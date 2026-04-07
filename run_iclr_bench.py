@@ -317,6 +317,8 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     output_path = Path(__file__).parent / "bench_results.md"
     csv_path = Path(__file__).parent / "bench_scores.csv"
+    reviews_dir = Path(__file__).parent / "bench_reviews"
+    reviews_dir.mkdir(exist_ok=True)
 
     # Check for existing results and ask user whether to continue or overwrite
     finished_ids: set[str] = set()
@@ -434,6 +436,9 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                     f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
                     f.write(f"- Match: {match_label(r['match'])}\n\n")
                     f.write(f"### Final Review\n\n{r['final_review']}\n\n---\n\n")
+                # Save individual review file
+                review_file = reviews_dir / f"{r['paper_id']}.md"
+                review_file.write_text(r["final_review"], encoding="utf-8")
                 with open(csv_path, "a", newline="") as f:
                     w = csv.writer(f)
                     gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))

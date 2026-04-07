@@ -1,137 +1,131 @@
-=== CALIBRATION EXAMPLE 58 ===
+=== CALIBRATION EXAMPLE 54 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
-### Title & Abstract
-The title clearly captures the paper's central claim: watermarking capacity is far from exhausted. The abstract succinctly summarizes the problem, the theoretical and empirical analysis, and the demonstration of higher capacity via Chunky Seal. The abstract's claims—that theoretical capacities are "orders of magnitude larger" and that a simple scaled model achieves 4× higher capacity—are supported by the paper's results. The only minor note is that the phrase "orders of magnitude" is most accurate for the PSNR-only case; with robustness constraints, the gap is still large but may be less extreme.
+**Title & Abstract:** The title "We Can Hide More Bits: The Unused Watermarking Capacity in Theory and in Practice" is direct and reflects the paper's core contribution. The abstract clearly states the problem, the approach (theoretical bounds and empirical validation), and the key finding: a large gap exists between theoretical capacity and current methods, demonstrated by scaling up a model to 1024 bits. All abstract claims are substantiated in the paper.
 
-### Introduction & Motivation
-The introduction effectively frames the stagnation in watermarking capacity and poses the critical question of whether we are near the theoretical limit. The three contributions are clearly stated and logically set up the rest of the paper. The motivation is strong and well-justified.
+**Introduction & Motivation:** Excellent. It effectively sets the stage by describing the perceived stagnation in watermarking capacity and posing the critical, unanswered question: "Have we already reached the theoretical ceiling?" The contributions (i, ii, iii) are stated clearly and map directly to the paper's structure. The framing as a hunt for the cause of the performance gap (hypotheses A-E) is a strong narrative device.
 
-### Method / Approach (Bounds on Watermarking Capacity)
-This section is a core contribution, deriving capacity bounds under PSNR and robustness constraints. The geometric approach is novel compared to classical information-theoretic models.
+**Method / Approach (Theoretical Bounds - Sections 2, Appendices):** The geometric modeling of images as a finite grid and the derivation of capacity bounds under PSNR constraints (Bounds 1-9) are rigorous and well-explained. The progression from absolute capacity to PSNR-only to robustness constraints is logical. The use of volume approximations and exact counting (Mitchell's algorithm) is appropriate.
 
-**Strengths:** The derivation is systematic, moving from absolute capacity to PSNR constraints and then robustness. The use of volume approximations and exact lattice counting for small radii is appropriate. The analysis of arbitrary cover images (corner case) shows the penalty is at most 1 bpp, which is insightful.
+However, the section on robustness constraints (Section 2.5) is the weakest part theoretically. Bounds 10-12 are explicitly labeled as "heuristic" and rely on an intuitive product of singular values factor (Eq. 6). The paper is transparent about their limitations (Figs. 8, 9 show they are neither strict upper nor lower bounds) and provides a separate, extremely conservative bound (Bound 13). While this honesty is commendable, for an ICLR paper, the lack of formal guarantees or tighter analysis for the robustness case is a notable gap. The construction of LinJPEG is clever and useful for analysis.
 
-**Weaknesses:**
-1. **Heuristic robustness bounds (Bounds 10–12)** are not rigorously justified. The paper acknowledges they are heuristic and shows examples where they can be inaccurate (Figures 8 and 9). This is a significant limitation because the paper's claim that robustness cannot explain the low empirical capacity relies on these heuristics. The conservative bound (13) is extremely loose, leaving uncertainty about the true capacity under practical transformations.
-2. **Linearized JPEG (LinJPEG)** is an approximation that may not capture the full non-linearity and perceptual effects of real JPEG compression. The impact on capacity bounds for compression robustness is therefore not fully established.
-3. **Data distribution argument** uses VQ-VAE/VQGAN to estimate the number of perceptually distinct images. While plausible, this is an approximation and not a fundamental limit.
+**Experiments & Results (Sections 3 & 4):** This is the strongest part of the paper. The experimental design is excellent for isolating the cause of the capacity gap.
+- **Section 3.1:** The experiment training Video Seal on a single gray image with only a PSNR constraint is a brilliant minimal test. Its failure to reach 1024 bits convincingly rules out hypotheses A, B, and C (advanced robustness/perceptual constraints, data distribution).
+- **Section 3.2:** The subsequent experiments are conclusive. The success of the linear model and the handcrafted model shows the bounds are achievable (ruling out hypothesis D), directly implicating hypothesis E (models are underperforming). The tiling experiment further highlights the architectural under-utilization of resolution.
+- **Section 4 (Chunky Seal):** This is the crucial "proof of concept" that higher capacity is feasible under real-world constraints. Scaling up Video Seal to achieve 4x capacity while maintaining comparable quality and robustness is a solid result. Table 3 shows a comprehensive evaluation. The fact that this was achieved with simple scaling and no hyperparameter tuning strongly supports the core thesis.
 
-Despite these weaknesses, the theoretical analysis convincingly shows that, even under conservative assumptions, capacity should be much higher than current methods achieve.
+**Potential Experiment Concerns:**
+- The comparison in Figure 1/Table 4 includes many older methods (HiDDeN, MBRS). It would be beneficial to explicitly state that the most relevant SOTA comparisons are Video Seal, TrustMark, and WAM, as the older baselines set a lower bar.
+- The Chunky Seal model is enormous (~1B parameter embedder). While this successfully demonstrates feasibility, it raises practical concerns about efficiency, which are only briefly mentioned in the conclusion. A brief discussion on parameter counts or FLOPs relative to capacity gain would be useful context.
 
-### Experiments & Results (Empirical Performance is Much Lower than Predicted)
-This section tests five hypotheses to explain the gap between theory and practice. The experiments are well-designed and controlled.
+**Writing & Clarity:** The paper is generally well-written but dense, especially in the theoretical sections and appendices. The use of figures (Fig. 2, 3, 4, 5) is very effective. Some parts, like the explanation of the heuristic robustness factor (Eq. 6) and the zonotope over-approximation for Bound 13, are complex and could benefit from additional intuitive explanation. The flow from theory to controlled experiments to real-world model is logical and clear.
 
-**Strengths:** 
-- The simplified setup (single gray image, only PSNR constraint) effectively isolates architectural limitations from other complexities.
-- Video Seal's failure to embed 1024 bits, while linear and handcrafted models succeed, strongly suggests structural underperformance (hypothesis E).
-- The tiling experiment shows that Video Seal does not utilize full resolution, and higher capacities are achievable even with the same architecture.
-
-**Weaknesses:**
-- The handcrafted and linear baselines are not robust, so they only demonstrate potential in a non-robust setting. However, the tiling experiment shows that capacities far beyond current models are feasible even with a trained model (though still without robustness).
-- The experiment does not fully rule out hypothesis D (bounds are unrealistic) for the robust case, since the robustness bounds are heuristic. However, the conservative bound (Table 2) still suggests capacities >900 bits for aggressive crops, which is much higher than current models.
-
-Overall, the experiments robustly support the claim that models underperform relative to what is achievable, even in simple settings.
-
-### Better Performance in Practice is Possible: Chunky Seal
-This section scales up Video Seal to achieve 1024 bits with comparable quality and robustness.
-
-**Strengths:** Chunky Seal demonstrates that 4× higher capacity is attainable with a straightforward scaling of a known architecture. The comprehensive evaluation (Table 3) shows maintained quality and robustness across many transformations, validating the feasibility of higher capacities.
-
-**Weaknesses:**
-- The model size increases dramatically (embedder 90×, extractor 23×), making it impractical for deployment. The paper appropriately notes this is a proof of concept, not a practical solution.
-- No ablation study is provided to disentangle the effects of increased dimensions, use of all channels, and training tricks like gradient clipping.
-- The robustness results, while comparable, show slight degradations (e.g., higher LPIPS, lower bit accuracy on some augmentations). A more detailed analysis of these trade-offs would be helpful.
-
-Nevertheless, Chunky Seal successfully proves that higher capacity is achievable without sacrificing much quality or robustness, reinforcing the paper's main argument.
-
-### Discussion and Conclusions
-The discussion appropriately highlights the implications (e.g., embedding full manifests) and limitations. The proposed sanity checks for future watermarking methods are a valuable contribution. The limitations section is honest, covering the heuristic nature of robustness bounds, the tractability of theoretical analysis, and the impractical size of Chunky Seal.
-
-**Missing element:** The broader impact section could briefly discuss potential negative societal impacts (e.g., watermarking for surveillance or censorship), but this is not critical for the paper's technical contribution.
-
-### Writing & Clarity
-The paper is generally well-written and logically structured. The mathematical derivations are detailed, and the figures effectively illustrate the bounds and results. Some formatting artifacts from PDF parsing are present but do not impede understanding. The paper is dense but appropriate for an ICLR audience.
+**Limitations & Broader Impact:** The discussion section (Sec. 5) adequately covers key limitations: theoretical bounds are for tractable setups, robustness bounds are heuristic, and Chunky Seal's size/latency. A significant limitation under-emphasized is the **computational cost and practicality** of the scaling approach. While the paper correctly states the goal was to explore feasibility, the community might misinterpret this as an endorsement of naive scaling. The proposed "sanity checks" are a valuable contribution. Broader impact is positively framed (enabling embedded manifests) without delving into potential misuse, which is reasonable for this work.
 
 ### Overall Assessment
-This paper makes a significant and timely contribution by challenging the assumption that watermarking capacity is near saturation. It provides compelling theoretical bounds (though partially heuristic) and rigorous experiments showing that current models are far from optimal, even in simplified settings. The demonstration of higher capacity via Chunky Seal, despite its impractical size, solidifies the claim that architectural and training innovations are needed. The weaknesses—most notably the lack of tight robustness bounds and the simplicity of the empirical setups—are acknowledged by the authors and do not undermine the core message. For ICLR, which values novel, impactful ideas that open new research directions, this paper is strong and likely to be accepted. The proposed sanity checks provide a concrete path forward for the community.
+
+This is a strong, well-executed paper that makes a significant contribution to the watermarking field. It successfully answers its core question: current models are far from theoretical capacity limits, and this gap is due to architectural/training limitations, not inherent problem complexity. The combination of novel theoretical bounds, cleverly designed controlled experiments, and a scaled-up practical model provides compelling, multi-faceted evidence. The main weakness is the non-rigorous treatment of robustness bounds, but the paper is transparent about this and supports its conclusion with strong empirical results (Chunky Seal). The work is insightful, provides clear directions for future research, and meets the bar for ICLR.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper systematically investigates the theoretical limits of image watermarking capacity under perceptual quality (PSNR) and robustness constraints. It establishes upper bounds indicating capacities are orders of magnitude higher than what current deep learning-based models achieve. To validate this gap, the authors conduct controlled experiments showing even state-of-the-art models like Video Seal fail in simplified settings, and they propose Chunky Seal, a scaled-up model that embeds 1024 bits (4x the baseline) while maintaining comparable quality and robustness.
+This paper presents a theoretical and empirical analysis of the capacity limits of image watermarking. It establishes geometric upper bounds on the achievable bits per pixel under PSNR and linear robustness constraints, showing these bounds are orders of magnitude higher than current deep learning-based methods achieve. The authors empirically demonstrate that even simple linear models can outperform state-of-the-art architectures in simplified settings, and they propose Chunky Seal, a scaled-up version of Video Seal, which embeds 1024 bits while maintaining comparable quality and robustness, proving higher capacities are practically attainable.
 
 ### Strengths
-1. **Clear and Important Research Question:** The paper directly addresses a perceived stagnation in watermarking capacity (100-200 bits) by asking how close we are to fundamental limits. This is a well-motivated and significant question for the field.
-2. **Systematic Theoretical Analysis:** The derivation of capacity bounds is methodical, starting from the absolute capacity of the image space, adding PSNR constraints (considering gray/central vs. arbitrary images), and then incorporating robustness to linear transformations (e.g., crop, rotation, linearized JPEG). The use of geometric (ball-cube intersection) rather than information-theoretic arguments makes the analysis more accessible and tied to practical constraints.
-3. **Rigorous Empirical Validation:** The authors effectively bridge theory and practice. They strip down the problem to a single gray image with only a PSNR constraint, demonstrating that Video Seal cannot embed 1024 bits where simple linear and handcrafted models can reach >450k bits (Table 1, Fig. 5,6). This elegantly isolates architectural/training limitations from real-world complexities.
-4. **Demonstrated Practical Improvement:** Chunky Seal successfully increases capacity to 1024 bits with quality/robustness on par with Video Seal (Table 3). This serves as concrete proof that higher capacities are practically achievable, supporting the paper's core thesis.
+1. **Rigorous Theoretical Framework**: The paper develops a novel geometric framework for deriving capacity bounds under PSNR and linear robustness constraints (e.g., Bounds 1-13). This approach is more aligned with the discrete, quantized nature of digital images compared to classical information-theoretic models based on Gaussian noise. The derivations for corner cases, robustness to transformations, and linearized JPEG are thorough and well-supported.
+2. **Compelling Empirical Evidence**: The controlled experiments (e.g., training on a single gray image) effectively isolate the cause of the capacity gap. The results showing Video Seal's failure to embed 1024 bits in a simple setting, while linear and handcrafted models succeed (Table 1, Figure 5), strongly argue that architectural limitations, not inherent problem complexity, are the primary bottleneck.
+3. **Demonstration of Practical Improvement**: The proposed Chunky Seal model achieves a 4× increase in capacity (1024 bits) over the strong Video Seal baseline while preserving image quality (PSNR ~45 dB) and robustness across a wide range of perturbations (Table 3). This concrete result validates the paper's core claim that significant performance gains are possible.
 
 ### Weaknesses
-1. **Heuristic and Incomplete Theoretical Bounds:** The robustness bounds (Bounds 10-12) are explicitly labeled as heuristics, relying on singular-value products which the authors note can both under- and over-estimate true capacity (Figs. 8,9). The provided "conservative" bound (Bound 13) is extremely loose. A more formal treatment of capacity under non-linear quantization (Q) is missing, leaving the robustness analysis as the least rigorous part of the theory.
-2. **Limited Architectural Innovation:** Chunky Seal is presented as a "simple scale-up" of Video Seal (90x larger embedder, 23x larger extractor). While it proves the feasibility of higher capacity, it does not introduce novel architectural principles. The paper acknowledges this and calls for future innovation, but the proposed model itself is not a significant algorithmic advance.
-3. **Sparse Discussion of Efficiency and Scalability:** The paper focuses on capacity but gives limited attention to the computational and memory costs of scaling models. Chunky Seal's massive size (∼1.8B params total) is noted, but its implications for training cost, inference latency, and practical deployment are not analyzed. Efficiency is a key concern for real-world watermarking.
-4. **Parser Artifacts Obscure Details:** While not the authors' fault, the extracted text contains numerous garbled tables (e.g., Fig. 1, Table 1), broken equation references, and misplaced text, which hinders a complete assessment of the experimental details and numerical results. This forces the reviewer to infer some content.
+1. **Heuristic and Loose Robustness Bounds**: The theoretical capacity bounds under robustness constraints (Bounds 10-12) are explicitly labeled as heuristics. The authors show these bounds can be both over- and underestimates (Figures 8-9), and the conservative alternative (Bound 13) is extremely loose. This limits the precision of the theoretical predictions for real-world, robust watermarking.
+2. **Limited Practicality of Chunky Seal Solution**: While Chunky Seal proves higher capacity is feasible, it achieves this via massive model scaling (90× larger embedder, 23× larger extractor), resulting in high computational cost. The paper does not address efficiency or explore more parameter-efficient architectural innovations, which is critical for real-world deployment.
+3. **Simplified Robustness Model**: The theoretical analysis is restricted to linear transformations and a linearized approximation of JPEG (LinJPEG). While many common perturbations are linear or approximately linear, the analysis may not fully capture complex, non-linear, or adversarial attacks prevalent in real-world scenarios.
 
 ### Novelty & Significance
-**Novelty:** The primary novelty lies in the comprehensive geometric framework for deriving actionable capacity bounds for digital image watermarking, moving beyond classical Gaussian channel models. The empirical demonstration that SOTA models fail catastrophically in simplified, analyzable settings is also a novel and impactful critique.
-**Significance:** The work is highly significant for the watermarking community. It shifts the narrative from incremental improvements on a saturated Pareto front to recognizing a vast, unexploited capacity potential. The proposed "sanity checks" (scaling with image size, outperforming linear baselines, etc.) provide valuable guidance for future research. Successfully embedding 1024 bits opens doors for applications like embedding full manifests.
+**Novelty**: The geometric modeling of capacity for digital images is a significant departure from classic information-theoretic approaches and provides a fresh, practical perspective. The systematic empirical deconstruction showing architectural underperformance in simplified settings is highly insightful.
+**Significance**: The work convincingly argues that the watermarking field is far from its fundamental limits, challenging a potential stagnation narrative. It provides both a theoretical lens (new bounds) and a practical proof-of-concept (Chunky Seal) to guide future research toward higher-capacity methods. The proposed "sanity checks" for new watermarking methods are a valuable contribution.
 
 ### Suggestions for Improvement
-1. **Strengthen the Robustness Theory:** A major weakness is the heuristic nature of the robustness bounds. Future work (or a revision) should aim for more formal guarantees, perhaps using tools from lattice theory or quantization analysis to better characterize the capacity reduction under linear+Q transformations.
-2. **Explore Architectural Inductive Biases:** The paper convincingly argues that current architectures are the bottleneck. To elevate the contribution, the authors could propose and test a novel architectural component or training strategy specifically designed to better utilize the available pixel-space dimensions, moving beyond naive scaling.
-3. **Include an Efficiency-Aware Analysis:** A discussion or small experiment on the trade-off between capacity, model size, and inference speed would greatly increase the practical relevance of Chunky Seal. Could a more efficient architecture achieve similar gains?
-4. **Clarify Experimental Details Amidst Artifacts:** Given the parsing issues, the authors should ensure the camera-ready version has perfectly clear tables and figures, especially for key results like Table 1 (handcrafted model capacities) and Fig. 5 (training sweeps). Explicitly stating the hyperparameters that yielded the best Chunky Seal results would aid reproducibility.
+1. **Tighten Robustness Bounds**: Future work should aim to derive tighter, non-heuristic bounds for capacity under common non-linear transformations (e.g., standard JPEG, gamma correction). Exploring connections to lattice packing or coding theory could be fruitful.
+2. **Pursue Architecturally Efficient Scaling**: Instead of advocating for pure model scaling, the authors should suggest and explore specific architectural inductive biases (e.g., frequency-aware layers, structured embeddings) that could achieve high capacity more efficiently. An ablation study on Chunky Seal's components would be informative.
+3. **Broaden the Attack Spectrum in Evaluation**: Evaluate Chunky Seal against a more comprehensive suite of attacks, including state-of-the-art adversarial removal techniques and non-linear, learned distortions, to better assess its practical robustness.
+4. **Improve Presentation and Reproducibility**:
+   * Provide full training details (hyperparameters, computational resources) for Chunky Seal to ensure reproducibility.
+   * Add a summary table in the main text listing all key bounds and their regimes of validity for easier reference.
+   * Consider streamlining the highly technical appendices (e.g., on zonotopes) for improved readability, focusing on intuitive explanations in the main text.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Comparison to recent high-capacity watermarking methods.** The paper only compares Chunky Seal to a scaled version of Video Seal and a few older methods (HiDDeN, MBRS). It must be compared against other recent works claiming higher capacity (e.g., InvisMark, RoSteALS, WAM, MuST) to substantiate the claim of pushing the Pareto frontier.
-2. **Robustness evaluation under stronger, composite, or adversarial attacks.** The tested augmentations (cropping, rotation, JPEG) are standard but mild. The claim of comparable robustness is undermined without testing against state-of-the-art watermark removal attacks, strong diffusion model edits, or realistic pipelines (e.g., social media processing chains combining multiple transforms).
-3. **Ablation study on Chunky Seal's architectural changes.** The model is a scaled-up Video Seal. The contribution is unclear without ablations: which scale-up factor (channels, depth, using all color channels) is critical for the capacity gain? A component-wise analysis is needed to attribute improvements.
-4. **Capacity scaling experiments with image resolution.** The theory predicts capacity should scale linearly with pixel count. The paper should test this empirically by training/evaluating Chunky Seal or baselines at multiple resolutions (e.g., 128x128, 512x512) to see if the observed bpp remains constant or drops.
+1. **Test Chunky Seal's capacity in the simplified gray-image setting.** The core claim is that capacity is far from theoretical limits. To validate that Chunky Seal represents progress, it must be evaluated on the same controlled task (single gray image, PSNR-only) where Video Seal failed. Does it approach the handcrafted baseline (456k bits) or at least surpass the linear model (2048 bits)? Without this, it's unclear if scaling addresses the fundamental limitation or just works on a different, easier distribution.
+
+2. **Perform an ablation study on Chunky Seal's scaling factors.** The model is scaled up in multiple ways (channels, depth, etc.). Which components are necessary for the capacity gain? A simple scaling sweep (e.g., 256, 512, 1024 bits) with controlled increases in parameters would show whether capacity scales predictably with model size, strengthening the architectural argument.
+
+3. **Compare against a robust, high-capacity non-neural baseline.** The handcrafted and linear baselines show high capacity without robustness. To isolate the impact of robustness constraints, design a simple scheme (e.g., the handcrafted method combined with error-correcting codes) and test it under the same augmentations used for Chunky Seal. If it outperforms deep models, the architectural critique is stronger.
+
+4. **Conduct a fair, capacity-matched comparison with prior work.** Chunky Seal (1024 bits) is compared to Video Seal (256 bits). To claim a Pareto improvement, train Video Seal at 1024 bits (or a similarly scaled version) on the same dataset and training budget. Otherwise, gains may be due to increased capacity budget rather than better efficiency.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Validation of heuristic robustness bounds.** The paper admits Bounds 10-12 are heuristic and not proven lower/upper bounds. The core claim that "robustness constraints cannot explain the low capacity" relies on these. They must provide empirical validation (e.g., via constructive coding schemes) to show these bounds are approachable, or at least discuss their potential looseness.
-2. **Root-cause analysis of architectural failure.** The paper identifies that Video Seal fails on a simple gray-image task, but only hypothesizes "structural limitations." A deeper analysis is needed: e.g., examining gradient flow, loss landscape, or representational capacity of the U-Net/ConvNeXt for learning the identity mapping required for the residual.
-3. **Analysis of the trade-off curve (capacity vs. quality/robustness).** The paper claims Chunky Seal increases capacity 4x while preserving quality/robustness. This is a single point. To argue that the Pareto front can be pushed, they should show the trade-off curve: how does capacity scale with model size or training, and what is the associated cost in PSNR or robustness for a fixed training budget?
+1. **Diagnose why Video Seal fails on the gray-image task.** The claim is "structural limitations." Analyze the learned embeddings: do they occupy a low-dimensional subspace? Test if increasing the width/depth of Video Seal (without other changes) improves capacity. This would pinpoint whether the architecture is fundamentally limited or just undertrained.
+
+2. **Quantify the capacity gap under robustness constraints in practice.** The theoretical bounds suggest high capacity remains under augmentations. For Chunky Seal, measure the *maximum* capacity achievable (via rate-distortion curves) under each augmentation (e.g., by training models at different bit lengths) and compare to the theoretical predictions. This shows whether the gap persists in realistic settings.
+
+3. **Validate the heuristic robustness bounds empirically.** Bounds 10-12 are unproven approximations. For small images (e.g., 8x8), compute the exact capacity under a linear transformation (via enumeration) and compare to the heuristic. This is essential to trust the central claim that robustness doesn't explain the low empirical capacity.
+
+4. **Analyze the bit error patterns under strong attacks.** When accuracy drops (e.g., rotation >10°), are errors random or structured? This reveals if the model fails due to insufficient invariance or because the message is destroyed. It informs architectural improvements.
 
 ### Visualizations & Case Studies
-1. **Visualizations of failure modes and capacity saturation.** Show cases where Chunky Seal fails to embed 1024 bits correctly (e.g., on complex textures, high-frequency areas). Visualizing the per-pixel residual pattern for different messages would reveal if the model uses the full spatial capacity or relies on specific patterns.
-2. **Case studies on images that stress the bounds.** Test the handcrafted and linear baselines on non-gray, natural images to see if the theoretical PSNR-only capacity is approachable in practice. This would bridge the gap between the simplified theory and real data.
+1. **Visualize the spatial and channel distribution of the watermark signal.** For Chunky Seal and Video Seal, plot the watermark energy per pixel/channel. Does Chunky Seal utilize more pixels or channels effectively? This would show if scaling leads to better spatial utilization.
+
+2. **Show qualitative examples of failure under cropping/rotation.** Display watermarked images before and after severe cropping (e.g., 25%) and the corresponding extracted bits. This reveals whether failures are due to content loss or decoder inadequacy.
+
+3. **Case study: Embed and recover a realistic C2PA manifest.** The discussion suggests high capacity enables embedding full manifests. Demonstrate this by encoding a ~1KB manifest into an image using Chunky Seal and recovering it after mild perturbations. This proves practical utility beyond bit accuracy metrics.
 
 ### Obvious Next Steps
-1. **Implement and test a baseline matching the theoretical setup.** The handcrafted embedder (Eq. 2) is for a gray image. They should design and test a *nonlinear* but capacity-optimal model (e.g., a learned projection) for the PSNR-only case on natural images to see how close one can get to the bound.
-2. **Explore architectural innovations, not just scaling.** The conclusion states that new architectures are needed, but the paper only presents scaled-up Video Seal. They should have at least proposed and tested one novel architectural modification (e.g., different residual pathways, frequency-domain processing) informed by the geometric analysis.
-3. **Extend theory to non-linear and non-blind scenarios.** The theoretical analysis is limited to linear transforms and a blind decoder. A discussion or initial bounds for common non-linearities (e.g., non-linear color adjustments, neural compression) and non-blind decoding would strengthen the claim of generality.
+1. **Implement and evaluate a tiled version of Video Seal on real images with robustness.** The tiling strategy worked on the gray image. Apply it to robust watermarking: train a small model on patches and tile it across a full image. This is a straightforward high-capacity baseline that should be tested; if it works well, it challenges the need for monolithic scaling.
+
+2. **Provide the "sanity checks" as quantitative metrics.** The conclusion proposes sanity checks (e.g., capacity linear in image size). Define these as concrete, measurable properties and evaluate Chunky Seal and prior work against them. This would provide a clear framework for future work.
+
+3. **Discuss the practical trade-offs of Chunky Seal's scale.** The model is huge (~1B parameters for embedder). Analyze its inference latency, memory footprint, and training cost compared to Video Seal. For real-world deployment, efficiency matters; ignoring this weakens the contribution.
+
+4. **Test the method on a wider range of image distributions and resolutions.** The evaluation uses SA-1B and COCO at 256px. Test on higher resolutions (e.g., 1024px) and diverse content (art, text, low-light). This ensures the capacity gains generalize beyond the training distribution.
 
 # Final Consolidated Review
 ## Summary
-This paper investigates the fundamental limits of image watermarking capacity under perceptual quality (PSNR) and robustness constraints. It establishes theoretical upper bounds showing that achievable capacities are orders of magnitude higher than current deep learning methods, and through controlled experiments and a scaled-up model, demonstrates that this gap stems from architectural limitations rather than theoretical ceilings.
+This paper establishes geometric upper bounds on the message-carrying capacity of image watermarking under PSNR and linear robustness constraints, showing that theoretical limits are orders of magnitude higher than current deep learning methods achieve. Through controlled experiments, it demonstrates that state-of-the-art architectures fail to approach these bounds even in simplified settings, implicating structural limitations. As proof of feasibility, the authors scale up a existing model to create Chunky Seal, which embeds 1024 bits—4× higher than prior work—while preserving image quality and robustness.
 
 ## Strengths
-- **Novel geometric framework for capacity bounds:** The systematic derivation moves from absolute limits to PSNR constraints and linear robustness transformations using a ball-cube intersection model, providing a practical and actionable alternative to classical information-theoretic approaches.
-- **Clever empirical isolation of architectural bottlenecks:** By simplifying the task to watermarking a single gray image with only a PSNR constraint, the paper shows that state-of-the-art models (Video Seal) fail to embed 1024 bits while simple linear and handcrafted models achieve up to 456,509 bits, proving that current architectures severely underutilize available capacity.
-- **Proof-of-concept demonstration of higher capacity:** Chunky Seal, a scaled-up version of Video Seal, successfully embeds 1024 bits (4× the baseline) while maintaining comparable image quality and robustness across standard transformations, validating that significantly higher capacities are practically attainable.
+- **Novel geometric capacity bounds** – The paper develops a practical framework modeling images as a discrete grid and derives a family of bounds (Bounds 1-13) for capacity under PSNR and linear transformations (e.g., cropping, rotation, linearized JPEG). This provides a fresh, analytically tractable alternative to classical information-theoretic models that rely on unrealistic Gaussian assumptions.
+- **Compelling minimal experiments** – By training a state-of-the-art model (Video Seal) on a single gray image with only a PSNR constraint, the authors isolate architectural limitations: Video Seal fails to embed 1024 bits where a simple linear model succeeds at 2048 bits and a handcrafted method reaches ~456k bits (Section 3.1, Table 1). This cleanly rules out hypotheses that data distribution, perceptual constraints, or robustness requirements explain the capacity gap.
+- **Practical proof-of-concept** – Chunky Seal, a scaled-up version of Video Seal, demonstrates that significantly higher capacities are achievable under real-world constraints: it embeds 1024 bits while maintaining PSNR ~45 dB and robust bit accuracy across common perturbations (Table 3). This validates the core claim that current methods are far from saturation.
 
 ## Weaknesses
-- **Heuristic robustness bounds introduce uncertainty:** The capacity bounds for linear transformations with quantization (Bounds 10–12) are explicitly heuristic and not rigorously derived; while the conservative bound (Bound 13) still suggests higher capacity than current methods, the lack of tight guarantees leaves the exact capacity under practical robustness constraints less firmly established.
-- **Practical limitations of the demonstrated improvement:** Chunky Seal achieves higher capacity primarily through massive model scaling (90× larger embedder, 23× larger extractor) without architectural innovation, and the paper does not analyze the efficiency trade-offs (e.g., inference latency, memory footprint), making it a proof-of-concept rather than a deployable solution.
+- **Heuristic robustness bounds** – The capacity bounds under linear transformations (Bounds 10-12) are explicitly heuristic, based on a product of singular values, and the paper shows they can both over- and under-estimate true capacity (Figures 8-9). While a conservative bound (Bound 13) is provided, the lack of formal guarantees limits the precision of theoretical predictions for robust watermarking.
+- **Incomplete empirical gap analysis under robustness** – Chunky Seal is not evaluated on the same controlled gray-image task (PSNR-only, no robustness) where the capacity gap was first demonstrated. Without this, it remains unclear whether the scaled architecture actually narrows the gap to theoretical limits or merely improves performance on a more complex, distributed task.
+- **Practical efficiency concerns** – Chunky Seal achieves higher capacity via massive model scaling (~90× larger embedder, ~23× larger extractor), but the paper only briefly notes the resulting size and latency implications. For real-world deployment, computational cost is critical, and the work does not explore parameter-efficient alternatives or provide a thorough efficiency analysis.
 
 ## Nice-to-Haves
-- A deeper investigation into why current architectures fail to utilize available capacity (e.g., through gradient flow or representational capacity analysis) could guide future architectural designs.
-- Exploring the capacity-quality-robustness trade-off curve by varying model size or training budget would further substantiate the claim that the Pareto front can be pushed.
+- An ablation study identifying which components of Chunky Seal (e.g., channel multipliers, depth) are most critical for capacity gains.
+- A capacity-matched comparison by training Video Seal at 1024 bits with proportional scaling to ensure fair evaluation of architectural improvements.
+- Extension of the theoretical analysis to derive tighter, non-heuristic bounds for common non-linear transformations like standard JPEG.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **Criticism that the comparison includes older methods (e.g., HiDDeN)** – The paper provides a comprehensive benchmark (Table 4) that includes recent state-of-the-art methods (Video Seal, TrustMark, WAM); the inclusion of older baselines offers historical context and does not invalidate the core comparison.
+- **Request for analysis of bit error patterns under attacks** – While insightful, this is a suggestion for deeper analysis rather than a flaw in the current contribution.
+- **Demand for evaluation on a wider range of image distributions and resolutions** – The paper evaluates on SA-1B and COCO at 256px, which is standard for the field; extending further is a natural next step but not required for the stated scope.
 
 ## Novel Insights
-The paper’s central insight is that the observed stagnation in watermarking capacity is not due to fundamental limits but to suboptimal model architectures. By deriving achievable bounds and showing that even simple models outperform state-of-the-art neural networks in controlled settings, it shifts the community’s focus from incremental improvements to rethinking architectural inductive biases and training strategies. The proposed sanity checks (e.g., scaling capacity with image size, outperforming linear baselines) provide concrete guidance for future work.
+The paper’s central insight is that the stagnation in watermarking capacity is not due to fundamental limits or the complexity of real-world constraints, but to architectural inefficiencies in current deep learning models. This is revealed by deriving achievable geometric bounds and showing that even simple baselines outperform state-of-the-art neural networks in minimal settings. The finding that models fail to utilize available resolution (e.g., tiling a low-resolution model achieves higher capacity) underscores a specific structural shortcoming, redirecting the field from incremental tuning to rethinking model design.
 
 ## Suggestions
-- In the camera-ready version, ensure that tables and figures (e.g., Table 1, Figure 5) are clearly presented to avoid ambiguity from parsing artifacts, and explicitly state the hyperparameters used for Chunky Seal’s best results to aid reproducibility.
-- Consider adding a brief discussion on the computational costs and potential efficiency optimizations for Chunky Seal to address practical deployment concerns.
+- Evaluate Chunky Seal on the single gray-image PSNR-only task to quantify how close it comes to the handcrafted baseline and theoretical bounds.
+- Provide quantitative metrics for Chunky Seal’s inference latency, memory footprint, and training cost relative to capacity gains to frame the efficiency trade-off clearly.
+- Explore architectural innovations beyond naive scaling, such as frequency-aware layers or structured embeddings, that could achieve high capacity with better parameter efficiency.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 6.0, 6.0]

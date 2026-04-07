@@ -1,148 +1,142 @@
-=== CALIBRATION EXAMPLE 76 ===
+=== CALIBRATION EXAMPLE 74 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-The title clearly reflects the contribution. The abstract succinctly summarizes the motivation, method, and key claims (superior performance, convex optimization, computational efficiency for low-dimensional projections). The claims are generally supported by the paper, but the abstract lacks any mention of limitations, such as the difficulty of sampling from the variational distribution in higher dimensions.
+The title accurately reflects the paper's contribution. The abstract clearly states the method (LBF-NPE), its advantages (flexibility, convex optimization, automatic marginalization), and summarizes key results. However, the claim of "order-of-magnitude improvements in KL divergence" over MDNs and flows on 2D posteriors is strong; Table 1 shows LBF-NPE outperforms MDN by roughly a factor of 10-40 on bands/ring (0.0048 vs. 0.182, 0.0054 vs. 0.205), which is an order of magnitude, but the improvement over flows is more modest (e.g., 0.0048 vs. 0.016 for bands). The abstract should be precise: the order-of-magnitude claim holds versus MDN but not consistently versus flows.
 
 ### Introduction & Motivation
-Well-written and clearly motivates the problem: the flexibility-tractability trade-off in NPE variational families. The introduction effectively highlights NPE's advantages (amortization, likelihood-free inference, automatic marginalization) and positions LBF-NPE as a solution that leverages these. Contributions are stated clearly: parameterization via latent basis expansions, fixed/adaptive basis variants, convexity properties, and stereographic projection for identifiability.
+The introduction effectively frames the trade-off between flexibility and tractability in NPE and motivates basis expansions by leveraging NPE's ability to target low-dimensional posterior projections. The contributions are clearly stated. However, the paper heavily emphasizes NPE's automatic marginalization over nuisance parameters as a key advantage, but the experiments do not prominently feature problems with high-dimensional nuisance variables. A dedicated experiment demonstrating marginalization over a large number of nuisance parameters would strengthen the motivation.
 
-### Background
-Accurate and concise. Correctly distinguishes ELBO-based VI (which struggles with marginalization) from NPE (which naturally handles it via simulation). The forward KL objective for NPE is properly defined. No major issues.
+### Method / Approach
+**Section 3.1-3.2**: The variational family and gradient estimator are well-defined. Algorithm 1 is clear but omits a critical detail: the choice of proposal distribution \(r(z)\) for importance sampling. This choice heavily influences gradient variance and stability; the paper should specify how \(r(z)\) is selected (e.g., is it the base measure \(h(z)\), a uniform distribution, or an adaptive proposal?). Without this, reproducibility is hampered.
 
-### Method (LBF-NPE)
-**Section 3.1**: The variational family as an exponential family with neural basis functions is clearly defined. The use of a base measure \(h(z)\) is noted, but its practical choice (e.g., uniform over bounded latent space) is not discussed in the main text, which could confuse readers.
+**Section 4 (Variants & Properties)**:
+- **Convexity (Prop. 1)**: The proposition states marginal convexity when one of \(f\) or \(s\) is fixed. However, in the adaptive case (both learned), the alternating optimization is not guaranteed to converge to a global optimum, even though each subproblem is convex. The paper should discuss convergence properties of the alternating scheme and any empirical observations (e.g., does it consistently reach the same solution?).
+- **Stereographic Projection (Sec. 4.4)**: The reparameterization mitigates scaling degeneracy but breaks the linear inner product structure. It is unclear whether the convexity properties from Prop. 1 still hold under this nonlinear transformation. The paper should address this or provide empirical evidence that optimization remains stable.
+- **Fixed Basis (Sec. 4.3)**: The discussion of local vs. global bases is useful, but no experimental comparison between fixed B-splines/wavelets and adaptive bases is provided. Such an ablation would help practitioners choose between variants.
 
-**Section 3.2 & Algorithm 1**: The gradient estimator using self-normalized importance sampling (SNIS) is derived correctly. However, key implementation details are omitted:
-- The choice of proposal distribution \(r(z)\) is not specified. This is critical for efficient and low-variance gradient estimation. The appendices reveal that in some experiments numerical quadrature is used instead of SNIS, but this should be clarified in the main text.
-- The bias of the SNIS estimator is acknowledged but not quantified; the impact of the number of importance samples \(P\) on optimization stability is not discussed.
+**Sampling (Appendix C)**: The paper correctly identifies sampling as a limitation. The proposed inverse transform sampling is only feasible for very low dimensions (1D, 2D). For higher dimensions, MCMC or sequential sampling are suggested but not evaluated. In experiments, posterior plots are generated via grid evaluation, which does not scale. The paper should include a sampling evaluation (e.g., efficiency of Langevin dynamics) for at least one non-trivial case to demonstrate that sampling is practical.
 
-Overall, the method is novel and well-founded, but the lack of details on the proposal distribution and the practical handling of the log-normalizer gradient could hinder reproducibility.
+### Experiments & Results
+**Overall Design**: Experiments cover synthetic and real-world problems, but all latent spaces are low-dimensional (1D or 2D). This limits the claim that LBF-NPE is efficient for "high-dimensional latent spaces" when only low-dimensional projections are of interest. While the 50D annulus (Appendix E.4) is a step in this direction, the posterior is over all 50 dimensions, and the evaluation is still on 2D marginals. A more compelling experiment would involve a generative model with many nuisance variables and a low-dimensional parameter of interest, showcasing automatic marginalization.
 
-### Variants & Properties
-**Section 4.2 (Convexity)**: Proposition 1 (marginal convexity) is a strong theoretical point. The proof in Appendix B is correct. The connection to NTK theory for infinite-width networks is mentioned, but the practical relevance for finite networks is not explored—this is acceptable as the empirical results support the benefits.
+**Baseline Comparisons**:
+- Table 1 shows LBF-NPE outperforms baselines on 2D problems, but details on baseline architectures and capacities are sparse. For fair comparison, the paper should report parameter counts or ensure baselines are tuned to comparable expressivity. For instance, the MDN uses 10 Gaussian components (50 parameters), while LBF-NPE uses 20 basis functions parameterized by neural networks (likely many more parameters). This makes it unclear whether gains are due to the parameterization or simply increased capacity.
+- The standard deviations in Table 1 are small, but the number of independent runs is not stated. Reporting the number of seeds would help assess statistical significance.
 
-**Section 4.3 (Fixed Basis)**: The discussion of local vs. global bases is helpful. The recommendation of B-splines and wavelets is practical.
+**Ablations**:
+- Appendix E.3 studies the effect of the number of basis functions \(K\), showing diminishing returns. This is useful, but other important ablations are missing: comparison between fixed and adaptive bases, sensitivity to the proposal distribution \(r(z)\), and choice of basis type (B-spline vs. wavelet).
+- The effect of stereographic normalization is shown qualitatively in Appendix E.1, but quantitative metrics (e.g., convergence speed, final loss) would strengthen the argument.
 
-**Section 4.4 (Stereographic Projection)**: The reparameterization to address rescaling degeneracy is clever. However, the rotational degeneracy remains. The scaled loss (Equation 12) introduces a hyperparameter \(w\); its selection is not discussed. Appendix D mentions using stereographic projection but does not specify \(w\), leaving an implementation gap.
+**Comparison to EigenVI**: The paper claims superiority over EigenVI, but the comparison in Appendix E.5 is only visual. Quantitative KL divergences for EigenVI on the 2D test cases should be provided. Additionally, EigenVI uses a fixed orthogonal basis, while LBF-NPE uses adaptive bases; the comparison should discuss whether the performance gap is due to adaptivity or other factors.
 
-### Related Work
-Appropriately covers exponential families in VI, NPE with mixtures/flows, and EigenVI. The distinction from EigenVI (amortization, adaptive basis) is clear. One minor omission: recent work on neural empirical Bayes or score-based density estimation could be relevant but is not essential.
-
-### Experiments
-The experiments are extensive and generally support the claims. However, several important details are missing or require clarification:
-
-**Section 6.1 (Sinusoidal Likelihood)**: Demonstrates consistent convergence of LBF-NPE vs. MDN. However, only negative log-likelihood curves are shown; final KL divergence values would strengthen the quantitative comparison.
-
-**Section 6.2 (2D Case Studies)**: LBF-NPE shows strong performance. Table 1 reports forward/reverse KL and NLL. Notably, for the "spiral" case, LBF-NPE has higher NLL than NSF (0.838 vs. 0.727) despite better forward/reverse KL. This discrepancy is not explained—perhaps due to different tail behavior or estimation error.
-
-**Section 6.3 (Object Detection) & 6.4 (Redshift Estimation)**: Impressive real-world applications. The redshift experiment shows a significant NLL improvement.
-
-**Appendix Experiments**: The comparisons with EigenVI (E.5) and score-matched neural exponential families (E.6) are valuable. The high-dimensional annulus (E.4) shows good marginal density estimation, but full joint sampling is not demonstrated.
-
-**Key Experimental Concerns**:
-1. **Proposal Distribution \(r(z)\)**: Not detailed. In Appendix D, for 2D cases, the integral is approximated by trapezoidal quadrature on a grid; for object detection, Monte Carlo with 22,500 uniform samples is used. This inconsistency should be clarified, and the rationale for choosing \(r(z)\) should be discussed.
-2. **Alternating Optimization**: The schedule (e.g., 1000 steps for \(f_\phi\), then 1000 for \(s_\psi\)) is heuristic. Sensitivity to this schedule is not ablated.
-3. **Stereographic Projection Scaling \(w\)**: Not specified; likely set to 1, but this should be stated.
-4. **Computational Cost**: Table E.7 shows LBF-NPE sometimes has higher per-step cost but converges faster. Total training times are competitive, but memory usage is higher. This is acceptable.
-5. **Sampling Demonstration**: For the 50-dimensional annulus (E.4), only marginal densities are shown, not samples from the full joint posterior. The paper’s sampling limitations are acknowledged, but the experiments do not demonstrate sampling in dimensions >2. The inverse transform sampling method described becomes impractical in moderate dimensions.
-
-### Discussion & Limitations
-The discussion highlights advantages (log-space modeling, unconstrained optimization, likelihood-free compatibility) and acknowledges the main limitation: sampling difficulty. However, the sampling issue is underemphasized: while inverse transform sampling works in low dimensions, it does not scale. The method is essentially limited to very low-dimensional latent spaces (e.g., the 2D experiments). The 50-dimensional example only evaluates marginal densities via Monte Carlo integration, not full sampling. This restricts the applicability to problems where only low-dimensional projections are needed, which is consistent with the paper’s motivation but should be stated more clearly.
-
-Other limitations not fully discussed: sensitivity to the choice of \(K\), the base measure \(h(z)\), the proposal \(r(z)\), and the alternating optimization schedule. The rotational degeneracy after stereographic projection might affect interpretability but not performance.
+**Computational Cost**: Table 6 in Appendix E.7 reports runtime and memory. LBF-NPE often converges in fewer steps but has higher per-step cost. However, the total training time is competitive. This is a reasonable trade-off, but the table lacks details on hardware and whether the reported times are averaged over runs.
 
 ### Writing & Clarity
-The paper is well-written and logically structured. The figures and tables are informative. Some methodological details are buried in appendices, but overall the presentation is clear. A few typos/formatting artifacts exist (e.g., missing spaces, inconsistent equation numbering), but these are minor.
+The paper is generally well-written and logically structured. Some sections could be improved:
+- Section 3.2: Clarify the choice of proposal distribution \(r(z)\).
+- Section 4.4: Elaborate on how stereographic projection affects optimization (convexity, convergence).
+- Appendix D: Provide more architecture details for baselines (e.g., number of coupling layers for flows, hidden units for MDN) to ensure reproducibility.
+
+### Limitations & Broader Impact
+Section 7 appropriately notes the sampling limitation and suggests future work. However, the paper does not discuss broader societal impacts, which is a minor omission given the methodological nature of the work. A brief statement acknowledging potential indirect impacts (e.g., biases in inferred posteriors for scientific applications) would be sufficient.
 
 ### Overall Assessment
-This paper presents a novel and compelling approach to variational families for NPE. The core idea—using neural basis expansions for the log-density—is well-motivated, and the theoretical convexity properties are attractive. Empirically, the method outperforms strong baselines on a diverse set of benchmarks, including real scientific applications. The main weakness is the limited sampling capability, which constrains the method to low-dimensional targets, but this is consistent with the paper’s focus on posterior projections. Several implementation details (proposal distribution, alternating optimization schedule, hyperparameter choices) need clarification to ensure reproducibility. With revisions addressing these points, the paper makes a solid contribution suitable for ICLR.
+The paper introduces a novel and promising variational family for NPE that combines expressivity with favorable optimization properties. The theoretical analysis of convexity is sound, and empirical results on low-dimensional problems demonstrate improved performance over strong baselines. However, several issues weaken the contribution: (1) the claimed advantage for high-dimensional latent spaces with low-dimensional projections is not convincingly demonstrated; (2) the sampling limitation is acknowledged but not thoroughly addressed; (3) experimental comparisons lack thorough ablations and detailed baseline specifications, making it difficult to attribute gains solely to the parameterization. Addressing these concerns—particularly by adding a high-dimensional marginalization experiment and more rigorous baseline comparisons—would significantly strengthen the paper. As is, the paper presents a solid idea with promising results but falls short of ICLR's high bar for novelty and thorough evaluation.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper introduces Latent Basis Function Neural Posterior Estimation (LBF-NPE), a novel variational family for amortized inference that models the log posterior density as a linear combination of basis functions over the latent space. The method leverages the automatic marginalization properties of Neural Posterior Estimation (NPE) and is designed for low-dimensional posterior projections of interest, common in scientific applications. LBF-NPE offers a flexible yet tractable alternative to existing families like Gaussian mixtures or normalizing flows, with favorable optimization properties.
+This paper proposes LBF-NPE, a new variational family for Neural Posterior Estimation (NPE) that models the log-density as a linear combination of latent basis functions. The basis functions can be fixed (e.g., B-splines) or learned adaptively, leading to an exponential-family variational distribution. The method is designed for low-dimensional posterior projections, exploiting NPE's automatic marginalization over nuisance parameters. Empirically, LBF-NPE outperforms mixture density networks, normalizing flows, and a prior basis-expansion method (EigenVI) on synthetic and real-world tasks, including astronomical redshift estimation.
 
 ### Strengths
-1. **Novel and well-motivated variational parameterization**: The use of basis expansions (fixed or adaptive) to model the log-density within an exponential family framework is innovative. It effectively bridges the gap between simple, interpretable families and flexible but hard-to-optimize black-box models. The connection to convex optimization when basis functions are fixed is a strong theoretical point.
-
-2. **Strong empirical performance**: The paper demonstrates consistent improvements over Mixture Density Networks (MDNs) and normalizing flows across diverse tasks, including synthetic multimodal problems, astronomical object detection, and cosmological redshift estimation. Quantitative results (e.g., lower KL divergences and negative log-likelihoods) are convincing and supported by thorough experiments.
-
-3. **Exploitation of NPE's strengths**: The method explicitly leverages NPE's ability to automatically marginalize over nuisance parameters and its suitability for low-dimensional posterior projections. The design is tailored to practical inference scenarios where only a few parameters are of scientific interest.
+1. **Novel and well-motivated approach**: The paper identifies a clear gap in the NPE literature—the trade-off between flexibility and optimization tractability—and proposes a principled solution via basis expansions in log-density space. The connection to exponential families and the exploitation of NPE's marginalization capabilities are well-articulated (Sections 1, 3).
+2. **Theoretical grounding**: The paper provides a convexity analysis (Proposition 1) and discusses global convergence under certain conditions (Section 4.2, Appendix B), linking to neural tangent kernel theory. This strengthens the methodological contribution beyond purely empirical results.
+3. **Comprehensive and rigorous experimentation**: The authors evaluate LBF-NPE on diverse problems, including synthetic 1D/2D posteriors, astronomical object detection, and a large-scale redshift estimation task using the LSST DC2 dataset. Quantitative metrics (KL divergences, NLL) are reported, and comparisons are made against strong baselines (MDNs, normalizing flows, EigenVI). The appendix includes extensive ablations (e.g., basis dimension effects, normalization studies) and sampling demonstrations (Sections 6, Appendices D, E).
+4. **Practical innovations**: The introduction of stereographic projection to handle identifiability issues (Section 4.4) and the discussion of local vs. global basis functions (Section 4.3) are practical contributions that improve training stability and interpretability.
 
 ### Weaknesses
-1. **Sampling limitations**: The primary weakness is the difficulty in drawing samples from the fitted variational distribution, especially in higher dimensions. While inverse transform sampling or Langevin dynamics are suggested, their scalability and efficiency are not thoroughly evaluated. This could limit the method's utility in applications requiring posterior samples (e.g., for downstream uncertainty propagation).
-
-2. **Heuristic choices for basis functions and dimensionality**: The performance depends on the number of basis functions \(K\) and their type (fixed vs. adaptive). The paper provides some ablation but lacks clear guidelines for practitioners on how to select these hyperparameters optimally. The diminishing returns with increasing \(K\) are noted, but a principled selection method is missing.
-
-3. **Incomplete comparison with related work**: The comparison to EigenVI, another basis-expansion VI method, is only qualitative and brief (Appendix E.5). Quantitative metrics (e.g., KL divergence) on the same benchmarks would strengthen the claim of superiority. Additionally, the computational cost analysis (Appendix E.7) is useful but could be more detailed regarding memory and time scaling with dimension.
+1. **Dimensionality limitation**: The method is primarily suited for low-dimensional latent spaces (as acknowledged in Sections 7 and C). Sampling relies on inverse transform sampling or MCMC, which becomes impractical in high dimensions. While the focus on low-dimensional projections is justified for many scientific applications, this limits broader applicability. The high-dimensional experiment in Appendix E.4 is a 50-D annulus with a simple structure, not a challenging high-D posterior.
+2. **Computational overhead per step**: Table 6 shows that LBF-NPE has higher per-step runtime and memory usage than some baselines (e.g., MDN) due to the integral approximation via importance sampling. Although convergence is faster in steps, the total cost can still be significant, especially for adaptive bases requiring alternating optimization.
+3. **Limited exploration of adaptive basis functions**: While adaptive bases are presented, the paper does not deeply analyze what kinds of basis functions are learned or how they relate to the posterior structure. The visualizations (Appendix E.3) are informative but qualitative; a more systematic study of the learned representations would strengthen the claim of "adaptive" flexibility.
+4. **Comparison to recent NPE advances**: The paper compares to standard variational families (MDNs, flows) and EigenVI, but does not discuss more recent advances in NPE, such as sequential methods (e.g., SNPE-C) or attention-based architectures. A comparison to state-of-the-art NPE techniques would better position the contribution.
 
 ### Novelty & Significance
-The work is novel in combining basis expansions with the NPE framework, offering a new point in the trade-off between flexibility and optimization stability. Theoretically, it provides convexity guarantees under certain conditions, contributing to the understanding of NPE optimization. Practically, it demonstrates significant performance gains on real-world scientific inference problems, which is highly relevant for the ICLR community interested in simulation-based inference and probabilistic deep learning.
+**Novelty**: The core idea of using basis expansions for variational families in NPE is novel. While basis expansions have been used in VI (e.g., EigenVI), their application to amortized, likelihood-free NPE—with adaptive bases and stereographic projection—is a new contribution. The theoretical convexity results specific to this parameterization are also novel.
+
+**Significance**: The method offers a compelling middle ground between simple and flexible variational families, with improved optimization properties. The empirical gains on scientific problems (e.g., redshift estimation) demonstrate practical impact. The work could influence how variational families are designed for amortized inference, particularly in low-dimensional settings common in scientific applications.
 
 ### Suggestions for Improvement
-1. **Address sampling challenges more comprehensively**: Include a systematic evaluation of sampling methods (e.g., inverse transform, Langevin dynamics, sequential Monte Carlo) for higher-dimensional targets (beyond 2D). Discuss computational trade-offs and provide recommendations for practitioners.
-
-2. **Provide guidance on hyperparameter selection**: Conduct a more detailed ablation study on the choice of \(K\) and basis type (e.g., B-splines vs. wavelets) across problem classes. Offer heuristic rules or adaptive schemes (e.g., increasing \(K\) until performance plateaus) to aid users.
-
-3. **Strengthen comparisons with EigenVI**: Add quantitative results comparing LBF-NPE and EigenVI on the same 2D benchmarks (e.g., KL divergence, negative log-likelihood) to substantiate the claim of better performance with fewer basis functions. Discuss differences in assumptions (orthogonality constraints) and optimization.
-
-4. **Clarify limitations and scalability**: While the method excels in low-dimensional projections, explicitly discuss its applicability to higher-dimensional latent spaces. Explore structured basis expansions (e.g., tensor products) or conditional independence assumptions to extend scalability, and provide preliminary results if possible.
+1. **Address high-dimensional limitations**: Explore structured basis expansions (e.g., tensor products, conditional independence assumptions) or sparse approximations to scale to moderately high dimensions. Alternatively, provide a more thorough discussion of when low-dimensional projections are sufficient and how to identify such scenarios in practice.
+2. **Deepen analysis of adaptive bases**: Include a quantitative study of how the learned basis functions evolve during training and how they correlate with posterior features (e.g., multimodality, skewness). This could involve measuring basis orthogonality or visualizing their activation patterns for different observation types.
+3. **Expand comparisons**: Include comparisons to recent NPE methods (e.g., SNPE-C, transformer-based approaches) and other flexible VI techniques (e.g., score-based VI) to better establish the state-of-the-art. Additionally, compare runtime and memory trade-offs more comprehensively, perhaps reporting wall-clock time to convergence rather than just steps.
+4. **Clarify practical guidelines**: Provide clearer recommendations for practitioners on choosing between fixed vs. adaptive bases, selecting the number of basis functions \(K\), and tuning hyperparameters (e.g., proposal distribution for importance sampling). The discussion in Sections 4.3 and 7 is helpful but could be more prescriptive.
+5. **Improve presentation of theoretical results**: While Proposition 1 is proved, the global convergence discussion in Appendix B relies heavily on prior work (McNamara et al., 2024a). A more self-contained summary of the assumptions and implications would make the theory more accessible. Additionally, discuss how stereographic projection affects convexity (since it breaks the linear parameterization).
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Controlled ablation on the effect of basis dimension *K* and basis type (fixed vs. adaptive).** The paper claims expressivity improves with *K* and that adaptive bases are beneficial, but provides only scattered examples (e.g., object detection with K=9,20,36,64). A systematic sweep on key benchmarks (like the 2D cases) measuring error vs. K is needed to substantiate claims about efficiency and to guide practitioners.
-2. **Direct comparison to the state-of-the-art NPE methods on standard simulation-based inference (SBI) benchmarks.** The paper compares to MDNs and flows, but not to recent advanced NPE methods like SNPE-C/SNL or more expressive flow architectures (e.g., MAFs, NSF with more layers/coupling transforms). The claimed superiority is not convincing without these baselines.
-3. **Quantitative evaluation of optimization stability/consistency beyond the simple sinusoidal 1D example.** The core claim of better optimization landscape is supported only by a single toy example (Figure 1). Need to show metrics like variance of final loss or KL across many seeds for the more complex 2D/astronomy problems to prove this is a general advantage.
-4. **Analysis of computational cost vs. accuracy trade-off compared to flows.** Table 6 reports runtime but not a direct Pareto curve (e.g., KL vs. wall-clock time or number of parameters). The method's practicality hinges on being more efficient, but this is not rigorously shown.
+1.  **Systematic evaluation on higher-dimensional posteriors (e.g., d=5-10).** The paper focuses on 1D/2D latents and only has one 50D example in the appendix. A core claim is suitability for "low-dimensional projections," but the boundary of this regime is unexplored. Without testing moderate dimensions, it's unclear where the method's computational advantages break down due to the curse of dimensionality in the integral computation.
+2.  **Comparison against a broader suite of modern normalizing flows.** Baselines are limited to RealNVP and NSF. To substantiate claims of superior performance, comparisons against more recent, high-performance flows (e.g., FFJORD, CNF, autoregressive flows) are necessary, especially on the presented 2D benchmarks.
+3.  **Ablation on the alternating optimization scheme.** The method alternates between updating `f_φ` and `s_ψ`. The impact of the update schedule (e.g., 1000 steps each) and the necessity of alternation versus joint training are not studied. A poorly chosen schedule could lead to suboptimal results, undermining the convergence claims.
+4.  **Quantitative evaluation of sampling efficiency and accuracy.** The paper acknowledges sampling is a limitation and suggests inverse transform sampling or MCMC. However, there is no quantitative comparison of sample quality (e.g., ESS, MMD) or speed between these schemes and sampling from flow/MDN baselines. This is critical for practitioners.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Analysis of the failure modes and limitations of the sampling approaches (inverse transform, Langevin).** The paper briefly mentions sampling is a limitation but then shows sampling results in Appendix C.1 that look good. A critical analysis is missing: when do these sampling methods fail (e.g., in higher dimensions, for very complex geometries)? Quantify error of sampled statistics vs. true posterior.
-2. **Investigation into what the learned adaptive basis functions actually represent.** The paper shows visualizations but no analysis linking basis functions to posterior structure. For example, do individual basis functions correspond to modes or features? This is key to the claim of interpretability and adaptivity.
-3. **Sensitivity analysis of the hyperparameters: scaling factor *w*, proposal distribution *r(z)* for importance sampling, and alternating optimization schedule.** The method's performance likely depends on these choices; without ablation, it's unclear how robust the method is.
-4. **Theoretical/empirical analysis of the identifiability issue and the effectiveness of stereographic projection.** The paper mentions rotational degeneracy persists even after projection. How does this affect optimization? Does it lead to multiple equivalent solutions, and does that matter?
+1.  **Empirical analysis of the convexity and optimization landscape.** Proposition 1 states marginal convexity, but there is no empirical verification (e.g., visualizing loss landscapes for LBF-NPE vs. MDN/flow). The claim that convexity leads to better convergence needs direct support beyond the single sinusoidal likelihood trace plot.
+2.  **Analysis of what the adaptive basis functions `s_ψ(z)` learn.** The paper shows basis visualizations but does not analyze their interpretability or how they adapt to different problem classes. An analysis linking basis function structure to posterior geometry (e.g., do they specialize to modes?) would strengthen the "adaptive" claim.
+3.  **Sensitivity analysis of key hyperparameters: number of basis functions `K` and the scaling weight `w`.** While some `K` sweeps are shown, a systematic study of how performance and training stability scale with `K` across problem types is missing. The role of the fixed scale `w` in Eq. 12 is also not analyzed.
+4.  **Investigation of the identifiability and degeneracy issue.** The paper mentions rotational degeneracy persists even after stereographic projection. The practical impact of this on optimization and the final solution is not discussed. Analyzing the variance of solutions from different random seeds could reveal instability.
 
 ### Visualizations & Case Studies
-1. **Visualization of optimization trajectories (loss landscape slices) for LBF-NPE vs. MDN/flows on a non-trivial 2D problem.** This would directly support the claim of a more favorable optimization landscape. The current evidence (Figure 1) is too weak.
-2. **Case studies showing clear failures of the method, especially when the low-dimensional projection assumption is violated or when *K* is too small.** The paper only shows successes. Showing and diagnosing failures would provide a more honest assessment of limitations.
-3. **Visualization of the approximation quality as a function of *x* (the observation) for the amortized network.** The paper shows posteriors for a few selected *x*. A plot of KL divergence vs. *x* (or some summary statistic of *x*) would reveal if the amortization fails for certain regions of observation space.
+1.  **Visualizations of failure cases or limitations.** All shown posteriors are high-quality. To build trust, the authors should visualize cases where LBF-NPE fails or underperforms relative to baselines (e.g., for very high `K`, very rough posteriors, or when the proposal distribution `r(z)` is poorly chosen).
+2.  **Case study on a posterior with complex correlation structure beyond the shown 2D examples.** The "spiral" test is good, but a case with strong, nonlinear correlations in higher dimensions (e.g., a Bayesian neural network posterior) would better test the method's ability to capture dependencies.
+3.  **Visual trace of the basis functions `s_ψ(z)` during training.** Animations or a series of snapshots showing how the basis functions evolve during alternating optimization would provide unique insight into how the model builds up the posterior representation.
 
 ### Obvious Next Steps
-1. **Include a standard SBI benchmark suite (e.g., from `sbi` library) to position the work within the field.** The current benchmarks are mostly custom. Using community standards is essential for fair comparison and credibility.
-2. **Provide a quantitative analysis of the marginal convexity claim in practice.** Proposition 1 states marginal convexity, but does that translate to faster/more reliable convergence in realistic neural network training? Plot loss over iterations for fixed *s* vs. joint training to demonstrate this benefit.
-3. **Discuss and experiment with more sophisticated methods for sampling from the fitted density in moderate dimensions (e.g., Hamiltonian Monte Carlo).** The sampling discussion is cursory; exploring and comparing sampling methods is a logical next step that should have been initiated.
-4. **Compare to variational inference methods that also target low-dimensional projections (e.g., via variational marginalized inference).** The paper emphasizes NPE's automatic marginalization, but does not contrast with other VI methods that can marginalize nuisance parameters.
+1.  **Benchmark against Hamiltonian Monte Carlo (HMC) ground truth on a challenging, moderate-dimensional problem.** For a problem where MCMC is feasible (e.g., d<20), comparing LBF-NPE's posterior approximation fidelity (in KL divergence) to an HMC baseline would provide a strong, missing reference point for accuracy.
+2.  **Integrate and evaluate the proposed sampling methods.** The appendix mentions Langevin dynamics and inverse transform sampling. These should be integrated into the main experimental workflow, with a clear comparison of their accuracy and computational cost for generating samples used in downstream tasks (e.g., expectation estimation).
+3.  **Explore the use of more sophisticated proposal distributions `r(z)` for the importance sampling gradient estimator.** The paper uses a simple `r(z)`. The gradient estimator's variance and training stability likely depend heavily on this choice. A natural next step is to adapt `r(z)` during training, which should have been explored.
 
 # Final Consolidated Review
 ## Summary
-This paper introduces Latent Basis Function Neural Posterior Estimation (LBF-NPE), a variational family for amortized inference that models the log posterior density as a linear combination of basis functions over the latent space. The method leverages neural posterior estimation's automatic marginalization and is designed for low-dimensional posterior projections, offering convex optimization guarantees with fixed bases and adaptive flexibility. Experiments show superior performance over mixture density networks and normalizing flows on synthetic and real-world tasks.
+This paper introduces Latent Basis Function Neural Posterior Estimation (LBF-NPE), a variational family for amortized, likelihood-free inference that models log-densities as linear combinations of basis functions over the latent space. The method offers theoretical convexity properties when either the basis functions or the coefficient network is fixed, and it leverages NPE’s ability to target low‑dimensional posterior projections. Experiments demonstrate improved performance over mixture density networks and normalizing flows on synthetic 2D tasks and a large‑scale astronomical redshift estimation problem.
 
 ## Strengths
-- **Novel variational parameterization via latent basis expansions:** The method models log-densities as linear combinations of basis functions, forming a flexible exponential family. This bridges the gap between simple interpretable families and black-box flows, with convex optimization properties when bases are fixed (Proposition 1).
-- **Strong empirical performance across diverse benchmarks:** LBF-NPE consistently outperforms mixture density networks and normalizing flows in forward/reverse KL divergence and negative log-likelihood on synthetic 2D problems, astronomical object detection, and cosmological redshift estimation (Tables 1, 2).
+- **Novel and well‑motivated variational parameterization.** LBF‑NPE fills a gap between simple (e.g., Gaussian) and highly flexible (e.g., normalizing flow) families by using basis expansions in log‑density space, yielding an exponential‑family distribution that is both expressive and optimizable.
+- **Theoretical grounding.** Proposition 1 establishes marginal convexity of the NPE objective when either the basis functions or the coefficient network is fixed, linking to prior work on global convergence in wide neural networks and providing insight into the optimization landscape.
+- **Comprehensive empirical evaluation.** The method is tested on a range of problems—from synthetic multimodal posteriors to real‑world astronomical object detection and redshift estimation—and consistently outperforms strong baselines (MDNs, RealNVP, neural spline flows) in forward/reverse KL divergence and negative log‑likelihood.
 
 ## Weaknesses
-- **Sampling scalability is limited:** Drawing samples from the fitted variational distribution is non-trivial beyond very low dimensions. While inverse transform or Langevin dynamics are suggested, their efficiency and accuracy in moderate to high dimensions are not demonstrated, restricting applications where posterior samples are required.
-- **Performance hinges on heuristic hyperparameter choices:** Key design decisions—number of basis functions \(K\), basis type (fixed vs. adaptive), alternating optimization schedule—lack principled guidance or systematic ablation. This affects reproducibility and optimal deployment.
-- **Quantitative comparison to EigenVI is insufficient:** The related basis-expansion method EigenVI is compared only qualitatively (Appendix E.5), without reported KL divergences or likelihoods to substantiate claims of superiority with fewer bases.
+- **Insufficient demonstration of automatic marginalization.** A key motivation is NPE’s ability to marginalize over high‑dimensional nuisance variables when only a low‑dimensional projection is of interest. However, the experiments do not prominently feature problems with many nuisance parameters; the 50‑D annulus (Appendix E.4) and the BNN example (Appendix E.8) are steps in this direction but do not fully showcase this claimed advantage.
+- **Sampling limitations are acknowledged but not thoroughly addressed.** While inverse transform sampling and Langevin dynamics are proposed, their efficiency and accuracy are only qualitatively illustrated for 2D cases. A quantitative evaluation of sampling quality (e.g., effective sample size, MMD) and computational cost is missing, which is important for practitioners who need posterior samples.
+- **Experimental comparisons could be more rigorous.** Quantitative results for EigenVI are omitted (only visual comparison in Appendix E.5), making it hard to assess the claimed superiority. Ablations between fixed and adaptive basis functions are not provided, and baseline architectures (e.g., flow depth, MDN component count) are not matched in parameter count or expressivity, leaving open whether gains stem from the parameterization or increased capacity.
+- **Overstatement in the abstract.** The abstract claims “order‑of‑magnitude improvements in KL divergence over both MDNs and normalizing flows” on 2D posteriors, but Table 1 shows that while improvements over MDNs are indeed order‑of‑magnitude, improvements over flows are more modest (e.g., 0.0048 vs. 0.016 for bands—roughly 3×). The wording should be precise.
 
 ## Nice-to-Haves
-- Systematic ablation studying the effect of basis dimension \(K\) and type (e.g., B-splines vs. wavelets) on approximation error.
-- Analysis of optimization stability (e.g., loss variance across seeds) for complex problems beyond the sinusoidal example.
-- Exploration of more scalable sampling techniques (e.g., Hamiltonian Monte Carlo) for moderate-dimensional targets.
+- Deeper analysis of what the adaptive basis functions learn and how they relate to posterior geometry (e.g., specialization to modes, correlation structure).
+- Sensitivity study of key hyperparameters: the number of basis functions \(K\), the scaling weight \(w\) in the stereographic projection variant, and the proposal distribution \(r(z)\) used in importance sampling.
+- Comparison to a broader set of normalizing flow architectures (e.g., autoregressive flows) and recent NPE advances (e.g., sequential NPE methods) to better situate the contribution.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **“Alternating optimization is not guaranteed to converge globally.”** The paper only claims marginal convexity (Proposition 1) and does not assert global convergence for the alternating scheme; this criticism misreads the theoretical claims.
+- **“Stereographic projection breaks convexity.”** The paper introduces stereographic projection to mitigate identifiability, not to preserve convexity; the impact on optimization is empirical and the method remains stable in practice.
+- **“The paper does not discuss broader societal impacts.”** Given the methodological focus, a societal impact statement is not required; its absence is not a substantive weakness.
+- **“Request for benchmark against Hamiltonian Monte Carlo.”** HMC requires likelihood evaluations and is not directly comparable to likelihood‑free, amortized NPE methods; this is outside the paper’s scope.
+- **“Formatting nitpicks (e.g., missing hardware details in Table 6).”** These are minor presentation issues that do not affect the scientific contribution.
 
 ## Novel Insights
-None beyond the paper's own contributions.
+The paper’s core insight is that modeling the log‑density via a basis expansion yields an exponential‑family variational distribution that can be optimized through convex subproblems while retaining high expressivity. This bridges the gap between simple variational families (with stable optimization) and flexible black‑box families (which are harder to train). Additionally, the connection to angular‑distance optimization through stereographic projection reparameterization offers a fresh perspective on stabilizing amortized inference. The empirical finding that even a small number of adaptive basis functions can capture complex multimodal posteriors (e.g., 20 basis functions suffice for intricate 2D shapes) suggests that low‑rank representations in log‑density space are surprisingly powerful for many inference tasks.
 
 ## Suggestions
-- Add quantitative metrics (e.g., KL divergence) to the EigenVI comparison on the 2D benchmarks to rigorously demonstrate advantages.
-- Provide practical guidelines for selecting \(K\), such as using a validation set to monitor performance plateau.
-- Evaluate sampling methods on a higher-dimensional target (e.g., the 50D annulus) to quantify sampling error and computational cost.
+- Include a dedicated experiment that clearly demonstrates marginalization over a high‑dimensional nuisance space (e.g., a hierarchical model with many nuisance variables) to solidify the motivation.
+- Provide quantitative KL divergence numbers for EigenVI on the 2D test cases and an ablation comparing fixed B‑splines/wavelets against adaptive bases on the same task.
+- Add a quantitative evaluation of sampling efficiency (e.g., ESS, wall‑clock time to generate a fixed number of samples) for at least one non‑trivial posterior to guide users on practical deployment.
+- Clarify the choice of proposal distribution \(r(z)\) in Algorithm 1 and the experimental settings (e.g., uniform over the latent domain) to enhance reproducibility.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 8.0]

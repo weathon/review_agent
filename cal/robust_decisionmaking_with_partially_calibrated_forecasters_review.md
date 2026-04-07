@@ -3,116 +3,145 @@
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
-### Title & Abstract
-The title clearly reflects the paper’s contribution. The abstract succinctly states the problem, approach, and main results. The claim that decision calibration recovers best-response optimality in a minimax sense is a central and well-supported result.
+**Title & Abstract**
+The title accurately reflects the core contribution (robust decision-making with partially calibrated forecasts). The abstract clearly states the problem, approach, and main results (minimax optimal decision rule, collapse to best response under decision calibration). The claim that decision calibration recovers the "trustworthiness" semantics of full calibration is a strong and compelling summary. No substantive issues.
 
-### Introduction & Motivation
-The introduction effectively motivates the problem: full calibration is intractable in high dimensions, while weaker calibration notions lack clear decision-theoretic guarantees. The paper’s central question—how to derive optimal decision policies under partial calibration—is well-posed. Contributions are clearly listed in Section 1.1.
+**Introduction & Motivation**
+The problem is exceptionally well-motivated, bridging the gap between the appealing decision-theoretic guarantees of full calibration and its practical intractability in high dimensions. The framing of "On the Model Side" vs. "On the Decision Making Side" is effective. The contributions (listed in Section 1.1) are clearly and precisely stated. The introduction successfully argues that the paper's minimax lens is a novel and needed perspective in this literature.
 
-### Method / Approach (Sections 2–4)
-**Section 2** clearly defines \(H\)-calibration and the robust decision-making framework. Assumption 2.1 (linear utility) is standard but a notable limitation; the paper acknowledges this and suggests future work.
+**Method / Approach**
+*Section 2 (Problem Setup)*: The definition of H-calibration and the robust decision-making problem (Eq. 5) are clear. **A major assumption (2.1) is that the utility is linear in the forecast vector `v`.** This is explicitly stated and justified for risk-neutral expected utility settings but is a significant restriction. The paper correctly notes it as a direction for future work, but reviewers may question the practical scope of this linearity assumption (e.g., it excludes any consideration of risk or variance).
+*Section 3 (General Characterization)*: Theorem 3.1 is the core technical result. The proof (in Appendix A) appears correct and leverages standard tools (Sion's minimax theorem, Lagrangian duality). The characterization of the optimal policy and worst-case belief via a dual multiplier `λ*` is elegant and provides a computational pathway. A minor point: the theorem states the policy is a best response to `q*(v)`, but the computation of `λ*` itself requires solving an optimization over the distribution of `f(X)`. The text mentions this can be done via standard methods, which is acceptable, but the complexity of this outer-loop optimization could be noted as a practical consideration.
+*Section 4 (Special Cases)*:
+    *Theorems 4.1 & 4.2 (Decision Calibration)*: These are the most striking results. The proof that the plug-in best response is minimax optimal under (or with) decision calibration is clever, using the invariance property (Eq. 9 in the proof). This is a significant conceptual contribution, elevating decision calibration from a swap-regret guarantee to a full minimax-optimality guarantee. The "sharp transition" point is well-illustrated in Figure 2.
+    *Proposition 4.4 (Self-orthogonality)*: This is a useful and practical insight, connecting standard squared-error regression training to a specific H-calibration guarantee. It grounds the theory in common practice.
+    *Proposition 4.5 (Bin-wise Calibration)*: Provides a simple, interpretable robust policy. This is a good example of instantiating the general framework.
+*Overall Methodological Assessment*: The theoretical development is rigorous, novel, and well-structured. The assumptions are clearly flagged. The transition from a general characterization to interpretable special cases is logical. The reproducibility is high given the detailed proofs in the appendix.
 
-**Section 3 (Theorem 3.1)** characterizes the optimal robust policy via duality. The proof (Appendix A) appears correct, but there is a subtle technical issue: the use of Sion’s minimax theorem requires compactness of the set \(Q\). The authors state \(Q\) is “compact,” but they do not specify the topology. Since \(Q\) consists of measurable functions from \([0,1]^d\) to \([0,1]^d\), compactness is non-trivial. Typically, one works with a weakly compact set (e.g., by considering \(L_2\) constraints), but this should be clarified or justified. This does not invalidate the result but is a gap in the rigorous presentation.
+**Experiments & Results**
+This is the section most likely to be critiqued at a conference like ICLR, which often expects empirical validation even for theory papers.
+*Strength*: The experiments directly test a theoretical prediction: the robust policy (`a_robust`) should outperform the plug-in policy (`a_BR`) under adversarial distributions consistent with the H-calibration guarantee, while potentially paying a mild cost under i.i.d. conditions. The results in Table 1 confirm this pattern.
+*Weaknesses/Limitations*:
+    1. **Scale and Scope**: The experiments are limited to two standard regression datasets with small, discrete action sets (3 actions). While sufficient for proof-of-concept, they do not demonstrate the framework's utility in more complex, high-dimensional decision problems (e.g., large action spaces, structured outputs) which the theory is designed to address.
+    2. **Adversary Construction**: The description of how the "worst-case" adversarial test distributions are generated is vague. The text says they are "tailored to the plug-in policy" and "induced by the robust dual," but no algorithmic details are provided in the main text or appendix. This makes the experimental results difficult to reproduce or fully evaluate.
+    3. **Missing Baseline**: A natural conservative baseline is the constant minimax strategy (`argmax_a min_y u(a,y)`), which is the optimal policy under an empty `H`. Comparing to this would better illustrate the benefit of incorporating even weak calibration information (like self-orthogonality).
+    4. **Statistical Significance**: No measures of variance (e.g., standard errors over multiple splits/seeds) are reported. The differences, while consistent with theory, are small.
+*Conclusion on Experiments*: They serve their primary purpose of illustrating the theoretical concepts but are not a comprehensive empirical study. The lack of detail on adversary generation is a notable omission for reproducibility.
 
-**Section 4** provides insightful specializations. Theorems 4.1 and 4.2 show that decision calibration (or any stronger notion) collapses the robust policy to plug-in best response. This is a sharp and important finding. The proofs rely on the invariance property (equation 9), which is correct under the linear utility assumption. Propositions 4.4 and 4.5 derive practical robust policies for self-orthogonality and bin-wise calibration. These are valuable for applications.
+**Writing & Clarity**
+Despite OCR/parser artifacts (e.g., "CALI### BRATED", broken equation formatting), the paper is generally well-written and logically organized. The figures (1 and 2) are helpful schematics. The flow from general problem to general solution to special cases is clear. A few points:
+* The notation `q` is used both for the conditional expectation map `q(v) = E[Y|f(X)=v]` and for specific values `q(v)`; this is standard but requires careful reading.
+* The switch between `v` and `ν` for forecast values is slightly inconsistent.
+* Section 3 would benefit from a brief, high-level intuition for Theorem 3.1 before diving into the formal statement, explaining the role of the dual multiplier `λ*` as an "adversarial tilt."
+These are minor clarity issues, not fundamental obstacles to understanding.
 
-**Overall**, the method is reproducible and the logical flow is sound, modulo the compactness concern.
+**Limitations & Broader Impact**
+The paper explicitly discusses its main technical limitation: the linearity assumption for utility (Assumption 2.1). It also briefly mentions the intractability of full calibration in high dimensions as motivation. The societal impact discussion is absent, which is reasonable for a paper of this theoretical nature; the framework itself is neutral, aiming to improve the reliability of decisions based on ML forecasts.
 
-### Experiments & Results (Section 5)
-Experiments on two regression datasets (Bike Sharing, California Housing) validate the theory. The robust policy (based on self-orthogonality) outperforms the plug-in rule under adversarial distribution shifts, with a small cost under i.i.d. conditions. The experiments are adequate but limited in scope:
-- Only two datasets and one utility function are used.
-- The adversarial distributions are constructed theoretically, but real-world distribution shifts are not tested.
-- The choice of \(H = \{h(v)=v\}\) (self-orthogonality) is natural but more calibration notions could be compared.
-While the experiments support the theory, broader empirical evaluation would strengthen the paper. Nonetheless, given the theoretical nature of the work, the experiments are sufficient.
-
-### Writing & Clarity
-The paper is exceptionally well-written. The narrative is clear, figures are helpful, and the appendix is thorough. No major clarity issues impede understanding.
-
-### Limitations & Broader Impact
-The conclusion discusses key limitations: risk-neutral (linear) utilities, finite action sets, and the challenges of non-linear utilities. The broader impact is not explicitly discussed; given the focus on trustworthy decision-making, a brief discussion of societal implications (e.g., in healthcare or finance) would be appropriate, though not required.
-
-### Appendix
-Appendix A contains complete proofs, which appear correct and detailed. Appendix B extends the results to approximate calibration, adding value. The proofs there are also rigorous.
+**Appendix B (Approximate Calibration)**
+This is a substantial and valuable extension, showing stability under `ε`-slack in the calibration constraints. Theorems B.1 and B.2 effectively generalize the main results to the approximate case, providing `O(ε)` degradation bounds. This strengthens the paper's relevance to practical settings where calibration is only approximate. This appendix significantly bolsters the paper's completeness.
 
 ### Overall Assessment
-This paper makes a significant theoretical contribution by linking partial calibration to robust decision making. The characterization of minimax optimal policies and the collapse to best response under decision calibration are novel and impactful results. The technical execution is strong, though the compactness assumption in Theorem 3.1 should be clarified. The experiments, while limited, adequately support the theory. The paper meets ICLR’s standards for novelty, significance, and clarity. It is likely above the acceptance bar, pending minor revisions to address the technical gap.
+This is a strong, theoretically novel paper that makes a clear contribution. It provides a principled, minimax framework for decision-making with partially calibrated forecasts and derives a sharp, insightful result: decision calibration—a tractable condition—suffices to make the simple plug-in best response minimax optimal. The technical execution is rigorous, with complete proofs. The main weaknesses are the limited scale and somewhat underspecified experimental validation, which is common for theory-focused submissions. The linearity assumption is a genuine but acknowledged limitation. The paper meets the high bar for ICLR in terms of novelty, significance, and technical soundness. Addressing the experimental reproducibility concern (detailing the adversary construction) is the most critical point for the authors to clarify in a revision.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper studies robust decision-making when forecasts satisfy only partial (weaker) calibration guarantees, formalized as H-calibration. The authors frame the problem as a minimax optimization: choose a decision policy that maximizes worst-case expected utility over all outcome distributions consistent with the H-calibration constraints. They characterize the optimal policy via duality and show that for the tractable notion of decision calibration (and any stronger calibration), the minimax-optimal policy collapses to simply best-responding to the forecasts. For weaker calibration notions (e.g., those arising from squared-loss regression), they derive efficiently computable robust policies and demonstrate their performance empirically.
+This paper addresses how a decision maker should optimally act when given forecasts that satisfy only partial (weaker) calibration guarantees, rather than full calibration. The authors formulate a minimax robust decision problem where the goal is to maximize worst-case utility over all distributions consistent with the promised calibration constraints. They characterize the optimal decision rule via a duality argument and show, surprisingly, that for the tractable notion of decision calibration (and any stronger calibration), the minimax optimal rule collapses to the simple plug-in best response—effectively restoring the "trust the forecast" principle. For weaker calibration notions, they derive efficiently computable robust rules and provide empirical validation on regression datasets.
 
 ### Strengths
-1. **Novel and well-motivated problem**: The paper addresses a critical gap between calibration theory and practical decision-making, providing a principled framework for acting on forecasts that are not fully calibrated. This is highly relevant for high-stakes applications where full calibration is intractable.
-2. **Theoretical elegance and insight**: The duality-based characterization of the minimax optimal policy is clean and general. The “sharp transition” result—that decision calibration suffices for plug-in best response to be optimal—is both surprising and significant, as it justifies a tractable calibration notion with strong decision-theoretic guarantees.
-3. **Practical relevance and empirical validation**: The paper includes experiments on real-world datasets (Bike Sharing and California Housing) that validate the theory: the robust policy outperforms the plug-in rule under adversarial distribution shifts consistent with the calibration constraints, with only a minor performance drop under i.i.d. conditions. This demonstrates the framework’s practical utility.
-4. **Clear exposition**: Despite the technical nature, the paper is well-structured, with intuitive explanations of key ideas (e.g., the interpolating property between aggressive and conservative extremes) and a thorough discussion of related work.
+1. **Novel and well-motivated framework**: The paper introduces a novel minimax perspective for decision making under partial calibration, bridging calibration theory and robust optimization. This addresses a practical gap: full calibration is intractable in high dimensions, but weaker forms are often achieved, and the paper provides a principled way to exploit them.
+2. **Theoretically sound and insightful results**: The characterization of the optimal robust policy (Theorem 3.1) is clean and general. The collapse to plug-in best response under decision calibration (Theorems 4.1 and 4.2) is a strong and surprising result, showing that a tractable calibration notion suffices for optimal decision making. Proofs are provided and appear correct.
+3. **Practical relevance and algorithmic implications**: The paper connects to practical scenarios by deriving robust rules for calibration guarantees that arise naturally from standard training (e.g., self-orthogonality from squared loss) and post-hoc methods (e.g., bin-wise calibration). The proposed policies are efficiently computable for finite action sets.
+4. **Clear exposition**: The paper is well-structured, with a clear problem statement, intuitive explanations, and a good discussion of related work. The interpolation property between aggressive and conservative extremes is nicely illustrated.
 
 ### Weaknesses
-1. **Restrictive utility assumption**: Assumption 2.1 requires linearity of the utility in the outcome probabilities. While common in the calibration literature, this excludes risk-averse or non-linear decision makers, limiting the scope of applications. The authors acknowledge this but do not offer a workaround.
-2. **Limited empirical evaluation**: Experiments are confined to two regression datasets with simple utility functions and a specific H-calibration derived from squared loss. Broader evaluation—including classification tasks, more complex neural networks, and diverse utility structures—would strengthen the empirical claims.
-3. **Computational considerations under-explored**: Although the policies are claimed to be efficiently computable for finite H and finite actions, no detailed complexity analysis or scalable implementations are provided. For large action sets or high-dimensional forecasts, the pointwise optimization might become burdensome.
-4. **Narrow focus on finite dimensions**: The theory assumes finite-dimensional H and finite action sets. While this covers many cases, extensions to continuous or infinite action spaces and nonparametric H are left as future work, which may limit applicability in some settings.
+1. **Limited empirical evaluation**: Experiments are conducted on only two regression datasets with simple, discrete action spaces (3 actions) and synthetic linear utilities. The evaluation under adversarial distribution shift is somewhat contrived. More diverse benchmarks (e.g., multiclass classification, larger action sets, real-world decision tasks) would strengthen the claims of practical applicability.
+2. **Restrictive assumptions**: The framework assumes risk-neutral linear utilities and finite action spaces. While common in the literature, this limits the scope. Nonlinear utilities (e.g., risk-averse) and continuous actions are important for many real-world decisions but are left as future work with only brief discussion.
+3. **Lack of comparison to alternative robust baselines**: The experiments compare only the proposed robust rule against the plug-in rule. It would be valuable to compare with other robust decision-making approaches or calibration methods to better contextualize the performance gains.
+4. **Computational considerations understated**: Although the paper claims efficient computability, the pointwise optimization required for the robust rule may become expensive for very large action sets or high-dimensional forecasts. No discussion of approximation methods or scalability is provided.
 
 ### Novelty & Significance
-The paper makes a novel contribution by bridging calibration guarantees with minimax robust decision-making. The key insight—that decision calibration recovers the “trust the forecast” semantics in a minimax sense—is significant because decision calibration is far more tractable than full calibration, especially in high dimensions. This provides a strong justification for using decision calibration in practice. The work also unifies several lines of research (calibration, robust optimization, and decision theory) and offers a practical framework for robust decision-making under partial trustworthiness. The results meet ICLR’s standards for novelty and potential impact.
+The paper makes a significant contribution by linking partial calibration guarantees to minimax optimal decision rules. The key insight—that decision calibration (a tractable condition) is sufficient for the plug-in best response to be minimax optimal—is both novel and impactful. It provides a rigorous decision-theoretic foundation for using tractable calibration notions in high-stakes applications. The work is timely and aligns well with ICLR's focus on trustworthy and reliable machine learning.
 
 ### Suggestions for Improvement
-1. **Generalize the utility assumption**: Explore extensions to non-linear utilities, perhaps via linearization over bases (as hinted in the conclusion) or by deriving robust policies for specific classes of convex/concave utilities. This would greatly broaden the applicability.
-2. **Expand empirical evaluation**: Include experiments on multi-class classification datasets, vary the utility functions (e.g., risk-sensitive utilities), and test with more complex models (e.g., deep neural nets) to demonstrate robustness across settings.
-3. **Provide algorithmic details and complexity analysis**: Add pseudocode for computing the robust policy, discuss computational bottlenecks, and suggest approximations or scalable implementations for large-scale problems.
-4. **Clarify connections to distributionally robust optimization (DRO)**: The ambiguity set Q defined by moment constraints is reminiscent of DRO. A more explicit discussion of this relationship could help situate the work within the broader robust optimization literature.
+1. **Expand the experimental section**: Include more datasets (especially multiclass classification) and more complex decision problems (e.g., larger action sets, non-linear utilities). Evaluate under a wider range of distribution shifts, including real-world shifts, to better demonstrate robustness.
+2. **Discuss computational scalability**: Provide an analysis of the computational cost of the robust rule as a function of the number of actions and forecast dimension. Suggest approximation techniques (e.g., using convex solvers, sampling) for large-scale settings.
+3. **Compare with additional baselines**: Incorporate comparisons to other robust decision-making methods (e.g., distributionally robust optimization) and calibration techniques (e.g., temperature scaling, conformal prediction) to better position the proposed approach.
+4. **Clarify the adversarial construction in experiments**: In Section 5, detail exactly how the worst-case distributions for the plug-in and robust rules are generated, ensuring reproducibility. Consider including a sensitivity analysis on the slack parameter ε for approximate calibration.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **No validation for the core claim about decision calibration.** The paper proves that decision calibration makes the plug-in rule minimax optimal, but provides no empirical demonstration. To validate this key theoretical result, an experiment should train a decision-calibrated forecaster (using existing algorithms) and show the robust policy indeed collapses to the plug-in rule.
-2. **Only one calibration notion (self-orthogonality) is tested.** The general framework is claimed to work for any H, but experiments do not test other natural choices (e.g., bin-wise calibration or top-label calibration). Without this, the practical breadth of the method is unsubstantiated.
-3. **Adversarial evaluations are synthetic and not representative of real shifts.** The constructed worst-case distributions are theoretical tools; the paper lacks evaluation on realistic distribution shifts (e.g., temporal, geographic, or subpopulation shifts) that are common in practice. This undermines the claimed practical utility.
-4. **No comparison to existing robust decision-making baselines.** Methods like conformal prediction or Bayesian uncertainty quantification also offer ways to act conservatively. Without comparisons, it is unclear whether the proposed robust policy offers any advantage.
+1. **Validate the collapse to plug-in under decision calibration.** The paper's central theoretical result (Theorems 4.1-4.2) states that if the forecaster is decision-calibrated, the minimax optimal rule is the plug-in best response. However, the experiments only test self-orthogonality (H={v}). To substantiate this claim, the authors must train or post-process a model to be decision-calibrated (e.g., using multicalibration algorithms) and demonstrate that the plug-in rule indeed cannot be outperformed under adversarial shifts consistent with decision calibration.
+
+2. **Assess performance under approximate calibration.** The theory assumes exact H-calibration, but practical models only satisfy it approximately. The paper should empirically evaluate how the robust rule's performance degrades with increasing calibration error (ε), and verify the bounds in Appendix B. Without this, the practical utility of the theory is unclear.
+
+3. **Compare to alternative robust decision-making baselines.** The paper lacks comparisons to established methods like distributionally robust optimization (DRO) with moment constraints or Bayesian decision rules. Such comparisons are necessary to demonstrate that the proposed minimax approach offers tangible advantages over existing techniques for handling uncertainty.
+
+4. **Test on diverse decision problems and data modalities.** Experiments are limited to two regression datasets with synthetic three-action linear utilities. To establish generality, the authors should evaluate on classification tasks (multiclass outcomes) and with non-linear utility functions, which are common in real-world decisions.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **The linear utility assumption is crucial but unexplored.** The theory requires utilities linear in the outcome probabilities. The paper should discuss how restrictive this is for real decision problems (e.g., risk-averse or safety-critical settings) and whether approximations (like basis expansions) are viable.
-2. **Computational scalability for large or infinite H is not addressed.** The dual optimization dimension scales with |H|. For decision calibration with many actions, or for combining many decision problems, solving the dual may become costly. An analysis of computational complexity and scalable approximations is missing.
-3. **The relationship to swap regret guarantees is not sufficiently clarified.** The paper claims decision calibration yields minimax optimality, which is stronger than swap regret. A direct comparison showing how minimax optimality subsumes or differs from swap regret would strengthen the theoretical contribution.
+1. **Analyze computational scalability.** The paper claims the robust rule is "efficiently computable" for finite H but provides no analysis of runtime, memory, or scalability as |H| grows (e.g., for multicalibration with many groups). Without this, practitioners cannot assess feasibility for complex H.
+
+2. **Discuss the impact of the linear utility assumption.** The entire theoretical framework requires utilities linear in outcome probabilities, excluding risk-averse or other non-linear utilities common in economics and healthcare. The paper should explicitly discuss this limitation and the practicality of linearization techniques mentioned.
+
+3. **Explore sensitivity to the choice of H.** The robust rule's behavior depends critically on the set H of calibration tests. The paper does not guide how to select H when decision calibration is infeasible. An analysis comparing performance across different H (e.g., self-orthogonality vs. bin-wise) on the same problem would provide crucial insight.
+
+4. **Clarify novelty relative to robust optimization with moment constraints.** The paper claims to be the first to apply a minimax lens to partially calibrated forecasts, but robust optimization with moment constraints is well-studied. A deeper discussion situating the work within that literature is needed to articulate the specific contribution.
 
 ### Visualizations & Case Studies
-1. **Visualize how the robust policy deviates from the plug-in rule.** For a simple 2D forecast space (e.g., two-class probabilities), plot the action regions of the robust policy versus the plug-in policy under a specific H (like self-orthogonality). This would concretely show how robustness alters decisions.
-2. **Case studies illustrating failure modes.** Show concrete examples (e.g., with specific utility functions and forecasts) where the robust policy incurs significant utility loss under i.i.d. data, quantifying the trade-off between robustness and nominal performance.
+1. **Visualize action regions in forecast space.** For a simple 2D forecast (e.g., two-class probabilities), plot the action regions chosen by the plug-in rule versus the robust rule under different H-calibration guarantees. This would concretely show how robustness alters decisions and where conservatism increases.
+
+2. **Case study on a real-world decision problem.** Apply the framework to a high-stakes domain (e.g., medical diagnosis or loan approval) with a realistic utility function and domain-specific calibration guarantees. Demonstrate that the robust rule improves decisions under distribution shift compared to naive plug-in, highlighting practical impact.
+
+3. **Illustrate constructed adversarial distributions.** In experiments, adversarial distributions are tailored to hurt specific policies. Visualizing how these adversaries shift outcomes conditional on forecasts (e.g., via histograms or scatter plots) would build intuition about the nature of the worst-case and how the robust rule counters it.
 
 ### Obvious Next Steps
-1. **Implement and test decision calibration.** The most immediate next step is to empirically verify the collapse to plug-in best response when decision calibration holds, using existing calibration algorithms.
-2. **Release a general-purpose solver for the robust policy.** Provide open-source code that computes the optimal robust policy for any user-specified H and utility function, enabling adoption and further research.
-3. **Extend experiments to classification tasks and larger action spaces.** The current experiments are on regression with tiny action sets. Testing on multi-class classification with more complex decision problems would demonstrate broader applicability.
+1. **Implement decision calibration and verify theorem.** As a direct validation, implement decision calibration (using existing multicalibration algorithms) on a forecaster and empirically confirm that no policy can outperform plug-in under admissible distribution shifts.
+
+2. **Extend experiments to classification and non-linear utilities.** Test the framework on standard classification datasets (e.g., CIFAR-10) with multiclass forecasts and non-linear utility functions to demonstrate broader applicability beyond regression.
+
+3. **Investigate adaptive or data-driven selection of H.** Propose and evaluate a method to choose H from data (e.g., based on validation performance or complexity) to balance robustness and tractability, addressing a key practical question.
+
+4. **Release open-source code for the robust rule.** To facilitate adoption and reproducibility, provide a well-documented implementation that computes the robust decision rule given a calibrated forecaster, utility function, and calibration set H.
 
 # Final Consolidated Review
 ## Summary
-This paper studies robust decision-making when forecasts satisfy only partial calibration guarantees. It characterizes the minimax-optimal decision policy via a duality argument and shows that, surprisingly, under the tractable notion of decision calibration, the optimal policy collapses to simply best-responding to the forecasts. Experiments on regression datasets demonstrate the practical value of the robust policy under adversarial distribution shifts.
+This paper introduces a minimax framework for decision-making with forecasts that satisfy partial calibration guarantees (H-calibration). It characterizes the optimal robust decision rule via duality and shows that under the tractable notion of decision calibration, the rule collapses to the simple plug-in best response—effectively restoring "trust the forecast" semantics. For weaker calibration, efficient computations are provided, with empirical validation on regression tasks.
 
 ## Strengths
-- The paper addresses a critical gap between calibration theory and practical decision-making, providing a principled framework for acting on forecasts that are not fully calibrated, which is especially relevant in high-dimensional settings where full calibration is intractable.
-- The theoretical analysis yields a sharp and insightful result: decision calibration—a tractable notion—suffices for the plug-in best response to be minimax optimal, effectively recovering the "trust the forecast" semantics of full calibration. This provides a strong justification for using decision calibration in practice.
-- The framework is empirically validated on real-world regression datasets, showing that the proposed robust policy outperforms the plug-in rule under adversarial shifts consistent with the calibration guarantees, with only a minor performance drop under i.i.d. conditions.
+- **Novel and well-motivated framework**: Bridges calibration theory and robust optimization, addressing the practical gap between intractable full calibration and weaker, achievable guarantees.
+- **Theoretically insightful results**: Theorem 3.1 gives a general characterization via duality, and Theorems 4.1–4.2 show that decision calibration suffices for plug-in best response to be minimax optimal—a sharp and surprising collapse that elevates decision calibration's decision-theoretic status.
+- **Practical instantiations**: Connects to common scenarios like self-orthogonality from squared-loss training (Proposition 4.4) and bin-wise calibration (Proposition 4.5), yielding efficiently computable rules for finite action sets.
 
 ## Weaknesses
-- The linear utility assumption (Assumption 2.1) restricts the framework to risk-neutral decision makers, excluding important classes of problems with risk-averse or non-linear utilities. While acknowledged, this limitation narrows the applicability of the results.
-- The empirical evaluation is limited in scope: only two regression datasets and one calibration notion (self-orthogonality) are tested. The key theoretical claim about decision calibration is not empirically validated, and the experiments do not cover classification tasks or more diverse utility structures.
-- The proof of Theorem 3.1 relies on the compactness of the set \(Q\) without explicitly justifying the topology or providing a rigorous compactness argument. While this does not invalidate the results, it leaves a technical gap in an otherwise rigorous presentation.
+- **Linear utility assumption**: The framework requires utilities linear in outcome probabilities (Assumption 2.1), excluding risk-averse or non-linear utilities common in real-world decisions. While acknowledged as a limitation, this restricts applicability.
+- **Limited empirical validation**: Experiments are confined to two regression datasets with small, discrete action sets and do not test the central collapse under decision calibration—only self-orthogonality is evaluated. Adversarial distribution generation is underspecified (Section 5), hindering reproducibility.
+- **Missing comparisons to robust baselines**: The experiments compare only plug-in and proposed robust rules; omitting the constant minimax strategy (mentioned as an extreme in the introduction) or other distributionally robust methods makes it hard to gauge the value of incorporating calibration information.
+- **Computational scalability not analyzed**: Although claimed "efficiently computable" for finite H, no analysis of runtime, memory, or scalability with |H| or action set size is provided, which is important for practical deployment.
 
 ## Nice-to-Haves
-- A more extensive empirical evaluation, including validation of the decision calibration collapse and comparisons to other robust decision-making baselines (e.g., conformal prediction), would strengthen the practical claims.
-- Discussion of computational complexity and scalable approximations for large action sets or high-dimensional \(H\) would aid implementation.
-- Visualizations illustrating how the robust policy deviates from the plug-in policy in simple settings could enhance intuition.
+- Empirical validation of the collapse theorem using decision-calibrated forecasters (e.g., via multicalibration algorithms).
+- More diverse experimental settings, such as multiclass classification or non-linear utility functions, to demonstrate broader applicability.
+- Guidance on selecting H when decision calibration is infeasible, perhaps with sensitivity analysis across different H.
+- Visualizations of action regions in forecast space to illustrate how robustness alters decisions.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution:*
+- **Criticism about outer-loop optimization complexity**: The paper notes standard methods can be used for the dual optimization, and this is a minor implementation detail rather than a core flaw.
+- **Request for deeper discussion on novelty relative to robust optimization with moment constraints**: The paper situates itself in related work (Section 1.2), and this is not a substantive weakness.
 
 ## Novel Insights
-The paper provides a novel connection between partial calibration and minimax robust decision-making. Its core insight is that decision calibration—a tractable and much weaker condition than full calibration—recovers the same "trust the forecast" semantics when viewed through a minimax lens. This collapse is surprising because it shows that a small set of calibration constraints (one per action) is sufficient to guarantee that best-responding is the optimal robust policy, effectively bridging the gap between theoretical intractability and practical trustworthiness.
+The key insight is that decision calibration—a tractable condition requiring only |A| tests—ensures the plug-in best response is minimax optimal, effectively restoring the "trust the forecast" principle without needing full calibration. This collapses a potential hierarchy of robust rules and provides a rigorous decision-theoretic foundation for using tractable calibration in high-stakes applications, bridging the gap between theory and practice.
 
 ## Suggestions
-- Clarify the compactness argument in Theorem 3.1 (e.g., by specifying the topology or adding a brief justification) to strengthen the mathematical presentation.
-- In the experimental section, include at least a small-scale validation of the decision calibration result (e.g., using a synthetic dataset or an existing decision calibration algorithm) to empirically confirm the theoretical collapse.
-- Expand the related work discussion to explicitly connect the ambiguity set \(Q\) to distributionally robust optimization, highlighting how the calibration constraints lead to a novel and structured uncertainty set.
+- Detail the algorithm for generating adversarial distributions in experiments (Section 5) to ensure reproducibility.
+- Include the constant minimax baseline in comparisons to demonstrate the value of even weak calibration information.
+- Report statistical significance or variance measures (e.g., standard errors over multiple splits) in experimental results.
+- Consider a brief case study with a real-world decision problem (e.g., medical diagnosis) to highlight practical impact.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 8.0, 8.0]

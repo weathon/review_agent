@@ -1,137 +1,165 @@
-=== CALIBRATION EXAMPLE 78 ===
+=== CALIBRATION EXAMPLE 82 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-The title is evocative and aligns with the core idea. The abstract succinctly presents the central claim of a rate separation (Θ(σ⁻²) for geometry vs. Θ(1) for density) and the proposed paradigm shift toward geometric learning. However, the claim that the success of score-based models "arises from implicitly learning the **data manifold**" is presented as a definitive alternative explanation, while the paper primarily provides theoretical evidence that such geometric learning is *easier* and can be achieved with weaker guarantees. The abstract should more carefully phrase this as a *plausible explanation* or a *consequence* of the theory, rather than an established fact.
+- **Title:** Accurately reflects the paper’s core contribution: a rate separation between learning geometry and learning the distribution under the manifold hypothesis.
+- **Abstract:** Clearly states the problem, the key insight (scale separation of Θ(σ⁻²) vs. Θ(1)), and the proposed paradigm shift to geometric learning. The three main consequences and preliminary experiments are summarized. Claims are bold but appear supported by the theoretical results. Well-structured and engaging.
 
 ### Introduction & Motivation
-The introduction effectively sets up the challenge of low-noise score estimation and the manifold hypothesis. The contributions are clearly listed. The related work section (1.1) adequately surveys prior art but could be more precise in delineating the novelty. For instance, the statement that prior works "do not explicitly isolate the higher-order terms involving *p_data*" is accurate, but the claim that they "do not characterize the separation between geometry and density" might be too strong, as some works (e.g., Lu et al., 2023; Lyu et al., 2025) analyze the asymptotic structure of the score, which implicitly contains this separation. The distinction should be that this paper *quantifies* the separation in terms of error tolerance (o(σ⁻²) vs. o(1)), which is novel.
+- **Motivation:** Well-posed: learning scores in the low-noise regime is challenging, and the manifold hypothesis is widely adopted.
+- **Contributions:** Clearly stated: a sharp scale separation, implications for existing generative models, a new geometric learning paradigm (uniform sampling with relaxed score error), and robustness in Bayesian inverse problems.
+- **Clarity:** The introduction logically builds the narrative and motivates the shift from distributional to geometric learning.
+- **Potential Concern:** While the theoretical insights are compelling, the claim that practical success of diffusion models “stems from” learning the manifold is somewhat speculative without more extensive empirical validation.
 
-### Method / Approach
-**Sections 2-3 (Preliminaries and Central Insight):** The setup is standard and clearly presented. Theorem 3.1 (informal) is the heart of the paper, and the expansion in Equation (6) elegantly shows the separation. However, the formal statement (Theorem B.2 in the appendix) should be referenced in the main text with a summary of its technical conditions (C⁴ manifold, C¹ density, etc.) to ensure transparency about the assumptions required for the expansion.
+### Preliminaries and Notation (Section 2)
+- **Assumptions:** Standard (compact C⁴ manifold, C¹ positive density). Clearly defined.
+- **Background:** Gaussian smoothing, diffusion models (VE/VP), Bayesian inverse problems, and non-reversible dynamics are succinctly explained.
+- **Clarity:** The notation is dense but appropriate for an ICLR paper. Some readers may find the differential geometry heavy, but it is necessary for the analysis.
 
-**Section 4 (Scale Separation in Existing Generative Learning):** Theorem 4.1 is a clear manifestation of the rate separation. The assumptions (Assumption 4.1) are reasonable but non-trivial (e.g., uniform rectifiable path-connectedness of the compact set *K*). The proof strategy is sound. The major limitation here, acknowledged in Section 8, is that the result is framed in terms of the score error of the *final generated distribution* π_σ. In practical diffusion models, the score is used iteratively in a reverse process, and errors accumulate along the trajectory. The theorem does not address how an o(σ⁻²) pointwise error in the *learned score network* translates to the error *E_σ* of the *generated distribution*. This gap significantly weakens the direct practical implication for diffusion models. The claim that "this insight provides a potential new explanation for the remarkable success of diffusion models" is therefore speculative without a analysis of error propagation.
+### Central Insight (Section 3)
+- **Theorem 3.1 (Informal):** Provides the key expansion of log p_σ(x), showing the leading term is -d_M(x)/σ² (geometry) while p_data appears only at O(1). This cleanly demonstrates the rate separation.
+- **Explanation:** The intuition—that any error in the distance function is amplified by σ⁻², so manifold recovery must precede density learning—is well conveyed.
+- **Potential Concerns:** 
+  - The expansion holds only in a tubular neighborhood; points far away are handled via concentration lemmas (Appendix B.3).
+  - The assumptions (manifold, regularity) are standard but may not hold exactly in practice (e.g., boundaries, non-positive density). A brief discussion of robustness would be helpful.
 
-**Section 5 (New Paradigm of Geometric Learning):** The tempered score (TS) Langevin dynamics is a simple and interesting idea.
-- Theorem 5.1 (gradient case) is straightforward and clearly demonstrates the benefit: uniform sampling with o(σ⁻²) error.
-- Theorem 5.2 (non-gradient case) is the most technically advanced contribution. However, it relies on several strong and non-standard assumptions:
-    1.  **L∞ Score Error (Equation (9)):** The requirement of *uniform* o(σ^β) error is stringent. Practical score matching minimizes an L²-type loss (e.g., Fisher divergence). The authors note this as a limitation, but it remains a significant gap between theory and practice.
-    2.  **Existence and Form of Stationary Distribution (Assumption B.2):** The assumption that the SDE admits a unique stationary distribution which *locally admits a WKB form* is crucial. For a general non-gradient drift, existence and uniqueness of a stationary distribution are not guaranteed. The WKB ansatz is an *ansatz*; its validity needs justification, especially when the drift is not a gradient field. The authors provide a derivation in Appendix B.4 assuming the ansatz holds, but they do not provide sufficient conditions under which it *does* hold for their specific SDE. This makes the theoretical guarantee feel conditional.
-    3.  **Smoothness of c₀:** The application of the strong maximum principle to conclude c₀ is constant requires c₀ to be C² on the manifold. It is unclear from the assumptions (p_data ∈ C² is assumed, but this pertains to the data density, not the prefactor from the WKB expansion) that this smoothness holds. This step needs more justification.
-    Overall, while the technical machinery is impressive, the foundational assumptions for the non-gradient case are not fully substantiated, which undermines the robustness of the main claim.
+### Scale Separation in Existing Generative Learning (Section 4)
+- **Theorem 4.1:** Formalizes the separation: 
+  1. Score error o(σ⁻²) ⇒ concentration on the manifold.
+  2. Score error Ω(1) can yield an arbitrary on-manifold distribution.
+  3. Exact recovery of p_data requires o(1) score error.
+- **Proof Sketch:** Uses the expansion and path-integral arguments; assumptions (compactness, path-connectedness) are reasonable for practice.
+- **Concerns:**
+  - The L∞ norm for score error is strong; practical objectives (e.g., denoising score matching) minimize L²-like losses. The authors note this as a limitation (Section 8), but the theory would be more impactful if extended to weaker norms.
+  - The result is asymptotic (σ→0); finite-σ behavior is not quantified.
 
-**Section 6 (Bayesian Inverse Problems):** Theorem 6.1 is a direct application of the previous results. The connection to classifier-free guidance is a nice observation, but its practical utility is only briefly explored in experiments.
+### New Paradigm of Geometric Learning (Section 5)
+- **Proposed Method:** Tempered Score (TS) Langevin dynamics: dX_t = σ^α s(X_t,σ) dt + √2 dW_t.
+- **Theorems 5.1 & 5.2:** Show that for max{-β,0} < α < 2 (β from score error), the stationary distribution converges to the uniform measure on the manifold, requiring only o(σ⁻²) score accuracy. Striking result.
+- **Technical Challenge:** The non-gradient case (Theorem 5.2) uses WKB expansion and overcomes the difficulty of a manifold (rather than point) attractor. The analysis is nontrivial and appears correct.
+- **Concerns:**
+  - Assumption B.2 (WKB form of stationary distribution) is nontrivial; more justification or discussion of when it holds would be welcome.
+  - The choice of α depends on β (unknown in practice). The experiments use α=1 successfully, but guidelines for choosing α are lacking.
+  - Convergence (mixing time) is only briefly analyzed in Appendix D for a simple case; general analysis is future work.
 
-### Experiments & Results
-The experimental validation is preliminary and does not fully substantiate the theoretical claims, especially for large-scale models.
+### Uniform Prior is More Robust in Bayesian Inverse Problems (Section 6)
+- **Theorem 6.1:** Extends TS Langevin to posterior sampling: with a uniform prior, o(σ⁻²) score error suffices; with p_data as prior, o(1) is needed. A direct corollary of previous results.
+- **Connection to Classifier-Free Guidance:** Insightful application: scaling the unconditional score by σ^α in the corrector step.
+- **Assumptions:** Bounded, C¹ likelihood; fine.
 
-1.  **Synthetic Experiments (Ellipse/Circle):** These are clean and demonstrate the phenomenon on a toy example with a known manifold and controlled score error. They support Theorems 4.1 and 5.1 well.
-2.  **Image Generation with Stable Diffusion:**
-    - **Metrics:** Relying solely on CLIP-based metrics (P-sim and I-sim) is insufficient. These measure alignment with a prompt and pairwise image similarity, but they do not directly measure proximity to the *data manifold* or uniformity of sampling on it. Standard generative metrics like FID, precision/recall, or a measure of coverage would be more informative. The improvement in I-sim (lower is better) is consistent with increased diversity, but it could also result from images becoming more "spread out" in CLIP space in an arbitrary way, not necessarily corresponding to a better approximation of the uniform distribution on the true image manifold.
-    - **Magnitude of Improvement:** The improvements in P-sim and I-sim are modest (often less than 1%). Statistical significance testing is absent. For ICLR, it is essential to show that these improvements are not due to random variation.
-    - **Validation of Uniform Sampling:** The central claim of Section 5 is that TS Langevin yields the *uniform distribution* on the manifold. The experiments do not provide evidence for this claim in the image domain. How can one verify that the samples are uniform on a complex, high-dimensional image manifold? The authors could attempt indirect validation, e.g., by showing that TS generates more diverse interpolations or explores a broader set of latent codes in a disentangled representation.
-    - **Ablations:** The sensitivity analysis for α (Appendix C.4) is good, but the choice of α=1 for most experiments is not theoretically motivated (the theory allows a range). More discussion on selecting α in practice is needed.
-    - **Baselines:** Comparisons are limited to DDPM and PC samplers. Comparisons with state-of-the-art samplers (e.g., DPM-Solver) would strengthen the case for the practical utility of the modification.
+### Experiments (Section 7)
+- **Synthetic Manifolds (Ellipse/Circle):** Demonstrates that TS Langevin recovers the uniform distribution while standard Langevin fails, validating Theorem 5.2.
+- **Image Generation (Stable Diffusion):** TS improves diversity (lower I-sim) while maintaining quality (P-sim) across prompts and corrector steps. The modification is simple and effective.
+- **Controlled Experiment (Appendix C.3):** With ground-truth scores and injected O(1) error, TS recovers uniformity while standard diffusion fails, supporting Theorems 4.1 and 5.1.
+- **Ablation (Appendix C.4):** Shows robustness to α (α ≥ 0.5 works well).
+- **Concerns:**
+  - Experiments are preliminary: only one large-scale model (Stable Diffusion 1.5), few prompts, no variance estimates, and no standard benchmarks (e.g., FID). More extensive validation is needed.
+  - The improvements in diversity, while consistent, are modest. Statistical significance is not assessed.
+  - The experiments do not directly measure score errors or verify the asymptotic rate separation; they show the outcome of the proposed algorithm.
+
+### Conclusion & Limitations (Section 8)
+- **Summary:** Concise recap of contributions.
+- **Limitations:** Honestly listed: simplified analysis for diffusion models (no cumulative error tracking), L∞ score error assumption, lack of sample complexity bounds, unquantified discretization error, preliminary experiments. Good direction for future work.
 
 ### Writing & Clarity
-The paper is generally well-written. The main ideas are presented clearly. The appendices are lengthy but necessary. Some parts of the technical proofs (especially Appendix B.4) are dense and would benefit from more intuitive scaffolding. The notation is mostly consistent, though in Appendix D, the use of *p_θ* for a parameterized density is potentially confusing given the prior use of *p_σ*.
-
-### Limitations & Broader Impact
-Section 8 correctly lists key limitations: the simplified setting for diffusion models, the L∞ error assumption, lack of statistical sample complexity results, and preliminary experiments. These are serious limitations that temper the immediate practical impact of the work. The societal impact section is missing; a brief discussion on the potential misuse of more robust generative models or the implications of uniform sampling (e.g., for fairness) would be appropriate.
+- **Overall:** Well-structured, with intuitive explanations preceding technical details. The paper is mathematically dense but appropriate for ICLR.
+- **Figures/Tables:** Helpful for illustration.
+- **Minor Issues:** Some formatting artifacts (likely from PDF parsing) but do not impede understanding.
 
 ### Overall Assessment
-This paper presents a novel and theoretically interesting insight: a sharp rate separation in score learning under the manifold hypothesis, leading to the proposal of "geometric learning" as a more robust objective. The tempered score Langevin dynamics is a simple and promising algorithmic idea. However, the paper has significant weaknesses that prevent it from being ready for ICLR in its current form:
+This paper makes a significant theoretical contribution by establishing a sharp rate separation between geometric and distributional learning in score-based models under the manifold hypothesis. The analysis is rigorous and novel, combining differential geometry, asymptotic expansions, and PDE techniques. The proposed tempered score Langevin dynamics is simple and provably recovers the uniform manifold measure with relaxed score accuracy. The experiments, while preliminary, support the theory. 
 
-1.  **Theoretical Gaps:** The analysis for the non-gradient score case (Theorem 5.2) rests on strong, unverified assumptions (existence/uniqueness of a stationary distribution with a WKB form, smoothness of the prefactor). The connection to practical diffusion models is weak, as the theory does not account for the iterative nature of the sampling process.
-2.  **Insufficient Empirical Validation:** The experiments on large-scale models are preliminary. The metrics used do not directly test the core theoretical claims (manifold concentration, uniform sampling), and the improvements are small and not statistically validated. The experiments do not convincingly demonstrate the superiority or even the operationalization of the "geometric learning" paradigm in practice.
-
-The paper has the potential to be a strong contribution if these issues are addressed. For acceptance, the authors need to:
-- Provide more justification for or relax the assumptions in Theorem 5.2, perhaps by proving the validity of the WKB ansatz under specific conditions.
-- Either provide a more rigorous bridge to practical diffusion models (e.g., analyzing error propagation in the reverse process) or more carefully qualify the implications of the theory.
-- Substantially expand the experimental section: include standard generative metrics, perform statistical tests, provide more direct evidence for uniform sampling (e.g., on synthetic data with known manifold structure), and conduct more comprehensive comparisons and ablations.
-- Address the missing discussion on societal impact.
+Main concerns are the strong assumptions (L∞ score error, asymptotic regime), limited empirical validation, and the gap between asymptotic theory and practical finite-σ settings. Nonetheless, the paper offers a fresh perspective that could influence how we understand and design score-based models. It meets ICLR’s standards for novelty, technical depth, and potential impact. **Acceptance is recommended, but the authors should address the empirical limitations and discuss practical implications more thoroughly in the final version.**
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper proposes a new perspective on score-based generative models (e.g., diffusion models) under the manifold hypothesis. The authors argue that these models succeed by implicitly learning the geometry of the data manifold, not the full distribution. Their key theoretical insight is a *rate separation*: geometric information (distance to the manifold) appears at order Θ(σ⁻²) in the low-noise limit, while distributional information (on-manifold density) appears only at order Θ(1). This suggests that learning the manifold is substantially easier than learning the exact distribution. Based on this, the paper introduces a simple "tempered score" Langevin dynamics that provably recovers the *uniform* distribution on the manifold with a much weaker score-error requirement (o(σ⁻²)) compared to exact distribution recovery (o(1)). The authors validate their theory with experiments on synthetic manifolds and image generation using Stable Diffusion.
+This paper provides a theoretical analysis of score-based generative models under the manifold hypothesis. The core contribution is identifying a *rate separation*: in the small-noise limit, geometric information (distance to the data manifold) appears at order Θ(σ⁻²) in the score, while distributional information (the data density on the manifold) appears only at order Θ(1). This insight motivates a paradigm shift from full distributional learning to more robust geometric learning. The authors show that a simple tempering of the score (scaling by σ^α) allows recovery of the *uniform distribution* on the manifold with a much weaker score-error tolerance (o(σ⁻²)) compared to exact distribution recovery (o(1)). Theoretical results are supported by synthetic experiments and preliminary image-generation experiments using Stable Diffusion.
 
 ### Strengths
-1. **Novel theoretical contribution:** The rate separation between geometric and distributional information is a fresh and insightful way to interpret the success of score-based models. Theorem 3.1 and its formal versions clearly articulate this phenomenon, and the subsequent theorems rigorously explore its implications for generative modeling, uniform sampling, and Bayesian inverse problems.
-2. **Practical relevance and simplicity:** The proposed tempered score (TS) Langevin dynamics is a one-line modification to existing sampling schemes (e.g., the corrector step in predictor-corrector algorithms). Experiments on Stable Diffusion show that TS can improve both diversity (lower inter-image CLIP similarity) and quality (higher prompt similarity) across multiple prompts, demonstrating potential real-world utility.
-3. **Theoretical rigor:** The paper provides detailed proofs using advanced techniques such as Laplace's method, WKB asymptotics, and analysis of non-reversible SDEs. The handling of non-gradient score fields (Theorem 5.2) is particularly nontrivial and strengthens the applicability of the results.
+1. **Novel and Insightful Theoretical Contribution:** The paper clearly articulates and rigorously proves a fundamental rate separation between geometric and distributional information in score-based models (Theorems 3.1, 4.1, 5.1-5.2). This provides a fresh explanatory framework for why diffusion models often succeed at capturing data support even with imperfect scores.
+2. **Practical Algorithmic Implications:** The proposed Tempered Score (TS) Langevin dynamics is a simple, one-line modification to standard samplers (e.g., the corrector step in Predictor-Corrector). The experiments (Sections 7.1, 7.2) demonstrate improved diversity and maintained quality in synthetic settings and with Stable Diffusion, offering a tangible proof-of-concept.
+3. **Technical Depth and Rigor:** The analysis handles both gradient and non-gradient score fields, employing sophisticated tools like WKB asymptotics and Laplace's method to characterize stationary distributions. The appendices provide detailed, self-contained proofs, meeting high standards for theoretical machine learning research.
 
 ### Weaknesses
-1. **Limited empirical validation:** The experiments are preliminary. The synthetic example (ellipse/circle) is simple, and the image generation experiments are confined to a single model (Stable Diffusion 1.5) with only three prompts and limited metrics. There is no comparison to state-of-the-art diffusion samplers or extensive ablation studies. The improvements in CLIP scores, while consistent, are modest.
-2. **Strong assumptions that may not fully hold in practice:** The analysis assumes a compact, boundaryless, C⁴ manifold with a strictly positive C¹ or C² data density. Real-world data manifolds may have boundaries, singularities, or less smoothness. Additionally, the theoretical results rely on L∞ bounds on the score error, which is stricter than the L²-type objectives typically used in training (e.g., denoising score matching). The paper acknowledges these limitations but does not address how violations might affect the conclusions.
-3. **Incomplete treatment of diffusion models:** The theoretical results focus on the stationary distribution of Langevin dynamics at a fixed noise level, whereas practical diffusion models involve a reverse process across a continuum of noise levels. The paper does not analyze error accumulation over the reverse trajectory, which is critical for understanding actual diffusion model performance.
-4. **Clarity could be improved:** The paper is dense with technical notation and asymptotic expansions. While the main ideas are well-motivated, the proofs are highly technical and may be difficult for a broad audience to follow. The connection between the theoretical results and practical algorithms could be made more explicit, especially for readers less familiar with WKB methods.
+1. **Limited and Preliminary Empirical Validation:** While the synthetic experiments directly validate the theory, the image-generation experiments are modest in scale. Improvements in CLIP metrics (P-sim, I-sim) are small, and evaluation is limited to one model (Stable Diffusion 1.5) and a few prompts without comparison to state-of-the-art samplers or standard metrics like FID.
+2. **Strong and Somewhat Unverifiable Assumptions:** The analysis relies on the idealized manifold hypothesis (compact, smooth, boundaryless manifold) and assumes the score error is measured in the L∞ norm. In practice, data manifolds are rarely perfect, and score matching typically minimizes L²-like losses (e.g., Fisher divergence). The WKB ansatz (Assumption B.2), while standard, is not directly justified for the specific SDEs considered.
+3. **Incomplete Treatment of Practical Sampling Dynamics:** The theory focuses on continuous-time dynamics and assumes access to the score error of the final stationary distribution. It does not address discretization error, cumulative error over the reverse diffusion trajectory, or the computational cost/mixing time of TS Langevin in high-dimensional settings—critical aspects for real-world application.
 
 ### Novelty & Significance
-The paper presents a novel and significant theoretical perspective on score-based generative models. The rate separation insight provides a plausible explanation for why diffusion models often generate realistic-looking samples even with imperfect score estimates. The proposal to shift focus from distributional learning to geometric learning is thought-provoking and could inspire new research directions. The tempered score modification is simple yet powerful, offering a practical way to encourage uniform exploration of the data manifold. However, the significance is somewhat tempered by the preliminary nature of the experiments and the strong assumptions required by the theory. For ICLR, which values both theoretical and empirical contributions, the paper would benefit from more thorough experimental validation.
+The paper introduces a novel and significant perspective by quantifying the different scales at which geometry and density information appear in score-based models. This rate separation provides a theoretical foundation for understanding the robustness of diffusion models and motivates a shift toward geometric learning. The proposal to recover the uniform distribution via simple tempering is elegant and could influence future work on robust generative modeling, Bayesian inverse problems, and manifold learning. The work is highly relevant to the ICLR community, bridging theoretical analysis and practical algorithm design.
 
 ### Suggestions for Improvement
-1. **Expand the experimental evaluation:** Test the tempered score approach on a wider range of datasets (e.g., CIFAR-10, FFHQ) and diffusion architectures (e.g., ADM, EDM). Include comparisons to other diversity-enhancing techniques (e.g., truncation, guidance tuning) and provide more comprehensive metrics (e.g., FID, precision/recall). Visual examples and user studies would also strengthen the empirical claims.
-2. **Relax theoretical assumptions:** Investigate whether the L∞ score-error condition can be relaxed to an L² bound more aligned with practical training objectives. Explore extensions to manifolds with boundaries or less smoothness, perhaps through numerical simulations. An analysis of error propagation over the full reverse diffusion process would greatly enhance the relevance to real-world models.
-3. **Improve clarity and accessibility:** Add more intuitive explanations of the technical results, possibly with additional figures or a less formal overview. Simplify notation where possible (e.g., by reducing the number of auxiliary functions). Clearly distinguish between the variance-exploding (VE) and variance-preserving (VP) cases in the main text, as they are often treated separately in practice.
-4. **Deeper discussion of limitations and future work:** The limitations section is brief. Elaborate on the challenges of generalizing the theory to full diffusion processes, the statistical sample complexity implications, and the impact of discretization errors in practical implementations. Suggest concrete steps for addressing these issues in future research.
-5. **Strengthen the related work section:** While the paper covers relevant literature, it could more clearly differentiate its contributions from prior work on diffusion models and manifold learning (e.g., how the uniform sampling approach compares to recent methods for improving diversity). Highlighting the unique aspects of the rate separation argument would help position the work.
-
-**Overall, the paper presents a compelling theoretical insight with promising practical implications. However, to meet ICLR's high standards, it needs more extensive empirical validation and a more thorough discussion of its limitations and applicability to real-world models.**
+1. **Expand Empirical Evaluation:** Conduct more comprehensive experiments on standard benchmarks (e.g., ImageNet, COCO) using multiple diffusion models and samplers. Compare TS against other diversity-enhancing techniques and report established metrics (FID, IS). Include controlled experiments with known score perturbations to directly test error tolerance.
+2. **Relax Assumptions and Discuss Practical Relevance:** Discuss how the theory might extend to settings where the manifold assumption is approximate or where score errors are measured in L². Providing bounds in terms of Fisher divergence (aligned with score matching objectives) would strengthen practical connections.
+3. **Address Discretization and Cumulative Error:** Analyze how the rate separation propagates through discrete-time reverse diffusion processes. Even with per-step error o(σ⁻²), cumulative error over many steps could be significant. A discussion or preliminary analysis of this issue is important.
+4. **Clarify and Justify the WKB Assumption:** Provide more intuition or justification for Assumption B.2 (local WKB ansatz). Reference prior uses in similar SDE analyses and discuss its plausibility for the tempered-score dynamics.
+5. **Deepen Discussion of Limitations and Future Work:** Expand the limitations section to address practical challenges: sensitivity of hyperparameter α, the difficulty of achieving o(σ⁻²) error in high dimensions, and the implications for training objectives. Also, discuss potential extensions to statistical sample complexity and generalization.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Controlled validation of the rate separation claim.** The paper lacks an experiment where the score error is systematically varied (e.g., by adding controlled noise of known magnitude) and the resulting distribution is measured as σ→0. Without this, the core theoretical claim—that o(σ⁻²) error yields manifold concentration while o(1) error is needed for the true density—remains unverified.
-2. **Comparison with explicit manifold-learning baselines.** The paper advocates a shift to geometric learning but does not compare against standard manifold-learning methods (e.g., VAEs, GANs with low-dimensional latent space) on tasks like uniform sampling or diversity. This omission weakens the claim that the proposed approach is novel or superior for geometric recovery.
-3. **Ablation study on the tempering parameter α.** The method introduces a key hyperparameter α, yet experiments only use α=1. A systematic analysis of how α affects sample quality/diversity across different σ regimes is missing, making it unclear how to choose α in practice and whether the theoretical bounds hold empirically.
-4. **Quantitative evaluation of recovered manifold geometry.** The paper claims to recover the manifold, but there is no quantitative assessment (e.g., intrinsic dimension estimation, geodesic distance preservation, or latent traversals) to verify that the geometry is correctly learned. This is essential to substantiate the geometric-learning paradigm.
+1. **Controlled score error ablation:** Systematically corrupt a known score function (e.g., on a synthetic manifold) with noise of magnitude δ and measure the resulting distribution’s distance to the manifold and to the true density as σ→0. This is essential to empirically validate the theoretical thresholds (o(σ⁻²) for manifold concentration vs. o(1) for density recovery).
+2. **Quantitative uniform sampling verification:** On synthetic manifolds with a known non-uniform data distribution, measure how close the samples from Tempered Score Langevin are to the uniform distribution (e.g., via statistical tests on intrinsic coordinates). The current ellipse experiment only shows qualitative alignment.
+3. **Bayesian inverse problem demonstration:** Apply the tempered-score uniform prior to a concrete inverse problem (e.g., image denoising or inpainting) and compare its robustness against a standard diffusion prior. This would substantiate the claim in Theorem 6.1.
+4. **Ablation on the tempering parameter α across models and data:** The theory suggests a range for α, but its practical effect on sample quality, diversity, and convergence speed should be studied systematically beyond the limited Stable Diffusion prompts.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Relaxation of L∞ score-error assumption.** The theory assumes L∞-bounded score error, but practical training minimizes L²-like losses (e.g., Fisher divergence). The paper must discuss whether the rate separation persists under L² errors, as this directly affects the relevance to real-world score matching.
-2. **Cumulative error analysis for full diffusion sampling.** The analysis considers a fixed σ, but diffusion models involve a reverse process with accumulating errors over time. Without extending the rate separation to the entire sampling trajectory, the implications for diffusion models remain speculative and incomplete.
-3. **Justification of the WKB ansatz (Assumption B.2).** The non-gradient analysis crucially assumes the stationary distribution admits a WKB form. The paper provides no conditions under which this holds (e.g., ergodicity, smoothness), making Theorem 5.2 appear as an unsubstantiated assumption rather than a proven result.
-4. **Discussion of practical σ regimes.** The theory requires σ→0, but real diffusion models use finite noise schedules. The paper should analyze how small σ must be for the rate separation to manifest and whether typical schedules (e.g., in Stable Diffusion) meet this condition.
+1. **From L∞ to L² score error:** The theory relies on L∞ bounds, but practical score matching minimizes Fisher divergence (an L²-like loss). Analyze whether the rate separation holds under L² errors, as this directly impacts the relevance to real training.
+2. **Error accumulation in full diffusion sampling:** The analysis assumes a score oracle for a fixed σ, but diffusion models use a time-dependent score and the reverse process accumulates error. A preliminary analysis linking the per-step error to the final distribution is needed to connect the theory to practice.
+3. **Dependence on manifold geometry:** Quantify how the constants in the rate separation depend on manifold properties (e.g., curvature, reach, intrinsic dimension). Without this, it is unclear when the separation is practically significant.
+4. **Statistical sample complexity:** Provide an initial bound on the number of data samples required to achieve the claimed score accuracies for geometric vs. density learning. This is needed to trust the feasibility of the paradigm shift.
 
 ### Visualizations & Case Studies
-1. **Visual decomposition of score components.** Plotting the geometric (Θ(σ⁻²)) and distributional (Θ(1)) parts of the score as σ varies for a simple manifold would visually confirm the rate separation and show the crossover point, making the theory more tangible.
-2. **Case studies of failure modes under large score errors.** Demonstrating how samples degrade when score error is O(σ⁻²) vs. O(1) would illustrate the practical consequences of the theory and help diagnose model limitations.
-3. **Manifold visualizations for image data.** Using dimensionality reduction (e.g., t-SNE, UMAP) to visualize the latent structure of samples generated by standard vs. tempered score methods would provide direct evidence that TS Langevin yields more uniform coverage of the manifold.
+1. **Score error vs. sample distribution on a 2D manifold:** For a simple known manifold (e.g., a spiral), visualize the learned score field, the generated samples, and the true density. Show how progressively larger score errors first break density recovery while manifold concentration persists.
+2. **Manifold coverage for image generation:** Demonstrate that TS Langevin yields better coverage of the data manifold by showing latent traversals or interpolations between generated images, indicating more uniform exploration compared to standard sampling.
+3. **Failure case visualization:** Illustrate scenarios where the score error is Ω(σ⁻²) and samples deviate from the manifold, or where standard Langevin (without tempering) yields a highly biased distribution on the manifold.
 
 ### Obvious Next Steps
-1. **Extend theory to L² score errors.** The most critical next step is to relax the L∞ assumption to L², aligning with practical training objectives. This would significantly strengthen the paper’s applicability.
-2. **Analyze error propagation in the full reverse diffusion process.** Incorporating time-dependent score errors and studying their accumulation is necessary to draw concrete conclusions about diffusion models.
-3. **Provide sufficient conditions for the WKB ansatz.** Either proving that Assumption B.2 holds under reasonable conditions or numerically verifying it is essential to trust the non-gradient results.
-4. **Experiments on higher-dimensional synthetic and real datasets.** Testing on more complex manifolds (e.g., high-dimensional spheres) and diverse image datasets (e.g., CIFAR-10, FFHQ) would bolster the empirical claims.
+1. **Direct experimental validation of the rate separation claim:** This is the core conceptual contribution and should be tested explicitly, as outlined in the missing experiments.
+2. **Theoretical extension to discrete-time diffusion samplers:** Provide a theorem linking the score error conditions to the discretized reverse SDE (including predictor steps), rather than only analyzing the corrector step in isolation.
+3. **Comparison to other uniform sampling methods:** Compare TS Langevin against existing methods for uniform manifold sampling (e.g., De Santi et al. 2025) in terms of sample quality, diversity, and computational cost.
+4. **Application to other generative models:** Test whether the tempering idea benefits other score-based models (e.g., consistency models, flow models) to see if the geometric learning advantage generalizes.
 
 # Final Consolidated Review
 ## Summary
-This paper establishes a sharp rate separation under the manifold hypothesis: the score of a Gaussian-smoothed data distribution encodes geometric information about the manifold at order Θ(σ⁻²), while the on-manifold density appears only at order Θ(1). This insight suggests that learning the data manifold is substantially easier than learning the full distribution. The authors propose a simple "Tempered Score" (TS) Langevin dynamics which, with only o(σ⁻²) score accuracy, provably samples uniformly from the manifold—a much weaker requirement than the o(1) accuracy needed for exact distribution recovery.
+This paper establishes a fundamental rate separation in score-based learning under the manifold hypothesis: geometric information (distance to the data manifold) appears at order Θ(σ⁻²) in the score, while distributional information (the data density on the manifold) appears only at order Θ(1). This insight motivates a paradigm shift from full distributional learning to more robust geometric learning. The authors propose Tempered Score (TS) Langevin dynamics, a simple modification that provably recovers the uniform distribution on the manifold with o(σ⁻²) score error—substantially weaker than the o(1) error required for exact density recovery. Theoretical results are supported by synthetic experiments and preliminary image-generation experiments using Stable Diffusion.
 
 ## Strengths
-- **Novel theoretical insight:** The paper rigorously quantifies a fundamental separation between geometric and distributional information in the low-noise score, providing a fresh and compelling lens through which to interpret the success of score-based models. The expansion in Theorem 3.1 and its consequences are clear and significant.
-- **Simple and practical algorithm:** The proposed TS Langevin dynamics is a one-line modification to standard sampling schemes (e.g., the corrector step in diffusion models). Preliminary experiments on Stable Diffusion show it can improve both diversity (lower inter-image CLIP similarity) and quality (higher prompt similarity), demonstrating potential real-world utility.
+- **Novel theoretical insight:** The rate separation is rigorously proven via asymptotic expansion of the log-density (Theorem 3.1) and formalized in consequences for existing generative models (Theorem 4.1), uniform sampling (Theorems 5.1–5.2), and Bayesian inverse problems (Theorem 6.1). This provides a fresh explanatory framework for the empirical success of diffusion models.
+- **Practical algorithmic contribution:** TS Langevin dynamics is a one-line modification to standard samplers (e.g., the corrector step in Predictor-Corrector). Experiments on synthetic manifolds (Section 7.1) directly validate uniform recovery, and application to Stable Diffusion (Section 7.2) shows consistent improvements in diversity while maintaining quality, demonstrating tangible utility.
+- **Technical depth:** The analysis handles both gradient and non-gradient score fields, employing advanced tools like WKB asymptotics and Laplace’s method to characterize stationary distributions. The proofs (Appendix B) are detailed and self-contained, meeting high standards for theoretical machine learning research.
 
 ## Weaknesses
-- **Theoretical gaps in the non-gradient case:** The central result for general score estimators (Theorem 5.2) relies on strong, unverified assumptions. It assumes the SDE admits a unique stationary distribution that locally satisfies a specific WKB ansatz (Assumption B.2), and it requires the prefactor in this ansatz to be sufficiently smooth to apply the strong maximum principle. The paper does not provide sufficient conditions under which these assumptions hold, making the guarantee feel conditional rather than proven.
-- **Limited empirical validation of core claims:** The experiments, while promising, are preliminary. The synthetic example (ellipse/circle) validates the theory in a controlled setting, but the image generation experiments do not directly test the paper's central claim—that TS Langevin recovers the *uniform distribution* on the manifold. The exclusive use of CLIP-based metrics (prompt and inter-image similarity) does not measure uniformity or manifold fidelity. Improvements are modest and statistical significance is not established.
-- **Incomplete bridge to practical diffusion models:** The analysis focuses on the stationary distribution of a Langevin sampler at a fixed noise level σ. Practical diffusion models involve a reverse process across a continuum of noise levels, where errors accumulate. The paper does not analyze this error propagation, leaving the direct implications for diffusion model performance speculative.
+- **Limited empirical validation:** Experiments are preliminary in scale. Image-generation results use only one model (Stable Diffusion 1.5) on a few prompts without standard benchmarks (e.g., FID, Inception Score) or variance estimates. While improvements in CLIP metrics (P-sim, I-sim) are consistent, they are modest and lack statistical significance.
+- **Strong theoretical assumptions:** The analysis relies on L∞ bounds for score error, whereas practical score matching minimizes L²-like losses (e.g., Fisher divergence). The connection to realistic training objectives is not established, limiting direct applicability. Additionally, the WKB ansatz (Assumption B.2) for non-gradient scores, while standard in asymptotic analysis, is assumed without full justification for the specific SDE.
+- **Gap between asymptotic theory and practice:** Results are asymptotic (σ → 0) and do not quantify finite-σ behavior. The theory does not address discretization error, cumulative error over the reverse diffusion trajectory, or mixing time in high dimensions—critical aspects for real-world deployment.
+- **Parameter sensitivity:** The tempering parameter α must satisfy max{−β, 0} < α < 2, where β is the exponent of the score error (unknown in practice). Guidelines for choosing α are lacking, though experiments suggest α = 1 works robustly.
 
 ## Nice-to-Haves
-- A more comprehensive experimental evaluation on diverse datasets (beyond three prompts) with standard generative metrics (e.g., FID, precision/recall) and comparisons to state-of-the-art samplers.
-- An investigation into whether the stringent L∞ score-error assumption can be relaxed to an L²-type bound more aligned with practical training objectives like denoising score matching.
-- A discussion of societal impact, given the work aims to improve the robustness and diversity of generative models.
+- Extension of theoretical bounds to L² score errors (e.g., Fisher divergence) to align with practical training objectives.
+- Analysis of discretization effects and error accumulation in full reverse diffusion sampling, beyond the isolated corrector step.
+- More comprehensive experiments on diverse datasets (e.g., ImageNet) with multiple models and comparison to state-of-the-art samplers.
+
+## Removed Points
+*These points are flagged to be removed; treat them with caution.*
+- **Criticism that the manifold hypothesis is too idealized:** This is a standard assumption for theoretical analysis in the field, and the paper explicitly states it (Assumption 2.1).
+- **Formatting nitpicks from the parsed PDF content:** These are artifacts of extraction and do not reflect the paper’s quality.
+- **Demand for extensive related work comparisons:** The review should not invent missing citations.
+- **Claim that the expansion only holds in a tubular neighborhood:** The paper addresses this via concentration lemmas (Lemma B.3, B.4) to show density concentrates near the manifold.
+- **Suggestion that the connection to diffusion model success is speculative:** While empirical proof is limited, the paper presents it as a theoretical insight supported by the rate separation, not as a conclusive claim.
 
 ## Novel Insights
-The paper's key novel insight is the explicit quantification of a rate separation: geometric information (distance to the manifold) dominates the score at order Θ(σ⁻²), while distributional details appear only at order Θ(1). This explains why approximate scores can still force samples onto a plausible-looking manifold while failing to recover the true data density. It motivates a paradigm shift from the hard task of distributional learning to the more attainable goal of geometric learning, exemplified by the efficient recovery of the uniform manifold measure—a structured and useful object—with relaxed score accuracy.
+The paper’s core insight—that score-based methods inherently prioritize geometry over density due to a sharp scaling separation—offers a new framework for understanding their robustness and partial successes. Beyond the stated contributions, the realization that uniform manifold sampling can be achieved with weak score accuracy (o(σ⁻²)) has broader implications for Bayesian inference (where uniform priors are more robust) and for principled manifold exploration in generative modeling.
 
 ## Suggestions
-- Provide more justification for the foundational assumptions in Theorem 5.2, such as proving the validity of the WKB ansatz under specific, verifiable conditions related to the learned score field.
-- Design experiments that more directly test the claim of uniform manifold sampling, even if indirectly (e.g., by analyzing the coverage of a known latent space or using metrics sensitive to distributional uniformity on synthetic manifolds with ground truth).
+- Conduct controlled experiments with systematic score perturbations on synthetic manifolds to empirically validate the o(σ⁻²) vs. o(1) error thresholds for manifold concentration versus density recovery.
+- Provide practical guidance on selecting the tempering parameter α, perhaps via cross-validation or empirical analysis of score error estimates.
+- Include variance estimates or multiple runs in image-generation experiments to assess statistical significance of reported improvements.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 4.0, 8.0]

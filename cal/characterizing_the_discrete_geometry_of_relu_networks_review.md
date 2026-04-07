@@ -1,137 +1,134 @@
-=== CALIBRATION EXAMPLE 85 ===
+=== CALIBRATION EXAMPLE 86 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-The title accurately reflects the paper's focus on the discrete geometry (connectivity graph) of ReLU networks. The abstract clearly states the main contributions: an upper bound of 2d on the average degree of the connectivity graph (independent of network size), an upper bound on the diameter that does not depend on input dimension, and empirical observations about the distribution of neighbors and data concentration. The claims are well-supported by the paper. The abstract is concise and suitable for ICLR.
+- **Title:** Appropriately reflects the paper's focus on characterizing the discrete (combinatorial) geometry of ReLU networks.  
+- **Abstract:** Clearly states the problem (understanding the arrangement of linear regions), summarizes the main theoretical contributions (average degree ≤ 2d, diameter bound independent of d), and lists key empirical observations. The claims are specific and supported in the paper.
 
 ### Introduction & Motivation
-The introduction effectively motivates the problem by highlighting the gap between counting linear regions and understanding their arrangement. It connects to a wide range of applications (explainability, robustness, verification, etc.), establishing relevance. The contributions are clearly listed in a box, separating theoretical and empirical findings. The literature review is adequate, though some recent works (e.g., on connectivity graphs) are cited. One minor concern: the statement that "calculating the complex exactly is intractable for most networks" might be too strong given recent algorithmic advances, but it is generally true for large networks.
+- Well-motivated, with a clear gap identified: while the number of linear regions has been studied extensively, their connectivity and arrangement are less understood.  
+- The introduction effectively situates the work within existing literature (e.g., counting regions, applications in verification, explainability) and states contributions concisely.
 
 ### Preliminaries
-The definitions (sign sequences, bent hyperplanes, polyhedral complex, connectivity graph) are clear and build properly on prior work (Masden, 2025). The assumptions of genericity and supertransversality are clearly stated and justified (holding almost surely). The explanation of how bent hyperplanes subdivide regions is intuitive, aided by Figure 2. The mapping between cells and sign sequences is central to the proofs and is well-described. No major gaps.
+- Definitions (sign sequences, bent hyperplanes, polyhedral complex, connectivity graph) are clearly presented and align with the established framework of Masden (2025).  
+- The genericity and supertransversality assumptions are stated and justified (they hold almost everywhere). These are standard and necessary for the theoretical analysis.
 
 ### Theoretical Results
-This is the core of the paper. The main theorem (3.1) bounds the average number of faces of k-cells by 2k, generalizing a known result for hyperplane arrangements to deep ReLU networks. The proof strategy (using sign sequences and induction via Lemmas 3.2 and 3.3) is elegant and appears sound (detailed in Appendix B). The key insight—removing a bent hyperplane and categorizing cells—is novel and powerful.
-
-- **Theorem 3.4 (average degree ≤ 2d):** This follows directly from Theorem 3.1 for k=d. The proof outline is clear, and the full induction is in the appendix.
-- **Theorem 3.5 (lower bound):** The lower bound of min(n1, d) on the degree of every d-cell is interesting and highlights the role of the first layer. The proof uses a rank argument and Lemma B.1 from prior work, which is appropriate.
-- **Theorem 3.6 (monotonicity):** The average degree increases as neurons are added. The proof is straightforward from Lemma 3.3.
-- **Theorem 3.7 (tightness for shallow networks):** Shows the bound is asymptotically tight for wide shallow networks, using known formulas for hyperplane arrangements.
-- **Theorem 3.8 (diameter bounds):** The lower bound Ω( ln(ln(Nd(C))) / ln(n) ) is derived from the Moore bound, and the upper bound O(m^ℓ) is constructed by a layer-wise path argument. The upper bound's independence from input dimension is surprising and novel. The proof is plausible, though the bound is likely loose in practice (as noted).
-
-**Overall:** The theoretical results are novel, non-trivial, and correctly proven under the stated assumptions. The proofs are well-structured and detailed in the appendix. A minor weakness: the diameter lower bound is very weak (double logarithmic), and the upper bound is exponential in depth, but these are first bounds of their kind.
+- **Theorem 3.1 & 3.4:** The upper bound of 2d on the average degree (average number of faces of a d-cell) is a significant generalization of the classic result for hyperplane arrangements to deep ReLU networks. The proof outline is logical, relying on induction and the cell-counting Lemma 3.3. The full proofs in Appendix B appear rigorous.  
+- **Theorem 3.5:** The lower bound (min(n₁, d)) is straightforward but useful, linking connectivity to the first layer's width.  
+- **Theorem 3.6 & 3.7:** Monotonicity and asymptotic convergence to 2d for shallow networks are well-established. The paper notes that deep networks empirically approach the bound as well.  
+- **Theorem 3.8:** The diameter bounds are novel. The upper bound O(m^ℓ) being independent of input dimension d is surprising and interesting, though the bound is loose (the authors note it is rarely reached). The lower bound Ω( ln(Nd(C))/ln(n) ) is intuitive.  
+- **Overall:** The theoretical contributions are substantial and form the core of the paper. The proofs are sound and well-structured. A minor weakness is that Theorem 3.7 is only proven for shallow networks, though experiments suggest the behavior holds for deep networks.
 
 ### Algorithm for Calculating Polyhedron Boundaries
-The algorithm (Algorithm 1) for enumerating polyhedra and building the connectivity graph is a standard BFS over sign sequences, using an LP to test adjacency (similar to prior work). The description is clear, and the LP formulation (in Appendix D) is correct for checking non-redundant constraints. The algorithm is practical only for moderate-sized networks due to the exponential number of regions, but the paper acknowledges this and uses sampling/early stopping for larger experiments. No major issues.
+- Algorithm 1 (BFS with LP redundancy checks) is clearly described and builds on existing methods (e.g., Xu et al., 2022). The use of LP to test for neighboring regions is standard and practical.  
+- The algorithm is necessary for the experiments but is not a primary contribution; it is appropriately positioned as a tool.
 
 ### Experiments & Results
-The experiments are extensive and support the theoretical claims.
-
-- **Synthetic data (Figs. 4, 5, Table 1, Appendix G):** Show that the average degree approaches 2d as network size increases, the distribution of neighbor counts is unimodal (right-skewed), and the diameter grows slowly and is largely independent of input dimension (as predicted by Theorem 3.8). The results are consistent across multiple runs.
-- **Real-world data (Figs. 6, 7):** The observation that data points tend to lie in regions with higher-than-average connectivity is intriguing and novel. The differences between classification (data in more unbounded regions) and regression (data in more bounded regions) are interesting, though the explanations are speculative. The computational limitations (enumerating only 8 million regions for CIFAR10/CA Housing) are acknowledged, and the sampling method is reasonable.
-
-**Potential concerns:** 
-- The networks studied are relatively small due to computational constraints, but this is unavoidable.
-- The diameter is estimated using heuristics (Magnien et al., 2009), which is acceptable given the graph sizes.
-- The correlation between data points and high-connectivity regions is an empirical observation without a theoretical explanation; the paper appropriately notes this as future work.
+- **Synthetic experiments:** Thoroughly explore the effects of depth, width, and input dimension on average degree and diameter. The results strongly support the theoretical bounds (average degree approaches 2d, diameter grows much slower than the number of regions).  
+- **Real-world experiments (MNIST, CIFAR10, California Housing):** Provide valuable insights: data points tend to lie in regions with higher-than-average connectivity, and boundedness correlates with task type (classification vs. regression).  
+- **Limitations:** Acknowledged that complete enumeration is intractable for large networks; partial exploration and sampling are used appropriately. The observations about data distribution are intriguing but preliminary—more analysis would be needed to establish causality.  
+- The experimental design is sound, and the results are presented clearly with figures and tables.
 
 ### Writing & Clarity
-The paper is well-organized and clearly written. Figures are helpful, though some (e.g., Fig. 4) are dense but still readable. The use of lemmas and theorem statements is effective. The appendix provides necessary details. There are no major clarity issues.
+- The paper is generally well-written and logically organized. The figures effectively illustrate key concepts (complexes, connectivity graph, categorizations).  
+- Some sections (e.g., proof sketches) are dense but necessary. The appendices provide thorough details.  
+- **Note:** The extracted text contains numerous formatting artifacts (e.g., broken equations, garbled tables) due to PDF parsing. These do not detract from the paper's actual content and should be ignored.
 
 ### Limitations & Broader Impact
-Section 6 honestly discusses limitations: the focus on fully-connected ReLU networks (not convolutional/skip connections), the lack of explanation for why data concentrates in high-connectivity regions, and the computational cost of enumeration. Broader impact is not explicitly discussed, but the work is foundational and unlikely to have negative societal consequences.
+- Limitations are discussed in Section 6: the need to explain why data concentrates in high-connectivity regions, the restriction to ReLU activations, and the lack of analysis for convolutional/skip connections. These are fair and point to future work.  
+- Broader impact is not discussed, but the work is foundational and unlikely to raise ethical concerns. Potential positive impacts (e.g., improved network interpretability, verification) are mentioned in the introduction.
 
-### Appendix
-The appendix is thorough, with complete proofs, additional examples, algorithmic details, and extended experiments. The proofs appear correct and are clearly presented. The extended results (Table 3, Figs. 11-14) provide valuable supporting data.
-
-## Overall Assessment
-This paper makes significant theoretical contributions to understanding the geometry of ReLU networks. It proves novel, non-obvious bounds on the average degree and diameter of the connectivity graph, which hold for all fully-connected ReLU networks under mild assumptions. The theoretical analysis is rigorous and elegant, building on recent topological frameworks. The experiments validate the theory and reveal new empirical patterns (e.g., data concentration in high-connectivity regions). The work is well-motivated, clearly presented, and meets ICLR's standards for novelty, technical quality, and reproducibility. While some bounds are loose and the empirical observations are not yet fully explained, the paper opens several promising research directions. I recommend acceptance.
+### Overall Assessment
+This paper makes strong theoretical contributions by establishing fundamental bounds on the connectivity structure of ReLU network polyhedral complexes. The average degree bound (≤ 2d) is elegant and general; the diameter bound independent of input dimension is surprising and insightful. The experiments validate the theory and offer new empirical observations about how trained networks organize their linear regions. The work is novel, rigorous, and well-presented, meeting ICLR's standards for theoretical depth and empirical validation. The main weakness is the limited explanation for the empirical findings regarding data distribution, but this does not undermine the core contributions. The paper should be accepted.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper studies the polyhedral complex formed by the linear regions of fully-connected ReLU networks through its connectivity graph. Theoretically, it proves that the average degree of this graph is at most twice the input dimension (independent of width/depth), and provides an upper bound on the graph diameter that does not depend on input dimension. Empirically, it shows that the average degree approaches this bound as networks grow, and that training data tends to lie in regions with higher connectivity.
+This paper studies the polyhedral complex formed by the linear regions of fully-connected ReLU networks. Its main theoretical contributions are proving that the average degree (number of neighboring regions) of this complex's connectivity graph is at most twice the input dimension (2d), and that the graph's diameter is upper-bounded by a function of network width and depth that is independent of the input dimension. These results are complemented by empirical observations showing that the average degree approaches the upper bound as networks grow, and that training data tends to lie within regions of higher-than-average connectivity.
 
 ### Strengths
-1. **Novel theoretical contributions**: The average degree bound (≤2d) extends known results for hyperplane arrangements to deep ReLU networks via a non-trivial induction using sign sequences and bent hyperplanes (Theorems 3.1, 3.4). The diameter bound (O((m+1)^ℓ)) being independent of input dimension is surprising and provides new insight into the global structure of the complex (Theorem 3.8).
-2. **Rigorous technical foundation**: Builds carefully on the topological framework of Masden (2025), with clear lemmas and proof sketches. The use of sign sequences to categorize cells (Lemma 3.2) and the counting argument (Lemma 3.3) are elegant.
-3. **Comprehensive empirical validation**: Experiments on synthetic and real datasets (MNIST, CIFAR-10, California Housing) corroborate theoretical trends and reveal new phenomena—e.g., data points lie in regions with higher connectivity (Figs. 6, 7), and the diameter grows slowly relative to the upper bound (Fig. 5).
-4. **Clear presentation and reproducibility**: The paper is well-organized, with helpful figures and an explicit algorithm for constructing the connectivity graph (Algorithm 1). Code is provided for reproducibility.
+1.  **Novel and Non-Trivial Theoretical Bounds:** The proof that the average degree of the connectivity graph is bounded by 2d for any ReLU network architecture (depth, width) is a clean and significant result. The diameter bound being independent of input dimension is also a surprising and insightful theoretical finding, as the number of regions grows exponentially with dimension.
+2.  **Rigorous Theoretical Framework:** The analysis builds carefully on a well-established topological and combinatorial framework (Masden, 2025) for describing ReLU complexes via sign sequences and bent hyperplanes. The proofs (outlined in the main text and detailed in the appendix) are clear and use induction effectively.
+3.  **Empirical Validation and New Observations:** The experiments corroborate the theoretical findings (e.g., average degree approaching 2d) and provide novel, data-driven insights. The observation that training data consistently resides in regions with higher connectivity and different boundedness properties is intriguing and could motivate further research into the relationship between geometry and learning.
+4.  **Reproducibility:** The authors provide a public GitHub repository with code to reproduce their results, which is a significant strength for a paper with substantial experimental components.
 
 ### Weaknesses
-1. **Limited practical implications for deep learning**: While the theoretical results are mathematically interesting, the direct relevance to improving or understanding deep learning in practice is not deeply explored. The discussion of applications (e.g., error prediction, robustness) remains brief and speculative.
-2. **Empirical scope constrained by computational cost**: Experiments are limited to moderate-sized fully-connected networks due to the exponential cost of enumerating polyhedra. For real datasets, networks are applied to lower-dimensional representations, which may not reflect the geometry of modern deep architectures.
-3. **Incomplete comparison to related work**: The comparison with Fan et al. (2024) is noted, but a more detailed discussion of how the bounds differ or improve upon prior literature (e.g., in tightness or assumptions) would strengthen the context.
-4. **Assumptions may not fully hold in practice**: The genericity and supertransversality assumptions, while proven to hold almost surely for random weights, are not verified for trained networks. The impact of optimization on these geometric properties is not addressed.
+1.  **Limited Practical Implications:** While the theoretical bounds are elegant, their direct utility for applications like network verification, robustness, or explainability is not deeply explored. The discussion of implications (e.g., for error prediction metrics) is brief and speculative.
+2.  **Loose and Asymptotic Bounds:** The diameter upper bound, O(m^ℓ), is very loose and not shown to be tight in practice (as acknowledged). The asymptotic bound for shallow networks (Theorem 3.7) is a known result for hyperplane arrangements; its extension to deep networks is only empirically suggested, not proven.
+3.  **Empirical Analysis is Largely Correlational:** The key empirical finding—that data lies in highly-connected regions—is presented as an observation without a causal or mechanistic explanation. The paper does not investigate *why* this occurs or how it relates to optimization dynamics or generalization.
+4.  **Scope Limited to Fully-Connected ReLU Networks:** The results do not extend to modern architectures with convolutional layers, skip connections (ResNet), or non-piecewise-linear activations. This limits the immediate relevance to state-of-the-art models.
 
 ### Novelty & Significance
-The paper makes significant theoretical advances in characterizing the discrete geometry of ReLU networks. The bounds on average degree and diameter are novel and provide fundamental insights into the connectivity structure of linear regions. The empirical finding that training data concentrates in higher-degree regions is also new and could inspire further research into the relationship between geometry and generalization. However, the significance for the broader machine learning community is somewhat limited by the specialized focus on polyhedral complexes, which are primarily of theoretical interest. The work is more likely to impact researchers studying neural network theory than practitioners.
+**Novelty:** The core theoretical results (Theorems 3.1, 3.4, 3.8) appear to be novel. While average-degree bounds exist for hyperplane arrangements, their generalization to deep ReLU networks (via bent hyperplanes) is new. The diameter bound independent of dimension is also a novel contribution.
+**Clarity:** The paper is generally well-written. The figures effectively illustrate key concepts like the connectivity graph and the categorization lemma. The proof outlines are helpful, though some algorithmic details (e.g., the SOLVELP subroutine) require careful reading of the appendix.
+**Reproducibility:** High. The provided code and detailed experimental setup facilitate replication.
+**Significance:** This is a solid theoretical contribution that advances the fundamental understanding of ReLU network geometry. It provides new tools (graph-theoretic bounds) for analyzing the complex structure of these networks. The significance is primarily for the theory community; translating these insights into practical algorithms or guarantees remains an open challenge.
 
 ### Suggestions for Improvement
-1. **Deepen the connection to practical deep learning**: Discuss more concretely how the bounds could inform, for example, the design of regularization methods, robustness certificates, or interpretability tools. The mention of error prediction (Ji et al., 2022) could be expanded to show how the new bounds might refine existing results.
-2. **Extend empirical analysis with approximations**: For larger networks, consider using sampling or approximation methods to estimate connectivity graph properties, enabling experiments on more realistic architectures.
-3. **Clarify the relationship to prior work**: Provide a more detailed comparison of the average degree bound with Fan et al. (2024) and other relevant works, discussing the trade-offs in assumptions and tightness.
-4. **Address the effect of training**: Investigate empirically whether the genericity assumptions hold approximately in trained networks, and if not, how the bounds might be affected. This could involve analyzing networks at different training stages.
-
-**Overall Recommendation**: This is a strong theoretical paper with solid proofs and interesting empirical observations. It meets ICLR's standards for technical rigor and novelty, but its impact may be narrower due to the specialized topic. With revisions that better articulate the practical implications, it would be a good fit for ICLR.
+1.  **Tighten or Characterize the Diameter Bound:** Investigate conditions under which the O(m^ℓ) diameter bound is approached or can be refined. A tighter, data-dependent bound would be more valuable.
+2.  **Deepen the Analysis of Data-Region Correlation:** Move beyond observation to hypothesis testing. For example, do regions with high connectivity have specific geometric properties (e.g., larger volume, proximity to many boundaries) that make them more likely to contain data? Could this be linked to gradients or loss landscape geometry during training?
+3.  **Explore Architectural Extensions:** Discuss the challenges and potential avenues for extending the theoretical framework to convolutional layers or residual connections. Even a discussion of the obstacles would be valuable.
+4.  **Improve Integration with Contemporary Work:** The related work section is comprehensive, but the discussion could better position this paper's unique graph-theoretic focus against recent works on polytope structure (e.g., Fan et al., 2024) and the ReLU transition graph (Dhayalkar, 2025).
+5.  **Clarify Algorithmic Contribution:** The paper notes its BFS algorithm is similar to prior work (Xu et al., 2022). The distinct contribution of building the connectivity graph *during* the search should be emphasized more clearly in the main text.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Systematic verification of diameter independence from input dimension.** The paper claims the diameter upper bound is independent of \(d\), but experiments only fix architecture and vary \(d\) incidentally. To substantiate this, run controlled experiments where \(d\) is varied while keeping width, depth, and neuron counts fixed, and report the diameter. Without this, the claim is only weakly supported.
-
-2. **Comparison of average-degree bound against prior work (e.g., Fan et al. 2024).** The paper cites asymptotic bounds from Fan et al. but does not empirically compare their non-asymptotic bound \(2d\) with these or other bounds on actual networks. Showing that the new bound is tighter or holds without restrictive assumptions would strengthen the contribution.
-
-3. **Ablation study on architecture vs. connectivity.** The paper shows aggregated results but does not isolate the effects of depth vs. width on average degree and diameter. For example, for a fixed total number of neurons, does depth or width affect connectivity more? Such an ablation is necessary to understand the architectural implications.
+1. **Compare empirical maximum degree against the 2d bound.** The paper provides average degree bounds but does not show the maximum degree observed across regions. Demonstrating that the maximum degree stays well below the trivial bound of `n` (number of neurons) and how it relates to `2d` is necessary to assess the tightness and practical significance of the theoretical bound.
+2. **Ablation on weight initialization and training.** The theoretical results hold for "all possible network weights" almost everywhere, but the key empirical observations (e.g., data lying in high-degree regions) are shown only on trained networks. Experiments with randomly initialized networks are needed to disentangle the effect of architecture from training, verifying that the basic geometric properties are indeed independent of weight values as claimed.
+3. **Systematic diameter scaling experiments.** The upper bound `O(m^ℓ)` is claimed to be independent of input dimension `d`. To test this, experiments should vary `d`, `m`, and `ℓ` independently while measuring diameter, and show that diameter growth aligns with the theoretical scaling (e.g., polynomial in `ℓ` when `m` is fixed), rather than just presenting a scatter plot against the loose bound.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Tightness of the diameter bound.** The upper bound \((m+1)^\ell\) is extremely loose (exponential in depth), and the paper admits it is rarely reached. A tighter probabilistic or average-case bound should be derived, or at least the gap between this bound and empirical diameters must be analyzed to assess the bound’s utility.
-
-2. **Theoretical explanation for data points lying in high-connectivity regions.** The empirical observation that data-containing regions have higher neighbor counts is intriguing but unexplained. A theoretical analysis linking training (e.g., gradient descent) to the geometry of the resulting complex is needed; otherwise, the observation is merely correlative.
-
-3. **Characterization of the lower bound on average degree.** The lower bound \(\min(n_1, d)\) is weak and does not reflect the empirical trend that average degree quickly approaches \(2d\). A more informative lower bound that grows with network size would better complement the upper bound.
+1. **Quantify the validity of genericity/supertransversality assumptions in practice.** The entire theory rests on these assumptions holding almost everywhere. An analysis showing how often these conditions are violated (e.g., due to weight decay, specific initializations, or training dynamics) in typical trained networks is required to trust the applicability of the results.
+2. **Provide a tighter or more informative diameter characterization.** The given bounds (Ω(log log N / log n) and O(m^ℓ)) are extremely loose. A more refined analysis (e.g., empirical scaling laws, or a tighter theoretical bound that depends on `d`) is needed to make the diameter claim meaningful for understanding network geometry.
+3. **Analyze the full degree distribution, not just the average.** The paper shows histograms but does not analyze the variance, skewness, or tail behavior of the degree distribution. This is critical for understanding whether the complex is dominated by typical regions or has a heavy-tailed structure, which would impact applications like error estimation based on path lengths.
 
 ### Visualizations & Case Studies
-1. **Visualization of the connectivity graph for a non-trivial trained network.** The paper only shows small toy examples. Plotting the connectivity graph (or a meaningful subgraph) for a network trained on a simple real dataset (e.g., 2D synthetic data) would reveal whether the graph has any meaningful structure (e.g., clusters, bottlenecks) beyond what histograms show.
-
-2. **Case study tracing the evolution of connectivity during training.** Figure 14 shows distributions over epochs but is not analyzed. A detailed case study of how the connectivity graph changes during training—especially how data regions become more connected—would help validate whether this is a consistent phenomenon tied to optimization.
+1. **Visualize the connectivity graph and its embedding for low-dimensional inputs.** For `d=2` or `3`, showing the connectivity graph superimposed on the polyhedral complex would directly illustrate the relationship between graph topology (degree, diameter) and spatial arrangement of regions. This would validate whether the graph abstraction faithfully represents geometric connectivity.
+2. **Case studies tracing paths between data points and adversarial examples.** To demonstrate the utility of the connectivity graph, show shortest paths in the graph between regions containing clean data and adversarial examples. This would test whether graph distance is a better metric than Hamming distance (as claimed) and reveal the geometry of decision boundaries.
 
 ### Obvious Next Steps
-1. **Extend theory to convolutional and residual networks.** The paper is restricted to fully-connected ReLU networks. Given the prevalence of convolutional architectures and skip connections, a discussion (or preliminary results) on how these affect connectivity is an obvious next step that should have been included as a limitation and future work.
-
-2. **Connect graph-theoretic properties to generalization.** The paper suggests implications for error prediction but does not empirically link diameter or average degree to test error. A direct analysis correlating these graph metrics with generalization gap would strengthen the practical relevance.
-
-3. **Compare shortest-path distance in the graph to Hamming distance.** The paper claims the shortest path in the connectivity graph is a better metric than Hamming distance for measuring distance between regions. This should be verified by comparing both metrics against geometric distances in input space or against generalization error in a controlled setting.
+1. **Connect degree/diameter bounds to generalization or robustness metrics.** The discussion (Section 6) suggests implications for error prediction but provides no experimental link. The paper should test whether average degree or graph distance between train and test regions correlates with generalization error, making the theoretical results actionable.
+2. **Investigate the cause of high connectivity in data-containing regions.** The observation that data lies in higher-degree regions is merely noted. A controlled experiment (e.g., tracking degree evolution during training, correlating degree with gradient norms or loss) is needed to hypothesize and test why training biases geometry this way.
+3. **Extend analysis beyond fully-connected networks.** The work is limited to fully-connected layers. As an obvious next step, the authors should discuss or preliminarily experiment with how convolutional layers or skip connections might alter the connectivity graph, as these are standard in practical architectures.
 
 # Final Consolidated Review
 ## Summary
-This paper characterizes the discrete geometry of fully-connected ReLU networks by analyzing their polyhedral complexes as connectivity graphs. Theoretically, it proves the average degree of this graph is at most twice the input dimension (independent of width/depth), and its diameter has an upper bound independent of input dimension. Empirically, it shows the average degree approaches this bound with network size and reveals that training data tends to concentrate in regions with higher-than-average connectivity.
+This paper studies the connectivity graph of the polyhedral complex formed by the linear regions of fully-connected ReLU networks. It proves that the average degree of this graph is at most twice the input dimension (2d) regardless of network depth and width, and that the graph's diameter is bounded above by a function of width and depth that does not depend on the input dimension. Empirical results show the average degree approaches this bound and that training data tends to lie in regions with higher-than-average connectivity.
 
 ## Strengths
-- **Novel and fundamental theoretical bounds:** The proof that the average degree of the connectivity graph is ≤ 2d for all fully-connected ReLU networks (Theorem 3.1, 3.4) is a non-trivial extension of a known result for hyperplane arrangements to deep networks via a clever induction on sign sequences and bent hyperplanes. The diameter bound O((m+1)^ℓ) being independent of input dimension (Theorem 3.8) is a surprising and insightful result about global structure.
-- **Rigorous and well-structured analysis:** The work builds solidly on the topological framework of Masden (2025), with clear lemmas (3.2, 3.3) and detailed proofs in the appendix. The algorithmic description for constructing the complex (Algorithm 1) is clear and facilitates reproducibility.
-- **Comprehensive and insightful empirical validation:** Experiments on synthetic and real-world data (MNIST, CIFAR-10, California Housing) convincingly corroborate the theoretical trends (average degree approaching 2d, diameter growth) and uncover a novel empirical phenomenon: training data consistently resides in polyhedral regions with higher neighbor counts (Fig. 6, 7), with intriguing differences between classification and regression tasks.
+- **Novel theoretical bounds:** The paper generalizes the classic average-degree bound from hyperplane arrangements to deep ReLU networks, proving an upper bound of 2d that holds for any architecture. The diameter bound independent of input dimension is a surprising and insightful result given the exponential growth in region count.
+- **Rigorous framework:** The analysis builds carefully on the established combinatorial topology of ReLU complexes (sign sequences, bent hyperplanes) and provides clear proof sketches with detailed appendices, ensuring theoretical soundness.
+- **Empirical validation and new observations:** Experiments on synthetic and real-world data corroborate the theoretical bounds and reveal an intriguing phenomenon: training data consistently resides in linear regions with higher connectivity and different boundedness properties, suggesting a geometric bias induced by learning.
 
 ## Weaknesses
-- **Specialized scope limits immediate practical impact:** The analysis is restricted to fully-connected ReLU networks, excluding prevalent architectures like convolutional or residual networks. While this is a necessary and stated scope, it limits the direct applicability of the results to modern deep learning practice.
-- **Computational cost restricts empirical scale:** The need to (partially) enumerate polyhedra limits experiments to networks of moderate size. For large real-world datasets (CIFAR-10, California Housing), analysis is performed on lower-dimensional feature representations or truncated searches, which may not fully capture the geometry of standard deep networks.
-- **The diameter upper bound is very loose:** The proven bound O((m+1)^ℓ) is exponential in depth and is acknowledged to be rarely tight. While its independence from input dimension is insightful, the bound itself offers limited quantitative insight into typical network geometry.
+- **Loose diameter bound:** The diameter upper bound O(m^ℓ) is acknowledged to be very loose and rarely approached in practice. The paper does not provide a tighter or more refined characterization, which limits the practical utility of this result for understanding network geometry.
+- **Correlational empirical findings:** The observation that training data lies in high-connectivity regions is presented without a mechanistic explanation or controlled experiments (e.g., comparison with randomly initialized networks) to disentangle the effects of architecture from training dynamics. This leaves open whether the phenomenon is a consequence of optimization or an architectural property.
+- **Restricted scope:** The analysis is limited to fully-connected ReLU networks. While this is clearly stated, it limits immediate relevance to modern architectures that use convolutional layers, skip connections, or non-piecewise-linear activations.
 
 ## Nice-to-Haves
-- A more detailed discussion comparing the non-asymptotic average degree bound (2d) with the asymptotic bounds of Fan et al. (2024) could better contextualize the improvement.
-- Preliminary empirical investigation into whether the genericity assumptions hold approximately in trained networks could strengthen the practical relevance of the theory.
-- An ablation study isolating the effects of depth versus width on connectivity metrics could provide finer-grained architectural insights.
+- A more detailed analysis of the full degree distribution (variance, skewness) beyond the average could offer further insight into the structure of the complex.
+- Visualizing the connectivity graph superimposed on the polyhedral complex for low-dimensional inputs (d=2 or 3) would help intuitively validate the graph abstraction.
+- Investigating whether graph-theoretic metrics (e.g., shortest-path distances between train and test regions) correlate with generalization error could strengthen the practical implications.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **"Quantify the validity of genericity assumptions in practice"**: This demand is not standard; the assumptions are standard in the field and hold almost everywhere in parameter space.
+- **"Compare empirical maximum degree against the 2d bound"**: The paper's focus is on average degree, and maximum degree is not a central claim.
+- **"Missing experiments on weight initialization ablation"**: While interesting, this is not required to validate the theoretical results, which hold for almost all weights. The observation about data distribution is presented as a preliminary finding, and the paper acknowledges the need for further investigation.
+- **"Provide a tighter diameter characterization"**: This is partially addressed by the empirical results showing diameter scaling, and the paper explicitly notes the bound is loose. Demanding a tighter theoretical bound is beyond the scope of this contribution.
 
 ## Novel Insights
-The paper provides a foundational advance in understanding the adjacency structure of ReLU network linear regions. The core theoretical insight is that, despite the exponential growth in the number of regions, their average local connectivity is bounded by a simple function of input dimension, and the global connectivity (diameter) can be bounded independently of that dimension. Empirically, the consistent finding that training data populates regions with higher connectivity suggests an implicit geometric bias induced by optimization, hinting at a previously unexplored link between network training and polyhedral complex structure.
+The paper establishes that the average connectivity of ReLU network regions is bounded by a constant (2d) regardless of network size, revealing a fundamental regularity in the complex's structure. The diameter bound's independence from input dimension is a counterintuitive result given the exponential growth in region count. Empirically, the consistent placement of training data in high-connectivity regions suggests that learning shapes the geometry in a non-uniform way, potentially concentrating complexity near decision boundaries.
 
 ## Suggestions
-- To strengthen the claim about diameter independence from input dimension, consider adding a concise experiment where width, depth, and total neuron count are held constant while input dimension is varied, reporting the resulting diameter.
-- The intriguing observation about data concentration in high-connectivity regions warrants a more focused discussion of potential mechanisms (e.g., gradient descent dynamics, loss landscape geometry) as future work.
+- Conduct controlled experiments comparing the degree distributions of randomly initialized and trained networks to determine whether the data-connectivity correlation arises from training or is inherent to the architecture.
+- Explore potential refinements of the diameter bound by analyzing its empirical scaling with respect to depth, width, and input dimension more systematically, possibly leading to a data-dependent or tighter theoretical bound.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 8.0, 8.0]

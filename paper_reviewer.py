@@ -95,267 +95,23 @@ def _detect_leakage_warning_phrases(text: str) -> list[str]:
             matches.append(found.group(0))
     return matches
 
+# ── Prompt loading ────────────────────────────────────────────────────
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+
+def _load_prompt(name: str) -> str:
+    """Load a prompt from the prompts/ directory."""
+    return (_PROMPTS_DIR / name).read_text(encoding="utf-8")
+
+
 # ── Agent system prompts ──────────────────────────────────────────────
 
-HARSH_CRITIC_PROMPT = """\
-You are a deeply thoughtful, experienced academic reviewer. You are NOT trying \
-to be picky or find fault for its own sake. Instead, you engage seriously with \
-the paper and raise genuine questions, concerns, and insights that the authors \
-need to address.
-
-You MUST evaluate EACH section of the paper individually using the rubric below. \
-Do not give vague general comments — cite specific sections, equations, figures, \
-tables, or claims when raising concerns.
-
-Do NOT nitpick formatting, style, or minor phrasing. Do NOT invent problems \
-that aren't there. Do NOT penalize intentional scope decisions. Focus on what \
-actually matters for the paper's contribution.
-
-Output format:
-
-## Section-by-Section Critical Review
-
-Go through the paper's sections and evaluate each one on its own merits. \
-You are not limited to the categories below — adapt your review to the \
-paper's actual structure and content. The following are examples of the \
-kinds of questions you might consider, but raise whatever concerns are \
-genuinely important for this specific paper:
-
-Example sections and questions (use as inspiration, not a checklist):
-- Title & Abstract: Does the title reflect the contribution? Are abstract \
-claims supported?
-- Introduction & Motivation: Is the problem well-motivated? Are contributions \
-clearly stated?
-- Method / Approach: Is it reproducible? Are assumptions justified? Any \
-logical gaps or missing edge cases? Are proofs correct?
-- Experiments & Results: Do experiments test the claims? Are baselines fair? \
-Missing ablations? Statistical significance? Cherry-picked results?
-- Writing & Clarity: Any sections confusing enough to impede understanding? \
-(Do NOT nitpick grammar or formatting.)
-- Limitations & Broader Impact: Are key limitations acknowledged? Any missed \
-failure modes or negative societal impacts?
-
-Focus on whatever matters most for THIS paper. Skip sections that are fine \
-and spend more time on sections with real issues.
-
-### Overall Assessment
-One paragraph. Summarize the most important concerns and whether the \
-contribution stands despite them. Be honest, direct, and calibrated.
-"""
-
-
-NEUTRAL_REVIEWER_PROMPT = """\
-You are a fair, balanced academic reviewer. You give credit where due and \
-critique where warranted, without bias in either direction.
-
-Your job:
-- Summarize the paper's main contribution in 2-3 sentences.
-- List concrete strengths (with evidence from the paper).
-- List concrete weaknesses (with evidence from the paper).
-- Assess novelty, clarity, reproducibility, and significance.
-- Suggest specific improvements.
-
-Output format (strictly follow):
-## Balanced Review
-
-### Summary
-...
-
-### Strengths
-1. ...
-
-### Weaknesses
-1. ...
-
-### Novelty & Significance
-...
-
-### Suggestions for Improvement
-1. ...
-"""
-
-SPARK_FINDER_PROMPT = """\
-You are a senior research advisor. Your job is to identify the MOST CRITICAL \
-gaps in this paper — what is missing or incomplete that directly undermines \
-the paper's claims or contribution.
-
-Be focused and prioritized. List only the TOP 3-5 most important issues per \
-category. Do NOT write an exhaustive wishlist of everything that could \
-possibly be done — that dilutes the signal. Every item you list should pass \
-this test: "Would addressing this meaningfully change whether the paper's \
-core claims are believable?" If not, leave it out.
-
-Do not praise the paper. Do not pad suggestions with compliments. State \
-what's needed directly: "Add X because without it, claim Y is not convincing."
-
-Be concise. Each item should be 1-3 sentences, not a paragraph.
-
-Your job:
-- What experiments are missing that directly undermine the paper's claims? \
-  Be specific about datasets, baselines, or ablations.
-- What analysis is absent that would be needed to trust the method or results?
-- What visualizations or case studies would expose whether the method \
-  actually works vs. fails?
-- What are the most obvious next steps the authors should have done?
-
-Output format (strictly follow):
-## How to Improve This Paper
-
-### Missing Experiments (top 3-5 only)
-1. ... (what, why it matters for the claims — keep it concise)
-
-### Deeper Analysis Needed (top 3-5 only)
-1. ... (what insight is missing and why it matters)
-
-### Visualizations & Case Studies
-1. ... (what would reveal whether the method works)
-
-### Obvious Next Steps
-1. ... (what should have been in this paper)
-"""
-
-RELATED_WORK_PROMPT = """\
-You are a research librarian and literature scout. Given a paper's title, \
-abstract, and key contributions, your job is to find REAL, EXISTING related \
-work that the authors should be aware of.
-
-Your job:
-- Search for closely related papers, especially recent ones (2022-2026).
-- Include papers that use similar methods on different problems.
-- Include papers that tackle the same problem with different methods.
-- Include foundational/seminal work that should be cited.
-- For each paper, provide: title, authors, year, venue, and a 1-sentence \
-  explanation of why it's relevant.
-
-Output format (strictly follow):
-## Related Work Search Results
-
-### Closely Related (same problem + similar approach)
-1. **Title** — Authors (Year, Venue). Why relevant: ...
-
-### Same Problem, Different Approach
-1. **Title** — Authors (Year, Venue). Why relevant: ...
-
-### Same Method, Different Problem
-1. **Title** — Authors (Year, Venue). Why relevant: ...
-
-### Foundational Work
-1. **Title** — Authors (Year, Venue). Why relevant: ...
-"""
-
-RELATED_WORK_FILTER_PROMPT = """\
-You are given a paper and a list of potentially related works found by a \
-search agent. Your job is to FILTER this list:
-
-1. REMOVE any work that is ALREADY CITED in the paper. Check the references \
-   section and in-text citations carefully. If the paper already mentions it \
-   (even by a different abbreviation or partial title), remove it.
-2. REMOVE any work that is only TANGENTIALLY related — if the connection is \
-   a stretch or requires multiple leaps of logic, drop it.
-3. KEEP only works that are genuinely relevant AND not already cited.
-
-For each kept work, briefly explain why it's a potentially missed reference.
-
-Output format (strictly follow):
-## Potentially Missed Related Work
-
-(These are suggestions, not definitive omissions. The authors may have \
-intentionally excluded them or been unaware of them.)
-
-1. **Title** — Authors (Year, Venue).
-   Why potentially missed: ...
-
-If all works are already cited or not relevant, say:
-"No significant potentially missed related work identified."
-"""
-
-
-
-_MERGER_PROMPT_TEMPLATE = """\
-You are a senior meta-reviewer / area chair. You have received {input_count} inputs \
-about the same paper:
-
-1. A **harsh critic** review (may be overly critical)
-{neutral_line}\
-{spark_line}\
-{related_work_line}\
-
-
-Your job is to synthesize these into ONE authoritative final review. \
-Be honest and unsparing about real problems, but do not manufacture or inflate weaknesses. \
-It is for ICLR — standards are high, but a strong paper should read as strong.
-
-Before including any weakness, verify: (1) does the paper actually have this problem, or did the reviewer \
-misread a section? (2) if the paper partially addresses this concern, is the addressal unreasonable or is \
-the reviewer ignoring it? Quote the relevant section if needed to justify keeping or removing the criticism.
-
-Rules:
-- REMOVE criticisms that are factually wrong or misunderstand the paper.
-- REMOVE pure formatting/style nitpicks.
-- WEAKEN criticisms that demand the paper address problems outside its stated scope \
-and contributions. A paper about X should be evaluated on whether it does X well, not on whether \
-it also does Y. If the paper explicitly scopes out a direction, criticizing its absence is scope creep, \
-not a weakness. But if it will strength the paper if it can also do Y, mention it as a nice-to-have.
-- WEAKEN weaknesses (or put them into nice-to-have) if they are generic or one-weakness-suit-all type \
-and does not harm the core claim of the paper. (Examples: larger dataset size if the current size is large enough, adding more models to be benchmarked if the model zoo is big enough now)
-- WEAKEN weaknesses that authors already address in the paper, even if imperfectly and the addressal is reasonable.
-- WEAKEN weaknesses where it is not what the paper intended to address \
-- REMOVE criticisms that claim a cited reference does not exist, a method or model is not yet released, \
-or a benchmark is unavailable. These are due to the lack of knowledge of AI reviewer, not author mis-claiming. \
-If the paper cites it, assume it exists unless proven otherwise.
-- MOVE TO NICE TO HAVE for weaknesses that demand methodological practices that are not standard or expected \
-- REMOVE "weaknesses" about unfair comparison with other methods of the unfairness is beneficial to the baseline and not author's method \
-These comparison is intentionally asymmetric and the asymmetry favors the baseline to prove a stronger point. \
-in the paper's field or setting. \
-Examples: requesting confidence intervals or multiple-run statistics for large scale benchmarks where \
-single-run evaluation is the norm, demanding theoretical proofs for an empirical systems paper, or \
-requiring user studies for a purely algorithmic contribution. \
-The review should evaluate the paper against the standards of its own community, not impose arbitrary \
-rigor requirements.
-- KEEP criticisms that are factually correct AND substantive, even if only \
-  one reviewer raised them.
-- KEEP genuine strengths backed by evidence.
-- KEEP and EMPHASIZE insightful and weaknesses that could help author improve their paper
-- DO NOT mention missing related works, as you do not have external sources to confirm their existence and could be making things up.
-- Do NOT pad Strengths or Weaknesses to appear balanced or make the list "more thorough". \
-If the paper has only one (or none) genuine strength, list only one (or none). \
-If a weakness is minor or redundant, omit it. Quality over quantity.
-- REMOVE or WEAKEN strengths that are generic or would apply to any paper. \
-Examples: "the paper is well-written," "the topic is important," "the experiments are extensive." \
-A strength must identify something specific this paper does well that most papers in the area do not.
-- If the weaknesses identified would, if true, invalidate or severely undermine the paper's core \
-contribution, the review should reflect that clearly — do not soften the overall tone to appear balanced.
-
-Output your final review in this markdown format:
-
-## Summary
-2-3 sentence summary of the paper's contribution.
-
-## Strengths
-- strength 1 with evidence
-- strength 2 with evidence
-
-## Weaknesses
-- weakness 1 — why it matters
-- weakness 2 — why it matters
-
-## Nice-to-Haves
-- suggestion that would improve but is not a core flaw
-
-## Novel Insights
-One paragraph synthesizing genuinely novel observations. \
-If no genuinely novel insight emerges from the reviews beyond the paper's own contributions, write \
-"None beyond the paper's own contributions."
-
-
-## Suggestions
-- specific actionable suggestion
-
-Do NOT output any numerical scores, subscores, or accept/reject decisions. \
-
-DO differentiate between papers of varying quality clearly: the content of the review \
-should make it clear whether the paper is strong or weak, without using numerical scores.
-"""
+HARSH_CRITIC_PROMPT = _load_prompt("harsh_critic.txt")
+NEUTRAL_REVIEWER_PROMPT = _load_prompt("neutral_reviewer.txt")
+SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt")
+RELATED_WORK_PROMPT = _load_prompt("related_work.txt")
+RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt")
+_MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt")
 
 
 def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, skip_related_work: bool = False) -> str:
@@ -387,46 +143,7 @@ def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, s
 MERGER_PROMPT = _build_merger_prompt()
 
 
-SCORE_PROMPT = """\
-You previously wrote a consolidated review of a paper. Now assign an overall \
-score from 0.0 to 10.0.
-
-This is for a top-tier venue (ICLR, ~29% acceptance rate), most papers are scored lower than 6. \
-
-
-## Comparative Scoring
-
-Select a few calibration papers that are closest in quality to the current \
-paper. Compare them against the current paper on these dimensions:
-- novelty
-- technical soundness
-- empirical support
-- significance
-- clarity
-
-
-The reviews you found might not be linear: a paper with better quality might get a lower score due to noise. Give your score consider multiple pages, not just a few.
-
-Then set your score relative to the human scores of those selected papers.
-
-Do NOT be afraid to give very high (>8) or very low (<4) scores when the \
-paper clearly warrants it.
-
-Score continuously (e.g. 3.5, 4.7, 8.1). Do not round to .5 or .0 unless the \
-comparison to calibration examples genuinely supports that value.
-
-Let the score distribution follow the actual quality of the paper relative to \
-the calibration examples. Borderline papers may legitimately cluster around \
-4-6, and stronger or weaker papers should be scored accordingly.
-
-## Scoring guide
-- 10: Strong accept. Exceptional, field-advancing contribution.
-- 8:  Accept.
-- 6:  Borderline accept.
-- 4:  Borderline reject.
-- 2:  Reject.
-- 0:  Strong reject. 
-"""
+SCORE_PROMPT = _load_prompt("scorer.txt")
 # ── Core logic ────────────────────────────────────────────────────────
 
 def sanitize_text(text: str) -> str:
@@ -631,12 +348,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     response = await client.beta.chat.completions.parse(
         model=MODEL_PARSER,
         messages=[
-            {"role": "system", "content": (
-                "The text contains a paper scoring analysis that references calibration examples "
-                "with their own scores. Ignore all calibration/reference scores. "
-                "Extract ONLY the final score (should be in a pineapple XML tag) the author assigned to the paper being reviewed. "
-                "Look for 'MY FINAL SCORE:' at the end of the text."
-            )},
+            {"role": "system", "content": _load_prompt("parse_score.txt")},
             {"role": "user", "content": text},
         ],
         response_format=ScoreSchema,
@@ -737,57 +449,21 @@ async def run_scorer(
     review_path.write_text(review_text, encoding="utf-8")
     paper_path.write_text(paper_content, encoding="utf-8")
 
-    prompt = f"""\
-{SCORE_PROMPT}
-
-You are a paper scoring agent. Your job:
-
-1. Read the consolidated review at {review_path} and the paper at {paper_path}.
-
-2. Use Grep to search the calibration directory at {cal_dir_abs} for relevant
-   calibration examples. The directory contains pairs of files:
-   - *_paper.md  — the original paper text
-   - *_review.md — the review + human scores
-   Search BOTH *_paper.md and *_review.md files for keywords related to the
-   paper's topic, methodology, strengths, and weaknesses. This helps you find
-   calibration papers that are similar in content or quality.
-
-3. Once you identify relevant matches, ONLY Read the *_review.md files (NOT the
-   *_paper.md files) to save context. Aim for 5-7 relevant calibration reviews.
-   You can also grep the score part of the review, usually in this format, to select a wide range of papers.
-   ```
-# Actual Human Scores
-Individual reviewer scores: [0.0, 0.0, 0.0]
-Average score: 0.0
-Binary outcome: Reject
-```
-   You MUST keep track of every calibration review file you actually Read.
-
-4. Compare the paper's quality against those calibration examples on:
-   novelty, technical soundness, empirical support, significance, clarity.
-
-5. Assign a single overall score from 0.0 to 10.0.
-
-Before your comparison, output a section exactly titled:
-## Calibration Reviews Read
-Under it, list EVERY calibration review file you actually Read, one per bullet.
-Do not omit any file you read. If you read 7 files, list all 7. If you read none,
-write "- None".
-
-Based on the calibration examples you found, assign a score. Explain your reasoning.
-
-IMPORTANT: At the very end of your response, you MUST write exactly this line (using a pineapple XML tag):
-MY FINAL SCORE: <pineapple>score</pineapple>
-This must be the LAST line of your output. Do NOT repeat calibration scores here — only YOUR score for THIS paper.
-"""
+    scorer_agent_template = _load_prompt("scorer_agent.txt")
+    prompt = scorer_agent_template.format(
+        score_prompt=SCORE_PROMPT,
+        review_path=review_path,
+        paper_path=paper_path,
+        cal_dir_abs=cal_dir_abs,
+    )
 
     print(f"  [scorer-agent] starting RAG scorer (claude-sonnet-4-6, cal={cal_dir_abs}) ...")
 
     result_text = ""
     options = ClaudeAgentOptions(
-        model="claude-sonnet-4-6",
+        model="claude-opus-4-6",
         cwd=cal_dir_abs or None,
-        allowed_tools=["Grep", "Read", "Glob"],
+        allowed_tools=["Grep", "Read", "Glob", "Agent"],
         permission_mode="bypassPermissions",
         effort="medium",
         max_turns=30,
@@ -920,7 +596,9 @@ async def review_paper(
     Phase 2:
       Merger — waits for all reviewers
     """
+
     path = Path(paper_path).expanduser().resolve()
+    print("Reviewing:", paper_path)
     if not path.exists():
         raise FileNotFoundError(f"Paper not found: {path}")
 

@@ -1,0 +1,33 @@
+## Summary
+This paper introduces Content-Aware Mamba (CAM), a novel state-space model designed to overcome two key limitations of standard Mamba in learned image compression: rigid, content-agnostic scanning and strict causality. CAM employs Content-Adaptive Token Permutation to group similar tokens and Global-Prior Prompting to inject global context, enabling more effective redundancy removal while preserving linear complexity. The resulting model, CMIC, achieves state-of-the-art rate-distortion performance across multiple datasets.
+
+## Strengths
+- **Novel and well-motivated architectural contributions.** The paper clearly identifies underexplored problems with applying Mamba to image compression and proposes two cohesive, task-specific solutions: a codebook-based clustering mechanism for token permutation and a clustering-derived global prompting strategy to relax causality. The design is directly tailored to the core need of capturing long-range, content-dependent redundancy.
+- **Extensive and compelling empirical validation.** CMIC demonstrates significant BD-rate improvements (e.g., -21.34% vs. VTM-21.0 on Tecnick) and consistently outperforms a wide range of recent CNN-, Transformer-, and Mamba-based learned methods across Kodak, Tecnick, and CLIC datasets for both PSNR and MS-SSIM. The gains are substantial and well-documented.
+- **Excellent ablation studies and analysis.** The paper provides thorough ablations showing the additive benefits of each component. The Effective Receptive Field (ERF) visualizations are particularly compelling, demonstrating quantitatively and visually that CAM achieves larger, more content-adaptive, and less causal receptive fields compared to prior methods. Analyses of cluster activation and throughput confirm the efficiency and adaptivity of the approach.
+
+## Weaknesses
+- **Limited analysis of computational overhead from clustering.** While the paper states clustering adds only ~5% training time overhead and minimal inference latency, a more detailed profiling breakdown (e.g., time spent on distance computation vs. sorting) is missing. For very high-resolution images, the O(NK) assignment step could become a bottleneck; a brief discussion of this scaling would strengthen the efficiency claims.
+- **Insufficient integration of comparison with prior adaptive methods.** A detailed comparison with another clustering-based LIC method (Zhang et al., 2024b) is relegated to the appendix. The core methodological distinctions (fine-grained, permutation-equivariant clustering vs. grid-anchored pooling) are important for novelty and should be highlighted in the main text or experiments.
+- **Missing standard "Limitations" section.** For ICLR, a discussion of limitations is expected. The paper should address potential failure modes (e.g., images with extremely fine-grained, non-stationary textures that may not cluster cleanly), the sensitivity of performance to the cluster count K beyond the provided ablation, and the inherent trade-off of potentially disrupting local spatial coherence when reordering tokens.
+
+## Nice-to-Haves
+- A direct comparison with a Mamba variant employing multi-directional scans (e.g., Vision Mamba) in a controlled, similar-capacity setting would further solidify the claim that CAM's content-adaptive approach is superior to simply adding more fixed scans.
+- Quantitative metrics for clustering quality (e.g., alignment with semantic segments, cluster consistency across training) would complement the strong visualizations and provide a more objective link between clustering efficacy and performance gains.
+- A case study showing images where CMIC performs relatively poorly or where clustering results are suboptimal would provide a more balanced view and help identify boundaries of the method's effectiveness.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **"Section 3.2 is completely empty" (Harsh Critic).** The paper's structure is clear: Section 3.1 is Preliminaries, and Section 3.3 begins the method description. Figure 2 provides the architectural overview. There is no missing section that breaks the narrative.
+- **"Lack of theoretical grounding" (Neutral Reviewer).** This is an empirical systems paper presenting novel architectures and achieving SOTA results. Demanding theoretical guarantees for convergence or redundancy removal imposes an arbitrary rigor requirement not standard in this subfield.
+- **"Superficial comparison...relegated to the appendix" (Neutral Reviewer) – Weakened and moved.** This is a valid point about presentation, but the comparison is detailed in Appendix A.2. The weakness is rephrased to focus on the need for better integration into the main narrative.
+- **"Unfair comparison with MambaIC due to model scale" (Harsh Critic).** The comparison is fair as it evaluates end-to-end models. CMIC's superior performance with significantly lower parameters, FLOPs, and memory is a core strength, not a flaw. The paper also compares favorably against many other models of similar or larger scale.
+- **Requests for out-of-domain dataset evaluation, application to other tasks, or differentiable clustering (Spark Finder).** These are interesting research directions but are outside the stated scope of the paper, which focuses on advancing learned image compression.
+
+## Novel Insights
+The paper provides a novel synthesis of ideas from vector quantization and state-space modeling specifically for compression. The key insight is that Mamba's efficiency for long sequences can be harnessed more effectively for images by dynamically reordering the sequence based on content similarity and conditioning the SSM on a global prior derived from that same clustering. This breaks the fundamental mismatch between Mamba's 1D causal design and the 2D, non-causal redundancy structure of images. The ERF visualizations offer a novel, intuitive demonstration that the model's receptive field becomes both global and semantically aligned, which is a direct result of the proposed mechanisms.
+
+## Suggestions
+- Integrate the core methodological comparison with Zhang et al. (2024b) from Appendix A.2 into the main related work or experiment sections to better contextualize the novelty of the fine-grained, non-Euclidean clustering.
+- Add a "Limitations" subsection before the conclusion to discuss the points raised in the weaknesses section (computational scaling, potential failure modes).
+- In the computational overhead analysis, consider adding a brief note or experiment profiling the clustering time separately on a very high-resolution image (e.g., 4K) to preemptively address scaling concerns.

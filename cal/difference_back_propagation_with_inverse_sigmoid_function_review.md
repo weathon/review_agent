@@ -1,116 +1,128 @@
-=== CALIBRATION EXAMPLE 15 ===
+=== CALIBRATION EXAMPLE 5 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-The title clearly indicates the core idea: a difference-based backpropagation method using the inverse sigmoid. However, the abstract makes a strong and potentially misleading claim: "the derivative for a nonlinear function is an approximation for the difference of the function values." This misrepresents calculus—the derivative is the limit of the difference quotient, not an approximation. The abstract further asserts that using differences directly is "more precise," but this is only argued in the context of finite learning rates, not established rigorously. The verification with "basic examples" is mentioned, but no concrete outcomes are provided.
+The title is specific but may be overly narrow given the paper’s claim that the method applies to any invertible activation function. The abstract makes strong claims about the precision and potential impact of the proposed method, but these are not substantiated by the experiments presented. The abstract also fails to mention key limitations (e.g., the requirement of invertible activation functions and the small-scale experiments).
 
 ### Introduction & Motivation
-The introduction cites the historical growth of models and data, suggesting that backpropagation is a bottleneck, yet provides no evidence or citations to support this claim. It also incorrectly states that "no new method for performing backpropagation has been proposed," ignoring alternatives like feedback alignment, synthetic gradients, or direct feedback alignment. The problem is loosely defined as an "inconsistency" between updated activations and pre-activations, but the contributions are not clearly enumerated.
+The introduction inadequately motivates the problem. The claim that backpropagation is a bottleneck in modern deep learning is not supported by citations or evidence; in fact, the success of large models suggests otherwise. The statement that “no new method for performing backpropagation has been proposed” is incorrect and reveals a lack of awareness of related work (e.g., synthetic gradients, feedback alignment, etc.). The contributions are stated but are not clearly differentiated from existing alternatives.
 
 ### Method / Approach
-The core method is under-specified and problematic:
-1. **Derivation Issues**: The proposed update uses \( \frac{dl}{dz} = \frac{a' - a}{z' - z} \cdot \frac{dl}{da} \), where \( a' = a - \text{learning\_rate} \cdot dl/da \) and \( z' = \text{invsig}(a') \). This effectively defines a gradient that, if used in gradient descent, would yield \( z' = \text{invsig}(a') \). However, this is not a gradient descent step on \( z \); it is a direct assignment via the inverse function. The method is not presented as a standard gradient update, creating confusion.
-2. **Invertibility Requirement**: The method requires an invertible activation function. While sigmoid is invertible, many common activations (e.g., ReLU, softmax) are not globally invertible, limiting applicability. The claim that it works for "any function that has an inverse function" is trivial and not helpful for non-invertible functions.
-3. **Vanishing Gradient Claim**: The authors claim DBP avoids vanishing gradients for sigmoid, but no analytical justification is given. If \( a \) is near 1, \( z' - z \) can be large, and the computed gradient may still become extremely small. The constraint \( a \in (10^{-16}, 1-10^{-16}) \) artificially avoids saturation, making the comparison to traditional backpropagation unfair unless the same constraint is applied.
-4. **Generalization**: The method is only derived for a single neuron. It is unclear how it generalizes to full layers, weight updates, or complex architectures. No algorithm is provided for computing weight gradients in a multi-layer network.
-5. **Non-Differentiable Functions**: The claim that DBP works for non-differentiable functions is overstated: it requires an inverse, which may not exist, and the update still relies on a gradient of the loss w.r.t. activations, which may be problematic at non-differentiable points.
+The method is described with garbled equations (likely parser issues), but the core idea is discernible. However, the theoretical justification is fundamentally flawed. The authors argue that using finite differences via the inverse function is more “precise” than derivatives, but they ignore the fact that gradient descent uses derivatives to define the direction of steepest descent for infinitesimal steps. Their update rule for \(z\) assumes that the loss function is linear in \(a\), which is not true in general. The proposed update does not necessarily yield a step that reduces the loss as intended. Additionally:
+- The method requires invertible activation functions, which excludes many common choices (e.g., ReLU is not invertible, softmax is not elementwise invertible).
+- The computational cost of computing inverses is not discussed, nor is the numerical instability introduced by constraining \(a\) to avoid domain issues.
+- The claim that DBP prevents gradient vanishing is not analytically substantiated; the product of local gradients through multiple layers could still vanish.
+- It is unclear how the method integrates into the full chain rule; the paper states it only changes the activation function step, but then the gradient for earlier layers would mix difference-based and derivative-based components, potentially causing inconsistencies.
 
 ### Experiments & Results
-The empirical validation is insufficient for an ICLR submission:
-1. **Toy Experiments**: The primary experiments use tiny synthetic datasets and networks with 1–2 hidden layers. The improvements in convergence speed and final loss are minor and not quantified (no numerical results are provided). The figures are described but not included, making it impossible to assess the magnitude of improvement.
-2. **Lack of Fair Comparisons**: The constraint on \( a \) to avoid domain issues is applied in DBP but not necessarily in the traditional baseline. Without applying the same constraint to the baseline, the comparison is invalid.
-3. **Missing Ablations**: There is no ablation to isolate the effect of the inverse sigmoid versus other techniques to mitigate vanishing gradients. No comparison with modern optimizers (e.g., Adam) or gradient clipping is provided.
-4. **Transformer Experiment**: The transformer experiment on AG News is mentioned, but details are scarce. It is unclear what activation function is used (sigmoid? others?), how DBP is implemented for non-sigmoid activations, or what hyperparameters are used. No quantitative results or statistical significance are reported. Given the parser artifacts, even the model dimensions are unclear.
+The empirical validation is insufficient for ICLR:
+- Experiments are conducted only on tiny synthetic datasets (100 points) and extremely small networks (e.g., (1,2,1)), which are not representative of modern deep learning.
+- No statistical significance is reported (single runs, no error bars).
+- Baselines are limited to standard backpropagation; there is no comparison to well-known techniques for mitigating gradient vanishing (e.g., proper initialization, residual connections, or alternative activation functions like ReLU).
+- The transformer experiment (Fig. 5) is poorly described: the architecture, activation functions, and how DBP is applied (e.g., to which layers) are not specified. Transformers typically use non-invertible functions like softmax and GELU, making the applicability of DBP unclear.
+- No ablation studies are performed to isolate the effect of the constraints on \(a\) or to test different activation functions.
+- The claim of improved convergence speed and final performance is based on minor differences in plots, with no quantitative analysis or statistical testing.
 
 ### Writing & Clarity
-The writing is often confusing, with incomplete sentences and ambiguous notation (e.g., crossed-out text in equations). The method description lacks clarity, especially regarding the update rule and its relation to standard gradient descent. Figures are referenced but not provided, hindering understanding. While some issues may stem from the PDF parser, the core exposition remains unclear.
+The writing is generally understandable, but the paper is very short and lacks depth. The equations are garbled (likely due to the parser), which impedes understanding. Critical details are missing, such as the exact weight update procedure and the specifics of the transformer experiment. The flow is reasonable, but the paper reads more like a preliminary research note than a conference submission.
 
 ### Limitations & Broader Impact
-The paper does not discuss limitations. Key limitations include: the requirement for invertible activations, the computational cost of computing inverse functions, the need to constrain activations to avoid domain issues, and the lack of theoretical convergence guarantees. There is no discussion of broader impact or potential negative societal consequences.
+The paper does not have a dedicated limitations section. Limitations mentioned in passing (e.g., the need to constrain \(a\) to avoid overflow) are underdeveloped. Major limitations—such as the requirement of invertibility, increased computational cost, lack of theoretical guarantees, and the small-scale experiments—are not adequately discussed. Broader impact is not addressed, but given the methodological nature, it is acceptable to omit societal impact if the method were well-validated.
 
-## Overall Assessment
-The paper proposes a novel idea—using inverse functions to align pre-activation and activation updates—but fails to deliver a coherent, rigorous, or empirically convincing contribution. The method is under-developed, with significant theoretical gaps and insufficient experiments. The claims of improved precision and mitigation of vanishing gradients are not substantiated analytically or empirically beyond toy examples. For ICLR, where contributions require either solid theoretical foundations or extensive empirical validation, this submission does not meet the bar. The idea may be worth exploring further, but in its current form, the paper is not acceptable.
+### Overall Assessment
+The paper proposes an interesting idea of using inverse functions for backpropagation updates. However, the theoretical foundation is weak, the experiments are far from convincing, and the paper lacks awareness of relevant literature. The contribution, as presented, is incremental and does not meet the bar for ICLR. Significant revisions—including a solid theoretical analysis, rigorous experiments on standard benchmarks, and comparisons to existing alternatives—would be necessary for reconsideration. In its current form, the paper is not acceptable.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper proposes "Difference Back Propagation" (DBP), a novel backpropagation algorithm that replaces the derivative-based chain rule with a difference-based update using the inverse of the activation function (e.g., inverse sigmoid). The core idea is to maintain consistency between pre- and post-activation values during weight updates with a finite learning rate, potentially mitigating gradient vanishing for sigmoid and extending to non-differentiable functions. The authors demonstrate DBP on small, synthetic regression tasks and briefly mention a transformer experiment.
+This paper proposes Difference Back Propagation (DBP), a novel backpropagation algorithm that replaces the derivative in the chain rule with a finite difference computed via the inverse activation function. The method aims to maintain consistency between pre- and post-activation updates for finite learning rates, particularly for sigmoid activations. Experiments on tiny synthetic networks and a small transformer show marginal improvements in convergence.
 
 ### Strengths
-1.  **Novel Conceptual Proposal:** The paper challenges a foundational component of deep learning (derivative-based backprop) by proposing an alternative paradigm based on function inversion and finite differences. This is a theoretically interesting direction for the community to consider.
-2.  **Addresses a Known Issue:** The method directly targets the gradient vanishing problem for saturating activation functions like sigmoid by avoiding multiplication by a near-zero derivative, using the inverse function instead.
-3.  **Potential Generality:** The authors correctly note that the principle could, in theory, be applied to any invertible activation function, including those that are non-differentiable or discontinuous (e.g., a modified Leaky ReLU with an inverse), which is a provocative claim.
+1. **Conceptual Novelty**: The core idea of using an inverse activation function to compute updates via finite differences, rather than derivatives, is underexplored and represents a creative departure from standard practice.
+2. **Potential for Non-Differentiable Functions**: The authors correctly note that DBP could, in principle, be applied to activation functions lacking derivatives (e.g., leaky ReLU at 0), provided an inverse exists, opening a new design space.
+3. **Initial Empirical Validation**: The provided experiments on minimal (1,2,1) and (1,2,2,1) networks demonstrate that DBP can train models and shows slight convergence benefits over standard backpropagation in these controlled settings.
 
 ### Weaknesses
-1.  **Fundamental Theoretical Flaw:** The paper's core motivation—that the derivative is an "approximation" of the difference and is thus imprecise—misinterprets calculus. The derivative *is* the exact instantaneous rate of change; the chain rule is exact for infinitesimal steps. The proposed method essentially performs a Newton-like step on the activation, which is a different optimization approach, not a more "precise" version of gradient descent. This undermines the paper's foundational premise.
-2.  **Severely Inadequate Empirical Validation (Critical for ICLR):** The experiments are limited to tiny (1-2-1, 1-2-2-1) networks on trivial, synthetically generated data. No standard benchmarks (e.g., MNIST, CIFAR), modern architectures (ResNet, Vision Transformer), or comparisons with standard optimizers (Adam, SGD with momentum) are provided. The transformer result (Fig. 5) is mentioned without essential details (dataset size, hyperparameters, reproducibility steps), making it non-credible. The evidence does not support claims of effectiveness for "modern large deep learning models."
-3.  **Limited Practical Applicability & Overlooked Challenges:** The requirement for a bijective (invertible) activation function is highly restrictive. Most common activations (ReLU, GeLU, SwiGLU) are not invertible. The method also introduces new numerical instability issues (e.g., dividing by `z' - z`, constraining `a` away from 0 and 1), which are only superficially addressed. The computational cost and stability of inverting functions across millions of neurons are not discussed.
-4.  **Clarity and Presentation:** The writing has grammatical errors and formatting issues (e.g., struck-out text like "~~r~~ate"). While some are parser artifacts, the core explanation of the algorithm (Eq. 6, the flow from `a'` to `z'`) is confusingly presented. Figure 1's concept is useful but could be clearer.
+1. **Lack of Theoretical Justification**: The paper fails to establish DBP as a valid optimization method. Equation 6 is presented without derivation from a loss minimization principle. There is no analysis showing that DBP updates follow the negative gradient direction of the loss, even approximately, which is fundamental for gradient-based optimization.
+2. **Extremely Limited and Non-Standard Evaluation**: Experiments are conducted only on tiny synthetic datasets and a very small transformer on AG News. There are no comparisons on standard benchmarks (e.g., CIFAR, ImageNet) or modern architectures (e.g., ResNet, large-scale transformers). The reported improvements are minimal and not tested for statistical significance.
+3. **Practical Viability and Numerical Issues Unaddressed**: The method requires a strictly invertible activation, which is problematic for common functions like ReLU (non-injective) and requires ad-hoc constraints (e.g., clamping `a` to `(1e-16, 1-1e-16)` for sigmoid). The handling of near-zero differences (`z' - z`) via setting to 1 is heuristic and lacks justification. Computational cost and stability for deep networks are not discussed.
+4. **Missing Comparison to Relevant Literature**: The paper does not situate DBP among existing alternatives to backpropagation (e.g., synthetic gradients, feedback alignment, or methods addressing gradient vanishing like skip connections or better initialization). This omission makes it difficult to assess its relative contribution.
+5. **Poor Presentation and Manuscript Quality**: The text contains numerous formatting artifacts and typos (e.g., "learning ~~r~~ ate", "inv ~~s~~ ig", garbled equations). While some are parser errors, the overall writing is unclear. Figures are referenced but not provided in the text, hindering assessment.
 
 ### Novelty & Significance
-**Novelty:** The specific proposal of replacing the derivative chain rule with an inverse-function-based difference update for backpropagation is novel. The idea of using the inverse activation to compute a parameter update is reminiscent of specific root-finding methods but is not standard in deep learning.
-**Significance:** The claimed significance is currently very low. The theoretical premise is questionable, and the empirical evidence is far too weak to demonstrate any practical advantage over the highly optimized, decades-old backpropagation framework. For ICLR, which expects work with strong theoretical grounding or compelling empirical results on non-trivial tasks, the paper in its current form does not meet the bar.
+The core concept of using inverse functions for backpropagation is novel. However, the paper does not demonstrate its significance. Without a solid theoretical foundation, rigorous experiments on standard tasks, or a clear advantage over existing methods, the work remains a preliminary idea with unproven potential. It does not currently meet the novelty and impact expectations of ICLR.
 
 ### Suggestions for Improvement
-1.  **Reframe the Theoretical Foundation:** Rebuild the motivation not on the "derivative is an approximation" argument, but on interpreting DBP as a specific fixed-point/Newton update step for the activation layer. Compare and contrast it formally with standard gradient descent and existing optimization literature.
-2.  **Conduct Rigorous, Standardized Experiments:** To be taken seriously, the paper must demonstrate DBP on standard benchmarks. At a minimum, train medium-sized MLPs/CNNs on MNIST/CIFAR-10, comparing convergence speed and final accuracy against SGD/Adam. The transformer experiment must be fully detailed and reproducible. Ablation studies on the impact of the `a`-constraint are necessary.
-3.  **Formalize and Broaden the Algorithm:** Provide a clear, general pseudocode for DBP. Discuss in detail how to handle non-invertible functions (e.g., by defining piecewise inverses) and analyze the computational complexity and numerical stability compared to standard backprop.
-4.  **Improve Presentation:** Revise the manuscript for clarity, correct grammar, and proper mathematical notation. Ensure figures are clearly labeled and described. A clear explanation of how the gradient for weights preceding `z` is computed using the new `∆z` is essential.
+1. **Develop Theoretical Foundation**: Formally derive the DBP update rule from an optimization perspective (e.g., as a fixed-point iteration or via implicit differentiation). Analyze its relationship to gradient descent, including conditions for convergence and the role of the learning rate.
+2. **Conduct Extensive and Standardized Experiments**: Evaluate DBP on established benchmarks (e.g., image classification on CIFAR-10/100, language modeling on WikiText) using common architectures (ResNets, Transformers). Compare against standard backpropagation and relevant baselines with multiple random seeds and statistical tests. Include results for other activation functions (tanh, ReLU variants) with properly defined inverses/pseudo-inverses.
+3. **Address Numerical and Implementation Challenges**: Provide a robust, general scheme for handling non-invertible or boundary cases. Discuss computational complexity, memory overhead, and propose scalable implementations for large models.
+4. **Survey and Compare with Related Work**: Discuss how DBP relates to and differs from prior work on alternative training methods (e.g., synthetic gradients, direct feedback alignment, target propagation) and gradient flow improvements (e.g., skip connections, normalization layers).
+5. **Revise for Clarity and Rigor**: Rewrite the manuscript to clearly define the algorithm, fix all typos and formatting issues, and include all figures and results in a self-contained manner. Provide a public code repository to ensure reproducibility.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Standard benchmark validation on modern architectures:** The paper only tests on tiny synthetic networks and a minimal transformer. To support claims of breaking bottlenecks in large models, experiments on standard datasets (e.g., CIFAR-10, ImageNet) with ResNets or standard Transformers are essential. Without this, the scalability and practical impact are unsubstantiated.
-2. **Comparison with state-of-the-art optimization methods:** The work lacks comparison with adaptive optimizers (Adam, RMSprop) or techniques specifically designed to mitigate vanishing gradients (e.g., batch normalization, residual connections). Showing DBP’s advantage over these is necessary to claim novelty and effectiveness.
-3. **Ablation across activation functions:** The paper claims DBP works for any invertible function, but only tests sigmoid. Experiments with tanh, ReLU (which is not bijective), and leaky ReLU are critical to verify generality and handle non-differentiable points.
-4. **Deep network experiments:** The claims about preventing vanishing gradients are only tested on networks with ≤2 hidden layers. Demonstrating DBP on deeper networks (e.g., 10+ layers) with sigmoid is needed to validate those claims.
+1. **No comparison on standard, non-synthetic datasets with modern architectures.** The paper only tests on tiny synthetic networks and a minimal transformer. To claim a fundamental improvement to backpropagation, it must demonstrate effectiveness on established benchmarks (e.g., CIFAR-10/100, ImageNet) with standard architectures (e.g., ResNet, ViT). Without this, the claimed advantages are unconvincing for real-world deep learning.
+2. **No comparison with state-of-the-art optimizers and gradient-handling techniques.** The paper compares only to basic gradient descent. Modern training uses adaptive optimizers (Adam, AdamW) and architectural solutions (skip connections, normalization) to mitigate vanishing gradients. Failing to compare against these makes it impossible to judge DBP's practical relevance.
+3. **No ablation on the claimed numerical stability and gradient vanishing prevention.** The paper asserts DBP avoids vanishing gradients for sigmoid, but provides no quantitative measure of gradient norms across layers or training steps in a deep network. Without this, the claim is unsupported.
+4. **No experiment on non-differentiable activation functions.** One claimed advantage is applicability to non-differentiable functions (e.g., leaky ReLU at 0). However, no experiment uses such an activation. This claim remains purely speculative.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Theoretical convergence analysis:** The method replaces derivatives with finite differences, effectively using a secant method. A formal analysis comparing its convergence rate and stability to gradient descent is missing; without it, the alleged "precision" and consistency are not justified.
-2. **Computational and memory cost analysis:** Computing inverse functions (e.g., log for sigmoid) may be more expensive than derivatives. The paper must analyze the overhead per iteration and memory implications, especially for large models, to assess practicality.
-3. **Proper derivation of the chain rule for multi-layer networks:** The paper only shows the update for a single neuron. The full chain rule for propagating differences through multiple layers is not provided, leaving it unclear how gradients are computed across layers.
+1. **Theoretical analysis of convergence and consistency.** The paper argues DBP is more "consistent" but provides no formal analysis. It should prove that the update direction approximates the gradient in the limit of small learning rates, or analyze its convergence properties. Without this, DBP is an ad hoc modification with unclear theoretical grounding.
+2. **Computational and memory cost analysis.** DBP requires computing inverse activation functions and applying constraints. There is no discussion of how this affects training speed or memory compared to standard backpropagation, which is critical for large-scale adoption.
+3. **Sensitivity analysis of the constraint thresholds.** The method relies on arbitrary bounds (e.g., \(10^{-16}\)) to avoid numerical issues. The paper does not analyze how sensitive the results are to these choices, which is essential for reproducibility and robustness.
+4. **Comparison of update directions.** The paper claims DBP gives a "more precise" update, but does not analyze the angle or magnitude difference between the DBP update and the true gradient. This is necessary to understand what the algorithm is actually optimizing.
 
 ### Visualizations & Case Studies
-1. **Visualization of gradient flow:** Plot the gradients (or difference ratios) at each layer during training for DBP vs. standard backpropagation in a deep network. This would directly show whether DBP alleviates vanishing/exploding gradients.
-2. **Case studies on boundary behavior:** Illustrate how DBP handles activations near saturation (a ≈ 0 or 1) and how the proposed constraints affect training. This would reveal numerical instability issues not addressed by the simple clamping.
-3. **Optimization path comparison:** Visualize the loss landscape and the optimization trajectories of DBP vs. standard backpropagation to show if DBP indeed follows a more consistent path.
+1. **Visualization of gradient flow in a deep network.** Plot the norm of updates (or gradients) per layer over training for a network with many sigmoid layers, comparing DBP and standard backprop. This would directly show if DBP mitigates vanishing gradients as claimed.
+2. **Case study on a non-differentiable point.** For an activation like ReLU, visualize the behavior of DBP vs. subgradient methods at the non-differentiable point during training, showing parameter trajectories and loss.
+3. **Loss landscape traversal.** For a simple 2D parameter space, plot the path taken by DBP vs. standard gradient descent to illustrate differences in optimization trajectory and convergence.
 
 ### Obvious Next Steps
-1. **Formulate DBP for common non-invertible activations (e.g., ReLU):** The method fails for non-bijective functions. Proposing a principled way to handle them (e.g., using subgradients or a modified inverse) is essential for broad applicability.
-2. **Integrate with automatic differentiation frameworks:** Implementing DBP in PyTorch/TensorFlow and testing with standard training pipelines would demonstrate feasibility and ease of adoption.
-3. **Hyperparameter sensitivity study:** The method introduces new constraints (clamping thresholds). A systematic analysis of their impact on performance and stability is necessary for robust deployment.
-4. **Error analysis of the difference approximation:** The derivative is a local linear approximation; the difference is a secant approximation. Analyzing the approximation error relative to learning rate would clarify when DBP is expected to outperform standard backpropagation.
+1. **Benchmark on at least one standard vision or language task with a common deep architecture.** This is the minimum to show the method is not just a toy example. For ICLR, toy experiments are insufficient for a core algorithm change.
+2. **Compare with adaptive optimizers like Adam.** Modern training rarely uses vanilla gradient descent. The paper must show DBP works with, or instead of, these optimizers.
+3. **Address the invertibility requirement for common activations.** Many activations (e.g., ReLU) are not invertible. The paper should discuss how DBP would be applied in practice (e.g., by restricting domains) or acknowledge this major limitation.
+4. **Provide a clear general algorithm.** The description is tied to sigmoid. A general pseudocode for DBP with any invertible activation would clarify the method's scope and implementation.
 
 # Final Consolidated Review
 ## Summary
-This paper proposes Difference Back Propagation (DBP), a new backpropagation algorithm that replaces derivatives with differences computed via the inverse of activation functions (e.g., sigmoid). It claims to improve consistency between pre- and post-activation updates with finite learning rates and mitigate vanishing gradients, with initial validation on small synthetic networks and a brief mention of a transformer experiment.
+This paper proposes Difference Back Propagation (DBP), an alternative to the standard backpropagation algorithm. Instead of using derivatives in the chain rule, DBP calculates updates using finite differences derived via the inverse of the activation function (demonstrated with sigmoid). The authors argue this maintains consistency between pre- and post-activation values for finite learning rates and can mitigate gradient vanishing. The method is validated on extremely small synthetic networks and a minimal transformer.
 
 ## Strengths
-- Introduces a novel variant of backpropagation based on inverse activation functions, offering a conceptually alternative approach to the standard derivative-based chain rule.
-- Provides preliminary empirical evidence on simple synthetic tasks showing that DBP can slightly improve convergence speed and final loss while preventing activation saturation for sigmoid functions.
+- **Conceptual Novelty:** The core idea of replacing the derivative in the chain rule with a finite difference computed via the inverse activation function is a creative and underexplored direction. It suggests a potential new design space for optimization in neural networks.
+- **Potential for Non-Differentiable Functions:** The method theoretically extends to activation functions that are not differentiable (e.g., leaky ReLU at 0), provided an inverse or pseudo-inverse can be defined, which is a noteworthy conceptual point.
 
 ## Weaknesses
-- **Fundamental theoretical error**: The paper incorrectly motivates DBP by stating that "the derivative for a nonlinear function is an approximation for the difference of the function values," misrepresenting calculus—the derivative is the limit of the difference quotient, not an approximation. This undermines the paper's foundational premise.
-- **Insufficient empirical validation**: Experiments are limited to tiny neural networks (e.g., 1-2-1 layers) on trivial synthetic data, with no results on standard benchmarks (e.g., MNIST, CIFAR) or modern architectures. The mentioned transformer experiment lacks critical details (e.g., hyperparameters, reproducibility), making its claims non-credible.
-- **Restrictive practicality**: DBP requires globally invertible activation functions, which excludes widely used non-invertible functions like ReLU. It also introduces ad-hoc numerical constraints (e.g., clamping activations to avoid domain issues) that are not needed in standard backpropagation, raising questions about general applicability.
-- **Unclear methodology**: The derivation is presented for a single neuron, and it is not fully explained how DBP generalizes to multi-layer networks or computes weight gradients in practice, leaving ambiguity about the algorithm's implementation.
+- **Lack of Theoretical Justification:** The paper presents the DBP update rule (Equation 6) without deriving it from a loss minimization principle. There is no analysis to show that DBP updates approximate a gradient direction or lead to convergence. This is a fundamental flaw for a method proposing to alter the core optimization algorithm.
+- **Extremely Limited Empirical Validation:** Experiments are conducted only on tiny synthetic datasets (100 points) and minimal network architectures (e.g., (1,2,1)). The claimed improvements in convergence speed and final loss are minimal and not tested for statistical significance. This is insufficient to support the paper's claim of a "more precise" or generally better backpropagation method for modern deep learning.
+- **Practical Viability and Scope are Unclear:** The method requires strictly invertible activation functions, which excludes common choices like ReLU and softmax. The paper relies on ad-hoc numerical constraints (e.g., clamping activations to `(1e-16, 1-1e-16)` for sigmoid) to avoid domain issues, and the computational cost, stability, and integration into deep networks are not discussed.
+- **Missing Comparison to Relevant Baselines:** The comparison is only to standard backpropagation with gradient descent. There is no comparison to modern optimizers (Adam, AdamW) or architectural techniques (residual connections, normalization layers) that effectively address issues like gradient vanishing, making it impossible to assess DBP's practical relevance.
 
 ## Nice-to-Haves
-- Theoretical analysis comparing the convergence properties of DBP to gradient descent.
-- Experiments with other invertible activation functions (e.g., tanh) and on deeper networks to better assess generality.
-- Analysis of computational cost and numerical stability relative to standard backpropagation.
+- Experiments on standard benchmarks (e.g., CIFAR-10) with common architectures (e.g., a small ResNet) would provide a more convincing demonstration of utility.
+- A theoretical analysis linking the DBP update to gradient descent in the limit of small learning rates would strengthen the foundation.
+- Discussing how to handle non-invertible but common activation functions (e.g., ReLU) would clarify the method's practical scope.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **Strength:** "Initial Empirical Validation" - The provided experiments are too minimal to be considered a validation of the method's core claims.
+- **Weakness:** Claim that the paper states "no new method for backpropagation has been proposed" is incorrect - the paper says "To our knowledge," which is a reasonable qualifier.
+- **Weakness:** Criticisms about the theoretical justification being "fundamentally flawed" because gradient descent uses derivatives for infinitesimal steps - the paper's premise is explicitly about finite steps, so this mischaracterizes the proposal.
+- **Weakness:** Garbled equations and formatting nitpicks are likely parser artifacts, not paper flaws.
+- **Weakness:** Demanding comparisons to synthetic gradients or feedback alignment - while relevant, the paper's scope is a direct modification of backpropagation; not comparing to every alternative is not a core weakness.
+- **Weakness:** Claim that the transformer experiment is "poorly described" to the point of being unusable - the paper does mention the architecture (dm=32, nlayers=2, etc.) and dataset (AG News).
 
 ## Novel Insights
-None beyond the paper's own contributions. The idea of using inverse functions for backpropagation is novel, but the paper does not provide deeper insights beyond its initial proposal.
+None beyond the paper's own contributions.
 
 ## Suggestions
-- Correct the motivational statement about derivatives versus differences to align with standard calculus.
-- Conduct rigorous experiments on standard datasets (e.g., MNIST, CIFAR-10) with comparisons to modern optimizers like Adam, including ablation studies on the impact of numerical constraints.
-- Provide a clear, general algorithm description or pseudocode for DBP in multi-layer networks, detailing how weight updates are computed.
+- Provide a clear theoretical motivation: derive the DBP update from an optimization perspective (e.g., as a fixed-point iteration to satisfy the activation function's forward pass) and analyze its properties.
+- Conduct substantive experiments. As a minimum, test DBP on a standard small-scale benchmark (e.g., CIFAR-10 with a small CNN) against standard backpropagation with an adaptive optimizer, using multiple random seeds to report mean and standard deviation.
+- Explicitly discuss the major limitations: the invertibility requirement, the numerical constraints needed, and how these impact the method's general applicability. A pseudocode for the general algorithm would be helpful.
 
 # Actual Human Scores
 Individual reviewer scores: [0.0, 0.0, 0.0]

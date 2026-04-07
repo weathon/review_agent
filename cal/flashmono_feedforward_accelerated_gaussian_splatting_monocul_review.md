@@ -1,128 +1,163 @@
-=== CALIBRATION EXAMPLE 59 ===
+=== CALIBRATION EXAMPLE 63 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-The title clearly reflects the core contribution: a feed-forward, accelerated monocular Gaussian Splatting SLAM system. The abstract succinctly states the problems (time efficiency, geometric accuracy, multi-view consistency) and the proposed solutions (recurrent feed-forward prediction, hidden-state loop closure, 2DGS representation). The claim of a **10x** speedup is prominent and sets high expectations for the experiments. The abstract is well-supported by the paper's content.
+The title accurately reflects the core contributions: feed-forward acceleration and monocular Gaussian Splatting SLAM. The abstract clearly states the three main contributions (feed-forward frontend, 2DGS mapping, hidden-state loop closure) and the claimed 10× speedup with state-of-the-art quality. The abstract is well-supported by the experiments, but the speed comparison lacks baseline FPS numbers (provided later in tables). The abstract should briefly note the model’s large size (≈800M parameters) as a trade-off for speed.
 
 ### Introduction & Motivation
-The introduction effectively motivates the problem. It clearly identifies the three critical challenges of current monocular GS-SLAM: the inefficient *Train-from-Scratch* paradigm, cumulative drift in incremental methods, and poor geometry of vanilla 3DGS. The positioning against prior work (optimization-based GS-SLAM vs. offline feed-forward methods) is logical. The contributions are stated clearly and align with the identified challenges. A minor point: while related feed-forward SLAM methods like VGGT-SLAM are mentioned in the Related Work, a more direct comparison of the core idea (recurrent prediction for online SLAM) against them in the introduction could strengthen the motivation.
+The introduction effectively motivates the problem by identifying three critical limitations in current monocular GS-SLAM: the “Train-from-Scratch” bottleneck, drift in incremental feed-forward methods, and poor geometry of vanilla 3DGS. The contributions are clearly enumerated and align with the abstract. The gap between offline feed-forward reconstruction and online SLAM requirements is well articulated.
 
-### Method / Approach
-This is the core technical section and is mostly well-described, but several points require clarification or raise concerns.
+### Related Work
+The related work covers both feed-forward 3D reconstruction models and monocular GS-SLAM adequately. It correctly notes that feed-forward methods (e.g., VGGT) are not designed for streaming SLAM, and that existing GS-SLAM methods are stuck at ~1 FPS due to per-frame optimization. A minor omission is the lack of comparison with other real-time dense SLAM systems (e.g., ElasticFusion, Kimera) that use different representations, but given the focus on Gaussian splatting, this is acceptable.
 
-**§4.1 Recurrent Feed-Forward Frontend Model:** The architecture description is good, but key details for reproducibility are in the appendix (e.g., the specific ViT encoder, decoder layers, token dimension `K`). The training loss (Eq. 8-11) is standard. A significant concern is the **scale ambiguity** inherent in monocular depth prediction. The pose loss (Eq. 9) uses absolute translation, but the model is trained on data with metric scale. How does the model learn to predict metric-scale translations from a single image and a hidden state? This is a fundamental challenge for monocular systems, and the paper assumes the network learns this implicitly from the training data distribution. An ablation or analysis of scale prediction accuracy would strengthen this section.
+### Preliminaries: 2D Gaussian for Geometric Accuracy
+This section succinctly explains the rationale for using 2D Gaussian surfels over 3D Gaussians: stronger surface prior, fewer floaters, and better geometric fidelity. The rendering equations are presented clearly. This choice is well justified and sets the stage for the method.
 
-**§4.2 Loop Closure via Hidden State:** This is a novel and interesting idea. However, the description of the loop **detection** mechanism is vague. The paper cites an "appearance-based method (Izquierdo & Civera, 2024)" but does not specify how it's integrated or its parameters. More critically, the scale estimation step (Eq. 12) is potentially fragile. It solves for a single global scale `s*` between two point clouds `P_j^a` and `P_j^b` predicted from the same image but conditioned on different hidden states. This assumes a consistent scale difference across all points, which may not hold if the predictions are noisy or incomplete. The paper needs a robustness analysis or a more robust scale estimation method (e.g., RANSAC-based). The pose graph optimization formulation (Eq. 14) is standard.
+### Our Approach (Section 4)
+#### 4.1 Recurrent Feed-Forward Frontend Model
+The frontend is the core innovation. The model takes an image and hidden state, and outputs pose, per-pixel 2DGS attributes, and updated hidden state. The architecture uses a ViT encoder and two decoders with cross-attention. The training losses (pose, geometry, rendering) are standard. However, several details are missing, hindering reproducibility:
+- The exact architecture of the “two interconnected decoders” is vague. How do they interact? What is the dimension and structure of the hidden state (e.g., number of tokens, feature dimension)?
+- The loss weights (λ_pose, λ_geo, λ_mse, etc.) are not provided.
+- The pose loss uses L2 on quaternions, which is not geometrically meaningful on SO(3). A geodesic loss would be more appropriate, though the results suggest the current formulation works.
+- The submap length used in experiments is not stated in the main text (from ablation, 8 frames is best, but is this the default?).
+- The training curriculum (Appendix D) is complex; key details (sequence lengths, learning rates) should be summarized in the main paper.
 
-**§4.3 2DGS Map Optimization:** The adaptive voxelization and fusion strategies are sensible heuristics. The claim of "only 20 iterations" of backend refinement is crucial for the speed claim. However, it's not compared quantitatively to the number of iterations needed *without* the feed-forward prior. The ablation in Fig. 5a shows PSNR improves with refinement iterations, but it doesn't show the baseline (e.g., training from scratch for 20 iterations). This is needed to justify the "strong prior" claim. The loop correction via rigid transformation of primitives is efficient but could introduce distortion if the correction is large; a discussion of its limitations is warranted.
+#### 4.2 Loop Closure via Hidden State
+This is a novel and clever mechanism. The hidden state serves as a submap descriptor; during loop closure, conditioning on a past hidden state yields a relocalized pose and point cloud, enabling Sim(3) constraint estimation. However:
+- The scale estimation (Eq. 12) assumes the two point clouds differ only by scale. Since they come from the same image but different hidden states, this assumes perfect rotation/translation alignment, which may not hold due to noise. More analysis of robustness is needed.
+- The loop detection method (Izquierdo & Civera, 2024) is cited but not detailed (thresholds, frequency). This affects both accuracy and runtime.
+- The pose graph optimization is standard, but it’s unclear how often it is triggered and whether it runs in real-time (the runtime breakdown in Appendix E shows it’s sparse).
 
-### Experiments & Results
-The experimental setup is comprehensive, using ScanNet (in-domain), BundleFusion (out-of-domain), and KITTI (outdoor). The metrics are appropriate.
+#### 4.3 2DGS Map Optimization
+The backend merges predicted Gaussians with adaptive voxelization, lightweight refinement (20 iterations), and loop correction via rigid transformation. This is efficient, but:
+- The voxelization thresholds (τ_d, τ_accum) and pruning criteria are not given.
+- The rigid transformation of Gaussians during loop correction may introduce distortion if Gaussians are influenced by multiple keyframes, but given the lightweight refinement, this may be acceptable.
+- The “Predict-and-Refine” paradigm is a key advantage, but the refinement is still necessary (ablation shows +2 PSNR from 10 iterations). The frontend alone does not achieve top rendering quality.
 
-**Tracking Performance (Table 1):** Results are strong. Flash-Mono outperforms all GS-SLAM baselines and is competitive with or better than the dedicated feed-forward SLAM system MASt3R-SLAM. This validates the core tracking claim.
+### Experiments
+#### 5.1 Experimental Setup
+Datasets (ScanNet, BundleFusion, KITTI) and metrics are appropriate. Baselines include relevant GS-SLAM and traditional SLAM systems. The hardware specification is clear.
 
-**Mapping Performance (Table 2):** The rendering quality (PSNR, SSIM, LPIPS) is state-of-the-art or highly competitive while running at ~12 FPS, a massive speedup over baselines at ~1 FPS. This strongly supports the **10x** speedup claim. The Depth L1 error (Table 5) is also best, supporting the geometric fidelity claim of using 2DGS. However, a critical **ablation is missing**: the benefit of using **2DGS over 3DGS** is claimed but not demonstrated experimentally. A comparison of depth error or floaters with a 3DGS variant of Flash-Mono is necessary.
+#### 5.2 Tracking Performance
+Table 1 shows Flash-Mono achieves state-of-the-art or competitive ATE, outperforming GS-SLAM baselines and often beating MASt3R-SLAM. This validates the tracking accuracy.
 
-**Outdoor Evaluation (Tables 3 & 4):** Good performance on KITTI demonstrates generalization. The failure of S3PO-GS on sequence 07 is noted.
+#### 5.3 Mapping Performance
+Table 2 shows rendering quality (PSNR, SSIM, LPIPS) is competitive or better than baselines while running at ~12 FPS, a 10× speedup over MonoGS and S3PO-GS (which run at ~1 FPS). However:
+- The FPS for baselines is not provided in the table; only text mentions “1 FPS”. Including baseline FPS in the table would strengthen the comparison.
+- DepthGS uses UniDepthV2 for depth prediction; its total runtime (including depth network) is not clearly reported, making the FPS comparison less direct.
+- Table 5 shows Flash-Mono achieves the best depth L1 error, supporting geometric accuracy.
 
-**Ablation Studies (Fig. 5):** These are useful but could be deeper.
-*   (a) Refinement Iterations: As noted, needs a "from scratch" baseline.
-*   (b) Submap Length: Supports the submap strategy.
-*   (c) Loop Closure: Shows the hidden-state method outperforms no loop closure and a PnP baseline. This is good evidence for the proposed loop mechanism.
-*   (d) Model Size vs. PSNR: Interesting but less critical.
-*   **Major Missing Ablation:** The contribution of the **hidden state itself** to tracking accuracy (not just loop closure) should be tested. What is the ATE if the hidden state is reset every frame (i.e., no recurrent context)?
+#### 5.4 Outdoor Evaluation on KITTI
+Results on KITTI demonstrate generalization to large-scale outdoor scenes. Flash-Mono outperforms S3PO-GS (which fails on sequence 07) in both tracking and rendering.
 
-**Baseline Comparisons:** The choice of baselines is appropriate for GS-SLAM. A comparison with **VGGT-SLAM** (Maggio et al., 2025), a very recent and strong feed-forward SLAM system, is conspicuously absent and should be included given its relevance.
+#### 5.5 Ablation
+The ablation studies are comprehensive and validate design choices: refinement iterations help, submap length of 8 is optimal, hidden-state loop closure beats PnP+RANSAC, and voxelization reduces primitives with minimal quality loss. However:
+- The loop closure ablation only compares ATE; it does not evaluate loop detection recall/precision or the quality of individual constraints.
+- The submap length ablation suggests catastrophic forgetting in the recurrent model, but no attempt to mitigate this (e.g., larger hidden state) is explored.
 
 ### Writing & Clarity
-The paper is generally well-written and logically structured. The pipeline figure (Fig. 2) is helpful. Some parts of the method section (particularly the loop closure scale estimation) could be explained more clearly. The appendices are extensive and provide necessary details (training curriculum, runtime breakdown, model acceleration), though some of this information (e.g., model architecture details) would be better in the main paper for reproducibility.
+The paper is generally well-written, but key details are missing in the method description (as noted). The figures are clear and illustrative. The appendix contains important information (training, runtime, model size), but some should be in the main paper (e.g., model size, training curriculum summary). The lack of a dedicated limitations section is a significant omission.
 
 ### Limitations & Broader Impact
-A dedicated "Limitations" section is **missing**, which is a significant oversight for an ICLR submission. The paper should discuss: (1) The large model size (795M parameters) and its implications for deployment on resource-constrained devices, even with the acceleration tricks in Appendix C. (2) Potential failure modes: How does the system handle extreme motion blur, low texture, or severe occlusion? (3) The sensitivity of the loop closure scale estimation (as raised above). (4) The assumption of a mostly static scene (like most SLAM). The Broader Impact statement is also absent; a brief discussion of positive applications (robotics, AR/VR) and potential misuse (surveillance) is expected.
+The paper does not have a limitations section. Important limitations include:
+- The model is large (795.7M parameters) and requires a high-end GPU for real-time inference. While acceleration techniques (half-precision, CUDA Graphs) help, deployment on resource-constrained edge devices remains challenging.
+- The system assumes known camera intrinsics (common in datasets) but does not discuss handling unknown or varying intrinsics.
+- Dynamic objects are not explicitly handled; they may be incorporated into the static map as artifacts.
+- The training requires ground-truth poses and depth, limiting applicability to datasets without such supervision.
+- The hidden-state loop closure may fail under extreme appearance changes (e.g., day to night), though Appendix G shows some robustness.
+- The rigid transformation of Gaussians during loop correction is an approximation that may not handle non-rigid deformations optimally.
 
-### Overall Assessment
-Flash-Mono presents a significant and well-executed contribution to monocular GS-SLAM. The shift to a feed-forward *Predict-and-Refine* paradigm is compelling, and the empirical results are impressive: state-of-the-art or highly competitive quality with a **10x** speedup. The hidden-state-based loop closure is a novel and effective idea. However, the paper has notable gaps that must be addressed before acceptance: the lack of a 2DGS vs. 3DGS ablation, an incomplete ablation of the recurrent frontend's role, the missing comparison to VGGT-SLAM, and the absence of a Limitations section. The core contribution is strong, but these issues currently prevent the paper from fully meeting ICLR's high standards for completeness and rigor.
+Broader impact is positive for robotics and AR/VR, with no obvious negative societal impacts.
+
+## Overall Assessment
+Flash-Mono presents a significant advance in monocular GS-SLAM by replacing the slow “Train-from-Scratch” paradigm with a feed-forward prediction frontend, achieving a 10× speedup while maintaining state-of-the-art tracking and rendering quality. The novel hidden-state-based loop closure is clever and effective. The experiments are thorough across indoor and outdoor datasets. However, the paper has notable weaknesses: missing architectural and hyperparameter details hinder reproducibility; the model is very large; and the lack of a limitations section is a major oversight for ICLR. The pose loss using L2 on quaternions is also problematic. With revisions to address these concerns (especially adding a limitations section and providing essential details), the paper would be strong for ICLR. The core contribution—real-time monocular GS-SLAM with competitive accuracy—stands and is likely of interest to the community.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper presents Flash-Mono, a monocular Gaussian Splatting SLAM system that shifts from the traditional per-frame optimization paradigm to a feed-forward prediction approach. The core innovation is a recurrent transformer model that jointly predicts camera poses and per-pixel 2D Gaussian surfel attributes incrementally, achieving a claimed 10x speedup. The system also introduces a novel loop closure mechanism that leverages the model's hidden state as a compact submap descriptor to enable efficient Sim(3) pose graph optimization for global consistency.
+This paper proposes Flash-Mono, a monocular Gaussian Splatting SLAM system that shifts from the traditional per-frame optimization paradigm to a feed-forward, recurrent model. The core idea is to use a transformer-based frontend to directly predict camera poses and per-pixel 2D Gaussian surfel attributes from a video stream, dramatically accelerating mapping. To address drift, the system leverages the model's hidden state as a compact submap descriptor for efficient Sim(3) loop closure and pose graph optimization. The backend performs lightweight refinement and fusion of predicted Gaussians. The method claims a **10x** speedup over prior GS-SLAM methods while achieving state-of-the-art or competitive results in tracking and rendering quality across indoor and outdoor datasets.
 
 ### Strengths
-1.  **Significant Efficiency Improvement**: The paper compellingly demonstrates a major speed advance. By replacing the costly "train-from-scratch" optimization of Gaussians per keyframe with a single feed-forward prediction, the system achieves 10+ FPS end-to-end, a clear order-of-magnitude improvement over prior GS-SLAM methods (which operate at ~1 FPS). The detailed runtime breakdown (Table 8) substantiates this claim.
-2.  **Novel and Effective Loop Closure Design**: The use of the recurrent model's hidden state for loop detection and relocalization is a creative and technically sound contribution. Conditioning the current frame on a past hidden state to directly generate a cross-submap Sim(3) constraint is elegant and empirically shown to outperform traditional PnP+RANSAC baselines in the ablation study (Figure 5c).
-3.  **Comprehensive and Rigorous Evaluation**: The experimental validation is thorough, covering multiple challenging datasets (ScanNet, BundleFusion, KITTI) and evaluating a full suite of metrics for tracking (ATE), rendering (PSNR, SSIM, LPIPS), and geometry (Depth L1). The results consistently show state-of-the-art or highly competitive performance across the board (Tables 1, 2, 3, 4, 5), strongly supporting the paper's claims.
+1. **Strong Empirical Performance:** The paper provides extensive quantitative results on ScanNet, BundleFusion, and KITTI, demonstrating superior or competitive tracking accuracy (ATE) and rendering quality (PSNR, SSIM, LPIPS) compared to a wide range of baselines, including optimization-based GS-SLAM and traditional SLAM systems. The reported **10x** speedup (reaching 10+ FPS) is a significant practical advancement.
+2. **Novel Architectural Components:** The recurrent feed-forward frontend that jointly predicts poses and Gaussian attributes is a well-motivated departure from the costly "train-from-scratch" paradigm. The proposed use of the model's hidden state as a submap descriptor for efficient loop closure detection and Sim(3) constraint generation is a clever and novel contribution.
+3. **Comprehensive Ablation and Analysis:** The paper includes thorough ablation studies (e.g., on refinement iterations, submap length, loop closure variants, and voxelization) that validate design choices. Additional analyses on model acceleration (CUDA Graphs, fp16), map compactness, and even a preliminary discussion on lifelong mapping (Appendix G) demonstrate rigorous investigation beyond core metrics.
+4. **Improved Geometric Prior:** Replacing standard 3D Gaussians with 2D Gaussian surfels (2DGS) is a sound decision justified by the need for better surface fidelity and reduction of "floater" artifacts, which is critical for SLAM. The results (e.g., lower Depth L1 error) support this choice.
 
 ### Weaknesses
-1.  **Large Model Size and Limited Deployment Analysis**: The feed-forward model has 795.7M parameters and requires ~3GB VRAM (Table 7). While the paper briefly discusses float16 conversion and CUDA Graph optimization, a deeper analysis of its deployability on truly resource-constrained edge devices (e.g., mobile phones, drones) is lacking. This is a practical concern for real-world SLAM applications that ICLR reviewers often highlight.
-2.  **Insufficient Justification for 2DGS Primitive Choice**: The paper adopts 2D Gaussian Surfels (2DGS) over standard 3DGS for geometric fidelity but provides only a cursory justification. A dedicated ablation study quantitatively comparing the impact of 2DGS vs. 3DGS on reconstruction quality, speed, and robustness within their framework would strengthen this design choice.
-3.  **Potential Training Data Dependency and Generalization**: The model is trained on large-scale datasets (ScanNet++, DL3DV) with ground truth poses and depth. The paper does not sufficiently discuss potential domain gap issues or sim-to-real transfer challenges. An analysis of performance degradation on truly "in-the-wild" sequences without ground truth depth (which their baselines like DepthGS rely on) would be valuable.
+1. **Large Model Size and Compute Requirements:** The feed-forward model has **795.7M parameters** and requires ~3GB VRAM for inference. While acceleration techniques are discussed, the model's size may hinder deployment on truly resource-constrained edge devices (e.g., robots, phones). The computational cost and carbon footprint of training such a large model on multiple datasets (ScanNet++, DL3DV, Replica) are not discussed, which is a relevant consideration for ICLR.
+2. **Incomplete Baseline Comparisons and Failure Reporting:** For the challenging KITTI outdoor benchmark, comparisons are primarily made against only one GS-SLAM baseline (S3PO-GS), as others reportedly failed. This limits the assessment of generalizability. Furthermore, for some baselines (MonoGS, S3PO-GS), metrics are reported on truncated sequences after failures (Sec. 5.2, B.1), which could bias the comparison favorably if the most difficult parts of the trajectory are omitted.
+3. **Limited Analysis of System Robustness:** The evaluation focuses on static scenes from standard datasets. There is no analysis of performance in highly dynamic environments, under severe motion blur, or with significant photometric changes (aside from the brief lifelong mapping discussion in Appendix G). The system's sensitivity to the hyperparameters of the submap partitioning and loop detection module is not deeply explored.
+4. **Clarity Gaps in Training and Implementation:** The three-stage training curriculum (Appendix D.3) is complex, and the necessity of such a scheme is not fully justified. Details like the specific loss weights (\(\lambda_{pose}, \lambda_{geo}, etc.\)) are omitted. The "extra rendering loss" strategy to prevent Gaussian shrinkage is heuristic and its impact could be better quantified.
 
 ### Novelty & Significance
-The paper's core novelty lies in successfully applying a feed-forward, recurrent prediction paradigm to monocular GS-SLAM, breaking away from the optimization-heavy status quo. The hidden-state-based loop closure is a significant conceptual contribution that cleverly repurposes the model's internal representation. The work is significant as it demonstrates a viable path toward real-time, high-quality neural SLAM. It meets ICLR's bar for a clear algorithmic advance with strong empirical backing. However, the practical significance is partially tempered by the model's substantial computational footprint.
+The paper's **novelty** is high. It is the first work to successfully apply a recurrent, feed-forward prediction model to monocular GS-SLAM, effectively decoupling frame rate from costly per-frame optimization. The hidden-state-based loop closure mechanism is a novel and elegant way to generate globally consistent constraints from a feed-forward model. The **significance** is also substantial: achieving real-time (10+ FPS) performance with high-quality rendering and tracking could enable new applications in robotics and AR/VR. The work convincingly demonstrates the potential of foundation-model-inspired architectures for SLAM. However, the practical impact is tempered by the model's large size.
 
 ### Suggestions for Improvement
-1.  **Conduct a detailed model efficiency and deployment study**. Include results on more constrained hardware (e.g., Jetson AGX), explore more aggressive model compression techniques (e.g., pruning, distillation, int8 quantization), and report metrics like energy consumption. A discussion on trading off model size for accuracy/speed would be insightful.
-2.  **Add an ablation study on the scene representation**. Rigorously quantify the benefits of 2DGS over 3DGS within the Flash-Mono pipeline, isolating its contribution to reduced floaters, improved depth accuracy, and mapping compactness.
-3.  **Strengthen the discussion on limitations and generalization**. Explicitly test on more unstructured, "wild" videos without perfect sequences or ground truth depth. Discuss failure modes, sensitivity to motion blur, or rapid rotation, and outline strategies for improving robustness.
+1. **Conduct a Model Efficiency and Fairness Analysis:** Include a table comparing model size, FLOPs, memory footprint, and training data/compute across all major baselines (including feed-forward ones like VGGT-SLAM or MASt3R-SLAM). This would contextualize the 10x speedup and help assess the trade-off between performance and efficiency, which is crucial for real-world adoption.
+2. **Strengthen the Outdoor Evaluation:** Attempt to run more baselines on KITTI (e.g., by tuning parameters or reporting partial results) or include comparisons to non-GS, state-of-the-art monocular SLAM methods known for outdoor performance (e.g., certain visual-inertial odometry methods). This would solidify the claim of strong generalization.
+3. **Add Experiments on Dynamic or Challenging Sequences:** Test and report performance on a subset of sequences with moderate dynamics (e.g., from the TartanAir or DA-RED datasets) or with strong lighting changes. This would better demonstrate the system's robustness for "in-the-wild" deployment.
+4. **Improve Methodological Clarity:** Provide the final, used values for all key hyperparameters (loss weights, voxelization thresholds \(\tau_d\), \(\tau_{accum}\), refinement iteration count \(K\), etc.) either in the main paper or a clearly marked section of the appendix. Simplify or better motivate the training curriculum in the text.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Comparison with recent, real-time capable monocular GS-SLAM baselines.** The primary claim is a 10x speedup, but the chosen baselines (MonoGS, DepthGS, S3PO-GS) are known to be slow (~1 FPS). To substantiate the efficiency claim, direct comparisons against contemporary methods that also aim for real-time performance (e.g., CaRtGS, VINGS-Mono, or DroidSplat) are essential. Without them, the claimed speed superiority is unconvincing.
-2. **Ablation on the core "Predict-and-Refine" paradigm.** The paper attributes speed gains to bypassing train-from-scratch, but the exact contribution of the feed-forward prediction versus the lightweight backend refinement is not isolated. An ablation comparing: a) frontend predictions only (no backend), b) backend refinement from random initialization, and c) the full pipeline, is needed to validate that the prediction is the key enabler.
-3. **Evaluation on standard monocular SLAM benchmarks with established protocols.** The paper uses selected sequences from ScanNet, BundleFusion, and KITTI but does not report results on standard benchmarks like TUM RGB-D or EuRoC, which are common for evaluating tracking accuracy and robustness under motion blur/weak texture. This omission makes it hard to gauge general SLAM performance against the broader field.
-4. **Robustness test on dynamic scenes.** The method is evaluated on largely static datasets. A critical test for any SLAM system is handling dynamic objects. An experiment on a dynamic sequence (e.g., from TUM RGB-D dynamic dataset) is needed to show whether the predicted Gaussians and tracking remain stable or if they degenerate.
+1. **Speed comparison against other feed-forward SLAM methods.** The paper compares speed only against optimization-based GS-SLAM methods (MonoGS, DepthGS, S3PO-GS). To substantiate the "10x speedup" and real-time claims, direct FPS comparisons with other feed-forward SLAM systems like VGGT-SLAM and MASt3R-SLAM are essential. Without this, the efficiency claim is only relative to slow baselines, not state-of-the-art.
+2. **Ablation on the necessity of the 2DGS representation.** The paper claims 2DGS improves geometric fidelity over 3DGS, but there is no controlled experiment comparing Flash-Mono using 3DGS vs. 2DGS primitives. This is critical to validate that the geometric improvement comes from the representation and not just the feed-forward model.
+3. **Evaluation on highly dynamic or low-texture scenes.** The experiments are on standard datasets (ScanNet, BundleFusion, KITTI). To claim robustness for "real-world" and "embodied perception," testing on sequences with significant dynamic objects, motion blur, or texture-less areas is necessary. The current evaluation does not expose potential failure modes.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Quantitative analysis of multi-view consistency and scale drift.** The paper claims the method ensures "multi-view consistency" and mitigates scale drift via loop closure, but only provides final ATE. To trust these claims, provide metrics that directly measure consistency: e.g., relative pose error (RPE) over segments, or scale drift ratio between submaps before/after loop closure. The current ablation on loop closure (Fig 5c) is insufficiently detailed.
-2. **Analysis of what the hidden state captures and its limitations.** The hidden state is central to loop closure and context aggregation. An analysis is missing: e.g., visualize the attention between image tokens and hidden state to show what scene information is retained; measure the performance drop when using a hidden state from a very different viewpoint; test its capacity (catastrophic forgetting) as submap length increases. Without this, the mechanism is a black box.
-3. **Breakdown of error contributions (pose vs. mapping).** The frontend jointly predicts pose and Gaussians. An analysis is needed to disentangle whether tracking errors stem primarily from inaccurate pose prediction or from poor Gaussian geometry prediction that then affects backend fusion. This would inform future improvements.
-4. **Sensitivity analysis of key thresholds.** The method uses several heuristic thresholds (depth variation τ_d for voxelization, accumulation threshold τ_accum for map fusion). A sensitivity analysis showing how performance varies with these values is necessary to demonstrate robustness and guide practitioners.
+1. **Analysis of scale drift and loop closure success rate.** The loop closure mechanism is central to correcting drift, but the paper provides no quantitative analysis of its reliability (e.g., recall/precision of loop detection, success rate of constraint generation) or its impact on scale consistency over long trajectories. Without this, the claimed mitigation of "long-standing challenge of drift" is not substantiated.
+2. **Breakdown of error contribution from the feed-forward model vs. backend refinement.** The paper attributes high quality to the "Predict-and-Refine" paradigm but does not analyze what errors the feed-forward model introduces (e.g., pose bias, Gaussian attribute inaccuracies) and what the backend specifically fixes. This is needed to understand the system's limitations and failure points.
+3. **Sensitivity analysis of key hyperparameters.** The ablation studies submap length and refinement iterations, but other critical choices (e.g., adaptive voxelization thresholds, loop detection thresholds, training curriculum stages) are not analyzed. Their impact on the trade-off between speed, accuracy, and map size is unknown.
 
 ### Visualizations & Case Studies
-1. **Visualization of the predicted per-frame 2DGS attributes before fusion.** Show the raw, unfused Gaussians predicted for a few frames (e.g., as a point cloud with color/size) alongside the input image. This would reveal the quality and potential noise of the direct predictions, validating the frontend's output.
-2. **Case study of a loop closure event.** Visualize the trajectory and map before and after a loop closure, highlighting the corrected drift. Show the relocalized point cloud P_j^a vs. P_j^b to illustrate how the scale factor is resolved. This is critical to understand the proposed loop mechanism's operation.
-3. **Failure case visualization.** Show examples where the method fails—e.g., tracking loss, severe scale drift without loop, or poor reconstruction in textureless areas. Analyzing failures is essential for understanding the method's boundaries and for ICLR reviewers to assess its robustness.
+1. **Visualization of per-frame Gaussian predictions before fusion/refinement.** Showing the raw output of the feed-forward model (pose and 2DGS attributes) for a few frames would reveal the quality of the initial prediction and how much work the backend must do. This is key to validating the "high-quality prior" claim.
+2. **Trajectory and map alignment before/after loop closure for failed baselines.** Figure 6 shows trajectories but not the corrective effect of loops. Side-by-side visualizations of the map and trajectory pre- and post-loop optimization on a sequence where baselines fail (e.g., ScanNet 0054) would powerfully demonstrate the loop module's necessity and effect.
+3. **Case studies on failure modes.** The paper should include examples where the method struggles—e.g., when loop detection fails, when the feed-forward model produces severe artifacts, or in rapid motion. This establishes the boundaries of the method's capabilities.
 
 ### Obvious Next Steps
-1. **Release code and pre-trained models.** For a paper claiming a 10x speedup and SOTA results, reproducibility is paramount. A commitment to releasing code and models is expected for ICLR. The current appendix discusses acceleration but does not promise release.
-2. **Compare with more relevant feed-forward SLAM baselines.** The paper compares with MASt3R-SLAM but omits other very relevant works like VGGT-SLAM or CUT3R-SLAM. Given the feed-forward theme, these are necessary comparisons to establish the novelty and performance of the recurrent design.
-3. **Discuss limitations explicitly.** The paper lacks a dedicated limitations section. Key limitations should be discussed: e.g., reliance on large-scale supervised training data, performance on entirely unseen scene types, the computational cost of the large model (795M parameters), and the assumption of mostly static scenes.
-4. **Clarify training/testing data splits to avoid data leakage concerns.** The paper mentions training on ScanNet++ and evaluating on ScanNet. It must be explicitly stated that the test sequences are not part of the training set, or if they are, a cross-dataset evaluation (e.g., train on ScanNet++, test on BundleFusion or 7-Scenes) should be performed to demonstrate generalization.
+1. **Compare with the most relevant contemporary work: VGGT-SLAM.** Given the direct architectural inspiration from feed-forward models like CUT3R and the claim of superior speed/accuracy, a direct comparison with VGGT-SLAM (Maggio et al., 2025) on tracking, mapping, and speed is mandatory for an ICLR paper.
+2. **Provide inference speed and memory footprint on a standardized edge-device hardware profile.** The paper tests on an RTX 4090 and mentions laptop RTX 4060 results in the appendix. To claim "real-time" and practicality for robotics, benchmarks on a common embedded platform (e.g., NVIDIA Jetson) with detailed CPU/GPU/Memory usage are needed.
+3. **Open-source the code and model.** For a paper proposing a new system with strong claims, the lack of code availability (only a project page is mentioned) severely limits reproducibility and trust in the results. Releasing code is a standard expectation for ICLR.
 
 # Final Consolidated Review
 ## Summary
-Flash-Mono introduces a monocular Gaussian Splatting SLAM system that shifts from per-frame optimization to a recurrent feed-forward model, jointly predicting camera poses and 2D Gaussian attributes. This yields a claimed 10× speedup while maintaining high-quality rendering and tracking, supported by a novel hidden-state-based loop closure mechanism for global consistency.
+Flash-Mono introduces a monocular Gaussian Splatting SLAM system that shifts from per-frame optimization to a recurrent feed-forward model, jointly predicting camera poses and 2D Gaussian attributes. This enables real-time performance (10+ FPS) and state-of-the-art tracking and rendering quality across indoor and outdoor datasets, while a novel hidden-state-based loop closure mechanism mitigates drift.
 
 ## Strengths
-- **Significant efficiency improvement**: The system achieves 10+ FPS end-to-end, an order-of-magnitude faster than prior optimization-based GS-SLAM methods, while preserving competitive rendering quality. Detailed runtime breakdown substantiates the speed claim.
-- **Effective and novel loop closure design**: Leveraging the hidden state as a compact submap descriptor for relocalization and Sim(3) constraint generation is creative; the ablation shows it outperforms a traditional PnP+RANSAC baseline.
-- **Comprehensive evaluation**: Extensive experiments on indoor (ScanNet, BundleFusion) and outdoor (KITTI) datasets demonstrate state-of-the-art or competitive performance across tracking (ATE), rendering (PSNR, SSIM, LPIPS), and geometry (Depth L1) metrics.
+- **Significant speedup with maintained accuracy:** Achieves a 10× speedup (10+ FPS) over optimization-based GS-SLAM baselines while matching or exceeding their tracking (ATE) and rendering (PSNR, SSIM, LPIPS) quality on ScanNet, BundleFusion, and KITTI.
+- **Novel loop closure using hidden states:** Leverages the recurrent model’s hidden state as a compact submap descriptor to generate Sim(3) constraints for efficient pose graph optimization, effectively addressing scale and pose drift without costly re-rendering.
+- **Comprehensive validation:** Includes thorough ablation studies (e.g., on refinement iterations, submap length, loop closure variants) and extended analyses on model acceleration, map compactness, and preliminary lifelong mapping scenarios, demonstrating rigorous evaluation.
 
 ## Weaknesses
-- **Insufficient ablation studies**: Critical design choices lack empirical justification: (a) the benefit of 2DGS over 3DGS within the proposed pipeline, (b) the contribution of the recurrent hidden state to tracking accuracy (beyond loop closure), and (c) the effectiveness of the feed-forward prediction versus a pure optimization baseline (e.g., training from scratch with the same refinement budget).
-- **Fragile scale estimation in loop closure**: The least-squares scale factor estimation (Eq. 12) assumes a consistent scale across all points, which may not hold under noisy predictions; no robustness analysis is provided.
-- **Missing comparisons with relevant baselines**: The paper does not compare with recent feed-forward SLAM systems like VGGT-SLAM or faster GS-SLAM methods (e.g., CaRtGS, DroidSplat), which are necessary to contextualize the claimed speed and accuracy advances.
-- **Omitted limitations and broader impact**: The paper lacks a dedicated limitations section and broader impact statement, expected for ICLR. Key limitations include the large model size (795M parameters) and its implications for edge deployment, generalization to truly wild sequences without ground-truth depth, and performance in dynamic scenes.
+- **Large model size impedes edge deployment:** The feed-forward model has 795.7M parameters and requires ~3GB VRAM, making real-time inference challenging on resource-constrained devices despite acceleration techniques like half-precision and CUDA Graphs.
+- **Missing comparisons with contemporary feed-forward SLAM:** While tracking is compared to MASt3R-SLAM, there is no direct benchmarking against other feed-forward SLAM systems (e.g., VGGT-SLAM) on rendering quality and speed, limiting the assessment of advancements relative to the state of the art.
+- **Insufficient analysis of loop closure reliability:** The paper lacks quantitative evaluation of loop detection success rates, constraint accuracy under appearance changes, or the impact on long-term consistency, leaving the robustness of the drift correction mechanism unclear.
+- **Absence of a limitations section:** Critical constraints—such as handling dynamic scenes, unknown camera intrinsics, the approximation in rigid Gaussian correction during loop closure, and dependency on ground-truth poses/depth for training—are not discussed, omitting important context for applicability.
+- **Reproducibility hindered by scattered details:** Key implementation specifics (e.g., loss weights \(\lambda_{pose}, \lambda_{geo}\), voxelization thresholds \(\tau_d, \tau_{accum}\), and full training curriculum) are relegated to appendices without clear summaries, making replication difficult.
 
 ## Nice-to-Haves
-- Sensitivity analysis of heuristic thresholds (e.g., depth variation τ_d for voxelization, accumulation threshold τ_accum for map fusion).
-- Visualization of raw per-frame Gaussian predictions and detailed case studies of loop closure events.
-- Analysis of what geometric and visual information the hidden state captures and its capacity limits.
+- Ablation study comparing 2DGS versus 3DGS primitives within the proposed framework to isolate the geometric contribution of the representation choice.
+- Evaluation on sequences with dynamic objects or severe photometric changes (e.g., from TartanAir or DA-RED) to better assess robustness for in-the-wild deployment.
+- Visualization of per-frame Gaussian predictions before backend refinement to illustrate the quality of the feed-forward prior and the refinement’s effect.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **Criticism about L2 loss on quaternions:** While a geodesic loss might be more geometrically meaningful, the use of L2 is common in practice and the results demonstrate effective pose estimation.
+- **Nitpick on submap length not explicitly stated:** The optimal length (8 frames) is evident from the ablation study in Figure 5, and the methodology for submap partitioning is described in Section 4.1.
+- **Demand for theoretical proofs or multiple-run statistics:** The paper is an empirical systems contribution; such requirements are not standard in this domain.
 
 ## Novel Insights
-The paper’s core insight is that a recurrent feed-forward model can jointly predict poses and Gaussian attributes, enabling real-time monocular GS-SLAM without per-frame optimization. Repurposing the hidden state as a compact submap descriptor for efficient loop closure provides a novel mechanism to achieve global consistency without expensive bundle adjustment.
+The paper’s core novel insight is the use of a recurrent feed-forward model’s hidden state as a dynamic, compact descriptor that encapsulates multi-frame context, enabling both efficient prediction of Gaussian attributes and, crucially, serving as a memory for generating accurate Sim(3) loop constraints. This bridges the gap between feed-forward reconstruction and incremental SLAM, allowing for real-time performance while maintaining global consistency without iterative optimization.
 
 ## Suggestions
-- Conduct the missing ablation studies (2DGS vs. 3DGS, hidden state contribution to tracking, and a predict-and-refine versus optimization-only baseline).
-- Include comparisons with VGGT-SLAM and other recent real-time GS-SLAM methods to better situate the claimed advancements.
-- Add a limitations section discussing model size, generalization to unstructured environments, and robustness in dynamic scenes.
-- Commit to releasing code and pre-trained models to ensure reproducibility.
+- Add direct comparisons with contemporary feed-forward SLAM methods like VGGT-SLAM and MASt3R-SLAM on rendering quality, tracking accuracy, and FPS to fully contextualize the speed and performance claims.
+- Include a dedicated limitations section discussing model size, handling of dynamics, assumptions on camera intrinsics, and training data requirements.
+- Release code and pretrained models to facilitate reproducibility and community adoption.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 8.0, 6.0, 2.0]

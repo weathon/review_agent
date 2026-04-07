@@ -1,124 +1,131 @@
-=== CALIBRATION EXAMPLE 6 ===
+=== CALIBRATION EXAMPLE 13 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-*   **Title:** The title clearly captures the paper's core conceptual reframing—"curriculum as selective data acquisition." The typo ("GOAL- CONDITIONED") is a parser artifact. The subtitle "Toward Reliable Generalization" is appropriate.
-*   **Abstract:** The abstract accurately summarizes the study's approach, environment, and primary findings. However, the claim that curricula "reduce approximation error" is not substantiated by any reported metric in the results. The paper only shows success rates (policy performance), not value function error. This is a significant overstatement that needs correction.
+The title clearly frames the core conceptual contribution: curriculum as selective data acquisition. The abstract accurately summarizes the problem, method, and findings. The claim that this perspective suggests a "pathway toward more persistent and open-ended agents" is a plausible, high-level interpretation of the work, though it remains speculative given the limited empirical scope.
 
 ### Introduction & Motivation
-*   **Quality:** The introduction is well-written and effectively sets up the problem. It clearly identifies a gap: prior work treats curriculum as an exploration heuristic, whereas this work reframes it as a mechanism for shaping the *training data distribution*. This perspective is well-motivated by the challenge of open-ended learning. The link to Hughes et al. (2024) provides a contemporary anchor.
-*   **Contributions:** The contributions are implied but not explicitly listed in a bullet-point format. This is acceptable, but the paper's claims would be sharper with a clear "Our contributions are:" statement.
+The introduction effectively establishes the challenge of sparse rewards in GCRL and connects curriculum learning to the broader agenda of open-ended learning (OEL), citing recent relevant work (Hughes et al., 2024). The key reframing—curriculum as a mechanism for shaping the *training data distribution* rather than merely aiding exploration—is clearly articulated and forms a compelling conceptual motivation. The specific contributions, however, are implied rather than explicitly listed, which slightly weakens the paper's clarity of purpose.
 
-### Methods
-*   **Reproducibility Gaps:** Several key details are missing, making exact replication difficult.
-    1.  **Curriculum Specification:** The exact sampling distributions for "baseline curriculum" and "weighted curriculum" are not defined. What is the probability of sampling an edge vs. interior goal? The phrase "increased edge sampling to match their empirical difficulty under NoCurr" is too vague.
-    2.  **UVFA Training:** The "pseudo-reward targets" are not defined. While PBRS is described, it's unclear how the target for the value function is computed from the shaped reward. Is it the discounted sum of shaped rewards? The terminal bonus of +1 is mentioned but not integrated into the PBRS equation.
-    3.  **Data Collection:** Using "greedy action selection" during data collection for a value function being learned is atypical and raises concerns. Greedy with respect to what policy? If the value function is untrained initially, this is essentially random action selection. If it's an iterative process, this needs to be described (e.g., is data collected from a continually updated policy?). The protocol describes a single batch of data collection, but this is ambiguous.
-*   **Logical Gaps:** The choice of Manhattan distance for the potential function in PBRS is reasonable for GridWorld but is a strong shaping prior. The success of the curriculum might be contingent on this dense, informative shaping. The paper does not discuss how the curriculum's effect might change with sparser reward signals.
+### Method / Approach
+This section has significant issues that undermine reproducibility and rigor, which are critical for ICLR.
+
+1.  **Environment & Agent Setup:** The GridWorld is appropriate for an initial proof-of-concept but is extremely simple (deterministic, discrete, low-dimensional). The choice of greedy action selection for data collection is stated but not justified. Crucially, it is unclear what policy is used to collect the initial 1000-episode dataset. Is it a random policy? Is it the greedy policy derived from an *untrained* UVFA? If it's from a trained UVFA, this creates a dependency loop not explained in the protocol. This ambiguity is a major methodological gap.
+
+2.  **Curriculum Implementation:** The description of the "Edge-Weighted Curriculum" is too vague to be reproducible. What is the "fixed proportion" for the baseline? How exactly is the sampling distribution "biased"? For the weighted variant, what does "match their empirical difficulty" mean quantitatively? Is it a re-weighting based on inverse success rates? Without precise formulas or pseudocode, the core intervention of the paper cannot be replicated.
+
+3.  **Training & Evaluation Details:** Key hyperparameters are provided (learning rate, batch size), but the UVFA architecture is incompletely described ("MLP with hidden dimension 64" – how many layers?). The evaluation protocol mentions "held-out goals" but does not specify how these goals are selected or partitioned from the training set. Are they a random subset of all cells? This needs clarification.
+
+4.  **Theoretical/Conceptual Gaps:** The paper posits that curricula reshape the inductive bias of the function approximator. However, the experimental design does not isolate or test this mechanism directly. The analysis is purely correlational: a shifted input distribution is associated with different output performance. A stronger design might involve, for example, training on a fixed, pre-collected curriculum dataset versus a uniform one to decouple curriculum from online exploration.
 
 ### Experiments & Results
-*   **Adequacy of Experiments:** The experiments are minimal and serve as a proof-of-concept. The GridWorld setting is extremely simple, which is fine for an initial study but severely limits the strength of the claims about "generalization" and "open-ended learning."
-*   **Evaluation of Claims:**
-    *   **Claim: Curriculum reshapes the state-goal distribution.** Figure 2 is cited for this, but the figure caption in the text is generic. The visual evidence for a distributional shift is assumed but not explicitly presented in the provided text. The authors must ensure the figure clearly shows the difference in goal visitation frequencies.
-    *   **Claim: Curriculum improves performance on hard goals.** The data in Table 1 and the textual results support this, but with major caveats. The absolute improvements are very small (e.g., edge-goal success increases from 0.060 to 0.143). More critically, the standard deviations are *extremely* high relative to the mean differences. For edge-goal success, the standard deviation for the curriculum condition (0.107) is larger than the mean improvement over uniform (0.083). This suggests the result is not statistically reliable. **No statistical significance testing is reported**, which is a critical omission for ICLR. The claim of "consistent improvements" is not backed by the presented data.
-    *   **Claim: Curriculum reduces approximation error.** This claim, made in the abstract and Section 3.1, is **not tested at all**. The paper reports only policy success rates, not any measure of value function error (e.g., MSE against Monte Carlo returns) across the state-goal space. This is the most serious flaw in the experimental validation.
-*   **Baselines and Ablations:** The comparison between uniform and edge-biased sampling is appropriate. However, a more informative baseline would be a simple "oracle" that samples goals uniformly from the set of currently unattainable goals, to distinguish the effect of targeting "hard" goals from the specific heuristic of targeting "edge" goals.
-*   **Results Presentation:** References to figures are inconsistent (Figure 1 and Figure 2 are described identically). Table 1 appears truncated in the text ("Pc"). This must be fixed for clarity.
+The results are preliminary and do not robustly support the paper's claims to the standard expected at ICLR.
 
-### Discussion & Limitations
-*   **Limitations:** The discussion correctly identifies key limitations: the simplicity of the environment, the manual nature of the curriculum, and the modest/inconsistent gains. This is honest and appropriate.
-*   **Broader Impact:** Not discussed, which is acceptable for this type of methodological paper.
+1.  **Weak Statistical Evidence:** The reported improvements are modest and characterized by large standard deviations relative to the effect sizes. For instance, in the baseline comparison (Section 3.1), the edge-goal success at H=16 is reported as 0.183 ± 0.131 (NoCurr) vs. 0.217 ± 0.125 (Curr). The confidence intervals heavily overlap, indicating the result is not statistically significant. Claims of "consistent improvements" are not backed by statistical testing.
+
+2.  **Inconsistent Numerical Reporting:** There are troubling discrepancies in the reported results. In Section 3.1, overall success at H=16 is reported as ~0.36 for both conditions. In Table 1 (presumably for the same H=16), overall success is reported as 0.276 and 0.297. Which is correct? The ∆edge of "+0.18" mentioned in the text (Section 3.2) does not match the +0.083 difference shown in Table 1. These inconsistencies severely damage credibility.
+
+3.  **Insufficient Analysis & Ablations:** The analysis is superficial. The paper shows that edge-sampling increases edge-goal success but does not delve into why. Does it genuinely reduce approximation error, as claimed in the abstract? A quantitative analysis of UVFA value error (e.g., MSE against optimal values) on edge versus interior goals would directly support the core hypothesis. Furthermore, there is no ablation on critical components: What is the effect of PBRS vs. sparse rewards in this curriculum context? Would a simple oversampling baseline (i.e., sampling more episodes overall) achieve similar gains?
+
+4.  **Limited Empirical Scope:** The entire empirical study is confined to one simple, deterministic grid world. There is no demonstration on environments with stochastic dynamics, partial observability, higher dimensionality, or continuous actions. This severely limits the generalizability of the findings and the strength of the connection to "open-ended learning."
 
 ### Writing & Clarity
-*   **Overall Clarity:** The writing is generally clear and concise. The central idea is communicated effectively.
-*   **Major Confusion:** The description of the training protocol is the most confusing part, as noted in the Methods section. The relationship between data collection, policy used, and UVFA training needs a step-by-step explanation.
+The writing is generally clear at a high level. However, the methodological ambiguities and numerical inconsistencies noted above create significant confusion. The references to figures (e.g., Fig. 2, Fig. 3) seem misplaced in the provided text, but this is likely a parser artifact and not a fault of the paper.
 
-### Overall Assessment
-The paper proposes a thoughtful conceptual reframing of curriculum learning in GCRL as "selective data acquisition," linking it to distributional shifts and function approximation bias. This perspective is valid and could be valuable for the field. However, the empirical validation is critically insufficient for an ICLR publication. The experiments are conducted in an overly simplistic environment, the results show small effects with high variance and no statistical testing, and the core claim about reducing approximation error is entirely unsupported by evidence. The paper reads as a promising but very preliminary proof-of-concept. In its current form, the contribution is primarily conceptual, lacking the rigorous experimental evidence required to substantiate the claims and demonstrate a meaningful advance. Major revisions—including more robust experiments, statistical analysis, and direct measurement of approximation error—are necessary before it could meet ICLR's bar.
+### Limitations & Broader Impact
+The Limitations section (4.1) correctly identifies the main weaknesses: simple environment, hand-designed curriculum, modest/inconsistent gains. It appropriately suggests future work. A broader impact statement is entirely absent. While the immediate societal impact of this theoretical work is likely neutral, a discussion of potential long-term implications (positive: more efficient RL; negative: risks of biased data acquisition in real systems) is a standard expectation for ICLR submissions and should be included.
+
+## Overall Assessment
+The paper presents a thoughtful and potentially valuable conceptual reframing of curriculum learning in GCRL as a problem of selective data acquisition. This perspective is intellectually interesting and aligns with current interests in open-ended learning. However, the empirical validation is critically underdeveloped for an ICLR submission. The experiments are preliminary, the results are not statistically convincing, and the methodology lacks the precision necessary for reproducibility. The contribution in its current form is primarily a position or hypothesis supported by suggestive but weak pilot studies. To be suitable for ICLR, the work requires a more rigorous experimental evaluation: statistically sound results, a clearer and reproducible method, deeper analysis (e.g., of approximation error), and validation in more complex environments.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper reframes curriculum learning in goal-conditioned reinforcement learning (GCRL) as a form of selective data acquisition, arguing that biasing goal sampling toward underachieved regions (e.g., edge cells in GridWorld) structurally reshapes the state–goal distribution and improves function approximation. Using Universal Value Function Approximators (UVFAs) with potential-based reward shaping, the authors demonstrate that a simple edge-biased curriculum yields modest but consistent improvements on harder goals while maintaining overall performance. The work positions curriculum learning as a principled mechanism for guiding data distribution, with implications for open-ended and lifelong learning.
+This paper reframes curriculum learning in goal-conditioned reinforcement learning (GCRL) as a form of selective data acquisition rather than merely an exploration heuristic. Through experiments in a deterministic GridWorld environment using Universal Value Function Approximators (UVFAs), the authors demonstrate that biasing goal sampling towards harder-to-reach (edge) goals reshapes the state-goal visitation distribution, leading to reduced approximation error and improved success rates on those difficult goals, albeit with modest overall gains.
 
 ### Strengths
-1. **Clear conceptual framing**: The paper articulates a coherent perspective—curriculum as selective data acquisition—that connects curriculum design to distributional shifts in training data and their effect on function approximation. This reframing is well-motivated and clearly presented in the introduction and discussion.
-2. **Controlled experimental design**: The use of a deterministic GridWorld with UVFAs and potential-based reward shaping allows for a focused investigation of distributional biases. The comparison between uniform and edge-weighted sampling cleanly isolates the effect of curriculum on data composition and downstream performance.
-3. **Transparent reporting**: Results are reported with means and standard deviations across multiple seeds, and the evaluation separates overall success from edge-goal success. The training protocol and hyperparameters are described in sufficient detail for reproducibility.
+1. **Clear conceptual framing**: The paper provides a coherent and well-motivated perspective by linking curriculum design to the distribution of training data and its effect on function approximation, connecting it to open-ended learning challenges (Hughes et al., 2024).
+2. **Controlled experimental setup**: The use of a simple GridWorld, UVFAs, and fixed dataset sizes effectively isolates the effect of distributional shifts from other confounding factors, allowing a clean comparison between uniform and curriculum sampling.
+3. **Honest reporting of results**: The authors transparently report modest, sometimes inconsistent gains and acknowledge limitations, such as the hand-designed nature of the curriculum and the small scale of the environment, which is appropriate for a preliminary study.
 
 ### Weaknesses
-1. **Limited novelty and incremental contribution**: The core idea that curricula bias data distributions is well-established in prior curriculum learning literature (e.g., Florensa et al., 2017; Portelas et al., 2020). The paper’s reframing as “selective data acquisition” offers a useful perspective but does not introduce a fundamentally new technique or theoretical insight.
-2. **Toy domain and modest results**: Experiments are confined to a simple GridWorld, and performance gains are small (e.g., edge-goal success improves by +0.083 in Table 1). The improvements are inconsistent across seeds (large standard deviations), and the study lacks validation in more complex, high-dimensional environments, limiting the generality of the claims.
-3. **Absence of comparisons to advanced baselines**: The paper only compares uniform sampling against a hand-designed curriculum. It does not benchmark against state-of-the-art automated curriculum methods (e.g., reverse curriculum generation, teacher-student frameworks) or alternative exploration strategies, making it difficult to assess the practical advantage of the proposed viewpoint.
+1. **Limited empirical scope and significance**: The experiments are conducted solely in a trivial, deterministic GridWorld with a hand-crafted edge-biased curriculum. The improvements are modest (e.g., +0.083 edge-goal success at H=16), and no comparison is made against more sophisticated, state-of-the-art curriculum generation methods (e.g., automatic goal generation, teacher-student frameworks). This severely limits the claim of providing a "pathway" toward persistent, open-ended agents.
+2. **Lack of theoretical or algorithmic contribution**: The work is primarily an empirical demonstration of an intuitive idea—that sampling harder goals more often can improve performance on them. The paper does not derive new theoretical insights, propose a novel algorithm, or provide a general framework for selective data acquisition beyond the simple biased sampling tested.
+3. **Incomplete evaluation and reproducibility details**: While seeds are mentioned, key details for full reproducibility are missing (e.g., grid size, exact weighting schemes for the curriculum, architecture details beyond hidden size). The evaluation is limited to success rate; no analysis of learning curves, sample efficiency, or the quality of the learned value function across the state-goal space is provided.
 
 ### Novelty & Significance
-**Novelty**: The paper’s main novelty lies in explicitly linking curriculum design in GCRL to the concept of selective data acquisition and demonstrating this link empirically with UVFAs. However, this connection is conceptually straightforward and builds directly on prior work.
-
-**Significance**: The work offers a modest step toward understanding how curricula affect function approximation in GCRL. While the perspective could inform future research on data-driven curriculum design, the empirical findings are preliminary and limited to a toy domain, reducing immediate impact.
-
-**Clarity**: The writing is clear and well-structured. The methodology, results, and limitations are presented in an accessible manner.
-
-**Reproducibility**: The experimental setup is described in enough detail to permit replication, though the exact grid size and random seeds are not specified. Code is not provided, but the simplicity of the environment and models likely allows reproduction.
+**Novelty**: The reframing of curriculum as selective data acquisition is a useful perspective but not highly novel. The connection to data distribution and function approximation bias is under-explored in GCRL but remains conceptually intuitive. The experimental findings themselves are unsurprising: biasing data toward underrepresented regions improves performance there.
+**Significance**: For ICLR, the significance is limited. The work is a small-scale proof-of-concept in a toy domain. While the perspective could inform future research, the paper does not demonstrate substantial empirical advances, propose a generally applicable method, or provide strong theoretical grounding that would shift prevailing understanding.
 
 ### Suggestions for Improvement
-1. **Scale experiments to more challenging domains**: To strengthen the claim, evaluate the curriculum-as-data-acquisition perspective in environments with continuous state/action spaces (e.g., MuJoCo) or pixel-based observations, and with deeper function approximators.
-2. **Compare against automated curriculum methods**: Include baselines such as reverse curriculum generation (Florensa et al., 2017) or goal-generating adversarial networks to contextualize the hand-designed curriculum and demonstrate the utility of the data-selection viewpoint relative to existing approaches.
-3. **Perform deeper analysis of approximation error**: Quantify and visualize how the curriculum affects UVFA generalization error across the entire state-goal space (e.g., via error heatmaps) to better support the claim that curricula improve approximation in underachieved regions.
-4. **Investigate adaptive curricula**: Extend the manual curriculum to an adaptive strategy that dynamically adjusts the goal distribution based on agent progress (e.g., tracking learning progress or value error), which would better align with the open-ended learning motivation.
-5. **Clarify experimental details and release code**: Specify the grid dimensions, architecture details (number of layers, hidden units), and random seeds. Releasing code would enhance reproducibility and facilitate future work.
+1. **Scale up experiments and comparisons**: To be suitable for ICLR, experiments should be conducted in more complex environments (e.g., continuous control benchmarks, Minigrid) and compared against strong automated curriculum baselines (e.g., GoalGAN, TEACHER). Demonstrating significant gains in sample efficiency or final performance in non-trivial settings is crucial.
+2. **Deepen the analysis and theoretical framing**: Provide a more rigorous analysis of how the data distribution shift affects the UVFA's generalization error (e.g., via approximation error metrics across the goal space). Develop a more formal link between curriculum design, distributional shift, and generalization, potentially drawing connections to importance weighting or distributionally robust optimization.
+3. **Propose a generalizable method or principle**: Instead of only testing a hand-designed bias, formulate a general principle or algorithm for adaptive "selective data acquisition" (e.g., based on value error or visitation counts) and demonstrate its effectiveness. This would transform the work from a demonstration into a contributory method.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Compare against automated curriculum baselines (e.g., ALP-GMM, GoalGAN).** Without showing the handcrafted edge curriculum is competitive with established adaptive methods, the claim that curriculum acts as a "principled mechanism" is unsupported.
-2. **Ablation on curriculum weighting schemes.** The paper uses a fixed edge bias but does not test whether weighting by empirical success rate or distance is critical. This is necessary to validate that the effect is due to targeting underachieved goals, not arbitrary bias.
-3. **Scale to a more complex environment (e.g., MiniGrid).** The claims about open-ended learning and generalization are not credible when only tested on a trivial deterministic GridWorld. A single more complex domain is needed to suggest broader applicability.
-4. **Vary dataset size to measure data efficiency.** If curriculum is selective data acquisition, it should achieve similar performance with less data or better performance with the same data. Without this, the claimed benefit is merely a redistribution effect.
+1. **Comparison with a strong, standard baseline like Hindsight Experience Replay (HER).** The paper only compares uniform vs. a handcrafted curriculum. Without comparing to HER—a canonical method for sparse rewards in GCRL—it's unclear if the observed benefits are marginal or if curriculum offers a distinct advantage.
+2. **Ablation on data quantity.** The claim is that curriculum improves data *quality*. To verify this, compare uniform sampling with more data against the curriculum with the original budget. If uniform with more data catches up, the curriculum is just a data efficiency trick, not a structural mechanism for generalization.
+3. **Experiments in a more complex environment (e.g., MiniGrid).** The entire study is conducted in a trivial GridWorld. To support the claim that curriculum is a general principle for selective data acquisition, evidence from a more challenging domain with visual inputs or continuous actions is necessary. Without it, the contribution is not credible for ICLR.
+4. **Ablation on the reward shaping component.** The method relies on potential-based reward shaping (PBRS) to provide dense rewards. The observed benefits might be an interaction between PBRS and the curriculum, not the curriculum alone. An ablation without PBRS (or with sparse rewards) is needed to isolate the curriculum's effect.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Quantify UVFA approximation error across state-goal space.** The paper claims curricula reduce approximation error but only reports success rates. Show MSE on a held-out set split by goal difficulty to directly link distribution shift to improved function approximation.
-2. **Analyze training dynamics (e.g., success rate over time).** It is unclear whether curriculum helps learning converge faster or just shifts final performance. Plot learning curves for edge vs. interior goals to show if curriculum accelerates learning on hard goals.
-3. **Perform a causal analysis: retrain on uniform data but oversample edge goals.** Does performance improve solely because edge goals appear more often? This would isolate the effect of data frequency from other factors like exploration.
+1. **Statistical significance testing.** Results show modest improvements with large standard deviations (e.g., edge-goal success 0.060 ± 0.055 vs. 0.143 ± 0.107). Without rigorous statistical tests (e.g., paired t-tests across seeds), it's impossible to trust that the reported gains are real and not due to noise.
+2. **Analysis of approximation error across the state-goal space.** The core claim is that curriculum reduces approximation error in targeted regions. The paper should directly quantify and compare the Bellman error or TD error for edge vs. interior goals during training, not just final success rates.
+3. **Analysis of the trade-off between edge and interior goal performance.** The paper notes curriculum may hurt performance on easy goals. A systematic analysis of this trade-off (e.g., a Pareto curve) is needed to understand the cost of the bias and whether it's a net benefit.
 
 ### Visualizations & Case Studies
-1. **Heatmaps of goal sampling frequency and success rates per cell.** A simple bar chart of edge vs. interior is insufficient. Show the spatial distribution of where the curriculum allocates data and where success improves/degrades.
-2. **Visualize learned value functions for representative goals.** Plot the predicted value landscape across the grid for a few goals (edge and interior) under both training regimes. This would reveal if curriculum leads to smoother or more accurate value estimates.
-3. **Show trajectory rollouts for failing cases.** Illustrate specific goals where curriculum underperforms uniform sampling to understand the trade-offs and failure modes of the biased distribution.
+1. **Heatmaps of the learned value function for specific goals.** Visualizing V(s,g) for a few edge and interior goals would show whether the curriculum-trained UVFA learns a more accurate and smoother value landscape, directly supporting the claim of improved function approximation.
+2. **Visualization of the training data distribution over time.** Showing how the state-goal visitation distribution evolves during curriculum training (vs. uniform) would concretely illustrate the "selective data acquisition" process and confirm it focuses on underachieved regions.
 
 ### Obvious Next Steps
-1. **Implement a simple adaptive curriculum (e.g., based on recent success rates).** The paper advocates for curricula as selective data acquisition but uses a static handcrafted one. A dynamic rule would strengthen the connection to open-ended learning.
-2. **Test generalization to unseen goal distributions.** Evaluate the UVFA on goals sampled from a different distribution (e.g., only corners) to see if curriculum improves out-of-distribution generalization, which is key for persistence.
-3. **Analyze the effect of curriculum on exploration.** Since the paper argues curriculum is not just an exploration heuristic, measure exploration metrics (e.g., state coverage) to disentangle data distribution effects from exploration.
+1. **Implement an adaptive, automated curriculum.** The paper's curriculum is handcrafted (edge bias). To substantiate the claim that curriculum is a general mechanism, the authors should have implemented a simple automatic method (e.g., sampling proportionally to goal difficulty or current failure rate) and shown it works.
+2. **Analyze the effect on exploration metrics.** The paper argues curriculum is not just an exploration heuristic. To rule this out, they should measure and compare exploration metrics (e.g., coverage of state space, unique states visited) between conditions.
+3. **Include a baseline that uses a more sophisticated value function architecture.** The UVFA is a simple MLP. The benefits of curriculum might diminish with a more powerful function approximator (e.g., a deeper network). Testing this would clarify the scope of the curriculum's utility.
 
 # Final Consolidated Review
 ## Summary
-This paper reframes curriculum learning in goal-conditioned reinforcement learning as a mechanism for selective data acquisition, arguing that biasing goal sampling shapes the training distribution and improves function approximation. Using UVFAs in a GridWorld, the authors show that an edge-biased curriculum yields modest improvements on harder goals. The contribution is primarily a conceptual perspective linking curriculum design to data distribution management.
+This paper reframes curriculum learning in goal-conditioned reinforcement learning (GCRL) as a form of selective data acquisition, arguing that biasing the training distribution toward underachieved goals improves function approximation and performance on those goals. Through experiments in a deterministic GridWorld using Universal Value Function Approximators (UVFAs) and potential-based reward shaping, the authors show modest improvements on edge goals when using an edge-biased sampling curriculum, linking this to broader challenges in open-ended learning.
 
 ## Strengths
-- **Clear conceptual framing:** The paper coherently articulates curriculum learning as selective data acquisition, connecting it to distributional shifts in training data and their effect on function approximation. This reframing is well-motivated and presented.
-- **Controlled experimental design:** The use of a simple deterministic GridWorld with UVFAs and potential-based reward shaping allows for a focused, isolated investigation of how a curriculum bias affects data composition and downstream performance.
+- **Clear conceptual framing**: The paper coherently reframes curriculum learning as a mechanism for shaping the training data distribution and its inductive bias, explicitly connecting it to challenges in open-ended learning and function approximation.
+- **Controlled experimental setup**: The use of a simple GridWorld, fixed dataset sizes, and identical UVFA architectures isolates the effect of distributional shifts, providing a clean comparison between uniform and curriculum sampling.
 
 ## Weaknesses
-- **Unsubstantiated core claim:** The abstract and text claim curricula "reduce approximation error," but the paper provides no measurement or analysis of value function error (e.g., MSE). Only policy success rates are reported, leaving a key theoretical claim experimentally unsupported.
-- **High variance undermines claimed consistency:** The reported improvements, particularly on edge goals, are small (e.g., +0.083 in Table 1), and the standard deviations are large relative to the mean differences (e.g., ±0.107 for curriculum edge success). Without statistical significance testing, the claim of "consistent improvements" is not convincingly demonstrated by the presented data.
-- **Overly simplistic experimental setting:** The proof-of-concept uses a trivial, deterministic GridWorld and a static, hand-designed curriculum. This severely limits the strength and generality of the conclusions regarding "reliable generalization" and the pathway to "open-ended learning."
+- **Methodological ambiguity and reproducibility issues**: The policy used for data collection ("greedy action selection under PBRS shaping") is not fully specified—it is unclear whether this policy is based on the UVFA, a heuristic, or a random policy. Additionally, the exact implementation of the curriculum (sampling proportions and weighting schemes) is described vaguely, lacking formulas or pseudocode. These omissions hinder reproducibility.
+- **Inconsistent numerical reporting**: There are discrepancies in reported success rates; for example, Section 3.1 reports overall success at H=16 as ~0.36 for both conditions, while Table 1 reports 0.276 and 0.297. Such inconsistencies undermine the credibility of the results and must be resolved.
+- **Weak statistical evidence**: Reported improvements are modest and accompanied by large standard deviations (e.g., edge-goal success: 0.060 ± 0.055 vs. 0.143 ± 0.107). The paper does not provide statistical tests to confirm the significance of these differences, leaving it unclear whether the gains are reliable.
+- **Limited empirical scope and generalizability**: The entire study is conducted in a trivial, deterministic GridWorld. Without experiments in more complex environments (e.g., with stochastic dynamics, partial observability, or continuous actions), the claims about a "pathway" to persistent, open-ended agents are not substantiated.
+- **Insufficient analysis to support core claims**: The paper argues that curriculum reduces approximation error, but only success rates are reported. There is no direct analysis of value function error (e.g., Bellman error or MSE against optimal values) across the state-goal space, which is essential to validate the proposed mechanism.
+- **Lack of comparison to strong baselines**: The paper only compares uniform sampling to a hand-crafted curriculum. There is no comparison to standard GCRL methods like Hindsight Experience Replay (HER) or automated curriculum generation techniques, making it difficult to assess the relative contribution.
 
 ## Nice-to-Haves
-- A deeper analysis quantifying UVFA approximation error across the state-goal space to directly link the distribution shift to function approximation quality.
-- Experimentation in a slightly more complex environment (e.g., MiniGrid) to better suggest the perspective's broader applicability.
-- Comparison against a simple adaptive curriculum baseline to strengthen the connection to open-ended learning.
+- **Ablation studies**: Investigating the effect of data quantity (comparing uniform with more data against curriculum) and the role of reward shaping (testing without PBRS) would help isolate the curriculum's effect.
+- **Deeper analysis of trade-offs**: Quantifying the performance trade-off between edge and interior goals would clarify the cost of the bias.
+- **Visualizations of learned value functions**: Heatmaps of V(s,g) for representative goals could provide intuitive support for improved approximation.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Missing broader impact statement**: While common, the absence is not a core flaw for a methodological/ conceptual paper of this scale.
+- **Demand for fixed-dataset experiments**: The suggestion to use pre-collected datasets to decouple curriculum from online exploration is an interesting direction but not a required standard for this paper's scope.
+- **Incomplete architecture details**: The exact number of layers in the MLP is a minor detail that does not affect the core findings; it can be clarified in the appendix.
+- **Request for exploration metrics**: Measuring state coverage is tangential to the core claim about data distribution and function approximation.
 
 ## Novel Insights
-The paper's novel insight is the explicit articulation of curriculum learning in GCRL as a structural mechanism for biasing the training data distribution—"selective data acquisition"—rather than merely an exploration heuristic. This perspective cleanly connects curriculum design to the inductive biases of the function approximator (the UVFA), offering a distinct conceptual lens through which to analyze and design curricula, particularly for challenges in persistent, open-ended learning.
+The paper provides a clear conceptual reframing of curriculum learning as selective data acquisition, highlighting its role in shaping the training distribution and, consequently, the inductive bias of function approximators in GCRL. This perspective, while intuitive, is under-explored in the literature and offers a plausible link to open-ended learning challenges. However, the empirical evidence presented is preliminary and does not strongly validate the novelty or generality of this insight.
 
 ## Suggestions
-- Revise the text to remove the unsupported claim about reducing approximation error or add experiments that directly measure and report value function error.
-- Report statistical significance tests (e.g., p-values or confidence intervals) for the performance differences to substantiate claims of consistency.
-- Clarify the training protocol in the Methods section, explicitly stating if data collection is a single batch from an initially random policy or an iterative process.
+- **Clarify methodology**: Specify the data collection policy (e.g., whether it uses a heuristic or the UVFA) and provide exact formulas or pseudocode for the curriculum sampling distributions.
+- **Fix numerical inconsistencies**: Ensure that all reported results are consistent across the text, tables, and figures.
+- **Perform statistical testing**: Conduct appropriate statistical tests (e.g., paired t-tests across seeds) to confirm the significance of reported differences.
+- **Expand experimental scope**: Validate the approach in at least one more complex environment (e.g., MiniGrid) to demonstrate broader applicability.
+- **Include strong baselines**: Compare against Hindsight Experience Replay (HER) and/or automated curriculum methods to better position the contribution.
+- **Analyze approximation error**: Directly measure and report value function error (e.g., TD error or MSE against optimal values) for edge and interior goals to substantiate the claim that curriculum improves function approximation.
 
 # Actual Human Scores
 Individual reviewer scores: [0.0, 0.0, 0.0, 0.0, 0.0]

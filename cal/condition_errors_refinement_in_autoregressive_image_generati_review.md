@@ -1,132 +1,150 @@
-=== CALIBRATION EXAMPLE 72 ===
+=== CALIBRATION EXAMPLE 77 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-- The title is descriptive and reflects the paper’s core contribution—condition error refinement in autoregressive image generation with diffusion loss.
-- The abstract clearly outlines the theoretical and methodological contributions. However, it makes strong claims (e.g., “exponential decay” of condition error influence, convergence guarantees via Wasserstein gradient flow) that must be substantiated in the body. The empirical claim of “superiority” is also strong and requires careful scrutiny.
+The title accurately reflects the paper's core focus: refining condition errors in autoregressive image generation with diffusion loss (despite a parsing artifact). The abstract clearly summarizes the contributions: a theoretical analysis showing autoregressive modeling with diffusion loss mitigates condition errors and stabilizes the condition distribution, plus a novel Optimal Transport (OT)-based refinement method to address "condition inconsistency." The claims are bold and align with the paper's content. However, the abstract does not mention any limitations or computational considerations, which would be helpful for context.
 
 ### Introduction & Motivation
-- The introduction adequately frames the problem, citing recent work on autoregressive image generation and diffusion loss. The motivation for comparing conditional diffusion and autoregressive diffusion with diffusion loss is valid.
-- Contributions are listed clearly, but the introduction does not deeply explain why “condition errors” or “condition inconsistency” are particularly detrimental in autoregressive diffusion models. The specific limitations of existing methods that necessitate OT-based refinement could be more sharply articulated.
+The introduction effectively situates the work within the landscape of diffusion and autoregressive image generation. It motivates the study by identifying an underexplored comparative analysis between conditional diffusion and autoregressive modeling with diffusion loss. The four contributions are listed clearly. The motivation is solid: to understand theoretical differences and improve condition consistency.
 
-### Theoretical Analysis (Sections 3.1–3.5)
-- **3.1 Difference of Diffusion Models**: Clearly distinguishes static vs. dynamic conditioning. Sets up the analysis well.
-- **3.2 Conditional Denoising Model Error Definition**: Theorem 1 (conditional score matching upper bound) is a known result; the proof in Appendix C appears correct. Definitions of error terms \(\epsilon_c\) and \(\bar{\epsilon}_c\) are reasonable but their practical relevance to “condition errors” is not explicitly linked.
-- **3.3 Conditional Control Term Analysis**: Lemma 2 isolates the conditional control term. The proof in Appendix E relies on interchanging gradient and expectation, which is valid under smoothness assumptions, but the connection to actual error reduction in autoregressive models is not fully established.
-- **3.4 Condition Refinement via Patch Denoising**: Proposition 1 claims that iterative condition refinement improves generation quality. The proof in Appendix F analyzes gradient norm decay under a bivariate Gaussian assumption. While it shows stabilization of the condition distribution, it does **not** directly prove improved generation quality—this is a gap between the claim and the proof.
-- **3.5 Autoregressive Modeling Can Refine Condition**: Theorem 2 states exponential decay of the gradient norm. The proof in Appendix G is mathematically involved but relies on strong assumptions:
-  1. The condition evolution is modeled as a *linear* autoregressive process (Eq. 18). In practice, the update is likely nonlinear, limiting the generality of the result.
-  2. Assumption 4 requires bounded second derivatives and Lipschitz continuity of the conditional probability, which may not hold for complex neural networks.
-  3. The analysis assumes geometric ergodicity of the Markov chain (Lemma 9), which is plausible for linear AR processes but not proven for the actual learned condition dynamics.
-  - These assumptions weaken the theoretical guarantee for real-world models.
+### Preliminaries (Section 2)
+Standard, concise, and clear. No issues.
+
+### Theoretical Analysis (Section 3)
+This is the paper's core theoretical contribution. While ambitious, it has significant clarity and grounding issues.
+
+*   **Section 3.2 (Error Definitions):** Theorem 1 (conditional score matching loss upper-bounds unconditional loss) is a known or straightforward result, but its presentation is valid. The definitions of \(\epsilon_c\) and \(\bar{\epsilon}_c\) are introduced, but the text confusingly mentions "Detailed Proof" for these definitions, which is unnecessary. The purpose of these error terms in the larger narrative is not well-motivated.
+*   **Section 3.3 (Conditional Control Term):** Lemma 2 isolates the conditional control term under classifier-free guidance. The proof (Appendix E) appears correct, but the lemma's reliance on the specific classifier-free guidance formulation should be explicitly stated in the main text. Its connection to the overall analysis is tenuous.
+*   **Section 3.4 (Condition Refinement via Patch Denoising):** Proposition 1 is vague ("leads to improved conditional generation quality"). The proof (Appendix F) analyzes a special Gaussian case to show gradient norm decay under strong assumptions (e.g., small variance). The claim that this generalizes to the full diffusion setting is not convincingly argued. The proposition does not directly prove improved generation quality.
+*   **Section 3.5 (Autoregressive Modeling Refines Condition):** Theorem 2 is a key result, showing exponential decay of the conditional score gradient norm under autoregressive iteration. The proof (Appendix G) is highly technical and relies on non-trivial assumptions (Assumption 4: bounded AR coefficients, bounded second derivatives of the conditional density). While the proof seems sound in its own framework, the practical validity of these assumptions for real image data and deep networks is unclear. Furthermore, the theorem's implication for final image quality is not directly established.
+
+**Overall, the theoretical section is dense and contains several interesting but loosely connected results. The flow from analysis to algorithm design is not well-articulated. The practical relevance of some results (e.g., the Gaussian case analysis) is questionable. The theoretical claims are stronger than the provided justifications.**
 
 ### Autoregressive Condition Optimization (Section 4)
-- **4.1 Condition Inconsistency**: Lemma 6 introduces the concept of extraneous information accumulation. The idea is intuitive but not rigorously defined—the “minimal sufficient information subspace” is not derived from information-theoretic principles, and the projection operator is not constructed explicitly.
-- **4.2 Optimal Transport for Condition Refinement**: Proposition 2 and Theorem 3 formulate refinement as a Wasserstein gradient flow and claim geometric convergence. The proof sketch is high-level and lacks critical details:
-  1. The energy functional \(F(P)\) combines a Wasserstein distance and a regularization term. Convergence of the JKO scheme typically requires convexity of \(F\) in the Wasserstein space, which is not discussed or verified.
-  2. The “inverse process” \(T^{-1}\) is not explicitly defined; its Lipschitz properties are assumed without justification.
-  3. The contraction rate \(\rho\) is claimed to depend on \(\lambda\) and step sizes, but no analysis is provided.
-  - Overall, the theoretical guarantees for OT refinement are promising but insufficiently rigorous for a top-tier conference.
+This section introduces the OT-based refinement method.
+
+*   **Section 4.1 (Condition Inconsistency):** Lemma 6 formally defines "condition inconsistency" via subspace projection, arguing that autoregressive conditions accumulate extraneous information. The concept is intuitively clear, but the notion of a "minimal sufficient information subspace" \(I_i^*\) is abstract and not operationalized for implementation.
+*   **Section 4.2 (OT Refinement via Wasserstein Gradient Flow):** Proposition 2 and Theorem 3 propose formulating refinement as a Wasserstein gradient flow and claim geometric convergence to the ideal condition distribution. This is a strong theoretical guarantee. However, the transition from theory to practice is severely lacking. The energy functional involves an inverse process \(T^{-1}\), which is **not defined** in any concrete way. How is \(T^{-1}\) obtained or approximated? The algorithm (Algorithm 1, Appendix L) uses \(T^{-1}\) as if it is a given function, making the proposed method incomplete. Furthermore, solving a regularized OT problem via Sinkhorn iterations at each step is computationally expensive; the paper does not address this cost or its feasibility for large-scale generation.
 
 ### Experiments (Section 5)
-- **Experimental Settings**: Details are sparse. The baseline “CDM” is not described (architecture, training scheme). Comparisons with LDM-4, U-ViT, DiT-XL appear to be numbers taken from literature, not controlled re-implementations. This raises fairness concerns—differences may stem from architecture, training data, or compute rather than the proposed method.
-- **Results**: Tables 1–3 show consistent improvements in FID and IS over baselines, including MAR. The gains are meaningful but not dramatic. However:
-  1. No ablation study is provided to isolate the contribution of the OT refinement module versus the autoregressive diffusion framework itself.
-  2. The analysis of SNR and Noise Intensity (Figure 3) is qualitative; no statistical significance tests are reported.
-  3. The claimed “effectiveness in condition refinement” is not directly measured—e.g., by tracking the Wasserstein distance to an ideal condition distribution during training.
-- **Scalability**: Experiments up to 943M parameters show improved scaling, but the limitation (Appendix B) acknowledges no evaluation on truly large-scale models (e.g., billion+ parameters), which is a significant gap given the focus on autoregressive generation.
+The experiments demonstrate improved metrics but lack critical analysis and ablation.
+
+*   **Section 5.1 & 5.2 (Settings & Main Results):** Results in Table 1 show the proposed method achieves superior FID/IS on ImageNet 256x256. However, **the model size and compute budget for "Our method" in Table 1 are not specified**, making comparisons with baselines like DiT-XL/2 unfair. It is likely the 943M model from Table 2, but this must be stated clearly.
+*   **Section 5.3 (Scalability):** Tables 2 and 3 show consistent gains over the strong baseline MAR across model sizes and resolutions. This is a positive result, though improvements are modest.
+*   **Section 5.4 (Condition Errors Analysis):** Figure 3 provides qualitative evidence of lower noise and higher SNR during denoising. However, this analysis is only against one baseline and does not isolate the contribution of the OT refinement.
+*   **Major Omissions:** There is **no ablation study** to quantify the impact of the OT refinement module versus the base autoregressive diffusion architecture. The computational overhead (training/inference time, memory) of the Sinkhorn-based refinement is **not reported**. The description of how the OT refinement is integrated into the training/generation pipeline is insufficient; readers must decipher Appendix L.
 
 ### Writing & Clarity
-- The paper is generally well-written, though the theoretical sections are dense and occasionally hard to follow. The notation table (Appendix O) is helpful.
-- Some proofs are deferred to appendices, which is acceptable, but the main text should provide more intuition for key results.
+The paper is generally well-structured but suffers from dense, poorly motivated theory. Key symbols are sometimes defined only in proofs (e.g., constant \(m\) in Theorem 2). The connection between the theoretical results in Section 3 and the proposed algorithm in Section 4 is weak. The algorithm description is relegated to an appendix, making the method difficult to understand from the main text.
 
 ### Limitations & Broader Impact
-- Limitations are briefly noted in Appendix B: lack of large-scale experiments and the theoretical assumptions. However, the paper misses a discussion of:
-  1. The computational overhead of OT refinement during training/inference.
-  2. Potential negative societal impacts (e.g., misuse for generating deepfakes).
-  3. The strong assumptions (linear AR process, Gaussianity, bounded derivatives) that may not hold in practice.
+Appendix B acknowledges the lack of experiments on "large-scale models" due to compute constraints, which is a significant limitation given the method's complexity. There is no discussion of broader impact, societal or ethical considerations, which is a minor shortfall for ICLR.
 
-### Overall Assessment
-The paper presents a novel integration of autoregressive modeling, diffusion loss, and optimal transport for condition refinement. The theoretical analysis is ambitious but suffers from strong assumptions and gaps—particularly in the exponential decay proof (linear AR assumption) and the OT convergence argument (lack of convexity analysis). Experimentally, the method shows consistent gains over strong baselines, but the comparisons are not fully controlled, and ablations are missing. For ICLR, which expects both theoretical rigor and empirical soundness, the paper currently falls short. The contribution is promising, but the theoretical claims are overstated, and the empirical evaluation lacks the depth needed to validate them. With major revisions—strengthening the theory (e.g., extending to nonlinear condition dynamics, providing rigorous convergence proofs for OT) and conducting thorough ablations/controlled comparisons—the paper could meet the bar. As is, it is likely **reject**.
+## Overall Assessment
+
+This paper presents two main contributions: (1) a theoretical analysis of condition error dynamics in autoregressive diffusion models, and (2) an OT-based condition refinement method with convergence guarantees. The theoretical analysis, while technically involved, is somewhat fragmented and its assumptions are not clearly justified for practical settings. The proposed OT method is theoretically interesting but its description is incomplete (the critical inverse process \(T^{-1}\) is undefined) and its practicality is unproven due to unaddressed computational costs. Experimentally, the method shows improved metrics over strong baselines, but the comparisons are potentially unfair due to unspecified model sizes, and the core contribution of the OT refinement is not ablated.
+
+For ICLR, the paper falls short in bridging theory and practice. The theoretical claims are not tightly coupled to the algorithm, and the algorithm's implementation is underspecified. The experimental validation, while positive, is insufficient to convince the reader that the OT refinement is both effective and feasible. **Major revisions are required to clarify the method's implementation, provide fair and ablative experiments, and realistically assess computational trade-offs.** Without these, the paper's contribution is primarily theoretical and its practical impact remains uncertain.
+
+**Recommendation: Weak Reject (Borderline).** The paper has promising ideas but currently does not meet ICLR's standards for a clear, reproducible, and well-evaluated contribution. With significant revisions addressing the concerns above, it could be reconsidered.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper provides a theoretical analysis of autoregressive image generation with diffusion loss, demonstrating that patch denoising in autoregressive models mitigates condition errors and leads to a stable condition distribution. The authors further propose an Optimal Transport (OT)-based condition refinement method to address "condition inconsistency" and prove its convergence via Wasserstein Gradient Flow. Experiments on ImageNet show improved performance over diffusion and autoregressive baselines.
+This paper presents a theoretical analysis of autoregressive image generation models with diffusion loss, demonstrating that patch denoising can mitigate condition errors and stabilize the condition distribution. The authors further identify "condition inconsistency" in autoregressive generation and propose a novel condition refinement method based on Optimal Transport (OT), formulated as a Wasserstein Gradient Flow. Experimental results on ImageNet show improved performance over diffusion and autoregressive baselines.
 
 ### Strengths
-1. **Theoretical Depth**: The paper offers substantial theoretical contributions, including Theorem 1 (conditional score matching upper bound), Theorem 2 (exponential decay of gradient norm in autoregressive processes), and Theorem 3 (convergence of Wasserstein Gradient Flow). Proofs are provided in appendices, demonstrating rigorous analysis.
-2. **Novel Integration**: The combination of autoregressive modeling, diffusion loss, and Optimal Transport for condition refinement is innovative. The proposed algorithm (Algorithm 1) integrates these components in a principled manner.
-3. **Empirical Validation**: Experiments on ImageNet 256×256 and 512×512 show consistent improvements in FID and IS over strong baselines (e.g., MAR, DiT, LDM). The method also scales well with model size and resolution (Tables 2-3).
+1. **Substantial Theoretical Contributions**: The paper provides rigorous theoretical proofs, including Theorem 2 on the exponential decay of the condition's influence and Theorem 3 on the convergence of the Wasserstein Gradient Flow. These are novel insights into the behavior of autoregressive models with diffusion loss.
+2. **Novel Method for Condition Refinement**: The introduction of an OT-based condition refinement to address inconsistency is innovative. The formulation as a Wasserstein Gradient Flow is theoretically well-founded and offers a principled approach to improving autoregressive generation.
+3. **Comprehensive Experimental Validation**: The method is evaluated on ImageNet at multiple resolutions (256×256 and 512×512) and across model sizes, consistently outperforming strong baselines like MAR, LDM-4, and DiT-XL/2. Metrics (FID, IS, Precision, Recall) show clear improvements.
+4. **Clarity in Theoretical Exposition**: Despite the complexity, the paper is well-structured with clear definitions, assumptions, and proof sketches. The appendix provides detailed derivations, and a notation table (Appendix O) aids readability.
 
 ### Weaknesses
-1. **Clarity and Exposition**: The theoretical sections are dense and notation-heavy, making the core insights difficult to follow. Key concepts (e.g., "condition inconsistency") are not intuitively explained, and the connection between theory and practical algorithm is underdeveloped.
-2. **Incomplete Experimental Details**: Critical implementation details are missing: model architectures, training hyperparameters, computational costs, and runtime. The OT refinement step's efficiency (Sinkhorn iterations) is not discussed, raising concerns about scalability.
-3. **Limited Ablation Study**: The contribution of individual components (autoregressive framework, diffusion loss, OT refinement) is not isolated. Without ablation, it's unclear which aspects drive the improvements.
-4. **Strong Assumptions**: Theoretical results rely on assumptions (e.g., small variance, Gaussianity) that may not hold in practice. The practical impact of these assumptions is not analyzed.
+1. **Insufficient Implementation Details for Reproducibility**: Key training details (hyperparameters, architectures beyond mentioning GPT-XL and U-ViT-H/2-G, compute resources) are missing. The algorithm in Appendix L lacks specific parameter values (e.g., λ, ϵ, learning rates), hindering reproduction.
+2. **Limited Empirical Scope**: Experiments are confined to ImageNet. Evaluation on additional datasets (e.g., LSUN, COCO) would strengthen claims about generalization and real-world applicability.
+3. **Incomplete Comparison to State-of-the-Art**: While baselines include strong models, recent SOTA autoregressive (e.g., MaskGIT, later VAR versions) and diffusion models (e.g., Stable Diffusion 3) are absent, making it difficult to assess the true advancement.
+4. **Theoretical Assumptions Not Fully Justified**: Assumptions (e.g., Gaussian noise, small variance, bounded derivatives) are standard but not discussed in the context of real data deviations. The practical impact of these assumptions is unclear.
+5. **Abstract Definition of Condition Inconsistency**: The concept of "condition inconsistency" is introduced theoretically but lacks intuitive explanation or visualization, making the problem and solution less accessible.
 
 ### Novelty & Significance
-The paper introduces novel theoretical insights into autoregressive diffusion models and proposes a novel OT-based condition refinement method. The theoretical convergence guarantees are a strength. However, the empirical gains, while consistent, are incremental (e.g., FID improvement from 1.55 to 1.31 on a 943M model). The work is a solid contribution but may not be considered groundbreaking for ICLR without more dramatic empirical advances or broader applicability.
+- **Novelty**: The theoretical analysis linking autoregressive patch denoising to condition error reduction and the OT-based refinement method are novel contributions. The convergence proof for the Wasserstein Gradient Flow in this context is also new.
+- **Significance**: The work advances the theoretical understanding of autoregressive image generation and offers a practical method to improve generation quality. It has the potential to influence future research in conditional generative modeling.
 
 ### Suggestions for Improvement
-1. **Improve Readability**: Add a high-level intuitive explanation of the theory, use diagrams to illustrate condition inconsistency and refinement, and streamline notation.
-2. **Provide Comprehensive Experiments**: Include full implementation details, computational costs, and runtime comparisons. Demonstrate the method's efficiency compared to baselines.
-3. **Conduct Ablation Studies**: Isolate the effects of the autoregressive design, diffusion loss, and OT refinement. Show how each component impacts performance and training stability.
-4. **Discuss Limitations and Scalability**: Explicitly address the limitations of theoretical assumptions and the computational overhead of OT refinement. Suggest approximations for large-scale applications.
-5. **Expand Validation**: Test on more diverse datasets (e.g., COCO, FFHQ) and tasks (e.g., text-to-image) to demonstrate generality. Consider qualitative comparisons beyond FID/IS.
+1. **Add Detailed Implementation Section**: Include full architectural details, hyperparameter values, training schedules, and computational requirements in the main paper or a separate appendix to ensure reproducibility.
+2. **Expand Experiments to More Datasets**: Test on additional benchmarks (e.g., LSUN, COCO) to demonstrate generalization and provide more convincing evidence of the method's effectiveness.
+3. **Include More Recent Baselines**: Compare with the latest SOTA autoregressive and diffusion models to better position the contribution within the current landscape.
+4. **Provide Qualitative Visualization of Condition Inconsistency**: Show example images or feature visualizations to illustrate the inconsistency problem and how refinement addresses it, making the motivation more concrete.
+5. **Discuss Practical Implications of Theoretical Assumptions**: Add a paragraph discussing how the assumptions might hold or break in practice and any potential limitations this introduces.
+6. **Conduct Ablation Studies**: Isolate the impact of the OT refinement module versus the autoregressive framework to clarify the contribution of each component.
+7. **Address Large-Scale Model Limitations**: While computational constraints are acknowledged, discuss the expected scalability and potential challenges when applying the method to very large models (e.g., billion-parameter models).
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Ablation study on the OT refinement module.** The paper claims the OT-based refinement is key to addressing condition inconsistency, but there is no experiment isolating its contribution. An ablation comparing the full method to the autoregressive backbone *without* OT refinement is essential to validate its necessity. Without this, the core algorithmic contribution is unsupported.
-2. **Comparison to recent strong autoregressive image generators.** The primary baseline is MAR. For ICLR, the method must be compared against other contemporary autoregressive models without VQ (e.g., LlamaGen, VAR) and top-tier diffusion models (e.g., DiT) on standard benchmarks. The current table includes older baselines (LDM-4, U-ViT), making the claimed superiority unconvincing.
-3. **Evaluation on datasets beyond ImageNet.** All experiments are on ImageNet 256x256/512x512. The method's generality and robustness are untested on more complex (e.g., MS-COCO) or diverse (e.g., FFHQ) datasets. This is critical for claiming a broad contribution to conditional image generation.
+1. **Compare to modern autoregressive baselines.** The paper only compares to MAR (Li et al., 2024a) and a few diffusion models. To claim superiority in "autoregressive image generation," comparisons to strong recent methods like LlamaGen (Sun et al., 2024a), VAR (Tian et al., 2024), and ImageFolder (Li et al., 2024b) are essential. Without these, the claim of superiority is not convincing.
+2. **Ablation study of the OT refinement module.** The core proposed contribution is the OT-based condition refinement. There is no experiment showing the performance gain from adding this module to a base autoregressive model with diffusion loss. This missing ablation directly undermines the claim that OT refinement is effective.
+3. **Condition error measurement.** The theory claims autoregressive refinement reduces condition error exponentially. No experiment quantifies this error (e.g., distance to an ideal condition or variance of condition distribution across iterations) to validate the theoretical decay.
+4. **High-resolution and cross-dataset validation.** The scalability analysis is limited to ImageNet 512x512. To demonstrate robustness, tests on other datasets (e.g., COCO, FFHQ) and higher resolutions (e.g., 1024x1024) are needed to see if benefits hold.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Empirical analysis of the theoretical claims.** The paper claims the condition gradient norm decays exponentially and OT refinement ensures convergence. These should be validated empirically by plotting the gradient norm or Wasserstein distance across autoregressive steps during inference. Without empirical verification, the theoretical results remain unsubstantiated hypotheses.
-2. **Analysis of the "condition inconsistency" phenomenon.** The core problem the OT module solves is not demonstrated. Quantitative analysis (e.g., measuring the divergence between predicted and ideal conditions) or qualitative visualizations showing how conditions drift without refinement are needed to justify the problem's existence and the solution's effectiveness.
-3. **Sensitivity analysis of OT hyperparameters.** The algorithm involves several key parameters (e.g., Sinkhorn regularization \(\epsilon\), regularization weight \(\lambda\)). The paper provides no study of how performance varies with these choices, leaving the practical implementation and reproducibility unclear.
+1. **Direct analysis of condition distribution convergence.** The paper claims the OT refinement ensures convergence to an ideal condition distribution via Wasserstein gradient flow. There is no empirical analysis (e.g., tracking Wasserstein distance during training or refinement steps) to verify this convergence. Without it, the theoretical guarantee is unsupported.
+2. **Breakdown of FID/IS improvements.** It is unclear whether gains come from better condition refinement, the autoregressive framework, or simply larger model size. An analysis correlating condition consistency metrics (e.g., patch coherence) with final FID/IS would link theory to practice.
+3. **Sensitivity analysis of OT hyperparameters.** The method introduces hyperparameters (λ, ε, sinkhorn steps). No analysis shows how sensitive results are to these choices, which is critical for reproducibility and understanding the method's stability.
 
 ### Visualizations & Case Studies
-1. **Visualization of condition refinement trajectory.** For a set of generated images, show how the condition vector \(c_i\) changes (e.g., via PCA/t-SNE) before and after OT refinement across the autoregressive steps. This would visually demonstrate the "denoising" of the condition path, which is a central claim.
-2. **Qualitative comparison highlighting failures of the baseline.** Show side-by-side examples where the baseline (MAR) produces inconsistent or low-quality patches due to "condition inconsistency," and how the proposed OT refinement corrects this. This would make the problem and solution concrete.
+1. **Visual trajectory of condition refinement.** Show how a condition vector evolves across autoregressive steps and OT refinement (e.g., via PCA/t-SNE). This would visually demonstrate the "refinement" and convergence claimed.
+2. **Qualitative comparison of failures.** Show side-by-side generations where the baseline (MAR) fails and our method succeeds, and vice versa. This would expose the specific improvements (e.g., in texture, structure) and remaining weaknesses.
+3. **Visualization of "condition inconsistency".** Illustrate the extraneous information accumulation (e.g., by visualizing the component η_i in the condition space) to make the problem tangible and show how OT reduces it.
 
 ### Obvious Next Steps
-1. **Include a thorough ablation study.** This is standard for ICLR and is conspicuously absent. The study must ablate the OT module and analyze the impact of different components (e.g., inverse process regularization, Sinkhorn iterations) on final performance.
-2. **Benchmark against state-of-the-art methods.** The experimental section must be expanded to include comparisons with the current best autoregressive and diffusion models on widely used metrics (FID, IS, Precision/Recall, and possibly classification accuracy score). The current comparisons are insufficient to claim superiority.
-3. **Provide pseudo-code or clearer implementation details for the OT refinement.** Algorithm 1 is high-level and relies on an undefined "inverse process" \(T^{-1}\). For reproducibility and understanding, the exact computation of this term and the Sinkhorn updates need to be clearly specified, ideally with code in the appendix.
+1. **Isolate the OT refinement contribution.** A simple but necessary experiment: take the same autoregressive base model and compare "with OT" vs. "without OT" (or with a simpler refinement like MLP). This should have been in the paper to prove the module's utility.
+2. **Measure computational overhead.** The OT refinement using Sinkhorn iterations adds cost. Reporting the additional training/inference time and memory compared to baselines is essential for assessing practicality.
+3. **Provide pseudo-code for the full algorithm in the main text.** The algorithm is buried in the appendix. For clarity and reproducibility, a concise version should be in the main paper, outlining how autoregressive generation, diffusion denoising, and OT refinement are interleaved.
 
 # Final Consolidated Review
 ## Summary
-This paper provides a theoretical analysis of autoregressive image generation with diffusion loss, demonstrating that patch denoising mitigates condition errors and leads to stable condition distributions. It further proposes an Optimal Transport (OT)-based condition refinement method to address "condition inconsistency," with convergence guarantees via Wasserstein Gradient Flow. Experiments on ImageNet show improved FID and Inception Score over several baselines.
+This paper presents a theoretical analysis of condition errors in autoregressive image generation with diffusion loss, demonstrating that patch denoising mitigates errors and refines conditions. It proposes a novel Optimal Transport-based condition refinement method formulated as a Wasserstein Gradient Flow with convergence guarantees. Experiments on ImageNet show improved performance over diffusion and autoregressive baselines.
 
 ## Strengths
-- **Substantial theoretical analysis:** The paper proves multiple non-trivial results, including an upper bound for conditional score matching (Theorem 1), exponential decay of the gradient norm in autoregressive processes under certain assumptions (Theorem 2), and convergence of the OT-based refinement via Wasserstein Gradient Flow (Theorem 3). Proofs are provided in the appendices.
-- **Innovative integration:** The combination of autoregressive modeling, diffusion loss, and Optimal Transport for condition refinement is novel and presented with a detailed algorithm (Algorithm 1).
-- **Empirical gains:** The method consistently improves FID and Inception Score on ImageNet 256×256 and 512×512 across multiple model sizes (Tables 1–3), demonstrating scalability.
+- Provides a rigorous theoretical proof that the condition's influence on the outcome decays exponentially as autoregressive iteration progresses (Theorem 2), offering novel insight into error reduction.
+- Introduces an innovative Optimal Transport-based condition refinement method with a Wasserstein Gradient Flow formulation and a proof of geometric convergence to the ideal condition distribution (Theorem 3).
+- Demonstrates consistent performance gains in FID, IS, Precision, and Recall over strong baselines (MAR, DiT-XL/2) across multiple model sizes and resolutions on ImageNet, validating scalability.
 
 ## Weaknesses
-- **Overly restrictive theoretical assumptions:** The exponential decay result (Theorem 2) assumes a linear autoregressive process (Eq. 18) and strong smoothness/boundedness conditions (Assumption 4) that are not justified for real neural networks. Similarly, the OT convergence proof (Theorem 3) is sketched and lacks necessary details (e.g., convexity of the energy functional, properties of the inverse process \(T^{-1}\)), weakening the theoretical guarantees.
-- **Insufficient experimental rigor:** The comparisons with baselines (LDM-4, U-ViT, DiT) are taken from literature without controlled re-implementation, making it unclear whether gains stem from the proposed method or differences in architecture, training, or compute. The baseline "CDM" is not described. An ablation study isolating the contribution of the OT refinement module is missing, which is critical for validating the core algorithmic innovation.
-- **Lack of implementation and efficiency details:** Key experimental details (model architectures, hyperparameters, computational cost, runtime) are omitted. The computational overhead of the Sinkhorn iterations in the OT refinement is not discussed, raising concerns about practical scalability.
+- **The OT refinement method is incomplete and underspecified** — the inverse process \(T^{-1}\) is used in the algorithm (Appendix L) but never concretely defined or implemented, making the method irreproducible and raising doubts about its feasibility.
+- **No ablation study to isolate the OT module's contribution** — without comparing the base autoregressive model with and without OT refinement, it is unclear whether gains stem from the novel refinement or the underlying architecture.
+- **Theoretical assumptions lack practical justification** — key assumptions (e.g., bounded second derivatives of conditional density, Gaussian case in Proposition 1) are not discussed in the context of real image data, limiting the relevance of the proofs to practical settings.
+- **Unfair experimental comparisons** — Table 1 does not specify the model size for "Our method," while baselines like DiT-XL/2 have known sizes; this omission risks misleading comparisons and hinders reproducibility.
+- **Computational overhead ignored** — the Sinkhorn-based OT refinement adds significant cost per iteration, but no analysis of training/inference time or memory is provided, undermining the method's practicality.
+- **Weak connection between theory and algorithm** — the theoretical analysis in Section 3 is loosely linked to the proposed OT refinement in Section 4, reducing clarity and coherence of the overall contribution.
 
 ## Nice-to-Haves
-- Evaluation on more diverse datasets (e.g., COCO, FFHQ) to demonstrate broader applicability.
-- Comparison with other recent autoregressive image generators (e.g., LlamaGen, VAR) for a more comprehensive benchmark.
-- Empirical validation of theoretical claims, such as plotting the gradient norm decay or Wasserstein distance during training to substantiate the analysis.
-- Sensitivity analysis of OT hyperparameters (e.g., Sinkhorn regularization \(\epsilon\), weight \(\lambda\)).
+- Expand experiments to additional datasets (e.g., COCO, FFHQ) to demonstrate generalization beyond ImageNet.
+- Include sensitivity analysis for OT hyperparameters (e.g., \(\lambda\), \(\epsilon\)) to guide implementation and show robustness.
+- Provide visualizations of condition refinement trajectories (e.g., via t-SNE) to illustrate the convergence claimed theoretically.
+- Compare to more recent autoregressive baselines (e.g., LlamaGen, VAR) for broader context, though MAR is a relevant baseline for diffusion loss methods.
+
+## Removed Points
+*These points are flagged to be removed; treat them with caution.*
+- **Strength**: "Clarity in theoretical exposition" — the theory is dense and poorly connected to the algorithm, so this is not a consistent strength.
+- **Weakness**: "Abstract does not mention limitations" — this is a formatting nitpick, not a substantive flaw.
+- **Weakness**: "Theorem 1 is known or straightforward" — it is correctly used as a foundation, not claimed as novel.
+- **Weakness**: "Proposition 1 is vague" — it is supported by a proof under specific assumptions, though the assumptions are a weakness.
+- **Weakness**: "Missing broader impact discussion" — this is not a core requirement for the paper's technical contributions.
 
 ## Novel Insights
 None beyond the paper's own contributions.
 
 ## Suggestions
-- Strengthen the theoretical analysis by discussing the plausibility of assumptions (e.g., linearity, smoothness) in practical settings or by providing empirical validation.
-- Conduct controlled experiments by re-implementing key baselines (e.g., MAR) under identical settings and performing a thorough ablation study to isolate the impact of the OT refinement module.
-- Include essential implementation details: model architectures, training hyperparameters, computational costs, and runtime comparisons. Discuss the efficiency of the OT refinement step and potential approximations for large-scale use.
+- Clearly define or approximate the inverse process \(T^{-1}\) in the OT refinement method (e.g., as a learned network or explicit function) to make the algorithm fully specified and reproducible.
+- Conduct an ablation study comparing the base autoregressive model with and without the OT refinement module to quantify its isolated impact.
+- Specify model sizes for all entries in Table 1 and report the computational overhead (time, memory) of the OT refinement during training and inference.
+- Empirically measure condition error (e.g., via Wasserstein distance to a reference distribution) across autoregressive steps to validate the theoretical decay claimed in Theorem 2.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 6.0, 6.0]

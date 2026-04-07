@@ -1,141 +1,157 @@
-=== CALIBRATION EXAMPLE 86 ===
+=== CALIBRATION EXAMPLE 89 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
 ### Title & Abstract
-The title accurately reflects the paper's focus on using special unitary matrices (SU(2)) for rotation estimation. The abstract clearly states the main contributions: reformulating Wahba's problem via SU(2), deriving linear constraints on quaternion parameters, and proposing two novel continuous representations for learning rotations. The claims of extensive experimental validation are supported in the later sections.
+- **Title**: Appropriately reflects the core contribution: using special unitary matrices (SU(2)) for rotation estimation.
+- **Abstract**: Clearly states the paper's goals: reformulating Wahba's problem via SU(2), deriving linear quaternion constraints, and proposing two novel continuous rotation representations for neural networks. Claims are supported by the experiments mentioned.
 
 ### Introduction & Motivation
-The introduction effectively motivates the problem, highlighting the ubiquity of 3D rotations and the under-explored potential of SU(2) in machine learning and robotics. It provides a concise background on Wahba's problem and the challenges of learning rotations in neural networks (e.g., discontinuities in minimal representations). The contributions are clearly listed, setting appropriate expectations. The recommendation to review Appendix A is reasonable given the heavy mathematical reliance.
+- **Problem Motivation**: Well-motivated, with a clear explanation of Wahba's problem and the challenges in learning rotations. The link between classical attitude estimation and modern deep learning representations is effectively drawn.
+- **Contributions**: Explicitly listed and match the content of the paper. However, the intuition for *why* SU(2) is particularly useful could be emphasized earlier (the linear constraints are a key benefit).
 
 ### Method / Approach
-This is the core of the paper and is mathematically dense. The derivations appear sound, but the presentation is highly technical and assumes substantial familiarity with complex projective geometry, SU(2), and Möbius transformations. While the appendix provides detailed proofs, the main text could benefit from more intuitive explanations to improve accessibility.
-
-**Key concerns:**
-1. **Clarity and Reproducibility:** The step-by-step derivations are provided, but the complexity may hinder implementation. The mapping between SU(2), quaternions, and SO(3) is clearly defined, but the numerous equations and transformations (e.g., Eq. (45) for recovering **R**) make it easy to lose the thread. More narrative guidance would help.
-2. **Logical Gaps:** The transition from the theoretical solutions to the proposed learning representations (2-vec and QuadMobius) is somewhat abrupt. For 2-vec, the connection to the two-point unweighted solution is clear, but the geometric intuition behind Eq. (23) could be expanded. For QuadMobius, the motivation for using a 16D output to parameterize **G_M** is not thoroughly justified beyond inspiration from prior work.
-3. **Assumptions and Edge Cases:** The methods assume non-singular inputs (e.g., **M** non-singular for QuadMobius, **a**₁ × **a**₂ ≠ 0 for two-point solutions). While the appendix discusses some degenerate cases (Appendix B.4.4, D.2), the practical handling of these in learning scenarios is not addressed in the main text. The differentiability of the proposed maps is asserted and supported in Appendix E, but a discussion of potential gradient instability (e.g., near singularities) is missing.
+- **Structure**: The method is divided into theoretical solutions to Wahba's problem (Section 2) and derived optimization methods/representations (Sections 3-4). This is logical.
+- **Section 2 (Solutions via SU(2))**: 
+    - Derivation of linear constraints in the stereographic plane (Eqs. 9, 11) and on the 3D sphere (Eqs. 17, 18) is sound, though dense. The appendices provide necessary detail.
+    - The Möbius approximation (Section 2.2) is interesting but presented as an approximate solution. Its motivation and relationship to the exact solution could be clearer.
+    - **Potential Gap**: The paper claims the solution to Eq. (12) (eigenvector of **G_P** with smallest eigenvalue) is equivalent to the original Wahba problem. While empirically validated (Table 4), a more explicit theoretical justification in the main text would strengthen the claim.
+- **Section 3 (Optimization Methods)**:
+    - Applications like residual-based optimization and constrained optimization are sensible extensions of the linear constraints.
+    - The two-point solutions (weighted and unweighted) are a significant contribution. The closed-form expressions (Eqs. 21, 22) appear simpler than prior work. However, the paper should discuss their numerical stability and singularities more directly (Appendix B.4.4 and D.2 handle this, but main text should note).
+- **Section 4 (Representations for Learning)**:
+    - **2-vec**: A novel 6D representation based on the two-point solution. The geometric intuition (balancing error from both axis predictions vs. Gram-Schmidt) is clear and supported by gradient analysis (Fig. 4).
+    - **QuadMobius**: A 16D representation based on the Möbius approximation. The construction (from network output to Hermitian matrix **G_M** to eigenvector to Möbius transformation to SU(2)) is complex. While motivated by connections to prior work (QCQP, SVD), the specific advantages of this high-dimensional, complex parameterization are not fully justified. Appendix F provides some analysis, but an ablation study in the main text (e.g., comparing to predicting SU(2) directly) would help.
+    - **Derivatives**: Appendix E provides formulas for backpropagation, which is necessary for implementation.
 
 ### Experiments & Results
-The experimental section is extensive and generally supports the claims. However, some aspects require deeper scrutiny.
-
-**Wahba's Problem Validation (Sec. 5.1, Tables 4 & 5):**
-- The proposed optimal solvers (**G_P**, **G_S**) match the accuracy of established methods (Q-method, QUEST), as expected from equivalent formulations. The reported timing differences are noted but not analyzed in depth (e.g., why is **G_P** slower than Q-method?).
-- The Möbius approximation (**G_M**) shows significant sensitivity to noise, which the authors acknowledge. This raises questions about its utility outside the learning context, where noise is inherent.
-- The two-point solutions are shown to be computationally more efficient (Table 5), a valuable contribution. The derivation of the weighted average of unnormalized quaternions (Appendix B.4.3) is elegant.
-
-**Learning Experiments (Sec. 5.2, Tables 1, 2, Fig. 2, Table 6):**
-- The benchmarks (ModelNet10-SO3, Inverse Kinematics, Camera Pose Estimation) are appropriate and commonly used. The proposed representations, especially QuadMobius variants, often achieve top or competitive performance.
-- **However, the experimental scope is limited:** Only three object categories from ModelNet10-SO3 are used, following prior work but limiting generalizability. The inverse kinematics and camera pose experiments are on single datasets.
-- **Missing Ablations:** While Table 6 (synthetic learning of Wahba's problem) provides a more controlled comparison, it lacks ablations on why QuadMobius works well. The theoretical investigations in Appendix F (gradient analysis, dropout sensitivity) are insightful but preliminary. A deeper analysis of the representation's properties (e.g., the effect of the 16D parameterization, the role of the eigendecomposition) would strengthen the paper.
-- **Statistical Significance and Reporting:** Results are reported as mean/median errors, but no measures of variance or statistical significance tests are provided. The "leader count" (Ldr.) in Table 6 is an interesting convergence metric but is not standard and its calculation is ambiguous (how is a "leader" defined per epoch?).
-- **Comparison to Baselines:** The baselines are well-chosen (Euler, Quat, GS, QCQP, SVD). The consistent outperformance of QuadMobius and the strong showing of 2-vec (often beating Gram-Schmidt) are convincing.
+- **Section 5.1 (Wahba's Problem)**:
+    - Synthetic experiments are thorough (1M trials). Tables 4 and 5 validate that the proposed optimal solvers match existing methods, and the two-point methods are more efficient.
+    - The Möbius approximation shows higher error, as noted. This is acceptable given its role as a learning representation component.
+    - **Missing**: Discussion of numerical stability and conditioning. Timing measurements should specify hardware/software environment.
+- **Section 5.2 (Learning Experiments)**:
+    - Benchmarks are diverse and standard (ModelNet10-SO3, Inverse Kinematics, Camera Pose). Results in Tables 1, 2, and Fig. 2 show that the proposed representations are competitive, often achieving best or second-best performance.
+    - **Concerns**:
+        - While results are strong, the gains over strong baselines (SVD, QCQP) are sometimes marginal. The paper should discuss statistical significance or provide error bars.
+        - The training details and architectures differ per task. It is unclear if the improvements are consistent or due to task-specific tuning. A more controlled synthetic learning experiment (like Appendix G.2.2) helps, but main text should summarize key insights.
+        - Computational cost: Table 7 shows QuadMobius is significantly slower. A discussion of the accuracy/speed trade-off is needed.
+    - **Appendix G.2.2 (Additional Learning Experiments)**: Provides extensive ablation across noise levels, loss functions, and real/complex domains. This is a strength, showing robustness. However, the main text should highlight key takeaways (e.g., QuadMobius often leads in convergence).
 
 ### Writing & Clarity
-The paper is structurally sound but extremely dense. The heavy reliance on mathematical notation and derivations, while necessary, makes it challenging to read. Key insights are sometimes buried in equations. Figures 1, 4, 5, 6, and 7 are helpful, but their captions could more explicitly connect to the main claims. The appendix is massive (33 pages of content), suggesting that much of the critical detail is relegated to supplemental material, which may hinder accessibility.
+- **Overall**: The paper is technically dense but well-structured. The heavy reliance on appendices (over 30 pages) makes the main text less self-contained, which may hinder readability for a conference paper.
+- **Equations and Derivation**: Many derivations are relegated to appendices. While this keeps the main text focused, some key steps (e.g., the form of Eq. (17)) appear without intuition. The main text could benefit from more high-level explanations.
+- **Figures**: Figures 1, 4, 5, 6, 7 are helpful but some captions are brief (e.g., Fig. 1(c)-(d) are "conceptual illustrations" that could be better explained).
 
 ### Limitations & Broader Impact
-The paper does not have a dedicated limitations section. Important limitations that should be explicitly acknowledged include:
-1. **Complexity and Accessibility:** The mathematical complexity of the methods may limit adoption.
-2. **Computational Cost:** QuadMobius is significantly slower in inference (Table 7), which may be prohibitive for real-time applications.
-3. **Learning-Specific Concerns:** The sensitivity of the Möbius approximation to noise might be a double-edged sword in learning; this trade-off is not discussed. The behavior of the representations in very high-noise regimes or with adversarial examples is unexplored.
-4. **Scope of Experiments:** As noted, the learning experiments are on a relatively narrow set of tasks.
-Broader societal impact is not discussed, which is acceptable for a technical paper of this nature.
+- **Limitations**: No dedicated section. The paper should explicitly discuss:
+    - Computational complexity of QuadMobius vs. other representations.
+    - Numerical stability of the two-point solutions (singularities are handled in appendix, but main text should note).
+    - The Möbius approximation is not exact; its role in learning is justified empirically but theoretical guarantees are limited.
+- **Broader Impact**: Not discussed. While rotation estimation itself has many positive applications (robotics, AR/VR), the paper could briefly mention societal impact (likely minimal) and limitations.
 
-### Overall Assessment
-This paper presents a novel and theoretically rigorous exploration of rotation estimation using SU(2). The core contributions—new solutions to Wahba's problem and two novel neural network rotation representations—are substantiated by derivations and experiments. The 2-vec representation is a simple, efficient alternative to Gram-Schmidt, and QuadMobius demonstrates strong empirical performance. However, the paper's impact is tempered by its high mathematical density and somewhat limited experimental breadth. The work is suitable for ICLR if the authors can improve clarity and provide a more thorough empirical analysis. Key revisions should include: (1) a more accessible presentation of the core ideas, (2) expanded experiments (more datasets, ablations), (3) explicit discussion of limitations, and (4) proper statistical reporting.
+## Overall Assessment
+This paper makes a solid theoretical and practical contribution to rotation estimation. The use of SU(2) to derive linear quaternion constraints is novel and leads to new closed-form solutions for Wahba's problem (especially the two-point case) and two new neural network rotation representations (2-vec and QuadMobius). The experimental validation is extensive across both classical estimation and learning tasks, showing competitive or superior performance.
+
+**Main strengths**: Theoretical novelty, thorough derivations, comprehensive experiments (including synthetic validation and multiple benchmarks), and the introduction of efficient two-point solutions.
+
+**Main weaknesses**: The paper is dense and heavily reliant on appendices, which may affect accessibility. The QuadMobius representation, while empirically strong, is complex and its design choices are not fully ablated. The computational cost of QuadMobius is notable, and the trade-offs are not discussed. Some experimental results, while positive, show marginal gains.
+
+For ICLR, the paper is above the acceptance bar due to its novel theoretical foundation and strong empirical results. However, revisions to improve clarity, discuss limitations, and provide more ablation analysis for QuadMobius would strengthen it significantly. I recommend acceptance conditional on addressing the major concerns outlined above.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper revisits the classic Wahba's problem in attitude estimation through the lens of special unitary matrices (SU(2)). It derives new, linear quaternion constraints by reformulating the problem in complex projective space, leading to efficient solvers and closed-form solutions for the two-point case. Building on this theory, the paper introduces two novel continuous representations for learning 3D rotations in neural networks: "2-vec" and "QuadMobius". These are evaluated on several standard benchmarks, demonstrating competitive or superior performance against established baselines.
+This paper revisits rotation estimation through the lens of special unitary matrices (SU(2)). It reformulates Wahba’s problem in complex projective space, deriving novel linear constraints on quaternion parameters that lead to efficient solutions for rotation estimation. Building on this theoretical foundation, the paper proposes two new continuous representations for learning rotations in neural networks: "2-vec" (a 6D representation) and "QuadMobius" (a 16D representation). Extensive experiments on synthetic Wahba’s problem solvers and three learning benchmarks (3D shape alignment, inverse kinematics, and camera pose estimation) demonstrate competitive performance of the proposed methods.
 
 ### Strengths
-1. **Novel Theoretical Formulation**: The paper provides a fresh, principled derivation of Wahba's problem using SU(2) and complex projective geometry. The reformulation yields linear constraints on quaternion parameters (Eqs. 11, 18), which is a distinct and theoretically interesting approach compared to traditional methods.
-2. **Practical Algorithmic Contributions**: The derived constraints enable efficient solutions for Wahba's problem (matching optimal solvers in Table 4) and lead to simplified, closed-form solutions for the two-point case (Eqs. 21, 22), which offer computational advantages (Table 5).
-3. **Effective New Learning Representations**: The proposed "2-vec" and "QuadMobius" representations are well-motivated from the theoretical framework. "2-vec" provides a balanced alternative to Gram-Schmidt with more stable gradients (Fig. 4), while "QuadMobius" shows strong empirical performance across multiple diverse benchmarks (Tables 1, 2, Fig. 2).
-4. **Comprehensive Experimental Validation**: The paper validates the theoretical solvers on synthetic Wahba's problems and evaluates the learning representations on three established tasks (ModelNet10-SO3, inverse kinematics, camera pose estimation). The results are thorough and demonstrate the versatility and competitiveness of the proposed methods.
-5. **Strong Supplementary Material**: The appendix provides detailed derivations, proofs, and additional experiments (e.g., gradient analysis, ablation studies), which greatly enhance reproducibility and understanding of the technical contributions.
+1. **Theoretical contributions**: The paper provides a novel reformulation of Wahba’s problem using SU(2) and stereographic projections, leading to linear quaternion constraints (Eqs. 11, 18). This formulation unifies the treatment of rotation estimation in both 3D and complex projective spaces, offering new insights and algorithmic alternatives.
+2. **Practical algorithms**: The paper derives efficient closed-form solutions for the two-point Wahba’s problem (Eqs. 21, 22) that are simpler and computationally cheaper than existing methods (Table 5). The proposed "2-vec" representation is shown to be more efficient than Gram-Schmidt and achieves competitive results with lower dimensionality.
+3. **Empirical validation**: The proposed representations are thoroughly evaluated on multiple benchmarks (ModelNet10-SO3, inverse kinematics, camera pose estimation) and show strong performance, often outperforming or matching state-of-the-art methods like SVD and QCQP (Tables 1, 2, Fig. 2). The paper also includes synthetic experiments validating the new Wahba solvers (Tables 4, 5).
+4. **Clarity and organization**: The paper is well-structured, with clear derivations in the main text and detailed proofs in the appendix. The figures (e.g., Fig. 1, 4) help illustrate the key ideas and differences between methods.
 
 ### Weaknesses
-1. **Limited Comparison to Recent Learning Methods**: While comparisons are made to SVD, QCQP, and Gram-Schmidt, the paper does not situate its learning representations within the broader, rapidly evolving landscape of rotation learning (e.g., more recent works on Procrustes, Riemannian, or implicit representations from the last 2-3 years). This makes it harder to assess the current significance of the contributions.
-2. **Theoretical Justification for QuadMobius as a Learning Proxy**: The connection between the Möbius approximation (Section 2.2) and the final "QuadMobius" learning representation (Section 4) feels somewhat heuristic. While the empirical results are strong, a more rigorous justification for why this specific 16D parameterization and projection is effective for learning is lacking.
-3. **Clarity and Accessibility of Complex Derivations**: The heavy reliance on complex numbers and projective geometry, while novel, makes the core theoretical sections (Section 2) difficult to follow for a general machine learning audience. Key intuitions are sometimes buried in algebraic derivations.
-4. **Computational Cost of QuadMobius**: The "QuadMobius" representation requires a 16D output and complex eigendecomposition/SVD (Table 7), making it significantly more expensive than lower-dimensional representations. The paper does not deeply discuss the trade-off between this cost and the performance gains, which are sometimes marginal.
-5. **Incomplete Discussion of Limitations**: The paper does not fully discuss the failure modes or limitations of the new representations (e.g., singularities for "2-vec", behavior of "QuadMobius" when `det(M)` is near zero, or the sensitivity of the Möbius approximation to noise noted in Table 4).
+1. **Limited theoretical comparison**: While the paper derives new formulations, it does not deeply compare the theoretical properties (e.g., convergence, stability) of the proposed SU(2) approach with existing SO(3) or quaternion methods. The connection to prior work (e.g., Bingham distributions) is mentioned but not fully explored.
+2. **Empirical limitations**: The learning experiments, while comprehensive, are limited to a few standard benchmarks. The paper does not include ablation studies on the sensitivity of QuadMobius to hyperparameters (e.g., network architecture, loss functions) or its behavior in more challenging scenarios (e.g., large-scale datasets, noisy labels).
+3. **Complexity and practicality**: The QuadMobius representation, while effective, is computationally more expensive than alternatives (Table 7) and requires complex arithmetic, which may hinder adoption. The paper does not discuss the trade-offs between performance and computational cost in depth.
+4. **Reproducibility concerns**: Although the paper provides derivations and experimental settings, key implementation details (e.g., handling of edge cases in the two-point solvers, initialization of complex-valued networks) are only briefly covered. The code is not provided, and the appendix, while detailed, may still leave gaps for full replication.
 
 ### Novelty & Significance
-The theoretical reformulation of Wahba's problem using SU(2) is novel and provides a new perspective that yields practical algorithmic benefits, particularly for the two-point case. The translation of this theory into novel neural network representations ("2-vec" and "QuadMobius") is a creative and significant application. The empirical results are solid, showing that these representations can outperform or match state-of-the-art continuous rotation representations on several tasks. The work is a valuable contribution to the field of rotation estimation and learning. However, its impact is partially limited by the complexity of the derivations and the lack of comparison to the very latest learning techniques.
+The paper introduces a novel perspective on rotation estimation by leveraging SU(2) matrices, which are less commonly used in robotics and machine learning compared to SO(3). The derived linear quaternion constraints and the resulting algorithms for Wahba’s problem are novel and offer computational advantages in certain cases. The proposed "2-vec" and "QuadMobius" representations are innovative contributions to the field of learning rotations, providing continuous, over-parameterized mappings that improve gradient flow and performance. The work is significant as it bridges theoretical rotation estimation with practical deep learning applications, offering new tools for a fundamental problem.
 
 ### Suggestions for Improvement
-1. **Expand Related Work**: Add a subsection or paragraph discussing more recent advances in rotation representation learning (post-2020) to better contextualize where "2-vec" and "QuadMobius" stand in the current literature.
-2. **Strengthen the Learning Motivation**: Provide a more intuitive, geometric, or probabilistic motivation for the "QuadMobius" representation. For instance, can the 16D parameter `Θ` be interpreted as encoding uncertainty or a distribution over transformations?
-3. **Improve Exposition**: To improve clarity, consider adding a high-level schematic or algorithm box summarizing the key steps of the SU(2) formulation for Wahba's problem. Move some of the more intricate algebraic manipulations (e.g., Appendix B.1.1) entirely to the appendix and replace them with intuitive explanations in the main text.
-4. **Analyze Complexity-Accuracy Trade-offs**: Include a more explicit discussion and experiment analyzing the inference/training time versus accuracy trade-off for "QuadMobius" compared to other representations. This is crucial for practitioners.
-5. **Discuss Failure Cases and Robustness**: Explicitly discuss and, if possible, experimentally validate the robustness of the proposed methods to edge cases (e.g., nearly collinear vectors for "2-vec", ill-conditioned `G_M` for "QuadMobius"). Suggest potential mitigation strategies.
-6. **Release Code**: To ensure reproducibility and foster adoption, the authors should commit to releasing well-documented code for all proposed methods and experiments.
+1. **Provide more theoretical analysis**: Compare the proposed SU(2) formulation with existing methods in terms of geometric interpretation, robustness to noise, and convergence properties. Discuss the relationship with Bingham distributions and other probabilistic models in more detail.
+2. **Expand empirical evaluation**: Include more diverse tasks (e.g., robotic manipulation, SLAM) and datasets to demonstrate broader applicability. Conduct ablation studies on QuadMobius to understand the impact of its components (eigendecomposition, Möbius transformation, projection) and its sensitivity to hyperparameters.
+3. **Address computational efficiency**: Discuss strategies to reduce the computational overhead of QuadMobius (e.g., approximation of eigendecomposition, use of real-valued equivalents) and provide a more thorough cost-benefit analysis compared to other representations.
+4. **Improve reproducibility**: Release code and models to facilitate replication. Provide more explicit pseudocode or algorithm descriptions for the two-point solvers and the backpropagation through QuadMobius, especially for edge cases (e.g., degenerate inputs, singular matrices).
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **No comparison to recent state-of-the-art rotation representations in learning tasks.** The paper does not compare against recent, strong baselines like the Projective Manifold Gradient Layer (Chen et al., 2022) or comprehensive frameworks like Geist et al. (2024). Without these, the claim that the new representations are competitive is not fully substantiated.
-
-2. **Missing controlled ablation on the QuadMobius components.** The paper does not isolate the impact of the Möbius transformation approximation versus the eigendecomposition step. An ablation (e.g., predicting an SU(2) matrix directly vs. full QuadMobius) is needed to justify the complexity of the proposed pipeline.
-
-3. **No evaluation of the two-point methods in a practical robust estimation pipeline.** The paper derives closed-form solutions for the two-point case but does not integrate them into a RANSAC or outlier-robust framework to demonstrate real-world efficiency gains over existing solvers.
-
-4. **Lack of systematic noise/outlier analysis in learning benchmarks.** The learning experiments report performance on clean datasets. There is no analysis of how the representations degrade with increasing label noise or outliers, which is critical for assessing robustness.
+1. **Statistical significance testing is missing.** The paper reports mean/median errors but provides no variance measures, confidence intervals, or statistical tests (e.g., paired t-tests) to confirm that performance differences between methods are significant. Without this, it is impossible to judge whether the reported improvements are meaningful or due to random chance.
+2. **Comparison to recent, strong baselines is incomplete.** The experiments omit comparisons to several modern, high-performing rotation regression methods (e.g., ProHMR, Procrustes-based approaches, or the Bingham loss) that have been shown to work well on tasks like ModelNet-SO3 and camera pose estimation. This gap undermines the claim that the proposed methods are state-of-the-art.
+3. **Insufficient ablation of the QuadMobius representation.** The paper does not ablate key design choices: Why use the eigenvector of the *smallest* eigenvalue? What is the impact of the intermediate Möbius transformation normalization step? An ablation comparing the SVD and algebraic projection variants, and testing the sensitivity to the eigenvalue selection, is needed to validate the core design.
+4. **No experiment on the real impact of the theoretical SU(2) formulations.** The paper derives new solutions to Wahba's problem but only validates them in synthetic, noise-added scenarios. A critical test is missing: apply these solvers in a real iterative optimization loop (e.g., in a bundle adjustment or SLAM context) against standard solvers to demonstrate practical utility beyond synthetic checks.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Theoretical characterization of the Möbius approximation error.** The paper states Section 2.2 is an approximation but provides no bounds on the error or analysis of when it coincides with the optimal solution. This makes it impossible to assess the reliability of the method.
-
-2. **Thorough gradient flow and optimization landscape analysis for the new representations.** While Appendix F includes a limited gradient analysis, a comprehensive study (e.g., gradient norms, conditioning, loss surfaces) comparable to Zhou et al. (2019) is missing. This is essential to trust the learning claims.
-
-3. **Analysis of singularities and failure modes for 2-vec and QuadMobius.** The paper mentions singular regions but does not quantify how often they occur in practice during training or inference, nor their impact on convergence and stability.
+1. **Analysis of gradient flow and learning dynamics for QuadMobius is superficial.** Figure 7 and the associated text in Appendix F provide some gradient magnitude plots, but a rigorous analysis is missing. How do the gradients through the complex eigendecomposition and SVD compare in terms of variance and bias? Does the representation suffer from gradient explosion/vanishment in deep networks? This is critical for trust in a learnable representation.
+2. **No clear analysis of the approximation error in the Möbius method.** Section 2.2 presents an *approximate* solution. The paper should quantify the approximation error theoretically or empirically as a function of noise level and number of points, explaining when and why this approximation might be beneficial or detrimental for learning.
+3. **Lack of discussion on the double-cover ambiguity and its handling.** The paper briefly mentions (in Appendix F) that directly predicting *SU*(2) performs poorly due to double-cover ambiguity, but does not analyze how QuadMobius avoids or mitigates this issue. A clear explanation of how the mapping from **G_M** to a rotation resolves the ambiguity is necessary.
+4. **The singular/degenerate cases for the proposed 2-point solutions are not thoroughly analyzed.** While Appendix B.4.4 and D.2 discuss degenerate cases, there is no empirical evaluation showing the failure rate or error behavior of the proposed robust selection scheme under near-degenerate configurations (e.g., nearly collinear points).
 
 ### Visualizations & Case Studies
-1. **Visualization of the Möbius approximation error.** For the Wahba problem, plots showing the distribution of error between the optimal rotation and the Möbius approximation under different noise levels would reveal when the approximation breaks down.
-
-2. **t-SNE visualizations of the learned representation spaces.** For the learning tasks, projecting the network outputs (e.g., the 16D Θ for QuadMobius) would show if the representations structure the latent space meaningfully compared to baselines.
-
-3. **Case studies of specific failure instances.** Showing concrete examples where the proposed methods underperform compared to baselines (e.g., on particular ModelNet objects or camera poses) would help identify limitations.
+1. **Visualizations of failure cases for the learned representations.** The paper shows only aggregated metrics. Visual case studies are needed: for example, show input images from ModelNet-SO3 or Cambridge Landmarks where 2-vec or QuadMobius produce large errors, and contrast with the predictions of baselines. This would expose systematic weaknesses.
+2. **Visual demonstration of the "balanced gradient" claim for 2-vec.** Figure 4 shows a density plot, but a more intuitive visualization is needed. For example, visualize the Gram-Schmidt and 2-vec mappings for a set of perturbed 6D inputs on a 2D manifold, showing how the output rotation changes, to geometrically illustrate the improved gradient behavior.
+3. **T-SNE/PCA visualization of the learned high-dimensional space for QuadMobius.** Since QuadMobius uses a 16D input Θ, visualizing how the network organizes this space (e.g., clustering by rotation type) could provide insight into why it works better than lower-dimensional representations.
 
 ### Obvious Next Steps
-1. **Incorporate the two-point solvers into a RANSAC framework for camera pose estimation.** This is a direct application mentioned in the text but not implemented. It would demonstrate practical utility.
-
-2. **Extend QuadMobius to model uncertainty.** The paper notes a link to Bingham distributions but does not implement uncertainty estimation. Outputting a distribution over rotations is a natural and impactful extension.
-
-3. **Apply the methods to direct point cloud registration tasks.** The theoretical formulations are geometric; testing on registration (e.g., ICP variants) would broaden the impact beyond learning-from-images.
+1. **Incorporate uncertainty estimation.** Given that QuadMobius is motivated by connections to Bingham distributions (mentioned briefly), a direct and evaluated method to extract prediction uncertainty (e.g., from the eigenvalues of **G_M**) should have been included. This is a standard expectation for learning rotation distributions.
+2. **Apply the SU(2)-based Wahba solvers to a real-world sensor fusion task.** The paper should have included a small but real experiment (e.g., fusing IMU and visual data for attitude estimation) to demonstrate the practical advantage of the new linear constraint formulations (Eqs. 11, 18) in a residual-based optimization, as claimed in Section 3.1.
+3. **Benchmark computational cost in an end-to-end learning pipeline.** Table 7 provides isolated timings, but the paper should analyze the total training time and memory footprint for each representation on a standard benchmark, discussing the trade-off between accuracy and efficiency for deployment.
+4. **Provide an open-source, easy-to-use implementation of the solvers and layers.** For the community to adopt these methods, a well-tested PyTorch/TensorFlow implementation of the 2-vec and QuadMobius layers, along with the new Wahba solvers, is essential. The paper only mentions reimplementations in C++ for timing.
 
 # Final Consolidated Review
 ## Summary
-This paper revisits rotation estimation through the lens of special unitary matrices (SU(2)). It reformulates Wahba's problem in complex projective space to derive linear constraints on quaternion parameters, leading to efficient solvers and novel closed-form solutions for the two-point case. Building on this theory, the paper introduces two new continuous representations for learning rotations in neural networks: "2-vec," a balanced 6D alternative to Gram-Schmidt, and "QuadMobius," a higher-dimensional representation based on Möbius transformations.
+This paper revisits rotation estimation through the lens of special unitary matrices (SU(2)). It reformulates Wahba's problem in complex projective space, deriving linear constraints on quaternion parameters that yield new efficient solutions, including closed-form two-point methods. Building on this foundation, the paper proposes two novel continuous rotation representations for neural networks: 2-vec (6D) and QuadMobius (16D). Extensive experiments validate the methods on synthetic Wahba problems and multiple learning benchmarks.
 
 ## Strengths
-- **Novel Theoretical Formulation**: The paper provides a principled, fresh derivation of Wahba's problem using SU(2) and complex projective geometry, yielding linear quaternion constraints (Eqs. 11, 18). This theoretical perspective is distinct from traditional approaches.
-- **Practical Algorithmic Contributions**: The derived constraints enable efficient optimal solvers for Wahba's problem and lead to simplified, closed-form solutions for the two-point case (Eqs. 21, 22), which offer computational advantages, as validated in Tables 4 and 5.
-- **Effective New Learning Representations**: The proposed "2-vec" and "QuadMobius" representations are well-motivated from the theory. "2-vec" demonstrates more balanced gradient flow than Gram-Schmidt (Fig. 4), and "QuadMobius" shows strong, often state-of-the-art, empirical performance across multiple diverse benchmarks (3D shape alignment, inverse kinematics, camera pose estimation) in Tables 1, 2, and Figure 2.
+- **Theoretical novelty:** The SU(2) reformulation unifies rotation estimation in 3D and complex projective space, producing linear quaternion constraints (Eqs. 11, 18) that enable new efficient algorithms and insights.
+- **Algorithmic contributions:** The paper derives simplified, closed-form solutions for the two-point Wahba problem (Eqs. 21, 22) that are computationally more efficient than existing methods (Table 5).
+- **Empirical validation:** The proposed representations are thoroughly evaluated on multiple benchmarks (ModelNet10-SO3, inverse kinematics, camera pose estimation) and consistently show competitive or superior performance against strong baselines (Tables 1, 2, Fig. 2). Additional synthetic experiments (Tables 4, 5, 6) comprehensively validate the solvers and learning behavior.
 
 ## Weaknesses
-- **Incomplete Empirical Contextualization**: While the paper compares to established baselines (SVD, QCQP, Gram-Schmidt), it does not include empirical comparisons to very recent state-of-the-art rotation learning methods (e.g., Chen et al., 2022, cited but not compared against). This makes it difficult to fully assess the current significance of the proposed representations.
-- **Justification for QuadMobius as a Learning Proxy is Empirical**: The connection between the Möbius approximation (Section 2.2) and the final "QuadMobius" learning representation (Section 4) is motivated by prior work and shown to work well, but a more rigorous theoretical or intuitive justification for why this specific 16D parameterization is particularly effective for learning is lacking.
-- **Computational Trade-off Underexplored**: "QuadMobius" is significantly more computationally expensive in inference than lower-dimensional representations (Table 7). The paper notes this but does not provide a substantive discussion or analysis of the performance-versus-cost trade-off, which is important for practitioners.
+- **Lack of statistical significance reporting:** The learning experiments report mean/median errors but no variance measures, confidence intervals, or statistical tests. Without these, it is difficult to assess whether the performance differences are meaningful or due to random variation.
+- **Incomplete ablation of QuadMobius:** While Appendix F provides some analysis, the paper does not systematically ablate key design choices of the QuadMobius representation (e.g., the role of the smallest eigenvalue, the impact of the Möbius normalization step) to validate the necessity of its components.
+- **Computational cost trade-off not discussed:** QuadMobius is significantly slower in both training and inference than other representations (Table 7), but the paper does not discuss the accuracy-versus-speed trade-off, which is important for practical deployment.
 
 ## Nice-to-Haves
-- A more explicit discussion of potential failure modes or robustness limits (e.g., behavior when `det(M)` is near zero for QuadMobius), even if preliminary mitigation strategies are outlined in the appendix.
-- An expanded experiment on the ModelNet10-SO3 benchmark using more object categories to strengthen the claim of generalizability beyond the three presented.
+- Extend the evaluation to more diverse tasks (e.g., robotic manipulation, SLAM) to demonstrate broader applicability.
+- Provide a more thorough theoretical comparison of the SU(2) formulation with existing methods in terms of geometric interpretation and robustness.
+- Release code and models to facilitate replication and adoption.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **"The paper is dense and heavily reliant on appendices."** This is a stylistic preference; the paper is well-structured and the appendices appropriately contain detailed derivations.
+- **"The Möbius approximation lacks theoretical guarantees."** The paper explicitly notes it is an approximation and empirically shows its error (Table 4); its role in learning is justified by the results.
+- **"Numerical stability of the two-point solutions is not addressed."** The paper handles singular/degenerate cases in Appendix B.4.4 and D.2.
+- **"Gradient flow analysis for QuadMobius is superficial."** The paper provides gradient analysis in Appendix F (Figs. 6, 7), which is more than many papers offer.
+- **"Approximation error of the Möbius method is not quantified."** Table 4 shows the error, and the paper discusses its sensitivity to noise.
+- **"Double-cover ambiguity is not analyzed."** Appendix F explains why direct SU(2) prediction fails and how QuadMobius avoids the issue.
+- **"Visualizations of failure cases or T-SNE plots are missing."** While insightful, these are not required for validation.
+- **"Uncertainty estimation should be incorporated."** This is outside the paper's scope on deterministic rotation estimation.
+- **"Real-world sensor fusion experiments are missing."** The paper's contributions are primarily theoretical and focused on learning representations, not on applied sensor fusion.
+- **"End-to-end pipeline computational cost benchmarking."** Table 7 already provides isolated timings; deeper pipeline analysis is not essential.
+- **"Open-source implementation is not provided."** Code release is encouraged but not a requirement for publication.
 
 ## Novel Insights
-The paper's core novel insight is the application of the SU(2) representation—common in physics but underused in robotics and ML—to rotation estimation. This perspective yields linear quaternion constraints, which in turn inspire new learning representations. Beyond the performance results, the analysis reveals insightful properties: "2-vec" provides more stable gradients than Gram-Schmidt by design (Fig. 4), and "QuadMobius" creates a resilient intermediate representation (the Möbius transformation) that buffers against input corruption while enabling strong gradient flow (Figs. 6, 7). These observations connect the theoretical formulation to tangible benefits in neural network optimization.
+The paper's key novel insight is that reformulating Wahba's problem via SU(2) and stereographic projection yields linear constraints on quaternion parameters. This perspective enables efficient closed-form solutions (e.g., for the two-point case) and inspires new continuous rotation representations. Specifically, 2-vec provides a more balanced gradient flow than Gram-Schmidt by optimally combining two axis predictions, while QuadMobius leverages a high-dimensional complex eigendecomposition to create a stable intermediate representation that buffers against poor inputs and ensures predictable gradient flow.
 
 ## Suggestions
-- Include empirical comparisons to recent strong baselines (e.g., Projective Manifold Gradient Layer) in the learning experiments to better situate the performance of the proposed representations.
-- Conduct and report a controlled ablation study for "QuadMobius" (e.g., comparing the full pipeline to directly predicting an SU(2) matrix) to isolate the contribution of its components.
-- Provide a more explicit discussion in the main text analyzing the accuracy versus inference-time trade-off presented by the "QuadMobius" representation.
-- Commit to releasing well-documented code for all proposed methods and experiments to ensure reproducibility and foster adoption.
+- Conduct statistical significance tests (e.g., paired t-tests) for the learning experiments to substantiate the reported performance differences.
+- Perform an ablation study on QuadMobius to validate the necessity of its components (e.g., the choice of the smallest eigenvalue, the Möbius transformation, and the projection step).
+- In the main text, discuss the accuracy-speed trade-off of QuadMobius given its higher computational cost, and suggest potential optimizations or use cases where the trade-off is justified.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 8.0, 8.0, 10.0]
