@@ -1,5 +1,4 @@
 
-
 ## Participate in Our Evaluation
 
 We are looking for participants to help evaluate our review quality. If you are interested, please contact us at wg25r@student.ubc.ca.
@@ -11,30 +10,32 @@ An automated academic paper review system that uses multiple LLM agents with dif
 ## Architecture
 
 ```
-Phase 1 (all parallel via OpenRouter chat completions):
-  ├── Critical Reviewer ──── z-ai/glm-5
-  ├── Supportive Reviewer ── z-ai/glm-5
-  ├── Spark Finder ───────── z-ai/glm-5
-  └── Related Work Scout ─── z-ai/glm-5:online → z-ai/glm-5 filter
+Phase 1 (all parallel):
+  ├── Harsh Critic ────────── claude-sonnet-4-6 (Claude Agent SDK, reads paper with tools)
+  ├── Neutral Reviewer ────── qwen/qwen3.5-flash-02-23 (OpenRouter)
+  ├── Spark Finder ────────── qwen/qwen3.5-plus-02-15 (OpenRouter)
+  └── Related Work Scout ──── qwen/qwen3.5-flash-02-23:online → qwen/qwen3.5-flash-02-23 filter (OpenRouter)
 
-Phase 2 (two-turn, separate models):
-  ├── Turn 1: Merger ─────── z-ai/glm-5 via OpenRouter (consolidated review, no scores)
-  └── Turn 2: Scorer ─────── z-ai/glm-5 via OpenRouter (calibrated score, review-only context)
+Phase 2 (two steps):
+  ├── Merger ──────────────── z-ai/glm-5 via OpenRouter (consolidated review, no scores)
+  └── Scorer ──────────────── claude-sonnet-4-6 (Claude Agent SDK, RAG over cal/ directory)
+      └── Score Parser ────── openai/gpt-5.4-nano via OpenRouter (structured output extraction)
 ```
 
 **Agents:**
 
 | Agent | Model | Role |
 |-------|-------|------|
-| Critical Reviewer | `z-ai/glm-5` | Section-by-section rubric review — raises genuine concerns, not nitpicks |
-| Supportive Reviewer | `z-ai/glm-5` | Balanced assessment with strengths, weaknesses, novelty. Labeled "supportive/cheering" for the merger — strengths are cross-checked cautiously |
-| Spark Finder | `z-ai/glm-5` | Identifies top 3-5 missing experiments, deeper analysis, obvious next steps |
-| Related Work Scout | `z-ai/glm-5:online` | Proposes potentially missed references using OpenRouter's online model variant |
-| Related Work Filter | `z-ai/glm-5` | Removes already-cited and loosely related results |
+| Harsh Critic | `claude-sonnet-4-6` (Agent SDK) | Section-by-section rubric review — raises genuine concerns, not nitpicks |
+| Neutral Reviewer | `qwen/qwen3.5-flash-02-23` | Balanced assessment with strengths, weaknesses, novelty |
+| Spark Finder | `qwen/qwen3.5-plus-02-15` | Identifies top 3-5 missing experiments, deeper analysis, obvious next steps |
+| Related Work Scout | `qwen/qwen3.5-flash-02-23:online` | Proposes potentially missed references using OpenRouter's online model variant |
+| Related Work Filter | `qwen/qwen3.5-flash-02-23` | Removes already-cited and loosely related results |
 | Merger | `z-ai/glm-5` | Synthesizes all inputs into a final structured review (no scores) |
-| Scorer | `z-ai/glm-5` | Scores the paper using the review + calibration examples (paper content stripped — only sees the review) |
+| Scorer | `claude-sonnet-4-6` (Agent SDK) | RAG-based scoring: searches calibration files via Grep/Read tools, compares paper against calibration examples |
+| Score Parser | `openai/gpt-5.4-nano` | Extracts numerical score from scorer output using structured output |
 
-All stages go through OpenRouter. To switch the scorer model, set `MODEL_SCORER` in `paper_reviewer.py` to another OpenRouter model ID.
+The harsh critic and scorer both run via the Claude Agent SDK (with Read/Glob/Grep tool access). All other stages go through OpenRouter chat completions.
 
 ## Review And Scoring Design
 
@@ -46,18 +47,27 @@ The merger acts as an area chair and applies several filters:
   1. Is this a *real* weakness or a *nice-to-have*?
   2. Could this omission be *intentional* (scope decision, space constraint)?
   3. Is this within the paper's stated scope?
-- **Calibration**: Uses score distribution priors (~5% strong accept, ~40% borderline reject, ~30% clear reject) to prevent score inflation
-- **Few-shot calibration** (optional): Injects real examples of multi-agent review bundles paired with human scores/decisions into the score predictor
 
-Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-haves go in `"nice_to_haves"` and should not be treated like core flaws. The merger outputs a structured review with no scores (turn 1), then scores the paper in a second turn of the same conversation using calibration examples. This ensures the scoring agent has full context of its own review when assigning the score.
+Real weaknesses go in `"weaknesses"` and inform the final assessment. Nice-to-haves go in `"nice_to_haves"` and should not be treated like core flaws. The merger outputs a structured review with no scores, then a separate scorer agent assigns the score.
+
+### RAG-Based Scoring
+
+The scorer uses the Claude Agent SDK with tool access (Grep, Read, Glob, Agent) to dynamically search a calibration directory (`cal/`) for relevant examples:
+
+1. The scorer agent reads the consolidated review and paper text
+2. It searches `cal/` for calibration papers with similar topics, methodologies, or quality levels
+3. It reads the `_review.md` files (which include human scores) for 5-7 relevant matches
+4. It compares the paper against those calibration examples on novelty, soundness, empirical support, significance, and clarity
+5. A sub-agent can be spawned to summarize the paper in parallel with calibration search
+6. The numerical score is extracted by `gpt-5.4-nano` with structured output parsing
+
+The scorer also includes leakage detection — it checks for suspicious phrases in its output that might indicate the agent recognized a calibration paper as the same paper being reviewed.
 
 ## Motivation
 
 Prior academic review agents have several practical problems that this project tries to avoid.
 
-CSPaper Review (CSPR) appears to rely on a forced-score style of review generation. It force the AI to generate a review for every single score in the score range (from 1-10) and then merge them. In practice, this design can encourage overly picky, internally inconsistent, or weakly grounded criticism, and may lead to contradictions across different parts of the review. Its related-work stage also appears to have relatively low precision, introducing a substantial amount of noisy or only weakly relevant feedback. Such noise can depress scores artificially and reduce the practical usability of the system for authors.
-
-> Review agents: For each valid rating/score level defined by the target conference (e.g., 1-strong reject to 5-strong accept), we force a dedicated agent to (concurrently) generate reviews that strictly justify the assigned score/rating. A review selector identifies three most realistic reviews: best justified, more optimistic, and more critical. They are synthesized into a coherent output primarily based on the best-justified review but selectively incorporating insights from the other two versions. Finally, a calibration step ensures coherence between overall and sub-dimensional scores (e.g., novelty, clarity), ensuring a well-aligned and balanced final review.
+CSPaper Review (CSPR) appears to rely on a forced-score style of review generation. It forces the AI to generate a review for every single score in the score range (from 1-10) and then merge them. In practice, this design can encourage overly picky, internally inconsistent, or weakly grounded criticism, and may lead to contradictions across different parts of the review. Its related-work stage also appears to have relatively low precision, introducing a substantial amount of noisy or only weakly relevant feedback. Such noise can depress scores artificially and reduce the practical usability of the system for authors.
 
 CSPR's calibration approach also appears to depend heavily on semantic analysis of generated critiques. This is potentially problematic because the number of negative points raised in a review is not a reliable proxy for overall paper quality. A paper may elicit many minor comments without having serious flaws, while a substantially stronger paper may have only a few high-impact concerns. As a result, direct semantic aggregation of negative points can distort score calibration. Combined with the previous point, this problem is actually exacerbated: when a paper has no major issues, the forced-low score agent is compelled to scrape the bottom of the barrel to find "weaknesses" that justify a score of 1. This led to many amusing incidents where reviewers raised points such as "why did the authors not define cosine similarity," simply because there was nothing else that could plausibly bring the paper down to that level. Although a merger module exists, these superficial points can still slip through, filling the review with trivial criticisms. When semantic classification is then applied, the review appears to reflect a lower quality assessment than is warranted.
 
@@ -65,7 +75,7 @@ A broader issue in this literature is evaluation methodology. Many systems empha
 
 The Stanford review agent appears to encounter similar related-work precision issues. It also exhibits a failure mode in which the model may incorrectly treat papers, methods, or models outside its training timeline as fabricated and challenge the user on that basis. Its reported correlation results are also difficult to interpret, since the presentation partly relies on human-human agreement rather than a cleaner AI-to-human benchmark. More broadly, like CSPR, it is neither open source nor accompanied by a sufficiently detailed technical description, which makes the system difficult to inspect, explain, or validate.
 
-The Stanford system also predicts sub-dimensional scores (novelty, soundness, clarity, etc.) and then uses linear regression to combine them into a final score. This design is fragile because LLMs tend to produce inflated, non-discriminative subscores due to sycophancy — without external anchor points or calibration, the subscores cluster in a narrow range (e.g., 6-8 out of 10) regardless of actual paper quality. When the input features to the regression are themselves uninformative, the final predicted score inherits that lack of discrimination. In contrast, our system avoids subscores entirely: the merger produces a qualitative review with no numerical ratings, and the final score is assigned in a separate step anchored by calibration examples with real human scores. This forces the scoring to be grounded in comparative quality rather than inflated self-assessments.
+The Stanford system also predicts sub-dimensional scores (novelty, soundness, clarity, etc.) and then uses linear regression to combine them into a final score. This design is fragile because LLMs tend to produce inflated, non-discriminative subscores due to sycophancy — without external anchor points or calibration, the subscores cluster in a narrow range (e.g., 6-8 out of 10) regardless of actual paper quality. When the input features to the regression are themselves uninformative, the final predicted score inherits that lack of discrimination. In contrast, our system avoids subscores entirely: the merger produces a qualitative review with no numerical ratings, and the final score is assigned in a separate step anchored by RAG calibration with real human scores. This forces the scoring to be grounded in comparative quality rather than inflated self-assessments.
 
 ## Quick Start
 
@@ -85,13 +95,24 @@ echo 'OPENREVIEW_USERNAME="your@email.com"' >> .env
 echo 'OPENREVIEW_PASSWORD="yourpassword"' >> .env
 ```
 
+Additional dependencies used but not in `requirements.txt`: `pymupdf4llm`, `pandas`, `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `tqdm`, `pydantic`, `claude-agent-sdk`.
+
 ## Usage
 
 ### Review a single paper
 
 ```bash
-python paper_reviewer.py paper.txt --parallel --venue NeurIPS
-python paper_reviewer.py paper.txt --parallel --no-related-work --no-spark
+# Parallel mode is the default
+python paper_reviewer.py paper.txt --venue NeurIPS
+
+# Run sequentially instead
+python paper_reviewer.py paper.txt --sequential --venue NeurIPS
+
+# Enable related work search (disabled by default)
+python paper_reviewer.py paper.txt --with-related-work
+
+# Skip specific agents
+python paper_reviewer.py paper.txt --no-spark --no-neutral
 ```
 
 ### Run the local Web UI
@@ -102,12 +123,14 @@ python paper_reviewer.py paper.txt --parallel --no-related-work --no-spark
 
 Then open `http://127.0.0.1:7860`.
 
-The UI is intentionally simple:
+The UI features:
 - no auth
 - BYOK via an OpenRouter API key field in the page
 - upload a `.pdf` / `.txt` / `.md` paper file, or paste paper text directly
-- PDF parsing reuses the dataset builder parser from `fetch_iclr2025.py`
+- PDF parsing reuses the parser from `fetch_iclr2026.py`
 - toggles for parallel mode, related work, spark finder, and calibration
+- score percentile display relative to benchmark scores
+- acceptance likelihood derived from benchmark AUROC/threshold
 
 ### Run everything (fetch → calibrate → benchmark)
 
@@ -115,11 +138,10 @@ The UI is intentionally simple:
 ./run_all.sh
 ```
 
-This runs the full pipeline:
-1. Fetches ICLR 2026 papers (balanced for calibration, unbalanced for testing)
-2. Builds calibration set from balanced data (~10 papers, multi-agent review bundles paired with human scores)
-3. Runs full reviewer benchmark on unbalanced data with calibration (50 papers, 3 concurrent)
-4. Computes metrics + generates plots
+This runs the benchmark pipeline:
+1. Prints dataset distribution from `iclr2026_balanced/`
+2. Runs reviewer benchmark with calibration and RAG scoring (200 papers, 3 concurrent)
+3. Computes metrics + generates plots
 
 ### Step by step
 
@@ -128,10 +150,10 @@ This runs the full pipeline:
 python fetch_iclr2026.py 100 42 --balanced --data-dir iclr2026_balanced
 python fetch_iclr2026.py 100 42 --data-dir iclr2026_unbalanced
 
-# 2. Build calibration set from balanced data
+# 2. Build calibration set from balanced data (saves to cal/ as individual file pairs)
 python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work
 
-# 3. Run benchmark on unbalanced data with calibration
+# 3. Run benchmark with RAG calibration
 python run_iclr_bench.py 50 3112 --parallel \
   --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work
 
@@ -141,11 +163,11 @@ python metric.py bench_scores.csv
 
 ## Baselines
 
-Four baselines are provided for comparison against the full multi-agent pipeline. Single-model baselines live under `baselines/`.
+Three baselines are provided for comparison against the full multi-agent pipeline. Single-model baselines live under `baselines/`.
 
 ```
 baselines/
-├── always_predict_6/         # trivial baseline: always predicts score=6, Accept
+├── always_predict_x/         # trivial baseline: always predicts score=5, Accept
 │   └── run_baseline.py
 ├── direct_review/            # single-turn direct scoring (no review pipeline)
 │   └── run_direct_baseline.py
@@ -154,19 +176,19 @@ baselines/
     └── build_calibration.py
 ```
 
-### Always-predict-6 baseline (`baselines/always_predict_6/run_baseline.py`)
+### Always-predict-5 baseline (`baselines/always_predict_x/run_baseline.py`)
 
-Predicts score=6 and decision=Accept for every paper. No model calls, no calibration. This is the trivial baseline — any useful system must beat it.
+Predicts score=5 and decision=Accept for every paper. No model calls, no calibration. This is the trivial baseline — any useful system must beat it.
 
 ```bash
-python baselines/always_predict_6/run_baseline.py 50 3112 --balanced --data-dir iclr2026_unbalanced --calibration calibration.md
+python baselines/always_predict_x/run_baseline.py 50 3112 --balanced --data-dir iclr2026_unbalanced --calibration calibration.md
 ```
 
 The `--calibration` flag only excludes calibration paper IDs from sampling — no calibration context is used.
 
 ### Direct-scoring baseline (`baselines/direct_review/run_direct_baseline.py`)
 
-Sends the paper directly to `MODEL_SCORER` and asks it to review and score in a single turn. No sub-agent reviews, no merger, no calibration. This measures what the scoring model can do on its own without any pipeline support.
+Sends the paper directly to the scoring model and asks it to review and score in a single turn. No sub-agent reviews, no merger, no calibration. This measures what the scoring model can do on its own without any pipeline support.
 
 ```bash
 python baselines/direct_review/run_direct_baseline.py 50 3112 --data-dir iclr2026_unbalanced
@@ -180,7 +202,7 @@ This isolates the value of the multi-agent pipeline itself: if the full system o
 
 Key differences from the simple review baseline:
 - **Review format**: matches the merger output (7 structured sections vs 4 simple sections)
-- **Scoring prompt**: uses the same comparative scoring procedure as the main pipeline (lower/upper bound identification, dimension-by-dimension comparison, interpolation)
+- **Scoring prompt**: uses the same comparative scoring procedure as the main pipeline
 - **Calibration format**: uses `# Final Consolidated Review` headers matching the main pipeline's calibration
 
 ```bash
@@ -196,23 +218,25 @@ python baselines/structured_review/run_baseline.py 50 3112 --balanced \
 
 | Method | Sub-agents | Review sections | Scoring method | Calibration |
 |--------|-----------|-----------------|----------------|-------------|
-| Always-predict-6 | None | N/A | Hardcoded 6 | None |
+| Always-predict-5 | None | N/A | Hardcoded 5 | None |
 | Direct scoring | None | Brief assessment | Single-turn scoring guide | None |
 | Structured review | None | Same 7 sections as merger | Comparative scoring (same as pipeline) | Own (`baselines/structured_review/calibration.md`) |
-| Full pipeline | 4 specialized agents | Same 7 sections (via merger) | Comparative scoring | Multi-agent (`calibration.md`) |
+| Full pipeline | 4 specialized agents | Same 7 sections (via merger) | RAG scoring (Claude Agent SDK) | File-based in `cal/` |
 
 ## Calibration
 
-The score predictor tends to overestimate scores. To fix this, we build a **calibration set**:
+The score predictor tends to overestimate scores. To fix this, we build a **calibration set** stored as individual file pairs in the `cal/` directory:
 
-1. **Sample** 1 paper per score bin (+ extra from borderline bins 5 and 6)
-2. **Run the full review stack** (critic, neutral, spark, related work, merger) on each calibration paper
-3. **Pair** the resulting review bundle with real human reviewer scores and decisions
-4. **Save** as `calibration.md` — injected into the score predictor prompt as few-shot examples
+1. **Sample** papers across score bins (10 per bin)
+2. **Run the full review stack** (harsh critic, neutral, spark, related work, merger) on each calibration paper
+3. **Save** each as two files in `cal/`:
+   - `{title}_paper.md` — the original paper text
+   - `{title}_review.md` — all agent outputs + merger + human scores
+4. **At scoring time**, the Claude Agent SDK scorer uses Grep/Read tools to dynamically find relevant calibration examples
 
-This shows the score predictor what "a paper that humans scored 3" vs "a paper that humans scored 8" looks like in terms of the assembled review bundle.
+The scorer agent searches both `_paper.md` and `_review.md` files for keywords related to the paper's topic and quality, then reads the `_review.md` files to see the human scores. This RAG approach avoids the token cost and context window limits of injecting all calibration examples into a single prompt.
 
-Calibration papers are excluded from both the benchmark and the baseline comparison set via `calibration_ids.json`.
+Calibration papers are excluded from the benchmark and baseline comparison set via `calibration_ids.json`.
 
 ## Dataset: ICLR 2026
 
@@ -232,9 +256,7 @@ We use **balanced (stratified) sampling for calibration** and **unbalanced (natu
 
 On the same model, same parser, and same year of data, balanced test sampling inflates Spearman from ~0.42 to ~0.70 purely because extreme-score papers are trivially easy to rank. MAE remains nearly identical (~2.4), confirming the model's actual scoring ability is the same — only the metric is inflated.
 
-`run_all.sh` implements this: step 3 builds calibration from `iclr2026_balanced/`, step 5 tests on `iclr2026_unbalanced/`.
-
-**Important leakage warning:** some source PDFs contain venue-status headers such as `Published as a conference paper at ICLR 2026`, which directly reveal acceptance status. The current pipeline removes both `Under review ...` and `Published as ...` status headers during text cleanup. For already-generated local datasets, run `python fix_paper_headers.py` before benchmarking.
+**Important leakage warning:** some source PDFs contain venue-status headers such as `Published as a conference paper at ICLR 2026`, which directly reveal acceptance status. The current pipeline removes both `Under review ...` and `Published as ...` status headers during text cleanup.
 
 More broadly, this is a general caution for any paper-review benchmark: metadata leakage can enter through parsed PDFs, repository mirrors, camera-ready headers, publication notices, or other artifacts that are not part of the original blind submission. Such leakage may not always produce obviously inflated accuracy, but it can still distort benchmarking results. Future benchmarks should explicitly audit and sanitize these signals before evaluation.
 
@@ -244,22 +266,29 @@ More broadly, this is a general caution for any paper-review benchmark: metadata
 - **Spearman correlation** (raw and rounded to ICLR scale)
 - **Pearson correlation**
 - **MAE** (Mean Absolute Error)
+- **Weighted MAE** (weighted by inverse frequency of GT score bins — prevents the dominant 4-6 cluster from hiding errors on extreme scores)
 - **Bias** (`mean(predicted_score - human_avg_score)`) to measure systematic under-scoring or over-scoring
-- **Decision accuracy** (Accept/Reject match)
+- **Decision accuracy** (Accept/Reject match — currently N/A since decision prediction is disabled)
 - **AUROC** (predicted score as discriminator for Accept vs Reject)
+- **AUPRC** (area under precision-recall curve)
 - **Optimal threshold** via Youden's J statistic
 - **Borderline performance** (papers with GT avg 4-6)
 - **Human match** (rounded prediction matches any individual reviewer)
+- **Human baselines**:
+  - **One-vs-rest**: leave-one-reviewer-out correlation (how well can one reviewer predict another's score?)
+  - **Split-half**: repeated random splits of reviewer scores (estimates human inter-rater reliability)
 
 For this project, **Pearson, MAE, bias, and decision quality are more important than Spearman**. Rank correlation is reported as a secondary metric, but it is highly sensitive to small local perturbations, especially in the borderline region where both human scores and accept/reject outcomes are inherently noisy. Since the main goal is calibrated scoring rather than exact global ranking, Pearson and bias are more informative about whether the model is using the same score scale as human reviewers.
 
-Generates a 4-panel plot: raw scatter, rounded scatter, ROC curve, and precision-recall curve.
+Generates a 6-panel plot: raw scatter, human one-vs-rest baseline, human split-half baseline, ROC curve, precision-recall curve, and score bin breakdown.
 
-### Benchmark Results (ICLR 2026, unbalanced test set)
+## LLM-as-Judge
 
-![Benchmark scatter plot](bench_scores_scatter.png)
+`judge/llm_as_judge.py` compares two AI-generated reviews against human reviews fetched from OpenReview. Uses the Claude Agent SDK to judge which candidate review is better aligned with the human review.
 
-Results forthcoming — re-running on the new ICLR 2026 unbalanced test set with balanced calibration.
+```bash
+python judge/llm_as_judge.py <paper_id> <review1_path> <review2_path> [--dataset unbalanced|balanced]
+```
 
 ## Output Files
 
@@ -268,15 +297,18 @@ Results forthcoming — re-running on the new ICLR 2026 unbalanced test set with
 | `bench_results.md` | Full reviews for each paper (written incrementally) |
 | `bench_scores.csv` | Per-paper: predicted score, GT avg score, all GT reviewer scores, match |
 | `bench_scores_scatter.png` | Scatter plot + ROC curve |
+| `bench_reviews/` | Individual review files per paper |
 | `bench_run.log` | Complete stdout/stderr log of the run |
-| `baseline_scores.csv` | Always-predict-6 baseline results (now at `baselines/always_predict_6/baseline_scores.csv`) |
-| `direct_baseline_scores.csv` | Direct-scoring baseline results |
-| `calibration.md` | Few-shot calibration examples (multi-agent review bundle + human scores) |
+| `cal/` | Calibration file pairs (`*_paper.md` + `*_review.md`) for RAG scoring |
+| `calibration.md` | Calibration examples in single-file format (fallback if no `cal/` dir) |
 | `calibration_ids.json` | Paper IDs excluded from benchmark |
+| `baselines/always_predict_x/baseline_scores.csv` | Always-predict-5 baseline results |
 | `baselines/direct_review/` | Direct-scoring baseline results |
 | `baselines/structured_review/scores.csv` | Structured-review baseline results |
 | `baselines/structured_review/calibration.md` | Calibration for structured review baseline |
 | `baselines/structured_review/calibration_ids.json` | Paper IDs excluded from structured review baseline |
+| `webui_runs/` | Reviews generated via the Gradio web UI |
+| `scorer_debug.log` | Full scorer agent output for debugging |
 
 ## CLI Reference
 
@@ -285,10 +317,12 @@ Results forthcoming — re-running on the new ICLR 2026 unbalanced test set with
 ```
 python paper_reviewer.py <paper.txt> [options]
 
-  --parallel          Run all reviewers concurrently
-  --no-related-work   Skip related work search + filter
-  --no-spark          Skip spark finder
-  --venue <name>      Set venue (ICLR, NeurIPS, ICML, etc.)
+  --sequential          Run agents sequentially (parallel is the default)
+  --with-related-work   Enable related work search & filter (disabled by default)
+  --no-spark            Skip spark finder
+  --no-neutral          Skip neutral reviewer
+  --venue <name>        Set venue (ICLR, NeurIPS, ICML, etc.)
+  --calibration <path>  Calibration file/path (default: calibration.md if present)
 ```
 
 ### `run_iclr_bench.py`
@@ -299,36 +333,38 @@ python run_iclr_bench.py [n] [seed] [options]
   --parallel              Run reviewers concurrently (within each paper)
   --balanced              Stratified sampling across score bins
   --data-dir <path>       Dataset directory (default: AI-Scientist/review_iclr_bench)
-  --calibration <path>    Calibration file for few-shot score prediction
+  --calibration <path>    Calibration file for RAG score prediction
   --no-related-work       Skip related work agents
   --no-spark              Skip spark finder
+  --no-neutral            Skip neutral reviewer
 ```
 
 ### `build_calibration.py`
 
 ```
-python build_calibration.py [seed] [options]
+python build_calibration.py [options]
 
   --data-dir <path>       Dataset directory
   --parallel              Run review agents concurrently
   --no-spark              Skip spark finder
   --no-related-work       Skip related work search
+  --no-neutral            Skip neutral reviewer
 ```
 
-### `baselines/always_predict_6/run_baseline.py`
+### `baselines/always_predict_x/run_baseline.py`
 
 ```
-python baselines/always_predict_6/run_baseline.py [n] [seed] [options]
+python baselines/always_predict_x/run_baseline.py [n] [seed] [options]
 
   --balanced              Stratified sampling across score bins
   --data-dir <path>       Dataset directory
   --calibration <path>    Calibration file; excludes calibration IDs
 ```
 
-### `run_direct_baseline.py`
+### `baselines/direct_review/run_direct_baseline.py`
 
 ```
-python run_direct_baseline.py [n] [seed] [options]
+python baselines/direct_review/run_direct_baseline.py [n] [seed] [options]
 
   --balanced              Stratified sampling across score bins
   --data-dir <path>       Dataset directory
@@ -347,7 +383,7 @@ python baselines/structured_review/run_baseline.py [n] [seed] [options]
 ### `baselines/structured_review/build_calibration.py`
 
 ```
-python baselines/structured_review/build_calibration.py [seed] [options]
+python baselines/structured_review/build_calibration.py [options]
 
   --data-dir <path>       Dataset directory
 ```
@@ -363,6 +399,15 @@ python fetch_iclr2026.py [n] [seed] [options]
 Requires OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD in .env
 ```
 
+### `judge/llm_as_judge.py`
+
+```
+python judge/llm_as_judge.py <paper_id> <review1_path> <review2_path> [--dataset unbalanced|balanced]
+
+Compares two candidate reviews against human reviews from OpenReview.
+Uses Claude Agent SDK as the judge.
+```
+
 ## Cost
 
-Sub-agents, merger, and scorer use `z-ai/glm-5` via OpenRouter. Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, and output length.
+The harsh critic and scorer use `claude-sonnet-4-6` via the Claude Agent SDK (cost not exposed by SDK). Neutral, spark, related work, and merger use Qwen and GLM-5 models via OpenRouter. Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, output length, and how many calibration files the scorer reads.
