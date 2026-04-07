@@ -1,5 +1,5 @@
 """
-ICLR Benchmark Runner.
+ICLR Benchmark Runner using OpenRouter chat completions.
 
 Usage:
   python run_iclr_bench.py                          # 10 papers, sequential
@@ -7,46 +7,68 @@ Usage:
   python run_iclr_bench.py 10 42 --parallel         # parallel agents
 """
 
+import asyncio
 import csv
 import json
 import random
-import re
 import sys
 import time
-import threading
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
 
-# Tee stdout+stderr to a log file
+# Tee stdout+stderr to a log file so all intermediate output is saved
 _log_path = Path(__file__).parent / "bench_run.log"
 _log_file = open(_log_path, "w")
 
 class _Tee:
+    """Write to both the original stream and a log file."""
     def __init__(self, stream, log):
         self._stream = stream
         self._log = log
     def write(self, data):
-        self._stream.write(data); self._stream.flush()
-        self._log.write(data); self._log.flush()
+        self._stream.write(data)
+        self._stream.flush()
+        self._log.write(data)
+        self._log.flush()
     def flush(self):
-        self._stream.flush(); self._log.flush()
+        self._stream.flush()
+        self._log.flush()
     def __getattr__(self, name):
         return getattr(self._stream, name)
 
 sys.stdout = _Tee(sys.stdout, _log_file)
 sys.stderr = _Tee(sys.stderr, _log_file)
 
+
 from paper_reviewer import (
-    MODEL_HARSH, MODEL_NEUTRAL, MODEL_RELATED_WORK, MODEL_MERGER,
-    decision_match, match_label, score_to_decision, review_paper,
+    HARSH_CRITIC_PROMPT,
+    MODEL_HARSH,
+    MODEL_MERGER,
+    MODEL_NEUTRAL,
+    MODEL_RELATED_WORK,
+    MODEL_SPARK,
+    NEUTRAL_REVIEWER_PROMPT,
+    SPARK_FINDER_PROMPT,
+    decision_match,
+    _get_client,
+    match_label,
+    run_merger,
+    run_related_work_search,
+    run_reviewer,
+    sanitize_text,
+    score_to_decision,
 )
+
+# ── Paths (defaults to AI-Scientist, overridable with --data-dir) ─────
 
 DEFAULT_BENCH_DIR = Path(__file__).parent / "AI-Scientist" / "review_iclr_bench"
 
+# ── Helpers ───────────────────────────────────────────────────────────
+
 
 def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
+    """Load GT from either AI-Scientist TSV or iclr2026_data CSV format."""
+    # Try iclr2026_data format first (CSV with paper_id, title, decision, gt_binary, avg_score, score_0..5)
     csv_file = bench_dir / "ratings.csv"
     tsv_file = bench_dir / "ratings_subset.tsv"
 
@@ -54,7 +76,8 @@ def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
         papers_dir = bench_dir / "papers"
         rows = []
         with open(csv_file, "r") as f:
-            for row in csv.DictReader(f):
+            reader = csv.DictReader(f)
+            for row in reader:
                 scores = []
                 for i in range(6):
                     val = row.get(f"score_{i}", "").strip()
@@ -78,7 +101,8 @@ def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
         papers_dir = bench_dir / "iclr_parsed"
         rows = []
         with open(tsv_file, "r") as f:
-            for row in csv.DictReader(f, delimiter="\t"):
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
                 scores = []
                 for i in range(7):
                     val = row.get(str(i), "").strip()
@@ -100,16 +124,120 @@ def load_ground_truth(bench_dir: Path) -> tuple[list[dict], Path]:
         raise FileNotFoundError(f"No ratings file found in {bench_dir}")
 
 
-def _extract_score_from_review(review_path: Path) -> float | None:
-    """Extract the score line from a review file."""
-    if not review_path.exists():
-        return None
-    text = review_path.read_text(encoding="utf-8")
-    m = re.search(r"^Score:\s*([\d.]+)", text, re.MULTILINE)
-    return float(m.group(1)) if m else None
+VALID_SCORES = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
+
+
+def _snap_score(raw: float) -> float:
+    """Snap a raw score to the nearest valid ICLR score."""
+    return min(VALID_SCORES, key=lambda v: abs(v - raw))
+
+
+async def review_single_paper(
+    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, calibration_context: str = "", cal_dir: str = "", gt_score: float | None = None,
+) -> dict:
+    """Run the full pipeline on one paper."""
+    paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
+    paper_content = sanitize_text(paper_content)
+
+    print(f"  Paper length: {len(paper_content):,} chars")
+
+    client = _get_client()
+    pp = str(paper_path)
+
+    sep = "~" * 60
+
+    # Phase 1: All reviewers (parallel or sequential)
+    total_cost = 0.0
+    if parallel:
+        tasks = [
+            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
+        ]
+        if not skip_neutral:
+            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"))
+        if not skip_spark:
+            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
+        if not skip_related_work:
+            tasks.append(run_related_work_search(client, paper_content))
+
+        print("  Phase 1: All reviewers in parallel ...")
+        results_list = await asyncio.gather(*tasks)
+
+        idx = 0
+        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
+        if not skip_neutral:
+            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            spark_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = results_list[idx]; total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+    else:
+        print("  Phase 1: Reviewers sequentially ...")
+        harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
+        total_cost += c
+        if not skip_neutral:
+            neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
+            total_cost += c
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
+            total_cost += c
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = await run_related_work_search(client, paper_content)
+            total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+
+    for label, text in [("harsh_critic", harsh_review), ("neutral", neutral_review)]:
+        # print(f"\n  {sep}\n  [{label} output] ({len(text)} chars)\n  {sep}\n{text}\n")
+        if not text.strip():
+            print(f"  *** WARNING: {label} returned empty output ***")
+    # if not skip_spark:
+    #     print(f"\n  {sep}\n  [spark_finder output] ({len(spark_review)} chars)\n  {sep}\n{spark_review}\n")
+    # if not skip_related_work:
+    #     print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
+
+    # Phase 2: Merger + Score (same conversation)
+    print("  Phase 2: Merger ...")
+    final_review, score, merger_cost = await run_merger(
+        client, harsh_review, neutral_review,
+        spark_review, related_work, paper_content,
+        calibration_context=calibration_context,
+        cal_dir=cal_dir,
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
+        gt_score=gt_score
+    )
+    total_cost += merger_cost
+    score = round(float(score), 1)
+    decision = score_to_decision(score)
+    # print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
+    print(f"  [merger_score] structured score: {score}")
+    print(f"  Total cost: ${total_cost:.4f}")
+
+    return {
+        "final_review": final_review,
+        "predicted_score": score,
+        "predicted_decision": decision,
+        "cost": total_cost,
+    }
+
+
+# ── Main ──────────────────────────────────────────────────────────────
 
 
 def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
+    """Sample equally from each score bin (rounded to int)."""
+    from collections import defaultdict
     rng = random.Random(seed)
     bins = defaultdict(list)
     for p in papers:
@@ -121,6 +249,7 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     per_bin = n // n_bins
     remainder = n % n_bins
     print(f"Stratified sampling: {n_bins} bins, {per_bin} per bin (+{remainder} extra)")
+    print(f"Bins: {', '.join(f'{k}({len(bins[k])})' for k in sorted_bins)}")
     samples = []
     for i, k in enumerate(sorted_bins):
         take = per_bin + (1 if i < remainder else 0)
@@ -131,32 +260,50 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     return samples
 
 
-def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_spark=False, skip_neutral=False, balanced=False, data_dir=None, calibration_path=None):
+async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None):
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
     print("=" * 72)
     print("ICLR Benchmark: Multi-Agent Paper Reviewer")
     print(f"  Data: {bench_dir}")
+    print("  OpenRouter chat completions for all agents")
     print("=" * 72)
+    print(f"Mode: {'parallel' if parallel else 'sequential'}")
+    print(f"Sampling: {'balanced (stratified)' if balanced else 'random'}")
+    print(f"Models:")
+    print(f"  Critic/Spark/Merger:             {MODEL_HARSH}")
+    print(f"  Neutral:                         {MODEL_NEUTRAL}")
+    print(f"  Related Work:                    {MODEL_RELATED_WORK}")
 
+    # Load calibration if provided
+    calibration_context = ""
     cal_dir = ""
     calibration_ids = set()
     if calibration_path:
         cal_path = Path(calibration_path)
-        cal_candidate = cal_path.parent / "cal"
-        if cal_candidate.is_dir():
-            cal_dir = str(cal_candidate)
-            print(f"\nUsing RAG calibration: {cal_dir}")
+        # Check for cal/ directory (RAG mode) next to calibration_path
+        cal_dir_candidate = cal_path.parent / "cal"
+        if cal_dir_candidate.is_dir():
+            cal_dir = str(cal_dir_candidate)
+            print(f"\nUsing RAG calibration: {cal_dir} (Agent SDK scorer)")
+        elif cal_path.exists():
+            calibration_context = cal_path.read_text(encoding="utf-8")
+            print(f"\nLoaded calibration: {cal_path} ({len(calibration_context):,} chars)")
+        else:
+            print(f"\nWARNING: calibration file not found: {cal_path}")
+        # Load excluded IDs
         ids_path = cal_path.parent / "calibration_ids.json"
         if ids_path.exists():
             calibration_ids = set(json.load(open(ids_path)))
-            print(f"Excluding {len(calibration_ids)} calibration papers")
+            print(f"Excluding {len(calibration_ids)} calibration papers from sampling")
 
     gt_data, papers_dir = load_ground_truth(bench_dir)
+    print(f"\nLoaded {len(gt_data)} papers from ground truth.")
+
     available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
     if calibration_ids:
         available = [r for r in available if r["paper_id"] not in calibration_ids]
-    print(f"Papers with text: {len(available)}")
+    print(f"Papers with parsed text (after exclusions): {len(available)}")
 
     if balanced:
         samples = stratified_sample(available, n_samples, seed)
@@ -166,7 +313,6 @@ def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_sp
         print(f"Selected {len(samples)} papers (seed={seed}).\n")
 
     results = []
-    results_lock = threading.Lock()
     total_start = time.time()
 
     output_path = Path(__file__).parent / "bench_results.md"
@@ -174,73 +320,70 @@ def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_sp
     reviews_dir = Path(__file__).parent / "bench_reviews"
     reviews_dir.mkdir(exist_ok=True)
 
+    # Check for existing results and ask user whether to continue or overwrite
     finished_ids: set[str] = set()
     if csv_path.exists() and csv_path.stat().st_size > 0:
         import pandas as pd
         existing_df = pd.read_csv(csv_path)
-        print(f"\nFound existing bench_scores.csv with {len(existing_df)} results.")
-        choice = input("  [C]ontinue or [O]verwrite? [C/o]: ").strip().lower()
+        existing_count = len(existing_df)
+        print(f"\nFound existing bench_scores.csv with {existing_count} results.")
+        choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
         if choice in ("o", "overwrite"):
-            print("  Overwriting.\n")
+            print("  Overwriting existing results.\n")
         else:
             finished_ids = set(existing_df["paper_id"].astype(str))
-            print(f"  Skipping {len(finished_ids)} finished papers.\n")
+            print(f"  Continuing — will skip {len(finished_ids)} already-finished papers.\n")
 
     if not finished_ids:
+        # Fresh start — write headers
         with open(output_path, "w") as f:
-            f.write(f"# ICLR Benchmark Results\n\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
+            f.write(f"# ICLR Benchmark Results\n\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+            f.write(f"Critic/Merger: {MODEL_HARSH} (OpenRouter)\n")
+            f.write(f"Neutral: {MODEL_NEUTRAL}, ")
+            f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
         with open(csv_path, "w", newline="") as f:
-            csv.writer(f).writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost",
+            w = csv.writer(f)
+            w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost",
                          "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
-    CONCURRENCY = 10
-    completed = [0]
+    # Run papers concurrently (up to CONCURRENCY at a time)
+    CONCURRENCY = 3
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+    file_lock = asyncio.Lock()
+    completed = [0]  # mutable counter
 
-    queue: Queue[tuple[int, dict] | None] = Queue()
-    for i, p in enumerate(samples, 1):
-        queue.put((i, p))
-    for _ in range(CONCURRENCY):
-        queue.put(None)
+    async def process_paper(i: int, paper_info: dict):
+        pid = paper_info["paper_id"]
+        paper_path = papers_dir / f"{pid}.txt"
 
-    def worker(worker_id):
-        jitter = random.uniform(0, 60)
-        print(f"  [worker-{worker_id}] stagger wait {jitter:.1f}s ...")
-        time.sleep(jitter)
+        if pid in finished_ids:
+            print(f"  [{i}/{len(samples)}] Skipping {pid} (already finished)")
+            return
 
-        while True:
-            item = queue.get()
-            if item is None:
-                break
-            i, paper_info = item
-            pid = paper_info["paper_id"]
-            paper_path = papers_dir / f"{pid}.txt"
-
-            if pid in finished_ids:
-                print(f"  [{i}/{len(samples)}] Skipping {pid}")
-                continue
-
+        async with semaphore:
             print(f"\n{'─' * 72}")
             print(f"[{i}/{len(samples)}] Paper: {pid}")
-            print(f"  GT: {paper_info['decision']} | Avg: {paper_info['avg_score']:.1f}")
+            print(f"  GT Decision: {paper_info['decision']}  |  GT Avg Score: {paper_info['avg_score']:.1f}")
+            print(f"  GT Reviewer Scores: {paper_info['scores']}")
             print(f"{'─' * 72}")
 
-            for attempt in range(1, 4):
+            max_paper_retries = 3
+            for attempt in range(1, max_paper_retries + 1):
                 start = time.time()
                 try:
-                    review_text, _ = review_paper(
-                        str(paper_path), parallel=parallel,
-                        skip_related_work=skip_related_work, skip_spark=skip_spark,
-                        skip_neutral=skip_neutral, cal_dir=cal_dir,
-                    )
+                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, skip_neutral=skip_neutral, calibration_context=calibration_context, cal_dir=cal_dir, gt_score=paper_info["avg_score"])
                     elapsed = time.time() - start
 
-                    review_file = paper_path.parent / f"{pid}_review.md"
-                    score = _extract_score_from_review(review_file)
-                    pred_score = round(score, 1) if score is not None else None
-                    pred_dec = score_to_decision(pred_score)
-                    match = decision_match(pred_dec, paper_info["gt_binary"])
+                    pred_score = review_result["predicted_score"]
+                    pred_dec = review_result["predicted_decision"]
 
-                    print(f"  [{pid}] Score: {pred_score} | Time: {elapsed:.1f}s")
+                    match = decision_match(pred_dec, paper_info["gt_binary"])
+                    marker = "MATCH" if match is True else ("MISMATCH" if match is False else "N/A")
+
+                    print(f"\n  [{pid}] Predicted Score: {pred_score}/10  |  Predicted Decision: {pred_dec}")
+                    print(f"  [{pid}] GT Binary: {paper_info['gt_binary']}  |  Result: *** {marker} ***")
+                    print(f"  [{pid}] Time: {elapsed:.1f}s")
 
                     r = {
                         "paper_id": pid,
@@ -251,20 +394,22 @@ def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_sp
                         "predicted_score": pred_score,
                         "predicted_decision": pred_dec,
                         "match": match,
-                        "cost": 0.0,
+                        "cost": review_result.get("cost", 0.0),
                         "time_s": elapsed,
-                        "final_review": review_text,
+                        "final_review": review_result["final_review"],
                     }
-                    break
+                    break  # success, exit retry loop
+
                 except Exception as e:
                     elapsed = time.time() - start
-                    if attempt < 3:
+                    if attempt < max_paper_retries:
                         wait = 15 * attempt
-                        print(f"  [{pid}] ERROR (attempt {attempt}): {e}")
+                        print(f"\n  [{pid}] ERROR (attempt {attempt}/{max_paper_retries}): {e}")
                         print(f"  [{pid}] Retrying in {wait}s ...")
-                        time.sleep(wait)
+                        await asyncio.sleep(wait)
                     else:
-                        print(f"  [{pid}] FAILED after 3 attempts: {e}")
+                        print(f"\n  [{pid}] ERROR (attempt {attempt}/{max_paper_retries}, giving up): {e}")
+                        print(f"  [{pid}] Time: {elapsed:.1f}s")
                         r = {
                             "paper_id": pid,
                             "gt_decision": paper_info["decision"],
@@ -279,7 +424,8 @@ def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_sp
                             "final_review": f"ERROR: {e}",
                         }
 
-            with results_lock:
+            # Thread-safe file writes + results append
+            async with file_lock:
                 results.append(r)
                 completed[0] += 1
                 print(f"  [{pid}] *** Completed {completed[0]}/{len(samples)} ***")
@@ -287,30 +433,54 @@ def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_sp
                 with open(output_path, "a") as f:
                     f.write(f"## {r['paper_id']}\n\n")
                     f.write(f"- GT: {r['gt_decision']} (avg {r['gt_avg_score']:.1f})\n")
-                    f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']})\n")
-                    f.write(f"- Match: {match_label(r['match'])}\n\n---\n\n")
-                review_out = reviews_dir / f"{r['paper_id']}.md"
-                review_out.write_text(r["final_review"], encoding="utf-8")
+                    f.write(f"- Predicted: {r['predicted_decision']} ({r['predicted_score']}/10)\n")
+                    f.write(f"- Match: {match_label(r['match'])}\n\n")
+                    f.write(f"### Final Review\n\n{r['final_review']}\n\n---\n\n")
+                # Save individual review file
+                review_file = reviews_dir / f"{r['paper_id']}.md"
+                review_file.write_text(r["final_review"], encoding="utf-8")
                 with open(csv_path, "a", newline="") as f:
                     w = csv.writer(f)
                     gt_scores_padded = r["gt_scores"] + [""] * (7 - len(r["gt_scores"]))
-                    w.writerow([r["paper_id"], r["predicted_score"], r["predicted_decision"],
-                                f"{r['gt_avg_score']:.2f}", r["gt_decision"], r["gt_binary"],
-                                match_label(r["match"]), f"{r['cost']:.4f}", *gt_scores_padded])
+                    match_str = match_label(r["match"])
+                    w.writerow([
+                        r["paper_id"],
+                        r["predicted_score"],
+                        r["predicted_decision"],
+                        f"{r['gt_avg_score']:.2f}",
+                        r["gt_decision"],
+                        r["gt_binary"],
+                        match_str,
+                        f"{r['cost']:.4f}",
+                        *gt_scores_padded,
+                    ])
 
+    # Launch all papers via worker pool with staggered start
     to_run = len(samples) - len(finished_ids & {p["paper_id"] for p in samples})
-    print(f"\nRunning {to_run} papers (concurrency={CONCURRENCY})...")
+    print(f"\nRunning {to_run} papers ({len(finished_ids)} skipped) with concurrency={CONCURRENCY}...")
 
-    threads = []
-    for w in range(CONCURRENCY):
-        t = threading.Thread(target=worker, args=(w,), daemon=True)
-        t.start()
-        threads.append(t)
-    for t in threads:
-        t.join()
+    queue: asyncio.Queue[tuple[int, dict] | None] = asyncio.Queue()
+    for i, paper_info in enumerate(samples, 1):
+        queue.put_nowait((i, paper_info))
+    for _ in range(CONCURRENCY):
+        queue.put_nowait(None)  # sentinel
+
+    async def worker(worker_id: int):
+        jitter = random.uniform(0, 60)
+        print(f"  [worker-{worker_id}] stagger wait {jitter:.1f}s ...")
+        await asyncio.sleep(jitter)
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            i, paper_info = item
+            await process_paper(i, paper_info)
+
+    await asyncio.gather(*(worker(w) for w in range(CONCURRENCY)))
 
     total_elapsed = time.time() - total_start
 
+    # ── Summary ───────────────────────────────────────────────────
     print("\n" + "=" * 72)
     print("BENCHMARK RESULTS SUMMARY")
     print("=" * 72)
@@ -320,16 +490,47 @@ def main(n_samples=10, seed=42, parallel=False, skip_related_work=False, skip_sp
     matches = sum(1 for r in valid if r["match"])
     accuracy = matches / len(valid) if valid else 0
 
-    print(f"\nPapers: {len(results)} | Successful: {len(successful)}")
+    print(f"\nPapers reviewed:  {len(results)}")
+    print(f"Successful:       {len(successful)}")
+    print(f"Decision eval:    {len(valid)}")
     if valid:
-        print(f"Accuracy: {matches}/{len(valid)} = {accuracy:.1%}")
-    print(f"Time: {total_elapsed:.1f}s ({total_elapsed / max(len(results), 1):.1f}s/paper)")
+        print(f"Correct:          {matches}/{len(valid)}")
+        print(f"Accuracy:         {accuracy:.1%}")
+    else:
+        print("Correct:          N/A")
+        print("Accuracy:         N/A (decision labels disabled)")
+    total_cost = sum(r.get("cost", 0.0) for r in results)
+    print(f"Total time:       {total_elapsed:.1f}s")
+    print(f"Avg time/paper:   {total_elapsed / len(results):.1f}s")
+    print(f"Total cost:       ${total_cost:.4f}")
+    print(f"Avg cost/paper:   ${total_cost / max(len(results), 1):.4f}")
+
+    print(f"\n{'Paper ID':<20} {'GT':>10} {'Predicted':>10} {'GT Score':>10} {'Pred Score':>11} {'Match':>7}")
+    print("─" * 72)
+    for r in results:
+        gt = r["gt_binary"]
+        pred = r["predicted_decision"] or "N/A"
+        gt_sc = f"{r['gt_avg_score']:.1f}"
+        pred_sc = f"{r['predicted_score']:.1f}" if r["predicted_score"] else "N/A"
+        match_str = match_label(r["match"])
+        print(f"{r['paper_id']:<20} {gt:>10} {pred:>10} {gt_sc:>10} {pred_sc:>11} {match_str:>7}")
 
     paired = [(r["gt_avg_score"], r["predicted_score"]) for r in results if r["predicted_score"] is not None]
     if len(paired) >= 2:
-        print(f"Mean GT: {sum(p[0] for p in paired) / len(paired):.2f}")
-        print(f"Mean Pred: {sum(p[1] for p in paired) / len(paired):.2f}")
-        print(f"MAE: {sum(abs(g - p) for g, p in paired) / len(paired):.2f}")
+        gt_scores = [p[0] for p in paired]
+        pred_scores = [p[1] for p in paired]
+        mean_gt = sum(gt_scores) / len(gt_scores)
+        mean_pred = sum(pred_scores) / len(pred_scores)
+        print(f"\nMean GT Score:      {mean_gt:.2f}")
+        print(f"Mean Pred Score:    {mean_pred:.2f}")
+        print(f"Score diff (avg):   {sum(abs(g - p) for g, p in paired) / len(paired):.2f}")
+
+    # Append summary to the file
+    with open(output_path, "a") as f:
+        accuracy_str = f"{accuracy:.1%}" if valid else "N/A"
+        f.write(f"\n# Summary\n\nPapers: {len(results)} | Accuracy: {accuracy_str}\n")
+
+    print(f"\nDetailed results saved to: {output_path}")
 
     return results
 
@@ -344,12 +545,14 @@ if __name__ == "__main__":
     calibration_path = None
     if "--data-dir" in sys.argv:
         idx = sys.argv.index("--data-dir")
-        if idx + 1 < len(sys.argv): data_dir = sys.argv[idx + 1]
+        if idx + 1 < len(sys.argv):
+            data_dir = sys.argv[idx + 1]
     if "--calibration" in sys.argv:
         idx = sys.argv.index("--calibration")
-        if idx + 1 < len(sys.argv): calibration_path = sys.argv[idx + 1]
+        if idx + 1 < len(sys.argv):
+            calibration_path = sys.argv[idx + 1]
     flag_values = {data_dir, calibration_path} - {None}
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path)
+    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))

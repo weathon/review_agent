@@ -12,6 +12,65 @@ def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
 
 
+def split_half_baseline(df, gt_score_cols, n_splits=1000, seed=42):
+    """Estimate human reliability via split-half correlation (repeated random splits)."""
+    rng = np.random.default_rng(seed)
+    pearson_list, spearman_list, mae_list = [], [], []
+
+    for _ in range(n_splits):
+        half_a, half_b = [], []
+        for _, row in df.iterrows():
+            scores = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
+            if len(scores) < 2:
+                half_a.append(np.nan)
+                half_b.append(np.nan)
+                continue
+            perm = rng.permutation(len(scores))
+            mid = len(scores) // 2
+            half_a.append(np.mean([scores[i] for i in perm[:mid]]))
+            half_b.append(np.mean([scores[i] for i in perm[mid:]]))
+
+        a = np.array(half_a)
+        b = np.array(half_b)
+        mask = ~(np.isnan(a) | np.isnan(b))
+        if mask.sum() < 2:
+            continue
+        a, b = a[mask], b[mask]
+        p, _ = stats.pearsonr(a, b)
+        s, _ = stats.spearmanr(a, b)
+        m = float(np.mean(np.abs(a - b)))
+        pearson_list.append(p)
+        spearman_list.append(s)
+        mae_list.append(m)
+
+    if not pearson_list:
+        return None
+
+    # Generate one representative split for plotting (using fresh rng)
+    plot_rng = np.random.default_rng(seed)
+    plot_a, plot_b = [], []
+    for _, row in df.iterrows():
+        scores = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
+        if len(scores) < 2:
+            continue
+        perm = plot_rng.permutation(len(scores))
+        mid = len(scores) // 2
+        plot_a.append(np.mean([scores[i] for i in perm[:mid]]))
+        plot_b.append(np.mean([scores[i] for i in perm[mid:]]))
+
+    return {
+        "n_splits": n_splits,
+        "pearson_mean": float(np.mean(pearson_list)),
+        "pearson_std": float(np.std(pearson_list)),
+        "spearman_mean": float(np.mean(spearman_list)),
+        "spearman_std": float(np.std(spearman_list)),
+        "mae_mean": float(np.mean(mae_list)),
+        "mae_std": float(np.std(mae_list)),
+        "half_a": plot_a,
+        "half_b": plot_b,
+    }
+
+
 def one_vs_rest_baseline(df, gt_score_cols):
     """Estimate human reliability via leave-one-reviewer-out predictions."""
     rest_means = []
@@ -69,6 +128,7 @@ def analyze_and_plot(path):
     mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
     bias_raw = np.mean(pred - gt_avg)
     one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
+    split_half = split_half_baseline(df, gt_score_cols)
 
     # Weighted MAE: weight by inverse frequency of GT score bins
     # Bins: [0,2), [2,4), [4,6), [6,8), [8,10]
@@ -117,6 +177,12 @@ def analyze_and_plot(path):
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
+    if split_half is not None:
+        print(f"  {'─'*45}")
+        print(f"  Human split-half baseline ({split_half['n_splits']} random splits):")
+        print(f"    Spearman:            {split_half['spearman_mean']:.4f} ± {split_half['spearman_std']:.4f}")
+        print(f"    Pearson:             {split_half['pearson_mean']:.4f} ± {split_half['pearson_std']:.4f}")
+        print(f"    MAE:                 {split_half['mae_mean']:.4f} ± {split_half['mae_std']:.4f}")
     # Show bin breakdown
     print(f"  {'─'*45}")
     print(f"  Score bin weights (inverse freq):")
@@ -192,7 +258,7 @@ def analyze_and_plot(path):
     ]
 
     has_curves = auroc is not None
-    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
+    fig, axes = plt.subplots(2, 3, figsize=(21, 12))
 
     # Top-left: raw
     ax = axes[0, 0]
@@ -241,17 +307,6 @@ def analyze_and_plot(path):
             transform=ax2.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8)
         )
-    elif has_curves:
-        ax2.plot(human_fpr, human_tpr, color="#f39c12", lw=2.5,
-                 label=f"Human Avg Baseline (AUROC={human_auroc:.3f})")
-        ax2.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
-        ax2.set_xlabel("False Positive Rate", fontsize=12)
-        ax2.set_ylabel("True Positive Rate", fontsize=12)
-        ax2.set_title("ROC Curve (Human Average Score Baseline)", fontsize=13)
-        ax2.set_xlim(-0.02, 1.02); ax2.set_ylim(-0.02, 1.02)
-        ax2.set_aspect("equal")
-        ax2.grid(True, alpha=0.2)
-        ax2.legend(fontsize=9, loc="lower right")
     else:
         ax2.axis("off")
 
@@ -282,9 +337,56 @@ def analyze_and_plot(path):
         ax4.grid(True, alpha=0.2)
         ax4.legend(fontsize=9, loc="lower left")
     else:
-        axes[0, 1].axis("off")
         axes[1, 0].axis("off")
         axes[1, 1].axis("off")
+
+    # Top-right: Split-half correlation scatter with jitter
+    ax5 = axes[0, 2]
+    if split_half is not None and split_half.get("half_a"):
+        sh_a = np.array(split_half["half_a"])
+        sh_b = np.array(split_half["half_b"])
+        jitter_rng = np.random.default_rng(99)
+        sh_a_jit = sh_a + jitter_rng.uniform(-0.3, 0.3, size=len(sh_a))
+        sh_b_jit = sh_b + jitter_rng.uniform(-0.3, 0.3, size=len(sh_b))
+        ax5.scatter(sh_a_jit, sh_b_jit, color="#8e44ad", s=80, edgecolors="white", linewidth=0.8, alpha=0.85)
+        mn5, mx5 = min(sh_a.min(), sh_b.min()) - 0.5, max(sh_a.max(), sh_b.max()) + 0.5
+        ax5.plot([mn5, mx5], [mn5, mx5], "k--", alpha=0.3)
+        if len(sh_a) >= 2:
+            m5, b5 = np.polyfit(sh_a, sh_b, 1)
+            xs5 = np.linspace(mn5, mx5, 100)
+            ax5.plot(xs5, m5 * xs5 + b5, color="#2c3e50", alpha=0.7)
+        ax5.set_xlabel("Half A Mean Score", fontsize=12)
+        ax5.set_ylabel("Half B Mean Score", fontsize=12)
+        ax5.set_title("Human Split-Half Correlation", fontsize=13)
+        ax5.set_xlim(mn5, mx5); ax5.set_ylim(mn5, mx5); ax5.set_aspect("equal")
+        ax5.grid(True, alpha=0.2)
+        ax5.text(
+            0.05, 0.95,
+            f"Pearson: {split_half['pearson_mean']:.3f} ± {split_half['pearson_std']:.3f}\n"
+            f"Spearman: {split_half['spearman_mean']:.3f} ± {split_half['spearman_std']:.3f}\n"
+            f"MAE: {split_half['mae_mean']:.3f} ± {split_half['mae_std']:.3f}\n"
+            f"{split_half['n_splits']} random splits",
+            transform=ax5.transAxes, fontsize=10, va="top",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8)
+        )
+    else:
+        ax5.axis("off")
+
+    # Bottom-right: Human AUROC curve
+    ax6 = axes[1, 2]
+    if has_curves:
+        ax6.plot(human_fpr, human_tpr, color="#f39c12", lw=2.5,
+                 label=f"Human Avg (AUROC={human_auroc:.3f})")
+        ax6.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
+        ax6.set_xlabel("False Positive Rate", fontsize=12)
+        ax6.set_ylabel("True Positive Rate", fontsize=12)
+        ax6.set_title("ROC Curve (Human Average Score)", fontsize=13)
+        ax6.set_xlim(-0.02, 1.02); ax6.set_ylim(-0.02, 1.02)
+        ax6.set_aspect("equal")
+        ax6.grid(True, alpha=0.2)
+        ax6.legend(fontsize=9, loc="lower right")
+    else:
+        ax6.axis("off")
 
     plt.tight_layout()
     out = path.replace(".csv", "_scatter.png")
