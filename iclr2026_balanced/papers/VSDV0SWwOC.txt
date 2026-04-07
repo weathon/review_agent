@@ -1,0 +1,2953 @@
+# LS-MERGE: MERGING LANGUAGE MODELS IN LATENT SPACE
+
+
+**Bedionita Soro** [1] _[∗]_ **Aoxuan Silvia Zhang** [1] _[∗]_ **Bruno Andreis** [3] _[,]_ [4] _[∗]_ **Jaehyeong Jo** [1]
+
+**Song Chong** [1] **Sung Ju Hwang** [1] _[,]_ [2] _[†]_
+
+1KAIST 2DeepAuto.ai 3University of Oxford 4Slater Labs
+
+
+ABSTRACT
+
+
+Model merging in weight space is an efficient way to reuse pretrained models,
+but existing methods typically assume matching architectures or sizes, making
+heterogeneous merges brittle or infeasible. We address this limitation by encoding
+model weights into a smooth latent space, enabling cross-architecture operations,
+and performing the merge in the latent space before decoding back to weights. This
+approach faces two major challenges. First, LLMs contain billions of parameters,
+which makes latent encoding computationally demanding. Second, using high compression ratios often hinders the encoder’s ability to generalize to unseen weights.
+We tackle these issues with a transformer-based variational autoencoder (VAE)
+trained in a two-stage compression curriculum with structured layer-aware chunking: the model first learns a high-capacity latent representation and then distills to
+a compact code, improving both stability and out-of-distribution generalization. To
+align heterogeneous models, we introduce a dimensionality-matching projection
+that allows interpolation between models of different sizes. Empirically, latentspace interpolation is consistently more robust than direct weight-space averaging
+and yields stronger downstream performance when merging models of different
+sizes. Together, these components provide a scalable, architecture-agnostic recipe
+for model merging.
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) are foundational to modern artificial intelligence. However, their
+pretraining demands millions of GPU-hours, leading to a significant inefficiency if the acquired
+knowledge remains confined to a single model instance. To mitigate this cost and enhance utility,
+weight-space model merging has emerged as a promising approach. This technique combines
+parameters from multiple pretrained models to integrate complementary capabilities and improve
+performance on diverse tasks, all without additional pretraining (Yang et al., 2024).
+
+
+Existing merging methodologies range from straightforward linear interpolation (Wortsman et al.,
+2022) to sophisticated evolutionary search-based fusion (Akiba et al., 2025), consistently demonstrating practical benefits at scale. Despite these advancements, current techniques typically face two
+significant limitations: (i) Requirement for multiple source models: Most approaches necessitate
+at least two distinct pretrained models for merging, which restricts their application when the goal
+is to enhance or adapt a single existing model. (ii) Architectural homogeneity: Merging methods
+frequently assume shape-compatible or architecturally homogeneous models, hindering their use
+with mismatched architectures (e.g., varying widths or depths) (Yu et al., 2024a). These constraints
+significantly limit the broad applicability of merging across diverse LLM checkpoints as well as
+self-merging. Addressing these constraints is crucial for unlocking the full potential of pretrained
+LLM checkpoints and fostering a more flexible and efficient paradigm for model reuse.
+
+
+_∗_ Equal contribution.
+
+_†_ Correspondence to: Bedionita Soro [sorobedio@kaist.ac.kr,](mailto:sorobedio@kaist.ac.kr) Aoxuan Silvia Zhang
+aoxuan ~~s~~ ilvia ~~z~~ [hang@kaist.ac.kr,](mailto:aoxuan_silvia_zhang@kaist.ac.kr) Bruno Andreis [bruno.andreis@eng.ox.ac.uk,](mailto:bruno.andreis@eng.ox.ac.uk) Jaehyeong Jo [harryjo97@kaist.ac.kr,](mailto:harryjo97@kaist.ac.kr) Song Chong [songchong@kaist.ac.kr,](mailto:songchong@kaist.ac.kr) Sung Ju Hwang
+[sjhwang82@kaist.ac.kr.](mailto:sjhwang82@kaist.ac.kr)
+
+
+1
+
+
+Figure 1: **LS-Merge:** **encode, align, and decode for LLM weight merging.** **(a)** Pretrained weight
+tensors _x_ 1 and _x_ 2 are chunked layer-wise and encoded by _E_ 1 _, E_ 2 into latents _z_ 1 _, z_ 2; decoders _D_ 1 _, D_ 2
+reconstruct _x_ ˜1 _,_ ˜ _x_ 2. **(b)** A latent-space alignment places _z_ 1 and _z_ 2 in a shared manifold where they
+are merged(linear interpolation) yielding a merged latent _zα_, supporting both homogeneous (samearchitecture(same encoding model) and heterogeneous (cross-architecture) merges. **(c)** A target
+decoder (e.g., _D_ 1) maps _zα_ back to weights _x_ ˜ _α_, producing the merged model. Here, _xi_ denotes the
+full weight set of model _i_, _zi_ its latent code, and tildes indicate reconstructions.
+
+
+Recent advancements in weight-space learning (Sch”urholt et al., 2024; Schurholt et al.¨, 2022; Peebles
+et al., 2022; Knyazev et al., 2025) offer a compelling opportunity to overcome the aforementioned
+limitations in LLM merging. These approaches operate directly on pretrained model weights as the
+input data modality. By projecting parameters from diverse models into a smooth, unified latent space
+of consistent dimensionality, we can inherently mitigate the challenge of architectural mismatch.
+Specifically, these parameter signals can be embedded into identical-dimensionality representations
+using powerful generative models such as Variational Autoencoders (VAEs) (Kingma & Welling,
+2013), normalizing flows (Kobyzev et al., 2021), or diffusion models (Wang et al., 2025). While these
+innovative latent-space methods have demonstrated considerable success in vision and other domains,
+their application to the encoding and subsequent merging of pretrained LLM weights remains a
+largely unexplored frontier.
+
+
+We propose LS-Merge, a novel framework that fundamentally shifts the merging process from
+the raw weight space to a learned latent space. This paradigm enables both homogeneous and
+heterogeneous merging by design: (i) Enabling single-model augmentation: A generative model
+can learn the latent manifold of a single LLM parameters, facilitating ”merging” operations within
+this latent space. This allows for the exploration of variations, specializations, or the enhancement
+of capabilities derived solely from the original model, obviating the need for an external second
+model. (ii) Facilitating heterogeneous integration: By projecting diverse LLM architectures into
+a common, fixed-dimensional latent space, the stringent constraints of architectural homogeneity
+are significantly relaxed. Merging operations then occur within this unified latent representation,
+enabling the seamless integration of knowledge from models with differing widths, depths, or even
+fundamental architectural designs, as our method operates solely on the tensor data within the latent
+space. In summary, LS-Merge advances LLM merging through the following key contributions:
+
+
+    - **Weight** **statistics** **that** **matter** **for** **encoding.** We show that LLM weights exhibit low
+variance with heavy tails, that could significantly affect the choice of encoding network.
+
+
+    - **Merging** **LLMs** **in** **latent** **space.** We propose LS-Merge, a novel latent-space merging
+methodology that enables merging LLMs in their weights latent space.
+
+
+    - **Heterogeneous merging.** We introduce a dimensionality-matching projection and OT-based
+latent alignment that enables interpolation between models of different depths or widths.
+
+
+2
+
+
+- **Consistent empirical gains.** On Gemma and LLaMA pretrained models and LoRA-experts
+merging, our latent space merging method outperforms existing merging methods and
+remains robust under heterogeneity.
+
+
+2 RELATED WORK
+
+
+**Model averaging** The simplest merging approach directly averages weights. Model Soup (Wortsman
+et al., 2022) showed that averaging fine-tuned checkpoints from the same initialization improves
+generalization. Extensions include Uniform Soup (Wortsman et al., 2022) for LoRA weights and
+spherical linear interpolation (SLERP), which interpolates on the unit hypersphere but remains a
+pairwise-only method that merges only two models at a time and requires identical architectures.
+
+
+**Interference-aware techniques** Merging models from different tasks can cause misalignment. Yadav
+et al. (2023) uses trimming and sign alignment, Yu et al. (2024a) sparsifies and rescales fine-tuned
+deltas, and Yu et al. (2024b) combine both. Greedy Soup (Wortsman et al., 2022) and EvolMerge (Akiba et al., 2025) treat merging as an optimization problem, while Task Arithmetic (Ilharco et al.,
+2023) models task vectors in parameter space. These methods require aligned architectures and incur
+computational cost.
+
+
+**Modular** **assembly** Instead of merging weights, some approaches combine modules or experts.
+Model Stocks (Jang et al., 2024) and LoraHub (Huang et al., 2023) aligns LoRA adapters, Pack of
+LLMs (Mavromatis et al., 2024) learns expert routing, and cBTM (Gururangan et al., 2023) merges
+task-specific experts via unsupervised domain discovery. Modular systems are flexible but increase
+inference cost and do not unify knowledge into a single parameter set.
+
+
+All prior methods operate in weight or module space and assume architectural alignment. In contrast,
+we propose **latent-space model merging**, which generalizes beyond these constraints.
+
+
+3 LS MERGE
+
+
+We present **LS-Merge**, a framework for performing model merging _in latent space_ . As illustrated
+in Figure 1, we encode pretrained LLM weights, operate on their latent representations (including
+alignment when heterogeneous), and decode back to parameters to obtain the merged model.
+
+
+3.1 EXPLORING WEIGHT DYNAMICS IN LLMS
+
+
+To motivate our design, we analyze the distributional properties of transformer submodules in Gemma3 (Team et al., 2025) and LLaMA-3.2 (Grattafiori et al., 2024). We compute the first four moments
+(mean, variance, skewness, and kurtosis) for self-attention layers (q ~~p~~ roj, k ~~p~~ roj, and o ~~p~~ roj) and MLP
+layers (up ~~p~~ roj, down ~~p~~ roj, and gate ~~p~~ roj). Table 1 reports the statics stands for per moment with
+full details in appendix Table 9. Weights exhibit near-zero means, low variances, and small positive
+skewness, but _markedly high kurtosis_ in earlier layers, especially in self-attention projections. High
+kurtosis, i.e., leptokurtic distributions, indicates sharp peaks with heavy tails: rare, large-magnitude
+parameters that are likely functionally important. This contradicts Gaussian assumptions used in prior
+work (Si et al., 2025) and suggests that encoders must preserve tail events rather than over-regularize
+toward a narrow Gaussian. We observe this pattern consistently across sizes within both families.
+
+
+**Theoretical Compressibility of LLM Weights** As the LLM weights distribution shows heavy
+tails and low intrinsic variance, we investigate whether a simple VAE can compress LLM weights
+effectively. Let _W_ _∈_ R _[n][×][m]_ be a layer matrix and let _w_ = vecrow( _W_ ) _∈_ R _[D]_ denote the row-wise
+concatenation (flattening) of _W_ with _D_ = _nm_ . Empirically (Fig. 2), the top _r_ _≪_ min( _n, m_ )
+principal components capture nearly all variance, i.e., [�] _i_ _[r]_ =1 _[λ][i][/]_ [ �] _i_ _[D]_ =1 _[λ][i]_ _[≈]_ [1][,] [where] _[{][λ][i][}]_ [are]
+the eigenvalues of the empirical covariance of _w_ (equivalently, proportional to squared singular
+values of _W_ ). By Eckart–Young theorem (Eckart & Young, 1936), the best rank- _r_ approximation
+_Wr_ satisfies _∥W_ _−_ _Wr∥_ [2] _F_ [=] [�] _i>r_ _[λ][i]_ [and] [can] [be] [stored] [with] _[O]_ [(] _[r]_ [(] _[n]_ [+] _[m]_ [))] [parameters] [(e.g.,]
+_Ur_ _∈_ R _[n][×][r]_, _Vr_ _∈_ R _[m][×][r]_ ). Thus, weights concentrate near a low-dimensional set. Assuming the
+collection of flattened weights _W_ _⊂_ R _[D]_ concentrates near a smooth _d_ -dimensional manifold _M_ with
+_d ≪_ _D_, manifold embedding results (Bengio et al., 2012; Lahiri et al., 2016) imply the existence of
+
+
+3
+
+
+**llama3-2-3b-it** **gemma-3-1b-it** **gemma-3-4b-it**
+**layers**
+
+mean var. skew kurt. mean var. skew kurt. mean var. skew kurt.
+
+
+self ~~a~~ ttn
+
+
+0 0.0017 0.0192 8.4032 0.0002 0.0031 0.0500 15.0505 0 0.0015 0.0501 15.2010
+0 0.0013 0.0191 7.3438 0.0002 0.0030 0.0450 9.8347 0 0.0015 0.0267 7.3832
+0 0.0012 0.0178 6.2172 0.0001 0.0030 0.0389 9.0363 0 0.0014 0.0255 7.2277
+0 0.0011 0.0104 5.4477 0.0001 0.0030 0.0288 8.6496 0 0.0014 0.0172 6.0731
+
+
+avg (self attn) 0 0.0005 -0.0002 1.4342 0 0.0012 -0.0009 3.2858 0 0.0005 0.0009 2.6900
+
+
+mlp
+
+
+0 0.0005 0.0093 5.4740 0.0002 0.0010 0.0167 8.7665 0 0.0004 0.0266 6.3297
+0 0.0005 0.0080 4.1465 0.0002 0.0010 0.0090 3.1514 0 0.0004 0.0155 5.9670
+0 0.0004 0.0075 2.6694 0.0002 0.0010 0.0077 3.0577 0 0.0004 0.0130 2.7454
+0 0.0004 0.0074 2.4364 0.0002 0.0010 0.0071 3.0113 0 0.0004 0.0094 2.4371
+
+
+avg (mlp) 0 0.0003 0.0003 0.8435 0 0.0006 0 1.1739 0 0.0003 0.0006 1.0807
+
+
+Table 1: Layer-wise distribution statistics of model parameters for three instruction-tuned LLMs:
+**llama3-2-3b-it**, **gemma-3-1b-it**, and **gemma-3-4b-it** . For each model and block type (self ~~a~~ ttn
+and mlp), we report the first four moments of the flattened weight tensors: _mean_, _variance_, _skewness_,
+and _excess kurtosis_ . Per-row entries list representative layers in each block; the avg row aggregates
+across all layers for that block and model. Means are near zero and variances are small, while
+skewness and especially kurtosis (often _>_ 5 and up to _∼_ 15) indicate pronounced heavy tails and
+asymmetry. These non-Gaussian, heavy-tailed statistics motivate encoders that preserve rare but
+high-magnitude outliers.
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+Principal Component
+
+
+0.12
+
+0.10
+
+0.08
+
+0.06
+
+0.04
+
+0.02
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+Principal Component
+
+
+(a) Llama3-2-3b-it layer 0 k ~~p~~ roj
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+(b) Gemma-3-1b-it layer 0 k ~~p~~ roj
+
+
+0.07
+
+
+0.06
+
+
+0.05
+
+
+0.04
+
+
+0.03
+
+
+0.02
+
+
+0.01
+
+
+Principal Component
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+(c) Gemma-3-4b-it layer 0 k ~~p~~ roj
+
+
+Figure 2: Plots of the PCA **explained-variance ratio** for first k projection weight matrices per model
+from three LLM checkpoints: Llama-3-2-3b-it, Gemma-3-1b-it, and Gemma-3-4b-it. Additional
+results are reported in the appendix A. For each model, we show the four projection matrices of
+self-attention ( _q, k, v, o_ ). The sharp drop after the leading principal components highlights a low-rank
+structure that is consistent across architectures and model sizes.
+
+
+Φ : R _[D]_ _→_ R _[k]_ with _k_ = _O_ - _εd_ [2] [log] _[V]_ _τ_ - _≪_ _D_ that preserves pairwise distances on _M_ within (1 _± ε_ ),
+
+where _V_ bounds manifold volume and _τ_ its reach. This confirms that there exists a projection map to
+a lower dimension which can be approximated by an encoder A VAE encoder _fθ_ : R _[D]_ _→_ R _[k]_ with
+decoder _gϕ_ : R _[k]_ _→_ R _[D]_ can approximate such compressive embeddings while modeling uncertainty,
+justifying our latent compression.
+
+
+3.2 LLM WEIGHTS PREPROCESSING AND ENCODING
+
+
+We first standardize pretrained LLM weights of varying shapes and store the normalized tensors
+offline. We then learn a compact latent representation with a transformer-based VAE, chosen for its
+strong generalization to unseen checkpoints and faster training than convolutional alternatives at a
+comparable parameter count.
+
+
+**Preprocessing as a Sequence** For each layer, we flatten its weight tensor to _w_ _∈_ R _[L]_, then zeropad to _Lp_ = _⌈L/c⌉_ _c_ and partition into _n_ = _Lp/c_ non-overlapping chunks _{ci}_ _[n]_ _i_ =1 [of] [size] _[c]_ [.] [A]
+batch becomes _X_ _∈_ R _[B][×][n][×][c]_ . Each chunk is embedded to _X_ emb _∈_ R _[B][×][n][×][d]_ and passed through a
+transformer encoder _Eθ_ with optional token downsampling. The latent is
+
+
+�R _B×zd_ (pooled over tokens)
+_z_ = _Eθ_ ( _X_ emb) _∈_
+R _[B][×][n][×][z][d]_ (token-wise)
+
+
+4
+
+
+The decoder _Dϕ_ is trained to reconstruct chunked weights from the latent _z_ . We optimize the _β_ -VAE
+objective in eq. 1
+
+
+_L_ = _−_ E _qϕ_ ( _z | w_ )� log _pθ_ ( _w | z_ )� + _β_ KL( _qϕ_ ( _z | w_ ) _∥_ _p_ ( _z_ )) _,_ (1)
+
+
+with _p_ ( _z_ ) standard Gaussian and fixed _β_ .
+
+
+**Stabilizing Training on Heavy-Tailed Weights** Since LLM weights distribution has low variance
+and heavy tails (Section 3.1; Appendix 5), training VAEs on these weights can lead to collapse in the
+early training stage. We use (i) transformer blocks (Vaswani et al., 2017) in _Eθ, Dϕ_ for long-range
+coupling across chunks and (ii) a two-stage curriculum: first train a deterministic autoencoder (KL
+off) to convergence, then enable the KL term and fine-tune to structure the latent space without
+sacrificing fidelity. The VAE performance is measured by the performance of the reconstructed
+weights when used to initialize the corresponding architectures.
+
+
+3.3 LATENT SPACE ALIGNMENT AND MERGING
+
+
+**Self-Merging and Homogeneous Merging** _Self-merging_ encodes a single model and draws multiple latent codes from its posterior (or the prior) to combine them, which is equivalent to merging
+_homogeneous_ models whose per-layer embeddings share the same dimensionality. To be specific, for
+two checkpoints with weights _Wa, Wb_ _∈_ R _[N]_, we encode _za_ = _E_ ( _Wa_ ) and _zb_ = _E_ ( _Wb_ ), and linearly
+interpolate them as _zλ_ = (1 _−_ _λ_ ) _za_ + _λzb_ for _λ_ _∈_ [0 _,_ 1]. We obtain the weights by decoding the
+interpolated latent _W_ [�] _λ_ = _D_ ( _zλ_ ). Empirically, latent-domain interpolation better preserves functional
+coherence than direct weight-space mixing, and common merge operators, for example, model soup
+or task arithmetic (Wortsman et al., 2022; Ilharco et al., 2023), transfer naturally by applying them to
+_{za, zb}_ before decoding.
+
+
+**Heterogeneous** **Mapping** **(depth/width** **mismatch)**
+When two architectures match, layer by layer, in the number of weight chunks, we employ a single VAE to embed
+all layers into a common _d_ -dimensional latent space. If
+the per-layer number and chunk counts differ, we instead
+deploy separate encoders for each architecture. Let the
+source have _ns_ layers with size _M_, and the target _nt_ layers with size _N_ . We embed per-layer latents to a fixed
+dimension _d_ and rescale the source so that total capacity
+matches the target:
+
+
+_r_ = _[n][t][ N]_ _Z_ [(src, mapped)] _∈_ R _[n][t][×][d]_ _,_ _Z_ [(tgt)] _∈_ R _[n][t][×][d]_ _._
+
+_ns M_ _[,]_
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||S<br>|ource<br>|
+||||||||~~arget~~<br>Merged|
+
+
+Figure 3: Visualization of embeddings of
+Gemma models and OT-aligned latents.
+The merged latent is partially overlapped
+with the target latent.
+
+
+This proportional alignment across depth and width stan- Gemma models and OT-aligned latents.
+dardizes each architecture to a common per-layer latent The merged latent is partially overlapped
+dimensionality, enabling interpolation and the use of stan- with the target latent.
+dard merge operators. However, when VAEs are trained separately per architecture (or under different
+training regimes), their _latent distributions_ can differ, so equal shape does not guarantee comparability.
+
+
+**Optimal** **Transport** **Alignment.** While latent encoding standardizes per-layer dimensionality,
+it does not guarantee that two models’ latent representations are geometrically compatible. As
+shown in Appendix C (Figure 9a), homogeneous models (e.g., checkpoints from the same pretraining run) exhibit overlapping latent support and often satisfy _Linear Mode Connectivity_, making
+linear interpolation well-behaved. In contrast, heterogeneous models such as Gemma and Llama
+produce latent distributions _Z_ src _,_ _Z_ tgt that lie on disjoint manifolds with different covariance
+structures and density profiles (Figure. 9b). Interpolating between such misaligned latents could
+produce low performing weights that fall outside the target decoder’s valid manifold and degrade
+functionality(performance on down stream tasks). To address this, we treat heterogeneous merging as
+a _manifold registration_ problem and align the source latent distribution to the target using Optimal
+Transport (OT) (Villani, 2009; Santambrogio, 2015). OT provides a principled framework for finding
+a map _T_ : _Z_ src _→Z_ tgt that minimizes geometric distortion while reshaping one distribution into the
+
+
+5
+
+
+**Algorithm 1** Heterogeneous LLM Parameter Merging in Latent Space
+
+
+**Require:** Source weights _W_ src, target weights _W_ tgt, encoder–decoder ( _E, D_ )
+**Ensure:** Merged weights _W_ merged
+
+1: Extract per-layer groups _L_ src _, L_ tgt; set _N_ _←_ min( _|L_ src _|, |L_ tgt _|_ ) and define pairs ( _l_ src [(] _[j]_ [)] _[, l]_ tgt [(] _[j]_ [)][)] _j_ _[N]_ =1
+2: **for** _j_ = 1 to _N_ **do**
+3: Flatten & chunk _w_ src [(] _[j]_ [)] _[, w]_ tgt [(] _[j]_ [)][; encode] _[ z]_ src [(] _[j]_ [)] _[←]_ _[E]_ [(] _[w]_ src [(] _[j]_ [)][)][,] _[ z]_ tgt [(] _[j]_ [)] _[←]_ _[E]_ [(] _[w]_ tgt [(] _[j]_ [)][)]
+
+4: Proportional mapping to fixed _d_ : obtain _Z_ src [(] _[j]_ [)] _[, Z]_ tgt [(] _[j]_ [)] _[∈]_ [R] _[n][t][×][d]_
+
+5: OT alignment: _Z_ [˜] src [(] _[j]_ [)] _[←]_ [OT-A][LIGN]  - _Z_ src [(] _[j]_ [)] _[, Z]_ tgt [(] _[j]_ [)]  - (solve equation 2)
+
+6: Interpolate latents: _Zλ_ [(] _[j]_ [)] _←_ (1 _−_ _λ_ ) _Z_ tgt [(] _[j]_ [)] [+] _[ λ]_ _[Z]_ [˜] src [(] _[j]_ [)]
+
+              -               7: Decode & assemble: _w_ merged [(] _[j]_ [)] _[←]_ _[D]_ _Zλ_ [(] _[j]_ [)] ; place into _W_ merged
+8: **end for**
+9: **return** _W_ merged
+
+
+other. Formally, we solve the Monge problem under the 2-Wasserstein distance 2:
+
+
+_T_ _[∗]_ = arg min
+_T_
+
+
+_∥z −_ _T_ ( _z_ ) _∥_ [2] 2 _[dµ]_ [src][(] _[z]_ [)] s.t. _T_ # _µ_ src = _µ_ tgt _,_ (2)
+
+
+where _T_ # _µ_ src denotes the pushforward measure induced by _T_ . This ensures that applying _T_ _[∗]_ to
+source latents produces samples distributed as the target. While the general Monge problem is
+computationally intensive, it can approximate each layer’s latent distribution as a high-dimensional
+Gaussian defined by its empirical mean _µs_ and covariance Σ _s_ . Under this assumption, the optimal
+transport map admits a closed-form affine solution: _z_ ˜src = _T_ _[∗]_ ( _z_ src) = _µt_ + _A_ ( _z_ src _−_ _µs_ ) _,_ where
+
+    - �1 _/_ 2
+_A_ = Σ _[−]_ _s_ [1] _[/]_ [2] Σ [1] _s_ _[/]_ [2] Σ _t_ Σ _s_ [1] _[/]_ [2] Σ _[−]_ _s_ [1] _[/]_ [2] _._ This transformation aligns both the mean and covariance of
+the source latents to the target, effectively registering the two manifolds and removing the geometric
+mismatch. In practice, we use existing OT library from Flamary et al. (2021; 2024) in our work.
+
+
+After alignment, the transported latents _Z_ [˜] src and the target latents _Z_ tgt share a common support, and
+we perform interpolation in this aligned space: _Zλ_ [OT] = (1 _−_ _λ_ ) _Z_ tgt + _λ_ _Z_ [˜] src _._ Because _Zλ_ [OT] now
+lies within the target decoder’s valid density region (Agustsson et al., 2019), the decoded weights
+remain stable and functional, enabling robust cross-architecture merging even between disparate
+model families. The overall process for heterogeneous LLMs merging is summarized in algorithm 2.
+We extend latent-space linear merging from pairs to _N_ models (e.g., LoRA experts) via a convex
+barycenter. For each expert _Wi_, we sample latent codes _zi_ [(] _[m]_ [)] _∼_ _q_ ( _z_ _| Wi_ ). We then merge experts by
+barycentric interpolation, _z_ merged = [�] _i_ _[N]_ =1 _[λ][i][z][i][,]_ _λi_ _≥_ 0 _,_ [�] _i_ _[N]_ =1 _[λ][i]_ [= 1] _[,]_ [ and decode the unified]
+weights as _W_ [�] merged = _D_ ( _z_ merged). Uniform and Greedy Soup correspond to different choices/updates
+of _{λi}_ .
+
+
+4 EXPERIMENTS
+
+
+**General** **Setup** We evaluate latent–space merging on Gemma-3-1B-it, Gemma-3-4B-it,
+Llama-3-1B-instruct, Llama-2-7b, and benchmark latent–space expert fusion against
+weight–space merging using 10 LoRA experts on Gemma-7B-it.
+
+
+**Datasets and Tasks** We first use subset dataset used by Feng et al. (2024b), such as language understanding (MMLU (Hendrycks et al., 2021), MMLU-pro (Wang et al., 2024b)), commonsense reasoning (HellaSwag (Zellers et al., 2019)), math (GSM8k (Cobbe et al., 2021)), and knowledge-intensive
+tasks (Knowledge Crosswords (Ding et al., 2024), NLGraph (Wang et al., 2024a), TruthfulQA (Lin
+et al., 2022), AbstainQA (Feng et al., 2024a)).
+
+
+Training data consist of pretrained weight snapshots for Gemma-3-1B-it and Gemma-3-4B-it,
+plus LoRA experts from Feng et al. (2024b).
+
+
+**Baselines** We compare against reference-free weight–space methods: spherical linear interpolation
+(SLERP), uniform soup (Wortsman et al., 2022), greedy soup (Wortsman et al., 2022), data-level
+
+
+6
+
+
+MMLU MMLU-pro HellaSwag Gsm8k
+
+Gemma-3-4b-it 53.10 20.90 47.40 29.90
+VAE 54.10 _±_ 0.36 20.80 _±_ 0.20 49.03 _±_ 0.70 31.27 _±_ 0.55
+LS-Merge **54.20** _±_ **0.00** **21.02** _±_ **0.03** **50.10** _±_ **0.00** **32.20** _±_ **0.05**
+
+Gemma-3-1b-it 32.20 7.10 28.70 16.90
+VAE 32.60 _±_ 0.26 7.60 _±_ 0.56 28.57 _±_ 0.12 16.77 _±_ 0.12
+LS-Merge **35.13** _±_ **0.02** **10.30** _±_ **0.20** **31.16** _±_ **0.14** **17.50** _±_ **0.01**
+
+
+Table 2: Benchmark scores for pretrained model, VAE, and LS-Merge.
+
+
+merging, the raw pretrained checkpoints, and the best single expert per task. This excludes approaches
+that require access to an unmodified base reference model.
+
+
+**Evaluation Protocols** We evaluate compression and merging in four scenarios:
+
+
+1. **Self-Merging:** sample multiple codes from one model’s latent distribution and merge them.
+
+
+2. **Expert Merging:** merge LoRA experts in latent space vs. weight space.
+
+
+3. **Cross-Architecture Merging:** align and merge models with various depths and widths.
+
+
+4. **Ablation** **study:** reconstruction or compression behavior and generalization to unseen
+checkpoints.
+
+
+**Weight-Encoding Models** We evaluated a Transformer-VAE and a ConvNet-VAE (Soro et al., 2025).
+We used AdamW (lr = 1e _−_ 4, weight decay = 1e _−_ 5) with a cosine-to-zero schedule. The checkpoints
+are from Hugging Face, and further details are given in the supplement. The learning rate was chosen
+on the basis of hyperparameter tuning.
+
+
+4.1 SELF-MERGING FOR ENHANCED PERFORMANCE
+
+
+We investigated a self-merging technique designed to enhance a single model’s performance by
+exploring its learned latent distribution. The process involves encoding a model, sampling multiple
+latent codes from its posterior distribution, merging these codes into a single representation, and
+decoding it back into the parameter space. For this experiment, we used a single Transformer-VAE
+with six encoder and decoder blocks, trained jointly on weights from both Gemma-3-1B-it and
+Gemma-3-4B-it with the compression ratio held constant at 2. As shown in Table 2, this approach
+yields an average performance improvement of _≈_ 4% over two key baselines: the original base
+model and a standard VAE reconstruction from a single latent sample. Notably, the gains are more
+pronounced on the smaller model, consistent with it having tighter capacity constraints.
+
+
+4.2 MERGING LLM EXPERTS IN LATENT SPACE
+
+
+Next, we evaluated the primary application of our work: combining specialized LoRA experts. We
+compared our latent space approach against traditional weight-space interpolation methods using the
+experts from Feng et al. (2024b). In our method, each expert is encoded, their latent representations
+are merged, and then the resulting latent vector will be decoded into a single fused model. As shown
+in Table 3, our latent-space fusion consistently outperforms all weight-space baselines, including both
+linear and SLERP interpolation across uniform and greedy soup. We found this advantage stems from
+increased robustness. For example, greedy soup is highly sensitive to initialization, the checkpoint
+with the best validation accuracy often fails to yield the best test performance. By sampling multiple
+latent codes for each expert before merging, our method explores the learned parameter distribution
+instead of relying on a single point estimate, creating more robust and effective combinations.
+
+
+4.3 COMPARISON TO REPRESENTATION-MERGING METHODS
+
+
+To assess the robustness of our latent space approach, we benchmark it against leading representationmerging methods: Task Arithmetic (Ilharco et al., 2023) and Activation-Informed Merging (AIM) (Nobari et al., 2025), which operate on model activations rather than parameters. contrairily to the
+previous experiments, in this setting we use _lm-eval_ tool (Gao et al., 2024) for fair comparison with
+the baselines. For this comparison, we merged Llama-2-13B models fine-tuned on distinct domains, utilizing a single VAE trained on the combined weights of all constituent models. The results
+
+
+7
+
+
+MMLU MMLU-pro HellaSwag Gsm8k TruthfulQA NLGraph K-Crossword AbstainQA
+
+
+Best expert 45.7 14.3 46.6 26.1 32.4 51.7 32.7 -10.8
+Base model 48.8 18.1 53.3 6.9 30.1 47.5 28.0 -0.9
+Data Merge [*] 44.5 17.6 52.7 14.3 10.7 42.3 **37.0** -2.5
+Uniform Soup 49.7 19.4 54.0 7.9 31.2 47.5 29.6 -0.1
+SLERP(t=0.45) 52.5 18.8 50.4 25.5 28.7 49.8 30.0 -0.2
+Greedy Soup 50.8 22.1 54.6 23.9 31.9 52.9 28.0 3.3
+Dare-Ties 49.1 18.8 53.7 7.3 28.2 52.8 29.0 1.4
+
+
+LS-Merge(lerp) 54.7 21.6 58.1 **28.1** **33.0** 53.1 35.6 2.0
+LS-Merge(soup) **56.0** **22.2** **60.1** 24.2 32.0 **56.1** 35.2 **4.0**
+
+
+Table 3: Results on merging expert LoRA weights in the raw weight space and the latent space.
+
+
+Method MMLU IFEval MBPP HumanEval GSM8k
+
+base 52.18 25.10 27.80 17.07 4.20
+code 52.91 26.25 31.60 17.07 24.10
+instruct 53.41 35.67 34.80 26.83 43.40
+
+code + instruct (Task Arithmetic) 52.18 25.10 34.40 26.83 4.20
+code + instruct (AIM) 54.18 32.00 36.00 **29.27** **46.20**
+
+code + instruct (LS-merge) **55.07** **36.41** **36.02** 28.14 44.12
+
+
+Table 4: Comparison of our latent space merging (LS-merge) with Task Arithmetic and AIM on
+Llama-2-13B fine-tuned models.
+
+
+presented in Table 4 demonstrate that our method is highly competitive. It achieves performance
+comparable to the state-of-the-art AIM and substantially outperforms Task Arithmetic. This finding is
+significant, as it shows that a latent weight-space approach can match the performance of prominent
+methods that require access to model activations.
+
+
+4.4 CROSS-ARCHITECTURE MERGING
+
+
+Our latent-space approach supports merging across substantial architectural gaps. We study two
+settings: (i) _intra-family_ (different sizes within Gemma) and (ii) _cross-family_ (Gemma _↔_ LLaMA).
+
+
+**Intra-family (Gemma-3-4B-it** _→_ **Gemma-3-1B-it).** Direct latent interpolation between independently trained models is unstable (Fig. 4b). Aligning the larger model’s latents to the smaller model’s
+distribution before interpolation yields consistent gains across the mixing range. As shown in
+Fig. 4a, small injections from the source ( _λ ∈_ [0 _._ 05 _,_ 0 _._ 20]) deliver the best improvements over the
+Gemma-3-1B-it baseline.
+
+
+**Cross-family (LLaMA-3.2-1B-instruct** _→_ **Gemma-3-1B-it).** Family-level transfer is more challenging: baseline parameter/latent mixing without alignment degrades performance. Table 5 shows that
+distributionally aligned latent merging recovers and surpasses these baselines, a modest interpolation
+weight ( _λ_ = 0 _._ 1) achieves the best overall scores. The evaluation for cross family evaluation is
+performed using _lm-eval_ for simplicity and also due to some issues with llama model when using the
+previous evaluation code.
+
+
+**Takeaway.** _Matching latent dimensionality_ is insufficient for heterogeneous merges, _aligning latent_
+_distributions_ is crucial. Once aligned, a single knob _λ_ reliably controls how much capacity is injected
+from the source into the target.
+
+
+5 ABLATION STUDIES
+
+
+To better understand the properties of our method, we conduct two targeted ablation studies. In this
+section we use _lm-eval_ for evaluation unless stated.
+
+
+5.1 COMPONENT CONTRIBUTIONS IN LATENT MERGING
+
+
+We first analyze how different submodules contribute to the merged model’s performance by merging
+MLP layers only, self-attention layers only, or both jointly. The results in Table 6 show that merging
+MLP layers alone provides modest gains, while merging attention layers alone degrades performance.
+Optimal results are achieved by merging both, indicating that **MLP and self-attention parameters**
+
+
+8
+
+
+40
+
+35
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+
+40
+
+35
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+
+|No-OPT With-OPT|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|With-OPT|With-OPT|||||||||
+|With-OPT|With-OPT|||||||||
+|With-OPT||||||||||
+
+
+(a) Heterogeneous latent space merging.
+
+
+(b) Varying coefficient on MMLU.
+
+
+Figure 4: (a) Accuracy gains obtained by latent space merging of Gemma-3-4B-it with
+Gemma-3-1B-it. Bars show performance on the validation ( _val_ ) and test splits of the MMLU and
+MMLU-PRO benchmarks (b) Impact of the merging coefficient _t_ on validation and test accuracy in
+latent-space merging.
+
+
+Strategy WinoGrande ARC-C HellaSwag
+
+
+Base 56.83 42.78 49.07
+OT only 51.13 34.25 48.50
+OT + interp. **57.75** **43.34** **50.10**
+
+
+Table 5: Downstream accuracy on WinoGrande,
+ARC-Challenge, and HellaSwag for different alignment strategies with _λ_ = 0 _._ 1.
+
+
+Strategy WinoGrande ARC-C MMLU
+
+Base 56.83 42.78 40.76
+MLP 56.84 **43.89** 41.02
+Attention 56.67 40.23 39.80
+Attention + MLP **57.75** 43.34 **42.10**
+
+
+Table 6: Ablation: Merging subsets of layers.
+MLP-only outperforms on ARC-C, combining
+MLP and Attention achieves the best results.
+
+
+**encode complementary functional knowledge**, and that altering one without the other can disrupt
+learned co-adaptations.
+
+
+5.2 VAE GENERALIZATION AND THE COMPRESSION TRADE-OFF
+
+
+Next, we assess the VAE’s zero-shot generalization by training it on Gemma-3-4B-it and
+evaluating it on two unseen models: an in-family Gemma-3-1B-it and an out-of-family
+LLaMA-3.2-1B-it. Table 7 reveals a clear trade-off between compression and generalization. At
+a low compression ratio ( _r_ = 1 _._ 6), the VAE maintains strong performance on both unseen models.
+However, performance degrades substantially at higher ratios ( _r_ = 2 _,_ 4). This suggests that while
+the VAE learns transferable representations of weight structures, higher compression ratios lead to
+posterior collapse due to the fact most of the data sample are cluster aroung zero.
+
+
+5.3 LINEAR SUBSPACE VS. NON-LINEAR MANIFOLD LEARNING
+
+
+In this section we investigate the use of incremental PCA for weights encoding on gemma-3-1 b-it
+compare to VAE based en coding. Although Section 3.1 showed that LLM weight matrices exhibit
+low-rank structure, this does not imply that the space of functional parameters forms a linear subspace.
+To assess whether linear methods are sufficient, we compare our non-linear Transformer-VAE against
+PCA across compression ratios _r_ _∈{_ 1 _._ 6 _,_ 2 _._ 0 _,_ 4 _._ 0 _}_ (Table 8).
+
+
+**PCA collapses functional performance.** Across all ratios, PCA-reconstructed models regress to
+near-random accuracy on MMLU ( _≈_ 25.5% at _r_ = 1 _._ 6) and exhibit a global drop across benchmarks
+(e.g., ARC-C: 42.41% _→_ 27.65%). Notably, performance is equally poor at _r_ = 1 _._ 6 and _r_ = 4 _._ 0,
+indicating that the failure is not due to insufficient latent capacity but to a structural mismatch: the set
+of valid pretrained weights does not reside in a linear subspace.
+
+
+**VAE** **preserves** **the** **functional** **manifold.** In contrast, the LS-Merge VAE retains near-original
+accuracy at all compression levels. At _r_ = 1 _._ 6, it recovers 96% of the base model’s MMLU
+performance (39.89% vs. 41.44%) and even improves Winogrande (56.64% vs. 55.41%). Remarkably,
+VAE reconstructions remain stable at _r_ = 4 _._ 0, whereas PCA has already collapsed at _r_ = 1 _._ 6. This
+indicates that pretrained weights lie on a non-linear manifold that requires expressive encoders and
+decoders to model its curvature. Linear projections such as PCA cannot preserve the structure of the
+pretrained weight manifold and produce functionally invalid models even under mild compression.
+The VAE’s non-linear latent geometry is therefore not a stylistic preference but a geometric necessity
+for faithful reconstruction, compression, and downstream operations such as interpolation and
+merging.
+
+
+9
+
+
+Model Winogrande (5-shot) ARC-Challenge (25-shot) HellaSwag (10-shot) MMLU (5-shot)
+
+
+Gemma-3-1B-it (base) 56.83 42.78 49.07 40.76
+LLaMA-3.2-1B-it (base) 61.56 41.11 61.62 46.55
+
+
+Gemma-3-1B-it (VAE, _r_ = 1 _._ 6) 56.67 42.83 47.31 39.98
+LLaMA-3.2-1B-it (VAE, _r_ = 1 _._ 6) 61.25 41.47 60.80 46.06
+Gemma-3-1B-it (VAE, _r_ = 2) 56.67 38.23 38.88 32.22
+LLaMA-3.2-1B-it (VAE, _r_ = 2) 59.43 37.12 55.99 39.73
+Gemma-3-1B-it (VAE, _r_ = 4) 46.49 28.24 25.66 25.02
+LLaMA-3.2-1B-it (VAE, _r_ = 4) 49.20 26.28 25.70 26.76
+
+
+Table 7: Accuracy of VAE models (trained on Gemma-3-4B-it) when evaluated on
+Gemma-3-1B-it and LLaMA-3.2-1B-it. Performance remains stable for _r_ = 1 _._ 6, but deteriorates as the compression factor increases.
+
+
+Table 8: Functional Reconstruction Fidelity vs. Compression Ratio. Zero-shot accuracy comparison
+on standard benchmarks (MMLU, HellaSwag, Winogrande, ARC-C) for Gemma-3-1B-it. We
+compare our non-linear Transformer-VAE (LS-Merge) against a linear PCA baseline at compression
+ratios _r_ _∈{_ 1 _._ 6 _,_ 2 _,_ 4 _}_ . While the VAE maintains strong performance at _r_ = 1 _._ 6 and _r_ = 2,
+linear compression suffers significantly as the bottleneck tightens, validating the need for non-linear
+manifold learning.
+
+
+Method Ratio ( _r_ ) MMLU HellaSwag Winogrande ARC-C
+
+
+Gemma-3–1b-it) 1 _._ 0 _×_ 41.44 _±_ 0.00 49.05 _±_ 0.01 55.41 _±_ 0.03 42.41 _±_ 0.02
+
+
+PCA (Linear) 1 _._ 6 _×_ 25.50 _±_ 0.37 25.56 _±_ 0.04 50.12 _±_ 0.01 27.65 _±_ 0.01
+LS-Merge VAE 1 _._ 6 _×_ **39.89** _±_ 0.01 **48.57** _±_ 0.25 **56.64** _±_ 0.15 **41.64** _±_ 0.01
+
+
+PCA (Linear) 2 _._ 0 _×_ 24.12 _±_ 0.00 25.27 _±_ 0.12 46.27 _±_ 0.01 26.24 _±_ 0.32
+LS-Merge VAE 2 _._ 0 _×_ **39.80** _±_ 0.00 **49.29** _±_ 0.10 **54.14** _±_ 1.02 **42.32** _±_ 0.21
+
+
+PCA (Linear) 4 _._ 0 _×_ 24.13 _±_ 0.15 24.79 _±_ 0.23 49.57 _±_ 0.01 25.89 _±_ 0.23
+LS-Merge VAE 4 _._ 0 _×_ **39.83** _±_ 0.00 **49.30** _±_ 0.21 **56.06** _±_ 0.15 **42.75** _±_ 0.20
+
+
+6 DISCUSSION
+
+
+**Limitations** Despite its strong performance, training the weight-encoding VAE at high compression
+ratios can be challenging(mode collapse), largely due to the heavy-tailed nature of LLM weight
+distributions. Nonetheless, our merging paradigm does not strictly require a tight bottleneck; it
+remains highly effective when utilizing an overcomplete latent space, which eases optimization while
+successfully unfolding the weight manifold.
+
+
+This work opens several avenues for future research. Promising directions include developing
+more efficient, property-aware weight encoders (Navon et al., 2023; Zhou et al., 2023) to improve
+scalability. Additionally, extending our framework beyond simple merging via iterative latent
+barycentric interpolation (Akash et al., 2022; Pennec, 2017) could unlock complex uni-model
+compositions, paving the way for advanced multimodal generation.
+
+
+7 CONCLUSION
+
+
+In this work, we introduced LS-Merge, a novel framework that reimagines model merging by
+operating in a learned latent space of model parameters. By mapping weights to a continuous
+manifold and critically employing OT for principled alignment, our method successfully merges
+models with heterogeneous architectures, overcoming a fundamental limitation of prior weight-space
+techniques. Our comprehensive experiments demonstrate that this approach not only excels at
+standard expert fusion but also enables robust cross-scale and cross-family model merging for the first
+time. LS-Merge establishes a scalable and architecture-agnostic paradigm for model composition,
+paving the way for more flexible and efficient reuse of pre-trained models.
+
+
+10
+
+
+REPRODUCIBILITY STATEMENT
+
+
+To ensure reliable and reproducible results, we have provided detailed experiment settings in
+the Appendix. We plan to open-source our implementation here: [https://github.com/](https://github.com/sorobedio/ls-merge/)
+[sorobedio/ls-merge/.](https://github.com/sorobedio/ls-merge/)
+
+
+ACKNOWLEDGMENTS
+
+
+This work was supported by the Institute for Information & Communications Technology Planning
+& Evaluation (IITP) grant funded by the Korea government (MSIT) (RS-2019-II190075, Artificial
+Intelligence Graduate School Program (KAIST)); and by the National Research Foundation of Korea
+(NRF) grant funded by the Korea government (MSIT) (No. RS-2023-00256259). This research was
+also supported by a grant from the Korea Machine Learning Ledger Orchestration for Drug Discovery
+Project (K-MELLODDY), funded by the Ministry of Health & Welfare and the Ministry of Science
+and ICT, Republic of Korea (Grant No. RS-2024-00460870); and by the Institute of Information &
+Communications Technology Planning & Evaluation (IITP) under the Open RAN Education and
+Training Program (IITP-2024-RS-2024-00429088), funded by the Korea government (MSIT).
+
+
+11
+
+
+REFERENCES
+
+
+Eirikur Agustsson, Alexander Sage, Radu Timofte, and Luc Van Gool. Optimal transport maps
+for distribution preserving operations on latent spaces of generative models. In _International_
+_Conference on Learning Representations_, 2019.
+
+
+Aditya Kumar Akash, Sixu Li, and Nicolas´ Garc´ıa Trillos. Wasserstein barycenter-based model
+fusion and linear mode connectivity of neural networks, 2022. [URL https://arxiv.org/](https://arxiv.org/abs/2210.06671)
+[abs/2210.06671.](https://arxiv.org/abs/2210.06671)
+
+
+Takuya Akiba, Makoto Shing, Yujin Tang, Qi Sun, and David Ha. Evolutionary optimization
+of model merging recipes. _Nature_ _Machine_ _Intelligence_, 7(2):195–204, January 2025. ISSN
+2522-5839. doi: 10.1038/s42256-024-00975-8. URL [http://dx.doi.org/10.1038/](http://dx.doi.org/10.1038/s42256-024-00975-8)
+[s42256-024-00975-8.](http://dx.doi.org/10.1038/s42256-024-00975-8)
+
+
+Yoshua Bengio, Aaron C. Courville, and Pascal Vincent. Representation learning: A review and new
+perspectives. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 35:1798–1828,
+2012.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, Christopher Hesse, and John
+Schulman. Training verifiers to solve math word problems. _arXiv preprint arXiv:2110.14168_,
+2021.
+
+
+Wenxuan Ding, Shangbin Feng, Yuhan Liu, Zhaoxuan Tan, Vidhisha Balachandran, Tianxing He,
+and Yulia Tsvetkov. Knowledge crosswords: Geometric knowledge reasoning with large language
+models, 2024. [URL https://arxiv.org/abs/2310.01290.](https://arxiv.org/abs/2310.01290)
+
+
+Carl Eckart and G. Marion Young. The approximation of one matrix by another of lower rank.
+_Psychometrika_, 1:211–218, 1936.
+
+
+Shangbin Feng, Weijia Shi, Yike Wang, Wenxuan Ding, Vidhisha Balachandran, and Yulia Tsvetkov.
+Don’t hallucinate, abstain: Identifying LLM knowledge gaps via multi-LLM collaboration. In
+_Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume_
+_1:_ _Long Papers)_, August 2024a.
+
+
+Shangbin Feng, Zifeng Wang, Yike Wang, Sayna Ebrahimi, Hamid Palangi, Lesly Miculicich, Achin
+Kulshrestha, Nathalie Rauschmayr, Yejin Choi, Yulia Tsvetkov, Chen-Yu Lee, and Tomas Pfister.
+Model swarms: Collaborative search to adapt llm experts via swarm intelligence, 2024b. URL
+[https://arxiv.org/abs/2410.11163.](https://arxiv.org/abs/2410.11163)
+
+
+Remi Flamary, Nicolas Courty, Alexandre Gramfort, Mokhtar Z. Alaya, Aur´ elie Boisbunon, Stanislas´
+Chambon, Laetitia Chapel, Adrien Corenflos, Kilian Fatras, Nemo Fournier, Leo´ Gautheron,
+Nathalie T.H. Gayraud, Hicham Janati, Alain Rakotomamonjy, Ievgen Redko, Antoine Rolet,
+Antony Schutz, Vivien Seguy, Danica J. Sutherland, Romain Tavenard, Alexander Tong, and
+Titouan Vayer. Pot: Python optimal transport. _Journal of Machine Learning Research_, 22(78):1–8,
+2021. [URL http://jmlr.org/papers/v22/20-451.html.](http://jmlr.org/papers/v22/20-451.html)
+
+
+Remi Flamary, C´ edric Vincent-Cuaz, Nicolas Courty, Alexandre Gramfort, Oleksii Kachaiev, Huy´
+Quang Tran, Laurene David, Cl` ement Bonet, Nathan Cassereau, Th´ eo Gnassounou, Eloi Tanguy,´
+Julie Delon, Antoine Collas, Sonia Mazelet, Laetitia Chapel, Tanguy Kerdoncuff, Xizheng Yu,
+Matthew Feickert, Paul Krzakala, Tianlin Liu, and Eduardo Fernandes Montesuma. Pot python
+optimal transport (version 0.9.5), 2024. [URL https://github.com/PythonOT/POT.](https://github.com/PythonOT/POT)
+
+
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster,
+Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muennighoff,
+Chris Ociepa, Jason Phang, Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang Sutawika,
+Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. The language model evaluation
+harness, 07 2024. [URL https://zenodo.org/records/12608602.](https://zenodo.org/records/12608602)
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, Amy Yang, Angela
+Fan, Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mitra, Archie Sravankumar, Artem
+
+
+12
+
+
+Korenev, Arthur Hinsvark, Arun Rao, Aston Zhang, Aurelien Rodriguez, Austen Gregerson, Ava
+Spataru, Baptiste Roziere, Bethany Biron, Binh Tang, Bobbie Chern, Charlotte Caucheteux, Chaya
+Nayak, Chloe Bi, Chris Marra, Chris McConnell, Christian Keller, Christophe Touret, Chunyang
+Wu, Corinne Wong, Cristian Canton Ferrer, Cyrus Nikolaidis, Damien Allonsius, Daniel Song,
+Danielle Pintz, Danny Livshits, Danny Wyatt, David Esiobu, Dhruv Choudhary, Dhruv Mahajan,
+Diego Garcia-Olano, Diego Perino, Dieuwke Hupkes, Egor Lakomkin, Ehab AlBadawy, Elina
+Lobanova, Emily Dinan, Eric Michael Smith, Filip Radenovic, Francisco Guzman, Frank Zhang,´
+Gabriel Synnaeve, Gabrielle Lee, Georgia Lewis Anderson, Govind Thattai, Graeme Nail, Gregoire
+Mialon, Guan Pang, Guillem Cucurell, Hailey Nguyen, Hannah Korevaar, Hu Xu, Hugo Touvron,
+Iliyan Zarov, Imanol Arrieta Ibarra, Isabel Kloumann, Ishan Misra, Ivan Evtimov, Jack Zhang,
+Jade Copet, Jaewon Lee, Jan Geffert, Jana Vranes, Jason Park, Jay Mahadeokar, Jeet Shah, Jelmer
+van der Linde, Jennifer Billock, Jenny Hong, Jenya Lee, Jeremy Fu, Jianfeng Chi, Jianyu Huang,
+Jiawen Liu, Jie Wang, Jiecao Yu, Joanna Bitton, Joe Spisak, Jongsoo Park, Joseph Rocca, Joshua
+Johnstun, Joshua Saxe, Junteng Jia, Kalyan Vasuden Alwala, Karthik Prasad, Kartikeya Upasani,
+Kate Plawiak, Ke Li, Kenneth Heafield, Kevin Stone, Khalid El-Arini, Krithika Iyer, Kshitiz
+Malik, Kuenley Chiu, Kunal Bhalla, Kushal Lakhotia, Lauren Rantala-Yeary, Laurens van der
+Maaten, Lawrence Chen, Liang Tan, Liz Jenkins, Louis Martin, Lovish Madaan, Lubo Malo,
+Lukas Blecher, Lukas Landzaat, Luke de Oliveira, Madeline Muzzi, Mahesh Pasupuleti, Mannat
+Singh, Manohar Paluri, Marcin Kardas, Maria Tsimpoukelli, Mathew Oldham, Mathieu Rita, Maya
+Pavlova, Melanie Kambadur, Mike Lewis, Min Si, Mitesh Kumar Singh, Mona Hassan, Naman
+Goyal, Narjes Torabi, Nikolay Bashlykov, Nikolay Bogoychev, Niladri Chatterji, Ning Zhang,
+Olivier Duchenne, Onur C¸ elebi, Patrick Alrassy, Pengchuan Zhang, Pengwei Li, Petar Vasic,
+Peter Weng, Prajjwal Bhargava, Pratik Dubal, Praveen Krishnan, Punit Singh Koura, Puxin Xu,
+Qing He, Qingxiao Dong, Ragavan Srinivasan, Raj Ganapathy, Ramon Calderer, Ricardo Silveira
+Cabral, Robert Stojnic, Roberta Raileanu, Rohan Maheswari, Rohit Girdhar, Rohit Patel, Romain
+Sauvestre, Ronnie Polidoro, Roshan Sumbaly, Ross Taylor, Ruan Silva, Rui Hou, Rui Wang, Saghar
+Hosseini, Sahana Chennabasappa, Sanjay Singh, Sean Bell, Seohyun Sonia Kim, Sergey Edunov,
+Shaoliang Nie, Sharan Narang, Sharath Raparthy, Sheng Shen, Shengye Wan, Shruti Bhosale,
+Shun Zhang, Simon Vandenhende, Soumya Batra, Spencer Whitman, Sten Sootla, Stephane
+Collot, Suchin Gururangan, Sydney Borodinsky, Tamar Herman, Tara Fowler, Tarek Sheasha,
+Thomas Georgiou, Thomas Scialom, Tobias Speckbacher, Todor Mihaylov, Tong Xiao, Ujjwal
+Karn, Vedanuj Goswami, Vibhor Gupta, Vignesh Ramanathan, Viktor Kerkez, Vincent Gonguet,
+Virginie Do, Vish Vogeti, V´ıtor Albiero, Vladan Petrovic, Weiwei Chu, Wenhan Xiong, Wenyin
+Fu, Whitney Meers, Xavier Martinet, Xiaodong Wang, Xiaofang Wang, Xiaoqing Ellen Tan, Xide
+Xia, Xinfeng Xie, Xuchao Jia, Xuewei Wang, Yaelle Goldschlag, Yashesh Gaur, Yasmine Babaei,
+Yi Wen, Yiwen Song, Yuchen Zhang, Yue Li, Yuning Mao, Zacharie Delpierre Coudert, Zheng Yan,
+Zhengxing Chen, Zoe Papakipos, Aaditya Singh, Aayushi Srivastava, Abha Jain, Adam Kelsey,
+Adam Shajnfeld, Adithya Gangidi, Adolfo Victoria, Ahuva Goldstand, Ajay Menon, Ajay Sharma,
+Alex Boesenberg, Alexei Baevski, Allie Feinstein, Amanda Kallet, Amit Sangani, Amos Teo,
+Anam Yunus, Andrei Lupu, Andres Alvarado, Andrew Caples, Andrew Gu, Andrew Ho, Andrew
+Poulton, Andrew Ryan, Ankit Ramchandani, Annie Dong, Annie Franco, Anuj Goyal, Aparajita
+Saraf, Arkabandhu Chowdhury, Ashley Gabriel, Ashwin Bharambe, Assaf Eisenman, Azadeh
+Yazdan, Beau James, Ben Maurer, Benjamin Leonhardi, Bernie Huang, Beth Loyd, Beto De Paola,
+Bhargavi Paranjape, Bing Liu, Bo Wu, Boyu Ni, Braden Hancock, Bram Wasti, Brandon Spence,
+Brani Stojkovic, Brian Gamido, Britt Montalvo, Carl Parker, Carly Burton, Catalina Mejia, Ce Liu,
+Changhan Wang, Changkyu Kim, Chao Zhou, Chester Hu, Ching-Hsiang Chu, Chris Cai, Chris
+Tindal, Christoph Feichtenhofer, Cynthia Gao, Damon Civin, Dana Beaty, Daniel Kreymer, Daniel
+Li, David Adkins, David Xu, Davide Testuggine, Delia David, Devi Parikh, Diana Liskovich,
+Didem Foss, Dingkang Wang, Duc Le, Dustin Holland, Edward Dowling, Eissa Jamil, Elaine
+Montgomery, Eleonora Presani, Emily Hahn, Emily Wood, Eric-Tuan Le, Erik Brinkman, Esteban
+Arcaute, Evan Dunbar, Evan Smothers, Fei Sun, Felix Kreuk, Feng Tian, Filippos Kokkinos, Firat
+Ozgenel, Francesco Caggioni, Frank Kanayet, Frank Seide, Gabriela Medina Florez, Gabriella
+Schwarz, Gada Badeer, Georgia Swee, Gil Halpern, Grant Herman, Grigory Sizov, Guangyi, Zhang,
+Guna Lakshminarayanan, Hakan Inan, Hamid Shojanazeri, Han Zou, Hannah Wang, Hanwen Zha,
+Haroun Habeeb, Harrison Rudolph, Helen Suk, Henry Aspegren, Hunter Goldman, Hongyuan
+Zhan, Ibrahim Damlaj, Igor Molybog, Igor Tufanov, Ilias Leontiadis, Irina-Elena Veliche, Itai
+Gat, Jake Weissman, James Geboski, James Kohli, Janice Lam, Japhet Asher, Jean-Baptiste Gaya,
+Jeff Marcus, Jeff Tang, Jennifer Chan, Jenny Zhen, Jeremy Reizenstein, Jeremy Teboul, Jessica
+Zhong, Jian Jin, Jingyi Yang, Joe Cummings, Jon Carvill, Jon Shepard, Jonathan McPhie, Jonathan
+
+
+13
+
+
+Torres, Josh Ginsburg, Junjie Wang, Kai Wu, Kam Hou U, Karan Saxena, Kartikay Khandelwal,
+Katayoun Zand, Kathy Matosich, Kaushik Veeraraghavan, Kelly Michelena, Keqian Li, Kiran
+Jagadeesh, Kun Huang, Kunal Chawla, Kyle Huang, Lailin Chen, Lakshya Garg, Lavender A,
+Leandro Silva, Lee Bell, Lei Zhang, Liangpeng Guo, Licheng Yu, Liron Moshkovich, Luca
+Wehrstedt, Madian Khabsa, Manav Avalani, Manish Bhatt, Martynas Mankus, Matan Hasson,
+Matthew Lennie, Matthias Reso, Maxim Groshev, Maxim Naumov, Maya Lathi, Meghan Keneally,
+Miao Liu, Michael L. Seltzer, Michal Valko, Michelle Restrepo, Mihir Patel, Mik Vyatskov,
+Mikayel Samvelyan, Mike Clark, Mike Macey, Mike Wang, Miquel Jubert Hermoso, Mo Metanat,
+Mohammad Rastegari, Munish Bansal, Nandhini Santhanam, Natascha Parks, Natasha White,
+Navyata Bawa, Nayan Singhal, Nick Egebo, Nicolas Usunier, Nikhil Mehta, Nikolay Pavlovich
+Laptev, Ning Dong, Norman Cheng, Oleg Chernoguz, Olivia Hart, Omkar Salpekar, Ozlem
+Kalinli, Parkin Kent, Parth Parekh, Paul Saab, Pavan Balaji, Pedro Rittner, Philip Bontrager,
+Pierre Roux, Piotr Dollar, Polina Zvyagina, Prashant Ratanchandani, Pritish Yuvraj, Qian Liang,
+Rachad Alao, Rachel Rodriguez, Rafi Ayub, Raghotham Murthy, Raghu Nayani, Rahul Mitra,
+Rangaprabhu Parthasarathy, Raymond Li, Rebekkah Hogan, Robin Battey, Rocky Wang, Russ
+Howes, Ruty Rinott, Sachin Mehta, Sachin Siby, Sai Jayesh Bondu, Samyak Datta, Sara Chugh,
+Sara Hunt, Sargun Dhillon, Sasha Sidorov, Satadru Pan, Saurabh Mahajan, Saurabh Verma, Seiji
+Yamamoto, Sharadh Ramaswamy, Shaun Lindsay, Shaun Lindsay, Sheng Feng, Shenghao Lin,
+Shengxin Cindy Zha, Shishir Patil, Shiva Shankar, Shuqiang Zhang, Shuqiang Zhang, Sinong Wang,
+Sneha Agarwal, Soji Sajuyigbe, Soumith Chintala, Stephanie Max, Stephen Chen, Steve Kehoe,
+Steve Satterfield, Sudarshan Govindaprasad, Sumit Gupta, Summer Deng, Sungmin Cho, Sunny
+Virk, Suraj Subramanian, Sy Choudhury, Sydney Goldman, Tal Remez, Tamar Glaser, Tamara
+Best, Thilo Koehler, Thomas Robinson, Tianhe Li, Tianjun Zhang, Tim Matthews, Timothy Chou,
+Tzook Shaked, Varun Vontimitta, Victoria Ajayi, Victoria Montanez, Vijai Mohan, Vinay Satish
+Kumar, Vishal Mangla, Vlad Ionescu, Vlad Poenaru, Vlad Tiberiu Mihailescu, Vladimir Ivanov,
+Wei Li, Wenchen Wang, Wenwen Jiang, Wes Bouaziz, Will Constable, Xiaocheng Tang, Xiaojian
+Wu, Xiaolan Wang, Xilun Wu, Xinbo Gao, Yaniv Kleinman, Yanjun Chen, Ye Hu, Ye Jia, Ye Qi,
+Yenda Li, Yilin Zhang, Ying Zhang, Yossi Adi, Youngjin Nam, Yu, Wang, Yu Zhao, Yuchen Hao,
+Yundi Qian, Yunlu Li, Yuzi He, Zach Rait, Zachary DeVito, Zef Rosnbrick, Zhaoduo Wen, Zhenyu
+Yang, Zhiwei Zhao, and Zhiyu Ma. The llama 3 herd of models, 2024.
+
+
+Suchin Gururangan, Margaret Li, Mike Lewis, Weijia Shi, Tim Althoff, Noah A. Smith, and Luke
+Zettlemoyer. Scaling expert language models with unsupervised domain discovery. _arXiv preprint_
+_arXiv:2303.14177_, 2023.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob
+Steinhardt. Measuring massive multitask language understanding. _Proceedings of the International_
+_Conference on Learning Representations (ICLR)_, 2021.
+
+
+Chengsong Huang, Qian Liu, Bill Yuchen Lin, Tianyu Pang, Chao Du, and Min Lin. Lorahub:
+Efficient cross-task generalization via dynamic lora composition, 2023.
+
+
+Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Ludwig Schmidt, Hannaneh Hajishirzi,
+and Ali Farhadi. Editing models with task arithmetic. In _The_ _Eleventh_ _International_ _Confer-_
+_ence on Learning Representations_, 2023. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=6t0Kwf8-jrj)
+[6t0Kwf8-jrj.](https://openreview.net/forum?id=6t0Kwf8-jrj)
+
+
+Dong-Hwan Jang, Sangdoo Yun, and Dongyoon Han. Model stock: All we need is just a few
+fine-tuned models. In _Proceedings of the European Conference on Computer Vision_, 2024.
+
+
+Diederik P. Kingma and Max Welling. Auto-encoding variational bayes. _CoRR_, abs/1312.6114, 2013.
+[URL https://api.semanticscholar.org/CorpusID:216078090.](https://api.semanticscholar.org/CorpusID:216078090)
+
+
+Boris Knyazev, Abhinav Moudgil, Guillaume Lajoie, Eugene Belilovsky, and Simon Lacoste-Julien.
+Accelerating training with neuron interaction and nowcasting networks. In _The Thirteenth Inter-_
+_national Conference on Learning Representations_, 2025. [URL https://openreview.net/](https://openreview.net/forum?id=cUFIil6hEG)
+[forum?id=cUFIil6hEG.](https://openreview.net/forum?id=cUFIil6hEG)
+
+
+Ivan Kobyzev, Simon J.D. Prince, and Marcus A. Brubaker. Normalizing flows: An introduction and
+review of current methods. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 43
+(11):3964–3979, 2021. doi: 10.1109/TPAMI.2020.2992934.
+
+
+14
+
+
+Subhaneil Lahiri, Peiran Gao, and Surya Ganguli. Random projections of random manifolds, 2016.
+[URL https://arxiv.org/abs/1607.04331.](https://arxiv.org/abs/1607.04331)
+
+
+Stephanie Lin, Jacob Hilton, and Owain Evans. Truthfulqa: Measuring how models mimic human
+falsehoods, 2022. [URL https://arxiv.org/abs/2109.07958.](https://arxiv.org/abs/2109.07958)
+
+
+Costas Mavromatis, Petros Karypis, and George Karypis. Pack of llms: Model fusion at
+test-time via perplexity optimization. _ArXiv_, abs/2404.11531, 2024. URL [https://api.](https://api.semanticscholar.org/CorpusID:269188153)
+[semanticscholar.org/CorpusID:269188153.](https://api.semanticscholar.org/CorpusID:269188153)
+
+
+Aviv Navon, Aviv Shamsian, Idan Achituve, Ethan Fetaya, Gal Chechik, and Haggai Maron. Equivariant architectures for learning in deep weight spaces. _arXiv preprint arXiv:2301.12780_, 2023.
+
+
+Amin Heyrani Nobari, Kaveh Alimohammadi, Ali ArjomandBigdeli, Akash Srivastava, Faez Ahmed,
+and Navid Azizan. Activation-informed merging of large language models, 2025. [URL https:](https://arxiv.org/abs/2502.02421)
+[//arxiv.org/abs/2502.02421.](https://arxiv.org/abs/2502.02421)
+
+
+William Peebles, Ilija Radosavovic, Tim Brooks, Alexei A. Efros, and Jitendra Malik. Learning
+to learn with generative models of neural network checkpoints, 2022. [URL https://arxiv.](https://arxiv.org/abs/2209.12892)
+[org/abs/2209.12892.](https://arxiv.org/abs/2209.12892)
+
+
+Xavier Pennec. Barycentric subspace analysis on manifolds, 2017. [URL https://arxiv.org/](https://arxiv.org/abs/1607.02833)
+[abs/1607.02833.](https://arxiv.org/abs/1607.02833)
+
+
+Filippo Santambrogio. _Optimal Transport for Applied Mathematicians: Calculus of Variations, PDEs,_
+_and Modeling_, volume 87 of _Progress in Nonlinear Differential Equations and Their Applications_ .
+Birkh¨auser, 2015.
+
+
+Konstantin Schurholt, Boris Knyazev, Xavier Gir¨ - i Nieto, and Damian Borth.´ Hyper-representations
+as generative models: Sampling unseen neural network weights. In Alice H. Oh, Alekh Agarwal,
+Danielle Belgrave, and Kyunghyun Cho (eds.), _Advances in Neural Information Processing Systems_,
+2022. [URL https://openreview.net/forum?id=uyEYNg2HHFQ.](https://openreview.net/forum?id=uyEYNg2HHFQ)
+
+
+Konstantin Sch”urholt, Michael W. Mahoney, and Damian Borth. Towards scalable and versatile
+weight space learning. In _Proceedings of the 41st International Conference on Machine Learning_
+_(ICML)_, 2024.
+
+
+Chongjie Si, Jingjing Jiang, and Wei Shen. Unveiling the mystery of weight in large foundation
+models: Gaussian distribution never fades, 2025.
+
+
+Bedionita Soro, Bruno Andreis, Hayeon Lee, Wonyong Jeong, Song Chong, Frank Hutter, and Sung Ju
+Hwang. Diffusion-based neural network weights generation. In _The_ _Thirteenth_ _International_
+_Conference on Learning Representations_, 2025.
+
+
+Gemma Team, Aishwarya Kamath, Johan Ferret, Shreya Pathak, Nino Vieillard, Ramona Merhej,
+Sarah Perrin, Tatiana Matejovicova, Alexandre Rame, Morgane Rivi´ ere, Louis Rouillard, Thomas`
+Mesnard, Geoffrey Cideron, Jean bastien Grill, Sabela Ramos, Edouard Yvinec, Michelle Casbon,
+Etienne Pot, Ivo Penchev, Gael Liu, Francesco Visin, Kathleen Kenealy, Lucas Beyer, Xiaohai¨
+Zhai, Anton Tsitsulin, Robert Busa-Fekete, Alex Feng, Noveen Sachdeva, Benjamin Coleman,
+Yi Gao, Basil Mustafa, Iain Barr, Emilio Parisotto, David Tian, Matan Eyal, Colin Cherry, JanThorsten Peter, Danila Sinopalnikov, Surya Bhupatiraju, Rishabh Agarwal, Mehran Kazemi,
+Dan Malkin, Ravin Kumar, David Vilar, Idan Brusilovsky, Jiaming Luo, Andreas Steiner, Abe
+Friesen, Abhanshu Sharma, Abheesht Sharma, Adi Mayrav Gilady, Adrian Goedeckemeyer, Alaa
+Saade, Alex Feng, Alexander Kolesnikov, Alexei Bendebury, Alvin Abdagic, Amit Vadi, Andras´
+Gyorgy, Andr¨ e Susano Pinto, Anil Das, Ankur Bapna, Antoine Miech, Antoine Yang, Antonia´
+Paterson, Ashish Shenoy, Ayan Chakrabarti, Bilal Piot, Bo Wu, Bobak Shahriari, Bryce Petrini,
+Charlie Chen, Charline Le Lan, Christopher A. Choquette-Choo, CJ Carey, Cormac Brick, Daniel
+Deutsch, Danielle Eisenbud, Dee Cattle, Derek Cheng, Dimitris Paparas, Divyashree Shivakumar
+Sreepathihalli, Doug Reid, Dustin Tran, Dustin Zelle, Eric Noland, Erwin Huizenga, Eugene
+Kharitonov, Frederick Liu, Gagik Amirkhanyan, Glenn Cameron, Hadi Hashemi, Hanna KlimczakPlucinska, Harman Singh, Harsh Mehta, Harshal Tushar Lehri, Hussein Hazimeh, Ian Ballantyne,´
+Idan Szpektor, Ivan Nardini, Jean Pouget-Abadie, Jetha Chan, Joe Stanton, John Wieting, Jonathan
+
+
+15
+
+
+Lai, Jordi Orbay, Joseph Fernandez, Josh Newlan, Ju yeong Ji, Jyotinder Singh, Kat Black, Kathy
+Yu, Kevin Hui, Kiran Vodrahalli, Klaus Greff, Linhai Qiu, Marcella Valentine, Marina Coelho,
+Marvin Ritter, Matt Hoffman, Matthew Watson, Mayank Chaturvedi, Michael Moynihan, Min Ma,
+Nabila Babar, Natasha Noy, Nathan Byrd, Nick Roy, Nikola Momchev, Nilay Chauhan, Noveen
+Sachdeva, Oskar Bunyan, Pankil Botarda, Paul Caron, Paul Kishan Rubenstein, Phil Culliton,
+Philipp Schmid, Pier Giuseppe Sessa, Pingmei Xu, Piotr Stanczyk, Pouya Tafti, Rakesh Shivanna,
+Renjie Wu, Renke Pan, Reza Rokni, Rob Willoughby, Rohith Vallu, Ryan Mullins, Sammy Jerome,
+Sara Smoot, Sertan Girgin, Shariq Iqbal, Shashir Reddy, Shruti Sheth, Siim Poder, Sijal Bhatnagar,˜
+Sindhu Raghuram Panyam, Sivan Eiger, Susan Zhang, Tianqi Liu, Trevor Yacovone, Tyler Liechty,
+Uday Kalra, Utku Evci, Vedant Misra, Vincent Roseberry, Vlad Feinberg, Vlad Kolesnikov,
+Woohyun Han, Woosuk Kwon, Xi Chen, Yinlam Chow, Yuvein Zhu, Zichuan Wei, Zoltan Egyed,
+Victor Cotruta, Minh Giang, Phoebe Kirk, Anand Rao, Kat Black, Nabila Babar, Jessica Lo,
+Erica Moreira, Luiz Gustavo Martins, Omar Sanseviero, Lucas Gonzalez, Zach Gleicher, Tris
+Warkentin, Vahab Mirrokni, Evan Senter, Eli Collins, Joelle Barral, Zoubin Ghahramani, Raia
+Hadsell, Yossi Matias, D. Sculley, Slav Petrov, Noah Fiedel, Noam Shazeer, Oriol Vinyals, Jeff
+Dean, Demis Hassabis, Koray Kavukcuoglu, Clement Farabet, Elena Buchatskaya, Jean-Baptiste
+Alayrac, Rohan Anil, Dmitry, Lepikhin, Sebastian Borgeaud, Olivier Bachem, Armand Joulin,
+Alek Andreev, Cassidy Hardin, Robert Dadashi, and Leonard Hussenot.´ Gemma 3 technical report,
+2025.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Ł ukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. In I. Guyon, U. Von Luxburg, S. Bengio,
+H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (eds.), _Advances in Neural Information_
+_Processing Systems_, volume 30. Curran Associates, Inc., 2017.
+
+
+Cedric Villani.´ _Optimal Transport:_ _Old and New_, volume 338 of _Grundlehren der mathematischen_
+_Wissenschaften_ . Springer, 2009.
+
+
+Heng Wang, Shangbin Feng, Tianxing He, Zhaoxuan Tan, Xiaochuang Han, and Yulia Tsvetkov. Can
+language models solve graph problems in natural language?, 2024a. [URL https://arxiv.](https://arxiv.org/abs/2305.10037)
+[org/abs/2305.10037.](https://arxiv.org/abs/2305.10037)
+
+
+Kai Wang, Dongwen Tang, Wangbo Zhao, Konstantin Schurholt, Zhangyang Wang, and Yang You.¨
+Recurrent diffusion for large-scale parameter generation, 2025.
+
+
+Yubo Wang, Xueguang Ma, Ge Zhang, Yuansheng Ni, Abhranil Chandra, Shiguang Guo, Weiming
+Ren, Aaran Arulraj, Xuan He, Ziyan Jiang, et al. Mmlu-pro: A more robust and challenging
+multi-task language understanding benchmark. _arXiv preprint arXiv:2406.01574_, 2024b.
+
+
+Mitchell Wortsman, Gabriel Ilharco, Samir Ya Gadre, Rebecca Roelofs, Raphael Gontijo-Lopes,
+Ari S Morcos, Hongseok Namkoong, Ali Farhadi, Yair Carmon, Simon Kornblith, and Ludwig
+Schmidt. Model soups: averaging weights of multiple fine-tuned models improves accuracy
+without increasing inference time. In _Proceedings_ _of_ _the_ _39th_ _International_ _Conference_ _on_
+_Machine Learning_, pp. 23965–23998, 2022.
+
+
+Prateek Yadav, Derek Tam, Leshem Choshen, Colin Raffel, and Mohit Bansal. TIES-merging:
+Resolving interference when merging models. In _Thirty-seventh Conference on Neural Information_
+_Processing Systems_, 2023. [URL https://openreview.net/forum?id=xtaX3WyCj1.](https://openreview.net/forum?id=xtaX3WyCj1)
+
+
+Enneng Yang, Li Shen, Guibing Guo, Xingwei Wang, Xiaochun Cao, Jie Zhang, and Dacheng Tao.
+Model merging in llms, mllms, and beyond: Methods, theories, applications and opportunities,
+2024.
+
+
+Le Yu, Bowen Yu, Haiyang Yu, Fei Huang, and Yongbin Li. Language models are super mario: absorbing abilities from homologous models as a free lunch. In _Proceedings of the 41st International_
+_Conference on Machine Learning_, ICML’24. JMLR.org, 2024a.
+
+
+Le Yu, Bowen Yu, Haiyang Yu, Fei Huang, and Yongbin Li. Language models are super mario:
+Absorbing abilities from homologous models as a free lunch. In _International_ _Conference_ _on_
+_Machine Learning_, 2024b.
+
+
+Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine
+really finish your sentence?, 2019. [URL https://arxiv.org/abs/1905.07830.](https://arxiv.org/abs/1905.07830)
+
+
+16
+
+
+Allan Zhou, Kaien Yang, Kaylee Burns, Adriano Cardace, Yiding Jiang, Samuel Sokota, J Zico Kolter,
+and Chelsea Finn. Permutation equivariant neural functionals. In _Thirty-seventh Conference on_
+_Neural Information Processing Systems_, 2023. [URL https://openreview.net/forum?](https://openreview.net/forum?id=fmYmXNPmhv)
+[id=fmYmXNPmhv.](https://openreview.net/forum?id=fmYmXNPmhv)
+
+
+A APPENDIX
+
+
+IMPACT STATEMENT
+
+
+We introduce a VAE-based latent-space merging technique for pretrained LLMs that encodes weights
+into compact codes, blends them, and decoding new high-performance parameters. This enables
+fast, compute-efficient model customization and smooth interpolation across architectures. However,
+blending latent codes can unintentionally merge biases or toxic behaviors, obscure the origin of
+capabilities, and be misused to graft malicious functionality. We advocate for rigorous bias /
+toxicity audits, transparent provenance tracking, and clear reporting guidelines to ensure responsible
+deployment.
+
+
+A EXTENDED DISTRIBUTION ANALYSIS
+
+
+Section 3.1 characterized layerwise weight statistics to inform encoding and merging. Here we extend
+that analysis with (i) complete per-layer distribution plots, including all _MLP_ layers for GEMMA-31B-IT, GEMMA-3-4B-IT, and LLAMA-3.2-3B-INSTRUCT, and (ii) cumulative variance–explained
+curves from PCA on those MLP layers.
+
+
+A.1 DATA AND PROCEDURE
+
+
+**Models.** GEMMA-3-1B-IT, GEMMA-3-4B-IT, LLAMA-3.2-3B-INSTRUCT, plus the main-paper
+models.
+
+
+**Layer selection.** For each transformer block, we analyze _self-attention_ (Q/K/V/O projections) and
+_MLP_ (up/gate/down) weight matrices independently.
+
+
+**Preprocessing.** Unless noted, statistics are computed on raw matrix entries. For PCA, matrices are
+mean-centered and the spectrum is computed over flattened rows; we report cumulative variance
+explained. We use _excess kurtosis_ (Fisher convention) so a Gaussian has _κ_ ex=0:
+
+_κ_ ex = [E][[(] _[W]_ _[−]_ _[µ]_ [)][4][]] _−_ 3 _._
+
+_σ_ [4]
+
+Means and variances are standard sample estimates; skewness uses the unbiased estimator.
+
+
+**Aggregation.** We report per-layer curves and layer-type aggregates (self-attention vs. MLP). Family
+summaries first average across layers within a model, then across models in the same family.
+
+
+A.2 COMPLETE PLOTS
+
+
+Figure 5 shows layerwise distribution plots (self-attention and MLP). Figure 6 reports cumulative
+PCA variance for all MLP layers (attention spectra are in the main text).
+
+
+A.3 FINDINGS AND IMPLICATIONS
+
+
+**Self-attention layers exhibit heavier tails in Gemma.** In self-attention projections (Fig. 7a, Table 9),
+GEMMA-3-1B-IT and GEMMA-3-4B-IT show pronounced positive excess kurtosis with depthlocalized peaks, indicating heavy tails and more extreme outliers. LLAMA models track closely
+across scales, suggesting family-level statistical stability.
+
+
+**MLP** **layers** **are** **more** **stable** **and** **closer** **to** **Gaussian.** Across models (Fig. 7b, Table 9), MLP
+projections are near-Gaussian with excess kurtosis typically in [0 _,_ 2] and fewer depth-dependent spikes.
+Their PCA spectra (Fig. 6) decay faster than attention, indicating lower intrinsic dimensionality.
+
+
+17
+
+
+model.layers.0.self_attn.k_proj.weight
+
+
+0.3 0.2 0.1 Weight Value0.0 0.1 0.2
+
+model.layers.0.self_attn.o_proj.weight
+
+
+0.10 0.05 Weight Value0.00 0.05 0.10
+
+
+model.layers.0.self_attn.k_proj.weight
+
+
+0.3 0.2 0.1 Weight Value0.0 0.1 0.2
+
+model.layers.0.self_attn.o_proj.weight
+
+
+0.20 0.15 0.10 0.05Weight Value0.00 0.05 0.10 0.15
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+model.layers.0.self_attn.k_proj.weight
+
+
+1.00 0.75 0.50 0.25Weight Value0.00 0.25 0.50 0.75
+
+model.layers.0.self_attn.o_proj.weight
+
+
+0.4 0.2 Weight Value0.0 0.2 0.4
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+model.layers.0.self_attn.q_proj.weight
+
+
+0.3 0.2 0.1 Weight Value0.0 0.1 0.2 0.3
+
+model.layers.0.self_attn.v_proj.weight
+
+
+0.15 0.10 0.05Weight Value0.00 0.05 0.10 0.15
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+model.layers.0.self_attn.q_proj.weight
+
+
+1.00 0.75 0.50 0.25Weight Value0.00 0.25 0.50 0.75 1.00
+
+model.layers.0.self_attn.v_proj.weight
+
+
+0.08 0.06 0.04 0.02Weight Value0.00 0.02 0.04 0.06 0.08
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+35
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+model.layers.0.self_attn.q_proj.weight
+
+
+0.3 0.2 0.1Weight Value0.0 0.1 0.2 0.3
+
+model.layers.0.self_attn.v_proj.weight
+
+
+0.2 0.1 Weight Value0.0 0.1 0.2
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+(a) llama3-2-3b-it-self ~~a~~ ttn-layer0
+
+
+(b) gemma-3-1b-it-self ~~a~~ ttn-layer0
+
+
+(c) gemma-3-4b-it-self ~~a~~ ttn-layer0
+
+
+model.layers.0.mlp.up_proj.weight
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+
+
+model.layers.1.mlp.gate_proj.weight
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+model.layers.0.mlp.gate_proj.weight
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+
+
+model.layers.0.mlp.down_proj.weight
+
+
+14
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+14
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+model.layers.0.mlp.up_proj.weight
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+
+
+model.layers.1.mlp.gate_proj.weight
+
+
+model.layers.0.mlp.gate_proj.weight
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+
+
+model.layers.0.mlp.down_proj.weight
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+20.0
+
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+model.layers.0.mlp.gate_proj.weight
+
+|Col1|Col2|
+|---|---|
+|||
+
+
+model.layers.0.mlp.down_proj.weight
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+model.layers.0.mlp.up_proj.weight
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+
+
+model.layers.1.mlp.gate_proj.weight
+
+
+14
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+35
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+|Col1|Col2|
+|---|---|
+|||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+
+
+(d) llama3-2-3b-it-mlp-layer0-1
+
+
+(e) gemma-3-1b-it-mlp-layer0-1
+
+
+(f) gemma-3-4b-it-mlp-layer0-1
+
+
+Figure 5: Distribution plot of the self-attention and the mlp modules in llama3-1-8b-instruct, gemma3-1b-it, and gemma-3-4b-it for attention layer 0.
+
+
+llama3-2-3b-it gemma-3-1b-it gemma-3-4b-it
+layers
+
+var. skew kurt. var. skew kurt. var. skew kurt.
+
+
+self ~~a~~ ttn
+
+
+0.0017 0.0192 8.4032 0.0031 0.0500 15.0505 0.0015 0.0501 15.2010
+0.0013 0.0191 7.3438 0.0030 0.0450 9.8347 0.0015 0.0267 7.3832
+0.0012 0.0178 6.2172 0.0030 0.0389 9.0363 0.0014 0.0255 7.2277
+0.0011 0.0104 5.4477 0.0030 0.0288 8.6496 0.0014 0.0172 6.0731
+
+
+avg (self ~~a~~ ttn) 0.0005 -0.0002 1.4342 0.0012 -0.0009 3.2858 0.0005 0.0009 2.6900
+min (self ~~a~~ ttn) 0.0001 -0.0131 0.3027 0.0002 -0.0418 0.1589 0.0001 -0.0305 0.2412
+
+
+mlp
+
+
+0.0005 0.0093 5.4740 0.0010 0.0167 8.7665 0.0004 0.0266 6.3297
+0.0005 0.0080 4.1465 0.0010 0.0090 3.1514 0.0004 0.0155 5.9670
+0.0004 0.0075 2.6694 0.0010 0.0077 3.0577 0.0004 0.0130 2.7454
+0.0004 0.0074 2.4364 0.0010 0.0071 3.0113 0.0004 0.0094 2.4371
+
+
+avg (mlp) 0.0003 0.0003 0.8435 0.0006 0 1.1739 0.0003 0.0006 1.0807
+min (mlp) 0.0003 -0.0139 0.0892 -0.0001 -0.0184 0.1552 0 -0.0076 0.1559
+
+
+Table 9: Statistical moments of the self-attention and MLP layers across three models.
+
+
+**Design implications for encoding and merging.**
+
+
+    - _Allocate capacity to attention._ Heavy tails in attention (notably in Gemma) warrant encoders
+with higher capacity or robust priors; Gaussian assumptions under-represent extremes.
+
+
+    - _MLP is the easy regime._ More Gaussian, stable MLP statistics admit accurate compression
+with standard VAE settings and fewer latent pathologies.
+
+
+    - _Family_ _consistency_ _aids_ _calibration._ The alignment of LLAMA statistics across scales
+simplifies cross-scale latent calibration and reduces merging friction.
+
+
+**Summary.** Attention weights (especially in Gemma) are the dominant source of heavy-tail behavior;
+MLP weights are comparatively benign. Tail-aware encoding and depthwise calibration are most
+critical for attention, while default settings suffice for MLP.
+
+
+18
+
+
+0_k_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_o_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.06
+
+
+0.05
+
+
+0.04
+
+
+0.03
+
+
+0.02
+
+
+0.01
+
+
+0.009
+
+
+0.008
+
+
+0.007
+
+
+0.006
+
+
+0.005
+
+
+0_q_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_v_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.175
+
+
+0.150
+
+
+0.125
+
+
+0.100
+
+
+0.075
+
+
+0.050
+
+
+0.025
+
+
+0.000
+
+
+0.0055
+
+
+0.0050
+
+
+0.0045
+
+
+0.0040
+
+
+0.0035
+
+
+0_q_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_v_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.12
+
+
+0.10
+
+
+0.08
+
+
+0.06
+
+
+0.04
+
+
+0.02
+
+
+0.016
+
+
+0.014
+
+
+0.012
+
+
+0.010
+
+
+0.008
+
+
+0.006
+
+
+0.004
+
+
+0.002
+
+
+0.06
+
+
+0.05
+
+
+0.04
+
+
+0.03
+
+
+0.02
+
+
+0.01
+
+
+0.012
+
+
+0.011
+
+
+0.010
+
+
+0.009
+
+
+0.008
+
+
+0.007
+
+
+0_k_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_o_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0_k_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_o_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0_q_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_v_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.07
+
+
+0.06
+
+
+0.05
+
+
+0.04
+
+
+0.03
+
+
+0.02
+
+
+0.01
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+(a) Llama3-2-3b-it-self ~~a~~ ttn-layer0
+
+
+(b) Gemma-3-1b-it-self ~~a~~ ttn-layer0
+
+
+(c) Gemma-3-4b-it-self ~~a~~ ttn-layer0
+
+
+0_gate_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_down_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0_up_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+1_gate_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0_up_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+1_gate_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.0050
+
+
+0.0045
+
+
+0.0040
+
+
+0.0035
+
+
+0.0030
+
+
+0.0025
+
+
+0.0045
+
+
+0.0040
+
+
+0.0035
+
+
+0.0030
+
+
+0.0025
+
+
+0.0020
+
+
+0.0015
+
+
+0_gate_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_down_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.0040
+
+
+0.0035
+
+
+0.0030
+
+
+0.0025
+
+
+0.0020
+
+
+0.0015
+
+
+0.00375
+
+
+0.00350
+
+
+0.00325
+
+
+0.00300
+
+
+0.00275
+
+
+0.00250
+
+
+0.00225
+
+
+0.00200
+
+
+0_up_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+1_gate_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.0050
+
+
+0.0045
+
+
+0.0040
+
+
+0.0035
+
+
+0.0030
+
+
+0.0025
+
+
+0.0020
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.0028
+
+0.0026
+
+0.0024
+
+0.0022
+
+0.0020
+
+0.0018
+
+0.0016
+
+0.0014
+
+0.0012
+
+
+0.0045
+
+
+0.0040
+
+
+0.0035
+
+
+0.0030
+
+
+0.0025
+
+
+0.007
+
+
+0.006
+
+
+0.005
+
+
+0.004
+
+
+0.003
+
+
+0.035
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0_gate_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+0_down_proj
+
+
+1 2 3 4 Principal Component5 6 7 8 9 10 11 12 13 14 15 16
+
+
+0.0030
+
+
+0.0028
+
+
+0.0026
+
+
+0.0024
+
+
+0.0022
+
+
+0.0020
+
+
+0.0018
+
+
+0.0055
+
+
+0.0050
+
+
+0.0045
+
+
+0.0040
+
+
+(d) Llama3-2-3b-it-mlp-layer0-1
+
+
+(e) Gemma-3-1b-it-mlp-layer0-1
+
+
+(f) Gemma-3-4b-it-mlp-layer0-1
+
+
+Figure 6: Plots of the PCA **explained-variance** **ratio** for individual weight matrices in the first
+self-attention block (top row of each subpanel set) of three LLM checkpoints—Llama-3-2-3b-it,
+Gemma-3-1b-it, and Gemma-3-4b-it. For each model, we show the four projection matrices of selfattention ( _q, k, v, o_ ). The sharp drop after the leading principal components highlights a pronounced
+low-rank structure that is consistent across architectures and model sizes.
+
+
+(a) Mean kurtosis per layer (Self-attention layers). (b) Mean kurtosis per layer (MLP layers).
+
+
+Figure 7: Comparison of mean kurtosis across layers in self-attention and MLP components for
+Gemma and LLaMA models.
+
+
+B VARIATIONAL ENCODER ARCHITECTURE AND TRAINING DETAILS
+
+
+Table 10 lists the configuration of our transformer VAE. The encoder applies a twofold downprojection of the token ( _compression_ _ratio_ _r_ =2), which is the smallest bottleneck we found that
+preserves reconstruction while generalizing to unseen checkpoints. The decoder mirrors the encoder
+to restore the original dimension. For heterogeneous merges, we set the latent size _dz_ by the source
+to target layer mapping ratio and keep all other hyperparameters fixed, ensuring comparable latent
+scales across architectures.
+
+
+**Objective.** We optimize the ELBO (reconstruction + KL to _N_ (0 _, I_ )) with a constant learning rate
+1 _×_ 10 _[−]_ [5] for 10 _,_ 000 epochs.
+
+
+**Training setup.** Single NVIDIA A6000, bfloat16 for forward and backward, the remaining settings
+(optimizer, batch size, weight decay, clip-norm) are in Table 10. Seeds are fixed for data order and
+initialization.
+
+
+19
+
+
+Field Value Notes
+
+
+length 10,240 Sequence length processed
+n ~~l~~ ayers 6 Transformer depth
+chunk ~~s~~ ize 640 Per-token chunk width
+embed ~~d~~ im 768 Matches global embed ~~d~~ im
+latent ~~d~~ im 640 Size of latent vector per chunk
+n ~~h~~ eads 4 Attention heads
+rope ~~b~~ ase 20,000 RoPE base frequency
+conv false No convolutional patching
+flatten true Flatten to original shape.
+
+
+Table 10: Transformer block settings shared by the encoder and decoder.
+
+
+700
+
+
+600
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+|Col1|Run A (1×, no compression)<br>Run B (2× compression)|
+|---|---|
+||<br>Run C (4× compression)<br>pVAE (2× compression)<br>pVAE (4× compression)|
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+0 25 50 75 100 125 150 175
+Training Step
+
+
+Figure 8: Mean reconstruction error curves (smoothed with a 5-step moving average) for pVAE (VAE
+initialized from an existing pretrained VAE with reduction factor 1) and VAE (random initialized
+VAE). _r_ denotes the compression ratio.
+
+
+**Ablation summary.** Bottlenecks weaker than _r_ =2 overfit and degrade out-of-distribution reconstruction, stronger bottlenecks raise reconstruction error and harm downstream merging. Choosing _dz_ via
+the mapping ratio stabilizes cross-architecture alignment without retuning.
+
+
+B.1 ANALYSIS WEIGHTS ENCODING EVOLUTION
+
+
+Pretrained weight matrices exhibit substantial variation in tail behavior (high to near-zero excess
+kurtosis; cf. Section 3.1). We study how this variability interacts with the compression ratio _r_ in the
+VAE and how it impacts generalization to unseen checkpoints.
+
+
+**Convergence vs. compression.** Figure 8 shows a clear monotone effect: optimization slows as the
+bottleneck tightens. With _r_ =2 (twofold down-projection), storage is halved and the reconstruction
+loss increases by only _≈_ 6%; at _r_ =4, the penalty rises to _≈_ 10%. These curves set a practical
+operating point: _r≈_ 2 balances footprint and fidelity with minimal training overhead.
+
+
+**Sensitivity to distribution shape.** Layers with heavier tails (high excess kurtosis) are more sensitive
+to increasing _r_, exhibiting larger loss gaps at fixed training budget, near-Gaussian layers degrade
+more gently. In our models, attention projections in GEMMA fall into the former regime, whereas
+MLP projections across families align with the latter (App. A).
+
+
+**Training schedule.** Two-Stage Training. To improve stability under tight bottlenecks, we employ a
+two-stage curriculum: (1) train a deterministic autoencoder to convergence with the KL term disabled,
+then (2) enable KL regularization and fine-tune as a VAE. This approach prevents early posterior
+
+
+20
+
+
+**Algorithm 2** Details of Heterogeneous LLM Parameter Merging in Latent Space
+
+
+**Require:** Source weights _W_ src, target weights _W_ tgt, VAE configs _C_ src _, C_ tgt
+**Ensure:** Merged weights _W_ merged
+
+1: Initialize VAEs: ( _V_ src _, V_ tgt) _←_ _init_ ( _C_ src _, C_ tgt)
+2: Load pretrained parameters into _V_ src _, V_ tgt
+3: Split weights into per-layer groups:
+_L_ src _←{_ all layers from _W_ src _}_
+_L_ tgt _←{_ all layers from _W_ tgt _}_
+4: Determine the number of pairs to merge: _N_ _←_ min( _|L_ src _|, |L_ tgt _|_ )
+
+5: Define aligned layer pairs: ( _l_ src [(] _[j]_ [)] _[, l]_ tgt [(] _[j]_ [)][)] [for] _[ j]_ [= 1] _[, . . ., N]_
+
+6: **for** each aligned pair ( _l_ src [(] _[j]_ [)] _[, l]_ tgt [(] _[j]_ [)][)] **[ do]**
+
+7: Flatten & chunk weights into _{w_ src [(] _[i]_ [)] _[, w]_ tgt [(] _[i]_ [)] _[}]_
+
+8: Encode: _z_ src [(] _[i]_ [)] _[←]_ _[V]_ src [(] _[w]_ src [(] _[i]_ [)][)][,] _[ z]_ tgt [(] _[i]_ [)] _[←]_ _[V]_ [tgt][(] _[w]_ tgt [(] _[i]_ [)][)]
+
+9: Align latents via OT: _z_ align [(] _[i]_ [)] _[←]_ _[OT]_ [(] _[z]_ src [(] _[i]_ [)] _[, z]_ tgt [(] _[i]_ [)][)]
+
+10: Merge latents: _z_ merged [(] _[i]_ [)] _[←]_ _[z]_ tgt [(] _[i]_ [)] [+] _[ β][ ·]_ [ (] _[z]_ align [(] _[i]_ [)] _[−]_ _[z]_ tgt [(] _[i]_ [)][)]
+
+11: Decode: _w_ merged [(] _[i]_ [)] _[←]_ _[V]_ tgt _[−]_ [1][(] _[z]_ merged [(] _[i]_ [)] [)]
+
+12: Store _w_ merged [(] _[i]_ [)] [in] _[ W]_ [merged]
+13: **end for**
+14: Initialize and evaluate final network with complete _W_ merged
+15: **return** _W_ merged
+
+
+collapse and yields stable convergence even at high compression ratios, without increasing total
+training time.
+
+
+**Computational Cost** All experiments were conducted on a single NVIDIA RTX 6000 Ada GPU.
+Training a _∼_ 200 _M_ parameter VAE at compression ratio _r_ = 1 _._ 6 requires approximately 1-2 hours
+for 1B-scale models and 3–4 hours for 7B-scale models ( _∼_ 500K chunks). Higher compression ratios
+increase training time proportionally. LoRA weights converge notably faster than full model weights
+due to their lower-rank structure. At inference, the full encode-decode pipeline completes in 5–10
+seconds, enabling rapid iteration during merging experiments.
+
+
+**Reducing** **the** **Training** **Time:** Interestingly, in the case of heterogeneous models expansion
+_r_ _<_ 1 can offer an alternative trade-off. Lifting weights into an overcomplete latent space can
+unfold curved manifolds, making linear interpolation better approximate geodesics on the original
+weight manifold. expansion forces the encoder to learn a non-trivial transformation, avoiding
+identity collapse. Practically, expansion significantly accelerates training the relaxed bottleneck eases
+optimization and improves gradient flow at the cost of increased memory.
+
+
+C HETEROGENEOUS MODEL MERGING IN LATENT SPACE
+
+
+Merging models with matched layer shapes is straightforward in weight space. Heterogeneous pairs
+are harder: to avoid truncating the higher-capacity model, we train _separate_ VAEs per architecture
+and merge in a shared, _aligned_ latent space. Concretely, we first calibrate latents per layer, fit an
+alignment map between the source and target latent spaces, and then interpolate on the target side
+before decoding. This preserves each model’s capacity while enabling stable cross-architecture
+merges without ad hoc dimensionality cuts. The full procedure is given in Algorithm 2.
+
+
+C.1 INTUITION BEHIND LATENT SPACE ALIGNMENT
+
+
+The rationale for restricting explicit latent alignment specifically to heterogeneous merging scenarios
+relies on the geometric properties of the neural loss landscape and the topological structure of the
+parameter manifolds.
+
+
+21
+
+
+**Homogeneous** **Merging** **and** **Linear** **Mode** **Connectivity.** In the case of homogeneous models—specifically those finetuned from a shared pretrained initialization (e.g., distinct fine-tunes of
+LLama-2-13B)—the parameters remain within a shared basin of attraction. Consequently, their
+weight vectors _θ_ 1 _, θ_ 2 reside on a connected region of the high-dimensional parameter manifold _M_ .
+When encoded into the latent space _Z_, the resulting distributions _p_ ( _z|θ_ 1) and _p_ ( _z|θ_ 2) naturally share
+a common support and overlapping density. Therefore, interpolation in _Z_ corresponds to traversing a
+flat, low-loss path on the underlying manifold, rendering explicit distributional alignment redundant.
+
+
+**The Heterogeneous Disconnect.** Conversely, heterogeneous models (e.g., Gemma-3-1B vs. LLaMA3.2-1B) possess fundamentally distinct architectures. Even when projected into a latent space of
+identical dimensionality _d_, their representations occupy disjoint manifolds _Msrc_ and _Mtgt_ with
+divergent geometric structures and density profiles as show in Figure 9
+
+
+This disjoint nature necessitates a non-linear mapping to bridge _Msrc_ and _Mtgt_ . We employ Optimal
+Transport (specifically the Monge map) to push the source distribution _µsrc_ onto the target distribution
+_µtgt_ by minimizing the Wasserstein-2 distance. This process essentially “registers” the two manifolds,
+aligning their statistical moments and geometric structure. By enforcing this alignment, we ensure
+that the interpolated latent codes _zα_ remain within the valid density region of the target decoder,
+thereby preserving functional competence across architectural boundaries.
+
+
+|Col1|Col2|Col3|Gemma-3-1B<br>LLaMA-3.2-1B|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+||2<br>1|0<br>1<br>||
+
+
+Dimension 1
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+|Col1|Col2|Col3|Col4|Col5|llama-2-13b-code-a<br>WizardLM-13B-V1.|Col7|lpaca<br>2|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+||2|1<br>0|||1<br>|1<br>||
+
+
+Dimension 1
+
+
+(a) Same-Architecture Fine-tuning Variants: LLaMA2-13B Code-Alpaca vs WizardLM-13B-V1.2.
+
+
+(b) Cross-Architecture Comparison: Gemma-3-1B vs
+LLaMA-3.2-1B.
+
+
+Figure 9: **VAE** **latent** **space** **reveals** **architectural** **signatures** **in** **weight** **distributions.** t-SNE
+projections of encoded k ~~p~~ roj weights show ( **a** ) fine-tuned variants of the same base model (LLaMA2-13B) remain indistinguishable while ( **b** ) distinct clusters for different architectures (Gemma vs
+LLaMA), suggesting the learned latent space captures intrinsic architectural properties.
+
+
+22

@@ -1,0 +1,3297 @@
+## ON THE SURPRISING EFFECTIVENESS OF A SINGLE GLOBAL MERGING IN DECENTRALIZED LEARNING
+
+
+**Tongtian Zhu** **[1*]** **,** **Tianyu Zhang** **[2,3*]** **,** **Mingze Wang** **[4]** **, Zhanpeng Zhou** **[5†]** **,** **Can Wang** **[1]**
+
+
+1Zhejiang University 2Mila, Quebec AI Institute 3Université de Montréal
+4Peking University 5Shanghai Jiao Tong University
+
+
+{raiden, wcang}@zju.edu.cn tianyu.zhang@mila.quebec
+mingzewang@stu.pku.edu.cn zzp1012@sjtu.edu.cn
+
+
+ABSTRACT
+
+
+Decentralized learning provides a scalable alternative to parameter-server-based
+training, yet its performance is often hindered by limited peer-to-peer communication. In this paper, we study how communication should be scheduled over time,
+including determining when and how frequently devices synchronize. Counterintuitive empirical results show that concentrating communication budgets in the
+later stages of decentralized training remarkably improves global test performance.
+Surprisingly, we uncover that fully connected communication at the final step, implemented by a single global merging, can significantly improve the performance of
+decentralized learning under high data heterogeneity. Our theoretical contributions,
+which explain these phenomena, are the first to establish that the globally merged
+model of decentralized SGD can match the convergence rate of parallel SGD.
+Technically, we reinterpret part of the discrepancy among local models, which were
+previously considered as detrimental noise, as constructive components essential
+for matching this rate. This work provides evidence that decentralized learning is
+able to generalize under high data heterogeneity and limited communication, while
+offering broad new avenues for model merging research. Blog post and code are
+available at � [Grokking in Decentralized Learning and �](https://paper-list.notion.site/...) [Code, respectively.](https://github.com/Raiden-Zhu/ICLR-2026-Grokking-in-Decentralized-Learning)
+
+
+1 INTRODUCTION
+
+
+Decentralized learning offers a promising approach to crowdsource computational workloads across
+geographically distributed compute (Yuan et al., 2022; Borzunov et al., 2023b; Jaghouar et al., 2024).
+A defining characteristic of this setting is the reliance on peer-to-peer communication during training,
+involving the peer-level exchange of model parameters or gradients. However, such communication is
+often constrained in practice due to limited bandwidth between geographically distant nodes, making
+it a scarce resource. These constraints can significantly degrade the performance of decentralized
+learning, both theoretically and empirically (Lian et al., 2017; Koloskova et al., 2020; Vogels et al.,
+2021). As a result, efficiently allocating limited communication resources becomes a fundamental
+challenge in decentralized learning, especially in heterogeneous environments where varying local
+data distributions intensify communication demands (Martínez Beltrán et al., 2023).
+
+
+To date, most efforts addressing this challenge have focused on optimizing communication allocation
+at the _spatial level_, particularly through the design of communication graphs (Ying et al., 2021; Li
+et al., 2022b; Takezawa et al., 2023; Kharrat et al., 2024). In contrast, the _temporal_ allocation of
+communication, i.e., deciding when and how frequently agents synchronize with others, remains
+a significant yet underexplored direction for improving decentralized learning. Although temporal
+communication allocation has been studied in federated learning (FL) (Tang et al., 2020), this problem
+remains largely untouched in the fully decentralized setting, which is fundamentally different due to
+the lack of a central server for global aggregation (see discussions in Section 2 and Remark 1).
+
+
+_∗_ Equal contribution. †Corresponding author.
+
+
+1
+
+
+(a) CLIP ViT-B/32 (b) ResNet-18 (w/o pretraining)
+
+
+(c) Landscape before final merging
+
+
+4.7
+
+
+4.5
+
+
+4.3
+
+
+4.1
+
+
+3.9
+
+
+3.7
+
+
+3.5
+
+
+(d) A comparative illustration of federated, decentralized, and local training.
+
+
+Figure 1: **(a,** **b)** Global test accuracy (see Definition 1) of CLIP ViT-B/32 (a) and ResNet-18 (b)
+on Tiny ImageNet under a 32-agent non-IID setup (Dirichlet _α_ = 0 _._ 1), where decentralized SGD
+communicates with one random peer per round with probability 0.2 and performs a final global
+merge. **(c)** Loss landscape before the final merge for decentralized SGD. [3] **(d)** Illustration of federated,
+decentralized, and local training. Experimental details are provided in Appendix C.1.
+
+
+To answer this question, we design a series of experiments that allocate communication budgets across
+different time windows during training (see Figure 2). Specifically, we divide the training process
+into consecutive windows, each with of a fixed number of communication rounds. We assign higher
+communication budgets to selected windows using global synchronization via AllReduce (Sergeev
+& Del Balso, 2018), while keeping communication low otherwise by infrequent synchronization with
+random peer agents. [1] This reveals how the temporal communication allocation affects performance
+under constrained budgets. We observe that allocating higher communication budgets toward the
+later stages of training consistently leads to improved final test performance (see Definition 1). More
+surprisingly, we observe the remarkable effect of a single round of fully-connected communication. [2]
+
+
+**Our Contributions** are summarized below.
+
+
+- **Empirical** **Observations** . **(1)** : We highlight the critical role of a single global merging in decentralized training, showing that it can achieve performance close to federated learning, even
+under severe communication constraints and data heterogeneity (see Figure 1a, Figure 1b). **(2)** :
+We observe that limited but non-zero communication preserves a challenging cross-initialization,
+cross-distribution “mergeability” of local models throughout training (see Definition 2, Figure 1c,
+
+
+1Agents refer to participants in decentralized learning. “Communication” and “synchronization” are used interchangeably.
+2Fully-connected communication refers to global synchronization via AllReduce. In this paper, fully-connected
+communication is realized through parameter averaging over the models on all agents, namely _global merging_ .
+3We use 16 agents for loss landscape visualization to ensure visual clarity.
+
+
+2
+
+
+and the blue curve in Figure 2c), which does not hold under complete local training (green curve in
+Figure 1a, Figure 1b). These findings remain consistent across datasets, heterogeneity levels, model
+architectures, and communication topologies (see Appendix C.3), and provide a first systematic
+study of global merging in decentralized learning.
+
+
+- **Theoretical Contributions** . We investigate the underlying mechanism that enables the _mergeability_
+of local models in decentralized learning. Specifically, we provide the first convergence analysis
+showing that the globally merged model of decentralized SGD can match the rate of parallel SGD
+(Theorem 1 and Proposition 2). Furthermore, we offer a theoretical explanation for why limited but
+nonzero communication can ensure mergeability, and why communication should be concentrated
+in the later stages of training (see Proposition 3).
+
+
+We anticipate that this work will pave the way for principled decentralized training algorithms capable
+of generalizing under communication constraints and data heterogeneity, while also advancing model
+merging research (see discussions in Section 6 and insights in the **Q&A Section**, Appendix A).
+
+
+2 RELATED WORK
+
+
+**Temporal** **Communication** **Allocation** **in** **Parallel,** **Federated,** **and** **Decentralized** **Learning.**
+Communication allocation is well-studied in both data-centric parallel learning (Li et al., 2014),
+and Federated Learning (FL) (McMahan et al., 2017). In parallel learning settings, Gu et al. (2024)
+proposed a novel strategy for scheduling local steps by analyzing the implicit bias of Local SGD (Gu
+et al., 2023b). FL extends this server-based paradigm to handle not identically and independently
+distributed (non-IID) data, but it critically retains a global model. This reliance on a global model has
+shaped a broad consensus in the FL literature: frequent, early-stage communication is considered
+essential for aligning local models (Wang et al., 2019; Tang et al., 2020).
+
+
+In contrast, our work addresses fully decentralized learning, a fundamentally different setting that
+lacks a central server. Instead of optimizing a generic global model, the goal is to make local models
+generalize to the global distribution. Despite extensive work focusing on communication allocation
+at the spatial level in decentralized learning (e.g., designing communication topologies) (Ying et al.,
+2021; Li et al., 2022b; Takezawa et al., 2023; Kharrat et al., 2024), few studies examine temporal
+allocation; a pioneering IID study (Kong et al., 2021) showed that stronger early alignment to the
+global average can modestly improve test performance. These findings do not directly transfer to
+non-IID settings, where _L_ ( _·_ ) _≡Lk_ ( _·_ ) no longer holds (see Equation (1) and Definition C.2), so
+they mainly characterize local rather than global generalization (see Definition 1). Due to space
+constraints, we refer readers to Appendix B.2 and Appendix B.3 for related work on the implicit bias
+of decentralized learning, and on the topic of model merging.
+
+
+3 NOTATIONS AND PRELIMINARIES
+
+
+3.1 NON-IID DECENTRALIZED LEARNING
+
+
+Decentralized learning formalizes distributed learning as an optimization problem over a connected
+graph _G_ = ( _V, E_ ), where _V_ contains _m_ agents and _E_ denotes the communication links. Each agent
+_k_ _∈V_ samples data from a local distribution _Dk_ and maintains a local model _θk_ _∈_ R _[d]_ . The objective
+is to learn a consensus model _θ_ that minimizes the global population risk (Koloskova et al., 2020):
+
+
+       
+
+E _ξk∼Dk_ _L_ ( _θ_ ; _ξk_ )
+_k∈V_
+
+
+_,_ (1)
+
+
+min
+_θ∈_ R _[d]_
+
+
+_L_ ( _θ_ ) ≜ [1]
+
+_m_
+
+
+_L_ ( _θ_ ) ≜ [1]
+
+
+where E _ξk∼Dk_ _L_ ( _θ_ ; _ξk_ ) ≜ _Lk_ ( _θ_ ) denotes the local population risk of _θ_ on unseen instance _ξk_ _∼Dk_ .
+
+
+In practice, the optimization of Equation (1) is performed under the empirical risk minimization
+framework, leveraging _m_ local datasets _S_ ≜ [�] _[m]_ _k_ =1 _[S][k]_ [,] [where] _[S][k]_ [=] _[{][ξ][k,]_ [1] _[, . . ., ξ][k,ζ][}]_ [denotes] [the]
+dataset of agent _k_ sampled from _Dk_ . The resulting optimization problem is given by:
+
+
+_k∈V_
+
+
+3
+
+
+_L_ ( _θ_ ; _ξk,ζ_ )
+
+_ζ_ =1
+
+
+
+
+
+ _._ (2)
+
+
+_nk_
+
+
+min
+_θ∈_ R _[d]_
+
+
+
+
+ _LS_ ( _θ_ ) ≜ _m_ [1]
+
+
+To solve the optimization problem in Equation (2), decentralized algorithms minimize the global
+empirical risk with only local computations and peer-to-peer communication (Tsitsiklis et al., 1986;
+Nedic & Ozdaglar, 2009). The communication graph is governed by a weighted adjacency matrix
+_W_ [(] _[t]_ [)] _∈_ [0 _,_ 1] _[m][×][m]_, sampled from a distribution _W_ [(] _[t]_ [)], where each entry _Wk,l_ [(] _[t]_ [)] _[≥]_ [0][ reflects the influ-]
+ence of agent _l_ on agent _k_ . [4] Decentralized learning algorithms operate by alternating between local
+updates and model aggregation through communication with neighbors, as outlined in Algorithm 1.
+
+
+**Algorithm 1** Decentralized Learning
+
+**input** Initialize values _θk_ [(0)] _∈_ R _[d]_ on each agent _k_ _∈V_, number of steps _T_, mixing matrix _W_
+
+
+1: **in parallel on all agents** _k_ _∈V_ **, for** _t_ = 0 _, . . ., T_ _−_ 1 **do**
+2: Sample training data _ξk_ [(] _[t]_ [)] from _Dk_, _θk_ [(] _[t]_ [+1)] _←_ _Optimizer_ ( _θk_ [(] _[t]_ [)] _[, ξ]_ _k_ [(] _[t]_ [)][)] _▷_ Local update
+
+3: Send _θk_ [(] _[t]_ [)] to out-neighbor(s) and receive _{θl_ [(] _[t]_ [)] _[}][l][∈N]_ in [(] _[k]_ [)] [from in-neighbor(s)] _[ ▷]_ [Communication]
+
+
+4: Sample mixing matrix _W_ [(] _[t]_ [)] _∼W_ [(] _[t]_ [)], _θk_ [(] _[t]_ [+1)] _←_ [�]
+
+
+4: Sample mixing matrix _W_ [(] _[t]_ [)] _∼W_ [(] _[t]_ [)], _θk_ [(] _[t]_ [+1)] _←_ [�] _l∈N_ in( _k_ ) _[W]_ [ (] _k,l_ _[t]_ [)] _[θ]_ _l_ [(] _[t]_ [)] _▷_ Gossip averaging
+
+5: **end parallel for**
+
+
+**Practical Evaluation Metrics** . In decentralized learning, data heterogeneity and limited training
+time often prevent a full consensus model _θ_ . We therefore propose to adopt _average_ _global_ _test_
+_accuracy_, a proxy for global population risk, as the primary metric to quantify how well local models
+generalize to the global data distribution.
+
+
+**Definition 1** (Average Global Test Accuracy) **.** _The average accuracy of agents k_ _∈V_ _is defined as:_
+
+
+Acc( _{θk_ [(] _[t]_ [)] _[}][k][∈V]_ [) =] [1]
+
+_m_
+
+
+- Acc( _θk_ [(] _[t]_ [)][)]
+
+_k∈V_
+
+
+E _ξl∼Dl_ Acc( _·_ ; _ξl_ )
+_l∈V_
+
+
+1
+_,_ _where_ Acc( _·_ ) ≜
+_m_
+
+
+_._
+
+
+- �� _Average Accuracy across agents_
+
+
+ - �� _Test accuracy on the global distribution_
+
+
+3.2 MERGEABILITY
+
+
+**Definition 2** (Mergeability under Global Population Risk) **.** _A set of local models {θk}k∈V_ _is globally_
+_mergeable if there exist combination weights {wk}k∈V_ _∈_ [0 _,_ 1] _such that:_
+
+
+_≤_ - _wkL_ ( _θk_ ) _,_ (3)
+
+
+_k∈V_
+
+
+_L_
+
+
+��
+
+_wkθk_
+
+_k∈V_
+
+
+_where L_ ( _·_ ) _denotes the global population risk._
+
+
+Definition 2 formalizes the intuition that a linearly interpolated model performs no worse than the
+original local models. This Definition is inherently non-trivial due to the _non-convexity_ of _L_ .
+
+
+4 EMPIRICAL OBSERVATIONS
+
+
+4.1 INCREASING IMPACT OF COMMUNICATION IN THE LATER STAGES OF TRAINING
+
+
+To investigate potential solutions of communication scheduling, we explore a direct strategy: Concentrate communication in a small subset of communication rounds. To this end, we divide the
+training process into consecutive windows, each consisting of a fixed length of communication rounds.
+
+
+4Our framework incorporates a randomized decentralized learning setting where the weighted adjacency matrix _W_ ( _t_ ) can
+change during training (Boyd et al., 2006; Koloskova et al., 2020; Vos et al., 2023).
+
+
+4
+
+
+Figure 2: **(a, b)** : Comparisons of global test accuracy (see Definition 1) in decentralized training
+of ResNet-18 on CIFAR-100 with AdamW, distributed across 16 agents with Dirichlet _α_ = 0.1
+(see details in Appendix C.1). Fully-connected communication (i.e., AllReduce) is activated only
+in specific windows, while low communication with one random peer with a probability of 0 _._ 2 is
+used elsewhere. **(a)** : Fully-connected communication in 1 _/_ 10 of total rounds. **(b)** : Fully-connected
+communication in 1 _/_ 20 of total rounds. In both, lighter bars show peak accuracy, darker bars show
+final accuracy. **(c)** : Global test accuracy curves for local models and the globally averaged model
+(counterfactual) under persistent low communication (blue) and no communication (orange). [7]
+
+
+Specifically, the communication scheme is as follows: (1) fully-connected communication (see Figure 1d (b)) is activated only within specific communication windows (i.e., global synchronization via
+AllReduce (Sergeev & Del Balso, 2018) [5] ); (2) while in all other rounds, each agent communicates
+only with _one_ random peer with a probability of 0 _._ 2 (see “Communication Graph" in Appendix C.1). [6]
+
+
+As shown in Figure 2, training is divided into 10 (a) and 20 (b) communication windows, respectively.
+The bars in Figure 2 show both the best global test accuracy achieved during training (lighter-colored
+bars) and the final test accuracy at the end of training (darker-colored bars). Each bar corresponds
+to one communication window, where fully connected communication is applied _only_ to the rounds
+within that window, while random peer communication is used in all other rounds. For instance, the
+inset in Figure 2a presents the complete test accuracy trajectory when fully-connected communication
+is applied during rounds 150 to 180. A consistent trend emerges: _allocating communication budgets_
+_toward the later stages of training yields substantial improvements, particularly in final test accuracy_ .
+
+
+4.2 A SINGLE GLOBAL MERGING SIGNIFICANTLY IMPROVES GLOBAL TEST PERFORMANCE
+
+
+In Figure 2b, we reduce the fully-connected communication window length to 10 rounds, yet still
+observe substantial improvements in global test performance. This observation naturally raises the
+question: _What happens if the fully-connected window is reduced to a single round?_
+
+
+To investigate this, we conduct experiments where fully-connected communication is applied only
+once, implemented by a single global merging. As shown in Figure 1a and Figure 1b, a single global
+merging is sufficient to significantly improve global test performance. Consistent gains are observed
+across a wide range of settings, including different datasets, architectures, and communication
+topologies (see additional experiments in Appendix C.3). The significant increase in performance
+suggests that the potential of decentralized learning might be considerably underestimated.
+
+
+**Comparisons.** D-PSGD (Lian et al., 2017) introduced final global merging under IID settings, but
+did not analyze the performance gap before and after merging. In contrast, we provide a systematic
+study of this recovery in challenging non-IID scenarios. Chen et al. (2021) showed the benefit of
+periodic global averaging, but their method requires frequent global communication (every _H_ = 48
+steps), whereas we recover performance with only _a single_ merging. We also compare with SkewCompensated Sparse Push (SCSP) (Aketi et al., 2021), which also includes a final global merging
+
+
+5We note that AllReduce can be efficiently realized in a decentralized manner such as Ring-ALLReduce.
+6 **Code** [: https://github.com/Raiden-Zhu/ICLR-2026-Grokking-in-Decentralized-Learning](https://github.com/Raiden-Zhu/ICLR-2026-Grokking-in-Decentralized-Learning)
+7The term “counterfactual” refers to the fact that no global merging occurs during decentralized training. Instead, we
+manually compute the test accuracy of the hypothetical globally averaged model to quantify the “mergeability” of local models.
+
+
+5
+
+
+step. While both works aim to reduce communication, they differ from ours in methodology and
+setting: (1 ) SCSP uses _gradient sparsification_ (top- _k_ gradients) over a fixed topology, whereas we
+study mergeability under _topological sparsification_ (sparse gossip); (2) SCSP focuses on one local
+step ( _H_ = 1), whereas we show robust mergeability with multiple local steps (e.g., _H_ = 100) under
+high heterogeneity. While these works share the broader goal of improving communication efficiency,
+our work offers a new perspective by investigating the _mergeability_ itself: Why local models retain
+this property despite extremely limited communication and high data heterogeneity.
+
+
+**Communication** **Cost** **Comparison.** Let _P_ be the model size, _m_ the number of agents, and
+_T_ the number of training rounds. A standard Ring-AllReduce-based protocol incurs a total
+communication cost of _O_ (2 _mPT_ ). In contrast, our decentralized setup has a cost of _O_ ( _mRPT_ +
+2 _mP_ ), where _R ≪_ 2 denotes the expected number of peers per round, and the _O_ (2 _mP_ ) term arises
+from final global merging via Ring-AllReduce. We also note that while a global merging may
+appear less practical in some cases, it can be effectively approximated via multiple rounds of gossip
+synchronization among local agents (see our supplementary experiments in Appendix C.3.4).
+
+
+4.3 MERGEABILITY PERSISTS UNDER LIMITED BUT NONZERO COMMUNICATION
+
+
+A follow-up question is whether the effectiveness of the global merging is specific to the end of
+training. To investigate this, we assess the _counterfactual_ performance of the globally averaged
+model at each training round, as depicted by the light-blue curve in Figure 2c. The experiments are
+conducted under a lower-communication setting, where each agent communicates with one random
+peer at each round with probability 0.2 (see “Communication Graph” in Subsection C.1). A consistent
+superiority of the merged model (light-blue curve) over the local models (dark-blue curve) is observed
+throughout training, suggesting that local models remain mergeable at all stages (see Definition 2).
+
+
+As an ablation, we conduct an experiment where all models are trained locally without any communication (see Figure 2c). In this case, the counterfactual test performance of the globally averaged model
+remains close to zero (light-orange curve), indicating that without communication, local models
+are not mergeable. This suggests that mergeability does _not_ arise inherently from the local models
+themselves. Interestingly, under the low-communication setting, the performance of local models
+before merging (dark-blue curve) remains similar to that in the no-communication case (dark-orange
+curve). However, after global merging, the models show significant performance improvement. This
+clear contrast implies that extremely limited but nonzero communication enables mergeability.
+
+
+**Mergeability without Consensus.** Prior work on gossip algorithms has suggested that local models
+may converge to a similar state even in minimal communication regimes (Jelasity et al., 2005). In
+contrast, our work addresses a more challenging heterogeneous data setting where we find that local
+models do not reach a single consensus point, yet remain mergeable. Specifically, we identify an
+emergent geometric structure where decentralized training guides local models to a ring-like high-loss
+region surrounding a central low-loss basin (see Figure 1c). Notably, this corresponds to a more
+challenging cross-initialization, cross-distribution merging scenario, where local models do not start
+from a shared pretrained checkpoint and are trained on non-IID data distributions.
+
+
+5 THEORETICAL ANALYSIS
+
+
+In this section, we examine the underlying mechanisms that enable the mergeability of local models
+in decentralized learning. As an initial step, we conduct a fine-grained convergence analysis of the
+
+
+6
+
+
+globally merged models trained by Decentralized SGD (DSGD). [8] To substantiate the mergeability of
+local models, we compare the convergence rate of the merged model trained by DSGD with that of
+parallel SGD. Remarkably, we prove that the merged model in decentralized learning can match the
+rate of parallel SGD (Dekel et al., 2012; Li et al., 2014). This supports the empirical findings that the
+merged model can preserve the performance of individual local models (see Definition 2).
+
+
+5.1 ASSUMPTIONS
+
+
+We start by introducing the commonly used assumptions (Kong et al., 2021; Koloskova et al., 2020).
+**Assumption 1** (Mixing matrix) **.** _Each sample of the (randomized) mixing matrix W_ _∈_ R _[m][×][m]_ _is_
+_doubly stochastic._ _Moreover, there exists p >_ 0 _such that_
+
+
+E _W ∥_ Θ _W_ _−_ Θ [¯] _∥_ [2] _F_ _[≤]_ [(1] _[ −]_ _[p]_ [)] _[∥]_ [Θ] _[ −]_ [¯Θ] _[∥]_ _F_ [2] _[,]_ _[∀]_ [Θ] _[ ∈]_ [R] _[d][×][m][.]_ (4)
+
+
+_Here_ Θ = [ _θ_ 1 _, . . ., θm_ ] _,_ Θ = [ [¯] _θ, . . .,_ [¯] _θ_ [¯] ] _≡_ Θ [1]
+
+
+_m_ [1] - _mk_ =1 _[θ][k][.]_
+
+
+_m_ [1] **[11]** _[⊤]_ _[where]_ _[θ]_ [¯] [=] [1]
+
+
+**Assumption 2** (Smoothness) **.** _The objective function L is four-times continuously differentiable (i.e.,_
+_L ∈C_ [4] _) and there exist constants Lq_ _≥_ 0 _for q_ _∈{_ 1 _, . . .,_ 4 _} such that:_
+
+
+_∥∇_ _[q]_ _L_ ( _θ_ ) _∥≤_ _Lq,_ _∀_ _θ_ _∈_ R _[d]_ _._ (5)
+
+
+We note that given _L ∈C_ [2], the boundedness of the Hessian norm (i.e., the case _q_ = 2) implies that _L_
+is _L_ 2-smooth, thereby recovering Assumption D.1 with ( _L_ = _L_ 2).
+
+**Assumption 3** (Bounded noise and diversity) **.** _There exist σ_ [2] _, ζ_ [2] _≥_ 0 _such that for any θk_ _∈{θk}_ _[m]_ _k_ =1 _[:]_
+
+
+_m_
+
+- _∥∇Lk_ ( _θk_ ) _−∇L_ ( _θk_ ) _∥_ [2] 2 _[≤]_ _[ζ]_ [2] _[,]_ (6)
+
+_k_ =1
+
+
+1
+
+_m_
+
+
+_m_
+
+- 1
+
+E _ξk_ _∥∇Lk_ ( _θk_ ; _ξk_ ) _−∇Lk_ ( _θk_ ) _∥_ [2] 2 _[≤]_ _[σ]_ [2] _[,]_
+_m_
+_k_ =1
+
+
+_where L_ ( _θ_ ) = _m_ [1] - _mk_ =1 _[L][k]_ [(] _[θ]_ [)] _[.]_
+
+
+Here _σ_ measures the local noise level and _ζ_ is a measure of the heterogeneity among agents.
+
+
+5.2 CONVERGENCE ANALYSIS
+
+
+**Remark 3.** We note that Theorem 1 gives an implicit bound depending on _U_ [(] _[t]_ [)] _, t ∈{_ 1 _,_ 2 _, . . ., T_ _−_
+1 _}_, rather than a closed-form expression. It primarily serves to bridge convergence with the periteration dynamics of _U_ [(] _[t]_ [)], facilitating the subsequent derivation of the conditions on consensus and
+communication required to recover the parallel SGD rate (see Proposition 2 and Proposition 3).
+
+
+**Comparison and Technical Novelty** . As summarized in Table 1, unified analysis by Koloskova
+
+~~_√_~~
+
+et al. (2020) showed that DSGD suffers from additional terms of order _O_ - 1 _−p_ _p σ_ + _ζ_ - in the
+
+[+] [3] _[/]_ [2]
+
+
+~~_√_~~
+
+_−p_ _p σ_ + _ζ_
+
+_pε_ [+] _p ε_ [3] _[/]_ [2]
+
+
+et al. (2020) showed that DSGD suffers from additional terms of order _O_ - 1 _pε−p_ [+] _p εp σ_ [3] _[/]_ + [2] _ζ_ - in the
+
+convergence rate compared to parallel SGD. The core idea behind their analysis is to separate the
+effects of three key factors: the descent force (i.e., the squared gradient norm), gradient noise, and
+
+
+8DSGD refers to standard decentralized SGD where the optimizer in Algorithm 1 is replaced with SGD.
+
+
+7
+
+
+Table 1: Comparison of non-convex convergence rates for parallel SGD and DSGD, both run with _m_
+agents under non-IID data.
+
+
+Algorithm Parallel SGD DSGD (Koloskova et al., 2020) DSGD (ours)
+
+
+parameter discrepancy among agents. Each of these components is then analyzed and controlled
+separately. Among them, both the gradient noise and the model discrepancy are treated as detrimental
+to convergence. In contrast, we adopt a new proof framework that leverages the implicit bias of decentralized learning (see Proposition D.3 (Zhu et al., 2023b) and Appendix B.2). Rather than treating
+the discrepancy among agents purely as noise, we partially incorporate it as a constructive component
+essential for matching the rate of parallel SGD. This intuition is formalized through the convergence
+guarantee provided in Theorem 1, which introduces an additional term of _O_ - 1 _ε_ - _Tt_ =0 _−_ 1 _[U]_ [ (] _[t]_ [)][�] . In
+
+what follows, we conduct a fine-grained analysis on the sign of _U_ [(] _[t]_ [)] .
+
+
+**Remark** **4** (Reduction to Standard Rates) **.** We consider two special cases where the term _U_ [(] _[t]_ [)]
+vanishes because the consensus error is identically zero (Ξ _t_ _≡_ 0):
+
+
+- The single-agent case ( _m_ = 1);
+
+
+- The fully synchronous Parallel SGD case, where perfect synchronization ensures identical local
+models ( _θk_ [(] _[t]_ [)] _≡_ _θ_ [¯][(] _[t]_ [)] for all _k_ ).
+
+
+In both settings, the auxiliary term _U_ [(] _[t]_ [)] in Theorem 1 strictly equals zero. Consequently, Theorem 1
+naturally recovers the rate of standard (Parallel) SGD, which is of the order _O_ - _mεσ_ [2][2] [+] [1] _ε_ - _._
+
+
+To better characterize how the high-order loss landscape affects the dynamics of _U_ [(] _[t]_ [)], we introduce
+a new assumption that is theoretically novel yet empirically supported by prior literature.
+
+**Assumption 4** (Progressive sharpening) **.** _For any positive semi-definite matrix_ Σ _, the gradient of_
+_population risk negatively aligns with the gradient of sharpness._ _Formally, ∀θ_ _∈_ R _[d]_ _,_
+
+
+_∇L_ ( _θ_ ) _[⊤]_ _∇_ Tr( _∇_ [2] _L_ ( _θ_ )Σ) _<_ 0 _._ (7)
+
+
+By the density of R, there exists a _γ_ _>_ 0 such that _∇L_ ( _θ_ ) _[⊤]_ _∇_ Tr( _∇_ [2] _L_ ( _θ_ )Σ) _<_ _−γ∥∇L_ ( _θ_ ) _∥_ _<_ 0
+holds strictly. We refer to _γ_ _[∗]_ ≜ sup - _γ_ _>_ 0 _| ∇L_ ( _θ_ ) _[⊤]_ _∇_ Tr( _∇_ [2] _L_ ( _θ_ )Σ) _< −γ∥∇L_ ( _θ_ ) _∥_ - as the
+_degree of progressive sharpening_ .
+
+**Remark 5.** Tr( _∇_ [2] _L_ ( _θ_ )Σ) can be interpreted as an “average sharpness” around _θ_ ; see similar metrics
+in (Gu et al., 2023a; Zhu et al., 2023b). Assumption 4 reflects a widely observed phenomenon in deep
+learning: The loss gradient exhibits a negative correlation with the gradient of sharpness (Wang et al.,
+2022; Damian et al., 2023; Cohen et al., 2025). Intuitively, this condition implies that as the optimizer
+moves to reduce the loss, it simultaneously moves in a direction that increases the sharpness.
+
+
+Assumption 4 ensures _∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _[⊤]_ _∇_ Tr� _∇_ [2] _L_ ( _θ_ [¯][(] _[t]_ [)] ) Γ [(] _[t]_ [)][�] in _U_ [(] _[t]_ [)] remains negative. In the following,
+we establish that this term can dominate the other terms in _U_ [(] _[t]_ [)], thereby ensuring _U_ [(] _[t]_ [)] _<_ 0.
+
+
+**Explanations for Assumptions.** We assume a lower bound on the global gradient norm evaluated
+at the averaged parameters _θ_ [¯][(] _[t]_ [)], i.e., _∥∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _∥≥_ _µt_ _>_ 0. We note that this applies to the
+gradient on the global data set, which can remain significant even if individual local gradients
+
+
+8
+
+
+vanish. The assumption is motivated by the Polyak-Lojasiewicz (PL) condition (Polyak, 1963),
+12 _[∥∇L]_ [(] _[θ]_ [)] _[∥]_ [2] _[≥]_ _[µ]_ [(] _[L]_ [(] _[θ]_ [)] _[ −L][∗]_ [)][, which ensures the gradient is bounded from zero before reaching the]
+optimum. Our new assumption formalizes this property for the pre-convergence phase by denoting
+this lower bound at iteration _t_ as [1] 2 _[µ]_ _t_ [2][.] [We also note that][ Assumption 2][ requires that the norm of the]
+
+loss derivatives is bounded up to the fourth order, _∥∇_ _[q]_ _L_ ( _θ_ ) _∥≤_ _Lq_ for _q_ = 1 _,_ 2 _,_ 3 _,_ 4. These bounds
+are necessary to analyze the interaction between the consensus error Ξ _t_ and higher-order landscape.
+
+
+At a high level, Proposition 2 highlights the potential of leveraging decentralized training to accelerate
+distributed training beyond communication efficiency. This theoretical insight aligns with the
+empirical gains observed in Figure C.1a. Specifically, Proposition 2 implies that satisfying _U_ [(] _[t]_ [)] _<_ 0
+necessitates careful control of both _η_ and Ξ [2] _t_ [.] [We proceed by discussing the learning rate constraint]
+below, and subsequently analyze the role of Ξ [2] _t_ [, based on which we provide a theoretical justification]
+for allocating more communication in the later stages of training in Subsection 5.3.
+
+
+To provide deeper intuition, we outline the proof sketch of Theorem 1 below. This analysis establishes
+a novel descent lemma tailored for decentralized SGD, demonstrating how learning rate control
+harnesses progressive sharpening to drive acceleration.
+
+
+2
+�� _∇L_ (¯ _θ_ ( _t_ ))��
+
+- 
+
+- �� Standard Descent
+
+
+   -   E _ξ_ ( _t_ ) _L_ ( _θ_ [¯][(] _[t]_ [+1)] ) _≤L_ ( _θ_ [¯][(] _[t]_ [)] ) _−_
+
+
+- _η −_ _[η]_ [2] _[L]_ [2] 
+2
+
+_>_ 0
+
+
++ _[η]_ [2] _[L]_ [2] _[σ]_ [2] + _O_ (Ξ [3] _t_ [)] _[.]_ (9)
+
+2 _m_
+
+
+_∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _[⊤]_ _∇_ Tr� _∇_ [2] _L_ ( _θ_ [¯][(] _[t]_ [)] )Γ [(] _[t]_ [)][�]
+
+
+- �� _<_ 0 _,_ progressive sharpening
+
+
++
+
+
+- _η_ [2] _L_ 2 _−_ _η_ 
+
+_>_ 0
+
+
+We note that this third-order effect differs from prior analyses, which were typically established in a
+near-minima regime (Li et al., 2022c). By contrast, we show that this mechanism emerges whenever
+local models are inconsistent, i.e., Ξ _t_ _>_ 0.
+
+Equation (9) further illuminates the critical role of the consensus violation term Ξ _t_ = �Tr(Γ [(] _[t]_ [)] ).
+Crucially, the progressive sharpening term scales with _O_ (Ξ [2] _t_ [)][, whereas the higher-order residual error]
+is _O_ (Ξ [3] _t_ [)][.] [Consequently, provided][ Ξ] _[t]_ [is properly controlled such that the] _[ O]_ [(Ξ][2] _t_ [)][ gain dominates the]
+_O_ (Ξ [3] _t_ [)][ error, decentralized SGD can match or even surpass the convergence rate of parallel SGD.]
+According to Corollary D.2, E�Ξ [2] _t_ - is bounded by
+
+
+E�Ξ [2] _t_ - _≤O_ - (1 _−p_ [2] _p_ )
+
+
+_,_ (10)
+
+
+where the parameter _p_ (with _p ∈_ (0 _,_ 1] reflects connectivity in the communication graph (see Assumption 1). A larger _p_ indicates better connectivity and faster consensus, while a smaller _p_ implies a
+sparse communication graph (i.e., lower communication) and slower information propagation. For
+example, _p_ = 1 corresponds to a fully connected topology, enabling perfect communication, whereas
+_p_ = 0 represents the extreme case of complete local training with no communication.
+
+
+**Why** **Limited** **but** **Nonzero** **Communication** **Enables** **Mergeability.** Notably, random communication graphs can achieve _p_ = Θ(1), striking a favorable trade-off: they require relatively low
+communication overhead while still maintaining efficient information mixing due to randomized
+edge sampling, which ensures a rapid decrease of Ξ _t_ (Vos et al., 2023). This is why we adopt random
+topologies as the primary setup in our experiments: They can satisfy the condition in Proposition 2
+even under extremely limited communication, thereby ensuring mergeability (see Figure 1). However,
+in the case of full local training where _p_ = 0 (see Figure 1d), the right-hand side of Equation (10)
+increases to infinity, indicating that Ξ _t_ may diverge. As a consequence, the condition of Ξ _t_ in Proposition 2 can no longer be satisfied, which explains why local models after complete local training
+cannot be reliably merged (see the green curve in Figure 1b).
+
+
+9
+
+
+5.3 A THEORETICAL EXPLANATION FOR COMMUNICATION ALLOCATION
+
+
+Proposition 2 highlights the importance of Ξ [2] _t_ [to satisfy][ Inequality (8)][.] [This motivates the question of]
+how small Ξ [2] _t_ [(or how large] _[ p]_ [) should be, which we answer in the following sufficient condition.]
+
+
+**Practical** **Guidance** . Proposition 3 provides guidance for allocating communication to ensure
+_U_ [(] _[t]_ [)] _≤_ 0, thereby guaranteeing the contribution of each step to the cumulative sum in Theorem 1.
+From Equation (11), note that _ϕ_, _σ_ [2], _γ_ _[∗]_, _m_, and _Lq_ ( _q_ _∈{_ 1 _, . . .,_ 4 _}_ ) are time-independent, while the
+key time-varying factor is the gradient lower bound _µt_, which tracks the optimization status of the
+averaged parameters _θ_ [¯][(] _[t]_ [)] on the global landscape. Under this interpretation, Equation (11) implies
+that the communication-related term _p_ should be dynamically adjusted in response to the changing
+landscape geometry captured by _µt_ . Analytically, the left-hand side of Equation (11) is a strictly
+decreasing function of _p_, while the right-hand side is an increasing function of _µt_ . This implies a
+fundamental trade-off: more frequent communication (larger _p_ ) relaxes the condition, whereas a
+vanishing gradient (smaller _µt_ ) tightens the allowable error bound. Specifically,
+
+
+- Early, High-Gradient Regime: In the starting phase of training, when the globally averaged model
+is far from a minimum, the lower bound on gradient norm _µt_ is large. This corresponds to a relaxed
+consensus requirement in Equation (11), which permits low-frequency communication (i.e., smaller
+_p_ ) without significantly impacting the performance of the globally merged model.
+
+
+- Late, Low-Gradient Regime: As models approach a solution and training enters a convergence
+phase, the gradient norm _µt_ decreases. This tightens the constraint in Equation (11). In this regime,
+frequent communication (i.e., larger _p_ ) becomes critical.
+
+
+We note that this theoretically motivated guidance aligns well with our empirical findings in Section 4
+that more communication should be concentrated in the later stages of training.
+
+
+6 IMPLICATIONS AND DISCUSSIONS
+
+
+**Model** **Merging.** The effectiveness of a single merging of decentralized models has significant
+implications for model merging. A recent work showed that pre-trained models occupy a large, flat
+“basic capability basin”, within which fine-tuning creates smaller “specific capability basins” (Chen
+et al., 2025). The observed “mergeability” of local models in our paper implies that decentralized
+learning may guide agents into connected specific capability basins, allowing simple permutationfree merging to integrate specialized knowledge. This suggests a practical direction: lightweight
+synchronization during local training may improve basin connectivity and simplify later merging into
+a more capable model.
+
+
+**Decentralized** **Learning.** Our work provides promising empirical and theoretical evidence that
+decentralized learning can generalize under high data heterogeneity and limited communication.
+More importantly, our findings could directly motivate a new class of adaptive, communicationefficient decentralized learning algorithms, which dynamically allocate their communication budget
+by monitoring training dynamics to satisfy the critical consensus edge condition in Equation (11).
+
+
+10
+
+
+REFERENCES
+
+
+Samuel Ainsworth, Jonathan Hayase, and Siddhartha Srinivasa. Git re-basin: Merging models modulo
+permutation symmetries. In _The Eleventh International Conference on Learning Representations_,
+2023.
+
+
+Sai Aparna Aketi, Amandeep Singh, and Jan Rabaey. Sparse-push: Communication-& energyefficient decentralized distributed learning over directed & time-varying graphs with non-iid
+datasets. _arXiv preprint arXiv:2102.05715_, 2021.
+
+
+Youssef Allouah, Anastasia Koloskova, Aymane El Firdoussi, Martin Jaggi, and Rachid Guerraoui.
+The privacy power of correlated noise in decentralized learning. In _Proceedings_ _of_ _the_ _41st_
+_International Conference on Machine Learning_, volume 235, pp. 1115–1143, 2024.
+
+
+Eric Bonabeau, Marco Dorigo, and Guy Theraulaz. _Swarm Intelligence:_ _From Natural to Artificial_
+_Systems_ . Oxford University Press, 1999.
+
+
+Marco Bornstein, Tahseen Rabbani, Evan Z Wang, Amrit Bedi, and Furong Huang. SWIFT: Rapid
+decentralized federated learning via wait-free model communication. In _The Eleventh International_
+_Conference on Learning Representations_, 2023.
+
+
+Alexander Borzunov, Dmitry Baranchuk, Tim Dettmers, Maksim Riabinin, Younes Belkada, Artem
+Chumachenko, Pavel Samygin, and Colin Raffel. Petals: Collaborative inference and fine-tuning
+of large models. In _Proceedings of the 61st Annual Meeting of the Association for Computational_
+_Linguistics_ _(Volume_ _3:_ _System_ _Demonstrations)_, pp. 558–568. Association for Computational
+Linguistics, 2023a.
+
+
+Alexander Borzunov, Max Ryabinin, Artem Chumachenko, Dmitry Baranchuk, Tim Dettmers,
+Younes Belkada, Pavel Samygin, and Colin A Raffel. Distributed inference and fine-tuning of large
+language models over the internet. In _Advances in Neural Information Processing Systems_, 2023b.
+
+
+S. Boyd, A. Ghosh, B. Prabhakar, and D. Shah. Randomized gossip algorithms. _IEEE Transactions_
+_on Information Theory_, 52(6):2508–2530, 2006.
+
+
+Ying Cao, Zhaoxian Wu, Kun Yuan, and Ali H Sayed. On the trade-off between flatness and
+optimization in distributed learning. _arXiv preprint arXiv:2406.20006_, 2024.
+
+
+CCAF. Cambridge bitcoin electricity consumption index (CBECI). [https://ccaf.io/cbnsi/](https://ccaf.io/cbnsi/cbeci)
+[cbeci, 2023.](https://ccaf.io/cbnsi/cbeci)
+
+
+Huanran Chen, Yinpeng Dong, Zeming Wei, Yao Huang, Yichi Zhang, Hang Su, and Jun Zhu.
+Understanding pre-training and fine-tuning from loss landscape perspectives. _arXiv_ _preprint_
+_arXiv:2505.17646_, 2025.
+
+
+Lesi Chen, Haishan Ye, and Luo Luo. An efficient stochastic algorithm for decentralized nonconvexstrongly-concave minimax optimization. _International Conference on Artificial Intelligence and_
+_Statistics_, 2024.
+
+
+Xuxing Chen, Minhui Huang, Shiqian Ma, and Krishna Balasubramanian. Decentralized stochastic
+bilevel optimization with improved per-iteration complexity. In _Proceedings of the 40th Interna-_
+_tional Conference on Machine Learning_, volume 202, pp. 4641–4671. PMLR, 2023.
+
+
+Yiming Chen, Kun Yuan, Yingya Zhang, Pan Pan, Yinghui Xu, and Wotao Yin. Accelerating gossip
+sgd with periodic global averaging. In _Proceedings_ _of_ _the_ _38th_ _International_ _Conference_ _on_
+_Machine Learning_, volume 139, pp. 1791–1802. PMLR, 2021.
+
+
+Jeremy M Cohen, Alex Damian, Ameet Talwalkar, Zico Kolter, and Jason D Lee. Understanding
+optimization in deep learning with central flows. In _The Thirteenth International Conference on_
+_Learning Representations_, 2025.
+
+
+Donato Crisostomi, Marco Fumero, Daniele Baieri, Florian Bernard, and Emanuele Rodolà.
+$c^2m^3$: Cycle-consistent multi-model merging. In _The_ _Thirty-eighth_ _Annual_ _Conference_
+_on Neural Information Processing Systems_, 2024.
+
+
+11
+
+
+Edwige Cyffers, Aurélien Bellet, and Jalaj Upadhyay. Differentially private decentralized learning
+with random walks. In _Proceedings of the 41st International Conference on Machine Learning_,
+volume 235, pp. 9762–9783, 2024.
+
+
+Alex Damian, Eshaan Nichani, and Jason D. Lee. Self-stabilization: The implicit bias of gradient descent at the edge of stability. In _the Eleventh International Conference on Learning Representations_,
+2023.
+
+
+Ofer Dekel, Ran Gilad-Bachrach, Ohad Shamir, and Lin Xiao. Optimal distributed online prediction
+using mini-batches. _Journal of Machine Learning Research_, 13(6):165–202, 2012.
+
+
+Arthur Douillard, Qixuan Feng, Andrei A Rusu, Rachita Chhaparia, Yani Donchev, Adhiguna
+Kuncoro, Marc’Aurelio Ranzato, Arthur Szlam, and Jiajun Shen. Diloco: Distributed lowcommunication training of language models. _arXiv preprint arXiv:2311.08105_, 2023.
+
+
+Felix Draxler, Kambis Veschgini, Manfred Salmhofer, and Fred Hamprecht. Essentially no barriers in
+neural network energy landscape. In _International conference on machine learning_, pp. 1309–1318.
+PMLR, 2018.
+
+
+Rahim Entezari, Hanie Sedghi, Olga Saukh, and Behnam Neyshabur. The role of permutation
+invariance in linear mode connectivity of neural networks. In _International Conference on Learning_
+_Representations_, 2022.
+
+
+Mathieu Even, Anastasia Koloskova, and Laurent Massoulie. Asynchronous SGD on graphs: a
+unified framework for asynchronous decentralized and federated optimization. In _Proceedings of_
+_the 27th International Conference on Artificial Intelligence and Statistics_, 2024.
+
+
+Stanislav Fort, Gintare Karolina Dziugaite, Mansheej Paul, Sepideh Kharaghani, Daniel M Roy,
+and Surya Ganguli. Deep learning versus kernel learning: an empirical study of loss landscape
+geometry and the time evolution of the neural tangent kernel. _Advances in Neural Information_
+_Processing Systems_, 33:5850–5861, 2020.
+
+
+Jonathan Frankle, Gintare Karolina Dziugaite, Daniel Roy, and Michael Carbin. Linear mode
+connectivity and the lottery ticket hypothesis. In _International Conference on Machine Learning_,
+pp. 3259–3269. PMLR, 2020.
+
+
+C. Daniel Freeman and Joan Bruna. Topology and geometry of half-rectified network optimization.
+In _International Conference on Learning Representations_, 2017.
+
+
+Hongchang Gao and Heng Huang. Fast training method for stochastic compositional optimization
+problems. _Advances in Neural Information Processing Systems_, 34:25334–25345, 2021.
+
+
+Hongchang Gao, Bin Gu, and My T. Thai. On the convergence of distributed stochastic bilevel
+optimization algorithms over a network. In _Proceedings of The 26th International Conference on_
+_Artificial Intelligence and Statistics_, volume 206, pp. 9238–9281. PMLR, 2023.
+
+
+Anissa Gardizy and Amir Efrati. Microsoft and OpenAI plot $100 billion stargate AI supercomputer. _The Information_, 2024. [URL https://www.theinformation.com/articles/](https://www.theinformation.com/articles/microsoft-and-openai-plot-100-billion-stargate-ai-supercomputer)
+[microsoft-and-openai-plot-100-billion-stargate-ai-supercomputer.](https://www.theinformation.com/articles/microsoft-and-openai-plot-100-billion-stargate-ai-supercomputer)
+
+
+Timur Garipov, Pavel Izmailov, Dmitrii Podoprikhin, Dmitry P Vetrov, and Andrew G Wilson.
+Loss surfaces, mode connectivity, and fast ensembling of dnns. _Advances in neural information_
+_processing systems_, 31, 2018.
+
+
+Grand View Research. Ai infrastructure market size, share & growth report, 2030,
+2024. URL [https://www.grandviewresearch.com/industry-analysis/](https://www.grandviewresearch.com/industry-analysis/ai-infrastructure-market-report)
+[ai-infrastructure-market-report.](https://www.grandviewresearch.com/industry-analysis/ai-infrastructure-market-report)
+
+
+Xinran Gu, Kaifeng Lyu, Longbo Huang, and Sanjeev Arora. Why (and when) does local SGD generalize better than SGD? In _The Eleventh International Conference on Learning Representations_,
+2023a.
+
+
+Xinran Gu, Kaifeng Lyu, Longbo Huang, and Sanjeev Arora. Why (and when) does local SGD
+generalize better than SGD? In _International Conference on Learning Representations_, 2023b.
+
+
+12
+
+
+Xinran Gu, Kaifeng Lyu, Sanjeev Arora, Jingzhao Zhang, and Longbo Huang. A quadratic synchronization rule for distributed deep learning. In _The Twelfth International Conference on Learning_
+_Representations_, 2024.
+
+
+Mert Gurbuzbalaban, Yuanhan Hu, Umut Simsekli, Kun Yuan, and Lingjiong Zhu. Heavy-tail
+phenomenon in decentralized sgd. _arXiv preprint arXiv:2205.06689_, 2022.
+
+
+F. He, L. Nan, and T. Zhu. Imagining a democratic, affordable future of foundation models: A
+decentralised avenue. In _Handbook of Blockchain Analytics_ . Springer, 2025.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Identity mappings in deep residual
+networks. In _European conference on computer vision_, 2016.
+
+
+Lie He, Sai Praneeth Karimireddy, and Martin Jaggi. Byzantine-robust decentralized learning via
+clippedgossip. _arXiv preprint arXiv:2202.01545_, 2022.
+
+
+Tzu-Ming Harry Hsu, Hang Qi, and Matthew Brown. Measuring the effects of non-identical data
+distribution for federated visual classification. _arXiv preprint arXiv:1909.06335_, 2019.
+
+
+Gabriel Ilharco, Mitchell Wortsman, Samir Yitzhak Gadre, Shuran Song, Hannaneh Hajishirzi, Simon
+Kornblith, Ali Farhadi, and Ludwig Schmidt. Patching open-vocabulary models by interpolating
+weights. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), _Advances_
+_in Neural Information Processing Systems_, 2022.
+
+
+Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Ludwig Schmidt, Hannaneh Hajishirzi,
+and Ali Farhadi. Editing models with task arithmetic. In _The Eleventh International Conference_
+_on Learning Representations_, 2023.
+
+
+Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry P. Vetrov, and Andrew Gordon Wilson.
+Averaging weights leads to wider optima and better generalization. In Amir Globerson and Ricardo
+Silva (eds.), _Proceedings of the Thirty-Fourth Conference on Uncertainty in Artificial Intelligence,_
+_UAI 2018, Monterey, California, USA, August 6-10, 2018_, pp. 876–885. AUAI Press, 2018.
+
+
+Sami Jaghouar, Jack Min Ong, Manveer Basra, Fares Obeid, Jannik Straube, Michael Keiblinger,
+Elie Bakouch, Lucas Atkins, Maziyar Panahi, Charles Goddard, et al. Intellect-1 technical report.
+_arXiv preprint arXiv:2412.01152_, 2024.
+
+
+Márk Jelasity, Alberto Montresor, and Ozalp Babaoglu. Gossip-based aggregation in large dynamic
+networks. _ACM Trans. Comput. Syst._, 23(3):219–252, August 2005. ISSN 0734-2071.
+
+
+Salma Kharrat, Marco Canini, and Samuel Horvath. Decentralized personalized federated learning.
+_arXiv preprint arXiv:2406.06520_, 2024.
+
+
+Jari Kolehmainen, Nikolay Blagoev, John Donaghy, O˘guzhan Ersoy, and Christopher Nies.
+Noloco: No-all-reduce low communication training method for large models. _arXiv_ _preprint_
+_arXiv:2506.10911_, 2025.
+
+
+Anastasia Koloskova, Nicolas Loizou, Sadra Boreiri, Martin Jaggi, and Sebastian Stich. A unified
+theory of decentralized SGD with changing topology and local updates. In _International Conference_
+_on Machine Learning_, 2020.
+
+
+Lingjing Kong, Tao Lin, Anastasia Koloskova, Martin Jaggi, and Sebastian Stich. Consensus control
+for decentralized deep learning. In _Proceedings of the 38th International Conference on Machine_
+_Learning_, 2021.
+
+
+Alex Krizhevsky, G Hinton, et al. Learning multiple layers of features from tiny images (tech. rep.).
+_University of Toronto_, 2009.
+
+
+Ya Le and Xuan Yang. Tiny imagenet visual recognition challenge. _CS 231N_, 2015.
+
+
+Batiste Le Bars, Aurélien Bellet, Marc Tommasi, Erick Lavoie, and Anne-Marie Kermarrec. Refined
+convergence and topology learning for decentralized sgd with heterogeneous data. In _Proceedings_
+_of the 26th International Conference on Artificial Intelligence and Statistics_, 2023.
+
+
+13
+
+
+Batiste Le Bars, Aurélien Bellet, Marc Tommasi, Kevin Scaman, and Giovanni Neglia. Improved
+stability and generalization guarantees of the decentralized SGD algorithm. In _Proceedings of the_
+_41st International Conference on Machine Learning_, 2024.
+
+
+Margaret Li, Suchin Gururangan, Tim Dettmers, Mike Lewis, Tim Althoff, Noah A. Smith, and Luke
+Zettlemoyer. Branch-train-merge: Embarrassingly parallel training of expert language models. In
+_First Workshop on Interpolation Regularizers and Beyond at NeurIPS 2022_, 2022a.
+
+
+Mu Li, David G Andersen, Alexander J Smola, and Kai Yu. Communication efficient distributed
+machine learning with the parameter server. _Advances in Neural Information Processing Systems_,
+2014.
+
+
+Shuangtong Li, Tianyi Zhou, Xinmei Tian, and Dacheng Tao. Learning to collaborate in decentralized
+learning of personalized models. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition (CVPR)_, pp. 9766–9775, 2022b.
+
+
+Zhiyuan Li, Tianhao Wang, and Sanjeev Arora. What happens after SGD reaches zero loss? –a
+mathematical framework. In _International Conference on Learning Representations_, 2022c.
+
+
+Xiangru Lian, Ce Zhang, Huan Zhang, Cho-Jui Hsieh, Wei Zhang, and Ji Liu. Can decentralized
+algorithms outperform centralized algorithms? a case study for decentralized parallel stochastic
+gradient descent. In _Advances in Neural Information Processing Systems_, 2017.
+
+
+Xiangru Lian, Wei Zhang, Ce Zhang, and Ji Liu. Asynchronous decentralized parallel stochastic
+gradient descent. In _International Conference on Machine Learning_, 2018.
+
+
+Tao Lin, Sai Praneeth Karimireddy, Sebastian Stich, and Martin Jaggi. Quasi-global momentum:
+Accelerating decentralized deep learning on heterogeneous data. In _Proceedings_ _of_ _the_ _38th_
+_International Conference on Machine Learning_, 2021.
+
+
+Yucheng Lu and Christopher De Sa. Optimal complexity in decentralized training. In _Proceedings of_
+_the 38th International Conference on Machine Learning_, 2021.
+
+
+Kaifeng Lyu. _Implicit Bias of Deep Learning Optimization:_ _A Mathematical Examination_ . PhD
+thesis, Princeton University, 2024.
+
+
+Enrique Tomás Martínez Beltrán, Mario Quiles Pérez, Pedro Miguel Sánchez Sánchez, Sergio López
+Bernal, Gérôme Bovet, Manuel Gil Pérez, Gregorio Martínez Pérez, and Alberto Huertas Celdrán. Decentralized federated learning: Fundamentals, state of the art, frameworks, trends, and
+challenges. _IEEE Communications Surveys & Tutorials_, 25(4):2983–3013, 2023.
+
+
+Michael S Matena and Colin Raffel. Merging models with fisher-weighted averaging. In Alice H. Oh,
+Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), _Advances in Neural Information_
+_Processing Systems_, 2022.
+
+
+Michalis Mavrovouniotis, Changhe Li, and Shengxiang Yang. A survey of swarm intelligence for
+dynamic optimization: Algorithms and applications. _Swarm and Evolutionary Computation_, 33:
+1–17, 2017.
+
+
+Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.
+Communication-Efficient Learning of Deep Networks from Decentralized Data. In _Proceedings_
+_of_ _the_ _20th_ _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_ _Statistics_, volume 54, pp.
+1273–1282. PMLR, 2017.
+
+
+Abdellah El Mrini, Edwige Cyffers, and Aurélien Bellet. Privacy attacks in decentralized learning.
+In _Proceedings of the 41st International Conference on Machine Learning_, 2024.
+
+
+Giorgi Nadiradze, Amirmojtaba Sabour, Peter Davies, Shigang Li, and Dan Alistarh. Asynchronous
+decentralized sgd with quantized and local updates. _Advances in Neural Information Processing_
+_Systems_, 2021.
+
+
+Vaishnavh Nagarajan and J Zico Kolter. Uniform convergence may be unable to explain generalization
+in deep learning. _Advances in Neural Information Processing Systems_, 32, 2019.
+
+
+14
+
+
+Angelia Nedi’c and Alex Olshevsky. Distributed optimization over time-varying directed graphs.
+volume 60, pp. 601–615. IEEE, 2014.
+
+
+Angelia Nedic and Asuman Ozdaglar. Distributed subgradient methods for multi-agent optimization.
+_IEEE Transactions on Automatic Control_, 54(1):48–61, 2009.
+
+
+OpenAI. Announcing the stargate project. [https://openai.com/index/](https://openai.com/index/announcing-the-stargate-project/)
+[announcing-the-stargate-project/, 2025.](https://openai.com/index/announcing-the-stargate-project/)
+
+
+Guillermo Ortiz-Jimenez, Alessandro Favero, and Pascal Frossard. Task arithmetic in the tangent
+space: Improved editing of pre-trained models. In _Thirty-seventh Conference on Neural Information_
+_Processing Systems_, 2023.
+
+
+Konstantin F Pilz, James Sanders, Robi Rahman, and Lennart Heim. Trends in ai supercomputers.
+_arXiv preprint arXiv:2504.16026_, 2025.
+
+
+B. T. Polyak. Gradient methods for minimizing functionals. _Zhurnal Vychislitel’noi Matematiki i_
+_Matematicheskoi Fiziki_, 3(4):643–653, 1963.
+
+
+Boris T Polyak. _Introduction to Optimization_ . Optimization Software, Inc., Publications Division,
+New York, 1987.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever.
+Learning transferable visual models from natural language supervision. In Marina Meila and Tong
+Zhang (eds.), _Proceedings of the 38th International Conference on Machine Learning_, volume 139
+of _Proceedings of Machine Learning Research_, pp. 8748–8763. PMLR, 18–24 Jul 2021.
+
+
+Sameera Ramasinghe, Thalaiyasingam Ajanthan, Gil Avraham, Yan Zuo, and Alexander Long.
+Protocol models: Scaling decentralized training with communication-efficient model parallelism.
+_arXiv preprint arXiv:2506.01260_, 2025.
+
+
+Alexandre Rame, Matthieu Kirchmeyer, Thibaud Rahier, Alain Rakotomamonjy, patrick gallinari,
+and Matthieu Cord. Diverse weight averaging for out-of-distribution generalization. In Alice H. Oh,
+Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), _Advances in Neural Information_
+_Processing Systems_, 2022.
+
+
+Alexandre Rame, Kartik Ahuja, Jianyu Zhang, Matthieu Cord, Leon Bottou, and David Lopez-Paz.
+Model ratatouille: Recycling diverse models for out-of-distribution generalization. In Andreas
+Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan
+Scarlett (eds.), _Proceedings of the 40th International Conference on Machine Learning_, volume
+202 of _Proceedings of Machine Learning Research_, pp. 28656–28679. PMLR, 23–29 Jul 2023.
+
+
+Dominic Richards et al. Graph-dependent implicit regularisation for distributed stochastic subgradient
+descent. _Journal of Machine Learning Research_, 2020.
+
+
+Max Ryabinin, Tim Dettmers, Michael Diskin, and Alexander Borzunov. SWARM parallelism:
+Training large models can be surprisingly communication-efficient. In _Proceedings of the 40th_
+_International Conference on Machine Learning_, volume 202 of _Proceedings of Machine Learning_
+_Research_, pp. 29416–29440. PMLR, 2023.
+
+
+Ali H. Sayed. _Adaptation, Learning, and Optimization over Networks_ . Now Publishers, 2014.
+
+
+Alexander Sergeev and Mike Del Balso. Horovod: fast and easy distributed deep learning in
+tensorflow. _arXiv preprint arXiv:1802.05799_, 2018.
+
+
+Li Shen, Yan Sun, Zhiyuan Yu, Liang Ding, Xinmei Tian, and Dacheng Tao. On efficient training of
+large-scale deep learning models. _ACM Computing Surveys_, 57(3), 2024.
+
+
+Tao Shen, Didi Zhu, Ziyu Zhao, Chao Wu, and Fei Wu. Will llms scaling hit the wall? breaking
+barriers via distributed resources on massive edge devices. _arXiv preprint arXiv:2503.08223_, 2025.
+
+
+Abhishek Singha, Charles Lua, Gauri Guptaa, Ayush Chopraa, Jonas Blanca, Tzofi Klinghoffera,
+Kushagra Tiwarya, and Ramesh Raskara. A perspective on decentralizing ai. 2024.
+
+
+15
+
+
+Ankit Sonthalia, Alexander Rubinstein, Ehsan Abbasnejad, and Seong Joon Oh. Do deep neural
+network solutions form a star domain? In _The Thirteenth International Conference on Learning_
+_Representations_, 2025.
+
+
+Tao Sun, Dongsheng Li, and Bao Wang. Stability and generalization of decentralized stochastic
+gradient descent. In _Proceedings of the AAAI Conference on Artificial Intelligence_, 2021.
+
+
+Yuki Takezawa, Ryoma Sato, Han Bao, Kenta Niwa, and Makoto Yamada. Beyond exponential
+graph: Communication-efficient topologies for decentralized learning via finite-time convergence.
+In _Thirty-seventh Conference on Neural Information Processing Systems_, 2023.
+
+
+Hanlin Tang, Xiangru Lian, Ming Yan, Ce Zhang, and Ji Liu. D2: Decentralized training over
+decentralized data. In _International Conference on Machine Learning_ . PMLR, 2018.
+
+
+Zhenheng Tang, Shaohuai Shi, Wei Wang, Bo Li, and Xiaowen Chu. Communication-efficient
+distributed deep learning: A comprehensive survey. _arXiv preprint arXiv:2003.06307_, 2020.
+
+
+J. Tsitsiklis, D. Bertsekas, and M. Athans. Distributed asynchronous deterministic and stochastic
+gradient optimization algorithms. _IEEE Transactions on Automatic Control_, 31(9):803–812, 1986.
+
+
+Gal Vardi. On the implicit bias in deep-learning algorithms. _Commun. ACM_, 66(6):86–93, 2023.
+
+
+Thijs Vogels, Lie He, Anastasia Koloskova, Sai Praneeth Karimireddy, Tao Lin, Sebastian U Stich, and
+Martin Jaggi. Relaysum for decentralized deep learning on heterogeneous data. In A. Beygelzimer,
+Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), _Advances in Neural Information Processing_
+_Systems_, 2021.
+
+
+Thijs Vogels, Hadrien Hendrikx, and Martin Jaggi. Beyond spectral gap: The role of the topology in
+decentralized learning. _Journal of Machine Learning Research_, 24(355):1–31, 2023.
+
+
+Martijn De Vos, Sadegh Farhadkhani, Rachid Guerraoui, Anne marie Kermarrec, Rafael Pires, and
+Rishi Sharma. Epidemic learning: Boosting decentralized learning with randomized communication. In _Thirty-seventh Conference on Neural Information Processing Systems_, 2023.
+
+
+Jue Wang, Yucheng Lu, Binhang Yuan, Beidi Chen, Percy Liang, Christopher De Sa, Christopher Re,
+and Ce Zhang. CocktailSGD: Fine-tuning foundation models over 500Mbps networks. In _Proceed-_
+_ings of the 40th International Conference on Machine Learning_, volume 202 of _Proceedings of_
+_Machine Learning Research_, pp. 36058–36076. PMLR, 2023.
+
+
+Shiqiang Wang, Tiffany Tuor, Theodoros Salonidis, Kin K. Leung, Christian Makaya, Ting He, and
+Kevin Chan. Adaptive federated learning in resource constrained edge computing systems. _IEEE_
+_Journal on Selected Areas in Communications_, 37(6):1205–1221, 2019.
+
+
+Zixuan Wang, Zhouzi Li, and Jian Li. Analyzing sharpness along GD trajectory: Progressive sharpening and edge of stability. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun
+Cho (eds.), _Advances in Neural Information Processing Systems_, 2022.
+
+
+Mitchell Wortsman, Gabriel Ilharco, Samir Ya Gadre, Rebecca Roelofs, Raphael Gontijo-Lopes,
+Ari S Morcos, Hongseok Namkoong, Ali Farhadi, Yair Carmon, Simon Kornblith, et al. Model
+soups: averaging weights of multiple fine-tuned models improves accuracy without increasing
+inference time. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 23965–23998. PMLR,
+2022a.
+
+
+Mitchell Wortsman, Gabriel Ilharco, Jong Wook Kim, Mike Li, Simon Kornblith, Rebecca Roelofs,
+Raphael Gontijo Lopes, Hannaneh Hajishirzi, Ali Farhadi, Hongseok Namkoong, and Ludwig
+Schmidt. Robust fine-tuning of zero-shot models. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 7959–7971, June 2022b.
+
+
+Tongle Wu and Ying Sun. Implicit regularization of decentralized gradient descent for sparse
+regression. In _the Thirty-eighth Annual Conference on Neural Information Processing Systems_,
+2024.
+
+
+16
+
+
+Wenhan Xian, Feihu Huang, Yanfu Zhang, and Heng Huang. A faster decentralized algorithm
+for nonconvex minimax problems. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 34:
+25865–25877, 2021.
+
+
+Jie Xu, Wei Zhang, and Fei Wang. A(dp) [2] sgd: Asynchronous decentralized parallel stochastic
+gradient descent with differential privacy. _IEEE Transactions on Pattern Analysis and Machine_
+_Intelligence_, 2021.
+
+
+Prateek Yadav, Derek Tam, Leshem Choshen, Colin Raffel, and Mohit Bansal. TIES-merging:
+Resolving interference when merging models. In _Thirty-seventh Conference on Neural Information_
+_Processing Systems_, 2023.
+
+
+Shuoguang Yang, Xuezhou Zhang, and Mengdi Wang. Decentralized gossip-based stochastic bilevel
+optimization over communication networks. _Advances in Neural Information Processing Systems_,
+35:238–252, 2022.
+
+
+Haoxiang Ye and Qing Ling. Generalization error matters in decentralized learning under Byzantine
+attacks. _IEEE Transactions on Signal Processing_, 2025.
+
+
+Bicheng Ying, Kun Yuan, Yiming Chen, Hanbin Hu, Pan Pan, and Wotao Yin. Exponential graph is
+provably efficient for decentralized deep training. In _Advances in Neural Information Processing_
+_Systems_, 2021.
+
+
+Binhang Yuan, Yongjun He, Jared Quincy Davis, Tianyi Zhang, Tri Dao, Beidi Chen, Percy Liang,
+Christopher Re, and Ce Zhang. Decentralized training of foundation models in heterogeneous
+environments. _Advances in Neural Information Processing Systems_, 2022.
+
+
+Kun Yuan, Qing Ling, and Wotao Yin. On the convergence of decentralized gradient descent. _SIAM_
+_Journal on Optimization_, 26(3):1835–1854, 2016.
+
+
+Liangqi Yuan, Ziran Wang, Lichao Sun, Philip S. Yu, and Christopher G. Brinton. Decentralized
+federated learning: A survey and perspective. _IEEE Internet of Things Journal_, pp. 1–1, 2024.
+
+
+Mikhail Yurochkin, Mayank Agarwal, Soumya Ghosh, Kristjan Greenewald, Nghia Hoang, and
+Yasaman Khazaeni. Bayesian nonparametric federated learning of neural networks. In _Proceedings_
+_of the 36th International Conference on Machine Learning_, 2019.
+
+
+Shahryar Zehtabi, Dong-Jun Han, Rohit Parasnis, Seyyedali Hosseinalipour, and Christopher G Brinton. Decentralized sporadic federated learning: A unified algorithmic framework with convergence
+guarantees. In _The Thirteenth International Conference on Learning Representations_, 2025.
+
+
+Wei Zhang, Mingrui Liu, Yu Feng, Xiaodong Cui, Brian Kingsbury, and Yuhai Tu. Loss landscape
+dependent self-adjusting learning rates in decentralized stochastic gradient descent. _arXiv preprint_
+_arXiv:2112.01433_, 2021.
+
+
+Zhanpeng Zhou, Yongyi Yang, Xiaojiang Yang, Junchi Yan, and Wei Hu. Going beyond linear mode
+connectivity: The layerwise linear feature connectivity. In _Thirty-seventh Conference on Neural_
+_Information Processing Systems_, 2023.
+
+
+Zhanpeng Zhou, Mingze Wang, Yuchen Mao, Bingrui Li, and Junchi Yan. Sharpness-aware minimization efficiently selects flatter minima late in training. In _The Thirteenth International Conference_
+_on Learning Representations_, 2025.
+
+
+Miaoxi Zhu, Li Shen, Bo Du, and Dacheng Tao. Stability and generalization of the decentralized
+stochastic gradient descent ascent algorithm. In _Thirty-seventh Conference on Neural Information_
+_Processing Systems_, 2023a.
+
+
+Tongtian Zhu, Fengxiang He, Lan Zhang, Zhengyang Niu, Mingli Song, and Dacheng Tao. Topologyaware generalization of decentralized SGD. In _International Conference on Machine Learning_ .
+PMLR, 2022.
+
+
+Tongtian Zhu, Fengxiang He, Kaixuan Chen, Mingli Song, and Dacheng Tao. Decentralized SGD
+and average-direction SAM are asymptotically equivalent. In _Proceedings of the 40th International_
+_Conference on Machine Learning_, 2023b.
+
+
+17
+
+
+Tongtian Zhu, Wenhao Li, Can Wang, and Fengxiang He. DICE: Data influence cascade in decentralized learning. In _The Thirteenth International Conference on Learning Representations_,
+2025.
+
+
+18
+
+
+LLM USAGE STATEMENT
+
+
+We use large language models (LLMs) as writing-assistance tools. Their role is confined to proofreading and language polishing.
+
+
+IMPACT STATEMENT
+
+
+This paper studies the problem of temporal communication allocation in decentralized distributed
+learning, a topic of very high significance in the era of communication-intensive large model training.
+Specifically, we aim to contribute to the development of communication-efficient decentralized
+learning without compromising performance. The potential positive social impact are twofold:
+
+
+- **Democratizing Access.** For individuals and organizations with constrained infrastructure, our
+work contributes to the democratization of access to large-scale collaborative training. By reducing
+communication requirements, we lower the barrier to entry for participating in advanced model
+development. Such inclusivity can extend the applicability of distributed learning systems to edge
+environments, thereby promoting more equitable contributions to models trained at scale.
+
+
+- **Reducing Training Costs.** In data center environments, our approach can alleviate communication
+bottlenecks of distributed training. This reduction directly translates to shorter total wall-clock
+training time, thereby lowering the overall costs and energy consumption associated with large-scale
+distributed training.
+
+
+No negative societal impacts are identified.
+
+
+ETHICS STATEMENT
+
+
+Our research strictly adheres to the ICLR Code of Ethics. The work is foundational, focusing on
+the algorithmic and theoretical properties of decentralized learning, and does not involve human
+subjects or the collection of new sensitive data. All experiments were conducted on publicly available,
+standard academic datasets. We foresee no direct negative societal impacts; on the contrary, by
+reducing communication overhead, our findings may contribute positively by democratizing access
+to large-scale distributed training and lowering the associated resource footprint.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We are committed to the reproducibility of our research. Our theoretical claims, including all
+assumptions and their justifications, are presented in Section 5 with complete, step-by-step proofs
+provided in Appendix D. Comprehensive details for reproducing our empirical results, including
+model architectures, data processing, hyperparameter settings, and communication configurations,
+are well documented in Appendix C.1.
+
+
+A LIMITATIONS AND POTENTIAL QUESTIONS
+
+
+**A** :We use decentralized AdamW in some of our experiments for its superior performance in NonIID settings. Crucially, all reported empirical observations remain fully consistent when using
+decentralized SGD, directly aligning with our theoretical analysis (see Figure 1 and Subsection C.3).
+
+
+**A** : The theoretical explanation for the “mergeability” of local models in decentralized learning is
+supported by our result that a globally merged model converges faster to the optimum than individual
+local models. Specifically, we provide a fine-grained convergence analysis showing that the model
+merged from decentralized SGD (DSGD) can match the convergence rate of parallel SGD, despite
+
+
+19
+
+
+limited communication. Since the rate of _m_ -agent parallel SGD is superior to that of a single local
+model, this result transitively justifies the merged model’s superior performance relative to any
+individual model, thereby providing theoretical support for mergeability.
+
+
+**A:** All hyperparameters were tuned via grid search based on global test performance, with the batch
+size searched over _{_ 64 _,_ 128 _}_ . For ResNet-18 trained from scratch on Tiny ImageNet, we searched the
+learning rate over _{_ 1 _×_ 10 _[−]_ [4] _,_ 5 _×_ 10 _[−]_ [4] _,_ 1 _×_ 10 _[−]_ [3] _}_ for AdamW and _{_ 1 _×_ 10 _[−]_ [3] _,_ 5 _×_ 10 _[−]_ [3] _,_ 1 _×_ 10 _[−]_ [2] _}_
+for SGD. For CLIP ViT-B/32 on Tiny ImageNet, we searched the learning rate over _{_ 1 _×_ 10 _[−]_ [4] _,_ 5 _×_
+10 _[−]_ [4] _,_ 1 _×_ 10 _[−]_ [3] _}_ for AdamW and _{_ 5 _×_ 10 _[−]_ [4] _,_ 1 _×_ 10 _[−]_ [3] _,_ 5 _×_ 10 _[−]_ [3] _,_ 1 _×_ 10 _[−]_ [2] _}_ for SGD. For the
+optimal hyperparameters selected for our main experiments, please refer to the **Implementation**
+**Details** in Appendix C.1 and the additional empirical results in Subsection C.3).
+
+
+**A:** We use different initialization schemes and observe consistent performance gains from global
+merging, whether models start from different random initializations or from a pretrained state.
+The majority of our experiments use different initializations, demonstrating that local models in
+decentralized learning can be effectively merged regardless of their starting points. This is quite
+surprising, as it contrasts with methods like **Model Soup**, which require models to be fine-tuned from
+an identical pretrained state. Furthermore, our experiments with a shared pretrained state confirm that
+the performance gains hold in that setting as well (see Figure 1a and Subsection C.3).
+
+
+**A** : We adopt the visualization tool from (Crisostomi et al., 2024), positioning 16 trained models at the vertices of a regular hexadecagon. Any point within this polygon is an interpolated model whose parameters are determined by Wachspress barycentric coordinates; we then
+evaluate its cross-entropy loss to generate the contour map. Unlike methods that use random directions, our visualization grid is **deterministically** defined by the models themselves,
+allowing a direct investigation of their geometric connectivity. The full implementation is
+available in their official code repository [https://github.com/crisostomi/cycle-consistent-model-](https://github.com/crisostomi/cycle-consistent-model-merging/blob/master/notebooks/plots/plot_loss_contours_n_models.ipynb)
+[merging/blob/master/notebooks/plots/plot_loss_contours_n_models.ipynb.](https://github.com/crisostomi/cycle-consistent-model-merging/blob/master/notebooks/plots/plot_loss_contours_n_models.ipynb)
+
+
+**A** : Our empirical findings primarily focus on tasks within the vision domain. We note that this is
+consistent with most existing decentralized learning literature (Lin et al., 2021; Kong et al., 2021; Ying
+et al., 2021; Vogels et al., 2021; Li et al., 2022b; Zehtabi et al., 2025). Extending the experimental
+setup to broader tasks is a meaningful direction for future research.
+
+
+**A** : In our setting, the local models do not, in fact, converge to a similar state or a single consensus point.
+This is because our work addresses a more challenging heterogeneous data regime, which differs
+from the setting in the cited prior work. Instead, we identify an emergent geometric structure where
+decentralized training guides local models to a shared “high-loss ring” surrounding a central low-loss
+basin (see Figure 1c). Although the models do not reach a consensus, they remain surprisingly
+mergeable within this region. This geometric arrangement allows their average, i.e., the globally
+merged model, to fall directly into the low-loss basin. To the best of our knowledge, we are the first
+to identify this emergent phenomenon in decentralized learning.
+
+
+20
+
+
+B ADDITIONAL BACKGROUND AND RELATED WORK
+
+
+B.1 DECENTRALIZED LEARNING
+
+
+Modern large-scale model training and inference are predominantly conducted within centralized,
+high-cost data centers. Driven by mounting constraints on computational resources and power
+availability (Pilz et al., 2025), both academia and industry are increasingly exploring decentralized
+training approaches (OpenAI, 2025; Grand View Research, 2024). This paradigm, drawing inspiration
+from swarm intelligence systems (Bonabeau et al., 1999; Mavrovouniotis et al., 2017), offers a more
+economical and scalable approach by distributing computational tasks across globally distributed
+nodes, rather than relying solely on a single central server (Yuan et al., 2022; Borzunov et al., 2023b;
+Jaghouar et al., 2024; Ramasinghe et al., 2025). A notable illustration of the computational potential
+through decentralization is the Bitcoin system, which sustains workloads equivalent to a 16 GW
+power draw (CCAF, 2023), surpassing by a factor of three the estimated 5 GW consumption of the
+largest AI supercluster under development (Gardizy & Efrati, 2024; OpenAI, 2025).
+
+
+To provide context, we summarize key algorithmic and theoretical advances in decentralized learning.
+While our discussion highlights several notable contributions, it is not exhaustive; readers are referred
+to recent advances and surveys (Zhu et al., 2025; Martínez Beltrán et al., 2023; Singha et al., 2024;
+Yuan et al., 2024; He et al., 2025; Ramasinghe et al., 2025; Kolehmainen et al., 2025).
+
+
+**Algorithmic** **Progress** **in** **Decentralized** **Learning** . The advancement of decentralized learning
+algorithms has been primarily driven by the need for communication-efficiency in practical distributed
+learning. Decentralized algorithms have been refined to handle a variety of realistic scenarios,
+including time-varying communication topologies (Nedi’c & Olshevsky, 2014; Koloskova et al.,
+2020; Ying et al., 2021; Takezawa et al., 2023), asynchronous updates (Lian et al., 2018; Xu et al.,
+2021; Nadiradze et al., 2021; Bornstein et al., 2023; Even et al., 2024), statistical heterogeneity
+(Tang et al., 2018; Vogels et al., 2021; Le Bars et al., 2023), and robustness to Byzantine failures
+(He et al., 2022; Ye & Ling, 2025). Moreover, recent works extended beyond standard empirical
+risk minimization to more structured problem classes, such as compositional (Gao & Huang, 2021),
+minimax (Xian et al., 2021; Zhu et al., 2023a; Chen et al., 2024), and bi-level optimization (Yang
+et al., 2022; Gao et al., 2023; Chen et al., 2023). Additionally, privacy concerns in decentralized
+learning are also critical, with efforts focusing on differentially privacy (Cyffers et al., 2024; Allouah
+et al., 2024) and data reconstruction attacks (Mrini et al., 2024).
+
+
+**Theoretical Progress in Decentralized Learning.** Foundational work on decentralized optimization
+(Nedic & Ozdaglar, 2009; Sayed, 2014; Yuan et al., 2016; Lian et al., 2017) laid the groundwork for
+understanding convergence. Building on this, Lu & De Sa (2021) proposed a hierarchical abstraction
+of decentralization, distinguishing it into three layers, providing a unified view across federated
+and decentralized paradigms. Koloskova et al. (2020) consolidated synchronous decentralized SGD
+algorithms with changing communication topologies and local updates, and Even et al. (2024)
+extended the unifying perspective to asynchronous protocols. More recently, Zehtabi et al. (2025)
+developed these frameworks further by considering the sporadicity of both communication and
+computations. On the generalization front, Richards et al. (2020) derived stability-based bounds for
+decentralized SGD in convex settings, while Sun et al. (2021) extended these to non-convex objectives,
+revealing a dependency on the spectral gap of the communication graph. This dependency was
+subsequently refined by Zhu et al. (2022), who introduced a Gaussian weight difference assumption
+to tighten the bound. Complementary results showed that in convex regimes, the generalization of
+decentralized SGD matches that of centralized SGD (Le Bars et al., 2024), while in non-convex
+landscapes, decentralization primarily impacts worst-case generalization behavior. To account for
+unexplained generalization behaviors in decentralized training (Kong et al., 2021; Gurbuzbalaban
+et al., 2022; Vogels et al., 2023), Zhu et al. (2023b) linked decentralized SGD to random sharpnessaware minimization (SAM), revealing a bias toward flatter minima. Notably, akin to our finding that
+decentralized learning generalizes when allocated high communication late in training, Zhou et al.
+(2025) has shown that SAM efficiently selects flatter minima in the later stage of training.
+
+
+**Towards Decentralized Training of Foundation Models.** Recent advances have shown the feasibility of training large-scale foundation models in decentralized environments. DT-FM (Yuan et al.,
+2022) introduced tasklet-based scheduling for Transformer training under bandwidth-constrained
+settings, enabling efficient resource allocation. SWARM Parallelism (Ryabinin et al., 2023) scaled
+decentralized training through resilient pipeline design and adaptive load balancing. CocktailSGD
+
+
+21
+
+
+(Wang et al., 2023) further improved efficiency via a combination of decentralization, gradient sparsification, and quantization for LLM fine-tuning. On the inference side, Petal (Borzunov et al., 2023a)
+exploited peer-to-peer networks to amortize computational costs across heterogeneous nodes. Most
+recently, Intellect (Jaghouar et al., 2024), building on Diloco (Douillard et al., 2023), leveraged hybrid
+parallelism, i.e., both data and model parallelism, to collaboratively train models with billions of
+parameters. NoLoCo (Kolehmainen et al., 2025) further extended Diloco to gossip-type decentralized
+settings. For a broad survey of large-scale deep learning practice, see Shen et al. (2024; 2025).
+
+
+B.2 IMPLICIT BIAS OF DECENTRALIZED LEARNING
+
+
+The concept of implicit bias, i.e., the intrinsic preference of learning algorithms for solutions with
+certain properties, has emerged as a key concept in explaining the empirical success of modern
+deep learning (Li et al., 2022c; Vardi, 2023; Lyu, 2024). Recent studies have highlighted intriguing
+distinctions between decentralized stochastic gradient descent (DSGD) and its centralized counterpart
+(CSGD). Gurbuzbalaban et al. (2022) demonstrated that under certain conditions, DSGD operating
+on large, sparse topologies exhibits heavier-tailed parameter distributions compared to CSGD. Zhang
+et al. (2021) showed that decentralization introduces landscape-dependent noise, which can improve
+tolerance to larger learning rates. This observation aligns with findings by Vogels et al. (2023), who
+revealed that collaboration in decentralized settings permits the use of larger learning rates. Zhu
+et al. (2023b) first explicitly characterized the implicit bias of decentralized SGD by establishing
+its connection with random sharpness-aware minimization, proving the existence of flatness bias
+in decentralized training. Complementing this, Cao et al. (2024) offered a detailed analysis of the
+interplay between flatness and optimization in DSGD, particularly its ability to escape local minima.
+More recently, Wu & Sun (2024) investigated the implicit regularization properties of decentralized
+optimization in non-convex sparse regression problems, recovering the convergence rates achieved by
+gradient descent in centralized settings.
+
+
+**Comparison with Zhu et al. (2023b)** . We note that Zhu et al. (2023b) has highlighted the generalization benefits of decentralized learning, but key differences exist in terms of the experimental
+setup and the insights derived. While Zhu et al. (2023b) focused on IID scenarios and specific
+cases involving exceptionally large batch sizes, we consider the more realistic non-IID setting using
+standard batch sizes. This shift in focus allows us to uncover phenomena not observed by Zhu et al.
+(2023b), including insights into communication allocation strategies.
+
+
+B.3 MODEL MERGING
+
+
+**Mode Connectivity and Model Merging Techniques.** Recent works on _(Linear) Mode Connectivity_
+have advanced our understanding of the complex loss landscape in neural networks. Freeman &
+Bruna (2017); Draxler et al. (2018); Garipov et al. (2018); Nagarajan & Kolter (2019); Frankle et al.
+(2020) discovered that different solutions of deep neural networks can be merged together by simply
+averaging their parameters. Sonthalia et al. (2025) further showed that the solutions may form a star
+domain. We note that these phenomena are observed in the following scenarios:
+
+
+- _Shared_ _initialization_ _(Frankle_ _et_ _al.,_ _2020;_ _Fort_ _et_ _al.,_ _2020;_ _Zhou_ _et_ _al.,_ _2023)._ Models are
+initialized from a pretrained checkpoint.
+
+
+- _Homogeneous data distribution (Wortsman et al., 2022a)_ . Models are trained on homogeneous
+data distribution.
+
+
+- _Permutation_ _(Ainsworth_ _et_ _al.,_ _2023;_ _Entezari_ _et_ _al.,_ _2022)._ Models are independently trained.
+The neurons of one model are permuted to match the neurons of the other while maintaining a
+functionally equivalent network.
+
+
+These findings have inspired a range of model merging techniques for various applications. Izmailov
+et al. (2018); Matena & Raffel (2022); Rame et al. (2022; 2023); Wortsman et al. (2022a;b) found
+that merging the parameters of models that start from the same pretrained model and finetune over
+the same task leads to improved generalization and robustness. Furthermore, Ilharco et al. (2022);
+Li et al. (2022a); Ilharco et al. (2023); Ortiz-Jimenez et al. (2023); Yadav et al. (2023) showed that
+merging models that finetune over different tasks enables multi-task abilities.
+
+
+22
+
+
+**Comparisons** **with** **Model** **Merging** **Literature.** Our results show that mode connectivity, or
+mergeability, can still emerge in decentralized learning, even when the local models are initialized
+_differently_, trained on highly _heterogeneous_ data, and merged _without_ any permutation. Our findings
+offer new insights into both model merging techniques and the geometry of the neural network loss
+landscape, which we anticipate will motivate further advances in both areas.
+
+
+C ADDITIONAL EXPERIMENTS
+
+
+C.1 EXPERIMENTAL SETUPS
+
+
+**Computational Resources.** The experiments were conducted on a computing facility equipped with
+80 GB NVIDIA [®] A100 [™] GPUs. All implementations are based on PyTorch, and computations are
+distributed across multiple GPUs for efficiency.
+
+
+**Dataset.** We use three widely adopted image classification datasets: CIFAR-10, CIFAR-100
+(Krizhevsky et al., 2009), and Tiny ImageNet (Le & Yang, 2015). CIFAR-10 consists of 60,000 RGB
+images across 10 classes, while CIFAR-100 contains 60,000 RGB images across 100 classes. The
+images in both datasets have a spatial resolution of 32 _×_ 32 pixels. Tiny ImageNet is a subset of the
+ImageNet dataset, comprising 100,000 images drawn from 200 classes, with each image resized to
+64 _×_ 64 pixels. It provides a mid-scale benchmark that is more challenging than CIFAR datasets
+but less computationally demanding than training full ImageNet. To incorporate data augmentation, we employ a combination of RandomCrop with 4-pixel padding, RandomHorizontalFlip, and
+RandAugment with num_ops=2 and magnitude=9.
+
+
+**Details of Decentralized Learning** . We simulate a heterogeneous decentralized learning environment. For our main experiments (Figure 1a and Figure 1b), we use _m_ = 32 agents, while for other
+experiments, including the sliding window experiments (Figure 2) and the loss landscape visualizations (Figure 1c), we use _m_ = 16 agents. The number of agents for the visualization was chosen as
+16 for clarity, as a plot with 32 models would be visually crowded. In all configurations, we employ
+a Dirichlet distribution characterized by _α_ = 0 _._ 1 to partition the data among agents. The Dirichlet
+distribution is commonly used to partition data in federated learning scenarios, as it allows for the
+control of label distribution skew among agents (Yurochkin et al., 2019; Hsu et al., 2019). A smaller
+_α_ results in more imbalanced data distributions, where some agents predominantly receive data from
+a limited number of classes, while a larger _α_ results in more uniform label distributions across agents.
+This configuration effectively captures the realistic non-IID nature of decentralized learning, where
+different agents may have access to personalized data reflective of their local environments.
+
+
+- **Communication Graph.** We evaluate three decentralized communication topologies: random
+graph, ring graph, and exponential graph. In the random graph setting, during each communication
+round, each agent selects a random subset of its neighbors for gossip averaging. For “R 1”, each
+agent selects exactly one random neighbor in each round. For “R 0.2”, each agent selects one
+neighbor with probability 0.2 and continues local training without communication with probability
+0.8. The ring graph enforces a fixed cyclic communication structure, while the exponential graph
+ensures connectivity by allowing agents to communicate at exponentially increasing distances.
+
+
+- **Communication** **Rounds** **and** **Local** **Steps.** The decentralized learning process is conducted
+over _T_ = 300 communication rounds. We use a local training step size of _H_ = 100 batches per
+communication round to balance communication and computation costs.
+
+
+- **Local Data per Agent.** Each agent is assigned a subset of the dataset with a fixed size of 4096
+samples, drawn according to a Dirichlet distribution to simulate realistic non-IID scenarios.
+
+
+**Model Architecture.** To ensure a representative comparison across different model families, we
+adopt ResNet-18 (He et al., 2016) and CLIP ViT-B/32 (Radford et al., 2021) as backbone architectures
+in our experiments. ResNet-18 is a widely used lightweight convolutional neural network that serves
+as a canonical example of traditional CNN-based architectures. In contrast, CLIP ViT-B/32 is a
+transformer-based vision model pre-trained on large-scale image–text pairs. For experiments on Tiny
+ImageNet, where images are resized to 64×64 pixels, we adjust the CLIP visual encoder to handle
+the lower resolution. With a patch size of 32, each image yields 4 visual tokens arranged in a 2×2
+grid, plus a [CLS] token, resulting in a 5-token input sequence.
+
+
+23
+
+
+**Implementation Details.** All hyperparameters are tuned through grid search based on global test
+performance (see Definition 1). For experiments using decentralized SGD, the optimal learning
+rates were found to be 1 _×_ 10 _[−]_ [2] for ResNet-18 (trained from scratch) and 1 _×_ 10 _[−]_ [3] for CLIP ViTB/32. When using decentralized AdamW, the optimal learning rate is 5 _×_ 10 _[−]_ [4] for ResNet-18 (both
+when trained from scratch and fine-tuned from ImageNet-pretrained weights) and 1 _×_ 10 _[−]_ [5] for the
+pretrained CLIP ViT-B/32 on Tiny ImageNet. For all experiments, weight decay is set to 5 _×_ 10 _[−]_ [4] and
+the batch size is selected as 128. The key empirical results remain consistent across these optimizer
+and hyperparameter choices, indicating that our conclusions are stable and not sensitive to specific
+hyperparameter configurations.
+
+
+**Details** **of** **Loss** **Landscape** **Visualization** **in** **Figure** **1c** . To analyze the geometric connections
+among models after decentralized training, we visualize the loss landscape spanning their parameter spaces. We adopt the visualization tool from (Crisostomi et al., 2024), which is specifically
+designed to analyze the interpolation space within the convex hull formed by a given set of models. In our implementation, we position the 16 trained models at the vertices of a regular hexadecagon. Any point within this polygon represents an interpolated model, whose parameters are a
+weighted sum of the parameters of the 16 vertex models; the weights are determined by the point’s
+Wachspress barycentric coordinates. We then evaluate the cross-entropy loss of each interpolated
+model on the entire test set to generate the final loss contour map, as shown in Figure 1c. The
+[implementation is available in their notebook https://github.com/crisostomi/cycle-consistent-model-](https://github.com/crisostomi/cycle-consistent-model-merging/blob/master/notebooks/plots/plot_loss_contours_n_models.ipynb)
+[merging/blob/master/notebooks/plots/plot_loss_contours_n_models.ipynb within the official code](https://github.com/crisostomi/cycle-consistent-model-merging/blob/master/notebooks/plots/plot_loss_contours_n_models.ipynb)
+repository for (Crisostomi et al., 2024). We note two key aspects of this visualization approach:
+
+
+- **Focus on Convex Combinations.** For points outside the polygon, one or more of their barycentric
+coordinates become negative, corresponding to an extrapolation, which is often unstable. This
+visualization approach is consistent with Definition 2, focusing on the space of convex combinations
+among the models.
+
+
+- **Deterministic** **Grid** **vs.** **Random** **Directions.** Notably, the visualization method differs from
+approaches that use random directions to probe the landscape of a single model, as our visualization
+grid is defined directly by the 16 models themselves. This allows us to directly investigate the
+geometric connectivity and interpolation properties among this predefined set of models.
+
+
+**Computational Resource Requirements and Runtime.** To enhance accessibility for researchers
+working with diverse computational environments, our code includes a centralized simulation of
+decentralized training. This enables the reproduction and extension of our decentralized learning
+experiments using fewer GPUs. A single decentralized AdamW training experiment with 16 agents
+using ResNet-18 on the Tiny ImageNet dataset requires approximately 15 GB of GPU memory
+and can be conducted on a single GPU with sufficient memory, such as an NVIDIA V100, RTX
+3090, RTX 4090, or A100. On an A100 GPU, the typical runtime is approximately 8 hours for
+300 communication rounds, each comprising 100 local steps. For the CLIP ViT-B/32 model, the
+memory demand rises to about 30 GB, yet it remains feasible on a single A100 GPU, with a runtime
+of approximately 12 hours under the same configuration of 300 communication rounds and 100 local
+steps per round.
+
+
+C.2 PRACTICAL EVALUATION METRICS
+
+
+The standard evaluation metric of parallel and federated learning is the accuracy of the global model.
+
+**Definition C.1** (Test Accuracy of Global Model) **.** _The accuracy of the global model θ is defined as:_
+
+
+Acc( _θ_ ) ≜ [1]
+
+_m_
+
+
+- if IID
+
+E _ξk∼Dk_ Acc( _θ_ ; _ξk_ ) = E _ξ∼D_ Acc( _θ_ ; _ξ_ ) _._
+_k∈V_
+
+
+In decentralized learning, models are often evaluated in the absence of a full consensus model _θ_ due
+to data heterogeneity and limited training time. Two major metrics are adopted in this scenario.
+
+**Definition C.2** (Average Local Test Accuracy) **.** _The average accuracy of agents k_ _∈V_ _is defined as:_
+
+
+Acc( _{θk}k∈V_ ) ≜ [1]
+
+_m_
+
+
+E _ξk∼Dk_ Acc( _θk_ ; _ξk_ )
+_k∈V_
+
+
+E _ξ∼D_ Acc( _θk_ ; _ξ_ ) _._
+
+_k∈V_
+
+
+if IID 1
+=
+_m_
+
+
+- �� _Average Test accuracy on the local distribution across agents_
+
+
+24
+
+
+However, in real-world scenarios, local data distributions are often heterogeneous and not guaranteed
+to be IID across agents. In such settings, an important goal is to understand how well local models,
+trained on limited local data, generalize to the global data distribution. To account for this, we adopt
+the following _average global test accuracy_, a proxy of average global population risk, as the primary
+evaluation metric, which quantifies how well local models generalize to the global distribution.
+
+**Definition C.3** (Average Global Test Accuracy) **.** _The average accuracy of agents k_ _∈V_ _is defined as:_
+
+
+Acc( _{θk}k∈V_ ) = [1]
+
+_m_
+
+
+Acc( _θk_ )
+
+_k∈V_
+
+
+E _ξl∼Dl_ Acc( _·_ ; _ξl_ )
+_l∈V_
+
+
+1
+_,_ _where_ Acc( _·_ ) ≜
+_m_
+
+
+_._
+
+
+- �� _Average Accuracy across agents_
+
+
+ - �� _Test accuracy on the global distribution_
+
+
+C.3 ADDITIONAL EXPERIMENTS
+
+
+C.3.1 DIFFERENT NUMBER OF AGENTS AND OPTIMIZERS
+
+
+We conduct additional experiments by varying the number of agents (from 16 to 32) and comparing
+different optimizers (SGD to AdamW). The effect of single merging remains consistent.
+
+
+(a) CLIP ViT-B/32 (b) ResNet-18 (w/o pretraining)
+
+
+Figure C.1: **(a, b)** : Global test accuracy (see Definition 1) of CLIP ViT-B/32 (a) and ResNet-18 (b)
+trained on Tiny ImageNet using FedAdamW (blue), decentralized AdamW (orange), and one-shot
+FedAdamW (green), distributed across **16** agents with high data heterogeneity (Dirichlet _α_ = 0 _._ 1).
+Decentralized training involves each agent syncing model parameters with a random peer per round
+with a probability of 0.2, with a single global merging at the final round (see details in Appendix C.1).
+
+
+C.3.2 DIFFERENT COMMUNICATION TOPOLOGIES
+
+
+We also conduct additional experiments with different communication topologies to examine whether
+the empirical results remain consistent. New observations are summarized below.
+
+
+- **Models remain mergeable under different numbers of peers.** We evaluate two settings (random
+topology with _R_ = 0 _._ 2 and _R_ = 1; see “Communication Graph” in Appendix C.1). As shown in
+
+
+25
+
+
+(a) CLIP ViT-B/32 (b) ResNet-18 (w/o pretraining)
+
+
+Figure C.2: **(a, b)** : Global test accuracy (see Definition 1) of CLIP ViT-B/32 (a) and ResNet-18 (b)
+trained on Tiny ImageNet using FedAdamW (blue), decentralized AdamW (orange), and one-shot
+FedAdamW (green), distributed across **32** agents with high data heterogeneity (Dirichlet _α_ = 0 _._ 1).
+Decentralized training involves each agent syncing model parameters with a random peer per round
+with a probability of 0.2, with a single global merging at the final round (see details in Appendix C.1).
+
+
+(a) Different Number of Peers _R_ (b) Different Topologies
+
+
+Figure C.3: Global test accuracy (see Definition 1) of training ResNet-18 on Tiny ImageNet, distributed across 16 agents with high heterogeneity (Dirichlet _α_ = 0.1; see details in Appendix C.1). We
+evaluate the effects of different **(a)** number of peers _R_, and **(b)** communication topologies. Pretrained
+weights are used only in (a).
+
+
+Figure C.3a, performance improvements are consistently observed, with more significant gains in the
+_R_ = 0 _._ 2 case.
+
+
+- **Models remain mergeable across different communication topologies.** We evaluate two topologies: exponential and ring graphs. As shown in Figure C.3b, both topologies preserve the mergeability
+of local models, with exponential graphs yielding slightly better test performance for both local and
+merged models. The trend of mergeability persists across topologies throughout training, though
+performance may vary.
+
+
+C.3.3 DIFFERENT HYPERPARAMETERS, DATASET, AND HETEROGENEITY LEVEL
+
+
+We further conduct supplementary experiments in which the final global merge is approximated by
+topology-constrained gossip merging on an exponential graph (Ying et al., 2021).
+
+
+**Summary** . Consistent test performance improvement of a single global merging across a wide
+range of settings are observed, including different hyperparameter setups, datasets, degree of data
+heterogeneity, model architectures, optimizers, initialization schemes, and communication topologies.
+
+
+C.3.4 REALIZING FINAL GLOBAL GOSSIP VIA TOPOLOGY-CONSTRAINED MERGING
+
+
+We also perform additional experiments where the final global merging is approximated by multiple
+rounds of gossip merging, i.e., a specific exponential topology (Ying et al., 2021).
+
+
+26
+
+
+(a) Different Batch Sizes (b) Different Learning Rates (c) Different Initialization Schemes
+
+
+Figure C.4: Global test accuracy (see Definition 1) of training ResNet-18 on Tiny ImageNet with
+decentralized AdamW, distributed across 16 agents with high heterogeneity (Dirichlet _α_ = 0.1; see
+details in Appendix C.1). We evaluate the effects of different **(a)** batch sizes (64 vs. 128), **(b)** learning
+rates (5 _×_ 10 _[−]_ [4] vs. 1 _×_ 10 _[−]_ [4] ), and **(c)** different initialization schemes.
+
+
+(a) (b) (c) (d)
+
+
+Figure C.5: Global test accuracy (see Definition 1) for ResNet-18 trained with decentralized AdamW
+across 32 agents under different levels of data heterogeneity (Dirichlet _α_ = 0 _._ 1 ( **a**, **c** ) vs. _α_ = 1 _._ 0 ( **b**,
+**d** ); see Appendix C.1). Results are reported on both CIFAR-100 ( **a**, **b** ) and Tiny ImageNet ( **c**, **d** ).
+
+
+(a) 1 Round Final Gossip Merging (b) 5 Rounds Final Gossip Merging (c) 1 Round Final Global Merging
+
+
+Figure C.6: Global test accuracy (see Definition 1) for ResNet-18 trained with decentralized AdamW
+on Tiny ImageNet (32 agents). Left: regular decentralized training followed by one round of topologyconstrained final gossip merging on an exponential graph. Middle: the same topology-constrained
+setting, but with five rounds of final gossip merging to better approximate global aggregation. Right:
+baseline setting (our original approach), with random communication among all agents during training
+followed by one perfect global merge.
+
+
+**Summary** . We observe that (1) even a single round of topology-constrained final gossip merging
+substantially improves global test accuracy, and (2) the resulting performance is comparable to the
+baseline that uses random communication among all agents followed by one perfect global merge.
+
+
+27
+
+
+D THEORY
+
+
+This section provides the proofs of the main theoretical results presented in this paper. For simplicity,
+and following the setup in the existing literature, we assume that the sample size of local agents is
+_nk_ = _n_ for all _k_ _∈V_ .
+
+
+_Proof._ For completeness, we provide the proof of Lemma D.1, with minor corrections and additional
+details. In decentralized SGD (Algorithm 1 with SGD as the local optimizer), each agent _k_ _∈V_
+performs at each iteration
+
+
+_θk_ [(] _[t]_ [+1)] =
+
+
+_m_
+
+- _Wk,l_ - _θl_ [(] _[t]_ [)] _−_ _η ∇Ll_ ( _θl_ [(] _[t]_ [)][;] _[ξ]_ _l_ [(] _[t]_ [)][)] - _._
+
+_l_ =1
+
+
+In matrix form, letting
+
+
+Θ [(] _[t]_ [)] = [ _θ_ 1 [(] _[t]_ [)] _[, . . ., θ]_ _m_ [(] _[t]_ [)][]] _[ ∈]_ [R] _[d][×][m][,]_ _∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] ) = [ _∇L_ 1( _θ_ 1 [(] _[t]_ [)][;] _[ ξ]_ 1 [(] _[t]_ [)][)] _[, . . .,][ ∇L][m]_ [(] _[θ]_ _m_ [(] _[t]_ [)][;] _[ ξ]_ _m_ [(] _[t]_ [)][)]] _[,]_
+
+
+we have
+
+
+Θ [(] _[t]_ [+1)] = �Θ [(] _[t]_ [)] _−_ _η ∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] )� _W._
+
+
+The consensus matrix after mixing is
+
+
+¯Θ [(] _[t]_ [+1)] = Θ [(] _[t]_ [+1)] _m_ 1 **[11]** _[⊤]_ [=] �Θ [(] _[t]_ [)] _−_ _η ∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] )� _m_ 1 **[11]** _[⊤][,]_
+
+
+since **1** _[⊤]_ _W_ = **1** _[⊤]_ .
+
+
+Thus the consensus distance satisfies
+
+_m_ Ξ [2] _t_ +1 [=] ��Θ( _t_ +1) _−_ ¯Θ( _t_ +1)��2 _F_ [=] ���Θ [(] _[t]_ [)] _−_ _η ∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] )� ( _W_ _−_ _m_ [1] **[11]** _[⊤]_ [)] ��2 _F_ _[.]_
+
+
+By Assumption 1, for any Θ _∈_ R _[d][×][m]_,
+
+
+2 2
+E _W_ ��Θ _W_ _−_ ¯Θ�� _F_ _[≤]_ [(1] _[ −]_ _[ρ]_ [)] ��Θ _−_ ¯Θ�� _F_ _[,]_
+
+
+we obtain,
+
+
+2
+_m_ [1] **[11]** _[⊤]_ [)] ���
+
+
+_m_ Ξ [2] _t_ +1 _[≤]_ [(1] _[ −]_ _[p]_ [)] ���Θ( _t_ )( _I_ _−_ _m_ 1 **[11]** _[⊤]_ [)] _[ −]_ _[η][ ∇L]_ [(Θ][(] _[t]_ [)][;] _[ ξ]_ [(] _[t]_ [)][)(] _[I]_ _[−]_ [1]
+
+
+_F_ _[.]_
+
+
+Applying the inequality _∥A_ + _B∥_ [2] _F_ _[≤]_ [(1 +] _[ α]_ [)] _[∥][A][∥]_ _F_ [2] [+ (1 + 1] _[/α]_ [)] _[∥][B][∥]_ _F_ [2] [with] _[ α]_ [ =] _[p]_ 2 [gives]
+
+
+_m_ Ξ [2] _t_ +1 _[≤]_ [(1] _[ −]_ _[p]_ [)] �(1 + _[p]_ 2
+
+
+_p_ [2] [)] _[ η]_ [2][ ��] _[∇L]_ [(Θ][(] _[t]_ [)][;] _[ ξ]_ [(] _[t]_ [)][)] ��2 _F_
+
+
+_[p]_ 2 [)] ��Θ( _t_ )( _I_ _−_ _m_ 1 **[11]** _[⊤]_ [)] ��2 _F_ [+ (1 +] _p_ [2]
+
+
+_[p]_ 2 - _m_ Ξ [2] _t_ [+] [6(1] _[ −]_ _[p]_ [)]
+
+
+ _≤_ 1 _−_ _[p]_
+
+
+2
+_p_ _η_ [2][ ��] _∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] )�� _F_ _[,]_
+
+
+where we use (1 + _p/_ 2) _≤_ 1 + _p_ and (1 + 2 _/p_ ) _≤_ 6 _/p_ for _p ∈_ (0 _,_ 1).
+
+
+28
+
+
+We now decompose the stochastic gradient as
+
+
+_∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] ) = _∇L_ (Θ [(] _[t]_ [)] ) +      - _∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] ) _−∇L_ (Θ [(] _[t]_ [)] )� _,_
+
+
+so by Young’s Inequality, we have
+�� _∇L_ (Θ( _t_ ); _ξ_ ( _t_ ))��2 _F_ _[≤]_ [2] �� _∇L_ (Θ( _t_ ))��2 _F_ [+ 2] �� _∇L_ (Θ( _t_ ); _ξ_ ( _t_ )) _−∇L_ (Θ( _t_ ))��2 _F_ _[.]_
+
+
+Taking expectation over _ξ_ [(] _[t]_ [)] and invoking Assumption 3, we get
+
+
+E� _∥∇L_ (Θ [(] _[t]_ [)] ; _ξ_ [(] _[t]_ [)] ) _∥_ [2] _F_          - _≤_ 2 _∥∇L_ (Θ [(] _[t]_ [)] ) _∥_ [2] _F_ [+ 2] _[ σ]_ [2] _[m.]_
+
+
+Substituting back and dividing by _m_ yields
+
+
+_[p]_ 2 - Ξ [2] _t_ [+] [12(1] _[ −]_ _[p]_ [)]
+
+
+E�Ξ [2] _t_ +1� _≤_ �1 _−_ _[p]_ 2
+
+
+_η_ [2][�] _ϕ_ [2] _t_ [+] _[ σ]_ [2][�] _,_
+_p_
+
+
+which completes the proof.
+
+
+_Proof._ Consider the key recursion from Lemma D.1:
+
+
+_[p]_ 2 - Ξ [2] _t_ [+] [12 (1] _[ −]_ _[p]_ [)]
+
+
+E�Ξ [2] _t_ +1� _≤_ �1 _−_ _[p]_ 2
+
+
+_η_ [2][�] _ϕ_ [2] _t_ [+] _[ σ]_ [2][�] _._
+_p_
+
+
+**(1) Special Case:** **uniformly bounded gradient norms.**
+
+Assume _ϕ_ [2] _t_ _[≤]_ _[ϕ]_ [2][.] [Unrolling the above gives]
+
+
+E�Ξ [2] _t_ +1� _≤_
+
+
+_t−_ 1
+
+
+1 _−_ _[p]_
+
+
+_i_ =0
+
+
+ - _i_ 12 (1 _−_ _p_ )
+
+_[p]_ 2 _p_ _η_ [2] ( _ϕ_ [2] + _σ_ [2] ) _._
+
+
+_[p]_ 2 [)] _[i]_ _[≤]_ _p_ [2]
+
+
+Since [�] _i_ _[t]_ =0 _[−]_ [1][(1] _[ −]_ _[p]_ 2
+
+
+_p_ [, we can bound the consensus distance as]
+
+
+E�Ξ [2] _t_ +1� _≤_ [12 (1] _[ −]_ _[p]_ [)]
+
+
+[2] [24 (1] _[ −]_ _[p]_ [)] _[ η]_ [2]
+
+_p_ [=] _p_ [2]
+
+
+_[ −]_ _[p]_ [)]
+
+_η_ [2] ( _ϕ_ [2] + _σ_ [2] ) _×_ [2]
+_p_ _p_
+
+
+( _ϕ_ [2] + _σ_ [2] ) _,_
+_p_ [2]
+
+
+which yields the first claim.
+
+
+**(2) Special Case:** **slowly changing gradient norms.**
+
+
+If _ϕ_ [2] _t_ _[≤]_ [(1 +] _[p]_ 4
+
+
+_[p]_ 4 [)] _[ ϕ]_ _t_ [2] +1 [, and since]
+
+
+      1 _−_ _[p]_
+
+
+_[p]_ 4 - _i_ _≤_ �1 _−_ _[p]_ 4
+
+
+_[p]_ 2 - _i_ �1 + _[p]_ 4
+
+
+_[p]_ 4 - _i,_
+
+
+29
+
+
+the consensus distance satisfies
+
+
+E �Ξ [2] _t_ +1� _≤_
+
+
+_≤_
+
+
+_t−i−_ 1
+
+
+_i_ =0
+
+
+_t−_ 1
+
+
+_i_ =0
+
+
+1 _−_ _[p]_
+
+4
+
+
+1 _−_ _[p]_
+
+2
+
+
+1 _−_ _[p]_
+
+
+- _i_ 12(1 _−_ _p_ ) _η_ 2 [�] _ϕ_ [2] _t−_ 1 [+] _[ σ]_ [2][�]
+
+_p_
+
+
+- _i_ 12(1 _−_ _p_ ) _η_ 2( _ϕ_ 2 _t−_ 1 [+] _[ σ]_ [2][)] _≤_ [48(1] _[ −]_ _[p]_ [)] _[η]_ [2] - _ϕ_ [2] _t−_ 1 [+] _[ σ]_ [2][�] _._ (D.2)
+_p_ _p_ [2]
+
+
+We can then control the expected squared distance between two consecutive steps of the globally
+averaged model with Corollary D.4.
+
+
+_Proof._ Denote _γ_ [(] _[t]_ [+1)] = E _ξ_ ( _t_ ) _θ_ [¯][(] _[t]_ [+1)] _−_ _θ_ [¯][(] _[t]_ [)] . We can expand the expected distance as follows:
+
+E _ξ_ ( _t_ ) �� _θ_ ¯( _t_ +1) _−_ _θ_ ¯( _t_ )��2 = E _ξ_ ( _t_ ) �� _θ_ ¯( _t_ +1)��2 + �� _θ_ ¯( _t_ )��2 _−_ 2(¯ _θ_ ( _t_ )) _⊤γ_ ( _t_ +1)
+
+= Tr �Cov( _θ_ [¯][(] _[t]_ [+1)] )� + ��E _ξ_ ( _t_ ) _θ_ ¯( _t_ +1)��2 + �� _θ_ ¯( _t_ )��2 _−_ 2(¯ _θ_ ( _t_ )) _⊤γ_ ( _t_ +1)
+
+= Tr �Cov( _θ_ [¯][(] _[t]_ [+1)] )� + ��E _ξ_ ( _t_ )[¯ _θ_ ( _t_ +1) _−_ _θ_ ¯( _t_ )]��2
+
+
++ ��E _ξ_ ( _t_ )[¯ _θ_ ( _t_ +1) _−_ _θ_ ¯( _t_ )]��2 _,_ (D.4)
+
+
+_m_
+
+
+= Tr
+
+
+Cov( _[η]_
+
+
+_m_
+
+
+- _∇L_ ( _θk_ [(] _[t]_ [)][;] _[ ξ]_ _k_ [(] _[t]_ [)][))]
+
+_k_ =1
+
+
+where the second equality follows from the definition of the covariance matrix, namely
+
+Tr �Cov( _θ_ [¯][(] _[t]_ [+1)] )� = E _ξ_ ( _t_ ) �� _θ_ ¯( _t_ +1)��2 _−_ ��E _ξ_ ( _t_ ) _θ_ ¯( _t_ +1)��2 _,_
+
+
+and the final equality is derived from the original update of decentralized SGD (without applying
+Proposition D.3):
+
+
+_θ_ ¯ [(] _[t]_ [+1)] = _θ_ ¯ [(] _[t]_ [)] _−_ _η ·_ [1]
+
+_m_
+
+
+_θ_ ¯ [(] _[t]_ [+1)] = _θ_ ¯ [(] _[t]_ [)] _−_ _η ·_ [1]
+
+
+_m_
+
+- _∇L_ ( _θk_ [(] _[t]_ [)][;] _[ ξ]_ _k_ [(] _[t]_ [)][)] _[.]_
+
+_k_ =1
+
+
+According to the convexity of the vector norm and the fact that
+
+
+- _∇L_ ( _θk_ [(] _[t]_ [)][;] _[ ξ]_ _k_ [(] _[t]_ [)][)] _[ −]_ [1]
+
+_m_
+
+_k_ =1
+
+
+= E _ξ_ ( _t_ )
+
+
+�����
+
+
+2
+
+
+_,_
+
+
+_m_
+
+
+_m_
+
+
+Tr
+
+
+Cov( [1]
+
+
+_m_
+
+
+1
+
+_m_
+�����
+
+
+_m_
+
+
+_m_
+
+
+- _∇L_ ( _θk_ [(] _[t]_ [)][;] _[ ξ]_ _k_ [(] _[t]_ [)][))]
+
+_k_ =1
+
+
+E _ξk_ ( _t_ ) _[∇L]_ [(] _[θ]_ _k_ [(] _[t]_ [)][;] _[ ξ]_ _k_ [(] _[t]_ [)][)]
+_k_ =1
+
+
+(D.5)
+
+
+we then complete the proof by applying Proposition D.3 and the bounded noise assumption in
+Assumption 3.
+
+
+30
+
+
+_Proof._ We apply the third-order Taylor expansion to _∇L_ around _θ_ [¯][(] _[t]_ [)] :
+
+_∇L_ ( _θ_ [¯][(] _[t]_ [)] + _ϵ_ [(] _[t]_ [)] ) = _∇L_ ( _θ_ [¯][(] _[t]_ [)] ) + _∇_ [2] _L_ ( _θ_ [¯][(] _[t]_ [)] ) _ϵ_ [(] _[t]_ [)] + [1]
+
+2 _[∇]_ [3] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)[] _[ϵ]_ [(] _[t]_ [)] _[, ϵ]_ [(] _[t]_ [)][] +] _[ R]_ [3][(] _[ϵ]_ [(] _[t]_ [)][)] _[,]_
+
+with the remainder:
+
+
+    - 1
+_R_ 3( _ϵ_ [(] _[t]_ [)] ) =
+
+0
+
+
+(1 _−_ _τ_ ) [3]
+
+_∇_ [4] _L_ ( _θ_ [¯][(] _[t]_ [)] + _τϵ_ [(] _[t]_ [)] )[ _ϵ_ [(] _[t]_ [)] _, ϵ_ [(] _[t]_ [)] _, ϵ_ [(] _[t]_ [)] ] _dτ._
+6
+
+
+Taking expectations over _ϵ_ [(] _[t]_ [)] _∼N_ (0 _,_ Γ [(] _[t]_ [)] ), since E[ _ϵ_ [(] _[t]_ [)] ] = 0, the linear term vanishes. The quadratic
+term E - _∇_ [3] _L_ ( _θ_ [¯][(] _[t]_ [)] )[ _ϵ_ [(] _[t]_ [)] _, ϵ_ [(] _[t]_ [)] ]� simplifies to _∇_ Tr - _∇_ [2] _L_ ( _θ_ [¯][(] _[t]_ [)] )Γ [(] _[t]_ [)][�] due to properties of the Gaussian
+distribution. The remainder bound can be bounded as
+
+
+     - 1
+_∥R_ 3( _ϵ_ [(] _[t]_ [)] ) _∥≤_
+
+0
+
+
+(1 _−_ _τ_ ) [3]
+
+
+_τ_ )
+
+_L_ 4 _∥ϵ_ [(] _[t]_ [)] _∥_ [3] _dτ_ = _L_ 4 _∥ϵ_ [(] _[t]_ [)] _∥_ [3] _·_ [1]
+6 6
+
+
+6
+
+
+- 1
+
+(1 _−_ _τ_ ) [3] _dτ._
+0
+
+
+Since �01 [(1] _[ −]_ _[τ]_ [)][3] _[dτ]_ [=] 4 [1] [, we have:]
+
+
+_∥R_ 3( _ϵ_ [(] _[t]_ [)] ) _∥≤_ _L_ 4 _∥ϵ_ [(] _[t]_ [)] _∥_ [3] _·_ [1]
+
+
+[1] [1]
+
+6 _[·]_ 4
+
+
+[1] _[L]_ [4]
+
+4 [=] 24
+
+
+[4]
+
+24 _[∥][ϵ]_ [(] _[t]_ [)] _[∥]_ [3] _[.]_
+
+
+For comparison, we restate the convergence rate of DSGD by Koloskova et al. (2020).
+**Assumption D.1** ( _L_ -smoothness) **.** _Each population risk Lk_ = E _ξk∼Dk_ _L_ ( _θ_ ; _ξk_ ) _for k_ _∈{_ 1 _, . . ., m}_
+_is continuously differentiable, and there is a constant L ≥_ 0 _such that:_
+
+_∥∇Lk_ ( _θ_ ) _−∇Lk_ ( _ϑ_ ) _∥≤_ _L∥θ −_ _ϑ∥,_ _∀_ _θ, ϑ ∈_ R _[d]_ _._ (D.7)
+**Theorem D.6** (Non-convex Convergence Rate of DSGD (Koloskova et al., 2020)) **.** _Under Assump-_
+_tion 1, Assumption D.1 and Assumption 3, let the learning rate η_ _satisfy η_ _≤_ _η_ max = _O_ - _Lp_ - _let_
+_θ_ ¯ [(] _[t]_ [)] = _m_ 1 - _mk_ =1 _[θ]_ _k_ [(] _[t]_ [)] _denote the averaged model at the t-th step._ _To achieve an ε-stationary point_
+_such that_ [1] - _T −_ 1 [E] - _∥∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _∥_ [2] - _≤_ _ε, the total number of steps T_ _satisfies:_
+
+
+_T_ [1] - _Tt_ =0 _−_ 1 [E] - _∥∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _∥_ [2] 2� _≤_ _ε, the total number of steps T_ _satisfies:_
+
+
+_σ_ 2 _√p σ_ + _ζ_
+
+_m ε_ [2] [+] _p ε_ [3] _[/]_ [2]
+
+
+_pε_
+
+
+2
+
+   - _σ_
+_T_ = _O_
+
+
+_p σ_ + _ζ_
+
++ [1]
+_p ε_ [3] _[/]_ [2] _pε_
+
+
+- _·_ - _L_ - _θ_ 0� _−L_ _[⋆]_ [�] _._
+
+
+We then provide our main theoretical results as follows.
+
+
+31
+
+
+_Proof._ We structure the proof into several key steps.
+
+
+**Step (A): Descent Force Decomposition.**
+
+
+Based on the _L_ 2-smoothness (Assumption D.1) of the loss function _L_ (as implied by Assumption 2)),
+we can apply the first-order Taylor expansion around _θ_ [¯][(] _[t]_ [)] to establish an upper bound for _L_ ( _θ_ [¯][(] _[t]_ [+1)] ):
+
+_L_    - _θ_ ¯( _t_ +1)� _≤L_    - _θ_ ¯( _t_ )� + _∇L_    - _θ_ ¯( _t_ )� _⊤_    - _θ_ ¯( _t_ +1) _−_ _θ_ ¯( _t_ )� + _[L]_ 2 [2] �� _θ_ ¯( _t_ +1) _−_ _θ_ ¯( _t_ )��2 _._
+
+
+According Proposition D.3, we have
+
+E _ξ_ ( _t_ )[ _θ_ [¯][(] _[t]_ [+1)] ] = _θ_ [¯][(] _[t]_ [)] _−_ _η_     - _∇L_     - _θ_ ¯( _t_ )� + 2 [1] _[∇]_ [Tr(] _[∇]_ [2] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)Γ][(] _[t]_ [)][)]     - + _δ_ [(] _[t]_ [)] _,_
+
+where Γ [(] _[t]_ [)] denotes the variance matrix of _ϵ_ [(] _[t]_ [)] _∼N_ (0 _,_ Γ [(] _[t]_ [)] ) and _δ_ [(] _[t]_ [)] = Θ - _mη_ - _mk_ =1 _[∥][θ]_ _k_ [(] _[t]_ [)] _−_ _θ_ [¯][(] _[t]_ [)] _∥_ [3] 2�
+
+denotes the high-order residuals (see Proposition D.3).
+
+
+Substituting this into the previous bound and taking the expectation with respect to random data
+sampling yields:
+
+E _ξ_ ( _t_ )[ _L_ - _θ_ ¯( _t_ +1)�]
+
+
+        
+[1] 2 _[∇]_ [Tr(] _[∇]_ [2] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)Γ][(] _[t]_ [)][)] _[ −]_ _[δ]_ [(] _[t]_ [)] + E _ξ_ ( _t_ ) _[L]_ 2 [2]
+
+
+        _≤L_ - _θ_ ¯( _t_ )� _−_ _η ∇L_ - _θ_ ¯( _t_ )� _⊤_ _∇L_ - _θ_ ¯( _t_ )� + [1]
+
+
+2 [2] �� _θ_ ¯( _t_ +1) _−_ _θ_ ¯( _t_ )��2 _._
+
+
+According to Corollary D.4, we obtain
+
+
+E _ξ_ ( _t_ ) �� _θ_ ¯( _t_ +1) _−_ _θ_ ¯( _t_ )��2 _≤_ _η_ [2] _σ_ [2]
+
+
+2 _[∇]_ [Tr(] _[∇]_ [2] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)Γ][(] _[t]_ [)][) +] _[ δ]_ [(] _[t]_ [)][��][2] _[.]_
+
+
+_σ_ + _η_ [2][��] _∇L_ - _θ_ ¯( _t_ )� + [1]
+
+_m_ 2
+
+
+We can then decompose the squared norm:
+�� _∇L_       - _θ_ ¯( _t_ )� + [1] ��2
+
+2 _[∇]_ [Tr(] _[∇]_ [2] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)Γ][(] _[t]_ [)][)]
+
+
+= [1]
+
+4
+
+
+�� _∇_ Tr( _∇_ 2 _L_ (¯ _θ_ ( _t_ ))Γ( _t_ ))��2 + �� _∇L_ - _θ_ ¯( _t_ )���2 + _∇_ Tr( _∇_ 2 _L_ (¯ _θ_ ( _t_ ))Γ( _t_ )) _⊤L_ - _θ_ ¯( _t_ )� _._
+
+
+Combining the previous steps, we obtain:
+
+
+2 _[L]_ [2] ) ��� _∇L_ - _θ_ ¯( _t_ )� [�] ��2 + _[η]_ [2] _[L]_ [2]
+
+
+E _ξ_ ( _t_ ) _L_ - _θ_ ¯( _t_ +1)� _≤L_ - _θ_ ¯( _t_ )� _−_ ( _η −_ _[η]_ [2] 2 _[L]_ [2]
+
+
+8
+
+
+ - _θ_ ¯( _t_ )� _−_ ( _η −_ _[η]_ [2] 2 _[L]_ [2] ) ��� _∇L_  - _θ_ ¯( _t_ )� [�] �� + 8 [2] �� _∇_ Tr( _∇_ 2 _L_ (¯ _θ_ ( _t_ ))Γ( _t_ ))��2
+
+                     - ��                     _T_ 1
+1 _[∇L]_ - _θ_ ¯( _t_ )� _⊤_ _∇_ Tr( _∇_ 2 _L_ (¯ _θ_ ( _t_ ))Γ( _t_ )) + _η_ _∇L_ - _θ_ ¯( _t_ )� _⊤δ_ ( _t_ )
+2 [(] _[−][η]_ [ +] _[ η]_ [2] _[L]_ [2][)] _[ ·]_
+
+        - ��        -        - ��        _T_ 2 _T_ 3
+
+
++ _η_ _∇L_ - _θ_ ¯( _t_ )� _⊤δ_ ( _t_ )
+
+  - ��   _T_ 3
+
+
++ _[η]_ [2] _[σ]_ [2]
+
+
+_[σ]_
+
+_·_ _[L]_ [2]
+_m_ 2
+
+
+�� _δ_ ( _t_ )��2
+
+- �� _T_ 5
+
+
++ _η_ [2] _L_ 2 - _∇L_ - _θ_ ¯( _t_ )� + [1] - _⊤δ_ ( _t_ )
+
+2 _[∇]_ [Tr(] _[∇]_ [2] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)Γ][(] _[t]_ [)][)]
+
+    - ��     _T_ 4
+
+
++ _[η]_ [2] _[L]_ [2]
+
+2
+
+
+_._ (D.8)
+
+
+We subsequently control terms related to E _ϵ_ ( _t_ ) _∼N_ (0 _,_ Γ( _t_ )) _∇L_ - _θ_ ¯( _t_ + 12 [)] )� _−∇L_ - _θ_ ¯( _t_ )� in Equation (D.8).
+
+
+**Step (B): Control Consensus-Related Terms**
+
+
+Combining the residual upper bound in Corollary D.5 and with the concavity of ( _·_ ) [3] _[/]_ [2], we can derive
+
+
+_m_
+
+
+_k_ =1
+
+
+�� _δ_ ( _t_ )�� _≤_ _L_ 4 [1]
+24 _[·]_ _m_
+
+
+_m_
+
+
+_k_ =1
+
+
+�� _θk_ ( _t_ ) _−_ _θ_ [¯][(] _[t]_ [)][��][3] _≤_ _[L]_ 24 [4] _[· √][m]_ - _m_ 1
+
+
+�� _θk_ ( _t_ ) _−_ _θ_ [¯][(] _[t]_ [)][��][2][�] 2 [3] _,_
+
+
+[1] _[L]_ [4] - 1 - _m_ ( _t_ ) 2
+
+24 _·_ _[√]_ _m_ _m_ _k_ =1 �� _θk_ _−_ _θ_ [¯][(] _[t]_ [)][��][2][�] [3]
+
+
+and thus _T_ 3 _≤_ _[L]_ [1] _[L]_ [4]
+
+
+2
+.
+
+
+Further, by the convexity of square operation, we have
+
+
+_T_ 5 = �� _δ_ ( _t_ )��2 _≤_ _mL_ 24 [2][2] 4 _[·]_ - _m_ 1
+
+
+32
+
+
+_m_
+
+
+_k_ =1
+
+
+( _t_ )
+�� _θk_ _−_ _θ_ [¯][(] _[t]_ [)][��][2][�][3] _._
+
+
+According to Assumption 2, we can upper-bound _T_ 1 as
+
+_T_ 1 = �� _∇_ Tr( _∇_ 2 _L_ (¯ _θ_ ( _t_ ))Γ( _t_ ))��2 = �� _∇_ 3 _L_ (¯ _θ_ ( _t_ )) : Γ( _t_ )��2 _≤_ _L_ 23 _[·]_   - 1
+_m_
+
+
+_m_
+
+
+_k_ =1
+
+
+( _t_ )
+�� _θk_ _−_ _θ_ [¯][(] _[t]_ [)][��][2][�][2] _,_
+
+
+where the colon (:) represents the tensor contraction of the third-order derivative with the matrix Γ.
+
+
+We can also bound _T_ 4 as follows:
+
+
+_T_ 4 _≤_ �� 1 - _θ_ ¯( _t_ )��� _·_ 1
+2 _[∇]_ [Tr(] _[∇]_ [2] _[L]_ [(¯] _[θ]_ [(] _[t]_ [)][)Γ][(] _[t]_ [)][) +] _[ ∇L]_ _m_
+
+
+_m_
+
+
+_k_ =1
+
+
+( _t_ )
+�� _θk_ _−_ _θ_ [¯][(] _[t]_ [)][��][3]
+
+
+_≤_ - _L_ 3 1
+2 _m_
+
+
+_≤_ - _L_ 3 1
+2 _m_
+
+
+_m_
+
+
+_k_ =1
+
+_m_
+
+
+_k_ =1
+
+
+�� _θk_ ( _t_ ) _−_ _θ_ [¯][(] _[t]_ [)][��][2] + _L_ 1� _m_ 1
+
+
+�� _θk_ ( _t_ ) _−_ _θ_ [¯][(] _[t]_ [)][��][2] + _L_ 1� _√m_ - _m_ 1
+
+
+_m_
+
+
+_k_ =1
+
+
+( _t_ )
+�� _θk_ _−_ _θ_ [¯][(] _[t]_ [)][��][3]
+
+
+_m_
+
+
+_k_ =1
+
+
+( _t_ ) 2
+�� _θk_ _−_ _θ_ [¯][(] _[t]_ [)][��][2][�] [3] _._
+
+
+For clarity, we consolidate the terms involving _T_ 1 to _T_ 2 in Equation (D.8):
+
+Accumulated _T_ -terms =( _−η_ + _η_ [2] _L_ 2) _T_ 2 + _ηT_ 3 + _[η]_ [2] _[L]_ [2] ( _T_ 1 + 8 _T_ 4 + 4 _T_ 5) _._ (D.9)
+
+8
+
+Substituting the **U** pper bounds for the Accumulated _T_ -terms into Equation (D.8) yields the updated
+descent inequality:
+
+E _ξ_ ( _t_ ) _L_   - _θ_ ¯( _t_ +1)� _≤L_   - _θ_ ¯( _t_ )� _−_   - _η −_ _[η]_ [2] 2 _[L]_ [2] ��� _∇L_   - _θ_ ¯( _t_ )���2 + _η U_ ( _t_ ) + _η_ 2 _σ_ 22 _L_ 2 _,_ (D.10)
+
+
+where _η U_ [(] _[t]_ [)] denotes the upper bound for Equation (D.9):
+
+
+_η U_ [(] _[t]_ [)] ≜( _η_ [2] _L_ 2 _−_ _η_ ) _T_ 2 + _[η][√][mL]_ [1] _[L]_ [4]
+
+
+[1] [4]
+
+24 Ξ [3] _t_
+
+
+[1] 3 [Ξ] _t_ [4] [+] [1]
+
+8 _[η]_ [2] _[L]_ [2] _[L]_ [2] 2
+
+
++ [1]
+
+
+4
+
+[1] _t_ [)Ξ] _t_ [3] [+] _[η]_ [2] _[mL]_ [2] _[L]_ [2] Ξ [6] _t_ _[,]_
+
+2 _[η]_ [2] _[√][mL]_ [2][(2] _[L]_ [1][ +] _[ L]_ [3][Ξ][2] 1152
+
+
+[2] 3 [Ξ] _[t]_ [+] _[η]_ [2]
+
+8 _[L]_ [2] _[L]_ [2] 2
+
+
+= ( _η_ [2] _L_ 2 _−_ _η_ ) _T_ 2
+
+  - ��  
+≜ _A_ [(] _[t]_ [)] = Θ(Ξ [2] _t_ [)]
+
+
+��
++ _η_ [2] _L_ 2 + _[ηL]_ [4]
+
+
+�� _η_ [2] _L_ 2 + _[ηL]_ [4] - _√mL_ 1 + _η_ [2] 3 [Ξ] _[t]_ [+] _[η]_ [2] _√mL_ 2 _L_ 3Ξ2 _t_ [+] _[η]_ [2] _[mL]_ [2] _[L]_ 4 [2] Ξ [3] _t_ �Ξ [3] _t_ _,_
+
+24 8 _[L]_ [2] _[L]_ [2] 2 1152
+
+- �� 
+
+
+[4]    - _√mL_ 1 + _η_ [2]
+
+24 8
+
+
+≜ _H_ [(] _[t]_ [)] = _O_ (Ξ [3] _t_ [)]
+
+
+_,_
+
+
+(D.11)
+
+and we recall that the consensus distance Ξ [2] _t_ [=] _m_ 1 - _mk_ =1 �� _θk_ ( _t_ ) _−_ _θ_ [¯][(] _[t]_ [)][��][2] . To facilitate subsequent
+analysis, we further separate _U_ [(] _[t]_ [)] into an **A** cceleration term _A_ [(] _[t]_ [)] plus **H** igh-order terms _H_ [(] _[t]_ [)],
+
+
+With _U_ [(] _[t]_ [)] serving as a unified proxy for the consensus errors, we obtain the new rate as follows.
+
+
+**Step (C): Derive the Convergence Rate**
+
+
+Starting from the descent inequality Equation (D.10):
+
+
+E _ξ_ ( _t_ )� _L_ ( _θ_ [¯][(] _[t]_ [+1)] )� _≤L_ ( _θ_ [¯][(] _[t]_ [)] ) _−_ - _η −_ _[η]_ [2] 2 _[L]_ [2]
+
+
+��� _∇L_ (¯ _θ_ ( _t_ ))��2 + _η U_ ( _t_ ) + _σ_ [2]
+
+
+_σ_ [2] _η_ [2] _L_ 2
+
+_m_ 2
+
+
+_._
+2
+
+
+Taking full expectation and summing over _t_ = 0 _, . . ., T_ _−_ 1, we obtain
+
+
+_T −_ 1
+
+
+_._
+2 _m_
+
+
+_η −_ _[η]_ [2] _[L]_ [2]
+
+
+�E�� _∇L_ (¯ _θ_ ( _t_ ))��2 _≤L_ ( _θ_ (0)) _−_ E� _L_ ( _θ_ [¯][(] _[T]_ [ )] )� + _η_
+
+
+_T −_ 1
+
+
+_−_ 1
+
+- _U_ [(] _[t]_ [)] + _[σ]_ [2] _[ η]_ [2] _[L]_ [2] _[ T]_
+
+2 _m_
+
+_t_ =0
+
+
+_t_ =0
+
+
+2
+
+
+To ensure the descent property of _−_ �� _∇L_ (¯ _θ_ ( _t_ ))��2, we have to set _η −_ _η_ 22 _L_ 2 _≥_ 0, which in turn implies
+that _η_ _≤_ _Lℓ_ 2 [, with] _[ ℓ<]_ [ 2][.] [Under this condition, and denoting][ ∆=] _[ L]_ [(¯] _[θ]_ [(0)][)] _[ −L][∗]_ [, we obtain]
+
+
+_T −_ 1
+
+- _U_ [(] _[t]_ [)] + _σ_ [2] _ηL_ 2 (D.12)
+
+(2 _−_ _ℓ_ ) _m_ _[.]_
+_t_ =0
+
+
+1
+
+_T_
+
+
+_T −_ 1
+
+- E�� _∇L_ (¯ _θ_ ( _t_ ))��2 _≤_ 2∆ 2 1
+
+(2 _−_ _ℓ_ ) _η T_ [+] (2 _−_ _ℓ_ ) _η_ _T_
+_t_ =0
+
+
+33
+
+
+To ensure this is at most _ε_, it suffices to enforce
+
+
+_[ε]_ and 2∆
+
+3 _[,]_ (2 _−_ _ℓ_ ) _η T_ _[≤]_ 3 _[ε]_
+
+
+(D.13)
+3 _[.]_
+
+
+_σ_ [2] _ηL_ 2 2 1
+(2 _−_ _ℓ_ ) _m_ _[≤]_ 3 _[ε]_ _[,]_ (2 _−_ _ℓ_ ) _T_
+
+
+_T −_ 1
+
+
+- _U_ [(] _[t]_ [)] _≤_ _[ε]_
+
+3
+
+_t_ =0
+
+
+To satisfy all three conditions simultaneously, along with a stability condition _η_ _≤_ _Lℓ_ 2 [, we should]
+select _η_ accordingly:
+
+
+_T −_ 1 
+- _U_ [(] _[t]_ [)]
+
+
+_t_ =0
+
+
+6 ∆ 6
+(2 _−_ _ℓ_ ) _ηε_ _[,]_ (2 _−_ _ℓ_ ) _ε_
+
+
+   - _ℓ_
+_η_ _≤_ min _,_ [(2] _[ −]_ _[ℓ]_ [)] _[mε]_
+_L_ 2 3 _σ_ [2] _L_ 2
+
+
+_,_ and _T_ _≥_ max
+
+
+_._
+
+
+To ensure a valid step-size _η_ exists, we substitute these three upper bounds into the condition for _T_ .
+This yields three distinct lower bounds on the total number of iterations _T_ that must be satisfied. By
+rearranging the inequality _Tη_ _≥_ [6∆] _ε_ [, we require:]
+
+
+_T −_ 1 
+- _U_ [(] _[t]_ [)]
+
+
+_t_ =0
+
+
+_T_ _≥_ max
+
+
+6∆ _L_ 2 18∆ _σ_ [2] _L_ 2 6
+_ℓ_ (2 _−_ _ℓ_ ) _ε_ _[,]_ (2 _−_ _ℓ_ ) [2] _mε_ [2] _[,]_ (2 _−_ _ℓ_ ) _ε_
+
+
+_,_
+
+
+where the first two bounds are derived directly by substituting the first two terms from the min _{·}_
+operation for _η_ into the first lower bound of _T_ .
+
+
+Therefore, the total number of iterations _T_ should be large enough to satisfy all applicable lower
+bounds. This leads to the sufficient condition:
+
+
+_,_
+
+
+[∆] _[σ]_ [1]
+
+_m ε_ [2] [+] _ε_
+
+
+_ε_
+
+
+_T −_ 1
+
+
+_T_ = _O_
+
+
+∆
+
+
+[∆] _[σ]_ [2]
+_ε_ [+] _m ε_ [2]
+
+
+_T −_ 1 
+- _U_ [(] _[t]_ [)] _,_
+
+
+_t_ =0
+
+
+This condition is sufficient to guarantee
+
+
+1
+
+_T_
+
+
+_T −_ 1
+
+- E�� _∇L_ (¯ _θ_ ( _t_ ))��22 _[≤]_ _[ε.]_
+
+_t_ =0
+
+
+The proof is now complete.
+
+
+**Remark D.1.** We note that Proposition D.8 does not contradict Equation (D.12) when both ∆ and _σ_
+are zero. The condition ∆= _L_ ( _θ_ [¯][(0)] ) _−L_ _[∗]_ = 0 implies that the models are initialized at an optimal
+point. In Theorem D.7, we assume that all initializations are identical ( _θk_ [(0)] = _θ_ [(0)] _, ∀k_ _∈V_ ), so it
+follows that all models begin at the same optimum. Consequently, the consensus error remains zero
+throughout all iterations, meaning the model covariance matrix Γ [(] _[t]_ [)] is the zero matrix and its trace
+Ξ _t_ is also zero. Since every component of the term _U_ [(] _[t]_ [)], defined as
+
+
+_U_ [(] _[t]_ [)] ≜ ( _ηL_ 2 _−_ 1) _T_ 2
+
+    - ��    
+≜ _A_ [(] _[t]_ [)] = Θ(Ξ [2] _t_ [)]
+
+
+��
++ _ηL_ 2 + _[L]_ [4]
+
+
+�� _ηL_ 2 + _[L]_ [4] - _√mL_ 1 + 1 3 [Ξ] _[t]_ [+] [1] _t_ [+] _[ηmL]_ [2] _[L]_ 4 [2] Ξ [3] _t_ �Ξ [3] _t_
+
+24 8 _[ηL]_ [2] _[L]_ [2] 2 _[η][√][mL]_ [2] _[L]_ [3][Ξ][2] 1152
+
+- �� 
+
+
+_[L]_ [4] - _√mL_ 1 + 1 3 [Ξ] _[t]_ [+] [1]
+
+24 8 _[ηL]_ [2] _[L]_ [2] 2
+
+
+≜ _H_ [(] _[t]_ [)] = _O_ (Ξ [3] _t_ [)]
+
+
+_._
+
+
+(D.15)
+
+
+_Proof._ The proof relies on establishing that for sufficiently small Ξ _t_, the negative leading term _A_ [(] _[t]_ [)]
+
+in the decomposition of _U_ [(] _[t]_ [)] dominates the higher-order residual term _H_ [(] _[t]_ [)] . Specifically, _A_ [(] _[t]_ [)] is of
+order Θ(Ξ [2] _t_ [)][, while] _[ H]_ [(] _[t]_ [)] [is of order] _[ O]_ [(Ξ][3] _t_ [)][.]
+
+
+34
+
+
+**Step (A): Derive Upper Bound on** _A_ [(] _[t]_ [)] **.** Let _g_ [(] _[t]_ [)] = _∇L_ ( _θ_ [¯][(] _[t]_ [)] ) and recall that
+
+
+_T_ 2 ≜ ( _g_ [(] _[t]_ [)] ) _[⊤]_ _∇_ Tr� _∇_ [2] _L_ ( _θ_ [¯][(] _[t]_ [)] ) Γ [(] _[t]_ [)][�] _._
+
+
+Based on the definition of _U_ [(] _[t]_ [)] in Equation (D.15), we have the leading term _A_ [(] _[t]_ [)] = ( _ηL_ 2 _−_ 1) _T_ 2.
+To analyze _T_ 2, consider the trilinear form defined on the unit sphere. Let _δk_ [(] _[t]_ [)] be the deviation vectors
+such that Γ [(] _[t]_ [)] = _m_ 1 - _mk_ =1 _[δ]_ _k_ [(] _[t]_ [)][(] _[δ]_ _k_ [(] _[t]_ [)][)] _[⊤]_ [and] [Ξ][2] _t_ [=] _m_ 1 - _mk_ =1 _[∥][δ]_ _k_ [(] _[t]_ [)] _[∥]_ [2][.] [Define] [the] [function] _[F]_ [(] _[δ]_ [)] [for]
+_δ_ = 0:
+
+_F_ ( _δ_ ) = _[∇]_ [3] _[L]_ [(] _[θ]_ [¯][(] _[t]_ [)][)[] _[δ, δ, g]_ [(] _[t]_ [)][]] _._
+
+_∥g_ [(] _[t]_ [)] _∥∥δ∥_ [2]
+
+Under Assumption 4, we have _∇_ [3] _L_ ( _θ_ [¯][(] _[t]_ [)] )[ _δ, δ, g_ [(] _[t]_ [)] ] _<_ 0, implying _F_ ( _δ_ ) _<_ 0. Since the unit sphere
+_S_ = _{δ_ : _∥δ∥_ = 1 _}_ is compact, _F_ attains a maximum value _M_ _<_ 0. Let _γ_ = _−M_ _>_ 0. It follows
+that for any vector _δ_,
+_∇_ [3] _L_ ( _θ_ [¯][(] _[t]_ [)] )[ _δ, δ, g_ [(] _[t]_ [)] ] _≤−γ ∥g_ [(] _[t]_ [)] _∥∥δ∥_ [2] _._
+
+
+Substituting this bound into the summation for _T_ 2:
+
+
+_T_ 2 = [1]
+
+_m_
+
+
+_m_
+
+
+- _∇_ [3] _L_ ( _θ_ [¯][(] _[t]_ [)] )[ _δk_ [(] _[t]_ [)] _[, δ]_ _k_ [(] _[t]_ [)] _[, g]_ [(] _[t]_ [)][]] _[ ≤]_ [1]
+
+_m_
+
+_k_ =1
+
+
+_m_
+
+
+_m_
+�� _−γ∥g_ [(] _[t]_ [)] _∥∥δk_ [(] _[t]_ [)] _[∥]_ [2][�] = _−γ∥g_ [(] _[t]_ [)] _∥_ Ξ [2] _t_ _[.]_
+
+_k_ =1
+
+
+Given the gradient lower bound _∥g_ [(] _[t]_ [)] _∥≥_ _µt_, we obtain _T_ 2 _≤−γµt_ Ξ [2] _t_ [.] [Consequently, assuming the]
+pre-condition _ηL_ 2 _−_ 1 _>_ 0 holds, the leading term _A_ [(] _[t]_ [)] satisfies:
+
+
+_A_ [(] _[t]_ [)] = ( _ηL_ 2 _−_ 1) _T_ 2 _≤−_ ( _ηL_ 2 _−_ 1) _γµt_ Ξ [2] _t_ _[.]_ (D.16)
+
+
+This confirms that _A_ [(] _[t]_ [)] provides a strictly negative contribution of order Θ(Ξ [2] _t_ [)][.]
+
+
+**Step (B): Dominance over Higher-Order Residuals.** We now show that _U_ [(] _[t]_ [)] = _A_ [(] _[t]_ [)] + _H_ [(] _[t]_ [)] _<_ 0
+for small Ξ _t_ . According to Equation (D.15), the residual term is given by
+
+
+Ξ [3] _t_ _[.]_
+
+
+��
+_H_ [(] _[t]_ [)] = _ηL_ 2 + _[L]_ [4]
+
+24
+
+
+- _√_ 1 4
+_mL_ 1 + 3 [Ξ] _[t]_ [+] [1] _t_ [+] _[ηmL]_ [2] _[L]_ [2] Ξ [3] _t_
+8 _[ηL]_ [2] _[L]_ [2] 2 _[η][√][mL]_ [2] _[L]_ [3][Ξ][2] 1152
+
+
+- �� 
+≜ _P_ (Ξ _t_ )
+
+
+Here, _P_ (Ξ _t_ ) is a polynomial in Ξ _t_ with positive coefficients, and thus _H_ [(] _[t]_ [)] = _O_ (Ξ [3] _t_ [)][.] [The condition]
+_U_ [(] _[t]_ [)] _<_ 0 is equivalent to _H_ [(] _[t]_ [)] _< −A_ [(] _[t]_ [)] . Using the bound from Equation (D.16), it suffices to show:
+
+
+_P_ (Ξ _t_ )Ξ [3] _t_ _[<]_ [ (] _[ηL]_ [2] _[−]_ [1)] _[γµ][t]_ [Ξ][2] _t_ _[.]_
+
+For Ξ _t_ _>_ 0, we divide both sides by Ξ [2] _t_ [, reducing the condition to:]
+
+
+Ξ _t · P_ (Ξ _t_ ) _<_ ( _ηL_ 2 _−_ 1) _γµt._
+
+
+Let _Q_ ( _u_ ) = _u · P_ ( _u_ ) for _u ≥_ 0. Since _P_ ( _u_ ) is bounded in a neighborhood of zero, we have:
+
+
+��
+lim _ηL_ 2 + _[L]_ [4]
+_u→_ 0 [+] _[ Q]_ [(] _[u]_ [) = 0] _[ ·]_ 24
+
+
+- _√_
+_mL_ 1
+
+
+= 0 _._
+
+
+The term on the right-hand side, _C_ ≜ ( _ηL_ 2 _−_ 1) _γµt_, is a strictly positive constant. By the continuity
+of polynomial functions and the intermediate value theorem, there exists a threshold _δ_ _>_ 0 such
+that for all 0 _<_ Ξ _t_ _< δ_, the inequality _Q_ (Ξ _t_ ) _< C_ holds. This implies that for a sufficiently small
+consensus error Ξ _t_, the negative drift from _A_ [(] _[t]_ [)] dominates the residual _H_ [(] _[t]_ [)], ensuring _U_ [(] _[t]_ [)] _<_ 0.
+
+
+**Explanation.** The high-level intuition of Theorem D.7 and Proposition D.8 is outlined by the
+following descent lemma.
+
+
+2
+�� _∇L_ (¯ _θ_ ( _t_ ))��
+
+ - 
+
+ - �� Standard Descent
+
+
+35
+
+
+   -   E _ξ_ ( _t_ ) _L_ ( _θ_ [¯][(] _[t]_ [+1)] ) _≤L_ ( _θ_ [¯][(] _[t]_ [)] ) _−_
+
+
+- _η −_ _[η]_ [2] _[L]_ [2] 
+2
+
+_>_ 0
+
+
++ _[η]_ [2] _[L]_ [2] _[σ]_ [2] + _O_ (Ξ [3] _t_ [)] _[.]_
+
+2 _m_
+
+
+_∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _[⊤]_ _∇_ Tr� _∇_ [2] _L_ ( _θ_ [¯][(] _[t]_ [)] )Γ [(] _[t]_ [)][�]
+
+
+- �� _<_ 0 _,_ progressive sharpening
+
+
++
+
+
+- _η_ [2] _L_ 2 _−_ _η_ 
+
+_>_ 0
+
+
+(D.17)
+
+
+_Proof._ The proof establishes that the condition in Equation (11) suffices to guarantee _U_ [(] _[t]_ [)] _<_ 0.
+Recall from the decomposition in Equation (D.15) that _U_ [(] _[t]_ [)] = _A_ [(] _[t]_ [)] + _H_ [(] _[t]_ [)], where _A_ [(] _[t]_ [)] is the leading
+descent term and _H_ [(] _[t]_ [)] represents higher-order residuals. We aim to show that the negative drift
+dominates the error, i.e., _H_ [(] _[t]_ [)] _< −A_ [(] _[t]_ [)] .
+
+Using the lower bound on the gradient norm _∥∇L_ ( _θ_ [¯][(] _[t]_ [)] ) _∥≥_ _µt_ derived in Proposition 2, the leading
+term satisfies _A_ [(] _[t]_ [)] _≤−_ ( _ηL_ 2 _−_ 1) _γ_ _[∗]_ _µt_ Ξ [2] _t_ [.] [Let] _[ K]_ [≜] [(] _[ηL]_ [2] _[−]_ [1)] _[γ][∗][µ][t]_ [.] [Under the sharpening regime]
+( _ηL_ 2 _>_ 1), we have _K_ _>_ 0. Thus, a sufficient condition for _U_ [(] _[t]_ [)] _<_ 0 is:
+
+_H_ [(] _[t]_ [)] _< K_ Ξ [2] _t_ _[.]_ (D.19)
+
+
+**Step (A): Bounding the residual term.** Substituting the expansion of _H_ [(] _[t]_ [)] from Equation (D.15)
+into Equation (D.19) and dividing both sides by Ξ [2] _t_ [(assuming][ Ξ] _[t]_ _[>]_ [ 0][), the requirement becomes:]
+�� _ηL_ 2 + _[L]_ [4]     - _√mL_ 1 + 1 _[ηL]_ [2] _[L]_ 3 [2][Ξ] _[t]_ [+] [1] _[η][√][mL]_ [2] _[L]_ [3][Ξ] _t_ [2] [+] _[ηmL]_ [2] _[L]_ 4 [2] Ξ [3] _t_     - Ξ _t_ _< K._
+
+
+_√_
+
+_[L]_ 24 [4] - _mL_ 1 + 18 _[ηL]_ [2] _[L]_ 3 [2][Ξ] _[t]_ [+] [1] 2
+
+
+[1] 2 _[η][√][mL]_ [2] _[L]_ [3][Ξ] _t_ [2] [+] _[ηmL]_ 1152 [2] _[L]_ 4 [2] Ξ [3] _t_  
+
+
+Ξ _t_ _< K._
+
+
+ - �� 
+≜ _P_ (Ξ _t_ )
+
+
+We define _C_ lin ≜ ( _ηL_ 2 + _[L]_ 24 [4] [)] _[√][m][L]_ [1][ as the coefficient of the linear term.] [Utilizing the assumption]
+
+that the consensus error is locally bounded (Ξ _t_ _≤_ 1), we have Ξ _[k]_ _t_ _[≤]_ [Ξ] _[t]_ [for] _[ k]_ _[≥]_ [1][.] [This allows us to]
+upper bound the higher-order polynomial terms using the aggregated coefficient Σhigh defined in the
+proposition:
+_P_ (Ξ _t_ )Ξ _t_ _≤_ _C_ linΞ _t_ + ΣhighΞ [2] _t_ _[.]_
+Therefore, it suffices to ensure _C_ linΞ _t_ + ΣhighΞ [2] _t_ _[< K]_ [.]
+
+
+**Step (B).** To satisfy the inequality above, we employ a budget splitting strategy, requiring both the
+linear and quadratic components to be bounded by half of the descent budget _K/_ 2. This yields two
+separate constraints on Ξ _t_ :
+
+
+_C_ linΞ _t_ _<_ _[K]_
+
+
+_[K]_ = _⇒_ Ξ _t_ _<_ _K_ _,_ and ΣhighΞ [2] _t_ _[<]_ _[K]_
+
+2 2 _C_ lin 2
+
+
+= _⇒_ Ξ _t_ _<_
+2
+
+
+_K_
+_._
+2Σhigh
+
+
+36
+
+
+Consequently, if Ξ _t_ _<_ min - 2 _CK_ lin _[,]_ - 2Σ _K_ high
+
+
+, then _U_ [(] _[t]_ [)] _<_ 0 holds.
+
+
+                - 24(1 _−p_ ) _η_ [2]
+Finally, invoking Corollary D.2, which bounds the consensus error as Ξ _t_ _≤_ _p_ [2] ( _ϕ_ [2] + _σ_ [2] ),
+
+we see that Equation (11) ensures Ξ _t_ falls within the safety region. This completes the proof.
+
+
+37

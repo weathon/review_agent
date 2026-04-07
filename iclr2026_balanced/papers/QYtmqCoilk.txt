@@ -1,0 +1,2291 @@
+# RETHINKING THE GOLD STANDARD: WHY DISCRETE CURVATURE FAILS TO FULLY CAPTURE OVER-SQUASHING IN GNNS?
+
+
+**Jialong Chen** [1] **, Bowen Deng, Zibin Zheng, Chuan Chen** [2] _[,][∗]_
+Sun Yat-sen University
+1chenjlong7@mail2.sysu.edu.cn, 2chenchuan@mail.sysu.edu.cn
+
+
+ABSTRACT
+
+
+As a topological invariant for discrete structures, discrete curvature has been widely
+adopted in the study of complex networks and graph neural networks. A prevailing viewpoint posits that edges with highly negative curvature will induce graph
+bottlenecks and the over-squashing phenomenon. In this paper, we critically reexamine this view and put forward our central claim: **high negative curvature**
+**is a sufficient but not a necessary condition for over-squashing** . We first construct a family of counterexamples demonstrating the failure of discrete curvature,
+where some edges are severely squashed, but the curvature still appears positive.
+Furthermore, extensive experiments demonstrate that the most commonly used
+discrete curvature measure — Ollivier–Ricci curvature — fails to detect as many
+as 30% _∼_ 40% of over-squashed edges. To alleviate this limitation, we propose
+Weighted Augmented Forman-3 Curvature (WAF3), which significantly improves
+the detection of over-squashed edges. Additionally, we develop a highly efficient
+approximation algorithm for WAF3, enabling curvature computation on graphs
+with five million edges in only 23.6 seconds, which is 133.7 times faster than the
+existing algorithm with the lowest complexity for curvatures.
+
+
+1 INTRODUCTION
+
+
+In differential geometry, curvature is used to describe how volume grows within a local region and how
+geodesics diverge or converge. Discrete curvature naturally extends this concept to discrete structures,
+such as graphs. In complex network analysis and graph deep learning, discrete curvature plays a
+critical role. It is widely applied in numerous downstream tasks, including key node identification
+(Farooq et al., 2019), community detection (Park & Li, 2024; Sia et al., 2019), clustering (Tian et al.,
+2025; Sun et al., 2023), sparsification (Zhang et al., 2023), and anomaly detection (Grover et al.,
+2025), among others. Among these, the idea of tackling the graph over-squashing (Akansha, 2025)
+based on discrete curvature has been widely studied, with one of the most notable findings being that:
+
+
+_“Edges with high negative curvature are those causing the graph bottleneck and thus leading_
+_to the over-squashing phenomenon.”_   - Topping et al. (2021)
+
+
+This perspective has garnered significant attention within the community. It has spawned a considerable body of follow-up research, including theoretical investigations into the relationship between
+over-squashing and curvature (Di Giovanni et al., 2023a; Nguyen et al., 2023), curvature-based
+graph rewiring techniques (Nguyen et al., 2023; Giraldo et al., 2023; Fesser & Weber, 2024), and
+curvature-inspired graph neural networks (Li et al., 2022; Sun et al., 2022; Fu et al., 2025).
+
+
+Although the work of Topping et al. (2021) has achieved remarkable success, a subtle but important
+point is that they only established the sufficiency of highly negative curvature for over-squashing,
+while leaving its necessity unaddressed. To the best of our knowledge, this fundamental yet crucial
+issue has long been overlooked. In this paper, we investigate it for the first time and uncover a striking
+fact: the necessity does not actually hold. In other words, there exist edges in graph datasets that
+suffer from severe over-squashing but cannot be detected by curvature.
+
+
+_∗_ Corresponding author.
+
+
+1
+
+
+In detail, our contributions are organized into four interlocking parts:
+
+
+❶ **New theoretical results (Section 3)** . We construct a family of counterexample graphs and prove
+that within them, there exist edges that, despite exhibiting severe over-squashing, still possess highly
+positive discrete curvature. Here, discrete curvature can be defined in eight popular ways, including
+Ollivier Ricci curvature (Ollivier, 2009) and Balanced Forman curvature (Topping et al., 2021),
+among others. Theorem 4 implies that curvature may ignore some over-squashed edges, so highly
+negative curvature is not a necessary condition for over-squashing.
+
+
+❷ **New metric and extensive empirical evidence (Section 4)** . To answer the question of how many
+over-squashed edges in practical graph learning tasks are overlooked by curvature, we propose a new
+metric: **M** issed **O** ver- **S** quashing **R** atio (MOSR). MOSR quantifies the proportion of over-squashed
+edges that are ignored by curvature. Extensive experimental results show that the MOSR of Ollivier
+Ricci curvature can exceed 30%, revealing a significant deficiency in one of the most widely used
+discrete curvature measures. Further experimental analysis provides insights into the underlying
+reasons why curvature fails to capture these edges.
+
+
+❸ **New discrete curvature (Section 5)** . Based on the aforementioned analysis and experimental
+observations, we propose a new discrete curvature definition called WAF3. Not only does WAF3
+achieve a significantly lower MOSR value compared to other existing curvature definitions, but it
+also maintains computational complexity on par with the most efficient one currently available.
+
+
+❹ **New** **approximation** **algorithm** **(Section** **6)** . Although WAF3 already boasts state-of-the-art
+computational complexity, it still faces scalability limitations when processing large-scale graphs. To
+address this, we propose an efficient approximation algorithm for WAF3 that further reduces the time
+complexity to a linear level. This algorithm requires only 23.8 seconds to complete computations on
+a graph containing five million edges, achieving a 133.7× speedup compared to exact computation.
+
+
+In summary, our work is not only critical, demonstrating through both theory and experiments that
+curvature cannot fully capture the over-squashing in GNNs, but also constructive: we propose new
+metrics, curvature definitions, and approximation algorithms, significantly enhancing the applicability
+of curvature-based tools in graph learning.
+
+
+2 PRELIMINARY
+
+
+**Message passing neural network (MPNN, (Gilmer et al., 2017; Kipf, 2016))** Consider a simple,
+connected, undirected graph _G_ = ( _V, E_ ) with a node set of _V_ and an edge set _E_ . We denote the
+adjacency matrix of _G_ by **A** . Each node is equipped with an initial feature vector **h** [(0)] _∈_ R _[d]_ [0] .
+_{_ **W** [(] _[l]_ [)] _∈_ R _[d][l][×][d][l]_ [+1] _}l_ is a set of learnable parameters. The _l_ -th layer of MPNN is formalized as:
+
+
+                 **H** [(] _[l]_ [+1)] = ReLU **AH**        - [(] _[l]_ [)] **W** [(] _[l]_ [)][�] _._ (1)
+
+
+where **A** := ( **D** + **I** ) _[−]_ [1] _[/]_ [2] ( **A** + **I** )( **D** + **I** ) _[−]_ [1] _[/]_ [2] denotes the symmetrically normalized adjacency
+
+[�]
+matrix and **D** denotes the degree matrix. **H** _[l]_ := [ **h** [(] 0 _[l]_ [)][;] _[ · · ·]_ [;] **[ h]** [(] _|N |_ _[l]_ [)] []] _[T]_ _[∈]_ [R] _[|N |×][d][l]_ [denotes the collections]
+of _l_ -layer embedding of all nodes. In line with many previous works, we also introduce the following
+assumptions to facilitate the analysis of the ReLU.
+
+**Assumption** **1.** _(Di_ _Giovanni_ _et_ _al.,_ _2023a;_ _Kawaguchi,_ _2016;_ _Xu_ _et_ _al.,_ _2018)_ _All_ _paths_ _in_ _the_
+_computation graph of the model are activated with the same probability of success ρ._
+
+
+**Discrete curvatures** For any edge _u_ _∼_ _v_ in graph _G_, the edge curvature Curv( _u, v_ ) measures the
+tightness of the connection between the first-order ego-graph of node _u_ and the first-order ego-graph
+of node _v_ . As shown in Table 1, there are multiple definitions for Curv. Regardless of the specific
+definition, discrete curvature typically depends only on a tiny local neighborhood of the edge _u ∼_ _v_
+(except for the resistance curvature (Devriendt & Lambiotte, 2022)).
+
+
+**Over-squashing** In graph deep learning, message passing often compresses information from large
+neighborhoods into single topological structures (e.g., nodes or edges), resulting in information loss
+and gradient issues — known as over-squashing (Alon & Yahav, 2020), which has emerged as a key
+challenge in modern graph models. The Jacobian norm between the feature of the input node and the
+embedding of the output node offers the most accurate measure of information flow, and thus the
+
+
+2
+
+
+Table 1: We summarize all discrete curvatures defined on edges here. Curvatures defined on nodes
+(such as Bakry-Emery-Ricci ( [´] Mondal et al., 2024), combination (Kamtue, 2018), and node resistance
+(Devriendt & Lambiotte, 2022)) are not included. _µ_ _[α]_ _u_ [is the uniform distribution of the first-order]
+neighbors of _u_ with restart probability _α_ . _W_ 1 is the 1-Wasserstein distance. _{wuv}_ is the pseudoinverse of the weighted Laplacian matrix. _du_ is the degree of node _u_, and _du ∨_ _dv_ := max( _du, dv_ ),
+_du_ _∧_ _dv_ := min( _du, dv_ ). _△_ ( _u, v_ ) and □( _u, v_ ) denote the number of triangles and quadrangles
+containing the edge ( _u, v_ ). # _[u]_ - [(] _[u, v]_ [)][ denote the numbers of neighbors of] _[ u]_ [ forming a 4-cycle based]
+at the edge ( _u, v_ ) without diagonals inside. _γ_ ( _u, v_ ) is the maximal number of 4-cycles based at ( _u, v_ )
+traversing a common node. _f_ is the degree-weighting function.
+
+
+|Curvature|Definition|Complexity|
+|---|---|---|
+|Ollivier ricci<br>(Ollivier, 2009)<br>Lin-Lu-Yau<br>(Lin et al., 2011)<br>Link resistance<br>(Devriendt & Lambiotte, 2022)<br>Balance forman<br>(Topping et al., 2021)<br>Balance Forman w/o 4-cycle<br>(Tori et al., 2024a)<br>Jost-Liu Forman<br>(Jost & Liu, 2014)<br>Augmented Forman-3<br>(Forman, 2003)<br>Augmented Forman-4<br>(Forman, 2003)|1_ −W_1(_µu, µv_)<br>lim_α→_1_−_(1_ −W_1(_µα_<br>_u, µα_<br>_v_ ))_/_(1_ −α_)<br>(2_ −_P<br>_i∼u wui −_P<br>_j∼v wvj_)_/wuv_<br>2<br>_du_ +<br>2<br>_dv −_2 + 2 _△_(_u,v_)<br>_du∨dv_ + _△_(_u,v_)<br>_du∧dv_ + #_u_<br>□(_u,v_)+#_v_<br>□(_u,v_)<br>_γ_(_u,v_)(_du∨dv_)<br>2<br>_du_ +<br>2<br>_dv −_2 + 2 _△_(_u,v_)<br>_du∨dv_ + _△_(_u,v_)<br>_du∧dv_<br>_−_(1_ −_<br>1<br>_du −_<br>1<br>_dv −△_(_u,v_)<br>_du∨dv_ )+_ −_(1_ −_<br>1<br>_du −_<br>1<br>_dv −△_(_u,v_)<br>_du∧dv_ )+ + _△_(_u,v_)<br>_du∨dv_<br>4_ −du −dv_ + 3_△_(_u, v_)<br>4_ −du −dv_ + 3_△_(_u, v_) + 2□(_u, v_)|_O_(_|E|d_3<br>max)<br>_O_(_|E|d_3<br>max)<br>_O_(_|V|_3)<br>_O_(_|E|d_2<br>max)<br>_O_(_|E|d_max)<br>_O_(_|E|d_max)<br>_O_(_|E|d_max)<br>_O_(_|E|d_2<br>max)|
+|Weighted AF-3 (Ours)|P<br>_i∈B_(_u_)_∩B_(_v_) _f_(_di_)_ −_<br>P<br>_i∈N_(_u_)_/B_(_v_) _f_(_di_) + P<br>_i∈N_(_v_)_/B_(_u_) _f_(_di_)<br>|_O_(_|E|d_max)<br>_O_(_H|E|_)|
+
+
+severity of over-squashing. In Lemma 2, we establish a lower bound for the Jacobian norm when the
+degrees of the two ends are fixed at _a_ and _b_ . All proofs are provided in Appendix A.
+
+
+**Lemma** **2** (Infimum of the over-squashing) **.** _Let_ _N, a, b_ _be_ _positive_ _integers._ _The_ _set_
+G _N_ ((s _, a_ ) _,_ (t _, b_ )) _denotes the collection of all simple undirected graphs G_ = ( _V, E_ ) _with |V|_ = _N_
+_such that there exist adjacent vertices_ s _,_ t _∈V_ _where_ deg(s) = _a and_ deg(t) = _b._ _Assume an_
+_L-layer MPNN as in equation (1)._ _Then:_
+
+
+= _ϕL_ ( _a, b_ ) _,_
+�����
+
+
+inf
+_N_ _∈_ Z [+]
+_G∈_ G _N_ ((s _,a_ ) _,_ (t _,b_ ))
+
+
+_∂_ **h** [(] t _[L]_ [)]
+����� _∂_ **h** [(0)] s
+
+
+_where ϕL_ ( _a, b_ ) := ���� _Ll_ =0 _−_ 1 **[W]** [(] _[l]_ [)][���] - _a_ +11 [+] _b_ +11 - _L−_ 1 ~~_√_~~ ( _a_ +1)( _ρ_ _b_ +1) _[.]_
+
+
+3 DISCRETE CURVATURES FAIL TO FULLY CAPTURES OVER-SQUASHING
+
+
+Since the Jacobian matrix norm is tightly coupled with the model and entails prohibitive computational
+costs, Topping et al. (2021) first proposed using discrete curvature as a surrogate criterion for detecting
+over-squashing. However, through the following counterexamples and theorems, we demonstrate that
+discrete curvature is in fact not a necessary condition for identifying over-squashing.
+
+
+source
+
+node
+
+
+N_1
+
+
+N_2
+
+
+**Definition** **3** (counterexample graph) **.** _Let_ s
+_the_ _soruce_ _node,_ t _the_ _target_ _node,_ _N_ 1 =
+_{ui}_ 1 _≤i≤n_ _the_ _1-hop_ _neighbor_ _set_ _and_ _N_ 2 =
+_{vij}_ 1 _≤i≤n,_ 1 _≤j≤m the 2-hop neighbor set._ _The_
+_counterexample_ _graph_ _Gn,m_ [c] _[is]_ _[such]_ _[a]_ _[simple,]_
+_connected_ _and_ _undirected_ _graph_ _that_ _V_ :=
+_{_ s _,_ t _} ∪N_ 1 _∪N_ 2 _and_ _E_ := _{_ (s _,_ t) _} ∪E_ 1 _∪E_ 2 _,_
+_which_ _E_ 1 := _{_ (s _, ui_ ) _}_ 1 _≤i≤n_ _∪{_ (t _, ui_ ) _}_ 1 _≤i≤n_
+_and E_ 2 := _{_ ( _ui, vij_ ) _}_ 1 _≤i≤n,_ 1 _≤j≤m._
+
+
+Figure 1: Example diagram of _G_ 2 [c] _,_ 4 [.]
+
+
+target
+
+node
+
+
+{(s,t)}
+
+
+E_1
+
+
+E_2
+
+
+s t
+
+
+t
+
+s
+
+
+3
+
+
+**Theorem 4** (Discrete curvatures fail to fully to capture over-squashing) **.** _Consider an L-layer_
+_GCN as in equation (1)._ _For the family of graphs G_ = _{Gn,m_ [c] _[}]_ _n,m∈_ R [+] _[with source-target pairs]_
+(s _,_ t) _, we have:_
+
+
+- _For any fixed n_ _[∗]_ _,_ _∂_ **h** t( _L_ )
+��� _∂_ **h** [(0)] s
+
+
+_→_ _ϕL_ ( _n∗_ + 1 _, n∗_ + 1) _at speed O_ ( _m−_ 1) _when m →_ + _∞._
+���
+
+
+     - _If_ Curv _is given by any of:_ _α-Ollivier-Ricci curvature, Lin-Lu-Yau curvature, balanced_
+_Forman curvature (with/without 4-cycle), Jost-Liu curvature or augmented Forman-3/4_
+_curvature, then there exist a c >_ 0 _, such that ∀G_ _∈_ _G,_ Curv(s _,_ t) _> c._
+
+     - _If_ Curv _is defined as resistance curvature under symmetric normalized Laplacian, then_
+_for any fixed n_ _[∗]_ _, there exist a m_ _[∗]_ _and a c >_ 0 _, such that ∀G_ _∈{Gn,m_ [c] _[|][n]_ [ =] _[ n][∗][, m > m][∗][}][,]_
+Curv(s _,_ t) _> c._
+
+
+In simple terms, the above theorem states that in _Gn,m_ [c] [, as long as] _[ m]_ [ is large enough, there will be]
+very severe over-squashing between source node s and target node t. However, all discrete curvatures
+fail to identify this — their values are all positive.
+
+
+To understand this phenomenon, we need to keep in mind that the discrete curvature between (s _,_ t)
+is essentially a measure of how tightly connected the first-order neighbors of s are to the first-order
+neighbors of t (Chen et al., 2025). Furthermore, this “tightness” can usually be reflected in the
+number of triangles that (s _,_ t) participates in (Topping et al., 2021; Jost & Liu, 2014; Forman, 2003).
+Since any edge ( _u, v_ ) can form at most min _{du −_ 1 _, dv −_ 1 _}_ triangles, and in _Gn,m_ [c] [,][ (][s] _[,]_ [ t][)][ just reaches]
+this upper limit ( _d_ s = _d_ t = _n_ + 1 and there are _n_ triangles: s _−_ _ui −_ t _, ∀i ∈_ [1 _, n_ ]), Curv(s _,_ t) under
+any definition is almost always highly positive.
+
+
+On the other hand, in _Gn,m_ [c] [, when the information in node][ s][ propagates to node][ t][, a considerable]
+part of the propagation path needs to pass through the nodes in _N_ 1. However, each node in _N_ 1 is
+connected to _m_ other nodes. Every time the propagation path passes through a node in _N_ 1, the
+information in s is “diluted” by _m_ nodes. As _m_ increases, the degree of over-squashing between
+s and t approaches its theoretical lower bound. Since almost all GNNs require at least two rounds
+of message-passing, discrete curvature that only considers first-order neighbors is almost always
+insufficient to capture all potential over-squashing fully.
+
+
+4 THE MISSED OVER-SQUASHING EDGES: HOW MANY AND WHERE
+
+
+Since discrete curvature cannot fully identify over-squashing in theory, two other important questions
+arise: _how many over-squashing edges are ignored by curvature in practice?_ _Moreover, where are_
+_these ignored edges?_
+
+
+To answer the first question, we first establish corresponding metrics. For any graph _G_ = ( _V, E_ ),
+we define the multiset _C_ := _{{_ Curv( _e_ ) _|e ∈E}}_ as the collection of discrete curvature values for all
+edges in _E_ . Let _C−_ := _{{c|c <_ 0 _, c ∈C}}_ be the subset of negative curvature values. The function
+Percentile( _C−, q_ ) returns the value below which _q_ % of the observations in _C−_ lie, for _q_ _∈_ [0 _,_ 100].
+We then define:
+_Eq_ := _{e ∈E|_ Curv( _e_ ) _≤_ Percentile( _C−, q_ ) _}._ (2)
+Note that _Eq_ corresponds precisely to the set of “edges with high negative curvature” mentioned by
+Topping et al. (2021). That is, the edges in _Eq_ are those correctly identified as over-squashing by
+curvature. Here, _q_ represents the threshold for classifying an edge as over-squashing; a smaller _q_
+implies a stricter criterion.
+
+
+For an _L_ -layer message passing neural network, let JacoNorm( _u, v_ ) := _∥∂_ **h** [(] _v_ _[L]_ [)] _/_ **h** [(0)] _u_ _[∥]_ _F_ [denote the]
+ground-truth measure of information squashing. Define _Jq_ := max( _u,v_ ) _∈Eq_ JacoNorm( _u, v_ ). We
+then introduce the **M** issed **O** ver- **S** quashing **R** atio (MOSR):
+
+
+MOSR _q_ :=
+
+
+( _u,v_ ) _∈E_ **[1]** [Curv][(] _[u,v]_ [)] _[≥]_ [0] _[·]_ **[ 1]** [JacoNorm][(] _[u,v]_ [)] _[≤][J]_ _q_
+
+ 
+
+
+_._ (3)
+( _u_ _[′]_ _,v_ _[′]_ ) _∈E_ **[1]** [JacoNorm][(] _[u][′][,v][′]_ [)] _[≤][J]_ _q_
+
+
+In MOSR _q_, the numerator counts edges with non-negative curvature that are nevertheless oversquashed (i.e., JacoNorm( _u, v_ ) _≤_ _Jq_ ), which are thus ignored by curvature. The denominator
+counts all truly over-squashing edges (with _Jq_ as the threshold). Therefore, MOSR _q_ **represents the**
+**proportion of over-squashing edges that are not identified by curvature** .
+
+
+4
+
+
+Table 2: The values of MOSR10 and MOSR25 across different GNNs, curvatures, and datasets.
+Among these, the entry “.030/.103” in the first row and first column indicates that for Ollivier Ricci
+curvature, GCN, and Cora dataset, MOSR10 = 0 _._ 030 and MOSR25 = 0 _._ 103. OOR denotes “Out of
+Resources”, meaning the GPU memory consumption exceeds 24 GB or the running time surpasses
+12 hours. NNE (No Negative-curvature Edge) indicates that _|Eq|_ = 0 in this scenario.
+
+|Col1|Ollivier Ricci Augmented Forman-3 Balanced Forman<br>GCN GAT SAGE GCN GAT SAGE GCN GAT SAGE|
+|---|---|
+|**Cora**<br>**Citeseer**<br>**Pubmed**<br>**Computers**<br>**Photo**<br>**CS**<br>**Physics**<br>**WikiCS**<br>**Cora** ~~**M**~~**L**<br>**Cora** ~~**F**~~**ull**<br>**DBLP**<br>**Cornell**<br>**Texas**<br>**Wisconsin**<br>**Chameleon**<br>**Squirrel**<br>**Roman-empire**<br>**Tolokers**<br>**Questions**<br>**Amazon-ratings**<br>**Minesweeper**|.030/.103<br>.185/.224<br>.233/.258<br>.001/.027<br>.163/.170<br>.187/.187<br>.002/.010<br>.155/.217<br>.210/.245<br>.119/.151<br>.172/.277<br>.286/.351<br>.008/.034<br>.239/.239<br>.289/.307<br>.000/.014<br>.087/.120<br>.219/.324<br>.026/.073<br>.087/.090<br>.097/.097<br>.000/.001<br>.009/.009<br>.011/.011<br>.000/.000<br>.074/.108<br>.144/.142<br>.352/.352<br>.353/.353<br>.353/.353<br>.003/.006<br>.011/.011<br>.011/.011<br>.000/.005<br>.010/.012<br>.011/.012<br>.503/.503<br>.503/.503<br>.503/.503<br>.042/.043<br>.045/.045<br>.045/.045<br>.041/.044<br>.045/.046<br>.045/.046<br>.057/.086<br>.113/.128<br>.125/.126<br>.017/.030<br>.074/.075<br>.075/.075<br>.001/.012<br>.041/.073<br>.080/.091<br>OOR<br>OOR<br>OOR<br>.006/.027<br>.052/.056<br>OOR<br>.001/.012<br>.055/.065<br>OOR<br>.472/.473<br>.473/.473<br>.473/.473<br>.250/.249<br>.249/.249<br>.249/.249<br>.245/.244<br>.246/.245<br>.250/.246<br>.204/.204<br>.217/.235<br>.210/.225<br>.025/.039<br>.096/.098<br>.099/.101<br>.056/.109<br>.126/.139<br>.126/.147<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>.072/.080<br>.084/.089<br>.086/.096<br>.003/.004<br>.030/.033<br>.036/.038<br>.007/.017<br>.038/.052<br>.048/.065<br>.000/.000<br>.383/.395<br>.396/.410<br>.000/.000<br>.136/.138<br>.167/.158<br>.000/.364<br>.335/.370<br>.373/.390<br>.093/.174<br>.308/.308<br>.308/.308<br>.000/.000<br>.112/.116<br>.126/.130<br>.000/.254<br>.385/.370<br>.342/.366<br>.000/.246<br>.334/.334<br>.332/.342<br>.000/.000<br>.113/.118<br>.128/.135<br>.175/.191<br>.257/.256<br>.221/.260<br>.643/.643<br>.643/.643<br>.643/.643<br>.115/.116<br>.125/.125<br>.129/.129<br>.010/.120<br>.131/.135<br>.136/.136<br>.723/.723<br>.723/.723<br>.723/.723<br>.137/.137<br>.133/.133<br>.133/.133<br>.130/.129<br>.130/.130<br>.132/.132<br>.014/.097<br>.276/.446<br>.497/.547<br>.001/.080<br>.430/.520<br>.524/.524<br>.000/.000<br>.247/.532<br>.695/.753<br>.657/.657<br>OOR<br>.657/.657<br>.002/.002<br>OOR<br>.003/.003<br>.003/.003<br>OOR<br>.003/.003<br>OOR<br>OOR<br>OOR<br>.000/.002<br>.008/.008<br>.010/.010<br>.048/.074<br>.083/.085<br>.103/.100<br>.639/.655<br>.524/.638<br>.638/.653<br>.228/.285<br>.292/.297<br>.309/.310<br>.335/.378<br>.117/.275<br>.357/.357<br>NNE<br>NNE<br>NNE<br>.502/.502<br>.502/.502<br>.502/.502<br>.502/.502<br>.502/.502<br>.502/.502|
+|**Average**|**.271/.307**<br>**.336/.366**<br>**.386/.398**<br>**.067/.079**<br>**.148/.155**<br>**.160/.161**<br>**.078/.124**<br>**.161/.196**<br>**.210/.227**|
+
+
+As shown in Table 2, we comprehensively report the results of MOSR10 and MOSR25 along with
+their average values across three of the most commonly used curvatures, three of the most widely
+adopted graph neural networks, and 21 datasets, amounting to a total of 350 numerical results.
+
+
+To answer the second question, we introduce edge betweenness (Freeman, 1977; Girvan & Newman,
+2002). According to Girvan & Newman (2002), the edge betweenness of an edge _e_ is defined as:
+
+
+Between( _e_ ) = 
+
+_u_ = _v∈V_
+
+
+_σuv_ ( _e_ )
+
+_._ (4)
+_σuv_
+
+
+Where _σuv_ denotes the total number of shortest paths between nodes _u_ and _v_ ; _σuv_ ( _e_ ) denotes the
+number of those shortest paths that pass through edge _e_ . Simply put, **a high** Between( _e_ ) **usually**
+**means that edge** _e_ **forms a bridge between two clusters, and a low** Between( _e_ ) **indicates that** _e_ **is**
+**inside a cluster** . We further introduce the following three statistics to characterize the average edge
+
+
+5
+
+
+Table 3: The model is fixed as GCN, _q_ is set to 25, and we report BetwIden, BetwAll, and BetwIgno
+on three curvature definitions and 21 datasets, respectively. NIE (No Ignored Edge) means no edges
+are ignored by curvature, so BetwIgno cannot be calculated.
+
+|Col1|Ollivier Ricci Augmented Forman-3 Balanced Forman<br>BetwIden BetwAll BetwIgno BetwIden BetwAll BetwIgno BetwIden BetwAll BetwIgno|
+|---|---|
+|**Cora**<br>**Citeseer**<br>**Pubmed**<br>**Computers**<br>**Photo**<br>**CS**<br>**Physics**<br>**WikiCS**<br>**Cora** ~~**M**~~**L**<br>**Cora** ~~**F**~~**ull**<br>**DBLP**<br>**Cornell**<br>**Texas**<br>**Wisconsin**<br>**Chameleon**<br>**Squirrel**<br>**Roman-empire**<br>**Tolokers**<br>**Questions**<br>**Amazon-ratings**<br>**Minesweeper**|1_._04_ ×_ 104<br>3_._69_ ×_ 103<br>7_._58_ ×_ 102<br>8_._41_ ×_ 103<br>3_._69_ ×_ 103<br>4_._75_ ×_ 102<br>9_._91_ ×_ 103<br>3_._69_ ×_ 103<br>2_._36_ ×_ 103<br>1_._75_ ×_ 104<br>4_._60_ ×_ 103<br>1_._02_ ×_ 103<br>9_._44_ ×_ 103<br>4_._60_ ×_ 103<br>5_._06_ ×_ 102<br>1_._16_ ×_ 104<br>4_._60_ ×_ 103<br>1_._09_ ×_ 103<br>6_._75_ ×_ 104<br>2_._78_ ×_ 104<br>1_._55_ ×_ 104<br>4_._74_ ×_ 104<br>2_._78_ ×_ 104<br>2_._62_ ×_ 103<br>5_._93_ ×_ 104<br>2_._78_ ×_ 104<br>NIE<br>4_._32_ ×_ 103<br>1_._23_ ×_ 103<br>2_._98_ ×_ 102<br>2_._44_ ×_ 103<br>1_._23_ ×_ 103<br>1_._79_ ×_ 102<br>2_._19_ ×_ 103<br>1_._23_ ×_ 103<br>2_._70_ ×_ 102<br>4_._02_ ×_ 103<br>9_._53_ ×_ 102<br>2_._81_ ×_ 102<br>1_._50_ ×_ 103<br>9_._53_ ×_ 102<br>2_._36_ ×_ 102<br>1_._91_ ×_ 103<br>9_._53_ ×_ 102<br>3_._31_ ×_ 102<br>2_._54_ ×_ 104<br>1_._11_ ×_ 104<br>2_._19_ ×_ 103<br>2_._22_ ×_ 104<br>1_._11_ ×_ 104<br>1_._39_ ×_ 103<br>2_._35_ ×_ 104<br>1_._11_ ×_ 104<br>1_._54_ ×_ 103<br>OOR<br>OOR<br>OOR<br>1_._86_ ×_ 104<br>1_._24_ ×_ 104<br>1_._43_ ×_ 103<br>2_._30_ ×_ 104<br>1_._24_ ×_ 104<br>1_._03_ ×_ 103<br>3_._36_ ×_ 103<br>8_._94_ ×_ 102<br>1_._77_ ×_ 102<br>3_._01_ ×_ 103<br>8_._94_ ×_ 102<br>7_._94_ ×_ 101<br>1_._82_ ×_ 103<br>8_._94_ ×_ 102<br>1_._81_ ×_ 102<br>7_._10_ ×_ 103<br>2_._55_ ×_ 103<br>7_._96_ ×_ 102<br>5_._24_ ×_ 103<br>2_._55_ ×_ 103<br>2_._54_ ×_ 102<br>5_._64_ ×_ 103<br>2_._55_ ×_ 103<br>1_._24_ ×_ 103<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>3_._79_ ×_ 104<br>1_._64_ ×_ 104<br>4_._53_ ×_ 103<br>2_._56_ ×_ 104<br>1_._64_ ×_ 104<br>1_._02_ ×_ 103<br>2_._89_ ×_ 104<br>1_._64_ ×_ 104<br>9_._19_ ×_ 103<br>5_._37_ ×_ 102<br>1_._92_ ×_ 102<br>NIE<br>3_._30_ ×_ 102<br>1_._92_ ×_ 102<br>NIE<br>4_._71_ ×_ 102<br>1_._92_ ×_ 102<br>1_._82_ ×_ 102<br>4_._08_ ×_ 102<br>1_._81_ ×_ 102<br>8_._45_ ×_ 101<br>3_._10_ ×_ 102<br>1_._81_ ×_ 102<br>NIE<br>3_._44_ ×_ 102<br>1_._81_ ×_ 102<br>1_._82_ ×_ 102<br>5_._93_ ×_ 102<br>2_._27_ ×_ 102<br>1_._32_ ×_ 102<br>4_._65_ ×_ 102<br>2_._27_ ×_ 102<br>NIE<br>4_._21_ ×_ 102<br>2_._27_ ×_ 102<br>1_._17_ ×_ 102<br>1_._66_ ×_ 103<br>2_._94_ ×_ 102<br>9_._02_ ×_ 101<br>7_._25_ ×_ 102<br>2_._94_ ×_ 102<br>3_._45_ ×_ 101<br>4_._72_ ×_ 102<br>2_._94_ ×_ 102<br>6_._64_ ×_ 101<br>1_._63_ ×_ 103<br>2_._31_ ×_ 102<br>6_._54_ ×_ 101<br>3_._40_ ×_ 102<br>2_._31_ ×_ 102<br>4_._03_ ×_ 101<br>5_._44_ ×_ 102<br>2_._31_ ×_ 102<br>6_._95_ ×_ 101<br>5_._28_ ×_ 107<br>1_._82_ ×_ 107<br>7_._48_ ×_ 105<br>3_._54_ ×_ 107<br>1_._82_ ×_ 107<br>1_._90_ ×_ 106<br>4_._18_ ×_ 107<br>1_._82_ ×_ 107<br>NIE<br>1_._64_ ×_ 103<br>3_._71_ ×_ 102<br>1_._39_ ×_ 102<br>7_._76_ ×_ 102<br>3_._71_ ×_ 102<br>3_._15_ ×_ 101<br>4_._71_ ×_ 102<br>3_._71_ ×_ 102<br>2_._31_ ×_ 103<br>OOR<br>OOR<br>OOR<br>5_._37_ ×_ 104<br>3_._34_ ×_ 104<br>5_._24_ ×_ 104<br>4_._83_ ×_ 104<br>3_._34_ ×_ 104<br>4_._89_ ×_ 104<br>3_._23_ ×_ 105<br>5_._23_ ×_ 104<br>1_._13_ ×_ 104<br>1_._12_ ×_ 105<br>5_._23_ ×_ 104<br>1_._03_ ×_ 104<br>1_._90_ ×_ 105<br>5_._23_ ×_ 104<br>1_._07_ ×_ 104<br>NNE<br>NNE<br>NNE<br>NNE<br>NNE<br>NNE<br>NNE<br>NNE<br>NNE|
+
+
+betweenness of different types of edges:
+
+
+BetwIden _q_ := Mean(Between( _e_ ) _, ∀e ∈Eq_ ) _,_
+BetwAll := Mean(Between( _e_ ) _, ∀e ∈E_ ) _,_ (5)
+BetwIgno _q_ := Mean(Between( _e_ ) _, ∀e ∈E,_ Curv( _e_ ) _≥_ 0 _,_ JacoNorm( _e_ ) _≤_ _Jq_ ) _._
+
+
+BetwAll indicates the average betweenness of all edges, while BetwIden and BetwIgno represent the
+average betweenness of identified or ignored edges by curvature, respectively. See Table 3 for results.
+
+
+Previous studies have often, perhaps unconsciously, conflated terms such as “over-squashing” and
+“bottleneck” with “bridge edges connecting clusters” (a classical example can be found in Figure 1
+of Topping et al. (2021)). However, our experimental results demonstrate that bottlenecks and oversquashing can also arise within clusters. The neglect of such edges by discrete curvature is precisely
+the key reason why curvature cannot serve as a necessary condition for detecting over-squashing.
+In this sense, curvature is not the gold standard for identifying over-squashing, but rather the gold
+standard for identifying bridge edges between clusters.
+
+
+5 WEIGHTED AUGMENTED FORMAN-3 CURVATURE
+
+
+In this section, we discuss how to leverage previous results
+to enhance existing discrete curvatures. According to the results in Table 2, we consider improving augmented Forman-3
+curvature, which has the lowest time complexity and the best
+actual performance. We first provide an equivalent form for
+AF3 (Equation 6), where _u_ and _v_ are any pair of adjacent nodes
+in a graph, _N_ ( _v_ ) = _{i|i ∼_ _v, i ∈V}_ represents all first-order
+
+
+6
+
+
+u v
+
+
+AF3(u,v) = #Blue - #Green
+Figure 2: Calculation of AF3.
+
+
+Table 4: The values of MOSR10 and MOSR25 across different GNNs and datasets when the discrete
+curvature si set to WAF3 and _f_ ( _x_ ) _≡_ 1 _/_ (1 + _x_ ).
+
+|Col1|GCN GAT SAGE|Col3|GCN GAT SAGE|
+|---|---|---|---|
+|**Cora**<br>**Pubmed**<br>**Photo**<br>**Physics**<br>**Cora** ~~**M**~~**L**<br>**Cornell**<br>**Wisconsin**<br>**Squirrel**<br>**Tolokers**<br>**Amazon-ratings**|.000/.014<br>.157/.166<br>.183/.183<br>.001/.002<br>.013/.014<br>.015/.015<br>.021/.024<br>.027/.027<br>.027/.027<br>.020/.040<br>.055/.058<br>OOR<br>.025/.056<br>.098/.103<br>.103/.103<br>.000/.000<br>.116/.122<br>.138/.143<br>.000/.000<br>.108/.117<br>.122/.134<br>.039/.039<br>.041/.041<br>.041/.041<br>.002/.002<br>OOR<br>.003/.003<br>.159/.218<br>.223/.231<br>.245/.246|**Citeseer**<br>**Computers**<br>**CS**<br>**WikiCS**<br>**DBLP**<br>**Texas**<br>**Chameleon**<br>**Roman-empire**<br>**Questions**<br>**Minesweeper**|.020/.040<br>.210/.216<br>.279/.280<br>.002/.005<br>.011/.011<br>.011/.011<br>.009/.034<br>.075/.075<br>.076/.076<br>.140/.141<br>.144/.144<br>.144/.144<br>.020/.022<br>.052/.055<br>.057/.059<br>.000/.000<br>.134/.139<br>.143/.149<br>.065/.066<br>.075/.076<br>.079/.079<br>.000/.001<br>.351/.431<br>.453/.453<br>.003/.011<br>.023/.024<br>.025/.025<br>.191/.192<br>.192/.192<br>.192/.192|
+|||**Average**|.036/.045<br>.111/.118<br>.123/.124|
+
+
+neighbors of _v_, and _B_ ( _v_ ) = _N_ ( _v_ ) _∪{v}_ represents all nodes within a distance of 1 from _v_ . The
+detailed derivation is provided in Appendix A.
+
+
+AF3( _u, v_ ) = 4 _−_ _du −_ _dv_ + 3 _△_ ( _u, v_ )
+= _|B_ ( _u_ ) _∩B_ ( _v_ ) _|_ _−_ ( _|N_ ( _u_ ) _/B_ ( _v_ ) _|_ + _|N_ ( _v_ ) _/B_ ( _u_ ) _|_ )
+
+        - ��        -        - ��        Number of nodes in triangles Number of nodes not in triangles
+
+
+_._ (6)
+
+
+According to Equation 6, AF3 actually calculates the difference between the number of nodes
+that make up the triangle and the number of remaining first-order neighbors (Figure 2). However,
+as discussed in Chapter 3, triangle counting ignores the degree of nodes; however, high-degree
+nodes actually do little to enhance the information flow from the source node to the target node.
+Therefore, we propose weighted augmented Forman-3 curvature (WAF3). WAF3 weights each node’s
+contribution to the curvature based on its degree by a function _f_ : R _→_ R, which corrects for the
+influence of high-degree nodes. Obviously, AF3 is a special case of WAF3 when _f_ _≡_ 1.
+
+
+
+
+
+
+
+
+WAF3 _f_ ( _u, v_ ) := - _f_ ( _di_ ) _−_
+
+
+_i∈B_ ( _u_ ) _∩B_ ( _v_ )
+
+
+ 
+
+
+ - _f_ ( _di_ ) + 
+
+_i∈N_ ( _u_ ) _/B_ ( _v_ ) _i∈N_ ( _v_ ) _/_
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ ) _/B_ ( _u_ )
+
+
+ _._ (7)
+
+
+**Theorem 5** (WAF3 gets rid of counterexamples) **.** _Consider an L-layer MPNN as in equation (1)._
+_Suppose f_ (+ _∞_ ) = 0 [+] _._ _For the family of graphs G_ = _{Gn,m_ [c] _[}]_ _n,m∈_ R [+] _[with source-target pairs]_
+(s _,_ t) _, There_ _**dose not**_ _exist a c >_ 0 _such that for every G_ _∈_ _G,_ WAF3(s _,_ t) _> c._
+
+
+The above theorem clearly shows the difference between WAF3 and all other discrete curvatures,
+namely correcting the inappropriate contribution of high-degree nodes — only requiring the weight
+function _f_ to satisfy _f_ (+ _∞_ ) = 0 [+] . Furthermore, we report the MOSR10 and MOSR10 values of
+AF3 in Table 4, where we set _f_ to be a GCN-style weighting function, i.e., _f_ = 1 _/_ (1 + _x_ ), which
+satisfies the condition required in Theorem 5.
+
+
+6 ACCELERATING WAF3 VIA MINHASH
+
+
+In terms of complexity, WAF3 has a time complexity of _O_ ( _|E|d_ max), while WAF3 has _O_ ( _|E|d_ max _·_
+Complex( _f_ )), in which the factor _d_ max comes from the intersection of sets ( _B_ ( _u_ ) _∩B_ ( _v_ )). When
+Complex( _f_ ) = _O_ (1) (such as the function _f_ = 1 _/_ (1 + _x_ ) we use), the complexity of WAF3 is
+equivalent to that of AF3, which is the curvature with the lowest complexity at present (Table 1).
+
+
+7
+
+
+**Algorithm 1** Approximating WAF3
+
+
+1: **Input:** Graph _G_ = ( _V, E_ ), weighting function _f_, number of hashing _H_ .
+2: **for** _u ∈V_ **do**
+3: _u_ _[′]_ = _f_ ( _du_ ); _▷_ Θ( _|V| ×_ Complex( _f_ ))
+4: **end for**
+5: **for** _u ∈V_ **do**
+6: _Su_ = _{v_ _[′]_ _|v_ _∈N_ ( _u_ ) _}_ ;
+7: _u_ _[′′]_ = Sum( _Su_ ); _▷_ Θ(2 _|E|_ )
+8: **end for**
+9: **for** ( _u, v_ ) _∈E_ **do**
+10: Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ )) _≈_ Minhash( _Su, Sv_ ) (Ioffe, 2010); _▷_ Θ( _H|E|_ )
+11: Compute WAF3 _f_ ( _u, v_ ) via Theorem 6; _▷_ Θ( _|E|_ )
+12: **end for**
+
+
+However, this is still unacceptable in large graphs, since _d_ max usually also grows with the number
+of nodes in graphs. This dilemma has largely hindered the promotion of curvature tools to graph
+learning. To solve this problem, we first prove that an equivalent form of WAF3 is as follows:
+
+
+**Theorem** **6** (Equivalent form of WAF3 based on Jaccard similarity) **.** _Let_ _weighted_ _Jaccard_
+
+
+_similarity_ Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ )) :=
+
+
+WAF3 _f_ ( _u, v_ ) =2 _f_ ( _u_ ) + 2 _f_ ( _v_ )
+
+
+_i∈N_ ( _u_ ) _∩N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+
+_i∈N_ ( _u_ ) _∪N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)] _[, then the following equation holds:]_
+
+
+[�] _f_ ( _di_ ) + 
+_i∈N_ ( _u_ ) _i∈N_ (
+
+
+ - 3
++ 2 _−_
+1 + Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ ))
+
+
+- []
+
+
+
+
+
+ [�]
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ )
+
+
+ _._
+
+
+Theorem 6 converts the time-consuming intersection operation into a weighted Jaccard similarity
+operation. Fortunately, the acceleration algorithm of the latter has been widely studied (Wu et al.,
+2020). In particular, a class of algorithms called weighted Minhash (Manasse, 2010; Ioffe, 2010; Wu
+et al., 2016; 2017; 2018) can reduce the complexity of computing Jaccard similarity to a constant
+( _O_ ( _H_ )) by sampling _H_ hash functions, where the larger _H_ is, the smaller the approximation error
+is. At this point, the overall complexity of WAF3 will be further advanced to _O_ ( _H|E|_ ), reaching its
+theoretical lower bound (because it has constant complexity for each edge).
+
+
+Two experiments are conducted to
+evaluate the practicality of Algorithm
+1. First, in order to verify the computational efficiency, we randomly generated Erdos–R˝ enyi´ random graphs
+(ERDdS & R&wi, 1959) with the
+number of nodes being _{_ 10 [4] _,_ 2 _×_
+10 [4] _,_ 3 _×_ 10 [4] _,_ 4 _×_ 10 [4] _,_ 5 _×_ 10 [4] _,_ 10 [5] _}_,
+where the connection probability _p_
+between any two nodes was set to
+0.0005, which is comparable to the
+sparsity level of most commonly used
+graph datasets. Under the constraint
+of a maximum GPU memory of 24GB,
+the running times of different curvature computations are reported in Figure 3.
+
+
+Figure 3: Computation time of different discrete curvatures
+with _p_ = 0 _._ 0005, 10 [4] –10 [5] nodes, and 24 GB GPU limit.
+Here, WAF3 [�] denotes the WAF3 approximation with different
+number of hashing (Algorithm 1).
+
+
+Secondly, we evaluate whether the ap- Here, WAF3 [�] denotes the WAF3 approximation with different
+proximation error is within an accept
+number of hashing (Algorithm 1).
+
+able range. It is worth noting that, for
+most curvature-based graph learning
+methods, the relative ordering of curvature values is often more critical than their absolute magnitudes
+(for example, in rewiring-based approaches (Nguyen et al., 2023; Giraldo et al., 2023; Fesser &
+
+
+8
+
+
+Figure 4: The Kendall Tau-b similarity between WAF3 and WAF3 [�] values calculated for different
+datasets when _H_ is 100, 1000, and 10000. The average value is also reported.
+
+
+Weber, 2024), typically only the edges with the smallest curvature are considered). Based on this
+observation, we report in Figure 4 the Kendall Tau-b similarity (Kendall, 1938) between WAF3 and
+its approximated values. This rank-based metric measures the consistency between two sequences,
+with higher values indicating greater agreement in their orderings.
+
+
+According to Figure 3, for large-scale graphs, even the exact computation of the least complex curvature becomes prohibitively expensive. However, our proposed algorithm facilitates the emergence of
+a new paradigm for curvature-based learning: first, a small subset of candidate edges is identified
+through an approximation algorithm, and then the final set of highly negatively curved edges is
+determined via exact computation.
+
+
+We provide more experiments and observations in Appendix, including the impact of model training
+and the value of _q_ on MOSR (Appendix D.1); insights into designing the weighting function _f_
+(Appendix D.2); and the effect of WAF3 in actual curvature garph learning (Appendix D.3).
+
+
+7 CONCLUSION
+
+
+This work revisits the belief that discrete curvature reliably captures over-squashing in graph neural
+networks. We prove through constructive counterexamples that even highly positive-curvature edges
+can suffer from severe squashing, showing that curvature is not a necessary condition. To quantify
+this gap, we introduce MOSR, a metric that measures the proportion of over-squashed edges missed
+by curvature-based criteria, and we find that common curvatures such as Ollivier–Ricci may overlook
+more than 30%. We further present WAF3, a weighted refinement of Forman-3 curvature, which
+addresses the theoretical limitations of existing definitions. By reformulating it as a weighted Jaccard
+similarity and applying weighted MinHash, we achieve practical scalability with over two orders of
+magnitude speedup.
+
+
+Overall, this work both challenges an implicit assumption in the community and provides a feasible
+alternative. It encourages more principled ways to characterize over-squashing and supports the
+design of graph learning methods that move beyond curvature as a universal surrogate.
+
+
+9
+
+
+8 REPRODUCIBILITY STATEMENT
+
+
+We provide detailed proofs and derivations of all theoretical results presented in the main text in
+the appendix. We also provide an anonymous link to the code of this project and state all necessary
+implementation details in the appendix. We provide a statement of use for the LLMs at the end of the
+appendix.
+
+
+REFERENCES
+
+
+Singh Akansha. Over-squashing in graph neural networks: A comprehensive survey. _Neurocomputing_,
+pp. 130389, 2025.
+
+
+Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. Optuna:
+A next-generation hyperparameter optimization framework. In _Proceedings_ _of_ _the_ _25th_ _ACM_
+_SIGKDD international conference on knowledge discovery & data mining_, pp. 2623–2631, 2019.
+
+
+Uri Alon and Eran Yahav. On the bottleneck of graph neural networks and its practical implications.
+_arXiv preprint arXiv:2006.05205_, 2020.
+
+
+Kushal Bose and Swagatam Das. Asynchronous message passing for addressing oversquashing in
+graph neural networks. _arXiv preprint arXiv:2509.06777_, 2025.
+
+
+Jialong Chen, Tianchi Liao, Chuan Chen, and Zibin Zheng. Improving message-passing gnns
+by asynchronous aggregation. In _Proceedings_ _of_ _the_ _33rd_ _ACM_ _International_ _Conference_ _on_
+_Information and Knowledge Management_, pp. 228–238, 2024.
+
+
+Jialong Chen, Bowen Deng, Chuan Chen, Zibin Zheng, et al. Graph neural ricci flow: Evolving
+feature from a curvature perspective. In _The Thirteenth International Conference on Learning_
+_Representations_, 2025.
+
+
+Karel Devriendt and Renaud Lambiotte. Discrete curvature on graphs from the effective resistance*.
+_Journal_ _of_ _Physics:_ _Complexity_, 3(2):025008, June 2022. ISSN 2632-072X. doi: 10.1088/
+2632-072x/ac730d. [URL http://dx.doi.org/10.1088/2632-072x/ac730d.](http://dx.doi.org/10.1088/2632-072x/ac730d)
+
+
+Francesco Di Giovanni, Lorenzo Giusti, Federico Barbero, Giulia Luise, Pietro Lio, and Michael M
+Bronstein. On over-squashing in message passing neural networks: The impact of width, depth,
+and topology. In _International conference on machine learning_, pp. 7865–7885. PMLR, 2023a.
+
+
+Francesco Di Giovanni, T Konstantin Rusch, Michael M Bronstein, Andreea Deac, Marc Lackenby,
+Siddhartha Mishra, and Petar Velickoviˇ c.´ How does over-squashing affect the power of gnns?
+_arXiv preprint arXiv:2306.03589_, 2023b.
+
+
+P ERDdS and A R&wi. On random graphs i. _Publ. math. debrecen_, 6(290-297):18, 1959.
+
+
+Hamza Farooq, Yongxin Chen, Tryphon T Georgiou, Allen Tannenbaum, and Christophe Lenglet.
+Network curvature as a hallmark of brain structural connectivity. _Nature communications_, 10(1):
+4937, 2019.
+
+
+Lukas Fesser and Melanie Weber. Mitigating over-smoothing and over-squashing using augmentations
+of forman-ricci curvature. In _Learning on Graphs Conference_, pp. 19–1. PMLR, 2024.
+
+
+Forman. Bochner’s method for cell complexes and combinatorial ricci curvature. _Discrete_ _&_
+_Computational Geometry_, 29(3):323–374, 2003.
+
+
+Linton C Freeman. A set of measures of centrality based on betweenness. _Sociometry_, pp. 35–41,
+1977.
+
+
+Xingcheng Fu, Jian Wang, Yisen Gao, Qingyun Sun, Haonan Yuan, Jianxin Li, and Xianxian Li.
+Discrete curvature graph information bottleneck. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_
+_Artificial Intelligence_, volume 39, pp. 16666–16673, 2025.
+
+
+Justin Gilmer, Samuel S Schoenholz, Patrick F Riley, Oriol Vinyals, and George E Dahl. Neural
+message passing for quantum chemistry. In _International conference on machine learning_, pp.
+1263–1272. Pmlr, 2017.
+
+
+10
+
+
+Jhony H Giraldo, Konstantinos Skianis, Thierry Bouwmans, and Fragkiskos D Malliaros. On the tradeoff between over-smoothing and over-squashing in deep graph neural networks. In _Proceedings of_
+_the 32nd ACM international conference on information and knowledge management_, pp. 566–576,
+2023.
+
+
+Michelle Girvan and Mark EJ Newman. Community structure in social and biological networks.
+_Proceedings of the national academy of sciences_, 99(12):7821–7826, 2002.
+
+
+Karish Grover, Geoffrey J Gordon, and Christos Faloutsos. Curvgad: Leveraging curvature for
+enhanced graph anomaly detection. _arXiv preprint arXiv:2502.08605_, 2025.
+
+
+Benjamin Gutteridge, Xiaowen Dong, Michael M Bronstein, and Francesco Di Giovanni. Drew:
+Dynamically rewired message passing with delay. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 12252–12267. PMLR, 2023.
+
+
+Sergey Ioffe. Improved consistent sampling, weighted minhash and l1 sketching. In _2010 IEEE_
+_international conference on data mining_, pp. 246–255. IEEE, 2010.
+
+
+Jurgen Jost and Shiping Liu.¨ Ollivier’s ricci curvature, local clustering and curvature-dimension
+inequalities on graphs. _Discrete & Computational Geometry_, 51(2):300–322, 2014.
+
+
+Supanat Kamtue. Combinatorial, bakry- _\_ ’emery, ollivier’s ricci curvature notions and their motivation
+from riemannian geometry. _arXiv preprint arXiv:1803.08898_, 2018.
+
+
+Kenji Kawaguchi. Deep learning without poor local minima. _Advances_ _in_ _neural_ _information_
+_processing systems_, 29, 2016.
+
+
+Maurice G Kendall. A new measure of rank correlation. _Biometrika_, 30(1-2):81–93, 1938.
+
+
+TN Kipf. Semi-supervised classification with graph convolutional networks. _arXiv_ _preprint_
+_arXiv:1609.02907_, 2016.
+
+
+Haifeng Li, Jun Cao, Jiawei Zhu, Yu Liu, Qing Zhu, and Guohua Wu. Curvature graph neural
+network. _Information Sciences_, 592:50–66, 2022.
+
+
+Yong Lin, Linyuan Lu, and Shing-Tung Yau. Ricci curvature of graphs. _Tohoku_ _Mathematical_
+_Journal_, 63(4):605 – 627, 2011. doi: 10.2748/tmj/1325886283. [URL https://doi.org/10.](https://doi.org/10.2748/tmj/1325886283)
+[2748/tmj/1325886283.](https://doi.org/10.2748/tmj/1325886283)
+
+
+Mark S Manasse. Consistent weighted sampling. 2010.
+
+
+Madhumita Mondal, Areejit Samal, Florentin Munch, and J¨ urgen Jost.¨ Bakry–emery–ricci curvature:´
+an alternative network geometry measure in the expanding toolbox of graph ricci curvatures.
+_Journal of Complex Networks_, 12(3):cnae019, 2024.
+
+
+Khang Nguyen, Nong Minh Hieu, Vinh Duc Nguyen, Nhat Ho, Stanley Osher, and Tan Minh Nguyen.
+Revisiting over-smoothing and over-squashing using ollivier-ricci curvature. In _International_
+_Conference on Machine Learning_, pp. 25956–25979. PMLR, 2023.
+
+
+Yann Ollivier. Ricci curvature of markov chains on metric spaces. _Journal of Functional Analysis_, 256
+(3):810–864, 2009. ISSN 0022-1236. doi: https://doi.org/10.1016/j.jfa.2008.11.001. [URL https:](https://www.sciencedirect.com/science/article/pii/S002212360800493X)
+[//www.sciencedirect.com/science/article/pii/S002212360800493X.](https://www.sciencedirect.com/science/article/pii/S002212360800493X)
+
+
+Yun Jin Park and Didong Li. Lower ricci curvature for efficient community detection. _arXiv preprint_
+_arXiv:2401.10124_, 2024.
+
+
+Jayson Sia, Edmond Jonckheere, and Paul Bogdan. Ollivier-ricci curvature-based method to community detection in complex networks. _Scientific reports_, 9(1):9800, 2019.
+
+
+Li Sun, Zhongbao Zhang, Junda Ye, Hao Peng, Jiawei Zhang, Sen Su, and Philip S Yu. A selfsupervised mixed-curvature graph neural network. In _Proceedings of the AAAI Conference on_
+_Artificial Intelligence_, volume 36, pp. 4146–4155, 2022.
+
+
+Li Sun, Feiyang Wang, Junda Ye, Hao Peng, and Philip S Yu. Contrastive graph clustering in
+curvature spaces. _arXiv preprint arXiv:2305.03555_, 2023.
+
+
+11
+
+
+Yu Tian, Zachary Lubberts, and Melanie Weber. Curvature-based clustering on graphs. _Journal of_
+_Machine Learning Research_, 26(52):1–67, 2025.
+
+
+Jake Topping, Francesco Di Giovanni, Benjamin Paul Chamberlain, Xiaowen Dong, and Michael M
+Bronstein. Understanding over-squashing and bottlenecks on graphs via curvature. _arXiv preprint_
+_arXiv:2111.14522_, 2021.
+
+
+Floriano Tori, Vincent Holst, and Vincent Ginis. The effectiveness of curvature-based rewiring and
+the role of hyperparameters in gnns revisited. _arXiv preprint arXiv:2407.09381_, 2024a.
+
+
+Floriano Tori, Vincent Holst, and Vincent Ginis. The effectiveness of curvature-based rewiring and
+the role of hyperparameters in gnns revisited. _arXiv preprint arXiv:2407.09381_, 2024b.
+
+
+Wei Wu, Bin Li, Ling Chen, and Chengqi Zhang. Canonical consistent weighted sampling for
+real-value weighted min-hash. In _2016_ _IEEE_ _16th_ _International_ _Conference_ _on_ _Data_ _Mining_
+_(ICDM)_, pp. 1287–1292. IEEE, 2016.
+
+
+Wei Wu, Bin Li, Ling Chen, and Chengqi Zhang. Consistent weighted sampling made more practical.
+In _Proceedings of the 26th international conference on world wide web_, pp. 1035–1043, 2017.
+
+
+Wei Wu, Bin Li, Ling Chen, Chengqi Zhang, and Philip S Yu. Improved consistent weighted sampling
+revisited. _IEEE Transactions on Knowledge and Data Engineering_, 31(12):2332–2345, 2018.
+
+
+Wei Wu, Bin Li, Ling Chen, Junbin Gao, and Chengqi Zhang. A review for weighted minhash
+algorithms. _IEEE Transactions on Knowledge and Data Engineering_, 34(6):2553–2573, 2020.
+
+
+Keyulu Xu, Chengtao Li, Yonglong Tian, Tomohiro Sonobe, Ken-ichi Kawarabayashi, and Stefanie
+Jegelka. Representation learning on graphs with jumping knowledge networks. In _International_
+_conference on machine learning_, pp. 5453–5462. pmlr, 2018.
+
+
+Xikun Zhang, Dongjin Song, and Dacheng Tao. Ricci curvature-based graph sparsification for
+continual graph representation learning. _IEEE Transactions on Neural Networks and Learning_
+_Systems_, 2023.
+
+
+12
+
+
+A PROOFS & DERIVATIONS
+
+
+A.1 PROOF OF LEMMA 2
+
+
+**Lemma 7.** _Let_ **A** _be the adjacency matrix of an undirected, unweighted, simple graph, and_ **D** _the_
+_degree matirx._ _For any two adjacent points i and j_ _in the graph, for any L ∈_ Z [+] _we have:_
+
+
+- - 1 1
+( **D** + **I** ) _[−]_ [1] _[/]_ [2] ( **A** + **I** )( **D** + **I** ) _[−]_ [1] _[/]_ [2][�] _[L]_
+
+_ij_ _[≥]_ _di_ + 1 [+] _dj_ + 1
+
+
+- _L−_ 1 1
+_._
+
+~~�~~ ( _di_ + 1)( _dj_ + 1)
+
+
+_The equal sign is obtained iff di_ = _dj_ = 1 _._
+
+
+_Proof._ Define **M** = ( **D** + **I** ) _[−]_ [1] _[/]_ [2] ( **A** + **I** )( **D** + **I** ) _[−]_ [1] _[/]_ [2] . The element of **M** is given by:
+
+
+**M** _ij_ =
+
+
+
+
+
+
+1
+for the diagonal _,_
+_di_ + 1
+
+1
+if _i ∼_ _j,_
+�( _di_ + 1)( _dj_ + 1)
+
+
+0 otherwise _._
+
+
+
+
+
+The ( _i, j_ )-th entry of **M** _[L]_, denoted **M** _[L]_ _ij_ [, represents the sum of the weights of all walks of length] _[ L]_
+from node _i_ to node _j_ . The weight of a walk is the product of the M-weights of the edges traversed at
+each step. To bound **M** _[L]_ _ij_ [, we consider the subgraph restricted to nodes] _[ i]_ [ and] _[ j]_ [.] [Since] _[ i]_ [ and] _[ j]_ [are]
+adjacent, this subgraph includes the edge ( _i, j_ ), along with self-loops at both nodes. The matrix **M**
+restricted to these two nodes is:
+
+
+_i_ ( _di_ +1)( _dj_ +1)
+
+~~_√_~~ 1 1
+
+
+1 1
+
+( _dj_ +1)( _dj_ +1) _dj_ +1
+
+
+**P** = - **M** _ii_ **M** _ij_
+**M** _ji_ **M** _jj_
+
+
+=
+
+
+
+
+
+
+
+
+1 ~~_√_~~ 1
+_di_ +1
+
+
+
+
+
+ _._
+
+
+We now compute the (1 _,_ 2)-th entry of **P** _[L]_, which corresponds to walks from _i_ (index 1) to _j_ (index
+2) within this subgraph. Note that **P** can be expressed as the outer product **P** = **vv** _[T]_, where:
+
+                  - ~~_√_~~ 1 ~~_√_~~ 1                  - _T_
+**v** = _di_ +1 _dj_ +1 _._
+
+
+Thus for any integer _L ≥_ 1:
+
+
+               - 1 1
+**P** _[L]_ = ( **vv** _[T]_ ) _[L]_ = ( **v** _[T]_ **v** ) _[L][−]_ [1] ( **vv** _[T]_ ) =
+_di_ + 1 [+] _dj_ + 1
+
+
+Specifically, we have:
+
+
+- _L−_ 1
+**P** _._
+
+
+  - 1 1
+**P** _[L]_ 12 [=]
+_di_ + 1 [+] _dj_ + 1
+
+
+- _L−_ 1 1
+_._
+�( _di_ + 1)( _dj_ + 1)
+
+
+In the full graph, **M** _[L]_ _ij_ [includes all walks of length] _[ L]_ [ from] _[ i]_ [ to] _[ j]_ [, not only those confined to] _[ {][i, j][}]_ [.]
+The walks restricted to _{i, j}_ form a subset of these walks, and their total weight is exactly **P** _[L]_ 12 [.] [Since]
+all entries of M are non-negative ( **M** _uv_ _≥_ 0 for all _u, v_ ), the weight of every walk is non-negative.
+Therefore, the sum over all walks is at least the sum over the subset of walks confined to _{i, j}_ :
+
+**M** _[L]_ _ij_ _[≥]_ **[P]** 12 _[L]_ _[.]_
+
+This establishes the desired inequality. The equal sign holds iff **P** _≡_ **M**, which means _di_ = _dj_ =
+1.
+
+
+Before we prove Lemma 2, we first further explain Assumption 1. When we compute the _∂_ **h** [(] t _[L]_ [)] _/∂_ **h** [(0)] s
+, we obtain a sum of different terms over all possible paths from s to t of length _L_ . In this case, the
+derivative of ReLU acts as a Bernoulli variable evaluated along all these possible paths. So follow the
+very same argument in Di Giovanni et al. (2023a); Kawaguchi (2016); Xu et al. (2018), we can get:
+
+
+_L−_ 1
+
+
+- **W** [(] _[l]_ [)][ �] ( **D** + **I** ) _[−]_ [1] _[/]_ [2] ( **A** + **I** )( **D** + **I** ) _[−]_ [1] _[/]_ [2][�] _[L]_
+
+s _,_ t
+
+_l_ =0
+
+
+E
+
+
+_∂_ **h** [(] t _[L]_ [)]
+_∂_ **h** [(0)] s
+
+
+= _ρ_
+
+
+s _,_ t
+
+
+13
+
+
+Which the expectation means that we are taking the average over such Bernoulli variables. Then we
+can take the norm (in expectation) and leverage Lemma 5:
+_∂_ **h** [(] t _[L]_ [)] _≥_ _ρ_ _L_       - _−_ 1 **W** [(] _[l]_ [)]       - 1 1       - _L−_ 1 1
+����� _∂_ **h** [(0)] s ����� ����� _l_ =0 ����� _a_ + 1 [+] _b_ + 1 ~~�~~ ( _a_ + 1)( _b_ + 1)
+
+Which _a_ := _d_ s and _b_ := _d_ t. Note that the right side of the inequality has nothing to do with the graph
+structure. And by Lemma 5, this bound is tight. So the proof is complete.
+
+
+A.2 PROOF OF THEOREM 4
+
+
+**Lemma** **8.** _Consider_ _a_ _family_ _of_ _n_ _×_ _n_ _matrices_ **A** [(] _[α]_ [)] = _{a_ [(] _ij_ _[α]_ [)] _[}]_ _[parameterized]_ _[by]_ _[α]_ _[>]_ [0] _[,]_
+_satisfying:_
+
+     - _**Diagonal**_ _**invariance**_ _:_ _For_ _all_ 1 _≤_ _i_ _≤_ _n,_ _the_ _diagonal_ _elements_ _a_ [(] _ii_ _[α]_ [)] _are_ _constant_
+_(independent of α)._
+
+     - _**Upper-left block invariance**_ _:_ _There exists a fixed integer m_ (1 _≤_ _m ≤_ _n_ ) _such that the_
+_submatrix_ **A** sub = ( _a_ [(] _ij_ _[α]_ [)][)][1] _[≤][i,j][≤][m][ is constant (independent of][ α]_ [)] _[.]_
+
+     - _**Uniform decay outside block**_ _:_ _All other elements are bounded by α, i.e.,_
+
+
+_|a_ [(] _ij_ _[α]_ [)] _[| ≤]_ _[α]_ _for all_ ( _i > m or j_ _> m_ ) _and i ̸_ = _j._
+
+
+_Let_ **A** _[k,]_ [(] _[α]_ [)] _denote the k-th power of_ **A** [(] _[α]_ [)] _, and_ **A** _[k]_ sub _[the][ k][-th power of the fixed submatrix]_ **[ A]** [sub] _[.]_
+_Then for any fixed integer k_ _≥_ 1 _and all_ 1 _≤_ _i, j_ _≤_ _m:_
+
+
+_≥_ _ρ_
+�����
+
+
+�����
+
+
+_L−_ 1
+
+- **W** [(] _[l]_ [)]
+
+_l_ =0 �����
+
+
+_L−_ 1
+
+
+- 1 1
+_a_ + 1 [+] _b_ + 1
+
+
+- _L−_ 1 1
+
+~~�~~ ( _a_ + 1)( _b_ + 1)
+
+
+lim
+_α→_ 0
+
+
+���( **A** _k,_ ( _α_ )) _ij_ _−_ ( **A** _k_ sub [)] _[ij]_ ��� = 0
+
+
+_with convergence rate O_ ( _α_ [2] ) _._
+
+
+_Proof._ Fix _k_ _≥_ 1 and _i, j_ _∈{_ 1 _, · · ·_ _, m}_ . We interpret **A** [(] _[α]_ [)] as the adjacency matrix of a weighted
+directed graph on _n_ nodes, where **a** [(] _ij_ _[α]_ [)] is the edge weight from node _i_ to _j_ . The ( _i, j_ )-entry of
+**A** [(] _[α]_ [)] _[,k]_ equals the sum of weights of all paths of length _k_ from _i_ to _j_, with path weight defined as
+the product of edge weights. Similarly, ( **A** _[k]_ sub [)] _[ij]_ [sums weights of paths confined to the subgraph of]
+nodes _{_ 1 _, · · ·_ _, m}_ .
+
+
+Let _P_ sub be the set of paths from _i_ to _j_ of length _k_ within _{_ 1 _, · · ·_ _, m}_, and _P_ else the set that visits at
+least one node in _{m_ + 1 _, · · ·_ _, n}_ . Then:
+
+
+( **A** _[k,]_ [(] _[α]_ [)] ) _ij_ = 
+
+
+- _w_ ( _p_ ) + 
+
+_p∈P_ sub _p∈P_
+
+
+- _w_ ( _p_ ) _,_ ( **A** _[k]_ sub [)] _[ij]_ [=] 
+_p∈P_ else _p∈P_
+
+
+_w_ ( _p_ ) _,_
+
+_p∈P_ sub
+
+
+so:
+���( **A** _k,_ ( _α_ )) _ij_ _−_ ( **A** _k_ sub [)] _[ij]_ ��� =
+
+
+������
+
+
+_w_ ( _p_ )
+
+_p∈P_ else
+
+
+= ������ _p∈P_
+
+
+_|w_ ( _p_ ) _| ._
+
+_p∈P_ else
+
+
+Where _w_ ( _p_ ) denotes the weight of the path _p_, which is always nonnegative. for each path _p ∈P_ else, it
+contains at least one edge that move from node set _{_ 1 _, · · ·_ _, m}_ to node set _{m_ + 1 _. · · ·_ _, n}_, and also
+contains at least one edge that move from node set _{m_ + 1 _. · · ·_ _, n}_ to node set _{_ 1 _, · · ·_ _, m}_ . Thus:
+
+         -          - �� _k−_ 2
+_w_ ( _p_ ) _≤_ _α_ [2] _·_ max _α,_ max _i_ _[{][a]_ _ii_ [(] _[α]_ [)] _[}][,]_ 1 _≤_ max _i,j≤m_ _[{][a]_ _ik_ [(] _[α]_ [)] _[}]_ _._
+
+When _α ≤_ max _i{a_ [(] _ii_ _[α]_ [)] _[}]_ [ and] _[ α][ ≤]_ [max][1] _[≤][i,j][≤][m][{][a]_ _ik_ [(] _[α]_ [)] _[}]_ [, the above formula is simplified to:]
+
+        -        - �� _k−_ 2
+_w_ ( _p_ ) _≤_ _α_ [2] _·_ max max _i_ _[{][a]_ _ii_ [(] _[α]_ [)] _[}][,]_ 1 _≤_ max _i,j≤m_ _[{][a]_ _ik_ [(] _[α]_ [)] _[}]_ = _α_ [2] _C_ 1 _[k][−]_ [2] _._
+
+Because _|P_ path _|_ + _|P_ else _|_ = _n_ _[k][−]_ [1] and _|P_ path _|_ = _m_ _[k][−]_ [1], so
+���( **A** _k,_ ( _α_ )) _ij_ _−_ ( **A** _k_ sub [)] _[ij]_ ��� _≤_ _α_ 2 _C_ 1 _k−_ 2( _n_ _[k][−]_ [1] _−_ _m_ _[k][−]_ [1] ) = _α_ [2] _C_ 2
+
+which implies lim _α→_ 0 ��( **A** _k,_ ( _α_ )) _ij_ _−_ ( **A** _k_ sub [)] _[ij]_ �� = 0 with convergence rate _O_ ( _α_ 2).
+
+
+14
+
+
+We first prove the second property in Theorem 3, namely the convergence of _∥∂_ **h** [(] t _[L]_ [)] _/∂_ **h** [(0)] s _[∥]_ [.] [Let] **[ A]** [c]
+the adjcent matrix of _Gn,m_ [c] [, and] **[ D]** [c] [the degree matrix.] [Similar to the proof of Lemma 2, we have:]
+
+
+_L−_ 1
+
+_∂_ **h** [(] t _[L]_ [)] = _ρ_       - **W** [(] _[l]_ [)] �( **D** [c] + **I** ) _[−]_ [1] _[/]_ [2] ( **A** [c] + **I** )( **D** [c] + **I** ) _[−]_ [1] _[/]_ [2][�] _[L]_
+����� _∂_ **h** [(0)] s ����� ����� _l_ =0 ����� s _,_ t
+
+
+= _ρ_
+�����
+
+
+_L−_ 1
+
+- **W** [(] _[l]_ [)]
+
+_l_ =0 �����
+
+
+�����
+
+
+_L−_ 1
+
+
+( **D** [c] + **I** ) _[−]_ [1] _[/]_ [2] ( **A** [c] + **I** )( **D** [c] + **I** ) _[−]_ [1] _[/]_ [2][�] _[L]_
+
+
+s _,_ t
+
+
+Let **M** [c] := ( **D** [c] + **I** ) _[−]_ [1] _[/]_ [2] ( **A** [c] + **I** )( **D** [c] + **I** ) _[−]_ [1] _[/]_ [2], we have:
+
+
+**M** [c] _ij_ [=]
+
+
+
+
+
+
+1
+if _i ∈{_ s _,_ t _}_ and _j_ _∈{_ s _,_ t _},_
+_n_ + 2
+
+1
+if _i_ = _j_ _∈N_ 1 _,_
+_m_ + 3
+
+1
+if _i_ = _j_ _∈N_ 2 _,_
+2
+
+1
+
+~~�~~ ( _n_ + 2)( _m_ + 3) if ( _i ∈{_ s _,_ t _}_ and _j_ _∈N_ 1) or ( _i ∈N_ 1 and _j_ _∈{_ s _,_ t _}_ ) _,_
+
+
+1
+
+~~�~~ 2( _m_ + 3) if ( _i ∈N_ 1 and _j_ _∈N_ 2) or ( _i ∈N_ 2 and _j_ _∈N_ 1) _,_
+
+
+0 otherwise _._
+
+
+
+
+
+Since
+
+
+1
+= _,_
+�2( _m_ + 3)
+
+
+max
+
+
+1 1
+0 _,_ _,_
+
+~~�~~ ( _n_ + 2)( _m_ + 3) ~~�~~ 2( _m_ + 3)
+
+
+According to Lemma 6, we have:
+
+
+��
+1 _/_ ( _n_ + 2) 1 _/_ ( _n_ + 2)
+1 _/_ ( _n_ + 2) 1 _/_ ( _n_ + 2)
+
+
+2 _[L][−]_ [1]
+=
+
+( _n_ + 2)
+
+1 _,_ 2
+
+
+( _n_ + 2) _[L]_ [=] _[ ϕ][L]_ [(] _[n]_ [ + 1] _[, n]_ [ + 1)] _[.]_
+
+
+( **M** [c] _[,L]_ )s _,_ t _→_
+
+
+- _L_ [�]
+
+
+with convergence rate _O_ (1 _/_ (2( _m_ + 3))) = _O_ ( _m_ _[−]_ [1] ) when _m →_ + _∞_ .
+
+
+Then we prove separately that for all _n, m ∈_ R [+], the seven discrete curvatures (except link resistance
+curvature) between nodes s and t are always positive in graph _Gn,m_ [c] [.]
+
+
+**Augmented Forman-3 curvature & Augmented Forman-4 curvature** Note that edge (s _,_ t) is not
+contained in any 4-cycle in _Gn,m_ [c] [, thus][ □][(][s] _[,]_ [ t][) = 0][.] [Thus for all] _[ n, m][ ∈]_ [R][+][, we have:]
+
+
+AF3(s _,_ t) = AF4(s _,_ t) = 4 _−_ _n −_ _n_ + 3 _n_ = 4 + _n ≥_ 5 _._
+
+
+**Jost-Liu forman curvature** Note that _△_ (s _,_ t) = _n_ and _d_ s _∧_ _d_ t = _d_ s _∨_ _d_ t = _n_ + 1. Thus for all _Gn,m_ [c] [:]
+
+
+[1] _−_ [1]
+
+_d_ s _d_ t
+
+
+_d_ s _∨_ _d_ t
+
+
+JLF(s _,_ t) = _−_ (1 _−_ [1]
+
+
+[1] _−_ [1]
+
+_d_ s _d_ t
+
+
+[1] _−_ _[△]_ [(][s] _[,]_ [ t][)]
+
+_d_ t _d_ s _∨_ _d_ t
+
+
+_[△]_ [(][s] _[,]_ [ t][)] )+ _−_ (1 _−_ [1]
+
+_d_ s _∨_ _d_ t _d_
+
+
+[1] _−_ _[△]_ [(][s] _[,]_ [ t][)]
+
+_d_ t _d_ s _∧_ _d_ t
+
+
+_[△]_ [(][s] _[,]_ [ t][)] )+ + _[△]_ [(][s] _[,]_ [ t][)]
+
+_d_ s _∧_ _d_ t _d_ s _∨_ _d_ t
+
+
+1 1 _n_ 1 1 _n_ _n_
+= _−_ (1 _−_
+_n_ + 1 _[−]_ _n_ + 1 _[−]_ _n_ + 1 [)][+] _[ −]_ [(1] _[ −]_ _n_ + 1 _[−]_ _n_ + 1 _[−]_ _n_ + 1 [)][+][ +] _n_ + 1
+
+_n_
+=
+_n_ + 1 _[≥]_ [1] 2 _[.]_
+
+
+**Balance forman curvature with/without 4-cycle** For all _n, m ∈_ R [+] :
+
+
+_d_ s _∧_ _d_ t
+
+
+BFw _/_ o4(s _,_ t) = [2]
+
+
+[2] + [2]
+
+_d_ s _d_
+
+
+[2] _−_ 2 + 2 _[△]_ [(][s] _[,]_ [ t][)]
+
+_d_ t _d_ s _∨_ _d_ t
+
+
+_[△]_ [(][s] _[,]_ [ t][)] + _[△]_ [(][s] _[,]_ [ t][)]
+
+_d_ s _∨_ _d_ t _d_ s _∧_ _d_ t
+
+
+2 2 _n_ _n_
+=
+_n_ + 1 [+] _n_ + 1 _[−]_ [2 + 2] _n_ + 1 [+] _n_ + 1
+
+= _[n]_ [ + 2]
+
+_n_ + 1 _[>]_ [ 1] _[.]_
+
+Note that [#] - [s] _γ_ [(] ( [s] s _[,]_ _,_ [t] t [)+#] )( _d_ s _∨_ [t] - _d_ [(] t [s] ) _[,]_ [t][)] _≥_ 0, Thus:
+
+
+BF(s _,_ t) _≥_ BFw _/_ o4(s _,_ t) _>_ 1 _._
+
+
+15
+
+
+**Ollivier Ricci curvature** Note that:
+
+
+
+
+
+
+_α_ _v_ = s _,_
+1 _−_ _α_
+_v_ _∈N_ 1 _∪{_ t _},_
+_n_ + 1
+
+0 else _._
+
+
+_α_ _v_ = t _,_
+1 _−_ _α_
+_v_ _∈N_ 1 _∪{_ s _},_
+_n_ + 1
+
+0 else _._
+
+
+
+
+
+and
+
+
+_µ_ _[α]_ s [(] _[v]_ [) =]
+
+
+_µ_ _[α]_ t [(] _[v]_ [) =]
+
+
+
+
+
+
+
+
+
+To calculate _W_ 1( _µ_ _[α]_ s _[, µ]_ t _[α]_ [)][,] [when] _[α]_ _[>]_ [1] _n_ _[−]_ +1 _[α]_
+
+
+[1] _n_ _[−]_ +1 _[α]_ [,] [we] [need] [to] [move] _[α][ −]_ [1] _n_ _[−]_ +1 _[α]_
+
+
+To calculate _W_ 1( _µ_ s _[, µ]_ t [)][,] [when] _[α]_ _[>]_ _n_ +1 [,] [we] [need] [to] [move] _[α][ −]_ _n_ +1 [probability] [mass] [directly]
+
+from s to t; when _α_ _<_ [1] _n_ _[−]_ +1 _[α]_ [, we need to move] [1] _n_ _[−]_ +1 _[α]_ _[−]_ _[α]_ [ probability mass directly from][ t][ to][ s][.] [So]
+
+_W_ 1( _µ_ _[α]_ s _[, µ]_ t _[α]_ [) =] _[ |][α][ −]_ [1] _n_ _[−]_ +1 _[α]_ _[|]_ [ and] _[ α]_ [OR][(][s] _[,]_ [ t][) = 1] _[ −|][α][ −]_ [1] _n_ _[−]_ +1 _[α]_ _[|]_ [ and thus][ OR][(][s] _[,]_ [ t][) = 1] _[ −]_ _n_ +11 _[≥]_ [1] 2 [when]
+
+
+[1] _[−][α]_ [1] _[−][α]_
+
+_n_ +1 [, we need to move] _n_ +1
+
+
+[1] _n_ _[−]_ +1 _[α]_ _[|]_ [ and] _[ α]_ [OR][(][s] _[,]_ [ t][) = 1] _[ −|][α][ −]_ [1] _n_ _[−]_ +1 _[α]_
+
+
+[1] _n_ _[−]_ +1 _[α]_ _[|]_ [ and thus][ OR][(][s] _[,]_ [ t][) = 1] _[ −]_ _n_ +11 _[≥]_ [1] 2
+
+
+_W_ 1( _µ_ s _[, µ]_ t [) =] _[ |][α][ −]_ _n_ +1 _[|]_ [ and] _[ α]_ [OR][(][s] _[,]_ [ t][) = 1] _[ −|][α][ −]_ _n_ +1 _[|]_ [ and thus][ OR][(][s] _[,]_ [ t][) = 1] _[ −]_ _n_ +1 _[≥]_ 2 [when]
+
+we take _α_ = 0.
+
+
+**Lin-Lu-Yau curvature** By using the definition:
+
+
+OR(s _,_ t) = lim 1 _−|α −_ [1] _n_ _[−]_ +1 _[α]_
+
+1 _−_ _α_ _α→_ 1 _[−]_ 1 _−_ _α_
+
+
+_α_ OR(s _,_ t)
+LLY(s _,_ t) = lim
+_α→_ 1 _[−]_ 1 _−_ _α_
+
+
+1 _−_ _α_
+
+
+_n_ +1 _[|]_
+
+
+Define _g_ ( _α_ ) = _α −_ [1] _n_ _[−]_ +1 _[α]_ [.] [For] _[ α]_ [ sufficiently close to 1, specifically when] _[ α >]_ _n_ +21 [(which holds for]
+
+_α_ in a left neighborhood of 1 since _n_ +21 _[<]_ [1][ for all positive integers] _[ n]_ [), we have] _[ g]_ [(] _[α]_ [)] _[≥]_ [0][.] [Thus,]
+_|g_ ( _α_ ) _|_ = _g_ ( _α_ ) in this region. The numerator simplifies as follows:
+
+
+         1 _−|g_ ( _α_ ) _|_ = 1 _−_ _g_ ( _α_ ) = 1 _−_ _α −_ [1] _[ −]_ _[α]_
+
+_n_ + 1
+
+
+         1 _−|g_ ( _α_ ) _|_ = 1 _−_ _g_ ( _α_ ) = 1 _−_ _α −_ [1] _[ −]_ _[α]_
+
+
+= (1 _−_ _α_ ) _[n]_ [ + 2]
+
+_n_ + 1 _[.]_
+
+
+= (1 _−_ _α_ ) _[n]_ [ + 2]
+
+
+Therefore:
+
+
+_−|g_ ( _α_ ) _|_ = lim (1 _−_ _α_ ) _n_ _[n]_ +1 [+2]
+
+1 _−_ _α_ _α→_ 1 _[−]_ 1 _−_ _α_
+
+
+_n_ + 1 _[>]_ [ 1] _[.]_
+
+
+1 _−|g_ ( _α_ ) _|_
+lim
+_α→_ 1 _[−]_ 1 _−_ _α_
+
+
+_α_ ) _n_ +1 = lim _n_ + 2 _[n]_ [ + 2]
+
+1 _−_ _α_ _α→_ 1 _[−]_ _n_ + 1 [=] _n_ + 1
+
+
+Which means LLY(s _,_ t) _>_ 1.
+
+
+**Link resistance curvature** Finally, we prove that in link resistance curvature, for any fixed _n_ _[∗]_, there
+exists an _m_ _[∗]_ such that for all _m > m_ _[∗]_, and node-pair (s _,_ t) in _Gn_ [c] _[∗]_ _,m_ [,][ LR][(][s] _[,]_ [ t][)] _[ >]_ [ 0][.]
+
+
+To calculate the link resistance curvature, we first need to calculate the equivalent resistance of each
+edge in _Gn,m_ [c] [.] [Looking] [back] [at] [the] [definition] [of] _[G]_ _n,m_ [c] [,] [there] [are] [three] [equivalent] [types] [of] [edges.]
+Let’s assume that the edges in _{_ (s _,_ t) _}_, _{_ (s _, ui_ ) _,_ (t _, ui_ ) _}_ 1 _≤i≤n_, and _{_ ( _ui, vij_ ) _}_ 1 _≤i≤n,_ 1 _≤j≤m_ have
+resistance values of _r_ 1, _r_ 2, and _r_ 3 respectively. And their equivalent resistances are recorded as _w_ 1,
+_w_ 2, and _w_ 3 respectively.
+
+
+Calculate _w_ 1: Note that there are _n_ + 1 resistors in parallel between s and t, _n_ of which have a
+resistance of 2 _r_ 2 and one has a resistance of _r_ 1, so:
+
+
+  - 1
+_w_ 1 = + _[n]_
+_r_ 1 2 _r_ 2
+
+
+- _−_ 1
+_._
+
+
+Calculate _w_ 2: Since the equivalent resistance of all edges in _{_ (s _, ui_ ) _,_ (t _, ui_ ) _}_ 1 _≤i≤n_ is equal, let’s
+take the calculation of the equivalent resistance between s and _u_ 1 as an example. According to the
+topology of the graph, the calculation is divided into three steps. First, we connect _n_ resistors in
+parallel: s _−_ t, s _−_ _u_ 2 _−_ t, s _−_ _u_ 3 _−_ t, _· · ·_,s _−_ _un −_ t, where the resistance of s _−_ t is _r_ 1 and the
+resistance of the remaining _n −_ 1 resistors is 2 _r_ 2. Then, we connect the resulting resistor in series
+with t _−_ _u_ 1 (with a resistance of _r_ 2). Finally, we connect the resulting resistor in parallel with s _−_ _u_ 1
+(with a resistance of _r_ 2). Therefore, _w_ 2 is calculated as:
+
+
+
+
+
+- _−_ 1 [+] _r_ [1] 2
+
+
+ _−_ 1
+
+
+
+
+
+_w_ 2 =
+
+
+1
+ 
+
+
+_r_ 2 + - _r_ 11 [+] _[n]_ 2 _[−]_ _r_ 2 [1]
+
+
+_._
+
+
+2 _r_ 2
+
+
+16
+
+
+Calculate _w_ 3: Since any _vij_ is only connected to _ui_, the equivalent resistance between _vij_ and _ui_ is
+not affected by any other resistance, so:
+_w_ 3 = _r_ 3 _._
+
+From the definition,
+
+LR(s _,_ t) = [2(1] _[ −]_ _[nw]_ [2][)] _._
+
+_w_ 1
+
+
+since _w_ 1 _>_ 0, making LR(s _,_ t) _>_ 0 is equivalent to making 1 _−_ _nw_ 2 _>_ 0 true, which is further
+equivalent to ensure:
+
+          - _−_ 1 [�] _[−]_ [1]
+
+
+- _−_ 1 [�] _[−]_ [1]
+
+
++ [1]
+
+
+  - 1
+_r_ 2 + + _[n][ −]_ [1]
+_r_ 1 2 _r_ 2
+
+
+_> n._
+_r_ 2
+
+
+2 _r_ 2
+
+
+Simplify the left side of the above inequality:
+
+
+    - 2 _r_ 1 _r_ 2
+
++ [1] = _r_ 2 +
+
+_r_ 2 2 _r_ 2 + ( _n −_ 1) _r_ 1
+
+
+  - 2 _r_ 2 + ( _n −_ 1) _r_ 1
+_r_ 2 +
+2 _r_ 1 _r_ 2
+
+
+- _−_ 1 [�] _[−]_ [1]
+
+
+- _−_ 1
++ [1]
+
+_r_ 2
+
+
+left =
+
+
+2 _r_ 2 + 2 _nr_ 1
+
+[1] = _._
+
+_r_ 2 2 _r_ 2 [2] [+ (] _[n]_ [ + 1)] _[r]_ [1] _[r]_ [2]
+
+
+ - 2 _r_ 22 [+ (] _[n]_ [ + 1)] _[r]_ [1] _[r]_ [2]
+=
+2 _r_ 2 + ( _n −_ 1) _r_ 1
+
+
+- _−_ 1
++ [1]
+
+
+[1] = 2 _r_ 2 + ( _n −_ 1) _r_ 1 + [1]
+
+_r_ 2 2 _r_ 2 [2] [+ (] _[n]_ [ + 1)] _[r]_ [1] _[r]_ [2] _r_
+
+
+Considering that in the symmetric normalized Laplacian, the value of any edge ( _u, v_ ) is
+~~_√_~~ 1 [,] [so] _[r]_ [=] 1 [and] _[r]_ [=] ~~_√_~~ 1 [.] [Thus] [(] _[n]_ [+] [1)] _[r]_ [=] [1][.] [We] [can] [further]
+
+
+( _du_ +1)(1 _dv_ +1) [,] [so] _[r]_ [1] [=] _n_ +11 [and] _[r]_ [2] [=] ~~_√_~~ ( _n_ 1
+
+
+[Thus] [(] _[n]_ [+] [1)] _[r]_ [1] [=] [1][.] [We] [can] [further]
+( _n_ +1)( _m_ +2) [.]
+
+
+deduce the equivalent conditions as follows:
+
+
+2 _r_ 2 + 2 _nr_ 1
+
+_> n ⇒_ [2] _[r]_ [2][ + 2] _[nr]_ [1] _> n ⇒_ (2 _−_ _n_ ) _r_ 2 + 2 _nr_ 1 _−_ 2 _nr_ 2 [2] _[>]_ [ 0] _[.]_
+2 _r_ 2 [2] [+ (] _[n]_ [ + 1)] _[r]_ [1] _[r]_ [2] 2 _r_ 2 [2] [+] _[ r]_ [2]
+
+
+We further narrow the left side of the above inequality to make its validity condition more stringent:
+
+
+(2 _−_ _n_ ) _r_ 2 + 2 _nr_ 1 _−_ 2 _nr_ 2 [2] _[>][ −][nr]_ [2] [+ 2] _[nr]_ [1] _[−]_ [2] _[nr]_ 2 [2] [=] _[ n]_ [(2] _[r]_ [1] _[−]_ _[r]_ [2] _[−]_ [2] _[r]_ 2 [2][)]
+
+
+= _n_
+
+
+2 1 2
+
+_−_
+_n_ + 1 _[−]_ �( _n_ + 1)( _m_ + 2) ( _n_ + 1)( _m_ + 2)
+
+
+:= _n × f_ ( _n, m_ ) _._
+
+
+Obviously, _∂f_ ( _n, m_ ) _/∂m >_ 0, and _f_ ( _n,_ + _∞_ ) = _n_ +12 _[>]_ [ 0][, so for any fixed] _[ n][∗]_ [, there must exist a]
+_m_ _[∗]_ such that for any _m > m_ _[∗]_, _f_ ( _n_ _[∗]_ _, m_ ) approaches _n_ +12 [arbitrarily, thus the original proposition is]
+proved.
+
+
+A.3 DERIVATION OF EQUATION 6
+
+
+4 _−_ _di −_ _dj_ + 3 _△ij_
+=4 _−|N_ ( _u_ ) _| −|N_ ( _v_ ) _|_ + 3( _|N_ ( _u_ ) _∩N_ ( _v_ ) _|_ )
+=4 _−_ ( _|N_ ( _u_ ) _| −|N_ ( _u_ ) _∩N_ ( _v_ ) _|_ ) _−_ ( _|N_ ( _v_ ) _| −|N_ ( _u_ ) _∩N_ ( _v_ ) _|_ ) + _|N_ ( _u_ ) _∩N_ ( _v_ ) _|_
+=4 _−|N_ ( _u_ ) _/N_ ( _v_ ) _| −|N_ ( _v_ ) _/N_ ( _u_ ) _|_ + _|N_ ( _u_ ) _∩N_ ( _v_ ) _|_
+=(2 + _|N_ ( _u_ ) _∩N_ ( _v_ ) _|_ ) _−_ ( _|N_ ( _u_ ) _/N_ ( _v_ ) _| −_ 1) _−_ ( _|N_ ( _v_ ) _/N_ ( _u_ ) _| −_ 1)
+= _|B_ ( _u_ ) _∩B_ ( _v_ ) _| −|N_ ( _u_ ) _/B_ ( _v_ ) _| −|N_ ( _v_ ) _/B_ ( _u_ ) _|_
+
+
+A.4 PROOF OF THEOREM 5
+
+
+By definition, we know that for any _Gn,m_ [c] [, we have:]
+
+
+WAF3(s _,_ t) = 2 _f_ ( _n_ + 1) + _nf_ ( _m_ + 2)
+
+
+The original proposition is equivalent to proving that for any _ϵ_ _>_ 0, there exists a set of positive
+integers _n_ _[∗]_ and _m_ _[∗]_ such that 2 _f_ ( _n_ + 1) + _nf_ ( _m_ + 2) _< ϵ_ . Since _f_ (+ _∞_ ) = 0 [+], for any _ϵ >_ 0, there
+exists _N_ 1 _>_ 0 such that when _x > N_ 1, we have _f_ ( _x_ ) _<_ _[ϵ]_ [.] [Choose a positive integer] _[ n][∗]_ [such that]
+
+
+exists _N_ 1 _>_ 0 such that when _x > N_ 1, we have _f_ ( _x_ ) _<_ 4 _[ϵ]_ [.] [Choose a positive integer] _[ n][∗]_ [such that]
+
+_n_ _[∗]_ + 1 _> N_ 1. Then, _f_ ( _n_ _[∗]_ + 1) _<_ _[ϵ]_ [, and thus]
+
+
+4 [, and thus]
+
+
+2 _f_ ( _n_ _[∗]_ + 1) _<_ _[ϵ]_
+
+2 _[.]_
+
+
+17
+
+
+For a fixed _n_ _[∗]_, since _f_ ( _x_ ) _→_ 0 as _x_ _→∞_, there exists _N_ 2 _>_ 0 such that when _x_ _>_ _N_ 2, we have
+_f_ ( _x_ ) _<_ 2 _nϵ_ _[∗]_ [.] [Choose a positive integer] _[ m][∗]_ [such that] _[ m][∗]_ [+ 2] _[ > N]_ [2][.] [Then,] _[ f]_ [(] _[m][∗]_ [+ 2)] _[ <]_ 2 _nϵ_ _[∗]_ [, and]
+thus
+_n_ _[∗]_ _f_ ( _m_ _[∗]_ + 2) _<_ _[ϵ]_
+
+2 _[.]_
+
+
+Therefore,
+2 _f_ ( _n_ _[∗]_ + 1) + _n_ _[∗]_ _f_ ( _m_ _[∗]_ + 2) _<_ _[ϵ]_
+
+
+2 [=] _[ ϵ.]_
+
+
+_[ϵ]_ _[ϵ]_
+
+2 [+] 2
+
+
+A.5 PROOF OF THEOREM 6
+
+
+Notice that:
+
+
+Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ )) =
+
+
+_⇐⇒_ Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ )) =
+
+
+1
+_⇐⇒_
+Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ )) [=]
+
+
+_−_ 1
+_i∈N_ ( _u_ ) _∩N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+
+_i∈N_ ( _u_ ) _∩N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+_i∈N_ ( _u_ ) _∪N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+
+    
+_i∈N_ ( _u_ ) _∩N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+_i∈N_ ( _u_ ) _[f]_ [(] _[d][i]_ [) +][ �] _i∈N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)] _[ −]_ [�] _i∈N_ ( _u_ ) _∩N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+
+_i∈N_ ( _u_ ) _[f]_ [(] _[d][i]_ [) +] [�] _i_
+
+
+( _u_ ) _[f]_ [(] _[d][i]_ [) +] [�] _i∈N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+
+_i∈N_ ( _v_ ) _[f]_ [(] _[d][i]_ [)]
+
+
+_⇐⇒_ - _f_ ( _di_ ) =
+
+
+_i∈N_ ( _u_ ) _∩N_ ( _v_ )
+
+
+_i∈N_ ( _u_ ) _[f]_ [(] _[d][i]_ [) +] [�]
+
+
+Jaccard _[−]_ _f_ [1][(] _[N]_ [(] _[u]_ [)] _[,][ N]_ [(] _[v]_ [)) + 1]
+
+
+So:
+
+WAF3 _f_ ( _u, v_ )
+
+
+= 
+
+
+ - _f_ ( _di_ ) _−_ 
+
+_i∈B_ ( _u_ ) _∩B_ ( _v_ ) _i∈N_ ( _u_ ) _/_
+
+
+ - _f_ ( _di_ ) _−_ 
+
+_i∈N_ ( _u_ ) _/B_ ( _v_ ) _i∈N_ ( _v_ ) _/_
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ ) _/B_ ( _u_ )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ _−_
+
+
+ _−_
+
+
+
+
+
+_f_ ( _di_ ) _−_ _f_ ( _dv_ )
+
+_i∈N_ ( _u_ ) _/N_ ( _v_ )
+
+
+ 
+
+
+_f_ ( _di_ ) _−_ _f_ ( _du_ )
+
+_i∈N_ ( _v_ ) _/N_ ( _u_ )
+
+
+=
+
+
+ _f_ ( _du_ ) + _f_ ( _dv_ ) + 
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _u_ ) _∩N_ ( _v_ )
+
+
+ 
+
+
+=2 _f_ ( _du_ ) + 2 _f_ ( _dv_ ) + 
+
+
+ - _f_ ( _di_ ) _−_ 
+
+_i∈N_ ( _u_ ) _∩N_ ( _v_ ) _i∈N_ ( _u_ ) _/_
+
+
+ - _f_ ( _di_ ) _−_ 
+
+_i∈N_ ( _u_ ) _/N_ ( _v_ ) _i∈N_ ( _v_ ) _/_
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ ) _/N_ ( _u_ )
+
+
+=2 _f_ ( _du_ ) + 2 _f_ ( _dv_ ) + 
+
+
+ - 3 _f_ ( _di_ ) _−_ 
+
+_i∈N_ ( _u_ ) _∩N_ ( _v_ ) _i∈N_ (
+
+
+- _f_ ( _di_ ) _−_ 
+
+_i∈N_ ( _u_ ) _i∈N_ ( _v_
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ )
+
+
+- []
+
+
+[�] _f_ ( _di_ ) + 
+_i∈N_ ( _u_ ) _i∈N_ (
+
+
+
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ )
+
+
+
+
+
+=2 _f_ ( _du_ ) + 2 _f_ ( _dv_ ) +
+
+
+3
+Jaccard _[−]_ _f_ [1][(] _[N]_ [(] _[u]_ [)] _[,][ N]_ [(] _[v]_ [)) + 1] _[−]_ [1]
+
+
+ [�]
+
+
+      -       - []
+3Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ ))
+=2 _f_ ( _du_ ) + 2 _f_ ( _dv_ ) + 1 + Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ )) _[−]_ [1] 
+
+
+
+
+
+ [�]
+
+
+[�] _f_ ( _di_ ) +  
+_i∈N_ ( _u_ ) _i∈N_ (
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ )
+
+
+
+
+
+
+
+
+      - 3
+=2 _f_ ( _du_ ) + 2 _f_ ( _dv_ ) + 2 _−_
+1 + Jaccard _f_ ( _N_ ( _u_ ) _, N_ ( _v_ ))
+
+
+B RELATED WORK
+
+
+- []
+
+
+ [�]
+
+
+[�] _f_ ( _di_ ) +  
+_i∈N_ ( _u_ ) _i∈N_ (
+
+
+_f_ ( _di_ )
+
+_i∈N_ ( _v_ )
+
+
+
+
+
+Alon & Yahav (2020) first proposed that information flowing through a graph can be over-squashed
+due to bottleneck structures. This idea was quickly recognized by the graph learning community, and
+over-squashing has become one of the core challenges faced by subsequent researchers designing new
+deep graph models. The next notable breakthrough in over-squashing research came from Topping
+et al. (2021), who demonstrated the use of the discrete decrement as an upper bound on the Jacobian
+matrix norm, thus transforming the ambiguous problem of determining over-squashed edges into a
+precisely defined curvature calculation.
+
+
+18
+
+
+Since then, discrete curvature has garnered significant interest within the graph learning community.
+One of the most typical approaches is curvature-based graph rewiring, whose core idea involves
+performing curvature-based preprocessing on graph data before executing graph deep learning to
+eliminate edges with extremely high or low curvature. Representative methods include those by SDRF
+(Topping et al., 2021), BORF (Nguyen et al., 2023), SJLR (Giraldo et al., 2023), AFR-3 (Fesser &
+Weber, 2024), among others. Another approach involves directly integrating curvature into end-toend GNN models. For instance, Li et al. (2022) utilized discrete curvature to improve aggregation
+weights in message passing; Sun et al. (2022) employed a hierarchical attention mechanism based
+on mixed-curvature spaces to capture complex graph structures and enhance performance; Fu et al.
+(2025) et al. proposed a curvature-optimized variational information bottleneck principle to optimize
+information transmission on graphs; while Chen et al. (2025) designed a continuous-depth GNN with
+effects similar to rewiring methods via curvature Ricci flow. In addition, there is another type of
+method that proposes the asynchronous message passing mechanism (Gutteridge et al., 2023; Chen
+et al., 2024; Bose & Das, 2025). Their core innovation lies in combining the above two categories:
+graph reconnection and end-to-end graph network.
+
+
+In terms of theoretical progress, Di Giovanni et al. (2023a) discussed how factors such as network
+width, depth, and graph topology affect over-squeezing with the help of arrival time; Di Giovanni
+et al. (2023b) studied the relationship between over-squeezing and expressiveness; Nguyen et al.
+(2023) et al. established a unified understanding of over-smoothing and over-squeezing through ORC;
+Chen et al. (2024) gave the conditions for GNN to exhibit local priority through curvature. Tori et al.
+(2024b) proposed that the effectiveness of curvature-based graph rewiring methods may be due to the
+correction of outliers.
+
+
+C COMPUTE MOSR
+
+
+In this paper, we introduce the metric MOSR _q_, which measures the proportion of over-squashed
+edges that are ignored by the discrete curvature. MOSR is calculated using the Jacobian matrix norm,
+making it a tightly coupled metric with the model. This section details the calculation of MOSR.
+
+
+To ensure fairness, we want the network model to be optimal when calculating the Jacobian matrix
+norm. To achieve this, we used Optuna Akiba et al. (2019) to perform 200 times hyperparameter
+search for each model on each dataset, with the hyperparameter search range fixed uniformly (as
+shown in Table 5. The hyperparameter search results are shown in Table 6, Table 7 and Table 8.
+
+
+We then randomly initialize the GNN with the optimal hyperparameter combination and calculate
+
+
+the Jacobian matrix norm _∂_ **h** _j_ [(] _[L]_ [)]
+���� _∂_ **h** [(0)] _i_
+
+
+for each edge ( _i, j_ ) in the dataset via the autograd module in
+����
+
+
+pytorch. We directly use randomly initialized GNNs without any training (See Appendix D.1 for
+more discussion on this).
+
+
+Following the definition of discrete curvature, we compute a curvature value for each edge and
+then compute MOSR as defined in Section 4. We repeat each experiment 10 times with different
+initialization and report the average value. Our experimental platform is Intel(R) Xeon(R) Gold
+6240C CPU @ 2.60GHz and NVIDIA GeForce RTX 4090 _×_ 4. We set the resource consumption
+limit for a single experiment to 12 hours of runtime and 24GB of GPU memory. Experiments
+exceeding this limit will be marked as Out of Resources (OOR).
+
+
+Table 5: Scope of hyperparameter search
+
+
+n ~~h~~ idden [64, 128, 256]
+dropout [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+lr [0.01, 0.005, 0.002, 0.001, 0.0005]
+weight ~~d~~ ecay [0.005, 0.001, 0.0005, 0.0001, 0]
+norm [”batch ~~n~~ rom”, ”layer ~~n~~ orm”, none]
+
+
+19
+
+
+Table 6: The optimal hyperparameter combination of GCN on different datasets
+
+|Col1|n layer n hidden dropout lr weight decay norm|
+|---|---|
+|**Cora**<br>**Citeseer**<br>**Pubmed**<br>**Computers**<br>**Photo**<br>**CS**<br>**Physics**<br>**WikiCS**<br>**Cora** ~~**M**~~**L**<br>**Cora** ~~**F**~~**ull**<br>**DBLP**<br>**Cornell**<br>**Texas**<br>**Wisconsin**<br>**Chameleon**<br>**Squirrel**<br>**Roman-empire**<br>**Tolokers**<br>**Questions**<br>**Amazon-ratings**<br>**Minesweeper**|2<br>64<br>0.7<br>0.001<br>0.005<br>none<br>2<br>256<br>0.5<br>0.001<br>0.005<br>none<br>2<br>64<br>0.6<br>0.005<br>0.0001<br>none<br>2<br>256<br>0.3<br>0.002<br>0.0001<br>none<br>2<br>256<br>0.5<br>0.0005<br>0<br>ln<br>2<br>128<br>0.7<br>0.0005<br>0.001<br>none<br>2<br>64<br>0.1<br>0.005<br>0.001<br>none<br>2<br>256<br>0.5<br>0.0005<br>0<br>ln<br>5<br>64<br>0.6<br>0.001<br>0.0001<br>none<br>2<br>128<br>0.5<br>0.01<br>0.001<br>none<br>3<br>256<br>0.3<br>0.005<br>0.005<br>none<br>2<br>64<br>0.4<br>0.0005<br>0.005<br>none<br>2<br>256<br>0.2<br>0.002<br>0.0005<br>none<br>3<br>128<br>0.2<br>0.01<br>0.001<br>bn<br>2<br>64<br>0.6<br>0.001<br>0.0005<br>none<br>4<br>128<br>0.2<br>0.01<br>0.0001<br>bn<br>2<br>256<br>0.1<br>0.002<br>0.0001<br>none<br>2<br>256<br>0.7<br>0.01<br>0<br>ln<br>2<br>256<br>0.6<br>0.01<br>0.001<br>ln<br>2<br>256<br>0.2<br>0.01<br>0<br>ln<br>3<br>256<br>0.5<br>0.005<br>0<br>ln|
+
+
+Table 7: The optimal hyperparameter combination of GAT on different datasets
+
+|Col1|n layer n hidden dropout lr weight decay norm|
+|---|---|
+|**Cora**<br>**Citeseer**<br>**Pubmed**<br>**Computers**<br>**Photo**<br>**CS**<br>**Physics**<br>**WikiCS**<br>**Cora** ~~**M**~~**L**<br>**Cora** ~~**F**~~**ull**<br>**DBLP**<br>**Cornell**<br>**Texas**<br>**Wisconsin**<br>**Chameleon**<br>**Squirrel**<br>**Roman-empire**<br>**Tolokers**<br>**Questions**<br>**Amazon-ratings**<br>**Minesweeper**|3<br>128<br>0.6<br>0.0005<br>0.005<br>none<br>2<br>64<br>0.4<br>0.005<br>0.005<br>none<br>2<br>64<br>0.5<br>0.0005<br>0<br>bn<br>4<br>128<br>0.5<br>0.001<br>0.001<br>ln<br>3<br>128<br>0.5<br>0.005<br>0.0001<br>none<br>2<br>256<br>0.6<br>0.01<br>0.0001<br>none<br>2<br>256<br>0.7<br>0.002<br>0.001<br>ln<br>2<br>256<br>0.6<br>0.0005<br>0.0001<br>bn<br>5<br>64<br>0.7<br>0.0005<br>0<br>ln<br>2<br>256<br>0.7<br>0.01<br>0.005<br>bn<br>3<br>64<br>0.5<br>0.01<br>0.005<br>none<br>4<br>64<br>0.4<br>0.005<br>0.005<br>bn<br>5<br>256<br>0.7<br>0.002<br>0<br>ln<br>4<br>128<br>0.7<br>0.01<br>0.005<br>none<br>5<br>128<br>0.3<br>0.0005<br>0.005<br>ln<br>2<br>256<br>0.6<br>0.002<br>0.001<br>bn<br>2<br>128<br>0.3<br>0.005<br>0<br>none<br>3<br>256<br>0.6<br>0.005<br>0.0001<br>none<br>4<br>256<br>0.3<br>0.001<br>0.0001<br>none<br>2<br>128<br>0.1<br>0.0005<br>0.0001<br>bn<br>3<br>128<br>0.4<br>0.01<br>0.0001<br>none|
+
+
+20
+
+
+Table 8: The optimal hyperparameter combination of GraphSAGE on different datasets
+
+|Col1|n layer n hidden dropout lr weight decay norm|
+|---|---|
+|**Cora**<br>**Citeseer**<br>**Pubmed**<br>**Computers**<br>**Photo**<br>**CS**<br>**Physics**<br>**WikiCS**<br>**Cora** ~~**M**~~**L**<br>**Cora** ~~**F**~~**ull**<br>**DBLP**<br>**Cornell**<br>**Texas**<br>**Wisconsin**<br>**Chameleon**<br>**Squirrel**<br>**Roman-empire**<br>**Tolokers**<br>**Questions**<br>**Amazon-ratings**<br>**Minesweeper**|2<br>64<br>0.5<br>0.0005<br>0.005<br>none<br>2<br>128<br>0.2<br>0.005<br>0.005<br>none<br>2<br>256<br>0.5<br>0.005<br>0.001<br>none<br>4<br>256<br>0.7<br>0.0005<br>0.0001<br>none<br>2<br>64<br>0.6<br>0.002<br>0<br>none<br>2<br>256<br>0.6<br>0.001<br>0.0001<br>none<br>3<br>256<br>0.7<br>0.005<br>0.0001<br>ln<br>3<br>256<br>0.7<br>0.005<br>0<br>ln<br>3<br>256<br>0.1<br>0.001<br>0.0005<br>none<br>2<br>256<br>0.2<br>0.0005<br>0.005<br>ln<br>5<br>64<br>0.7<br>0.01<br>0.0005<br>bn<br>3<br>64<br>0.1<br>0.0005<br>0.001<br>none<br>2<br>64<br>0.2<br>0.001<br>0.005<br>none<br>3<br>64<br>0.3<br>0.01<br>0.001<br>none<br>2<br>128<br>0.7<br>0.01<br>0<br>none<br>3<br>256<br>0.7<br>0.005<br>0<br>ln<br>4<br>256<br>0.5<br>0.01<br>0<br>bn<br>4<br>64<br>0.5<br>0.005<br>0<br>bn<br>5<br>128<br>0.7<br>0.0005<br>0.0005<br>none<br>3<br>256<br>0.5<br>0.002<br>0<br>bn<br>5<br>256<br>0.4<br>0.001<br>0.0005<br>none|
+
+
+D SUPPLEMENTARY EXPERIMENTS
+
+
+D.1 EFFECTS OF TRAINING AND _q_ ON MOSR.
+
+
+We explore the impact of the number of training rounds of the GNN model and the choice of _p_ value
+on the value of MOSR. Our experimental settings cover different models, datasets, and curvature
+definitions.
+
+
+The MOSR values reported in the main paper are all based on an untrained model (epoch=0) and
+small _p_ -values (10 and 25). Based on the above observations, this means that we are reporting a **lower**
+**bound** on the probability that the discrete curvature ignores over-squashing edges. Under any other
+settings (e.g., more epochs and higher _p_ ), the discrete curvature will ignore even more over-squashing
+edges than we report.
+
+
+21
+
+
+Figure 5: When the dataset is Citeseer, the model is GCN, and the discrete curvature is Ollivier Ricci
+Curvature, the impact of different training epochs and _p_ -values on MOSR.
+
+
+Figure 6: When the dataset is Citeseer, the model is GCN, and the discrete curvature is balanced
+Forman Curvature, the impact of different training epochs and _p_ -values on MOSR.
+
+
+Figure 7: When the dataset is Citeseer, the model is GCN, and the discrete curvature is augmented
+Forman-3 Curvature, the impact of different training epochs and _p_ -values on MOSR.
+
+
+22
+
+
+Figure 8: When the dataset is Citeseer, the model is GAT, and the discrete curvature is Ollivier Ricci
+Curvature, the impact of different training epochs and _p_ -values on MOSR.
+
+
+Figure 9: When the dataset is Citeseer, the model is GraphSAGE, and the discrete curvature is Ollivier
+Ricci Curvature, the impact of different training epochs and _p_ -values on MOSR.
+
+
+Figure 10: When the dataset is Cora, the model is GCN, and the discrete curvature is Ollivier Ricci
+Curvature, the impact of different training epochs and _p_ -values on MOSR.
+
+
+23
+
+
+Figure 11: When the dataset is Pubmed, the model is GCN, and the discrete curvature is Ollivier
+Ricci Curvature, the impact of different training epochs and _p_ -values on MOSR..
+
+
+D.2 WEIGHTING FUNCTION
+
+
+Assuming that node _u_ and node _v_ have a common node _i_, for an MPNN as shown in Equation (1),
+the norm of the Jacobian matrix of _u_ ’s information flowing through _i_ to _v_ is:
+
+
+_∂_ **h** [(] _v_ _[l]_ [+2)] _·_ _[∂]_ **[h]** _i_ [(] _[l]_ [+1)]
+����� _∂_ **h** [(] _i_ _[l]_ [+1)] _∂_ **h** [(] _u_ _[l]_ [)]
+
+
+����� _F_
+
+
+= _ρ_ **W** ( _l_ +1) **W** ( _l_ ) �( **D** + **I** ) _[−]_ [1] _[/]_ [2] ( **A** + **I** )( **D** + **I** ) _[−]_ [1] _[/]_ [2][�]
+����
+
+
+( **D** + **I** ) _[−]_ [1] _[/]_ [2] ( **A** + **I** )( **D** + **I** ) _[−]_ [1] _[/]_ [2][�]
+
+
+_i,v_
+
+
+_u,i_
+
+
+���� _F_
+
+
+= _ρ_ **W** ( _l_ +1) **W** ( _l_ ) 1
+��� ��� _F_ _[·]_ 1 + _di_
+���           The influence of intermediate node i
+
+
+1
+
+_·_ _._
+�(1 + _du_ )(1 + _dv_ )
+
+
+Therefore, we set _f_ ( _di_ ) to 1 _/_ (1 + _di_ ) to balance the contribution of any first-order neighbor node in
+computing the discrete curvature. We also explore the effects of weight functions that decay faster or
+slower than 1 _/_ (1 + _di_ ) (i.e., (1 + _di_ ) _[−]_ [2] and (1 + _di_ ) _[−]_ [1] _[/]_ [2] ) in Table 9.
+
+
+D.3 CURVATURE-BASED GRAPH LEARNING
+
+
+We explore the impact of different discrete curvature definitions on graph learning. We select
+Stochastic Discrete Ricci Flow (SDRF, (Topping et al., 2021)) as a representative graph rewiring
+method and Graph Neural Ricci Flow (GNRF, (Chen et al., 2025)) as a representative end-to-end
+method. The results are shown in Tables 10 and 11, respectively.
+
+
+The above observations show that WAF3 can achieve better performance in curvature-based graph
+learning than previous curvature methods, and can do well enough even with rough approximations.
+
+
+24
+
+
+Table 9: The impact of different attenuation functions on the calculation of WAF3. The values in the
+table represent MOSR10 and MOSR25.
+
+|Col1|f(d) = (1 + d)−2 f(d) = (1 + d)−1/2 f(d) = (1 + d)−1<br>GCN GAT SAGE GCN GAT SAGE GCN GAT SAGE|
+|---|---|
+|**Cora**<br>**Citeseer**<br>**Pubmed**<br>**Computers**<br>**Photo**<br>**CS**<br>**Physics**<br>**WikiCS**<br>**Cora** ~~**M**~~**L**<br>**Cora** ~~**F**~~**ull**<br>**DBLP**<br>**Cornell**<br>**Texas**<br>**Wisconsin**<br>**Chameleon**<br>**Squirrel**<br>**Roman-empire**<br>**Tolokers**<br>**Questions**<br>**Amazon-ratings**<br>**Minesweeper**|.009/.056<br>.169/.178<br>.196/.196<br>.000/.016<br>.147/.154<br>.172/.172<br>.000/.014<br>.157/.166<br>.183/.183<br>.044/.092<br>.223/.235<br>.286/.286<br>.007/.026<br>.205/.205<br>.255/.273<br>.020/.040<br>.210/.216<br>.279/.280<br>.008/.013<br>.023/.023<br>.025/.025<br>.000/.001<br>.009/.010<br>.011/.011<br>.001/.002<br>.013/.014<br>.015/.015<br>.014/.017<br>.018/.018<br>.018/.018<br>.001/.004<br>.009/.009<br>.010/.010<br>.002/.005<br>.011/.011<br>.011/.011<br>.020/.025<br>.026/.026<br>.026/.026<br>.029/.030<br>.033/.033<br>.033/.033<br>.021/.024<br>.027/.027<br>.027/.027<br>.070/.079<br>.092/.093<br>.094/.094<br>.011/.021<br>.068/.068<br>.069/.069<br>.009/.034<br>.075/.075<br>.076/.076<br>.060/.069<br>.071/.072<br>OOR<br>.019/.023<br>.049/.053<br>OOR<br>.020/.040<br>.055/.058<br>OOR<br>.065/.069<br>.070/.071<br>.071/.071<br>.203/.203<br>.205/.205<br>.205/.205<br>.140/.141<br>.144/.144<br>.144/.144<br>.074/.085<br>.115/.119<br>.119/.119<br>.020/.048<br>.088/.090<br>.091/.093<br>.025/.056<br>.098/.103<br>.103/.103<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>OOR<br>.056/.069<br>.084/.086<br>.088/.092<br>.002/.010<br>.034/.037<br>.039/.043<br>.020/.022<br>.052/.055<br>.057/.059<br>.000/.000<br>.127/.138<br>.141/.156<br>.000/.000<br>.120/.124<br>.143/.143<br>.000/.000<br>.116/.122<br>.138/.143<br>.000/.000<br>.132/.132<br>.140/.143<br>.000/.000<br>.118/.123<br>.128/.137<br>.000/.000<br>.134/.139<br>.143/.149<br>.000/.000<br>.122/.132<br>.130/.130<br>.000/.000<br>.102/.109<br>.116/.126<br>.000/.000<br>.108/.117<br>.122/.134<br>.037/.043<br>.040/.044<br>.044/.044<br>.090/.091<br>.100/.101<br>.104/.104<br>.065/.066<br>.075/.076<br>.079/.079<br>.015/.015<br>.015/.015<br>.015/.015<br>.103/.103<br>.100/.100<br>.100/.101<br>.039/.039<br>.041/.041<br>.041/.041<br>.000/.002<br>.293/.432<br>.452/.454<br>.000/.004<br>.352/.431<br>.452/.453<br>.000/.001<br>.351/.431<br>.453/.453<br>.007/.007<br>OOR<br>.007/.007<br>.001/.001<br>OOR<br>.002/.002<br>.002/.002<br>OOR<br>.003/.003<br>.011/.018<br>.031/.031<br>.032/.032<br>.001/.006<br>.016/.016<br>.018/.018<br>.003/.011<br>.023/.024<br>.025/.025<br>.194/.219<br>.201/.209<br>.223/.224<br>.178/.235<br>.240/.248<br>.261/.263<br>.159/.218<br>.223/.231<br>.245/.246<br>.270/.270<br>.271/.271<br>.271/.271<br>.233/.233<br>.234/.234<br>.233/.233<br>.191/.192<br>.192/.192<br>.192/.192|
+|**Average**|**.048/.057**<br>**.118/.122**<br>**.125/.126**<br>**.045/.053**<br>**.117/.124**<br>**.128/.129**<br>**.036/.045**<br>**.111/.118**<br>**.123/.124**|
+
+
+Table 10: Accuracy on downstream classification tasks after graph rewiring using SDRF (Topping
+et al., 2021) with different curvature definitions. The experimental setup for this experiment remains
+identical to the original paper. *Indicates data referenced from Topping et al. (2021).
+
+|Col1|Cornell Texas Wisconsin|
+|---|---|
+|Balanced Forman<br>Ollivier Ricci<br>Augmented Forman 3<br>Weighted AF3<br>Approximately Weighted AF3 (100 hash)<br>Approximately Weighted AF3 (1000 hash)<br>Approximately Weighted AF3 (10000 hash)|57_._54_ ±_ 0_._34_∗_<br>70_._35_ ±_ 0_._60_∗_<br>61_._55_ ±_ 0_._84_∗_<br>55_._56_ ±_ 1_._05<br>64_._51_ ±_ 0_._26<br>58_._51_ ±_ 0_._60<br>**58**_._**29**_ ±_** 0**_._**92**<br>73_._29_ ±_ 0_._64<br>63_._19_ ±_ 0_._96<br>57_._91_ ±_ 0_._54<br>**73**_._**62**_ ±_** 0**_._**62**<br>65_._64_ ±_ 0_._24<br>58_._21_ ±_ 0_._64<br>71_._96_ ±_ 0_._68<br>63_._74_ ±_ 0_._34<br>57_._88_ ±_ 0_._78<br>70_._55_ ±_ 0_._61<br>65_._10_ ±_ 0_._63<br>57_._67_ ±_ 0_._62<br>72_._11_ ±_ 0_._51<br>**65**_._**99**_ ±_** 0**_._**67**|
+
+
+Table 11: The accuracy of end-to-end model GNRF (Chen et al., 2025) on downstream classification
+tasks using different curvature definitions. The experimental setup for this experiment remains exactly
+the same as the original GNRF paper.
+
+|Col1|Cornell Texas Wisconsin|
+|---|---|
+|Balanced Forman<br>Ollivier Ricci<br>Augmented Forman 3<br>Weighted AF3<br>Approximately Weighted AF3 (100 hash)<br>Approximately Weighted AF3 (1000 hash)<br>Approximately Weighted AF3 (10000 hash)|84_._37_ ±_ 3_._11<br>83_._15_ ±_ 6_._25<br>83_._15_ ±_ 3_._25<br>81_._26_ ±_ 5_._45<br>79_._95_ ±_ 5_._14<br>81_._26_ ±_ 2_._36<br>84_._21_ ±_ 5_._26<br>85_._66_ ±_ 3_._25<br>79_._26_ ±_ 1_._59<br>84_._62_ ±_ 3_._26<br>**87**_._**11**_ ±_** 1**_._**03**<br>84_._66_ ±_ 0_._34<br>84_._16_ ±_ 4_._10<br>84_._26_ ±_ 2_._34<br>82_._56_ ±_ 1_._26<br>83_._12_ ±_ 2_._16<br>85_._79_ ±_ 1_._26<br>**85**_._**11**_ ±_** 1**_._**26**<br>**84**_._**99**_ ±_** 2**_._**13**<br>86_._35_ ±_ 2_._11<br>84_._25_ ±_ 0_._67|
+
+
+25
+
+
+E USE OF LLMS
+
+
+In this project, we only used LLMs to find and correct grammatical errors and polish the text.
+
+
+26

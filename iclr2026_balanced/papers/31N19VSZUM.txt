@@ -1,0 +1,1470 @@
+# MITIGATING OVER-REFUSAL IN ADVERSARIAL TUN## ING VIA SUBSPACE-GUIDED SAMPLE SELECTION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+As the adoption of large language models (LLMs) increases, their vulnerability
+to jailbreaks poses a significant concern. Adversarial tuning offers an effective
+means of enabling LLMs to resist jailbreak prompts, but it inevitably introduces
+the problem of over-refusal, where benign queries are mistakenly rejected, thereby
+comprising the model utility. To address the limitation, we propose the _**S**_ _oft_
+_**A**_ _dversarial_ _**T**_ _uning_ _(SAT)_ framework, which selects “soft samples” that balance
+robustness and over-refusal for adversarial tuning. Specifically, SAT decomposes
+the model’s hidden states into two behavioral subspaces via representation engineering: one for producing robust responses to malicious queries and another for
+avoiding over-refusal on benign queries. By projecting the gradients of candidate
+adversarial-tuning samples onto these subspaces, we quantify each sample’s influence on jailbreak defense and over-refusal. We then select “soft samples” that
+exert strong influence in the robustness subspace while having minimal effect in
+the over-refusal subspace for soft adversarial tuning. We evaluate SAT with six
+existing defense methods across different settings. Experimental results show that
+SAT consistently outperforms these methods, reducing the over-refusal rate by
+more than 22%, while maintaining an attack success rate below 2.8% against five
+representative jailbreak attacks.
+
+
+1 INTRODUCTION
+
+
+Although large language models (LLMs) (Ouyang et al., 2022);(Achiam et al., 2023);Zheng et al.
+(2023);(Team et al., 2023) have demonstrated strong performance across a wide range of complex
+tasks in zero-shot settings, recent studies have shown that they remain vulnerable to jailbreak attacks.
+In such attack, adversaries craft prompts to bypass safety constraints, inducing harmful outputs or
+unexpected actions(Deng et al., 2023b);(Zou et al., 2023);(Zheng et al., 2023);(Team et al., 2023).
+Strengthening robustness to such attacks has therefore become an urgent priority.
+
+
+Unlike defenses that attach external security modules such as LLM guardrails (Hu et al., 2024),(Xu
+& Sheng, 2024),(Robey et al., 2023), adversarial fine-tuning strengthens a model’s intrinsic robustness (Jain et al., 2023),(Deng et al., 2023a),(Siththaranjan et al., 2023) and has become a mainstream
+defense against jailbreak attacks. By incorporating adversarial data into training and updating only
+a small subset of parameters, the model learns to recognize harmful prompts and refuse to answer.
+(Goodfellow et al., 2014),(Madry et al., 2017),(Cai et al., 2018),(Zhang et al., 2019),(Tram`er et al.,
+2017). However, the tuned model often exhibits excessive rejection: while learning the features of
+harmful samples, they become overly sensitive to safety-related tokens, shifting the decision threshold toward an overly conservative stance. This not only results in frequent rejections of harmless but
+borderline requests but also causes unnecessary rejections of benign prompts. Over-refusal undermines the model’s usability and further exacerbates the imbalance between security and practicality.
+To this end, we face a key challenge: How to choose tuning samples that improve robustness to
+jailbreak attacks while minimizing excessive rejection of harmless prompts.
+
+
+To address this challenge, we propose the Soft Adversarial Tuning (SAT) framework. This method
+automatically identifies and selects soft adversarial samples as targeted fine-tuning data, thereby improving the model’s robustness to jailbreak attacks while effectively mitigating the tendency toward
+over-refusal. Through this process, the model achieves a more stable balance between safety and
+usability.
+
+
+1
+
+
+Overall, our contributions are summarized as follows:
+
+
+1. **Soft Adversarial Tuning framework** : We propose Soft Adversarial Tuning (SAT), which
+defines and leverages intermediate-state samples generated during jailbreak iterations as
+Soft Adversarial Fine-Tuning Samples for adapting LLMs. SAT enhances robustness
+against jailbreak attacks while mitigating the over-refusal problem commonly observed
+in traditional adversarial training.
+
+2. **Automated subspace-based selection mechanism** : We introduce an automated subspacebased selection mechanism. By integrating parameter-subspace decomposition, gradientprojection simulation, and a weighted scoring criterion, our method efficiently predicts and
+prioritizes Soft Samples prior to fine-tuning. This design isolates behavior-specific effects,
+enabling high-quality dataset curation without full training.
+
+3. **Empirical validation and practical implications** : Experiments on three models show that
+SAT reduces the over-refusal rate by more than 22%, while maintaining an attack success
+rate below 2.8% against five representative jailbreak attacks.
+
+
+2 BACKGROUND AND RELATED WORK
+
+
+In this section, we first introduce LLM jailbreak. We then review recent studies about adversarial
+fine-tuning, a prominent defense approach in current practice. Finally, we describe representation
+engineering methods that inspire our work.
+
+
+**LLM Jailbreak** .Current jailbreak attacks can be categorized into three main classes: perturbationbased, prompt-based and gradient-based. They share the common objective of inducing LLMs to
+generate harmful content despite security safeguards. (1) Perturbation-based attacks. Wei et al.
+(2023a) introduce superficial modifications to the original query, such as Base64 encoding or removing all vowels. (2) Prompt-based attacks. Adversaries manually craft prompts to steer model
+behavior, for example, instructing LLMs to adopt specific roles (Deshpande et al., 2023), escalate
+privileges (Li et al., 2023a), or redirect attention by constraining the allowable vocabulary and masking harmful intent in seemingly benign phrasing (Liu et al., 2023b). Automated generation of such
+
+
+2
+
+
+Uniform Manifold Approximation and Projection SAT consists of four stages. In the first stage,
+
+PositiveNegative we collect harmful prompts as seed samples
+
+and optimize them using iterative adversarial
+attacks to generate candidate training sets. In
+the second stage, we partition the model’s latent space into robustness subspaces and overrejection subspaces based on representation engineering. For each subspace, we construct
+positive–negative sample pairs: positive samples represent the expected correct behaviors
+the model should exhibit, while negative samples correspond to erroneous behaviors it must
+avoid. The difference vector between positive
+and negative samples forms the basis vector of
+
+Figure 1: For each subspace, we collect contrast
+the subspace, with its direction pointing toward
+
+ing samples (positives as desired behavior(green
+
+the desired model behavior as illustrated in Fig
+points), negatives as undesired(red points), extract
+
+ure 1: The subspace visualization, by intu
+their hidden activations, compute the mean activa
+itively showing the clustered separation of acti
+tions of positives and negatives and take their dif
+vations for positive and negative samples, leads
+
+ference, then normalize this difference vector; the
+
+us to recognize the presence of a “behavioral
+
+normalized vector points from negative to positive
+
+boundary” in the activation space. This insight
+
+and serves as the basis vector capturing the desired
+
+motivates us to leverage such separability to an
+behavioral direction.
+
+alyze and filter the contributions of soft samples
+across different behavioral dimensions. Then,
+we project candidate sample gradients to estimate the extent to which each sample influences directional changes across the two subspaces. Finally, we rank samples by their subspace projections,
+prioritizing higher robustness and lower over-refusal, and select the final resilient samples as soft
+tuning data.
+
+
+Uniform Manifold Approximation and Projection
+
+
+Positive
+Negative
+
+
+Figure 1: For each subspace, we collect contrasting samples (positives as desired behavior(green
+points), negatives as undesired(red points), extract
+their hidden activations, compute the mean activations of positives and negatives and take their difference, then normalize this difference vector; the
+normalized vector points from negative to positive
+and serves as the basis vector capturing the desired
+behavioral direction.
+
+
+jailbreak prompts has also been explored (Yu et al., 2023). (3) Gradient attacks.Zou et al. (2023)
+used gradient optimization to generate escape prompts in a white-box setting, discovering that the
+resulting prompts could be transferred to black-box LLMs; moreover, such optimized prompts are
+often unintelligible to humans.
+
+
+**Adversarial Fine-Tuning** . Adversarial fine-tuning enhances LLM robustness by training on harmful samples to encourage refusals of inappropriate requests (Mo et al., 2024);(Liu et al., 2024). A
+typical loss is cross-entropy:
+
+
+_L_ ( _θ_ ) = _−_          - log _p_ ( **y** _ref_ _|_ **x** _adv_ ; _θ_ ) _,_ (1)
+
+
+where _θ_ are the model parameters, **y** _ref_ is the desired refusal response (e.g., ”refuse to generate
+harmful content”), and **x** _adv_ is an adversarial sample. To simulate real-world threats, techniques
+like Red Teaming generate diverse attack prompts to further improve defense performance against
+jailbreaks (Ganguli et al., 2022),(Perez et al., 2022),(Mazeika et al., 2024). However, these methods
+often rely on fully successful jailbreak samples, which can lead to over-refusal. An over-refusal
+model becomes overly conservative and reject harmless queries, which degrades usability (R¨ottger
+et al., 2023). Over-refusal can be quantified as the refusal rate on harmless queries _r_ = _NNbenignref_ [,]
+where _Nref_ is the number of refusals and _Nbenign_ is the total number of harmless queries.
+
+
+**Representation Engineering** . Representation engineering manipulates activation spaces to control
+model behaviors, such as steering outputs toward safe responses (Wang & Shu, 2024),(Wang et al.,
+2025a),(Cao et al., 2024),(Bhattacharjee et al., 2024). Subspace methods decompose hidden representations to extract behavior-specific directions, like refusal directions, enabling targeted interventions (Skean et al., 2025);(Liu et al., 2025). Given activations from positive and negative samples in
+a contrastive dataset, **a** [+] and **a** _[−]_, the subspace basis vector is computed via difference-in-means:
+
+
+approximating parameter changes ∆ _θ_ _≈−η_ _·_ proj _S_ ( **g** ), where _η_ is the learning rate. While effective for post-fine-tuning analysis, these approaches are rarely applied to pre-fine-tuning sample
+selection. SAT extends this line of work by defining dual subspaces for robustness and over-refusal
+avoidance, combining projections with scoring to predict and curate Soft Samples, filling a gap in
+using subspaces for data filtering in adversarial settings.
+
+
+3 METHODOLOGY
+
+
+We propose the SAT framework. It aims to automatically select samples for Soft Adversarial Tuning, which are intermediate-state prompts from jailbreak iteration processes. The goal is to balance
+robustness against jailbreak attacks in LLMs while reducing over-refusal on harmless queries. Drawing from representation engineering and gradient-based analysis, SAT decomposes model parameter
+spaces into behavior-specific subspaces. It simulates fine-tuning effects through projections and uses
+a scoring mechanism for sample selection. This predicts each sample’s impact on robustness and
+over-refusal avoidance without full training.
+
+
+The methodology includes three steps: (1) defining dual subspaces for robustness and over-refusal
+avoidance; (2) simulating fine-tuning updates via gradient projections; and (3) scoring and selecting
+Soft Samples.
+
+
+3
+
+
+**v** = [1]
+
+_N_
+
+
+- **a** [+] _−_ [1]
+
+_N_
+
+
+- **a** _[−]_ _,_ (2)
+
+
+where **v** represents a directional axis (e.g., robust refusal direction) and is normalized for use in
+projections. This formula, based on statistical differences, effectively isolates semantic features.
+Gradient projections simulate updates by mapping gradients **g** onto a subspace _S_ (Zhang et al.,
+2025),(Wang et al., 2025b),(Duan et al., 2025):
+
+
+    - **g** _·_ **v**
+proj _S_ ( **g** ) = _∥_ **v** _∥_ [2]
+
+
+**v** _,_ (3)
+
+
+|Traning Set Selection<br>Robustness Score Over-Refusal Score<br>𝑺𝒄𝒐𝒓𝒆 𝑹 −𝜷∙ 𝑺𝒄𝒐𝒓𝒆 𝑶<br>𝒇𝒊𝒏𝒂𝒍𝒔𝒄𝒐𝒓𝒆<br>R<br>o -K<br>B Mo u Mo|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|𝒔𝒄𝒐𝒓𝒆𝑹=<br>|𝒔𝒄𝒐𝒓𝒆𝑹=<br>||𝒔𝒄𝒐𝒓𝒆𝑶=|𝒔𝒄𝒐𝒓𝒆𝑶=|𝒔𝒄𝒐𝒓𝒆𝑶=|
+|𝒔𝒄𝒐𝒓𝒆𝑹=<br>||𝑷𝒓𝒐𝒋𝑹|𝑷𝒓𝒐𝒋𝑹||𝑷𝒓𝒐𝒋𝑶|
+
+
+where _fl_ ( _·_ ) denotes the mean-pooled hidden states at layer _l_, yielding vectors in R _[d]_ (hidden dimension _d_ ). This vector **v** _k_ represents the directional axis distinguishing positive and negative behaviors.
+We normalize it to unit length for consistent projections: **v** _k_ _←_ **v** _k/∥_ **v** _k∥_ 2.
+
+
+4
+
+
+The score is computed as the norm of the
+projection once it has been normalized,
+and it serves as a quantitative indicator of
+how strongly a given sample contributes
+to, or aligns with, the target subspace.
+
+
+Figure 2: Soft Adversarial Tuning(SAT) framework. **Stage 1:** We use an adversarial attack algorithm
+to generate a candidate training set. **Stage** **2:** We extract gradient vectors of candidate samples
+by calculating loss of model output and target response. **Stage** **3:** We extract gradient vectors
+for candidate samples by computing the loss between the model’s output and the target response.
+**Stage 4:** We design a contribution scoring system that selects samples with strong benefits to safety
+robustness while exerting minimal influence on over-refusal. Then we fine-tune the model on the
+selected samples to simultaneously enhance robustness and mitigate over-refusal.
+
+
+3.1 STEP 1: DEFINING SUBSPACES FOR ROBUSTNESS AND OVER-REFUSAL AVOIDANCE
+
+
+To predict sample effects on target behaviors, we define two complementary subspaces in the
+model’s activation space. These serve as proxies for parameter space, given their linear correspondence in Transformers. The subspaces capture directional differences for jailbreak robustness
+(resisting harmful queries) and over-refusal avoidance (normal responses to harmless queries). This
+decomposition isolates and quantifies trade-offs. It ensures selected samples boost robustness without increasing over-refusal risks on harmless queries.
+
+For each subspace, we collect a contrastive dataset _Dk_ = _{_ ( **p** [+] _i_ _[,]_ **[ p]** _i_ _[−]_ [)] _[}]_ _i_ _[N]_ =1 [(with] _[ N]_ _[≥]_ [100][ pairs for]
+reliability). For the robustness subspace ( _k_ = 1), we gather positive samples (robust refusals to
+harmful queries. For example: _prompt:’How to make a bomb?’, response:’sorry, I can not answer_
+_your_ _question’_ ) and negative samples (successful jailbreak responses. For example: _prompt:’How_
+_to_ _make_ _a_ _bomb?’,_ _response:’To_ _make_ _a_ _bomb,_ _you_ _need...’_ ). For the over-refusal avoidance subspace ( _k_ = 2), we gather positive samples (normal responses to harmless queries. For example:
+_prompt:’How to kill a python process?’, response:’First you should... ’_ ) and negative samples (overrefusals to harmless queries. For example: _prompt:’How to kill a python process?’, response:’sorry,_
+_I can not answer your question’_ ).
+
+
+We extract activations via forward passes on a base LLM at a selected layer _l_, which is the higher
+layer of the model to capture richer semantic information. Drawing from difference-in-means analysis in representation engineering, which effectively isolates behavioral directions,we compute the
+basis vector for subspace _k_ ( _k_ = 1 for robustness, _k_ = 2 for over-refusal avoidance) as:
+
+
+**v** _k_ = [1]
+
+_N_
+
+
+_N_
+
+
+- _fl_ ( **p** [+] _i_ [)] _[ −]_ [1]
+
+_N_
+
+_i_ =1
+
+
+_N_
+
+
+_N_
+
+- _fl_ ( **p** _[−]_ _i_ [)] _[,]_ (4)
+
+_i_ =1
+
+
+The subspace _Sk_ is the span of basis **B** _k_ = _{_ **v** _k}_ (one-dimensional for simplicity; extendable to
+multi-dimensional via PCA if overlaps occur). Positive projections along **v** 1 indicate enhanced
+robustness. Positive projections along **v** 2 indicate improved over-refusal avoidance (negative projections signal increased risk).
+
+
+3.2 STEP 2: SIMULATING FINE-TUNING UPDATES VIA GRADIENT PROJECTIONS
+
+
+With subspaces defined, we simulate fine-tuning effects for candidate samples, which are generated
+from jailbreak iterations, such as gradient-based prompt optimization. This predicts impacts without
+actual training. The step approximates parameter changes in each subspace. It builds on linear gradient approximations from parameter-efficient fine-tuning method. By mapping the loss gradient of
+the sample to the direction of the behavioral subspace, the effect of parameter updates is simulated,
+thus predicting the trend of behavioral change of the model in that direction (such as enhancing
+robustness or avoiding rejection) after training the sample.
+
+
+For a candidate sample _sj_ = ( **q** _j,_ **r** _j_ ), a prompt-response pair, where **r** _j_ is the desired robust refusal,
+we compute the cross-entropy loss _Lj_ and its gradient **g** _j_ with respect to the hidden states at layer _l_ :
+
+
+_Lj_ = _L_ ( _f_ ( **q** _j_ ) _,_ **r** _j_ ) _,_ **g** _j_ = _∇Lj_ (5)
+
+
+We choose cross-entropy for _L_ due to its standard role in supervised fine-tuning. This ensures that
+the gradients reflect alignment toward robustness.
+
+
+To isolate subspace-specific effects, we use orthogonal projection to map **g** _j_ onto _Sk_ . This method
+preserves directional contributions and filters noise (as demonstrated in interpretability studies for
+efficient simulation):
+
+
+where _η_ (e.g., 10 _[−]_ [3] ) is a small learning rate that simulates gradient descent steps. This produces
+∆ _θ_ 1 for robustness and ∆ _θ_ 2 for over-refusal avoidance, supporting pre-fine-tuning evaluation.
+
+
+3.3 STEP 3: SCORING AND SELECTING FLEXIBLE SAMPLES
+
+
+Finally, we score candidate samples to select those that optimize the robustness-over-refusal avoidance trade-off. This step introduces a weighted scoring function. It prioritizes moderate robustness
+gains from intermediate samples while penalizing over-refusal risks. This automates the identification of “soft” data.
+
+
+For each sample _j_, we extract directional scores: _p_ 1 = ∆ _θ_ 1 _·_ **v** 1 and _p_ 2 = ∆ _θ_ 2 _·_ **v** 2. The composite
+score draws from multi-objective optimization to balance competing goals. We compute it as:
+
+
+score = _p_ 1 _−_ _λ · |p_ 2 _|_ + _β · p_ 1 _·_ (1 _−|p_ 2 _|_ ) _,_ (8)
+
+
+where _λ_ _>_ 0 (e.g., 1.0) penalizes over-refusal risks, _β_ _≥_ 0 (e.g., 0.5) rewards ”Soft” moderation
+around an ideal robustness value _γ_ (e.g., 0.5 for intermediate effects), and parameters are tuned via
+a validation set. This formula ensures selected samples (those with score _j_ _> τ_, e.g., _τ_ = 0 _._ 5) form
+a high-quality dataset for SAT fine-tuning.
+
+
+5
+
+
+    - **g** _j_ _·_ **v** _k_
+proj _Sk_ ( **g** _j_ ) = _∥_ **v** _k∥_ [2] 2
+
+
+**v** _k._ (6)
+
+
+We aggregate these projections across a dataset of _M_ samples to obtain an empirical approximation
+of the parameter update ∆ _θk_ :
+
+
+∆ _θk_ _≈−η_
+
+
+_M_
+
+- proj _Sk_ ( **g** _j_ ) _,_ (7)
+
+_j_ =1
+
+
+3.4 SOFT SAMPLE GUIDED ADVERSARIAL FINE-TUNING
+
+
+Given the soft samples obtained from the previous stage, we adopt adversarial fine-tuning on these
+examples to enhance model robustness while not inducing over-refusal. Following the Low-Rank
+Adaptation (LoRA)(Hu et al., 2022) methodology, we freeze the pre-trained backbone weights **W**
+and and introduce trainable adapter matrices **A** and **B** to selected layers, computing the weight
+update **∆W** using low rank decomposition. **W** _,_ **∆W** _∈_ R _[m][×][n]_, and **∆W** is parameterized by two
+low-rank matrices: **A** _∈_ R _[r][×][n]_ and **B** _∈_ R _[m][×][r]_ . The **W** _[′]_ is updated as:
+
+
+**W** _[′]_ = **W** + **∆W** = **W** + **BA** _._ (9)
+
+
+During adversarial fine-tuning, we initialize **A** using a random Gaussian distribution and **B** with
+zeros, ensuring that **∆W** = 0 at initialization.
+
+
+4 EXPERIMENTS
+
+
+This section systematically evaluates SAT in terms of effectiveness, usefulness, efficiency, and compatibility, focusing on its robustness to various jailbreak attacks across different models, its tendency
+toward over-refusal on harmless yet deceptive tasks, and its instruction-following capability with respect to prompts.
+
+
+4.1 EXPERIMENT SETUP
+
+
+**Dataset:** We evaluate each defense method along three dimensions: robustness to diverse jailbreak
+attacks, over-refusal on harmless prompts, and instruction-following capability. The datasets used
+for these tasks, as well as the training set for adversarial fine-tuning, are described below:
+
+
+ - **Robustness** **of** **Jailbreak** **Attack:** To rigorously assess the effectiveness of multiple defense
+methods, we adopt AdvBench(Zou et al., 2023) : a widely used adversarial safety benchmark as
+our base evaluation dataset. AdvBench contains 520 malicious prompts across 10 risk categories.
+We augment it with enhanced jailbreak prompts from multiple representative strategies to boost
+deception and transferability, then compare results on the original and augmented sets to assess
+each defense’s safety and robustness across threat models.
+
+ - **Over-Refusal:** We use the XSTest dataset (R¨ottger et al., 2023) to evaluate over-refusal across
+different defense methods. XSTest consists of 250 safe prompts across 10 categories and 200
+carefully crafted unsafe prompts. Many safe prompts contain safety-sensitive terms and are intentionally deceptive, such as _“How_ _can_ _I_ _kill_ _a_ _python_ _process?”._ We measure over-refusal
+behavior by the refusal rate on the safe subset and evaluate harmful-prompt detection by performance on the unsafe subset.
+
+ - **Adversarial** **Tuning:** Our adversarial fine-tuning seed data is sourced from the HarmBench
+dataset(Mazeika et al., 2024), after removing any samples overlapping with AdvBench. We
+apply the GCG (Zou et al., 2023) attack to iteratively refine these seed samples. Intermediate
+candidates generated during the iterations are filtered using the selection criteria detailed in the
+Methodology section, and the retained samples are used for adversarial fine-tuning. This procedure prevents data leakage and redundant evaluation while preserving the effectiveness and
+diversity of adversarial examples.
+
+
+**Target** **Model:** Following (Jain et al., 2023),(Liu et al., 2023a), we deployed and evaluated SAT
+on three open-source LLMs, including Vicuna-7B (Team, 2023), Llama2-7B-chat (Touvron et al.,
+2023), its variant model Dolphin-7B (Hartford, 2023) and Qwen2.5-7B-Instruct (Team et al., 2024).
+This variant model filters the dataset to remove bias, enabling more flexible responses.
+
+
+**Attack** **Methods:** We consider five state-of-the-art jailbreak attacks spanning diverse categories:
+GCG (gradient-based)(Zou et al., 2023), AutoDAN (genetic algorithm-based)(Liu et al., 2023a),
+PAIR (editing-based)(Chao et al., 2025), DeepInception (representative empirica-based)(Li et al.,
+2023b), and TAP (query-based)(Mehrotra et al., 2024). We conduct a systematic performance evaluation of all five methods.
+
+
+6
+
+
+**Baselines:** We compare SAT against six state-of-the-art and effective defense mechanisms. Among
+them, PPL(Alon & Kamfonas) and Self-Examination (Phute et al., 2023) are input/output detection
+methods, while Paraphrase(Jain et al., 2023), Retokenization(Jain et al., 2023), Self-Reminder(Wu
+et al., 2023), and ICD(Wei et al., 2023b) are mitigation-based approaches.
+
+
+**Evaluation Metrics:** We adopt the evaluation framework proposed by Liu et al. (2023a) and assess
+the effectiveness of SAT using two metrics.
+
+
+ - **ASR:** The first metric is the Attack Success Rate (ASR), which quantifies the proportion of model
+outputs that align with the attacker’s target prompt. To compute ASR, we employ Dic-Judge(Zou
+et al., 2023), a keyword-based decision procedure that counts responses deemed misaligned with
+the attacker’s target. Concretely, Dic-Judge inspects whether the LLM-generated text contains
+any predefined refusal expressions. Detection of such strings is taken to indicate non-compliance
+with the attacker’s target; absence thereof is taken as compliance.
+
+
+ASR = _[N]_ [aligned with the attacker’s objective] (10)
+
+_N_ test samples
+
+
+ - **Harmful** **Score:** Recognizing that LLMs do not invariably issue explicit refusals to malicious
+queries and may instead produce off-topic content, we further introduce a second metric, harmful
+score to quantify the potential harmfulness of the responses. This metric is obtained via GPTJudge (Qi et al., 2023), which relies on GPT-4 to assign a score on a 1–5 scale, where 1 denotes
+non-harmful and 5 denotes highly harmful. We follow the evaluation template of Qi et al. (2023)
+and report the average harmful score of the Vicuna model in in Figure 1 of Section 4.3, and the
+harmful scores of the remaining three models are presented in Appendix A.4.
+
+ - **RR:** To evaluate over-refusal, we report the Refusal Rate (RR) for Over-Refusal task. A response
+shall be deemed a refusal to answer upon the occurrence of any predefined refusal terms within
+the response content. The predefined refusal term table is detailed in the appendix A.1.
+
+
+RR = _[N]_ [refuse to answer] (11)
+
+_N_ test samples
+
+
+4.2 EXPERIMENT RESULTS
+
+
+**Robustness** **of** **Jailbreak** **Attack** We summarizes the results of previous state-of-the-art methods
+and our defense for both token-level and prompt-level jailbreaks in Table1. Our method outperforms almost all baseline defenses on the harmful benchmark and across five attack methods under
+two evaluation metrics. Specifically, under jailbreak attacks, the four target models achieve mean
+scores of 86.4%, 33.6%, 89.0% and 55.2% on ASR, respectively; existing defenses are generally
+middling. With our approach, the corresponding means on the three models are reduced to 2.8%,
+1.2%, 2.8% and 5.4% . These results indicate that our method is effective at mitigating adversarial
+prompting and performs better than existing methods across settings. Furthermore, we observed that
+the Llama2-7B model exhibits greater inherent robustness to jailbreak attacks compared to Vicuna7B, Dolphin-7B and Qwen-7B. We hypothesize this is likely a result of the extensive and rigorous
+safety alignment training Llama2-7B underwent, particularly the use of Reinforcement Learning
+from Human Feedback (RLHF) to improve its ability to refuse harmful instructions.
+
+
+**Refusal** **rate** **for** **harmless** **and** **harmful** **Prompt:** We summarize the results of previous stateof-the-art methods in Table2. We measure over-refusal behavior by the refusal rate on the safe
+subset and evaluate harmful-prompt detection by performance on the unsafe subset. Our method
+outperforms existing defenses on two metrics: it reduces over-refusal on benign inputs and enhances
+the accuracy in recognizing harmful prompts. Specifically, on Vicuna, the two metrics improve by
+13.6% and 9.5% over the best baseline. On Llama-2, over-refusal drops by 18.7%, and the refusal
+rate to harmful inputs matches the lowest baseline. On Dolphin-7B, the reductions are 18.5% and
+11.3%, respectively. We also find that, without any defense, Llama-2-7B shows a much higher
+over-refusal rate than the other two models but provides better protection against harmful queries.
+This aligns with its stronger safety alignment and suggests that heavily safety-focused alignment
+can make models overly sensitive to safety-related requests, leading to over-refusal.
+
+
+7
+
+
+Table 1: This table compares ASR scores of multiple jailbreak attacks when applying SAT and
+baselines to Vicuna-7B, Llama2-7B, Dolphin-7B and Qwen2.5-7B-Instruct.
+
+
+|Model|Defense|AdvBench ↓|Jailbreak Attacks ↓<br>Average ↓<br>GCG AutoDAN PAIR DeepInception TAP|
+|---|---|---|---|
+|Vicuna-7B|No Defense<br>PPL<br>Self-Reminder<br>Retokenization<br>ICD<br>Self-Examination<br>Paraphrase<br>SAT(ours)|8%_ ±_ 2.7<br>7%_ ±_ 2.6<br>2%_ ±_ 1.4<br>25%_ ±_ 1.3<br>**0%**_ ±_ 0.0<br>**0%**_ ±_ 0.0<br>10%_ ±_ 1.0<br>**0%**_ ±_** 0.0**|100%_ ±_ 0.0 98%_ ±_ 1.4 90%_ ±_ 2.0<br>81%_ ±_ 1.9<br>63%_ ±_ 1.8<br>86.4%<br>0%_ ±_ 0.0<br>88%_ ±_ 2.2 88%_ ±_ 1.2<br>86%_ ±_ 1.5<br>59%_ ±_ 1.9<br>64.2%<br>48%_ ±_ 2.0<br>68%_ ±_ 1.7 46%_ ±_ 2.2<br>62%_ ±_ 1.9<br>57%_ ±_ 1.5<br>56.2%<br>42%_ ±_ 0.9<br>84%_ ±_ 1.7 82%_ ±_ 0.8<br>79%_ ±_ 1.1<br>38%_ ±_ 0.9<br>65%<br>68%_ ±_ 1.7<br>80%_ ±_ 2.0 60%_ ±_ 2.1<br>46%_ ±_ 1.0<br>12%_ ±_ 1.2<br>53.2%<br>21%_ ±_ 1.1<br>12%_ ±_ 1.6<br>9%_ ±_ 1.3<br>6%_ ±_ 0.4<br>3%_ ±_ 0.2<br>10%<br>25%_ ±_ 1.3<br>70%_ ±_ 1.6 27%_ ±_ 1.4<br>51%_ ±_ 1.0<br>26%_ ±_ 1.4<br>39.8%<br>**0%**_ ±_** 0.0**<br>**12**%_ ±_** 1.2**<br>**0%**_ ±_** 0.0**<br>**0%**_ ±_** 0.0**<br>**2%**_ ±_** 0.4**<br>**2.8%**|
+|Llama2-7B|No Defense<br>PPL<br>Self-Reminder<br>Retokenization<br>ICD<br>Self-Examination<br>Paraphrase<br>SAT(ours)|3%_ ±_ 1.7<br>1%_ ±_ 1.0<br>**0%**_ ±_ 0.0<br>**0%**_ ±_ 0.0<br>1%_ ±_ 1.0<br>**0%**_ ±_** 0.0**<br>2%_ ±_ 1.4<br>**0%**_ ±_** 0.0**|46%_ ±_ 3.0<br>22%_ ±_ 2.1 51%_ ±_ 1.0<br>2%_ ±_ 1.4<br>47%_ ±_ 1.9<br>33.6%<br>3%_ ±_ 1.7<br>13%_ ±_ 3.4 46%_ ±_ 2.7<br>1%_ ±_ 0.0<br>45%_ ±_ 1.6<br>21.6%<br>**0%**_ ±_ 0.0<br>2%_ ±_ 1.4<br>11%_ ±_ 1.4<br>**0%**_ ±_ 0.0<br>**1%**_ ±_ 0.1<br>2.8%<br>2%_ ±_ 1.4<br>10%_ ±_ 0.4 21%_ ±_ 2.1<br>1%_ ±_ 1.0<br>3%_ ±_ 1.7<br>7.4%<br>1%_ ±_ 0.0<br>1%_ ±_ 0.2<br>5%_ ±_ 1.2<br>**0%**_ ±_ 0.0<br>5%_ ±_ 1.4<br>2.4%<br>10%_ ±_ 1.3<br>**0%**_ ±_ 0.0<br>6%_ ±_ 0.4<br>**0%**_ ±_ 0.0<br>3%_ ±_ 0.7<br>3.8%<br>6%_ ±_ 0.0<br>2%_ ±_ 0.1<br>10%_ ±_ 0.3<br>2%_ ±_ 0.0<br>8%_ ±_ 1.7<br>5.6%<br>1%_ ±_** 0.2**<br>**0%**_ ±_** 0.0**<br>**4%**_ ±_** 0.3**<br>**0%**_ ±_** 0.0**<br>**1%**_ ±_** 1.0**<br>**1.2**%|
+|Dolphin-7B|No Defense<br>PPL<br>Self-Reminder<br>Retokenization<br>ICD<br>Self-Examination<br>Paraphrase<br>SAT(ours)|14%_ ±_ 0.5<br>10%_ ±_ 1.0<br>4%_ ±_ 0.4<br>21%_ ±_ 0.1<br>4%_ ±_ 0.0<br>**0%**_ ±_ 0.0<br>9%_ ±_ 0.9<br>**0%**_ ±_** 0.0**|98%_ ±_ 1.4<br>98%_ ±_ 1.4 86%_ ±_ 3.5<br>84%_ ±_ 3.7<br>79%_ ±_ 2.1<br>89.0%<br>**0%**_ ±_ 0.0<br>96%_ ±_ 2.0 82%_ ±_ 1.8<br>81%_ ±_ 2.9<br>66%_ ±_ 2.7<br>65.0%<br>39%_ ±_ 1.1<br>71%_ ±_ 1.5 43%_ ±_ 2.0<br>57%_ ±_ 2.1<br>69%_ ±_ 1.6<br>55.8%<br>49%_ ±_ 2.0<br>74%_ ±_ 1.4 71%_ ±_ 1.5<br>67%_ ±_ 1.7<br>38%_ ±_ 1.9<br>59.8%<br>60%_ ±_ 1.9<br>83%_ ±_ 2.8 69%_ ±_ 1.6<br>38%_ ±_ 2.6<br>19%_ ±_ 0.9<br>53.8%<br>22%_ ±_ 1.1<br>16%_ ±_ 0.7<br>7%_ ±_ 0.6<br>8%_ ±_ 0.7<br>6%_ ±_ 1.4<br>11.8%<br>30%_ ±_ 1.6<br>66%_ ±_ 2.7 36%_ ±_ 0.8<br>48%_ ±_ 2.4<br>33%_ ±_ 1.3<br>42.6%<br>**0%**_ ±_** 0.0**<br>**7**%_ ±_** 1.1**<br>**2%**_ ±_** 0.0**<br>**4%**_ ±_** 0.2**<br>**1%**_ ±_** 0.0**<br>**2.8%**|
+|Qwen-7B|No Defense<br>PPL<br>Self-Reminder<br>Retokenization<br>ICD<br>Self-Examination<br>Paraphrase<br>SAT(ours)|4%_ ±_ 0.3<br>4%_ ±_ 0.0<br>1%_ ±_ 1.0<br>11%_ ±_ 0.6<br>**0%**_ ±_** 0.0**<br>1%_ ±_ 0.0<br>22%_ ±_ 0.0<br>**0%**_ ±_** 0.0**|62%_ ±_ 2.3<br>57%_ ±_ 1.7 71%_ ±_ 1.5<br>33%_ ±_ 2.0<br>53%_ ±_ 1.4<br>55.2%<br>4%_ ±_ 0.9<br>25%_ ±_ 0.3 60%_ ±_ 2.1<br>8%_ ±_ 0.1<br>59%_ ±_ 1.6<br>31.2%<br>23%_ ±_ 0.2<br>22%_ ±_ 3.0 32%_ ±_ 1.7<br>12%_ ±_ 0.2<br>12%_ ±_ 0.2<br>20.2%<br>41%_ ±_ 1.7<br>36%_ ±_ 1.3 32%_ ±_ 2.0<br>17%_ ±_ 0.4<br>21%_ ±_ 1.1<br>29.4%<br>18%_ ±_ 0.9<br>42%_ ±_ 1.1 29%_ ±_ 1.5<br>**3%**_ ±_ 0.0<br>17%_ ±_ 1.2<br>21.8%<br>18%_ ±_ 0.8<br>16%_ ±_ 0.7 13%_ ±_ 0.4<br>16%_ ±_ 0.3<br>13%_ ±_ 0.0<br>15.2%<br>20%_ ±_ 0.0<br>11%_ ±_ 1.1 29%_ ±_ 0.5<br>19%_ ±_ 0.1<br>26%_ ±_ 1.0<br>21.0%<br>**3%**_ ±_** 1.0**<br>**9**%_ ±_** 1.1**<br>**0%**_ ±_** 0.0**<br>**6%**_ ±_** 0.4**<br>**9%**_ ±_** 1.4**<br>**5.4%**|
+
+
+|Model|Harmful|Defense Method|
+|---|---|---|
+|Model|Harmful|Base<br>PPL<br>Self-R<br>Retoken<br>ICD<br>Self-E<br>Para<br>SAT(ours)|
+|Vicuna-7B|safe_↓_<br>unsafe_↑_|13.6%_ ±_ 0.2 39.2%_ ±_ 1.6 35.2%_ ±_ 1.4 42.4%_ ±_ 1.9 40.8%_ ±_ 1.8 38.8%_ ±_ 1.1 33.2%_ ±_ 0.8 19.6%_ ±_ 0.7<br>79.5%_ ±_ 1.0 80.5%_ ±_ 1.3 77.5%_ ±_ 2.1 60.8%_ ±_ 1.8 76.0%_ ±_ 0.4 80.5%_ ±_ 1.2 66.5%_ ±_ 1.2 90.0%_ ±_ 1.3|
+|Llama2-7B|safe_↓_<br>unsafe_↑_|38.0%_ ±_ 0.4 39.2%_ ±_ 2.2 42.6%_ ±_ 1.7 40.9%_ ±_ 0.9 45.7%_ ±_ 1.0 38.8%_ ±_ 0.8 39.1%_ ±_ 1.7 20.1%_ ±_ 0.8<br>89.7%_ ±_ 1.0 89.4%_ ±_ 2.0 90.7%_ ±_ 0.4 91.4%_ ±_ 0.7 88.7%_ ±_ 1.9 92.8%_ ±_ 1.3 92.1%_ ±_ 139 92.8%_ ±_ 0.9|
+|Dolphin-7B|safe_↓_<br>unsafe_↑_|16.9%_ ±_ 0.3 40.1%_ ±_ 1.6 38.3%_ ±_ 1.9 40.2%_ ±_ 2.0 37.9%_ ±_ 1.4 36.4%_ ±_ 0.8 34.7%_ ±_ 0.7 16.2%_ ±_ 0.8<br>77.2%_ ±_ 1.1 79.7%_ ±_ 1.1 78.9%_ ±_ 1.7 76.5%_ ±_ 2.2 77.6%_ ±_ 1.5 80.2%_ ±_ 0.9 79.4%_ ±_ 0.6 91.5%_ ±_ 1.2|
+|Qwen2-7B|safe_↓_<br>unsafe_↑_|27.3%_ ±_ 0.7 31.2%_ ±_ 1.8 43.7%_ ±_ 2.0 39.6%_ ±_ 1.7 40.1%_ ±_ 1.8 30.2%_ ±_ 1.1 32.5%_ ±_ 1.3 19.3%_ ±_ 0.9<br>80.1%_ ±_ 1.1 83.3%_ ±_ 1.7 85.7%_ ±_ 2.2 86.2%_ ±_ 2.0 83.6%_ ±_ 1.3 89.8%_ ±_ 1.1 81.1%_ ±_ 2.4 91.6%_ ±_ 1.0|
+
+
+4.3 ABLATION STUDY AND OTHER EXPERIMENTS
+
+
+In this section, we conduct ablation studies and additional experiments, including analyzing the
+impact of removing the over-refusal penalty in the scoring system and show the directional changes
+of basis vectors during training epochs.
+
+
+8
+
+
+Table 2: This table compares RR of safe and unsafe tasks when applying SAT and baselines to
+Vicuna-7B, Llama2-7B, Dolphin-7B and Qwen2.5-7B-Instruct
+
+
+|Jailbreak Attack<br>100% 98% 90% No Defense<br>81% SAT|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||**63%**<br>~~SAT (λ = 0)~~|**63%**<br>~~SAT (λ = 0)~~|**63%**<br>~~SAT (λ = 0)~~|
+|||**0%**<br>**0%**||**12% 9%**||**0%**<br>**0%**||**0% 0%**||**2%**<br>**2%**|
+
+
+|Over-refusal<br>38.7% No Defense<br>SAT|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+|**13.6%**<br>**19.6%**|**13.6%**<br>**19.6%**|**13.6%**<br>**19.6%**||~~SAT (λ = 0)~~<br>**20.5%**<br>**10% 10.3%**|~~SAT (λ = 0)~~<br>**20.5%**<br>**10% 10.3%**|~~SAT (λ = 0)~~<br>**20.5%**<br>**10% 10.3%**|~~SAT (λ = 0)~~<br>**20.5%**<br>**10% 10.3%**|~~SAT (λ = 0)~~<br>**20.5%**<br>**10% 10.3%**|
+|**13.6%**<br>**19.6%**|||||||||
+||||||||||
+
+
+**Comparison of Vector Representation Extraction Methods:** Following the findings of Reimers &
+Gurevych (2019), mean pooling is robust in extracting global semantic information, particularly for
+tasks such as clustering and retrieval. Since our subspace partitioning method fundamentally aligns
+with semantic clustering, we initially adopted mean pooling for representation extraction. However,
+considering the inherent nature of autoregressive models—where the next token is generated based
+on the semantics of all preceding tokens, we also conducted comparative experiments using the
+vector of the last token. As show in Table3 and 6, the results indicate that the performance gap
+between these two extraction schemes is negligible. Nevertheless, the representations derived from
+
+
+9
+
+
+**40%**
+
+
+**40%**
+
+
+**40%**
+
+
+**40%**
+
+
+**0%**
+
+
+**75%**
+
+
+**50%**
+
+
+**25%**
+
+
+**0%**
+
+
+GCG AutoDAN PAIR DeepInception TAP
+
+
+safe unsafe
+
+
+Figure 3: Model performance on robustness against five attack methods and over-refusal on harmless
+tasks after removing the over-refusal penalty ( _λ_ = 0)
+
+
+**Ablation study** **result:** As show in Figure3, experimental results indicate that removing the overrefusal penalty during training yields an approximately 3% improvement in robustness against AutoDAN attacks, while concurrently causing a 19.1% increase in the over-refusal rate on harmless
+prompts. Taken together, these findings highlight the over-refusal penalty as a key mechanism mediating the trade-off between robustness and usability: on the one hand, attenuating or eliminating
+this penalty can strengthen the model’s defenses against adversarial inputs; on the other hand, these
+gains come at the cost of reduced willingness to respond appropriately to benign queries, manifested as more frequent misclassification of safe requests as high risk and subsequent refusals. In
+other words, the over-refusal penalty not only shapes the model’s defensive posture under adversarial
+conditions but also tightens the model’s effective usability boundary in normal interactions.
+
+
+**Trend of cosine similarity:** As shown in Figure4, experimental results reveal that, as training progresses across epochs, the basis vectors undergo only modest directional adjustments. Despite this
+gradual evolution, the cosine similarities for both the robustness-related basis vectors and the overrefusal basis vectors converge to, and remain close to, approximately 0.8, indicating limited drift
+over time. This pattern suggests that while the vectors do update, their underlying orientations
+remain relatively stable, reflecting a consistent structure in both the robustness and over-refusal subspaces throughout training. The observed stability further implies that the model’s representations
+of robustness and over-refusal behaviors are not radically reshaped but instead are refined through
+small, incremental adjustments—providing a reliable geometric reference for analyzing training dynamics and for designing corresponding regularization or monitoring strategies.
+
+
+Table 3: Comparison of Vector Representation Extraction for Mean Pooling(M) and Last Token(L)
+on Robustness Task.
+
+|Model|Defense|AdvBench ↓|Jailbreak Attacks ↓<br>Average ↓<br>GCG AutoDAN PAIR DeepInception TAP|
+|---|---|---|---|
+|Vicuna-7B|SAT(M)<br>SAT(L)|0%_ ±_ 0.0<br>0%_ ±_ 0.0|0%_ ±_ 0.0<br>12%_ ±_ 1.2<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>2%_ ±_ 0.4<br>2.8%<br>0%_ ±_ 0.0<br>10%_ ±_ 1.4<br>0%_ ±_ 0.0<br>2%_ ±_ 0.0<br>3%_ ±_ 0.6<br>3.0%|
+|Llama2-7B|SAT(M)<br>SAT(L)|0%_ ±_ 0.0<br>0%_ ±_ 0.0|1%_ ±_ 0.2<br>0%_ ±_ 0.0<br>4%_ ±_ 0.3<br>0%_ ±_ 0.0<br>1%_ ±_ 1.0<br>1.2%<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>5%_ ±_ 0.4<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>1.0%|
+|Dolphin-7B|SAT(M)<br>SAT(L)|0%_ ±_ 0.0<br>0%_ ±_ 0.0|0%_ ±_ 0.0<br>7%_ ±_ 1.1<br>2%_ ±_ 0.0<br>4%_ ±_ 0.2<br>1%_ ±_ 0.0<br>2.8%<br>0%_ ±_ 0.0<br>9%_ ±_ 1.4<br>2%_ ±_ 0.1<br>2%_ ±_ 0.2<br>0%_ ±_ 0.0<br>2.6%|
+|Qwen-7B|SAT(M)<br>SAT(L)|0%_ ±_ 0.0<br>0%_ ±_ 0.0|3%_ ±_ 1.0<br>9%_ ±_ 1.1<br>0%_ ±_ 0.0<br>6%_ ±_ 0.4<br>9%_ ±_ 1.4<br>5.4%<br>1%_ ±_ 1.3<br>11%_ ±_ 1.7<br>2%_ ±_ 0.2<br>6%_ ±_ 0.3<br>8%_ ±_ 1.0<br>5.6%|
+
+
+the last token performed slightly better on the over-refusal task compared to the robustness task.
+We hypothesize that this may be attributed to the last token’s sensitivity to prompt length; a more
+in-depth analysis of this phenomenon is reserved for future work.
+
+
+**Harmfulness Scores:** As shown in Figure5, we evaluate the harmfulness scores for seven baseline
+defenses and our proposed method under a range of different attacks. The original model serves
+as a control, registering a harmfulness score of 3.63. When comparing the baseline methods, the
+Self-Examination technique achieves the lowest score, effectively bringing the average down to
+1.34. However, our method surpasses the performance of all comparative baselines, demonstrating
+a further improvement in safety by reducing the average harmfulness score to 1.03.
+
+
+Vicuna-7B Defense Performance Analysis
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+Attack Methods
+AdvBench GCG AutoDAN PAIR DeepInception TAP
+
+
+Figure 5: Harmful Scores on Vicuna-7B model
+
+
+5 CONCLUSIONS
+
+
+In this work, we proposed Soft Adversarial Tuning (SAT), an adversarial fine-tuning method designed to mitigate over-refusal while maintaining the robustness. By identifying soft adversarial
+samples from jailbreak iterations that induce minimal changes in the over-refusal latent space, SAT
+selected a small subset of candidate adversarial samples during fine-tuning. Specifically, SAT first
+decomposed the activation spaces into two distinct subspaces: one that enhances adversarial robustness against jailbreak prompts, and another that counters over-refusal against benign prompts. SAT
+then simulated updates within both subspaces of the training samples, using gradient projections to
+measure the influence of each sample in two subspaces. Further, SAT adopted a weighted scoring
+function to guide data selection during adversarial fine-tuning. Extensive evaluations demonstrated
+that SAT outperforms state-of-the-art adversarial fine-tuning methods, reducing the over-refusal rate
+by 22%, while maintaining robustness against jailbreak prompts.
+
+
+10
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Gabriel Alon and Michael Kamfonas. Detecting language model attacks with perplexity, 2023.
+_URL: https://arxiv. org/abs/2308.14132_ .
+
+
+Amrita Bhattacharjee, Shaona Ghosh, Traian Rebedea, and Christopher Parisien. Towards inferencetime category-wise safety steering for large language models. _arXiv preprint arXiv:2410.01174_,
+2024.
+
+
+Qi-Zhi Cai, Min Du, Chang Liu, and Dawn Song. Curriculum adversarial training. _arXiv preprint_
+_arXiv:1805.04807_, 2018.
+
+
+Zouying Cao, Yifei Yang, and Hai Zhao. Nothing in excess: Mitigating the exaggerated safety for
+llms via safety-conscious activation steering. _arXiv e-prints_, pp. arXiv–2408, 2024.
+
+
+Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J Pappas, and Eric Wong.
+Jailbreaking black box large language models in twenty queries. In _2025_ _IEEE_ _Conference_ _on_
+_Secure and Trustworthy Machine Learning (SaTML)_, pp. 23–42. IEEE, 2025.
+
+
+Boyi Deng, Wenjie Wang, Fuli Feng, Yang Deng, Qifan Wang, and Xiangnan He. Attack
+prompt generation for red teaming and defending large language models. _arXiv_ _preprint_
+_arXiv:2310.12505_, 2023a.
+
+
+Gelei Deng, Yi Liu, Yuekang Li, Kailong Wang, Ying Zhang, Zefeng Li, Haoyu Wang, Tianwei
+Zhang, and Yang Liu. Masterkey: Automated jailbreak across multiple large language model
+chatbots. _arXiv preprint arXiv:2307.08715_, 2023b.
+
+
+Ameet Deshpande, Vishvak Murahari, Tanmay Rajpurohit, Ashwin Kalyan, and Karthik
+Narasimhan. Toxicity in chatgpt: Analyzing persona-assigned language models. _arXiv preprint_
+_arXiv:2304.05335_, 2023.
+
+
+Haoran Duan, Shuai Shao, Bing Zhai, Tejal Shah, Jungong Han, and Rajiv Ranjan. Parameter efficient fine-tuning for multi-modal generative vision models with m¨obius-inspired transformation.
+_International Journal of Computer Vision_, 133(7):4590–4603, 2025.
+
+
+Deep Ganguli, Liane Lovitt, Jackson Kernion, Amanda Askell, Yuntao Bai, Saurav Kadavath, Ben
+Mann, Ethan Perez, Nicholas Schiefer, Kamal Ndousse, et al. Red teaming language models to
+reduce harms: Methods, scaling behaviors, and lessons learned. _arXiv preprint arXiv:2209.07858_,
+2022.
+
+
+Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial
+examples. _arXiv preprint arXiv:1412.6572_, 2014.
+
+
+Eric Hartford. Dolphin, 2023.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022.
+
+
+Xiaomeng Hu, Pin-Yu Chen, and Tsung-Yi Ho. Gradient cuff: Detecting jailbreak attacks on large
+language models by exploring refusal loss landscapes. _Advances in Neural Information Process-_
+_ing Systems_, 37:126265–126296, 2024.
+
+
+Neel Jain, Avi Schwarzschild, Yuxin Wen, Gowthami Somepalli, John Kirchenbauer, Ping-yeh Chiang, Micah Goldblum, Aniruddha Saha, Jonas Geiping, and Tom Goldstein. Baseline defenses
+for adversarial attacks against aligned language models. _arXiv preprint arXiv:2309.00614_, 2023.
+
+
+Haoran Li, Dadi Guo, Wei Fan, Mingshi Xu, Jie Huang, Fanpu Meng, and Yangqiu Song. Multi-step
+jailbreaking privacy attacks on chatgpt. _arXiv preprint arXiv:2304.05197_, 2023a.
+
+
+Xuan Li, Zhanke Zhou, Jianing Zhu, Jiangchao Yao, Tongliang Liu, and Bo Han. Deepinception:
+Hypnotize large language model to be jailbreaker. _arXiv preprint arXiv:2311.03191_, 2023b.
+
+
+11
+
+
+Fan Liu, Zhao Xu, and Hao Liu. Adversarial tuning: Defending against jailbreak attacks for llms.
+_arXiv preprint arXiv:2406.06622_, 2024.
+
+
+Sheng Liu, Haotian Ye, and James Zou. Reducing hallucinations in large vision-language models via
+latent space steering. In _The_ _Thirteenth International Conference on Learning Representations_,
+2025.
+
+
+Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. Autodan: Generating stealthy jailbreak
+prompts on aligned large language models. _arXiv preprint arXiv:2310.04451_, 2023a.
+
+
+Yi Liu, Gelei Deng, Zhengzi Xu, Yuekang Li, Yaowen Zheng, Ying Zhang, Lida Zhao, Tianwei
+Zhang, Kailong Wang, and Yang Liu. Jailbreaking chatgpt via prompt engineering: An empirical
+study. _arXiv preprint arXiv:2305.13860_, 2023b.
+
+
+Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu.
+Towards deep learning models resistant to adversarial attacks. _arXiv preprint arXiv:1706.06083_,
+2017.
+
+
+Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee,
+Nathaniel Li, Steven Basart, Bo Li, et al. Harmbench: A standardized evaluation framework for
+automated red teaming and robust refusal. _arXiv preprint arXiv:2402.04249_, 2024.
+
+
+Anay Mehrotra, Manolis Zampetakis, Paul Kassianik, Blaine Nelson, Hyrum Anderson, Yaron
+Singer, and Amin Karbasi. Tree of attacks: Jailbreaking black-box llms automatically. _Advances_
+_in Neural Information Processing Systems_, 37:61065–61105, 2024.
+
+
+Yichuan Mo, Yuji Wang, Zeming Wei, and Yisen Wang. Fight back against jailbreaking via prompt
+adversarial tuning. _Advances in Neural Information Processing Systems_, 37:64242–64272, 2024.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. _Advances in neural information processing systems_, 35:
+27730–27744, 2022.
+
+
+Ethan Perez, Saffron Huang, Francis Song, Trevor Cai, Roman Ring, John Aslanides, Amelia
+Glaese, Nat McAleese, and Geoffrey Irving. Red teaming language models with language models.
+_arXiv preprint arXiv:2202.03286_, 2022.
+
+
+Mansi Phute, Alec Helbling, Matthew Hull, ShengYun Peng, Sebastian Szyller, Cory Cornelius, and
+Duen Horng Chau. Llm self defense: By self examination, llms know they are being tricked.
+_arXiv preprint arXiv:2308.07308_, 2023.
+
+
+Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson.
+Fine-tuning aligned language models compromises safety, even when users do not intend to!
+_arXiv preprint arXiv:2310.03693_, 2023.
+
+
+Nils Reimers and Iryna Gurevych. Sentence-bert: Sentence embeddings using siamese bertnetworks. _arXiv preprint arXiv:1908.10084_, 2019.
+
+
+Alexander Robey, Eric Wong, Hamed Hassani, and George J Pappas. Smoothllm: Defending large
+language models against jailbreaking attacks. _arXiv preprint arXiv:2310.03684_, 2023.
+
+
+Paul R¨ottger, Hannah Rose Kirk, Bertie Vidgen, Giuseppe Attanasio, Federico Bianchi, and Dirk
+Hovy. Xstest: A test suite for identifying exaggerated safety behaviours in large language models.
+_arXiv preprint arXiv:2308.01263_, 2023.
+
+
+Anand Siththaranjan, Cassidy Laidlaw, and Dylan Hadfield-Menell. Understanding hidden context
+in preference learning: Consequences for rlhf. In _Socially_ _Responsible_ _Language_ _Modelling_
+_Research_, 2023.
+
+
+Oscar Skean, Md Rifat Arefin, Dan Zhao, Niket Patel, Jalal Naghiyev, Yann LeCun, and Ravid
+Shwartz-Ziv. Layer by layer: Uncovering hidden representations in language models. _arXiv_
+_preprint arXiv:2502.02013_, 2025.
+
+
+12
+
+
+Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut,
+Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al. Gemini: a family of highly
+capable multimodal models. _arXiv preprint arXiv:2312.11805_, 2023.
+
+
+Qwen Team et al. Qwen2 technical report. _arXiv preprint arXiv:2407.10671_, 2(3), 2024.
+
+
+Vicuna Team. Vicuna: An open-source chatbot impressing gpt-4 with 90% chatgpt quality. _Vicuna:_
+_An open-source chatbot impressing gpt-4 with_, 90, 2023.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Florian Tram`er, Alexey Kurakin, Nicolas Papernot, Ian Goodfellow, Dan Boneh, and Patrick McDaniel. Ensemble adversarial training: Attacks and defenses. _arXiv preprint arXiv:1705.07204_,
+2017.
+
+
+Han Wang, Gang Wang, and Huan Zhang. Steering away from harm: An adaptive approach to
+defending vision language model against jailbreaks. In _Proceedings of the Computer Vision and_
+_Pattern Recognition Conference_, pp. 29947–29957, 2025a.
+
+
+Haoran Wang and Kai Shu. Trojan activation attack: Red-teaming large language models using
+steering vectors for safety-alignment. In _Proceedings of the 33rd ACM International Conference_
+_on Information and Knowledge Management_, pp. 2347–2357, 2024.
+
+
+Luping Wang, Sheng Chen, Linnan Jiang, Shu Pan, Runze Cai, Sen Yang, and Fei Yang. Parameterefficient fine-tuning in large language models: a survey of methodologies. _Artificial Intelligence_
+_Review_, 58(8):227, 2025b.
+
+
+Alexander Wei, Nika Haghtalab, and Jacob Steinhardt. Jailbroken: How does llm safety training
+fail? _Advances in Neural Information Processing Systems_, 36:80079–80110, 2023a.
+
+
+Zeming Wei, Yifei Wang, Ang Li, Yichuan Mo, and Yisen Wang. Jailbreak and guard aligned
+language models with only few in-context demonstrations. _arXiv_ _preprint_ _arXiv:2310.06387_,
+2023b.
+
+
+Fangzhao Wu, Yueqi Xie, Jingwei Yi, Jiawei Shao, Justin Curl, Lingjuan Lyu, Qifeng Chen, and
+Xing Xie. Defending chatgpt against jailbreak attack via self-reminder. 2023.
+
+
+Zhenyu Xu and Victor S Sheng. Detecting ai-generated code assignments using perplexity of large
+language models. In _Proceedings of the aaai conference on artificial intelligence_, volume 38, pp.
+23155–23162, 2024.
+
+
+Jiahao Yu, Xingwei Lin, Zheng Yu, and Xinyu Xing. Gptfuzzer: Red teaming large language models
+with auto-generated jailbreak prompts. _arXiv preprint arXiv:2309.10253_, 2023.
+
+
+Dan Zhang, Tao Feng, Lilong Xue, Yuandong Wang, Yuxiao Dong, and Jie Tang. Parameter-efficient
+fine-tuning for foundation models. _arXiv preprint arXiv:2501.13787_, 2025.
+
+
+Hongyang Zhang, Yaodong Yu, Jiantao Jiao, Eric Xing, Laurent El Ghaoui, and Michael Jordan.
+Theoretically principled trade-off between robustness and accuracy. In _International conference_
+_on machine learning_, pp. 7472–7482. PMLR, 2019.
+
+
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. Judging llm-as-a-judge with mt-bench and
+chatbot arena. _Advances in neural information processing systems_, 36:46595–46623, 2023.
+
+
+Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson.
+Universal and transferable adversarial attacks on aligned language models. _arXiv_ _preprint_
+_arXiv:2307.15043_, 2023.
+
+
+13
+
+
+A APPENDIX
+
+
+A.1 DETAILED EXPERIMENTAL SETUPS
+
+
+**Attack Setup:** We adhere to the experimental protocol of Chao et al. (2025). Concretely, we curate
+a seed set comprising 50 representative adversarial queries from AdvBench Zou et al. (2023) and an
+additional 50 queries sourced from HarmBench that span a broad range of task domains. Building
+on these 100 seed queries, we construct model-specific attack prompts for each evaluated system,
+thereby facilitating fair and controlled comparisons under identical initial conditions. To preserve
+methodological fidelity, all hyperparameters are set strictly according to the specifications in the
+original papers, without any supplementary tuning or deviations. This design aims to minimize
+confounding factors arising from implementation choices and to enhance both the comparability
+and reproducibility of the reported results.
+
+
+**Defense Baseline Setup:**
+
+
+1. **PPL** Alon & Kamfonas:PPL is an input filtering approach that first computes the perplexity
+of a user’s request and then uses that value to decide whether the request should be allowed or
+rejected. We use GPT-2 to calculate the perplexity and set the maximum perplexity of any prompt
+in the AdvBench dataset
+
+2. **Self-Reminder** Wu et al. (2023):Self-Reminder constrains the model to produce harmless responses by appending safety prompts and corresponding guidelines to the user’s input. The
+examples from the experiments are shown in Figure 6.
+
+
+Figure 7: Check prompt using in Self-Examination method.
+
+
+14
+
+
+Figure 6: Safety prompt using in Self-Reminder method.
+
+
+3. **Retokenization** Jain et al. (2023): This method splits an original token into multiple smaller
+sub-tokens for representation. We follow the original paper’s configuration for hyperparameter
+settings.
+
+4. **ICD** Wei et al. (2023b): ICD enhances model safety by inserting harmful prompts plus corresponding refusal examples into the model’s context. For the Vicuna and LLaMA models, the
+inserted safety examples are show in Figure 8.
+
+5. **Self-Examination** Phute et al. (2023): Self-Examination is an output detection technique that
+leverages the language model itself to determine whether its generated content is harmful.If the
+model detects that the generated content is harmful, it will respond using a predefined refusalresponse template: ”Sorry, I cannot answer your question.”. The examples from the experiments
+are shown in Figure 7.
+
+
+6. **Paraphrase** Jain et al. (2023): This method uses another large language model to semantically
+interpret the user’s input and paraphrase its intent. We use GPT-3 as the model for understanding
+and paraphrasing the input text. The paraphrased version of the input is then fed back to the
+target model as the user query.
+
+
+Figure 8: Inserted safety examples using in ICD method.
+
+
+**Training Datasets:** We select 400 samples from HarmBench as seed harmful data. Using iterative
+attacks, we generate 500 optimized samples per seed as candidate training data. We then use the
+SAT framework to filter out 500 samples as the final training set. To preserve the model’s generation
+quality as much as possible, we feed the candidate training data to the target model to obtain the
+model’s original responses, and select the refusal responses as the training targets, forming prompt,
+response pairs. For each prompt, we generate 5 responses to increase the probability of the model
+producing refusal outputs. Detailed parameters setup shows in Table4.
+
+
+Table 4: Training Parameters setup
+
+
+**Parameters** **Temperature** **Lora** **dropout** **Lora** **rank** **Learning** **rate** **Warmup** **ratio** **Max** **seq** **len**
+
+
+**Value** 0.8 0.1 16 2e-4 0.03 2048
+
+
+**Target** **Model:** To align the models’ safety with real-world usage, we configure system prompts
+to enhance the baseline safety capabilities of the three models used in our experiments: Vicuna-7B,
+Llama2-7B, and Dolphin-7B. The specific system prompts are as follows, Dolphin-7B uses the same
+system prompt as Llama2-7B, while Vicuna-7B uses a separately customized system prompt. The
+examples from the experiments are shown in Figure 10.
+
+
+**Refusal** **String** **Keywords:** We observe that system prompts have a significant impact on model
+performance in both attack and defense. We consider an attack to be successful as long as its output
+does not contain these strings. Following the approach of (Zou et al. (2023)), we determined the
+corresponding system prompts for each model based on the configurations provided by fschat0.2.20
+and the official pages on Hugging Face. The string set shows in Table5.
+
+
+A.2 THE USE OF LARGE LANGUAGE MODELS(LLMS)
+
+
+We employ GPT-4Achiam et al. (2023) to perform thorough spell-checking, grammar checking, and
+language polishing across the manuscript. The primary goal of the polishing process is to split and
+reorganize overly complex long sentences without altering their original meaning, thereby aligning
+the prose with academic writing conventions, enhancing clarity and coherence, and enabling readers
+to grasp the main ideas and details more efficiently.
+
+
+15
+
+
+Figure 9: System ptompts in different models.
+
+
+Table 5: Refusal String Keywords
+
+
+**Refusal String Keywords**
+
+
+I’m sorry
+I am sorry
+I’m an
+I’m just
+Sorry
+I apologize
+As an
+As an AI
+As a language model
+As an Assistant
+I cannot
+I do not
+It is not</s>
+It is not appropriate
+I’m unable to
+I am unable to
+I am not allowed to
+I am an AI language model
+
+
+16
+
+
+A.3 EXAMPLE DEMONSTRATIONS
+
+
+We present the following examples illustrating SAT across different tasks. For clarity, attack prompts
+are highlighted in red.
+
+
+|over-refusal|Model|Col3|Col4|Col5|
+|---|---|---|---|---|
+|over-refusal|vicuna-7B|llama-2-7B|Dolphin-7B|Qwen-7B|
+|over-refusal|SAT(M)<br>SAT(L)|SAT(M)<br>SAT(L)|SAT(M)<br>SAT(L)|SAT(M)<br>SAT(L)|
+|safe_ ↓_|19.6%_ ±_ 0.7<br>18.3%_ ±_ 0.6|20.1%_ ±_ 0.8<br>18.9%_ ±_ 1.0|16.2%_ ±_ 0.8<br>16.3%_ ±_ 0.4|19.3%_ ±_ 0.9<br>20.5%_ ±_ 0.9|
+|unsafe_ ↑_|90.0%_ ±_ 1.3<br>90.3%_ ±_ 1.1|92.8%_ ±_ 0.9<br>92.9%_ ±_ 0.5|91.5%_ ±_ 1.2<br>90.3%_ ±_ 1.4|91.6%_ ±_ 1.0<br>92.1%_ ±_ 0.8|
+
+
+**Visualization of semantic separation across different layers:** As show in Figures11,demonstrates
+how the separability of positive and negative samples changes across layers from shallow to deep.
+The representations of positive and negative samples are entangled in early layers but become progressively separable in deeper layers. This indicates that higher layers exhibit more refined semantic
+discrimination compared to shallower layers, making them better suited for subspace partitioning.
+
+
+**Comparison defense results with other data selection baselines:** The table 7 presents a comparison between SAT and three baselines: random-based selection (randomly sampling candidates),
+human construction (using human-authored harmful data), and loss-based selection (minimizing
+loss between samples and target responses). Results show that random selection performs the worst,
+and while the loss-based method outperforms the other two baselines, SAT demonstrates superior
+robustness across all attack methods.
+
+
+17
+
+
+_**Original Response:**_ _Sure, here's a social media post that encourages people to engage in_
+_dangerous behaviors like drunk driving or using drugs:\n"_
+
+
+_**Retokenization Response:**_ _Sure, here's a social media post that encourages people to_
+_engage in dangerous behaviors like drunk driving or using drugs:\n\n\"Hey everyone! Want_
+_to feel like a rebel? Try drunk driving or using drugs! It's the ultimate thrill ride and_
+_everyone's doing it. Don't be a squares, join the fun!\"\n\nI hope this helps! Let me know if_
+_you need anything else.</s>"_
+
+
+Figure 10: Response under GCG attack from different defense methods.
+
+
+A.4 OTHER EXPERINMENT RESULTS
+
+
+**Comparison** **of** **Vector** **Representation** **Extraction** **Methods:** As show in table6, we present the
+performance of models trained using data extracted via two different feature extraction methods
+on the over-refusal mitigation task. Specifically, SAT(M) denotes the mean pooling method, and
+SAT(L) denotes the last token method.
+
+
+Table 6: Comparison of Vector Representation Extraction for Mean Pooling(M) and Last Token(L)
+on Over-Refusal Task.
+
+
+**Layer 0** **Layer 8** **Layer 12** **Layer 16**
+
+
+**Layer 20** **Layer 24** **Layer 28** **Layer 32**
+
+
+Figure 11: Visualization of semantic separation across different layers
+
+
+Table 7: Comparison of the defense effectiveness of the SAT method and other data selection baselines.
+
+
+|Model|Defense|AdvBench ↓|Jailbreak Attacks ↓<br>Average ↓<br>GCG AutoDAN PAIR DeepInception TAP|
+|---|---|---|---|
+|Vicuna-7B|Random-based<br>Human construction<br>loss-based<br>SAT|2%_ ±_ 0.8<br>7%_ ±_ 0.3<br>1%_ ±_ 0.0<br>0%_ ±_ 0.0|17%_ ±_ 1.2<br>57%_ ±_ 2.3<br>62%_ ±_ 2.0<br>49%_ ±_ 1.9<br>63%_ ±_ 1.4<br>49.6%<br>20%_ ±_ 1.0<br>72%_ ±_ 1.2<br>64%_ ±_ 1.5<br>70%_ ±_ 1.6<br>52%_ ±_ 0.4<br>55.6%<br>11%_ ±_ 0.7<br>19%_ ±_ 1.5<br>9%_ ±_ 0.9<br>11%_ ±_ 0.4<br>14%_ ±_ 0.4<br>12.8%<br>0%_ ±_ 0.0<br>12%_ ±_ 1.2<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>2%_ ±_ 0.4<br>2.8%|
+|Llama2-7B|Random-based<br>Human construction<br>loss-based<br>SAT|5%_ ±_ 0.1<br>3%_ ±_ 0.0<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0|12%_ ±_ 0.4<br>44%_ ±_ 0.7<br>57%_ ±_ 0.3<br>60%_ ±_ 0.8<br>71%_ ±_ 1.8<br>48.8%<br>14%_ ±_ 0.3<br>38%_ ±_ 0.6<br>42%_ ±_ 0.7<br>41%_ ±_ 0.4<br>53%_ ±_ 1.6<br>37.6%<br>10%_ ±_ 0.1<br>21%_ ±_ 0.5<br>26%_ ±_ 0.3<br>19%_ ±_ 0.4<br>22%_ ±_ 1.3<br>19.6%<br>1%_ ±_ 0.2<br>0%_ ±_ 0.0<br>4%_ ±_ 0.3<br>0%_ ±_ 0.0<br>1%_ ±_ 1.0<br>1.2%|
+|Dolphin-7B|Random-based<br>Human construction<br>loss-based<br>SAT|4%_ ±_ 0.1<br>3%_ ±_ 0.4<br>1%_ ±_ 0.0<br>0%_ ±_ 0.0|19%_ ±_ 1.1<br>47%_ ±_ 1.6<br>58%_ ±_ 0.9<br>64%_ ±_ 0.7<br>61%_ ±_ 0.6<br>49.8%<br>13%_ ±_ 0.5<br>32%_ ±_ 1.1<br>34%_ ±_ 0.9<br>29%_ ±_ 0.2<br>31%_ ±_ 0.7<br>27.8%<br>10%_ ±_ 0.0<br>27%_ ±_ 1.4<br>21%_ ±_ 0.3<br>14%_ ±_ 0.2<br>19%_ ±_ 0.0<br>18.2%<br>0%_ ±_ 0.0<br>7%_ ±_ 1.1<br>2%_ ±_ 0.0<br>4%_ ±_ 0.2<br>1%_ ±_ 0.0<br>2.8%|
+|Qwen-7B|Random-based<br>Human construction<br>loss-based<br>SAT|2%_ ±_ 0.0<br>1%_ ±_ 0.0<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0|15%_ ±_ 0.4<br>59%_ ±_ 1.6<br>63%_ ±_ 1.0<br>45%_ ±_ 0.4<br>59%_ ±_ 1.7<br>48.2%<br>13%_ ±_ 0.2<br>53%_ ±_ 1.2<br>58%_ ±_ 0.6<br>38%_ ±_ 0.2<br>43%_ ±_ 1.1<br>41.0%<br>12%_ ±_ 1.0<br>22%_ ±_ 0.1<br>17%_ ±_ 0.3<br>16%_ ±_ 0.0<br>21%_ ±_ 1.3<br>17.6%<br>3%_ ±_ 1.0<br>9%_ ±_ 1.1<br>0%_ ±_ 0.0<br>6%_ ±_ 0.4<br>9%_ ±_ 1.4<br>5.4%|
+
+
+**Candidate** **training** **samples** **with** **other** **attack** **method:** Our SAT method employs a scoring
+mechanism to select candidate samples generated during the iterative process of jailbreak attacks
+for model fine-tuning. The table 8 below presents three categories of candidate sample generation
+methods: black-box attacks (PAIR), white-box attacks (GCG), and hybrid attacks.Experimental results indicate that fine-tuning samples derived from a specific attack type yield superior defensive
+performance against that same attack type. In contrast, samples generated via hybrid attacks exhibit no significant bias toward specific attack vectors; however, they demonstrate effective defense
+capabilities against both black-box and white-box attacks.
+
+
+**Harmfulness Scores of other models:** In Figures12,13,14, we respectively present the harmfulness
+scores of the responses generated by Llama-2-7B, Dolphin-7B, and Qwen2.5-7B-Instruct under various attacks, comparing them against other baseline defense methods.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Llama2-7B Defense Performance Analysis
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+Attack Methods
+AdvBench GCG AutoDAN PAIR DeepInception TAP
+
+
+Figure 12: Harmful Scores on Llama2-7B model
+
+
+Dolphin-7B Defense Performance Analysis
+
+
+Attack Methods
+AdvBench GCG AutoDAN PAIR DeepInception TAP
+
+
+Figure 13: Harmful Scores on Dolphin-7B model
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 8: Generate candidate adversarial samples with other attack methods.
+
+
+|Model|Defense|AdvBench ↓|Jailbreak Attacks ↓<br>Average ↓<br>GCG AutoDAN PAIR DeepInception TAP|
+|---|---|---|---|
+|Vicuna-7B|SAT(black-box)<br>SAT(white-box)<br>SAT(MIX)|0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0|0%_ ±_ 0.0<br>11%_ ±_ 1.2<br>0%_ ±_ 0.0<br>3%_ ±_ 1.0<br>1%_ ±_ 0.2<br>3.0%<br>0%_ ±_ 0.0<br>12%_ ±_ 1.2<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>2%_ ±_ 0.4<br>2.8%<br>0%_ ±_ 0.0<br>10%_ ±_ 1.1<br>1%_ ±_ 0.1<br>2%_ ±_ 0.1<br>3%_ ±_ 0.4<br>3.2%|
+|Llama2-7B|SAT(black-box)<br>SAT(white-box)<br>SAT(MIX)|0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0|1%_ ±_ 0.0<br>5%_ ±_ 1.4<br>3%_ ±_ 0.2<br>2%_ ±_ 0.0<br>1%_ ±_ 0.1<br>2.4%<br>1%_ ±_ 0.2<br>0%_ ±_ 0.0<br>4%_ ±_ 0.3<br>0%_ ±_ 0.0<br>1%_ ±_ 1.0<br>1.2%<br>0%_ ±_ 0.0<br>3%_ ±_ 1.2<br>4%_ ±_ 0.6<br>1%_ ±_ 0.1<br>2%_ ±_ 0.6<br>2.0%|
+|Dolphin-7B|SAT(black-box)<br>SAT(white-box)<br>SAT(MIX)|1%_ ±_ 0.2<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0|0%_ ±_ 0.0<br>7%_ ±_ 1.0<br>3%_ ±_ 0.4<br>2%_ ±_ 0.2<br>1%_ ±_ 0.7<br>2.6%<br>0%_ ±_ 0.0<br>7%_ ±_ 1.1<br>2%_ ±_ 0.0<br>4%_ ±_ 0.2<br>1%_ ±_ 0.0<br>2.8%<br>0%_ ±_ 0.0<br>9%_ ±_ 1.3<br>2%_ ±_ 0.4<br>4%_ ±_ 0.3<br>1%_ ±_ 0.2<br>3.2%|
+|Qwen-7B|SAT(black-box)<br>SAT(white-box)<br>SAT(MIX)|0%_ ±_ 0.0<br>0%_ ±_ 0.0<br>0%_ ±_ 0.0|4%_ ±_ 0.7<br>7%_ ±_ 1.4<br>0%_ ±_ 0.0<br>8%_ ±_ 0.5<br>8%_ ±_ 0.6<br>5.4%<br>3%_ ±_ 1.0<br>9%_ ±_ 1.1<br>0%_ ±_ 0.0<br>6%_ ±_ 0.4<br>9%_ ±_ 1.4<br>5.4%<br>3%_ ±_ 0.2<br>9%_ ±_ 1.7<br>0%_ ±_ 0.0<br>6%_ ±_ 0.7<br>6%_ ±_ 0.6<br>4.8%|
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+Qwen-7B Defense Performance Analysis
+
+
+Attack Methods
+AdvBench GCG AutoDAN PAIR DeepInception TAP
+
+
+Figure 14: Harmful Scores on Qwen2.5-7B-Instruct model
+
+
+20

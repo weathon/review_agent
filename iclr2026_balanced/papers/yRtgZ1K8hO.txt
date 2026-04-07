@@ -1,0 +1,4122 @@
+# THE POLAR EXPRESS: OPTIMAL MATRIX SIGN METHODS AND THEIR APPLICATION TO THE MUON ALGORITHM
+
+
+**Christopher Musco**
+New York University
+cmusco@nyu.edu
+
+
+**Noah Amsel**
+New York University
+noah.amsel@nyu.edu
+
+
+**David Persson**
+New York University
+Flatiron Institute
+dup210@nyu.edu
+
+
+**Robert M. Gower**
+Flatiron Institute
+rgower@flatironinstitute.org
+
+
+ABSTRACT
+
+
+Computing the polar decomposition and the related matrix sign function has
+been a well-studied problem in numerical analysis for decades. Recently, it has
+emerged as an important subroutine within the Muon optimizer for training deep
+neural networks. However, the requirements of this application differ sharply from
+classical settings: deep learning demands GPU-friendly algorithms that prioritize
+high throughput over high precision. We introduce Polar Express, a new
+method for computing the polar decomposition. [1] Like Newton-Schulz and other
+classical polynomial methods, our approach uses only matrix-matrix multiplications, making it very efficient on GPUs. Inspired by earlier work of Chen & Chow
+and Nakatsukasa & Freund, Polar Express adapts the update rule at each iteration by solving a minimax optimization problem. We prove that this strategy
+minimizes error in a worst-case sense, allowing Polar Express to converge
+as rapidly as possible both in the early iterations and asymptotically. We also
+address finite-precision issues, making it practical to use in bfloat16. When
+integrated into Muon, our method yields consistent improvements in validation
+loss for a GPT-2 model trained on one to ten billion tokens from the FineWeb
+dataset, outperforming recent alternatives across a range of learning rates.
+
+
+1 INTRODUCTION
+
+
+Advanced linear algebra is making its way into deep learning. Efficient algorithms for computing
+_matrix functions_ have found exciting new applications in training neural networks. In particular, approximations to the matrix-inverse are used in the full Adagrad method (Duchi et al., 2011), the matrix square-root and quarter-root appear as subroutines in the Shampoo and Soap optimizers (Gupta
+et al., 2018; Shi et al., 2023; Vyas et al., 2025), and most recently, the matrix sign function has
+become a key ingredient of the Muon optimizer (Bernstein & Newhouse, 2024b;a; Jordan et al.,
+2024b). While the problem of computing these matrix functions has been studied by numerical
+analysts for decades, applications in deep learning come with different requirements than those in
+computational science. For deep learning, it is critical to take maximum advantage of GPU-friendly
+operations like matrix-matrix products and to avoid less parallel operations. Moreover, memory
+overhead must be small to handle large models. On the other hand, high accuracy is typically less
+important; the gold standard of sixteen digits of accuracy is overkill in deep learning.
+
+
+Given these considerations, there is a need to develop new matrix function methods that are tailormade for deep learning applications. We take on this challenge by designing a state-of-the-art,
+GPU-friendly algorithm for computing the matrix sign function, or more generally, for computing
+
+
+[1https://github.com/NoahAmsel/PolarExpress](https://github.com/NoahAmsel/PolarExpress)
+
+
+1
+
+
+the _polar_ _decomposition_ of a rectangular matrix. We apply our new Polar Express method
+(Algorithm 1, Implementation 1) to compute the descent direction in the increasingly popular Muon
+optimizer. In Figure 1, we show that using Polar Express within Muon consistently results in
+lower validation loss across all learning rates when training a GPT-2 model, as compared to other
+matrix sign methods (Cesista et al., 2025; Jordan et al., 2024b).
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+3 _._ 4
+
+
+3 _._ 46
+
+
+3 _._ 44
+
+
+3 _._ 42
+
+
+3 _._ 40
+
+
+3 _._ 38
+
+
+3 _._ 36
+
+
+3 _._ 34
+
+
+|Col1|Col2|muon-You|
+|---|---|---|
+||muon-PolarExp<br>muon-Jordan|muon-PolarExp<br>muon-Jordan|
+||||
+||||
+||||
+||||
+||||
+||||
+
+
+10 _[−]_ [2]
+
+
+Learning Rate
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8
+Epoch
+
+
+Figure 1: Training a GPT-2-Large model (774M params) on 1 billion tokens from the FineWeb
+dataset (Aroca-Ouellette et al., 2023). The label muon-<name> refers to implementing Muon using
+<name> to compute the polar factor. Left: final validation loss across learning rates. Right: validation loss across epochs using the best learning rate. The best learning rate ( _lr_ ) and final validation
+loss for each method were muon-You ( _lr_ = 0 _._ 02): 3 _._ 399, muon-Jordan ( _lr_ = 0 _._ 02): 3 _._ 398 and
+muon-PolarExp ( _lr_ = 0 _._ 02): 3 _._ 340.
+
+
+1.1 THE MUON METHOD
+
+
+The Muon optimizer has recently gained popularity for training large language models, often outperforming state-of-the-art adaptive gradient methods like Adam and AdamW (Kingma & Ba, 2015;
+Loshchilov & Hutter, 2019). Muon has been used to set records for the NanoGPT speedrun (Jordan
+et al., 2024b), to expand the Pareto frontier of performance versus training FLOPs for large language models (Liu et al., 2025; Shah et al., 2025), and even to train a 1 trillion parameter frontier
+LLM (Kimi Team et al., 2025).
+
+
+The Muon update rule (Bernstein & Newhouse, 2024b) is defined as follows. Let _λ, β_ _>_ 0 be the
+learning rate and momentum coefficient hyperparameters. (By default, _β_ = 0 _._ 9.) Let _**W**_ _t_ R _[m][×][n]_
+be the weight matrix of a given neural network layer at iteration _t_, and let _**G**_ _t_ R _[m][×]_ _∈_ _[n]_ be its
+(stochastic) gradient. Let _**M**_ _t_ R _[m][×][n]_ be the running momentum estimate of the gradient, where _∈_
+_**M**_ 0 = **0** . The Muon update is given by _∈_
+
+_**M**_ _t_ = _β_ _**M**_ _t−_ 1 + (1 _−_ _β_ ) _**G**_ _t,_ _**W**_ _t_ +1 = _**W**_ _t −_ _λ_ polar( _**M**_ _t_ ) _._
+
+Whereas standard stochastic gradient descent (SGD) with momentum updates the weight matrix by
+taking a step in the direction _**M**_ _t_, the Muon method steps in the direction polar( _**M**_ _t_ ), where
+
+_−_ _−_
+polar( _**M**_ ) denotes the closest semi-orthogonal matrix to _**M**_ (Higham, 2008, Chapter 8). Concretely, if _**M**_ = _**U**_ **Σ** _**V**_ [T] is the singular value decomposition (SVD) of _**M**_, then
+
+polar( _**M**_ ) := _**UV**_ [T] _._ (1)
+
+
+The matrix polar( _**M**_ ) can be seen as a generalization of the matrix sign function to rectangular matrices (Benzi & Huang, 2019). Indeed, when _**M**_ is square symmetric with eigendecomposition _**M**_ =
+_**V**_ **Λ** _**V**_ [T], polar( _**M**_ ) exactly coincides with the matrix sign function sign( _**M**_ ) = _**V**_ sign( **Λ** ) _**V**_ [T]
+(Higham, 2008, Chapter 5). Equivalently, polar( _**M**_ ) is the left orthogonal factor of the polar decomposition of _**M**_ (Higham, 2008, Chapter 8). The motivation for Muon is that _−_ polar( _**M**_ ) gives
+the steepest-descent direction with respect to the _spectral_ _norm_ (instead of the Frobenius norm,
+as in standard SGD). For analysis and further discussion on Muon we refer the reader to (Jordan
+et al., 2024b; Bernstein & Newhouse, 2024b; Pethick et al., 2025; Riabinin et al., 2025; Carlson
+et al., 2015a;b). In this paper, we take the Muon update rule as given and focus on the problem of
+efficiently computing the polar decomposition polar( _**M**_ ).
+
+
+2
+
+
+1.2 COMPUTING THE POLAR FACTOR
+
+
+Although polar( _**M**_ ) can be computed directly via an SVD in _O_ ( _mn_ min( _m, n_ )) time, doing so is
+prohibitively expensive in deep learning applications, especially as standard SVD algorithms fail to
+take full advantage of the parallelism available on GPUs. There has been significant work on highlyparallel methods for the SVD, but the most common approaches actually require computing the
+matrix-sign function as a subroutine (Nakatsukasa & Freund, 2016; Nakatsukasa & Higham, 2013).
+Numerical analysts have spent decades developing iterative methods for computing polar( _**M**_ ). This
+rich line of work includes Newton-Schulz (Higham, 2008, Chapter 8), Pad´e iteration (Kenney &
+Laub, 1991; Higham, 1986), the Newton and scaled Newton iterations (Higham, 2008, Chapter 8),
+the QDWH iteration (Nakatsukasa et al., 2010; Nakatsukasa & Higham, 2013), and _Zolo-pd_ (Nakatsukasa & Freund, 2016). Unfortunately, as discussed in Appendix B, most of these methods are
+based on rational approximations to the function sign( _x_ ) and require computing matrix inverses
+or QR decompositions. Such methods are ill-suited to GPU acceleration and deep learning applications. In contrast, the older Newton-Schulz method is based on _polynomial_ approximation of sign( _x_ )
+and uses only matrix-matrix products. Thus, Muon initially used Newton-Schulz (Bernstein & Newhouse, 2024a). Indeed, Muon stands for “MomentUm Orthogonalized by Newton-Schulz” (Jordan
+et al., 2024b). For a more comprehensive discussion on prior work, see Appendix B.
+
+
+**The** **Newton-Schulz** **methods.** Newton-Schulz constructs a sequence of approximations _**X**_ _t_
+_≈_
+polar( _**M**_ ) as follows:
+
+
+_**X**_ 0 = _**M**_ _/_ _**M**_ F _,_ _**X**_ _t_ +1 = [3]
+_∥_ _∥_ 2
+
+
+[3]
+
+2 _**[X]**_ _[t][ −]_ [1] 2
+
+
+_t_ _**[X]**_ _[t][.]_ (2)
+2 _**[X]**_ _[t]_ _**[X]**_ _[⊤]_
+
+
+At each iteration, this rule effectively applies the cubic polynomial _p_ ( _x_ ) = 2 [3] _[x][ −]_ [1] 2 _[x]_ [3] [to each sin-]
+
+gular value of _**X**_ _t_ . The scalar fixed-point iteration _xt_ +1 = _p_ ( _xt_ ) converges to sign( _x_ 0) as _t_,
+provided _x_ 0 1. As a result, the matrix iteration satisfies lim [=] _**[UV]**_ _[⊤]_ [=] [polar(] _→∞_ _**[X]**_ [0][)][.]
+_|_ _|_ _≤_ _t→∞_ _**[X]**_ _[t]_
+Higher-degree versions of Newton-Schulz follow the same principle. For example, the degree-5
+polynomial _p_ ( _x_ ) = (15 _x −_ 10 _x_ [3] + 3 _x_ [5] ) _/_ 8 converges even faster. The Newton-Schulz iterations
+converge super-exponentially when _**X**_ _t_ is sufficiently close to polar( _**M**_ ), but they suffer from slow
+initial convergence; when _**X**_ 0 is far from polar( _**M**_ ), the approximation improves slowly over the
+first few iterations. Due to the slow initial convergence of Newton-Schulz, Chen & Chow (2014)
+developed a version of the Newton-Schulz iteration, which adapts the polynomial at each iteration.
+The resulting method achieves a faster initial convergence, while retaining super-exponential convergence in later iterations. Polar Express is inspired by their method.
+
+
+At each iteration, this rule effectively applies the cubic polynomial _p_ ( _x_ ) = [3]
+
+
+[3]
+
+2 _[x][ −]_ [1] 2
+
+
+**The Jordan and You methods.** In Muon, high accuracy approximations to polar( _**M**_ ) are usually
+not necessary. The primary goal is instead to compute a coarse approximation in as few iterations
+as possible. To accelerate convergence in the low-accuracy regime, Jordan recently proposed a
+fixed-point iteration based on the polynomial _p_ ( _x_ ) = 3 _._ 4445 _x −_ 4 _._ 7750 _x_ [3] + 2 _._ 0315 _x_ [5], which was
+found using a heuristic numerical search (Jordan et al., 2024b). Unlike Newton-Schulz, the scheme
+that Jordan proposed does not converge to polar( _**M**_ ), but plateaus at an error of _≈_ 0 _._ 3. However,
+it reaches this level of accuracy rapidly and outperforms the Newton-Schulz when only a small
+number of iterations are performed. Building on this idea, You proposed a method that applies
+six different polynomial updates in succession, which were again found by heuristic search. This
+method achieves better accuracy than Jordan’s but still fails to converge (Cesista et al., 2025).
+
+
+1.3 CONTRIBUTIONS
+
+
+We present Polar Express (Algorithm 1), an iterative method for approximating polar( _**M**_ ).
+Our method dynamically adapts the polynomial update rule at each iteration, prioritizing rapid
+progress in the initial stage and high accuracy in the later stage. Polar Express constructs
+polynomials _p_ 1 _, . . ., pT_ so that the resulting composition is the optimal approximation to the sign
+function with respect to the supremum ( _L_ _[∞]_ ) norm (Theorem 3.1). By iteratively applying these
+polynomials to _**M**_, Polar Express computes an approximation to polar( _**M**_ ) that is optimal
+in the worst-case. Our method converges to polar( _**M**_ ) super-exponentially (Theorem 3.3), and it
+quickly reaches a good approximation within just five to ten iterations. This early-stage acceleration
+is especially valuable in deep learning applications, where runtime efficiency takes precedence over
+
+
+3
+
+
+high accuracy. In contrast, classical methods like Newton-Schulz suffer from a slow initial convergence, while recent heuristic proposals (Jordan et al., 2024b; Cesista et al., 2025) fail to converge.
+Our method is efficient to run on GPUs, using only a few matrix-matrix products per iteration. We
+give an explicit instantiation of Polar Express in Implementation 1, which incorporates minor
+modifications to make it compatible with half-precision arithmetic (see Section 3.4). Implementation 1 is very short and easy to use, with no dependencies except PyTorch. It serves as a drop-in
+replacement for previous methods. In numerical experiments, Polar Express outperforms previous methods on synthetic matrices and gradient matrices from a GPT-2 transformer (Figure 3). We
+demonstrate the effectiveness of using Polar Express within the Muon optimizer in Figure 1,
+showing that it consistently improves the training of GPT-2 language models on 1 billion tokens of
+the FineWeb dataset (Aroca-Ouellette et al., 2023). Our method has been adopted into the NanoGPT
+speedrun (Jordan et al., 2024a), a heavily optimized implementation that serves as a benchmark for
+LLM training efficiency.
+
+
+**Notation.** We let _∥_ _**M**_ _∥_ F and _∥_ _**M**_ _∥_ 2 denote the Frobenius norm and spectral norm (largest singular
+value) of a matrix _**M**_, respectively. We denote the spectrum (set of singular values) by _σ_ ( _**M**_ ). Let
+P _d_ be the set of polynomials of degree at most _d_ . For odd _d_, P [odd] _d_ denotes the set of polynomials of
+degree at most _d_ containing only odd-degree monomials. For a polynomial _p_, deg( _p_ ) is its degree.
+Let sign( _x_ ) be the scalar sign function, which satisfies sign(0) = 0, sign( _x_ ) = 1 if _x_ _>_ 0 and
+sign( _x_ ) = 1 if _x_ _<_ 0. For a polynomial _p_ P [odd] _d_ and a matrix _**M**_ with rank reduced SVD
+
+_−_ _∈_
+given by _**M**_ = _**U**_ **Σ** _**V**_ [T] and positive singular values _σ_ 1 _σ_ rank( _**M**_ ) _>_ 0, we define _p_ ( _**M**_ ) :=
+_≥· · · ≥_
+_**U**_ _p_ ( **Σ** ) _**V**_ [T], where _p_ ( **Σ** ) is the diagonal matrix with diagonal entries _p_ ( _σi_ ) for _i_ = 1 _, . . .,_ rank( _**M**_ ).
+
+
+2 APPROXIMATIONS BY COMPOSITIONS OF POLYNOMIALS
+
+
+To design a GPU-friendly method for computing polar( _**M**_ ), we limit ourselves to the following
+GPU-friendly operations: (i) linear combinations of matrices (given scalars _β, γ_ _∈_ R and matrices _**B**_ and _**C**_, compute _β_ _**B**_ + _γ_ _**C**_ ) and (ii) matrix-matrix products (compute _**BC**_ ). While both
+these computational primitives are well-suited for parallel computing environments, matrix-matrix
+products come at a higher computational cost than linear combinations. Therefore, our method
+attempts to minimize the number of matrix-matrix products. A key observation is that we can compute _odd_ monomials of _**M**_ = _**U**_ **Σ** _**V**_ [T] using the following formula: _**M**_ [2] _[q]_ [+1] := _**U**_ **Σ** [2] _[q]_ [+1] _**V**_ [T] =
+_**M**_ ( _**M**_ [T] _**M**_ ) _[q]_ _._ [2] Hence, for an odd polynomial _p_ ( _x_ ) = _a_ 0 _x_ + _a_ 1 _x_ [3] + + _aqx_ [2] _[q]_ [+1] we can compute
+
+_· · ·_
+
+
+_p_ ( _**M**_ ) := _a_ 0 _**M**_ + _a_ 1 _**M**_ ( _**M**_ [T] _**M**_ ) + + _aq_ _**M**_ ( _**M**_ [T] _**M**_ ) _[q]_ _._
+_· · ·_
+
+
+It has been shown that for an arbitrary polynomial _p_, one requires Θ(deg( _p_ ) [1] _[/]_ [2] ) products to compute
+_p_ ( _**M**_ ) (Paterson & Stockmeyer, 1973); see also Jarlebring & Lorentzon (2025) for related work.
+This compares favorably to the naive approach that forms all monomials in _p_ and then sums them
+together, which requires Ω(deg( _p_ )) products. However, if _p_ can be expressed as a composition of _T_
+polynomials, each of degree _d_
+_p_ = _pT_ _pT −_ 1 _p_ 1 _,_ (3)
+
+_◦_ _◦· · · ◦_
+then the degree of _p_ is _d_ _[T]_, and _p_ ( _**M**_ ) can be efficiently computed recursively by
+_**X**_ 0 = _**M**_ _,_ _**X**_ _t_ = _pt_ ( _**X**_ _t−_ 1) for _t_ = 1 _,_ 2 _, . . ., T._ (4)
+The final iterate is _**X**_ _T_ = _p_ ( _**M**_ ), which we compute with just _O_ ( _Td_ ) matrix-matrix products.
+Iterative methods for polar( _**M**_ ) can be seen in this light. For instance, the degree-5 Newton-Schulz
+method uses the polynomial update _pt_ ( _x_ ) = 15 _[x]_ [10] _[x]_ [3] [+] [3] _[x]_ [5] [for] [each] _[t]_ [=] [1] _[, . . ., T]_ [.] [The]
+
+
+8 _[x]_ [3] [+] [3] 8
+
+
+method uses the polynomial update _pt_ ( _x_ ) = 158 _[x]_ _[−]_ [10] 8 _[x]_ [3] [+] [3] 8 _[x]_ [5] [for] [each] _[t]_ [=] [1] _[, . . ., T]_ [.] [The]
+
+composition _p_ = _pT_ _p_ 1 approximates sign( _x_ ), and the approximation error goes to 0 as _T_
+_◦· · · ◦_
+grows. In this paper, we ask the following question: what choice of _pT_ _p_ 1 gives the _best_
+_◦· · · ◦_
+approximation to sign( _x_ )?
+
+
+The method we will present is optimal in the following sense: given lower and upper bounds _ℓ_ and _u_
+on the singular values of _**M**_, an odd degree _d ∈_ N, and the number of iterations _T_ _∈_ N, our method
+computes the composition _p_ _[⋆]_ ( _**M**_ ) that minimizes the worst-case error in the spectral norm. That is,
+_p_ _[⋆]_ = _p_ = _pT_ arg min _◦pT −_ 1 _◦···◦p_ 1 _**M**_ max _∈_ R _[m][×][n]_ _∥_ polar( _**M**_ ) _−_ _p_ ( _**M**_ ) _∥_ 2 _._ (5)
+_pt∈_ P [odd] _d_ _σ_ ( _**M**_ ) _⊂_ [ _ℓ,u_ ]
+
+
+2For non-symmetric matrices, e.g. rectangular matrices, we cannot compute even polynomials of the singular values without first explicitly computing the SVD. We are therefore restricted to odd polynomials.
+
+
+8 _[x]_ _[−]_ [10] 8
+
+
+The method we will present is optimal in the following sense: given lower and upper bounds _ℓ_ and _u_
+on the singular values of _**M**_, an odd degree _d ∈_ N, and the number of iterations _T_ _∈_ N, our method
+computes the composition _p_ _[⋆]_ ( _**M**_ ) that minimizes the worst-case error in the spectral norm. That is,
+_p_ _[⋆]_ = _p_ = _pT_ arg min _◦pT −_ 1 _◦···◦p_ 1 _**M**_ max _∈_ R _[m][×][n]_ _∥_ polar( _**M**_ ) _−_ _p_ ( _**M**_ ) _∥_ 2 _._ (5)
+_pt∈_ P [odd] _d_ _σ_ ( _**M**_ ) _⊂_ [ _ℓ,u_ ]
+
+
+4
+
+
+Figure 2: The evolution of the first three optimal polynomials _p_ 1, _p_ 2, and _p_ 3 and the corresponding
+lower bounds _ℓt_ +1 = _pt_ ( _ℓt_ ) and upper bounds _ut_ +1 = 2 _ℓt_ +1, as described in Theorem 3.1. The
+_−_
+horizontal black line shows _y_ = 1. The polynomial degree is _d_ = 5. We set _ℓ_ 1 = 0 _._ 03 and _u_ 1 = 1.
+
+
+Given that polar( _**M**_ ) _−_ _p_ ( _**M**_ ) = _**U**_ ( _**I**_ _−_ _p_ ( **Σ** )) _**V**_ [T], and by the unitary invariance of the spectral
+norm, we have that (5) is equivalent to [3]
+
+
+_p_ _[⋆]_ = arg min
+_p_ = _pT ◦pT −_ 1 _◦···◦p_ 1
+_pt∈_ P [odd] _d_
+
+
+max (6)
+_x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][ .]_
+
+
+In other words, the problem given in (5) reduces to that of finding a “uniform” approximation to
+the constant function _x_ _�→_ 1 over the interval [ _ℓ, u_ ], as given in (6). Uniform approximation on an
+interval by polynomials or rational functions of a given degree is a central topic in approximation
+theory (Trefethen, 2020). Here, we seek an approximation of a particular form—a _composition_ of
+odd polynomials of fixed degrees. In the next section, we solve the optimization problem of (6) and
+use the solution to create Polar Express.
+
+
+3 THE POLAR EXPRESS
+
+
+3.1 GREEDY IS OPTIMAL
+
+
+The key observation is that the polynomial used in each iteration can be chosen greedily, given the
+choice of polynomials from the previous iterations. For the first iteration, we choose _p_ 1 so as to map
+the interval [ _ℓ, u_ ] as close to 1 as possible. That is, it minimizes max _x∈_ [ _ℓ,u_ ] 1 _p_ 1( _x_ ) . The image
+of _p_ 1 will be a new interval [ _ℓ_ 2 _, u_ 2], where _|_ _−_ _|_
+
+
+_ℓ_ 2 = min _u_ 2 = max (7)
+_x∈_ [ _ℓ,u_ ] _[p]_ [1][(] _[x]_ [)] _x∈_ [ _ℓ,u_ ] _[p]_ [1][(] _[x]_ [)]
+
+
+We now pick _p_ 2 to map the interval [ _ℓ_ 2 _, u_ 2] as close to 1 as possible, obtaining a new interval [ _ℓ_ 3 _, u_ 3]
+that is the image of [ _ℓ, u_ ] through _p_ 2 _p_ 1. We continue this process for as many iterations as desired.
+_◦_
+
+The following theorem guarantees that this process finds the solution to (6), and thereby also (5).
+The scheme is also outlined in Figure 2, which demonstrates the evolution of the lower bounds _ℓt_,
+the upper bounds _ut_, and the polynomials _pt_ across iterations. The proof is in Appendix C.
+
+
+**Theorem 3.1.** Let _d_ be odd and define _ℓ_ 1 = _ℓ_ and _u_ 1 = _u_ . For _t_ = 1 _, . . ., T_ define
+
+
+_pt_ = arg min max _ℓt_ +1 = min _ut_ +1 = max (8)
+_p∈_ P [odd] _d_ _x∈_ [ _ℓt,ut_ ] _x∈_ [ _ℓt,ut_ ] _[p][t]_ [(] _[x]_ [)] _[,]_ _x∈_ [ _ℓt,ut_ ] _[p][t]_ [(] _[x]_ [)]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][,]_
+
+
+The resulting composition _p_ _[⋆]_ := _pT_ _◦_ _pT −_ 1 _◦· · · ◦_ _p_ 1 is optimal and the error is given by:
+
+
+max = min
+_x∈_ [ _ℓ,u_ ] _p_ = _pT ◦pT −_ 1 _◦···◦p_ 1
+
+_[|]_ [1] _[ −]_ _[p][⋆]_ [(] _[x]_ [)] _[|]_ _pt∈_ P [odd] _d_
+
+
+max (9)
+_x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_ [ = 1] _[ −]_ _[ℓ][T]_ [ +1] _[.]_
+
+
+3For completeness, the equivalence between (5) and (6) is proven in Appendix E.
+
+
+5
+
+
+Furthermore the new error, lower and upper bounds can be computed through
+
+
+_ℓt_ +1 = _pt_ ( _ℓt_ ) _,_ _ut_ +1 = 2 _ℓt_ +1 _,_ and max (10)
+_−_ _x∈_ [ _ℓt,ut_ ] _[|]_ [1] _[ −]_ _[p][t]_ [(] _[x]_ [)] _[|]_ [ = 1] _[ −]_ _[ℓ][t]_ [+1] _[.]_
+
+
+**Remark 3.2** (Why a fixed degree?) **.** We note that choice of the degree of each _p_ 1 _, p_ 2 _, . . ., pT_ need
+not be the same for Theorem 3.1 to hold. More generally, one may specify a sequence of degrees
+_d_ 1 _, . . ., dT_ and define each _pt_ as _pt_ = arg min _p∈_ Podd _dt_ max _x∈_ [ _ℓt,ut_ ] _|p_ ( _x_ ) _−_ 1 _|_ for _t_ = 1 _, . . ., T._
+However, Lee et al. (2022, Table 2) supports setting _dt_ = 5, as we do.
+
+
+Fortunately, (10) shows that once _pt_ has been found, we can compute the new lower and upper
+bounds _ℓt_ +1 and _ut_ +1 simply by evaluating _pt_ ( _ℓt_ ). Hence, for any _fixed_ upper and lower bounds
+on the singular values of _**M**_, we can _precompute_ all the polynomials _p_ 1 _, . . ., pT_ and the bounds
+
+[ _ℓ_ 1 _, u_ 1] _, . . .,_ [ _ℓT_ +1 _, uT_ +1]. Then, applying the iterative procedure of (4), the final iterate _**X**_ _T_ will
+satisfy the following error bound:
+
+polar( _**M**_ ) _**X**_ _T_ 2 = polar( _**M**_ ) _p_ _[⋆]_ ( _**M**_ ) 2 1 _ℓT_ +1 _._ (11)
+_∥_ _−_ _∥_ _∥_ _−_ _∥_ _≤_ _−_
+
+
+From the optimality guarantee of Theorem 3.1, we know that our method converges at least as fast
+as the Newton-Schulz iteration of the same degree. Combining this fact with an existing analysis of
+Newton-Schulz, we immediately get the following convergence guarantee showing that our method
+enjoys faster than exponential convergence. The proof can be found in Appendix D.
+
+
+**Theorem 3.3.** Let _**M**_ be a matrix normalized so that _σ_ ( _**M**_ ) [ _ℓ,_ 1]. Let _**X**_ _T_ = _p_ _[⋆]_ ( _**M**_ ), where
+_⊂_
+_p_ _[⋆]_ is the polynomial from Theorem 3.1 with _d_ = 2 _q_ + 1. Then, we have
+
+
+polar( _**M**_ ) _**X**_ _T_ 2 1 _ℓ_ [2] _._ (12)
+_∥_ _−_ _∥_ _≤|_ _−_ _|_ [(] _[q]_ [+1)] _[T]_
+
+Hence, for _d_ = 3 and _d_ = 5 the method converges quadratically and cubically, respectively.
+
+
+In fact, our method is strictly faster than Newton-Schulz, even if _σ_ min( _**M**_ ) _<_ _ℓ_ . When _σ_ min = _ℓ_,
+Polar Express is about twice as fast as Newton-Schulz (cf. Chen & Chow (2014, Section 3.1)).
+Recent work has analyzed the stability and convergence of Muon when the polar factor is computed
+inexactly (Shulgin et al., 2025; Refael et al., 2025). Combining these analyses with Theorem 3.3
+immediately yields a convergence guarantee for Muon as implemented with Polar Express.
+
+
+3.2 FINDING THE OPTIMAL POLYNOMIAL FOR EACH ITERATION
+
+
+Theorem 3.1 shows that we can solve (6) by greedily choosing the optimal approximation _pt_ P [odd] _d_
+_∈_
+for each interval [ _ℓt, ut_ ] for _t_ = 1 _, . . ., T_ . In this section, we show how to find each _pt_ . Since we
+are now focused on just one iteration, we drop the subscripts. Given _ℓ_ and _u_, we wish to solve the
+following optimization problem:
+
+
+arg min max (13)
+_p∈_ P [odd] _d_ _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+That is, we seek a minimax or uniform approximation of the function _x_ _�→_ 1 on [ _ℓ, u_ ] from the
+set of odd polynomials. (Equivalently, we seek a minimax optimal approximation to sign( _x_ ) on
+
+[ _−u, −ℓ_ ] _∪_ [ _ℓ, u_ ].) Problems of this form are well-studied in approximation theory and numerical
+analysis. The key mathematical insight underlying their solution is the Equioscillation Theorem,
+which we state formally for our setting in Lemma C.1. This theorem is the basis of the Remez
+algorithm (Pach´on & Trefethen, 2009; Parks & McClellan, 1972), a general-purpose method that
+finds a (nearly) optimal polynomial approximation of a given degree to _any_ function on any interval.
+With a very minor modification to handle the constraint that _p_ be odd, Remez can solve (13).
+
+
+However, the Remez algorithm is complicated and notoriously difficult to implement correctly. [4]
+Fortunately, we do not need the algorithm in its full generality; we seek only low-degree polynomial
+approximations, and the function we wish to approximate is just _f_ ( _x_ ) = 1. We use the Equioscillation Theorem to derive (17), an explicit, closed-form solution to (13) for the degree _d_ = 3 case. Up
+
+
+[4For implementations of the general Remez algorithm, we recommend Chebfun or lolremez.](https://www.chebfun.org/examples/approx/BestApprox.html)
+
+
+6
+
+
+to rescaling, this turns out to be the same polynomial derived by different means in Chen & Chow
+(2014). For _d_ = 5, we present Algorithm 2, a simpler way of solving (13) that is mathematically
+equivalent to Remez in our setting. This algorithm is implemented in its entirety in Implementation 2. For more details, we refer the reader to Appendix F.
+
+
+3.3 UPPER AND LOWER BOUNDS ON THE SINGULAR VALUES
+
+
+To instantiate our method, we need upper and lower bounds _u_ and _ℓ_ on the singular values of the
+input matrix _**M**_ . A trivial upper bound is given by _**M**_ F. This can be quite loose in the worst case.
+_∥_ _∥_
+In practice, it is off only by a small constant factor because the gradient matrices of the weights
+of dense linear layers in neural networks tend to have small effective rank (Yang et al., 2024). We
+therefore rescale _**M**_ by _∥_ _**M**_ _∥_ F and set _u_ = 1. It is difficult to efficiently find a good lower bound on
+_σ_ min, so we are forced to guess. Fortunately, the consequences of a bad guess are not severe. The
+method converges for any _ℓ_ _∈_ (0 _, u_ ], and even an order of magnitude error only delays convergence
+by a few iterations. For matrices stored in floating point arithmetic, the singular values are usually
+larger than machine precision _ϵ_ mach (Boutsikas et al., 2024). We work in bfloat16, which has
+_ϵ_ mach = 2 _[−]_ [8] 3 _._ 91 10 _[−]_ [3], so we set _ℓ_ = 10 _[−]_ [3] . Since we use these bounds for all input matrices,
+_≈_ _·_
+we can pre-compute the optimal polynomials once and apply them to as many inputs as we want.
+
+
+3.4 FINITE PRECISION CONSIDERATIONS
+
+
+When working in finite-precision arithmetic, especially the half-precision bfloat16 format used
+in deep learning, we must take some care to avoid blowups and other problems due to numerical
+error. To this end, we make a few small but crucial changes to the method in the offline stage
+that stabilize it with a negligible effect on accuracy. One issue arises when numerical round-off
+creates singular values that are slightly larger than our current upper bound _ut_ . To fix it, we replace
+each polynomial _pt_ by _x_ _pt_ ( _x/_ 1 _._ 01), effectively increasing _ut_ . Another issue, identified by
+_�→_
+Nakatsukasa & Higham (2013), is due to the non-monotonicity of _pt_ . We address it by using slightly
+suboptimal (but less oscillatory) polynomials in the early iterations, as suggested by Chen & Chow
+(2014). For a detailed discussion on the finite precision considerations, we refer to Appendix G.
+
+
+3.5 THE ALGORITHM
+
+
+**Algorithm 1** The General Polar Express
+**input:** Matrix _**M**_, iteration count _T_, degree _d_, approximate lower bound _ℓ_ .
+**output:** An approximation _**X**_ _T_ to polar( _**M**_ ).
+
+
+We give the pseudocode of our proposed
+method for any degree in Algorithm 1.
+We give the specific Python code of the
+Polar Express with degree _d_ = 5
+and _ℓ_ = 10 _[−]_ [3] used in our GPT experiments in Implementations 1 and 2 in Appendix A. Both incorporate the finite precision considerations discussed in Section 3.4. Our algorithm precomputes the
+polynomials _p_ 1 _, . . ., pT_ of Theorem 3.1
+in full precision using the results of Section 3.2 (or the Remez algorithm for _d_ _>_
+5). This stage is offline because the coefficients of the polynomials are only computed and stored once. For every subsequent call to the algorithm, these coefficients are reused and the offline stage
+is skipped. For instance, in Implementation 1 these polynomials have been
+precomputed and stored in the variable
+coeffs ~~l~~ ist.
+
+
+1
+
+
+8
+9
+
+
+The online stage can be performed in lower precision (bfloat16) for greater speed on a GPU.
+Horner’s rule can be used to carry out each iteration. For instance, if _pt_ = _ax_ + _bx_ [3] + _cx_ [5], then
+
+
+7
+
+
+Synthetic Matrix
+
+
+GPT-2 Gradient
+
+
+|00 σmin/σmax = 10−6 1.00 Layer 4 mlp.c proj|Col2|Col3|Layer 4 mlp.c proj|
+|---|---|---|---|
+|0<br>5<br>10<br>15<br>20<br>25<br>Iteration<br>3<br>2<br>1<br><br>2<br>4<br>6<br>8<br>10<br>Iteration<br>0_._00<br>0_._25<br>0_._50<br>0_._75<br>1_._00<br>Newton-Schulz (_d_ = 5)<br>Jordan<br>You<br>PolarExp, _ℓ_= 10_−_8<br>PolarExp, _ℓ_= 10_−_6<br>PolarExp, _ℓ_= 10_−_4|0<br>5<br>10<br>15<br>20<br>25<br>Iteration<br>3<br>2<br>1<br><br>2<br>4<br>6<br>8<br>10<br>Iteration<br>0_._00<br>0_._25<br>0_._50<br>0_._75<br>1_._00<br>Newton-Schulz (_d_ = 5)<br>Jordan<br>You<br>PolarExp, _ℓ_= 10_−_8<br>PolarExp, _ℓ_= 10_−_6<br>PolarExp, _ℓ_= 10_−_4|0<br>5<br>10<br>15<br>20<br>25<br>Iteration<br>3<br>2<br>1<br><br>2<br>4<br>6<br>8<br>10<br>Iteration<br>0_._00<br>0_._25<br>0_._50<br>0_._75<br>1_._00<br>Newton-Schulz (_d_ = 5)<br>Jordan<br>You<br>PolarExp, _ℓ_= 10_−_8<br>PolarExp, _ℓ_= 10_−_6<br>PolarExp, _ℓ_= 10_−_4||
+|Newton-Schulz<br>Jordan|(_d_ =|5)<br>You<br>PolarExp, _ℓ_= 10_−_8<br>PolarExp, _ℓ_= 10_−_6<br>PolarExp, _ℓ_= 10_−_4|5)<br>You<br>PolarExp, _ℓ_= 10_−_8<br>PolarExp, _ℓ_= 10_−_6<br>PolarExp, _ℓ_= 10_−_4|
+|||||
+
+
+Figure 3: Convergence of degree-5 polynomial methods. Polar Express outperforms other methods
+at every iteration when tuned properly. Left panel: synthetic matrix with _σ_ max = 1, _σ_ min = 10 _[−]_ [6] .
+Right panel: gradient from randomly-initialized GPT-2 model on a batch of language modeling data.
+Shaded region shows 90% interval over 512 batches of data.
+
+
+_**X**_ _t_ = _**X**_ _t−_ 1 ( _a_ _**I**_ + _**Y**_ _t−_ 1 ( _b_ _**I**_ + _c_ _**Y**_ _t−_ 1)) where _**Y**_ _t−_ 1 = _**X**_ _t_ _[⊤]_ _−_ 1 _**[X]**_ _[t][−]_ [1][.] [A] [simple] [implementation] [of]
+the offline stage of Algorithm 1 is given in Implementation 2. For deep learning applications, we
+recommend using _d_ = 5 and _T_ = 5 or 6 with _ℓ_ 1 = 10 _[−]_ [3] . With these parameters, the offline
+stage as implemented in Implementation 2 gives the polynomials encoded in coeffs ~~l~~ ist in
+Implementation 1. All told, our proposal for Muon is to apply the composition of these polynomials
+to _**M**_ _/_ ( _**M**_ _F_ + 10 _[−]_ [2] ). [5]
+_∥_ _∥_
+
+
+4 NUMERICAL EXPERIMENTS
+
+
+4.1 CONVERGENCE OF POLAR EX P R E S S
+
+
+We compare Polar Express against degree-5 Newton-Schulz and the methods of Jordan et al.
+(2024b) and Cesista et al. (2025). We first generate a random matrix whose singular values are
+evenly spaced on a logarithmic scale between 10 _[−]_ [6] and 1, with singular vectors chosen randomly.
+The left panel of Figure 3 shows the results. Since all the methods in this plot use degree-5 polynomials, their computational and runtime costs are all proportional to the number of iterations. As
+expected, Newton-Schulz converges but makes almost no progress for the first 17 iterations. Jordan’s method rapidly achieves an error of _≈_ 0 _._ 3 after just 11 iterations, but ceases to converge further. You’s method, which is only defined for six iterations, converges at a similar rate as Jordan’s
+method. When Polar Express is instantiated with _ℓ_ = _σ_ min, it dominates the other methods
+at every iteration, achieving excellent accuracy after just 11 iterations and converging about twice
+as fast as Newton-Schulz to any given error. Even when _ℓ_ is wrong by two orders of magnitude in
+either direction, the method remains competitive, though it does not outperform Jordan’s method
+until iteration 13 or 14. We also test convergence on a non-synthetic matrix: the gradient of a weight
+matrix from the fourth transformer block of a GPT-2 model (Figure 3, right). Again, the best-tuned
+version of Polar Express outperforms the other methods, but setting _ℓ_ to be many orders of
+magnitude too small can delay convergence. Note that Figure 3 measures error in the spectral norm.
+For many applications we may be satisfied with a looser measure of error; see Appendix H.1.
+
+
+5In Appendices I and J, we describe two further algorithmic ideas. They are not used in our Muon experiments but they may be beneficial in other settings, and we believe they merit further study.
+
+
+8
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+|muon-Jordan<br>4.4 muon-You<br>adamw<br>muon-PolarExp<br>Loss<br>4.2<br>Validation<br>4.0<br>Final<br>3.8<br>3.6|Col2|Col3|Col4|
+|---|---|---|---|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|||muon-Jordan<br>|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|||~~muon-You~~<br>adamw<br>muon-PolarExp|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8
+Epoch
+
+
+Figure 4: Training a GPT-2-Small (124M) model on 1 Billion tokens of the FineWeb data set (ArocaOuellette et al., 2023). muon-<method> denotes Muon with 5 iterations of <method> to compute
+polar( _**M**_ ). No weight decay is used. Left: final validation loss vs. learning rate. The best final validation losses for each method were adamw(lr =0 _._ 0005): 4 _._ 197, muon-Jordan(lr =0 _._ 01): 3 _._ 639,
+muon-You(lr =0 _._ 01): 3 _._ 629 and muon-PolarExp(lr =0 _._ 005): 3 _._ 588. Right: Validation loss vs.
+training iteration.
+
+
+4.2 TRAINING GPT-2
+
+
+We compare the performance of using Polar Express (Implementation 1) inside Muon against
+Jordan’s (Jordan et al., 2024b) and You’s (Cesista et al., 2025) methods. We train two architectures:
+GPT-2-Small ( _n_ embd = 768 _, n_ layer = 12 _, n_ head = 12) and GPT-2-Large ( _n_ embd = 1280 _, n_ layer =
+36 _, n_ head = 20), both with a vocabulary size of 50 _,_ 257 and a context length of 1024. We train
+on 1B tokens of the FineWeb dataset (Aroca-Ouellette et al., 2023) for one epoch with batch size
+32. All runs use mixed precision (bfloat16) on 4 H100 GPUs with the learning rate schedule
+proposed in Jordan et al. (2024a)—a constant phase for the first 40% of training steps followed by
+linear decay. All methods for the matrix sign computations are performed in bfloat16 precision
+and use five iterations. Following nano-gpt (Jordan et al., 2024a), we assign Muon to all parameters with at least two dimensions (e.g., excluding RMS norm parameters), except for embeddings,
+unembeddings, and positional encodings. These excluded parameters are optimized with AdamW. [6]
+
+
+Figures 1 and 4 show the resulting in terms of validation loss for the GPT-Large and GPT-Small
+models, respectively. In both cases, muon-PolarExp achieves a better validation loss than
+muon-Jordan or muon-You. The advantage is remarkably consistent across all learning rates
+and epochs. While not shown in Figures 1 and 4, muon-PolarExp also achieves a better training
+loss than the baselines, and the improvements in training loss are nearly identical to the improvements in validation loss. Furthermore, since all three of these matrix sign methods are equally
+expensive (they all apply a degree 5 polynomial at each iteration), improved validation loss in terms
+of training steps also implies improved loss in terms of wall clock time. For figures displaying the
+improvements in training loss and wall-clock time, see Appendix H.2, Figure 11.
+
+
+4.3 ABLATIONS
+
+
+**Accuracy** **of** **polar** **approximation** We now explore how the accuracy of approximating
+polar( _**M**_ ) affects the optimization quality of Muon. Our main experiments with GPT-2 use 5 iterations. We trained GPT-2 Small with Muon using between 2 and 30 iterations of Polar Express
+instead. For comparison, we also implemented Muon with the _exact_ polar factor, computed using
+torch.linalg.svd. Figure 5 shows the results. The left plot shows that when using only 2 or 3
+iterations of Polar Express, the final validation loss is worse than when using 5 or 6 iterations.
+However, increasing the accuracy of the polar approximation further—even computing it exactly
+
+
+6Code for our LLM training experiments is available at [https://github.com/modichirag/](https://github.com/modichirag/GPT-opt/tree/polar)
+[GPT-opt/tree/polar, in the polar branch.](https://github.com/modichirag/GPT-opt/tree/polar)
+
+
+9
+
+
+2 3 4 5 6 7 10 20 30 SVD
+Iterations of Polar Express
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+3 _._ 75
+
+
+3 _._ 70
+
+
+3 _._ 65
+
+
+3 _._ 60
+
+
+2 3 4 5 6 7 10 20 30 SVD
+Iterations of Polar Express
+
+
+Figure 5: Ablating the number of iterations of Polar Express used to implement Muon, and
+comparing to computing polar( _**M**_ ) exactly via an SVD. Left: using _>_ 6 iterations or the SVD does
+not improve final validation loss. Right: Runtime of Muon is not sensitive to the number of iterations
+of Polar Express, but the SVD makes it significantly slower. All runs use GPT-2-Small with 1
+Billion tokens of FineWeb data, learning rate 0 _._ 05, and weight decay 0 _._ 1.
+
+
+3 _._ 5
+
+
+3 _._ 4
+
+
+3 _._ 3
+
+
+3 _._ 2
+
+
+3 _._ 1
+
+
+3 _._ 0
+
+
+2 _._ 9
+
+
+3 _._ 06
+
+
+3 _._ 04
+
+
+3 _._ 02
+
+
+3 _._ 00
+
+
+2 _._ 98
+
+
+2 _._ 96
+
+
+2 _._ 94
+
+
+2 _._ 92
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+|||~~muon-Jordan~~<br>muon-PolarExp<br>|
+||||
+|||~~muon-You~~|
+||||
+||||
+||||
+||||
+||||
+||||
+||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0
+Epoch
+
+
+Figure 6: Training GPT-2-Large on 10 billion tokens of FineWeb with weight decay 0.1. Best final
+validation losses were muon-Jordan (lr = 0 _._ 002): 2 _._ 921, muon-You (lr = 0 _._ 002): 2 _._ 919 and
+muon-PolarExp (lr = 0 _._ 002): 2 _._ 913.
+
+
+with the SVD—does not improve the optimization quality. The right plot shows that changing the
+number of iterations does not meaningfully change the runtime of Muon; in our setting, the runtime
+of computing polar( _**M**_ ) is dominated by the forward and backward passes. However, the SVD is so
+costly that using it _doubles_ the runtime of each training step. These results validate the standard way
+of implementing Muon: using 5 or 6 iterations of an iterative approximation like Polar Express
+rather than computing polar( _**M**_ ) exactly. For further experiments supporting this conclusion, see
+Appendix H.1, Figure 9.
+
+
+**Weight decay** We also experimented with adding weight decay of 0 _._ 1 to the GPT-2 training runs,
+keeping all else the same. The results are presented in Appendix H.2, Figure 12. They are quite
+similar to Figures 1 and 4. We again find that muon-PolarExp outperforms the other methods.
+
+
+**Number of Training Tokens** Our main experiments with GPT-2 use 1 billion tokens of training
+data from FineWeb (Aroca-Ouellette et al., 2023). We now select a subset of our training runs
+and extend them to 10 billion tokens. 10 billion tokens roughly matches the Chinchilla scaling
+rule for GPT-2-Large (774M params) and exceeds it for GPT-2-Small, as per Table 3 in Hoffmann
+et al. (2022). Figure 6 shows the results for GPT-2-Large with weight decay. (For GPT-2-Small,
+see Appendix H.2, Figure 13b). Polar Express still outperforms the baselines by a small but
+consistent margin.
+
+
+10
+
+
+**Acknowledgments** This work was partially supported by NSF awards 2045590 and 2234660.
+
+
+**Reproducibility** **statement** A complete Pytorch implementation of our method is given in Appendix A. Details of our experiments, including hyperparameters, are given in Sections 4.1 and 4.2.
+Source code to reproduce our experiments is given in the supplementary materials and is available
+at [https://github.com/modichirag/GPT-opt/tree/polar,](https://github.com/modichirag/GPT-opt/tree/polar) in the polar branch.
+Proofs of all theoretical claims can be found in the appendices.
+
+
+REFERENCES
+
+
+N. I. Achieser. _Theory of approximation_ . Dover Publications, Inc., New York, 1992. ISBN 0-48667129-1. Translated from the Russian and with a preface by Charles J. Hyman, Reprint of the
+1956 English translation.
+
+
+Samuel Aroca-Ouellette, Philippe Beaudoin, Guillaume Lajoie, Liam Paull, Joelle Pineau, Pascal
+Vincent, and Anirudh Goyal. Fineweb: Learning language models with high quality web data. In
+_NeurIPS_ _Datasets_ _and_ _Benchmarks_ _Track_, 2023. URL [https://arxiv.org/abs/2306.](https://arxiv.org/abs/2306.03061)
+[03061.](https://arxiv.org/abs/2306.03061)
+
+
+Michele Benzi and Ru Huang. Some matrix properties preserved by generalized matrix functions.
+_Spec. Matrices_, 7:27–37, 2019. ISSN 2300-7451. doi: 10.1515/spma-2019-0003. [URL https:](https://doi.org/10.1515/spma-2019-0003)
+[//doi.org/10.1515/spma-2019-0003.](https://doi.org/10.1515/spma-2019-0003)
+
+
+Jeremy Bernstein and Laker Newhouse. Modular duality in deep learning. _arXiv_ _preprint_
+_arXiv:2410.21265_, 2024a. [URL https://arxiv.org/abs/2410.21265.](https://arxiv.org/abs/2410.21265)
+
+
+Jeremy Bernstein and Laker Newhouse. Old optimizer, new norm: An anthology. _arXiv_ _preprint_
+_arXiv:2409.20325_, 2024b. [URL https://arxiv.org/abs/2409.20325.](https://arxiv.org/abs/2409.20325)
+
+
+˙A. Bj¨orck and C. Bowie. An iterative algorithm for computing the best estimate of an orthogonal
+matrix. _SIAM J. Numer. Anal._, 8:358–364, 1971. ISSN 0036-1429. doi: 10.1137/0708036. URL
+[https://doi.org/10.1137/0708036.](https://doi.org/10.1137/0708036)
+
+
+Christos Boutsikas, Petros Drineas, and Ilse C. F. Ipsen. Small singular values can increase in lower
+precision. _SIAM_ _J._ _Matrix_ _Anal._ _Appl._, 45(3):1518–1540, 2024. ISSN 0895-4798,1095-7162.
+doi: 10.1137/23M1557209. [URL https://doi.org/10.1137/23M1557209.](https://doi.org/10.1137/23M1557209)
+
+
+David Carlson, Volkan Cevher, and Lawrence Carin. Stochastic Spectral Descent for Restricted
+Boltzmann Machines. In Guy Lebanon and S. V. N. Vishwanathan (eds.), _Proceedings_ _of_ _the_
+_Eighteenth_ _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_ _Statistics_, volume 38 of _Pro-_
+_ceedings of Machine Learning Research_, pp. 111–119, San Diego, California, USA, 09–12 May
+2015a. PMLR. [URL https://proceedings.mlr.press/v38/carlson15.html.](https://proceedings.mlr.press/v38/carlson15.html)
+
+
+David E Carlson, Edo Collins, Ya-Ping Hsieh, Lawrence Carin, and Volkan Cevher. Preconditioned spectral descent for deep learning. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama,
+and R. Garnett (eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 28. Curran
+Associates, Inc., 2015b. URL [https://proceedings.neurips.cc/paper_files/](https://proceedings.neurips.cc/paper_files/paper/2015/file/f50a6c02a3fc5a3a5d4d9391f05f3efc-Paper.pdf)
+[paper/2015/file/f50a6c02a3fc5a3a5d4d9391f05f3efc-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2015/file/f50a6c02a3fc5a3a5d4d9391f05f3efc-Paper.pdf)
+
+
+Franz Louis Cesista, Jiacheng You, and Keller Jordan. Squeezing 1-2% efficiency gains out of muon
+by optimizing the newton-schulz coefficients, 2025. [URL http://leloykun.github.io/](http://leloykun.github.io/ponder/muon-opt-coeffs/)
+[ponder/muon-opt-coeffs/.](http://leloykun.github.io/ponder/muon-opt-coeffs/)
+
+
+PL Chebyshev. Questions on smallest quantities connected with the approximate representation of
+functions (1859). _Collected works_, 2:151–235, 1947.
+
+
+Jie Chen and Edmond Chow. A stable scaling of newton-schulz for improving the sign function
+computation of a hermitian matrix. _Preprint_ _ANL/MCS-P5059-0114_, 2014. URL [https://](https://www.mcs.anl.gov/papers/P5059-0114.pdf)
+[www.mcs.anl.gov/papers/P5059-0114.pdf.](https://www.mcs.anl.gov/papers/P5059-0114.pdf)
+
+
+E. W. Cheney. _Introduction to approximation theory_ . McGraw-Hill Book Co., New York-TorontoLondon, 1966.
+
+
+11
+
+
+J. Douglas Carroll and Phipps Arabie. Chapter 3 - multidimensional scaling. In Michael H.
+Birnbaum (ed.), _Measurement,_ _Judgment_ _and_ _Decision_ _Making_, Handbook of Perception and
+Cognition (Second Edition), pp. 179–250. Academic Press, San Diego, 1998. ISBN 978-0-12099975-0. doi: https://doi.org/10.1016/B978-012099975-0.50005-1. URL [https://www.](https://www.sciencedirect.com/science/article/pii/B9780120999750500051)
+[sciencedirect.com/science/article/pii/B9780120999750500051.](https://www.sciencedirect.com/science/article/pii/B9780120999750500051)
+
+
+John Duchi, Elad Hazan, and Yoram Singer. Adaptive subgradient methods for online learning and
+stochastic optimization. _J. Mach. Learn. Res._, 12:2121–2159, 2011. ISSN 1532-4435,1533-7928.
+
+
+Alexandre Eremenko and Peter Yuditskii. Uniform approximation of sgn _x_ by polynomials and
+entire functions. _J. Anal. Math._, 101:313–324, 2007. ISSN 0021-7670,1565-8538. doi: 10.1007/
+s11854-007-0011-3. [URL https://doi.org/10.1007/s11854-007-0011-3.](https://doi.org/10.1007/s11854-007-0011-3)
+
+
+Gene H. Golub and Charles F. Van Loan. _Matrix_ _computations_ . Johns Hopkins Studies in the
+Mathematical Sciences. Johns Hopkins University Press, Baltimore, MD, fourth edition, 2013.
+ISBN 978-1-4214-0794-4; 1-4214-0794-9; 978-1-4214-0859-0.
+
+
+J. C. Gower and G. B. Dijksterhuis. _Procrustes_ _problems_, volume 30 of _Oxford_ _Statistical_ _Sci-_
+_ence_ _Series_ . Oxford University Press, Oxford, 2004. ISBN 0-19-851058-6. doi: 10.1093/
+[acprof:oso/9780198510581.001.0001. URL https://doi.org/10.1093/acprof:oso/](https://doi.org/10.1093/acprof:oso/9780198510581.001.0001)
+[9780198510581.001.0001.](https://doi.org/10.1093/acprof:oso/9780198510581.001.0001)
+
+
+Ekaterina Grishina, Matvey Smirnov, and Maxim Rakhuba. Accelerating newton-schulz iteration
+for orthogonalization via chebyshev-type polynomials, 2025. URL [https://arxiv.org/](https://arxiv.org/abs/2506.10935)
+[abs/2506.10935.](https://arxiv.org/abs/2506.10935)
+
+
+Vineet Gupta, Tomer Koren, and Yoram Singer. Shampoo: Preconditioned stochastic tensor optimization. In Jennifer Dy and Andreas Krause (eds.), _Proceedings_ _of_ _the_ _35th_ _International_
+_Conference on Machine Learning_, volume 80 of _Proceedings of Machine Learning Research_, pp.
+1842–1850. PMLR, 10–15 Jul 2018. URL [https://proceedings.mlr.press/v80/](https://proceedings.mlr.press/v80/gupta18a.html)
+[gupta18a.html.](https://proceedings.mlr.press/v80/gupta18a.html)
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings_ _of_ _the_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_
+_(CVPR)_, pp. 770–778, 2016.
+
+
+Nicholas J. Higham. Computing the polar decomposition—with applications. _SIAM J. Sci. Statist._
+_Comput._, 7(4):1160–1174, 1986. ISSN 0196-5204. doi: 10.1137/0907079. URL [https://](https://doi.org/10.1137/0907079)
+[doi.org/10.1137/0907079.](https://doi.org/10.1137/0907079)
+
+
+Nicholas J. Higham. _Functions_ _of_ _matrices_ . SIAM, Philadelphia, PA, 2008. ISBN 978-089871-646-7. doi: 10.1137/1.9780898717778. URL [https://doi.org/10.1137/1.](https://doi.org/10.1137/1.9780898717778)
+[9780898717778.](https://doi.org/10.1137/1.9780898717778)
+
+
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy,
+Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent Sifre.
+Training compute-optimal large language models, 2022. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2203.15556)
+[2203.15556.](https://arxiv.org/abs/2203.15556)
+
+
+Elias Jarlebring and Gustaf Lorentzon. The polynomial set associated with a fixed number of matrixmatrix multiplications. _arXiv preprint arXiv:2504.01500_, 2025. [URL https://arxiv.org/](https://arxiv.org/abs/2504.01500)
+[abs/2504.01500.](https://arxiv.org/abs/2504.01500)
+
+
+Keller Jordan, Jeremy Bernstein, Brendan Rappazzo, @fernbear.bsky.social, Boza Vlado, You Jiacheng, Franz Cesista, Braden Koszarsky, and @Grad62304977. modded-nanogpt: Speedrunning the nanogpt baseline, 2024a. URL [https://github.com/KellerJordan/](https://github.com/KellerJordan/modded-nanogpt)
+[modded-nanogpt.](https://github.com/KellerJordan/modded-nanogpt)
+
+
+Keller Jordan, Yuchen Jin, Vlado Boza, Jiacheng You, Franz Cesista, Laker Newhouse, and Jeremy
+Bernstein. Muon: An optimizer for hidden layers in neural networks, 2024b. URL [https:](https://kellerjordan.github.io/posts/muon/)
+[//kellerjordan.github.io/posts/muon/.](https://kellerjordan.github.io/posts/muon/)
+
+
+12
+
+
+Tetsuya Kaneko, Simone Fiori, and Toshihisa Tanaka. Empirical arithmetic averaging over the compact Stiefel manifold. _IEEE Trans. Signal Process._, 61(4):883–894, 2013. ISSN 1053-587X,19410476. doi: 10.1109/TSP.2012.2226167. URL [https://doi.org/10.1109/TSP.2012.](https://doi.org/10.1109/TSP.2012.2226167)
+[2226167.](https://doi.org/10.1109/TSP.2012.2226167)
+
+
+Charles Kenney and Alan J. Laub. Rational iterative methods for the matrix sign function. _SIAM_
+_J._ _Matrix_ _Anal._ _Appl._, 12(2):273–291, 1991. ISSN 0895-4798. doi: 10.1137/0612020. URL
+[https://doi.org/10.1137/0612020.](https://doi.org/10.1137/0612020)
+
+
+Kimi Team, Yifan Bai, Yiping Bao, Guanduo Chen, Jiahao Chen, Ningxin Chen, Ruijue Chen, Yanru
+Chen, Yuankun Chen, Yutian Chen, Zhuofu Chen, et al. Kimi k2: Open agentic intelligence, 2025.
+[URL https://arxiv.org/abs/2507.20534.](https://arxiv.org/abs/2507.20534)
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In _International_
+_Conference_ _on_ _Learning_ _Representations_, 2015. URL [http://arxiv.org/abs/1412.](http://arxiv.org/abs/1412.6980)
+[6980.](http://arxiv.org/abs/1412.6980)
+
+
+Zdislav Kov´aˇr´ık. Some iterative methods for improving orthonormality. _SIAM J. Numer. Anal._, 7:
+386–389, 1970. ISSN 0036-1429. doi: 10.1137/0707031. URL [https://doi.org/10.](https://doi.org/10.1137/0707031)
+[1137/0707031.](https://doi.org/10.1137/0707031)
+
+
+Alex Krizhevsky. Learning multiple layers of features from tiny images. Technical Report
+TR-2009, University of Toronto, 2009. URL [https://www.cs.toronto.edu/˜kriz/](https://www.cs.toronto.edu/~kriz/learning-features-2009-TR.pdf)
+[learning-features-2009-TR.pdf.](https://www.cs.toronto.edu/~kriz/learning-features-2009-TR.pdf)
+
+
+Eunsang Lee, Joon-Woo Lee, Jong-Seon No, and Young-Sik Kim. Minimax approximation of
+sign function by composite polynomial for homomorphic comparison. _IEEE_ _Transactions_ _on_
+_Dependable and Secure Computing_, 19(6):3711–3727, 2022. doi: 10.1109/TDSC.2021.3105111.
+
+
+R. B. Leipnik. Rapidly convergent recursive solution of quadratic operator equations. _Numer. Math._,
+[17:1–16, 1971. ISSN 0029-599X,0945-3245. doi: 10.1007/BF01395861. URL https://doi.](https://doi.org/10.1007/BF01395861)
+[org/10.1007/BF01395861.](https://doi.org/10.1007/BF01395861)
+
+
+Jingyuan Liu, Jianlin Su, Xingcheng Yao, Zhejun Jiang, Guokun Lai, Yulun Du, Yidao Qin,
+Weixin Xu, Enzhe Lu, Junjie Yan, et al. Muon is scalable for LLM training. _arXiv_ _preprint_
+_arXiv:2502.16982_, 2025. [URL https://arxiv.org/abs/2502.16982.](https://arxiv.org/abs/2502.16982)
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In _International Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2019. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=Bkg6RiCqY7)
+[Bkg6RiCqY7.](https://openreview.net/forum?id=Bkg6RiCqY7)
+
+
+Modula. Newton-schulz algorithm - jiacheng’s six-step method. [https://docs.modula.](https://docs.modula.systems/algorithms/newton-schulz/#jiacheng-s-six-step)
+[systems/algorithms/newton-schulz/#jiacheng-s-six-step,](https://docs.modula.systems/algorithms/newton-schulz/#jiacheng-s-six-step) 2024. Accessed: 2025-05-19.
+
+
+Yuji Nakatsukasa and Roland W. Freund. Computing fundamental matrix decompositions accurately
+via the matrix sign function in two iterations: the power of Zolotarev’s functions. _SIAM_ _Rev._,
+58(3):461–493, 2016. ISSN 0036-1445,1095-7200. doi: 10.1137/140990334. URL [https:](https://doi.org/10.1137/140990334)
+[//doi.org/10.1137/140990334.](https://doi.org/10.1137/140990334)
+
+
+Yuji Nakatsukasa and Nicholas J. Higham. Backward stability of iterations for computing the polar
+decomposition. _SIAM J. Matrix Anal. Appl._, 33(2):460–479, 2012. ISSN 0895-4798,1095-7162.
+doi: 10.1137/110857544. [URL https://doi.org/10.1137/110857544.](https://doi.org/10.1137/110857544)
+
+
+Yuji Nakatsukasa and Nicholas J. Higham. Stable and efficient spectral divide and conquer algorithms for the symmetric eigenvalue decomposition and the SVD. _SIAM_ _J._ _Sci._ _Comput._,
+35(3):A1325–A1349, 2013. ISSN 1064-8275,1095-7197. doi: 10.1137/120876605. URL
+[https://doi.org/10.1137/120876605.](https://doi.org/10.1137/120876605)
+
+
+Yuji Nakatsukasa, Zhaojun Bai, and Franc¸ois Gygi. Optimizing Halley’s iteration for computing
+the matrix polar decomposition. _SIAM_ _J._ _Matrix_ _Anal._ _Appl._, 31(5):2700–2720, 2010. ISSN
+0895-4798,1095-7162. doi: 10.1137/090774999. URL [https://doi.org/10.1137/](https://doi.org/10.1137/090774999)
+[090774999.](https://doi.org/10.1137/090774999)
+
+
+13
+
+
+Herbert Neuberger. Exactly massless quarks on the lattice. _Phys. Lett. B_, 417(1-2):141–144, 1998.
+ISSN 0370-2693,1873-2445. doi: 10.1016/S0370-2693(97)01368-3. URL [https://doi.](https://doi.org/10.1016/S0370-2693(97)01368-3)
+[org/10.1016/S0370-2693(97)01368-3.](https://doi.org/10.1016/S0370-2693(97)01368-3)
+
+
+Ricardo Pach´on and Lloyd N. Trefethen. Barycentric-Remez algorithms for best polynomial approximation in the chebfun system. _BIT_, 49(4):721–741, 2009. ISSN 0006-3835,1572-9125. doi: 10.
+1007/s10543-009-0240-1. [URL https://doi.org/10.1007/s10543-009-0240-1.](https://doi.org/10.1007/s10543-009-0240-1)
+
+
+T Parks and James McClellan. Chebyshev approximation for nonrecursive digital filters with linear
+phase. _IEEE_ _Transactions_ _on_ _circuit_ _theory_, 19(2):189–194, 1972. doi: 10.1109/TCT.1972.
+1083419.
+
+
+Michael S. Paterson and Larry J. Stockmeyer. On the number of nonscalar multiplications necessary
+to evaluate polynomials. _SIAM_ _J._ _Comput._, 2:60–66, 1973. ISSN 0097-5397. doi: 10.1137/
+0202007. [URL https://doi.org/10.1137/0202007.](https://doi.org/10.1137/0202007)
+
+
+Thomas Pethick, Wanyun Xie, Kimon Antonakopoulos, Zhenyu Zhu, Antonio Silveti-Falls, and
+[Volkan Cevher. Training deep learning models with norm-constrained lmos, 2025. URL https:](https://arxiv.org/abs/2502.07529)
+[//arxiv.org/abs/2502.07529.](https://arxiv.org/abs/2502.07529)
+
+
+Yehonathan Refael, Guy Smorodinsky, Tom Tirer, and Ofir Lindenbaum. Sumo: Subspaceaware moment-orthogonalization for accelerating memory-efficient llm training. _arXiv_ _preprint_
+_arXiv:2505.24749_, 2025.
+
+
+Artem Riabinin, Egor Shulgin, Kaja Gruntkowska, and Peter Richt´arik. Gluon: Making muon &
+scion great again! (bridging theory and practice of lmo-based optimizers for llms), 2025. URL
+[https://arxiv.org/abs/2505.13416.](https://arxiv.org/abs/2505.13416)
+
+
+Ishaan Shah, Anthony M Polloreno, Karl Stratos, Philip Monk, Adarsh Chaluvaraju, Andrew Hojel,
+Andrew Ma, Anil Thomas, Ashish Tanwer, Darsh J Shah, et al. Practical efficiency of muon
+for pretraining. _arXiv preprint arXiv:2505.02222_, 2025. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2505.02222)
+[2505.02222.](https://arxiv.org/abs/2505.02222)
+
+
+Hao-Jun Michael Shi, Tsung-Hsien Lee, Shintaro Iwasaki, Jose Gallego-Posada, Zhijing Li,
+Kaushik Rangadurai, Dheevatsa Mudigere, and Michael Rabbat. A distributed data-parallel PyTorch implementation of the distributed Shampoo optimizer for training neural networks at-scale.
+_arXiv preprint arXiv:2309.06497_, 2023. [URL https://arxiv.org/abs/2309.06497.](https://arxiv.org/abs/2309.06497)
+
+
+Egor Shulgin, Sultan AlRashed, Francesco Orabona, and Peter Richt´arik. Beyond the ideal: Analyzing the inexact muon update. _arXiv preprint arXiv:2510.19933_, 2025.
+
+
+Attila Szabo and Neil S Ostlund. _Modern quantum chemistry:_ _introduction to advanced electronic_
+_structure theory_ . Courier Corporation, 1996.
+
+
+Lloyd N. Trefethen. _Approximation theory and approximation practice_ . Society for Industrial and
+Applied Mathematics (SIAM), Philadelphia, PA, extended edition, 2020. ISBN 978-1-61197593-2.
+
+
+Nikhil Vyas, Depen Morwani, Rosie Zhao, Itai Shapira, David Brandfonbrener, Lucas Janson, and
+Sham M. Kakade. SOAP: Improving and stabilizing shampoo using adam for language modeling.
+In _The Thirteenth_ _International Conference on Learning Representations_, 2025. [URL https:](https://openreview.net/forum?id=IDxZhXrpNf)
+[//openreview.net/forum?id=IDxZhXrpNf.](https://openreview.net/forum?id=IDxZhXrpNf)
+
+
+Greg Yang, James B. Simon, and Jeremy Bernstein. A spectral condition for feature learning, 2024.
+[URL https://arxiv.org/abs/2310.17813.](https://arxiv.org/abs/2310.17813)
+
+
+Zhenyue Zhang, Hongyuan Zha, and Wenlong Ying. Fast parallelizable methods for computing
+invariant subspaces of Hermitian matrices. _J. Comput. Math._, 25(5):583–594, 2007. ISSN 02549409,1991-7139. [URL http://www.jstor.org/stable/43693395.](http://www.jstor.org/stable/43693395)
+
+
+14
+
+
+CONTENTS
+
+
+**1** **Introduction** **1**
+
+
+1.1 The Muon Method . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2
+
+
+1.2 Computing the Polar Factor . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+
+
+1.3 Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+
+
+**2** **Approximations by Compositions of Polynomials** **4**
+
+
+**3** **The Polar Express** **5**
+
+
+3.1 Greedy is optimal . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+
+
+3.2 Finding the optimal polynomial for each iteration . . . . . . . . . . . . . . . . . . 6
+
+
+3.3 Upper and lower bounds on the singular values . . . . . . . . . . . . . . . . . . . 7
+
+
+3.4 Finite precision considerations . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+
+
+3.5 The algorithm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+
+
+**4** **Numerical Experiments** **8**
+
+
+4.1 Convergence of Polar Express . . . . . . . . . . . . . . . . . . . . . . . . . 8
+
+
+4.2 Training GPT-2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+
+
+4.3 Ablations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+
+
+**A** **Code for Polar** **Express** **16**
+
+
+**B** **Related Work** **17**
+
+
+**C** **Proof of Theorem 3.1** **19**
+
+
+**D** **Proof of Theorem 3.3** **22**
+
+
+**E** **Proof of equivalence between** (5) **and** (6) **23**
+
+
+**F** **Remez algorithm** **23**
+
+
+**G** **Finite precision considerations** **26**
+
+
+**H** **Additional Experimental Results** **26**
+
+
+H.1 Convergence of Polar Express and Its Impact on Muon . . . . . . . . . . . . 26
+
+
+H.2 Training GPT-2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+H.3 Image Classification . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+**I** **Initialization for Matrices with Large Spectral Gaps** **30**
+
+
+**J** **Fast Polynomial Iteration for Rectangular Matrices** **35**
+
+
+J.1 Application to Muon . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+
+
+15
+
+
+A CODE FOR PO L A R EX P RESS
+
+
+Implementation 1 gives a Python implementation of the online stage of Algorithm 1 for degree
+= 5, which we use in our numerical experiments. It uses hard-coded polynomials generated from
+Implementation 2 and incorporates a numerical safety factor of 1 _._ 01 as described in Section 3.4.
+This implementation is designed for ease of use. It is short, it has no dependencies besides PyTorch,
+and it is a drop-in replacement for previous implementations of matrix sign methods (Cesista et al.,
+2025; Jordan et al., 2024b), such as Modula (2024). [7]
+
+
+**Implementation 1** Python code for Polar Express of degree = 5.
+
+
+from itertools import repeat
+import torch
+
+
+coeffs_list = [
+
+(8.28721201814563, -23.595886519098837, 17.300387312530933),
+(4.107059111542203, -2.9478499167379106, 0.5448431082926601),
+(3.9486908534822946, -2.908902115962949, 0.5518191394370137),
+(3.3184196573706015, -2.488488024314874, 0.51004894012372),
+(2.300652019954817, -1.6689039845747493, 0.4188073119525673),
+(1.891301407787398, -1.2679958271945868, 0.37680408948524835),
+(1.8750014808534479, -1.2500016453999487, 0.3750001645474248),
+(1.875, -1.25, 0.375), # subsequent coeffs equal this numerically
+]
+# safety factor for numerical stability (but exclude last polynomial)
+coeffs_list = [(a / 1.01, b / 1.01**3, c / 1.01**5)
+
+for (a, b, c) in coeffs_list[:-1]] + [coeffs_list[-1]]
+
+
+@torch.compile
+def PolarExpress(G: torch.Tensor, steps: int) -> torch.Tensor:
+
+assert G.ndim >= 2
+X = G.bfloat16() # for speed
+if G.size(-2)   - G.size(-1): X = X.mT # this reduces FLOPs
+X = X / (X.norm(dim=(-2, -1), keepdim=True)   - 1.01 +1e-7)
+hs = coeffs_list[:steps] + list(
+
+repeat(coeffs_list[-1], steps     - len(coeffs_list)))
+for a, b, c in hs:
+
+A = X @ X.mT
+B = b     - A + c     - A @ A
+X = a     - X + B @ X # X <- aX + bXˆ3 + cXˆ5
+if G.size(-2)   - G.size(-1): X = X.mT
+return X
+
+
+Implementation 2 gives a Python implementation of the offline stage of Algorithm 1. This code was
+used to construct the coefficients of the polynomials given in Implementation 1, which in turn were
+used in our Muon experiments (Section 4.2). It uses _ℓ_ = 10 _[−]_ [3] and _u_ = 1 by default. It incorporates
+Algorithm 2 and the finite precision modifications described in Section 3.4.
+
+
+**Implementation 2** Polar Express, Offine Stage
+
+
+from math import inf, sqrt
+import numpy as np
+
+
+def optimal_quintic(l, u):
+
+assert 0 <= l <= u
+if 1   - 5e-6 <= l / u:
+
+# Above this threshold, the equioscillating polynomials
+# is numerically equal to...
+return (15/8)/u, (-10/8)/(u**3), (3/8)/(u**5)
+# This initialization becomes exact as l -> u
+q = (3*l + u) / 4
+
+
+[7Code including Implementations 1 and 2 can also be found at https://github.com/NoahAmsel/](https://github.com/NoahAmsel/PolarExpress)
+[PolarExpress.](https://github.com/NoahAmsel/PolarExpress)
+
+
+16
+
+
+r = (l + 3*u) / 4
+E, old_E = inf, None
+while not old_E or abs(old_E   - E)   - 1e-15:
+
+old_E = E
+LHS = np.array([
+
+[l, l**3, l**5, 1],
+
+[q, q**3, q**5, -1],
+
+[r, r**3, r**5, 1],
+
+[u, u**3, u**5, -1],
+])
+a, b, c, E = np.linalg.solve(LHS, np.ones(4))
+q, r = np.sqrt((-3*b + np.array([-1, 1])     
+sqrt(9*b**2             - 20*a*c)) / (10*c))
+return float(a), float(b), float(c)
+
+
+def optimal_composition(l, num_iters, cushion=0.02407327424182761):
+
+u = 1
+coefficients = []
+for _ in range(num_iters):
+
+a, b, c = optimal_quintic(max(l, cushion*u), u)
+# Due to cushioning, this may be centered around 1 with
+# respect to 0.024*u, u. Recenter it around 1 with respect
+# to l, u, meaning find c so that 1     - c*p(l) = c*p(u)     - 1:
+pl = a*l + b*l**3 + c*l**5
+pu = a*u + b*u**3 + c*u**5
+rescalar = 2/(pl + pu)
+a *= rescalar; b *= rescalar; c *= rescalar
+# Optionally incorporate safety factor here:
+# a /= 1.01; b /= 1.01**3; c /= 1.01**5
+coefficients.append((a, b, c))
+l = a*l + b*l**3 + c*l**5
+u = 2     - l
+return coefficients
+
+
+print(*optimal_composition(1e-3, 10), sep="\n")
+
+
+B RELATED WORK
+
+
+Computing polar( _**M**_ ) is an important and longstanding problem in numerical linear algebra, with
+applications spanning electronic structure calculations, lattice quantum chromodynamics, orthogonal Procrustes analysis, parallel algorithms for computing the SVD, and beyond; see e.g. (Higham,
+1986; Kaneko et al., 2013; Douglas Carroll & Arabie, 1998; Gower & Dijksterhuis, 2004; Neuberger, 1998; Szabo & Ostlund, 1996).
+
+
+**Newton-Schulz and polynomial Pad´e methods.** The earliest methods in the literature are polynomial iterations like (2). Several nearly simultaneous papers introduced the family of polynomial
+Pad´e iterations, comprising Newton-Schulz and its higher-degree analogues (Kov´aˇr´ık, 1970; Bj¨orck
+& Bowie, 1971; Higham, 1986; Leipnik, 1971). These higher-degree methods are also sometimes
+called “Newton-Schulz”; when doing so, we will specify the degree for clarity. In these methods,
+each iteration refines the current approximation _**X**_ _t_ by applying a low-degree odd matrix polynomial, where any odd monomial _x_ _x_ [2] _[q]_ [+1] is defined for rectangular matrices by the formula
+
+     -     - _q_ _�→_
+_**X**_ _t_ _**X**_ _t_ _**X**_ _t_ _[⊤]_ _**[X]**_ _[t]_ . Our Polar Express method also takes this form, though unlike Newton_�→_
+Schulz, it changes the polynomial at each iteration.
+
+
+The polynomials used in Pad´e methods are chosen to match the value and first few derivatives of
+sign( _x_ ) at the points _x_ = 1. For instance, the update rule of the third method in this family
+
+            is defined by _p_ ( _x_ ) = 161 35 _±x_ 35 _x_ [3] + 21 _x_ [5] 5 _x_ [7][�], which is the unique degree-7 polynomial
+_−_ _−_
+satisfying _p_ ( _±_ 1) = _±_ 1 and _p_ _[′]_ ( _±_ 1) = _p_ _[′′]_ ( _±_ 1) = _p_ _[′′′]_ ( _±_ 1) = 0. These methods converge so long as
+all singular values of _**X**_ 0 lie in (0 _,_ 1], a condition guaranteed by the initialization of (2). Furthermore,
+
+
+17
+
+
+the order of convergence of the degree 2 _q_ +1 method is _q_ +1 (Bj¨orck & Bowie, 1971). In particular,
+the Newton-Schulz method ( _q_ = 1) converges quadratically.
+
+
+**Newton’s** **method** **and** **rational** **Pad´e.** In the numerical analysis literature, polynomial methods
+were succeeded by rational iterations like Newton’s method (Higham, 1986), defined as follows [8] :
+
+                            -                             
+_**X**_ 0 = _**M**_ _**X**_ _t_ +1 = [1] _**X**_ _t_ + _**X**_ _t_ _[−⊤]_ (14)
+
+2
+
+
+Newton’s method also converges quadratically. Like Newton-Schulz, it works because the rational
+function _r_ ( _x_ ) = [1] [(] _[x]_ [ +] _[ x][−]_ [1][)][ has a stable fixed point at][ 1][; unlike for Newton-Schulz, this point is a]
+
+
+function _r_ ( _x_ ) = [1] 2 [(] _[x]_ [ +] _[ x][−]_ [1][)][ has a stable fixed point at][ 1][; unlike for Newton-Schulz, this point is a]
+
+global attractor for the whole positive real line. At first glance, Newton’s method has nothing to do
+with the Pad´e iterations discussed above. However, after a change of variables _**Y**_ _t_ = _**X**_ _t_ _[−]_ [1], it can be
+reinterpreted as _**Y**_ _t_ +1 = 2 _**Y**_ _t_ ( _**I**_ + _**Y**_ _t_ _[⊤]_ _**[Y]**_ _[t]_ [)] _[−]_ [1][, which is sometimes called inverse Newton.] [Observing]
+that _r_ ( _x_ ) = 1+2 _xx_ [2] [satisfies] _[r]_ [(] _[±]_ [1)] [=] [and] _[r][′]_ [(] _[±]_ [1)] [=] [0][,] [we] [see] [that] [(inverse)] [Newton] [is] [also] [a]
+
+_[±]_ [1]
+Pad´e method, though a rational rather than polynomial one. In fact, given a odd degree 2 _qn_ + 1
+for the numerator and an even degree 2 _qd_ for the denominator, there is a unique rational function
+that matches the value and first _qn_ + _qd_ derivatives of sign( _x_ ) at _x_ = 1. This directly yields a
+_±_
+Pad´e method for computing polar( _**M**_ ) whose order of convergence is _qn_ + _qd_ + 1. For instance,
+_r_ ( _x_ ) = [3] 1+3 _[x]_ [+] _x_ _[x]_ [2][3] [is called Halley’s method, which converges cubically.] [When] _[ q][d]_ [=] [0][, we recover the]
+
+polynomial Pad´e methods.
+
+
+There are two main weakness of Newton’s method and the Pad´e iterations: slow convergence in the
+initial phase and the need to compute explicit inverses. To accelerate initial convergence, Higham
+popularized the technique of rescaling the matrix after every Newton iteration (Higham, 1986).
+Intuitively, rescaling _**X**_ _t_ so that _σ_ max = 1 _/σ_ min centers the spectrum around 1, where convergence
+is fastest. Several easily-computable choices of scaling factor exist to accomplish this approximately.
+Note that this rescaling scheme would fail for Newton-Schulz, which likewise suffers from slow
+initial convergence but which would diverge if _σ_ max 1.
+_≫_
+
+Computing matrix inverses is difficult to parallelize and to implement stably in low precision arithmetic. However, a trick was developed for stably computing many rational methods _without_ explicit
+inverses; QR decompositions can be used instead (Nakatsukasa et al., 2010; Zhang et al., 2007).
+Applying this trick to Halley’s method and combining with a special rescaling scheme yields the
+QDWH (QR-based dynamically weighted Halley) method, which converges in just six iterations for
+any reasonably conditioned matrix (Nakatsukasa et al., 2010).
+
+
+There are two main weakness of Newton’s method and the Pad´e iterations: slow convergence in the
+initial phase and the need to compute explicit inverses. To accelerate initial convergence, Higham
+popularized the technique of rescaling the matrix after every Newton iteration (Higham, 1986).
+Intuitively, rescaling _**X**_ _t_ so that _σ_ max = 1 _/σ_ min centers the spectrum around 1, where convergence
+is fastest. Several easily-computable choices of scaling factor exist to accomplish this approximately.
+Note that this rescaling scheme would fail for Newton-Schulz, which likewise suffers from slow
+initial convergence but which would diverge if _σ_ max 1.
+_≫_
+
+
+**Adaptive rational methods from optimal approximations.** A landmark 2016 paper introduced a
+new paradigm to design iterative methods for computing polar( _**M**_ ) (Nakatsukasa & Freund, 2016).
+The main insight is as follows. Pad´e methods choose the update rule to be an approximation to
+sign( _x_ ) of a given degree that is optimally accurate in the neighborhood of _x_ = 1. Instead, we should
+choose the approximation to sign( _x_ ) that is optimal over an _interval_ [ _ℓ,_ 1] R _≥_ 0 that contains the
+_⊂_
+singular values. Moreover, after each step of the algorithm, the range of the singular values changes;
+therefore, we adapt the update rule at each iteration to match the new interval. When the range of the
+singular values is large, this approach ensures that the update rule shrinks it as quickly as possible.
+As the algorithm proceeds and the interval shrinks to a small neighborhood of 1, the update rule
+approaches that of a Pad´e method, maintaining the same high order of convergence as it has.
+
+
+Within the class of odd rational functions whose numerators and denominators have degree 2 _q_ + 1
+and 2 _q_, respectively, an explicit formula for this optimal approximation to sign( _x_ ) on any interval
+
+[ _ℓ,_ 1] was found by Zolotarev. It was shown that these rationals have remarkable convergence properties for any _q_ (Nakatsukasa & Freund, 2016). For _q_ = 1, this optimal approximation coincides
+exactly with the dynamically weighted Halley’s method (QDWH) referenced above. For even faster
+convergence than QDWH, (Nakatsukasa & Freund, 2016) proposed the Zolo-pd method, which uses
+_q_ = 17. Finally, these methods all admit the same QR-based implementation trick as QDWH.
+
+
+**Adaptive** **polynomial** **methods.** In this paper, we adopt the paradigm of Zolo-pd (Nakatsukasa
+& Freund, 2016) but with polynomials rather than rationals of degree (2 _q_ + 1 _,_ 2 _q_ ). This choice
+
+
+8Our description of Newton’s method and other rational methods assumes square non-singular _**M**_ . Nonsquare problems can be reduced to the square case by an initial QR decomposition, but this is not an option for
+purely polynomial methods like ours.
+
+
+18
+
+
+avoids the need for QR factorizations, relying solely on GPU-friendly matrix-matrix multiplications
+in low-precision arithmetic. While this class of methods has not been fully developed in the numerical analysis literature, similar ideas have been rediscovered in different guises. In an unpublished
+manuscript that predates Zolo-pd, Chen & Chow (2014) describe a rescaling strategy for NewtonSchulz. Though motivated differently, their method is equivalent to ours for degree-3 polynomials
+(unlike our work, they do not consider general odd degree). They also observe numerical instability
+that prevents the method from converging to all the way to machine precision. Using the insights
+of Nakatsukasa & Higham (2012), they propose a simple mitigation for this issue that we adopt in
+Section 3.4. Our work gives the approach from Nakatsukasa & Higham (2012) a stronger theoretical
+foundation that connects to the paradigm of Zolo-pd. Concretely, we prove that choosing an optimal
+polynomial at each iteration leads to a composed polynomial that is _globally_ optimal in the sense of
+(5).
+
+
+Independently, a group of cryptographers developed a similar method for approximating the scalar
+function sign( _x_ ) in the context of homomorphic encryption schemes (Lee et al., 2022). Their focus
+is mainly on tuning the analogues in their setting of the polynomial degree and number of iterations,
+whereas we focus on demonstrating optimality and efficiently constructing the update polynomials
+for degree 3 and 5. In addition, we consider matrix-valued inputs in low-precision arithmetic—
+not scalars in exact arithmetic—and we demonstrate our method’s effectiveness within the Muon
+algorithm for training deep neural networks.
+
+
+**Application** **within** **Muon.** The designers of Muon realized that, due to the extreme efficiency
+requirements and lax accuracy requirements of their setting, rational-based methods from the numerical analysis literature are inapplicable. However, polynomial-based iteration schemes can take
+full advantage of GPUs because they use only matrix-matrix products in half-precision arithmetic,
+not inverses or QR decompositions. The preference for speed over accuracy motivates methods
+that aim to quickly produce coarse approximations, even at the cost of asymptotic convergence.
+Examples include the proposals of Jordan (Jordan et al., 2024b) and You (Cesista et al., 2025), as
+discussed in Section 1.2. Like Chen & Chow (2014), Jordan found that convergence in the initial
+phase can be accelerated by choosing update rules that have a large derivative near zero, so as to
+increase the small singular values as much as possible at each iteration. You furthermore chose to
+use different update rules at each iteration, allowing extra flexibility to tune the trade-off between
+speed and accuracy. Both used degree-5 polynomials that were found through gradient descent on
+heuristic objective functions. These proposals were previously compared to Newton-Schultz [9], but
+never to Nakatsukasa & Higham (2012). We find that our method (which generalizes Nakatsukasa
+& Higham (2012)) outperforms them all.
+
+
+Finally, we remark that concurrent work of Grishina, Smirnov, and Rakhuba also proposes an adaptive polynomial method that generalizes Nakatsukasa & Higham (2012) and applies it to accelerating Muon (Grishina et al., 2025). Like Nakatsukasa & Higham (2012), this work does not establish
+global optimality of the composed polynomial as we do in Section 3 or address finite precision
+considerations.
+
+
+C PROOF OF THEOREM 3.1
+
+
+The aim of this section is to prove Theorem 3.1. We begin with a result that provides a few essential
+properties for the the polynomial solving (6) when _T_ = 1. This result is known as Chebyshev’s
+theorem (Chebyshev, 1947) or the equioscillation theorem (Trefethen, 2020, Chapter 10).
+
+
+**Lemma C.1.** Let _d_ = 2 _q_ + 1 and _u, ℓ>_ 0. Consider the problem
+
+
+min max (15)
+_p∈_ P [odd] _d_ _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][.]_
+
+
+23 _[x]_ [3] [+] [1] 2
+
+
+9Jordan et al. (2024b) actually compares to 2 _x −_ 23 _[x]_ [3] [+] [1] 2 _[x]_ [5][,] [whereas] [the] [true] [degree-5] [Newton-Schulz]
+
+polynomial is (15 _x −_ 10 _x_ [3] + 3 _x_ [5] ) _/_ 8. However, the difference in performance is negligible for the first few
+iterations.
+
+
+9Jordan et al. (2024b) actually compares to 2 _x_ 23
+_−_
+
+[3] [5]
+
+
+19
+
+
+There exists a unique polynomial _p_ _[⋆]_ P [odd] _d_ solving (15). Furthermore, _p_ _[⋆]_ is the unique solution
+_∈_
+to the above problem if and only if there exist _q_ + 2 distinct points _x_ 0 _, . . ., xq_ +1 [ _ℓ, u_ ] such
+_{_ _}_ _⊂_
+that
+1 _p_ _[⋆]_ ( _xi_ ) = _η_ ( 1) _[i]_ max for _i_ = 0 _, . . ., q_ + 1 _,_
+_−_ _−_ _x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[p][⋆]_ [(] _[x]_ [)] _[|][,]_
+
+for _η_ = 1 or _η_ = _−_ 1.
+
+
+_Proof._ A discussion can be found in Eremenko & Yuditskii (2007). Here we include a formal proof
+for completeness.
+
+
+By Chebyshev’s Theorem (Achieser, 1992; Chebyshev, 1947; Cheney, 1966) it is sufficient to show
+that P [odd] _d_ satisfies the Haar condition: any non-zero _p_ P [odd] _d_ = span _x, . . ., x_ [3] _, . . ., x_ [2] _[q]_ [+1] can
+_∈_ _{_ _}_
+have at most _q_ roots in [ _ℓ, u_ ].
+
+
+Since deg( _p_ ) = _d_ = 2 _q_ + 1 we know that _p_ can have at most 2 _q_ + 1 roots in R. However, since
+_p_ (0) = 0 and _p_ ( _x_ ) = _−p_ ( _−x_ ) we know that _p_ has one root at zero, and the remaining roots come
+thus it can have at mostin symmetric pairs ( _x, − qx_ roots in). Because of this, [ _ℓ, u_ ] (0 _p,_ can have at most). Hence, P [odd] _d_ _q_ satisfies the Haar condition, whichroots in the positive orthant, and
+_⊂_ _∞_
+yields the desired result.
+
+
+The proof of Theorem 3.1 will be by induction on _T_ . We begin by establishing the base case, _T_ = 1,
+which is handled by the following result.
+
+
+**Lemma C.2.** Let _u, ℓ>_ 0 and define
+
+
+_p_ _[⋆]_ := arg min max
+_p∈_ P _[∗]_ _d_ _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][.]_
+
+Then
+
+
+_p_ _[⋆]_ ( _ℓ_ ) = min max [and] [max]
+_x∈_ [ _ℓ,u_ ] _[p][⋆]_ [(] _[x]_ [)] _[,]_ _x∈_ [ _ℓ,u_ ] _[p][⋆]_ [(] _[x]_ [) = 2] _[ −]_ _[p][⋆]_ [(] _[ℓ]_ [)] _[,]_ _x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[p][⋆]_ [(] _[x]_ [)] _[|]_ [ = 1] _[ −]_ _[p][⋆]_ [(] _[ℓ]_ [)] _[.]_
+
+
+_Proof._ Throughout the proof we assume _d_ = 2 _q_ + 1. We begin with proving
+
+
+_p_ _[⋆]_ ( _ℓ_ ) = min
+_x∈_ [ _ℓ,u_ ] _[p][⋆]_ [(] _[x]_ [)] _[.]_
+
+
+Consider the polynomial _e_ ( _x_ ) := 1 _p_ _[⋆]_ ( _x_ ). The proof will contain three steps. We first rule out
+_−_ 2
+the trivial case that _p_ _[⋆]_ = 0, since _p_ ( _x_ ) = _ℓ_ + _u_ _[x]_ [ would then be a better approximation.] [Hence,] _[p][⋆]_
+
+cannot be the zero polynomial.
+
+
+_Step 1:_ _e_ ( _x_ ) _has exactly q stationary points inside the open interval_ ( _ℓ, u_ ) _._
+
+
+Note that _e_ ( _x_ ) has at most 2 _q_ stationary points in R, since its derivative _e_ _[′]_ ( _x_ ) is a polynomial of
+degree 2 _q_ . Furthermore, since _p_ _[⋆]_ is odd, we have that _e_ _[′]_ ( _x_ ) = _−p_ _[′]_ ( _x_ ) is even of degree 2 _q_, and thus
+can have at most _q_ stationary points contained in (0 _,_ + _∞_ ). Hence, there can be at _most q_ stationary
+points of _e_ ( _x_ ) inside the interval [ _ℓ, u_ ].
+
+
+By Lemma C.1 there are _q_ + 2 points _x_ 0 _, . . ., xq_ +1 [ _ℓ, u_ ] where _e_ ( _x_ ) is maximized or minimized
+_∈_
+in [ _ℓ, u_ ]. These points are either stationary points or they are endpoints of the interval [ _ℓ, u_ ]. Let _n_ ext
+be the number of stationary points and _n_ stat be the number of endpoints in the set _x_ 0 _, . . ., xq_ +1 .
+_{_ _}_
+Since a point can be both a stationary point and an endpoint we have _q_ + 2 _≤_ _n_ end + _n_ stat. However,
+_n_ end 2 and _n_ stat _q_, which follows from the previous paragraph where we showed that there are
+_≤_ _≤_
+at most _q_ stationary points of _e_ ( _x_ ) in [ _ℓ, u_ ]. So _n_ end + _n_ stat _≤_ _q_ + 2, and consequently we must have
+_n_ end = 2 and _n_ stat = _q_, as required.
+
+
+_Step 2:_ _x_ = _ℓ_ _is a maximum of e_ ( _x_ ) _on the interval_ [ _ℓ, u_ ]
+
+
+By Lemma C.1 and the discussion from Step 1, we know that _|e_ ( _x_ ) _|_ is maximized at _q_ + 2 points
+inside [ _ℓ, u_ ] and _q_ of these points are contained inside the open interval ( _ℓ, u_ ). Hence, _x_ = _ℓ_ must
+
+
+20
+
+
+either be a maximum or a minimum of _e_ ( _x_ ). We will show that _x_ = _ℓ_ must be a maximum by
+contradiction.
+
+
+Suppose _x_ = _ℓ_ was a minimum of _e_ ( _x_ ) on [ _ℓ, u_ ]. First note that _p_ _[⋆]_ is trivially non-negative on [ _ℓ, u_ ],
+or else _p_ ( _x_ ) = 0 would be a better polynomial. Hence, since _p_ _[⋆]_ (0) = 0 we must have _p_ _[∗′]_ ( _δ_ ) _>_ 0
+for some _δ_ _∈_ [0 _, ℓ_ ], or else the zero polynomial _p_ ( _x_ ) = 0 would be a better approximation. Hence,
+for some _δ_ _∈_ [0 _, ℓ_ ] we have _e_ _[′]_ ( _δ_ ) _<_ 0.
+
+We must also have _e_ _[′]_ ( _ℓ_ ) _≥_ 0 or else _x_ = _ℓ_ is not a minimum of _e_ ( _x_ ). Since _e_ _[′]_ ( _δ_ ) _<_ 0 for some
+_δ_ _∈_ [0 _, ℓ_ ] and _e_ _[′]_ ( _ℓ_ ) _≥_ 0, by the intermediate value theorem there exists a point _x_ _[∗]_ _∈_ [0 _, ℓ_ ] such that
+_e_ _[′]_ ( _x_ _[∗]_ ) = 0. However, by the discussion above we know that all stationary points of _e_ are contained
+inside the open interval ( _ℓ, u_ ). Hence, _x_ = _ℓ_ cannot be a minimum of _e_ ( _x_ ) on [ _ℓ, u_ ]. However, by
+Step 1 we know that the endpoints of [ _ℓ, u_ ] must be either minima or maxima of _e_ ( _x_ ). Hence, _x_ = _ℓ_
+is a maximum of _e_ ( _x_ ) on [ _ℓ, u_ ].
+
+
+_Step 3:_ _Obtaining the desired equalities_
+
+
+Since _e_ ( _x_ ) has a maximum in [ _ℓ, u_ ] at _x_ = _ℓ_, we have _p_ _[⋆]_ ( _ℓ_ ) = min
+_x∈_ [ _ℓ,u_ ] _[p][⋆]_ [(] _[x]_ [)][. The other two equalities]
+
+are immediate consequences of the equioscillation property of _p_ _[⋆]_ Lemma C.1 and that _x_ = _ℓ_ is a
+minimum of _p_ _[⋆]_ over the set [ _ℓ, u_ ].
+
+
+With the above-mentioned result in hand, we are ready to prove Theorem 3.1.
+
+
+**Theorem 3.1.** Let _d_ be odd and define _ℓ_ 1 = _ℓ_ and _u_ 1 = _u_ . For _t_ = 1 _, . . ., T_ define
+
+
+_pt_ = arg min max _ℓt_ +1 = min _ut_ +1 = max (8)
+_p∈_ P [odd] _d_ _x∈_ [ _ℓt,ut_ ] _x∈_ [ _ℓt,ut_ ] _[p][t]_ [(] _[x]_ [)] _[,]_ _x∈_ [ _ℓt,ut_ ] _[p][t]_ [(] _[x]_ [)]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][,]_
+
+
+The resulting composition _p_ _[⋆]_ := _pT_ _◦_ _pT −_ 1 _◦· · · ◦_ _p_ 1 is optimal and the error is given by:
+
+
+max = min
+_x∈_ [ _ℓ,u_ ] _p_ = _pT ◦pT −_ 1 _◦···◦p_ 1
+
+_[|]_ [1] _[ −]_ _[p][⋆]_ [(] _[x]_ [)] _[|]_ _pt∈_ P [odd] _d_
+
+
+max (9)
+_x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_ [ = 1] _[ −]_ _[ℓ][T]_ [ +1] _[.]_
+
+
+Furthermore the new error, lower and upper bounds can be computed through
+
+
+_ℓt_ +1 = _pt_ ( _ℓt_ ) _,_ _ut_ +1 = 2 _ℓt_ +1 _,_ and max (10)
+_−_ _x∈_ [ _ℓt,ut_ ] _[|]_ [1] _[ −]_ _[p][t]_ [(] _[x]_ [)] _[|]_ [ = 1] _[ −]_ _[ℓ][t]_ [+1] _[.]_
+
+
+_Proof._ The proof of (10) is an immediate consequence of Lemma C.2, since for each _t_ = 1 _, . . ., T_,
+_pt_ is the optimal approximation in P [odd] _d_ to _x_ 1.
+_�→_
+
+We now proceed with the proof of (9), which will be by induction. The proof for _T_ = 1 is an
+immediate consequence of Lemma C.2 and we also have _p_ _[⋆]_ ( _ℓ_ ) = _ℓ_ 2 by (10). Now suppose the
+result is true for all _t ≤_ _T_ _−_ 1. Thus
+
+_g_ ( _x_ ) := _pT −_ 1 _p_ 1( _x_ )
+_◦· · · ◦_
+
+is the optimal solution of (9) for _T_ 1 _._ For _t_ = 1 _, . . ., T_ 1, note that the image of _pt_ on [ _ℓt, ut_ ]
+
+_−_ _−_
+is exactly [ _ℓt_ +1 _, ut_ +1] by Lemma C.2. Hence, the image of _g_ on [ _ℓ, u_ ] is [ _ℓT, uT_ ]. Furthermore,
+by Lemma C.2 we also have _g_ ( _ℓ_ ) = _ℓT_ . Pick any _f_ such that _f_ = _g_ and
+
+
+_f_ = _p_                 - _T −_ 1 _p_ �1 _,_
+_◦· · · ◦_
+
+
+_[a]_
+
+_b_ _uT_
+
+_[≤]_ _[ℓ][T]_
+
+
+for some � _p_ 1 _, . . .,_ - _pT −_ 1 P [odd] _d_ . Let the image of _f_ on [ _ℓ, u_ ] be [ _a, b_ ]. We will prove that _[a]_ _b_
+_∈_
+
+
+for somecontradiction. � _p_ 1 _, . . .,_ - _pT −_ 1 _∈_ P _d_ . Let the image of _f_ on [ _ℓ, u_ ] be [ _a, b_ ]. We will prove that _b_ _[≤]_ _u_ _[T]_ _T_ [by]
+
+Suppose _[a]_ _b_ _[>]_ _u_ _[ℓ][T]_ _T_ [.] [Define] _[ c]_ [=] _a_ +2 _b_ [.] [Then,] [the image of the scaled function] _[ cf]_ [on][ [] _[ℓ, u]_ []][ is][ [] _[ca, cb]_ []]
+
+and _cf_ satisfies
+
+
+_[a]_ _[ℓ][T]_
+
+_b_ _[>]_ _uT_
+
+
+Suppose _[a]_
+
+
+max _[b][ −]_ _[a]_
+_x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[cf]_ [(] _[x]_ [)] _[|]_ [ = max] _[ {]_ [1] _[ −]_ _[ca, cb][ −]_ [1] _[}]_ [ =] _a_ + _b_ _[.]_
+
+
+21
+
+
+Recall by our inductive hypothesis, we have max [=] _[ u][T]_
+_x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[g]_ [(] _[x]_ [)] _[|]_ [ = 1] _[ −]_ _[ℓ][T]_ _[−]_ [1][ where the second]
+
+equality holds by (10). It follows that
+
+_a_ _[ℓ][T]_
+_b_ _[>]_ _uT_
+
+
+_⇔_ _[a]_ _b_
+
+
+_ℓT_
+
+_[a]_ _b_ _[>]_ 2 _ℓT_
+
+_−_
+
+
+2 _a_
+_⇔_ _ℓT_ _<_ _a_ + _b_
+
+
+_⇔_ 1 _−_ _ℓT_ _>_ _a_ _[b][ −]_ + _b_ _[a]_
+
+max [max]
+_⇔_ _x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[g]_ [(] _[x]_ [)] _[|][ >]_ _x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[cf]_ [(] _[x]_ [)] _[|][,]_
+
+
+which leads to a contradiction to our inductive hypothesis that _g_ is optimal. Hence, we must have
+_a_
+_b_ _[≤]_ _u_ _[ℓ][T]_ _T_ [.]
+
+Consequently, using that _[a]_ _b_ _uT_ [, we will show for any][ �] _[p][T]_ _d_ and for any _f_ = _p_ - _T −_ 1 _p_ �1,
+
+that _p_ - _T_ _f_ cannot be a better approximation than _[≤]_ _[ℓ][T]_ _pT_ _g_ . In particular, we have _[∈]_ [P][odd] _◦· · · ◦_
+
+_◦_ _◦_
+
+
+_[T]_
+
+_uT_ [.]
+
+
+_[a]_
+
+_b_ _uT_
+
+_[≤]_ _[ℓ][T]_
+
+
+Consequently, using that _[a]_
+
+
+max max
+_x∈_ [ _ℓ,u_ ] _p∈_ P _[∗]_ _d_ _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [�] _[T]_ [ (] _[f]_ [(] _[x]_ [))] _[| ≥]_ [min] _[|]_ [1] _[ −]_ _[p]_ [(] _[f]_ [(] _[x]_ [))] _[|]_
+
+
+= min max
+_p∈_ P _[∗]_ _d_ _x∈_ [ _a,b_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+
+= min max
+_p∈_ P _[∗]_ _d_ _x∈_ [ _a/b,_ 1]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+
+min max
+_≥_ _p∈_ P _[∗]_ _d_ _x∈_ [ _ℓT /uT,_ 1]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+
+= min max
+_p∈_ P _[∗]_ _d_ _x∈_ [ _ℓT,uT_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+= min max
+_p∈_ P _[∗]_ _d_ _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[g]_ [(] _[x]_ [))] _[|]_
+
+
+= max
+_x∈_ [ _ℓT,uT_ ]
+
+_[|]_ [1] _[ −]_ _[p][T]_ [ (] _[g]_ [(] _[x]_ [))] _[|]_ [ = 1] _[ −]_ _[p][T]_ [ (] _[ℓ][T]_ [ ) = 1] _[ −]_ _[ℓ][T]_ [ +1] _[,]_
+
+
+where the second and third equality follow by changing variables _y_ = _x/b_ so that
+
+
+min max [min] max [min] max
+_p∈_ P _[∗]_ _d_ _x∈_ [ _a,b_ ] _p∈_ P _[∗]_ _d_ _y∈_ [ _a/b,_ 1] _p∈_ P _[∗]_ _d_ _y∈_ [ _a/b,_ 1]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_ [ =] _[|]_ [1] _[ −]_ _[p]_ [(] _[by]_ [)] _[|]_ [ =] _[|]_ [1] _[ −]_ _[p]_ [(] _[y]_ [)] _[|]_
+
+and this last equality follows because the space P _[∗]_ _d_ [is invariant under input rescaling; that is, for any]
+_b ̸_ = 0, the map _x �→_ _bx_ preserves the space span _{x, x_ [3] _, . . ., x_ _[d]_ _}_ . This concludes the proof.
+
+
+D PROOF OF THEOREM 3.3
+
+
+In this section we provide the proof of the convergence guarantee stated in Theorem 3.3.
+
+
+**Theorem 3.3.** Let _**M**_ be a matrix normalized so that _σ_ ( _**M**_ ) [ _ℓ,_ 1]. Let _**X**_ _T_ = _p_ _[⋆]_ ( _**M**_ ), where
+_⊂_
+_p_ _[⋆]_ is the polynomial from Theorem 3.1 with _d_ = 2 _q_ + 1. Then, we have
+
+
+polar( _**M**_ ) _**X**_ _T_ 2 1 _ℓ_ [2] _._ (12)
+_∥_ _−_ _∥_ _≤|_ _−_ _|_ [(] _[q]_ [+1)] _[T]_
+
+Hence, for _d_ = 3 and _d_ = 5 the method converges quadratically and cubically, respectively.
+
+
+_Proof._ Define
+_p_ _[⋆]_ = arg min
+_p_ = _pT ◦pT −_ 1 _◦···◦p_ 1
+_pt∈_ P _[∗]_ _d_
+
+
+22
+
+
+max
+_x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][ .]_
+
+
+Then Algorithm 1 returns _**X**_ _T_ = _p_ _[⋆]_ ( _**M**_ ). Let _h_ P _q_ be the [ _q/_ 0] Pad´e-approximant to (1 _x_ ) _[−]_ [1] _[/]_ [2]
+
+(Kenney & Laub, 1991, Section 3) and define _p_ ( _∈x_ ) = _xh_ (1 _x_ [2] ) P [odd] _d_ . Define _f_ = _p_ _−_ _p_ as
+_−_ _∈_ _◦· · · ◦_
+the composition of _p_ with itself _T_ times. Then, by Theorem 3.1, (Kenney & Laub, 1991, Theorem
+3.1), and _f_ ( _x_ ) _≥_ 0 for _x ≥_ 0 we have
+
+
+sign( _**M**_ ) _**X**_ _T_ 2 max
+_∥_ _−_ _∥_ _≤_ _x∈_ [ _ℓ,_ 1] _[|]_ [1] _[ −]_ _[p][⋆]_ [(] _[x]_ [)] _[|]_
+
+
+max
+_≤_ _x∈_ [ _ℓ,_ 1]
+
+   - _[|]_ [1] _[ −]_ _[f]_ [(] _[x]_ [)] _[|]_
+
+
+max
+_≤_ _x∈_ [ _ℓ,_ 1]
+
+
+_|_ 1 _−_ _x_ [2] _|_ [(] _[d]_ [+1)] _[T]_
+
+
+1 + _f_ ( _x_ )
+
+
+_≤|_ 1 _−_ _ℓ_ [2] _|_ [(] _[d]_ [+1)] _[T]_ _,_
+
+as required.
+
+
+E PROOF OF EQUIVALENCE BETWEEN (5) AND (6)
+
+
+In this section we provide a proof for the equivalence between (5) and (6). It is sufficient to show
+that for any fixed polynomial _p_ we have
+
+
+_ε_ 1 := max polar( _**M**_ ) _p_ ( _**M**_ ) 2 = max
+_**M**_ _∈_ R _[m][×][n]_ _∥_ _−_ _∥_ _x∈_ [ _ℓ,u_ ]
+_σ_ ( _**M**_ ) _⊂_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_ [ :=] _[ ε]_ [2] _[.]_
+
+
+For any fixed _**M**_, by the unitary invariance of the spectral norm we immediately have
+
+
+polar( _**M**_ ) _p_ ( _**M**_ ) 2 = max
+_∥_ _−_ _∥_ _σi∈σ_ ( _**M**_ ) _[|]_ [1] _[ −]_ _[p]_ [(] _[σ][i]_ [)] _[| ≤]_ _x_ [max] _∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|][ .]_
+
+Consequently, _ε_ 1 _ε_ 2.
+_≤_
+
+Suppose that _x_ _[∗]_ [ _ℓ, u_ ] is chosen so that 1 _p_ ( _x_ _[∗]_ ) = max _x∈_ [ _ℓ,u_ ] 1 _p_ ( _x_ ) _._ Without loss of
+generality, assumeorthonormal columns, and noting _∈ m ≥_ _n_ . Letting polar( _**M**_ = _**M**_ _x_ _[∗]_ ) = _|_ _**UV**_ _−_ _**UV**_ [T], for any matrix [T] yields _|_ _**U**_ _∈ |_ R _−_ _[m][×][n]_ and _|_ _**V**_ _∈_ R _[n][×][n]_ with
+
+
+_ε_ 1 polar( _**M**_ ) _p_ ( _**M**_ ) 2
+_≥∥_ _−_ _∥_
+= _**I**_ _n_ _p_ ( _x_ _[∗]_ ) _**I**_ _n_ 2
+_∥_ _−_ _∥_
+= _|_ 1 _−_ _p_ ( _x_ _[∗]_ ) _|_
+= max [=] _[ ε]_ [2]
+_x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+Consequently, _ε_ 1 _ε_ 2. Hence, _ε_ 1 = _ε_ 2, as desired.
+_≥_
+
+
+F REMEZ ALGORITHM
+
+
+In this section, we show in detail how to solve (13). By Theorem 3.1, these solutions give the update
+rule for a single step of Polar Express. We give a closed form solution for _d_ = 3. We then
+describe how the Remez algorithm (Pach´on & Trefethen, 2009; Parks & McClellan, 1972) can be
+used to approximate _pt_ for arbitrary _d_ . We then present Algorithm 2, a simplified version of Remez
+for solving (13) with _d_ = 5. Recall (13):
+
+
+arg min max
+_p∈_ P [odd] _d_ _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+
+We begin with the case when _d_ = 3. We seek a polynomial of the form _p_ ( _x_ ) = _ax_ + _bx_ [3] . The
+Equioscillation Theorem (Lemma C.1) stipulates that _p_ must have an equioscillating set of size 3.
+For _p_ to achieve its maximum error at a point _x_, _x_ must be a local extremum of _p_ ( _x_ ) _−_ 1 on the
+interval [ _ℓ, u_ ]. Thus, for _x_ to be eligible for membership in the equioscillating set, it must either
+be a true local extremum ofHowever, because _p_ is an odd cubic, it has at most one true local extremum on _p_ ( _x_ ) _−_ 1 that happens to lie in [ _ℓ, u_ ], or else one of the endpoints R _≥_ 0. Thus, to build _ℓ, u_ .
+
+
+23
+
+
+an equioscillating set of three points, we must include _p_ ’s unique positive local extremum _and_ both
+
+
+          endpoints. This local extremum of _p_ occurs at _−a_
+
+
+3 _b_ [.] [Therefore, we seek] _[ a, b]_ [ such that]
+
+
+= 1 + _E,_ _p_ ( _u_ ) = 1 _−_ _E_ (16)
+
+
+_p_ ( _ℓ_ ) = 1 _−_ _E,_ _p_
+
+
+��
+_−a_
+
+3 _b_
+
+
+for some _E_ . This is a system of three equations in three variables. The solution _p_ ( _x_ ) = _ax_ + _bx_ [3] is
+most easily expressed as follows. Let _p_ NS( _x_ ) = [3] _[x]_ [1] _[x]_ [3][.] [Then]
+
+
+[3]
+
+2 _[x][ −]_ [1] 2
+
+
+[Then]
+
+[1] 2 _[x]_ [3][.]
+
+
+_p_ ( _x_ ) = _βp_ NS( _αx_ ) _,_ where _α_ =
+
+
+~~�~~
+3 4
+_u_ [2] + _ℓu_ + _ℓ_ [2] and _β_ = 2 + _ℓu_ ( _ℓ_ + _u_ ) _α_ [3] _[.]_ (17)
+
+
+                  One can verify that this polynomial satisfies the equioscillation condition of (16), with _−a_
+
+
+_a_ [1]
+
+3 _b_ [=] _α_
+
+
+3 _b_ _α_
+
+and _E_ = _β_ 1. Therefore, it must necessarily be the optimal approximation from P [odd] 3 . Note that
+_−_
+for _u_ = 1, _x_ _p_ NS( _αx_ ) is the same polynomial derived in Chen & Chow (2014).
+_�→_
+
+Unfortunately, for larger _d_, finding closed form expressions for optimal approximations from P [odd] _d_
+becomes challenging, and we know of no closed form solution. However, we can approximate the
+optimal polynomial using the Remez algorithm. Let _d_ = 2 _q_ + 1. Again recalling Lemma C.1,
+the optimal polynomial must satisfy the equioscillation property at a set of _q_ + 2 points, as in (16).
+The Remez algorithm finds the equioscillation points _A_ = _x_ 0 _, . . ., xq_ +1 from Lemma C.1 by
+_{_ _}_
+iteratively refining a sequence of trial points _A_ [(] _[k]_ [)] = _{x_ [(] 0 _[k]_ [)] _[, . . ., x]_ _q_ [(] _[k]_ +1 [)] _[}]_ [ so that] _[ A]_ [(] _[k]_ [)] [converges to] _[ A]_ [.]
+From the sequence of trial points _A_ [(] _[k]_ [)] the algorithm also finds a sequence of polynomials _p_ [(] _[k]_ [)] so
+that _p_ [(] _[k]_ [)] converges to the optimal polynomial. The convergence is very fast, and usually 10 iterations
+is sufficient to converge to the optimal polynomial up to double precision machine epsilon (Pach´on
+& Trefethen, 2009). More commonly, the Remez algorithm is used to find optimal polynomial
+approximations to general continuous functions where _d_ _≈_ 100 or even _d_ _≈_ 1000. However,
+because the polynomial we build to approximate sign( _x_ ) is a composition of polynomials, each of
+which has a low degree, in our setting the degree _d_ is small, usually _d_ = 5. For _d_ = 5 the Remez
+algorithm simplifies significantly. We now describe this simplified algorithm.
+
+
+We first choose an initial set of trial points _A_ [(1)], which ideally should come close to satisfying the
+equioscillation property. From Lemma C.1, the unique optimal approximation _p_ _[⋆]_ P [odd] 5 satisfies
+_∈_
+the equioscillation property at four points in [ _ℓ, u_ ]. Since the function we wish to approximate is
+constant, the equioscillation points must be extrema of _p_ _[⋆]_ on [ _ℓ, u_ ]. Because _p_ _[⋆]_ is a odd quintic,
+it can have at most two local extrema on the positive real line, and thus at most two local extrema
+on [ _ℓ, u_ ]. The other two equioscillation points must therefore be the endpoints _ℓ_ and _u_ . Since we
+know that _ℓ_ and _u_ must be equioscillation points we always set _x_ [(] 0 _[k]_ [)] = _ℓ_ and _x_ [(] 3 _[k]_ [)] = _u_ for all _k_ .
+We initialize _x_ [(1)] 1 and _x_ [(1)] 2 to 4 [3] _[ℓ]_ [+] [1] 4 _[u]_ [and] [1] 4 _[ℓ]_ [+] [3] 4 _[u]_ [,] [since] [we] [observe] [that] [as] _[ℓ]_ _[u]_ [these] [are]
+
+
+[3] [1]
+
+4 _[ℓ]_ [+] 4
+
+
+[1] [and] [1]
+
+4 _[u]_ 4
+
+
+[1] [3]
+
+4 _[ℓ]_ [+] 4
+
+
+We initialize _x_ 1 and _x_ 2 to 4 _[ℓ]_ [+] 4 _[u]_ [and] 4 _[ℓ]_ [+] 4 _[u]_ [,] [since] [we] [observe] [that] [as] _[ℓ]_ _[→]_ _[u]_ [these] [are]
+
+approximately the other two equioscillation points.
+
+
+We now show how to refine a candidate set of trial points _A_ [(] _[k]_ [)] to produce _A_ [(] _[k]_ [+1)] as well as an
+approximately equioscillating polynomial _pk_ . For any fixed set of trial points _{ℓ, x_ [(] 1 _[k]_ [)] _[, x]_ 2 [(] _[k]_ [)] _[, u][}]_ [, we]
+can find a degree-5 odd polynomial _pk_ ( _x_ ) = _akx_ + _bkx_ [3] + _ckx_ [5] that satisfies
+
+_pk_ ( _ℓ_ ) = 1 _−_ _Ek,_ _pk_ ( _x_ [(] 1 _[k]_ [)][) = 1 +] _[ E][k][,]_ _pk_ ( _x_ [(] 2 _[k]_ [)][) = 1] _[ −]_ _[E][k][,]_ _pk_ ( _u_ ) = 1 + _Ek_ (18)
+
+
+for some _Ek_ by solving a linear system in _ak, bk, ck_ and _Ek_ . This can be rewritten as follows:
+ 
+
+
+_ak_
+_bk_
+_ck_
+_Ek_
+
+
+ =
+
+
+ _._ (19)
+
+
+_ℓ_ _ℓ_ [3] _ℓ_ [5] 1
+_x_ [(] 1 _[k]_ [)] ( _x_ [(] 1 _[k]_ [)][)][3] ( _x_ [(] 1 _[k]_ [)][)][5] _−_ 1
+_x_ [(] 2 _[k]_ [)] ( _x_ [(] 2 _[k]_ [)][)][3] ( _x_ [(] 2 _[k]_ [)][)][5] 1
+_u_ _u_ [3] _u_ [5] _−_ 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1
+1
+1
+1
+
+
+If _A_ [(] _[k]_ [)] were the extrema of the error function _ek_ ( _x_ ) = 1 _pk_ ( _x_ ) on [ _ℓ, u_ ], then they would be
+_−_
+an equioscillating set for _pk_, and _pk_ would be the solution. Therefore, to refine _A_ [(] _[k]_ [)], we find the
+extrema of _ek_ ( _x_ ) = 1 _−_ _pk_ ( _x_ ). These can occur at _ℓ, u_ and the roots of _e_ _[′]_ _k_ [(] _[x]_ [)][.] [Setting] _[ e][′]_ _k_ [(] _[x]_ [)] [=] [0]
+
+
+24
+
+
+yields the quartic equation 5 _ckx_ [4] + 3 _bkx_ [2] + _ak_ = 0, whose two solutions are given explicitly by
+the _quadratic_ formula after the substitution _y_ = _x_ [2] . We set _x_ [(] 1 _[k]_ [+1)] and _x_ [(] 2 _[k]_ [+1)] to be the solutions
+to this equation and let _A_ [(] _[k]_ [+1)] = _ℓ, x_ [(] 1 _[k]_ [+1)] _, x_ [(] 2 _[k]_ [+1)] _, u_ . We repeat the procedure until _Ek_ :=
+_{_ _}_ _|_ _|_
+max
+_x∈_ [ _ℓ,u_ ] _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p][k]_ [(] _[x]_ [)] _[| ≈]_ [max] _[|]_ [1] _[ −]_ _[p][k]_ [+1][(] _[x]_ [)] _[|]_ [ =:] _[ |][E][k]_ [+1] _[|]_ [.]
+
+We note that the matrix appearing in (19) is a Vandermonde matrix. Vandermonde matrices become
+notoriously ill-conditioned as the degree grows large (Golub & Van Loan, 2013, Section 4.6). However, since in our setting we choose _d_ to be small, there is no ill-conditioning due to large degrees.
+Instead, we observe ill-conditioning when _ℓ_ _u_ . However, as _ℓ/u_ 1 the optimal polynomial will
+
+              - _≈_ _→_
+
+converge to the polynomial _[x/u]_ 15 10( _x/u_ ) [2] + 3( _x/u_ ) [4][�], which can be verified by noting that
+
+
+              
+converge to the polynomial _[x/u]_ 8 15 10( _x/u_ ) [2] + 3( _x/u_ ) [4][�], which can be verified by noting that
+
+_−_
+as _ℓ/u_ 1 all equioscillation points _x_ 0 _, x_ 1 _, x_ 2 _, x_ 3 must converge to _u_ . For general _d_ = 2 _q_ + 1,
+the polynomial will converge to _→_ ( _x/ℓ_ ) _h_ (1 ( _x/ℓ_ ) [2] ) where _h_ P _q_ is the [ _q/_ 0] Pad´e approximant
+_−_ _∈_
+polynomial for sufficiently largeto (1 _−_ _x_ ) [1] _[/]_ [2] (�Kenney & Laub, _ℓ_ 1991. To see this, let). In fact, this _p_ _[⋆]_ polynomialbe the optimal approximation fromis extremely close to the P [odd] 5optimaland
+let _p_ ( _x_ ) = _[x/u]_ 15 10( _x/u_ ) [2] + 3( _x/u_ ) [4][�] . Then,
+
+
+  8 15 10( _x/u_ ) [2] + 3( _x/u_ ) [4][�] . Then,
+_−_
+
+
+max [max]
+_x∈_ [ _ℓ,u_ ] _x∈_ [ _ℓ,u_ ] _x∈_ [ _ℓ,u_ ]
+
+_[|][p][⋆]_ [(] _[x]_ [)] _[ −]_ _[p]_ [(] _[x]_ [)] _[| ≤]_ [max] _[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_ [ +] _[|]_ [1] _[ −]_ _[p][⋆]_ [(] _[x]_ [)] _[|]_
+
+
+2 max
+_≤_ _x∈_ [ _ℓ,u_ ] _[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_
+
+
+_≤_ 2 (1 _−_ _ℓ/u_ ) [3] _._
+
+
+where we invoked (Kenney & Laub, 1991, Theorem 3.1) and the fact that _p_ _[⋆]_ is the optimal approximation to _x_ 1 from P [odd] 5 . Hence, when _ℓ/u_ 1 _ϵ_ [1] _d_ _[/]_ [3], where _ϵ_ double 1 _._ 1 10 _[−]_ [16] is the
+_�→_ _≥_ _−_ _≈_ _×_
+double precision machine epsilon, then _p_ _[⋆]_ ( _x_ ) _p_ ( _x_ ) 2 _ϵ_ double. In other words, up to double
+_|_ _−_ _|_ _≤_
+precision machine epsilon, _p_ _[⋆]_ is equal to _p_ . Therefore, whenever _ℓ/u_ _≥_ 1 _−_ _ϵ_ [1] double _[/]_ [3] [the] [algorithm]
+simply returns the Pad´e approximant (that is, the scaled Newton-Schulz polynomial).
+
+
+The full algorithm is given in Algorithm 2. In our experiments, we never observed Algorithm 2 taking more than five iterations to converge. This algorithm is implemented in full in Implementation 2.
+
+
+**Algorithm 2** Remez algorithm (degree 5 approximation for sign( _x_ ))
+**input:** interval [ _ℓ, u_ ] for _u > ℓ>_ 0.
+**output:** Approximation _p_ P [odd] 5 to _p_ _[⋆]_ = arg min max
+_∈_ _p∈_ P [odd] 5 _x∈_ [ _ℓ,u_ ]
+
+_[|]_ [1] _[ −]_ _[p]_ [(] _[x]_ [)] _[|]_ [.]
+
+
+**define** _ϵ_ double = 1 _._ 11 10 _[−]_ [16]
+_×_
+
+[1] _[/]_ [3]
+
+
+**if** _ℓ/u ≥_ 1 _−_ _ϵ_ [1] double _[/]_ [3] **[then]** Return _p_ ( _x_ ) = _[x/u]_
+
+
+**end if**
+_x_ [(1)] 1 = [3] 4
+
+
+4 [1] _[u,]_ _x_ [(1)] 2 = [1] 4
+
+
+  8 15 10( _x/u_ ) [2] + 3( _x/u_ ) [4][�]
+_−_
+
+
+[3] [1]
+
+4 _[ℓ]_ [+] 4
+
+
+[1] [3]
+
+4 _[ℓ]_ [+] 4
+
+
+_x_ 1 = 4 _[ℓ]_ [+] 4 _[u,]_ _x_ 2 = 4 _[ℓ]_ [+] 4 _[u]_ [.]
+
+_E_ 0 = _,_ _E−_ 1 =
+_∞_ _−∞_
+_k_ _←_ 0
+**while** _Ek_ _Ek−_ 1 _> ϵ_ double **do**
+_||_ _| −|_ _||_
+
+
+
+
+
+
+
+_k_ _k_ + 1
+ _←_  
+
+
+1
+1
+1
+1
+
+
+
+
+
+_−_ 1 
+
+
+_ak_
+_bk_
+_ck_
+_Ek_
+
+
+
+
+
+
+
+
+
+
+ =
+
+
+
+
+
+
+
+_ℓ_ _ℓ_ [3] _ℓ_ [5] 1
+_x_ [(] 1 _[k]_ [)] ( _x_ [(] 1 _[k]_ [)][)][3] ( _x_ 1 [(] _[k]_ [)][)][5] _−_ 1
+_x_ [(] 2 _[k]_ [)] ( _x_ [(] 2 _[k]_ [)][)][3] ( _x_ [(1)] 2 [)][5] 1
+_u_ _u_ [3] _u_ [5] _−_ 1
+
+
+
+
+
+_x_ [(] 1 _[k]_ [+1)] = _−_ 3 _bk−_ 109 _bc_ [2] _kk_ _[−]_ [20] _[a][k][c][k]_ _,_ _x_ [(] 2 _[k]_ [+1)] = _−_ 3 _bk_ + 109 _bc_ [2] _kk_ _[−]_ [20] _[a][k][c][k]_
+
+**end while**
+Return _p_ ( _x_ ) = _akx_ + _bkx_ [3] + _ckx_ [5]
+
+
+~~�~~
+
+_−_ 3 _bk_ + ~~_[√]_~~
+
+
+_x_ [(] 1 _[k]_ [+1)] =
+
+
+~~�~~
+
+_−_ 3 _bk−_ ~~_[√]_~~
+
+
+109 _bc_ [2] _kk_ _[−]_ [20] _[a][k][c][k]_ _,_ _x_ [(] 2 _[k]_ [+1)] =
+
+
+25
+
+
+G FINITE PRECISION CONSIDERATIONS
+
+
+As highlighted in Section 3.4, one must take care to implement Polar Express in finite precision. In this section we outline modifications to our method to ensure stability in finite precision
+arithmetic.
+
+
+The first issue arises when numerical round-off creates singular values that are slightly larger than
+our current upper bound _ut_ . Our optimal polynomials converge only when the singular values of _**X**_ _t_
+are less than _ut_ . In some cases we have
+_pt_ ( _ut_ + _ϵ_ ) _> ut_ +1 + _ϵ,_
+so over many iterations, a singular value that is slightly larger than _ut_ large could grow to _∞_ instead
+of converging to 1.
+
+
+To fix this issue, we simply replace each polynomial _x_ _pt_ ( _x_ ) by _x_ _pt_ ( _x/_ 1 _._ 01). This safety
+_�→_ _�→_
+factor corrects for round-off errors in previous iterations while only slightly changing the behavior
+of the polynomial on the interval [ _ℓt, ut_ ], though it does cause the singular values to converge to
+0 _._ 999998 instead of to 1. To correct for this, the safety factor can be omitted in the final iteration.
+This fix is reflected in line 5 of Algorithm 1.
+
+
+The second issue was identified in Nakatsukasa & Higham (2012) and addressed in the context of
+polynomial iterations by Chen & Chow (2014). In general, iterative methods for polar( _**M**_ ) aim to
+increase each singular value relative to the largest singular value; while _σ_ min( _**X**_ 0) _σ_ max( _**X**_ 0),
+_≪_
+after enough iterations, _σ_ min( _**X**_ _t_ ) _σ_ max( _**X**_ _t_ ) 1. However, the convergence of each singular
+_≈_ _≈_
+value to _σ_ max may not be monotonic. Over the domain [ _ℓt, ut_ ], our optimal polynomial _pt_ oscillates
+repeatedly between _ℓt_ +1 and _ut_ +1, so some singular values that are near _ut_ may get mapped down
+to _ℓt_ +1. It so happens that this non-monotonicity—even at a single iteration—can cause loss of
+precision. That is, problems occur if
+
+
+max
+
+( _σi_ ) _x∈_ [ _σ_ min _,σ_ max] _[p][t]_ [(] _[x]_ [)]
+
+_σi_ _≪_ _σ_ max
+
+
+_pt_ ( _σi_ )
+
+
+_,_
+_σ_ max
+
+
+where 0 _σ_ min _σi_ _σ_ max are singular values of _**X**_ _t_ (Nakatsukasa & Higham, 2012). In the
+_≤_ _≤_ _≤_
+extreme case _pt_ ( _σi_ ) _<_ 0, the _i_ th singular vector will change sign, causing the method to converge
+to the polar factor of the wrong matrix. Unlike Newton-Schulz, unscaled Newton, or QDWH, our
+method is affected by this loss of precision.
+
+
+To mitigate this issue, Chen & Chow (2014) propose modifying their update polynomials to enforce
+a lower bound on the ratio _[p][t]_ [(] _[σ][i]_ [)] . This issue only occurs when _ℓt_ _ut_ ; as _ℓt_ _ut_, our optimal
+
+
+_σi_ _[i]_ . This issue only occurs when _ℓt_ _ut_ ; as _ℓt_ _ut_, our optimal
+_≪_ _→_
+
+_[p]_ [(] _[x]_ [)]
+
+
+polynomial approaches the Pad´e approximant and so _[p][t]_ [(] _[x]_ [)]
+
+
+polynomial approaches the Pad´e approximant and so _[t]_ _x_ 1 for all _x_ [0 _, ut_ ]. We could fully
+
+_≥_ _∈_
+solve the problem by using the Pad´e approximant instead of our optimal polynomial, but this would
+significantly slow down convergence. Instead we compromise. When _ℓt_ _ut/_ 10, we find that
+_ptx_ ( _x_ ) 0 _._ 236. Therefore, whenever _ℓt_ _<_ _ut/_ 10 we select the update rule as though _≥_ _ℓt_ = _ut/_ 10.
+
+_≥_
+This change slows convergence, but only very slightly. (The choice of 10 is somewhat arbitrary. In
+Implementation 2, we use a different factor.) This fix is reflected in line 4 of Algorithm 1.
+
+The third change is copied from the original Muon implementation: normalize _**M**_ by _∥_ _**M**_ _∥_ F +10 _[−]_ [2]
+instead of by _**M**_ F. As before, we set _u_ 1 = 1. This fix is reflected in line 10 of Algorithm 1.
+_∥_ _∥_
+
+
+H ADDITIONAL EXPERIMENTAL RESULTS
+
+
+In this section, we present additional experimental results.
+
+
+H.1 CONVERGENCE OF POLAR EX P R E S S AND ITS IMPACT ON MUON
+
+
+**Convergence in Frobenius Norm** In Figure 8, we plot the convergence of Polar Express and
+three baselines as measured in the Frobenius norm. We also plot convergence in cosine similarity,
+which is defined with respect to the Frobenius inner _⟨_ _**A**_ _,_ _**B**_ product _⟩_ _⟨_ _**A**_ _,_ _**B**_ _⟩_ = Tr( _**A**_ _[⊤]_ _**B**_ ). Formally, the
+cosine similarity between _**A**_ and _**B**_ is defined as _∥_ _**A**_ _∥_ F _∥_ _**B**_ _∥_ F [. We use gradients of GPT-2 layers as test]
+matrices. While Polar Express is designed to minimize the spectral norm error, convergence
+in the Frobenius norm is similar (compare with Figure 3).
+
+
+26
+
+
+Before
+stabilizing
+
+
+2 _._ 0
+
+
+1 _._ 5
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+After
+0 _._ 236 _x_
+stabilizing
+
+
+0 _._ 0
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0
+_x_
+
+
+Figure 7: Effects of stabilizing the update rules with a safety factor and cushioning, as described
+in Appendix G. The blue curve is the optimal degree-5 polynomial for the interval [0 _._ 005 _,_ 1]. It is
+has numerical issues because it maps singular values near 0 _._ 8 down to almost zero and maps 1 + _ϵ_
+to _ut_ +1 + 25 _ϵ_ . The stabilized version is better because it ensures _[p][t]_ _x_ [(] _[x]_ [)] 0 _._ 236 and maps all
+_≈_ _≥_
+
+_x_ 1 _._ 01 to at most _ut_ +1.
+_≤_
+
+
+GPT-2 Gradient
+
+Layer 3 mlp.c ~~f~~ c
+
+
+2 4 6 8 10
+Iteration
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+0 _._ 0
+
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+GPT-2 Gradient
+Layer 1 attn.c ~~a~~ ttn
+
+
+2 4 6 8 10
+Iteration
+
+
+Newton-Schulz ( _d_ = 5) Jordan You PolarExp, _ℓ_ = 10 _[−]_ [3]
+
+
+Figure 8: Convergence of degree-5 polynomial methods measured in Frobenius norm and cosine
+similarity. Test matrices are gradients of two layers of a randomly-initialized GPT-2 model on a
+batch of language modeling data. Polar Express outperforms other methods.
+
+
+27
+
+
+**(In)sensitivity of Muon to Small Singular Values** Figure 5 shows that using more than five or six
+iterations of Polar Express does not improve the performance of Muon. However, Figures 3
+and 8 show that five iterations is not enough for Polar Express or any other method to converge.
+In practice, Polar Express is taking steps in directions that are meaningfully different from
+the exact polar( _**M**_ ) (as computed by an SVD), but still converging equally fast. One possible
+explanation for this observation is that Muon may not be sensitive to the convergence of small
+singular values of _**M**_ . Intuitively, the singular vectors associated with these small singular values
+correspond to directions which have little effect on the output of the neural network; they may
+signify little more than noise in the stochastic gradients.
+
+
+We now conduct an experiment to test this hypothesis. We compare three ways that a Muon-like
+optimizer could handle the small singular values. Assume _**M**_ has full rank, and partition the singular
+value decomposition of _**M**_ into two parts
+
+
+           _**M**_ = _**U**_ **Σ** _**V**_ _[⊤]_ = [ _**U**_ 1 _**U**_ 2] **Σ** 1 **Σ** 2
+
+
+[ _**V**_ 1 _**V**_ 2] _[⊤]_ = _**U**_ 1 **Σ** 1 _**V**_ 1 _[⊤]_ [+] _**[ U]**_ [2] **[Σ]** [2] _**[V]**_ 2 _[⊤]_ (20)
+
+
+where **Σ** 1 contains the singular values larger than some threshold _γσ_ max and **Σ** 2 contains those
+smaller than _γσ_ max, where _σ_ max is the largest singular value of _**M**_ . Recall that
+
+polar( _**M**_ ) := _**UV**_ _[⊤]_ = _**U**_ 1 _**V**_ 1 _[⊤]_ [+] _**[ U]**_ [2] _**[V]**_ 2 _[⊤]_ (21)
+
+
+is obtained by mapping each singular value of _**M**_ to 1. We define the truncated polar factor by
+mapping the larger singular values to 1 and the smaller singular values to 0:
+
+
+polar _γ_ ( _**M**_ ) := _**U**_ 1 _**V**_ 1 _[⊤][.]_ (22)
+
+A third possibility is to map the small singular values to _−_ 1:
+
+_**UV**_ _[⊤]_ = _**U**_ 1 _**V**_ 1 _[⊤]_ 2 _[⊤]_ (23)
+
+_[−]_ _**[U]**_ [2] _**[V]**_
+
+Note that _**U**_ 2 _**V**_ 2 _[⊤]_ is in the _opposite_ direction as the Muon update. If the small singular values
+
+_−_
+carry meaningful information about the loss landscape, then we expect this partly “uphill” step to
+hurt performance. Comparing the three update rules in Equations (21) to (23) can tell us how small
+singular values affect Muon.
+
+
+We train GPT-2 Small using each of these three update rules with learning rate 0 _._ 05 and weight
+decay 0 _._ 1. We sweep three different options for the cutoff _γ_ that defines the ‘small” singular values:
+10 _[−]_ [4], 10 _[−]_ [3], and 10 _[−]_ [2] . The results are plotted in Figure 9. They show that the treatment of singular
+values smaller than 10 _[−]_ [4] _σ_ max does not matter at all for the performance of Muon, and those smaller
+than 10 _[−]_ [3] _σ_ max have a very minor effect. Notably, even _reversing_ the direction of the Muon step
+in the bottom singular subspace barely worsens performance, showing that the gradient information
+in this subspace not very informative. The bottom panel of Figure 9 shows how five iterations of
+Polar Express (with _ℓ_ = 10 _[−]_ [3] ) affect small singular values. Singular values greater than 10 _[−]_ [3]
+are all mapped close to 1, while those smaller than 10 _[−]_ [4] are all mapped close to 0. Thus, while
+Polar Express does not fully converge after five iterations, it does converge in the ways that
+matter for Muon.
+
+
+**Convergence** **of** **Top** **Singular** **Values** As discussed in the previous paragraph, we hypothesize
+that Muon may not be sensitive to the convergence of the small singular values of _**M**_ when approximating polar( _**M**_ ). Therefore, in Figure 10, we plot the convergence of Polar Express and the
+baselines when all singular values smaller than 10 _[−]_ [3] are ignored. Specifically, if alg( _**M**_ ) denotes
+the output of an algorithm for approximating polar( _**M**_ ), then we compare
+
+
+_**U**_ 1 _**U**_ 1 _[⊤]_ 1 _[⊤]_ to polar10 _−_ 3( _**M**_ ) _,_
+
+_[·]_ [ alg(] _**[M]**_ [)] _[ ·]_ _**[ V]**_ [1] _**[V]**_
+
+above.where polarThe 10results _−_ 3( _**M**_ show) = _**U**_ that1 _**V**_ 1 _[⊤]_ Polar= _**U**_ 1 _**U**_ Express1 _[⊤]_ _[·]_ [ polar(] _**[M]**_ converges [)] _[ ·]_ _**[ V]**_ [1] _**[V]**_ 1 _[⊤]_ in [is the truncated polar factor defined] just six iterations as measured in
+the relative Frobenius norm and just five iterations when measuring in cosine similarity. The other
+methods converge faster too, but Polar Express still outperforms them. These results may
+explain why the performance of Muon saturates at five or six iterations of Polar Express, as
+shown in Figure 5.
+
+
+28
+
+
+5 _._ 000
+
+
+4 _._ 750
+
+
+4 _._ 500
+
+
+4 _._ 250
+
+
+4 _._ 000
+
+
+3 _._ 750
+
+
+3 _._ 588
+
+
+1
+
+
+0
+
+
+10 _[−]_ [4] 10 _[−]_ [3] 10 _[−]_ [2]
+
+Cutoff ( _γ_ )
+
+
+Figure 9: Impact of small singular directions of momentum matrix on optimization quality. We
+compare three variations of the Muon update rule. Exact Muon (green) processes the momentum
+_**M**_ = _**U**_ **Σ** _**V**_ _[⊤]_ by mapping each singular value to 1: polar( _**M**_ ) = _**UV**_ _[⊤]_ . Truncated Muon (orange)
+maps the larger singular values to 1 and the smaller singular values to 0. Reverse Muon (blue) maps
+the larger ones to 1 and the smaller ones to _−_ 1. Computations are performed in bfloat32. All
+runs train GPT-2 Small on 1 billion tokens of FineWeb data with learning rate 0.05 and weight
+decay 0.1. When the cutoff that defines “large” and “small” singular values is _γ_ _≈_ 10 _[−]_ [3], all three
+methods perform well, showing that the small singular directions do not matter. Bottom panel shows
+the polynomial defined by composing five iterations of Polar Express. Five iterations is just
+enough for singular values _≥_ 10 _[−]_ [3] to nearly converge.
+
+
+GPT-2 Gradient
+
+Layer 3 mlp.c ~~f~~ c
+
+
+2 4 6 8 10
+Iteration
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+0 _._ 0
+
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+GPT-2 Gradient
+Layer 1 attn.c ~~a~~ ttn
+
+
+2 4 6 8 10
+Iteration
+
+
+Newton-Schulz ( _d_ = 5) Jordan You PolarExp, _ℓ_ = 10 _[−]_ [3]
+
+
+Figure 10: Convergence of degree-5 polynomial methods, considering only singular values larger
+than _σ_ max _/_ 10 [3] . Test matrices are gradients of two layers of a randomly-initialized GPT-2 model on
+a batch of language modeling data. Polar Express converges in just five or six iterations and
+outperforms other methods.
+
+
+29
+
+
+H.2 TRAINING GPT-2
+
+
+**Additional Metrics** We report additional results from the experiment of Section 4.2. In addition to
+showing validation loss vs. learning rate and training step, we also report _training_ loss vs. learning
+rate and training _time_ . The results are shown in Figures 11a and 11b. The upper rows of each
+subfigure are identical to Figure 1 and Figure 4, and are repeated here for ease of comparison.
+
+
+**Weight Decay** As described in Section 4.3, we reran our GPT-2 training runs with weight decay
+of 0 _._ 1. This change had little effect on the results, as shown in Figure 12.
+
+
+**Number** **of** **Training** **Tokens** We also reran some of our GPT-2 training runs using 10 billion
+tokens of training data instead of 1 billion. As described in Section 4.3, 10 billion tokens roughly
+matches the Chinchilla scaling rule for GPT-2-Large and exceeds it for GPT-2-Small. Results are
+shown in Figure 13. Note that the top row of Figure 13a is identical to Figure 6. Polar Express
+still outperforms the baselines across all conditions, but the gap shrinks as the training loss converges.
+
+
+H.3 IMAGE CLASSIFICATION
+
+
+We conducted experiments on the CIFAR-10 and CIFAR-100 image classification benchmarks
+(Krizhevsky, 2009) using ResNet-20 and ResNet-110 architectures with batch normalization (He
+et al., 2016). We used a range of learning rates in the range 10 _[−]_ [6] to 1 with a constant learning-rate
+schedule, a batch size of 128, and 50 epochs of training data. We used three different random seeds
+for each hyperparameter setting to assess stability and variability. As a baseline, we also included
+AdamW and SGD with momentum (Kingma & Ba, 2015). Results are given in Figures 14 and 15.
+For these experiments we see that all the Muon variants performed well, matching or exceeding
+the training loss and validation accuracy of AdamW and sgd-m while also being more stable with
+respect to the choice of learning rate. However, we do not see a marked difference between the
+varieties of Muon. Indeed, even Newton-Schulz (degree = 5) performs equally well in this context,
+despite being significantly less accurate than PolarExpress, Jordan or You.
+
+
+Next we train a Vision Transformer (patch size 4, embedding dimension 512, depth 6, 8 heads, MLP
+dimension 512, dropout 0.1) on CIFAR-10 for 200 epochs with batch size 512 using a constant
+learning rate schedule. Results are shown in Figure 16. Muon with Polar Express achieved
+the best training and validation loss (closely followed by Jordan’s and You’s methods). However,
+improved loss did not entirely translate to better accuracy: both Muon and Newton-Schulz and
+Adam performed well in terms of validation accuracy. Overall, these experiments do not show a
+consistent advantage for Polar Express. Further work may be beneficial to fully realize the
+potential benefits of Muon and to further tune Polar Express for these settings.
+
+
+I INITIALIZATION FOR MATRICES WITH LARGE SPECTRAL GAPS
+
+
+In Section 3, we constructed a sequence of polynomials that is adapted to the range of the singular
+values [ _ℓ, u_ ]. Assuming nothing else about the input, these polynomials are optimal since they provide a good approximation to 1 across the entire interval. However, in many applications, the spectrum has large gaps; that is, there are several large outlying singular values that are well-separated
+from the rest. For these matrices, it is not necessary for the polynomial to be accurate on the entire
+interval [ _ℓ, u_ ], only on the range of the small singular values plus a few other isolated points. In this
+section, we take advantage of this structure to accelerate our method by preprocessing the matrix to
+eliminate the largest singular values.
+
+
+The first step is to find small intervals containing each of these large singular values. To find lower
+bounds, we use subspace iteration, which is a generalization of the power method that approximates
+multiple singular values simultaneously. Fix _k_, the number of singular values we wish to eliminate.
+Letting _σ_ 1 _σn_ denote the singular values of _**M**_, subspace iteration produces estimates
+_≥· · ·_ _≥_
+
+
+30
+
+
+|Col1|Col2|muon-You|
+|---|---|---|
+||muon-PolarExp<br>muon-Jordan|muon-PolarExp<br>muon-Jordan|
+||||
+||||
+||||
+||||
+||||
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8
+Epoch
+
+
+0 2000 4000 6000 8000
+Time (s)
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+3 _._ 4
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+3 _._ 4
+
+
+3 _._ 46
+
+
+3 _._ 44
+
+
+3 _._ 42
+
+
+3 _._ 40
+
+
+3 _._ 38
+
+
+3 _._ 36
+
+
+3 _._ 34
+
+
+3 _._ 46
+
+
+3 _._ 44
+
+
+3 _._ 42
+
+
+3 _._ 40
+
+
+3 _._ 38
+
+
+3 _._ 36
+
+
+3 _._ 34
+
+
+10 _[−]_ [2]
+
+|Col1|Col2|muon-You<br>muon-PolarExp|
+|---|---|---|
+||muon-Jordan|muon-Jordan|
+||||
+||||
+||||
+||||
+||||
+
+
+10 _[−]_ [2]
+
+
+Learning Rate
+
+
+Learning Rate
+
+
+(a) GPT-2-Large (774M params). Best final validation losses were muon-You (lr = 0 _._ 02): 3 _._ 399,
+muon-Jordan (lr = 0 _._ 02): 3 _._ 398 and muon-PolarExp (lr = 0 _._ 02): 3 _._ 340 _._
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+|4.4<br>Loss<br>4.2<br>Validation<br>4.0<br>Final<br>3.8<br>3.6|Col2|Col3|muon-Jordan|
+|---|---|---|---|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss|||~~muon-You~~<br>adamw<br>muon-PolarExp|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Validation Loss||||
+
+
+|10−3 10−2 Learning Rate|Col2|Col3|Col4|
+|---|---|---|---|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|||muon-Jordan<br>|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp|||~~muon-You~~<br>adamw<br>muon-PolarExp|
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+|3_._6<br>3_._8<br>4_._0<br>4_._2<br>4_._4<br>Final Loss<br>muon-Jordan<br>~~muon-You~~<br>adamw<br>muon-PolarExp||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8
+Epoch
+
+
+0 200 400 600 800 1000 1200
+Time (s)
+
+
+(b) GPT-2-Small (124M params). Best final validation losses were adamw (lr = 0 _._ 001): 4 _._ 197,
+muon-Jordan (lr = 0 _._ 01): 3 _._ 639, muon-You (lr = 0 _._ 01): 3 _._ 629 and muon-PolarExp (lr = 0 _._ 005):
+3 _._ 588.
+
+
+Figure 11: Training GPT-2 on 1 billion tokens of FineWeb data (Aroca-Ouellette et al., 2023) without weight decay. The label muon-<method> denotes Muon with 5 iterations of <method> to
+compute polar( _**M**_ ). Top left: final validation loss vs. learning rate. Bottom left: final training loss
+vs. learning rate. Top right: validation loss vs. number of iterations for best learning rate. Bottom
+right: training loss vs. time for best learning rate.
+
+
+31
+
+
+|Col1|Col2|muon-You|
+|---|---|---|
+|||muon-Jordan<br>muon-PolarExp|
+||||
+||||
+||||
+||||
+||||
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8
+Epoch
+
+
+0 2000 4000 6000 8000
+Time (s)
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+3 _._ 4
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+3 _._ 4
+
+
+3 _._ 46
+
+
+3 _._ 44
+
+
+3 _._ 42
+
+
+3 _._ 40
+
+
+3 _._ 38
+
+
+3 _._ 36
+
+
+3 _._ 34
+
+
+3 _._ 46
+
+
+3 _._ 44
+
+
+3 _._ 42
+
+
+3 _._ 40
+
+
+3 _._ 38
+
+
+3 _._ 36
+
+
+10 _[−]_ [2]
+
+|Col1|muon-You<br>muon-Jordan|Col3|
+|---|---|---|
+||muon-PolarExp|muon-PolarExp|
+||||
+||||
+||||
+||||
+||||
+
+
+10 _[−]_ [2]
+
+
+Learning Rate
+
+
+Learning Rate
+
+
+(a) GPT-2-Large (774M params). Best final validation losses were muon-You (lr = 0 _._ 02): 3 _._ 390,
+muon-Jordan (lr = 0 _._ 02): 3 _._ 401 and muon-PolarExp (lr = 0 _._ 02): 3 _._ 344 _._
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+4 _._ 4
+
+
+4 _._ 2
+
+
+4 _._ 0
+
+
+3 _._ 8
+
+
+3 _._ 6
+
+
+3 _._ 72
+
+
+3 _._ 70
+
+
+3 _._ 68
+
+
+3 _._ 66
+
+
+3 _._ 64
+
+
+3 _._ 62
+
+
+3 _._ 60
+
+
+3 _._ 58
+
+
+3 _._ 72
+
+
+3 _._ 70
+
+
+3 _._ 68
+
+
+3 _._ 66
+
+
+3 _._ 64
+
+
+3 _._ 62
+
+
+3 _._ 60
+
+
+|Col1|Col2|muon-Jordan|
+|---|---|---|
+|||muon-You<br>muon-PolarExp|
+||||
+||||
+||||
+||||
+||||
+||||
+
+
+10 _[−]_ [2]
+
+|Col1|Col2|muon-Jordan|
+|---|---|---|
+|||muon-You<br>muon-PolarExp|
+||||
+||||
+||||
+||||
+||||
+||||
+
+
+10 _[−]_ [2]
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8
+Epoch
+
+
+0 250 500 750 1000 1250 1500
+Time (s)
+
+
+Learning Rate
+
+
+Learning Rate
+
+
+(b) GPT-2-Small (124M params). Best final validation losses were muon-Jordan (lr = 0 _._ 01): 3 _._ 638,
+muon-You (lr = 0 _._ 005): 3 _._ 641 and muon-PolarExp (lr = 0 _._ 005): 3 _._ 587.
+
+
+Figure 12: Training GPT-2 on 1 billion tokens of FineWeb data (Aroca-Ouellette et al., 2023) **with**
+**weight** **decay** 0 _._ 1. The label muon-<method> denotes Muon with 5 iterations of <method> to
+compute polar( _**M**_ ). Top left: final validation loss vs. learning rate. Bottom left: final training loss
+vs. learning rate. Top right: validation loss vs. number of iterations for best learning rate. Bottom
+right: training loss vs. time for best learning rate.
+
+
+32
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+||||~~muon-Jordan~~<br>muon-PolarExp<br>|
+|||||
+||||~~muon-You~~|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0
+Epoch
+
+
+0 10000 20000 30000 40000 50000 60000
+Time (s)
+
+
+3 _._ 5
+
+
+3 _._ 4
+
+
+3 _._ 3
+
+
+3 _._ 2
+
+
+3 _._ 1
+
+
+3 _._ 0
+
+
+2 _._ 9
+
+
+3 _._ 5
+
+
+3 _._ 4
+
+
+3 _._ 3
+
+
+3 _._ 2
+
+
+3 _._ 1
+
+
+3 _._ 0
+
+
+2 _._ 9
+
+
+3 _._ 06
+
+
+3 _._ 04
+
+
+3 _._ 02
+
+
+3 _._ 00
+
+
+2 _._ 98
+
+
+2 _._ 96
+
+
+2 _._ 94
+
+
+2 _._ 92
+
+
+3 _._ 06
+
+
+3 _._ 04
+
+
+3 _._ 02
+
+
+3 _._ 00
+
+
+2 _._ 98
+
+
+2 _._ 96
+
+
+2 _._ 94
+
+
+2 _._ 92
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+|Col1|Col2|Col3|muon-Jordan|
+|---|---|---|---|
+|||||
+||||muon-PolarExp<br>muon-You|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+
+(a) GPT-2-Large (774M params) with weight decay 0 _._ 1. Best final validation losses were muon-Jordan (lr
+
+
+|02): 2.921, muon-You (lr = 0.002): 2.919|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||muon-Jordan<br>muon-You<br>||
+||~~muon-PolarE~~<br>adamw|~~muon-PolarE~~<br>adamw|~~p~~|
+||~~muon-PolarE~~<br>adamw|~~muon-PolarE~~<br>adamw||
+|||||
+|||||
+|||||
+|||||
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1 _._ 0
+Epoch
+
+
+0 10000 20000 30000
+Time (s)
+
+
+3 _._ 50
+
+
+3 _._ 45
+
+
+3 _._ 40
+
+
+3 _._ 35
+
+
+3 _._ 30
+
+
+3 _._ 25
+
+
+3 _._ 20
+
+
+3 _._ 50
+
+
+3 _._ 45
+
+
+3 _._ 40
+
+
+3 _._ 35
+
+
+3 _._ 30
+
+
+3 _._ 25
+
+
+3 _._ 20
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||muon-Jordan<br>muon-You<br>||
+||~~muon-PolarE~~<br>adamw|~~muon-PolarE~~<br>adamw|~~p~~|
+||~~muon-PolarE~~<br>adamw|~~muon-PolarE~~<br>adamw||
+|||||
+|||||
+|||||
+|||||
+
+
+10 _[−]_ [3] 10 _[−]_ [2]
+
+Learning Rate
+
+
+3 _._ 6
+
+
+3 _._ 5
+
+
+3 _._ 4
+
+
+3 _._ 3
+
+
+3 _._ 2
+
+
+3 _._ 6
+
+
+3 _._ 5
+
+
+3 _._ 4
+
+
+3 _._ 3
+
+
+3 _._ 2
+
+
+(b) GPT-2-Small (124M params) without weight decay. Best final validation losses were adamw (lr = 0 _._ 0005):
+3 _._ 370, muon-Jordan (lr = 0 _._ 005): 3 _._ 233, muon-You (lr = 0 _._ 005): 3 _._ 234 and muon-PolarExp (lr =
+0 _._ 005): 3 _._ 231.
+
+
+Figure 13: Training GPT-2 **on** **10** **billion** **tokens** **of** **FineWeb** **data** (Aroca-Ouellette et al., 2023).
+The label muon-<method> denotes Muon with 5 iterations of <method> to compute polar( _**M**_ ).
+Top left: final validation loss vs. learning rate. Bottom left: final training loss vs. learning rate. Top
+right: validation loss vs. number of iterations for best learning rate. Bottom right: training loss vs.
+time for best learning rate.
+
+
+33
+
+
+0 _._ 90
+
+
+0 _._ 85
+
+
+0 _._ 80
+
+
+0 _._ 75
+
+
+0 _._ 70
+
+
+0 _._ 65
+
+
+0 _._ 60
+
+
+|Col1|adamw muon-Newton muon-You<br>muon-Jordan muon-PolarExp sgd-m|Col3|
+|---|---|---|
+||||
+||||
+||||
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [6] 10 _[−]_ [5] 10 _[−]_ [4] 10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0] 10 [1]
+
+Learning rate
+
+
+0 _._ 70
+
+
+0 _._ 65
+
+
+0 _._ 60
+
+
+0 _._ 55
+
+
+0 _._ 50
+
+
+0 _._ 45
+
+
+0 _._ 40
+
+
+|adamw muon-Newton muon-You<br>muon-Jordan muon-PolarExp sgd-m|Col2|
+|---|---|
+|||
+|||
+|||
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [6] 10 _[−]_ [5] 10 _[−]_ [4] 10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0]
+
+Learning rate
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+10 _[−]_ [7] 10 _[−]_ [6] 10 _[−]_ [5] 10 _[−]_ [4] 10 _[−]_ [3] 10 _[−]_ [2] 10 _[−]_ [1] 10 [0]
+
+Learning rate
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [2]
+
+
+|Col1|adamw muon-Newton muon-You<br>muon-Jordan muon-PolarExp sgd-m|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>101<br>Learning rate<br> 14: CIFAR10 with a RESNET20. <br>st validation accuracy for each meth<br>muon-You (lr = 0_._001): 0_._887, muo<br>1): 0_._891, muon-PolarExp (lr = 0<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>101<br>Learning rate<br> 14: CIFAR10 with a RESNET20. <br>st validation accuracy for each meth<br>muon-You (lr = 0_._001): 0_._887, muo<br>1): 0_._891, muon-PolarExp (lr = 0<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>101<br>Learning rate<br> 14: CIFAR10 with a RESNET20. <br>st validation accuracy for each meth<br>muon-You (lr = 0_._001): 0_._887, muo<br>1): 0_._891, muon-PolarExp (lr = 0<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>101<br>Learning rate<br> 14: CIFAR10 with a RESNET20. <br>st validation accuracy for each meth<br>muon-You (lr = 0_._001): 0_._887, muo<br>1): 0_._891, muon-PolarExp (lr = 0<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>101<br>Learning rate<br> 14: CIFAR10 with a RESNET20. <br>st validation accuracy for each meth<br>muon-You (lr = 0_._001): 0_._887, muo<br>1): 0_._891, muon-PolarExp (lr = 0<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|
+|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>101<br>Learning rate<br> 14: CIFAR10 with a RESNET20. <br>st validation accuracy for each meth<br>muon-You (lr = 0_._001): 0_._887, muo<br>1): 0_._891, muon-PolarExp (lr = 0<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>m<br>s|adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>m<br>s|uon-You<br>gd-m|uon-You<br>gd-m|
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>Learning rate<br> 15:<br>CIFAR100 with RESNET11<br>The best validation accuracy for e<br>0_._01): 0_._643, muon-Jordan (lr = <br>-PolarExp (lr = 0_._001): 0_._663, muo<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>Learning rate<br> 15:<br>CIFAR100 with RESNET11<br>The best validation accuracy for e<br>0_._01): 0_._643, muon-Jordan (lr = <br>-PolarExp (lr = 0_._001): 0_._663, muo<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>Learning rate<br> 15:<br>CIFAR100 with RESNET11<br>The best validation accuracy for e<br>0_._01): 0_._643, muon-Jordan (lr = <br>-PolarExp (lr = 0_._001): 0_._663, muo<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>Learning rate<br> 15:<br>CIFAR100 with RESNET11<br>The best validation accuracy for e<br>0_._01): 0_._643, muon-Jordan (lr = <br>-PolarExp (lr = 0_._001): 0_._663, muo<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|10_−_6<br>10_−_5<br>10_−_4<br>10_−_3<br>10_−_2<br>10_−_1<br>100<br>Learning rate<br> 15:<br>CIFAR100 with RESNET11<br>The best validation accuracy for e<br>0_._01): 0_._643, muon-Jordan (lr = <br>-PolarExp (lr = 0_._001): 0_._663, muo<br>adamw<br>muon-Jordan<br>muon-Newton<br>muon-PolarExp<br>muon-You<br>sgd-m|
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+|10_−_6<br>10_−_4<br>10_−_2<br>100<br>10<br>Learning rate|10_−_6<br>10_−_4<br>10_−_2<br>100<br>10<br>Learning rate|10_−_6<br>10_−_4<br>10_−_2<br>100<br>10<br>Learning rate|10_−_6<br>10_−_4<br>10_−_2<br>100<br>10<br>Learning rate|10_−_6<br>10_−_4<br>10_−_2<br>100<br>10<br>Learning rate|
+
+
+Figure 16: CIFAR10 with a VIT. Shaded regions show range over three random seeds. The best
+validation accuracy for each method was sgd-m (lr = 10 _[−]_ [1] ): 0 _._ 809, muon-PolarExp (lr =
+10 _[−]_ [5] ): 0 _._ 860, Adamw (lr = 10 _[−]_ [3] ): 0 _._ 861, muon-Jordan (lr = 10 _[−]_ [5] ): 0 _._ 861, muon-You (lr
+= 10 _[−]_ [5] ): 0 _._ 865, muon-Newton (lr = 10 _[−]_ [4] ): 0 _._ 874 .
+
+
+34
+
+
+_σ_ ˜1 _σ_ ˜ _k_ satisfying _σi_ _σ_ ˜ _i_ for all _i_ 1 _, . . ., k_ . [10] To find upper bounds on each _σi_, we can
+_≥· · ·_ _≥_ _≥_ _∈_
+use the fact that _∥_ _**M**_ _∥_ F [2] [=][ �] _j_ _[n]_ =1 _[σ]_ _j_ [2] [as follows:]
+
+
+     - _n_
+
+_σi_ [2] [=] _[ ∥]_ _**[M]**_ _[∥]_ F [2] _[−]_ _j_ =1
+
+_j_ = _i_
+
+That is, for each _i ∈_ [ _n_ ],
+
+
+_σi_
+_∈_
+
+
+_σj_ [2] F
+
+_[≤∥]_ _**[M]**_ _[∥]_ [2] _[−]_
+
+
+
+
+
+_σj_ [2] F
+
+_[≤∥]_ _**[M]**_ _[∥]_ [2] _[−]_
+
+
+- _k_
+
+
+_j_ =1
+_j_ = _i_
+
+
+- _k_
+
+_σ_ ˜ _j_ [2] (24)
+
+_j_ =1
+_j_ = _i_
+
+
+
+
+
+_σ_ ˜ _i,_
+
+
+
+~~�~~
+
+~~�~~
+
+
+- _[∥]_ _**[M]**_ _[∥]_ F [2] _[−]_
+
+
+- _k_
+
+
+_j_ =1
+_j_ = _i_
+
+
+_σ_ ˜ _j_ [2]
+
+
+
+
+
+Setting _i_ = _k_ +1, the above also provides an upper bound for the tail of the spectrum, _σk_ +1 _, . . ., σn_ .
+
+
+The second step is to find an odd polynomial that well-approximates the constant function on each
+of these intervals and on the tail simultaneously. For simplicity, we treat only the _k_ = 1 case here.
+Assume that _**M**_ is normalized to _**M**_ F = 1 and let _z_ = _σ_ ˜1 be the lower bound produced by
+_∥_ _∥_
+subspace iteration (which reduces to the power method in this case). Then (24) gives _σ_ 1 [ _z,_ 1]
+_∈_
+and _σ_ 2 _, . . ., σn_ _√_ 1 _z_ [2] . Assume that these intervals do not overlap, that is, _√_ 1 _z_ [2] _z_
+_≤_ _−_ _−_ _≤_ _⇐⇒_
+
+_√_ [3]
+
+
+1 _−_ _z_ [2] . Assume that these intervals do not overlap, that is, _√_
+
+
+and _σ_ 2 _, . . ., σn_ 1 _z_ [2] . Assume that these intervals do not overlap, that is, 1 _z_ [2] _z_
+_≤_ _−_ _−_ _≤_ _⇐⇒_
+
+_z_ _≥_ 1 _/√_ 2. Then we construct the unique odd cubic polynomial _p_ ( _x_ ) = _ax_ + _bx_ [3] that satisfies
+
+
+_z_ _≥_ 1 _/_ 2. Then we construct the unique odd cubic polynomial _p_ ( _x_ ) = _ax_ + _bx_ [3] that satisfies
+
+_p_ ( _√_ 1 _z_ [2] ) = 1 and _p_ ( _z_ ) = 1 by setting
+
+
+1 _−_ _z_ [2] ) = 1 and _p_ ( _z_ ) = 1 by setting
+
+
+_√_
+_a_ = _[z]_ [2][(] _[z]_ [ +]
+
+
+1 _−_ _z_ [2] ) _−_ _√_
+
+
+1 _−_ _z_ [2]
+
+
+_z_ ~~_√_~~
+
+
+_b_ =
+1 _−_ _z_ [2] (2 _z_ [2] _−_ 1)
+
+
+1 _−_ _z_ [2] _−_ _z_
+_z_ ~~_√_~~ 1 _z_ [2] (2 _z_ [2]
+
+
+_√_
+
+
+(25)
+1 _−_ _z_ [2] (2 _z_ [2] _−_ 1)
+
+
+guarantee thatBecause _p_ (0) _p_ = is concave-increasing on0 and _p_ has at most one [0 _,_ lo _√_ cal1 extr _z_ [2] ]emum, so it must lie above the lineon R _≥_ 0, these conditions _x_ imm _x/√_ ediately1 _z_ [2] .
+
+
+1 _−_ _z_ [2] ], so it must lie above the line _≥_ 0 _x �→_ _x/√_
+
+ps _σ_ 1 [ _z,_ 1] to [ _p_ (1) _,_ 1]. By minimizing _p_
+_∈_
+
+2 _,_ 1]), one can further show that _p_ (1) _>_ 1 _/√_
+
+
+guarantee that _p_ is concave-increasing on [0 _,_ 1 _−_ _z_ [2] ], so it must lie above the line _x �→_ _x/_ 1 _−_ _z_ [2] .
+
+Furthermore, _p_ is decreasing on [ _σ_ 1 _,_ 1], so it maps _σ_ 1 [ _z,_ 1] to [ _p_ (1) _,_ 1]. By minimizing _p_ (1) over
+_∈_
+all valid _z_ (that is, over the interval _z_ [1 _/√_ 2 _,_ 1]), one can further show that _p_ (1) _>_ 1 _/√_ 2, so _σ_ 1
+_∈_
+
+
+all valid _z_ (that is, over the interval _z_ [1 _/_ 2 _,_ 1]), one can further show that _p_ (1) _>_ 1 _/_ 2, so _σ_ 1
+_∈_
+
+cannot be decreased very much by applying _p_ . Thus, the largest singular value of _p_ ( _**M**_ ) is still at
+most 1, while the smaller singular values have increased by a potentially large factor of 1 _/√_ 1 _z_ [2] .
+
+
+most 1, while the smaller singular values have increased by a potentially large factor of 1 _/_ 1 _−_ _z_ [2] .
+
+When there is a large outlying singular value, _z_ is close to 1 and this initialization scheme makes
+much more progress than a standard iteration of PolarExpress would have.
+
+
+In Figure 17, we demonstrate the benefit of using the _p_ given by (25) on a synthetic matrix whose
+spectrum follows a power law decay. That is, _σj_ ( _**M**_ ) = _j_ _[−]_ [5], so this matrix has a large outlying
+singular value _σ_ 1 _σ_ 2. Applying (25) costs almost as much as performing an iteration of a degree_≫_
+5 polynomial method, so for fair comparison, we count it as an additional iteration in this plot. For
+both Newton-Schulz and Polar Express, performing the extra spectrum-aware initialization
+step described in this section leads to significant speedups in convergence.
+
+
+J FAST POLYNOMIAL ITERATION FOR RECTANGULAR MATRICES
+
+
+In this section, we describe a simple method for applying an iterative polynomial method to a rectangular matrix. For matrices with a large aspect ratio, this method yields significant computational savings. We emphasize that this method is applicable to _any_ computation of the form ( _pT_ _p_ 1)( _**X**_ ),
+where each _pt_ is an odd polynomial. Thus, it can be used to apply Newton-Schulz or Jordan’s poly- _◦· · ·◦_
+nomials in addition to our own.
+
+As a preliminary, we first describe the baseline approach. Let _**X**_ _∈_ R _[m][×][n]_ with _m ≥_ _n_, where _α_ :=
+_m/n ≥_ 1 is called the aspect ratio. Any odd polynomial _p_ of degree _d_ = 2 _q_ + 1 can be represented
+as _p_ ( _x_ ) = _xh_ ( _x_ [2] ), where _h_ is a polynomial of degree _q_ . Thus, _p_ ( _**X**_ ) = _**X**_ _h_ ( _**X**_ _[⊤]_ _**X**_ ). Furthermore,
+_h_ can be written in a factored form called Horner’s rule to reduce the number of multiplications. For
+instance, if _h_ ( _y_ ) = _a_ + _by_ + _cy_ [2] + _dy_ [3], Horner’s rule gives _h_ ( _y_ ) = _a_ + _y_ ( _b_ + _y_ ( _c_ + _dy_ )). For a
+matrix, _h_ ( _**Y**_ ) = _a_ _**I**_ + _**Y**_ ( _b_ _**I**_ + _**Y**_ ( _c_ _**I**_ + _d_ _**Y**_ )). Thus for _**Y**_ _∈_ R _[n][×][n]_, computing _h_ ( _**Y**_ ) costs about
+
+10Let _**Q**_ 0 R _[n][×][k]_ be a random matrix with orthonormal columns and define _**Q**_ _t_ +1 _,_ _**R**_ _t_ +1 =
+`qr` - _**M**_ _[⊤]_ _**MQ**_ _t∈_ �, where `qr` is the QR decomposition. Subspace iteration outputs the singular values ˜ _σ_ 1 _, . . .,_ ˜ _σk_
+of _**MQ**_ _T_, _σ_ ˜1 _, . . .,_ ˜ _σk_ . By the Cauchy interlacing theorem, _σ_ ˜ _k_ _≤_ _σk_ .
+
+
+35
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0 5 10 15 20 25
+Iteration
+
+
+Figure 17: Benefits of the spectrum-aware initialization scheme of Appendix I. Using this scheme
+improves convergence of both Newton-Schulz and Polar Express on a synthetic 32 _×_ 32 matrix
+with _σj_ ( _**M**_ ) = _j_ _[−]_ [5] . Note that we count the spectrum-aware initialization as an additional iteration.
+
+
+                                    -                                     (deg(� _d−_ 2 3 _h_ + 2) _−α_ 1)� _n·_ _n_ [3][3] operations.operations, and computingThis process could _p_ ( _**X**_ be) =repeated _**X**_ _h_ ( _**X**_ _[⊤]_ for _**X**_ each) costsiteration 2 _mn_ [2] + _p_ 1 _, . . ., pd−_ 2 1 _−T_ 1 . Notice _·_ _n_ [3] =
+
+_·_
+that if we instead computed _h_ ( _**XX**_ _[⊤]_ ) _**X**_, the result would be the same but the cost would be higher.
+
+
+A major drawback of this naive approach is that it has a strong dependence on _α_, since two rectangular matrix multiplications must be performed in _each_ of the _T_ iterations. When _m_ _≫_ _n_, these
+two multiplications dominate the cost. In Algorithm 3, we introduce a simple trick that dramatically
+reduces this cost, using just two rectangular matrix multiplications to compute _all T_ iterations.
+
+
+**Algorithm 3** Fast Polynomial Iteration for Rectangular Matrices
+**input:** _**X**_ _∈_ R _[m][×][n]_ with _m >_ 1 _._ 5 _n_, odd polynomials _p_ 1( _x_ ) = _xh_ 1( _x_ [2] ) _, . . ., pT_ ( _x_ ) = _xhT_ ( _x_ [2] ).
+**output:** The matrix ( _pT_ _p_ 1)( _**X**_ ).
+_◦· · · ◦_
+
+_**Y**_ = _**X**_ _[⊤]_ _**X**_ _▷mn_ [2]
+Let _**Q**_ 0 = _**I**_
+**for** _t_ = 1 _,_ 2 _, . . ., T_ **do**
+
+_**R**_ _t_ = _**Q**_ _[⊤]_ _t−_ 1 _**[Y Q]**_ _[t][−]_ [1] _▷_ 2 _n_ [3]
+_**Q**_ _t_ = _**Q**_ _t−_ 1 _ht_ ( _**R**_ _t_ ) _▷_ Horner’s rule: deg( _ht_ ) _· n_ [3]
+**end for**
+**return** _**XQ**_ _T_ _▷mn_ [2]
+
+
+To see why this works, define _q_ 0( _x_ ) = 1,
+
+
+_qt_ ( _x_ ) = [(] _[p][t][ ◦· · · ◦]_ _[p]_ [1][)(] _[x]_ [)]
+
+
+_[p]_ [1][)(] _[x]_ [)] = _[p][t]_ [ ((] _[p][t][−]_ [1] _[ ◦· · · ◦]_ _[p]_ [1][)(] _[x]_ [))]
+
+_x_ _x_
+
+
+(26)
+_x_
+
+
+        ( _xqt−_ 1( _x_ )) [2][�]
+= _[xq][t][−]_ [1][(] _[x]_ [)] _[ ·][ h][t]_
+
+
+_[p]_ [1][)(] _[x]_ [))] = _[p][t]_ [ (] _[xq][t][−]_ [1][(] _[x]_ [))]
+
+_x_ _x_
+
+
+( _xqt−_ 1( _x_ )) [2] 
+= _qt−_ 1( _x_ ) _ht_ _x_ [2] _qt−_ 1( _x_ ) [2][�] (27)
+_x_ _·_ _·_
+
+
+and _rt_ ( _x_ ) = _x_ [2] _qt−_ 1( _x_ ) [2] . It is clear by induction that _**R**_ _t_ = _rt_ ( _**X**_ ) _,_ _**Q**_ _t_ = _qt_ ( _**X**_ ), and _**XQ**_ _T_ =
+
+_·_
+( _pt_ _p_ 1)( _**X**_ ). As promised, this algorithm uses no rectangular multiplications in the for-loop.� _◦· · · ◦_ _d_ +3 _T_
+If each _pt_ is degree _d_, then the total cost is 2 _[T]_ [+ 2] _[α]_ _· n_ [3] . When _α_ _>_ 1 _._ 5 _T −_ 1 [, this is smaller]
+than the naive method. We can use this criterion to select either Algorithm 3 or the baseline method
+at runtime. [11]
+
+
+Algorithm 3 can introduce numerical errors, especially when working in a low precision format
+like bfloat16. We identify two sources of numerical trouble and propose remedies for each.
+The first is due to the ill-conditioning of _**X**_ . Let _**X**_ = _**U**_ **Σ** _**V**_ _[⊤]_ be the SVD. For large _T_, ( _pT_
+_p_ 1)( _**X**_ ) = _**XQ**_ _T_ polar( _**X**_ ) = _**UV**_ _[⊤]_ . Thus, _**Q**_ _T_ _**V**_ _[⊤]_ **Σ** _[−]_ [1] _**V**_ . When _**X**_ has very small _◦_
+
+_· · ·_ _≈_ _≈_
+
+11Notice that _**Q**_ _T_ _**Y**_ _−_ 1 _/_ 2. This shows that the Polar Express polynomials also give a method of
+_→_
+computing the inverse square root of a PSD matrix.
+
+
+36
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [2]
+
+
+_n_
+1024
+2048
+4096
+Restart Interval
+1
+3
+6
+
+
+10 [0] 10 [1]
+
+Aspect Ratio ( _α_ = _m/n_ )
+
+
+Figure 18: Effects of using Algorithm 3 on runtime on a GPU. We run _T_ = 6 iterations of a degree-5
+polynomial method on matrices with various dimensions _n_ and aspect ratios _α_ . Restart interval = 6
+is Algorithm 3, restart interval = 1 is equivalent to the baseline (that is, not using Algorithm 3),
+and restart interval = 3 is an intermediate method that calls Algorithm 3 once to do the first three
+iterations and again to do the last three iterations for greater stability. When _α_ _≫_ 1, increasing the
+restart interval _significantly_ reduces the runtime.
+
+
+singular values and the floating point precision is very low, instantiating _**Q**_ _T_ may be unstable. To
+mitigate this issue, we use a restarting strategy. Notice that the issue arises only for large _T_, for
+which ( _pT_ _p_ 1)( _ϵ_ ) 1. Limiting ourselves to _T_ = 3 iterations improves the conditioning of
+_◦· · · ◦_ _≈_
+_**Q**_ Algorithm _T_ because3 (with _pT ◦· · ·◦_ the first _p_ 1)(three _ϵ_ ) _≪_ polynomials,1. Thus, to computeproducing _T_ _>_ _**X**_ 33 iterations, we begin with. When then apply Algorithm _**X**_ 0 and apply3 again
+with the next three polynomials to _**X**_ 3, producing _**X**_ 6, and so on. As _**X**_ _t_ approaches convergence, its
+conditioning improves and we may no longer need to restart at all. Note that restarting Algorithm 3
+after every iteration is exactly the same as the baseline method.
+
+
+Second, while the matrix _**Y**_ is positive definite in exact arithmetic, numerical round-off can introduce spurious negative eigenvalues that cause the method to diverge to infinity. To combat this issue,
+we instead set _**Y**_ = _**X**_ _[⊤]_ _**X**_ + 10 _[−]_ [3] _**I**_ during the first application of Algorithm 3. (We also normalize
+by _∥_ _**X**_ _∥_ F + 10 _[−]_ [3] instead of _∥_ _**X**_ _∥_ F.) In subsequent restarts of Algorithm 3, we set _**Y**_ = _**X**_ _[⊤]_ _**X**_ as
+before. This is akin to slightly increasing each of the singular values of _**X**_, but it does _not_ change
+the polar factor of _**X**_ . Thus, while the output will be slightly different in the early iterations, the
+algorithm still converges to the correct answer.
+
+
+Figure 18 shows that using Algorithm 3 can significantly improve runtime on the GPU when the aspect ratio is large enough. As expected, using Algorithm 3 for many iterations significantly reduces
+the dependence of the runtime on the aspect ratio. Running six iterations of a degree-5 polynomial
+method when _α_ = 4 (as with the linear transformations in each MLP block of a transformer) we
+obtain almost a 2x speedup, and when _α_ = 32, we obtain a 5x speedup. If we restart every three
+iterations, the trend is the same but the runtime savings are somewhat smaller.
+
+
+J.1 APPLICATION TO MUON
+
+
+If these problems can be mitigated, the speed afforded by Algorithm 3 suggests an improvement in
+the way Muon is applied to transformers. In sum, the idea is to replace one large matrix with a small
+aspect ratio by many smaller matrices with large aspect ratios and apply Algorithm 3 to all of them in
+parallel. Each multi-head attention layer contains four square weight matrices _**W**_ _Q,_ _**W**_ _K,_ _**W**_ _V_ and
+_**W**_ _O_ R _[d][×][d]_ . The orthogonalization step of Muon is either applied separately to these four matrices
+_∈_
+or else to [ _**W**_ _Q_ _|_ _**W**_ _K_ _|_ _**W**_ _V_ ] and _**W**_ _O_, since typical implementations of multi-head attention store
+the weights in this concatenated form. However, we believe it is natural to consider each of these four
+weight matrices to be a concatenation of many smaller linear transformations, each corresponding
+to a single attention head. If _H_ is the number of heads, each of these smaller matrices has size
+
+
+37
+
+
+_d_ can _×_ be _H_ _[d]_ [; that is, they have aspect ratio] reshaped into 3-tensors in which _[ α]_ [ =] each _[ H]_ [.] [The gradient matrices of] slice is one of these smaller [ [] _**[W]**_ _[Q]_ matrices. _[|]_ _**[ W]**_ _[K]_ _[|]_ _**[ W]**_ Since _[V]_ [ ]][ and] typical _**[ W]**_ _[O]_
+
+transformers like GPT-3 can have as many as 96 heads, this variation of Muon has the potential to
+reduce the runtime.
+
+
+We use this idea to train a GPT-Small model on FineWeb1B. We compare four conditions:
+
+
+1. The baseline approach used in the rest of this paper (not splitting [ _**W**_ _Q_ _|_ _**W**_ _K_ _|_ _**W**_ _V_ ] and
+not using Algorithm 3)
+
+2. Splitting up the gradient matrices of [ _**W**_ _Q_ _|_ _**W**_ _K_ _|_ _**W**_ _V_ ] and _**W**_ _O_ by head and applying
+Muon to each piece, as described above
+
+
+3. Using Algorithm 3, restarted after three iterations, on all rectangular weight matrices
+
+
+4. Splitting by head _and_ using Algorithm 3
+
+
+We used Polar Express with weight decay of 0 _._ 1 for all conditions and swept learning rates
+0 _._ 003 _,_ 0 _._ 005 _,_ 0 _._ 01. Otherwise, all hyperparameters were the same as in Section 4.2.
+
+
+Our results showed that these changes had a negligible effect in this setting. They did not affect
+the optimization quality. Compared to the baseline, splitting by heads actually reduced the final loss
+slightly from 3.59 to 3.55; using Algorithm 3 increased the loss very slightly, from 3.59 to 3.60 when
+not splitting by head, and from 3.55 to 3.56 when we did split. However, the runtimes of all 12 runs
+were nearly identical, showing that at this scale, the FLOP savings of Algorithm 3 is not beneficial.
+The embedding size of GPT-Small is just 768. These techniques may be more impactful when using
+a larger model. It may also have more impact outside of deep learning, where Polar Express
+would be run for more than the 5 iterations used in our experiments. We leave exploration of these
+settings to future work.
+
+
+38

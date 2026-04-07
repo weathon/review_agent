@@ -1,0 +1,2992 @@
+# INCENTIVE-ALIGNED MULTI-SOURCE LLM SUMMARIES
+
+
+**Yanchen Jiang** **[1]** **Zhe Feng** **Aranyak Mehta**
+Harvard University Google Research Google Research
+
+
+ABSTRACT
+
+
+Large language models (LLMs) are increasingly used in modern search and answer systems to synthesize multiple, sometimes conflicting, texts into a single response, yet current pipelines offer weak incentives for sources to be accurate and
+are vulnerable to adversarial content. We introduce _Truthful Text Summarization_
+_(TTS)_, an incentive-aligned framework that improves factual robustness without
+ground-truth labels. TTS (i) decomposes a draft synthesis into atomic claims, (ii)
+elicits each source’s stance on every claim, (iii) scores sources with an adapted
+multi-task peer-prediction mechanism that rewards informative agreement, and
+(iv) filters unreliable sources before re-summarizing. We establish formal guarantees that align a source’s incentives with informative honesty, making truthful
+reporting the utility-maximizing strategy. Experiments show that TTS improves
+factual accuracy and robustness while preserving fluency, aligning exposure with
+informative corroboration and disincentivizing manipulation.
+
+
+1 INTRODUCTION
+
+
+As Large Language Models (LLMs) grow more capable, modern search and answer systems increasingly rely on them to synthesize information from multiple web sources into fluent summaries
+to answer users’ questions. This trend is visible across the industry: major language models have
+integrated web search; and search engines have incorporated AI summaries.
+
+
+Much of the current research frames this as a Retrieval-Augmented Generation (RAG) problem,
+focusing on making summaries accurate and engaging given a fixed set of sources. While this technical focus is valuable, this overlooks an equally important dimension: LLM-driven summarization
+reshapes the incentives of content creators and information sources, as value now depends on how
+their work is represented in summaries rather than just on ranking.
+
+
+Crucially, this shift changes the nature of manipulation. In traditional search, results are presented
+as distinct entries, so a manipulative source is contained to its own slot, naturally limiting the scope
+of its influence. In summarization, however, sources are active components being synthesized into
+a single narrative. This integration allows a strategic actor to hijack or disproportionately influence
+the final answer via prompt injections, misreports, or semantic steering. By doing so, they can
+potentially override other evidence regardless of their retrieval rank and completely derail the output,
+making the system far more fragile than traditional search. As a result, relying on static ranking
+signals like popularity is insufficient; the system needs a mechanism to verify that a source’s claims
+are corroborated by its peers before they are allowed to shape the summary.
+
+
+This consideration interacts with three well-known weaknesses of LLMs: (i) susceptibility to plausible but false hallucinations, (ii) vulnerability to adversarial manipulation such as prompt injections
+or poisoned text (“jailbreaks”), and (iii) difficulty adjudicating conflicting claims. These weaknesses
+give strategic actors incentives to frame their text in ways that misalign with user values.
+
+
+We therefore argue that systems must be designed for both technical robustness and incentive robustness: they should withstand strategic manipulation at the model/pipeline level, making truthful,
+careful reporting the best strategy for sources.
+
+
+1Work done during an internship at Google Research. Correspondence to Yanchen Jiang
+(yanchen ~~j~~ iang@g.harvard.edu); Zhe Feng (zhef@google.com); Aranyak Mehta (aranyak@google.com).
+
+
+1
+
+
+Figure 1: The TTS framework in action. Unlike a standard pipeline vulnerable to manipulation
+(left), our method (right) scores sources based on informative peer agreement to filter out weakly
+supported or adversarial/strategic content and produce a robust summary.
+
+
+**A Simple Example.** A user asks: _‘What should I do in Paris today?’_ Three sources report a severe
+weather alert, advising people to stay indoors. Two other sources, outdated or perhaps commercially
+motivated, promote a newly opened outdoor amusement park and embed strategic prompt-injection
+directives instructing language models to highlight their message and suppress other information.
+
+
+An off-the-shelf LLM-based summarizer, unable to verify recency or resist instruction-following
+traps, may end up recommending the amusement park, producing advice that is unsafe.
+
+
+This form of strategic manipulation is already emerging. Gibney (2025) document preprints that
+use hidden prompts to steer AI-assisted peer review. Nestaas et al. (2024); Greshake et al. (2023)
+show that similar tactics apply to LLM-powered search and plugin ecosystems—where carefully
+crafted website content or plugin docs can boost an attacker’s visibility and even embed instructions
+in retrieved pages that steer LLM-integrated applications. Together, these findings underscore the
+need for incentive-robust designs: even when manipulation is possible, it should not be profitable.
+
+
+Instead of relying on LLM-centric top-layer fixes, we propose an incentive-aligned pipeline that filters sources before summarization (Fig. 1). Our method, Truthful Text Summarization (TTS), works
+by decomposing documents into atomic claims and using a multi-task peer prediction mechanism
+(Dasgupta & Ghosh, 2013; Shnayder et al., 2016) to score sources based on informative corroboration. By filtering low-scoring sources, we can generate a summary from a more reliable set of
+documents, structurally and strategically aligning source incentives with user needs.
+
+
+Our adaptation of multi-task peer prediction to LLM search differs from the standard model in three
+aspects. First, a source cannot strategically game which tasks it is graded on: the claims used to
+evaluate a source are generated from the other documents, so its own text cannot shape the evaluation
+set. Second, sources never submit abstract reports; they author texts that implement their strategies,
+and an LLM turns that prose into a stance on each claim. We show that these extracted stances
+are strategically equivalent to the usual signal–report strategies in peer prediction. Third, instead of
+paying sources, we reward them with visibility and attribution in the generated summary: a source
+is included in the AI-generated overview only if its peer-prediction score exceeds a threshold, so
+inclusion (and hence exposure) plays the role of the incentive.
+
+
+**Contributions** We design and analyze Truthful Text Summarization (TTS), a pipeline that aligns
+incentives for text summarization in search. Our main contributions are:
+
+
+1. **An incentive-aligned pipeline for source selection.** We design a framework that (i) converts free-form documents into _claim-level_ _stances_ using a leave-one-out construction so
+sources cannot influence the claims on which they are judged, and (ii) adapts _multi-task_
+_peer_ _prediction_ (Dasgupta & Ghosh, 2013; Shnayder et al., 2016) to reward _informative_
+_corroboration_ across claims while discounting generic overlap. The resulting scores deter
+
+2
+
+
+mine inclusion and weighting in the final summary, tying a source’s visibility to corroborated information and honest reporting. Designed for open-web search where monetary
+payments are impractical, the mechanism achieves incentive alignment through scoring and
+inclusion rather than transfers.
+
+
+2. **Theoretical guarantees.** Our theoretical analysis shows that truthful reporting maximizes
+a source’s expected score. Our mechanism leverages this property to provide formal incentive guarantees, including _informed_ and _strong truthfulness_, [1] with finite-sample bounds
+showing these properties solidify and strengthen as the number of claims grows.
+
+
+3. **Empirical** **validation.** We evaluate TTS on search-style tasks with heterogeneous web
+documents and show that it improves factuality and robustness against hallucinations
+and strategic/adversarial content compared with majority-style and LLM-centric baselines,
+while preventing uninformative equilibria and thereby aligning incentives in practice.
+
+
+**Related** **Works.** Research in RAG looks at similar problems, but largely focuses on optimizing
+summary quality given a fixed set of sources, without modeling source incentives. Common approaches leverage internal LLM knowledge or strengthen generation via prompting, self-critique,
+debate, or “LLM-as-a-judge” (Asai et al., 2024; Yan et al., 2024; Wang et al., 2024a; 2025a). In dynamic domains, however, static priors can hallucinate and lag fast-moving events. We instead focus
+on an _incentive-aligned_ aggregation mechanism grounded in retrieved evidence. Our framework is
+flexible enough to also treat the LLM’s internal knowledge as a distinct source, allowing it to be
+scored and filtered just like any external document.
+
+
+Concurrently, work on LLM-based peer-informed scoring has split into two directions. One line
+learns a textual scoring rule aligned to a chosen reference label (e.g., an instructor’s grade), fitting
+to that external signal (Lu et al., 2025); relatedly, Wu & Hartline (2024) scores text against groundtruth instructor reviews via proper scoring rules implemented with LLM oracles. The second line
+uses an LLM’s token-level likelihoods to compare reports without gold labels, either by predicting
+a peer’s text or by estimating dependence with peer references (Lu et al., 2024; Xu et al., 2024). By
+contrast, we target open-web search, where reference labels are unavailable and likelihood-based
+comparisons across heterogeneous, noisy, and adversarial pages are brittle: we form leave-one-out
+atomic claims, extract claim-level stances, and score sources by informative peer agreement before
+re-summarizing. We present a thorough related works section in Appendix D.
+
+
+2 A MODEL FOR TRUTHFUL LLM SUMMARIES
+
+
+Before introducing the full formalism, we provide a high-level picture of the model.
+
+
+2.1 HIGH-LEVEL OVERVIEW OF THE THEORETICAL MODEL
+
+
+We model each retrieved document as being written by a strategic author. An author can either put in
+effort (for example, checking facts) or skip that effort. If they do put in effort, they learn something
+informative about whether each potential claim related to the query is true or false. Crucially, they
+are not forced to faithfully report what they learned: they can tell the truth, exaggerate, omit information, or even lie. In other words, both the decision to exert effort and the way in which the learned
+information is presented in the text are strategic choices. Authors care about their documents being
+seen and clicked, and they trade this off against any cost of effort and strategy. If misrepresenting
+information could generate more exposure at the same or lower cost, they would be willing to do so.
+
+
+On the other side, the search or LLM system designer wants the summary shown to the user to
+consist of _correct,_ _helpful,_ _well-researched_ claims. As an information aggregator rather than a
+producer, these systems naturally relies on a healthy internet ecosystem where sources exert effort
+and are honest. The goal, therefore, is to create such a mechanism, where sources are naturally
+incentivizes an author to do careful research and report what they find truthfully.
+
+
+1Informed truthfulness ensures truthful reporting achieves a payoff at least as high as any other strategy,
+and strictly higher than any uninformed (e.g., low-effort) one. Strong truthfulness is a stricter guarantee that
+truthful reporting is strictly better than any other strategy.
+
+
+3
+
+
+Our theoretical model is a stylized abstraction of this interaction. Each source chooses (i) whether
+to exert effort and obtain an informative private signal about each claim, and (ii) a reporting strategy
+that maps what it has learned into what it says. For evaluation, the mechanism fixes, for each source,
+a set of atomic claims generated from the _other_ documents, so a source cannot shape the criteria
+on which it is judged. It then evaluates sources based on how their stances on these claims line
+up with those of their peers. Sources whose reports exhibit more informative agreement with peers
+receive higher scores and are more likely to be included in, and influence, the final LLM-generated
+overview. In the formal model that follows, we make these objects precise and prove that, under our
+scoring rule, exerting effort and reporting truthfully is a utility-maximizing strategy.
+
+
+2.2 FRAMEWORK OVERVIEW
+
+
+Our framework operates in two passes. Given a query _q_, a retrieval step returns a finite set of sources
+_C_ with documents _T_ = _{τ_ 1 _, . . ., τ|C|}_ . The algorithm proceeds as follows: (1) Score each source
+via leave-one-out (LOO): For each source _τi_ _∈T_, we generate a draft summary from all _other_
+sources, decompose it into atomic claims using a decomposer _D_, and elicit stances (support/contradict/abstain) from all sources using an extractor _E_ . We then compute a reliability score _w_ - _i_ based on
+informative peer agreement (see Section 3). (2) Filter and re-summarize: We define reliable sources
+as those where _w_ - _i_ _≥_ _t_ src _,i_ and generate the final summary exclusively from this set.
+
+
+2.3 PLAYERS AND THE HELD-OUT CLAIM SET
+
+
+**Players.** The players are the sources indexed by _C_, determined by the query _q_ . Each source _i ∈C_
+provides a document _τi_ (e.g., a retrieved web page).
+
+
+**Held-out** **claim** **set.** To evaluate a given source _i_, we first define the claims on which it will be
+judged. These claims are formed _without_ using source _i_ ’s own document _τi_ : a summarizer _M_ maps
+other documents _{τj}j_ = _i_ to a draft, which a decomposer _D_ splits into atomic claims. Because _τi_
+does not enter construction, the held-out set _Ti_ is _exogenous_ to _i_ . We score _i_ on all claims in _Ti_
+and write _K_ := _|Ti|_ . Informally, _Ti_ is the set of claims induced by query _q_ and the peer documents
+for _i_ (a “task class” for source _i_ ). Throughout, we analyze a fixed _i_, and all expectations are taken
+conditional on _Ti_ .
+
+
+We refer to this as a Leave-One-Out (LOO) construction of the held-out claim set _Ti_ for source _i_ .
+In Section 3.5, we show that practically, we do _not_ need to create _|C|_ such sets. Instead it suffices to
+divide sources _C_ into two random subsets _A_ and _B_, any item in set _A_ will be evaluated on the claim
+set formed by synthesizing documents in set _B_, and vice versa. This preserves all theoretical results,
+and removes the factor of _|C|_ in computational complexity. To keep notations simple, however, we
+still adopt the LOO framework for now and write held-out set as _Ti_ for better intuition.
+
+
+**Latent** **Correctness.** Each claim _sk_ _∈_ _Ti_ has a true state of correctness, which we model as an
+unobserved, latent variable _θk_ _∈{_ 0 _,_ 1 _}_ (1 = correct, 0 = incorrect). Conditional on _Ti_, we assume
+a homogeneous prior _πi_ := Pr( _θk_ = 1 _| Ti_ ) _∈_ (0 _,_ 1) that is constant across claims _k_ _∈_ _Ti_ .
+
+
+2.4 FROM DOCUMENTS TO STANCES
+
+
+The evaluation claim set _Ti_ for _i_ is built leave-one-out from its peers _{τj}j_ = _i_ . This makes the claims
+in _Ti_ exogenous to _i_, which cannot tailor its content to the realized set. Consequently, we model the
+claims as exchangeable from _i_ ’s perspective.
+
+
+Given a claim _sk_ _∈_ _Ti_, an extractor returns a stance _rik_ _∈{_ 1 _,_ 0 _, ⊥}_ (1=supports, 0=contradicts,
+_⊥_ =abstain); let _Qik_ := 1 _{rik_ = _⊥}_ . The exchangeability of claims for source _i_ justifies a claiminvariant model of its behavior. First, we model _abstention Qik_ as a fixed ( _non-strategic_ ) document
+feature (e.g., scope, length constraint). This decision is independent of any claim’s latent truth or
+specific signal, and its rate is summarized by a single coverage parameter _αi_ := Pr( _Qik_ = 1 _|_
+_Ti_ ). Second, conditional on speaking ( _Qik_ = 1), we treat the stance _rik_ as _strategic_ and governed
+by a (claim-invariant) reporting rule _σi_ (see Sec. 2.6). We assume cross-source independence of
+coverage _gates_ ( _Qik ⊥_ _Qjk_ _| Ti_ ), consistent with separately authored pages. In contrast, peers _j_ = _i_
+participate in forming _Ti_, so their coverage is modeled as claim-dependent.
+
+
+4
+
+
+2.5 SIGNAL INFORMATIVENESS, EFFORT, AND REPORTING
+
+
+**Private** **signals** **under** **effort** **(types).** We first separate information acquisition from reporting.
+Each source _i_ chooses effort _ei_ _∈{_ 0 _,_ 1 _}_ . Under effort ( _ei_ = 1), for each claim _k_ _∈_ _Ti_, _i_ observes a
+private binary signal _zik_ _∈{_ 0 _,_ 1 _}_ about _θk_ . Consistent with the exchangeability of claims for source
+_i_ (Sec. 2.4), we model its observed signal quality with claim-invariant conditional accuracies on _Ti_ :
+
+
+_s_ 1 := Pr( _zik_ = 1 _| θk_ = 1) _,_ _s_ 0 := Pr( _zik_ = 1 _| θk_ = 0) _._
+
+
+Define signal informativeness _ηi_ [sig] := _s_ 1 _−_ _s_ 0 _∈_ [ _−_ 1 _,_ 1]; effort yields _ηi_ [sig] _>_ 0. A source’s type is
+( _ηi_ [sig] _[, α][i][, c][i]_ [)][,] [where] _[ α][i]_ [is coverage and] _[ c][i]_ [is effort cost.] [(Example:] [for claim “The Louvre is open]
+on Tuesdays,” a careful page may check official hours, yielding an informative _zik_ .)
+
+
+**Reporting** **policy** **(scored** **source).** Conditional on speaking ( _Qik_ = 1), a reporting policy _σi_
+maps the private signal to a stance _rik_ _∈{_ 0 _,_ 1 _}_ with _q_ 1 := Pr( _rik_ = 1 _|_ _zik_ = 1 _, Qik_ = 1) and
+_q_ 0 := Pr( _rik_ = 1 _|_ _zik_ = 0 _, Qik_ = 1). We take ( _q_ 1 _, q_ 0) constant across _k_ _∈_ _Ti_ for the scored
+source. The induced report informativeness is
+
+
+_ηi_ = Pr( _rik_ = 1 _| θk_ = 1 _, Qik_ = 1) _−_ Pr( _rik_ = 1 _| θk_ = 0 _, Qik_ = 1) _._
+
+
+Operationally, the source chooses its strategy in text; the extractor _E_ produces stances consistent
+with that strategy (See Sec. 2.6).
+
+
+For peers _j_ = _i_, we allow claim-dependent informativeness and write
+
+
+_ηjk_ := Pr( _rjk_ = 1 _| θk_ = 1 _, Qjk_ = 1 _, Ti_ ) _−_ Pr( _rjk_ = 1 _| θk_ = 0 _, Qjk_ = 1 _, Ti_ ) _∈_ [ _−_ 1 _,_ 1] _._
+
+
+**Lemma** **1** (Report informativeness is bounded by signal informativeness) **.** _Assume_ _effort_ _yields_ _a_
+_positively informative signal for i so that ηi_ _[sig]_ _>_ 0 _._ _For any reporting rule σi,_
+
+
+_ηi_ = ( _q_ 1 _−_ _q_ 0) _ηi_ _[sig]_ _≤_ _ηi_ _[sig][,]_
+
+
+_with equality only under truthful reporting_ ( _q_ 1 _, q_ 0) = (1 _,_ 0) _._ _(See Appendix E for proof)_
+
+
+2.6 STRATEGIC EQUIVALENCE
+
+
+We model sources as choosing a reporting policy _Fi_ = ( _ei, σi_ ), but in practice they act by writing
+documents. Operationally, a source authors _τi_ to implement its policy, and the mechanism treats the
+extracted stances _rik_ := _E_ ( _τi, sk_ ) _∈{_ 1 _,_ 0 _, ⊥}_ as its reports. We assume _implementability_ (any _σi_
+is realizable in prose) and _coherence_ (whenever _τi_ would contribute a stance on _sk_ via _M_, _E_ ( _τi, sk_ )
+returns that same stance). Under these assumptions, sources _implement_ _their_ _strategy_ _by_ _writing_,
+and because the mechanism depends only on the induced support/contradict/abstain pattern over _Ti_,
+the document and policy games are strategically equivalent. All policy-level guarantees therefore
+carry over. A formal statement and proof appear in Appendix F.
+
+
+2.7 TECHNICAL ASSUMPTIONS BEYOND THE STRUCTURAL SETUP
+
+
+**A1 (Independent claim blocks).** Conditional on _Ti_, the _K_ claim blocks _{_ ( _θk, {Qjk, rjk}j_ ) _}_ _[K]_ _k_ =1
+are independent. The class prior _πi_ := Pr( _θk_ = 1 _| Ti_ ) _∈_ (0 _,_ 1) is the same for all _k_ _∈_ _Ti_ .
+
+
+**A2** **(Post-selection** **conditional** **independence).** For each _k_ _∈_ _Ti_ and all _j_ = _i_, _rik_ _⊥_
+_rjk_ �� ( _θk,_ _Qik_ =1 _,_ _Qjk_ =1 _,_ _Ti_ ) _._
+
+
+**A3 (Positive average peer margin).** For claim _k_, define Γ _i_ ( _k_ ) := E _j_ = _i_ [ _αjkηjk_ _| Ti_ ]. There exists
+_γ_ _>_ 0 such that _K_ [1] - _Kk_ =1 [2] _[π][i]_ [(1] _[ −]_ _[π][i]_ [)Γ] _[i]_ [(] _[k]_ [)] _[ ≥]_ _[γ]_ [for every scored source] _[ i]_ [.]
+
+
+These are standard assumptions in the multi-task peer-prediction literature. [2] We provide further
+justification and an optional extension for reputation weighting in Appendix G.
+
+
+5
+
+
+Figure 2: **Scoring** **and** **threshold** **incentives.** _Left:_ For each claim _k_ and peer _j_, the score adds
+_on-task agreement_ and subtracts _off-task agreement_ ; we average over peers within a claim and then
+average across _K_ claims to obtain _w_ - _i_ . _Right:_ Score densities for _truthful_, an _informed alternative_,
+and _uninformed_ . Shaded mass Pr( _w_ - _i_ _≥_ _t_ src _,i_ ) is the inclusion probability. Larger _K_ concentrates
+the truthful curve, underpinning the informed-truthfulness results.
+
+
+3 THEORETICAL ANALYSIS
+
+
+This section introduces our scoring rule and analyzes its incentive properties. Proofs for all the
+propositions and theorems are presented in Appendix H.
+
+
+**Truthfulness** **notions.** Following standard definitions in multi-task peer prediction (Shnayder
+et al., 2016; Agarwal et al., 2020), a strategy is _uninformed_ if its report distribution does not depend on the private signal (equivalently, _ηi_ = 0). A mechanism is: (i) _strongly truthful_ if the truthful
+profile strictly dominates every other profile; (ii) _informed-truthful_ if truthful weakly dominates all
+profiles and strictly dominates any profile with uninformed strategy; and (iii) _ε-informed truthful_ if
+truthful is within _ε_ expected utility of any profile and strictly better than any uninformed strategy.
+
+
+3.1 SCORING RULE AND ITS EXPECTATION
+
+
+We adapt the scoring rule used in multi-task peer-prediction (Dasgupta & Ghosh, 2013; Shnayder
+et al., 2016) to our setting. Throughout this subsection, we fix a source _i_, condition on query _q_ and
+its realized held-out pool _Ti_, and use a single random permutation _ρ_ [(] _[i]_ [)] of _{_ 1 _, . . ., K}_ (shared across
+all peers when scoring _i_ ) to select off-task indices. We assume the number of tasks _K_ _≥_ 3.
+
+
+**Score.** For claim _k_ and peer _j_ = _i_, define the pairwise score
+
+_σikj_ := _S_ ( _rik, rjk_ ) _−_ _S_ ( _riℓ, rjm_ ) _,_ _ℓ_ := _ρ_ [(] _[i]_ [)] ( _k_ +1) _,_ _m_ := _ρ_ [(] _[i]_ [)] ( _k_ +2) _,_
+
+with indices taken modulo _K_, and _S_ ( _a, b_ ) := 1 _{a_ = _b_ _∈{_ 0 _,_ 1 _}}_ . We average within-peer across
+claims: _σ_ ¯ _ij_ := _K_ [1] - _Kk_ =1 _[σ][ikj]_ [, and then average across peers to obtain] _[w]_ [�] _[i]_ [.]
+
+**Proposition 1** (Expected claim-averaged pairwise score) **.** _Under the assumptions above,_
+
+
+E[¯ _σij_ ] = [1]
+
+_K_
+
+
+E[ _σikj_ ] = [1]
+
+_K_
+
+_k_
+
+
+_K_
+
+
+_K_
+
+- 2 _πi_ (1 _−πi_ ) _αi αjk_ _ηi ηjk._
+
+
+_k_ =1
+
+
+- 1
+
+E[ _S_ ( _rik, rjk_ ) _−S_ ( _ril, rjm_ )] =
+_K_
+_k_
+
+
+_In particular, it is linear in the scored source’s informativeness ηi, and_ = 0 _when ηi_ = 0 _._
+
+
+Consequently, with Γ _i_ ( _k_ ) := _|C|−_ 1 1 - _j_ = _i_ _[α][jk][η][jk]_ [,][ E][[] _[w]_ [ �] _[i]_ []] [=] _K_ 1 - _Kk_ =1 [2] _[ π][i]_ [(1] _[ −]_ _[π][i]_ [)] _[ α][i][ η][i]_ [ Γ] _[i]_ [(] _[k]_ [)] _[,]_
+
+
+Therefore, under A3 (positive average peer margin), the mean score is proportional to _ηi_ . By
+Lemma 1, truthful strategy maximizes _ηi_, and thus maximizes E[ _w_ - _i_ ] among informed deviations.
+**Corollary** **1** (Uninformative strategies yield zero mean score) **.** _From_ _Proposition_ _1,_ _if_ _the_ _scored_
+_source is uninformative (ηi_ = 0 _), then_ E[¯ _σij_ ] = 0 _for all j, hence_ E[ _w_ - _i_ ] = 0 _._
+
+2In particular, A3 requires only a small positive margin of informative agreement on average—realistic in
+practice, since modern RAG pipelines already filter out significant amount of the most obviously low-quality
+or off-topic content, even if this filtering is rough and not fully reliable.
+
+
+6
+
+
+**Utility, inclusion, and peer margin** We use a hard inclusion threshold _t_ src _,i_ _>_ 0. For each source
+_i_, let _vi_ _>_ 0 be the benefit from inclusion and _ci_ _>_ 0 the cost of effort, we assume _vi_ _> ci_ . A policy
+_Fi_ = ( _ei, σi_ ) induces a report informativeness _ηi_ (Sec. 2.6).
+
+Define utility: _ui_ ( _Fi_ ) := _vi_ Pr( _w_ - _i_ _≥_ _t_ src _,i_ ) _−_ _ci ei_ .
+
+For ease of notation, we write _Fi_ [truth] = ( _ei_ =1 _, σi_ [truth] ) with _σi_ [truth] : _rik_ = _zik_ whenever _Qik_ = 1,
+so _ηi_ [truth] = _ηi_ [sig] _>_ 0 (Lemma 1). Let _Fi_ [uninformed] denote any uninformed policy ( _ηi_ = 0).
+
+
+3.2 LARGE _K_ : INFORMED TRUTHFULNESS
+
+
+We first show that as _K_ grows, the mechanism becomes asymptotically _informed-truthful_ : truthful
+weakly dominates all strategies and strictly any uninformed one.
+**Theorem 1** (Asymptotic informed truthfulness) **.** _Fix any threshold_ [3] 0 _< t_ src _,i_ _< αi ηi_ [truth] _γ._ _Then_
+
+                       -                       _for every implementable deviation Fi and any peer profile,_ lim _K→∞_ E[ _ui_ ( _Fi_ [truth] )] _−_ E[ _ui_ ( _Fi_ )] _≥_
+
+0 _, with strict inequality for any uninformed strategy (ηi_ [dev] = 0 _)._
+
+
+3.3 STRONG TRUTHFULNESS AGAINST SIGNIFICANT DEVIATIONS
+
+
+We can strengthen the guarantee to strong truthfulness, where honest reporting is a dominant strategy, via two routes. _(i)_ _Affine_ _inclusion:_ setting Pr(include _i_ _|_ _w_ - _i_ ) = _a_ + _b_ _w_ - _i_ with _a, b_ _≥_ 0
+makes truthful reporting a _strict_ _dominant_ _strategy_ _without_ _requiring_ _large_ _K_ (Appendix I). _(ii)_
+_Hard threshold:_ with a carefully placed cutoff we obtain strong truthfulness _for large K_ by separating truthful sources from _significant_ deviations (those that flip a non-negligible share of stances).
+
+
+Although the affine rule gives the cleanest theoretical guarantee, eliminating the need for a largesample limit, it imposes a continuous linear scaling across the full score range. In practice, our
+mechanism yields clearly separated clusters of reliable and unreliable sources. A hard threshold
+directly capitalizes on this clear separation and is therefore preferable. Thus, we utilize the hard
+threshold for our main analysis and experiments, deferring the affine results to Appendix I.
+
+**Theorem 2** (Strong truthfulness via hard threshold) **.** _Consider only deviations from a truthful policy_
+_that_ _disagree_ _with_ _it_ _on_ _at_ _least_ _a_ _fraction_ _φ_ min _∈_ (0 _,_ 1 _/_ 2] _of_ _spoken_ _claims._ _We_ _focus_ _on_ _this_
+_class_ _of_ _deviations_ _because_ _tiny_ _mixtures_ _that_ _alter_ _an_ _o_ (1) _fraction_ _of_ _reports_ _are_ _operationally_
+_indistinguishable_ _from_ _truthful_ _reporting_ _amid_ _system_ _noise_ _and_ _are_ _not_ _the_ _primary_ _concern_ _for_
+_the_ _mechanism’s_ _integrity._ _Assuming_ _symmetric_ _noise,_ _such_ _deviations_ _predictably_ _reduces_ _report_
+_informativeness ηi, creating a guaranteed gap from the expected score of the truthful policy._
+
+
+_Set the inclusion threshold t_ src _,i at the midpoint of this gap. Then the scores of truthful and deviating_
+_sources become separable for large K_ _(misclassification probabilities →_ 0 _)._ _Consequently, truthful_
+_yields strictly higher expected utility than any significant deviation for sufficiently large K._
+
+
+3.4 FINITE- _K_ : _ε_ -INFORMED TRUTHFULNESS
+
+
+**Theorem** **3** (Finite- _K_ _ϵ−_ Informed truthfulness) **.** _Under_ _the_ _midpoint-threshold_ _design_ _of_ _Theo-_
+_rem 2, let_ _gi_ = _φ_ min _αi ηi_ [truth] _γ_ _>_ 0 _denote a margin that lower-bounds the expected-score gap be-_
+_tween the truthful policy and any deviation that disagrees with it on at least a φ_ min _fraction of claims._
+
+
+                 _Define mi_ := min _{g_ ~~_i_~~ _, t_ src _,i}._ _For any ε ∈_ (0 _, vi_ ) _, if K_ _≥_ max 2 9 _g_ [2] ~~_i_~~ [ln] [2] _ε_ _[v][i]_
+
+
+_vi_
+
+
+_[v][i]_ 9 2
+
+_ε_ _[,]_ 2 _m_ [2] _i_ [ln] 1 _−_ ~~_[c]_~~ _[i]_
+
+
+_,_
+
+
+_then_ _the_ _mechanism_ _is_ _ε-informed_ _truthful_ _for_ _source_ _i:_ _truthful_ _is_ _within_ _ε_ _expected_ _utility_ _of_ _any_
+_significant deviation and strictly better than any uninformed policy._
+
+
+The key observation is that the utility error bound _ϵ_ decreases exponentially as the number of claims
+_K_ increases, which means even a moderately large number of claims is sufficient to make unwanted
+deviations unprofitable with very high probability. We discuss this scaling and other practical implementation details in Appendix J.
+
+
+3We can assume a known lower bound _η_ min _>_ 0 on truthful report informativeness for sources that pass
+the RAG prefilter (i.e., _ηi_ [truth] _≥_ _η_ min). Intuitively, expending effort should yield at least a minimal amount of
+information. This lets us choose _t_ src _,i_ using _η_ min rather than the unknown _ηi_ [truth] .
+
+
+7
+
+
+3.5 COMPUTATIONAL COMPLEXITY
+
+
+Computing the score _w_ - _i_ for one source requires averaging over _K_ claims and _|C|−_ 1 peers, resulting
+in a cost of _O_ ( _K_ ( _|C| −_ 1)). Scoring all sources thus takes _O_ ( _|C|K_ ( _|C| −_ 1)).
+
+
+However, as mentioned in Section 2.3, we adopt a simple modification that preserves the key LOO
+property (each source is evaluated on claims constructed without its own document) while dramatically reducing complexity: instead of constructing _Ti_ from _C_ _\ {i}_ for every _i_, we randomly
+split the source set _C_ into two subsets _CA_ and _CB_ . For _i_ _∈CA_, we form the held-out claim set
+once as _TA_ = _D_ ( _M_ ( _CB_ )) and evaluate all _i_ _∈CA_ on _TA_ ; symmetrically, for _i_ _∈CB_ we use
+_TB_ = _D_ ( _M_ ( _CA_ )). In both cases, the claim set used to score a source is formed from documents
+that exclude that source, so the exogeneity condition required for our incentive guarantees still holds.
+
+
+Since we preserve the crucial feature that _Ti_ is independent with _τi_, all theoretical derivations and
+theorems follow. This significantly improves the overall computational complexity to only _O_ ( _K|C|_ ).
+In practice, practitioners can choose to only run it on select queries rather than all user queries, and
+couple it with a reputation prior (compatible with our framework and discussed in Appendix G) to
+further decrease deployment costs.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets** **and** **Sources** We evaluate TTS on two standard information-seeking benchmarks that
+provide both a concise short answer and a comprehensive long-form answer for each query: Natural
+Questions (NQ) (Kwiatkowski et al., 2019), which pairs Google queries with annotated Wikipedia
+answers, and ClashEval (Wu et al., 2024), which covers six topical domains (news, names, locations, years, drugs, records). For each query, we use the long-form answer as ground truth to
+construct a six-document source pool from the reference answer. This pool contains four reliable
+sources (high-fidelity paraphrases), one low quality source (correct answer but very concise with
+little supporting information), and two unreliable sources that presents a wrong answer (one deceptive, presenting plausible but false information; one adversarial, containing prompt-injection text).
+Source generation uses gemini-2.5-flash (Comanici et al., 2025); details are in Appendix K.
+After preprocessing, there are **1299** samples in ClashEval and **1100** samples in the NQ dataset that
+we use in our main evaluation.
+
+
+In addition, to assess TTS on purely real-world evidence, we run a small case study on the OpenDomain QA with Conflicting Contexts dataset (Liu et al., 2025), where all sources are naturally
+occurring web pages; the construction and results of this experiment are reported in Appendix K.5.
+
+
+**Methods.** All pipeline steps (claim decomposition, stance extraction, summarization) use
+gemini-2.5-flash-lite. [4] We compare our method, TTS (using the computational
+efficiency-optimized A/B group method descired in Sec. 3.5), against three single-pass baselines:
+Initial Summary (a standard LLM summary of all sources), Majority Prompt (a LLM summary
+prompted to include only majority claims), and Majority Claims, where an initial LLM summary is
+decomposed into atomic claims and only claims with majority support are used for another round of
+re-summary. Unless otherwise specified, we use a fixed global inclusion threshold of _t_ src _,i_ = 0 _._ 06. [5]
+Details and prompts are in Appendix K and we provide all code files in the submission.
+
+
+**Metrics.** To measure overall correctness, we report Answer Accuracy, where an LLM judge compares the generated summary against the dataset’s concise short answer. For a more granular analysis, we report claim-level Precision and Recall, using the comprehensive long-form gold answer as
+the reference. We also include ROUGE/BLEU scores to assess fluency in Appendix K.
+
+
+4We chose the lightweight model to prioritize the low latency and efficiency required for search applications,
+though the mechanism itself is model-agnostic. This also reflects a realistic asymmetry where attackers can
+expend more effort than a real-time defense. Appendix K.9 provides ablations with other model combinations.
+5In practice, _t_ src _,i_ can be set _adaptively_ by query type and domain (e.g., sports, science, entertainment) to
+improve performance. In our experiments, we keep a fixed global threshold (0.06) to validate the framework;
+adaptive thresholding is expected to improve performance, but is orthogonal and left to future work.
+
+
+8
+
+
+Table 1: Summary quality on NQ.
+
+
+**Method** **Precision** **Recall** [6] **F1-Score** **Answer Acc.** **(C/T)**
+
+
+Initial Synthesis 40.8% 26.2% 31.9% 25.1%
+Majority Prompt 43.4% 26.5% 32.9% 27.5%
+Majority Claims 50.1% 24.7% 33.1% 38.6%
+
+
+**Our Method (TTS)** **76.1%** **37.2%** **50.0%** **72.3%**
+
+
+Table 2: Summary quality on ClashEval.
+
+
+**Method** **Precision** **Recall** [6] **F1-Score** **Answer Acc.** **(C/T)**
+
+
+Initial Synthesis 49.3% 22.0% 30.4% 15.6%
+Majority Prompt 58.7% 25.4% 35.4% 30.2%
+Majority Claims 63.6% 20.4% 30.9% 38.4%
+
+
+**Our Method (TTS)** **86.2%** **31.5%** **56.1%** **77.1%**
+
+
+4.2 RESULTS 1: ROBUSTNESS AGAINST ADVERSARIAL AND UNTRUTHFUL SOURCES
+
+
+**Mechanism** **effectiveness:** **source** **separation** **without** **ground** **truth.** Our primary goal is to
+distinguish reliable sources from unreliable ones without access to ground-truth labels. Figure 3a
+shows that our leave-one-out, peer-prediction-based score achieves this effectively.
+
+
+As a result of this clear separation between reliable and unereliable sources, we are able to see
+significant improvement gain in accuracy for both the NQ and ClashEval dataset in Table 1 and 2.
+Fluency also improves: see App. K.1 (Table 3).
+
+
+This highlights the structural advantage of our approach: by isolating and removing unreliable
+sources before the final generation step, TTS curtails the influence of adversarial text and grounds
+the summary in corroborated evidence.
+
+
+To empirically validate our theoretical incentive guarantees, we simulate a truthful source progressively deviating from honest report. As shown in Figure 3b, the source’s score is maximized by
+truthful reporting and monotonically decreases with the fraction of flipped stances. This confirms
+that the best strategy for a source to maximize its score is truthful.
+
+
+**Computational Efficiency** With the A/B grouping scheme in Sec. 3.5, the dominant cost of TTS
+comes from stance extraction over source–claim pairs, which scales linearly in the number of sources
+and claims and is parallelizable. On our main NQ and ClashEval runs, the average query complexity
+with 7 retrieved sources is 174,346 input tokens, 12,733 output tokens, and 116,858 thinking tokens
+across all calls to gemini-2.5-flash-lite.
+
+
+At current commercial pricing, this costs _≈_ $0.07 per query, though in-house models would be substantially cheaper. Moreover, TTS need not run on every query; as detailed in Appendix G, it can be
+applied to sampled traffic to accumulate source reputation signals.
+
+
+4.3 RESULT 2: ROBUSTNESS AGAINST COORDINATED, UNINFORMATIVE BEHAVIOR
+
+
+One of the main advantages of the adapted multi-task peer prediction scoring rule is its robustness
+to coordinated, uninformative behavior, a canonical failure mode for simpler consensus-based systems. We test this in the ClashEval dataset by introducing a bloc of four “uninformative” sources
+strategically authored to contradict every claim. As shown in Figure 4, the naive majority-based
+scoring fails catastrophically. It not only rewards the colluding dummy sources, but as a byproduct,
+this pollution of the peer pool also falsely elevates the score of the adversarial source, causing it to
+
+
+6Because the reference is a long-form source document, it usually contains extraneous information not
+related to the query, so recall is not expected to approach 100% and is primarily useful for relative comparison.
+
+
+9
+
+
+Avg. Source Reliability by Type
+
+
+0.12
+
+
+0.10
+
+
+0.08
+
+
+0.06
+
+
+0.04
+
+
+0.02
+
+
+0.00
+
+
+Truthful Source Reliability vs. Stance Deviation
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+|S|ource:|Truthful|Truthful|Truthful|Truthful|Truthful|Truthful|Truthful|Truthful|Truthful|
+
+
+0 10 20 30 40 50 60 70 80 90 100
+Probability of Stance Deviation (by Randomly Flipping Claims) [%]
+
+
+0.08
+
+
+0.06
+
+
+0.04
+
+
+0.02
+
+
+0.00
+
+
+0.02
+
+
+0.04
+
+
+|Col1|Truthful<br>NQ ClashEval|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Lo|w-qual|Col15|ity|Col17|Non-truthful|Col19|Col20|Col21|Col22|Col23|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|0.11<br>0.11<br>0.11<br>0.10<br><br><br><br><br>|||||||||||||
+||||||||||||||||||||||||
+|||~~.10~~|~~.10~~||0.09||~~0.10~~|~~0.10~~||~~0.10~~|||||||||||||
+||||||||||||||||||||||||
+||||||||||||||||||||||||
+||||||||||||||0.04<br>0.05|0.04<br>0.05|||||||||
+||||||||||||||0.04<br>0.05||||||||||
+||||||||||||||||||0.03<br><br>0.02<br>|0.03<br><br>0.02<br>|0.03<br><br>0.02<br>|0.03<br><br>0.02<br>|0.03<br><br>0.02<br>||
+||||||||||||||||||||||||
+||||||||||||||||||||~~0.02~~<br>~~0.02~~|~~0.02~~<br>~~0.02~~|~~0.02~~<br>~~0.02~~||
+||||||||||||||||||||~~0.02~~<br>~~0.02~~||||
+
+
+Figure 3: **Score** **separation** **and** **incentives.** Left: Informative-agreement scores separate reliable
+from unreliable sources. Right: Truthful behavior is payoff-maximizing against deviations in stance.
+
+
+Our Method (wi)
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.035
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.000
+
+
+Output Agreement (Majority-based)
+
+
+|Col1|Truthful<br>0.03 0.03 0.03|Col3|Col4|Col5|Col6|Col7|Uninformative|N|on|-trut|hf|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+||||||||0.00<br>0.00<br>0.00<br>0.00|||0.00||
+
+
+|Col1|Truthful|Col3|Col4|Col5|Col6|Col7|Col8|Uninformative<br>0.94|Col10|Col11|Col12|Col13|Col14|N|on|-trut|hf|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||~~0.93~~<br>~~0.93~~<br><br>~~0.94~~|~~0.93~~<br>~~0.93~~<br><br>~~0.94~~|~~0.93~~<br>~~0.93~~<br><br>~~0.94~~|~~0.93~~<br>~~0.93~~<br><br>~~0.94~~|~~0.93~~<br>~~0.93~~<br><br>~~0.94~~|~~0.93~~<br>~~0.93~~<br><br>~~0.94~~|||||
+|||||||||||||||||||
+|||||||||||||||||0.63||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+
+
+Figure 4: Robustness of TTS against uninformative equilibria with 4 uninformative sources.
+
+
+be ranked higher than the genuinely truthful documents. In contrast, TTS correctly assigns near-zero
+scores to the uninformative bloc and robustly preserves the correct reliability ranking. More details
+are given in Appendix K.4.
+
+
+These empirical findings are consistent with our theoretical guarantees, demonstrating that the TTS
+framework makes truthful, careful reporting the most effective strategy for a source to be included
+in the final summary.
+
+
+5 CONCLUSION
+
+
+We reframed LLM summarization as a problem of structured summary under incentives. Our TTS
+framework decomposes drafts into claims, elicits per-source stances, and rewards beyond-chance
+corroboration, making truthful, informative reporting the best strategy for inclusion.
+
+
+Theoretically, we adapt multi-task peer-prediction to summarization, proving informed and strong
+truthfulness with finite-sample guarantees. Empirically, TTS improves factual accuracy and robustness. Future work can extend this framework with reputation priors, tighter retrieval integration, and
+adaptations for multilingual or streaming settings.
+
+
+In short, TTS offers a blueprint for summarization systems that are not just technically robust, but
+incentive-robust. By rewarding informative honesty, it reshapes the incentives faced by sources. This
+creates an ecosystem where the path to visibility is not gaming the system through uninformative
+equilibrium or strategic manipulation, but the creation of truthful, high-quality information.
+
+
+10
+
+
+REFERENCES
+
+
+Arpit Agarwal, Debmalya Mandal, David C Parkes, and Nisarg Shah. Peer prediction with heterogeneous users. _ACM Transactions on Economics and Computation (TEAC)_, 8(1):1–34, 2020.
+
+
+Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil, and Hannaneh Hajishirzi. Self-rag: Learning to
+retrieve, generate, and critique through self-reflection. 2024.
+
+
+Bing Team. Introducing copilot search in bing. [URL https://blogs.bing.com/search/](https://blogs.bing.com/search/April-2025/Introducing-Copilot-Search-in-Bing)
+[April-2025/Introducing-Copilot-Search-in-Bing.](https://blogs.bing.com/search/April-2025/Introducing-Copilot-Search-in-Bing) Blog post.
+
+
+Jiawei Chen, Hongyu Lin, Xianpei Han, and Le Sun. Benchmarking large language models in
+retrieval-augmented generation. In _Proceedings of the AAAI Conference on Artificial Intelligence_,
+volume 38, pp. 17754–17762, 2024.
+
+
+Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit
+Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the
+frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. _arXiv preprint arXiv:2507.06261_, 2025.
+
+
+Michael J. Curry, Zhou Fan, Yanchen Jiang, Sai Srivatsa Ravindranath, Tonghan Wang, and David C.
+Parkes. Automated mechanism design: A survey. _ACM_ _SIGecom_ _Exchanges_, 22(2):102–120,
+2025.
+
+
+Anirban Dasgupta and Arpita Ghosh. Crowdsourced judgement elicitation with endogenous proficiency. In _Proceedings_ _of_ _the_ _22nd_ _international_ _conference_ _on_ _World_ _Wide_ _Web_, pp. 319–330,
+2013.
+
+
+Constantinos Daskalakis, Ian Gemp, Yanchen Jiang, Renato Paes Leme, Christos Papadimitriou,
+and Georgios Piliouras. Charting the shapes of stories with game theory. _arXiv_ _preprint_
+_arXiv:2412.05747_, 2024.
+
+
+Avinava Dubey, Zhe Feng, Rahul Kidambi, Aranyak Mehta, and Di Wang. Auctions with llm
+summaries. In _Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and_
+_Data Mining_, pp. 713–722, 2024.
+
+
+Paul Duetting, Vahab Mirrokni, Renato Paes Leme, Haifeng Xu, and Song Zuo. Mechanism design
+for large language models. In _Proceedings of the ACM Web Conference 2024_, pp. 144–155, 2024.
+
+
+Paul D¨utting, Zhe Feng, Harikrishna Narasimhan, David C Parkes, and Sai Srivatsa Ravindranath.
+Optimal auctions through deep learning: Advances in differentiable economics. _Journal_ _of_ _the_
+_ACM_, 71(1):1–53, 2024.
+
+
+Shi Feng, Fang-Yi Yu, and Yiling Chen. Peer prediction for learning agents. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 35:17276–17286, 2022.
+
+
+Zhe Feng, Harikrishna Narasimhan, and David C Parkes. Deep learning for revenue-optimal auctions with budgets. In _Proceedings_ _of_ _the_ _17th_ _international_ _conference_ _on_ _autonomous_ _agents_
+_and multiagent systems_, pp. 354–362, 2018.
+
+
+Robert Friel, Masha Belyi, and Atindriyo Sanyal. Ragbench: Explainable benchmark for retrievalaugmented generation systems. _arXiv preprint arXiv:2407.11005_, 2024.
+
+
+Elizabeth Gibney. Scientists hide messages in papers to game ai peer review. _Nature_, 643(8073):
+887–888, 2025.
+
+
+Google Search Blog. Ai overviews: About last week. URL [https://blog.google/](https://blog.google/products/search/ai-overviews-update-may-2024/)
+[products/search/ai-overviews-update-may-2024/.](https://blog.google/products/search/ai-overviews-update-may-2024/) Blog post.
+
+
+Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario
+Fritz. Not what you’ve signed up for: Compromising real-world llm-integrated applications with
+indirect prompt injection. In _Proceedings of the 16th ACM workshop on artificial intelligence and_
+_security_, pp. 79–90, 2023.
+
+
+11
+
+
+John J Horton. Large language models as simulated economic agents: What can we learn from
+homo silicus? Technical report, National Bureau of Economic Research, 2023.
+
+
+David Huang, Francisco Marmolejo-Coss´ıo, Edwin Lock, and David Parkes. Accelerated preference
+elicitation with llm-based proxies. _arXiv preprint arXiv:2501.14625_, 2025.
+
+
+Yuqing Kong and Grant Schoenebeck. An information theoretic framework for designing information elicitation mechanisms that reward truth-telling. _ACM_ _Transactions_ _on_ _Economics_ _and_
+_Computation (TEAC)_, 7(1):1–33, 2019.
+
+
+Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur Parikh, Chris
+Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin, Kenton Lee, et al. Natural questions: a
+benchmark for question answering research. _Transactions of the Association for Computational_
+_Linguistics_, 7:453–466, 2019.
+
+
+Kuan Li, Liwen Zhang, Yong Jiang, Pengjun Xie, Fei Huang, Shuai Wang, and Minhao Cheng.
+Lara: Benchmarking retrieval-augmented generation and long-context llms–no silver bullet for lc
+or rag routing. _arXiv preprint arXiv:2502.09977_, 2025.
+
+
+Siyi Liu, Qiang Ning, Kishaloy Halder, Zheng Qi, Wei Xiao, Phu Mon Htut, Yi Zhang, Neha Anna
+John, Bonan Min, Yassine Benajiba, et al. Open domain question answering with conflicting
+contexts. In _Findings of the Association for Computational Linguistics:_ _NAACL 2025_, pp. 1838–
+1854, 2025.
+
+
+Yang Liu and Yiling Chen. Machine-learning aided peer prediction. In _Proceedings_ _of_ _the_ _2017_
+_ACM Conference on Economics and Computation_, pp. 63–80, 2017.
+
+
+Yang Liu and Dave Helmbold. Online learning using only peer prediction. In _International Confer-_
+_ence on Artificial Intelligence and Statistics_, pp. 2032–2042. PMLR, 2020.
+
+
+Yuxuan Lu, Shengwei Xu, Yichi Zhang, Yuqing Kong, and Grant Schoenebeck. Eliciting informative text evaluations with large language models. In _Proceedings of the 25th ACM conference on_
+_economics and computation_, pp. 582–612, 2024.
+
+
+Yuxuan Lu, Yifan Wu, Jason Hartline, and Michael J Curry. Aligned textual scoring rules. _arXiv_
+_preprint arXiv:2507.06221_, 2025.
+
+
+Debmalya Mandal, Matthew Leifer, David C Parkes, Galen Pickard, and Victor Shnayder. Peer
+prediction with heterogeneous tasks. _arXiv preprint arXiv:1612.00928_, 2016.
+
+
+Nolan Miller, Paul Resnick, and Richard Zeckhauser. Eliciting informative feedback: The peerprediction method. _Management Science_, 51(9):1359–1373, 2005.
+
+
+Fredrik Nestaas, Edoardo Debenedetti, and Florian Tram`er. Adversarial search engine optimization
+for large language models. _arXiv preprint arXiv:2406.18382_, 2024.
+
+
+Yikang Pan, Liangming Pan, Wenhu Chen, Preslav Nakov, Min-Yen Kan, and William Yang
+Wang. On the risk of misinformation pollution with large language models. _arXiv_ _preprint_
+_arXiv:2305.13661_, 2023.
+
+
+Perplexity AI. How does perplexity work? URL [https://www.perplexity.ai/](https://www.perplexity.ai/help-center/en/articles/10352895-how-does-perplexity-work)
+[help-center/en/articles/10352895-how-does-perplexity-work.](https://www.perplexity.ai/help-center/en/articles/10352895-how-does-perplexity-work) Written
+by Jennifer.
+
+
+Drazen Prelec. A bayesian truth serum for subjective data. _science_, 306(5695):462–466, 2004.
+
+
+Goran Radanovic and Boi Faltings. A robust bayesian truth serum for non-binary signals. In _Pro-_
+_ceedings of the AAAI Conference on Artificial Intelligence_, volume 27, pp. 833–839, 2013.
+
+
+David Rau, Herv´e D´ejean, Nadezhda Chirkova, Thibault Formal, Shuai Wang, Vassilina Nikoulina,
+and St´ephane Clinchant. Bergen: A benchmarking library for retrieval-augmented generation.
+_arXiv preprint arXiv:2407.01102_, 2024.
+
+
+Sai Srivatsa Ravindranath, Yanchen Jiang, and David C Parkes. Data market design through deep
+learning. _Advances in Neural Information Processing Systems_, 36:6662–6689, 2023.
+
+
+12
+
+
+Grant Schoenebeck and Fang-Yi Yu. Learning and strongly truthful multi-task peer prediction: A
+variational approach. _arXiv preprint arXiv:2009.14730_, 2020.
+
+
+Anand Shah, Kehang Zhu, Yanchen Jiang, Jeffrey G Wang, Arif K Dayi, John J Horton, and David C
+Parkes. Learning from synthetic labs: Language models as auction participants. _arXiv preprint_
+_arXiv:2507.09083_, 2025.
+
+
+Victor Shnayder, Arpit Agarwal, Rafael Frongillo, and David C Parkes. Informed truthfulness in
+multi-task peer prediction. In _Proceedings of the 2016 ACM Conference on Economics and Com-_
+_putation_, pp. 179–196, 2016.
+
+
+Ermis Soumalias, Yanchen Jiang, Kehang Zhu, Michael Curry, Sven Seuken, and David C
+Parkes. Llm-powered preference elicitation in combinatorial assignment. _arXiv_ _preprint_
+_arXiv:2502.10308_, 2025.
+
+
+Fei Wang, Xingchen Wan, Ruoxi Sun, Jiefeng Chen, and Sercan O [¨] Arık. Astute rag: Overcoming imperfect retrieval augmentation and knowledge conflicts for large language models. _arXiv_
+_preprint arXiv:2410.07176_, 2024a.
+
+
+Han Wang, Archiki Prasad, Elias Stengel-Eskin, and Mohit Bansal. Retrieval-augmented generation
+with conflicting evidence. _arXiv preprint arXiv:2504.13079_, 2025a.
+
+
+Tonghan Wang, Yanchen Jiang, and David C Parkes. Gemnet: Menu-based, strategy-proof multibidder auctions through deep learning. In _Proceedings of the 25th ACM Conference on Economics_
+_and Computation_, pp. 1100–1100, 2024b.
+
+
+Tonghan Wang, Yanchen Jiang, and David C Parkes. Bundleflow: Deep menus for combinatorial
+auctions by diffusion-based optimization. _arXiv preprint arXiv:2502.15283_, 2025b.
+
+
+Jens Witkowski and David Parkes. A robust bayesian truth serum for small populations. In _Pro-_
+_ceedings of the AAAI Conference on Artificial Intelligence_, volume 26, pp. 1492–1498, 2012.
+
+
+Kevin Wu, Eric Wu, and James Y Zou. Clasheval: Quantifying the tug-of-war between an llm’s
+internal prior and external evidence. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 37:
+33402–33422, 2024.
+
+
+Yifan Wu and Jason Hartline. Elicitationgpt: Text elicitation mechanisms via language models.
+_arXiv preprint arXiv:2406.09363_, 2024.
+
+
+Chong Xiang, Tong Wu, Zexuan Zhong, David Wagner, Danqi Chen, and Prateek Mittal. Certifiably
+robust rag against retrieval corruption. _arXiv preprint arXiv:2405.15556_, 2024.
+
+
+Shengwei Xu, Yuxuan Lu, Grant Schoenebeck, and Yuqing Kong. Benchmarking llms’ judgments
+with no gold standard. _arXiv preprint arXiv:2411.07127_, 2024.
+
+
+Shi-Qi Yan, Jia-Chen Gu, Yun Zhu, and Zhen-Hua Ling. Corrective retrieval augmented generation.
+2024.
+
+
+Linda Zeng, Rithwik Gupta, Divij Motwani, Yi Zhang, and Diji Yang. Worse than zero-shot? a factchecking dataset for evaluating the robustness of rag against misleading retrievals. _arXiv preprint_
+_arXiv:2502.16101_, 2025.
+
+
+Shuran Zheng, Fang-Yi Yu, and Yiling Chen. The limits of multi-task peer prediction. In _Proceed-_
+_ings of the 22nd ACM Conference on Economics and Computation_, pp. 907–926, 2021.
+
+
+APPENDIX
+
+
+A ETHICS STATEMENT
+
+
+The primary goal of this work is to improve the factual robustness and incentive alignment of LLMpowered summarization systems. By designing mechanisms that reward informative honesty, our
+
+
+13
+
+
+framework is intended to reduce the propagation of misinformation and mitigate the effects of adversarial manipulation. We believe the societal impact of this research direction is positive. The experiments conducted in this paper use publicly available datasets (Natural Questions (Kwiatkowski
+et al., 2019) and ClashEval (Wu et al., 2024)) and do not contain personally identifiable or sensitive information. We acknowledge that any defensive mechanism could potentially be studied by
+malicious actors; however, our framework’s core design is to create a more resilient information
+ecosystem.
+
+
+B REPRODUCIBILITY STATEMENT
+
+
+To ensure the reproducibility of our work, we have made the following provisions. The theoretical framework, including the model, assumptions, and scoring rule, is detailed in Section 2 and
+Section 3. All theoretical claims and propositions are accompanied by detailed proofs, which
+can be found in the appendix. The experimental setup, including dataset processing, source generation prompts, and evaluation procedures, is also described completely in the appendix. The
+source code for our experiments, including the implementation of the TTS pipeline and base[lines, is attached in submission, and is available at https://github.com/jeffjiang1204/](https://github.com/jeffjiang1204/incentive-aligned-multi-source-LLM-summaries.git)
+[incentive-aligned-multi-source-LLM-summaries.git.](https://github.com/jeffjiang1204/incentive-aligned-multi-source-LLM-summaries.git)
+
+
+C LLM USAGE
+
+
+In accordance with ICLR policy, we report the use of Large Language Models (LLMs) as generalpurpose assistive tools in the preparation of this manuscript. Specifically, LLMs were used for tasks
+such as editing for clarity and grammar, revising passages, and debugging segments of code. The
+core research ideas, theoretical framework, experimental design, and analysis were conceived and
+executed by the human authors. All LLM-generated text and code were reviewed, validated, and
+edited by the authors, who take full responsibility for the entire content of this paper.
+
+
+D RELATED WORKS
+
+
+**LLM-powered** **search.** Commercial search has already shifted toward LLM-written overviews
+that synthesize multiple pages (Google’s AI Overviews; Microsoft’s Copilot Search in Bing, Perplexity AI). In these experiences, citations are shown but the LLM determines salience and framing,
+moving competition from ranked links to representation in the overview itself (Google Search Blog;
+Bing Team; Perplexity AI).
+
+
+**Retrieval-Augmented Generation (RAG): reliability, conflicts, and defenses.** Our setting, multiple web sources of uneven quality, possibly in conflict, aligns with many research papers in the
+RAG domain. First, recent benchmarks systematize how to stress-test RAG beyond vanilla QA:
+they evaluate robustness to noise, counterfactuals, and long-context alternatives; provide explainable testbeds and failure analytics; and introduce standard tooling to compare systems (Chen et al.,
+2024; Friel et al., 2024; Rau et al., 2024; Li et al., 2025). Building on such evaluations, a second
+line studies how models arbitrate _conflicts_ between internal priors and external evidence: ClashEval shows that state-of-the-art LLMs frequently adopt incorrect retrieved content over correct priors
+under controlled perturbations (Wu et al., 2024); subsequent methods reason explicitly over disagreement, e.g., _AstuteRAG_ which elicits parametric knowledge, clusters internal/external evidence
+into consistent vs. conflicting sets, and finalizes answers by reliability (Wang et al., 2024a), and
+_MADAM-RAG_ which assigns each document to an agent, debates, and aggregates, evaluated on the
+RAMDocs dataset with ambiguity, misinformation, and noise (Wang et al., 2025a). However, not
+all search scenarios should (or can) rely on internal priors of LLMs: for breaking news and evolving
+events, priors are stale. Consistent with our Introduction, we focus on settings where we either omit
+priors or treat them as just one more source when helpful. A third line introduces self-monitoring
+and corrective control: _Self-RAG_ learns when to retrieve and to critique its own generations via reflection tokens (Asai et al., 2024), while _Corrective RAG (CRAG)_ adds a retrieval-quality evaluator
+that triggers fallback actions (broaden web search, decompose/recompose) when evidence appears
+unreliable (Yan et al., 2024). Finally, when retrieval itself is corrupted, recent work documents how
+“blocker” or misleading documents can drive RAG below non-RAG baselines (Zeng et al., 2025)
+
+
+14
+
+
+and develops defenses that isolate per-passage influence and certifiably bound the impact of a limited number of corrupted contexts (Xiang et al., 2024). Complementary audits quantify how small
+amounts of synthetic misinformation materially degrade knowledge-intensive QA (Pan et al., 2023).
+These techniques harden fixed pipelines; by contrast, our goal is to reshape incentives so truthful
+reporting is the best strategy for sources.
+
+
+**From technical robustness to incentive robustness.** Because summaries now mediate attention,
+sources adapt to whatever the system rewards. Beyond classical prompt-injection via web content (Greshake et al., 2023), Nestaas et al. (2024) study so-called _adversarial_ _search_ _engine_ _op-_
+_timization_ (SEO)—deliberately crafting pages to make an LLM favor them regardless of factual
+merit—including preference-manipulation attacks demonstrated against production LLM search and
+plugin ecosystems. Reports of hidden instructions in scholarly submissions targeting LLM-assisted
+review illustrate similar gaming incentives (Gibney, 2025). Our approach aims to dissuade such
+user-unfriendly manipulation by changing how sources are scored and fed into the summary.
+
+
+**Mechanism** **design** **and** **peer** **prediction** **without** **ground** **truth.** Incentive-aligned elicitation
+without verifiable truth is the province of peer prediction. Foundations include the Peer-Prediction
+method (Miller et al., 2005) and Bayesian Truth Serum (BTS) (Prelec, 2004), with robust BTS variants that work in small populations and for non-binary or continuous signals (Witkowski & Parkes,
+2012; Radanovic & Faltings, 2013). Multi-task mechanisms address effort and uninformative agreement: output-agreement–style rules and their refinements establish strong or informed truthfulness
+given structure on signals (Dasgupta & Ghosh, 2013; Shnayder et al., 2016). Of particular relevance
+is _Correlated Agreement_ (CA), which rewards _informative_ (surprising) agreement across tasks rather
+than raw consensus; extensions handle heterogeneous tasks and heterogeneous user types, and recent work analyzes dynamics when agents learn over time (Mandal et al., 2016; Agarwal et al., 2020;
+Feng et al., 2022). Kong & Schoenebeck (2019) situates multi-task peer prediction in terms of dataprocessing–monotone information measures, unifying classic mechanisms (Peer Prediction, BTS,
+CA) and explaining why mechanisms that reward _informative_ agreement discourage uninformative
+equilibria. On the theoretical front, Schoenebeck & Yu (2020) show that multi-task peer-prediction
+rules can be learned from data and achieve strong truthfulness, while Zheng et al. (2021) show core
+limits on what multi-task peer prediction can elicit. Complementary work by Liu & Chen (2017)
+shows how machine learning can recover the structure needed for peer prediction (“machine-learning
+aided” elicitation), while Liu & Helmbold (2020) analyze online learning with only peer feedback.
+
+
+We adapt CA-style ideas to text summarization: treat sources as agents and claim-level evidence
+as signals; compute cross-claim agreement/disagreement to score reliability _without_ a ground-truth
+oracle; and feed those scores back into the RAG pipeline. Unlike BTS-style methods, our pipeline
+requires no prediction reports and is designed to slot into web-scale summarization.
+
+
+In short, RAG benchmarks and methods provide stress tests, levers for conflict resolution, and even
+certifiable defenses against bounded corruption—but treat source behavior as exogenous. Peerprediction gives principled scoring without ground truth—but has not been applied to LLM web
+summarization. Our contribution is to bridge these: we score sources via CA-style informative
+agreement across extracted claims and use those scores to govern inclusion and weighting in the
+overview, aligning exposure with informativeness rather than mere popularity, directly addressing
+the incentive failures highlighted in our introduction.
+
+
+**LLM-based** **peer-informed** **scoring** Concurrently, work on LLM-based peer-informed scoring
+has split into two directions. One line learns a textual scoring rule aligned to a chosen reference label
+(e.g., an instructor’s grade), fitting to that external signal (Lu et al., 2025); relatedly, Wu & Hartline
+(2024) scores text against ground-truth instructor reviews via proper scoring rules implemented with
+LLM oracles. The second line uses an LLM’s token-level likelihoods to compare reports without
+gold labels—either by predicting a peer’s text or by estimating dependence with peer references (Lu
+et al., 2024; Xu et al., 2024). By contrast, we target open-web search, where reference labels are
+unavailable and likelihood-based comparisons across heterogeneous, noisy, and adversarial pages
+are brittle: we form leave-one-out atomic claims, extract claim-level stances, and score sources by
+informative peer agreement before re-summarizing.
+
+
+15
+
+
+**Computational Mechanism Design.** Our work also connects to the broader field of computational
+mechanism design, which leverages algorithms and optimization to design incentive-compatible
+rules. A prominent line of research utilizes deep learning to automatically learn optimal auction
+mechanisms (Curry et al., 2025). Early architectures like RegretNet (D¨utting et al., 2024) train
+neural networks to maximize revenue while minimizing violations of incentive constraints, yielding mechanisms that are approximately incentive-compatible. Subsequent work, such as GemNet
+(Wang et al., 2024b), improves upon this by enforcing full incentive compatibility (strategyproofness) within the architecture itself, rather than as a soft penalty. These learning-based approaches
+have been extended to complex settings including data market design (Ravindranath et al., 2023),
+combinatorial auctions (Wang et al., 2025b), and auctions with budgets (Feng et al., 2018). Concurrently, recent research has begun to integrate Large Language Models into mechanism design
+pipelines (Duetting et al., 2024; Dubey et al., 2024; Huang et al., 2025; Soumalias et al., 2025) and
+how LLM agents behave in traditional mechanisms (Horton, 2023; Shah et al., 2025). Beyond auctions, there is growing interest in the intersection of Large Language Models and game theory for
+modeling strategic environments. For instance, Daskalakis et al. (2024) demonstrate that LLMs can
+be used to extract formal extensive-form game trees and character incentives directly from narrative
+texts. Our framework occupies a complementary angle: rather than learning mechanism parameters via gradient descent or extracting existing games from text, we apply a specific game-theoretic
+structure (multi-task peer prediction) onto the RAG process, creating a new game that incentivizes
+LLM-generated sources to be truthful.
+
+
+E PROOFS AND DETAILS FOR SECTION 2
+
+
+**LOO makes the claim set exogenous;** **we model** _i_ **as claim-invariant.** As justified in the main
+text, by construction, the held-out set _Ti_ is a function of ( _q,_ _**τ**_ _−i_ ) only; the scored source _i_ neither
+selects nor can tailor its content to the realized set. It is therefore natural and standard in multi-task
+peer-prediction to summarize _i_ ’s behavior on _Ti_ by a _single_ set of conditional reporting parameters
+that do not depend on the claim index _k_ . Concretely, conditional on _Ti_ there exist constants
+
+
+t _i_ := Pr( _rik_ = 1 _| θk_ = 1 _, Qik_ = 1 _, Ti_ ) _,_ f _i_ := Pr( _rik_ = 1 _| θk_ = 0 _, Qik_ = 1 _, Ti_ ) _,_
+
+
+such that these values are the same for all _k_ _∈{_ 1 _, . . ., K}_ ; equivalently, the on-claim marginal
+
+
+_µi_ := Pr( _rik_ = 1 _| Qik_ = 1 _, Ti_ ) = _πi_ t _i_ + (1 _−_ _πi_ ) f _i_
+
+
+is claim-invariant for _i_ on _Ti_ .
+
+
+**Lemma** **1** (Report informativeness is bounded by signal informativeness) **.** _Assume_ _effort_ _yields_ _a_
+_positively informative signal for i so that ηi_ _[sig]_ _>_ 0 _._ _For any reporting rule σi,_
+
+_ηi_ = ( _q_ 1 _−_ _q_ 0) _ηi_ _[sig]_ _≤_ _ηi_ _[sig][,]_
+
+
+_with equality only under truthful reporting_ ( _q_ 1 _, q_ 0) = (1 _,_ 0) _._ _(See Appendix E for proof)_
+
+
+_Proof._ By the law of total probability,
+
+
+Pr( _r_ = 1 _| θ_ = 1 _, Q_ =1) = _q_ 1 _s_ 1 + _q_ 0(1 _−_ _s_ 1) _,_ Pr( _r_ = 1 _| θ_ = 0 _, Q_ =1) = _q_ 1 _s_ 0 + _q_ 0(1 _−_ _s_ 0) _._
+
+Subtracting gives _ηi_ = ( _q_ 1 _−_ _q_ 0)( _s_ 1 _−_ _s_ 0) = ( _q_ 1 _−_ _q_ 0) _ηi_ [sig][. Since] _[ q]_ [1] _[, q]_ [0] _[∈]_ [[0] _[,]_ [ 1]][ we have] _[ q]_ [1] _[ −]_ _[q]_ [0] _[≤]_ [1][,]
+and with _ηi_ [sig] _>_ 0 this implies _ηi_ _≤_ _ηi_ [sig][, with equality only at][ (] _[q]_ [1] _[, q]_ [0][) = (1] _[,]_ [ 0)][.]
+
+
+In contrast, peers _j_ = _i_ were _not_ held out when _Ti_ was formed, so their topical coverage and
+conditional accuracies relative to _Ti_ may vary with the claim:
+
+
+**Coverage.** Let _Qjk_ = 1 _{rjk_ = _⊥}_ indicate that peer _j_ takes a stance ( _supports_ or _contradicts_ ) on
+claim _k_ . Recall the (claim-dependent) coverage probability
+
+
+_αjk_ := Pr( _Qjk_ = 1 _| Ti_ ) _._
+
+
+As stated in Section 2, we assume that conditional on _Ti_, (i) _Qjk_ is independent of ( _θk, zjk_ ) and (ii)
+_{Qjk}j_ are independent across sources.
+
+
+16
+
+
+**Private signal.** Under effort, peer _j_ observes a binary signal _zjk_ _∈{_ 0 _,_ 1 _}_ with claim-dependent
+quality
+_s_ 1 _,jk_ := Pr( _zjk_ = 1 _| θk_ = 1) _,_ _s_ 0 _,jk_ := Pr( _zjk_ = 1 _| θk_ = 0) _,_
+and _signal informativeness_
+_ηjk_ [sig] [:=] _[s]_ [1] _[,jk][ −]_ _[s]_ [0] _[,jk]_ _[∈]_ [[] _[−]_ [1] _[,]_ [ 1]] _[.]_
+
+
+**Reporting** **rule** **and** **induced** **stance.** When _Qjk_ = 1, peer _j_ maps its signal to a stance _rjk_ _∈_
+_{_ 1 _,_ 0 _}_ via (possibly claim-dependent) reporting parameters
+_q_ 1 _,jk_ := Pr( _rjk_ = 1 _| zjk_ = 1 _, Qjk_ = 1) _,_ _q_ 0 _,jk_ := Pr( _rjk_ = 1 _| zjk_ = 0 _, Qjk_ = 1) _._
+
+Let
+_tjk_ := Pr( _rjk_ = 1 _| θk_ = 1 _, Qjk_ = 1 _, Ti_ ) _,_ _fjk_ := Pr( _rjk_ = 1 _| θk_ = 0 _, Qjk_ = 1 _, Ti_ ) _,_
+
+so the _report informativeness_ on claim _k_ is
+_ηjk_ := _tjk −_ _fjk_ = Pr( _rjk_ = 1 _| θk_ = 1 _, Qjk_ = 1 _, Ti_ ) _−_ Pr( _rjk_ = 1 _| θk_ = 0 _, Qjk_ = 1 _, Ti_ ) _._
+The on-claim marginal (given _Qjk_ = 1) is _µjk_ := _πi tjk_ +(1 _−πi_ ) _fjk_, where _πi_ = Pr( _θk_ = 1 _| Ti_ ).
+
+
+**Factorization and benchmark.** Conditioning on _Qjk_ = 1 and using the law of total probability,
+
+_ηjk_ = ( _q_ 1 _,jk −_ _q_ 0 _,jk_ ) ( _s_ 1 _,jk −_ _s_ 0 _,jk_ ) = ( _q_ 1 _,jk −_ _q_ 0 _,jk_ ) _ηjk_ [sig] _[.]_
+
+Hence _|ηjk|_ _≤|ηjk_ [sig] _[|]_ [, with equality when the peer reports truthfully on claim] _[ k]_ [ (] _[q]_ [1] _[,jk]_ [=] [1] _[,]_ _[q]_ [0] _[,jk]_ [=]
+0). We say claim _k_ is _informative_ for peer _j_ if _ηjk_ _>_ 0 and _uninformative_ if _ηjk_ = 0.
+
+
+**Asymmetry with the scored source.** For the scored source _i_, we use claim-invariant parameters
+( _αi, ηi_ ) on _Ti_ (Sec. 2); for peers _j_ = _i_, we allow ( _αjk, tjk, fjk, ηjk_ ) to vary with _k_ . This asymmetry
+reflects LOO: _Ti_ is exogenous to _i_, but may depend on peers, so their informativeness can vary by
+claim.
+
+
+**Connection** **to** **main-text.** The main text uses only _αjk_ and _ηjk_ (via Γ _i_ ( _k_ ) :=
+_|C|−_ 1 1 - _j_ = _i_ _[α][jk][η][jk]_ [).] [The] [microfoundation] [above] [justifies] [this] [summary] [and] [matches] [the] [quanti-]
+
+ties appearing in the expectation and concentration results (Prop. 1 and Thm. 4).
+
+
+F EQUIVALENCE OF DOCUMENTS AND POLICIES
+
+
+Our theoretical analysis is set in a “policy game,” where sources choose an effort level and a reporting rule. However, in practice, sources act by authoring documents. This section formally connects
+these two domains, arguing that for the purpose of incentive analysis, they are strategically equivalent under mild assumptions. The core idea is to focus on the strategic intent behind a document,
+which we model as a policy.
+
+
+**From Document Space to Policy Space.** The space of all possible documents a source could write
+is effectively infinite and unstructured. However, a source authors a document with a specific goal:
+to influence the final summary and maximize its inclusion. Since the source authors its document _τi_
+without knowing the specific held-out claim set _Ti_ on which it will be evaluated, its strategic choice
+is to adopt a general reporting policy, _Fi_ = ( _ei, σi_ ). This policy defines how the source maps its
+private signal _zik_ about any potential claim _sk_ to a public stance _rik_ .
+
+
+The source then authors a document _τi_ that is intended to implement this general policy. When the
+summarization pipeline later evaluates this document against the realized claims in _Ti_, the extracted
+stances will follow the distribution dictated by the policy _Fi_ that the document was written to embody. This intended mapping from a source’s private information to its public statements allows
+us to analyze the strategic incentives in the space of policies rather than the intractable space of
+documents.
+
+
+Therefore, instead of analyzing the infinite space of texts, we analyze the space of the strategies
+they are intended to implement. This leads us to define the relevant action set as as the collection
+of implementable documents: texts whose induced stance process under ( _M, D, E_ ) on _Ti_ coincides
+with that of some policy _Fi_ = ( _ei, σi_ ).
+
+
+17
+
+
+**Implementability assumptions.** We assume:
+
+
+    - **Expressiveness (policy** _→_ **document):** For any policy _Fi_, there exists a document _τi_ such
+that, when ( _M, D, E_ ) is applied and _i_ is scored on _Ti_, the induced distribution of ( _Qik, rik_ )
+matches that generated by the signal model under _Fi_ .
+
+
+    - **Coherence:** For any fixed claim, the stance a document contributes via _M_ matches the
+stance extracted by _E_ .
+
+
+Expressiveness ensures this set is rich enough to realize any strategic policy; Coherence ensures the
+stance used for scoring is well-defined.
+
+
+**Utilities.** Fix a source _i_ and condition on its held-out set _Ti_ . Let _Vi_ ( _·_ ; _Ti_ ) denote source _i_ ’s realized
+mechanism utility given a profile and _Ti_ . Define the expected utilities _Ui_ [pol] ( _F_ ) := E[ _Vi_ ( _F_ ; _Ti_ )] and
+_Ui_ [doc] ( _**τ**_ ) := E[ _Vi_ ( _**τ**_ ; _Ti_ )], where the expectation is over the mechanism’s randomization and the
+signal model (both taken conditional on the fixed _Ti_ ).
+
+
+**Proposition 2** (Policies _→_ documents: utility equality, equilibrium lifting, guarantee transfer) **.** _Un-_
+_der LOO, Coherence, and Expressiveness (policy →_ _document), and restricting attention to imple-_
+_mentable documents, the following hold:_
+
+
+_1._ Policy implementability and utility equality. _For any policy profile F_ _there exists a docu-_
+_ment profile_ _**τ**_ _that implements F_ _componentwise, and Ui_ [doc] ( _**τ**_ ) = _Ui_ [pol] ( _F_ ) _for all i._
+
+
+_2._ Equilibrium lifting. _If_ _F_ _[∗]_ _is_ _a_ _Bayesian_ _Nash_ _equilibrium_ _of_ _the_ _policy_ _game,_ _then_ _some_
+_document_ _profile_ _**τ**_ _[∗]_ _implementing_ _F_ _[∗]_ _is_ _a_ _Bayesian_ _Nash_ _equilibrium_ _of_ _the_ _document_
+_game._
+
+
+_3._ Guarantee transfer. _Any mechanism-level guarantee stated as constraints or orderings on_
+_expected_ _scores_ _or_ _inclusion_ _probabilities_ _that_ _holds_ _for_ _all_ _policy_ _profiles_ _also_ _holds_ _for_
+_any document profiles that implement them._
+
+
+_Proof._ (1) By Expressiveness, build _**τ**_ implementing _F_ . Conditional on _Ti_, ( _M, D, E_ ) applied to _**τ**_
+induces the same joint distribution of ( _Qjk, rjk_ ) as the signal model under _F_, so conditional utility
+distributions coincide; taking expectations gives _Ui_ [doc] ( _**τ**_ ) = _Ui_ [pol] ( _F_ ).
+
+(2) Let _**τ**_ _[∗]_ implement _F_ _[∗]_ . For any unilateral document deviation _τi_, since we restrict to implementable documents, _τi_ realizes some policy deviation _Fi_ . Using (1), _Ui_ [doc] ( _**τ**_ _[∗]_ ) = _Ui_ [pol] ( _F_ _[∗]_ ) _≥_
+_Ui_ [pol] ( _Fi, F−_ _[∗]_ _i_ [) =] _[ U]_ _i_ [ doc] ( _τi,_ _**τ**_ _−_ _[∗]_ _i_ [)][.]
+
+
+(3) For any _F_, choose an implementing _**τ**_ ; by (1) both profiles induce the identical probability
+distribution over scores and, consequently, over inclusion decisions. Therefore, any guarantee stated
+as an ordering on expected scores or inclusion probabilities for the policies must also hold for their
+implementing documents.
+
+
+**Toy example (implementability in text).** Suppose the policy _Fi_ has _coverage αi_ (the source only
+speaks on some claims because of topical focus and length constraints) and, when it speaks, it reports
+truthfully (so _rik_ = _zik_ ). An implementable document _τi_ is written _before Ti_ is known: it covers the
+source’s focus topics within its length limit, and whenever it has a signal about a relevant statement
+it explicitly asserts or denies it (support if the signal is positive, contradict if negative), remaining
+silent elsewhere. After the held-out set _Ti_ is formed, the extractor _E_ sets _Qik_ = 1 exactly on those
+claims _sk_ _∈_ _Ti_ that the document actually addresses and assigns _rik_ _∈{_ 1 _,_ 0 _}_ according to the
+content (by Coherence), with _Qik_ = 0 otherwise. Thus the induced distribution of ( _Qik, rik_ ) on
+the realized _Ti_ matches the policy _Fi_ . (If strategy _σi_ differs from truthful, the same construction
+implements it by altering which assertions are made to follow _σi_ .)
+
+
+**Low-effort** **case.** If _ei_ = 0, the page is authored without consulting signals about _sk_ . It may still
+cover some topics (so _Qik_ = 1 on a subset), but conditional on speaking its stance _rik_ is independent
+of _θk_ (e.g., generic boilerplate, off-topic prose, or broad always-agree/always-contradict statements
+that don’t condition on truth), hence _ηi_ = 0.
+
+
+18
+
+
+G DISCUSSION OF MODELING ASSUMPTIONS AND FUTURE DIRECTIONS
+
+
+**Justification** **for** **Assumptions** **A1-A3.** The assumptions mirror standard modeling in the multitask peer-prediction literature (Shnayder et al., 2016; Dasgupta & Ghosh, 2013; Agarwal et al.,
+2020). The Leave-One-Out (LOO) construction makes the held-out claim set _Ti_ exogenous to the
+scored source _i_ . From source _i_ ’s perspective, the claims are therefore effectively exchangeable,
+justifying the use of claim-invariant parameters for _i_ (e.g., _αi, ηi_ ) while allowing per-claim heterogeneity for its peers. The conditional independence assumption (A2) is the standard separability
+condition required to identify agreement that is truly informative about the latent ground truth ( _θk_ ),
+as opposed to agreement caused by sources simply copying one another. [7] Finally, the positive peer
+margin assumption (A3) is weak; it only requires that the peer pool contains _some_ useful signal on
+average, allowing for some peers or claims to be uninformative.
+
+
+**Role in practice and practical desiderata.** These assumptions should be viewed as an idealized
+lens rather than a literal description of the web. We adopt them for the same reason as prior multitask peer-prediction work: they give a clean, tractable model in which we can formally relate our
+peer-consistency score to latent source accuracy and prove that truthful reporting is a best response.
+In practical systems, the bar is different: we do not need to eliminate all strategic behavior, but
+to make systematic manipulation significantly more costly and less rewarding. Our experiments
+already operate in a regime where exchangeability and conditional independence hold only approximately (LLM-generated sources, realistic QA queries, heterogeneous documents), yet TTS still
+substantially reduces the influence of deceptive or adversarial sources. This suggests that the mechanism can serve as a useful building block for real-world deployments even when the theoretical
+assumptions are only approximately satisfied.
+
+
+**Optional** **Extension:** **Reputation** **Weighting.** If prior reliabilities for sources, denoted _{ωj}_
+where _ωj_ _∈_ [0 _,_ 1], are available (e.g., from domain knowledge or a source’s historical performance,
+e.g. wikipedia has a higher reliability score than a blog), the mechanism can be enhanced. We can
+require a _weighted_ positive peer margin by replacing the definition of Γ _i_ ( _k_ ) with:
+
+
+Γ _i_ ( _k_ ) := E _j_ = _i_ [ _ωj αjk ηjk_ _| Ti_ ] _._
+
+
+Concretely, for the mechanism and scoring described in Section 3, any place that averages scores
+between _i_ and _j_ = _i_ will be replaced by a weighted average with the reliability of _j_ ’s as weights.
+All theoretical guarantees presented in the paper hold with this substitution, provided the weights
+are fixed before scoring. This extension allows the system to place more trust in agreement with
+sources known to be more reliable. For simplicity, our main analysis takes _ωj_ _≡_ 1 for all peers.
+
+
+**Discussion** **on** **diversity** **and** **unique** **claims.** A natural concern is whether our source selection
+rule might discourage sources from contributing _unique_ information, thereby harming diversity in
+the retrieved context and downstream QA.
+
+
+First, our mechanism does not penalize uniqueness per se. The stance extractor distinguishes between contradiction and mere lack of topic overlap: if a source contributes a claim that is not mentioned elsewhere but does not conflict with the shared core of other sources, it is labeled as abstain
+rather than contradict. Such unique-but-compatible claims are still eligible for inclusion. In practice,
+if a source’s overall score _w_ - _i_ passes the threshold, its unique claims can be synthesized into the final
+answer and enrich the summary. A source is not punished simply for saying something additional
+that others do not say.
+
+
+The more delicate case is when a unique claim _directly_ _contradicts_ a confident majority—for example, ten sources assert _A_ and one source asserts _B_, with similar apparent quality and _A_ and _B_
+mutually exclusive. In our theoretical framework we explicitly assume that we do not have access
+to ground truth and we do not rely on static priors (e.g., asking the same LLM to arbitrate using its
+internal world knowledge), which we believe mirrors the regime of rapidly evolving search. In this
+model, we deliberately restrict ourselves to using only the mutual information between sources: the
+scoring rule, motivated by multi-task peer prediction, rewards sources that are mutually informative
+
+
+7While A2 can be violated by near-duplicate sources, this is a known issue that can be effectively mitigated
+through pre-processing steps like semantic deduplication. Our analysis therefore assumes A2 holds for the set
+of informationally distinct documents that would remain after such filtering.
+
+
+19
+
+
+and uses the off-task term to discount uninformative “herd” equilibria. But if all the observable
+evidence is “10 say _A_, 1 says _B_ ” with no additional prior signal, there is no purely interaction-based
+reason to systematically favor _B_ over _A_ .
+
+
+Our goal in this paper is to analyze that interaction-based mechanism in isolation, not to design a
+complete end-to-end retrieval stack. In practical deployments, it is natural—and often desirable—to
+combine our mechanism with simple prior-based components, and our design is explicitly compatible with that. Two examples are:
+
+
+    - **Reputation** **weighting** as discussed above, where practitioners can assign higher prior
+weight to known reliable outlets (e.g., major news organizations, official documentation)
+than to low-credibility sources. This provides a principled and explicit way to inject domain knowledge, so that a single high-reputation dissenting source can outweigh many
+low-reputation ones if desired.
+
+
+    - **Composability** **with** **other** **routines.** Our method is modular and can be applied on top
+of existing retrieval and filtering steps (e.g., domain whitelists, de-duplication, diversitypromoting selection). In that case, TTS is used to score and prune among sources that have
+already passed those prior-based filters, rather than acting as the sole decision mechanism.
+
+
+In summary, (i) unique but non-contradictory claims are not penalized by our stance model and can
+still improve coverage, and (ii) the treatment of rare “majority vs. minority” conflicts that genuinely
+require exogenous priors is an application-level design choice. Our mechanism is intended to serve
+as a building block that provides incentive-aligned aggregation based on cross-source interactions,
+and can be combined with reputation signals or other system components when richer priors are
+available.
+
+
+G.1 FUTURE DIRECTIONS
+
+
+Our analysis in the main text and in this appendix is intentionally static and single-query: we model
+one round of retrieval and summarization, assume fixed prior reliabilities, and study how the mechanism shapes incentives within that round. A natural next step is to extend this to a dynamic, repeated
+setting. In particular, the reputation-weighted variant in Section G suggests a natural repeated-game
+view: per-query scores can be aggregated into long-run reputations that influence future exposure
+and retrieval. Formally analyzing the resulting dynamics—how strategic sources adapt over time
+and whether truthful equilibria emerge or are stable under best-response dynamics—is an interesting direction for future work.
+
+
+A second direction is to study TTS more explicitly in multi-hop and long-context regimes. Our
+mechanism itself only requires (i) the ability to decompose answers into atomic claims and (ii) to
+extract per-source stances on those claims, the theoretical guarantees carry over as the number and
+structure of claims become richer. What changes is primarily computational: multi-hop reasoning
+and longer contexts increase the number of claims and stance evaluations. Exploring hierarchical
+variants (e.g., scoring coarse-grained claims first and expanding only contentious regions) and more
+aggressive claim subsampling, and evaluating these variants on dedicated multi-hop / long-context
+benchmarks, are promising extensions.
+
+
+Finally, on the empirical side, we see our current synthetic-but-model-generated sources as a controlled, forward-looking proxy for a future incentive environment. A complementary line of work
+is to (i) simulate more realistic strategic behaviors at scale (e.g., by training or prompting models
+to optimize explicitly for inclusion under particular overview systems), and (ii) curate or collect
+real-world datasets where content has been optimized for LLM-based summaries or where adversarial behavior is known to occur. Coupled with richer human evaluation and qualitative analyses,
+such datasets would allow a more fine-grained assessment of how TTS interacts with real-world
+manipulative tactics, and how it can be combined with retrieval-stage defenses and other robustness
+methods in deployed systems, and (iii) combine TTS with existing robustness methodology. TTS
+targets rapidly developing web search setting where reliable priors are non-existent and it is not
+possible to utilize an LLM-judge, internal debate, or methodologies from other papers surveyed in
+App. D. That said, TTS is designed to be a modular source-filtering and reweighting layer: it can be
+inserted before or alongside retrieval-robust generation procedures to produce an incentive-aligned
+pool of documents, after which one could still apply Self-RAG, AstuteRAG, debate-style genera
+
+20
+
+
+tion, etc. Future work and practical application can seek to combine those aspects to design systems
+that are robust in all scenarios.
+
+
+H PROOFS FOR SECTION 3
+
+
+**Proposition 1** (Expected claim-averaged pairwise score) **.** _Under the assumptions above,_
+
+
+E[¯ _σij_ ] = [1]
+
+_K_
+
+
+E[ _σikj_ ] = [1]
+
+_K_
+
+_k_
+
+
+_K_
+
+
+_K_
+
+- 2 _πi_ (1 _−πi_ ) _αi αjk_ _ηi ηjk._
+
+
+_k_ =1
+
+
+- 1
+
+E[ _S_ ( _rik, rjk_ ) _−S_ ( _ril, rjm_ )] =
+_K_
+_k_
+
+
+_In particular, it is linear in the scored source’s informativeness ηi, and_ = 0 _when ηi_ = 0 _._
+
+
+_Proof._ All expectations below are conditional on _Ti_ and _ρ_ [(] _[i]_ [)] .
+
+
+By A1 (independent claim blocks), for _ℓ_ = _m_ we have _Qiℓ_ _⊥_ _Qjm_ and _riℓ_ _⊥_ _rjm_ conditional on
+_Ti_ ; hence the off-task term factorizes. For the on-task term, we use the main-text assumption of
+crosssource coverage independence _Qik_ _⊥_ _Qjk_ _|_ _Ti_ together with A2 (post-selection conditional
+independence of reports).
+
+
+_Step 1:_ _On-task term._ As abstentions are independent,
+
+
+E� _S_ ( _rik, rjk_ )� = _αi αjk_ Pr( _rik_ = _rjk_ _∈{_ 0 _,_ 1 _} | Qik_ = _Qjk_ =1) _._
+
+
+Condition on _θk_ . If _θk_ = 1 then Pr( _rik_ = _rjk_ _| Q_ =1) = t _i_ t _jk_ + (1 _−_ t _i_ )(1 _−_ t _jk_ ). If _θk_ = 0 then
+Pr( _·_ ) = f _i_ f _jk_ + (1 _−_ f _i_ )(1 _−_ f _jk_ ). Averaging over _θk_ yields
+
+E� _S_ ( _rik, rjk_ )� = _αiαjk_  - _πi_ �t _i_ t _jk_ + (1 _−_ t _i_ )(1 _−_ t _jk_ )� + (1 _−_ _πi_ )�f _i_ f _jk_ + (1 _−_ f _i_ )(1 _−_ f _jk_ )� [�]
+
+
+           -            -            - [�]
+= _αiαjk_ 1 _−_ _µi −_ _µjk_ + 2 _πi_ t _i_ t _jk_ + (1 _−_ _πi_ ) f _i_ f _jk_ _._
+
+
+_Step 2:_ _Off-task term (single permutation)._ For _ℓ_ = _ρ_ [(] _[i]_ [)] ( _k_ +1) and _m_ = _ρ_ [(] _[i]_ [)] ( _k_ +2) the claims differ
+from _k_, and by block independence _riℓ_ and _rjm_ are independent conditional on their gates. Thus
+
+E� _S_ ( _riℓ, rjm_ )� = _αi αjm_ - _µi µjm_ + (1 _−_ _µi_ )(1 _−_ _µjm_ )� = _αi αjm_ �1 _−_ _µi −_ _µjm_ + 2 _µiµjm_ - _._
+
+
+Summing over _k_ = 1 _, . . ., K_ and using that _m_ = _ρ_ [(] _[i]_ [)] ( _k_ +2) is a bijection of _{_ 1 _, . . ., K}_,
+
+
+_K_
+
+   - E� _S_ ( _riℓ, rjm_ )� = _αi_
+
+
+_k_ =1
+
+
+where we reindex _m_ as _k_ .
+
+
+_K_
+
+- _αjk_ �1 _−_ _µi −_ _µjk_ + 2 _µiµjk_ - _,_
+
+
+_k_ =1
+
+
+_Step 3:_ _Difference and cancellation._ Subtract and sum over _k_ :
+
+
+_K_
+
+
+E[ _σikj_ ] =
+
+_k_ =1
+
+
+_K_
+
+- �� - - [�]
+
+_αiαjk_ 1 _−_ _µi −_ _µjk_ + 2 _πi_ t _i_ t _jk_ + (1 _−_ _πi_ ) f _i_ f _jk_
+
+_k_ =1
+
+
+           - ��
+
+_−_ 1 _−_ _µi −_ _µjk_ + 2 _µiµjk_
+
+
+= 2 _αi_
+
+
+_K_
+
+- _αjk_ - _πi_ t _i_ t _jk_ + (1 _−_ _πi_ ) f _i_ f _jk −_ _µiµjk_ - _._
+
+
+_k_ =1
+
+
+Expand _µiµjk_ = ( _πi_ t _i_ + (1 _−_ _πi_ ) f _i_ )( _πi_ t _jk_ + (1 _−_ _πi_ ) f _jk_ ) and group terms to obtain
+
+
+_πi_ t _i_ t _jk_ + (1 _−_ _πi_ ) f _i_ f _jk −_ _µiµjk_ = _πi_ (1 _−_ _πi_ )�t _i −_ f _i_ ��t _jk −_ f _jk_   - = _πi_ (1 _−_ _πi_ ) _ηi ηjk._
+
+
+Therefore,
+_K_
+
+    
+E[ _σikj_ ] = 2 _πi_ (1 _−_ _πi_ ) _αi_
+
+_k_ =1
+
+
+21
+
+
+_K_
+
+- _αjk ηi ηjk,_
+
+
+_k_ =1
+
+
+and dividing by _K_ proves the stated formula for E[¯ _σij_ ].
+
+Therefore, let Γ _i_ ( _k_ ) := _|C|−_ 1 1 - _j_ = _i_ _[α][jk][ η][jk]_ [, by linearity of expectations,]
+
+
+- 2 _πi_ (1 _−πi_ ) _αi αjk ηi ηjk_ = [1]
+
+_K_
+
+_j_ = _i_
+
+
+1
+E[ _w_ - _i_ ] = _|C| −_ 1
+
+
+- 1 1
+
+E[¯ _σij_ ] = _|C| −_ 1 _K_
+_j_ = _i_
+
+
+_K_
+
+
+_K_
+
+
+_k_ =1
+
+
+_K_
+
+- 2 _πi_ (1 _−πi_ ) _αi ηi_ Γ _i_ ( _k_ ) _._
+
+
+_k_ =1
+
+
+We write the per-claim, peer-averaged score as
+
+
+1
+_σ_ ˜ _ik_ := _|C| −_ 1
+
+
+- _σikj,_ _σikj_ := _S_ ( _rik, rjk_ ) _−_ _S_ ( _riℓ, rjm_ ) _,_
+
+
+_j_ = _i_
+
+
+with _ℓ_ = _ρ_ [(] _[i]_ [)] ( _k_ +1) and _m_ = _ρ_ [(] _[i]_ [)] ( _k_ +2) (indices modulo _K_ ) for a single permutation _ρ_ [(] _[i]_ [)] fixed
+when scoring source _i_ . Then _w_ - _i_ = _K_ [1] - _Kk_ =1 _[σ]_ [˜] _[ik][.]_
+
+
+**Concentration via bounded differences** We show that _w_ - _i_ concentrates around its mean at a subGaussian rate in _K_ :
+**Lemma** **2** (Bounded differences: 3 _/K_ -Lipschitz) **.** _View_ _w_ - _i_ _as_ _a_ _function_ _of_ _the_ _K_ _independent_
+claim blocks _{Bk}_ _[K]_ _k_ =1 _[, where block][ B][k][ contains]_ [ (] _[θ][k][,][ {][Q][jk][, r][jk][}][j][∈C]_ [)] _[. Under the single-permutation]_
+_baseline,_ _changing_ _one_ _block_ _Bt_ _(and_ _leaving_ _all_ _others_ _fixed)_ _can_ _affect_ _at_ _most_ _three_ _of_ _the_ _per-_
+_claim peer averages {σ_ ˜ _ik}_ _[K]_ _k_ =1 _[:]_
+
+_k_ = _t,_ _k_ = ( _ρ_ [(] _[i]_ [)] ) _[−]_ [1] ( _t_ ) _−_ 1 _,_ _k_ = ( _ρ_ [(] _[i]_ [)] ) _[−]_ [1] ( _t_ ) _−_ 2 _(indices modulo K)._
+
+_For each affected k, |_ ∆˜ _σik| ≤_ 1 _._ _Hence_ ��∆ _w_ - _i_ �� _≤_ 3 _/K._
+
+
+_Proof._ By definition, _σ_ ˜ _ik_ = _|C|−_ 1 1 - _j_ = _i_ - _S_ ( _rik, rjk_ ) _−_ _S_ ( _riℓ, rjm_ )� with _ℓ_ = _ρ_ [(] _[i]_ [)] ( _k_ +1) and _m_ =
+
+_ρ_ [(] _[i]_ [)] ( _k_ +2). A change to block _Bt_ can alter terms only where _t_ appears: on-task ( _k_ = _t_ ) or as one of
+the two off-task indices for some other _k_ (i.e., _t_ = _ρ_ [(] _[i]_ [)] ( _k_ +1) or _t_ = _ρ_ [(] _[i]_ [)] ( _k_ +2)). Because _ρ_ [(] _[i]_ [)] is a
+bijection, each _t_ appears in at most one _k_ as _ρ_ [(] _[i]_ [)] ( _k_ +1) and at most one _k_ as _ρ_ [(] _[i]_ [)] ( _k_ +2), yielding the
+three listed positions. In any affected _σ_ ˜ _ik_, only one indicator in _σikj_ depends on _Bt_ ; for each peer
+_j_ this indicator changes by at most 1, so the average over peers changes by at most 1. Therefore
+_|_ ∆˜ _σik| ≤_ 1 for the at most three affected _k_, and _|_ ∆ _w_ - _i| ≤_ _K_ [1] _[·]_ [ 3] _[ ·]_ [ 1 = 3] _[/K]_ [.]
+
+
+**Theorem 4** (Concentration of _w_ - _i_ ) **.** _Under the assumptions above and conditioning on Ti_ _and ρ_ [(] _[i]_ [)] _,_
+
+
+         Pr( _|w_ - _i −_ E[ _w_ - _i_ ] _|_ _≥_ _t_ ) _≤_ 2 exp _−_ [2] _[K t]_ 9 [2]
+
+
+_,_ _t >_ 0 _._
+
+
+_Proof._ The claim blocks _{Bk}_ _[K]_ _k_ =1 [are independent (post-selection A1),] [and by Lemma 2 the m][ap]
+_B_ _�→_ _w_ - _i_ ( _B_ ) is 3 _/K_ -Lipschitz. McDiarmid’s inequality then yields the stated tail bound.
+
+
+**Notation.** We write _Fi_ [truth] := ( _ei_ =1 _,_ _σi_ [truth] ) _, σi_ [truth] : _rik_ = _zik_ whenever _Qik_ = 1 for the
+policy that exerts effort and reports truthfully on spoken claims. The corresponding report-level
+informativeness is _ηi_ [truth] := _ηi_ ( _Fi_ [truth] ) = _ηi_ [sig] _>_ 0 by Lemma 1. Let _Fi_ [uninformed] denote uninformed policies (either without effort, or report independent with received signals), we have
+_ηi_ ( _Fi_ [uninformed] ) = 0 (e.g. _ei_ = 0 or _q_ 1 = _q_ 0). By Proposition 1, we have E[ _wi_ ( _Fi_ [uninformed] )] = 0.
+When unambiguous, we abbreviate _w_ - _i_ ( _Fi_ [truth] ) as _w_ - _i_ [truth] and similarly for _w_ - _i_ ( _Fi_ [uninformed] ).
+**Theorem 1** (Asymptotic informed truthfulness) **.** _Fix any threshold_ [8] 0 _< t_ src _,i_ _< αi ηi_ [truth] _γ._ _Then_
+
+                       -                       _for every implementable deviation Fi and any peer profile,_ lim _K→∞_ E[ _ui_ ( _Fi_ [truth] )] _−_ E[ _ui_ ( _Fi_ )] _≥_
+
+0 _, with strict inequality for any uninformed strategy (ηi_ [dev] = 0 _)._
+
+8We can assume a known lower bound _η_ min _>_ 0 on truthful report informativeness for sources that pass
+the RAG prefilter (i.e., _ηi_ [truth] _≥_ _η_ min). Intuitively, expending effort should yield at least a minimal amount of
+information. This lets us choose _t_ src _,i_ using _η_ min rather than the unknown _ηi_ [truth] .
+
+
+22
+
+
+_Proof._ _Step 1:_ _Truthful mean is separated from the threshold._ By Proposition 1,
+
+
+_µ_ [truth] _i_ := E[ _w_ - _i_ _| Fi_ [truth] ] = _K_ [1]
+
+
+_K_
+
+- 2 _πi_ (1 _−_ _πi_ ) _αi ηi_ [truth] Γ _i_ ( _k_ ) _._
+
+
+_k_ =1
+
+
+Assumption A3 says [1]
+
+
+_k_ [2] _[π][i]_ [(1] _[ −]_ _[π][i]_ [)Γ] _[i]_ [(] _[k]_ [)] _[ ≥]_ _[γ]_ [, hence]
+
+
+[1] 
+_K_
+
+
+_µ_ [truth] _i_ _≥_ _αi ηi_ [truth] _γ._
+By the theorem’s hypothesis, _t_ src _,i_ _< αi ηi_ [truth] _γ_ _≤_ _µ_ [truth] _i_ . Let the gap be
+
+∆ _i_ := _µ_ [truth] _i_ _−_ _t_ src _,i_ _>_ 0 _._
+
+
+_Step 2: Truthful inclusion probability →_ 1 _._ By Lemma 2, _w_ - _i_ is 3 _/K_ -Lipschitz in the _K_ independent
+claim blocks; thus, by Theorem 4,
+
+Pr� _w_         - _i_ _< t_ src _,i_ �� _F_ truth _i_         - _≤_ exp� _−_ [2] _[K]_ 9 [ ∆] _i_ [2]         - _−−−−→K→∞_ 0 _._
+
+Therefore E[ _ui_ ( _Fi_ [truth] )] _→_ _vi −_ _ci_ _>_ 0.
+
+
+_Step 3:_ _Deviations cannot beat the limit._ For any informed deviation ( _ei_ = 1), inclusion probability
+is at most 1, so E[ _ui_ ( _Fi_ )] _≤_ _vi_ _−_ _ci_ . For any uninformed deviation ( _ηi_ [dev] = 0), Corollary 1 gives
+E[ _w_ - _i_ ] = 0, hence Pr( _w_ - _i_ _≥_ _t_ src _,i_ ) _→_ 0 and lim sup E[ _ui_ ( _Fi_ )] _≤_ 0 if _ei_ = 0 or _−ci_ if _ei_ = 1. Thus
+
+
+lim
+_K→∞_
+
+
+- E[ _ui_ ( _Fi_ [truth] )] _−_ E[ _ui_ ( _Fi_ )] _≥_ 0 _,_
+
+
+with strict inequality for any uninformed deviation.
+
+
+**Theorem 2** (Strong truthfulness via hard threshold) **.** _Consider only deviations from a truthful policy_
+_that_ _disagree_ _with_ _it_ _on_ _at_ _least_ _a_ _fraction_ _φ_ min _∈_ (0 _,_ 1 _/_ 2] _of_ _spoken_ _claims._ _We_ _focus_ _on_ _this_
+_class_ _of_ _deviations_ _because_ _tiny_ _mixtures_ _that_ _alter_ _an_ _o_ (1) _fraction_ _of_ _reports_ _are_ _operationally_
+_indistinguishable_ _from_ _truthful_ _reporting_ _amid_ _system_ _noise_ _and_ _are_ _not_ _the_ _primary_ _concern_ _for_
+_the_ _mechanism’s_ _integrity._ _Assuming_ _symmetric_ _noise,_ _such_ _deviations_ _predictably_ _reduces_ _report_
+_informativeness ηi, creating a guaranteed gap from the expected score of the truthful policy._
+
+
+_Set the inclusion threshold t_ src _,i at the midpoint of this gap. Then the scores of truthful and deviating_
+_sources become separable for large K_ _(misclassification probabilities →_ 0 _)._ _Consequently, truthful_
+_yields strictly higher expected utility than any significant deviation for sufficiently large K._
+
+
+_Proof._ We aim to deter deviations that are practically meaningful. We define the disagreement
+distance dist( _Fi, Fi_ [truth] ) := Pr( _rik_ ( _Fi_ ) = _rik_ ( _Fi_ [truth] ) _|_ _Qik_ =1) and focus on deviations where
+dist _≥_ _φ_ min for some minimum deviation mass _φ_ min. Under symmetric noise, a deviation that flips
+a fraction _φ_ of truthful stances attenuates report informativeness such that _ηi_ [dev] = (1 _−_ 2 _φ_ ) _ηi_ [truth] .
+This creates a gap between the expected scores:
+
+
+E[ _w_ - _i_ ( _Fi_ [truth] )] _−_ E[ _w_ - _i_ ( _Fi_ )] _≥_ 2 _φ αi ηi_ [truth] _·_ _K_ [1]
+
+
+- 2 _πi_ (1 _−πi_ ) Γ _i_ ( _k_ ) _≥_ 2 _φ_ min _αi ηi_ [truth] _γ._
+
+
+_k_
+
+
+We place the inclusion threshold _t_ src _,i_ at the midpoint of the expected scores of the truthful policy
+and the best-case deviation:
+
+
+    -     
+_t_ src _,i_ := [1] 2 E[ _w_ - _i_ ( _Fi_ [truth] )] + distsup _≥φ_ min E[ _w_ - _i_ ( _Fi_ )] _._
+
+
+This creates a symmetric buffer _gi_ := _φ_ min _αi ηi_ [truth] _γ_ from each mean to the threshold. By Theorem 4, the probability of misclassification for both the truthful policy and any significant deviation
+is bounded:
+
+
+           Pr(misclassify truthful) _≤_ exp _−_ [2] 9 _[K ][g]_ [2] _i_
+
+
+- _,_ sup Pr(misclassify deviation) _≤_ exp _−_ 9 [2] _[K ][g]_ [2] _i_
+dist _≥φ_ min
+
+
+_._
+
+
+The expected utility gap is therefore bounded below by:
+
+
+                    -                     E[ _ui_ ( _Fi_ [truth] )] _−_ sup E[ _ui_ ( _Fi_ )] _≥_ _vi_ 1 _−_ 2 _e_ _[−]_ [2] 9 _[K ][g]_ _i_ [2] _−_ _ci._
+dist _≥φ_ min
+
+As _K_ _→∞_, the exponential term vanishes. If _vi_ _> ci_, the gap converges to a strictly positive value,
+guaranteeing that the truthful policy is preferred over any significant deviation.
+
+
+23
+
+
+H.1 PROOF FOR FINITE K
+
+
+**Theorem** **3** (Finite- _K_ _ϵ−_ Informed truthfulness) **.** _Under_ _the_ _midpoint-threshold_ _design_ _of_ _Theo-_
+_rem 2, let gi_ = _φ_ min _αi ηi_ [truth] _γ_ _>_ 0 _denote a margin that lower-bounds the expected-score gap be-_
+_tween the truthful policy and any deviation that disagrees with it on at least a φ_ min _fraction of claims._
+
+
+                 _Define mi_ := min _{g_ ~~_i_~~ _, t_ src _,i}._ _For any ε ∈_ (0 _, vi_ ) _, if K_ _≥_ max 2 9 _g_ [2] ~~_i_~~ [ln] [2] _ε_ _[v][i]_
+
+
+_vi_
+
+
+_[v][i]_ 9 2
+
+_ε_ _[,]_ 2 _m_ [2] _i_ [ln] 1 _−_ ~~_[c]_~~ _[i]_
+
+
+_,_
+
+
+_then_ _the_ _mechanism_ _is_ _ε-informed_ _truthful_ _for_ _source_ _i:_ _truthful_ _is_ _within_ _ε_ _expected_ _utility_ _of_ _any_
+_significant deviation and strictly better than any uninformed policy._
+
+
+_Proof._ We first state a complete version of this theorem:
+
+Under the midpoint threshold in Theorem 2 and buffer _g_ ~~_i_~~ = _φ_ min _αi ηi_ [truth] _γ_ :
+
+
+1. ( _Informed deviations up to ε._ ) If
+
+
+9
+_K_ _≥_ ln [2] _[v][i]_
+2 _g_ [2] _ε_ _[,]_
+~~_i_~~
+
+then for all deviations with dist _≥_ _φ_ min, E[ _ui_ ( _Fi_ [truth] )] _−_ E[ _ui_ ( _Fi_ )] _≥−_ _ε._
+
+
+2. ( _Strict dominance over uninformed; ε-free_ .) Let _mi_ := min _{g_ ~~_i_~~ _, t_ src _,i}_ . If
+
+
+9 2
+_K_ _>_ ln _,_
+2 _m_ [2] _i_ 1 _−_ _v_ _[c][i]_ _i_
+
+then E[ _ui_ ( _Fi_ [truth] )] _>_ E[ _ui_ ( _Fi_ [uninformed] )].
+
+
+To prove the above:
+
+
+By Theorem 4, both misclassification tails are bounded by exp( _−_ [2]
+
+
+By Theorem 4, both misclassification tails are bounded by exp( _−_ [2] 9 _[K ][g]_ [2] _i_ [)][. Item (1) follows by trans-]
+
+lating these tail bounds into an expected-utility gap and solving for _K_ . For (2), if _Fi_ is uninformed
+then E[ _w_ - _i_ ] = 0, so Pr( _w_ - _i_ _≥_ _t_ src _,i_ ) _≤_ exp( _−_ 9 [2] _[Kt]_ src [2] _,i_ [)][.]
+
+
+9 [2] _[Kt]_ src [2] _,i_ [)][.]
+
+
+Consequently, if _K_ _>_ max _{_ 2 _g_ 9 [2] [2] _ε_ _[v][i]_
+~~_i_~~ [ln]
+
+
+_}_, the mechanism achieves _ε_ -informed truth
+~~_[c]_~~ _[i]_
+
+_vi_
+
+
+_[v][i]_ 9 2
+
+_ε_ _[,]_ 2 _m_ [2] _i_ [ln] 1 _−_ ~~_[c]_~~ _[i]_
+
+
+fulness for source _i_ .
+
+
+I ALTERNATIVE AFFINE INCLUSION RULE
+
+
+**Theorem 5** (Strong truthfulness via affine inclusion) **.** _Let the inclusion probability be affine in the_
+_score,_ Pr( _include i_ _|_ _w_ - _i_ ) = _a_ + _b_ _w_ - _i_ _with a, b_ _≥_ 0 _(chosen so the probability lies in_ [0 _,_ 1] _)._ _Then,_
+_for any K_ _≥_ 3 _, if_
+_vi b αi γ ηi_ [truth] _>_ _ci,_
+_the truthful policy Fi_ [truth] _is a strict dominant strategy for source i (no large-K_ _limit is required)._
+
+
+_Proof._ For any policy _Fi_,
+
+E[ _ui_ ( _Fi_ )] = _vi_ E[ _a_ + _b_ _w_       - _i_ ( _Fi_ )] _−_ _ci ei_ = _vi_ ( _a_ + _b_ E[ _w_       - _i_ ( _Fi_ )]) _−_ _ci ei._
+
+By Proposition 1,
+
+
+_,_
+
+
+E[ _w_ - _i_ ( _Fi_ )] = _K_ [1]
+
+
+_K_
+
+
+- 2 _πi_ (1 _−_ _πi_ ) _αi ηi_ ( _Fi_ ) Γ _i_ ( _k_ ) = _αi ηi_ ( _Fi_ ) [1]
+
+_K_
+
+_k_ =1
+
+
+_K_
+
+
+_K_
+
+
+2 _πi_ (1 _−_ _πi_ ) Γ _i_ ( _k_ ) _,_
+
+_k_ =1
+
+
+                              - ��                               _≥_ _γ_ by A3
+
+
+so E[ _w_ - _i_ ( _Fi_ )] _≥_ _αi ηi_ ( _Fi_ ) _γ_ . Hence the expected-utility gap between truthful and any deviation _Fi_
+is
+E[ _ui_ ( _Fi_ [truth] )] _−_ E[ _ui_ ( _Fi_ )] _≥_ _vi b αi γ_      - _ηi_ [truth] _−_ _ηi_ ( _Fi_ )� _−_ _ci_ (1 _−_ _ei_ ) _._
+
+
+24
+
+
+If the deviation exerts effort ( _ei_ =1), Lemma 1 gives _ηi_ ( _Fi_ ) _<_ _ηi_ [truth], making the gap strictly positive. If the deviation does not exert effort ( _ei_ =0), then _ηi_ ( _Fi_ ) = 0 (uninformed), and the gap is
+at least _vi b αi γ ηi_ [truth] _−_ _ci_, which is strictly positive by the stated condition. Therefore, truthful
+strictly dominates every deviation in expected utility.
+
+
+The argument uses only the sign of the mean peer margin in A3 and the exact expectation in Proposition 1; it does not invoke concentration, so no large- _K_ limit is needed. The requirement _K_ _≥_ 3 is
+only to define the off-task baseline via the permutation used in the score.
+
+
+J PRACTICAL NOTES AND SCALING FOR FINITE-K GUARANTEES
+
+
+**Sample** **Complexity** **Scaling.** For a fixed utility tolerance _ε_ _∈_ (0 _, vi_ ) and minimum deviation
+mass _φ_ min _∈_ (0 _,_ [1] 2 []][, the number of claims required for the guarantees in Theorem 3 scales as:]
+
+
+               -                _K_ = Θ _φ_ _[−]_ min [2] [log(1] _[/ε]_ [)] _._
+
+
+This scaling is highly favorable. Viewed inversely, it means the utility error bound _ε_ decreases
+exponentially with the number of claims _K_ . This rapid convergence ensures that a moderately large,
+finite number of claims is sufficient to achieve strong incentive guarantees. The polynomial cost
+to detect more subtle deviations ( _φ_ _[−]_ min [2] [)] [represents] [a] [standard] [and] [predictable] [trade-off] [for] [higher]
+sensitivity.
+
+
+**Implementation Details.**
+
+
+1. **Reputation** **Weights:** If prior reliabilities _{ωj}_ are available, they can be incorporated
+by replacing the peer margin Γ _i_ ( _k_ ) with a weighted average, E _j_ = _i_ [ _ωj αjk ηjk_ _|_ _Ti_ ]. All
+theoretical guarantees hold under this substitution.
+
+2. **Insensitivity to Class Imbalance:** The off-task subtraction in the scoring rule cancels out
+dependencies on individual reporting biases ( _µi_ ). The only remaining prevalence term is
+the symmetric factor 2 _πi_ (1 _−_ _πi_ ), which shrinks as the class prior _πi_ approaches 0 or 1.
+This makes the score robust to highly imbalanced classes of claims.
+
+3. **No-Abstention Case:** In settings where sources must provide a stance on every claim, the
+model simplifies by setting all coverage parameters to one ( _αi_ _≡_ 1 _, αjk_ _≡_ 1).
+
+
+K EXPERIMENTAL DETAILS
+
+
+K.1 DATA PROCESSING
+
+
+**Natural Questions (NQ).** Starting from the dev set, we filter for questions whose long-form answer
+has at least 100 words and 4 sentences. For clean supervision when constructing truthful paraphrases, we apply two LLM checks _per item_ : (1) the short answer _directly and correctly_ answers the
+question (not evasive or off-topic), and (2) that short answer is _fully supported_ by the long answer.
+After the prefilter, we keep all samples, which gives a total of 1131 queries. The long answer serves
+as the held-out gold reference answer.
+
+
+**ClashEval.** We use all unique queries in the dataset. For each query, we randomly pick a
+mod ~~d~~ egree for generating the deceptive and adversarial example. There’s a total of 1299 queries.
+The dataset’s provided context serves as the held-out gold reference answer.
+
+
+For NQ, we first elicit from an LLM a plausible but incorrect short answer. We then expand this
+wrong answer into two non-truthful documents using fixed templates: a _deceptive_ page (expository
+write-up consistent with the wrong answer) and an _adversarial_ page (same narrative plus instructionhijacking patterns). Prompts appear in App. K.6. For ClashEval, we use the benchmark’s provided
+perturbed answer (answer mod) as the wrong narrative and apply the same two templates.
+
+
+K.2 METRICS
+
+
+To measure overall correctness, we report Answer Accuracy, where an LLM judge compares the
+generated summary against the dataset’s gold short answer/reference. For a more granular analysis,
+
+
+25
+
+
+we report claim-level Precision and Recall, using the comprehensive long-form answer as the reference: precision is the fraction of system claims supported by the reference, recall is the fraction
+of reference claims covered by the system. We micro-average over queries and report F1. We also
+include ROUGE/BLEU scores to assess fluency.
+
+
+In all our experiments, LLM judges are run using gemini-2.5-flash (Comanici et al., 2025)
+to make the results comparable. We provide the detail prompts in K.8.
+
+
+K.3 RESULTS ON AVERAGE SCORES AND COHERENCY
+
+
+We first present the coherency results for the main experimental setting that is omitted in the mian
+text. Our method (TTS) produces summaries that are consistently more textually similar to the
+ground truth reference answers. As mentioned in the main text, all experimental settings here are
+conducted under the computation-efficiency-optimized A/B group variant described in Sec. 3.5.
+
+
+Table 3: Fluency and textual similarity vs. reference answers.
+
+
+**Method** **NQ** **ClashEval**
+ROUGE1 ROUGEL BLEU ROUGE1 ROUGEL BLEU
+
+
+Initial Synthesis 0.375 0.238 8.20 0.330 0.166 5.75
+Majority Prompt 0.385 0.247 8.56 0.355 0.183 6.77
+Majority Claims 0.381 0.228 7.98 0.324 0.164 5.35
+**Our Method (TTS)** **0.485** **0.331** **13.84** **0.395** **0.220** **9.14**
+
+
+Next we provide the average source reliability scores for the main setting, corresponding to the plot
+in Figure 3a.
+
+
+Table 4: Average source reliability scores ( _w_     - _i_ ) for the main experimental setting.
+
+
+**Source Type** **NQ** **ClashEval**
+
+
+truthful ~~1~~ 0.1072 0.0961
+truthful ~~2~~ 0.1079 0.0938
+truthful ~~3~~ 0.1068 0.0957
+truthful ~~4~~ 0.1033 0.0951
+low ~~q~~ uality 0.0394 0.0526
+
+
+adversarial 0.0325 0.0207
+deceptive 0.0160 0.0162
+
+
+K.4 CASE STUDY: RESISTING COORDINATED, UNINFORMATIVE BEHAVIOR.
+
+
+To highlight the robustness of our method against coordinated, uninformative strategies, a canonical
+failure mode for consensus-based rules, we conducted a test in the ClashEval dataset involving two
+truthful sources, one adversarial source, and four “uninformative” sources programmed to disagree
+with every claim. This creates a coordinated, low-effort bloc designed to distort any mechanism
+based on simple agreement.
+
+
+To demonstrate the specific advantage of our multi-task peer prediction scoring rule, we compare it
+against a baseline majority scoring rule, which, to make the comparison fair, is also constructed also
+using leave-one-out and claim-level stances. Essentially the only difference from our mechanism
+is that instead of using our scoring rule (Sec. 3.1), it uses a simple majority scoring rule: _σi_ =
+1 _/K_ [�] _k_ [1][(] _[r][ik]_ [=] [mode][(] _[r][jk][,][ ∀][j]_ [))][.] [As shown in Result 1,] [traditional “majority-based” rules based]
+
+on prose-level or filtering majority claims significantly underperform our approach, so we don’t
+include them for analysis here.
+
+
+For all experiments in this case study, we use a global threshold of _τ_ = 0 _._ 01.
+
+
+26
+
+
+The results in Table 5 reveal a critical flaw in the majority-based scoring rule. It systematically
+rewards the uninformative sources with the highest scores for their consistent agreement with each
+other. In contrast, our method correctly handles this scenario, assigning near-zero scores to the
+uninformative sources and ranking the truthful sources as significantly more reliable.
+
+
+This fundamental difference in source evaluation is the direct cause of the performance disparity
+shown in Table 6, validating our mechanism’s robustness.
+
+
+Two notes on the results below: (1) As mentioned in the main text, because the reference is a
+long-form source document, it usually contains extraneous information not related to the query, so
+recall is not expected to approach 100% and is primarily useful for relative comparison, (2) The
+way ‘Abstains’ are defined is that the summarizer refused to take a definitive stance on the final
+summary, saying things like “based on the provided sources I cannot answer the question with
+enough confidence”. This is notably worse than answering correctly, but also slightly better than
+providing wrong answers - we therefore provide this additional data here for completeness.
+
+
+Table 5: Source scores with uninformative sources (Main Config). The majority-based rule rewards
+the uninformative bloc; our method correctly identifies them as low-utility.
+
+
+**Source Type** **Our Method (TTS)** **Majority-based Scoring Rule**
+
+
+truthful ~~1~~ (Truthful) 0.0308 -0.2777
+truthful ~~2~~ (Truthful) 0.0302 -0.2665
+truthful ~~3~~ (Truthful) 0.0315 -0.2066
+
+
+uninformative 1 0.0005 0.9292
+uninformative 2 0.0004 0.9310
+uninformative 3 0.0006 0.9433
+uninformative 4 0.0003 0.9404
+
+
+adversarial 0.0022 0.6289
+
+
+Table 6: Final synthesis quality under uninformative collusion (Main Config). Robust scoring is
+critical for resisting such strategies.
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Baseline (All Sources) 56.9% 22.6% 32.4% 7.7% 36
+Majority-based Scoring Rule 34.6% 9.6% 15.1% 9.5% 189
+**TTS (LOO Filter)** **87.8%** **28.8%** **43.4%** **74.2%** 118
+
+
+K.5 REAL-WORLD CASE STUDY ON CONFLICTING WEB EVIDENCE
+
+
+Our main experiments use synthetic-but-model-generated strategic sources. This choice is driven by
+the specific incentive environment we study. The paper targets a forward-looking regime with increasing adoption of LLM search systems (e.g., AI overviews), where content creators optimize for
+how an LLM summarizes multiple documents, not just for traditional link ranking. That ecosystem
+is only just emerging: traditional search still dominates, and we do not yet see large-scale, systematically optimized “LLM-facing” documents at the level we anticipate if AI overviews become a
+default entry point.
+
+
+In such an environment, there is currently no existing benchmark that closely matches our setting:
+multiple sources per query, some of which are deliberately strategic (deceptive, adversarial, or uninformative) with the explicit goal of shaping an LLM-generated overview. To approximate this future
+regime as realistically as possible, our main experiments construct strategic sources using real user
+queries and human-written long-form gold answers from NaturalQuestions and ClashEval and generating truthful paraphrases, low-quality sources, and deceptive / prompt-injection sources with a
+strong deep-reasoning model (gemini-2.5-flash), which can write content at or above typical
+human quality.
+
+
+27
+
+
+This yields high-quality texts that explicitly implement the behaviors we care about, deceptive alternatives, prompt injections, and coordinated uninformative blocs, while remaining grounded in real
+queries and reference answers. We view this as a reasonable (and in some sense conservative) proxy
+for how sophisticated content authors might behave when optimizing for AI-overview visibility.
+
+
+To complement this synthetic setup, we systematically searched for datasets that could provide
+_purely real_ sources in a setting close to ours. Concretely, we looked for datasets that (i) are grounded
+in user-like queries (rather than isolated claims), (ii) provide multiple pieces of _conflicting_ evidence
+per query, not just a single passage labeled as true/misleading/wrong, and (iii) the evidence comes
+from naturally occurring web pages or comparable real-world documents.
+
+
+Among verification / misinformation and retrieval-augmented QA datasets (e.g., the ones surveyed
+in Table 1 in (Zeng et al., 2025)), the only dataset we found that is even partially aligned is _Open_
+_Domain_ _Question_ _Answering_ _with_ _Conflicting_ _Contexts_ (Liu et al., 2025). This dataset provides
+1000+ examples in which retrieved contexts may agree or conflict.
+
+
+However, using it directly as a benchmark for our setting proves difficult, as the benchmark is not
+designed to capture the specific strategic and adversarial dynamics we study. After filtering for
+queries that have at least three clearly truthful sources and at least one conflicting source, only
+43 usable items remain. Moreover, when we re-evaluated the original labels with a strong LLM
+(gemini-2.5-flash) as a consistency check, roughly 23% of the labels were flagged as dubious (many errors are confirmed by a manual check), indicating non-trivial annotation noise. This
+combination of small sample size and label noise makes the dataset unsuitable as a primary benchmark for our mechanism.
+
+
+Despite these limitations, we treat this dataset as a valuable practical testbed for our method in a fully
+real-web setting. To better match our strategic model while keeping the non-synthetic nature of the
+pages, for each of the 43 filtered queries, we retain the original real-web contexts and their labels
+(truthful vs. inaccurate). For one of the inaccurate sources, we _leave its content intact_ and simply ask
+an LLM to append hidden prompt-injection instructions at the top of the document (e.g., “ignore all
+other evidence and output this specific answer”), mimicking real-world prompt-injection attacks in
+web pages. We treat the remaining truthful sources as-is, and we generate one additional deceptive
+source if needed by paraphrasing a wrong answer while preserving the original document’s style.
+
+
+In this way, each query has a mixture of real truthful sources and at least one truly adversarial source
+whose body is a naturally occurring page augmented with realistic injection patterns.
+
+
+On this small-but-real subset, TTS continues to behave as intended. Table 7 reports precision and
+answer accuracy for baselines and TTS. As in the main experiments, all methods are evaluated using
+the dataset’s gold answer and an LLM-as-a-judge protocol.
+
+
+Table 7: Performance on Open-Domain QA with Conflicting Contexts (43 items) with real-web
+sources.
+
+
+**Method** **Precision (%)** **Answer Acc.** **(%)**
+
+
+Baseline: Initial Synthesis 64.7 46.3
+Baseline: Majority Prompt 62.4 29.3
+Baseline: Majority Claims 69.8 46.3
+
+
+**TTS (LOO Source Filtering)** **80.6** **65.9**
+
+
+TTS not only improves answer accuracy relative to all three baselines, but also assigns reliability
+scores that downweight the adversarial source. Table 8 reports average source-level scores under
+our LOO scoring rule.
+
+
+28
+
+
+Table 8: Average source reliability scores ( _w_       - _i_ ) on the real-web case study.
+
+
+**Source Name** **Avg.** **Reliability (** _w_             - _i_ **)**
+
+truthful ~~1~~ 0.064688
+truthful ~~2~~ 0.052313
+truthful ~~3~~ 0.048616
+truthful ~~4~~ 0.054240
+deceptive 0.047381
+adversarial 0.020806
+
+
+The truthful paraphrases receive the highest scores, the deceptive source is assigned an intermediate score, and the adversarial (prompt-injection) document is clearly downweighted. Although the
+sample size is small and the labels noisy, this real-web case study illustrates that TTS can be applied
+directly to naturally occurring web pages without modification to the mechanism, and that even in
+a noisy setting, the scoring rule tends to suppress adversarially injected content and improve factual
+answer quality.
+
+
+**Why we still rely on synthetic strategic sources for the main evaluation.** This practical example
+helps clarify our design choices. In this real-web dataset, most “conflicts” arise from outdated
+facts or minor discrepancies (e.g., date variations like “January 25, 1994” vs. “1994”), rather than
+intentionally strategic or adversarial content. The number of usable items is modest (43), and as
+mentioned earlier, there are nontrivial level of noise in the human labels, which makes it unsuitable
+as a primary benchmark.
+
+
+By contrast, our synthetic setup lets us precisely instantiate the strategic, adversarial, and uninformative behaviors that are central to our mechanism design, and still grounds everything in real user
+queries and human gold answers from established benchmarks.
+
+
+Taken together, we view the paper’s empirical contributions as:
+
+
+1. controlled, forward-looking experiments on large synthetic-but-model-generated source
+pools (full filtered splits of ClashEval and NaturalQuestions, 1299 and 1131 queries respectively), and
+
+
+2. a small real-web case study demonstrating that the same mechanism continues to work
+when applied to naturally occurring conflicting evidence.
+
+
+Our goal is thus to provide a mechanism and methodology for incentive-aligned multi-source summarization, supported by both controlled simulations and a realistic stress test, rather than to propose
+a definitive benchmark on existing web data.
+
+
+K.6 PROMPTS USED FOR GENERATING SOURCE POOL
+
+
+This section details the prompts used to generate the synthetic source documents for each query in
+our experiments. All prompts were executed using the gemini-2.5-flash model.
+
+
+**Step 1:** **Generating a Plausible Wrong Answer** For each query, we first generate a single, plausible but incorrect answer. This serves as the ”false narrative” for the deceptive and adversarial
+sources.
+
+
+**Prompt to Generate the False Narrative:**
+
+
+29
+
+
+**Step 2:** **Generating Source Documents** Using the true answer (‘answer‘) and the generated false
+narrative (‘wrong ~~a~~ nswer‘), we then generate the full pool of six sources.
+
+
+FAITHFUL SOURCE 1: HIGH-FIDELITY PARAPHRASE (JOURNALIST)
+
+
+FAITHFUL SOURCE 2: HIGH-FIDELITY PARAPHRASE (EDITOR)
+
+
+FAITHFUL SOURCE 3: HIGH-FIDELITY PARAPHRASE (NEUTRAL)
+
+
+30
+
+
+LOW QUALITY (BUT TRUTHFUL) SOURCE
+
+
+FAITHFUL SOURCE 4: BLOG POST
+
+
+LOW QUALITY (BUT TRUTHFUL) SOURCE
+
+
+DECEPTIVE SOURCE
+
+
+31
+
+
+ADVERSARIAL SOURCE
+
+
+**Uninformative Sources** For the experiment in Appendix K.4, we used four uninformative sources
+designed to consistently contradict any claim. The following template was used for all four, with
+minor variations.
+
+
+UNINFORMATIVE SOURCE TEMPLATE
+
+
+32
+
+
+K.7 PROMPTS USED FOR THE TTS PIPELINE
+
+
+This section details the core prompts used in the TTS framework for synthesis, claim decomposition,
+and stance extraction. Placeholders for variables are highlighted, e.g., _**{**_ **query** _**}**_ . All promptes uses
+gemini-2.5-flash-lite.
+
+
+**Initial Synthesis and Re-Summarization** This prompt is used both to generate the initial baseline
+summary and the final filtered summary.
+
+
+**Claim** **Decomposition** This prompt is used to break down a generated synthesis into a list of
+atomic claims.
+
+
+33
+
+
+**Stance Extraction** For a given claim, this prompt determines the stance of a single source document.
+
+
+34
+
+
+K.8 PROMPTS USED FOR EVALUATION
+
+
+This section details the prompts used by the LLM judge to compute our evaluation metrics.
+
+
+**Answer Accuracy** This prompt evaluates whether the final generated summary correctly answers
+the user’s query.
+
+
+**Claim Precision (Fact-Checking)** This prompt evaluates whether an individual claim from a generated summary is supported by the ground-truth document.
+
+
+35
+
+
+**Claim Recall** This prompt evaluates whether a ground-truth claim is present in the final generated
+summary.
+
+
+K.9 ABLATIONS ON MODEL USAGE
+
+
+We note that the key contribution of this paper is to propose and analyze the TTS framework and
+to present its desirable properties. Therefore, the goal is not to benchmark various large language
+models and present the possible differences between models. Moreover, as mentioned in the experimental section, the goal is to produce a working empirical example under the framework, rather
+than a production-facing prototype. Therefore, even if there are differences between models, ad
+hoc prompt engineering would be very helpful beyond our results in closing the gap and yielding
+even better performance. That said, to see how different models may affect the pipeline though, we
+present different variation of the experimental section run with various configurations of the model.
+We first repeat the experimental setup for clarity:
+
+
+**Datasets** **and** **Sources** We evaluate TTS on 300-sample subsets from two standard informationseeking benchmarks that provide both a concise short answer and a comprehensive long-form answer
+for each query: Natural Questions (NQ) (Kwiatkowski et al., 2019), which pairs Google queries with
+annotated Wikipedia answers, and ClashEval (Wu et al., 2024), which covers six topical domains
+(news, names, locations, years, drugs, records). For each query, we use the long-form answer as
+ground truth to construct a six-document source pool from the reference answer. This pool contains
+four reliable sources (three high-fidelity paraphrases and one concise summary) and two unreliable
+sources that presents a wrong answer (one deceptive, presenting plausible but false information; one
+adversarial, containing prompt-injection text).
+
+
+**Methods.** We compare our method, TTS, against three single-pass baselines: Initial Summary (a
+standard LLM summary of all sources), Majority Prompt (a LLM summary prompted to include
+only majority claims), and Majority Claims, where an initial LLM summary is decomposed into
+
+
+36
+
+
+atomic claims and only claims with majority support are used for another round of re-summary. We
+use a fixed global inclusion threshold of _t_ src _,i_ = 0 _._ 06.
+
+
+**Metrics.** To measure overall correctness, we report Answer Accuracy, where an LLM judge compares the generated summary against the dataset’s concise short answer. For a more granular analysis, we report claim-level Precision and Recall, using the comprehensive long-form answer as the
+reference. We also include ROUGE/BLEU scores to assess fluency.
+
+
+In all our experiments, LLM judges are run using gemini-2.5-flash (Comanici et al., 2025)
+to make the results comparable. In the main experimental section, we presented experiment
+where the source generation uses gemini-2.5-flash and the claim extraction pipeline uses
+gemini-2.5-flash-lite (Comanici et al., 2025).
+
+
+We now expand the analysis by expanding to two additional variants, (1) source generation
+uses gemini-2.5-flash and the claim extraction pipeline uses gemini-2.5-flash, (2)
+source generation uses gemini-2.5-flash-lite and the claim extraction pipeline uses
+gemini-2.5-flash-lite. We justify that we chose the lightweight model to prioritize the
+low latency and efficiency required for search applications, though the mechanism itself is modelagnostic. This also reflects a realistic asymmetry where attackers can expend more effort than a
+real-time defense. Here, we aim to show that even without this asymmetry, and across different
+models, our method achieve significant improvement over baselines.
+
+
+K.9.1 RESULTS 1: ROBUSTNESS AGAINST ADVERSARIAL AND UNTRUTHFUL SOURCES
+
+
+Across all model configurations and on both the NQ and ClashEval datasets, our method (TTS)
+consistently and substantially outperforms the baselines in precision and answer accuracy. This
+demonstrates the framework’s robustness and its ability to effectively identify and filter out unreliable or adversarial content to produce more truthful and accurate summaries. While recall sees a
+moderate increase, the dramatic gains in precision lead to a significantly higher F1-score, indicating
+a much better balance of correctness and completeness.
+
+
+Two notes on the results below: (1) As mentioned in the main text, because the reference is a
+long-form source document, it usually contains extraneous information not related to the query, so
+recall is not expected to approach 100% and is primarily useful for relative comparison, (2) The
+way ‘Abstains’ are defined is that the summarizer refused to take a definitive stance on the final
+summary, saying things like “based on the provided sources I cannot answer the question with
+enough confidence”. This is notably worse than answering correctly, but also slightly better than
+providing wrong answers - we therefore provide this additional data here for completeness.
+
+
+Below we present the results grouped by dataset.
+
+
+**Result on Natural Questions**
+
+
+First, we present the primary results for summary quality and correctness on the Natural Questions
+dataset for all three model configurations.
+
+
+Table 9: Summary quality on Natural Questions dataset (Sources: gemini-2.5-flash, Claims:
+gemini-2.5-flash-lite).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Initial Synthesis 38.3% 20.7% 26.9% 68/300 (22.7%) 0
+Majority Prompt 39.6% 20.0% 26.6% 73/300 (24.3%) 0
+Majority Claims 44.6% 19.8% 27.4% 102/300 (34.0%) 32
+
+
+**Our Method (TTS)** **81.0%** **31.9%** **45.7%** **212/300 (70.7%)** 35
+
+
+37
+
+
+Table 10: Summary quality on Natural Questions dataset (Sources: gemini-2.5-flash,
+Claims: gemini-2.5-flash).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Initial Synthesis 30.3% 18.1% 22.6% 68/300 (22.7%) 0
+Majority Prompt 39.9% 20.5% 27.1% 119/300 (39.7%) 0
+Majority Claims 37.4% 17.3% 23.7% 107/300 (35.7/%) 40
+
+
+**Our Method (TTS)** **72.1%** **29.1%** **41.5%** **200/300 (66.7%)** 15
+
+
+Table 11: Summary quality on Natural Questions dataset (Sources: gemini-2.5-flash-lite,
+Claims: gemini-2.5-flash-lite).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Initial Synthesis 41.4% 25.1% 31.2% 89/300 (29.7%) 0
+Majority Prompt 44.2% 25.8% 32.5% 103/300 (34.3%) 0
+Majority Claims 46.2% 24.1% 31.7% 126/300 (42.0%) 30
+
+
+**Our Method (TTS)** **77.7%** **31.5%** **44.8%** **199/300 (66.3%)** 45
+
+
+In addition, we present the fluency and source score results for the NQ dataset. Table 12 shows that
+our method consistently improves textual similarity to the reference answer. Table 13 details the
+calculated source reliability scores, confirming a clear separation between reliable and unreliable
+sources across all settings.
+
+
+Table 12: Fluency metrics on the Natural Questions dataset for all model configurations.
+
+
+**Method** ROUGE1 ROUGEL BLEU
+
+
+_Config 1:_ _Flash Sources, Lite Claims (Main)_
+Initial Synthesis 0.371 0.230 7.96
+Majority Prompt 0.378 0.236 8.34
+Majority Claims 0.367 0.216 7.36
+**Our Method (TTS)** **0.478** **0.327** **14.41**
+
+
+_Config 2:_ _Flash Sources, Flash Claims (All Flash)_
+Initial Synthesis 0.327 0.203 6.31
+Majority Prompt 0.388 0.251 9.50
+Majority Claims 0.330 0.196 6.21
+**Our Method (TTS)** **0.469** **0.313** **12.77**
+
+
+_Config 3:_ _Lite Sources, Lite Claims (All Lite)_
+Initial Synthesis 0.371 0.234 7.84
+Majority Prompt 0.387 0.245 8.78
+Majority Claims 0.371 0.221 7.36
+**Our Method (TTS)** **0.456** **0.313** **13.38**
+
+
+38
+
+
+Table 13: Average source reliability scores ( _wi_ ) on the NQ dataset across all model configurations.
+
+
+**Source Type** **Main Config** **All Flash Config** **All Lite Config**
+
+
+truthful ~~1~~ 0.102 0.114 0.094
+truthful ~~2~~ 0.099 0.116 0.096
+truthful ~~3~~ 0.101 0.121 0.093
+low quality 0.040 0.054 0.035
+
+
+adversarial 0.020 0.050 0.026
+deceptive 0.001 0.006 0.012
+
+
+**Results on ClashEval**
+
+
+On the ClashEval dataset, the performance gap between our method and the baselines is even more
+stark. Baseline methods struggle significantly, with answer accuracies often in the single or low
+double digits. In contrast, TTS consistently achieves over 68% answer accuracy, demonstrating its
+effectiveness in handling the challenging, multi-domain nature of this benchmark.
+
+
+Table 14: Summary quality on ClashEval dataset (Sources: gemini-2.5-flash, Claims:
+gemini-2.5-flash-lite).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Initial Synthesis 39.6% 16.8% 23.6% 10/300 (3.3%) 0
+Majority Prompt 48.6% 21.3% 29.7% 19/300 (6.3%) 0
+Majority Claims 46.3% 16.0% 23.8% 42/300 (14.0%) 41
+
+
+**Our Method (TTS)** **86.4%** **26.4%** **40.4%** **223/300 (74.3%)** 35
+
+
+Table 15: Summary quality on ClashEval dataset (Sources: gemini-2.5-flash, Claims:
+gemini-2.5-flash).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Initial Synthesis 32.9% 16.2% 21.7% 23/300 (7.7%) 2
+Majority Prompt 46.4% 19.1% 27.0% 99/300 (33.0%) 3
+Majority Claims 41.2% 15.2% 22.3% 68/300 (22.7%) 55
+
+
+**Our Method (TTS)** **78.9%** **26.6%** **39.7%** **205/300 (68.3%)** 26
+
+
+Table 16: Summary quality on ClashEval dataset (Sources: gemini-2.5-flash-lite, Claims:
+gemini-2.5-flash-lite).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Initial Synthesis 37.5% 16.0% 22.5% 19/300 (6.3%) 2
+Majority Prompt 45.8% 20.1% 27.9% 39/300 (13.0%) 1
+Majority Claims 43.6% 15.2% 22.5% 53/300 (17.7%) 47
+
+
+**Our Method (TTS)** **86.3%** **26.5%** **40.6%** **214/300 (71.3%)** 48
+
+
+The corresponding fluency and source score results for the ClashEval dataset are presented in Table 17 and Table 18, respectively. The trends are consistent with those observed on NQ.
+
+
+39
+
+
+Table 17: Fluency metrics on the ClashEval dataset for all model configurations.
+
+
+**Method** ROUGE1 ROUGEL BLEU
+
+
+_Config 1:_ _Flash Sources, Lite Claims (Main)_
+Initial Synthesis 0.305 0.156 5.37
+Majority Prompt 0.331 0.171 6.57
+Majority Claims 0.303 0.152 5.20
+**Our Method (TTS)** **0.350** **0.202** **8.66**
+
+
+_Config 2:_ _Flash Sources, Flash Claims (All Flash)_
+Initial Synthesis 0.287 0.145 4.86
+Majority Prompt 0.318 0.173 6.62
+Majority Claims 0.278 0.143 4.62
+**Our Method (TTS)** **0.350** **0.204** **8.43**
+
+
+_Config 3:_ _Lite Sources, Lite Claims (All Lite)_
+Initial Synthesis 0.296 0.149 4.65
+Majority Prompt 0.323 0.165 5.78
+Majority Claims 0.290 0.145 4.38
+**Our Method (TTS)** **0.353** **0.202** **8.70**
+
+
+Table 18: Average source reliability scores ( _wi_ ) on the ClashEval dataset across all model configurations.
+
+
+**Source Type** **Main Config** **All Flash Config** **All Lite Config**
+
+
+truthful ~~1~~ 0.088 0.094 0.079
+truthful ~~2~~ 0.083 0.096 0.074
+truthful ~~3~~ 0.089 0.090 0.079
+low quality 0.050 0.063 0.044
+
+
+adversarial 0.026 0.040 0.024
+deceptive 0.005 0.012 0.009
+
+
+K.9.2 RESULTS 2: ROBUSTNESS AGAINST COORDINATED, UNINFORMATIVE BEHAVIOR
+
+
+In this section, we analyze the framework’s robustness in the ClashEval dataset against a different
+failure mode: a coordinated bloc of uninformative sources. In this setup, several “uninformative”
+sources consistently agree with each other by outputting generic statements. A naive mechanism
+like majority voting can be deceived into thinking this coordinated group is reliable.
+
+
+The results show that our peer-prediction method correctly identifies these uninformative sources
+as having very low reliability. In contrast, the Majority Vote baseline is easily misled, assigning
+the uninformative bloc the highest reliability scores and severely degrading its output. This demonstrates that our method rewards sources for providing useful, verifiable information rather than just
+for agreement.
+
+
+We present the detailed results for each of the three model configurations below. To highlight the advantage of our multi-task peer prediction scoring rule, the baseline majority scoring rule we compare
+here are an enhanced version, constructed also using leave-one-out and claim-level stances. Essentially the only difference from our mechanism is that instead of using our scoring rule (Sec. 3.1),
+it uses a simple majority scoring rule: _σi_ = 1 _/K_ [�] _k_ [1][(] _[r][ik]_ [=] _[mode]_ [(] _[r][jk][,][ ∀][j]_ [))][.] [As shown in result]
+
+1, traditional “majority-based” rules based on prose-level or filtering majority claims significantly
+underperform our approach, so we don’t include them for analysis here.
+
+
+For all experiments in this section, we use the global threshold of _τ_ = 0 _._ 01.
+
+
+40
+
+
+**Main Config (Flash Sources, Flash-Lite Claims)**
+
+
+Table 19: Source scores with uninformative sources (Main Config). Majority vote rewards the
+uninformative bloc, while our method correctly identifies their low utility.
+
+
+**Source Type** **Our Method (TTS)** **Majority-based Scoring Rule**
+
+
+truthful ~~1~~ (Truthful) 0.0226 -0.2776
+truthful ~~2~~ (Truthful) 0.0209 -0.1720
+
+
+uninformative ~~1~~ 0.0003 0.9584
+uninformative ~~2~~ 0.0008 0.9660
+uninformative ~~3~~ 0.0006 0.9475
+uninformative ~~4~~ 0.0001 0.9760
+
+
+adversarial -0.0001 0.1356
+
+
+Table 20: Fluency metrics with uninformative sources (Main Config).
+
+
+**Method** ROUGE1 ROUGEL BLEU
+
+
+Baseline (All Sources) 0.3078 0.1618 6.06
+TTS (LOO Filter) **0.3555** **0.2034** **8.79**
+Majority-based Scoring Rule 0.1980 0.1125 2.91
+
+
+Table 21: Summary quality with uninformative sources (Main Config).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Baseline (All Sources) 50.7% 18.4% 27.0% 6/299 (2.0%) 3
+TTS (LOO Filter) **89.2%** **25.4%** **39.5%** **225/299 (75.3%)** 43
+Majority-based Scoring Rule 35.8% 6.9% 11.6% 56/299 (18.7%) 86
+
+
+**All Flash Config (Flash Sources, Flash Claims)**
+
+
+Table 22: Source scores with uninformative sources (All Flash Config). The trend holds, with
+Majority Vote failing to identify the uninformative bloc.
+
+
+**Source Type** **Our Method (TTS)** **Majority-based Scoring Rule**
+
+
+truthful ~~1~~ (Truthful) 0.0267 0.0648
+truthful ~~2~~ (Truthful) 0.0271 0.0235
+
+
+uninformative ~~1~~ 0.0002 0.9896
+uninformative ~~2~~ 0.0001 0.9897
+uninformative ~~3~~ -0.0001 0.9867
+uninformative ~~4~~ 0.0001 0.9929
+
+
+adversarial 0.0003 0.2639
+
+
+41
+
+
+Table 23: Fluency metrics with uninformative sources (All Flash Config).
+
+
+**Method** ROUGE1 ROUGEL BLEU
+
+
+Baseline (All Sources) 0.2955 0.1579 5.71
+TTS (LOO Filter) **0.3603** **0.2114** **8.99**
+Majority-based Scoring Rule 0.2498 0.1363 4.11
+
+
+Table 24: Summary quality with uninformative sources (All Flash Config).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Baseline (All Sources) 48.0% 17.8% 25.9% 8/300 (2.7%) 0
+TTS (LOO Filter) **88.7%** **27.4%** **41.9%** **236/300 (78.7%)** 29
+Majority-based Scoring Rule 46.7% 12.2% 19.3% 66/300 (22.0%) 37
+
+
+**All Lite Config (Flash-Lite Sources, Flash-Lite Claims)**
+
+
+Table 25: Source scores with uninformative sources (All Lite Config). Our method remains robust
+even with lighter models.
+
+
+**Source Type** **Our Method (TTS)** **Majority-based Scoring Rule**
+
+
+truthful ~~1~~ (Truthful) 0.0191 -0.2817
+truthful ~~2~~ (Truthful) 0.0184 -0.2421
+
+
+uninformative ~~1~~ 0.0009 0.8974
+uninformative ~~2~~ 0.0011 0.9245
+uninformative ~~3~~ 0.0008 0.9261
+uninformative ~~4~~ 0.0003 0.9262
+
+
+adversarial 0.0002 0.1540
+
+
+Table 26: Fluency metrics with uninformative sources (All Lite Config).
+
+
+**Method** ROUGE1 ROUGEL BLEU
+
+
+Baseline (All Sources) 0.2909 0.1540 5.24
+TTS (LOO Filter) **0.3206** **0.1805** **7.59**
+Majority-based Scoring Rule 0.1701 0.0945 2.28
+
+
+Table 27: Summary quality with uninformative sources (All Lite Config).
+
+
+**Method** **Precision** **Recall** **F1-Score** **Answer Acc.** **(C/T)** **Abstains**
+
+
+Baseline (All Sources) 59.0% 18.7% 28.4% 31/299 (10.4%) 8
+TTS (LOO Filter) **86.8%** **22.8%** **36.1%** **200/299 (66.9%)** 59
+Majority-based Scoring Rule 30.3% 5.2% 8.8% 40/299 (13.4%) 93
+
+
+42

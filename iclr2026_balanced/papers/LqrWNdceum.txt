@@ -1,0 +1,992 @@
+# EMBRIDGE: ENHANCING GESTURE GENERALIZA- TION FROM EMG SIGNALS THROUGH CROSS-MODAL REPRESENTATION LEARNING
+
+
+**Wenhui Cui** [1] _[,]_ [2] _[∗]_ **, Christopher M. Sandino** [1] **, Hadi Pouransar** [1] **, Ran Liu** [1] **, Juri Minxha** [1] **,**
+**Ellen L. Zippi** [1] **, Erdrin Azemi** [1] **, Behrooz Mahasseni** [1]
+
+1 Apple
+2 University of Southern California
+_{_ wcui23, csandino, mpouransari, ran ~~l~~ iu3, j ~~m~~ inxha, ezippi,
+erdrin, bmahasseni _}_ @apple.com
+
+
+ABSTRACT
+
+
+Hand gesture classification using high-quality structured data such as videos, images, and hand skeletons is a well-explored problem in computer vision. Alternatively, leveraging low-power, cost-effective bio-signals, e.g., surface electromyography (sEMG), allows for continuous gesture prediction on wearable devices.
+In this work, we aim to enhance EMG representation quality by aligning it with
+embeddings obtained from structured, high-quality modalities that provide richer
+semantic guidance, ultimately enabling zero-shot gesture generalization. Specifically, we propose EMBridge, a cross-modal representation learning framework
+that bridges the modality gap between EMG and pose. EMBridge learns highquality EMG representations by introducing a Querying Transformer (Q-Former),
+a masked pose reconstruction loss, and a community-aware soft contrastive learning objective that aligns the relative geometry of the embedding spaces. We evaluate EMBridge on both in-distribution and unseen gesture classification tasks and
+demonstrate consistent performance gains over all baselines. To the best of our
+knowledge, EMBridge is the first cross-modal representation learning framework
+to achieve zero-shot gesture classification from wearable EMG signals, showing
+potential toward real-world gesture recognition on wearable devices.
+
+
+1 INTRODUCTION
+
+
+Hand gesture recognition on wearable devices has recently attracted significant interest (Pyun et al.,
+2024; Moin et al., 2021) and demonstrated potential across diverse applications such as rehabilitation (Marcos-Ant´on et al., 2023), human–computer interaction (Jarque-Bou et al., 2021), and
+prosthetic control (Yu et al., 2023). With advances in deep learning and the availability of largescale visual data, including videos and motion capture (Casile et al., 2023), vision-based models
+have achieved remarkable success (Pavlakos et al., 2023; Qi et al., 2024). However, cameras suffer
+from high power demands and privacy concerns, and potential occlusions can destabilize visionbased classification. This has motivated growing interest in low-power, easily integrable sensors
+(Tchantchane et al., 2023), such as surface electromyography (sEMG), for gesture recognition on
+wearable devices (Tchantchane et al., 2023; Wang et al., 2023). Deep learning approaches have been
+explored for EMG-based gesture classification, including convolutional neural networks (CNNs)
+(Atzori et al., 2016), recurrent neural networks (RNNs) (Liu et al., 2021), and Transformers (Montazerin et al., 2023). However, predicting hand gestures from wearable EMG, especially generalizing to unseen gestures without task-specific training, remains challenging (Laput & Harrison, 2019).
+This is mainly because of the high variability and fine dexterity of human hand movements, sensor
+noise, and/or the limited scale of publicly available data (Lee et al., 2024a; Pereira et al., 2024;
+Tam et al., 2024). Due to the noisy and heterogeneous nature of EMG signals, learning from EMG
+alone (through self-supervised learning or supervised end-to-end training) may not reliably yield
+generalizable and discriminative representations (as later demonstrated in our experiments).
+
+
+_∗_ Work done during internship at Apple.
+
+
+1
+
+
+An effective strategy to overcome the above limitations is to leverage another modality that offers
+richer semantic structure and higher signal quality as guidance during representation learning. This
+can be achieved through cross-modal representation learning, which has proven highly effective
+in improving the quality of learned embeddings and shown remarkable success in vision-language
+models (Xie et al., 2025; Li et al., 2023), audio-visual language models (Gurram et al., 2022; Guo
+et al., 2025), and in biosignals such as IMU-video-text alignment (Moon et al., 2022) and EEG-text
+alignment (Feng et al., 2023). However, aligning representations across modalities has not yet been
+fully explored for wearable EMG signals. Given paired EMG recordings and kinematic hand pose
+annotations collected simultaneously, we can study cross-modal alignment between EMG and pose.
+Unlike visual data, pose data directly captures the kinematics of hand movements, making it an informative modality for guiding EMG representation learning. Therefore, we introduce a cross-modal
+framework for EMG representation learning that leverages a high-quality anchor modality, where
+pose data provides richer supervisory signals by capturing structural and semantic relationships.
+Our goal is to improve the quality of EMG embeddings, enabling generalization to new users and
+unseen gestures at test time without the need for additional training or large-scale data collection.
+A potential practical application of our framework is wearable Human-Computer Interaction. In
+scenarios like VR/AR and prosthetic control applications (Jarque-Bou et al., 2021; Yu et al., 2023),
+a wrist-worn device must continuously infer hand gestures from EMG to drive a virtual avatar or
+robotic hand. A critical bottleneck is that users cannot be expected to record training data for every
+possible gesture they might perform. Our framework is designed to enable zero-shot generalization,
+allowing the model to recognize novel gestures without requiring training samples from users.
+
+
+We first introduce two unimodal encoders trained separately on EMG and pose data, and then align
+their output embeddings. Unlike classical approaches such as CLIP or BLIP (Radford et al., 2021;
+Li et al., 2023; 2022), which symmetrically update both encoders toward a shared latent space,
+our design adopts an asymmetric setup, where the pose encoder is frozen as an anchor and only
+the EMG encoder is optimized. On this basis, we propose **EMBridge**, a cross-modal representation learning framework that bridges the modality gap between EMG and pose and enhances the
+representation quality learned from EMG signals through advanced alignment with pose representations. EMBridge consists of three components: a Querying Transformer (Q-former) (Li et al., 2023)
+that extracts pose-informative queries and aligns EMG and pose, a masked pose reconstruction loss
+(MPRL) that encourages queries to carry structured pose information, and a community-aware soft
+contrastive learning (CASCLe) objective that considers the neighborhood structures of poses and
+aligns the relative geometry in the latent space across modalities. Standard contrastive learning
+approaches (e.g., InfoNCE) treat all non-matching samples as equally distant negatives. However,
+this assumption is suboptimal for our pose data, which is inherently continuous. Moreover, poses
+across different gesture categories can be semantically close. To capture these structural similarities
+and avoid confusing the model with hard negatives, we introduce CASCLe, which utilizes geometric proximity in the pose space to generate soft targets. Together, these objectives guide the EMG
+encoder to capture pose-relevant semantics and produce discriminative, generalizable embeddings.
+Unlike general-purpose multi-modal alignment, EMBridge is designed as a specialized solution for
+EMG-based gesture classification through cross-modal supervision.
+
+
+We utilize large-scale public EMG datasets (Salter et al., 2024; Atzori et al., 2014), which provide
+simultaneous paired EMG and pose recordings to pre-train our EMBridge model and perform downstream evaluations. We design a gesture classification task to evaluate EMG representation quality.
+Following CLIP evaluation protocol (Radford et al., 2021), we validate the learned EMG representations through zero-shot classification and linear probing, demonstrating superior performance on
+both in-distribution and unseen gestures compared to benchmark models. In summary, our contributions are two-fold: (i). We propose a cross-modal representation learning strategy to enhance the
+quality of EMG representations learned from noisy EMG signals by aligning them with high-quality
+pose representations. (ii). To the best of our knowledge, EMBridge is the first cross-modal framework enabling zero-shot classification of unseen gestures for EMG signals from wearable devices.
+
+
+2
+
+
+Figure 1: (a) Motivation for cross-modal representation learning: using the same MAE pre-training,
+pose embeddings are semantically structured and well-separated across gestures (colors), whereas
+EMG embeddings are not. This motivates leveraging pose as guidance to structure the EMG representation space. (b) Detailed architecture of EMBridge. Only one transformer block (self-attention,
+cross-attention, and feed-forward layers) is shown for clarity, the model uses four such blocks.
+
+
+2 METHODOLOGY
+
+
+2.1 PRELIMINARIES
+
+
+_**Definition**_ _**1.**_ _**EMG,**_ _**pose**_ _**data,**_ _**and**_ _**gesture**_ _**classes.**_ Let _X_ = _{_ **x** _i_ _∈_ R _[C][×][T]_ _}_ _[N]_ _i_ =1 [denote] [multi-]
+channel EMG sequences with _C_ channels and window length _T_, and let _P_ = _{_ **p** _i_ _∈_ R _[J][×][T]_ _}_ _[N]_ _i_ =1
+denote the paired pose sequences of joint angles, where _J_ is the number of joints in a predefined
+hand skeleton (Salter et al., 2024). Here, _N_ is the total number of paired samples. We define a
+pose as the instantaneous state of the hand skeleton (20 joint angles) at a single time point, whereas
+a gesture is a temporal sequence of poses over a time window. Let _Y_ = _{_ 1 _, . . ., K}_ denote the
+gesture classes, and let _{yi}_ _[N]_ _i_ =1 [be] [the] [labels] [with] _[y][i]_ _[∈Y]_ [.] [Each] [pose] **[p]** _[i]_ [has] [a] [unique] [label] _[y][i]_ [,]
+although multiple samples may share the same label. The paired dataset is
+
+
+_D_ = _{_ ( **x** _i,_ **p** _i, yi_ ) _}_ _[N]_ _i_ =1 _[,]_
+
+
+which we split into _D_ tr, _D_ val, and _D_ test. Let _Y_ in _⊂Y_ be the in-distribution gesture classes and
+_Y_ unseen _⊂Y_ be the unseen gesture classes, with _Y_ in _∩Y_ unseen = _∅_ . For subset _S_ _∈{_ tr _,_ val _,_ test _}_,
+
+_DS_ [in] [=] _[ {]_ [(] **[x]** _[,]_ **[ p]** _[, y]_ [)] _[ ∈D][S]_ [:] _[y]_ _[∈Y]_ [in] _[}][,]_ _DS_ [unseen] = _{_ ( **x** _,_ **p** _, y_ ) _∈DS_ : _y_ _∈Y_ unseen _}._
+
+
+_**Definition 2.**_ _**Unimodal Encoders.**_ Let _Ex_ and _Ep_ map EMG and pose, respectively, into R _[d]_ . When
+the pose encoder is used frozen, we write _Ep_ _[∗]_ [.]
+
+
+**Unimodal Encoder Pre-training.** We adopt a Transformer encoder (Vaswani et al., 2023) with a
+linear tokenizer to map raw signals into _d_ -dimensional token embeddings. A patch length _S_ along
+time yields _L_ = - _T/S_ - non-overlapping tokens. We flatten channels within each patch and project
+to **a** _i_ _∈_ R _[d]_ . Following masked autoencoders (MAE) (He et al., 2021), we randomly mask a certain
+ratio of input tokens. The encoder processes only unmasked tokens and the transformer decoder
+reconstructs all tokens. The reconstruction loss is a mean squared error loss only applied to the
+masked tokens. We pre-train the EMG and pose encoders independently, yielding _Ex_ and _Ep_ . We
+use a mask ratio of 0 _._ 5 and a patch length of _S_ = 200. Unlike CLIP, which is trained on billions of
+image–text pairs, we align strong unimodal encoders to reduce the need for large-scale paired data.
+
+
+2.2 EMBRIDGE
+
+
+The proposed cross-modal representation learning framework EMBridge comprises three components: (i) a Querying Transformer that acts as an information bottleneck, extracting pose-informative
+features from the EMG encoder; (ii) a Masked Pose Reconstruction Loss that strengthens representation learning; and (iii) a Community-Aware Soft Contrastive Learning objective that aligns the
+relative geometry of the EMG and pose spaces by matching their community-level similarity structures, yielding a more structured EMG latent space. The framework is shown in Figure 1.
+
+
+3
+
+
+2.2.1 QUERYING TRANSFORMER (Q-FORMER).
+
+
+Inspired by BLIP-2 (Li et al., 2023), we use a set of learnable queries to extract pose-informative
+features from the EMG encoder. Let _Q_ [(0)] _∈_ R _[M]_ _[×][d]_ be _M_ learnable queries. The Q-Former _Fϕ_
+stacks 4 self-attention blocks (each with a feed-forward layer) and 2 cross-attention layers inserted every other block, whose keys/values are from _Ex_ ( **x** ). The self-attention modules of the
+Q-Former are initialized from the pre-trained Pose-MAE encoder _Ep_ _[∗]_ [while] [cross-attention] [lay-]
+ers are randomly initialized. All Q-Former parameters and the EMG encoder _Ex_ are trainable,
+while the pose encoder _Ep_ _[∗]_ [remains] [frozen.] [The] [Q-Former] [takes] [the] [learnable] [queries] _[Q]_ [(0)] [as] [in-]
+put and produces the same length of queries with learned representations _Q_ _[′]_ _∈_ R _[M]_ _[×][d]_ . We train
+the Q-Former using a contrastive objective following Li et al. (2022). Given the pose embedding _vi_ = _Ep_ _[∗]_ [(] **[p]** _[i]_ [)][,] [we] [select] [the] [query] [token] [that] [has] [the] [highest] [cosine] [similarity] [with] _[v][i]_ [as]
+
+_ui_ = _Q_ _[′]_ _m_ _[∗]_ ( _i_ ) _[, m][∗]_ [(] _[i]_ [)] [=] [arg max] _[m][∈{]_ [1] _[,...,M]_ _[}]_ _∥QQ_ _[′]_ _m_ _[′]_ _m∥∥⊤vvii∥_ _[.]_ [Given] [a] [mini-batch] [of] [size] _[B]_ [,] [we] [define]
+
+exp( _u_ _[⊤]_ _i_ _[v][j]_ _[/τ]_ [)]
+the softmax over EMG–pose similarities _qij_ = - _B_ [Let] _[ I]_ _[∈{]_ [0] _[,]_ [ 1] _[}][B][×][B]_ [be the one-]
+_k_ =1 [exp(] _[u]_ _i_ _[⊤][v][k][/τ]_ [)] [.]
+hot indicator matrix with _Iij_ = 1 iff _j_ = _i_ (matching pairs on the diagonal). The Information
+Noise-Contrastive Estimation (InfoNCE) loss (van den Oord et al., 2019) can then be written as
+
+
+_B_
+
+- _Iij_ log _qij._ (1)
+
+
+_j_ =1
+
+
+_L_ InfoNCE = _−_ [1]
+
+_B_
+
+
+_B_
+
+
+_i_ =1
+
+
+Unlike CLIP, where both encoders are trained jointly, in our setup the pose encoder is frozen and
+serves as a fixed anchor, since pose representations are higher-quality and more structured compared
+to EMG representations. Thus, we adopt the standard InfoNCE loss (EMG _→_ pose) rather than a
+symmetric variant, since gradients only flow into the EMG encoder while the pose embeddings
+remain fixed. By encouraging the learnable queries to extract EMG features that are most consistent
+with pose representations, the Q-Former efficiently and effectively aligns EMG and pose.
+
+
+2.2.2 MASKED POSE RECONSTRUCTION LOSS (MPRL)
+
+
+Beyond the contrastive loss, we add a masked reconstruction objective on input pose tokens to enrich the representation learning process (Li et al., 2023). Specifically, in the first forward pass, the
+Q-Former produces query embeddings _Q_ _[′]_ _∈_ R _[M]_ _[×][d]_ . In the second forward pass, we concatenate
+masked pose tokens _P_ [˜] = [˜ _p_ 1 _, . . .,_ ˜ _pL_ ] with _Q_ _[′]_ and apply the same self–attention modules with
+an attention mask: pose tokens may attend to all queries, while queries attend only to themselves.
+Cross–attention from pose tokens to EMG is also disabled, pose cannot directly access EMG features. Thus, the information required to reconstruct masked pose tokens must be captured in _Q_ _[′]_,
+enforcing that queries extract pose-informative content from EMG. Let _M_ be the set of masked
+pose-token indices and _HP_ = _Fϕ_ �[ _Q_ ; _P_ [˜] ]� _∈_ R [(] _[M]_ [+] _[L]_ [)] _[×][d]_ denote the outputs of Q-Former. The mask
+ratio is _r_ . A decoding layer _g_ maps the outputs back to input pose token space. We minimize
+
+
+1
+_L_ MPRL = _|M|_
+
+
+_m∈M_
+
+
+�� _g_ - _HP_ [ _m_ ]� _−_ _P_ [ _m_ ]��22 _[,]_ (2)
+
+
+where _P_ [ _m_ ] is the ground-truth pose token at index _m_ . Jointly optimizing _L_ MPRL with the contrastive loss encourages the Q-Former to learn denoised, pose-informative EMG representations and
+then yields an EMG latent space with richer pose semantics that can extrapolate to new gestures.
+
+
+2.2.3 COMMUNITY-AWARE SOFT CONTRASTIVE LEARNING (CASCLE)
+
+
+We propose CASCLe, which aligns EMG to pose by matching relative geometry of embedding
+spaces rather than only instance-level pairs. In standard contrastive learning, all non-matching poses
+are treated as negatives, even if some are semantically very close to the true positive. This treatment
+is suboptimal because grouping similar poses as strict negatives confuses the model and leads to
+unstable gradients. CASCLe addresses this by assigning soft targets. Poses that are more similar to
+the ground-truth pose receive higher probabilities, while relatively dissimilar ones receive lower or
+zero probabilities. Since the pose encoder _Ep_ _[∗]_ [is frozen, its embedding space defines a fixed relational]
+graph. CASCLe builds soft targets from this graph and trains the Q-Former queries to learn similar
+
+
+4
+
+
+neighborhood structures for EMG embeddings, which strengthens overall semantic consistency with
+pose. An illustration of CASCLe is shown in Figure 2.
+
+
+_Pose_ _communities._ We cluster pre-trained Pose-MAE embeddings (offline) using _k_ -means (Likas
+et al., 2003) to obtain _Nc_ centroids _C_ _∈_ R _[N][c][×][d]_ (all _ℓ_ 2-normalized). For a mini-batch of pose
+embeddings _P_ = [ _v_ 1; _. . ._ ; _vB_ ] _∈_ R _[B][×][d]_, we compute a _pose–cluster affinity matrix Sp,c_ = _P_ _C_ _[⊤]_ _∈_
+R _[B][×][N][c]_, where each row is sparsified by keeping only the top- _kc_ closest clusters. This keeps the
+community size reasonable and excludes irrelevant clusters, reducing noise in soft targets.
+
+
+[ _Sp,c_ ] _ij_ _←_ �[ _Sp,c_ ] _ij,_ _j_ _∈_ TopK( _Sp,c_ [ _i,_ :]) _,_ (3)
+0 _,_ otherwise _._
+
+
+_Pose–pose similarity matrix._ The community-aware pose–pose similarity matrix is then defined as
+_Sp,p_ = _Sp,c Sp,c_ _[⊤]_ _[∈]_ [R] _[B][×][B][.]_ [To] [prevent] [self-matches] [from] [dominating] [the] [probability] [distribution]
+after softmax when generating soft targets, we remove the diagonal: _S_ [¯] _p,p_ = _Sp,p_ _−_ diag( _Sp,p_ ) _._ A
+similar strategy has been adopted in prior work (Gao et al., 2023) for soft target construction and
+proven effective. _Soft targets_ are then defined as
+
+
+exp� _S_ ¯ _p,p_ [ _i, j_ ] _/τs_     _y_ ˜ _ij_ =
+
+
+_,_ _j_ = _i,_ (4)
+_k_ = _i_ [exp] - _S_ ¯ _p,p_ [ _i, k_ ] _/τs_ 
+
+
+with temperature _τs_ _>_ 0. Intuitively, _y_ ˜ _ij_ is the probability that pose _vj_ is a semantically relevant
+neighbor of _vi_ in the fixed pose relational graph. Using the same EMG-pose similarities _qij_ defined
+earlier for InfoNCE, CASCLe minimizes a _Soft_ _contrastive_ _objective_ defined as the cross-entropy
+between soft targets _y_ ˜ _ij_ and _qij, i ̸_ = _j_ :
+
+
+_B_
+
+- _y_ ˜ _ij_ log _qij._ (5)
+
+
+_j_ =1
+
+
+_L_ CASCLe = _−_ [1]
+
+_B_
+
+
+_B_
+
+
+_i_ =1
+
+
+This objective can be interpreted as predicting the degree of similarity between EMG–pose pairs,
+where this degree is measured according to the structural organization of the pose latent space.
+The total training objective of EMBridge combines instance-level and structural community-level
+supervision:
+_L_ = _L_ InfoNCE + _α L_ CASCLe + _λ L_ MPRL _,_
+
+
+with weights _λ, α_ _>_ 0. InfoNCE enforces instance alignment, while CASCLe aligns relational
+structure of the latent space between two modalities. In this way, the EMG encoder is guided to
+align not only with its exact pair but also with poses that share similar semantics, providing more
+robust and informative supervisory signals.
+
+
+5
+
+
+Table 1: Dataset splits with gesture and user counts. Four unseen gestures evaluated out of six total.
+
+
+Gesture Counts User Counts
+Split (totals) Subset
+
+In-dist. Unseen In-dist. Unseen
+
+
+_Dtr_ (23 gestures / 158 users) _D_ probe-tr [in] 4 0 158 0
+
+
+_D_ tune 4 4 0 3
+_Dval_ (29 gestures / 15 users) _D_ probe-tr [unseen] 0 4 0 12
+
+
+_Dtest_ (29 gestures / 158 users) _D_ eval 4 4 0 20
+
+
+3 EXPERIMENTS AND RESULTS
+
+
+3.1 EVALUATION PROTOCOLS.
+
+
+We employ two evaluation protocols to examine the learned representation quality. **Linear** **prob-**
+**ing** (LP): with labeled EMG data _{_ ( _xi, yi_ ) _}_, we freeze _Ex_ and train a randomly-initialized linear
+classifier _C_ on top of its embeddings, reporting accuracy on a held-out split. **Zero-shot** **classi-**
+**fication** (ZS) is performed as k-nearest-neighbor voting in the embedding space, following standard practice in representation learning (Marks et al., 2024; Radford et al., 2021). For each
+EMG sample, we retrieve its top- _k_ nearest poses in the embedding space, then vote the corresponding gesture labels to determine the predicted gesture. Given a test EMG sample _xj_, let
+_Rj_ = TopK _p∈P_ test� _Ex_ ( _xj_ ) _[⊤]_ _Ep_ _[∗]_ [(] _[p]_ [))] - be the set of _k_ pose samples with highest cosine similarity
+to _xj_ . We then predict _y_ ˆ _j_ = mode� _y_ ( _p_ ) _| p ∈Rj_ - _,_ where _y_ ( _p_ ) is the gesture class of pose _p_ .
+
+
+3.2 DATASETS
+
+
+_**emg2pose**_ **dataset.** We use _emg2pose_ (Salter et al., 2024), a large-scale open-source EMG dataset
+containing 370 hours of sEMG and synchronized hand pose data across 193 consenting users, 29
+different behavioral groups that include a diverse range of discrete and continuous hand motions
+such as making a fist or counting to five. The hand pose labels are generated using a high-resolution
+motion capture system. The full dataset contains over 80 million pose labels and is of similar scale
+to the largest computer vision equivalents. Each user completed four recording sessions per gesture
+category, each with a different EMG-band placement. Each session lasted 45–120 s, during which
+users repeatedly performed a mix of 3–5 similar gestures or unconstrained freeform movements. We
+use non-overlapping 2-second windows as input sequences. EMG is instance-normalized, band-pass
+filtered (2–250 Hz), and notch-filtered at 60 Hz. For more details, please refer to Salter et al. (2024).
+
+
+**Data Split for** _**emg2pose**_ **.** We evaluate on two disjoint gesture sets drawn from the public _emg2pose_
+corpus. First, we select four representative single-hand motions covering various finger movements
+as our **in-distribution gestures** . Second, from the six held-out classes that are not seen during training, we exclude the two-handed gesture and the highly variable “finger freeform” class, yielding four
+**unseen gestures** . Details of gesture classes are in Appendix. For data splits, we follow the public
+train _Dtr_, val _Dval_, test _Dtest_ splits and define our data splits for downstream gesture classification
+tasks as shown in Table 1. The model is pre-trained on the full _Dtr_ . A linear head is trained on
+_D_ probe-tr [in] [, and report final accuracy on the evaluation set] _[ D]_ eval [in] [.] [For linear probing on unseen gestures]
+(which appear only in the original val and test splits), we train on _D_ probe-tr [unseen] [,] [and report accuracy on]
+_D_ eval [unseen] . Zero-shot classification is evaluated only on _D_ eval. All users in _D_ eval are unseen, so both
+the LP and ZS results also assess user-level generalization. A held-out dataset _D_ tune, strictly disjoint
+from all other sets, is reserved for hyper-parameter tuning.
+
+
+_**NinaPro**_ **dataset:** We utilized two _NinaPro_ EMG datasets for a more comprehensive evaluation of
+EMBridge. Specifically, Ninapro DB2 (Atzori et al., 2014) is used for pre-training, which includes
+paired EMG-pose data from 40 subjects. It contains 49 hand gestures (including basic finger flexions, functional grasps, and combined movements) performed by 40 healthy subjects. EMG signals
+are recorded from 12 electrodes placed on the forearm at a sampling rate of 2 kHz, alongside hand
+kinematics data captured by a data glove. For downstream gesture classification, we use NinaPro
+DB7 (Krasoulis et al., 2017), which contains data from 20 non-amputated subjects collected with
+
+
+6
+
+
+the same EMG device and gesture set as DB2 (more details on NinaPro Website [1] ). **Data split.** The
+entire DB2 dataset was used for pre-training, except Gestures 1, 5, 10, and 15 from exercise B,
+which were excluded to serve as **unseen** **gestures** in DB7. Gestures 1, 5, and 10 from exercise C
+were used as **in-distribution** **gestures** . Within each gesture, sessions were randomly divided into
+probe-training and evaluation sets, and zero-shot evaluation was conducted only on the latter.
+
+
+3.3 GESTURE CLASSIFICATION RESULTS
+
+
+**Comparing Schemes.** We evaluate EMBridge against various baselines. Unimodal models trained
+solely on EMG include: a supervised encoder–decoder Transformer ( **PoseT** ) regressing poses
+from EMG; the supervised regression models from the _emg2pose_ benchmark (Salter et al., 2024)
+( **emg2pose**, **Vemg2pose**, **NeuroPose** ); and a self-supervised MAE model trained only on EMG
+( **EMG-MAE** ). We also compare to multi-modal models: a CLIP-style Contrastive Pose–EMG Pretraining framework ( **CPEP** ) (Cui et al., 2025), which applies _L_ InfoNCE directly to [CLS] tokens
+from EMG and pose encoders via a projection layer; and a plain **Q-Former** variant trained only with
+_L_ InfoNCE. Unlike Q-Former, CPEP does not introduce a transformer but uses a projection layer. We
+further evaluate label-smoothed variants of both models. Label smoothing has been shown to improve contrastive learning by mitigating overconfidence and handling noisy similarities (Wickstrøm
+et al., 2022; Li et al., 2022). We introduce **CPEP-LS** and **Q-Former-LS**, where InfoNCE targets are
+softened with a smoothing factor of 0 _._ 1. For a fair comparison under linear probing, each baseline’s
+encoder is frozen and a softmax linear head is trained on top. As an additional reference, we report
+an **upper bound** from linear probing the pre-trained Pose-MAE. Since the pose encoder is the fixed
+alignment anchor, this represents the best achievable performance if EMG features were perfectly
+aligned. For LP, we use publicly available _emg2pose_ checkpoints with the same data splits.
+
+
+We evaluate EMG representation quality on both **in-dist.** and **unseen** gestures using two protocols:
+zero-shot classification (ZS) and linear probing (LP). Supervised baselines do not support zero-shot
+(K-nearest neighbor) classification in the embedding space. We report balanced accuracy on both
+_emg2pose_ and _NinaPro_ dataset to account for class imbalance across gesture classes. As shown in
+Table 2, EMBridge consistently outperforms all baselines, with the largest gains in zero-shot classification, where it even surpasses the LP performance of all unimodal models. The most significant
+improvements appear on unseen gestures for _emg2pose_ and ZS on in-dist. gestures for _NinaPro_,
+demonstrating the stronger generalization capacity of EMBridge and its practical value for wearable gesture recognition. We note that CPEP achieves higher LP performance on unseen gestures
+than EMBridge for both datasets. This is likely due to our use of query averaging in EMBridge
+instead of selecting the query with maximum similarity to the paired pose, which may be suboptimal. Maximum-similarity selection is avoided here during LP to prevent potential data leakage. We
+also evaluate EMBridge in the few-shot setting with LP on _emg2pose_ . Even with only 50% of the
+probe-training data, EMBridge outperforms all unimodal baselines. [2]
+
+
+**Per-Gesture** **Classification** **Performance** **Breakdown.** We conduct a detailed analysis on the
+_emg2pose_ dataset by computing per-gesture F1 scores from zero-shot classification on unseen gestures to assess performance gains achieved by EMBridge over other cross-modal frameworks (CPEP
+and Q-Former). Reporting F1 scores provides a more comprehensive and balanced view of per-class
+performance. Confusion matrices in Figure 3(a) offer a clearer illustration of improvements. Compared to CPEP and Q-Former, **EMBridge achieves consistently higher F1 scores across all ges-**
+**ture classes**, with particularly notable gains on _Class 1_ (0.513 vs. 0.439/0.494) and _Class 3_ (0.504
+vs. 0.436/0.458). _Class 3_ is the gesture of counting up and down then finger wiggling, which is very
+challenging for vision-based gesture classification due to visual occlusion (Salter et al., 2024). The
+improvements underscore EMBridge’s stronger discriminative capability on difficult and frequently
+confused gestures, demonstrating its practical value in real-world cases where occlusion is common.
+
+
+**Per-User** **Performance** **Gains** **Breakdown.** Similarly, on unseen gestures, we compute the zeroshot classification performance (F1 score) within each user, where all 20 users are held out from
+training. Figure 3(b) illustrates the per-user performance gains of EMBridge compared to CPEP and
+Q-Former. For per-user analysis, EMBridge achieves an overall improvement of 14 _._ 2% over CPEP
+(0 _._ 522 vs. 0 _._ 457) and 10 _._ 2% over Q-Former (0 _._ 522 vs. 0 _._ 473). The average relative per-user im
+
+[1https://ninapro.hevs.ch/](https://ninapro.hevs.ch/)
+2More details are provided in the Appendix.
+
+
+7
+
+
+Table 2: Comparison of gesture classification results across unimodal and multi-modal models.
+Results are reported on the _emg2pose_ dataset and the _NinaPro_ dataset.
+
+
+_emg2pose_ _NinaPro_
+Unimodal Models
+
+In-dist. LP Unseen LP In-dist. LP Unseen LP
+
+
+Upper-bound 0.851 0.649 0.769 0.632
+EMG-MAE 0.347 0.334 0.283 0.256
+NeuroPose (Salter et al., 2024) 0.692 0.248 / /
+emg2pose (Salter et al., 2024) 0.734 0.405 / /
+Vemg2pose (Salter et al., 2024) 0.650 0.312 / /
+PoseT 0.705 0.433 0.694 0.425
+
+In-dist. Unseen In-dist. Unseen
+Multi-modal Models
+
+LP ZS LP ZS LP ZS LP ZS
+
+
+CPEP 0.782 0.757 0.536 0.481 0.675 0.604 0.483 0.413
+CPEP-LS 0.780 0.759 **0.538** 0.487 0.681 0.617 **0.494** 0.424
+Q-Former 0.782 0.763 0.493 0.498 0.688 0.613 0.481 0.447
+Q-Former-LS 0.777 0.760 0.495 0.498 0.692 0.618 0.486 0.439
+**EMBridge** **0.785** **0.777** 0.505 **0.528** **0.703** **0.692** 0.492 **0.447**
+
+
+provement is 16 _._ 0% compared to CPEP and 11 _._ 6% compared to Q-Former, which demonstrates that
+EMBridge yields consistent improvements across unseen users, even under inter-subject variability.
+
+
+(a). Per-class Performance Breakdown
+
+
+Figure 3: (a) Confusion matrices from ZS on unseen gestures, with per-class _F1 scores_ shown beside
+row labels. (b) Per-user ZS performance on unseen gestures. (c) Data efficiency analysis via ZS on
+in-dist. and unseen gestures. Dotted lines indicate LP performance of unimodal baselines.
+
+
+4 ABLATION STUDY
+
+
+**Individual Contribution of Components in EMBridge.** We analyze three ablated variants of EMBridge, each removing a component (Q-Former, MPRL, or CASCLe) to assess its individual impact.
+Removing Q-Former reduces the model to CPEP + CASCLe, since without the Q-Former architecture and learnable queries, the masked pose reconstruction task cannot be performed. As shown in
+
+
+8
+
+
+Table 3: Ablation of EMBridge: individual component impact and soft contrastive objectives.
+
+
+Ablated Variants LP in-dist. LP unseen ZS in-dist. ZS unseen
+
+|EMBridge w/o Q-Former EMBridge w/o MPRL EMBridge w/o CASCLe|0.793 0.538 0.763 0.494 0.783 0.494 0.764 0.516 0.784 0.485 0.764 0.509|
+|---|---|
+|Soft Contrastive Objective||
+|Label Smoothing (Fini et al., 2023)<br>SoftCLIP (Gao et al., 2023)<br>CASCLe|0.777<br>0.489<br>0.759<br>0.511<br>**0.788**<br>0.490<br>0.760<br>0.510<br>0.785<br>**0.505**<br>**0.777**<br>**0.528**|
+
+
+Table 3, removing any component leads to a drop in zero-shot performance. Interestingly, removing Q-Former yields slightly better linear probing results, consistent with prior CPEP findings, and
+demonstrates the versatility of CASCLe, which can be effectively integrated into the CPEP architecture to improve performance. Removing MPRL or CASCLe reduces generalization to unseen
+gestures, underscoring their importance in cross-modal alignment and representation learning.
+
+
+**Soft Contrastive Objectives.** We further compare CASCLe with alternative soft contrastive learning objectives. **Label** **Smoothing**, explored in Fini et al. (2023), applies soft targets in CLIP and
+has shown consistent gains. We also adapt SoftCLIP (Gao et al., 2023) to our EMG–pose setup
+by deriving soft targets from instance-level pairwise similarities between pose samples, providing
+a fair baseline against CASCLe, which models community-level structural similarity. We replace
+_L_ InfoNCE+ _αL_ CASCLe with label smoothing and the adapted SoftCLIP objective, respectively, while
+keeping the rest of EMBridge unchanged. Further discussion of soft contrastive learning is provided
+in Section 5. In Table 3, CASCLe outperforms both alternatives in ZS, which highlights the advantage of modeling community structure over simple soft labels or instance-level similarities.
+
+
+**Data** **Efficiency.** We investigate how the scale of paired pre-training data influences downstream
+performance. Since collecting paired EMG–pose data is costly and time-consuming, it is essential
+to evaluate the data efficiency of EMBridge. We uniformly downsample sessions within each gesture class to simulate limited pre-training data. We vary the proportion of paired pre-training data
+from 0 _._ 2 to 1 _._ 0 (full dataset) and report ZS performance on both in-dist. and unseen gestures in Figure 3(c). Remarkably, even when trained with only 40% of the paired data, EMBridge’s zero-shot
+classification still surpasses the LP performance of unimodal baselines trained on the full dataset.
+
+
+**Sensitivity** **to** **Hyper-parameters.** We analyze how ZS and LP performance of EMBridge is influenced by different hyper-parameter choices. Specifically, we vary one hyper-parameter at a time
+while keeping all others fixed to their optimal settings. Results are summarized in Figure 4. The
+choice of _τs_ and the number of top- _kc_ clusters (used in CASCLe; see Eq. 3) jointly determines the
+quality of the resulting soft targets. A smaller _τs_ produces a sharper probability distribution, and as
+_τs_ _→_ 0, CASCLe degenerates to the Supervised Contrastive Loss (Khosla et al., 2021) by assigning
+a hard label of 1 to multiple positives. In contrast, a moderate _τs_ assigns reasonable weights to offdiagonal soft positives, balancing contributions without allowing them to dominate or amplifying
+small differences. Increasing the number of top- _k_ clusters ( _k_ = 10 _,_ 20) degrades both LP and ZS
+performance (Figure 4b), confirming that including distant neighbors introduces noise when constructing soft targets. EMBridge is robust to variations in _λ_ and mask ratio _r_ in the masked pose
+reconstruction task, as well as loss weight _α_ . We also find that using 16 queries yields the best
+results. 8 queries may be insufficient to capture the full range of information, while 32 queries can
+lead to overfitting. We also evaluate alternative similarity metrics for CASCLe. By default, cosine
+similarity is used to compute both the pose–cluster and pose–pose similarity matrices. Using L1 and
+L2 distances yields weaker results. This aligns with prior contrastive learning literature, where cosine similarity is commonly preferred for representation alignment (Radford et al., 2021; Chen et al.,
+2020). In Figure 4 (f), we observe that using more nearest neighbors improves ZS performance.
+
+
+9
+
+
+**Related** **Work** **on** **Soft** **Contrastive** **Learning.** Traditional contrastive learning methods (van den
+Oord et al., 2019; Chen et al., 2020; Radford et al., 2021) use one-hot targets, where only the exact
+matching pair is treated as positive and all others as negatives. However, when multiple positives or
+highly similar instances exist, this introduces false negatives. Recent work addresses this by incorporating soft targets. Fini et al. (2023) employs label smoothing to generate soft targets. SoftCLIP
+(Gao et al., 2023) derives them from intra-modal similarity using fine-grained image features, while
+X-CLR (Sobal et al., 2024) builds a sample similarity graph and replaces binary labels with similarity scores. SoftCLT (Lee et al., 2024b) softens targets based on temporal proximity, and Huang
+et al. (2024) aligns cross-modal and uni-modal representations using teacher-derived similarity signals. **CASCLe** differs by constructing soft targets from **community-level** structural similarities in
+the embedding space, rather than relying solely on instance-level relations.
+
+
+The motivation of the asymmetric setup is to use pose representations as fixed anchors to guide the
+learning of EMG representations. Training both encoders simultaneously could lead to suboptimal
+representations, as the pose representations are altered to be closer to the noisier EMG representations. Additionally, this asymmetric setup enhances extendability. Future work can pre-train the
+pose encoder on large-scale and unpaired pose data using MAE. This allows us to effectively learn
+EMG representations by aligning with frozen pose embeddings, even when paired data is limited.
+Leveraging abundant unpaired data reduces reliance on paired samples and improves data efficiency.
+
+
+By leveraging pose as a rich supervisory signal, EMBridge learns pose-informed EMG embeddings
+that capture structural and semantic relationships and are discriminative in the latent space. Across
+in-distribution and unseen gesture classification tasks, EMBridge demonstrated strong performance
+gains, particularly in the zero-shot setting. Overall, EMBridge provides an effective approach to
+zero-shot gesture classification on wearable EMG signals, and can serve as a foundation for future
+exploration of cross-modal representation learning on EMG and other bio-signals.
+
+
+6 LIMITATIONS AND FUTURE WORK
+
+
+While EMBridge significantly enhances zero-shot gesture classification on wearable EMG signals,
+we acknowledge limitations and room for future exploration. Our framework currently relies on
+paired EMG-pose data for cross-modal alignment. Although _emg2pose_ and _NinaPro_ are large-scale
+datasets, high-quality paired datasets remain scarce in the broader bio-signal community. Training
+on a single dataset could potentially limit the pose encoder’s capacity. A promising direction for future work is to leverage large-scale, publicly available unpaired pose data for unimodal pre-training.
+This would yield more robust pose representations, providing stronger supervision for EMG representation learning while significantly reducing the reliance on paired samples. EMBridge can further
+demonstrate its effectiveness in cross-modal learning with limited paired data. Furthermore, the proposed framework can potentially be extended to other modalities such as RGB-EMG or Video-EMG
+in future work, which can be done by incorporating a pre-trained vision encoder. Another interesting
+
+
+10
+
+
+direction for future work is to explore probabilistic modeling when constructing pose communities.
+Specifically, a Gaussian Mixture Model could be used to assign each pose embedding a soft probability distribution over multiple clusters or communities. Structural similarity between poses could
+then be computed based on the similarity between these membership distributions (e.g., using KL
+divergence), enabling a smoother and more continuous modeling of pose neighborhood structure.
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+All datasets used in this work are publicly available. Details of the model architecture, training
+objectives, and implementation details are provided in Section 2 and Appendix A.6, including all
+key hyper-parameters and model configurations to ensure reproducibility.
+
+
+REFERENCES
+
+
+Manfredo Atzori, Arjan Gijsberts, Claudio Castellini, Barbara Caputo, Anne-Gabrielle Mittaz
+Hager, Simone Elsig, Giorgio Giatsidis, Franco Bassetto, and Henning M¨uller. Electromyography data for non-invasive naturally-controlled robotic hand prostheses. _Scientific_ _data_, 1(1):
+1–13, 2014.
+
+
+Manfredo Atzori, Arjan Gijsberts, Claudio Castellini, Barbara Caputo, Anne-Gabrielle Hager,
+Stephan Elsig, Giorgio Giatsidis, Franco Bassetto, and Henning M¨uller. Deep learning with
+convolutional neural networks applied to electromyography data: A resource for the classification
+of movements for prosthetic hands. _Frontiers in Neurorobotics_, 10:9, 2016.
+
+
+Antonino Casile, Giulia Fregna, Vittorio Boarini, Chiara Paoluzzi, Fabio Manfredini, Nicola Lamberti, Andrea Baroni, and Sofia Straudi. Quantitative comparison of hand kinematics measured
+with a markerless commercial head-mounted display and a marker-based motion capture system
+in stroke survivors. _Sensors_, 23(18):7906, 2023.
+
+
+Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework
+for contrastive learning of visual representations, 2020. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2002.05709)
+[2002.05709.](https://arxiv.org/abs/2002.05709)
+
+
+Wenhui Cui, Christopher Sandino, Hadi Pouransari, Ran Liu, Juri Minxha, Ellen Zippi, Aman
+Verma, Anna Sedlackova, Erdrin Azemi, and Behrooz Mahasseni. Cpep: Contrastive pose-emg
+pre-training enhances gesture generalization on emg signals, 2025. URL [https://arxiv.](https://arxiv.org/abs/2509.04699)
+[org/abs/2509.04699.](https://arxiv.org/abs/2509.04699)
+
+
+Xiachong Feng, Xiaocheng Feng, Bing Qin, and Ting Liu. Aligning semantic in brain and language: A curriculum contrastive method for electroencephalography-to-text generation. _IEEE_
+_Transactions_ _on_ _Neural_ _Systems_ _and_ _Rehabilitation_ _Engineering_, 31:3874–3883, 2023. doi:
+10.1109/TNSRE.2023.3314642.
+
+
+Enrico Fini, Pietro Astolfi, Adriana Romero-Soriano, Jakob Verbeek, and Michal Drozdzal. Improved baselines for vision-language pre-training, 2023. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2305.08675)
+[2305.08675.](https://arxiv.org/abs/2305.08675)
+
+
+Yuting Gao, Jinfeng Liu, Zihan Xu, Tong Wu Enwei Zhang, Wei Liu, Jie Yang, Ke Li, and Xing Sun.
+Softclip: Softer cross-modal alignment makes clip stronger, 2023. URL [https://arxiv.](https://arxiv.org/abs/2303.17561)
+[org/abs/2303.17561.](https://arxiv.org/abs/2303.17561)
+
+
+Yuxin Guo, Shuailei Ma, Shijie Ma, Xiaoyi Bao, Chen-Wei Xie, Kecheng Zheng, Tingyu Weng,
+Siyang Sun, Yun Zheng, and Wei Zou. Aligned better, listen better for audio-visual large language
+models, 2025. [URL https://arxiv.org/abs/2504.02061.](https://arxiv.org/abs/2504.02061)
+
+
+Sumanth Gurram, Andy Fang, David Chan, and John Canny. Lava: Language audio vision alignment for contrastive video pre-training, 2022. URL [https://arxiv.org/abs/2207.](https://arxiv.org/abs/2207.08024)
+[08024.](https://arxiv.org/abs/2207.08024)
+
+
+Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ar, and Ross Girshick. Masked
+autoencoders are scalable vision learners, 2021. URL [https://arxiv.org/abs/2111.](https://arxiv.org/abs/2111.06377)
+[06377.](https://arxiv.org/abs/2111.06377)
+
+
+11
+
+
+Hailang Huang, Zhijie Nie, Ziqiao Wang, and Ziyu Shang. Cross-modal and uni-modal soft-label
+alignment for image-text retrieval. _Proceedings of the AAAI Conference on Artificial Intelligence_,
+38(16):18298–18306, March 2024. ISSN 2159-5399. doi: 10.1609/aaai.v38i16.29789. URL
+[http://dx.doi.org/10.1609/aaai.v38i16.29789.](http://dx.doi.org/10.1609/aaai.v38i16.29789)
+
+
+N´estor J Jarque-Bou, Joaquin L Sancho-Bru, and Margarita Vergara. A systematic review of emg
+applications for the characterization of forearm and hand muscle activity during activities of daily
+living: Results, challenges, and open issues. _Sensors_, 21(9):3035, 2021.
+
+
+Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna, Yonglong Tian, Phillip Isola, Aaron
+Maschinot, Ce Liu, and Dilip Krishnan. Supervised contrastive learning, 2021. URL [https:](https://arxiv.org/abs/2004.11362)
+[//arxiv.org/abs/2004.11362.](https://arxiv.org/abs/2004.11362)
+
+
+Agamemnon Krasoulis, Iris Kyranou, Mustapha Suphi Erden, Kianoush Nazarpour, and Sethu Vijayakumar. Improved prosthetic hand control with concurrent use of myoelectric and inertial
+measurements. _Journal of neuroengineering and rehabilitation_, 14(1):71, 2017.
+
+
+Gierad Laput and Chris Harrison. Sensing fine-grained hand activity with smartwatches. In _Proceed-_
+_ings of the 2019 CHI Conference on Human Factors in Computing Systems_, CHI ’19, pp. 1–13,
+New York, NY, USA, 2019. Association for Computing Machinery. ISBN 9781450359702. doi:
+10.1145/3290605.3300568. [URL https://doi.org/10.1145/3290605.3300568.](https://doi.org/10.1145/3290605.3300568)
+
+
+Donghee Lee, Dayoung You, Gyoungryul Cho, Hoirim Lee, Eunsoo Shin, Taehwan Choi, Sunghan Kim, Sangmin Lee, and Woochul Nam. Emg-based hand gesture classifier robust to daily
+variation: Recursive domain adversarial neural network with data synthesis. _Biomedical_ _Signal_
+_Processing and Control_, 88:105600, 2024a.
+
+
+Seunghan Lee, Taeyoung Park, and Kibok Lee. Soft contrastive learning for time series, 2024b.
+[URL https://arxiv.org/abs/2312.16424.](https://arxiv.org/abs/2312.16424)
+
+
+Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. Blip: Bootstrapping language-image
+pre-training for unified vision-language understanding and generation, 2022. URL [https:](https://arxiv.org/abs/2201.12086)
+[//arxiv.org/abs/2201.12086.](https://arxiv.org/abs/2201.12086)
+
+
+Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. BLIP-2: bootstrapping language-image
+pre-training with frozen image encoders and large language models. In _ICML_, 2023.
+
+
+Aristidis Likas, Nikos Vlassis, and Jakob J Verbeek. The global k-means clustering algorithm.
+_Pattern recognition_, 36(2):451–461, 2003.
+
+
+Yilin Liu, Shijia Zhang, and Mahanth Gowda. Neuropose: 3d hand pose tracking using emg
+wearables. In _Proceedings_ _of_ _the_ _Web_ _Conference_ _2021_, WWW ’21, pp. 1471–1482, New
+York, NY, USA, 2021. Association for Computing Machinery. ISBN 9781450383127. doi:
+10.1145/3442381.3449890. [URL https://doi.org/10.1145/3442381.3449890.](https://doi.org/10.1145/3442381.3449890)
+
+
+Ilya Loshchilov and Frank Hutter. Sgdr: Stochastic gradient descent with warm restarts, 2017. URL
+[https://arxiv.org/abs/1608.03983.](https://arxiv.org/abs/1608.03983)
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. URL [https:](https://arxiv.org/abs/1711.05101)
+[//arxiv.org/abs/1711.05101.](https://arxiv.org/abs/1711.05101)
+
+
+S Marcos-Ant´on et al. semg-controlled forearm bracelet and serious game-based rehabilitation.
+_Journal of NeuroEngineering and Rehabilitation_, 2023. [URL https://jneuroengrehab.](https://jneuroengrehab.biomedcentral.com/articles/10.1186/s12984-023-01233-5)
+[biomedcentral.com/articles/10.1186/s12984-023-01233-5.](https://jneuroengrehab.biomedcentral.com/articles/10.1186/s12984-023-01233-5)
+
+
+Markus Marks, Manuel Knott, Neehar Kondapaneni, Elijah Cole, Thijs Defraeye, Fernando PerezCruz, and Pietro Perona. A closer look at benchmarking self-supervised pre-training with image
+classification, 2024. [URL https://arxiv.org/abs/2407.12210.](https://arxiv.org/abs/2407.12210)
+
+
+Ali Moin, Andy Zhou, Abbas Rahimi, Alisha Menon, Simone Benatti, George Alexandrov, Senam
+Tamakloe, Jonathan Ting, Natasha Yamamoto, Yasser Khan, et al. A wearable biosensing system
+with in-sensor adaptive machine learning for hand gesture recognition. _Nature Electronics_, 4(1):
+54–63, 2021.
+
+
+12
+
+
+Mansooreh Montazerin, Elahe Rahimian, Farnoosh Naderkhani, S Farokh Atashzar, Svetlana
+Yanushkevich, and Arash Mohammadi. Transformer-based hand gesture recognition from instantaneous to fused neural decomposition of high-density emg signals. _Scientific reports_, 13(1):
+11000, 2023.
+
+
+Seungwhan Moon, Andrea Madotto, Zhaojiang Lin, Alireza Dirafzoon, Aparajita Saraf, Amy Bearman, and Babak Damavandi. Imu2clip: Multimodal contrastive learning for imu motion sensors
+from egocentric videos and text, 2022. [URL https://arxiv.org/abs/2210.14395.](https://arxiv.org/abs/2210.14395)
+
+
+Georgios Pavlakos, Dandan Shan, Ilija Radosavovic, Angjoo Kanazawa, David Fouhey, and Jitendra
+Malik. Reconstructing hands in 3d with transformers, 2023. URL [https://arxiv.org/](https://arxiv.org/abs/2312.05251)
+[abs/2312.05251.](https://arxiv.org/abs/2312.05251)
+
+
+Joao Pereira, Dimitrios Chalatsis, Balint Hodossy, and Dario Farina. Tackling electrode shift in
+gesture recognition with hd-emg electrode subsets, 2024. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2401.02773)
+[2401.02773.](https://arxiv.org/abs/2401.02773)
+
+
+Kyung Rok Pyun, Kangkyu Kwon, Myung Jin Yoo, Kyun Kyu Kim, Dohyeon Gong, Woon-Hong
+Yeo, Seungyong Han, and Seung Hwan Ko. Machine-learned wearable sensors for real-time
+hand-motion recognition: toward practical applications. _National science review_, 11(2):nwad298,
+2024.
+
+
+Jing Qi, Li Ma, Zhenchao Cui, and Yushu Yu. Computer vision-based hand gesture recognition for
+human-robot interaction: a review. _Complex & Intelligent Systems_, 10(1):1581–1606, 2024.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya
+Sutskever. Learning transferable visual models from natural language supervision, 2021. URL
+[https://arxiv.org/abs/2103.00020.](https://arxiv.org/abs/2103.00020)
+
+
+Sasha Salter, Richard Warren, Collin Schlager, Adrian Spurr, Shangchen Han, Rohin Bhasin, Yujun
+Cai, Peter Walkington, Anuoluwapo Bolarinwa, Robert Wang, Nathan Danielson, Josh Merel,
+Eftychios Pnevmatikakis, and Jesse Marshall. emg2pose: A large and diverse benchmark for
+surface electromyographic hand pose estimation, 2024. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2412.02725)
+[2412.02725.](https://arxiv.org/abs/2412.02725)
+
+
+Vlad Sobal, Mark Ibrahim, Randall Balestriero, Vivien Cabannes, Diane Bouchacourt, Pietro Astolfi, Kyunghyun Cho, and Yann LeCun. X-sample contrastive loss: Improving contrastive learning with sample similarity graphs, 2024. [URL https://arxiv.org/abs/2407.18134.](https://arxiv.org/abs/2407.18134)
+
+
+Simon Tam, Shriram Tallam Puranam Raghu, Etienne Buteau, [´] Erik Scheme, Mounir Boukadoum,
+Alexandre Campeau-Lecours, and Benoit Gosselin. Towards robust and interpretable emg-based
+[hand gesture recognition using deep metric meta learning, 2024. URL https://arxiv.org/](https://arxiv.org/abs/2404.15360)
+[abs/2404.15360.](https://arxiv.org/abs/2404.15360)
+
+
+Rayane Tchantchane, Hao Zhou, Shen Zhang, and Gursel Alici. A review of hand gesture recognition systems based on noninvasive wearable sensors. _Advanced_ _intelligent_ _systems_, 5(10):
+2300207, 2023.
+
+
+Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Representation learning with contrastive predictive coding, 2019. [URL https://arxiv.org/abs/1807.03748.](https://arxiv.org/abs/1807.03748)
+
+
+Laurens Van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. _Journal_ _of_ _machine_
+_learning research_, 9(11), 2008.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+Lukasz Kaiser, and Illia Polosukhin. Attention is all you need, 2023. [URL https://arxiv.](https://arxiv.org/abs/1706.03762)
+[org/abs/1706.03762.](https://arxiv.org/abs/1706.03762)
+
+
+Huihui Wang, Bo Ru, Xin Miao, Qin Gao, Masood Habib, Long Liu, and Sen Qiu. Mems devicesbased hand gesture recognition via wearable computing. _Micromachines_, 14(5):947, 2023.
+
+
+13
+
+
+Kristoffer Wickstrøm, Michael Kampffmeyer, Karl Øyvind Mikalsen, and Robert Jenssen. Mixing
+up contrastive learning: Self-supervised representation learning for time series. _Pattern Recogni-_
+_tion Letters_, 155:54–61, March 2022. ISSN 0167-8655. doi: 10.1016/j.patrec.2022.02.007. URL
+[http://dx.doi.org/10.1016/j.patrec.2022.02.007.](http://dx.doi.org/10.1016/j.patrec.2022.02.007)
+
+
+Shaoan Xie, Lingjing Kong, Yujia Zheng, Yu Yao, Zeyu Tang, Eric P. Xing, Guangyi Chen, and
+Kun Zhang. Smartclip: Modular vision-language alignment with identification guarantees, 2025.
+[URL https://arxiv.org/abs/2507.22264.](https://arxiv.org/abs/2507.22264)
+
+
+Guangjie Yu, Ziting Deng, Zhenchen Bao, Yue Zhang, and Bingwei He. Gesture classification
+in electromyography signals for real-time prosthetic hand control using a convolutional neural
+network-enhanced channel attention model. _Bioengineering_, 10(11):1324, 2023.
+
+
+A APPENDIX
+
+
+A.1 THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+We used LLMs to assist with language polishing, including grammar checking and word choice
+refinement. All research ideas, experiment design, analyses, and essential contributions were conducted by the authors.
+
+
+A.2 DETAILS OF EMG2POSE DATASET
+
+
+A.2.1 DATA COLLECTION PROTOCOL
+
+
+Data collection was divided into four distinct sessions, involving multiple device don-doff cycles
+(avg. 3.9) to account for sensor placement shifts. In each session, participants performed two repetitions of prompted stages (gesture categories), with each stage lasting 45 to 60 seconds. Annotations
+are available at this recording level, which we utilized as the gesture class labels. Each stage contains either a mix of discrete gestures or freeform unprompted movements. To ensure a broad range
+of postures, participants were explicitly instructed to move their hand from right-to-left and up-anddown while performing specific gestures.
+
+
+A.2.2 DETAILS OF GESTURES
+
+
+**In-distribution** **(4** **classes).** _D_ eval [in] [contains] [approximately] [80] [sessions] [per] [class] [from] [20] [held-out]
+users.
+
+
+_class 0:_ Thumb swipes whole hand; _class 1:_ Hand claw, grasp, and flicks. _class 2:_ ThumbsUpDown, ThumbRotations; _class 3:_ FingerPinches, SingleFinger, PinchesMultiple;
+
+
+**Unseen (4 classes).** _D_ eval [unseen] uses the same 20 held-out users, with approximately 80 sessions each
+for _classes 0–2_ and 40 sessions for _class 3_ .
+
+
+_class 0:_ HookEmHorns, OK, and Scissors; _class 1:_ Shaka and Vulcan peace; _class 2:_ Counting
+up/down face side away; _class 3:_ Counting up/down with finger wiggling and spreading.
+
+
+A.3 VISUALIZATION OF REPRESENTATIONS.
+
+
+We visualize EMG embeddings before and after applying EMBridge using t-SNE (Van der Maaten
+& Hinton, 2008), and compare them with anchor pose embeddings from the pre-trained Pose-MAE.
+Points are colored by gesture classes. Before EMBridge, EMG embeddings (pre-trained with MAE),
+show mixed distributions across classes. After EMBridge, the EMG embeddings become more
+structured and separable across classes. As we observe in the pose space, some overlap between
+classes remains, which reflects micro-gestures within 2-second windows that share semantic similarity across gesture categories. This highlights both the improved alignment achieved by EMBridge
+and the intrinsic difficulty of gesture classification on this dataset.
+
+
+14
+
+
+Figure 5: Example visualizations of gestures used in gesture classification tasks.
+
+
+Figure 6: t-SNE visualization of embeddings from in-dist. gestures, colored by gesture class labels.
+
+
+A.4 FEW-SHOT EVALUATION OF EMBRIDGE
+
+
+We evaluate the few-shot performance of EMBridge by gradually increasing the number of training
+samples within each class (n-shot) during linear probing. For each number of shots, we repeat
+random sampling five times to obtain a more reliable estimate of performance. We report the average
+balanced accuracy, with the standard deviation indicated as a shaded region in Figure 8. With only
+50% of the probe-training data (40 shots), EMBridge can achieve performance almost comparable
+to that of the full set on unseen gestures and surpasses all baselines trained on the complete dataset.
+
+
+Figure 7: t-SNE visualization of embeddings from unseen gestures, colored by gesture class labels.
+
+
+15
+
+
+Figure 8: Few-shot evaluation of EMBridge. X-axis is the number of training samples within each
+class (n-shot) during linear probing. For each number of shots, we repeat random sampling five
+times to obtain a more reliable estimate of performance. We report the average balanced accuracy,
+with the standard deviation indicated as a shaded region.
+
+
+A.5 VISUALIZATION OF SOFT TARGETS CONSTRUCTED IN CASCLE
+
+
+We visualize the soft targets to examine how the temperature _τs_ and the number of top- _k_ clusters _kc_
+influence the resulting probability distribution. As shown in Figure 9, a smaller _τs_ produces a sharper
+distribution, where probability mass is concentrated on a few dominant samples. This indicates that
+the model places high confidence on a small number of nearest pose neighbors, approaching a hardlabel regime. In contrast, a larger _τs_ leads to a smoother distribution with more evenly distributed
+weights, reflecting greater uncertainty and incorporating information from a broader set of pose
+samples. For the number of clusters _kc_, larger values expand the set of contributing clusters and
+potentially diluting the impact of the most similar samples.
+
+
+A.6 IMPLEMENTATION DETAILS
+
+
+We use 2 s windows sampled at 2 kHz for both pose and EMG. EMG is instance-normalized, bandpass filtered (2–250 Hz), and notch-filtered at 60 Hz. Following (Salter et al., 2024), we apply
+channel-rotation augmentation to EMG. Our MAE is an encoder–decoder Transformer model with
+4 encoder layers and 2 decoder layers, and the embedding dimension is _d_ =256. We optimize with
+AdamW (Loshchilov & Hutter, 2019) (lr 4e _−_ 4, weight decay 1e _−_ 5) and cosine annealing with
+warm restarts (Loshchilov & Hutter, 2017). Token length is _S_ =200 for pose and _S_ =50 for EMG,
+producing non-overlapping tokens along time. Mask ratio _r_ = 0.5. Each MAE is trained for 100
+epochs. PoseT is an encoder-decoder transformer model that consists of 4 encoder layers and 2
+decoder layers, trained using the same losses adopted in Salter et al. (2024).
+
+
+For CPEP, we attach a 1-layer projection head (hidden size 256) to the EMG encoder and train the
+EMG encoder plus projection head while keeping the pose encoder frozen. More details about CPEP
+can be found in Cui et al. (2025). The contrastive temperature _τ_ is learnable (initialized to 0.02).
+All output embeddings are _ℓ_ 2-normalized. All model trainings are conducted on 4 _×_ NVIDIA V100
+GPUs; end-to-end training of each model takes approximately 6 to 8 hours. CPEP, Q-Former, and
+
+
+16
+
+
+Figure 9: Soft targets from a batch of 64 samples for clearer visualization. We vary the value of
+temperature _τs_ and the number of top-k clusters _kc_ .
+
+
+EMBridge are all trained for 40 epochs. _Nc_ = 138 clusters were computed using K-means from
+the anchor pose embeddings. The output embedding size used in linear probing is 256. Batch size
+is 256 for all models. Increasing batch size (512, 1024) for CPEP and Q-Former will degrade the
+performance, but EMBridge’s performance remains robust as shown in Table 4.
+
+
+Table 4: Impact of batch size on zero-shot classifcation performance of unseen gestures.
+
+
+Method Batch Size 256 Batch Size 512 Batch Size 1024
+
+
+CPEP 0.481 0.439 0.433
+Q-Former 0.498 0.464 0.436
+**EMBridge (Ours)** **0.528** **0.525** **0.523**
+
+
+In zero-shot retrieval, we precompute pose embeddings for the entire corpus and, for each EMG
+query, retrieve the top- _k_ neighbors by cosine similarity with _k_ =10. The predicted label is the majority vote of the retrieved labels. For linear probing on _emg2pose_ benchmark models, we replace
+the final decoding layer with a randomly initialized linear layer for classification, we average the
+embeddings at each timepoint as input to the classification layer.
+
+
+17

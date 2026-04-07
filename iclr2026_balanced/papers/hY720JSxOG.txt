@@ -1,0 +1,1780 @@
+# RERANKER HELPS, BUT NOT ENOUGH: TOWARDS STRONG POISONING ATTACKS AGAINST RAG
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Retrieval-Augmented Generation (RAG) augments Large Language Models with
+timely, external information, making their retrieval corpora a prime target for
+data poisoning. However, existing targeted poisoning attacks exhibit limited effectiveness against RAG equipped with a reranker to enhance retrieval quality.
+Remarkably, this defensive benefit comes at no additional cost: a reranker finetuned only on benign, in-domain documents can effectively filter malicious content without any adversarial training. To realistically evaluate RAG and strengthen
+red-teaming efforts, we conclude practical prompt design principles that reveal
+reranker blind spots. Building on these insights, we introduce the **P** rompt**P** erturbation **P** oisoning **A** ttack ( **P** [3] **A** ), a novel framework for generating sophisticated poisoned documents. P [3] A first employs rule-based prompt engineering to
+craft initial poisoned texts designed to evade reranker filtering. It then injects subtle character-level perturbations into these texts, which promotes their ranking by
+the reranker while maintaining their adversarial effectiveness. These perturbations
+introduce only about 1% textual change, ensuring the poisoned texts remain natural and readable. Extensive experiments demonstrate that our methods achieve
+effective attack performance, compromising reranker-enhanced RAG pipelines.
+Furthermore, our method exhibits strong transferability, proving equally effective
+against vanilla RAG—offering a more realistic and challenging benchmark for
+evaluating defense mechanisms. Code is available in the supplementary material.
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) excel at language understanding and generation, but their
+static knowledge can yield outdated or inaccurate outputs. Retrieval-Augmented Generation
+(RAG) (Lewis et al., 2020) mitigates this by grounding responses in retrieved documents, improving
+factuality and timeliness. However, this creates a key vulnerability: adversaries can inject malicious
+content into the corpus to manipulate model outputs (Zou et al., 2025; Kang et al., 2024).
+
+
+The threat of data poisoning in RAG has motivated a range of research (Zhong et al., 2023; Carlini
+et al., 2024; Ha et al., 2025). These attacks can be broadly categorized by their objectives. The most
+common are targeted attacks, which aim to force the model to produce an attacker-specified answer
+for a specific query. Pioneering work like PoisonedRAG (Zou et al., 2025) showed that injecting a
+few malicious documents could achieve this. Subsequent efforts explored more practical variations,
+such as generating more covert texts (Li et al., 2025) or using low-level perturbations (Cho et al.,
+2024). Other attack vectors include trigger-based attacks, where a predefined trigger in a user’s
+query activates a malicious response regardless of the query’s main content (Chaudhari et al., 2024).
+A third category, untargeted attacks, aims to degrade the model’s performance more broadly without
+a specific query target (Tan et al., 2024b). Our work focuses on targeted attacks, which we argue to
+represent a highly practical threat scenario where adversaries manipulate specific information.
+
+
+In production-grade RAG, a reranker is commonly employed as a crucial intermediate step between
+the initial retriever and the final generator (Yu et al., 2024). Its purpose is to refine the coarse-grained
+list of retrieved candidates. To adapt these rerankers to specific domains, users typically fine-tune
+them on their own corpus of benign, in-domain documents (Dong et al., 2024). Remarkably, we
+uncover an unintended defensive benefit from this standard practice: _existing_ _targeted_ _poisoning_
+_attacks_ _are_ _largely_ _ineffective_ _against_ _RAG_ _enhanced_ _with_ _a_ _reranker_ _fine-tuned_ _solely_ _on_ _benign_
+
+
+1
+
+
+_data_ . As shown in Figure 1, this “free lunch” defense means that current attack benchmarks do not
+accurately reflect the resilience of practical RAG pipelines.
+
+
+By analyzing the linguistic features that rerankers
+
+itative tone; (3) Provide supporting context; (4)
+
+framework operates in two phases. In the rulebased prompt phase, we leverage our four principles in a rule-guided prompt engineering strat
+Figure 1: The ASR (%) results of existing poi
+egy that instructs an LLM to generate an ini
+soning attacks on both vanilla and reranker
+tial poisoned document. This is followed by
+
+enhanced RAG. Results reveal a significant drop
+
+the character-level perturbation phase, which as
+when a reranker is incorporated, highlighting
+
+sumes white-box access to the reranker and re
+the limitations of prior work that overlook this
+
+fines the text by injecting perturbations. This
+
+commonly used yet crucial RAG component.
+
+phase first identifies salient character positions
+
+Experiments are conducted on the NQ dataset
+
+via queries, then optimizes perturbations using
+
+using Llama3-8B as the LLM and MiniLM as
+
+a Projected Gradient Descent-inspired method,
+
+the reranker.
+
+and finally employs beam search to construct the
+high-impact poisoned document. Notably, the rule-based prompt phase also serves as an effective
+variant in black-box scenarios, which we term the Prompt Poisoning Attack (P [2] A).
+
+
+We conduct extensive experiments across various settings, demonstrating the consistent effectiveness of P [3] A. Our approach generalizes well to vanilla RAG, underscoring its strong transferability.
+Overall, our work introduces a more realistic threat model for RAG defense research.
+
+
+In summary, our main contributions are:
+
+
+- We highlight a key limitation of existing RAG poisoning attacks, demonstrating that they are
+largely mitigated by rerankers fine-tuned on benign data—a common “free lunch” defense in
+practical RAG pipelines.
+
+- We introduce the P [3] A framework, combining rule-guided prompt engineering strategy with
+perturbation-based refinement to craft effective poisoned documents.
+
+- Our method achieves strong attack performance against reranker-enhanced RAG and transfers
+well to vanilla settings, offering a rigorous benchmark for future RAG security evaluation.
+
+
+2 BACKGROUND
+
+
+2.1 RETRIEVAL-AUGMENTED GENERATION (RAG)
+
+
+RAG augments LLMs by grounding their outputs in external, up-to-date knowledge (Ding et al.,
+2025; Tan et al., 2024a). The RAG architecture follows a multi-stage pipeline comprising a retriever,
+an optional reranker, and a generator.
+
+
+- **Retriever:** Given a user query _q_ and a large-scale knowledge corpus _D_ = _{d_ 1 _, d_ 2 _, . . ., dN_ _}_, the
+retriever identifies a candidate set _C_ cand of top- _J_ semantically relevant documents (Sawarkar et al.,
+2024). This is typically achieved by embedding both the query, and documents and computing
+similarity scores. The documents with the highest scores are selected:
+_C_ cand = _R_ ( _q, D_ ; _θr_ ) _,_ (1)
+where _θr_ denotes the retriever’s parameters.
+
+- **Reranker:** To improve retrieval precision, a reranker reorders the candidate documents _C_ cand using
+a more expressive model (Ampazis, 2024). It selects a refined subset _C_ final of top- _K_ documents
+most relevant to _q_ :
+_C_ final = _R_ rerank( _q, C_ cand; _θ_ rerank) _,_ (2)
+
+
+2
+
+
+**75**
+
+
+**50**
+
+
+**25**
+
+
+**Method**
+
+
+Figure 1: The ASR (%) results of existing poisoning attacks on both vanilla and rerankerenhanced RAG. Results reveal a significant drop
+when a reranker is incorporated, highlighting
+the limitations of prior work that overlook this
+commonly used yet crucial RAG component.
+Experiments are conducted on the NQ dataset
+using Llama3-8B as the LLM and MiniLM as
+the reranker.
+
+
+where _θ_ rerank represents the reranker model parameters.
+
+
+- **LLM** **(Generator):** The generator, typically a large language model, conditions on the query _q_
+and the selected context documents _C_ final to generate the final answer _a_ :
+
+
+_a_ = _G_ ( _q, C_ final; _θg_ ) _,_ (3)
+
+
+where _G_ denotes the generation function and _θg_ the generator’s parameters.
+
+
+2.2 DATA POISONING ATTACKS AGAINST RAG
+
+
+**Targeted** **attacks** aim to manipulate responses to specific queries. Zou _et_ _al._ introduced PoisonedRAG (Zou et al., 2025), showing that injecting a few malicious texts can force a RAG system to
+produce attacker-specified answers. Subsequent works refine this threat under practical constraints:
+CorruptRAG (Zhang et al., 2025a) uses only one poisoned document per query; CPA-RAG (Li
+et al., 2025) generates covert texts in black-box settings; GARAG (Cho et al., 2024) perturbs relevant documents at the character level. Other studies target different malicious goals, such as inducing denial-of-service (Shafran et al., 2025) or manipulating opinions on controversial topics (Chen
+et al., 2025). The attack surface has also expanded to structured knowledge graphs (Zhao et al.,
+2025), where poisoned triples disrupt reasoning paths for targeted queries.
+
+
+**Trigger-based** **attacks** activate when a specific trigger appears in the query, regardless of context (Cheng et al., 2024). Phantom (Chaudhari et al., 2024) and AgentPoison (Chen et al., 2024b)
+inject trigger-sensitive documents to induce harmful or biased outputs. Later works extend this to
+semantic triggers (Xue et al., 2024) and controversial topics (Gong et al., 2025). PR-Attack (Jiao
+et al., 2025) combines prompt-level triggers with poisoned documents using bilevel optimization
+for coordinated attacks. **Untargeted** **attacks**, by contrast, aim to inject broadly retrievable malicious content without query-specific knowledge (Tan et al., 2024b). Our work focuses on targeted
+attacks, which we argue pose the most realistic threat in scenarios where adversaries target specific
+high-value information (Li et al., 2025).
+
+
+3 THREAT MODEL
+
+
+We consider an attacker seeking to compromise a RAG system, which consists of a knowledge
+corpus, a retriever, an optional reranker, and a generator (Chen et al., 2024a; Xia et al., 2025). The
+attacker’s actions are shaped by their objectives, available knowledge, and operational capabilities.
+
+
+3.1 ATTACKER’S GOAL
+
+
+The adversary’s goal is to conduct a targeted poisoning attack. The attacker selects a set of target
+questions _Q_ target, and for each question _qi_ _∈_ _Q_ target, specifies a corresponding malicious answer _a_ _[∗]_ _i_ [.]
+The objective is to craft a small set of poisoned documents _Dp_, and inject them into the system’s
+knowledge corpus _D_ (Zhao et al., 2025). This manipulation aims to cause the RAG system to output
+the attacker-specified answer _a_ _[∗]_ _i_ [when presented with the query] _[ q][i]_ [.]
+
+The attacker’s objective is to craft an optimal poison set _Dp_ _[∗]_ [by] [manipulating] [the] [RAG] [pipeline.]
+This process can be formally broken down as follows. First, for a given query _qi_, the retriever and
+reranker select the final context documents:
+
+
+_C_ cand _,i_ = _R_ ( _qi, D ∪Dp_ ; _θr_ ) _,_ (4)
+_C_ final _,i_ = _R_ rerank( _qi, C_ cand _,i_ ; _θ_ rerank) _._ (5)
+
+
+The optimization objective is then to maximize the probability that the generator outputs the target
+answer _a_ _[∗]_ _i_ [based on the manipulated context:]
+
+_Dp_ _[∗]_ [= arg max] _Dp_ [E] _[q][i][∈][Q]_ [target][ [][I][ (] _[G]_ [(] _[q][i][,][ C]_ [final] _[,i]_ [;] _[ θ][g]_ [) =] _[ a]_ _i_ _[∗]_ [)]] _[,]_ (6)
+
+
+where I( _·_ ) is the indicator function.
+
+
+3
+
+
+3.2 ATTACKER’S KNOWLEDGE AND CAPABILITIES
+
+
+The threat model depends on how much the attacker knows about the internal components of the
+RAG system (Choi et al., 2025). We consider two typical scenarios:
+
+
+- **Black-box** **setting:** The attacker has no access to the system’s internal models or the original
+knowledge corpus _D_ . All parameters ( _θr_, _θ_ rerank, _θg_ ) are unknown. The attacker can only poison
+the system by injecting carefully crafted documents _Dp_ into the corpus via public sources (e.g.,
+Wikipedia or online forums) (Zhang et al., 2025b).
+
+- **White-box setting:** The attacker knows the reranker and its parameters _θ_ rerank, which is realistic
+since rerankers are often smaller, publicly available, or easier to reverse-engineer. The retriever,
+generator, and benign corpus content remain unknown.
+
+
+4 LIMITATIONS OF EXISTING ATTACKS
+
+
+Many such attacks succeed by em
+PoisonedRAG-B 8.8 72.6 28.6 34.8 34.0 31.6
+
+bedding a target question into a poi
+PoisonedRAG-W 3.6 44.2 31.8 15.8 30.4 21.0
+
+soned document to ensure its re
+CorruptRAG-AS 4.2 85.8 36.6 3.0 39.2 7.0
+
+trieval (Zhou et al., 2025; Zhang
+
+CorruptRAG-AK 3.8 85.0 28.2 27.2 33.4 27.4
+
+et al., 2025c). However, we demonstrate that this attack vector can be
+largely neutralized by a simple normalization step: appending the same target question to all candidate documents before passing them to the reranker. _Remarkably, this defensive benefit persists even_
+_when_ _the_ _reranker_ _is_ _fine-tuned_ _on_ _benign_ _documents_ _and_ _has_ _never_ _been_ _exposed_ _to_ _adversarial_
+_examples, with a clear separation between training and testing datasets._
+
+
+As demonstrated in Table 1, the inclusion of a reranker not only enhances the performance of a
+vanilla RAG but also significantly mitigates the effectiveness of existing attack methods. This finding suggests that current security benchmarks for RAG are incomplete without considering the role
+of rerankers, and that this more realistic pipeline should be the standard for evaluating future attacks.
+
+
+5 METHODOLOGY
+
+
+We propose the **P** rompt- **P** erturbation **P** oisoning **A** ttack ( **P** [3] **A** ), a two-phase framework for manipulating reranker-enhanced RAG outputs. The first phase employs rule-based prompt engineering to
+produce an initial adversarial document, while the second phase performs gradient-based refinement
+via character-level perturbations. Notably, the rule-based prompt phase alone serves as a black-box
+variant, termed the Prompt Poisoning Attack (P [2] A).
+
+
+5.1 RULE-BASED PROMPT PHASE
+
+
+To construct a malicious document _P_ capable of influencing the RAG pipeline, we leverage prompt
+engineering guided by principles that align with reranker preferences. Specifically, _P_ must satisfy
+two key conditions derived from the pipeline’s operational flow:
+
+
+- **Retrieval** **and** **Reranking** **Condition** **(RRC):** The malicious document _P_ must be successfully
+retrieved from the full corpus _D∪Dp_ and scored highly by the reranker. This ensures it is included
+in the final context, _C_ final _,i_, that is passed to the generator.
+
+
+4
+
+
+In production-grade RAG systems,
+a reranker is a standard component
+used to refine the initial list of retrieved documents (Zhao et al., 2024;
+Tian et al., 2025). While commonly
+fine-tuned on benign, in-domain data
+to boost performance, rerankers also
+provide a potent, yet often overlooked, defensive capability against
+poisoning attacks.
+
+
+Benign 33.4 - 37.4 - 41.4 Prompt Injection 7.6 67.2 37.4 2.4 41.2 4.6
+Disinformation 23.2 37.0 30.2 27.6 33.8 30.2
+PoisonedRAG-B 8.8 72.6 28.6 34.8 34.0 31.6
+PoisonedRAG-W 3.6 44.2 31.8 15.8 30.4 21.0
+CorruptRAG-AS 4.2 85.8 36.6 3.0 39.2 7.0
+CorruptRAG-AK 3.8 85.0 28.2 27.2 33.4 27.4
+
+
+Table 1: Results on the NQ dataset with Llama3-8B. Existing attack methods yield high ASR on vanilla RAG but
+show significant drops with reranker-enhanced RAG.
+
+
+Vanilla MiniLM Electra
+Method Acc ASR Acc ASR Acc ASR
+
+
+- **Generation** **Condition** **(GC):** When included in _C_ final _,i_, the document _P_ must be influential
+enough to steer the generator _G_ to output the attacker’s target answer _a_ _[∗]_ _i_ [.]
+
+
+Inspired by PoisonedRAG (Zou et al., 2025), we adopt a two-part structure for the malicious document _P_ = _S_ _⊕_ _I_, where _S_ is set directly as the target question _qi_ to boost retrieval. _Unlike prior_
+_work,_ _we design I_ _to be robust enough to satisfy both retrieval and generation constraints_ . In this
+phase, _I_ is generated by prompting a LLM ( _i.e._ GPT-4o) with carefully four key principles.
+
+
+The complete prompt is as follows:
+
+
+Each rule in this prompt is designed to strengthen the malicious text _I_ against the RAG pipeline’s
+defenses. First, to satisfy the GC, our principle is **Rule** **1:** **Directly** **State** **the** **Answer**, which
+prominently places the adversarial payload _a_ _[∗]_ _i_ [at] [the] [beginning] [of] [the] [text.] [Second,] [to] [support] [the]
+RRC and evade anomaly detection, we apply **Rule 2:** **Use an Authoritative Tone**, mimicking the
+credible and stylistically benign nature of trusted sources to improve perceived relevance. Third, to
+bolster both the RRC and the GC, we follow **Rule 3: Provide Supporting Context**, which helps the
+text resemble a legitimate document for reranking while reinforcing the malicious fact to increase
+the generator’s confidence. Finally, to bolster the RRC, we employ **Rule 4: Maintain Sharp Focus**,
+aligning the content with the target query _qi_ to maximize retrieval similarity scores and significantly
+increase the likelihood that the adversarial text is surfaced.
+
+
+By combining the query _S_ = _qi_ with the generated text _I_, we produce a malicious document _P_ that
+serves as a robust initialization for the subsequent perturbation phase and also acts as an effective
+variant in black-box scenarios.
+
+
+5.2 CHARACTER-LEVEL PERTURBATION PHASE
+
+
+Building on the prompt-generated initialization, we further refine the poisoned document through a
+character-level optimization process that enhances its ranking under the reranker. Given a query _qi_
+and an initial passage _pi_, the goal is to produce a perturbed variant _p_ _[′]_ _i_ [that maximizes the reranker]
+score _s_ ( _qi, p_ _[′]_ _i_ [;] _[ θ]_ [rerank][)][ while preserving its adversarial intent (Rocamora et al., 2024).]
+
+
+**Stage** **1:** **Position** **Selection** **via** **Score** **Impact** **Estimation** We first mask the _m_ characters corresponding to the incorrect answer in _pi_, and identify the positions in the remaining text that most
+affect the reranker score (Wang et al., 2025). Let _Z_ _⊆{_ 0 _,_ 1 _, . . .,_ 2 _|pi|_ _−_ _m}_ denote the set of
+editable character-level positions (insertions and substitutions). For each _z_ _∈Z_, we perturb _pi_ at
+position _z_ with a single space character and compute the change in reranker score:
+
+
+∆ _sz_ = _s_ ( _qi,_ Perturb( _pi, z_ ); _θ_ rerank) _−_ _s_ ( _qi, pi_ ; _θ_ rerank) _,_ (7)
+
+
+where _s_ ( _q, p_ ; _θ_ rerank) denotes the true reranker score given a query–passage pair. We then select the
+top- _N_ positions with the largest ∆ _sz_ to form the vulnerable subset _Z_ _[∗]_ _⊂Z_ .
+
+
+**Stage 2: Candidate Generation via Projected Gradient Descent (PGD)** Using _Z_ _[∗]_, we construct
+_n_ perturbed candidates _{p_ _[′]_ 1 _[, . . ., p]_ _n_ _[′]_ _[}]_ [through] [character-level] [edits.] [Let] _[h]_ [(] _[p][′]_ _j_ [)] [denote] [the] [encoder]
+representation of candidate _p_ _[′]_ _j_ [.] [We introduce a convex weight vector] _[ u]_ _[∈]_ [∆] _[n]_ [,] [where][ ∆] _[n]_ [=] _[{][u]_ _[∈]_
+
+
+5
+
+
+Figure 2: Overview of **P** rompt- **P** erturbation **P** oisoning **A** ttack ( **P** [3] **A** ) against reranker-enhanced
+RAG systems. (a) Attackers inject poisoned documents into the retrieval corpus, which are ranked
+highly due to their query relevance, thereby inducing the generator to produce a specific, incorrect
+answer. (b) In the rule-based prompt phase, a LLM is guided by prompt engineering grounded in
+four reranker-friendly principles. (c) In the character-level perturbation phase, reranker is used to
+subtly modify the text: key character positions are identified, PGD-inspired updates are applied, and
+beam search refines the poisoned document.
+
+
+R _[n]_ _| u ≥_ 0 _,_ [�] _j_ _[u][j]_ [= 1] _[}]_ [, and define the relaxed representation] _[ h]_ [(] _[u]_ [) =][ �] _[n]_ _j_ =1 _[u][j][·][h]_ [(] _[p]_ _j_ _[′]_ [)][. To facilitate]
+
+gradient-based optimization, we define a proxy objective _s_ ˜( _qi, h_ ( _u_ ); _θ_ rerank), which evaluates the
+reranker score on the continuous mixture _h_ ( _u_ ). We update _u_ by projected gradient ascent:
+
+
+             -              _u_ [(] _[t]_ [+1)] = Π∆ _n_ _u_ [(] _[t]_ [)] + _η · ∇us_ ˜( _qi, h_ ( _u_ [(] _[t]_ [)] ); _θ_ rerank) _,_ (8)
+
+
+where _η_ is the learning rate and Π∆ _n_ projects _u_ onto the probability simplex. After _T_ iterations, we
+select the top- _M_ candidates for subsequent beam search.
+
+
+**Stage 3:** **Beam Search Refinement** We apply beam search to iteratively refine adversarial candidates. At each iteration _t_, we maintain a beam of top- _B_ sequences _{_ ( _p_ [(] _j_ _[t]_ [)] _[, s]_ _j_ [(] _[t]_ [)][)] _[}]_ _j_ _[B]_ =1 [.] [The] [process]
+terminates once the attack reaches a pre-defined reranker score _τ_ or stagnates for _P_ consecutive
+steps. The final output is the champion passage _p_ _[∗]_ _i_ [with highest achieved score:]
+
+_p_ _[∗]_ _i_ [= arg] [max] (9)
+_p_ _[′]_ _∈_ beam _[s]_ [(] _[q][i][, p][′]_ [;] _[ θ]_ [rerank][)] _[.]_
+
+
+This method consistently produces perturbations that evade reranker suppression and remain semantically aligned with the attacker’s objectives, thereby enabling a reliable and stealthy attack.
+
+
+6 EXPERIMENT
+
+
+6.1 EXPERIMENTAL SETUP
+
+
+**Models.** For retrievers, we use Contriever (Izacard et al., 2021) and ANCE (Xiong et al., 2021) (in
+Appendix B.5); for rerankers, we adopt MiniLM (Wang et al., 2020) and ELECTRA (Clark et al.,
+2020); for generators, we evaluate Llama3-8B (Grattafiori et al., 2024), Qwen2.5-7B (Yang et al.,
+2025), and Gemma-9B (Team et al., 2024). The results of other LLM sizes are in Appendix B.1.
+
+
+**Datasets.** We use NQ (Kwiatkowski et al., 2019), MS-MARCO (Bajaj et al., 2016), and HotpotQA (Yang et al., 2018) with their corresponding knowledge databases. For evaluation, we sample
+
+
+6
+
+
+(a)
+
+_User_
+
+
+(c)
+
+
+_Score Impact Estimation_
+
+Sydney i s t h e l a r ...
+
+
+(b)
+
+_Reranker_ _Attacker_
+
+
+b
+d
+e
+
+
+_Generator_
+
+
+e a b
+f g d
+j h e
+... ... ...
+
+
+a
+g
+h
+...
+
+
+_Poisoned_
+
+
+Table 2: Comparison of attack methods on three datasets (NQ, MS-MARCO, HotpotQA) across
+different rerankers (MiniLM, ELECTRA) and LLMs. _↓_ Acc (%), _↑_ ASR (%), and _↑_ F1-Score are
+reported. The best results are in bold.
+
+
+MiniLM ELECTRA
+Llama3-8B Qwen2.5-7B Gemma-9B Llama3-8B Qwen2.5-7B Gemma-9B
+Dataset Method Acc ASR Acc ASR Acc ASR F1-Score Acc ASR Acc ASR Acc ASR F1-Score
+
+
+Prompt Injection 37.4 2.4 32.6 3.4 39.4 3.0 0.0008 41.2 4.6 37.0 4.6 46.0 3.6 0.0020
+Disinformation 30.2 27.6 26.8 28.8 33.4 27.4 0.1820 33.8 30.2 30.0 29.2 35.6 29.8 0.2068
+PoisonedRAG-B 28.6 34.8 26.6 35.6 30.8 33.4 0.2368 34.0 31.6 30.4 33.8 35.4 31.2 0.2328
+PoisonedRAG-W 31.8 15.8 30.8 18.6 35.2 17.8 0.1048 30.4 21.0 32.2 26.4 38.2 21.8 0.1592
+CorruptRAG-AS 36.6 3.0 32.4 5.0 38.4 4.8 0.0128 39.2 7.0 34.6 9.6 43.0 8.0 0.0356
+CorruptRAG-AK 28.2 27.2 23.0 30.8 28.6 31.6 0.1656 33.4 27.4 26.8 34.2 33.6 32.6 0.1748
+P [2] A 15.8 63.0 14.6 67.8 17.4 63.6 0.5592 17.8 66.8 **13.4** 69.6 19.0 66.4 0.5988
+P [3] A **10.4** **72.2** **6.8** **83.4** **9.0** **82.2** **0.8416** **14.2** **71.0** **13.4** **85.6** **12.8** **77.6** **0.7796**
+
+
+Prompt Injection 32.0 4.8 30.6 3.8 33.8 3.2 0.0000 33.4 4.0 32.4 3.4 33.4 3.4 0.0012
+Disinformation 27.6 25.2 29.6 23.8 28.0 24.2 0.2248 28.8 21.8 28.6 20.6 28.2 20.6 0.2084
+PoisonedRAG-B 28.8 24.4 27.0 21.8 29.0 21.4 0.1780 28.6 24.6 31.2 22.2 28.8 20.6 0.2104
+PoisonedRAG-W 29.4 11.0 29.2 8.8 31.8 9.2 0.0504 30.2 14.0 30.2 14.6 29.8 13.8 0.1028
+CorruptRAG-AS 32.0 5.0 29.8 3.8 33.8 3.4 0.0004 30.8 6.4 29.4 6.8 31.6 6.2 0.0196
+CorruptRAG-AK 31.0 5.6 28.8 5.4 32.4 5.0 0.0080 30.6 8.6 28.6 9.6 30.4 8.8 0.0336
+P [2] A 21.2 40.6 21.6 35.0 22.2 37.0 0.3232 18.6 51.2 17.8 47.8 18.4 48.2 0.4820
+P [3] A **15.6** **53.0** **16.6** **50.4** **17.0** **53.6** **0.5632** **14.6** **58.2** **14.8** **58.6** **15.2** **59.0** **0.6460**
+
+
+Prompt Injection 39.4 10.4 35.8 7.0 51.8 6.4 0.0216 38.4 6.4 37.6 8.0 50.0 6.0 0.0036
+Disinformation 33.0 34.4 29.8 36.4 39.2 39.8 0.2444 32.0 34.8 27.4 41.0 33.2 44.4 0.2784
+PoisonedRAG-B 30.2 35.0 26.8 47.2 36.6 46.2 0.3280 31.6 30.2 29.4 41.2 36.2 40.8 0.2604
+PoisonedRAG-W 27.6 20.2 30.0 37.6 39.4 36.6 0.2348 26.6 18.8 30.2 34.6 37.4 34.6 0.2032
+CorruptRAG-AS 38.6 10.4 34.4 10.4 50.0 9.2 0.0348 37.2 7.4 35.8 10.8 48.6 8.2 0.0204
+CorruptRAG-AK 37.0 16.2 32.4 15.8 46.4 16.0 0.0676 35.6 11.8 33.6 16.0 44.8 15.4 0.0468
+P [2] A 13.4 **73.2** 6.2 86.8 9.8 85.6 0.8176 **15.8** 67.4 6.8 85.2 10.6 83.8 0.7776
+P [3] A **13.0** 72.8 **5.4** **89.4** **7.8** **88.6** **0.8884** **15.8** **68.0** **6.8** **86.0** **9.0** **85.2** **0.8208**
+
+
+500 questions with clearly defined answers from each dataset, instead of open-ended questions; an
+additional 1,000 samples are used to finetune the reranker.
+
+
+**Metrics.** We report Accuracy (Acc), Attack Success Rate (ASR), and F1-Score. Acc and ASR are
+computed via substring match on the LLM’s first generated sentence; F1-Score (Zou et al., 2025) is
+the harmonic mean of Precision and Recall, evaluating the balance between the fraction of retrieved
+texts that are malicious and the fraction of injected malicious texts that are successfully retrieved.
+
+
+**RAG Settings.** For each query, we inject _Np_ =5 malicious documents into the corpus. The retriever
+fetches Top- _J_ =100 candidates, which are reranked to obtain the final Top- _K_ =5 passages. We adopt
+the dot product between the embeddings of a query and a text to calculate their similarity score. The
+results with different Top- _J_ and Top- _K_ values are in Appendix B.6 and B.7.
+
+
+**Baselines.** We compare our method against a diverse set of baseline attacks. (1) Prompt Injection (Liu et al., 2023): embeds explicit instructions in the input to induce the LLM into producing an
+attacker-specified answer. (2) Disinformation (Pan et al., 2023): generates misleading content using
+LLMs without ensuring retrieval compatibility. (3) PoisonedRAG-B (Black-Box) (Zou et al., 2025):
+heuristically satisfies retrieval and generation by concatenating the target question with a crafted
+answer. (4) PoisonedRAG-W (White-Box) (Zou et al., 2025): optimizes a retrieval-enhancing prefix via gradients, assuming white-box access to the retriever. (5) CorruptRAG-AS (Zhang et al.,
+2025a): frames the correct answer as outdated and promotes the attacker’s answer as updated. (6)
+CorruptRAG-AK (Zhang et al., 2025a): improves CorruptRAG-AS using a LLM to generate more
+fluent and generalizable adversarial content.
+
+
+6.2 MAIN RESULTS
+
+
+Table 2 summarizes the main experimental results, comparing our P [3] A method in reranker-enhanced
+RAG settings. We highlight three key findings. First, P [3] A and P [2] A consistently and substantially
+outperform all baselines, demonstrating highly effective attacks against reranker-enhanced RAG
+pipelines. For example, on NQ with MiniLM and Llama3-8B, P [3] A achieves an ASR of 72.2%,
+far exceeding the best baseline (PoisonedRAG-B at 34.8%). This performance advantage holds
+across all datasets, LLMs, and rerankers. Second, the high F1-Scores of P [3] A (up to 0.8884 on
+
+
+7
+
+
+HotpotQA) demonstrate its ability to meet the RRC. In contrast, baselines such as Prompt Injection
+and CorruptRAG-AS yield near-zero F1-Scores. Third, P [3] A generally outperforms P [2] A due to
+access to reranker gradients. On HotpotQA with ELECTRA, P [3] A achieves an F1-Score of 0.8208
+with Qwen2.5-7B, compared to 0.7776 for P [2] A. In summary, P [3] A effectively poisons the RAG
+system by jointly targeting retrieval and generation, posing a greater threat than prior methods.
+
+
+To evaluate the adaptability of our attack, we test its performance on a Table 3: Performance of different attack methods on the NQ
+vanilla RAG pipeline without rerank- dataset using vanilla RAG. P [3] A is optimized on MiniLM.
+ing. As shown in Table 3, our
+P [3] A methods remain highly effec
+Vanilla
+
+tive in this setting. For exam
+Llama3-8B Qwen2.5-7B Gemma-9B
+
+ple, P [2] A achieves an ASR of 91.8% Method Acc ASR Acc ASR Acc ASR F1-Score
+with the Llama3-8B model, demon
+Prompt Injection 7.6 67.2 8.0 66.8 9.2 77.0 0.7560
+
+strating strong performance against
+
+Disinformation 23.2 37.0 21.6 35.2 23.8 36.2 0.2880
+
+RAG without a reranker. While
+
+PoisonedRAG-B 8.8 72.6 8.4 73.0 7.8 72.8 0.9136
+
+some baselines (e.g., CorruptRAG
+PoisonedRAG-W 3.6 44.2 6.8 76.6 7.0 71.4 0.9620
+
+AS) also benefit from the simpler CorruptRAG-AS 4.2 85.8 2.0 **90.6** 2.0 **92.6** 0.9320
+setup, P [2] A remains a competitive CorruptRAG-AK 3.8 85.0 2.4 88.8 3.6 90.0 0.8924
+performer. Interestingly, P [3] A per- P [2] A 3.2 **91.8** **1.6** 89.6 **1.0** 91.6 **0.9740**
+forms slightly worse than P [2] A in this P [3] A **2.8** 82.2 2.0 89.4 1.4 90.8 0.9620
+setting—likely because its characterlevel perturbations are less beneficial
+without reranker supervision. Overall, these results confirm the robustness of our strategy: P [3] A generalizes well to vanilla RAG, while P [2] A demonstrates strong effectiveness as a black-box variant.
+
+
+scores for both benign documents and those generated by our P [2] A
+method. As shown in Figure 3, malicious texts have a higher
+mean perplexity (55.45) than benign ones (31.71), yet the distributions substantially overlap. This suggests that P [2] A-generated documents are statistically similar to benign texts from the language
+model’s perspective. Therefore, P [2] A not only achieves strong attack performance but also renders perplexity-based detection ineffective for identifying such malicious content.
+
+
+**Evaluation** **of** **Paraphrasing** **Defense.** We assess the effectiveness of paraphrasing defense against our P [3] A attacks. This defense
+strategy rewrites user queries before retrieval to disrupt alignment
+with poisoned documents. As shown in Table 5, paraphrasing offers only marginal protection. While it slightly reduces the success
+
+
+8
+
+
+|5<br>0<br>5<br>0|CLEAN|Mean: 3|1.71|
+|---|---|---|---|
+|0<br>5<br>0<br>5|<br>MALIC|<br>IOUS Mea|<br> n: 55.45|
+|0<br>5<br>0<br>5||||
+|0<br>5<br>0<br>5||||
+
+
+Figure 3: Perplexity distribution of clean and malicious
+documents on the NQ dataset.
+
+
+Table 3: Performance of different attack methods on the NQ
+dataset using vanilla RAG. P [3] A is optimized on MiniLM.
+
+
+Vanilla
+Llama3-8B Qwen2.5-7B Gemma-9B
+Method Acc ASR Acc ASR Acc ASR F1-Score
+
+
+Prompt Injection 7.6 67.2 8.0 66.8 9.2 77.0 0.7560
+Disinformation 23.2 37.0 21.6 35.2 23.8 36.2 0.2880
+PoisonedRAG-B 8.8 72.6 8.4 73.0 7.8 72.8 0.9136
+PoisonedRAG-W 3.6 44.2 6.8 76.6 7.0 71.4 0.9620
+CorruptRAG-AS 4.2 85.8 2.0 **90.6** 2.0 **92.6** 0.9320
+CorruptRAG-AK 3.8 85.0 2.4 88.8 3.6 90.0 0.8924
+P [2] A 3.2 **91.8** **1.6** 89.6 **1.0** 91.6 **0.9740**
+P [3] A **2.8** 82.2 2.0 89.4 1.4 90.8 0.9620
+
+
+6.3 ROBUSTNESS AGAINST DEFENSE MECHANISMS
+
+
+**Evaluation of Textual Modifications.** We quantify
+the textual modifications introduced during the per- Table 4: Average Levenshtein distance and
+turbation phase using Levenshtein distance and the change ratio relative to the poisoned texts becorresponding change ratio. The Levenshtein dis- fore and after the character-level perturbation
+tance captures the minimum number of single char- phase, using the MiniLM reranker.
+acter edits required to transform one string into another, while the change ratio normalizes this value
+
+Dataset Edit Distance Change Ratio
+
+by the original text length. As shown in Table 4, the
+perturbations are minimal across all datasets. For NQ 5.33 1.32%
+example, NQ yield average edit distances of 5.33, MS-MARCO 4.70 1.23%
+
+HotpotQA 1.42 0.29%
+
+with change ratios of only 1.32%. HotpotQA exhibits an even smaller ratio of 0.29%, indicating
+near-negligible modifications. These results confirm that the perturbation phase successfully introduces sufficient variation to influence reranker scoring, while preserving the naturalness and readability of the poisoned texts. A case study is in Appendix B.9.
+
+
+**Evaluation of Perplexity Defense.** We evaluate a perplexity-based defense, which assumes that malicious texts yield higher perplexity and can thus be detected. Using GPT-2, we compute perplexity
+
+
+Table 4: Average Levenshtein distance and
+change ratio relative to the poisoned texts before and after the character-level perturbation
+phase, using the MiniLM reranker.
+
+
+Dataset Edit Distance Change Ratio
+
+
+NQ 5.33 1.32%
+MS-MARCO 4.70 1.23%
+HotpotQA 1.42 0.29%
+
+
+Perplexity
+
+
+We investigate how the number of injected poisoned documents, Figure 4: Impact of different
+denoted as _Np_, affects ASR. Figure 4 illustrates that ASR in- _Np_ values for P [3] A and P [2] A on
+creases consistently with larger _Np_, as more poisoned documents the NQ dataset with Top- _K_ = 5.
+raise the likelihood of retrieval and influence the LLM’s output.
+Notably, P [3] A remains highly effective even with minimal injection: with just one poisoned document ( _Np_ =1), P [3] A achieves a 58.6% ASR on NQ. In summary, while ASR scales with _Np_, even a
+single well-crafted poisoned document can significantly compromise RAG.
+
+
+7 CONCLUSION
+
+
+In this work, we identify a critical gap in RAG security research, demonstrating that rerankers finetuned on benign data offer a “free lunch” defense against existing poisoning attacks. To provide a
+more realistic threat model, we introduce the Prompt-Perturbation Poisoning Attack (P [3] A) framework. It combines a rule-based prompt phase leveraging prompt-engineering techniques aligned
+with reranker preference, and a character-level perturbation phase that introduces modifications to
+enhance ranking. The prompt phase also serves as an effective black-box variant. Our extensive
+experiments show that P [3] A effectively compromises reranker-enhanced RAG systems and transfers
+reliably to vanilla RAG. By demonstrating the insufficiency of common defenses against our attack,
+this research underscores the need for more robust security evaluations. Future research should
+prioritize the development of advanced, adaptive defense mechanisms that can effectively counter
+complex, semantically coherent poisoning strategies.
+
+
+9
+
+
+Table 5: Evaluation of paraphrasing-based
+defense on the NQ dataset using MiniLM
+reranker and Llama3-8B.
+
+
+w/o defense with defense
+Method Acc ASR F1-Score Acc ASR F1-Score
+
+
+Prompt Injection 37.4 2.4 0.0008 34.6 4.6 0.0036
+PoisonedRAG-B 28.6 34.8 0.2368 28.6 30.4 0.2244
+CorruptRAG-AS 36.6 3.0 0.0128 34.0 6.0 0.0120
+P [2] A 15.8 63.0 0.5592 21.2 53.0 0.4552
+P [3] A **10.4** **72.2** **0.8416** **14.2** **63.8** **0.7380**
+
+
+Table 6: Transfer performance of P [3] A with
+Llama3-8B across datasets, trained and tested on
+different rerankers.
+
+
+MiniLM 10.4 72.2 0.8416 18.2 64.4 0.6444
+NQ
+ELECTRA 17.6 61.8 0.5720 14.2 71.0 0.7796
+
+15.6 53.0 0.5632 16.6 51.4 0.5128
+MS-MARCO [MiniLM]
+ELECTRA 21.0 39.4 0.3248 14.6 58.2 0.6460
+
+MiniLM 13.0 72.8 0.8884 15.0 65.8 0.7704
+HotpotQA
+ELECTRA 14.4 70.6 0.8148 15.8 68.0 0.8208
+
+
+of P [3] A and P [2] A, ASR remains high. For instance, P [3] A’s ASR decreases only from 72.2% to 63.8%,
+with the F1-Score still at 0.7380. This suggests that P [3] A-crafted examples are semantically resilient
+and survive paraphrasing. Because paraphrasing preserves the core query intent, it continues to
+retrieve malicious content and thus proves inadequate as a defense against P [3] A attacks.
+
+
+6.4 TRANSFERABILITY AND EFFICIENCY OF P [3] A
+
+
+**Transferability** **of** **P** [3] **A.** A practical white-box attack must transfer to models unseen during optimization. We assess this by training P [3] A on one reranker and testing it on another.
+
+
+As shown in Table 6, P [3] A demonstrates strong transferability. On
+HotpotQA, training on MiniLM yields an ASR of 72.8%, and
+testing on ELECTRA retains a high ASR of 65.8%. The reverse
+setup (training on ELECTRA, testing on MiniLM) achieves a
+comparable ASR of 70.6%. Although some performance drop
+is expected under transfer, the consistently high ASRs across
+datasets suggest that P [3] A does not overfit to specific model architectures. This strong transferability underscores the real-world
+risk: an attacker could exploit a target system using only whitebox access to a publicly available proxy reranker.
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Np
+
+
+**Impact of the Number of Poisoned Documents.**
+
+
+REFERENCES
+
+
+Nicholas Ampazis. Improving rag quality for large language models with topic-enhanced reranking.
+In _Proc. AIAI_, 2024.
+
+
+Payal Bajaj, Daniel Campos, Nick Craswell, Li Deng, Jianfeng Gao, Xiaodong Liu, Rangan Majumder, Andrew McNamara, Bhaskar Mitra, Tri Nguyen, et al. Ms marco: A human generated
+machine reading comprehension dataset. _arXiv preprint arXiv:1611.09268_, 2016.
+
+
+Nicholas Carlini, Matthew Jagielski, Christopher A Choquette-Choo, Daniel Paleka, Will Pearce,
+Hyrum Anderson, Andreas Terzis, Kurt Thomas, and Florian Tram`er. Poisoning web-scale training datasets is practical. In _Proc. S&P_, 2024.
+
+
+Harsh Chaudhari, Giorgio Severi, John Abascal, Matthew Jagielski, Christopher A Choquette-Choo,
+Milad Nasr, Cristina Nita-Rotaru, and Alina Oprea. Phantom: General trigger attacks on retrieval
+augmented language generation. _arXiv preprint arXiv:2405.20485_, 2024.
+
+
+Jiawei Chen, Hongyu Lin, Xianpei Han, and Le Sun. Benchmarking large language models in
+retrieval-augmented generation. In _Proc. AAAI_, 2024a.
+
+
+Zhaorun Chen, Zhen Xiang, Chaowei Xiao, Dawn Song, and Bo Li. Agentpoison: Red-teaming llm
+agents via poisoning memory or knowledge bases. In _Proc. NeurIPS_, 2024b.
+
+
+Zhuo Chen, Yuyang Gong, Miaokun Chen, Haotan Liu, Qikai Cheng, Fan Zhang, Wei Lu, Xiaozhong Liu, and Jiawei Liu. Flipedrag: Black-box opinion manipulation attacks to retrievalaugmented generation of large language models. _arXiv preprint arXiv:2501.02968_, 2025.
+
+
+Pengzhou Cheng, Yidong Ding, Tianjie Ju, Zongru Wu, Wei Du, Ping Yi, Zhuosheng Zhang, and
+Gongshen Liu. Trojanrag: Retrieval-augmented generation can be backdoor driver in large language models. _arXiv preprint arXiv:2405.13401_, 2024.
+
+
+Sukmin Cho, Soyeong Jeong, Jeongyeon Seo, Taeho Hwang, and Jong C Park. Typos that broke
+the rag’s back: Genetic attack on rag pipeline by simulating documents in the wild via low-level
+perturbations. In _Proc. EMNLP Findings_, 2024.
+
+
+Chanwoo Choi, Jinsoo Kim, Sukmin Cho, Soyeong Jeong, and Buru Chang. The rag paradox: A
+black-box attack exploiting unintentional vulnerabilities in retrieval-augmented generation systems. _arXiv preprint arXiv:2502.20995_, 2025.
+
+
+Kevin Clark, Minh-Thang Luong, Quoc V. Le, and Christopher D. Manning. Electra: Pre-training
+text encoders as discriminators rather than generators. In _Proc. ICLR_, 2020.
+
+
+Hanxing Ding, Shuchang Tao, Liang Pang, Zihao Wei, Liwei Chen, Kun Xu, Huawei Shen, and
+Xueqi Cheng. Revisiting robust rag: Do we still need complex robust training in the era of
+powerful llms? _arXiv preprint arXiv:2502.11400_, 2025.
+
+
+Guanting Dong, Yutao Zhu, Chenghao Zhang, Zechen Wang, Ji-Rong Wen, and Zhicheng Dou.
+Understand what llm needs: Dual preference alignment for retrieval-augmented generation. In
+_Proc. WWW_, 2025.
+
+
+Jialin Dong, Bahare Fatemi, Bryan Perozzi, Lin F Yang, and Anton Tsitsulin. Don’t forget to
+connect! improving rag with graph-based reranking. _arXiv preprint arXiv:2405.18414_, 2024.
+
+
+Yuyang Gong, Zhuo Chen, Miaokun Chen, Fengchang Yu, Wei Lu, Xiaofeng Wang, Xiaozhong
+Liu, and Jiawei Liu. Topic-fliprag: Topic-orientated adversarial opinion manipulation attacks to
+retrieval-augmented generation models. _arXiv preprint arXiv:2502.01386_, 2025.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd
+of models. _arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Hyeonjeong Ha, Qiusi Zhan, Jeonghwan Kim, Dimitrios Bralios, Saikrishna Sanniboina, Nanyun
+Peng, Kai-Wei Chang, Daniel Kang, and Heng Ji. Mm-poisonrag: Disrupting multimodal rag
+with local and global poisoning attacks. _arXiv preprint arXiv:2502.17832_, 2025.
+
+
+10
+
+
+Gautier Izacard, Mathilde Caron, Lucas Hosseini, Sebastian Riedel, Piotr Bojanowski, Armand
+Joulin, and Edouard Grave. Unsupervised dense information retrieval with contrastive learning.
+_arXiv preprint arXiv:2112.09118_, 2021.
+
+
+Yang Jiao, Xiaodong Wang, and Kai Yang. Pr-attack: Coordinated prompt-rag attacks on retrievalaugmented generation in large language models via bilevel optimization. In _Proc. SIGIR_, 2025.
+
+
+Mintong Kang, Nezihe Merve G¨urel, Ning Yu, Dawn Song, and Bo Li. C-rag: Certified generation
+risks for retrieval-augmented language models. In _Proc. ICML_, 2024.
+
+
+Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur Parikh, Chris
+Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin, Kenton Lee, et al. Natural questions: a
+benchmark for question answering research. _Transactions of the Association for Computational_
+_Linguistics_, 7:453–466, 2019.
+
+
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal,
+Heinrich K¨uttler, Mike Lewis, Wen-tau Yih, Tim Rockt¨aschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks. In _Proc. NeurIPS_, 2020.
+
+
+Chunyang Li, Junwei Zhang, Anda Cheng, Zhuo Ma, Xinghua Li, and Jianfeng Ma. Cpa-rag: Covert
+poisoning attacks on retrieval-augmented generation in large language models. _arXiv_ _preprint_
+_arXiv:2505.19864_, 2025.
+
+
+Yi Liu, Gelei Deng, Yuekang Li, Kailong Wang, Zihao Wang, Xiaofeng Wang, Tianwei Zhang,
+Yepang Liu, Haoyu Wang, Yan Zheng, et al. Prompt injection attack against llm-integrated applications. _arXiv preprint arXiv:2306.05499_, 2023.
+
+
+Yikang Pan, Liangming Pan, Wenhu Chen, Preslav Nakov, Min-Yen Kan, and William Yang Wang.
+On the risk of misinformation pollution with large language models. In _Proc. EMNLP Findings_,
+2023.
+
+
+Elias Abad Rocamora, Yongtao Wu, Fanghui Liu, Grigorios G Chrysos, and Volkan Cevher. Revisiting character-level adversarial attacks for language models. In _Proc. ICML_, 2024.
+
+
+Kunal Sawarkar, Abhilasha Mangal, and Shivam Raj Solanki. Blended rag: Improving rag (retrieveraugmented generation) accuracy with semantic search and hybrid query-based retrievers. In _Proc._
+_MIPR_, 2024.
+
+
+Avital Shafran, Roei Schuster, and Vitaly Shmatikov. Machine against the rag: Jamming retrievalaugmented generation with blocker documents. In _Proc. USENIX Security_, 2025.
+
+
+Xue Tan, Hao Luan, Mingyu Luo, Xiaoyan Sun, Ping Chen, and Jun Dai. Revprag: Revealing poisoning attacks in retrieval-augmented generation through llm activation analysis. _arXiv preprint_
+_arXiv:2411.18948_, 2024a.
+
+
+Zhen Tan, Chengshuai Zhao, Raha Moraffah, Yifan Li, Song Wang, Jundong Li, Tianlong Chen, and
+Huan Liu. ” glue pizza and eat rocks”–exploiting vulnerabilities in retrieval-augmented generative
+models. In _Proc. EMNLP_, 2024b.
+
+
+Gemma Team, Thomas Mesnard, Cassidy Hardin, Robert Dadashi, Surya Bhupatiraju, Shreya
+Pathak, Laurent Sifre, Morgane Rivi`ere, Mihir Sanjay Kale, Juliette Love, et al. Gemma: Open
+models based on gemini research and technology. _arXiv preprint arXiv:2403.08295_, 2024.
+
+
+Shiyu Tian, Shuyue Xing, Xingrui Li, Yangyang Luo, Caixia Yuan, Wei Chen, Huixing Jiang, and
+Xiaojie Wang. A systematic exploration of knowledge graph alignment with large language models in retrieval augmented generation. In _Proc. AAAI_, 2025.
+
+
+Cheng Wang, Yiwei Wang, Yujun Cai, and Bryan Hooi. Tricking retrievers with influential tokens:
+An efficient black-box corpus poisoning attack. _arXiv preprint arXiv:2503.21315_, 2025.
+
+
+Wenhui Wang, Furu Wei, Li Dong, Hangbo Bao, Nan Yang, and Ming Zhou. MiniLM: Deep selfattention distillation for task-agnostic compression of pre-trained transformers. In _Proc. NeurIPS_,
+2020.
+
+
+11
+
+
+Yuan Xia, Jingbo Zhou, Zhenhui Shi, Jun Chen, and Haifeng Huang. Improving retrieval augmented
+language model with self-reasoning. In _Proc. AAAI_, 2025.
+
+
+Lee Xiong, Chenyan Xiong, Ye Li, Kwok-Fung Tang, Jialin Liu, Paul Bennett, Junaid Ahmed,
+and Arnold Overwijk. Approximate nearest neighbor negative contrastive learning for dense text
+retrieval. In _Proc. ICLR_, 2021.
+
+
+Jiaqi Xue, Mengxin Zheng, Yebowen Hu, Fei Liu, Xun Chen, and Qian Lou. Badrag: Identifying vulnerabilities in retrieval augmented generation of large language models. _arXiv_ _preprint_
+_arXiv:2406.00083_, 2024.
+
+
+An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li,
+Dayiheng Liu, Fei Huang, Haoran Wei, et al. Qwen2.5 technical report. _arXiv_ _preprint_
+_arXiv:2412.15115_, 2025.
+
+
+Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W Cohen, Ruslan Salakhutdinov,
+and Christopher D Manning. Hotpotqa: A dataset for diverse, explainable multi-hop question
+answering. In _Proc. EMNLP_, 2018.
+
+
+Yue Yu, Wei Ping, Zihan Liu, Boxin Wang, Jiaxuan You, Chao Zhang, Mohammad Shoeybi, and
+Bryan Catanzaro. Rankrag: Unifying context ranking with retrieval-augmented generation in
+llms. In _Proc. NeurIPS_, 2024.
+
+
+Baolei Zhang, Yuxi Chen, Minghong Fang, Zhuqing Liu, Lihai Nie, Tong Li, and Zheli Liu. Practical poisoning attacks against retrieval-augmented generation. _arXiv preprint arXiv:2504.03957_,
+2025a.
+
+
+Baolei Zhang, Haoran Xin, Minghong Fang, Zhuqing Liu, Biao Yi, Tong Li, and Zheli Liu. Traceback of poisoned texts in poisoning attacks to retrieval-augmented generation. In _Proc._ _WWW_,
+2025b.
+
+
+Baolei Zhang, Haoran Xin, Jiatong Li, Dongzhe Zhang, Minghong Fang, Zhuqing Liu, Lihai Nie,
+and Zheli Liu. Benchmarking poisoning attacks against retrieval-augmented generation. _arXiv_
+_preprint arXiv:2505.18543_, 2025c.
+
+
+Penghao Zhao, Hailin Zhang, Qinhan Yu, Zhengren Wang, Yunteng Geng, Fangcheng Fu, Ling
+Yang, Wentao Zhang, Jie Jiang, and Bin Cui. Retrieval-augmented generation for ai-generated
+content: A survey. _arXiv preprint arXiv:2402.19473_, 2024.
+
+
+Tianzhe Zhao, Jiaoyan Chen, Yanchi Ru, Haiping Zhu, Nan Hu, Jun Liu, and Qika Lin. Rag
+safety: Exploring knowledge poisoning attacks to retrieval-augmented generation. _arXiv preprint_
+_arXiv:2507.08862_, 2025.
+
+
+Zexuan Zhong, Ziqing Huang, Alexander Wettig, and Danqi Chen. Poisoning retrieval corpora by
+injecting adversarial passages. In _Proc. EMNLP_, 2023.
+
+
+Huichi Zhou, Kin-Hei Lee, Zhonghao Zhan, Yue Chen, and Zhenhao Li. Trustrag: Enhancing
+robustness and trustworthiness in rag. _arXiv preprint arXiv:2501.00879_, 2025.
+
+
+Wei Zou, Runpeng Geng, Binghui Wang, and Jinyuan Jia. Poisonedrag: Knowledge corruption
+attacks to retrieval-augmented generation of large language models. In _Proc. USENIX Security_,
+2025.
+
+
+12
+
+
+A BACKGROUND INFORMATION
+
+
+A.1 INTRODUCTION OF DATASETS
+
+
+We evaluate our RAG poisoning attack on three widely used open-domain QA datasets: NQ, MSMARCO, and HotpotQA. These datasets differ in question types, reasoning requirements, and underlying knowledge sources.
+
+
+**NQ** consists of real user queries issued to Google Search, with answers annotated from Wikipedia.
+The questions are diverse in form and often ambiguous or incomplete, reflecting real-world information needs. Each question is paired with long and short answers, with the latter being direct spans
+from Wikipedia paragraphs. NQ relies solely on Wikipedia as its knowledge source.
+
+
+**MS-MARCO** contains anonymized Bing queries and corresponding passages retrieved from a large
+web corpus. Unlike NQ, MS-MARCO includes a combination of factoid, descriptive, and procedural questions. The answers are typically free-form text, not necessarily extractive, and often
+require synthesizing information from multiple documents. Its heterogeneous knowledge sources
+pose challenges for both retrieval and generation in RAG models.
+
+
+**HotpotQA** is a multi-hop QA dataset requiring reasoning over multiple Wikipedia articles. Questions are designed to necessitate compositional reasoning, and the dataset provides supporting facts
+to facilitate interpretability. Due to the use of multiple supporting documents from Wikipedia, HotpotQA is particularly suitable for evaluating the effect of poisoning strategies in multi-hop settings.
+
+
+Together, these datasets cover a broad spectrum of QA scenarios and knowledge retrieval conditions,
+enabling robust evaluation of RAG model vulnerabilities under different task demands.
+
+
+A.2 INTRODUCTION OF RERANKERS
+
+
+To enhance retrieval precision in RAG pipelines, we adopt two representative rerankers: MiniLM
+and ELECTRA. These models are chosen for their efficiency and strong performance in reranking
+tasks, offering a realistic setting for evaluating the resilience of RAG under poisoning attacks.
+
+
+**MiniLM** [1] is a lightweight transformer model that retains high performance through deep selfattention distillation. It compresses large teacher models such as BERT or RoBERTa into compact student models by minimizing the discrepancy in self-attention distributions and hidden states.
+MiniLM is typically fine-tuned on large-scale relevance datasets using pairwise or listwise ranking
+objectives, making it well-suited for passage reranking in open-domain QA.
+
+
+**ELECTRA** [2] adopts a discriminative pre-training approach by replacing masked language modeling
+with a replaced token detection task. It trains a small discriminator to distinguish real input tokens
+from those generated by a generator network. This pre-training method results in strong downstream
+performance. For reranking tasks, ELECTRA is fine-tuned using a cross-encoder architecture on
+datasets where the query and candidate passages are jointly encoded to produce relevance scores.
+
+
+A.3 HYPERPARAMETER SETTINGS
+
+
+In the reranker fine-tuning phase, we employ a cross-encoder with a pointwise regression objective,
+minimizing mean squared error (MSE) between the predicted scalar relevance score and binary
+labels. Training is conducted with AdamW using a learning rate of 2 _×_ 10 _[−]_ [5] and a weight decay of
+0.01, for 2 epochs with a batch size of 16. A linear learning-rate decay schedule with 100 warmup
+steps is applied, and gradient clipping is set to 1.0. For each query, all ground truth passages serve
+as positives, while the 10 non-relevant retrieved candidates are sampled as negatives, and the model
+is optimized to assign higher scores to the positive passages.
+
+
+In the character-level perturbation phase, we detail the hyperparameters across its three stages. In the
+position selection stage (Stage 1), we identify the top- _N_ = 100 most influential character positions
+for perturbation. For the PGD-based candidate generation (Stage 2), we apply a learning rate of
+_η_ = 0 _._ 01 for _T_ = 100 iterations, from which we select the top- _M_ = 700 candidates. In the final
+
+
+[1https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2)
+[2https://huggingface.co/cross-encoder/ms-marco-electra-base](https://huggingface.co/cross-encoder/ms-marco-electra-base)
+
+
+13
+
+
+Table 7: Comparison of attack methods across different LLMs (Llama3-3B, Qwen2.5-14B, Vicuna7B). _↓_ Acc (%), _↑_ ASR (%), and _↑_ F1-Score are reported.
+
+
+MiniLM ELECTRA
+Llama3-3B Qwen2.5-14B Vicuna-7B Llama3-3B Qwen2.5-14B Vicuna-7B
+Dataset Method Acc ASR Acc ASR Acc ASR F1-Score Acc ASR Acc ASR Acc ASR F1-Score
+
+
+Prompt Injection 34.6 3.6 40.4 4.0 35.0 6.4 0.0008 38.8 4.0 44.0 3.8 36.4 6.4 0.0020
+Disinformation 26.0 29.8 33.8 26.2 29.8 28.2 0.1820 28.6 33.0 36.8 27.2 28.6 30.8 0.2068
+PoisonedRAG-B 24.4 37.2 34.2 26.4 24.2 40.2 0.2368 27.8 36.0 38.2 25.4 26.2 36.8 0.2328
+PoisonedRAG-W 29.4 20.2 36.8 16.4 31.2 19.2 0.1048 29.4 24.0 39.8 22.2 30.4 25.8 0.1592
+CorruptRAG-AS 33.4 4.6 39.4 5.6 35.2 7.2 0.0128 36.6 6.2 41.6 7.0 34.2 10.2 0.0356
+CorruptRAG-AK 24.4 28.4 30.6 26.0 28.2 30.2 0.1656 28.4 29.6 38.0 26.8 27.8 32.6 0.1748
+P [2] A 12.8 69.8 23.2 46.8 10.2 74.8 0.5592 12.6 73.2 26.4 47.2 10.2 77.2 0.5988
+P [3] A **6.2** **80.8** **15.0** **67.2** **4.6** **88.6** **0.8416** **10.2** **77.6** **19.2** **60.8** **7.0** **85.4** **0.7796**
+
+
+Prompt Injection 30.0 3.0 34.6 5.0 32.0 4.2 0.0000 31.0 3.0 36.4 3.6 31.8 4.4 0.0012
+Disinformation 26.8 22.8 30.8 25.2 27.0 22.6 0.2248 27.6 19.4 31.4 23.0 27.0 20.4 0.2084
+PoisonedRAG-B 27.0 23.6 33.6 19.8 27.8 21.4 0.1780 24.4 23.8 33.6 19.4 26.6 21.8 0.2104
+PoisonedRAG-W 27.8 10.0 34.6 9.0 30.2 9.4 0.0504 27.2 13.8 33.6 13.4 28.8 14.2 0.1028
+CorruptRAG-AS 30.6 3.2 34.8 5.0 32.2 4.2 0.0004 28.6 5.2 34.8 6.2 30.4 7.0 0.0196
+CorruptRAG-AK 29.2 4.2 33.4 5.8 31.2 5.2 0.0080 28.4 8.2 34.2 8.2 29.8 9.0 0.0336
+P [2] A 17.8 43.4 26.8 22.8 17.6 42.6 0.3232 12.6 53.0 22.4 31.4 14.8 57.0 0.4820
+P [3] A **12.2** **57.6** **20.2** **39.2** **12.2** **60.2** **0.5632** **10.6** **60.0** **18.8** **42.4** **11.8** **64.8** **0.6460**
+
+
+Prompt Injection 36.8 10.2 41.2 9.6 39.6 13.8 0.0216 36.4 7.2 41.4 8.6 37.8 11.2 0.0036
+Disinformation 29.6 38.4 35.8 35.2 32.4 37.4 0.2444 29.4 39.8 33.8 37.2 27.6 41.0 0.2784
+PoisonedRAG-B 27.2 43.0 38.4 39.8 24.8 50.0 0.3280 28.4 36.8 39.8 33.8 22.8 45.2 0.2604
+PoisonedRAG-W 25.2 26.6 37.2 34.8 31.0 32.4 0.2348 24.8 24.8 37.8 31.8 29.2 30.8 0.2032
+CorruptRAG-AS 36.6 12.2 40.6 12.6 38.6 14.8 0.0348 35.2 9.0 40.6 10.2 38.0 13.0 0.0204
+CorruptRAG-AK 34.8 17.4 39.8 18.6 36.2 20.4 0.0676 33.0 13.8 39.0 14.6 34.8 18.6 0.0468
+P [2] A **9.8** **77.0** 20.0 70.2 8.0 **88.0** 0.8176 **10.0** 72.6 **20.0** 63.4 8.0 85.6 0.7776
+P [3] A 10.8 74.0 **19.0** **76.4** **8.2** 87.2 **0.8884** 11.8 **73.8** **20.0** **67.2** **7.2** **87.2** **0.8208**
+
+
+beam search refinement (Stage 3), we employ a beam width of _B_ = 5. The process terminates upon
+reaching a predefined reranker score threshold _τ_ . For the MiniLM model, _τ_ is set to 0.92 (NQ), 0.90
+(MS-MARCO), and 0.99 (HotpotQA). For the ELECTRA model, the corresponding thresholds are
+0.90 (NQ), 0.78 (MS-MARCO), and 0.98 (HotpotQA).
+
+
+B ADDITIONAL EXPERIMENTAL RESULTS
+
+
+In this section, we provide a set of additional experimental results to further validate the effectiveness, generalizability, and robustness of our proposed Prompt-Perturbation Poisoning Attack (P [3] A).
+These evaluations complement the main results by examining the attack’s performance under diverse
+settings, including different LLM architectures, retriever models, and retrieval depths. Through
+these extended experiments, we aim to present a holistic view of P [3] A’s capabilities and limitations,
+ensuring that the reported advantages are consistent and reproducible across diverse RAG scenarios.
+
+
+B.1 MAIN RESULTS
+
+
+The experimental results presented in Table 7 demonstrate the advantage of our proposed P [3] A compared to existing baseline methods. Specifically, P [3] A consistently achieves the effective performance across all three datasets (NQ, MS-MARCO, HotpotQA), two rerankers (MiniLM, ELECTRA), and three large language models (Llama3-3B, Qwen2.5-14B, Vicuna-7B). For instance, on
+the NQ dataset under the MiniLM and Vicuna-7B configuration, P [3] A yields the highest ASR of
+88.6% and the lowest Acc of 4.6%, with a corresponding F1-Score of 0.8416. This significantly
+surpasses the strongest baseline, PoisonedRAG-B, which only reaches a 40.2% ASR. Furthermore,
+P [2] A, the black-box variant of our attack, also shows remarkable effectiveness, consistently outperforming all other baselines. For example, on HotpotQA, P [2] A consistently achieves high ASRs in
+all settings. These results provide evidence for the effectiveness and robustness of our P [3] A method,
+consistently across different model architectures and LLM sizes.
+
+
+14
+
+
+B.2 TRANSFERABILITY TO VANILLA RAG
+
+
+Our method is effective beyond reranker-enhanced RAG architectures. As shown in Table 8, the
+P [3] A method transfers effectively to vanilla RAG systems without reranking. While specialized
+methods like CorruptRAG-AK excel in this setting, our P [3] A approaches deliver highly competitive
+results. For instance, on the MS-MARCO dataset with the Llama3-8B model, P [2] A achieves an
+ASR of 80.2%, closely trailing CorruptRAG-AK’s 88.4%. On HotpotQA, both P [2] A and P [3] A reach
+F1-Score of 1.0000, with ASRs up to 95.4% (Gemma-9B). This demonstrates that our poisoning
+strategy generalizes well and remains a potent threat even against vanilla architectures, highlighting
+the broad applicability of our approach.
+
+
+Table 8: Performance of different attack methods on the MS-MARCO and HotpotQA datasets using
+vanilla RAG. P [3] A is optimized on MiniLM.
+
+
+Vanilla
+Llama3-8B Qwen2.5-7B Gemma-9B
+Dataset Method Acc ASR Acc ASR Acc ASR F1-Score
+
+
+Prompt Injection 6.6 74.6 8.2 56.4 7.8 76.0 0.7084
+Disinformation 27.2 13.8 27.0 14.4 27.2 14.0 0.1348
+PoisonedRAG-B 18.0 47.4 19.2 47.2 16.6 47.8 0.7076
+PoisonedRAG-W 13.2 42.0 16.0 52.8 15.0 47.4 0.8240
+CorruptRAG-AS 4.8 83.6 3.2 83.4 2.4 92.4 0.9096
+CorruptRAG-AK **4.2** **88.4** **1.2** **86.2** **2.4** **92.8** **0.9308**
+P [2] A 5.2 80.2 7.6 72.6 5.8 82.2 0.8720
+P [3] A 6.6 74.6 8.6 71.6 6.6 78.4 0.8292
+
+
+Prompt Injection 0.4 89.0 2.0 92.2 0.8 97.8 0.9944
+Disinformation 15.8 58.2 12.6 63.8 13.8 69.2 0.7708
+PoisonedRAG-B 6.4 73.4 5.6 81.8 4.0 86.2 0.9992
+PoisonedRAG-W 3.2 26.4 5.0 84.0 3.6 84.2 0.9996
+CorruptRAG-AS 2.4 91.4 **1.0** **96.2** **0.4** **98.0** 0.9992
+CorruptRAG-AK **1.8** **91.8** 1.4 95.4 **0.4** 97.6 0.9972
+P [2] A 6.4 88.6 1.6 95.0 1.6 95.2 **1.0000**
+P [3] A 5.2 85.6 1.4 94.6 1.6 95.4 **1.0000**
+
+
+We extend the perplexity-based defense analysis to MS-MARCO and HotpotQA. As shown in Figure 5, malicious texts again exhibit higher mean perplexity than clean ones (65.48 vs. 44.89 for
+MS-MARCO; 39.96 vs. 30.79 for HotpotQA). However, the distributions overlap substantially, indicating that many adversarial documents fall within the normal perplexity range of benign texts.
+This overlap demonstrates that while P [2] A increases perplexity moderately, the generated content
+remains statistically close to natural text, thereby evading simple perplexity-threshold defenses.
+
+
+15
+
+
+B.3 EVALUATION OF TEXTUAL MODIFICATIONS
+
+
+We further assess the perturbation phase using the
+ELECTRA reranker. Table 9 shows that the modifications remain minimal across datasets. For NQ and
+MS-MARCO, the average edit distances are 4.00
+and 3.01, with change ratios of 0.97% and 0.79%,
+respectively. HotpotQA yields the smallest ratio
+of 0.20%, confirming that the introduced characterlevel variations are negligible relative to the text
+length. These results are consistent with those obtained using MiniLM, indicating that the perturbations maintain naturalness and readability while ensuring sufficient variation for reranker sensitivity.
+
+
+B.4 EVALUATION OF PERPLEXITY DEFENSE
+
+
+Table 9: Average Levenshtein distance and
+change ratio relative to the poisoned texts before and after the character-level perturbation
+phase, using the ELECTRA reranker.
+
+
+Dataset Edit Distance Change Ratio
+
+
+NQ 4.00 0.97%
+MS-MARCO 3.01 0.79%
+HotpotQA 0.98 0.20%
+
+
+|008<br>006<br>004<br>002<br>000|CLEAN Mean: 4|4.89|0.020<br>0.015<br>Density<br>0.010<br>0.005<br>0.000|CLEAN|Mean: 3|0.79|
+|---|---|---|---|---|---|---|
+|00<br>002<br>004<br>006<br>008|CLEAN Mean: 4<br>|4.89<br>|0.000<br>0.005<br>0.010<br>0.015<br>0.020<br>Density|<br>MALIC|<br>IOUS Mea|<br> n: 39.96|
+|00<br>002<br>004<br>006<br>008|~~MALICIOUS Mea~~|~~ n: 65.48~~|~~ n: 65.48~~|~~ n: 65.48~~|~~ n: 65.48~~|~~ n: 65.48~~|
+|00<br>002<br>004<br>006<br>008|~~MALICIOUS Mea~~|~~ n: 65.48~~|~~ n: 65.48~~||||
+|00<br>002<br>004<br>006<br>008|||||||
+|00<br>002<br>004<br>006<br>008|||||||
+|00<br>002<br>004<br>006<br>008|||||||
+
+
+Figure 5: Perplexity distribution of clean and malicious documents on the MS-MARCO and HotpotQA datasets. Perplexity is computed with a GPT-2 model.
+
+
+B.5 EFFECTIVENESS ON THE ANCE RETRIEVER
+
+
+Table 10 presents results using the ANCE retriever, confirming the strong performance of our P [3] A
+method. Across all three datasets, both P [3] A and P [2] A consistently outperform all baselines, achieving lower Acc and higher ASR and F1-Score. On the NQ dataset, for example, P [3] A reaches a 70.8%
+ASR and 0.7520 F1-Score. This performance advantage holds across datasets, showing that our
+method generalizes effectively to different retrievers, including models like ANCE.
+
+
+Table 10: Experimental results using the ANCE retriever. Evaluations are conducted on the three
+datasets with MiniLM as the reranker and Llama3-8B as the LLM.
+
+
+NQ MS-MARCO HotpotQA
+Method Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score
+
+
+Prompt Injection 35.0 8.0 0.0188 33.2 2.8 0.0008 12.6 64.0 0.5360
+Disinformation 31.8 23.8 0.1256 28.6 21.8 0.1884 25.6 46.6 0.5212
+PoisonedRAG-B 30.2 31.6 0.2276 30.2 24.8 0.2444 25.4 48.0 0.6128
+PoisonedRAG-W 31.6 16.2 0.0972 27.8 13.6 0.1292 13.8 26.0 0.5824
+CorruptRAG-AS 33.6 10.0 0.0464 33.2 3.4 0.0072 18.6 46.0 0.4348
+CorruptRAG-AK 29.8 24.4 0.1436 29.6 8.4 0.0332 14.8 57.0 0.4764
+P [2] A 18.4 62.8 0.5220 24.6 32.6 0.2632 10.2 **82.0** 0.9488
+P [3] A **12.2** **70.8** **0.7520** **20.6** **43.8** **0.4148** **10.0** 80.4 **0.9548**
+
+
+B.6 IMPACT OF THE NUMBER OF RETRIEVED DOCUMENTS (TOP- _J_ )
+
+
+Table 11 presents an ablation study on the number of documents ( _J_ ) retrieved before reranking. As
+_J_ increases from 40 to 100, the ASR and F1-Score of P [3] A gradually decrease, while Acc increases
+slightly. This trend is expected: retrieving more documents dilutes the impact of the poisoned
+document, making it more likely that the reranker and LLM focus on benign content. However, even
+when retrieving 100 documents, our attack remains highly effective. For example, on the HotpotQA
+dataset, P [3] A maintains an ASR of 72.8% and an F1-Score of 0.8884 at _J_ = 100. This underscores
+the robustness of our attack, which remains effective despite extensive document competition.
+
+
+B.7 IMPACT OF THE NUMBER OF FINAL DOCUMENTS (TOP- _K_ )
+
+
+Table 12 reports the impact of varying the number of reranked documents ( _K_ ) on attack performance. Overall, both ASR and F1-Score exhibit a rising then falling trend as _K_ increases, which
+is reasonable since the fixed number of poisoned documents ( _Np_ = 5) exerts a stronger influence
+when _K_ is small, but gradually becomes diluted as more benign documents are included. Nevertheless, P [3] A consistently achieves higher ASR and F1-Score than P [2] A across all datasets, particularly
+at moderate _K_ values (e.g., _K_ = 3–5), where its effectiveness peaks. Importantly, even when _K_
+
+
+16
+
+
+Perplexity
+
+
+(a) MS-MARCO
+
+
+Perplexity
+
+
+(b) HotpotQA
+
+
+Table 11: Experimental results with different Top- _J_ values. Top- _J_ refers to the number of candidates
+fetched by the retriever. Evaluations are conducted on the three datasets with Contriever as the
+retriever, MiniLM as the reranker, and Llama3-8B as the LLM. The number of poisoned documents
+_Np_ is set to 5 with Top- _K_ = 5.
+
+
+Top- _J_ =40 Top- _J_ =60 Top- _J_ =80 Top- _J_ =100
+Dataset Method Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score
+
+
+P [2] A 13.4 76.4 0.7012 13.4 72.0 0.6400 15.6 68.0 0.5952 15.8 63.0 0.5592
+NQ
+P [3] A 7.2 76.0 0.9092 8.8 74.8 0.8796 10.0 73.2 0.8604 10.4 72.2 0.8416
+
+P [2] A 17.8 55.4 0.5184 19.2 49.0 0.4360 20.8 45.0 0.3836 21.2 40.6 0.3232
+MS-MARCO
+P [3] A 13.0 63.8 0.7240 12.8 60.8 0.6652 15.4 56.6 0.6208 15.6 53.0 0.5632
+
+P [2] A 12.0 76.2 0.8520 12.2 74.8 0.8352 12.6 74.4 0.8264 13.4 73.2 0.8176
+HotpotQA
+P [3] A 12.2 75.0 0.9036 12.2 74.0 0.8968 12.6 73.4 0.8924 13.0 72.8 0.8884
+
+
+Table 12: Experimental results with different Top- _K_ values. Top- _K_ denotes the number of documents selected after reranking. Evaluations are conducted on the three datasets with Contriever as
+the retriever, MiniLM as the reranker, and Llama3-8B as the LLM. The number of poisoned documents _Np_ is set to 5 with Top- _J_ = 100.
+
+
+Top- _K_ =1 Top- _K_ =2 Top- _K_ =3 Top- _K_ =4 Top- _K_ =5
+Dataset Method Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score
+
+
+P [2] A 18.2 40.2 0.1440 16.0 52.0 0.2783 16.6 57.8 0.3940 18.2 60.8 0.4796 15.8 63.0 0.5592
+NQ
+P [3] A 15.2 61.0 0.2273 11.4 73.4 0.4383 9.0 74.4 0.6115 10.2 74.6 0.7436 10.4 72.2 0.8416
+
+P [2] A 22.0 20.0 0.0780 19.2 28.8 0.1531 20.2 33.8 0.2175 19.2 38.0 0.2787 21.2 40.6 0.3232
+MS-MARCO
+P [3] A 17.4 38.2 0.1507 15.6 44.0 0.2749 15.4 48.8 0.3905 16.2 51.0 0.4893 15.6 53.0 0.5632
+
+P [2] A 13.8 65.6 0.2433 10.8 72.6 0.4446 11.6 74.6 0.6060 13.4 73.4 0.7293 13.4 73.2 0.8176
+HotpotQA
+P [3] A 12.0 71.4 0.2767 10.2 77.6 0.4949 11.2 75.6 0.6625 13.2 73.8 0.7893 13.0 72.8 0.8884
+
+
+Top- _K_ =6 Top- _K_ =7 Top- _K_ =8 Top- _K_ =9 Top- _K_ =10
+Dataset Method Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score Acc ASR F1-Score
+
+
+P [2] A 18.6 63.2 0.5771 17.6 63.8 0.5777 20.4 64.0 0.5717 20.8 63.8 0.5571 21.8 62.8 0.5389
+NQ
+P [3] A 14.8 67.8 0.8396 15.4 66.6 0.8013 18.8 62.8 0.7529 20.8 60.4 0.7069 21.6 59.8 0.6627
+
+P [2] A 20.8 39.2 0.3564 21.8 40.0 0.3727 21.4 42.4 0.3843 21.8 42.6 0.3900 20.6 44.2 0.3912
+MS-MARCO
+P [3] A 18.4 50.4 0.5895 19.6 48.4 0.5897 20.4 49.0 0.5818 21.6 47.2 0.5674 21.0 45.6 0.5509
+
+P [2] A 20.8 56.8 0.8196 26.6 53.0 0.7803 26.0 52.4 0.7342 26.4 52.2 0.6903 28.0 53.4 0.6485
+HotpotQA
+P [3] A 20.0 54.0 0.8749 23.4 48.8 0.8203 26.0 47.2 0.7631 25.2 47.8 0.7106 27.2 48.4 0.6640
+
+
+reaches 10, our method still maintains strong attack success and high F1-Scores, demonstrating the
+robustness and persistence of P [3] A against reranker-enhanced RAG systems.
+
+
+B.8 IMPACT OF THE NUMBER OF POISONED DOCUMENTS
+
+
+We extend the analysis of _Np_ to MS-MARCO and HotpotQA. As shown in Figure 6, ASR increases
+steadily with larger _Np_ for both P [3] A and P [2] A. On MS-MARCO, P [3] A consistently outperforms P [2] A,
+with the gap widening as _Np_ grows. For HotpotQA, both methods show similar trends, and the ASR
+advantage of P [3] A becomes more evident at _Np_ =5. These results confirm that increasing the number
+of poisoned documents enhances attack success across datasets, and highlight the robustness of P [3] A.
+
+
+Figure 6: Impact of different _Np_ values for P [3] A and P [2] A under Top- _K_ = 5.
+
+
+17
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Np
+
+
+(a) MS-MARCO
+
+
+Np
+
+
+(b) HotpotQA
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+B.9 CASE STUDY
+
+
+We present a case study to intuitively illustrate the difference between our P [2] A and P [3] A. As shown
+in Case 1, the P [2] A attack fails. In this instance, the reranker provides the LLM with several benign
+contexts, one of which explicitly contains the correct answer (“Odoacer”). Consequently, the LLM
+successfully synthesizes the factual information and provides the correct response, indicating that
+the poisoned document crafted by the P [2] A method was likely filtered out or down-weighted by the
+reranker. In sharp contrast, the P [3] A attack succeeds, as depicted in Case 2. Here, the character-level
+optimization generates perturbed, adversarial contexts that are successfully promoted to the top by
+the reranker. A direct comparison in Case 3 reveals that P [2] A generates fluent but factually incorrect
+text, whereas P [3] A introduces subtle character-level perturbations (e.g., ‘defeate/)’, ‘Roman rmy’).
+These carefully crafted perturbations enable the poisoned content to bypass system defenses and
+misleads the LLM into outputting the incorrect answer (“Attila”). This case study highlights that
+P [3] A’s superior performance stems from its ability to craft robust, evasive poisoned texts tailored to
+the specific vulnerabilities of the target RAG system.
+
+
+C LIMITATIONS
+
+
+Our experiments are conducted on widely adopted QA datasets (NQ, MS-MARCO, HotpotQA)
+rather than on domain-specific corpora. While these benchmarks are representative, extending the
+evaluation to specialized domains such as healthcare or finance could better reflect real-world scenarios. In addition, since P [3] A is optimization-based, the generation of poisoned texts incurs additional
+computational overhead. Although computational efficiency is not a primary concern from the attacker’s perspective, further improving the algorithmic efficiency and scalability of P [3] A may pose
+an even more challenging and realistic threat to practical RAG systems.
+
+
+D THE USE OF LARGE LANGUAGE MODELS
+
+
+We employed large language models exclusively for language refinement and polishing to improve
+the readability of the manuscript. All substantive research contributions, including problem formulation, algorithm design, experimental implementation, and analytical evaluation, were conceived
+and executed solely by the authors without any LLM involvement.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+21

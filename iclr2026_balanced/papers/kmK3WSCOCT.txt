@@ -1,0 +1,2923 @@
+# FROM MARKOV TO LAPLACE: HOW MAMBA IN-CONTEXT LEARNS MARKOV CHAINS
+
+
+**Marco Bondaschi** _[∗]_ **Nived Rajaraman** **Xiuying Wei** **Razvan Pascanu**
+EPFL UC Berkeley EPFL Google DeepMind
+
+
+**Caglar Gulcehre** **Michael Gastpar** **Ashok Vardhan Makkuva**
+EPFL EPFL Télécom Paris
+
+
+ABSTRACT
+
+
+While transformer-based language models have driven the AI revolution thus
+far, their computational complexity has spurred growing interest in viable alternatives, such as structured state space sequence models (SSMs) and Selective SSMs. Among these, Mamba (S6) and its variant Mamba-2 have shown
+remarkable inference speed-ups over transformers while achieving comparable
+or superior performance on complex language modeling tasks. However, despite
+these architectural innovations and empirical successes, the fundamental learning capabilities of Mamba remain poorly understood. In this paper, we address
+this gap by studying in-context learning (ICL) on Markov chains and uncovering an interesting phenomenon: even a single-layer Mamba efficiently learns the
+in-context Laplacian smoothing estimator, which is both Bayes and minimax optimal. To explain this, we theoretically characterize the representation capacity
+of Mamba and reveal the fundamental role of convolution in enabling it to represent the optimal Laplacian smoothing. These theoretical insights align strongly
+with empirical results and, to the best of our knowledge, represent the first formal
+connection between Mamba and optimal statistical estimators. Finally, we outline
+promising research directions inspired by these findings. Code is available at
+[https://github.com/Bond1995/Markov-Mamba.](https://github.com/Bond1995/Markov-Mamba)
+
+
+1 INTRODUCTION
+
+
+Transformers have been at the forefront of recent breakthroughs in language modeling, driving the AI
+revolution (Vaswani et al., 2017; Radford & Narasimhan, 2018; Devlin et al., 2018). Despite their
+empirical success, transformers suffer from high computational complexity, such as quadratic scaling
+in sequence length during training and linear cache size at inference (Gu & Dao, 2023a). To address
+these limitations, there is a growing interest in designing alternative efficient architectures among
+which structured state space models (SSMs) are the most prominent. In particular, Selective SSMs
+such as Mamba and Mamba-2, have achieved state-of-the-art results in various language modeling
+tasks, while greatly improving the inference throughput (Cirone et al., 2025).
+
+
+Motivated by this success, there is tremendous interest in understanding the sequential modeling
+abilities of SSMs, especially that of Mamba. In particular, mirroring a theme that has been successful
+in unraveling fundamental mechanisms (e.g. induction heads) behind transformers (Makkuva et al.,
+2025; 2024; Rajaraman et al., 2024; Nichani et al., 2024; Edelman et al., 2024), a growing body
+of research explores Mamba through its in-context learning (ICL) capabilities (Grazzi et al., 2024;
+Halloran et al., 2024; Akyürek et al., 2024; Park et al., 2024). While these works reveal interesting
+insights about Mamba’s ICL abilities vis-a-vis transformers, they are largely empirical in nature, and
+we currently lack a fundamental theoretical understanding of Mamba and its underlying learning
+mechanisms. We are thus motivated to ask:
+
+
+**Can we systematically characterize the ICL capabilities of Mamba?**
+
+
+_∗_ Correspondence to marco.bondaschi@epfl.ch.
+
+
+1
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+|1 - l a y e r M a mba|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer|<br> <br>~~1-layer Transformer~~<br>2-layer Transformer||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+||||||||||||||||||||
+
+
+0 10 20 30 40 50 60 70
+
+_t_ : _xt_ = 0
+
+
+(a) Next-token probability estimation
+
+
+0.00
+1 2 3 4
+
+
+Markov order
+
+
+(b) _L_ 1 distance of model estimation from optimal
+
+
+Figure 1: Single-layer Mamba learns the optimal Laplacian estimator when trained on random
+Markov chains, exhibiting ICL. (a) shows the predicted probability distribution on a fixed test
+sequence for models trained on binary first-order Markov sources. (b) quantifies the _L_ 1 deviation
+from the optimal estimator for random sequences and various Markov orders. The error intervals show
+the standard deviation across 5 runs. Sec. 4.3 and Fig. 10 further discuss Mamba vs. Transformers.
+
+
+In this paper, we approach this question from the point of view of representation power, and characterize Mamba’s ICL capabilities on Markov processes, building upon the Markov-ICL framework
+originally introduced for transformers (Edelman et al., 2024). As opposed to a Mamba vs. Transformers comparison, here we leverage this framework for a detailed study of Mamba, and uncover
+an interesting phenomenon: even a single-layer Mamba efficiently learns the in-context Laplacian
+smoothing estimator, which is both Bayes and minimax optimal, for all Markov orders (Figs. 1 and
+10a). Towards explaining this, we theoretically characterize the representation capacity of Mamba and
+demonstrate that the convolution mechanism, together with selectivity and recurrence, plays a fundamental role in realizing the Laplacian smoothing. Importantly, we showcase that these theoretical
+insights align strongly with empirical results, even outside the realm of Markovian data. To the best of
+our knowledge, this is the first result of its kind connecting Mamba and optimal statistical estimators.
+
+
+In summary, we make the following contributions:
+
+
+    - Leveraging the Markov-ICL framework, we uncover the surprising fact that even a
+single-layer Mamba learns the optimal in-context estimator for all Markov orders (Fig. 1).
+Intriguingly, convolution plays a pivotal role, more so than gating and non-linear activation,
+in this learning ability (Sec. 3).
+
+    - Towards explaining this phenomenon, we characterize the representational capacity of
+single-layer Mamba and show, both theoretically and empirically, how it represents the
+optimal in-context estimator for any finite-state first-order processes, through an intricate
+interplay of convolution, selectivity and recurrence. Further, we provide fundamental limits
+for higher-order processes (Sec. 4).
+
+    - We demonstrate the generality of our findings on non-Markovian data and illustrate the
+fundamental role of convolution even on complex language-modeling tasks (Sec. 5).
+
+
+1.1 RELATED WORK
+
+
+SSMs (Gu et al., 2020; 2021) have been recently introduced as an alternative recurrent architecture
+aimed at rivaling the well established transformer backbone (Vaswani et al., 2017). The model was
+originally introduced as a discretized linear dynamical system (Gu et al., 2021). Recent works tried to
+re-frame the architecture from a linear recurrent perspective (Orvieto et al., 2023b). However, there
+are still many gaps in understanding this family of models (Team et al., 2024), such as questions
+around expressivity (Orvieto et al., 2023a). This is particularly important given the proliferation of
+Mamba-inspired architectures that have emerged since its introduction (Qin & Liu, 2024; Csordás
+et al., 2024; Zhu et al., 2024; Gu & Dao, 2023b; De et al., 2024; Beck et al., 2024).
+
+
+2
+
+
+To this end, our work squarely focuses on understanding the representation power of Mamba, and
+in particular its ICL capability, which, while extensively studied for transformers (Xie et al., 2021;
+Hendel et al., 2023; Bai et al., 2023), remains largely unexplored for SSMs. In this space, recent
+studies such as Sushma et al. (2024), have shown that SSMs can perform gradient-based learning
+for in-context adaptation similar to transformers. There is conflicting evidence whether Mamba’s ICL
+abilities are better (Grazzi et al., 2024) or worse (Halloran et al., 2024; Akyürek et al., 2024) compared
+to transformers. Nonetheless, SSMs have demonstrated promising results in in-context reinforcement
+learning tasks (Lu et al., 2024), as well as in next-state prediction for dynamical models (Joseph
+et al., 2024), highlighting the potential of SSMs as efficient alternatives to transformers for ICL tasks.
+Motivated by this, as opposed to an architectural comparison Jelassi et al. (2024); Bhattamishra et al.
+(2024); Merrill et al. (2024); Sarrof et al. (2024), here we solely focus on Mamba’s ICL capabilities,
+specifically, through the lens of random Markov processes. This framework has been successfully
+applied to transformers (Edelman et al., 2024; Makkuva et al., 2025; 2024; Rajaraman et al., 2024;
+Nichani et al., 2024), where it helped unveil fundamental learning mechanisms of transformers such
+as induction heads. Ours is the first work that employs this framework for Mamba and SSMs.
+
+
+2 PROBLEM SETUP
+
+
+We formally define the problem setting and provide necessary background. We use the
+following notation: scalars are denoted by such italic lower case letters as _x, y_, Euclidean
+vectors by bold _**x**_ _,_ _**y**_, and matrices by upper case _X, Y_, etc. **1** refers to the all-one vector. For
+_T_ _∈_ N, [ _T_ ] ≜ _{_ 1 _, . . ., T_ _}_, and for a sequence ( _xt_ ) _t≥_ 1, define _x_ _[t]_ _k_ [≜] [(] _[x][k][, . . ., x][t]_ [)][.] [For] _[z]_ _[∈]_ [R][,]
+sigmoid( _z_ ) ≜ 1 _/_ (1 + _e_ _[−][z]_ ) _,_ ReLU( _z_ ) ≜ max(0 _, z_ ), and softplus( _z_ ) ≜ log(1 + _e_ _[z]_ ). Unif( _S_ )
+denotes the uniform distribution over a set _S_ and Dir( _**β**_ ) denotes the Dirichlet distribution with
+parameter _**β**_ _>_ 0. _D_ KL ( _P_ _∥Q_ ) denotes the KL divergence between distributions _P_ and _Q_ .
+
+
+2.1 INPUT DATA: RANDOM MARKOV CHAINS
+
+
+To investigate the ICL capabilities of Mamba, we build upon the Markov-ICL framework of Edelman
+et al. (2024). In particular, we let the input tokens to be stochastic and drawn from a random Markov
+chain of order _k_ . That is, the token sequence _x_ = ( _xt_ ) _[T]_ _t_ =1 [on the state space (vocabulary)] _[ X]_
+follows the transition dynamics: _[∈X][ T]_
+
+P          - _xt_ +1 = _· | x_ _[t]_ 1� = P          - _xt_ +1 = _· | x_ _[t]_ _t−k_ +1� _,_ (1)
+
+almost surely for all _t_ [ _T_ ], and the _k_ [th] -order Markov kernels, P - _xt_ +1 = _x_ _[t]_ _t_ _k_ +1 [=] _[ i]_ _t_ _[t]_ _k_ +1�,
+_∈_ _· |_ _−_ _−_
+are sampled independently for each tuple ( _it−k_ +1 _, · · ·_ _, it_ ) from the Dirichlet prior Dir( _β ·_ **1** ), with
+_β_ _>_ 0. When _β_ = 1, this corresponds to the uniform distribution on the _S_ -dimensional simplex
+∆ _[S]_ 1 [, where size] _[ S]_ [=] _[ |X|]_ [.]
+
+The transition matrix _P_ = ( _Pik_ 1 [)] _[i][k]_ 1 _[∈X][ k]_ _[, P][i][k]_ 1 [encapsulates] [the] [set] [of] [all] _[S][k]_ [conditional]
+probabilities of the chain, each row corresponding _[∈]_ [[0] _[,]_ [ 1]] to _[S]_ [,] one of them. While this transition matrix
+governs the generation of each token _xt_ for _t > k_, the first _k_ -tokens _x_ 1 _, . . ., xk_ are drawn i.i.d. from
+Unif( _X_ ). This constitutes the joint law of the random variables ( _P, x_ ), termed random Markov
+distribution henceforth. More succinctly,
+
+
+**Data generation** (Random Markov sequences).
+
+1. Draw _P_ with each row sampled i.i.d. from Dir( _β ·_ **1** ).
+2. For _t_ = 1 _, . . ., k_, sample _xt_ Unif( ).
+3. For _t_ = _k, . . ., T_, sample _xt_ +1 _∼_ _∼_ _PxttX−k_ +1 [.]
+4. Return the input _x_ = ( _xt_ ) _[T]_ _t_ =1 [.]
+5. Repeat the above steps to generate a batch _{x_ [(] _[b]_ [)] _}b∈_ [ _B_ ].
+
+
+**Why Random Markov is a good testbed for ICL.** As a consequence of the generation process, every
+sequence follows a different Markov distribution. Therefore, at inference, a model trained on this
+random Markovian data has to estimate the next-token distribution in-context for every test sequence.
+Hence, this data class serves as a good sandbox to gauge the ICL capabilities of Mamba, which was
+also used in a similar context for transformers (Nichani et al., 2024; Rajaraman et al., 2024).
+
+
+3
+
+
+2.2 MAMBA ARCHITECTURE
+
+
+Selective SSMs such as Mamba and Mamba-2 are a class of sequence-to-sequence models that are closely related to RNNs and classical state space models (Gu & Dao, 2023b).
+
+
+A key feature underpinning these models is
+the _selectivity_ _mechanism_, enabling them to
+selectively choose inputs at every timestep,
+as opposed to linear time-invariant (LTI)
+systems. While we believe our work captures the behavior of all selective SSMs, we
+will specifically focus on the state-of-theart Mamba-2 model to simplify exposition.
+By slight abuse of terminology, henceforth
+we will also refer to this model simply as
+Mamba. Mathematically speaking, Mamba
+implements the sequence-to-sequence mapping Mamba : R _[d][×][T]_ _�→_ R _[d][×][T]_, where
+given a sequence of input embeddings
+_**x**_ = ( _**x**_ _t_ ) _[T]_ _t_ =1 R _[d][×][T]_ of dimension _d_,
+_∈_
+it outputs the corresponding output embeddings _**o**_ = ( _**o**_ _t_ ) _[T]_ _t_ =1 R _[d][×][T]_ of the
+_∈_
+same dimension with _**o**_ = Mamba( _**x**_ ).
+More precisely, fix _t_ _∈_ [ _T_ ]. Then
+the output _**o**_ _t_ at time _t_ is computed as
+
+_**o**_ _t_ = Mamba( _**x**_ _[t]_ 1 [)] using the following
+recurrence equations (Dao & Gu, 2024):
+
+
+_f_ _**θ**_ ( _x_ [1] 1 [)] _. . ._ _f_ _**θ**_ ( _x_ _[t]_ 1 [)] _. . ._ _f_ _**θ**_ ( _x_ _[T]_ 1 [)]
+
+
+Figure 2: Mamba-based language model.
+
+
+_Ht_ = _at Ht−_ 1 + _**x**_ - _t_ _**b**_ _[⊤]_ _t_
+
+_[∈]_ [R] _[ed][×][N]_ _[,]_
+
+
+∆ _t_ ≜ softplus( _**w**_ ∆ _,_ _**x**_ _t_ + _δ_ ) R _,_
+_⟨_ _⟩_ _∈_
+
+
+_at_ ≜ exp( _a_ ∆ _t_ ) (0 _,_ 1) _,_
+
+_−_ _·_ _∈_
+
+
+_**y**_ _t_ = _Ht_ _**c**_ _t_ _∈_ R _[ed]_ _,_
+
+
+_**z**_ _t_ = _**y**_ _t ⊙_ ReLU( _Wz_ _**x**_ _t_ ) _∈_ R _[ed]_ _,_
+
+
+_**x**_ - _t_ ≜ ReLU(conv _X_ ( _WX_ _**x**_ _[t]_ _t−w_ +1 [))] _[ ·]_ [ ∆] _[t][,]_
+
+
+_**o**_ _t_ = _Wo_ _**z**_ _t_ _∈_ R _[d]_ _,_
+
+
+(Mamba)
+
+
+_**b**_ _t_ ≜ ReLU(conv _B_ ( _WB_ _**x**_ _[t]_ _t_ _w_ +1 [))] _[,]_
+
+_−_
+
+_**c**_ _t_ ≜ ReLU(conv _C_ ( _WC_ _**x**_ _[t]_ _t_ _w_ +1 [))] _[,]_
+
+_−_
+
+
+(Input selectivity)
+
+
+where the initial state _H_ 0 = 0, _Wz_ R _[ed][×][d]_ _, Wo_ R _[d][×][ed]_, _a_ 0 _,_ _**w**_ ∆ R _[d]_ _, δ_ R _, WX_
+R _[ed][×][d]_ _, WB_ R _[N]_ _[×][d]_ and _WC_ R _∈_ _[N]_ _[×][d]_ are all learnable _∈_ parameters, _≥_ and _∈_ conv( _**z**_ _∈t_ _[t]_ _w_ +1 [)] [is] _∈_ [a]
+time-wise convolution of window _∈_ _∈ w_ _∈_ N with distinct kernels per dimension. Here _e−∈_ N is the
+feature expansion factor, typically 2. Let _**θ**_ Mamba denote the set of all these parameters.
+
+
+**Intuition behind Mamba.** The underlying intuition behind the update equations in Mamba is simple:
+given a sequence of input embeddings ( _**x**_ _t_ ), we first capture their local temporal information using
+separate convolutions to compute _**x**_ - _t,_ _**b**_ _t_, and _**c**_ _t_ (Input selectivity). Equipped with this local memory,
+we perform a linear state update to compute the current state _Ht_ from the past _Ht−_ 1, weighed by an
+input-dependent decay factor _at_ (0 _,_ 1), and ( _**x**_ - _t,_ _**b**_ _t_ ). Subsequently, we compute the state projection
+_∈_
+_**y**_ _t_, modulate it with an input-selective term to yield _**z**_ _t_, and finally project it down to get the output
+embedding _**o**_ _t_, which is a function of the entire input sequence until then, _**x**_ _[t]_ 1 [, i.e.,] _**[ o]**_ _[t]_ [=][ Mamba][(] _**[x]**_ _[t]_ 1 [)][.]
+
+
+**Mamba-based language model.** Mamba block is then incorporated into a full-fledged language
+model as follows:
+
+
+_xt_ _∈{_ 0 _,_ 1 _}_ _−−−−−−→_ Embedding _**x**_ _t_ _−−−−→_ Mamba _**u**_ _t_ _−−−→_ [MLP] _**v**_ _t_ _−−−→_ Linear logit _t_ _−−−−−→_ Prediction _f_ _**θ**_ ( _x_ _[t]_ 1 [)] _[,]_ (2)
+
+
+where _f_ _**θ**_ ( _x_ _[t]_ 1 [)] [≜] [P] _**[θ]**_ [(] _[x][t]_ [+1] [=] _[ · |][ x][t]_ 1 [)] [=] [softmax(logit] _t_ [)] _[∈]_ [[0] _[,]_ [ 1]] _[S]_ [is the probability estimation for]
+the next symbol _xt_ +1 conditioned on the past _x_ _[t]_ 1 [.] [We omit the layer norm here for simplicity.] [We]
+compactly denote the set of all model parameters as _**θ**_ _∈_ R _[D]_ . We refer to § B for more details.
+
+
+4
+
+
+2.3 LEARNING TASK: NEXT-TOKEN PREDICTION
+
+
+With the objective of auto-regressively estimating the next token, we train the model parameters
+_**θ**_ to minimize the cross-entropy loss between the next-token predicted probability _f_ _**θ**_ ( _x_ _[t]_ 1 [)][ and the]
+corresponding ground-truth symbol _xt_ +1 across all the positions _t ∈_ [ _T_ ]:
+
+
+_L_ ( _**θ**_ ) ≜
+
+_−_ _T_ [1]
+
+
+_T_
+
+
+- E _P_ E _xt_ 1+1 _P_ - log _f_ _**θ**_ [(] _[x][t]_ [+1][)] ( _x_ _[t]_ 1 [)] - _,_ (3)
+
+_∼_
+_t∈_ [ _T_ ]
+
+
+where _f_ _**θ**_ [(] _[j]_ [)][(] _[x]_ 1 _[t]_ [)] [≜] [P] _**[θ]**_ [(] _[x][t]_ [+1] [=] _[ j]_ _[|][ x]_ 1 _[t]_ [)] [for] _[j]_ _[∈X]_ [,] [and] [the] [expectation] [is] [both] [over] [the] [transition]
+kernels _P_ and the Markov sequences _x_ = ( _xt_ ) _[T]_ _t_ =1 [sampled from] _[ P]_ [.] [In practice, it is replaced by]
+empirical average across a finite set of batches, sampled according to the random Markov distribution
+in Sec. 2.1. For our experiments we use the AdamW optimizer (Kingma & Ba, 2015).
+
+
+2.4 OPTIMAL ESTIMATOR: LAPLACIAN SMOOTHING
+
+
+Given the Bayesian prediction loss in Eq. (3), it is natural to ask: _what is the optimal_ _**θ**_ _minimizing it?_
+It follows from a classical result in statistics (Rissanen (1984), § A) that this minimum is achieved
+when the corresponding model prediction matches the (average) ground-truth predictive distribution,
+i.e. P _**θ**_ ( _xt_ +1 = _j_ _| x_ _[t]_ 1 [) =][ E] _P |x_ _[t]_ 1 [[][P][ (] _[x][t]_ [+1] [=] _[ j]_ _[|][ x]_ 1 _[t]_ [)]][, for all] _[ t]_ [.] [Given the joint distribution of the pair]
+( _P, x_ _[t]_ 1 [+1] ) in Sec. 2.1, where the kernel _P_ Dir( _β_ **1** ), it can be shown (§ A) that the conditional
+_∼_ _·_
+expectation above simplifies to the well-known _Laplacian_ _smoothing_, also known as the _add-β_
+_estimator_ (see e.g. Merhav & Feder (1998)):
+
+P [(] _β_ _[k]_ [)]   - _xt_ +1 = _j_ _x_ _[t]_ 1� ≜ E _P_ _xt_ 1 �P   - _xt_ +1 = _j_ _x_ _[t]_ 1�� = _[n][j]_ [+] _[ β]_ (Laplacian smoothing)
+_|_ _|_ _|_ _n_ + 2 _β_ _[,]_
+
+
+where _nj_ is the number of times token _j_ follows the current _k_ [th] -order context _x_ _[t]_ _t_ _k_ +1 [in the sequence]
+
+_−_
+_x_ _[t]_ 1 [, i.e.] _[n][j]_ [=] [:] [(] _[x][i]_ _i_ _[−]_ [1] _k_ _[, x][i]_ [)] [=] [(] _[x][t]_ _t_ _k_ +1 _[, j]_ [)] _[}|]_ [ and] _[ n]_ [ is the frequency of this context, i.e.] _[n]_ [=] [:]
+
+_[|{][i]_ _−_ _−_ _[|{][i]_
+_x_ _[i]_ _i_ _[−]_ [1] _k_ [=] _[ x]_ _t_ _[t]_ _k_ +1 _[}|]_ [.] [Adjusting these counts by] _[ β]_ [ plays the role of additive smoothing, which avoids]
+
+_−_ _−_
+assigning zero probabilities to unseen events, an idea dating back to Laplace (Laplace, 1814). It is
+also known that the add- _β_ estimator is asymptotically minimax optimal, as _T_ _→∞_ (Xie & Barron,
+1997; Hao et al., 2018).
+
+**How Laplacian smoothing implies ICL.** If Mamba realizes this smoothing estimator, i.e. P _**θ**_ = P [(] _β_ _[k]_ [)][,]
+it automatically implies its ICL abilities: given a fresh test sequence at inference, in order to optimally
+predict the next token, it has to process the input tokens in-context to compute the relevant counts, as
+in the Laplacian smoothing. _But does Mamba realize this optimal counting estimator in practice?_
+
+
+3 DOES MAMBA LEARN IN-CONTEXT ESTIMATORS?
+
+
+To investigate the ICL capabilities of Mamba, we consider the problem setup described above and
+train Mamba and transformer models using AdamW on the next-token prediction loss in Eq. (3) on
+random Markov chains (we refer to § F for more experimental details). These experiments reveal
+interesting and rather surprising insights about Mamba:
+
+
+1. Mamba learns the optimal Laplacian smoothing estimator on the Markov prediction task,
+even with a single layer (Fig. 1a).
+
+
+2. Convolution mechanism plays a fundamental role in Mamba, more so than gating and
+non-linear activations, in aiding its learning abilities (Fig. 3a).
+
+
+In the sequel, we expand upon these observations in detail.
+
+
+**1) Mamba learns the Laplacian smoothing.** After training, we evaluate Mamba and transformers
+on the same test sequence fixed beforehand and compare their performance to that of the optimal
+Laplacian smoothing estimator. Specifically, we compare their next-token prediction probabilities
+with those of the add- _β_ estimator. Fig. 1 illustrates these results for various Markov orders, which
+uncovers a surprising phenomenon: _even_ _a_ _single-layer_ _Mamba_ _sharply_ _matches_ _the_ _optimal_
+
+
+5
+
+
+0.40
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||<br> <br>M<br>|<br>amba<br>|<br>||||
+||||<br> <br>M<br>M|<br>mbaZ<br>amba w|<br>ro<br> ithout|<br> convolu|tion||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+0 5 10 15 20 25 30 35
+
+Iteration ( _×_ 200)
+
+
+(a) Importance of convolution
+
+
+0.00
+
+|Col1|Col2|Col3|Col4|O r d e r 1|Col6|Col7|
+|---|---|---|---|---|---|---|
+|||||<br> <br> <br>~~Order 2~~<br>Order 3|<br> <br> <br>~~Order 2~~<br>Order 3||
+||<br>~~Order 4~~|<br>~~Order 4~~|<br>~~Order 4~~|<br>~~Order 4~~|<br>~~Order 4~~|<br>~~Order 4~~|
+||||||||
+||||||||
+||||||||
+||||||||
+
+2 3 4 5 6
+
+
+Convolution window of Mamba
+
+
+(b) Relation between window size and Markov order
+
+
+Figure 3: (a) illustrates the fundamental role of convolution, without which the model fails to
+learn the task. In contrast, a simplified variant with just the convolution (MambaZero) matches the
+performance of the full model. (b) highlights the relation between the Markov order _k_ and the window
+size _w_ of Mamba. It is required that _w_ _≥_ _k_ + 1 for the model to learn the order- _k_ prediction task.
+
+
+_estimator_ _on_ _the_ _whole_ _sequence_ . The same conclusion holds for larger state spaces and deeper
+models (Fig. 10a), as well as in over-parametrized settings (Fig. 9), and even when part of the
+dataset is held out (see § E). For transformers, we observe that a two-layer model also matches the
+predictor, albeit less sharply, whereas a single layer fails to solve the task. This aligns with recent
+theoretical results (Sanford et al., 2024; Ekbote et al., 2025), that show that two layers are required
+for transformers to implement an induction head (realizing the counting estimator) efficiently. We
+also observe that linear attention performs similarly to softmax attention in this setting (cf. Fig. 7).
+Sec. 4.3 further discusses Mamba vs. Transformers.
+
+
+**2) Convolution is the key.** To decipher the key architectural component behind Mamba’s success
+in Markov prediction task, we do an ablation study on its three main features: (i) convolution in Input
+selectivity, (ii) ReLU non-linearity in Input selectivity, and (iii) the gating mechanism in Mamba and
+MLP. Amongst them, interestingly, _convolution_ plays a fundamental role in the model’s performance,
+as illustrated in Fig. 3a. Here we compare the full Mamba architecture from Sec. 2.2, Mamba with
+just the convolution in Input selectivity removed, and a simplified Mamba architecture with only
+convolution (MambaZero in Sec. 4.1). Further experiments on adding/removing convolution to
+Mamba and transformers, as well as experiments with varying width, are shown in § E.6, while
+experiments on natural language are deferred to Sec. 5.2. As a metric of comparison, we use the
+closeness of each of these models’ losses _L_ ( _**θ**_ ) to that of the optimal add- _β_ estimator _Lβ_, i.e. i.e.
+_L_ ( _**θ**_ ) _Lβ_ . The closer this metric is to zero, the better the model’s performance is. Remarkably,
+_|_ _−_ _|_
+the simplified Mamba with just the convolution succeeds on the Markov prediction task, while the
+full model without convolution fails, highlighting its fundamental importance. This raises a natural
+question: _how does convolution help Mamba to implement the optimal Laplacian estimator?_
+
+
+4 HOW MAMBA IMPLEMENTS THE LAPLACIAN ESTIMATOR
+
+
+Motivated by its success in learning the optimal estimator, here we study how Mamba represents
+Laplacian smoothing. Specifically, we provide a concrete theoretical construction backed by
+empirical results, that illustrates the mechanism Mamba uses to implement the estimator in practice.
+
+
+4.1 MAMBAZERO: SIMPLIFIED MODEL
+
+
+Building upon the insight that Mamba with just the convolution achieves the same performance
+as that of the full model (Fig. 3a), we consider its simplified version: MambaZero. MambaZero
+retains only the essential elements of the full model in Sec. 2.2: the Embedding layer, the convolution
+
+
+6
+
+
+inside the Mamba block in Input selectivity, and the Linear layer. More formally, it is given by:
+
+
+_**x**_ _t_ = _**e**_ _xt_ R _[d]_ _,_ (Embedding)
+_∈_
+
+_**u**_ _t_ = _**x**_ _t_ + MambaZero( _**x**_ _[t]_ 1 [)] _[,]_ (MambaZero)
+
+logit _t_ = _Wℓ_ _**u**_ _t_ R _[S]_ _,_ (Linear)
+_∈_
+
+_f_ _**θ**_ ( _x_ _[t]_ 1 [) = (logit] _t_ _[/][∥]_ [logit] _t_ _[∥]_ [1][)] _[,]_ (Prediction)
+
+
+_Ht_ = _atHt−_ 1 + _**x**_ - _t_ _**b**_ _[⊤]_ _t_
+
+_[∈]_ [R] _[ed][×][N]_ _[,]_
+
+
+_**y**_ _t_ = _Ht_ _**c**_ _t_ _∈_ R _[ed]_ _,_
+
+_**o**_ _t_ = _Wo_ _**y**_ _t_ _∈_ R _[d]_ _,_
+
+
+(MambaZero)
+
+
+where _**e**_ _x_ is the token embedding for _x_, and the input-selective terms _at,_ - _**x**_ _t,_ _**b**_ _t_ and _**c**_ _t_ are
+_∈X_
+computed as in Input selectivity without ReLU and just the convolution. Here we use the _L_ 1
+normalization instead of the softmax in the Prediction layer to ease theoretical analysis, similar to
+Nichani et al. (2024); Rajaraman et al. (2024). Let _**θ**_ = ( _**e**_ _i_ _i_ _,_ _**θ**_ MambaZero _, Wℓ_ ) R _[D]_ denote
+_{_ _}_ _∈X_ _∈_
+the full set of parameters for appropriate _D_ _≥_ 1.
+
+
+4.2 MAIN THEOREM: MAMBA REPRESENTS THE LAPLACIAN ESTIMATOR
+
+
+We now present our main theorem that MambaZero can represent Laplacian smoothing for any
+finite-state first-order Markov process. A key defining feature of our constructive proof is that it aligns
+with the structures empirically learned by the model, shedding light on the fundamental learning
+mechanisms of Mamba.
+
+**Theorem 1.** _For a state space X_ = _{_ 1 _,_ 2 _, . . ., S} of size |X|_ = _S, there is a choice of parameters for_
+_the canonical_ MambaZero _model, with dimensions N_ = _S, d_ = 2 _S, e_ = 1 _and convolution window_
+_w_ = 2 _, such that its output prediction exactly matches that of the Laplacian estimator, for first-order_
+_Markov chains on X_ _._ _More formally, for any β_ _>_ 0 _, there exists a set of parameters_ _**θ**_ _such that, for_
+_all sequences_ ( _xt_ ) _t≥_ 1 _and all t ≥_ 1 _,_
+
+_D_ KL �P [(1)] _β_ [(] _[· |][ x]_ 1 _[t]_ [)] _[∥]_ [P] _**[θ]**_        - _· | x_ _[t]_ 1� [�] = 0 _._
+
+
+**Remark.** The KL divergence above is precisely the penalty paid in the cross-entropy loss in Eq. (3)
+at time _t_ when using the predictor P _**θ**_ instead of the optimal P [(1)] _β_ [.] [In other words, the result implies]
+that the loss of MambaZero can be made exactly equal to the optimal.
+
+
+4.2.1 KEY MECHANISM AND PROOF SKETCH
+
+
+**Main idea.** To build our intuition towards how MambaZero can realize the add- _β_ counting estimator
+for first-order Markov sequences, let’s focus on the core MambaZero block. The key observation
+here is the following: if the state _Ht−_ 1 can capture all the transition counts _i →_ _j_ till _x_ _[t]_ 1 _[−]_ [1], the new
+state _Ht_ can be updated to account for the current transition _xt−_ 1 _→_ _xt_ on top of the existing counts,
+by a suitable choice of _at,_ - _**x**_ _t_, and _**b**_ _t_ . Then the relevant count information corresponding to the
+current prefix _xt_ could be read off from the state projection _**y**_ _t_ = _Ht_ _**c**_ _t_, and be modified to account
+for _β_ -smoothing via the Linear and Prediction layers. Buttressing this idea are two key empirical
+facts, which in fact hold for any _k_ _≥_ 1, underpinning our construction:
+
+**(i)** **State-to-state** **transition** **factor** _at_ 1 **for** **all** _t_ 1 **.** We empirically observe that when the
+_≈_ _≥_
+MambaZero model is trained on random first-order Markov data, at convergence we have _at_ 1 for
+_≈_
+all _t ≥_ 1 (Fig. 4). Since _at_ modulates how much past information flows into the present, _at_ = 1 is
+required for the state _Ht_ to store all previous transition counts. Note that this can be easily achieved
+by setting either _a_ or ∆ _t_ to be zero in Input selectivity, which we empirically observe as well.
+
+**(ii) Convolution window** _w_ _≥_ _k_ + 1 **.** Recalling that _k_ is the Markov order, we empirically observe
+that the window size _w_ = _k_ + 1 is sufficient for the full Mamba to learn the Laplacian smoothing
+on _k_ [th] -order Markov chains (Fig. 3b). To understand why, note that in the MambaZero architecture
+above, apart from the MambaZero block, all remaining equations operate on the current token at time
+_t_ . In the MambaZero block, the dependency of the output _**y**_ _t_ on the previous tokens is due to that of
+the state _Ht_ on ( _**x**_ - _t,_ _**b**_ _t_ ) in the update equation, and of _**c**_ _t_ in the state projection. Since ( _**x**_ - _t,_ _**b**_ _t,_ _**c**_ _t_ )
+depend on the past through the convolutions, a window of size _k_ + 1 enables them to keep track of
+the current token as well as its length- _k_ prefix, which is necessary to compute the counts needed in
+Laplacian smoothing. On the other hand, if _wX_ _, wB_ _k_, then one can find _confusable_ sequences,
+_≤_
+i.e. sequences that share the same number of occurrences of all length- _k_ prefixes, but whose counts
+
+
+7
+
+
+of the tokens following each prefix is different, resulting in the model’s estimate to deviate from
+that of the optimal add- _β_ . We refer to § C.1 for more details. While having all the window sizes
+_wX_ _, wB, wc_ _k_ + 1 is sufficient, it can be further strengthened to _wc_ = _k_ (§ C.1).
+_≥_
+
+We now detail our construction for the first-order case, capitalizing on these insights.
+
+
+**Construction.** Let us fix _w_ = _k_ + 1 = 2. Then, _**x**_ - _t_ and _**b**_ _t_ only depend on the current token _xt_ and
+the previous one _xt−_ 1, while _**c**_ _t_ only depends on _xt_ . Thus, _**x**_ - _t_ and _**b**_ _t_ can only take _S_ [2] possible values
+depending on the last transition in the sequence, whereas _**c**_ _t_ only _S_ . To ease the notation, we will
+denote these values by _**x**_ [(] _[ij]_ [)], _**b**_ [(] _[ij]_ [)], and _**c**_ [(] _[i]_ [)] respectively, for _i, j_ . Additionally, at _t_ = 1, these
+
+         _∈X_
+terms depend only on the current symbol, taking two additional values each, denoted by _**x**_ [(] _[i]_ [)] _,_ _**b**_ [(] _[i]_ [)] .
+
+                                 Let _nij_ denote the number of transitions _i →_ _j_ in the input sequence _x_ _[t]_ 1 [.] [Then, unfolding the state]
+update recursion in MambaZero, we get that the output of the MambaZero block is
+
+
+_**o**_ _t_ = _Wo_ _**x**_ �0 _**b**_ _[⊤]_ 0 _**[c]**_ _[t]_ [+]          - _nij Wo_ _**x**_          - [(] _[ij]_ [)] _**b**_ [(] _[ij]_ [)] _[⊤]_ _**c**_ _t._ (4)
+
+_ij_
+
+
+While the output in Eq. (4) depends on all the transition counts, in view of Laplacian smoothing, we
+ideally want only those counts pertaining to relevant transitions, i.e. if _xt_ = 0, the counts _n_ 0 _j_, for
+_j_, and similarly for other values of _xt_ . To this end, we empirically observe that at convergence,
+_∈X_
+the model’s parameters are such that _**b**_ [(] _[ij]_ [)] _[⊤]_ _**c**_ _t_ _≈_ 0 whether _i ̸_ = _xt_ (cf. Fig. 5). Due to this property,
+only the counts that are involved in the computation of the Laplacian estimator for the current token
+_xt_ appear in the output _**o**_ _t_ . Stitching these facts, the final logits in the Linear layer depend on the first
+and current token via
+
+logit _t_ = _Wℓ_ _**x**_ _t_ + _WℓWo_ _**x**_ �0 _**b**_ _[⊤]_ 0 _**[c]**_ _[t]_ [+]        - _nxt,jWℓWo_ _**x**_        - [(] _[x][t][,j]_ [)] _**b**_ [(] _[x][t][,j]_ [)] _[⊤]_ _**c**_ _t._ (5)
+
+_j_
+
+
+The final step is to then show that for properly chosen parameters, one can make the two vectors
+associated with the counts to be orthogonal, and the other vectors, independent of the counts, to
+sum up to the vector _β_ **1** (which we also empirically verified, cf. Fig. 5). Subsequently, the _L_ 1
+normalization in Prediction layer will give a next-token probability estimate, matching that of the
+add- _β_ estimator. We defer the full proof and additional details to § C.
+
+**Dimension reduction for binary state space.** Interestingly, for the binary case _X_ = _{_ 0 _,_ 1 _}_, it is
+possible to further reduce the hidden dimension _d_ = 2 _S_ in Thm. 1 to _d_ = _S_ = 2 by leveraging the
+relationship between the transition counts. The key theoretical insight is that the transition counts in
+binary sequences are strongly correlated. Specifically, _n_ 01 and _n_ 10 are at most one apart: every time
+a transition 0 _→_ 1 occurs, either the sequence is followed by only 1’s until the end, or a subsequent
+transition 1 0 also occurs. Therefore, the dependency of the output on _n_ 01 is in fact a dependency
+_→_
+on _n_ 10. One can leverage this property to help MambaZero realize Laplacian smoothing with just
+two-dimensional embeddings, with arbitrarily small error. We refer to Thm. 4 in § C.3 for full details.
+
+
+4.3 LOWER BOUND: FUNDAMENTAL LIMIT ON THE REPRESENTATION POWER OF MAMBA
+
+
+We now provide a fundamental limit on the representation power of recurrent architectures like
+Mamba, in the form of a lower bound on the hidden dimension that is required to represent the
+optimal estimator. In particular, our result establishes that with finite bit precision, irrespective of
+depth, for any recurrent architecture to implement the Laplacian estimator, the hidden dimension
+has to at least scale as Ω(2 _[k]_ ).
+
+**Theorem 2.** _Consider a recurrent model of the form_
+
+
+_Ht_ = _ht_ ( _Ht−_ 1 _, xt_ ) _,_
+
+
+_yt_ = P _**θ**_ - _x_ _[t]_ 1� = _gt_ ( _Ht_ ) _,_
+
+_· |_
+
+
+_with transformations_ ( _ht, gt_ ) _, where Ht_ R _[d]_ _and the model has a bit precision of_ `p` _._ _Suppose that_
+_∈_
+_the_ _k_ _[th]_ _-order_ _Markov_ _kernel_ _P_ _is_ _sampled_ _from_ _the_ _Dirichlet_ _prior_ _with_ _β_ = 1 _,_ _P_ _∼_ Dir(1 _·_ **1** ) _._
+_Suppose also that the recurrent architecture satisfies the following point-wise guarantee:_ _for any_
+_sufficiently large t, almost surely over P_ _and x_ _[t]_ 1
+
+_[∼]_ _[P]_ _[,]_
+���P _**θ**_                       - _x_ _[t]_ 1� P [(] 1 _[k]_ [)][(] _[· |][ x]_ 1 _[t]_ [)] ��� (6)
+
+_· |_ _−_
+_∞_ _[≤]_ _[ε,]_
+
+
+8
+
+
+_where_ P [(] 1 _[k]_ [)][(] _[· |][ x]_ 1 _[t]_ [)] _[ is the Laplacian estimator for][ β]_ [= 1] _[.]_ _[Then, the recurrent architecture must satisfy]_
+
+_d ·_ `p` _≥_ 2 _[k]_ (1 _−_ 3 _ε_ ) log(1 _/ε_ ) _._
+
+
+We defer the full proof and additional details to App. D.
+
+
+**Depth.** We note that Thm. 2 does not assume depth one, and holds for recurrent models of any depth.
+
+
+**Mamba** **vs.** **Transformers.** As Thm. 2 demonstrates, to capture a _k_ [th] -order Markov process,
+Mamba requires the hidden dimension to scale exponentially in _k_, whereas the best known result for
+transformers needs a three layer model with the hidden dimension growing linearly in _k_ (Rajaraman
+et al., 2024). On the other hand, for first-order sources we empirically observe from Fig. 1a that
+1-layer Mamba tracks the optimal estimator more sharply than a transformer (see § E for additional
+comparative results). While these comparisons are meant to provide a more detailed context for
+Mamba, we would like to emphasize that the main focus of our paper is not a comparative study
+but rather a _fundamental understanding of Mamba’s ICL abilities_ .
+
+
+**Higher** **orders** **and** **learning** **dynamics.** While Thm. 1 demonstrates that Mamba can represent
+the optimal estimator for finite-state first-order processes, our empirical results in Fig. 1b strongly
+suggest that a similar conclusion holds for higher-order sources. In a similar vein, analyzing Mamba’s
+learning dynamics in its convergence to this smoothing estimator is an interesting topic of future
+research, but outside the scope of this paper, whose focus is on representation power.
+
+
+5 BEYOND MARKOV
+
+
+5.1 SWITCHING MARKOV MODEL
+
+
+A key component of Mamba enabling selectivity is the state-transition factor _at_, that controls the flow
+of information from the past state _Ht−_ 1 to the current _Ht_ : if _at_ = 1, the past information is fully
+utilized in computing the current state, and hence the output, whereas _at_ = 0 completely ignores the
+past. In the Markovian setting considered so far, the role of _at_ has largely been dormant: _at_ _≈_ 1 for
+all _t_ _≥_ 1, as the optimal Laplacian predictor requires counts of all transitions, demanding the use
+of full past (Sec. 4.2). To better highlight this selectivity mechanism, we consider a non-Markovian
+process, where the role of _at_ becomes fundamental.
+
+
+Specifically, we focus on the _switching Markov process_, where we add a _switch_ token to the binary
+alphabet, i.e. we consider _X_ = _{_ 0 _,_ 1 _,_ S _}_ . The key difference here compared to the random Markov
+generation in Sec. 2.1 is that until we hit switch token, we follow the same binary Markov sequence
+generation as the former, but once the switch state is reached, we sample a new Markov kernel
+and then generate a new Markov sequence. The switch tokens are sampled according to a parallel
+i.i.d. Bernoulli process with probability _p_ switch (0 _._ 01 in our experiments). The sampling process is
+described in detail in § E.7. With this data model, the optimal prediction strategy is to use the add- _β_
+estimator in between two switch tokens, and reset the transition counts every time a switch occurs.
+We provide empirical evidence in § E.7. Indeed, Fig. 13 illustrates that Mamba implements precisely
+this strategy, closely tracking the switching events via the transition factor _at_ : it sets _at_ to be zero
+whenever _xt_ = S and to one otherwise.
+
+
+5.2 NATURAL LANGUAGE MODELING
+
+
+To test the generality of our finding that
+convolution plays a key role on Markovian
+data (Fig. 3), we conduct experiments on
+language modeling using the WikiText103 dataset. Details on the experimental
+setup can be found in § F. By adding or removing convolution in both these models,
+we obtain the results in Table 1. The results illustrate that convolution enhances
+the performance of the two architectures,
+in particular for Mamba (11% vs. 2%),
+
+
+Table 1: Perplexity results on the WikiText-103 dataset.
+
+
+**Model** **Params.** **Perplexity**
+
+
+Mamba-2 (w/o conv) 14 _._ 53 M 30 _._ 68
+Mamba-2 (w/ conv) 14 _._ 54 M **27** _._ **55**
+
+
+Transformer (w/o conv) 14 _._ 46 M 29 _._ 28
+Transformer (w/ conv) 14 _._ 46 M **28** _._ **67**
+
+
+9
+
+
+highlighting its saliency. Further ablation studies on this task show that together with convolution,
+gating also plays a central role (17% change, cf. § E.8, Table 4). Furthermore, additional experiments
+with deeper models show that the relative importance of convolution seems to decrease as the number
+of layers increases (cf. § E.8, Table 5). This may be due to the fact that the role of convolution is
+taken over by other Mamba layers, which are known to successfully approximate convolution (Wang
+& Xue, 2023).
+
+
+6 CONCLUSION
+
+
+Structured state space sequence models (SSMs) and Selective SSMs such as Mamba have shown remarkable inference speed-ups over transformers while achieving comparable or superior performance
+on complex language modeling tasks. In this paper, we studied in-context learning (ICL) capabilities
+of Mamba on random Markov chains and show that, unlike transformers, even a single-layer Mamba
+efficiently learns the in-context Laplacian smoothing estimator. To explain this, we theoretically and
+empirically characterized the representation capacity of Mamba, which revealed the fundamental
+role of convolution, together with selectivity and recurrence, in enabling it. We further provided
+additional empirical results on non-Markovian data, showing the generality of our insights. Extending
+our results to deeper Mamba models, as well as investigating Mamba’s learning dynamics, are some
+interesting future directions.
+
+
+ACKNOWLEDGMENTS
+
+
+The work in this manuscript was partially supported by the Swiss National Science Foundation under
+Grant 200364.
+
+
+REFERENCES
+
+
+Ekin Akyürek, Bailin Wang, Yoon Kim, and Jacob Andreas. In-context language learning: Arhitectures and algorithms. _arXiv preprint arXiv:2401.12973_, 2024.
+
+
+Yu Bai, Fan Chen, Huan Wang, Caiming Xiong, and Song Mei. Transformers as statisticians:
+Provable in-context learning with in-context algorithm selection. In _Workshop on Efficient Systems_
+_for Foundation Models @ ICML2023_, 2023.
+
+
+Maximilian Beck, Korbinian Pöppel, Markus Spanring, Andreas Auer, Oleksandra Prudnikova,
+Michael Kopp, Günter Klambauer, Johannes Brandstetter, and Sepp Hochreiter. xlstm: Extended
+long short-term memory. _arXiv preprint arXiv:2405.04517_, 2024.
+
+
+Satwik Bhattamishra, Michael Hahn, Phil Blunsom, and Varun Kanade. Separations in the representational capabilities of transformers and recurrent architectures. _Advances in Neural Information_
+_Processing Systems_, 37:36002–36045, 2024.
+
+
+Marco Bondaschi and Michael Gastpar. Batch universal prediction. In _2024 IEEE International_
+_Symposium on Information Theory (ISIT)_, pp. 3552–3557, 2024. doi: 10.1109/ISIT57864.2024.
+10619270.
+
+
+Marco Bondaschi and Michael Gastpar. Alpha-NML universal predictors. _IEEE Transactions on_
+_Information Theory_, 71(2):1171–1183, 2025. doi: 10.1109/TIT.2024.3521221.
+
+
+N. Cesa-Bianchi and G. Lugosi. _Prediction, Learning, and Games_ . Cambridge University Press,
+2006.
+
+
+Nicola Muca Cirone, Antonio Orvieto, Benjamin Walker, Cristopher Salvi, and Terry Lyons. Theoretical foundations of deep selective state-space models, 2025. [URL https://arxiv.org/](https://arxiv.org/abs/2402.19047)
+[abs/2402.19047.](https://arxiv.org/abs/2402.19047)
+
+
+Róbert Csordás, Kazuki Irie, Jürgen Schmidhuber, Christopher Potts, and Christopher D Manning.
+Moeut: Mixture-of-experts universal transformers. _arXiv preprint arXiv:2405.16039_, 2024.
+
+
+Tri Dao and Albert Gu. Transformers are SSMs: Generalized Models and Efficient Algorithms
+Through Structured State Space Duality. _arXiv preprint arXiv:2405.21060_, 2024.
+
+
+10
+
+
+Soham De, Samuel L Smith, Anushan Fernando, Aleksandar Botev, George Cristian-Muraru, Albert
+Gu, Ruba Haroun, Leonard Berrada, Yutian Chen, Srivatsan Srinivasan, et al. Griffin: Mixing
+Gated Linear Recurrences with Local Attention for Efficient Language Models. _arXiv preprint_
+_arXiv:2402.19427_, 2024.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: Pre-training of deep
+bidirectional transformers for language understanding, 2018. URL [https://arxiv.org/](https://arxiv.org/abs/1810.04805)
+[abs/1810.04805.](https://arxiv.org/abs/1810.04805)
+
+
+Benjamin L. Edelman, Ezra Edelman, Surbhi Goel, Eran Malach, and Nikolaos Tsilivis. The
+Evolution of Statistical Induction Heads: In-Context Learning Markov Chains, 2024.
+
+
+Chanakya Ekbote, Marco Bondaschi, Nived Rajaraman, Jason D. Lee, Michael Gastpar, Ashok Vardhan Makkuva, and Paul Pu Liang. What one cannot, two can: Two-layer transformers provably
+represent induction heads on any-order markov chains, 2025. [URL https://arxiv.org/](https://arxiv.org/abs/2508.07208)
+[abs/2508.07208.](https://arxiv.org/abs/2508.07208)
+
+
+Riccardo Grazzi, Julien Siems, Simon Schrodi, Thomas Brox, and Frank Hutter. Is mamba capable
+of in-context learning? _arXiv preprint arXiv:2402.03170_, 2024.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-Time Sequence Modeling with Selective State Spaces. _arXiv_
+_preprint arXiv:_ _2312.00752_, 2023a.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023b.
+
+
+Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, and Christopher Ré. Hippo: Recurrent memory
+with optimal polynomial projections. In _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+volume 33, pp. 1474–1487, 2020.
+
+
+Albert Gu, Isys Johnson, Karan Goel, Khaled Saab, Tri Dao, Atri Rudra, and Christopher Ré.
+Combining recurrent, convolutional, and continuous-time models with linear state space layers. In
+_Advances in Neural Information Processing Systems_, volume 34, pp. 572–585, 2021.
+
+
+John T Halloran, Manbir Gulati, and Paul F Roysdon. Mamba state-space models can be strong
+downstream learners. _arXiv preprint arXiv:2406.00209_, 2024.
+
+
+Yi Hao, Alon Orlitsky, and Venkatadheeraj Pichapati. On learning markov chains. In _Advances in_
+_Neural Information Processing Systems_, volume 31, pp. 646–655, 2018.
+
+
+Roee Hendel, Mor Geva, and Amir Globerson. In-context learning creates task vectors. _arXiv preprint_
+_arXiv:2310.15916_, 2023.
+
+
+Samy Jelassi, David Brandfonbrener, Sham M Kakade, and Eran Malach. Repeat after me: Transformers are better than state space models at copying. _arXiv preprint arXiv:2402.01032_, 2024.
+
+
+Federico Arangath Joseph, Kilian Konstantin Haefeli, Noah Liniger, and Caglar Gulcehre. Hippoprophecy: State-space models can provably learn dynamical systems in context. _arXiv preprint_
+_arXiv:2407.09375_, 2024.
+
+
+Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In _International_
+_Conference on Learning Representations (ICLR)_, 2015.
+
+
+Pierre Simon Laplace. _Essai_ _philosophique_ _sur_ _les_ _probabilités_ . Courcier, Paris, France, 1814.
+Reprinted by Cambridge University Press, 2009. In the reprint, the estimator appears on page 23.
+
+
+Chris Lu, Yannick Schroecker, Albert Gu, Emilio Parisotto, Jakob Foerster, Satinder Singh, and
+Feryal Behbahani. Structured state space models for in-context reinforcement learning. _Advances_
+_in Neural Information Processing Systems_, 36, 2024.
+
+
+Ashok Vardhan Makkuva, Marco Bondaschi, Adway Girish, Alliot Nagle, Hyeji Kim, Michael
+Gastpar, and Chanakya Ekbote. Local to Global: Learning Dynamics and Effect of Initialization
+for Transformers. In _The_ _Thirty-eighth_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_
+_Systems_, 2024.
+
+
+11
+
+
+Ashok Vardhan Makkuva, Marco Bondaschi, Alliot Nagle, Adway Girish, Hyeji Kim, Martin Jaggi,
+and Michael Gastpar. Attention with Markov: A curious case of single-layer transformers. In _The_
+_Thirteenth International Conference on Learning Representations_, 2025.
+
+
+N. Merhav and M. Feder. Universal prediction. _IEEE Transactions on Information Theory_, 44(6):
+2124–2147, 1998. doi: 10.1109/18.720534.
+
+
+William Merrill, Jackson Petty, and Ashish Sabharwal. The illusion of state in state-space models.
+_arXiv preprint arXiv:2404.08819_, 2024.
+
+
+Eshaan Nichani, Alex Damian, and Jason D Lee. How Transformers Learn Causal Structure with
+Gradient Descent. _arXiv preprint arXiv:2402.14735_, 2024.
+
+
+Antonio Orvieto, Soham De, Caglar Gulcehre, Razvan Pascanu, and Samuel L Smith. On the universality of linear recurrences followed by nonlinear projections. _arXiv preprint arXiv:2307.11888_,
+2023a.
+
+
+Antonio Orvieto, Samuel L Smith, Albert Gu, Anushan Fernando, Caglar Gulcehre, Razvan Pascanu,
+and Soham De. Resurrecting recurrent neural networks for long sequences. _arXiv_ _preprint_
+_arXiv:2303.06349_, 2023b.
+
+
+Matteo Pagliardini. GPT-2 modular codebase implementation. [https://github.com/epfml/](https://github.com/epfml/llm-baselines)
+[llm-baselines.](https://github.com/epfml/llm-baselines) Accessed: Jan. 2025.
+
+
+Jongho Park, Jaeseung Park, Zheyang Xiong, Nayoung Lee, Jaewoong Cho, Samet Oymak, Kangwook Lee, and Dimitris Papailiopoulos. Can mamba learn how to learn? a comparative study
+on in-context learning tasks. In _Proceedings of the 41st International Conference on Machine_
+_Learning_, 2024.
+
+
+Jiahao Qin and Feng Liu. Mamba-spike: Enhancing the mamba architecture with a spiking front-end
+for efficient temporal data processing. _arXiv preprint arXiv:2408.11823_, 2024.
+
+
+Alec Radford and Karthik Narasimhan. Improving language understanding by generative pre-training.
+2018. [URL https://api.semanticscholar.org/CorpusID:49313245.](https://api.semanticscholar.org/CorpusID:49313245)
+
+
+Nived Rajaraman, Marco Bondaschi, Ashok Vardhan Makkuva, Kannan Ramchandran, and Michael
+Gastpar. Transformers on Markov data: Constant depth suffices. In _The Thirty-eighth Annual_
+_Conference on Neural Information Processing Systems_, 2024.
+
+
+J. Rissanen. Universal coding, information, prediction, and estimation. _IEEE_ _Transactions_ _on_
+_Information Theory_, 30(4):629–636, 1984. doi: 10.1109/TIT.1984.1056936.
+
+
+Clayton Sanford, Daniel Hsu, and Matus Telgarsky. One-layer transformers fail to solve the induction
+heads task, 2024. [URL https://arxiv.org/abs/2408.14332.](https://arxiv.org/abs/2408.14332)
+
+
+Yash Sarrof, Yana Veitsman, and Michael Hahn. The Expressive Capacity of State Space Models: A
+Formal Language Perspective. _arXiv preprint arXiv:_ _2405.17394_, 2024.
+
+
+Neeraj Mohan Sushma, Yudou Tian, Harshvardhan Mestha, Nicolo Colombo, David Kappel, and
+Anand Subramoney. State-space models can learn in-context by gradient descent. _arXiv preprint_
+_arXiv:2410.11687_, 2024.
+
+
+Jamba Team, Barak Lenz, Alan Arazi, Amir Bergman, Avshalom Manevich, Barak Peleg, Ben
+Aviram, Chen Almagor, Clara Fridman, Dan Padnos, et al. Jamba-1.5: Hybrid transformer-mamba
+models at scale. _arXiv preprint arXiv:2408.12570_, 2024.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. In _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, pp. 5998–6008, 2017.
+
+
+Shida Wang and Beichen Xue. State-space models with layer-wise nonlinearity are universal
+approximators with exponential decaying memory. _Advances in Neural Information Processing_
+_Systems_, 36:74021–74038, 2023.
+
+
+12
+
+
+Qun Xie and A.R. Barron. Minimax redundancy for the class of memoryless sources. _IEEE_
+_Transactions on Information Theory_, 43(2):646–657, 1997.
+
+
+Sang Michael Xie, Aditi Raghunathan, Percy Liang, and Tengyu Ma. An explanation of in-context
+learning as implicit bayesian inference. _arXiv preprint arXiv:2111.02080_, 2021.
+
+
+L Zhu, B Liao, Q Zhang, X Wang, W Liu, and X Wang. Vision Mamba: Efficient visual representation
+learning with bidirectional state space model. _arXiv preprint arXiv:2401.09417_, 2024.
+
+
+13
+
+
+A PRELIMINARIES ON LAPLACIAN SMOOTHING
+
+
+Laplacian smoothing is a mature and well understood topic. An account can be found, e.g., in Merhav
+& Feder (1998); Cesa-Bianchi & Lugosi (2006), with some recent updates in Bondaschi & Gastpar
+(2024; 2025). For the sake of completeness, we provide a brief outline of how it applies to our
+context. For _k_ -th order Markov data, at every time instant _t_, the Laplacian add- _β_ estimator applied
+to the subsequence of tokens with the same context _i_ _[k]_ 1 [as the current one is the predictor that]
+minimizes the Bayesian cross-entropy loss in Eq. (3), when the Markov kernel is sampled according _[∈X][ k]_
+to the product Dirichlet distribution Dir( _β ·_ **1** ). We first give an intuition of why this is the case, and
+we provide a full proof at the end of the section. We consider the binary case _X_ = _{_ 0 _,_ 1 _}_, but the
+results can be extended to arbitrary finite alphabets.
+
+Consider a given sequence ( _xt_ ) _[T]_ _t_ =1 [.] [For every length-] _[k]_ [context] _[ i][k]_ 1 _[∈X][ k]_ [, let][ (] _[x][t]_ [)] _[|]_ _i_ _[k]_ 1 [be the subse-]
+quence of tokens preceded by _i_ _[k]_ 1 [.] [Note that, since each sequence][ (] _[x][t]_ [)][ is generated by a] _[ k]_ [-th order]
+Markov chain, all the tokens in the sequence with the same length- _k_ prefix share the same conditional
+probability distribution. Furthermore, since each of the conditional distributions of the chain is
+randomly chosen independently from the others, the subsequence ( _xt_ ) _|ik_ 1 [is a sufficient statistic to]
+estimate the probability distribution of all the tokens with the same prefix _i_ _[k]_ 1 [.] [Therefore, the optimal]
+prediction for a sequence ( _xt_ ) _[T]_ _t_ =1 [is given by employing the optimal predictor for each i.i.d.] [subse-]
+quencedistribution with parameter ( _xt_ ) _|ik_ 1 [, for every] _[ i]_ 1 _[k]_ _β_ _[∈X]_, it is well known that the optimal predictor for such subsequences is the _[ k]_ [.] [Since each conditional distribution is sampled from a Dirichlet]
+add-constant estimator, with constant equal to _β_ . More specifically, if _x_ _[t]_ _t_ _[−]_ [1] _k_ [=] _[ i]_ 1 _[k]_ [, then the optimal]
+
+_−_
+estimation for _xt_ is
+
+
+P [(] _β_ _[k]_ [)] - _xt_ +1 = _j_ _| x_ _[t]_ 1� = _n_ _[n]_ + 2 _[j]_ [+] _[ β]_ _β_
+
+
+(7)
+_n_ + 2 _β_ _[,]_
+
+
+where _nj_ is the number of times token _j_ appears in the subsequence _x_ _[t]_ 1 _[|]_ _i_ _[k]_ 1 [= (] _[x][ℓ]_ _[∈]_ _[x]_ 1 _[t]_ [:] _[ x]_ _ℓ_ _[ℓ][−]_ _−k_ [1] [=] _[ i]_ 1 _[k]_ [)][,]
+and _n_ is the length of the subsequence.
+
+
+We now provide a formal proof of this fact.
+**Theorem 3.** _Consider the class of all k-th order Markov kernels P_ = ( _Pik_ 1 [)] _[i][k]_ 1 _[∈X][ k]_ _[, where each][ P][i][k]_ 1 [=]
+P( _· | i_ _[k]_ 1 [)] _[ is a probability distribution on][ X]_ [=] _[ {]_ [0] _[,]_ [ 1] _[}][.]_ _[Let each][ P]_ _i_ _[k]_ 1 _[be sampled i.i.d.]_ _[from]_ [ Dir(] _[β][ ·]_ **[ 1]** [)] _[,]_
+
+_and let x_ _[k]_ 1 _[∼]_ [Unif(] _[X][ k]_ [)] _[ and][ x][t]_ [+1] _[|][x]_ 1 _[t]_ _[∼]_ _[P]_ _x_ _[t]_ _t−k_ +1 _[.]_ _[Then, the predictor][ f]_ [ (] _[j]_ [)][(] _[x][t]_ 1 [) =] [P][ˆ][(] _[x][t]_ [+1] [=] _[ j]_ _[|][ x]_ 1 _[t]_ [)] _[,]_
+_for j_ _∈{_ 0 _,_ 1 _}, that minimizes the loss_
+
+
+_L_ ≜
+
+_−_ _T_ [1]
+
+
+_T_
+
+
+- E _P_ E _xt_ 1+1 _P_ - _xt_ +1 log _f_ [(1)] ( _x_ _[t]_ 1 [) + (1] _[ −]_ _[x][t]_ [+1][)] _[ ·]_ [ log] _[ f]_ [ (0)][(] _[x]_ 1 _[t]_ [)] - (8)
+
+_t∈_ [ _T_ ] _∼_ _·_
+
+
+_is the add-β_ _estimator in Eq._ (7) _, i.e._ _the minimizer f∗_ [(] _[j]_ [)][(] _[x]_ 1 _[t]_ [) =][ P][(] _β_ _[k]_ [)] ( _xt_ +1 = _j_ _| x_ _[t]_ 1 [)] _[, for all][ t][ ≥]_ _[k][.]_
+
+
+_Proof._ First note that
+
+
+_L_ =
+_−_ _T_ [1]
+
+
+=
+_−_ _T_ [1]
+
+
+=
+_−_ _T_ [1]
+
+
+- E _xt_ 1�E _xt_ +1 _xt_ 1 [[] _[x][t]_ [+1][]] _[ ·]_ [ log] _[ f]_ [ (1)][(] _[x]_ 1 _[t]_ [) + (1] _[ −]_ [E] _xt_ +1 _x_ _[t]_ 1 [[] _[x][t]_ [+1][])] _[ ·]_ [ log] _[ f]_ [ (0)][(] _[x]_ 1 _[t]_ [)] - _._
+
+_|_ _|_
+_t_
+
+
+- E _P_ E _xt_ 1+1 _P_ - _xt_ +1 log _f_ [(1)] ( _x_ _[t]_ 1 [) + (1] _[ −]_ _[x][t]_ [+1][)] _[ ·]_ [ log] _[ f]_ [ (0)][(] _[x][t]_ 1 [)] 
+_t_ _∼_ _·_
+
+
+- E _xt_ 1 [E] _[x][t]_ [+1] _[|][x][t]_ 1� _xt_ +1 log _f_ [(1)] ( _x_ _[t]_ 1 [) + (1] _[ −]_ _[x][t]_ [+1][)] _[ ·]_ [ log] _[ f]_ [ (0)][(] _[x][t]_ 1 [)] 
+_t_ _·_
+
+
+Let us define the distribution _f∗_ [(1)][(] _[x]_ 1 _[t]_ [)][ ≜] [E] _xt_ +1 _|x_ _[t]_ 1 [[] _[x][t]_ [+1][]][ and] _[ f]_ _∗_ [ (0)][(] _[x]_ 1 _[t]_ [)][ ≜] [1] _[ −]_ _[f]_ _∗_ [ (1)][(] _[x]_ 1 _[t]_ [)][.] [Then, we can]
+rewrite the loss as
+
+
+_L_ = [1]
+
+_T_
+
+
+- E _xt_ 1� _−_ _f∗_ [(1)][(] _[x]_ 1 _[t]_ [)] _[ ·]_ [ log] _[ f]_ [ (1)][(] _[x][t]_ 1 [)] _[ −]_ _[f]_ _∗_ [ (0)][(] _[x]_ 1 _[t]_ [)] _[ ·]_ [ log] _[ f]_ [ (0)][(] _[x][t]_ 1 [)] - _._
+
+_t_
+
+
+For every _t_ [ _T_ ] and every _x_ _[t]_ 1 [the] [term] [inside] [the] [expectation] [is] [minimized] [by] [picking]
+_∈_ _[∈X][ t]_ [,]
+_f_ [(1)] ( _x_ _[t]_ 1 [) =] _[ f]_ _∗_ [ (1)][(] _[x]_ 1 _[t]_ [)][.] [In fact, note that it can be rewritten as]
+
+_f_ [(1)] 1 [)] _[ ·]_ [ log] _[ f]_ [ (1)][(] _[x][t]_ 1 [)] _[ −]_ _[f]_ [ (0)] 1 [)] _[ ·]_ [ log] _[ f]_ [ (0)][(] _[x][t]_ 1 [)]
+
+_−_ _∗_ [(] _[x][t]_ _∗_ [(] _[x][t]_
+
+
+14
+
+
+1 [)] 1 [)]
+= _f_ [(1)] 1 [)] _[ ·]_ [ log] _[f]_ _∗_ [ (1)][(] _[x][t]_ 1 [)] _[ ·]_ [ log] _[f]_ _∗_ [ (0)][(] _[x][t]_ 1 [) log] _[ f]_ [ (1)] 1 [)]
+_∗_ [(] _[x][t]_ _f_ [(1)] ( _x_ _[t]_ 1 [)] [+] _[ f]_ _∗_ [ (0)][(] _[x][t]_ _f_ [(0)] ( _x_ _[t]_ 1 [)] _∗_ [(] _[x][t]_ _∗_ [(] _[x][t]_
+
+_[−]_ _[f]_ [ (1)]
+
+
+= _D_ KL - _f_ ( _x_ _[t]_ 1 [)] _[∥][f]_ [(] _[x][t]_ 1 [)] - + _H_ ( _f_ ( _x_ _[t]_ 1 [))] _[,]_
+_∗_ _∗_
+
+
+_f_ [(0)] 1 [) log] _[ f]_ [ (0)] 1 [)]
+
+_−_ _∗_ [(] _[x][t]_ _∗_ [(] _[x][t]_
+
+
+which is minimized when _D_ KL ( _f∗_ ( _x_ _[t]_ 1 [)] _[∥][f]_ [(] _[x][t]_ 1 [)) = 0][, i.e., when] _[ f]_ [(] _[x][t]_ 1 [) =] _[ f][∗]_ [(] _[x][t]_ 1 [)][.] [We will now show]
+that _f∗_ ( _x_ _[t]_ 1 [)][ is precisely the add-] _[β]_ [estimator.] [Consider any context] _[ i][k]_ 1 [and any sequence] _[ x]_ 1 _[t]_ [such that]
+_x_ _[t]_ _t_ _k_ +1 [=] _[ i]_ 1 _[k]_ [.] [Let also] _[ p]_ [ ≜] _[P]_ _i_ _[k]_ 1 [(1) =][ P][(1] _[ |][ i]_ 1 _[k]_ [)][.] [Then,]
+
+_−_
+
+
+_f∗_ [(1)][(] _[x]_ 1 _[t]_ [)][ ≜] [E] _xt_ +1 _|x_ _[t]_ 1 [[] _[x][t]_ [+1][]]
+
+
+= E _Pik_ 1 1 [E] _[x][t]_ [+1] _[|][x][t]_ 1 _[,P]_ _i_ _[k]_ 1 [[] _[x][t]_ [+1][]]
+
+_[|][x][t]_
+
+
+= E _Pik_ 1 1 [[] _[P][i][k]_ 1 [(1)]]
+
+_[|][x][t]_
+
+
+= E _Pik_ 1 _[|][x]_ 1 _[t]_ _[|]_ _i_ _[k]_ 1 [[] _[P][i]_ 1 _[k]_ [(1)]] _[,]_
+
+
+where in the last equation we used the fact that, whensufficient statistic for _Pik_ 1 [.] [Hence,] _x_ _[k]_ 1 _[∼]_ [Unif(] _[X][ k]_ [)][, the subsequence] _[ x]_ 1 _[t]_ _[|]_ _i_ _[k]_ 1 [is a]
+
+
+_f∗_ [(1)][(] _[x]_ 1 _[t]_ [) =][ E] _Pik_ 1 _[|][x]_ 1 _[t]_ _[|]_ _i_ _[k]_ 1 [[] _[P][i]_ 1 _[k]_ [(1)]]
+
+
+ - 1
+=
+
+
+_p_ _[β][−]_ [1] (1 _p_ ) _[β][−]_ [1] _p_ _[n]_ [1] (1 _p_ ) _[n]_ [0]
+
+- 1 _−_ _−_ _· p dp_
+0 _[q][β][−]_ [1][(1] _[ −]_ _[q]_ [)] _[β][−]_ [1] _[q][n]_ [1][(1] _[ −]_ _[q]_ [)] _[n]_ [0] _[ dq]_
+
+
+0
+
+
+=
+
+
+ - 1
+0 _[p][n]_ [1][+] _[β]_ [(1] _[ −]_ _[p]_ [)] _[n]_ [0][+] _[β][−]_ [1] _[ dp]_
+�01 _[q][n]_ [1][+] _[β][−]_ [1][(1] _[ −]_ _[q]_ [)] _[n]_ [0][+] _[β][−]_ [1] _[dq]_
+
+
+[ +] _[ β]_ [ + 1)Γ(] _[n]_ [0][ +] _[ β]_ [)] Γ( _n_ + 2 _β_ )
+
+Γ( _n_ + 2 _β_ + 1) _·_ Γ( _n_ 1 + _β_ )Γ( _n_ 0 + _β_ )
+
+
+= [Γ(] _[n]_ [1][ +] _[ β]_ [ + 1)Γ(] _[n]_ [0][ +] _[ β]_ [)]
+
+
+= _[n]_ [1][ +] _[ β]_
+
+_n_ + 2 _β_ _[,]_
+
+
+                      - 1
+where we used the fact thatand that Γ( _z_ + 1) = _z_ Γ( _z_ ). _Pik_ 1 _[∼]_ [Dir(] _[β][ ·]_ **[ 1]** [)][, that] 0 _[q][z]_ [1] _[−]_ [1][(1] _[ −]_ _[q]_ [)] _[z]_ [0] _[−]_ [1] [= Γ(] _[z]_ [1][)Γ(] _[z]_ [0][)] _[/]_ [Γ(] _[z]_ [1][ +] _[ z]_ [0][)][,]
+
+
+**Remark.** The proof above is for _x_ _[k]_ 1 [However, note that the same proof would also]
+work for _x_ _[k]_ 1 [distributed according to any distribution that is independent of the Markov kernel] _[∼]_ [Unif(] _[X][ k]_ [)][.] _[ P]_ [.] [If]
+instead the distribution depends on _P_ (e.g., the stationary distribution of the Markov chain), then the
+proof would fail in the step where _x_ _[t]_ 1 _[|]_ _i_ _[k]_ 1 [is a sufficient statistic for] _[ P][i]_ 1 _[k]_ [.]
+
+
+**Remark.** It is important to note that, to be able to implement such a predictor requires in-context
+capabilities: at inference, in order to optimally predict the next token, the model must be able to look
+into the previous tokens of the test sequence, and count the tokens with the correct prefix.
+
+
+15
+
+
+B MAMBA-BASED LANGUAGE MODELING ARCHITECTURE
+
+
+Mamba block can be incorporated into a full-fledged language model as follows: let _x_ =
+( _x_ 1 _, x_ 2 _, · · ·_ _, xT_ ) _∈X_ _[T]_ be an input token-sequence over the alphabet _X_ ; here _X_ = _{_ 0 _,_ 1 _}_ as
+explained in Sec. 2.1. Then, at every _t_ _∈_ [ _T_ ], the output of the language model _**θ**_ is given by the
+following sequence of equations (Dao & Gu, 2024):
+
+
+_**x**_ _t_ = _**e**_ _xt_ R _[d]_ _,_ (Embedding)
+_∈_
+
+_**u**_ _t_ = _**x**_ _t_ + Mamba( _**x**_ _[t]_ 1 [)] _[ ∈]_ [R] _[d][,]_ (Mamba)
+
+_**v**_ _t_ = _**u**_ _t_ + _W_ 2[ReLU( _W_ 1 _**u**_ _t_ ) _⊙_ _W_ 3 _**u**_ _t_ ] _∈_ R _[d]_ _,_ (MLP)
+
+
+logit _t_ = _Wℓ_ _**v**_ _t_ R _[S]_ _,_ (Linear)
+_∈_
+
+
+_f_ _**θ**_ ( _x_ _[t]_ 1 [)][ ≜] [P] _**[θ]**_ - _xt_ +1 = _x_ _[t]_ 1� = softmax(logit _t_ ) [0 _,_ 1] _[S]_ _,_ (Prediction)
+_· |_ _∈_
+
+
+where the parameters _**e**_ _i_ R _[d]_ _, W_ 1 R [4] _[d][×][d]_ _, W_ 2 R _[d][×]_ [4] _[d]_ and _Wℓ_ R _[S][×][d]_ are learnable, and
+_∈_ _∈_ _∈_ _∈_
+_f_ _**θ**_ ( _x_ _[t]_ 1 [)] [is] [the] [probability] [law] [for] [the] [next] [symbol] _[x][t]_ [+1] [conditioned] [on] [the] [past] _[x][t]_ 1 [.] [We] [omit] [the]
+layer norm here for simplicity. We compactly denote the set of all model parameters as _**θ**_, i.e.
+_**θ**_ = ( _**e**_ _i_ _i_ _,_ _**θ**_ Mamba _, W_ 1 _,_ 2 _,_ 3 _, Wℓ_ ) R _[D]_ .
+_{_ _}_ _∈X_ _∈_
+
+
+16
+
+
+C PRELIMINARIES AND PROOF OF THM. 1 AND THM. 4
+
+
+C.1 EMPIRICAL INSIGHTS
+
+
+Here we expand upon our empirical observations in 4.2.1, which form the basis of our proof.
+
+
+**State-to-state** **transition** **factor** _at_ 1 **for** **all** _t_ 1 **.** We empirical evidence supporting this
+_≈_ _≥_
+observation in Fig. 4.
+
+
+Position _t_
+
+
+Figure 4: Value of _at_ across positions at convergence.
+
+
+**Convolution window** _w_ _≥_ _k_ + 1 **.** Recalling that _k_ is the Markov order, we empirically observe
+that the window that _w_ = _k_ + 1 is sufficient for the full Mamba to learn the Laplacian smoothing
+on _k_ [th] -order Markov chains. To understand why, note that in the MambaZero architecture above,
+apart from the MambaZero block, all remaining equations operate on the current token at time _t_ . In
+the MambaZero block, same as the Mamba block except ReLU, the dependency of the output _**y**_ _t_ on
+the previous tokens is due to that of the state _Ht_ on ( _**x**_ - _t,_ _**b**_ _t_ ) in the update equation, and of _**c**_ _t_ in the
+state projection. Since ( _**x**_ - _t,_ _**b**_ _t,_ _**c**_ _t_ ) depend on the past through the convolutions, a window of size
+_k_ + 1 enables them to keep track of the current token as well as its length- _k_ prefix, which is necessary
+to compute the counts needed in Laplacian smoothing. On the other hand, if _w_ _≤_ _k_, then one can
+find _confusable_ sequences, i.e. sequences that share the same number of occurrences of all length- _k_
+prefixes, but whose counts of the tokens following each prefix is different.
+
+
+For such sequences, the state _Ht_ is the same, and so are the predicted probabilities by the Mamba
+model; however, the optimal estimator, depending on the transition counts, would give very different
+probability estimates, allowing Mamba’s prediction loss to deviate from that of the optimal. For
+example, consider _k_ = 1. If _w_ = 1, then ( _**x**_ - _t,_ _**b**_ _t,_ _**c**_ _t_ ) depend only on the current token _xt_ . Then,
+consider the two sequences _x_ = (0 _,_ 1 _,_ 0 _,_ 1 _,_ 0 _,_ 1) and _x_ = (0 _,_ 0 _,_ 0 _,_ 1 _,_ 1 _,_ 1). At time _t_ = 6, these two
+                         sequences would give the same state _Ht_ and the same output _**y**_ _t_, since they share the same number of
+tokens 0 and 1. Therefore, the estimated probability given by the model would be the same in both
+cases. However, the optimal add-constant estimator (with _β_ = 1) would estimate the probability of
+_xt_ +1 = 1 to be 1 _/_ 4 for _**x**_, and 3 _/_ 4 for _**x**_ �.
+
+Further, _it is sufficient that the convolution for_ _**c**_ _t has window wC_ = _k._ That is, the convolution conv _C_
+involved in the computation of _**c**_ _t_ can have a window size equal to the Markov order _k_ (i.e., one less
+than conv _X_ and conv _B_ ) without affecting the model’s capability of learning the task (or, equivalently,
+the left-most kernel coefficients of conv _C_ can be taken to be zero). Intuitively, this is because the
+role of _**c**_ _t_ in the state projection is to select the correct transition counts for the computation of the
+estimator, distilled into _**y**_ _t_ . In order to do so, it is sufficient to know the length- _k_ context of the current
+symbol _xt_, which can be encoded by a convolution with window size _k_ .
+
+**Orthogonal count-dependent vectors.** The inner products _**b**_ [(] _[ij]_ [)] _[⊤]_ _**c**_ [(] _[k]_ [)] corresponding to _i ̸_ = _k_ go to
+zero at convergence: only the correct counts are kept in the final logit.
+
+
+17
+
+
+**Convergence** **to** **the** **optimal** _β_ = 1 **.** The count-independent part of the final logit converges to
+_β_ = 1, corresponding to the optimal Laplacian estimator.
+
+
+1 _._ 75
+
+
+1 _._ 50
+
+
+1 _._ 25
+
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+0 _._ 00
+
+
+_−_ 0 _._ 25
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|b(00)⊤c(0)|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||**b**(01)_⊤_**c**(0)<br>**b**(10)_⊤_**c**(0)|**b**(01)_⊤_**c**(0)<br>**b**(10)_⊤_**c**(0)|
+||||||||**b**(11)_⊤_**c**(0)|**b**(11)_⊤_**c**(0)|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+0 100 200 300 400 500 600 700
+Iterations
+
+
+(a) Counts-related inner products
+
+
+1 _._ 2
+
+
+1 _._ 1
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+|Col1|Col2|Col3|Col4|Col5|β0<br>β1|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+0 25 50 75 100 125 150 175 200
+Iterations (x10)
+
+
+(b) Counts-independent vector
+
+
+Figure 5: (a) Counts-related inner products across interations. Only the correct counts corresponding
+to _**b**_ [(] _[ij]_ [)] _[⊤]_ _**c**_ [(] _[k]_ [)] for _i_ = _k_ have a non-zero inner product at convergence. (b) Binary coordinates of the
+counts-independent vector across iterations. Both coordinates converge to the optimal _β_ = 1.
+
+
+C.2 PROOF OF THM. 1
+
+
+Let _β_ _>_ 0 be the constant of the considered add-constant estimator. Let us fix _a_ = 0 and ∆ _t_ = 1, so
+that _at_ = 1, for all _t_ 1. This can be done by picking, e.g., _**w**_ ∆ = **0** and _δ_ such that softplus( _δ_ ) = 1.
+_≥_
+Note that the application of convolution to a given sequence of vectors _**z**_ 1 _[t]_ [can be rewritten as a linear]
+matrix-form operation. For example, for conv _X_, one has that
+
+conv _X_ ( _**z**_ _t_ ) = _DX_ [(0)] _**[z]**_ _[t][−]_ [1][ +] _[ D]_ _X_ [(1)] _**[z]**_ _[t]_ (9)
+
+where _DX_ [(0)] [and] _[ D]_ _X_ [(1)] [are diagonal matrices.] [The same holds for][ conv] _[B]_ [and][ conv] _[C]_ [, with correspond-]
+ing diagonal matrices _DB_ [(0)] _[, D]_ _B_ [(1)] _[, D]_ _C_ [(0)] [and] _[ D]_ _C_ [(1)][.]
+
+Let us take the embedding vectors _**e**_ _i, i_, to be the one-hot encoding vectors for the alphabet
+_∈X_
+_X_, interleaved with zeros, i.e., let _**e**_ _i_ be such that _ei,_ 2 _i−_ 1 = 1 and 0 otherwise. Furthermore, take
+_WX_ to be the 2 _S_ 2 _S_ matrix such that _WX_ ( _i, j_ ) = 1 for _i_ = 2 _k_ and _j_ = 2 _k_ 1, for 1 _k_ _S_,
+_×_ _−_ _≤_ _≤_
+and 0 otherwise. (The role of _WX_ is shift each coordinate of the embedding vectors by one.) Take
+now conv _X_ to be such that its output is simply equal to the current vector, i.e., take _DX_ [(0)] [=] **[ 0]** [ and]
+_DX_ [(1)] [=] _[ I]_ [2] _[S][×]_ [2] _[S]_ [.] [Take also] _[ W][B]_ [=] _[ I][S][×][S]_ [and][ conv] _[B]_ [so that the output is equal to the second-to-last]
+vector, i.e., take _DB_ [(0)] = _IS×S_ and _DX_ [(1)] = **0** . Finally, take _WC_ = _IS×S_ and conv _C_ such that
+_C_ [(0)] = **0** and _C_ [(1)] = _IS×S_ .
+
+The final logit vector is in general equal to
+
+logit _t_ = _Wℓ_ _**x**_ _t_ + _WℓWo_ _**x**_        - [(] _[x]_ [1][)] _**b**_ [(] _[x]_ [1][)] _[⊤]_ _**c**_ _t_ +        - _nij WℓWo_ _**x**_        - [(] _[ij]_ [)] _**b**_ [(] _[ij]_ [)] _[⊤]_ _**c**_ _t._ (10)
+
+_ij_
+
+
+Using the matrices chosen above, we can simplify the formula as follows. Firstly, note that _**b**_ [(] _[x]_ [1][)] = **0**,
+as the _**b**_ vectors only depend on the second-to-last vectors. Furthermore, since the embedding vectors
+are orthogonal to each other, we have that _**b**_ [(] _[ij]_ [)] _[⊤]_ _**c**_ _t_ = 1 whether _i_ = _xt_, and 0 otherwise. (That
+is, only the correct counts are kept in the logit computation.) With these simplifications, the logit
+formula becomes
+logit _t_ = _Wℓ_ _**x**_ _t_ +                - _nxt,j WℓWo_ _**x**_                - [(] _[j]_ [)] _._ (11)
+
+_j_
+
+Finally, take _Wo_ = _I_ 2 _S×_ 2 _S_ and take _Wℓ_ such that _Wℓ_ ( _i_ ) = _β_ **1** for all odd _i_, _Wℓ_ (2 _i, i_ ) = 1 for
+1 _≤_ _i ≤_ _S_, and 0 otherwise. With this choice, we get, for all _t ≥_ 1,
+
+
+logit _t_ = _β_ **1** + 
+
+
+_nxt,j_ _**e**_ _i_ (12)
+
+_j_
+
+
+18
+
+
+where _**e**_ _i_ is the one-hot vector for symbol _i_ . After the normalization, we finally get
+_∈X_
+
+
+_f_ _**θ**_ ( _x_ _[t]_ 1 [)] _[j]_ [=] - _nij_ + _β_
+
+
+(13)
+_k_ _[n][ik]_ [ +] _[ Sβ]_
+
+
+if _xt_ = _i_, for _i_ . This is precisely the required add- _β_ Laplacian estimator.
+_∈X_
+
+
+C.3 THM. 4: DIMENSIONALITY REDUCTION FOR THE BINARY CASE
+
+
+**Theorem** **4.** _For_ _the_ _canonical_ MambaZero _model_ _with_ _dimensions_ _d_ = _N_ = 2 _,_ _e_ = 1 _,_ _and_
+_convolution_ _window_ _w_ = 2 _,_ _there_ _is_ _a_ _choice_ _of_ _parameters_ _such_ _that_ _the_ _model_ _prediction_ _is_
+_arbitrarily close to the Laplacian estimator for random first-order Markov chains._ _More formally, for_
+_any β_ _>_ 0 _and ϵ ∈_ (0 _,_ 1) _, there exists a set of parameters_ _**θ**_ _such that, for all sequences_ ( _xt_ ) _t≥_ 1 _and_
+_all t ≥_ 1 _,_
+
+_D_ KL �P [(1)] _β_ [(] _[· |][ x]_ 1 _[t]_ [)] _[∥]_ [P] _**[θ]**_        - _· | x_ _[t]_ 1� [�] _≤_ _ϵ._
+
+
+_Proof._ Fix _ϵ >_ 0 and let _β_ _>_ 0 be the constant of the considered add-constant estimator. Let us fix
+_a_ = 0 and ∆ _t_ = 1, so that _at_ = 1, for all _t_ 1. This can be done by picking, e.g., _**w**_ ∆ = **0** and _δ_
+_≥_
+such that softplus( _δ_ ) = 1. Let us compactly denote the convolution kernels as
+
+
+conv _X_ = - _αα_ 1000 _αα_ 0111� _,_ conv _B_ = - _γγ_ 1000 _γγ_ 0111
+
+
+(14)
+
+
+where each row corresponds to the kernel weights applied time-wise to each coordinate of the input
+sequence ( _**x**_ _t_ ) _t≥_ 1. Since the window for conv _C_ is _wC_ = 1, we can simply assume w.l.o.g. that
+_Ct_ = _WC_ _**x**_ _t_ .
+
+Let us denote the embedding vectors to be _**e**_ 0 = ( _e_ 00 _, e_ 01) _[⊤]_ and _**e**_ 1 = ( _e_ 10 _, e_ 11) _[⊤]_, and assume that
+the vectors are not collinear. Take also _WX_ = _WB_ such that
+
+
+�1
+_WX_ _**e**_ 0 =
+0
+
+
+- �0�
+_,_ _WX_ _**e**_ 1 = (15)
+1
+
+
+- �0
+_,_ _WX_ _**e**_ 1 =
+1
+
+
+and take _WC_ such that
+
+
+_WC_ _**e**_ 0 = - _c_ 0� _,_ _WC_ _**e**_ 1 = - 0
+0 _c_ 1
+
+
+_._ (16)
+
+
+Let us also take the kernels of conv _X_ and conv _B_ to be the same across coordinates, i.e.,
+
+
+conv _X_ = - _αα_ 00 _αα_ 11� _,_ conv _B_ = - _γγ_ 00 _γγ_ 11
+
+
+(17)
+
+
+(18)
+
+
+such that the following conditions are satisfied:
+ _αα_ 0 _γγ_ 0
+
+
+_α_ 0 _γ_ 0 + _α_ 1 _γ_ 1 = 0
+_α_ 0 _γ_ 1 + _α_ 1 _γ_ 0 _>_ 0
+_α_ 0 = _α_ 1
+_α_ 0 _γ_ 1
+_α_ 0 _γ_ 1+ _α_ 1 _γ_ 0 [=] _[ −][βϵ]_
+
+
+
+
+
+Note that, with such a choice of parameters, we have
+
+
+_X_ [(0)] = - _α_ 1
+0
+
+
+- _,_ _X_ [(1)] = - 0 - _,_ _B_ [(0)] = - _γ_ 1
+_α_ 1 0
+
+
+- - 0
+_,_ _B_ [(1)] =
+_γ_ 1
+
+
+(19)
+
+
+_C_ [(0)] =    - _c_ 0
+0
+
+- _,_ _X_ [(01)] = - _α_ 0
+_α_ 1
+
+
+- - 0
+_,_ _C_ [(1)] =
+_c_ 1
+
+
+(20)
+
+
+   - _α_ 0 + _α_ 1
+_X_ [(00)] =
+0
+
+
+- _,_ _X_ [(10)] = - _α_ 1
+_α_ 0
+
+
+- - 0
+_,_ _X_ [(11)] =
+_α_ 0 + _α_ 1
+
+
+(21)
+
+
+   - _γ_ 0 + _γ_ 1
+_B_ [(00)] =
+0
+
+
+- _,_ _B_ [(01)] = - _γ_ 0
+_γ_ 1
+
+
+- _,_ _B_ [(10)] = - _γ_ 1
+_γ_ 0
+
+
+19
+
+
+- - 0
+_,_ _B_ [(11)] =
+_γ_ 0 + _γ_ 1
+
+
+_._ (22)
+
+
+(We replaced the vector notation of Sec. 4 with matrix notation, so that _X_ [(0)] has to be intended as
+_**x**_ - [(0)], and so on.) Take also _Wo_ = _Wℓ_ = _I_ . With this choice of parameters, the final logit vector
+becomes, using Eq. (5),
+
+
+logit _t_ = _Wℓ_
+
+
+_**x**_ _t_ + _WoX_ [(] _[x]_ [1][)] _B_ [(] _[x]_ [1][)] _[⊤]_ _C_ [(] _[x][t]_ [)] + 1 _x_ 1= _xt_ _WoX_ [(] _[x]_ [1] _[x][t]_ [)] _B_ [(] _[x]_ [1] _[x][t]_ [)] _[⊤]_ _C_ [(] _[x][t]_ [)]
+_{_ _}_
+
+
+               -                + _nxtxtWo X_ [(] _[x][t][x][t]_ [)] _B_ [(] _[x][t][x][t]_ [)] _[⊤]_ _Ct_ + _nxtx_ ¯ _tWo_ _X_ [(] _[x][t][x]_ [¯] _[t]_ [)] _B_ [(] _[x][t][x]_ [¯] _[t]_ [)] _[⊤]_ + _X_ [(¯] _[x][t][x][t]_ [)] _B_ [(¯] _[x][t][x][t]_ [)] _[⊤]_ [�] _Ct_
+
+
+(23)
+
+
+   - _e_ 00 + _c_ 0 _α_ 1 _γ_ 1
+=
+_e_ 01
+
+
+   - _e_ 00 + _c_ 0 _α_ 1 _γ_ 1
+=
+_e_ 01
+
+
+if _xt_ = 0, and
+
+logit _t_ = - _e_ 11 + _e c_ 101 _α_ 1 _γ_ 1
+
+
+=   - _e_ 10
+_e_ 11 + _c_ 1 _α_ 1 _γ_ 1
+
+
+if _xt_ = 1. Take now
+
+
+- - 0
++ 1 _{x_ 1=1 _} ·_ _c_ 0 _α_ 0 _γ_ 1
+
+
+- - 0
++ 1 _{x_ 1=1 _} ·_ _c_ 0 _α_ 0 _γ_ 1
+
+
+- �( _α_ 0 + _α_ 1)( _γ_ 0 + _γ_ 1) _c_ 0
++ _n_ 00 0
+_·_
+
+
+�( _α_ 0 _γ_ 0 + _α_ 1 _γ_ 1) _c_ 0�
++ _n_ 01 _·_ ( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _c_ 0
+
+(24)
+
+
+- �( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _c_ 0
++ _n_ 00 0
+_·_
+
+
+  - 0   + _n_ 01 _·_ ( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _c_ 0
+
+(25)
+
+
+- + 1 _{x_ 1=0 _} ·_ - _c_ 1 _α_ 00 _γ_ 1
+
+
+- + 1 _{x_ 1=0 _} ·_ - _c_ 1 _α_ 00 _γ_ 1
+
+
+- �( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _c_ 1
++ _n_ 10 _·_ ( _α_ 0 _γ_ 0 + _α_ 1 _γ_ 1) _c_ 1
+
+
+  - 0   + _n_ 11 _·_ ( _α_ 0 + _α_ 1)( _γ_ 0 + _γ_ 1) _c_ 1
+
+(26)
+
+
+- �( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _c_ 1
++ _n_ 10 0
+_·_
+
+
+  - 0   + _n_ 11 _·_ ( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _c_ 1
+
+(27)
+
+
+_e_ 00 = _e_ 11 = ( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _βc_ 0 _−_ _α_ 1 _γ_ 1 _c_ 0 (28)
+_e_ 01 = _e_ 10 = ( _α_ 0 _γ_ 1 + _α_ 1 _γ_ 0) _βc_ 0 _−_ _α_ 0 _γ_ 1 _c_ 0 (29)
+
+With this choice of parameters, after the layer normalization, the final output probability vector is
+
+
+     - _n_ 00 + _β_ _n_ 01 + _β_ + 1 _x_ 1=0 _βϵ_
+_f_ _**θ**_ ( _x_ _[t]_ 1 [) =] _n_ 00 + _n_ 01 + 2 _β_ + 1 _x_ 1=0 _βϵ_ _[,]_ _n_ 00 + _n_ 01 + 2 _β_ + _{_ 1 _x}_ 1 _·_ =0 _βϵ_
+_{_ _} ·_ _{_ _} ·_
+
+if _xt_ = 0, and
+
+
+   - _n_ 10 + _β_ + 1 _x_ 1=1 _βϵ_ _n_ 11 + _β_
+_f_ _**θ**_ ( _x_ _[t]_ 1 [) =] _n_ 10 + _n_ 11 + 2 _β_ + _{_ 1 _x}_ 1 _·_ =1 _βϵ_ _[,]_ _n_ 10 + _n_ 11 + 2 _β_ + 1 _x_ 1=1 _βϵ_
+_{_ _} ·_ _{_ _} ·_
+
+
+- _⊤_
+(30)
+
+
+- _⊤_
+(31)
+
+
+if _xt_ = 1. Note that the resulting predicted probabilities exactly match the add- _β_ estimator when
+_x_ 1 = _xt_, but they are slightly different when _x_ 1 = _xt_ due to the additional _βϵ_ factor. We now show
+that, when the additional factor is present, the two predictors nevertheless differ by at most _ϵ_ in KL
+distance. We show it for the case _x_ 1 = _xt_ = 0, the other case follows in the same way. In fact, note
+that
+_n_ 01 + _β_ + _βϵ_ _n_ 01 + _β_ 1 + _n_ 01 _βϵ_ + _β_
+_n_ 00 + _n_ 01 + 2 _β_ + _βϵ_ [=] _n_ 00 + _n_ 01 + 2 _β_ _[·]_ 1 + _n_ 00+ _nβϵ_ 01+2 _β_ _._ (32)
+
+
+Now, since
+
+
+_βϵ_
+1 1 + (33)
+_≤_ _n_ 01 + _β_
+
+_[≤]_ [1 +] _[ ϵ]_
+
+
+20
+
+
+and
+_βϵ_
+1 1 + (34)
+_≤_ _n_ 00 + _n_ 01 + 2 _β_
+
+_[≤]_ [1 +] _[ ϵ]_
+
+we have that
+_n_ 01 + _β_ _n_ 01 + _β_ + _βϵ_
+(35)
+_n_ 00 + _n_ 01 + 2 _β_ _n_ 00 + _n_ 01 + 2 _β_ + _βϵ_
+
+_[≤]_ _[·]_ [ (1 +] _[ ϵ]_ [)]
+
+
+but we also have
+_n_ 00 + _n_ 01 + 2 _β_ + _βϵ_
+
+
+so that
+
+
++ _n_ 01 + 2 _β_ + _βϵ_ _βϵ_
+
+1 + (36)
+_n_ 00 + _n_ 01 + 2 _β_ _≤_ _n_ 00 + _n_ 01 + 2 _β_
+
+_[≤]_ [1 +] _[ ϵ,]_
+
+
+P [(1)]
+_D_ KL �P [(1)] _β_ - _· | x_ _[t]_ 1� _∥_ P _**θ**_ - _· | x_ _[t]_ 1� [�] = P [(1)] _β_ - _xt_ +1 = 0 _| x_ _[t]_ 1� log P _β_ _**θ**_ ( [(] _x_ _[x]_ _t_ _[t]_ +1 [+1] = 0 [= 0] _[ |]_ _x_ _[ x][t][t]_ 1 [)][)]
+
+
+P _**θ**_ ( _xt_ +1 = 0 _| x_ _[t]_ 1 [)]
+
+
++ P [(1)] _β_ - _xt_ +1 = 1 _| x_ _[t]_ 1� log PP [(1)] _β_ _**θ**_ ( [(] _x_ _[x]_ _t_ _[t]_ +1 [+1] = 1 [= 1] _[ |]_ _x_ _[ x][t][t]_ 1 [)][)]
+
+
+P _**θ**_ ( _xt_ +1 = 1 _| x_ _[t]_ 1 [)]
+(37)
+
+
+_n_ 01+ _β_
+_n_ 00+ _n_ 01+2 _β_
+
+_n_ 01+ _β_ + _βϵ_
+_n_ 00+ _n_ 01+2 _β_ + _βϵ_
+(38)
+
+
+_n_ 00 + _β_
+=
+_n_ 00 + _n_ 01 + 2 _β_ [log]
+
+
+_n_ 00+ _β_
+_n_ 00+ _n_ 01+2 _β_
+
+_n_ 00+ _β_
+_n_ 00+ _n_ 01+2 _β_ + _βϵ_
+
+
+_n_ 01 + _β_
++
+_n_ 00 + _n_ 01 + 2 _β_ [log]
+
+
+concluding the proof.
+
+
+_n_ 00 + _β_ _n_ 01 + _β_
+_≤_ _n_ 00 + _n_ 01 + 2 _β_ [log(1 +] _[ ϵ]_ [) +] _n_ 00 + _n_ 01 + 2 _β_ [log(1 +] _[ ϵ]_ [)]
+
+(39)
+
+_≤_ log(1 + _ϵ_ ) (40)
+_≤_ _ϵ_ (41)
+
+
+21
+
+
+D PROOF OF THM. 2
+
+
+Consider a recurrent model of the form _Ht_ R _[d]_ and the model has a bit precision of _Ht_ = _p_ . _h_ In this proof, we will assume that the state space of( _Ht−_ 1 _, xt_ ) and _yt_ = _g_ ( _Ht_ ) for each _t_ _≥_ 1 where
+_∈_
+the underlying Markov chain is _{_ 0 _,_ 1 _}_ . By the recurrent architecture, the predicted distribution over
+the next token _xt_ + _k_ +1 is of the form,
+
+
+_yt_ + _k_ = P _**θ**_              - _xt_ + _k_ +1 = _z_ _x_ _[t]_ 1 [+] _[k]_              - = _g_ ( _z, Ht_ + _k_ ) _._ (42)
+_|_
+
+Recall that the add-1 estimator is defined as,
+
+
+_n_ ( _z, x_ _[t]_ _t_ [+] +1 _[k]_ [) + 1]
+
+_,_ (43)
+_n_ ( _x_ _[t]_ _t_ [+] +1 _[k]_ [) + 2]
+
+where _n_ ( _z_ 1 _[k]_ [)] [=] [�] _i_ _[t]_ =1 [+1] [I][(] _[x][i]_ _i_ [+] _[k][−]_ [1] = _z_ 1 _[k]_ [)][ indicates the number of times] _[ z]_ 1 _[k]_ [appears in the sequence.]
+This is the optimal estimator for sequences drawn from the product-Dirichlet prior: for every _i_ _[k]_ 1 [,]
+_P_ ( _·_ _|_ _i_ _[k]_ 1 [)] _[∼]_ [Dir(1] _[ ·]_ **[ 1]** [)][, which is the distribution we will assume for this proof.] [Fixing] _[ x][t]_ 1 [, we can]
+write the add-1 estimator more explicitly as a function of _x_ _[t]_ _t_ [+] +1 _[k]_ [as,]
+
+P [(] 1 _[k]_ [)]        - _xt_ + _k_ +1 = _z_ _| x_ _[t]_ 1 _[, x]_ _t_ _[t]_ [+] +1 _[k]_ [=] _[ z]_ 1 _[k]_        - = _[n]_ _n_ [(] _[z]_ (1 _z_ _[k]_ 1 _[k][, z]_ [) + 2][) + 1] _[.]_ (44)
+
+
+Now, fixing _x_ _[t]_ 1 [, correctness of the recurrent model means that, almost surely over] _[ P]_ [drawn from the]
+prior, and _x_ _[t]_ 1 _[∼]_ _[P]_ [and] _[ z]_ 1 _[k]_ _[∼]_ _[P]_ [(] _[·|][x]_ 1 _[t]_ [)][,]
+
+_g_ ( _xt_ + _k_ +1 = 0 _, Ht_ + _k_ ) _∈_ P [(] 1 _[k]_ [)]       - _xt_ + _k_ +1 = 0 _| x_ _[t]_ 1 _[, x]_ _t_ _[t]_ [+] +1 _[k]_ [=] _[ z]_ 1 _[k]_       - + [ _−ε, ε_ ] _._ (45)
+
+wherethe strong law of large numbers RHS converges almost surely to the conditional distribution under _Ht_ + _k_ is a function of _x_ _[t]_ 1 [and] _[ z]_ 1 _[k]_ [.] [As] _[ t][ →∞]_ [, under the randomness of the draw of] _[ x][t]_ 1 _[∼]_ _[P]_ [, by] _P_,
+almost surely over the choice of _P_ from the product-Dirichlet prior. Here we use the fact that for _P_
+drawn from the product-Dirichlet prior, _P_ ( _z|z_ 1 _[k]_ [)] _[ >]_ [ 0][ almost surely, and so the resulting distributions]
+are exponentially mixing and ergodic. Namely, for each _z_ 1 _[k]_ [drawn]
+from the product-Dirichlet prior, _[∈{]_ [0] _[,]_ [ 1] _[}][k]_ [, almost surely over] _[ P]_
+
+
+ Pr lim sup
+_t→∞_
+
+
+               ���P(1 _k_ ) - _xt_ + _k_ +1 = 0 _x_ _[t]_ 1 _[, x]_ _t_ _[t]_ [+] +1 _[k]_ [=] _[ z]_ 1 _[k]_ - _P_ (0 _z_ 1 _[k]_ [)] ��� _> γ_ ) = 0 (46)
+_|_ _−_ _|_
+
+
+for any _γ_ _>_ 0. Therefore, a necessary condition to satisfy Equation (45) is, for each _z_ 1 _[k]_
+
+_[∈X][ k]_ [,]
+
+_g_ ( _xt_ + _k_ +1 = 0 _, Ht_ + _k_ ) _P_ (0 _z_ 1 _[k]_ [) + [] _[−][ε][ −]_ _[η][P]_ [(] _[t]_ [)] _[, ε]_ [ +] _[ η][P]_ [(] _[t]_ [)]] _[.]_ (47)
+_∈_ _|_
+
+for some _ηP_ ( _t_ ), which is a function of _P_ satisfying lim sup _t_ _ηP_ ( _t_ ) = 0 almost surely over _P_
+_→∞_
+drawn from the prior; note that _Ht_ + _k_ is implicitly a function of _x_ _[t]_ 1 [and] _[ z]_ 1 _[k]_ [.] [Divide the interval][ [0] _[,]_ [ 1]]
+into 1 _/ε_ disjoint intervals of size _ε_ each. Recall that _P_ ( _·|z_ 1 _[k]_ [)] _[ ∼]_ _[ρ]_ [ = Dir(1] _[ ·]_ **[ 1]** [)][, which implies that]
+the random variable _P_ (0 _|z_ 1 _[k]_ [)][ for each fixed] _[ z]_ 1 _[k]_ [(randomness is over] _[ P]_ [) is distributed as,]
+
+Pr            - _P_ (0 _z_ 1 _[k]_ [) =] _[ ·]_ �� _z_ 1 _k_            - = Unif([0 _,_ 1]) _._ (48)
+_ρ_ _|_
+
+
+Consider the buckets _Bε_ = [0 _, ε_ ) _,_ [ _ε,_ 2 _ε_ ) _,_ _,_ [1 _ε,_ 1] . Define the function round( _p_ ) : [0 _,_ 1]
+_{_ _· · ·_ _−_ _}_ _→_
+_{_ 0 _, · · ·_ _, |Bε| −_ 1 _}_ to return the index of the bucket in _Bε_ such that _p_ falls in that bucket.
+
+**Lemma 1.** _Consider any function f_ ( _z_ 1 _[k]_ [) :] _[ X][ k]_ _[→{]_ [0] _[,][ · · ·]_ _[,][ |][B][ε][| −]_ [1] _[}][ such that, pointwise,]_
+
+_|_ round( _P_ (0 _|z_ 1 _[k]_ [))] _[ −]_ _[f]_ [(] _[z]_ 1 _[k]_ [)] _[| ≤]_ _[r.]_ (49)
+
+
+_i.i.d._
+_Then, when P_ (0 _|z_ 1 _[k]_ [)] _∼_ Dir(1 _·_ **1** ) _,_
+
+
+_HShannon_ ( _f_ ( _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ (50)
+_{_ _[∈{]_ [0] _[,]_ [ 1] _[}][k][}]_ [)] _[ ≥]_ [2] _[k]_ [ ((1] _[ −]_ [3] _[ε]_ [) log(1] _[/ε]_ [)] _[ −]_ [log(2] _[r]_ [ + 1))]
+
+
+_where the randomness is over the draw of P_ _and HShannon is the discrete Shannon entropy._
+
+
+22
+
+
+i.i.d.
+_Proof._ Recall that _P_ (0 _|z_ 1 _[k]_ [)] _∼_ Unif([0 _,_ 1]) across _z_ 1 _[k]_ _[∈X][ k]_ [.] [Then,]
+
+
+Pr(round( _P_ (0 _|z_ 1 _[k]_ [)) =] _[ j]_ [) = Pr(] _[P]_ [(0] _[|][z]_ 1 _[k]_ [)] _[ ∈]_ [[] _[ε]_ [(] _[j][ −]_ [1] _[/]_ [2)] _[, ε]_ [(] _[j]_ [ + 1] _[/]_ [2)))] (51)
+
+
+ - _ε_ if 1 _j_ _Bε_ 2 _,_
+= _≤_ _≤|_ _| −_ (52)
+3 _ε/_ 2 if _j_ = 0 or _j_ = _Bε_ 1 _._
+_|_ _| −_
+
+
+This implies that, by independence of the _P_ (0 _z_ 1 _[k]_ [)][’s across] _[ z]_ 1 _[k]_
+_|_ _[∈X][ k]_ [,]
+
+
+_H_ Shannon �� _P_ (0 _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ (1 3 _ε_ ) log(1 _/ε_ ) _._ (53)
+_|_ _[∈X][ k]_ [��] _≥|X|_ _[k]_ _−_
+
+
+Let _e_ ( _z_ 1 _[k]_ [)][ be the random variable] _[ P]_ [(0] _[|][z]_ 1 _[k]_ [)] _[ −]_ _[f]_ [(] _[z]_ 1 _[k]_ [)][.] _[P]_ [(0] _[|][z]_ 1 _[k]_ [)][ is a measurable function of] _[ f]_ [(] _[z]_ 1 _[k]_ [)][ and]
+_e_ ( _z_ 1 _[k]_ [)][, and therefore,]
+
+
+_H_ Shannon �� _f_ ( _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ - _e_ ( _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ _H_ Shannon �� _P_ (0 _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ (54)
+
+_[∈X][ k]_ [�] _∪_ _[∈X][ k]_ [��] _≥_ _|_ _[∈X][ k]_ [��]
+
+
+Note that _e_ ( _z_ 1 _[k]_ [)][ is bounded in the rate] _[ {−][r,][ · · ·]_ _[, r][}]_ [ and can take at most][ 2] _[r]_ [ + 1][ values.] [Therefore,]
+_H_ �� _e_ ( _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ log(2 _r_ + 1). Since _H_ ( _A, B_ ) _H_ ( _A_ ) + _H_ ( _B_ ), we have that,
+
+_[∈X][ k]_ [��] _≤|X|_ _[k]_ _≤_
+
+
+_H_ Shannon �� _f_ ( _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ _H_ Shannon �� _P_ (0 _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_ _H_ �� _e_ ( _z_ 1 _[k]_ [) :] _[ z]_ 1 _[k]_
+
+_[∈X][ k]_ [��] _≥_ _|_ _[∈X][ k]_ [��] _−_ _[∈X][ k]_ [��]
+
+
+(55)
+
+
+_≥|X|_ _[k]_ ((1 _−_ 3 _ε_ ) log(1 _/ε_ ) _−_ log(2 _r_ + 1)) _._ (56)
+
+
+Recall that we are guaranteed that _g_ ( _xt_ + _k_ +1 = 0 _, Ht_ + _k_ ) _P_ (0 _z_ 1 _[k]_ [) + [] _[−][ε][ −]_ _[η][P]_ [(] _[t]_ [)] _[, ε]_ [ +] _[ η][P]_ [(] _[t]_ [)]][.]
+_∈_ _|_
+This implies that the recurrent model is able to recover round( _p_ ) for _p_ = _P_ (0 _|z_ 1 _[k]_ [)][ up to an error]
+of _r_ = _η_ ( _t_ ) _/ε_ for each _z_ 1 _[k]_ [by] [computing] [round(ˆ] _[p]_ [)] [where] _[p]_ [ˆ] [=] _[g]_ [(] _[x][t]_ [+] _[k]_ [+1] [=] [0] _[, H][t]_ [+] _[k]_ [)][.]
+Informally, this just means that _⌈_ _⌉_ _p_ _[∈X]_ ˆ is likely to fall in a bucket close to _[ k]_ _p_ . In combination with Lemma 1,
+for _f_ ( _z_ 1 _[k]_ [) =] _[ g]_ [(] _[x][t]_ [+] _[k]_ [+1] [= 0] _[, H][t]_ [+] _[k]_ [)][ we have that,]
+
+_H_ Shannon( _g_ ( _xt_ + _k_ +1 = 0 _, Ht_ + _k_ ) : _z_ 1 _[k]_ [(] _[t]_ [)] _[/ε][⌉]_ [+ 1))]
+_{_ _[∈{]_ [0] _[,]_ [ 1] _[}][k][}]_ [)] _[ ≥]_ [2] _[k]_ [ ((1] _[ −]_ [3] _[ε]_ [) log(1] _[/ε]_ [)] _[ −]_ [log(2] _[⌈][η][P]_ (57)
+
+
+Note however, that _g_ ( _xt_ + _k_ +1 = 0 _, Ht_ + _k_ ) is a function of _z_ 1 _[k]_ [implicitly, through] _[ H][t]_ [+] _[k]_ [(which is also]
+a function of _x_ _[t]_ 1 [).] [Since the dimensionality of] _[ H][t]_ [+] _[k]_ [is] _[ d]_ [ and the model is implemented to] `[ p]` [ bits of]
+precision,
+
+
+_H_ Shannon( _g_ ( _xt_ + _k_ +1 = 0 _, Ht_ + _k_ ) : _z_ 1 _[k]_ (58)
+_{_ _[∈{]_ [0] _[,]_ [ 1] _[}][k][}]_ [)] _[ ≤]_ _[H]_ [Shannon][(] _[H][t]_ [+] _[k]_ [)] _[ ≤]_ _[d]_ `[p]`
+
+where all randomness here is induced by the random draw of the _k_ [th] -order Markov kernel _P_ .
+Therefore, for the correctness guarantee Equation (45) to hold, we need,
+
+_d_ `p` _≥_ 2 _[k]_ ((1 _−_ 3 _ε_ ) log(1 _/ε_ ) _−_ log(2 _⌈ηP_ ( _t_ ) _/ε⌉_ + 1)) (59)
+
+in the limit _t_, and noting that lim sup _t_ _ηP_ ( _t_ ) = 0 almost surely over _P_ drawn from the
+_→∞_ _→∞_
+prior, it is necessary that,
+
+_d_ `p` _≥_ 2 _[k]_ (1 _−_ 3 _ε_ ) log(1 _/ε_ ) _._ (60)
+
+
+Fig. 6 provides empirical evidence that the exponential dependency of the theorem on the order _k_ is
+consistent.
+
+
+**Remark.** The proof above assumes that the _k_ [th] -order Markov chain is on a binary state space.
+However, the result can easily be extended to give the lower bound _d ·_ `p` _≥_ Ω( _|X|_ _[k]_ ) for larger state
+spaces, as well as similar scaling results for priors Dir( _β ·_ **1** ) for any _β_ _>_ 0. Furthermore, we believe
+it should be possible to replace the _L_ error guarantee in Equation (6) by the KL-divergence between
+_∞_
+the two distributions without significantly changing the conclusion ( _d ·_ `p` = 2 [Ω(] _[k]_ [)] ).
+
+**Intuition.** The intuition behind this result is in the manner in which the recurrent architecture carries
+out computation: by proceeding sequentially and compressing the information from the sequence it
+has seen thus far at some time _t_ into a small hidden vector, the model does not know what the next
+
+
+23
+
+
+_k_ tokens will be: the knowledge of this is vital to be able to compute the add- _β_ estimator at time
+_t_ + _k_ + 1 with a small memory footprint. Indeed, when the identity of the next _k_ tokens changes,
+the output of the model at time _t_ + _k_ + 1 must look drastically different (as the add- _β_ estimator
+corresponds to approximately evaluating P( _·|i_ _[k]_ 1 [)][, which are unrelated distributions under different]
+choices of _i_ _[k]_ 1 [).] [There are] _[ ∼]_ [2][2] _[k]_ [possible values the set] _[ P]_ [=] _[ {]_ [P][(] _[·|][i][k]_ 1 [) :] _[ i][k]_ 1 [But]
+when _d_ and `p` are small, the output of the model just cannot take so many values: _[∈{]_ [0] _[,]_ [ 1] _[}][k]_ it can realize at _[}]_ [ can take.]
+most 2 _[d]_ `[p]` possible sets. In other words, in order to succeed, the recurrent architecture is essentially
+forced to keep track of the number of occurrences of each _i_ _[k]_ 1 [in the sequence at each time]
+_t_, which costs an exponential dependence on _k_ in the hidden dimension/precision. _[∈{]_ [0] _[,]_ [ 1] _[}][k]_
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+|d = 2<br>d = 4|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|d = 2<br>~~d = 4~~|
+||<br>d = 8<br>|<br>d = 8<br>||||||||||||||||
+||~~d = 16~~<br>d = 32|~~d = 16~~<br>d = 32||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+
+
+1 2 3 4 5
+Order
+
+
+Figure 6: Relation between the Markov order _k_ and the hidden dimension _d_ of the 1-layer Mamba
+model. The plot shows that _d_ = 2 _[k]_ is sufficient for the model to learn the _k_ -th order Markov task.
+This corroborates the fact that Theorem 2 in the main paper has the correct order dependency.
+
+
+24
+
+
+E ADDITIONAL RESULTS
+
+
+E.1 LINEAR ATTENTION
+
+
+|1-layer Mamba 0.35|Col2|Col3|1-layer Mamba|Col5|
+|---|---|---|---|---|
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||1-layer Mamba<br>1-layer Transformer<br>|1-layer Mamba<br>1-layer Transformer<br>|
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||~~2-layer Transformer~~<br>1-layer Linear Transformer<br>2-layer Linear Transformer|~~2-layer Transformer~~<br>1-layer Linear Transformer<br>2-layer Linear Transformer|
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||||
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||||
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||||
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||||
+|<br>1-layer Transformer<br>2-layer Transformer<br>~~1-layer Linear Transformer~~<br>2-layer Linear Transformer<br>Optimal estimator<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br><br>L1 norm|||||
+
+
+1 2 3 4
+Orders
+
+
+(b) Test loss
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0 10 20 30 40 50 60 70
+Position
+
+
+(a) Predicted probability
+
+
+Figure 7: Comparison of predicted probability and test loss between a 1-layer Mamba and the other
+baselines, including linear attention. Mamba outperforms all baselines. Linear attention and softmax
+attention Transformers perform similarly.
+
+
+E.2 MULTIPLE STATES
+
+
+Fig. 8 shows that our results extend to larger number of states.
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|2<br>4|states<br>states|
+|---|---|---|---|---|---|
+|||||~~6~~<br>8|~~ states~~<br> states|
+|||||||
+|||||||
+|||||||
+
+
+0 5 10 15 20 25 30 35
+Iteration (x 200)
+
+
+(a) Absolute test loss gap
+
+
+0 5 10 15 20 25 30 35
+Iteration (x 200)
+
+
+(b) Relative test loss gap
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+Figure 8: Test loss gap from the optimal for 1-layer Mamba and first-order Markov data, for different
+number of states. (a) shows the absolute gap _L_ ( _θ_ ) _−_ _L_ _[∗]_ ; (b) shows the relative gap ( _L_ ( _θ_ ) _−_ _L_ _[∗]_ ) _/L_ _[∗]_ .
+The loss gap is consistently small for all state sizes.
+
+
+E.3 DEEPER NETWORKS
+
+
+Fig. 10 show that our results are consistent with larger number of layers.
+
+
+E.4 OVER-PARAMETRIZED SETTINGS
+
+
+Fig. 9 shows that our observations hold also for larger convolution width and deeper networks.
+
+
+25
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+|Col1|Col2|Col3|w = 2|
+|---|---|---|---|
+||||_w_ = 3<br>_w_ = 4<br>_w_ = 5|
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+0 20 40 60 80 100
+Iterations
+
+
+(a) Convolution width
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+|Col1|Col2|Col3|Col4|Col5|ℓ= 1<br>ℓ= 2<br>ℓ= 3|Col7|
+|---|---|---|---|---|---|---|
+|||||<br>_ℓ_= 4|<br>_ℓ_= 4|<br>_ℓ_= 4|
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+0 20 40 60 80 100
+Iterations
+
+
+(b) Depth
+
+
+Figure 9: Test loss gap from optimal across iterations in over-parametrized settings. (a) shows 1-layer
+Mamba with varying convolution width. (b) shows a Mamba with convolution width _w_ = 2 and
+varying number of layers. The models correctly learn the optimal predictor in all cases.
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+|1 layer<br>2 layers|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||<br>3 layers<br>|<br>3 layers<br>|<br>3 layers<br>|<br>3 layers<br>|<br>3 layers<br>||
+|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|
+|||||||||
+|||||||||
+|||||||||
+
+
+1 2 3 4
+Order
+
+
+(a) Mamba
+
+
+|1 layer<br>2 layers|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|1 layer<br>~~2 layers~~|
+|<br>3 layers<br>||||||||||||||||||
+|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|||||||||||
+|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|~~4 layers~~|||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+
+
+1 2 3 4
+Order
+
+
+(b) Transformers
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+Figure 10: Test loss gap from the optimal for Mamba and Transformers, for different number of layers
+and Markov orders. Mamba has a smaller loss gap than transformers across all orders. Furthermore,
+adding more layers to Mamba does not significantly improve performance. As expected, 1-layer
+Transformers cannot solve the Markov task, while 1-layer Mamba can.
+
+
+E.5 HOLD-OUT EXPERIMENT
+
+
+We also consider the following interesting experiment: we trained Mamba only on sequences from a
+subset of the Markov simplex, specifically the interval [0 _,_ 0 _._ 5], and we tested it on sequences from
+its complement [0 _._ 5 _,_ 1]. Interestingly, our experiments show that the test loss still converges to the
+optimal. However, by inspecting the actual estimated probabilities on a fixed test sequence, we see that
+the absolute difference between the model’s estimation and the optimal Laplacian smoothing is high
+for the first samples, and gradually decreases as the sequence progresses. This is justified by the fact
+that the Laplacian estimator is not only Bayes-optimal, but also minimax optimal (i.e., independently
+of the prior on the simplex) in the limit of long sequences (i.e., the gap from the optimal loss goes
+to 0 as _n_ ). Table 2 shows the absolute difference P _θ_ ( _xt_ = 1 _x_ _[t]_ 1 _[−]_ [1] ) P _[∗]_ ( _xt_ = 1 _x_ _[t]_ 1 _[−]_ [1] ) for
+_→∞_ _|_ _|_ _−_ _|_ _|_
+several _t_, showing how this difference gradually goes to zero as _t_ increases.
+
+
+E.6 CONVOLUTION
+
+
+Fig. 11 shows that adding convolution to transformers (similarly to Mamba) makes the model solve
+the task with just one layer. On the contrary, Fig. 12 shows that Mamba needs two layers to solve the
+
+
+26
+
+
+Table 2: Results for the hold-out experiment.
+
+
+**Length** _t_ **Abs.** **difference from optimal**
+
+1 0 _._ 378 _±_ 0 _._ 050
+50 0 _._ 098 _±_ 0 _._ 039
+100 0 _._ 007 _±_ 0 _._ 003
+300 0 _._ 001 _±_ 0 _._ 001
+
+
+task if convolution is removed. Table 3 shows that a one-layer Mamba without convolution cannot
+learn the optimal estimator, no matter how wide the model is.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1-layer Mamba
+~~1-layer Transformer~~
+
+Optimal predictor
+
+|0.40|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer||||tion|
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|Mamba<br>||||
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|~~ Transfor~~<br> Transfor|~~ er~~<br> mer + co|nvolu|nvolu|
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|||||
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|||||
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|||||
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|||||
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|||||
+|ution<br><br>0.05<br>0.10<br>0.15<br>0.20<br>0.25<br>0.30<br>0.35<br>0.40<br>Test loss<br>1-layer<br>~~1-layer~~<br>1-layer|||||
+
+
+0 10 20 30 40 50 60 70
+t : x_t = 0
+
+
+(a) Predicted probability
+
+
+0 5 10 15 20 25 30 35
+Iteration (x 200)
+
+
+(b) Test loss
+
+
+Figure 11: Predicted probability and test loss for Transformers with and without convolution. Adding
+convolution to the _K, Q, V_ matrices of transformers makes the models succeed in learning the
+Markov task, similarly to 1-layer Mamba.
+
+
+|0.5|Col2|Col3|Col4|
+|---|---|---|---|
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~|||nvolution<br>~~  nvolution~~|
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~|amba<br> amba wi<br>|thout co<br>|thout co<br>|
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~|~~ amba wi~~|~~ hout c~~|~~ hout c~~|
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~||||
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~||||
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~||||
+|nvolution<br>~~  nvolution~~<br><br>0.1<br>0.2<br>0.3<br>0.4<br>0.5<br>Test loss<br>1-layer M<br>1-layer M<br>~~2-layer M~~||||
+
+
+0 2 4 6 8 10 12 14
+Iteration (x 200)
+
+
+(b) Test loss
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+~~1-layer Mamba~~
+
+Optimal predictor
+
+
+0 10 20 30 40 50 60 70
+t : x_t = 0
+
+
+(a) Predicted probability
+
+
+Figure 12: Predicted probability and test loss for the full 1-layer Mamba and a 2-layer Mamba without
+convolution. Similarly to transformers, Mamba needs two layers to solve the Markov task when
+convolution is removed.
+
+
+E.7 SWITCHING MARKOV
+
+
+Here we detail the switching Markov process more formally:
+
+
+1. Initialize _t_ = 0.
+
+
+27
+
+
+Table 3: Experiments on one-layer Mamba without convolution, with varying width. The model does
+not learn the optimal estimator successfully.
+
+
+**Hidden dimension** _d_ **Avg.** **test loss gap from optimal**
+
+10 0 _._ 113 _±_ 0 _._ 032
+100 0 _._ 158 _±_ 0 _._ 055
+1000 0 _._ 140 _±_ 0 _._ 072
+
+
+2.3. LetDraw a binary Markov kernel _xt_ = _S_ with probability _p_ switch _P_ with each row sampled i.i.d., or sample _xt_ _∼_ _Pxtt−k_ +1 _[,]_ [:][ with probability] from Dir( _β ·_ **1** ) [ 1] . _[ −]_ _[p]_ [switch][.]
+4. If _xt_ = _S_, set _t_ = _t_ + 1 and go to step 2; if _xt_ = _S_, set _t_ = _t_ + 1 and go to step 3.
+
+
+Fig. 13 illustrates the behavior of Mamba on this process when _p_ switch = 0 _._ 01.
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.0
+
+|Col1|Col2|1-layer Mam|mba|
+|---|---|---|---|
+|||<br> <br>1-layer Mam<br>Optimal esti|<br> ba<br> ator|
+|||<br>||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+0 50 100 150 200 250 300
+
+_t_ : _xt_ = 0
+
+
+(a) Predicted probabilities
+
+
+0 100 200 300 400 500
+
+Position _t_
+
+
+(b) Value of _at_ across positions
+
+
+Figure 13: One-layer Mamba on switching Markov data. Mamba is able to learn the optimal predictor
+by forgetting past counts every time a switch token occurs. This is achieved by setting _at_ = 0 at
+every switch, and _at_ = 1 otherwise.
+
+
+E.8 FURTHER ABLATION FOR NATURAL LANGUAGE
+
+
+The fundamental role played by convolution in modeling natural language is demonstrated in Table 1.
+However, we find that other components, in particular gating factor _at_, play an essential role as
+well, when natural language is considered. In Table 4, we show the increase in test perplexity when
+convolution, gating factor _at_ and non-linearities are individually removed from the full Mamba-2
+architecture.
+
+
+Table 4: Perplexity results on the WikiText-103 dataset.
+
+
+**Model** **Params.** **Perplexity** **Percentage increase**
+
+
+Mamba-2 (full) 14 _._ 54 M **27** _._ **55**     Mamba-2 (w/o conv) 14 _._ 53 M 30 _._ 68 11%
+Mamba-2 (w/o gating factor) 14 _._ 54 M 32 _._ 16 17%
+Mamba-2 (w/o non-linearities) 14 _._ 54 M 28 _._ 98 5%
+
+
+28
+
+
+Table 5: Perplexity results on WikiText-103 and PG-19 datasets for Mamba with 12 layers.
+
+
+**Dataset** **Model** **Params.** **Perplexity**
+
+
+WikiText-103 Mamba-2 110 M 21 _._ 38
+WikiText-103 Mamba-2 w/o convolution 110 M 21 _._ 46
+WikiText-103 Mamba-2 w/o gating 110 M 21 _._ 71
+
+
+PG-19 Mamba-2 200 M 14 _._ 16
+PG-19 Mamba-2 w/o convolution 200 M 14 _._ 28
+PG-19 Mamba-2 w/o gating 200 M 14 _._ 66
+
+
+29
+
+
+F MODEL ARCHITECTURES AND HYPER-PARAMETERS
+
+
+The following tables discuss details on the architectures and hyperparameters used in all the paper’s
+experiments. Each experiment was run on a single Nvidia A100 GPU. The time taken by each
+experiment was between 10 to 60 minutes.
+
+
+Table 6: Parameters in the Mamba architecture with their shape.
+
+
+Parameter Matrix shape
+
+
+embedding 2 _× d_
+mamba.A 1
+mamba.dt 1
+mamba.in_proj (2 _ed_ + 2 _N_ + 1) _× d_
+mamba.conv1d ( _ed_ + 2 _N_ ) _× w_
+mamba.out_proj _d ×_ (2 _ed_ + 2 _N_ + 1)
+mlp.fc1 4 _d × d_
+mlp.fc2 _d ×_ 4 _d_
+lm_head _d ×_ 2
+
+
+Table 7: Settings and parameters for the Mamba model used in the experiments.
+
+
+Dataset _k_ -th order binary Markov source
+Architecture Based on the Mamba-2 architecture as implemented in Dao & Gu (2024)
+
+
+Batch size Grid-searched in _{_ 16 _,_ 32 _,_ 64 _,_ 128 _,_ 256 _}_
+Accumulation steps 1
+
+
+Optimizer AdamW ( _β_ 1 = 0 _._ 9 _, β_ 2 = 0 _._ 95)
+Learning rate 0 _._ 001
+Scheduler Cosine
+# Iterations 10000
+Weight decay 1 _×_ 10 _[−]_ [3]
+
+
+Dropout 0
+Sequence length Grid-searched in _{_ 128 _,_ 256 _,_ 512 _}_
+Embedding dimension Grid-searched in _{_ 2 _,_ 4 _,_ 8 _,_ 16 _,_ 32 _}_
+Mamba layers 1
+Heads 1
+Convolution window Between 2 and 6
+
+
+Repetitions 5
+
+
+Table 8: Parameters in the transformer architecture with their shape.
+
+
+Parameter Matrix shape
+
+
+transformer.wte 2 _× d_
+transformer.wpe _N_ _× d_
+transformer.h.ln_1 ( _×ℓ_ ) _d ×_ 1
+transformer.h.attn.c_attn ( _×ℓ_ ) 3 _d × d_
+transformer.h.attn.c_proj ( _×ℓ_ ) _d × d_
+transformer.h.ln_2 ( _×ℓ_ ) _d ×_ 1
+transformer.h.mlp.c_fc ( _×ℓ_ ) 4 _d × d_
+transformer.h.mlp.c_proj ( _×ℓ_ ) _d ×_ 4 _d_
+transformer.ln_f _d ×_ 1
+
+
+30
+
+
+Table 9: Settings and parameters for the transformer model used in the experiments.
+
+
+Dataset _k_ -th order binary Markov source
+Architecture Based on the GPT-2 architecture as implemented in Pagliardini
+
+
+Batch size Grid-searched in _{_ 16 _,_ 32 _,_ 64 _,_ 128 _,_ 256 _}_
+Accumulation steps 1
+
+
+Optimizer AdamW ( _β_ 1 = 0 _._ 9 _, β_ 2 = 0 _._ 95)
+Learning rate 0 _._ 001
+Scheduler Cosine
+# Iterations 10000
+Weight decay 1 _×_ 10 _[−]_ [3]
+
+
+Dropout 0
+Sequence length Grid-searched in _{_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_
+Embedding dimension Grid-searched in _{_ 4 _,_ 8 _,_ 16 _,_ 32 _}_
+Transformer layers Between 1 and 2 depending on the experiment
+Attention heads 1
+
+
+Repetitions 5
+
+
+31

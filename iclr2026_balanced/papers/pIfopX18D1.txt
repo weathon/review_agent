@@ -1,0 +1,985 @@
+# ITEM RESPONSE SCALING LAWS: A MEASUREMENT THEORY APPROACH TO GENERALIZABLE NEURAL PERFORMANCE PREDICTION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Classical neural scaling laws describe how the performance of large language
+models (LLMs) improves with increased compute, but they are typically estimated
+in aggregate across all questions in a benchmark, overlooking the information carried by individual questions. Item Response Theory (IRT) offers a principled way
+to address this by modeling per-question characteristics, though traditional IRT is
+limited to binary data with a Bernoulli loss. In pre-training downstream scaling,
+probabilities of producing the correct answer over the entire vocabulary yield more
+informative laws, while in test-time scaling, repeated sampling naturally gives rise
+to empirical probabilities. Empirical probability responses do not arise in human
+testing or LLM leaderboard evaluations, settings where IRT has shown success.
+To bridge this gap, we propose extending IRT with a Beta loss on empirical probability responses, naturally yielding Item Response Scaling Laws. We validate our
+framework in two large-scale studies: (1) pre-training downstream scaling, using
+25 models from 6 families with up to 359 checkpoints on 15 NLP datasets; and (2)
+test-time scaling, using 15 models on 10 NLP datasets with up to 10,000 samples
+per question. In both cases, IRT-based approaches provide reliable and efficient
+estimates of scaling behavior while remaining interpretable and generalizable. [1]
+
+
+1 INTRODUCTION
+
+
+Modern large language models (LLMs) are general-purpose tools that offer diverse capabilities.
+Scaling laws, such as pre-training downstream scaling and test-time scaling, provide a principled
+framework for understanding and improving LLM performance. Pre-training downstream scaling
+laws characterize how a model’s performance on downstream tasks improves as a function of the
+computational effort invested during pre-training, typically measured in floating-point operations
+(FLOP) (Biderman et al., 2023; Mishra et al., 2024). Test-time scaling laws describe how a model’s
+inference performance on a benchmark (e.g., success rate) grows with the number of stochastic
+samples performed at test time (Brown et al., 2024; Hughes et al., 2024).
+
+
+Deriving these scaling laws requires extensive data; however, practical studies are constrained to
+small experimental scales due to their costly nature. As a baseline, LLM evaluation leaderboards
+typically involve on the order of 10 [6] questions evaluated across 10 [2] models, amounting to 10 [8]
+total queries (Liang, 2023). Based on this, pretraining downstream scaling laws introduce around
+10 [2] pretraining checkpoints per model, and test-time scaling laws introduce around 10 [4] samples
+per question. These additional dimensions inflate the total number of queries by several orders of
+magnitude. Consequently, existing studies often evaluate only a limited set of models and a subset
+of benchmark questions, and they rely primarily on mean score as the performance metric (Chen
+et al., 2024; Schaeffer et al., 2024; Brown et al., 2024).
+
+
+The laws derived from limited experimental scales can exhibit surprising and unintuitive behaviors,
+including inconsistencies across different model–benchmark pairs. For example, Brown et al. (2024)
+derives a power-law test-time scaling relationship that, as Schaeffer et al. (2025) demonstrates, holds
+only for ill-structured response distributions in single-sample success rates. Such phenomena suggest that the benchmark-specific factors, such as the difficulty of each question, play a crucial role
+in shaping the scaling behavior. Moreover, mean score on a subset may not reliably reflect overall
+
+
+1Code: anonymous.4open.science/r/irsl-7560
+
+
+1
+
+
+|Col1|Definition|Classical Fitting Approach|IRT-based Fitting Approach|
+|---|---|---|---|
+|**Pre-training** Acc<br>**Pre-training**_ p_**Correct Choice**<br>**Test-time**|E[Acc(_i, D_)] = 1<br>_N_<br>P_N_<br>_j_=1 _pij_<br>_p_Correct Choice(_i, D_) = 1<br>_N_<br>P_N_<br>_j_=1 _p_Correct Choice(_i, j_)<br>pass@k(_i, D_) = 1<br>_N_<br>P_N_<br>_j_=1 1_ −_(1_ −pij_)_k_|_a · σ_(_b ·_ (_α ·_ FLOP_−β_<br>_i_<br>+_ γ −c_)) +_ d_<br>_g_(FLOP_i_)<br>exp<br>�<br>_−a · k−b_|1<br>_N_<br>P_N_<br>_j_=1 _σ_(_f_(FLOP_i_)_ −zj_)<br>1<br>_N_<br>P_N_<br>_j_=1 _σ_(_f_(FLOP_i_)_ −zj_)<br>1<br>_N_<br>P_N_<br>_j_=1<br><br>1_ −_(1_ −σ_(_θi −zj_))_k_|
+
+
+Table 1: The definitions, classical fitting approach, and IRT-based fitting approach for Acc,
+_p_ Correct Choice (downstream pre-training scaling law), and pass@k (test-time scaling law). We use
+the Rasch model as a demonstration. Classical fitting approaches fit uninterpretable parameters specific to datasets and LLMs. Our IRT-based fitting approach learns question-level parameters (rather
+than dataset-level ones), while being interpretable and generalizable.
+
+
+performance, nor does mean score on one dataset generalize to other datasets with similar measurement objectives but different difficulty levels (Truong et al., 2025). More fundamentally, these
+shortcomings arise because prevailing scaling-law formulations implicitly treat datasets as homogeneous inputs and focus exclusively on aggregate metrics, thereby obscuring the heterogeneity of
+item characteristics.
+
+
+Item Response Theory (IRT), originating from psychology and educational testing, offers a principled way to address these limitations. IRT parameterizes question-level characteristics to model
+the probability that a test taker (human or LLM) answers a question correctly. It is typically applied in two phases: calibration and computerized adaptive testing (CAT). In the calibration phase,
+a binary response matrix is collected from test takers (human or LLMs) and used to estimate item
+characteristics such as question difficulty. With these calibrated parameters, CAT adaptively selects
+informative subsets of questions to reliably and efficiently evaluate new test takers. IRT has been
+highly successful in human testing, and recent work has shown its promise on binary response data
+from LLM leaderboards (Biderman et al., 2023; Mishra et al., 2024; Magnusson et al., 2025; Gadre
+et al., 2024). However, in both pre-training downstream scaling and test-time scaling laws, there is
+a need to model empirical probability responses rather than binary responses, an aspect absent from
+both human testing and LLM leaderboard evaluations. In the pre-training setting, mean scores often
+exhibit emergent behaviors and poor predictability (Lourie et al., 2025), whereas probabilities of
+producing the correct answer over the entire vocabulary preserve richer information and yield more
+consistent scaling laws (Schaeffer et al., 2024). In the test-time setting, repeated sampling naturally
+gives rise to empirical probabilities. Motivated by this, we propose extending IRT with a Beta loss
+to model empirical probabilities, yielding efficiently estimated, interpretable, and generalizable Item
+Response Scaling Laws. Our contributions are:
+
+
+    - We conduct a large-scale study on 25 models from 6 model families, ranging from 111M
+to 13B parameters, with up to 359 pretraining checkpoints, on 15 popular natural language
+datasets, to demonstrate the superiority of our item response pretraining downstream scaling laws: interpretable, generalizable, and giving robust estimates of the scaling behavior
+with limited budgets.
+
+
+    - We conduct a large-scale study on 15 models across 10 popular natural language datasets
+with up to 10,000 repeated sampling steps. We demonstrate that IRT gives more reliable
+estimates of the scaling behavior in an efficient manner, surpassing traditional approaches,
+while being interpretable and generalizable.
+
+
+By embedding the scaling law within the IRT framework, our approach provides a theoretically principled and empirically validated alternative to conventional aggregate performance scaling.
+
+
+2 RELATED WORK
+
+
+**Pre-training Downstream Scaling Law** Many neural networks exhibit power-law scaling of the
+pre-training loss as a function of the amount of compute, data, or parameters used for training (Hestness et al., 2017; Kaplan et al., 2020; Bahri et al., 2021; Hernandez et al., 2021; Hoffmann et al.,
+2022; Muennighoff et al., 2024). Unlike predicting loss, predicting downstream performance from
+scale is generally harder (Lourie et al., 2025; Schaeffer et al., 2024). However, recent work has
+demonstrated it can be done based on a two-step prediction that chains together predictions from
+
+
+2
+
+
+scale to loss and loss to downstream performance (Biderman et al., 2023; Mishra et al., 2024; Magnusson et al., 2025; Gadre et al., 2024).
+
+
+**Test-time** **Scaling** **Law** Test-time scaling laws characterize how a model’s performance on a
+benchmark (e.g., success rate) improves as the number of stochastic samples drawn at inference
+increases (Brown et al., 2024; Hughes et al., 2024). Schaeffer et al. (2025) demonstrate that such
+laws hold only for ill-structured response distributions in single-sample success rates. Kang et al.
+(2025) develop scalable test-time inference strategies that balance sample efficiency and performance gains under limited budgets. Dorner et al. (2025) establish that the shape of a verifier’s ROC
+curve governs the effectiveness of rerolling and best-of-N, formalizing limits of test-time scaling
+with imperfect verifiers. Zhang et al. (2025) survey the test-time scaling literature and outline open
+challenges for reliability and generalization.
+
+
+**Measurement** **Theory-based** **AI** **evaluation** Several recent works adopt Item Response Theory
+(IRT) as a foundation for AI evaluation using binary responses and Bernoulli loss (Truong et al.,
+2025; Hofmann et al., 2025; Kipnis et al., 2025; Madaan et al., 2024; Polo et al., 2024). Polo et al.
+(2025) introduce Sloth scaling laws, which model benchmark performance through low-dimensional
+latent skills influenced by compute, offering a measurement-theoretic perspective that improves prediction and interpretability across LLM families. Heineman et al. (2025) propose a framework based
+on signal and noise to quantify benchmark reliability, showing that higher signal-to-noise ratios correlate with more accurate model ranking and lower scaling law prediction error, and introducing
+interventions to improve evaluation robustness.
+
+
+3 METHOD
+
+
+Item Response Theory (IRT) provides an elegant and parsimonious mathematical framework to
+model the natural interaction of LLMs and benchmark questions. We show how, under this framework, various known scaling laws arise naturally and how the framework facilitates efficient, interpretable, and generalizable scaling evaluation. We show the definitions, classical fitting approaches,
+and IRT-based fitting approaches of the scaling laws in Table 1.
+
+
+3.1 ITEM RESPONSE THEORY
+
+Item Response Theory refers to a class of probabilistic latent variable models that explain the relationship between the test taker’s latent ability, the question’s characteristics (e.g., difficulty), and the
+observed response from the test taker to the questions (Baker, 2001; Van der Linden et al., 2000). A
+central model in IRT is the Rasch model (Rasch, 1993), where each test-taker (here, an LLM) has
+an ability parameter _θ_, and each question has a difficulty parameter _z_ . A higher _θ_ denotes greater
+ability, while a higher _z_ signifies a more difficult question. Let _y_ denote the response of the test taker
+to the question, where _y_ = 1 if the response is correct and 0 otherwise. The probability of a correct
+response is modeled by _p_ ( _y_ = 1 _| θ, z_ ) = _σ_ ( _θ−z_ ), where _σ_ is the sigmoid function. Another widely
+adopted model in IRT is the 2PL model (Lord, 1952; Birnbaum, 1968), which adds a discrimination
+parameter _a_ to capture how sharply a question differentiates between test-takers of different abilities,
+modeling the probability of a correct response as _p_ ( _y_ = 1 _|_ _θ, z, a_ ) = _σ_ ( _a_ ( _θ −_ _z_ )) _._ In this case, A
+higher _a_ indicates that the question is more effective at distinguishing between abilities close to its
+difficulty level. The difficulty _z_ and the discrimination _a_ are collectively referred to as the item parameters. The use of IRT consists of two phases: calibration, which estimates item parameters, and
+computerized adaptive testing (CAT), which enables efficient evaluation for new test-takers.
+
+
+In traditional human testing, the most common approach is to perform calibration on binary response data, where each question is scored as either correct or incorrect. A binary response matrix _Y_ _∈{_ 0 _,_ 1 _}_ _[M]_ _[×][N]_ is collected, where _M_ and _N_ denote the number of test takers and questions, respectively. Each entry _Yij_ represents a response of test taker _i_ to question _j_ . With the
+binary response matrix, the item parameters can be estimated via either MLE or EM by minimizing the Bernoulli loss between the IRT-predicted probabilities and the observed binary responses
+_L_ Bernoulli = _−_ [�] _[M]_ _i_ =1 - _Nj_ =1 [[] _[Y][ij]_ [ log] _[ p][ij]_ [+ (1] _[ −]_ _[Y][ij]_ [) log(1] _[ −]_ _[p][ij]_ [)]][ (Bock & Aitkin, 1981; Chalmers,]
+2012; Wu et al., 2020).
+
+
+Unlike human testing, LLM evaluation provides empirical response probabilities, which convey
+richer information than binary responses. In the pre-training downstream scenario, the probability of
+producing the correct answer among the entire vocabulary, _p_ [Vocab] (Correct Choice), as well as among
+the set of multiple-choice options, _p_ [Choices] (Correct Choice), provides a richer signal than accuracy of
+
+
+3
+
+
+binary responses (Schaeffer et al., 2024). In the test-time scaling scenario, each question is queried
+thousands of times with independent samples to estimate pass@1, defined as the probability that a
+single independent sample answers the question correctly. To exploit those probability information
+for calibration, we collect the probability matrix _P_ _∈_ R _[M]_ _[×][N]_ _,_ 0 _≤_ _Pij_ _≤_ 1 and estimate the item
+parameters by minimizing the Beta loss between the IRT-predicted probabilities and the observed
+empirical probabilities _L_ Beta = _−_ [�] _[M]_ _i_ =1 - _Nj_ =1 [log] �BetaPDF( _Pij_ ; _µij, ϕ_ )� _,_ where _µij_ = _pij_ is the
+IRT-predicted probability, and _ϕ_ is a precision (inverse variance) parameter. Traditional calibration
+on binary data usually demands a large and diverse set of LLMs, which is costly to obtain. By
+leveraging empirical response probabilities, reliable calibration can be achieved with fewer testtakers, thereby significantly lowering the computational cost of querying LLMs.
+
+
+Given a question bank _Q_ with calibrated item parameters, computerized adaptive testing can efficiently evaluate new test-takers using fewer questions. At query step _t_, given the current estimate
+of the test taker’s ability _θ_ new _[t]_ [and] [the] [calibrated] [item] [parameters,] [the] [next] [question] _[q]_ _j_ _[∗][t]_ [is] [selected]
+as the most informative question, guided by an acquisition function such as Fisher information
+I (Meijer & Nering, 1999; Chang, 2015; Magis et al., 2017). This process iterates between the
+question selection step _qj_ _[∗][t]_ [=] [arg max] _qj_ _∈Q_ _[t]_ [ I] _Q_ _[t]_ [+1] = _Q_ _[t]_ _\ {qj_ _[∗][t][}]_ [ and the ability estimation step]
+_θ_ new _[t]_ [+1] [=] [arg max] _θ_ new _[t]_ - _tj_ =1 [log] _[ p]_ [new] _[,j]_ [.] [Ability] [estimation] [can] [also] [be] [carried] [out] [using] [binary] [re-]
+sponses with a Bernoulli loss or empirical probability responses with a Beta loss.
+
+
+3.2 PRE-TRAINING DOWNSTREAM ITEM RESPONSE SCALING LAW
+
+The pre-training downstream scaling law characterizes how model performance on a benchmark
+scales with the compute used during model pre-training. Performance of model _i_ on dataset _D_ (e.g.,
+MMLU) with _N_ questions indexed by _j_ is usually quantified by the expected mean accuracy, which
+is often approximated with an empirical mean accuracy:
+
+
+_p_ Correct Choice( _i, D_ ) = [1]
+
+_N_
+
+
+4
+
+
+_N_
+
+- _Yij_
+
+
+_j_ =1
+
+
+
+
+
+ = _N_ [1]
+
+
+(1)
+
+
+_N_
+
+
+E[ _Yij_ ] = [1]
+
+_N_
+
+_j_ =1
+
+
+_N_
+
+
+E[Acc( _i, D_ )] = E
+
+
+
+
+ [1]
+
+_N_
+
+
+_N_
+
+
+_N_
+
+- _pij._
+
+
+_j_ =1
+
+
+E[Acc( _i, D_ )] _≈_ Acc( _i, D_ ) = [1]
+
+_N_
+
+
+_N_
+
+- _Yij,_ where _Yij_ _∼_ Bern( _pij_ ) _._
+
+
+_j_ =1
+
+
+The binary variable _Yij_ is model _i_ ’s response to the _j_ -th question (1 for a correct response and 0
+otherwise). Classical linear approximation model Acc as a function of the model _i_ ’s pretraining
+compute FLOP _i_ (Bhagia et al., 2024; et al., 2024; Gadre et al., 2024).
+
+
+Acc( _i, D_ ) _≈_ _a · σ_ ( _b ·_ ( _Li −_ _c_ )) + _d_ where _Li_ _≈_ _α ·_ FLOP _[−]_ _i_ _[β]_ + _γ,_ (2)
+
+where _σ_ is the sigmoid function, _a, b, c,_ and _d_ are dataset-specific parameters for _D_, _Li_ is the LLMspecific cross-entropy loss, and _α, β, γ_ are LLM-specific parameters for model _i_ . None of these
+scaling parameters is interpretable.
+
+
+We propose to model the probability of test taker _i_ correctly answering question _j_ from benchmark _D_
+with IRT. For example, under the Rasch model, this probability is given as _p_ ˆ _ij_ = _σ_ ( _θi −_ _zj_ ):
+
+
+E[Acc( _i, D_ )] _≈_ [1]
+
+_N_
+
+
+_N_
+
+
+- _p_ ˆ _ij_ = [1]
+
+_N_
+
+_j_ =1
+
+
+_N_
+
+
+_N_
+
+- _σ_ ( _θi −_ _zj_ ) _θi_ = _f_ (FLOP _i_ ) _,_ (3)
+
+
+_j_ =1
+
+
+where _θi_ generalizes across questions that measure the same construct, and _zj_ generalizes across
+different LLMs. _θi_ can be interpreted as the ability of test taker _i_, _zj_ can be interpreted as difficulty
+of question _j_ . Modeling pre-training downstream scaling law from Acc gives emergent behavior
+and low predictability (Lourie et al., 2025; Schaeffer et al., 2024). There is growing interest in
+modeling the law from the probability of producing the correct answer among the entire vocabulary,
+_p_ [Vocab] (Correct Choice), which preserves more information (Schaeffer et al., 2024):
+
+
+_N_
+
+- _p_ Correct Choice( _i, j_ ) _._ (4)
+
+
+_j_ =1
+
+
+Traditional approaches tend to fit a regression model with LLM-specific and dataset-specific parameters _g_ : _p_ Correct Choice( _i, D_ ) _≈_ _g_ (FLOP _i_ ) _._ We propose to use IRT to model _p_ Correct Choice( _i,j_ ). For
+example, under the Rasch model, this probability is given as _p_ Correct Choice� ( _i,j_ ) = _σ_ ( _θi −_ _zj_ ):
+
+
+where _θi_ generalizes across questions that measure the same construct, and _zj_ generalizes across
+different LLMs, both are interpretable.
+
+
+4 EXPERIMENTS
+
+
+We demonstrate the advantages of the downstream item response scaling law in Section 4.1 and of
+the test-time item response scaling law in Section 4.2.
+
+
+4.1 PRE-TRAINING DOWNSTREAM ITEM RESPONSE SCALING LAW
+
+**Experimental** **Setup** We collect two sets of responses across LLMs and datasets. (1) The first
+consists of the binary responses from 13 models spanning 3 model families with up to 359 checkpoints, evaluated on 13 datasets covering both exact-match and multiple-choice tasks. This yields
+a binary response matrix _Y_ 1 [pretrain] The data are queried using the HELM framework at temperature
+0 (Liang, 2023). Truong et al. (2025) calibrated question difficulties on these datasets using the
+Rasch model with binary responses from 42–91 diverse LLMs on the HELM leaderboard. Under
+the same query setup, we reuse these calibrated difficulties in our experiments. (2) The second
+is obtained from Schaeffer et al. (2024) and contains outputs from 5 model families (see Schaeffer et al. (2024) for details). For our experiments, we select three out of the 12 multiple-choice
+datasets in Schaeffer et al. (2024). Each output includes a binary response _y_, a probability response
+_p_ [Vocab] (Correct Choice), and a probability response _p_ [Choices] (Correct Choice), resulting in one binary
+response matrix _Y_ 2 [pretrain] and two probability response matrices _P_ 2 [pretrain pvocab] and _P_ 2 [pretrain pchoices] . The
+data are queried using the LM Evaluation Harness at temperature 0 (Gao et al., 2023). Hofmann et al.
+(2025) calibrate item parameters on these datasets using the 2PL model with binary responses from
+102 diverse LLMs on the Open LLM Leaderboard (Beeching et al., 2023). Under the same query
+setup, we reuse these calibrated item parameters in our experiments.
+
+
+**Binary-IRT CAT and Scaling Law Fit** We first apply IRT with a Bernoulli loss (denoted BinaryIRT) to the binary response matrix _Y_ 1 [pretrain] . Using the calibrated question difficulties, we conduct
+CAT on the LLM checkpoints with a question budget of 100. We then compare the _θ_ –FLOP curve
+
+
+5
+
+
+_p_ Correct Choice( _i, D_ ) _≈_ [1]
+
+_N_
+
+
+_N_
+
+- _σ_ ( _θi −_ _zj_ ) _,_ _θi_ = _f_ (FLOP _i_ ) _._ (5)
+
+
+_j_ =1
+
+
+3.3 TEST-TIME ITEM RESPONSE SCALING LAW
+
+Test-time scaling investigates the predictable relationship between a model’s success rates on a
+benchmark and the number of independent samples generated during inference (Brown et al., 2024;
+Hughes et al., 2024). The model _i_ ’s success rate on dataset _D_ with _N_ questions indexed by _j_ and _H_
+samples indexed by _k_ is quantified by pass@k( _i, D_ ):
+
+
+pass@k( _i, D_ ) = [1]
+
+_N_
+
+
+_N_
+
+
+- pass@k( _i, j_ ) = [1]
+
+_N_
+
+_j_ =1
+
+
+_N_
+
+
+_N_
+
+- 1 _−_ (1 _−_ pass@1( _i, j_ )) _[k]_ (6)
+
+
+_j_ =1
+
+
+where the pass@k( _i, j_ ) = 1 if at least one of the _k_ generated responses of model _i_ to _qj_ is correct, and pass@1( _i, j_ ) denote the probability that a single independent sample of model _i_ correctly
+answers question _qj_ (Schaeffer et al., 2025). Brown et al. (2024) model the negative log success
+rate falls as a power law with the number of independent samples _k_ : pass@k( _i, D_ ) _≈_ exp( _−ak_ _[−][b]_ ),
+where _a, b_ _>_ 0 are uninterpretable model-specific and benchmark-specific parameters. We propose
+to model pass@1( _i, j_ ) using IRT. For example, under the Rasch model, this probability is given by
+pass@1( _i, j_ ) = _pij_ = _σ_ ( _θi −_ _zj_ ). Instead of fitting LLM-specific and benchmark-specific constants
+_a, b_, we models pass@k( _i, D_ ) as a function of IRT parameters:
+
+
+pass@k( _i, D_ ) _≈_ [1]
+
+_N_
+
+
+_N_
+
+
+_j_ =1
+
+
+1 _−_ (1 _−_ _p_ ˆ _ij_ ) _[k]_ [�] = [1]
+
+_N_
+
+
+_N_
+
+
+_j_ =1
+
+
+1 _−_ (1 _−_ _σ_ ( _θi −_ _zj_ )) _[k]_ [�] _,_ (7)
+
+
+Figure 1: Comparison of binary-IRT (red) and Acc curves (light blue) during pre-training on a
+subset, across 2 LLMs and 2 datasets. The full-set Acc (dark blue) serves as ground truth. The blue
+lines use the left _y_ -axis (Acc), while the red line use the right _y_ -axis (CAT _θ_ ). Subset binary-IRT
+yields lower variance than subset Acc. But both IRT and ground truth Acc show emergent behavior
+and exhibit poor predictability.
+
+
+Figure 2: Naive scaling behavior of three metrics (Acc, _p_ [Vocab] (Correct Choice),
+_p_ [Choices] (Correct Choice)) versus FLOP of AMBER on 3 datasets. Because _p_ [Vocab] (Correct Choice)
+is often too small to visualize, we also plot its negative log probability. The left _y_ -axis corresponds
+to the three metrics, and the right _y_ -axis corresponds to _−_ log _p_ [Vocab] . Shaded regions indicate _±_ 3
+standard deviations estimated from subset sampling or bootstrap. _p_ [Vocab] (Correct Choice) or its
+negative log probability does not show emergent behaviors and exhibits strong predictability.
+
+
+lower step-to-step variance and thus higher evaluation quality. Averaged across all datasets and
+models, subset Acc yields TV = 39 _._ 66, while subset IRT achieves TV = 26 _._ 72, demonstrating its
+superior stability. However, neither IRT nor ground truth Acc addresses the challenging questions
+of downstream scaling laws: emergence and predictability.
+
+
+**Naive** **Scaling** **Behavior** **of** _p_ **Correct Choice** Schaeffer et al. (2024) find that _p_ [Vocab] (Correct Choice)
+retains substantially more information than binary responses, offering a potential avenue to address
+emergence and predictability. Using _Y_ 2 [pretrain], _P_ 2 [pretrain pvocab], and _P_ 2 [pretrain pchoices], we examine the
+naive scaling behavior of three metrics: Acc, _p_ [Vocab] (Correct Choice), and _p_ [Choices] (Correct Choice).
+Figure 2 plots these metrics against FLOP of AMBER on three datasets, averaged across the full set
+and on a random subset of 50 questions. We observe that _p_ [Vocab] (Correct Choice) (or its negative log)
+exhibits clear scaling behavior. While _p_ [Vocab] (Correct Choice) is too small to be effectively modeled
+by IRT on ARC Challenge and HellaSwag, it appears feasible on MMLU. Accordingly, we apply
+Beta-IRT to both _p_ [Vocab] (Correct Choice) and _p_ [Choices] (Correct Choice) for MMLU. Moreover, the
+average _p_ [Vocab] (Correct Choice) across the 50-question subset of MMLU closely aligns with the fullset curves with low variance, suggesting that naive probability-based metrics already provide strong
+approximations that may be difficult for IRT to improve upon, as we describe next.
+
+
+**Beta-IRT** **CAT** **and** **Scaling** **Law** **Fit** We apply IRT with a Beta loss (denoted Beta-IRT) to the
+probability response matrix _P_ 2 [pretrain pvocab] and _P_ 2 [pretrain pchoices] . Using the calibrated item parameters,
+we conduct CAT on the LLM checkpoints with a question budget of 50. In Figure 3, we use the average _p_ [Vocab] (Correct Choice) on the full set as the ground truth. We compare the average _p_ Correct Choice
+on the subset, and estimate _θ_ using Beta-IRT CAT on probability responses with the budget. We
+
+
+6
+
+
+obtained from CAT with the Acc–FLOP curve computed on a random subset of 100 questions.
+The full-set Acc serves as the ground truth. As shown in Figure 1, IRT yields lower variance and
+closely tracks the ground-truth curve. To assess evaluation stability, we report the total variation
+(TV) following Hofmann et al. (2025). For each model _i_ and benchmark _D_ with _V_ checkpoints,
+let _x_ _[v]_ _i_ [(] _[D]_ [)] [denote] [the] [measured] [performance] [(either] [Acc] [or] _[θ]_ [)] [at] [checkpoint] _[v]_ [.] [The] [normalized]
+
+
+total variation is defined as TV( _i, D_ ) = _V −V_ 1 _[·]_
+
+
+- _Vv_ =1 _−_ �� _x_ 1 _Vi_ �� _x_ [(] _vi_ _[D]_ +1 [)] _[−]_ ( _D_ _[x]_ _i_ [1] ) [(] _−_ _[D]_ _x_ [)] _[v]_ _i_ �� [(] _[D]_ [)] �� _,_ where lower values indicate
+
+
+Figure 3: Scaling behavior of three model families on MMLU Anatomy. The blue lines use the left
+_y_ -axis (Mean score), while the red lines use the right _y_ -axis (IRT _θ_ ). Beta-IRT effectively captures
+_p_ Correct Choice, which is more predictable and less emergent.
+
+
+observe that both the _θ_ estimated from Beta-IRT CAT and the average _p_ Correct Choice exhibit smooth
+increasing trends that closely align with the ground truth. This suggests that Beta-IRT effectively
+captures _p_ Correct Choice, which is more predictable and less emergent, making it a suitable candidate
+for modeling downstream scaling laws. We note, however, that while subset Beta-IRT does not surpass the subset average of _p_ Correct Choice in estimation accuracy or stability, it performs comparably
+and remains valuable for its interpretability and generalizability, as we describe next.
+
+
+**IRT** **Ability** **Estimates** **Generalize** **across** **Questions** **Mea-**
+**suring the same Construct** We use the scaling performance
+of Pythia-12B on WikiFact (from _Y_ 1 [pretrain] ) as a demonstration.
+The scaling law is characterized by the relationship between
+Acc and the training FLOP of the 154 Pythia-12B checkpoints.
+We split the questions into an easy subset for training and a difficult subset for testing according to the calibrated difficulties.
+For the IRT model, we first estimate the model’s ability parameter _θ_ on the training set using pre-calibrated difficulties; we Figure 4: Pythia-12B checkpoionts
+then model _θ_ as a function of FLOP via Kernel Ridge Regres- on WikiFact. Acc versus FLOP on
+sion: _θ_ = _f_ KRR(FLOP). Finally, we infer the test set accuracy the easy (train, blue) and difficult
+by combining _f_ KRR(FLOP) with the pre-calibrated test set dif- (test, red) question splits. Solid:
+ficulties. As shown in Figure 4, the IRT model closely matches GT scaling curves; dotted: IRT
+the ground truth curve on both the training and test sets. This curves. The _θ_ estimated from the
+shows that _θ_ generalizes across questions with different diffi- easy question set generalizes to the
+culties but measuring the same construct, while the traditional hard question set, accurately prescaling law remains test set-specific. We replicate this experi- dicting the scaling behavior on the
+ment across 13 benchmarks and 13 models from _Y_ 1 [pretrain] . Fig- hard question set, while the tradiure 7 presents the difference in test mean squared error (MSE) tional approach fits dataset-specific
+with ground truth between the classical scaling law (which fits scaling parameters.
+on the train ground truth and stays the same for the test set)
+and the item response scaling law (which generalizes to the
+test set). From the consistent positive MSE difference, we conclude that the item response scaling
+law demonstrates superior generalization across questions measuring the same construct.
+
+
+This is a core property of IRT known in psychology as test-set invariance, meaning that ability
+estimates remain robust across subsets of varying difficulty. This feature is particularly important
+in the pre-training setting. For example, in an industrial setting where training and evaluation are
+handled by separate teams, increasing model ability with more compute causes CAT to adaptively
+choose more difficult questions for evaluation (Hofmann et al., 2025). By doing so, CAT ensures
+that different subsets are presented to the model, which can reduce contamination and lead to more
+reliable evaluation.
+
+
+4.2 TEST-TIME ITEM RESPONSE SCALING LAW
+**Experimental** **Setup** We collect two probability matrices, denoted as _P_ 1 [testtime] and _P_ 2 [testtime] . The
+matrix _P_ 1 [testtime] contains the responses of 8 LLMs on 552 questions drawn from 6 multiple-choice
+benchmarks. For each entry, the empirical pass@1 is estimated by averaging over 10 _,_ 000 samples,
+with queries performed under a few-shot setting and temperature 1. The matrix _P_ 2 [testtime] contains
+the responses of 12 latest LLMs on 120 questions from 4 latest benchmarks, including both exact
+
+
+7
+
+
+Figure 5: Consistency between (1) IRT-predicted probability with _θ_ estimated from 50 or 30 questions and 50 samples ( _x_ -axis), and (2) pass@1 estimated from 10,000 or 2,500 samples ( _y_ -axis).
+Each point represents a question in the benchmark. From left to right, the four subplots are training
+LLM in _P_ 1 [testtime], test LLM in _P_ 1 [testtime], training LLM in _P_ 2 [testtime], and test LLM in _P_ 2 [testtime] . IRTpredicted probabilities correlate closely with pass@1.
+
+
+match and multiple-choice tasks. Here, the empirical pass@1 is estimated by averaging over 2 _,_ 500
+samples, with queries performed without few-shot examples but using chain-of-thought prompting
+at temperature 0 _._ 6.
+
+
+**Beta-IRT** **Calibration** We adopt the Rasch model for both matrices, leaving out 4 LLMs for
+CAT. Question difficulty parameters _z_ are calibrated on the remaining LLMs using the Beta loss.
+We report two correlation metrics for calibration performance: the Spearman correlation between
+the estimated difficulty _z_ and the average empirical pass@1 of each question across the LLMs used
+for calibration, denoted as _ρ_ train; and the Spearman correlation between _z_ and the average empirical
+pass@1 across the LLMs left out for CAT, denoted as _ρ_ test. For _P_ 1 [testtime], we obtain _ρ_ train = 0 _._ 97 and
+_ρ_ test = 0 _._ 80. For _P_ 2 [testtime], we obtain _ρ_ train = 0 _._ 99 and _ρ_ test = 0 _._ 95.
+
+
+Although leaderboard-calibrated difficulties are publicly available (Hofmann et al., 2025; Truong
+et al., 2025), we recalibrate question difficulties on the test-time probability matrices, because testtime scaling is typically conducted with a positive temperature to enable diverse sampling, whereas
+leaderboard evaluations are usually performed at temperature 0 for reproducibility. Our analysis
+shows that difficulties obtained under different evaluation setups can sometimes exhibit low correlation. For _P_ 1 [testtime], the questions overlap with those used in Truong et al. (2025). In Truong et al.
+(2025), question difficulties are calibrated from a binary response matrix of 42–91 test takers collected from the HELM leaderboard (Liang, 2023). We compare the estimated difficulties between
+our setting and theirs: across the six benchmarks, three exhibit high correlation while the other three
+do not, likely due to differences in evaluation setup (Figure 8). These results suggest there is hope
+to transfer difficulty estimates calibrated from leaderboards to test-time scaling scenarios, but they
+are not always reliable.
+
+
+**Beta-IRT CAT** With calibrated question difficulties, we perform CAT using the Beta loss on both
+the LLMs included in calibration and those held out, with a sample budget of 50. For _P_ 1 [testtime], we
+set the question budget to 50, and for _P_ 2 [testtime], we set it to 30. Given the estimated LLM ability _θ_, we
+compute the correlation between the IRT-predicted probability _σ_ ( _θ −_ _z_ ) and the empirical pass@1
+estimated from all available samples. Figure 5 presents four subplots, corresponding to one training
+(included in calibration) and one test (held out) LLM on each of _P_ 1 [testtime] and _P_ 2 [testtime] . We report
+the Spearman correlation averaged across LLMs and datasets between IRT-predicted probability and
+pass@1: _ρ_ _[P]_ train [ 1] [=] [0] _[.]_ [70] _[, ρ][P]_ test [ 1] [=] [0] _[.]_ [53] _[, ρ][P]_ train [ 2] [=] [0] _[.]_ [92] _[, ρ][P]_ test [ 2] [=] [0] _[.]_ [88] _[.]_ [We] [observe] [that] [the] [IRT-predicted]
+probabilities correlate closely with pass@1. However, when pass@1 is exactly zero, the IRT model
+fails to produce an exact zero probability, which introduces discrepancies in the law fitting process,
+as we describe next.
+
+
+**Scaling** **Law** **Fit** We report 3 law curves on pass@k or _−log_ pass@k versus number of samples
+_k_ in Figure 9: (1) the full unbiased (GT) curve serves as the ground truth. In this case, pass@k is
+estimated from all available samples (10,000 or 2,500 samples) and all available questions using the
+unbiased and numerically stable estimator of Chen et al. (2021): pass@k(� _i, j_ ) = 1 _−_ - _H−kcij_ - _/_ - _Hk_ �,
+where _H_ is the total number of available samples, _cij_ is the number of correct samples of LLM
+_i_ on question _qj_ among those samples. (2) In the sub pass@1 curve, pass@k is estimated from
+subset questions (50 or 30 questions) and subset samples (50 samples): pass@k(� _i, j_ ) = E _j_ [1 _−_ (1 _−_
+
+
+8
+
+
+_p_ ˆ _ij_ ) _[k]_ ], where _p_ ˆ _ij_ = _cj/H_ . (3) In the sub beta-IRT curve, _z_ ˆ is estimated from calibration, and _θ_ [ˆ] is
+estimated from subset questions (50 or 30 questions) and subset samples (50 samples). pass@k is
+then estimated as pass@k(� _i, j_ ) = E _j_ [1 _−_ (1 _−_ _p_ ˆ _ij_ ) _[k]_ ], where _p_ ˆ _ij_ = _σ_ ( _θ_ [ˆ] _−_ _z_ ˆ). In the left half of
+Figure 9, we observe that the IRT law curves tend to achieve pass@k = 1 while the ground truth
+curves do not. This arises because IRT probabilities never reach exact zero: both _θ_ and _z_ are typically
+modeled as approximately normal, and even a large negative difference such as _θ −_ _z_ = _−_ 6 yields
+_σ_ ( _−_ 6) _≈_ 0 _._ 0025. This behavior can be interpreted as an inherent limitation of IRT; one possible
+extension would be to introduce a prior that induces a binning effect. We also note that the groundtruth curves may be resolution-limited due to finite samples: if an LLM never answers a question
+correctly in the limited samples, the ground truth estimates become exactly zero.
+
+
+In psychometrics, questions that are never correctly answered are typically discarded because they
+provide no discriminatory power (Lord, 1980). Following this principle, we filter out questions with
+pass@1 _≤_ 0 _._ 01 and show empirically that this improves predictive reliability of IRT. After filtering,
+we obtain the right half of Figure 9, where the sub beta-IRT curve provides a closer estimate than
+the sub pass@1 curve under a limited query budget. We report the mean absolute errors (MAEs) of
+
+_−_ log pass@k between the subset estimates and the ground-truth estimates for both IRT and pass@1.
+To highlight the relative advantage, we compute MAEpass@1 _−_ MAEbeta-IRT and visualize the results
+in Figure 10, where positive values (red) indicate superiority of IRT. Across nearly all LLMs and
+datasets, IRT achieves more reliable estimates of test-time scaling laws in an efficient manner, while
+being interpretable and generalizable.
+
+
+**IRT** **Ability** **Estimates** **Generalize** **across**
+**Questions** **Measuring** **the** **same** **Construct**
+We use the scaling performance of Qwen3-4B
+on Global MMLU Lite as a demonstration. We
+split the questions into an easy subset for training and a difficult subset for testing according
+to the calibrated difficulties. For the IRT, we
+first estimate the model’s ability parameter _θ_
+on the training set using pre-calibrated difficulties; we then combine _θ_ with the pre-calibrated
+
+Figure 6: Qwen3-4B on Global MMLU Lite.
+
+difficulties of the test set to predict the proba
+**Left:** pass@k versus _k_ on the easy (train, blue)
+
+bility of correct responses. As shown in Fig
+and difficult (test, red) question splits. Solid:
+
+ure 6 (left), the IRT curves closely match the
+
+GT scaling curves; dotted: IRT curves. **Right:**
+
+ground truth curves on both the training and test
+sets. This shows that _θ_ generalizes across ques- pass@1 as a function of question difficulty _z_ . The
+
+LLM ability _θ_ estimated from the easy set gener
+tions with different difficulties but measuring
+
+alizes effectively to the hard set, accurately pre
+the same construct, while the traditional scal
+dicting pass@1 and giving accurate estimation for
+
+ing law remains test set-specific. In Figure 6
+(right), we visualize pass@1 as a function of pass@k scaling on more difficult questions, while
+question difficulty _z_ . The LLM ability _θ_ es- the traditional approach remains dataset-specific.
+timated generalizes effectively to the test set,
+producing a scaling curve that accurately predicts pass@1 on more difficult questions.
+
+
+5 DISCUSSION, LIMITATIONS, AND FUTURE WORK
+
+
+In the scaling laws literature, pre-training downstream curves are typically fit only to final checkpoints; by contrast, we fit to intermediate checkpoints of pretrained models. Our estimation of FLOP
+may be inaccurate because learning signals are nonuniform over training (e.g. due to warmup and
+decay schedules). Future work includes introducing a prior into IRT that induces a binning effect in
+test-time settings, fitting a shared latent ability that generalizes across benchmarks under the hypothesis that most benchmarks measure the ability to autoregress text (Truong et al., 2025; Kipnis et al.,
+2025), exploring alternative probabilistic models beyond IRT, extending to other scaling laws (e.g.,
+observational scaling law (Ruan et al., 2024), pre-training validation-loss scaling law (Kaplan et al.,
+2020), in-context scaling laws (Arora et al., 2025)), and extending IRT to non-binary assessments
+(Ostini & Nering, 2006).
+
+
+9
+
+
+REFERENCES
+
+
+Aryaman Arora, Dan Jurafsky, Christopher Potts, and Noah D. Goodman. Bayesian scaling laws for
+in-context learning, 2025. [URL https://arxiv.org/abs/2410.16531.](https://arxiv.org/abs/2410.16531)
+
+
+Yasaman Bahri, Ethan Dyer, Jared Kaplan, Jaehoon Lee, and Utkarsh Sharma. Explaining neural
+scaling laws. _arXiv preprint arXiv:2102.06701_, 2021.
+
+
+Frank B Baker. _The basics of item response theory_ . ERIC, 2001.
+
+
+Edward Beeching, Cl´ementine Fourrier, Nathan Habib, Sheon Han, Nathan Lambert, Nazneen
+Rajani, Omar Sanseviero, Lewis Tunstall, and Thomas Wolf. Open LLM leaderboard.
+https://huggingface.co/spaces/open-llm-leaderboard-old/open ~~l~~ lm ~~l~~ eaderboard, 2023.
+
+
+Akshita Bhagia, Jiacheng Liu, Alexander Wettig, David Heineman, Oyvind Tafjord, Ananya Harsh
+Jha, Luca Soldaini, Noah A Smith, Dirk Groeneveld, Pang Wei Koh, et al. Establishing task
+scaling laws via compute-efficient model ladders. _arXiv preprint arXiv:2412.04403_, 2024.
+
+
+Stella Biderman, Hailey Schoelkopf, Quentin Gregory Anthony, Herbie Bradley, Kyle O’Brien, Eric
+Hallahan, Mohammad Aflah Khan, Shivanshu Purohit, USVSN Sai Prashanth, Edward Raff, et al.
+Pythia: A suite for analyzing large language models across training and scaling. In _International_
+_Conference on Machine Learning_, pp. 2397–2430. PMLR, 2023.
+
+
+Allan Birnbaum. Some latent trait models and their use in inferring an examinee’s ability. In
+Frederic M. Lord and Melvin Novick (eds.), _Statistical Theories of Mental Test Scores_, pp. 392–
+479. Addison-Wesley, Reading, MA, 1968.
+
+
+R Darrell Bock and Murray Aitkin. Marginal maximum likelihood estimation of item parameters:
+Application of an em algorithm. _Psychometrika_, 46(4):443–459, 1981.
+
+
+Bradley Brown, Jordan Juravsky, Ryan Ehrlich, Ronald Clark, Quoc V Le, Christopher R´e, and
+Azalia Mirhoseini. Large language monkeys: Scaling inference compute with repeated sampling.
+_arXiv preprint arXiv:2407.21787_, 2024.
+
+
+R. Philip Chalmers. mirt: A multidimensional item response theory package for the r environment.
+_Journal_ _of_ _Statistical_ _Software_, 48(6):1–29, 2012. doi: 10.18637/jss.v048.i06. URL [https:](https://www.jstatsoft.org/index.php/jss/article/view/v048i06)
+[//www.jstatsoft.org/index.php/jss/article/view/v048i06.](https://www.jstatsoft.org/index.php/jss/article/view/v048i06)
+
+
+Hua-Hua Chang. Psychometrics behind computerized adaptive testing. _Psychometrika_, 80(1):1–20,
+2015.
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, Alex Ray, Raul Puri,
+Gretchen Krueger, Michael Petrov, Heidy Khlaaf, Girish Sastry, Pamela Mishkin, Brooke Chan,
+Scott Gray, Nick Ryder, Mikhail Pavlov, Alethea Power, Lukasz Kaiser, Mohammad Bavarian,
+Clemens Winter, Philippe Tillet, Felipe Petroski Such, Dave Cummings, Matthias Plappert, Fotios Chantzis, Elizabeth Barnes, Ariel Herbert-Voss, William Hebgen Guss, Alex Nichol, Alex
+Paino, Nikolas Tezak, Jie Tang, Igor Babuschkin, Suchir Balaji, Shantanu Jain, William Saunders,
+Christopher Hesse, Andrew N. Carr, Jan Leike, Josh Achiam, Vedant Misra, Evan Morikawa, Alec
+Radford, Matthew Knight, Miles Brundage, Mira Murati, Katie Mayer, Peter Welinder, Bob McGrew, Dario Amodei, Sam McCandlish, Ilya Sutskever, and Wojciech Zaremba. Evaluating large
+language models trained on code, 2021. [URL https://arxiv.org/abs/2107.03374.](https://arxiv.org/abs/2107.03374)
+
+
+Yangyi Chen, Binxuan Huang, Yifan Gao, Zhengyang Wang, Jingfeng Yang, and Heng Ji. Scaling
+laws for predicting downstream performance in llms. _arXiv preprint arXiv:2410.08527_, 2024.
+
+
+Florian E. Dorner, Yatong Chen, Andr´e F. Cruz, and Fanny Yang. Roc-n-reroll: How verifier imperfection affects test-time scaling, 2025. [URL https://arxiv.org/abs/2507.12399.](https://arxiv.org/abs/2507.12399)
+
+
+Grattafiori et al. The llama 3 herd of models, 2024. [URL https://arxiv.org/abs/2407.](https://arxiv.org/abs/2407.21783)
+[21783.](https://arxiv.org/abs/2407.21783)
+
+
+10
+
+
+Samir Yitzhak Gadre, Georgios Smyrnis, Vaishaal Shankar, Suchin Gururangan, Mitchell Wortsman, Rulin Shao, Jean Mercat, Alex Fang, Jeffrey Li, Sedrick Keh, Rui Xin, Marianna Nezhurina,
+Igor Vasiljevic, Jenia Jitsev, Luca Soldaini, Alexandros G. Dimakis, Gabriel Ilharco, Pang Wei
+Koh, Shuran Song, Thomas Kollar, Yair Carmon, Achal Dave, Reinhard Heckel, Niklas Muennighoff, and Ludwig Schmidt. Language models scale reliably with over-training and on downstream tasks, 2024. [URL https://arxiv.org/abs/2403.08540.](https://arxiv.org/abs/2403.08540)
+
+
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster, Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muennighoff, Chris Ociepa, Jason Phang, Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang Sutawika, Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. A framework
+for few-shot language model evaluation, 12 2023. [URL https://zenodo.org/records/](https://zenodo.org/records/10256836)
+[10256836.](https://zenodo.org/records/10256836)
+
+
+David Heineman, Valentin Hofmann, Ian Magnusson, Yuling Gu, Noah A. Smith, Hannaneh Hajishirzi, Kyle Lo, and Jesse Dodge. Signal and noise: A framework for reducing uncertainty in
+language model evaluation, 2025. [URL https://arxiv.org/abs/2508.13144.](https://arxiv.org/abs/2508.13144)
+
+
+Danny Hernandez, Jared Kaplan, Tom Henighan, and Sam McCandlish. Scaling laws for transfer.
+_arXiv preprint arXiv:2102.01293_, 2021.
+
+
+Joel Hestness, Sharan Narang, Newsha Ardalani, Gregory Diamos, Heewoo Jun, Hassan Kianinejad,
+Md Mostofa Ali Patwary, Yang Yang, and Yanqi Zhou. Deep learning scaling is predictable,
+empirically. _arXiv preprint arXiv:1712.00409_, 2017.
+
+
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, et al. Training compute-optimal large language models. _arXiv preprint arXiv:2203.15556_, 2022.
+
+
+Valentin Hofmann, David Heineman, Ian Magnusson, Kyle Lo, Jesse Dodge, Maarten Sap, Pang Wei
+Koh, Chun Wang, Hannaneh Hajishirzi, and Noah A. Smith. Fluid language model benchmarking,
+2025. [URL https://arxiv.org/abs/2509.11106.](https://arxiv.org/abs/2509.11106)
+
+
+John Hughes, Sara Price, Aengus Lynch, Rylan Schaeffer, Fazl Barez, Sanmi Koyejo, Henry Sleight,
+Erik Jones, Ethan Perez, and Mrinank Sharma. Best-of-n jailbreaking, 2024. URL [https:](https://arxiv.org/abs/2412.03556)
+[//arxiv.org/abs/2412.03556.](https://arxiv.org/abs/2412.03556)
+
+
+Zhewei Kang, Xuandong Zhao, and Dawn Song. Scalable best-of-n selection for large language
+models via self-certainty. _arXiv preprint arXiv:2502.18581_, 2025.
+
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. _arXiv preprint arXiv:2001.08361_, 2020.
+
+
+Alex Kipnis, Konstantinos Voudouris, Luca M. Schulze Buschoff, and Eric Schulz. metabench – a
+sparse benchmark of reasoning and knowledge in large language models, 2025. URL [https:](https://arxiv.org/abs/2407.12844)
+[//arxiv.org/abs/2407.12844.](https://arxiv.org/abs/2407.12844)
+
+
+Percy et al. Liang. Holistic evaluation of language models. _Transactions_ _on_ _Machine_ _Learning_
+_Research_, 2023. [URL https://openreview.net/forum?id=iO4LZibEqW.](https://openreview.net/forum?id=iO4LZibEqW)
+
+
+Frederic M. Lord. _A Theory of Test Scores_ . Psychometric Corporation, Richmond, VA, 1952.
+
+
+Frederic M. Lord. _Applications of Item Response Theory to Practical Testing Problems_ . Routledge,
+1st edition, 1980. doi: 10.4324/9780203056615.
+
+
+Nicholas Lourie, Michael Y Hu, and Kyunghyun Cho. Scaling laws are unreliable for downstream
+tasks: A reality check. _arXiv preprint arXiv:2507.00885_, 2025.
+
+
+Lovish Madaan, Aaditya K. Singh, Rylan Schaeffer, Andrew Poulton, Sanmi Koyejo, Pontus Stenetorp, Sharan Narang, and Dieuwke Hupkes. Quantifying variance in evaluation benchmarks,
+2024. [URL https://arxiv.org/abs/2406.10229.](https://arxiv.org/abs/2406.10229)
+
+
+11
+
+
+David Magis, Duanli Yan, and Alina A. von Davier. _Computerized Adaptive and Multistage Testing_
+_with R_ . Springer, Cham, 2017.
+
+
+Ian Magnusson, Nguyen Tai, Ben Bogin, David Heineman, Jena D. Hwang, Luca Soldaini, Akshita
+Bhagia, Jiacheng Liu, Dirk Groeneveld, Oyvind Tafjord, Noah A. Smith, Pang Wei Koh, and
+Jesse Dodge. Datadecide: How to predict best pretraining data with small experiments, 2025.
+[URL https://arxiv.org/abs/2504.11393.](https://arxiv.org/abs/2504.11393)
+
+
+Rob R. Meijer and Michael L. Nering. Computerized adaptive testing: Overview and introduction.
+_Applied Psychological Measurement_, 23(3):187–194, 1999.
+
+
+Shubhra Mishra, Gabriel Poesia, Belinda Mo, and Noah D Goodman. Mathcamps: Fine-grained
+synthesis of mathematical problems from human curricula. _arXiv_ _preprint_ _arXiv:2407.00900_,
+2024.
+
+
+Niklas Muennighoff, Alexander Rush, Boaz Barak, Teven Le Scao, Nouamane Tazi, Aleksandra
+Piktus, Sampo Pyysalo, Thomas Wolf, and Colin A Raffel. Scaling data-constrained language
+models. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+R. Ostini and M.L. Nering. _Polytomous Item Response Theory Models_ . Polytomous Item Response
+Theory Models. SAGE Publications, 2006. ISBN 9780761930686. URL [https://books.](https://books.google.com.hk/books?id=wS8VEMtJ3UYC)
+[google.com.hk/books?id=wS8VEMtJ3UYC.](https://books.google.com.hk/books?id=wS8VEMtJ3UYC)
+
+
+Felipe Maia Polo, Lucas Weber, Leshem Choshen, Yuekai Sun, Gongjun Xu, and Mikhail
+Yurochkin. tinybenchmarks: evaluating llms with fewer examples, 2024. URL [https:](https://arxiv.org/abs/2402.14992)
+[//arxiv.org/abs/2402.14992.](https://arxiv.org/abs/2402.14992)
+
+
+Felipe Maia Polo, Seamus Somerstep, Leshem Choshen, Yuekai Sun, and Mikhail Yurochkin. Sloth:
+scaling laws for llm skills to predict multi-benchmark performance across families, 2025. URL
+[https://arxiv.org/abs/2412.06540.](https://arxiv.org/abs/2412.06540)
+
+
+Georg Rasch. _Probabilistic models for some intelligence and attainment tests._ ERIC, 1993.
+
+
+Yangjun Ruan, Chris J Maddison, and Tatsunori Hashimoto. Observational scaling laws and the
+predictability of language model performance. _arXiv preprint arXiv:2405.10938_, 2024.
+
+
+Rylan Schaeffer, Hailey Schoelkopf, Brando Miranda, Gabriel Mukobi, Varun Madan, Adam
+Ibrahim, Herbie Bradley, Stella Biderman, and Sanmi Koyejo. Why has predicting downstream
+capabilities of frontier ai models with scale remained elusive? _arXiv preprint arXiv:2406.04391_,
+2024.
+
+
+Rylan Schaeffer, Joshua Kazdan, John Hughes, Jordan Juravsky, Sara Price, Aengus Lynch, Erik
+Jones, Robert Kirk, Azalia Mirhoseini, and Sanmi Koyejo. How do large language monkeys get
+their power (laws)?, 2025. [URL https://arxiv.org/abs/2502.17578.](https://arxiv.org/abs/2502.17578)
+
+
+Sang Truong, Yuheng Tu, Percy Liang, Bo Li, and Sanmi Koyejo. Reliable and efficient amortized
+model-based evaluation. _arXiv preprint arXiv:2503.13335_, 2025.
+
+
+Wim J Van der Linden, Cees AW Glas, et al. _Computerized adaptive testing:_ _Theory and practice_,
+volume 13. Springer, 2000.
+
+
+Mike Wu, Richard L Davis, Benjamin W Domingue, Chris Piech, and Noah Goodman. Variational
+item response theory: Fast, accurate, and expressive. _arXiv preprint arXiv:2002.00276_, 2020.
+
+
+Qiyuan Zhang, Fuyuan Lyu, Zexu Sun, Lei Wang, Weixu Zhang, Wenyue Hua, Haolun Wu, Zhihan
+Guo, Yufei Wang, Niklas Muennighoff, et al. A survey on test-time scaling in large language
+models: What, how, where, and how well? _arXiv preprint arXiv:2503.24235_, 2025.
+
+
+12
+
+
+Figure 7: Heatmap of the difference in test MSE (Classic – IRT) across 13 benchmarks (rows) and
+13 LLMs (columns) in _Y_ 1 [pretrain] . Consistent positive (red) values indicate that the classical scaling
+law incurs higher error than the item response scaling law on the test set, demonstrating the latter’s
+superior generalization across question subsets with the same measurement objective but differing
+in difficulty.
+
+
+Figure 8: Consistency of question difficulty estimates between our calibration ( _x_ -axis) and Truong
+et al. (2025) ( _y_ -axis). Each point represents a question. Across the six benchmarks, three exhibit
+high correlation while the other three do not. There is hope to transfer difficulty estimates calibrated
+from leaderboards (temperature = 0) to test-time scaling scenarios (temperature _>_ 0), but they are
+not always reliable.
+
+
+A THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+We used large language models (LLMs) as general-purpose assistive tools for two purposes: (1)
+polishing the writing of the paper, and (2) providing coding assistance. In all cases, the outputs
+generated by LLMs were carefully reviewed, verified, and modified by the authors before inclusion.
+The authors take full responsibility for all content presented in this paper.
+
+
+B ADDITIONAL FIGURES
+
+
+B.1 PRE-TRAINING DOWNSTREAM ITEM RESPONSE SCALING LAW
+
+B.2 TEST-TIME ITEM RESPONSE SCALING LAW
+
+
+13
+
+
+Figure 9: Left 2 columns: pass@k or _−log_ pass@k versus number of samples _k_ before filtering.
+Right 2 columns: pass@k or _−log_ pass@k versus number of samples _k_ after filtering. Row 1 to 4:
+a training LLM in _P_ 1 [testtime], a test LLM in _P_ 1 [testtime], a training LLM in _P_ 2 [testtime], and a test LLM in
+_P_ 2 [testtime] . The MAEs of _−log_ pass@k between estimates on subset questions and subset samples and
+GT are reported in subplot titles. After filtering out questions with low pass@1, IRT achieves more
+reliable estimates of test-time scaling laws than traditional approaches with limited budget.
+
+
+Figure 10: MAEpass@1 _−_ MAEbeta-IRT across LLMs and datasets. Left: _P_ 1 [testtime], Right: _P_ 2 [testtime] .
+Across nearly all LLMs and datasets, IRT achieves more reliable estimates of test-time scaling laws
+in an efficient manner.
+
+
+14

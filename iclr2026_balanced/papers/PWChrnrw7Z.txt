@@ -1,0 +1,3020 @@
+# SHE-LORA: SELECTIVE HOMOMORPHIC ENCRYP## TION FOR FEDERATED TUNING WITH HETEROGENEOUS
+# LORA
+
+
+**Jianmin Liu** [1] **,** **Li Yan** [1] _[∗]_ **,** **Borui Li** [1] **,** **Lei Yu** [2] **,** **Chao Shen** [1]
+
+1Xi’an Jiaotong University 2Rensselaer Polytechnic Institute
+jianmin.liu@stu.xjtu.edu.cn, li.yan.88@xjtu.edu.cn,
+boruili@stu.xjtu.edu.cn, yul9@rpi.edu, chaoshen@mail.xjtu.edu.cn
+
+
+ABSTRACT
+Federated fine-tuning is critical for improving the performance of large language
+models (LLMs) in handling domain-specific tasks while keeping training data
+decentralized and private. However, prior work has shown that clients’ private data
+can actually be recovered via gradient inversion attacks. Existing privacy preservation techniques against such attacks typically entail performance degradation and
+high costs, making them ill-suited for clients with heterogeneous data distributions
+and device capabilities. In this paper, we propose SHE-LoRA, which integrates
+selective homomorphic encryption (SHE) and low-rank adaptation (LoRA) to enable efficient and privacy-preserving federated tuning of LLMs in cross-device
+environments. Based on model parameter sensitivity assessment, heterogeneous
+clients adaptively negotiate and select a subset of model parameters for homomorphic encryption. To ensure accurate model aggregation, we design a column-aware
+secure aggregation method and customized reparameterization techniques to align
+the aggregation results with the heterogeneous device capabilities of clients. Extensive experiments demonstrate that SHE-LoRA maintains performance comparable
+to non-private baselines, achieves strong resistance to state-of-the-art attacks, and
+significantly reduces communication overhead by 99.71% and encryption time by
+99.87%, compared to HE baselines.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have excelled in various tasks, but their deployment in domainspecific applications (e.g., healthcare, finance) often requires private, user-generated data (Durante
+et al., 2024; Huang et al., 2024). However, stringent privacy preservation regulations like GDPR
+(Voigt & Von dem Bussche, 2017) pose significant barriers to centralized fine-tuning on such data.
+To address this, federated learning (FL) emerged as a promising solution by enabling decentralized
+parameter-efficient fine-tuning (PEFT) of LLMs without exposing raw data (Zhang et al., 2024).
+
+
+Among various PEFT techniques, Low-Rank Adaptation (LoRA) stands out due to its high efficiency
+and model quality. It reparameterizes the weight matrix **W** _∈_ R _[m][×][n]_ as **W** = **W0** + ∆ **W** =
+**W0** + **BA**, where **W0** _∈_ R _[m][×][n]_ represents the frozen pre-trained parameters, and **B** _∈_ R _[m][×][r]_ and
+**A** _∈_ R _[r][×][n]_ are the two low-rank adapter matrices to be learned. Given that the rank _r_ _≪_ min( _m, n_ ),
+LoRA significantly reduces both computation and communication costs in federated PEFT. However,
+recent works (Petrov et al., 2024; Balunovic et al., 2022) have shown that the parameters or gradients
+transmitted during federated PEFT can be exploited via _inversion_ _attacks_ to reconstruct private
+training data, highlighting the need for stronger privacy protection in federated PEFT with LoRA.
+
+
+Many privacy-preserving techniques have been proposed to mitigate privacy leakage risks in FL,
+including differential privacy (DP) (Sun et al., 2024c; Yu et al., 2022; Zhu et al., 2025), secure
+multi-party computation (MPC) (Mugunthan et al., 2019; Kanagavelu et al., 2020; Zheng et al.,
+2024)), and homomorphic encryption (HE) (Han & Yan, 2023; Jin et al., 2023; Hu & Li, 2024)). DP
+ensures formal privacy guarantees by perturbing data or model updates with random noise. However,
+in LoRA-based settings that involve the multiplication of **A** and **B**, this noise becomes amplified
+through the multiplication, often hindering convergence and degrading model performance (Sun
+et al., 2024c). In contrast, cryptographic approaches such as MPC and HE can achieve higher
+
+
+_∗_ Li Yan is the corresponding author of this paper.
+[Code is publicly available at https://github.com/liyan2015/SHE-LoRA.](https://github.com/liyan2015/SHE-LoRA)
+
+
+1
+
+
+accuracy. MPC-based secure aggregation employs techniques like garbled circuits and secret sharing
+to securely compute PEFT updates. Nevertheless, it often requires intricately designed computation
+and synchronization protocols, making it less practical for FL with heterogeneous data and device
+capabilities (Kairouz et al., 2021; Li et al., 2020). Selective HE (SHE) (Han & Yan, 2023; Jin et al.,
+2023; Hu & Li, 2024) offers a compelling alternative by encrypting only sensitive parameters and
+allowing computation over ciphertexts, delivering strong privacy guarantees with low HE costs and
+preserving accuracy for privacy-preserving federated PEFT.
+
+
+However, existing SHE methods struggle to balance privacy and efficiency in cross-device federated
+PEFT with LoRA, particularly under Non-IID (Non-Independently Identically Distributed) data and
+heterogeneous device capabilities. As discussed in Section 2.4, two observations highlight these
+challenges: 1) LoRA matrix multiplication makes ∆ **W** denser, which may increase the number of
+parameters requiring encryption, and 2) heterogeneous clients produce different encrypted parameter
+positions, whose union during aggregation expands the encrypted set and inflates HE costs. Driven by
+these limitations, we aim to adaptively balance security and HE overhead per client in cross-device
+federated PEFT with LoRA. Achieving this goal requires addressing the following key challenges:
+
+
+- **How to adaptively apply SHE across heterogeneous clients?** Algorithms like FedAvg (McMahan
+et al., 2017) are not directly applicable to LoRA-based PEFT. Naively applying LoRA requires all
+clients to use the same low-rank configuration, which is impractical for devices with heterogeneous
+capabilities. Furthermore, separately aggregating the adapter matrices ( **A** and **B** ) is not mathematically equivalent to full-weight aggregation (Section 2.4). Heterogeneous hardware also prevents
+clients from encrypting updates of the same size, since clients with limited resources can encrypt
+only a small subset of parameters while stronger devices may encrypt more. This mismatch disrupts
+aggregation and complicates reconstruction of low-rank matrices from encrypted weights. Thus, a
+new aggregation algorithm that is efficient, accurate, and compatible with SHE is needed.
+
+- **How to avoid expansion of encrypted subsets under SHE?** In heterogeneous settings, clients
+may independently encrypt arbitrary positions in their model parameter matrix, inflating ciphertext
+size during aggregation. Moreover, mixing plaintext and ciphertext matrices introduces structural
+disorder, making aggregation inefficient. Without coordinated negotiation of encryption positions,
+both ciphertext size and aggregation overhead can increase substantially.
+
+
+To address these challenges, we propose SHE-LoRA, which integrates SHE and LoRA to enable
+efficient and privacy-preserving federated PEFT in cross-device environments. Specifically,
+
+
+- We devise a HE subset negotiation mechanism that tailors model-parameter encryption to each
+client’s capabilities. Each client assesses its model parameter importance and selects an affordable
+subset for HE based on its resource constraints and privacy needs. This subset is encoded using
+order-preserving encryption (OPE) and sent to a server, which then negotiates a global HE subset to
+optimally balance privacy and HE overhead across heterogeneous clients.
+
+- We introduce a selective parameter encryption method based on column-swapping parameter
+obfuscation, which clusters unencrypted and encrypted parameters separately, enabling efficient
+matrix operations on plaintexts and batch encryption of ciphertexts. Moreover, obfuscating encrypted
+parameter positions increases adversarial uncertainty and mitigates privacy leakage.
+
+- We propose a column-aware adaptive aggregation method, which aligns encrypted columns across
+clients for efficient and accurate aggregation of adapter matrices and subsequent reparameterization
+to recover LoRA parameters without losing meaningful model updates.
+
+- Experiments on clients and LLMs with varying scales demonstrate that SHE-LoRA provides strong
+resistance to state-of-the-art (SOTA) attacks while maintaining model performance comparable to
+non-private baselines. Compared to HE baselines, SHE-LoRA reduces communication overhead by
+up to 99.71% and HE overhead by 99.87%.
+
+
+2 PRELIMINARIES AND MOTIVATIONS
+
+
+2.1 DEFINITION OF PARAMETER SENSITIVITY
+
+Inspired by model pruning, which removes unimportant model parameters to reduce model size while
+maintaining performance, SHE identifies and selectively encrypts the most important parameters.
+Specifically, given model parameters **W**, let _L_ ( **W** ) denote the loss function. For a subset of the
+model parameters **w** _∈_ **W**, and the model parameters with **w** zeroed out (denoted as **W** _−_ **w** ), the
+sensitivity of **w** is defined as the change in loss when **w** is zeroed out:
+Ω( **w** ) = _|L_ ( **W** ) _−L_ ( **W** _−_ **w** ) _|._ (1)
+
+
+2
+
+
+**Matrix A**
+
+
+**Matrix B**
+
+
+**Client 1** **Client 2** **Server**
+
+
+Encrypted Plaintext Encrypted Plaintext
+
+Figure 1: Expansion of encryption positions. Figure 2: Inflation of ciphertext size.
+
+Eq. (1) implies that a larger loss change upon removing **w** indicates higher sensitivity of **w** . Thus,
+Ω( **w** ) reflects not only importance, but also the potential privacy leakage risk associated with exposing
+**w** . However, directly computing Ω( **w** ) for all parameters is computationally infeasible. Taylor
+approximation-based estimation (Frantar et al., 2023) requires gradient computation, which also
+incurs significant overhead, especially in LLMs, where high dimensionality and outlier activations
+further exacerbate the cost (Sun et al., 2024a). To mitigate this, we adopt Wanda (Sun et al., 2024b)
+to estimate the sensitivity of a parameter _Wij_ in the _i_ -th row and _j_ -th column as:
+Ω( _Wij_ ) = _|Wij| · ∥xj∥_ 2 _,_ (2)
+
+
+where _| · |_ is the absolute value operator, _∥xj∥_ 2 is the _l_ 2 norm of the _j_ -th features in the input data
+**X** . Since both **W** and **X** are directly accessible, Wanda estimates parameter sensitivity with only a
+single forward pass. See Appendix B.1 for details on the link between high-sensitivity parameters
+and privacy risk.
+
+
+2.2 PRIVACY LEAKAGE QUANTIFICATION
+
+We leverage mutual information to quantify privacy leakage caused by the selective encryption of
+**w** . Specifically, we assume that once encrypted with HE, **w** does not leak any privacy information.
+While for the accessible plaintext portion of the model parameters (i.e., **W** _−_ **w** ), we measure the
+mutual information shared between **W** _−_ **w** and **W** as:
+
+
+_I_ ( **W** ; **W** _−_ **w** ) = 
+
+_y∈_ **W** _−_ **w**
+
+
+- _p_ ( _x, y_ ) log2 _pp_ ( _x_ ( _x, y_ ) _p_ ( _y_ )) _[,]_ (3)
+
+_x∈_ **W**
+
+
+where _p_ ( _x, y_ ) is the joint probability distribution, _p_ ( _x_ ) and _p_ ( _y_ ) are the marginal distributions of **W**
+and **W** _−_ **w**, respectively. _I_ ( **W** ; **W** _−_ **w** ) quantifies the extent of privacy leakage attributable to the
+unencrypted model parameters. As the value of _I_ ( **W** ; **W** _−_ **w** ) increases, the risk of privacy leakage
+due to the selective encryption of **w** also increases. See Appendix F.3 for implementation details.
+
+
+2.3 THREAT MODEL
+
+Following prior works (Jin et al., 2023; Kiani et al., 2025), we consider a semi-honest adversary _A_ that
+may compromise the aggregation server or a subset of clients. While _A_ follows the training protocol,
+it passively attempts to infer client data from observed model updates. We assume that 1) when _A_
+compromises a subset of clients, it can only infer private information from the clients’ local models; 2)
+when _A_ compromises the aggregation server, it can only infer private information from unencrypted
+parameters; 3) when both the aggregation server and a subset of clients are compromised, _A_ can
+access the private key (shared among all clients) to decrypt model updates sent from benign clients,
+which can be addressed via multi-party HE techniques such as multi-key HE, proxy re-encryption,
+etc. The multi-party HE techniques and protection against other malicious behaviors (e.g., poisoning,
+backdoor attacks) are not the focus of this work, and we refer to existing defenses (Zheng et al., 2022;
+Queyrut et al., 2023) and possible extensions in Appendix C as future endeavors.
+
+
+2.4 MOTIVATIONS
+
+**Naive averaging of LoRAs leads to mathematical errors.** Popular federated LoRA methods (Zhang
+et al., 2024; Yan et al., 2024; Meng et al., 2024; Babakniya et al., 2023) require clients to possess
+homogeneous LoRA ranks, and aggregate **A** and **B** separately across clients (i.e., server side =
+
+- **B** _×_ **A**, _rA_ = _rB_ ). However, this introduces inconsistency in global model updates, as the
+   aggregation of LoRA updates (i.e., [�] ( **B** _×_ **A** )) is intrinsically unequal to [�] **B** _×_ [�] **A**, which
+will degrade model performance. Moreover, separately aggregating the LoRA matrices requires all
+clients to use the same rank, which is unrealistic for cross-device federated LoRA. Thus, these naive
+approaches are inapplicable to heterogeneous LoRA settings.
+
+
+**Matrix multiplication expands encryption positions.** Albeit the strong privacy guarantee of HE,
+applying HE per parameter is computationally and communicatively expensive. Although existing
+SHE methods like FedML-HE (Jin et al., 2023) and MaskCrypt (Hu & Li, 2024) reduce HE overhead
+
+
+3
+
+
+by selectively encrypting a subset of model parameters with masking, the matrix multiplication
+of LoRA will lead to an expanded HE subset as shown in Fig. 1, which significantly impairs the
+cost-saving performance of SHE for federated LoRA.
+
+
+**Matrices from heterogeneous clients inflate ciphertext size.** Our experiments show that clients
+with heterogeneous hardwares and Non-IID data tend to focus on different sensitive model parameters
+during fine-tuning. As a result, the positions selected for encryption vary across clients. In the
+aggregation phase of existing SHE methods, if a client encrypts a specific model parameter, the
+parameter corresponding to the same position must remain encrypted in the global model as well,
+leading to inflated ciphertext size as the number of clients grows, which is illustrated in Fig. 2.
+
+
+3 METHOD
+
+
+In order to adaptively balance security and HE overhead per client in cross-device federated LoRA,
+encrypting **A** offers a cost-effective solution. Since **A** directly operates on user data, it is more
+vulnerable to inversion attacks (Petrov et al., 2024), making its protection essential for preventing
+privacy leakage. Following this rationale, the diagram of SHE-LoRA is as illustrated in Fig. 3.
+
+
+|Col1|Col2|Col3|Col4|Step 3. Adaptive Aggregatio|Col6|n|
+|---|---|---|---|---|---|---|
+|**Server**<br>**Step 1. HE Subset Negotiation**<br>…|**Server**<br>**Step 1. HE Subset Negotiation**<br>…|**Server**<br>**Step 1. HE Subset Negotiation**<br>…|**Client LoRAs**<br>**Aggregation**<br><br> <br>**Cipher**<br>Get Plain Part<br>Get HE Cipher<br>**Plain**<br>…<br>**SVD**<br>…<br>Plain result<br>Cipher result|**Client LoRAs**<br>**Aggregation**<br><br> <br>**Cipher**<br>Get Plain Part<br>Get HE Cipher<br>**Plain**<br>…<br>**SVD**<br>…<br>Plain result<br>Cipher result|**Client LoRAs**<br>**Aggregation**<br><br> <br>**Cipher**<br>Get Plain Part<br>Get HE Cipher<br>**Plain**<br>…<br>**SVD**<br>…<br>Plain result<br>Cipher result|**Client LoRAs**<br>**Aggregation**<br><br> <br>**Cipher**<br>Get Plain Part<br>Get HE Cipher<br>**Plain**<br>…<br>**SVD**<br>…<br>Plain result<br>Cipher result|
+|**Model**|**Model**|**Model**|**Step 2. Selective Encryption of**<br>**Model Parameter Matrix**<br> <br>**Step 4. Reparameterization**<br>**Result**|**Step 2. Selective Encryption of**<br>**Model Parameter Matrix**<br> <br>**Step 4. Reparameterization**<br>**Result**|**Step 2. Selective Encryption of**<br>**Model Parameter Matrix**<br> <br>**Step 4. Reparameterization**<br>**Result**|**Step 2. Selective Encryption of**<br>**Model Parameter Matrix**<br> <br>**Step 4. Reparameterization**<br>**Result**|
+|**Client 1**<br>**Client N**<br>**HE Subset 1**<br>**HE Subset N**<br>**Before**<br>**After**<br>**Before**<br>**After**<br>**…**|**Client 1**<br>**Client N**<br>**HE Subset 1**<br>**HE Subset N**<br>**Before**<br>**After**<br>**Before**<br>**After**<br>**…**|**Client 1**<br>**Client N**<br>**HE Subset 1**<br>**HE Subset N**<br>**Before**<br>**After**<br>**Before**<br>**After**<br>**…**|<br>**Column**<br>**Swapping**<br>**Column**<br>**Swapping**<br>**…**|<br>**Column**<br>**Swapping**<br>**Column**<br>**Swapping**<br>**…**|||
+|**Client 1**<br>**Client N**<br>**HE Subset 1**<br>**HE Subset N**<br>**Before**<br>**After**<br>**Before**<br>**After**<br>**…**|**Client 1**<br>**Client N**<br>**HE Subset 1**<br>**HE Subset N**<br>**Before**<br>**After**<br>**Before**<br>**After**<br>**…**|**Client 1**<br>**Client N**<br>**HE Subset 1**<br>**HE Subset N**<br>**Before**<br>**After**<br>**Before**<br>**After**<br>**…**|<br>**Column**<br>**Swapping**<br>**Column**<br>**Swapping**<br>**…**|<br>**Column**<br>**Swapping**<br>**Column**<br>**Swapping**<br>**…**|**Fusion Cipher&Plain to Client1**<br>**Fusion Cipher&Plain to ClientN**<br>**…**|**Fusion Cipher&Plain to Client1**<br>**Fusion Cipher&Plain to ClientN**<br>**…**|
+
+
+**LoRA Updates For FL**
+
+
+**SHE-LoRAAfter Local Updates**
+
+
+**Heterogeneous Devices**
+
+
+Figure 3: The workflow of SHE-LoRA.
+
+SHE-LoRA consists of the following components: **Step 1.** **HE Subset Negotiation** . Based on the
+definition of model parameter sensitivity in Eq. (2), each client assesses and transmits its model parameter importance to a server. Then, the server negotiates a global HE subset and feeds it back to clients.
+**Step 2.** **Selective Encryption of Model Parameter Matrix** . Based on the global subset, clients
+perform column swapping to separately cluster unencrypted and encrypted parameters, enabling
+efficient matrix operations on plaintexts, batch encryption of ciphertexts, and parameter position
+obfuscation that enhances privacy protection and HE efficiency. **Step 3.** **Adaptive Aggregation** .
+The server performs adaptive, column-aware aggregation of the clients’ unencrypted and encrypted
+parameters, respectively, enabling efficient and accurate aggregation of adapter matrices. **Step 4.**
+**Reparameterization** . Each client reparameterizes the aggregated plaintext and ciphertext results into
+LoRA parameters, matching its local rank for the next round of model tuning.
+
+
+3.1 HE SUBSET NEGOTIATION
+
+
+3.1.1 ASSESSMENT OF MODEL PARAMETER IMPORTANCE
+
+Fig. 4 shows the sensitivity of parameters measured by Eq. (2), where darker color indicates
+higher importance. We find that the sensitivity values generally differ by columns, suggesting a strong correlation with specific data channels. Considering that encrypting even a single element in a column will result in the expansion of encryption positions for that entire column due to matrix multiplication (Section 2.4), and vectorized encryption by columns is bene
+
+4
+
+
+ficial to improving HE efficiency (Cheon et al., 2017), we let each client assess parameter importance by columns and determine its HE subset of columns based on its encryption budget.
+
+
+Specifically, the encryption budget of Client _i_ is defined as the ratio of parameters for SHE (denoted as
+_γi_ _∈_ [0 _,_ 1]), which is specified according to its hardware capabilities such as CPU clock speed, etc. For
+an adapter matrix **A** _∈_ R _[r][×][n]_ and input **X** _∈_ R _[L][×][n]_,
+we use _Sj_ = [�] _k_ _[r]_ =0 _[|]_ **[W]** _[kj][| · ∥][x][j][∥]_ [2] [to] [calculate] [the]
+importance of the _j_ -th channel, where _∥xj∥_ 2 is the _l_ 2
+norm of the _j_ -th feature _xj_ _∈_ R _[L]_ . Thus, the proposed
+approach can not only provide channel-level privacy
+protection, but also prevent unnecessary expansion
+of encryption positions.
+
+
+0
+2
+4
+6
+8
+10
+12
+14
+
+
+0.10
+
+
+0.08
+
+
+0.06
+
+
+0.04
+
+
+0.02
+
+
+Figure 4: Sensitivity of model parameters.
+
+
+3.1.2 HE SUBSET NEGOTIATION
+As explained in Section 2.4, clients with heterogeneous data distributions and device capabilities
+will select different positions and amounts of important model parameters for encryption according
+to their individual budgets. As the union of HE subsets expands with the aggregation of client
+model updates, the ciphertext size may inflate significantly. To address this, we devise a HE subset
+negotiation mechanism to tailor client-specific encryption of model parameters, ensuring that the
+overall ciphertext size remains affordable per client.
+
+
+To prevent the server from snooping on the positions of important model parameters and conducting
+targeted attacks, we apply OPE to hide each client’s HE subset. Since SHE-LoRA is modular, OPE
+can be replaced by alternatives like order-revealing encryption, secure multi-party computation, or a
+trusted third party whenever stronger order privacy is required. As OPE only preserves numerical
+ordering of the plaintext, the server cannot obtain any information from the cipher other than the
+plaintext order. Specifically, Client _i_ first encrypts a tuple ( _Gi, Si_ ) with OPE and sends it to the
+server, where _Gi_ is the set of columns that needs HE, and _Si_ is their sensitivities. Then, the server
+maintains two shared lists based on all the clients’ tuples: the _Common_ list, which sorts all columns
+in [�] _i_ _[G][i]_ [ from most to least frequently deemed as sensitive, and the] _[ Sensitivity]_ [ list, which sorts all]
+
+columns in [�] _i_ _[G][i]_ [from highest to lowest sensitivity.] [Finally, by taking into account both the overlap]
+of important HE subsets across clients (reflected in _Common_ and _Sensitivity_ ) and the preferred HE
+subsets of individual clients (reflected in _Gi_ ), the server negotiates a global HE subset affordable for
+each client, of which algorithmic details are elaborated in Appendix D.1. As a result, the negotiated
+global HE subset optimally balances privacy and HE overhead per client.
+
+
+3.2 SELECTIVE ENCRYPTION OF MODEL PARAMETER MATRIX
+
+
+As illustrated in the top of Fig. 5, the selected columns for
+encryption may be scattered across the parameter matrix. This
+irregular distribution increases the complexity of matrix batching and the overhead of encryption, decryption and computation.
+To address this, based on the negotiated HE subset, we propose
+a column-swapping method to separately cluster the columns
+pending for encryption and those remain unencrypted. This
+approach brings three key benefits: (1) encrypted columns are
+clustered together, allowing for efficient batch encryption with
+reduced storage and communication overhead; (2) the clustered
+unencrypted columns can be directly used in matrix operations,
+improving computational efficiency; and (3) the column-wise
+obfuscation increases the difficulty of potential privacy attacks.
+
+
+**Column swapping**
+
+
+Figure 5: Selective encryption of
+columns.
+
+
+After swapping, Client _i_ selectively encrypts its parameter matrix, and uses the last _ki_ = _⌊n × γi⌋_
+columns as its HE subset, which is affordable according to the client’s encryption budget. Thus, the
+tensor to be encrypted, denoted as **A** _[′]_, has the shape of ( _r, ki_ ). In HE, the CKKS (Cheon-Kim-KimSong) scheme (Cheon et al., 2017) serves as an encryption technique that facilitates approximate
+floating-point arithmetic, making it particularly advantageous for the encryption of matrices or tensors.
+For large-scale tensors, the limited capacity of HE requires them to be partitioned into blocks, each
+encrypted separately. As illustrated in the bottom of Fig. 5, given a block size of _chunk_, **A** _[′]_ can be
+
+
+5
+
+
+divided into _N_ _[b]_ = _⌈ki/chunk⌉_ blocks by column (denoted as **A** _[′]_ = _{b_ 1 _, . . ., bj, . . ., bN b_ _}_ ), where
+each block contains a tensor that has the shape of ( _r, chunk_ ). For each block _bj_, the client applies
+CKKS encryption to obtain its ciphertext _Cj_ = CKKS( _bj, pk_ ), where _pk_ is the public HE key. After
+all blocks are encrypted, the complete list of ciphertext blocks _{Cj}_ _[N]_ _[b]_ is sent to the server.
+
+
+3.3 ADAPTIVE AGGREGATION
+
+
+To prevent the inflation of ciphertext size caused by aggregating heterogeneous HE subsets as
+illustrated in Section 2.4, we propose an adaptive column-aware aggregation method to aggregate the
+unencrypted and encrypted parts separately.
+
+
+**Aggregation of Unencrypted Model Parameters:** Upon receiving the adapter matrix **B** _i_ and the
+unencrypted part of **A** _i_ (denoted as **A** [plain] _i_ ) from Client _i_, the server calculates the unencrypted weight
+update from Client _i_ as ∆ **W** _i_ [plain] = **B** _i_ **A** [plain] _i_ . However, as the number of encrypted columns (i.e., _ki_ )
+differs across the clients due to their diverse encryption budgets, the shape of ∆ **W** _i_ [plain] _∈_ R _[m][×]_ [(] _[n][−][k][i]_ [)]
+also varies across the clients, which makes the traditional aggregation methods of weight-averaging
+∆ **W** _i_ [plain] or **A** [plain] _i_ inapplicable. Considering that the unencrypted columns of all the clients have
+been clustered to the left as explained in Section 3.2, we let the server apply column-wise weighted
+averaging to aggregate the unencrypted model parameters as illustrated in the top of Fig. 6. This
+column-wise partial aggregation is consistent with standard FedAvg (McMahan et al., 2017) under
+client subsampling and ensures no bias is introduced from non-contributing clients. The detailed
+algorithm is elaborated in Appendix D.2.
+
+
+**Client 1:**
+
+
+ _W_ 1 _plain_ **Client 2:**  _W_ 2
+
+
+1
+
+
+**Client 2:**  _W_ _plain_ **Client 3:**
+
+
+ _W_ 2 _plain_ **Client 3:**  _W_ 3
+
+
+**Aggregation:**
+
+
+1 1
+ 3 1 2 3   2 2  3  3
+
+
+**Client 1:**
+
+
+ _W_ 1 _cipher_ **Client 2:**  _W_ 2
+
+
+1
+
+
+**Client 2:**  _W_ _cipher_ **Client 3:**
+
+
+ _W_ 2 _cipher_ **Client 3:**  _W_ 3
+
+
+**Aggregation:**
+
+
+1
+ 0  1  2 1 2 
+
+
+**Unencrypted Parameters** **Encrypted Parameters**
+
+
+**Encrypted Parameters**
+
+
+Figure 6: Aggregation of unencrypted (top) and encrypted (bottom) model parameters.
+
+
+**Aggregation of Encrypted Model Parameters:** Similarly, upon receiving **B** _i_ and the encrypted
+part of **A** _i_ (denoted as **A** [cipher] _i_ = _{Cj}_ _[N]_ _[b]_ ) from Client _i_, the server calculates the encrypted weight
+update from Client _i_ as ∆ **W** _i_ [cipher] = **B** _i_ **A** [cipher] _i_ _∈_ R _[m][×][k][i]_ . Although the difference in _ki_ also causes
+∆ **W** _i_ [cipher] to have different shapes, the cipher block order is consistent across the clients, and the
+encrypted columns of all the clients have been clustered to the right as explained in Section 3.2. Thus,
+the encrypted model parameters can be similarly aggregated via column-wise weighted averaging as
+illustrated in the bottom of Fig. 6. The detailed algorithm is elaborated in Appendix D.3.
+
+
+To reduce communication overhead, the server sends the unencrypted and encrypted parts separately:
+
+
+- For the unencrypted part, since most model parameters remain unencrypted during LoRA, we let the
+server, which generally has more computation capability, apply singular value decomposition (SVD)
+SVD
+to decompose the aggregation result: ∆ **W** plain = **UpΣpVp** _[⊤]_ _[∈]_ [R] _[m][×][K]_ [, where] _[ K]_ [=] _[ n][ −]_ [min(] _[k][i]_ [)][,]
+**Up** _∈_ R _[m][×][m]_, **Σp** _∈_ R _[m][×][K]_ and **Vp** _[⊤]_ _[∈]_ [R] _[K][×][K]_ [.] [Then, given each client’s rank] _[ r][i]_ [, the server slices]
+
+
+6
+
+
+the decomposition results as: **Up** [: _,_ : _ri_ ] _∈_ R _[m][×][r][i]_, **Σp** [: _ri,_ : _ri_ ] _∈_ R _[r][i][×][r][i]_ and **Vp** _[⊤]_ [[:] _[ r][i][,]_ [ :]] _[ ∈]_ [R] _[r][i][×][K]_ [.]
+Thus, each client receives the unencrypted aggregation result corresponding to its own rank.
+
+- For the encrypted part, since each client only selectively encrypts a small portion of model
+parameters, we let the server first truncate the aggregation result by the encryption budget of respective
+clients, and then let the clients decrypt their corresponding aggregation results as in Section 3.4.
+
+
+3.4 REPARAMETERIZATION
+
+To enable the next round of model tuning, each client needs to merge the plaintext and ciphertext
+results returned by the server into new LoRA parameters. Suppose the client receives the plaintext
+decomposition result: ∆ **W** plain SVD= **BpAp**, where **Bp** = **Up** - **Σp** _∈_ R _[m][×][r]_ and **Ap** = ~~�~~ **ΣpVp** _[⊤]_ _[∈]_
+R _[r][×][K]_, and the cipher blocks from the server. For the plaintext decomposition results, the client
+directly zero-pads **Bp** and **Ap** to the shapes of ( _m, r_ ) and ( _r, n_ ), respectively, for further update of
+its model parameter matrix. For the cipher blocks, the client first decrypts the ciphertext into plaintext,
+SVD
+and then performs _√_ SVD and zero-padding to obtain the decomposed results as ∆ **W** cipher = **BcAc**,
+where **Bc** = **Uc** **Σc** and **Ac** = _√_ **ΣcVc** _⊤_ [.] [By merging the decomposition results of the plaintext]
+and ciphertext via Eq. (4) and restoring the position of the model parameters according to the
+corresponding positions in Section 3.2, the correct aggregation result can be reparameterized as:
+
+
+**Bg** = [ **Bp** **Bc** ] = [ **Up** ~~�~~ **Σp** **Uc** ~~_√_~~ **Σc** ] _∈_ R _[m][×]_ [(] _[r]_ [+] _[r]_ [)] _,_ **Ag** = - **AApc**
+
+
+- = - ~~�~~ ~~_√_~~ **ΣΣcpVVc** _⊤_ **P** _[⊤]_
+
+
+_∈_ R [(] _[r]_ [+] _[r]_ [)] _[×][n]_ _._ (4)
+
+
+Finally, the client performs SVD on **Ag** and **Bg** again, and re-adjusts the parameter shapes according
+to the client’s rank to **B** [ˆ] _∈_ R _[m][×][r]_ and **A** [ˆ] _∈_ R _[r][×][n]_ . As the SVD conducted by the client is all on lowrank matrices, the computation overhead is trivial. The detailed derivation of the reparameterization
+is presented in Appendix D.4. The formal proof of the losslessness of meaningful model updates in
+SHE-LoRA is provided in Appendix D.5.
+
+
+3.5 PRIVACY GUARANTEE OF SHE-LORA
+
+The parameters protected by HE do not leak privacy, and privacy risks are mainly caused by unencrypted parameters. The column swapping process, which serves as column-wise obfuscation,
+increases the difficulty of privacy attacks, and can be viewed as adding an asymptotic Gaussiandistributed noise (with _s_ [2] as the equivalent variance) to the original gradient as detailed in Appendix D.7.
+
+
+Thus, the privacy guarantee of selective encryption can be given by the Bayesian Cramér-Rao Lower
+Bound (Chen et al., 2025; Huang et al., 2025). Specifically, the reconstruction error _ER_ can be
+defined as the minimum expected squared reconstruction error:
+
+
+2
+_ER_ = min _R_ [E] _[x][∼X]_ [ E] **[y]** _[∼][f]_ [(] _[g]_ [(] _[x]_ [))] ��� _R_ ( **y** ) _−_ _x_ ��2
+
+
+(5)
+
+
+where _R_ ( _·_ ) is any data reconstruction attack method, _f_ ( _·_ ) is the selective HE method of SHE-LoRA,
+and _g_ ( _x_ ) is the gradient calculated on data _x_ . Then, the Bayesian Cramér-Rao Lower Bound can be
+given by (Huang et al., 2025):
+
+
+_d_ [2]
+_ER_ _≥_
+
+
+_d_ [2] _d_ [2]
+
+E _x∼X_ [tr( _JF_ ( _x_ ))] + _λe_ ( _JP_ ) _[≥]_ _n_ (1 _−γ_ ) E _∥∇_ _g_ (
+
+
+_n_ (1 _−γ_ )
+
+
+_,_ (6)
+
+_−γ_ )
+
+_s_ [2] E _x∼X ∥∇xg_ ( _x_ ) _∥_ [2] max + _λe_ ( _JP_ )
+
+
+where _JF_ ( _x_ ) is the Fisher information matrix, tr( _·_ ) is the trace operator, _λe_ ( _JP_ ) is the largest
+eigenvalue of the prior-informed Fisher information matrix _JP_, _d_ is the data dimension, _n_ is the
+number of columns in **G**, _γ_ is the encryption ratio, _s_ [2] is the variance of the equivalent noise, and
+_∥∇xg_ ( _x_ ) _∥_ [2] max [= (max] _[i,j]_ _[|∇][x][g][j]_ [(] _[x][i]_ [)] _[|]_ [)][2] [quantifies the maximum gradient exposure, which is defined]
+as the squared maximum sensitivity of an unencrypted (exposed) gradient coordinate _gj_ ( _xi_ ) with
+respect to a data feature _xi_ .
+
+
+Eq. (6) means that the reconstruction error _ER_ is lower-bounded by a quantity whose denominator
+depends on tr( _JF_ ( _x_ )) and _λe_ ( _JP_ ). Since _λe_ ( _JP_ ) is determined solely by the data prior, the bound
+under fixed _n_, _s_ [2], and _γ_ is governed exclusively by _∥∇xg_ ( _x_ ) _∥_ [2] max [.] [By selectively encrypting the]
+most sensitive columns, which are measured in terms of the Wanda parameter sensitivity (a proxy for
+their contribution to input-space sensitivity via the score _Sj_ in Line 217), SHE-LoRA suppresses the
+dominant terms in the Fisher information matrix, thereby reducing the magnitude of the unencrypted
+gradients _∥∇xg_ ( _x_ ) _∥_ [2] max [and lowering tr][(] _[J][F]_ [(] _[x]_ [))][.]
+
+
+7
+
+
+In summary, by encrypting the most sensitive parameters, SHE-LoRA increases the minimum
+achievable reconstruction error and strengthens privacy against any gradient inversion attack.
+
+
+4 PERFORMANCE EVALUATION
+
+4.1 EXPERIMENTAL SETUP Table 1: Heterogeneous device types.
+
+
+et al., 2018) model and the OpenLLaMA3B (Geng & Liu, 2023) model for performance evaluation across diverse task scenarios. More evaluation settings and results on
+larger LLMs can be found in Appendix E.
+
+|Type|GFlops|Rank|Budget (Bert, LLaMA)|#|
+|---|---|---|---|---|
+|1<br>2<br>3<br>4|105.2<br>165.5<br>216.9<br>243.1|8<br>16<br>16<br>32|(0.4%, 0.125%)<br>(0.4%, 0.125%)<br>(0.8%, 0.25%)<br>(1.6%, 0.50%)|20<br>15<br>10<br>5|
+
+**Datasets:** We use the IMDB (Maas et al., 2011) and natural-instructions datasets (Wang et al., 2022)
+for natural language understanding and generation tasks, respectively. We use the MMLU (Hendrycks
+et al., 2021) and the GLUE (Wang et al., 2019) benchmarks for evaluation on natural language
+generation and natural language understanding tasks, respectively. For evaluation on vision tasks,
+we use the MNIST (LeCun et al., 2002), DTD (Cimpoi et al., 2014), EuroSAT (Helber et al., 2019),
+GTSRB (Stallkamp et al., 2012), SVHN (Netzer et al., 2011) visual classification datasets.
+**Hyperparameters of HE:** We adopt the CKKS implementation from the TenSEAL library (Benaissa
+et al., 2021) for HE operations. As instructed [1], we set the polynomial degree to 8192, 2048, and the
+modules chain to [60, 40, 60], [20,20] for OpenLLaMA-3B and Bert-Large, respectively.
+**Implementation:** SHE-LoRA is implemented with PyTorch based on the Flower framework [2] . We
+deploy federated LoRA of LLMs on 50 clients for 200 rounds. The heterogeneous data partitioning
+is instantiated via a Dirichlet distribution with _ρ_ = 0 _._ 3. The evaluation settings and results on more
+clients can be found in Appendix E.1. As detailed in Table 1, we configure four types of client devices
+with varying computing capabilities, LoRA ranks and encryption budgets. Without losing generality,
+we posit that weaker devices are characterized by lower ranks and encryption budgets, while stronger
+devices are capable of supporting higher ranks and encryption budgets.
+
+
+4.2 MODEL TUNING PERFORMANCE
+
+We compare the model tuning performance of SHE-LoRA with two homogeneous LoRA-based
+methods (FedIT (Zhang et al., 2024) and FedSA (Guo et al., 2024)) and two heterogeneous LoRAbased methods (HeterLoRA (Cho et al., 2024) and Flex-LoRA (Bai et al., 2024)). The methods’
+performance on natural language understanding tasks and natural language generation tasks is
+evaluated on the GLUE benchmark (Wang et al., 2019) and the MMLU benchmark (Hendrycks
+et al., 2021), respectively, while the methods’ performance on vision tasks is evaluated on the 5
+visual classification datasets. SHE-LoRA achieves comparable performance to the SOTA method
+(Flex-LoRA) and outperforms the other baselines. Detailed results are elaborated in Appendix F.1.
+
+
+4.3 HE COST EFFICIENCY
+
+To our best knowledge, SHE-LoRA is the first to integrate SHE into federated LoRA of LLMs. We
+implement two methods for the comparison of HE cost efficiency: (1) **MaskCrypt** (Hu & Li, 2024),
+the SOTA SHE method for securing FL, and (2) **Baseline**, the vanilla method with full HE of LoRA
+parameters. Specifically, MaskCrypt lets each client select an encryption mask and uses the union of
+the masks for global SHE of parameters during FL. Baseline uses the stock implementation of CKKS
+(Benaissa et al., 2021) to encrypt each LoRA parameter. The clients’ device specifications follow
+Table 1. We collect the encryption time and communication overhead of all the clients under the
+methods per round during the federated tuning of the OpenLLaMA-3B and Bert-Large models. Fig. 7
+and Fig. 8 show the collected results, where the bar represents the mean, and the lines extending
+upward and downward from the mean represent the maximum and minimum values, respectively.
+
+
+**Encryption Time** : Baseline always consumes the longest encryption time as it encrypts each LoRA
+parameter. In comparison, MaskCrypt greatly shortens the encryption time on both models, which is
+primarily due to its selective encryption of partial parameters. However, the clients’ encryption time
+in both Baseline and MaskCrypt severely fluctuates within [311s, 653s] and [1.556s, 104.63s] on
+OpenLLaMA-3B, and [12s, 60s] and [0.27s, 39.75s] on Bert-Large, respectively. This is because that
+these methods cannot deal with the inflation of the global HE mask caused by matrix multiplication
+
+
+[1https://github.com/OpenMined/TenSEAL](https://github.com/OpenMined/TenSEAL)
+[2https://flower.ai/](https://flower.ai/)
+
+
+8
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+18.5
+
+
+18.0
+
+3
+
+
+0
+
+
+Bert-Large
+
+
+600
+
+
+400
+
+
+100
+
+
+0
+
+
+|hed|Col2|Col3|Col4|
+|---|---|---|---|
+|Op|Op|Op|Op|
+|||0.54<br>0.60<br>0.66||
+|||||
+|||||
+
+
+|0.057<br>0.054<br>0.051|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|0.051<br>0.054<br>0.057|0.051<br>0.054<br>0.057|0.051<br>0.054<br>0.057|||||
+|0.051<br>0.054<br>0.057|0.051<br>0.054<br>0.057|0.051<br>0.054<br>0.057|||||
+|0.051<br>0.054<br>0.057|||||||
+
+
+|Col1|Col2|Bert-Large 2.4|Col4|e|Col6|Col7|
+|---|---|---|---|---|---|---|
+|||0.8<br>1.6<br>2.4|0.8<br>1.6<br>2.4||||
+|||0.8<br>1.6<br>2.4|0.8<br>1.6<br>2.4||||
+|||0.8<br>1.6<br>2.4|0.8<br>1.6<br>2.4||||
+|||0.8<br>1.6<br>2.4|||||
+
+
+4.4 RESISTANCE TO PRIVACY ATTACK
+
+|103 Op|enLLaMA-3B Bert-Large<br>90 2.4<br>60 1.6<br>30 100 0.8<br>75<br>50<br>25<br>0<br>Me a sk C ry S Hp t E -L o R A B a se lin e M a sk C ry p St H E -L o R A<br>re 8: Communication overhead.<br>ese methods, whether weak or strong<br>ghly imbalanced encryption time. I<br>ypted columns, which enables efficien<br>cryption time by 99.87%∼98.10% an<br>the OpenLLaMA-3B and Bert-Larg<br>ients differ in computing capabilities<br>e primary reason is that each client i<br>hat matches its device capability, an<br>cross the clients.<br>thods follow similar rankings as thos<br>ion overhead by 99.71%∼98.18% o<br>ompared to Baseline and MaskCryp<br>e the communication overhead stay<br>-LoRA. This is consistent with thei<br>(full ciphertext size) and MaskCryp<br>xt size), while SHE-LoRA lets client<br>s (diverse ciphertext sizes).<br>tes. Although parameter-based attack<br>y inaccurate and impractical for larg<br>). Therefore, we evaluate the resistanc<br>, which is the SOTA gradient inversio<br>ear combinations of input embedding<br>measures the distance between eac<br>ient, aiming to identify tokens. Mor<br>ppendix F.4.<br>del via SHE-LoRA and MaskCrypt o<br>Pang & Lee, 2005), as in DAGER, wit<br>e let them use the same HE overhea<br>erated LoRA method, Flex-LoRA, an<br>P, where gradients are obfuscated wit<br>attack on gradients per training roun<br>lect the data reconstruction scores o<br>ected in terms of “ROUGE-1” (R-1 i<br>nd “ROUGE-2” (R-2 in short), whic<br>lect better privacy protection.<br>ores. In practice, if SHE-LoRA an<br>n Table 1 (i.e., γ = 0.125%) for SHE<br>i<br>s (i.e., scores=0). Thus, we graduall<br>ally compromising SHE-LoRA whe<br>ontrast, MaskCrypt is no longer secur<br>an SHE-LoRA and may significantl<br>tance of SHE-LoRA against DAGER<br>ant columns. Although the change i<br>apping is trivial, which does not lea|Col3|Col4|
+|---|---|---|---|
+||30<br>60<br>90|||
+|||||
+|aselin<br><br>Figu<br>  in th<br>ng hi<br>     encr<br>    an en<br>   pt on<br>   the cl<br>   s. Th<br>   t_ γi_ t<br>    me a<br>  e me<br>  nicat<br> as c<br>wher<br> SHE<br>    eters<br>     herte<br>    ilitie<br>    upda<br>    highl<br> 2024<br> 024)<br>   re lin<br> and <br>    grad<br>   d in A<br>    mo<br>  toes ( <br> on, w<br>   fed<br>   RA-D<br>   AGER<br>d col<br>  coll<br>    ms, a<br> s ref<br>e sc<br>    vice i<br>    tting<br>    parti<br> In c<br>   re th<br> resis<br>     mport<br>    n sw|aselin<br><br>Figu<br>  in th<br>ng hi<br>     encr<br>    an en<br>   pt on<br>   the cl<br>   s. Th<br>   t_ γi_ t<br>    me a<br>  e me<br>  nicat<br> as c<br>wher<br> SHE<br>    eters<br>     herte<br>    ilitie<br>    upda<br>    highl<br> 2024<br> 024)<br>   re lin<br> and <br>    grad<br>   d in A<br>    mo<br>  toes ( <br> on, w<br>   fed<br>   RA-D<br>   AGER<br>d col<br>  coll<br>    ms, a<br> s ref<br>e sc<br>    vice i<br>    tting<br>    parti<br> In c<br>   re th<br> resis<br>     mport<br>    n sw|aselin<br><br>Figu<br>  in th<br>ng hi<br>     encr<br>    an en<br>   pt on<br>   the cl<br>   s. Th<br>   t_ γi_ t<br>    me a<br>  e me<br>  nicat<br> as c<br>wher<br> SHE<br>    eters<br>     herte<br>    ilitie<br>    upda<br>    highl<br> 2024<br> 024)<br>   re lin<br> and <br>    grad<br>   d in A<br>    mo<br>  toes ( <br> on, w<br>   fed<br>   RA-D<br>   AGER<br>d col<br>  coll<br>    ms, a<br> s ref<br>e sc<br>    vice i<br>    tting<br>    parti<br> In c<br>   re th<br> resis<br>     mport<br>    n sw|aselin<br><br>Figu<br>  in th<br>ng hi<br>     encr<br>    an en<br>   pt on<br>   the cl<br>   s. Th<br>   t_ γi_ t<br>    me a<br>  e me<br>  nicat<br> as c<br>wher<br> SHE<br>    eters<br>     herte<br>    ilitie<br>    upda<br>    highl<br> 2024<br> 024)<br>   re lin<br> and <br>    grad<br>   d in A<br>    mo<br>  toes ( <br> on, w<br>   fed<br>   RA-D<br>   AGER<br>d col<br>  coll<br>    ms, a<br> s ref<br>e sc<br>    vice i<br>    tting<br>    parti<br> In c<br>   re th<br> resis<br>     mport<br>    n sw|
+
+
+to the failure of DAGER, such change leads to a strong perturbation in the orthogonal complement
+of gradients in the low-rank space of LoRA parameters, which causes the failure of DAGER’s span
+
+
+9
+
+
+Table 2: Data reconstruction scores of DAGER.
+
+
+B=4 B=8 B=16
+Dataset Method
+R-1 R-2 R-1 R-2 R-1 R-2
+
+
+SST2
+
+
+Flex-LoRA 95.18 _±_ 1.6 94.66 _±_ 1.8 61.14 _±_ 1.9 52.49 _±_ 2.2 10.27 _±_ 1.6 5.86 _±_ 1.2
+Flex-LoRA-DP 86.25 _±_ 1.1 86.11 _±_ 1.4 80.28 _±_ 1.1 78.54 _±_ 1.3 68.62 _±_ 3.1 66.44 _±_ 3.7
+MaskCrypt 89.16 _±_ 1.3 87.93 _±_ 2.1 61.49 _±_ 2.2 61.49 _±_ 2.4 10.91 _±_ 1.2 6.79 _±_ 1.4
+SHE-LoRA 0.72 _±_ 5.2 0.12 _±_ 1.2 0.98 _±_ 4.4 0.14 _±_ 0.6 0.0 _±_ 0.0 0.0 _±_ 0.0
+
+
+Flex-LoRA 38.44 _±_ 1.5 32.76 _±_ 1.3 3.76 _±_ 1.4 2.12 _±_ 2.1 0.0 _±_ 0.0 0.0 _±_ 0.0
+
+Rotten Flex-LoRA-DP 36.74 _±_ 1.9 31.28 _±_ 2.6 3.76 _±_ 1.3 2.02 _±_ 2.3 0.0 _±_ 0.0 0.0 _±_ 0.0
+Tomatoes MaskCrypt 31.65 _±_ 2.0 25.11 _±_ 2.6 6.09 _±_ 1.0 3.27 _±_ 1.2 0.0 _±_ 0.0 0.0 _±_ 0.0
+
+SHE-LoRA 0.0 _±_ 0.0 0.0 _±_ 0.0 0.0 _±_ 0.0 0.0 _±_ 0.0 0.0 _±_ 0.0 0.0 _±_ 0.0
+
+check. In addition, as the key gradient information for reconstructing data has also been protected by
+SHE, DAGER completely fails when the batch size is greater than 8 even if only 0.3‰ parameters
+are encrypted.
+
+
+We further decrease the batch size to 1 (i.e., easiest for inversion attack) with _γi_ = 0 _._ 3‰ in SHE-LoRA, while gradually increasing the ratio= SHE-LoRA HE overhead [MaskCrypt HE overhead] [, and measure]
+
+the data reconstruction scores of DAGER under the two
+methods, which are shown in Fig. 9. Due to ciphertext
+inflation, when SHE-LoRA HE overhead [MaskCrypt HE overhead] [=1, MaskCrypt is inef-]
+
+ficient at protecting sufficient parameters against DAGER.
+To match SHE-LoRA’s security, MaskCrypt has to consume _>_ 100 _×_ the HE overhead of SHE-LoRA, making it
+unsuitable for weak clients.
+
+
+100
+
+
+80
+
+60
+
+40
+
+20
+
+
+0
+
+
+MaskCrypt HE overhead
+~~SHE-LoRA HE overhead~~
+
+
+Figure 9: Resistance comparison.
+
+
+4.5 PRIVACY LEAKAGE ANALYSIS FROM MUTUAL INFORMATION PERSPECTIVE
+
+
+three naive encryption strategies: (1) **Max:** the most important parameters are prioritized for encryption; (2) **Min:** 0
+the least important parameters are prioritized for encryption; (3) **Random:** parameters are randomly selected for
+
+|×10|4|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||M<br>M<br>|ax<br>in<br>|||
+|||||||~~R~~|~~and~~|~~om~~||
+
+
+Encryption budget
+
+encryption. Then, we gradually increase the encryption
+
+Figure 10: Impact of encryption budget
+
+budget from 0.3‰ to 80%, and measure the mutual infor
+and strategy on mutual information.
+
+mation shared between full parameters and the selectively
+encrypted parameters per strategy via an efficient approach based on the kernel density estimators
+(Appendix F.3). Fig. 10 shows the measured results. We find that the mutual information in Max
+drops much faster than the others, while the mutual information in Min drops the slowest, reflecting
+a strong correlation between parameter importance and privacy leakage risk. The cost-effective
+protection of important parameters is the key to the effectiveness of SHE-LoRA against DAGER-like
+attacks.
+
+
+2
+
+
+0
+
+
+Encryption budget
+
+
+Figure 10: Impact of encryption budget
+and strategy on mutual information.
+
+
+5 CONCLUSION
+
+
+We propose SHE-LoRA, a framework integrating SHE and LoRA for efficient and privacy-preserving
+federated tuning of LLMs in cross-device environments. It constrains the expansion of ciphertexts
+through HE subset negotiation, enables tailored privacy protection via selective encryption of parameters based on column-swapping parameter obfuscation, and achieves efficient and accurate update of
+LoRA parameters by column-aware adaptive aggregation and subsequent reparameterization. Results
+show that SHE-LoRA maintains model tuning performance comparable to non-private baselines,
+while achieving strong resistance to SOTA attacks, and significantly reducing communication overhead by 99.71% and encryption time by 99.87%, compared to HE baselines. Our work demonstrates
+that SHE with a well balance between privacy and utility can secure federated LoRA of LLMs against
+DAGER-like attacks and membership inference attacks. We hope SHE-LoRA can foster further
+research into creating more reliable and cost-effective privacy protection frameworks for private
+collaborative learning.
+
+
+10
+
+
+6 ACKNOWLEDGEMENTS
+
+
+This work was supported in part by the National Key Research and Development Program of China
+under Grant 2022YFB4500800, in part by the National Natural Science Foundation of China under
+Grant 62103325, in part by the Shaanxi High-Level Talent Program under Grant 2021QCYRC4-26.
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+The paper has fully disclosed all the information needed to reproduce the main experimental results of
+the paper to the extent that it affects the main claims and conclusions of the paper. We have provided
+[a link (https://github.com/liyan2015/SHE-LoRA) to a downloadable source code with detailed](https://github.com/liyan2015/SHE-LoRA)
+explanations and annotations to support the reproducibility of our work. In addition, the necessary
+hyperparameter settings are described in Section 4.1.
+
+
+REFERENCES
+
+
+Rakesh Agrawal, Jerry Kiernan, Ramakrishnan Srikant, and Yirong Xu. Order preserving encryption
+for numeric data. In _Proc. of SIGMOD_, pp. 563–574, New York, NY, USA, 2004.
+
+
+Asma Aloufi, Peizhao Hu, Yongsoo Song, and Kristin Lauter. Computing blindfolded on data
+homomorphically encrypted under multiple keys: A survey. _ACM CSUR._, 54(9), October 2021.
+ISSN 0360-0300.
+
+
+Giuseppe Ateniese, Kevin Fu, Matthew Green, and Susan Hohenberger. Improved proxy re-encryption
+schemes with applications to secure distributed storage. _ACM TISSEC_, 9(1):1–30, 2006.
+
+
+Sara Babakniya, Ahmed Roushdy Elkordy, Yahya H Ezzeldin, Qingfeng Liu, Kee-Bong Song,
+Mostafa El-Khamy, and Salman Avestimehr. Slora: Federated parameter efficient fine-tuning of
+language models. _arXiv preprint arXiv:2308.06522_, 2023.
+
+
+Jiamu Bai, Daoyuan Chen, Bingchen Qian, Liuyi Yao, and Yaliang Li. Federated fine-tuning of large
+language models under heterogeneous tasks and client resources. In _Proc. of NeurIPS_, 2024.
+
+
+Mislav Balunovic, Dimitar Dimitrov, Nikola Jovanovi´c, and Martin Vechev. Lamp: Extracting text
+from gradients with language model priors. In _Proc. of NeurIPS_, 2022.
+
+
+Ayoub Benaissa, Bilal Retiat, Bogdan Cebere, and Alaa Eddine Belfedhal. Tenseal: A library
+for encrypted tensor operations using homomorphic encryption. arxiv 2021. _arXiv_ _preprint_
+_arXiv:2104.03152_, 2021.
+
+
+Matt Blaze, Gerrit Bleumer, and Martin Strauss. Divertible protocols and atomic proxy cryptography.
+In _Proc. of TACT_, pp. 127–144. Springer, 1998.
+
+
+Alexandra Boldyreva, Nathan Chenette, Younho Lee, and Adam O’neill. Order-preserving symmetric
+encryption. In _Proc. of EUROCRYPT_, pp. 224–241. Springer, 2009.
+
+
+E Bolthausen. An estimate of the remainder in a combinatorial central limit theorem. _Probability_
+_Theory and Related Fields_, 66(3):379–386, 1984.
+
+
+Nicholas Carlini, Florian Tramer, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine
+Lee, Adam Roberts, Tom Brown, Dawn Song, Ulfar Erlingsson, et al. Extracting training data
+from large language models. In _USENIX security_, pp. 2633–2650, 2021.
+
+
+Shuaijun Chen, Omid Tavallaie, Niousha Nazemi, and Albert Y Zomaya. Rbla: Rank-based-loraaggregation for fine-tuning heterogeneous models in flaas. In _Proc. of ICWS_, 2024.
+
+
+Yuxiao Chen, Gamze Gursoy, and Qi Lei. Optimal defenses against data reconstruction attacks. In
+_ICML Workshop_, 2025.
+
+
+Jung Hee Cheon, Andrey Kim, Miran Kim, and Yongsoo Song. Homomorphic encryption for
+arithmetic of approximate numbers. In _Proc. of ASIACRYPT_, 2017.
+
+
+11
+
+
+Yae Jee Cho, Luyang Liu, Zheng Xu, Aldi Fahrezi, and Gauri Joshi. Heterogeneous lora for federated
+fine-tuning of on-device foundation models. In _Proc. of EMNLP_, 2024.
+
+
+Mircea Cimpoi, Subhransu Maji, Iasonas Kokkinos, Sammy Mohamed, and Andrea Vedaldi. Describing textures in the wild. In _Proc. of CVPR_, pp. 3606–3613, 2014.
+
+
+Harald Cramér and Herman Wold. Some theorems on distribution functions. _Journal of the London_
+_Mathematical Society_, 1(4):290–294, 1936.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep
+bidirectional transformers for language understanding. _arXiv preprint arXiv:1810.04805_, 2018.
+
+
+Zane Durante, Qiuyuan Huang, Naoki Wake, Ran Gong, Jae Sung Park, Bidipta Sarkar, Rohan
+Taori, Yusuke Noda, Demetri Terzopoulos, Yejin Choi, et al. Agent ai: Surveying the horizons of
+multimodal interaction. _arXiv preprint arXiv:2401.03568_, 2024.
+
+
+Elias Frantar and Dan Alistarh. Sparsegpt: Massive language models can be accurately pruned in
+one-shot. In _Proc. of ICML_, pp. 10323–10337. PMLR, 2023.
+
+
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. Gptq: Accurate post-training
+quantization for generative pre-trained transformers. _Proc. of ICLR_, 2023.
+
+
+Xinyang Geng and Hao Liu. Openllama: An open reproduction of llama, May 2023. [URL https:](https://github.com/openlm-research/open_llama)
+[//github.com/openlm-research/open_llama.](https://github.com/openlm-research/open_llama)
+
+
+Craig Gentry. Fully homomorphic encryption using ideal lattices. In _Proc. of STOC_, pp. 169–178,
+2009.
+
+
+Pengxin Guo, Shuang Zeng, Yanran Wang, Huijie Fan, Feifei Wang, and Liangqiong Qu. Selective
+aggregation for low-rank adaptation in federated learning. _arXiv preprint arXiv:2410.01463_, 2024.
+
+
+Jaroslav Hájek. Some extensions of the wald-wolfowitz-noether theorem. _The Annals of Mathematical_
+_Statistics_, pp. 506–523, 1961.
+
+
+Junhao Han and Li Yan. Adaptive batch homomorphic encryption for joint federated learning in
+cross-device scenarios. _IEEE IoT-J_, 11(6):9338–9354, 2023.
+
+
+Babak Hassibi, David G Stork, and Gregory J Wolff. Optimal brain surgeon and general network
+pruning. In _Proc. of ICNN_, pp. 293–299. IEEE, 1993.
+
+
+Patrick Helber, Benjamin Bischke, Andreas Dengel, and Damian Borth. Eurosat: A novel dataset
+and deep learning benchmark for land use and land cover classification. _IEEE J-STARS_, 12(7):
+2217–2226, 2019.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob
+Steinhardt. Measuring massive multitask language understanding. In _Proc. of ICLR_, 2021.
+
+
+Wassily Hoeffding. A combinatorial central limit theorem. _The Annals of Mathematical Statistics_,
+pp. 558–566, 1951.
+
+
+Chenghao Hu and Baochun Li. Maskcrypt: Federated learning with selective homomorphic encryption. _IEEE TDSC_, 2024.
+
+
+Edward J Hu, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen,
+et al. Lora: Low-rank adaptation of large language models. In _Proc. of ICLR_, 2022.
+
+
+Qiuyuan Huang, Naoki Wake, Bidipta Sarkar, Zane Durante, Ran Gong, Rohan Taori, Yusuke Noda,
+Demetri Terzopoulos, Noboru Kuno, Ade Famoti, et al. Position paper: Agent ai towards a holistic
+intelligence. _arXiv preprint arXiv:2403.00833_, 2024.
+
+
+Ren-Yi Huang, Dumindu Samaraweera, Prashant Shekhar, and J Morris Chang. Advancing practical
+homomorphic encryption for federated learning: Theoretical guarantees and efficiency optimizations. _arXiv preprint arXiv:2509.20476_, 2025.
+
+
+12
+
+
+Jinwoo Jeon, Kangwook Lee, Sewoong Oh, Jungseul Ok, et al. Gradient inversion with generative
+image prior. In _Proc. of NeurIPS_, 2021.
+
+
+Weizhao Jin, Yuhang Yao, Shanshan Han, Jiajun Gu, Carlee Joe-Wong, Srivatsan Ravi, Salman
+Avestimehr, and Chaoyang He. Fedml-he: An efficient homomorphic-encryption-based privacypreserving federated learning system. _arXiv preprint arXiv:2303.10837_, 2023.
+
+
+Peter Kairouz, H Brendan McMahan, Brendan Avent, Aurélien Bellet, Mehdi Bennis, Arjun Nitin
+Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, et al. Advances and open problems in federated learning. _Foundations and Trends in Machine Learning_, 14
+(1–2), 2021.
+
+
+Renuga Kanagavelu, Zengxiang Li, Juniarto Samsudin, Yechao Yang, Feng Yang, Rick Siow Mong
+Goh, Mervyn Cheah, Praewpiraya Wiwatphonthana, Khajonpong Akkarajitsakul, and Shangguang
+Wang. Two-phase multi-party computation enabled privacy-preserving federated learning. In _Proc._
+_of CCGrid_, 2020.
+
+
+Shahrzad Kiani, Nupur Kulkarni, Adam Dziedzic, Stark Draper, and Franziska Boenisch. Differentially private federated learning with time-adaptive privacy spending. In _Proc._ _of_ _ICLR_,
+2025.
+
+
+Virginia Klema and Alan Laub. The singular value decomposition: Its computation and some
+applications. _IEEE TAC_, 25(2):164–176, 1980.
+
+
+Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to
+document recognition. _Proc. of the IEEE_, 86(11):2278–2324, 2002.
+
+
+Tian Li, Anit Kumar Sahu, Ameet Talwalkar, and Virginia Smith. Federated learning: Challenges,
+methods, and future directions. In _Proc. of SPM_, 2020.
+
+
+Andrew L. Maas, Raymond E. Daly, Peter T. Pham, Dan Huang, Andrew Y. Ng, and Christopher
+Potts. Learning word vectors for sentiment analysis. In _Proc._ _of_ _ACL_, pp. 142–150, Portland,
+Oregon, USA, June 2011.
+
+
+Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.
+Communication-efficient learning of deep networks from decentralized data. In _Proc. of AISTATS_,
+2017.
+
+
+Fanxu Meng, Zhaohui Wang, and Muhan Zhang. Pissa: Principal singular values and singular vectors
+adaptation of large language models. In _Proc. of NeurIPS_, 2024.
+
+
+Young-Il Moon, Balaji Rajagopalan, and Upmanu Lall. Estimation of mutual information using
+kernel density estimators. _Physical Review E_, 52(3):2318, 1995.
+
+
+Vaikkunth Mugunthan, Antigoni Polychroniadou, David Byrd, and Tucker Hybinette Balch. Smpai:
+Secure multi-party computation for federated learning. In _Proc. of NeurIPS_, 2019.
+
+
+Yuval Netzer, Tao Wang, Adam Coates, Alessandro Bissacco, Baolin Wu, Andrew Y Ng, et al.
+Reading digits in natural images with unsupervised feature learning. In _NIPS workshop_, volume
+2011, pp. 7. Granada, 2011.
+
+
+Bo Pang and Lillian Lee. Seeing stars: Exploiting class relationships for sentiment categorization
+with respect to rating scales. In _Proc. of ACL_, pp. 115–124, 2005.
+
+
+Ivo Petrov, Dimitar I Dimitrov, Maximilian Baader, Mark Müller, and Martin Vechev. Dager: Exact
+gradient inversion for large language models. In _Proc. of NeurIPS_, 2024.
+
+
+Simon Queyrut, Valerio Schiavoni, and Pascal Felber. Mitigating adversarial attacks in federated
+learning with trusted execution environments. In _Proc. of ICDCS_, 2023.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _Proc. of ICML_, pp. 8748–8763. PmLR, 2021.
+
+
+13
+
+
+Ronald L Rivest, Len Adleman, Michael L Dertouzos, et al. On data banks and privacy homomorphisms. _Foundations of secure computation_, 4(11):169–180, 1978.
+
+
+Weijia Shi, Anirudh Ajith, Mengzhou Xia, Yangsibo Huang, Daogao Liu, Terra Blevins, Danqi Chen,
+and Luke Zettlemoyer. Detecting pretraining data from large language models. In _Proc. of ICLR_,
+2024.
+
+
+Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D Manning, Andrew Y Ng,
+and Christopher Potts. Recursive deep models for semantic compositionality over a sentiment
+treebank. In _Proc. of EMNLP_, pp. 1631–1642, 2013.
+
+
+Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. Man vs. computer: Benchmarking machine learning algorithms for traffic sign recognition. _Neural networks_, 32:323–332,
+2012.
+
+
+Shangchao Su, Bin Li, and Xiangyang Xue. Fedra: A random allocation strategy for federated tuning
+to unleash the power of heterogeneous clients. In _Proc. of ECCV_, 2024.
+
+
+Mingjie Sun, Xinlei Chen, J Zico Kolter, and Zhuang Liu. Massive activations in large language
+models. In _Proc. of ICLR Workshop_, 2024a.
+
+
+Mingjie Sun, Zhuang Liu, Anna Bair, and J Zico Kolter. A simple and effective pruning approach for
+large language models. In _Proc. of ICLR_, 2024b.
+
+
+Youbang Sun, Zitao Li, Yaliang Li, and Bolin Ding. Improving LoRA in privacy-preserving federated
+learning. In _Proc. of ICLR_, 2024c.
+
+
+Kevin Swersky, Jasper Snoek, and Ryan P Adams. Multi-task bayesian optimization. _Proc._ _of_
+_NeurIPS_, 26, 2013.
+
+
+Chunlin Tian, Zhan Shi, Zhijiang Guo, Li Li, and Chengzhong Xu. Hydralora: An asymmetric lora
+architecture for efficient fine-tuning. In _Proc. of NeurIPS_, 2024.
+
+
+Paul Voigt and Axel Von dem Bussche. The eu general data protection regulation (gdpr). _A practical_
+_guide, 1st ed., Cham:_ _Springer International Publishing_, 10(3152676):10–5555, 2017.
+
+
+Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R Bowman. Glue:
+A multi-task benchmark and analysis platform for natural language understanding. In _Proc. of_
+_ICLR_, 2019.
+
+
+Fei Wang and Baochun Li. Data reconstruction and protection in federated learning for fine-tuning
+large language models. _IEEE TBD_, pp. 1–13, 2024.
+
+
+Yizhong Wang, Swaroop Mishra, Pegah Alipoormolabashi, Yeganeh Kordi, Amirreza Mirzaei,
+Atharva Naik, Arjun Ashok, Arut Selvan Dhanasekaran, Anjana Arunkumar, David Stap, et al.
+Super-naturalinstructions: Generalization via declarative instructions on 1600+ nlp tasks. In _Proc._
+_of EMNLP_, 2022.
+
+
+Ziyao Wang, Zheyu Shen, Yexiao He, Guoheng Sun, Hongyi Wang, Lingjuan Lyu, and Ang Li. Flora:
+Federated fine-tuning large language models with heterogeneous low-rank adaptations. _arXiv_
+_preprint arXiv:2409.05976_, 2024.
+
+
+Roy Xie, Junlin Wang, Ruomin Huang, Minxing Zhang, Rong Ge, Jian Pei, Neil Gong, and Bhuwan
+Dhingra. Recall: Membership inference via relative conditional log-likelihoods. In _Proc._ _of_
+_EMNLP_, pp. 8671–8689, 2024.
+
+
+Yuxuan Yan, Qianqian Yang, Shunpu Tang, and Zhiguo Shi. Federa: Efficient fine-tuning of language
+models in federated learning leveraging weight decomposition. _arXiv preprint arXiv:2404.18848_,
+2024.
+
+
+Wentao Ye, Jiaqi Hu, Liyao Li, Haobo Wang, Gang Chen, and Junbo Zhao. Data contamination
+calibration for black-box llms. In _Findings of ACL_, pp. 10845–10861, 2024.
+
+
+Liping Yi, Han Yu, Gang Wang, Xiaoguang Liu, and Xiaoxiao Li. pfedlora: model-heterogeneous
+personalized federated learning with lora tuning. _arXiv preprint arXiv:2310.13283_, 2023.
+
+
+14
+
+
+Da Yu, Saurabh Naik, Arturs Backurs, Sivakanth Gopi, Huseyin A Inan, Gautam Kamath, Janardhan
+Kulkarni, Yin Tat Lee, Andre Manoel, Lukas Wutschitz, Sergey Yekhanin, and Huishuai Zhang.
+Differentially private fine-tuning of language models. In _Proc. of ICLR_, 2022.
+
+
+Jianyi Zhang, Saeed Vahidian, Martin Kuo, Chunyuan Li, Ruiyi Zhang, Tong Yu, Guoyin Wang, and
+Yiran Chen. Towards building the federatedgpt: Federated instruction tuning. In _Proc. of ICASSP_,
+2024.
+
+
+Chao Zheng, Liming Wang, Zhen Xu, and Hongjia Li. Optimizing privacy in federated learning with
+mpc and differential privacy. In _Proc. of CACML_, 2024.
+
+
+Yifeng Zheng, Shangqi Lai, Yi Liu, Xingliang Yuan, Xun Yi, and Cong Wang. Aggregation service
+for federated learning: An efficient, secure, and more resilient realization. _IEEE TDSC_, 20(2):
+988–1001, 2022.
+
+
+Ligeng Zhu, Zhijian Liu, and Song Han. Deep leakage from gradients. In _Proc. of NeurIPS_, 2019.
+
+
+Meilu Zhu, Axiu Mao, Jun Liu, and Yixuan Yuan. Deer: Deviation eliminating and noise regulating
+for privacy-preserving federated low-rank adaptation. _IEEE TMI_, 44(4):1783–1795, 2025.
+
+
+15
+
+
+## **Appendix**
+
+
+LIST OF CONTENTS
+
+
+A: Related Work
+
+
+B: Preliminary
+
+B.1 Relationship between Parameter Importance and Privacy Leakage Risk
+B.2 Data Reconstruction via Inversion Attacks
+B.3 Federated Parameter-Efficient Fine-Tuning
+B.4 Matrix Multiplication in LoRA Amplifies DP Noise
+B.5 Homomorphic Encryption
+B.6 Order-Preserving Encryption
+B.7 Singular Value Decomposition
+
+
+C: HE Key Management and Distribution
+
+
+D: Additional Technical Details of SHE-LoRA
+
+D.1 The Algorithm of HE Subset Negotiation
+D.2 Aggregation of Unencrypted Model Parameters
+D.3 Aggregation of Encrypted Model Parameters
+D.4 Reparameterization of LoRA
+D.5 Proof of the Losslessness of Meaningful Model Updates in SHE-LoRA
+D.6 Distribution Shift of Model Parameter Importance Values
+D.7 Proof of Asymptotic Gaussian-distributed Noise
+
+
+E: Distributability and Scalability
+
+E.1 Performance on More Clients
+E.2 Performance on Larger LLMs
+E.3 Performance on Stronger Base Models and more Challenging Benchmarks
+
+
+F: Additional Experimental Results
+
+F.1 Performance on Varying Tasks
+F.2 Robustness under Varying Non-IID Conditions
+F.3 Efficient Estimation of Mutual Information
+F.4 Resistance against Membership Inference Attacks
+F.5 Impact of Sensitive Parameters on Performance
+
+
+G: Table of Notations
+
+
+H: Limitations
+
+
+I: Broader Impact
+
+
+J: The Use of Large Language Models (LLMs)
+
+
+16
+
+
+A RELATED WORK
+
+
+**LoRA Tuning in FL.** FedIT (Zhang et al., 2024) employed FedAvg to aggregate updates from locally
+performed LoRA fine-tuning. FeDeRA (Yan et al., 2024) modified the initialization of matrices **A**
+and **B** by the SVD results of pre-trained parameters, which helps mitigate client drift caused by data
+heterogeneity. SLoRA (Babakniya et al., 2023) employed SVD for initializing matrices **A** and **B**,
+and calculated a mask to reduce the parameters for training and communication overhead. FedRA (Su
+et al., 2024) partitioned the pre-trained model by layer, enabling clients to fine-tune specific layers
+on homogeneous models. Inspired by the mixture of experts architecture, HydraLoRA (Tian et al.,
+2024) proposed to learn multiple LoRAs corresponding to different knowledge. PiSSA (Meng et al.,
+2024) proposed to directly fine-tune the principal component of the pre-trained model, facilitating
+rapid convergence and enhancing overall performance. These LoRA variants primarily focus on
+reducing training costs in homogeneous settings, but neglect the heterogeneity of device capabilities
+and Non-IID data in cross-device federated PEFT scenarios.
+
+
+**Heterogeneous LoRA.** FLoRA (Wang et al., 2024) contended that the aggregation used in FedIT
+(Zhang et al., 2024) is flawed and employed stacking to aggregate parameters from heterogeneous
+clients. HeterLoRA (Cho et al., 2024) implemented different ranks on clients and aggregates
+heterogeneous LoRA modules through zero-padding, which may dilute certain parameters. RBLA
+(Chen et al., 2024) designed a rank-based LoRA aggregation method to prevent model parameter
+dilution caused by zero-padding. Flex-LoRA (Bai et al., 2024) synthesized a complete set of LoRA
+weights from individual client contributions, and employed SVD for weight reparameterization,
+thereby fully leveraging heterogeneous client resources. Furthermore, pFedLoRA (Yi et al., 2023)
+aggregated adapters to facilitate personalized FL, and treated LoRA as a mechanism for knowledge
+transfer, allowing clients to locally train heterogeneous models while maintaining a homogeneous
+adapter. Although these works have made significant contributions to heterogeneous federated PEFT
+with LoRA, they still suffer from potential privacy leakage risks under inversion attacks.
+
+
+**Privacy Preservation Techniques.** To defend against inversion attacks, Yu et al. (2022) employed
+the DP-SGD optimizer for fine-tuning, providing formal DP guarantees for model parameters.
+Considering that DP noise may be amplified by LoRA multiplication, FFA-LORA (Sun et al., 2024c)
+modified the LoRA training procedure by freezing matrix **A** after initialization and solely applying
+DP on matrix **B**, at the cost of fewer tunable model parameters. Similarly, FedSA-LoRA (Guo
+et al., 2024) proposed to globally train matrix **A** while reserving matrix **B** for local training without
+participating in aggregation. Han & Yan (2023) proposed an adaptive, precision-lossless batch
+HE method that transforms model parameters into non-negative values to prevent overflow errors.
+Inspired by model pruning techniques, FedML-HE (Jin et al., 2023) proposed to encrypt only a subset
+of sensitive model parameters to reduce HE overhead. MaskCrypt (Hu & Li, 2024) proposed to select
+a consensus mask for SHE to minimize overhead across homogeneous devices. In summary, the
+application of DP involves a trade-off between privacy protection and model convergence, while
+existing HE methods struggle to balance privacy and efficiency in cross-device federated PEFT with
+LoRA, particularly under scenarios with Non-IID data and heterogeneous device capabilities.
+
+
+B PRELIMINARY
+
+
+B.1 RELATIONSHIP BETWEEN PARAMETER IMPORTANCE AND PRIVACY LEAKAGE RISK
+
+
+On one hand, as indicated in previous SHE methods (Hu & Li, 2024; Jin et al., 2023), the privacy
+leakage risk in FL mainly comes from the fact that the locally trained model weights contain private
+data information, and are vulnerable to attacks. The lower gradient loss a parameter results in, the
+higher privacy leakage risk it may cause under the attacks.
+
+
+On the other hand, model pruning methods (Frantar et al., 2023; Hassibi et al., 1993; Sun et al.,
+2024b) have proved that by carefully screening the parameters by importance, many parameters can
+be removed without hurting performance. Following this rationale, SHE-LoRA lets heterogeneous
+clients adaptively encrypt partial parameters via importance screening and negotiate a global HE
+subset for secure Federated PEFT without hurting privacy and efficiency.
+
+
+Specifically, let **W** and _L_ ( **W** ) denote parameters and the loss function, respectively. Given a subset
+of the parameters **w** _∈_ **W**, **W** _−_ **w** = **W** _−_ **w** denotes the parameters with **w** zeroed out. According
+to (Hassibi et al., 1993), the loss function _L_ ( **W** _−_ **w** ) can be expanded as the following Taylor series:
+
+
+17
+
+
+_L_ ( **W** _−_ **w** ) = _L_ ( **W** _−_ **w** ) = _L_ ( **W** ) + _g_ _[⊤]_ **w** + [1]
+
+
+(7)
+2 **[w]** _[⊤][H]_ **[w]** [ +] _[ O]_ [(] _[∥]_ **[w]** _[∥]_ [3][)] _[,]_
+
+
+where _g_ _[⊤]_ and _H_ are the first-order (gradient) and second-order (Hessian) partial derivatives, respectively. _O_ ( _∥_ **w** _∥_ [3] ) is the higher-order infinitesimal of **w** . The sensitivity of **w** (denoted as Ω( **w** )) can
+be denoted as:
+
+
+Ω( **w** ) = _|L_ ( **W** _−_ **w** ) _−L_ ( **W** ) _|_ = _g_ _[⊤]_ **w** + [1]
+
+
+[1]
+
+2 **[w]** _[⊤][H]_ **[w]** [ +] _[ O]_ [(] _[∥]_ **[w]** _[∥]_ [3][)] _[ ≈]_ 2 [1]
+
+
+(8)
+2 **[w]** _[⊤][H]_ **[w]** _[.]_
+
+
+Considering that when **W** converges to the local minimum after training, _g_ _[⊤]_ is 0, while _O_ ( _∥_ **w** _∥_ [3] )
+can be neglected, thus Ω( **w** ) only depends on _H_ and **w** . Finally, the sensitivity of the _q_ -th parameter
+
+is calculated as Ω( **w** _q_ ) = 2[ _H_ **w** _[−]_ _q_ [2][1] ] _qq_ [according to OBS (][Hassibi et al.][,][ 1993][), where][ [] _[H]_ _[−]_ [1][]] _[qq]_ [is the]
+diagonal element at ( _q, q_ ) of the inverse Hessian matrix, _H_ _[−]_ [1] .
+
+
+Inspired by _H_ = _XX_ _[⊤]_ from SparseGPT (Frantar & Alistarh, 2023), Wanda (Sun et al., 2024b)
+modified weight importance assessment to avoid the high computation cost of _H_ and _H_ _[−]_ [1] (Eq. (2)).
+Based on Wanda, SHE-LoRA assesses channel-wise weight importance as in Section 3.1.1.
+
+
+Besides, Fig. 10 shows that the mutual information (privacy leakage) of _Max_ decreases much sharper
+than the others along with the encryption of parameters, which intuitively reflects a strong correlation
+between weight importance and privacy leakage risk.
+
+
+B.2 DATA RECONSTRUCTION VIA INVERSION ATTACKS
+
+
+Inversion attacks (Petrov et al., 2024; Balunovic et al., 2022; Zhu et al., 2019; Jeon et al., 2021) aim
+to reconstruct private training data or model parameters, such as pixel values in images or sensitive
+information in text, by reversing the clients’ updates uploaded during federated fine-tuning, such as
+gradients, parameter updates or prediction results. Specifically, for a model _f_ **W** ( _x_ ) = **W** _[⊤]_ _x_, a client
+trains it with its local data ( _x, y_ ), and calculates the gradient _g_ as the derivative of the loss function _L_ :
+
+
+_g_ = _[∂][L]_
+
+
+_∂f_ **W** _∂L_ (9)
+
+_∂_ **W** [=] _∂f_ **W** _[·][ x,]_
+
+
+_∂L_ _∂f_ **W**
+
+_[∂][L]_
+
+_∂_ **W** [=] _∂f_ **W** _∂_ **W**
+
+
+and uploads it to the server. The uploaded gradient _g_ contains a linear combination of the original
+data. An attacker can analyze the principal components of the model update to search for the client’s
+data distribution space and then reconstruct the data (Petrov et al., 2024).
+
+
+B.3 FEDERATED PARAMETER-EFFICIENT FINE-TUNING
+
+
+Federated Parameter-Efficient Fine-Tuning (PEFT) is a technology designed for the efficient finetuning of large models within a distributed learning framework that prioritizes data privacy. For
+instance, LoRA (Hu et al., 2022) is a well-established method for PEFT. Suppose the weight matrix
+of the global pre-trained model is denoted as **W** _∈_ R _[m][×][n]_, LoRA introduces trainable parameters,
+**B** _∈_ R _[m][×][r]_ and **A** _∈_ R _[r][×][n]_ . Each client freezes the original weights **W** and learns only the trainable
+low-rank parameters **B** and **A** on its local data. Then, the updates (e.g., weights or gradients) from
+clients are aggregated by the server via
+
+
+∆ **W** =
+
+
+_N_
+
+- _τi_ **BiAi** _,_ (10)
+
+
+_i_ =1
+
+
+where _τi_ denotes the weight coefficient of Client _i_, proportional to its local data size. Federated
+PEFT uses Eq. (10) to guarantee heterogeneous aggregation of LoRA parameters. SVD is used
+to reparameterize the aggregation result into heterogeneous LoRA parameters, which reduces the
+communication overhead of ∆ _W_ . The new LoRA parameters are then sent back to each device for
+continued local training, and the process is iterated repeatedly to progressively optimize the model. It
+is worth noting that the model parameters are transmitted in plaintext throughout this process, making
+them visible to the server.
+
+
+B.4 MATRIX MULTIPLICATION IN LORA AMPLIFIES DP NOISE
+
+
+Differential privacy (DP) (Yu et al., 2022; Zhu et al., 2025) is a common privacy defense mechanism
+that adds specific noise to gradient or parameter updates, making the relationship between gradients
+and data non-linear, which misleads the attacker’s optimization direction. Given that the LoRA
+
+
+18
+
+
+fine-tuning parameter is ∆ **W** = **BA**, and ∆ **W** plays a role during model inference, if a noise _ϵ_
+satisfying the privacy budget is added to the parameters, then:
+
+∆ **W** = ( **B** + _ϵB_ )( **A** + _ϵA_ ) = **BA** + **B** _ϵA_ + **A** _ϵB_ + _ϵAϵB_ (11)
+
+Thus, except for **BA**, all the terms in Eq. (11) are noises that will be aggregated into the global model
+parameters, which may severely affect the model’s performance and convergence direction.
+
+
+B.5 HOMOMORPHIC ENCRYPTION
+
+
+Homomorphic encryption (Rivest et al., 1978; Gentry, 2009) is a cryptographic primitive that allows
+computations to be performed on encrypted data without revealing the underlying plaintext. It is
+exceptionally well-suited for FL, as it enables the computation of aggregation in server without
+exposing clients’ updates. The Cheon–Kim–Kim–Song (CKKS) encryption scheme (Cheon et al.,
+2017) supports approximate numerical computations and floating-point arithmetic. The CKKS offers
+relatively high computational efficiency and supports vectorized operations, making it highly suitable
+for LoRA tuning in FL. It can be used to encrypt the parameters or gradients of local models, allowing
+the server to perform model aggregation without decrypting any data, thereby protecting user privacy.
+In the implementation of SHE-LoRA, we employ the CKKS provided by the TenSEAL library,
+which supports homomorphic computations on both vectors and tensors, thereby enabling encrypted
+computation operations over complex model parameters.
+
+
+B.6 ORDER-PRESERVING ENCRYPTION
+
+
+Order-Preserving Encryption (OPE) (Agrawal et al., 2004; Boldyreva et al., 2009) is a cryptographic
+technique that preserves the numerical order of plaintexts. If two plaintexts, _a_ and _b_, satisfy the
+condition _a < b_, then their encrypted ciphertexts will also satisfy _Enc_ ( _a_ ) _< Enc_ ( _b_ ). This enables
+comparisons, sorting, or range queries to be performed on ciphertexts without decryption. In principle,
+OPE maps plaintexts to an interval within the ciphertext space, while ensuring that the mapping
+function is monotonically increasing. Although OPE does not provide semantic security in the
+traditional sense (i.e., it is possible to infer the approximate range of the plaintext from the ciphertext),
+it is highly useful in applications that require sorting or range operations on encrypted data, such as
+encrypted databases or cloud storage queries. In SHE-LoRA, we employ OPE to hide clients’ HE
+subset, which prevents the server from snooping on the positions of important model parameters and
+conducting targeted attacks.
+
+
+B.7 SINGULAR VALUE DECOMPOSITION
+
+
+Singular value decomposition (SVD) (Klema & Laub, 1980) is a mathematical method that decomposes any real or complex matrix into the product of three standard matrices. It is applicable to
+matrices of arbitrary shapes, and hence suitable for tasks such as dimensionality reduction, data
+compression, and recommendation systems. For a real matrix **W** _∈_ R _[m][×][n]_, SVD decomposes it as
+follows: **W** = **UΣV** _[⊤]_, where **U** _∈_ R _[m][×][m]_ is an orthogonal matrix, **Σ** _∈_ R _[m][×][n]_ is a diagonal matrix
+with non-negative real values on its diagonal, known as singular values, arranged in descending order,
+and **V** _[⊤]_ _∈_ R _[n][×][n]_ is an orthogonal matrix as well. To match heterogeneous LoRAs from clients, many
+methods (Yan et al., 2024; Babakniya et al., 2023) have employed SVD decomposition, breaking
+_√_ _√_
+down the aggregated matrix into **B** = **U** **Σ** and **A** = **ΣV** _[⊤]_, which enables the projection of the
+
+
+_√_
+**Σ** and **A** =
+
+
+down the aggregated matrix into **B** = **U** **Σ** and **A** = **ΣV** _[⊤]_, which enables the projection of the
+
+original parameters into a lower-dimensional space while preserving the essential features.
+
+
+C HE KEY MANAGEMENT AND DISTRIBUTION
+
+
+In the configuration outlined herein, the system necessitates an honest-but-curious server to execute
+the aggregation of models. Then, a trusted third party is required to oversee the distribution of keys
+for both OPE and HE, with the assumption that it will not collude with the server. However, when the
+server colludes with compromised clients, cryptographic techniques such as threshold HE, Multi-Key
+HE, and proxy re-encryption can be employed to achieve distributed secure computation. **Threshold**
+**Homomorphic Encryption** (Aloufi et al., 2021) is a cryptographic scheme that amalgamates the
+threshold cryptography and HE. It not only supports computations on encrypted data (homomorphism), but also enables joint decryption by multiple participants (thresholding), thereby enhancing
+
+
+19
+
+
+both security and fault tolerance while preserving privacy. Decryption can only be accomplished
+with the collective participation of a predetermined number of participants, known as the threshold.
+**Proxy Re-Encryption** (Blaze et al., 1998; Ateniese et al., 2006) permits a semi-trusted third party
+(the proxy) to transform ciphertext encrypted for one party into ciphertext decryptable by another, all
+without accessing the original plaintext or either party’s private keys. **Multi-Key Homomorphic**
+**Encryption** (Aloufi et al., 2021) enables homomorphic operations to be performed on user data
+encrypted under different keys, obviating the need for key sharing. The resultant ciphertext requires
+collaborative partial decryption by all participants, each utilizing their respective private key, to yield
+the final plaintext outcome. This mechanism ensures that joint computations can be performed in
+multi-party data collaborations while protecting the data privacy of each participant.
+
+
+In SHE-LoRA, we retain Multi-Key HE as a countermeasure against potential collusion between the
+server and clients, while leaving its practical integration and optimization to future endeavors.
+
+
+D ADDITIONAL TECHNICAL DETAILS OF SHE-LORA
+
+
+D.1 THE ALGORITHM OF HE SUBSET NEGOTIATION
+
+
+D.1.1 OBJECTIVES OF THE NEGOTIATION
+
+The negotiation aims to select a subset of columns _Res_ _⊆_ [�] _[N]_ _i_ =1 _[G][i]_ [with] [cardinality] _[|][Res][|]_ [=]
+max _i∈{N_ _} ki_, where _ki_ denotes the number of sensitive columns that client _i_ can afford to encrypt and _{N_ _}_ denotes the set of all clients, thereby achieving a principled trade-off between privacy
+and HE overhead. However, the notions of “privacy” and “HE overhead” are inherently ambiguous
+without concrete metrics. To make the trade-off operational, we formalize two explicit objectives
+with _min-Coverage_ and _max-Risk_ .
+
+
+We first define the _Coveragei_ of client _i_ as the fraction of its sensitive columns that are selected for
+encryption (i.e., included in _Res_ ), and hence protected from exposure: _Coveragei_ = _[|][Res]_ _|G_ _[∩]_ _i_ _[G]_ _|_ _[i][|]_ _,_ where
+
+_Gi_ is the set of columns that client _i_ deems sensitive, and _Res_ is the final selected subset.
+
+
+To extend HE-based privacy protection to as many clients as possible, we adopt a max-min criterion
+and define the overall coverage as:
+
+
+_min-Coverage_ = min (12)
+_i∈{N_ _}_ _[Coverage][i][.]_
+
+Maximizing _min-Coverage_ ensures that the coverage of every client is at least this value, thereby
+guaranteeing the worst-case coverage of sensitive parameter columns: even the least-covered client
+receives a quantifiable level of protection.
+
+
+Second, to quantify the privacy leakage risk of each client, we define _Riski_ =
+
+
+_j∈Gi\Res_ _[S][j]_
+
+
+_j∈Gi_ _[S][j]_ _[,]_ [ which]
+
+
+measures the fraction of client _i_ ’s total sensitivity that remains unencrypted. We further define
+_max-Risk_ = max (13)
+_i∈{N_ _}_ _[Risk][i]_
+
+to capture the worst-case privacy leakage risk across all clients, which we aim to minimize. Lower
+residual risk implies stronger privacy preservation. Minimizing _max-Risk_ ensures that the privacy
+leakage risk of every client is at most this value, thereby providing a worst-case privacy guarantee:
+even the most exposed client suffers from no more than a quantifiable level of privacy leakage risk.
+
+
+The negotiation thus seeks a balanced _Res_ that jointly optimizes both Eq. (12) and Eq. (13). To
+formalize this goal, we define a composite objective score as Eq. (14):
+
+
+_|Res ∩_ _Gi|_
+score( _Res_ ) = min
+_i∈{N_ _}_ _|Gi|_
+
+
+       - ��       _min-Coverage_
+
+
+_i∈{N_ _}_ - _j∈Gi_ _[S][j]_
+
+- �� _max-Risk_
+
+
+_−_ max
+_i∈{N_ _}_
+
+
+_j∈Gi\Res_ _[S][j]_
+
+
+_._ (14)
+
+
+Eq. (14) balances the minimal client coverage of sensitive parameters and the maximal privacy
+leakage risk of unencrypted parameters. These two objectives often contradict under a limited
+encryption budget: satisfying client-specific privacy leakage risk may sacrifice overall coverage of
+clients’ sensitive parameters, and vice versa.
+
+
+20
+
+
+**Algorithm 1:** HE subset negotiation
+
+**Input:** _clients_ = _{ri, ki,_ ( _Gi, Si_ ) _}_ _[N]_ _i_ =1 [,] _[ a, b, c]_ [ are three hyper-parameters of selection ratio.]
+**Output:** _Res_ : the column index of global HE subset.
+
+**1** _Res, selected_num ←{},_ 0;
+
+
+**2** _Common ←_ sorts columns in [�]
+
+
+_i_ _[G][i]_ [from highest to lowest sensitivity;]
+
+
+_i_ _[G][i]_ [from most to least frequently deemed as sensitive;]
+
+
+**3** _Sensitivity ←_ sorts columns in [�]
+
+
+**4** Γ _←{_ ( _k, countk_ ) _}_ clusters clients by budget _k_, and sorts them in ascending order of _k_ ;
+
+
+**5** **for** _each budget k in_ Γ **do**
+
+**6** _λ ←_ update current budget by _k −_ _selected_ _ _num_ ;
+
+**7** _Clients ←_ collect all unique columns from [�] _i_ : _ki_ = _k_ _[G][i]_ [, and sort them by][ min] _[ S][j]_ [;]
+
+**8** **if** _countk_ = 1 **then**
+
+**9** _P_ _←_ select top _λ_ columns from _Gi_ - _Res_ of the unique client;
+
+**10** _Res ←_ { _P_,{ _Res_ }};
+
+**11** _selected_num ←_ _k_ ;
+
+
+**12** **else**
+
+**13** _a, b, c ←_ coefficients optimized via Bayesian optimization under _a_ + _b_ + _c_ = 1, balancing
+_min-Coverage_ and _max-Risk_ as detailed in Algorithm 2;
+
+**14** _P_ _←_ select top _⌊aλ⌋_ columns from _Clients_ - _Res_ ;
+
+**15** _C_ _←_ select top _⌊bλ⌋_ columns from _Common_ - _P_ - _Res_ ;
+
+**16** _S_ _←_ select top _λ −⌊aλ⌋−⌊bλ⌋_ columns from _Sensitivity_ - _P_ - _C_ - _Res_ ;
+
+**17** _Res ←_ result of _k_ columns is { _S, C, P, {Res}_ };
+
+**18** _selected_num ←_ _k_ ;
+
+
+**19** **return** _Res_
+
+
+D.1.2 PROCEDURE OF THE NEGOTIATION
+
+
+The workflow of HE subset negotiation is summarized as Algorithm 1. Note that the server keeps
+the rank _ri_ and encryption budget _γi_ of all clients. The number of encrypted columns of Client _i_ is
+denoted as _ki_ = _γi · n_, where _n_ is the number of columns in the parameter matrix. As described in
+Section 3.1.2, the server receives a set of tuples ( _Gi, Si_ ) from clients as input, where _Gi_ is Client _i_ ’s
+set of columns that needs HE, and _Si_ is their sensitivities.
+
+
+At Lines 1-3, the server first initiates the negotiation result _Res_ and the number of columns that have
+been selected _selected_num_ . Then, the server maintains two shared lists: the _Common_ list, which
+sorts all columns in [�] _i_ _[G][i]_ [from most to least frequently deemed as sensitive,] [and the] _[Sensitivity]_
+
+
+sorts all columns in [�] _i_ _[G][i]_ [from most to least frequently deemed as sensitive,] [and the] _[Sensitivity]_
+
+list, which sorts all columns in [�] _i_ _[G][i]_ [ from highest to lowest sensitivity.] [The columns ranked higher]
+
+
+list, which sorts all columns in [�] _i_ _[G][i]_ [ from highest to lowest sensitivity.] [The columns ranked higher]
+
+in _Common_ are more frequently deemed as sensitive by the clients, and selecting them improves
+_min-Coverage_ . The columns ranked higher in _Sensitivity_ have greater global sensitivity, and selecting
+them reduces _max-Risk_ . At Line 4, the server clusters the clients by their budget _k_, and sorts them in
+the ascending order of _k_ . At Lines 5-18, the server repeats the process several times, which depends
+on the number of unique budgets. For each process, the number of column positions to be negotiated,
+denoted as _λ_, is calculated by the difference between current budget _k_ and the number of columns that
+have been determined. A _Clients_ list ranks unique columns from budget- _k_ clients by their minimum
+sensitivity, aiming to encrypt columns that are personally deemed as sensitive. If the current budget
+corresponds to a single client (i.e., _countk_ = 1), the strategy greedily selects from that client’s _Gi_
+for optimal privacy protection. Otherwise, the server iteratively selects _⌊aλ⌋_ columns from _Clients_,
+_⌊bλ⌋_ columns from _Common_, and _λ −⌊aλ⌋−⌊bλ⌋_ columns from _Sensitivity_ without duplicate
+selection to form the global HE subset, where _a_ + _b_ + _c_ = 1 and _⌊·⌋_ is the floor function. This hybrid
+selection jointly optimizes worst-case coverage and privacy risk while preserving a degree of client
+personalization to accommodate heterogeneous environments.
+
+
+Clearly, the success of this objective relies heavily on the choice of the coefficients _a_, _b_, and
+_c_ . As presented in Algorithm 2, we employ the Bayesian optimization (Swersky et al., 2013) to
+determine their optimal values via searching different combinations of column selection from three
+complementary perspectives: client-specific ( _Clients_ ), commonly shared ( _Common_ ), and sensitivitydriven ( _Sensitivity_ ). Specifically, Algorithm 2 begins by defining the feasible search space for the
+parameters ( _a, b, c_ ) at Line 1, subject to the constraint _a_ + _b_ + _c_ = 1. At Line 2, a Bayesian
+optimization model (i.e., a Gaussian process) is initialized over this search space. At Lines 3–16, the
+model performs _N_ opt (e.g., 50) iterations of optimization: at each iteration _t_, the current parameter
+triple ( _at, bt, ct_ ) is used to construct the negotiation result _Rest_ at Line 5, following the same column
+
+
+21
+
+
+**Algorithm 2:** Bayesian optimization for the selection of _a_, _b_ and _c_ .
+
+**Input:** _clients_ = _{ri, ki,_ ( _Gi, Si_ ) _}_ _[N]_ _i_ =1 [, Current] _[ λ]_ [,] _[ Res]_ [,] _[ Clients]_ [,] _[ Common]_ [,] _[ Sensitivity]_ [.]
+**Output:** Optimal coefficients ( _a_ _[∗]_ _, b_ _[∗]_ _, c_ _[∗]_ ) with _a_ _[∗]_ + _b_ _[∗]_ + _c_ _[∗]_ = 1
+
+**1** _X_ _←_ Define search space with _{_ ( _a, b_ ) _∈_ [0 _,_ 1] [2] _| a_ + _b ≤_ 1 _}_ ;
+
+**2** Initialize a Bayesian optimization model _M_ over _X_ ;
+
+**3** **for** _t_ = 1 **to** _Nopt_ **do**
+
+// Bayesian optimizer selects ( _at, bt_ ) for evaluation
+
+**4** ( _at, bt_ ) _←_ SELECT( _M_ );
+
+**5** _ct_ _←_ 1 _−_ _at −_ _bt_ ;
+
+**6** _Pt_ _←_ select top _⌊atλ⌋_ columns from _Clients-Res_ ;
+
+**7** _Ct_ _←_ select top _⌊btλ⌋_ columns from _Common-Res_ - _Pt_ ;
+
+**8** _St_ _←_ select top _λ −⌊atλ⌋−⌊btλ⌋_ columns from _Sensitivity-Res_ - _Pt_ - _Ct_ ;
+
+**9** _Rest_ _←_ the union of { _St, Ct, Pt_ };
+
+**10** **for** _each client i_ **do**
+
+**11** _Coveragei_ _←_ _[|][Res]_ _|_ _[t]_ _G_ _[ ∩]_ _i|_ _[G][i][|]_ ;
+
+
+**12** _Riski_ =
+
+
+ - _j∈Gi\Res_ _[S][j]_ ;
+_j∈Gi_ _[S][j]_
+
+
+**13** _min-Coverage ←_ min _i∈{N_ _} Coveragei_ ;
+
+**14** _max-Risk ←_ max _i∈{N_ _} Riski_ ;
+
+**15** score _t_ _←_ _min-Coverage −_ _max-Risk_ ;
+// Update Bayesian optimizer with ( _at, bt,_ score _t_ )
+
+**16** _M ←_ UPDATE( _M,_ ( _at, bt_ ) _,_ score _t_ );
+
+
+**17** ( _a_ _[∗]_ _, b_ _[∗]_ ) _←_ arg max _t_ score _t_ ;
+
+**18** _c_ _[∗]_ _←_ 1 _−_ _a_ _[∗]_ _−_ _b_ _[∗]_ ;
+
+**19** **return** ( _a_ _[∗]_ _, b_ _[∗]_ _, c_ _[∗]_ );
+
+
+selection procedure as in Algorithm 1. Then, at Lines 10–12, the client-specific coverage and privacy
+risk are evaluated for every client. The overall score is computed at Line 15 using Eq. 14, and in
+Line 16, this score is fed back to update the Bayesian optimization model, guiding the next parameter
+selection. Finally, Lines 17–19 return the best-performing coefficients ( _a_ _[∗]_ _, b_ _[∗]_ _, c_ _[∗]_ ) as the outcome of
+the negotiation.
+
+
+D.2 AGGREGATION OF UNENCRYPTED MODEL PARAMETERS
+
+
+Algorithm 3 illustrates how the server aggregates unencrypted model parameters. The input of
+the algorithm is the set of unencrypted weight updates ∆ _Wi_ [plain] from all _N_ clients. At Line 1, the
+columns of the aggregation result is initialized by _K_ = _n −_ min( _k_ 1 _, . . ., kN_ ), where _n_ is the number
+of columns in the frozen pre-trained parameter matrix, and _ki_ is the number of encrypted columns of
+Client _i_ . At Lines 2-3, the server initializes the aggregation result to **0** _∈_ R _[m][×][K]_, and sets a counter
+that records the respective contributions of the clients during the aggregation of each column. At
+Lines 4-7, the server incorporates Client _i_ ’s parameters ∆ _Wi_ [plain] into the aggregation results, and
+updates the counter to record the number of clients contributing to each column. At Lines 8-11,
+the server weight-averages the results based on the counters and returns the final aggregated result
+∆ _W_ plain _∈_ R _[m][×][K]_ .
+
+
+D.3 AGGREGATION OF ENCRYPTED MODEL PARAMETERS
+
+
+Algorithm 4 illustrates how the server aggregates encrypted model parameters. The algorithm takes
+the set of ciphertexts ∆ _Wi_ [cipher] _∈_ R _[m][×][k][i]_ as the input. At Line 1, the columns of the aggregation result
+are initialized by _K_ _[∗]_ = max ( _k_ 1 _, k_ 2 _, . . ., kN_ ), where _ki_ is the column number of encrypted model
+parameters of client _i_ . At Lines 2-3, the server initializes the aggregation result to **0** 1 _×K∗_ and sets a
+counter to record the respective contributions of the clients. At Lines 4-6, the server incorporates
+encrypted model parameters ∆ _Wi_ [cipher] into the aggregation results and updates the counter to record
+the number of clients contributing to each column. Finally, at Lines 7-9, the server weight-averages
+the encrypted model parameters based on the counters, and returns the final aggregated encrypted
+model parameters, denoted as ∆ _W_ cipher _∈_ R _[m][×][K][∗]_ . Although the columns of encrypted model
+parameters extends to _K_ _[∗]_, each client can receive a set of encrypted blocks matching its encryption
+budget.
+
+
+22
+
+
+**Algorithm 3:** Aggregation of unencrypted model parameters
+
+**Input:** _{_ ∆ _Wi_ [plain] _}_ _[N]_ _i_ =1 [:] [Set of] _[ N]_ [matrices, each][ ∆] _[W]_ _i_ [ plain] has shape ( _m, n −_ _ki_ ).
+**Output:** ∆ _W_ plain: Aggregated matrix with shape ( _m, K_ ).
+
+**1** _K_ _←_ _n −_ min( _k_ 1 _, . . ., kN_ ) ;
+
+**2** ∆ _W_ plain _←_ **0** _m×K_ ;
+
+**3** Counts _←_ **0** 1 _×K_ ;
+
+**4** **for** _each client i_ = 1 **to** _N_ **do**
+
+**5** _ci_ _←_ get column count of ∆ _Wi_ [plain] ;
+
+**6** ∆ _W_ plain[: _,_ : _ci_ ] _←_ ∆ _W_ plain[: _,_ : _ci_ ] + ∆ _Wi_ [plain] ;
+
+**7** Counts[: _ci_ ] _←_ Counts[: _ci_ ] + 1 ;
+
+
+**8** **for** _j_ = 1 **to** _K_ **do**
+
+**9** **if** Counts[ _j_ ] _>_ 0 **then**
+
+**10** ∆ _W_ plain[: _, j_ ] _←_ ∆ _W_ plain[: _, j_ ] _/_ Counts[ _j_ ];
+
+
+**11** **return** ∆ _W plain_
+
+
+**Algorithm 4:** Aggregation of encrypted model parameters
+
+**Input:** _{_ ∆ _Wi_ [cipher] _}_ _[N]_ _i_ =1 [:] [Sets of] _[ N]_ [ciphertexts from clients, each][ ∆] _[W]_ _i_ [ cipher] has shape ( _m, ki_ ).
+**Output:** ∆ _W_ cipher: Aggregated matrix with shape ( _m, K_ _[∗]_ ).
+
+**1** _K_ _[∗]_ _←_ max( _k_ 1 _, k_ 2 _, . . ., kN_ ) ;
+
+**2** ∆ _W_ cipher _←_ **0** _m×K_ _[∗]_ ;
+
+**3** Counts _←_ **0** 1 _×K_ _[∗]_ ;
+
+**4** **for** _each client i_ = 1 **to** _N_ **do**
+
+**5** ∆ _W_ cipher[: _, −ki_ :] _←_ ∆ _W_ cipher[: _, −ki_ :] + ∆ _Wi_ [cipher]
+**6** Counts[ _−ki_ :] _←_ Counts[ _−ki_ :] + 1 ;
+
+**7** **for** _j_ = 1 **to** _K_ _[∗]_ **do**
+
+**8** **if** Counts[ _j_ ] _>_ 0 **then**
+
+**9** ∆ _W_ cipher[: _, j_ ] _←_ ∆ _W_ cipher[: _, j_ ] _/_ Counts[j]
+
+
+**10** **return** ∆ _W cipher_
+
+
+D.4 REPARAMETERIZATION OF LORA
+
+
+The updated full-parameter for each client, termed as ∆ **W**, can be formulated as two parts, the
+plaintext update ∆ **W** plain = **B** _p_ **A** _p_ and the ciphertext update ∆ **W** cipher _∈_ R _[r][×][k][i]_ as shown in Eq. (15).
+In order to reparameterize the two parts of the model parameters into the parameter matrices **B** [ˆ] and
+**A** ˆ of LoRA, we first apply SVD and zero-padding to the ciphertext update to generate two low-rank
+matrices ( **B** _c_ _∈_ R _[m][×][r]_ _,_ **A** _c_ _∈_ R _[r][×][n]_ ), which ensures their dimension aligns with **B** _p_ **A** _p_ . The final
+LoRA parameter matrices ( **B** [ˆ] _,_ **A** [ˆ] ) are calculated as follows:
+
+
+∆ **W** = ∆ **W** plain + ∆ **W** cipher (15)
+
+
+SVD
+==== **B** _p_ **A** _p_ + **B** _c_ **A** _c_
+
+
+_√_
+= ( **U** 1
+
+
+_√_
+= - **U** 1
+
+
+_√_
+**Σ** 1)
+
+
+_√_
+**Σ** 1 **V** 1 _[⊤]_ [+ (] **[U]** [2]
+
+
+**Σ** 2� _m×_ ( _r_ + _r_ ) [�] _[√]_ _√_ **Σ** 1 **V** 1 _[⊤][⊤]_
+
+
+_√_
+**Σ** 2)
+
+
+**Σ** 2 **V** 2 _[⊤]_
+
+
+_√_
+**Σ** 1 _,_ **U** 2
+
+
+**Σ** 2 **V** 2 _[⊤]_
+
+
+�( _r_ + _r_ ) _×n_
+
+
+SVD
+==== ( **U** 3 **Σ** 3 **V** 3 _[⊤]_ [)(] **[U]** [4] **[Σ]** [4] **[V]** 4 _[⊤]_ [)]
+
+
+_√_
+= ( **U** 3 **Σ** 3 **V** 3 _[⊤]_ **[U]** [4]
+
+
+_√_
+**Σ** 4): _,_ : _r_ (
+
+
+**Σ** 4 **V** 4 _[⊤]_ [)][:] _[r,]_ [:]
+
+
+= **B** [ˆ] **A** [ˆ]
+
+
+D.5 PROOF OF THE LOSSLESSNESS OF MEANINGFUL MODEL UPDATES IN SHE-LORA
+
+
+The losslessness of meaningful model updates in the aggregation of SHE-LoRA is supported by the
+following theorem.
+
+
+23
+
+
+**Theorem 1** _Whether a column of the parameter matrix is encrypted or not, it will always be inte-_
+_grated into the aggregated model, and hence results in no loss of meaningful model updates._
+
+
+**Proof 1** _Suppose that for clients_ 1 _to N_ _, their encryption budgets are γi_ _(γ_ 1 _≤_ _γ_ 2 _· · ·_ _≤_ _γN_ _), and_
+_the hidden size of the model is n (i.e., number of columns in the parameter matrix)._ _Then the numbers_
+_of encrypted columns of the clients are k_ 1 = _n × γ_ 1 _≤_ _k_ 2 = _n × γ_ 2 _· · · ≤_ _kN_ = _n × γN_ _._
+
+
+_From_ _Section_ _3.3,_ _all_ _ki_ _encrypted_ _columns_ _are_ _integrated_ _in_ ∆ **W** _cipher,_ _while_ _plaintext_ _columns_
+
+_SVD_ _SVD_
+_are integrated in_ ∆ **W** _plain._ _According to Section 3.4,_ ∆ **W** _plain_ = **B** _p_ **A** _p and_ ∆ **W** _cipher_ = **B** _c_ **A** _c,_
+_respectively._ _Following Eq._ (4) _,_ _all meaningful updates are integrated in LoRA matrices as_ **B** =
+
+[ **B** _p_ **B** _c_ ] _and_ **A** = [ **A** _p_ **A** _c_ ] _[⊤]_ _._ _Finally,_ _the_ _weight_ _update_ _for_ _each_ _client_ _can_ _be_ _calculated_
+_as_ ∆ **W** = ∆ **W** _plain_ + ∆ **W** _cipher_ = [ **B** _p_ **B** _c_ ] [ **A** _p_ **A** _c_ ] _[⊤]_ = **BA** _._ _Thus,_ _whether_ _a_ _column_ _is_
+_encrypted (in_ ∆ **W** _cipher) or not (in_ ∆ **W** _plain), it will always be integrated into the aggregated model_
+_(_ ∆ **W** = **BA** _)._
+
+
+D.6 DISTRIBUTION SHIFT OF MODEL PARAMETER IMPORTANCE VALUES
+
+
+To determine whether the distribution of model parameter importance values will shift during training,
+we conduct 50 rounds of FL training on the Natural-Instructions (Wang et al., 2022) dataset under
+Non-IID conditions with the Dirichlet distribution parameter _ρ_ = 0 _._ 3. Fig. 11 illustrates the variation
+of the distribution of channel-wise importance values along with the progress of FL training. We
+can see that the specific importance values do change slightly, but their relative ranking remains
+almost unchanged as compared to Fig. 4. Considering that the parameter importance in SHE-LoRA
+is assessed via channel-wise summation of sensitivity values, the slight change of model parameter
+importance distribution has minor impact on performance.
+
+
+Moreover, considering that extreme cases (e.g., dynamic data change) may occur, especially under
+Non-IID settings, the negotiation of HE subsets can be executed periodically depending on the clients’
+tolerance to the change of model parameter importance distribution. Specifically, the theoretical costs
+of negotiation and training per layer on a client are listed in Table 3.
+
+
+Table 3: Theoretical costs of negotiation and training per layer.
+
+|Col1|Communication|Computation|
+|---|---|---|
+|Negotiation_ × N r_|4 Bytes_ ×_ hidden size_ ×_ ratio_ × N r_|Forward_ × N r_|
+|Training_ ×_ 1|2 Bytes_ ×_ rank_ ×_ hidden size|Backpropagation_ ×_ 1|
+
+
+With precision=bf16, encryption ratio=1% and _r_ =16, FL training generally takes _N_ _[r]_ _<_ 50 rounds
+for convergence. Even if the negotiation is executed per round, the negotiation communication
+overhead of 50 rounds is 4 Bytes _×_ 6656 hidden size (Llama-30B) _×_ 1% _×_ 50=13 KB, which is much
+smaller than the overall training communication overhead (2 Bytes _×_ 16 _×_ 6656 hidden size (Llama30B)=213 KB). However, although the computation cost of a “Forward” is much lower than that of a
+“Backpropagation”, the computation cost of N rounds of “Forward” will gradually increase along
+with the training progress. Therefore, the clients can choose the negotiation period according to their
+expected balance between model parameter importance update timeliness and computation cost.
+
+
+D.7 PROOF OF ASYMPTOTIC GAUSSIAN-DISTRIBUTED NOISE
+
+
+Let **G** = [ _g_ 1 _, . . ., gn_ ] _∈_ R _[r][×][n]_ be the gradient matrix from LoRA fine-tuning, with columns _gk_ _∈_ R _[r]_,
+and let **P** be the permutation matrix corresponding to a uniform random permutation _π_ ( _·_ ). We define
+the noise matrix as **Θ** = **G** ( **P** _−_ **I** ), so that the noise added on each gradient element is calculated as
+_σi,k_ = _gi,π_ ( _k_ ) _−_ _gi,k_ . For any fixed linear query matrix **Q** _∈_ R _[r][×][n]_, the query output is:
+
+
+_n_
+
+- **Q** _i,k_ ( _gi,π_ ( _k_ ) _−_ _gi,k_ ) _._ (16)
+
+
+_k_ =1
+
+
+_O_ **Q** ( **Θ** ) = _⟨_ **Q** _,_ **Θ** _⟩_ =
+
+
+_r_
+
+
+_i_ =1
+
+
+24
+
+
+Rank:16 - FL Round:1 Rank:16 - FL Round:3 Rank:16 - FL Round:4 Rank:16 - FL Round:5
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+Rank:16 - FL Round:6 Rank:16 - FL Round:7 Rank:16 - FL Round:8 Rank:16 - FL Round:9
+
+
+0.4
+
+
+0.4
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:10 0.4 Rank:16 - FL Round:11 Rank:16 - FL Round:12 Rank:16 - FL Round:13
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.2
+
+
+0.3
+
+0.2
+
+0.1
+
+
+Rank:16 - FL Round:14 Rank:16 - FL Round:15 Rank:16 - FL Round:16 Rank:16 - FL Round:17
+
+
+0.4
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.4
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:18 Rank:16 - FL Round:19 Rank:16 - FL Round:20 Rank:16 - FL Round:21
+
+
+0.4
+
+
+0.4
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:22 Rank:16 - FL Round:23 Rank:16 - FL Round:24 Rank:16 - FL Round:25
+
+
+0.4
+
+
+0.4
+
+
+0.4
+
+
+0.2
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:26 Rank:16 - FL Round:27 Rank:16 - FL Round:28 Rank:16 - FL Round:29
+
+
+0.4
+
+
+0.4
+
+
+0.4
+
+
+0.2
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:30 Rank:16 - FL Round:31 Rank:16 - FL Round:32 Rank:16 - FL Round:33
+
+
+0.4
+
+
+0.4
+
+
+0.4
+
+
+0.2
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:34 Rank:16 - FL Round:35 Rank:16 - FL Round:36 Rank:16 - FL Round:37
+
+
+0.4
+
+
+0.4
+
+
+0.4
+
+
+0.2
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:38 Rank:16 - FL Round:39 Rank:16 - FL Round:40 Rank:16 - FL Round:41
+
+
+0.4
+
+
+0.4
+
+
+0.4
+
+
+0.2
+
+
+0.2
+
+
+0.2
+
+
+Rank:16 - FL Round:42 Rank:16 - FL Round:43 Rank:16 - FL Round:44 0.4 Rank:16 - FL Round:45
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.2
+
+
+Rank:16 - FL Round:46 Rank:16 - FL Round:47 0.4 Rank:16 - FL Round:48 Rank:16 - FL Round:49
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.4
+
+
+0.2
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+
+0.2
+
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.3
+
+0.2
+
+0.1
+
+
+0.3
+
+0.2
+
+0.1
+
+
+Figure 11: Distribution of model parameter importance values across FL rounds.
+
+
+25
+
+
+The randomness comes solely from the permuted sum [�] _i,k_ **[Q]** _[i,k][g][i,π]_ [(] _[k]_ [)][, which is a combinatorial]
+
+statistic of the form studied in (Hoeffding, 1951). Therefore, by combinatorial central limited theorem
+(Hoeffding, 1951) and Berry–Esseen bound (Bolthausen, 1984), we have
+
+
+    - 1
+
+_−_ Φ( _x_ ) = _O_ ~~_√_~~
+
+_n_
+�����
+
+
+_O_ **Q** ( **Θ** )
+
+~~�~~ Var[ _O_ **Q** ( **Θ** )]
+
+
+_−−→N_ dist (0 _,_ 1) _,_ sup
+_x∈_ R
+
+
+_P_
+�����
+
+
+- _O_ **Q** ( **Θ** ) _≤_ _x_
+�Var[ _O_ **Q** ( **Θ** )]
+
+
+_._ (17)
+
+
+The first statement means that the response to any fixed linear query is asymptotically Gaussian,
+and the second quantifies the approximation error as _O_ (1 _/_ _[√]_ _n_ ). Moreover, by the classical variance
+formula for permuted linear statistics (Hoeffding, 1951; Hájek, 1961), we have
+
+
+_n_ �( _gi,k −_ _g_ ¯ _i_ ) [2]
+
+
+_k_ =1
+
+
+_,_ (18)
+
+
+- _n_
+
+ 
+
+
+_n_ �� _n_
+�( **Q** _i,k −_ **Q** [¯] _i_ ) [2] 
+
+_k_ =1 _k_ =1
+
+
+Var[ _O_ **Q** ( **Θ** )] =
+
+
+_r_
+
+
+_i_ =1
+
+
+1
+_n −_ 1
+
+
+_n_ [1] - _nk_ =1 _[g][i,k]_ [and] **[Q]** [¯] _[i]_ [=] _n_ [1]
+
+
+where ¯ _gi_ = [1]
+
+
+_n_ [1] - _nk_ =1 **[Q]** _[i,k]_ [.]
+
+
+For fixed **G** and **Q**, we define _s_ [2] as the variance of _O_ **Q** ( **Θ** ). Since this asymptotic normality holds for
+every fixed query matrix _Q_, the Cramér–Wold device (Cramér & Wold, 1936) implies that the noise
+matrix **Θ**, viewed as a random vector in R _[rn]_, converges in distribution to a zero-mean multivariate
+Gaussian with the same covariance structure as **Θ** . Consequently, **Θ** behaves like Gaussian noise for
+all linear queries.
+
+
+E DISTRIBUTABILITY AND SCALABILITY
+
+
+Our system implementation is predicated upon Flower, an open-source FL framework developed by a
+team at the University of Oxford. Flower is designed to streamline the construction of FL systems
+while affording a high degree of flexibility and scalability. It supports a variety of mainstream machine
+learning frameworks, such as PyTorch, TensorFlow, and Hugging Face Transformers, rendering it
+suitable for researchers and engineers addressing FL requirements across diverse scenarios. Flower
+allows users to extensively configure the framework according to their specific needs, thereby
+accommodating various FL scenarios while offering substantial support for AI research. Based on
+Flower, our SHE-LoRA supports parallelized simulation and multi-machine deployment, capable of
+satisfying the distributed and scalable requirements inherent in real-world applications.
+
+
+E.1 PERFORMANCE ON MORE CLIENTS
+
+
+We repeat the experiment of bert-large model with 100, 300, 500, 1000, 2000 clients on the IMDB
+datasets, which takes 1.58, 4.14, 6.91, 13.8 and 25.3 hours to complete 10 rounds of FL training.
+Each client encrypts 0.5% of OpenLLaMA-3B with the same rank (16). The means and standard
+deviations of HE time and communication overhead are listed in Table 4.
+
+
+Table 4: HE time and communication overhead on varying number of clients.
+
+|# of Clients|HE Time|Communication Overhead|
+|---|---|---|
+|100<br>300<br>500<br>1000<br>2000|53.34_±_0.5s<br>53.57_±_0.5s<br>53.49_±_0.6s<br>54.23_±_0.8s<br>54.19_±_1.1s|93.39_±_0.1MB<br>93.39_±_0.1MB<br>93.39_±_0.1MB<br>93.39_±_0.1MB<br>93.39_±_0.1MB|
+
+
+We find that although the convergence of FL training does slow down along with the increase of
+clients, thanks to SHE-LoRA’s global control over HE subset, the clients’ HE time and communication
+overhead do not significantly inflate even in extreme heterogeneity with >1000 clients. This means
+that SHE-LoRA will not delay FL training and scales well with increased number of clients.
+
+
+26
+
+
+E.2 PERFORMANCE ON LARGER LLMS
+
+
+We deploy SHE-LoRA on larger LLMs including OpenLlama-3B, Llama-3-8B, Llama-30B and
+Llama-3.1-70B, and analyze its scalability in comparison with the DP baseline. Specifically, as
+Section 4.4 has confirmed that SHE-LoRA is secure against the DAGER attack as long as more
+than 0.125% of the parameters are encrypted, we let each client encrypt 0.125% of the parameters
+in the scalability experiments with rank _r_ =16. In the DP baseline, we let each client add DP noise
+to parameters with ( _ϵ_, _σ_ ) = (10, 10 _[−]_ [7] ), which is the same as in the DAGER (Petrov et al., 2024)
+experiments. The HE key size for OpenLlama-3B and Llama-3-8B is set to 8192. However, the HE
+key size for Llama-30B and Llama-70B is set to 16384 as the HE key size of 8192 cannot hold a
+single column (minimum encryption unit in SHE-LoRA) of LLMs at this scale. Then, we measure
+the encryption time, time cost with DP and ciphertext size per client under varying model scales. The
+mean and standard deviation of the measured results are shown in Table 5.
+
+
+Table 5: The costs under varying model scales.
+
+
+OpenLlama-3B Llama-3-8B Llama-30B Llama-3.1-70B
+
+# of Layers 26 32 60 80
+Hidden Size 3200 4096 6656 8192
+Encryption Budget 0.125% 0.125% 0.125% 0.125%
+Encrypted Parameters 1,664 2,624 8,040 13,120
+Encryption Time (s) 2.67 _±_ 0.32 4.46 _±_ 0.73 148.70 _±_ 5.41 242.32 _±_ 8.72
+HE Key Size 8192 8192 16384 16384
+Time Cost with DP (s) 0.0548 _±_ 0.001 0.0878 _±_ 0.005 0.2693 _±_ 0.028 0.4575 _±_ 0.061
+Ciphertext Size (MB) 23.34 _±_ 0.00 35.91 _±_ 0.01 289.37 _±_ 0.01 385.84 _±_ 0.03
+
+
+When HE key size is 8192, for OpenLlama-3B, encryption time per parameter=2.67/1664=0.0016
+s, ciphertext size per parameter=23.34/1664=0.0140 MB; for Llama-3-8B, encryption time per
+parameter=4.46/2624=0.0017 s, ciphertext size per parameter=35.91/2624=0.0137 MB.
+
+
+When HE key size is 16384, for Llama-30B, encryption time per parameter=148.70/8040=0.0185
+s, ciphertext size per parameter=289.37/8040=0.0360 MB; for Llama-3.1-70B, encryption time per
+parameter=242.32/13120=0.0184 s, ciphertext size per parameter=385.84/13120=0.0294 MB.
+
+
+These observations demonstrate that when LLMs are encrypted with the same level of HE key size,
+the encryption time and ciphertext size scale almost linearly with the increase of LLM scale. Although
+the time cost with DP is much lower than that of SHE-LoRA, DP may significantly degrade model
+accuracy (Sun et al., 2024c), and is vulnerable against inversion attacks under low-noise-level settings
+(as shown in Table 10 of (Petrov et al., 2024) and Table 2)]).
+
+
+E.3 PERFORMANCE ON STRONGER BASE MODELS AND MORE CHALLENGING BENCHMARKS
+
+
+We conduct the fine-tuning of Qwen3-4B-Instruct-2507 [3] and Llama-3.2-3B [4] with SHE-LoRA and
+Vanilla LoRA on the PILE dataset [5], and evaluate the performance of the fine-tuned models on six
+benchmarks: MMLU-Pro [6], GPQA [7], MuSR [8], MATH [9], IFEval [10], and BBH [11] . The collected results
+of SHE-LoRA, Vanilla LoRA and the base model without fine-tuning are shown in Table 6.
+
+
+The results demonstrate that SHE-LoRA preserves the original LoRA performance while providing
+privacy via selective HE. This benefit generalizes across stronger base model families and diverse
+tasks, provided that federated LoRA is used for PEFT.
+
+
+[3https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507)
+[4https://huggingface.co/meta-llama/Llama-3.2-3B](https://huggingface.co/meta-llama/Llama-3.2-3B)
+[5https://huggingface.co/datasets/iamgroot42/mimir](https://huggingface.co/datasets/iamgroot42/mimir)
+[6https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro](https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro)
+[7https://github.com/idavidrein/gpqa](https://github.com/idavidrein/gpqa)
+[8https://github.com/Zayne-sprague/MuSR](https://github.com/Zayne-sprague/MuSR)
+[9https://huggingface.co/datasets/nlile/hendrycks-MATH-benchmark](https://huggingface.co/datasets/nlile/hendrycks-MATH-benchmark)
+[10https://huggingface.co/datasets/google/IFEval](https://huggingface.co/datasets/google/IFEval)
+[11https://github.com/suzgunmirac/BIG-Bench-Hard](https://github.com/suzgunmirac/BIG-Bench-Hard)
+
+
+27
+
+
+Table 6: Performance comparison of Qwen-3 and Llama-3.2 across more challenging benchmarks.
+
+
+|Method|Method|MMLU-Pro GPQA MuSR MATH IFEval BBH|
+|---|---|---|
+|Qwen3-4B|SHE-LoRA<br>Vanilla LoRA<br>Base|47.36<br>43.94<br>30.71<br>78.86<br>67.34<br>63.26<br>48.54<br>42.57<br>32.31<br>77.63<br>68.06<br>64.58<br>65.36<br>45.00<br>61.67<br>84.00<br>90.17<br>85.93|
+|Llama-3.2-3B|SHE-LoRA<br>Vanilla LoRA<br>Base|14.86<br>13.64<br>17.86<br>21.74<br>27.24<br>9.26<br>14.62<br>13.87<br>18.05<br>20.96<br>27.37<br>9.38<br>14.29<br>11.11<br>30.95<br>16.68<br>27.99<br>10.85|
+
+
+F ADDITIONAL EXPERIMENTAL RESULTS
+
+
+F.1 PERFORMANCE ON VARYING TASKS
+
+
+We employ FedIT (Zhang et al., 2024) and FedSA (Guo et al., 2024) as baseline methods under
+homogeneous settings (rank _r_ =8). FedIT averages LoRA weights across clients, limiting the rank
+according to the capability of the weakest device. FedSA trains matrix **B** locally while aggregating
+matrix **A** globally, leveraging FL to enhance the representation capacity of LoRA. Moreover, we
+employ FLoRA (Wang et al., 2024), HeterLoRA (Cho et al., 2024) and Flex-LoRA (Bai et al., 2024)
+as baselines under heterogeneous settings. FLoRA utilizes stacking to reduce full-weight computation
+and achieve precise averaging across heterogeneous LoRA updates, but at the cost of an expanded
+parameter space. HeterLoRA zero-pads all LoRA matrices to the global maximum rank, applies
+weight-averaged aggregation similar to FedAvg, and subsequently truncates the aggregated weights
+to align with the local rank of each client. However, zero-padding introduces additional dilution
+in the aggregated parameters, which in turn leads to degraded model performance. Flex-LoRA
+reconstructs the full parameter matrix for each client by computing _B × A_ and performs aggregation.
+Subsequently, the aggregated matrix is decomposed using SVD and truncated according to the client’s
+LoRA rank, producing a low-rank parameter matrix.
+
+
+F.1.1 RESULTS ON NLP TASKS
+
+
+**Natural Language Generation** : According to the results in Table 7, FedIT and FedSA perform
+the worst on the MMLU Benchmark, obtaining scores of 21.2 and 20.1, respectively. These results
+indicate the limitations of traditional homogeneous approaches in heterogeneous LoRA settings,
+where the inability to effectively utilize client-specific information hinders overall performance.
+While HeterLoRA integrates parameters from heterogeneous devices to improve performance, its
+reliance on zero-padding leads to parameter dilution, resulting in inferior performance compared to
+Flex-LoRA. SHE-LoRA achieves the highest scores on STEM, Social Sciences(SS) and the overall
+Average, and matches Flex-LoRA’s performance on Humanities. Both methods outperform all other
+baselines by a significant margin. These results indicate that SHE-LoRA better preserves informative
+updates in heterogeneous generative tasks, leading to improved generalization and performance.
+
+
+Table 7: Performance on the MMLU benchmark.
+
+
+**Method** **STEM** **SS** **Humanities** **Average**
+
+FedIT (Zhang et al., 2024) 21.5 21.3 20.4 21.2
+FedSA (Guo et al., 2024) 21.8 21.4 19.7 20.1
+HeterLoRA (Cho et al., 2024) 24.7 25.4 25.8 26
+Flex-LoRA (Bai et al., 2024) 26.2 27.9 **26.6** 27.4
+SHE-LoRA **28.1** **29.2** 26.5 **28.2**
+
+
+**Natural Language Understanding** : Similarly, we reviewed on the six datasets of GLUE Benchmark
+in Table 8, and the performances of FedIT and FedSA reaffirmed the limitations of traditional
+aggregation methods in heterogeneous scenarios. Flex-LoRA and SHE-LoRA, on the other hand,
+outperform the other methods, demonstrating that SHE-LoRA can more effectively update model
+parameters in heterogeneous environments while achieving performance comparable to non-private
+methods. Unsurprisingly, HeterLoRA achieves better performance than homogeneous baselines.
+However, it lags behind Flex-LoRA and SHE-LoRA, primarily due to the performance degradation
+caused by parameter dilution.
+
+
+28
+
+
+Table 8: Performance on the GLUE benchmark.
+
+
+**Method** **SST2** **MRPC** **QQP** **RTE** **WNLI** **QNLI**
+
+FedIT (Zhang et al., 2024) 47.41 31.62 64.71 43.07 46.34 48.87
+FedSA (Guo et al., 2024) 48.23 33.71 66.32 43.56 48.27 48.26
+HeterLoRA (Cho et al., 2024) 55.73 68.38 72.17 44.72 48.86 49.14
+Flex-LoRA (Bai et al., 2024) 52.29 **74.81** **75.31** 46.93 49.66 49.51
+SHE-LoRA **57.11** 70.88 72.52 **50.18** **57.75** **59.63**
+SHE-LoRA demonstrates strong performance across both benchmarks, achieving SOTA results in
+heterogeneous settings while maintaining optimal performance despite the integration of privacypreserving mechanisms.
+
+
+Table 9: Performance comparison on 5 vision tasks.
+
+
+**Datasets**
+**Method** **MNIST** **DTD** **EuroSAT** **GTSRB** **SVHN** **AVG**
+_Clip-Vit-Base-Patch-16_ r = 8
+
+FedIT (Zhang et al., 2024) 93.38 68.74 93.17 83.62 90.43 85.87
+FedSA (Guo et al., 2024) 93.13 67.51 94.23 85.12 88.49 85.69
+HeterLoRA (Cho et al., 2024) 95.37 68.83 96.22 87.18 91.55 87.83
+Flex-LoRA (Bai et al., 2024) 99.28 **70.32** **98.48** 95.74 **95.37** **91.84**
+SHE-LoRA **99.33** 69.97 98.35 **95.88** 95.13 91.73
+_Clip-Vit-Base-Patch-16_ r = 16
+
+FedIT (Zhang et al., 2024) 95.36 68.85 94.56 85.37 91.58 87.14
+FedSA (Guo et al., 2024) 94.62 67.92 95.18 87.23 90.67 87.12
+HeterLoRA (Cho et al., 2024) 94.56 68.21 96.77 89.62 92.28 88.29
+Flex-LoRA (Bai et al., 2024) **99.30** 70.05 **98.29** **95.45** 95.15 91.65
+SHE-LoRA 99.25 **70.85** 98.22 95.35 **96.03** **91.94**
+
+
+F.1.2 RESULTS ON VISION TASKS
+
+
+We apply CLIP (Radford et al., 2021) as the basic pre-trained model for vision tasks, a multimodal
+model that mixes visual model and language model. Specifically, we load the Clip-Vit-Base-Patch-16
+model from huggingface [12] and fine-tune its visual model, and conduct experiments on five visual
+classification tasks, which are MNIST (LeCun et al., 2002), DTD (Cimpoi et al., 2014), EuroSAT
+(Helber et al., 2019), GTSRB (Stallkamp et al., 2012), SVHN (Netzer et al., 2011). We conduct FL
+training for 10 rounds on each task, and set that each client has the same LoRA rank.
+
+
+The results are shown in Table 9. The highest accuracy (%) for each task is highlighted in **blod** . At
+rank _r_ = 8, SHE-LoRA achieves a comparable average accuracy (91.73%) to that of Flex-LoRA
+(91.84%), while outperforming FedIT, FedSA and HeterLoRA. At the rank of _r_ = 16, SHE-LoRA
+can even achieve the best average accuracy (91.94%). The results indicate that the privacy protection
+mechanism of SHE-LoRA will not lead to significant performance degradation.
+
+
+F.2 ROBUSTNESS UNDER VARYING NON-IID CONDITIONS
+
+
+The results of SHE-LoRA in Tables 7 and 8 are collected under the Dirichlet distribution with
+parameter _ρ_ =0.3, which confirm that SHE-LoRA achieves comparable performance to a SOTA
+non-private Federated PEFT method (Flex-LoRA) on various benchmarks under Non-IID conditions.
+
+
+To further validate the robustness of SHE-LoRA under varying Non-IID conditions, we conduct more
+experiments on the natural-instructions dataset with _ρ_ set to 0.1, 0.5, 1 and 10, respectively. A smaller
+_ρ_ indicates a greater Non-IID degree among clients. The experiment is repeated for 10 rounds under
+each _ρ_ value. The mean, standard deviation of model accuracies collected on the MMLU Benchmark
+are shown in Table 10 ( _↑_ means that higher accuracy is better):
+
+
+[12https://huggingface.co/openai/clip-vit-base-patch16](https://huggingface.co/openai/clip-vit-base-patch16)
+
+
+29
+
+
+Table 10: MMLU benchmark under varying Non-IID conditions.
+
+
+_ρ_ STEM _↑_ SS _↑_ Humanities _↑_ Average _↑_
+0.1 24.8 _±_ 0.00 25.5 _±_ 0.35 25.4 _±_ 0.15 25.9 _±_ 0.09
+0.5 24.7 _±_ 0.15 25.6 _±_ 0.46 25.4 _±_ 0.21 25.8 _±_ 0.21
+1 24.7 _±_ 0.51 25.4 _±_ 0.11 25.3 _±_ 0.25 25.8 _±_ 0.06
+10 24.8 _±_ 0.21 25.4 _±_ 0.12 25.5 _±_ 0.11 25.8 _±_ 0.10
+
+We can see that no matter how Non-IID the clients’ data is, the models trained with SHE-LoRA
+can achieve stable performance across clients, which validates the robustness of SHE-LoRA under
+varying Non-IID conditions.
+
+
+F.3 EFFICIENT ESTIMATION OF MUTUAL INFORMATION
+
+
+As described in Section 2.2, mutual information measures the amount of information shared between
+two variables. According to Eq. (3), evaluating the mutual information requires knowledge of _p_ ( _x_ ),
+_p_ ( _y_ ) and the joint density _p_ ( _x, y_ ), yet in practice we have only samples and not the true densities. The
+simplest empirical approach is a histogram (binning) estimator, which partitions the space and counts
+frequencies. However, histograms require large sample sizes and are sensitive to the choice of binning.
+A more stable nonparametric approach is to employ kernel density estimators (KDE) (Moon et al.,
+1995). Concretely, flatten the parameter matrices **W** and **W** _−_ **w** into one-dimensional collections
+and treat the corresponding elements as paired samples _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1 [.] [In] [this] [step,] [the] [marginal]
+distribution of _p_ ( _x_ ), _p_ ( _y_ ) and the joint density _p_ ( _x, y_ ) are estimated by kernel density estimation
+(KDE), which constructs a smooth probability density function by centering kernel functions (e.g.,
+Gaussian) at each sample point and aggregating them with an appropriate bandwidth. Once these
+probability density variables are obtained, they are substituted into Eq. (3) to compute the final mutual
+information. The code for the mutual information calculation is given as follows:
+
+
+from sklearn.neighbors import KernelDensity
+def kde_mutual_info(X_flat, Y_flat, bandwidth=0.2):
+X_flat = X_flat.flatten()
+Y_flat = Y_flat.flatten()
+n = len(X_flat)
+sample_num = min(10000, n)
+sample_points = np.random.choice(n, sample_num, replace=False)
+X_sample = X_flat[sample_points].reshape(-1, 1)
+Y_sample = Y_flat[sample_points].reshape(-1, 1)
+XY_sample = np.hstack([X_sample, Y_sample])
+kde_x = KernelDensity(bandwidth=bandwidth).fit(X_sample)
+kde_y = KernelDensity(bandwidth=bandwidth).fit(Y_sample)
+kde_xy = KernelDensity(bandwidth=bandwidth).fit(XY_sample)
+log_px = kde_x.score_samples(X_sample)
+log_py = kde_y.score_samples(Y_sample)
+log_pxy = kde_xy.score_samples(XY_sample)
+return np.mean(log_pxy   - log_px   - log_py)
+
+
+F.4 RESISTANCE AGAINST MEMBERSHIP INFERENCE ATTACKS
+
+
+We fine-tune the base model Qwen3-4B-Instruct-2507 on the PILE dataset using standard LoRA
+(denoted as _Vanilla LoRA_ in tables) and SHE-LoRA with varying encryption ratios _γ_, respectively.
+Then, we implement seven membership inference attacks (MIAs)(Loss (Carlini et al., 2021), Lowercase (Carlini et al., 2021), Zlib (Carlini et al., 2021), Min-k (0.1) (Shi et al., 2024), Min-k (0.5) (Shi
+et al., 2024), Recall (Xie et al., 2024) and PAC (Ye et al., 2024)) on the base model (denoted as _Base_
+in tables) and the fine-tuned models of Vanilla LoRA and SHE-LoRA. Under SHE-LoRA, attackers
+can only launch MIAs based on unencrypted parameters. The attack results are reported in AUROC
+with Table 11, FPR@95 with Table 12 and TPR@5 with Table 13.
+
+
+In the AUROC results, _Base_ performs no better than random guessing (with AUROC _≈_ 50%), confirming that the pretraining corpus does not include the evaluation data. In contrast, Vanilla LoRA
+achieves much higher AUROC results across all attacks, indicating substantial membership leakage
+after fine-tuning. Remarkably, compared with Vanilla LoRA, SHE-LoRA reduces the average MIA
+
+
+30
+
+
+Table 11: The AUROC results reported under 7 membership inference attacks.
+
+|Model|Loss Lowercase Zlib Min-k (0.1) Min-k (0.5) Recall PAC|
+|---|---|
+|Base<br>Vanilla LoRA<br>_γ_ = 1‰<br>_γ_ = 1%<br>_γ_ = 5%<br>_γ_ = 10%<br>_γ_ = 20%|50.9%<br>48.4%<br>50.2%<br>50.5%<br>50.9%<br>50.1%<br>51.2%<br>81.4%<br>80.5%<br>76.7%<br>80.9%<br>82.9%<br>73.8%<br>83.3%<br>62.6%<br>62.8%<br>60.3%<br>62.5%<br>63.5%<br>64.7%<br>65.0%<br>56.8%<br>57.7%<br>55.4%<br>56.5%<br>57.3%<br>58.4%<br>58.4%<br>54.1%<br>55.2%<br>53.1%<br>53.7%<br>54.3%<br>55.8%<br>55.3%<br>56.8%<br>57.7%<br>55.4%<br>56.5%<br>57.3%<br>58.4%<br>58.4%<br>52.4%<br>53.2%<br>51.7%<br>52.1%<br>52.5%<br>53.1%<br>53.3%|
+
+
+success rate by 21.0% with an encryption ratio as low as _γ_ = 1‰. With the increasing of _γ_ (e.g.,
+to 1%), attack success rates further drop by 20.9% 30.9%, resulting in nearly random-guessing
+performance and demonstrating significantly stronger privacy protection.
+
+
+Table 12: The FPR@95 results reported under 7 membership inference attacks.
+
+|Model|Loss Lowercase Zlib Min-k (0.1) Min-k (0.5) Recall PAC|
+|---|---|
+|Base<br>Vanilla LoRA<br>_γ_ = 1‰<br>_γ_ = 1%<br>_γ_ = 5%<br>_γ_ = 10%<br>_γ_ = 20%|94.1%<br>95.4%<br>96.1%<br>96.1%<br>95.2%<br>95.5%<br>95.7%<br>66.5%<br>63.3%<br>88.8%<br>71.4%<br>66.2%<br>79.2%<br>72.1%<br>89.7%<br>86.9%<br>93.9%<br>90.8%<br>90.3%<br>90.5%<br>89.9%<br>92.4%<br>90.7%<br>95.2%<br>93.8%<br>93.4%<br>91.6%<br>93.1%<br>93.2%<br>92.1%<br>95.5%<br>94.5%<br>94.1%<br>93.1%<br>93.8%<br>92.4%<br>90.7%<br>95.2%<br>93.8%<br>93.4%<br>91.6%<br>93.1%<br>93.2%<br>93.5%<br>95.6%<br>95.4%<br>95.1%<br>94.0%<br>94.8%|
+
+
+Table 13: The TPR@5 results reported under 7 membership inference attacks.
+
+|Model|Loss Lowercase Zlib Min-k (0.1) Min-k (0.5) Recall PAC|
+|---|---|
+|Base<br>Vanilla LoRA<br>_γ_ = 1‰<br>_γ_ = 1%<br>_γ_ = 5%<br>_γ_ = 10%<br>_γ_ = 20%|8.6%<br>5.6%<br>7.4%<br>5.5%<br>8.0%<br>5.1%<br>9.9%<br>35.7%<br>35.6%<br>39.7%<br>39.4%<br>41.8%<br>25.4%<br>53.5%<br>12.5%<br>13.0%<br>15.2%<br>14.0%<br>14.5%<br>15.4%<br>17.4%<br>9.7%<br>9.3%<br>10.8%<br>9.1%<br>10.2%<br>10.3%<br>15.0%<br>9.0%<br>7.4%<br>9.1%<br>7.3%<br>9.3%<br>7.7%<br>12.4%<br>9.7%<br>9.3%<br>10.8%<br>9.1%<br>10.2%<br>10.3%<br>11.9%<br>8.2%<br>6.7%<br>8.5%<br>6.5%<br>8.2%<br>6.2%<br>11.1%|
+
+
+Consistent with the AUROC results, even at _γ_ = 1‰, SHE-LoRA achieves an average FPR@95 of
+90.27% and an average TPR@5 of 14.57%, closely comparable to the base model’s performance
+(FPR@95=95.44%, TPR@5=7.16%). In contrast, Vanilla LoRA is significantly more vulnerable,
+with an average FPR@95 of 72.50% and TPR@5 of 38.73%. These results demonstrate that SHELoRA preserves membership privacy during fine-tuning: even under a very small encryption ratio,
+attackers can only achieve performance close to random guessing, with negligible advantage in
+distinguishing members from non-members.
+
+
+In summary, experiments on Qwen3-4B-Instruct-2507 across seven MIAs demonstrate that SHELoRA is consistently robust. This stems from two key design features: 1) selective encryption of
+the most sensitive parameter columns prevents direct leakage of privacy-critical information, and 2)
+column-wise position obfuscation, similar to injecting structured perturbations (see Appendix D.7),
+increases uncertainty for attackers. These mechanisms also mitigate property inference and reconstruction attacks that leverage auxiliary priors, as they obscure the very gradients or parameters these
+attacks typically exploit.
+
+
+F.5 IMPACT OF SENSITIVE PARAMETERS ON PERFORMANCE
+
+
+As theoretically established in Appendix B.1, parameter sensitivity is closely linked to privacy
+risk. To empirically validate this connection, we conduct experiments on the PILE dataset using
+the Qwen3-4B-Instruct-2507 model. Specifically, we fine-tune the model on the training set and
+
+
+31
+
+
+Table 14: Model performance comparison with perplexity.
+
+|Model|Base Vanilla LoRA γ = 1‰ γ = 1% γ = 5% γ = 10%|
+|---|---|
+|PPL|74.01<br>21.23<br>38.83 / 21.23<br>50.53 / 21.23<br>55.21 / 21.23<br>60.57 / 21.23|
+
+
+evaluate text generation quality via perplexity (PPL) on the validation set. A higher PPL indicates
+poorer adaptation to the target domain. We compare three settings Table 14: (i) the original base
+model (denoted as _Base_ ), (ii) a raw LoRA-finetuned model (denoted as _Vanilla LoRA_ ), and (iii) SHELoRA with varying encryption ratios _γ_ . This allows us to assess whether protecting high-sensitivity
+parameters, rather than removing or ignoring them, preserves model utility while enhancing privacy.
+
+
+SHE-LoRA reports two PPL metrics: the value on the left of “/” reflects the model performance
+when encrypted parameters are masked (i.e., using only unencrypted columns), while the value on
+the right of “/” reflects the model’s true performance without masking parameters. As expected, _Base_
+exhibits high PPL due to lack of domain adaptation, whereas _Vanilla LoRA_ significantly reduces PPL,
+confirming effective learning. Notably, SHE-LoRA with an encryption ratio of merely 1‰ already
+raises the masked PPL to 38.83, indicating that even trivial removal of the most sensitive columns
+substantially degrades utility. In contrast, the PPL result on the right of “/” is nearly identical to that
+of _Vanilla LoRA_, demonstrating sound utility preservation under SHE-LoRA. Furthermore, as the
+encryption ratio increases, masked PPL consistently rises, confirming that SHE-LoRA prioritizes the
+most privacy-sensitive columns.
+
+
+G TABLE OF NOTATIONS
+
+
+Table 15 lists the main notations used in this paper.
+
+
+Table 15: Table of Notations
+
+|Notation|Description|
+|---|---|
+|**W** _∈_R_m×n_|Model parameters of a LLM|
+|**W**_−w ∈_R_m×n_|Model parameters with_ w_ zeroed-out|
+|**W**0 _∈_R_m×n_|Frozen pre-trained parameters|
+|**A**_ ∈_R_r×n_|Low-rank adapter matrix A of LoRA|
+|**B**_ ∈_R_m×r_|Low-rank adapter matrix B of LoRA|
+|**X**_ ∈_R_L×n_|Input embedding|
+|**G**|Gradient Matrix|
+|_L_(_·_)|<br>Loss function|
+|Ω(_·_)|Sensitivity computation function|
+|_S_(_·_)|Selective HE method|
+|_R_(_·_)|Any data reconstruction attack method|
+|_r_|Rank of LoRA adapter|
+|_L_|Number of tokens in an input sequence|
+|_xi ∈_R_L_|The_ i_-th features in the input|
+|_I_(_W_;_ W−w_)|Mutual information between_ W_ and_ W−w_|
+|_γi_|Ratio of parameters in client_ i_ for encryption|
+|_ki_|Number of columns in client_ i_ for encryption|
+|_Gi_|Group of indices of selected columns in client_ i_|
+|_Si_|Sensitivities of the columns in_ Gi_ on client_ i_|
+|_bi_|<br>Block_ i_ of tensor to be encrypted|
+|_N b_|Number of tensor blocks to be encrypted|
+|_pk_|Public HE key|
+|_Ci_|Ciphertext of the_ i_-th block|
+|_K_|Max columns of unencrypted parameters among clients|
+
+
+H LIMITATIONS
+
+
+As described in Section 2.3 and Appendix C, SHE-LoRA operates under the assumption of an
+honest-but-curious server, where all clients share the same HE key. Although secure communication
+channels can be used to defend against malicious clients or collusion between the server and clients,
+such mechanisms incur higher encryption costs. A promising direction for future work is to explore
+
+
+32
+
+
+more efficient distributed parameter protection using techniques such as threshold homomorphic
+encryption, multi-key homomorphic encryption, or proxy re-encryption.
+
+
+I BROADER IMPACT
+
+
+In this work, we leverage parameter sensitivity and SHE to ensure the secure aggregation of federated
+LoRA against inversion attacks such as DAGER. Such attacks are able to recover the original client
+data from clients’ updates uploaded during federated PEFT, exacerbating privacy concerns and
+hindering the possibility of FL to extract value from distributed data. Our work offers adaptive and
+sufficient privacy preservation, while minimizing HE overhead per client in cross-device federated
+PEFT with LoRA.
+
+
+Importantly, we find that with more sensitive model parameters being encrypted, the mutual information that can be leaked from the model updates drops dramatically, indicating that it is possible to
+effectively reduce the risk of privacy leakage in terms of privacy information as long as the sensitive
+model parameters are correctly encrypted. Our work implies that critical information within the
+model parameters can be soundly protected against the SOTA attacks by merely encrypting less than
+1% of the model parameters. Furthermore, we take into account the heterogeneity of the parameter
+sensitivity and encryption capabilities across clients, and broadly adapt the cost-effective SHE-LoRA
+to accommodate clients with diverse data distributions and device capabilities. With these observations, we highlight the feasibility and effectiveness of applying tailored and secure privacy protection
+for cross-device federated PEFT at much lower overhead compared to existing off-the-shelf privacy
+protection techniques.
+
+
+J THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+According to the policies on large language model usage at ICLR 2026, we state that LLMs are only
+used to help with paper writing, including spell checking, grammar checking, and polish writing.
+
+
+33

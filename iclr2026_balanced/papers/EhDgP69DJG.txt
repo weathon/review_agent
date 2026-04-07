@@ -1,0 +1,2514 @@
+# PMARK: TOWARDS ROBUST AND DISTORTION-FREE SEMANTIC-LEVEL WATERMARKING WITH CHANNEL CONSTRAINTS
+
+
+**Jiahao Huo** [1] **, Shuliang Liu** [1] _[,]_ [2] **, Bin Wang** [3] **, Junyan Zhang** [1] _[,]_ [4] **, Yibo Yan** [1] _[,]_ [2] **, Aiwei Liu** [5] **,**
+**Xuming Hu** [1] _[,]_ [2] _[∗]_, **Mingxun Zhou** [2] _[∗]_
+
+1The Hong Kong University of Science and Technology (Guangzhou)
+2The Hong Kong University of Science and Technology 3Peking University
+4National University of Singapore 5Tsinghua University
+jiahaohuotj@gmail.com mingxunz@ust.hk
+
+
+ABSTRACT
+
+
+Semantic-level watermarking (SWM) for large language models (LLMs) enhances watermarking robustness against text modifications and paraphrasing attacks by treating the sentence as the fundamental unit. However, existing methods
+still lack strong theoretical guarantees of robustness, and reject-sampling–based
+generation often introduces significant distribution distortions compared with unwatermarked outputs. In this work, we introduce a new theoretical framework on
+SWM through the concept of proxy functions (PFs) – functions that map sentences
+to scalar values. Building on this framework, we propose PMARK, a simple yet
+powerful SWM method that estimates the PF median for the next sentence dynamically through sampling while enforcing multiple PF constraints (which we
+call channels) to strengthen watermark evidence. Equipped with solid theoretical
+guarantees, PMARK achieves the desired distortion-free property and improves
+the robustness against paraphrasing-style attacks. We also provide an empirically
+optimized version that further removes the requirement for dynamical median estimation for better sampling efficiency. Experimental results show that PMARK
+consistently outperforms existing SWM baselines in both text quality and robustness, offering a more effective paradigm for detecting machine-generated text.
+[The source code is available at this URL.](https://github.com/PMark-repo/PMark)
+
+
+1 INTRODUCTION
+
+
+The rapid advancements of generative AI (GenAI) techniques (Achiam et al., 2023; Team et al.,
+2025; Rombach et al., 2022; Liu et al., 2024; Brooks et al., 2024) have transformed content creation
+across diverse fields (Mittal et al., 2024; Chen et al., 2025; Yang et al., 2024), raising significant concerns regarding the traceability of AI-generated text and copyright protection (Zhao et al., 2024; Wu
+et al., 2025). Watermarking (Kirchenbauer et al., 2023; Aaronson, 2023), which embeds distinctive
+patterns into generated content, has emerged as a critical solution to these challenges.
+Token-level watermarking schemes for text generation have been widely studied. The popular
+Green-Red scheme (Kirchenbauer et al., 2023; Zhao et al., 2023a) biases token sampling toward
+a “green” subset, enabling watermark detection via statistical tests on the frequency of green tokens.
+However, Green-Red watermarking schemes are inherently _biased_ (Hu et al., 2023), meaning that
+they deviate from the original sampling distribution of LLMs and may degrade text quality (Hu
+et al., 2023). Distortion-free methods such as Gumbel Watermarking (Aaronson, 2023) and PRCbased schemes (Christ & Gunn, 2024) have also been explored, typically associated with cryptographic techniques such as digital signatures (Rivest et al., 1978). Recently, some studies (Tsur
+et al., 2025b;a) also discuss the best trade-off between detectability and text quality by maximizing
+the likelihood of watermark detection while minimizing the distortion of generated text.
+Unfortunately, token-level watermarks can be easily removed: an attacker can simply ask an unwatermarked model to rephrase the generated text while preserving most of its semantic information (Hou et al., 2023). To improve robustness against such attacks, semantic-level watermarking
+(SWM) approaches like SemStamp (Hou et al., 2023; 2024) treat a semantically complete sentence
+as the fundamental watermarking unit. These methods employ rejection sampling to ensure that generated sentences fall within a valid semantic region of the embedding space, analogous to the green
+
+
+_∗_ Co-corresponding authors: Mingxun Zhou and Xuming Hu.
+
+
+1
+
+
+Figure 1: Illustration of PMARK pipeline in 2D space, with robustness enhanced by multi-channel
+constraints. Note that we use orthogonal pivots and distortion-free partition in practice.
+
+
+list in Green-Red watermarking. Nonetheless, this split-and-reject paradigm inherits the distortion
+drawback of Green-Red watermarking and also introduces additional weaknesses, such as sampling
+failures when all candidate sentences fall in invalid regions (Zhao et al., 2024).
+In this work, we propose a new semantic-level watermarking scheme named PMARK with the
+distortion-free property. To achieve this goal, we first establish a solid framework for analyzing
+SWM schemes based on a core concept called the _proxy_ _function_ (PF). Within this framework,
+PMARK defines the PF of a sentence as the cosine similarity between its embedding and a predefined random vector. The key idea behind PMARK is that, given knowledge of certain statistical
+properties of the PF distribution, we can quantify the probability mass of the valid region and perform a sampling process with a strong theoretical guarantee of being distortion-free. We further
+incorporate multiple channel constraints to enhance the density of watermarking evidence, as illustrated in Figure 1. Leveraging the fact that random vectors in high-dimensional spaces are almost
+always orthogonal (Ruppert, 2004), we show that even when simply estimating the median PF as
+zero, PMARK still achieves high text quality with an efficient sampling process.
+Empirically, our evaluation demonstrates that while PMARK preserves high text quality (PPL
+4.37–4.71), it achieves significantly better robustness against paraphrasing attacks using GPT Paraphraser (OpenAI, 2022), with improvements of up to 14.8% and 44.6% over the prior best semanticlevel and token-level watermarking schemes, respectively. In terms of sampling efficiency, the online
+version of PMARK requires only 20% of the resources (measured in token consumption) compared
+to prior SOTA semantic-level watermarking schemes, while the offline version exhibits even lower
+consumption, paving the way for real-world deployment of PMARK in practice.
+**Key contributions of this paper include:**
+
+❶ We propose a novel theoretical framework that unifies existing SWMs via the introduction
+of the proxy function, providing solid analytical foundations for performance evaluation.
+❷ We identify that sparse watermarking evidence in SWMs negatively impacts adversarial
+robustness, and address this problem by introducing multiple channel constraints.
+❸ We introduce an online version of PMARK that achieves high robustness and is theoretically
+distortion free under mild prerequisites; we also present an offline version that reduces
+computational cost while maintaining low distortion.
+❹ We conduct comprehensive experiments across a variety of text watermarking tasks across
+multiple datasets and backbones, validating the effectiveness and efficiency of our method.
+
+
+2 PRELIMINARIES
+
+
+In this section, we delve into the problem of Semantic-level Watermarking (SWM), which treats
+semantically complete sentences as the fundamental unit. We begin by formalizing the problem and
+defining key concepts, inspired by Hu et al. (2023). See Appendix B for detailed proofs.
+
+
+**Zero-** **and** **Multi-bit** **Watermarks.** We write _M_ ( _π_ ) _→_ _y_ to denote the process of sampling a
+response _y_ from the model given an input prompt _π_ . A watermark generation algorithm is denoted
+as Generation _[M]_ _k_ [(] _[π]_ [)] _[ →]_ _[y]_ [, where] _[ k]_ [ is the watermark generation key (][Zhao et al.][,][ 2024][).] [A detection]
+algorithm determines whether a given text _y_ is watermarked, denoted as Detect( _y_ ) _→{_ True _,_ False _}_ .
+In this work, we focus on _zero-bit_ watermarks, which embed a single detectable signal (e.g., True
+or False) into text. In contrast, the concurrent **SAEMark** (Yu et al., 2025) investigates _multi-bit_
+watermarking, which embeds a message m _∈{_ 0 _,_ 1 _}_ _[m]_ into text (Lau et al., 2024). A detailed
+discussion of concurrent studies and related work can be found in Appendix C.
+
+
+2
+
+
+**Problem Setup.** Let Σ denote the vocabulary set of LLM. We define Σ _[∗]_ as the set of all semantically complete sentences, including the null sentence of length zero. For any _s_ _∈_ Σ _[∗]_, let _s_ denote
+its token sequence, _s_ = [ _x_ _[s]_ 1 _[, . . ., x][s]_ _|s|_ [] =][ tokenize][(] _[s]_ [)][.]
+At each generation step, the probability of producing the next token _xn_ +1 _∈_ Σ given the current
+context _x_ 1 _, . . ., xn_ is denoted by _PM_ ( _xn_ +1 _|_ _x_ 1 _, . . ., xn_ ). The joint probability of generating a
+sequence of _m_ tokens _xn_ +1 _, . . ., xn_ + _m_ is expressed as:
+
+
+_PM_ ( _xn_ +1 _, . . ., xn_ + _m_ _| x_ 1 _, . . ., xn_ ) =
+
+
+_m_
+
+- _PM_ ( _xn_ + _i_ _| x_ 1 _, . . ., xn, xn_ +1 _, . . ., xn_ + _i−_ 1) _._ (1)
+
+
+_i_ =1
+
+
+In the context of SWM, we focus on the probability distribution of the next sentence _sn_ +1 _∈_ Σ _[∗]_
+given the preceding context _s_ 1 _, . . ., sn_, denoted as:
+
+
+_PM_ ( _sn_ +1 _| s_ 1 _, . . ., sn_ ) =
+
+
+_|s|_
+
+- _PM_ ( _x_ _[s]_ _i_ _[|]_ _[s]_ [1] _[,][ . . ., ][s][n][, x][s]_ 1 _[, . . ., x][s]_ _i−_ 1 [)] _[.]_ (2)
+
+_i_ =1
+
+
+Here _PM_ ( _s_ ) : Σ _[∗]_ _→_ [0 _,_ 1] is a probability mass function over the countable set Σ _[∗]_ .
+For watermarking, we introduce a private key _k_ drawn from a key space _K_, where _k_ _∈_ _K_ is
+randomly sampled from a prior distribution _PK_ ( _k_ ). The watermarked output of the LLM follows a
+conditional distribution _PM_ _[w]_ [(] _[s][n]_ [+1] _[|][ s]_ [1] _[, . . ., s][n]_ [;] _[ k]_ [)][, which depends on the preceding context and] _[ k]_ [.]
+
+
+**Sampling-based** **Semantic-level** **Watermarking.** Directly modeling _PM_ ( _sn_ +1 _|_ _s_ 1 _, . . ., sn_ ) is
+generally intractable since Σ _[∗]_ is infinite. A common approach adopted by SWM methods is to
+sample a set of i.i.d. candidate sentences _x_ 1 _, . . ., xN_ _∼_ _PM_ ( _sn_ +1 _|_ _s_ 1 _, . . ., sn_ ), and then select a
+candidate _Y_ that carries watermark evidence, _Yk_ = SWM _k_ ( _{x_ 1 _, . . ., xN_ _}_ ). The distribution of the
+watermarked output is then defined as the distribution of _Y_ :
+_Yk_ _∼_ _PM_ _[w]_ [(] _[s][n]_ [+1] _[|][ s]_ [1] _[, . . ., s][n]_ [;] _[ k]_ [)] _[.]_ (3)
+
+**Definition 1** ( **Single-sentence Distortion-Free** ) **.** _Given a context_ _**π**_ = [ _s_ 1 _, . . ., sn_ ] _, we say that the_
+_watermarked LLM distribution is_ single-sentence distortion-free _relative to the original LLM PM_ _if,_
+_for all sn_ +1 _∈_ Σ _[∗]_ _,_ _PM_ ( _sn_ +1 _|_ _**π**_ ) = - _PK_ ( _k_ ) _· PM_ _[w]_ [(] _[s][n]_ [+1] _[|]_ _**[ π]**_ [;] _[ k]_ [)] _[.]_ (4)
+
+_k∈K_
+
+
+This condition means that the marginal distribution of _sn_ +1, when averaged over all possible watermark keys _k_, is identical to its unwatermarked distribution under the original model.
+
+
+**Definition 2** (Equivalence via Watermark Code Space) **.** _In most cases, PK_ ( _k_ ) _is designed to induce_
+_uniform random sampling over a watermark code space E,_ _where eK_ _∼_ _Uniform_ ( _E_ ) _._ _Under this_
+_construction, the right side of equation 4 can be equivalently rewritten as:_
+
+  - _[w]_   - _[w]_
+
+
+- _PK_ ( _k_ ) _· PM_ _[w]_ [(] _[s][n]_ [+1] _[|]_ _**[ π]**_ [;] _[ k]_ [) =] 
+_k∈K_ _e∈E_
+
+
+- _P_ ( _eK_ = _e_ ) _· PM_ _[w]_ [(] _[s][n]_ [+1] _[|]_ _**[ π]**_ [;] _[ e]_ [)] _[.]_ (5)
+
+_e∈E_
+
+
+**Definition** **3** (Probability Measure on Σ _[∗]_ ) **.** _Let_ (Σ _[∗]_ _, G, µM_ ) _be_ _a_ _probability_ _space,_ _where_ _G_ _is_ _a_
+_σ-algebra over_ Σ _[∗]_ _, and µM_ _is the probability measure induced by the model PM_ : Σ _[∗]_ _→_ [0 _,_ 1] _._ _For_
+_any measurable subset A ⊆_ Σ _[∗]_ _, the measure µM_ ( _A_ ) _is defined as_
+
+_µM_ ( _A_ ) =            - _PM_ ( _s_ ) _._
+
+
+_s∈A_
+
+
+3 REVISITING SEMANTIC-LEVEL WATERMARKING
+
+
+3.1 PROXY FUNCTION
+
+Section 2 discusses the sampling-based paradigm of SWM, which addresses the challenge of operating over the infinite set Σ _[∗]_ . However, to enable rule-based selection among a candidate sentence
+set _x_ 1 _, . . ., xN_ _∈_ Σ _[∗]_, SWM methods require a concrete mapping from the sentence space to the real
+numbers, since direct computation in the infinite textual space is generally intractable.
+
+
+**Proxy Function.** To this end, we define a function _F_ : Σ _[∗]_ _→_ R, referred to as the _proxy function_,
+which assigns a real-valued score to each semantically complete sentence. Let _U_ denote the range
+of the proxy function _F_ . We define a partition of the range _U_ as _P_ ( _U_ ) (see Definition 4). Each
+element _u ∈_ _U_ belongs to exactly one subset _Ai_ _∈P_ ( _U_ ), denoted as _Ai_ = _Pu_ ( _U_ ).
+We also define the inverse mapping of _F_, denoted by _F_ _[−]_ [1] : _U_ _→_ 2 [Σ] _[∗]_, where 2 [Σ] _[∗]_ is the power set of
+Σ _[∗]_ . Each value _u ∈_ _U_ thus maps to the set of sentences in Σ _[∗]_ that share the same proxy value under
+
+
+3
+
+
+_F_, denoted as _F_ _[−]_ [1] ( _u_ ). Furthermore, the watermark code space is denoted as _E_ _∈_ 2 _[P]_ [(] _[U]_ [)], whose
+element _e_ is selected by the watermarking scheme according to a prior distribution _eK_ _∼_ _PK_ ( _E_ )
+induced by the key _PK_ ( _k_ ).
+
+
+3.2 ANALYSIS OF THE BASELINE
+
+
+**Proxy Function of SemStamp.** We first focus on a simplified generation process of SemStamp,
+where the original margin constraint is removed for clarity. In SemStamp (Hou et al., 2023), the
+proxy function is defined as:
+_F_ ( _s_ ) = LSH( _T_ ( _s_ )) = [LSH1( _T_ ( _s_ )) _∥· · · ∥_ LSH _h_ ( _T_ ( _s_ ))] _,_ (6)
+where LSH _i_ ( _v_ ) = sign( _ti · v_ ) (Indyk & Motwani, 1998; Charikar, 2002), _{ti_ _| i_ = 1 _, . . ., h} ⊂_ R _[d]_
+is a set of randomly initialized vectors, _T_ is a text encoder with _T_ ( _s_ ) : Σ _[∗]_ _→_ R _[d]_, and [ _·_ ] denotes the
+transformation from binary representation to its corresponding decimal value. Given that the range
+of _F_ is _U_ = _{_ 1 _, . . .,_ 2 _[h]_ _}_, the partition used in SemStamp is defined as _P_ ( _U_ ) = _{{_ 1 _}, . . ., {_ 2 _[h]_ _}}_ .
+
+
+**Sampling-then-selecting** **Process.** We now reformulate the rejection-sampling process of SemStamp as a sampling-then-selecting process, without loss of generality:
+
+
+    - Given a context _**π**_, SemStamp samples _N_ candidate sentences from the natural distribution:
+_W_ = _{x_ 1 _, . . ., xN_ _}, xi_ _∼_ _P_ ( _s |_ _**π**_ ) _,_ _i_ = 1 _, . . ., N_ .
+
+
+    - For a fixed green ratio _γ_ such that _γ|P_ ( _U_ ) _|_ _∈_ N+, the watermark code space is defined as
+_E_ = _{e_ _∈_ 2 _[P]_ [(] _[U]_ [)] _|_ _|e|_ = _γ|P_ ( _U_ ) _|}_ . The watermark code _eK_ is sampled uniformly at random from _eK_ _∼_ Un( _E_ ), implying that each element of _P_ ( _U_ ) is selected with probability
+_γ_ . The _green region_ of Σ _[∗]_ is then defined as _G_ = _{s ∈_ Σ _[∗]_ _| F_ ( _s_ ) _∈_ [�] _e}_, while the set of
+valid candidates is _V_ = _{xi_ _| F_ ( _xi_ ) _∈_ [�] _e}_ . We assume that _V_ is always non-empty.
+
+
+    - A watermarked sentence _Y_ is then uniformly selected from _V_, where the distribution of
+the watermarked output is _Y_ _∼_ _PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [)][.]
+
+
+**Distortionary Distribution of Watermarked Output.** Fix a context _**π**_ and let _F_ : Σ _[∗]_ _→_ _U_ be
+the proxy function with a finite range _U_ of size _M_ ≜ _|U_ _|_ . For _∀u ∈_ _U_, define its natural mass:
+
+
+_q_ ( _u_ ) ≜ _µM_ - _F_ _[−]_ [1] ( _u_ )� = 
+
+
+ - _PM_ ( _t |_ _**π**_ ) _,_ 
+
+_t∈F_ _[−]_ [1] ( _u_ ) _u∈U_
+
+
+_q_ ( _u_ ) = 1 _._ (7)
+
+_u∈U_
+
+
+Fix a green ratio _γ_ _∈_ (0 _,_ 1) with _g_ = _γM_ _∈_ N+. The code space consists of all size- _m_ subsets _S_ _⊆_
+_U_, each chosen uniformly at random. For any _S_ _⊆_ _U_, define the green mass _q_ ( _S_ ) ≜ [�] _v∈S_ _[q]_ [(] _[v]_ [)][.]
+
+**Lemma 1** (Probability Scaling of Green Region) **.** _For any fixed green set S_ _⊆_ _U_ _and any N_ _≥_ 1 _,_
+_the_ _distribution_ _of_ _the_ _output_ _sentence_ _Y_ _is_ _independent_ _of_ _N_ _and_ _equals_ _the_ _natural_ _distribution_
+_conditioned on F_ _∈_ _S._ _Specifically, for any s ∈_ Σ _[∗]_ _with u_ = _F_ ( _s_ ) _,_
+
+
+_PM_ ( _s |_ _**π**_ )
+
+
+_,_ _u ∈_ _S,_
+_q_ ( _S_ )
+
+
+_P_ ( _Y_ = _s |_ _**π**_ _, S_ ) =
+
+
+
+
+
+
+_q_ ( _S_ ) (8)
+
+0 _,_ _u_ _∈/_ _S._
+
+
+
+
+
+Averaging over the uniformly random choice of green set _S_ yields a closed-form expression:
+
+**Theorem 2** (Closed-form of Watermarked PMF) **.** _For any s ∈_ Σ _[∗]_ _with u_ = _F_ ( _s_ ) _∈_ _U_ _,_
+
+
+_PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =] _[ P][M]_ [(] _[s][ |]_ _**[ π]**_ [)] _[ ·]_ - _M_ 1 - _g_ _S⊆U_
+
+_|S|_ = _m,u∈S_
+
+
+1
+(9)
+_q_ ( _S_ ) _[.]_
+
+
+_where q_ ( _u_ ) _is defined in equation 7, and M, g, u, U,_ Σ _[∗]_ _, F, F_ _[−]_ [1] _are known quantities._
+
+**Corollary 2.1.** _PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [)] _[ is distortion-free if and only if][ q]_ [(] _[u]_ [) =] _M_ 1 _[for all][ u][ ∈]_ _[U]_ _[.]_
+
+However, the condition in Corollary 2.1 is not guaranteed in SemStamp, whose embedding space is
+randomly partitioned. Similar conclusions apply to other SWM methods such as k-SemStamp and
+SimMark, with further analysis provided in Appendix D.1 and E.
+
+
+3.3 SINGLE-CHANNEL DISTORTION-FREE SAMPLING
+
+
+In this section, we present a toy example of a distortion-free sampling scheme for next-sentence
+generation, serving as a foundation for subsequent sections.
+
+
+4
+
+
+**Proxy** **Function** **via** **Pivot** **Vector.** Given a text encoder _T_ : Σ _[∗]_ _→_ R _[d]_ and a fixed pivot vector
+_v·T_ ( _s_ )
+_v_ _∈_ R _[d]_, we define the proxy function as _Fv_ ( _s_ ) = _⟨v, T_ ( _s_ ) _⟩_ = _∥v∥·∥T_ ( _s_ ) _∥_ [, which denotes the cosine]
+similarity between the pivot vector and the encoded sentence. The range of _Fv_ is [ _−_ 1 _,_ 1].
+
+
+**Median-based** **Sampling.** Given a context _**π**_, we sample _N_ i.i.d. candidate sentences from the
+natural distribution: _W_ = _{x_ 1 _, . . ., xN_ _}, xi_ _∼_ _PM_ ( _s_ _|_ _**π**_ ), where _N_ is an even integer. The proxy
+function _Fv_ assigns each candidate a scalar score _F_ = _{fi_ = _Fv_ ( _xi_ ) _|_ _i_ = 1 _, . . ., N_ _}_ . Let _mv_ be
+the median of _F_ . We partition _W_ into two equal-sized subsets:
+_F_ upper = _{xi_ _| fi_ _≥_ _mv},_ _F_ lower = _{xi_ _| fi_ _< mv},_ (10)
+with ties broken randomly to ensure balance.
+Define the watermark code space as _E_ = _{F_ upper _, F_ lower _}_ . A random seed _k_ _∈{_ 0 _,_ 1 _}_ is sampled
+
+uniformly, and the selected code is _eK_ = - _F_ upper _,_ if _k_ = 1 _,_
+_F_ lower _,_ if _k_ = 0 _._
+The valid sentence set is _V_ = _eK_, and the next sentence is sampled uniformly from _V_ : _Y_ _∼_ Un( _V_ ).
+We denote the operation that selects the half-partition _V_ from the whole set _W_ based on random
+seed _k_ and proxy function _Fv_ as _V_ = _D_ ( _W_ _| k, Fv_ ) _, |V |_ = _|W_ _|/_ 2.
+
+
+**Theorem** **3** (Distortion-free on a Single Channel) **.** _For_ _any_ _context_ _**π**_ _,_ _sample_ _N_ _i.i.d._ _candidates_
+_W_ = _{x_ 1 _, . . ., xN_ _}_ _from_ _PM_ ( _·_ _|_ _**π**_ ) _,_ _and_ _form_ _half-sets_ _e_ 0 _, e_ 1 _by_ _the_ _median_ _rule._ _Draw_ _k_ _∼_
+Unif _{_ 0 _,_ 1 _} and then sample Y_ _uniformly from ek._ _Then PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =] _[ P][M]_ [(] _[s][ |]_ _**[ π]**_ [)] _[.]_
+
+
+_Proof._ For any _xi_ _∈_ _W_, we have
+
+
+_P_ ( _Y_ = _xi_ _| W_ ) = 
+
+
+2 [1] - _N_ 2 **[1]** _[{][x][i]_ _[∈]_ _[e]_ [0] _[}]_ [ +] _N_ [2]
+
+
+_N_ [2] **[1]** _[{][x][i]_ _[∈]_ _[e]_ [1] _[}]_ - = _N_ [1]
+
+
+ - _P_ ( _k_ ) _P_ ( _Y_ = _xi_ _| W, k_ ) = 2 [1]
+
+_k∈{_ 0 _,_ 1 _}_
+
+
+_N_ _[.]_
+
+
+Averaging over the randomness of _W_ yields
+
+
+_PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =]
+
+
+_N_
+
+- _P_ ( _xi_ = _s_ ) _P_ ( _Y_ = _xi_ _| W_ ) = _PM_ ( _s |_ _**π**_ ) _,_
+
+
+_i_ =1
+
+
+which proves that the single-channel sampling method above is distortion-free.
+
+
+4 PROPOSED METHOD
+
+
+4.1 MULTI-CHANNEL CONSTRAINED GENERATION (ONLINE)
+
+
+**Single-Channel Robustness.** While Section 3.3 introduces a simple distortion-free sampling strategy for SWM, it remains vulnerable to paraphrasing attacks.
+
+**Theorem 4** (Semantic Robustness on Single Channel) **.** _Let s be a watermarked sentence and v_ _∈_ R _[d]_
+_the pivot vector._ _Suppose an attacker A_ : Σ _[∗]_ _→_ Σ _[∗]_ _modifies s such that_ 1 _−⟨T_ ( _A_ ( _s_ )) _, T_ ( _s_ ) _⟩≤_ _d._
+_Then the probability that the watermark evidence of s is removed by such an attack is bounded by_
+
+
+    - _√_
+_P_ rm _≤_ _µM_ _s ∈_ Σ _[∗]_ [��] _Fv_ ( _s_ ) _∈_ [ _mv −_
+
+            
+
+
+_√_
+2 _d, mv_ +
+
+
+ 2 _d_ ] _._ (11)
+
+
+The robustness of the entire watermarked text _S_ = [ _s_ 1 _, . . ., sn_ ] depends on the specific detection
+scheme, with a detailed analysis available in Giboulot & Furon (2024). Importantly, compared with
+token-level baselines where each token contributes one bit of watermark evidence, the evidence
+density of SWM in the single-channel setting is extremely sparse. This sparsity results in a significant degradation in detectability under adversarial attacks. To address this limitation, we extend the
+paradigm to incorporate multiple channel constraints.
+
+
+**Multi-Channel Sampling.** Given a pre-defined set of _b_ orthogonal vectors _v_ 1 _, · · ·_ _, vb_, we refer to
+each pivot as a _channel_ . The proxy function defined on _vi_ is _Fvi_ ( _s_ ) = _⟨vi, T_ ( _s_ ) _⟩_, also denoted as _Fi_
+for simplicity. Specifically, these pivots can be generated from the QR decomposition of a matrix.
+Since this approach relies on dynamic median estimation, we refer to it as the online PMARK.
+
+
+1. Given a context _**π**_, PMARK samples _N_ candidate sentences from the natural distribution:
+_W_ = _{x_ 1 _, . . ., xN_ _}, xi_ _∼_ _P_ ( _s |_ _**π**_ ) _, i_ = 1 _, . . ., N_ .
+
+
+2. For _i_ = 1 to _b_, update _Vi_ = _D_ ( _Vi−_ 1 _| ki, Fi_ ), where _V_ 0 = _W_ and _ki_ _∼_ Un( _{_ 0 _,_ 1 _}_ ).
+
+
+3. A watermarked sentence _Y_ is then uniformly sampled from _Vb_, so that the distribution of
+the watermarked output is _Y_ _∼_ _PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [)][.]
+
+
+5
+
+
+**Algorithm 1:**
+PMARK Online Generation
+**Input** **:** LLM _M_ ; prompt _s_ [(0)] ;
+encoder _T_ ; _T_ ; _b_ ;
+random seeds _R_ = _{r_ ( _t,j_ ) _}_ ;
+sample budget _N_ ;
+**Output:** _s_ [(1)] _, . . ., s_ [(] _[T]_ [ )]
+
+**1** Initialize _b_ orthogonal pivots
+_v_ [(1)] _, . . ., v_ [(] _[b]_ [)] ;
+
+
+**2** **for** _t ←_ 1 **to** _T_ **do**
+
+
+**3** Sample _W_ [(] _[t]_ [)] = _{x_ [(1)] _, . . ., x_ [(] _[N]_ [)] _}_
+with _x_ [(] _[i]_ [)] _∼_ _PM_ ( _s | s_ [(0:] _[t][−]_ [1)] );
+
+
+**Algorithm 2:** PMARK Online Detection
+
+**Input** **:** _S_ = [ _s_ [(0)] _, . . ., s_ [(] _[T]_ [ )] ]; _M_ ; _T_ ; _v_ [(1] _[...b]_ [)] ; _R_ = _{r_ ( _t,j_ ) _}_ ;
+_N_ ; _α_ ; threshold _δ_ ; Smooth Factor _K_
+**Output:** True or False
+
+**1** _Ng_ _←_ 0; _N_ total _←_ _b · T_ ;
+
+**2** **for** _t ←_ 1 **to** _T_ **do**
+
+**3** Resample _Wt_ _[′]_ [=] _[ {][x]_ [(1)] _[, . . ., x]_ [(] _[N]_ [)] _[}]_ [ with]
+_x_ [(] _[i]_ [)] _∼_ _PM_ ( _s | s_ [(0:] _[t][−]_ [1)] );
+
+**4** **for** _j_ _←_ 1 **to** _b_ **do**
+
+**5** Define _Fj_ ( _s_ ) = _⟨v_ [(] _[j]_ [)] _, T_ ( _s_ ) _⟩_ ;
+_m_    - ( _t,j_ ) _←_ HDMedian� _{Fj_ ( _x_ [(] _[i]_ [)] ) _}_ _[N]_ _i_ =1�;
+
+**6** _x_ ( _t,j_ ) _←Fj_ ( _s_ [(] _[t]_ [)] );
+
+**7** **if** _r_ ( _t,j_ ) = 1 _**and**_ _x_ ( _t,j_ ) _>_ _m_ - ( _t,j_ ) _−_ _δ_ **then**
+
+**8** _c_ ( _t,j_ ) _←_ 1
+
+**9** **else if** _r_ ( _t,j_ ) = 0 _**and**_ _x_ ( _t,j_ ) _<_ _m_ - ( _t,j_ ) + _δ_ **then**
+
+**10** _c_ ( _t,j_ ) _←_ 1
+
+**11** **else**
+
+**12** _c_ ( _t,j_ ) _←_ exp( _−K|x_ ( _t,j_ ) _−_ _m_ - ( _t,j_ ) _|_ )
+
+**13** **end**
+
+**14** _Ng_ _←_ _Ng_ + _c_ ( _t,j_ );
+
+**15** **end**
+
+**16** **end**
+
+_[−]_ [0] _[.]_ [5] _[ N]_ [total] _[|]_
+**17** _z_ _←_ _[|][N]_ ~~_√_~~ _[g]_ ; **return** ( _z_ _> zα_ );
+0 _._ 25 _N_ total
+
+
+**4** _V_ [(0)] _←_ _W_ [(] _[t]_ [)] ;
+
+
+**5** **for** _j_ _←_ 1 **to** _b_ **do**
+
+**6** _Fj_ ( _s_ ) = _⟨v_ [(] _[j]_ [)] _, T_ ( _s_ ) _⟩_ ;
+
+**7** _V_ [(] _[j]_ [)] _←_
+
+_D_    - _V_ [(] _[j][−]_ [1)] _| r_ ( _t,j_ ) _, Fj_    - on
+
+channel _v_ [(] _[j]_ [)] ;
+
+**8** **end**
+
+**9** Select _s_ [(] _[t]_ [)] _∼_ Un� _V_ [(] _[b]_ [)][�] ;
+
+
+**10** **end**
+
+**11** **return** _s_ [(1)] _, . . ., s_ [(] _[T]_ [ )] ;
+
+
+Figure 2: PMARK Online Watermarking. **Left** : Multi-channel constrained generation; **Right** : Detection via soft- _z_ -test.
+**Remark** **1** (Multi-channel Distortion-free) **.** _It_ _is_ _straightforward_ _to_ _verify_ _that_ _such_ _multi-channel_
+_sampling is distortion-free, since for ∀xj_ _∈_ _Vi, P_ ( _xj_ _∈_ _Vi_ +1) = [1] 2 _[and][ P]_ [(] _[Y]_ [=] _[ x][ |][ x][ ∈]_ _[W]_ [) = 1] _[/N]_ _[.]_
+
+The complete process for generating watermarked texts is described in Algorithm 1. A theoretical
+analysis outlining the advantages of multi-channel sampling is presented in Appendix B.
+
+
+4.2 SOFT- _z_ -TEST DETECTION (ONLINE)
+
+We now introduce a robust detection scheme for text watermarked with the online PMARK.
+
+1. **Sentence Segmentation.** The input text is segmented into sentences _S_ = [ _s_ 0 _, s_ 1 _, . . ., sT_ ]
+to enable subsequent processing.
+2. **Median** **Reconstruction** **via** **Sampling.** For each sentence _st_ (1 _≤_ _t_ _≤_ _T_ ), resample
+_Wt_ _[′]_ [=] _[ {][x]_ [1] _[, . . ., x][N]_ _[}]_ [ i.i.d.] [from] _[ P][M]_ [(] _[s][t]_ _[|][ s]_ [0:] _[t][−]_ [1][)][.]
+3. **Online** **Median** **Estimation.** For each pivot vector _vj_ (1 _≤_ _j_ _≤_ _b_ ), estimate the median
+_m_ _[′]_ ( _t,j_ ) [of the values] _[ F][j]_ [(] _[W][ ′]_ _t_ [)][ using the Harrell–Davis estimator (][Harrell & Davis][,][ 1982][).]
+
+4. **Smooth Counting of Watermark Evidence.** To mitigate discrepancies between the medians estimated during generation and detection, we introduce a smooth counting mechanism
+inspired by (Dabiriaghdam & Wang, 2025). Specifically, given a margin threshold _δ_ _>_ 0
+and a smoothing factor _K_ _>_ 0, the watermark evidence contributed by _st_ along axis _vj_ is
+defined as
+
+
+_c_ ( _t,j_ ) =
+
+
+1 _,_ if ( _r_ ( _t,j_ ) = 1 _∧Fj_ ( _st_ ) _> m_ _[′]_ ( _t,j_ ) _[−]_ _[δ]_ [)] _[ ∨]_ [(] _[r]_ [(] _[t,j]_ [)] [= 0] _[ ∧F][j]_ [(] _[s][t]_ [)] _[ < m][′]_ ( _t,j_ ) [+] _[ δ]_ [)] _[,]_
+
+_e_ _[−][K][|F][j]_ [(] _[s][t]_ [)] _[−][m]_ ( _[′]_ _t,j_ ) _[|]_ _,_ otherwise _._
+
+
+5. **Robust** **Detection** **via** **Soft-** _z_ **-Test.** Finally, to determine whether the input text was generated by PMARK, we apply a soft-count-based _z_ -test. The test statistic is computed as
+
+    - _T_    - _b_
+_z_ = _[|]_ _t_ =1 ~~_√_~~ _j_ =1 _[c]_ [(] _[t,j]_ [)] _[−]_ [0] _[.]_ [5] _[bT]_ _[|]_, where _b · T_ is the total number of potential watermark bits
+
+_bT ·_ 0 _._ 5 _·_ 0 _._ 5
+across channels.
+
+The complete description of the online detection scheme is provided in Algorithm 2.
+
+
+4.3 OFFLINE PARTITION WITH A PRIOR THRESHOLD
+
+**Concentration** **of** **Measure.** In practice, we find the range of _F_ is confined to a small interval
+around zero, [ _−ϵ, ϵ_ ] with _ϵ ≤_ 0 _._ 08 in most cases. This observation is consistent with Lemma 5:
+
+
+6
+
+
+**Lemma** **5** (Orthogonality) **.** _Let_ _x, y_ _be_ _random_ _vectors_ _drawn_ _uniformly_ _from_ _the_ _unit_ _sphere_
+_S_ _[d][−]_ [1] _⊂_ R _[d]_ _._ _Then the angle θ between them has density_
+
+_pd_ ( _θ_ ) = Γ �Γ _d−_ 2�1 _d_ 2�� ~~_√_~~ _π_ sin _[d][−]_ [2] _θ_ ( _θ_ _∈_ [0 _, π_ ]) _._ (12)
+
+Moreover, we observe a concentration phenomenon whereby the median _m_ remains close to zero.
+Building on this intuition and supporting empirical results, we use zero as an effective prior for the
+median in the offline PMARK. Experimental results in Section 5 demonstrate the effectiveness of
+this approximation. A brief analysis of the theoretical impact of this prior assumption is included in
+Appendix F.
+
+
+**Offline** **Watermarking** **with** **a** **Prior-Median** **Assumption.** Accordingly, we adopt zero as the
+prior median during both generation and detection, while maintaining the same watermarking rate _γ_
+for the _z_ -test. For a candidate sentence _x_, define the binary signal vector
+Sig( _x_ ) = �[ _f_ 1( _x_ ) _>_ 0] _, . . .,_ [ _fb_ ( _x_ ) _>_ 0]� _,_ (13)
+and let _r_ _∈{_ 0 _,_ 1 _}_ _[b]_ denote the random channel seeds. The total watermark evidence contributed by
+_x_ is _b_
+E( _x_ ) = ��Sig( _x_ )( _j_ ) _∧_ _r_ ( _j_ )� _._ (14)
+
+
+_j_ =1
+
+During generation, we select the sentence that maximizes this watermark evidence. This avoids the
+computational overhead of repeated sampling and the need to access the original prompt during detection by eliminating dynamical estimation, meaning that the offline detector will function without
+querying generator. The complete algorithm is also provided in Appendix F.
+
+
+5 EXPERIMENTS
+
+
+In this section, we conduct extensive experiments to answer the following research questions: ( **RQ1** )
+How does PMARK perform under various attacks? ( **RQ2** ) Can PMARK enable high-quality text
+generation in practice? ( **RQ3** ) What is the computational cost of PMARK compared with other
+SWM baselines? ( **RQ4** ) How sensitive is PMARK to its key components or parameters?
+
+
+5.1 EXPERIMENT SETUP
+
+**Dataset and Baselines.** Following previous work (Hou et al., 2023; Wang et al., 2025), we evaluate the performance of PMARK using 500 samples from the C4 (Raffel et al., 2020) and BOOKSUM (Kry´sci´nski et al., 2021) datasets separately, with OPT-1.3B (Zhang et al., 2022) and Mistral7B-v0.1 (Jiang et al., 2023) as backbone models. Our baselines are based on the official implementation of MarkLLM (Pan et al., 2024), including token-level watermarking methods KGW (Kirchenbauer et al., 2023), UPV (Liu et al., 2023a), MorphMark (Wang et al., 2025), SIR (Liu et al., 2023b),
+EXP (Aaronson, 2023), EXPGumbel (Aaronson, 2023), SynthID (Dathathri et al., 2024), as well as
+semantic-level baselines SemStamp (Hou et al., 2023), k-SemStamp (Hou et al., 2024), and SimMark (Dabiriaghdam & Wang, 2025). For the PMARK generation process, we set the number of
+channels to 4 with a sample budget _N_ = 64. The hyperparameters of the soft- _z_ -test during detection
+are set as _K_ = 150 and _δ_ = 0 _._ 001. More implementation details can be found in Appendix G.1.
+
+
+**Metrics.** Following previous work, we use perplexity (PPL) to measure the quality of generated
+text, computed using LLaMA-2-7B (Touvron et al., 2023). We also assess watermark effectiveness
+in terms of detectability (TPR@1%, AUC) and robustness under sentence-level attacks (Paraphrase
+Attack by Parrot (Sadasivan et al., 2023), GPT-3.5-turbo (OpenAI, 2022), and Back-Translation Attack by LLAMA-3.1-8B (Pan et al., 2024; Dubey et al., 2024)). Word-level attacks (Pan et al., 2024)
+such as word deletion and synonym substitution at rates 0.05, 0.15, and 0.30 are also considered.
+Refer to Appendix G.2 for a more detailed discussion of these attacks.
+
+
+5.2 ROBUSTNESS AND TEXT QUALITY (RQ1 & RQ2)
+
+To answer **RQ1**, we comprehensively compare PMARK with seven widely used token-level watermarks and three semantic-level watermarks under various attacks. Table 1 presents comprehensive
+results of watermarking methods under paraphrase attacks, with Pegasus (Pu et al., 2023), Parrot (Sadasivan et al., 2023), and GPT-3.5-turbo (OpenAI, 2022) as different paraphrasers. Figure
+3 illustrates the trade-off between text quality and robustness under back-translation attacks, while
+Figure 4 shows the results of various SWM methods under word-level attacks. We provide the
+following observations ( **Obs.** ):
+
+
+7
+
+
+_b_
+
+
+�Sig( _x_ )( _j_ ) _∧_ _r_ ( _j_ )� _._ (14)
+
+
+Table 1: Overall results for baseline methods and PMARK on OPT-1.3B and Mistral-7B across the
+BOOKSUM and C4 benchmarks. **Doc-P** denotes Paraphrase Attack, while Pegasus, Parrot, GPT are
+different paraphrasers. For each attack, we report TP@FP=1%, TP@FP=5%, and AUC, followed
+by the standard deviation of TP@FP=1% in light gray. **Bold** denotes the best result, and underlined
+denotes the second-best.
+
+|Method|BOOKSUM|C4|
+|---|---|---|
+|**Method**|**No Attack**_↑_<br>**Doc-P (Pegasus)**_↑_**Doc-P (Parrot)**_↑_**Doc-P (GPT)**_↑_|**No Attack**_↑_<br>**Doc-P (Pegasus)**_↑_**Doc-P (Parrot)**_↑_**Doc-P (GPT)**_↑_|
+
+
+**OPT-1.3B**
+
+**Mistral-7B**
+
+
+PPL vs. Doc-T TP@FP=1%
+
+
+shown in Table 1, PMARK exhibits
+
+60
+
+
+Specifically, the TP@FP1% of online
+
+40
+
+PMARK remains above 93.0% across dif
+forming the baselines. For Mistral-7B,
+
+|EXPGumbel<br>UPV<br>KGW SIR|Synth|ID|Ours(On<br>EXPOu|)<br>rs(Off)|
+|---|---|---|---|---|
+||Morp<br>|hMark<br>SemStamp|||
+|||K-SemStamp|||
+||||||
+||~~Sim~~|~~ark~~|||
+
+the TP@FP1% on BOOKSUM and C4 6.5 6.0 5.5 5.0 4.5
+after GPT paraphrasing reaches 96.8 and PPL( better)
+95.2, exceeding the best SWM baseline
+
+Figure 3: Results of Mistral-7B on the C4 dataset.
+
+SemStamp by 20.8% and 26.0% and the
+
+Smaller bubbles denote lower PPL.
+
+best TWM baseline SIR by 55.6% and
+31.8%. The offline PMARK also shows strong robustness to paraphrase attacks, with TP@FP1%
+remaining above 90.8%, consistently ranking second to the online PMARK. A similar conclusion
+can be drawn from Figure 3, where both online and offline PMARK excel in TP@FP1% under backtranslation attack. Despite a few competitive baseline results, such as those achieved by KGW when
+attacked by Pegasus, we argue that online PMark demonstrates near SOTA performance across a
+variety of paraphrasers, while offline PMark offers highly competitive robustness against paraphrase
+attacks.
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+6.5 6.0 5.5 5.0 4.5
+
+
+PPL( better)
+
+
+Figure 3: Results of Mistral-7B on the C4 dataset.
+Smaller bubbles denote lower PPL.
+
+
+TP@FP1% under Substitution Attack
+
+
+|96.3 AAttttaacckk RRaattiioo 1350%%<br>87.0 85.4|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|98.2|83.1|Col14|Col15|95.2|Col17|Col18|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|96.3<br>85.4<br>87.0<br>~~Attack Ratio 15%~~<br>Attack Ratio 30%|96.3<br>85.4<br>87.0<br>~~Attack Ratio 15%~~<br>Attack Ratio 30%|||||||||||83.1|83.1|83.1|83.1|83.1|83.1|
+|||6|3.3|||||||||||||~~77.9~~||
+|||||55.2<br>47.9|55.2<br>47.9|55.2<br>47.9|55.2<br>47.9|55.2<br>47.9|55.2<br>47.9|||||||||
+|||||55.2<br>47.9|55.2<br>47.9|||||||||||||
+|||||||||||||||||||
+||||||~~19.2~~||27.6<br>|27.6<br>|27.6<br>|||||||||
+||||||~~19.2~~|||||||||||||
+|||||||||16.2||||||||||
+
+
+|.8<br>.6<br>.4<br>.2<br>.0|96.8|96.4 AAttttaacckk RRaattiioo 1350%%<br>89.2|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|93.0|Col16|Col17|84.0|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|0<br>.2<br>.4<br>.6<br>.8<br>|96.8|||||||||||||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>|||63.6|63.6||71.8<br>63.1|71.8<br>63.1|71.8<br>63.1|71.8<br>63.1|71.8<br>63.1|71.8<br>63.1|||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>|||63.6|63.6||71.8<br>63.1|71.8<br>63.1|||||||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>||||||||||||||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>|||||||||40.2|40.2|40.2|||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>|||||||28.9|||||||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>||||||||||||||||||
+|0<br>.2<br>.4<br>.6<br>.8<br>||||||||||16.8||||||||
+
+
+still underperforms PMARK by a Figure 4: TP@FP1% under Word-D and Word-S attacks.
+clear margin. We observe similar trends on the C4 dataset: both the online and offline variants
+of PMARK deliver the highest-quality watermarked text. Similarly, EXP and k-SemStamp remain
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+Figure 4: TP@FP1% under Word-D and Word-S attacks.
+
+
+8
+
+
+the strongest token-level and semantic-level baselines, respectively. Additional results on robustness
+and text quality are provided in Appendix H.1 and H.2.
+
+
+**Obs.** ❸ **Previous** **SWM** **methods** **are** **vulnerable** **to** **word-level** **attacks.** We also evaluate
+PMARK under word-level deletion and synonym-substitution attacks with Mistral-7B on BOOKSUM, as shown in Figure 4. Surprisingly, existing SWMs remain vulnerable to these token-level
+attacks because their watermark evidence is relatively sparse. As a result, even the reversal of onebit watermark evidence can cause a large deviation in the _z_ statistic. In our work, we address this
+problem efficiently by applying multiple channel constraints to each sentence, rather than simply increasing generation length. Consequently, our method achieves state-of-the-art robustness: in online
+mode, TP@FP1% reaches 98.2% and 99.0% under 15% word deletion and synonym substitution,
+respectively; in offline mode, the corresponding TP@FP1% values are 95.2% and 98.6%.
+
+
+5.3 COMPUTATION CONSUMPTION (RQ3)
+
+
+**Obs.** ❹ **Evidence** **den-**
+**sity** **is** **critical** **for** **SWM** Table 2: TP@FP1% across different sample budgets and channel num**detectability.** Table 2 bers in online/offline modes.
+confirms our understand
+_N_ / _b_ b=1 b=2 b=3 b=4
+
+ing of watermark evidence
+
+PMARK exhibits a high
+TP@FP% of 98% with an extremely limited sampling budget _N_ = 8, supported by 3 channels. This
+suggests that dense watermark evidence is necessary for reducing sampling budget. We also note
+that offline PMARK requires a budget of 16 to achieve practical detectability, which we attribute to
+the high risk of prior deviation caused by a limited budget. While Bayesian models can improve
+accuracy in such probability estimation as shown in SynthID, we only present the naive results here
+and leave related improvements for future work.
+
+
+**Obs.** ❺ **PMARK** **achieves** Table 3: Token efficiency of SWM methods. _Ts_ denotes average token
+**the** **remarkable** **trade-off** consumption per sentence, while _Tt_ denotes consumption per token.
+**between** **token** **efficiency**
+**and** **performance** **among**
+**SWM** **methods.** To further verify the efficiency of
+
+|Method|k-Sem SimMark Sem Ours(On) Ours(Off)|
+|---|---|
+|_Ts_<br>_Tt_|246.9<br>186.7<br>1694.4<br>315.8<br>239.7<br>13.3<br>8.1<br>99.3<br>16.0<br>12.1|
+
+PMARK, we conducted additional experiments on token efficiency across existing SWM methods
+at the same detectability level, as shown in Table 3. While SimMark achieves the lowest token consumption during watermark generation, it performs poorly without well-tuned hyperparameters, as
+shown in Table 1. Similarly, k-SemStamp requires fewer tokens than online PMARK, but its robustness to paraphrasing is limited. In contrast, SemStamp exhibits the highest robustness to semantic
+attacks among existing SWMs, but at the cost of an impractical 1694.4 tokens per sentence. As a
+result, we argue that PMARK achieves the best trade-off among SWM methods: the offline mode
+requires fewer tokens than k-SemStamp while maintaining competitive robustness, and the online
+mode achieves the highest robustness with only 20% additional token consumption.
+
+
+Table 2: TP@FP1% across different sample budgets and channel numbers in online/offline modes.
+
+
+_N_ / _b_ b=1 b=2 b=3 b=4
+
+
+Table 3: Token efficiency of SWM methods. _Ts_ denotes average token
+consumption per sentence, while _Tt_ denotes consumption per token.
+
+
+5. Results of Doc-P(GPT)
+
+|RQ4) BOOKSUM C4 BOOKSUM (Attacked) C4 (Attacked)|Col2|Col3|Col4|Col5|Col6|Col7|Col8|BOOKSUM|Col10|Col11|Col12|Col13|C4|Col15|Col16|Col17|Col18|BOOKSUM (Attacked)|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|C4 (Attacked)|Col29|Col30|Col31|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|100.0<br>99.6<br>100.0<br>~~99.4~~<br>100.0<br>99.8<br>99.6<br>99.8<br>100.0<br>99.7<br>100.0<br>99.7<br>100.0<br>99.8<br>~~99.4~~<br>99.6<br>BOOKSUM<br>C4<br>BOOKSUM (Attacked)<br>C4 (Attacked)|100.0<br>99.6<br>100.0<br>~~99.4~~<br>100.0<br>99.8<br>99.6<br>99.8<br>100.0<br>99.7<br>100.0<br>99.7<br>100.0<br>99.8<br>~~99.4~~<br>99.6<br>BOOKSUM<br>C4<br>BOOKSUM (Attacked)<br>C4 (Attacked)|100.0<br>99.6<br>100.0<br>~~99.4~~<br>100.0<br>99.8<br>99.6<br>99.8<br>100.0<br>99.7<br>100.0<br>99.7<br>100.0<br>99.8<br>~~99.4~~<br>99.6<br>BOOKSUM<br>C4<br>BOOKSUM (Attacked)<br>C4 (Attacked)|100.0<br>99.6<br>100.0<br>~~99.4~~<br>100.0<br>99.8<br>99.6<br>99.8<br>100.0<br>99.7<br>100.0<br>99.7<br>100.0<br>99.8<br>~~99.4~~<br>99.6<br>BOOKSUM<br>C4<br>BOOKSUM (Attacked)<br>C4 (Attacked)|100.0<br>99.6<br>100.0<br>~~99.4~~<br>100.0<br>99.8<br>99.6<br>99.8<br>100.0<br>99.7<br>100.0<br>99.7<br>100.0<br>99.8<br>~~99.4~~<br>99.6<br>BOOKSUM<br>C4<br>BOOKSUM (Attacked)<br>C4 (Attacked)|100.0<br>99.6<br>100.0<br>~~99.4~~<br>100.0<br>99.8<br>99.6<br>99.8<br>100.0<br>99.7<br>100.0<br>99.7<br>100.0<br>99.8<br>~~99.4~~<br>99.6<br>BOOKSUM<br>C4<br>BOOKSUM (Attacked)<br>C4 (Attacked)|||BOOKSUM|BOOKSUM|BOOKSUM|BOOKSUM||C4|C4|C4|||BOOKSUM (Attacked)|BOOKSUM (Attacked)|BOOKSUM (Attacked)|BOOKSUM (Attacked)|BOOKSUM (Attacked)|BOOKSUM (Attacked)|BOOKSUM (Attacked)|||C4 (Attacked)|C4 (Attacked)|C4 (Attacked)|C4 (Attacked)|
+||96.8|95.4||~~94.4~~|||96.8|96.8|95.2||~~94.4~~||||95.4|95.4|95.0|95.0|||||||||||||
+||||||||||||||||||||||||||||||||
+||||||91.9|||||||92.0|92.0|||||||93.6|90.2|||||||~~93.8~~|||
+||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||84.9|~~88.8~~|~~88.8~~||||87.8||
+||||||||||||||||||||||||84.9||||||||
+||||||||||||||||||||||||84.9||||||||
+||||||||||||||||||||||||||||||||
+
+
+150/0.0 150/0.0 150/0.001 150/0.001 250/0.001 250/0.001 inf/0.0 inf/0.0
+
+are also included for Online Offline Online Offline Online Offline Online Offline
+comparison. While the Figure 5: Performance of Mistral-7B under different hyperparameter
+soft- _z_ -test yields a stable settings ( _K_ = 150 _,_ 250 _,_ + _∞_ and _δ_ = 0 _,_ 0 _._ 001).
+improvement in robustness compared with the naive _z_ -test ( _K_ = + _∞, δ_ = 0), we find it is more
+beneficial for online PMARK, where increases of 11.9% and 6.4% in attacked TP@FP1% are ob
+
+
+100
+
+
+95
+
+
+90
+
+
+85
+
+
+150/0.0
+
+Online
+
+
+150/0.0
+
+
+Offline
+
+
+150/0.001
+
+
+Online
+
+
+150/0.001
+
+
+Offline
+
+
+250/0.001
+
+
+Online
+
+
+250/0.001
+
+
+Offline
+
+
+inf/0.0
+Online
+
+
+inf/0.0
+Offline
+
+
+Figure 5: Performance of Mistral-7B under different hyperparameter
+settings ( _K_ = 150 _,_ 250 _,_ + _∞_ and _δ_ = 0 _,_ 0 _._ 001).
+
+
+9
+
+
+served on BOOKSUM and C4, respectively. More results and cases can be found in Appendix H.4.
+
+
+6 CONCLUSION
+
+
+The semantics of the next sentence is an abstract and complex concept. To effectively estimate it
+indirectly, a proxy function that maps sentences from textual space to a scalar value is often used,
+either implicitly or explicitly. Building on this insight, we present a unified perspective on existing
+SWMs and propose a novel distortion-free paradigm based on median estimation. Furthermore,
+we identify that the vulnerability of current SWMs to adversarial attacks arises from the sparsity
+of watermark evidence. To address this issue, we introduce multi-channel constraints to enhance
+robustness. To the best of our knowledge, this is the first work to provide a unified theoretical
+framework for SWMs, the first distortion-free SWM approach, and the first to highlight and realize
+dense watermark evidence in SWM. Experimental results demonstrate that PMARK consistently
+outperforms existing SWM baselines in both text quality and robustness, offering a more reliable
+and effective paradigm for semantic-level watermarking.
+
+
+7 ACKNOWLEDGMENTS
+
+
+We would like to express our gratitude to the Red Bird MPhil Program at the Hong Kong University
+of Science and Technology (Guangzhou) for providing support, resources, and funding, which have
+been instrumental in the successful completion of this research.
+
+
+10
+
+
+REFERENCES
+
+
+Scott Aaronson. Simons institute talk on watermarking of large language models, 2023. _URL_
+_https://simons.berkeley.edu/talks/scott-aaronson-ut-austin-openai-2023-08-17_, 2023.
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Li An, Yujian Liu, Yepeng Liu, Yang Zhang, Yuheng Bu, and Shiyu Chang. Defending llm
+watermarking against spoofing attacks with contrastive representation learning. _arXiv_ _preprint_
+_arXiv:2504.06575_, 2025.
+
+
+Dara Bahri, J. Michael Wieting, Dana Alon, and Donald Metzler. A watermark for black-box language models. _ArXiv_, abs/2410.02099, 2024.
+
+
+Tim Brooks, Bill Peebles, Connor Holmes, Will DePue, Yufei Guo, Li Jing, David Schnurr, Joe
+Taylor, Troy Luhman, Eric Luhman, et al. Video generation models as world simulators. _OpenAI_
+_Blog_, 1(8):1, 2024.
+
+
+Moses S Charikar. Similarity estimation techniques from rounding algorithms. In _Proceedings_ _of_
+_the thiry-fourth annual ACM symposium on Theory of computing_, pp. 380–388, 2002.
+
+
+Qiguang Chen, Mingda Yang, Libo Qin, Jinhao Liu, Zheng Yan, Jiannan Guan, Dengyun Peng,
+Yiyan Ji, Hanjing Li, Mengkang Hu, et al. Ai4research: A survey of artificial intelligence for
+scientific research. _arXiv preprint arXiv:2507.01903_, 2025.
+
+
+Miranda Christ and Sam Gunn. Pseudorandom error-correcting codes. In _Annual_ _International_
+_Cryptology Conference_, pp. 325–347. Springer, 2024.
+
+
+Miranda Christ, Sam Gunn, and Or Zamir. Undetectable watermarks for language models. In _The_
+_Thirty Seventh Annual Conference on Learning Theory_, pp. 1125–1139. PMLR, 2024.
+
+
+Amirhossein Dabiriaghdam and Lele Wang. Simmark: A robust sentence-level similarity-based
+watermarking algorithm for large language models. _arXiv preprint arXiv:2502.02787_, 2025.
+
+
+Sumanth Dathathri, Abigail See, Sumedh Ghaisas, Po-Sen Huang, Rob McAdam, Johannes Welbl,
+Vandana Bachani, Alex Kaskasoli, Robert Stanforth, Tatiana Matejovicova, et al. Scalable watermarking for identifying large language model outputs. _Nature_, 634(8035):818–823, 2024.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv e-prints_, pp. arXiv–2407, 2024.
+
+
+Eva Giboulot and Teddy Furon. Watermax: breaking the llm watermark detectability-robustnessquality trade-off. _Advances in Neural Information Processing Systems_, 37:18848–18881, 2024.
+
+
+Frank E Harrell and CE Davis. A new distribution-free quantile estimator. _Biometrika_, 69(3):635–
+640, 1982.
+
+
+Abe Bohan Hou, Jingyu Zhang, Tianxing He, Yichen Wang, Yung-Sung Chuang, Hongwei
+Wang, Lingfeng Shen, Benjamin Van Durme, Daniel Khashabi, and Yulia Tsvetkov. Semstamp: A semantic watermark with paraphrastic robustness for text generation. _arXiv_ _preprint_
+_arXiv:2310.03991_, 2023.
+
+
+Abe Bohan Hou, Jingyu Zhang, Yichen Wang, Daniel Khashabi, and Tianxing He. k-semstamp:
+A clustering-based semantic watermark for detection of machine-generated text. _arXiv preprint_
+_arXiv:2402.11399_, 2024.
+
+
+Zhengmian Hu, Lichang Chen, Xidong Wu, Yihan Wu, Hongyang Zhang, and Heng Huang. Unbiased watermark for large language models. _arXiv preprint arXiv:2310.10669_, 2023.
+
+
+Baihe Huang, Hanlin Zhu, Banghua Zhu, Kannan Ramchandran, Michael I Jordan, Jason D Lee,
+and Jiantao Jiao. Towards optimal statistical watermarking. _arXiv_ _preprint_ _arXiv:2312.07930_,
+2023.
+
+
+11
+
+
+Piotr Indyk and Rajeev Motwani. Approximate nearest neighbors: towards removing the curse of
+dimensionality. In _Proceedings of the thirtieth annual ACM symposium on Theory of computing_,
+pp. 604–613, 1998.
+
+
+Albert Q. Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier,
+L´elio Renard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas
+Wang, Timoth´ee Lacroix, and William El Sayed. Mistral 7b, 2023.
+
+
+John Kirchenbauer, Jonas Geiping, Yuxin Wen, Jonathan Katz, Ian Miers, and Tom Goldstein. A
+watermark for large language models. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+17061–17084. PMLR, 2023.
+
+
+Wojciech Kry´sci´nski, Nazneen Rajani, Divyansh Agarwal, Caiming Xiong, and Dragomir Radev.
+Booksum: A collection of datasets for long-form narrative summarization. _arXiv_ _preprint_
+_arXiv:2105.08209_, 2021.
+
+
+Gregory Kang Ruey Lau, Xinyuan Niu, Hieu Dao, Jiangwei Chen, Chuan-Sheng Foo, and Bryan
+Kian Hsiang Low. Waterfall: Framework for robust and scalable text watermarking. In _ICML_
+_2024 Workshop on Foundation Models in the Wild_, 2024.
+
+
+Aiwei Liu, Leyi Pan, Xuming Hu, Shu’ang Li, Lijie Wen, Irwin King, and Philip S Yu. An unforgeable publicly verifiable watermark for large language models. _arXiv preprint arXiv:2307.16230_,
+2023a.
+
+
+Aiwei Liu, Leyi Pan, Xuming Hu, Shiao Meng, and Lijie Wen. A semantic invariant robust watermark for large language models. _arXiv preprint arXiv:2310.06356_, 2023b.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024.
+
+
+Yepeng Liu and Yuheng Bu. Adaptive text watermark for large language models. _arXiv_ _preprint_
+_arXiv:2401.13927_, 2024.
+
+
+Yijian Lu, Aiwei Liu, Dianzhi Yu, Jingjing Li, and Irwin King. An entropy-based text watermarking
+detection method. _arXiv preprint arXiv:2403.13485_, 2024.
+
+
+Uday Mittal, Siva Sai, Vinay Chamola, et al. A comprehensive review on generative ai for education.
+_IEEE Access_, 2024.
+
+
+Alexander Nemecek, Yuzhou Jiang, and Erman Ayday. Topic-based watermarks for large language
+models, 2024.
+
+
+OpenAI. ChatGPT, 2022. [URL https://openai.com/blog/chatgpt.](https://openai.com/blog/chatgpt)
+
+
+Leyi Pan, Aiwei Liu, Zhiwei He, Zitian Gao, Xuandong Zhao, Yijian Lu, Binglin Zhou, Shuliang
+Liu, Xuming Hu, Lijie Wen, et al. Markllm: An open-source toolkit for llm watermarking. _arXiv_
+_preprint arXiv:2405.10051_, 2024.
+
+
+Xiao Pu, Jingyu Zhang, Xiaochuang Han, Yulia Tsvetkov, and Tianxing He. On the zero-shot
+generalization of machine-generated text detectors. _arXiv preprint arXiv:2310.05165_, 2023.
+
+
+Wenjie Qu, Wengrui Zheng, Tianyang Tao, Dong Yin, Yanze Jiang, Zhihua Tian, Wei Zou, Jinyuan
+Jia, and Jiaheng Zhang. Provably robust multi-bit watermarking for _{_ AI-generated _}_ text. In _34th_
+_USENIX Security Symposium (USENIX Security 25)_, pp. 201–220, 2025.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _Journal of machine learning research_, 21(140):1–67, 2020.
+
+
+Nils Reimers and Iryna Gurevych. Sentence-bert: Sentence embeddings using siamese bertnetworks. In _Proceedings_ _of_ _the_ _2019_ _Conference_ _on_ _Empirical_ _Methods_ _in_ _Natural_ _Language_
+_Processing_ . Association for Computational Linguistics, 11 2019. URL [https://arxiv.](https://arxiv.org/abs/1908.10084)
+[org/abs/1908.10084.](https://arxiv.org/abs/1908.10084)
+
+
+12
+
+
+Ronald L Rivest, Adi Shamir, and Leonard Adleman. A method for obtaining digital signatures and
+public-key cryptosystems. _Communications of the ACM_, 21(2):120–126, 1978.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+David Ruppert. The elements of statistical learning: data mining, inference, and prediction, 2004.
+
+
+Vinu Sankar Sadasivan, Aounon Kumar, Sriram Balasubramanian, Wenxiao Wang, and Soheil Feizi.
+Can ai-generated text be reliably detected? _arXiv preprint arXiv:2303.11156_, 2023.
+
+
+Hongjin Su, Weijia Shi, Jungo Kasai, Yizhong Wang, Yushi Hu, Mari Ostendorf, Wen tau Yih,
+Noah A. Smith, Luke Zettlemoyer, and Tao Yu. One embedder, any task: Instruction-finetuned
+text embeddings, 2023. [URL https://arxiv.org/abs/2212.09741.](https://arxiv.org/abs/2212.09741)
+
+
+Gemma Team, Aishwarya Kamath, Johan Ferret, Shreya Pathak, Nino Vieillard, Ramona Merhej,
+Sarah Perrin, Tatiana Matejovicova, Alexandre Ram´e, Morgane Rivi`ere, et al. Gemma 3 technical
+report. _arXiv preprint arXiv:2503.19786_, 2025.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Lloyd N Trefethen and David Bau. _Numerical linear algebra_ . SIAM, 2022.
+
+
+Dor Tsur, Carol Xuan Long, Claudio Mayrink Verdun, Hsiang Hsu, Chen-Fu Chen, Haim Permuter,
+Sajani Vithana, and Flavio P Calmon. Heavywater and simplexwater: Watermarking low-entropy
+text distributions. _arXiv preprint arXiv:2506.06409_, 2025a.
+
+
+Dor Tsur, Carol Xuan Long, Claudio Mayrink Verdun, Hsiang Hsu, Haim Permuter, and Flavio P
+Calmon. Optimized couplings for watermarking large language models. _arXiv_ _preprint_
+_arXiv:2505.08878_, 2025b.
+
+
+Lean Wang, Wenkai Yang, Deli Chen, Hao Zhou, Yankai Lin, Fandong Meng, Jie Zhou, and
+Xu Sun. Towards codable watermarking for injecting multi-bits information to llms. _arXiv_
+_preprint arXiv:2307.15992_, 2023.
+
+
+Zongqi Wang, Tianle Gu, Baoyuan Wu, and Yujiu Yang. Morphmark: Flexible adaptive watermarking for large language models. _arXiv preprint arXiv:2505.11541_, 2025.
+
+
+Junchao Wu, Shu Yang, Runzhe Zhan, Yulin Yuan, Lidia Sam Chao, and Derek Fai Wong. A
+survey on llm-generated text detection: Necessity, methods, and future directions. _Computational_
+_Linguistics_, 51(1):275–338, 2025.
+
+
+Jiahao Xu, Rui Hu, and Zikai Zhang. Majority bit-aware watermarking for large language models.
+_arXiv preprint arXiv:2508.03829_, 2025.
+
+
+Xiaojun Xu, Jinghan Jia, Yuanshun Yao, Yang Liu, and Hang Li. Robust multi-bit text watermark
+with llm-based paraphrasers. _arXiv preprint arXiv:2412.03123_, 2024a.
+
+
+Zhenyu Xu, Kun Zhang, and Victor S Sheng. Freqmark: Frequency-based watermark for sentencelevel detection of llm-generated text. _arXiv preprint arXiv:2410.10876_, 2024b.
+
+
+John Yang, Carlos E Jimenez, Alexander Wettig, Kilian Lieret, Shunyu Yao, Karthik Narasimhan,
+and Ofir Press. Swe-agent: Agent-computer interfaces enable automated software engineering.
+_Advances in Neural Information Processing Systems_, 37:50528–50652, 2024.
+
+
+Zhuohao Yu, Xingru Jiang, Weizheng Gu, Yidong Wang, Shikun Zhang, and Wei Ye. Saemark:
+Multi-bit llm watermarking with inference-time scaling. _arXiv preprint arXiv:2508.08211_, 2025.
+
+
+Junyan Zhang, Shuliang Liu, Aiwei Liu, Yubo Gao, Jungang Li, Xiaojie Gu, and Xuming
+Hu. Cohemark: A novel sentence-level watermark for enhanced text quality. _arXiv_ _preprint_
+_arXiv:2504.17309_, 2025.
+
+
+13
+
+
+Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen, Christopher Dewan, Mona Diab, Xian Li, Xi Victoria Lin, et al. Opt: Open pre-trained transformer
+language models. _arXiv preprint arXiv:2205.01068_, 2022.
+
+
+Yuehan Zhang, Peizhuo Lv, Yinpeng Liu, Yongqiang Ma, Wei Lu, Xiaofeng Wang, Xiaozhong Liu,
+and Jiawei Liu. Personamark: Personalized llm watermarking for model protection and user
+attribution. _arXiv preprint arXiv:2409.09739_, 2024.
+
+
+Xuandong Zhao, Prabhanjan Ananth, Lei Li, and Yu-Xiang Wang. Provable robust watermarking
+for ai-generated text. _arXiv preprint arXiv:2306.17439_, 2023a.
+
+
+Xuandong Zhao, Yu-Xiang Wang, and Lei Li. Protecting language generation models via invisible
+watermarking. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 42187–42199. PMLR,
+2023b.
+
+
+Xuandong Zhao, Sam Gunn, Miranda Christ, Jaiden Fairoze, Andres Fabrega, Nicholas Carlini,
+Sanjam Garg, Sanghyun Hong, Milad Nasr, Florian Tram`er, Somesh Jha, Lei Li, Yu-Xiang Wang,
+and Dawn Xiaodong Song. Sok: Watermarking for ai-generated content. _2025 IEEE Symposium_
+_on Security and Privacy (SP)_, pp. 2621–2639, 2024.
+
+
+14
+
+
+A USE OF LLMS
+
+
+We used AI assistants for two purposes: (1) generating routine code and boilerplate functions, which
+were subsequently reviewed and debugged by humans, and (2) performing grammatical review and
+sentence-level editing of the manuscript. The research methodology, findings, and analysis were
+independently proposed and conducted.
+
+
+B DETAILED DEFINITION AND ADDITIONAL PROOFS
+
+
+**Lemma** **6** (Countable) **.** _Let_ Σ _be_ _a_ _finite_ _tokenizer_ _vocabulary,_ _and_ _let_ Σ _[⋆]_ _denote_ _the_ _set_ _of_ _all_
+_semantically complete sentences (including the null sentence) represented as finite token sequences_
+_over_ Σ _._ _Then_ Σ _[⋆]_ _is countable._
+
+
+_Proof._ Since Σ is finite, fix a bijection _e_ : Σ _→_ N _≥_ 1 (i.e. the index on the tokenizer). Let ( _pk_ ) _k≥_ 1
+be the increasing sequence of prime numbers. Define _C_ : Σ _[<ω]_ _→_ N by
+
+
+_C_ ( _s_ ) :=
+
+
+
+
+
+
+1 _,_ _s_ = ∅ _,_
+_|s|_
+
+- _[e]_ [(] _[x][k]_ [)+1]
+
+
+- _pk_ _[e]_ [(] _[x][k]_ [)+1] _,_ _s_ = ( _x_ 1 _, . . ., x|s|_ ) _∈_ Σ _[<ω]_ _._ (15)
+
+_k_ =1
+
+
+
+
+
+If _C_ ( _s_ ) = _C_ ( _t_ ), the Fundamental Theorem of Arithmetic forces the exponent of each _pk_ to coincide
+on both sides. Hence _|s|_ = _|t|_ and _e_ ( _xk_ ) = _e_ ( _yk_ ) for all _k_, which implies _xk_ = _yk_ by bijectivity
+of _e_, so _s_ = _t_ . Therefore Σ _[<ω]_ injects into N and is countable. Since Σ _[⋆]_ _⊆_ Σ _[<ω]_, it is countable as
+well.
+
+
+**Definition 4** (Partition of a Set) **.** _Let U_ _be a non-empty set._ _A_ partition _P_ ( _U_ ) _of U_ _is a collection of_
+_non-empty, pairwise disjoint subsets of U_ _whose union equals U_ _._ _Formally,_
+_P_ ( _U_ ) = _{A_ 1 _, . . ., An}_
+_such that:_
+
+
+    - _Ai_ = _∅_ _for all i,_
+
+    - _Ai ∩_ _Aj_ = _∅_ _for all i ̸_ = _j,_
+
+    - [�] _i_ _[n]_ =1 _[A][i]_ [=] _[ U]_ _[.]_
+
+_Each element u_ _∈_ _U_ _belongs to exactly one subset Ai_ _∈P_ ( _U_ ) _, which we denote as Pu_ ( _U_ ) _in the_
+_main body._
+
+
+**Proof of Lemma 1.** Here we suppose that _q_ ( _S_ ) _>_ 0 in practice, meaning that reject-sampling will
+always succeed when _N_ is large enough.
+
+
+_Proof._ Let _F_ : Σ _[∗]_ _→_ _U_ be the proxy with finite range _U_, and fix a green set _S_ _⊆_ _U_ . For _u ∈_ _U_,
+
+
+_q_ ( _u_ ) ≜ 
+
+
+ - _PM_ ( _t |_ _**π**_ ) _,_ _q_ ( _S_ ) ≜ 
+
+_t∈F_ _[−]_ [1] ( _u_ ) _F_ ( _t_ )
+
+
+_PM_ ( _t |_ _**π**_ ) _._ (16)
+
+_F_ ( _t_ ) _∈S_
+
+
+Hence
+
+
+Pr( _Y_ = _s |_ _**π**_ _, S_ ) =
+
+
+_∞_
+
+- �1 _−_ _q_ ( _S_ )� _k PM_ ( _s |_ _**π**_ ) = _PM_ ( _s |_ _**π**_ ) for _∀F_ ( _s_ ) _∈_ _S._ (17)
+
+_q_ ( _S_ )
+
+_k_ =0
+
+
+**Proof** **of** **Theorem** **2.** Here the watermark code space is _E_ = _{S_ _|_ _S_ _⊆_ _U, |S|_ = _}_, where
+_|U_ _|_ = _M_, = _γM_ and _|E|_ = - _M_ �.
+
+
+_Proof._ Based on equation 5 we have
+
+
+ - _P_ ( _Y_ = _s |_ _**π**_ _, eK_ ) _P_ ( _eK_ ) = - _M_ 1 - 
+_eK_ _∼_ Un( _E_ ) _g_ _S∈E_
+
+
+_PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =] 
+
+
+_P_ ( _Y_ = _s |_ _**π**_ _, S_ ) _._ (18)
+
+_S∈E_
+
+
+From Lemma 1,
+
+
+_PM_ ( _s |_ _**π**_ )
+
+
+_,_ _u ∈_ _S,_
+_q_ ( _S_ )
+
+
+_P_ ( _Y_ = _s |_ _**π**_ _, S_ ) =
+
+
+
+
+
+
+_q_ ( _S_ ) (19)
+
+0 _,_ _u_ _∈/_ _S,_
+
+
+
+
+
+15
+
+
+therefore only sets _S_ containing _u_ = _F_ ( _s_ ) contribute:
+
+
+_PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =]     - _M_ 1     -     
+_S⊆E_
+_u∈S_
+
+
+which is exactly equation 9.
+
+
+_PM_ ( _s |_ _**π**_ )
+
+
+_q_ (( _sS |_ ) _**π**_ ) = _PM_ ( _s |_ _**π**_ ) _·_ - _M_ 1 - 
+
+
+_S⊆U_
+_|S|_ = _, u∈S_
+
+
+1
+(20)
+_q_ ( _S_ ) _[.]_
+
+
+**Proof of Corollary 2.1.** Denote equation 9 as
+_PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =] _[ P][M]_ [(] _[s][ |]_ _**[ π]**_ [)] _[A]_ [(] _[u]_ [)] _[,]_
+where _A_ ( _u_ ) ≜ 1 - 1
+
+                  - _M_                  -                  
+
+
+1
+
+
+_S⊆U_
+_|S|_ = _m,u∈S_
+
+
+( _⋆_ )
+_v∈S_ _[q]_ [(] _[v]_ [)] _[.]_
+
+
+So _PM_ _[w]_ [(] _[· |]_ _**[ π]**_ [)][ is distortion-free if and only if] _[ A]_ [(] _[u]_ [)] _[ ≡]_ [1][ for all] _[ u][ ∈]_ _[U]_ [.]
+
+
+_Proof._
+_Sufficiency_ . If _q_ ( _u_ ) _≡_ 1 _/M_ for all _u_, then for every _S_, _q_ ( _S_ ) = [�]
+
+
+_M_ _−_ 1
+_g−_ 1 [)]
+Pr( _u ∈_ _S_ ) = [(] ( _M_ ) = _M_ = _γ_ . Hence
+
+
+_v∈S_ _[q]_ [(] _[v]_ [)] [=] _[g/M]_ [=] _[γ]_ [.] [Also]
+
+
+_A_ ( _u_ ) = _·_ [1]
+_M_ _γ_ [= 1] _[,]_
+
+
+which means _PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [) =] _[ P][M]_ [(] _[s][ |]_ _**[ π]**_ [)] _[.]_
+_Necessity_ . Assume distortion-free, so _A_ ( _u_ ) = 1 for all _u_ . Fix two indices _u_ = _v_ . Write the
+difference using ( _⋆_ ). Denote _T_ _⊆_ _U_ _\ {u, v}_, _|T_ _|_ = _−_ 1, as a set containing both _u_ and _v_ will be
+neutralized in the difference, thus
+
+
+- 1
+_q_ ( _u_ ) + [�]
+
+
+_A_ ( _u_ ) _−_ _A_ ( _v_ ) = 1 
+        - _M_        
+_T ⊆U_ _\{u,v}_
+_|T |_ = _−_ 1
+
+
+1
+_w∈T_ _[q]_ [(] _[w]_ [)] _[−]_ _q_ ( _v_ ) + [�]
+
+
+_w∈T_ _[q]_ [(] _[w]_ [)]
+
+
+_._
+
+
+Since _f_ ( _x_ ) = _x_ +1 _a_ [is a strictly decreasing function for any fixed] _[ a >]_ [ 0][, therefore]
+
+
+    - If _q_ ( _u_ ) _> q_ ( _v_ ), then every term in the sum is negative and hence _A_ ( _u_ ) _< A_ ( _v_ ).
+
+    - If _q_ ( _u_ ) _< q_ ( _v_ ), then _A_ ( _u_ ) _> A_ ( _v_ ).
+
+
+Distortion-free requires _A_ ( _u_ ) _≡_ _A_ ( _v_ ), hence we must have _q_ ( _u_ ) = _q_ ( _v_ ). Since _u, v_ were arbitrary,
+all _q_ ( _·_ ) are equal, meaning that _q_ ( _u_ ) = _M_ 1 [for every] _[ u][ ∈]_ _[U]_ [.]
+
+
+**Proof** **of** **Theorem** **4.** Let _⃗x_ = _∥TT_ ( ( _ss_ )) _∥_ [,] _[⃗x][′]_ [=] _∥TT_ ( ( _AA_ (( _ss_ )))) _∥_ [,] [and] _[ ⃗v]_ [=] _∥vv∥_ [.] [Then] [the] [proxy] [is] _[f]_ [=]
+_⟨⃗v, ⃗x⟩∈_ [ _−_ 1 _,_ 1] and _f_ _[′]_ = _⟨⃗v, ⃗x_ _[′]_ _⟩∈_ [ _−_ 1 _,_ 1].
+
+
+_Proof._ For unit vectors, _∥⃗x_ _[′]_ _−_ _⃗x∥_ [2] = 2 _−_ 2 _⟨⃗x_ _[′]_ _, ⃗x⟩≤_ 2 _d_, hence
+
+
+_√_
+_|f_ _[′]_ _−_ _f_ _|_ = _|⟨⃗v, ⃗x_ _[′]_ _−_ _⃗x⟩| ≤∥⃗v∥∥⃗x_ _[′]_ _−_ _⃗x∥≤_
+
+
+_|f_ _−_ _f_ _|_ = _|⟨⃗v, ⃗x_ _−_ _⃗x⟩| ≤∥⃗v∥∥⃗x_ _−_ _⃗x∥≤_ 2 _d._
+
+_√_
+A flip is possible only if the original score sits within the 2 _d_
+
+
+2 _d_ band around the median:
+_√_ _√_ _√_
+_|f_ _−_ _mv| ≤|f_ _[′]_ _−_ _f_ _| ≤_ 2 _d_ = _⇒_ _f_ _∈_ [ _mv −_ 2 _d, mv_ + 2 _d_ ] _._
+
+
+_√_
+2 _d_ = _⇒_ _f_ _∈_ [ _mv −_
+
+
+_√_
+2 _d, mv_ +
+
+
+_|f_ _−_ _mv| ≤|f_ _−_ _f_ _| ≤_ 2 _d_ = _⇒_ _f_ _∈_ [ _mv −_ 2 _d, mv_ + 2 _d_ ] _._
+
+Therefore, - _√_ _√_ _P_ rm _≤_ _µM_ _s ∈_ Σ _[∗]_ [��] _Fv_ ( _s_ ) _∈_ [ _mv −_ 2 _d, mv_ + 2 _d_ ] _._
+
+                         
+
+
+_√_
+2 _d, mv_ +
+
+
+ 2 _d_ ] _._
+
+
+**Proof of Lemma 5.**
+
+
+_Proof._ Without loss of generality, fix _x_ = _e_ 1 = (1 _,_ 0 _, . . .,_ 0). Draw _y_ uniformly on _S_ _[d][−]_ [1] . The angle
+_θ_ between _x_ and _y_ satisfies cos _θ_ = _x · y_ = _g_ ( _y_ ). For _t ∈_ ( _−_ 1 _,_ 1), the set _{y_ _∈_ _S_ _[d][−]_ [1] : _g_ ( _y_ ) = _t}_ is
+_√_
+a ( _d −_ 2)-sphere of radius 1 _−_ _t_ [2] . Its ( _d −_ 2)-dimensional surface area is
+
+
+_d−_ 3
+A( _t_ ) = A( _S_ _[d][−]_ [2] )(1 _−_ _t_ [2] ) 2 _,_
+
+
+16
+
+
+2 _π_ [(] _[k]_ [+1)] _[/]_ [2]
+where A( _·_ ) denotes the surface area, A( _S_ _[k]_ ) = [Hence] [the] [probability] [that] _[T]_ _[∈]_
+
+Γ(( _k_ + 1) _/_ 2) [.]
+
+[ _t, t_ + _dt_ ] is proportional to that area times _dt_ .
+
+
+2 _,_ _t ∈_ [ _−_ 1 _,_ 1] _._
+
+
+_fT_ ( _t_ ) = [A(] _[S][d][−]_ [2][)]
+
+
+     - _d_      
+_−_ 2 3 = Γ 2
+
+
+_d−_ 3
+
+2
+
+A( _S_ _[d][−]_ [1] ) [(1] _[ −]_ _[t]_ [2][)]
+
+
+Γ - _d−_ 2 12� ~~_√_~~ _π_ (1 _−_ _t_ [2] ) _d−_ 2 3
+
+
+With _t_ = cos _θ_, _dt_ = _−_ sin _θdθ_, and 1 _−_ _t_ [2] = sin [2] _θ_ . Therefore
+
+
+_pd_ ( _θ_ ) = _fT_ (cos _θ_ ) sin _θ_ = Γ �Γ _d−_ 2�1 _d_ 2�� ~~_√_~~ _π_ sin _[d][−]_ [2] _θ,_ _θ_ _∈_ [0 _, π_ ] _._
+
+
+**Theorem 7** _√_ (Multi-channel Robustness) **.** _Let ϵ be an upper bound on p_ = _µM_ ( _s_ _∈_ Σ _[∗]_ _|_ _|Fvj_ ( _s_ ) _−_
+_mvj_ _| ≤_ 2 _d_ ) _for all channels j, with proxy function independence across channels._ _Then:_
+
+
+2 _d_ ) _for all channels j, with proxy function independence across channels._ _Then:_
+
+
+_√_
+E[ _z_ _[′]_ ] _≥_ (1 _−_ 2 _ϵ_ )
+
+
+_√_
+_bT,_ _Var_ [ _z_ _[′]_ ] _≤_ 4 _ϵ_ (1 _−_ _ϵ_ ) _,_ _SNR ≥_ [(1] _[ −]_ [2] _[ϵ]_ [)]
+
+
+2� _ϵ_ (1 _−_ _ϵ_ )
+
+
+_bT_
+
+
+_Proof._ Attack removes evidence in each channel with probability _ϵ_ :
+E[ _c_ _[′]_ ( _t,j_ ) [] = 1] _[ −]_ _[ϵ,]_ Var[ _c_ _[′]_ ( _t,j_ ) [] =] _[ ϵ]_ [(1] _[ −]_ _[ϵ]_ [)]
+Total evidence after attack:
+E[ _Ng_ _[′]_ [] =] _[ bT]_ [(1] _[ −]_ _[ϵ]_ [)] _[,]_ Var[ _Ng_ _[′]_ [] =] _[ bTϵ]_ [(1] _[ −]_ _[ϵ]_ [)]
+Let _X_ = _Ng_ _[′]_ _[−]_ [0] _[.]_ [5] _[bT]_ [:]
+E[ _X_ ] = _bT_ (0 _._ 5 _−_ _ϵ_ ) _,_ Var[ _X_ ] = _bTϵ_ (1 _−_ _ϵ_ )
+By Jensen’s inequality for convex _| · |_ :
+
+
+    - _|X|_
+E[ _z_ _[′]_ ] = E ~~_√_~~
+0 _._ 5 _bT_
+
+
+~~_√_~~
+0 _._ 5
+
+
+[]] _[|]_ _√_
+
+= (1 _−_ 2 _ϵ_ )
+_bT_
+
+
+_≥_ _[|]_ [E][[] ~~_√_~~ _[X]_ []] _[|]_
+
+
+_bT_
+
+
+For variance bound, _X_ approximately _N_ ( _µX_ _, σX_ [2] [)][ with] _[ µ][X]_ _[>]_ [ 0][:]
+Var[ _|X|_ ] _≤_ _σX_ [2]
+
+
+Var[ _z_ _[′]_ ] = [4]
+
+
+[4]
+
+_bT_ [Var][[] _[|][X][|]_ []] _[ ≤]_ _bT_ [4]
+
+
+_X_ [= 4] _[ϵ]_ [(1] _[ −]_ _[ϵ]_ [)]
+_bT_ _[·][ σ]_ [2]
+
+
+_√_
+Signal-to-noise ratio: E[ _z_ _[′]_ ]
+SNR = _≥_ [(1] _[ −]_ [2] _[ϵ]_ [)]
+
+~~�~~ Var[ _z_ _[′]_ ] 2 ~~�~~ _ϵ_ (1 _−_
+
+
+_bT_
+
+
+2 ~~�~~ _ϵ_ (1 _−_ _ϵ_ )
+
+
+This theorem demonstrates that increasing the number of channels _b_ improves robustness under
+_√_
+the same attack strength. The signal-to-noise ratio grows with _bT_, showing that multi-channel
+
+c _√_ onstraints enhance detectability. The approximation Var[ _|X|_ ] _≤_ _σX_ [2] [is reasonable when] _[ µ][X]_ _[/σ][X]_ [=]
+
+
+_bT_ _·_ ~~_√_~~ 0 _._ 5 _−ϵ_
+
+
+_[≈]_ [10] _[ −]_ [20] _[, ϵ][ ≤]_
+_ϵ_ (1 _−ϵ_ ) [is large, which occurs for typical experimental parameters (] _[b]_ [ = 4] _[, T]_
+
+
+0 _._ 3), yielding _µX_ _/σX_ _≥_ 2 _._ 8. This theoretical analysis complements the empirical results showing
+PMARK’s superior robustness against various attacks.
+
+
+C ADDITIONAL RELATED WORK
+
+
+Text watermarking techniques for large language models can be broadly categorized into two main
+paradigms: token-level methods and sentence-level methods.
+
+
+C.1 TOKEN-LEVEL TEXT WATERMARKING
+
+Token-level watermarking, the more traditional approach, embeds signals by manipulating the probability distribution of tokens during the decoding process. A foundational method in this category
+partitions the vocabulary into “green” and “red” lists, boosting the probability of green-listed tokens
+to create a detectable statistical bias (Kirchenbauer et al., 2023). Numerous subsequent works have
+built upon this concept. For instance, some methods focus on enhancing security and text quality by
+adaptively watermarking only high-entropy tokens (Liu & Bu, 2024; Lu et al., 2024), while others
+dynamically adjust watermark strength to balance effectiveness and quality (Wang et al., 2025). To
+improve robustness against spoofing attacks, researchers have explored contrastive representation
+
+
+17
+
+
+learning to generate semantic-aware token lists (An et al., 2025). Other variations introduce signals in different domains, such as sinusoidal perturbations in the token probability vector to guard
+against model distillation (Zhao et al., 2023b), or frequency-based signals detectable via STFT (Xu
+et al., 2024b). There are also some token-level watermarking techniques (Giboulot & Furon, 2024;
+Bahri et al., 2024) that introduce a scorer to select chunk candidates with better detectability, thereby
+facilitating watermarks for black-box LLMs.
+Multi-bit watermarking has also been a significant focus, with techniques employing errorcorrection codes (Qu et al., 2025), probability balancing (Wang et al., 2023), and majority-bit-based
+list construction (Xu et al., 2025) to embed more complex information. Furthermore, some approaches frame watermarking as a problem of hypothesis testing, optimizing detection accuracy by
+coupling output tokens with pseudo-random generators (Huang et al., 2023). Despite their diversity
+and ingenuity, a fundamental limitation shared by nearly all token-level methods is their vulnerability to semantic-level attacks. Since the watermark is tied to specific token choices, paraphrasing or
+other meaning-preserving modifications can easily disrupt or erase the embedded signal.
+
+
+C.2 SENTENCE-LEVEL TEXT WATERMARKING
+
+
+To address the vulnerability of token-level methods to paraphrasing, sentence-level watermarking
+(SWM) has emerged as a more robust paradigm. These methods treat entire sentences as the fundamental unit for embedding information. A pioneering work in this area, SEMSTAMP (Hou et al.,
+2023), partitions the semantic embedding space using locality-sensitive hashing and employs rejection sampling to ensure that generated sentences fall into a pre-defined “valid” semantic region. This
+approach significantly enhances robustness against paraphrastic attacks.
+Building on this idea, subsequent methods have explored various ways to define and select valid
+semantic regions. For example, SimMark (Dabiriaghdam & Wang, 2025) uses sentence embedding similarity, PersonaMark (Zhang et al., 2024) hashes sentence structures for personalization,
+and CoheMark (Zhang et al., 2025) leverages fuzzy c-means clustering and inter-sentence cohesion.
+Other approaches utilize advanced feature extractors such as sparse autoencoders (Yu et al., 2025)
+or fine-tuned LLM-based paraphrasers (Xu et al., 2024a) to embed multi-bit watermarks. However,
+a persistent challenge for most existing SWM techniques is their reliance on rejection sampling.
+Although effective for ensuring semantic validity, this mechanism often introduces significant distortion to the original text distribution, degrades text quality, and risks sampling failure when no
+valid candidates are found within a reasonable number of attempts. Furthermore, many of these
+methods lack rigorous theoretical guarantees for their robustness and distortion properties, a critical
+gap that our work aims to address.
+**Concurrent Work.** A concurrent work is SAEMark (Yu et al., 2025), which introduces a concept
+analogous to the proxy function used in our framework, referred to as a “feature extractor.” While
+both approaches share some conceptual similarities, PMARK offers notable advantages in several
+respects. (1) _Task_ _setting._ SAEMark targets multi-bit watermarking that embeds additional information into the generated text, whereas PMARK is designed for single-bit watermarking. (2) _Text_
+_quality._ SAEMark selects sentences based on proximity to a target threshold, which may result in
+distortion. (3) _Robustness._ SAEMark embeds watermark signals on a per-sentence basis, which
+has been shown to be vulnerable to certain attacks in their original work, while PMARK leverages
+multi-channel constraints to significantly improve resistance to such threats. (4) _Flexibility._ PMARK
+allows for greater adaptability through customizable settings such as the pivot vector and the number
+of channels, which are more difficult to implement effectively within the SAEMark framework.
+
+
+D ADDITIONAL DISCUSSION
+
+
+D.1 ROBUST RANDOM SEEDS FOR SEMANTIC-LEVEL WATERMARK
+
+
+**Random** **Seeds in** **SWMs.** In previous SWM schemes such as SemStamp and k-SemStamp, the
+random seed for _sn_ is extracted from the proxy value of the previous sentence _sn−_ 1, as shown in
+Appendix E. However, this approach may not be truly random, since consecutive sentences often
+relate to the same topic (Nemecek et al., 2024). Moreover, SimMark (Dabiriaghdam & Wang,
+2025) eliminates the use of a random seed entirely, relying instead on a fixed green region. These
+approaches can reduce the randomness of the key _k_ and thus break the assumption in 5. In this
+work, we use pre-defined random seeds that are de facto bound to specific positions _t_ . This partially
+addresses the problem but leaves the challenge of achieving _n_ -shot undetectability (Hu et al., 2023)
+unresolved.
+
+
+18
+
+
+**Definition 5** (Sentence-level _n_ -shot-undetectable) **.** _For a fixed context_ _**π**_ _, we say that a watermarked_
+_LLM distribution is n-shot-undetectable compared to the original LLM if, for all s ∈_ Σ _[⋆]_ _,_
+_n_ _n_
+
+    -    -    - _[w]_
+
+
+- _PM_ ( _s |_ _**π**_ ) = 
+
+_i_ =1 _k∈K_
+
+
+_P_ ( _K_ )
+
+_k∈K_
+
+
+_n_
+
+
+- _PM_ _[w]_ [(] _[s][ |]_ _**[ π]**_ [;] _[ k]_ [)] _[.]_
+
+
+_i_ =1
+
+
+Imagine a user asking the model the same question _n_ times. An unwatermarked model or _n_ -shotundetectable scheme would generate answers _xi, i_ = 1 _, . . ., n_ i.i.d. from _PM_ ( _s_ _|_ _**π**_ ), while watermarking schemes such as SemStamp would always generate answers based on the same _k_, since
+the context is identical across queries. A stronger notion, _n-sequence distortion-free_, is proposed in
+SynthID, which removes the requirement of identical contexts in Definition 5.
+
+
+**Definition 6** (Sentence-level _n_ -sequence Distortion-free) **.** _For a sequence of n prompts_ _**π**_ 1 _, . . .,_ _**π**_ _n_
+_and_ _a_ _sequence_ _of_ _n_ _responses_ _y_ 1 _, ..., yn_ _∈_ Σ _[⋆]_ _,_ _we_ _say_ _that_ _a_ _watermarked_ _LLM_ _distribution_ _is_
+_n-sequence distortion-free if, for all s ∈_ Σ _[⋆]_ _,_
+_n_ _n_
+
+  -  -  - _[w]_
+
+
+- _PM_ ( _yi_ _|_ _**π**_ _i_ ) = 
+
+_i_ =1 _k∈K_
+
+
+_P_ ( _K_ )
+
+_k∈K_
+
+
+_n_
+
+
+- _PM_ _[w]_ [(] _[y][i]_ _[|]_ _**[ π]**_ _[i]_ [;] _[ k]_ [; (] _**[π]**_ [1] _[, y]_ [1][)] _[, . . .,]_ [ (] _**[π]**_ _[i][−]_ [1] _[, y][i][−]_ [1][))] _[.]_
+
+
+_i_ =1
+
+
+In token-level watermarking methods such as Unbiased (Hu et al., 2023) and SynthID (Dathathri
+et al., 2024), this is achieved by skipping previously seen contexts and directly outputting unwatermarked tokens.
+However, in semantic-level watermark this is difficult to implement. Using the proxy of the previous sentence like SemStamp reintroduces the problem of reduced randomness in _K_ . Furthermore,
+mixing SWM with token-level random seed generators may increase vulnerability to paraphrase attacks. Therefore, we consider semantic-level dynamic random seed generation to be a challenging
+open problem and leave it for future work. In this work, we directly adopt pre-defined random seeds
+following Christ et al. (2024) to achieve single-shot distortion-freeness.
+
+
+D.2 ROBUSTNESS TO CROSS-SENTENCE PARAPHRASING ATTACK
+
+**Context-aware semantic-robust Random Seeds.** Based on the discussion in Appendix D.1, we
+further explore the potential of pseudo-random, context-aware, yet semantically robust random seeds
+within the PMARK framework. Specifically, we define _b_ additional orthogonal vectors _ζ_ 1 _, . . ., ζb_,
+which are distinct from the pivot vectors _v_ 1 _, . . ., vb_ used during sampling.
+The random seed _r_ ( _t,i_ ) for sentence _st_ is then based on the signal from the last _w_ sentence embeddings _T_ ( _st−w_ : _t−_ 1):
+
+                    - _ζi · T_ ( _st−w_ : _t−_ 1)                    _r_ ( _t,i_ ) = [ _⟨ζi, T_ ( _st−w_ : _t−_ 1) _⟩_ _>_ 0] = _∥ζi∥· ∥T_ ( _st−w_ : _t−_ 1) _∥_ _[>]_ [ 0] _._
+
+We leave the rigorous analysis of the distribution of these random seeds _r_ ( _t,i_ ) for future work.
+However, this approach is intuitively more random than seeds directly adapted from the proxy value
+of the last sentence, as employed by SemStamp and k-SemStamp.
+
+
+Table 4: Results for baseline methods and PMARK on OPT-1.3B and Mistral-7B across the C4 and
+BOOKSUM benchmarks, under extreme paragraph-level paraphrasing attacks by GPT-3.5-turbo.
+For each dataset and model combination, we report TP@FP=1%, TP@FP=5%, and AUC from left
+to right. **Bold** denotes the best result, and underlined denotes the second-best.
+
+|Method|(C4, OPT-1.3B)|(C4, Mistral-7B)|(BOOKSUM, OPT-1.3B)|(BOOKSUM, Mistral-7B)|
+|---|---|---|---|---|
+|**KGW**<br>**UPV**<br>**SynthID**<br>**KSEMSTAMP**<br>**Ours(Online)**<br>**Ours(Offine)**|34.20/68.84/90.51<br>59.20/78.98/95.68<br>1.83/25.98/69.14<br>0.00/0.81/53.77<br>88.46/**96.15**/97.63<br>**75.00**/95.83/**98.26**|37.82/65.17/91.62<br>10.62/46.42/89.03<br>7.11/12.82/66.33<br>0.00/2.26/50.79<br>**96.97**/**100.00**/**99.91**<br>41.67/63.95/91.64|2.81/5.64/55.25<br>81.56/88.66/**97.86**<br>4.45/17.69/62.15<br>2.60/8.44/56.38<br>**82.30**/**94.44**/97.61<br>70.83/82.11/96.33|42.85/70.95/90.88<br>35.41/60.83/90.51<br>5.09/12.19/64.88<br>9.60/15.96/54.64<br>75.00/87.50/98.18<br>**77.45**/**95.65**/**98.39**|
+
+
+In Table 4, we present the results of PMARK under paragraph-level paraphrasing attacks with _w_ = 3,
+an attack setting where most existing watermark methods are nearly powerless. The results demonstrate the potential of PMARK under extreme cross-sentence paraphrasing attacks, where 1) Online
+PMARK exhibits a remarkable TPR@FPR1% _>_ 75% across different backbones and datasets; 2)
+Offline PMARK maintains a highly competitive performance compared with baselines.
+
+
+19
+
+
+**Experiment Details.** The prompt used to instruct gpt-3.5-turbo for paragraph-level paraphrasing
+is as follows:
+
+
+<system>
+You are a helpful assistant to rewrite the text.
+</system>
+<user>
+Please rewrite the following text, avoiding the use of
+same words or phrases as the original text as much as possible.
+You are able to merge sentences or change their order:
+{whole_text}
+</user>
+
+
+<Original Watermarked text>
+The troupe’s goal is to transform Passepartout into a clown-like
+character. Passepartout’s story starts in the medieval town of
+Qeynan. He is being held captive by a man named Laidrin. He is a
+sorcerer who makes Passepartout into a clown-like character.
+Passepartout’s story begins with a peasant, Fath, who has been
+betrayed by the king’s men. Fath flees with his wife ...
+<Is_watermarked: True>
+
+
+<Detected Text after Attack>
+The troupe aims to transform Passepartout into a clown-like figure.
+The story begins in the medieval town of Qeynan, where Passepartout
+is held captive by Laidrin, a sorcerer who casts a spell on him,
+turning him into a clownish character. Meanwhile, a peasant named
+Fath, betrayed by the king’s men, flees into the forest with ...
+<Is_watermarked: True>
+
+
+E ANALYSIS OF EXISTING SWM METHODS
+
+
+In Section 2, we presented a brief analysis of existing SWM methods, whose core lies in the proxy
+functions they employ.
+**SemStamp.** Specifically, the proxy function of SemStamp can be defined as
+_F_ SemStamp = LSH( _T_ ( _s_ )) = �LSH1( _T_ ( _s_ )) _∥· · ·_ _∥_ LSH _n_ ( _T_ ( _s_ ))� _,_
+where LSH _i_ ( _v_ ) = sign( _u_ _[⊤]_ _i_ _[v]_ [)][ (][Indyk & Motwani][,][ 1998][;][ Charikar][,][ 2002][),] _[ {][u][i][}]_ _i_ _[n]_ =1 _[⊂]_ [R] _[d]_ [is a set of]
+randomly initialized vectors, and _E_ is a text encoder with _T_ ( _s_ ) _∈_ R _[d]_ . The Green Region _Gt_ for
+each sentence position _t_ is then defined as
+_Gt_ = _U_ _[′]_ [: _γ ·_ 2 _[d]_ ] _,_ _U_ _[′]_ = Shuffle( _U_ ; _rt_ ) _,_ _rt_ = _q · F_ ( _st−_ 1) _,_
+where Shuffle( _U_ ; _r_ ) denotes shuffling the ordered list _U_ with random seed _r_, and _q_ is a large prime.
+**k-SemStamp.** For k-SemStamp (Hou et al., 2023),
+
+
+_F_ k-SemStamp = argmax
+_j_
+
+
+_u_ _[⊤]_ _j_ _[T]_ [ (] _[s]_ [)]
+_∥uj∥· ∥T_ ( _s_ ) _∥_ _[,]_
+
+
+where _{uj}_ are cluster centers obtained via k-means clustering on the entire dataset. Similar to
+SemStamp (Hou et al., 2023), the Green Region _Gt_ is given by
+_Gt_ = _U_ _[′]_ [: _γ ·_ 2 _[d]_ ] _,_ _U_ _[′]_ = Shuffle( _U_ ; _rt_ ) _,_ _rt_ = _q · F_ ( _st−_ 1) _._
+**SimMark.** For SimMark (Dabiriaghdam & Wang, 2025),
+
+_F_ SimMark( _st_ ) = _∥TT_ ( ( _sts−t−_ 1)1 _∥· ∥T_ ) _[⊤]_ _T_ ( ( _sts_ ) _t_ ) _∥_ _[,]_
+
+where _st−_ 1 is the previous sentence. A fixed interval is then used as the Green Region. Under the
+cosine similarity used above, _Gt_ is always
+_Gt_ = [0 _._ 68 _,_ 0 _._ 76] _._
+Such a pre-defined threshold carries a high risk that no valid candidate sentence has a proxy lying
+within the Green Region. Moreover, these carefully tuned hyperparameters may perform poorly in
+other settings, as shown in Table 1.
+
+
+20
+
+
+F OFFLINE ALGORITHM
+
+
+To describe the generation and detection process of the offline version of PMARK more precisely,
+we illustrate it in pseudocode, as shown in Figure 6.
+
+**Theorem 8** (Distortion Bound of Offline PMark) **.** _Let pj_ = _PM_ ( _Fvj_ ( _s_ ) _>_ 0 _|_ _π_ ) _, |pj_ _−_ 0 _._ 5 _|_ _≤_ _ϵ,_
+_δTV_ = [1] - _s∈_ Σ _[∗]_ _[|][P][ w]_ _M_ [(] _[s][ |][ π]_ [)] _[ −]_ _[P][M]_ [(] _[s][ |][ π]_ [)] _[|][.]_ _[Then][ δ][TV]_ _[≤]_ _[ϵ][ for single-channel case.]_
+
+
+_s∈_ Σ _[∗]_ _[|][P][ w]_ _M_ [(] _[s][ |][ π]_ [)] _[ −]_ _[P][M]_ [(] _[s][ |][ π]_ [)] _[|][.]_ _[Then][ δ][TV]_ _[≤]_ _[ϵ][ for single-channel case.]_
+
+
+[1] 
+2
+
+
+_Proof._ For single-channel case:
+
+
+_PM_ _[w]_ [(] _[s][ |][ π]_ [) =]
+
+
+Therefore,
+
+
+- _PM_ ( _s | π_ ) _·_ 2 [1] _p_ if _Fv_ ( _s_ ) _>_ 0
+
+_PM_ ( _s | π_ ) _·_ 2(11 _−p_ ) if _Fv_ ( _s_ ) _<_ 0
+
+
+
+
+
+
+
+
+
+
+
+_δ_ TV = [1]
+
+2
+
+
+ - _PM_ ( _s | π_ ) 1 + 
+���� 2 _p_ _[−]_ [1] ����
+_s_ : _Fv_ ( _s_ ) _>_ 0 _s_ : _Fv_ ( _s_ )
+
+
+ 
+
+
+ - _PM_ ( _s | π_ ) 1
+
+���� 2(1 _−_ _p_ ) _[−]_ [1] ����
+_s_ : _Fv_ ( _s_ ) _<_ 0
+
+
+2(1 _−_ _p_ )
+
+
+= [1]
+
+2
+
+
+= [1]
+
+
+- _|_ 1 _−_ 2 _p|_
++ _[|]_ [1] _[ −]_ [2] _[p][|]_
+2 2
+
+
+= _[|]_ [1] _[ −]_ [2] _[p][|]_ (21)
+
+2
+
+
+= [1]
+
+2
+
+
+_p ·_ _[|]_ [1] _[ −]_ [2] _[p][|]_
+
+
+[2] _[p][|]_
+
++ (1 _−_ _p_ ) _·_ _[|]_ [1] _[ −]_ [2] _[p][|]_
+2 _p_ 2(1 _−_ _p_ )
+
+
+Since _|p −_ 0 _._ 5 _| ≤_ _ϵ_, _|_ 1 _−_ 2 _p| ≤_ 2 _ϵ_, thus _δ_ TV _≤_ _ϵ_ .
+
+
+For the multi-channel offline PMark, the generation process selects the sentence with the highest
+watermark evidence score score( _s_ ) = [�] _j_ _[b]_ =1 **[1]** _[F]_ _vj_ [(] _[s]_ [)] _[>]_ [0] _[·][ r][j]_ [.] [The] [distortion] [depends] [on] [the] [joint]
+distribution of the proxy function values across channels.
+Assuming that the proxy functions are orthogonal and that the signs **1** _Fvj_ ( _s_ ) _>_ 0 are independent
+across channels for a random sentence _s_, the score distribution can be analyzed. If _pj_ = 0 _._ 5 for all
+_j_, the selection is uniform, and distortion is zero. If _|pj −_ 0 _._ 5 _| ≤_ _ϵ_, the distortion can be bounded by
+considering the probability that the score deviates from its expectation. Empirical results show that
+the perplexity of offline PMark is close to that of the unwatermarked text, indicating that _ϵ_ is small
+in practice, and thus the distortion is negligible.
+
+
+G IMPLEMENTATION DETAILS
+
+
+G.1 BASELINES
+**MarkLLM.** We use the official implementation of MarkLLM (Pan et al., 2024) [1] to reproduce the
+results of various token-level baselines, including KGW (Kirchenbauer et al., 2023), UPV (Liu
+et al., 2023a), MorphMark (Wang et al., 2025), SIR (Liu et al., 2023b), EXP (Aaronson, 2023),
+EXPGumbel (Aaronson, 2023), and SynthID (Dathathri et al., 2024). During generation, we set
+max ~~n~~ ew ~~t~~ okens to 256, comparable to the generation length used by semantic-level methods.
+The temperature and top ~~p~~ are fixed at 0 _._ 7 and 0 _._ 95, respectively, across all experiments to ensure
+fair comparison. In addition, for baselines that depend on external networks (e.g., SIR (Liu et al.,
+2023b) and UPV (Liu et al., 2023a)), we use the official weights provided by MarkLLM.
+**k-SemStamp.** We adapt the official k-SemStamp implementation from MarkLLM to align it with
+other semantic-level methods. Specifically, we set max ~~n~~ ew ~~s~~ entences to 12 (instead of a token
+count), which is applied consistently across all semantic-level baselines. We set max ~~t~~ rials to
+the default value of 100 for SemStamp, k-SemStamp, and SimMark. For the embedding model, we
+use the fine-tuned all-mpnet-base-v2 (Reimers & Gurevych, 2019) [2] provided by Hou et al.
+(2024). We also employ the k-means centroid weights [3] released by Hou et al. (2024), trained on the
+C4 (Raffel et al., 2020) and BookSum (Kry´sci´nski et al., 2021) datasets. For the backbone generation models OPT-1.3B (Zhang et al., 2022) [4] and Mistral-7B-v0.1 (Jiang et al., 2023) [5], we use the
+original Hugging Face versions to ensure fair comparison with all other methods. All other hyperparameters are kept at their default settings in the k-SemStamp implementation of MarkLLM. For
+all SWM experiments, we assume that sentence segmentation is consistent during both generation
+and detection, such that we evaluate only the intrinsic capability of the SWM method.
+
+
+[1https://github.com/THU-BPM/MarkLLM](https://github.com/THU-BPM/MarkLLM)
+[2https://huggingface.co/AbeHou/SemStamp-c4-sbert](https://huggingface.co/AbeHou/SemStamp-c4-sbert)
+[3https://github.com/abehou/SemStamp](https://github.com/abehou/SemStamp)
+[4https://huggingface.co/facebook/opt-1.3b](https://huggingface.co/facebook/opt-1.3b)
+[5https://huggingface.co/mistralai/Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+
+
+21
+
+
+**SemStamp.** For SemStamp (Hou et al., 2023), we use the authors’ official implementation, setting
+temperature = 0 _._ 7, top ~~p~~ = 0 _._ 95, and max ~~n~~ ew ~~s~~ entences = 12 to match the other semanticlevel methods. We also use the fine-tuned embedding model and the original generation model to
+ensure fair comparison.
+**SimMark.** We use the official implementation of SimMark (Dabiriaghdam & Wang, 2025) [6] . We
+adopt cosine distance with the recommended validity interval [0.68, 0.76]. Additionally, we use the
+recommended embedding model instructor-large (Su et al., 2023) [7] and the original generation models OPT-1.3B and Mistral-7B-v0.1 to maintain comparability with other methods. The
+factor _K_ is set to 250 for the soft- _z_ test, following the original paper.
+**PMARK.** During generation, we use the original all-mpnet-base-v2 embedding
+model (Reimers & Gurevych, 2019) [8] without fine-tuning. Pivot vectors are generated via QR decomposition of a Gaussian random matrix (Trefethen & Bau, 2022) to ensure orthogonality. We
+set temperature = 0 _._ 7, top ~~p~~ = 0 _._ 95, and max ~~n~~ ew ~~s~~ entences = 12, consistent with other
+semantic-level methods. The sample budget is _N_ = 64, and the number of channels is _b_ = 4. For
+detection, we set the numerical threshold _δ_ = 0 _._ 001 and the smoothing factor _K_ = 150.
+
+
+G.2 ADVERSARIAL ATTACKS
+
+
+**Doc-P.** We conduct paraphrase attacks following the official SemStamp implementation Hou et al.
+(2023; 2024). Specifically, for the paraphrasers Pegasus (Pu et al., 2023) [9] and Parrot (Sadasivan
+et al., 2023) [10], we adopt the bigram-style attack proposed by SemStamp Hou et al. (2023), which
+selects paraphrases with minimal bigram overlap relative to the source. For the GPT (OpenAI, 2022)
+paraphrasing attack, we use the prompt provided by MarkLLM (Pan et al., 2024). All attacks are
+applied at the sentence level across all methods and settings to simulate real-world scenarios.
+**Doc-T.** We implement the back-translation attack following MarkLLM. Specifically, we use Llama3.1-8B (Dubey et al., 2024) [11] to translate watermarked English sentences into Spanish and then back
+into English in an attempt to remove watermark evidence. However, as noted in Section 5.2, this
+attack can be biased and unstable in some cases.
+**Word-D and Word-S.** We implement word deletion (Word-D) and synonym substitution (Word-S)
+attacks following the official MarkLLM implementation. We set the attack ratios to 5%, 15%, and
+30% to evaluate the overall robustness of our method. Additional experimental results are reported
+in Appendix H.
+
+
+H SUPPLEMENTED EXPERIMENTAL RESULTS
+
+
+H.1 ROBUSTNESS TO ADVERSARIAL ATTACKS
+
+
+We evaluate the robustness of existing watermarking methods under various attacks, with results
+shown in Table 5 and Table 6.
+
+
+H.2 QUALITY OF WATERMARKED TEXT
+
+
+Similar to Figure 3, we present additional results about the perplexity of existing methods across
+different benchmarks and backbones in Figure 7, 8 and 9.
+
+
+H.3 SENSITIVITY OF HYPERPARAMETER
+
+
+We present additional hyperparameter analysis results for OPT-1.3B in Figure 10, where similar
+conclusions can be deduced.
+
+
+H.4 CASE STUDY
+
+
+We illustrate various cases of SemStamp and PMARK across different backbones and datasets. Compared with the baseline, PMARK demonstrates superior text quality and robustness, producing more
+diverse sentences and retaining watermark evidence even after paraphrase attacks.
+
+
+[6https://github.com/DabiriAghdam/SimMark](https://github.com/DabiriAghdam/SimMark)
+[7https://huggingface.co/hkunlp/instructor-large](https://huggingface.co/hkunlp/instructor-large)
+[8https://huggingface.co/sentence-transformers/all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2)
+[9https://huggingface.co/tuner007/pegasus_paraphrase](https://huggingface.co/tuner007/pegasus_paraphrase)
+[10https://github.com/PrithivirajDamodaran/Parrot_Paraphraser](https://github.com/PrithivirajDamodaran/Parrot_Paraphraser)
+[11https://huggingface.co/meta-llama/Llama-3.1-8B](https://huggingface.co/meta-llama/Llama-3.1-8B)
+
+
+22
+
+
+**Algorithm 3:** PMARK Offine Generation
+
+**Input:** _M_ ; _s_ [(0)] ; _T_ ; _T_ ; _b_ ; _v_ [(1)] _, . . ., v_ [(] _[b]_ [)] ; _R_ = _{r_ ( _t,j_ ) _}_ ;
+_N_
+**Output:** _s_ [(1)] _, . . ., s_ [(] _[T]_ [ )]
+
+**for** _t ←_ 1 **to** _T_ **do**
+
+**for** _j_ _←_ 1 **to** _b_ **do**
+
+_Fj_ ( _s_ ) _←⟨v_ [(] _[j]_ [)] _, T_ ( _s_ ) _⟩_
+**end**
+_u_ max _←−∞_ ; _B_ _←_ ∅ **for** _i ←_ 1 **to** _N_ **do**
+Sample _x_ [(] _[i]_ [)] _∼_ _PM_ ( _s | s_ [(0:] _[t][−]_ [1)] )
+Sig( _x_ [(] _[i]_ [)] ) _←_     - _Fj_ ( _x_ [(] _[i]_ [)] ) _>_ 0� _bj_ =1
+_u_ [(] _[i]_ [)] _←_ [�] _[b]_ _j_ =1 [Sig(] _[x]_ [(] _[i]_ [)][)(] _[j]_ [)] **[ if]** _[ u]_ [(] _[i]_ [)] [=] _[ b]_ **[ then]**
+_s_ [(] _[t]_ [)] _←_ _x_ [(] _[i]_ [)]
+
+**continue**
+**end**
+**if** _u_ [(] _[i]_ [)] _> u_ max **then**
+
+_u_ max _←_ _u_ [(] _[i]_ [)] ; _B_ _←{x_ [(] _[i]_ [)] _}_
+**end**
+**else if** _u_ [(] _[i]_ [)] = _u_ max **then**
+
+_B_ _←_ _B ∪{x_ [(] _[i]_ [)] _}_
+**end**
+**end**
+Select _s_ [(] _[t]_ [)] _∼_ Un( _B_ )
+**end**
+**return** _s_ [(1)] _, . . ., s_ [(] _[T]_ [ )]
+
+
+**end**
+_Ng_ _←_ _Ng_ + _c_ ( _t,j_ );
+**end**
+**end**
+
+_[−]_ [0] _[.]_ [5] _[ N]_ [total] _[|]_
+_z_ _←_ _[|][N]_ ~~_√_~~ _[g]_ ; **return** ( _z_ _> zα_ )
+0 _._ 25 _N_ total
+
+
+**Algorithm** **4:** PMARK Offline Detection
+**Input:** _S_ = [ _s_ [(0)] _, . . ., s_ [(] _[T]_ [ )] ]; _T_ ; _v_ [(1] _[...b]_ [)] ;
+_R_ = _{r_ ( _t,j_ ) _}_ ; _δ_ ; _K_ ; _α_
+**Output:** True or False
+**for** _j_ _←_ 1 **to** _b_ **do**
+
+Define _Fj_ ( _s_ ) = _⟨v_ [(] _[j]_ [)] _, T_ ( _s_ ) _⟩_
+**end**
+_Ng_ _←_ 0; _N_ total _←_ _b · T_
+**for** _t ←_ 1 **to** _T_ **do**
+
+**for** _j_ _←_ 1 **to** _b_ **do**
+
+
+_x_ ( _t,j_ ) _←Fj_ ( _s_ [(] _[t]_ [)] ); _m_ ( _j_ ) _←_ 0
+**if** _r_ ( _t,j_ ) = 1 _**and**_
+_x_ ( _t,j_ ) _> m_ ( _j_ ) _−_ _δ_ **then**
+
+
+_c_ ( _t,j_ ) _←_ 1
+**else if** _r_ ( _t,j_ ) = 0 _**and**_
+_x_ ( _t,j_ ) _< m_ ( _j_ ) + _δ_ **then**
+
+
+_c_ ( _t,j_ ) _←_ 1
+**else** _c_ ( _t,j_ ) _←_
+exp� _−_ _K |x_ ( _t,j_ ) _−_ _m_ ( _j_ ) _|_   
+
+
+Figure 6: PMARK Offline Watermarking: Left: Generation using fixed prior median = 0; Right:
+Detection using soft z-test.
+
+
+Table 5: Overall results for baseline methods and PMARK on OPT-1.3B and Mistral-7B on BOOKSUM. **Doc-T** denotes back-translation attack by LLama-3.1-8B, while Word-D and Word-S are
+word-level attacks under different ratios.
+
+
+**Method** **No Attack** _↑_ **Doc-P (Pegasus)** _↑_ **Doc-P (Parrot)** _↑_ **Doc-P (GPT)** _↑_ **Doc-T** _↑_ **Word-D(0.05)** _↑_ **Word-D(0.15)** _↑_ **Word-D(0.30)** _↑_ **Word-S(0.05)** _↑_ **Word-S(0.15)** _↑_ **Word-S(0.30)** _↑_
+
+**OPT-1.3B**
+
+**Mistral-7B**
+
+
+I BROADER IMPACTS AND LIMITATIONS
+
+
+As a pioneering study on distortion-free and robust semantic-level watermarking, PMARK paves
+the way for more secure and powerful solutions for copyright protection and content attribution in
+the AI industry. However, several limitations remain. (1) For simplicity, we consider only fixed
+random seeds in this work, although more flexible techniques such as sliding windows and pseudorandom error-correcting codes could enhance adaptability. (2) While the sampling-based generation
+paradigm avoids the sampling failures of prior methods and provides an indirect estimate of the nextsentence distribution—thereby reducing distortion—the required sampling budget still needs to be
+further reduced for practical deployment. (3) Current SWM methods, including PMARK, operate at
+the sentence level, which depends on consistent sentence segmentation between the generation and
+
+
+23
+
+
+Table 6: Overall results for baseline methods and PMARK on OPT-1.3B and Mistral-7B on C4.
+
+
+**Method** **No Attack** _↑_ **Doc-P (Pegasus)** _↑_ **Doc-P (Parrot)** _↑_ **Doc-P (GPT)** _↑_ **Doc-T** _↑_ **Word-D(0.05)** _↑_ **Word-D(0.15)** _↑_ **Word-D(0.30)** _↑_ **Word-S(0.05)** _↑_ **Word-S(0.15)** _↑_ **Word-S(0.30)** _↑_
+
+**OPT-1.3B**
+
+**Mistral-7B**
+
+
+PPL vs. Doc-T TP@FP=1%
+
+
+95
+
+90
+
+85
+
+80
+
+75
+
+70
+
+65
+
+60
+
+
+|XPG|umbel|Col3|Col4|Col5|Col6|Ours(|On)|Col9|
+|---|---|---|---|---|---|---|---|---|
+||~~Morp~~|~~Mark~~|||EXP|O|Sy<br><br>rs(Off)|n|
+||||K-SemS|UPV<br><br>amp|||||
+||||SemSta<br>|mp<br>|||||
+|||KGW|||||||
+||||||||||
+||||||SIR||||
+|||||||Sim|Mark||
+||||||||||
+
+
+8.0 7.5 7.0 6.5 6.0 5.5 5.0 4.5
+
+PPL( better)
+
+
+Figure 7: Mistral-7B PPL on BOOKSUM.
+
+
+detection processes. Future research should explore more advanced SWM methods that eliminate
+this reliance and embed watermark evidence directly into the semantics of text, potentially enabling
+more sophisticated capabilities such as detecting whether specific ideas originate from LLMs.
+
+
+24
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+|Col1|Col2|Col3|UPV|Col5|Col6|Synt|hID|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||||~~MorphM~~<br><br>K-Se|~~ark~~<br>SemSt<br>mStam|amp<br>p||Ou<br>Ou|rs(On)<br>rs(Off)||
+||KG|W<br>|||Sim|Mark||||
+|||||||||||
+|||||||||||
+||EXPGu<br>~~SIR~~|mbel||||||||
+
+
+PPL vs. Doc-T TP@FP=1%
+
+
+8.5 8.0 7.5 7.0 6.5 6.0 5.5 5.0 4.5
+
+
+PPL( better)
+
+
+Figure 8: OPT-1.3B PPL on BOOKSUM.
+
+
+PPL vs. Doc-T TP@FP=1%
+
+
+|Col1|Col2|Synth|IDUPV|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|KGW|~~SemSta~~|~~p~~|||O|SIR<br>rs(On)<br>Ours(O|ff)|
+|||Mo<br>|rphMark<br>K-Se|mStamp||||
+|||||||||
+|||||||||
+|E<br>|XP<br>EXPGum|bel<br>~~SimM~~|~~rk~~|||||
+
+
+7.5 7.0 6.5 6.0 5.5 5.0 4.5
+
+PPL( better)
+
+
+Figure 9: OPT-1.3B PPL on C4.
+
+
+100
+
+
+95
+
+
+90
+
+
+|BOOKSUM C4 BOOKSUM (Attacked) C4 (Attacked)<br>99.8100.0 99.4 99.8100.0 99.4 99.8100.0 99.4 99.0 99.6|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|Col25|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||95.4|98.0|||98.1<br>|98.1<br>|95.4|97.8|||98.0|98.0||97.2|||98.2<br>98.0<br>|98.2<br>98.0<br>|98.2<br>98.0<br>|98.2<br>98.0<br>|98.2<br>98.0<br>||98.0|98.0|
+||95.4||||||||||||||||||||||||
+||95.4||||||||||||||||||||||||
+|||||~~94.2~~|92.4|||||~~94.2~~|92.6||~~94.~~|||93.0|90.6||~~89.5~~<br>|90.8||92.9|||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||||
+||||||||||||||||||||||||87.4||
+||||||||||||||||||||||||||
+
+
+150/0.0
+
+Online
+
+
+150/0.001
+
+Online
+
+
+150/0.001
+
+Offline
+
+
+150/0.0
+
+Offline
+
+
+250/0.001
+
+Online
+
+
+250/0.001
+
+Offline
+
+
+inf/0.0
+Online
+
+
+inf/0.0
+Offline
+
+
+Figure 10: Performance comparison of OPT-1.3B under different hyperparameter settings.
+
+
+25
+
+
+(a) SemStamp without attack. (b) Offline PMARK without attack. (c) Online PMARK without attack.
+
+
+(d) SemStamp paraphrased by GPT.(e) Online PMARK paraphrased by
+GPT.
+
+
+(f) Offline PMARK paraphrased by
+GPT.
+
+
+Figure 11: Cases from Mistral-7B on BOOKSUM dataset. _•_, _•_, _•_ and _•_ indicate valid watermark
+evidence is detected with the transparetness denoting evidence strength, while _•_ indicates that no
+valid evidence detected in this channel.
+
+
+(a) SemStamp without attack. (b) Offline PMARK without attack. (c) Online PMARK without attack.
+
+
+(d) SemStamp paraphrased by GPT.(e) Online PMARK paraphrased by
+GPT.
+
+
+(f) Offline PMARK paraphrased by
+GPT.
+
+
+Figure 12: Cases from Mistral-7B on C4 dataset.
+
+
+26
+
+
+(a) SemStamp without attack. (b) Offline PMARK without attack. (c) Online PMARK without attack.
+
+
+(d) SemStamp paraphrased
+by GPT.
+
+
+(e) Online PMARK paraphrased by
+GPT.
+
+
+(f) Offline PMARK paraphrased by
+GPT.
+
+
+Figure 13: Cases from OPT-1.3B on BOOKSUM dataset.
+
+
+(a) SemStamp without attack. (b) Offline PMARK without attack. (c) Online PMARK without attack.
+
+
+(d) SemStamp paraphrased by GPT.(e) Online PMARK paraphrased by
+GPT.
+
+
+(f) Offline PMARK paraphrased by
+GPT.
+
+
+Figure 14: Cases from OPT-1.3B on C4 dataset.
+
+
+27

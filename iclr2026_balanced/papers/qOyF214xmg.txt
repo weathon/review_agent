@@ -1,0 +1,4711 @@
+**Vésteinn Snæbjarnarson** _[∗]_ _[Q][,][R]_ **Samuel Kiegeland** _[∗][Q][,][X]_ **Tianyu Liu** _[Q]_
+
+**Reda Boumasmoud** _[Q]_ **Ryan Cotterell** _[Q]_ **Tim Vieira** _[Q]_
+
+_Q_ ETH Zürich _R_ University of Copenhagen _X_ CHI-FRO
+[{vest.snae,](mailto:vest.snae@gmail.com) [tim.f.vieira}@gmail.com](mailto:tim.f.vieira@gmail.com) [reda.boumasmoud@math.ethz.ch](mailto:reda.boumasmoud@math.ethz.ch)
+[{samuel.kiegeland,](mailto:samuel.kiegeland@inf.ethz.ch) [tianyu.liu,](mailto:tianyu.liu@inf.ethz.ch) [ryan.cotterell}@inf.ethz.ch](mailto:ryan.cotterell@inf.ethz.ch)
+
+
+ABSTRACT
+
+
+Modern language models define distributions over strings, but downstream tasks
+often require different output formats. For instance, a model that generates
+byte-pair strings does not directly produce word-level predictions, and a DNA
+model does not directly produce amino-acid sequences. In such cases, a
+deterministic string-to-string transformation can convert the model’s output to the
+desired form. This is a familiar pattern in probability theory: applying a function
+_f_ to a random variable _X_ _∼_ _p_ yields a transformed random variable _f_ ( _X_ ) with an
+induced distribution. While such transformations are occasionally used in language
+modeling, prior work does not treat them as yielding new, fully functional language
+models. We formalize this perspective and introduce a general framework for
+language models derived from deterministic string-to-string transformations. We
+focus on transformations representable as finite-state transducers—a commonly
+used state-machine abstraction for efficient string-to-string mappings. We develop
+algorithms that compose a language model with an FST to _marginalize_ over
+source strings mapping to a given target, propagating probabilities through the
+transducer without altering model parameters and enabling _conditioning_ on
+transformed outputs. We present an exact algorithm, an efficient approximation,
+and a theoretical analysis. We conduct experiments in three domains: converting
+language models from tokens to bytes, from tokens to words, and from DNA
+to amino acids. These experiments demonstrate inference-time adaptation of
+pretrained language models to match application-specific output requirements.
+
+
+[https://github.com/rycolab/transducing-language-models](https://github.com/rycolab/transducing-language-models)
+
+
+1 INTRODUCTION
+
+
+Language models (LMs) define distributions over strings. Yet, the strings they produce often do not
+match the requirements of downstream applications, so practitioners resort to ad hoc post-processing.
+We call this the **string mismatch problem** . For example, in natural language processing, modern language models typically generate byte-pair encoded strings (Sennrich et al., 2016), while downstream
+tasks may require words or characters instead (see Ex. (2), below). Similarly, DNA language models
+generate nucleobase sequences, whereas many applications require amino acid sequences (Ex. (5)).
+
+Adding a string-to-string transformation to a generation pipeline is a common engineering solution,
+such as normalizing output or mapping subword tokens to bytes. Formally, this defines a new
+language model over _transformed_ strings. However, while sampling remains straightforward,
+other operations—such as computing the probability of a transformed string or conditioning on
+transformed outputs—become intractable. Consider, for instance, the mapping from a string in any
+casing to its lowercase version, as in the use-case depicted in Fig. 1. While lowercasing a given
+input is trivial, converting the original distribution to a distribution over lowercased words is not.
+
+This work treats string-to-string transformations as a first-class component of the language modeling
+pipeline. We show how to equip these transformed models with the familiar autoregressive interface—
+incremental next-symbol distributions and prefix probabilities—making them interoperable with
+
+
+_∗_ Equal contribution.
+
+
+1
+
+
+any system built for standard autoregressive language models. This approach to the string mismatch
+problem is principled, modular, and can be substantially cheaper than retraining. Moreover, the
+transformations often guarantee adherence to the requirements of the downstream applications.
+
+
+Consider language models over English text—the same
+utterance can be encoded in many ways. For example,
+
+
+(1) _Dr._ _Lemaître was flabbergasted._
+
+The byte-pair encoding used by GPT-4o (OpenAI, 2024)
+encodes Ex. (1) as the following string of subword tokens:
+
+
+4.1e-07
+
+
+.
+13
+
+
+␣L
+451
+
+
+ema
+4603
+
+
+\C3\AEtre
+
+
+29135
+
+
+␣was
+
+
+␣fl
+1548
+
+
+Hello
+hello
+HE _|_ LL _|_ O
+hell _|_ Hell _|_ H _|_ ello
+hell _|_ O
+Hell _|_ O
+he _|_ llo
+Hel _|_ lo
+
+...
+
+
+3.1e-08
+
+
+1.9e-08
+
+
+3.4e-10
+
+
+1.8e-10
+
+
+1.1e-10
+
+
+7.4e-12
+
+
+7.2e-12
+
+
+4.7e-12
+
+
+4.2e-12
+
+
+(2)
+
+
+Dr . ␣L ema \C3\AEtre ␣was ␣fl ab
+5822 13 451 4603 29135 673 1548 378
+
+berg asted . ␣\F0\9F\A4 \AF
+
+
+Dr
+5822
+
+
+673
+
+
+asted
+
+
+.
+13
+
+
+␣\F0\9F\A4
+
+
+93643
+
+
+\AF
+
+107
+
+
+9667
+
+
+23030
+
+
+The byte-pair segmentation of Ex. (1) into subwords is
+based on character substring frequency. However, many
+applications seek different units. For instance, computational psycholinguistics (e.g., Giulianelli et al., 2024) and
+controlled generation (e.g., Lew et al., 2023; Xefteri et al.,
+2025) both require custom units. This also holds if one
+wishes to derive distributions over words, such as those
+defined by the Penn Treebank (PTB) annotation guidelines
+(Marcus et al., 1993), a variation of which is shown below:
+
+(3) DR. LEMAÎTRE WAS FLABBERGASTED .
+
+
+hello 4.6e-07
+Figure 1: GPT-2 probabilities for the
+BPE token strings that, when lowercased, match hello. The total probability of all such sequences is at the bottom.
+
+
+For other applications, e.g., spelling correction, we might also wish to represent Ex. (2) using a string
+of characters or UTF-8 byte representation as follows: [1]
+
+
+D
+(4) 68
+
+
+r
+
+114
+
+
+.
+
+46
+
+
+␣
+
+32
+
+
+L
+
+76
+
+
+e
+
+101
+
+
+m
+
+109
+
+
+a
+
+97
+
+
+\C3
+
+195
+
+
+\AE
+
+174
+
+
+116
+
+
+t
+
+
+r
+
+114
+
+
+e
+
+101
+
+
+␣
+
+32
+
+
+w
+
+119
+
+
+a
+
+97
+
+
+s
+
+115
+
+
+␣
+
+32
+
+
+f
+
+102
+
+
+l
+
+108
+
+
+a b
+
+97 98
+
+
+b
+
+98
+
+
+e
+
+101
+
+
+r
+
+114
+
+
+g
+
+103
+
+
+a
+
+97
+
+
+s
+
+115
+
+
+t
+
+116
+
+
+e
+
+101
+
+
+d
+
+100
+
+
+.
+
+46
+
+
+␣
+
+32
+
+
+\F0\9F
+
+
+\F0
+
+240
+
+
+159
+
+
+\A4
+
+164
+
+
+\AF
+
+175
+
+
+In genetics, we have another example of varying representations. Consider the DNA sequence given
+in Ex. (5). The sequence is one of many that translate into the hormone _oxytocin_, typically written
+as the amino acid sequence in Ex. (6), as represented below:
+(5) T G T T A C A T A C A A A A T T G T C C T C T A G G T (6) C Y I Q N C P L G
+Transforming a language model is generally non-trivial. Even transformations with simple colloquial
+descriptions can be hard to apply. The conversion to bytes (ex. (4)) can be performed using a lookup
+table that specifies the sequence of bytes a subword token maps to. Similarly, the conversion from
+DNA to protein sequences (ex. (5)) relies on mappings from three-letter sequences of DNA bases
+to a single amino acid. The grammatical word segmentation (ex. (3)) cannot be described as easily;
+it requires _lookahead_ to determine whether, e.g., punctuation should stand alone, if it is part of the
+‘DR.’ title, or a decimal number ‘3.50’. Simple rules alone do not ensure exact conversions. Despite
+their simplicity, the byte and amino-acid transformations are not straightforward: the number of
+token sequences that map to each output sequence grows exponentially over the length of the output,
+and a proper language model transformation must account for all source-sequence probabilities. [2]
+The decimal and title examples highlight another level of complexity, where the transformation
+rules require careful analysis of the surrounding context. Recent papers have thus focused on
+practical methods for specific subsets of these transformations, in particular for estimating byte-level
+probabilities from subword models (Phan et al., 2024; Vieira et al., 2025a; Hayase et al., 2025). [3]
+We generalize these approaches to handle all of the examples given above.
+
+This work introduces a framework for string-to-string conversion using _finite-state transducers_ (FSTs).
+FSTs encode a powerful yet tractable family of relations, including those mentioned above. We com
+1Note that UTF-8 allows multiple encodings of some strings. For example, the character î can be encoded
+_composed_ (\C3\AE) or _decomposed_ (i\CC\82). [See https://unicode.org/reports/tr15/.](https://unicode.org/reports/tr15/)
+2This can also be seen in Fig. 1, where an exponentially increasing number of input prefixes map to a given
+output prefix: with each additional symbol on the output, the number of source sequences doubles.
+3Our approach is most similar to that of Vieira et al. (2025a), which considers the case of _strict-prefix monotone_
+_transformations_ (§6), which includes the subword-to-byte transformation.
+
+
+2
+
+
+pose pretrained language models with transducers that encode such transformations, and refer to the
+compositions as _transduced language models_ . FSTs provide explicit structure for tracing how probabilities from the original model should map to output sequences. This allows us to develop exact and
+approximate algorithms for efficient sampling, scoring, and conditioning on transformed strings, all
+without modifying the underlying language model. We give sufficient conditions for when the transformations can be made exactly (§6) and approximations when exact transformations are infeasible (§5).
+
+To validate our approach, we construct FSTs for the three use cases above: (i) converting tokens
+to bytes, (ii) inserting orthographic boundaries following the Penn Treebank tokenizer, and (iii)
+converting DNA sequences to sequences over amino acids. We then employ commonly used
+pretrained language models over the input units of the FSTs, and compose them with the FSTs
+to obtain language models over the output tokens. Finally, we use these settings to benchmark the
+theoretical and algorithmic contributions. In particular, we find that using a practical approximation
+is sufficient to obtain a good estimate at a fraction of the computational cost.
+
+
+2 BACKGROUND [4]
+
+**Strings.** Let _X_ be an **alphabet** (i.e., a finite, non-empty set). Let _X_ _[∗]_ denote the set of all finite
+stringsalphabets, we simply writeover _X_, including _ε_ the. We useempty _**x**_ string _,_ _**x**_ _[′]_ _∈_ _εXX_ _[∗]_ . to denote strings andWhen there is no risk _Z, Z_ of _[′]_ _⊆_ ambiguity _X_ _[∗]_ to denote sets ofwith other
+strings. Let _**xx**_ _[′]_ denote **concatenation** . Similarly, we define the concatenation of sets of strings as
+
+[def] [def] [def]
+_ZZ_ _[′]_ = _{_ _**xx**_ _[′]_ _|_ _**x**_ _∈_ _Z,_ _**x**_ _[′]_ _∈_ _Z_ _[′]_ _}_, and in the singleton case as _**x**_ _Z_ _[′]_ = _{_ _**x**_ _}Z_ _[′]_, and _Z_ _**x**_ _[′]_ = _Z{_ _**x**_ _[′]_ _}_ . We
+write _**x**_ _⪯_ _**x**_ _[′]_ when _**x**_ is a **prefix** of _**x**_ _[′]_, and _**x**_ _≺_ _**x**_ _[′]_ when it is a **strict-prefix** . Conversely, if _**x**_ _⪯_ _**x**_ _[′]_,
+we say _**x**_ _[′]_ is an **extension** of _**x**_ (a **strict extension** when _**x**_ _≺_ _**x**_ _[′]_ ).
+
+**Language models.** A **language model** _pX_ is a probability distribution over a set of strings _[∗]_ .
+_X_
+Let EOS _/_ be a special **end-of-string symbol** . We define the **prefix probability** of _pX_ as the
+_∈_ _X_
+probability that a string _X_ _pX_ starts with a given prefix _**x**_, and the **conditional prefix probability** :
+_∼_
+
+
+- def _p−→X_ ( _**xx**_ _[′]_ )
+
+_pX_ ( _**xx**_ _[′]_ ) _p−→X_ ( _**x**_ _[′]_ _**x**_ ) =
+_**x**_ _[′]_ _∈X_ _[∗]_ _|_ _p_ ~~_−→_~~ _X_ ( _**x**_ )
+
+
+def       _p−→X_ ( _**x**_ ) =
+
+
+_X_ ( _**xx**_ ) def _X_ [(] _**[x]**_ [)]
+
+_p−→X_ (EOS _**x**_ ) = _[p]_
+_p_ ~~_−→_~~ _X_ ( _**x**_ ) _|_ _p_ ~~_−→_~~ _X_ ( _**x**_ )
+
+
+_X_ (1)
+
+_p_ ~~_−→_~~ _X_ ( _**x**_ )
+
+
+def def
+when _pX_ ( _**x**_ ) _>_ 0; otherwise we set _pX_ ( _**x**_ _[′]_ _**x**_ ) = 0 and _pX_ (EOS _**x**_ ) = 1. Therefore, _pX_ ( _**x**_ )
+is a probability _[−→]_ distribution over _X_ _⊔{_ _[−→]_ EOS _|}_ for all _**x**_ _∈ −→X_ _[∗]_ . Using _|_ this structure, any _−→_ language _·_ _|_
+modeldefines a left-to-right generative process: _pX_ may be factorized as _pX_ ( _**x**_ ) starting from= _p_ _[−→]_ _X_ (EOS _**x**_ _|_ _**x**_ =) _ε_ [�], we repeatedly sample _t_ _[|]_ _**[x]**_ =1 _[|]_ _p_ _[−→]_ _X_ ( _xt_ _|_ _**x**_ _<t_ ). This _x_ _[′]_ factorization _∼_ _p_ _[−→]_ _X_ ( _· |_ _**x**_ );
+if _x_ _[′]_ = EOS, we stop, otherwise we update _**x**_ to _**x**_ _x_ _[′]_ . Conditional generation simply starts from
+the conditioning prefix instead of the empty string. We refer to the quantities in Eq. (1) as the
+**autoregressive interface** to the language model _pX_ .
+
+we **Cylindrical sets.** define the **cylinder** A cylindrical set is the set of all strings with a given prefix.over _Z_ as _⟨Z⟩_ =def _ZX ∗_ . We say that _Z_ is **cylindrical** ifLet _Z_ _Z_ = _, Z⟨Z_ _[′]_ _⟩⊆_ . The _X_ _[∗]_ ;
+union of cylinder sets is again a cylinder set, since cylinders are upward-closed. We define
+def
+thepf( _Z_ **basic** ) =def _{_ _**x**_ **cylinder** _∈_ _Z_ : ∄for _**x**_ _′_ _∈_ _**x**_ _Z_ as : _**x**_ _⟨′_ _**x**_ _≺⟩_ _**x**_ = _}_ ; this operation uniquely partitions _⟨{_ _**x**_ _}⟩_ . The **prefix-base** operation _⟨Z⟩_ pfinto basic cylinders( _Z_ ) is defined by
+over pf( _Z_ ). We say that _Z_ is **prefix-free** if pf( _Z_ ) = _Z_ . Since pf( _Z_ ) is prefix-free, the basic
+cylinders _{⟨_ _**x**_ _⟩|_ _**x**_ _∈_ pf( _Z_ ) _}_ are pairwise disjoint, and _⟨Z⟩_ = [�] _**x**_ _∈_ pf( _Z_ ) _[⟨]_ _**[x]**_ _[⟩]_ [.]
+
+**Transducers.** A **transducer** is a state-machine that encodes string-to-string relations
+_f_ _⊆_ _X_ _[∗]_ _×_ _Y_ _[∗]_ . When we express a relationship defined by _f_ as a transducer, we expose the
+computational structure needed to develop efficient algorithms. Formally, a **finite-state transducer** [5]
+( **FST** ) f is a tuple (S _, X_ _, Y,_ I _,_ F _,_ T) where S is a finite set of **states** and _X_ and _Y_ are alphabets
+of **input** and **output** symbols, respectively. The sets I _,_ F _⊆_ S are the **initial** and **accepting** states.
+T S ( _ε_ ) ( _ε_ ) S is a set of **transitions** . We render transitions ( _s, x, y, s_ _[′]_ ) T as
+_⊆x_ : _y_ _×_ _X_ _∪{_ _}_ _×_ _Y ∪{_ _}_ _×_ _∈_
+_s_ _s_ _[′]_ ; we say the transition **scans** _x_ and **emits** _y_ . We write T( _s_ ) for the set of outgoing transitions
+
+
+_**x**_ _∈_ pf( _Z_ ) _[⟨]_ _**[x]**_ _[⟩]_ [.]
+
+
+_x_ : _y_
+
+_s_ _−−→_ _s_ _[′]_ ; we say the transition **scans** _x_ and **emits** _y_ . We write T( _s_ ) for the set of outgoing transitions
+
+from state _s_, and T( _s, x_ ) for those that scan _x_ . [6] The transducer f defines a set of **paths** Π. Each
+
+
+4§A provides a notation glossary.
+5We refer to Pin (2021, Ch. 2 & 3) for a detailed treatment of transducers.
+6I.e., T( _s′′_ ) def= _{_ ( _s_ _−−→x_ : _y_ _s_ _[′]_ ) _∈_ T : _s_ = _s_ _[′′]_ _}_, and T( _s_ _[′′]_ _, x_ _[′′]_ ) [def] = _{_ ( _s_ _−−→x_ : _y_ _s_ _[′]_
+
+
+_−−→x_ : _y_ _s_ _[′]_ ) _∈_ T : _s_ = _s_ _[′′]_ _}_, and T( _s_ _[′′]_ _, x_ _[′′]_ ) [def] = _{_ ( _s_
+
+
+_−−→x_ : _y_ _s_ _[′]_ ) _∈_ T : _s_ = _s_ _[′′]_ _, x_ = _x_ _[′′]_ _}_ .
+
+
+3
+
+
+**path** _**π**_ Π is a sequence of transitions of the form _s_ 0 _x_ 1: _y_ 1 _s_ 1 _x_ 2: _y_ 2 _s_ 2 _sN_ _−_ 1 _xN_ : _yN_ _sN_ .
+
+We call _∈_ _**π**_ an **accepting** **path** if _s_ 0 I and _sN_ F. _−−−→_ The **relation** _−−−→_ **defined** _···_ by f _−−−−→_ is given by
+f =def ( _**x**_ _,_ _**y**_ ) _s_ 0 _x_ 1: _y_ 1 _s_ 1 _sN_ _−_ 1 _∈xN_ : _yN_ _sN_ _∈_ Π: _s_ 0 I _, sN_ F, i.e., each accepting path
+�contributes (not necessarily uniquely) a pair of scanned and emitted strings.� _{_ _|_ _−−−→_ _···_ _−−−−→_ _∈_ _∈_ _∈_ _}_ When every transition of
+
+
+_x_ 2: _y_ 2 _s_ 2 _sN_ _−_ 1
+_−−−→_ _···_
+
+
+**path** _**π**_ Π is a sequence of transitions of the form _s_ 0
+_∈_
+
+
+_x_ 1: _y_ 1 _s_ 1
+_−−−→_
+
+
+f =def ( _**x**_ _,_ _**y**_ ) _s_ 0 _x_ 1: _y_ 1 _s_ 1 _sN_ _−_ 1 _xN_ : _yN_ _sN_ Π: _s_ 0 I _, sN_ F, i.e., each accepting path
+�contributes (not necessarily uniquely) a pair of scanned and emitted strings.� _{_ _|_ _−−−→_ _···_ _−−−−→_ _∈_ _∈_ _∈_ _}_ When every transition of
+
+a transducer scans and emits the same symbol ( _x_ = _y_ ), the machine acts as a **finite-state automaton**
+( **acceptor** ) that recognizes a **language** _L ⊆_ _X_ _[∗]_ —the set of strings admitted by at least one accepting
+path. Such a machine is a **nondeterministic finite automaton** ( **NFA** ) in general; it is a **deterministic**
+**finite automaton** ( **DFA** ) if it has a single initial state, no _ε_ -transitions, and at most one transition
+per state and input symbol. Every NFA can be converted to an equivalent DFA by **determinization**
+(Rabin & Scott, 1959). For completeness, §B provides additional background.
+
+
+_x_ 1: _y_ 1 _s_ 1 _sN_ _−_ 1
+_−−−→_ _···_
+
+
+3 TRANSDUCED LANGUAGE MODELS
+
+
+A **transduced language model** _pY_ arises from applying a string-to-string **transformation** _f_ : _[∗]_
+_X_ _→_
+_Y_ _[∗]_, encoded by a transducer f, to a string drawn from a **source language model** _pX_ . Formally, if
+_X_ _∼_ _pX_, then _f_ ( _X_ ) has the following probability mass function:
+
+def                             _pY_ ( _**y**_ ) = Pr [=] _[ f]_ [(] _[X]_ [)] =] _pX_ ( _**x**_ ) (2)
+_X∼pX_ [[] _**[y]**_
+
+_**x**_ _∈f_ _[−]_ [1] ( _**y**_ )
+
+where _f_ _[−]_ [1] ( _**y**_ ) is the **preimage** of _**y**_, _f_ _[−]_ [1] ( _**y**_ ) =def _{_ _**x**_ _∈_ _X ∗_ : _**y**_ = _f_ ( _**x**_ ) _}_ . Put differently, in Eq. (2),
+we sum over the strings _**x**_ such that _f_ ( _**x**_ ) = _**y**_ . Unfortunately, evaluating _pY_ ( _**y**_ ) exactly using Eq. (2)
+is generally infeasible (since the preimage _f_ _[−]_ [1] ( _**y**_ ) can be very large), even though exact sampling
+from _pY_ is efficient (by sampling _**x**_ _pX_ and applying _f_ ). Like all language models, a transduced
+_∼_
+language model _pY_ has prefix and conditional prefix probability functions; its prefix probability is
+
+_p−→Y_ ( _**y**_ ) = _X_ Pr _∼pX_ [[] _**[y]**_ _[⪯]_ _[f]_ [(] _[X]_ [)] =]                     - _pX_ ( _**x**_ ) (3)
+
+_**x**_ _∈P_ ( _**y**_ )
+
+where _P_ ( _**y**_ ) is the **precover** of _**y**_, with respect to _f_, defined as _P_ ( _**y**_ ) =def _{_ _**x**_ _∈_ _X ∗_ : _**y**_ _⪯_ _f_ ( _**x**_ ) _}_ .7
+
+Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient
+left-to-right autoregressive generation. We develop a method in §4 that allows us to compute the sum
+in Eq. (3) in _finite_ time for a general class of mappings, such as those mentioned in the introduction
+(i.e., normalizing text, inserting orthographic word boundaries, or converting DNA to amino-acid
+sequences). In §5, we present algorithms to compute these quantities.
+
+
+4 DECOMPOSING THE PRECOVER
+
+
+In §3, we saw that if we can sum over the precover of _**y**_, we can calculate _pY_ ( _**y**_ ) (Eq. (3)), unlocking
+
+_[−→]_
+an autoregressive interface to the transduced language model. The following two examples illustrate
+how we can often compute this infinite sum by exploiting structural properties of the transducer.
+
+**Example 1.** _The transducer below lowercases a string. For the target string_ ab _, the precover is the infi-_
+_nite set_ (ab) = AB _,_ Ab _,_ aB _,_ ab _._ _Given a model pX_ _over the input language, the derivation on the_
+_P_ _⟨{_ _}⟩_
+_right (4a–4c) applies Eq._ (3) _to express_ _pY_ (ab) _as a sum of four source-language prefix probabilities:_
+
+_[−→]_
+
+
+_..._
+
+Z : z
+
+
+_p−→Y_ (ab) = - _pX_ ( _**x**_ ) (4a)
+
+
+_**x**_ _∈P_ (ab)
+
+
+= _pX_ (AB) + _pX_ (Ab) + _pX_ (aB) + _pX_ (ab) (4c)
+
+_[−→]_ _[−→]_ _[−→]_ _[−→]_
+
+
+_..._
+
+z : z
+
+
+= 
+
+_**x**_ _[′]_ _∈{_ AB _,_ Ab _,_ aB _,_ ab _}_
+
+
+- _pX_ ( _**x**_ ) (4b)
+
+_**x**_ _∈⟨_ _**x**_ _[′]_ _⟩_
+
+
+In Example 1, each input symbol maps to exactly one output symbol, so the precover decomposes
+neatly into cylinders. The next example shows what happens when some source strings cover the
+target string, while their extensions do not.
+
+
+7
+Note that the precover depends on _f_ ; we suppress this dependency when it is clear from context.
+
+
+4
+
+
+**Example 2.** _The transducer below implements a_ newspeak [8] _rewrite rule:_ _the word_ bad _is replaced_
+_by_ ungood _._ _For the target string_ ba _, the precover does not decompose neatly into cylinders:_ _since_
+bad _does not map to a string prefixed by_ ba _, the cylinder_ bad _does not contribute to_ _pY_ (ba) _._ _The_
+_⟨_ _⟩_ _[−→]_
+_derivation on the right (5–5c) shows how this cylinder is excluded._ [9]
+
+
+_p−→Y_ (ba) = - _pX_ ( _**x**_ ) (5a)
+
+_**x**_ _∈⟨_ ba _⟩\⟨_ bad _⟩_
+
+
+= 
+
+
+_**x**_ _∈_ [�]
+
+
+ - _pX_ ( _**x**_ ) (5b)
+
+_x∈X_ _\{_ d _}_ _[⟨]_ [ba] _[x][⟩∪{]_ [ba] _[}]_
+
+
+_p−→X_ (ba _x_ ) (5c)
+
+
+= _pX_ (ba) + 
+_x∈X_ _\{_ d _}_
+
+
+stead, we decompose it into two disjoint parts: a maximal cylindrical subset and its complement in the
+precover. The _quotient_ collects the shortest element of each cylinder; the complement is the _remainder_ .
+The final step (5c) illustrates a **computational shortcut** ; for any _**y**_ we can decompose _pY_ ( _**y**_ ):
+
+_[−→]_
+_p−→Y_ ( _**y**_ ) =                     - _p−→X_ ( _**x**_ ) +                     - _pX_ ( _**x**_ ) (6)
+
+
+_p−→X_ ( _**x**_ ) + 
+
+
+_pX_ ( _**x**_ ) (6)
+
+
+_**x**_ _∈Q_ ( _**y**_ )
+�Quotient�� 
+
+
+_**x**_ _∈R_ ( _**y**_ )
+Remainder� ���
+
+
+The precover can also be represented as an FSA, as shown below for _P_ (ba). The single string
+accepted at R (teal node) marks the remainder element ba while the state Q (yellow node) accepts
+
+
+We now formalize the remainder, quotient, and decomposition for any string-to-string function _f_ .
+
+**The prefix decomposition of the precover.** _C_ ( _**y**_ ) =def _{_ _**x**_ _∈_ _X ∗_ : _⟨_ _**x**_ _⟩⊆_ _P_ ( _**y**_ ) _}_ ; this set is a cylinder—ifLet _f_ : _X_ _[∗]_ _→_ _**x**_ _∈Y_ _[∗]_ _C_ be a map.( _**y**_ ) then every extension ofFor each _**y**_ _∈_ _Y_ _[∗]_, define _**x**_ also
+belongs to _C_ ( _**y**_ )—making it the largest cylinder contained in _P_ ( _**y**_ ). We define the **quotient** and
+**remainder** of _**y**_ with respect to _f_ as
+
+
+def def
+_Q_ ( _**y**_ ) = pf( _C_ ( _**y**_ )) and _R_ ( _**y**_ ) = _P_ ( _**y**_ ) _\ C_ ( _**y**_ ) (7)
+
+We call the pair ( _Q_ ( _**y**_ ) _,_ _R_ ( _**y**_ )) the **optimal prefix decomposition** of _P_ ( _**y**_ ), characterized by three
+conditions: (i) _Q_ ( _**y**_ ) is _prefix-free_, (ii) _P_ ( _**y**_ ) = _⟨Q_ ( _**y**_ ) _⟩⊔_ _R_ ( _**y**_ ) ( _validity_ ), and (iii) _⟨Q_ ( _**y**_ ) _⟩_ = _C_ ( _**y**_ )
+( _maximality_ )— _Q_ ( _**y**_ ) identifies the largest cylinder in _P_ ( _**y**_ ). This decomposition (indeed, any valid
+one) lets us compute prefix probabilities using the shortcut:
+
+
+_p−→Y_ ( _**y**_ ) = 
+
+
+) = - _pX_ ( _**x**_ ) = 
+_**x**_ _∈C_ ( _**y**_ ) _⊔_ _R_ ( _**y**_ ) _**x**_ _∈Q_ (
+
+
+- _pX_ ( _**x**_ ) = 
+_**x**_ _∈P_ ( _**y**_ ) _**x**_ _∈C_ ( _**y**_ ) _⊔_
+
+
+_**x**_ _∈Q_ ( _**y**_ )
+
+
+_pX_ ( _**xx**_ _[′]_ ) + 
+
+
+_p−→X_ ( _**x**_ ) + 
+
+
+- _pX_ ( _**x**_ ) = 
+_**x**_ _∈R_ ( _**y**_ ) _**x**_ _∈Q_ (
+
+
+_**x**_ _∈Q_ ( _**y**_ )
+
+
+- _pX_ ( _**x**_ ) (8a)
+
+_**x**_ _∈R_ ( _**y**_ )
+
+
+_**x**_ _[′]_ _∈X_ _[∗]_
+
+§5 provides an algorithm for computing the prefix decomposition; §6 identifies when it is finite.
+
+
+5 ALGORITHMS
+
+
+We now present an algorithm for computing prefix decompositions by exploiting the explicit structure
+of a transducer that encodes the function. Combined with the computational shortcut (Eq. (6)), this
+gives an autoregressive interface to transduced language models. We first describe the algorithm
+abstractly, then instantiate its checks using a transducer, and finally discuss optimizations.
+
+
+8 _Newspeak_ is the controlled language from Orwell’s _1984_ (Orwell, 1949); the example bad _→_ ungood is
+canonical. A complete Newspeak transducer is left as an exercise for the Party.
+9Arcs labeled by a single symbol are _copy transitions_, e.g., b is shorthand for b : b; a set label such as _X_ ∖ _{_ b _}_
+denotes one copy-transition arc per symbol in the set.
+
+
+5
+
+
+Fig. 2 gives the decomposition algorithm (decompose),
+which maintains a queue of candidate source strings and
+explores them by breadth-first search (BFS), optionally
+pruning low-probability candidates at each step (described
+below). [10] Each dequeued string _**x**_ undergoes three checks,
+defined in terms of the precover _P_ ( _**y**_ ):
+
+1. _Cylinder_ : is_cylinder( _**x**_ _,_ _**y**_ ) _⇐⇒⟨_ _**x**_ _⟩⊆_ _P_ ( _**y**_ ), i.e.,
+every extension of _**x**_ covers _**y**_ . _**x**_ is added to the quotient
+set Q and not explored further (line 12).
+2. _Member_ : is_member( _**x**_ _,_ _**y**_ ) _⇐⇒_ _**x**_ _∈_ _P_ ( _**y**_ ), i.e., _**x**_ itself
+covers _**y**_ . When is_cylinder is false but is_member is
+true, _**x**_ is added to the remainder set R; its extensions are
+still explored (line 15).
+3. _Live_ : is_live( _**x**_ _,_ _**y**_ ) _⇐⇒∃_ _**x**_ _[′′]_ _∈_ _X_ _[∗]_ : _**xx**_ _[′′]_ _∈_ _P_ ( _**y**_ ), i.e.,
+some extension of _**x**_ belongs to the precover. Only live
+extensions are enqueued (line 18).
+
+Because strings are processed shortest-first, if any prefix of
+the current string had already entered the quotient, the current string would never have been enqueued. Once the queue
+is exhausted, the algorithm returns the prefix decomposition.
+We instantiate these checks concretely in §5.1.
+
+
+Figure 2: Decomposition algorithm.
+
+
+1 **def** decompose( _**y**_ ): # memoize
+
+
+2 _N_ _←|_ _**y**_ _|_
+
+
+3 **if** _N_ = 0:
+
+
+4 q _←_ QUEUE( _{ε}_ )
+
+
+5 **else** :
+
+
+6 (Q _[′]_ _,_ R _[′]_ ) decompose( _**y**_ _<N_ )
+_←_
+
+_[′]_ _[′]_
+
+
+7 q _←_ QUEUE(Q _[′]_ _∪_ R _[′]_ )
+
+
+8 (Q _,_ R) _←_ ( _∅, ∅_ )
+
+
+9 **while** _|_ q _| >_ 0:
+
+_[′]_
+
+
+10 q _[′]_ _←∅_
+
+
+11 **for** _**x**_ _∈_ q:
+
+
+12 **if** is_cylinder( _**x**_ _,_ _**y**_ ):
+
+
+13 Q.add( _**x**_ )
+
+14 **continue**
+
+15 **if** is_member( _**x**_ _,_ _**y**_ ):
+
+
+16 R.add( _**x**_ )
+
+17 **for** _x_ _[′]_ _∈_ _X_ :
+
+
+18 **if** is_live( _**x**_ _x_ _[′]_ _,_ _**y**_ ):
+
+
+19 q _[′]_ .add( _**x**_ _x_ _[′]_ )
+
+
+20 q _←_ prune(q _[′]_ )
+
+21 **return** (Q _,_ R)
+
+
+**Theorem 5.1** (Correctness of decompose) **.** _If P_ ( _**y**_ ) _admits_
+_a finite decomposition and the three checks exactly implement the conditions above with no pruning,_
+_then_ decompose( _**y**_ ) _terminates and its output_ (Q _,_ R) _is the optimal prefix decomposition (Eq._ (7) _)._
+
+
+_Proof._ We verify the three conditions of the optimal prefix decomposition (Eq. (7)).
+
+1. _Prefix-freeness_ (Q is prefix-free): When is_cylinder succeeds for _**x**_ (line 12), the continue
+(line 14) skips the extension loop, so no _**x**_ _x_ _[′]_ is enqueued. Since strings enter the queue only as
+single-symbol extensions of dequeued strings, no extension of _**x**_ is ever enqueued or dequeued,
+and thus no two elements of Q share a prefix.
+2. _Validity_ ( _P_ ( _**y**_ ) = _⟨_ Q _⟩⊔_ R): Let _**x**_ _∈_ _P_ ( _**y**_ ); we first show that _**x**_ _∈⟨_ Q _⟩⊔_ R. We show by induction
+on prefix length that either a prefix of _**x**_ enters Q or _**x**_ itself is dequeued and added to Q or R.
+The base case holds: _ε_ is enqueued. If _**x**_ _<k_ is dequeued and not placed in Q, then _**x**_ _<k_ +1 is
+enqueued by the extension loop: since _**x**_ _<k_ +1 _**x**_ and _**x**_ ( _**y**_ ), we have is_live( _**x**_ _<k_ +1 _,_ _**y**_ )
+_⪯_ _∈_ _P_
+(line 18). By induction, either some prefix _**x**_ _<j_ enters Q—giving _**x**_ _**x**_ _<j_ Q —or _**x**_ itself
+_∈⟨_ _⟩⊆⟨_ _⟩_
+is dequeued, the cylinder check fails, and _**x**_ _∈_ _P_ ( _**y**_ ) gives _**x**_ _∈_ R via is_member (line 15). The
+reverse direction is clear since elements of Q pass the exact is_cylinder check, so _⟨_ Q _⟩⊆_ _P_ ( _**y**_ ).
+Similarly, elements of R pass is_member, so R _⊆_ _P_ ( _**y**_ ). What remains is to show that _⟨_ Q _⟩_ and R are
+disjoint. If _**x**_ _∈_ R, then _**x**_ was dequeued and is_cylinder failed, so _**x**_ _∈/_ Q. No proper prefix of
+_**x**_ is in Q either—otherwise _**x**_ would never have been enqueued (prefix-freeness). Hence _**x**_ _∈⟨/_ Q _⟩_ .
+3. _Maximality_ ( _⟨_ Q _⟩_ = _C_ ( _**y**_ )): shortest-first processing ensures no proper prefix of a quotient element
+satisfies is_cylinder (line 12), so Q is the _minimal_ prefix-free set of cylinders. Together with
+the exact cylinder check, the earliest qualifying prefix is always found, as required by Eq. (7). It
+remains to show _C_ ( _**y**_ ) _⊆⟨_ Q _⟩_ . By validity, _P_ ( _**y**_ ) = _⟨_ Q _⟩⊔_ R. Every element of R fails is_cylinder,
+so R _∩_ _C_ ( _**y**_ ) = _∅_ . Hence _C_ ( _**y**_ ) _⊆⟨_ Q _⟩_ .
+
+_Termination_ : is_live (line 18) ensures only viable extensions are enqueued; finiteness of the
+decomposition guarantees the queue empties. 
+**Conservative** **checks** **and** **suboptimality.** If the checks used by decompose are conservative
+approximations, the algorithm may produce _suboptimal_ decompositions—valid but with a smaller
+quotient than the optimal one. A conservative liveness check (false positives) enqueues unnecessary
+extensions but does not affect classification: every dequeued string is still correctly classified by
+is_cylinder and is_member, so the result remains optimal. A conservative cylinder check (false
+negatives) may fail to recognize some quotient elements, placing them in R instead. The decomposition
+
+
+10For efficiency, decompose should be memoized. For _|_ _**y**_ _| >_ 0, the recursive call decompose( _**y**_ _<N_ ) seeds the
+queue with the previous decomposition Q _[′]_ _∪_ R _[′]_ rather than enumerating from _ε_ .
+
+
+6
+
+
+remains valid, but because a successful cylinder check terminates exploration of that subtree (line 14),
+missing a cylinder means the BFS continues exploring extensions that would otherwise have been cut
+off, potentially inflating the remainder and increasing the computation. By contrast, the membership
+check must be exact to preserve validity.
+
+**Approximation via pruning.** When the prefix decomposition becomes large, exhaustively enumerating and scoring can become infeasible. In these cases, we use a pruning strategy (prune)
+that sorts candidates by prefix probability and removes those whose cumulative probability mass
+falls below a specified threshold _τ_ . This discards low-probability candidates to keep decomposition
+tractable. Since pruning only removes candidates from the queue, every element found is correct—
+_⟨_ Q _⟩⊔_ R _⊆_ _P_ ( _**y**_ )—but the decomposition is no longer valid in general (coverage may be incomplete),
+so the computed prefix probability is a lower bound on the true value. Our strategy is detailed in §C.3.
+
+
+5.1 GETTING STARTED: INSTANTIATING THE CHECKS WITH THE PRECOVER MACHINE
+
+
+We now show how to instantiate the three checks (Fig. 2) using a finite-state transducer. This serves
+as a pedagogical introduction; §C describes a more detailed, but faster algorithm.
+
+We represent the transformation _f_ with a transducer f (see §2 and § B). Given a target prefix _**y**_,
+projbelow, we determinize and trim this NFA to obtain a DFA: _X_ (f _◦_ _**y**_ _Y_ _[∗]_ ) is an NFA that accepts exactly _P_ ( _**y**_ ). To P _**y**_ enable=def trimthe(determinizeefficient state-based(proj _X_ (f _◦_ _**y**_ checks _Y_ _∗_ )))
+
+Let S _**y**_, I _**y**_, F _**y**_, and T _**y**_ denote the components of P _**y**_ . Since P _**y**_ is deterministic, scanning a source
+string _**x**_ = _x_ 1 _xN_ yields a unique state, which we denote by run _**y**_ ( _**x**_ ). We now describe how to
+implement the three checks using _···_ P _**y**_ (pseudocode in Fig. 3).
+
+- _Cylinder_ : We need to check whether _**x**_ ( _**y**_ ) to decide if _**x**_ ( _**y**_ ). Let _S_ = run _**y**_ ( _**x**_ ) be
+_⟨_ _⟩⊆_ _P_ _∈_ _Q_
+the unique state reached after scanning _**x**_ . Since P _**y**_ is deterministic, _**x**_ ( _**y**_ ) if and only if
+_S_ is **universal** : P _**y**_ [ _S_ ] = _[∗]_, meaning every continuation of _**x**_ is accepted. _⟨_ _⟩⊆_ _P_ The is_cylinder
+check (Fig. 3) tests universality via breadth-first search (BFS) from�  - _X_ _S_ .
+
+- _Member_ : When the is_cylinder check fails for _**x**_ with _S_ = run _**y**_ ( _**x**_ ), we need to determine
+whether the scanned string _**x**_ is in ( _**y**_ ). Here it suffices to check if _S_ F _**y**_, i.e., if P _**y**_ accepts _**x**_ .
+_R_ _∈_
+
+- _Live_ : We construct P _**y**_ as a _trimmed_ automaton accepting _**x**_ where _**y**_ _f_ ( _**x**_ ). [11] Trimming ensures
+_⪯_
+that every reachable state lies on some accepting path, so liveness reduces to run _**y**_ ( _**x**_ ) = .
+_̸_ _∅_
+
+Although decompose is written in terms of source strings, each check internally computes the state
+_S_ = run _**y**_ ( _**x**_ ) reached by scanning _**x**_ in the deterministic P _**y**_, and reduces to a state property.
+
+
+5.2 OPTIMIZATIONS
+
+
+The algorithm above is correct but impractical for large transducers. In § C, we describe several
+optimizations; we summarize the key ideas here.
+
+**Lazy determinization.** Eagerly determinizing P _**y**_ is often computationally expensive. Instead, we
+track _frontiers_ : sets of transducer states reachable after scanning a source prefix, paired with the
+output emitted so far. Frontiers lazily perform the subset construction (the standard NFA-to-DFA
+conversion; Rabin & Scott, 1959) and the composition with _**y**_ _Y_ _[∗]_ simultaneously, avoiding both eager
+determinization and eager composition. The three checks—cylinder, member, and liveness—are now
+defined in terms of the frontier rather than a single DFA state (§C.2).
+
+**Incremental next-symbol decomposition.** To efficiently compute _pY_ ( _y_ _[′]_ _**y**_ ) for all _y_ _[′]_, we
+
+_[−→]_ _|_ _∈_ _Y_
+introduce decompose_next (§C.4), which derives the decomposition of each extension _**y**_ _y_ _[′]_ from the
+decomposition of _**y**_ . It operates in a single BFS pass that handles each _y_ _[′]_ _∈_ _Y_ simultaneously.
+
+**Decomposition** **shortcuts.** Many structural properties of the decomposition allow the BFS to
+skip work: non-cylinder monotonicity (Prop. C.3), cylinder uniqueness (Prop. C.4), input-projection
+universality (§C.6), combined universality (Prop. C.5), and an all-universal fast path (Fig. 14).
+
+**Lazier enumeration.** Rather than explicitly composing the transducer with the copy transducer
+_**y**_ _Y_ _[∗]_, the frontier-based algorithms track output buffers directly, performing the composition lazily
+and avoiding the materialization cost. Additionally, we precompute states whose input projection
+
+
+11This can also be expressed as _P_ ( _**y**_ ) = _f −_ 1( _**y**_ _Y_ _∗_ ) = proj _X_ (f _◦_ _**y**_ _Y_ _∗_ ) .
+                               -                                
+
+7
+
+
+22 **def** step _**y**_ ( _s, x_ ):
+
+23 **return** T _**y**_ ( _s, x_ ) # deterministic
+
+
+32 **def** is_cylinder( _**x**_ _,_ _**y**_ ):
+
+33 # Run BFS to find a counterexample:
+
+
+34 # a nonaccepting or incomplete state
+
+
+24 **def** run _**y**_ ( _x_ 1 _xN_ ):
+
+**if** : _···_
+
+
+25 **if** _N_ = 0: **return** I _**y**_ # unique
+
+
+35 _S_ run _**y**_ ( _**x**_ ); _V_ _S_ ; q QUEUE( _S_ )
+_←_ _←{_ _}_ _←_ _{_ _}_
+
+
+36 **while** q:
+
+
+26 **return** step _**y**_ (run _**y**_ ( _**x**_ _<N_ ) _, xN_ )
+
+
+37 _S_ _←_ q.pop()
+
+
+27 **def** is_member( _**x**_ _,_ _**y**_ ):
+
+28 **return** run _**y**_ ( _**x**_ ) F _**y**_
+_∈_
+
+29 **def** is_live( _**x**_ _,_ _**y**_ ):
+
+30 # not in failure state
+
+
+38 **if** _S_ _/_ F _**y**_ : **return** **False**
+_∈_
+
+_[′]_
+
+
+41 **if** _S_ _[′]_ = _∅_ : **return** **False**
+
+_[′]_ _[′]_
+
+
+42 **if** _S_ _[′]_ _∈/_ _V_ : q.add( _S_ _[′]_ ); _V_ .add( _S_ _[′]_ )
+
+
+39 **for** _x_ _[′]_ _∈_ _X_ :
+
+_[′]_
+
+
+40 _S_ _[′]_ step _**y**_ ( _S, x_ _[′]_ )
+_←_
+
+_[′]_
+
+
+31 **return** run _**y**_ ( _**x**_ ) =
+_̸_ _∅_
+
+
+_**y**_ 43 **return** **True** # No counterexamples
+
+Figure 3: State-based instantiation of the checks from Fig. 2 on the precover DFA P _**y**_ . Helper
+functions step and run advance through the DFA; is_member and is_live are single-state lookups;
+is_cylinder performs a BFS to verify universality.
+
+
+accepts all of _X_ _[∗]_ (§C.6). When a frontier reaches such a state with a buffer that already covers _**y**_, the
+cylinder check succeeds immediately, bypassing the expensive check.
+
+**Label** **pushing.** As a standard preprocessing step (see, e.g., Oncina et al., 1993; Mohri, 2003;
+2009), we push output labels toward the initial state of f: when every path through a state _s_ emits
+output beginning with _y_, that _y_ is shifted to the incoming arc so it is produced one step earlier. This
+ensures that output is committed as early as possible, speeding up the frontier-based cylinder check.
+
+
+6 SUFFICIENT CONDITIONS FOR FINITE DECOMPOSITIONS
+
+
+The decomposition algorithms in §5 enumerate strings by breadth-first search. For the enumeration to
+terminate, the quotient _Q_ ( _**y**_ ) and remainder _R_ ( _**y**_ ) need to be finite for a given target string _**y**_ _∈_ _Y_ _[∗]_ .
+Previous work (Vieira et al., 2025a, Props 1 and 3; also in §D.2) showed that strict-prefix monotonicity
+guarantees an empty remainder and a bounded quotient. This ensures that _pY_ ( _**y**_ ) is computable.
+
+_[−→]_
+
+For functions that are not strict-prefix monotone, however, the decomposition may be infinite. In this
+section, we give additional conditions for finite decomposition. We first give function-level properties
+that guarantee an empty remainder and bounded quotient, and then transducer-level conditions for
+when the quotient and remainder are finite.
+
+We say that a map _f_ : _X_ _[∗]_ _→_ _Y_ _[∗]_ is **strict-prefix monotone** if and only if _**x**_ _≺_ _**x**_ _[′]_ = _⇒_ _f_ ( _**x**_ ) _≺_ _f_ ( _**x**_ _[′]_ ).
+Similarly _f_ is **prefix monotone** if and only if _**x**_ _⪯_ _**x**_ _[′]_ = _⇒_ _f_ ( _**x**_ ) _⪯_ _f_ ( _**x**_ _[′]_ ). We say that a map _f_ is
+**prefix-continuous** if, for every _**y**_ _∈_ _Y_ _[∗]_, the set _P_ ( _**y**_ ) is cylindrical, i.e., _R_ ( _**y**_ ) = _∅_ . The following
+proposition shows that prefix monotonicity implies prefix-continuity:
+
+**Proposition 6.1.** _all_ _**x**_ _∈_ _X_ _[∗]_ _(iii) P_ ( _The following are equivalent:f_ ( _**x**_ )) = _C_ ( _f_ ( _**x**_ )) _for all_ _**x**_ _∈_ _X(i)_ _[∗]_ _f(iv)is prefix monotone (ii) f_ _is prefix-continuous. f_ ( _⟨_ _**x**_ _⟩_ ) [Proof: _⊆⟨f_ ( _**x**_ §) _⟩_ D.1 _for_ ]
+
+Proposition 6.1 shows how we generalize Vieira et al. (2025a). First, by relaxing strict-prefix monotonicity to prefix monotonicity, we support multi-symbol lookahead in the quotient. Ex. (6) is an example of this: it is prefix monotone and requires two-symbol lookahead before committing to an output.
+Second, by introducing the remainder, we can handle functions that are not prefix monotone, meaning
+that there can be source strings that cover the target, but not all of their extensions do (e.g., Example 2).
+
+Lemma 6.1 gives sufficient conditions on a transducer that guarantee a finite decomposition for every
+target string, even when the underlying function is not prefix monotone. The key notion is _safety_ :
+a state is safe if it is IP-universal, has **finite closure** (i.e., f[ _s_ ] _<_ ), or all its successors are safe.
+_|_                                            -                                            - _|_ _∞_
+
+**Lemma** **6.1.** _Let_ _f_ : _X_ _[∗]_ _→_ _Y_ _[∗]_ _be_ _a_ _function_ _realized_ _by_ _a_ _transducer_ f _._ _The_ _decomposition_
+( _Q_ ( _**y**_ ) _, R_ ( _**y**_ )) _is finite for every_ _**y**_ _∈_ _Y_ _[∗]_ _if:_
+
+
+_(i)_ No _ε_ -output cycles: f _contains no cycle in which every arc outputs ε._
+_(ii)_ Safety: _Every state of_ f _is_ _**safe**_ _, defined inductively as the smallest set such that s is safe if:_ _(a) s_
+_is IP-universal; (b)_ f[ _s_ ] _<_ _(finite closure); or (c) for all transitions s_ _x_ : _y_ _s_ _[′]_ _, s_ _[′]_ _is safe._
+_|_                   -                   - _|_ _∞_ _−−→_
+
+
+Proof: See §D.3.
+
+
+_x_ : _y_
+_−−→_ _s_ _[′]_ _, s_ _[′]_ _is safe._
+
+
+8
+
+
+The conditions in Lemma 6.1 guarantee exact computation. In particular, these are satisfied by the
+transducers introduced in the experiments section (§7): the token-to-byte transducer f _α_ and the
+DNA-to-amino-acid transducer fdna2aa, whose quotients are finite and remainders empty, but not by
+the PTB transducer fptb, whose quotients are infinite.
+
+The finiteness of decomposition is a property of the function _f_, not of any particular transducer
+encoding it. The lemma’s conditions are sufficient but not necessary: safety tests each state
+individually, whereas the decomposition algorithm tests universality of frontiers (sets of state/string
+pairs), which can succeed even when individual states are not safe. There are many cases where
+the prefix decomposition is infinite, or otherwise prohibitively large; in these cases, we let the source
+language model determine which prefix decomposition members carry the most significant mass
+and prune others (§5). This lets us greedily approximate the probabilities of the transduced language
+model by enumerating a high-mass subset of the decomposition.
+
+
+7 EXPERIMENTS
+
+
+We now consider three examples of transduced language models. For each use case, we follow the
+approach in Vieira et al. (2025a) and measure the Jensen–Shannon divergence (JSD) between the
+distributions obtained using the approximation via probability mass pruning mentioned in §C.3 and
+a reference distribution we get by choosing a pruning threshold _τ_ . We also report cross-entropy loss
+(§G.4), reflecting the cost of scoring specific sequences rather than full distributions. Experiments use
+GPT-2 Large ( _p_ gpt2) (Radford et al., 2019), LLaMA 3.2-1B ( _p_ llama1B) and LLaMA 3.1-8B ( _p_ llama8B)
+(Team, 2024), Phi-4 ( _p_ phi4) (14B; Abdin et al., 2024), and a DNA model trained on the human genome
+( _p_ dna). [12] For the experiments in §7, we use genlm-bytes [13] to convert token-level models to byte-level
+models. See §F for details on the training and evaluation setup, and §F.5 for transducer details.
+
+Recall that a transduced language model _pY_ is characterized by a source model _pX_ and a transducer
+f encoding some function _f_ (§3). To make this dependency explicit, we write _pX_ f =def _pY_ and refer
+
+_◦_
+
+to the operation as composing. All experiments compute next-symbol distributions using the more
+efficient algorithm (§C.8), which reuses cached decompositions across target positions and exploits
+structural shortcuts (§C.5). Probability mass pruning (§C.3) retains the most likely decomposition
+elements such that the discarded probability mass does not exceed the pruning threshold.
+
+Our experiments span the prefix-monotonicity spectrum (Proposition 6.1): token-to-byte (T2B) is
+strict-prefix monotone, DNA-to-amino-acid is prefix monotone with multi-symbol lookahead, and
+PTB tokenization is not prefix monotone.
+
+**From tokens to bytes.** We revisit the algorithm for converting models from tokens to bytes, as
+in Vieira et al. (2025a). This transformation can be realized by a simple transducer f _α_, with ( )
+_O_ _|X_ _|_
+states. Specifically, the transducer contains a chain for each token present in the input vocabulary
+_X_ . This structure allows us to use a shortcut (see Fig. 14) that resolves each quotient element with a
+single LM call. An example of such a machine is given in Fig. 4. We benchmark the algorithms in §5
+[using the transducersof the wikitext-2-raw-v1](https://huggingface.co/datasets/Salesforce/wikitext) _p_ gpt2 _◦_ dataset (f _α_, _p_ llama1BMerity et al. _◦_ f _α_, _p_ llama8B, 2017 _◦_ ) (corresponding to the first 7684 bytes).f _α_, and _p_ phi4 _◦_ f _α_ on the first ten paragraphsAs
+shown in Fig. 6 (left) and Tab. 8 in §G, lower pruning thresholds ( _τ_ ) give lower JSD values against a
+reference distribution ( _τ_ = 1e-5) at the cost of throughput, measured in bytes per second. We confirm
+that the JSD values are similar to those achieved by Vieira et al. (2025a) in § G.1, Tab. 6. Their
+method is limited to strict-prefix monotone transformations, which enables a specialized trie-based
+algorithm that achieves higher throughput while maintaining comparable accuracy.
+
+**From** **tokens** **to** **orthographic** **word** **boundaries.** The next transformation we consider is
+converting language models over tokens to language models over _orthographic_ words. The precise
+definition of what constitutes such a word varies depending on the application. In some settings,
+contractions such as “wouldn’t” should be treated as a single unit. In other settings, however, a more
+natural segmentation would be “would” and “n’t”. We can accommodate any FST-based definition.
+Linguistic tokenizers, such as the PTB tokenizer (Marcus et al., 1993), use contextual information to
+
+
+12Links to models: [https://huggingface.co/openai-community/gpt2-large,](https://huggingface.co/openai-community/gpt2-large) [https://huggingface.](https://huggingface.co/meta-llama/Llama-3.2-1B)
+[co/meta-llama/Llama-3.2-1B,](https://huggingface.co/meta-llama/Llama-3.2-1B) [https://huggingface.co/meta-llama/Llama-3.1-8B,](https://huggingface.co/meta-llama/Llama-3.1-8B) [https:](https://huggingface.co/microsoft/phi-4)
+[//huggingface.co/microsoft/phi-4 and https://huggingface.co/vesteinn/gpt2-dna.](https://huggingface.co/microsoft/phi-4)
+[13genlm-bytesis an implementation of Vieira et al. (2025a); see https://github.com/genlm/genlm-bytes.](https://github.com/genlm/genlm-bytes)
+
+
+9
+
+
+_ε_ :,
+
+
+Figure 4: An FST for converting a token model
+into a character model. Paths for ␣cat and Dog.
+
+
+Figure 5: An FST that inserts a separator (SEP)
+before commas followed by non-digit characters.
+
+
+_τ_ =3e-5 _τ_ =1e-4 _τ_ =3e-4 _τ_ =1e-3 _τ_ =3e-3 _τ_ =1e-2 _τ_ =3e-2 _τ_ =1e-1
+
+
+_p_ gpt2 f _α_
+
+
+3e-2
+
+1.5e-2
+0.0
+
+
+_p_ lla8B f _α_
+
+
+Speed (bytes per second)
+
+
+_p_ phi4 f _α_
+
+
+4.5e-3
+3e-3
+
+
+_p_ lla8B f _α_ fptb
+
+
+_p_ phi4 f _α_ fptb
+
+
+_p_ gpt2 f _α_ fptb
+
+
+1.5e-3
+0.0
+
+
+Figure 6: Average Jensen–Shannon divergence (JSD) and throughput (bytes/sec) across thresholds
+_τ_ Bars show 95% bootstrapped CIs.. Left: _pX_ _◦_ f _α_ (reference: _τ_ = 1e-5).At the tightest thresholds, large decomposition sizes prevent someRight: _pX_ _◦_ f _α ◦_ fptb (reference: _τ_ = 1e-4; 3e-4 for _p_ phi4).
+models from completing all paragraphs; see §G.2.
+
+
+segment raw English text into linguistically meaningful units suitable for downstream NLP tasks. We
+construct an FST that encodes the PTB tokenizer, fptb; details are in §F.5. An example of a rule in the
+transducer is given in Fig. 5, which inserts SEP before a comma if a digit does not follow. Composing
+_pX_ f _α_ fptb yields a transduced language model, mapping subword tokens to PTB tokens. To
+reduce the state count of the composed FST and improve efficiency, we represent _◦_ _◦_ _pX_ _◦_ f _α_ using the
+byte-transformed models from genlm-bytes. [14] In Fig. 6 (right), we plot the average JSD against the
+throughput for different thresholds _τ_, using the same dataset as in §7. The reference distribution uses
+_τ_ = 1e-4 (3e-4 for _p_ phi4). As with the experiments in §7, we observe lower JSD at lower thresholds,
+albeit at the cost of throughput. For experiments using higher thresholds, see §G, Tab. 9.
+
+**Converting DNA models to models over amino acids.** We use a transducer that converts sequences
+of the four DNA nucleotides to sequences over the twenty-two amino acids. [15] Let _p_ dna fdna2aa
+denote the transduced model that converts DNA nucleotides into amino acids. To evaluate _◦_ our
+approach, we sample 65 human proteins. [16] In Tab. 10, we show the average JSD and throughput
+for different thresholds _τ_ . Note that this transducer is particularly challenging since the set of
+candidates in the decomposed precover grows exponentially with the sequence length. To mitigate the
+combinatorial blow-up, we cap the candidate-set and report throughput and JSD while varying the cap.
+
+
+8 CONCLUSION
+
+
+We have introduced a general framework for transforming language models using transducers.
+Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining. Our
+theoretical analysis characterizes the conditions under which such mappings can be performed exactly.
+The proposed approach is an effective way to repurpose existing language models and to accurately
+compute probabilities for any unit and transformation defined by a transducer. By reducing the
+problem to transducer decomposition, the framework opens the door to leveraging future advances in
+finite-state methods for language model adaptation. (Future work and limitations are discussed in §J.)
+
+
+[14https://github.com/genlm/genlm-bytes that implements Vieira et al.’s (2025a) method.](https://github.com/genlm/genlm-bytes)
+15I.e., _X_ = _{_ A _,_ C _,_ G _,_ T _}_ and _Y_ = �A _,_ R _,_ N _,_ D _,_ C _,_ Q _,_ E _,_ G _,_ H _,_ I _,_ L _,_ K _,_ M _,_ F _,_ P _,_ S _,_ T _,_ V _,_ W _,_ Y _,_ B _,_ Z _,_ *�.
+
+[16Sampled from https://www.uniprot.org/uniprotkb?query=Human, see Tab. 1 for the accession numbers.](https://www.uniprot.org/uniprotkb?query=Human)
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+The authors thank Ben LeBrun, Brian DuSell, Clemente Pasti, Juan Luis Gastaldi, Mario Giulianelli,
+and Yahya Emara for useful feedback and discussions that greatly improved this work. Vésteinn
+Snæbjarnarson is supported by the Pioneer Centre for AI, DNRF grant number P1.
+
+
+REFERENCES
+
+Marah Abdin, Jyoti Aneja, Harkirat Behl, Sébastien Bubeck, Ronen Eldan, Suriya Gunasekar,
+Michael Harrison, Russell J. Hewett, Mojan Javaheripi, Piero Kauffmann, James R. Lee, Yin Tat
+Lee, Yuanzhi Li, Weishung Liu, Caio C. T. Mendes, Anh Nguyen, Eric Price, Gustavo de Rosa,
+Olli Saarikivi, Adil Salim, Shital Shah, Xin Wang, Rachel Ward, Yue Wu, Dingli Yu, Cyril Zhang,
+and Yi Zhang. Phi-4 technical report, 2024. [URL https://arxiv.org/abs/2412.08905.](https://arxiv.org/abs/2412.08905)
+
+
+Cyril Allauzen, Bill Byrne, Adrià de Gispert, Gonzalo Iglesias, and Michael Riley. Pushdown
+Automata in Statistical Machine Translation. _Computational_ _Linguistics_, 2014. URL [https:](https://aclanthology.org/J14-3008/)
+[//aclanthology.org/J14-3008/.](https://aclanthology.org/J14-3008/)
+
+
+Lisa Beinborn and Yuval Pinter. Analyzing Cognitive Plausibility of Subword Tokenization. In
+_Proceedings of the Conference on Empirical Methods in Natural Language Processing_, 2023. URL
+[https://aclanthology.org/2023.emnlp-main.272/.](https://aclanthology.org/2023.emnlp-main.272/)
+
+
+Martin Berglund and Brink van der Merwe. Formalizing BPE tokenization. In _Proceedings of the_
+_International_ _Workshop_ _on_ _Non-Classical_ _Models_ _of_ _Automata_ _and_ _Applications_, volume 388,
+2023. [URL https://cgi.cse.unsw.edu.au/~eptcs/paper.cgi?NCMA2023.4.pdf.](https://cgi.cse.unsw.edu.au/~eptcs/paper.cgi?NCMA2023.4.pdf)
+
+
+Martin Berglund, Willeke Martens, and Brink van der Merwe. Constructing a BPE Tokenization
+DFA. In _Implementation and Application of Automata_, 2024. ISBN 978-3-031-71112-1. URL
+[https://link.springer.com/chapter/10.1007/978-3-031-71112-1_5.](https://link.springer.com/chapter/10.1007/978-3-031-71112-1_5)
+
+
+Jean Berstel. _Transductions and Context-Free Languages_, volume 38. Teubner, Stuttgart, Germany,
+1979. [URL https://www.worldcat.org/oclc/06364613.](https://www.worldcat.org/oclc/06364613)
+
+
+Harry E. Blanchard, Alexander Pollatsek, and Keith Rayner. The acquisition of parafoveal word
+information in reading. _Perception_ _&_ _Psychophysics_, 46(1), 1989. ISSN 0031-5117. URL
+[https://link.springer.com/content/pdf/10.3758/BF03208078.pdf.](https://link.springer.com/content/pdf/10.3758/BF03208078.pdf)
+
+
+Filippo Bonchi and Damien Pous. Hacking nondeterminism with induction and coinduction. _Com-_
+_munications of the ACM_, 2015. [URL https://doi.org/10.1145/2713167.](https://doi.org/10.1145/2713167)
+
+
+Christian Choffrut. Une caracterisation des fonctions sequentielles et des fonctions sous-sequentielles
+en tant que relations rationnelles. _Theoretical Computer Science_, 5(3), 1977. ISSN 0304-3975.
+[URL https://doi.org/10.1016/0304-3975(77)90049-4.](https://doi.org/10.1016/0304-3975(77)90049-4)
+
+
+Marco Cognetta, David Pohl, Junyoung Lee, and Naoaki Okazaki. Pitfalls, subtleties, and techniques
+in automata-based subword-level constrained generation. In _Tokenization Workshop_, 2025. URL
+[https://openreview.net/forum?id=DFybOGeGDS.](https://openreview.net/forum?id=DFybOGeGDS)
+
+
+M. De Wulf, L. Doyen, T. A. Henzinger, and J. F. Raskin. Antichains: A New Algorithm for Checking
+Universality of Finite Automata. In _Proceedings of the International Conference on Computer_
+_Aided Verification_, 2006. [URL https://doi.org/10.1007/11817963_5.](https://doi.org/10.1007/11817963_5)
+
+
+Edo Dotan, Gal Jaschek, Tal Pupko, and Yonatan Belinkov. Effect of tokenization on transformers for
+biological sequences. _Bioinformatics_, 40(4), 2024. ISSN 1367-4811. [URL https://doi.org/](https://doi.org/10.1093/bioinformatics/btae196)
+[10.1093/bioinformatics/btae196.](https://doi.org/10.1093/bioinformatics/btae196)
+
+
+Philip Gage. A new algorithm for data compression. _The C Users Journal Archive_, 12, 1994. URL
+
+[https://api.semanticscholar.org/CorpusID:59804030.](https://api.semanticscholar.org/CorpusID:59804030)
+
+
+Renato Geh, Honghua Zhang, Kareem Ahmed, Benjie Wang, and Guy Van Den Broeck. Where is the
+signal in tokenization space? In _Proceedings of the Conference on Empirical Methods in Natural_
+_Language Processing_, 2024. [URL https://aclanthology.org/2024.emnlp-main.230/.](https://aclanthology.org/2024.emnlp-main.230/)
+
+
+11
+
+
+Marjan Ghazvininejad, Xing Shi, Yejin Choi, and Kevin Knight. Generating Topical Poetry. In
+_Proceedings of the Conference on Empirical Methods in Natural Language Processing_, 2016. URL
+[https://aclanthology.org/D16-1126/.](https://aclanthology.org/D16-1126/)
+
+
+Mario Giulianelli, Luca Malagutti, Juan Luis Gastaldi, Brian DuSell, Tim Vieira, and Ryan Cotterell.
+On the Proper Treatment of Tokenization in Psycholinguistics. In _Proceedings of the Conference_
+_on Empirical Methods in Natural Language Processing_, 2024. [URL https://aclanthology.](https://aclanthology.org/2024.emnlp-main.1032)
+[org/2024.emnlp-main.1032.](https://aclanthology.org/2024.emnlp-main.1032)
+
+
+Kyle Gorman. Pynini: A Python library for weighted finite-state grammar compilation. In _Proceedings_
+_of_ _the_ _SIGFSM_ _Workshop_ _on_ _Statistical_ _NLP_ _and_ _Weighted_ _Automata_, 2016. URL [https://](https://aclanthology.org/W16-2409/)
+[aclanthology.org/W16-2409/.](https://aclanthology.org/W16-2409/)
+
+
+Jonathan Hayase, Alisa Liu, Noah A. Smith, and Sewoong Oh. Sampling from Your Language Model
+One Byte at a Time. In _Tokenization Workshop_, 2025. [URL https://openreview.net/forum?](https://openreview.net/forum?id=DM8D9Nq9uO)
+[id=DM8D9Nq9uO.](https://openreview.net/forum?id=DM8D9Nq9uO)
+
+
+John E. Hopcroft, Rajeev Motwani, and Jeffrey D. Ullman. _Introduction_ _to_ _Automata_ _Theory,_
+_Languages,_ _and Computation_ . Addison-Wesley, 2nd edition, 2001. ISBN 0201441241. URL
+[https://openlibrary.org/books/OL6795097M.](https://openlibrary.org/books/OL6795097M)
+
+
+Yanrong Ji, Zhihan Zhou, Han Liu, and Ramana V Davuluri. DNABERT: Pre-trained bidirectional
+encoder representations from transformers model for DNA-language in genome. _Bioinformatics_,
+37(15), 2021. ISSN 1367-4803. [URL https://doi.org/10.1093/bioinformatics/btab083.](https://doi.org/10.1093/bioinformatics/btab083)
+
+
+Arthur B. Kahn. Topological sorting of large networks. _Communications of the ACM_, 5(11), 1962.
+[URL https://dl.acm.org/doi/10.1145/368996.369025.](https://dl.acm.org/doi/10.1145/368996.369025)
+
+
+Terry Koo, Frederick Liu, and Luheng He. Automata-based constraints for language model decoding. In _Conference on Language Modeling_, 2024. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=BDBdblmyzY)
+[BDBdblmyzY.](https://openreview.net/forum?id=BDBdblmyzY)
+
+
+Taku Kudo. Subword Regularization: Improving Neural Network Translation Models with Multiple
+Subword Candidates. In _Proceedings of the Annual Meeting of the Association for Computational_
+_Linguistics_, 2018. [URL https://aclanthology.org/P18-1007/.](https://aclanthology.org/P18-1007/)
+
+
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model serving
+with PagedAttention. In _SOSP_, 2023. [URL https://doi.org/10.1145/3600006.3613165.](https://doi.org/10.1145/3600006.3613165)
+
+
+Alexander K. Lew, Tan Zhi-Xuan, Gabriel Grand, and Vikash Mansinghka. Sequential Monte
+Carlo Steering of Large Language Models using Probabilistic Programs. In _ICML_ _Workshop:_
+_Sampling and Optimization in Discrete Space_, 2023. [URL https://openreview.net/forum?](https://openreview.net/forum?id=Ul2K0qXxXy)
+[id=Ul2K0qXxXy.](https://openreview.net/forum?id=Ul2K0qXxXy)
+
+
+Chu-Cheng Lin, Hao Zhu, Matthew R. Gormley, and Jason Eisner. Neural Finite-State Transducers:
+Beyond Rational Relations. In _Proceedings of the Conference of the North American Chapter_
+_of the Association for Computational Linguistics:_ _Human Language Technologies_, 2019. URL
+[https://aclanthology.org/N19-1024/.](https://aclanthology.org/N19-1024/)
+
+
+Mitchell P. Marcus, Beatrice Santorini, and Mary Ann Marcinkiewicz. Building a large annotated
+corpus of English: The Penn Treebank. _Computational_ _Linguistics_, 1993. URL [https://](https://aclanthology.org/J93-2004/)
+[aclanthology.org/J93-2004/.](https://aclanthology.org/J93-2004/)
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer Sentinel Mixture Models. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2017. URL [https:](https://openreview.net/forum?id=Byj72udxe)
+[//openreview.net/forum?id=Byj72udxe.](https://openreview.net/forum?id=Byj72udxe)
+
+
+A. R. Meyer and L. J. Stockmeyer. The equivalence problem for regular expressions with squaring
+requires exponential space. In _Proceedings of the Annual Symposium on Switching and Automata_
+_Theory_, 1972. [URL https://doi.org/10.1109/SWAT.1972.29.](https://doi.org/10.1109/SWAT.1972.29)
+
+
+Mehryar Mohri. Finite-State Transducers in Language and Speech Processing. _Computational_
+_Linguistics_, 1997. [URL https://aclanthology.org/J97-2003/.](https://aclanthology.org/J97-2003/)
+
+
+12
+
+
+Mehryar Mohri. Edit-Distance of Weighted Automata: General Definitions and Algorithms.
+_International_ _Journal_ _of_ _Foundations_ _of_ _Computer_ _Science_, 14(06), 2003. doi: 10.1142/
+S0129054103002114. [URL https://doi.org/10.1142/S0129054103002114.](https://doi.org/10.1142/S0129054103002114)
+
+
+Mehryar Mohri. _Weighted_ _Automata_ _Algorithms_, chapter 5. Springer Berlin Heidelberg,
+Berlin, Heidelberg, 2009. ISBN 978-3-642-01492-5. URL [https://doi.org/10.1007/](https://doi.org/10.1007/978-3-642-01492-5_6)
+[978-3-642-01492-5_6.](https://doi.org/10.1007/978-3-642-01492-5_6)
+
+
+Sathvik Nair and Philip Resnik. Words, subwords, and morphemes: What really matters in the
+surprisal-reading time relationship? In _Findings of the Association for Computational Linguistics:_
+_EMNLP_, 2023. [URL https://aclanthology.org/2023.findings-emnlp.752/.](https://aclanthology.org/2023.findings-emnlp.752/)
+
+
+Eric Nguyen, Michael Poli, Marjan Faizi, Armin W Thomas, Michael Wornow, Callum Birch-Sykes,
+Stefano Massaroli, Aman Patel, Clayton M. Rabideau, Yoshua Bengio, Stefano Ermon, Christopher
+Re, and Stephen Baccus. HyenaDNA: Long-range genomic sequence modeling at single nucleotide
+resolution. In _Proceedings of the Conference on Neural Information Processing Systems_, 2023.
+[URL https://openreview.net/forum?id=ubzNoJjOKj.](https://openreview.net/forum?id=ubzNoJjOKj)
+
+
+Byung-Doh Oh and William Schuler. Leading whitespaces of language models’ subword vocabulary
+pose a confound for calculating word probabilities. In _Proceedings of the Conference on Empiri-_
+_cal Methods in Natural Language Processing_, 2024. [URL https://aclanthology.org/2024.](https://aclanthology.org/2024.emnlp-main.202/)
+[emnlp-main.202/.](https://aclanthology.org/2024.emnlp-main.202/)
+
+
+J. Oncina, P. Garcia, and E. Vidal. Learning subsequential transducers for pattern recognition
+interpretation tasks. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 15(5), 1993.
+[URL https://ieeexplore.ieee.org/document/211465.](https://ieeexplore.ieee.org/document/211465)
+
+
+OpenAI. Tiktoken: A fast BPE tokeniser for OpenAI’s models, 2024. [URL https://github.com/](https://github.com/openai/tiktoken)
+[openai/tiktoken.](https://github.com/openai/tiktoken)
+
+
+George Orwell. _Nineteen Eighty-Four_ . Secker & Warburg, 1949. [URL https://en.wikipedia.](https://en.wikipedia.org/wiki/Nineteen_Eighty-Four)
+[org/wiki/Nineteen_Eighty-Four.](https://en.wikipedia.org/wiki/Nineteen_Eighty-Four)
+
+
+Buu Phan, Marton Havasi, Matthew Muckley, and Karen Ullrich. Understanding and Mitigating
+Tokenization Bias in Language Models, 2024. [URL https://arxiv.org/abs/2406.16829.](https://arxiv.org/abs/2406.16829)
+
+
+Tiago Pimentel and Clara Meister. How to compute the probability of a word. In _Proceedings_
+_of the Conference on Empirical Methods in Natural Language Processing_, 2024. [URL https:](https://aclanthology.org/2024.emnlp-main.1020/)
+[//aclanthology.org/2024.emnlp-main.1020/.](https://aclanthology.org/2024.emnlp-main.1020/)
+
+
+Jean-Éric Pin. _Mathematical Foundations of Automata Theory_ . Lecture notes LIAFA, Université
+Paris, 2025. [URL https://www.irif.fr/~jep/PDF/MPRI/MPRI.pdf.](https://www.irif.fr/~jep/PDF/MPRI/MPRI.pdf)
+
+
+Jean-Éric Pin. _Handbook of Automata Theory_ . European Mathematical Society Publishing House,
+2021. ISBN 978-3-98547-006-8. [URL https://doi.org/10.4171/Automata.](https://doi.org/10.4171/Automata)
+
+
+Lifeng Qiao, Peng Ye, Yuchen Ren, Weiqiang Bai, chaoqi liang, Xinzhu Ma, Nanqing Dong, and
+Wanli Ouyang. Model decides how to tokenize: Adaptive DNA sequence tokenization with
+MxDNA. In _The_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_, 2024. URL
+[https://openreview.net/forum?id=AQ1umQL7dZ.](https://openreview.net/forum?id=AQ1umQL7dZ)
+
+
+Michael O. Rabin and Dana Scott. Finite automata and their decision problems. _IBM_ _Journal_
+_of Research and Development_, 3(2), 1959. URL [https://ieeexplore.ieee.org/document/](https://ieeexplore.ieee.org/document/5392601)
+[5392601.](https://ieeexplore.ieee.org/document/5392601)
+
+
+Alec Radford, Jeff Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever.
+Language Models are Unsupervised Multitask Learners. _OpenAI_ _Blog_, 2019.
+URL [https://cdn.openai.com/better-language-models/language_models_are_](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
+[unsupervised_multitask_learners.pdf.](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
+
+
+Pushpendre Rastogi, Ryan Cotterell, and Jason Eisner. Weighting Finite-State Transductions With
+Neural Context. In _Proceedings of the Conference of the North American Chapter of the Association_
+_for Computational Linguistics: Human Language Technologies_, 2016. doi: 10.18653/v1/N16-1076.
+[URL https://aclanthology.org/N16-1076/.](https://aclanthology.org/N16-1076/)
+
+
+13
+
+
+Keith Rayner, Arnold D. Well, Alexander Pollatsek, and James H. Bertera. The availability of useful
+information to the right of fixation in reading. _Perception & Psychophysics_, 31(6), 1982. URL
+[https://doi.org/10.3758/BF03204186.](https://doi.org/10.3758/BF03204186)
+
+
+Rico Sennrich, Barry Haddow, and Alexandra Birch. Neural Machine Translation of Rare Words
+with Subword Units. In _Proceedings of the Annual Meeting of the Association for Computational_
+_Linguistics_, 2016. [URL https://aclanthology.org/P16-1162/.](https://aclanthology.org/P16-1162/)
+
+
+Xinying Song, Alex Salcianu, Yang Song, Dave Dopson, and Denny Zhou. Fast WordPiece tokenization. In _Proceedings of the Conference on Empirical Methods in Natural Language Processing_,
+2021. [URL https://aclanthology.org/2021.emnlp-main.160/.](https://aclanthology.org/2021.emnlp-main.160/)
+
+
+Felix Stahlberg, Christopher Bryant, and Bill Byrne. Neural grammatical error correction with
+finite state transducers. In _Proceedings_ _of_ _the_ _Conference_ _of_ _the_ _North_ _American_ _Chapter_ _of_
+_the_ _Association_ _for_ _Computational_ _Linguistics:_ _Human_ _Language_ _Technologies_, 2019. URL
+[https://aclanthology.org/N19-1406/.](https://aclanthology.org/N19-1406/)
+
+
+Llama Team. The Llama 3 herd of models, 2024. [URL https://arxiv.org/abs/2407.21783.](https://arxiv.org/abs/2407.21783)
+
+
+Tim Vieira, Benjamin LeBrun, Mario Giulianelli, Juan Luis Gastaldi, Brian DuSell, John Terilla,
+Timothy J. O’Donnell, and Ryan Cotterell. From Language Models over Tokens to Language
+Models over Characters. In _Forty-second International Conference on Machine Learning_, 2025a.
+[URL https://openreview.net/forum?id=sQS0roNQZR.](https://openreview.net/forum?id=sQS0roNQZR)
+
+
+Tim Vieira, Tianyu Liu, Clemente Pasti, Yahya Emara, Brian DuSell, Benjamin LeBrun, Mario
+Giulianelli, Juan Luis Gastaldi, John Terilla, Timothy J. O’Donnell, and Ryan Cotterell. Language
+Models over Canonical Byte-Pair Encodings. In _International Conference on Machine Learning_,
+2025b. [URL https://openreview.net/forum?id=eCVrfVDNSY.](https://openreview.net/forum?id=eCVrfVDNSY)
+
+
+Ning Wang, Jiang Bian, Yuchen Li, Xuhong Li, Shahid Mumtaz, Linghe Kong, and Haoyi
+Xiong. Multi-purpose RNA language modelling with motif-aware pretraining and type-guided
+fine-tuning. _Nature_ _Machine_ _Intelligence_, 6(5), 2024. URL [https://doi.org/10.1038/](https://doi.org/10.1038/s42256-024-00836-4)
+[s42256-024-00836-4.](https://doi.org/10.1038/s42256-024-00836-4)
+
+
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc V Le, Ed H. Chi, Sharan Narang, Aakanksha
+Chowdhery, and Denny Zhou. Self-Consistency Improves Chain of Thought Reasoning in Language Models. In _The_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2023. URL
+[https://openreview.net/forum?id=1PL1NIMMrw.](https://openreview.net/forum?id=1PL1NIMMrw)
+
+
+Brandon T. Willard and Rémi Louf. Efficient guided generation for large language models, 2023.
+[URL https://arxiv.org/abs/2307.09702.](https://arxiv.org/abs/2307.09702)
+
+
+Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi,
+Pierric Cistac, Tim Rault, Remi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick von
+Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao, Sylvain Gugger, Mariama
+Drame, Quentin Lhoest, and Alexander Rush. Transformers: State-of-the-art natural language processing. In _Proceedings of the Conference on Empirical Methods in Natural Language Processing:_
+_System Demonstrations_, 2020. [URL https://aclanthology.org/2020.emnlp-demos.6.](https://aclanthology.org/2020.emnlp-demos.6)
+
+
+Yonghui Wu, Mike Schuster, Zhifeng Chen, Quoc V. Le, Mohammad Norouzi, Wolfgang Macherey,
+Maxim Krikun, Yuan Cao, Qin Gao, Klaus Macherey, Jeff Klingner, Apurva Shah, Melvin Johnson,
+Xiaobing Liu, Łukasz Kaiser, Stephan Gouws, Yoshikiyo Kato, Taku Kudo, Hideto Kazawa, Keith
+Stevens, George Kurian, Nishant Patil, Wei Wang, Cliff Young, Jason Smith, Jason Riesa, Alex
+Rudnick, Oriol Vinyals, Greg Corrado, Macduff Hughes, and Jeffrey Dean. Google’s Neural
+Machine Translation System: Bridging the Gap between Human and Machine Translation, 2016.
+[URL https://arxiv.org/abs/1609.08144.](https://arxiv.org/abs/1609.08144)
+
+
+Vicky Xefteri, Tim Vieira, Ryan Cotterell, and Afra Amini. Syntactic Control of Language Models by
+Posterior Inference. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher
+Pilehvar (eds.), _Findings of the Association for Computational Linguistics:_ _ACL 2025_, pp. 25350–
+25365, Vienna, Austria, July 2025. Association for Computational Linguistics. ISBN 979-889176-256-5. doi: 10.18653/v1/2025.findings-acl.1300. URL [https://aclanthology.org/](https://aclanthology.org/2025.findings-acl.1300/)
+[2025.findings-acl.1300/.](https://aclanthology.org/2025.findings-acl.1300/)
+
+
+14
+
+
+APPENDIX CONTENTS
+
+
+**A** **Notation Glossary** **17**
+
+
+**B** **Background on Transducers** **18**
+
+
+**C** **Efficient Algorithms** **19**
+
+C.1 The Goal: An Efficient Implementation of the Autoregressive Interface . . . . . . . 19
+
+C.2 Frontier-Based Checks (is_cylinder _,_ is_member _,_ is_live) . . . . . . . . . . . . 21
+
+C.3 Pruning (prune) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+C.4 Fast Next-Symbol Decomposition (decompose_next) . . . . . . . . . . . . . . . . 23
+
+C.5 Next-Symbol Decomposition Shortcuts . . . . . . . . . . . . . . . . . . . . . . . 25
+
+C.6 Input-Projection Universality Shortcut (fast_univ_filter) . . . . . . . . . . . . 26
+
+C.7 Memoization and Batching of _pX_ . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+C.8 Realizing the Autoregressive Interface . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+C.9 All-Universal Fast Path . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+
+**D** **Proofs for Finiteness Conditions** **30**
+
+D.1 Properties of Prefix Monotone Maps . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+D.2 Quotient Bound for Strict-Prefix Monotone Maps . . . . . . . . . . . . . . . . . . 31
+
+D.3 Sufficient Conditions for Finite Quotients and Remainders . . . . . . . . . . . . . 32
+
+
+**E** **Example Decompositions** **34**
+
+
+**F** **Experimental Setup** **36**
+
+F.1 Datasets . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+F.2 Models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+F.3 Parameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+F.4 GPU Usage . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+F.5 Details on Transducers Used in Experiments . . . . . . . . . . . . . . . . . . . . . 37
+
+
+**G** **Additional Experimental Results** **39**
+
+G.1 Comparison to Vieira et al. (2025a) . . . . . . . . . . . . . . . . . . . . . . . . . . 39
+
+G.2 Jensen–Shannon Divergence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40
+
+G.3 Decomposition Size . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43
+
+G.4 Cross-Entropy . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 45
+
+G.5 Benchmarking the Computational Shortcut . . . . . . . . . . . . . . . . . . . . . . 46
+
+
+**H** **State-Based Decomposition** **47**
+
+
+**I** **Related Work** **48**
+
+
+15
+
+
+**J** **Limitations** **50**
+
+
+16
+
+
+A NOTATION GLOSSARY
+
+
+Notation Gloss
+
+_ε_ Empty string
+EOS End-of-string symbol
+_x_ _**x**_ _XZ,,, x_ _[∗]_ _**x**_ _Z_ _[′][′][′]_ _∈∈⊆XXX_ _[∗][∗]_ Symbols in the source alphabetSource stringsSet of all source stringsSets of source strings _X_
+_**xx**_ _[′]_ Concatenation (strings)
+_ZZ_ _[′]_ Concatenation (sets of strings)
+
+_y, y_ _[′]_ _∈_ _Y_ Symbols in the target alphabet
+_**y**_ _,_ _**y**_ _[′]_ _∈_ _Y_ _[∗]_ Target strings
+_Yf_ : _[∗]_ _X_ _[∗]_ _→_ _Y_ _[∗]_ Set of all target stringsTransformation from source strings _X_ _[∗]_ to target strings _Y_ _[∗]_
+
+_**x**_ _⪯_ _**x**_ _[′]_ _**x**_ is a prefix of _**x**_ _[′]_
+_**x**_ _≺_ _**x**_ _[′]_ _**x**_ is a strict-prefix of _**x**_ _[′]_
+_⟨Z⟩_ Cylinder set spanned by _Z_
+pf( _Z_ ) Prefx-base of _Z_
+
+
+_pX_ Language model over source strings _[∗]_
+_X_ _[∗]_ -valued random variable _X_ _pX X_
+_X_ _∼_
+_p−→X_ Prefix probability of _pX_
+_pY_ Language model over target strings
+_Y_ _[∗]_
+_f_ ( _X_ ) -valued random variable _f_ ( _X_ ) _pY_
+_Y_ _[∗]_ _∼_
+_p−→Y_ Prefx probability of _pY_
+f Transducer implementation of _f_
+_�→_ _X_ Input alphabet
+_�→_ _Y_ Output alphabet
+_�→_ S Set of states
+_�→_ I _⊆_ S Set of initial states
+_�→_ F _⊆_ S Set of accepting states
+_�→_ T Set of transitions
+_�→_ U _⊆_ S Set of IP-universal states (§C.6)
+_s, s_ _[′]_ S States
+
+_x_ : _∈y_
+
+( _s_ _s_ _[′]_ ) T Transition from _s_ to _s_ _[′]_ that scans _x_
+
+
+_x_ : _y_
+
+( _s_ _−−→_ _s_ _[′]_ ) _∈_ T Transition from _s_ to _s_ _[′]_ that scans _x_ and emits _y_
+
+T( _s_ ) _⊆_ T Outgoing transitions from state _s_
+f _f ◦◦_ f _f_ _[′][′]_ Transducer compositionRelation composition
+proj _X_ (f) Input projection
+f[ _s_ ] Force-start f in state _s_
+_**y**_ _Y_ _[∗]_ Either a copy-transducer that accepts _**y**_ _Y_ _[∗]_ or the corresponding relation.
+f _◦_ _**y**_ _Y_ _[∗]_ A transducer whose paths are restricted to those that accept _**y**_ _Y_ _[∗]_ .
+
+
+_f_ _[−]_ [1] ( _**y**_ ) Preimage of the target string _**y**_ (§3)
+_f_ _[−]_ [1] ( _Y_ ) The preimage of a set _Y_, _{f_ _[−]_ [1] ( _**y**_ ) _|_ _**y**_ _∈_ _Y}_ (§3)
+_P_ ( _**y**_ ) Precover of the target string _**y**_ (§3)
+_C_ ( _**y**_ ) The largest cylinder set contained in _P_ ( _**y**_ ) (§4)
+_Q_ ( _**y**_ ) Quotient (§4)
+_R_ ( _**y**_ ) Remainder (§4)
+
+
+**Notation conventions.** **Color** encodes domain: magenta denotes source-domain objects (e.g., _**x**_, _X_,
+_P_, _Q_, _R_ ) and olive green denotes target-domain objects (e.g., _**y**_, _Y_, _f_ ). **Font** encodes type: lowercase
+italic for symbols ( _x_, _y_ ), bold italic for strings ( _**x**_, _**y**_ ), calligraphic for alphabets and sets ( _X_, _Y_, _P_,
+_Q_, _R_ ), sans-serif for transducer components (S, T, I, F, U), and typewriter for the transducer itself
+(f) and for concrete strings in examples (abc, xyz). The overrightarrow _[−→]_ _·_ marks prefix probabilities:
+_p−→X_ is the prefix probability of _pX_ .
+
+
+17
+
+
+B BACKGROUND ON TRANSDUCERS
+
+
+This section introduces additional information on transducers, complementing §2.
+
+
+**Transducer** **variants.** We say a transducer is **functional** if it defines a function, and **partially**
+**functional** if it defines a partial function. A transducer is **input-deterministic** if for every state _s ∈_ S,
+_|_ stringT( _s, ε_ _**x**_ ) _|_ _∈_ = _X_ 0 and _[∗]_ has _|_ Tat( _s,_ most _x_ ) _|_ _≤_ one1 for allaccepting _x_ _∈_ path _X_ [17] .thatFor input-deterministic transducers, each sourcescans _**x**_ and, therefore, can emit at most one
+target string _**y**_ _∈_ _Y_ _[∗]_ . Thus, every input-deterministic transducer defines a (partial) function. A **copy-**
+**transducer** is one where every transition emits the same symbol as it scans, i.e., every transition is of
+
+_x_ : _x_ _x_ _′_ 18
+
+the form _s_ _s_ _[′]_ . We abbreviate copy transitions as _s_ _s_ . Copy-transducers define partial iden
+
+
+_x_ : _x_ _x_ _′_ 18
+
+the form _s_ _−−→_ _s_ _[′]_ . We abbreviate copy transitions as _s_ _−→_ _s_ . Copy-transducers define partial iden
+tity functions: they map each string in a designated subset to itself, and drop all others. In the same way
+that we abbreviate copy transitions, we may implicitly map them to a set of strings via ( _**x**_ _,_ _**x**_ ) _�→_ _**x**_ .
+
+**Operations.** is a transducer denoting�intent is clear from context.f� _◦{_ ( _**y**_ _[′]_ _,_ _**y**_ _[′]_ ) _|_ Transducers support _**y**_ _[′]_ _∈⟨_ _**y**_ - _⟩}_ f _◦_ withf _[′]_ We define the� =def f � _◦_ **composition** f _**y**_ - _Y◦_ - _[∗]_ f. _′_ We freely coerce between these representations when the�. **input projection** 1920:We denote a transducer that encodes the relationshipgiven transducers operation encoding the relationship f and f _[′]_, their composition f _◦_ f _[′]_
+
+- _s_ proj _[′]_ _X_ T (f)), which is a copy-transducer.� = _{_ ( _**x**_ _,_ _**x**_ ) _|_ _∃_ _**y**_ : ( _**x**_ _,_ _**y**_ ) _∈_ Let�f f� _}_ asdenote the operation ofproj _X_ (f) =def (S _, X_ _, X_ _,_ **force-starting** I _,_ F _, {_ ( _s_ _−−→x_ : _x_ _s_ f _[′]_ ) in state _|_ _s_ _−−→x_ : _sy_,
+
+
+_x_ : _x_
+_−−→_ _s_ _[′]_ . We abbreviate copy transitions as _s_
+
+
+- _s_ proj _[′]_ _X_ T (f)), which is a copy-transducer.� = _{_ ( _**x**_ _,_ _**x**_ ) _|_ _∃_ _**y**_ : ( _**x**_ _,_ _**y**_ ) _∈_ Let�f f� _}_ [ _s_ as] denote the operation ofproj _X_ (f) =def (S _, X_ _, X_ _,_ **force-starting** I _,_ F _, {_ ( _s_ _−−→x_ : _x_ _s_ f _[′]_ ) in state _|_ _s_ _−−→x_ : _sy_,
+
+f[ _s∈_ ] = (def _}_ S _,_ _,_ _,_ _s_ _,_ F _,_ T); this operation yields a machine defining the set of source–target suffix
+_X_ _Y_ _{_ _}_
+pairs that are generated by paths starting at a given _s_ and ending in an accepting state. We say that
+a stateinput follows, the transducer can still produce output. _s_ is **IP-universal** ( **input-projection universal** Let) if U � _⊆_ projS _X_ denote the set of IP-universal states; (f[ _s_ ])� = _X_ _[∗]_, i.e., no matter what
+this set can be precomputed for each transducer (§C.6).
+
+Our algorithms use an **input-determinization** transformation determinize(f) that maps a (partially)
+functional transducer f to an equivalent one that is input-deterministic. In general, such a mapping
+is not always realizable with a finite number of states. [21] However, in the special case of copytransducers, input-determinization is always possible, but may result in exponential blowup in the
+worst case. [22] We use trim(f) to denote a **trimming** operation that removes all states and edges that
+do not appear on any accepting path. These are standard operations that are implemented in any FST
+library; more details can be found in (Pin, 2021; 2025).
+
+**Visual notation.** We use diagrams like those shown in § E to represent transducers. Transitions
+without source states denote initial states; double-lined states indicate accepting states. Transitions
+
+_x_ : _y_
+
+_s_ _−−→_ _s_ _[′]_ are shown as arrows between states.
+
+**Limitations.** Finite-state transducers define the class of _rational relations_ (Berstel, 1979, Ch. III).
+Because FSTs only have finitely many states, they are inherently limited in the relations they can
+represent. For example, FSTs cannot perform transformations that require unbounded matching
+or counting. In contrast, transducers with unbounded memory extend beyond the rational class,
+offering greater expressive power, but come with increased complexity and often undecidability of
+key properties, such as _universality_ .
+
+
+_x_ : _x_
+_−−→_ _s_ _[′]_ ) _|_ _s_
+
+
+_x_ : _y_
+_−−→_ _s_ _[′]_ are shown as arrows between states.
+
+
+17The more general notion of a _subsequential_ _transducer_ additionally includes a final output function; this
+distinction does not arise for copy-transducers.
+18For readers familiar with finite-state automata, every copy-transducer is isomorphic to an _acceptor_ .
+19 def
+Here, **relation composition** is given by _f_ _◦_ _g_ = _{_ ( _x, z_ ) _|_ ( _x, y_ ) _∈_ _f,_ ( _y, z_ ) _∈_ _g}_ where _f_ and _g_ are relations.
+20Pin (2025, Ch. XIX, sec. 2) gives an efficient method for constructing f _◦_ f _′_ .
+21Choffrut (1977) gives such an algorithm, by using a power set construction on the input side as in the
+determinization of nondeterministic finite automata. He shows it yields a finite machine if and only if the
+automaton has _bounded variation_, the constraint that for any two strings whose prefix distance (the combined
+length of the strings with the longest shared prefix removed) is bounded, then the output prefix distance is
+also bounded. He also provides a testable condition for determinization, known as the twinning condition:
+once two runs have read the same input prefix (i.e., we cut the input at the same point), then for every common
+continuation, they append the same further output.
+22For readers familiar with finite-state automata, input-determinization of a copy-transducer is isomorphic to the
+determinization of an equivalent finite-state automaton, see §B.
+
+
+18
+
+
+C EFFICIENT ALGORITHMS
+
+
+The decomposition algorithm of §5 operates on a determinized, trimmed precover machine P =
+trim(determinize(proj _X_ (f _◦_ _**y**_ _Y_ _[∗]_ ))). In practice, both the composition with _**y**_ _Y_ _[∗]_ and the explicit
+determinization are expensive and must be repeated for each target _**y**_ . The algorithms in this section
+perform both steps lazily, operating directly on the original transducer f and avoiding explicit
+materialization. This requires careful bookkeeping of partial outputs via _frontiers_ (§ C.1.1), but
+enables precomputation of IP-universal states and incremental reuse across targets.
+
+We begin by stating the algorithmic goal (§C.1), then introduce the frontier data structure (§C.1.1) and
+show how each check reduces to a frontier query (§C.2). We write (S _, X_ _, Y,_ I _,_ F _,_ T) = f throughout
+and omit the dependency on _pX_ since it is clear from context.
+
+_[−→]_
+
+C.1 THE GOAL: AN EFFICIENT IMPLEMENTATION OF THE AUTOREGRESSIVE INTERFACE
+
+
+We seek efficient algorithms for the prefix probabilities _pY_ ( _**y**_ ), string probabilities _pY_ ( _**y**_ ), and next
+_[−→]_
+token distributions _pY_ ( _**y**_ ) of transduced language models. Specifically, we want efficient implemen
+_[−→]_ _· |_
+tations of the following methods, which constitute the interface to the transduced language model (§2).
+
+
+44 **def** prefix_prob( _**y**_ ):
+
+
+49 **def** next_dist( _**y**_ ):
+
+
+45 (Q _,_ R) _←_ decompose( _**y**_ )
+
+[�]
+
+
+_**x**_ _∈_ R _[p][X]_ [ (] _**[x]**_ [)]
+
+
+_**x**_ _∈_ Q _pX_ ( _**x**_ ) + [�]
+
+_[−→]_
+
+
+46 **return** [�]
+
+
+50 _p_ _←{}_
+
+
+51 _Z_ _←_ prefix_prob( _**y**_ )
+
+_[′]_
+
+
+47 **def** prob( _**y**_ ):
+
+
+48 **return** prefix_prob( _**y**_ ) _·_ next_dist( _**y**_ )[EOS]
+
+
+52 **for** _y_ _[′]_ _∈_ _Y_ :
+
+_[′]_
+
+
+53 _p_ [ _y_ _[′]_ ] _←_ prefix_prob( _**y**_ _y_ _[′]_ ) _/Z_
+
+[�] _[′]_
+
+
+54 _p_ ~~[~~ EOS] _←_ 1 _−_ [�]
+
+
+55 **return** _p_
+
+
+_y_ _[′]_ _∈Y_ _[p]_ ~~[[]~~ _[y][′]_ []]
+
+
+The primitive operation above is prefix_prob, which requires a single call to decompose. Both
+next_dist and prob are derived from it: next_dist computes _|Y|_ additional prefix probabilities and
+obtains _pY_ (EOS _**y**_ ) by complement; prob is a one-line product. In an implementation, _pX_ and _pX_
+
+_[−→]_ _|_ _[−→]_
+should be memoized so that extending _pX_ ( _**x**_ ) to _pX_ ( _**x**_ _x_ ) requires only a single conditional evaluation
+
+_[−→]_ _[−→]_
+rather than replaying the entire history (see §C.7). In §C.4, we show how to compute next_dist
+with a more efficient, joint decomposition, rather than _|Y|_ +1 separate calls to prefix_prob.
+
+The three checks in Fig. 2—is_cylinder, is_member, and is_live—all require determining which
+transducer states are reachable after reading a source string _**x**_, and what output each has produced
+relative to _**y**_ . We capture this information in a single data structure: the _frontier_ (§C.1.1). In §C.2,
+we show how each check reduces to a simple query on the frontier. In practice, the quotient and
+remainder may be large or infinite, so we introduce pruning (§C.3) to obtain practical approximations.
+
+
+C.1.1 FRONTIER COMPUTATION
+
+
+Since f can be nondeterministic even if it is functional, the transducer f may reach many states
+simultaneously for a given source string _**x**_ and target _**y**_ . Each of these paths may have produced a
+different output buffer. The **frontier** = run _**y**_ ( _**x**_ ) collects this information: it is the set of ( _s,_ _**b**_ )
+_F_
+pairs—where _s_ _∈_ S is a transducer state and _**b**_ _∈_ _Y_ _[∗]_ is the output produced so far—reachable by
+reading _**x**_ from the initial states, filtered to buffers _**b**_ compatible with _**y**_ . [23] The frontier encodes
+all information needed for the three checks: is_cylinder, is_member, and is_live can each be
+evaluated from _F_ alone, without retaining the full path history (§C.2; Fig. 8). The pseudocode in
+Fig. 7 describes how to compute the frontier using the three functions run _**y**_, step _**y**_, and closure _**y**_ .
+
+The frontier replaces the explicit precover machine P = trim(determinize(proj _X_ (f _◦_ _**y**_ _Y_ _[∗]_ ))) used
+in §5. Rather than materializing P, the frontier tracks the same information directly on f, avoiding
+both the composition with _**y**_ _Y_ _[∗]_ and the explicit determinization. The design reflects a two-phase
+structure: before a path’s buffer covers the target, the frontier tracks per-state output buffers ( _s,_ _**b**_ )
+filtered by target compatibility; once the buffer reaches or passes _**y**_, the frontier can be truncated
+for universality checking (§C.2). The frontier unifies the two phases into a single lazy data structure.
+
+
+23
+A buffer _**b**_ is compatible with _**y**_ if and only if _**b**_ _⪯_ _**y**_ _∨_ _**y**_ _⪯_ _**b**_, i.e., the buffer has either covered the target or
+has yet to diverge from it.
+
+
+19
+
+
+56 **def** run _**y**_ ( _x_ 1 _xN_ ): # memoize
+
+**if** : _···_ **return** closure
+
+
+57 **if** _N_ = 0: **return** closure _**y**_ (I _ε_ )
+_× {_ _}_
+
+
+67 **def** closure _**y**_ ( ):
+_F_
+
+_[′]_
+
+
+68 _F_ _[′]_ _←F_
+
+
+69 q _←_ QUEUE( _F_ )
+
+
+58 **return** step _**y**_ (run _**y**_ ( _**x**_ _<N_ ) _, xN_ )
+
+
+70 **while** _|_ q _| >_ 0:
+
+
+59 **def** step _**y**_ ( _, x_ ):
+_F_
+
+_[′]_
+
+
+71 ( _s,_ _**b**_ ) _←_ q _[′]_ .pop()
+
+
+60 _F_ _[′]_ _←∅_
+
+
+61 **for** ( _s,_ _**b**_ ) **in** :
+
+_x_ : _y_ _F_
+
+
+_ε_ : _y_ _[′]_
+72 **for** (_ _−−→_ _s_ _[′]_ ) _∈_ T( _s, ε_ ):
+
+_[′]_ _[′]_
+
+
+73 _**b**_ _[′]_ _←_ _**b**_ _y_ _[′]_
+
+_[′]_
+
+
+74 **if** _**b**_ _[′]_ _⪯_ _**y**_ _∨_ _**y**_ _⪯_ _**b**_ _[′]_ :
+
+_[′]_ _[′]_ _[′]_
+
+
+75 **if** ( _s_ _[′]_ _,_ _**b**_ _[′]_ ) _∈F/_ _[′]_ :
+
+_[′]_ _[′]_ _[′]_
+
+
+62 **for** (_
+
+
+_−−→x_ : _y_ _s_ _[′]_ ) _∈_ T( _s, x_ ):
+
+
+63 _**b**_ _[′]_ _←_ _**b**_ _y_
+
+_[′]_
+
+
+64 **if** _**b**_ _[′]_ _⪯_ _**y**_ _∨_ _**y**_ _⪯_ _**b**_ _[′]_ :
+
+_[′]_ _[′]_ _[′]_
+
+
+76 _F_ _[′]_ .add(( _s_ _[′]_ _,_ _**b**_ _[′]_ ))
+
+_[′]_ _[′]_
+
+
+77 q.add(( _s_ _[′]_ _,_ _**b**_ _[′]_ ))
+
+
+65 _F_ _[′]_ .add(( _s_ _[′]_ _,_ _**b**_ _[′]_ ))
+
+_[′]_
+
+
+78 **return** _F_ _[′]_
+
+
+66 **return** closure _**y**_ ( )
+_F_ _[′]_
+
+
+Figure 7: Frontier-based state machine
+
+
+_**x**_ Frontier is_live is_cylinder is_member Class
+
+_ε_ ( _q_ 0 _, ε_ ) ✓ ✗ ✗ extend
+a _{_ ( _q_ 1 _,_ c) _},_ ( _q_ 3 _,_ cd) ✓ ✓     - (c)
+b _{{_ ( _q_ 2 _,_ c) _}_ _}_ ✓ ✗ ( _q_ 2 dead on b) ✓ _RQ_ (c)
+
+Figure 8: Truncated frontier example for the target _**y**_ = c. **Top:** the transducer f. **Middle:** the
+frontier graph runc, whose nodes are sets of ( _s,_ _**b**_ ) pairs and whose edges are input symbols. Buffers
+are truncated to length _**y**_ +1 = 2: advancing ( _q_ 3 _,_ cd) by any input produces cdd, truncated back
+_|_ _|_
+to cd, yielding the self-loop. Truncation keeps the state space finite while preserving whether the
+buffer has reached the target and which next output symbol it commits to. Reading _**x**_ = a reaches
+two states via _ε_ -closure: _q_ 1 (buffer = _**y**_ ) and _q_ 3 (buffer _**y**_ ). Yellow nodes are universal—every
+_≻_
+input leads to a non-empty accepting successor—placing a in (c). The teal node _q_ 2 has no arc
+_Q_
+on b, so the BFS fails and b enters _R_ (c).
+
+
+The frontier enjoys a useful monotonicity property: extending the target by one symbol can only
+remove elements from the frontier, never add new ones. This means we can compute the frontier
+incrementally—filtering rather than rebuilding—as the target grows.
+
+**Proposition C.1** (Frontier containment) **.** _For any source string_ _**x**_ _, target string y_ 1 _yN_ _with N_ _>_ 0 _:_
+_···_
+
+
+run _y_ 1 _···yN_ ( _**x**_ ) = _{_ ( _s,_ _**b**_ ) _∈_ run _y_ 1 _···yN_ _−_ 1( _**x**_ ): _|_ _**b**_ _| < N_ _∨_ _**b**_ _N_ = _yN_ _}_ (9)
+
+
+_Proof._ Buffer filtering in step and closure keeps only ( _s,_ _**b**_ ) pairs where _**b**_ and the target agree on
+their shared prefix. Since FST arcs only append to the buffer, once _**b**_ is long enough to have an _N_ [th]
+symbol and _**b**_ _N_ = _yN_, then all descendant buffers would be filtered out by the _y_ 1 _yN_ -compatibility
+filter. Therefore, filtering run _**y**_ ( _**x**_ ) at the end is equivalent to filtering at each step. _···_
+
+
+20
+
+
+To see this, note that the ( ) direction holds because _y_ 1 _yN_ -compatible elements are also
+_y_ 1 _yN_ _−_ 1-compatible (the former _⊇_ is strictly more restrictive). _···_ The ( ) direction holds because
+elements that are _···_ _y_ 1 _yN_ _−_ 1-compatible but _not y_ 1 _yN_ -compatible (i.e., _⊆_ _**b**_ _N_ and _**b**_ _N_ = _yN_ )
+cannot produce descendants that become _···_ _y_ 1 _yN_ -compatible, since buffers only grow. _···_ _|_ _| ≥_ _···_
+
+
+**Proposition C.2.** _Prop. C.1 generalizes beyond single-symbol extensions:_ _for any_ _**y**_ _[′]_ _⪯_ _**y**_ _:_
+
+
+run _**y**_ ( _**x**_ ) = ( _s,_ _**b**_ ) run _**y**_ _′_ ( _**x**_ ): _**b**_ _**y**_ _**b**_ _**y**_ (10)
+_{_ _∈_ _⪯_ _∨_ _⪰_ _}_
+
+
+_Proof._ _**y**_ = _**y**_ _[′]_ By induction on _yN_ with _**y**_ _[′]_ _**y**_ _|_ _[′]_ _**y**_ . _| −|_ By Prop. _**y**_ _[′]_ _|_ . The base case C.1, run _**y**_ ( _**x y**_ ) == _**y**_ ( _[′]_ _s,_ is immediate. _**b**_ ) run _**y**_ _′_ ( _**x**_ For the inductive step, write): _**b**_ _<_ _N_ _**b**_ _N_ = _yN_ .
+By the induction hypothesis, _⪯_ run _**y**_ _′_ ( _**x**_ ) = ( _s,_ _**b**_ ) run _{_ _**y**_ _′_ ( _**x**_ _∈_ ): _**b**_ _**y**_ _[′]_ _|_ _**b**_ _|_ _**y**_ _[′]_ . _∨_ Substituting, _}_
+( _s,_ _**b**_ ) run _**y**_ _′_ ( _**x**_ ) survives both filters iff _**b**_ _{_ agrees with _∈_ _**y**_ on all positions up to _⪯_ _∨_ _⪰_ min( _}_ _**b**_ _, N_ ), i.e.,
+
+_**b**_ _⪯_ _**y**_ _∨∈_ _**b**_ _⪰_ _**y**_ . _|_ _|_ 
+Prop. C.2 is the key property that enables warm-starting decompose_next (§ C.4) from any target
+prefix’s cached frontiers.
+
+
+C.2 FRONTIER-BASED CHECKS (is_cylinder _,_ is_member _,_ is_live)
+
+
+Recall that the decomposition algorithm (Fig. 2) relies on three checks (is_cylinder, is_member,
+is_live). This section describes how to compute them in terms of the frontier.
+
+
+79 **def** is_cylinder( _**x**_ _,_ _**y**_ ): # memoize
+
+
+96 **def** is_member( _**x**_ _,_ _**y**_ ):
+
+
+80 _N_ _←|_ _**y**_ _|_
+
+
+81 trunc_buf _**y**_ (run _**y**_ ( _**x**_ ))
+_F_ _←_
+
+
+97 **return** ( _s,_ _**b**_ ) run _**y**_ ( _**x**_ ):
+_∃_ _∈_
+
+
+99 **def** is_live( _**x**_ _,_ _**y**_ ):
+
+
+82 _V_ _←{F}_ ; q _←_ QUEUE( _{F}_ )
+
+
+98 _**b**_ _⪰_ _**y**_ _∧_ _s ∈_ F
+
+
+83 **while** q:
+
+
+84 _F_ _←_ q.pop()
+
+85 # Accepting: some pair has matched
+
+86 # target and is accepting
+
+87 **if** _¬∃_ ( _s,_ _**b**_ ) _∈F_ : _**b**_ _⪰_ _**y**_ _∧_ _s ∈_ F:
+
+88 **return** **False**
+
+89 # Complete: every input leads to a
+
+
+100 **return** run _**y**_ ( _**x**_ ) =
+_̸_ _∅_
+
+
+101 **def** trunc_buf _**y**_ ( ):
+_F_
+
+
+102 _N_ _←|_ _**y**_ _|_
+
+
+103 **return** ( _s,_ _**b**_ _≤N_ ) ( _s,_ _**b**_ ) _,_
+_{_ _|_ _∈F_
+
+
+104 _**b**_ _⪯_ _**y**_ _∨_ _**y**_ _⪯_ _**b**_ _}_
+
+
+90 # non-empty successor
+
+
+91 **for** _x_ _[′]_ _∈_ _X_ :
+
+_[′]_
+
+
+92 trunc_buf _**y**_ (step _**y**_ ( _, x_ _[′]_ ))
+_F_ _[′]_ _←_ _F_
+
+_[′]_
+
+
+93 **if** _F_ _[′]_ = _∅_ : **return** **False**
+
+_[′]_ _[′]_
+
+
+94 **if** _F_ _[′]_ _∈/_ _V_ : _V_ .add( _F_ _[′]_ ); q.push( _F_ _[′]_ )
+
+
+95 **return** **True**
+
+
+Figure 9: Frontier-based checks. is_cylinder( _**x**_ _,_ _**y**_ ) verifies universality via powerset BFS over
+projected frontiers. is_member checks for an accepting covering state; is_live checks whether the
+frontier is non-empty.
+
+
+To check whether _⟨_ _**x**_ _⟩⊆_ _P_ ( _**y**_ ), the frontier-based is_cylinder applies trunc_buf to the frontier
+run _**y**_ ( _**x**_ ), which truncates buffers to length _**y**_, yielding a **truncated frontier** —a set of ( _s,_ _**b**_ ) pairs
+_|_ _|_
+whose buffers are compatible with _**y**_ . It then verifies universality via BFS over truncated frontiers:
+each successor frontier is obtained by applying step _**y**_ followed by trunc_buf. Unlike the ordinary
+frontier, where buffers can grow without bound, truncated buffers must be prefixes of _**y**_, so at most
+_|_ _**y**_ _|_ +1 distinct buffers exist, making the truncated frontier state space finite. Each truncated frontier
+corresponds to a state of the determinized precover machine P, so the BFS terminates. The BFS
+checks that every truncated frontier is both accepting (some pair has _**b**_ _⪰_ _**y**_ and _s ∈_ F) and complete
+(every input symbol leads to a non-empty successor). Without this exploration, two nondeterministic
+paths may yield the same string yet end in different states _s_ 1 and _s_ 2, where neither is universal on its
+own, although f[ _s_ 1] f[ _s_ 2] = _[∗]_ . [24] The precomputation of IP-universal states and a cylinder
+check shortcut are discussed in § � - _∪_ - - C.6 _X_ .
+
+
+24Universality is decidable for finite-state automata; efficient algorithms include antichain-based simulation
+(De Wulf et al., 2006), bisimulation up to congruence (Bonchi & Pous, 2015), and classical equivalence
+checking (Meyer & Stockmeyer, 1972).
+
+
+21
+
+
+When the cylinder check fails, membership reduces to checking whether the frontier contains a
+covering accepting pair ( _**b**_ _⪰_ _**y**_ and _s ∈_ F): if so, _**x**_ _∈_ _P_ ( _**y**_ ) and _**x**_ enters _R_ ( _**y**_ ).
+
+Liveness is non-emptiness of the frontier. Since frontier pairs are already filtered to target-compatible
+buffers, a non-empty frontier witnesses that some extension of _**x**_ can reach the precover.
+
+
+C.3 PRUNING (prune)
+
+
+Even when the decomposition is finite, the quotient and remainder can be very large. Enumerating
+all of them is often impractical, so pruning is essential for scalability. [25] At minimum, prune drops
+source strings with zero prefix probability, since these cannot contribute any mass:
+
+
+105 **def** prune(q _[′]_ ):
+
+106 **return** _{_ _**x**_ _∈_ q _[′]_ : _p_ _[−→]_ _X_ ( _**x**_ ) _>_ 0 _}_
+
+This simplistic filter drops only strings with _zero_ probability. In practice, we use a probability-mass
+pruning strategy: given candidates q _[′]_ with total mass _Z_ = [�] _**x**_ _∈_ q _[′][ −→]_ _pX_ ( _**x**_ ), we sort by descending _pX_
+
+_[−→]_
+and greedily retain candidates until their cumulative mass reaches (1 _−_ _τ_ ) _· Z_ or the capacity _n_ max is
+reached, whichever comes first. The resulting decomposition is approximate: discarded candidates
+contribute at most _τ_ _· Z_ mass per step, but the error vanishes as _τ_ _→_ 0.
+
+107 **def** prune_prob_mass( _τ, n_ max):
+
+108 **def** prune(q _[′]_ ):
+
+
+109 _M_ _←|_ q _[′]_ _|_
+
+_[′]_
+
+
+110 q _[′]_ _←_ sort_descending(q _[′]_, key= _[−→]_ _pX_ )
+
+_[′]_
+
+
+111 w _←_ [ _[−→]_ _pX_ ( _**x**_ ) **for** _**x**_ _∈_ q _[′]_ ] # _w_ 1 _≥···_ _≥_ w _M_
+
+W cumulative_sum(w)
+
+
+112 W _←_ cumulative_sum(w)
+
+
+113 _Z_ W _M_
+_←_
+
+
+114 q _←∅_
+
+
+115 **for** _m_ 1 _,...,_ min( _n_ max _, M_ ) :
+_∈{_ _}_
+
+_[′]_
+
+
+116 q.add(q _[′]_ _m_ [)]
+
+
+117 **if** W _m_ (1 _τ_ ) _Z_ : **break**
+_≥_ _−_
+
+**return** q
+
+
+118 **return** q
+
+
+119 **return** prune
+
+
+**Approximation bound.** At each step, the discarded mass is at most _τ ·_ _Z_ . As _τ_ _→_ 0 and _n_ max _→∞_,
+the algorithm converges to the exact decomposition.
+
+**Finite termination.** Even when the decomposition is finite, its size can be enormous. Pruning
+makes the algorithm tractable by bounding the queue at _n_ max candidates per step, and also guarantees
+termination for transducers whose decomposition is infinite (§D.3).
+
+**Backtracking.** Pruning may occasionally lead to dead ends where no valid extension remains.
+When this occurs while scoring an observed sequence, the next symbol _y_ receives zero conditional
+probability under the approximate _pY_ ( _**y**_ ). We recover using the procedure in Fig. 10, which takes
+
+_[−→]_ _· |_
+the current target string _**y**_, the next symbol _y_, the current pruning threshold _τ_, and hyperparameters:
+maximum retries _R_, threshold floor _τ_ min, and maximum eviction depth _D_ max. On each retry, _τ_
+is halved (floored at _τ_ min to prevent unlimited q growth), and cached decompositions for prefixes
+of _**y**_ are evicted at exponentially increasing depth _D_ = min(2 _[i][−]_ [1] _, D_ max), forcing decompose to
+recompute with the relaxed threshold. The original threshold is restored afterward. The procedure
+is heuristic: there is no guarantee that a fixed number of retries with halved thresholds will recover.
+Frequent backtracking signals that the pruning threshold is overly aggressive; in such cases, the
+overhead of repeated eviction and recomputation can dominate runtime. In our experiments, we use
+_R_ = 20, _τ_ min = 10 _[−]_ [10], _D_ max = 32. Backtracking is infrequent in practice: for _τ_ 1e-3, zero
+_≤_
+fallbacks occur across all experiments. At the coarsest threshold ( _τ_ = 1e-1), the mean number of
+18), and 0.4 forfallbacks per paragraph reaches at most 96 for _p_ dna _◦_ fdna2aa (max 5). _p_ gpt2 _◦_ f _α_ (max 159), 5.1 for _p_ gpt2 _◦_ f _α ◦_ fptb (max
+
+
+25An alternative to deterministic pruning is importance sampling with a proposal distribution over source strings;
+we leave this direction to future work.
+
+
+22
+
+
+120 **def** backtrack( _**y**_ _, y, τ, R, τ_ min _, D_ max):
+
+
+121 _τ_ 0 _τ_
+_←_
+
+**for**
+
+
+122 **for** _i ∈_ 1 _,..., R_ :
+
+
+123 _τ_ max( _τ/_ 2 _,_ _τ_ min)
+_←_
+
+_[i][−]_ [1]
+
+
+124 _D_ min(2 _[i][−]_ [1] _,_ _D_ max)
+_←_
+
+
+125 **for** _d ∈_ 0 _,..., D−_ 1:
+
+
+126 **if** _d > |_ _**y**_ _|_ : **break**
+
+
+127 evict cached decompose( _**y**_ _<|_ _**y**_ _|−d_ )
+
+
+128 _p_ _←_ next_dist( _**y**_ )
+
+129 **if** _p_ ~~[~~ _y_ ] _>_ 0:
+
+
+130 _τ_ _τ_ 0
+_←_
+
+131 **return** _p_
+
+
+132 _τ_ _τ_ 0
+_←_
+
+133 **raise** DeadEnd
+
+
+Figure 10: Backtracking. On each retry, halve _τ_ (floored at _τ_ min) and evict cached decompositions
+for progressively longer prefixes of _**y**_ (depth _D_ = min(2 _[i][−]_ [1] _, D_ max)), then recompute next_dist.
+Restore _τ_ afterward.
+
+
+C.4 FAST NEXT-SYMBOL DECOMPOSITION (decompose_next)
+
+Since _⟨Q_ ( _**y**_ _y_ ) _⟩⊆⟨Q_ ( _**y**_ ) _⟩_, we have _P_ ( _**y**_ _y_ ) = ( _⟨Q_ ( _**y**_ ) _⟩∩⟨Q_ ( _**y**_ _y_ ) _⟩_ ) _⊔_ _R_ ( _**y**_ _y_ ). The decomposition
+for _**y**_ _y_ can therefore be obtained with incremental work starting from _Q_ ( _**y**_ ) _∪_ _R_ ( _**y**_ ). The structural
+reason is monotonicity: the precover for _**y**_ and _**y**_ _y_ share the same alphabet and initial states; only the
+accepting states differ, as acceptability depends on which buffers cover the target. This is formalized
+by the frontier containment property (Prop. C.1).
+
+Theas the exact preimage decompose_next _f_ method computes _[−]_ [1] ( _**y**_ ). This is the key efficiency improvement over calling _Q_ ( _**y**_ _y_ ) and _R_ ( _**y**_ _y_ ) for all _y_ _∈_ _Y_ simultaneously, as well decompose( _**y**_ _y_ )
+independently for each _y_ .
+
+The BFS is seeded with _Q_ ( _**y**_ ) _∪_ _R_ ( _**y**_ ) (line 152). For each source string _**x**_ in the queue, we first check
+whether is_exact_member( _**x**_ _,_ _**y**_ ) (line 156) and, if so, record _**x**_ in the preimage set. Next, for each
+_y_ _∈_ reachable_outputs( _**x**_ _,_ _**y**_ ) (defined below; line 159), we classify _**x**_ as a cylinder or member
+for _**y**_ _y_ ; by functionality of f, at most one _y_ can be a cylinder (Prop. C.4). If a cylinder was found
+for some _y_, the entire subtree rooted at _**x**_ is absorbed—we skip extension for _all_ symbols (line 164).
+Otherwise, we extend by all reachable source symbols (line 165).
+
+The decompose_next algorithm relies on two mechanisms described next: target recursion for cheap
+frontier computation, and three frontier-based helpers. We now introduce these.
+
+**Target recursion.** The call is_cylinder( _**x**_ _,_ _**y**_ _y_ ) internally triggers run _**y**_ _y_ ( _**x**_ ). Target recursion is
+used opportunistically when the parent frontier run _**y**_ ( _**x**_ ) is already cached: the frontier for the extended target is derived by filtering rather than recomputing the entire source-string chain (Prop. C.1).
+This is the typical case in decompose_next, where decompose( _**y**_ ) has already populated the cache.
+This optimization is transparent: is_cylinder is called unchanged; the logic lives entirely inside run.
+
+**Per-symbol frontier helpers.** The BFS loop uses three frontier-based helpers.
+
+- is_exact_member( _**x**_ _,_ _**y**_ ) checks whether _**x**_ maps to _**y**_ exactly, i.e., is_exact_member( _**x**_ _,_ _**y**_ ) _⇐⇒_
+( _f_ ( _**x**_ ) = _**y**_ ).
+
+- reachable_inputs( _**x**_ _,_ _**y**_ ) conservatively approximates the set of source symbols _x_ _[′]_ such that
+extending _**x**_ by _x_ _[′]_ remains compatible with _**y**_, i.e., _{x_ _[′]_ _∈_ _X_ : _⟨_ _**x**_ _x_ _[′]_ _⟩∩_ _P_ ( _**y**_ ) _̸_ = _∅}_ . The pseudocode
+checks for transitions from frontier states whose extended buffer is prefix-compatible with _**y**_ ; this
+may over-report when the resulting state cannot reach acceptance.
+
+- reachable_outputs( _**x**_ _,_ _**y**_ ) conservatively approximates the set of target symbols _y_ _[′]_ such that
+some extension of _**x**_ can produce _**y**_ _y_ _[′]_ as an output prefix, i.e., _{y_ _[′]_ _∈_ _Y_ : _⟨_ _**x**_ _⟩∩_ _P_ ( _**y**_ _y_ _[′]_ ) _̸_ = _∅}_ . The
+pseudocode checks single-step transitions from frontier states, which may over-report (a transition
+from a frontier state that cannot reach acceptance) because the frontier is not cotrimmed. Symbols
+requiring multiple transitions to extend past _**y**_ are handled by the expansion loop.
+
+
+23
+
+
+All three are computed directly from the frontier run _**y**_ ( _**x**_ ):
+
+
+134 **def** is_exact_member( _**x**_ _,_ _**y**_ ):
+
+135 **return** ( _s,_ _**b**_ ) run _**y**_ ( _**x**_ ):
+_∃_ _∈_
+
+
+140 **def** reachable_outputs( _**x**_ _,_ _**y**_ ):
+
+141 run _**y**_ ( _**x**_ )
+_F_ _←_
+
+142 # _y_ _[′]_ is read from _**b**_ (committed)
+
+
+136 _**b**_ = _**y**_ _∧_ _s ∈_ F
+
+
+137 **def** reachable_inputs( _**x**_ _,_ _**y**_ ):
+
+
+143 # or _y_ (boundary)
+
+
+138 **return** _x_ _[′]_ ( _s,_ _**b**_ ) run _**y**_ ( _**x**_ ) _,_
+
+_[′]_ _{_ _[′]_ _|_ _∈_
+
+
+144 **return** _[′]_ _{y_ _[′]_ _|_ ( _s,_ _**b**_ ) _∈F,_
+
+
+_: _y_ _[′]_
+145 ( _s_ _−−→_ _s_ _[′]_ ) _∈_ T( _s_ ) _,_ _**y**_ _y_ _[′]_ _⪯_ _**b**_ _y_ _[′]_ _}_
+
+
+139 ( _s_
+
+
+_x_ _[′]_ : _y_ _[′]_
+_−−−→_ _s_ _[′]_ ) _∈_ T _,_ _**b**_ _y_ _[′]_ _⪯_ _**y**_ _∨_ _**y**_ _⪯_ _**b**_ _y_ _[′]_ _}_
+
+
+**Expansion loop.** The following algorithm combines the seeding, shortcuts, and helpers above into
+a single BFS that computes the per-symbol quotients and remainders for every _y_ _∈_ _Y_ simultaneously.
+
+
+146 **def** decompose_next( _**y**_ ):
+
+
+147 (Q _,_ R) _←_ decompose( _**y**_ )
+
+
+148 qs _←{}_ ; rs _←{}_ # map _y_ _�→_ set of _**x**_
+
+
+149 ps _←∅_
+
+
+150 # Remainders were not cylinders for _**y**_, hence not for any _**y**_ _y_ (Prop. C.3)
+
+
+151 non_cyl _←_ R
+
+
+152 q _←_ Q _∪_ R
+
+
+153 **while** _|_ q _| >_ 0:
+
+_[′]_
+
+
+154 q _[′]_ _←∅_
+
+
+155 **for** _**x**_ **in** q:
+
+
+156 **if** is_exact_member( _**x**_ _,_ _**y**_ ) : ps.add( _**x**_ ) # _f_ ( _**x**_ ) = _**y**_ exactly
+
+157 # Check reachable _y_ ; at most one _y_ can have _**x**_ as a cylinder (Prop. C.4).
+
+158 _y_
+
+    _←⊥_
+
+159 **for** _y_ **in** reachable_outputs( _**x**_ _,_ _**y**_ ) :
+
+
+160 **if** _y_ = **and** _**x**_ _/_ non_cyl **and** is_cylinder( _**x**_ _,_ _**y**_ _y_ ):
+
+       _⊥_ _∈_
+
+
+161 qs[ _y_ ].add( _**x**_ ); _y_ _y_ ; **continue**
+
+            _←_
+
+
+162 **if** is_member( _**x**_ _,_ _**y**_ _y_ ):
+
+
+163 rs[ _y_ ].add( _**x**_ )
+
+
+164 **if** _y_ = : **continue** # absorbed skip extension for all _y_
+
+      _⊥_ _⇒_
+
+_[′]_
+
+
+      
+165 **for** _x_ _[′]_ _∈_ reachable_inputs( _**x**_ _,_ _**y**_ ) :
+
+_[′]_ _[′]_
+
+
+166 q _[′]_ .add( _**x**_ _x_ _[′]_ )
+
+167 q _←_ prune(q _[′]_ )
+
+168 **return** (qs _,_ rs _,_ ps)
+
+
+167 q _←_ prune(q _[′]_ )
+
+
+Figure 11: Fast next-token decomposition algorithm.
+
+
+decompose_next( _**y**_ ) computes _Q_ ( _**y**_ _y_ ) and _R_ ( _**y**_ _y_ ) for all _y_ _∈_ _Y_ in a single BFS pass. The
+is_cylinder( _**x**_ _,_ _**y**_ _y_ ) call triggers run _**y**_ _y_ ( _**x**_ ), which is computed cheaply via target recursion
+(Prop. C.1) since the parent frontier run _**y**_ ( _**x**_ ) is already cached. The non-cylinder shortcut avoids
+the universality check entirely for seeds in _R_ ( _**y**_ ). After the BFS, the cache is populated so that
+subsequent decompose( _**y**_ _y_ ) calls are free. The exact preimage is collected as a byproduct: if _**x**_ is a
+cylinder for some _**y**_ _y_, every extension produces output strictly longer than _**y**_, so no extension can be
+an exact preimage of _**y**_ .
+
+**Cache** **population.** After the BFS, the computed _Q_ ( _**y**_ _y_ ) and _R_ ( _**y**_ _y_ ) should be written into decompose’s memoization cache. A subsequent decompose( _**y**_ _y_ ) call (e.g., from
+decompose_next( _**y**_ _y_ )) hits the cache instead of re-running its own BFS.
+
+
+169 **def** decompose_next( _**y**_ ):
+
+170 _···_
+
+171 # Populate decompose's cache for all children
+
+
+172 **for** _y_ _∈_ qs _._ keys() _∪_ rs _._ keys():
+
+
+173 cache[decompose _,_ _**y**_ _y_ ] _←_ (qs[ _y_ ] _,_ rs[ _y_ ])
+
+
+174 **return** _···_
+
+
+24
+
+
+C.5 NEXT-SYMBOL DECOMPOSITION SHORTCUTS
+
+
+The decompose_next algorithm (Fig. 11) shares work across all output symbols by making a single
+BFS pass for all output symbols at once instead of calling the decomposition for each symbol as in
+decompose (Fig. 2). By starting with the decomposition from the prior step and using target recursion,
+the overall frontier computations are reused. The remaining bottleneck is the per-symbol cylinder
+check is_cylinder (Fig. 9). Three shortcuts avoid or reduce this cost, each justified by a proposition
+about the structure of the precovers. _Non-cylinder_ _monotonicity_ and _cylinder_ _uniqueness_ enable
+skipping BFS for some settings. _Combined universality_ resolves additional symbols by examining
+how a frontier partitions into committed and boundary elements.
+
+**(1)** **Non-cylinder** **shortcut.** Strings in _R_ ( _**y**_ ) cannot be quotient elements for _**y**_ . And since
+_⟨Q_ ( _**y**_ _y_ _[′]_ ) _⟩⊆⟨Q_ ( _**y**_ ) _⟩_, they are not quotient elements for the strictly more restrictive _**y**_ _y_ either. The
+expensive cylinder check (line 160) is thus skipped for these seeds (line 151).
+**Proposition C.3** (Non-cylinder monotonicity) **.** _If_ _**x**_ _∈_ _R_ ( _**y**_ ) _then_ _**x**_ _∈/_ _Q_ ( _**y**_ _y_ ) _for all y_ _∈_ _Y._
+
+_Proof._ so _**x**_ _∈/_ We have that _Q_ ( _**y**_ _y_ ). _**x**_ _∈_ _R_ ( _**y**_ ) implies _⟨_ _**x**_ _⟩̸⊆_ _P_ ( _**y**_ ). Since _P_ ( _**y**_ _y_ ) _⊆_ _P_ ( _**y**_ ), and thus _⟨_ _**x**_ _⟩̸⊆_ _P_ ( _**y**_ _y_ ■),
+
+**(2) Cylinder uniqueness shortcut.** Since the transformations we consider are functions, at most
+one output symbol _y_ can have _**x**_ as a cylinder element. Once a cylinder element is found, the cylinder
+check is skipped for the remaining output symbols (line 159).
+**Proposition** **C.4** (Cylinder uniqueness) **.** _For_ _a_ _function_ _f_ _and_ _target_ _prefix_ _**y**_ _,_ _**x**_ _∈_ _Q_ ( _**y**_ _y_ ) _∩_
+_Q_ ( _**y**_ _y_ _[′]_ ) = _⇒_ _y_ = _y_ _[′]_ _._
+
+_fProof._ contradicts _[−]_ [1] ( _**y**_ _y_ Suppose _[′]_ _Y_ _[∗]_ _⟨_ ) = _**x**_ _⟩̸ ∅_ = _y_, where the last equality holds because _∅_ =. _y_ _[′]_ and _**x**_ _∈_ _Q_ ( _**y**_ _y_ ) _∩_ _Q_ ( _**y**_ _y_ _[′]_ ). Then _f_ _⟨_ is a function and _**x**_ _⟩⊆_ _P_ ( _**y**_ _y_ ) _∩_ _**y**_ _Py_ ( _Y_ _**y**_ _y_ _[∗][′]_ _∩_ ) = _**y**_ _y f_ _[′]_ _Y_ _[−][∗]_ [1] (= _**y**_ _∅yY_ . This _[∗]_ ) _∩_ 
+**(3) Combined universality shortcut.** Given _**x**_ ( _**y**_ ) and _y_, we want to determine whether
+                             _∈_ _Q_ _∈_ _Y_
+_**x**_ ( _**y**_ _y_ ) using the covering frontier at _**y**_ without running a full powerset BFS. The frontier
+
+    _∈_ _Q_
+run( _**x**_ _,_ _**y**_ ) partitions into _committed_ elements ( _s,_ _**b**_ ) with _**b**_ _**y**_ _y_ (the accumulated output already
+
+                        _⪰_
+extends past _**y**_ with symbol _y_ ) and _boundary_ elements ( _s,_ _**b**_ ) with _**b**_ = _**y**_ (the next output symbol
+is undetermined). The committed� states alone may not be universal—some input symbols may
+lack outgoing transitions from committed states. Boundary states can fill the gaps, provided every
+transition from a boundary state produces _y_ as its next output symbol.
+                    **Proposition C.5** (Combined universality) **.** _Let_ _**x**_ ( _**y**_ ) _,_ _y_ _, and define_
+                            _∈_ _Q_ _∈_ _Y_
+_Sc_ = _s_ ( _s,_ _**b**_ ) run( _**x**_ _,_ _**y**_ ) _,_ _**b**_ _**y**_ _y_             - _,_
+_{_ _|_ _∈_ _⪰_ _}_
+_Sb_ = _s_ ( _s,_ _**b**_ ) run( _**x**_ _,_ _**y**_ ) _,_ _**b**_ = _**y**_
+_{_ _|_ _∈_ _}_
+_If the unionfrom a boundary state producesx_ : _y_ _Sc ∪_ _Sb_ _is universal (i.e.,y_ - _, except that_ �proj _X_ (f _ε_ [ _S-input transitions may producec∪Sb_ ])� = _X_ _[∗]_ _), Sc ∩_ F = _∅, and every transition ε (i.e., s_ _∈_ _Sb_ _and_
+_s_ _s_ _[′]_ T _implies y_ = _y or_ ( _x_ = _ε_ _y_ = _ε_ ) _), then_ _**x**_ ( _**y**_ _y_ ) _._
+
+          -          _−−→_ _∈_ _∧_ _∈_ _Q_
+
+_Proof._ Let _**x**_ _[′]_ _[∗]_ be arbitrary. By universality of _Sc_ _Sb_, there exists ( _s,_ _**b**_ ) run( _**x**_ _,_ _**y**_ ) with
+_s_ _Sc_ _Sb_ such that _∈_ _X_ _s_ has an accepting run on _**x**_ _[′]_ in the input projection. _∪_ If _s_ _Sc∈_, then _**b**_ _**y**_ _y_ �, so
+the output of the corresponding path in _∈_ _∪_ f already begins with _**y**_ _y_ �, giving _**xx**_ _∈_ _[′]_ ( _**y**_ _y_ �). _⪰_ If _s_ _Sb_,
+_∈_ _P_ _∈_
+then _**b**_ = _**y**_ . By the exclusivity hypothesis, every non- _ε_ -input transition from _s_ produces output _y_,
+
+                                   and _ε_ -input transitions produce � _y_ or _ε_ . States reachable from _s_ via _ε_ : _ε_ arcs are also in _Sb_ (since the
+frontier is _ε_ -closed and the buffer is unchanged), so they satisfy the same constraint. Therefore the
+first non- _ε_ output along any path from _s_ is _y_, and the output begins with _**y**_ _y_, giving _**xx**_ _[′]_ ( _**y**_ _y_ ).
+                    -                     -                     Since _**x**_ _[′]_ was arbitrary, _**x**_ ( _**y**_ _y_ ), i.e., _**x**_ ( _**y**_ _y_ ). _∈_ _P_ 
+             -             _⟨_ _⟩⊆_ _P_ _∈_ _Q_
+
+This shortcut is complementary to the IP-universality shortcut (Prop. C.6): IP-universality is a perstate property, while combined universality is a set-level property that leverages partial coverage from
+both committed and boundary states.
+
+The proposition requires set-level universality of _Sc_ _Sb_ (the input-projection NFA started from
+those states accepts _X_ _[∗]_ ). In practice, we use a stronger but cheaper sufficient condition: _∪_ we require
+every individual state in _Sc_ _Sb_ to be in the precomputed U. This runs in _O_ ( ) time, whereas the
+set-level check requires a powerset BFS that may be as expensive as the full _∪_ is_cylinder _|F|_ check this
+shortcut is meant to avoid.
+
+
+25
+
+
+175 **def** combined_universal( _,_ _**y**_ _y_ ):
+
+              _F_
+
+
+176 _Sc_ _s_ ( _s,_ _**b**_ ) _,_ _**b**_ _**y**_ _y_ - # covered
+_←{_ _|_ _∈F_ _⪰_ _}_
+
+#
+
+
+177 _Sb_ _s_ ( _s,_ _**b**_ ) _,_ _**b**_ = _**y**_ # boundary
+_←{_ _|_ _∈F_ _}_
+
+**if** : **return** **False**
+
+
+178 # **if** Non- _∃_ _s ∈_ _S_ input _c ∪_ _Sb_ must : _s_ _∈/_ produceU: **return** ; **False**
+
+
+179 # Non- _ε_ input must produce _y_ ; _ε_ input may produce _ε_
+
+               
+
+
+180 **for** _s_ _Sb_ :
+_∈_ _x_ :
+
+
+181 **for** (_
+
+
+_−−→x_ : _y_ _s_ _[′]_ ) _∈_ T( _s_ ):
+
+
+182 **if** **not** ( _y_ = _y_ or ( _x_ = _ε_ _y_ = _ε_ )):
+
+          _∧_
+
+
+183 **return** **False**
+
+
+184 **return** _Sc_ F =
+_∩_ _̸_ _∅_
+
+C.6 INPUT-PROJECTION UNIVERSALITY SHORTCUT (fast_univ_filter)
+
+
+Recall that the cylinder check is_cylinder verifies whether every extension of a source prefix maps
+through the target prefix, using a powerset BFS that can be expensive. A cheap sufficient condition
+avoids it in many cases:transducer started from _s_ accepts all ofa state _s_ _∈_ S is _X_ **input-projection universal** _[∗]_ —intuitively, no matter what input follows, the transducer if the input projection of the
+can still produce output. Let U _⊆_ S be the set of all input-projection universal states.
+**Proposition C.6** (IP-universality shortcut) **.** _If some covering frontier state of_ _**x**_ _with respect to_ _**y**_ _is_
+_IP-universal, then_ _**x**_ _is a cylinder:_ - _∃_ ( _s,_ _**b**_ ) _∈_ run( _**x**_ _,_ _**y**_ ): _**b**_ _⪰_ _**y**_ _∧_ _s ∈_ U� = _⇒_ _**x**_ _∈_ _Q_ ( _**y**_ ) _._
+
+with output prefix� _Proof._ proj _X_ (Letf[ _s_ ])(� _s,_ = _**b**_ _X_ ) _**y**_ _∈_ _[∗]_, so for any.runHence( _**x**_ _,_ _**xx y**_ ) _**x**_ with _[′]_ _[′]_ _∈∈PX_ _**b**_ ( _**y**_ _[∗]_ _⪰_ ), there exists an accepting run of. _**y**_ Sinceand _**x**_ _s_ _[′]_ _∈_ was arbitrary,U be the witness _⟨_ _**x**_ _⟩⊆_ from f _P_ on( _**y xx**_ )the, i.e., _[′]_ antecedent.passing through _**x**_ _∈_ _Q_ ( _**y**_ ).Then■ _s_
+
+Fig. 12 shows how to efficiently precompute the set of input-projection universal states. We first
+input-project the transducer and remove _ε_ -transitions (replacing each path _s_ _ε_ _ε_ _s′_ _x_ _s′′_
+
+with a direct transition _s_ _−→x_ _s′′_ ; see, e.g., Hopcroft et al. 2001, Ch. 2) to obtain an _−→··· ε−→_ -free NFA _−→_ A
+
+over _X_ . Both operations preserve the state set: input projection drops output labels, and _ε_ -removal
+modifies only transitions (adding shortcuts through _ε_ -closures), so SA = S and states in U correspond
+directly to transducer states in the frontier. A state _s_ of A is input-projection universal iff it is
+accepting and, for every _x ∈_ _X_, has at least one _x_ -successor that is also input-projection universal—a
+greatest-fixpoint condition. We compute the fixpoint in linear time using an algorithm analogous to
+Kahn’s algorithm for topological sorting (Kahn, 1962): initialize the candidate set U to the accepting
+states of A and maintain per-state, per-symbol successor counts. When a count reaches zero, remove
+the state and propagate the change to its predecessors via a reverse transition index. Each transition
+is processed at most once, yielding _O_ ( _|_ TA _|_ ) time.
+
+
+with a direct transition _s_
+
+
+The shortcut can be integrated into is_cylinder (Fig. 9) as a fast path in is_cylinder:
+
+
+205 **def** is_cylinder( _**x**_ _,_ _**y**_ ): # memoize
+
+206 **if** fast_univ_filter( _**x**_ _,_ _**y**_ ): **return** **True** # fast path
+
+207 _N_ _←|_ _**y**_ _|_
+
+208 ... # continue BFS as before
+
+
+For transducers in which most accepting states are input-projection universal, this shortcut avoids
+the universality BFS in is_cylinder for the vast majority of cylinder checks. In BPE, where all
+states are input-projection universal, the universality BFS is never needed.
+
+
+C.7 MEMOIZATION AND BATCHING OF _pX_
+
+
+The source LM is queried in two places: first during decomposition, where probability-mass pruning
+calls _pX_ ( _**x**_ ) to rank candidates, and then during scoring, where prefix_prob and next_dist sum
+
+_[−→]_
+_p−→X_ ( _**x**_ ) and _pX_ ( _**x**_ ) over the quotient and remainder. These calls involve many overlapping source
+prefixes. Naïvely, each call recomputes the entire chain _pX_ ( _x_ 1) _pX_ ( _x_ 2 _x_ 1) from scratch.
+
+_[−→]_ _·_ _[−→]_ _|_ _···_
+Memoizing the conditional _pX_ ( _**x**_ ) avoids this: given a cached state for _**x**_, extending by one
+
+_[−→]_ _·_ _|_
+symbol _x_ requires a single conditional evaluation rather than replaying the entire history.
+
+For transformer language models, the cached state is the _key–value (KV) cache_ : the accumulated
+key and value tensors from the self-attention layers. Extending by one token reuses the cached KV
+entries and runs a single forward pass for the new position. Moreover, most LMs return the complete
+next-symbol distribution _pX_ ( _**x**_ ) in a single call, so we cache the full distribution rather than
+
+_[−→]_ _·_ _|_
+
+
+26
+
+
+185 # Preprocess: input-project and _ε_ -remove
+
+
+186 A _←_ eps-remove(proj _X_ (f))
+
+
+187 # queue-based greatest fixpoint
+
+
+188 U FA; q
+_←_ _←∅_
+
+
+189 count[ _,_ ] 0
+
+_·_ _·x ←′_
+
+
+190 **for** ( _s_
+
+
+_x_ _s′_ ) TA **with** _s′_ U:
+_−→_ _∈_ _∈_
+
+
+191 count[ _s, x_ ] += 1
+
+
+192 **for** _s ∈_ U:
+
+
+193 **if** _∃x ∈_ _X_ : count[ _s, x_ ] = 0:
+
+
+194 q.add( _s_ )
+
+195 **while** q _̸_ = _∅_ :
+
+_[′]_
+
+
+196 _s_ _[′]_ _←_ q _._ pop()
+
+197 U _←_ U _\ {s_ _[′]_ _}_
+
+
+198 **for** ( _s, x_ ) **with** ( _s_
+
+
+_x_ _s′_ ) TA:
+_−→_ _∈_
+
+
+199 count[ _s, x_ ] -= 1
+
+
+200 **if** count[ _s, x_ ] = 0 **and** _s ∈_ U:
+
+
+201 q.add( _s_ )
+
+
+202 **def** fast_univ_filter( _**x**_ _,_ _**y**_ ):
+
+203 # Does any covering frontier state have a universal input projection?
+
+204 **return** _∃_ ( _s,_ _**b**_ ) _∈_ run( _**x**_ _,_ _**y**_ ): _**b**_ _⪰_ _**y**_ _∧_ _s ∈_ U
+
+Figure 12: Efficient computation of input-projection universal states and the fast_univ_filter
+method that uses them.
+
+
+individual values. When the extension loop generates children _**x**_ _x_ 1 _,...,_ _**x**_ _xk_, their prefix probabilities
+are read directly from the cached distribution without additional LM calls. [26]
+
+**Batching** **while** **pruning.** The prune step (§ C.3) needs _pX_ ( _**x**_ ) for every string _**x**_ in the queue.
+
+_[−→]_
+Many of these strings share a common prefix but extend by different symbols. We group the
+queue by parent: for each parent _**x**_ _<N_ whose next-symbol distribution _pX_ ( _**x**_ _<N_ ) is not yet
+
+_[−→]_ _·_ _|_
+cached, we issue a single batched LM call. Each call returns the full distribution, from which
+_p−→X_ ( _**x**_ _<N_ _x_ ) = _p_ _[−→]_ _X_ ( _**x**_ _<N_ ) _· p_ _[−→]_ _X_ ( _x |_ _**x**_ _<N_ ) is read off for all children simultaneously. On GPU-based
+LMs, batching these parent contexts into a single forward pass amortizes the per-call overhead.
+
+
+C.8 REALIZING THE AUTOREGRESSIVE INTERFACE
+
+
+Given the decomposition, the transduced LM interface from §C.1 is implemented as follows. The
+prefix probability _pY_ ( _**y**_ ) sums LM prefix probabilities over Q and LM string probabilities over R. The
+
+_[−→]_
+string probability _pY_ ( _**y**_ ) sums over the exact preimage. The next-symbol distribution _pY_ ( _**y**_ ) is
+
+_[−→]_ _·_ _|_
+computed via decompose_next, which provides the per-symbol decompositions and exact preimage
+in a single BFS pass; the computational cost is dominated by decompose_next, and once the persymbol quotients, remainders, and preimage are available, the scoring reduces to lookups into the
+memoized source LM (§C.7).
+
+
+209 **def** prefix_prob( _**y**_ ):
+
+
+215 **def** next_dist( _**y**_ ):
+
+
+210 (Q _,_ R) _←_ decompose( _**y**_ )
+
+[�]
+
+
+_**x**_ _∈_ R _[p][X]_ [ (] _**[x]**_ [)]
+
+
+_**x**_ _∈_ Q _pX_ ( _**x**_ ) + [�]
+
+_[−→]_
+
+
+211 **return** [�]
+
+
+216 (qs _,_ rs _,_ ps) _←_ decompose_next( _**y**_ )
+
+
+217 _p_ _←{}_ ; _Z_ _←_ prefix_prob( _**y**_ )
+
+
+218 **for** _**x**_ _∈_ ps: _p_ ~~[~~ EOS] += _pX_ ( _**x**_ ) _/Z_
+
+
+212 **def** prob( _**y**_ ):
+
+
+213 (_ _,_ _ _,_ ps) _←_ decompose_next( _**y**_ )
+
+[�]
+
+
+219 **for** _y_ _∈_ qs _._ keys() _∪_ rs _._ keys():
+
+
+220 **for** _**x**_ _∈_ qs[ _y_ ]: _p_ [ _y_ ] += _p_ _[−→]_ _X_ ( _**x**_ ) _/Z_
+
+221 **for** _**x**_ _∈_ rs[ _y_ ]: _p_ [ _y_ ] += _pX_ ( _**x**_ ) _/Z_
+
+
+214 **return** [�]
+
+
+_**x**_ _∈_ ps _[p][X]_ [ (] _**[x]**_ [)]
+
+
+222 **return** _p_
+
+
+Figure 13: Fast implementation of the autoregressive interface using decompose_next.
+
+
+26Our implementation uses genlm [(https://github.com/genlm/genlm-backend)](https://github.com/genlm/genlm-backend) for its seamless caching
+and auto-batching interface.
+
+
+27
+
+
+For reference, the naïve next-symbol distribution computes prefix_prob( _**y**_ _y_ ) independently for
+each _y_ (see §C.1). The reference implementation is correct, but inefficient because it does not share
+work: each prefix_prob( _**y**_ _y_ _[′]_ ) call triggers its own decompose BFS, and it does not benefit from the
+non-cylinder shortcut, target recursion, or cache population described in §C.4.
+
+
+C.9 ALL-UNIVERSAL FAST PATH
+
+
+When every transducer state is IP-universal, the remainder is always empty and every newly
+discovered element is immediately a quotient element, so decomposition terminates in a single BFS
+round. If, additionally, every non- _ε_ -input arc produces at least one output symbol, then boundary
+frontier elements can be resolved in closed form via a precomputed first-output table. Together,
+these two conditions let next_dist (Fig. 13) simplify into all_universal_next_dist (Fig. 14).
+We describe the simplifications below (normalization is unchanged).
+
+**Decompose (simplified).** Because every state is IP-universal, _R_ ( _**y**_ ) = _∅_ for all _**y**_ : every source
+prefix in the precover is in the quotient. The call to decompose( _**y**_ ) (Fig. 2) terminates in a single BFS
+round—every newly discovered element is immediately classified as a quotient element. This makes
+decompose_next unnecessary: the per-symbol classification is absorbed into the scoring below.
+
+**Score** **(simplified).** For each ( _F,_ _**x**_ ) _∈_ Q, the frontier partitions into _committed_ elements ( _s,_ _**b**_ )
+with _**b**_ _≻_ _**y**_ and _boundary_ elements with _**b**_ = _**y**_, as in the combined universality shortcut (§ C.5).
+Committed elements have already determined their next output symbol � _y_ = _**b**_ _N_ +1; because all states
+are IP-universal, each contributes _pX_ ( _**x**_ ) directly to _p_ [ _y_ �]; thus, no expansion is needed.
+
+_[−→]_
+
+Boundary elements ( _**b**_ = _**y**_ ) need one more source symbol to commit to an output. The no- _ε_ -output
+precondition ensures that each non- _ε_ -input arc produces at least one output symbol, so a precomputed
+_first-output table_ fo( _S, x_ ) (defined in the pseudocode) maps each input symbol to the unique output
+it produces from a given powerstate. This symbol is unique: functionality of _f_ requires that all
+transitions on _x_ from states in _S_ produce the same output, since IP-universality guarantees each
+successor has an accepting continuation (so both outputs would be realized). Each boundary element
+is thus resolved with a single batched LM call: _ℓ_ = _pX_ ( _**x**_ ) is queried once per quotient element,
+
+_[−→]_ _· |_
+and for each _x ∈_ _X_, the mass _p_ _[−→]_ _X_ ( _**x**_ ) _·ℓ_ ( _x_ ) is attributed to fo( _S, x_ ). If any boundary state is accepting,
+the LM’s EOS probability contributes _pX_ ( _**x**_ ) _ℓ_ (EOS) to _p_ [EOS].
+
+_[−→]_ _·_
+
+The f _α_ transducers satisfy both preconditions (Tab. 4: all states IP-universal, no _ε_ -output on non- _ε_ input arcs), explaining their substantially higher throughput (§7). The DNA transducer fdna2aa has
+all states IP-universal but uses _ε_ -output arcs (the first two bases of each codon emit no amino acid),
+so the fast path does not apply.
+
+
+28
+
+
+223 **def** all_universal_next_dist( _**y**_ ):
+
+
+224 (Q _,_ _) _←_ decompose( _**y**_ ) # R = _∅_ always
+
+
+241 **def** fo( _S, x_ ):
+
+
+243 # Unique if functional &
+
+
+_−−→x_ : _y_ _s_ _[′]_ ) _∈_ T( _S, x_ ):
+
+
+225 _p_ _←{}_ ; _Z_ _←_ prefix_prob( _**y**_ )
+
+
+242 **for** (_
+
+
+226 **for** ( _F,_ _**x**_ ) **in** Q:
+
+
+227 # Committed: output past target
+
+228 **for** _y_ - _**b**_ _N_ +1 ( _s,_ _**b**_ ) _,_ _**b**_ _**y**_ :
+_∈{_ _|_ _∈F_ _≻_ _}_
+
++=
+
+
+244 # all states IP-universal
+
+245 **return** _y_
+
+246 **return** _⊥_
+
+
+     
+229 _p_ ~~[~~ _y_ �] += _pX_ ( _**x**_ )
+
+_[−→]_
+
+
+230 # Boundary: output = target
+
+
+231 _Sb_ _s_ ( _s,_ _**b**_ ) _,_ _**b**_ = _**y**_
+_←{_ _|_ _∈F_ _}_
+
+**if** :
+
+
+232 **if** _Sb_ = :
+_∅_
+
+
+233 _ℓ_ _←_ _p_ _[−→]_ _X_ ( _· |_ _**x**_ ) # one LM call
+
+
+234 **for** _x ∈_ _X_ :
+
+
+235 _y_ - fo( _Sb, x_ )
+_←_
+
+
+236 **if** _y_ = :
+
+       _⊥_
+
+
+       
+237 _p_ [ _y_ �] += _pX_ ( _**x**_ ) _ℓ_ ( _x_ )
+
+_[−→]_ _·_
+
+
+238 **if** _∃_ _s ∈_ _Sb_ : _s ∈_ F:
+
+
+239 _p_ ~~[~~ EOS] += _pX_ ( _**x**_ ) _ℓ_ (EOS)
+
+_[−→]_ _·_
+
+
+240 **return** _p/Z_
+
+
+Figure 14: all_universal_next_dist: specialization of next_dist (Fig. 13) when all states are IPuniversal and every non- _ε_ -input arc produces output. R = _∅_ always, so only Q contributes. Boundary
+elements are resolved via fo, requiring one LM call per quotient element.
+
+
+29
+
+
+D PROOFS FOR FINITENESS CONDITIONS
+
+
+D.1 PROPERTIES OF PREFIX MONOTONE MAPS
+
+**Proposition 6.1.** _all_ _**x**_ _∈_ _X_ _[∗]_ _(iii) P_ ( _The following are equivalent:f_ ( _**x**_ )) = _C_ ( _f_ ( _**x**_ )) _for all_ _**x**_ _∈_ _X(i)_ _[∗]_ _f(iv)is prefix monotone (ii) f_ _is prefix-continuous. f_ ( _⟨_ _**x**_ _⟩_ ) _⊆⟨f_ ( _**x**_ ) _⟩_ _for_
+
+_Proof._ (1) _⇒_ (2): Prefix monotonicity means that for any _**x**_ _,_ _**x**_ _[′]_ _∈_ _X_ _[∗]_, if we have that _**x**_ _⪯_ _**xx**_ _[′]_ then
+_f_ ( _**x**_ ) _⪯_ _f_ ( _**xx**_ _[′]_ ) and thus that there exists a _**y**_ _∈_ _Y_ _[∗]_ such that _f_ ( _**xx**_ _[′]_ ) = _f_ ( _**x**_ ) _**y**_ . And since _**x**_ _[′]_ was
+chosen arbitrarily (2) holds.
+
+(2) _⇒_ (3): Let _**x**_ _∈_ _X_ _[∗]_ . Suppose _f_ ( _⟨_ _**x**_ _⟩_ ) _⊆⟨f_ ( _**x**_ ) _⟩_ . Then, _⟨_ _**x**_ _⟩⊆_ _f_ _[−]_ [1] ( _f_ ( _⟨_ _**x**_ _⟩_ )) _⊆_ _P_ ( _f_ ( _**x**_ )) _._ Note
+that, for any _**x**_ _[′]_ _∈_ _P_ ( _f_ ( _**x**_ )), _P_ ( _f_ ( _**x**_ _[′]_ )) _⊆_ _P_ ( _f_ ( _**x**_ )). Therefore, _⟨_ _**x**_ _[′]_ _⟩⊆_ _P_ ( _f_ ( _**x**_ _[′]_ )) _⊆_ _P_ ( _f_ ( _**x**_ )) and so
+_**x**_ _[′]_ _∈_ _C_ ( _f_ ( _**x**_ )). This shows that _P_ ( _f_ ( _**x**_ )) = _C_ ( _f_ ( _**x**_ )).
+
+(3) _⇒_ (4): By assumption, any element in the precover is an extension of a quotient element, and
+thus a member in the cylinder over quotient elements.
+
+(4) _⇒_ (1): Assume _f_ is prefix-continuous, i.e., _P_ ( _**y**_ ) is cylindrical for all _**y**_ . Let _**x**_ _⪯_ _**x**_ _[′]_ . Since
+
+_fP_ (( _**x**_ _f_ )( _**x**_ _⪯_ )). _f_ In particular,( _**x**_ ), we have _**x**_ _[′]_ _**x**_ _∈∈PP_ ( _f_ (( _f_ _**x**_ ()) _**x**_ )), which gives. By prefix-continuity, _f_ ( _**x**_ ) _⪯_ _f_ ( _**x**_ _[′]_ _P_ ).( _f_ ( _**x**_ )) is cylindrical, so _⟨_ _**x**_ _⟩⊆_ 
+
+30
+
+
+D.2 QUOTIENT BOUND FOR STRICT-PREFIX MONOTONE MAPS
+
+
+The following proposition bounds the size of the quotient when the map is strict-prefix monotone.
+
+
+**Proposition D.1.** _Let f_ : _X_ _[∗]_ _→_ _Y_ _[∗]_ _be a strict-prefix monotone map._ _Then, for every_ _**y**_ _∈_ _Y_ _[∗]_ _:_
+
+
+_1._ _f_ _[−]_ [1] ( _**y**_ ) = _Q_ ( _**y**_ ) _\_ [�]
+
+
+_2.1._ [�] _f_ _[−]_ _y_ [1] _∈_ ( _Y_ _**y**_ ) = [(] _**[y]**_ _Q_ _[y]_ [)] ( _**y**_ ) _\_ [(][�] _**[y]**_ _y_ [) (] _∈Y_ _[Q]_ [(] _**[y]**_ _[ε][y]_ [)]
+
+
+_y∈Y_
+
+_[Q]_ [(] _**[y]**_ _[y]_ [)] _[ ⊆]_ _[Q]_ [(] _**[y]**_ [) (] _[X]_ _[⊔{][ε][}]_ [)]
+
+_[|]_ _**[y]**_ _[|]_
+
+
+_3._ _|Q_ ( _**y**_ ) _| ≤_ ( _|X_ _|_ + 1) _[|]_ _**[y]**_ _[|]_
+
+
+_Proof._ (1) Observe that (using Proposition 6.1) for every _**y**_ _∈_ _Y_ _[∗]_
+
+
+_C_ ( _**y**_ ) = _P_ ( _**y**_ ) = _f_ _[−]_ [1] ( _**y**_ ) _⊔_ 
+
+
+_y∈Y_
+
+
+_P_ ( _**y**_ _y_ ) = _f_ _[−]_ [1] ( _**y**_ ) _⊔_ 
+
+
+_y∈Y_
+
+
+_C_ ( _**y**_ _y_ ) (11)
+
+
+In particular, the minimality of _Q_ ( _**y**_ ) in _P_ ( _**y**_ ) implies that
+
+
+_Q_ ( _**y**_ ) _∩_ 
+
+
+_⟨Q_ ( _**y**_ _y_ ) _⟩_ (12)
+
+
+_y∈Y_
+
+
+_Q_ ( _**y**_ _y_ ) = _Q_ ( _**y**_ ) _∩_ 
+
+
+_y∈Y_
+
+
+which in turn yields the inclusionConsequently, we obtain the identity _f_ _[−]_ [1] ( _**y**_ ) = _C_ ( _**y**_ ) _\_ [�] _y∈Y_ _[C]_ [(] _**[y]**_ _[y]_ [)] [=] _[⟨][Q]_ [(] _**[y]**_ [)] _[⟩\]_ [ �] _y∈Y_ _[⟨][Q]_ [(] _**[y]**_ _[y]_ [)] _[⟩]_ [,]
+
+
+Consequently, we obtain the identity _f_ _[−]_ [1] ( _**y**_ ) = _C_ ( _**y**_ ) _\_ [�]
+
+
+_y∈Y_ [=]
+
+_[C]_ [(] _**[y]**_ _[y]_ [)] _[⟨][Q]_ [(] _**[y]**_ [)] _[⟩\]_ [ �]
+
+
+_Q_ ( _**y**_ ) _\_ 
+_y∈Y_
+
+
+_Q_ ( _**y**_ _y_ ) = _Q_ ( _**y**_ ) _\_ 
+_y∈Y_
+
+
+_⟨Q_ ( _**y**_ _y_ ) _⟩⊆_ _f_ _[−]_ [1] ( _**y**_ ) (13)
+
+
+For the reverse inclusion, let _**x**_ _[′]_ _f_ _[−]_ [1] ( _**y**_ ). Then there exists a unique _**x**_ _q_ ( _**y**_ ) such that _**x**_ _q_ _**x**_ _[′]_,
+_∈_ _∈_ _Q_ _⪯_
+by definition of the quotient set. Since _f_ is strict-prefix monotone and _f_ ( _**x**_ _q_ ) _f_ ( _**x**_ _[′]_ ) = _**y**_, we must
+_⪯_
+have _**x**_ _q_ = _**x**_ _[′]_ . This shows that _f_ _[−]_ [1] ( _**y**_ ) ( _**y**_ ), and completes the proof of (1).
+_⊆_ _Q_
+
+(2) Fix _y_, _**y**_ and let _**x**_ ( _**y**_ _y_ ). There exists a unique _**x**_ _y_ ( _**y**_ ) such that _**x**_ _y_ _**x**_ .
+_∈_ _Y_ _∈_ _Y_ _[∗]_ _∈_ _Q_ _∈_ _Q_ _⪯_
+Intersecting _**x**_ _y_ with both sides of (11), one obtains
+_⟨_ _⟩_
+
+
+_**x**_ _y_ = ( _**x**_ _y_ _f_ _[−]_ [1] ( _**y**_ )) _⟨_ _⟩_ _⟨_ _⟩∩_ _⊔_
+
+
+( _**x**_ _y_ ( _**y**_ _y_ _[′]_ )) (14)
+_⟨_ _⟩∩_ _C_
+
+
+_y_ _[′]_ _∈Y_
+
+
+= ( _**x**_ _y_ _f_ _[−]_ [1] ( _**y**_ )) _**x**_ _C_ _**x**_ (15)
+_⟨_ _⟩∩_ _⊔⟨_ _⟩⊔_
+
+
+where _C_ _**x**_
+
+
+def
+
+where _C_ _**x**_ = [�] _y_ _[′]_ _∈Y_ [(] _[⟨]_ _**[x]**_ _[y][⟩∩]_ _[C]_ [(] _**[y]**_ _[y][′]_ [))] _[ \ ⟨]_ _**[x]**_ _[⟩]_ [.] [Note that this set is cylindrical.] [By strict monotonicity]
+
+we have _**x**_ _y_ _f_ _[−]_ [1] ( _**y**_ ) 1. Hence either: (i) _**x**_ _y_ _f_ _[−]_ [1] ( _**y**_ ) =, in which case
+_|⟨_ _⟩∩_ _| ≤_ _⟨_ _⟩∩_ _∅_
+
+
+=def [�]
+
+
+_**x**_ = _**x**_ _y_ ( _**y**_ ) ( _**y**_ _y_ ) _,_
+_∈_ _Q_ _∩_ _Q_
+
+
+or (ii) _**x**_ _y_ _f_ _[−]_ [1] ( _**y**_ ) = _**x**_ _y_ . Then there exists a word _z_ _[∗]_ such that _**x**_ = _**x**_ _yz_ . Let _z_ _[′]_ _z_ . If
+_⟨_ _⟩∩_ _{_ _}_ _∈_ _X_ _≺_
+_z_ _[′]_ = _ε_, then _**x**_ _yz_ _[′]_ _C_ _**x**_ . Since _C_ _**x**_ is cylindrical, it contains _**x**_ _yz_ _[′]_ and in particular it must contain
+_∈_ _⟨_ _⟩_
+_**x**_ contradicting the definition of _C_ _**x**_ . Therefore no non-empty proper prefix _z_ _[′]_ _z_ exists, so _z_ is a
+_⟨_ _⟩_ _≺_
+single symbol _x ∈_ _X_ and
+
+
+_**x**_ = _**x**_ _yx_ ( _**y**_ ) _._
+_∈_ _Q_ _X_
+
+
+(3) For any _**y**_ _∈_ _Y_ _[∗]_ and any _y_ _∈_ _Y_, we have from (2),
+
+
+_|Q_ ( _**y**_ _y_ ) _| ≤_ ( _|X_ _|_ + 1) _|Q_ ( _**y**_ ) _|_ (16)
+
+
+Iterating this bound along any string _**y**_ _∈_ _Y_ _[∗]_, we have:
+
+
+_|Q_ ( _**y**_ ) _| ≤_ ( _|X_ _|_ + 1) _[|]_ _**[y]**_ _[|]_ _|Q_ ( _ε_ ) _|_ = ( _|X_ _|_ + 1) _[|]_ _**[y]**_ _[|]_ 
+
+
+31
+
+
+D.3 SUFFICIENT CONDITIONS FOR FINITE QUOTIENTS AND REMAINDERS
+
+
+Lemma 6.1 below gives sufficient conditions for when one can derive a finite precover decomposition.
+An example of such a transducer is given in Example 3.
+
+
+**Lemma** **6.1.** _Let_ _f_ : _X_ _[∗]_ _→_ _Y_ _[∗]_ _be_ _a_ _function_ _realized_ _by_ _a_ _transducer_ f _._ _The_ _decomposition_
+( _Q_ ( _**y**_ ) _, R_ ( _**y**_ )) _is finite for every_ _**y**_ _∈_ _Y_ _[∗]_ _if:_
+
+
+_(i)_ No _ε_ -output cycles: f _contains no cycle in which every arc outputs ε._
+_(ii)_ Safety: _Every state of_ f _is_ _**safe**_ _, defined inductively as the smallest set such that s is safe if:_ _(a) s_
+_is IP-universal; (b)_ f[ _s_ ] _<_ _(finite closure); or (c) for all transitions s_ _x_ : _y_ _s_ _[′]_ _, s_ _[′]_ _is safe._
+_|_                   -                   - _|_ _∞_ _−−→_
+
+
+_x_ : _y_
+_−−→_ _s_ _[′]_ _, s_ _[′]_ _is safe._
+
+
+_Proof._ Fix _**y**_ ; we show that ( _**y**_ ) and ( _**y**_ ) are finite. Let Π _**y**_ be the set of all paths in f
+_∈_ _Y_ _[∗]_ def _Q_ _x_ 1: _y_ 1 _R_ _xN_ : _yN_
+that emit exactly _**y**_, i.e., Π _**y**_ = _s_ 0 _s_ 1 _sN_ _−_ 1 _sN_ _s_ 0 I _, y_ 1 _yN_ = _**y**_ . By
+
+
+def _x_ 1: _y_ 1 _xN_ : _yN_
+
+that emit exactly _**y**_, i.e., Π _**y**_ = _s_ 0 _s_ 1 _sN_ _−_ 1 _sN_ _s_ 0 I _, y_ 1 _yN_ = _**y**_ . By
+
+condition (i), the _ε_ -output subgraph of _{_ f _−−−→_ is acyclic, so any sub-path that emits no output has length at _···_ _−−−−→_ _|_ _∈_ _···_ _}_
+most S . Since the total output is _**y**_, each path has bounded length, and Π _**y**_ is finite. Let Π _⪰_ _**y**_ be the
+_|_ _|_
+set of all valid paths formed by extending the roots in Π _**y**_ until they reach a state satisfying a safety
+base case. By condition (ii), every state of f is safe—in particular, the end states of paths in Π _**y**_ . This
+implies that no extension path can continue indefinitely without satisfying a base case (IP-universality
+or finite closure). Since a finite-state transducer has finite branching and no infinite valid extension
+paths, K˝onig’s Lemma implies that the tree of extensions is finite. [27] Thus, Π _⪰_ _**y**_ is a finite set.
+
+Let S _U_ =def _s_ S : _s_ is IP-universal and S _C_ =def _s_ S : f[ _s_ ] _<_ be the sets of states satisfying
+_{_ _∈_ _}_ _{_ def _∈_ _|_      -      - _|_ _∞}_
+conditions (a) and (b), respectively, and let S _S_ = S _U_ S _C_ . We can decompose the set of extended
+_∪_
+paths disjointly based on their end state:
+
+
+def
+= _s_ 0
+_{_
+
+
+_x_ 1: _y_ 1 _s_ 1 _sN_ _−_ 1
+_−−−→_ _···_
+
+
+Π _⪰_ _**y**_ = - _ρ ∈_ Π _⪰_ _**y**_ _..._ : _ρ|ρ|_ _∈_ S _U_ - _⊔_ - _ρ ∈_ Π _⪰_ _**y**_ : _ρ|ρ|_ _∈_ S _C_ - (17)
+
+
+= - _**π**_ _s|_ _**π**_ _|_ _..._ _sN_ _**π**_ Π _**y**_ _, sN_ S _U_ _,_ _s|_ _**π**_ _|,..., sN_ _−_ 1 S _S_ = _·_ _−→..._ _|_ _∈_ _∈_ _{_ _} ∩_ _∅_
+
+
+ - _**π**_ _s|_ _**π**_ _|_ _..._ _sN_ _**π**_ Π _**y**_ _, sN_ S _C,_ _s|_ _**π**_ _|,..., sN_ _−_ 1 S _S_ =  - (18)
+_⊔_ _·_ _−→_ _|_ _∈_ _∈_ _{_ _} ∩_ _∅_
+
+
+The first term corresponds to ( _**y**_ ) by definition. Since Π _⪰_ _**y**_ is finite, this set is finite. The second
+_Q_
+term collects paths leading to states _s_ S _C_ . The remainder ( _**y**_ ) consists of the input strings from
+_∈_ _R_
+these paths, concatenated with the finite language accepted by _s_ . Since the number of paths is finite
+and the closure of each stopping state is finite, _R_ ( _**y**_ ) is finite. 
+
+**Example 3.** _Consider the transducer below over X_ = _{_ a _,_ b _}, Y_ = _{_ a _,_ b _,_ d _}, encoding a (partial)_
+_function f_ _._ _The four states illustrate all cases of safety._ _State s_ 3 _is universal:_ _it is accepting and loops_
+_on every input symbol with ε-output, so L_ ( _s_ 3) = _X_ _[∗]_ _(base case a)._ _State s_ 2 _has finite closure:_ _it is_
+_accepting with no outgoing transitions, so L_ ( _s_ 2) = _{ε} (base case b)._ _State s_ 1 _is neither universal_
+_nor finite closure, but is safe by the recursive step (c):_ _its successors s_ 3 _(via_ a _) and s_ 2 _(via_ b _) are_
+_both safe._ _Similarly, s_ 0 _is safe because its successors s_ 1 _(via_ a _) and s_ 2 _(via_ b _) are both safe._
+
+
+a:a
+
+_For target_ _**y**_ = a _, the path set_ Πa = _s_ 0 _s_ 1 _is finite (condition i), with terminal state s_ 1 _safe_
+_{_ _−−→_ _}_
+
+_(condition ii)._ _Extending from s_ 1 _:_ _input_ a _reaches the universal state s_ 3 _, contributing_ aa _to_ (a) _;_
+_Q_
+_input_ b _reaches the finite-closure state s_ 2 _, contributing_ ab _to_ (a) _._ _The root string_ a _is also in_ (a) _:_
+_R_ _R_
+_s_ 1 _is accepting with f_ (a) = a _⪰_ a _, but_ a _is not cylindrical since_ ab _cannot be further extended (stuck_
+_at s_ 2 _)._ _Thus_ (a) = aa _and_ (a) = a _,_ ab _._
+_Q_ _{_ _}_ _R_ _{_ _}_
+
+
+27K˝onig’s Lemma states that every infinite tree with finite branching must have an infinite path. Since our
+alphabet is finite (finite branching) and the Safety condition forbids cycles among non-base-case states (no
+infinite paths), the resulting tree of extensions must be finite.
+
+
+32
+
+
+33
+
+
+E EXAMPLE DECOMPOSITIONS
+
+
+We give three concrete examples of decompositions and prefix probabilities.
+
+**Example 4.** _The transducer below merges consecutive backticks (_ _````_ _) into a quotation mark (_ " _) but_
+_otherwise keeps the symbols_ a _and_ _```_ _fixed._ _It can be seen as a minimal example of text normalization._
+
+
+
+
+
+
+
+
+(19a)
+
+
+
+f =
+
+
+
+
+
+_When computing the prefix probability_ _pY_ ( _```_ ) _, sequences starting with two backticks get mapped to a_
+
+_[−→]_
+_quote and thus do not appear in the precover._ _Instead, a single backtick remains in the remainder,_
+_while a backtick followed by_ a _goes into the quotient, as any further extensions preserve the initial_
+_backtick._ _We thus have (by visually canceling out continuations that get mapped to quotation marks),_
+
+_P_ ( _```_ ) = _{_ _```_ _,_        - _````_ [�] _,_ _`````_ _,_ _`` ``_ a _,...} ∪{_ _```_ a _,_ _```_ a _```_ _,_ _```_ aa _,...}_ (19b)
+= _{_ _```_ _} ⊔{_ _```_ a _} X_ _[∗]_ (19c)
+
+_Thus,_ _pY_ ( _```_ ) = _pX_ ( _```_ ) + _pX_ ( _```_ a) _._ _Similarly, we have_ (") = _`` ``_ _[∗]_ _and thus_ _pY_ (") = _pX_ ( _````_ ) _._
+
+_[−→]_ _[−→]_ _P_ _{_ _}X_ _[−→]_ _[−→]_
+
+Example 4 demonstrates the efficiency of using the remainder and the quotient; both sets only have a
+single element, yet they fully specify what probabilities contribute to _P_ ( ``` ). There are, however, edge
+cases that do not lend themselves to such efficient decompositions.
+
+**Example 5.** _Consider the following mapping f_ _and its representation as a transducer_ f _:_
+
+
+_f_ (a _[n]_ ) = b _[n]_ _**if**_ _n is even_ _**else**_ c _[n]_ f =
+
+
+
+
+
+
+
+(20a)
+
+
+a _:_ b
+
+
+a _:_ c
+
+
+
+
+
+
+
+_with X_ = _{_ a _} and Y_ = _{_ b _,_ c _}._ _The precover for_ b _is given by_
+
+
+(b) =  - _ε,_ �a _,_ aa _,_ �aaa [�] _,_ aaaa _,_ aaaaa _,_ aaaaaa _,..._ (20b)
+_P_ _{_ _}_
+
+
+_This example is, unfortunately, challenging for our approach as the remainder set is not finite:_
+
+
+_R_ (b) = �a [2] _[ n]_ _| n >_ 0� _, Q_ (b) = _∅_ (20c)
+
+_In other words, the mapping never releases the evenness constraint, and we sum forever._
+
+
+Finally, we give an example of a simple transducer with a single remainder element in Example 6.
+
+**Example 6.** _Consider the following mapping f_ _, visualized in Fig. 15._
+
+
+_f_ (a _[n]_ ) = b _[n]_ _**if**_ _n ̸_ = 2 _**else**_ c (21a)
+
+
+= a _and_ = b _,_ c _._ _Suppose we want to compute the prefix probability_ _pY_ (b) _._
+_X_ _{_ _}_ _Y_ _{_ _}_ _[−→]_
+
+
+_P_ (b) = _{_ a _,_ aa _,_ aaa _,_ aaaa _,_ aaaaa _,...}_ (21b)
+
+
+_R_ (b) = _{_ a _}, Q_ (b) = _{_ aaa _}_ (21c)
+
+
+_Thus,_
+_p−→Y_ (b) =                      
+
+
+- _pX_ ( _**x**_ ) + 
+
+_**x**_ _∈R_ (b) _**x**_ _∈Q_ (b
+
+
+_p−→X_ ( _**x**_ ) (21d)
+
+
+_**x**_ _∈Q_ (b)
+
+
+= _pX_ (a) + _pX_ (aaa) (21e)
+
+_[−→]_
+
+
+34
+
+
+Figure 15: An FST that maps _n_ occurrences of ’a’ to the same number of ’b’s, except when the input
+is exactly two ’a’s, which are mapped to ’c’.
+
+
+a: _ε_
+
+Figure 16: An FST where the _ε_ -output arc _q_ 0 _q_ 1 creates a frontier element whose output
+
+_−−→_
+has not yet reached the target. For target _**y**_ = c and source prefix _**x**_ = a, the frontier is _F_ =
+( _q_ 1 _, ε_ ) _,_ ( _q_ 2 _,_ c) . The covering states _q_ 2 are not input-projection universal ( _q_ 2 has no arc on b), so
+_{_ _}_ _{_ _}_
+fast_univ_filter(a _,_ c) fails and a would be misclassified as non-quotient. However, _q_ 1 handles
+input b and produces c, matching the target. The BFS in is_cylinder confirms universality over the
+full frontier, correctly placing a in _Q_ (c).
+
+
+35
+
+
+F EXPERIMENTAL SETUP
+
+
+Here we detail the experimental setup for reproducing the experiments in §7 and §G.5.
+
+
+F.1 DATASETS
+
+
+For the tokens-to-byte and PTB experiments in §7, we choose the first 10 paragraphs (excluding
+[headers) of the test split in the wikitext-2-raw-v1 dataset (Merity et al., 2017) (corresponding to](https://huggingface.co/datasets/Salesforce/wikitext)
+the first 7684 bytes) from the Hugging Face datasets library. We use the first 256 bytes of the
+same dataset and split to run the experiments in §G.5. For the DNA experiments in §7, we sample 65
+human proteins [28], each consisting of 4-12 amino acids, with their accession numbers given in Tab. 1.
+
+
+Table 1: Accession numbers used in this study.
+
+
+C0HLZ5 P01858 P0DPI4 P0DUS0 P84464
+P84465 P0DOY5 P67857 P67858 P67859
+P81826 P23210 P85003 P84071 P86168
+C0HJF1 C0HJG0 P02729 P81010 P86909
+P86922 B3EWE5 P0DMM6 P0DQM6 P0DQM7
+P12481 P85002 B3EWR3 P01358 P02728
+P0C005 P0DKX2 P0DMM7 P0DQM9 P0DX30
+P22103 P84200 P84785 P84868 P86600
+A8C8X2 B3A0L6 B3EUR5 C0HJM6 C0HLK7
+P0DJC3 P0DJF4 P69208 P85444 P85870
+P86942 A0A0A0MT89 B3EWS0 C0HJB6 C0HL84
+C0HL88 P0C8I8 P0DQH7 P0DQH8 P0DQX4
+P0DQX5 P58805 P69437 P82820 P83127
+
+
+F.2 MODELS
+
+
+We conduct experiments using GPT-2 Large (Radford et al., 2019), Llama 3.2-1B, Llama 3.1-8B and
+Phi-4 (14B; Abdin et al., 2024) [29] from the Hugging Face hub (Wolf et al., 2020). We use the
+library [30] and the (Kwon et al., 2023) backend to efficiently evaluate the models.
+
+For the PTB experiments we use 31 to convert token-level models into byte-level
+models and compose them with fptb. For we use a beam size of _K_ =5 and a pruning
+threshold of 0.001. For the DNA experiments we train a custom GPT-2 Small model [32] on a human
+DNA dataset [33] . The token set of the model is _X_ = _{_ A _,_ C _,_ G _,_ T _}_, eliminating the need for composing
+the model with a transducer f _α_ that maps from subword tokens to bytes. For training parameters, see
+Tab. 2, for training and validation metrics, see Tab. 3.
+
+
+F.3 PARAMETERS
+
+
+For all experiments, we use the pruning heuristic described in §C.3. For the experiments in §7 we
+report the results for different values of _n_ max _∈{_ 5000 _,_ 10000 _,_ 15000 _,_ 20000 _,_ 25000 _,_ 30000 _}_ . For all
+other experiments, we set _n_ max = _∞_ .
+
+F.4 GPU USAGE
+
+
+All experiments in §7 use a single NVIDIA GeForce RTX 4090 (24 GB), except Phi-4, which requires
+two. The benchmarks in §G.5 use an NVIDIA GeForce RTX 3090.
+
+
+[28https://www.uniprot.org/uniprotkb?query=Human](https://www.uniprot.org/uniprotkb?query=Human)
+29Available under [openai/gpt2-large,](https://huggingface.co/openai-community/gpt2-large) [meta-llama/Llama-3.2-1B,](https://huggingface.co/meta-llama/Llama-3.2-1B) [meta-llama/Llama-3.1-8B](https://huggingface.co/meta-llama/Llama-3.1-8B) and
+[microsoft/phi-4 at https://huggingface.co.](https://huggingface.co/microsoft/phi-4)
+[30https://github.com/genlm/genlm-backend](https://github.com/genlm/genlm-backend)
+[31https://github.com/genlm/genlm-bytes](https://github.com/genlm/genlm-bytes)
+[32https://huggingface.co/vesteinn/gpt2-dna](https://huggingface.co/vesteinn/gpt2-dna)
+[33https://huggingface.co/datasets/simecek/Human_DNA_v0.](https://huggingface.co/datasets/simecek/Human_DNA_v0)
+
+
+36
+
+
+Table 2: Training parameters for the GPT-2
+small model, trained on a human DNA.
+
+
+**Parameter** **Value**
+
+Learning Rate 0.0003
+Optimizer AdamW
+_β_ 1 = 0 _._ 9, _β_ 2 = 0 _._ 999,
+_ϵ_ = 1e _−_ 8
+Learning Rate Scheduler Linear
+Warm-up Steps 1000
+Train Batches (per device) 64
+Eval Batches (per device) 8
+Total Train Batches 256 (262,144 tokens)
+Total Eval Batches 32
+Epochs 10
+Seed 42
+Distributed Training Multi-GPU (4 devices)
+Mixed Precision Native AMP
+
+
+Table 3: Training and validation metrics for the
+GPT-2 small model, trained on a human DNA.
+
+
+**Step** **Epoch** **Train Loss** **Val Loss** **Acc (%)**
+
+5k 0.69 1.1252 1.1206 47.45
+10k 1.38 1.0835 1.0814 49.91
+15k 2.07 1.0641 1.0639 51.03
+20k 2.76 1.0563 1.0547 51.63
+25k 3.45 1.0504 1.0486 52.04
+30k 4.14 1.0439 1.0439 52.33
+35k 4.84 1.0425 1.0407 52.54
+40k 5.53 1.0365 1.0380 52.71
+45k 6.22 1.0325 1.0361 52.84
+50k 6.91 1.0322 1.0341 52.96
+55k 7.60 1.0307 1.0328 53.05
+60k 8.29 1.0267 1.0316 53.13
+65k 8.98 1.0273 1.0306 53.20
+70k 9.67 1.0270 1.0299 53.24
+
+
+F.5 DETAILS ON TRANSDUCERS USED IN EXPERIMENTS
+
+
+Tab. 4 contains the number of states, IP-universal states, and transitions for the transducers described
+in §7. We construct all finite-state transducers using Pynini (Gorman, 2016). Note that for experiments
+using the Penn Treebank FST (fptb), we realize _pX_ _◦_ f _α_ using, thereby keeping the
+number of states and arcs constant.
+
+
+Table 4: Number of states, IP-universal states, and transitions.
+
+
+**Model** **States** **IP-Univ. States** **Transitions**
+
+
+**Tokens to Bytes**
+
+_p_ gpt2 f _α_ 75,723 75,723 125,979
+_p_ llama1B _◦_ f _α_ 176,990 176,990 305,244
+_p_ llama8B _◦_ f _α_ 176,990 176,990 305,244
+_p_ phi4 f _◦α_ 115,244 115,244 215,593
+_◦_
+
+**Tokens to Words**
+
+_p_ gpt2 f _α_ fptb 479 56 26,962
+_p_ llama1B _◦_ _◦_ f _α_ fptb 479 56 26,962
+_p_ llama8B _◦_ f _α ◦_ fptb 479 56 26,962
+_p_ phi4 f _◦α_ f _◦_ ptb 479 56 26,962
+_◦_ _◦_
+
+**DNA to amino acids**
+
+_p_ dna fdna2aa 21 21 84
+_◦_
+
+
+**Constructing the PTB transducer.** We construct the PTB FST by encoding each tokenizer rule [34]
+as an FST that segments character sequences by inserting a distinguished separator symbol SEP _∈/_ _Y_ .
+Specifically, the transducer inserts SEP at punctuation and clitic boundaries, and collapses whitespace
+characters (spaces, tabs, newlines, etc.) into SEP. Note that the resulting transduced language model
+is thus not a true distribution over PTB tokens, but over characters and separators corresponding
+to the same boundaries that the PTB tokens would have. This is a pragmatic decision, as the PTB
+tokenizer can tokenize any sentence into orthographic words. In other words, it would accept an
+infinite vocabulary. Such a transducer can be built on the fly and would be equivalent to one with
+infinitely many states. In this paper, we only use the finite version. An example of such a rule is
+given in Fig. 5, which inserts SEP before a comma if it is not followed by a digit. We then compose
+
+
+34See [https://www.nltk.org/_modules/nltk/tokenize/treebank.html#TreebankWordTokenizer](https://www.nltk.org/_modules/nltk/tokenize/treebank.html#TreebankWordTokenizer) for
+the full specification.
+
+
+37
+
+
+these FSTs into a single transducer (fptb). Note that context-dependent rules, such as the one given
+in Fig. 5, introduce non-IP-universal states. For example, state _q_ 2 only accepts _x ∈_ _X_ _\ {_ 0–9, _}_ . In
+fact, of the 479 states in fptb, just 56 are IP-universal.
+
+**The** **DNA** **to** **amino** **acid** **transducer.** The DNA to amino-acid transducer, described in §7, is
+partially shown in Fig. 17.
+
+
+Figure 17: An FST for converting DNA sequences to amino acids. Each triplet of nucleobases maps
+to one of 20 different amino acids. We only show a proportion of the machine.
+
+
+38
+
+
+G ADDITIONAL EXPERIMENTAL RESULTS
+
+
+Here we provide complementary results to the experiments presented in §7, using the algorithms
+described in §C. First, in §G.1 we compare our transducer-based method using f _α_ to
+(Vieira et al., 2025a), then give full JSD (§G.2) comparisons for f _α_, fptb, and fdna2aa. In §G.4 we report cross-entropy comparisons for f _α_, and finally ablate the importance of IP-universal states (§G.5).
+
+
+G.1 COMPARISON TO VIEIRA ET AL. (2025A)
+
+
+Vieira et al. (2025a) convert token-level models to byte-level models using a beam-search algorithm
+parameterized by a beam size _K_ . We compare our transducer-based approach with their method by
+computing the JSD between the two resulting distributions over the paragraphs from WikiText (§F).
+Tab. 6 uses genlm-bytes ( _K_ = 32, pruning threshold of 0.0) as a reference and varies our pruning
+threshold _τ_ . As _τ_ decreases, JSD drops, and our distributions converge to the baseline. At moderate
+thresholds ( _τ_ _≤_ 1e-3), JSD is already below 1.5e-3 for all models, confirming that the two methods
+produce closely matching distributions.
+
+
+To verify that the two methods compute the same underlying
+distribution in the exact setting, we compare them with no
+pruning: _τ_ = 0 (no pruning) for our method and exact
+inference for genlm-bytes ( _K_ = _∞_ ). Tab. 5 shows the perposition JSD and maximum absolute difference for the first
+10 bytes of the WikiText evaluation data using _p_ gpt2 f _α_ .
+
+_◦_
+The JSD values are on the order of 1e-14–1e-15, and the
+maximum absolute probability difference is at most 3.4e6, confirming that both methods give the same distribution
+within floating-point precision.
+
+
+0 R 3.9e-15 7.9e-7
+1 - 6.5e-16 1.2e-6
+2 b 3.5e-15 1.2e-6
+3 e 4.4e-14 1.7e-6
+4 r 4.5e-15 3.4e-6
+5 t 1.8e-15 2.4e-6
+6 ␣ 1.1e-14 1.4e-6
+7 B 1.9e-15 1.8e-6
+8 - 6.1e-15 1.2e-6
+9 u 1.3e-14 1.5e-6
+
+
+Table 5: Exact comparison: our
+method ( _τ_ = 0) vs. genlm-bytes (exact) for _p_ gpt2 f _α_ .
+_◦_
+
+Pos Byte JSD max _|_ ∆ _p|_
+
+
+Tab. 7 reports the JSD and throughput of the baseline itself t
+
+6 ␣ 1.1e-14 1.4e-6
+
+at _K_ 8 _,_ 16 _,_ 32, showing the accuracy–speed trade-off
+_∈{_ _}_ 7 B 1.9e-15 1.8e-6
+within their method. Reducing K from 32 to 8 substantially
+
+8                              - 6.1e-15 1.2e-6
+
+increases throughput while introducing only modest changes 9 u 1.3e-14 1.5e-6
+in JSD, indicating that the baseline’s approximation error
+at _K_ = 32 is small. Note that the method of Vieira et al.
+(2025a) is designed specifically for strictly prefix monotone transformations, a property that f _α_
+satisfies. This specialization enables a trie-based algorithm that achieves a better accuracy–speed
+trade-off than our more general-purpose approach on this class of transformations.
+
+
+39
+
+
+Table 6: Average Jensen–Shannon divergence (JSD) and bytes/sec for various thresholds _τ_ using
+_pX_ _◦_ f _α_ against a reference distribution from Vieira et al. (2025a) with a beam size of _K_ =32. 95%
+confidence intervals are given in parentheses.
+
+
+_p_ gpt2 _◦_ f _α_ _p_ llama1B _◦_ f _α_
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 4.0e-2 (3.7e-2, 4.2e-2) 70.95 (64.14, 79.65) 2.8e-2 (2.5e-2, 3.0e-2) 84.21 (71.77, 99.54)
+3e-2 1.9e-2 (1.8e-2, 2.1e-2) 44.68 (40.59, 48.66) 1.2e-2 (1.1e-2, 1.4e-2) 72.23 (65.87, 78.10)
+1e-2 6.7e-3 (5.8e-3, 7.8e-3) 25.13 (23.83, 26.69) 4.2e-3 (3.5e-3, 4.9e-3) 40.45 (37.60, 43.43)
+3e-3 2.5e-3 (1.9e-3, 3.3e-3) 10.48 (9.89, 11.12) 1.1e-3 (8.4e-4, 1.3e-3) 22.09 (20.94, 23.51)
+1e-3 1.4e-3 (9.3e-4, 1.9e-3) 6.21 (5.89, 6.59) 4.0e-4 (2.9e-4, 5.6e-4) 11.86 (11.27, 12.49)
+3e-4 7.6e-5 (6.0e-5, 9.9e-5) 1.97 (1.84, 2.11) 1.3e-4 (1.1e-4, 1.5e-4) 5.90 (5.60, 6.22)
+1e-4 3.7e-5 (3.0e-5, 4.7e-5) 0.65 (0.61, 0.71) 8.8e-5 (8.1e-5, 9.5e-5) 2.15 (2.04, 2.26)
+3e-5 2.5e-5 (2.4e-5, 2.7e-5) 0.21 (0.19, 0.22) 7.8e-5 (7.3e-5, 8.3e-5) 1.20 (1.15, 1.27)
+1e-5 2.5e-5 (2.3e-5, 2.7e-5) 0.19 (0.17, 0.21) 7.4e-5 (6.9e-5, 7.7e-5) 0.62 (0.59, 0.66)
+
+
+_p_ llama8B _◦_ f _α_ _p_ phi4 _◦_ f _α_
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 2.2e-2 (2.0e-2, 2.4e-2) 79.03 (71.08, 87.28) 2.5e-2 (2.3e-2, 2.7e-2) 41.04 (36.96, 45.33)
+3e-2 8.8e-3 (7.7e-3, 1.0e-2) 66.41 (62.69, 70.69) 9.7e-3 (8.6e-3, 1.1e-2) 36.20 (33.26, 38.87)
+1e-2 3.5e-3 (2.9e-3, 4.2e-3) 45.47 (43.10, 47.91) 4.6e-3 (3.8e-3, 5.4e-3) 22.85 (21.14, 24.77)
+3e-3 1.3e-3 (9.3e-4, 1.8e-3) 26.71 (25.11, 28.34) 1.8e-3 (1.4e-3, 2.4e-3) 14.80 (13.70, 15.83)
+1e-3 5.1e-4 (2.9e-4, 8.4e-4) 15.73 (14.88, 16.60) 8.5e-4 (5.0e-4, 1.3e-3) 8.75 (8.30, 9.27)
+3e-4 1.3e-4 (1.1e-4, 1.5e-4) 9.08 (8.68, 9.57) 1.9e-4 (1.4e-4, 2.5e-4) 4.87 (4.60, 5.16)
+1e-4 9.1e-5 (8.0e-5, 1.0e-4) 4.03 (3.84, 4.23) 1.0e-4 (8.8e-5, 1.2e-4) 2.19 (2.07, 2.33)
+3e-5 7.5e-5 (6.8e-5, 8.3e-5) 2.38 (2.27, 2.49) 7.6e-5 (6.8e-5, 8.4e-5) 1.30 (1.23, 1.37)
+1e-5 7.3e-5 (6.6e-5, 8.1e-5) 1.40 (1.33, 1.47) 7.9e-5 (7.2e-5, 8.8e-5) 0.74 (0.70, 0.79)
+
+
+Table 7: Throughput and Jensen–Shannon divergence (JSD) of Vieira et al. (2025a) at beam sizes
+_K_ _∈{_ 8 _,_ 16 _,_ 32 _}_ . JSD is measured against _K_ =32. 95% confidence intervals are given in parentheses.
+
+
+_p_ gpt2 _◦_ f _α_ _p_ llama1B _◦_ f _α_
+_K_ JSD vs _K_ =32 bytes / sec JSD vs _K_ =32 bytes / sec
+
+8 3.0e-5 (2.5e-5, 3.9e-5) 37.81 (37.59, 37.98) 7.1e-5 (6.7e-5, 7.6e-5) 46.94 (45.69, 47.97)
+16 2.4e-5 (2.3e-5, 2.7e-5) 28.83 (28.53, 29.13) 7.1e-5 (6.7e-5, 7.5e-5) 28.76 (28.42, 29.08)
+32 (not applicable) 18.12 (17.87, 18.36) (not applicable) 5.34 (4.21, 7.19)
+
+
+_p_ llama8B _◦_ f _α_ _p_ phi4 _◦_ f _α_
+_K_ JSD vs _K_ =32 bytes / sec JSD vs _K_ =32 bytes / sec
+
+8 6.8e-5 (6.3e-5, 7.4e-5) 18.30 (18.17, 18.43) 4.6e-5 (4.3e-5, 4.9e-5) 11.59 (11.29, 11.80)
+16 6.9e-5 (6.2e-5, 7.8e-5) 10.55 (10.45, 10.65) 5.3e-5 (4.9e-5, 5.6e-5) 7.90 (7.84, 7.96)
+32 (not applicable) 5.85 (5.79, 5.91) (not applicable) 4.51 (4.44, 4.56)
+
+
+G.2 JENSEN–SHANNON DIVERGENCE
+
+
+We benchmark how well the algorithm given in §C approximates the exact distribution when using
+high pruning thresholds _τ_ in the probability mass pruning described in § C.3. Across all three
+settings—token-to-byte, PTB tokenization, and DNA-to-amino-acid—JSD decreases as _τ_ decreases,
+at the cost of throughput (bytes/sec).
+
+Tab. 8 reports the token-to-byte results ( _pX_ f _α_ ) for all four models. JSD drops by two to three
+
+_◦_
+orders of magnitude from _τ_ = 1e-1 to _τ_ = 3e-5, with the tightest thresholds reaching JSD below 1e-4
+for all models.
+
+Tab. 9 gives the corresponding results for PTB tokenization ( _pX_ f _α_ fptb), complementing Fig. 6
+(right). Although fptb has fewer states than the token-to-byte transducers, only 56 of its 479 states _◦_ _◦_
+are IP-universal, making lower thresholds computationally expensive; the reference is therefore _τ_ =
+1e-4 (3e-4 for _p_ phi4) rather than 1e-5. Despite this, JSD converges quickly, reaching the order of 1e-5
+at _τ_ = 3e-4 for _p_ gpt2, _p_ llama1B, and _p_ llama8B, while _p_ phi4 converges more slowly.
+
+
+40
+
+
+Tab. 10 reports the DNA-to-amino-acid results ( _p_ dna fdna2aa), where we additionally vary the
+
+_◦_
+candidate-set cap _n_ max to mitigate the combinatorial blow-up inherent in the three-to-one nucleotideto-amino-acid mapping. Tighter thresholds generally reduce JSD. However, the interaction between
+_τ_ and _n_ max is less uniform, as both the evaluated and reference distributions depend on the cap.
+
+**Incomplete runs.** As shown in §G.3, the decomposition size grows rapidly at tight thresholds—
+mean Q exceeds 35,000 at _τ_ = 1e-5 for f _α_ . For some model–threshold combinations, this growth
+_|_ _|_
+prevents calculating the full distribution at each position in all ten evaluation paragraphs. Specifically,
+_p_ gpt2 f _α_ in Tab. 8 completed only 7 of 10 paragraphs at _τ_ = 1e-5. In Tab. 9, _p_ phi4 f _α_ fptb
+
+_◦_ _◦_ _◦_
+completed 7 of 10 paragraphs at its reference threshold of _τ_ = 3e-4, and _p_ llama1B _◦_ f _α_ _◦_ fptb completed
+9 of 10 atto an unrecoverable backtracking failure (Fig. _τ_ = 1e-4. Additionally, _p_ phi4 _◦_ f _α ◦_ f 10ptb). completed only 9 of 10 paragraphs atIn these cases, JSD and throughput are computed _τ_ = 1e-1 due
+over the paragraphs shared across all thresholds for that model–transducer combination.
+
+
+Table 8: Average Jensen–Shannon divergence (JSD) and bytes/sec for various thresholds _τ_ using
+_pX ◦_ f _α_ against a reference distribution ( _τ_ =1e-5). 95% confidence intervals are given in parentheses.
+
+
+_p_ gpt2 _◦_ f _α_ _p_ llama1B _◦_ f _α_
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 3.8e-2 (3.4e-2, 4.1e-2) 76.50 (66.94, 89.01) 2.8e-2 (2.6e-2, 3.0e-2) 84.21 (72.49, 99.24)
+3e-2 1.7e-2 (1.5e-2, 1.9e-2) 45.61 (39.82, 51.46) 1.2e-2 (1.1e-2, 1.4e-2) 72.23 (66.25, 78.94)
+1e-2 5.9e-3 (4.8e-3, 7.1e-3) 25.71 (24.08, 27.89) 4.2e-3 (3.5e-3, 5.0e-3) 40.45 (37.65, 43.43)
+3e-3 2.1e-3 (1.4e-3, 2.9e-3) 11.22 (10.44, 12.07) 1.1e-3 (8.5e-4, 1.3e-3) 22.09 (20.90, 23.34)
+1e-3 1.5e-3 (9.1e-4, 2.3e-3) 6.49 (6.02, 6.99) 4.0e-4 (2.8e-4, 5.4e-4) 11.86 (11.25, 12.54)
+3e-4 5.5e-5 (4.7e-5, 6.7e-5) 2.28 (2.09, 2.48) 1.2e-4 (1.1e-4, 1.4e-4) 5.90 (5.59, 6.23)
+1e-4 3.6e-5 (2.9e-5, 4.8e-5) 1.00 (0.92, 1.09) 7.4e-5 (6.9e-5, 8.0e-5) 2.15 (2.03, 2.26)
+3e-5 2.4e-5 (2.2e-5, 2.7e-5) 0.44 (0.40, 0.49) 5.2e-5 (4.9e-5, 5.6e-5) 1.20 (1.14, 1.26)
+1e-5 (not applicable) 0.19 (0.17, 0.21) (not applicable) 0.62 (0.59, 0.65)
+
+
+_p_ llama8B _◦_ f _α_ _p_ phi4 _◦_ f _α_
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 2.3e-2 (2.1e-2, 2.5e-2) 79.03 (71.62, 87.24) 2.5e-2 (2.3e-2, 2.7e-2) 41.04 (36.75, 45.30)
+3e-2 8.9e-3 (7.8e-3, 1.0e-2) 66.41 (61.96, 70.51) 9.9e-3 (8.7e-3, 1.1e-2) 36.20 (33.36, 38.85)
+1e-2 3.5e-3 (2.9e-3, 4.4e-3) 45.47 (43.16, 48.08) 4.7e-3 (3.8e-3, 5.6e-3) 22.85 (21.06, 24.55)
+3e-3 1.3e-3 (9.4e-4, 1.8e-3) 26.71 (25.17, 28.24) 1.8e-3 (1.3e-3, 2.4e-3) 14.80 (13.74, 15.78)
+1e-3 5.2e-4 (3.0e-4, 8.4e-4) 15.73 (14.89, 16.61) 8.3e-4 (4.8e-4, 1.2e-3) 8.75 (8.30, 9.27)
+3e-4 1.2e-4 (1.1e-4, 1.4e-4) 9.08 (8.64, 9.60) 1.9e-4 (1.1e-4, 2.9e-4) 4.87 (4.61, 5.19)
+1e-4 8.3e-5 (7.3e-5, 9.6e-5) 4.03 (3.83, 4.26) 7.4e-5 (6.1e-5, 9.2e-5) 2.19 (2.05, 2.33)
+3e-5 5.9e-5 (5.3e-5, 6.6e-5) 2.38 (2.27, 2.49) 3.7e-5 (3.4e-5, 4.0e-5) 1.30 (1.23, 1.37)
+1e-5 (not applicable) 1.40 (1.34, 1.47) (not applicable) 0.74 (0.70, 0.79)
+
+
+41
+
+
+Table 9: Average Jensen–Shannon divergence (JSD) and bytes/sec for various thresholds _τ_ using
+_p_ are given in parentheses. _X_ _◦_ f _α ◦_ fptb against a reference distribution ( _τ_ = 1e-4; 3e-4 for _p_ phi4). 95% confidence intervals
+
+
+_p_ gpt2 _◦_ f _α ◦_ fptb _p_ llama1B _◦_ f _α ◦_ fptb
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 3.9e-3 (3.3e-3, 4.7e-3) 26.65 (25.79, 27.48) 3.0e-3 (2.6e-3, 3.5e-3) 30.44 (28.31, 32.19)
+3e-2 1.4e-3 (1.2e-3, 1.5e-3) 17.03 (16.42, 17.66) 1.1e-3 (9.3e-4, 1.3e-3) 17.45 (16.67, 18.27)
+1e-2 5.7e-4 (5.0e-4, 6.7e-4) 10.79 (10.23, 11.36) 3.7e-4 (3.4e-4, 4.0e-4) 10.54 (10.03, 11.09)
+3e-3 1.7e-4 (1.5e-4, 1.9e-4) 4.52 (4.29, 4.79) 1.3e-4 (1.2e-4, 1.4e-4) 8.30 (7.98, 8.67)
+1e-3 5.5e-5 (5.1e-5, 6.1e-5) 2.01 (1.88, 2.15) 6.1e-5 (5.8e-5, 6.5e-5) 4.13 (3.91, 4.36)
+3e-4 2.0e-5 (1.7e-5, 2.4e-5) 0.81 (0.77, 0.85) 3.3e-5 (3.1e-5, 3.5e-5) 1.67 (1.59, 1.76)
+1e-4 (not applicable) 0.20 (0.16, 0.25) (not applicable) 0.70 (0.66, 0.74)
+
+
+_p_ llama8B _◦_ f _α ◦_ fptb _p_ phi4 _◦_ f _α ◦_ fptb
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 2.5e-3 (2.1e-3, 3.0e-3) 19.25 (18.79, 19.76) 4.6e-3 (3.2e-3, 6.5e-3) 10.07 (9.53, 10.67)
+3e-2 1.0e-3 (8.6e-4, 1.2e-3) 13.38 (12.99, 13.83) 3.8e-3 (2.6e-3, 5.1e-3) 5.87 (5.37, 6.40)
+1e-2 6.0e-4 (4.7e-4, 7.8e-4) 9.49 (9.16, 9.88) 3.2e-3 (2.2e-3, 4.4e-3) 2.94 (2.59, 3.35)
+3e-3 1.1e-4 (1.0e-4, 1.2e-4) 5.90 (5.62, 6.20) 4.2e-4 (3.0e-4, 5.8e-4) 2.95 (2.68, 3.26)
+1e-3 5.1e-5 (4.7e-5, 5.5e-5) 3.29 (3.13, 3.45) 3.6e-4 (2.5e-4, 4.8e-4) 1.54 (1.37, 1.74)
+3e-4 2.3e-5 (2.1e-5, 2.5e-5) 1.42 (1.35, 1.49) (not applicable) 0.48 (0.43, 0.54)
+1e-4 (not applicable) 0.56 (0.53, 0.59) (not applicable) (not applicable)
+
+
+42
+
+
+Table 10: Average Jensen–Shannon divergence (JSD) and bytes/sec for various thresholds _τ_ and a
+reference ( _τ_ =1e-6) using _p_ dna fdna2aa. 95% confidence intervals are given in parentheses. We
+limit the candidate-set size ( _n_ max _◦_ ) to mitigate the combinatorial blow-up with increasing sequence
+length.
+
+
+_p_ dna _◦_ fdna2aa ( _n_ max = 5000) _p_ dna _◦_ fdna2aa ( _n_ max = 10000)
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 2.8e-2 (2.4e-2, 3.2e-2) 9.55 (8.44, 10.90) 2.8e-2 (2.5e-2, 3.3e-2) 9.54 (8.45, 10.82)
+3e-2 3.2e-3 (2.8e-3, 3.6e-3) 2.90 (2.57, 3.26) 3.3e-3 (2.9e-3, 3.7e-3) 2.03 (1.74, 2.39)
+1e-2 6.6e-4 (4.4e-4, 9.0e-4) 2.20 (1.99, 2.47) 7.4e-4 (5.0e-4, 1.0e-3) 1.42 (1.25, 1.63)
+3e-3 1.6e-4 (7.8e-5, 2.7e-4) 1.89 (1.72, 2.11) 2.7e-4 (1.1e-4, 4.9e-4) 1.16 (1.03, 1.31)
+1e-3 7.1e-5 (1.7e-5, 1.6e-4) 1.79 (1.62, 1.97) 6.6e-5 (1.7e-5, 1.5e-4) 1.08 (0.97, 1.22)
+3e-4 4.9e-5 (9.1e-6, 1.1e-4) 1.73 (1.58, 1.93) 3.5e-5 (6.7e-6, 7.9e-5) 1.04 (0.93, 1.17)
+1e-4 5.8e-5 (1.1e-5, 1.2e-4) 1.72 (1.56, 1.91) 2.1e-5 (9.9e-7, 7.9e-5) 1.02 (0.92, 1.16)
+3e-5 3.0e-5 (7.9e-7, 7.9e-5) 1.71 (1.55, 1.89) 2.1e-5 (6.6e-7, 6.2e-5) 1.02 (0.92, 1.14)
+1e-5 2.2e-5 (1.0e-6, 5.4e-5) 1.71 (1.56, 1.89) 3.9e-6 (5.1e-7, 8.9e-6) 1.02 (0.91, 1.15)
+3e-6 1.0e-5 (2.3e-7, 2.9e-5) 1.70 (1.55, 1.89) 1.2e-5 (6.1e-7, 3.2e-5) 1.01 (0.91, 1.12)
+1e-6 (not applicable) 1.71 (1.55, 1.90) (not applicable) 1.02 (0.92, 1.14)
+
+
+_p_ dna _◦_ fdna2aa ( _n_ max = 15000) _p_ dna _◦_ fdna2aa ( _n_ max = 20000)
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 2.9e-2 (2.5e-2, 3.3e-2) 9.52 (8.46, 10.82) 2.9e-2 (2.5e-2, 3.3e-2) 9.35 (8.21, 10.65)
+3e-2 3.2e-3 (2.8e-3, 3.5e-3) 1.63 (1.37, 1.94) 3.2e-3 (2.8e-3, 3.7e-3) 1.41 (1.18, 1.71)
+1e-2 6.8e-4 (4.5e-4, 9.8e-4) 1.10 (0.96, 1.27) 8.3e-4 (5.0e-4, 1.3e-3) 0.91 (0.78, 1.07)
+3e-3 2.2e-4 (8.2e-5, 4.2e-4) 0.88 (0.77, 1.00) 2.0e-4 (7.6e-5, 3.9e-4) 0.71 (0.62, 0.83)
+1e-3 5.0e-5 (8.5e-6, 1.3e-4) 0.80 (0.71, 0.91) 6.6e-5 (1.7e-5, 1.5e-4) 0.64 (0.56, 0.73)
+3e-4 2.8e-5 (3.6e-6, 7.2e-5) 0.77 (0.68, 0.88) 3.0e-5 (3.9e-6, 7.9e-5) 0.61 (0.55, 0.71)
+1e-4 2.4e-5 (1.1e-6, 7.0e-5) 0.75 (0.66, 0.84) 6.0e-5 (1.8e-6, 1.6e-4) 0.60 (0.54, 0.69)
+3e-5 6.0e-5 (1.0e-6, 1.6e-4) 0.74 (0.66, 0.84) 1.8e-4 (5.0e-5, 3.7e-4) 0.60 (0.53, 0.68)
+1e-5 3.0e-7 (7.1e-9, 8.3e-7) 0.74 (0.66, 0.84) 7.8e-7 (5.3e-8, 2.1e-6) 0.59 (0.53, 0.68)
+3e-6 9.3e-7 (1.1e-8, 2.7e-6) 0.73 (0.65, 0.83) 7.3e-7 (8.9e-9, 2.1e-6) 0.59 (0.53, 0.67)
+1e-6 (not applicable) 0.74 (0.65, 0.84) (not applicable) 0.60 (0.53, 0.69)
+
+
+_p_ dna _◦_ fdna2aa ( _n_ max = 25000) _p_ dna _◦_ fdna2aa ( _n_ max = 30000)
+_τ_ average JSD / byte bytes / sec average JSD / byte bytes / sec
+
+1e-1 2.9e-2 (2.5e-2, 3.3e-2) 9.50 (8.31, 10.78) 2.8e-2 (2.5e-2, 3.3e-2) 9.52 (8.43, 10.99)
+3e-2 3.3e-3 (2.9e-3, 3.7e-3) 1.28 (1.06, 1.60) 3.3e-3 (2.9e-3, 3.8e-3) 1.18 (0.96, 1.45)
+1e-2 7.9e-4 (4.9e-4, 1.3e-3) 0.81 (0.70, 0.95) 8.2e-4 (4.9e-4, 1.2e-3) 0.72 (0.61, 0.86)
+3e-3 2.3e-4 (8.1e-5, 4.7e-4) 0.62 (0.54, 0.72) 2.5e-4 (7.9e-5, 4.8e-4) 0.55 (0.47, 0.64)
+1e-3 5.9e-5 (1.1e-5, 1.4e-4) 0.56 (0.49, 0.65) 6.0e-5 (1.1e-5, 1.4e-4) 0.49 (0.42, 0.57)
+3e-4 2.6e-5 (3.5e-6, 6.8e-5) 0.53 (0.46, 0.61) 3.4e-5 (4.9e-6, 8.5e-5) 0.46 (0.41, 0.53)
+1e-4 2.4e-5 (8.2e-7, 6.9e-5) 0.52 (0.46, 0.59) 2.4e-5 (1.0e-6, 8.0e-5) 0.45 (0.39, 0.51)
+3e-5 7.2e-5 (1.9e-5, 1.5e-4) 0.51 (0.45, 0.59) 2.4e-5 (5.6e-7, 7.1e-5) 0.45 (0.39, 0.52)
+1e-5 1.9e-6 (5.6e-8, 4.6e-6) 0.51 (0.45, 0.59) 1.7e-7 (5.7e-9, 3.8e-7) 0.44 (0.39, 0.51)
+3e-6 1.3e-6 (1.2e-8, 3.3e-6) 0.51 (0.45, 0.58) 1.6e-6 (1.7e-8, 3.7e-6) 0.44 (0.38, 0.51)
+1e-6 (not applicable) 0.51 (0.45, 0.59) (not applicable) 0.44 (0.39, 0.51)
+
+
+G.3 DECOMPOSITION SIZE
+
+
+Tab. 11 and Fig. 18 show how the quotient and remainder sizes grow as _τ_ decreases, explaining the
+throughput reduction observed in the JSD experiments.
+
+For the all-IP-universal token-to-byte and DNA transducers, the remainder is empty ( _|_ R _|_ = 0) at
+every position, so only the quotient size is reported. In the token-to-byte setting, the mean quotient
+size grows from 62 at _τ_ = 1e-1 to over 35,000 at _τ_ = 1e-5, directly accounting for the throughput
+reduction at tight thresholds. The DNA transducer saturates early due to _n_ max = 5000: mean _|_ Q _|_
+reaches 465 by _τ_ = 3e-5 and remains flat beyond that.
+
+For fptb, which has non-IP-universal states, both Q and R are reported. Q grows steadily with a
+_|_ _|_ _|_ _|_ _|_ _|_
+tighter _τ_, while _|_ R _|_ initially decreases as more candidates enter the quotient but then grows as the
+expansion loop over non-IP-universal states discovers additional remainder elements. The presence
+of a non-trivial remainder is the key structural difference from the all-IP-universal transducers: each
+
+
+43
+
+
+remainder element requires a full string probability _pX_ ( _**x**_ ) rather than just a prefix probability, making
+it more expensive per element.
+
+
+Table 11: Mean and maximum quotient size _|_ Q _|_ across sequence positions for three transducers
+at varying pruning thresholds _τ_ . Results are computed on paragraph 1 of WikiText (833 bytes
+for _p_ gpt2 f _α_, 850 bytes for _p_ gpt2 f _α_ fptb) and on the longest protein in the test set (P83127,
+
+_◦_ _◦_ _◦_
+12 amino acids foreverywhere). The f _p_ ptbdna transducer has non-universal states, so we additionally report the remainder _◦_ fdna2aa). The f _α_ and fdna2aa transducers have all-universal states ( _|_ R _|_ = 0
+size _|_ R _|_ .
+
+
+(a) _p_ gpt2 _◦_ f _α_
+
+
+_τ_ Mean _|_ Q _|_ Max _|_ Q _|_
+
+1e-1 62 2,238
+3e-2 200 5,736
+1e-2 439 11,998
+3e-3 873 18,761
+1e-3 1,536 25,341
+3e-4 3,161 65,536
+1e-4 7,800 131,072
+3e-5 17,232 524,288
+1e-5 35,768 2,097,152
+
+
+(b) _p_ dna _◦_ fdna2aa
+
+
+_τ_ Mean _|_ Q _|_ Max _|_ Q _|_
+
+1e-1 104 344
+3e-2 288 1,274
+1e-2 346 1,329
+3e-3 439 2,011
+1e-3 454 2,027
+3e-4 462 2,044
+1e-4 463 2,044
+3e-5 465 2,046
+1e-5 465 2,046
+3e-6 465 2,046
+
+
+(c) _p_ gpt2 _◦_ f _α ◦_ fptb
+
+
+_τ_ Mean _|_ Q _|_ Max _|_ Q _|_ Mean _|_ R _|_ Max _|_ R _|_
+
+1e-1 1.3 31 1.0 113
+3e-2 1.9 57 0.38 113
+1e-2 3.6 142 0.48 25
+3e-3 7.3 353 1.2 53
+1e-3 16 686 3.5 129
+3e-4 47 1,807 11.4 408
+1e-4 128 5,101 33.9 1,195
+
+
+_τ_ =1e-1
+_τ_ =3e-2
+
+_p_ gpt2 _◦_ f _α_
+
+
+_τ_ =1e-2
+_τ_ =3e-3
+
+
+10 [2]
+
+
+10 [1]
+
+
+_τ_ =1e-3
+_τ_ =3e-4
+
+_p_ gpt2 _◦_ f _α ◦_ fptb
+
+
+_τ_ =1e-4
+_τ_ =3e-5
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [1]
+
+
+_τ_ =1e-5
+_τ_ =3e-6
+
+_p_ dna _◦_ fdna2aa
+
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+
+10 [0]
+
+
+10 [0]
+
+|Col1|Col2|
+|---|---|
+|0<br>200<br>4|0<br>600<br>800|
+
+
+Position in sequence
+
+
+10 [0]
+
+
+Figure 18: Growth of the quotient size _|_ Q _|_ (solid lines) and remainder size _|_ R _|_ (dashed lines) with
+sequence position for three transducer compositions at varying pruning thresholds _τ_ . Left: _p_ gpt2 f _α_
+on paragraph 1 of WikiText (833 bytes). Center: _p_ gpt2 f _α_ fptb on paragraph 1 (850 bytes after _◦_
+transduction); dashed lines show R, which is non-zero _◦_ because _◦_ fptb contains non-IP-universal
+_|_ _|_
+states. Right: _p_ dna fdna2aa on the longest protein in the test set (P83127, 12 amino acids). For
+
+_◦_
+f _α_ and fdna2aa, all FST states are IP-universal, so R = 0 everywhere. The fdna2aa panel uses a
+_|_ _|_
+candidate-set cap of _n_ max = 5 _,_ 000, which limits the quotient size at lower thresholds and breaks
+monotonic growth at later positions.
+
+
+44
+
+
+G.4 CROSS-ENTROPY
+
+
+Cross-entropy measures how well the transduced model assigns probability to held-out text; unlike
+JSD, it only requires evaluating _pY_ ( _y_ _**y**_ ) for the observed next symbol rather than computing the
+
+_[−→]_ _|_
+full next-symbol distribution _pY_ ( _**y**_ ). Tab. 12 reports cross-entropy (in nats and bits per byte)
+
+_[−→]_ _·_ _|_
+together with throughput for ( _pX_ f _α_ ). Because only a single probability is needed per position,
+
+_◦_
+throughput is higher than in the JSD tables above. Cross-entropy converges quickly as _τ_ decreases:
+for all four models, the tightest thresholds yield nearly identical values, confirming that moderate
+pruning suffices for accurate sequence scoring.
+
+
+Table 12: Cross-entropy and throughput for various thresholds _τ_ using _pX_ f _α_ . 95% confidence
+
+_◦_
+intervals are given in parentheses. _p_ gpt2 f _α_ at _τ_ = 1e-5 is computed over 6 paragraphs; all other
+configurations use 10. _◦_
+
+
+_τ_ bytes / sec Bits / byte Cross-entropy
+
+Mean 95% CI Mean 95% CI Mean 95% CI
+
+
+_p_ gpt2 _◦_ f _α_
+
+1e-1 82.61 (73.33, 92.34) 1.2434 (1.1884, 1.2936) 0.8619 (0.8237, 0.8966)
+3e-2 49.10 (44.48, 54.24) 1.1466 (1.0978, 1.1949) 0.7948 (0.7609, 0.8282)
+1e-2 28.46 (26.73, 30.33) 1.0652 (1.0199, 1.1068) 0.7383 (0.7070, 0.7672)
+3e-3 14.20 (13.47, 14.98) 1.0385 (0.9956, 1.0806) 0.7199 (0.6901, 0.7490)
+1e-3 6.46 (6.08, 6.84) 1.0293 (0.9909, 1.0664) 0.7134 (0.6868, 0.7392)
+3e-4 2.18 (2.04, 2.33) 1.0220 (0.9831, 1.0604) 0.7084 (0.6815, 0.7350)
+1e-4 0.75 (0.70, 0.80) 1.0220 (0.9823, 1.0610) 0.7084 (0.6809, 0.7355)
+3e-5 0.35 (0.33, 0.39) 1.0200 (0.9781, 1.0633) 0.7070 (0.6779, 0.7370)
+1e-5 0.34 (0.30, 0.38) 1.0025 (0.9461, 1.0550) 0.6949 (0.6558, 0.7313)
+
+
+_p_ llama1B _◦_ f _α_
+
+1e-1 129.22 (112.82, 146.19) 0.9922 (0.9467, 1.0405) 0.6877 (0.6562, 0.7212)
+3e-2 90.74 (82.63, 99.33) 0.9128 (0.8682, 0.9542) 0.6327 (0.6018, 0.6614)
+1e-2 47.81 (44.04, 51.52) 0.8626 (0.8252, 0.9027) 0.5979 (0.5720, 0.6257)
+3e-3 26.15 (24.71, 27.73) 0.8402 (0.8037, 0.8790) 0.5823 (0.5571, 0.6093)
+1e-3 14.89 (14.18, 15.69) 0.8364 (0.8001, 0.8725) 0.5797 (0.5546, 0.6048)
+3e-4 6.80 (6.46, 7.18) 0.8358 (0.7999, 0.8724) 0.5793 (0.5545, 0.6047)
+1e-4 2.62 (2.49, 2.77) 0.8362 (0.8018, 0.8699) 0.5796 (0.5558, 0.6030)
+3e-5 1.42 (1.35, 1.49) 0.8361 (0.8002, 0.8717) 0.5796 (0.5547, 0.6042)
+1e-5 0.73 (0.69, 0.77) 0.8360 (0.8002, 0.8717) 0.5795 (0.5546, 0.6042)
+
+
+_p_ llama8B _◦_ f _α_
+
+1e-1 88.65 (79.18, 99.61) 0.8176 (0.7757, 0.8661) 0.5667 (0.5377, 0.6003)
+3e-2 76.39 (71.27, 81.35) 0.7392 (0.7007, 0.7759) 0.5124 (0.4857, 0.5378)
+1e-2 52.05 (49.41, 54.93) 0.7153 (0.6778, 0.7507) 0.4958 (0.4698, 0.5203)
+3e-3 28.81 (27.18, 30.44) 0.6959 (0.6627, 0.7282) 0.4824 (0.4594, 0.5047)
+1e-3 16.86 (16.01, 17.82) 0.6913 (0.6584, 0.7251) 0.4791 (0.4564, 0.5026)
+3e-4 9.73 (9.24, 10.25) 0.6870 (0.6513, 0.7179) 0.4762 (0.4515, 0.4976)
+1e-4 4.35 (4.15, 4.58) 0.6870 (0.6557, 0.7221) 0.4762 (0.4545, 0.5005)
+3e-5 2.60 (2.47, 2.73) 0.6869 (0.6533, 0.7208) 0.4761 (0.4528, 0.4996)
+1e-5 1.57 (1.49, 1.66) 0.6869 (0.6552, 0.7180) 0.4761 (0.4541, 0.4977)
+
+
+_p_ phi4 _◦_ f _α_
+
+1e-1 42.39 (37.95, 47.19) 0.8714 (0.8217, 0.9208) 0.6040 (0.5695, 0.6382)
+3e-2 34.48 (31.73, 37.33) 0.7748 (0.7317, 0.8180) 0.5371 (0.5072, 0.5670)
+1e-2 24.89 (23.05, 26.59) 0.7547 (0.7165, 0.7959) 0.5231 (0.4966, 0.5517)
+3e-3 16.55 (15.34, 17.92) 0.7301 (0.6959, 0.7690) 0.5061 (0.4824, 0.5330)
+1e-3 9.91 (9.41, 10.52) 0.7241 (0.6882, 0.7595) 0.5019 (0.4770, 0.5264)
+3e-4 5.81 (5.51, 6.14) 0.7170 (0.6803, 0.7509) 0.4970 (0.4716, 0.5205)
+1e-4 2.55 (2.41, 2.70) 0.7163 (0.6824, 0.7493) 0.4965 (0.4730, 0.5194)
+3e-5 1.54 (1.46, 1.62) 0.7162 (0.6793, 0.7490) 0.4965 (0.4709, 0.5192)
+1e-5 0.86 (0.81, 0.91) 0.7162 (0.6828, 0.7502) 0.4964 (0.4733, 0.5200)
+
+
+45
+
+
+G.5 BENCHMARKING THE COMPUTATIONAL SHORTCUT
+
+
+We benchmark the computational shortcut inherent in the prefix decomposition described in §4,
+which allows us to decompose the precover into remainder and quotient representatives. We generate
+suboptimal decompositions by randomly selecting _n_ IP-universal states in the transducer (see §4)
+and treating them as non-IP-universal in our algorithms (see §5). This gradually decreases the
+size of the quotient and increases the remainder correspondingly. Tab. 13 shows the average JSD
+between the original and modified distributions over the first 256 bytes of the first 5 paragraphs of the
+[wikitext-2-raw-v1 dataset (Merity et al., 2017).](https://huggingface.co/datasets/Salesforce/wikitext) For each value of _n_, we repeat the sampling of
+new non-universal states three times, and report the mean JSD.
+
+The distributions diverge rapidly, and after converting roughly 15–20% of IP-universal states, the
+algorithm repeatedly encounters dead ends. This number varies between runs; as shown in Fig. 19,
+each repeat exhibits a distinct step function: JSD remains low until a particular high-connectivity
+state is converted, then jumps by 2–3 orders of magnitude and plateaus. In the PTB transducer, one IPuniversal state (state 193) serves as a routing hub with 274 arcs spanning 245 output symbols. When
+this state is converted, frontiers containing it move from the quotient Q to the remainder R, causing the
+expansion loop to require fallback scoring (Fig. 10). Different runs encounter this hub at different values depending on the permutation order, producing the staircase pattern. This shows that IP-universal
+states have a hierarchical importance structure: distribution quality is governed by a small number of
+high-connectivity hub states, while the majority can be converted with negligible impact (JSD _≤_ 1e-4).
+
+Table 13: Average Jensen–Shannon divergence (JSD) for the PTB transducer ( _τ_ =1e-3) after
+randomly converting _n_ of the IP-universal states to non-IP-universal. 95% confidence intervals are
+given in parentheses. JSD is computed against the unmodified transducer ( _n_ = 0).
+
+
+Converted States ( _n_ ) _p_ llama1B _◦_ f _α ◦_ fptb _p_ llama8B _◦_ f _α ◦_ fptb _p_ phi4 _◦_ f _α ◦_ fptb
+
+0 (not applicable) (not applicable) (not applicable)
+2 3.9e-5 (3.5e-5, 4.3e-5) 1.3e-4 (7.4e-5, 2.1e-4) 6.6e-5 (3.1e-5, 1.1e-4)
+5 9.5e-4 (7.5e-4, 1.2e-3) 9.0e-4 (7.5e-4, 1.1e-3) 7.8e-4 (6.4e-4, 9.4e-4)
+8 9.8e-4 (8.0e-4, 1.2e-3) 9.2e-4 (7.7e-4, 1.1e-3) 8.1e-4 (6.6e-4, 9.6e-4)
+11 3.0e-2 (2.6e-2, 3.3e-2) 2.8e-2 (2.5e-2, 3.1e-2) 2.6e-2 (2.3e-2, 2.9e-2)
+14 2.9e-2 (2.6e-2, 3.3e-2) 2.8e-2 (2.5e-2, 3.1e-2) 2.6e-2 (2.3e-2, 2.9e-2)
+16 2.9e-2 (2.6e-2, 3.2e-2) 2.8e-2 (2.5e-2, 3.2e-2) 2.6e-2 (2.3e-2, 2.9e-2)
+19 2.9e-2 (2.6e-2, 3.3e-2) 2.8e-2 (2.5e-2, 3.2e-2) 2.6e-2 (2.3e-2, 2.9e-2)
+
+
+Repeat 1 Repeat 2 Repeat 3 Pooled avg.
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||
+||||||||||||||||
+||||||||||||||||
+||||||||||||||||
+
+
+Converted States
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [3]
+
+
+10 _[−]_ [4]
+
+
+Figure 19: Per-repeat Jensen–Shannon divergence (JSD) vs. number of states converted from IPuniversal to non-IP-universal for the PTB transducer ( _τ_ =1e-3). Each repeat uses a different
+random conversion order. The abrupt jumps are caused by individual high-connectivity states, whose
+conversion causes a jump in JSD.
+
+
+46
+
+
+H STATE-BASED DECOMPOSITION
+
+The algorithms presented in the main text enumerate source _strings_ : the quotient _Q_ ( _**y**_ ) and remainder
+_R_ ( _**y**_ ) are represented as explicit sets of strings. When these sets are infinite, the string-enumeration
+approach does not terminate without pruning.
+
+An alternative is to operate on the _state space_ of the precover DFA rather than its string space. Since
+the precover DFA P _**y**_ (§5.1) has finitely many states, a state-based traversal always terminates, even
+when _Q_ ( _**y**_ ) or _R_ ( _**y**_ ) are infinite. The key idea is to represent the quotient and remainder as DFAs Q
+and R—automata that _accept_ the (possibly infinite) sets _Q_ ( _**y**_ ) and _R_ ( _**y**_ ) respectively—rather than
+enumerating their elements. The full precover is then recovered as _P_ ( _**y**_ ) = _⟨_ �Q� _⟩⊔_ �R�.
+
+The algorithm in Fig. 20 performs a BFS over the states of P _**y**_ . At each state _s_, it checks whether
+_s_ is _universal_ —i.e., whether the sub-automaton rooted at _s_ accepts _X_ _[∗]_ (see is_cylinder). If so, _s_
+is marked as a quotient member and accepting state, and its successors are not explored, since all
+extensions from a universal state are covered. If _s_ is accepting but not universal, it is marked as a
+remainder member and accepting state, and exploration continues through its outgoing arcs.
+
+The result is a pair of DFAs that share the same state space and truncated arc set but differ in their
+accepting states. The quotient automaton Q has the universal states as accepting states, and arcs
+leaving universal states are dropped (since the BFS does not expand past them); thusaccepting exactly the quotient elements. The remainder automaton R uses the same truncated arc set �Q� = _Q_ ( _**y**_ ),
+but marks only the non-universal accepting states; thus, �R� = _R_ ( _**y**_ ).
+
+
+247 **def** dfa_decomposition(f _,_ _**y**_ ):
+
+
+248 P _**y**_ _←_ trim(determinize(proj _X_ (f _◦_ _**y**_ _Y_ _[∗]_ )))
+
+q
+
+
+268 **def** is_cylinder( _s_ ):
+
+
+269 _V_ _←{s}_ ; q _←_ QUEUE( _{s}_ )
+
+
+270 **while** q:
+
+
+249 q QUEUE(I _**y**_ )
+_←_
+
+
+250 _V_ _←∅_ ; arcs _←∅_
+
+
+271 _s ←_ q.pop()
+
+
+272 **if** _s_ _/_ F _**y**_ :
+_∈_
+
+
+251 Q _←∅_ ; R _←∅_
+
+
+273 **return** **False**
+
+
+252 **while** q:
+
+
+253 _s ←_ q.pop()
+
+
+254 **if** _s ∈_ _V_ : **continue**
+
+
+274 **for** _x ∈_ _X_ :
+
+_[′]_
+
+
+275 _s_ _[′]_ step _**y**_ ( _s, x_ )
+_←_
+
+_[′]_
+
+
+255 _V_ .add( _s_ )
+
+
+256 **if** _s_ F _**y**_ :
+_∈_
+
+257 **if** is_cylinder( _s_ ):
+
+258 Q.add( _s_ )
+
+259 **continue** # do not expand
+
+260 **else** :
+
+261 R.add( _s_ )
+
+
+276 **if** _s_ _[′]_ = _∅_ : **return** **False**
+
+_[′]_
+
+
+277 **if** _s_ _[′]_ _∈/_ _V_ :
+
+
+278 _V_ .add( _s_ _[′]_ ); q.push( _s_ _[′]_ )
+
+
+279 **return** **True**
+
+
+262 **for** _x ∈_ _X_ :
+
+_[′]_
+
+
+263 _s_ _[′]_ step _**y**_ ( _s, x_ )
+_←_
+
+_[′]_
+
+
+264 **if** _s_ _[′]_ = _∅_ : **continue**
+
+_[′]_
+
+
+265 q.push( _s_ _[′]_ )
+
+266 arcs.add( _s_
+
+
+_−→x_ _s′_ )
+
+
+267 **return** DFA( _V_,arcs,Q), DFA( _V_,arcs,R)
+
+
+Figure 20: State-based decomposition of the precover into DFAs. _Left_ : BFS over the precover DFA
+P _**y**_ . Universal states become accepting in Q; non-universal accepting states become accepting in R.
+Arcs leaving universal states are not collected. _Right_ : is_cylinder is the same universality BFS as
+in Fig. 3, but takes a DFA state directly rather than computing it from a source string via run _**y**_ .
+
+
+**Comparison with string-based algorithms.** The state-based algorithm always terminates in finite
+time—even when ( _**y**_ ) or ( _**y**_ ) are infinite—because P _**y**_ has finitely many states. The resulting
+_Q_ _R_
+DFAs Q and R provide compact, finite representations of these potentially infinite sets.
+
+However, implementing the autoregressive interface (§ C.1) still requires enumerating the strings
+accepted by these machines: computing _pY_ ( _**y**_ ) via Eq. (8a) sums _pX_ ( _**x**_ ) over elements of ( _**y**_ ) and
+
+_[−→]_ _Q_
+_R_ ( _**y**_ ), and when these sets are infinite, the sum must be truncated regardless. Thus, while the DFA
+representation guarantees a finite decomposition, it does not, on its own, yield finite-time scoring.
+
+
+47
+
+
+I RELATED WORK
+
+
+Modern language models define probability distributions over sequences of tokens (see §2). For
+efficiency and vocabulary (a.k.a. their alphabet) management, they usually rely on subword schemes
+such as BPE (Sennrich et al., 2016; Gage, 1994) or Unigram (Kudo, 2018). Although these approaches
+have been remarkably successful, their units often don’t coincide with linguistic boundaries, and
+any given string typically admits an exponential number of tokenization variants with non-zero
+probability mass under the language model. Recent work has tackled this issue by enforcing canonical
+tokenization to remove probability mass from noncanonical encodings (Vieira et al., 2025b), while
+Geh et al. (2024) have shown that aggregating the probability mass of noncanonical tokenization
+choices carries a useful signal that can boost downstream accuracy.
+
+Subword segmentation also gives rise to the prompt-boundary problem (Vieira et al., 2025a), where
+imperceptible changes to the final characters of a prompt (e.g., appending a single whitespace)
+can push the encoded token sequence onto a completely different path in token space, causing the
+model to abandon otherwise highly probable continuations. To overcome these issues, Vieira et al.
+(2025a) introduce an algorithm for transforming token-based language models into language models
+over characters. Although their contribution centers around characters, the underlying idea can be
+generalized (as shown in this work).
+
+Many applications need a method to accurately convert the probability mass learned on subword
+tokens to other types of units, such as bytes, words, or morphemes in NLP, or amino acids in
+computational biology, as pointed out in §1. An additional example is found in psycholinguistics,
+where researchers often require fine-grained estimates of surprisal, e.g., to predict a reader’s likelihood
+of skipping a word based on how predictable its first three characters are (Rayner et al., 1982;
+Blanchard et al., 1989). To this end, recent studies have tackled the challenges posed by subword
+tokenization (Nair & Resnik, 2023; Beinborn & Pinter, 2023; Pimentel & Meister, 2024; Oh &
+Schuler, 2024; Giulianelli et al., 2024). For example, Oh & Schuler (2024) and Pimentel & Meister
+(2024) argue that leading whitespace tokenization introduces a confounder in surprisal estimates and
+instead advocate for incorporating the probability of trailing whitespaces into such calculations.
+
+Furthermore, Pimentel & Meister (2024) give a bespoke procedure for converting token-based
+language models to word-based language models. However, their method does not model the
+contextually sensitive nature of English word segmentation, e.g., it treats both periods in Ex. (1)
+identically, where English orthography does not. Additionally, the justification of the procedure
+requires that there exists a set of distinguished end-of-word markers that appear at the end of a token,
+if at all. We now consider how such a transducer can be constructed. Let f _α_ be a transducer that
+converts a token alphabet to a character alphabet, and _D_ be the set of delimiters. The transducer f _D_
+is given in Fig. 21. Given a language model _pX_ over, we can then compose them into a transducer
+_X_
+_pX_ f _α_ f _D_ to get a transduced language model over separator-delimited words. However, such
+an approach would be rather naïve. _◦_ _◦_ Unfortunately, delimiter-based separation would not be able to
+distinguish when the dot should be its own symbol or not, as in ex. (3).
+
+
+_d_ : _d_, _∀d ∈_ _D_
+
+
+_x_ : _x_, _∀x ∈_ _X_ _\ D_
+
+
+_d_ : _d_, _∀d ∈_ _D_
+
+
+Figure 21: A simple FST that segments character streams into words without contextual information,
+inserting at the start of each word.
+
+
+The delimiter-based approach also fails for most BPE-based language models because of the clustering
+
+
+of delimiter candidates. For instance, GPT-4o’s alphabet contains the token
+
+
+48
+
+
+!!!
+10880 [,] [which consists]
+
+
+!!!
+
+solely of end-of-word symbols. Under PTB guidelines, for example, 10880 [should be broken into three]
+
+consecutive orthographic words ! ! ! . In contrast, we argue that the proper tokenization scheme
+for psycholinguistic modeling should be specified based on the goals of the study and not based on
+the properties of any one specific tokenizer.
+
+Tokenization challenges are not unique to modeling natural language. In computational biology, DNA,
+RNA, and protein sequences are long, unsegmented strings over small alphabets that pose challenges
+in tokenization. Researchers thus alternate between different tokenization schemas, such as k-mers,
+learned subwords, and motif-aware segmenters (Ji et al., 2021; Nguyen et al., 2023; Dotan et al.,
+2024; Wang et al., 2024; Qiao et al., 2024). Because language models are often trained under different
+tokenization schemas, their autoregressive predictions—step-by-step probabilities and conditional
+distributions—are not directly comparable across tokenization schemes.
+
+Transducer-based approaches to tokenization are well-established—WordPiece (Wu et al., 2016)
+can be implemented as a transducer (Song et al., 2021), and deterministic finite automata have been
+constructed for BPE (Berglund & van der Merwe, 2023; Berglund et al., 2024). Moreover, transducers
+also have a long history in language modeling (Mohri, 1997) and have been adopted for constrained
+decoding, where an FST enforces lexical or structural constraints (Allauzen et al., 2014; Ghazvininejad
+et al., 2016; Stahlberg et al., 2019; Willard & Louf, 2023; Koo et al., 2024; Cognetta et al., 2025).
+
+Closely related are neural finite-state transducers (Lin et al., 2019) and earlier neural FST hybrids
+(Rastogi et al., 2016), which assign (neural) weights to transitions and compute prefix/sequence
+probabilities as path-sums over all paths consistent with a given output. Our construction admits a
+similar view: we marginalize over all source strings (paths) that map to a given output. However,
+rather than learning transition weights, we focus on transducing an off-the-shelf pretrained LM,
+enabling efficient inference via quotient-remainder decomposition.
+
+In this study, we generalize character-level conversion and extend Vieira et al. (2025a) into a
+framework that enables transforming a language model into another language model, beyond the
+limited setting of strict-prefix monotonic mappings. We support conversions between sets of units
+and unit-preserving transformations, provided that the mapping between them can be described by a
+finite-state transducer.
+
+
+49
+
+
+J LIMITATIONS
+
+
+**Empirical scope.** Although our framework theoretically enables transduction of any language model
+to any unit of interest, given a valid transducer, we test only a limited set of architectures (GPT-2,
+LLaMA 3, and Phi-4) and target specific units (bytes, Penn Treebank tokens, and amino acids).
+Future research could broaden the analysis to a wider range of models, datasets, and units.
+
+**Expressiveness.** Our analysis has focused on functional finite-state transducers and regular languages.
+Future work could consider dynamically built transducers and distributions over more expressive
+languages, as well as stochastic maps encoded by non-functional transducers—where the notion of
+universality would need to be adjusted.
+
+**Approximation quality.** Our pruning-based inference algorithm performs well when the source
+language model concentrates most of its probability mass on a small number of prefixes that map
+to the current target prefix under the transducer—i.e., when the effective size of the quotient and
+remainder after pruning is small. When the mass is dispersed across many source prefixes (such
+as in the DNA to amino-acid case), pruning must discard a larger fraction of the total probability,
+and the approximation degrades. An importance-sampling approach (§ C.3) could provide a less
+systematically biased alternative.
+
+**Speed.** The speed of our algorithms and implementations may not suit every use case. Obtaining the
+full distribution (for example, for decoding or model comparisons) currently requires speeds of around
+10–20 bytes/sec. While this is not prohibitive for many tasks, it leaves ample room for improvement.
+
+**Marginalization.** A core property of transduced language models is the _marginalization_ : the
+transduction sums source-string probabilities to compute target-string probabilities, aggregating mass
+across all source strings that map to the same target. Since natural language allows the same meaning
+to be expressed in multiple ways, a transduction could normalize these to obtain a more representative
+output distribution over the space of interest. Consider, for instance, a math problem: “If 12 students
+are younger than Tom and 12 students are older, how many are there in total?” The answer could
+be ‘25’, or ‘twenty-five’, or perhaps ‘12+1+12’. If any of these have significant probability mass,
+we would like to sum them. In chain-of-thought reasoning, we can similarly imagine summing and
+normalizing probabilities across samples from the system, an approach known as _self-consistency_
+(Wang et al., 2023). We hope to see transduced language models applied in such settings in future
+work.
+
+
+50

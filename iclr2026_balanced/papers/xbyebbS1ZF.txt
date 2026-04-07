@@ -1,0 +1,1323 @@
+# ONLINE ALGORITHM CONFIGURATION FOR MILP RE- OPTIMIZATION WITH LLM GUIDANCE
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In this work, we study the re-optimization setting for mixed-integer linear programs, where solving sequentially related instances can benefit from both adaptive solver parameter configuration and the reuse of historical information from
+previous solves. However, modern solvers expose hundreds of tunable parameters, yielding a large configuration space; and the effectiveness of re-optimization
+techniques (e.g., warm starts or branching statistics) varies substantially across
+problem families. To address these challenges, we formulate a generalized algorithm configuration problem that jointly determines solver built-in parameters and
+the selective use of historical information within a reduced configuration space.
+Given the sequential nature of re-optimization and the limited number of available
+instances, offline methods that require large datasets are impractical, so adaptive
+online configuration selection becomes essential. We therefore propose a twostage framework: (i) configuration space reduction via large language models,
+which generate a compact portfolio of candidate configurations; and (ii) adaptive
+online selection using multi-armed bandit algorithms to minimize solving cost
+over the sequence. Empirical results on the MIP Workshop 2023 re-optimization
+benchmarks demonstrate that our method substantially outperforms default SCIP
+and Gurobi configurations as well as strong baselines, achieving solving time reductions of up to 54 _._ 18%, without requiring prior validation data or supervised
+training.
+
+
+1 INTRODUCTION
+
+
+Many real-world decision problems are naturally modeled as mixed-integer programs (MIPs). When
+the underlying system evolves over time, as in hybrid model predictive control Richards & How
+(2005); Frick et al. (2019); Marcucci & Tedrake (2020), dynamic vehicle routing Dondo & Cerd´a
+(2006); Ozbaygin & Savelsbergh (2019); Andersen et al. (2024), unit commitment in power systems Morales-Espa˜na et al. (2013); Gentile et al. (2017); He et al. (2024), and dynamic production
+planning Wolsey (1997); Cedillo-Robles et al. (2020); Dunke & Nickel (2023), practitioners rarely
+solve a single static instance. Instead, they face a _sequence_ of closely related instances that share a
+common structure but differ in parameters such as objective coefficients, constraint right-hand sides,
+or variable bounds. We refer to this sequential setting as _re-optimization_ ; in this paper we focus on
+the mixed-integer linear programs (MILPs) case.
+
+
+Instead of solving each instance from scratch, in the setting of re-optimization one can exploit information from previous instances in three complementary ways: (i) warm starts from historical
+solutions Berthold (2006); Gamrath et al. (2015); (ii) reuse branch-and-bound (B&B) information
+such as pseudocosts or conflict statistics Achterberg et al. (2005); Patel (2024a); (iii) automated parameter tuning Xu et al. (2011). Although these approaches have been empirically effective, several
+research gaps remain. First, their effectiveness is highly problem specific, simply enabling all reoptimization mechanisms may not yield the best performance Patel (2024b). Second, many searchbased or learning-based parameter tuning methods require solving large numbers of instances offline
+to train predictors or validate configurations, which is impractical in re-optimization scenarios where
+only limited data are available and system dynamics evolve over time. Third, the parameter space
+of modern MILP solvers is already very large, and re-optimization introduces additional tunable
+options, further exacerbating the challenge of efficient exploration.
+
+
+1
+
+
+These limitations motivate us to propose a generalized algorithm configuration framework for reoptimization. To address the first gap, we treat the use of re-optimization mechanisms (e.g., warm
+starts) as tunable options alongside built-in solver parameters. To address the second, we design a
+lightweight online method based on multi-armed bandits (MAB), which avoids costly offline training or searching and adapts to dynamic changes. To address the third, we leverage the zero-shot
+capabilities of large language models (LLMs) to reduce the algorithm configuration space, generating a compact but diverse configuration candidate set from which the bandit algorithm can adaptively
+select. Our main contributions are as follows:
+
+
+    - We formally define the MILP re-optimization problem, where a solver faces a sequence
+of structurally related instances and can leverage a finite history window of past solutions
+and solver information. Within this setting, we cast the task as a generalized algorithm
+configuration problem that jointly considers built-in solver parameters and re-optimization
+techniques.
+
+
+    - We develop a lightweight two-stage approach that first introduces LLMs to generate configuration candidates, thereby reducing the combinatorially large algorithm configuration
+space to a compact candidate set, and then designs an MAB-based strategy for adaptive
+online configuration selection.
+
+
+    - We demonstrate on challenging benchmarks with multiple varying components and largescale instances that our method consistently outperforms default SCIP and Gurobi solvers
+as well as strong baselines, achieving solving-time reductions of up to 54 _._ 18%, without
+requiring offline training or validation data.
+
+
+2 LITERATURE REVIEW
+
+
+**Re-optimization** **for** **MILPs.** Re-optimization of sequentially related MILP instances has been
+investigated extensively, with prior work exploring techniques that leverage historical information
+from previously solved similar instances to accelerate solving new ones. Modern solvers such as
+Gurobi Gurobi Optimization (2023) and SCIP Bestuzheva et al. (2021) include warm-start features,
+whereby feasible or incumbent solutions from past instances are provided as primal hints. Gamrath
+et al. (2015) presents a branch-and-bound scheme in SCIP that reuses the search frontier from a
+solved instance, mainly focusing on objective coefficient variations. More recently, Bolusani et al.
+(2024) delivers extensive benchmarks covering variations in objective coefficients, variable bounds,
+right-hand sides, and constraint matrix coefficients. Patel (2024b) achieves leading performance on
+these benchmarks by combining reuse of primal solutions, branching history, and automated parameter tuning to adapt across multiple instances. Zhang et al. proposes a two-stage re-optimization
+framework: first predicting a high-confidence solution subspace from historical solving trajectories, then partially fixing variables within this subspace using Thompson Sampling to accelerate the
+search. The method is mainly effective for quickly identifying feasible solutions without necessarily reaching optimality, and it does not extend to re-optimization scenarios with multiple varying
+components.
+
+
+**Algorithm** **configuration.** Modern MILP solvers such as SCIP expose hundreds of tunable parameters across many components (e.g., branching rules, cut separators, presolve options, heuristics, conflict analysis, symmetry handling) Bestuzheva et al. (2021). In addition, the use of reoptimization methods introduces further tunable choices. For example, when leveraging primal hints
+from previously solved instances, one may decide how many incumbent solutions to carry forward
+and from which instances, as well as whether to include only integer variables or all variables Patel
+(2024b). These solver-native and re-optimization parameters yield a combinatorially large configuration space. The task of selecting suitable parameter values is typically framed as an _algorithm_
+_configuration_ problem, where extensive offline search is conducted to identify configurations that
+perform well across a distribution of instances Hutter et al. (2007; 2009); Xu et al. (2011); Eryoldas¸
+& Durmus¸oglu (2022). However, such approaches are computationally prohibitive in practice, as
+they require evaluating various configurations on large training sets.
+
+
+Learning-based methods have been proposed to predict good configurations or guide the search over
+large configuration spaces Biedenkapp et al. (2020); Adriaensen et al. (2022); Valentin et al. (2022);
+Li et al. (2023); Hosny & Reda (2024). Many of these approaches focus on _instance-wise_ algorithm
+
+
+2
+
+
+configuration, where handcrafted or learned features are mapped to solver configurations. While
+effective, such methods typically depend on costly feature engineering, supervised training, and
+large datasets to ensure generalization. In the re-optimization setting, Patel (2024b) addresses algorithm configuration by applying an MAB framework. Instead of time-consuming offline training,
+they adaptively tune parameters online. However, their approach treats each parameter independently as a separate bandit problem, which hampers convergence and forces them to restrict tuning
+to only a small subset of parameters, limiting achievable performance. These observations motivate
+our question: _can_ _we_ _design_ _a_ _more_ _lightweight,_ _training-free_ _approach_ _that_ _remains_ _effective_ _in_
+_re-optimization scenarios?_
+
+
+Lawless et al. (2025) recently proposed an LLM-based method for separator configuration with minimal training data, leveraging instance descriptions and formulations. Yet, LLMs may hallucinate
+and generate inconsistent configurations, necessitating an additional validation set—impractical in
+re-optimization scenarios with limited instances. Furthermore, their scope is restricted to separators, whereas re-optimization exposes richer historical information and a broader range of tunable
+parameters. These limitations motivate our work on generalized re-optimization algorithm configuration, leveraging the zero-shot capabilities of LLMs for space reduction and online bandit-based
+adaptation for selection.
+
+
+3 PROBLEM FORMULATION
+
+
+In this section, we first present formal formulations of the MILP model and the re-optimization
+setting. We then define the generalized algorithm configuration problem. Finally, we describe two
+sub-tasks: (i) generating configuration portfolios to reduce the configuration space, and (ii) performing online configuration selection over these configuration candidates.
+
+
+**Mixed Integer Linear Programming (MILP).** An MILP problem can be represented as follows:
+min s.t. _**x**_ _∈_ XMILP = _{_ _**x**_ : _**Ax**_ _◦_ _**b**_ _,_ _**l**_ _≤_ _**x**_ _≤_ _**u**_ _,_ _xj_ _∈_ Z _, ∀j_ _∈_ I _},_ (1)
+_**x**_ _∈_ R _[n]_ _**[ c]**_ _[⊤]_ _**[x]**_ _[,]_
+
+where _**A**_ _∈_ Q _[m][×][n]_, _**c**_ _∈_ Q _[n]_, and _**b**_ _∈_ Q _[m]_ . The symbols _**l**_ and _**u**_ denote the lower and upper bounds
+of the variables, respectively, and each component satisfies _lj_ _∈_ Q _∪{−∞}_ and _uj_ _∈_ Q _∪{_ + _∞}_ .
+The relational operator _◦_ indicates the type of constraint applied to each row, with entries _◦j_ _∈{≤_
+_,_ = _, ≥}_ . The index set I _⊂{_ 1 _,_ 2 _, . . ., n}_ identifies which variables _xj_ are integer variables.
+
+
+**Re-optimization** **problem.** We consider solving a sequence of MILP instances _{Pt}_ _[T]_ _t_ =1 _[⊆P]_
+arising from the same problem family. The instances in each series have a fixed overall problem
+structure: the number of constraints, and the number, order, and meaning of variables remain the
+same across the instances in a series. Some or all of the following input data may vary over _t_ :
+objective function coefficients _**c**_, variable bounds _**l**_ and/or _**u**_, constraint right-hand sides _**b**_, and
+coefficients of the constraint matrix _**A**_ Bolusani et al. (2024). At round _t_, the solver faces the current
+instance _Pt_ and may access a finite history window of length _τ_ :
+
+
+_Pt_ [(] _[τ]_ [)] = ( _Pt−τ_ _, . . ., Pt_ ) _,_ _Ht_ [(] _[τ]_ [)] = ( _ht−τ_ _, . . ., ht−_ 1) _,_
+
+
+where _h_ denotes information obtained from the solver, such as primal solutions, branching information, or cut statistics. After solving the MILP problem, the solver produces an output
+_zt_ = _f_ ( _Pt_ [(] _[τ]_ [)] _, Ht_ [(] _[τ]_ [)] ) _,_ where _f_ denotes the (black-box) solver execution. The output _zt_ captures
+relevant performance signals, such as solving time, primal–dual integral, optimality gap, or objective value. The cost is then defined as a functional of this output, _C_ ( _zt_ ) _,_ which provides a scalar
+performance measure for round _t_ . The re-optimization problem is to design a policy that minimizes
+the cumulative cost over the sequence:
+
+
+**Algorithm configuration.** In our re-optimization setting, MILP solvers expose numerous tunable
+_built-in_ _parameters_ . In addition, our framework treats optional _re-optimization_ _parameters_ as part
+of the configuration space, controlling whether and how prior information is reused. The algorithm
+configuration problem is to derive a policy that automatically selects these parameters to accelerate
+
+
+3
+
+
+min
+
+
+_T_
+
+- _C_ ( _zt_ ) _._
+
+
+_t_ =1
+
+
+the solution for each forthcoming instance in a series. Let _M_ = _{_ 1 _, . . ., M_ _}_ index the set of
+configurable parameters. For each _i_ _∈M_, let _Si_ denote the finite set of admissible choices with
+cardinality _|Si|_ = _Ki_ . For instance, one configurable parameter may be whether to use primal hints
+from previous instances as a warm start in re-optimization ( _Ki_ = 2, with 0 indicating not used and
+1 indicating used). Another parameter corresponds to separator aggressiveness as implemented in
+commercial solvers such as Gurobi ( _Ki_ = 3, with 0 = off, 1 = moderate, and 2 = aggressive). The
+overall configuration space is the Cartesian product _S_ = _S_ 1 _× · · · × SM_ _, |S|_ = [�] _i_ _[M]_ =1 _[K][i][,]_ [and] [a]
+configuration is an element _s_ = ( _s_ 1 _, . . ., sM_ ) _∈S_ with _si_ _∈Si_ specifying the choice for algorithm
+parameter _i_ . Note that _s_ _∈S_ does not correspond to a single parameter choice, but rather to a
+complete configuration across all parameters. For example, if _M_ = 2 with parameters (Primal Hint,
+CoverCuts), then _s_ = (1 _,_ 2) denotes a configuration in which the primal hint is enabled and the
+cover-cut separator is set to aggressive.
+
+
+In the re-optimization setting, combining algorithmic choices (e.g., whether to use warm starts or
+exploit historical branching information) with built-in solver parameters (e.g., separator aggressiveness) yields a combinatorially large configuration space, making direct exploration impractical. We
+therefore formulate a configuration space reduction task as follows.
+
+
+**Configuration space reduction.** To reduce the configuration space, given a problem description
+_φ_ (e.g., instance features or textual context), we seek a subset _S_ _[′]_ _⊆S_ that still contains configurations with strong performance. In this work, LLMs are used to generate a manageable portfolio
+of candidate configurations. A multi-armed bandit algorithm then adaptively selects among these
+candidates, where each configuration corresponds to an arm.
+
+
+We formalize online configuration selection over the candidate portfolio as a regret–minimization
+problem:
+
+
+This quantifies the gap between the policy _π_ and the best fixed configuration in hindsight.
+
+4 METHODOLOGY
+
+
+In this section, we present a two-stage approach for sequentially related MILP instances. First,
+an LLM proposes configuration candidates _s_ _∈S_ ; querying it _N_ times yields a reduced portfolio
+_S_ _[′]_ _⊆S_ with _|S_ _[′]_ _|_ = _N_ . Second, an MAB algorithm adaptively selects configurations from _S_ _[′]_ along
+the re-optimization sequence. Figure 1 depicts the workflow.
+
+
+4.1 OFFLINE CONFIGURATION SPACE REDUCTION WITH LLMS
+
+
+Inspired by Lawless et al. (2025), we provide detailed descriptions of the re-optimization problem
+series and the tunable parameters, so as to supply sufficient context for LLMs to generate reasonable
+and diverse configurations. In what follows, we introduce the specific design choices made for the
+re-optimization setting. Details of the LLM prompts are provided in Appendix A.3.
+
+
+**Problem description.** The re-optimization datasets Bolusani et al. (2024) used in this work provide comprehensive context, including provenance, series-level metadata, and the components that
+vary across instances. We convert this information into a structured prompt for each problem series
+with three blocks: (i) _Provenance_ _&_ _formulation._ We provide a concise natural-language description along with the canonical IP/MIP formulation (sets, variables, and constraints). For example,
+explicitly describing capacity constraints can guide the LLM to enable separators such as implied
+bound cuts. (ii) _Series_ _metadata_ . This block specifies the problem size (number of variables and
+constraints), the binary/continuous variable mix, and, when available, additional structural hints
+
+
+4
+
+
+**Policy** **and** **regret.** A policy _π_ selects configurations adaptively from the reduced space: _st_ =
+_π_ ( _Pt_ [(] _[τ]_ [)] _, Ht_ [(] _[τ]_ [)] ) _∈S_ _[′]_ _._ Applying configuration _st_ yields an output _zt_ = ( _Pt_ [(] _[τ]_ [)] _, Ht_ [(] _[τ]_ [)] ; _st_ ) and corresponding cost _C_ ( _zt_ ) as defined in the re-optimization problem. To align with the bandit literature,
+we define the reward as the negative cost: _rt_ ( _st_ ) = _−C_ - _f_ ( _Pt_ [(] _[τ]_ [)] _, Ht_ [(] _[τ]_ [)] ; _st_ )� _._ Since ( _Pt_ [(] _[τ]_ [)] _, Ht_ [(] _[τ]_ [)] ) are
+fixed at round _t_, we abbreviate the reward as _rt_ ( _st_ ). Performance is then measured by cumulative
+regret:
+
+
+_RT_ ( _π_ ) = max
+_s∈S_ _[′]_
+
+
+_T_
+
+
+E[ _rt_ ( _s_ )] _−_
+
+_t_ =1
+
+
+_T_
+
+
+E[ _rt_ ( _st_ )] _._
+
+_t_ =1
+
+
+|Config 2<br>Score 𝑈!,#<br>Arm 2|Config 4<br>Score 𝑈$,#<br>Arm 4|Config 5<br>Score 𝑈%,#<br>Arm 5|
+|---|---|---|
+|Solver Info<br>Instance<br>Instance𝑃#&'|Solver Info<br>Instance<br>Instance…|Solver Info<br>Instance𝑃#&(<br>Instance|
+
+
+Figure 1: Two-stage framework for MILP re-optimization. Top: Offline configuration space reduction with LLMs. Given problem and parameter prompts, the LLM is queried _N_ times to generate
+compact portfolios. Bottom: online configuration selection via MABs. At each round _t_, the agent
+should select a configuration for the current instance _Pt_, and the solver loads historical information.
+After solving the instance, the environment returns solver output (e.g., solving time) for the agent to
+update all arm scores and store solver information for future rounds.
+
+
+such as sparsity or density. (iii) _Re-optimization variation._ We summarize which components vary
+across the series, such as objective coefficients, right-hand sides, or variable bounds. For instance,
+objective drift often encourages warm starts, whereas bound changes may reduce the reliability of
+primal hints. Each block provides signals that help the LLM generate configurations aligned with
+the structural and dynamic properties of the problem series.
+
+
+**Parameter description.** For each solver, we list the tunable parameters together with their discrete
+choices. We provide both the solver-specific names and a detailed description of each parameter.
+These descriptions are consolidated from multiple sources, including research papers, textbooks,
+solver documentation, and empirical insights. Since the parameter choices typically control not
+only whether a function is enabled or disabled, but also to what extent, we explicitly summarize
+the strengths and limitations of each parameter to guide LLMs in deciding both whether and how
+aggressively to activate a function.
+
+
+For example, Primal Hint (MIP warm-start) supplies an incumbent solution from previous instances.
+This can significantly reduce time to derive a feasible solution at the early stage and improve pruning
+efficiency when the hint is of high quality and structurally consistent across instances. However, if
+the incumbent solution has a poor objective value, lower bounds cannot prune effectively, leading
+to larger search trees. Another tunable parameter, Root-only cuts, controls whether cutting planes
+are generated exclusively at the root node. On the one hand, enabling root-only can reduce the
+overhead of cut separation and LP solves at non-root nodes. On the other hand, it may fail to
+sufficiently strengthen the dual bound, thereby decreasing pruning opportunities and potentially
+increasing the number of explored nodes. Describing such strengths and limitations is crucial for
+LLM to generate algorithm configurations: it enables the model to weigh trade-offs (e.g., speed
+versus pruning power) and to adapt recommendations more effectively in the re-optimization setting,
+where historical context can amplify both the benefits and risks of these parameter choices.
+
+
+4.2 ONLINE CONFIGURATION SELECTION VIA MULTI-ARMED BANDITS
+
+
+Through offline configuration space reduction with LLMs, we derive a reduced candidate set _S_ _[′]_ _⊆_
+_S_ . We then formulate the task of adaptively selecting configurations from _S_ _[′]_ as an MAB problem:
+at each round _t_, the policy _π_ chooses a configuration _st_ _∈S_ _[′]_, observes the resulting reward _rt_ ( _st_ ),
+and updates its decision rule based on past observations. The goal is to minimize the cumulative
+cost relative to the best configuration in hindsight.
+
+
+5
+
+
+**Agent**
+
+
+Bandit
+
+
+History
+
+Buffer
+
+
+We instantiate the configuration selection policy _π_ using the Upper Confidence Bound algorithm
+with a tunable exploration coefficient _α_ _>_ 0 to scale the bonus term (Auer et al., 2002). For each
+candidate configuration _s_ _∈S_ _[′]_, let _µ_ ˆ _s_ ( _t_ ) denote its empirical mean reward up to round _t_, and let
+_ns_ ( _t_ ) denote the number of times _s_ has been selected. UCB1 computes the score
+
+
+and selects the configuration _st_ = arg max _s∈S_ _′ Us_ ( _t_ ) _._ The first term promotes exploitation of configurations with high empirical rewards, while the second term is an exploration bonus that decays
+with the number of pulls. More details of the MAB algorithm are provided in Appendix A.4.
+
+
+5 EXPERIMENT
+
+
+In this section, we evaluate our proposed framework against default solver configurations and representative baselines. Our experiments are designed to address the following research questions: (i)
+_Comparative performance._ How does our framework perform relative to default solver settings and
+baselines? (ii) _Offline_ _configuration_ _space_ _reduction._ Can LLMs efficiently reduce the algorithm
+configuration space by generating reasonable and diverse candidate configurations? (iii) _Online_
+_configuration_ _selection._ Can bandit algorithms adaptively select effective configurations over the
+sequential instances within a re-optimization series?
+
+
+5.1 EXPERIMENT SETUP
+
+
+All experiments are conducted on a high-performance computing cluster with Intel Xeon Platinum
+8628 CPUs. All Gurobi experiments use Gurobi 12.0.3, and all SCIP experiments use SCIP 9.02.
+We set the number of candidate configurations to _N_ = 5 for each re-optimization problem series.
+However, since single-shot LLM outputs may be noisy or redundant, and following prior work Lawless et al. (2025), we deliberately over-generate a larger pool of 100 configurations and then apply
+_k_ -medoids clustering to condense them into _N_ = 5 representative candidates. The exploration coefficient and the length of history window are fixed at _α_ = 1 and _τ_ = 5, respectively. We further
+investigate the sensitivity of these parameter choices in this section.
+
+
+**Benchmarks.** We evaluate our proposed method and baselines on the datasets provided by The
+MIP Workshop 2023 Computational Competition ON Re-optimization Bolusani et al. (2024). We
+select 10 datasets from this benchmark, each corresponding to a re-optimization problem series
+consisting 50 sequential instances. To analyze performance across different difficulty levels, we
+categorize the datasets into easy and hard groups. _Easy datasets_ involve only a single varying (e.g.,
+objective coefficients), and have relatively small problem sizes, with no more than 1 _,_ 457 integer
+variables. _Hard_ _datasets_ are characterized either by having at least two (up to four) varying components, by significantly larger problem sizes (up to 63 _,_ 009 integer variables), or by both. For each
+dataset, we further split the 50 instances into 45 evaluation instances and 5 validation instances. Note
+that validation instances are only used by one baseline method; our approach and all other baselines
+do not require validation data. More details of the benchmarks are provided in Appendix A.2.
+
+
+**Evaluation** **metrics.** We consider the average _solving_ _time_ across a re-optimization sequence as
+the primary evaluation metric: Time = _T_ 1 - _Tt_ =1 _[z]_ [(] _[t]_ [)] _[,]_ [where] _[z]_ [(] _[t]_ [)] [denotes] [the] [solving] [time] [of] [in-]
+stance _t_ . We also report the _relative improvement_ over default solvers: Improve = [Time][default] Time _[−]_ default [Time][method] _._
+
+All instances are solved to optimality, subject to a maximum time limit of 400 seconds. If an instance does not terminate within the limit, its solving time is set to the maximum, ensuring fairness
+and preventing a few particularly hard instances from dominating the aggregate evaluation.
+
+
+**Baselines.** We compare against four baselines: (i) _Default_ _solvers_ _(Default)._ SCIP and Gurobi
+with default configurations. (ii) _Progressively_ _Tuning_ _(Tuning)_ Patel (2024b). The winning solution of the MIP Workshop 2023 re-optimization competition. Each parameter (primal hints, root
+cuts, non-root cuts) is modeled as an independent bandit problem, with arms corresponding to its
+discrete choices (e.g., on/off). Implemented only for SCIP, as Gurobi does not expose root/nonroot separation controls. (iii) _LLM_ _with_ _validation_ _(LLM-validation)_ Lawless et al. (2025). LLMs
+generate separator configurations, followed by validation-set selection of the best candidate. This
+
+
+6
+
+
+_Us_ ( _t_ ) = _µ_ ˆ _s_ ( _t_ ) + _α_
+
+
+2 ln _t_
+(2)
+_ns_ ( _t_ ) _[,]_
+
+
+constitutes a strong baseline, as it leverages additional validation instances to select the best configuration among the LLM-generated candidates. (iv) _LLM-cold-start._ LLM-generated configurations
+are clustered using _k_ -medoids, and the representative of the largest cluster is selected directly for
+evaluation. Appendix A.1 provides additional details of the experimental setup.
+
+
+5.2 EXPERIMENT RESULTS
+
+
+Table 1: Comparison of different methods across 10 re-optimization benchmarks with SCIP solver.
+Each method is evaluated by solving time (s) and relative improvement compare to Default SCIP
+solver (%). The first 5 benchmarks are categorized as _easy_, and the last 5 as _hard_ .
+
+
+Default Tuning LLM-validation LLM-cold-start LLM-MAB (Ours)
+
+
+Dataset Time _↓_ Time _↓_ Improv. _↑_ Time _↓_ Improv. _↑_ Time _↓_ Improv. _↑_ Time _↓_ Improv. _↑_
+
+
+_Easy datasets_
+
+
+bnd 2 252.41(6.70) 244.66(6.33) 3.05 187.12(9.61) 25.77 235.97(5.67) 6.48 **185.01(5.65)** **26.64**
+bnd 3 355.04(3.81) 365.83(3.31) -3.04 349.02(17.03) 2.24 358.81(2.41) -0.79 **343.79(1.10)** **3.16**
+rhs ~~2~~ 80.32(1.80) 62.25(1.04) 22.46 59.33(2.85) 26.06 **47.04(0.46)** **41.42** 48.53(0.98) 39.58
+rhs ~~4~~ 77.04(0.59) 61.06(0.44) 20.73 59.01(2.05) 23.4 47.95(0.34) 37.76 **47.53(1.58)** **38.83**
+obj ~~1~~ 306.71(8.83) 241.23(6.22) 21.32 236.28(2.79) 22.93 232.50(1.55) 24.16 **229.50(8.83)** **25.10**
+
+
+_Hard datasets_
+
+
+rhs ~~3~~ 311.94(15.96)291.27(13.86) 6.32 296.81(36.49) 4.35 289.24(39.02) 6.68 **285.23(8.30)** **8.30**
+obj ~~3~~ 145.74(8.78) 74.30(6.75) 48.73 74.25(10.88) 48.65 67.40(5.42) 53.60 **66.63(3.62)** **54.18**
+rhs ~~o~~ bj 397.14(1.09) 394.92(4.81) 0.56 391.46(4.95) 1.43 388.01(2.91) 1.95 **387.99(1.69)** **1.99**
+mat 368.77(4.73) 361.30(9.34) 2.00 336.55(8.86) 8.71 337.68(9.77) 8.42 **335.42(9.50)** **9.02**
+all 116.13(17.78) 86.78(12.52) 23.28 86.32(4.63) 24.03 86.24(5.95) 19.35 **84.60(3.34)** **25.99**
+
+
+Table 2: Comparison of different methods across 10 re-optimization benchmarks with Gurobi solver.
+Each method is evaluated by solving time (s) and relative improvement compare to Default Gurobi
+solver(%). The first 5 benchmarks are categorized as _easy_, and the last 5 as _hard_ .
+
+
+Default LLM-validation LLM-cold-start LLM-MAB (Ours)
+
+
+Dataset Time _↓_ Time _↓_ Improv. _↑_ Time _↓_ Improv. _↑_ Time _↓_ Improv. _↑_
+
+
+_Easy datasets_
+
+
+bnd ~~2~~ 341.76(4.30) 336.55(6.92) 1.24(1.19) 400(0.00) -17.62(0.66) **333.38(8.87)** **2.18(1.77)**
+bnd ~~3~~ 341.6(4.07) 330.75(1.29) 3.17(1.53) 400(0.00) -17.11(1.39) **324.65(3.47)** **4.95(2.15)**
+rhs ~~2~~ 18.41(0.28) 18.25(0.03) 0.85(1.64) 19.39(0.02) -5.08(1.74) **18.14(0.06)** **1.41(2.37)**
+rhs ~~4~~ 18.26(0.18) 65.39(41.20) 0.35(3.55) 17.35(0.23) 4.98(1.19) **17.30(0.39)** **5.25(1.76)**
+obj ~~1~~ 89.24(1.27) 89.14(3.17) 0.08(4.97) **86.38(0.39)** **0.73(4.62)** 88.30(0.74) -2.23(6.88)
+
+
+_Hard datasets_
+
+
+rhs ~~3~~ 33.03(4.12) 30.98(6.66) 4.54(28.67) 32.81(4.93) -0.43(19.92) **30.44(7.39)** **6.65(28.18)**
+obj ~~3~~ 14.38(0.33) **7.01(0.27)** **51.30(2.12)** 12.73(0.36) 11.42(4.12) 8.52(0.07) 40.73(0.88)
+rhs ~~o~~ bj 144.93(2.82)158.79(24.32) -9.42(15.34)160.42(11.06) -10.76(8.82) **143.90(2.37)** **1.52(1.45)**
+mat 44.52(1.55) 38.99(2.71) 12.44(5.15) 36.99(0.45) **16.77(5.11)** **36.82(0.66)** 15.81(3.66)
+all 8.09(0.44) 8.20(0.77) -1.62(10.91) 8.12(0.22) -0.48(3.27) **8.05(0.19)** **0.30(2.84)**
+
+
+**Overall** **performance** **comparison.** Table 1 and Table 2 summarize the results on SCIP and
+Gurobi, respectively, reporting mean solving time with standard deviation as well as relative improvement over the default solvers. Our proposed method _LLM-MAB_ achieves substantial speedups
+compared to default SCIP across all benchmarks, outperforming existing baselines on 9 out of 10
+benchmarks and remaining competitive with _LLM-cold-start_ on rhs ~~2~~ . On 6 benchmarks, _LLM-_
+_MAB_ delivers more than 25% relative improvement, reaching up to 54 _._ 18% on obj ~~3~~, a hard benchmark with 9599 integer variables. Notably, on the challenging all benchmark—where objective
+coefficients, bounds, right-hand sides, and matrix coefficients all vary— _LLM-MAB_ still achieves a
+25 _._ 99% improvement, demonstrating its robustness under the most complex re-optimization scenarios. _LLM-MAB_ also reduces the solving time of Gurobi across all benchmarks, outperforming
+
+
+7
+
+
+other baselines on 8 out of 10 datasets. On the 5 hard benchmarks, it achieves up to 40 _._ 73% relative
+improvement, highlighting its effectiveness under challenging re-optimization scenarios.
+
+
+_LLM-validation_ serves as a strong baseline since it leverages additional validation instances to identify a single well-performing configuration. We observe that this strategy is particularly effective
+when one configuration generalizes well across all instances in a series. For example, on obj ~~3~~
+with Gurobi, it achieves a 51 _._ 3% relative improvement by selecting the best configuration from the
+validation set. In contrast, although _LLM-MAB_ attains 40 _._ 73% improvement on average, its use of
+UCB inherently encourages exploration of multiple configurations in the early rounds, which incurs
+overhead and slightly degrades the total average solving time. This effect is amplified in the reoptimization benchmarks where each series contains only 50 instances (45 for testing), so the cost
+of early exploration constitutes a larger fraction of the total runtime.
+
+
+We observe that on certain datasets the solving time budget of 400 seconds is insufficient, as many
+instances could not reach optimality within the limit. To ensure a fairer evaluation, we repeat the
+experiments with an extended time limit of 600 seconds in Appendix A.5.
+
+
+Table 3: Ablation of _LLM-MAB_ without general solver parameters (i.e., restricted to separator configurations only). Results are reported as relative solving time improvement (%) over Default SCIP
+across 10 benchmarks. (Higher is better.)
+
+
+Method bnd ~~2~~ bnd 3 rhs 2 rhs ~~4~~ obj ~~1~~ rhs ~~3~~ obj 3 rhs obj mat all
+
+
+**26.64** **3.16** **39.58** **38.83** **25.10** **8.30** **54.18** **1.99** **9.02** **25.99**
+LLM-MAB (Ours)
+(3.89) (0.77) (0.77) (2.38) (4.39) (8.12) (3.46) (0.28) (3.37) (11.48)
+
+17.48 1.78 36.07 34.42 22.92 6.64 53.50 0.45 8.55 15.64
+LLM-MAB (Separators only)
+(2.66) (1.51) (2.38) (2.04) (1.96) (10.17) (3.58) (1.03) (3.03) (16.25)
+
+
+Table 4: Ablation of _LLM-MAB_ without online bandit adaptation (i.e., using validation-only selection of a fixed configuration). Results are reported as relative solving time improvement (%) over
+Default SCIP across 10 benchmarks. (Higher is better.)
+
+
+Method bnd ~~2~~ bnd ~~3~~ rhs 2 rhs 4 obj ~~1~~ rhs ~~3~~ obj ~~3~~ rhs ~~o~~ bj mat all
+
+
+**26.64** **3.16** **39.58** **38.83** **25.10** 8.30 **54.18** **1.99** 9.02 **25.99**
+LLM-MAB (Ours)
+(3.89) (0.77) (0.77) (2.38) (4.39) (8.12) (3.46) (0.28) (3.37) (11.48)
+
+18.42 -2.31 38.96 35.35 23.40 **11.23** 51.81 1.71 **10.135** 15.94
+LLM-Validation (General)
+(3.34) (2.87) (2.07) (0.61) (1.46) (2.27) (4.66) (0.66) (0.50) (16.22)
+
+
+**Effectiveness** **of** **algorithm** **configuration** **generation.** We analyze this effectiveness from two
+aspects. First, we evaluate the extension from separator-only tuning (as in prior work Lawless et al.
+(2025)) to a more general re-optimization algorithm configuration problem that incorporates both
+solver-native parameters and historical information. Table 3 reports the ablation study comparing
+_LLM-MAB_ with its separator-only variant, which is studied in recent papers Lawless et al. (2025);
+Li et al. (2023). The results show that our full configuration space consistently outperforms the
+separator-only setting across all benchmarks. While the margins vary by dataset, improvements
+are observed on both easy benchmarks (e.g., +9 _._ 16% on bnd ~~2~~ ) and hard ones (e.g., +10 _._ 35% on
+all), demonstrating that extending the configuration scope beyond separators yields tangible gains
+in more challenging re-optimization scenarios.
+
+
+As mentioned in Section 3, the combinatorially large algorithm configuration space makes direct
+online bandit-based selection difficult to converge, and therefore necessitates selecting a small set of
+candidate configurations in advance. The comparison with _Tuning_ Patel (2024b) in Table 1 also illustrates this: tuning all parameters independently with a shared reward and without space reduction
+is ineffective, so they restricted to a few parameters, which still led to degraded results. In contrast,
+_LLM-cold-start_ achieves strong performance—surpassing default SCIP on 9 of 10 benchmarks and
+default Gurobi on 4 of 10—simply by committing to a single configuration selected via clustering.
+This highlights that LLMs are capable of producing high-quality solver configurations.
+
+
+**Effectiveness of online configuration selection.** To assess the benefit of MAB-based online configuration selection in _LLM-MAB_, we include the ablation _LLM-Validation (General)_ in Table 4. In
+
+
+8
+
+
+this variant, the configuration space is identical to that of _LLM-MAB_, but the best algorithm configuration is chosen once from the validation set and then fixed for evaluation, without online adaptation. The results show that _LLM-MAB_ surpasses _LLM-Validation (General)_ on 8 of 10 benchmarks,
+achieving up to +10 _._ 06% additional improvement on all. This demonstrates that bandit-based online selection provides robustness by adaptively exploiting different configurations throughout the
+series, rather than committing prematurely to a single choice. We also note that when one configuration candidate is clearly superior (e.g., mat), _LLM-Validation_ _(General)_ may perform slightly
+better, as it can directly identify this configuration from validation, while _LLM-MAB_ incurs exploration overhead before converging.
+
+
+Table 5: Sensitivity analysis of the exploration coefficient _α_ in the UCB scoring rule. We report
+relative solving time improvement (%) over Default SCIP across 10 re-optimization benchmarks.
+
+
+Method bnd ~~2~~ bnd 3 rhs 2 rhs ~~4~~ obj ~~1~~ rhs ~~3~~ obj ~~3~~ rhs ~~o~~ bj mat all
+
+
+17.69 1.72 **50.37** 33.82 20.23 6.43 49.81 1.64 9.09 18.67
+LLM-MAB ( _α_ = 0 _._ 5)
+(5.48) (1.07) (25.71) (0.59) (3.61) (6.43) (3.80) (0.51) (3.80) (18.26)
+
+**26.64** **3.16** 39.58 **38.83** **25.10** 8.30 **54.18** **1.99** 9.02 **25.99**
+LLM-MAB ( _α_ = 1)
+(3.89) (0.77) (0.77) (2.38) (4.39) (8.12) (3.46) (0.28) (3.37) (11.48)
+
+20.57 2.22 36.74 34.28 19.16 **9.63** 50.49 0.44 **10.71** 17.42
+LLM-MAB ( _α_ = 2)
+(2.99) (1.68) (2.20) (1.49) (1.18) (9.35) (4.08) (1.00) (5.35) (17.98)
+
+
+**Sensitivity analysis of the exploration coefficient** _α_ **.** We further analyze the sensitivity of _LLM-_
+_MAB_ to the exploration coefficient _α_ in UCB, tested at _α_ _∈{_ 0 _._ 5 _,_ 1 _,_ 2 _}_ (Table 5). All three settings
+consistently outperform the default solver, indicating that the framework is robust to this hyperparameter. Among them, _α_ = 1 provides the best overall trade-off, outperforming baselines on 8 out of
+10 benchmarks and achieving the largest gains on hard instances such as obj ~~3~~ and all. By contrast, _α_ = 0 _._ 5 favors exploitation and explores too little, resulting in faster convergence but is hard
+to yield the strongest performance. On the other hand, _α_ = 2 encourages aggressive exploration,
+which occasionally discovers stronger configurations (e.g., two benchmark wins), but its overhead in
+the early rounds often offsets these gains. These results suggest that moderate exploration ( _α_ = 1) is
+most effective in practice, while also demonstrating that the overall framework remains stable across
+a wide range of _α_ values.
+
+
+**Sensitivity analysis of the configuration candidate set size** _N_ **.** Table 9 in Appendix A.5 reports
+the performance of _LLM-MAB_ under different numbers of configuration candidates, tested at _N_ _∈_
+_{_ 1 _,_ 3 _,_ 5 _}_ . Note that _N_ = 1 corresponds to _LLM-cold-start_, where a single configuration is selected
+without online adaptation. We observe that when _N_ = 5, _LLM-MAB_ achieves the most stable
+improvements and consistently outperforms default SCIP across all benchmarks, suggesting that
+having a sufficiently diverse candidate set is crucial to include at least one effective configuration.
+On the other hand, given the small size of the re-optimization benchmark (50 instances per problem
+series, of which only 45 are used for testing in our setting), larger values of _N_ are less practical:
+convergence becomes more difficult and each arm must still be explored at least once, leading to
+higher overhead and less reliable adaptation.
+
+
+6 CONCLUSION
+
+
+In this paper, we formulated the re-optimization problem for MILP by incorporating a finite history window of solver information, and we cast algorithm configuration as a joint problem of
+configuration-space reduction and adaptive online selection. Building on this formulation, we developed a lightweight two-stage method that first leverages LLMs to generate a compact set of candidate configurations and then applies bandit algorithms for online adaptation. Empirical results on
+the MIP Workshop 2023 re-optimization benchmarks demonstrate that our framework consistently
+improves solver performance over strong baselines, achieving substantial reductions in solving time
+without requiring offline training or validation data.
+
+
+For future work, our framework can be extended by incorporating richer re-optimization techniques
+as configurable options, such as learning-based solution prediction or adaptive branching strategies.
+It is also promising to explore instance-wise configuration policies that exploit problem features
+more directly while retaining the lightweight online nature of our approach.
+
+
+9
+
+
+REPRODUCIBILITY STATEMENT
+
+
+Our experiment setup (devices, solver settings, hyper-parameters, evaluation metrics, and baselines)
+is detailed in Section 5.1 and Appendix A.1, and the re-optimization benchmark is summarized in
+Section 5.1 and Appendix A.2. An anonymous code repository is provided in the supplemental
+materials to reproduce the experiment results.
+
+
+REFERENCES
+
+
+Tobias Achterberg, Thorsten Koch, and Alexander Martin. Branching rules revisited. _Operations_
+_Research Letters_, 33(1):42–54, 2005.
+
+
+Steven Adriaensen, Andr´e Biedenkapp, Gresa Shala, Noor Awad, Theresa Eimer, Marius Lindauer,
+and Frank Hutter. Automated dynamic algorithm configuration. _Journal of Artificial Intelligence_
+_Research_, 75:1633–1699, 2022.
+
+
+Tiria Andersen, Shaun Belward, Mangalam Sankupellay, Trina Myers, and Carla Chen. Reoptimisation strategies for dynamic vehicle routing problems with proximity-dependent nodes. _Top_, 32
+(1):1–21, 2024.
+
+
+Peter Auer, Nicolo Cesa-Bianchi, and Paul Fischer. Finite-time analysis of the multiarmed bandit
+problem. _Machine learning_, 47(2):235–256, 2002.
+
+
+Timo Berthold. _Primal_ _heuristics_ _for_ _mixed_ _integer_ _programs_ . PhD thesis, Zuse Institute Berlin
+(ZIB), 2006.
+
+
+Ksenia Bestuzheva, Mathieu Besanc¸on, Wei-Kun Chen, Antonia Chmiela, Tim Donkiewicz, Jasper
+Van Doornmalen, Leon Eifler, Oliver Gaul, Gerald Gamrath, Ambros Gleixner, et al. The scip
+optimization suite 8.0. _arXiv preprint arXiv:2112.08872_, 2021.
+
+
+Andr´e Biedenkapp, H Furkan Bozkurt, Theresa Eimer, Frank Hutter, and Marius Lindauer. Dynamic
+algorithm configuration: Foundation of a new meta-algorithmic framework. In _ECAI_ _2020_, pp.
+427–434. IOS Press, 2020.
+
+
+Suresh Bolusani, Mathieu Besanc¸on, Ambros Gleixner, Timo Berthold, Claudia D’ambrosio, Gonzalo Mu˜noz, Joseph Paat, and Dimitri Thomopulos. The mip workshop 2023 computational
+competition on reoptimization. _Mathematical Programming Computation_, 16(2):255–266, 2024.
+
+
+Juan Antonio Cedillo-Robles, Neale R Smith, Rosa G Gonz´alez-Ramirez, Julio Alonso-Stocker,
+Joaqu´ın Alonso-Stocker, and Ronald G Askin. A production planning milp optimization model
+for a manufacturing company. In _International_ _Conference_ _of_ _Production_ _Research–Americas_,
+pp. 85–96. Springer, 2020.
+
+
+Rodolfo Dondo and Jaime Cerd´a. An milp framework for dynamic vehicle routing problems with
+time windows. _Latin American applied research_, 36(4):255–261, 2006.
+
+
+Fabian Dunke and Stefan Nickel. Exact reoptimisation under gradual look-ahead for operational
+control in production and logistics. _International_ _Journal_ _of_ _Systems_ _Science:_ _Operations_ _&_
+_Logistics_, 10(1):2141590, 2023.
+
+
+Yasemin Eryoldas¸ and Alptekin Durmus¸oglu. A literature survey on offline automatic algorithm
+configuration. _Applied Sciences_, 12(13):6316, 2022.
+
+
+Damian Frick, Angelos Georghiou, Juan L Jerez, Alexander Domahidi, and Manfred Morari. Lowcomplexity method for hybrid mpc with local guarantees. _SIAM_ _Journal_ _on_ _Control_ _and_ _Opti-_
+_mization_, 57(4):2328–2361, 2019.
+
+
+Gerald Gamrath, Benjamin Hiller, and Jakob Witzig. Reoptimization techniques for mip solvers. In
+_International Symposium on Experimental Algorithms_, pp. 181–192. Springer, 2015.
+
+
+Claudio Gentile, Germ´an Morales-Espana, and Andres Ramos. A tight mip formulation of the unit
+commitment problem with start-up and shut-down constraints. _EURO Journal on Computational_
+_Optimization_, 5(1):177–201, 2017.
+
+
+10
+
+
+LLC Gurobi Optimization. Gurobi optimizer reference manual. 2023.
+
+
+Xuan He, Honglin Wen, Yufan Zhang, Yize Chen, and Danny HK Tsang. Fast unit commitment
+constraint screening with learning-based cost model. In _2024 IEEE International Conference on_
+_Communications, Control, and Computing Technologies for Smart Grids (SmartGridComm)_, pp.
+295–300. IEEE, 2024.
+
+
+Abdelrahman Hosny and Sherief Reda. Automatic milp solver configuration by learning problem
+similarities. _Annals of Operations Research_, 339(1):909–936, 2024.
+
+
+Frank Hutter, Holger H Hoos, and Thomas St¨utzle. Automatic algorithm configuration based on
+local search. In _Aaai_, volume 7, pp. 1152–1157, 2007.
+
+
+Frank Hutter, Holger H Hoos, Kevin Leyton-Brown, and Thomas St¨utzle. Paramils: an automatic
+algorithm configuration framework. _Journal of artificial intelligence research_, 36:267–306, 2009.
+
+
+Connor Lawless, Yingxi Li, Anders Wikum, Madeleine Udell, and Ellen Vitercik. Llms for coldstart cutting plane separator configuration. In _International_ _Conference_ _on_ _the_ _Integration_ _of_
+_Constraint Programming,_ _Artificial Intelligence, and Operations Research_, pp. 51–69. Springer,
+2025.
+
+
+Sirui Li, Wenbin Ouyang, Max Paulus, and Cathy Wu. Learning to configure separators in branchand-cut. _Advances in Neural Information Processing Systems_, 36:60021–60034, 2023.
+
+
+Tobia Marcucci and Russ Tedrake. Warm start of mixed-integer programs for model predictive
+control of hybrid systems. _IEEE Transactions on Automatic Control_, 66(6):2433–2448, 2020.
+
+
+Germ´an Morales-Espa˜na, Jesus M Latorre, and Andres Ramos. Tight and compact milp formulation
+for the thermal unit commitment problem. _IEEE_ _Transactions_ _on_ _Power_ _Systems_, 28(4):4897–
+4908, 2013.
+
+
+Gizem Ozbaygin and Martin Savelsbergh. An iterative re-optimization framework for the dynamic vehicle routing problem with roaming delivery locations. _Transportation_ _Research_ _Part_
+_B: Methodological_, 128:207–235, 2019.
+
+
+Krunal Kishor Patel. Discounted pseudocosts in milp. _arXiv preprint arXiv:2407.06237_, 2024a.
+
+
+Krunal Kishor Patel. Progressively strengthening and tuning mip solvers for reoptimization. _Math-_
+_ematical Programming Computation_, 16(2):267–295, 2024b.
+
+
+Arthur Richards and Jonathan How. Mixed-integer programming for control. In _Proceedings of the_
+_2005, American Control Conference, 2005._, pp. 2676–2683. IEEE, 2005.
+
+
+Romeo Valentin, Claudio Ferrari, J´er´emy Scheurer, Andisheh Amrollahi, Chris Wendler, and Max B
+Paulus. Instance-wise algorithm configuration with graph neural networks. _arXiv_ _preprint_
+_arXiv:2202.04910_, 2022.
+
+
+Laurence A Wolsey. Mip modelling of changeovers in production planning and scheduling problems. _European Journal of Operational Research_, 99(1):154–165, 1997.
+
+
+Lin Xu, Frank Hutter, Holger H Hoos, and Kevin Leyton-Brown. Hydra-mip: Automated algorithm
+configuration and selection for mixed integer programming. In _RCRA workshop on experimental_
+_evaluation of algorithms for solving problems with combinatorial explosion at the international_
+_joint conference on artificial intelligence (IJCAI)_, pp. 16–30, 2011.
+
+
+Sijia Zhang, Shuli Zeng, Shaoang Li, Feng Wu, Shaojie Tang, and Xiangyang Li. Don’t restart, just
+reuse: Reoptimizing milps with dynamic parameters. In _Forty-second International Conference_
+_on Machine Learning_ .
+
+
+11
+
+
+A APPENDIX
+
+
+A.1 EXPERIMENT SETUPS
+
+
+**Algorithm configuration space.** In this work, we cast algorithm configuration as a joint selection
+over (i) solver-native parameters and (ii) optional re-optimization mechanisms. To keep the algorithm configuration space impactful yet tractable for MILP, we primarily target cutting-plane–related
+controls, which strongly influence LP bound quality, node counts, and overall time. As an optional
+re-optimization mechanism, we include Primal Hint (incumbent injection + light repair), which can
+provide high-quality starting solutions and thereby accelerate early pruning.
+
+
+Our framework is solver-agnostic, and in this study, we restrict attention to features that are available
+in both SCIP and Gurobi. Consequently, we do not consider branching-information reuse here;
+investigating it within our framework is left for future work.
+
+
+Table 6 and Table 7 provide the parameter lists for SCIP and Gurobi, respectively.
+
+
+Table 6: List of SCIP parameters used in our generalized algorithm configuration. Values: 1 = on, 0
+= off, respectively.
+
+
+**Parameter** **Description** **Values**
+
+
+clique Clique inequalities from conflict graphs 0 / 1
+root ~~o~~ nly Restrict cuts to root node only 0 / 1
+Primal Hint Warm-start from prior solutions 0 / 1
+cmir Mixed-integer rounding cuts 0 / 1
+aggregation Flow-cover inequalities (aggregation) 0 / 1
+mcf Flow path cuts (multi-commodity flow) 0 / 1
+impliedbounds Implied bound cuts (bin-cont vars) 0 / 1
+strongcg Strong Chv´atal–Gomory cuts 0 / 1
+zerohalf Zero-half inequalities 0 / 1
+disjunction Disjunctive cuts 0 / 1
+convexprojection Convex projection cuts (MINLP relaxations) 0 / 1
+integerobjective Objective integrality cuts 0 / 1
+gomory Gomory fractional cuts 0 / 1
+cgmip Chv´atal–Gomory cuts 0 / 1
+oddcycle Odd cycle inequalities (graph-based) 0 / 1
+rapidlearning Rapid learning heuristic cuts 0 / 1
+
+
+**Implementation** **of** **Primal** **Hints.** The re-optimization dataset from the MIP Workshop 2023
+Computational Competition on Re-optimization consists of problem series where different components vary across instances (objective function coefficients(obj), constraint right-hand sides(rhs),
+variable bounds(bnd), coefficients of the constraint matrix(mat). Changing obj does not affect
+feasibility, whereas changes to rhs/bnd/mat can render a previously feasible incumbent infeasible. Guided by this, we adopt the following hinting policy.
+
+
+    - obj series: we reuse the entire historical incumbent as the Primal Hint.
+
+    - rhs/bnd/mat series: we reuse only the integer part of the incumbent. For SCIP, we fix
+those integers and solve a continuous LP to repair the continuous variables; if a feasible
+completion is found, the full repaired solution is passed as the Primal Hint. For Gurobi,
+we provide the integer assignments as a partial MIP start and rely on its built-in repair
+mechanism to complete missing values. For bnd changes specifically, integer values are
+first clipped to the new bounds before repair.
+
+
+**Experiment Setup Details of Baselines.** We compare against four baselines:
+
+
+    - _Default solvers (Default)._ SCIP and Gurobi with default configurations.
+
+    - _Progressively Tuning (Tuning)_ Patel (2024b). The winning solution of the MIP Workshop
+2023 re-optimization competition. Each parameter (Provide hint or not, Use root node cuts
+
+
+12
+
+
+Table 7: List of Gurobi parameters used in our generalized algorithm configuration. Values: 2 =
+aggressive, 1 = on, 0 = off, respectively.
+
+
+**Parameter** **Description** **Values**
+
+
+Primal Hint Warm-start from prior solutions 0 / 1
+CliqueCuts Clique inequalities from conflict graphs 0 / 1 / 2
+CoverCuts Cover inequalities for knapsack sets 0 / 1 / 2
+FlowCoverCuts Flow-cover cuts for fixed-charge flows 0 / 1 / 2
+FlowPathCuts Path cuts in fixed-charge networks 0 / 1 / 2
+GUBCoverCuts Cover cuts under generalized upper bounds 0 / 1 / 2
+ImpliedCuts Implied bound inequalities (bin-cont vars) 0 / 1 / 2
+InfProofCuts Infeasibility proof inequalities 0 / 1 / 2
+LiftProjectCuts Lift-and-project cuts from disjunctions 0 / 1 / 2
+MIRCuts Mixed-integer rounding cuts 0 / 1 / 2
+MixingCuts Mixing inequalities (generalized MIR) 0 / 1 / 2
+ModKCuts Modular arithmetic divisibility cuts 0 / 1 / 2
+NetworkCuts Network structure cuts 0 / 1 / 2
+RelaxLiftCuts Relax-and-lift cuts 0 / 1 / 2
+SubMIPCuts SubMIP-based cuts 0 / 1 / 2
+StrongCGCuts Strong Chv´atal–Gomory cuts 0 / 1 / 2
+ZeroHalfCuts Zero-half inequalities 0 / 1 / 2
+ProjImpliedCuts Projected implied bound inequalities 0 / 1 / 2
+
+
+or not, Use cuts at other nodes or not) is modeled as an independent bandit problem, with
+arms corresponding to its discrete values (on/off). The score of each value is computed by
+Upper Confidence Bound (UCB) Algorithm:
+
+_Sv_ = _Qv_ + _[C]_ _._
+
+_Nv_
+
+
+This score involves two parts: (i) The running average of the base score ( _Qv_ ), and (ii)
+The uncertainty of the score, i.e., the confidence bound _N_ 1 _v_ [,] [where] _[N][v]_ [is] [the] [number] [of]
+score updates the value has received. When a value is not explored enough, the confidence
+bound adds a higher number to the score to encourage more exploration for that value. _C_
+is a weight constant that determines how fast the score converges and is fixed to 0 _._ 3 as
+suggested by the paper. This baseline is implemented only for SCIP, as Gurobi does not
+expose root/non-root separation controls.
+
+
+    - _LLM_ _with_ _validation_ _(LLM-validation)_ Lawless et al. (2025). Following _LLM-MAB_, we
+prompt an LLM to generate 100 separator configurations for each re-optimization series,
+then apply _k_ -medoids to condense them into _N_ = 5 representatives. We evaluate each
+representative on a held-out validation set and select the configuration with the best average
+reward. This forms a strong baseline because it exploits additional validation instances to
+pick the best among LLM-generated candidates.
+
+
+    - _LLM-cold-start_ . Again following _LLM-MAB_, we generate 100 separator configurations
+per series and cluster them with _k_ -medoids, but we directly take the single medoid of the
+_largest_ cluster without any validation as the chosen configuration for evaluation.
+
+
+13
+
+
+A.2 RE-OPTIMIZATION BENCHMARKS
+
+
+**Benchmark** **datasets.** Table 8 summarizes the re-optimization benchmarks used in our experiments, including the size, domain/source, and which model components vary within each sequence.
+Here, #Vars denotes the total number of variables (integer variables in parentheses), and #Cons denotes the number of constraints. An _X_ indicates that the corresponding component changes across
+instances in the sequence. To analyze performance across different difficulty levels, we categorize
+the datasets into easy and hard groups. Easy datasets involve only a single varying (e.g., objective
+coefficients), and have relatively small problem sizes, with no more than 1 _,_ 457 integer variables.
+Hard datasets are characterized either by having at least two (up to four) varying components, by
+significantly larger problem sizes (up to 63 _,_ 009 integer variables), or by both.
+
+
+Table 8: Re-optimization benchmark datasets: size, source domain, and varying components. #Vars:
+total number of variables (integer variables in parentheses). LO: variable lower bounds; UP: variable
+upper bounds; OBJ: objective coefficients; LHS: left-hand sides; RHS: right-hand sides; MAT: constraint matrix coefficients. _X_ indicates that the corresponding component varies within the instance
+sequence.
+
+
+Dataset #Vars #Constrs Domain/Source LO UP OBJ LHS RHS MAT
+
+
+_Easy datasets_
+
+
+bnd 2 1758 (1457) 351 MIPLIB’17 X X - - - bnd 3 1758 (1457) 351 MIPLIB’17 X X - - - rhs 2 1000 (500) 1250 Synthetic MILP - - - - X rhs 4 1000 (500) 1250 Synthetic MILP - - - X X obj 1 360 (360) 55 Stochastic multi 0–1 knapsack - - X - - 
+
+_Hard datasets_
+
+
+rhs 3 63009 (63009) 507 MIPLIB’17 - - - X X obj 3 9599 (9599) 27940 UCI Machine Learning - - X - - rhs obj 90983 (60146) 33438 Hydro unit commitment - - X X X mat 802 (500) 531 Vaccine allocation - - - - - X
+all 7973 (5186) 3558 Mixed synthetic benchmark X X X X X X
+
+
+After the table, we provide detailed descriptions of each dataset, including how instances were
+generated and which variations are introduced:
+
+
+bnd ~~2~~ : Based on csched007 (MIPLIB 2017). Instances are generated via random fixings of
+15%–25% of the binary variables, selected uniformly with respect to the original instance.
+
+
+bnd ~~3~~ : Also based on csched007. Instances are generated via random fixings of 5%–20% of
+the binary variables (uniform selection). This series is relatively harder than bnd series 2 (as
+reflected by the time limits).
+
+
+rhs ~~2~~ : Based on a synthetic MILP dataset. Instances are generated by taking a convex combination
+of two different RHS vectors.
+
+
+rhs ~~4~~ : Also based on the synthetic MILP dataset as in rhs series 2, but using a different pair
+of RHS vectors for the convex combination.
+
+
+obj ~~1~~ : Based on a stochastic multiple binary knapsack dataset. We consider one scenario at a time,
+yielding a series in which roughly one third of the objective vector (corresponding to _y_ -variables)
+varies across instances.
+
+
+rhs ~~3~~ : Based on glass4 (MIPLIB). Instances are generated by perturbing nonnegative LHS and
+RHS components via a discrete uniform distribution by up to _±_ 70% of their values.
+
+
+obj ~~3~~ : Derived from the UCI MAGIC dataset. Instances are subproblems from a column generation
+approach to decision trees; the final set stems from a public call for additional datasets.
+
+
+rhs ~~o~~ bj: Based on a hydro unit commitment (HUC) MILP for a fixed valley. Varying inputs
+include electricity prices (objective), inflows, and initial/target reservoir volumes (constraint sides);
+most other data remain unchanged, making sequential re-optimization especially relevant.
+
+
+14
+
+
+mat: Based on an optimal vaccine allocation problem. Considering 500 scenarios at a time yields a
+series where the _constraint matrix of inequality constraints_ varies across instances.
+
+
+mat ~~r~~ hs ~~b~~ nd ~~o~~ bj (all): Also HUC-based (as in rhs ~~o~~ bj), but here _every_ input component
+(objective, bounds, sides, and matrix) may vary.
+
+
+15
+
+
+A.3 LLM PROMPT EXAMPLE
+
+
+Figures 2 and 3 provide an example LLM dialogue for algorithm configuration. The LLM input
+consists of (i) a meta prompt, (ii) a parameter description, and (iii) a problem description. The LLM
+output is a proposed configuration accompanied by brief explanations.
+
+
+Figure 2: LLM dialogue example for algorithm configuration. From top to bottom: (i) Meta prompt
+and (ii) Parameter Description Example. These two boxes are the materials provided to the LLM.
+The final box shows the LLM output: a concrete configuration with multi-level settings.
+
+
+16
+
+
+Figure 3: LLM dialogue example of problem description.
+
+
+17
+
+
+A.4 MAB ALGORITHM IMPLEMENTATION
+
+
+For completeness, we provide in Algorithm 1 the pseudocode of our bandit-based online configuration selection procedure in ( _LLM-MAB_ ). The algorithm maintains empirical mean rewards _µ_ ˆ _s_ and
+counts _ns_ for each candidate configuration _s_ _∈S_ _[′]_ . At each step _t_, given an instance _Pt_, if some
+configurations have not yet been explored, they are selected to ensure every arm is tried at least once.
+Otherwise, the next configuration is chosen according to the UCB1 score with exploration coefficient _α_ . The solver is then run on the current re-optimization instance _Pt_, optionally reusing primal
+hints from the last _τ_ instances. The solving time is converted into a negative reward and used to
+update statistics online. This procedure adaptively balances exploration of different configurations
+with exploitation of the most promising ones.
+
+
+**Algorithm 1:** LLM-MAB: Online Confguration Selection via UCB1
+
+**Input** **:** Exploration coefficient _α_ ;
+Candidate configurations _S_ _[′]_ = _{s_ 1 _, . . ., sN_ _}_ ;
+Sequential instance stream _{Pt}_ _[T]_ _t_ =1 [;]
+Historical window size _τ_ (for optional reuse of primal hints).
+**Output:** Per-instance record of chosen configuration and solving time.
+
+**Initialization:** For each _s ∈S_ _[′]_, set _µ_ ˆ _s_ (0) _←_ 0, _ns_ (0) _←_ 0.
+**for** _t ←_ 1 **to** _T_ **do**
+
+**if** _∃s_ : _ns_ ( _t −_ 1) = 0 **then**
+
+Select such untried configuration _st_ = _s_ . // ensure each tried once
+
+**else**
+
+Compute UCB1 score U _s_ ( _t_ ) = _µ_ ˆ _s_ ( _t −_ 1) + _α_    - _ns_ 2 ln( _t− t_ 1) [for each] _[ s]_ [.]
+
+Select _st_ = arg max _s∈S_ _′_ U _s_ ( _t_ ).
+Run solver on _Pt_ with configuration _st_ (and hints from last _τ_ instances if enabled).
+Observe solving time _zt_, set reward _rt_ = _−zt_ .
+Update statistics: _nst_ ( _t_ ) _←_ _nst_ ( _t −_ 1) + 1,
+
+_µ_ ˆ _st_ ( _t_ ) _←_ _µ_ ˆ _st_ ( _t −_ 1) + _[r][t][−]_ _n_ _[µ]_ [ˆ] _st_ _[st]_ ( [(] _t_ _[t]_ ) _[−]_ [1)] .
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+A.5 ADDITIONAL EXPERIMENT RESULTS
+
+
+**Sensitivity analysis of the configuration candidate set size.** Table 9 reports the detailed results
+of _LLM-MAB_ with different candidate set sizes _N_ _∈{_ 1 _,_ 3 _,_ 5 _}_ across all benchmarks. As discussed
+in Section 5.2, increasing _N_ to 5 provides more stable performance and ensures consistent improvements over the default solver.
+
+
+Table 9: Sensitivity analysis of the configuration candidate set size. We report relative solving time
+improvement (%) over Default SCIP across 10 re-optimization benchmarks. (Higher is better.)
+
+
+Method bnd ~~2~~ bnd ~~3~~ rhs 2 rhs ~~4~~ obj ~~1~~ rhs ~~3~~ obj 3 rhs obj mat all
+
+
+6.48 -0.79 **41.42** 37.76 24.16 6.68 53.60 **2.72** 8.42 19.35
+LLM-MAB ( _N_ = 1)
+(2.62) (1.77) (1.56) (0.67) (1.80) (17.52) (6.38) (0.47) (2.99) (18.92)
+
+11.06 **13.39** 38.45 32.68 20.92 1.57 47.07 0.88 -0.84 10.36
+LLM-MAB ( _N_ = 3)
+(12.79) (3.01) (2.17) (1.04) (2.14) (12.49) (4.54) (0.32) (3.16) (18.60)
+
+**26.64** 3.16 39.58 **38.83** **25.10** 8.30 **54.18** 1.99 **9.02** **25.99**
+LLM-MAB ( _N_ = 5)
+(3.89) (0.77) (0.77) (2.38) (4.39) (8.12) (3.46) (0.28) (3.37) (11.48)
+
+
+**Additional experiments with extended time limit.** In preliminary experiments, we observed that
+within each re-optimization sequence, the default solver’s solving times varied significantly across
+instances. To prevent a few particularly hard instances from dominating the aggregate metrics,
+we followed prior work Lawless et al. (2025) and imposed a global time limit of 400 seconds per
+instance. However, on certain datasets this budget proved insufficient, as many instances could not
+reach optimality within the limit. To ensure a fairer evaluation, we repeated the experiments with an
+extended time limit of 600 seconds. The corresponding results are reported in Table 10.
+
+
+We observe that _LLM-MAB_ still achieves consistent improvements over Default SCIP. In particular,
+substantial gains are observed on obj ~~1~~ (+33 _._ 42%) and mat (+12 _._ 29%), while on rhs ~~o~~ bj the
+performance is similar to the default. These results confirm that our approach remains effective
+under more relaxed computational budgets.
+
+
+Table 10: Additional experiments with extended time limit. We report solving time (s) and relative
+improvement (%) over Default SCIP. Lower solving time and higher relative improvement are better.
+
+
+Method bnd 3 rhs 3 obj ~~1~~ rhs obj mat
+
+
+Default 493.16 (4.42) 434.04 (32.60) 409.32 (1.42) 570.95 (5.20) 504.33 (4.97)
+
+
+LLM-MAB **462.32** (3.21) **394.25** (29.41) **272.55** (7.95) **569.46** (6.82) **442.21** (25.53)
+Improv. 6.24 8.51 33.42 0.25 12.29
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+A.6 THE USE OF LARGE LANGUAGE MODELS
+
+
+We used a large language model solely for language polishing and L [A] TEXformatting, such as grammar
+correction, stylistic editing, and minor reformatting of tables and figures. The LLM was not used
+to design experiments, generate results, analyze data, or draw conclusions. All technical content,
+algorithms, and empirical findings were authored and verified by the authors.
+
+
+20

@@ -1,0 +1,2456 @@
+# TO INFINITY AND BEYOND: TOOL-USE UNLOCKS LENGTH GENERALIZATION IN STATE SPACE MODELS
+
+
+**Sinead Williamson**
+Apple
+sa ~~w~~ illiamson@apple.com
+
+
+**Eran Malach**
+Apple
+e ~~m~~ alach@apple.com
+
+
+**Omid Saremi**
+Apple
+osaremi@apple.com
+
+
+**Arwen Bradley**
+Apple
+arwen ~~b~~ radley@apple.com
+
+
+**Josh Susskind**
+Apple
+jsusskind@apple.com
+
+
+**Aryo Lotfi**
+Apple
+alotfi@apple.com
+
+
+**Etai Littwin**
+Apple
+elittwin@apple.com
+
+
+ABSTRACT
+
+
+**Emmanuel Abbe**
+Apple
+e ~~a~~ bbe@apple.com
+
+
+State Space Models (SSMs) have become the leading alternative to Transformers for sequence modeling tasks. Their primary advantage is efficiency in longcontext and long-form generation, enabled by fixed-size memory and linear scaling of computational complexity. We begin this work by showing a simple theoretical result stating that SSMs _cannot_ accurately solve any “truly long-form” generation problem (in a sense we formally define), undermining their main competitive
+advantage. However, we show that this limitation can be mitigated by allowing
+SSMs _interactive_ access to external tools. In fact, we show that given the right
+choice of tool access _and_ problem-dependent training data, SSMs can learn to
+solve any tractable problem and generalize to arbitrary problem length/complexity
+(i.e., achieve _length generalization_ ). Following our theoretical finding, we demonstrate that tool-augmented SSMs achieve remarkable length generalization on a
+variety of arithmetic, reasoning, and coding tasks. These findings highlight SSMs
+as a potential efficient alternative to Transformers in interactive tool-based and
+agentic settings.
+
+
+1 INTRODUCTION
+
+
+Transformers (Vaswani et al., 2017), the main architecture powering large language models, have
+a well-known limitation: due to the attention mechanism, their computational complexity scales
+quadratically with the sequence length, and their memory scales linearly with length [1] . This quadratic
+dependency becomes a major limitation for tasks that require long-context and long-form generation.
+As test-time scaling paradigms that involve the generation of long Chain of Thought (CoT) (Wei
+et al., 2022) have become the leading solution for improving reasoning capabilities (Jaech et al.,
+2024; Guo et al., 2025), the ability to efficiently generate long sequences becomes even more crucial.
+
+
+To solve this limitation, various works suggested replacing the attention mechanism with other
+modules where memory and per-token compute are fixed as a function of the sequence length
+(Choromanski et al., 2020). Examples of such architectures include variants of Linear Transformers
+(Katharopoulos et al., 2020) and State Space Models (Gu et al., 2021) such as Mamba (Gu & Dao,
+2023; Dao & Gu, 2024), DeltaNet (Yang et al., 2024c) and GatedDeltaNet (Yang et al., 2024b).
+These architectures achieve performance similar to Transformers across a wide range of domains
+(Qu et al., 2024) at a lower inference cost. However, some works have also pointed out significant
+limitations of these architectures in certain tasks that involve memorization of long sequences and
+
+
+1While a naive implementation of attention requires quadratic memory complexity, efficient implementations such as Flash Attention (Dao et al., 2022) and KV caching enable close to linear complexity.
+
+
+1
+
+
+**1) Single-Turn Tool-Use:**
+
+```
+   cat *.py
+
+```
+
+
+**3) Distillation:**
+
+
+**2) Interactive Tool-Use:**
+
+```
+    python main.py
+
+|Col1|Traceback (most recent ...<br>⋮<br>File “code/169.py”, ...|
+|---|---|
+|`sed –i s/”v5”/”v10”/g f169.py`|`sed –i s/”v5”/”v10”/g f169.py`|
+|`python main.py`<br>`Traceback (most recent ...`<br> ⋮|`python main.py`<br>`Traceback (most recent ...`<br> ⋮|
+
+
+       File “code/f904.py”, ...
+
+```
+
+⋮
+
+
+**SWE-agent 32B**
+
+
+_Let’s start by examining the repository_
+_structure._
+
+
+⋮
+
+
+Figure 1: We finetune Mamba and Pythia (Transformer) on trajectories collected from different tooluse agents for solving a coding problem. 1) **Single-Turn** **Tool-Use:** Hard-coded agent that prints
+all the files in the repository and then outputs all the required changes. 2) **Interactive** **Tool-Use:**
+Hard-coded agent that iteratively runs the code, changes a few files, runs the code again etc. until all
+problems are resolved. 3) **Distillation:** SWE-agent Language Model (Yang et al., 2025) instructed
+to solve the bug in the code. Models are trained on codebases of up to 16 files (dashed red line), with
+context length 8K, and evaluated on larger codebases with longer context. While Pythia outperforms
+Mamba on smaller codebases and single-turn tool use, Mamba displays favorable performance on
+large codebases when trained to imitate interactive agents (agents 2 and 3), extrapolating beyond the
+training distribution.
+
+
+in-context learning (Jelassi et al., 2024; Park et al., 2024; Aky¨urek et al., 2024). Possibly due to
+these limitations, linear-time models are still not widely adopted as a replacement to Transformers.
+
+
+The goal of this work is to understand the capabilities and limitations of SSMs, focusing on tasks that
+require long-form generation. We formally define long-form generation tasks to be problems where
+the effective number of _outputs_ grows with the complexity of the problem. We focus on such tasks
+as these are the tasks where SSMs display a clear benefit over Transformers in terms of inference
+efficiency. However, we show that this efficiency comes at a cost of inherent performance degradation. Namely, we prove that SSMs _fail_ to solve long-form generation tasks when the complexity
+of the task increases beyond the capacity of the model, even if the model is allowed to generate
+CoT of any length. This limitation arises from the bounded memory of the model, which limits the
+expressive power when generating long sequences. This is in contrast with Transformers which,
+using CoT, can in principle solve any computationally tractable problem, utilizing their unbounded
+memory (Merrill & Sabharwal, 2023). So, to solve long-form generation tasks we can either use
+Transformers and suffer quadratic scaling of compute, or use SSMs and suffer performance degradation. Another alternative is to use hybrid models that mix attention and SSM layers and have
+been recently shown to achieve state-of-the-art performance at large scale (Blakeman et al., 2025).
+However, this ultimately does not eliminate the quadratic dependence on the sequence length.
+
+
+Following the observation above, we explore another alternative: allowing SSMs to _interactively_ use
+external tools. LLMs are now increasingly used as agents that interact with external tools for solving
+tasks such as coding, math or question answering (Luo et al., 2025; Yehudai et al., 2025). These tools
+can allow agents to query and read from external resources, and write information that can be used
+later. Therefore, such tool-use can naturally augment the internal memory of the model, allowing
+it access to practically unbounded external memory. We introduce a new theoretical framework for
+studying ReAct (Yao et al., 2023) agents, and show that allowing SSMs access to external memory
+through interactive tool-use makes them much more powerful. We prove that tool-augmented SSMs
+trained on task-specific trajectories can achieve _length_ _generalization_ on any tractable long-form
+generation task. That is, we show that for any such task we can construct training data with tooluse trajectories such that a simple training paradigm learns to execute the task with high accuracy,
+even when evaluated beyond the length of the training data. Importantly, this result only holds for
+_interactive_ tool-use, and we show that _single-turn_ tool-use SSMs are still limited.
+
+
+2
+
+
+```
+      pointer1
+
+```
+
+
+Step 0:
+
+
+Step 9:
+
+
+```
+pointer1.read() 1 pointer2.read() 1
+
+```
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+|||Mamb<br>|Mamb<br>|a|
+||||~~LSTM~~<br>GRU<br>Pythia<br>||
+|||~~Mistra~~|~~Mistra~~||
+|||~~Mistra~~|~~Mistra~~||
+||||||
+
+
+10 ~~[1]~~ 10 ~~[2]~~ 10 ~~[3]~~
+
+Sequence length
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|...|Col2|pointer1.move_left()|Col4|pointer2.move_left()|
+|---|---|---|---|---|
+|`pointer1.read()`<br>`2`<br>`pointer2.read()`<br>`4`<br>`sum=6,carry=0`|`pointer1.read()`<br>`2`<br>`pointer2.read()`<br>`4`<br>`sum=6,carry=0`|`pointer1.read()`<br>`2`<br>`pointer2.read()`<br>`4`<br>`sum=6,carry=0`|`pointer1.read()`<br>`2`<br>`pointer2.read()`<br>`4`<br>`sum=6,carry=0`|`pointer1.read()`<br>`2`<br>`pointer2.read()`<br>`4`<br>`sum=6,carry=0`|
+
+
+Step 20:
+
+
+```
+  ...
+
+```
+
+```
+pointer2.move_left()
+
+```
+
+```
+pointer2.read() 6,0 6
+
+```
+
+
+Step 21:
+
+
+Figure 2: **Left:** Illustration of an interactive tool-use agent trajectory with pointer-based memory
+tool for solving multi-digit addition. The agent can generate _thoughts_ (blue), _outputs_ (purple) or
+_commands_ (orange), and receive _observations_ (green) from the memory tool. At each step, we show
+the state of the memory context on the top row, and below it show the sequence of generated tokens.
+**Right:** Accuracy of recurrent/SSM models (Mamba, LSTM, GRU) and Transformers (Pythia, Mistral) trained on trajectories for _≤_ 5-digit addition, evaluated on up to 1,000-digits (log scale).
+
+
+Experimentally, we show that SSMs trained to _interactively_ use external memory tools achieve
+length generalization on tasks such as arithmetic, logical reasoning and coding. For example, a
+Mamba model trained to solve a simple coding task extrapolates to codebases larger than those seen
+during training when trained on trajectories with interactive tool-use (Figure 1). Additionally, a
+Mamba model trained to execute long-form multi-digit addition using pointer-based memory can
+generalize from 5-digit addition to 1,000-digit addition (Figure 2). We observe similar results on
+multiplication and on a logical reasoning task, and more modest extrapolation on solving the Tower
+of Hanoi task (a task which proved to be difficult for reasoning models, see Shojaee et al. (2025)).
+Taken together, our theoretical and experimental results highlight the potential advantage of using
+SSMs as agents with interactive tool access, instead of using them as standalone systems.
+
+
+1.1 RELATED WORK
+
+
+**Chain-of-Thought** **and** **Scratchpad** When solving problems that require reasoning, LLMs are
+known to significantly benefit from generating a CoT, detailing the step-by-step process required
+for solving the target task (Wei et al., 2022; Nye et al., 2021). Indeed, many datasets used for
+training models on mathematical problems include such CoT in the training data (Toshniwal et al.,
+2024b;a; Cobbe et al., 2021). Theoretically, CoT is shown to improve both the expressive power of
+language models (Merrill & Sabharwal, 2023) and their optimization and learnability (Wies et al.,
+2022; Malach, 2023). Additionally, it was shown that choices of CoT training data that “localize” the
+computation enable efficient learning and length generalization (Abbe et al., 2024). In another work,
+using CoT that encodes the operation of a Turing machine was used to improve length generalization
+on various tasks (Hou et al., 2024; Hua et al., 2025). In our work, we follow a similar approach
+for improving length generalization capabilities of language models. However, we focus on SSMs
+instead of Transformers, and study the effect of interactive tool-use for improving learning and
+generalization.
+
+
+**Emulations** **and** **Neural** **Turing** **Machines** The goal of learning to execute general algorithms
+with neural networks has been discussed in various works. Abbe & Sandon (2023) and Abbe et al.
+(2021) show universality learning properties of poly-size neural networks trained by stochastic gradient descent. Graves et al. (2014) introduces the Neural Turing Machine (NTM), a neural network
+that can simulate Turing machines and thus execute computable algorithms. NTMs were studied in
+different settings (Malekmohamadi Faradonbe et al., 2020), with some improvements such as the
+Neural GPU (Kaiser & Sutskever, 2015), but were ultimately not widely adopted. Similar works
+suggested augmenting LSTMs (Hochreiter & Schmidhuber, 1997) with external stack or external
+tape (Del´etang et al., 2022; Joulin & Mikolov, 2015). We use similar ideas to study algorithmic
+
+
+3
+
+
+learning and length generalization capabilities of SSMs in the setting of tool-augmented interactive
+agents.
+
+
+**Length** **Generalization** The problem of length generalization, training models on short/simple
+problems and evaluating them on longer/complex instances, has been studied in many works. These
+works often focus on training Transformers on arithmetic or algorithmic tasks such as sorting, copying or multi-digit addition (Jelassi et al., 2023; Nogueira et al., 2021). Different works suggest
+various techniques for improving length generalization capabilities of Transformers, including various choices of positional encodings and output format (Zhou et al., 2024; Cho et al., 2024; McLeish
+et al., 2024; Kazemnejad et al., 2023; Ruoss et al., 2023), scratchpads (Nye et al., 2021; Lee et al.,
+2023; Zhou et al., 2023; Abbe et al., 2024), architecture (Ontanon et al., 2021; Li & McClelland,
+2023), mixing different tasks for “task hinting” (Awasthi & Gupta, 2023) or using looped Transformers (Fan et al., 2024). Some works aim to give scientific or theoretical explanation to the capability
+and limitation of Transformers in extrapolating beyond the context length (Golowich et al., 2025;
+Zhou et al., 2023; Huang et al., 2024; Bhattamishra et al., 2022). SSMs have been shown to display
+robust length generalization capabilities in certain cases. Gu & Dao (2023) demonstrate that Mamba
+achieves significantly better length generalization performance compared to Transformers on some
+tasks. Other works show that the length extrapolation of SSMs can be significantly improved with
+modifications to the model (Ben-Kish et al., 2024) or the training pipeline (Ruiz & Gu, 2025). In this
+paper, we study the length generalization of SSMs when trained on data with tool-use trajectories.
+We show that SSMs can achieve perfect length generalization in this setting on various tasks.
+
+
+2 THEORY
+
+
+In this section we formally define the notion of long-form generation tasks: tasks that require generating longer output sequences as their complexity increases. Following this, we define a family of
+functions that generalizes the class of SSMs, and theoretically analyze their limitation and capabilities in different tool-use settings.
+
+
+**Definitions** **and** **Notation.** Fix some set _Z_ and some distribution _P_ over _Z_ . For some subset
+_S_ _⊆Z_, we denote by _P_ ( _S_ ) the probability mass of _S_ under _P_, i.e. _P_ ( _S_ ) := Pr _**z**_ _∼P_ [ _**z**_ _∈_ _S_ ]. For
+some function _f_ : _Z_ _→Z_ _[′]_, we denote by _f_ ( _P_ ) the probability distribution of _f_ ( _**z**_ ) for _**z**_ _∼P_ . For
+some set _B_, we denote by ∆( _B_ ) the set of probability distributions over _B_ .
+**Definition** **2.1.** _For_ _some_ _finite_ _set_ _Z_ _and_ _some_ _distribution_ _P_ _over_ _Z,_ _we_ _define_ _the_ _**minimum**_
+_**support**_ _**size**_ _of_ _mass_ 0 _≤_ _α_ _≤_ 1 _for_ _P_ _to_ _be_ _the_ _size_ _of_ _the_ _smallest_ _set_ _that_ _covers_ _α_ _probability_
+_mass:_ supp _α_ ( _P_ ) := min _{|S|_ : _S_ _⊆Z, P_ ( _S_ ) _≥_ _α}._
+
+
+2.1 LONG-FORM GENERATION
+
+
+Let Σ be a dictionary of tokens, and denote by Σ _[∗]_ the set of strings of tokens. Let _X_ 1 _, X_ 2 _, · · · ⊆_ Σ _[∗]_
+be a sequence of input spaces, and let _Y_ 1 _, Y_ 2 _, · · · ⊆_ Σ _[∗]_ be a sequence of output spaces. We assume
+that the input and output spaces are finite, i.e. _|Xn|, |Yn|_ _<_ _∞_ for all _n_ . Let _D_ 1 _, D_ 2 _, . . ._ be a
+sequence of distributions, such that _Dn_ is a distribution over _Xn_ . Finally, let _f_ : Σ _[∗]_ _→_ Σ _[∗]_ be some
+ground-truth function that satisfies, for all _n_, that _f_ ( _Xn_ ) _⊆Yn_ . We think of the parameter _n_ as a
+complexity parameter, and so the distribution _Dn_ generates more complex inputs as _n_ _→∞_ . We
+give the following definition of long-form generation tasks:
+**Definition 2.2.** _We say that f_ _, {Dn}_ _[∞]_ _n_ =1 _[is a]_ _**[ long-form generation]**_ _[ task with coverage][ α][ ∈]_ [(0] _[,]_ [ 1)] _[ if]_
+supp _α_ ( _f_ ( _Dn_ )) _is monotonically increasing with n,_ [2] _and_ lim _n→∞_ supp _α_ ( _f_ ( _Dn_ )) = _∞._
+
+
+Namely, we require that as the complexity _n_ increases, the effective number of possible outputs (i.e.,
+outputs that have non-negligible probability mass) increases as well. We note that many natural
+long-form generation tasks indeed satisfy these conditions, for example: 1) **Multi-Digit** **Addition**
+(or Multiplication): _Dn_ is a distribution over strings of the form _a_ + _b_ = (or _a × b_ =), where _a, b_
+uniformly random numbers with _n_ -digits. The function _f_ maps the input strings to the solution, e.g.
+_f_ (“ _a_ + _b_ = ”) = _c_ where _c_ = _a_ + _b_ (or _c_ = _a · b_ ). 2) **Sorting** : _Dn_ is a distribution over _n_ items,
+
+
+2The condition that the support size is monotonically increasing makes the theoretical results slightly easier
+to introduce, and holds for practically all reasonable long-form generation problems.
+
+
+4
+
+
+_f_ maps to the sorted list of items. 3) **Code Fixing** : _Dn_ is a distribution over python codes that have
+bugs that require changing _n_ lines of code, _f_ maps the code to the necessary changes.
+
+
+2.2 GENERALIZED STATE SPACE MODELS
+
+
+In this section, we follow similar definitions and notations as in Jelassi et al. (2024). We define a
+state space to be some _finite_ set _S_ with _|S|_ _<_ _∞_ . A generalized state space model (GSSM) is a
+(potentially probabilistic) function _h_ : Σ _[∗]_ _→_ ∆(Σ _[∗]_ ) defined by an initial state _s_ 0 _∈S_ and two
+rules: an update rule _u_ : _S ×_ Σ _→S_, and an output rule _r_ : _S_ _→_ ∆(Σ). Given some input _**x**_ _∈_ Σ _[∗]_,
+the function _h_ generates a sequence _**y**_ _∈_ Σ _[∗]_ . We define the state and the output of _h_ at time _t_
+recursively s.t. _st_ = _uh_ ( _st−_ 1 _, xt−_ 1) if _t ≤|_ _**x**_ _|_ and _st_ = _uh_ ( _st−_ 1 _, yt−|_ _**x**_ _|_ ) if _t > |_ _**x**_ _|_, and we sample
+_yt_ _∼_ _r_ ( _s|_ _**x**_ _|_ + _t_ ). We terminate when an end-of-sequence token [EOS] _∈_ Σ is observed.
+
+
+Note that any model that has fixed memory as a function of the sequence length satisfies the definition of a GSSM. This includes common choices of recurrent models, such as: LSTM (Hochreiter &
+Schmidhuber, 1997), Linear Transformers (Katharopoulos et al., 2020), H3 (Fu et al., 2022), RetNet
+(Sun et al., 2023), Mamba-1 and Mamba-2 (Gu & Dao, 2023; Dao & Gu, 2024) and other variants
+(Yang et al., 2024b). Additionally, Transformers where all the attention layers have local (sliding
+window) attention with fixed window size, are also GSSMs. Other computational models that use
+Transformers to process fixed length sequences and update fixed-size “memory” vectors (Hutchins
+et al., 2022) are also GSSMs. Transformers and hybrid-SSM models are _not_ GSSMs, since their
+memory increases with the sequence length.
+
+
+**CoT, Single-Turn and Interactive Tool-Use.** We analyze multiple settings where the model can
+invoke reasoning and tool-use. We follow the popular ReAct framework (Yao et al., 2023) and let
+the model generate either _thoughts_, that capture the internal reasoning of the model, or _actions_ that
+are followed by _observations_ from the environment. The thoughts and actions can be interleaved
+during the runtime of the model. We specify two types of actions: _command actions_, that are sent
+to a tool-oracle _O_ that returns an _observation_ following the execution of the command, and _output_
+_actions_ that are simply tokens appended to an _output stream_ and do not result in an observation. The
+_output stream_ captures the final response of the model which is then evaluated against the groundtruth [3] . Thoughts, commands and observations are placed between dedicated open/close tags (e.g.
+
+[THINK] _,_ [ _\_ THINK]). We define more formally the tool-oracle and the interaction protocol in
+Appendix A. We analyze three settings for problem-solving agents. 1) **CoT-only:** The model is
+allowed to use only _thoughts_ or _outputs_, but cannot issue _commands_ or receive external observations [4] . 2) **Single-Turn Tool-Use:** The model is allowed to issue a single _command_, followed by an
+observation, and then generate the output. The model can use _thoughts_ before and after the tool call,
+and during the output generation. 3) **Interactive** **Tool-Use:** The model is allowed to use as many
+_commands_ as it needs, and freely interleave thoughts, commands and outputs.
+
+
+2.3 LEARNING ALGORITHMS AND LENGTH GENERALIZATION
+
+
+Fix some task _f, {Dn}_ _[∞]_ _n_ =1 [.] [We] [now] [define] [training] [data] [distributions] [for] [learning] [the] [task] _[f]_ [.] [We]
+note that for many downstream tasks, it is common to collect training data that contains CoT reasoning and/or tool-use traces for solving the problem. We therefore allow the training distributions
+to contain a task-specific reasoning and tool-use trajectories. Given some trajectory _**z**_ _∈_ Σ _[∗]_, we
+denote by _**z**_ [(out)] the value of the output stream after execution of the trajectory. Formally, a training
+distribution for the task _f, {Dn}_ _[∞]_ _n_ =1 [is] [a] [sequence] [of] [distributions] _[{P][n][}][∞]_ _n_ =1 [s.t.] _[P][n]_ [is] [a] [distribu-]
+tion over _Xn_ _×_ Σ _[∗]_ satisfying that: 1) _Dn_ is the marginal distribution of _Pn_ w.r.t. _Xn_, and 2) For
+( _**x**_ _,_ _**z**_ ) _∼Pn_, with probability 1 it holds that _**z**_ [(out)] = _f_ ( _**x**_ ) (i.e. the output stream at the end of
+generation evaluates to the correct answer).
+
+
+A learning algorithm _A_ is an algorithm that, for some given length _n_, draws a sample of size _m_ from
+_P_ 1 _, . . ., Pn_ [5], and returns some hypothesis _h_ : Σ _[∗]_ _→_ ∆(Σ _[∗]_ ) that, given an input problem, can gen
+
+3We focus on agents for solving input-output problems, where the task of the model is to generate some
+output given the input problem (e.g. question answering, coding, mathematical proofs etc.). This is a different
+setting from an agent that performs actions and collects rewards, as in many Reinforcement Learning problems.
+4This setting also includes the case where the model generates the output immediately, without using CoT.
+5We let the algorithm choose freely how to sample from these distributions.
+
+
+5
+
+
+erate a reasoning and tool-use trajectory. We denote the output of _A_ in this case by _A_ ( _P_ 1 _, . . ., Pn_ ).
+We say that _A_ is a GSSM learning algorithm if it always returns a GSSM. We define the error of _h_
+w.r.t _f_ for some complexity _n_ by err _n_ ( _h_ ) = Pr - _h_ [(out)] ( _**x**_ ) _̸_ = _f_ ( _**x**_ )�, with probability over _**x**_ _∼Dn_
+and the randomness of _h_ . We now define _length generalization_ of an algorithm:
+
+**Definition** **2.3.** _We_ _say_ _that_ _A_ _achieves_ _**length**_ _**generalization**_ _,_ _if_ _for_ _every_ _ϵ, δ_ _∈_ (0 _,_ 1) _there_ _ex-_
+_ists_ _some_ _minimal_ _complexity_ _n_ 0 _and_ _sample_ _size_ _m_ _s.t._ _w.p._ _≥_ 1 _−_ _δ_ _we_ _have_ _that_ _hn_ 0 =
+_A_ ( _P_ 1 _, . . ., Pn_ 0) _satisfies_ err _n_ ( _hn_ 0) _≤_ _ϵ for all n ≥_ _n_ 0 _._
+
+
+Namely, we require that the algorithm returns a hypothesis with low-error on problems with arbitrarily large complexity _n_, as long as it sees “complex enough” inputs sequence in the training data
+(with complexity larger than _n_ 0). This requirement may seem relatively strong, as we could expect
+that the error of the learned model would grow with the complexity of the problem. However, we
+will show theoretically (and to some extent, empirically) that with a carefully constructed training
+data, achieving such “infinite” length generalization is possible.
+
+
+2.4 MAIN RESULTS
+
+
+In this subsection, we state the main theoretical results in the paper. We begin by showing a negative
+result, stating that GSSMs _cannot_ solve long-form generation tasks, if they operate in the _CoT-_
+_only_ or _single-turn tool-use_ setting. Following this, we show a positive result, proving that for any
+computable long-form generation task we can construct training data such that a simple learning
+algorithm achieves length generalization on the target task in the _interactive tool-use_ setting.
+
+
+**GSSMs cannot Solve Long-Form Generation Tasks without Interaction.** We begin by stating
+the negative result. The proof is relatively simple: since the model has a fixed memory, and outputs
+are a function of the state of the memory, the model cannot generate all outputs as complexity grows.
+**Theorem 2.1.** _Let f_ _be a long-form generation task over {Dn}_ _[∞]_ _n_ =1 _[with coverage parameter][ α]_ _[∈]_
+(0 _,_ 1) _._ _Then, for any CoT-only or Single-Turn GSSM h there exists some problem complexity n_ 0 _s.t._
+_for all n ≥_ _n_ 0 _the model h has error:_ err _n_ ( _h_ ) _≥_ 1 _−_ _α._
+
+
+The full proof is given in Appendix B. An immediate implication of this result is that GSSM learning
+algorithms cannot achieve length generalization on long-form generation tasks without interaction.
+
+
+**GSSMs** **with** **Interactive** **Tool-Use** **can** **Length** **Generalize** **on** **Long-Form** **Generation** **Tasks.**
+For some function _f_ : Σ _[∗]_ _→_ Σ _[∗]_, we say that _f_ is _computationally tractable_ if there exists a Turing
+machine _T_ s.t. for any _**x**_ _∈_ Σ _[∗]_, if _T_ begins with _**x**_ written on its tape, it halts with _f_ ( _**x**_ ) written on its
+tape. The following result shows that a GSSM learning algorithm can achieve length generalization
+with interactive tool-use, given proper training data:
+**Theorem** **2.2.** _There_ _exists_ _memory-tool_ _oracle_ _O_ _and_ _a_ _simple_ _GSSM_ _learning_ _algorithm_ _A_ [6] _s.t._
+_for any computationally tractable long-form generation task f, {Dn}_ _[∞]_ _n_ =1 _[, there exists a sequence of]_
+_training distributions {Pn}_ _[∞]_ _n_ =1 _[for which][ A][ achieves length generalization in the interactive setting,]_
+_with sample complexity m_ = _n_ 0 _M_ log( _M/δ_ ) _/ϵ (where M_ _is a constant that depends on the Turing_
+_machine for computing the function f_ _)._
+
+
+To show the above result, we define a simple tool that allows read/write access to some external
+memory, using a pointer that can move left or right between the memory cells. Using this tool, we
+can simulate the operations of a Turing machine, where we use the external memory as the tape of
+the Turing machine, use _thoughts_ to track the state of the machine and _commands_ to move the head
+and read/write symbols. Since the transition function of the Turing machine is defined for every pair
+of state and symbol, to prove that length generalization is achieved we show that, for large enough
+_n_ 0, most of these pairs are seen in the training data. We give the complete proof in Appendix B.
+
+
+To conclude, the above results show that _interactive_ tool-use is both _necessary_ and _sufficient_ for
+GSSMs to achieve length generalization on tractable long-form generation problems.
+
+
+6The algorithm that we analyze is “simple” in the sense that it learns a function that operates using simple
+string-matching with the training data, similar to e.g. n-gram models. While this is not a “standard” learning
+algorithm, we believe that similar results can be obtained for more natural algorithms (e.g., gradient descent on
+a simple RNN), at the cost of making the analysis much more involved.
+
+
+6
+
+
+Table 1: Experimental results for synthetic tasks for different models. The notation _n_ _→_ _m_ ( _p_ %)
+means a model trained on length _n_ achieves accuracy _p_ on length _m_ (for the largest _m_ s.t. _p ≥_ 5%).
+
+
+Model _n ×_ 1 _n ×_ 2 Logical Graph Hanoi [7]
+
+Mamba **10** _→_ **1K (100%)** **10** _→_ **1K (100%)** 10 _→_ 1K (98%) **8** _→_ **12 (49%)**
+LSTM 10 _→_ 500 (100%) 10 _→_ 100 (100%) **10** _→_ **1K (100%)** 8 _→_ 8 (100%)
+GRU 10 _→_ 500 (100%) 10 _→_ 100 (100%) **10** _→_ **1K (100%)** 8 _→_ 8 (100%)
+Pythia 10 _→_ 20 (79%) 10 _→_ 14 (12%) 10 _→_ 1K (5%) 8 _→_ 8 (100%)
+Mistral 10 _→_ 13 (25%) 10 _→_ 20 (33%) 10 _→_ 500 (9%) 8 _→_ 8 (100%)
+
+
+3 EXPERIMENTS
+
+
+In this section we evaluate the length generalization capabilities of GSSMs and Transformer-based
+language models on various tasks, including arithmetic, reasoning and coding. We experiment with
+different choices of tools that allow read/write memory access, using either a pointer-based memory
+access, search tool, or arbitrary _bash_ commands for reading and changing files. We use both tasks
+where we synthetically generate the ground-truth trajectory and tool commands, as well as a coding task where we collect the trajectories from a SWE coding agent. In our experiments, we largely
+follow a similar framework for ReAct agents defined in the previous section, where the model can interleave _thoughts_, _outputs_ (“final answer” tokens), and _commands_ that are followed by _observations_
+from the environment. In our experiments we use Mamba SSM (Gu & Dao, 2023), LSTM (Hochreiter & Schmidhuber, 1997), GRU (Cho et al., 2014), Pythia Transformer (Biderman et al., 2023) and
+a Transformer with sliding window (local) attention based on the Mistral architecture (Jiang et al.,
+2023). In all experiments, we see that SSMs/RNNs achieve length generalization performance that
+is much better compared to Transformers. See Appendix C for experimental details.
+
+
+3.1 ARITHMETIC TASKS
+
+
+In the following set of experiments, we augment the model with a pointer-based memory tool that
+gives the model access to past tokens in the input/output context. In this setting, the model can
+execute the following commands: 1) initialize a new pointer, 2) move the pointer left or right by a
+single token and 3) read the token under a given pointer. By default, a new pointer is initialized to the
+first token position of the input context. The _thoughts_ and _outputs_ are appended to the context, and
+are therefore accessible by the pointers (if they reach beyond the length of the input), but _commands_
+and _observations_ are discarded (i.e., they are not appended to the context memory and cannot be read
+by the pointers). We give a detailed description of how _thoughts_, _commands_ and _outputs_ are specified
+in Appendix D.1. The final answer is written in the _output stream_ at the end of the generation.
+
+
+We train the model using the standard next-token prediction objective with teacher-forcing, while
+masking from the loss the input question and the _observations_ (the outputs of a _read_ operation, which
+will be generated by the memory tool). For the training data, we construct synthetic trajectories that
+simulate the desired algorithm, and train the model to exactly execute the algorithm required for
+solving the problem using the memory-tool interaction.
+
+
+**Multi-Digit** **Addition.** For this task, we train the model to perform multi-digit addition. We fix
+some maximal training length _n_, and for each training example we sample uniformly _n_ 1 _, n_ 2 _∼_
+_{_ 1 _, . . ., n}_, then sample two numbers _x_ 1 _, x_ 2 where _xi_ is a uniformly random _ni_ -digit number. We
+construct a training example with the trajectory for solving _x_ 1 + _x_ 2, essentially mimicking the long
+addition algorithm (see Appendix D.3 for details). For evaluation, we choose _n_ _[′]_ _≥_ _n_ and evaluate
+on addition of two _n_ _[′]_ -digit numbers. In evaluation, we measure the accuracy of exact-recovery
+of the trajectory _and_ the final answer (i.e., we measure the probability of generating a solution
+that exactly matches the desired algorithm). Figure 2 (right) shows the results of this experiment.
+We observe that Mamba and LSTM trained on 5-digit demonstrations learn to perfectly perform
+1,000-digit addition (we did not measure the accuracy beyond this). A Transformer trained in the
+same setting fails to extrapolate. Additional ablations, such as training with no CoT, no tool-use
+
+
+7Due to the sensitivity of the Hanoi experiments to the initialization seed, we use 10 seeds for Mamba and
+Pythia and 3 seeds for other models. Best performing seed is reported. See Appendix D.4 for more details.
+
+
+7
+
+
+and single-turn tool-use, result in little to no length generalization, and are discussed in Appendix
+D.7. We also compare Mamba to two alternative architectures on the addition task: Hybrid-Mamba,
+which interleaves Mamba layers with attention layers, and Recurrent Memory Transformer (RMT)
+(Bulatov et al., 2022), which augments a Transformer with learnable memory tokens and segmentlevel recurrence. We find that Hybrid-Mamba performs similarly to Mamba, while RMT does not
+achieve meaningful length generalization. See Appendix D.9 for details.
+
+
+**Multi-Digit Multiplication.** For this task we use the same pointer-based memory tool described
+above for learning the multiplication algorithm. In this task, we increase the length of only the first
+operand, keeping the second operand fixed. Specifically, we fix some maximal training length _n_,
+choose _n_ 1 _∼{_ 1 _, . . ., n}_ to be the length of the first operand and choose _n_ 2 _∼{_ 1 _,_ 2 _}_ to be the
+length of the second operand (i.e. we multiply an _n_ 1-digit number by a 1-digit or 2-digit number).
+We sample _x_ 1 _, x_ 2 where _xi_ is a uniformly random _ni_ -digit number, and construct the trajectory
+for solving _x_ 1 _× x_ 2 (see details in Appendix D.3). We then evaluate on _n_ _[′]_ _×_ 1 and _n_ _[′]_ _×_ 2 digit
+multiplication, for some _n_ _[′]_ _≥_ _n_, and report exact recovery accuracy. We train different SSMs/RNNs
+and Transformers where first operand has _n ≤_ 10 digits, and evaluate on multiplications of numbers
+with up to 1,000-digits (Table 1). Here too we see that Mamba models maintain high accuracy when
+evaluated on numbers that have orders of magnitude more digits than in the training data (also see
+Appendix D.6 for ablations on training steps and maximum number of digits seen during training).
+
+
+**Task Mixture.** We examine whether co-training a primary task with an auxiliary task that shares
+a related computational structure yields synergistic benefits (Awasthi & Gupta, 2023). Our experiments indicate that such co-training improves the length generalization of the primary task under
+limited training budgets. In our experiments, the primary task is multiplication ( _n_ -digit × 2-digit),
+co-trained with addition ( _n_ + _n_ digits) as an auxiliary task. Both tasks share structural similarities when expressed as sequences of tool calls. The training distribution for multiplication contains
+samples up to 20 digits. We compare the accuracy as a function of test length for various training
+budgets (250, 500 or 800 steps) and various choices of task mixtures (see Appendix D.8). We observe that under limited budgets (250 steps), introducing auxiliary addition samples yields minor
+improvements. At intermediate budgets (500 steps), the benefit becomes more pronounced, with
+certain weights extending generalization to much larger _n_ . However, with sufficient training (800
+steps), all settings converge to strong generalization.
+
+
+3.2 ALGORITHMIC/REASONING TASKS
+
+
+We next turn to evaluate the tool-use paradigm on tasks that test certain “reasoning” capabilities.
+
+
+**Tower** **of** **Hanoi.** This task is based on the popular puzzle game, which was also recently used
+for testing reasoning capabilities of frontier LLMs, showing that they struggle to solve this task as
+complexity increases (Shojaee et al., 2025). In our setup, we randomly sample (without replacement)
+_n_ disks of sizes _∈{_ 1 _, . . .,_ 100 _}_ . These disks are placed on the first rod (labeled _A_ ), ordered from
+the largest to the smallest, with rods _B_ and _C_ being empty. The input to the model is the list of
+disks, which captures the initial state of the game. The model then needs to output a sequence of
+valid moves that result in placing the pile on rod _C_ . We use the same pointer-based memory tool as
+in the previous experiments, and train the model trajectories with up to _n_ disks, evaluating on larger
+_n_ _[′]_ (see Appendix D.3). In this experiment we observe more limited length generalization (Table 1),
+but note that unlike other experiments, here the length of the output increases _exponentially_ with _n_ .
+
+
+**Logical** **Graph.** In this task, we construct a directed-acyclic computation graph with _n_ nodes.
+The graph has _k_ input nodes (for some fixed _k_ ), and each internal node node computes a Boolean
+operation (AND/OR) on one or two input variables or their negations. We construct the graph
+by iteratively adding new internal nodes and randomly choosing their Boolean operation and their
+connectivity to existing nodes in the graph. We take the last node that is added to be the output node.
+All nodes are randomly labeled, and the model receives the graph structure and an assignment for
+the input variables as a python code (see Figure 4). In this task, instead of using the pointer-based
+memory tool as in previous tasks, we use a _search_ tool: the model can issue a command find( _x_ ),
+and gets a list of all occurrences of the pattern _x_ in the context. As before, all _thoughts_ and _outputs_
+generated by the model are appended to the context and are therefore searchable in future iterations.
+
+
+8
+
+
+We fix _k_ = 3 and train the model on trajectories for solving this problem for graphs with _n_ _≤_ 10
+nodes. We evaluate on graphs with _n_ _[′]_ _≥_ _n_ nodes, and report the exact-match accuracy in Table 1.
+We observe that Mamba and recurrent models extrapolate to graphs with _n_ = 1 _K_ nodes.
+
+
+3.3 CODING TASK
+
+
+For the previous tasks, we trained models “from scratch” on synthetic trajectories that invoke tool
+use for solving arithmetic and algorithmic problems. This allowed us to demonstrate the length
+generalization capability of SSMs equipped with tool-use in a clean and controlled setting, resulting
+in perfect recovery of the underlying algorithm in many cases. We now turn to study extrapolation of
+tool-use agents in a more realistic coding setting. Importantly, this setting will allow us to go beyond
+programmatically generated trajectories and collect trajectories from an existing SWE coding agent.
+This demonstrates that our results and observations can also be applicable in settings where the
+underlying algorithm/method for solving the task are not known or well-specified.
+
+
+Our task will be fixing a “bug” in a given codebase. To construct the codebase we generate _n_ python
+functions, each function saved in a separate python file. The functions form a dependency graph,
+with one root function called main (stored in main.py). Each function declares variables (named
+v0 _,_ v1 _, . . .,_ v9), gets some variables as inputs and passes some variables to other functions it imports. We generate this codebase by randomly generating a dependency graph, iteratively adding
+nodes (functions) to this graph and connecting each node to existing nodes, where each edge represents a parent function importing a child function. Function names are randomly selected from
+f0 _, . . .,_ f999, except for the last function added to the graph which is called foo. We then randomly assign variables and print them and/or pass them from parent functions to child functions. The
+code always has the following “bug”: there is a special variable v10 that is declared in main.py
+and is called in foo.py without properly passing it from main. In order to fix the code, we need
+to pass the variable v10 through all the dependency paths from main to foo (ideally without
+changing other functions, though we do not enforce this). See Figure 4 for an illustration.
+
+
+We start by running a coding agent and collecting its trajectories when attempting to solve this codefixing task, as we are varying the number of functions _n_ in the codebase (choosing _n ∈{_ 4 _, . . .,_ 16 _}_ ).
+We use three types of agents for generating trajectories, (illustrated in Figure 1): 1) **Single-Turn**
+**Agent** : Hard-coded agent that prints all the files and immediately generates the correct code edits.
+2) **Interactive Agent** : Hard-coded agent that iteratively runs the code, resolves the issue in up to 3
+files, then runs the code again, and keeps going until the code runs without errors. 3) **Distillation** :
+An agent based on SWE-agent-LM-32B (Yang et al., 2025), a capable open-source coding model
+that we couple with mini-SWE-agent [8] (Yang et al., 2024a) as a simple agent environment which
+gives the model access to the code through bash commands. We instruct the model to fix the bug in
+the code, specifically telling it what the bug is and how it should fix it (pass the variable v10 from
+main to foo). See the full prompt and further details in Appendix E. We observe that while this
+task is relatively simple, the model’s performance degrades as the complexity (number of functions)
+in the codebase increases (see statistics in Appendix E). We therefore filter the trajectories to include
+only trajectories that correctly fixed the code, and also filter for short trajectories (shorter than the
+average length for a given size _n_ ).
+
+
+After collecting around 100K trajectories from each coding agent, we finetune two comparable
+models on these trajectories: Pythia-1.4B (Transformer-based model, Biderman et al. (2023)) and
+Mamba-1.4B (Gu & Dao, 2023), both pretrained on The Pile (Gao et al., 2020). We train both
+models with context length 8,192, on codebases of up to 16 functions (if the trajectory is longer
+than the context length, we train only on the first 8,192 tokens). We then evaluate both models on
+codebases of different sizes, letting the models generate beyond the context length. [9] We measure
+the probability of correctly fixing the code (using the same environment used for collecting the
+trajectories). As shown in Figure 1, we observe that for codebases with small number of functions,
+both Transformer and Mamba models perform well in all settings. Notably, the Transformer-based
+model outperforms the Mamba SSM for small codebases in the agent distillation setting, achieving
+over 90% pass rate. However, for larger codebases, beyond the training distribution (both in terms
+
+
+[8https://github.com/SWE-agent/mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent)
+9We experimented with applying RoPE scaling when using the Transformer beyond the training context
+length, both in finetuning and evaluation, and observed mixed results. We report the accuracy for the best
+choice (with or without RoPE scaling) in each setting.
+
+
+9
+
+
+of number of functions and trajectory length), we see that the Mamba model maintains much better
+accuracy as the complexity increases when trained to imitate interactive agents (agents 2 and 3), but
+fails on complex codebases when trained in the single-turn setting (agent 1). This finding aligns
+with our theoretical results, and also matches the previous synthetic experiments.
+
+
+3.4 LONG-CONTEXT NATRUAL-LANGUAGE
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+|on|ng-Cont|text Na|Col4|atural L|Langua|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||<br>Pythia|<br> (1.4B)|
+
+
+Number of Examples
+
+
+To further compare the length generalization of SSMs and 0.9
+Transformers in long-context tool-use setting, we train our
+
+0.8
+
+models on solving a task that involves natural language and
+long-context reasoning. In particular, we adapt a task from the 0.7
+Oolong benchmark (Bertsch et al., 2025), a very recent benchmark that proposed a novel set of long-context tasks that prove 0.6
+
+ticular date, and needs to answer questions of the form: _“In the_ Number of Examples
+_above data,_ _was a question of category X more common,_ _less_
+_common,_ _or_ _the_ _same_ _frequency_ _before_ _date_ _Y,_ _as_ _compared_ Figure 3: Accuracy of Pythia
+_to_ _after_ _date_ _Y?”_ . We train the models on hard-coded agent and Mamba trained on in-context
+trajectories that use a simple tool call that retrieves the next datasets with 5 examples, evaluexample in the dataset (starting from the first example), along ated on up to 25 examples.
+with _thought_ tokens for analyzing each example. We finetune
+1.4B Pyhita Transformer and Mamba SSM (similarly to the coding experiment) on problems with
+up to 5 data examples, and compare the performance of the models when tested on larger number of examples. As shown in Figure 3, here too we observe that while both models have similar
+performance in-distribution, the Mamba SSM extrapolates better when evaluated on longer datasets.
+
+
+Figure 3: Accuracy of Pythia
+and Mamba trained on in-context
+datasets with 5 examples, evaluated on up to 25 examples.
+
+
+4 CONCLUSION AND DISCUSSION
+
+
+We started this work by comparing two families of models for long-form generation: Transformers
+and SSMs. Transformers are inefficient for long-context and long-form generation, as their computational complexity scales quadratically with the sequence length. SSMs, on the other hand, offer
+linear scaling of compute but, as we showed, cannot accurately solve long-form generation tasks
+(without tools). This demonstrates a clear trade-off between efficiency and accuracy that seems to
+be inescapable. Indeed, several works have observed that SSMs are inferior to Transformers in various tasks that require memorization of long sequences (Jelassi et al. (2024); Waleffe et al. (2024)).
+
+
+On the positive side, we show that in the agentic/tool-use setting, SSMs can leverage tools to overcome their memory bottleneck, thus offering efficiency, accuracy, and generalization to longer sequences. In hindsight, SSMs seem to be a natural fit for tool-use settings: tools often generate large
+quantities of content, which SSMs can parse efficiently, and also involve multi-turn interactions that
+can quickly overflow the context of a standard Transformer. However, it seems that there is little
+work on building SSM-based agents, and thus their evaluation is restricted to the “standalone” setting, where they are inherently limited. We do not believe this is due to any inability of SSMs to
+learn tool-use behavior. For example, while Mistral’s Mamba-Codestral-7B-v0.1 model does not
+naively support function calling, it is able to achieve comparable tool-use performance to several
+function-calling-enabled transformer-based models (Appendix F). We therefore believe this work
+should encourage the development of a tool-based SSMs that operate in various agentic settings,
+such as coding, search or reasoning. This application could potentially unlock the full capabilities
+of these models, making them competitive with, or even superior to, Transformer-based agents.
+
+
+Finally, we want to emphasize that our work is one of the first to analyze the performance of language
+modeling architectures _in a system_, rather than as standalone models. To some extent, our analysis
+shows that certain architectures can be “weaker” when operating standalone, but in fact perform
+better when incorporated as part of a system. Since LLMs are now rarely used as standalone tools,
+we believe that this aspect of language modeling deserves more attention and focus in the field.
+
+
+10We use examples from the Yahoo Answers Topic Classification dataset (Zhang et al., 2015).
+
+
+10
+
+
+REFERENCES
+
+
+Emmanuel Abbe and Colin Sandon. Polynomial-time universality and limitations of deep learning. _Communications_ _on_ _Pure_ _and_ _Applied_ _Mathematics_, 76(11):3493–3549, 2023. doi: https:
+//doi.org/10.1002/cpa.22121. URL [https://onlinelibrary.wiley.com/doi/abs/](https://onlinelibrary.wiley.com/doi/abs/10.1002/cpa.22121)
+[10.1002/cpa.22121.](https://onlinelibrary.wiley.com/doi/abs/10.1002/cpa.22121)
+
+
+Emmanuel Abbe, Pritish Kamath, Eran Malach, Colin Sandon, and Nathan Srebro. On the power of
+differentiable learning versus PAC and SQ learning. In _Advances in Neural Information Process-_
+_ing Systems_, volume 34, 2021.
+
+
+Emmanuel Abbe, Samy Bengio, Aryo Lotfi, Colin Sandon, and Omid Saremi. How far can transformers reason? the globality barrier and inductive scratchpad. _Advances in Neural Information_
+_Processing Systems_, 37:27850–27895, 2024.
+
+
+Ekin Aky¨urek, Bailin Wang, Yoon Kim, and Jacob Andreas. In-context language learning: Architectures and algorithms. _arXiv preprint arXiv:2401.12973_, 2024.
+
+
+Pranjal Awasthi and Anupam Gupta. Improving length-generalization in transformers via task
+hinting. _arXiv preprint arXiv:2310.00726_, 2023. [URL https://arxiv.org/abs/2310.](https://arxiv.org/abs/2310.00726)
+[00726.](https://arxiv.org/abs/2310.00726)
+
+
+Assaf Ben-Kish, Itamar Zimerman, Shady Abu-Hussein, Nadav Cohen, Amir Globerson, Lior Wolf,
+and Raja Giryes. Decimamba: Exploring the length extrapolation potential of mamba. _arXiv_
+_preprint arXiv:2406.14528_, 2024.
+
+
+Amanda Bertsch, Adithya Pratapa, Teruko Mitamura, Graham Neubig, and Matthew R. Gormley.
+Oolong: Evaluating long context reasoning and aggregation capabilities, 2025. URL [https:](https://arxiv.org/abs/2511.02817)
+[//arxiv.org/abs/2511.02817.](https://arxiv.org/abs/2511.02817)
+
+
+Satwik Bhattamishra, Arkil Patel, Varun Kanade, and Phil Blunsom. Simplicity bias in transformers
+and their ability to learn sparse boolean functions. _arXiv preprint arXiv:2211.12316_, 2022.
+
+
+Stella Biderman, Hailey Schoelkopf, Quentin Gregory Anthony, Herbie Bradley, Kyle O’Brien, Eric
+Hallahan, Mohammad Aflah Khan, Shivanshu Purohit, USVSN Sai Prashanth, Edward Raff, et al.
+Pythia: A suite for analyzing large language models across training and scaling. In _International_
+_Conference on Machine Learning_, pp. 2397–2430. PMLR, 2023.
+
+
+Aaron Blakeman, Aarti Basant, Abhinav Khattar, Adithya Renduchintala, Akhiad Bercovich, Aleksander Ficek, Alexis Bjorlin, Ali Taghibakhshi, Amala Sanjay Deshmukh, Ameya Sunil Mahabaleshwarkar, et al. Nemotron-h: A family of accurate and efficient hybrid mamba-transformer
+models. _arXiv preprint arXiv:2504.03624_, 2025.
+
+
+Aydar Bulatov, Yury Kuratov, and Mikhail Burtsev. Recurrent memory transformer. _Advances_ _in_
+_Neural Information Processing Systems_, 35:11079–11091, 2022.
+
+
+Hanseul Cho, Jaeyoung Cha, Pranjal Awasthi, Srinadh Bhojanapalli, Anupam Gupta, and Chulhee
+Yun. Position coupling: Improving length generalization of arithmetic transformers using task
+structure. _Advances in Neural Information Processing Systems_, 37:22233–22315, 2024.
+
+
+Kyunghyun Cho, Bart Van Merri¨enboer, Dzmitry Bahdanau, and Yoshua Bengio. On the properties
+of neural machine translation: Encoder-decoder approaches. _arXiv_ _preprint_ _arXiv:1409.1259_,
+2014.
+
+
+Krzysztof Choromanski, Valerii Likhosherstov, David Dohan, Xingyou Song, Andreea Gane, Tamas
+Sarlos, Peter Hawkins, Jared Davis, Afroz Mohiuddin, Lukasz Kaiser, et al. Rethinking attention
+with performers. _arXiv preprint arXiv:2009.14794_, 2020.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Tri Dao and Albert Gu. Transformers are ssms: Generalized models and efficient algorithms through
+structured state space duality. _arXiv preprint arXiv:2405.21060_, 2024.
+
+
+11
+
+
+Tri Dao, Dan Fu, Stefano Ermon, Atri Rudra, and Christopher R´e. Flashattention: Fast and memoryefficient exact attention with io-awareness. _Advances in neural information processing systems_,
+35:16344–16359, 2022.
+
+
+Gr´egoire Del´etang, Anian Ruoss, Jordi Grau-Moya, Tim Genewein, Li Kevin Wenliang, Elliot Catt,
+Chris Cundy, Marcus Hutter, Shane Legg, Joel Veness, et al. Neural networks and the chomsky
+hierarchy. _arXiv preprint arXiv:2207.02098_, 2022.
+
+
+Ying Fan, Yilun Du, Kannan Ramchandran, and Kangwook Lee. Looped transformers for length
+generalization. _arXiv preprint arXiv:2409.15647_, 2024.
+
+
+Daniel Y Fu, Tri Dao, Khaled K Saab, Armin W Thomas, Atri Rudra, and Christopher R´e.
+Hungry hungry hippos: Towards language modeling with state space models. _arXiv_ _preprint_
+_arXiv:2212.14052_, 2022.
+
+
+Leo Gao, Stella Biderman, Sid Black, Laurence Golding, Travis Hoppe, Charles Foster, Jason
+Phang, Horace He, Anish Thite, Noa Nabeshima, Shawn Presser, and Connor Leahy. The Pile:
+An 800gb dataset of diverse text for language modeling. _arXiv preprint arXiv:2101.00027_, 2020.
+
+
+Noah Golowich, Samy Jelassi, David Brandfonbrener, Sham M Kakade, and Eran Malach. The role
+of sparsity for length generalization in transformers. _arXiv preprint arXiv:2502.16792_, 2025.
+
+
+Alex Graves, Greg Wayne, and Ivo Danihelka. Neural turing machines. _arXiv_ _preprint_
+_arXiv:1410.5401_, 2014.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023.
+
+
+Albert Gu, Karan Goel, and Christopher R´e. Efficiently modeling long sequences with structured
+state spaces. _arXiv preprint arXiv:2111.00396_, 2021.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+via reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025.
+
+
+Sepp Hochreiter and J¨urgen Schmidhuber. Long short-term memory. _Neural_ _computation_, 9(8):
+1735–1780, 1997.
+
+
+Kaiying Hou, David Brandfonbrener, Sham Kakade, Samy Jelassi, and Eran Malach. Universal
+length generalization with turing programs. _arXiv preprint arXiv:2407.03310_, 2024.
+
+
+Zhouqi Hua, Wenwei Zhang, Chengqi Lyu, Yuzhe Gu, Songyang Gao, Kuikun Liu, Dahua Lin, and
+Kai Chen. The imitation game: Turing machine imitator is length generalizable reasoner. _arXiv_
+_preprint arXiv:2507.13332_, 2025.
+
+
+Xinting Huang, Andy Yang, Satwik Bhattamishra, Yash Sarrof, Andreas Krebs, Hattie Zhou, Preetum Nakkiran, and Michael Hahn. A formal framework for understanding length generalization
+in transformers. _arXiv preprint arXiv:2410.02140_, 2024.
+
+
+DeLesley Hutchins, Imanol Schlag, Yuhuai Wu, Ethan Dyer, and Behnam Neyshabur. Blockrecurrent transformers. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:33248–33261,
+2022.
+
+
+Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec
+Helyar, Aleksander Madry, Alex Beutel, Alex Carney, et al. Openai o1 system card. _arXiv_
+_preprint arXiv:2412.16720_, 2024.
+
+
+Samy Jelassi, St´ephane d’Ascoli, Carles Domingo-Enrich, Yuhuai Wu, Yuanzhi Li, and Franc¸ois
+Charton. Length generalization in arithmetic transformers. _arXiv_ _preprint_ _arXiv:2306.15400_,
+2023.
+
+
+Samy Jelassi, David Brandfonbrener, Sham M Kakade, and Eran Malach. Repeat after me: Transformers are better than state space models at copying. In _International Conference on_ _Machine_
+_Learning_, pp. 21502–21521. PMLR, 2024.
+
+
+12
+
+
+Albert Q. Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier,
+L´elio Renard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril,
+Thomas Wang, Timoth´ee Lacroix, and William El Sayed. Mistral 7b, 2023. URL [https:](https://arxiv.org/abs/2310.06825)
+[//arxiv.org/abs/2310.06825.](https://arxiv.org/abs/2310.06825)
+
+
+Armand Joulin and Tomas Mikolov. Inferring algorithmic patterns with stack-augmented recurrent
+nets. _Advances in neural information processing systems_, 28, 2015.
+
+
+Łukasz Kaiser and Ilya Sutskever. Neural gpus learn algorithms. _arXiv preprint arXiv:1511.08228_,
+2015.
+
+
+Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and Franc¸ois Fleuret. Transformers are
+rnns: Fast autoregressive transformers with linear attention. In _International conference on ma-_
+_chine learning_, pp. 5156–5165. PMLR, 2020.
+
+
+Amirhossein Kazemnejad, Inkit Padhi, Karthikeyan Natesan Ramamurthy, Payel Das, and Siva
+Reddy. The impact of positional encoding on length generalization in transformers. _Advances_
+_in Neural Information Processing Systems_, 36:24892–24928, 2023.
+
+
+Nayoung Lee, Kartik Sreenivasan, Jason D Lee, Kangwook Lee, and Dimitris Papailiopoulos.
+Teaching arithmetic to small transformers. _arXiv preprint arXiv:2307.03381_, 2023.
+
+
+Yuxuan Li and James McClelland. Representations and computations in transformers that support
+generalization on structured tasks. _Transactions on Machine Learning Research_, 2023.
+
+
+Opher Lieber, Barak Lenz, Hofit Bata, Gal Cohen, Jhonathan Osin, Itay Dalmedigos, Erez Safahi,
+Shaked Meirom, Yonatan Belinkov, Shai Shalev-Shwartz, et al. Jamba: A hybrid transformermamba language model. _arXiv preprint arXiv:2403.19887_, 2024.
+
+
+Junyu Luo, Weizhi Zhang, Ye Yuan, Yusheng Zhao, Junwei Yang, Yiyang Gu, Bohan Wu, Binqi
+Chen, Ziyue Qiao, Qingqing Long, et al. Large language model agent: A survey on methodology,
+applications and challenges. _arXiv preprint arXiv:2503.21460_, 2025.
+
+
+Eran Malach. Auto-regressive next-token predictors are universal learners. _arXiv_ _preprint_
+_arXiv:2309.06979_, 2023.
+
+
+Soroor Malekmohamadi Faradonbe, Faramarz Safi-Esfahani, and Morteza Karimian-Kelishadrokhi.
+A review on neural turing machine (ntm). _SN Computer Science_, 1(6):333, 2020.
+
+
+Sean McLeish, Arpit Bansal, Alex Stein, Neel Jain, John Kirchenbauer, Brian Bartoldson, Bhavya
+Kailkhura, Abhinav Bhatele, Jonas Geiping, Avi Schwarzschild, et al. Transformers can do
+arithmetic with the right embeddings. _Advances in Neural Information Processing Systems_, 37:
+108012–108041, 2024.
+
+
+William Merrill and Ashish Sabharwal. The expressive power of transformers with chain of thought.
+_arXiv preprint arXiv:2310.07923_, 2023.
+
+
+Rodrigo Nogueira, Zhiying Jiang, and Jimmy Lin. Investigating the limitations of transformers with
+simple arithmetic tasks. _arXiv preprint arXiv:2102.13019_, 2021.
+
+
+Maxwell Nye, Anders Johan Andreassen, Guy Gur-Ari, Henryk Michalewski, Jacob Austin, David
+Bieber, David Dohan, Aitor Lewkowycz, Maarten Bosma, David Luan, et al. Show your work:
+Scratchpads for intermediate computation with language models. 2021.
+
+
+Santiago Ontanon, Joshua Ainslie, Vaclav Cvicek, and Zachary Fisher. Making transformers solve
+compositional tasks. _arXiv preprint arXiv:2108.04378_, 2021.
+
+
+Jongho Park, Jaeseung Park, Zheyang Xiong, Nayoung Lee, Jaewoong Cho, Samet Oymak, Kangwook Lee, and Dimitris Papailiopoulos. Can mamba learn how to learn? a comparative study on
+in-context learning tasks. _arXiv preprint arXiv:2402.04248_, 2024.
+
+
+Shishir G Patil, Huanzhi Mao, Fanjia Yan, Charlie Cheng-Jie Ji, Vishnu Suresh, Ion Stoica, and
+Joseph E Gonzalez. The berkeley function calling leaderboard (bfcl): From tool use to agentic
+evaluation of large language models. In _International Conference on Machine Learning_ .
+
+
+13
+
+
+Haohao Qu, Liangbo Ning, Rui An, Wenqi Fan, Tyler Derr, Hui Liu, Xin Xu, and Qing Li. A survey
+of mamba. _arXiv preprint arXiv:2408.01129_, 2024.
+
+
+Ricardo Buitrago Ruiz and Albert Gu. Understanding and improving length generalization in recurrent models. _arXiv preprint arXiv:2507.02782_, 2025.
+
+
+Anian Ruoss, Gr´egoire Del´etang, Tim Genewein, Jordi Grau-Moya, R´obert Csord´as, Mehdi Bennani, Shane Legg, and Joel Veness. Randomized positional encodings boost length generalization
+of transformers. _arXiv preprint arXiv:2305.16843_, 2023.
+
+
+Parshin Shojaee, Iman Mirzadeh, Keivan Alizadeh, Maxwell Horton, Samy Bengio, and Mehrdad
+Farajtabar. The illusion of thinking: Understanding the strengths and limitations of reasoning
+models via the lens of problem complexity. _arXiv preprint arXiv:2506.06941_, 2025.
+
+
+Yutao Sun, Li Dong, Shaohan Huang, Shuming Ma, Yuqing Xia, Jilong Xue, Jianyong Wang, and
+Furu Wei. Retentive network: A successor to transformer for large language models. _arXiv_
+_preprint arXiv:2307.08621_, 2023.
+
+
+Shubham Toshniwal, Wei Du, Ivan Moshkov, Branislav Kisacanin, Alexan Ayrapetyan, and Igor
+Gitman. Openmathinstruct-2: Accelerating ai for math with massive open-source instruction
+data. _arXiv preprint arXiv:2410.01560_, 2024a.
+
+
+Shubham Toshniwal, Ivan Moshkov, Sean Narenthiran, Daria Gitman, Fei Jia, and Igor Gitman.
+Openmathinstruct-1: A 1.8 million math instruction tuning dataset. _Advances in Neural Informa-_
+_tion Processing Systems_, 37:34737–34774, 2024b.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Roger Waleffe, Wonmin Byeon, Duncan Riach, Brandon Norick, Vijay Korthikanti, Tri Dao, Albert
+Gu, Ali Hatamizadeh, Sudhakar Singh, Deepak Narayanan, et al. An empirical study of mambabased language models. _arXiv preprint arXiv:2406.07887_, 2024.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_
+_neural information processing systems_, 35:24824–24837, 2022.
+
+
+Noam Wies, Yoav Levine, and Amnon Shashua. Sub-task decomposition enables learning in sequence to sequence tasks. _arXiv preprint arXiv:2204.02892_, 2022.
+
+
+John Yang, Carlos E Jimenez, Alexander Wettig, Kilian Lieret, Shunyu Yao, Karthik R Narasimhan,
+and Ofir Press. SWE-agent: Agent-computer interfaces enable automated software engineering.
+In _The Thirty-eighth Annual Conference on Neural Information Processing Systems_, 2024a. URL
+[https://arxiv.org/abs/2405.15793.](https://arxiv.org/abs/2405.15793)
+
+
+John Yang, Kilian Leret, Carlos E Jimenez, Alexander Wettig, Kabir Khandpur, Yanzhe Zhang,
+Binyuan Hui, Ofir Press, Ludwig Schmidt, and Diyi Yang. Swe-smith: Scaling data for software
+engineering agents. _arXiv preprint arXiv:2504.21798_, 2025.
+
+
+Songlin Yang, Jan Kautz, and Ali Hatamizadeh. Gated delta networks: Improving mamba2 with
+delta rule. _arXiv preprint arXiv:2412.06464_, 2024b.
+
+
+Songlin Yang, Bailin Wang, Yu Zhang, Yikang Shen, and Yoon Kim. Parallelizing linear transformers with the delta rule over sequence length. _Advances in neural information processing systems_,
+37:115491–115522, 2024c.
+
+
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, and Yuan Cao.
+React: Synergizing reasoning and acting in language models. In _International_ _Conference_ _on_
+_Learning Representations (ICLR)_, 2023.
+
+
+Asaf Yehudai, Lilach Eden, Alan Li, Guy Uziel, Yilun Zhao, Roy Bar-Haim, Arman Cohan,
+and Michal Shmueli-Scheuer. Survey on evaluation of llm-based agents. _arXiv_ _preprint_
+_arXiv:2503.16416_, 2025.
+
+
+14
+
+
+Xiang Zhang, Junbo Zhao, and Yann LeCun. Character-level convolutional networks for text classification. _Advances in neural information processing systems_, 28, 2015.
+
+
+Hattie Zhou, Arwen Bradley, Etai Littwin, Noam Razin, Omid Saremi, Josh Susskind, Samy Bengio,
+and Preetum Nakkiran. What algorithms can transformers learn? a study in length generalization.
+_arXiv preprint arXiv:2310.16028_, 2023.
+
+
+Yongchao Zhou, Uri Alon, Xinyun Chen, Xuezhi Wang, Rishabh Agarwal, and Denny Zhou. Transformers can achieve length generalization but not robustly. _arXiv_ _preprint_ _arXiv:2402.09371_,
+2024.
+
+
+A MORE DEFINITIONS
+
+
+Here we give a more complete and formal definition for models with tool-use. We start by defining
+a tool-use _oracle_, which will receive tool-use commands and will return an observation that corresponds to the execution of the command. This oracle will be stateful, meaning that its responses can
+vary depending on the _memory_ of the oracle, which can be updated based on the commands it receives [11] . Let _M_ be some set which will correspond to the set of memories of the oracle. We denote
+by _Mt_ _∈M_ the memory of the oracle after receiving _t_ commands, and let _M_ 0 be the initial memory
+of the oracle. Importantly, we let the initial memory of the oracle depend on the input (e.g., the input
+can be stored in the memory of the oracle). For some memory _Mt_ _∈M_, we define _OMt_ : Σ _[∗]_ _→_ Σ _[∗]_
+to be the mapping from tool calls to observations, given memory _Mt_ .
+
+
+We augment the dictionary with additional tokens: [TOOL] _,_ [ _\_ TOOL] _,_ [OBS] _,_ [ _\_ OBS] _,_
+
+[THINK] _,_ [ _\_ THINK] _∈_ Σ. At any point in the generation, the model _h_ can issue a call to a tool
+by generating a sequence of the form [TOOL] _,_ _**z**_ _,_ [ _\_ TOOL], for some _**z**_ _∈_ Σ _[∗]_ which encodes the
+tool command. The command _**z**_ is passed to the tool oracle, and the resulting observation that is
+then appended to the context of the model, with the format: [OBS] _, OMt_ ( _**z**_ ) _,_ [ _\_ OBS]. The model
+can also generate thoughts/reasoning, generated as a sequence [THINK] _,_ _**z**_ _,_ [ _\_ THINK]. All other
+tokens (tokens that are not tool-commands, observations or thinking tokens) are considered output
+tokens, and are appended to the output stream.
+
+
+In the CoT-only setting, the model is only allowed to use thinking and output tokens. In the singleturn setting, the model can issue a single tool command, and can start generating the output after
+receiving the observation from the command (but can think before, after and during the output
+generation). In the interactive setting, a model can issue a tool call at any point in the generation,
+possibly interleaved with output tokens and tool commands. When evaluating the output, we ignore
+all tool commands, observations and thoughts and only consider the output stream at the end of
+generation.
+
+
+B PROOFS
+
+
+B.1 PROOF OF THEOREM 2.1
+
+
+Before we introduce the complete proof of the theorem, we prove a simple version of the Theorem
+for the case where the output rule of the GSSM is deterministic. This proof is simpler than the more
+general stochastic setting, and captures the key principles for this result.
+
+
+_Proof of Theorem 2.1 for deterministic GSSMs._ Let _S_ be the state space of _h_ . By definition, there
+exists some _n_ 0 such that for all _n_ _≥_ _n_ 0 it holds that supp _α_ ( _f_ ( _Dn_ )) _>_ _|S|_ . Now, fix some _n_ _≥_ _n_ 0,
+and let _A ⊆_ Σ _[∗]_ be all the possible outputs of _h_ . Note that the output is determined by the state of _h_
+before the output tokens are generated. Therefore, _|A| ≤|S| <_ supp _α_ ( _f_ ( _Dn_ )) and so we have
+
+
+Pr Pr _[∈]_ _[A]_ [] =] _[ f]_ [(] _[D][n]_ [)(] _[A]_ [)] _[ < α]_
+_**x**_ _∼Dn_ [[] _[f]_ [(] _**[x]**_ [)] _[ ∈]_ _[A]_ [] =] _**y**_ _∼f_ ( _Dn_ ) [[] _**[y]**_
+
+
+11For example, the oracle can receive a command for updating the content of a file on disk, which will affect
+its memory and hence future requests for reading the contents of the changed file.
+
+
+15
+
+
+Finally, we have
+
+Pr
+_**x**_ _∼Dn_ [[] _[f]_ [(] _**[x]**_ [) =] _[ h]_ [(] _**[x]**_ [)] = Pr [] _[f]_ [(] _**[x]**_ [) =] _[ h]_ [(] _**[x]**_ [)] _[|][f]_ [(] _**[x]**_ [)] _[ ∈]_ _[A]_ [] Pr [] _[f]_ [(] _**[x]**_ [)] _[ ∈]_ _[A]_ []]
+
+
++ Pr [ _f_ ( _**x**_ ) = _h_ ( _**x**_ ) _|f_ ( _**x**_ ) _∈/_ _A_ ]
+
+ - ��  =0
+
+
+Pr [ _f_ ( _**x**_ ) _∈/_ _A_ ] _≤Dn_ ( _A_ ) _< α_
+
+
+and so err _n_ ( _h_ ) _≥_ 1 _−_ _α_ .
+
+
+We now show the proof of the theorem for the general (stochastic) setting:
+
+
+_Proof of Theorem 2.1._ Let _S_ be the state space of _h_, and we assume that _h_ operates either in the
+CoT-only or the single-turn setting. Denote by _U_ ( _**x**_ ) the state of the model before generating the
+first output token. The model _h_ can generate thinking tokens and/or a single tool command before
+generating the first output token, and therefore _U_ ( _**x**_ ) is a random variable that depends on _**x**_ and
+the randomness of _h_ . [12] Let _R_ ( _s_ ) be the distribution of _outputs_ (i.e. values of the output stream)
+generated by the model _h_ if it is at state _s_ before generating the first output token. Treating _h_ [(out)] ( _**x**_ )
+as a random variable over outputs, we note that it depends only on the state after parsing _**x**_, and
+therefore _h_ [(out)] ( _**x**_ ) = _R_ ( _U_ ( _**x**_ )). Additionally, we denote the conditional distribution over outputs
+induced by _h_ [(out)] with _p_ ( _**y**_ _|_ _**x**_ ). Again, since the future generation of the model depends only on the
+state, we have _p_ ( _**y**_ _|_ _**x**_ ) = _p_ ( _**y**_ _|U_ ( _**x**_ )).
+
+
+Now, by definition, there exists some _n_ 0 such that for all _n ≥_ _n_ 0 it holds that supp _α_ ( _f_ ( _Dn_ )) _> |S|_ .
+Fix some _n_ _≥_ _n_ 0. Fix some _s_ _∈S_ . Let _**y**_ _s_ be an output with maximal probability under the
+distribution _Dn_, conditioned on the event that _U_ ( _**x**_ ) = _s_ :
+_**y**_ _s_ = arg max Pr
+_**y**_ _**x**_ _∼Dn_ [[] _[f]_ [(] _**[x]**_ [) =] _**[ y]**_ _[|][U]_ [(] _**[x]**_ [) =] _[ s]_ []]
+
+Denote by _A_ the set of maximal probability outputs _A_ = _{_ _**y**_ _s_ : _s_ _∈S}_ . Note that _|A|_ _≤|S|_ _<_
+supp _α_ ( _f_ ( _Dn_ )) and so we have
+Pr Pr _[∈]_ _[A]_ [] =] _[ f]_ [(] _[D][n]_ [)(] _[A]_ [)] _[ < α]_
+_**x**_ _∼Dn_ [[] _[f]_ [(] _**[x]**_ [)] _[ ∈]_ _[A]_ [] =] _**y**_ _∼f_ ( _Dn_ ) [[] _**[y]**_
+
+
+Observe that:
+
+       Pr[ _f_ ( _**x**_ ) = _h_ ( _**x**_ ) _|U_ ( _**x**_ ) = _s_ ] = E[1 _h_ ( _**x**_ )= _**y**_ _·_ 1 _f_ ( _**x**_ )= _**y**_ _|U_ ( _**x**_ ) = _s_ ]
+
+_**y**_ _∈Yn_
+
+
+       = E[1 _R_ ( _U_ ( _**x**_ ))= _**y**_ _·_ 1 _f_ ( _**x**_ )= _**y**_ _|U_ ( _**x**_ ) = _s_ ]
+
+_**y**_ _∈Yn_
+
+
+       = E[1 _R_ ( _s_ )= _**y**_ _·_ 1 _f_ ( _**x**_ )= _**y**_ _|U_ ( _**x**_ ) = _s_ ]
+
+_**y**_ _∈Yn_
+
+=            - _p_ ( _**y**_ _|s_ ) _·_ Pr
+
+_**x**_ _∼Dn_ [[] _[f]_ [(] _**[x]**_ [) =] _**[ y]**_ _[|][U]_ [(] _**[x]**_ [) =] _[ s]_ []]
+_**y**_ _∈Yn_
+
+_≤_            - _p_ ( _**y**_ _|s_ ) _·_ Pr[ _f_ ( _**x**_ ) = _**y**_ _s|U_ ( _**x**_ ) = _s_ ]
+
+
+_**y**_ _∈Yn_
+
+_≤_ Pr[ _f_ ( _**x**_ ) = _**y**_ _s|U_ ( _**x**_ ) = _s_ ]
+
+
+Where in the 4th equality we use the fact that the variables are independent. Therefore, we have:
+
+Pr   - Pr[ _f_ ( _**x**_ ) = _h_ ( _**x**_ ) _|U_ ( _**x**_ ) = _s_ ] Pr[ _U_ ( _**x**_ ) = _s_ ]
+_**x**_ _∼Dn_ [[] _[f]_ [(] _**[x]**_ [) =] _[ h]_ [(] _**[x]**_ [)] =]
+
+_s∈S_
+
+_≤_       - Pr[ _f_ ( _**x**_ ) = _**y**_ _s|U_ ( _**x**_ ) = _s_ ] Pr[ _U_ ( _**x**_ ) = _s_ ]
+
+
+_s∈S_
+
+_≤_       - Pr[ _f_ ( _**x**_ ) _∈_ _A|U_ ( _**x**_ ) = _s_ ] Pr[ _U_ ( _**x**_ ) = _s_ ] = Pr[ _f_ ( _**x**_ ) _∈_ _A_ ] _< α_
+
+
+_s∈S_
+
+and so err _n_ ( _h_ ) _≥_ 1 _−_ _α_ .
+
+12We assume the oracle (e.g., the environment) is deterministic, but we can be easily extend this result to
+capture a stochastic oracle.
+
+
+16
+
+
+_Proof of Theorem 2.2._ First, let us define the oracle _O_ . The memory of the oracle at iteration _t_
+holds a sequence of tokens _**m**_ _t_ _∈_ Σ _[∗]_, and additionally some index _it_ _∈_ N. At first iteration, we set
+_**m**_ 0 = _**x**_ and _i_ 0 = 0. The oracle _O_ accepts the following commands:
+
+
+    - read: outputs the _it_ -th token in _mt_ . If _it_ _> |_ _**m**_ _t|_, output [EOS].
+
+
+    - write _σ_ : updates the _it_ -th token of _mt_ to be _σ_ .
+
+
+    - move ~~l~~ eft, move right: adds/subtracts 1 from _it_ .
+
+
+Next, we describe the training distributions _Pn_ . Since _f_ is tractable, there exists some Turing
+machine _T_ that computes _f_ . By definition, the machine halts for every input, and we can assume w.l.o.g. that it halts when the head is at position 0. Let _Q_ be the (finite) set of states of
+_T_, and let _q_ 0 be the initial state. We assume the dictionary Σ contains the following symbols:
+_{_ 0 _,_ 1 _,_ [STATE] _,_ [ _\_ STATE] _}_ _∈_ Σ. For each state _q_ _∈_ _Q_, we define the encoding of the state
+enc( _q_ ) = [STATE] _**z**_ _q_ [ _\_ STATE], where _**z**_ _q_ _∈{_ 0 _,_ 1 _}_ [log(] _[|][Q][|]_ [)] is a binary encoding of the state. Then,
+for some input _**x**_ _∼Dn_, we construct a CoT of _**x**_, denoted by _F_ ( _**x**_ ), that will capture the “trace” of
+the machine _T_ :
+
+
+    - The sequence _F_ ( _**x**_ ) begins with: [THINK]enc( _q_ 0)[ _\_ THINK][TOOL]read[ _\_ TOOL].
+
+
+    - In each step of the Turing machine processing _**x**_, we add to _F_ ( _**x**_ ) the sequence:
+
+
+[THINK]enc( _q_ )[ _\_ THINK][TOOL]read[ _\_ TOOL]
+
+[OBS] _σ_ [ _\_ OBS][TOOL]write _σ_ _[′]_ [ _\_ TOOL]
+
+
+where _q_ is the current state, and _σ_ _[′]_ is the next symbol to write when reading _σ_ in state _q_ .
+Additionally, we add [TOOL]move ~~l~~ eft[ _\_ TOOL] if the machine moves the head to the
+left, and otherwise [TOOL]move ~~r~~ ight[ _\_ TOOL].
+
+
+    - When the machine reaches a halting state, for every _i_ = 1 _. . . |f_ ( _**x**_ ) _|_ we add:
+
+
+[TOOL]move ~~r~~ ight[ _\_ TOOL][TOOL]read[ _\_ TOOL][OBS] _f_ ( _**x**_ ) _i_ [OBS] _f_ ( _**x**_ ) _i_
+
+
+Note that since the machine computes _f_ ( _**x**_ ) it will be written on its tape when it reaches a valid
+state. Therefore, it is easy to verify that the memory of the oracle _O_ at step _t_ will hold the state
+of the tape and the correct position of the head, and that all the tool observations will be correct.
+Finally, _**x**_ _∼Dn_ and _F_ ( _**x**_ ) together define the distribution _Pn_ for all _n_, and it is indeed a training
+distribution for the task (since the non-tool tokens after the [ANS] token correspond to the correct
+output _f_ ( _**x**_ )).
+
+
+Next, we will show that a simple tool-SSM algorithm can achieve length generalization on this task.
+Let _{_ ( _**x**_ 1 _, F_ ( _**x**_ 1)) _, . . .,_ ( _**x**_ _m, F_ ( _**x**_ _m_ ) _}_ be the set of examples observed by the algorithm. Let _A_ [�] be
+the set of all pairs of state encodings and symbols that appear together in _F_ ( _**x**_ _i_ ) in some _**x**_ _i_ :
+
+
+_A_ - := _{_ ( _q, σ_ ) : _∃i,_ [THINK]enc( _q_ )[ _\_ THINK][TOOL]read[ _\_ TOOL][OBS] _σ_ [ _\_ OBS] _∈_ _F_ ( _**x**_ _i_ ) _}_
+
+
+Note that for every ( _q, σ_ ) _∈_ _A_ - there is a single symbol _σ_ _[′]_ and a single command _**d**_ _∈_
+_{_ move ~~l~~ eft _,_ move ~~r~~ ight _}_ and a single state _q_ _[′]_ that follow ( _q, σ_ ) in the trace (corresponding
+to the operation of the Turing machine). Let _R_ be the function mapping ( _q, σ_ ) to ( _q_ _[′]_ _, σ_ _[′]_ _,_ _**d**_ ). Note
+that both _A_ [�] and _R_ can be encoded with fixed (finite) memory. Therefore, we define a GSSM _h_ - _A,R_
+that generates tokens as follows:
+
+
+    - Immediately after the input, generate: [THINK]enc( _q_ 0)[ _\_ THINK][TOOL]read[ _\_ TOOL].
+
+
+    - Following each response to a read command, generate:
+
+
+[THINK]enc( _q_ _[′]_ )[ _\_ THINK][TOOL]write _σ_ _[′]_ [ _\_ TOOL][TOOL] _**d**_ [ _\_ TOOL]
+
+
+where _q_ _[′]_ _, σ_ _[′]_ _,_ _**d**_ = _R_ ( _q, σ_ ), for the _σ_ returned by the tool oracle.
+
+
+17
+
+
+- When a halting state is reached, generate the sequence:
+
+
+[TOOL]move ~~r~~ ight[ _\_ TOOL][TOOL]read[ _\_ TOOL]
+
+
+and following the observation [OBS] _σ_ [ _\_ OBS], output _σ_ (if _σ_ = [EOS] we halt the generation).
+
+
+    - If at some point we observe a pair _q, σ_ _∈/_ _A_ [�], output [EOS].
+
+
+Denote by _A_ ( _**x**_ ) _⊆_ _Q ×_ Σ the set of state-symbol pairs observed by _T_ when processing _**x**_ . Its easy
+to verify that for every _**x**_ s.t. _A_ ( _**x**_ ) _∈_ _A_ [�], the GSSM _h_ - _A,R_ [will exactly recover] _[ F]_ [(] _**[x]**_ [)][.] [Therefore, the]
+following lemma suffices for proving the theorem:
+
+
+**Lemma** **B.1.** _Fix_ _some_ _ϵ, δ_ _∈_ (0 _,_ 1) _._ _There_ _exists_ _some_ _n_ 0 _s.t._ _with_ _sample_ _size_ _m_ =
+_n_ 0 _|Q| |_ Σ _|_ log( _|Q| |_ Σ _| /δ_ ) _/ϵ w.p._ _at least_ 1 _−_ _δ over sampling from P_ 1 _, . . ., Pn_ 0 _it holds that:_
+
+
+_∀n ≥_ _n_ 0 Pr
+_**x**_ _∼Dn_
+
+
+- _A_ ( _**x**_ ) _⊆_ _A_ [�] _>_ 1 _−_ _ϵ_
+
+
+_Proof._ For every pair of symbols _σ_ _∈_ Σ and state _q_ _∈_ _Q_, denote _pn_ ( _σ, q_ ) := Pr _**x**_ _∼Dn_ [( _q, σ_ ) _∈_
+_A_ ( _**x**_ )] the probability over sampling _**x**_ _∼Dn_ that the machine _T_ reads a symbol _σ_ while it is in
+state _q_, when processing _**x**_ . Let _M_ := _|Q| · |_ Σ _|_ . Denote:
+
+
+        -         _Aϵ_ = ( _q, σ_ ) _∈_ _Q ×_ Σ s _._ t _._ sup
+_n_ _[p][n]_ [(] _[q, σ]_ [)] _[ ≥]_ [2] _[ϵ/M]_
+
+
+Now, for every _q, σ_ _∈_ _Aϵ_, let _n_ 0( _q, σ_ ) be the minimal _n_ s.t. _pn_ ( _q, σ_ ) _≥_ _ϵ/M_ . Let _n_ 0 =
+max _{n_ 0( _q, σ_ ) _}_ ( _q,σ_ ) _∈Aϵ_ . Let _m_ = _[n]_ [0] _[M]_ [log(] _ϵ_ _[M/δ]_ [)], and we will sample _m_ _[′]_ = _m/n_ 0 = _[M]_ [log(] _ϵ_ _[M/δ]_ [)]
+
+
+_ϵ_ _[M/δ]_ [)], and we will sample _m_ _[′]_ = _m/n_ 0 = _[M]_ [log(] _ϵ_ _[M/δ]_ [)]
+
+
+_ϵ_ _ϵ_ _ϵ_
+
+examples from each of _D_ 1 _, . . ., Dn_ 0. Fix some ( _q, σ_ ) _∈_ _Aϵ_ .
+
+
+**Claim:** w.p. at least 1 _−_ _δ/M_ we have ( _q, σ_ ) _∈_ _A_ [�] .
+
+**Proof:** Note that _n_ 0( _q, σ_ ) _≤_ _n_ 0, and therefore we sample _m_ _[′]_ examples from _Dn_ 0( _q,σ_ ). Let _p_ :=
+Pr _**x**_ _∼Dn_ 0( _q,σ_ )[( _q, σ_ ) _∈_ _A_ ( _**x**_ )] and by definition _p_ _≥_ _ϵ/M_ . Therefore, for the _m_ _[′]_ samples we draw,
+the probability that we do not encounter ( _q, σ_ ) in any of the traces is at most (1 _−_ _p_ ) _[m][′]_ _≤_ (1 _−_
+_ϵ/M_ ) _[m][′]_ _≤_ exp( _−m_ _[′]_ _ϵ/M_ ) _≤_ _δ/M_ .
+
+
+From the above claim, using the union bound, we get that w.p. at least 1 _−_ _δ_ we have _Aϵ_ _⊆_ _A_ [�] .
+Assume this holds, and fix some _n_ _≥_ _n_ 0. For every ( _q, σ_ ) _∈_ _Q_ _×_ Σ _\_ _Aϵ_ it holds that
+Pr _**x**_ _∼Dn_ [( _q, σ_ ) _∈_ _A_ ( _**x**_ )] _≤_ _ϵ/M_ . From the union bound, the probability over _**x**_ _∼Dn_ that there
+exists some ( _q, σ_ ) _∈/_ _Aϵ_ _⊆_ _A_ [�] s.t. ( _q, ϵ_ ) _∈_ _A_ ( _**x**_ ) is at most _|Q ×_ Σ _\ Aϵ| ϵ/M_ _≤_ _ϵ_ . Therefore, the
+required follows.
+
+
+From the above lemma the proof of Theorem 2.2 follows.
+
+
+C ARCHITECTURE AND TRAINING DETAILS
+
+
+We train the following architectures for the synthetic experiments:
+
+
+    - **Mamba-130M** [(https://huggingface.co/state-spaces/](https://huggingface.co/state-spaces/mamba-130m-hf)
+[mamba-130m-hf):](https://huggingface.co/state-spaces/mamba-130m-hf) a selective state-space (SSM) language model. We use a 24-layer,
+1536-d intermediate size and 768-d model size configuration to match the Transformer
+baselines while retaining linear-time sequence modeling.
+
+
+    - **LSTM** : a multi-layer recurrent baseline sized to roughly comparable capacity (4 layers,
+hidden size 1536) to probe how classical RNNs fare on our trajectory-style tasks.
+
+
+    - **GRU** : a gated-recurrent baseline (4 layers, hidden size 1536) offering a stronger RNN
+comparator with fewer parameters per unit than LSTM.
+
+
+18
+
+
+- **Pythia** **(GPT-NeoX** **style)** [(https://huggingface.co/EleutherAI/](https://huggingface.co/EleutherAI/pythia-160m)
+[pythia-160m):](https://huggingface.co/EleutherAI/pythia-160m) a decoder-only Transformer from the Pythia scaling suite. We
+adopt a 24-layer, 1536-d intermediate size, 768-d model size and 8-head model variant
+with RoPE, roughly matching Mamba’s scale.
+
+    - **Mistral-style** **Transformer** [(https://huggingface.co/mistralai/](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+[Mistral-7B-v0.1):](https://huggingface.co/mistralai/Mistral-7B-v0.1) a modern decoder-only Transformer with sliding-window
+(512) sparse attention, utilizing RoPE. We use a scaled-down 8-layer, 1536-d intermediate
+size and 768-d model size.
+
+
+For the synthetic experiment, we perform hyper-parameter search over learning rate, batch size and
+weight decay. We choose learning ~~r~~ ate _∈{_ 0 _._ 00005 _,_ 0 _._ 0001 _,_ 0 _._ 0003 _,_ 0 _._ 0005 _,_ 0 _._ 001 _,_ 0 _._ 003 _,_ 0 _._ 005 _}_,
+batch ~~s~~ ize _∈{_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_, weight ~~d~~ ecay _∈{_ 0 _,_ 0 _._ 01 _}_ and fix the number training steps
+to be 2 _,_ 000. We run each experiment with 2 seeds, and report the accuracy of the best model. For
+Tower of Hanoi experiments, due to their sensitivity, we exceptionally used 10 seeds for Mamba
+and Pythia models and 3 seeds for other architectures. For the code fixing experiment, we finetune
+a pretrained Mamba-1.4b and Pythia-1.4b, both trained on The Pile (Gao et al., 2020), with learning
+rate 0 _._ 0001, weight decay 0 _._ 01, batch size 512 and 200 training steps. For all experiments, we use a
+single node with 8 H100 GPUs.
+
+
+D SYNTHETIC EXPERIMENTS DETAILS
+
+
+D.1 MEMORY TOOL DEFINITIONS
+
+
+As discussed in Section 3, we use either a pointer-based or a search-based memory tool to augment
+the memory of the model. We now describe how the model interacts with the memory tool, and
+how we differentiate between _thoughts_, _outputs_, _commands_ and _observations_ . We generally try to
+reduce the number of tokens by using dedicated command tokens, and differentiate between output,
+thoughts and observation tokens based on the context (instead of using open/closing tags).
+
+
+**Pointer-based** **Memory.** The commands for this memory are given as special tokens that the
+model can output, e.g. [pointer1 _._ read()] or [pointer2 _._ move ~~l~~ eft()]. A read command will be immediately followed by a single _observation_ token, that is the token read by the pointer at its current
+position. All other tokens (tokens that are not command tokens or observation tokens, which always immediately follow a read command) are either _thoughts_ or _outputs_ . We use a single token
+
+[ANS] that indicates the final answer of the model, where all tokens before the [ANS] token are
+considered _thoughts_ and all tokens after the [ANS] token are considered _outputs_ . Both _thoughts_ and
+_outputs_ are appended to the context memory, and the pointers can move beyond the input context,
+and start reading _thought_ or _output_ tokens that were previously generated by the model. _Commands_
+and _observations_ are discarded and are not appended to the external memory (but of course do affect
+the internal memory and representation of the model). The model can freely interleave commands,
+thoughts and outputs, and therefore the model can interact with the memory while producing the
+answers.
+
+
+**Search-based** **Memory.** This memory tool allows the model to search for a given pattern in the
+context. A search command is a sequence of tokens of the form: [COMMAND]find[VALUE] _**x**_,
+where _**x**_ is some sequence of tokens to search for. Following the search command, the model will
+receive a set of _observations_ of the form: [OBSERVATION] _**z**_ 1 _, . . .,_ _**z**_ _k_, where _**z**_ 1 _, . . .,_ _**z**_ _k_ are all the
+lines in the memory context that contain the string _**x**_ (similar to the operation of a grep command).
+As before, all other tokens are either _thoughts_ or _outputs_, and are appended to the memory and can
+be searched for in future iterations. In this case we take the output to be the last line generated by
+the model.
+
+
+D.2 LOGICAL REASONING TASK
+
+
+As described in Section 3, we generate a random logical computation graph with _k_ = 3 input nodes,
+where each intermediate node is a boolean expression over one or two variables or their negation.
+The graph is encoded as a python code given to the model as input. Illustration of the graph and the
+code are shown in Figure 4.
+
+
+19
+
+
+**Logical Graph**
+
+
+**Code Fixing**
+
+
+```
+v630 = True
+v872 = False
+v622 = True
+v191 = not v872
+v240 = v872 or v622
+v539 = v622 and not v191
+v539 = ?
+
+```
+
+
+Figure 4: Illustration of Logical Graph reasoning task and code fixing task. We generate random
+graphs that define logical function structure (top) or code dependencies (bottom), and synthetically
+generate problems according to these graph structures.
+
+
+D.3 TOOL-USE ALGORITHMS
+
+
+We describe the synthetically generated tool-use trajectories for solving the different tasks presented
+in Section 3.
+
+
+**Multi-Digit Addition.** We follow the standard long addition algorithm, summing one-digit from
+right to left while keeping the “carry” digit. The model uses pointer-based memory with two pointers, and performs the following steps:
+
+
+1. Move each pointer to the least significant digit of each summand, where the first pointer
+points to the digit of the first summand, and the second pointer to the second summand. To
+do this, we move the first pointer until we read the token +, and move the second pointer
+until we read the token =.
+
+
+2. Read one digit from each summand, compute the sum of the digits and the carry from
+previous iteration (if it exists), output the new sum and carry as _thoughts_, and move both
+pointers to the left. Stop each pointer if it reaches a non-digit token. If both pointers reached
+non-digit tokens, output [ANS] and move to the next step.
+
+
+3. At this step we have the sum written in reverse in memory, along with the carry digits from
+each iteration. To write the final output in reverse, we move the second pointer to the right
+until it reaches the [ANS] token, then start moving to the left, each iteration outputting the
+sum digit, until the pointer reaches the = token.
+
+
+**Multi-Digit** **Multiplication.** We follow the long multiplication algorithm for multiplying an _n_ digit number by a _k_ -digit number (for fixed _k_ ). We use a pointer-based memory with max( _k,_ 2)
+pointers. The algorithm executes the following steps:
+
+
+1. Move the first pointer to the least significant digit of the first operand, and the second
+pointer to the least significant digit of the second operand.
+
+
+2. Move the first pointer to the left, each time reading a digit and multiplying it with the digit
+of the second pointer. Add the result to the previous carry, and write it together with the
+new carry. If we reach the most significant digit of the first operand, move the first pointer
+back to the least significant digit, move the second pointer one position to the left, output a
++ sign and zeros as required (depending on which digit from the second operand we read).
+If the second pointer reached the _×_ sign, move to the next step.
+
+
+3. At this step we have a summation problem with _k_ summands, where the summands are
+written in reverse and also contain carry digits that we should ignore. We move each
+pointer to the least significant digit of its respective summand, read all digits, compute the
+
+
+20
+
+
+sum and the carry, and move each pointer to the right and skip carry digits. We continue
+until we reach the most significant digit of all summands, and then output an [ANS] token.
+
+
+4. Finally, we have the answer written in reverse with carry digits. We move the first pointer
+to the [ANS] token, then move it one token to the left and output the tokens read by the
+pointer, skipping carry digits.
+
+
+**Tower of Hanoi.** The Tower of Hanoi puzzle can be solved by a simple recursive algorithm. Let
+_n_ be the number of disks in the puzzle. The recursive algorithm involves three steps: (1) recursively
+moving the top _n −_ 1 disks from rod _A_ to rod _B_ ; (2) moving the largest disk from rod _A_ to rod _C_ ;
+and (3) recursively moving the _n_ _−_ 1 disks from rod _B_ to rod _C_ . Therefore, the puzzle can be solved
+with 2 _[n]_ _−_ 1 moves. This algorithm can also be stated iteratively:
+
+
+    - At the first step, the smallest disk is moved from rod _A_ to rod _B_ or _C_ depending on whether
+_n_ is even or odd, respectively.
+
+
+    - At the second and other even steps, the only legal move not involving the smallest disk is
+performed.
+
+
+    - At the third and other odd steps, the smallest disk is moved to the rod it was not on two
+turns ago.
+
+
+Our model uses the iterative algorithm described above to solve the puzzle. The model uses pointerbased memory with one pointer. At each step of the algorithm, the model outputs the next move and
+the subsequent state of the rods. Specifically, the model takes the following steps:
+
+
+1. The pointer traverses rod _A_ from its base, reading disks one by one and outputting _B_ and
+_C_ alternatively. This step computes the parity of _n_, which is crucial for the first move.
+After reaching the end of rod _A_, the pointer rewinds to the beginning of the current state
+representation. The model is now ready to predict the next move.
+
+2. At this step, the model outputs the next move, e.g., (5) _AC_ $ [13] (meaning disk (5) is moved
+from rod _A_ to rod _C_ ). Next, the model outputs the new state of the puzzle and goes to
+the step described below. In case that all disks are on rod _C_, no move is predicted and the
+output ends at this step.
+
+
+3. The model uses the pointer to output the new state. The pointer starts by reading the
+previous state one disk at a time, outputting the new state. Note that the new state differs
+from the previous state only by the position of a single disk. After processing the previous
+state, the pointer is then advanced past the outputted move (e.g., (5)AC$) to position itself
+at the beginning of the newly generated state. The model then goes back to the move
+prediction step above.
+
+
+We also trained our models using the recursive algorithm; however, their length generalization performance was weaker. Details of this experiment are presented in Appendix D.4.
+
+
+**Logical** **Reasoning.** We use a search-based memory tool to solve the logical reasoning problem
+detailed in Appendix D.2. We try to resolve variables’ truth value recursively using depth-firstsearch (DFS). Namely, starting with the output variable, we recursively search for the values of
+variables in a given expression. If we find a variable with a boolean (True/False) value, we update
+the expression, replacing the variable’s name by its value. If we find a child variable that is still not
+resolved, we search for the variables in the child’s expression, while also logging the value of the
+parent variable (that we can use for “backtracking”). When we are done resolving a variable’s value,
+we backtrack to its parent, trying to resolve the parent’s value. When we resolved the output nodes
+value, we finish the generation.
+
+
+D.4 TOWER OF HANOI EXPERIMENT DETAILS
+
+
+In contrast to other tasks presented in this paper, the solution length for the Tower of Hanoi puzzle
+scales exponentially with the number of disks. In particular, solving the puzzle for 9 and 12 disks
+
+
+13$ is used after each move as a delimiter.
+
+
+21
+
+
+Table 2: Experimental results for the Tower of Hanoi puzzle solved recursively by different models.
+
+
+Model Hanoi (recursive)
+Mamba 7 _→_ 8 (100%)
+LSTM **7** _→_ **9 (83%)**
+GRU 7 _→_ 8 (100%)
+Pythia 7 _→_ 7 (100%)
+Mistral 7 _→_ 8 (87%)
+
+
+would require over 42,000 and 385,000 tokens, respectively. A solution is considered correct only if
+all of its tokens are correctly generated. As a result, even if a model has 99% token accuracy, it may
+not show any length generalization capability. In agreement with this intuition, we found that Hanoi
+length generalization performance is very sensitive to the random seed. Hence, we used 10 seeds for
+Mamba and Pythia models and 3 seeds for the rest of the models. In our experiments with Mamba
+models, we noticed that token accuracy is always high (e.g., _≥_ 99 _._ 75% for 12 disks), however, the
+actual accuracy varies based on the seed. The performance of our 10 seeds (all trained on puzzles
+with up to 8 disks) is shown in Figure 5. We note that Pythia did not show any length generalization,
+in particular, even the token accuracy did not exceed 93%.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+7 8 9 10 11 12
+Number of Disks
+
+
+Figure 5: Performance of different seeds when training a Mamba model on Tower of Hanoi puzzles
+with up to 8 disks.
+
+
+As discussed in Appendix D.3, the Tower of Hanoi puzzle can also be solved recursively. We
+also tried the recursive variant of the algorithm, however, its length generalize performance was
+weaker than the iterative algorithm. Here, we include the implementation and results of the recursive
+implementation.
+
+
+**Recursive** **Implementation.** For a puzzle with _n_ disks, the model outputs the list of moves for
+puzzles of size 1, 2, ..., _n_ sequentially and uses the move list generated for puzzle of size _i −_ 1
+to output the list of moves for puzzle of size _i_ using the recursive pattern. The model uses pointerbased memory with two pointers. While outputting the list of moves for the puzzle of size _i_, the first
+pointer points to the _i_ th disk (largest disk moved in the moves of the puzzle of size _i_ ). The second
+pointer is used for implementing the recursive pattern and iterating the moves of the puzzle of size
+_i −_ 1 while generating the moves for size _i_ . More precisely, the input gives the list of disks (e.g.,
+(7)(5)(2)) and the model executes the following steps:
+
+
+1. Both pointers are moved to the smallest (top) disk, and the model outputs the first move,
+i.e., moving the top disk from rod _A_ to rod _C_ . This solves the problem for a single disk.
+First pointer moves one step back (now pointing to the second smallest disk) and the second
+pointer advances, pointing to the beginning of the first move. The model is now ready to
+output the moves for solving the puzzle for two disks.
+
+
+2. At this step, the model copies the last list of moves, swapping rod labels _B_ and _C_ . To
+achieve the latter, the second pointer traverses the last list of moves and the model reads
+
+
+22
+
+
+1.0
+
+
+0.8
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||Mamba<br>|Mamba<br>|
+||Mamba<br>|Mamba<br>|
+|||~~LSTM~~<br>GRU<br>Pythia<br>|
+||Mistral|Mistral|
+||||
+||||
+
+
+Sequence length
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|Mamba<br>LSTM|Mamba<br>LSTM|||
+|Mamba<br>LSTM|Mamba<br>LSTM|Mamba<br>LSTM|Mamba<br>LSTM|
+|GRU<br>Pythia<br>~~Mistral~~||||
+
+
+6 7 8 9
+# of Discs
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+|||Mamba<br>|Mamba<br>||
+|||amba<br>|amba<br>|amba<br>|
+||G<br>P<br>|~~STM~~<br>RU<br>ythia<br>|||
+|||istral|istral||
+||||||
+||||||
+
+
+Sequence length
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|Mamba<br>LSTM<br>~~GRU~~||||
+|Pythia<br>Mistral||||
+
+
+10 ~~[1]~~ 10 ~~[2]~~ 10 ~~[3]~~
+
+Sequence length
+
+
+Figure 6: We train various transformer (Pythia, Mistral) and SSM (Mamba, LSTM, GRU) models
+on Multi-Digit Multiplication, Logical Graph and Tower of Hanoi tasks, with CoT + pointer-based
+memory tool. **Multi-Digit Multiplication:** We train models on multiplying a number of up to 10digit by a 1-digit number or 2-digit number, using the pointer-based memory tool. **Logical Graph:**
+We train models to perform a logical graph reasoning problem using search-based memory tool,
+training on graphs with up to 10 variables. **Tower of Hanoi:** We train models to solve the _Tower of_
+_Hanoi_ (recursive implementation) reasoning problem using search-based memory tool, training on
+problems with up to 7 disks. The first point in each plot is the maximal problem size seen during
+training (i.e., all other points are out-of-distribution extrapolation).
+
+
+and outputs one token at a time (performing the swap if needed). This step corresponds
+to the first step of the recursive algorithm. At the end of copying, the second pointer is
+rewound to point to the beginning of the list of moves again.
+
+
+3. Next, the middle move, i.e., moving the largest disk ( _i_ th disk while outputting the moves
+of size _i_ ) is performed. This disk is identified by the value of the first pointer and the
+move is always from rod _A_ to _C_ . This step corresponds to the second step of the recursive
+algorithm.
+
+
+4. Similar to step 2, the model copies the list of moves again, swapping _B_ and _A_ . The second
+pointer is used again for iterating the list of moves and copying. This step corresponds to
+the third step of the recursive algorithm. After the copying is finished, the second pointer
+advances and points to the beginning of the newly constructed move list. The first pointer
+goes one step back so that it points to the next larger disk. This completes the generation for
+size _i_, and the process iterates by returning to step 2 for size _i_ +1. The generation terminates
+if there is no disk remaining for the first pointer, indicating that the lists of moves have been
+generated for all puzzle sizes 1 _, . . ., n_ . [14]
+
+
+The performance of the recursive solution for the Tower of Hanoi puzzle is reported in Table 2.
+
+
+D.5 SSMS AND TRANSFORMER BASELINES
+
+
+In Figure 6 we report accuracies of our baseline models on the Multi-Digit Multiplication, logical
+reasoning and Tower of Hanoi tasks. We train each model on the same trajectories, using CoT and
+tool use. We perform hyperparameter optimization for each model as described in C. Our results
+
+
+14We note that we use a delimiter (e.g., #) between the list of moves for different number of disks so that
+they become separable.
+
+
+23
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|train_len=5|
+|---|---|---|
+|||train_len=10<br>train_len=20|
+||||
+||||
+||||
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|train_len=5<br>|train_len=5<br>|
+|~~train_len=10~~<br>train_len=20||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+|train_len=5<br>|train_len=5<br>|train_len=5<br>|
+|~~train_len=1~~<br>train_len=20|||
+
+
+|Col1|Col2|train_len=5|
+|---|---|---|
+|||train_len=10<br>train_len=20|
+||||
+||||
+||||
+||||
+
+
+10 [1] 10 [2] 10 [3]
+
+Sequence Length
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+||train_len=5<br>|
+||train_len=10<br>train_len=20|
+|||
+|||
+
+
+10 [1] 10 [2] 10 [3]
+
+Sequence Length
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+|train_len=5<br>|train_len=5<br>|train_len=5<br>|
+|~~train_len=1~~<br>train_len=20|||
+
+
+10 [1] 10 [2] 10 [3]
+
+Sequence Length
+
+
+Sequence Length
+
+
+Sequence Length
+
+
+Sequence Length
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Figure 7: Multiplication generalization performance for Mamba across different training configurations. Each subplot shows accuracy as a function of sequence length for a specific maximum
+training steps value. Different colored lines represent different training sequence lengths, with error
+envelope indicating median absolute discrepancy across 5 runs.
+
+
+generally point to a length generalization advantage for state space models over baseline transformer
+models.
+
+
+D.6 ABLATING TRAINING STEPS AND DIGIT LENGTH FOR MULTIPLICATION
+
+
+In Figure 7 we investigate the impact of different training configurations on generalization for multidigit multiplication, varying the training budget (250, 500, or 800 steps) and the maximum number
+of digits seen during training for the first operand (5, 10, or 20). For this experiment, the learning rate
+was set to 0.003 based on validation. Results indicate that increasing the maximum number of digits
+shown during training for the first operand improved stablity of OOD generalization consistently,
+with results improving with more training steps. In particular, training with up to 20 digits improves
+generalization stability perfectly up to the maximum digit size tested (1000 digits). However, even
+training with up to 5 and 10 digits show progressive improvements as the number of training steps
+increases.
+
+
+D.7 ADDITIONAL ABLATIONS
+
+
+We run the following ablations on the multi-digit addition task:
+
+
+1. No-CoT: we train the model to directly output the final answer, without any CoT or tooluse.
+
+2. No-CoT, reversed answer: we train the model to directly output the final answer in reverse
+(reverse format was shown to improve length generalization in certain settings, e.g. Zhou
+et al. (2024)).
+
+3. No Tool-Use: The model is trained on similar trajectories as in the main experiment, but
+now needs to predict the output of the memory tool instead of receiving these as observations. Namely, the trajectory is used as CoT data.
+
+4. Single-Turn Tool-Use: we train the model with a “calculator”, where the model needs to
+generate a single addition command following the input (i.e., given an input _a_ + _b_ it needs
+to generate add( _a, b_ )).
+
+
+24
+
+
+We train the Mamba model in all settings with extensive hyper-parameter tuning on 5-digit addition. Experiments 1,2 and 4 results in perfect accuracy on 5-digit addition, but little to no length
+generalization. Experiment 3 results in poor performance even in-distribution.
+
+
+D.8 TASK MIXTURE
+
+
+In Figure 8 each panel shows accuracy as a function of test length for various training budgets (250,
+500, or 800 steps). The curves correspond to different mixing weights, where _w_ = 0 denotes the
+baseline trained only on the main task and higher values indicate a normalized fraction of auxiliary
+samples. The error bars indicate variability across random seeds.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Number of Digits
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Number of Digits
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Number of Digits
+
+
+Figure 8: Multiplication task accuracy under co-training with varying training budgets (see Sec 3.1).
+
+
+The accuracy plots for the main task (multiplication) in the task mixture experiment were presented
+in section 3.1. For completeness, we show the auxiliary task accuracy in Figure 9.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Number of Digits
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|
+|---|---|
+|w=0.0<br>~~w=0.33~~<br>w=0.5<br>~~w=0.6~~||
+|||
+|||
+
+
+Number of Digits
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Addition / Max|Steps: 800|
+|---|---|
+|||
+|w=0.0<br>~~w=0.33~~<br>w=0.5<br>~~w=0.6~~||
+|||
+|||
+
+
+Number of Digits
+
+
+Figure 9: Addition task accuracy under co-training with varying training budgets (250, 500, 800
+steps). Curves show different mixing weights. See (3.1).
+
+
+D.9 COMPARISON WITH HYBRID-MAMBA AND RMT
+
+
+In addition to comparing Mamba against Transformers, we also evaluate two alternative architectures on the multi-digit addition task with CoT and pointer-based memory tool: Hybrid-Mamba and
+the Recurrent Memory Transformer (RMT) (Bulatov et al., 2022).
+
+
+**Hybrid-Mamba.** The Hybrid-Mamba model follows the Jamba architecture Lieber et al. (2024),
+which interleaves Mamba SSM layers with periodic Transformer attention layers. In our configuration, we use a 24-layer model with hidden size 768 and intermediate size 2048, where every 4th
+layer is a standard Transformer attention layer (with 12 attention heads and 4 key-value heads) and
+the remaining 20 layers are Mamba SSM layers (with state size 16, convolution kernel size 4, and
+expansion factor 2).
+
+
+25
+
+
+Figure 10: Pass rate and median sequence length for SWE-agent-LM-32B on the code fixing task.
+
+
+**Recurrent** **Memory** **Transformer** **(RMT).** The RMT model (Bulatov et al., 2022) augments a
+GPT-NeoX Transformer (24 layers, hidden size 768, 8 attention heads, intermediate size 1536) with
+learnable memory tokens and segment-level recurrence. The input is divided into segments of fixed
+length, and each segment is processed with the layout: [read ~~m~~ em _|_ content _|_ write ~~m~~ em]. The
+read-memory tokens are prepended to each segment and attend bidirectionally among themselves;
+content tokens attend causally to themselves and fully to the read-memory tokens; write-memory
+tokens attend fully to both read-memory and content tokens, and causally among themselves. The
+write-memory hidden states from segment _k_ become the read-memory inputs for segment _k_ + 1,
+enabling information to flow across segments through a fixed-size memory bottleneck. We use 10
+memory tokens and experiment with a segment length of 16 and 64.
+
+
+**Experimental** **Setup.** We train all three model types (Mamba, Hybrid-Mamba, and RMT)
+on the addition task with CoT and pointer-based memory tool, training on up to 5-digit
+addition and evaluating on longer sequences. We perform a hyperparameter sweep over
+learning rate _∈_ _{_ 0 _._ 00005 _,_ 0 _._ 0001 _,_ 0 _._ 0003 _,_ 0 _._ 0005 _,_ 0 _._ 001 _,_ 0 _._ 003 _,_ 0 _._ 005 _}_, effective batch size _∈_
+_{_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_, and weight decay _∈{_ 0 _,_ 0 _._ 01 _}_, with a fixed budget of 2,000 training steps.
+
+
+**Results.** We find that the Hybrid-Mamba model performs similarly to Mamba, achieving perfect
+length generalization on the addition task, extrapolating from 5-digit to 1,000 digit addition. This
+suggests that the periodic attention layers do not hurt the length generalization capability of the
+SSM backbone. In contrast, while the RMT model learns the task in-distribution (achieving 100%
+accuracy on 5-digit addition), it does not achieve meaningful length generalization.
+
+
+E CODE FIXING AGENT SETUP
+
+
+We use the same system prompt and input prompt as in mini-SWE-agent (Yang et al., 2024a) from:
+[https://github.com/SWE-agent/mini-swe-agent.](https://github.com/SWE-agent/mini-swe-agent) We instruct the model to solve
+the bug in main.py, and explain how the bug should be solved. We modify the original prompt
+of mini-SWE-agent to instruct the model interactively debug the code and generate a fix for up to 3
+files at a time.
+
+
+_Please solve this issue: Fix the bug in main.py. Make sure to pass variable v10 too_
+_foo()_ _and_ _all_ _other_ _relevant_ _functions._ _Pass_ _v10_ _to_ _ONLY_ _the_ _relevant_ _functions,_
+_do not pass it if it is not needed._
+
+_You_ _can_ _execute_ _bash_ _commands_ _and_ _edit_ _files_ _to_ _implement_ _the_ _necessary_
+_changes._
+
+_## Recommended Workflow_
+
+_This_ _workflows_ _should_ _be_ _done_ _step-by-step_ _so_ _that_ _you_ _can_ _iterate_ _on_ _your_
+_changes and any possible problems._
+
+_1._ _Create a script to reproduce the issue and run it_
+
+_2._ _Spot 3 files that might be causing the issue_
+
+
+26
+
+
+_3._ _Read the content of these 3 files._
+
+_3._ _Edit_ _the_ _source_ _code_ _of_ _these_ _files_ _resolve_ _the_ _issue._ _Do_ _not_ _edit_ _more_ _than_ _3_
+_files before running the script again, even if the code is not completely fixed._
+
+_4._ _Verify_ _your_ _fix_ _works_ _by_ _running_ _your_ _script_ _again,_ _if_ _not_ _-_ _analyze_ _at_ _most_ _3_
+_more files that might cause the issue and repeat the debugging process_
+
+_5._ _Submit your changes and finish your work by issuing the following command:_
+_‘echo_ _COMPLETE_ ~~_T_~~ _ASK_ ~~_A_~~ _ND_ ~~_S_~~ _UBMIT_ ~~_F_~~ _INAL_ ~~_O_~~ _UTPUT‘._ _Do_ _not_ _combine_ _it_
+_with any other command._ _⟨_ important _⟩After this command,_ _you cannot continue_
+_working on this task.⟨/_ important _⟩_
+
+
+We plot the pass rate and generated trajectory length of the SWE agent as a function of the number
+of functions in the code in Figure 10.
+
+
+F TOOL USE CAPABILITIES OF PRETRAINED SSMS
+
+
+At the time of writing, we were unable to find any publicly-available SSM models that were finetuned for function calling. The closest we could find is Mistral’s Mamba-Codestral-7B-v0.1, which
+was fine-tuned on coding tasks. We evaluated this model on the Berkeley Function Calling Leaderboard (Patil et al.), and found an overall accuracy of 16.58%, comparable with the reported accuracies of 16.22% for Falcon3-3B-Instruct and 15.58% for Llama-3.1-8B-Instruct.
+
+
+27

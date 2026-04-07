@@ -1,0 +1,3329 @@
+# BRINGING STABILITY TO DIFFUSION: DECOMPOSING AND REDUCING VARIANCE OF TRAIN- ING MASKED DIFFUSION MODELS
+
+
+**Mengni Jia** [1], **Mengyu Zhou** [2], **Yihao Liu** [3], **Xiaoxi Jiang** [2], **Guanjun Jiang** [2]
+
+
+1University of Cambridge, 2Qwen Large Model Application Team, Alibaba, 3Peking University
+
+
+ABSTRACT
+
+
+Masked diffusion models (MDMs) are a promising alternative to autoregressive
+models (ARMs), but they suffer from **inherently** much higher training variance.
+High variance leads to noisier gradient estimates and unstable optimization, so
+even pretrained MDMs and ARMs are competitive at initialization, they often diverge after task-specific training, with MDMs falling far behind. Currently, there
+has been no theoretical explanation or systematic solution. In this paper, we derive
+**the first decomposition** of MDM training variance into three sources: A mask
+ing on this foundation, we design six variance-reduction methods, including two
+core methods: (1) P-POTS, a **Pareto-optimal** _t_ -sampler that minimizes training
+variance by sampling harder _t_ values more often with appropriately smaller update steps, and (2) MIRROR, which uses negatively correlated samples to reduce
+
+A . Experiments show that, compared to standard MDM training, our methods
+improve accuracy by **7–8%** on complex reasoning tasks, while simultaneously
+reducing run-to-run variability to **near** **ARM** **levels**, substantially narrowing the
+gap with strong ARM baselines; in most settings, even the best baseline method
+runs remain below the worst run of our method. The code will be released at
+https://github.com/Qwen-Applications/StableDLLM.
+
+
+1 INTRODUCTION
+
+
+|PDF P-POTS<br>1<br>C B<br>Training Dataset<br>0 1 t<br>Sample 𝑥0 from 𝑝data(∙) Sample 𝑡 from 𝑝𝑡<br>MIRROR<br>𝑡= 0.3<br>Mask 𝑥0 with probability 𝑡 complementarily|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+
+
+|Sample 𝑥0 from 𝑝data(∙)|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+
+
+**A**
+
+
+|Sample 𝑥0 from 𝑝data(∙)|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+
+
+|Mask 𝑥0 with probability 𝑡|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|Mask𝑥0 with probability𝑡||||||
+
+
+|PDF<br>1<br>C B<br>Training Dataset<br>0 1 t<br>Sample 𝑥0 from 𝑝data(∙) Sample 𝑡 from 𝑈0,1<br>𝑡= 0.3<br>Mask 𝑥0 with probability 𝑡|PDF<br>1<br>B<br>1 t|Col3|
+|---|---|---|
+|𝑡= 0.3<br>Sample𝑡 from𝑈0,1<br>Sample𝑥0 from𝑝data(∙)<br>Mask𝑥0 with probability𝑡<br>**C**<br>**B**<br><br>PDF<br>t<br>1<br>1<br>0<br>Training Dataset|||
+|𝑡= 0.3<br>Sample𝑡 from𝑈0,1<br>Sample𝑥0 from𝑝data(∙)<br>Mask𝑥0 with probability𝑡<br>**C**<br>**B**<br><br>PDF<br>t<br>1<br>1<br>0<br>Training Dataset||Sample𝑡 from𝑈0,1<br>|
+
+
+**A**
+
+
+**A**
+
+
+Prompt Response [MASK] Variance Source
+
+
+Figure 1: Graphic illustration of three sources of training variance in MDMs. The left panel illustrates standard
+MDM training, compared to our core methods (P-POTS and MIRROR) on the right.
+
+
+Recently, masked diffusion models (MDMs) (Austin et al., 2021; Lou et al., 2023; Sahoo et al.,
+2024) have been viewed as a strong alternative architecture for both large language models (Dream7B (Ye et al., 2025), LLaDA-8B (Nie et al., 2025), DiffuCoder (Gong et al., 2025)) and multi-modal
+models (Dimple-7B (Yu et al., 2025), MMaDA-8B (Yang et al., 2025)). They operate by masking
+input tokens at a randomly sampled masking rate _t_ and learning to reconstruct them. By moving
+
+
+1
+
+
+beyond sequential token modeling, they potentially address limitations of auto-regressive models
+(ARMs), such as lack of parallelism, exposure bias, and reversal curse (Berglund et al., 2023).
+
+
+However, the noise-based training paradigm that powers MDMs also makes their training unstable.
+Numerous studies have reported that diffusion training suffers from high variance (Meng et al., 2021;
+Xu et al., 2023; Jeha et al., 2024; Kim et al., 2024; Zhu et al., 2025; Arriola et al., 2025). We refer
+to this phenomenon as the _training divergence_ from ARMs, which manifests in two aspects:
+
+
+- **Across-run** **variability.** Even under identical training setups, MDMs can converge to very different solutions: since parameter updates scale with loss gradients, fluctuations in losses translate
+directly into erratic updates. By contrast, ARMs are more predictable: with the same data order,
+they converge reliably to the same solution across runs.
+
+- **Within-run** **sub-optimality.** Although pretrained MDMs and ARMs show comparable abilities
+at initialization, we consistently observe a sharp divergence after post-training: once fine-tuned on
+the same dataset, ARMs always outperform MDMs by wide margins, even in cases where MDMs
+begin from a stronger point. This highlights that, even within a single run, the variance gap makes
+MDMs use supervision resources less efficiently, as noisier updates slow convergence.
+
+
+To address this problem, several prior works have proposed mitigation strategies. However, these
+efforts remain isolated and ad-hoc, lacking a unified theoretical framework for explaining the high
+training variance of MDMs. For example, Zhu et al. (2025) evaluates both the policy and reference
+ELBOs on the same time-steps and masking patterns so that their Monte Carlo errors cancel out at
+comparison, but their method is limited to preference optimization. Arriola et al. (2025) proposes
+adaptively re-fitting masking-rates samplers at each evaluation, selecting from a fixed number of
+candidate clipped intervals _{_ [ _βj, ωj_ ] _}_ _[b]_ _j_ =1 _[⊂]_ [[0] _[,]_ [ 1]][ to determine the best interval for training until the]
+next evaluation. While this strategy can adjust the learning process accordingly, its reliance on such
+coarse candidate intervals remains heuristic. These limitations call for more principled solutions.
+
+
+Motivated by this, we revisit the basic definitions to develop a systematic explanation and theoretically grounded solutions. Specifically, Sahoo et al. (2024) derived a principled training objective:
+
+
+_L_ MDM = E _x∼q_ ( _x_ ) _,,t∼U_ [0 _,_ 1] _,,xt∼q_ ( _·|x,t_ )� _lθ_ ( _x, t, xt_ )� _,_ _lθ_ = 1 _−αt_ _[′]_ _αt_
+
+
+_L_
+
+- log - _x_ _[ℓ]_ _θ_ [(] _[x]_ _t_ [1:] _[L]_ _, t_ ) _,_ _x_ _[ℓ]_ [�]
+
+
+_ℓ_ =1
+
+
+(1)
+for interpolating MDMs, where the loss _lθ_ is a function of the clean data _x_, the masking rate _t_, and
+the noised (masked) input _xt_ obtained from the forward process _q_ ( _xt_ _|_ _x, t_ ). To understand the
+variance origins in this training objective, we derive **the first systematic variance decomposition**
+(proof in A.5.1). Mathematically, this yields:
+
+
+Var _x_ 0 _,t,xt_ ( _lθ_ ) = E _x_ 0 _,t_ [Var _xt_ ( _lθ_ _| x_ 0 _, t_ )]
+
+        - ��        Masking Pattern Noise A
+
+
++ E _x_ 0 [Var _t_ ( _gθ_ ( _x_ 0 _, t_ ) _| x_ 0)]
+
+ - ��  Masking Rate Noise B
+
+
++ Var _x_ 0 (E _t_ [ _gθ_ ( _x_ 0 _, t_ )])
+
+ - ��  
+Data Noise C
+
+
+(2)
+
+
+with _gθ_ ( _x_ 0 _, t_ ) = E _xt_ [ _lθ_ _|_ _x_ 0 _, t_ ]. This decomposition relies on **no** hard assumptions and emerges
+naturally, so it both explains existing methods and lays a foundation for understanding how they
+may complement one another. As shown in Figure 1, the MDM training variance is decomposed
+into three factors: A Masking Pattern Noise (randomness from _xt_ even if _x_ 0 and _t_ are fixed), B
+Masking Rate Noise (variability in the expected loss _g_ ( _x_ 0 _, t_ ) across different _t_ for the same _x_ 0), and
+
+C Data Noise (variability across _x_ 0, as some are inherently easier or harder to predict). In contrast,
+ARMs are subject to only data noise C . Therefore, the high training variance of MDMs is explained
+by the extra sources A and B, highlighting the need to reduce them to stabilize MDM training.
+
+
+To address this challenge, we introduce six techniques, including two core methods (P-POTS and
+MIRROR in §3.1) and four additional ones. Specifically, P-POTS is the **Pareto optimal** _t_ -sampler
+among all unbiased ones in minimizing A, B and C : it focuses training on high-variance _t_ regions while down-weighting their updates to prevent destabilizing optimization. MIRROR, on the
+other hand, constructs two complementary noised inputs and employs their negative correlation to
+explicitly reduce A . Crucially, these two methods exhibit strong synergy, leading us to recommend
+P-POTS alone for cost-efficiency and P-POTS+MIRROR for maximal performance.
+
+
+Experiments validate our claims. On GSM8K, the accuracy of standard MDM training ranges from
+50.6% to 53.7%, while P-POTS+MIRROR improves to 58.6%–62.0%. On HiTab, the accuracy
+
+
+2
+
+
+range rises from 52.9%–62.6% to 66.0%–68.6%. On these textual datasets, our method allows
+MDMs to match or even surpass ARMs, with run-to-run variability reduced to near-ARM levels.
+On text-to-image-2M, the CLIP score range narrows from 28.61-34.28 to 34.10-35.27.
+
+
+Our major contributions can be summarized as follows:
+
+
+- We derive the first systematic variance decomposition for MDM training as a foundational framework (Eq. 2) and link prior w orks to relevant variance factors they actually address (§2).
+
+
+- We introduce six variance-reduction methods, with P-POTS Pareto optimal and P-POTS+MIRROR giving the best results. Each method is theoretically grounded with proofs or analysis, simple
+to implement (requiring little or no hyperparameter tuning) and robust across datasets.
+
+
+- We validate our methods on both textual and multi-modal data across various masked diffusion
+models, demonstrating their effectiveness and generality in stabilizing MDM training.
+
+
+2 RELATED WORK
+
+
+The inherently high training variance in diffusion models has been empirically observed. Several
+remedies have been proposed, yet most of them target continuous diffusion models that are widely
+used in image generation, and relatively few of them directly apply to masked diffusion models, the
+model architecture behind dLLMs (diffusion LLMs). Moreover, due to the lack of a theoretical decomposition of the variance sources, the methods remain largely isolated and heuristic. Concretely:
+
+
+- Meng et al. (2021) proposes using denoising models trained at antithetic levels of Gaussian noise,
+which reduces mask pattern noise A, but is limited to continuous diffusion models.
+
+
+- Xu et al. (2023) computes the denoising score as a self-normalized importance-sampled weighted
+average over a reference batch. It reduces A and B, but introduces systematic bias with finite
+reference batches and suffer weight degeneracy in high-dimensional or poorly covered posteriors.
+
+
+- Jeha et al. (2024) uses a _k_ th order Taylor expansion of the denoising score as a control variate and
+subtracting it (with an optimally fitted coefficient) from the Monte Carlo estimate. However, it depends on closed-form Gaussian moment calculations that don’t generalize to non-Gaussian noise
+(e.g., masked diffusion models). Moreover, the method’s reliance on low-order Taylor approximations leads to ineffective variance reduction under high noise or rapidly varying derivatives.
+
+
+- Kim et al. (2024) dynamically adjusts the probability of sampling each diffusion timestep based
+on online estimates of gradient variance. This reduces mask ratio noise B, but does not apply
+importance reweighting, which biases their loss estimates; moreover, the sampler is restricted to a
+simple Beta( _a, b_ ), which may fail to capture the true optimal sampling distribution.
+
+
+- Zhu et al. (2025) formalizes the variance of ELBO-based gradient estimates in masked diffusion
+language models and employs optimal Monte Carlo budget allocation and antithetic sampling,
+reducing the mask pattern noise A, but is limited in preference optimization.
+
+
+- Arriola et al. (2025) select a _t_ -sampling interval by evaluating candidate sub-intervals and choosing the one that minimizes evaluation variance, which reduces A + B + C . While they justify
+clipping away extreme _t_ s (e.g., to [0 _._ 45 _,_ 0 _._ 95]), our analysis suggests extremes can be worth emphasizing, so their gains likely come from clipping that sometimes approximates the optimal _p_ ( _t_ ).
+
+
+3 METHOD
+
+
+Let’s recap the standard training algorithm for masked diffusion models (MDMs). Let _x_ 0 denote the
+concatenation of prompt and response tokens and _P_ denote the number of response tokens, then:
+
+
+1. Sample clean data _x_ 0 from the data distribution.
+
+2. Sample a masking rate _t ∼U_ [0 _,_ 1].
+
+
+3. For each _eligible_ token _i_, sample _Ui_ _∼U_ [0 _,_ 1], and construct _xt_ by replacing _x_ 0( _i_ ) with
+
+[MASK] if _Ui_ _< t_, so each _eligible_ token is independently masked with probability _t_ .
+
+4. Compute the sample loss _lθ_ ( _x_ 0 _, t, xt_ ) = _−_ _P t_ [1]    - _Pi_ =1 [1[] _[x][t]_ [(] _[i]_ [) =][ [MASK]][] log] _[ p][θ]_ [(] _[x]_ [0][(] _[i]_ [)] _[ |][ x][t]_ [)] _[ .]_
+
+
+3
+
+
+5. Average _lθ_ ( _x_ 0 _, t, xt_ ) across the batch to obtain [ˆ] _lθ_ and update _θ_ via backpropagation.
+
+
+Which tokens are _eligible_ for masking depends on the training stage: in pretraining both prompts
+and responses are _eligible_, while in supervised fine-tuning only responses are. This algorithm is a
+special case of discrete diffusion (Austin et al., 2021) - MDMs with _αt_ = _t_ (see Eq. 1). Nearly
+all pretrained MDMs adopt this setting. Beyond this, MDMs can model both text and image tokens
+(Yang et al., 2025), making it a unified framework for both language and multi-modal modeling.
+
+
+To minimize the training objective in Eq. 1, gradient-based methods such as stochastic gradient
+descent (SGD) are typically used (Robbins & Monro, 1951). However, these methods require an
+empirical estimate of Eq. 1, which is usually the batch mean of losses _B_ 1 - _Bi_ =1 _[ℓ]_ [(] _[x]_ 0 [(] _[i]_ [)] _[, t][i][, x]_ _t_ [(] _[i]_ [)] _|_
+_θ_ ). For ARMs, this estimator is generally reliable, since the variance (Eq. 2) arises only from C .
+However, in MDM training, we question its reliability, since extra sources A and B come into play.
+While the standard MDM training procedure gives an unbiased estimator of Eq. 1, its variance can
+be significantly high. This raises a central question – can we construct an alternative estimator that
+remains unbiased but achieves lower variance, providing a more stable basis for optimization?
+
+
+In the rest of this section, we introduce six methods - two core methods and then four others - to
+address the problem. A qualitative analysis of their combinations is provided in A.6.
+
+
+3.1 CORE METHODS
+
+
+3.1.1 P-POTS: PARAMETRIC-PARETO OPTIMAL T-SAMPLING
+
+
+**P-POTS** ( **P** arametric **-P** areto **O** ptimal **T** imestep **S** ampling) replaces the masking rate sampler _t_ _∼_
+_U_ [0 _,_ 1] with a data-fitted non-uniform one to reduce A + B + C . To estimate Eq. 1, standard training
+uses _t ∼_ _U_ [0 _,_ 1] directly: unbiased but high variance (§3). Instead, one could use another _t_ -sampler
+that remains unbiased but reduces variance via importance weights (Kahn & Marshall, 1953).
+
+
+We now derive the optimal unbiased _t_ -sampler in the view of minimizing A + B + C . If we instead
+sample _t_ _∼_ _p_ ( _t_ ), we can re-weight to form _p_ (1 _t_ ) _[l][θ]_ [.] [This] [estimator] [has] [the] [same] [expectation] [as]
+_t ∼_ _U_ [0 _,_ 1] and is thus still unbiased in estimating the training objective 1, as shown below:
+
+
+E _t∼p, xt_ - _p_ (1 _t_ ) _[l][θ]_ [(] _[x]_ [0] _[, t, x][t]_ [)] - = - 1
+
+
+[1]  - 1
+
+_p_ ( _t_ ) _[g]_ [(] _[t]_ [)] _[dt]_ [ =]
+
+
+_p_ ( _t_ ) [1]
+0 _p_ (
+
+
+_g_ ( _t_ ) _dt_ = E _t∼U, xt_ ( _lθ_ ) _,_ (3)
+0
+
+
+With Eq. 3 establishing the unbiasedness, we next turn to minimizing its variance from _x_ 0 _, t_ and
+_xt_, which is exactly A + B + C in Eq. 2. Define _v_ ( _t_ ) = Var _x_ 0 _,xt_ ( _lθ_ _|_ _t_ ) and _g_ ( _t_ ) = _Ex_ 0 _,xt_ ( _lθ_ _|_
+_t_ ). Under regularity conditions, Fubini’s theorem (Rudin, 1987) allows us to change the order of
+expectation between _t_ and _x_ 0 _, xt_ . The variance can then be written as (detailed proof in A.5.2):
+
+
+�2
+_g_ ( _t_ ) _dt_ _._ (4)
+0
+
+
+[1]  - 1
+
+_p_ ( _t_ ) _[l][θ]_ [(] _[x]_ [0] _[, t, x][t]_ [))) =]
+
+
+_g_ ( _t_ ) [2] + _v_ ( _t_ )
+
+
+1
+
+[2] + _v_ ( _t_ ) - [�]
+
+_dt −_
+_p_ ( _t_ )
+
+
+_A_ + _B_ + _C_ = Var _x_ 0 _,t,xt_ ( [1]
+
+
+0
+
+
+To minimize Eq. 4 over all _t_ -samplers, one can use Lagrange multipliers (Lagrange, 1811), yielding
+
+
+_√_
+the optimal choice _p_ _[∗]_ ( _t_ ) = ~~_√_~~
+
+
+( _t_ ) + _v_ ( _t_ ) - _g_ ( _t_ ) [2] + _v_ ( _t_ ) _._ In minimizing A, B and C, this
+
+_g_ ( _t_ ) [2] + _v_ ( _t_ ) _dt_ _[∝]_
+
+
+�01 ~~_√_~~ _gg_ (( _tt_ )) [2][2] ++ _vv_ (( _tt_ )
+
+
+is _Pareto-optimal_ among all unbiased _t_ -samplers of _U_ [0 _,_ 1]: no other choice improves them jointly.
+
+
+**Algorithm** **of** **P-POTS.** Since _g_ ( _t_ ) and _v_ ( _t_ ) are unknown, P-POTS estimates them empirically:
+before training, for each of _{x_ [(] 0 _[i]_ [)] _[}]_ _i_ _[a]_ =1 [, draw] _[ b]_ [ values] _[ {][t][j][}][b]_ _j_ =1 [and, for each][ (] _[x]_ 0 [(] _[i]_ [)] _[, t][j]_ [)][, draw] _[ c]_ [ masked]
+
+samples _{x_ [(] _t_ _[i,j,k]_ [)] _}_ _[c]_ _j_ =1 [with losses] _[ ℓ][i,j,k]_ [:=] _[ l][θ]_ [(] _[x]_ [(] 0 _[i]_ [)] _[, t][j][, x]_ _t_ [(] _[i,j,k]_ [)] ). We then compute
+
+
+_c_
+
+
+- _ℓi,j,k,_ _v_ ˆ _j_ = _a_ [1]
+
+_k_ =1
+
+
+_c_
+
+
+_j_ =1
+
+
+_g_ ˆ _j_ = _ac_ 1
+
+
+_a_
+
+
+_i_ =1
+
+
+_a_
+
+
+_c_
+
+
+�( _ℓi,j,k−_ [1] _c_
+
+_k_ =1
+
+
+_c_
+
+
+_a_
+
+
+_i_ =1
+
+
+1
+_c−_ 1
+
+
+_c_
+
+- ~~�~~
+
+_ℓi,j,k′_ ) [2] _,_ _p_ ˆ _j_ = _g_ ˆ _j_ [2] [+ ˆ] _[v][j][/]_
+_k_ _[′]_ =1
+
+
+_g_ ˆ _j_ [2] [+ ˆ] _[v][j]_
+
+
+for _j_ = 1 _, . . ., b_ . The weights _{p_ ˆ _j}_ _[b]_ _j_ =1 [represent] [an] [empirical] [scatter] [of] [the] [underlying] [optimal]
+_p_ _[∗]_ ( _t_ ). To capture its structure, we design a model called **EPR** ( **E** xponential- **P** olynomial **R** oot) as:
+
+
+_p_ [EPR] ( _t_ ) = ~~�~~ _at_ _[r]_ + _b_ (1 _−_ _t_ ) _[q]_ + _A_ [2] exp(2 _κt_ _[m]_ ) _,_ _a, b, A, κ >_ 0 _, r, q_ _≥_ 0 _, m >_ 1 (5)
+
+
+4
+
+
+(a) OpenScience (b) GSM8K (c) HiTab
+Figure 2: Empirical _{pj}_ _[b]_ _j_ =1 [(scatter) and the fitted curve] _[ p][∗]_ [(] _[t]_ [)] [=] ~~�~~ _g_ ( _t_ ) [2] + _v_ ( _t_ ) (line) on three datasets: (a)
+OpenScience, (b) GSM8K, and (c) HiTab. The equations in each subplot show the fitted forms of _g_ ( _t_ ) and _v_ ( _t_ ),
+which together characterize the sampling distribution across masking rates _t_ .
+
+
+with _g_ [EPR] (( _t_ ) = _A_ exp( _κt_ _[m]_ ) and _v_ [EPR] (( _t_ ) = _b_ (1 _−t_ ) _[q]_ + _at_ _[r]_, and we fit it via KL divergence. By the
+EPV rule that suggests 10 data points per fitted parameter (Peduzzi et al., 1996), we set _b_ = 70 and
+slightly raise _a_ and _c_ to 15, which proved reliable. As shown in Figure 2, EPR fits _{p_ ˆ _j}_ [70] _j_ =1 [almost]
+perfectly with only seven parameters, suggesting it captures the characteristic form of optimal _p_ _[∗]_ ( _t_ ).
+
+
+**Intuition behind P-POTS.** We call a _t hard_ to train if - _g_ [2] ( _t_ ) + _v_ ( _t_ ) is large, typically at higher _t_
+(Figure 2). Our P-POTS allocates more samples to these regions, providing extra training on them,
+while the reweighting factor 1 _/p_ _[∗]_ ( _t_ ) keeps their contribution small so that their noisy signals do
+not dominate and hurt global optimization. In this way, _p_ _[∗]_ ( _t_ ) acts as an adaptive sampler, directing
+training effort where it is most needed and using resources more efficiently.
+
+
+**Intuition** **behind** **EPR.** To motivate our forms of _v_ [EPR] ( _t_ ) and _g_ [EPR] ( _t_ ) in Eq. 5, we consider loss
+behavior at different _t_ . The mean loss _g_ ( _t_ ) reflects average task difficulty at _t_ . Its growth is not just
+because more tokens are masked, but because entire reasoning chains are broken. Once a chain is
+cut, the model must guess at multiple points, and errors compound multiplicatively (or equivalently,
+add in log space), motivating an exponential form with delayed ignition. The design of _m_ _>_ 1
+ensures _g_ [EPR] _[′]_ (0) = 0, since the average loss _g_ ( _t_ ) at _t_ = 0 is 0 and must be a local minimum.
+
+
+Meanwhile, empirically, we find that _v_ ( _t_ ) falls when _t_ is small, rises after a local minimum, and falls
+again after a local maximum - thus exhibiting up to two turning points. We explain this behavior
+as follows. At small _t_, a loss spike occurs if a critical set of _r_ key tokens is masked simultaneously
+( _∼_ _t_ _[r]_ ). At large _t_, loss remains high unless a set of _q_ key tokens survives ( _∼_ (1 _−_ _t_ ) _[q]_ ). Since the
+variance of a rare event is approximately its probability, and multiple nearly independent rare events
+contribute additively, these mechanisms together generate the observed curvature . Based on this
+explanation, we propose the model _v_ ( _t_ ) = _at_ _[r]_ + _b_ (1 _−_ _t_ ) _[q]_ _._
+
+While one may wonder if it suffices to naively fit _{pj}_ _[b]_ _j_ =1 [with polynomials, we argue this is prob-]
+lematic for three reasons. First, as discussed in the next paragraph, _p_ ( _t_ ) faces a drift problem: its
+shape may evolve during training. Although this drift is typically slow, it can become severe if the
+training loss remains high ( _e.g._, MMaDA on text-to-image-2M). Consequently, polynomials quickly
+lose effectiveness if the true functional form of _p_ _[∗]_ ( _t_ ) is not well understood. Experiments in A.8
+show that EPR performs better in this case. Second, polynomials require manual tuning of degree,
+while P-POTS requires _no_ tuning at all. Third, they lack interpretability and ignore known structure.
+
+
+**Drift** **of** _p_ ( _t_ ) _._ While _p_ ( _t_ ) reduces variance, it may become outdated as model evolves during
+training—a phenomenon we refer to as the _drift_ _of_ _p_ ( _t_ ). In practice, P-POTS only fits _p_ _[∗]_ ( _t_ ) once
+before training and then replaces the uniform sampler. This incurs negligible overhead, but leaves
+the sampler static and therefore potentially exposed to drift. Empirically, however, the drift tends
+to be slow, since our experiments show strong gains even without correction; see §4. An adaptive
+strategy, such as periodically re-estimating _p_ ( _t_ ) to re-estimate _p_ ( _t_ ), could address this. Given the
+strong empirical performance of P-POTS, we leave such validation to future work.
+
+
+3.1.2 MIRROR: VARIANCE REDUCTION WITH MIRRORED MASKS
+
+
+**MIRROR** (Variance reduction with **MIRROR** ed masks) targets A by creating two masked samples
+complementarily from the _same x_ 0 and _t_ . With the notation introduced in §3, it works as follows:
+
+
+5
+
+
+1. Sample clean data _x_ 0 from the data distribution.
+2. Sample a masking rate _t ∼U_ [0 _,_ 1].
+
+3. After sampling _x_ 0 and _t_, for each _eligible_ token _i_, sample, and generate two noisy samples:
+
+     - _x_ [1] _t_ [by masking] _[ x]_ [0][(] _[i]_ [)][ if] _[ U][i]_ _[< t]_
+
+     - _x_ [2] _t_ [by masking] _[ x]_ [0][(] _[i]_ [)][ if] _[ U][i]_ _[>]_ [ 1] _[ −]_ _[t]_
+
+4. Compute _lj_ = _−_ [1] _t_    - _Pi_ =1 [1]    - _x_ _[j]_ _t_ [(] _[i]_ [) =][ [MASK]]    - log _pθ_ ( _x_ 0( _i_ ) _| x_ _[j]_ _t_ [)][ for] _[ j]_ _[∈{]_ [1] _[,]_ [ 2] _[}]_
+
+5. Average [¯] _l_ = [1] 2 [(] _[l]_ [1][ +] _[ l]_ [2][)][ across batch for backpropagation.]
+
+
+Compared to standard training that averages _l_ 1 from a single _x_ [1] _t_ [across the batch, MIRROR uses][ ¯] _[l]_ [,]
+which remains unbiased in estimating the the training objective (Eq. 1). It uses the same number
+of _x_ 0 samples, thereby avoiding overfitting. While it doubles training cost due to an extra forward
+pass, it is particularly effective on long-response datasets and shows strong synergy with P-POTS.
+
+
+**Intuition behind MIRROR.** MIRROR can be understood as a hedging strategy between two assets.
+To reduce A, one needs a loss estimate from _x_ 0 with lower variance that arises solely from masking
+patterns. Suppose the token sequence is masked at _n_ positions, if the easier tokens are masked ( _e.g._,
+uninformative prefix tokens) versus the harder ones ( _e.g._, answer tokens), the resulting losses can
+differ significantly. To reduce this variance, MIRROR samples two noised inputs as described above.
+Due to the “complementary” masking pattern design, the two noised samples tend to yield negatively
+correlated losses. Consequently, regardless of whether _x_ [1] _t_ [correspond to an easier or harder case,] _[ x]_ _t_ [2]
+provides the complementary one, and the averaged loss from them still remains a reliable estimate.
+
+
+**A** **Reduced by at Least a Half.** Given _x_ 0 and _t_, the only randomness comes from _xt_ . Since _l_ 1 and
+_l_ 2 are identically distributed, define _σ_ [2] = Var( _l_ 1) = Var( _l_ 2) and _ρ_ = Corr( _l_ 1 _, l_ 2) _≤_ 0 _._ Then
+
+
+2 [(1 +] _[ ρ]_ [)] _[,]_
+
+
+Var( [¯] _l_ ) = Var� 12 [(] _[l]_ [1][ +] _[ l]_ [2][)] - = [1]
+
+4
+
+
+- Var( _l_ 1) + Var( _l_ 2) + 2 Cov( _l_ 1 _, l_ 2) = [2] _[σ]_ [2]
+
+
+_[σ]_ [2] �1 + _ρ_ - = _[σ]_ [2]
+
+4 2
+
+
+The effectiveness of variance reduction depends on _ρ_ = Corr( _l_ 1 _, l_ 2). Since _ρ_ _∈_ [ _−_ 1 _,_ 1], Var( [¯] _l_ ) _≤_
+Var( _l_ 1), so MIRROR is never worse than standard training. Because _x_ [1] _t_ [and] _[x]_ [2] _t_ [are] [constructed]
+complementarily, _ρ_ tends to be negative, which already reduces A by at least a half. For _t_ _<_ 0 _._ 5,
+the two masks have no overlap, producing even stronger negative correlation between _l_ 1 and _l_ 2 and
+thus greater variance reduction. This explains its synergy with P-POTS (discussed later in §3.1.3).
+
+
+**Comparison** **to** **MultiSample-** _k_ **.** We refer to as MultiSample- _k_ the method that estimates _lθ_ ( _·_ _|_
+_x_ 0 _, t_ ) by drawing _k_ independent masked samples _x_ [(1)] _t_ _[, . . ., x]_ _t_ [(] _[k]_ [)] from the same masking strategy
+_Ui_ _< t_ and averaging [˜] _l_ = _k_ [1] - _kj_ =1 _[l][θ]_ [(] _[x]_ _t_ [(] _[j]_ [)] _| x_ 0 _, t_ ). Our comparison focuses on:
+
+
+- Negative Correlation: MultiSample-2 uses independent masks, so Cov( _l_ 1 _, l_ 2) = 0. MIRROR
+introduces natural complementarity, leading to Cov( _l_ 1 _, l_ 2) _<_ 0 and better variance reduction.
+
+- Token Coverage: Only masked tokens contribute to gradient updates. Intuitively, masking more
+tokens reduces pattern noise, as each token carries less individual weight when more contribute.
+Standard training masks each token with probability _t_, giving expected coverage _tP_ . MIRROR
+uses complementary masks, which together _maximize_ two-view coverage as Pr( _i ∈_ _M_ 1 _∪_ _M_ 2) =
+Pr( _Ui_ _<_ _t_ ) + Pr( _Ui_ _>_ 1 _−_ _t_ ) = min(1 _,_ 2 _t_ ) _._ By contrast, MultiSample2 does _not_ have double
+coverage: Pr( _i ∈_ _M_ 1 _∪_ _M_ 2) = 1 _−_ Pr( _i_ _∈/_ _M_ 1 _∩_ _M_ 2) = 1 _−_ (1 _−_ _t_ ) [2] = 2 _t −_ _t_ [2] _≤_ 2 _t._
+
+
+3.1.3 SYNERGY OF P-POTS AND MIRROR
+
+
+P-POTS and MIRROR are compatible because they rely on non-interacting assumptions – accurate
+modeling of _p_ ( _t_ ) and negative correlation between ( _x_ [1] _t_ _[, x]_ [2] _t_ [)][.] [However, why their combination yields]
+synergies beyond simple additivity (1 + 1 _>_ 2) worth further investigation.
+
+
+To answer this question, we return to Eq. 4, the variance in estimating the training objective ( _lθ_
+
+~~�~~ �� 1 ~~�~~ �2 �� 1 �2
+in Eq. 1). With _p_ ( _t_ ) _∝_ _g_ [2] ( _t_ ) + _v_ ( _t_ ), it becomes 0 _g_ _[∗]_ [2] ( _t_ ) + _v_ _[∗]_ ( _t_ ) _dt_ _−_ 0 _[g][∗]_ [(] _[t]_ [)] _[ dt]_ .
+
+Since this value no longer depends on _p_ ( _t_ ), for fixed _g_ ( _t_ ) and _v_ ( _t_ ), it cannot be further reduced by
+altering _p_ ( _t_ ). However, it can still be lowered by changing _g_ ( _t_ ) and _v_ ( _t_ ) during training.
+
+
+6
+
+
+Suppose _v_ ( _t_ ) = 0 and �01 _[v]_ [(] _[t]_ [)] _[ dt]_ [=] _[V]_ _>_ 0 is fixed. The variance depends on how close
+�01 ~~�~~ _g_ [2] ( _t_ ) + _v_ ( _t_ ) _dt_ and �01 _[g]_ [(] _[t]_ [)] _[ dt]_ [are.] [To] [bring] [them] [closer,] _[v]_ [(] _[t]_ [)] [should] [be] [concentrated] [where]
+_g_ ( _t_ ) is large, as - _g_ [2] ( _t_ ) + _v_ ( _t_ ) is less sensitive to _v_ ( _t_ ) in this regime. MIRROR helps here by suppressing _v_ ( _t_ ) most strongly at moderate _t_, leaving _v_ ( _t_ ) relatively larger where _g_ ( _t_ ) is high. Thus,
+MIRROR naturally shifts _v_ ( _t_ ) towards the direction favored by P-POTS. Together they reinforce
+each other: MIRROR clears moderate- _t_ regions, while P-POTS emphasizes low- and high- _t_ . This
+synergy is remarkable, as naive method combinations rarely deliver such gains (A.6).
+
+
+3.2 OTHER TECHNIQUES
+
+
+We introduce several other variance-reduction techniques as **baseline methods** in our experiments.
+
+
+3.2.1 ISAD: IMPORTANCE SAMPLING ON ANSWER DELIMITERS
+
+
+**ISAD** shift masking toward answer delimiters, targeting A, by the sampling distribution:
+
+
+         - _t,_ if token _j_ _∈/_ rare ids _,_
+_qj_ ( _t_ ) =
+min(1 _,_ _t_ + ∆) _,_ if token _j_ _∈_ rare ids _,_
+
+
+with ∆ _∈_ (0 _,_ 1). To keep the estimator unbiased, token-level losses are reweighted by 1 _/qj_ ( _t_ ). The
+intuition is to guide the model on when to output answer tokens for better downstream performance.
+
+
+3.2.2 SYRM: SYNTAX-AND-RESPONSE MASK
+
+
+**SyRM** is designed for structured data such as HTML tables, source code, or graphs. We partition
+tokens into two groups: (i) response tokens _R_, and (ii) syntax tokens _C_ in the prompt. For example,
+in an HTML table, _C_ includes tags such as <table>, <tr>, <th>, and <td>. SyRM modifies the
+eligibility set for masking to _R ∪_ _C,_ so that both response tokens and syntax tokens may be masked.
+
+
+**Rationale.** Assuming (i) tokens within each group are homogeneous in first and second moments
+of token-level losses, (ii) syntax tokens are predicted more stably than response tokens, and (iii)
+reasoning errors couple response tokens more strongly, we show that SyRM reduces masking-pattern
+noise A at the cost of a small, bounded bias (optimum shift). Overall, the mean-squared error of
+estimating training loss can still decrease. Intuitively, by treating easy-to-predict syntax tokens as
+auxiliary targets, SyRM stabilizes training and mitigates mask-pattern noise, while still preserving
+the primary learning signal on response tokens (see A.5.4 for the rigorous proof).
+
+
+3.2.3 STRATS: STRATIFIED T-SAMPLING
+
+
+Instead of drawing i.i.d. _ti_ _∼U_ [0 _,_ 1] for batch size _n_, partition [0 _,_ 1] into _k_ equal strata [ _j/k,_ ( _j_ +
+1) _/k_ ] with _j_ = 0 _, . . ., k−_ 1 and draw - _nk_ - values of _ti_ per stratum, with leftovers assigned randomly.
+
+
+This approach was first introduced in Sahoo et al. (2024) with _k_ = _n_ . In this work, we prove that
+stratified sampling yields an unbiased estimator and reduces B via inter-stratum variance. Furthermore, we recommend _k_ = _⌈_ _[√]_ _n⌉_ instead of _k_ = _n_ as a general strategy (see Appendix A.5.5).
+Although **StraTS** uses stratified sampling for the _t_ -sampler instead of _p_ _[∗]_ ( _t_ ) (§3.1.1) and is not optimal for minimizing _Ax_ 0 + _Bx_ 0, it still outperforms baselines and is easy to implement.
+
+
+3.2.4 EMA: BIN-WISE EMA CONTROL VARIATE
+
+
+To reduce B, we reduce its variance arising from heteroscedastic losses across masking rates by
+maintaining an exponential moving average ( **EMA** ) of losses within bins of _t_ _∈_ [0 _,_ 1]. Each bin
+tracks a baseline that is updated online, yielding a piecewise-constant approximation of the expected
+loss against _t_ . By using these bin-wise estimates as control variates, we cancel baseline-related noise
+more effectively than with fixed scaling, while preserving unbiasedness of gradient estimates.
+
+
+This approach requires choosing the number of bins _m_ and EMA rate _η_, which balances stability
+and adaptivity. From our MSE-minimization analysis in A.5.6, we derive _m×_ batch size per GPU _≈_
+0 _._ 1 _× n ×_ (train data size) _,_ which serves as a practical rule for selecting _m_ and _η_ .
+
+
+7
+
+
+4 EXPERIMENTS
+
+
+(a) (b) (c) (d)
+
+
+(e) (f) (g) (h)
+Figure 3: Images generated by MMaDA-8B-MixCoT trained with P-POTS+MIRROR (top row) and the standard method (bottom row) under the same seed. The columns correspond to the prompts: 1) A woman with
+blonde hair is wearing a colorful crochet headband and a black top with a floral patterned shawl. She is holding
+a toy sword with a green handle and a yellow ball on top; 2) A rustic wooden farmhouse with a weathered roof
+and a small porch stands in a field of dry grass. The sky is filled with fluffy white clouds, and a single bird
+is flying in the distance. The landscape is devoid of any other structures or signs of life, giving the scene a
+serene and isolated feel; 3) A car is on fire under a bridge with smoke billowing out. The fire is intense, with
+flames visible on the car’s underside. The bridge has a metal railing and is located near a forested area. There
+is a street lamp above the bridge, and the scene appears to be at night or during dusk; 4) A close-up of a grey
+fringed purse with a tassel detail on the front. The purse is placed on a surface with a soft, blurred background;
+more case studies can be found in A.11.
+
+
+Limited by resources, and given that current MDMs perform comparably to strong ARM baselines
+(Nie et al., 2025; Yang et al., 2025), we focus our validation on supervised fine-tuning, though our
+methods naturally extend to pretraining. We evaluate our methods using the setup below:
+
+
+**Setting.** We train each model three times independently using seeds 42, 731 and 20231, holding
+model, data and all hyper-parameters fixed, and evaluate the trained models by greedy decoding.
+_This setting ensures difference across runs arise solely from training, not inference._
+
+
+**Tasks.** We evaluate on _three_ _textual_ _datasets_ - OpenScience (NVIDIA Corporation, 2025),
+GSM8K (Cobbe et al., 2021), and HiTab (Cheng et al., 2022) - as well as one _image_ _genera-_
+_tion dataset_, text-to-image-2M (Hate, 2024). OpenScience is a multi-domain, knowledge-intensive
+dataset spanning humanities, law, and STEM; GSM8K targets mathematical reasoning; and HiTab
+focuses on tabular question answering. Together with the multimodal text-to-image-2M benchmark,
+diverse data modalities and domains are covered. Details of data processing and training/inference
+hyper-parameters are provided in Appendix A.7. We report pass@1 accuracy for OpenScience,
+GSM8K and HiTab, and CLIP score for text-to-image-2M.
+
+
+**Models.** We evaluate two MDMs in total. On textual datasets, we evaluate one MDM, LLaDA-8BInstruct (Nie et al., 2025), with three ARMs, Qwen2.5-7B-Instruct (Team, 2024), Qwen3-8B (Team,
+2025) and Llama3.1-8B-Instruct (Meta AI, 2024b). For text-to-image-2M, we evaluate one multimodal MDM, MMaDA-8B-MixCoT (Yang et al., 2025).
+
+
+**Baselines.** We compare our methods to two baselines: (i) standard training (§3), and (ii) the clipped
+noise schedule of Arriola et al. (2025), which has been reported to achieve the best performance on
+perplexity across most standard schedules (Chang et al., 2022), including linear, logarithmic, square
+root, square, and cosine. We therefore adopt it as a representative baseline.
+
+
+8
+
+
+Table 1: Per-seed performance comparison of MDMs and ARMs. The best performance within MDMs training
+methods is bolded. Training is repeated under three seeds, with model, data and all hyper-parameters fixed, and
+we evaluate trained models by greedy decoding, so difference across runs are solely from **training** rather than
+**inference** . Avg is the mean over available runs.
+
+
+OpenScience GSM8K HiTab
+Method (Seed) 42 731 20231 Avg 42 731 20231 Avg 42 731 20231 Avg
+
+
+LLaDA-8B-Instruct
+
+|P-POTS+Mirror|50.80 53.80 53.00|52.53|62.02 58.61 60.96|60.53|66.02 66.67 68.62|67.10|
+|---|---|---|---|---|---|---|
+|P-POTS<br>MIRROR|45.34 47.60<br>47.47<br>45.63 47.25<br>46.25|46.80 <br>46.38|59.59 59.36<br>56.79<br> 56.56 51.40<br>53.15|58.58 <br>53.70|60.56 64.74<br>58.80<br> 64.72 65.04<br>63.68|61.37<br>64.48|
+|ISAD<br>SyRM<br>StraTS<br>EMA|45.40<br>–<br>–<br>–<br>–<br>–<br>44.69<br>–<br>–<br>47.08<br>–<br>–|45.40 <br>–<br>44.69 <br>47.08|55.27<br>–<br>–<br>–<br>–<br>–<br> 55.57<br>–<br>–<br> 52.39<br>–<br>–|55.27 <br>–<br>55.57 <br>52.39|64.39<br>–<br>–<br>59.79<br>–<br>–<br> 61.86<br>–<br>–<br> 61.66<br>–<br>–|64.39<br>59.79<br>61.86<br>61.66|
+|Clipped<br>Standard|47.90 49.20<br>50.90<br>43.57 46.50<br>46.50|49.33 <br>45.52|55.57 54.60<br>58.38<br> 50.64 53.22<br>53.68|56.18 <br>52.51|58.90 60.80<br>62.20<br> 52.96 60.43<br>62.64|60.63<br>58.68|
+
+
+Auto-Regressive Large Language Models
+
+
+Qwen2.5-7B-Instruct 47.85 46.30 45.10 46.42 56.20 54.66 53.60 54.82 46.55 45.74 45.20 45.83
+Qwen3-8B-Base **53.05** **51.70** **50.10** **51.62** **72.40** **70.58** **69.80** **70.93** 49.70 48.84 48.20 48.91
+Llama3.1-8B-Instruct 44.95 47.07 47.76 46.59 47.60 46.40 49.10 47.70 **65.02** **66.28** **64.88** **65.39**
+
+
+Table 2: Per-seed performance of MMaDA-8B-MixCoT on text-to-image-2M. We report CLIP scores under
+three training seeds with identical model, data, and hyper-parameters. Avg is the mean CLIP over runs.
+
+
+text-to-image-2M
+Method (Seed) Avg
+42 731 20231
+
+
+P-POTS+Mirror **35.27** 34.10 **34.39** **34.59**
+
+
+Standard 28.61 **34.28** 31.19 31.36
+
+
+P-POTS 31.51 30.02 33.41 31.65
+Mirror 34.88 33.77 33.57 34.07
+
+
+4.1 KEY INSIGHTS
+
+
+MDMs exhibit uniquely high training variance, which makes gradient updates noisy and optimization less stable. As a result, even pretrained MDMs are shown to achieve comparable performance
+with strong ARMs, after task-specific training, they often under-perform by a wide margin. This instability is evident in Table 1: under standard MDM training on HiTab, accuracy varies substantially
+across random seeds (about 52% _∼_ 63%), and the mean performance across datasets frequently remains below that of ARMs. Our method targets this root cause by reducing MDM training variance.
+Figure 4 shows that P-POTS+MIRROR (green) converges to a lower final loss with smoother dynamics than the Standard method (red), indicating more stable training. This improved stability shows
+consistent improvement and closes the training gap effectively: on all three textual benchmarks,
+even the best Standard/Clipped run remains below the worst run of our method (OpenScience: best
+Standard 46 _._ 50 _vs._ worst P-POTS+MIRROR 50 _._ 80; GSM8K: 53 _._ 68 _vs._ 58 _._ 61; HiTab: 62 _._ 64 _vs._
+66 _._ 02). On text-to-image-2M, the two methods are essentially comparable (best Standard 34 _._ 28 _vs._
+worst ours 34 _._ 10). This highlights the importance of variance reduction in delivering more consistent and reliable performance across runs. Overall, MDMs trained with our method can match, and
+in some cases surpass, strong ARMs, while run-to-run variability drops to near ARM levels.
+
+
+Moreover, ablation studies in A.8 confirm synergy between P-POTS and MIRROR. On GSM8K and
+OpenScience, compared to standard training, the accuracy gains from P-POTS+MIRROR (8 _._ 02%
+and 7 _._ 01% respectively) surpass the sum of the individual gains from P-POTS and MIRROR ((6 _._ 07+
+1 _._ 19)% = 7 _._ 26% and (1 _._ 28 + 0 _._ 86)% = 2 _._ 14% ), while on HiTab they are nearly additive (8 _._ 42%
+
+
+9
+
+
+Figure 4: Training loss comparison between P-POTS+MIRROR (green) and Standard (red) on OpenScience
+(left) and text-to-image-2M (right). The annotations indicate the average loss at the beginning and end of
+training over the first and last 5 steps. Overall, P-POTS+MIRROR achieves more stable loss trajectories with
+consistently lower end losses compared to the Standard baseline.
+
+
+and (2 _._ 69 + 5 _._ 80)% = 8 _._ 49% ). We emphasize that this is nontrivial, because as discussed in A.6,
+naive combinations of methods do not typically yield such improvements.
+
+
+MIRROR is especially effective on long-response datasets due to its design. As shown in Tables 1
+and 2, its gains on OpenScience, HiTab and text-to-image-2M are substantially higher than on
+GSM8K. This aligns with its design: MIRROR targets masking pattern noise A, which becomes
+more severe with longer responses due to the greater number of possible masking patterns.
+
+
+MDMs achieve comparable performance as ARMs with much shorter outputs. In our experiments,
+MDMs often generate responses as short as 5% of ARM outputs and consistently shorter than training labels (see exact values in A.7.1). Truncating ARMs to the same length severely hurts their performance because outputs are often cut off mid-reasoning. One possible explanation is that MDMs
+decode by repeatedly unmasking a block of [MASK] tokens whose length is predetermined by the
+user-passed max new ~~t~~ okens, giving the model an implicit sense of how many tokens it is allowed to generate. In contrast, ARMs generate token by token without an explicit stopping criterion
+until hitting EOS, which can lead to verbosity or redundancy.
+
+
+On text-to-image-2M, the drift in _p_ is more severe; see A.8.2. We attribute this to larger loss scales
+(and thus gradients) that move _θ_ faster. Although EPR targets a U-shape, we use it as a stable
+compromise because P-POTS fits _p_ ( _t_ ) only once pre-training; empirically, EPR is more robust than
+fitting the initial S-shape, so we recommend it as a default. In principle, periodically refitting _p_ ( _t_ )
+( _e.g._, at each eval) could further improve P-POTS and P-POTS+MIRROR.
+
+
+4.2 CASE STUDY
+
+
+In Figure 3, standard training often produces blurry images or misses fine details. We suspect two
+causes. First, rare detail-critical tokens are masked too infrequently under uniform _p_ ( _t_ ), so the model
+under-trains on details. Consequently, features such as the “crochet headband” and “toy sword” in
+case (b) are missing or distorted. Second, cross-entropy on masked image tokens can show an
+averaging effect. When multiple outputs are possible, the model may learn to predict their mean; at
+inference with low temperature, argmax decoding turns this into unstable choices, leading to blur.
+This may explain case (d), where fire and smoke looks unrealistic. By contrast, P-POTS+MIRROR
+may address these problems. P-POTS emphasizes harder regions, while MIRROR averages two
+negatively correlated samples and reduces the tendency to hedge. Together, they could improve
+the gradient signal-to-noise ratio, giving sharper textures and more faithful objects, _e.g._ correct
+headband/sword in (a) and more realistic flames in (c).
+
+
+5 CONCLUSION
+
+
+This work derives a systematic decomposition of MDM training variance as a fundamental framework for variance reduction, and proposes six corresponding techniques. Among them, P-POTS
+is provably Pareto-optimal for minimizing loss variance, while MIRROR is particularly beneficial
+on long-response datasets; together, they yield strong synergy. Our methods reduce both run-to-run
+variability and within-run suboptimality, making one training run sufficient for reliable performance.
+Looking forward, we expect our decomposition and methods to serve as building blocks for scalable MDM training, and to inspire future work toward a unified framework for variance control in
+masked diffusion models.
+
+
+10
+
+
+REFERENCES
+
+
+Marianne Arriola, Aaron Gokaslan, Justin T Chiu, Zhihan Yang, Zhixuan Qi, Jiaqi Han, Subham Sekhar Sahoo, and Volodymyr Kuleshov. Block diffusion: Interpolating between autoregressive and diffusion language models. _arXiv preprint arXiv:2503.09573_, 2025.
+
+
+Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured
+denoising diffusion models in discrete state-spaces. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 34:17981–17993, 2021.
+
+
+Lukas Berglund, Meg Tong, Max Kaufmann, Mikita Balesni, Asa Cooper Stickland, Tomasz Korbak, and Owain Evans. The reversal curse: Llms trained on” a is b” fail to learn” b is a”. _arXiv_
+_preprint arXiv:2309.12288_, 2023.
+
+
+Huiwen Chang, Han Zhang, Lu Jiang, Ce Liu, and William T. Freeman. Maskgit: Masked generative
+image transformer. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition (CVPR)_, pp. 11315–11325, 2022.
+
+
+Zhoujun Cheng, Haoyu Dong, Zhiruo Wang, Ran Jia, Jiaqi Guo, Yan Gao, Shi Han, Jian-Guang
+Lou, and Dongmei Zhang. Hitab: A hierarchical table dataset for question answering and natural
+language generation. In _Proceedings of the 60th Annual Meeting of the Association for Compu-_
+_tational Linguistics (Volume 1:_ _Long Papers)_, pp. 1094–1110, 2022.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Shansan Gong, Ruixiang Zhang, Huangjie Zheng, Jiatao Gu, Navdeep Jaitly, Lingpeng Kong, and
+Yizhe Zhang. Diffucoder: Understanding and improving masked diffusion models for code generation. _arXiv preprint arXiv:2506.20639_, 2025.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd
+of models. _arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu
+Zhang, Shirong Ma, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms via
+reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025.
+
+
+Jacky Hate. text-to-image-2m (revision e64fca4), 2024. URL [https://huggingface.co/](https://huggingface.co/datasets/jackyhate/text-to-image-2M)
+[datasets/jackyhate/text-to-image-2M.](https://huggingface.co/datasets/jackyhate/text-to-image-2M)
+
+
+Paul Jeha, Will Grathwohl, Michael Riis Andersen, Carl Henrik Ek, and Jes Frellsen. Variance
+reduction of diffusion model’s gradients with taylor approximation-based control variate. _arXiv_
+_preprint arXiv:2408.12270_, 2024.
+
+
+Herman Kahn and Theodore E. Marshall. Methods of reducing sample variance in monte carlo
+computations. _Journal of the Operations Research Society of America_, 1(5):263–278, 1953.
+
+
+Myunsoo Kim, Donghyeon Ki, Seong-Woong Shim, and Byung-Jun Lee. Adaptive non-uniform
+timestep sampling for diffusion model training. _arXiv preprint arXiv:2411.09998_, 2024.
+
+
+Joseph-Louis Lagrange. _M´ecanique Analytique_ . Courcier, 1811.
+
+
+Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion modeling by estimating the ratios
+of the data distribution. _arXiv preprint arXiv:2310.16834_, 2023.
+
+
+Chenlin Meng, Yang Song, Wenzhe Li, and Stefano Ermon. Estimating high order gradients of the
+data distribution by denoising. _Advances in Neural Information Processing Systems_, 34:25359–
+25369, 2021.
+
+
+Meta AI. Introducing llama 3.1: Our most capable models to date. Meta AI Blog, 2024a. URL
+[https://ai.meta.com/blog/meta-llama-3-1/.](https://ai.meta.com/blog/meta-llama-3-1/)
+
+
+11
+
+
+Meta AI. Llama-3.1-8b-instruct. HuggingFace model card, 2024b. URL [https://](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
+[huggingface.co/meta-llama/Llama-3.1-8B-Instruct.](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
+
+
+Shen Nie, Fengqi Zhu, Zebin You, Xiaolu Zhang, Jingyang Ou, Jun Hu, Jun Zhou, Yankai
+Lin, Ji-Rong Wen, and Chongxuan Li. Large language diffusion models. _arXiv_ _preprint_
+_arXiv:2502.09992_, 2025.
+
+
+NVIDIA Corporation. Openscience: A multi-domain synthetic dataset for general-purpose reasoning. [https://huggingface.co/datasets/nvidia/OpenScience,](https://huggingface.co/datasets/nvidia/OpenScience) 2025. Version
+1; licensed under CC BY 4.0; data creation date May 15 2025.
+
+
+Peter Peduzzi, John Concato, Elizabeth Kemper, Theodore R. Holford, and Alvan R. Feinstein. A
+simulation study of the number of events per variable in logistic regression analysis. _Journal_
+_of_ _Clinical_ _Epidemiology_, 49(12):1373–1379, 1996. ISSN 0895-4356. doi: https://doi.org/10.
+1016/S0895-4356(96)00236-3. URL [https://www.sciencedirect.com/science/](https://www.sciencedirect.com/science/article/pii/S0895435696002363)
+[article/pii/S0895435696002363.](https://www.sciencedirect.com/science/article/pii/S0895435696002363)
+
+
+Herbert Robbins and Sutton Monro. A stochastic approximation method. _The Annals of Mathemat-_
+_ical Statistics_, 22(3):400–407, 1951.
+
+
+Walter Rudin. _Real and Complex Analysis_ . McGraw-Hill, 3 edition, 1987.
+
+
+Subham Sahoo, Marianne Arriola, Yair Schiff, Aaron Gokaslan, Edgar Marroquin, Justin Chiu,
+Alexander Rush, and Volodymyr Kuleshov. Simple and effective masked diffusion language
+models. _Advances in Neural Information Processing Systems_, 37:130136–130184, 2024.
+
+
+John Schulman, Philipp Moritz, Sergey Levine, Michael Jordan, and Pieter Abbeel. Highdimensional continuous control using generalized advantage estimation. _arXiv_ _preprint_
+_arXiv:1506.02438_, 2015.
+
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms. _arXiv preprint arXiv:1707.06347_, 2017.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+[Qwen Team. Qwen2.5: A party of foundation models, September 2024. URL https://qwenlm.](https://qwenlm.github.io/blog/qwen2.5/)
+[github.io/blog/qwen2.5/.](https://qwenlm.github.io/blog/qwen2.5/)
+
+
+Qwen Team. Qwen3 technical report, 2025. [URL https://arxiv.org/abs/2505.09388.](https://arxiv.org/abs/2505.09388)
+
+
+Yilun Xu, Shangyuan Tong, and Tommi Jaakkola. Stable target field for reduced variance score
+estimation in diffusion models. _arXiv preprint arXiv:2302.00670_, 2023.
+
+
+An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li,
+Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Haoran Wei, Huan Lin, Jialong Tang,
+Jialin Wang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Ma, Jin Xu, Jingren Zhou, Jinze Bai,
+Jinzheng He, Junyang Lin, Kai Dang, Keming Lu, Keqin Chen, Kexin Yang, Mei Li, Mingfeng
+Xue, Na Ni, Pei Zhang, Peng Wang, Ru Peng, Rui Men, Ruize Gao, Runji Lin, Shijie Wang, Shuai
+Bai, Sinan Tan, Tianhang Zhu, Tianhao Li, Tianyu Liu, Wenbin Ge, Xiaodong Deng, Xiaohuan
+Zhou, Xingzhang Ren, Xinyu Zhang, Xipin Wei, Xuancheng Ren, Yang Fan, Yang Yao, Yichang
+Zhang, Yu Wan, Yunfei Chu, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zhihao Fan. Qwen2
+technical report. _arXiv preprint arXiv:2407.10671_, 2024.
+
+
+Ling Yang, Ye Tian, Bowen Li, Xinchen Zhang, Ke Shen, Yunhai Tong, and Mengdi Wang. Mmada:
+Multimodal large diffusion language models. _arXiv preprint arXiv:2505.15809_, 2025.
+
+
+Jiacheng Ye, Zhihui Xie, Lin Zheng, Jiahui Gao, Zirui Wu, Xin Jiang, Zhenguo Li, and Lingpeng
+Kong. Dream 7b: Diffusion large language models. _arXiv preprint arXiv:2508.15487_, 2025.
+
+
+Runpeng Yu, Xinyin Ma, and Xinchao Wang. Dimple: Discrete diffusion multimodal large language
+model with parallel decoding. _arXiv preprint arXiv:2505.16990_, 2025.
+
+
+12
+
+
+Fengqi Zhu, Rongzhen Wang, Shen Nie, Xiaolu Zhang, Chunwei Wu, Jun Hu, Jun Zhou, Jianfei
+Chen, Yankai Lin, Ji-Rong Wen, et al. Llada 1.5: Variance-reduced preference optimization for
+large language diffusion models, 2025.
+
+
+13
+
+
+A APPENDIX
+
+
+CONTENTS
+
+
+A.1 Statement . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+
+
+A.2 Preliminaries . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+
+
+A.2.1 Stochastic Gradient Descent on Convex Objectives . . . . . . . . . . . . . 15
+
+
+A.2.2 Discrete Diffusion Models . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+
+
+A.2.3 Proximal Policy Optimization . . . . . . . . . . . . . . . . . . . . . . . . 17
+
+
+A.2.4 Group Relative Policy Optimization . . . . . . . . . . . . . . . . . . . . . 17
+
+
+A.3 Training Variance Decomposition . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+A.4 Algorithms . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+A.4.1 Bin-Wise EMA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+A.5 Proofs . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+A.5.1 Training Variance Decomposition . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+A.5.2 P-POTS: Pareto-Optimal Property . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+A.5.3 Importance Sampling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+A.5.4 SyRM . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+A.5.5 Stratified Sampler . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+
+A.5.6 Bin-Wise EMA: Variance Reduction & Hyperparameter Selection . . . . . 27
+
+
+A.6 Method Combination . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+
+A.6.1 Stratified Sampling VS EMA . . . . . . . . . . . . . . . . . . . . . . . . 29
+
+
+A.6.2 ISAD VS SyRM . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+A.7 Experimental Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+A.7.1 Hyperparameter Settings . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+
+
+A.7.2 How Training Variance is Estimated . . . . . . . . . . . . . . . . . . . . . 31
+
+
+A.8 Complete Experimental Results . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+A.8.1 Per-Run Experimental Results on LLaDA . . . . . . . . . . . . . . . . . . 32
+
+
+A.8.2 Per-Run Experimental Results on MMaDA . . . . . . . . . . . . . . . . . 33
+
+
+A.9 Extension to Reinforcement Learning . . . . . . . . . . . . . . . . . . . . . . . . 33
+
+
+A.10 Future Work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+A.11 Case Study . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+A.11.1 Case Study: Image Generation . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+A.1 STATEMENT
+
+
+**Reproducibility.** All models and datasets used in this work are publicly available, as listed in 4.
+Details of dataset splits and hyperparameter configurations are provided in Appendix A.7.1, while
+the evaluation protocols for inference results are described in Appendix 4. All theoretical proofs and
+assumptions are presented in Appendix A.5.
+
+
+**LLM** **Usgae.** We used large language models (LLMs) as a general-purpose assist tool in three
+ways: (i) polishing the writing for grammar and clarity, (ii) helping to identify potentially relevant
+
+
+14
+
+
+related work (with all citations manually verified by the authors), and (iii) providing code assistance
+for implementing ideas developed by the authors. The research ideas, methodology, experiments,
+and final paper content remain the responsibility of the authors.
+
+
+A.2 PRELIMINARIES
+
+
+A.2.1 STOCHASTIC GRADIENT DESCENT ON CONVEX OBJECTIVES
+
+
+We consider the optimization problem
+min (6)
+_β∈C_ _[f]_ [(] _[β]_ [)] _[,]_
+
+where _C_ _⊆_ R _[p]_ is a closed convex set and _f_ : _C_ _→_ R is convex. In machine learning, _f_ typically
+represents the population risk, _i.e._, the expected loss with respect to the true but unknown data
+distribution. A common example is the expected cross-entropy loss of the model under parameter _β_
+relative to the true data distribution.
+
+
+Gradient-based optimization methods generally rely on estimates of the gradient of the expected
+loss. Using a larger batch size reduces the variance of this estimate but increases the computational
+cost per iteration. Stochastic Gradient Descent (SGD) strikes a balance by sampling a batch of
+fixed size at random and using the average loss gradient over this batch as an unbiased estimator of
+the population gradient. Convergence of SGD can be guaranteed in principle, provided that certain
+standard assumptions are satisfied:
+
+
+**Theorem** **1** Suppose _β_ [ˆ] is a minimiser of _f_ over a closed convex set _C_ _⊆_ R _[p]_ . Suppose
+sup _β∈C ∥β∥_ 2 _≤_ _R < ∞_ and
+
+
+  
+sup E
+_β∈C_
+
+
+sup _∥g_ ˜ _∥_ [2] 2
+_g_ ˜ _∈∂f_ [˜] ( _β_ ; _U_ )
+
+
+_≤_ _L_ [2] _< ∞._
+
+
+_√_
+Then if _ηs_ _≡_ _η_ = 2 _R/_ ( _L_
+
+
+_k_ ), the output _β_ [¯] of the stochastic gradient descent algorithm satisfies
+
+
+E _f_ ( _β_ [¯] ) _−_ _f_ ( _β_ [ˆ] ) _≤_ [2] ~~_√_~~ _[LR]_ _._
+
+_k_
+
+
+**Note.** From a statistic point of view, the batch mean is merely an estimator of the population
+gradient, and thus inevitably subject to estimation variance. In MDM training, where the expected
+loss is subject to three sources of variance, this issue becomes particularly severe. It is therefore
+important to develop estimators that are more variance-efficient.
+
+
+A.2.2 DISCRETE DIFFUSION MODELS
+
+
+Let **x** 0 _∈{_ 1 _, . . ., K}_ _[n]_ denote an initial discrete data vector, such as a length _n_ token sequence,
+where each element _x_ _[i]_ 0 [takes values from a finite vocabulary of size] _[ K]_ [.] [A discrete diffusion model]
+defines a forward corruption process that transforms **x** 0 into a sequence of progressively noisier
+variables **x** 1 _, . . .,_ **x** _T_ over _T_ timesteps.
+
+
+At each timestep _t_ = 1 _, . . ., T_, let _xt_ ( _k_ ) represents the _k_ th token of **x** _t_ for _k_ _∈{_ 1 _, ..., n}_, then each
+token _xt−_ 1( _k_ ) is corrupted into _xt_ ( _k_ ) using a predefined transition matrix _Qt_ _∈_ R _[K][×][K]_ . Formally,
+the transition probabilities are defined as:
+
+
+_q_ ( _xt_ ( _k_ ) = _j_ _| xt−_ 1( _k_ ) = _i_ ) = [ _Qt_ ] _i,j._ (7)
+
+
+where _Qt_ is a stochastic matrix with each column sum to 1. Let **v** ( _x_ ) _∈_ _R_ _[K]_ be a one-hot vector
+with 1 at position _x_ . For simplicity, we abbreviate token position information and use _xt_ for **x** _t_ ( _k_ )
+for any _k_ _∈{_ 1 _, ..., K}_ . Then we can write the transition equation as
+
+
+_q_ ( _xt_ _| xt−_ 1) = **v** _[T]_ ( _xt_ ) _Qt_ **v** ( _xt−_ 1) _._ (8)
+
+
+We can then marginalize intermediate steps and compute the transition probability from _x_ 0 to _xt_ :
+
+
+15
+
+
+_q_ ( _xt_ _| x_ 0) = **v** _[T]_ ( _xt_ ) _Q_ [˜] **v** ( _x_ 0) = **v** _[T]_ ( _xt_ ) _Qt . . . Q_ 1 **v** ( _x_ 0) _._ (9)
+
+
+The posterior distribution conditioned on _x_ 0 is then:
+
+
+[1] _[, x]_ [0][)] _[q]_ [(] _[x][t][−]_ [1] _[|][x]_ [0][)]
+
+= [(] **[v]** _[T]_ [ (] _[x][t]_ [)] _[Q][t]_ **[v]** [(] _[x][t][−]_ [1][))(] **[v]** _[T]_ [ (] _[x][t][−]_ [1][) ] _[Q]_ [ˆ] _[t][−]_ [1] **[v]** [(] _[x]_ [0][)))]
+_q_ ( _xt|x_ 0) **v** _[T]_ ( _x_ ) _Q_ [ˆ] **v** ( _x_ )
+
+
+_q_ ( _xt−_ 1 _|xt, x_ 0) = _[q]_ [(] _[x][t][|][x][t][−]_ [1] _[, x]_ [0][)] _[q]_ [(] _[x][t][−]_ [1] _[|][x]_ [0][)]
+
+
+**v** _[T]_ ( _xt_ ) _Q_ [ˆ] _t_ **v** ( _x_ 0)
+(10)
+
+
+For the reverse (denoising) process, a neural network _pθ_ ( _xt−_ 1 _|_ _xt_ ) = Categorical� _xt−_ 1; _Pθ_ ( _xt_ )�
+
+is trained to undo this corruption, where _Pθ_ ( _xt_ ) _∈_ R _[K]_ denotes the logits produced by the model.
+_pθ_ ( _xt−_ 1 _|_ _xt_ ) is trained to estimate this posterior. Since this posterior is defined on predefined
+forward processes only (the transition matrix _QT_ that controls the noisy level at each time step _t_ ),
+the design of transition matrix is crucial in the success of discrete diffusion models. A well-designed
+noise schedule ensures the model encounters a smooth curriculum of denoising tasks, leading to
+better final performance.
+
+
+Early works propose a uniform noise design:
+
+
+_Qt_ = _αtI_ + (1 _−_ _βt_ ) **11** _[T]_ _, βt_ = [1] _[ −]_ _[α][t]_
+
+_K_
+
+
+This design means at each time step, a token has probability _αt_ + _βt_ to remain and _βt_ probability to
+transfer to other _K_ _−_ 1 tokens. This matrix has one eigenvalue _λ_ 1 = 1(with eigenvector **1** ) and all
+other _K −_ 1 eigenvalues equal to _αt_ . Thus, the signal of _x_ 0 decays like _αt...α_ 0. If this goes to 0 too
+quickly, you lose all information.
+
+
+Among the general discrete diffusion model framework, masked diffusion models consistently
+achieves the best performance (Austin et al., 2021)(Lou et al., 2023). In masked diffusion, a specific
+design is employed in which the _K_ th category serves as an absorbing state, commonly corresponding to a special token such as [MASK]. Under this configuration, the transition matrix _Qt_ is defined
+as:
+
+
+
+
+
+
+
+
+ _._
+
+
+_Qt_ =
+
+
+
+
+
+_αt_ 0 _· · ·_ 0 1 _−_ _αt_
+0 _αt_ _· · ·_ 0 1 _−_ _αt_
+... ... ... ... 1 _−_ _αt_
+0 0 _· · ·_ _αt_ 1 _−_ _αt_
+
+
+where _αt_ _∈_ [0 _,_ 1] denotes the masking ratio at timestep _t_ . This design ensures that each token is
+independently replaced with the [MASK] token with probability 1 _−αt_, and retained with probability
+_αt_ . Note the [MASK] token is an absorbing state. By isolating noise into a dedicated [MASK]
+token, the model preserves a clean, low-dimensional signal subspace, which it can focus on when
+reconstructing **x** _t−_ 1.
+
+
+The training objective maximizes a variational lower bound (ELBO) on log _pθ_ ( _x_ 0), as introduced in
+Eq. 1. Importantly, Sahoo et al. (2024) has shown that Eq. 1:
+
+
+1. is invariant to the specific choice of the noise schedule _αt_, and
+
+2. serves as an upper bound of
+
+_−_ E _p_ data( _x_ )� _pθ_ ( _x_ )� _,_
+thus enabling a principled and simplified training framework for masked diffusion models.
+
+
+Restricting attention to _interpolating_ masked diffusion models— _i.e._, those whose forward process
+_q_ interpolates between clean data _x_ _∈V_ and a target distribution Cat( _·_ ; _π_ ), Sahoo et al. (2024)
+derived a principled training objective Eq. 1 that is invariant to noisy schedules. Recent models such
+as LLaDA and MMaDA base their training on this training objective and adopt a log-linear noise
+schedule defined by:
+_αt_ = exp(log(1 _−_ _t_ )) = 1 _−_ _t,_
+which means that at each timestep _t_, every token is independently replaced with a [MASK] token
+with probability _t_ .
+
+
+16
+
+
+A.2.3 PROXIMAL POLICY OPTIMIZATION
+
+
+Proximal Policy Optimization (PPO) can be derived as a first-order approximation to the Trust Region Policy Optimization (TRPO) problem by replacing the hard KL-constraint with a KL-penalty.
+We begin with the constrained optimization
+
+
+max _θ_ E _t_      - _rt_ ( _θ_ ) _A_ [ˆ] _t_      - s.t. E _t_      - _D_ KL� _πθ_ old ( _· | st_ ) _∥_ _πθ_ ( _· | st_ )�� _≤_ _δ,_ (11)
+
+
+where
+
+
+_rt_ ( _θ_ ) = _πθ_ ( _at_ _| st_ ) and _A_ ˆ _t_ is an estimator of the advantage at time _t._
+_πθ_ old( _at_ _| st_ )
+
+
+Introducing a Lagrange multiplier _β_ for the KL-constraint yields the penalized surrogate objective
+
+
+_L_ [KLPEN] ( _θ_ ) = E _t_      - _rt_ ( _θ_ ) _A_ [ˆ] _t_ _−_ _β D_ KL� _πθ_ old( _· | st_ ) _∥_ _πθ_ ( _· | st_ )� [�] _._ (12)
+
+
+In practice, PPO proceeds by:
+
+
+1. Collect trajectories _{_ ( _st, at, rt_ ) _}_ under the old policy _πθ_ old .
+
+2. Compute advantage estimates _A_ [ˆ] _t_ ( _e.g._, via GAE).
+3. For _K_ epochs, perform minibatch gradient ascent on _L_ [KLPEN] ( _θ_ ):
+
+_θ_ _←_ _θ_ + _η ∇θL_ [KLPEN] ( _θ_ ) _._
+
+
+4. Optionally adjust _β_ to keep the KL close to a target _δ_ :
+
+
+_β_ _←_
+
+
+where _D_ [¯] _D_ KL = E _t_ [ _D_ KL( _πθ_ old _∥πθ_ )].
+5. Set _θ_ old _←_ _θ_ and repeat.
+
+
+
+
+
+
+_α_ + _β,_ _D_ ¯ _D_ KL _>_ 1 _._ 5 _δ,_
+_α−_ _β,_ _D_ ¯ _D_ KL _< δ/_ 1 _._ 5 _,_
+_β,_ otherwise _,_
+
+
+
+
+
+A.2.4 GROUP RELATIVE POLICY OPTIMIZATION
+
+
+Group Relative Policy Optimization (GRPO) extends PPO to settings where we have a collection
+of _G_ groups (or tasks), each potentially requiring its own policy behavior while sharing parameters.
+Let _G_ = _{_ 1 _, . . ., G}_ denote the set of groups, with weightings _{ωg}g∈G_ such that [�] _g_ _[ω][g]_ [=] [1][.] [For]
+
+each group _g_, define
+
+_rt_ _[g]_ [(] _[θ]_ [)] [=] _πθ_ ( _at_ _| st, g_ ) _A_ ˆ _[g]_ _t_ [=] [advantage estimate for group] _[ g]_ [ at time] _[ t,]_
+_πθ_ old( _at_ _| st, g_ ) _[,]_
+
+and the group-specific KL divergence
+
+
+                 -                  -                  - [�]
+_DD_ _[g]_ KL [(] _[θ]_ [) =][ E] _[t][∼][g]_ _D_ KL _πθ_ old( _· | st, g_ ) _∥_ _πθ_ ( _· | st, g_ ) _._
+
+
+Introducing a common penalty coefficient _β_, the GRPO surrogate objective is
+
+
+    -    -    -    - [�]
+_L_ [GRPO] ( _θ_ ) = _ωg_ E _t∼g_ _rt_ _[g]_ [(] _[θ]_ [)] _[A]_ [ˆ] _[g]_ _t_ _[−]_ _[β D]_ [KL] _πθ_ old( _· | st, g_ ) _∥_ _πθ_ ( _· | st, g_ ) _._ (13)
+
+_g∈G_
+
+
+In some cases, one may also include an inter-group regularizer to encourage policies for different
+groups to remain similar:
+
+
+_−_ _γ_ 
+
+_g,h∈G_
+_g_ = _h_
+
+
+     -     -     - [�]
+_ωg,h_ E _s∼D_ _D_ KL _πθ_ ( _· | s, g_ ) _∥_ _πθ_ ( _· | s, h_ ) _,_
+
+
+where _γ_ _≥_ 0 and _{ωg,h}_ are pairwise weights.
+
+
+The GRPO algorithm proceeds analogously to PPO:
+
+
+17
+
+
+1. For each _g_ _∈G_, collect trajectories under _πθ_ old( _·_ _| ·, g_ ).
+
+2. Compute group-specific advantages _{A_ [ˆ] _[g]_ _t_ _[}]_ [.]
+3. For _K_ epochs, perform minibatch gradient ascent on _L_ [GRPO] ( _θ_ ):
+
+
+_θ_ _←_ _θ_ + _η ∇θL_ [GRPO] ( _θ_ ) _._
+
+4. Optionally adjust _β_ (and _γ_, if used) to keep each _DD_ _[g]_ KL [(and] [inter-group] [KLs)] [near] [desired]
+targets.
+5. Update _θ_ old _←_ _θ_ and repeat.
+
+
+A.3 TRAINING VARIANCE DECOMPOSITION
+
+
+The proof of Eq. 2 is deferred to A.5.1. Here we clarify why this decomposition is well-motivated
+and how it supports the P-POTS derivation (§3.1.1).
+
+
+**Effect of Alternative decompositions.** Our decomposition is obtained by iteratively conditioning
+on the random variables ( _x_ 0 _, t, xt_ ), so different conditioning orders give different decompositions.
+The order adopted in this paper _x_ 0 _→_ _t →_ _xy_ is the only interpretable one, because it aligns with the
+MDM training procedure and matches ARMs’ variance decomposition. Importantly, the resulting
+form of P-POTS in § 3.1.1 is invariant to the conditioning order. This is because the optimal sampler
+_p_ _[∗]_ ( _t_ ) depends only on E[ _l_ [2] _| t_ ], not on how the total variance is partitioned.
+
+
+**Loss Variance** _**vs.**_ **Gradient Variance.** While gradient variance is most directly tied to optimization stability, we focus on loss variance for three reasons. (1) it is is optimizer-agnostic: adaptive
+optimizers rescale gradients, making “raw” gradient variance dependent on the optimizer, whereas
+Var( _l_ ) directly improves the SNR of the Monte Carlo estimate of the training objective. (2) Gradients are high-dimensional ( _e.g._, a 8B-model has a gradient of dimension 8B), so any notion of
+“gradient variance” requires a scalarization ( _e.g._, E _∥_ **g** _∥_ [2] 2 [).] [Yet this is not theoretically neutral:] [dif-]
+ferent parameters may prefer different sampling distributions. Any scalarization therefore introduce
+extra design choices and breaks the clean optimality claim. In contrast, the loss is already a unified
+scalar with a clear interpretation as the objective whose expectation we estimate, so its variance is
+unambiguous. (3) A _t_ -sampler can reliably control only the conditional variance of the loss: by
+first-order linearization, Var( **g** _|_ _t_ ) _≈_ _Jt_ Var( _l_ _|_ _t_ ) _Jt_ _[⊤]_ [+][ (terms from model sensitivity), where] _[ J][t]_
+is the Jacobian _w.r.t._ parameters. This highlights that part of gradient variance comes from model
+sensitivity (the Jacobian), which cannot be affected by _t_ -sampler. The only reliably controllable
+component is Var( _l | t_ ) (holding fixed over short horizons).
+
+
+A.4 ALGORITHMS
+
+
+A.4.1 BIN-WISE EMA
+
+
+We partition the interval _t_ _∈_ [0 _,_ 1] into _m_ equal bins and fix an EMA learning rate _η_ . For each bin
+_j_, we maintain four EMA-tracked quantities:
+
+_µL_ ( _j_ ) _≈_ E[ _ℓi_ _| t ∈_ bin _j_ ] _,_ _µH_ ( _j_ ) _≈_ E[ [˜] _bj_ ] _,_ _MLH_ ( _j_ ) _≈_ E[ _ℓi_ [˜] _bj_ ] _,_ _MHH_ ( _j_ ) _≈_ E[ [˜] _b_ [2] _j_ []] _[,]_
+
+and a per-bin baseline estimate [˜] _bj_, initialized to zero. On each training step:
+
+
+- Draw a batch _{xi}_ _[B]_ _i_ =1 [,] [sample mask ratios] _[ t][i]_ _[∼U]_ [[0] _[,]_ [ 1]][,] [run the forward diffusion,] [and compute]
+per-sample losses _ℓi_ .
+
+- Assign each _ti_ to bin _j_ via
+
+
+     - _j −_ 1
+_j_ = _f_ ( _ti_ ) if _ti_ _∈_ _[j]_
+_m_ _[,]_ _m_
+
+
+_m_
+
+
+_._
+
+
+- For each sample, form an online estimate of the optimal control-variate coefficient
+
+_cj_ = _[M][LH]_ [(] _[j]_ [)] _[ −]_ _[µ][L]_ [(] _[j]_ [)] _[µ][H]_ [(] _[j]_ [)]
+
+_MHH_ ( _j_ ) _−_ _µH_ ( _j_ ) [2] + _ϵ_ _[,]_
+
+
+where _ϵ_ is a small damping constant.
+
+
+18
+
+
+- Compute the adjusted loss
+_ℓ_ [adj] _i_ = _ℓi −_ _cj_ _·_ [˜] _bj,_
+detaching [˜] _bj_ so that gradients flow only through _ℓi_, and backpropagate on _ℓ_ [adj] _i_ [.]
+
+- Update all four EMA statistics for bin _j_ :
+_µL_ ( _j_ ) _←_ (1 _−_ _η_ ) _µL_ ( _j_ ) + _ηℓi,_
+
+_µH_ ( _j_ ) _←_ (1 _−_ _η_ ) _µH_ ( _j_ ) + _η_ [˜] _bj,_
+
+_MLH_ ( _j_ ) _←_ (1 _−_ _η_ ) _MLH_ ( _j_ ) + _η_ ( _ℓi_ [˜] _bj_ ) _,_
+
+_MHH_ ( _j_ ) _←_ (1 _−_ _η_ ) _MHH_ ( _j_ ) + _η_ ( [˜] _b_ [2] _j_ [)] _[.]_
+
+- Finally, update the baseline itself via
+˜ _bj_ _←_ (1 _−_ _η_ )˜ _bj_ + _ηℓi._
+
+
+This procedure produces a piecewise-constant approximation **b** **[˜]** of the true expected loss _b_ ( _t_ ) while
+dynamically choosing, per bin, the coefficient _cj_ that maximally cancels out baseline-related noise–
+yielding tighter variance reduction than a fixed scaling _e.g._, _c_ = 1. Additionally, this “per-bin” EMA
+is updated per GPU batch and is analogous to standard moving-average updates used elsewhere in
+deep learning.
+
+
+A.5 PROOFS
+
+
+A.5.1 TRAINING VARIANCE DECOMPOSITION
+
+
+The law of total variance states that
+
+
+Var( _Y_ ) = E�Var( _Y_ _| X_ )� + Var�E[ _Y_ _| X_ ]� _._ (14)
+
+
+Let _Y_ = _l_ ( _x_ 0 _, t, xt_ ) where _x_ 0 _∼_ _p_ data( _._ ) _, t ∼_ _U_ [0 _,_ 1] _, xt_ _∼_ _q_ ( _xt_ _| x_ 0 _, t_ ) are three random variables.
+We apply the law of total variance twice:
+
+
+**1.** **First Decomposition over** _x_ 0
+
+
+View _x_ 0 as the outer random variable. By the law of total variance,
+Var _x_ 0 _,t,xt_ ( _Y_ ) = E _x_ 0 [Var _t,xt_ ( _Y_ _| x_ 0)] + Var _x_ 0 [E _t,xt_ ( _Y_ _| x_ 0)] _._
+
+
+Define
+_gθ_ ( _x_ 0 _, t_ ) = E _xt_ [ _ℓθ_ ( _x_ 0 _, t, xt_ ) _| x_ 0 _, t_ ] _,_ _hθ_ ( _x_ 0) = E _t,xt_ [ _ℓθ_ ( _x_ 0 _, t, xt_ ) _| x_ 0] = E _t_ [ _gθ_ ( _x_ 0 _, t_ ) _| x_ 0] _._
+
+
+Then the second term becomes
+Var _x_ 0[ _hθ_ ( _x_ 0)] = Var _x_ 0 (E _t_ [ _gθ_ ( _x_ 0 _, t_ )]) C data variance _._
+
+
+**2.** **Second decomposition inside** E _x_ 0[Var _t,xt_ ( _Y_ _| x_ 0)]
+
+
+We apply the law of total variance again, this time conditioning on _t_ :
+Var _t,xt_ ( _Y_ _| x_ 0) = E _t_ [Var _xt_ ( _Y_ _| x_ 0 _, t_ )] + Var _t_ [E _xt_ ( _Y_ _| x_ 0 _, t_ )] _._
+Note that E _xt_ ( _Y_ _| x_ 0 _, t_ ) = _gθ_ ( _x_ 0 _, t_ ), so:
+E _x_ 0[Var _t,xt_ ( _Y_ _| x_ 0)] = E _x_ 0 [E _t_ [Var _xt_ ( _ℓθ_ _| x_ 0 _, t_ )]] + E _x_ 0 [Var _t_ ( _gθ_ ( _x_ 0 _, t_ ) _| x_ 0)] _,_
+= E _x_ 0 _,t_ [Var _xt_ ( _ℓθ_ _| x_ 0 _, t_ )] + E _x_ 0 [Var _t_ ( _gθ_ ( _x_ 0 _, t_ ) _| x_ 0)] _._
+
+           - ��            -            - ��            A mask pattern noise B mask rate noise
+
+
++ E _x_ 0 [Var _t_ ( _gθ_ ( _x_ 0 _, t_ ) _| x_ 0)]
+
+ - ��  B mask rate noise
+
+
+_._
+
+
+**3.** **Combine Everything**
+
+
+Putting steps 1 and 2 together, we have:
+Var _x_ 0 _,t,xt_ ( _ℓθ_ ) = E _x_ 0 _,t_ [Var _xt_ ( _ℓθ_ _| x_ 0 _, t_ )]
+
+         - ��          A
+
+
++ E _x_ 0 [Var _t_ ( _gθ_ ( _x_ 0 _, t_ ) _| x_ 0)]
+
+ - ��  B
+
+
+C
+
+
++ Var _x_ 0 (E _t_ [ _gθ_ ( _x_ 0 _, t_ )]) _,_
+
+ - ��  
+
+
+_,_
+
+
+which is exactly the claimed decomposition Eq. 2.
+
+
+19
+
+
+A.5.2 P-POTS: PARETO-OPTIMAL PROPERTY
+
+
+Consider the reweighted estimator
+
+
+1
+_t ∼_ _p_ ( _t_ ) _._
+_p_ ( _t_ ) _[l][θ]_ [(] _[x]_ [0] _[, t, x][t]_ [)] _[,]_
+
+
+As shown in Eq. 3, this estimator is unbiased for the training objective in Eq. 1. We now give a
+detailed proof that
+
+
+_p_ ( _t_ ) =
+
+
+~~�~~ _g_ [2] ( _t_ ) + _v_ ( _t_ )
+�01 - _g_ [2] ( _s_ ) + _v_ ( _s_ ) _ds_
+
+
+is the theoretically optimal distribution that minimizes _A_ + _B_ + _C_ .
+
+
+Recall Var[ _X_ ] = E[ _X_ [2] ] _−_ E[ _X_ ] [2] . Then
+
+_A_ + _B_ + _C_ = Var _x_ 0 _,t,xt_        - _p_ (1 _t_ ) _[l][θ]_ [(] _[x]_ [0] _[, t, x][t]_ [)]        - _._
+
+
+Expanding yields
+
+E _x_ 0 _,t,xt_       - _p_ [2] 1( _t_ ) _[l]_ _θ_ [2][(] _[x]_ [0] _[, t, x][t]_ [)]       - _−_ E [2] _x_ 0 _,t,xt_       - _p_ (1 _t_ ) _[l][θ]_ [(] _[x]_ [0] _[, t, x][t]_ [)]       - _._
+
+
+Assuming absolute convergence and finite expectations, Fubini’s theorem allows us to exchange the
+order of integration, giving
+
+
+_x_ 0 _∼D_
+
+
+- 1
+
+
+0
+
+
+_lθ_ [2][(] _[x]_ [0] _[, t, x][t]_ [)] _[ dx][t][dx]_ [0] _[dt][ −]_
+_Xt_
+
+
+�� 1
+
+
+0
+
+
+_lθ_ ( _x_ 0 _, t, xt_ ) _dxtdx_ 0 _dt_
+_Xt_
+
+
+�2
+
+
+1
+
+_p_ ( _t_ )
+
+
+_x_ 0 _∼D_
+
+
+_._
+
+
+Define
+_g_ ( _t_ ) := E _x_ 0 _,xt_ [ _lθ_ _| t_ ] _,_ _v_ ( _t_ ) := Var _x_ 0 _,xt_ [ _lθ_ _| t_ ] _._
+Substituting yields
+
+           - 1 [2] [�] 1 2
+
+
+_g_ [2] ( _t_ ) + _v_ ( _t_ )
+
+
+�2
+_g_ ( _t_ ) _dt_ _._
+0
+
+
+0
+
+
+1
+
+) + _v_ ( _t_ ) - [�]
+
+_dt −_
+_p_ ( _t_ )
+
+
+The second term is independent of _p_ ( _t_ ). Thus the optimization problem reduces to
+
+
+     - 1
+min _J_ [ _p_ ] :=
+_p_
+
+0
+
+
+_t_ ) + _v_ ( _t_ ) - 1
+
+_dt,_ s.t. _p_ ( _t_ ) _≥_ 0 _,_
+_p_ ( _t_ )
+
+
+_g_ [2] ( _t_ ) + _v_ ( _t_ )
+
+
+_p_ ( _t_ ) _dt_ = 1 _._
+0
+
+
+**Lagrangian method.** Form the Lagrangian:
+
+
+    - 1
+_L_ [ _p, λ_ ] =
+
+0
+
+
+2
+
+- _g_ ( _t_ ) + _v_ ( _t_ ) + _λp_ ( _t_ ) _dt −_ _λ,_
+_p_ ( _t_ )
+
+
+where _λ_ enforces normalization. Taking the variation _w.r.t. p_ ( _t_ ) gives
+
+
+_−_ _[g]_ [2][(] _[t]_ [) +] _[ v]_ [(] _[t]_ [)]
+
+
+_λ_ _._
+
+
+_p_ [) +] ( _t_ ) [2] _[ v]_ [(] _[t]_ [)] + _λ_ = 0 = _⇒_ _p_ _[∗]_ ( _t_ ) = - _g_ [2] ( _t_ )+ _λ_ _v_ ( _t_ )
+
+
+Normalization requires
+_√_
+
+
+  - 1
+_λ_ =
+
+0
+
+
+- _g_ [2] ( _s_ ) + _v_ ( _s_ ) _ds._
+
+
+**Final result.** Therefore, the unique minimizer is
+
+
+_p_ _[∗]_ ( _t_ ) =
+
+
+~~�~~ _g_ [2] ( _t_ ) + _v_ ( _t_ )
+�01 - _g_ [2] ( _s_ ) + _v_ ( _s_ ) _ds_
+
+
+which achieves the Pareto-optimal balance by minimizing _A_ + _B_ + _C_ .
+
+
+20
+
+
+A.5.3 IMPORTANCE SAMPLING
+
+
+**Part 1:** **Unbiasedness of the Importance-Sampling Estimator**
+
+
+Suppose we wish to estimate
+
+
+                _I_ = _f_ ( _x_ ) _p_ ( _x_ ) _dx,_
+
+
+but drawing samples from _p_ ( _x_ ) directly is difficult. Instead, we draw _x_ 1 _, . . ., xN_ i.i.d. from a
+proposal distribution _q_ ( _x_ ), which satisfies _q_ ( _x_ ) _>_ 0 whenever _f_ ( _x_ ) _p_ ( _x_ ) = 0, and construct the
+estimator
+
+
+_q_ ( _x_ ) _[.]_
+
+
+_I_ ˆ _N_ = [1]
+
+_N_
+
+
+_N_
+
+
+- _w_ ( _xi_ ) _f_ ( _xi_ ) _,_ where _w_ ( _x_ ) = _[p]_ [(] _[x]_ [)]
+
+_q_ ( _x_ )
+
+_i_ =1
+
+
+We check its expectation under the sampling law _q_ :
+
+
+E _q_ [ _I_ [ˆ] _N_ ] = [1]
+
+_N_
+
+
+_N_
+
+
+E _q_ [ _w_ ( _xi_ ) _f_ ( _xi_ )] (by linearity and identical distribution)
+
+_i_ =1
+
+
+= E _q_ [ _w_ ( _X_ ) _f_ ( _X_ )] (drop index)
+
+
+        - _p_ ( _x_ )         = _f_ ( _x_ ) _p_ ( _x_ ) _dx_ = _I._
+_q_ ( _x_ ) _[f]_ [(] _[x]_ [)] _[q]_ [(] _[x]_ [)] _[ dx]_ [ =]
+
+
+Hence, _I_ [ˆ] _N_ is an unbiased estimator of _I_ .
+
+
+**Part 2:** **Choice of** _q_ **to Minimize Variance**
+
+
+The variance of _I_ [ˆ] _N_ under _q_ is
+
+
+Var _q_ ( _I_ [ˆ] _N_ ) = [1]
+
+
+�E _q_ [ _w_ ( _X_ ) [2] _f_ ( _X_ ) [2] ] _−_ _I_ [2][�] _._
+_N_
+
+
+[1] [1]
+
+_N_ [Var] _[q]_ [[] _[w]_ [(] _[X]_ [)] _[f]_ [(] _[X]_ [)] =] _N_
+
+
+Since _I_ is fixed, minimizing Var _q_ ( _I_ [ˆ] _N_ ) amounts to minimizing
+
+
+                   - _p_ ( _x_ )2
+E _q_ [ _w_ ( _X_ ) [2] _f_ ( _X_ ) [2] ] =
+
+_q_ ( _x_ ) _[f]_ [(] _[x]_ [)][2] _[ dx,]_
+
+
+subject to the constraint - _q_ ( _x_ ) _dx_ = 1.
+
+
+Introduce a Lagrange multiplier _λ_, and consider the functional
+
+
+            - _p_ ( _x_ )2 _f_ ( _x_ )2 ��            _L_ [ _q_ ] = _dx_ + _λ_ _q_ ( _x_ ) _dx −_ 1 _._
+
+_q_ ( _x_ )
+
+
+Taking the functional derivative with respect to _q_ ( _x_ ) and setting it to zero:
+
+
+_−_ _[p]_ [(] _[x]_ [)][2] _[f]_ [(] _[x]_ [)][2] + _λ_ = 0 _⇒_ _q_ ( _x_ ) _∝_ _p_ ( _x_ ) _|f_ ( _x_ ) _|._
+
+_q_ ( _x_ ) [2]
+
+
+Thus, the optimal proposal distribution is
+
+
+_|f_ ( _x_ ) _| p_ ( _x_ )
+_q_ _[∗]_ ( _x_ ) =                 - _|f_ ( _u_ ) _| p_ ( _u_ ) _du_ _[,]_
+
+
+which, for nonnegative _f_, minimizes the variance to its theoretical minimum–zero in the ideal
+continuous-sampling limit.
+
+
+21
+
+
+A.5.4 SYRM
+
+
+SyRM is designed for structured data such as HTML tables, source code, or graphs. We categorize
+tokens into two groups: 1) response tokens _R_, and 2) syntax tokens _C_ in the prompt. For example,
+in an html table, the syntax tokens are <table>, <tr>, <th>, <td>, and similar tags. SyRM
+modifies the eligibility set for masking as follows:
+
+
+eligible := response tokens _∪_ syntax tokens in prompt
+
+
+**Definition of Eligible Tokens**
+
+
+We define a token position as _eligible_ if it can be masked during the forward process. According to
+LLaDA(Nie et al., 2025), during pretraining, all tokens in **x** 0 are eligible. During supervised finetuning, where **x** 0 is composed of concatenated prompt and response tokens, only response tokens
+are eligible. Thus, in this stage, prompt tokens remain unmasked while response tokens are masked
+independently.
+
+
+**Under the following assumptions,**
+
+
+- Tokens within each group are homogeneous in first and second moments of token-level losses.
+
+- Syntax tokens are stabler predicted than response tokens.
+
+- Reasoning errors couple response tokens more strongly than syntax tokens.
+
+
+we show below that SyRM rigorously reduces the masking pattern noise A . Although this introduces some bias (optimum shift), we show this bias is bounded, and the total MSE of estimating
+training loss is reduced due to significant variance reduction. Intuitively, by including syntax tokens
+in prompts that are both easy to predict and helpful for guiding the model’s reasoning as an auxiliary
+loss, SyRM reduces A mask pattern noise.
+
+
+**Setup**
+
+
+- Number of _eligible_ positions: _P_ _∈_ N.
+
+
+i.i.d.
+
+- Mask variables: _Mi_ _∼_ Bernoulli( _t_ ) with 0 _< t <_ 1.
+
+- Per-token loss: random variables _Yi_ satisfying
+
+E[ _Yi_ ] = _µi,_ Var( _Yi_ ) = _σi_ [2] _[,]_ Cov( _Yi, Yj_ ) = _ρij_ ( _i ̸_ = _j_ ) _._
+
+
+- Batch loss:
+
+
+1
+_L_ =
+_Pt_
+
+
+_P_
+
+- _MiYi._
+
+
+_i_ =1
+
+
+- The _Mi_ ’s are independent of all _Yj_, and the _Mi_ ’s are mutually independent.
+
+
+**Theorem 1**
+
+
+_ρij._
+
+1 _≤i<j≤P_
+
+
+_P_
+
+
+Var� _L | t_ - = 1
+_P_ [2] _t_
+
+
+_P_
+
+
+- _σi_ [2] [+] [1] _[ −]_ _[t]_
+
+_P_ [2] _t_
+
+_i_ =1
+
+
+_P_ [2] _t_
+
+
+- _µ_ [2] _i_ [+] 2 
+_P_ [2]
+_i_ =1 1 _≤i<j_
+
+
+**Proof** Let _S_ := [�] _i_ _[P]_ =1 _[M][i][Y][i]_ [, so] _[ L]_ [ =] _[ S/]_ [(] _[Pt]_ [)][.]
+
+
+Then
+
+
+where
+
+
+and
+
+
+Var( _MiYi_ ) = E[ _MiYi_ [2][]] _[ −]_ [(][E][[] _[M][i][Y][i]_ [])][2] [=] _[ t]_ [E][[] _[Y]_ _i_ [2][]] _[ −]_ _[t]_ [2] _[µ]_ _i_ [2] [=] _[ tσ]_ _i_ [2] [+] _[ t]_ [(1] _[ −]_ _[t]_ [)] _[µ]_ _i_ [2] _[.]_ (16)
+
+
+22
+
+
+Cov( _MiYi, MjYj_ ) _._ (15)
+
+1 _≤i<j≤P_
+
+
+Var( _S_ ) =
+
+
+_P_
+
+
+- Var( _MiYi_ ) + 2 
+
+_i_ =1 1 _≤i<j_
+
+
+Cov( _MiYi, MjYj_ ) = E[ _MiMjYiYj_ ] _−_ E[ _MiYi_ ]E[ _MjYj_ ] = _t_ [2] ( _ρij_ + _µiµj_ ) _−t_ [2] _µiµj_ = _t_ [2] _ρij._ (17)
+
+
+Combine Eqs. 15, 16 and 17:
+
+
+_P_
+
+
+- _µ_ [2] _i_ [+ 2] _[t]_ [2] 
+_i_ =1 1 _≤i<j_
+
+
+_ρij._ (18)
+
+1 _≤i<j≤P_
+
+
+Var( _S_ ) = _t_
+
+
+Convert Eq. 18 back to _L_ = _P tS_ [:]
+
+
+_P_
+
+- _σi_ [2] [+] _[ t]_ [(1] _[ −]_ _[t]_ [)]
+
+_i_ =1
+
+
+1
+Var[ _L | t_ ] = ( _Pt_ ) [2] [Var(] _[S]_ [)]
+
+
+ _P_ [2]
+
+
+_P_
+
+
+_ρij._
+
+1 _≤i<j≤P_
+
+
+1
+=
+_P_ [2] _t_
+
+
+_P_
+
+
+- _σi_ [2] [+] [1] _[ −]_ _[t]_
+
+_P_ [2] _t_
+
+_i_ =1
+
+
+_P_ [2] _t_
+
+
+- _µ_ [2] _i_ [+] [2]
+
+_P_
+
+_i_ =1
+
+
+**Theorem 2** Let _S_ C be the SyRM strategy and _S_ R the baseline strategy that masks only response
+tokens. Define the mask-pattern noise of a strategy _S_ as _A_ ( _S_ ) := Var[ _L | S_ ]. For _m ∈{_ C _,_ R _}_ with
+corresponding eligible-set size _Pm_ and token statistics _µi,m, σi,m_ [2] _[, ρ][ij,m]_ [,]
+
+
+ - _ρij,m._
+
+
+1 _≤i<j≤Pm_
+
+
+- _Pm_ _µ_ [2] _i,m_ [+] 2
+
+_i_ =1 _Pm_ [2]
+
+
+_A_ ( _Sm_ ) = [E] _P_ [[1] _m_ [2] _[/t]_ []]
+
+
+_Pm_
+
+
+- _m_ _σi,m_ [2] [+] [E] �(1 _−_ _t_ ) _/t_ 
+_i_ =1 _Pm_ [2]
+
+
+_Pm_ [2]
+
+
+**Proof** Take the conditional variance from Theorem 1 and integrate over _t_ . Note that token-wise
+parameters naturally depend on the chosen strategy, so we let _P, σi, µi, ρij_ depend on _m ∈{_ C _,_ R _}_ .
+
+
+**Theorem 3** Partition the eligible tokens into
+
+
+1. response tokens _R_ (count _PR_ ),
+
+
+2. syntax prompt tokens _C_ (count _PC_ ),
+
+
+so _P_ = _PR_ + _PC_ . Under the assumptions
+
+
+(A1) All tokens in _R_ share _µR, σR_ [2] [; tokens in] _[ C]_ [share] _[ µ][C][, σ]_ _C_ [2] [.]
+
+(A2) _σC_ [2] _[≪]_ _[σ]_ _R_ [2] [.]
+
+(A3) _ρCC_ _≪_ _ρRR_ .
+
+(A4) _|ρRC| ≤_ _[√]_ _ρRRρCC_ .
+
+(A5) 2 _wRβ_ _≤_ [(1] _[ −]_ _[α]_ [)(] _[P][R][ −]_ [1)] _[ρ][RR]_ + (1 _−_ _β_ ), where _α_ := _σC_ [2] _[/σ]_ _R_ [2] [,] _[β]_ [:=] _[ρ][CC][/ρ][RR]_ [,]
+
+_σR_ [2] _[B]_
+
+_wR_ := _PR/P_, and _B_ := E[1 _/t_ ] _>_ 0,
+
+
+we have
+_A_           - _S_ C� _<_ _A_           - _S_ R� _._
+
+
+**Proof** Denote _B_ := E� 1 _t_ - _>_ 0. By Theorem 2,
+
+
+_A_ - _S_ R� = _[B]_
+
+
+_[B]_ _σR_ [2] [+] [1]
+
+_PR_ _P_
+
+
+[1] ( _B −_ 1) _µ_ [2] _m_ [+] _[P][R][ −]_ [1]
+
+_PR_ _PR_
+
+
+_ρRR_ (19)
+_PR_
+
+
+23
+
+
+In the SyRM strategy, both R and C are _eligible_ . Denote _wR_ = _[P][R]_
+
+
+_P_ _[R]_ _[, w][C]_ [=] _[P]_ _P_ _[C]_
+
+
+In the SyRM strategy, both R and C are _eligible_ . Denote _wR_ = _P_ _[R]_ _[, w][C]_ [=] _P_ _[C]_ [where] _[ P]_ [=] _[P][R]_ [+]
+
+_PC_ _>_ max( _PR, PC_ ). We group terms accordingly, yielding
+
+
+ - - _σR_ [2] _C_
+_A_ _S_ C = _[σ]_ [2]
+_PRB_ [+] _PCB_ [+] _[P][R]_ _P_ _[ −]_ [1]
+
+
+(20)
+
+
+_[ −]_ [1] _[−]_ [1]
+
+_ρRR_ + _[P][C]_
+_P_ _P_
+
+
+_P_ [2] _ρRC_ = _wRAR_ + _wCAC_ +2 _wRwCρRC,_
+
+
+_[−]_ [1]
+
+_P_ _ρCC_ + [2] _[P]_ _P_ _[R]_ [2] _[P][C]_
+
+
+where
+
+
+Thus,
+
+
+_AR_ := _σR_ [2] _[P][R][ −]_ [1]
+_PRB_ [+] _PR_
+
+
+_ρCC._
+_PC_
+
+
+_[ −]_ [1] _ρRR,_ _AC_ := _σC_ [2] _[P][C]_ _[−]_ [1]
+
+_PR_ _PCB_ [+] _PC_
+
+
+_A_       - _S_ C� _−_ _A_       - _S_ R� = _wC_ ( _AC_ _−_ _AR_ ) + 2 _wRwCρRC._
+
+
+**Claim 3.1**
+_AR_ _> AC_
+
+
+**Proof** By the Cauchy–Schwarz inequality,
+
+_|ρRC| ≤_ _[√]_ _ρRRρCC._
+
+
+From Eqs. 19 and 20, we further obtain:
+
+
+_AR −_ _AC_ = - _σR_ 2 _−_ _[σ]_ _C_ [2]
+_PR_ _PC_
+
+
+- - _PR −_ 1 _[−]_ [1]
+_B_ + _ρRR −_ _[P][C]_ _ρCC_
+_PR_ _PC_
+
+
+_._ (21)
+
+
+Define:
+
+
+then:
+
+
+_α_ := _[σ]_ _C_ [2] _,_ _β_ := _[ρ][CC]_ (as in Assumption A, assume _α, β_ _≪_ 1) _,_
+_σR_ [2] _ρRR_
+
+
+     - 1
+_AR−AC_ = _σR_ [2] _[B]_ _−_ _[α]_
+_PR_ _PC_
+
+
++ _ρRR_
+
+
+- _PR −_ 1 _[−]_ [1]
+
+_−_ _β ·_ _[P][C]_
+_PR_ _PC_
+
+
+_≥_ _σR_ [2] _[B][·]_ [1] _[ −]_ _[α]_
+
+
+_[ −]_ _[α]_
+
++ _ρRR·_ [1] _[ −]_ _[β]_
+_PR_ _PR_
+
+
+_[ −]_ _[β]_
+
+_·_ _[P][R][ −]_ [1] _._
+_PR_ 1
+
+
+(22)
+
+
+Therefore,
+_AR_ _> AC._
+
+
+Using the inequality
+_|ρRC| ≤_ _[√]_ _ρRRρCC_ _≤_ _βρRR,_
+
+
+we obtain:
+
+
+_A_ - _S_ C� _−_ _A_ - _S_ R� _≤_ _wC_
+
+
+_R_ _[B]_
+
+_−_ (1 _−_ _α_ ) _[σ]_ [2] _−_ (1 _−_ _β_ ) _[P][R][ −]_ [1] _ρRR_
+_PR_ _PR_
+
+
++2 _wRwCβρRR._
+
+
+               - ��               =: _D_
+
+
+Since _D_ _>_ 0 and _β_ _≪_ 1, setting
+
+_D_
+2 _wRβ_ _≤_ _,_
+_ρRR_
+
+
+ensures that
+_A_           - _S_ C� _−_ _A_           - _S_ R� _<_ 0 _._
+
+
+24
+
+
+**Discussion of Assumptions**
+
+
+- A1–A2. Syntax tokens _C_ are homogeneous and more stably predicted, hence lower mean and
+variance.
+
+
+- A3. Reasoning errors couple response tokens more strongly than syntax tokens, implying _ρRR_ _≫_
+_ρCC_ .
+
+
+- A4. Cauchy–Schwarz bounds the cross-covariance.
+
+
+- A5. Given A2–A3, this technical condition is typically satisfied in practice and ensures the crossterm cannot offset the variance reduction provided by including _C_ .
+
+
+**Theorem 4**
+_L_ SyRM = _α L_ resp + (1 _−_ _α_ ) _L_ coord
+
+
+**Proof 4** Consider a single forward pass with _PR_ response tokens and _PC_ syntax tokens (disjoint
+sets, so _P_ = _PR_ + _PC_ ). All eligible positions are masked with the same rate _t_ _∼_ Uniform(0 _,_ 1).
+Define the per-step loss
+
+
+1
+_L_ =
+_Pt_
+
+
+_P_
+
+- _MiYi,_ _Mi_ _∼_ Bernoulli( _t_ ) _,_
+
+
+_i_ =1
+
+
+where _P_ is the number of eligible tokens under the chosen strategy.
+
+
+For the SyRM strategy, _P_ SyRM = _PR_ + _PC_, and
+
+
+1
+_L_ SyRM =
+_P_ SyRM _t_
+
+
+- _MiYi_
+
+
+_i∈R∪C_
+
+
+_PR_
+=
+_P_ SyRM
+
+
+- 1 - _MiYi_ - + _PC_
+_PR t_ _i∈R_ _P_ SyRM
+
+
+- 1
+_PC t_
+
+
+- _MjYj_ 
+
+_j∈C_
+
+
+where
+
+
+:= _α L_ resp + (1 _−_ _α_ ) _L_ coord _,_
+
+
+_PR_ _PC_
+_α_ := _,_ 1 _−_ _α_ := _._
+_PR_ + _PC_ _PR_ + _PC_
+
+
+Hence,
+_L_ SyRM = _α L_ resp + (1 _−_ _α_ ) _L_ coord _,_
+
+
+which is a purely algebraic identity requiring no additional assumptions.
+
+
+**Theorem 5** Optimum-shift bias is inevitable.
+
+
+**Proof** Define the objectives _J_ resp( _θ_ ) = E[ _L_ resp] _,_ _J_ coord( _θ_ ) = E[ _L_ coord] _,_ _J_ SyRM( _θ_ ) =
+_α J_ resp( _θ_ ) + (1 _−_ _α_ ) _J_ coord( _θ_ ) _._ Let the response-only optimum _θ_ resp _[⋆]_ [satisfy] _[ ∇][θ][J]_ [resp][(] _[θ]_ resp _[⋆]_ [) = 0] _[.]_ [ If]
+at the same point _∇θJ_ coord( _θ_ resp _[⋆]_ [)] _[ ̸]_ [= 0] _[,]_ [ then]
+
+
+_∇θJ_ SyRM( _θ_ resp _[⋆]_ [) = (1] _[ −]_ _[α]_ [)] _[ ∇][θ][J]_ [coord][(] _[θ]_ resp _[⋆]_ [)] _[ ̸]_ [= 0] _[,]_
+
+
+so _θ_ resp _[⋆]_ [is] _[ not]_ [ a stationary point of] _[ J]_ [SyRM][.] [Under gradient-based optimization, the parameters will]
+continue to move and eventually converge to a different optimum _θ_ SyRM _[⋆]_ [=] _[ θ]_ resp _[⋆]_ [.] [Hence, whenever]
+_∇θJ_ coord( _θ_ resp _[⋆]_ [)] _[ ̸]_ [= 0] _[,]_ [ the two optima necessarily diverge; coincidence occurs iff] _[ ∇][θ][J]_ [coord][(] _[θ]_ resp _[⋆]_ [) =]
+0 _._
+
+
+**Theorem 6** If the Hessian of _J_ SyRM is positive definite,
+
+
+1 _−_ _α_
+_∥θ_ SyRM _[⋆]_ _[−]_ _[θ]_ resp _[⋆]_ _[∥≤]_
+_λ_ min( _H_ SyRM)
+
+
+25
+
+
+�� _∇J_ coord( _θ_ resp _⋆_ [)] �� _._
+
+
+**Proof** Perform a first-order Taylor expansion of _θ_ SyRM _[⋆]_ [around] _[ θ]_ resp _[⋆]_ [:]
+
+0 = _∇J_ SyRM( _θ_ SyRM _[⋆]_ [)] _[ ≃∇][J]_ [SyRM][(] _[θ]_ resp _[⋆]_ [) +] _[ H]_ [SyRM][(] _[ξ]_ [)(] _[θ]_ SyRM _[⋆]_ _[−]_ _[θ]_ resp _[⋆]_ [)] _[,]_
+
+where _H_ SyRM( _ξ_ ) is the Hessian evaluated at some point _ξ_ between _θ_ SyRM _[⋆]_ [and] _[θ]_ resp _[⋆]_ [.] [Rearranging]
+gives:
+_θ_ SyRM _[⋆]_ _[−]_ _[θ]_ resp _[⋆]_ _[≃−]_ [(1] _[ −]_ _[α]_ [)] _[H]_ SyRM _[−]_ [1] [(] _[ξ]_ [)] _[∇][J]_ [coord][(] _[θ]_ resp _[⋆]_ [)] _[.]_
+
+
+If _H_ SyRM( _ξ_ ) is positive definite, we can bound the Euclidean norm using its smallest eigenvalue
+_λ_ min( _H_ SyRM):
+
+
+1 _−_ _α_
+_∥θ_ SyRM _[⋆]_ _[−]_ _[θ]_ resp _[⋆]_ _[∥≤]_
+_λ_ min( _H_ SyRM)
+
+
+�� _∇J_ coord( _θ_ resp _⋆_ [)] �� _._
+
+
+**Explanation:**
+
+
+- Weight factor 1 _−_ _α_ : The smaller the proportion of syntax tokens, the tighter the bound.
+
+- Curvature _λ_ min( _H_ SyRM): A steeper loss (larger curvature) suppresses the shift.
+
+- Task conflict �� _∇J_ coord( _θ_ resp _⋆_ [)] ��: If the syntax gradient is already small at the resp-optimal point,
+the shift will naturally be small.
+
+
+A.5.5 STRATIFIED SAMPLER
+
+
+Specifically, when processing a batch of _n_ data points, instead of independently drawing mask ratios
+_ti_ _∼U_ [0 _,_ 1], one partitions the interval [0 _,_ 1] into _k_ uniform strata: [0 _,_ 1 _/k_ ] _,_ [1 _/k,_ 2 _/k_ ] _, . . .,_ [( _k −_
+1) _/k,_ 1], and samples one masking ratio from each stratum. This approach, known as the _stratified_
+_sampler_, is known to produce low discrepancy. Here, _k_ is the number of strata, which must be
+chosen before training.
+
+
+This technique is discussed in Sahoo et al. (2024), where they use _n_ = _k_ ( _i.e._, one sample per
+stratum). Here, we provide a rigorous analysis and offer a practical guideline for selecting _k_ .
+
+
+**A principled Method:** **Unbiased and Reduce Variance**
+
+
+Let
+_G_ ( _t_ ) = _gθ_ ( _x_ 0 _, t_ ) = E _xt∼q_ ( _·|x_ 0 _,t_ )[ _ℓθ_ ( _x_ 0 _, t, xt_ ) _| x_ 0 _, t_ ] _._
+
+For a fixed _x_ 0, we are interested in the expected value of _G_ ( _t_ ) under _t ∼_ Unif[0 _,_ 1], _i.e._,
+
+
+_µ_ = E _t_ [ _G_ ( _t_ )] _._
+
+
+During training, this is estimated by the empirical mean over a batch:
+
+
+_µ_ ˆ = [1]
+
+_n_
+
+
+_n_
+
+- _G_ ( _ti_ ) _._
+
+
+_i_ =1
+
+
+If _ti_ _∼_ i.i.d. Unif[0 _,_ 1] for _i_ = 1 _, . . ., n_, then by standard results,
+
+Var[ˆ _µ | x_ 0] = [1] _t_ _[,]_ where _σt_ [2] [= Var] _[t]_ [[] _[G]_ [(] _[t]_ [)]] _[.]_
+
+_n_ _[σ]_ [2]
+
+
+This corresponds to the B term in the variance decomposition:
+
+
+E _x_ 0[Var _t_ ( _G_ )] _._
+
+
+For stratified sampling, partition [0 _,_ 1] into _k_ equal-length intervals:
+
+
+  - _j −_ 1
+_Ij_ = _,_ _[j]_
+_k_ _k_
+
+
+_,_ for _j_ = 1 _, . . ., k,_
+
+
+and sample _tj_ _∼_ Unif( _Ij_ ) independently within each stratum. Then the estimator becomes
+
+
+_µ_ ˆ = [1]
+
+_k_
+
+
+_k_
+
+- _G_ ( _tj_ ) _._
+
+
+_j_ =1
+
+
+26
+
+
+This remains an unbiased estimator of _µ_, and its conditional variance is:
+
+
+_w_ _[,]_
+_k_ _[σ]_ [2]
+
+
+Var[ˆ _µ | x_ 0] = [1]
+
+_k_ [2]
+
+
+_k_
+
+
+- Var _t∈Ij_ [ _G_ ( _t_ )] = _k_ [1]
+
+_j_ =1
+
+
+where we define the within-stratum variance:
+
+
+_σw_ [2] [=] [1]
+
+_k_
+
+
+_k_
+
+- Var _t∈Ij_ [ _G_ ( _t_ )] _._
+
+
+_j_ =1
+
+
+Decomposing the total variance _σt_ [2] [into within- and between-stratum variance gives:]
+
+_σt_ [2] [=] _[n]_ _w_ [+] _[ σ]_ _b_ [2][)] _[,]_ where _σb_ [2] [= Var] _[k]_ [[] _[µ][k]_ []] _[,]_ _µk_ = E _t∈Ik_ [ _G_ ( _t_ )] _._
+
+_k_ [(] _[σ]_ [2]
+
+
+Therefore, the variance of the stratified estimator satisfies:
+
+
+[1] _t_ _[−]_ [1]
+
+_n_ _[σ]_ [2] _k_
+
+
+Varstrat[ˆ _µ | x_ 0] = [1]
+
+
+_b_ _[,]_
+_k_ _[σ]_ [2]
+
+
+which is smaller than the SRS variance:
+
+
+VarSRS = [1] _t_ _[.]_
+
+_n_ _[σ]_ [2]
+
+
+The reduction is exactly
+1
+_b_ _[.]_
+_k_ _[σ]_ [2]
+
+
+**Practical Suggestion for Choosing** _n_
+
+
+To choose an appropriate number of strata, we aim to balance two objectives:
+
+
+1. Reduce the overall estimation variance (which favors using a larger number of strata _n_ );
+
+2. Ensure the estimation of within-stratum variance _σk_ [2][–denoted] [by] _[σ]_ [ˆ] _k_ [2][–is] [sufficiently] [stable]
+(which favors having more samples per stratum, _i.e._, _m_ = int( _B/n_ )).
+
+
+While setting _n_ = _B_ results in highly fine-grained strata, it may lead to unstable estimates within
+each stratum due to too few samples. To balance this trade-off, we propose the following optimal
+number of strata: _√_
+_n_ opt _∝_ _B,_
+
+
+where _B_ is the total sampling budget, and _m_ = int( _B/n_ ) denotes the number of samples per stratum.
+
+
+A.5.6 BIN-WISE EMA: VARIANCE REDUCTION & HYPERPARAMETER SELECTION
+
+
+**Bin-Wise** **EMA** **Reduces** **B** **as** **a** **Control-Variate** **Strategy** To estimate a random variable _X_
+with mean _µX_ = E[ _X_ ], we can use a control variate _Y_ with known mean _µY_ = E[ _Y_ ]. Given _n_ i.i.d.
+samples _{_ ( _Xi, Yi_ ) _}_ _[n]_ _i_ =1 [, the control variate estimator]
+
+_µCV_ = _X_ [¯] _−_ [Cov(] _[X, Y]_ [ )] _Y_ ¯
+
+_σY_ [2]
+
+
+_X_ _X_ Cov( _X,Y_ )
+reduces the variance from _[σ]_ _n_ [2] to _[σ]_ _n_ [2] [(1] _[−]_ _[ρ]_ [2][)][,] [where] _[ρ]_ [=] _σX_ _σY_ . Importantly, this form of
+
+estimator gives an unbiased estimate of loss gradients.
+
+
+In our context, _X_ represents the loss gradient for the current batch, while _Y_ is the exponential
+moving average _bk_ of past gradients within the same _t_ -bin. Assuming strong heteroscedasticity over
+_t ∈_ [0 _,_ 1], partitioning _t_ into bins and applying EMA within each bin maximizes _|ρ|_, thus achieving
+significant variance reduction. Several alternative control strategies are listed in Table 3. Among
+these, we adopt bin-wise EMA for its strong variance reduction under heteroscedastic conditions
+and minimal implementation burden, which also helps prevent overfitting.
+
+
+27
+
+
+|Variant|Assumptions|Tuning and Resources|Characteristics|
+|---|---|---|---|
+|Spline|Smooth _ℓ_(_t_), no<br>sharp changes|Requires<br>degree/node<br>selec-<br>tion; low memory usage|Captures trends well but sen-<br>sitive to under-/over-ftting|
+|Kernel|Flexible; handles<br>arbitrary<br>het-<br>eroscedasticity|Only<br>bandwidth<br>_h_;<br>stores<br>_O_(1_/h_) samples; higher mem-<br>ory cost than bin-wise EMA|Most robust; no shape as-<br>sumptions; tuning and imple-<br>mentation are more complex|
+
+
+Table 3: Comparison of spline and kernel variants
+
+
+**Choose** **the** **Number** **of** **Bins** **in** **EMA:** **A** **Mathematical** **Perspective** Suppose we have _m_ data
+points and choose _b_ bins; then each bin will contain approximately _m/b_ samples to estimate the
+piecewise-constant value of _b_ ( _t_ ) over an interval of width 1 _/b_ .
+
+
+We use MSE optimization analysis to determine a principled choice of _b_ given _m_ . Specifically, we
+aim to estimate the function
+_g_ ( _t_ ) = E _xt_ [ _ℓθ_ ( _x_ 0 _, t, xt_ ) _| x_ 0 _, t_ ]
+on [0 _,_ 1] by a piecewise-constant approximation _gb_ ( _t_ ) with _b_ equal-width bins of size ∆= 1 _/b_,
+using the sample average within each bin.
+
+
+The total mean squared error is decomposed as
+
+
+MSE _B_ = E[( _gb_ ( _t_ ) _−_ _g_ ( _t_ )) [2] ] + Var( _gb_ ( _t_ ))
+
+      - ��      -      - ��      Bias [2] Variance
+
+
+_._
+
+
+**Bias** **Term** Assuming _g_ ( _t_ ) is twice differentiable within each bin, we can apply Taylor approximation:
+Bias [2] _≈_ _C_ 1∆ [4] = _[C]_ [1]
+
+_b_ [4] _[,]_
+
+where _C_ 1 _∝_ max _|g_ _[′′]_ ( _t_ ) _|_ .
+
+
+**Variance Term** Each bin contains _n_ = _m/b_ samples, hence:
+
+
+[2]
+
+_[C]_ [2] _[b]_
+_n_ [=] _m_
+
+
+Var _≈_ _[C]_ [2]
+
+
+_m_ _[,]_
+
+
+where _C_ 2 _∝_ Varmask[ _ℓ_ ].
+
+
+**Total MSE** Combining both terms:
+
+
+MSE _B_ _≈_ _[C]_ [1]
+
+
+_[C]_ [1] _[C]_ [2] _[b]_
+
+_b_ [4] [+] _m_
+
+
+_m_ _[.]_
+
+
+**Optimal** _b_ Taking the derivative _w.r.t._ _b_ and setting it to zero:
+
+
+_d_      - 4 _C_ 1 _m_
+
+_[B]_ [=] _[ −]_ [4] _[C]_ [1] _[b][−]_ [5][ +] _[C]_ [2] _⇒_ _b_ _[∗]_ =
+_db_ [MSE] _m_ [= 0] _C_ 2
+
+
+�1 _/_ 5
+_∝_ _m_ [1] _[/]_ [5] _._
+
+
+**Selection for** _η_ For _η_, it’s useful to think in terms of the e-folding time _k_ = _−_ ln(11 _−η_ ) _[≈]_ _η_ [1] _[,]_ [ so that]
+
+each EMA bin effectively averages over the past _k ×_ (batch size per GPU) losses. Larger _η_ adapts
+faster but use fewer past samples to estimate _b_ ( _t_ ); smaller _η_ is stabler but can cause the EMA to lag
+(and suffer from domain-shift issues). In our experiments, we set:
+
+
+       - 1        _m ×_ _≈_ 0 _._ 1 _×_ (train data size) _._
+_η_ _[×]_ [ batch size per GPU]
+
+
+A.6 METHOD COMBINATION
+
+
+One might wonder whether all methods proposed in this work could be combined into a single
+ultra-strong approach. While such a combination may sound attractive, it is not a straightforward
+task: different methods rely on distinct assumptions, and naive aggregation can easily introduce
+redundancy or bias:
+
+
+28
+
+
+1. **Different** **Assumptions.** Each method relies on specific assumptions. For example, the
+effectiveness of P-POTS depends on accurate modeling of _g_ ( _t_ ) and _v_ ( _t_ ), while Bin-Wise
+EMA requires heteroskedasticity of the loss _l_ with respect to _t_ . Blindly combining them
+risks violating these assumptions.
+
+
+2. **Redundancy.** Each method in this work is already effective on its own. If two methods
+target the same source, the first may remove most of the variance ( _e.g._, 80%), while the
+second may introduce estimation bias that offset any residual variance reduction, resulting
+in worse performance than using a single method.
+
+
+Instead, we emphasize the synergy between P-POTS and MIRROR, which our experiments confirm
+to be stable. In practice, we recommend P-POTS+MIRROR for maximal performance gains, and
+P-POTS alone for cost efficiency. Other techniques may still be preferable in specific contexts due to
+their simplicity or ease of implementation. Rather than combining everything, we provide guidance
+below on how to select among them.
+
+
+A.6.1 STRATIFIED SAMPLING VS EMA
+
+
+Both methods rely on the assumption that the loss _l_ is heteroskedastic in _t_ : after averaging over _x_ 0
+and _xt_, different values of _t_ yield losses of different magnitudes. This generally holds, since larger
+_t_ masks more tokens, making reconstruction harder and the loss higher, as shown in Figure 5a.
+
+
+(a) (b)
+Figure 5: The left panel shows the heteroscedasticity of the _t_ -loss, and the right panel illustrates the shrinking
+difference between IID and stratified sampling as batch size _B_ increases, where we use the KS statistic to
+measure their maximum deviation.
+
+
+However, the two methods reduce B in fundamentally different ways:
+
+
+- Batch Size: Stratified sampling enforces fixed proportions of _t_ -values in each batch, which is
+particularly beneficial when the batch size is small. As the batch size grows, its advantage over
+simple independent sampling diminishes, as shown in Figure 5b. By contrast, EMA accumulates
+information continuously across training; its effectiveness depends on the choice of _m_ and _η_, but
+not on batch size.
+
+
+- Theoretical Limit: Stratified sampling cannot fully eliminate variance, as within-stratum variance
+always remains. In contrast, EMA can, in principle, reduce B to zero if the control variate is
+sufficiently correlated.
+
+
+**Note.** We do not recommend combining EMA with stratified sampling. Each method is effective on
+its own, and their joint use may introduce estimation bias that offset any residual variance reduction.
+
+
+In practice, we suggest using stratified sampling as the default strategy for reducing B, and switching to EMA only when the batch size is sufficiently large.
+
+
+29
+
+
+A.6.2 ISAD VS SYRM
+
+
+These methods are dataset-specific. We recommend choosing based on the dataset type: ISAD
+is designed for QA datasets with explicit answer delimiters, while SyRM is designed for datasets
+containing syntax tokens in prompts.
+
+
+A.7 EXPERIMENTAL DETAILS
+
+
+A.7.1 HYPERPARAMETER SETTINGS
+
+
+We detail here the hyperparameters used for training and inference of masked diffusion models
+(MDMs) and auto-regressive models (ARMs).
+
+
+**Chain-of-Thought (CoT) Reasoning.**
+
+
+_Dataset_ _CoT Handling_
+All except text-to-image-2M & HiTab Responses include chain-of-thoughts
+HiTab No CoT provided; generated via rejection sampling
+
+
+**Train/Validation/Test Splits.**
+
+
+_Dataset_ _Train/Validation Split_ _Test Split_
+OpenScience 5,000 samples, 9:1 (4,500/500) 5001st–6000th examples
+GSM8K Official train split Official test split
+HiTab Official train split Official test split
+text-to-image-2M 5,000 samples, 9:1 (4,500/500) 5001st–5100th examples
+
+
+text-to-image-2M consists of two subsets, 1024 ~~1~~ 0k and 512 ~~2~~ M. We sample 2,500 examples from
+each subset to construct the training and validation splits, and 500 examples from each subset to
+form the test split.
+
+
+**General Hyperparameter.**
+
+
+_Parameter_ _Value_
+Learning rate 5 _×_ 10 _[−]_ [5]
+Scheduler Linear
+Global batch size 32
+Epochs 5
+Max sequence length 4096
+Warmup steps 0
+
+
+Note that after constructing the training data as described in **Train/Validation/Test Splits.**, we further filter out samples with a total sequence length (prompt + response) exceeding 4096, matching
+the fixed context length used in the pretraining stage of LLaDA. As a result, the final dataset may be
+smaller than the original.
+
+
+**Method-Specific Hyperparameters (MDMs Only).**
+
+
+_Technique_ _Setting_
+Importance sampling ∆= 0 _._ 2
+_√_
+Stratified sampler #strata = _⌈_ batch size _⌉_ = 6
+
+EMA bins 10
+EMA learning rate 0.01
+
+
+**Checkpoint Selection.**
+
+
+30
+
+
+_Criterion_ _Setting_
+Evaluation strategy Early stopping (patience = 3)
+
+
+**Random Seeds (MDMs).**
+
+
+_Seeds used_ 42, 731, 20231
+
+
+**How Data Cleaned in HiTab**
+
+
+Raw answers are extracted from _\_ boxed _{}_ delimiters, then cleaned by removing surrounding
+whitespace, unwrapping _\_ text _{_ ... _}_ blocks, converting escaped percent signs _\_ % to %, deleting
+backslashes and trimming a trailing period
+
+
+**Inference Settings for LLaDA.**
+
+
+We set the decoding temperature to 0 for all ARMs and MDMs, ensuring that variance in downstream task performance originates solely from training.
+
+
+_Dataset_ _Train Data Response Max Length_ _ARMs_ _MDMs_
+GSM8K 444 512 128-128-32
+HiTab 3571 3968 512-256-16
+Open 4605 5120 256-256-256
+
+
+The ARM column indicates the maximum number of new tokens, while the MDM column specifies
+generation length-steps-block length, as we adopt block diffusion for inference (Arriola et al., 2025).
+
+
+For ARMs, we determine the maximum new tokens as:
+
+
+max new tokens = _⌈_ response max length _×_ (1 + _s_ ) _⌉_ 64 _,_
+
+
+where _s_ is a safety factor (set to 0 _._ 1), and the result is upscaled to the nearest multiple of 64.
+
+
+For MDMs, hyperparameters are selected according to dataset type.
+
+
+**Note.** As shown in the table, ARMs require significantly longer generation lengths at inference. This
+arises from their auto-regressive nature: given a budget of max new tokens, they auto-regressively
+generate token by token, without explicit awareness of how many tokens are ultimately needed.
+In contrast, MDMs use substantially fewer tokens-even shorter than the training responses-yet still
+produce accurate reasoning without truncation. This efficiency arises because MDMs predict all
+masked tokens in parallel and are constrained by the generation length. For example, with gen
+length = 512, the model predicts all 512 tokens for the masked input and iteratively applies
+the remasking–masking scheduler until completion. By design, MDMs avoid unnecessarily verbose
+outputs, which we argue constitutes another advantage of MDMs over ARMs.
+
+
+**Inference Settings for MMaDA.**
+
+
+_Dataset_ _generation length_ _steps_ _block_ ~~_l_~~ _ength_ _temperature_ _mask schedule_
+text-to-image-2M 1024 15 1024 0 cosine
+
+
+A.7.2 HOW TRAINING VARIANCE IS ESTIMATED
+
+
+During training, we maintain an online estimator of the per-sample loss variance using importanceweighted statistics. Since losses decrease during training, this metric captures both fluctuations and
+the overall downward trend, it is an approximate empirical proxy for Eq. 2
+
+
+For each batch, the per-token (or per-sample) losses _L_ are detached, flattened, and reweighted by the
+corresponding importance weights _w_ . We then update three running sums: the weighted mean of
+losses ( _S_ 1), the weighted mean of squared losses ( _S_ 2), and the weighted mean of squared weighted
+losses ( _S_ 12). These sufficient statistics allow us to compute unbiased estimates of the second mo
+
+31
+
+
+ment _m_ 2, the squared mean _µ_ [2], and finally the unbiased variance estimator
+
+
+Var[� _L_ ] = _m_ 2 _−_ _µ_ [2] _,_ (23)
+
+where _m_ 2 = _[S]_ _n_ [2] [and] _[ µ]_ [2] [=] _[S]_ _n_ 1 [2] ( _n_ _[−]_ _−_ _[S]_ 1) [12] [.] [Here,] _[ n]_ [ denotes the total number of accumulated samples across]
+
+updates. If importance sampling on _t_ is enabled, the weights _w_ are drawn from the fitted distribution
+_p_ ( _t_ ) to ensure unbiased estimation; otherwise, unit weights are used.
+
+
+At the end of training, the accumulated statistics are queried once to produce the final unbiased
+variance estimate. These values are then substituted into Eq. 23 to obtain the final estimate of
+training variance.
+
+
+Intuitively, the use of an unbiased estimator is necessary because the naive sample variance can be
+downward biased when computed incrementally with importance weights. By correcting for this
+bias, our estimate better reflects the true variance of the training process, independent of batch size
+or logging frequency.
+
+
+A.8 COMPLETE EXPERIMENTAL RESULTS
+
+
+A.8.1 PER-RUN EXPERIMENTAL RESULTS ON LLADA
+
+
+Seed 42 Seed 731 Seed 20231
+Dataset / Method Perf Time (h) Var Perf Time (h) Var Perf Time (h) Var
+
+
+**OpenScience**
+Baseline 43.57 11.29 2.1404 46.50 11.32 2.0614 46.50 11.40 2.0743
+
+
+P-POTS+Mirror 50.80 14.70 1.5550 53.80 14.07 1.5672 53.00 14.00 1.5776
+P-POTS 45.34 13.63 1.6319 47.60 12.98 1.6417 47.47 12.88 1.6622
+Mirror 45.63 12.46 2.0800 47.25 12.47 2.0392 46.25 12.47 2.0205
+
+
+**GSM8K**
+Baseline 50.64 1.55 0.2526 53.22 1.62 0.2524 53.68 1.61 0.2673
+
+
+P-POTS+Mirror 62.02 3.64 0.1906 58.61 3.73 0.1949 60.96 3.88 0.1922
+P-POTS 59.59 1.67 0.1726 59.36 1.77 0.1715 56.79 1.67 0.1722
+Mirror 56.56 3.69 0.3167 51.40 3.37 0.3042 53.15 3.38 0.3162
+
+
+**HiTab**
+Baseline 52.96 8.22 1.0063 60.43 8.22 1.0116 62.64 8.26 1.0173
+
+
+P-POTS+Mirror 66.02 17.80 0.9903 66.67 16.78 0.9892 68.62 16.83 0.9847
+P-POTS 60.56 10.19 0.7498 64.74 10.66 0.7536 58.80 10.99 0.7503
+Mirror 64.72 16.08 1.3052 65.04 16.27 1.3282 63.68 16.29 1.3480
+
+
+Table 4: Complete results –performance, training time (in hours), and variance – across datasets (OpenScience,
+GSM8K, HiTab).
+
+
+Compared to only reporting mean and standard deviations across runs, this complete results table
+provides a more direct view of training instability: under standard training, the final performance
+can vary substantially, _e.g._, from 52.96% to 62.64% on HiTab. In contrast, our method achieves
+more consistent outcomes across runs, demonstrating greater reliability.
+
+
+Table 4 and 5 show that methods with lower reported training variance are generally associated with
+better downstream performance. Interestingly, MIRROR sometimes reports higher variance than
+the baseline, yet achieves more stable results in evaluation. Since our variance measure serves only
+as a proxy that captures both the downward trend and short-term fluctuations of training losses, we
+conjecture that the stronger overall loss reduction under MIRROR may interact with this proxy in a
+way that inflates the reported variance, even while true training stability improves.
+
+
+32
+
+
+Table 5: Average training variance with training hours across datasets (All experiments were trained on 2 H100
+GPUs; details on training variance approximation provided in A.7.2)
+
+
+OpenScience GSM8K HiTab
+
+
+Baseline 2.0920 (11.33) 0.7723 (1.59) 3.0352 (8.23)
+
+
+P-POTS+MIRROR 1.5666 (14.26) 0.5777 (3.75) 2.9642 (17.13)
+P-POTS 1.6453 (13.17) 0.5163 (1.71) 2.2537 (10.61)
+MIRROR 2.0466 (12.47) 0.9371 (3.48) 3.9814 (16.21)
+
+
+ISAD 2.1480 (11.48) 0.2525 (1.61) 1.0016 (10.51)
+SyRM - - 0.9233 (8.23)
+StraTS 2.0851 (11.46) 0.2568 (1.59) 1.0083 (10.19)
+EMA 2.1450 (11.46) 0.2535 (1.62) 1.0018 (8.40)
+
+
+A.8.2 PER-RUN EXPERIMENTAL RESULTS ON MMADA
+
+
+Seed 42 Seed 731 Seed 20231
+Dataset / Method Perf Time (h) Var Perf Time (h) Var Perf Time (h) Var
+
+
+Baseline 28.61 3.21 1.4149 34.28 3.09 1.4245 31.19 3.31 1.3848
+MIRROR 34.88 6.88 1.0308 33.77 6.13 1.0808 33.57 6.74 1.0458
+**text-to-image-2M EPR**
+P-POTS 31.51 3.28 2.6203 30.02 3.33 2.6150 33.41 3.37 2.6236
+P-POTS+MIRROR 35.27 6.97 2.4044 34.10 6.79 2.3504 34.39 6.87 2.3370
+
+
+**text-to-image-2M polynomial (degree 7)**
+P-POTS 30.00 3.28 2.8395 33.35 3.27 2.8398 28.66 3.56 2.6187
+P-POTS+MIRROR 34.51 5.96 2.3538 33.78 6.43 2.7319 34.78 6.71 2.3199
+
+
+Table 6: Performance (Perf), training time (in hours), and variance (Var) on text-to-image-2M-EPR and textto-image-2M-poly7 across methods and random seeds (42, 731, 20231).
+
+
+(a) (b) (c)
+Figure 6: Shape of _p_ ( _t_ ) under different situations: (a) shape of empirical and fitted _p_ ( _t_ ) by EPR before training;
+(b) by polynomial of degree 7 before training; (c) fitted by EPR after training for one epoch using polynomial
+(degree 7). These functions are fitted by minimizing the KL divergence, so only their shapes are matched; they
+are later renormalized in training to yield valid PDFs.
+
+
+As shown in Figure 6, even when the model is trained with the S-shaped distribution, after one epoch
+it quickly reverts back to the U-shape. This suggests that the EPR form is a stable and persistent
+structure across datasets.
+
+
+A.9 EXTENSION TO REINFORCEMENT LEARNING
+
+
+Applying standard RL algorithms such as PPO and GRPO to MDMs is challenging, because it
+requires computing log-likelihoods over transitions between consecutive states. In ARMs, states are
+token sequences. Since tokens are generated one by one, by the chain rule _P_ ( _x_ 1: _n_ ) = [�] _i_ _[n]_ =1 _[P]_ [(] _[x][i]_ _[|]_
+_x<i_ ), the transition probability for each token _xi_ is naturally _pθ_ ( _xi_ _|_ _x<i_ ). In contrast, MDMs
+generate tokens in parallel, which induces complex marginalization between intermediate states
+_xt−_ 1 and _xt_ . Training stability is further challenged by token-level rewards derived from highvariance sequence returns.
+
+
+33
+
+
+**Algorithm 1** UniGRPO Policy Gradient Optimization
+**Require:** Reference model _π_ ref, prompt distribution _D_, number of completions per prompt _G_, number of inner updates _µ_, diffusion steps _T_
+
+1: Initialize policy _πθ_ _←_ _π_ ref
+2: **while** not converged **do**
+3: _π_ old _←_ _πθ_
+4: Sample a prompt _q_ _∼D_
+5: Sample _G_ completions _oi_ _∼_ _π_ old( _· | q_ ) for _i ∈_ [ _G_ ]
+
+6: For each _oi_, compute reward _ri_ and advantage _A_ [(] _i_ _[k]_ [)] ( _π_ old)
+7: Sample a starting timestep _t_ 0 _∼U_ (0 _, T_ _−_ 1)
+8: Generate _µ −_ 1 uniformly spaced timesteps _t_ 1 _, . . ., tµ−_ 1 from [ _t_ 0 _, T_ ]
+9: **for** gradient update iterations _n_ = 1 to _µ_ **do**
+10: **if** _n_ = 1 **then**
+11: Sample a starting mask ratio _r_ 1 _∼U_ (0 _,_ 1) and compute initial timestep _t_ 1 = _⌊r_ 1 _T_ _⌋_
+12: **else**
+13: Compute _tn_ = - _nµ−−_ 11 [(] _[T]_ _[−]_ _[t]_ [1][) +] _[ t]_ [1] 
+14: **end if**
+15: Construct input ( _q,_ masked _oi_ ) using timestep _tn_ (with _q_ always unmasked)
+16: For _πθ, π_ old _, π_ ref, estimate log-probabilities of masked tokens in _oi_ at _tn_
+17: Compute UniGRPO objective 24 and update _πθ_ via gradient descent
+18: **end for**
+19: **end while**
+20: **return** _πθ_
+
+
+Our methods can be naturally extended to these problems. As an example, consider UniGRPO (Yang
+et al., 2025) (Algorithm 1), whose training objective is defined as
+
+
+_J_ UniGRPO( _θ_ ) = E( _q,a_ ) _∼D, {oi}Gi_ =1 _[∼][π][θ]_ old [(] _[·|][q]_ [)] _[,][ {][p][i][∈]_ [[0] _[,]_ [1]] _[}]_ _i_ _[G]_ =1
+
+
+
+
+
+
+- - - - - [�]
+min _ri,t_ _[′]_ [(] _[θ]_ [)] _[A]_ [ˆ] _i,t_ _[,]_ [clip(] _[r]_ _i,t_ _[′]_ [(] _[θ]_ [)] _[,]_ [1] _[ −]_ _[ε,]_ [1 +] _[ ε]_ [)] _[A]_ [ˆ] _i,t_ _−_ _βD_ KL _πθ_ _[′]_ _[∥]_ _[π]_ ref _[′]_ 
+
+
+ [1]
+
+_G_
+
+
+_G_
+
+
+_i_ =1
+
+
+1
+_|oi|_
+
+
+_|oi|_
+
+
+_t_ =1
+
+
+ _._ (24)
+
+
+We can incorporate our core methods through the following modifications:
+
+
+- P-POTS: Replace lines 7–8 with sampling _µ_ timesteps from _p_ _[∗]_ ( _t_ ), sorted as _t_ 0 _, . . ., tµ−_ 1.
+
+- MIRROR: At line 15, construct complementary masks _o_ [(1)] _i_ [,] _[o]_ [(2)] _i_ for each _tn_, and average their
+log-probabilities before updating _πθ_ .
+
+
+At present, this integration is a conjecture; confirming its effectiveness requires empirical validation,
+which we leave as future work.
+
+
+A.10 FUTURE WORK
+
+
+While our current results highlight both the importance of variance reduction and the effectiveness
+of our proposed methods, several open directions remain. First, we aim to deepen our understanding
+of the _p_ -drift problem and to validate the effectiveness of periodically re-estimating or gradually
+down-weighting _p_ ( _t_ ), as suggested in §3.1.1, which so far remains conjectural. Second, since reinforcement learning on MDMs face the difficulty of likelihood evaluation, it is worthwhile to explore
+whether our methods can also reduce estimation variance in this setting (see A.9).
+
+
+A.11 CASE STUDY
+
+
+A.11.1 CASE STUDY: IMAGE GENERATION
+
+
+Below are images generated by MMaDA-8B-MixCoT trained with P-POTS+MIRROR (left) and
+standard method (right).
+
+
+34
+
+
+35
+
+
+36

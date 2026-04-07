@@ -1,0 +1,3181 @@
+# LATENT PARTICLE WORLD MODELS: SELF- SUPERVISED OBJECT-CENTRIC STOCHASTIC DYNAM## ICS MODELING
+
+
+**Tal Daniel** [1] **, Carl Qi** [2] **, Dan Haramati** [3] **, Amir Zadeh** [4] **, Chuan Li** [4] **, Aviv Tamar** [5] **,**
+**Deepak Pathak** [1], **David Held** [1]
+
+1Carnegie Mellon University, 2UT Austin, 3Brown University, 4Lambda, 5Technion
+tdaniel@andrew.cmu.edu
+
+
+ABSTRACT
+
+
+We introduce Latent Particle World Model (LPWM), a self-supervised objectcentric world model scaled to real-world multi-object datasets and applicable in
+decision-making. LPWM autonomously discovers keypoints, bounding boxes,
+and object masks directly from video data, enabling it to learn rich scene decompositions without supervision. Our architecture is trained end-to-end purely
+from videos and supports flexible conditioning on actions, language, and image goals. LPWM models stochastic particle dynamics via a novel latent action module and achieves state-of-the-art results on diverse real-world and synthetic datasets. Beyond stochastic video modeling, LPWM is readily applicable
+to decision-making, including goal-conditioned imitation learning, as we demonstrate in the paper. Code, data, pre-trained models and video rollouts are available:
+[https://taldatech.github.io/lpwm-web](https://taldatech.github.io/lpwm-web)
+
+
+Figure 1: Self-supervised object-centric world modeling with LPWM. Top: latent particle decomposition.
+Bottom left: language-conditioned video generation. Bottom right: latent-action-conditioned video prediction.
+
+
+1
+
+
+1 INTRODUCTION
+
+
+Recent years have witnessed remarkable progress in the visual fidelity of general-purpose video
+generation models (Blattmann et al., 2023; Yang et al., 2024b). Driven by vast datasets and expansive computational resources, these models—often built on scalable architectures like Transformers (Vaswani et al., 2017)—have achieved unprecedented realism. However, their success comes
+at a steep computational cost: training requires thousands of GPU hours (Zhu et al., 2024), and,
+due to their reliance on diffusion processes (Ho et al., 2020), inference remains slow and resourceintensive, limiting practical applications. This has sparked an important question: can we leverage the strengths of these generative models for decision-making? For instance, by turning them
+into _world models_ —dynamics predictors that can be externally controlled by action or goal signals,
+tasks such as robotic planning (Yang et al., 2023; Zhu et al., 2024) become possible. Despite their
+strengths in producing high-fidelity videos, these models’ resource demands can be prohibitive. In
+parallel, recent work (Haramati et al., 2024; Qi et al., 2025) demonstrates that incorporating inductive biases and leveraging more compact models can enable efficient, robust performance on
+complex multi-object decision-making tasks. Motivated by this, our work aims to bridge these two
+directions—by introducing an efficient, self-supervised, object-centric world model for video prediction, _and_ decision-making in real-world and simulated, multi-entity environments.
+
+
+Consider the illustrative example in Figure 2, where the
+dynamics of two moving objects are described alongside
+the caption: “The blue ball is moving diagonally towards
+the green square.” Text representations typically rely on
+semantic tokenization into words or subword units, which
+underpins the success of large language models (Radford et al., 2018). In contrast, image representations predominantly use “patchifying”—dividing the image into
+a fixed grid of patches without regard for semantic content (Dosovitskiy et al., 2020). While this patch-based
+approach enables scalability and generality, it lacks the
+semantic intuitiveness of object-centric decompositions
+that can enhance the model’s ability to capture meaningful object interactions and relationships, crucial for
+understanding complex scenes, and align more naturally
+with language representations. Inspired by the “whatwhere” pathway in the human visual system (Goodale
+& Milner, 1992) and recent neuroscience findings (Pickering & Clark, 2014; Nau et al., 2018; Barnaveli et al.,
+2025), which suggest humans leverage internal visualspatial world models for planning and action, combining object-centric representations with world models is
+a promising direction towards more effective decisionmaking and vision-language integration.
+
+
+Figure 2: Representation discrepancy.
+Text is typically tokenized into semantically meaningful units such as words
+or subwords, whereas image representations are most often constructed by dividing the image into a fixed grid of
+patches (“patchifying”) that do not explicitly encode semantic content.
+
+
+Building on this premise, recent research has focused on introducing inductive biases in the form of
+object-centric representations, namely Deep Latent Particles (DLP, Daniel & Tamar (2022a)), which
+have shown strong empirical benefits across a range of domains—including video prediction (Daniel
+& Tamar, 2024), reinforcement learning (RL) (Haramati et al., 2024), imitation learning (Qi et al.,
+2025), and microscopy (Goldenberg et al., 2025). These approaches demonstrate that, when applicable, object-centric representations can lead to improved downstream performance, even with smaller
+model sizes and less data. However, their success has so far been largely confined to specific datasets
+and environments, typically involving simulated scenes or simple real-world settings with isolated
+objects, limited camera motion, or single-agent interactions. Scaling object-centric models to handle the complexity of real-world multi-object environments remains a substantial challenge. While
+patch-based representations remain dominant for large-scale, general-purpose visual modeling, ongoing advances indicate that object-centric approaches offer clear advantages for decision-making
+tasks whenever the problem structure allows. The present work aims to advance this direction by
+developing scalable, efficient world modeling grounded in object-centric decomposition.
+
+
+2
+
+
+In this work, we introduce the Latent Particle World Model (LPWM), the first self-supervised objectcentric world model capable of end-to-end training on complex real-world video data. Building
+upon the DLP-based video prediction framework DDLP (Daniel & Tamar, 2024), we eliminate the
+requirement for explicit particle tracking and propose a novel context module that predicts distributions over latent actions for each particle. This approach enables stochastic dynamics sampling and
+enables scalability to complex environments. LPWM is trained exclusively from video observations
+and supports optional conditioning on actions, language, images, and multi-view inputs. Its design
+can accommodate a range of decision-making applications, including unconditional video prediction pretraining and goal-conditioned imitation learning. By integrating object-centric representations with scalable stochastic dynamics modeling, LPWM advances the development of efficient
+and interpretable visual world models.
+
+
+Our contributions are summarized as follows: (1) We propose a self-supervised object-centric world
+model with a novel latent action module that supports multiple conditioning types, including actions, language, images, and multi-view inputs; (2) We achieve state-of-the-art performance in
+object-centric video prediction on diverse real-world and simulated multi-object datasets, and (3)
+We demonstrate the applicability of our model to imitation learning on two complex multi-object
+environments, highlighting its utility for decision-making tasks.
+
+
+2 RELATED WORK
+
+
+This section provides an overview of related literature relevant to latent object-centric video prediction and world modeling. To the best of our knowledge, LPWM is the first self-supervised objectcentric model that can be trained solely from videos, supports multi-view training, and enables
+diverse conditioning modalities, including actions, language, and goal images. Since no existing
+method shares this unique combination of capabilities, we briefly review several adjacent and complementary lines of work to highlight the context and novelty of our contributions. A more detailed
+survey of keypoints, latent actions, and decision-making methods is provided in Appendix A.6.
+
+
+**General video prediction and latent world models:** Classic approaches encode images into latent
+spaces and predict future states with recurrent dynamics, often using convolutional encoders and
+RNNs (Finn et al., 2016a; Ha & Schmidhuber, 2018). Recent work has improved long-horizon
+prediction with discrete latent variables (Hafner et al., 2020b), hierarchical architectures (Wang
+et al., 2022), self-attention (Micheli et al., 2024), and language conditioning (Nematollahi et al.,
+2025), but most methods model frames holistically and lack explicit object decomposition, resulting
+in blurry or unstable predictions. Video diffusion models (Zhu et al., 2024) achieve high fidelity, but
+remain computationally intensive and do not incorporate object-centric biases.
+
+
+**Unsupervised** **object-centric** **latent** **video** **prediction** **and** **world** **models:** Unsupervised objectcentric video prediction methods learn latent dynamics on decomposed scene elements, typically
+using patch-, slot-, or particle-based representations. **Patch-based approaches** (e.g., G-SWM (Lin
+et al., 2020a)) represent objects using local latent attributes and typically model joint dynamics with
+RNNs and interaction modules. These methods rely on post-hoc matching object proposals across
+frames for temporal consistency, which—combined with unordered object representations—limits
+their scalability to complex or real-world video datasets. **Slot-based approaches** (Locatello et al.,
+2020) typically represent scenes as a set of slots: permutation-invariant latent vectors encoding
+spatial and appearance information for objects. These approaches generally adopt a two-stage training strategy: a slot decomposition is first learned independently, followed by a separate dynamics
+model trained on the inferred slots using RNNs (Nakano et al., 2023) or Transformers (Wu et al.,
+2022b; Villar-Corrales et al., 2023). In practice, slot-based methods suffer from inconsistent decompositions, blurry predictions, and convergence issues (Seitzer et al., 2023). **Particle-based**
+**approaches**, introduces as DLP (Daniel & Tamar, 2022a), provide compact, interpretable object
+representations using keypoint-based latent particles with extended attributes. DDLP (Daniel &
+Tamar, 2024) jointly trains a Transformer dynamics model and the particle representation, allowing
+stable object-centric decomposition and improved modeling of complex scenes. However, DDLP
+relies on particle tracking and sequential encoding, which restricts parallelization and stochasticity.
+Our proposed LPWM model is a direct extension to this lineage. LPWM eliminates the need for
+explicit tracking, enabling parallel encoding of all frames, trains end-to-end, and integrates a latent
+action distribution for stochastic world modeling. This allows the model to capture transitions such
+
+
+3
+
+
+as object occlusion, appearance, or random movements (e.g., agents or grippers), and supports comprehensive conditioning via actions, language, or goal images–advancing particle-based modeling
+to the world model regime and addressing unsolved limitations of previous work.
+
+
+**Video prediction and world models with latent actions:** Several recent works have introduced _la-_
+_tent actions_ —global latent variables representing transitions between consecutive frames—to learn
+controllable or playable environments from videos. Models like CADDY (Menapace et al., 2021)
+and Genie (Bruce et al., 2024) learn discrete latent actions by quantizing inverse module outputs,
+and conditioning dynamics on these codes in a two-stage training scheme. AdaWorld (Gao et al.,
+2025) proposes a continuous latent action space with strong KL regularization. PlaySlot (VillarCorrales & Behnke, 2025) augments slot-based object-centric video prediction with discrete latent
+action conditioning, demonstrating benefits of object-level decomposition for controllable modeling. In contrast, our particle-based LPWM learns continuous, per-particle latent actions end-to-end
+with dynamics, naturally capturing stochastic multi-object interactions. LPWM’s learned latent policy enables sampling latent actions during inference without external input, supporting stochastic
+video generation. It also supports diverse conditioning—including goal-conditioning—making it
+well-suited for post-hoc policy learning and control, as demonstrated in our experiments.
+
+
+Table 1 summarizes key differences between self-supervised object-centric video prediction and
+
+|rld modeling methods.|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|**Model**|**Obj.-Centric Rep.**|**Latent Actions**|**Action Cond.**|**Text Cond.**|**End-to-End**|**Dyn. Module**|
+|SCALOR (Jiang et al., 2019)<br>G-SWM (Lin et al., 2020a)<br>STOVE (Kossen et al., 2019)<br>OCVT (Wu et al., 2021b)<br>GATSBI (Min et al., 2021)|Patch<br>Patch<br>Patch<br>Patch<br>Patch+Keypt|–<br>–<br>–<br>–<br>–|–<br>–<br>–<br>–<br>✓|–<br>–<br>–<br>–<br>–|✓<br>✓<br>✓<br>–<br>✓|RNN<br>RNN<br>RNN<br>Transformer<br>RNN|
+|PARTS (Zoran et al., 2021)<br>STEDIE (Nakano et al., 2023)<br>SlotFormer (Wu et al., 2022b)<br>OCVP (Villar-Corrales et al., 2023)<br>TextOCVP (Villar-Corrales et al., 2025)<br>SOLD (Mosbach et al., 2024)<br>PlaySlot (Villar-Corrales & Behnke, 2025)|Slots<br>Slots<br>Slots<br>Slots<br>Slots<br>Slots<br>Slots|–<br>–<br>–<br>–<br>–<br>–<br>Discrete|–<br>–<br>–<br>–<br>–<br>✓<br>–|–<br>–<br>–<br>–<br>✓<br>–<br>–|✓<br>✓<br>–<br>–<br>–<br>–<br>–|RNN<br>RNN<br>Transformer<br>Transformer<br>Transformer<br>Transformer<br>Transformer|
+|DLP (Daniel & Tamar, 2022a)<br>DDLP (Daniel & Tamar, 2024)<br>LPWM (Ours)|Particles<br>Particles<br>Particles|–<br>–<br>Cont. (per)|–<br>–<br>✓|–<br>–<br>✓|–<br>✓<br>✓|GNN<br>Transformer<br>Transformer|
+
+
+Table 1: Comparison of object-centric video prediction and world modeling methods across key
+dimensions and representation types. Please refer to Table 4 for an extended comparison.
+
+
+3 BACKGROUND
+
+
+**Variational Autoencoders (VAEs, (Kingma & Welling, 2014)):** VAEs are likelihood-based latent
+variable models that maximize the evidence lower bound (ELBO) on the data log-likelihood:
+
+
+log _pθ_ ( _x_ ) _≥_ E _qϕ_ ( _z|x_ ) [log _pθ_ ( _x|z_ )] _−_ _KL_       - _qϕ_ ( _z|x_ ) _∥p_ ( _z_ )� _≡_ _ELBO_ ( _x_ ) _,_
+
+
+where _qϕ_ ( _z|x_ ) (the _encoder_ ) approximates the intractable posterior, and _pθ_ ( _x|z_ ) (the _decoder_ ) models the likelihood. Typically, _qϕ_, _pθ_, and the prior _p_ ( _z_ ) are Gaussian distributions, enabling efficient
+training via the _reparameterization trick_ . Minimizing the negative ELBO decomposes into a reconstruction loss and a KL regularization term.
+
+
+Temporal VAEs (Lee et al., 2018; Ha & Schmidhuber, 2018) extend this framework to sequential
+data (e.g., videos) by training to maximize the sum of ELBOs over timesteps. Here, the prior
+for each latent at timestep _t_ is conditioned on previous latents through a dynamics model, i.e.,
+
+- _t_ _[KL]_ - _qϕ_ ( _z_ _[t]_ _|xt_ ) _∥pξ_ ( _z_ _[t]_ _|z_ _[<t]_ )� _._ This enables learning temporally coherent latent dynamics suitable
+
+for video prediction.
+
+
+**Deep** **Latent** **Particles** **(DLP,** **Daniel** **&** **Tamar** **(2022a;** **2024)):** a VAE-based self-supervised
+object-centric representation for images. Each image is modeled as a set of _M_ foreground latent particles alongside a single background particle. A foreground particle is defined as _z_ fg =
+
+[ _zp, zs, zd, zt, zf_ ] _∈_ R [6+] _[d]_ [obj] _,_ where each component encodes a disentangled stochastic attribute: position _zp_ _∼N_ ( _µp, σp_ [2][)] _[∈]_ [R][2][,] [representing] [the] [2D] [keypoint] [coordinates;] [scale] _[z][s]_ _[∼N]_ [(] _[µ][s][, σ]_ _s_ [2][)] _[∈]_
+R [2], representing bounding-box size; depth _zd_ _∼N_ ( _µd, σd_ [2][)] _[∈]_ [R][,] [specifying] [compositing] [or-]
+der (indicating which particles appear in front of others within the rendered scene); transparency
+
+
+4
+
+
+_zt_ _∼_ Beta( _a, b_ ) _∈_ [0 _,_ 1], controlling visibility; and visual features _zf_ _∼N_ ( _µf_ _, σf_ [2][)] _[ ∈]_ [R] _[d]_ [obj] [, encod-]
+ing appearance of the local region around the particle. The particle attributes are illustrated in Figure 8 in the Appendix. The background is represented by a single particle _z_ bg _∼N_ ( _µ_ bg _, σ_ bg [2] [)] _[ ∈]_ [R] _[d]_ [bg] _[,]_
+fixed at the image center and modeling background visual features. DLP additionally learns an alpha channel mask per particle as part of reconstruction, enabling pixel-space foreground-background
+decomposition. For a detailed overview of DLP and its components, as well as improvements introduced in this work, see Appendix A.3. Figure 1 presents example decompositions of DLP on
+various datasets used in this work.
+
+
+**Notations:** Non-latent (observed) temporal variables are denoted with subscripts indicating the temporal index, e.g., _xt_, while latent variables use superscripts, e.g., _z_ _[t]_ . For latent particles, the superscript index _m_ denotes the particle number within the set, and subscripts refer to attribute types. For
+example, _zp_ _[m,t]_ denotes the position (keypoint) attribute _p_ of particle _m_ at timestep _t_, whereas _z_ bg _[t]_
+represents the background particle at timestep _t_ .
+
+
+4 LATENT PARTICLE WORLD MODELS (LPWM)
+
+
+Our objective is to construct a _world_ _model_ —a dynamics model _F_ ( _I_ 0: _T −_ 1 _, c_ ) = _I_ [ˆ] _T_ : _T_ + _τ_ _−_ 1 that,
+given a sequence of _T_ image observations _I_ 0: _T −_ 1 _∈_ R _[T][ ×][C][×][H][×][W]_ (where _C_ is the number of channels, _H_ and _W_ are image height and width), and _optionally_ conditioning inputs _c_ (actions, language,
+etc.), generates a rollout of future predictions _I_ [ˆ] _T_ : _T_ + _τ_ _−_ 1 _∈_ R _[τ]_ _[×][C][×][H][×][W]_ in an autoregressive manner. As modeling directly in pixel space is high-dimensional and sample inefficient, we propose an
+end-to-end latent world model, Latent Particle World Models (LPWM), which combines a compact
+self-supervised object-centric latent representation, based on DLP, with a novel learned dynamics
+module that operates over particle latents. The model is trained end-to-end such that _the representa-_
+_tion is trained to be predictable_ by the dynamics module.
+
+
+The **Latent** **Particle** **World** **Model** **(LPWM)** consists of four components, jointly trained end-toend as a VAE: the ENCODER _Eϕ_, the DECODER _Dθ_, the CONTEXT _Kψ_ and the DYNAMICS _Fξ_ . The
+pipeline, illustrated in Figure 3, proceeds as follows: input frames are encoded into particle sets by
+the ENCODER, decoded back to images by the DECODER for reconstruction loss, then processed by
+the CONTEXT module to sample latent actions, which are combined with particles in the DYNAMICS
+module to predict next-step particles states and compute per-particle KL. Below, we summarize the
+role of each module and describe, in the main text, the core novel contributions-particularly the context and dynamics modules. For completeness, extended component details, minor implementation
+modifications of DLP and design choices are provided in Appendix A.4.
+
+
+**ENCODER** _Eϕ_ **(Appendix A.4.1)** : corresponds to the VAE’s approximate posterior _qϕ_ ( _z|x_ ). It takes
+as input an image frame and outputs a set of latent particles: _Eϕ_ ( _x_ = _It_ ) = [ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ []] _[.]_ [ Each]
+frame _It_ is represented by _M_ foreground latent particles _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1][, where each particle originates]
+from per-patch learned keypoint (see Appendix A.4.1), and one background particle _z_ bg _[t]_ [.] [Unlike]
+DDLP, particle filtering to a subset _L_ _≤_ _M_ is deferred to the decoder to preserve particle identities
+and eliminates the need for explicit tracking, a requirement in DDLP that necessitated sequential
+frame encoding. In contrast, the proposed approach enables encoding all frames in parallel. Foreground particles are parameterized as _z_ fg _[m]_ _[∈]_ [R][6+] _[d]_ [obj] _[,]_ [ where the first six dimensions capture explicit]
+attributes (e.g., spatial coordinates, scale, transparency), and the remaining _d_ obj dimensions represent appearance features as described in Section 3. The background particle is defined as _z_ bg _∈_ R _[d]_ [bg],
+where _d_ bg denotes the latent dimension of the background visual features. These features are encoded from a masked version of the original image, in which regions corresponding to visible foreground particles are masked out, as illustrated in Figure 9 in the Appendix.
+
+
+**DECODER** _Dθ_ **(Appendix A.4.2)** : corresponds to the VAE’s likelihood _pθ_ ( _x|z_ ). It takes as input a
+set of _L_ _≤_ _M_ foreground particles together with a background particle, and reconstructs an image
+frame: _Dθ_ ([ _{z_ fg _[l,t][}]_ _l_ _[L]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ [])] [=] _[I]_ [ˆ] _[t][.]_ [Here,] _[L]_ [can] [be] [less] [than] _[M]_ [to] [allow] [particle] [filtering] [before]
+rendering, based on transparency or confidence measures (Daniel & Tamar, 2024), reducing memory
+usage without compromising reconstruction quality. Each particle is decoded independently into an
+RGBA (RGB + Alpha channel) glimpse _x_ ˜ _[p]_ _l_ _[∈]_ [R] _[S][×][S][×]_ [4][,] [where] _[ S]_ [is the glimpse size,] [representing]
+the reconstructed appearance of particle _l_ . The alpha mask (Alpha channel) is modulated by the
+transparency and depth attribute of each particle, and the decoded glimpse is then placed into the full
+
+5
+
+
+resolution canvas to create _x_ ˆfg. The background is decoded from _z_ bg using a standard upsampling
+network to produce _x_ ˆbg, and the final reconstructed image is stitched according to _x_ ˆ = _α ⊙_ _x_ ˆfg +
+(1 _−_ _α_ ) _⊙_ _x_ ˆbg, where _α_ is the effective mask obtained from the compositing process.
+
+
+**CONTEXT** _Kψ_ : We now present the main novel component added to the DLP framework—the
+CONTEXT module _Kψ_ —designed to model _stochastic dynamics_ in actionless videos. In such videos,
+scene dynamics are not fully determined by initial frames (e.g., a ball beginning to roll (Lin et al.,
+2020a) where initial conditions fully determine future dynamics) but can also be influenced by external signals such as actions (e.g., a robotic gripper (Ebert et al., 2017a)).
+
+
+Commonly, stochastic transitions are captured by introducing _latent actions_ (Menapace et al., 2021;
+Bruce et al., 2024; Gao et al., 2025; Villar-Corrales & Behnke, 2025). Typically, a latent action
+_zc_ is learned through an autoencoding scheme: an inverse model infers _zc_ _[t]_ [=] _[K]_ _ψ_ [inv][(] _[I][t]_ [+1] _[, I][t]_ [)] [from]
+consecutive frames, and a decoder reconstructs the future frame _I_ [ˆ] _t_ +1 = _Dθ_ ( _It, zc_ _[t]_ [)][,] [trained via re-]
+construction loss. To prevent _zc_ _[t]_ [from] [trivially] [memorizing] _[I][t]_ [+1][,] [strong] [regularization] [is] [applied]
+through a vector quantization bottleneck (Bruce et al., 2024; Ye et al., 2025) or KL-regularization
+to a fixed prior (Gao et al., 2025). However, these approaches use a _global_ latent action vector representing all changes between frames, limiting their ability to model local dynamics in multi-entity
+scenes (e.g., independent enemy movements in Mario or secondary contact events in robotics). A
+global action vector cannot naturally disentangle these local dynamics.
+
+
+In this work, we introduce the CONTEXT module _Kψ_, a novel _per-particle_ mechanism for latent
+action modeling. Unlike prior work (Villar-Corrales & Behnke, 2025; Gao et al., 2025), we model
+a latent action for each particle, directly governing the transition from _zi_ _[m,t]_ to _zi_ _[m,t]_ [+1] . Regularization is not imposed via a fixed prior, but instead learned through a _latent_ _policy_, which models
+the distribution of latent actions conditioned on the current state. This per-particle formulation enables the representation of multiple, simultaneous interactions, and allows stochastic sampling of
+latent actions at inference time, capturing multimodality (e.g., moving left or right from the same
+state). The proposed module explicitly separates the modeling of latent actions (which encapsulate
+the stochastic aspects) from the dynamics prediction.
+
+
+Formally, the CONTEXT module takes as input a sequence of particle sets across _T_ + 1 frames,
+**optionally** conditioned on external signals _{ct}_ _[T]_ _t_ =0 [(e.g., control actions, goal images, or language]
+instructions). It outputs a sequence of per-particle latent contexts:
+
+
+_Kψ_ ( _{_ [ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ _[, c][t]_ []] _[}]_ _t_ _[T]_ =0 [) =] _[ {]_ [[] _[{][z]_ _c,_ _[m,t]_ fg _[}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ _c,_ _[t]_ bg []] _[}]_ _t_ _[T]_ =0 _[ −]_ [1] _[.]_
+
+
+The CONTEXT module is implemented as a _causal spatio-temporal transformer_ ((Zhu et al., 2024),
+Appendix A.4.5), which jointly processes particles across space and time while ensuring autoregressive temporal dependencies. It is composed of two complementary heads: (1) **Latent** **inverse**
+**dynamics** _p_ [inv] _ψ_ [(] _[z]_ _c_ _[t]_ _[|]_ _[z][t]_ [+1] _[, z][t][, . . ., z]_ [0] _[, c][t]_ [)][,] [which] [predicts] [the] [latent] [action] [responsible] [for] [the] [tran-]
+
+sition between consecutive states; (2) **Latent** **policy** _p_ [policy] _ψ_ ( _zc_ _[t]_ _[|]_ _[z][t][, . . ., z]_ [0] _[, c][t]_ [)][,] [which] [models] [the]
+distribution of latent actions conditioned on the current state.
+
+
+The latent policy serves as a prior that regularizes the inverse dynamics via a KL-divergence penalty
+in the VAE objective (Appendix A.4.6). Specifically, the latent actions are modeled as Gaussian
+distributions, _zc_ _∼N_ ( _µc, σc_ [2][)][, parameterized by the context module.] [At training time, latent actions]
+are obtained through the inverse dynamics head, ensuring consistency with observed transitions. At
+inference time, latent actions can instead be sampled directly from the latent policy prior, enabling
+stochastic rollouts of the world model. Conditioning on external signals (global actions, language
+instructions or image-based goals) _within_ the latent context module maps global scene-level signals
+into per-particle latent actions. For instance, given a language instruction, _Kψ_ learns to translate
+it into per-particle latent actions that drive the dynamics towards satisfying the instruction. When
+no external conditioning is provided, _Kψ_ simply infers latent actions from past particle trajectories.
+When conditioned on a goal image or a language instruction, sampling from the latent policy can
+be further utilized for planning in the particles space, as we demonstrate later in the experiments
+section. In Appendix A.4.3 we describe how the global action, language and image conditioning mechanisms are implemented. Finally, we note that the proposed novel CONTEXT module is
+broadly applicable to general-purpose, non-object-centric architectures utilizing patch-based representations, as demonstrated in the experiments section. The CONTEXT module is illustrated in
+Figure 3.
+
+
+6
+
+
+**DYNAMICS** _Fξ_ : The dynamics module implements the VAE’s autoregressive dynamics prior _pξ_ ( _z_ _[t]_ _|_
+_z_ _[t][−]_ [1] _, . . ., z_ [0] ). It predicts the particles at the next timestep conditioned on the current particles and
+their corresponding latent actions provided by the context module:
+
+
+_Fξ_ ��[ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[,]_ _[z]_ bg _[t]_ _[,]_ _[z]_ _c_ _[t]_ []] - _Tt_ =0 _−_ 1
+
+
+- = �[ _{z_ ˆfg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[,]_ _[z]_ [ˆ] bg _[t]_ []] - _Tt_ =1 _[.]_
+
+
+It is implemented as a causal spatio-temporal transformer, where particles are conditioned on their
+corresponding latent actions via AdaLN (Zhu et al., 2024). The module outputs distribution parameters serving as the prior in the KL-divergence between the encoder posterior and dynamics prior. [1]
+
+
+Unlike DDLP (Daniel & Tamar, 2024), LPWM retains all _M_ encoded particles with their identities
+(patch origins) across timesteps, removing the need to track particles over time. This results in an
+implicit regime where particles can move in a certain region around their origin, balancing between
+two extremes: patch-based methods (e.g., VideoGPT (Yan et al., 2021)), where particles are fixed
+patches with evolving features, and object-centric particle models (Daniel & Tamar, 2024), which
+track a subset of free-moving particles with explicit attributes that can traverse the entire canvas. We
+discuss tracking limitations and the implications of this regime in Appendix A.4.4.
+
+
+Figure 3: Latent Particle World Model architecture. Left: Input frames are encoded into particle sets
+by the ENCODER and decoded back to images by the DECODER. The CONTEXT module then processes the particles to sample latent actions, which are combined with the particles in the DYNAMICS
+module to predict next-step particle states. Right: The CONTEXT module models the per-particle
+latent action distribution. During training, we use the latent inverse dynamics head, while at inference, the latent policy is employed for sampling.
+
+
+**Optimization** **and** **Training** **Details** : LPWM, following DDLP, is trained by maximizing a temporal ELBO, or minimizing the sum of reconstruction errors and KL-divergences, decomposed
+into a _static_ term for the first frame and a _dynamic_ term for subsequent frames: _L_ LPWM =
+
+_−_ [�] _[T]_ _t_ =0 _[ −]_ [1] _[ELBO]_ [(] _[x][t]_ [=] _[I][t]_ [)] [=] _[L]_ [static] [+] _[L]_ [dynamic] _[.]_ [The] [static] [term] [covers] [the] [single-frame] [setting,]
+computing per-particle KL with respect to fixed priors, and adds regularization on particle transparency. The dynamic term includes KL losses for both latent actions and predicted future particles.
+All KL terms are evaluated in closed-form. Both losses also include frame-wise reconstruction loss:
+pixel-wise MSE for simulated datasets, or MSE and LPIPS (Hoshen et al., 2019) for real-world data.
+A key difference from DDLP is that KL contributions are masked using the particle transparency
+attribute (Lin et al., 2020a), so only visible particles affect the KL loss. Full loss details are provided
+in Appendix A.4.6. For all experiments, the dimension of the latent actions is set to _d_ ctx = 7. Models
+are optimized end-to-end with Adam (Kingma & Ba, 2014) with a learning rate of 8 _×_ 10 _[−]_ [5] and
+implemented in PyTorch (Paszke et al., 2017). Hyperparameter details are in Appendix A.9. Code
+[and pretrained models are available at https://github.com/taldatech/lpwm.](https://github.com/taldatech/lpwm)
+
+
+1The priors for the first timestep particles are fixed hyperparameters, consistent with DLP’s single-image
+setup.
+
+
+7
+
+
+5 EXPERIMENTS
+
+
+We design our experimental suite with the following key goals: (1) benchmark LPWM on unconditional and conditional video prediction across real-world and synthetic datasets; (2) analyze the
+impact of LPWM’s design choices through ablation studies; and (3) demonstrate a practical imitation learning application on diverse, multi-object, long-horizon tasks and environments.
+
+
+5.1 SELF-SUPERVISED OBJECT-CENTRIC VIDEO PREDICTION AND GENERATION
+
+
+We evaluate LPWM across multiple video prediction settings, including unconditional, actionconditioned, and language-conditioned scenarios. Additional demonstrations of image conditioning and multi-view training, particularly for goal-conditioned imitation learning, are presented in
+Section 5.2.
+
+
+**Datasets:** we evaluate our approach on a diverse set of datasets, spanning real-world and simulated domains with varying dynamics and interaction densities. Simulated datasets include OBJ3D,
+featuring dense interactions and deterministic 3D physics (Lin et al., 2020a), PHYRE, a sparse interaction 2D physical reasoning benchmark with deterministic dynamics (Bakhtin et al., 2019), and
+Mario, a stochastic 2D dataset with dense interactions from expert Super Mario Bros gameplay
+videos (Smirnov et al., 2021). Real-world datasets encompass robotic datasets such as Sketchy
+with sparse stochastic interactions (Cabi et al., 2019), BAIR and Bridge featuring dense, stochastic robotic manipulation with and without language instructions (Ebert et al., 2017a; Walke et al.,
+2023), and LanguageTable featuring language-guided, dense object rearrangements (Lynch
+et al., 2023). Unless stated otherwise, all datasets are trained at 128 _×_ 128 resolution. We provide a detailed description of each dataset in Appendix A.7.
+
+
+**Baselines:** Our main baseline is a non-object-centric patch-based dynamics VAE (DVAE) world
+model, where “particles” correspond to fixed grid patch embeddings matching the number of LPWM
+particles, _M_ . This baseline shares the same architecture and parameter count as LPWM and supports identical conditioning but lacks explicit attribute modeling. It closely resembles large-scale
+video generation models using patch-based tokenization (Yan et al., 2021; Yang et al., 2024b). Unlike pre-trained or quantized patch embeddings, ours are learned end-to-end like LPWM’s particles, with a higher latent dimension to offset the absence of object-centric structure. When applicable, we also compare against recent object-centric video prediction methods, including the
+slot-based PlaySlot (Villar-Corrales & Behnke, 2025) for latent-action-conditioned tasks; and for
+deterministic dynamics datasets, the patch-based G-SWM (Lin et al., 2020a), the slot-based SlotFormer/OCVP (Wu et al., 2022b; Villar-Corrales et al., 2023), and the particle-based DDLP (Daniel
+& Tamar, 2024). Extended baseline details are provided in Appendix A.8.
+
+
+**Metrics:** For latent-action-conditioned video prediction and datasets with deterministic dynamics,
+we report standard visual similarity metrics—PSNR, SSIM (Wang et al., 2004), and LPIPS (Zhang
+et al., 2018)—to compare generated sequences against ground truth [2] . For stochastic video generation, we compute the Fr´echet Video Distance (FVD, Unterthiner et al. (2018); Hu (2023)) to evaluate
+the distributional similarity between generated and real video sets.
+
+
+**Results:** LPWM outperforms all baselines on LPIPS and FVD metrics across stochastic dynamic
+datasets under various conditioning settings (Table 2). It effectively preserves _object_ _permanence_
+throughout generation (Figure 1) and models complex object interactions, unlike competing methods
+that exhibit blurring or deformation. LPWM also supports multi-modal sampling, producing diverse
+plausible rollouts from identical initial conditions (see Appendix A.10 and videos). Compared to
+the slot-based PlaySlot baseline, which suffers from object drifting and blurry reconstructions due
+to global latent actions and limited number of slots, LPWM’s per-particle latent actions and lowdimensional representation scale effectively to many-object scenarios. DVAE, a non-object-centric
+baseline, performs well on synthetic data but lacks robustness on real-world datasets, highlighting
+the advantages of object-centric modeling. Finally, we demonstrate that a compact LPWM model
+trained on BAIR-64 matches larger video generation models in FVD (89 _._ 4, Table 9), emphasizing
+how object-centric inductive biases enable superior modeling of object interactions beyond what
+
+
+2Our evaluation follows the DDLP protocol (Daniel & Tamar, 2024) using the open-source PIQA library (Rozet, 2022) for perceptual metrics.
+
+
+8
+
+
+scale alone achieves. Extended results are in Appendix A.10 and videos are available: [https:](https://taldatech.github.io/lpwm-web)
+
+|Dataset|Sketchy-U|Col3|BAIR-U|Col5|Mario-U|Col7|
+|---|---|---|---|---|---|---|
+|Setting|_t_ : 20_, c_ : 6_, p_ : 44|_t_ : 20_, c_ : 6_, p_ : 44|_t_ : 16_, c_ : 1_, p_ : 15|_t_ : 16_, c_ : 1_, p_ : 15|_t_ : 20_, c_ : 6_, p_ : 34|_t_ : 20_, c_ : 6_, p_ : 34|
+||PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|
+|**DVAE**<br>**PlaySlot**<br>**LPWM** (Ours)|25.75_±_3.85<br>0.86_±_0.08<br>0.113_±_0.06<br>140.06<br>22.63_±_3.90<br>0.80_±_0.09<br>0.275_±_0.06<br>_−_<br>28.41_±_3.8<br>0.91_±_0.06<br>**0.070**_±_**0.04**<br>**85.45**|25.75_±_3.85<br>0.86_±_0.08<br>0.113_±_0.06<br>140.06<br>22.63_±_3.90<br>0.80_±_0.09<br>0.275_±_0.06<br>_−_<br>28.41_±_3.8<br>0.91_±_0.06<br>**0.070**_±_**0.04**<br>**85.45**|26_±_2.2<br>0.90_±_0.03<br>0.063_±_0.02<br>164.41<br>17.56_±_1.50<br>0.57_±_0.05<br>0.483_±_0.03<br>_−_<br>25.66_±_1.52<br>0.89_±_0.02<br>0.062_±_0.02<br>163.91|26_±_2.2<br>0.90_±_0.03<br>0.063_±_0.02<br>164.41<br>17.56_±_1.50<br>0.57_±_0.05<br>0.483_±_0.03<br>_−_<br>25.66_±_1.52<br>0.89_±_0.02<br>0.062_±_0.02<br>163.91|23.35_±_4.28<br>0.93_±_0.04<br>0.087_±_0.05<br>277.41<br>16.38_±_2.78<br>0.68_±_0.1<br>0.314_±_0.09<br>_−_<br>27.50_±_5.52<br>0.95_±_0.04<br>**0.035**_±_**0.02**<br>**195.95**|23.35_±_4.28<br>0.93_±_0.04<br>0.087_±_0.05<br>277.41<br>16.38_±_2.78<br>0.68_±_0.1<br>0.314_±_0.09<br>_−_<br>27.50_±_5.52<br>0.95_±_0.04<br>**0.035**_±_**0.02**<br>**195.95**|
+|Dataset|Dataset|Sketchy-A|LanguageTable-A|LanguageTable-L|LanguageTable-L|Bridge-L|
+|Setting|Setting|_t_ : 20_, c_ : 6_, p_ : 44|_t_ : 20_, c_ : 1_, p_ : 15|_t_ : 20_, c_ : 1_, p_ : 15|_t_ : 20_, c_ : 1_, p_ : 15|_t_ : 24_, c_ : 1_, p_ : 29|
+|||PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_|FVD_↓_|FVD_↓_|FVD_↓_|
+|**DVAE**<br>**LPWM** (Ours)|**DVAE**<br>**LPWM** (Ours)|25.33_±_4.2<br>0.85_±_0.09<br>0.111_±_0.06<br>27.06_±_4.26<br>0.88_±_0.09<br>**0.083**_±_**0.05**|29.29_±_5.28<br>0.94_±_0.04<br>**0.038**_±_**0.02**<br>29.5_±_5.06<br>0.94_±_0.04<br>**0.037**_±_**0.02**|26.78<br>**15.96**|26.78<br>**15.96**|146.85<br>**47.78**|
+
+
+Table 2: Quantitative results on latent-action-conditioned (U), action-conditioned (A), and languageconditioned (L) video prediction. FVD is reported for stochastic generation by sampling from the
+latent policy. _t_ is the training horizon, _c_ is the conditional frames at inference, and _p_ is the predicted
+frames at inference.
+
+
+**Ablation Analysis:** We conduct a series of ablation studies on our design choices, including global
+versus per-particle latent actions, the dimensionality of the latent action vector, and types of positional embeddings. As detailed in Appendix A.10.3, our results demonstrate that per-particle latent
+actions are essential for achieving strong performance and that the model is robust to latent action dimension near the effective particle dimension (6 + _d_ obj). Furthermore, embedding positional
+information via AdaLN outperforms standard additive positional embeddings.
+
+
+5.2 IMITATION LEARNING WITH PRE-TRAINED LPWM
+
+
+Pre-training LPWM on actionless video datasets enables it to predict video dynamics using latent
+actions, suggesting that these latent actions capture actionable information. Assuming access to
+ground-truth actions and that the latent actions effectively encode dynamics, learning a simple mapping from latent actions to true actions may suffice to derive a policy, which we verify next. Formally, once paired video-action trajectories ( _I_ 0: _T, a_ 0: _T −_ 1) are available (e.g., collected post-hoc),
+pre-trained LPWMs can be adapted to goal-conditioned imitation tasks using image-based goals (details in Appendix A.4.3). For each trajectory, image sequences are encoded by a frozen LPWM to
+produce per-particle latent actions _{zc_ _[m,t]_ _}_ _[M]_ _m_ =0 [via the latent inverse dynamics head] _[ p]_ _ψ_ [inv][(] _[z]_ _c_ _[t]_ _[|]_ _[z][≤][T]_ [ )][.]
+Policy learning maps latent actions to global actions using a simple, compact, two-layer attention
+pooling transformer (Haramati et al., 2024). At inference, given a goal image and a rollout horizon
+_k_, LPWM is autoregressively unrolled for _k_ + 1 steps to generate particles and their _k_ latent actions.
+The trained mapping network outputs a sequence of _k_ global actions, which are executed sequentially in the environment (Zhao et al., 2023); this process is repeated until the maximum number of
+environment steps is reached. Implementation and training details are described in Appendix A.5.
+
+
+**Task** **EC Diffusion Policy** **EC Diffuser** **LPWM (Ours)**
+
+
+1 Cube 88 _._ 7 _±_ 3 94.8 _±_ 1.5 92.7 _±_ 4.5
+2 Cubes 38 _._ 8 _±_ 10 _._ 6 91.7 _±_ 3 74 _±_ 4
+3 Cubes 66 _._ 8 _±_ 17 89.4 _±_ 2.5 62 _._ 1 _±_ 4 _._ 4
+
+
+**Task** **GCIVL** **HIQL** **LPWM (Ours)**
+
+
+task1 84 _±_ 4 80 _±_ 6 100 _±_ 0
+task2 24 _±_ 8 81 _±_ 7 6 _±_ 9
+task3 16 _±_ 8 61 _±_ 11 89 _±_ 9
+
+
+Table 3: Imitation learning results (success rates) on PandaPush (left) and OGBench-Scene (right).
+**Environments** : PandaPush challenges manipulation of up to three cubes observed from two camera views, while OGBench-Scene evaluates long-horizon planning involving diverse objects such
+as drawers and buttons. We train a single LPWM per environment that _encompasses_ _all_ _tasks_,
+whereas for PandaPush, the baselines train separate policies for each task, effectively giving them
+an advantage by optimizing individually for each task.
+
+
+**Results** : Table 3 summarizes performance compared to the two best baselines in each (full results
+in Tables 12 and 13). On PandaPush, LPWM outperforms all baselines except EC Diffuser and
+matches its performance on the 1-cube task. We employ the multi-view LPWM variant here, modeling particle dynamics from multiple views simultaneously, highlighting the framework’s flexibility
+(see Appendix A.4.5). On OGBench, despite the challenge of highly suboptimal, unstructured
+‘play’ data hindering behavioral cloning, our method achieves strong results on tasks involving up
+to four atomic behaviors (task1 and task3), outperforming all baselines on these. For task4
+and task5, all methods fail (with the exception of HIQL attaining 20% success rate on task4).
+Although we employ a relatively simple policy, LPWM demonstrates competitive performance, underscoring its potential for decision-making applications. Figure 4 visualizes an example imagined
+
+
+9
+
+
+trajectory alongside environment execution on OGBench, and rollout videos are available on the
+project website. Full results, baseline details and more visualizations are in Appendix A.10.4.
+
+
+Figure 4: LPWM generated goal-conditioned imagined trajectories (top) and actual environment
+executions (bottom) through a learned mapping to actions on OGBench-Scene. The imagined
+trajectories closely match the actual executions, demonstrating LPWM’s predictive accuracy.
+
+
+6 CONCLUSION
+
+
+We introduced Latent Particle World Model (LPWM), advancing self-supervised object-centric
+world modeling for real-world data. LPWM discovers keypoints, bounding boxes, and masks in a
+fully self-supervised fashion, decomposing scenes into latent particles whose temporal evolution is
+modeled by novel latent action and dynamics modules. This design enables state-of-the-art stochastic object-centric video generation while flexibly supporting action, language, and image conditioning, as well as multi-view inputs. LPWM shows strong potential for decision-making tasks,
+including imitation learning as demonstrated here.
+
+
+**Limitations:** LPWM presently depends on datasets exhibiting small camera motion and recurring
+scenarios, such as robotics or video games; it is not yet applicable to general-purpose large-scale
+video data. Future work could address scaling to diverse datasets, unified multi-modal conditioning (e.g., simultaneous action, language, and image signals), and integration with explicit reward
+modeling for reinforcement learning.
+
+
+10
+
+
+7 ETHICS STATEMENT
+
+
+This work introduces a video generation model evaluated on both simulated and real-world robotics
+datasets. As discussed in the limitations above, our model is not demonstrated on general-purpose
+video data or applied to sensitive content. All datasets used are either publicly available or collected
+in controlled, non-sensitive environments. We do not foresee ethical or societal risks arising from
+this work as presented; however, as with any generative model, future extensions to broader or lesscontrolled domains should carefully consider potential misuse and ensure responsible deployment.
+
+
+8 REPRODUCIBILITY STATEMENT
+
+
+We strive to facilitate reproducibility and transparency in self-supervised object-centric world modeling. To this end, we provide code excerpts throughout the appendix, along with extended implementation details and the full list of hyperparameters in Appendix A.9. Source code and pre-trained
+model checkpoints are available. These resources aim to make it straightforward for others to build
+upon our framework.
+
+
+ACKNOWLEDGMENTS
+
+
+This work is supported by ONR MURI N00014-24-1-2748 and ERC grant Bayes-RL (101041250).
+Views and opinions expressed are those of the authors only and do not necessarily reflect those of
+the European Union or the European Research Council Executive Agency (ERCEA). Neither the
+European Union nor the granting authority can be held responsible for them.
+
+
+REFERENCES
+
+
+Eloi Alonso, Adam Jelley, Vincent Micheli, Anssi Kanervisto, Amos J Storkey, Tim Pearce, and
+Franc¸ois Fleuret. Diffusion for world modeling: Visual details matter in atari. _Advances_ _in_
+_Neural Information Processing Systems_, 37:58757–58791, 2024.
+
+
+Mohammad Babaeizadeh, Mohammad Taghi Saffar, Suraj Nair, Sergey Levine, Chelsea Finn,
+and Dumitru Erhan. Fitvid: Overfitting in pixel-level video prediction. _arXiv_ _preprint_
+_arXiv:2106.13195_, 2021.
+
+
+Anton Bakhtin, Laurens van der Maaten, Justin Johnson, Laura Gustafson, and Ross Girshick.
+Phyre: A new benchmark for physical reasoning. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 32, 2019.
+
+
+Irina Barnaveli, Simone Vigan`o, Daniel Reznik, Patrick Haggard, and Christian F Doeller.
+Hippocampal-entorhinal cognitive maps and cortical motor system represent action plans and
+their outcomes. _Nature Communications_, 16(1):4139, 2025.
+
+
+Peter Battaglia, Razvan Pascanu, Matthew Lai, Danilo Jimenez Rezende, et al. Interaction networks
+for learning about objects, relations and physics. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 29, 2016.
+
+
+Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik
+Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, et al. Stable video diffusion: Scaling
+latent video diffusion models to large datasets. _arXiv preprint arXiv:2311.15127_, 2023.
+
+
+Alexandre Brown and Glen Berseth. Segdac: Segmentation-driven actor-critic for visual reinforcement learning. _arXiv preprint arXiv:2508.09325_, 2025.
+
+
+Jake Bruce, Michael D Dennis, Ashley Edwards, Jack Parker-Holder, Yuge Shi, Edward Hughes,
+Matthew Lai, Aditi Mavalankar, Richie Steigerwald, Chris Apps, et al. Genie: Generative interactive environments. In _Forty-first International Conference on Machine Learning_, 2024.
+
+
+Christopher P Burgess, Loic Matthey, Nicholas Watters, Rishabh Kabra, Irina Higgins, Matt
+Botvinick, and Alexander Lerchner. Monet: Unsupervised scene decomposition and representation. _arXiv preprint arXiv:1901.11390_, 2019.
+
+
+11
+
+
+Serkan Cabi, Sergio G´omez Colmenarejo, Alexander Novikov, Ksenia Konyushkova, Scott Reed,
+Rae Jeong, Konrad Zolna, Yusuf Aytar, David Budden, Mel Vecerik, et al. Scaling datadriven robotics with reward sketching and batch reinforcement learning. _arXiv_ _preprint_
+_arXiv:1909.12200_, 2019.
+
+
+Jun Cen, Chaohui Yu, Hangjie Yuan, Yuming Jiang, Siteng Huang, Jiayan Guo, Xin Li, Yibing
+Song, Hao Luo, Fan Wang, et al. Worldvla: Towards autoregressive action world model. _arXiv_
+_preprint arXiv:2506.21539_, 2025.
+
+
+Cheng Chi, Siyuan Feng, Yilun Du, Zhenjia Xu, Eric Cousineau, Benjamin Burchfiel, and Shuran
+Song. Diffusion policy: Visuomotor policy learning via action diffusion. In _Proceedings_ _of_
+_Robotics:_ _Science and Systems (RSS)_, 2023.
+
+
+Aidan Clark, Jeff Donahue, and Karen Simonyan. Adversarial video generation on complex datasets.
+_arXiv preprint arXiv:1907.06571_, 2019.
+
+
+Jeremy A Collins, Lor´and Cheng, Kunal Aneja, Albert Wilcox, Benjamin Joffe, and Animesh
+Garg. Amplify: Actionless motion priors for robot learning from videos. _arXiv_ _preprint_
+_arXiv:2506.14198_, 2025.
+
+
+Eric Crawford and Joelle Pineau. Spatially invariant unsupervised object detection with convolutional neural networks. In _AAAI_, 2019.
+
+
+Zichen Cui, Hengkai Pan, Aadhithya Iyer, Siddhant Haldar, and Lerrel Pinto. Dynamo: In-domain
+dynamics pretraining for visuo-motor control. _Advances in Neural Information Processing Sys-_
+_tems_, 37:33933–33961, 2024.
+
+
+Tal Daniel. Ddlp: Unsupervised object-centric video prediction with deep dynamic latent particles.
+[https://github.com/taldatech/ddlp, 2024.](https://github.com/taldatech/ddlp)
+
+
+Tal Daniel and Aviv Tamar. Unsupervised image representation learning with deep latent particles. In _Proceedings of the 39th International Conference on Machine Learning_, volume 162 of
+_Proceedings of Machine Learning Research_, pp. 4644–4665. PMLR, 17–23 Jul 2022a.
+
+
+Tal Daniel and Aviv Tamar. Unsupervised image representation learning with deep latent particles.
+[https://github.com/taldatech/deep-latent-particles-pytorch, 2022b.](https://github.com/taldatech/deep-latent-particles-pytorch)
+
+
+Tal Daniel and Aviv Tamar. DDLP: Unsupervised object-centric video prediction with deep dynamic
+latent particles. _Transactions on Machine Learning Research_, 2024. ISSN 2835-8856.
+
+
+Aram Davtyan, Sepehr Sameni, and Paolo Favaro. Efficient video prediction via sparsely conditioned flow matching. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_
+_Vision_, pp. 23263–23274, 2023.
+
+
+Antoine Dedieu, Joseph Ortiz, Xinghua Lou, Carter Wendelken, Wolfgang Lehrach, J Swaroop
+Guntupalli, Miguel Lazaro-Gredilla, and Kevin Patrick Murphy. Improving transformer world
+models for data-efficient rl. _arXiv preprint arXiv:2502.01591_, 2025.
+
+
+Emily Denton and Rob Fergus. Stochastic video generation with a learned prior. In _International_
+_conference on machine learning_, pp. 1174–1183. PMLR, 2018.
+
+
+Aniket Didolkar, Andrii Zadaianchuk, Anirudh Goyal, Mike Mozer, Yoshua Bengio, Georg Martius, and Maximilian Seitzer. Zero-shot object-centric representation learning. _arXiv_ _preprint_
+_arXiv:2408.09162_, 2024.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An
+image is worth 16x16 words: Transformers for image recognition at scale. _arXiv_ _preprint_
+_arXiv:2010.11929_, 2020.
+
+
+Frederik Ebert, Chelsea Finn, Alex X Lee, and Sergey Levine. Self-supervised visual planning with
+temporal skip connections. _CoRL_, 12(16):23, 2017a.
+
+
+12
+
+
+Frederik Ebert, Chelsea Finn, Alex X Lee, and Sergey Levine. Self-supervised visual planning with
+temporal skip connections. In _CoRL_, pp. 344–356, 2017b.
+
+
+Ashley Edwards, Himanshu Sahni, Yannick Schroecker, and Charles Isbell. Imitating latent policies
+from observation. In _International conference on machine learning_, pp. 1755–1763. PMLR, 2019.
+
+
+Gamaleldin Fathy Elsayed, Aravindh Mahendran, Sjoerd van Steenkiste, Klaus Greff, Michael Curtis Mozer, and Thomas Kipf. SAVi++: Towards end-to-end object-centric learning from realworld videos. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.),
+_Advances in Neural Information Processing Systems_, 2022.
+
+
+Martin Engelcke, Adam R Kosiorek, Oiwi Parker Jones, and Ingmar Posner. Genesis: Generative scene inference and sampling with object-centric latent representations. _arXiv_ _preprint_
+_arXiv:1907.13052_, 2019.
+
+
+Martin Engelcke, Oiwi Parker Jones, and Ingmar Posner. Genesis-v2: Inferring unordered object
+representations without iterative refinement. _arXiv preprint arXiv:2104.09958_, 2021.
+
+
+Patrick Esser, Robin Rombach, and Bjorn Ommer. Taming transformers for high-resolution image
+synthesis. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recogni-_
+_tion_, pp. 12873–12883, 2021.
+
+
+Benjamin Eysenbach, Tianjun Zhang, Sergey Levine, and Russ R Salakhutdinov. Contrastive learning as goal-conditioned reinforcement learning. _Advances in Neural Information Processing Sys-_
+_tems_, 35:35603–35620, 2022.
+
+
+Stefano Ferraro, Pietro Mazzaglia, Tim Verbelen, Bart Dhoedt, and Sai Rajeswar. Representing positional information in generative world models for object manipulation. _arXiv_ _preprint_
+_arXiv:2409.12005_, 2024.
+
+
+Stefano Ferraro, Pietro Mazzaglia, Tim Verbelen, and Bart Dhoedt. Focus: object-centric world
+models for robotic manipulation. _Frontiers in Neurorobotics_, 19:1585386, 2025.
+
+
+Chelsea Finn, Ian Goodfellow, and Sergey Levine. Unsupervised learning for physical interaction
+through video prediction. _Advances in neural information processing systems_, 29, 2016a.
+
+
+Chelsea Finn, Xin Yu Tan, Yan Duan, Trevor Darrell, Sergey Levine, and Pieter Abbeel. Deep spatial
+autoencoders for visuomotor learning. In _2016 IEEE International Conference on Robotics and_
+_Automation (ICRA)_, pp. 512–519. IEEE, 2016b.
+
+
+Shenyuan Gao, Siyuan Zhou, Yilun Du, Jun Zhang, and Chuang Gan. Adaworld: Learning adaptable
+world models with latent actions. _arXiv preprint arXiv:2503.18938_, 2025.
+
+
+Xiaojie Gao, Yueming Jin, Qi Dou, Chi-Wing Fu, and Pheng-Ann Heng. Accurate grid keypoint
+learning for efficient video prediction. In _2021 IEEE/RSJ International Conference on Intelligent_
+_Robots and Systems (IROS)_, pp. 5908–5915. IEEE, 2021.
+
+
+Ofri Goldenberg, Tal Daniel, Dafei Xiao, Yael Shalev Ezra, and Yoav Shechtman. Physics-informed
+generative model for 3d localization microscopy. _bioRxiv_, pp. 2025–07, 2025.
+
+
+Xinrui Gong, Oliver Hahn, Christoph Reich, Krishnakant Singh, Simone Schaub-Meyer, Daniel
+Cremers, and Stefan Roth. Motion-refined dinosaur for unsupervised multi-object discovery.
+_arXiv preprint arXiv:2509.02545_, 2025.
+
+
+Melvyn A. Goodale and A. David Milner. Separate visual pathways for perception and action.
+_Trends in Neurosciences_, 15:20–25, 1992.
+
+
+Klaus Greff, Rapha¨el Lopez Kaufman, Rishabh Kabra, Nick Watters, Christopher Burgess, Daniel
+Zoran, Loic Matthey, Matthew Botvinick, and Alexander Lerchner. Multi-object representation
+learning with iterative variational inference. In _International Conference on Machine Learning_,
+pp. 2424–2433. PMLR, 2019.
+
+
+David Ha and J¨urgen Schmidhuber. World models. _arXiv preprint arXiv:1803.10122_, 2018.
+
+
+13
+
+
+Danijar Hafner, Timothy Lillicrap, Jimmy Ba, and Mohammad Norouzi. Dream to control: Learning behaviors by latent imagination. In _International_ _Conference_ _on_ _Learning_ _Representations_,
+2020a.
+
+
+Danijar Hafner, Timothy Lillicrap, Mohammad Norouzi, and Jimmy Ba. Mastering atari with discrete world models. _arXiv preprint arXiv:2010.02193_, 2020b.
+
+
+Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse domains
+through world models. _arXiv preprint arXiv:2301.04104_, 2023.
+
+
+Dan Haramati, Tal Daniel, and Aviv Tamar. Entity-centric reinforcement learning for object manipulation from pixels. In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_,
+2024.
+
+
+Irina Higgins, Loic Matthey, Arka Pal, Christopher Burgess, Xavier Glorot, Matthew Botvinick,
+Shakir Mohamed, and Alexander Lerchner. beta-VAE: Learning basic visual concepts with a
+constrained variational framework. In _International_ _Conference_ _on_ _Learning_ _Representations_,
+2017.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_Neural Information Processing Systems_, 33:6840–6851, 2020.
+
+
+Jonathan Ho, Tim Salimans, Alexey Gritsenko, William Chan, Mohammad Norouzi, and David J
+Fleet. Video diffusion models. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:8633–
+8646, 2022.
+
+
+Tobias H¨oppe, Arash Mehrjou, Stefan Bauer, Didrik Nielsen, and Andrea Dittadi. Diffusion models
+for video prediction and infilling. _arXiv preprint arXiv:2206.07696_, 2022.
+
+
+Yedid Hoshen, Ke Li, and Jitendra Malik. Non-adversarial image synthesis with generative latent nearest neighbors. In _Proceedings of the IEEE Conference on Computer Vision and Pattern_
+_Recognition_, pp. 5811–5819, 2019.
+
+
+[Junyao Hu. Common metrics on video quality. https://github.com/JunyaoHu/common_](https://github.com/JunyaoHu/common_metrics_on_video_quality/)
+[metrics_on_video_quality/, 2023.](https://github.com/JunyaoHu/common_metrics_on_video_quality/)
+
+
+Yucheng Hu, Yanjiang Guo, Pengchao Wang, Xiaoyu Chen, Yen-Jen Wang, Jianke Zhang, Koushil
+Sreenath, Chaochao Lu, and Jianyu Chen. Video prediction policy: A generalist robot policy with
+predictive visual representations. In _Forty-second International Conference on Machine Learning_,
+2025.
+
+
+Max Jaderberg, Karen Simonyan, Andrew Zisserman, et al. Spatial transformer networks. _Advances_
+_in neural information processing systems_, 28:2017–2025, 2015.
+
+
+Tomas Jakab, Ankush Gupta, Hakan Bilen, and Andrea Vedaldi. Unsupervised learning of object
+landmarks through conditional image generation. In _Proceedings of the 32nd International Con-_
+_ference on Neural Information Processing Systems_, pp. 4020–4031, 2018.
+
+
+Joel Jang, Seonghyeon Ye, Zongyu Lin, Jiannan Xiang, Johan Bjorck, Yu Fang, Fengyuan Hu,
+Spencer Huang, Kaushil Kundalia, Yen-Chen Lin, et al. Dreamgen: Unlocking generalization in
+robot learning through video world models. _arXiv preprint arXiv:2505.12705_, 2025.
+
+
+Michael Janner, Yilun Du, Joshua Tenenbaum, and Sergey Levine. Planning with diffusion for
+flexible behavior synthesis. In _International Conference on Machine Learning_, 2022.
+
+
+Youngjoon Jeong, Junha Chun, Soonwoo Cha, and Taesup Kim. Object-centric world model for
+language-guided manipulation. _arXiv preprint arXiv:2503.06170_, 2025.
+
+
+Jindong Jiang, Sepehr Janghorbani, Gerard De Melo, and Sungjin Ahn. Scalor: Generative world
+models with scalable object representations. _arXiv preprint arXiv:1910.02384_, 2019.
+
+
+Justin Johnson, Bharath Hariharan, Laurens Van Der Maaten, Li Fei-Fei, C Lawrence Zitnick, and
+Ross Girshick. Clevr: A diagnostic dataset for compositional language and elementary visual
+reasoning. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_,
+pp. 2901–2910, 2017.
+
+
+14
+
+
+Nikola Juki´c, Tim Lebailly, and Tinne Tuytelaars. Object-centric pretraining via target encoder
+bootstrapping. In _The Thirteenth International Conference on Learning Representations_, 2025.
+
+
+Rishabh Kabra, Daniel Zoran, Goker Erdogan, Loic Matthey, Antonia Creswell, Matt Botvinick,
+Alexander Lerchner, and Chris Burgess. Simone: View-invariant, temporally-abstracted object
+representations via unsupervised video decomposition. _Advances in Neural Information Process-_
+_ing Systems_, 34:20146–20159, 2021.
+
+
+Ioannis Kakogeorgiou, Spyros Gidaris, Konstantinos Karantzalos, and Nikos Komodakis. Spot:
+Self-training with patch-order permutation for object-centric learning with autoregressive transformers. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-_
+_tion_, pp. 22776–22786, 2024.
+
+
+Yunji Kim, Seonghyeon Nam, In Cho, and Seon Joo Kim. Unsupervised keypoint learning for
+guiding class-conditional video prediction. _Advances in neural information processing systems_,
+32, 2019.
+
+
+Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _International_
+_Conference on Learning Representations_, 12 2014.
+
+
+Diederik P. Kingma and Max Welling. Auto-encoding variational bayes. In _ICLR_, 2014.
+
+
+Thomas Kipf, Gamaleldin F Elsayed, Aravindh Mahendran, Austin Stone, Sara Sabour, Georg
+Heigold, Rico Jonschkowski, Alexey Dosovitskiy, and Klaus Greff. Conditional object-centric
+learning from video. _arXiv preprint arXiv:2111.12594_, 2021.
+
+
+Albina Klepach, Alexander Nikulin, Ilya Zisman, Denis Tarasov, Alexander Derevyagin, Andrei
+Polubarov, Nikita Lyubaykin, and Vladislav Kurenkov. Object-centric latent action learning.
+_arXiv preprint arXiv:2502.09680_, 2025.
+
+
+Jannik Kossen, Karl Stelzner, Marcel Hussing, Claas Voelcker, and Kristian Kersting. Structured object-aware physics prediction for video modeling and planning. _arXiv_ _preprint_
+_arXiv:1910.02425_, 2019.
+
+
+Ilya Kostrikov, Ashvin Nair, and Sergey Levine. Offline reinforcement learning with implicit qlearning. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2022. URL [https://](https://openreview.net/forum?id=68n2s9ZJWF8)
+[openreview.net/forum?id=68n2s9ZJWF8.](https://openreview.net/forum?id=68n2s9ZJWF8)
+
+
+Tejas Kulkarni, Ankush Gupta, Catalin Ionescu, Sebastian Borgeaud, Malcolm Reynolds, Andrew
+Zisserman, and Volodymyr Mnih. Unsupervised learning of object keypoints for perception and
+control. _arXiv preprint arXiv:1906.11883_, 2019.
+
+
+Guillaume Le Moing, Jean Ponce, and Cordelia Schmid. Ccvs: Context-aware controllable video
+synthesis. _Advances in Neural Information Processing Systems_, 34:14042–14055, 2021.
+
+
+Alex X Lee, Richard Zhang, Frederik Ebert, Pieter Abbeel, Chelsea Finn, and Sergey Levine.
+Stochastic adversarial video prediction. _arXiv preprint arXiv:1804.01523_, 2018.
+
+
+Seungjae Lee, Yibin Wang, Haritheja Etukuru, H Jin Kim, Nur Muhammad Mahi Shafiullah, and
+Lerrel Pinto. Behavior generation with latent actions. In _Forty-first International Conference on_
+_Machine Learning_, 2024.
+
+
+Yunzhu Li, Antonio Torralba, Animashree Anandkumar, Dieter Fox, and Animesh Garg. Causal
+discovery in physical systems from videos. _arXiv preprint arXiv:2007.00631_, 2020.
+
+
+Zhixuan Lin, Yi-Fu Wu, Skand Peri, Bofeng Fu, Jindong Jiang, and Sungjin Ahn. Improving generative imagination in object-centric world models. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 6140–6149. PMLR, 2020a.
+
+
+Zhixuan Lin, Yi-Fu Wu, Skand Vishwanath Peri, Weihao Sun, Gautam Singh, Fei Deng, Jindong
+Jiang, and Sungjin Ahn. Space: Unsupervised object-oriented scene representation via spatial
+attention and decomposition. _arXiv preprint arXiv:2001.02407_, 2020b.
+
+
+15
+
+
+Francesco Locatello, Dirk Weissenborn, Thomas Unterthiner, Aravindh Mahendran, Georg Heigold,
+Jakob Uszkoreit, Alexey Dosovitskiy, and Thomas Kipf. Object-centric learning with slot attention. _arXiv preprint arXiv:2006.15055_, 2020.
+
+
+Pauline Luc, Aidan Clark, Sander Dieleman, Diego de Las Casas, Yotam Doron, Albin Cassirer, and
+Karen Simonyan. Transformation-based adversarial video prediction on large-scale data. _arXiv_
+_preprint arXiv:2003.04035_, 2020.
+
+
+Corey Lynch, Mohi Khansari, Ted Xiao, Vikash Kumar, Jonathan Tompson, Sergey Levine, and
+Pierre Sermanet. Learning latent plans from play. In _Conference_ _on_ _robot_ _learning_, pp. 1113–
+1132. Pmlr, 2020.
+
+
+Corey Lynch, Ayzaan Wahid, Jonathan Tompson, Tianli Ding, James Betker, Robert Baruch, Travis
+Armstrong, and Pete Florence. Interactive language: Talking to robots in real time. _IEEE Robotics_
+_and Automation Letters_, 2023.
+
+
+Xin Ma, Yaohui Wang, Xinyuan Chen, Gengyun Jia, Ziwei Liu, Yuan-Fang Li, Cunjian Chen, and
+Yu Qiao. Latte: Latent diffusion transformer for video generation. _Transactions_ _on_ _Machine_
+_Learning Research_, 2025. ISSN 2835-8856.
+
+
+Viktor Makoviychuk, Lukasz Wawrzyniak, Yunrong Guo, Michelle Lu, Kier Storey, Miles Macklin,
+David Hoeller, Nikita Rudin, Arthur Allshire, Ankur Handa, and Gavriel State. Isaac gym: High
+performance gpu-based physics simulation for robot learning, 2021.
+
+
+Willi Menapace, St´ephane Lathuili`ere, Sergey Tulyakov, Aliaksandr Siarohin, and Elisa Ricci.
+Playable video generation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_
+_and Pattern Recognition_, pp. 10061–10070, 2021.
+
+
+Willi Menapace, St´ephane Lathuili`ere, Aliaksandr Siarohin, Christian Theobalt, Sergey Tulyakov,
+Vladislav Golyanik, and Elisa Ricci. Playable environments: Video manipulation in space and
+time. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_,
+pp. 3584–3593, 2022.
+
+
+Vincent Micheli, Eloi Alonso, and Franc¸ois Fleuret. Transformers are sample-efficient world models. In _The Eleventh International Conference on Learning Representations_, 2023.
+
+
+Vincent Micheli, Eloi Alonso, and Franc¸ois Fleuret. Efficient world models with context-aware
+tokenization. In _International Conference on Machine Learning_, pp. 35623–35638. PMLR, 2024.
+
+
+Cheol-Hui Min, Jinseok Bae, Junho Lee, and Young Min Kim. Gatsbi: Generative agent-centric
+spatio-temporal object interaction. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_
+_Vision and Pattern Recognition_, pp. 3074–3083, 2021.
+
+
+Matthias Minderer, Chen Sun, Ruben Villegas, Forrester Cole, Kevin P Murphy, and Honglak Lee.
+Unsupervised learning of object structure and dynamics from videos. _Advances in Neural Infor-_
+_mation Processing Systems_, 32, 2019.
+
+
+Malte Mosbach, Jan Niklas Ewertz, Angel Villar-Corrales, and Sven Behnke. Sold: Slot objectcentric latent dynamics models for relational manipulation learning from pixels. _arXiv_ _preprint_
+_arXiv:2410.08822_, 2024.
+
+
+Akihiro Nakano, Masahiro Suzuki, and Yutaka Matsuo. Interaction-based disentanglement of entities for object-centric world models. In _The_ _Eleventh_ _International_ _Conference_ _on_ _Learning_
+_Representations_, 2023.
+
+
+Charlie Nash, Jo˜ao Carreira, Jacob Walker, Iain Barr, Andrew Jaegle, Mateusz Malinowski, and
+Peter Battaglia. Transframer: Arbitrary frame prediction with generative models. _arXiv preprint_
+_arXiv:2203.09494_, 2022.
+
+
+Matthias Nau, Joshua B Julian, and Christian F Doeller. How the brain’s navigation system shapes
+our visual experience. _Trends in cognitive sciences_, 22(9):810–825, 2018.
+
+
+16
+
+
+Iman Nematollahi, Branton DeMoss, Akshay L Chandra, Nick Hawes, Wolfram Burgard, and Ingmar Posner. Lumos: Language-conditioned imitation learning with world models. _arXiv preprint_
+_arXiv:2503.10370_, 2025.
+
+
+Seohong Park, Dibya Ghosh, Benjamin Eysenbach, and Sergey Levine. Hiql: Offline goalconditioned rl with latent states as actions. _Advances in Neural Information Processing Systems_,
+36:34866–34891, 2023.
+
+
+Seohong Park, Kevin Frans, Benjamin Eysenbach, and Sergey Levine. Ogbench: Benchmarking
+offline goal-conditioned rl. In _International_ _Conference_ _on_ _Learning_ _Representations_ _(ICLR)_,
+2025.
+
+
+Adam Paszke, Sam Gross, Soumith Chintala, Gregory Chanan, Edward Yang, Zachary DeVito,
+Zeming Lin, Alban Desmaison, Luca Antiga, and Adam Lerer. Automatic differentiation in
+PyTorch. In _NIPS Autodiff Workshop_, 2017.
+
+
+William Peebles and Saining Xie. Scalable diffusion models with transformers. In _Proceedings of_
+_the IEEE/CVF international conference on computer vision_, pp. 4195–4205, 2023.
+
+
+Martin John Pickering and Andy Clark. Getting ahead: forward models and their place in cognitive
+architecture. _Trends in Cognitive Sciences_, 18:451–456, 2014.
+
+
+Carl Qi, Dan Haramati, Tal Daniel, Aviv Tamar, and Amy Zhang. EC-diffuser: Multi-object manipulation via entity-centric behavior generation. In _The Thirteenth International Conference on_
+_Learning Representations_, 2025.
+
+
+Alec Radford, Karthik Narasimhan, Tim Salimans, Ilya Sutskever, et al. Improving language understanding by generative pre-training. 2018.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, Peter J Liu, et al. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _J. Mach. Learn. Res._, 21(140):1–67, 2020.
+
+
+Ruslan Rakhimov, Denis Volkhonskiy, Alexey Artemov, Denis Zorin, and Evgeny Burnaev. Latent
+video transformer. _arXiv preprint arXiv:2006.10704_, 2020.
+
+
+Zhongwei Ren, Yunchao Wei, Xun Guo, Yao Zhao, Bingyi Kang, Jiashi Feng, and Xiaojie Jin. Videoworld: Exploring knowledge learning from unlabeled videos. In _Proceedings of the Computer_
+_Vision and Pattern Recognition Conference_, pp. 29029–29039, 2025.
+
+
+Franc¸ois Rozet. Pytorch image quality assessment. [https://github.com/](https://github.com/francois-rozet/piqa)
+[francois-rozet/piqa, 2022.](https://github.com/francois-rozet/piqa)
+
+
+Alexander Rubinstein, Ameya Prabhu, Matthias Bethge, and Seong Joon Oh. Are we done with
+object-centric learning? _arXiv preprint arXiv:2504.07092_, 2025.
+
+
+Mehdi SM Sajjadi, Daniel Duckworth, Aravindh Mahendran, Sjoerd van Steenkiste, Filip Paveti´c,
+Mario Luˇci´c, Leonidas J Guibas, Klaus Greff, and Thomas Kipf. Object scene representation
+transformer. _arXiv preprint arXiv:2206.06922_, 2022.
+
+
+Nedko Savov, Naser Kazemi, Mohammad Mahdi, Danda Pani Paudel, Xi Wang, and Luc Van Gool.
+Exploration-driven generative interactive environments. In _Proceedings_ _of_ _the_ _Computer_ _Vision_
+_and Pattern Recognition Conference_, pp. 27597–27607, 2025.
+
+
+Dominik Schmidt and Minqi Jiang. Learning to act without actions. _arXiv_ _preprint_
+_arXiv:2312.10812_, 2023.
+
+
+Maximilian Seitzer, Max Horn, Andrii Zadaianchuk, Dominik Zietlow, Tianjun Xiao, Carl-Johann
+Simon-Gabriel, Tong He, Zheng Zhang, Bernhard Sch¨olkopf, Thomas Brox, and Francesco Locatello. Bridging the gap to real-world object-centric learning. In _The_ _Eleventh_ _International_
+_Conference on Learning Representations_, 2023.
+
+
+Gaurav Shrivastava and Abhinav Shrivastava. Continuous video process: Modeling videos as continuous multi-dimensional processes for video prediction. _arXiv preprint arXiv:2412.04929_, 2024.
+
+
+17
+
+
+Gautam Singh, Fei Deng, and Sungjin Ahn. Illiterate dall-e learns to compose. _arXiv_ _preprint_
+_arXiv:2110.11405_, 2021.
+
+
+Gautam Singh, Yeongbin Kim, and Sungjin Ahn. Neural block-slot representations. _arXiv preprint_
+_arXiv:2211.01177_, 2022a.
+
+
+Gautam Singh, Yi-Fu Wu, and Sungjin Ahn. Simple unsupervised object-centric learning for complex and naturalistic videos. _arXiv preprint arXiv:2205.14065_, 2022b.
+
+
+Gautam Singh, Yeongbin Kim, and Sungjin Ahn. Neural systematic binder. In _The Eleventh Inter-_
+_national Conference on Learning Representations_, 2023.
+
+
+Dmitriy Smirnov, Michael Gharbi, Matthew Fisher, Vitor Guizilini, Alexei A. Efros, and Justin
+Solomon. MarioNette: Self-supervised sprite learning. _Conference on Neural Information Pro-_
+_cessing Systems_, 2021.
+
+
+Kihyuk Sohn, Honglak Lee, and Xinchen Yan. Learning structured output representation using deep
+conditional generative models. In _NIPS_, 2015.
+
+
+Yeon-Ji Song, Suhyung Choi, Jaein Kim, Jin-Hwa Kim, and Byoung-Tak Zhang. Unsupervised
+dynamics prediction with object-centric kinematics. _arXiv preprint arXiv:2404.18423_, 2024.
+
+
+Aleksandar Stani´c and J¨urgen Schmidhuber. R-sqair: relational sequential attend, infer, repeat.
+_arXiv preprint arXiv:1910.05231_, 2019.
+
+
+Jennifer J Sun, Serim Ryou, Roni H Goldshmid, Brandon Weissbourd, John O Dabiri, David J
+Anderson, Ann Kennedy, Yisong Yue, and Pietro Perona. Self-supervised keypoint discovery in
+behavioral videos. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition_, pp. 2171–2180, 2022.
+
+
+Yang Tian, Sizhe Yang, Jia Zeng, Ping Wang, Dahua Lin, Hao Dong, and Jiangmiao Pang. Predictive inverse dynamics models are scalable learners for robotic manipulation. _arXiv_ _preprint_
+_arXiv:2412.15109_, 2024.
+
+
+Thomas Unterthiner, Sjoerd Van Steenkiste, Karol Kurach, Raphael Marinier, Marcin Michalski,
+and Sylvain Gelly. Towards accurate generative models of video: A new metric & challenges.
+_arXiv preprint arXiv:1812.01717_, 2018.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Rishi Veerapaneni, John D Co-Reyes, Michael Chang, Michael Janner, Chelsea Finn, Jiajun Wu,
+Joshua Tenenbaum, and Sergey Levine. Entity abstraction in visual model-based reinforcement
+learning. In _Conference on Robot Learning_, pp. 1439–1456. PMLR, 2020.
+
+
+Angel Villar-Corrales. Playslot: Learning inverse latent dynamics for controllable object-centric
+video prediction and planning. [https://github.com/angelvillar96/PlaySlot,](https://github.com/angelvillar96/PlaySlot)
+2025.
+
+
+Angel Villar-Corrales and Sven Behnke. Playslot: Learning inverse latent dynamics for controllable
+object-centric video prediction and planning. In _International Conference on Machine Learning_
+_(ICML)_, 2025.
+
+
+Angel Villar-Corrales, Ismail Wahdan, and Sven Behnke. Object-centric video prediction via decoupling of object dynamics and interactions. In _Internation_ _Conference_ _on_ _Image_ _Processing_
+_(ICIP)_, 2023.
+
+
+Angel Villar-Corrales, Gjergj Plepi, and Sven Behnke. Object-centric image to video generation
+with language guidance. _arXiv preprint arXiv:2502.11655_, 2025.
+
+
+Ruben Villegas, Jimei Yang, Yuliang Zou, Sungryull Sohn, Xunyu Lin, and Honglak Lee. Learning
+to generate long-term future via hierarchical prediction. In _international conference on machine_
+_learning_, pp. 3560–3569. PMLR, 2017.
+
+
+18
+
+
+Ruben Villegas, Arkanath Pathak, Harini Kannan, Dumitru Erhan, Quoc V Le, and Honglak Lee.
+High fidelity video prediction with large stochastic recurrent neural networks. _Advances in Neural_
+_Information Processing Systems_, 32, 2019.
+
+
+Vikram Voleti, Alexia Jolicoeur-Martineau, and Chris Pal. Mcvd-masked conditional video diffusion
+for prediction, generation, and interpolation. _Advances in neural information processing systems_,
+35:23371–23385, 2022.
+
+
+Homer Walke, Kevin Black, Abraham Lee, Moo Jin Kim, Max Du, Chongyi Zheng, Tony Zhao,
+Philippe Hansen-Estruch, Quan Vuong, Andre He, Vivek Myers, Kuan Fang, Chelsea Finn, and
+Sergey Levine. Bridgedata v2: A dataset for robot learning at scale. In _Conference_ _on_ _Robot_
+_Learning (CoRL)_, 2023.
+
+
+Jacob Walker, Ali Razavi, and A¨aron van den Oord. Predicting video with vqvae. _arXiv_ _preprint_
+_arXiv:2103.01950_, 2021.
+
+
+Tongzhou Wang, Antonio Torralba, Phillip Isola, and Amy Zhang. Optimal goal-reaching reinforcement learning via quasimetric learning. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+36411–36430. PMLR, 2023.
+
+
+Xingrui Wang, Xin Li, Yaosi Hu, Hanxin Zhu, Chen Hou, Cuiling Lan, and Zhibo Chen. Tivdiffusion: Towards object-centric movement for text-driven image to video generation. In _Pro-_
+_ceedings of the AAAI Conference on Artificial Intelligence_, volume 39, pp. 7988–7996, 2025a.
+
+
+Yunbo Wang, Haixu Wu, Jianjin Zhang, Zhifeng Gao, Jianmin Wang, Philip Yu, and Mingsheng
+Long. Predrnn: A recurrent neural network for spatiotemporal predictive learning. _IEEE Trans-_
+_actions on Pattern Analysis and Machine Intelligence_, 2022.
+
+
+Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment:
+from error visibility to structural similarity. _IEEE transactions on image processing_, 13(4):600–
+612, 2004.
+
+
+Zizhao Wang, Kaixin Wang, Li Zhao, Peter Stone, and Jiang Bian. Dyn-o: Building structured
+world models with object-centric representations. _arXiv preprint arXiv:2507.03298_, 2025b.
+
+
+Marissa A Weis, Kashyap Chitta, Yash Sharma, Wieland Brendel, Matthias Bethge, Andreas Geiger,
+and Alexander S Ecker. Benchmarking unsupervised object representations for video sequences.
+_J. Mach. Learn. Res._, 22:183–1, 2021.
+
+
+Ronald J. Williams and David Zipser. A learning algorithm for continually running fully recurrent
+neural networks. _Neural Comput._, 1:270–280, jun 1989.
+
+
+Bohan Wu, Suraj Nair, Roberto Martin-Martin, Li Fei-Fei, and Chelsea Finn. Greedy hierarchical variational autoencoders for large-scale video prediction. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 2318–2328, 2021a.
+
+
+Chenfei Wu, Jian Liang, Lei Ji, Fan Yang, Yuejian Fang, Daxin Jiang, and Nan Duan. N¨uwa: Visual
+synthesis pre-training for neural visual world creation. In _European_ _conference_ _on_ _computer_
+_vision_, pp. 720–736. Springer, 2022a.
+
+
+Yi-Fu Wu, Jaesik Yoon, and Sungjin Ahn. Generative video transformer: Can objects be the words?
+In Marina Meila and Tong Zhang (eds.), _Proceedings_ _of_ _the_ _38th_ _International_ _Conference_ _on_
+_Machine Learning_, volume 139 of _Proceedings of Machine Learning Research_, pp. 11307–11318.
+PMLR, 18–24 Jul 2021b.
+
+
+Ziyi Wu, Nikita Dvornik, Klaus Greff, Thomas Kipf, and Animesh Garg. Slotformer: Unsupervised
+visual dynamics simulation with object-centric models. _arXiv preprint arXiv:2210.05861_, 2022b.
+
+
+Amber Xie, Oleh Rybkin, Dorsa Sadigh, and Chelsea Finn. Latent diffusion planning for imitation
+learning. _arXiv preprint arXiv:2504.16925_, 2025.
+
+
+Zhengtong Xu, Qiang Qiu, and Yu She. Vilp: Imitation learning with latent video planning. _IEEE_
+_Robotics and Automation Letters_, 2025.
+
+
+19
+
+
+Wilson Yan, Yunzhi Zhang, Pieter Abbeel, and Aravind Srinivas. Videogpt: Video generation using
+vq-vae and transformers. _arXiv preprint arXiv:2104.10157_, 2021.
+
+
+Mengjiao Yang, Yilun Du, Kamyar Ghasemipour, Jonathan Tompson, Dale Schuurmans, and Pieter
+Abbeel. Learning interactive real-world simulators. _arXiv_ _preprint_ _arXiv:2310.06114_, 1(2):6,
+2023.
+
+
+Mingyu Yang, Junyou Li, Zhongbin Fang, Sheng Chen, Yangbin Yu, Qiang Fu, Wei Yang, and
+Deheng Ye. Playable game generation. _arXiv preprint arXiv:2412.00887_, 2024a.
+
+
+Zhuoyi Yang, Jiayan Teng, Wendi Zheng, Ming Ding, Shiyu Huang, Jiazheng Xu, Yuanming Yang,
+Wenyi Hong, Xiaohan Zhang, Guanyu Feng, et al. Cogvideox: Text-to-video diffusion models
+with an expert transformer. _arXiv preprint arXiv:2408.06072_, 2024b.
+
+
+Seonghyeon Ye, Joel Jang, Byeongguk Jeon, Se June Joo, Jianwei Yang, Baolin Peng, Ajay Mandlekar, Reuben Tan, Yu-Wei Chao, Bill Yuchen Lin, Lars Liden, Kimin Lee, Jianfeng Gao, Luke
+Zettlemoyer, Dieter Fox, and Minjoon Seo. Latent action pretraining from videos. In _The Thir-_
+_teenth International Conference on Learning Representations_, 2025.
+
+
+Kexin Yi, Chuang Gan, Yunzhu Li, Pushmeet Kohli, Jiajun Wu, Antonio Torralba, and Joshua B
+Tenenbaum. Clevrer: Collision events for video representation and reasoning. _arXiv_ _preprint_
+_arXiv:1910.01442_, 2019.
+
+
+Jiwen Yu, Yiran Qin, Xintao Wang, Pengfei Wan, Di Zhang, and Xihui Liu. Gamefactory: Creating
+new games with generative interactive videos. _arXiv preprint arXiv:2501.08325_, 2025.
+
+
+Lijun Yu, Yong Cheng, Kihyuk Sohn, Jos´e Lezama, Han Zhang, Huiwen Chang, Alexander G
+Hauptmann, Ming-Hsuan Yang, Yuan Hao, Irfan Essa, et al. Magvit: Masked generative video
+transformer. _arXiv preprint arXiv:2212.05199_, 2022.
+
+
+Andrii Zadaianchuk, Georg Martius, and Fanny Yang. Self-supervised reinforcement learning with
+independently controllable subgoals. In _Conference_ _on_ _Robot_ _Learning_, pp. 384–394. PMLR,
+2022.
+
+
+Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable
+effectiveness of deep features as a perceptual metric. In _Proceedings of the IEEE conference on_
+_computer vision and pattern recognition_, pp. 586–595, 2018.
+
+
+Weipu Zhang, Gang Wang, Jian Sun, Yetian Yuan, and Gao Huang. Storm: Efficient stochastic
+transformer based world models for reinforcement learning. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 36:27147–27166, 2023.
+
+
+Weipu Zhang, Adam Jelley, Trevor McInroe, and Amos Storkey. Objects matter: object-centric
+world models improve reinforcement learning in visually complex environments. _arXiv preprint_
+_arXiv:2501.16443_, 2025.
+
+
+Tony Z Zhao, Vikash Kumar, Sergey Levine, and Chelsea Finn. Learning fine-grained bimanual
+manipulation with low-cost hardware. _arXiv preprint arXiv:2304.13705_, 2023.
+
+
+Fangqi Zhu, Hongtao Wu, Song Guo, Yuxiao Liu, Chilam Cheang, and Tao Kong. Irasim: Learning
+interactive real-robot action simulators. _arXiv preprint arXiv:2406.14540_, 2024.
+
+
+Daniel Zoran, Rishabh Kabra, Alexander Lerchner, and Danilo J. Rezende. Parts: Unsupervised segmentation with slots, attention and independence maximization. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision (ICCV)_, pp. 10439–10447, October 2021.
+
+
+20
+
+
+A APPENDIX
+
+
+A.1 LARGE LANGUAGE MODELS (LLMS) ASSISTANCE DISCLOSURE
+
+
+We used large language models (LLMs) to assist in polishing the writing and improving grammar
+on a sentence level. All suggestions were reviewed and approved by the authors.
+
+
+A.2 PRELIMINARIES: SPATIAL SOFTMAX (SSM) AND SPATIAL TRANSFORMER NETWORK
+(STN)
+
+
+We first review two core building blocks of the Deep Latent Particles (DLP, Daniel & Tamar, 2022a;
+2024) model, an object-centric latent representation with disentangled attributes, before formally
+defining DLP. The _Spatial Softmax_ (SSM, Jakab et al., 2018; Finn et al., 2016b) is commonly used
+for self-supervised extraction of keypoints from feature maps. The _Spatial_ _Transformer_ _Network_
+(STN, Jaderberg et al., 2015) provides a differentiable mechanism for spatial transformations: given
+a set of keypoint locations, it enables the model to extract localized patches from the image and to
+recompose the image from such patches using parameterized affine transformations.
+
+
+**Spatial Softmax (SSM).** The spatial softmax, also known as the soft-argmax, can be viewed as a differentiable relaxation of the argmax operator: rather than selecting a single coordinate, it computes
+the expected coordinate under a probability distribution. Given a heatmap _H_ [˜] _∈_ R _[H][×][W]_, typically
+obtained from CNN feature maps of an image or patch, the softmax function is applied over the
+spatial dimensions to normalize _H_ [˜] into a probability distribution _H_ . Each entry _hij_ = _H_ ( _i, j_ ) then
+represents the probability of a keypoint being located at position ( _i, j_ ). From this distribution, the
+mean coordinate ( _µx, µy_ ) and the covariance values _σx_ [2] _[, σ]_ _y_ [2] _[,]_ [and] _[σ][xy]_ [,] [following] [Sun] [et] [al.] [(2022),]
+are computed:
+
+
+_µx_ = 
+
+
+_xi_  
+_i_ _j_
+
+
+_H_ ( _i, j_ ) _,_ _µy_ = 
+_j_ _j_
+
+
+_yj_  
+_j_ _i_
+
+
+_H_ ( _i, j_ ) _,_
+
+_i_
+
+
+( _xi −_ _µx_ ) [2] _H_ ( _i, j_ ) _,_ _σy_ [2] [=]  _ij_ _ij_
+
+
+_σx_ [2] [=] 
+
+
+( _yj_ _−_ _µy_ ) [2] _H_ ( _i, j_ ) _,_
+
+_ij_
+
+
+_σxy_ = �( _xi −_ _µx_ )( _yj_ _−_ _µy_ ) _H_ ( _i, j_ ) _._
+
+
+_ij_
+
+
+Here, [�]
+
+
+_j_ _[H]_ [(] _[i, j]_ [)][ and][ �]
+
+
+Here, [�] _j_ _[H]_ [(] _[i, j]_ [)][ and][ �] _i_ _[H]_ [(] _[i, j]_ [)][ correspond to the marginal distributions along each axis.] [The co-]
+
+ordinate grids _{xi}_ and _{yj}_ are defined as normalized continuous values, typically spanning [ _−_ 1 _,_ 1]
+across the width and height, rather than raw pixel indices. The process is illustrated in Figure 5 and
+we provide a PyTorch-style code in Figure 6. Intuitively, sharply peaked activations yield low covariance values, typically corresponding to salient structures such as objects, corners, or edges. In
+contrast, broadly spread activations tend to produce high covariances, which are characteristic of
+background or less informative regions. Thus, covariance values provide a natural criterion for detecting and filtering meaningful locations. Since the SSM is fully differentiable, the heatmaps are
+optimized end-to-end through the reconstruction objective, encouraging the model to attend to the
+most informative regions of the scene.
+
+
+**Spatial** **Transformer** **Network** **(STN).** A Spatial Transformer Network (STN; Jaderberg et al.,
+2015) is a learnable module that performs spatial transformations on input data in a fully differentiable manner. Such transformations include translation, scaling, rotation, and more general warping.
+In our context, we focus on the core differentiable operation underlying STNs: **grid sampling** .
+
+
+Given an input image _I_ _∈_ R _[C][×][H][×][W]_, an affine transformation matrix
+
+
+_A_ = - _a_ 11 _a_ 12 _tx_
+_a_ 21 _a_ 22 _ty_
+
+
+21
+
+
+Figure 5: Spatial-softmax. Given a heatmap _H_ [˜] _∈_ R _[H][×][W]_, the softmax function is applied over the
+spatial dimensions to normalize _H_ [˜] into a probability distribution _H_ . These values are then used to
+compute the expected coordinate values for each axis, and their covariance.
+
+
+1 def spatial_softmax(heatmap, kp_range=(-1, 1)):
+2 """
+3 Spatial Softmax with Marginalization for keypoint detection.
+4 Args:
+5 heatmap: [B, K, H, W] input heatmaps
+6 kp_range: coordinate range for normalization (default: (-1, 1))
+7 Returns:
+8 kp: [B, K, 2] expected keypoint coordinates [y, x]
+9 var: [B, K, 3] variance estimates [var_y, var_x, cov_yx]
+10 """
+11 batch_size, n_kp, height, width = heatmap.shape
+12
+13 # 1. Flatten and apply softmax
+14 logits = heatmap.view(batch_size, n_kp, -1) # [B, K, H*W]
+15 scores = torch.softmax(logits, dim=-1)
+16 scores = scores.view(batch_size, n_kp, height, width) # [B, K, H, W]
+17
+18 # 2. Create coordinate axes
+19 y_axis = torch.linspace(kp_range[0], kp_range[1], height,
+20 device=scores.device).type_as(scores)
+21 x_axis = torch.linspace(kp_range[0], kp_range[1], width,
+22 device=scores.device).type_as(scores)
+23
+24 # 3. Marginalize over dimensions
+25 sm_h = scores.sum(dim=-1) # [B, K, H] - marginalize over width
+26 sm_w = scores.sum(dim=-2) # [B, K, W] - marginalize over height
+27
+28 # 4. Compute expected coordinates
+29 kp_y = torch.sum(sm_h - y_axis, dim=-1) # [B, K]
+30 kp_x = torch.sum(sm_w - x_axis, dim=-1) # [B, K]
+31 kp = torch.stack([kp_y, kp_x], dim=-1) # [B, K, 2]
+32
+33 # 5. Compute variance: Var(X) = E[Xˆ2] - (E[X])ˆ2
+34 y_sq = (scores - (y_axis.unsqueeze(-1) ** 2)).sum(dim=(-2, -1))
+35 var_y = (y_sq - kp_y ** 2).clamp_min(1e-6) # [B, K]
+36
+37 x_sq = (scores - (x_axis.unsqueeze(-2) ** 2)).sum(dim=(-2, -1))
+38 var_x = (x_sq - kp_x ** 2).clamp_min(1e-6) # [B, K]
+39
+40 # 6. Compute covariance: Cov(X,Y) = E[XY] - E[X]E[Y]
+41 xy = (scores - (y_axis.unsqueeze(-1) - x_axis.unsqueeze(-2))).sum(dim=(-2, -1))
+42 cov_yx = xy - kp_y - kp_x # [B, K]
+43
+44 var = torch.stack([var_y, var_x, cov_yx], dim=-1) # [B, K, 3]
+45
+46 return kp, var
+
+
+Figure 6: PyTorch-style code of Spatial Softmax for keypoint detection.
+
+
+22
+
+
+maps normalized target coordinates ( _x_ _[t]_ _, y_ _[t]_ ) _∈_ [ _−_ 1 _,_ 1] [2] in the output grid to source coordinates
+( _x_ _[s]_ _, y_ _[s]_ ) in the input:
+
+                - _x_ _[s]_                -  _x_ _[t]_ 
+_y_ _[s]_ = _A_  _y_ _[t]_  _._
+
+
+
+
+
+= _A_
+
+
+
+
+
+ _x_ _[t]_
+
+ _y_ _[t]_
+1
+
+
+ _._
+
+
+The resulting sampling grid _G_ = _{_ ( _x_ _[s]_ _, y_ _[s]_ ) _}_ specifies where to fetch pixels from the input image.
+The _grid sampling_ operation then computes the transformed image _I_ [ˆ] via bilinear interpolation:
+
+
+_I_ ˆ( _x_ _[t]_ _, y_ _[t]_ ) =        - _I_ ( _i, j_ ) max(0 _,_ 1 _−|x_ _[s]_ _−_ _j|_ ) max(0 _,_ 1 _−|y_ _[s]_ _−_ _i|_ ) _._
+
+
+_i,j_
+
+
+This interpolation ensures that the transformation is differentiable with respect to both the sampling
+locations and the input image. In DLP, this mechanism is used in two ways:
+
+
+1. **Encoding:** extracting glimpses from the input image, parameterized by each particle’s
+attributes (position and scale).
+
+2. **Decoding:** stitching back the reconstructed image from the decoded particle glimpses.
+
+
+Thus, the encoder and decoder construct particle-specific affine transformations, generate the corresponding sampling grids, and warp the images or patches via differentiable grid sampling. Importantly, both grid generation and sampling are natively implemented in modern frameworks such as
+PyTorch (Paszke et al., 2017). A minimal PyTorch-style code snippet is provided in Figure 7.
+
+
+1 def spatial_transform(
+2 image, z_pos, z_scale, out_dims, inverse=False, eps=1e-9, padding_mode="zeros"
+3 ):
+4 """
+5 Differentiable spatial transform using grid sampling.
+6
+7 Args:
+8 image: [B, C, H, W] input tensor.
+9 z_pos: [B, 2] position (tx, ty).
+10 z_scale: [B, 2] scale factors (sx, sy).
+11 out_dims: (B, C, H_out, W_out) desired output size.
+12 inverse: if False (default), encoding transform (image -> glimpse).
+13 if True, decoding transform (glimpse -> image).
+14 eps: small constant for numerical stability.
+15 padding_mode: padding for out-of-bounds sampling.
+16 """
+17 # 1. Construct 2x3 affine transform matrix
+18 theta = torch.zeros(image.shape[0], 2, 3, device=image.device)
+19
+20 # scaling
+21 theta[:, 0, 0] = z_scale[:, 1] if not inverse else 1 / (z_scale[:, 1] + eps)
+22 theta[:, 1, 1] = z_scale[:, 0] if not inverse else 1 / (z_scale[:, 0] + eps)
+23
+24 # translation
+25 theta[:, 0, 2] = z_pos[:, 1] if not inverse else -z_pos[:, 1] / (z_scale[:, 1] + eps)
+26 theta[:, 1, 2] = z_pos[:, 0] if not inverse else -z_pos[:, 0] / (z_scale[:, 0] + eps)
+27
+28 # 2. Construct grid and apply bilinear sampling
+29 grid = F.affine_grid(theta, torch.Size(out_dims), align_corners=False)
+30 return F.grid_sample(image, grid, mode=’bilinear’,
+31 align_corners=False, padding_mode=padding_mode)
+
+
+Figure 7: PyTorch-style code for differentiable warping with encoding (image _→_ glimpse) and decoding (glimpse _→_ image).
+
+
+A.3 DEEP LATENT PARTICLES (DLP)
+
+
+We now formally define _deep latent particles_ (DLP) (Daniel & Tamar, 2024) and their attributes. In
+the following sections, we describe how they are learned and used for dynamics modeling.
+
+
+A foreground latent particle, illustrated in Figure 8, is defined as
+
+
+_z_ fg = [ _zp, zs, zd, zt, zf_ ] _∈_ R [6+] _[d]_ [obj] _,_
+
+
+23
+
+
+where each component corresponds to a disentangled stochastic attribute: position _zp_, scale _zs_,
+depth _zd_, transparency _zt_, and visual features _zf_ . The background is represented by a single abstract
+particle _z_ bg, fixed at the center of the image and parameterized only by _d_ bg background features.
+Formally,
+_z_ bg _∼N_ ( _µ_ bg _, σ_ bg [2] [)] _[ ∈]_ [R] _[d]_ [bg] _[.]_
+
+
+We now detail the role of each attribute:
+
+
+**Position** _zp_ _∈_ R [2] **:** encodes the spatial location of the particle, i.e., its ( _x, y_ ) coordinates within
+
+[ _−_ 1 _,_ 1]. Following object-centric models such as G-SWM (Lin et al., 2020a) and SCALOR (Jiang
+et al., 2019), _zp_ is modeled as a Gaussian _N_ ( _µp, σp_ [2][)][.] [In DLP, the prior for] _[ z][p]_ [is derived from SSM]
+over patches, which ensures that positions carry explicit spatial meaning.
+
+
+**Scale** _zs_ _∈_ R [2] **:** defines the particle’s height and width (i.e., bounding box size). It is modeled as
+_N_ ( _µs, σs_ [2][)][ and passed through a Sigmoid activation to constrain values to][ [0] _[,]_ [ 1]][.]
+
+
+**Depth** _zd_ _∈_ R **:** specifies the relative ordering of particles when reconstructing the scene, and modeled as _N_ ( _µd, σd_ [2][)][.] [While] _[z][d]_ [determines] [the] [compositing] [order] [of] [decoded] [objects,] [it] [does] [not]
+necessarily correspond to physical 3D depth, since DLP is trained on monocular RGB inputs.
+
+
+**Transparency** _zt_ _∈_ [0 _,_ 1] **:** controls whether and to what extent a particle contributes to the reconstructed image. A value of _zt_ = 0 corresponds to a fully transparent (inactive) particle, _zt_ = 1 to a
+fully visible particle, and intermediate values capture partial visibility. Unlike many object-centric
+models that use a Bernoulli “presence” variable, we model transparency with a Beta distribution,
+_zt_ _∼_ Beta( _at, bt_ ). This has two key advantages: (1) the Beta distribution is continuous and reparameterizable, enabling stable gradient-based optimization without discrete relaxations, and (2) it
+naturally supports intermediate values, making it possible to represent partially occluded or semitransparent objects. Moreover, like Gaussian and Bernoulli, the Beta distribution has a closed-form
+KL divergence that can be easily plugged in the VAE’s objective function.
+
+
+**Visual** **features** _zf_ _∈_ R _[d]_ **[obj]** _,_ _z_ **bg** _∈_ R _[d]_ **[bg]** **:** encode the appearance of foreground particles, i.e., the
+keypoint’s surrounding region, and the background, respectively. Both are modeled as Gaussian
+latents: _zf_ _∼N_ ( _µf_ _, σf_ [2][)][ and] _[ z]_ [bg] _[∼N]_ [(] _[µ]_ [bg] _[, σ]_ bg [2] [)][.]
+
+
+Figure 8: A Deep Latent Particle. Each component of a latent particle corresponds to a disentangled
+stochastic attribute: position _zp_, scale _zs_, depth _zd_, transparency _zt_, and visual features _zf_ . Further
+details are provided in Section 3 of the main text and Section A.3 of the Appendix.
+
+
+A.4 LATENT PARTICLE WORLD MODELS - EXTENDED METHOD DETAILS
+
+
+In this section, we provide a detailed overview of our method.
+
+
+Our goal is to design a _world model_, i.e., a dynamics model _F_ ( _I_ 0: _T −_ 1 _, c_ ) = _I_ [ˆ] _T_ : _T_ + _τ_ _−_ 1 that takes in
+a sequence of _T_ image observations _I_ 0: _T −_ 1 _∈_ R _[T][ ×][C][×][H][×][W]_ (a video), where _C_ is the number of image channels (typically 3 for RGB) and _H_ and _W_ are the height and width of the images respectively,
+
+
+24
+
+
+and _optionally_ a sequence of conditioning signals _c_ (e.g., action sequence or language instruction),
+and predicts a sequence of future observations _τ_ autoregressively _I_ [ˆ] _T_ : _T_ + _τ_ _−_ 1 _∈_ R _[τ]_ _[×][C][×][H][×][W]_ . We
+note that our world model need not be conditioned on _c_ and can be trained only with videos, i.e.
+_c_ = _∅_, as we explain later in the section. As the original image pixel space is high-dimensional, we
+propose an end-to-end latent world model, termed Latent Particle World Models (LPWM), which
+learns a compact self-supervised object-centric latent representation for the images, based on an
+improved version of the Deep Latent Particles (DLP, Daniel & Tamar, 2022a; 2024) representation,
+DLPv3, and a novel dynamics module learned over the latent particle space. The model is trained
+end-to-end such that the representation is trained to be predictable by the dynamics module, and as
+such does not require pre-trained image tokenization of any sort.
+
+
+The **Latent** **Particle** **World** **Model** **(LPWM)** consists of four components, jointly trained end-toend as a variational autoencoder (VAE, Kingma & Welling, 2014): the ENCODER _Eϕ_, the DECODER
+_Dθ_, the CONTEXT _Kψ_ and the DYNAMICS _Fξ_ . The general pipeline operates as follows: input
+frames are first encoded by the ENCODER into sets of particles, which are then decoded by the DECODER to reconstruct images and compute the reconstruction loss. The resulting sequence of latent
+particles is passed to the CONTEXT module, which generates distributions over latent actions. The
+sampled latent actions—together with the particles themselves—are processed by the DYNAMICS
+module to predict the next-step particle states, where the KL is computed per-particle. Below, we
+provide a high-level overview of each component and a detailed description is provided in subsequent sections. A high-level schematic of the encoding and decoding process is shown in Figure 9,
+and an overview of the full architecture is shown in Figure 3.
+
+
+Figure 9: Encoding and decoding particles in DLP. Input image is first used to generate _keypoint_
+_proposals_, that, jointly with input image are used to encode a set of particles by the ENCODER,
+which is then decoded by the DECODER. Further details are provided in Section 4 of the main text
+and Section A.4 of the Appendix.
+
+
+**ENCODER** **(Section** **A.4.1)** : corresponds to the VAE’s approximate posterior _qϕ_ ( _z|x_ ). It takes as
+input an image frame and outputs a set of latent particles:
+
+_Eϕ_ ( _x_ = _It_ ) = [ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ []] _[.]_
+
+Each frame _It_ is represented by _M_ foreground latent particles _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1][, where each particle orig-]
+inates from per-patch learned keypoint (see Section A.4.1), and one background particle _z_ bg _[t]_ [.] [Unlike]
+DDLP, particle filtering to a subset _L_ _≤_ _M_ is deferred to the decoder to preserve particle identities
+and avoid explicit tracking in downstream modules. Foreground particles are parameterized as
+
+_z_ fg _[m]_ _[∈]_ [R][6+] _[d]_ [obj] _[,]_
+
+where the first six dimensions capture explicit attributes (e.g., spatial coordinates, scale, transparency), and the remaining _d_ obj dimensions represent appearance features. The background particle
+is defined as
+_z_ bg _∈_ R _[d]_ [bg] _,_
+
+
+25
+
+
+with _d_ bg encoding the global appearance of the background.
+
+
+**DECODER (Section A.4.2)** : corresponds to the VAE’s likelihood _pθ_ ( _x|z_ ). It takes as input a set of
+_L ≤_ _M_ foreground particles together with a background particle, and reconstructs an image frame:
+
+
+_Dθ_ ([ _{z_ fg _[l,t][}]_ _l_ _[L]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ []) =] _[I]_ [ˆ] _[t][.]_
+
+
+Here, _L_ denotes the number of foreground particles provided to the decoder, which can be smaller
+than the _M_ particles produced by the encoder. Particles can be filtered based on their confidence –
+e.g., using their variance scores (Daniel & Tamar, 2024), or transparency values prior to rendering
+the frame, with the purpose of reducing the memory footprint without degrading the reconstruction
+performance.
+
+
+**CONTEXT (Section A.4.3)** : a novel mechanism for modeling latent actions, i.e., the transitions that
+move a particle from _zi_ _[t]_ [to] _[ z]_ _i_ _[t]_ [+1] . These latent actions provide the dynamics model with per-particle
+context, capturing events such as the stochastic movement of a gripper in a robotic video or the
+appearance of a new object in the scene. Throughout the paper, we use the terms _latent context_ and
+_latent actions_ interchangeably. Formally, the module takes as input a sequence of particle sets across
+_T_ + 1 frames, optionally conditioned on external signals _{ct}_ _[T]_ _t_ =0 [(e.g., control actions or language]
+instructions), and outputs a sequence of per-particle latent contexts:
+
+
+_Kψ_ ( _{_ [ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ _[, c][t]_ []] _[}]_ _t_ _[T]_ =0 [) =] _[ {]_ [[] _[{][z]_ _c,_ _[m,t]_ fg _[}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ _c,_ _[t]_ bg []] _[}]_ _t_ _[T]_ =0 _[ −]_ [1] _[.]_
+
+
+The CONTEXT module consists of two complementary heads:
+
+
+    - **Latent** **inverse** **dynamics** _p_ [inv] _ψ_ [(] _[z]_ _c_ _[t]_ _[|]_ _[z][t]_ [+1] _[, z][t][, . . ., z]_ [0] _[, c][t]_ [)][,] [which] [predicts] [the] [latent] [action]
+responsible for the transition between consecutive states.
+
+    - **Latent** **policy** _p_ [policy] _ψ_ ( _zc_ _[t]_ _[|]_ _[z][t][, . . ., z]_ [0] _[, c][t]_ [)][,] [which] [models] [the] [distribution] [of] [latent] [actions]
+given the current state.
+
+
+In practice, the model does not output particles directly, but instead produces the parameters of their
+predictive distribution (e.g., Gaussian means and variances). The latent policy acts as a prior that
+regularizes the inverse dynamics via a KL-divergence term in the VAE objective (Section A.4.6).
+During training, latent actions are inferred through the inverse dynamics head. At inference time,
+actions can instead be sampled from the policy prior, enabling stochastic rollout of the world model.
+
+
+**DYNAMICS** **(Section** **A.4.4)** : corresponds to the VAE’s autoregressive dynamics prior
+_pξ_ ( _z_ _[t]_ _|z_ _[t][−]_ [1] _, . . ., z_ [0] ). It predicts the next-step particles conditioned on the current particles and their
+associated latent actions:
+
+_Fξ_ ( _{_ [ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ _[, z]_ _c_ _[t]_ []] _[}][T]_ _t_ =0 _[ −]_ [1][) =] _[ {]_ [[] _[{][z]_ [ˆ] fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[,]_ [ ˆ] _[z]_ bg _[t]_ []] _[}]_ _t_ _[T]_ =1 _[.]_
+
+
+Similarly to the context module, the model outputs the parameters of the distributions, which serve
+as the prior in the KL-divergence calculation part of the VAE training objective.
+
+
+**LOSS (Section A.4.6)** : Latent Particle World Models are trained by maximizing a temporal ELBO,
+which decomposes into a _static_ term (for the first frame) and a _dynamic_ term (for subsequent frames).
+For brevity, we omit the particle index _m_, and note that both dynamics and context losses are
+summed over all _M_ particles.
+
+
+**Static ELBO.** For the initial frame _x_ 0, we optimize
+
+_L_ static = _L_ rec( _x_ 0 _,_ ˆ _x_ 0) + _β_ KL KL� _qϕ_ ( _z_ [0] _| x_ 0) _∥_ _p_ ( _z_ [0] )� + _β_ reg _L_ reg( _zt_ [0][)] _[,]_
+
+
+where _z_ [0] denotes the set of particle attributes and features. The KL is computed in a _masked form_,
+where each particle’s contribution is weighted by its transparency attribute _zt_ _[m]_ [,] [such] [that] [particles]
+with _zt_ _[m]_ _[≈]_ [0][ (inactive) have negligible effect.] [The transparency regularizer is defined as]
+
+
+_L_ reg =
+
+
+_M_ _−_ 1
+
+- ( _zt_ _[m]_ [)][2] _[,]_
+
+_m_ =0
+
+
+which penalizes the total transparency values across particles and thus encourages sparse explanations of the scene, i.e., only a small subset of particles remain active.
+
+
+26
+
+
+**Dynamic ELBO.** For frames _t ≥_ 1, the loss is
+
+
+_L_ rec( _xt,_ ˆ _xt_ )
+
+
+    -     -     - [�]
++ _β_ dyn KL _qϕ_ ( _z_ _[t]_ _| xt_ ) _∥_ _pξ_ _z_ _[t]_ _| z_ _[<t]_ _, zc_ _[<t]_
+
+
+    - ��
++ _β_ ctx KL _p_ [inv] _ψ_ [(] _[z]_ _c_ _[t]_ _[|][ z][≤][t]_ [+1][)] _[ ∥]_ _[p]_ _ψ_ [policy] ( _zc_ _[t]_ _[|][ z][≤][t]_ [)] _._
+
+
+_L_ dynamic =
+
+
+_T −_ 1
+
+
+_t_ =1
+
+
+(1)
+
+
+where _zc_ _[t]_ [denotes latent context (action) variables.] [The dynamics KL is masked as above, while the]
+context KL is not, allowing context variables to also explain transitions between active and inactive
+states.
+
+
+**Priors.** The static prior parameters are fixed: Gaussian means and covariances for attributes and
+visual features, and ( _a, b_ ) parameters of a Beta distribution for transparency (see Appendix A.9).
+
+
+**Reconstruction.** The reconstruction term is defined as pixel-wise MSE in simulated environments,
+and as a perceptual loss in real-world data:
+
+
+_L_ rec =
+
+
+- _∥x −_ _x_ ˆ _∥_ 22 _[,]_ for simulated environments _,_
+
+
+_∥x −_ _x_ ˆ _∥_ [2] 2 [+] _[ γ][ ∥][ϕ]_ [(] _[x]_ [)] _[ −]_ _[ϕ]_ [(ˆ] _[x]_ [)] _[∥]_ 2 [2] _[,]_ for real-world datasets _,_
+
+
+where _ϕ_ ( _·_ ) denotes VGG features as in LPIPS (Hoshen et al., 2019), and _γ_ = 0 _._ 1 controls the
+perceptual loss contribution.
+
+
+In the following sections, we describe the technical and implementation details of each component,
+with the differences from DLPv2 and DDLP (Daniel & Tamar, 2024) highlighted in _italics_ . In
+Section A.10.1, we compare the proposed DLPv3 to DLPv2 and DLP on image reconstruction in
+the single-image setting, demonstrating the effect of these modifications.
+
+
+A.4.1 ENCODER _Eϕ_
+
+
+We now describe the image encoding process from pixels to latent particles. The encoder operates
+per-frame (i.e., non-temporally; all frames are processed independently in parallel) and serves as the
+posterior of the VAE. The scheme largely follows DLPv2 (Daniel & Tamar, 2024); for completeness,
+we provide the details here and highlight the modifications introduced in DLPv3.
+
+
+DLP learns an object-centric particle representation by disentangling _position_ from _appearance_
+within a conditional VAE framework (Sohn et al., 2015). Specifically, keypoint proposals are first
+generated to represent candidate particle positions, after which additional attributes such as scale
+and transparency are extracted from regions centered around these proposals. The overall encoding
+steps are illustrated in Figure 10.
+
+
+The encoder’s role is to produce the posterior distribution over latent particles for a given image.
+Formally, it models the approximate posterior as
+
+
+_qϕ_ ( _z|x_ ) = _qϕ_ ( _za|x_ ) _× qϕ_ ( _zo, zs, zd, zt|x, za_ ) _× qϕ_ ( _zf_ _|x, zp, zs_ ) _,_
+
+
+where _za_ denotes the keypoint proposals and _zo_ the offsets that together form the particle positions
+_zp_ = _za_ + _zo_ . This modular factorization improves performance: keypoint proposals from the spatial
+softmax (SSM) layer tend to capture regions of interest but are not guaranteed to align with object
+centers. Offsets, in contrast, are predicted by a neural network and can accurately adjust proposals
+to object centers–a property that is crucial for modeling object dynamics. The encoding process is
+hierarchical and involves of 3 steps: (1) _keypoint proposals_ - a patch-based network with a spatial
+softmax layer generates candidate particle locations; (2) _attribute encoding_ - offsets, scales, depths,
+and transparencies are inferred for each particle, and (3) _appearance encoding_ - foreground particle
+features and global background features are extracted. We now describe each step in detail.
+
+
+**Keypoint proposals.** Given an input image _x_ _∈_ R _[C][×][H][×][W]_, we divide it into _M_ non-overlapping
+patches of size _D × D_ (typically _D_ _∈{_ 8 _,_ 16 _}_ ). Each patch is processed by the _proposal encoder_
+_qϕ_ ( _za|x_ ), a lightweight convolutional neural network (CNN), followed by a spatial softmax (SSM)
+
+
+27
+
+
+Figure 10: Encoding particles in DLP. The encoding process involves 4 steps: (1) _keypoint propos-_
+_als_ - a patch-based network with a spatial softmax layer generates candidate particle locations; (2)
+_attribute encoding_ - offsets, scales, depths, and transparencies are inferred for each particle; (3) _ap-_
+_pearance encoding_ - foreground particle features, and (4) _background encoding_ - global background
+features are extracted from the keypoint-masked image.
+
+
+layer, which produces a single keypoint proposal _za_ per patch. _In_ _DLPv2,_ _these_ _proposals_ _were_
+_filtered_ _down_ _to_ _a_ _smaller_ _set_ _of_ _size_ _L_ _using_ _the_ _variance_ _of_ _the_ _SSM_ _distribution._ _In_ _DLPv3,_ _we_
+_instead postpone filtering until after other particle attributes have been estimated, which yields more_
+_reliable_ _selection._ _In_ _LPWM,_ _filtering is deferred even further:_ _particles are_ never _removed in the_
+_encoder, but instead filtered in the decoder, ensuring that positional identity is preserved for down-_
+_stream dynamics modeling._ _Nevertheless,_ _for the single-image training setting,_ _where only object-_
+_centric_ _decomposition_ _is_ _learned_ _and_ _no_ _dynamics_ _are_ _modeled,_ _we_ _retain_ _the_ _option_ _of_ _applying_
+_encoder-side filtering._
+
+
+**Attribute** **encoding.** To infer the position offset _zo_, scale _zs_, depth _zd_, and transparency _zt_ of
+each particle, we extract glimpses of size _S × S_, where _S_ _≥_ _D_, centered at the keypoint proposals
+_za_ using an STN. [3] These glimpses are processed by the _attribute_ _encoder_ _qϕ_ ( _zo, zs, zd, zt|x, za_ ),
+implemented as a small CNN followed by a fully connected layer, which outputs the distribution
+parameters described in Section A.3 for each particle. The encoder’s weights are shared across all
+particles.
+
+
+**Appearance** **encoding.** The visual features of each particle are extracted with the _appearance_
+_encoder qϕ_ ( _zf_ _|x, zp, zs_ ). As in the attribute stage, an STN is used to obtain glimpses of size _S_, but
+here the transformation is conditioned on both the particle position _zp_ = _za_ + _zo_ and the learned scale
+_zs_, rather than a fixed patch ratio. This allows the glimpse size to adapt when objects are smaller or
+larger than the nominal _S × S_ region. Since all stages rely on STN, the entire pipeline remains fully
+differentiable. The appearance encoder has the same architecture as the attribute encoder and outputs
+the Gaussian distribution parameters for the particle’s visual features. In addition to object particles,
+we allocate a background particle anchored at the image center. Its features _z_ bg are inferred by a
+dedicated _background encoder qϕ_ ( _z_ bg _|x, zp_ ) which operates on a masked version of the input image.
+Specifically, the posterior keypoints _zp_, along with their transparencies _zt_, are used to generate _M_
+masks of size _S_ _×S_, each masking out the region corresponding to a particle, leaving the background
+regions visible for encoding.
+
+
+**DLPv3 encoding modifications.** _In DLPv3, we introduce several changes to the encoding process_
+_aimed at improving stability and performance:_
+
+
+3The affine transformation in this stage uses a fixed scale corresponding to the patch size _S_, a predefined
+hyperparameter (typically 0 _._ 125 or 0 _._ 25 of the image size; we assume square images with _H_ = _W_ ).
+
+
+28
+
+
+1. **Depth** **via** **particle** **attention.** Instead of predicting the depth attribute _zd_ during the attribute encoding stage, we introduce an attention layer applied _after_ attribute encoding.
+This attention layer takes as input all particles, including the background particle, and outputs the depth values _{zd_ _[m][}]_ _m_ _[M]_ =0 _[−]_ [1][.] [The motivation is that relative depth is inherently a global]
+property, best estimated by jointly considering all particle positions and features rather than
+independently.
+
+
+2. **Residual appearance encoding.** The same attention layer is also used to refine appearance
+features. Specifically, in the appearance encoding stage, we first compute a deterministic
+feature embedding _z_ ˆ _f_ for each particle. The attention layer then outputs a residual ∆ _zf_
+and variance _σf_ [2][, such that the final appearance distribution is]
+
+
+_qϕ_ ( _zf_ _| x, zp, zs_ ) = _N_              - _zf_ �� _z_ ˆ _f_ + ∆ _zf_ _,_ _σf_ 2� _._
+
+
+This residual modeling improves performance by allowing the network to adjust features
+based on contextual information from all particles.
+
+
+3. **Stable transparency parameterization.** In DLPv2, the Beta distribution parameters ( _a, b_ )
+for transparency were modeled as _a_ = exp( _ya_ ) _,_ _b_ = exp( _yb_ ), where _ya, yb_ are the outpus
+of the network, which could lead to excessively large concentration values and unstable
+training. In DLPv3, we reparameterize them as
+
+
+_a_ = _r_ max _σ_ ( _ya_ ) + _r_ min �1 _−_ _σ_ ( _ya_ )� _,_ _b_ = _r_ max _σ_ ( _yb_ ) + _r_ min �1 _−_ _σ_ ( _yb_ )� _,_
+
+
+where _σ_ ( _·_ ) is the sigmoid function, _r_ min = 10 _[−]_ [4], and _r_ max = 100. This constrains ( _a, b_ ) to
+a bounded range, leading to smoother and more stable optimization.
+
+
+A.4.2 DECODER _Dθ_
+
+
+The decoder architecture is designed to mirror the object-centric structure of the latent representation. Each particle is decoded into a localized appearance patch, positioned and scaled according to
+its spatial attributes, while transparency and depth resolve visibility and occlusions. This compositional design parallels classical graphics pipelines, local rendering, spatial transformation, and alpha
+compositing, but is learned end-to-end from data, enabling the model to reconstruct complex scenes
+in a structured and interpretable manner.
+
+
+The decoder models the likelihood
+
+
+_pθ_ ( _x | z_ ) = _pθ_ ( _x | z_ fg = _{zp, zs, zd, zt, zf_ _}, z_ bg)
+
+
+and is composed of a _particle decoder_ and a _background decoder_, as illustrated in Figure 11.
+
+
+**Particle decoder.** Each particle is decoded independently into an RGBA (RGB + Alpha) glimpse
+_x_ ˜ _[p]_ _i_ _[∈]_ [R] _[S][×][S][×]_ [4][, representing the reconstructed appearance of particle] _[ i]_ [. The particle decoder consists]
+of a fully connected layer followed by a small upsampling CNN that maps the latent feature vector
+_zf_ [(] _[i]_ [)] into this glimpse.
+
+
+The alpha channel encodes a soft segmentation mask for the particle. The depth _zd_ and transparency
+_zt_ attributes modulate this mask, determining both the effective visibility and the compositing order
+of the particle. The spatial attributes ( _zp, zs_ ) specify the particle’s position and scale, and are applied
+to the decoded glimpse using a Spatial Transformer Network (STN) to place it into the full-resolution
+canvas _x_ ˆfg.
+
+
+The transparency and depth factorization process, which governs the stitching of multiple particles,
+is summarized in Figure 12.
+
+
+**Background decoder.** The background is decoded from _z_ bg using a standard VAE-style network:
+a fully connected layer followed by an upsampling CNN produces _x_ ˆbg, and the final reconstructed
+image is produced according to
+
+
+_x_ ˆ = _α ⊙_ _x_ ˆfg + (1 _−_ _α_ ) _⊙_ _x_ ˆbg _,_
+
+
+where _α_ is the effective mask obtained from the compositing process (Figure 12).
+
+
+29
+
+
+Figure 11: Decoding particles in DLP. Each particle is decoded into a localized appearance patch,
+positioned and scaled according to its spatial attributes, while transparency and depth resolve visibility and occlusions. The background is decoded with a standard upsampling CNN-based network.
+Finally, the foreground and background components are stitched using the effective alpha masks.
+
+
+1 def factor_alpha_map(alpha_obj, rgb_obj, z_t, z_d):
+2 # alpha_obj: [B, N, 1, h, w], per-particle alpha maps
+3 # rgb_obj: [B, N, 3, h, w], per-particle RGB patches
+4 # z_t: [B, N, 1], transparency attributes
+5 # z_d: [B, N, 1], depth attributes
+6
+7 # Apply transparency
+8 alpha_obj = alpha_obj - z_t
+9
+10 # Mask RGB channels with alpha
+11 rgba_obj = alpha_obj - rgb_obj
+12
+13 # Depth-based importance map
+14 importance = alpha_obj - sigmoid(-z_d)
+15
+16 # Normalize importance weights
+17 importance = importance / (importance.sum(dim=1, keepdim=True) + 1e-5)
+18
+19 # Composite objects according to importance
+20 objects_canvas = (rgba_obj - importance).sum(dim=1)
+21
+22 # Background mask
+23 bg_mask = 1 - (alpha_obj - importance).sum(dim=1)
+24
+25 return objects_canvas, bg_mask
+
+
+Figure 12: PyTorch-style pseudocode of the transparency and depth factorization used for compositing particles.
+
+
+_In DLPv3,_ _we defer the particle filtering process to the decoder stage._ _Instead of rendering all M_
+_particles,_ _we_ _only_ _render_ _a_ _subset_ _of_ _L_ _≤_ _M_ _particles,_ _where_ _filtering_ _is_ _based_ _on_ _the_ _particles’_
+_positional_ _variance_ _and_ _transparency._ _This_ _design_ _serves_ _two_ _purposes:_ _(i)_ _preserving_ _the_ _full_
+_set_ _of_ _particles_ _after_ _encoding,_ _which_ _is_ _important_ _for_ _downstream_ _dynamics_ _modeling,_ _and_ _(ii)_
+_reducing computational and memory cost during rendering, since many particles may be inactive or_
+_redundant._ _The filtering procedure is described below._
+
+
+30
+
+
+**Particle filtering.** _During training,_ _we retain the top-L particles with the lowest positional vari-_
+_ance_ _(i.e.,_ _highest_ _spatial_ _confidence)._ _Formally,_ _the_ _positional_ _variance_ _of_ _a_ _particle_ _is_ _defined_
+_as_
+_V_ ( _z_ ) = _σx_ [2] [+] _[ σ]_ _y_ [2] [+] _[ σ][xy]_ [+]          - log _σo,j_ [2] _[,]_
+
+_j∈{_ 0 _,_ 1 _}_
+
+
+_where σx_ [2] _[, σ]_ _y_ [2] _[, and][ σ][xy]_ _[denote the variance and covariance terms from the spatial softmax proposal,]_
+_and σo,j_ [2] _[is the variance of the offset distribution predicted by the attribute encoder along axis][ j][.]_ _[We]_
+_use the_ log-variance _for the offset term to account for scale differences between the empirical vari-_
+_ance from the spatial softmax and the learned offset uncertainty._ _This choice is motivated by prior_
+_work (Daniel & Tamar, 2022a), which demonstrated that particles with low positional variance tend_
+_to correspond to salient and meaningful parts of the scene, such as objects or object parts._ _At infer-_
+_ence time, where particles are generated autoregressively, we simply discard all particles with zero_
+_transparency, i.e., zt_ = 0 _._
+
+
+A.4.3 CONTEXT _Kψ_
+
+
+We now present the main novel additional component to the DLP framework—the CONTEXT module _Kψ_ —designed to address the problem of _stochastic_ _dynamics_ in actionless videos. In such
+videos, scene dynamics are not fully determined by the first frames (e.g., a ball starting to roll in
+OBJ3D (Lin et al., 2020a) or CLEVRER (Yi et al., 2019)), but also by external signals such as actions
+(e.g., a robotic gripper moving in the BAIR dataset (Ebert et al., 2017a)).
+
+
+A common approach to capture such stochastic transitions is to introduce _latent actions_ (Menapace
+et al., 2021; Bruce et al., 2024; Gao et al., 2025; Villar-Corrales & Behnke, 2025). Typically, a
+latent action _zc_ is learned in an autoencoding scheme: an inverse model infers _zc_ _[t]_ [=] _[K]_ _ψ_ [inv][(] _[I][t]_ [+1] _[, I][t]_ [)]
+from two consecutive frames, and a decoder reconstructs the future frame _I_ [ˆ] _t_ +1 = _Dθ_ ( _It, zc_ _[t]_ [)][, with]
+training driven by reconstruction loss. To avoid degenerate solutions where _zc_ _[t]_ [memorizes] _[ I][t]_ [+1][,] _[ z][c]_ [is]
+strongly regularized, either via a vector-quantization (VQ) bottleneck (Bruce et al., 2024; Ye et al.,
+2025) or a variational bottleneck with KL-regularization to a fixed prior (Gao et al., 2025). Crucially,
+in these designs, the latent action is _global_ : a single vector encodes all changes between two frames.
+While this aligns with how agents are typically controlled (e.g., joint positions in robotics, discrete
+actions in video games), it is limited in multi-entity settings. For example, in Mario, enemies move
+independently of the player’s true action space, and in robotics, contact events can induce secondary
+object interactions. A global action vector cannot naturally disentangle these local dynamics.
+
+
+In this work, we introduce the CONTEXT module _Kψ_, a novel per-particle mechanism for latent
+action modeling. Unlike prior work (Villar-Corrales & Behnke, 2025; Gao et al., 2025), we model
+a latent action for each particle, directly governing the transition from _zi_ _[m,t]_ to _zi_ _[m,t]_ [+1] . Regularization is not imposed via a fixed prior, but instead learned through a _latent policy_, which models the
+distribution of latent actions conditioned on the current state. This per-particle formulation enables
+the representation of multiple, simultaneous interactions, and allows stochastic sampling of latent
+actions at inference time, capturing multimodality (e.g., moving left or right from the same state).
+
+
+Finally, we extend _Kψ_ to support external conditioning signals such as global actions (e.g., groundtruth gripper controls), language instructions, or image-based goals. Importantly, conditioning
+_within_ the latent context module maps global scene-level signals into per-particle latent actions. For
+instance, given a language instruction, _Kψ_ learns to translate it into per-particle latent actions that
+drive the dynamics towards satisfying the instruction. When no external conditioning is provided,
+_Kψ_ simply infers latent actions from past particle trajectories.
+
+
+Formally, the CONTEXT module takes as input a sequence of particle sets across _T_ + 1 frames,
+**optionally** conditioned on external signals _{ct}_ _[T]_ _t_ =0 [(e.g., control actions, goal images, or language]
+instructions). It outputs a sequence of per-particle latent contexts:
+
+
+_Kψ_ ( _{_ [ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ bg _[t]_ _[, c][t]_ []] _[}]_ _t_ _[T]_ =0 [) =] _[ {]_ [[] _[{][z]_ _c,_ _[m,t]_ fg _[}]_ _m_ _[M]_ =0 _[−]_ [1] _[, z]_ _c,_ _[t]_ bg []] _[}]_ _t_ _[T]_ =0 _[ −]_ [1] _[.]_
+
+
+The CONTEXT module is implemented as a _causal spatio-temporal transformer_ (Zhu et al., 2024),
+which jointly processes particles across space and time while ensuring autoregressive temporal dependencies. It is composed of two complementary heads:
+
+
+31
+
+
+- **Latent** **inverse** **dynamics** _p_ [inv] _ψ_ [(] _[z]_ _c_ _[t]_ _[|]_ _[z][t]_ [+1] _[, z][t][, . . ., z]_ [0] _[, c][t]_ [)][,] [which] [predicts] [the] [latent] [action]
+responsible for the transition between consecutive states.
+
+    - **Latent** **policy** _p_ [policy] _ψ_ ( _zc_ _[t]_ _[|]_ _[z][t][, . . ., z]_ [0] _[, c][t]_ [)][,] [which] [models] [the] [distribution] [of] [latent] [actions]
+conditioned on the current state.
+
+
+The latent policy serves as a prior that regularizes the inverse dynamics via a KL-divergence penalty
+in the VAE objective (Section A.4.6). Specifically, the latent actions are modeled as Gaussian distributions, _zc_ _∼N_ ( _µc, σc_ [2][)][,] [parameterized] [by] [the] [context] [module.] [At] [training] [time,] [latent] [actions]
+are obtained through the inverse dynamics head, ensuring consistency with observed transitions. At
+inference time, latent actions can instead be sampled directly from the latent policy prior, enabling
+stochastic rollouts of the world model. When conditioned on a goal image or a language instruction, sampling from the latent policy can be further utilized for planning in the particles space, as
+we demonstrate in the experiments section (Section 5.2). The CONTEXT module is illustrated in
+Figure 3.
+
+
+We now describe how different optional conditioning mechanisms are implemented.
+
+**Action conditioning.** Given a sequence of _T_ global actions _{ct}t_ _[T]_ =0 _[ −]_ [1] [=] _[ {][a][t][}]_ _t_ _[T]_ =0 _[ −]_ [1] [(e.g., robotic grip-]
+per joint positions), each action is projected to the transformer’s inner dimension and then _repeated_
+_for_ _all_ _M_ _input_ _particles_, such that the same global action conditions every particle at timestep _t_ .
+Conditioning is applied via adaptive layer normalization (AdaLN, (Peebles & Xie, 2023)), enabling
+global actions to modulate the particle representations consistently across the scene.
+
+
+**Language** **conditioning.** Given a language instruction, we embed its _K_ tokens with a pretrained
+T5-large model (Raffel et al., 2020) to obtain a sequence of embeddings _ct_ = _{lk}_ _[K]_ _k_ =0 _[−]_ [1][.] [These em-]
+beddings are projected to the transformer’s inner dimension and appended to the _M_ particle embeddings along the sequence dimension, resulting in _M_ + _K_ inputs at every timestep _t_ = 0 _, . . ., T_ _−_ 1.
+The joint set of particle and language embeddings is processed by self-attention, after which the
+language embeddings are discarded. We found this self-attention conditioning more effective than
+cross-attention, consistent with prior work in video generation (Yang et al., 2024b).
+
+
+**Goal image conditioning.** Given a goal image _Ig_, we encode it into _M_ particles (plus a background
+particle) using the particle encoder ENCODER. The resulting goal particle set _ct_ = _{zg_ _[m][}]_ _m_ _[M]_ =0 _[−]_ [1] [is re-]
+peated across all _T_ timesteps and used to condition the corresponding particles _{z_ _[i]_ _}_ through AdaLN.
+This allows each particle to be guided toward its goal state in a temporally consistent manner.
+
+
+A.4.4 DYNAMICS _Fξ_
+
+
+The dynamics module implements the VAE’s autoregressive dynamics prior _pξ_ ( _z_ _[t]_ _| z_ _[t][−]_ [1] _, . . ., z_ [0] ). It
+predicts the particles at the next timestep conditioned on the current particles and their corresponding
+latent actions provided by the context module:
+
+
+_Fξ_ ��[ _{z_ fg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[,]_ _[z]_ bg _[t]_ _[,]_ _[z]_ _c_ _[t]_ []] - _Tt_ =0 _−_ 1
+
+
+- = �[ _{z_ ˆfg _[m,t][}]_ _m_ _[M]_ =0 _[−]_ [1] _[,]_ _[z]_ [ˆ] bg _[t]_ []] - _Tt_ =1 _[.]_
+
+
+Here _zc_ _[t]_ [denotes the latent actions at timestep] _[ t]_ [. The dynamics module] _[ F][ξ]_ [is implemented as a causal]
+spatio-temporal transformer, where particles are conditioned on their corresponding latent actions
+through adaptive layer normalization (AdaLN (Zhu et al., 2024)).
+
+
+As in the other components, _Fξ_ outputs distribution parameters that serve as the prior in the KLdivergence term between the posterior encoder _Eϕ_ and the dynamics prior. [4]
+
+
+_Differently from DDLP (Daniel & Tamar, 2024), LPWM does not rely on tracking a subset of par-_
+_ticles_ _across_ _timesteps._ _Instead,_ _it_ _keeps_ _the_ _entire_ _set_ _of_ _M_ _encoded_ _particles_ _along_ _with_ _their_
+_identities_ _(i.e.,_ _the_ _patches_ _they_ _originated_ _from)._ _This_ _induces_ _a_ _particle-grid_ _regime:_ _each_ _parti-_
+_cle is constrained to move only within a local region around its original patch center,_ _and when it_
+_reaches the limits of this region, its features are transferred to nearby particles._ _This mechanism is_
+_illustrated in Figure 13._
+
+
+4The priors for the particles in the first timestep are fixed hyperparameters, consistent with the single-image
+training setup of DLP.
+
+
+32
+
+
+Figure 13: Particle-grid regime. Each particle is constrained to move only within a local region
+around its original patch center, and when it reaches the limits of this region, its features are transferred to nearby particles.
+
+
+_This_ _design_ _balances_ _between_ _two_ _extremes._ _On_ _one_ _side_ _are_ _patch-based_ _approaches_ _(e.g.,_
+_VideoGPT_ _(Yan_ _et_ _al.,_ _2021)),_ _where_ _“particles”_ _are_ _fixed_ _at_ _patch_ _centers_ _and_ _only_ _patch_ _fea-_
+_tures evolve over time. On the other side are object-centric particle models (Daniel & Tamar, 2024),_
+_where a subset of free-moving particles with explicit attributes (e.g., position) can traverse the entire_
+_canvas, but their identities must be tracked across time. The latter assumption may hold in controlled_
+_settings—for instance, videos with deterministic dynamics and moderate frame rates—but it fails in_
+_more general video data where actions or stochastic events occur._
+
+
+_As_ _discussed_ _in_ _Daniel_ _&_ _Tamar_ _(2024),_ _relying_ _on_ _tracking_ _introduces_ _two_ _key_ _limitations:_ _(1)_
+_the_ _tracking_ _algorithm_ _assumes_ _sufficiently_ _small_ _frame-to-frame_ _displacements,_ _which_ _constrains_
+_the_ _model_ _to_ _certain_ _frame_ _rates;_ _and_ _(2)_ _since_ _the_ _tracked_ _subset_ _of_ _particles_ _is_ _fixed,_ _the_ _model_
+_cannot naturally represent events such as new objects entering the scene without additional mecha-_
+_nisms (Lin et al., 2020a)._
+
+
+_In contrast,_ _purely_ _patch-based dynamics models avoid these issues by predicting only fixed patch_
+_features_ _without_ _explicit_ _attributes_ _(e.g.,_ _keypoints)._ _While_ _more_ _general,_ _such_ _models_ _struggle_ _to_
+_capture_ _fine-grained_ _object_ _interactions_ _and_ _relations_ _(Lin_ _et_ _al.,_ _2020a;_ _Wu_ _et_ _al.,_ _2022b;_ _Daniel_
+_& Tamar, 2024)._ _LPWM, through its particle-grid design, aims to combine the generality of patch-_
+_based models with the expressivity of object-centric particles._
+
+
+A.4.5 TRANSFORMER ARCHITECTURE AND MULTI-VIEW
+
+
+**Spatio-temporal** **transformer.** Given a temporal input sequence of particle sets with shape
+
+[ _B, T, M, D_ ], where _B_ is batch size, _T_ is temporal horizon, _M_ is the number of particles, and
+_D_ is the embedding dimension, a standard transformer block applies multi-head attention over all
+_T_ _× M_ tokens, resulting in quadratic computation cost. To reduce this, LPWM employs a memoryefficient spatio-temporal attention mechanism (Ma et al., 2025; Zhu et al., 2024) (see Figure 14),
+which decomposes each spatio-temporal block into two stages: (1) a spatial block that processes all
+_M_ particles at each timestep independently ([ _B × T, M, D_ ]), and (2) a temporal block that captures
+temporal dependencies for each particle across time ([ _B × M, T, D_ ]).
+
+
+For conditioning, we use adaptive layer normalization (AdaLN) (Peebles & Xie, 2023). Given a
+condition vector _c_ and intermediate feature _z_, AdaLN modulates transformer block activations as:
+
+
+_α_ 1 _, α_ 2 _, β_ 1 _, β_ 2 _, γ_ 1 _, γ_ 2 = MLP( _c_ ) _,_
+
+
+_z_ = _z_ + _α_ 1 _·_ Self-Attention( _γ_ 1 _·_ RMSNorm( _z_ ) + _β_ 1) _,_
+
+_z_ = _z_ + _α_ 2 _·_ MLP( _γ_ 2 _·_ RMSNorm( _z_ ) + _β_ 2) _._
+
+
+This mechanism is used to incorporate positional and temporal information within the transformer
+in addition to other conditional inputs such as actions, language tokens or images. During training,
+we use teacher forcing (Williams & Zipser, 1989), while inference is performed autoregressively.
+
+
+**Multi-view support.** We extend LPWM to jointly train on multiple camera views by _synchronizing_
+particle dynamics across views. Multi-view training is crucial for decision-making tasks with occlusions, such as multi-object manipulation (Haramati et al., 2024; Qi et al., 2025), where an object
+
+
+33
+
+
+Figure 14: Spatio-temporal transformer block. It consists of (1) a spatial block that independently
+processes all _M_ particles at each timestep, with shape [ _B × T, M, D_ ], and (2) a temporal block that
+captures each particle’s temporal dependencies across the full horizon, with shape [ _B_ _× M, T, D_ ].
+Here, _B_ is batch size, _T_ is temporal horizon, _M_ is number of particles, and _D_ is the embedding
+dimension.
+
+
+hidden in one view may be visible in another, enabling agents to form a more complete representation of the scene. To achieve this, images from _V_ views are each encoded into _M_ particles, which
+are then concatenated into a single set of _V_ _· M_ particles. Each particle is augmented with a view
+embedding to indicate its origin. The latent action and dynamics modules process the entire multiview particle set jointly, allowing particles from different views to attend to each other and integrate
+information across viewpoints.
+
+
+A.4.6 LOSS _L_
+
+
+Latent Particle World Models are trained as a variational autoencoder (VAE), with the objective of
+maximizing the temporal evidence lower bound (ELBO), as in prior VAE-based video prediction
+models (Denton & Fergus, 2018; Lin et al., 2020a; Daniel & Tamar, 2024). The ELBO decomposes
+into a reconstruction term and a KL-divergence term between the posterior particle distributions and
+the prior predicted by the dynamics model. We further distinguish between two regimes: a _static_
+ELBO, where the KL-divergence is computed against fixed priors for the first timestep (equivalent
+to the single-image DLP objective), and a _dynamic_ ELBO, where the prior is given by the autoregressive dynamics predictions. Formally,
+
+
+_T −_ 1
+
+
+_L_ LPWM = _−_
+
+
+_ELBO_ ( _xt_ = _It_ ) = _L_ static + _L_ dynamic _._ (2)
+
+_t_ =0
+
+
+We next detail the formulation of the static and dynamic components.
+
+
+**Static ELBO:** Building on DLPv2 (Daniel & Tamar, 2024), given an input image _x_ _∈_ R _[C][×][H][×][W]_,
+the loss in DLPv3 is defined as:
+_L_ static = _L_ rec( _x,_ ˆ _x_ ) + _β_ KL _L_ KL( _z_ ) + _β_ reg _L_ reg( _zt_ ) _,_ (3)
+
+where _x_ ˆ is the reconstructed image, _L_ rec( _x,_ ˆ _x_ ) is the reconstruction loss, _z_ = - _{z_ fg _[m][}]_ _m_ _[M]_ =0 _[−]_ [1] _[,]_ _[z]_ [bg] 
+are the posterior particle distribution parameters, _L_ KL( _z_ ) is the KL-divergence between the poste
+
+34
+
+
+rior and fixed priors, _zt_ is the _transparency_ attribute of each particle, _L_ reg( _zt_ ) is a regularization
+loss applied over the transparency values, and _β_ KL _, β_ reg are scalar hyperparameters balancing the
+losses (Higgins et al., 2017). For the single-image setting (i.e., no temporal dynamics), _L_ static is the
+only objective. Below we detail the KL-divergence and regularization terms.
+
+
+**KL-divergence** **loss** _L_ KL **:** For all _M_ particles, we compute the KL-divergence of each attribute
+distribution with respect to its fixed prior, except for the background particle which only has visual
+features. _In_ _DLPv3,_ _we_ _adopt_ _the_ masked _KL-divergence_ _(Lin_ _et_ _al.,_ _2020a),_ _where_ _the_ _mask_ _is_
+_defined_ _by_ _the_ _transparency_ _attribute_ _zt_ _(e.g.,_ _particles_ _with_ _zt_ = 0 _do_ _not_ _contribute_ _to_ _the_ _KL_
+_term):_
+
+
+ - KL( _qϕ_ ( _z_ att _[m]_ _[|][ x, z]_ _a_ _[m]_ [)] _[ ∥]_ _[p]_ [att][(] _[z]_ [))] _[ ⊙]_ _[z]_ _t_ _[m]_
+
+att _∈{o,s,d}_
+
+
+_L_ KL( _z_ ) =
+
+
+_M_ _−_ 1
+
+
+_m_ =0
+
+
+                     
++ KL( _qϕ_ ( _zt_ _[m]_ _[|][ x, z]_ _a_ _[m]_ [)) +] _[ β][f]_ [KL]          - _qϕ_ ( _zf_ _[m]_ _[|][ x, z][p]_ [)]          - _⊙_ _zt_ _[m]_
+
+
++ _βf_ KL( _qϕ_ ( _z_ bg _| x, zp_ ) _∥_ _p_ bg( _z_ )) _,_ (4)
+
+
+where _o, s, d_ denote the offset ( _zo_ ), scale ( _zs_ ), and depth ( _zd_ ) attributes, _za_ is the keypoint proposal,
+_zt_ is the transparency, _zp_ = _za_ + _zo_ is the final particle position, _zf_ is the visual features attribute, and
+_βf_ is a fixed hyperparameter balancing explicit and visual attributes ( _βf_ = 0 _._ 01 in all experiments).
+Note that the KL for the transparency attribute is _not_ masked.
+
+
+**Transparency regularization** _L_ reg **:** _In DLPv3, to prevent the trivial solution where all particles_
+_remain active (zt_ = 1 _) and sit at patch centers (i.e., a patch-based decomposition), we apply an L_ 2
+_penalty on transparency:_
+
+
+_L_ reg =
+
+
+_M_ _−_ 1
+
+- ( _zt_ _[m]_ [)][2] _[.]_ (5)
+
+_m_ =0
+
+
+This penalty encourages _sparsity_ in transparency so that only a subset of particles is active ( _zt_ _>_ 0).
+Since inactive particles do not contribute to reconstruction, the remaining active particles must cover
+more of the scene and are thereby incentivized to move off patch centers and lock onto salient objects. This yields a more object-centric decomposition and reduces per-particle appearance variance
+in decoding (e.g., a moving ball is better captured by a single active particle than by several fixed
+patches). In practice, we set _β_ reg = _β_ KL.
+
+
+**Dynamic ELBO.** The dynamic component of the ELBO consists of three terms: the frame reconstruction loss, the particle dynamics KL, and the context KL:
+
+
+_L_ rec( _xt,_ ˆ _xt_ )
+
+
++ _β_ dyn KL� _qϕ_ ( _z_ _[t]_ _| xt_ ) _∥_ _pξ_ ( _z_ _[t]_ _| z_ [0:] _[t][−]_ [1] _, zc_ [0:] _[t][−]_ [1] )�
+
+      -      - [�]
++ _β_ ctx KL _p_ [inv] _ψ_ [(] _[z]_ _c_ _[t]_ _[|][ z]_ [0:] _[t]_ [+1][)] _[ ∥]_ _[p]_ _ψ_ [policy] ( _zc_ _[t]_ _[|][ z]_ [0:] _[t]_ [)] _._
+
+
+_L_ dynamic =
+
+
+_T −_ 1
+
+
+_t_ =1
+
+
+(6)
+
+
+where _L_ rec is the reconstruction error as defined in the static ELBO. Here, _z_ denotes all particles
+and their attributes (including the background particle), while _zc_ denotes the latent actions. The
+coefficients _β_ dyn and _β_ ctx weight the two KL terms (in practice we set _β_ ctx = _β_ dyn). Note that
+for brevity we omitted the particle index _m_ ; in practice, the summation is carried out over all _M_
+particles for both the dynamics and context losses.
+
+
+For the particle dynamics KL, we adopt the same _**masked**_ formulation as in the static ELBO, without
+distinguishing between explicit attributes and visual features. For the context KL, however, we do
+not apply masking: latent actions must also capture discrete events where particles switch between
+inactive ( _zt_ = 0) and active ( _zt_ = 1). Optimizing this loss end-to-end regularizes the posterior
+particle distributions to remain predictable under the learned particle dynamics and latent action
+models. Intuitively, the context KL enforces agreement between the inverse model of latent actions
+
+
+35
+
+
+(which infers actions from observed transitions) and the policy prior (which proposes actions given
+the current state), ensuring coherent action-conditioned dynamics.
+
+
+Finally, we specify the choice of priors and reconstruction losses used in practice.
+
+
+**Priors:** For the fixed static prior distribution parameters, we define means and covariances for
+Gaussian distributions over all attributes and visual features, and ( _a, b_ ) in the Beta distribution for
+the transparency attribute. These are treated as hyperparameters and detailed in Section A.9.
+
+
+**Reconstruction** **objective:** We use either the standard pixel-wise mean squared error (MSE) for
+simulated environments, or an LPIPS-based _L_ 2 perceptual loss (Hoshen et al., 2019) for real-world
+datasets. When using LPIPS, the total reconstruction loss is the sum of the pixel-wise MSE and a
+VGG-feature-wise MSE, with the LPIPS feature loss weighted by _γ_ = 0 _._ 1. Formally,
+
+
+_L_ rec =
+
+
+- _∥x −_ _x_ ˆ _∥_ 22 _[,]_ for simulated environments _,_
+
+
+_∥x −_ _x_ ˆ _∥_ [2] 2 [+] _[ γ][ ∥][ϕ]_ [(] _[x]_ [)] _[ −]_ _[ϕ]_ [(ˆ] _[x]_ [)] _[∥]_ 2 [2] _[,]_ for real-world datasets _,_
+where _ϕ_ ( _·_ ) denotes VGG features.
+
+
+A.5 POLICY LEARNING WITH LATENT PARTICLE WORLD MODELS
+
+
+Pre-training a Latent Particle World Model (LPWM) enables the extraction of rich latent dynamics
+from large-scale, actionless video datasets. Once paired video-action data becomes available, such
+pre-trained LPWMs can be leveraged for downstream policy learning. In this work, we demonstrate
+this ability in goal-conditioned settings, where the goal can be specified with an image or a language
+instruction.
+
+
+The key idea is to use the CONTEXT module ( _Kψ_ ) to learn a mapping from per-particle latent actions
+_{zc_ _[m,t]_ _}_ _[M]_ _m_ =0 [to] [the] [ground-truth] [(GT)] [environment] [actions] _[a][t]_ [.] [While] [the] [latent] [actions] [encode] [the]
+transition from latent state _z_ _[t]_ to _z_ _[t]_ [+1], LPWM produces a latent action per particle; thus, the mapping
+network must first aggregate information across particles to predict a single global action.
+
+
+To address this, we design the mapping network _mω_ as an _attention pooling_ network (Dosovitskiy
+et al., 2020; Haramati et al., 2024), implemented as a compact two-layer transformer. This enables
+the model to adaptively pool the per-particle latent actions before regressing the global action.
+
+
+**Training** **procedure:** Given a dataset of paired trajectories ( _I_ 0: _T, a_ 0: _T −_ 1), we encode the image
+sequence with a frozen, pre-trained unconditional LPWM to obtain latent actions _{zc_ _[m,t]_ _}_ _[M]_ _m_ =0 [using]
+the latent inverse dynamics head _p_ [inv] _ψ_ [(] _[z]_ _c_ _[t]_ _[|]_ _[z][≤][T]_ [ )][.] [These] [are] [projected] [to] [the] [transformer’s] [inner]
+dimension _D_ . At each timestep, we concatenate a learned action token [ACT] to the particle dimension, forming an input of shape [ _B, T, M_ + 2 _, D_ ], where _B_ is the batch size. Here, the _M_ particles
+correspond to the _M_ foreground particles, the additional one represents the background particle, and
+the extra token is the learned action token.
+
+
+The mapping network regresses the global action from the output corresponding to the action token:
+_a_ ˆ _t_ = _mω_ �� _{zc_ _[m,t]_ _}_ _[M]_ _m_ =0 _[,]_ [ [][ACT][]] _[t]_ �� _M_ +1 _,t_
+
+using the _L_ 1 loss:
+_l_ = _∥at −_ _a_ ˆ _t∥_ 1 _._
+
+
+**Inference** **and** **planning:** For deployment, given an execution horizon of _k_ actions and a goal
+_g_, we unroll LPWM _k_ + 1 steps autoregressively, generating a trajectory of particles and their
+corresponding _k_ latent actions. These latent actions are mapped to global actions using the trained
+mapping network, which are then executed sequentially in the target environment.
+
+
+An important detail is that for each step, the next-state particles are generated by first sampling
+a latent action from the CONTEXT module’s latent policy head _p_ [policy] _ψ_ ( _zc_ _[t]_ _[|]_ _[z][≤][t][, c][t]_ [=] _[z][g]_ [)][,] [and then]
+applying the DYNAMICS module. Notably, we empirically found that directly using the latent policy
+outputs for mapping degrades downstream performance; the mapping network performs best when
+evaluated on the outputs of the latent inverse module, as this matches the distribution seen during
+training. The difference may be due to distribution mismatch or higher noise from the latent policy
+predictor—a question we leave for future investigation.
+
+
+A high-level PyTorch-style code is provided in Figure 15.
+
+
+36
+
+
+1 # Training loop
+2 for (I_seq, a_seq) in dataset:
+3 with torch.no_grad():
+4 # Encode sequence to latent actions with frozen LPWM inverse dynamics
+5 z_c_seq = LPWM(I_seq) # shape: [B, T, M+1, D_latent]
+6
+7 # Project latent actions and concatenate learned [ACT] token
+8 inputs = concat(z_c_seq, repeat_learned_act_token(T)) # shape: [B, T, M+2, D]
+9
+10 # Predict global action from [ACT] token output
+11 a_pred = mapping_network(inputs)[:, :, -1, :]
+12
+13 # Compute L1 loss against ground truth actions
+14 loss = L1(a_pred, a_seq)
+15 loss.backward()
+16 optimizer.step()
+17 # ------------------ #
+18
+19 # Inference Loop
+20 obs = env.reset()
+21 goal = get_goal() # image or language
+22 z_particles = encoder(obs) # Initial particle states
+23 z_goal = encode_goal(goal)
+24
+25 # Storage for predicted particle states during unroll
+26 particle_trajectory = [z_particles]
+27
+28 # Unroll LPWM for (plan_horizon + 1) steps
+29 for _ in range(plan_horizon):
+30 # Sample latent action from latent policy prior given current particles
+31 z_c = ctx.latent_policy(z_particles, z_goal)
+32
+33 # Predict next particle state given current state and latent action
+34 z_particles = dyn(z_particles, z_c)
+35
+36 # Append predicted particles to trajectory
+37 particle_trajectory.append(z_particles)
+38
+39 # Convert full particle sequence (batch) to latent actions in one call
+40 latent_actions = ctx.inverse_dynamics_batch(particle_trajectory) # outputs plan_horizon
+_�→_ latent actions
+41
+42 # Concatenate learned [ACT] token for mapping network input
+43 mapping_inputs = concat(latent_actions, repeat_learned_act_token(plan_horizon))
+44
+45 # Predict global action sequence from mapping network
+46 action_sequence = mapping_network(mapping_inputs)
+47
+48 # Execute the full predicted action sequence in environment
+49 env.step(action_sequence)
+
+
+Figure 15: PyTorch-style code for policy learning with Latent Particle World Models.
+
+
+A.6 EXTENDED RELATED WORK
+
+
+In this section, we provide a broad overview of related literature to situate Latent Particle World
+Models (LPWM) within the landscape of object-centric representation learning. LPWM is, to the
+best of our knowledge, the first self-supervised object-centric model capable of being trained only
+from videos, optionally supporting multi-view training, and enabling various forms of conditioningincluding action, language, and goal-image inputs. Since there are currently no other models with
+the same combination of capabilities, we review several adjacent and complementary lines of work
+to establish our contributions.
+
+
+**General video prediction and latent world models:** Traditional video prediction models operate
+by encoding visual observations into a compact latent space, predicting future latents with a recurrent (or, more recently, autoregressive) dynamics module, and decoding these latents back into
+pixel space. The notion of a “world model” commonly refers to extensions of this pipeline that support action conditioning and, in some cases, reward modeling. Early methods (Finn et al., 2016a;
+Ebert et al., 2017b; Villegas et al., 2017; Lee et al., 2018; Denton & Fergus, 2018; Ha & Schmidhuber, 2018; Hafner et al., 2020a) learned such representations using convolutional encoders and
+RNN-based dynamics to capture scene dynamics in the latent space. More recent work improves
+
+
+37
+
+
+long-horizon prediction robustness using discrete latent variables (Walker et al., 2021; Hafner et al.,
+2020b; 2023) or focuses on scaling up through hierarchical modeling and larger architectures (Villegas et al., 2019; Wu et al., 2021a; Wang et al., 2022). A core limitation of all these approaches is
+that they model scene-level dynamics holistically, extracting representations that describe the entire
+frame at once without explicitly decomposing the scene into objects. This often results in blurry predictions or object disappearance during longer rollouts (Wu et al., 2022b; Daniel & Tamar, 2024).
+To address these issues and improve sample quality, a number of recent works have incorporated
+self-attention mechanisms for video dynamics (Nash et al., 2022; Yu et al., 2022; Yan et al., 2021;
+Zhang et al., 2023; Micheli et al., 2023; 2024; Dedieu et al., 2025), sometimes extending to richer
+forms of conditioning such as language instructions (Cen et al., 2025; Nematollahi et al., 2025).
+Despite their advances in visual fidelity, these methods still lack explicit object-centric modeling,
+and are consistently outperformed by models with object-level inductive biases on tasks involving
+complex interactions (Wu et al., 2022b; Zhang et al., 2025; Qi et al., 2025). A further trend involves
+world models based on video diffusion (Alonso et al., 2024; Yang et al., 2023; 2024a; Zhu et al.,
+2024; Yu et al., 2025), which achieve state-of-the-art generative fidelity but remain computationally
+intensive and, in their current form, forgo object-centric structure entirely in favor of scaling with
+model and dataset size.
+
+
+**Keypoint-based unsupervised video prediction:** A distinct line of research aims to represent video
+dynamics through keypoint-based latent representations. Early works, such as Kim et al. (2019),
+combine unsupervised KeyNet (Jakab et al., 2018) keypoint detection with class-guided video prediction using a recurrent adversarial conditional VAE. Similarly, Minderer et al. (2019) and Gao et al.
+(2021) employ KeyNet for learning keypoints and use a variational RNN prior to model stochastic
+dynamics, with the latter mapping predicted keypoints onto a discrete grid for more robust long-term
+prediction. Although these methods successfully leverage keypoints for video structure, they do not
+explicitly capture object properties or interactions; visual features are extracted directly from feature
+maps rather than being represented as random latent variables. As a result, prediction quality often
+suffers from blurriness and object disappearance in long rollouts (Daniel & Tamar, 2022a; 2024).
+More recent approaches take steps toward modeling interactions: V-CDN (Li et al., 2020) detects unsupervised keypoints using Transporter (Kulkarni et al., 2019), constructs a causal interaction graph,
+and predicts video outcomes using an Interaction Network (Battaglia et al., 2016). The original Deep
+Latent Particles (DLP) framework (Daniel & Tamar, 2022a) introduced particle-based video prediction on real data but was limited by its simple graph neural network, which struggled with complex
+interactions. The subsequent DDLP (Daniel & Tamar, 2024) advanced the framework to objectcentric latent particles with richer attributes, enabling more nuanced video predictions. Compared
+to earlier keypoint-based approaches, DDLP (Daniel & Tamar, 2024) more closely resembles our
+model, as it captures both rich object attributes and intricate object interactions in video prediction.
+However, DDLP’s reliance on particle tracking and its limitations in handling stochasticity motivate
+our advances; the present work addresses these challenges while extending the framework toward
+fully self-supervised world modeling and broader conditioning capabilities, as discussed next.
+
+
+**Unsupervised object-centric latent video prediction and world models:** Unsupervised methods
+for object-centric video prediction build latent dynamics over decomposed scene elements, using
+one of three main paradigms: patch-based, slot-based, or particle-based representations.
+
+
+Patch-based approaches (e.g., RSQAIR (Stani´c & Schmidhuber, 2019), SPAIR (Crawford & Pineau,
+2019), SPACE (Lin et al., 2020b), SCALOR (Jiang et al., 2019), G-SWM (Lin et al., 2020a),
+STOVE (Kossen et al., 2019)) represent objects with local “what”, “where”, “depth,” and “presence” latent attributes, and typically model the joint latent dynamics by RNN-based modules. Later
+works such as SCALOR and G-SWM incorporated explicit interaction modules to capture objectobject physics in prediction. Importantly, GATSBI (Min et al., 2021), an extension of the above with
+a separate keypoints module, stands out as a patch-based model that can be considered a rudimentary action-conditioned world model, since it predicts scene evolution in response to agent actions.
+However, unlike particle-based models, keypoints in GATSBI serve only to localize the “agent” in
+the scene and are not directly part of the object latent representation—most objects and background
+are discovered through separate modules, and the keypoint module merely distinguishes agent from
+non-agent entities. As a result, the full object representation remains patch-based rather than explicit
+keypoint- or particle-based. The patch-based typically require post-hoc or rule-based matching of
+object proposals across frames for temporal consistency. This reliance on frame-to-frame matching
+
+
+38
+
+
+and the unordered nature of their object pose a scalability challenge to complex or real-world video
+datasets.
+
+
+Slot-based approaches (Burgess et al., 2019; Locatello et al., 2020; Greff et al., 2019; Engelcke et al.,
+2019; 2021; Kipf et al., 2021; Singh et al., 2022b; Kabra et al., 2021; Singh et al., 2021; 2022a;
+2023; Sajjadi et al., 2022; Weis et al., 2021; Veerapaneni et al., 2020) typically represent scenes
+as a set of slots: permutation-invariant latent vectors encoding spatial and appearance information
+for objects. These approaches generally adopt a two-stage training strategy: a slot decomposition
+is first learned independently in a self-supervised manner, followed by a separate dynamics model
+trained on the inferred slots using recurrent models (Zoran et al., 2021; Nakano et al., 2023) or
+Transformers (Wu et al., 2022b; Villar-Corrales et al., 2023; Song et al., 2024). While recent extensions incorporate conditioning on language (Villar-Corrales et al., 2025; Wang et al., 2025a; Jeong
+et al., 2025) or latent actions (Villar-Corrales & Behnke, 2025), these models remain fundamentally
+limited by the quality and stability of the underlying slot decomposition. In practice, slot-based
+methods suffer from inconsistent decompositions, blurry predictions, and convergence issues, and
+recent research (Seitzer et al., 2023; Didolkar et al., 2024; Gong et al., 2025; Kakogeorgiou et al.,
+2024; Juki´c et al., 2025) focuses on stabilizing and scaling them, leaving open questions for robust
+long-term dynamics and world modeling.
+
+
+Particle-based approaches, initiated by DLP (Daniel & Tamar, 2022a) and advanced by
+DDLP (Daniel & Tamar, 2024), provide compact, interpretable object representations using
+keypoint-based latent particles with extended attributes. DDLP jointly trains a Transformer dynamics model and the particle representation, allowing stable object-centric decomposition and improved
+modeling of complex scenes. However, DDLP relies on particle tracking and sequential encoding,
+which restricts parallelization and stochasticity. Our proposed LPWM model is a direct extension
+to this lineage. LPWM eliminates the need for explicit tracking, enabling parallel encoding of all
+frames, trains end-to-end, and integrates a latent action distribution for stochastic world modeling.
+This allows the model to capture transitions such as object occlusion, appearance, or random movements (e.g., agents or grippers), and supports comprehensive conditioning via actions, language, or
+goal images–advancing particle-based modeling to the world model regime and addressing unsolved
+limitations of previous work.
+
+
+**Video** **prediction** **and** **world** **models** **with** **latent** **actions:** To enable learning controllable or
+playable environments purely from videos, several works propose the use of _latent_ _actions_ -global
+latent variables that model the dynamic transition between consecutive frames. Models such as
+CADDY (Menapace et al., 2021; 2022) and Genie (Bruce et al., 2024; Savov et al., 2025) learn
+_discrete_ latent actions by quantizing the output of an inverse dynamics module. These latent actions condition a dynamics model to generate subsequent frames. Crucially, these approaches use
+a two-stage training process: first, the latent action module is trained, then the conditioned dynamics module. During inference, users select latent actions from a learned codebook to generate
+video sequences. AdaWorld (Gao et al., 2025) proposes a continuous analog without quantization,
+substituting quantization with strong KL regularization on the latent action distribution. This enables more flexible and smooth latent action representations. PlaySlot (Villar-Corrales & Behnke,
+2025), the method most similar to ours in this category, augments slot-based object-centric prediction (OCVP (Villar-Corrales et al., 2023)) with a discrete global latent action module akin to
+CADDY, showcasing the benefits of object-centric decomposition for controllable video modeling.
+In contrast, our particle-based LPWM learns _continuous_, _per-particle_ latent actions trained end-toend jointly with the dynamics module. This design captures stochastic dynamics across multiple
+entities simultaneously. Furthermore, LPWM regularizes latent actions using a learned latent policy, enabling stochastic sampling of latent actions at inference without external intervention, thereby
+supporting stochastic video generation. Additionally, unlike PlaySlot, LPWM’s latent action module
+supports multiple conditioning modalities—including goal-conditioning—making it readily applicable for post-hoc policy learning and control, as demonstrated in our experiments.
+
+
+**Decision-making** **with** **video** **inverse** **dynamics** **and** **latent** **actions:** Recent works have increasingly focused on learning policies from videos by leveraging inverse dynamics modeling (IDM)
+or latent action representations. ILPO (Edwards et al., 2019) learns discrete latent actions via
+forward dynamics under the assumption of a known action set, then maps these latent actions to
+ground-truth (GT) actions for behavioral cloning (BC). Seer (Tian et al., 2024) jointly trains image prediction and GT action prediction via inverse modeling, without a latent action bottleneck,
+and effectively supports language-conditioned BC. LAPO (Schmidt & Jiang, 2023) combines dis
+
+39
+
+
+crete latent actions learned via vector quantization (VQ) with policy learning; an action decoder
+is jointly trained alongside an online reinforcement learning agent to map latent actions to GT actions. LAPA (Ye et al., 2025) performs large-scale VQ-based latent action pretraining, which serves
+as the objective for vision-language model policy training, and fine-tunes for GT action mapping,
+with AMPLIFY (Collins et al., 2025) extending this by replacing latent actions with quantized keypoint tracks. DreamGen (Jang et al., 2025) further extends LAPA with diffusion-based objectives.
+AdaWorld (Gao et al., 2025) pre-trains large-scale autoregressive world models with continuous
+latent actions for downstream planning, while VideoWorld (Ren et al., 2025) trains an autoregressive discrete latent action model producing latent plans and frame-level IDM over decoded plans.
+Latent Diffusion Planning (Xie et al., 2025) and VILP (Xu et al., 2025) learn diffusion-based planners coupled with inverse dynamics modules. Similarly, Video Prediction Policy (Hu et al., 2025)
+fine-tunes a text-based large video diffusion model for plan generation, then learns a diffusion-based
+policy via inverse dynamics. DynaMo (Cui et al., 2024) pre-trains image representations with paired
+inverse and forward dynamics self-supervised objectives for policy learning over these representations. In contrast to these approaches, LPWM is an object-centric world model that integrates latent
+action learning directly with dynamics, producing per-entity latent actions that naturally accommodate multiple interacting objects. Its latent policy further enables effective post-hoc mapping to
+GT actions and direct application to behavioral cloning and control tasks, distinguishing it from
+predominantly global or multi-stage latent action frameworks.
+
+
+**Decision-making** **with** **object-centric** **representations:** As object-centric representations have
+matured, they have been increasingly incorporated into decision-making pipelines, demonstrating strong performance on multi-object tasks that require complex reasoning and interaction.
+SMORL (Zadaianchuk et al., 2022) leverages patch-based object-centric representations in online
+RL, showing that structured perception improves sample efficiency and enables control in environments with multiple entities. ECRL (Haramati et al., 2024) and EC-Diffuser (Qi et al., 2025) employ DLP-based (particle-centric) representations, integrating them into online RL (ECRL) or imitation learning with diffuser-based policies (EC-Diffuser). These results provide clear evidence that
+object-centric models facilitate efficient policy learning and handle multi-object interaction challenges. Complementary lines of work adapt slot-based world models for decision-making. FOCUS (Ferraro et al., 2025; 2024), SOLD (Mosbach et al., 2024), and Dyn-O (Wang et al., 2025b)
+augment online RL frameworks like Dreamer (Hafner et al., 2020b) with slot-based object decomposition, yielding improvements in simulated environments featuring a limited number of objects.
+OC-STORM (Zhang et al., 2025) extends STORM (Zhang et al., 2023) by combining a transformerbased dynamics module with object masks derived from supervised segmentation, thus relying on
+labeled inputs for decomposition. SegDAC (Brown & Berseth, 2025) and OCAAM (Rubinstein
+et al., 2025) similarly use deep RL over masked inputs, leveraging externally supervised segmentation models. Some recent efforts bridge object-centric decomposition with latent action learning:
+Klepach et al. (2025) trains latent actions on top of pre-trained slot-based representations, mapping these actions to ground-truth policies via imitation learning. In contrast, LPWM is a fully
+self-supervised, object-centric world model: it builds directly on DLP, is trained end-to-end from
+pixels, and learns per-object latent actions as part of its joint dynamics training—without requiring
+supervised segmentation or decoupled vision/policy phases, with object masks emerging as a natural
+result of its reconstruction objective rather than any external supervision. Finally, LPWM supports
+post-hoc multi-object imitation learning and behavioral cloning in complex scenes.
+
+
+Table 4 summarizes the various video prediction world modeling approaches across key dimensions.
+
+
+A.7 DATASETS AND ENVIRONMENTS DETAILS
+
+
+We provide detailed descriptions of all datasets used in this paper. Datasets are characterized by
+their properties: real-world or simulated origin, nature of dynamics—deterministic (dominated by
+physics, no external actions) or stochastic (external signals such as agent actions or camera motion)—and interaction density. Some datasets feature dense interactions, where object interactions
+are frequent and most sequences include them, while others are sparse, with less frequent or delayed
+interactions, and some sequences may contain no interactions (Daniel & Tamar, 2024).
+
+
+OBJ3D: A simulated 3D dataset featuring dense interactions and deterministic dynamics, introduced
+by Lin et al. (2020a). It consists of CLEVR-like objects (Johnson et al., 2017) in 100-frame videos
+of 128 _×_ 128 resolution, where a randomly colored ball rolls towards multiple objects in the scene
+
+
+40
+
+
+|Dyn. Module|RNN RNN RNN Transformer Diffusion Diffusion Transformer|RNN RNN RNN Transformer RNN GNN|RNN RNN Transformer Transformer Transformer Transformer Transformer|GNN Transformer Transformer|
+|---|---|---|---|---|
+|**Stochastic**|–<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓|✓<br>✓<br>✓<br>–<br>✓<br>✓|–<br>–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>✓|
+|**Multi-View**|–<br>–<br>–<br>–<br>varies<br>varies<br>–|–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>✓|
+|**End-to-End**|✓<br>✓<br>–<br>–<br>✓<br>✓<br>✓|✓<br>✓<br>✓<br>–<br>✓<br>–|✓<br>✓<br>–<br>–<br>–<br>–<br>–|–<br>✓<br>✓|
+|**Image-Goal Cond.**|–<br>–<br>–<br>–<br>Varies<br>–<br>–|–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>✓|
+|**Text Cond.**|–<br>–<br>–<br>–<br>✓<br>–<br>–|–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>–<br>–<br>✓<br>–<br>–|–<br>–<br>✓|
+|**Action Cond.**|✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>–|–<br>–<br>–<br>–<br>✓<br>–|–<br>–<br>–<br>–<br>–<br>✓<br>–|–<br>–<br>✓|
+|**Latent Actions**|–<br>–<br>Discrete<br>Discrete<br>–<br>–<br>–|–<br>–<br>–<br>–<br>–<br>–|–<br>–<br>–<br>–<br>–<br>–<br>Discrete|–<br>–<br>Cont. (per)|
+|**Obj.-Centric**|–<br>–<br>–<br>–<br>–<br>–<br>–|Patch<br>Patch<br>Patch<br>Patch<br>Patch+Keypt<br>Keypt+Graph|Slots<br>Slots<br>Slots<br>Slots<br>Slots<br>Slots<br>Slots|Particles<br>Particles<br>Particles|
+|**Model**|CDNA/SNA/SVG (Finn et al., 2016a)<br>Dreamer/D2/D3 (Hafner et al., 2020a)<br>CADDY (Menapace et al., 2021)<br>Genie (Bruce et al., 2024)<br>UniSim (Yang et al., 2023)<br>Diamond/GameFactory (Alonso et al., 2024)<br>VideoGPT (Yan et al., 2021)|SCALOR (Jiang et al., 2019)<br>G-SWM (Lin et al., 2020a)<br>STOVE (Kossen et al., 2019)<br>OCVT (Wu et al., 2021b)<br>GATSBI (Min et al., 2021)<br>V-CDN (Li et al., 2020)|PARTS (Zoran et al., 2021)<br>STEDIE (Nakano et al., 2023)<br>SlotFormer (Wu et al., 2022b)<br>OCVP (Villar-Corrales et al., 2023)<br>TextOCVP (Villar-Corrales et al., 2025)<br>SOLD (Mosbach et al., 2024)<br>PlaySlot (Villar-Corrales & Behnke, 2025)|DLP (Daniel & Tamar, 2022a)<br>DDLP (Daniel & Tamar, 2024)<br>LPWM (Ours)|
+
+
+41
+
+
+center, causing collisions. The dataset includes 2,920 training episodes, 200 validation, and 200 test
+episodes.
+
+
+PHYRE: A simulated 2D dataset featuring sparse interactions and deterministic dynamics, designed
+for physical reasoning (Bakhtin et al., 2019). We use the BALL-tier tasks in the ball-within-template
+setting, where tasks are solved if a user-placed ball satisfies specific conditions (e.g., touching a wall,
+floor, or object). Data consists of 128 _×_ 128 frames generated from rollouts of all tasks except for
+tasks [12 _,_ 13 _,_ 16 _,_ 20 _,_ 21], which contain substantial distractions. The dataset contains 2,574 training
+episodes, 312 validation, and 400 test episodes.
+
+
+Mario: A simulated 2D dataset with stochastic dynamics and dense interactions, introduced by
+Smirnov et al. (2021). It consists of expert gameplay videos of Super Mario Bros downloaded from
+YouTube, featuring Mario traversing multiple levels. The videos include moving camera views with
+new objects and enemies appearing dynamically. The dataset contains 217 training trajectories and
+25 test trajectories, each consisting of 100 frames with resolution 128 _×_ 128. For FVD evaluation,
+we sample 100 trajectories for each video in the test set.
+
+
+Sketchy: A real-world robotic dataset introduced by Cabi et al. (2019), featuring a robotic gripper
+interacting with diverse objects. It has stochastic dynamics with sparse interactions. We focus on the
+stack ~~g~~ reen ~~o~~ n ~~r~~ ed task, which includes 198 expert and 3,241 rollout trajectories. The dataset
+is split into 80% training, 10% validation, and 10% test. Each trajectory is truncated to the first 70
+frames, resized to 128 _×_ 128, and contains labeled actions enabling action-conditioned training.
+
+
+BAIR: A real-world robotic dataset introduced by Ebert et al. (2017a), featuring a robotic gripper
+manipulating diverse objects under a random play policy. The dataset exhibits stochastic dynamics
+and dense interactions, containing 43,264 training and 256 test trajectories at 64 _×_ 64 resolution.
+For evaluation of FVD we follow the standard procedure of sampling 100 trajectories for each video
+in the test set (a total of 25,600 of generated videos). For 128 _×_ 128 resolution training we use the
+high-resolution version of the dataset introduced in Menapace et al. (2021), which contains 42,880
+train trajectories, 1,152 for validation and 128 for test.
+
+
+Bridge: A real-world robotic dataset introduced by Walke et al. (2023), featuring expert demonstrations of a WidowX robotic arm performing tasks guided by natural language instructions. It
+exhibits stochastic dynamics and dense interactions. The dataset contains 25,460 training and 3,475
+test trajectories, with episodes of varied lengths, all resized to 128 _×_ 128 resolution.
+
+
+LanguageTable: A real-world tabletop robotic dataset introduced by Lynch et al. (2023), featuring language-guided, action-annotated demonstrations of complex relational object arrangements
+based on shape, color, and relative position. The dataset exhibits stochastic dynamics with dense
+interactions and contains 179,976 episodes of variable length, resized to 128 _×_ 128 resolution. We
+use an 80% training, 10% validation, and 10% test split.
+
+
+PandaPush: A simulated 3D robotic environment introduced in ECRL (Haramati et al., 2024) and
+used by EC-Diffuser (Qi et al., 2025) for goal-conditioned imitation learning. The task involves
+Isaac Gym-based (Makoviychuk et al., 2021) tabletop manipulation using a Franka Panda arm to
+push colored cubes to a goal configuration specified by an image. We utilize the same offline twoview image dataset collected in EC-Diffuser, comprising approximately 9,000 episodes with 1–3
+cubes each, and around 30–40 128 _×_ 128 frames per episode from each view.
+
+
+OGBench-Scene: A simulated 3D environment and dataset from the offline goal-conditioned
+reinforcement learning benchmark OGBench (Park et al., 2025). Specifically, we use the _Visual_
+_Scene_ environment and the associated “play” dataset, which features non-goal-directed interactions
+of a 6-DoF UR5e robot arm with various objects in a tabletop setting. The dataset includes 1,000
+training and 100 validation trajectories, each containing 1,000 transitions, recorded at a resolution
+of 64 _×_ 64.
+
+
+A.8 BASELINE DETAILS
+
+
+**OCVP** **and** **PlaySlot:** We use the official implementations (Villar-Corrales, 2025) of OCVP and
+PlaySlot and adapt the dynamic modules sizes to match LPWM, alongside modifying the CNN
+components for compatibility with 128 _×_ 128 input resolution. Both models are trained in multiple
+stages, beginning with slot-based decomposition using SAVi (Elsayed et al., 2022). Downstream
+
+
+42
+
+
+video prediction performance is highly dependent on the quality of this initial decomposition. As
+noted in previous works (Daniel & Tamar, 2024; Didolkar et al., 2024), SAVi can fail to assign
+distinct objects to separate slots and may require repeated runs with identical hyperparameters to
+achieve satisfactory results. While we primarily adhere to recommended hyperparameters, slot assignments are sometimes ambiguous, with multiple objects per slot and occasional blurry reconstructions.
+
+
+**DVAE:** We implement a non-object-centric, patch-based dynamics VAE (DVAE) world model
+adapted from LPWM. In DVAE, “particles” correspond to fixed-grid patch embeddings, where the
+number of patches matches LPWM’s particle count, _M_ . The baseline architecture preserves the
+same transformer backbone and parameter budget as LPWM, and supports identical conditioning
+modes (e.g., actions, language, image goals). However, DVAE does not model explicit object attributes, relying instead on spatially organized patch features. This approach is analogous to patchbased tokenization schemes commonly used in large-scale video generation (Yan et al., 2021; Yang
+et al., 2024b), but the patch embeddings are learned end-to-end without pretraining or quantization,
+similar to LPWM’s particle learning. To compensate for the lack of object-centric structure, we
+increase the latent dimension of each patch embedding. Patch extraction follows the standard procedure (Esser et al., 2021), whereby a CNN encoder downsamples input frames by a factor of _f_ until
+the spatial dimensions are _M_ = _[H]_ _f_ _[×]_ _[W]_ _f_ [,] [with] _[H]_ [and] _[W]_ [being] [the] [input] [height] [and] [width.] [The]
+
+resulting grid of patch features is used as the input “particle” set for downstream dynamics modeling
+and video prediction.
+
+
+A.9 HYPERPARAMETERS AND TRAINING DETAILS
+
+
+**Hyperparameters.** We use the Adam (Kingma & Ba, 2014) optimizer ( _β_ 1 = 0 _._ 9 _, β_ 2 = 0 _._ 999 _, ϵ_ =
+1 _e −_ 6) with a constant learning rate of 8 _e −_ 5. For all models we use an inner transfomer projection
+dimension of 512, and the latent actions dimension is set to _d_ ctx = 7. The constant prior distribution
+parameters, reported in Table 6, depend on the patch size used to extract the particles attributes and
+features. The complete set of the rest of the hyperparameters can be found in Table 5.
+
+
+**Warmup.** In our training procedure, given a sequence of _T_ frames, we typically apply the static
+ELBO loss to the first frame and the dynamic ELBO loss to the remaining _T_ _−_ 1 frames. To facilitate
+robust learning of the initial particle decomposition, we introduce a warmup stage during the first
+few iterations, usually corresponding to the first training epoch. In this stage, the static ELBO is
+applied to the first _T −_ 1 frames, and only the final frame receives the dynamic ELBO. This warmup
+provides a strong initialization for the dynamics module and improves overall training stability and
+downstream performance.
+
+
+**Burn-in** **frames.** Previous work (Wu et al., 2022b; Villar-Corrales et al., 2023; Daniel & Tamar,
+2024) introduces the concept of _burn-in_ _frames_, where the first _n_ frames in a sequence (typically
+4 _≤_ _n_ _≤_ 6) are provided as conditioning inputs to drive dynamics prediction under the assumption
+of deterministic dynamics. In DDLP, these initial frames are optimized using the static ELBO. In
+contrast, LPWM does _not_ employ burn-in frames, as we assume stochastic dynamics and instead
+rely on latent actions to drive predictions.
+
+
+**Stopping** **criteria.** During training, we track several metrics calculated on the validation sets.
+Mainly, we save checkpoints for the best validation ELBO value and best validation LPIPS value,
+where the latent-action-conditioned generated video is compared to the GT video.
+
+
+**Resources.** All experiments were conducted on various cloud-based computing platforms. For most
+datasets, training utilized a single NVIDIA A100 or GH200 GPU. For larger-scale datasets such as
+LanguageTable, Bridge, and Panda, training was performed on 8 GPUs, either A100s or
+H100s. The training duration varies by dataset size: small to medium datasets typically require a
+few days to train, while large-scale datasets may take up to two weeks.
+
+
+A.10 ADDITIONAL EXPERIMENTS AND RESULTS
+
+
+This section presents additional experimental results and further insights complementing the main
+findings of this paper. In Section 7, we compare our modified DLPv3 model to its predecessors.
+Section A.10.2 provides further video prediction results, followed by an ablative analysis in Sec
+
+43
+
+
+44
+
+
+|Attribute|Distribution|Parameters (glimpse ratio = 0.25)|Parameters (glimpse ratio = 0.125)|
+|---|---|---|---|
+|Position Offset_ zo_<br>Scale_ zs_<br>Depth_ zd_<br>Transparency_ zt_<br>Appearance Features_ zf_,_ z_bg|Normal,_ N_(_µ, σ_2)<br>Normal,_ N_(_µ, σ_2)<br>Normal,_ N_(_µ, σ_2)<br>Beta, Beta(_a, b_)<br>Normal,_ N_(_µ, σ_2)|<br>_µ_ = 0_, σ_ = 0_._2<br>_µ_ = Sigmoid_−_1(0_._25)_, σ_ = 0_._3<br>_µ_ = 0_, σ_ = 1<br>_a_ = 0_._01_, b_ = 0_._01<br>_µ_ = 0_, σ_ = 1|<br>_µ_ = 0_, σ_ = 0_._1<br>_µ_ = Sigmoid_−_1(0_._125)_, σ_ = 0_._15<br>_µ_ = 0_, σ_ = 1<br>_a_ = 0_._01_, b_ = 0_._01<br>_µ_ = 0_, σ_ = 1|
+
+
+Table 6: Prior distribution parameters for different glimpse (patch) ratios. Glimpses are patches
+taken around keypoints, where glimpse ~~r~~ atio = [glimpse size] image size [.]
+
+
+tion A.10.3. Finally, Section A.10.4 discusses and analyzes our imitation learning-based decisionmaking application.
+
+
+A.10.1 COMPARISON OF DLPV3, DLPV2, AND DLPV1
+
+
+We quantitatively evaluate our enhanced DLP variant, DLPv3 (see Section A.4), against the original
+DLP (Daniel & Tamar, 2022a) and DLPv2 (Daniel & Tamar, 2024) using publicly available implementations (Daniel & Tamar, 2022b; Daniel, 2024). All models are trained in the single-image
+setting on the OBJ3D dataset, with identical particle counts and recommended hyperparameters.
+Training for each model is terminated when the validation LPIPS score ceases to improve. As presented in Table 7, DLPv3 achieves substantially superior image reconstruction compared to prior
+versions. Notably, DLPv1 lacks explicit modeling of object attributes and is therefore unable to
+generate bounding boxes and other attributes that contribute to the performance.
+
+|Col1|OBJ3D|
+|---|---|
+||PSNR_ ↑_<br>SSIM_ ↑_<br>LPIPS_ ↓_|
+|**DLP**<br>**DLPv2**<br>**DLPv3**|39.23_ ±_ 3.33<br>0.982_ ±_ 0.009<br>0.085_ ±_ 0.018<br>41.97_ ±_ 3.74<br>0.985_ ±_ 0.006<br>0.019_ ±_ 0.01<br>**43.87**_ ±_** 4.45**<br>**0.990**_ ±_** 0.006**<br>**0.011**_ ±_** 0.005**|
+
+
+Table 7: DLPv3, DLPv2, and DLP image reconstruction performance comparison in the singleimage setting, evaluated on the test set.
+
+
+A.10.2 SELF-SUPERVISED OBJECT-CENTRIC VIDEO PREDICTION AND GENERATION
+
+
+Table 2 demonstrates that LPWM surpasses all baselines on LPIPS and FVD metrics across datasets
+with stochastic dynamics under all conditioning settings. Notably, Figure 1 illustrates that LPWM
+effectively preserves _object_ _permanence_ over the entire generation horizon, whereas competing
+methods often suffer from object blurring and deformation. Furthermore, LPWM accurately models
+complex object interactions which are better aligned with the language instructions, as evidenced by
+rollouts on various robotic datasets.
+
+
+We also highlight LPWM’s multi-modality sampling capability: by drawing multiple samples from
+the latent policy starting from the same initial frames and language prompts, LPWM produces diverse and plausible rollouts. Several examples are presented in Figures 16 and in videos available
+on our project website. Results for datasets with deterministic dynamics are detailed in Table 8.
+
+
+Regarding our main object-centric slot-based baseline, PlaySlot, objects tend to drift rather than
+remain static. This likely stems from its use of a global latent action vector that models transitions for all entities collectively, unlike our approach that leverages per-particle latent actions.
+Slot-based models also suffer from limitations inherent to their slot-decomposition modules, which
+produce blurry reconstructions and imperfect object decompositions, consistent with prior observations. Moreover, slot models struggle on datasets containing many objects (e.g., Mario) due
+to memory-limited number of slots, whereas LPWM’s low-dimensional latent particles effectively
+scale.
+
+
+DVAE, our primary non-object-centric baseline, performs competitively on synthetic datasets but
+falls short on real-world datasets, underscoring the advantages of object-centric representations. In
+certain cases, DVAE even outperforms PlaySlot, likely because both DVAE and LPWM utilize perpatch latent actions. We note that some datasets involve sparse object interactions, and visual metrics
+tend to emphasize large entities, which can favor DVAE’s performance.
+
+
+45
+
+
+[Video rollout examples demonstrating these behaviors are available on our project website: https:](https://taldatech.github.io/lpwm-web)
+[//taldatech.github.io/lpwm-web.](https://taldatech.github.io/lpwm-web)
+
+
+**Representation Inductive Bias versus Model Scale** : To further highlight the advantages of objectcentric representations over simply scaling up model size using standard patch-based representations, we train an LPWM model with 100M parameters on the standard video prediction benchmark BAIR-64 and report its FVD in Table 9. Despite its relatively small size, LPWM achieves
+performance comparable to many larger video generation models. We attribute this to LPWM’s
+inherent strength in modeling object interactions, which provides a significant advantage over large
+patch-based models that may generate crisp pixel-level details but struggle with physically plausible
+interactions (e.g., gripper movements intersecting objects). This demonstrates that the inductive biases encoded through object-centric representations can yield benefits that scale alone cannot easily
+
+|achieve.|Col2|Col3|
+|---|---|---|
+|Dataset|OBJ3D|PHYRE|
+|Setting|_t_ : 20_, c_ : 6_, p_ : 44|_t_ : 15_, c_ : 10_, p_ : 40|
+||PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_|
+|**DVAE**<br>**G-SWM**<br>**SlotFormer**/**OCVP**<br>**DDLP**<br>**LPWM** (Ours)|31.44_±_5.69<br>0.923_±_0.05<br>0.085_±_0.07<br>31.7_±_6.2<br>0.924_±_0.05<br>0.118_±_0.07<br>31.2_±_4.91<br>0.925_±_0.04<br>0.135_±_0.05<br>31.29_±_5.22<br>0.923_±_0.04<br>0.088_±_0.06<br>31.45_±_5.47<br>0.926_±_0.04<br>**0.081**_±_**0.06**|26.61_±_6.01<br>0.94_±_0.04<br>**0.047**_±_**0.04**<br>24.64_±_6.25<br>0.93_±_0.05<br>0.078_±_0.06<br>21.26_±_3.54<br>0.89_±_0.05<br>0.108_±_0.05<br>26.98_±_5.3<br>0.95_±_0.04<br>0.055_±_0.04<br>26.94_±_5.88<br>0.95_±_0.04<br>**0.048**_±_**0.04**|
+
+
+Table 8: Quantitative results on video prediction for datasets with deterministic dynamics. _t_ is the
+training horizon, _c_ is the conditional frames at inference and _p_ is the predicted frames at inference.
+
+
+BAIR-64 (64 _×_ 64) FVD _↓_
+
+
+LVT (Rakhimov et al., 2020) 125.8
+DVD-GAN-FP (Clark et al., 2019) 109.8
+TrIVD-GAN-FP (Luc et al., 2020) 103.3
+VideoGPT (Yan et al., 2021) 103.3
+CCVS (Le Moing et al., 2021) 99.0
+FitVid (Babaeizadeh et al., 2021) 93.6
+MCVD (Voleti et al., 2022) 89.5
+N UWA (Wu et al., 2022a) [¨] 86.9
+RaMViD (H¨oppe et al., 2022) 84.2
+MAGVIT-B (Yu et al., 2022) 76
+RIVER (Davtyan et al., 2023) 73.5
+CVP (Shrivastava & Shrivastava, 2024) 70.1
+VDM (Ho et al., 2022) 66.9
+MAGVIT-L (Yu et al., 2022) 62
+
+
+LPWM (Ours) 89.4
+
+
+Table 9: Video prediction results on BAIR-64 (64 _×_ 64) conditioning on one past frame and predicting 15 frames in the future. Table adapted from Shrivastava & Shrivastava (2024).
+
+
+**Language-conditioned video prediction** : Table 10 provides additional visual metrics for languageconditioned settings. Specifically, we report the PSNR, SSIM and LPIPS when using the languageconditioned posterior latent-actions to reproduce the original trajectory, as opposed to the standard
+practice of sampling language-conditioned latent-actions from the latent prior where only FVD is
+applicable.
+
+
+A.10.3 ABLATION ANALYSIS
+
+
+We perform ablation studies to evaluate the impact of key design decisions in LPWM, including
+latent action type (global vs. per-particle), latent action dimensionality, and positional embedding
+methods. Using the Sketchy dataset and evaluating after 10 training epochs (Table 11), we observe that per-particle latent actions are critical for strong latent-action-conditioned video prediction
+performance. However, for sampling diversity, global mean-pooling of latent actions yields improved FVD, suggesting benefits from global variables during generation. The model demonstrates
+
+
+46
+
+
+Figure 16: Multi-modal future sampling by LPWM. Starting from the same initial frame, LPWM
+produces diverse possible future trajectories, illustrated on the Mario (left) and BAIR (right)
+datasets.
+
+|Dataset|Bridge-L|LanguageTable-L|
+|---|---|---|
+||PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|PSNR_↑_<br>SSIM_↑_<br>LPIPS_↓_<br>FVD_↓_|
+|**DVAE**<br>**LPWM** (Ours)|19.37_±_3.8<br>0.75_±_0.09<br>0.177_±_0.078<br>146.85<br>26.38_±_4.1<br>0.87_±_0.08<br>0.077_±_0.05<br>**47.78**|36.0_±_4.14<br>0.97_±_0.01<br>0.019_±_0.01<br>26.78<br>36.57_±_3.01<br>0.97_±_0.007<br>0.016_±_0.006<br>15.96|
+
+
+Table 10: Quantitative results on language-conditioned (L) video generation. PSNR, SSIM and
+LPIPS are calculated on latent-action-conditioned video prediction. FVD is reported for stochastic
+generation by sampling from the latent policy.
+
+
+robustness to latent action dimension as long as it approximates the effective particle dimension
+( _<_ 6 + _d_ obj, i.e., 10 for Sketchy), balancing compression and information retention; our choice
+of _d_ ctx = 7 reflects this trade-off [5] . Finally, adaptive layer normalization (AdaLN) for embedding
+timestep and particle identity outperforms standard additive positional embeddings, as previously
+observed (Zhu et al., 2024), albeit with an increased parameter count.
+
+
+Ablation Variant Latent Latent Actions Positional PSNR _↑_ SSIM _↑_ LPIPS _↓_ FVD _↓_
+Actions _d_ ctx Type Embeddings
+
+
+Original 7 Per-Particle Learned AdaLN 28.55 _±_ 3.30 0.91 _±_ 0.05 0.072 _±_ 0.03 120.32
+_d_ ctx = 1 1 Per-Particle Learned AdaLN 27.71 _±_ 3.50 0.89 _±_ 0.06 0.081 _±_ 0.03 177.64
+_d_ ctx = 3 3 Per-Particle Learned AdaLN 29.08 _±_ 3.15 0.92 _±_ 0.05 0.070 _±_ 0.03 117.46
+_d_ ctx = 10 10 Per-Particle Learned AdaLN 28.97 _±_ 3.28 0.91 _±_ 0.05 0.068 _±_ 0.03 117.54
+_d_ ctx = 14 14 Per-Particle Learned AdaLN 28.81 _±_ 3.22 0.91 _±_ 0.05 0.069 _±_ 0.03 121.02
+Global Latent Actions 7 Mean Pool Learned AdaLN 27.24 _±_ 3.7 0.89 _±_ 0.07 0.087 _±_ 0.04 100.75
+Global Latent Actions 7 Token Attention Pool Learned AdaLN 21.54 _±_ 4.29 0.80 _±_ 0.11 0.176 _±_ 0.09 142.64
+Positional Embeddings 7 Per-Particle Learned Additive 21.54 _±_ 4.29 0.80 _±_ 0.11 0.176 _±_ 0.09 142.64
+
+
+Table 11: Ablation results: impact of latent action dimensions and type, and positional embeddings
+on LPWM performance. Results are reported on the Sketchy dataset after 10 epochs of training.
+Results do not reflect final performance.
+
+
+A.10.4 POLICY LEARNING WITH LATENT PARTICLE WORLD MODELS
+
+
+This section provides additional details on our decision-making application—learning imitation
+policies from a pre-trained LPWM, as described in Section 5.2.
+
+
+OGBench-Scene: designed to challenge an agent’s long-horizon sequential reasoning through
+manipulation of diverse objects including cubes, windows, drawers, and buttons. Pressing a button
+toggles the lock status of associated objects, requiring complex, multi-step planning to arrange objects into target configurations. The baselines are taken directly from the benchmark which includes
+GCBC (Lynch et al., 2020), GCIQL (a goal-conditioned variant of IQL (Kostrikov et al., 2022)),
+
+
+5Results after 10 epochs do not reflect final performance; best performance across datasets achieved with
+_d_ ctx = 7
+
+
+47
+
+
+**Task** **VQ-BeT** **Diffuser** **EIT+BC** **EC Diffusion Policy** **EC Diffuser** **LPWM (Ours)**
+
+
+1 Cube 93 _±_ 3 36 _._ 7 _±_ 2 _._ 7 89 _±_ 2 88 _._ 7 _±_ 3 **94.8** _±_ **1.5** **92.7** _±_ **4.5**
+2 Cubes 5 _._ 2 _±_ 1 1 _._ 3 _±_ 1 14 _._ 6 _±_ 12 _._ 5 38 _._ 8 _±_ 10 _._ 6 **91.7** _±_ **3** 74 _±_ 4
+3 Cubes 0 _._ 6 _±_ 0 _._ 1 0 _._ 2 _±_ 0 _._ 4 14 _±_ 16 _._ 4 66 _._ 8 _±_ 17 **89.4** _±_ **2.5** 62 _._ 1 _±_ 4 _._ 4
+
+
+Table 12: Performance results on PandaPush, a physics-based tabletop benchmark in IsaacGym where a
+Franka arm must arrange multiple cubes to match target goal images. Reported values are success rates over
+500 trajectories across 5 seeds; results within one standard deviation of the best are shown in bold.
+
+
+GCIVL (Park et al., 2023), QRL (Wang et al., 2023), CRL (Eysenbach et al., 2022) and HIQL (Park
+et al., 2023).
+
+
+Our image-goal-conditioned LPWM is trained on offline data with a 30-frame horizon, where goals
+are sampled within a window spanning the last training frame to 70 steps into the future, typically
+encompassing 2–3 atomic tasks. Because trajectories stem from unstructured play data rather than
+task-specific demonstrations, the goal sampling window is limited to maintain informative transitions for goal conditioning. During inference, we sample 20 actions per step, execute them in the
+environment, and feed back new observations for subsequent action predictions. Table 13 summarizes results across tasks, while Figure 4 visualizes an example imagined trajectory alongside
+environment execution. Videos are available on our project webpage.
+
+
+_Results discussion:_ OGBench datasets contain highly suboptimal, unstructured trajectories, posing
+challenges for behavioral cloning (BC), particularly on tasks requiring many atomic subtasks (e.g.,
+unlock drawer, open drawer, place cube). As reflected by GCBC’s performance, straightforward
+BC struggles when the goal is distant from the initial state. Nonetheless, our BC method achieves
+strong performance on tasks involving up to four atomic behaviors, including task1 and task3,
+outperforming all baselines on these. We attribute this to LPWM’s expressiveness, which captures
+multiple behavior modes and highlights its potential for integration with RL value functions to optimize goal-reaching policies.
+
+
+PandaPush: designed to challenge complex, goal-conditioned multi-object manipulation. We use
+the same 1–3 cube manipulation dataset as EC-Diffuser (Qi et al., 2025), but unlike EC-Diffuser,
+we train a single multi-view image-goal-conditioned LPWM and policy across all tasks, rather than
+separate policies for each task (e.g., one for 1 cube, another for 2 cubes), which gives the baselines
+an advantage. Baselines, taken from Qi et al. (2025), include VQ-BeT (Lee et al., 2024), a nondiffusion method using a Transformer with flattened VQ-VAE image inputs; Diffuser (Janner et al.,
+2022), trained without guidance on flattened VQ-VAE inputs; EIT+BC, an adaptation of the EIT
+policy (Haramati et al., 2024) to behavioral cloning using pre-trained DLP image representations;
+and EC Diffusion Policy, inspired by Chi et al. (2023) and modified for goal-conditioning, learning from pre-trained DLP representations. Table 12 summarizes results, and Figure 17 shows an
+example imagined trajectory alongside environment execution. Videos are available on our project
+webpage.
+
+
+_Results discussion:_ despite a relatively simple policy compared to complex diffusion-based methods,
+LPWM outperforms all baselines except EC Diffuser and matches EC Diffuser’s performance on the
+1-cube task. While this work focuses on demonstrating the potential of adapting pre-trained LPWM
+for downstream decision-making, future work can explore combining LPWM with more advanced
+policies for multi-object reasoning. Additionally, we leverage the multi-view variant of LPWM in
+this experiment, modeling particle dynamics simultaneously from multiple views, demonstrating the
+framework’s flexibility and enhancing the its ability to robustly handle occlusions (Haramati et al.,
+2024).
+
+
+48
+
+
+Figure 17: LPWM generated goal-conditioned imagined trajectories (top) and actual environment
+executions (bottom) through a learned mapping to actions on PandaPush from two views. LPWM
+generates dynamics in both views simultaneously, handling occlusions by the gripper.
+
+
+**Task** **GCBC** **GCIVL** **GCIQL** **QRL** **CRL** **HIQL** **LPWM (Ours)**
+
+
+task1 59 _±_ 7 84 _±_ 4 56 _±_ 4 44 _±_ 6 52 _±_ 6 80 _±_ 6 _±_ 0
+task2 0 _±_ 0 24 _±_ 8 1 _±_ 1 2 _±_ 2 1 _±_ 1 **81** _±_ 7 6 _±_ 9
+task3 0 _±_ 0 16 _±_ 8 0 _±_ 0 0 _±_ 0 0 _±_ 0 61 _±_ 11 **89** _±_ 9
+task4 2 _±_ 1 0 _±_ 0 3 _±_ 4 2 _±_ 1 1 _±_ 1 **20** _±_ 8 3 _±_ 5
+task5 0 _±_ 0 0 _±_ 0 0 _±_ 0 0 _±_ 0 0 _±_ 0 **3** _±_ 2 0 _±_ 0
+overall 12 _±_ 2 25 _±_ 3 12 _±_ 2 10 _±_ 1 11 _±_ 2 **49** _±_ 4 40 _±_ 1
+
+
+Table 13: **Full results on Visual Scene** with the visual-scene-play-v0 dataset. Results for baselines
+were taken from the original OGBench benchmark (Park et al., 2025) and represent success rates across 4 seeds.
+Results within a standard deviation are highlighted in bold.
+
+
+49

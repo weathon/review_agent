@@ -1,0 +1,1726 @@
+# CONSTRAINT-AWARE REWARD RELABELING FOR OFFLINE SAFE REINFORCEMENT LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Offline safe reinforcement learning (OSRL) considers the problem of learning
+reward-maximizing policies for a pre-defined cost constraint from a fixed dataset.
+This paper proposes a simple and effective approach referred to as Constraintaware Reward (Re)Labeling (CARL), that can be wrapped around existing offline
+RL algorithms. CARL is an iterative approach that alternates between two steps
+for each sampled batch of data to ensure state-action-wise safety constraints. First,
+update cost evaluation function using an off-policy evaluation procedure. Second, update policy using relabeled rewards (assign large penalty) for state-action
+pairs which are detected unsafe based on cost estimates. CARL is a minimalist
+approach, doesn’t introduce any additional task-specific hyperparameters, and allows us to leverage strong off-the-shelf offline RL algorithms to solve OSRL problems. Experimental results on the DSRL benchmark tasks demonstrate that CARL
+reliably enforces safety constraints under small cost budgets, while achieving high
+rewards. [The code is available at https://anonymous.4open.science/](https://anonymous.4open.science/r/CARL-6F11)
+[r/CARL-6F11.](https://anonymous.4open.science/r/CARL-6F11)
+
+
+1 INTRODUCTION
+
+
+Reinforcement learning (RL) has achieved remarkable success across diverse domains, from game
+playing (Silver et al., 2016) to robotic control (Siekmann et al., 2021). However, in safety-critical
+applications such as healthcare, autonomous systems, and industrial control, online exploration
+poses unacceptable risks. Offline reinforcement learning addresses this limitation by learning policies exclusively from pre-collected datasets without any additional interaction with the environment
+(Levine et al., 2020). However, in safety-critical domains, it is insufficient to focus on maximizing
+rewards alone and policies must also respect explicit safety constraints during deployment.
+
+
+This double requirement motivates offline safe reinforcement learning (OSRL), where agents must
+simultaneously maximize expected returns while satisfying user-specified cost budgets or safety
+constraints. OSRL inherits fundamental challenges from both offline RL and safe RL: handling
+distributional shift from fixed datasets, and ensuring that the policy behavior remains within safety
+constraints after deployment. This problem becomes especially challenging under tight cost budgets,
+where even small cost constraint violations may be unacceptable.
+
+
+As explained in the related work section, prior approaches for OSRL typically employ constrained
+optimization frameworks. These approaches rely on dual-gradient updates, Lagrangian multipliers,
+or policy regularization techniques (Polosky et al., 2022; Lee et al., 2022; Xu et al., 2022b). While
+theoretically principled, such methods introduce substantial algorithmic complexity. In practice,
+they can also be sensitive to hyperparameter configurations and require careful tuning to avoid training instability or collapsing to overly conservative solutions when the cost budget is small (Zheng
+et al., 2024).
+
+
+This paper develops a novel approach referred to as _Constraint-aware Reward (Re)Labeling (CARL)_
+to solve OSRL problems. There are two key innovations behind CARL. First, we formulate an
+unconstrained policy optimization problem to enforce state-action-wise safety constraints. This formulation naturally motivates an iterative policy improvement algorithm that doesn’t require tuning
+Lagrange multipliers. Second, we develop a simple iterative method that can be wrapped around
+offline RL algorithms with batch updates. It alternates between two steps for each sampled batch
+of data: update cost evaluation function using an off-policy evaluation procedure and update policy
+
+
+1
+
+
+using relabeled rewards (assigns a large penalty) for state-action pairs whose cost-to-go estimates
+violate cost constraint. CARL is a minimalist method requiring no additional hyperparameters,
+leveraging off-the-shelf offline RL algorithms to effectively address OSRL problems.
+
+
+The main findings from our evaluation of CARL on DSRL benchmark tasks (Liu et al., 2024) are
+as follows. First, CARL produces safe policies with high returns on most tasks and outperforms
+prior methods on a greater number of tasks. Second, CARL achieves excellent performance for the
+challenging setting of small cost budgets. Third, when trained only on unsafe trajectories, CARL
+remarkably learns safe policies. Finally, CARL achieves good performance with different offline
+RL algorithms.
+
+
+**Contributions.** The key contribution of this paper is the development and evaluation of the
+Constraint-aware Reward Relabeling approach for OSRL problems. Specific contributions include:
+
+
+    - Formulation of an unconstrained optimization problem for state-action-wise safety constraints.
+
+    - Development of the iterative constraint-aware reward relabeling (CARL) method that can
+be wrapped around existing offline RL algorithms.
+
+    - Experimental evaluation of the proposed CARL algorithm on DSRL benchmark tasks to
+demonstrate its strong effectiveness over state-of-the-art methods.
+
+
+2 PROBLEM SETUP
+
+
+We consider the problem of offline reinforcement learning under safety constraints, modeled using
+the Constrained Markov Decision Process (CMDP) framework. A CMDP is defined by the tuple
+( _S, A, P, r, c, γ, µ_ 0), where _S_ and _A_ denote the state and action spaces, respectively; _P_ : _S_ _× A ×_
+_S_ _→_ [0 _,_ 1] represents the unknown stochastic transition dynamics; _r_ : _S_ _× A_ _→_ R is the reward
+function; _c_ : _S_ _× A_ _→_ [0 _, C_ max] is a non-negative cost function; _γ_ _∈_ (0 _,_ 1) is the discount factor;
+and _µ_ 0 is the initial state distribution.
+
+
+Let _π_ : _S_ _→A_ represent a policy that maps states to actions. Given _π_ and _µ_ 0, we can define a
+distribution over trajectories _τ_ = _{_ ( _st, at, rt, ct_ ) _}_ _[T]_ _t_ =1 [generated by rolling out] _[ π]_ [from initial states]
+drawn from _µ_ 0. We define
+
+
+to be the standard reward state- and action-value functions. Similarly _Vc_ _[π]_ [(] _[s]_ [)] [and] _[Q][π]_ _c_ [(] _[s, a]_ [)] [denote]
+the cost state- and ation-value functions respectively. In the offline setting, the agent has access
+only to a static dataset _D_ = _{_ ( _si, ai, ri, ci, s_ _[′]_ _i_ [)] _[}][n]_ _i_ =1 [collected from one or more unknown behavior]
+policies, without further interaction with the environment.
+
+
+The goal of offline safe RL (OSRL) is to learn a policy from the given offline dataset _D_ that maximizes the expected return while satisfying a given cost constraint:
+max _π_ E _s∼µ_ 0 [ _Vr_ _[π]_ [(] _[s]_ [)]] subject to _Vc_ _[π]_ _[≤]_ _[κ,]_ (1)
+
+where _κ ≥_ 0 is a user-specified safety cost threshold (also referred to as a cost budget or limit).
+
+
+_Tight cost limits_ (i.e., small _κ_ values) present an especially demanding regime where many existing
+OSRL methods falter. In such safety-critical settings, such as autonomous driving, robotics, or
+industrial control, even minor constraint violations can be unacceptable. Common approaches based
+on constrained optimization or dual updates often face practical implementation challenges, such as
+high sensitivity to tuning, which can result in unstable training dynamics or overly conservative
+policies. Our goal is to develop a minimalist approach that can be wrapped around existing offline
+RL methods to solve OSRL problems under the challenging setting of small cost budgets.
+
+
+3 RELATED WORK
+
+
+**Online Safe RL.** Safety in online RL has been widely studied (Garcıa & Fern´andez, 2015; Gu et al.,
+2024; Wachi et al., 2024). In this setting, the agent interacts with the environment while adhering to safety constraints. A common mechanism is penalty-based control, shaping the reward as
+
+
+2
+
+
+_,_ _Q_ _[π]_ _r_ [(] _[s, a]_ [) =] [E] _[τ]_ _[∼][π]_ [[] _[V]_ _r_ _[π]_ [(] _[s][′]_ [)] _[ |][ s]_ [1] [=] _[ s, a]_ [1] [=] _[ a]_ []]
+
+
+_Vr_ _[π]_ [(] _[s]_ [) =] [E] _[τ]_ _[∼][π]_
+
+
+- _T_
+
+
+- _γ_ _[t]_ _rt_ _| s_ 1 = _s_
+
+
+_t_ =1
+
+
+_r_ _[′]_ = _r −_ _λ · c_ . While simple, fixed penalties introduce a sensitive trade-off between reward and constraint satisfaction, and often require extensive tuning; e.g., RCPO (Tessler et al., 2018) and Safety
+Gym (Ray et al., 2019) include baselines with fixed _λ_ values, with main results based on adaptive
+Lagrangian updates. ROSARL formalizes penalty selection via the “minmax penalty” (Tasse et al.,
+2023). Within this penalty-based family, Saut´e RL (Sootla et al., 2022) augments the state with a
+safety budget, and MASE (Wachi et al., 2023) casts online safe exploration as a generalized problem that combines uncertainty quantification with a reset action to prevent violations during training.
+Recent work also targets adaptability under changing constraints, e.g., constraint-conditioned value
+function approximation (Yao et al., 2023).
+
+
+**Offline RL.** Offline reinforcement learning focuses on learning policies purely from fixed datasets
+without additional interaction with the environment (Levine et al., 2020; Figueiredo Prudencio et al.,
+2024). A key challenge in this setting is distributional shift between the behavior policy and the
+learned policy. Approaches addressing this include value estimation regularization (Fujimoto & Gu,
+2021; Kostrikov et al., 2022; Kumar et al., 2019; Lyu et al., 2022; Yang et al., 2022), generative or
+sequential modeling (Janner et al., 2021; Wang et al., 2022), and uncertainty-aware learning (An
+et al., 2021; Bai et al., 2022). Some techniques utilize Q-function based action selection via filtering
+and reweighting, including SfBC and IDQL (Chen et al., 2023; Hansen-Estruch et al., 2023). Other
+methods constrain policy updates using divergence measures (Wu et al., 2020; Jaques et al., 2020;
+Wu et al., 2022), or leverage advances in model-based RL (Kidambi et al., 2020; Yu et al., 2020;
+Rigter et al., 2022) and imitation learning (Xu et al., 2022a).
+
+
+**Offline Safe RL.** OSRL extends the offline RL setting to include user-defined cost constraints (Liu
+et al., 2024). Many OSRL methods rely on constrained optimization, often using Lagrangian relaxation (Xu et al., 2022b; Lee et al., 2022; Polosky et al., 2022), or exploiting convexity assumptions in
+cost and reward trade-offs (Zhang et al., 2024). However, they often require solving interdependent
+optimization problems and are prone to instability, particularly under strict cost limits.
+
+
+Beyond constrained optimization, several recent methods propose alternative strategies. FISOR
+(Zheng et al., 2024) enforces safety via diffusion models to select only feasible actions and is the
+only method designed to handle the challenging setting of small cost budgets. TraC (Gong et al.,
+2025) introduces a trajectory-based classification method for safe policy learning. Latent safety
+modeling was also explored in (Koirala et al., 2024). LSPC employs a conditional VAE to encode
+conservative safety constraints into a latent space and perform reward optimization via advantageweighted regression in that space. CAPS (Chemingui et al., 2025) switches between pre-trained
+policies to adapt to different test-time cost constraints. (Guo et al., 2025) propose a constraintconditioned actor-critic (CCAC) method that explicitly models the relationship between state-action
+distributions and constraints, to improve generalization to unseen cost thresholds.
+
+
+Diffusion-based generative models have also gained traction for OSRL. TREBI (Lin et al., 2023)
+employs trajectory-level diffusion sampling guided by safety classifiers, while other works adapt
+models such as Decision Transformer (Chen et al., 2021) and Diffuser (Janner et al., 2022) to the
+constrained setting (Liu et al., 2023; Lin et al., 2023). While powerful, these methods often require
+additional architectural components, hyperparameter tuning, or auxiliary optimization targets.
+
+
+The overall goal of this paper is to address two key limitations of prior work. First, there is very
+little work on OSRL under small cost budgets. FISOR produces safe policies in this regime, but
+it achieves low reward. Second, Lagrangian-based constrained policy optimization methods can be
+difficult to stabilize in offline settings, often requiring extensive tuning to achieve optimal performance. The proposed constraint-aware reward relabeling approach is minimalist, can be wrapped
+around offline RL algorithms.
+
+
+4 STATE-ACTION-WISE CONSTRAINTS FOR SAFETY
+
+
+This section first describes an alternative formulation which enforces safety for all states and theoretically shows that its solution also solves the original problem which enforces safety constraint in
+expectation. Next, we provide the sketch of an iterative policy improvement approach that is most
+natural to solve our formulation and forms the basis for our proposed algorithm.
+
+
+**Formulation** **for** **state-action-wise** **safety.** Solving the constrained MDP in Equation (1) often
+involves reformulating it as an unconstrained optimization problem via the Lagrangian method.
+
+
+3
+
+
+Although this reformulation offers a principled approach, it requires an intricate tuning of the Lagrangian multiplier, where the final performance is sensitive to it. To overcome this challenge, we
+consider a stronger formulation that aims to ensure constraint satisfaction for all state-action pairs a
+policy will encounter which is particularly beneficial when the cost limit _κ_ is small.
+
+max _π_ _Vr_ _[π]_ [subject to] _[ Q]_ _c_ _[π]_ [(] _[s, π]_ [(] _[s]_ [))] _[ ≤]_ _[κ,][ ∀][s.]_ (2)
+
+
+where the max operator over value functions considers _V_ 1 _≤_ _V_ 2 if _V_ 1( _s_ ) _≤_ _V_ 2( _s_ ) _, ∀s_ . The above
+pointwise constraints ensure that we enforce safety across all states and actions that the policy will
+select, not simply over the expected value of the cost function as in the optimization problem from
+Equation (1). A solution to the optimization problem in Equation (2), if it exists, immediately yields
+a solution to the problem in Equation (1), but not vice versa.
+
+
+The point-wise constraints formulation offers various benefits. First, to a certain extent, the pointwise constraint should be a preferred solution to many real-world applications that require safety. It
+requires that, no matter where we start within the system, the expected cumulative cost will be within
+the safety threshold. On the other hand, the problem in Equation (1) only requires that a policy is
+safe in the expectation with respect to the initial state and action. This might not be desirable. In
+the deployment of safe RL for real safety-critical applications, we are often in a one-shot setting,
+instead of performing repeated experiments. In such a case, only the solution for Equation (2) but
+not from Equation (1) guarantees safety every time during deployment.
+
+
+Second, and most importantly, the point-wise constraints allow us to turn the offline constrained RL
+problem into an unconstrained optimization problem where it is free of tuning Lagrangian multipliers. Additionally, this unconstrained optimization naturally motivates a simple iterative algorithm
+that allows us to leverages powerful off-the-shelf solvers. Let us consider the following problem:
+
+max _π_ _Vr_ _[π]_ _π_ where _rπ_ ( _s, a_ ) := 1 _{Qπc_ [(] _[s,a]_ [)] _[≤][κ][}][ ·][ r]_ [(] _[s, a]_ [)] _[ −]_ [1] _[{][Q]_ _c_ _[π]_ [(] _[s,a]_ [)] _[>κ][}][V]_ [max] (3)
+
+
+with _V_ max = _R_ max _/_ (1 _−_ _γ_ ) being the maximum possible infinite-horizon value. We show in the
+Theorem below that it suffices to solve the unconstrained optimization in Equation (3).
+
+
+**Theorem 1.** Assume there exists a solution to Problem (2). Then a policy _π_ _[∗]_ is an optimal solution
+to Problem (2) if and only if it is an optimal solution to the unconstrained optimization in (3).
+
+
+**Proof.** Consider any safe policy _π_ according to the constraint in Problem (2). By definition we
+know that for each state _s_, _Q_ _[π]_ _c_ [(] _[s, π]_ [(] _[s]_ [))] _[ ≤]_ _[κ]_ [.] [This means that for any state-action pair][ (] _[s][t][, a][t]_ [)][ along]
+a trajectory _τ_ generated by _π_, we have _r_ ( _st, at_ ) = _rπ_ ( _st, at_ ). Thus, for any safe policy _π_ we have
+_Vr_ _[π]_ [=] _[V]_ _r_ _[π]_ _π_ [.] [To complete the proof we show that any solution to Problem (3) must be safe.]
+
+Let _π_ ˜ _[∗]_ be a solution to Problem (2). Let _π_ _[∗]_ be a solution to Problem (3). We will show
+that _π_ _[∗]_ must satisfy the point-wise safety, i.e., _Q_ _[π]_ _c_ _[∗]_ [(] _[s, π][∗]_ [(] _[s]_ [))] _[≤]_ _[κ,][ ∀][s]_ [.] Indeed, assume that
+_Q_ _[π]_ _c_ _[∗]_ [(] _[s, π][∗]_ [(] _[s]_ [))] _[>]_ _[κ]_ [for] [some] _[s]_ [.] [Then,] _[r][π][∗]_ [(] _[s, π][∗]_ [(] _[s]_ [))] [=] _[−][V]_ [max][.] [Thus,] _[V]_ _r_ _[π]_ _π_ _[∗]_ _∗_ [(] _[s]_ [)] [=] _[−][V]_ [max] [+]
+E _π∗,P_ [ [�] _[∞]_ _t_ =1 _[γ][t][r][π][∗]_ [(] _[s][t][, a][t]_ [)]] _[<]_ [0] _[<]_ _[V]_ _r_ _[π]_ [˜] _[∗]_ ( _s_ ) = _Vr_ _[π]_ [˜] _π_ ˜ _[∗]_ _∗_ [(] _[s]_ [)][,] [where] [the] [last] [equality] [follows] [from] [the]
+safety of _π_ ˜ _[∗]_ . This contradicts that _π_ _[∗]_ is an optimal policy to Problem (3). Thus, _Q_ _[π]_ _c_ _[∗]_ [(] _[s, π][∗]_ [(] _[s]_ [))] _[≤]_
+_κ, ∀s_ and hence is safe according to Problem (2). 
+
+**Sketch** **of** **an** **Iterative** **Policy** **Improvement** **Algorithm.** Motivated by the classical policy iteration method, we can design a policy iteration variant to solve the unconstrained optimization in
+Equation (3) as summarized below:
+
+
+offline policy evaluation reward relabeling offline policy optimization
+_πt_ _−→_ _Q_ _[π]_ _c_ _[t]_ _−→_ _rπt_ _−→_ _πt_ +1 (4)
+
+
+The goal of this iterative method is to improve utility and safety trade-offs of the policy incrementally
+from one iteration to the next. Specifically, in each iteration _t_, given the current policy _πt_, we
+estimate the cost function _Q_ _[π]_ _c_ _[t]_ [using an offline policy evaluation (OPE) solver.] [Next,] [we compute]
+the reshaped reward _rπt_ based on _Q_ _[π]_ _c_ _[t]_ [.] [Finally,] [we] [perform] [offline] [policy] [optimization] [(OPO)]
+by calling an offline RL algorithm with the reward-relabeled offline data ( _s, a, rπt, s_ _[′]_ ) to obtain
+a improved policy _πt_ +1. Building on this general principle, we describe a concrete algorithmic
+approach next.
+
+
+4
+
+
+5 CARL: CONSTRAINT-AWARE REWARD RELABELING
+
+
+Our solution approach is based on designing a wrapper around any _batch-update_ offline RL algorithm. In particular, batch update algorithms can be described via batch update rules, where _A_ OPE
+denotes an offline policy evaluation update rule, and _A_ OPO an offline policy optimization update
+rule. Each accepts a mini-batch _B_ = _{_ ( _si, ai, ri, s_ _[′]_ _i_ [)] _[}]_ [ and performs:]
+
+
+_Q_ _[′]_ _←A_ OPE( _Q, π, B_ ) _,_ ( _π_ _[′]_ _, Q_ _[′]_ ) _←A_ OPO( _π, Q, B_ ) _,_
+
+
+allowing iterative improvement by repeatedly sampling batches from a given offline training dataset.
+Most state-of-the-art offline RL algorithms—e.g., TD3-BC, IQL—can be expressed in this form.
+The goal is to wrap these existing update functions so that, given a safe offline RL problem in the
+form of a training dataset _D_ and a cost budget _κ_, the resulting policy _π_ maximizes reward while
+satisfying the safety constraint.
+
+
+Below we first describe the motivation for our approach, followed by the algorithmic details.
+
+
+5.1 ACTION FILTER MOTIVATION
+
+
+To motivate our approach, consider a finite MDP with discrete states and actions. We can view
+applying the iteration in Equation 4 to this MDP as integrating an _action filter_ into a standard unconstrained solver (e.g., policy iteration): given the current policy _π_, estimate its cost-to-go _Q_ _[π]_ _c_ [(] _[s, a]_ [)][,]
+and remove from the MDP all actions whose cost-to-go exceeds the budget _κ_ . Solving this reduced
+MDP yields a new policy _π_ _[′]_, and the process can be repeated, always starting each iteration with the
+_full_ action set. Across iterations, actions previously removed may be reintroduced if they become
+safe, and safe actions may be removed if they become unsafe.
+
+
+While intuitive, this process can be unstable. The root cause is that after each policy update, the
+cost-to-go function can change drastically, causing the set of filtered actions to vary arbitrarily from
+one iteration to the next.
+
+
+One way to mitigate this instability is to update the policy and cost-to-go _gradually_, so that they
+track each other closely throughout the optimization process. In the discrete MDP setting, this
+might mean updating only for a small batch of states at each iteration. Below we extend this idea to
+the more general setting of continuous state and action _offline_ safe RL.
+
+
+5.2 FILTERING VIA BATCH REWARD RELABELING
+
+
+In continuous domains with function approximation, “removing” an individual unsafe action is illposed: we instead want to suppress an _entire_ _neighborhood_ of similar actions. A simple way to
+achieve this is via the reward relabeling approach implicit in Problem (3) where we replace the
+reward for any state–action pair predicted to be unsafe with a maximally negative constant. Function
+approximation then naturally generalizes this penalty to nearby actions, discouraging them without
+needing to identify and prune them explicitly.
+
+
+We use a simple approach to integrate reward relabeling and batch-update offline RL. Specifically,
+given the current Q-cost function _Q_ _[π]_ _c_ [under] [the] [current] [policy] _[π]_ [,] [we] [define] [the] _[constraint-aware]_
+_reward relabeling rule_ for a transition ( _s, a, r, s_ _[′]_ ) as:
+
+
+Performing batch updates where rewards in each batch are relabeled naturally avoids actions currently considered unsafe and, by generalization, actions similar to them.
+
+
+The generic batch reward relabeling loop alternates between the following two steps:
+
+
+1. **Cost evaluation:** _M_ iterations of OPE updates on ( _s, a, c, s_ _[′]_ ) to refine _Q_ _[π]_ _c_ [.]
+
+2. **Policy optimization:** _K_ iterations of OPO updates on CARL( _s, a, r, s_ _[′]_ ) given by 5.
+
+
+5
+
+
+CARL( _s, a, r, s_ _[′]_ ) =
+
+
+( _s, a, r, s_ _[′]_ ) _,_ if _Q_ _[π]_ _c_ [(] _[s, a]_ [)] _[ ≤]_ _[κ,]_
+
+(5)
+( _s, a, −V_ max _, s_ _[′]_ ) otherwise,
+
+
+**Algorithm 1** Constraint-aware Reward Relabeling (CARL)
+
+
+**Require:** Offline dataset _D_, budget _κ_, backbone updates _A_ OPE _, A_ OPO, batch size _m_
+
+1: Init cost critic _Qc_, policy _π_, and reward critic _Qr_
+2: **while** not converged **do**
+3: Sample mini-batch _{_ ( _si, ai, ri, ci, s_ _[′]_ _i_ [)] _[}][m]_ _i_ =1 _[⊂D]_
+4: _Qc_ _←A_ OPE� _Qc, π, {_ ( _si, ai, ci, s_ _[′]_ _i_ [)] _[}][m]_ _i_ =1�
+
+5: ( _π, Qr_ ) _←A_ OPO� _π, Qr, {_ CARL( _si, ai, ri, s_ _[′]_ _i_ [)] _[}]_ _i_ _[m]_ =1�
+
+6: **end while**
+7: **return** _π_
+
+
+To address this instability, a natural stabilizing choice is to keep _M_ and _K_ _small_ so that _Qc_ and _π_
+track each other closely. The most extreme case, _M_ = _K_ = 1, suggests a simple wrapper with no
+additional tunable hyperparameters (utilizing dataset-derived penalties) beyond the base OPE and
+OPO algorithms. Each iteration involves sampling a mini-batch _B_ followed by:
+
+
+Update _Q_ _[π]_ _c_ [with] _[ B]_ _−→_ Relabel _B_ via Equation 5 _−→_ Update _π_ with relabeled _B_ .
+
+
+The pseudo-code for this incremental variant called is shown in Algorithm 1. Despite the minimalism, we find that _M_ = _K_ = 1 consistently results in state-of-the-art performance. Further,
+while one can treat _K_ and _M_ as hyperparameters, we have not found values that consistently outperform CARL across benchmarks. Because the CARL algorithm modifies only the reward before
+passing data to the backbone, it inherits the underlying offline RL algorithms’ sample efficiency and
+out-of-distribution handling.
+
+
+While setting _K_ = _M_ = 1 greatly reduces drift compared to using large values of _K_ and _M_, theoretical convergence guarantees are unclear. Formally analyzing whether _K_ = _M_ = 1 converges—
+possibly under assumptions on the MDP class, dataset coverage, or backbone stability—is an open
+problem. Empirically, we find the method to be stable across all tested benchmarks and initializations, and achieving significantly better performance than state-of-the-art offline safe RL methods.
+
+
+**Summary of CARL’s advantages.** Our proposed CARL approach has the following advantages.
+
+
+    - It can be wrapped around existing offline RL algorithms to effectively solve offline safe RL
+problems as we demonstrate in our experiments.
+
+
+    - It is a minimalist approach that doesn’t introduce any additional tunable hyperparameters.
+
+
+6 EXPERIMENTS AND RESULTS
+
+
+6.1 EXPERIMENTAL SETUP
+
+
+**Benchmarks.** We evaluate CARL across a variety of offline safe reinforcement learning tasks
+using the DSRL benchmark suite (Liu et al., 2024), which offers standardized datasets with diverse safety constraints. Our evaluation mainly spans both the Bullet-based environments (Car-Run,
+Drone-Circle etc.), as well as broader generalization through additional tasks drawn from SafetyGymnasium (Ray et al., 2019; Ji et al., 2024). The combined benchmark suite includes diverse tasks
+spanning a range of difficulty levels and safety complexities.
+
+
+6
+
+
+Intuitively, large _M_ and _K_ let _Qc_ and _π_
+change substantially between phases. Thus,
+as described above for discrete MDPs, this
+can cause severe oscillations: the algorithm
+alternates between unsafe, high-reward policies and overly conservative safe policies,
+never exploring the many safe policies with
+high reward. Figure 1 illustrates an implementation based on TD3BC where we observe this oscillation for a standard benchmark problem AntRun.
+
+
+Figure 1: Oscillatory Performance of AntRun: reward (left) and cost (right) across training steps with
+a cost limit of 40.
+
+
+**Evaluation** **Protocol.** Consistent with DSRL standards, we report two core metrics: normalized
+cumulative reward and normalized cumulative cost. For a task _T_, if _r_ max( _T_ ) and _r_ min( _T_ ) represent
+the maximum and minimum observed cumulative rewards, the normalized reward for a policy _π_ is
+computed as:
+
+_Rπ −_ _r_ min( _T_ )
+_R_ norm = _C_ norm = _[C][π]_
+_r_ max( _T_ ) _−_ _r_ min( _T_ ) _[,]_ _κ_ _[.]_
+
+
+where _Cπ_ is the policy’s cumulative cost and _κ_ is the cost threshold. A policy is considered safe
+if _C_ norm _≤_ 1. This formulation differs from alternative evaluations in CCAC (Guo et al., 2025)
+that normalize rewards only using trajectories satisfying the cost budget _κ_ . Instead, we follow the
+standard DSRL evaluation protocol, which uses the full reward range per task. Our main results use
+stringent thresholds of _κ_ = 5 and _κ_ = 10 to test performance in highly constrained scenarios. Each
+policy is tested over 20 episodes and averaged over three random seeds.
+
+
+**Baselines.** We compare CARL against a range of state-of-the-art OSLR methods. BC-Safe is
+a behavior cloning baseline that trains on trajectories satisfying a predefined cost threshold. CPQ
+(Xu et al., 2022b) penalizes out-of-distribution actions and updates Q-values using only safe transitions. COptiDICE (Lee et al., 2022) addresses safety via stationary distribution correction. CDT
+(Liu et al., 2023) uses a decision transformer to learn policies conditioned on reward and cost enabling test-time constraint adaptation. CAPS (Chemingui et al., 2025) also supports test-time constraint handling by switching among multiple pre-trained policies. FISOR (Zheng et al., 2024) is
+a diffusion-based approach that directly optimizes for feasibility to produce zero-violation policies.
+Finally, we include CCAC (Guo et al., 2025), a recent method that uses a constraint-conditioned
+actor–critic with generative modeling and OOD detection for adaptive, safe policy learning under
+varying constraints. We further evaluated Lagrangian variants of offline RL algorithms in Table 5.
+
+
+Our results use CARL as a wrapper around TD3-BC, with fitted-Q evaluation (FQE) employed for
+off-policy evaluation (Le et al., 2019). Implementation details are available in the Appendix.
+
+
+6.2 RESULTS AND DISCUSSION
+
+
+**CARL vs.** **Baselines.** Table 1 compares CARL with a suite of offline safe RL baselines across 19
+DSRL tasks. Performance is reported in terms of normalized reward (higher is better) and normalized cost (lower is better, with values _≤_ 1 indicating constraint satisfaction) under low budgets of
+5 or 10. For the main results, we set the penalty using _R_ max = max( _s,a,r,·_ ) _r_ from the offline data
+instead of _V_ max; an ablation with the larger penalty _V_ max is included in Table 5 in the appendix.
+Remarkably, CARL is the _only_ method that satisfies the cost constraint across _all_ Bullet tasks. It
+is also safe on 8 out of 11 in the more challenging SafetyGym tasks. While other methods such as
+CAPS, FISOR, or CCAC manage to remain safe on a few tasks, none of them achieve the same level
+of consistency for safety. Importantly, CARL’s safety does not come at the expense of reward performance. CARL consistently ranks as the best or second-best safe method in terms of reward. While
+other baselines occasionally achieve higher returns, the top-performing method varies across tasks
+and fails to consistently satisfy the cost constraint, unlike CARL which maintains stricter safety in
+most of the tasks.
+
+
+These results demonstrate that CARL strikes a strong balance between reward maximization and
+constraint satisfaction, without requiring special reward shaping, risk-sensitive training objectives,
+or task-specific tuning. Its consistent safety and competitive performance across tasks and cost
+budgets highlight its robustness and suitability for safety-critical settings.
+
+
+**Backbone** **Offline** **RL** **Algorithm.** CARL can be wrapped around any off-the-shelf offline RL
+algorithm without modifying the method’s loss, targets, or regularizers. Our main results use TD3BC (Fujimoto & Gu, 2021) as the backbone. To test generality, we also evaluate CARL with IQL
+(Kostrikov et al., 2022), which differs significantly in design. TD3-BC is an actor–critic method that
+queries the current policy to generate target actions and applies behavior cloning regularization on
+the actor. In contrast, IQL estimates Q-values purely from dataset actions and optimizes the policy
+separately via advantage-weighted regression, without querying the policy during value learning.
+
+
+As shown in Table 2, CARL maintains safety and achieves comparable rewards under both backbones. This indicates that our relabeling in Equation 5 is agnostic to the underlying backbone,
+confirming that CARL generalizes effectively across offline RL algorithms.
+
+
+7
+
+
+Table 1: CARL main results for normalized rewards and costs. The normalized cost threshold is 1
+( _κ_ = 5 or 10). The _↑_ symbol denotes that higher rewards are better. The _↓_ symbol denotes that
+lower costs (up to threshold 1) are better. Each cell shows reward or cost with standard deviation.
+**Bold** : safe agents ( _C_ norm _≤_ 1). Gray: unsafe agents. **Blue bold** : best safe result ( _C_ norm _≤_ 1).
+
+
+**Tasks** BC Safe CPQ COptiDICE CDT CAPS CCAC FISOR CARL
+
+|Col1|Bullet Gym Tasks: κ = 5|
+|---|---|
+|BallRun<br>Reward_ ↑_<br>Cost_ ↓_|0.16_±_0.11<br>0.09_±_0.26<br>0.53_±_0.10<br>0.27_±_0.09<br>**0.07**_±_**0.05**<br>**0.31**_±_**0.01**<br>0.09_±_0.07<br>**0.28**_±_**0.02**<br>4.50_±_3.38<br>2.20_±_2.88<br>10.83_±_1.68<br>2.57_±_3.23<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>1.28_±_1.70<br>**0.00**_±_**0.00**|
+|CarRun<br>Reward_ ↑_<br>Cost_ ↓_|**0.92**_±_**0.01**<br>**0.93**_±_**0.01**<br>**0.91**_±_**0.04**<br>**0.99**_±_**0.00**<br>**0.97**_±_**0.00**<br>1.82_±_0.84<br>**0.74**_±_**0.01**<br>**0.97**_±_**0.00**<br>**0.26**_±_**0.23**<br>**0.20**_±_**0.18**<br>**0.00**_±_**0.00**<br>**0.90**_±_**0.34**<br>**0.11**_±_**0.17**<br>24.57_±_20.94<br>**0.00**_±_**0.00**<br>**0.02**_±_**0.03**|
+|DroneRun<br>Reward_ ↑_<br>Cost_ ↓_|0.41_±_0.23<br>0.29_±_0.11<br>0.68_±_0.01<br>**0.58**_±_**0.00**<br>0.41_±_0.06<br>0.50_±_0.08<br>0.31_±_0.04<br>**0.36**_±_**0.12**<br>1.62_±_1.73<br>2.35_±_4.08<br>15.02_±_0.10<br>**0.07**_±_**0.07**<br>5.70_±_3.08<br>16.29_±_9.35<br>2.52_±_1.10<br>**0.30**_±_**0.52**|
+|AntRun<br>Reward_ ↑_<br>Cost_ ↓_|0.56_±_0.02<br>**0.03**_±_**0.05**<br>0.61_±_0.01<br>0.70_±_0.03<br>0.53_±_0.13<br>**0.03**_±_**0.10**<br>**0.43**_±_**0.02**<br>**0.36**_±_**0.09**<br>1.15_±_0.47<br>**0.05**_±_**0.08**<br>3.26_±_1.39<br>1.66_±_0.24<br>2.03_±_2.17<br>**0.00**_±_**0.00**<br>**0.27**_±_**0.15**<br>**0.60**_±_**0.41**|
+|BallCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.45_±_0.03<br>0.56_±_0.10<br>0.71_±_0.01<br>0.61_±_0.17<br>**0.33**_±_**0.02**<br>0.47_±_0.38<br>**0.32**_±_**0.05**<br>**0.69**_±_**0.03**<br>1.21_±_0.23<br>1.11_±_1.92<br>9.41_±_0.69<br>2.03_±_1.39<br>**0.01**_±_**0.02**<br>10.19_±_17.65<br>**0.00**_±_**0.00**<br>**0.33**_±_**0.23**|
+|CarCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.31_±_0.06<br>**0.71**_±_**0.02**<br>0.49_±_0.01<br>0.71_±_0.01<br>**0.40**_±_**0.03**<br>0.70_±_0.01<br>**0.37**_±_**0.02**<br>**0.69**_±_**0.01**<br>1.57_±_0.07<br>**0.00**_±_**0.00**<br>10.82_±_1.28<br>1.58_±_0.57<br>**0.03**_±_**0.03**<br>1.61_±_0.51<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**|
+|DroneCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.50_±_0.01<br>**-0.21**_±_**0.04**<br>0.26_±_0.02<br>0.55_±_0.01<br>**0.36**_±_**0.02**<br>**0.43**_±_**0.04**<br>**0.48**_±_**0.01**<br>**0.53**_±_**0.02**<br>1.22_±_0.31<br>**0.70**_±_**0.41**<br>3.68_±_0.51<br>1.14_±_0.06<br>**0.00**_±_**0.00**<br>**0.06**_±_**0.07**<br>**0.17**_±_**0.15**<br>**0.00**_±_**0.00**|
+|AntCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.40_±_0.02<br>**0.00**_±_**0.00**<br>0.18_±_0.02<br>0.45_±_0.05<br>**0.33**_±_**0.05**<br>**0.49**_±_**0.07**<br>**0.24**_±_**0.02**<br>**0.60**_±_**0.01**<br>4.72_±_0.87<br>**0.00**_±_**0.00**<br>17.40_±_0.36<br>6.59_±_1.42<br>**0.00**_±_**0.00**<br>**0.02**_±_**0.03**<br>**0.04**_±_**0.08**<br>**0.02**_±_**0.03**|
+
+
+|Col1|Safety Gym Tasks: κ = 10|
+|---|---|
+|CarCircle1<br>Reward_ ↑_<br>Cost_ ↓_|0.27_±_0.09<br>-0.03_±_0.07<br>0.68_±_0.05<br>0.53_±_0.07<br>0.42_±_0.04<br>0.32_±_0.10<br>0.69_±_0.03<br>0.46_±_0.03<br>3.82_±_1.01<br>10.17_±_7.26<br>20.70_±_1.15<br>8.58_±_2.04<br>2.79_±_1.04<br>21.96_±_4.14<br>10.52_±_0.10<br>4.15_±_0.83|
+|CarCircle2<br>Reward_ ↑_<br>Cost_ ↓_|0.37_±_0.06<br>0.46_±_0.05<br>0.75_±_0.02<br>0.61_±_0.04<br>0.38_±_0.14<br>0.57_±_0.01<br>0.63_±_0.02<br>0.45_±_0.05<br>6.90_±_2.62<br>2.41_±_3.95<br>26.40_±_2.30<br>13.12_±_2.59<br>4.15_±_5.07<br>16.85_±_4.07<br>12.78_±_1.97<br>1.57_±_1.38|
+|CarGoal1<br>Reward_ ↑_<br>Cost_ ↓_|**0.20**_±_**0.09**<br>0.67_±_0.07<br>0.40_±_0.03<br>0.62_±_0.04<br>0.27_±_0.00<br>0.82_±_0.06<br>0.42_±_0.07<br>**0.26**_±_**0.04**<br>**0.40**_±_**0.12**<br>4.41_±_0.46<br>2.50_±_0.36<br>3.12_±_0.69<br>1.15_±_0.10<br>5.27_±_0.92<br>1.70_±_0.58<br>**0.92**_±_**0.55**|
+|CarGoal2<br>Reward_ ↑_<br>Cost_ ↓_|0.14_±_0.02<br>0.53_±_0.14<br>0.21_±_0.10<br>0.42_±_0.06<br>0.11_±_0.06<br>0.91_±_0.02<br>**0.05**_±_**0.01**<br>0.13_±_0.03<br>1.45_±_0.60<br>15.09_±_1.91<br>3.01_±_1.45<br>5.34_±_1.25<br>2.05_±_2.23<br>15.80_±_1.04<br>**0.50**_±_**0.71**<br>1.77_±_0.51|
+|PointCircle1<br>Reward_ ↑_<br>Cost_ ↓_|**0.30**_±_**0.11**<br>**0.46**_±_**0.04**<br>0.87_±_0.01<br>**0.54**_±_**0.01**<br>**0.31**_±_**0.05**<br>0.57_±_0.08<br>0.43_±_0.05<br>**0.52**_±_**0.01**<br>**0.26**_±_**0.24**<br>**0.73**_±_**1.20**<br>19.16_±_0.38<br>**0.54**_±_**0.61**<br>**0.94**_±_**1.53**<br>6.65_±_3.51<br>14.93_±_4.24<br>**0.04**_±_**0.07**|
+|PointCircle2<br>Reward_ ↑_<br>Cost_ ↓_|0.42_±_0.07<br>0.44_±_0.05<br>0.85_±_0.01<br>0.59_±_0.02<br>**0.44**_±_**0.06**<br>0.03_±_0.75<br>0.76_±_0.05<br>**0.55**_±_**0.01**<br>2.10_±_0.37<br>1.20_±_1.28<br>29.36_±_1.23<br>2.05_±_0.93<br>**0.10**_±_**0.09**<br>3.99_±_4.30<br>18.02_±_4.17<br>**0.91**_±_**1.46**|
+|PointGoal1<br>Reward_ ↑_<br>Cost_ ↓_|**0.22**_±_**0.02**<br>0.55_±_0.11<br>0.49_±_0.02<br>0.63_±_0.08<br>0.30_±_0.09<br>0.74_±_0.03<br>0.64_±_0.03<br>**0.06**_±_**0.06**<br>**0.91**_±_**0.42**<br>3.33_±_1.68<br>5.27_±_0.91<br>2.97_±_0.82<br>1.45_±_0.74<br>3.90_±_0.50<br>5.38_±_1.05<br>**0.09**_±_**0.11**|
+|PointGoal2<br>Reward_ ↑_<br>Cost_ ↓_|0.18_±_0.01<br>0.25_±_0.13<br>0.41_±_0.06<br>0.46_±_0.08<br>0.19_±_0.04<br>0.78_±_0.05<br>0.31_±_0.07<br>**0.13**_±_**0.05**<br>1.81_±_0.72<br>5.34_±_1.33<br>5.68_±_0.48<br>5.57_±_0.81<br>1.02_±_0.22<br>15.51_±_5.75<br>1.67_±_1.32<br>**0.81**_±_**0.31**|
+|AntVelo<br>Reward_ ↑_<br>Cost_ ↓_|**0.92**_±_**0.03**<br>**-1.01**_±_**0.00**<br>1.00_±_0.01<br>**0.97**_±_**0.02**<br>**0.88**_±_**0.05**<br>**-1.01**_±_**0.00**<br>**0.89**_±_**0.01**<br>**0.99**_±_**0.01**<br>**0.33**_±_**0.19**<br>**0.00**_±_**0.00**<br>11.82_±_5.56<br>**0.59**_±_**0.02**<br>**0.21**_±_**0.07**<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>**0.43**_±_**0.11**|
+|HalfCheetahVelo<br>Reward_ ↑_<br>Cost_ ↓_|**0.86**_±_**0.01**<br>0.67_±_0.05<br>**0.63**_±_**0.02**<br>**0.98**_±_**0.00**<br>**0.86**_±_**0.01**<br>**0.91**_±_**0.04**<br>**0.89**_±_**0.01**<br>**0.96**_±_**0.01**<br>**0.30**_±_**0.13**<br>8.56_±_6.19<br>**0.00**_±_**0.00**<br>**0.65**_±_**0.34**<br>**0.27**_±_**0.06**<br>**0.97**_±_**0.12**<br>**0.00**_±_**0.00**<br>**0.14**_±_**0.09**|
+|SwimmerVelo<br>Reward_ ↑_<br>Cost_ ↓_|**0.46**_±_**0.07**<br>0.20_±_0.20<br>0.59_±_0.07<br>0.66_±_0.01<br>0.45_±_0.06<br>**0.06**_±_**0.25**<br>**-0.02**_±_**0.05**<br>**0.21**_±_**0.19**<br>**0.80**_±_**0.19**<br>2.82_±_4.19<br>16.80_±_7.39<br>1.26_±_0.50<br>2.17_±_2.91<br>**0.91**_±_**1.57**<br>**0.23**_±_**0.20**<br>**0.00**_±_**0.00**|
+
+
+Table 2: Comparison of TD3BC and IQL across Bullet Safety Gym and Velocity tasks. Each cell
+shows reward ( _↑_ ) or cost ( _↓_ ) with standard deviation. **Bold** : safe agents ( _Cnorm_ _≤_ 1).
+
+|Method|CarRun DroneRun CarCircle DroneCircle AntVelocity HalfCheetahVelo|
+|---|---|
+|TD3BC<br>Reward_ ↑_<br>Cost_ ↓_|**0.97**_±_**0.00**<br>**0.36**_±_**0.12**<br>**0.69**_±_**0.01**<br>**0.53**_±_**0.02**<br>**0.99**_±_**0.01**<br>**0.96**_±_**0.01**<br>**0.02**_±_**0.03**<br>**0.30**_±_**0.52**<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>**0.43**_±_**0.11**<br>**0.14**_±_**0.09**|
+|IQL<br>Reward_ ↑_<br>Cost_ ↓_|**0.96**_±_**0.01**<br>**0.46**_±_**0.03**<br>**0.68**_±_**0.01**<br>**0.35**_±_**0.02**<br>**0.97**_±_**0.01**<br>**0.92**_±_**0.02**<br>**0.12**_±_**0.14**<br>**0.71**_±_**1.06**<br>**0.08**_±_**0.10**<br>**0.00**_±_**0.00**<br>**0.38**_±_**0.09**<br>**0.26**_±_**0.40**|
+
+
+**Evaluation Across Varying Cost Limits.** While our main results are for the strict cost thresholds ( _κ_
+equals 5 or 10) representative of safety-critical settings, we also evaluate CARL under more relaxed
+safety constraints: cost limits of 20 and 40 for Bullet tasks, and 40 and 80 for Safety Gym tasks,
+following the setup introduced in DSRL. Based on the results shown in Table 1, the safest baseline
+methods after CARL are FISOR, CAPS, CPQ, and CCAC. However, FISOR is trained solely to
+minimize cost and does not adapt to different cost limits. CPQ, while safe in some tasks, achieves
+
+
+8
+
+
+very low rewards in two of the safe results. Therefore, for the varying cost limit analysis, we focus
+our comparison on CAPS and CCAC, both of which show better balance for safety and reward
+performance.
+
+
+Figures 2 show that CARL improves rewards as the cost budget increases, while keeping normalized
+costs within the safety threshold ( _≤_ 1). On the challenging **CarCircle2** task, all methods are unsafe
+at budget 10. When the budget rises to 40 or 80, CARL attains both safety and higher rewards,
+whereas CAPS and CCAC remain unsafe (Table 6, Appendix). This demonstrates CARL’s ability
+to exploit larger budgets where other methods fail.
+
+
+**Training** **Only** **on** **Unsafe**
+**Trajectories.** We perform
+an ablation where we train
+CARL using either the full
+dataset, or only unsafe trajectories (those with cumulative cost exceeding the
+threshold ( _κ_ = 5 or 10)).
+
+
+Figures 3 shows results for
+training with only unsafe Figure 2: Results for CARL with varying cost budget limits on three
+trajectories (blue). CARL tasks: rewards vs. cost budget (left) and costs vs. cost budget (right).
+generates 60 trajectories
+per task (20 from each of
+the three seeds), shown in red. Despite the absence of safe training examples, these trajectories
+remain within the cost threshold (dashed line) while achieving strong rewards. In BALLCIRCLE,
+CARL attains rewards around 600–650, enforcing safety with little loss in rewards. In ANTVELOCITY, it reaches near-optimal rewards of _∼_ 3000 while staying safe, combining strict constraint
+satisfaction with top-level performance. In ANTCIRCLE, CARL shifts trajectories into the safe zone
+while still reaching rewards up to 300+, comparable to the best unsafe cases near the boundary,
+showing that meaningful reward performance can be retained under strict safety. Overall, these
+results highlight CARL’s ability to recover safe and competitive behavior from purely unsafe data
+through reward relabeling: transforming unsafe dataset trajectories into safe ones and shifting behavior into the feasible region without substantial loss in rewards.
+
+
+Figure 3: Results for CARL-generated trajectories (red) when trained on unsafe data, compared
+against unsafe dataset trajectories (blue) on three representative tasks.
+
+
+We also evaluate a naive hard-filtering variant (Appendix Table 8), which removes unsafe transitions
+entirely, and find that it fails on nearly all tasks, underscoring the importance of CARL’s reward
+relabeling rather than simple data exclusion.
+
+
+7 SUMMARY
+
+
+This paper introduces an embarrassingly simple framework for solving offline safe reinforcement
+learning (OSRL). It reformulates the OSRL problem into an unconstrained optimization problem
+that requires no tuning of Lagrangian multipliers when compared to the vast majority of the previous methods. This framework allows us to naturally leverage powerful off-the-shelf offline RL
+algorithms and advances directly to effectively solve OSRL problems via constraint-aware reward
+relabeling. Experimental results on the DSRL benchmark demonstrate the remarkably strong performance of the proposed framework compared to state-of-the-art OSRL methods.
+
+
+9
+
+
+**Reproducibility** **Statement.** We include full implementation details in Appendix C, including
+hyperparameters and training settings. All datasets used are publicly available. An anonymous link
+to the source code is provided in the abstract to support reproducibility of our experiments.
+
+
+REFERENCES
+
+
+Gaon An, Seungyong Moon, Jang-Hyun Kim, and Hyun Oh Song. Uncertainty-based offline reinforcement learning with diversified q-ensemble. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 34:7436–7447, 2021.
+
+
+Chenjia Bai, Lingxiao Wang, Zhuoran Yang, Zhi-Hong Deng, Animesh Garg, Peng Liu, and Zhaoran Wang. Pessimistic bootstrapping for uncertainty-driven offline reinforcement learning. In
+_International Conference on Learning Representations_, 2022. [URL https://openreview.](https://openreview.net/forum?id=Y4cs1Z3HnqL)
+[net/forum?id=Y4cs1Z3HnqL.](https://openreview.net/forum?id=Y4cs1Z3HnqL)
+
+
+Yassine Chemingui, Aryan Deshwal, Honghao Wei, Alan Fern, and Jana Doppa. Constraint-adaptive
+policy switching for offline safe reinforcement learning. In _Proceedings of the AAAI Conference_
+_on Artificial Intelligence_, volume 39, pp. 15722–15730, 2025.
+
+
+Huayu Chen, Cheng Lu, Chengyang Ying, Hang Su, and Jun Zhu. Offline reinforcement learning
+via high-fidelity generative behavior modeling. In _The_ _Eleventh_ _International_ _Conference_ _on_
+_Learning Representations_, 2023.
+
+
+Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Misha Laskin, Pieter Abbeel,
+Aravind Srinivas, and Igor Mordatch. Decision transformer: Reinforcement learning via sequence
+modeling. _Advances in neural information processing systems_, 34:15084–15097, 2021.
+
+
+Rafael Figueiredo Prudencio, Marcos R. O. A. Maximo, and Esther Luna Colombini. A survey on
+offline reinforcement learning: Taxonomy, review, and open problems. _IEEE_ _Transactions_ _on_
+_Neural Networks and Learning Systems_, 35(8):10237–10257, 2024. doi: 10.1109/TNNLS.2023.
+3250269.
+
+
+Scott Fujimoto and Shixiang Shane Gu. A minimalist approach to offline reinforcement learning.
+_Advances in neural information processing systems_, 34:20132–20145, 2021.
+
+
+Scott Fujimoto, David Meger, and Doina Precup. Off-policy deep reinforcement learning without
+exploration. In _International conference on machine learning_, pp. 2052–2062. PMLR, 2019.
+
+
+Javier Garcıa and Fernando Fern´andez. A comprehensive curvey on safe reinforcement learning.
+_Journal of Machine Learning Research_, 16(1):1437–1480, 2015.
+
+
+Ze Gong, Akshat Kumar, and Pradeep Varakantham. Offline safe reinforcement learning using
+trajectory classification. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, volume 39, pp. 16880–16887, 2025.
+
+
+Sven Gronauer. Bullet-safety-gym: A framework for constrained reinforcement learning. Technical
+report, mediaTUM, 2022.
+
+
+Shangding Gu, Long Yang, Yali Du, Guang Chen, Florian Walter, Jun Wang, and Alois Knoll. A
+review of safe reinforcement learning: Methods, theories and applications. _IEEE Transactions on_
+_Pattern Analysis and Machine Intelligence_, 2024.
+
+
+Zijian Guo, Weichao Zhou, Shengao Wang, and Wenchao Li. Constraint-conditioned actor-critic
+for offline safe reinforcement learning. In _The Thirteenth International Conference on Learning_
+_Representations_, 2025.
+
+
+Philippe Hansen-Estruch, Ilya Kostrikov, Michael Janner, Jakub Grudzien Kuba, and Sergey Levine.
+Idql: Implicit q-learning as an actor-critic method with diffusion policies. _arXiv_ _preprint_
+_arXiv:2304.10573_, 2023.
+
+
+Michael Janner, Qiyang Li, and Sergey Levine. Offline reinforcement learning as one big sequence
+modeling problem. _Advances in neural information processing systems_, 34:1273–1286, 2021.
+
+
+10
+
+
+Michael Janner, Yilun Du, Joshua B Tenenbaum, and Sergey Levine. Planning with diffusion for
+flexible behavior synthesis. _arXiv preprint arXiv:2205.09991_, 2022.
+
+
+Natasha Jaques, Asma Ghandeharioun, Judy Hanwen Shen, Craig Ferguson, Agata Lapedriza, Noah
+Jones, Shixiang Gu, and Rosalind Picard. Way off-policy batch deep reinforcement learning
+of human preferences in dialog, 2020. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=rJl5rRVFvH)
+[rJl5rRVFvH.](https://openreview.net/forum?id=rJl5rRVFvH)
+
+
+Jiaming Ji, Jiayi Zhou, Borong Zhang, Juntao Dai, Xuehai Pan, Ruiyang Sun, Weidong Huang,
+Yiran Geng, Mickel Liu, and Yaodong Yang. Omnisafe: An infrastructure for accelerating safe
+reinforcement learning research. _Journal_ _of_ _Machine_ _Learning_ _Research_, 25(285):1–6, 2024.
+[URL http://jmlr.org/papers/v25/23-0681.html.](http://jmlr.org/papers/v25/23-0681.html)
+
+
+Rahul Kidambi, Aravind Rajeswaran, Praneeth Netrapalli, and Thorsten Joachims. Morel: Modelbased offline reinforcement learning. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and
+H. Lin (eds.), _Advances in Neural Information Processing Systems_, volume 33, pp. 21810–21823.
+Curran Associates, Inc., 2020. URL [https://proceedings.neurips.cc/paper_](https://proceedings.neurips.cc/paper_files/paper/2020/file/f7efa4f864ae9b88d43527f4b14f750f-Paper.pdf)
+[files/paper/2020/file/f7efa4f864ae9b88d43527f4b14f750f-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/f7efa4f864ae9b88d43527f4b14f750f-Paper.pdf)
+
+
+Prajwal Koirala, Zhanhong Jiang, Soumik Sarkar, and Cody Fleming. Latent safety-constrained
+policy approach for safe offline reinforcement learning. _arXiv preprint arXiv:2412.08794_, 2024.
+
+
+Ilya Kostrikov, Ashvin Nair, and Sergey Levine. Offline reinforcement learning with implicit qlearning. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2022. URL [https://](https://openreview.net/forum?id=68n2s9ZJWF8)
+[openreview.net/forum?id=68n2s9ZJWF8.](https://openreview.net/forum?id=68n2s9ZJWF8)
+
+
+Aviral Kumar, Justin Fu, Matthew Soh, George Tucker, and Sergey Levine. Stabilizing off-policy
+q-learning via bootstrapping error reduction. _Advances in neural information processing systems_,
+32, 2019.
+
+
+Hoang Le, Cameron Voloshin, and Yisong Yue. Batch policy learning under constraints. In _Inter-_
+_national Conference on Machine Learning_, pp. 3703–3712. PMLR, 2019.
+
+
+Jongmin Lee, Cosmin Paduraru, Daniel J Mankowitz, Nicolas Heess, Doina Precup, Kee-Eung Kim,
+and Arthur Guez. COptiDICE: Offline constrained reinforcement learning via stationary distribution correction estimation. In _International Conference on Learning Representations_, 2022. URL
+[https://openreview.net/forum?id=FLA55mBee6Q.](https://openreview.net/forum?id=FLA55mBee6Q)
+
+
+Sergey Levine, Aviral Kumar, George Tucker, and Justin Fu. Offline reinforcement learning: Tutorial, review, and perspectives on open problems. _arXiv preprint arXiv:2005.01643_, 2020.
+
+
+Qian Lin, Bo Tang, Zifan Wu, Chao Yu, Shangqin Mao, Qianlong Xie, Xingxing Wang, and Dong
+Wang. Safe offline reinforcement learning with real-time budget constraints. In _International_
+_Conference on Machine Learning_, pp. 21127–21152. PMLR, 2023.
+
+
+Zuxin Liu, Zijian Guo, Yihang Yao, Zhepeng Cen, Wenhao Yu, Tingnan Zhang, and Ding Zhao.
+Constrained decision transformer for offline safe reinforcement learning. In _International_ _Con-_
+_ference on Machine Learning_, pp. 21611–21630. PMLR, 2023.
+
+
+Zuxin Liu, Zijian Guo, Haohong Lin, Yihang Yao, Jiacheng Zhu, Zhepeng Cen, Hanjiang Hu, Wenhao Yu, Tingnan Zhang, Jie Tan, and Ding Zhao. Datasets and benchmarks for offline safe reinforcement learning. _Journal of Data-centric Machine Learning Research_, 2024.
+
+
+Jiafei Lyu, Xiaoteng Ma, Xiu Li, and Zongqing Lu. Mildly conservative q-learning for offline
+reinforcement learning. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:1711–1724,
+2022.
+
+
+Nicholas Polosky, Bruno C Da Silva, Madalina Fiterau, and Jithin Jagannath. Constrained offline policy optimization. In _International Conference on Machine Learning_, pp. 17801–17810.
+PMLR, 2022.
+
+
+Alex Ray, Joshua Achiam, and Dario Amodei. Benchmarking safe exploration in deep reinforcement
+learning. _arXiv preprint arXiv:1910.01708_, 2019.
+
+
+11
+
+
+Marc Rigter, Bruno Lacerda, and Nick Hawes. Rambo-rl: Robust adversarial model-based offline
+reinforcement learning. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:16082–16097,
+2022.
+
+
+Jonah Siekmann, Kevin Green, John Warila, Alan Fern, and Jonathan Hurst. Blind bipedal stair
+traversal via sim-to-real reinforcement learning. _arXiv preprint arXiv:2105.08328_, 2021.
+
+
+David Silver, Aja Huang, Chris J Maddison, Arthur Guez, Laurent Sifre, George Van Den Driessche,
+Julian Schrittwieser, Ioannis Antonoglou, Veda Panneershelvam, Marc Lanctot, et al. Mastering
+the game of go with deep neural networks and tree search. _nature_, 529(7587):484–489, 2016.
+
+
+Aivar Sootla, Alexander I Cowen-Rivers, Taher Jafferjee, Ziyan Wang, David H Mguni, Jun Wang,
+and Haitham Ammar. Saut´e rl: Almost surely safe reinforcement learning using state augmentation. In _International Conference on Machine Learning_, pp. 20423–20443. PMLR, 2022.
+
+
+Geraud Nangue Tasse, Tamlin Love, Mark Nemecek, Steven James, and Benjamin Rosman. Rosarl:
+Reward-only safe reinforcement learning. _arXiv preprint arXiv:2306.00035_, 2023.
+
+
+Chen Tessler, Daniel J Mankowitz, and Shie Mannor. Reward constrained policy optimization. _arXiv_
+_preprint arXiv:1805.11074_, 2018.
+
+
+Akifumi Wachi, Wataru Hashimoto, Xun Shen, and Kazumune Hashimoto. Safe exploration in reinforcement learning: A generalized formulation and algorithms. _Advances in Neural Information_
+_Processing Systems_, 36:29252–29272, 2023.
+
+
+Akifumi Wachi, Xun Shen, and Yanan Sui. A survey of constraint formulations in safe reinforcement
+learning. _arXiv preprint arXiv:2402.02025_, 2024.
+
+
+Kerong Wang, Hanye Zhao, Xufang Luo, Kan Ren, Weinan Zhang, and Dongsheng Li. Bootstrapped
+transformer for offline reinforcement learning. _Advances in Neural Information Processing Sys-_
+_tems_, 35:34748–34761, 2022.
+
+
+Jialong Wu, Haixu Wu, Zihan Qiu, Jianmin Wang, and Mingsheng Long. Supported policy optimization for offline reinforcement learning. _Advances in Neural Information Processing Systems_,
+35:31278–31291, 2022.
+
+
+Yifan Wu, George Tucker, and Ofir Nachum. Behavior regularized offline reinforcement learning,
+2020. [URL https://openreview.net/forum?id=BJg9hTNKPH.](https://openreview.net/forum?id=BJg9hTNKPH)
+
+
+Haoran Xu, Li Jiang, Li Jianxiong, and Xianyuan Zhan. A policy-guided imitation approach for
+offline reinforcement learning. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:4085–
+4098, 2022a.
+
+
+Haoran Xu, Xianyuan Zhan, and Xiangyu Zhu. Constraints penalized q-learning for safe offline reinforcement learning. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 36,
+pp. 8753–8760, 2022b.
+
+
+Rui Yang, Chenjia Bai, Xiaoteng Ma, Zhaoran Wang, Chongjie Zhang, and Lei Han. RORL: Robust offline reinforcement learning via conservative smoothing. In Alice H. Oh, Alekh Agarwal,
+Danielle Belgrave, and Kyunghyun Cho (eds.), _Advances in Neural Information Processing Sys-_
+_tems_, 2022. [URL https://openreview.net/forum?id=_QzJJGH_KE.](https://openreview.net/forum?id=_QzJJGH_KE)
+
+
+Yihang Yao, Zuxin Liu, Zhepeng Cen, Jiacheng Zhu, Wenhao Yu, Tingnan Zhang, and Ding
+Zhao. Constraint-conditioned policy optimization for versatile safe reinforcement learning. In
+_Thirty-seventh_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_, 2023. URL [https:](https://openreview.net/forum?id=FdtdjQpAwJ)
+[//openreview.net/forum?id=FdtdjQpAwJ.](https://openreview.net/forum?id=FdtdjQpAwJ)
+
+
+Yihang Yao, Zhepeng Cen, Wenhao Ding, Haohong Lin, Shiqi Liu, Tingnan Zhang, Wenhao Yu,
+and Ding Zhao. Oasis: Conditional distribution shaping for offline safe reinforcement learning.
+_Advances in Neural Information Processing Systems_, 37:78451–78478, 2024.
+
+
+12
+
+
+Tianhe Yu, Garrett Thomas, Lantao Yu, Stefano Ermon, James Y Zou, Sergey Levine,
+Chelsea Finn, and Tengyu Ma. Mopo: Model-based offline policy optimization. In
+H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.), _Advances_ _in_ _Neu-_
+_ral_ _Information_ _Processing_ _Systems_, volume 33, pp. 14129–14142. Curran Associates, Inc.,
+2020. URL [https://proceedings.neurips.cc/paper_files/paper/2020/](https://proceedings.neurips.cc/paper_files/paper/2020/file/a322852ce0df73e204b7e67cbbef0d0a-Paper.pdf)
+[file/a322852ce0df73e204b7e67cbbef0d0a-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/a322852ce0df73e204b7e67cbbef0d0a-Paper.pdf)
+
+
+Haobo Zhang, Xiyue Peng, Honghao Wei, and Xin Liu. Safe and efficient: A primal-dual method
+for offline convex cmdps under partial data coverage. _Advances in Neural Information Processing_
+_Systems_, 37:34239–34269, 2024.
+
+
+Yinan Zheng, Jianxiong Li, Dongjie Yu, Yujie Yang, Shengbo Eben Li, Xianyuan Zhan, and Jingjing
+Liu. Safe offline reinforcement learning with feasibility-guided diffusion model. In _The Twelfth_
+_International Conference on Learning Representations_, 2024. [URL https://openreview.](https://openreview.net/forum?id=j5JvZCaDM0)
+[net/forum?id=j5JvZCaDM0.](https://openreview.net/forum?id=j5JvZCaDM0)
+
+
+13
+
+
+A EXTENDED RELATED WORK DISCUSSION
+
+
+A recurring theme across safe reinforcement learning is the idea of discouraging unsafe actions
+through penalties, though the way those penalties are implemented differs across methods. In the
+online setting, MASE (Wachi et al., 2023) integrates uncertainty quantification with an emergency
+stop: if no action can be certified safe, the episode is halted and a large penalty is applied. Saut´e RL
+Sootla et al. (2022) also relies on penalties but does so through a state augmentation mechanism:
+each state is paired with a remaining safety budget, and once the budget runs out, the trajectory
+transitions into an absorbing unsafe state with a per task tuned large penalty. This budget-based
+reformulation means that penalties are not just added externally but become part of the dynamics,
+shaping exploration as the agent trains. In both approaches, penalties are tightly coupled with the
+exploration process, ensuring that unsafe behavior is discouraged while the agent is still gathering
+data.
+
+
+CARL operates under a different contract. In the offline setting, trajectories are fixed in advance:
+there is no opportunity to terminate episodes at will, and unsafe trajectories cannot simply be avoided
+during training. The evaluation of a policy must account for the costs accumulated across complete
+episodes, regardless of whether individual transitions are safe or not. This creates a distinctive
+challenge: unsafe transitions are often plentiful in available datasets, and discarding them reduces
+coverage, while treating them naively may compromise deployment safety. CARL addresses this
+challenge by transforming unsafe transitions into useful training signal. Rather than filtering or
+generating alternative trajectories, it directly relabels rewards with large penalties whenever the cost
+critic predicts that a safety budget would be violated. This allows learning to leverage the entire
+dataset, including unsafe portions, while still driving the learned policy toward safe behavior.
+
+
+Placed in the broader landscape of offline safe RL, this perspective contrasts with approaches that
+construct explicit feasibility regions Zheng et al. (2024), rely on constraint-conditioned generative
+models (Guo et al., 2025), or employ diffusion-based feasibility shaping (Yao et al., 2024). Unlike
+CPQ (Xu et al., 2022b), which masks the policy and zeroes out future reward value estimates for
+unsafe actions, CARL employs active reward penalization to provide a continuous, negative gradient
+signal for such unsafe actions. Those methods introduce additional modeling complexity to estimate
+which actions are permissible. CARL, in comparison, emphasizes a minimalist path: penalties are
+imposed through direct reward relabeling, and the resulting relabeled dataset can be handled by any
+strong offline RL backbone. Empirically, this strategy proves effective even in challenging regimes
+such as small cost budgets or datasets composed entirely of unsafe trajectories. In such settings, the
+ability to repurpose unsafe data as penalized signal is particularly advantageous, as it avoids both
+the brittleness of feasibility approximations and the conservatism of discarding large parts of the
+dataset.
+
+
+From this viewpoint, the contribution of CARL is not a departure from the penalty-based philosophy
+shared across safe RL, but rather a demonstration that in the offline regime, the most straightforward
+instantiation of that philosophy, reward relabeling informed by cost estimates,can be both robust and
+broadly applicable. This observation highlights that in certain cases, simplicity in how penalties are
+enforced may offer a more reliable path to safety than more sophisticated mechanisms.
+
+
+B ADDITIONAL RESULTS
+
+
+B.1 ROBUSTNESS TO OPE ESTIMATION ERRORS
+
+
+Accurate off-policy evaluation (OPE) is a challenge for all offline safe RL methods that rely on
+value estimation. However, the mechanism by which estimation errors affect the policy differs significantly between approaches. Lagrangian methods update dual variables based on the magnitude
+of the constraint violation; consequently, errors in the cost value function _Qc_ can cause the Lagrange
+multiplier to grow arbitrarily large, destabilizing the policy.
+
+
+In contrast, CARL employs a binary penalty mechanism: a fixed penalty is applied only if the cost
+limit is violated. This structure clamps the error signal, preventing estimation inaccuracies from
+scaling the penalty magnitude. To empirically verify this robustness, we conducted an ablation
+study assessing the method’s sensitivity to OPE miscalibration.
+
+
+14
+
+
+Table 3: CARL performance robustness under synthetic OPE noise. The normalized cost threshold
+is 1. _↑_ indicates higher is better (reward); _↓_ indicates lower is better (cost, with values _≤_ 1 considered
+safe). Each cell shows the mean with standard deviation. **Bold** : safe agents ( _Cnorm_ _≤_ 1). Gray:
+unsafe agents.
+
+
+**Noise level**
+**0.1** **0.2** **0.3** **0.5**
+
+
+**Task** R _↑_ C _↓_ R _↑_ C _↓_ R _↑_ C _↓_ R _↑_ C _↓_
+
+
+BallCircle **0.73** _±_ **0.01** **0.35** _±_ **0.24** **0.75** _±_ **0.01** **0.11** _±_ **0.05** 0.49 _±_ 0.33 2.85 _±_ 4.61 0.87 _±_ 0.02 10.56 _±_ 0.81
+CarCircle **0.70** _±_ **0.01** **0.02** _±_ **0.03** **0.69** _±_ **0.04** **0.00** _±_ **0.00** **0.71** _±_ **0.03** **0.00** _±_ **0.00** 0.90 _±_ 0.01 16.73 _±_ 0.44
+DroneCircle **0.52** _±_ **0.03** **0.00** _±_ **0.00** **0.55** _±_ **0.01** **0.00** _±_ **0.00** **-0.15** _±_ **0.12** **0.48** _±_ **0.44** 0.50 _±_ 0.53 13.40 _±_ 7.13
+AntCircle **0.60** _±_ **0.02** **0.09** _±_ **0.10** **0.47** _±_ **0.05** **0.00** _±_ **0.00** **0.33** _±_ **0.19** **0.71** _±_ **0.27** 0.70 _±_ 0.08 20.62 _±_ 3.34
+
+
+**Noise Injection Methodology.** During training, we randomly inverted the decision of the cost critic
+(flipping “safe” to “unsafe” and vice versa) with a probability _p ∈{_ 10% _,_ 20% _,_ 30% _,_ 50% _}_ to inject
+synthetic noise into the relabeling process.
+
+
+As detailed in Table 3, our results demonstrate that the policy remains safe under moderate levels of
+noise. Using a normalized cost _≤_ 1 as the safety criterion, all evaluated tasks remained safe at noise
+levels of 10% and 20%, despite mild degradation in rewards. This indicates that reward performance
+deteriorates before safety is compromised, which is the intended behavior of our safety mechanism.
+
+
+At 30% noise, we observed the onset of instability: BallCircle became unsafe (normalized cost
+2.85) and DroneCircle suffered negative rewards ( _−_ 0 _._ 15), while CarCircle and AntCircle remained
+safe. Finally, at 50% noise, all tasks incurred large safety violations (normalized costs 10–20).
+This regime corresponds to noise levels where the input signal is largely uninformative, resulting in
+behavior consistent with random inputs.
+
+
+These results demonstrate that CARL does not rely on precise, pointwise accuracy of the cost estimator ( _Qc_ ). Instead, the method is functionally robust to significant signal degradation. Even
+when nearly one-third of the safety labels are noisy, the aggregate topological signal provided by
+the critic remains strong enough to guide the policy into the feasible region. This resilience validates the design choice of the iterative update cycle ( _M_ = _K_ = 1); by co-evolving the policy and
+critic incrementally, transient estimation errors are mitigated over the course of training rather than
+accumulating catastrophically.
+
+
+Furthermore, the collapse of safety at the 50% noise level serves as a critical control. It confirms that
+the safety observed in standard runs is causally driven by the _Qc_ signal, and not by external factors
+or environment design, demonstrating that the critic is indeed providing the necessary directional
+guidance.
+
+
+**Control** **Experiment:** **Random** **Penalties.** To further isolate the contribution of the cost critic,
+we conducted a second control experiment where we removed the _Qc_ signal entirely. Instead of
+relabeling based on estimated cost, we applied penalties to a random subset of transitions (ranging
+from 70% to 90% of the dataset) to simulate the distribution of penalties _without_ the topological
+information provided by the critic.
+
+
+The agent failed to achieve safety across the tasks under this random penalty regime, as shown in
+Table 4. This failure is significant as it directly refutes the potential critique that CARL achieves
+safety merely through over-conservatism or indiscriminate data suppression. The results demonstrate that safety in these environments cannot be achieved simply by avoiding a large percentage of
+the state–action space; rather, it requires avoiding _specific_, structurally unsafe transitions.
+
+
+This corroborates our hypothesis that, despite the inherent challenges of OPE, the cost critic is
+successfully identifying the correct manifold of unsafe state–action pairs. The penalties in CARL
+are not merely acting as regularization; they are effectively shaping the decision boundary. Random
+penalties disrupt this boundary, leading to constraint violations, whereas _Qc_ -guided penalties, even
+with the noise demonstrated in the previous experiment, successfully preserve it.
+
+
+15
+
+
+Table 4: Control experiment results using Random Penalties. The normalized cost threshold is 1.
+_↑_ indicates higher is better (reward); _↓_ indicates lower is better (cost, with values _≤_ 1 considered
+safe). Each cell shows the mean with standard deviation. **Bold** : safe agents ( _Cnorm_ _≤_ 1). Gray:
+unsafe agents.
+
+
+**Relabeling ratio**
+**0.7** **0.9**
+
+
+**Task** R _↑_ C _↓_ R _↑_ C _↓_
+
+
+BallCircle 0.54 _±_ 0.36 6.86 _±_ 1.06 0.01 _±_ 0.01 11.84 _±_ 20.50
+CarCircle 0.84 _±_ 0.03 15.09 _±_ 0.35 0.76 _±_ 0.03 13.44 _±_ 1.33
+DroneCircle 0.44 _±_ 0.52 8.68 _±_ 6.11 0.49 _±_ 0.53 9.49 _±_ 6.83
+AntCircle 0.64 _±_ 0.02 18.83 _±_ 2.54 0.60 _±_ 0.07 17.47 _±_ 1.50
+
+
+B.2 PENALTY MAGNITUDE ABLATION: _R_ max VS. _V_ max
+
+
+Table 5 compares CARL trained with two penalty magnitudes: _R_ max, the maximum single-step
+reward in the dataset, and _V_ max = _R_ max _/_ (1 _−_ _γ_ ), the maximum possible discounted return. Using
+_R_ max produces a smaller penalty and thus a less aggressive correction, while _V_ max enforces harsher
+penalties. The results confirm this intuition: CARL with _V_ max remains safe in most tasks but often
+at the cost of lower rewards compared to the _R_ max variant. For instance, rewards drop from 0.69
+_→_ 0.50 in CARCIRCLE and 0.60 _→_ 0.40 in ANTCIRCLE, while in DRONECIRCLE (0.53 _→_ 0.02)
+and ANTVELOCITY (0.99 _→_ 0.38) the decline is particularly severe. Nevertheless, even under
+the stricter _V_ max penalty, CARL outperforms other baselines: it remains safe in far more tasks, and
+when safe, its performance is frequently the best or second-best (e.g., BALLCIRCLE, POINTGOAL2,
+SWIMMERVELOCITY). Overall, _R_ max provides the best trade-off between safety and reward, and
+has the added advantage of not depending on the discount factor _γ_, thereby avoiding sensitivity to
+this extra hyperparameter.
+
+
+To provide a broader comparison of stability, we evaluated Lagrangian extensions of offline RL
+methods, BEAR-Lag (Kumar et al., 2019) and BCQ-Lag (Fujimoto et al., 2019), alongside the
+reported baselines. As detailed in Table [REFERENCE NEW TABLE], these methods frequently
+failed to satisfy cost constraints: BEAR-Lag and BCQ-Lag were safe on only 2 and 1 of the 15
+tasks evaluated, respectively. In comparison, CARL consistently yields safe policies. These results
+reinforce the observation that while Lagrangian methods possess theoretical guarantees, they are
+difficult to stabilize in offline scenarios, whereas CARL consistently achieves constraint satisfaction
+across diverse environments.
+
+
+B.3 EXTRA COST LIMITS
+
+
+While our main results emphasize strict cost thresholds ( _κ_ = 5 _,_ 10), we also investigate performance
+under more relaxed safety budgets: cost limits of 20 and 40 for Bullet tasks, and 40 and 80 for
+Safety Gym tasks, following the DSRL setup. This analysis addresses a natural concern: since
+CARL penalizes unsafe transitions harshly, one might expect it to perform well only under tight
+constraints, but to underutilize more generous budgets. Table 6 shows that this is not the case.
+CARL continues to adapt effectively to larger budgets, often outperforming more the sophisticated
+methods of CAPS and CCAC.
+
+
+We evaluate across 16 tasks in total, 8 from Bullet and 8 from Safety Gym, each under two cost
+limits, yielding 32 evaluations. Among these, CARL is the best performer in 16 cases, CAPS in 13,
+and CCAC in 4. CARL is unsafe only twice (both in BALLCIRCLE), whereas CAPS is unsafe in 7
+cases and CCAC fails in 20.
+
+
+In the Bullet tasks with larger budgets ( _κ_ = 20 _,_ 40), CARL continues to adapt effectively despite
+its simple penalty mechanism. On BALLRUN, CARL consistently produces safe policies, whereas
+CAPS and CCAC violate the cost threshold. In ANTCIRCLE, all methods remain safe, but CARL
+achieves the highest rewards across both budgets. The only exception is BALLCIRCLE, where CARL
+attains high rewards but fails to satisfy the safety constraint. Importantly, across the remaining
+15 out of 16 tasks, CARL maintains safety while matching or exceeding baseline rewards. This
+
+
+16
+
+
+Table 5: CARL results with _V_ max vs. _R_ max penalties, reported with normalized rewards and costs.
+The normalized cost threshold is 1 ( _κ_ = 5 or 10). _↑_ indicates higher is better (reward); _↓_ indicates
+lower is better (cost, with values _≤_ 1 considered safe). Each cell shows the mean with standard
+deviation. **Bold** : safe agents ( _Cnorm_ _≤_ 1). Gray: unsafe agents. **Blue bold** : best safe performance.
+
+
+**Tasks** BCQ-Lag BEAR-Lag CPQ CDT CAPS CCAC FISOR CARL CARL _Vmax_
+
+|Col1|Bullet Gym Tasks: κ = 5|
+|---|---|
+|BallRun<br>Reward_ ↑_<br>Cost_ ↓_|0.67_±_0.24<br>0.53_±_0.47<br>0.09_±_0.26<br>0.27_±_0.09<br>**0.07**_±_**0.05**<br>**0.31**_±_**0.01**<br>0.09_±_0.07<br>**0.28**_±_**0.02**<br>**0.29**_±_**0.01**<br>11.33_±_3.69<br>18.60_±_0.35<br>2.20_±_2.88<br>2.57_±_3.23<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>1.28_±_1.70<br>**0.00**_±_**0.00**<br>**0.67**_±_**1.15**|
+|CarRun<br>Reward_ ↑_<br>Cost_ ↓_|**0.86**_±_**0.08**<br>0.27_±_1.20<br>**0.93**_±_**0.01**<br>**0.99**_±_**0.00**<br>**0.97**_±_**0.00**<br>1.82_±_0.84<br>**0.74**_±_**0.01**<br>**0.97**_±_**0.00**<br>0.97_±_0.02<br>**0.83**_±_**0.76**<br>30.27_±_10.48<br>**0.20**_±_**0.18**<br>**0.90**_±_**0.34**<br>**0.11**_±_**0.17**<br>24.57_±_20.94<br>**0.00**_±_**0.00**<br>**0.02**_±_**0.03**<br>1.92_±_2.49|
+|DroneRun<br>Reward_ ↑_<br>Cost_ ↓_|0.74_±_0.06<br>-0.18_±_0.09<br>0.29_±_0.11<br>**0.58**_±_**0.00**<br>0.41_±_0.06<br>0.50_±_0.08<br>0.31_±_0.04<br>**0.36**_±_**0.12**<br>**0.37**_±_**0.03**<br>21.45_±_2.50<br>16.31_±_9.49<br>2.35_±_4.08<br>**0.07**_±_**0.07**<br>5.70_±_3.08<br>16.29_±_9.35<br>2.52_±_1.10<br>**0.30**_±_**0.52**<br>**0.08**_±_**0.14**|
+|AntRun<br>Reward_ ↑_<br>Cost_ ↓_|0.81_±_0.05<br>**0.01**_±_**0.02**<br>**0.03**_±_**0.05**<br>0.70_±_0.03<br>0.53_±_0.13<br>**0.03**_±_**0.10**<br>**0.43**_±_**0.02**<br>**0.36**_±_**0.09**<br>**0.30**_±_**0.20**<br>22.09_±_2.54<br>**0.00**_±_**0.01**<br>**0.05**_±_**0.08**<br>1.66_±_0.24<br>2.03_±_2.17<br>**0.00**_±_**0.00**<br>**0.27**_±_**0.15**<br>**0.60**_±_**0.41**<br>**0.82**_±_**1.37**|
+|BallCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.69_±_0.03<br>0.85_±_0.04<br>0.56_±_0.10<br>0.61_±_0.17<br>**0.33**_±_**0.02**<br>0.47_±_0.38<br>**0.32**_±_**0.05**<br>**0.69**_±_**0.03**<br>**0.59**_±_**0.01**<br>7.55_±_1.95<br>10.54_±_1.74<br>1.11_±_1.92<br>2.03_±_1.39<br>**0.01**_±_**0.02**<br>10.19_±_17.65<br>**0.00**_±_**0.00**<br>**0.33**_±_**0.23**<br>**0.00**_±_**0.00**|
+|CarCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.62_±_0.05<br>0.74_±_0.06<br>**0.71**_±_**0.02**<br>0.71_±_0.01<br>**0.40**_±_**0.03**<br>0.70_±_0.01<br>**0.37**_±_**0.02**<br>**0.69**_±_**0.01**<br>**0.50**_±_**0.03**<br>8.73_±_1.78<br>7.51_±_1.45<br>**0.00**_±_**0.00**<br>1.58_±_0.57<br>**0.03**_±_**0.03**<br>1.61_±_0.51<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**|
+|DroneCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.66_±_0.05<br>0.86_±_0.07<br>**-0.21**_±_**0.04**<br>0.55_±_0.01<br>**0.36**_±_**0.02**<br>**0.43**_±_**0.04**<br>**0.48**_±_**0.01**<br>**0.53**_±_**0.02**<br>**0.02**_±_**0.15**<br>6.09_±_3.08<br>15.90_±_2.51<br>**0.70**_±_**0.41**<br>1.14_±_0.06<br>**0.00**_±_**0.00**<br>**0.06**_±_**0.07**<br>**0.17**_±_**0.15**<br>**0.00**_±_**0.00**<br>**0.39**_±_**0.53**|
+|AntCircle<br>Reward_ ↑_<br>Cost_ ↓_|0.54_±_0.10<br>0.69_±_0.03<br>**0.00**_±_**0.00**<br>0.45_±_0.05<br>**0.33**_±_**0.05**<br>**0.49**_±_**0.07**<br>**0.24**_±_**0.02**<br>**0.60**_±_**0.01**<br>**0.40**_±_**0.01**<br>9.39_±_3.21<br>19.03_±_0.84<br>**0.00**_±_**0.00**<br>6.59_±_1.42<br>**0.00**_±_**0.00**<br>**0.02**_±_**0.03**<br>**0.04**_±_**0.08**<br>**0.02**_±_**0.03**<br>**0.00**_±_**0.01**|
+
+
+|Col1|Safety Gym Tasks: κ = 10|
+|---|---|
+|PointCircle1<br>Reward_ ↑_<br>Cost_ ↓_|0.56_±_0.15<br>0.74_±_0.15<br>**0.46**_±_**0.04**<br>**0.54**_±_**0.01**<br>**0.31**_±_**0.05**<br>0.57_±_0.08<br>0.43_±_0.05<br>**0.52**_±_**0.01**<br>**0.51**_±_**0.02**<br>8.28_±_5.58<br>15.29_±_8.52<br>**0.73**_±_**1.20**<br>**0.54**_±_**0.61**<br>**0.94**_±_**1.53**<br>6.65_±_3.51<br>14.93_±_4.24<br>**0.04**_±_**0.07**<br>**0.16**_±_**0.14**|
+|PointCircle2<br>Reward_ ↑_<br>Cost_ ↓_|0.44_±_0.07<br>0.74_±_0.07<br>0.44_±_0.05<br>0.59_±_0.02<br>**0.44**_±_**0.06**<br>0.03_±_0.75<br>0.76_±_0.05<br>**0.55**_±_**0.01**<br>**0.41**_±_**0.07**<br>2.98_±_1.39<br>23.50_±_6.85<br>1.20_±_1.28<br>2.05_±_0.93<br>**0.10**_±_**0.09**<br>3.99_±_4.30<br>18.02_±_4.17<br>**0.91**_±_**1.46**<br>**0.01**_±_**0.02**|
+|PointGoal1<br>Reward_ ↑_<br>Cost_ ↓_|0.73_±_0.01<br>0.76_±_0.01<br>0.55_±_0.11<br>0.63_±_0.08<br>0.30_±_0.09<br>0.74_±_0.03<br>0.64_±_0.03<br>**0.06**_±_**0.06**<br>**0.00**_±_**0.04**<br>4.03_±_0.22<br>3.69_±_0.93<br>3.33_±_1.68<br>2.97_±_0.82<br>1.45_±_0.74<br>3.90_±_0.50<br>5.38_±_1.05<br>**0.09**_±_**0.11**<br>**0.10**_±_**0.11**|
+|PointGoal2<br>Reward_ ↑_<br>Cost_ ↓_|0.68_±_0.02<br>0.76_±_0.01<br>0.25_±_0.13<br>0.46_±_0.08<br>0.19_±_0.04<br>0.78_±_0.05<br>0.31_±_0.07<br>**0.13**_±_**0.05**<br>**0.14**_±_**0.06**<br>9.85_±_1.51<br>11.92_±_1.17<br>5.34_±_1.33<br>5.57_±_0.81<br>1.02_±_0.22<br>15.51_±_5.75<br>1.67_±_1.32<br>**0.81**_±_**0.32**<br>**0.56**_±_**0.21**|
+|AntVelo<br>Reward_ ↑_<br>Cost_ ↓_|1.00_±_0.01<br>**-1.01**_±_**0.00**<br>**-1.01**_±_**0.00**<br>**0.97**_±_**0.02**<br>**0.88**_±_**0.05**<br>**-1.01**_±_**0.00**<br>**0.89**_±_**0.01**<br>**0.99**_±_**0.01**<br>**0.38**_±_**0.15**<br>7.11_±_3.65<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>**0.59**_±_**0.02**<br>**0.21**_±_**0.07**<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>**0.43**_±_**0.11**<br>**0.01**_±_**0.01**|
+|HalfCheetahVelo<br>Reward_ ↑_<br>Cost_ ↓_|1.05_±_0.01<br>0.93_±_0.03<br>0.67_±_0.05<br>**0.98**_±_**0.00**<br>**0.86**_±_**0.01**<br>**0.91**_±_**0.04**<br>**0.89**_±_**0.01**<br>**0.96**_±_**0.01**<br>**0.80**_±_**0.06**<br>61.93_±_5.33<br>5.72_±_3.12<br>8.56_±_6.19<br>**0.65**_±_**0.34**<br>**0.27**_±_**0.06**<br>**0.97**_±_**0.12**<br>**0.00**_±_**0.00**<br>**0.14**_±_**0.09**<br>**0.03**_±_**0.02**|
+|SwimmerVelo<br>Reward_ ↑_<br>Cost_ ↓_|0.51_±_0.08<br>0.30_±_0.09<br>0.20_±_0.20<br>0.66_±_0.01<br>0.45_±_0.06<br>**0.06**_±_**0.25**<br>**-0.02**_±_**0.05**<br>**0.21**_±_**0.19**<br>**0.20**_±_**0.12**<br>25.01_±_3.21<br>9.33_±_5.06<br>2.82_±_4.19<br>1.26_±_0.50<br>2.17_±_2.91<br>**0.91**_±_**1.57**<br>**0.23**_±_**0.20**<br>**0.00**_±_**0.00**<br>**0.07**_±_**0.12**|
+
+
+demonstrates that CARL not only enforces safety under strict budgets but also scales to more relaxed
+thresholds without collapsing into overly conservative behavior.
+
+
+In the Safety Gym tasks, CARL’s robustness is equally evident. In the particularly challenging
+CARCIRCLE2 task, all methods are unsafe at _κ_ = 10 (main paper, Table 1), yet when the budget
+is relaxed to 40 or 80, CARL achieves both safety and competitive rewards (0 _._ 53 at cost 0 _._ 42 for
+_κ_ = 40; 0 _._ 59 at cost 0 _._ 80 for _κ_ = 80). By contrast, CAPS and CCAC remain unsafe even under
+the larger budgets, failing to adjust effectively. Similar improvements are visible in the other tasks,
+where CARL consistently satisfies safety while delivering best or competitive rewards, while both
+baselines oscillate between unsafe operation and lower rewards.
+
+
+Overall, these results highlight that CARL is not limited to low-cost regimes: even though it employs
+a simple, strong penalty on unsafe transitions, it adapts gracefully as cost budgets grow. CARL
+demonstrates both strict constraint satisfaction in safety-critical regimes and flexibility in leveraging
+more permissive budgets, an essential property for practical deployment across environments with
+varying safety requirements.
+
+
+B.4 UNSAFE TRAJECTORIES TRAINING DATA.
+
+
+Table 7 reports CARL’s performance when trained either on only unsafe trajectories ( _Non Safe_ ) or
+on the full dataset ( _All_ ) ( _κ_ = 5 or 10). In both cases, CARL reliably recovers safe agents (cost
+_≤_ 1), but access to the full dataset generally improves the reward–cost trade-off. For example, in
+DRONECIRCLE and ANTCIRCLE, using all data raises rewards (0.47 _→_ 0.53 and 0.53 _→_ 0.60)
+while further lowering costs. In ANTVELOCITY, CARL achieves nearly maximal reward (0.99)
+under both conditions, but with much lower cost when trained on all data (0.27 vs. 0.43). A notable
+case is CARCIRCLE, where CARL already finds safe solutions from unsafe-only data, yet including
+
+
+17
+
+
+Table 6: CARL results under larger cost constraints. Each cell shows the mean with standard deviation. **Bold** : safe agents ( _Cnorm_ _≤_ 1). Gray: unsafe agents. **Blue bold** : best safe performance.
+
+
+**Environment** **Cost 20** **Cost 40**
+
+
+CAPS CCAC CARL CAPS CCAC CARL
+
+
+Reward _↑_ 0.17 _±_ 0.09 **0.30** _±_ **0.02** **0.16** _±_ **0.14** 0.36 _±_ 0.08 0.61 _±_ 0.06 **0.32** _±_ **0.14**
+BallRun
+Cost _↓_ 1.41 _±_ 0.79 **0.25** _±_ **0.43** **0.44** _±_ **0.45** 1.17 _±_ 0.12 1.13 _±_ 0.13 **0.75** _±_ **0.32**
+
+
+Reward _↑_ **0.98** _±_ **0.00** 1.81 _±_ 0.82 **0.97** _±_ **0.00** **0.98** _±_ **0.00** 1.82 _±_ 0.78 **0.97** _±_ **0.00**
+CarRun
+Cost _↓_ **0.20** _±_ **0.21** 6.39 _±_ 4.79 **0.02** _±_ **0.02** **0.21** _±_ **0.26** 3.35 _±_ 2.10 **0.03** _±_ **0.02**
+
+
+Reward _↑_ **0.51** _±_ **0.01** 0.46 _±_ 0.11 **0.54** _±_ **0.04** **0.51** _±_ **0.04** 0.44 _±_ 0.09 **0.52** _±_ **0.05**
+DroneRun
+Cost _↓_ **0.46** _±_ **0.07** 6.34 _±_ 0.75 **0.44** _±_ **0.60** **0.32** _±_ **0.13** 1.53 _±_ 0.39 **0.80** _±_ **0.86**
+
+
+Reward _↑_ 0.65 _±_ 0.03 **0.03** _±_ **0.09** **0.55** _±_ **0.06** **0.69** _±_ **0.03** **0.05** _±_ **0.07** **0.46** _±_ **0.31**
+AntRun
+Cost _↓_ 1.00 _±_ 0.36 **0.00** _±_ **0.00** **0.98** _±_ **0.26** **0.91** _±_ **0.15** **0.01** _±_ **0.02** **0.86** _±_ **0.80**
+
+
+Reward _↑_ **0.69** _±_ **0.01** 0.52 _±_ 0.42 0.76 _±_ 0.01 **0.80** _±_ **0.01** 0.58 _±_ 0.47 0.85 _±_ 0.03
+BallCircle
+Cost _↓_ **0.64** _±_ **0.01** 3.19 _±_ 4.53 1.16 _±_ 0.11 **0.82** _±_ **0.01** 1.93 _±_ 1.98 1.12 _±_ 0.09
+
+
+Reward _↑_ **0.71** _±_ **0.04** **0.72** _±_ **0.01** **0.73** _±_ **0.01** **0.75** _±_ **0.01** **0.78** _±_ **0.00** **0.74** _±_ **0.02**
+CarCircle
+Cost _↓_ **0.71** _±_ **0.02** **0.95** _±_ **0.14** **0.16** _±_ **0.15** **0.86** _±_ **0.00** **0.82** _±_ **0.06** **0.60** _±_ **0.34**
+
+
+Reward _↑_ **0.57** _±_ **0.00** **0.40** _±_ **0.07** **0.55** _±_ **0.01** **0.62** _±_ **0.00** **0.17** _±_ **0.11** **0.65** _±_ **0.03**
+DroneCircle
+Cost _↓_ **0.73** _±_ **0.02** **0.85** _±_ **0.06** **0.01** _±_ **0.02** **0.87** _±_ **0.02** **0.66** _±_ **0.06** **0.83** _±_ **0.12**
+
+
+Reward _↑_ **0.40** _±_ **0.01** **0.56** _±_ **0.07** **0.61** _±_ **0.05** **0.52** _±_ **0.03** **0.59** _±_ **0.02** **0.67** _±_ **0.03**
+AntCircle
+Cost _↓_ **0.09** _±_ **0.05** **0.55** _±_ **0.25** **0.02** _±_ **0.02** **0.35** _±_ **0.02** **0.95** _±_ **0.23** **0.10** _±_ **0.04**
+
+
+**Cost 40** **Cost 80**
+
+
+Reward _↑_ **0.47** _±_ **0.03** 0.48 _±_ 0.12 **0.43** _±_ **0.02** 0.63 _±_ 0.03 0.46 _±_ 0.10 **0.56** _±_ **0.02**
+CarCircle1
+Cost _↓_ **0.90** _±_ **0.29** 4.32 _±_ 1.12 **0.01** _±_ **0.02** 1.14 _±_ 0.06 2.61 _±_ 0.39 **0.07** _±_ **0.04**
+
+
+Reward _↑_ 0.44 _±_ 0.10 0.54 _±_ 0.05 **0.53** _±_ **0.02** 0.54 _±_ 0.09 0.58 _±_ 0.02 **0.59** _±_ **0.02**
+CarCircle2
+Cost _↓_ 1.08 _±_ 1.03 2.36 _±_ 2.14 **0.42** _±_ **0.17** 1.09 _±_ 0.73 1.82 _±_ 0.58 **0.80** _±_ **0.29**
+
+
+Reward _↑_ **0.31** _±_ **0.04** 0.84 _±_ 0.02 **0.33** _±_ **0.01** **0.40** _±_ **0.06** **0.84** _±_ **0.02** **0.41** _±_ **0.06**
+CarGoal1
+Cost _↓_ **0.45** _±_ **0.16** 1.32 _±_ 0.14 **0.27** _±_ **0.10** **0.22** _±_ **0.06** **0.58** _±_ **0.09** **0.21** _±_ **0.02**
+
+
+Reward _↑_ **0.17** _±_ **0.06** 0.94 _±_ 0.05 **0.13** _±_ **0.04** **0.24** _±_ **0.04** 0.91 _±_ 0.05 **0.15** _±_ **0.06**
+CarGoal2
+Cost _↓_ **0.85** _±_ **0.05** 4.31 _±_ 1.17 **0.29** _±_ **0.05** **0.35** _±_ **0.10** 2.06 _±_ 0.46 **0.18** _±_ **0.07**
+
+
+Reward _↑_ **0.51** _±_ **0.02** 0.65 _±_ 0.08 **0.55** _±_ **0.02** **0.56** _±_ **0.02** 0.68 _±_ 0.06 **0.56** _±_ **0.01**
+PointCircle1
+Cost _↓_ **0.88** _±_ **0.35** 2.51 _±_ 0.92 **0.22** _±_ **0.11** **0.70** _±_ **0.20** 1.62 _±_ 0.33 **0.24** _±_ **0.12**
+
+
+Reward _↑_ **0.51** _±_ **0.02** -0.28 _±_ 0.71 **0.56** _±_ **0.04** 0.61 _±_ 0.03 **-0.30** _±_ **0.71** **0.60** _±_ **0.01**
+PointCircle2
+Cost _↓_ **0.75** _±_ **0.07** 1.11 _±_ 1.09 **0.21** _±_ **0.09** 1.02 _±_ 0.21 **0.77** _±_ **0.67** **0.30** _±_ **0.08**
+
+
+Reward _↑_ **0.50** _±_ **0.06** 0.72 _±_ 0.05 **0.09** _±_ **0.04** **0.51** _±_ **0.06** **0.67** _±_ **0.16** **0.21** _±_ **0.04**
+PointGoal1
+Cost _↓_ **0.53** _±_ **0.18** 1.12 _±_ 0.16 **0.06** _±_ **0.08** **0.34** _±_ **0.06** **0.63** _±_ **0.07** **0.04** _±_ **0.02**
+
+
+Reward _↑_ **0.34** _±_ **0.06** 0.80 _±_ 0.03 **0.15** _±_ **0.01** **0.49** _±_ **0.07** 0.78 _±_ 0.08 **0.30** _±_ **0.07**
+PointGoal2
+Cost _↓_ **0.76** _±_ **0.10** 3.95 _±_ 0.75 **0.24** _±_ **0.02** **0.58** _±_ **0.11** 2.00 _±_ 0.17 **0.18** _±_ **0.04**
+
+
+safe trajectories eliminates residual cost variance. Overall, this ablation shows that while CARL
+can recover safety even from unsafe-only datasets, leveraging the full dataset strengthens safety
+guarantees and yields the best safe performance ( **bold** ).
+
+
+Table 7: CARL results with only unsafe trajectories data. Each cell shows reward ( _↑_ ) or cost ( _↓_ ).
+**Bold** : safe agents ( _Cnorm_ _≤_ 1). **Blue bold** : best safe performance.
+
+|Data|BallCircle CarCircle DroneCircle AntCircle PointGoal1 PointGoal2 AntVelocity SwimmerVelo|
+|---|---|
+|Non Safe<br>Reward_ ↑_<br>Cost_ ↓_|**0.67**_±_**0.04**<br>**0.69**_±_**0.01**<br>**0.47**_±_**0.00**<br>**0.53**_±_**0.08**<br>**0.03**_±_**0.03**<br>**0.13**_±_**0.06**<br>**0.99**_±_**0.00**<br>**0.17**_±_**0.02**<br>**0.31**_±_**0.11**<br>**0.03**_±_**0.06**<br>**0.02**_±_**0.04**<br>**0.02**_±_**0.02**<br>**0.19**_±_**0.14**<br>**0.85**_±_**0.20**<br>**0.27**_±_**0.03**<br>**0.06**_±_**0.10**|
+|All<br>Reward_ ↑_<br>Cost_ ↓_|**0.69**_±_**0.03**<br>**0.69**_±_**0.01**<br>**0.53**_±_**0.02**<br>**0.60**_±_**0.01**<br>**0.06**_±_**0.06**<br>**0.13**_±_**0.05**<br>**0.99**_±_**0.01**<br>**0.21**_±_**0.19**<br>**0.33**_±_**0.23**<br>**0.00**_±_**0.00**<br>**0.00**_±_**0.00**<br>**0.02**_±_**0.03**<br>**0.09**_±_**0.11**<br>**0.81**_±_**0.32**<br>**0.43**_±_**0.11**<br>**0.00**_±_**0.00**|
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+B.5 HARD-FILTERING TRANSITIONS
+
+
+In this variant of CARL, each sampled batch is passed through the cost critic, and transitions whose
+predicted cost-to-go exceeds the threshold ( _κ_ = 5) are entirely removed from training. No reward
+relabeling is applied, so the agent learns from a reduced dataset. While this naive filtering strategy
+enforces a strict notion of safety during training, it discards transitions that provide valuable learning
+signals or partial recovery paths. As a result, policies trained with hard filtering generalize poorly
+and typically violate constraints at deployment, since they only optimize the original reward signal
+over a limited state space. Table 8 shows that this approach succeeds in only one out of eight
+tasks and otherwise breaches the cost threshold severely (e.g., cost 16 _._ 53 in DRONERUN, 20 _._ 52 in
+ANTCIRCLE). By contrast, CARL achieves safe performance across all tasks with good rewards.
+These results highlight that CARL’s effectiveness lies not in discarding unsafe data, but in relabeling
+rewards with penalties, which preserves dataset coverage and enables safe, high-reward policies.
+
+
+Table 8: CARL results compared to the Hard Filter variant. Each cell shows reward ( _↑_ ) or cost ( _↓_ )
+with standard deviation. **Bold** : safe agents ( _Cnorm_ _≤_ 1). Gray: unsafe agents.
+
+
+**Environment** **Hard Filter** **CARL**
+
+
+reward _↑_ cost _↓_ reward _↑_ cost _↓_
+
+
+BallRun 0.58 _±_ 0.46 11.38 _±_ 6.60 **0.28** _±_ **0.02** **0.00** _±_ **0.00**
+CarRun **0.97** _±_ **0.00** **0.10** _±_ **0.16** **0.97** _±_ **0.00** **0.02** _±_ **0.03**
+DroneRun 0.55 _±_ 0.19 16.53 _±_ 14.32 **0.36** _±_ **0.12** **0.30** _±_ **0.52**
+AntRun 0.47 _±_ 0.14 4.44 _±_ 2.15 **0.36** _±_ **0.09** **0.60** _±_ **0.41**
+BallCircle 0.70 _±_ 0.02 2.41 _±_ 1.61 **0.69** _±_ **0.03** **0.33** _±_ **0.23**
+CarCircle 0.72 _±_ 0.01 1.06 _±_ 0.94 **0.69** _±_ **0.01** **0.00** _±_ **0.00**
+DroneCircle 0.63 _±_ 0.01 7.79 _±_ 1.16 **0.53** _±_ **0.02** **0.00** _±_ **0.00**
+AntCircle 0.68 _±_ 0.03 20.52 _±_ 2.06 **0.60** _±_ **0.01** **0.02** _±_ **0.03**
+
+
+B.6 EXTRA SEEDS
+
+
+To further validate the statistical significance of our results, we extended the evaluation of CARL
+from the original three seeds (10, 20, 30) to six random seeds by adding 40, 50, and 60 for a subset
+of representative tasks. This expansion results in a total of 120 test trajectories per task. In addition
+to the standard cumulative cost metrics, we report the Safe Rate: the percentage of test episodes
+where the total cost remained strictly within the limit ( _C_ _≤_ _κ_ ).
+
+
+While the primary DSRL metric focuses on average normalized cost, the safe rate provides a more
+granular view of reliability, distinguishing between rare catastrophic failures and consistent minor
+violations.
+
+
+As shown in Table 9, CARL maintains high performance stability with the increased sample size.
+We observe that for tasks like CarCircle, DroneCircle, and SwimmerVelocity, the method achieves a
+perfect 100% safe rate. Even in environments with like CarRun and DroneRun, the safe rate remains
+effectively perfect (98%). The low standard deviations across rewards and costs further confirm that
+the method’s performance is not an artifact of favorable seed selection.
+
+
+C EXPERIMENTAL DETAILS
+
+
+C.1 ENVIRONMENT DESCRIPTIONS
+
+
+To evaluate safe offline reinforcement learning (RL) approaches, we employ a range of environments
+constructed on different simulation platforms, each customized for particular agents and control
+tasks.
+
+
+**Bullet-Safety-Gym Gronauer (2022):** This benchmark suite leverages the PyBullet physics engine
+and features four distinct agents: Ball, Car, Drone, and Ant. It supports two main tasks: Run
+and Circle. In the Run scenario, agents must traverse a corridor marked by virtual safety boundaries.
+While these boundaries are non-colliding, crossing them results in a penalty. Speed regulation is also
+enforced; going beyond a specified threshold leads to further penalties. The Circle task challenges
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 9: CARL results over 6 random seeds (120 total trajectories per task), along with the count of
+safe trajectories ( _Nsafe_ ), and the overall Safe Rate. **Bold** : safe agents ( _Cnorm_ _≤_ 1).
+
+
+**Task** **Reward** **Cost** **# Safe** **Safe Rate**
+
+
+CarRun **0.97** _±_ **0.00** **0.10** _±_ **0.18** **0.98**
+DroneRun **0.29** _±_ **0.16** **0.15** _±_ **0.37** **0.98**
+CarCircle **0.69** _±_ **0.01** **0.00** _±_ **0.00** **1.00**
+DroneCircle **0.52** _±_ **0.03** **0.00** _±_ **0.00** **1.00**
+CarGoal1 **0.29** _±_ **0.05** **0.87** _±_ **0.39** **81** **0.68**
+PointCircle1 **0.52** _±_ **0.01** **0.05** _±_ **0.08** **0.98**
+PointGoal2 **0.11** _±_ **0.05** **0.74** _±_ **0.33** **90** **0.75**
+AntVelocity **0.99** _±_ **0.01** **0.54** _±_ **0.16** **0.94**
+SwimmerVelocity **0.26** _±_ **0.17** **0.00** _±_ **0.00** **1.00**
+
+
+(a) Bullet-Safety-Gym environments. (b) Safety-Gymnasium environments.
+
+
+Figure 4: Visualizations of benchmark environments.
+
+
+agents to move in a clockwise direction along a circular trajectory. Here, staying closer to the outer
+edge at higher speeds earns greater rewards, but leaving the designated safe area results in penalties.
+Visual examples of these scenarios are shown in Figure 4 (a).
+
+
+**Safety-Gymnasium** **Ray** **et** **al.** **(2019);** **Ji** **et** **al.** **(2024):** Built on the Mujoco simulator, SafetyGymnasium presents a diverse set of environments designed for exploring safety-related behaviors.
+The Car agent can engage in several tasks, including Circle and Goal, each offered in two levels
+of complexity. These tasks require the agent to reach specific objectives while navigating around
+hazards. In the Goal task, the agent moves toward designated goal positions that change after each
+success. The Circle task involves following a green circular track while avoiding the outer region,
+which incurs penalties. Figure 4 (b) displays visualizations of these environments. The benchmark also introduces velocity-restricted tasks for agents like Ant, HalfCheetah, and Swimmer. In
+the Velocity task, agents coordinate limb movements to advance forward while respecting velocity
+constraints.
+
+
+C.2 CARL HYPERPARAMETERS
+
+
+Table 10 outlines the hyperparameter settings applied in various environments (BulletGym and SafetyGym) for CARL, highlighting shared configurations including cost limits, training durations, and
+neural network architecture details. For the IQL results, training is conducted with the IQL tau
+hyperparameter set to 0.7.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 10: CARL hyperparameters.
+
+
+**General Parameters** **BulletGym** **SafetyGym**
+
+
+Cost limit 5 10
+Training steps 200000 400000
+AntRun, DroneRun 300000           discount _γ_ 0.99
+Batch size 512
+Cost Critic hidden size 256 _,_ 256
+Cost Critic learning rate 3e-4
+seeds 10 _,_ 20 _,_ 30
+
+
+**TD3BC parameters**
+
+
+Policy noise 0.2
+Policy noise clip (0.5, 0.5)
+Policy update frequency 2
+_α_ 2.5
+Optimizer Adam
+Actor, Critic learning rate 3e-4
+Actor, Critic hidden size 256 _,_ 256
+
+
+C.3 COMPUTATIONAL RESOURCES AND TRAINING TIME:
+
+
+Experiments were run on a system equipped with an NVIDIA A40 GPU (48GB memory). When
+running without any competing workloads, training a single task for one random seed takes approximately 31 minutes per 200k update steps.
+
+
+21

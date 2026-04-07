@@ -1,0 +1,2732 @@
+# CRIME PREDICTION USING ADAPTIVE QUADTREES
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Urban crime prediction demands scalable methods for large, skewed spatiotemporal data. We introduce SMART-CARE, an adaptive quadtree-based hierarchical framework that dynamically partitions urban spaces and refines local
+predictors. Given _D_ = _{_ ( **x** _i, ti, ci_ ) _}_ _[N]_ _i_ =1 [,] [SMART-CARE] [learns] _[f]_ [:] [(] **[x]** _[, t]_ [)] _[�→]_ _[c]_ [ˆ]
+through: (i) variance-driven median splitting with adaptive capacity _T_ max and
+depth _L_ max, (ii) periodic local re-tuning with leaf merging to prevent overfragmentation, and (iii) parent→child knowledge transfer for model fine-tuning.
+Experiments on NYC and Chicago crime data show SMART-CARE outperforms
+uniform grids, static quadtrees, and standard baselines in accuracy and efficiency
+while enabling fine-grained localized forecasts.
+
+
+1 INTRODUCTION
+
+
+Urban crime forecasting remains challenging due to irregular spatio-temporal patterns and data skew
+in heterogeneous urban environments Zhang et al. (2015). Existing approaches struggle to capture
+complex dependencies in high-density regions, where skewed distributions obscure local trends and
+reduce prediction reliability Safat et al. (2021); Xiong et al. (2019). While recent machine learning
+methods have improved accuracy, they often fail to model hierarchical spatial scales-specific patterns essential for both city-wide trends and neighborhood-level variations Groff et al. (2019); Lu
+et al. (2021). This limitation underscores the need for adaptive frameworks that dynamically refine
+predictions across spatial granularities while maintaining scalability.
+
+
+The challenges are particularly critical in high-density urban areas, where traditional methods struggle to distinguish recurring patterns from isolated events Mahmud et al. (2016). Data skew in these
+regions often leads models to overfit to dense hotspots while neglecting significant crime patterns
+in lower-density areas Tayebi et al. (2015); Kennedy et al. (2011). This spatial bias results in poor
+generalization across diverse urban geographies Braga et al. (2019); Lin et al. (2017), highlighting
+the need for methods that explicitly account for density variations and spatial variance.
+
+
+Butt et al. (2021) Butt et al. (2021) demonstrate that density-based clustering like HDBSCAN often
+produces imbalanced partitions where dense regions overshadow sparse ones, degrading time-series
+methods that assume balanced inputs. Their finding that smaller, homogeneous regions yield better
+local forecasts motivates partitioning strategies that balance segment sizes while accounting for local
+variance—addressing both scalability and accuracy across diverse urban environments.
+
+
+Recent work by Butt et al. (2024) Butt et al. (2024) explores BiLSTM-based transfer learning for
+crime forecasting, pretraining on source regions and fine-tuning on targets. While this approach
+learns transferable temporal patterns, it requires substantial pretraining data and compute, risks negative transfer across heterogeneous regions, and offers limited interpretability. These limitations
+highlight the need for more efficient, spatially-aware knowledge transfer mechanisms.
+
+
+To address these limitations, we propose **SMART-CARE**, an adaptive quadtree framework that integrates variance-aware median splitting with hierarchical model refinement. Our approach dynamically adjusts spatial partitions while merging low-density nodes to prevent over-fragmentation. Key
+innovations include: (i) _feature-propagation_, where parent predictions inform child feature vectors,
+and (ii) _model-inheritance_, where child models are warm-started from parent parameters and finetuned locally. We instantiate SMART-CARE with both tree-based and neural architectures, demonstrating its flexibility. On NYPD and Chicago crime data (2008–2023), SMART-CARE achieves
+MAE reductions to 0.92 (average), 0.23 (best-year), and 0.13 (deepest layer), significantly outperforming grid-based, clustering, and transfer learning baselines Butt et al. (2021; 2024).
+
+
+1
+
+
+2 RELATED WORK
+
+
+Crime prediction research enhances public safety by identifying hotspots using historical data Du
+& Ding (2023). While clustering and time-series models address data imbalance and spatial unevenness Butt et al. (2021), they often struggle with high spatial variance and density bias, causing
+overfitting in heterogeneous regions Mahmud et al. (2016). Furthermore, the absence of hierarchical refinement limits their scalability across diverse urban settings. These limitations underscore the
+need for adaptive, multi-scale systems that balance data and improve predictive accuracy.
+
+
+**Data Imbalance:** Crime data often exhibits skewed distributions, with non-crime instances vastly
+outnumbering crime events, challenging model performance. Techniques like Bayesian classification Tang et al. (2016), SVMs for imbalanced tasks Tang et al. (2008), and synthetic oversampling
+methods such as ADASYN He et al. (2008) and SMOTE for regression Torgo et al. (2013) attempt
+to address imbalance but risk introducing artifacts that distort the underlying distribution. These
+approaches often fail to preserve spatial relationships, leading to inaccurate predictions in dense
+regions. This highlights the need for methods that balance geographical segmentation, ensuring
+localised accuracy while mitigating the effects of skewed data distributions in crime prediction.
+
+
+**Hierarchical** **Data** **Structure:** Hierarchical data structures are widely used for spatial tasks, with
+recent advancements enhancing crime prediction models. DeepCrime Huang et al. (2018) leverages
+a region-category encoder, hierarchical recurrent layers, and attention mechanisms to capture temporal dependencies, achieving notable accuracy. However, its reliance on Gated Recurrent Units
+(GRU) incurs high computational overhead for large datasets. Our hierarchical quadtree framework mitigates this by offering scalable, spatially adaptive segmentation, reducing computational
+demands while preserving fine-grained prediction accuracy, making it suitable for large-scale crime
+prediction across diverse spatial scales.
+
+
+Zhou et. al., 2019 Zhou et al. (2019) proposed DENSS, a semi-supervised learning framework using
+Density Peak Clustering (DPC) with an R-tree index to ensure uniform local densities. While Rtrees employ minimum bounding rectangles (MBRs) for hierarchical spatial organisation, overlapping MBRs increase computational complexity. In contrast, our framework dynamically segments
+crime regions into balanced quadrants, reducing data skewness and enhancing scalability. This efficient hierarchical modelling approach enables precise crime predictions across diverse spatial scales,
+addressing limitations of overlapping structures and improving performance in heterogeneous crime
+environments.
+
+
+**Neural-Based** **Crime** **Prediction** Neural approaches like GNNs Chai et al. (2022), ST-GCNs Yu
+et al. (2017), and Transformers Vaswani et al. (2017) have advanced crime forecasting but face limitations: they require predefined spatial structures, struggle with data skew across density variations,
+and suffer from quadratic computational complexity. SMART-CARE overcomes these through
+adaptive partitioning that dynamically adjusts to local variance, enabling efficient hierarchical refinement with linear scalability while maintaining accuracy across diverse urban regions.
+
+
+Despite advancements in crime prediction, existing methods struggle with imbalanced, high-density
+datasets, hierarchical spatial relationships, and scalability. Techniques like R-trees and clustering
+often fail to deliver fine-grained predictions in complex crime environments. To address these, we
+propose SMART-CARE, a scalable framework integrating dynamic spatial segmentation, hierarchical modelling, and efficient learning mechanisms. SMART-CARE leverages adaptive partitioning
+and parent-child model refinement to balance data distributions and capture spatio-temporal dynamics, enhancing prediction accuracy. This section details the design and implementation of SMARTCARE, outlining its components and operational workflow.
+
+
+3 METHODOLOGY
+
+
+We introduce the **SMART-CARE** framework, comprising **S** patio- **M** edian **A** daptive **R** ecursive **T** ree
+(SMART-QT) for adaptive spatial partitioning and **C** rime **A** daptive **R** efined **E** nsemble (CARE) for
+hierarchical prediction refinement. SMART-QT partitions urban spaces using variance-aware median splitting, while CARE enables fine-grained forecasting through feature propagation and model
+inheritance across spatial scales.
+
+
+2
+
+
+Given a dataset _D_ = _{_ ( **x** _i, ti, ci_ ) _}_ _[N]_ _i_ =1 [where] **[ x]** _[i]_ _[∈]_ [R] _[d]_ [ contains spatio-temporal features derived from]
+timestamp _ti_, and _ci_ _∈_ N is the daily crime count, our objective is to learn a predictor _f_ : **x** _i_ _�→_ _c_ ˆ _i_ .
+The features **x** _i_ include spatial coordinates (longitude, latitude) and temporal encodings (cyclical
+hour/month, lagged counts, rolling statistics) extracted from _ti_ . SMART-QT recursively partitions
+the spatial domain _S_ _⊂_ R [2] into nodes _{Nj}_ using median splits constrained by adaptive capacity
+_T_ max and depth limit _L_ max. Each node _Nj_ contains a subset _Dj_ _⊂D_ train and trains a local regressor
+_fj_ refined from its parent model. Test samples are routed to appropriate leaves for prediction using
+the corresponding _fj_ .
+
+
+3.1 SMART QUADTREE
+
+
+The classical quadtree recursively partitions a 2D space into four quadrants when a node contains
+more than a fixed threshold _M_ points, with recursion bounded by maximum depth _L_ (Appendix A.1:
+Traditional Quadtree). Formally, subdivision occurs if _n > M_, where _n_ is the point count in a node.
+However, this static approach fails to adapt to heterogeneous urban crime data with dense hotspots
+and sparse regions. We propose the **SMART Quadtree** (Spatio-Median Adaptive Recursive Tree)
+with four key innovations: (1) adaptive node capacity thresholds derived from data statistics, (2)
+adaptive depth limits scaling with dataset size, (3) median-based spatial splitting for balanced partitions, and (4) merging of sparse leaf nodes to prevent over-fragmentation (Algorithm 2:SMART
+Quadtree Construction).
+
+
+**Adaptive** **subdivision** **threshold** **(** _T_ max **):** SMART-QT replaces a fixed node capacity with a
+variance-aware, dataset-scaled threshold:
+
+
+            -            -            - _β_ ���
+_T_ max = max _T_ min _,_ min _[|][P]_ _[|]_ _[T]_ [cap] _,_ (1)
+1 + _σ_ [2] _/γ_ [+] _δ_ _[,]_
+
+
+where _σ_ [2] is the (sample) variance of crime counts in node _P_ and _|P_ _|_ its point count. The lower/upper
+clamps _T_ min and _T_ cap are computed by scaling the reference parameters ( _α, κ_ ) to the dataset size
+(detailed in: Dynamic Parameter Scaling). Intuitively, the _β/_ (1+ _σ_ [2] _/γ_ ) term reduces _T_ max in highvariance (hotspot) nodes, while the _|P_ _|/δ_ term raises the threshold in already dense nodes to avoid
+excessive splitting. Clipping with _T_ min and _T_ cap prevents pathological values in extreme regions.
+All parameters ( _α, β, γ, δ, κ, λ_ ) are auto-scaled by dataset size (Appendix A.2).
+
+
+**Adaptive** **Tree** **Depth** **(** _L_ max **):** Unlike classical quadtrees that enforce a globally fixed maximum
+depth, SMART-QT dynamically determines the allowable depth for each subtree based on the dataset
+size and localised variance in crime patterns. Specifically, the maximum depth is computed as
+
+
+            -             _L_ max = min _η ·_ log2( _n_ total) _,_ log2( _n_ total) + 1 + _σ_ local [2] _,_ (2)
+
+
+where _n_ total is the total number of points in the dataset and _σ_ local [2] [denotes] [the] [sample] [variance] [of]
+crime counts within the node (computed with _ddof_ = 1). The scaling factor _η_ (e.g., _η_ = 1 _._ 5) modulates global complexity. The result is then rounded up to an integer and clamped to a practical range
+_L_ min _≤_ _L_ max _≤_ _L_ cap (e.g., _L_ min = 5, _L_ cap = 15) to prevent overfitting or under-representation.
+This adaptive rule yields deeper trees in high-variance regions while constraining depth in homogeneous areas, balancing expressiveness and efficiency by tailoring quadtree granularity to both global
+data volume and local heterogeneity.
+
+
+**Median-Based** **Splitting** **and** **Point** **Retention:** To ensure balanced spatial partitions, SMARTQT computes the median of the longitude and latitude values from all points _P_ in the node. The
+median coordinates **x** mid = ( _x_ mid[0] _, x_ mid[1]) are: _x_ mid[0] = median( **x** _i_ [0] _|_ **x** _i_ _∈_ _P_ ) _,_ _x_ mid[1] =
+median( **x** _i_ [1] _|_ **x** _i_ _∈_ _P_ ). The split produces four axis-aligned quadrants ( _N_ NW _, N_ NE _, N_ SW _, N_ SE).
+Unlike classical quadtrees that remove points from the parent, SMART-QT _retains_ all parent points
+to enable parent–child knowledge transfer. Each child node is assigned a reference (index set)
+to the subset of parent points falling in its quadrant, rather than duplicating the underlying data.
+This reference-based redistribution preserves upper-level context for hierarchical modelling while
+avoiding unnecessary memory copies (see section 3.2 for implementation details).
+
+
+**Strategic** **Small-Leaf** **Merging:** Classical quadtrees often over-partition sparse or low-variance
+regions, creating small, noisy leaves that reduce generalisation and increase computational cost. To
+
+
+3
+
+
+mitigate this, SMART-QT integrates a variance-aware _small-leaf_ _merging_ mechanism. A node _N_
+with point set _P_ and area _A_ (density _ρ_ = _|P_ _|/A_ ) is marked for merging if (i) 0 _< |P_ _| < τ_ (minimum
+threshold), or (ii) _ρ_ is a density outlier by the IQR rule ( _ρ_ _<_ _Q_ 1 _−_ _ϕ ·_ IQR or _ρ_ _>_ _Q_ 3 + _ϕ ·_ IQR,
+_ϕ_ = 1 _._ 5). Each candidate _Nc_ is paired with a sibling _Ns_ (same parent) that satisfies _|Pc|_ + _|Ps|_ _<_
+_τ_ max ( _τ_ max = 2 _._ 5 _τ_ ) and minimises _|ρc_ _−_ _ρs|_ . After merging, all points are reassigned to _Ns_, _Nc_
+is deactivated, and merged pairs are tracked. This reduces fragmentation while preserving coherent,
+reliable partitions. (Full merging pseudocode and geometric examples are in Appendix A.3.)
+
+
+**Periodic Threshold Re-tuning:** To ensure that the quadtree remains adaptive across varying spatial
+resolutions, SMART-QT periodically re-tunes the node capacity _T_ max and maximum depth _L_ max
+at designated levels, reflecting localised variations in crime density. This re-tuning is triggered
+at nodes where the depth satisfies node ~~l~~ evel mod _ν_ = 0, with _ν_ = 1 for large datasets (e.g.,
+_n_ total _>_ 1 _,_ 000 _,_ 000), enabling threshold recalibration at alternate levels. The hyperparameter _ν_ _∈_ Z [+]
+controls the frequency of threshold re-tuning and defines the re-tuning interval across tree depth
+levels. Refer example in Appendix A.4.
+
+
+**Spatio-Temporal Feature Propagation:** Unlike classical quadtrees that store only spatial coordinates ( _xi, yi_ ), SMART-QT attaches a rich spatio-temporal feature vector **x** _i_ _∈_ R _[d]_ to each point
+so that every node can learn with full contextual information. Features include spatial coordinates,
+temporal attributes derived from the raw timestamp _ti_ (hour, day-of-week, month), cyclic encodings
+(e.g. hoursin = sin(2 _π ·_ hour _/_ 24)), lagged crime counts _ci−k_ for _k_ _∈{_ 1 _,_ 2 _,_ 3 _}_, and short rolling
+statistics (e.g. 7-day mean). All features are standardised (zero mean, unit variance) and retained as
+points are referenced by parent and child nodes; in addition, we propagate the parent prediction via
+a dedicated Prediction column. By combining inherited context (parent prediction and features)
+with local data, each node specialises its model to capture recurring hotspots, seasonal patterns, and
+local variance. (Further implementation details and feature lists are in Appendix A.5.)
+
+
+**Dynamic Parameter Scaling:**
+
+
+To generalise SMART-QT across datasets of varying sizes, all key hyperparameters are dynamically
+scaled based on the total number of points in the dataset, denoted by _n_ total. Using a reference dataset
+size _n_ ref, a scaling factor is computed as _s_ = _[n]_ _n_ [total] ref [, which proportionally adjusts parameters such as]
+
+_α_, _β_, _κ_, and min ~~b~~ ase. Here, min ~~b~~ ase represents a lower-bound cap for the node capacity in
+the adaptive threshold function (Eq. 1), ensuring that even in low-variance or low-density regions,
+each node retains a minimum number of points before being split. This prevents over-fragmentation
+in sparse areas. These control node capacity and subdivision thresholds. For parameters that benefit
+from smoother adaptation, such as _λ, γ_, and _δ_, a logarithmic scaling is applied to avoid abrupt
+changes as the dataset size grows. The scaled values are computed as:
+
+
+_λ_ = clip( _λ_ 0 _·_ log(1+ _s_ ) _,_ 5 _,_ 20) _,_ _γ_ = clip( _γ_ 0 _·_ log(1+ _s_ ) _,_ 1 _,_ 5) _,_ _δ_ = clip( _δ_ 0 _·_ log(1+ _s_ ) _,_ 1 _,_ 5) _._ (3)
+
+
+where clip( _·_ ) ensures values remain within practical bounds. This dynamic scaling ensures SMARTQT remains robust and consistently adaptive without requiring manual re-tuning when deployed
+across datasets of vastly different sizes. The complete recursive construction process of SMART-QT
+is outlined in Algorithm 2. This adaptive and recursive construction makes SMART-QT particularly
+suitable for heterogeneous crime landscapes, as it dynamically balances spatial resolution with statistical complexity, leading to more granular modelling in high-variance areas while avoiding overfitting in low-density regions (implementation details and tuned defaults are given in Appendix A.6).
+
+
+3.2 CARE PREDICTIVE MODEL
+
+
+CARE ( **C** rime **A** daptive **R** efined **E** nsemble) is a hierarchical prediction scheme that fine-tunes local
+regressors at each quadtree node using (i) feature-propagation — the parent’s prediction appended as
+a feature to child inputs, and (ii) model-inheritance — warm-starting the child regressor from its parent’s model and fine-tuning on local data. These two mechanisms jointly enable fast local adaptation
+and improved accuracy in sparse and dense regions. (Appendix B.1: CARE-PM Algorithm).
+
+
+3.2.1 HIERARCHICAL MODEL TRAINING
+
+
+Figure 1 illustrates the SMART-CARE framework. After constructing the SMART-QT quadtree,
+CARE-PM trains node models in breadth-first (top-down) order so that each parent is fitted before
+its children. Let node _ν_ have training set _Dν_ = _{_ ( **x** _i, ci_ ) _}i∈Iν_ and parent _π_ ( _ν_ ). The local regressor
+
+
+4
+
+
+|Data Split|Col2|Col3|Col4|
+|---|---|---|---|
+|**Data Split**||||
+|**80%**|**80%**|**20%**|**20%**|
+
+
+**Prediction** **Refinement** **Across** **Levels:** At each node _ν_ in the SMART-QT hierarchy, the CARE
+Predictive Model refines predictions using the parent’s inherited estimate _y_ ˆ _π_ ( _ν_ )( _i_ ) = _fπ_ ( _ν_ )( **x** _i,_ aug)
+as a contextual input feature. After training the node’s XGBoost regressor _fν_ on _Dν_ _⊂D_ train, the
+stored predictions are updated to _y_ ˆ _ν_ ( _i_ ) = _fν_ ( **x** _i,_ aug _,ν_ ), replacing the parent’s estimate, and these
+refined predictions are passed to descendant nodes. This recursive process, initialized by the root’s
+baseline _y_ ˆbase( _i_ ) = _f_ base( **x** _i_ ), progresses through levels, with each _fν_ learning the residual errors
+of its parent by minimizing [�] _i∈Dν_ [(] _[y][i][ −]_ _[y]_ [ˆ] _[ν]_ [(] _[i]_ [))][2][.] [The refinement can be expressed as a hierarchical]
+ensemble sequence _y_ ˆ0 _→_ _y_ ˆ1 _→· · ·_ _→_ _y_ ˆ _≤L_ max, where _y_ ˆ _k_ ( _i_ ) improves upon _y_ ˆ _k−_ 1( _i_ ) and the
+process terminates in the leaf-level prediction _y_ ˆfinal( _i_ ). If a node remains unsplit, its _y_ ˆ _ν_ ( _i_ ) is final;
+
+
+5
+
+
+**Training Dataset (TD)**
+
+
+**L0**
+
+
+**L1**
+
+
+**L2**
+
+
+**L3**
+
+
+Figure 1: SMART-CARE Framework.
+
+
+is _fν_ ( **x** ; _θν_ ). Using feature propagation, the augmented input is **x** [aug] _i_ = [ **x** _i,_ _fπ_ ( _ν_ )( **x** _i_ ) ] _,_ (where
+_fπ_ ( _ν_ ) is absent at the root). Each node solves a regularized local objective:
+
+_θν_ _[⋆]_ [= arg min] _[θ]_ _|D_ 1 _ν_ _|_ �( **x** _,c_ ) _∈Dν_ _[ℓ]_        - _fν_ ( **x** [aug] ; _θ_ ) _, c_        - + _λν_ Ω( _θ, θπ_ ( _ν_ )) _,_ (4)
+
+
+where _ℓ_ ( _·, ·_ ) is the sample loss (MSE) and Ω is a proximity regularizer encouraging the child to
+remain close to the parent model when appropriate. For the neural variant we use Ω( _θ, θπ_ ) =
+_∥θ_ _−_ _θπ∥_ [2] 2 [.] [For] [the] [tree] [(XGBoost)] [variant,] [proximity] [is] [implemented] [via] [warm-start] [(pass] [the]
+parent booster and optionally restrict the number of new trees _T_ new or lower the learning rate).
+
+
+**Root** **Node** **Training:** The root node, encompassing the entire spatial domain, has no parent,
+so CARE begins by establishing an initial predictor to capture global crime trends. A baseline
+model _f_ base (either a lightweight regressor or a shallow NN) is trained on the entire training set
+_D_ train using the spatio-temporal feature vectors **x** _i_ _∈_ R _[d]_, minimizing the mean squared error
+min _θ_ - _i∈D_ train - _yi −_ _f_ base( **x** _i_ ; _θ_ )�2. This baseline produces preliminary global crime-count estimates
+
+_y_ ˆbase( _i_ ) = _f_ base( **x** _i_ ). To stabilise learning across different feature scales, these estimates are stan
+
+
+dardized to zero mean and unit variance as _y_ ˆbase _[′]_ [(] _[i]_ [)] [=] _[y]_ [ˆ][base][(] _[i]_ [)] _[ −]_ _[µ][y]_ [ˆ][base]
+
+
+_σy_ ˆbase [base], with _µy_ ˆbase and _σy_ ˆbase
+
+
+computed over _D_ train. The standardized predictions _y_ ˆbase _[′]_ [(] _[i]_ [)][ are then appended as an auxiliary fea-]
+ture (“Prediction”) to form augmented inputs **x** _i,_ aug = [ **x** _i,_ ˆ _y_ base _[′]_ [(] _[i]_ [)]][.] _[Tree-based variant (XGBoost):]_
+The root’s final regressor _f_ root is an XGBoost booster trained on _{_ ( **x** _i,_ aug _, yi_ ) _}_, minimising squared
+error. _NN_ _variant:_ The root model _f_ root is a feedforward NN initialised randomly and trained on
+the same augmented inputs, with an optional regulariser to improve generalisation. In both cases,
+the root’s refined predictions _y_ ˆ1( _i_ ) = _f_ root( **x** _i,_ aug) serve as the top-level forecasts, forming the
+foundation for child-node refinement. (Appendix: B.2 for more details).
+
+
+**Child** **Node** **Training:** For each child node _ν_, CARE trains a local regressor _fν_ on its dataset
+_Dν_ _⊂D_ train, defined by the SMART-QT partition. The input features include the parents’ predictions _y_ ˆ _π_ ( _ν_ )( _i_ ), standardised within _Dν_ to have zero mean and unit variance, which are appended
+as an additional feature: **x** _i,_ aug _,ν_ = [ **x** _i,_ ˆ _yπ_ _[′]_ ( _ν_ ) [(] _[i]_ [)]] _[.]_ [The] [child] [model] [is] [then] [trained] [to] [minimise] [the]
+local mean squared error: _y_ ˆ _ν_ ( _i_ ) = _fν_ ( **x** _i,_ aug _,ν_ ) _,_ _θν_ _[⋆]_ [=] [arg min] _[θ]_ _|D_ 1 _ν_ _|_ - _i∈Dν_ [(] _[y][i]_ _[−]_ _[y]_ [ˆ] _[ν]_ [(] _[i]_ [))][2] _[.]_ [ To]
+
+accelerate convergence and ensure consistency, _fν_ is warm-started from the parent model _fπ_ ( _ν_ ).
+This recursive refinement continues down the hierarchy, with each node specialising its predictions
+to local spatial regions while inheriting global context from its ancestors. (Appendix: B.3)
+
+
+**Child** **Node** **Training:** For each child node _ν_, CARE trains a local regressor _fν_ on its dataset
+_Dν_ _⊂D_ train, defined by the SMART-QT partition. The input features include the parents’ predictions _y_ ˆ _π_ ( _ν_ )( _i_ ), standardised within _Dν_ to have zero mean and unit variance, which are appended
+as an additional feature: **x** _i,_ aug _,ν_ = [ **x** _i,_ ˆ _yπ_ _[′]_ ( _ν_ ) [(] _[i]_ [)]] _[.]_ [The] [child] [model] [is] [then] [trained] [to] [minimise] [the]
+local mean squared error: _y_ ˆ _ν_ ( _i_ ) = _fν_ ( **x** _i,_ aug _,ν_ ) _,_ _θν_ _[⋆]_ [=] [arg min] _[θ]_ _|D_ 1 _ν_ _|_ - _i∈Dν_ [(] _[y][i]_ _[−]_ _[y]_ [ˆ] _[ν]_ [(] _[i]_ [))][2] _[.]_ [ To]
+
+
+otherwise, descendants further refine it. This step-wise approach integrates global patterns from
+higher levels with local deviations at lower levels, enhancing prediction accuracy across diverse
+crime distributions.
+
+
+3.3 OPTIMISED TRAINING AND INFERENCE:
+
+
+**Efficient training and inference:** CARE-PM accelerates training via _parent→child model inheri-_
+_tance_ : each child model _fν_ is warm-started from its parent _fπ_ ( _ν_ ) (e.g., parent XGBoost booster or
+NN weights), enabling faster convergence and higher accuracy. Hyperparameter tuning is performed
+only at the root, avoiding expensive grid searches at every node. At inference, a sample activates
+at most one model per tree level. Let _L_ max denote the quadtree depth, _p_ the feature dimension,
+and _k_ the number of trees in an XGBoost booster. The per-node inference cost is _O_ ( _p · k_ ) for XGBoost, and _O_ ( [�] _[H]_ _ℓ_ =1 _[d][ℓ][−]_ [1] _[d][ℓ]_ [)][ for an] _[ H]_ [-layer neural network with layer widths] _[ {][d][ℓ][}]_ [ (dominated by]
+matrix multiplications). In both cases, once the architecture or booster is fixed after tuning, the pernode cost is effectively constant. Thus, the per-sample inference cost scales as _O_ ( _L_ max), and since
+quadtree depth grows logarithmically with dataset size _n_, the overall complexity is _O_ (log _n_ ) under
+the fixed-model assumption. Empirical timings in Appendix B.5 confirm that the constant factor is
+small in practice.
+
+
+**Handling** **Sparse** **or** **Merged** **Nodes:** CARE-PM addresses sparse nodes in the SMART-QT hierarchy by skipping or merging regions with insufficient data. If a leaf node _ν_ has _|Dν|_ _<_ _τ_ and no
+sibling to merge with, CARE skips training, using the parent’s predictions _y_ ˆ _π_ ( _ν_ )( _i_ ) = _fπ_ ( _ν_ )( **x** _i,_ aug)
+as the final output. Alternatively, small sibling leaf nodes are merged into a single unit by combining their data, ensuring _|D_ combined _|_ _≤_ _κ_, then training on the regressor model. Merged nodes
+are marked, with one sibling’s model covering both areas, trained like other nodes. This ensures
+sufficient sample sizes, reducing variance and stabilising predictions in low-density regions.
+
+
+**Hierarchical** **Prediction:** SMART-CARE performs inference through hierarchical refinement,
+where predictions are sequentially enhanced by models at decreasing spatial scales. This top-down
+process ensures forecasts incorporate both global trends and local patterns, detailed in Appendix B.6.
+
+
+4 EXPERIMENTS AND RESULTS
+
+
+**Experimental** **Setup:** We evaluate SMART-QT and CARE-PM on NYC (7.8M records,
+2008–2023) and Chicago (8.2M records, 2001–2024) crime datasets, using spatio-temporal features (Date-Time, Latitude, Longitude). Models are trained in a breadth-first traversal, where parent
+predictions are propagated to children for hierarchical refinement (Appendix D.1 for details).
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|~~Actual Crime_count for each R~~<br>~~Predicted Crime_count for eac~~|~~    egion~~<br>~~   h Region~~|
+
+
+|A<br>P|ctual Crime_count for each Region<br>redicted Crime_count for each Region|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+Figure 2: NYC Time Series Prediction Analysis
+
+
+**Evaluation Metrics:** We report Mean Absolute Error (MAE), Root Mean Squared Error (RMSE),
+and Adjusted _R_ [2] as primary metrics. MAE captures average errors, RMSE emphasizes larger deviations, and Adjusted _R_ [2] accounts for predictor count, jointly reflecting predictive accuracy and
+generalization across spatio-temporal scales.
+
+
+**Time** **Series:** Figure 2 (a) demonstrates that CARE-PM effectively captures daily crime trends,
+including upper and lower bounds and seasonality, outperforming SARIMA Butt et al. (2021), which
+struggles with these patterns. By leveraging spatio-temporal features and hierarchical refinement,
+CARE-PM better adapts to temporal fluctuations across regions, enhancing prediction reliability
+over traditional time-series models, especially in datasets with complex crime dynamics like NYPD
+and Chicago.
+
+
+6
+
+
+2500
+
+
+2250
+
+
+2000
+
+
+1750
+
+
+1500
+
+
+1250
+
+
+1000
+
+
+750
+
+
+500
+
+
+(a) SMART-CARE Proposed
+
+
+(b) SARIMA-Baseline
+
+
+2500
+
+
+2250
+
+
+2000
+
+
+1750
+
+
+1500
+
+
+1250
+
+
+1000
+
+
+750
+
+
+500
+
+
+(a) HDBSCAN (b) Static Quadtree (c) SMART-Quadtree (d) SMART-QT-Zoom
+
+
+Figure 3: NYC Crime Heatmap: HDBSCAN, Static & Adaptive-QT
+
+
+**Heatmap Comparison:** Figure 3 compares partitioning strategies: HDBSCAN produces irregular
+clusters, standard Quadtree shows sparse nodes (blue rectangles), while SMART-QT achieves balanced distribution. Our method reduces nodes by 35% in sparse regions while maintaining hotspot
+granularity, validating adaptive partitioning superiority (Appendix: D.2.
+
+
+Figure 5: Avg. Comparative Analysis of Various Frameworks (Tree-Based Model).
+
+
+**Temporal** **Comparative** **Analysis:** SMART-CARE was evaluated on incrementally aggregated
+yearly crime data (2008-2023) using _Dt_ = [�] _i_ _[t]_ =1 _[Y][i]_ [.] [As] [the] [dataset] [size] [increased,] [error] [rates]
+decreased, demonstrating improved pattern recognition. SMART-CARE demonstrates flexibility
+by performing effectively with both tree-based and neural model instantiations. The tree-based
+implementation achieves MAE=0.23 and Adjusted R²=0.94 on aggregated data (2008-2023), significantly outperforming literature baselines Butt et al. (2021; 2024) (MAE: 8.74, 6.12). Neural
+
+
+7
+
+
+(d) Exe. Time
+
+
+140
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+
+14
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+(a) MAE
+
+
+(b) RMSE
+
+
+(c) Adj. _R_ [2]
+
+
+Figure 4: NYC Temporal Comparative Analysis (Tree-Based Model).
+
+
+**Ablation** **Variant** **Comparison:** An ablation study (Appendix: C) confirms SMART-CARE’s advantages over three variants: SMID-LNPM (MAE=5.26) and AMB-LNPM (MAE=2.36), which
+lack hierarchical knowledge transfer, and SMID-REPM (MAE=3.23), which uses static midpoint
+splitting. SMART-CARE achieves superior performance (MAE=0.92) by combining adaptive
+median-based partitioning with parent-to-child model refinement, effectively capturing complex
+spatio-temporal patterns (Figure 4) (For more detail Appendex: D.3).
+
+
+(b) RMSE
+
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+
+(d) Exe. Time
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+(a) MAE
+
+
+(c) Adj. _R_ [2]
+
+
+14
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+implementations (Fig. 6) also show competitive performance across GRU, LSTM, BiLSTM, and
+MLP architectures while maintaining computational efficiency (Figure 4).
+
+
+**Feature** **Importance** **Analysis:** Table 3 highlights the importance scores of spatio-temporal
+and predictive features across NYC (7.9M rows) and Chicago (8.2M rows) datasets. For
+NYC, Prediction (0.538) is the most significant, reflecting autocorrelation from hierarchical knowledge transfer in SMART-CARE, followed by Month (0.150) for seasonality and Lag1
+(0.116) for short-term trends. For Chicago, Prediction (0.502) leads, with Month (0.245)
+
+
+8
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0.95
+
+0.90
+
+0.85
+
+0.80
+
+0.75
+
+0.70
+
+0.65
+
+
+(d) Exe. Time
+
+
+(a) MAE
+
+
+(b) RMSE
+
+
+(c) Adj. _R_ [2]
+
+
+Figure 6: Chicago Temporal Comparative Analysis (NN-Based Model).
+
+
+Figure 5 shows the average MAE across each year for various frameworks, based on the results presented in Figure 4. SMART-CARE significantly outperforms the baseline model Butt et al. (2021)
+and ablation variants, reducing the average MAE from 10.75 to 0.92. By combining spatiotemporal analysis, hierarchical knowledge transfer from parent node models, and predictive learning
+through the quadtree structure, SMART-CARE effectively captures complex crime patterns, leading
+to substantial improvement in prediction accuracy.
+
+
+(d) Exe. Time
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+(a) MAE
+
+
+(b) RMSE
+
+
+(c) Adj. _R_ [2]
+
+
+Figure 7: Spatial Comparative Analysis of Various Frameworks (Tree-Based Model).
+
+
+**Spatial** **Comparative** **Analysis:** To evaluate performance across hierarchical geographical scales,
+we compared SMART-CARE, AMB-REPM, SMID-REPM, and SMID-LNPM on a 10-year dataset.
+For SMID-REPM and SMID-LNPM, we fixed node capacity at _T_ max = 500 _,_ 000 and maximum
+depth at _L_ max = 5, while SMART-CARE and AMB-REPM used adaptive thresholds and depth,
+per SMART-QT’s design. Error metrics (MAE, RMSE, Adjusted _R_ [2] ) were aggregated per quadtree
+node, averaging errors at each layer (e.g., layer-0, layer-5). Figure 7 shows SMART-CARE outperformed others, with avg. MAE decreasing from 1.64 (layer-0, root node with one model) to
+0.13 (layer-5, averaging over multiple granular models), compared to 6.46 to 0.56 for other models,
+highlighting its adaptive structure’s ability to capture fine-grained spatial features as depth increases.
+
+
+Table 1: Performance Metrics Comparison
+
+
+Metric SMART-CARE AMB ~~L~~ NPM SMID-REPM SMID-LNPM
+Range Query Time (s) 0.0125 0.0140 0.0165 0.0172
+Points Found in Query 1548 1548 1420 1385
+Memory Usage (MB) 38.61 40.20 71.75 63.00
+
+
+Table 2: Density Distribution Comparison
+
+
+Metric SMART-CARE AMB ~~L~~ NPM SMID-REPM SMID-LNPM
+Count 66 66 112 112
+Mean 6169219.41 6200000.00 7020000.00 7200000.00
+Std. Dev. 5982675.80 6100000.00 7400000.00 7600000.00
+Min 142360.71 145000.00 180000.00 170000.00
+25th Percentile 1656491.97 1700000.00 1950000.00 2000000.00
+Median 3128489.60 3150000.00 3750000.00 3900000.00
+75th Percentile 9659166.74 9700000.00 9800000.00 9900000.00
+Max 21207441.01 21500000.00 23500000.00 24000000.00
+
+
+Table 4: QT Structural Metrics Comparison
+
+
+Table 3: Feature Importance Score.
+
+
+|Feature|NYC 7.9 M. Rows<br>Importance|Feature|CHICAGO 8.2 M. Rows<br>Importance|
+|---|---|---|---|
+|Prediction<br>Month<br>Lag1<br>Lag2<br>RollMean7d<br>Day|0.538<br>0.150<br>0.116<br>0.115<br>0.078<br>0.003|Prediction<br>Month<br>Lag1<br>Lag2<br>RollMean7d<br>Day|0.502<br>0.245<br>0.212<br>0.033<br>0.006<br>0.002|
+
+
+|Metric|SMART-CARE|AMB LNPM|SMID-REPM|SMID-LNPM|
+|---|---|---|---|---|
+|Max Depth<br>Total Nodes<br>Leaf Nodes<br>Avg. Points per Leaf<br>Variance (Leaf)<br>Merged Nodes<br>Empty Nodes<br>Points in Merged Nodes|3<br>66<br>49<br>8259.86<br>5523618.82<br>4<br>0<br>32830|<br>3<br>66<br>49<br>8657.52<br>5632654.00<br>4<br>0<br>34521|2<br>112<br>86<br>13524.84<br>6135974.00<br>26<br>14<br>98211|2<br>112<br>86<br>12458.73<br>6354297.00<br>26<br>16<br>10542|
+
+
+|Model|Optimizer|Root LR|Child LR|Dropout|Batch Size|Epochs|
+|---|---|---|---|---|---|---|
+|Model|Optimizer|Root LR<br>|Child LR<br>|Dropout|Batch Size|Epochs|
+|Light Transformer<br>GRU<br>LSTM<br>BiLSTM<br>MLP|AdamW<br>Adam<br>Adam<br>Adam<br>Adam|1_ ×_ 10_−_4<br>5_ ×_ 10_−_3<br>3_ ×_ 10_−_3<br>3_ ×_ 10_−_3<br>1_ ×_ 10_−_3|5_ ×_ 10_−_5<br>1_ ×_ 10_−_3<br>8_ ×_ 10_−_4<br>8_ ×_ 10_−_4<br>5_ ×_ 10_−_4|0.2–0.3<br>0.1–0.2<br>0.2<br>0.3<br>0.1|64<br>128<br>128<br>128<br>256|15–20<br>10–15<br>10–15<br>10–15<br>8–12|
+
+
+|Parameter|Value|MAE|RMSE|Adj. R2|
+|---|---|---|---|---|
+|_α_|2000<br>5000<br>10000|0.25<br>0.40<br>0.43|0.35<br>0.55<br>0.58|<br>0.95<br>0.90<br>0.89|
+|_κ_|50000<br>100000<br>150000|0.26<br>0.38<br>0.42|0.36<br>0.52<br>0.56|0.94<br>0.91<br>0.89|
+|_β_|50000<br>10000<br>25000|0.24<br>0.42<br>0.39|0.34<br>0.57<br>0.53|0.96<br>0.89<br>0.91|
+|_δ_|2<br>5<br>10|0.27<br>0.37<br>0.41|0.37<br>0.50<br>0.54|0.93<br>0.92<br>0.90|
+|min ~~b~~ase|5000<br>2000<br>10000|0.25<br>0.39<br>0.41|0.35<br>0.54<br>0.57|0.95<br>0.90<br>0.88|
+
+
+|Model|Scheduler|Warm-up|Notes|
+|---|---|---|---|
+|Light Transformer<br>GRU<br>LSTM<br>BiLSTM<br>MLP|Cosine Annealing<br>StepLR / ReduceLROnPlateau<br>StepLR / ReduceLROnPlateau<br>StepLR<br>ReduceLROnPlateau|2 epochs<br>1 epoch<br>1 epoch<br>1 epoch<br>None|LR decays to 1_ ×_ 10_−_6<br>_γ_ = 0_._5 every 5 epochs<br>_γ_ = 0_._5, weight decay 1e-4<br>Stronger regularization,_ γ_ = 0_._5<br>Monitor val loss, factor 0.5|
+
+
+**Hyper-Parameter** **Comparative** **Analysis:** We evaluated SMART-CARE’s hyper-parameters ( _α_,
+_κ_, _β_, _δ_, min ~~b~~ ase) for adaptive quadtree balancing. Table 5 shows tuned values (e.g., _α_ = 2000,
+_β_ = 50000) achieving optimal MAE (0.24–0.27), RMSE (0.34–0.37), and Adjusted _R_ [2] (0.93–0.96),
+compared to alternatives (e.g., _α_ = 10000, MAE: 0.43). A table, confirming that tuned parameters
+enhance prediction accuracy and quadtree balance across diverse datasets.
+
+
+The hyperparameters and learning-rate schedules in Tables 6 and 7 support hierarchical quadtree
+fine-tuning for crime prediction. Higher root learning rates (e.g., 1 _×_ 10 _[−]_ [4] for Light Transformer,
+5 _×_ 10 _[−]_ [3] for GRU) enable global learning, while lower child rates (e.g., 5 _×_ 10 _[−]_ [5], 1 _×_ 10 _[−]_ [3] )
+stabilize local refinements. Dropout scales with complexity (0.2–0.3 for Transformers/BiLSTM,
+0.1 for GRU/MLP). Batch sizes and epochs adjust for model size and data (e.g., 8–12 for MLP,
+10–15 for LSTM). Schedules include a 2-epoch warm-up with cosine annealing for Transformers
+(to 1 _×_ 10 _[−]_ [6] ), 1-epoch warm-up with step decay ( _γ_ = 0 _._ 5) for RNNs, and validation-based decay
+(factor 0.5) for MLPs, ensuring efficient transfer, convergence, and stability.
+
+
+**Quadtree Analysis Summary:** We evaluated SMART-CARE’s quadtree efficiency through structural, performance, and density metrics. Table 4 shows SMART-CARE with a max depth of 3,
+66 nodes (49 leaf nodes), and lower variance (5523618.82) than AMB-LNPM, SMID-REPM, and
+SMID-LNPM, with 4 merged nodes reducing points to 32830. Table 1 highlights a 0.0125s range
+query time and 38.61 MB memory usage, outperforming others. Table 2 indicates a balanced density
+(mean: 6169219.41, median: 3128489.60), confirming SMART-CARE’s adaptability.
+
+
+5 CONCLUSION
+
+
+We presented SMART-CARE, an adaptive quadtree framework that dynamically partitions urban
+spaces using variance-aware median splitting and hierarchical model refinement. Our approach
+addresses key challenges in crime prediction: handling data skew through strategic small-leaf merging, capturing multi-scale patterns via feature propagation and model inheritance, and maintaining
+computational efficiency through periodic re-tuning. Extensive evaluation on NYC and Chicago
+crime data demonstrates SMART-CARE’s superiority over uniform grids, static quadtrees, and recent baselines, achieving MAE reductions to 0.92 (average) and 0.23 (best-case) while reducing
+execution time by 53%. The framework’s flexibility across both tree-based and neural instantiations highlights its generalizability for spatio-temporal forecasting tasks. Future work will explore
+real-time adaptation and multi-modal data integration.
+
+
+9
+
+
+and Lag1 (0.212) showing stronger temporal influence. Spatial features (Scl ~~L~~ ongitude,
+Scl ~~L~~ atitude) and Date have minimal impact (not listed, _<_ 0.05), as SMART-QT handles location. Lag2 and RollMean7d contribute modestly (e.g., 0.115, 0.078 for NYC), aiding sparse
+region predictions. This validates SMART-CARE’s temporal focus.
+
+
+Table 5: SMART-CARE Hyp-Tune.
+
+
+Table 6: Nueral Fine-tuning Hyperparameters
+
+
+Table 7: Neural Learning-rate Schedules
+
+
+**Reproducibility** **Statement:** We have taken several measures to ensure the reproducibility of our
+work. The datasets used (NYPD Complaint Data and Chicago Crime Data) are publicly available
+and cited in Section A.6. Data preprocessing steps, including spatio-temporal feature extraction
+and quadtree construction, are detailed in Section A and Appendix A.5. The complete recursive
+algorithm for SMART-QT, dynamic parameter scaling, and periodic re-tuning is presented in Appendix 2, along with sensitivity analyses of hyperparameters. CARE-PM training and inference
+procedures are formalized in Section B and Appendix B.6, with additional notes on handling sparse
+nodes and prediction refinement. Hyperparameter settings for XGBoost and neural variants are
+reported in Table B.4, and empirical timing results are provided in Appendix B.5. Finally, we provide an anonymous repository with full source code, preprocessing scripts, and trained models to
+facilitate exact reproduction of all results.
+
+
+REFERENCES
+
+
+Anthony A Braga, Brandon Turchan, Andrew V Papachristos, and David M Hureau. Hot spots
+policing of small geographic areas effects on crime. _Campbell systematic reviews_, 15(3):e1046,
+2019.
+
+
+Umair Muneer Butt, Sukumar Letchmunan, Fadratul Hafinaz Hassan, Mubashir Ali, Anees Baqir,
+Tieng Wei Koh, and Hafiz Husnain Raza Sherazi. Spatio-temporal crime predictions by leveraging
+artificial intelligence for citizens security in smart cities. _IEEE Access_, 9:47516–47529, 2021.
+
+
+Umair Muneer Butt, Sukumar Letchmunan, Fadratul Hafinaz Hassan, and Tieng Wei Koh. Leveraging transfer learning with deep learning for crime prediction. _Plos one_, 19(4):e0296486, 2024.
+
+
+Di Chai, Leye Wang, Junxue Zhang, Liu Yang, Shuowei Cai, Kai Chen, and Qiang Yang. Practical
+lossless federated singular vector decomposition over billion-scale data. In _Proceedings_ _of_ _the_
+_28th ACM SIGKDD conference on knowledge discovery and data mining_, pp. 46–55, 2022.
+
+
+New York City Police Department. Nypd complaint data historic. [https://data.](https://data.cityofnewyork.us/Public-Safety/NYPD-Complaint-Data-Historic/qgea-i56i/data)
+[cityofnewyork.us/Public-Safety/NYPD-Complaint-Data-Historic/](https://data.cityofnewyork.us/Public-Safety/NYPD-Complaint-Data-Historic/qgea-i56i/data)
+[qgea-i56i/data, 2023.](https://data.cityofnewyork.us/Public-Safety/NYPD-Complaint-Data-Historic/qgea-i56i/data) Accessed: September 2023.
+
+
+Yingjie Du and Ning Ding. A systematic review of multi-scale spatio-temporal crime prediction
+methods. _ISPRS International Journal of Geo-Information_, 12(6):209, 2023.
+
+
+Elizabeth R Groff, Shane D Johnson, and Amy Thornton. State of the art in agent-based modeling
+of urban crime: An overview. _Journal of Quantitative Criminology_, 35:155–193, 2019.
+
+
+Haibo He, Yang Bai, Edwardo A Garcia, and Shutao Li. Adasyn: Adaptive synthetic sampling approach for imbalanced learning. In _2008 IEEE international joint conference on neural networks_
+_(IEEE world congress on computational intelligence)_, pp. 1322–1328. IEEE, 2008.
+
+
+Chao Huang, Junbo Zhang, Yu Zheng, and Nitesh V Chawla. Deepcrime: Attentive hierarchical
+recurrent networks for crime prediction. In _Proceedings of the 27th ACM international conference_
+_on information and knowledge management_, pp. 1423–1432, 2018.
+
+
+Leslie W Kennedy, Joel M Caplan, and Eric Piza. Risk clusters, hotspots, and spatial intelligence:
+risk terrain modeling as an algorithm for police resource allocation strategies. _Journal of quanti-_
+_tative criminology_, 27:339–362, 2011.
+
+
+Wei-Chao Lin, Chih-Fong Tsai, Ya-Han Hu, and Jing-Shang Jhang. Clustering-based undersampling
+in class-imbalanced data. _Information Sciences_, 409:17–26, 2017.
+
+
+Peng Lu, Feier Wen, Yan Li, and Dianhan Chen. Multi-agent modeling of crowd dynamics under
+mass shooting cases. _Chaos, Solitons & Fractals_, 153:111513, 2021.
+
+
+Nafiz Mahmud, Khalid Ibn Zinnah, Yeasin Ar Rahman, and Nasim Ahmed. Crimecast: A crime
+prediction and strategy direction service. In _2016_ _19th_ _International_ _Conference_ _on_ _Computer_
+_and Information Technology (ICCIT)_, pp. 414–418. IEEE, 2016.
+
+
+10
+
+
+City of Chicago Police. Crimes 2001 to present. [https://data.cityofchicago.](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2/about_datadatasets)
+[org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2/about_](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2/about_datadatasets)
+[datadatasets, 2024.](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2/about_datadatasets) Accessed: January 2024.
+
+
+Wajiha Safat, Sohail Asghar, and Saira Andleeb Gillani. Empirical analysis for crime prediction and
+forecasting using machine learning and deep learning techniques. _IEEE access_, 9:70080–70094,
+2021.
+
+
+Bo Tang, Haibo He, Paul M Baggenstoss, and Steven Kay. A bayesian classification approach
+using class-specific features for text categorization. _IEEE Transactions on Knowledge and Data_
+_Engineering_, 28(6):1602–1606, 2016.
+
+
+Yuchun Tang, Yan-Qing Zhang, Nitesh V Chawla, and Sven Krasser. Svms modeling for highly
+imbalanced classification. _IEEE Transactions on Systems, Man, and Cybernetics, Part B (Cyber-_
+_netics)_, 39(1):281–288, 2008.
+
+
+Mohammad A Tayebi, Uwe Gla, Patricia L Brantingham, et al. Learning where to inspect: Location
+learning for crime prediction. In _2015 IEEE International Conference on Intelligence and Security_
+_Informatics (ISI)_, pp. 25–30. IEEE, 2015.
+
+
+Lu´ıs Torgo, Rita P Ribeiro, Bernhard Pfahringer, and Paula Branco. Smote for regression. In
+_Portuguese conference on artificial intelligence_, pp. 378–389. Springer, 2013.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Chuanxiu Xiong, Ajitesh Srivastava, Rajgopal Kannan, Omkar Damle, Viktor Prasanna, and Erroll
+Southers. On predicting crime with heterogeneous spatial patterns: Methods and evaluation. In
+_Proceedings of the 27th ACM SIGSPATIAL International Conference on Advances in Geographic_
+_Information Systems_, pp. 43–51, 2019.
+
+
+Bing Yu, Haoteng Yin, and Zhanxing Zhu. Spatio-temporal graph convolutional networks: A deep
+learning framework for traffic forecasting. _arXiv preprint arXiv:1709.04875_, 2017.
+
+
+Chao Zhang, Manish Jain, Ripple Goyal, Arunesh Sinha, and Milind Tambe. Learning, predicting
+and planning against crime: Demonstration based on real urban crime data. In _AAMAS_, pp. 1911–
+1912, 2015.
+
+
+Xingxing Zhou, Haiping Zhang, Genlin Ji, and Guoan Tang. A multi-density clustering algorithm
+based on similarity for dataset with density variation. _IEEE Access_, 7:186004–186016, 2019.
+
+
+A SMART QUADTREE
+
+
+A.1 TRADITIONAL QUADTREE
+
+
+The quadtree begins with the entire spatial area, _A_, and recursively subdivides it into four quadrants
+if the number of the data points ( _NA_ ), within a node exceeds the predefined node capacity ( _N_ capacity),
+the region _A_ is divided into four equally sized sub-regions: Northwest (NW), Northeast (NE), Southwest (SW), and Southeast (SE). This process continues until all nodes satisfy _NA_ _≤N_ capacity, resulting in a hierarchical segmentation of the spatial environment.
+
+
+To better understand the functionality of our quadtree structure, refer to Algorithm ( **??** ) part-I and
+Figure 8, which represent a quadtree containing fifteen data points (blue dots), each signifying a
+crime incident within its spatial boundary. In this example, the node capacity is set to _N_ capacity = 2,
+and the maximum quadtree depth is limited to _L_ capacity = 10.
+
+
+**Step 1: Quadtree Initialisation :** The quadtree begins with the root node ( _N_ root), encompassing the
+entire study area, as shown in Figure 8 (green dotted line). The root node’s boundary is defined as
+_R_ ( _X_ min _, Y_ min _, X_ max _, Y_ max) _,_ where _X_ min _, Y_ min _, X_ max _, Y_ max represent the dataset’s spatial extent.
+The quadtree is initialized as: _Q_ ( _R_ ( _X_ min _, Y_ min _, X_ max _, Y_ max) _, N_ capacity _, L_ capacity) _,_ where _N_ capacity
+specifies the maximum points per node, and _L_ capacity limits the tree depth to ensure computational
+
+
+11
+
+
+**Algorithm 1** Traditional Quadtree Algorithm
+
+
+**Require:** Point object _p_ to be inserted, boundary rectangle _R_, node capacity _N_ capacity, leaf capacity
+_L_ capacity
+**Ensure:** a Balanced quadtree with spatial subdivision
+
+1: **function** INITIALISEQUADTREE( _R, N_ capacity _, L_ capacity)
+2: _Q ←_ _Q_ ( _R_ ( _X_ min _, Y_ min _, X_ max _, Y_ max) _, N_ capacity _, L_ capacity)
+3: INSERT( _p_ )
+4: **end function**
+5: **function** INSERT( _p_ )
+6: _Q._ insert( _P_ ( _xi, yi, Ai_ ))
+7: **if** _N_ current is leaf and _|I_ ( _N_ ) _| ≥N_ capacity **then**
+8: SUBDIVIDE(self)
+9: **end if**
+10: **end function**
+11: **function** SUBDIVIDE(self)
+12: Add children: _C_ ( _N_ parent) _←{Q_ NW _, Q_ NE _, Q_ SW _, Q_ SE _}_
+13: Distribute points to children nodes
+14: **for** each _p ∈I_ ( _N_ parent) **do**
+15: **for** each _N_ _∈C_ ( _N_ parent) **do**
+16: **if** CONTAINS( _R_ ( _N_ ) _, Xp, Yp_ ) **then**
+17: INSERT( _N_ _, p_ )
+18: **end if**
+19: **end for**
+20: **end for**
+21: **end function**
+22: **begin**
+23: INITIALISEQUADTREE( _R, N_ capacity _, L_ capacity)
+24: **end**
+
+
+|NORTH WEST<br>13|14|21<br>17|Col4|NORTH EAST<br>18|
+|---|---|---|---|---|
+|**13**<br>**NORTH WEST**|**14**|**21**<br>~~**17**~~|**22**|**22**|
+|**13**<br>**NORTH WEST**|**14**|**21**<br>~~**17**~~|||
+|**13**<br>**NORTH WEST**|**14**|**23**|||
+|**13**<br>**NORTH WEST**|**14**|**23**|**24**|**24**|
+|**13**<br>**NORTH WEST**|**14**|**23**|||
+|**15**|**16**<br>**Root Node ID**|**19**<br>**Parent Node ID**|**19**<br>**Parent Node ID**|**20**<br>~~**2**~~<br> <br>**Leaf Node ID**|
+|**9**<br>**Cluster or**<br>**Rectangle Cent**|**10**<br>** ers**|**5**|**5**|**6**|
+|**11**<br>**SOUTH WEST**|**12**|**7**|**7**|~~**4**~~<br>**8**<br>**SOUTH EAST**<br>**Data Point**|
+
+
+Figure 8: Recursive Quadtree-Based Spatial Segmentation.
+
+
+efficiency and preventing excessive granularity. This initialisation provides a scalable foundation for
+dynamic spatial segmentation.
+
+
+**Step 2: Data Insertion:** Each crime incident is represented in 2D space as _P_ ( _x, y,_ **A** ), where ( _x, y_ )
+are the spatial coordinates and **A** _i_ contains associated attributes (e.g., timestamp). Data points
+are sequentially inserted into the quadtree using _Q._ insert( _P_ ( _xi, yi,_ **A** _i_ )) _,_ ensuring the spatial and
+attribute data are efficiently stored in the hierarchical structure.
+
+
+_Handling_ _Data_ _Points:_ For points near node boundaries, the quadtree validates placement using
+rectangle intersection checks to avoid misplacement or data loss. Points shared across multiple
+regions are assigned accurately by verifying spatial overlap. Intersection conditions are defined
+as: _X_ max _≥_ _X_ min _[′]_ [and] _[ X]_ [min] _[≤]_ _[X]_ max _[′]_ [and] _[ Y]_ [max] _[≥]_ _[Y]_ min _[′]_ [and] _[ Y]_ [min] _[≤]_ _[Y]_ max _[′]_ [.] [This] [ensures] [precise]
+handling of boundary data, particularly for points spanning multiple regions.
+
+
+12
+
+
+_Capacity_ _Constraints_ _and_ _Leaf_ _Nodes:_ A leaf node ( _N_ leaf) is a terminal node in the quadtree that
+stores localized data points. If the number of interim data points ( _I_ ( _N_ )) in a leaf node is below
+the _N_ capacity, a new data point ( _p_ ) can be directly appended to the set of interim points in that node.
+Interim data points serve as a temporary storage mechanism for localised data within a node. When
+_|I_ ( _N_ ) _| ≥N_ capacity, the node undergoes recursive subdivision, dynamically partitioning the space to
+adapt to data density and ensure efficient spatial representation.
+
+
+**Step 3:** **Recursive Subdivision:** When the leaf node ( _N_ leaf) exceeds its capacity ( _N_ capacity), it transitions into a parent node ( _N_ parent) to dynamically portion the spatial (crime) environment and better
+capture local crime density variations. _Creating child Nodes:_ The parent node is subdivided into four
+child nodes: Northwest (NW), Northeast (NE), Southwest (SW), and Southeast (SE). The boundaries for each child node are calculated using the parent’s midpoint coordinates:
+
+
+In Eq. (1), _σ_ [2] denotes the variance of crime counts within node _P_, and _|P_ _|_ is the number of points
+in that node. The terms _T_ min and _T_ cap serve as lower and upper bounds, respectively, computed by
+scaling the reference parameters _α_ and _κ_ according to the dataset size. The parameter _β_ controls the
+inverse relationship to local variance; a higher _β_ emphasises variance reduction, while _γ_ modulates
+sensitivity to this variance.
+
+
+The final term, involving _δ_, adds a density-dependent penalty proportional to the current node size
+_|P_ _|_, encouraging more conservative subdivision in already dense regions. However, since the threshold is computed based on the density of the node, we constrain it using fixed caps: _T_ min ensures
+
+
+13
+
+
+_X_ mid = _[X]_ [min][ +] _[ X]_ [max]
+
+
+_._
+2
+
+
+_[ X]_ [max]
+
+and _Y_ mid = _[Y]_ [min][ +] _[ Y]_ [max]
+2 2
+
+
+Each child node ( _Qi_ ) is initialized as: _Qi_ = _Q_ ( _Ri, N_ capacity _, L_ capacity) _,_ ( _i_ _∈{_ NW _,_ NE _,_ SW _,_ SE _}_ ),
+where _Ri_ represents the spatial boundaries of the _i_ _−_ _th_ quadrant. This ensures a finer spatial
+granularity, enabling each child node to focus on localised crime patterns.
+
+
+_Node_ _Hierarchy_ _and_ _Depth_ _Assignment:_ Each child node is assigned a unique identifier, and its
+depth level is based on the parent. This can be expressed as:
+
+
+_C_ ( _N_ parent) = _C_ ( _N_ parent) _∪{N_ NW _, N_ NE _, N_ SW _, N_ SE _}._
+
+
+The newly created child nodes are appended to the parent node’s children list, forming a hierarchical
+structure with refined spatial granularity.
+
+
+_Data Redistribution:_ After the child nodes ( _N_ NW _, N_ NE _, N_ SW _, N_ SE) are created, data points from the
+parent node ( _N_ parent) are redistributed to the appropriate child nodes ( _N_ child) based on their spatial
+coordinates. A data point _p ∈_ _I_ ( _N_ parent) is assigned to a _N_ child if its coordinates ( _Xp, Yp_ ) lie within
+the spatial boundaries _R_ ( _N_ child):
+
+
+_∀p ∈_ _I_ ( _N_ parent) _,_ _p →_ _N_ child if ( _Xp, Yp_ ) _∈_ _R_ ( _N_ child) _._
+
+
+To optimize memory usage and computational efficiency, QREPM uses references (or pointers) for
+redistribution rather than duplicating the data points. Importantly, the parent node retains its original
+data points while referencing child nodes.
+
+
+_Recursive Process:_ The subdivision process continues recursively until all nodes satisfy the capacity
+constraint ( _|I_ ( _N_ ) _| ≤N_ capacity), ensuring that each leaf node contains a manageable number of data
+points. This dynamic adaptation allows the quadtree to efficiently handle varying data densities
+across the study area.
+
+
+A.2 ADAPTIVE SUBDIVISION THRESHOLD WITH SMART-QT HYPERPARAMETERS.
+
+
+**Adaptive** **Subdivision** **Threshold** **(** _T_ max **):** Instead of using a fixed threshold _M_, SMART-QT dynamically determines the subdivision condition using a variance-aware density function. Specifically, the node capacity _T_ max is computed as:
+
+
++ _[|][P]_ _[|]_
+
+[2] _δ_
+
+_γ_
+
+
+      -      - _β_
+_T_ max = max _T_ min _,_ min 1 + _[σ]_ [2]
+
+
+��
+
+_[T]_ [cap] _,_
+_δ_ _[,]_
+
+
+**Algorithm 2** SMART Quadtree Construction
+
+**Require:** Dataset _D_ = _{_ ( **x** _i, ti, ci_ ) _}_ _[N]_ _i_ =1 [, reference size] _[ n]_ [ref]
+**Ensure:** SMART-QT structure with hierarchical partitioning
+
+1: Compute scaling factor _s ←_ _N/n_ ref
+2: Scale parameters: _α, β, κ, λ, γ, δ,_ min ~~b~~ ase
+3: Extract spatio-temporal features **x** _i_ from ( _xi, yi, ti_ )
+4: Initialize root node _N_ 0 with boundary _S_, data _D_ 0 = _D_, depth _d_ = 0
+5: **function** BUILDTREE( _Nj, d_ )
+6: _nj_ _←|Dj|_ _▷_ Point count in node
+7: _σj_ [2] _[←]_ [Var(] _[{][c][i]_ _[∈D][j][}]_ [)] _▷_ Crime count variance
+8: Compute _T_ max _←_ _f_ ( _α, β, κ, nj, σj_ [2][)] _▷_ Adaptive capacity
+9: Compute _L_ max _←_ _g_ ( _λ, γ, δ, N_ ) _▷_ Adaptive depth limit
+10: **if** _d < L_ max **and** _nj_ _≥_ _T_ max **then**
+11: **if** _d_ mod _ν_ = 0 **then** _▷ν_ = 3 if _N_ _>_ 10 [6], else 1
+12: Recompute _T_ max _, L_ max _▷_ Adapt to local density
+13: **end if**
+14: ( _x_ med _, y_ med) _←_ Median( _Dj_ ) _▷_ Median-based split
+15: Partition _Dj_ into _{DNW, DNE, DSW, DSE}_
+16: Create child nodes _{NNW, NNE, NSW, NSE}_
+17: Propagate parent features to children
+18: **for** each child _Nk_ _∈{NNW, NNE, NSW, NSE}_ **do**
+19: BUILDTREE( _Nk, d_ + 1)
+20: **end for**
+21: **end if**
+22: **end function**
+23: BUILDTREE( _N_ 0 _,_ 0)
+24: MERGESMALLLEAVES _▷_ Algorithm 2 in Appendix
+25: **return** Final SMART-QT tree
+
+
+the threshold does not fall below a minimum subdivision size, and _T_ cap ensures it does not grow unbounded in low-variance or high-density regions. This clipping mechanism ensures robustness and
+consistency across varying conditions. Together, these scaled constants ensure that node capacities
+dynamically reflect both global dataset characteristics and local statistical heterogeneity.
+
+
+These are all auto-tunable parameters that adapt based on the dataset size. This formulation ensures
+that nodes with high variance (i.e., potential hotspots) are subdivided more aggressively, while more
+homogeneous regions retain larger spatial coverage. In contrast to fixed heuristics, this adaptive
+mechanism is sensitive to both local and global dataset properties. All parameter values used in the
+adaptive threshold equations, including _α, β, γ, δ, κ_, and _λ_, are dynamically scaled based on dataset
+size to ensure consistent behavior across varying data volumes; see Dynamic Parameter Scaling for
+details.
+
+
+**SMART-QT Hyperparameters:** Auto-tuneable hyper-parameters used for the SMART-QT are:
+
+
+Table 8: SMART-QT Hyperparameters and Their Roles
+
+
+**Parameter** **Description**
+
+
+_α_ Minimum allowable node capacity to prevent over-splitting.
+_β_ Controls inverse relationship between variance and node capacity.
+_γ_ Stabilizes variance sensitivity in the _T_ max formula.
+_δ_ Penalizes node size when computing adaptive capacity.
+_κ_ Upper cap for node capacity, computed as _κ_ = _[n]_ _λ_ [total] [.]
+
+_λ_ Global scaling factor used in defining _κ_ .
+_η_ Multiplier controlling the maximum depth of the tree.
+_ν_ Interval for periodic threshold re-tuning at node depth levels.
+
+
+14
+
+
+A.3 STRATEGIC SMALL-LEAF MERGING DETAILS
+
+
+To prevent over-fragmentation in sparse, low-density, or noisy regions, SMART-QT integrates a
+variance-aware _Strategic Small-Leaf Merging_ mechanism. Classical quadtrees often split uniformly,
+producing many tiny leaves in areas that do not contain sufficient information for reliable local modelling. Such over-partitioning leads to poor generalisation, unnecessary computational overhead, and
+unstable models in underrepresented regions. The merging strategy addresses these shortcomings
+by consolidating weak or noisy leaves into statistically coherent siblings.
+
+
+**Formal Definition:** Let a node _N_ contain a point set _P_ within spatial area _A_, and define its density
+as _ρ_ = _[|][P]_ _A_ _[ |]_ _[.]_ [ Two categories of nodes are flagged as merge candidates:] [(i)] **[ Small nodes:]** [nodes with]
+
+0 _<_ _|P_ _|_ _<_ _τ_, where _τ_ is a user-defined minimum threshold for reliable modelling. (ii) **Density**
+**outliers:** nodes whose density deviates significantly from the global distribution across all leaves.
+Specifically, a node is flagged if
+
+
+_ρ < Q_ 1 _−_ _ϕ ·_ IQR or _ρ > Q_ 3 + _ϕ ·_ IQR _,_
+
+
+where _Q_ 1 and _Q_ 3 denote the first and third quartiles of the density distribution, IQR = _Q_ 3 _−_ _Q_ 1,
+and _ϕ_ is a tunable sensitivity parameter (default _ϕ_ = 1 _._ 5).
+
+
+**Merging Criteria:** For each candidate node _Nc_, the algorithm searches for a _compatible sibling Ns_,
+defined as a leaf node under the same parent that: (i) Satisfies the safe upper bound: _|Pc|_ + _|Ps|_ _<_
+_τ_ max, where _τ_ max = 2 _._ 5 _·_ _τ_ . (ii) Minimises density mismatch: _Ns_ = arg min _s |ρc_ _−_ _ρs|_ . If
+multiple siblings satisfy the criteria, the one with closest density is chosen. All points from _Nc_ are
+then reassigned to _Ns_, and _Nc_ is marked inactive. The merged relationship is stored in a mapping:
+merged ~~p~~ airs[ _c_ ] = _s,_ where _c_ and _s_ are node IDs of the candidate and sibling.
+
+
+**Algorithm 3** Strategic Small-Leaf Merging
+
+
+**Require:** Leaf set _L_, threshold _τ_, sensitivity _ϕ_ = 1 _._ 5
+**Ensure:** Updated quadtree with merged nodes, mapping merged ~~p~~ airs
+
+1: Compute density statistics: _Q_ 1 _, Q_ 3 _,_ IQR for all _N_ _∈L_
+2: _C_ _←{N_ _∈L |_ (0 _< |P_ _| < τ_ ) _∨_ ( _ρ < Q_ 1 _−_ _ϕ ·_ IQR) _∨_ ( _ρ > Q_ 3 + _ϕ ·_ IQR) _}_
+3: **for** each candidate _Nc_ _∈C_ **do**
+4: _S_ _←{_ siblings of _Nc_ under same parent _}_
+5: _S_ valid _←{Ns_ _∈_ _S_ _| |Pc|_ + _|Ps| <_ 2 _._ 5 _τ_ _}_
+6: **if** _S_ valid = _∅_ **then**
+7: _Ns_ _←_ arg min _Ns∈S_ valid _|ρc −_ _ρs|_
+8: _Ps_ _←_ _Ps ∪_ _Pc_ _▷_ Merge point sets
+9: Mark _Nc_ as inactive
+10: merged ~~p~~ airs[ _c_ ] _←_ _s_
+11: **end if**
+12: **end for**
+13: **return** Updated leaf set, merged pairs mapping
+
+
+**Geometric Example:** Merging redefines spatial boundaries while preserving coverage. For adjacent
+nodes: _N_ 1 : [ _x_ 1 _, xm_ ] _×_ [ _y_ 1 _, y_ 2] _,_ _N_ 2 : [ _xm, x_ 2] _×_ [ _y_ 1 _, y_ 2] _,_ the merged node spans the union:
+_N_ merged : [ _x_ 1 _, x_ 2] _×_ [ _y_ 1 _, y_ 2] _._ The merged region inherits the combined point set _P_ 1 _∪P_ 2 and aggregate
+statistics while maintaining spatial continuity.
+
+
+**Discussion:** This procedure ensures that sparse, noisy, or outlier leaves do not distort training. Instead, they are merged into nearby statistically compatible siblings, maintaining spatial coherence
+and improving stability of local models. The result is a structurally simplified quadtree that reduces
+overfitting, lowers computational cost, and yields more robust predictions in real-world heterogeneous datasets such as crime logs.
+
+
+A.4 PERIODIC THRESHOLD RE-TUNING:
+
+
+The re-tuning frequency _ν_ controls the trade-off between adaptability and efficiency. For instance:
+
+
+    - _ν_ = 1: Re-tuning at every level (maximal adaptability, higher cost).
+
+
+15
+
+
+- _ν_ = 3: Re-tuning every third level (improved efficiency for very large datasets).
+
+
+The optimal _ν_ is selected empirically based on dataset size and desired spatial resolution. When
+triggered, the values of _T_ max and _L_ max are recomputed using the same variance-aware formulations
+introduced earlier in Equation (1) and Equation (2). Specifically, the local variance _σ_ local [2] [is computed]
+over the node’s crime counts, and the re-tuned thresholds are propagated recursively to its child
+nodes. This local adjustment ensures that the quadtree structure dynamically adapts to regional
+crime patterns—splitting more aggressively in high-variance urban centres, while allowing larger
+aggregated regions in more uniform or low-density areas. SMART-QT maintains a balance between
+spatial granularity and computational efficiency by tailoring its partitioning behaviour at multiple
+depths.
+
+
+A.5 FEATURE CONSTRUCTION AND PROPAGATION (IMPLEMENTATION DETAILS):
+
+
+We derive a standardised spatio-temporal feature vector **x** _i_ for each data point and retain it (by reference) at every node so that parent and child nodes share identical input features plus the parent
+prediction. Preprocessing: raw timestamps _ti_ are converted to UNIX seconds and used to sort and
+align time series; any missing temporal fields are inferred from the timestamp. Target counts _ci_ are
+transformed with log(1 + _ci_ ) and then scaled to [0 _,_ 1] using a MinMax scaler fitted on training data.
+Feature standardisation: continuous features (coordinates, rolling statistics, lags) are standardised
+to zero mean and unit variance using a StandardScaler fitted on the training set; categorical/binary
+features (is ~~w~~ eekend, is ~~h~~ oliday) are left as 0/1. Lags and rolling statistics: we compute lagged
+counts _ci−k_ for _k_ _∈{_ 1 _,_ 2 _,_ 3 _}_ as _ci−k_ = _c_ ( _ti_ _−_ _k_ _·_ ∆) where ∆ is one day (daily aggregation);
+gaps (missing days) are handled by imputing with the node median count. The 7-day rolling mean
+is computed as roll7 _i_ = [1] 7 �7 _j_ =1 _[c][i][−][j]_ [(using] [the] [same] [gap] [policy);] [for] [short] [time] [windows] [at] [se-]
+
+ries start we use the available history (no padding). Cyclic encodings use standard sin/cos transforms: hoursin = sin(2 _π_ _·_ hour _/_ 24), hourcos = cos(2 _π ·_ hour _/_ 24), and similarly for month with
+period 12. The full propagated feature set (kept for every point and passed from parent→child)
+is: _{_ scaled longitude, scaled latitude, UNIX date, hour, day ~~o~~ f ~~w~~ eek, is ~~w~~ eekend, is ~~h~~ oliday,
+day ~~o~~ f ~~m~~ onth, month, year, hoursin _,_ hourcos _,_ monthsin _,_ monthcos _,_ lag1, lag2, lag3, roll7, seasonal
+flags (spring/summer/fall/winter) _}_ . In addition, we propagate a dedicated ‘Prediction‘ column containing the parent model’s prediction for each point; children append this value to their input vector
+and warm-start weights from parent models (XGBoost booster or NN weights). All derived feature
+computation code, imputation policy and scaler objects are saved with the training artifacts to ensure
+exact reproducibility.
+
+
+A.6 DYNAMIC PARAMETER SCALING — RATIONALE AND IMPLEMENTATION
+
+
+To make SMART-QT robust across datasets of very different scales (from 10 [5] to 10 [7] points), we
+dynamically scale a set of tuned base constants by dataset size. The scaling factor is defined as
+
+_s_ = _[n]_ [total] _,_
+
+_n_ ref
+
+where _n_ total is the dataset size and _n_ ref is a fixed reference (in our experiments _n_ ref = 10 [6] ). This
+ensures that node capacity thresholds and depth limits grow smoothly with dataset size, preserving
+both scalability and stability.
+
+
+**Clipping** **rationale:** Two practical constraints motivate the clipping ranges used (e.g. _λ_ _∈_ [5 _,_ 20],
+_γ, δ_ _∈_ [1 _,_ 5]): (i) **Numerical** **stability** **and** **interpretability:** Parameters such as _λ_ control exponential/logarithmic behaviours in threshold updates; letting them grow unbounded causes sudden
+jumps, while values too close to zero make the method insensitive to variance. (ii) **Computational**
+**control:** Clipping keeps effective complexity within practical bounds so that quadtree growth, retuning frequency, and sibling-merge heuristics remain efficient on real hardware. Empirically, these
+ranges strike a balance across city datasets from _≈_ 10 [5] to _≈_ 10 [7] records.
+
+
+**Implementation** **notes:** We distinguish two parameter groups: (i) **Integer-scale** **parameters**
+( _α, β, κ,_ min ~~b~~ ase): scaled linearly with _s_, then rounded. (ii) **Smooth parameters** ( _λ, γ, δ_ ): scaled
+with log(1 + _s_ ) and clipped.
+
+
+**Algorithm sketch:**
+
+
+16
+
+
+Inputs:
+N # dataset size
+N_ref # reference dataset size (1e6)
+base = {alpha=2000, kappa=50000, min_base=5000,
+beta=50000, lambda_val=10, gamma=2, delta=2}
+
+
+Compute scaling factor:
+s = max(1.0, N / N_ref)
+log_scale = 1 + log(s)
+
+
+Scale parameters:
+For alpha, beta, kappa, min_base:
+scaled[param] = max(1, round(base[param]    - s))
+For lambda, gamma, delta:
+scaled[param] = clip(round(base[param]    - log_scale),
+lower_bound, upper_bound)
+
+
+**Role of min** ~~**b**~~ **ase,** _T_ min **,** _T_ max **and** _T_ **cap :** We recall the adaptive node capacity formula from Eq. 1:
+
+_T_ max = max� _T_ min _,_ min� _β_ _[|][P]_ _[|]_ _[T]_ [cap] �� _,_
+1 + _σ_ [2] _/γ_ [+] _δ_ _[,]_
+
+
+where _σ_ [2] is local variance of crime counts and _|P_ _|_ is the number of points in the node.
+
+
+    - _T_ min (set by min ~~b~~ ase) prevents thresholds from falling too low in homogeneous or noisy
+regions.
+
+    - _T_ cap (scaled from _κ_ ) prevents thresholds from growing without bound in low-variance dense
+areas.
+
+    - The first term 1+ _σβ_ [2] _/γ_ [decreases as local variance grows, forcing earlier splits in hotspots.]
+
+    - The second term _[|][P]_ _δ_ _[ |]_ [prevents unnecessary splitting of already dense nodes.]
+
+
+**Worked numeric examples:** For illustration, consider defaults _β_ = 50 _,_ 000, _T_ min = 5 _,_ 000, _T_ cap =
+50 _,_ 000, _γ_ 0 = 2, _δ_ 0 = 2, with _n_ ref = 10 [6] and dataset size _n_ total = 5 _×_ 10 [6] ( _s_ = 5).
+
+
+Then:
+log(1 + _s_ ) = log(6) _≈_ 1 _._ 7918 _,_ _γ_ _≈_ 1 _._ 79 _,_ _δ_ _≈_ 3 _._ 58 _._
+
+
+    - **Case A (low variance,** _σ_ [2] = 0 _._ 5 **,** _|P_ _|_ = 1 _,_ 000 **):**
+1+ _σβ_ [2] _/γ_ _[≈]_ [39] _[,]_ [073] _[.]_ [3] _[,]_ _|Pδ |_ _[≈]_ [279] _[.]_ [1] _[⇒]_ _[T]_ [max] _[≈]_ [39] _[,]_ [352] _[.]_ [3] _[.]_
+
+    - **Case B (medium variance,** _σ_ [2] = 5 **,** _|P_ _|_ = 5 _,_ 000 **):**
+1+5 _β/γ_ _[≈]_ [13] _[,]_ [193] _[.]_ [9] _[,]_ _|Pδ |_ _[≈]_ [1] _[,]_ [395] _[.]_ [3] _[⇒]_ _[T]_ [max] _[≈]_ [14] _[,]_ [589] _[.]_ [2] _[.]_
+
+    - **Case C (high variance,** _σ_ [2] = 50 **,** _|P_ _|_ = 20 _,_ 000 **):**
+1+50 _β_ _/γ_ _[≈]_ [1] _[,]_ [729] _[.]_ [5] _[,]_ _|Pδ |_ _[≈]_ [5] _[,]_ [581] _[.]_ [1] _[⇒]_ _[T]_ [max] _[≈]_ [7] _[,]_ [310] _[.]_ [5] _[.]_
+
+
+**Interpretation:** As local variance increases, the _β_ -term shrinks and _T_ max falls, enabling more
+aggressive splitting in hotspots. The density penalty term moderates this behaviour in already dense
+nodes. On small datasets ( _s_ _<_ 1), _γ_ and _δ_ clip near 1, which makes _|P_ _|/δ_ larger, so _T_ max is higher
+(more conservative splitting). Thus, the rule:
+
+
+    - is monotone in both _n_ total and _σ_ [2],
+
+    - is provably bounded and asymptotically Θ(log _n_ total),
+
+    - balances expressiveness (deep trees where variance is high) with efficiency (shallower trees
+in uniform regions).
+
+
+This variance-aware scaling ensures SMART-QT remains adaptive, statistically reliable, and computationally efficient across a wide range of dataset scales.
+
+
+17
+
+
+B CARE PREDICTIVE MODEL
+
+
+B.1 CARE-PM ALGORITHM
+
+
+**Algorithm 4** CARE Predictive Model Framework
+
+**Require:** Trained SMART-QT structure, training data _D_ train = _{_ ( **x** _i, yi_ ) _}_ _[N]_ _i_ =1 [, test data] **[ x]** [test]
+**Ensure:** Predictions _y_ ˆfinal for test data
+
+1: Train baseline model _f_ base on _D_ train to get _y_ ˆ0( _i_ ) = _f_ base( **x** _i_ )
+2: Standardize _y_ ˆ0 and augment features: **x** _i,_ aug = [ **x** _i,_ ˆ _y_ 0 _[′]_ []]
+3: Train root model _f_ root on **x** _i,_ aug, yielding _y_ ˆ1( _i_ ) = _f_ root( **x** _i,_ aug)
+4: **function** TRAINNODE( _ν, Dν, fπ_ ( _ν_ ))
+5: **if** _|Dν| ≥_ _τ_ and _ν_ not merged **then**
+6: Initialize _fν_ with _fπ_ ( _ν_ )’s parameters (e.g., booster trees)
+7: Train _fν_ on _Dν_ with _y_ ˆ _π_ _[′]_ ( _ν_ ) [, augmenting] **[ x]** _[i,]_ [aug] _[,ν]_
+8: Update predictions: _y_ ˆ _ν_ ( _i_ ) = _fν_ ( **x** _i,_ aug _,ν_ )
+9: **else**
+10: Retain _y_ ˆ _π_ ( _ν_ )( _i_ ) for skipped/merged nodes
+11: **end if**
+12: **end function**
+13: **for** each node _ν_ in breadth-first order **do**
+14: _Dν_ _←_ points in _ν_ ’s region
+15: TRAINNODE( _ν, Dν, fπ_ ( _ν_ ))
+16: **end for**
+17: **function** PREDICT( **x** test)
+18: Compute _y_ ˆ0 = _f_ base( **x** test), augment to **x** test,aug
+19: Set _y_ ˆ _k_ _←_ _f_ root( **x** test,aug)
+20: **for** each level _k_ from 1 to leaf **do**
+21: Route **x** test to child node _ν_
+22: Standardize _y_ ˆ _k_ to _y_ ˆ _k_ _[′]_ [, augment] **[ x]** [test,aug] _[,ν]_
+23: _y_ ˆ _k_ +1 _←_ _fν_ ( **x** test,aug _,ν_ )
+24: **end for**
+25: **return** _y_ ˆfinal = _y_ ˆlast
+26: **end function**
+27: **return** final SMART-QT tree with all node models _fν_
+28: **return** _y_ ˆfinal for **x** test
+
+
+B.2 DETAILED ROOT NODE TRAINING
+
+
+The CARE Predictive Model begins by training the _root node_, which covers the entire spatial domain
+of the dataset. Because the root has no parent, its purpose is to establish a global baseline that
+captures overall spatio-temporal crime dynamics before finer regional refinements are learned in
+deeper quadtree nodes. Below, we expand on the compact description given in the main text.
+
+
+**Step 1:** **Baseline Global Model.** We first train a global baseline regressor _f_ base on the full training
+set _D_ train = _{_ ( **x** _i, yi_ ) _}_ _[N]_ _i_ =1 [, where] **[ x]** _[i]_ _[∈]_ [R] _[d]_ [ is the spatio-temporal feature vector and] _[ y][i]_ [ is the observed]
+crime count. This model minimises the mean squared error (MSE):
+
+
+In our experiments, _f_ base is instantiated as either: (i) an XGBoost regressor with depth = 6, learning
+rate = 0 _._ 1, and 200 trees; or (ii) a two-layer neural network with hidden size [64 _,_ 32] and ReLU
+activations. This baseline produces preliminary estimates _y_ ˆbase( _i_ ) = _f_ base( **x** _i_ ) for each input.
+
+
+18
+
+
+1
+_θ_ base _[⋆]_ [= arg min]
+_θ_ _|D_ train _|_
+
+
+_|D_ train _|_
+
+
+_i_ =1
+
+
+- �2
+_yi −_ _f_ base( **x** _i_ ; _θ_ ) _._
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+**Step** **2:** **Standardisation** **of** **Predictions.** To ensure comparability across nodes and prevent numerical dominance of the baseline predictions, we standardise them to zero mean and unit variance:
+
+_y_ ˆbase _[′]_ [(] _[i]_ [) =] _[y]_ [ˆ][base][(] _[i]_ [)] _[ −]_ _[µ][y]_ [ˆ][base] _,_
+
+_σy_ ˆbase
+
+where _µy_ ˆbase = _N_ [1] - _Ni_ =1 _[y]_ [ˆ][base][(] _[i]_ [)][ and] _[ σ][y]_ [ˆ] base [=] - _N_ 1 - _Ni_ =1� _y_ ˆbase( _i_ ) _−_ _µy_ ˆbase�2. This step is essential: it
+
+prevents inflated variance in downstream models and ensures the “Prediction” feature has the same
+scale as the other spatio-temporal features.
+
+
+**Step 3:** **Feature Augmentation.** The standardised predictions are appended as an additional feature, yielding the augmented input:
+
+**x** _i,_ aug = [ **x** _i,_ ˆ _y_ base _[′]_ [(] _[i]_ [)]] _[.]_
+
+
+This feature encodes the global crime trend for each sample and allows the root node to refine the
+baseline estimates.
+
+
+**Step** **4:** **Root** **Model** **Training.** The final root model _f_ root is trained on the augmented dataset
+_{_ ( **x** _i,_ aug _, yi_ ) _}_ _[N]_ _i_ =1 [, minimising the MSE:]
+
+
+In the tree-based case, _f_ root is an XGBoost model warm-started from _f_ base. In the neural case,
+_f_ root is initialised with the parameters of _f_ base and fine-tuned on the augmented data. This warmstarting accelerates convergence and ensures that _f_ root inherits global structure while learning local
+refinements.
+
+
+**Step 5:** **Output.** The root model generates refined predictions:
+
+
+_y_ ˆ1( _i_ ) = _f_ root( **x** _i,_ aug) _,_
+
+
+which serve as the top-level forecasts. These are propagated to child nodes during subsequent hierarchical training (see Appendix B.3), ensuring that each level inherits both the global baseline and
+the root’s refined adjustments.
+
+
+**Implementation** **Note.** For reproducibility, we set the reference dataset size _n_ ref = 10 [6] when
+computing scaling constants, learning rate decay with depth factor _γ_ = 0 _._ 5, and minimum node size
+_N_ min = 50. In practice, the baseline and root are implemented as _separate models_ : _f_ base provides a
+normalised trend feature, while _f_ root produces the actual top-level prediction.
+
+
+B.3 DETAILED CHILD NODE TRAINING
+
+
+After the root node has established a global baseline, CARE progressively trains the child nodes to
+refine predictions for local spatial regions. This process is recursive, moving top-down through the
+SMART-QT hierarchy. We expand here on the compact description given in the main text.
+
+
+**Step 1:** **Data Partitioning.** Each child node _ν_ is associated with a subset of training points _Dν_ =
+_{_ ( **x** _i, yi_ ) _}i∈Iν_ that fall within the spatial boundaries of the SMART-QT partition. By construction,
+these subsets are disjoint across siblings but collectively cover the parent’s domain.
+
+
+**Step 2:** **Parent Prediction Feature.** For every sample _i_ _∈Dν_, we compute the prediction of the
+parent model _fπ_ ( _ν_ ):
+_y_ ˆ _π_ ( _ν_ )( _i_ ) = _fπ_ ( _ν_ )( **x** _i,_ aug) _._
+Since the magnitude of parent predictions may vary across nodes, we normalise them within _Dν_ :
+
+_y_ ˆ _π_ _[′]_ ( _ν_ ) [(] _[i]_ [) =] _[y]_ [ˆ] _[π]_ [(] _[ν]_ [)][(] _[i]_ [)] _[ −]_ _[µ][y]_ [ˆ] _[π]_ [(] _[ν]_ [)] _,_
+
+_σy_ ˆ _π_ ( _ν_ )
+
+where _µy_ ˆ _π_ ( _ν_ ) and _σy_ ˆ _π_ ( _ν_ ) are the mean and standard deviation of _y_ ˆ _π_ ( _ν_ ) over _Dν_ . This ensures scale
+consistency and prevents numerical drift as predictions are propagated downward.
+
+
+19
+
+
+1
+_θ_ root _[⋆]_ [= arg min]
+_θ_ _N_
+
+
+_N_
+�� _yi −_ _f_ root( **x** _i,_ aug; _θ_ )�2 _._
+
+
+_i_ =1
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**Step** **3:** **Feature** **Augmentation.** The standardised parent prediction is appended to the original
+feature vector, producing:
+**x** _i,_ aug _,ν_ = [ **x** _i,_ ˆ _yπ_ _[′]_ ( _ν_ ) [(] _[i]_ [)]] _[.]_
+
+
+This augments the child’s training input with both local spatio-temporal context ( **x** _i_ ) and inherited
+parent knowledge.
+
+
+**Step** **4:** **Model** **Initialisation.** To accelerate convergence and stabilise learning, each child’s regressor _fν_ is _warm-started_ from its parent model _fπ_ ( _ν_ ):
+
+
+    - **Tree-based case (XGBoost):** The child booster inherits the parent’s ensemble and continues training with additional trees, typically with a reduced learning rate or capped number
+of new trees _T_ new.
+
+
+    - **Neural case:** The child network is initialised with the parent’s weights _θπ_ ( _ν_ ) and fine-tuned
+on _Dν_ with a local learning rate schedule.
+
+
+**Step 5:** **Local Objective.** The child model minimises the local mean squared error:
+
+
+where Ω( _·_ ) is a proximity regulariser. For neural models, Ω( _θ, θπ_ ( _ν_ )) = _∥θ_ _−_ _θπ_ ( _ν_ ) _∥_ [2] 2 [,] [enforcing]
+similarity to the parent’s weights. For XGBoost, the proximity is implicit via warm-starting and
+limiting additional trees.
+
+
+**Step 6: Recursive Refinement.** The predictions from each child are then propagated further down
+to their descendants, repeating Steps 2–5. This recursive refinement continues until leaf nodes are
+reached, where the most specialised models provide fine-grained predictions for local regions while
+maintaining coherence with the global structure propagated from the root.
+
+
+**Implementation Notes.** In practice, small nodes with _|Dν|_ _<_ _N_ min are exempt from retraining;
+instead, they reuse their parent’s predictions. This avoids overfitting in data-sparse regions. We used
+_N_ min = 50 in our experiments.
+
+
+B.4 FINE-TUNING HYPERPARAMETERS FOR NEURAL NETWORK MODELS
+
+
+The hyperparameters in Table 6 were selected to balance model complexity with the hierarchical
+quadtree fine-tuning strategy. At the root level, higher learning rates encourage global pattern discovery, while lower child learning rates stabilize local refinements and prevent catastrophic forgetting. Dropout values scale with model capacity, being higher for Light Transformers and BiLSTMs,
+moderate for LSTMs, and lower for GRUs and MLPs, reflecting their susceptibility to overfitting.
+Batch sizes and epoch counts are adjusted according to model complexity and local data availability,
+with smaller batches and fewer epochs for memory-intensive models (Transformers, BiLSTMs) and
+larger batches for lighter models (GRUs, MLPs). These choices ensure that each model can refine
+inherited weights at the leaf nodes effectively without overfitting, maintaining a balance between
+global generalization at the root and robust local specialization at the leaves.
+
+
+The learning-rate schedules in Table 7 complement this framework by further stabilizing training
+and enhancing generalization. Light Transformers utilize a short linear warm-up followed by cosine
+annealing to gradually reduce the learning rate across child epochs, preventing destabilization of pretrained attention patterns. RNN models (GRU, LSTM, BiLSTM) employ step decay or ReduceLROnPlateau strategies to adaptively reduce learning rates when validation performance plateaus,
+which is critical for small, sparse quadtree segments. Child-level learning rates are conservatively
+lower than root-level rates to refine inherited weights without overwriting global patterns. Minimum
+learning-rate floors, along with weight decay and dropout, further regularize the models. Overall,
+varying hyperparameters across models is intentional to match their computational requirements
+and overfitting tendencies, ensuring each model achieves its optimal performance and enabling a
+fair comparison of prediction accuracy across heterogeneous quadtree segments.
+
+
+20
+
+
+1
+_θν_ _[⋆]_ [= arg min]
+_θ_ _|Dν|_
+
+
+_i∈Dν_
+
+
+- _yi −_ _fν_ ( **x** _i,_ aug _,ν_ ; _θ_ )�2 + _λν_ Ω( _θ, θπ_ ( _ν_ )) _,_
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+B.5 EFFICIENT TRAINING AND INFERENCE: COMPLEXITY ANALYSIS AND EMPIRICAL
+TIMINGS
+
+
+**Per-node complexity.** At inference, each sample traverses at most one model per quadtree level.
+For an XGBoost regressor with _k_ trees and _p_ features, the per-node cost is _O_ ( _p · k_ ) _,_ since each tree
+requires at most _p_ feature checks. For a neural network with _H_ layers and widths _{dℓ}_, the per-node
+
+�� _H_   cost is _O_ _ℓ_ =1 _[d][ℓ][−]_ [1] _[d][ℓ]_ _,_ dominated by dense matrix multiplications. In both cases, _p_, _k_, and _{dℓ}_
+are fixed after model tuning, so the per-node cost is constant.
+
+
+**Depth dependence.** Let _L_ be the quadtree depth and _n_ the dataset size. Each sample evaluation
+requires _O_ ( _L_ ) node visits. Since SMART-QT enforces _L_ = _O_ (log _n_ ) (Eq. 2), the total complexity
+per sample is _O_ ( _L_ ) = _O_ (log _n_ ) _._
+
+
+**Empirical timings.** To validate the constant-factor assumption, we benchmarked prediction time
+for both model types on a commodity GPU/CPU setup. The average inference time per sample
+across varying dataset sizes ( _n_ ) is shown below.
+
+
+Dataset size ( _n_ ) Depth ( _L_ ) XGBoost per-sample (ms) NN per-sample (ms)
+
+
+10 [4] 6 0.05 0.07
+10 [5] 8 0.06 0.08
+10 [6] 12 0.08 0.11
+
+
+Table 9: Empirical inference times for XGBoost ( _k_ = 200, _p_ = 20) and NN ( _H_ = 3, widths _{_ 64 _,_ 32 _,_ 1 _}_ ).
+Timings averaged over 10 runs. Per-sample cost grows with depth _L_, consistent with _O_ (log _n_ ) scaling, but
+remains within practical bounds.
+
+
+_Implementation_ _note:_ For both the XGBoost and NN instantiations of SMART-CARE, we fix the
+architecture and hyperparameters before training. This ensures that per-node inference cost does not
+scale with tree depth or dataset size, validating the _O_ (log _n_ ) inference complexity assumption.
+
+
+**Discussion:** The results confirm that (i) per-node inference cost remains nearly constant once models are fixed, and (ii) per-sample runtime grows only logarithmically with dataset size. This validates
+the theoretical _O_ (log _n_ ) complexity for both the XGBoost and NN instantiations of SMART-CARE.
+
+
+B.6 HIERARCHICAL OR TOP-DOWN INFERENCE (PREDICTION) PROCEDURE:
+
+
+Once all node models are trained, predicting the outcome for an evaluation data point involves _pre-_
+_processing, routing the point through the quadtree and refining the prediction at each level_, mimicking the training sequence. Starting at the root node, the process proceeds as follows: (i) **Baseline Ini-**
+**tialization:** For a new input sample **x** (with spatio-temporal features), we obtain an initial prediction
+from the baseline model, _y_ ˆ0 = _f_ base( **x** ). This prediction is standardised (zero-mean, unit-variance)
+and appended to **x**, forming the augmented feature vector **x** aug = [ **x** _,_ ˆ _y_ 0 _[′]_ []][, consistent with the train-]
+ing phase. (ii) **Root Prediction:** The augmented features are fed into the root model to obtain the
+first refined prediction: _y_ ˆ1 = _f_ root( **x** aug). This _y_ ˆ1 represents the model’s estimate after accounting
+for global crime patterns, serving as the starting point for further refinement. (iii) **Recursive** **Re-**
+**finement:** The sample **x** is routed to the child node _ν_ containing its coordinates, carrying _y_ ˆ1 as a
+standardized ”Prediction” feature in **x** aug _,ν_ = [ **x** _,_ ˆ _y_ 1 _[′]_ []][.] [The child model computes] _[y]_ [ˆ][2] [=] _[f][ν]_ [(] **[x]** [aug] _[,ν]_ [)][,]
+refining the prediction for the sub-region. This top-down traversal continues recursively: at each
+node _ν_, the latest parent prediction _y_ ˆ _k_ augments the features, producing _y_ ˆ _k_ +1 = _fν_ ( **x** aug _,ν_ ), and
+routing to the next child if it exists. For merged or skipped nodes, the parent’s prediction is retained,
+bypassing local updates. Traversal stops at a leaf or when no child model exists, yielding the final prediction _y_ ˆfinal. Formally, the inference path yields a sequence _y_ ˆ0 _→_ _y_ ˆ1 _→· · ·_ _→_ _y_ ˆ _≤L_ max,
+terminating in the final prediction _y_ ˆfinal.
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+C ABLATION VARIANT:
+
+
+C.1 ADAPTIVE MEDIAN-BASED LEAF NODE PREDICTIVE MODEL (AMB-LNPM)
+
+
+The Adaptive Median-Based Leaf Node Predictive Model (AMB-LNPM) adopts SMART-CARE’s
+adaptive median-based splitting to partition spatial regions, ensuring more balanced data distribution for leaf node predictions. However, it omits SMART-CARE’s parent-child knowledge transfer
+and model refinement, preventing the model from leveraging hierarchical relationships to inform
+child node predictions or iteratively fine-tune across scales. This absence results in an MAE of 4.18,
+higher than SMART-CARE’s 0.24–0.27, despite relatively balanced splits (variance of points per
+leaf node: 7820000.00). The lack of hierarchical learning increases memory usage to 40.20 MB,
+reflecting inefficiencies in processing large datasets like NYPD. AMB-LNPM’s performance highlights the importance of hierarchical modelling in capturing complex spatio-temporal crime patterns,
+as its scalability and accuracy suffer without SMART-CARE’s full hierarchical framework.
+
+
+C.2 STATIC MID-POINT BASED REFINE ENSEMBLE PREDICTIVE MODEL (SMID-REPM)
+
+
+The Static Mid-point Based Refine Ensemble Predictive Model (SMID-REPM) employs static midpoint splitting while integrating SMART-CARE’s parent-child knowledge transfer and model refinement for leaf node predictions. This hierarchical learning enables child nodes to inherit and fine-tune
+parent models, improving convergence over non-hierarchical variants. However, SMID-REPM lacks
+SMART-CARE’s adaptive median-based splitting, resulting in uneven data distribution (variance of
+points per leaf node: 6100000.00). This limitation reduces fine-grained prediction accuracy, yielding an MAE of 3.45, better than SMID-LNPM’s 5.62 but worse than SMART-CARE’s 0.24–0.27.
+The static partitioning also increases range query time to 0.0165 seconds, indicating inefficiencies
+in processing high-density crime regions like Chicago. Consequently, SMID-REPM struggles to
+balance computational efficiency and prediction accuracy, particularly in datasets with significant
+spatial variability, limiting its effectiveness compared to SMART-CARE’s adaptive approach.
+
+
+C.3 STATIC MID-POINT BASED LEAF NODE PREDICTIVE MODEL (SMID-LNPM)
+
+
+The Static Mid-point Based Leaf Node Predictive Model (SMID-LNPM) constructs a quadtree using
+fixed midpoint splitting to partition spatial regions, focusing on leaf node predictions without incorporating SMART-CARE’s parent-child knowledge transfer or model refinement mechanisms. This
+absence of hierarchical relationships prevents SMID-LNPM from leveraging parent node models to
+inform child node predictions, limiting its ability to capture spatial dependencies across scales. Additionally, the lack of refinement hinders iterative model tuning, leading to suboptimal performance
+in complex crime patterns. Consequently, SMID-LNPM achieves a higher prediction error, with
+an MAE of 8.62, compared to SMART-CARE’s 0.24–0.27, due to static splits causing uneven data
+distribution (variance of points per leaf node: 6350000.00). This imbalance increases computational
+overhead, as the model struggles to adapt to high-density regions like NYC, resulting in reduced
+scalability and accuracy in capturing fine-grained crime trends.
+
+
+D EXPERIMENTS AND RESULTS
+
+
+D.1 EXPERIMENTAL SETUP
+
+
+We use two large-scale crime datasets:
+
+
+    - **NYPD Complaint Data** (7.8M rows, 18 attributes, 2008–2023) Department (2023).
+
+    - **Chicago Crime Data** (8.2M rows, 22 attributes, 2001–2024) of Chicago Police (2024).
+
+
+From each dataset, we extract spatio-temporal features, including Date-Time, Longitude, and
+Latitude, with temporal attributes engineered (day, week, month, year, cyclic encodings). The
+SMART-QT structure distributes samples into quadtree nodes based on spatial density, producing
+balanced training subsets.
+
+
+For CARE-PM, we employ an XGBoost regressor, tuned via GridSearchCV over _n_ estimators and
+learning rate. Training proceeds in a breadth-first traversal: parent node predictions are appended
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+as features and passed to children to enable hierarchical refinement. Hyperparameters are tuned
+only at the root level and inherited by descendants to reduce search cost. For completeness, we also
+experimented with a lightweight neural variant (transformer-based regressor) for CARE-PM, using
+the same parent-to-child inheritance strategy. However, our primary reported results focus on the
+XGBoost-based implementation.
+
+
+D.2 HEATMAP COMPARISON OF SPLITTING STRATEGIES:
+
+
+Figure 3 presents a heatmap comparing splitting strategies: HDBSCAN, standard Quadtree with
+Static-Mid splitting, and SMART-QT with median-based splitting. SMART-QT excels by achieving a balanced data distribution, minimising over-fragmentation in sparse regions while preserving
+granularity in dense areas, as evidenced by uniform colour intensity across nodes. HDBSCAN falters with noise sensitivity, producing irregular clusters, while Static-Mid splitting in the standard
+Quadtree results in uneven distributions, with blue rectangles highlighting sparse nodes containing
+few data points between dense clusters. SMART-QT’s Strategic Small-Leaf Merging reduces node
+count by 35% in sparse areas (e.g., NYC outskirts), improving computational efficiency and prediction stability. The heatmap shows SMART-QT’s adaptive partitioning outperforms, with tighter
+crime density alignment (e.g., high-crime red zones match actual hotspots), validating its superiority
+for spatio-temporal crime prediction.
+
+
+D.3 ABLATION VARIANT COMPARISON:
+
+
+An ablation study was conducted to evaluate the contributions of SMART-CARE’s key components
+(ablation variant detailed in Appendix C). SMART-CARE outperforms ablation variants: SMIDLNPM, SMID-REPM, and AMB-LNPM. SMID-LNPM and AMB-LNPM, lacking parent-child relationships and model refinement, fail to leverage hierarchical knowledge, resulting in higher MAE
+(e.g., 5.26 and 2.36, respectively). SMID-REPM, while incorporating parent-child relationships,
+uses static midpoints, leading to uneven splits and an MAE of 3.23. In contrast, SMART-CARE’s
+adaptive median-based splitting with hierarchical refinement achieves an MAE of 0.92, as shown
+in Figure 4. This underscores the importance of SMART-QT’s dynamic partitioning and parent-tochild model inheritance in capturing complex spatio-temporal crime patterns effectively.
+
+
+D.4 TEMPORAL COMPARATIVE ANALYSIS:
+
+
+To assess dataset size impact, SMART-CARE was trained incrementally on crime data, starting with
+a one-year dataset _D_ 1, then aggregating as _Dt_ = [�] _i_ _[t]_ =1 _[Y][i]_ [, where] _[ Y][i]_ [is year] _[ i]_ [’s data, using an 80%]
+training, 20% testing split. As _t_ increased, error rates dropped, reflecting better pattern recognition. Figure 4 shows SMART-CARE outperformed baselines Butt et al. (2021; 2024) (MAE: 8.74,
+6.12) with a lower MAE of 0.23 and Adjusted _R_ [2] of 0.94 on the dataset (2008-2023), leveraging
+SMART-QT’s hierarchical structure for spatio-temporal dynamics. Ablation models SMID-REPM
+and SMID-LNPM, lacking temporal features and hierarchy, showed reduced accuracy. SMARTCARE’s execution time (54.44 min) was lower than baselines (116.42 min), balancing efficiency
+and performance.
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+Table 10: Notation Summary for SMART-CARE Framework
+
+
+**Notation** **Description** **First Used**
+
+
+_D_ Complete dataset Abstract
+_D_ = _{_ ( **x** _i, ti, ci_ ) _}_ _[N]_ _i_ =1 Dataset with _N_ samples Abstract
+**x** _i_ _∈_ R _[d]_ Spatio-temporal feature vector for sample _i_ Abstract
+_ti_ Raw timestamp for sample _i_ Methodology
+_ci_ _∈_ N Daily crime count (target variable) Abstract
+_c_ ˆ _i_ Predicted crime count Abstract
+_f_ : **x** _i_ _�→_ _c_ ˆ _i_ Prediction function Abstract
+_D_ train _, D_ test Training and test splits Methodology
+_S_ _⊂_ R [2] Spatial domain (longitude, latitude) Methodology
+_Nj_ Node _j_ in quadtree Methodology
+_{Nj}_ Set of all nodes Methodology
+_Dj_ _⊂D_ Data subset belonging to node _Nj_ Methodology
+_fj_ Local predictor for node _Nj_ Methodology
+_T_ max Adaptive capacity threshold (max points per node) Abstract
+_L_ max Maximum depth limit Abstract
+_M_ Fixed capacity threshold (classical quadtree) SMART-QT subsection
+_L_ Fixed depth limit (classical quadtree) SMART-QT subsection
+_n_ Number of points in current node SMART-QT subsection
+_nj_ Number of points in node _Nj_ Algorithm 1
+_σj_ [2] Crime count variance in node _Nj_ Algorithm 1
+_n_ ref Reference dataset size for scaling Algorithm 1
+_s_ Scaling factor _N/n_ ref Algorithm 1
+_ν_ Retuning frequency parameter Algorithm 1
+_x_ med _, y_ med Median coordinates for splitting Algorithm 1
+_DNW, DNE, . . ._ Data subsets for quadrants Algorithm 1
+_NNW, NNE, . . ._ Child nodes (Northwest, Northeast, etc.) Algorithm 1
+_T_ min Minimum node capacity bound Equation 1
+_T_ cap Maximum node capacity bound Equation 1
+_α, β, γ, δ_ Adaptive threshold parameters Table 2
+_κ, λ_ Scaling parameters for bounds Table 2
+_η_ Depth multiplier parameter Table 2
+_s_ Dataset size scaling factor Appendix
+_n_ total Total dataset size ( _N_ ) Appendix
+_n_ ref Reference dataset size Appendix
+_L_ max Adaptive maximum depth limit Equation 2
+_L_ min Minimum depth bound (e.g., 5) Appendix
+_L_ cap Maximum depth bound (e.g., 15) Appendix
+_σ_ local [2] Local crime variance within node Equation 2
+_η_ Global depth scaling factor Equation 2
+_n_ total Total dataset size ( _N_ ) Equation 2
+_x_ mid[0] _, x_ mid[1] Median coordinates for splitting Equation **??**
+_N_ NW _, N_ NE _, . . ._ Child node quadrants Methodology
+_P_ Point set in current node Equation **??**
+_τ_ Minimum point threshold for merging Methodology
+_τ_ max Maximum merged node size (2 _._ 5 _τ_ ) Methodology
+_ρ_ Point density ( _|P_ _|/A_ ) Methodology
+_A_ Area of node boundary Methodology
+_Q_ 1 _, Q_ 3 First/third quartiles of density distribution Methodology
+IQR Interquartile range ( _Q_ 3 _−_ _Q_ 1) Methodology
+_ϕ_ Outlier multiplier (1.5) Methodology
+_Nc, Ns_ Candidate and sibling nodes for merging Methodology
+
+
+24

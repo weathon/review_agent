@@ -1,0 +1,2394 @@
+# EFFICIENT RESOURCE-CONSTRAINED TRAINING OF TRANSFORMERS VIA SUBSPACE OPTIMIZATION
+
+
+**Le-Trung Nguyen** **Enzo Tartaglione** **Van-Tam Nguyen**
+LTCI, T´el´ecom Paris, Institut Polytechnique de Paris, France
+_{_ name.surname _}_ @telecom-paris.fr
+
+
+ABSTRACT
+
+
+As AI increasingly shapes daily life, energy consumption and data privacy have
+become pressing concerns. On-device learning trains models directly on edge
+devices, cutting energy consumption and safeguarding data privacy. However,
+the expanding scale of modern neural networks creates a major obstacle for ondevice training. Although prior work has concentrated on compact convolutional
+architectures, we instead apply subspace-based training to transformer models.
+Motivated by the idea that a model’s essential information lies in a fixed subspace, we introduce Weight-Activation Subspace Iteration (WASI), a method that
+mitigates the memory bottleneck of backpropagation and boosts inference efficiency in transformer models by restricting training to this subspace. Our results
+demonstrate that WASI maintains accuracy comparable to vanilla training while
+reducing memory usage by up to 62 _×_ and computational cost (FLOPs) by up
+to 2 _×_ . On a Raspberry Pi 5, WASI achieves roughly 1 _._ 4 _×_ faster training and
+inference than vanilla training. The code is available at [https://github.com/Le-](https://github.com/Le-TrungNguyen/ICLR2026-WASI.git)
+[TrungNguyen/ICLR2026-WASI.git.](https://github.com/Le-TrungNguyen/ICLR2026-WASI.git)
+
+
+1 INTRODUCTION
+
+
+Subspace
+
+
+On-device learning has recently emerged as a promising research direction, enabling deep learning models to be finetuned directly on resource-constrained edge devices. This approach addresses critical issues such as privacy and energy
+consumption, improves scalability, and places control of AI
+capabilities directly “in user’s hands” (Dhar et al., 2021). Prior
+work on on-device learning has largely focused on vision tasks
+using convolutional neural network models, primarily because
+of their compact architectures (Lin et al., 2022; Nguyen et al.,
+2024; Yang et al., 2023b; Qu´elennec et al., 2024; Bragagnolo
+et al., 2022; Nguyen et al., 2025).
+
+
+Subspace
+
+
+In many real-world applications, however, transformer-based
+models have become the de facto choice due to their unique
+
+Original Original
+
+architectural mechanisms (Vaswani et al., 2017). Specifically, space space
+these models employ efficient forward propagation through the
+
+allel, and alleviate the vanishing gradient problem thanks to
+self-attention – key advantages that make them well-suited for Figure 1: Overview of WASI in a
+handling long-range dependencies, whether in extended text single training iteration.
+sequences or high-resolution images. Notable examples of
+such models include GPT (Brown et al., 2020), Gemini (Team et al., 2023), LLaMA (Touvron
+et al., 2023), and DeepSeek (Liu et al., 2024a). Nevertheless, these mechanisms make training and
+deployment of transformer models resource-intensive. This is even worse when considering the ondevice learning context, where models need to be trained on separate edge devices and are often
+resource-constrained.
+
+
+Original
+
+
+Original
+
+
+space
+
+
+space
+
+
+Figure 1: Overview of WASI in a
+single training iteration.
+
+
+1
+
+
+A significant fraction of training costs arises from backpropagation, especially the memory and computations needed for storing tensors in model layers (Lin et al., 2022). Various research has emerged
+to address the inefficiencies of backpropagation and enable learning directly on devices. For instance, Lin et al. (2022) demonstrated the feasibility of fine-tuning a predefined subnetwork under
+a 256KB memory constraint device while still maintaining competitive performance. Qu´elennec
+et al. (2024) took this further by dynamically adapting the subnetwork during training rather than
+relying on a static one, leading to better accuracy within tight memory budgets. Beyond the scope
+of on-device learning, many methods aim to reduce training overhead through parameter-efficient
+approaches, such as LoRA (Hu et al., 2022) and its variants (Xu et al., 2023; Zhang et al., 2023;
+Hayou et al., 2024; Liu et al., 2024b). While these techniques successfully limit the number of parameters updated at training time, they often overlook the cost of storing intermediate calculations
+(activation maps). Nguyen et al. (2024) address this by compressing activation maps under a controlled information-loss constraint, but lack robust memory budget control and incur considerable
+compression overhead.
+
+
+None of these methods enhances the neural architecture itself, and inference proceeds as usual,
+resulting in high deployment costs on edge devices. This issue has been further addressed by
+ASVD (Yuan et al., 2023) and FWSVD (Hsu et al., 2022), which employ truncated Singular Value
+Decomposition (SVD) to decompose the model architecture, but lack a theoretical basis for choosing which singular values to truncate. Subsequently, SVD-LLM (Wang et al., 2024) was developed
+to overcome this limitation and outperforms the aforementioned approaches. However, these methods are specifically designed for large language models (LLMs) and are not readily applicable to
+all vision transformer-based models (see Appendix. A.4). Another similar effort, ESPACE (Sakr &
+Khailany, 2024), requires access to a downstream dataset, which is not feasible in on-device learning
+scenarios.
+
+
+Inspired by prior studies on the stability of parameter subspaces during fine-tuning (Radiya-Dixit
+& Wang, 2020; Li & Zhang, 2021), we present WASI (Fig. 1), the first method for efficient _model-_
+_activation-decomposition-aware_ _training_ . WASI enables transformer models to be fine-tuned and
+executed entirely in a low-rank representation, substantially reducing hardware costs and making
+vision transformer tasks feasible on edge devices. We assess its effectiveness on vision transformer models, including the Swin Transformer (SwinT) (Liu et al., 2021), the Vision Transformer
+(ViT) (Dosovitskiy et al., 2020), and even TinyLlama (Zhang et al., 2024).
+
+
+Our main contributions are summarized as follows.
+
+
+    - Based on the previous studies, we formulate that the essential information of a model parameters resides in a stable subspace throughout fine-tuning (Sec. 3.3), which is then verified in Sec. 4.2.
+
+    - Leveraging this hypothesis, we propose Weight-Activation Subspace Iteration (WASI) in
+Sec. 3.3 to effectively compress the model architecture under a controlled information-loss
+constraint.
+
+    - We showcase the effectiveness of our approach through extensive experiments on multiple
+tasks (Sec. 4.3 and Sec. 4.4).
+
+
+2 RELATED WORKS
+
+
+In this section, we review low-rank decomposition techniques as applied to two key components
+of deep learning models: model weights and activation maps. Other research directions such as
+compact model design, quantization, sparsification, and knowledge distillation also exist, but they
+fall outside the scope of this work– _low-rank decomposition_ (Cheng et al., 2017; Deng et al., 2020).
+Therefore they are not discussed here (see Appendix A.5 for details).
+
+
+**Low-rank** **Decomposition** **for** **Model** **Weights.** Low-rank approximation methods for model
+weights have been extensively studied and can generally be categorized into two main approaches:
+_Low-rank Adapters_ and _Low-rank Models_ .
+LoRA (Hu et al., 2022) is the most prominent example of the first category, which introduces an
+additional low-rank adapter while freezing the original model architecture. This strategy can reduce
+the number of trainable parameters by up to four orders of magnitude, but comes with two notable
+drawbacks. During training, memory usage grows because both the frozen weights and the new
+
+
+2
+
+
+adapter must co-exist in memory. At inference time, the adapter is merged back into the model,
+resulting in inference performance that is identical to the original model, and thus losing the computational advantages of low-rank decomposition.
+Low-rank Models are an alternative line of research that factorizes the weight matrices themselves
+and trains only the low-rank components, enabling inference to run directly on the compressed representation. Methods such as ASVD (Yuan et al., 2023) and FWSVD (Hsu et al., 2022) achieve this by
+applying truncated SVD to each layer. These approaches, however, lack a theoretical link between
+the truncation loss and model performance loss, which is latter addressed by SVD-LLM (Wang et al.,
+2024). It is important to note that, except for SVD-LLM, all aforementioned methods are specifically
+tailored for LLMs, and even SVD-LLM cannot be directly applied to all vision transformer-based
+models with activation maps of four or more dimensions (see Appendix A.4).
+
+
+**Low-rank Decomposition for Activation Maps.** In addition to model weights, activation maps are
+a major contributor to memory consumption during training. Gradient Filter (Yang et al., 2023b) is
+a pioneering work that addresses this issue in on-device learning by generating approximated versions of activation maps through pooling operations with a predefined patch size, aiming to reduce
+memory usage and FLOPs during fine-tuning. However, this method is limited to convolutional
+models, and also has the drawback of the accumulated errors as fine-tuning progresses deeper into
+the model (Nguyen et al., 2024). To overcome this drawback, Nguyen et al. (2024) introduced
+Activation Map Compression (AMC), which applies High-Order Singular Value Decomposition
+(HOSVD) to compress activation maps while controlling the information loss via a threshold parameter _ε_ . While AMC achieves impressive memory savings up to 120 _×_, it incurs significant computational overhead due to the need for full HOSVD at every iteration. Additionally, the varying
+ranks required to meet the error threshold lead to fluctuating memory usage, which complicates deployment on devices with fixed memory budgets.
+Activation Subspace Iteration (ASI) (Nguyen et al., 2025) addresses both of these issues. Instead of
+controlling the reconstruction error, ASI fixes the activation ranks using a perplexity-based heuristic.
+This approach stabilizes memory usage throughout fine-tuning and allows for replacing the expensive HOSVD with subspace iteration. As a result, ASI preserves the high compression ratio of AMC
+while reducing computational cost by up to 252 _._ 65 _×_ . On a Raspberry Pi 5, fine-tuning with ASI is
+1 _._ 56 _×_ faster than vanilla training when being tested on a highly compact convolutional model.
+Beyond this scope, LBP-WHT (Yang et al., 2023b) has also been explored. However, it focuses
+solely on reducing computational cost during training by applying the Walsh-Hadamard Transformation to tensors in gradient computations, and does not address memory bottlenecks.
+
+
+Our proposed WASI overcomes the limitations posed by prior works. Hypothesizing the stability of the essential subspace of model weights, we introduce a novel method that simultaneously
+compresses the model architecture and activation maps while carefully controlling information loss
+throughout the fine-tuning process. This capability makes it feasible to fine-tune transformer-based
+models in on-device learning scenarios.
+
+
+3 METHOD
+
+
+In this section, we first identify the computational bottlenecks of training and inference (Sec. 3.1).
+Next, we review how activation maps can be efficiently compressed (Sec. 3.2). We then introduce
+a compression-aware-training strategy for both model weights and activation maps that controls
+information loss (Sec. 3.3). Finally, we analyze the computational complexity of our method and
+discuss its practical advantages (Sec. 3.4).
+
+
+3.1 BOTTLENECKS IN TRAINING AND INFERENCE
+
+
+Consider a deep transformer-based model, where _i_ denotes the index of a linear layer. This layer is
+represented by a weight matrix _i_ R _[O][i][×][I][i]_, which takes as input a tensor _i_ R _[B][×][N][i][×][I][i]_ and
+produces an output tensor _i_ +1 _W_ R _∈_ _[B][×][N][i][×][O][i]_ . Here, _B_ is the batch size, _Ni_ _A_ is the sequence length _∈_
+_A_ _∈_
+(or number of tokens), _Ii_ is the input feature dimension, and _Oi_ is the output feature dimension. We
+denote the dimensionality of the input as _i_ = _B, Ni, Ii_ .
+_D_ _{_ _}_
+
+During the forward pass (similarly in inference), the output of this layer is computed as:
+
+_Ai_ +1 = _AiWi_ _[⊤][,]_ (1)
+
+
+3
+
+
+**Algorithm 1** Weight Subspace Iteration - WSI at iteration _t_
+
+
+1: **Input:**
+
+
+Weight _i,_ ( _t_ ) at iteration _t_,
+_W_
+Explained variance threshold _ε ∈_ [0 _,_ 1].
+2: **Function:**
+3: **if** _t_ = 0 **then**
+4: _Li,_ ( _t_ ) _, Ri,_ ( _t_ ) = SVD - _i,_ ( _t_ ) _, ε_ - (see Eq. 5, Eq. 6, and Eq. 7)
+_W_
+5: **else**
+6: _Ri,_ _[T]_ ( _t_ ) [=] _[ W]_ _i,_ _[T]_ ( _t_ )
+
+_[·][ L][i,]_ [(] _[t][−]_ [1)]                               -                               
+7: _Li,_ ( _t_ ) = Orthogonalize _i,_ ( _t_ ) _Ri,_ _[T]_ ( _t_ ) (Using Gram-Schmidt)
+_W_ _·_
+
+8: **endif**
+9: **return** _Li,_ ( _t_ ) _, Ri,_ ( _t_ )
+
+
+where _⊤_ denotes the matrix transpose. Eq. 1 presents a batch matrix multiplication applied over the
+last two dimensions of _i_ ; that is, for each sample in the batch and each token, a matrix multiplica_A_
+tion is performed between a 1 _Ii_ vector and the transposed weight matrix of size _Ii_ _Oi_ .
+_×_ _×_
+
+Similarly, in the backward pass the chain rule of backpropagation is computed as follows:
+
+
+_⊤_
+_i,_ (2)
+
+_· A_
+
+
+_∂_ _∂_
+_L_ = _L_
+_∂_ _i_ _∂_ _i_ +1
+_W_ _A_
+
+
+_⊤_ _[∂][A][i]_ [+1] = _∂L_
+
+_·_ _∂_ _i_ _∂_ _i_ +1
+_W_ _A_
+
+
+_∂_ _∂_ _∂_
+_∂_ _Li_ = _∂_ _Li_ +1 _·_ _[∂]_ _∂_ _[A][i]_ [+1] _i_ = _∂_ _Li_ +1 _· Wi,_ (3)
+_A_ _A_ _A_ _A_
+
+
+where _L_ is the loss computed at the output of the model. Apparently, to compute _∂∂WLi_ [and] _∂∂ALi_
+during the backward pass, _i_ and _i_ must be stored during the forward pass. The large size of
+_A_ _W_
+these tensors is the primary cause of memory bottlenecks during backpropagation (Lin et al., 2022).
+Additionally, it also contributes to high inference costs, as multiplying between large _i_ and _i_
+_W_ _A_
+requires significant computational resources.
+
+
+3.2 ACTIVATION SUBSPACE ITERATION
+
+
+Here, we recap how activation maps can be decomposed by subspace iteration. Given an activation
+memory budgetvector **r** _i_ N [3] _B_ for, ASI performs brute-force optimization before fine-tuning to find an optimal rankeach layer such that the resulting memory does not exceed . Then, for each
+mode _m_ _∈_ 1 _,_ 2 _,_ 3, the activation map _i_ is unfolded into a matrix _Ai,m_ R _B_ _[a][i,m][×][b][i,m]_, where
+_∈{_   - _}_   - _A_ _∈_
+
+( _ai,m, bi,m_ ) = _Di,m,_ [�] _j_ = _m_ _[D][i,j]_ .
+
+Vogels et al. (2019) showed that warm-started subspace iteration matches SVD performance on
+stable tensors at much lower cost. Exploiting the stability of activation maps during fine-tuning,
+ASI applies this technique to each _Ai,m_ . The resulting approximation takes the form of a Tucker
+decomposition (Tucker, 1966):
+
+
+_i_ _i_ 1 _U_ [˜] _i_ [(1)] 2 _U_ [˜] _i_ [(2)] 3 _U_ [˜] _i_ [(3)] _,_ (4)
+_A_ _≈_ _S_ [˜] _×_ _×_ _×_
+
+where [˜] _i_ R **[r]** _[i,]_ [1] _[×]_ **[r]** _[i,]_ [2] _[×]_ **[r]** _[i,]_ [3] is the core tensor, representing a compressed version of _i_, and each
+_S_ _∈_ _A_
+factor matrix _U_ [˜] _i_ [(] _[m]_ [)] R _[a][i,m][×]_ **[r]** _[i,m]_ contains the principal components along the _m_ [th] mode.
+_∈_
+
+��3              Consequently, instead of storing all Θspace _m_ =1 elements of _i_, ASI reduces the storage
+
+��3 _[D][i,m]_       - _A_
+requirement to Θspace _m_ =1 **[r]** _[i,m]_ [ +][ �] _m_ [3] =1 _[D][i,m]_ **[r]** _[i,m]_ .
+
+
+_i_ _i_ 1 _U_ [˜] _i_ [(1)] 2 _U_ [˜] _i_ [(2)] 3 _U_ [˜] _i_ [(3)] _,_ (4)
+_A_ _≈_ _S_ [˜] _×_ _×_ _×_
+
+
+��3              Consequently, instead of storing all Θspace _m_ =1 elements of _i_, ASI reduces the storage
+
+_[D][i,m]_ _A_
+
+
+Details of the algorithm can be found in Appendix A.2.
+
+
+3.3 WEIGHT - ACTIVATION SUBSPACE ITERATION
+
+
+**Stability** **of** **Model** **Parameters** **Subspace.** While prior work has shown that over-parameterized
+models in fact reside in a low-dimensional intrinsic subspace (Aghajanyan et al., 2020; Li et al.,
+
+
+4
+
+
+_Di,m_ = _Oi_ = 128 _| m ∈_ [1 _,_ 3]
+
+_Di,m_ = _Oi_ = 256 _| m ∈_ [1 _,_ 3]
+
+
+10 [4]
+
+
+10 [2]
+
+
+_Di,m_ = _Oi_ = 32 _| m ∈_ [1 _,_ 3]
+
+_Di,m_ = _Oi_ = 64 _| m ∈_ [1 _,_ 3]
+
+10 [2]
+
+
+10 [1]
+
+
+50
+
+
+100
+
+
+0
+1 5 9 13
+
+
+0
+1 5 9 13
+
+
+1 5 9 13
+
+
+10 [0]
+1 5 9 13
+
+
+_Ki_ = **r** _i,_ 1 = **r** _i,_ 2 = **r** _i,_ 3
+
+
+Figure 2: For the linear layer _i_ with a single data batch of size _B_, given varying dimensions of _i_
+_W_
+and _i_ and different values of **r** _i,m_, _C_ training and _C_ inference illustrate the evolution in compression
+_A_
+rates for training and inference, respectively; while _S_ training and _S_ inference forecast the speedup ratios
+for these processes.
+
+
+2018), we further observe that fine-tuning introduces only minor updates at each training step due
+to the use of a small learning rate. As a result, our key insight is that the intrinsic subspace remains relatively stable after each training iteration and can therefore be reused in the following one
+(confirmed in Sec. 4.2 - Fig. 3). This is supported by the findings of Radiya-Dixit & Wang (2020)
+and Li & Zhang (2021), who showed that the fine-tuned models are close in parameter space to the
+pre-trained counterpart.
+
+
+**Weight Subspace Iteration.** Besides activation maps, model parameters (weights) _i_ are another
+_W_
+major source of memory bottlenecks during training. To address this, we propose a low-rank weight
+decomposition strategy that projects each weight tensor into a smaller subspace at every training
+iteration, thereby preserving the meaningful subspace. The method works as follows:
+
+
+Step 1. For the weight tensor _i_ at layer _i_, its SVD form is given by:
+_W_
+
+
+_Wi_ = _Ui_ Σ _iVi_ _[T]_ _[,]_ _Ui_ _∈_ R _[O][i][×][O][i]_ _,_ Σ _i_ _∈_ R _[O][i][×][I][i]_ _,_ _Vi_ _∈_ R _[I][i][×][I][i]_ _,_ (5)
+
+
+where Σ _i_ is a diagonal matrix containing _ri_ singular values _si,j∈_ [1 _,ri_ ], and _ri_ is the rank of _i_ .
+As shown in Eq. 3, truncating _Ui_, Σ _i_, and _Vi_ _[T]_ inevitably introduces error into _∂∂ALi_ [,] [which] [then] _W_
+propagates backward during training. In other words, low-rank decomposition of the weights affects
+model convergence due to the accumulation of truncation error.
+To control this effect, we constrain the truncation error by enforcing a target explained variance
+threshold _ε_, similar to the strategy used in Nguyen et al. (2024). Specifically, we measure the
+variance explained by the _j_ [th] singular value as _σi,j_ [2] [=] _[s]_ [2] _i,j_ _[/]_ [ �] _k_ _[s]_ _i,k_ [2] [.] [Assuming the singular values]
+
+
+variance explained by the _j_ [th] singular value as _σi,j_ [2] [=] _[s]_ [2] _i,j_ _[/]_ [ �] _k_ _[s]_ _i,k_ [2] [.] [Assuming the singular values]
+
+are sorted in descending order ( _si,j_ _si,k,_ _j_ _k_ ), the optimal rank is defined as the smallest
+_≥_ _∀_ _≤_
+ofinteger _i_, represented by _Ki_ _∈_ [1 _, ri_ ] such that _Li_ and _R_ [�] _ij_ _[K]_ =1such that: _[i]_ _[σ]_ _i,j_ [2] _[≥]_ _[ε]_ [.] [We then identify the essential subspace with rank] _[ K][i]_
+_W_
+
+
+where
+
+
+_i_ _i_ = _LiRi,_ (6)
+_W_ _≈_ _W_ [˜]
+
+
+_Li_ = _Ui,_ ( _Ki_ )Σ _i,_ ( _Ki_ ) _,_ _Ri_ = _Vi,_ _[T]_ ( _Ki_ ) _i_ [)] Σ _i,_ ( _Ki_ ) R _[K][i][×][K][i]_ _,_ _Vi,_ ( _Ki_ ) R _[I][i][×][K][i]_ _._
+
+_[|][ U][i,]_ [(] _[K]_ _[∈]_ [R] _[O][i][×][K][i][,]_ _∈_ _∈_ (7)
+Step 2. Performing full SVDs at every iteration, however, is computationally prohibitive for ondevice training (Nguyen et al., 2025). Leveraging the stability of parameter subspaces established
+above, Σ _i_ can be expected to remain relatively stable. Thus, for a fixed _ε_, the optimal rank _Ki_
+should also remain consistent (verified in Sec. 4.2). Consequently, instead of recomputing the SVD
+at every iteration, we compute it once at the beginning to determine the essential subspace. Subspace
+iteration is applied during training to minimize computational overhead. We refer to this method as
+**W** eight **S** ubspace **I** teration (WSI), with the full procedure outlined in Algorithm 1.
+
+
+**Weight-Activation** **Subspace** **Iteration.** While WSI reduces weight-related overhead, activation maps also dominate memory usage in backpropagation (Sec. 3.1). Previous work has shown
+that most of the energy in activation maps is concentrated in the first few principal components
+across all modes (Nguyen et al., 2024). Such a distribution makes them highly compressible while
+
+
+5
+
+
+still achieving high-fidelity reconstruction (confirmed in Sec. 4.2 - Fig. 4 and Sec. 4.3). Motivated
+by this property, we propose a unified framework in which both weights and activations are compressed under stable low-rank subspaces. Specifically, we redesign ASI with two improvements: (i)
+a dynamic-programming strategy that determines **r** _i_ by minimizing memory usage under a target
+pre-tuning perplexity, rather than relying on a fixed budget _B_, thereby reducing the search cost from
+exponential to linear (Appendix A.2); and (ii) an extension to support 3D activation tensors (Appendix A.1).
+Together, WSI and ASI form the proposed Weight-Activation Subspace Iteration (WASI), a novel
+framework for low-rank training that jointly leverages the stability of both weights and activations.
+Under this scheme, the forward and backward passes are computed as follows:
+_Ai_ +1 = _AiRi_ _[T]_ _[L]_ _i_ _[T]_ _[,]_ (8)
+_∂_              - _∂Li_ = _f_ LR              - _A_ ˜ _i,_ _∂_              - _∂Li_ +1              - _,_ (9)
+_W_ _A_
+
+      - _∂_      - _∂_
+_∂_ _Li_ = _∂_ _Li_ +1 _· LiRi,_ (10)
+_A_ _A_
+
+where _f_ LR( _._ ) denotes a linear operator applied in the low-rank space (see Appendix A.1). With
+learning rate _η_, the weight update is then computed as:
+
+
+        - _∂_
+_LiRi_ = _LiRi_ + _η_ _L_ _._ (11)
+_·_ _∂_ _i_
+_W_
+
+
+3.4 MEMORY EFFICIENCY AND COMPUTATIONAL COMPLEXITY ANALYSIS
+
+
+For simplicity, we assume that the same optimal rank is applied to both _Ai_ and _Wi_ . By varying
+this value, we can predict total memory usage and speedup for WASI compared to vanilla training
+(Fig. 2). As model size grows and the optimal rank decreases, WASI delivers greater memory
+compression ( _C_ training, _C_ inference) and speedup ( _S_ training, _S_ inference), a property especially valuable in
+on-device learning where models are typically over-parameterized and reside in low-dimensional
+subspaces (Aghajanyan et al., 2020; Li et al., 2018). Conversely, as the optimal rank increases,
+WASI’s computational cost approaches that of vanilla training, and the speedup ratios converge to
+1, reflecting the upper bound set by vanilla training.
+
+
+Detailed derives of _C_ training, _C_ inference, _S_ training, and _S_ inference can be found in Appendix A.3.
+
+
+4 EXPERIMENTS
+
+
+In this section, we present experiments designed to demonstrate the effectiveness of WASI. We
+begin by outlining the experimental setup in Sec. 4.1. Then, in Sec. 4.2, we conduct experiments to
+validate the assumptions introduced in Sec. 3.3 and Sec. 3.3. Sec. 4.3 compares WASI with various
+state-of-the-art methods across multiple datasets. Finally, all methods are evaluated in a real-world
+deployment scenario (Sec. 4.4. All simulation experiments are conducted using PyTorch 1.13.1 on
+an NVIDIA Quadro RTX A4500 with 20 GB of VRAM, while on-device experiments are run on a
+Raspberry Pi 5 equipped with a Cortex-A76 CPU and 8 GB of RAM.
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+Our goal is to enable on-device training of transformer models, where networks pretrained on largescale datasets are fine-tuned locally with task-specific data (Murshed et al., 2021). We evaluate
+WASI on image classification using ViT and SwinT, both pretrained on ImageNet-1K (Deng et al.,
+2009), across five downstream datasets: CIFAR-10/100 (Krizhevsky, 2009), CUB (Wah et al., 2011),
+Flowers (Nilsback & Zisserman, 2008), and Pets (Zhang et al., 2022).
+Comparisons are made against three directly comparable baselines at the time of conducting experi
+ments: ASI, SVD-LLM, and vanilla training (as discussed in Secs. 1, 2, Appendix A.5). We measure memory and computation costs during training and inference, focusing on linear layers within
+multi-perceptron blocks for fair comparison with previous methods (extended results with attention
+layers in Appendix B.3). All experiments are run with the same set of hyperparameters, detailed in
+Appendix B.1.
+
+
+6
+
+
+- - _∂_
+_A_ ˜ _i,_ _∂_ _Li_ +1
+_A_
+
+
+_,_ (9)
+
+
+- _∂_ - _∂_
+_∂_ _Li_ = _∂_ _Li_ +1 _· LiRi,_ (10)
+_A_ _A_
+
+
+4
+
+700
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10 [12] 1 _._ 2 _×_ 10 [12] 1 _._ 4 _×_ 10 [12] 1 _._ 6 _×_ 10 [12] 1 _._ 8 _×_ 10 [12]
+FLOPs
+
+
+(b)
+
+
+600
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+0
+
+
+0 10 20 30 40
+Epoch
+
+
+(a)
+
+
+3
+
+
+2
+
+
+1
+
+
+Figure 3: When fine-tuning ViT on the Pets dataset, **(a)** illustrates the evolution of singular values of
+_W_ 6 across epochs; **(b)** compares WSI and full SVD in terms of accuracy and training FLOPs under
+varying explained variance thresholds, _ε ∈{_ 0 _._ 4 _,_ 0 _._ 5 _,_ 0 _._ 6 _,_ 0 _._ 7 _,_ 0 _._ 8 _,_ 0 _._ 9 _}_ .
+
+
+Mode 3
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+Mode 1
+
+
+0
+
+
+Mode 2
+
+
+0
+
+
+0
+
+
+800
+
+
+(c)
+
+
+(a)
+
+
+(b)
+
+
+Figure 4: Explained variance of each singular value of _i_ across all of its modes when fine-tuning
+_A_
+ViT on the Pets dataset.
+
+
+4.2 PRELIMINARY RESULTS
+
+
+In these experiments, we focus on fine-tuning ViT model using Pets dataset.
+
+
+**Stability of Layer Ranks.** We apply truncated SVD to the weight tensors of the linear layers within
+ViT’s MLP blocks at each training iteration. We constrain the decomposition by setting _ε_ = 0 _._ 8
+and monitor the layer ranks _Ki_ throughout the course of training. As shown in Fig. 3a, we observe
+that the ranks exhibit remarkable stability across epochs. This observation validates our insight in
+Sec. 3.3, confirming the stability of layer ranks during training.
+
+
+**WSI** **vs** **SVD.** Next, we compare two strategies: (1) reapplying truncated SVD at every training
+iteration, and (2) WSI. We evaluate their performance across a range of _ε_ values - specifically, 0 _._ 4,
+0 _._ 5, 0 _._ 6, 0 _._ 7, 0 _._ 8, and 0 _._ 9 - with each value represented by a different marker in Fig. 3b. The results
+demonstrate that incorporating subspace iteration through WSI leads to a significant reduction in
+computational complexity compared to performing a full SVD at every iteration. Specifically, WSI
+requires 1 _._ 36 _×_ fewer FLOPs than SVD to achieve the same level of accuracy. Moreover, when both
+methods are constrained to use the same amount of FLOPs, WSI outperforms SVD by approximately
+35% in terms of accuracy. This result verifies that reusing the subspace in subsequent training
+iterations does not degrade model convergence.
+
+
+**Explained** **Variance** **Distribution** **of** **Activation** **Maps.** Fig. 4 illustrate the explained variances
+_σi,j,m_ of each singular value _j_ in mode _m_ of the activation map _Ai_ . As anticipated in Sec. 3.3, most
+activation-map energy lies in the first few singular values, which capture the key information during
+fine-tuning.
+
+
+7
+
+
+90
+
+
+80
+
+
+90
+
+
+80
+
+
+90
+
+
+80
+
+
+90
+
+
+80
+
+
+10 [2] 10 [3]
+Training Mem (MB)
+
+
+10 [2]
+Inference Mem (MB)
+
+
+10 [11] 10 [12]
+Training FLOPs
+
+
+10 [11]
+
+Inference FLOPs
+
+
+Figure 5: Resource consumption during fine-tuning and inference of ViT on the CIFAR-10 dataset.
+Each marker in the plots corresponds to a different compression rate, with the red diamond indicating
+vanilla training.
+
+
+**Pets** **Flowers** **CUB** **CIFAR-10** **CIFAR-100**
+
+
+100
+
+
+80
+
+
+60
+
+
+100
+
+
+80
+
+
+60
+
+
+100
+
+
+80
+
+
+60
+
+
+100
+
+
+80
+
+
+60
+
+
+6 _×_ 10 [11] 10 [12] 2 _×_ 10 [12]
+Training FLOPs
+
+
+2 _×_ 10 [11] 3 _×_ 10 [11] 4 _×_ 10 [11] 6 _×_ 10 [11]
+Inference FLOPs
+
+
+10 [2] 10 [3]
+Training Mem (MB)
+
+
+2 _×_ 10 [1] 3 _×_ 10 [1] 4 _×_ 10 [1] 6 _×_ 10 [1]
+Inference Mem (MB)
+
+
+Figure 6: Resource consumption when applying WASI for fine-tuning and inference of SwinT across
+different datasets. Each marker along the curves represents a different compression rate, while the
+final marker on each curve corresponds to vanilla training.
+
+
+4.3 MAIN RESULTS
+
+
+**ViT** **on** **CIFAR-10.** Fig. 5 presents the results of fine-tuning a ViT pretrained on ImageNet-1K
+using CIFAR-10. Each curve for WASI and ASI contains six markers, corresponding to explained
+variance thresholds _ε_ _∈{_ 0 _._ 4 _,_ 0 _._ 5 _,_ 0 _._ 6 _,_ 0 _._ 7 _,_ 0 _._ 8 _,_ 0 _._ 9 _}_ from left to right. The red diamond indicates
+vanilla training, and for fairness, the same compression ratios are applied to SVD-LLM.
+WASI achieves up to 100 _×_ higher memory efficiency than SVD-LLM at similar accuracy, owing
+to its avoidance of LoRA adapters. Its accuracy also improves steadily as _ε_ increases. In contrast,
+at the lowest compression rates (last two markers), SVD-LLM consumes even more memory than
+vanilla training because of the overhead of storing sub-layer activations.
+In terms of computation, LoRA adapters allow SVD-LLM to achieve the lowest FLOPs, followed
+by WASI, which jointly compresses weights and activations into a low-rank subspace. Since ASI
+only compresses activations while keeping weights intact, its computational cost is higher, and at
+_ε_ = 0 _._ 9, it even exceeds vanilla training (confirmed in Tab. 2). On the other hand, ASI maintains
+stable accuracy across compression rates, supporting the stability assumption discussed in Sec. 3.3.
+At inference, both WASI and SVD-LLM achieve similar memory/FLOPs savings, while ASI resembles vanilla since the architecture is unchanged.
+
+
+**SwinT** **on** **Multiple** **Datasets.** Fig. 6 compares WASI and vanilla across datasets, additional
+baselines are in Appendix B.3. Each marker along a curve from left to right, indicates different
+_ε_ _∈{_ 0 _._ 4 _, . . .,_ 1 _._ 0 _}_, with 1 _._ 0 as vanilla. Across all datasets, WASI consistently provides a better
+accuracy-efficiency trade-off. At _ε_ = 0 _._ 9, it matches vanilla accuracy while cutting memory by up
+to 62 _×_ and FLOPs by 1 _._ 5 _×_, and even surpasses vanilla on CUB.
+
+**WASI on TinyLlama.** The initial goal of WASI was to enable training transformer-based models on
+edge devices, so we focused on ViT and SwinT. To test its generality, we extended our experiments
+to TinyLlama, a decoder-only transformer model. The downstream dataset used is BoolQ (Clark
+et al., 2019). Due to limited resources, we only fine-tune up to the last 5 layers of the model and
+set the WASI _ε_ to 0 _._ 1. All other training hyperparameters followes the same configuration as in our
+previous experiments. For comparison, we log the resource consumption only at the layers that are
+fine-tuned. The results are shown in Fig. 7.
+
+
+8
+
+
+66
+
+
+64
+
+
+66
+
+
+64
+
+
+66
+
+
+64
+
+
+66
+
+
+64
+
+
+10 [0] 10 [2]
+Activation Mem (MB)
+
+
+10 [1] 10 [2]
+Weight Mem (MB)
+
+
+10 [10] 10 [11]
+Training FLOPs
+
+
+10 [9] 10 [10] 10 [11]
+Inference FLOPs
+
+
+Figure 7: Performance of WASI vs. vanilla training when fine-tuning TinyLlama on BoolQ. Each
+marker indicates the number of layers fine-tuned from the last layer upward: the marker closest to
+the y-axis of each figure corresponds to fine-tuning only the last layer, the next marker corresponds
+to the last two layers, and so on.
+
+
+WASI again outperforms vanilla: activation and weight memory drop by up to 953 _._ 86 _×_ and 30 _._ 12 _×_,
+while training and inference FLOPs fall by 13 _._ 11 _×_ and 30 _._ 27 _×_, all without accuracy loss.
+
+Additional results, including ViT on more datasets and extended baselines for SwinT are in Appendix B.3.
+
+
+4.4 ON-DEVICE LATENCY
+
+
+resource-constrained hardware by fine-tuning
+
+15
+
+ViT on CIFAR-10 using a Raspberry Pi 5.
+Fig. 8 reports the average time required to com- 10
+plete a single iteration of both training and
+inference across different explained variance 5
+thresholds _ε_ 0 _._ 4 _,_ 0 _._ 5 _,_ 0 _._ 6 _,_ 0 _._ 7 _,_ 0 _._ 8 _,_ 0 _._ 9, 0
+
+
+_ε_
+
+As expected, the runtime for both training
+and inference under WASI increases as _ε_ be- Figure 8: Training and inference time per iteracomes larger. This trend aligns with the intu- tion for ViT on CIFAR-10 (batch size = 128) usition that higher _ε_ values retain more informa- ing a Raspberry Pi 5, measured under different extion and thus result in higher-rank approxima- plained variance thresholds _ε_ . The final marker on
+tions, which require more compute and mem- each curve represents vanilla training.
+ory. However, despite this increase, WASI consistently outperforms vanilla training in terms of
+speed. For instance, even at _ε_ = 0 _._ 9, which corresponds to the least aggressive compression setting
+in this experiment, WASI remains approximately 1 _._ 4 _×_ faster than vanilla training. Thus, WASI delivers clear benefits even when preserving much of the original information.
+Importantly, WASI helps to reduce runtime without causing significant accuracy degradation, as discussed in earlier sections. This ability makes it a strong candidate for the deployment of transformerbased model in real-world on-device learning scenarios, where computational resources are severely
+constrained. Further numerical results can be found in Appendix. B.3.
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+0.4 0.5 0.6 0.7 0.8 0.9 vanilla
+_ε_
+
+
+Figure 8: Training and inference time per iteration for ViT on CIFAR-10 (batch size = 128) using a Raspberry Pi 5, measured under different explained variance thresholds _ε_ . The final marker on
+each curve represents vanilla training.
+
+
+5 CONCLUSION
+
+
+In this work, we introduced WASI, an efficient training method for resource-constrained finetuning of transformer models. Assuming that essential parameter information lies in a stable lowdimensional subspace, WASI applies SVD and subspace iteration to obtain low-rank approximations
+of both weights and activations during each training iteration. This yields significant gains in memory and computation while tightly controlling information loss.
+Building on prior theory and validated through extensive experiments, WASI outperforms stateof-the-art methods, reducing training memory usage by up to 62 _×_ and achieving 1 _._ 4 _×_ speedup
+over vanilla training on a Raspberry Pi 5. These results show the potential of WASI for enabling
+on-device learning with transformers, a domain traditionally dominated by CNNs. While our experiments focus on transformers, the underlying principles apply broadly to any neural network trained
+with backpropagation.
+
+
+9
+
+
+ACKNOWLEDGEMENT
+
+
+Part of this work was funded by Hi!PARIS Center on Data Analytics and Artificial Intelligence,
+by the European Union’s Horizon Europe Research and Innovation Programme under grant agreement No. 101120237 (ELIAS - European Lighthouse of AI for Sustainability) and No. 101120657
+(ENFIELD - European Lighthouse to Manifest Trustworthy and Green AI), by the French National
+Research Agency (ANR) in the framework of the IA Cluster project “Hi! PARIS Cluster 2030”
+(ANR-23-IACL-005), the NF-NAI project (ANR-22-PEFT-0003) and NF-FITNESS project (ANR22-PEFT-0007) as part of France 2030.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+Detailed description of our algorithm is provided in Sec. 3.3, Appendix A.1, and Appendix A.2. Full
+details of the training policy, including hyperparameters, datasets, and other configurations, are presented in Appendix B.1. Code to reproduce the main experiments is included in the Supplementary
+Material zip file. We commit to open-sourcing the complete code upon acceptance of this paper.
+
+
+REFERENCES
+
+
+Armen Aghajanyan, Luke Zettlemoyer, and Sonal Gupta. Intrinsic dimensionality explains the effectiveness of language model fine-tuning. _arXiv preprint arXiv:2012.13255_, 2020.
+
+
+Andrea Bragagnolo, Enzo Tartaglione, and Marco Grangetto. To update or not to update? neurons
+at equilibrium in deep models. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:22149–
+22160, 2022.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Yu Cheng, Duo Wang, Pan Zhou, and Tao Zhang. A survey of model compression and acceleration
+for deep neural networks. _arXiv preprint arXiv:1710.09282_, 2017.
+
+
+Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina
+Toutanova. Boolq: Exploring the surprising difficulty of natural yes/no questions. _arXiv preprint_
+_arXiv:1905.10044_, 2019.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In _2009 IEEE conference on computer vision and pattern recognition_,
+pp. 248–255. Ieee, 2009.
+
+
+Lei Deng, Guoqi Li, Song Han, Luping Shi, and Yuan Xie. Model compression and hardware
+acceleration for neural networks: A comprehensive survey. _Proceedings_ _of_ _the_ _IEEE_, 108(4):
+485–532, 2020.
+
+
+Sauptik Dhar, Junyao Guo, Jiayi Liu, Samarth Tripathi, Unmesh Kurup, and Mohak Shah. A survey
+of on-device machine learning: An algorithms and learning theory perspective. _ACM Transactions_
+_on Internet of Things_, 2(3):1–49, 2021.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An
+image is worth 16x16 words: Transformers for image recognition at scale. _arXiv_ _preprint_
+_arXiv:2010.11929_, 2020.
+
+
+Marawan Gamal Abdel Hameed, Marzieh S Tahaei, Ali Mosleh, and Vahid Partovi Nia. Convolutional neural network compression through generalized kronecker product decomposition. In
+_Proceedings of the AAAI Conference on Artificial Intelligence_, volume 36, pp. 771–779, 2022.
+
+
+Soufiane Hayou, Nikhil Ghosh, and Bin Yu. Lora+: Efficient low rank adaptation of large models.
+_arXiv preprint arXiv:2402.12354_, 2024.
+
+
+10
+
+
+Yen-Chang Hsu, Ting Hua, Sungen Chang, Qian Lou, Yilin Shen, and Hongxia Jin. Language model
+compression with weighted low-rank factorization. _arXiv preprint arXiv:2207.00112_, 2022.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022.
+
+
+Alex Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University
+of Toronto, 2009.
+
+
+Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimension
+of objective landscapes. _arXiv preprint arXiv:1804.08838_, 2018.
+
+
+Dongyue Li and Hongyang Zhang. Improved regularization and robustness for fine-tuning in neural
+networks. _Advances in Neural Information Processing Systems_, 34:27249–27262, 2021.
+
+
+Ji Lin, Ligeng Zhu, Wei-Ming Chen, Wei-Chen Wang, Chuang Gan, and Song Han. On-device
+training under 256kb memory. _Advances in Neural Information Processing Systems_, 35:22941–
+22954, 2022.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024a.
+
+
+Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, KwangTing Cheng, and Min-Hung Chen. Dora: Weight-decomposed low-rank adaptation. In _Forty-first_
+_International Conference on Machine Learning_, 2024b.
+
+
+Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo.
+Swin transformer: Hierarchical vision transformer using shifted windows. In _Proceedings of the_
+_IEEE/CVF international conference on computer vision_, pp. 10012–10022, 2021.
+
+
+Ivan Markovsky. Structured low-rank approximation and its applications. _Automat-_
+_ica_, 44(4):891–909, 2008. ISSN 0005-1098. doi: https://doi.org/10.1016/j.automatica.
+2007.09.011. URL [https://www.sciencedirect.com/science/article/pii/](https://www.sciencedirect.com/science/article/pii/S0005109807003950)
+[S0005109807003950.](https://www.sciencedirect.com/science/article/pii/S0005109807003950)
+
+
+MG Sarwar Murshed, Christopher Murphy, Daqing Hou, Nazar Khan, Ganesh Ananthanarayanan,
+and Faraz Hussain. Machine learning at the network edge: A survey. _ACM Computing Surveys_
+_(CSUR)_, 54(8):1–37, 2021.
+
+
+Le-Trung Nguyen, A¨el Qu´elennec, Enzo Tartaglione, Samuel Tardieu, and Van-Tam Nguyen. Activation map compression through tensor decomposition for deep learning. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 37:130384–130407, 2024.
+
+
+Le-Trung Nguyen, A¨el Qu´elennec, Van-Tam Nguyen, and Enzo Tartaglione. Beyond low-rank decomposition: A shortcut approach for efficient on-device learning. In _Forty-second International_
+_Conference on Machine Learning_, 2025.
+
+
+Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number
+of classes. In _Indian Conference on Computer Vision, Graphics and Image Processing_, 2008.
+
+
+A¨el Qu´elennec, Enzo Tartaglione, Pavlo Mozharovskyi, and Van-Tam Nguyen. Towards on-device
+learning on the edge: Ways to select neurons to update under a budget constraint. In _Proceedings_
+_of the IEEE/CVF Winter Conference on Applications of Computer Vision_, pp. 685–694, 2024.
+
+
+Evani Radiya-Dixit and Xin Wang. How fine can fine-tuning be? learning efficient language models.
+In _International Conference on Artificial Intelligence and Statistics_, pp. 2435–2443. PMLR, 2020.
+
+
+Charbel Sakr and Brucek Khailany. Espace: Dimensionality reduction of activations for model
+compression. _arXiv preprint arXiv:2410.05437_, 2024.
+
+
+GW Stewart and JH Miller. Methods of simultaneous iteration for calculating eigenvectors of matrices. _Topics in Numerical Analysis II_, 2, 1975.
+
+
+11
+
+
+Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut,
+Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al. Gemini: a family of highly
+capable multimodal models. _arXiv preprint arXiv:2312.11805_, 2023.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models. _arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Ledyard R Tucker. Some mathematical notes on three-mode factor analysis. _Psychometrika_, 31(3):
+279–311, 1966.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Aladin Virmaux and Kevin Scaman. Lipschitz regularity of deep neural networks: analysis and
+efficient estimation. _Advances in Neural Information Processing Systems_, 31, 2018.
+
+
+Thijs Vogels, Sai Praneeth Karimireddy, and Martin Jaggi. Powersgd: Practical low-rank gradient
+compression for distributed optimization. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+32, 2019.
+
+
+Catherine Wah, Steve Branson, Peter Welinder, Pietro Perona, and Serge Belongie. The caltech-ucsd
+birds-200-2011 dataset, 2011.
+
+
+Xin Wang, Yu Zheng, Zhongwei Wan, and Mi Zhang. Svd-llm: Truncation-aware singular value
+decomposition for large language model compression. _arXiv preprint arXiv:2403.07378_, 2024.
+
+
+Ou Xinwei, Chen Zhangxin, Zhu Ce, and Liu Yipeng. Low rank optimization for efficient deep
+learning: Making a balance between compact architecture and fast training. _Journal of Systems_
+_Engineering and Electronics_, 2023.
+
+
+Yuhui Xu, Lingxi Xie, Xiaotao Gu, Xin Chen, Heng Chang, Hengheng Zhang, Zhengsu Chen, Xiaopeng Zhang, and Qi Tian. Qa-lora: Quantization-aware low-rank adaptation of large language
+models. _arXiv preprint arXiv:2309.14717_, 2023.
+
+
+Jian Xue, Jinyu Li, and Yifan Gong. Restructuring of deep neural network acoustic models with
+singular value decomposition. In _Interspeech_, pp. 2365–2369, 2013.
+
+
+Yuedong Yang, Hung-Yueh Chiang, Guihong Li, Diana Marculescu, and Radu Marculescu. Efficient
+low-rank backpropagation for vision transformer adaptation. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 36:14725–14736, 2023a.
+
+
+Yuedong Yang, Guihong Li, and Radu Marculescu. Efficient on-device training via gradient filtering.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+3811–3820, 2023b.
+
+
+Zhihang Yuan, Yuzhang Shang, Yue Song, Qiang Wu, Yan Yan, and Guangyu Sun. Asvd:
+Activation-aware singular value decomposition for compressing large language models. _arXiv_
+_preprint arXiv:2312.05821_, 2023.
+
+
+Hui Zhang, Shenglong Zhou, Geoffrey Ye Li, and Naihua Xiu. 0/1 deep neural networks via block
+coordinate descent. _arXiv preprint arXiv:2206.09379_, 2022.
+
+
+Longteng Zhang, Lin Zhang, Shaohuai Shi, Xiaowen Chu, and Bo Li. Lora-fa: Memory-efficient
+low-rank adaptation for large language models fine-tuning. _arXiv_ _preprint_ _arXiv:2308.03303_,
+2023.
+
+
+Peiyuan Zhang, Guangtao Zeng, Tianduo Wang, and Wei Lu. Tinyllama: An open-source small
+language model. _arXiv preprint arXiv:2401.02385_, 2024.
+
+
+Hengling Zhao, Yipeng Liu, Xiaolin Huang, and Ce Zhu. Semi-tensor product-based tensordecomposition for neural network compression. _arXiv preprint arXiv:2109.15200_, 2021.
+
+
+12
+
+
+A ADDITIONAL THEORETICAL DETAILS
+
+
+A.1 DETAILS OF BACKPROPAGATION IN LOW-RANK SUBSPACE
+
+
+In this section, we explain the definition of _f_ LR( _._ ) in Eq. 9. For simplicity, we denote the activation
+tensor _Ai_ as _I_, the output gradient _∂∂WLi_ [as][ ∆] _[W]_ [, and the gradient with respect to the output] _∂A∂Li_ +1
+as ∆ _Y_ .
+
+**r3D** _∈_ **Activation** R [3], resulting in the following approximation: **Maps.** For each activation map _I_ _∈_ R _[B][×][N]_ _[×][I]_, applying ASI with optimal rank
+
+
+**r** 1
+
+
+_r_ 1=1
+
+
+**r** 3
+
+- _S_ ˜ _r_ 1 _,r_ 2 _,r_ 3 ˜ _Ub,r_ [(1)] 1 _[U]_ [˜] _n,r_ [ (2)] 2 _[U]_ [˜] _i,r_ [ (3)] 3 (12)
+
+_r_ 3=1
+
+
+**r** 3
+
+
+˜ _b,n,i_ =
+_I_
+
+
+**r** 2
+
+
+_r_ 2=1
+
+
+which transforms the weight gradient calculation (Eq. 9) into:
+
+
+_N_
+
+
+_n_ =1
+
+
+_N_
+
+
+_n_ =1
+
+
+_O_
+
+
+_o_ =1
+
+
+_O_
+
+
+_o_ =1
+
+
+_I_
+
+- ˜ _b,n,i_ ∆� _b,n,o_ (13)
+
+_I_ _Y_
+_i_ =1
+
+
+_I_
+
+
+_i_ =1
+
+
+**r** 1
+
+
+_r_ 1=1
+
+
+∆� _o,i_ =
+_W_
+
+
+=
+
+
+_B_
+
+
+_b_ =1
+
+
+_B_
+
+
+_b_ =1
+
+
+**r** 3
+
+- _S_ ˜ _r_ 1 _,r_ 2 _,r_ 3 ˜ _Ub,r_ [(1)] 1 _[U]_ [˜] _n,r_ [ (2)] 2 _[U]_ [˜] _i,r_ [ (3)] 3∆ [�] _Y_ _b,n,o_ (14)
+
+_r_ 3=1
+
+
+**r** 3
+
+
+**r** 2
+
+
+_r_ 2=1
+
+
+By reordering and grouping terms, we obtain:
+
+
+_Zn,o,r_ [(1)] 1 [=]
+
+
+_B_
+
+- ∆� _Y_ _b,n,oU_ [˜] _b,r_ [(1)] 1 _[,]_ (15)
+
+_b_ =1
+
+
+**r** 2
+
+_Zr_ [(2)] 1 _,r_ 3 _,n_ [=] - _S_ ˜ _r_ 1 _,r_ 2 _,r_ 3 ˜ _Un,r_ [(2)] 2 _[,]_ (16)
+
+_r_ 2=1
+
+
+_Zr_ [(3)] 1 _,i,n_ [=]
+
+
+∆� _o,i_ =
+_W_
+
+
+**r** 3
+
+
+_Zr_ [(2)] 1 _,r_ 3 _,n_ _[U]_ [˜] _i,r_ [ (3)] 3 _[,]_ (17)
+_r_ 3=1
+
+
+_N_
+
+
+_n_ =1
+
+
+**r** 1
+
+
+_n,o,r_ 1 _[Z]_ _r_ [(3)] 1 _,i,n_ _[.]_ (18)
+_Z_ [(1)]
+_r_ 1=1
+
+
+**4D** **Activation** **Maps.** In some transformer-based models, such as SwinT, the activation maps are
+4D: _I_ _∈_ R _[B][×][H][×][W][ ×][I]_ . When applying ASI with optimal rank **r** _∈_ R [4], the activation map is
+approximated as:
+
+
+**r** 3
+
+
+_r_ 3=1
+
+
+**r** 4
+
+- _S_ ˜ _r_ 1 _,r_ 2 _,r_ 3 _,r_ 4 ˜ _Ub,r_ [(1)] 1 _[U]_ [˜] _h,r_ [ (2)] 2 _[U]_ [˜] _w,r_ [ (3)] 3 _[U]_ [˜] _i,r_ [ (4)] 4 (19)
+
+_r_ 4=1
+
+
+**r** 4
+
+
+˜ _b,h,w,i_ =
+_I_
+
+
+**r** 1
+
+
+_r_ 1=1
+
+
+**r** 2
+
+
+_r_ 2=1
+
+
+Reorganizing the terms yields:
+
+
+_H_
+
+
+_h_ =1
+
+
+_H_
+
+
+_h_ =1
+
+
+_W_
+
+
+_w_ =1
+
+
+_W_
+
+
+_w_ =1
+
+
+_O_
+
+
+_o_ =1
+
+
+_O_
+
+
+_o_ =1
+
+
+_I_
+
+- ˜ _b,h,w,i_ ∆� _b,h,w,o_ (20)
+
+_I_ _Y_
+_i_ =1
+
+
+_I_
+
+
+_i_ =1
+
+
+**r** 1
+
+
+_r_ 1=1
+
+
+∆� _o,i_ =
+_W_
+
+
+=
+
+
+_B_
+
+
+_b_ =1
+
+
+_B_
+
+
+_b_ =1
+
+
+**r** 3
+
+
+_r_ 3=1
+
+
+**r** 4
+
+- _S_ ˜ _r_ 1 _,r_ 2 _,r_ 3 _,r_ 4 ˜ _Ub,r_ [(1)] 1 _[U]_ [˜] _h,r_ [ (2)] 2 _[U]_ [˜] _w,r_ [ (3)] 3 _[U]_ [˜] _i,r_ [ (4)] 4∆ [�] _Y_ _b,h,w,o_
+
+_r_ 4=1
+
+
+**r** 4
+
+
+**r** 2
+
+
+_r_ 2=1
+
+
+(21)
+
+
+13
+
+
+Again, by reordering and grouping operator, Eq. 21 becomes:
+
+
+_Zr_ [(1)] 1 _,h,w,o_ [=]
+
+
+_B_
+
+- ∆� _Y_ _b,h,w,oU_ [˜] _b,r_ [(1)] 1 _[,]_ (22)
+
+_b_ =1
+
+
+_Zr_ [(2)] 1 _,h,r_ 3 _,r_ 4 [=]
+
+
+**r** 2
+
+- _S_ ˜ _r_ 1 _,r_ 2 _,r_ 3 _,r_ 4 ˜ _Uh,r_ [(2)] 2 _[,]_ (23)
+
+_r_ 2=1
+
+
+_Zr_ [(3)] 1 _,h,r_ 3 _,o_ [=]
+
+
+**r** 3
+
+
+_Zb,h,w,o_ [(1)] _[U]_ [˜] _w,r_ [ (3)] 3 _[,]_ (24)
+_r_ 3=1
+
+
+  _Zr_ [(4)] 1 _,h,i,r_ 3 [=] _Zr_ [(2)] 1 _,h,r_ 3 _,r_ 4 _[U]_ [˜] _i,r_ [ (4)] 4 _[,]_ (25)
+
+
+**r** 3
+
+
+_Zr_ [(3)] 1 _,h,r_ 3 _,o_ _[Z]_ _r_ [(4)] 1 _,h,i,r_ 3 _[.]_ (26)
+_r_ 3=1
+
+
+_H_
+
+
+_h_ =1
+
+
+∆� _o,i_ =
+_W_
+
+
+**r** 1
+
+
+_r_ 1=1
+
+
+A.2 ADDITIONAL ALGORITHMIC DETAILS
+
+
+**The** _i_ **-Mode** **Product** **Operation.** The _i_ -mode product “ _i_ ” of a _n_ _[th]_ -order tensor
+R _[P]_ [1] _[×][P]_ [2] _[×···×][P][n]_ and a matrix _B_ _∈_ R _[Q][×][P][i]_ is a _n_ _[th]_ -order tensor _R×_ _∈_ R _[P]_ [1] _[×···×][P][i][−]_ [1] _[×][Q][×][P][i]_ [+1] _[×···×]_ _G_ _[P]_ _∈_ _[n]_
+can be expressed as:
+
+
+_Rp_ 1 _,...,pi−_ 1 _,q,pi_ +1 _,...,pn_ = _G ×i Q_ =
+
+
+_Pi_
+
+
+_gp_ 1 _,p_ 2 _,...,pnbq,pi._ (27)
+_pi_ =1
+
+
+**Subspace Iteration.** Here, we present how can activation maps be compressed by the subspace iteration technique of PowerSGD (Vogels et al., 2019). The underlying idea remains the same: a single
+step of subspace iteration (Stewart & Miller, 1975) is used to obtain a fast low-rank approximation
+of a matrix, which in this case corresponds to an unfolding of the activation maps along their respective modes. As noted in the original work, however, a single iteration often yields an approximation
+that is not sufficiently accurate. To address this, Vogels _et al._ propose initializing each step with the
+low-rank approximation obtained in the previous iteration.
+This reuse is particularly well justified in activation maps. While activation maps evolve as the network parameters are updated, the changes across consecutive iterations remain small. This stability
+arises from the Lipschitz continuity of activation functions (Virmaux & Scaman, 2018) together with
+the incremental nature of parameter updates during optimization. By reusing the previous approximation, the sequence of activation maps across iterations can be effectively smoothed and reduced
+the variance of the low-rank approximation compared to the case without reuse. A formal proof of
+this property is provided in (Vogels et al., 2019).
+
+
+**Perplexity for Activation Compression.** The perplexity of activation _Ai_ is defined as the differ_P_
+
+ence between _∂∂WLi_ [and] _∂_ [�] _∂WLi_ [to represent the error introduced when performing activation compres-]
+sion.
+Estimating perplexity over compression levels requires HOSVD on four-dimensional activation tensors, which naively induces an exponential number of rank combinations across modes and layers.
+To avoid this combinatorial blow-up, the search over ranks is replaced by a set _E_ of explainedvariance thresholds. Let _E_ _∈_ (0 _,_ 1] _[E]_ denote the _E_ thresholds evaluated; each threshold yields a
+consistent set of truncation ranks for all considered layers. The procedure has two steps:
+Step 1. For each threshold _εj_, run a forward pass on a held-out batch. At layer _i_, cache the orig_∈E_
+inal activation ( _i_ ) _j_ and its low-rank approximation ( [˜] _i_ ) _j_, obtained via HOSVD with components
+_A_ _A_
+truncated according to _εj_ .
+Step 2. During backpropagation, compute the exact gradient ( _∂_ _[∂]_ _W_ _[L]_ _i_ [)] _[j]_ [and its approximated counter-]
+
+part ( _∂_ [�] _∂WLi_ [)] _[j]_ [.] [The layer-wise perplexity at threshold] _[ ε][j]_ [is the Frobenius norm of their difference:]
+
+
+   - _∂_
+
+_Pi,j_ = _∂_ _Li_
+
+������ _W_
+
+
+_j_ _−_
+
+
+14
+
+
+_j_
+
+
+������ _F_
+
+
+ - _∂_
+_L_
+_∂_ _i_
+_W_
+
+
+_._ (28)
+
+
+**Algorithm 2** ASI for layer _i_ with set of rank **r** _i_ opt
+_∈R_
+
+1: **Input:**
+
+
+Activation map _i_ R _[B][×][N][i][×][O][i]_ at epoch _t_ .
+Target ranks for 3 modes _A_ [(] _[t]_ [)] _∈_ **r** _i_ N [3] [1 _,_ min( _ai,m, bi,m_ )], where ( _ai,m, bi,m_ ) is the shape of
+_∈_ _∩_
+_i_ at mode _m_ .
+_A_ [(] _[t]_ [)]
+2: **Function:**
+3: Initialize _Si_ = _i_
+_A_ [(] _[t]_ [)]
+4: **for** _m_ = 1 to 3 **do**
+5: _Ai,m_ = unfold _i_ along mode _m_, _Ai,m_ R _[a][i,m][×][b][i,m]_
+_A_ [(] _[t]_ [)] _∈_
+
+
+6: **if** _t_ = 0 **then**
+7: Initialize _V_ _∈_ R _[b][i,m][×]_ **[r]** _[i,m]_ from an i.i.d. standard normal distribution.
+8: **else**
+9: _V_ = _A_ _[T]_ _i,m_ _[U]_ _i,m_ [ (] _[t]_ [)]
+10: **end if**
+11: _Ui,m_ [(] _[t]_ [)] [=][ Orthogonalize][(] _[A][i,m][V]_ [ )]
+
+
+12: _Si_ = _Si_ _m Ui,m_ [(] _[t]_ [)]
+13: **end for** _×_
+14: **return** _Si, Ui,m_ [(] _[t]_ [)] [with] _[ m]_ [ = 1] _[, . . .,]_ [ 3]
+
+
+This process is repeated across all layers, resulting in a perplexity matrix _P_ _∈_ R _[N]_ _[×][E]_ and a corresponding rank tensor _R_ _[N]_ _[×][E][×]_ [3], containing the selected ranks across the 3 modes of activation
+tensors for each combination of layer and explained variance threshold.
+
+**Rank Selection.** Given a memory budget _B_ for activations over the fine-tuned layer set _F_, the goal
+is to choose mode-wise truncation ranks that satisfy the budget while minimizing total perplexity. A
+recursive backtracking routine identifies an index set _J_ _∈_ N _∩_ [1 _, E_ ] and the corresponding optimal
+ranks **r** such that
+
+
+**r** _i,m_ = _i,j,m_ _j_ _[∗]_ _,_ (29)
+_R_ _|_ _∈J_
+
+
+
+
+
+_i,j_
+_P_
+_j∈J_
+
+
+
+
+
+ (30)
+
+
+_J_ _[∗]_ = arg _J,_ [�] _[|F|]_ _i_ min=1 _[M][i][≤B]_
+
+
+
+
+_i_ =1
+
+
+_|F|_
+
+
+where
+
+
+3
+
+- _i,m_ **r** _i,m_ (31)
+
+_D_
+_m_ =1
+
+
+_Mi_ =
+
+
+3
+
+- **r** _i,m_ +
+
+_m_ =1
+
+
+denotes the activation memory induced by the chosen ranks **r** _i_ for layer _i_ .
+Detail of ASI is shown Algorithm 2.
+
+
+**Rank Selection in WASI.** For WASI, _J_ _[∗]_ is found such that:
+
+
+
+
+
+- 3
+
+ 
+_Ri,j,m_ +
+_m_ =1
+
+
+3
+
+
+_i,m_ _i,j,m_
+_D_ _R_
+_m_ =1
+
+
+- []
+
+ (32)
+
+
+_[∗]_ = arg min
+_J_ _J_
+
+
+
+
+_i_ =1
+
+
+_|F|_
+
+
+A.3 DETAILS OF COMPUTATIONAL SPEEDUP AND SPACE COMPLEXITY
+
+
+**Computational** **Speedup.** We derive the computational speedup as the ratio between the total
+FLOPs required for vanilla training and those required by WASI.
+
+
+First, the number of FLOPs required to perform forward pass in vanilla training (Eq. 1) is:
+
+
+_F_ vanilla 2 _BNiIiOi_ (33)
+_≈_
+
+Meanwhile, the backward pass includes Eq. 2 and Eq. 3, costing:
+
+
+_B_ vanilla 4 _BNiIiOi_ (34)
+_≈_
+
+
+15
+
+
+In contrast, WASI performs the forward pass in a low-rank subspace (Eq. 8) with a complexity of:
+
+
+_F_ WASI _≈_ 2 _BNiKi_ ( _Ii_ + _Oi_ ) (35)
+
+However, this does not account for the overhead from weight subspace decomposition (Algorithm 1)
+and ASI decomposition. These add the following costs:
+
+_O_ WSI = 4 _IiOiKi_ + 2 _OiKi_ [2] _[,]_ (36)
+
+
+_O_ ASI =
+
+
+3
+
+
+_m_ =1
+
+
+�4 _dd_ _[′]_ **r** _i,m_ + 2 _d_ **r** [2] _i,m_ - _,_ where _d_ = _Di,m,_ ; _d_ _[′]_ = _Di \ {d}_ (37)
+
+
+The backward pass in WASI follows Eq. 10, Eq. 15, Eq. 16, Eq. 17, and Eq. 18, with a total FLOPs
+cost of:
+
+
+_B_ WASI = 2 _BNiKi_ ( _Ii_ + _Oi_ ) + _BNiOi_ **r** _i,_ 1 + **r** _i,_ 1 **r** _i,_ 2 **r** _i,_ 3 _Ni_ + **r** _i,_ 1 **r** _i,_ 3 _IiNi_ + **r** _i,_ 1 _IiOiNi_
+
+     - ��     -     - ��     Eq. 10 Eq. 15 to Eq. 18
+
+
+(38)
+
+
+The speedup ratios between vanilla training and WASI are defined as:
+
+
+_F_ vanilla + _B_ vanilla
+_S_ training = _F_ WASI + _O_ WSI + _O_ ASI + _B_ WASI (39)
+
+_S_ inference = _[F]_ _F_ [vanilla] WASI (40)
+
+
+**Memory Usage.** In vanilla training, the total memory consists of the memory for weights and the
+memory for storing activations:
+
+
+_M_ vanilla [(] _[W][i]_ [)] [=] _[ I][i][O][i]_ (41)
+
+_M_ vanilla [(] _[A][i]_ [)] [=] _[ BN][i][I][i]_ (42)
+
+
+In WASI, these become:
+
+_M_ WASI [(] _[W][i]_ [)] [=] _[ K][i]_ [(] _[I][i]_ [ +] _[ O][i]_ [)] (43)
+
+
+3
+
+- _i,m_ **r** _i,m_ (44)
+
+_D_
+_m_ =1
+
+
+_M_ WASI [(] _[A][i]_ [)] [=]
+
+
+3
+
+- **r** _i,m_ +
+
+_m_ =1
+
+
+Thus, the memory reduction ratios between vanilla and WASI are:
+
+
+vanilla [+] _[ M]_ [ (] vanilla _[A][i]_ [)]
+_C_ training = _[M]_ _M_ [ (] WASI [(] _[W][W][i][i]_ [)][)] [+] _[ M]_ [ (] WASI _[A][i]_ [)] (45)
+
+_C_ inference = _[M]_ _M_ [ (] vanillaWASI [(] _[W][W][i][i]_ [)][)] (46)
+
+
+Similar ratios can be derived for the case of 4D activation maps.
+
+
+A.4 LIMITATIONS OF SVD-LLM
+
+
+We analyze the 3D activation map _i_ R _[B][×][N][i][×][I][i]_, as considered throughout the paper. The core
+_A_ _∈_
+idea of SVD-LLM is to incorporate “Truncation-aware Data Whitening” mechanism that enables a
+direct relationship between singular values and the resulting compression loss.
+
+To do this, SVD-LLM whitens the activation using a transformation of the form _Si_ _[−]_ [1] _Xi_, where
+_Xi_ R _[N][i][×][I][i]_ is obtained by summing _i_ over the batch dimension. The goal is to make the trans_∈_ _A_
+formed activation orthonormal, i.e., ( _Si_ _[−]_ [1] _Xi_ )( _Si_ _[−]_ [1] _Xi_ ) _[T]_ = _I_ . Here, _Si_ is computed via Cholesky
+decomposition on _X_ .
+
+
+16
+
+
+SVD is then applied to the transformed weight matrix _iSi_, resulting in _Ui_, Σ _i_, and _Vi_ . Based on
+_W_
+the optimal rank _Ki_ found by a desired compression ratio, the smallest singular values in Σ _i_ are
+truncated (denoted by Σ _i,_ ( _Ki_ )) to obtain two low-ranking matrices:
+
+
+_i_ = _Ui,_ ( _Ki_ )Σ [1] _i,_ _[/]_ ( [2] _Ki_ ) _[,]_ _i_ = Σ [1] _i,_ _[/]_ ( [2] _Ki_ ) _[V]_ _i,_ _[T]_ ( _Ki_ ) _[S]_ _i_ _[−]_ [1] (47)
+_W_ _[′]_ [(] _[u]_ [)] _W_ _[′]_ [(] _[v]_ [)]
+
+
+and the final compressed matrix is given by:
+
+
+˜ _i_ = _i_ _i_ = _Ui,_ ( _Ki_ )Σ _i,_ ( _Ki_ ) _Vi,_ _[T]_ ( _Ki_ ) _[S]_ _i_ _[−]_ [1] _._ (48)
+_W_ _W_ _[′]_ [(] _[u]_ [)] _W_ _[′]_ [(] _[v]_ [)]
+
+
+However, a current limitation of SVD-LLM is that “Truncation-aware Data Whitening” is only
+defined for 3D activation maps. It does not generalize to 4D activations, which are common in
+certain architectures such as SwinT. As a result, SVD-LLM cannot be directly applied to models
+that rely on 4D activation structures.
+
+
+A.5 OTHER RESEARCH DIRECTIONS
+
+
+Model compression and acceleration have become central topics in deep learning research, with
+efforts ranging from hardware improvements to algorithmic techniques. On the algorithmic side, the
+main directions include _compact model design_, _quantization_, _sparsification_, _knowledge distillation_,
+and _low-rank_ _decomposition_ (Cheng et al., 2017; Deng et al., 2020). The shared goal of these
+approaches is to shrink the size of neural networks while keeping their accuracy intact. Among
+them, low-rank decomposition has gained particular attention because it combines solid theoretical
+foundations with practical advantages for deployment (Xinwei et al., 2023). Originally developed in
+systems theory and signal processing (Markovsky, 2008), low-rank methods were first used in deep
+learning to compress fully connected layers through singular value decomposition (SVD) (Xue et al.,
+2013). Since then, more advanced forms such as generalized Kronecker product decomposition
+(GKPD) (Hameed et al., 2022), semi-tensor products (STP) (Zhao et al., 2021), and applications to
+vision transformers (Yang et al., 2023a) have pushed the field forward. Progress is largely measured
+in terms of compression ratio, inference speed, and power efficiency, with the challenge being to
+achieve these gains while minimizing performance loss.
+
+
+Note that the research directions mentioned above are orthogonal to each other and can be combined
+to leverage their respective strengths.
+
+
+B ADDITIONAL EXPERIMENTAL DETAILS
+
+
+B.1 DETAILS OF EXPERIMENTAL SETUP
+
+
+To ensure a fair comparison, we follow the same experimental setup as described in (Nguyen et al.,
+2024). The key details are as follows:
+
+
+**General hyperparameters.** All models are first pretrained on ImageNet-1K, then fine-tuned on a
+different downstream dataset using an 80% _−_ 20% train-validation split in 50 epochs. We use crossentropy loss and optimize the models with SGD. The initial learning rate is set to 0 _._ 05 and decayed
+using a cosine annealing schedule. Momentum is set to 0, and weight decay is fixed at 1 _×_ 10 _[−]_ [4] . We
+apply L2 gradient clipping with a threshold of 2 _._ 0. For data augmentation, we use random resizing,
+horizontal flipping, normalization, and a mini-batch size of 128.
+
+
+**ASI.** We follow the same strategy as proposed in (Nguyen et al., 2025). Specifically, in our main
+experiments, we apply AMC with a range of _ε_ values: 0 _._ 4, 0 _._ 5, 0 _._ 6, 0 _._ 7, 0 _._ 8, and 0 _._ 9. For each
+value of _ε_, we record the peak activation memory consumption of AMC and use it as the activation
+memory budget for ASI. The perplexity of ASI is also measured based on these _ε_ values.
+
+
+**SVD-LLM.** Unlike WASI, SVD-LLM compresses models based on a fixed compression ratio. To
+compare fairly, we compute the compression ratios achieved by WASI at each _ε_ and use the same
+ratios for SVD-LLM. We also adopt the same LoRA adapter settings as used in their original paper:
+_α_ = 16 and rank = 8.
+
+
+17
+
+
+**Pets** **Flowers** **CUB** **CIFAR-10** **CIFAR-100**
+
+
+100
+
+
+75
+
+
+50
+
+
+25
+
+
+100
+
+
+75
+
+
+50
+
+
+25
+
+
+100
+
+
+75
+
+
+50
+
+
+25
+
+
+100
+
+
+75
+
+
+50
+
+
+25
+
+
+10 [2] 10 [3]
+Training Mem (MB)
+
+
+10 [2]
+Inference Mem (MB)
+
+
+10 [12]
+Training FLOPs
+
+
+10 [11]
+
+Inference FLOPs
+
+
+Figure 10: WASI performance when fine-tuning ViT across multiple datasets. In each plot, markers
+from left to right represent increasing values of _ε_ ; the rightmost marker corresponds to vanilla training.
+
+
+**WASI** **ASI** **Vanilla**
+
+
+98
+
+
+97
+
+
+96
+
+
+95
+
+
+98
+
+
+97
+
+
+96
+
+
+95
+
+
+98
+
+
+97
+
+
+96
+
+
+95
+
+
+98
+
+
+97
+
+
+96
+
+
+95
+
+
+6 _×_ 10 [11] 10 [12] 2 _×_ 10 [12] 3 _×_ 10 [12]
+Training FLOPs
+
+
+2 _×_ 10 [11] 3 _×_ 10 [11] 4 _×_ 10 [11] 6 _×_ 10 [11]
+Inference FLOPs
+
+
+10 [2] 10 [3]
+Training Mem (MB)
+
+
+2 _×_ 10 [1] 3 _×_ 10 [1] 4 _×_ 10 [1] 6 _×_ 10 [1]
+Inference Mem (MB)
+
+
+Figure 11: Comparison of different methods when fine-tuning SwinT on CIFAR-10. For each plot,
+markers from left to right correspond to increasing values of _ε_ .
+
+
+B.2 VARIANCE ACROSS DIFFERENT RANDOM SEEDS
+
+
+Fig. 9 presents the results of fine-tuning a ViT
+
+on Pets dataset. We test different values of
+
+70
+
+_ε_ markerfrom on _{_ 0 _._ 4the _,_ 0 _._ 5plot _,_ 0 _._ 6(from _,_ 0 _._ 7 _,_ 0left _._ 8 _,_ 0to _._ 9 _}_ right), withcorre-each 60
+sponding to one of these settings. For each 50
+_ε_, we report the average accuracy and peak 40
+training memory usage over three random seeds
+
+30
+
+(233, 234, and 235), with error bars represent
+20
+
+ing standard deviation.
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|||Mean A|ccuracy|Std|Std|Std|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+As expected, increasing _ε_ leads to higher ac- 40 60 80 100 120
+curacy and greater memory usage, reflecting Training Mem (MB)
+the trade-off between compression and per
+Figure 9: WASI performance on the with differ
+formance. Importantly, the variance across
+
+ent _ε_ values, showing mean accuracy and memory
+
+seeds is minimal, which is reasonable given
+
+usage across three random seeds. Error bars rep
+that WASI mainly uses deterministic compo
+resent standard deviation.
+
+nents such as SVD, Gram-Schmidt orthogonalization, and matrix multiplications. Therefore, we fix the random seed to 233 in all other experiments.
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+40 60 80 100 120
+Training Mem (MB)
+
+
+Figure 9: WASI performance on the with different _ε_ values, showing mean accuracy and memory
+usage across three random seeds. Error bars represent standard deviation.
+
+
+B.3 ADDITIONAL RESULTS
+
+
+**Additional** **Transformer-based** **Results.** We conduct experiments similar to those in Sec. 4.3.
+Fig. 10 and Fig. 11 show consistent trends with our earlier findings. Note that due to the architectural design of SwinT, which generates 4-dimensional activation maps, the “Truncation-Aware Data
+Whitening” mechanism used in SVD-LLM is not applicable (see Appendix. A.4). Therefore, this
+method is excluded from the experiments in Fig. 11.
+The accuracy of WASI improves steadily as _ε_ increases, demonstrating the effectiveness of controlling compression error through the explained variance threshold. Overall, WASI achieves up to one
+
+
+18
+
+
+Table 1: Performance of WASI with different _ε_ values on all linear layers (including attention blocks
+and MLP blocks) of ViT using the CIFAR-10 dataset. Note that _ε_ = 1 _._ 0 corresponds to vanilla
+training.
+
+
+_ε_ **Train Mem (MB)** **Infer Mem (MB)** **Train FLOPs** **Infer FLOPs** **Acc.** **(%)**
+
+0.4 39.39 32.43 3.92 _×_ 10 [11] 1.08 _×_ 10 [11] 68.99
+0.5 54.02 47.06 4.99 _×_ 10 [11] 1.57 _×_ 10 [11] 78.53
+0.6 72.28 65.32 6.33 _×_ 10 [11] 2.19 _×_ 10 [11] 85.50
+0.7 95.70 88.74 8.06 _×_ 10 [11] 2.97 _×_ 10 [11] 90.52
+0.8 127.85 120.89 1.04 _×_ 10 [12] 4.05 _×_ 10 [11] 94.07
+0.9 179.61 172.65 1.43 _×_ 10 [12] 5.79 _×_ 10 [11] 96.24
+1.0 2349.00 324.00 3.26 _×_ 10 [12] 1.09 _×_ 10 [12] 97.32
+
+
+order of magnitude reduction in training memory when fine-tuning ViT, with similarly favorable
+results observed in terms of computational cost and inference memory.
+
+
+**WSI** **on** **Convolutional** **Neural** **Network.** In
+this experiment, we extend the application
+scope of WSI to convolutional neural networks.
+Specifically, we use MCUNet (Lin et al., 2022),
+pretrained on ImageNet-1K, with Pets dataset
+as the downstream task. WSI is applied to finetune the last 1 to 4 convolutional layers of the
+model. When _ε_ = 0 _._ 9, applying WSI unexpectedly increases the weight memory. This
+is due to the fact that the optimal rank found
+is too high, resulting in principal components
+whose total number of elements exceeds that
+of the original weight tensor. In contrast, for
+smaller values of _ε_ (0 _._ 75 and 0 _._ 8), applying
+WSI to more layers leads to reduced memory
+usage for the weights, as expected, at the cost
+of some accuracy degradation. However, this
+trade-off is not worthwhile, as the memory savings are marginal and the convolutional layers
+are already highly compact by design.
+
+
+48
+
+
+46
+
+
+44
+
+
+42
+
+
+40
+
+
+38
+
+|Vanilla training ε = 0.8 ε = 0.9 ε = 0.75|Col2|
+|---|---|
+|4<br>|4<br>|
+|~~4~~<br>~~4~~|3<br>4|
+|3<br><br>|3|
+|3||
+||2<br>|
+|1<br>2<br><br>2<br>1<br>2|1<br>2<br><br>2<br>1<br>2|
+
+Weight Mem (MB)
+
+
+Figure 12: Performance of WSI when applied to
+fine-tune MCUNet (pretrained on ImageNet-1K)
+on Pets dataset. The number next to each marker
+indicates how many convolutional layers WSI was
+applied to.
+
+
+**Extending WASI to multi-head attention projections.** For a fair comparison with state-of-the-art
+baselines, we relied on their efficient implementations and applied WASI only to the linear layers in
+MLP blocks for the main experiments. To demonstrate the broader applicability of WASI, we then
+extended the experiments to attention blocks as well. The setup was identical to that described in
+Fig. 5, and the results are summarized in Tab. 1.
+
+
+**Numerical On-device Latency.** Tab. 2 reports the latency results of WASI, ASI, and vanilla training
+when fine-tuning ViT on a Raspberry Pi 5. We used the same setup as in Sec. 4.4. As the compression rank increases (i.e., larger _ε_ ), ASI becomes progressively slower, eventually even slower than
+vanilla training. In contrast, WASI consistently maintains its speed. These findings are further
+confirmed by Fig. 5 and Fig. 10.
+
+
+**Latency** **on** **Multiple** **Edge** **Devices.** We conducted additional experiments using the same setup
+described in Sec. 4.4. The results are shown in Tab. 3.
+
+
+**On-device** **Energy** **Consumption** **Results.** We reran the experiment in Sec. 4.4 by fine-tuning a
+ViT on a single minibatch of 128 CIFAR-10 samples initialized with ImageNet-pretrained weights.
+Energy consumption was measured on a Jetson Orin using its on-board INA3221 power sensor.
+Tab. 4 reports the energy consumption for one inference pass and one training iteration.
+
+
+19
+
+
+Table 2: Comparison of inference and training time (s) when applying WASI, ASI, and vanilla
+training to fine-tune ViT on Raspberry Pi 5 at different _ε_ values.
+
+
+**WASI** **ASI** **Vanilla**
+_ε_
+
+**Infer.** **Train.** **Infer.** **Train.** **Infer.** **Train.**
+
+
+0.4 3.15 8.49 7.69 18.35           -           0.5 3.35 9.54 7.76 18.38           -           0.6 3.56 10.21 7.94 19.22           -           0.7 3.88 11.61 7.85 21.30           -           0.8 4.49 13.75 7.71 22.57           -           0.9 5.58 16.57 7.91 25.52           -           1.0           -           -           -           - 7.87 23.87
+
+
+Table 3: On-device latency of fine-tuning ViT on one minibatch of 128 CIFAR-10 samples initialized
+with ImageNet-pretrained weights. We report the time for one inference pass and one training
+iteration on three edge devices.
+
+
+**Jetson Orin** **Jetson Nano** **Raspberry Pi 4**
+
+
+_ε_ **Infer (s)** **Train (s)** **Infer (s)** **Train (s)** **Infer (s)** **Train (s)**
+
+
+0.4 1.60 5.73 5.94 71.30 5.01 16.32
+0.5 1.97 6.79 9.30 91.73 5.55 18.03
+0.6 2.26 7.61 12.84 85.43 6.57 20.65
+0.7 2.80 8.88 19.22 93.94 7.95 24.59
+0.8 3.56 10.68 20.36 117.91 9.78 29.26
+0.9 4.57 13.58 22.67 118.60 13.14 38.15
+1.0 6.84 21.79 29.47 241.90 20.82 65.42
+
+
+C LIMITATIONS
+
+
+Our goal is to enable the training of transformer models on edge devices. So far, our experiments
+have primarily focused on vision tasks, which allows for direct comparison with existing work in
+this domain. While our experiments with TinyLlama demonstrate the potential of WASI for LLMs
+(Fig. 7), current hardware limitations prevent us from evaluating larger-scale models. In future work,
+we plan to extend our approach to a broader range of tasks, with a particular emphasis on LLMs.
+
+
+D LLM USAGE
+
+
+We used LLM for grammar editing. All research ideas and the article structure were conceived and
+developed by the authors.
+
+
+20
+
+
+Table 4: Energy consumption of WASI on Jetson Orin with different _ε_ . Note that _ε_ = 1 _._ 0 corresponds to vanilla training.
+
+
+_ε_ **Inference Energy (J)** **Training Energy (J)**
+
+
+0.4 27.86 92.42
+0.5 29.52 96.36
+0.6 30.92 97.78
+0.7 33.67 104.21
+0.8 38.00 110.13
+0.9 43.43 120.98
+1.0 47.51 141.87
+
+
+21

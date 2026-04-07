@@ -1,0 +1,3460 @@
+## BUDGETED BROADCAST: AN ACTIVITY-DEPENDENT PRUNING RULE FOR NEURAL NETWORK EFFICIENCY
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Most pruning methods remove parameters ranked by impact on loss (e.g., magnitude or gradient). We propose Budgeted Broadcast (BB), which gives each
+unit a local traffic budget—the product of its long-term on-rate _ai_ and fan-out
+_ki_ . A constrained-entropy analysis shows that maximizing coding entropy under
+a global traffic budget yields a selectivity–audience balance, log [1] _[−]_ _ai_ _[a][i]_ = _βki_ . BB
+
+enforces this balance with simple local actuators that prune either fan-in (to lower
+activity) or fan-out (to reduce broadcast). In practice, BB increases coding entropy
+and decorrelation and improves accuracy at matched sparsity across Transformers
+for ASR, ResNets for face identification, and 3D U-Nets for synapse prediction,
+sometimes exceeding dense baselines. On electron microscopy images, it attains
+state-of-the-art F1 and PR-AUC under our evaluation protocol. We further implement BB for large language models using both unstructured and structured oneshot pruning.BB is easy to integrate and suggests a path towards learning more
+diverse and efficient representations.
+
+
+1 INTRODUCTION
+
+
+Biological neural circuits are masterpieces of efficiency, sculpted by evolution to operate under
+strict metabolic and material constraints. This constant pressure for resource optimization fosters
+diverse and robust neural codes capable of navigating a complex world. In stark contrast, modern
+deep neural networks, trained with abundant compute, often learn highly redundant representations
+and falter on rare, long-tail events. This discrepancy raises a central question: can principles of
+biological resource efficiency be formalized and transferred to artificial neural networks to make
+them more robust and diverse?
+
+
+Most pruning methods developed for artificial networks focus almost exclusively on a neuron’s _util-_
+_ity_ : its importance as measured by weight magnitude, gradient information, or direct contribution
+to the loss. Such approaches target the function each unit provides, but remain blind to the costs
+those units impose. We argue that this narrow, opportunistic strategy overlooks a key dimension
+emphasized in biological systems. Inspired by formal models of metabolic pressure in developing
+neuromuscular junctions, particularly activity-dependent synaptic competition (Barber & Lichtman,
+1999), we introduce the orthogonal axis of a neuron’s _metabolic_ _cost_, defined by the ongoing resources required to broadcast its signal to its downstream partners.
+
+
+We formalize this cost as a neuron’s _traffic_, _ti_ = _aiki_ : the product of how often it ‘speaks’ (its
+long-term firing rate, _ai_ ) and the size of its ‘audience’ (its axonal fan-out, _ki_ ). Biologically, this
+traffic is a proxy for the amount of neurotransmitter release and synaptic material turnover required
+per unit time to maintain these synapses in a functional state. In artificial networks, it provides a
+principled analogue: the ongoing compute and representational bandwidth consumed by a neuron’s
+outgoing connections. Our method, **Budgeted** **Broadcast** **(BB)**, directly enforces a local budget
+on this traffic. In its simplest form, a unit prunes its weakest connections if and only if its traffic
+_ti_ exceeds a threshold _τ_ . Intuitively, this has a direct consequence of protecting highly selective,
+rare-feature detectors (low _ai_ ) by treating them as metabolically cheap, while curtailing the fan-out
+of over-active, low-selectivity units. This enforces a tradeoff: neurons can ‘speak’ loudly to a small
+audience (high activity, low fan-out) or quietly to a large one (low activity, high fan-out), but not
+both.
+
+
+1
+
+
+Figure 1: **The conceptual framework of Budgeted Broadcast, from biology to a predictive the-**
+**ory.** **(Left)** Our method models a neuron’s metabolic cost as traffic, _ti_ = _aiki_ (long-term activity
+_×_ fan-out). If traffic exceeds a budget _τ_, connections are pruned. This can be achieved by reducing
+fan-out (axonal pruning) or reducing fan-in to lower activity (dendritic pruning). **(Top Right)** This
+rule is inspired by Henneman’s size principle (Henneman, 1957; Henneman et al., 1965), where
+large motor neurons (large size, analogous to fan-out _ki_ ) have lower average activity levels ( _ai_ ).
+**(Bottom Right)** Our resource-preservation rule predicts a linear relationship between a unit’s fanout ( _ki_ ) and its inactivity log-odds (log 1 _−aiai_ [), which we term the selectivity-audience balance.]
+
+
+This tradeoff mirrors a classic organizational rule in the motor system called “the size principle”
+Henneman (1957), where the most active motor neurons connect to fewer muscle fibers compared
+to less active neurons that connect to many. In contrast to “lazy-neuron” pruning (e.g., (Hu et al.,
+2016)), BB reallocates connectivity toward a more efficient and diverse code.
+
+
+This simple, local rule gives rise to a global organizing principle. An analysis of the network’s
+coding entropy, which we detail later, predicts that this budget pressure drives the network to selforganize into a measurable equilibrium, which we term _selectivity–audience balance_ (Fig. 1, bottom
+right). In learned codes where unit activities are only weakly correlated (Amari, 2002), this balance
+is attained when the unit’s fan-out _ki_ is proportional to its inactivity log-odds:
+
+log [1] _[ −]_ _[a][i]_ _≈_ _β ki._
+
+_ai_
+
+
+This condition couples a unit’s structure (node degree) with its function (node activity), and we
+show that, under standard assumptions, it is equivalent to maximizing the entropy of the learned
+code. We show that while it emerges as a regularity in a budgeted network, it is absent in networks
+trained (and/or pruned) with standard methods. In practice, we directly use this linear relationship
+to progressively modify the connections during learning.
+
+
+**Contributions.** Our contributions follow a progression from empirical neuroscience to learning
+theory and ends with large-scale deployment of pruned LLMs. (1) We formalize a traffic budget
+originally studied in the context of the neuromuscular connectome, now as a constrained-entropy
+objective that yields the testable _selectivity-audience balance_ (log [1] _[−]_ _ai_ _[a][i]_ = _βki_ ), akin to the biologi
+cal system, identifying the precise equilibrium solved by our controller. (2) We provide a learningtheoretic analysis of the controller, including stability guarantees for two input and output-pruning
+actuators and empirical diagnostics that certify the predicted balance. (3) We validate the properties
+of this mechanism on controlled didactic tasks, verifying the predicted balance, structural safety for
+rare-but-relevant signals, and the ability to overcome optimization barriers. (4) We demonstrate the
+breadth of BB across five domains: automatic speech recognition (ASR), face identification, change
+detection, synapse prediction, and autoregressive language modeling on Llama 3.1–8B—where it
+consistently improves tail or rare-event metrics at matched sparsity (Sec. 5.2, 5.3, 5.4, 5.5, 5.6).
+These experiments confirm that the theoretical predictions hold across diverse architectures and
+scales, including one-shot, structured, and foundation-model settings.
+
+
+2
+
+
+2 RELATED WORK
+
+
+Many pruning algorithms have been studied in the past decade. Recent approaches include magnitude pruning (Han et al., 2015; 2016) and layer-wise _L_ 1 regularization as in MorphNet (Gordon
+et al., 2018); early saliency and Hessian-based criteria (LeCun et al., 1990); sparse trainable subnetworks in the Lottery Ticket framework (Frankle & Carbin, 2019); and connectivity-based proxies
+such as SynFlow (Tanaka et al., 2020).
+
+
+For modern large language models, SparseGPT (Frantar & Alistarh, 2023) formulates pruning as
+a local reconstruction problem and uses second-order information to minimize activation error,
+and is therefore conceptually quite different from our competition-based mechanism. In contrast,
+activation-aware method Wanda (Sun et al., 2024) is closer in spirit to our work in that they explicitly take activation magnitude into account and score connections using products of weights and
+activations. However, their criteria effectively favor already-strong connections (“rich get richer”)
+and does not impose any activity-dependent global broadcast budget on the total signal a neuron
+can distribute across its outgoing connections, which is the key constraint in our formulation. Closest to our model is the bipartite-matching model of Dasgupta et al. (2024), which simulates neural
+competition and reallocation of resources across outgoing edges.
+
+
+Like Dasgupta et al., our approach draws inspiration from biological principles but differs fundamentally from existing pruning methods in both motivation and mechanism.
+
+
+**Activity-dependent** **synapse** **elimination:** Our work operationalizes a specific form of homeostatic regulation observed during neural development: activity-dependent synapse elimination. This
+process is captured by the two-force dynamic model of the neuromuscular junction of Barber &
+Lichtman (1999), in which a neuron’s finite metabolic budget induces a trade-off between firing rate
+and audience size—high _ai_ to few targets (low _ki_ ) or low _ai_ to many (high _ki_ ). Our _traffic_ metric
+_ti_ = _aiki_ is the direct computational expression of this trade-off. We translate the model’s forces
+into our rule: (1) the _presynaptic resource limit_ becomes the budget gate _ti_ _> τ_ that triggers pruning,
+and (2) _postsynaptic_ _competition_ is modeled by removing the weakest outgoing weight _|wij|_ . BB
+therefore implements structural homeostasis, turning foundational neurodevelopmental principles
+into a practical algorithm for sculpting network connectivity.
+
+
+**Activity-Based Pruning:** Methods that prune based on activity ( _ai_ ) alone are an intuitive starting
+point, but they risk conflating a neuron’s importance with its firing rate. In contrast, BB’s traffic
+metric _ti_ = _aiki_ is more nuanced in intuiting that a highly selective unit (low _ai_ ) may be critically
+important and thus require a large audience (high _ki_ ), hence protecting this ’quiet specialist.’
+
+
+**Gradient-Based Methods:** SNIP and GraSP estimate importance from gradients (Lee et al., 2019;
+Wang et al., 2020), while methods like RigL use gradient information to guide dynamic regrowth.
+While effective, these approaches rely on optimization signals that may lag optimal connectivity
+patterns. Unlike these gradient-driven methods, BB is a developmental controller derived from first
+principles. It operates using local, label-free statistics ( _ai, ki_ ) and can reshape connectivity independently of gradient updates, acting as an autonomous homeostatic process analogous to biological
+circuit refinement.
+
+
+**Structured** **Patterns:** While hardware-aligned patterns like N:M sparsity deliver predictable
+speedups, our focus is on the _allocation_ _principle_ rather than the implementation pattern. BB can
+first allocate audience under a budget, then the resulting connectivity can be projected to hardwarefriendly patterns for deployment-separating the biological principle from engineering constraints.
+
+
+3 METHOD — BUDGETED BROADCAST (LOCAL BROADCAST RULE)
+
+
+Our method, Budgeted Broadcast (BB), is governed by a local traffic-control rule. For each unit _i_,
+we periodically evaluate its traffic score:
+
+
+_ti_ = _ai · ki_
+
+
+where _ai_ is the long-term average activation (on-rate), tracked via an Exponential Moving Average
+(EMA), and _ki_ is its current fan-out. If _ti_ exceeds a predefined budget _τ_, the unit is marked for
+pruning in either or both ways: 1) A fraction of its weakest outgoing connections is removed (an
+‘SP-out’ action), directly reducing _ki_ to bring the unit back within budget. 2) incoming connections
+
+
+3
+
+
+mize coding entropy _H_ ( _h_ ) of the network, subject to a total traffic budget [�] _i_ _[a][i][k][i]_ _[≤]_ _[T]_ [max][.] [The]
+
+Lagrangian _L_ = _H_ ( _h_ ) _−_ _β_ �� _i_ _[a][i][k][i][ −]_ _[T]_ [max] - is stationary for log [1] _[−]_ _ai_ _[a][i]_ = _βki_ consistently with the
+
+controller (see Appendix S1 and the Theory section for the full derivation).
+
+
+In practice, we implement BB inside FFN blocks (the 1 _×_ 1 paths) by multiplying _W_ 1 and _W_ 2 with
+binary masks that refresh periodically (Fig. 23). For simplicity, most of our theory is derived for the
+_SP-out_ actuators: at the first projection _W_ 1, _row_ _masks_ (SP-out@ _W_ 1) limit a source unit’s broadcast by reducing its fan-out _k_ ; at the second projection _W_ 2, _row masks_ (SP-out@ _W_ 2) analogously
+limit a hidden unit’s broadcast. We provide in the appendix theoretical accounts for the complementary _SP-in_ actuator, implemented as _column masks_ at _W_ 1 that reduce fan-in to modulate activity _a_
+(Appendix. 22). In this work, other components (e.g., attention, embeddings) remain dense. To minimize overhead, we avoid per-weight counters and store only a channel-wise EMA and the binary
+masks.
+
+
+We defer the full refresh pseudocode to the Appendix (Alg. 4).
+
+
+4 THEORY
+
+
+A central question is why a simple, local pruning rule should lead to a globally coherent and efficient
+network structure. We get some insight by viewing our rule as a decentralized algorithm for solving
+a global optimization problem. Imagine we could design the network’s connectivity to perfectly
+adhere to its function (a ‘god’s-eye view’) with the goal of maximizing the total information-coding
+capacity of the hidden units (measured by their entropy), subject to a fixed total ‘energy’ budget.
+
+While this constrained-entropy view implicitly leads to the selectivity-audience balance log [1] _[−]_ _ai_ _[a][i]_ =
+
+_βki_ (formally derived in the appendix), we can establish a more direct link between our local rule
+and the network’s function using information theory. Under a standard noisy channel model for
+interlayer communication (see Assumption A1 in Appendix S1.1), the mutual information _I_ ( _Z_ ; _Y_ )
+between a layer’s code _Z_ and the next layer’s preactivations _Y_ is upper-bounded by the trace of the
+output covariance: _I_ ( _Z_ ; _Y_ ) _≤_ 2 _σ_ 1 [2] [tr(] _[W][ ⊤]_ [Cov(] _[Z]_ [)] _[W]_ [)] _[.]_ [ When correlations are weak (a regime BB]
+
+
+4
+
+
+**Entropy** **maximization.** This degree controller satisfies the conditions needed to globally maximize coding entropy _H_ ( _h_ ) of the network, subject to a total traffic budget [�] _i_ _[a][i][k][i]_ _[≤]_ _[T]_ [max][.] [The]
+
+
+_i_ _[a][i][k][i][ −]_ _[T]_ [max] - is stationary for log [1] _[−]_ _ai_ _[a][i]_
+
+
+|KKT one-shot (d_target=18) Threshold one-shot (mean k matched)|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|SGD Control|Col19|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|Col28|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|=|=|0.496±0.0|9||||||=0.|=0.|082±0.021||||||||No co|rrelation||||||||
+|||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||
+||12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|12<br>14<br>16<br>18<br>20<br>22<br>24<br>Audience (fan-out k)<br>10<br>20<br>30<br>40<br>50<br>60<br>Audience (fan-out k)<br>62.0<br>62.5<br>63.0<br>63.5<br>64.0<br>64.5<br>65.0<br>65.5<br>66.0<br>Audience (fan-out k)|
+
+
+This indicates that the total traffic in a learning network serves as a tractable upper bound on the
+downstream information flow. Consequently, a BB refresh that prunes the weakest outgoing edges
+from high-traffic units produces a descent step on a composite objective _L_ = _L_ task + _λ_ [�] _i_ _[a][i][k][i]_
+
+(Lemma 4 in Appendix S1.1). Hence, the observed network homeostasis observed in biological
+networks (Barber & Lichtman, 1999) and in our experiments is a consequences of optimizing a
+single, principled objective. Specifically, we show that neurons in a budgeted network are more
+decorrelated than neurons trained with standard methods, while maintaining accuracy, and that total
+traffic is a good linear predictor of the estimated mutual information (Appendix Fig. 14). The full
+formal treatment is provided in Appendix S1.1.
+
+
+**Input versus output pruning.** We also find that the two BB pruning actuators, SP-in and SP-out,
+provide complementary forces that drive the network toward this balance. A local linear-response
+analysis (see Appendix S1.3) shows that SP-in shocks primarily adjust a unit’s activity ( _ai_ ), while
+SP-out shocks primarily adjust its audience ( _ki_ ). Together, the system can efficiently correct deviations from the optimal state.
+
+
+5 EXPERIMENTS
+
+
+We treat experiments as hypothesis tests for the learning-theoretic predictions. We first provide
+clean-room validation of BB’s core properties on controlled didactic tasks (balance, safety for rare
+features, and overcoming optimization barriers), then demonstrate the principle’s breadth on largescale benchmarks (ASR, face identification, change detection, synapse prediction), and conclude
+with an autoregressive language-modeling study on Llama 3.1–8B that highlights BB’s behavior in
+a fifth, foundation-model domain.
+
+
+5.1 DIDACTIC VALIDATION: MECHANISM, SAFETY, AND HARDNESS
+
+
+We first use simple MLP architectures to investigate three consequences of BB on controlled
+tasks—mechanism (XOR balance), feature safety (DNF+rare), and optimization hardness (DNF
+witness). While the specific controller implementation can vary (e.g., using a global budget with
+adaptive _β_ or a fixed local threshold _τ_ ), all variants operate on the same core idea: pruning is
+triggered when a unit’s traffic _ti_ = _aiki_ becomes excessive. This allows us to cleanly study the
+emergence of the predicted balance, the inherent safety for rare features, and the ability to overcome
+optimization challenges.
+
+
+5
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+Figure 3: **The selectivity–audience balance emerges under budget pressure on controlled XOR**
+**tasks.** The balance is a direct consequence of budget-driven structural adaptation, not an artifact of
+gradient-based training. **Left panel:** In networks trained with Budgeted Broadcast, a robust linear
+relationship emerges between unit fan-out ( _ki_ ) and inactivity log-odds, confirming our theoretical
+prediction. **Middle** **panel:** A one-shot traffic-threshold variant that prunes when _ti_ = _aiki_ _>_ _τ_
+produces a similar trend but with a wider variability band and mild curvature, consistent with the
+threshold gate being a local approximation to the KKT stationary law log [1] _[−]_ _ai_ _[a][i]_ = _βki_ . **Right panel:**
+
+In control networks trained with SGD alone, fan-out remains constant at the initialization value (64),
+eliminating any correlation with activity (see Sec. 5.1.1)
+
+
+and SGD promote and we observe empirically) and weights are bounded, this reduces to _I_ ( _Z_ ; _Y_ ) _≤_
+_C_ 2 _σ_ [2] _i_ _[a][i][k][i][,]_ [ so total traffic serves as a simple proxy for downstream information flow (derivation]
+
+in Appendix S1.1).
+
+
+_I_ ( _Z_ ; _Y_ ) _≤_ _[C]_
+
+
+_aiki_
+
+_i_
+
+
+ 2 _σ_ [2]
+
+
+5.1.1 EMERGENCE OF THE SELECTIVITY-AUDIENCE BALANCE
+
+
+To provide a visualization of the selectivity–audience balance, we use a simple 3-layer MLP trained
+on the XOR task (Input _→_ H1(64) _→_ H2(128) _→_ Output, with ReLU activations). We use SP-out on
+_W_ 2 (row-mask on _W_ 2) to control the output fan-out of the first hidden layer (H1). Activity ( _ai_ ) is
+measured as the post-ReLU EMA of the H1 units. As shown in Figure 3, this setup produces a stable
+linear relationship between fan-out ( _ki_ ) and the log-odds of inactivity (log [1] _[−]_ _ai_ _[a][i]_ [),] [ensuring that the]
+
+BB mechanism achieves the theoretically predicted balance (100% accuracy; linear fit with slope
+_β_ ˆ =0.5 _±_ 0.02 and _R_ [2] =0.98 _±_ 0.005 on non-saturated units across 7 seeds).
+
+
+5.1.2 DNF TASKS: SAFETY AND OPTIMIZATION
+
+
+We study two aspects of BB on Disjunctive Normal Form (DNF; an OR of several AND clauses)
+tasks: rare-feature safety and optimization barrier removal.
+
+
+**Safety for Rare Features.** We first test if the BB rule is able to protect rare but important signals.
+We construct a DNF task containing features with varying frequencies of activation: rare ( _p≈_ 0 _._ 11),
+common ( _p≈_ 0 _._ 72), and moderately selective ( _p≈_ 0 _._ 22). As shown in Figure 4a, the BB controller
+demonstrates remarkable selectivity. The rare feature’s traffic ( _ts_ = _asks_ ) is low and only moderately
+reduced to go below the pruning threshold _τ_ . In contrast, the common feature is actively managed,
+its traffic sharply curbed by pruning. This empirically validates that by budgeting traffic, BB can
+distinguish between features based on their usage patterns, safeguarding the pathways for infrequent
+events.
+
+
+**Overcoming an Optimization Barrier.** To test BB’s ability to reshape learning dynamics, we designed a DNF task that is difficult for standard gradient-based methods. The task uses _W_ +1 disjoint
+clauses, where each AND clause operates on a unique set of inputs. The ideal network should learn
+a sparse “one-unit-per-clause” representation, allocating one hidden unit for each clause.
+
+
+This setup creates a severe credit assignment problem for standard SGD, particularly in “lazy” learning regimes where weights change little from their random initialization. We train the network on a
+witness set, where each input is designed to activate only one specific clause. We predict that when
+a mini-batch contains witnesses for different clauses, the averaged gradient is weak and ambiguous,
+failing to specialize any single unit to its target clause, causing the network to get stuck (being unable to break the initial symmetry of its random weights). Theory predicts (and our experiments
+confirm) that such a learner will fail to solve the problem about half the time (Fig. 4b),consistent
+with Cover’s separability fraction (formalized in Theorem 11 (Appendix)).
+
+
+In contrast, alternating SGD with our BB controller consistently escapes this barrier. After a few
+SGD steps, units that responded non-specifically to multiple inputs develop slightly higher average activity. The BB controller, being agnostic to the ambiguous gradients, simply identifies these
+“uselessly busy” units by their high traffic and prunes their connections. This structural change
+breaks the learning symmetry, allowing other units to specialize and “capture” a clause in the next
+training phase. This iterative process acts as a powerful search mechanism. As shown in Figure 4b
+and 4c, BB consistently solves the task, and the number of cycles required scales predictably as
+_O_ ( _W_ log _W_ ). This empirically matches the “coupon collector” behavior we formally analyze in the
+appendix (Theorem 10), where the network “collects” the solution for each of the _W_ clauses one by
+one.
+
+
+**Homeostatic** **Resilience** **to** **Structural** **Shocks.** Finally, we tested the dynamic resilience conferred by the BB rule. In a “shock–recovery” experiment, we subjected a trained network to sudden,
+large-scale pruning events and observed its response. The network exhibited graceful degradation
+in performance, followed by rapid, autonomous recovery once training resumed. This demonstrates
+that BB creates not just a statically efficient architecture, but a dynamically stable one with robust
+homeostatic properties. The full protocol and results are detailed in Appendix S3.1.
+
+
+5.2 DOMAIN 1: AUTOMATIC SPEECH RECOGNITION (ASR)
+
+
+To test BB on a foundational sequence-to-sequence task, we employed a standard encoder-decoder
+Transformer trained on the LibriSpeech (Panayotov et al. (2015)) train-clean-100 dataset.
+For a controlled comparison, all methods (including baselines) followed an identical three-stage
+
+
+6
+
+
+|Col1|Col2|-in end|Col4|ctive|Col6|Rare feat<br>Common<br>Selective|ure<br>feat<br>fea|ure<br>ture|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||Burn||BB a|<br>|Budget th<br>Safety reg|res<br> ion|hold<br>|= 3.0|
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+|M|edian ±|IQR|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+|Cove|Col2|r bound (0.5)|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|~~rate=~~<br>p=0<br>n=|~~rate=~~<br>p=0<br>n=|~~0.550~~<br>.52<br>60<br>rate=<br>p=0<br>n=|~~0.550~~<br>.52<br>60<br>rate=<br>p=0<br>n=|~~0.550~~<br>.52<br>60<br>rate=<br>p=0<br>n=|0.483<br>.90<br>60|0.483<br>.90<br>60||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+Figure 4: **BB’s** **core** **properties** **validated** **on** **controlled** **DNF** **tasks.** These experiments confirm
+the mechanism, safety, and optimization benefits of the BB principle. **(a)** BB inherently protects
+rare features (green line), whose traffic remains safely below the budget _τ_, while actively pruning
+over-active common features (red line). **(b)** BB consistently solves a DNF task designed to make
+standard SGD fail, overcoming a lazy-learning barrier. **(c)** The number of cycles for BB to solve the
+DNF task follows a predictable _O_ ( _W_ log _W_ ) scaling law. All setup details are in Appendix S2.4.
+
+
+Figure 5: **ASR on LibriSpeech.** (a) Overall Word Error Rate Reduction (WERR) test_clean;
+(b) Bucketed ∆Word Error Rate (WER) test_clean (Head/Mid/Tail fixed at 20/70/10; buckets
+are fixed across methods); (c) Overall WERR test_other; (d) Bucketed ∆WER test_other.
+Shaded bands/bars are mean _±_ std over seeds; dashed line is Dense (WERR / ∆WER= 0).
+
+
+training schedule, beginning with decoder dense pre-training and encoder-only align training before
+enabling sparsification for the final full-transformer training.
+
+
+To establish a fair and empirically-grounded sparsity budget, we applied the final network density
+of 0.85 for all baseline methods, and mask refreshes occurred every 25 optimizer steps with no
+regrowth rule (detail in Appendix 3). This setup allowed us to fairly evaluate the impact of different
+pruning principles on Word Error Rate (WER), particularly on rare words.
+
+
+Under the identical schedule and budget, BB (SP-in) is consistently best (Fig. 5a,c), while BB (SPout) is roughly neutral and Magnitude/Top- _k_ trails.
+
+
+To localize gains, Fig. 5b,d report bucketed ∆WER using the fixed Head/Mid/Tail buckets. We
+assign utterances to Head/Mid/Tail by sorting items by frequency and taking disjoint quantiles
+(20%/70%/10%); buckets are fixed across methods and runs. All results are under matched budget, placement, schedule, and seeds. Averaged across seeds, SP-in improves all buckets and is
+largest on the long tail; SP-out shows smaller gains; Magnitude is negative on Head and near zero
+on Mid/Tail. This suggests that while magnitude pruning may harm performance on common words,
+BB’s traffic-based approach reallocates resources to benefit the entire frequency spectrum, especially
+the challenging long tail.
+
+
+7
+
+
+0.0
+Frozen SGD (lazy) SGD+BB
+
+
+(b) Optimization Barrier
+
+
+rate=1.000
+
+
+DNF witness set success (pooled)p 10 ¹
+~~n=60~~
+
+
+O(W ln W) scaling validation
+
+
+5 10 15 20 25 30 35 40 45
+W ln(W+1) [natural log]
+
+
+(c) Convergence Scaling
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Selective Safety
+
+
+0 2500 5000 7500 10000 12500 15000 17500 20000
+
+Training Step
+
+
+(a) Selective Safety
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+35
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+Figure 6: **Pareto fronts on VGGFace2–7k.** _Left_ : Top-1 classification accuracy vs. budget (effective
+density). _Right_ : verification accuracy vs. budget on a held-out pair set. Each curve shows the best
+checkpoint per method at each density; the dense reference is the gray point at 1 _._ 0. Across a broad
+range of budgets, SP-in forms or matches the upper envelope while using fewer active parameters
+
+.
+
+
+5.3 DOMAIN 2: FACE IDENTIFICATION
+
+
+For face identification, we utilized a standard ResNet-101 (He et al. (2016)) backbone with its final
+layer adapted for the 7,001 identities in our curated VGGFace2-7k dataset (Cao et al., 2018). To
+test BB in a modern convolutional architecture, we applied it as a fan-in mask (SP-in) to the 1 _×_ 1
+projection kernels within each bottleneck block. This specific placement allows us to investigate the
+effect of budgeting traffic between channels in a ResNet. All sparse methods, including baselines
+like Magnitude pruning and RigL (Evci et al., 2020), were applied to the same set of kernels to
+ensure a fair comparison based on Top-1 classification and verification accuracy.
+
+
+We pre-specify the budgets before training. Concretely, we sweep six target sparsity levels _s_ _∈_
+_{_ 0 _._ 9 _,_ 0 _._ 7 _,_ 0 _._ 6 _,_ 0 _._ 5 _,_ 0 _._ 4 _,_ 0 _._ 3 _}_ and enforce the same target for all methods on the identical layer subset
+and fan-in masking side. Masks are refreshed every 200 optimizer steps with regrowth enabled
+at each refresh (i.e., previously pruned edges may re-enter via top- _k_ ). This protocol isolates the
+pruning principle itself under matched budgets and placement (details in Appendix 4).
+
+
+For each density, we sweep 30 epochs and pick the best validation checkpoint per method. Fig. 6
+plots _Top-1_ (left) and _verification_ (right) against effective density. Across 0 _._ 3 _−_ 0 _._ 7, SP-in forms
+or matches the upper envelope and often exceeds the dense references around 0 _._ 5 _−_ 0 _._ 7. RigL is
+competitive at higher densities; magnitude degrades as sparsity increases; activation Top- _k_ shows
+inconsistent peaks but does not dominate.
+
+
+Under a matched controller and budgets, SP-in consistently gives the strongest classification Pareto
+front and competitive-to-best verification, revealing a practical region ( _∼_ 0 _._ 5 _−_ 0 _._ 7) where it beats
+dense networks on both tasks while using fewer active parameters.
+
+
+5.4 DOMAIN 3: CHANGE DETECTION
+
+
+To evaluate BB’s performance in a pixel-wise prediction task, we addressed bi-temporal building
+change detection on the LEVIR-CD dataset (Chen & Shi, 2020). We used a lightweight, Siamese
+encoder-decoder architecture (FC-Siam-conc) that processes two temporal images to produce a binary change mask. For this model, SP-in was applied as a fan-in mask to the first 3 _×_ 3 convolution
+in each encoder block, with the decoder remaining dense. We report mean Intersection-over-Union
+(IoU) and F1-score on the held-out test set, comparing against the unpruned dense model under an
+identical training schedule.
+
+
+We compare BB(SP-in) against the dense model without pre-specifying a sparsity target using default hyperparameters. This yields a final global density of 0.70. Masks use a warm-up of 1,000
+optimizer steps, then refresh every 50 steps, with regrowth enabled at each refresh (i.e., previously
+pruned edges may re-enter via top- _k_ ). This protocol ensures a fair comparison under matched placement and schedule while allowing SP-in to discover an empirically grounded budget (details in
+Appendix 5).
+
+
+Under the same 30-epoch schedule and fixed decision threshold, SP-in improves over Dense in all
+runs, as summarized below.
+
+
+8
+
+
+Figure 7: **Change** **detection** **on** **LEVIR-CD:** **Dense** **vs.** **SP-in** **(top-** _k_ **qualitative).** The first two
+columns show the before/after image pair (t1, t2), and the third shows the ground truth. _Dense-only_
+true positives are highlighted in red, and _SP-in-only_ true positives are highlighted in green.
+
+
+Figure 8: **Synapse** **prediction** **(per-method** **Best-F1).** Qualitative overlays and operating-point
+comparison. Red arrows denote false negatives (omitted GT synapses). Right overlay: Dense=red,
+BB=green, Mag=blue; yellow marks consensus. Further details in Appendix 21.
+
+
+Averaged across runs, this represents a relative improvement of +10.8% in IoU and +7.9% in F1
+(details in Appendix S3.8).
+
+
+SP-in recovers substantially more true positives _inside_ the GT regions, especially for small, spatially
+scattered changes, while preserving major detections shared with Dense.
+
+
+5.5 DOMAIN 4: SYNAPSE PREDICTION (EM)
+
+
+As a capstone test of architectural generality, we applied BB(SP-in) (magnitude-based, row-wise
+fan-in masks) to a residual–SE 3D U-Net for synapse segmentation on volumetric EM from the
+SmartEM dataset (Meirovitch et al. (2023); GT1 for training, GT2 held-out for testing). Concretely,
+we attach BB to all main 3 _×_ 3 _×_ 3 convolutions (both conv1 and conv2) across encoder and decoder
+blocks, while leaving ConvTranspose upsampling layers and skip concatenations dense. We compare against a dense baseline and a standard magnitude pruning baseline, reporting PR-AUC and
+Best F1 on the held-out test set.
+
+
+For synapse prediction, we use a fixed budget ratio of 0.70, apply a 1,000-step warm-up, then
+linearly ramp to the target over 8,000 steps; masks are refreshed every 200 optimizer steps, with
+variance-preserving rescaling �prev _/_ cur per output channel. Pruning is applied to all Conv3d layers in encoder and decoder blocks (including SE 1 _×_ 1 _×_ 1 and residual 1 _×_ 1 _×_ 1 projections), while
+ConvTranspose3d upsampling layers and skip concatenations remain dense. Dense and pruned
+models share the exact same pipeline; inference uses sliding windows with 8 _×_ flip TTA, and we
+report PR-AUC and best F1 on the held-out GT2 set (detail in Appendix 6).
+
+
+Table 1 reports three seeds (mean _±_ std). BB attains the best mean PR-AUC and F1, with a small but
+consistent ROC-AUC gain; Magnitude lies between BB and Dense with slightly larger variance.
+
+
+5.6 DOMAIN 5: SCALING TO LLMS AND HARDWARE-ALIGNED CONSTRAINTS
+
+
+We next studied whether BB scales to modern, large-scale architectures by using it to prune the
+Llama 3.1–8B model (Grattafiori et al., 2024) focusing on feedforward blocks (5.64B params). We
+evaluated in separate standard unstructured sparsity and hardware-compatible N:M structured sparsity. Comparisons include Magnitude (MAG) and Wanda (Sun et al., 2024), a strong activationbased baseline.
+
+
+**Unstructured Pruning and the Preservation of Rare Features.** Our theory predicts that limiting
+total traffic ( _aiki_ ) protects rare but informative features: units with low activity effectively “pay less”
+for connections, maintaining a larger audience. The results on TinyStories (Appendix Table 10) and
+
+
+9
+
+
+Method PR-AUC ROC-AUC BestF1 BestIoU
+
+
+Dense 0 _._ 6952 _±_ 0 _._ 010 0 _._ 9889 _±_ 0 _._ 0004 0 _._ 6578 _±_ 0 _._ 0070 0 _._ 4906 _±_ 0 _._ 0080
+BB (SP-in) **0** _._ **7407** _±_ 0 _._ 014 **0** _._ **9906** _±_ 0 _._ 0006 **0** _._ **6752** _±_ 0 _._ 0090 **0** _._ **5099** _±_ 0 _._ 0100
+Mag 0 _._ 7253 _±_ 0 _._ 019 0 _._ 9896 _±_ 0 _._ 0009 0 _._ 6643 _±_ 0 _._ 0120 0 _._ 4981 _±_ 0 _._ 0140
+
+
+Table 1: **Synapse** **prediction** **(3** **seeds,** **mean** _±_ **std).** Results are computed at each method’s own
+Best-F1 threshold and then averaged across seeds.
+
+
+Table 2: **Llama** **3.1-8B** **on** **Wikitext-2.** Perplexity (PPL) across sparsity levels. At _s_ = 0 _._ 7,
+activation-based methods suffer massive degradation on Rare tokens (Wanda: 2782), while BB remains robust (68.69).
+
+
+**All tokens** **Common bucket** **Rare bucket**
+
+
+Method Category _s_ = 0 _._ 5 _s_ = 0 _._ 6 _s_ = 0 _._ 7 _s_ = 0 _._ 5 _s_ = 0 _._ 6 _s_ = 0 _._ 7 _s_ = 0 _._ 5 _s_ = 0 _._ 6 _s_ = 0 _._ 7
+
+
+Dense Baseline - 6.11 - - 5.87 - - 8.33 
+
+BB Unstructured **6.18** **7.19** **11.31** **6.01** **6.77** **10.88** **18.27** **24.53** **68.69**
+WANDA Unstructured 8.50 14.91 82.33 7.22 11.72 53.22 31.95 105.06 2782.85
+
+
+BB-G4R N:M 15.97 **18.54** **33.33** 12.45 **14.18** **23.77** 119.75 **162.50** **513.63**
+WANDA N:M **15.34** 23.01 93.28 **12.03** 17.14 59.15 **109.62** 249.24 3667.68
+
+
+Wikitext-2 (Table 2) validate this _selectivity-audience_ _balance_ . In the unstructured regime, BB
+yields strictly lower perplexity across all sparsity levels. The advantage is critical in the Rare token
+bucket. At _s_ = 0 _._ 7 on Wikitext-2, Wanda degrades catastrophically on rare tokens (PPL 8 _._ 33 _→_
+2782), likely mistaking low activity for low utility. In contrast, BB maintains robust performance
+(68.69), outperforming the baseline by orders of magnitude and confirming that the metabolic budget
+successfully distinguishes between “lazy” neurons and quiet specialists.
+
+
+**Hardware-Aligned N:M Structured Pruning.** We further test compatibility with NVIDIA A10080GB 2:4 sparse tensor cores using “BB-G4R” (BB applied locally within groups of 4). In this
+rigid setting, results are more nuanced: Wanda holds a slight edge at moderate sparsity ( _s_ = 0 _._ 5),
+but BB proves significantly more robust as the constraint tightens. At _s_ = 0 _._ 7 on TinyStories, BBG4R suppresses perplexity to 12.32 (vs. 29.22 for Wanda), a _∼_ 2.4 _×_ gap; on Wikitext-2 rare tokens
+the difference is even more dramatic (513 vs. 3668). These results suggest that while activation
+heuristics suffice for mild pruning, the traffic-based allocation provides a more stable signal for
+structural selection when the model is pushed to hardware-imposed limits.
+
+
+6 DISCUSSION & FUTURE WORK
+
+
+This work introduces a new axis for structural plasticity in artificial neural networks, shifting the
+focus from a component’s _utility_ to its metabolic _cost_ . We formalized this cost as traffic ( _aiki_ )
+and showed that a simple, local budget on this traffic can organize connectivity. The emergent selectivity–audience balance (log [1] _[−]_ _ai_ _[a][i]_ _≈_ _βki_ ) is a predictable equilibrium that links structure ( _ki_ )
+
+to function ( _ai_ ). Future work should study application of budgeted neural activity beyond FFNs
+and CNNs, and in particular to lateral connections and attention models. While our method introduces modest, amortized overhead from EMA tracking and periodic mask updates, its scalability
+makes it a promising candidate for foundation models where protecting the long tail of knowledge
+is paramount. A Budgeted Attention mechanism would extend our per-neuron budget to a dynamic,
+per-token budget. A token’s ‘traffic’ could be defined as _tj_ = _f_ ( _Aj_ ) _× k_ eff( _j_ ), where _f_ ( _Aj_ ) is a
+function of the token’s activation norm (how ‘loud’ it is) and _k_ eff( _j_ ) is its effective fan-out.
+
+
+This computational framework provides a unified explanation for seemingly distinct biological phenomena from Henneman’s size principle (Henneman, 1957) to the competitive dynamics of synapse
+elimination (Barber & Lichtman, 1999), reframing them as convergent solutions to the problem of
+efficient information broadcast. The success of the Budgeted Broadcast rule on diverse benchmarks,
+even when scaled to modern LLMs, provides empirical support for this structural perspective of
+neural organization in both biological and artificial settings.
+
+
+10
+
+
+REFERENCES
+
+
+S-I Amari. Information geometry on hierarchy of probability distributions. _IEEE_ _transactions_ _on_
+_information theory_, 47(5):1701–1711, 2002.
+
+
+Mark J. Barber and Jeff W. Lichtman. Activity-driven synapse elimination leads paradoxically to
+domination by the remaining, less active axon. _Journal_ _of_ _Neuroscience_, 19(22):9975–9985,
+1999. doi: 10.1523/JNEUROSCI.19-22-09975.1999.
+
+
+Qiong Cao, Li Shen, Weidi Xie, Omkar M. Parkhi, and Andrew Zisserman. Vggface2: A dataset for
+recognising faces across pose and age. In _2018 13th IEEE International Conference on Automatic_
+_Face & Gesture Recognition (FG 2018)_, pp. 67–74, 2018.
+
+
+Hao Chen and Zhenwei Shi. A spatial-temporal attention-based method and a new dataset for
+remote sensing image change detection. _Remote Sensing_, 12(10), 2020. ISSN 2072-4292. doi:
+10.3390/rs12101662. [URL https://www.mdpi.com/2072-4292/12/10/1662.](https://www.mdpi.com/2072-4292/12/10/1662)
+
+
+Sanjoy Dasgupta, Yaron Meirovitch, Xin Zheng, Ian Bush, Jeff W. Lichtman, and Saket Navlakha.
+A neural algorithm for computing bipartite matchings. _Proceedings of the National Academy of_
+_Sciences_, 121(37):e2321032121, 2024. doi: 10.1073/pnas.2321032121.
+
+
+Utku Evci, Trevor Gale, Jacob Menick, Pablo Samuel Castro, and Erich Elsen. Rigging the lottery:
+Making all tickets winners. In Hal Daumé III and Aarti Singh (eds.), _Proceedings_ _of_ _the_ _37th_
+_International Conference on Machine Learning_, volume 119 of _Proceedings of Machine Learning_
+_Research_, pp. 2943–2952. PMLR, 13–18 Jul 2020. URL [https://proceedings.mlr.](https://proceedings.mlr.press/v119/evci20a.html)
+[press/v119/evci20a.html.](https://proceedings.mlr.press/v119/evci20a.html)
+
+
+Jonathan Frankle and Michael Carbin. The lottery ticket hypothesis: Finding sparse, trainable neural
+networks. In _International Conference on Learning Representations_, 2019.
+
+
+Elias Frantar and Dan Alistarh. Sparsegpt: Massive language models can be accurately pruned in
+one-shot. In _Proceedings of the 40th International Conference on Machine Learning_, volume 202
+of _Proceedings of Machine Learning Research_, pp. 10323–10337, Honolulu, Hawaii, USA, 2023.
+PMLR. [URL https://proceedings.mlr.press/v202/frantar23a.html.](https://proceedings.mlr.press/v202/frantar23a.html)
+
+
+Ariel Gordon, Elad Eban, Ofir Nachum, Bo Chen, Hao Wu, Tien-Ju Yang, and Edward Choi. Morphnet: Fast & simple resource-constrained structure learning of deep networks. In _Proceedings of_
+_the IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 1586–1595, 2018.
+
+
+Aaron Grattafiori et al. The llama 3 herd of models. _arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Song Han, Jeff Pool, John Tran, and William Dally. Learning both weights and connections for
+efficient neural network. In _Advances in Neural Information Processing Systems_, 2015.
+
+
+Song Han, Huizi Mao, and William J. Dally. Deep compression: Compressing deep neural networks
+with pruning, trained quantization and huffman coding. In _International Conference on Learning_
+_Representations_, 2016.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition_, pp.
+770–778, 2016.
+
+
+E. Henneman, G. Somjen, and D. O. Carpenter. Functional significance of cell size in spinal motoneurons. _Journal of Neurophysiology_, 28(3):560–580, 1965.
+
+
+Elwood Henneman. Relation between size of neurons and their susceptibility to discharge. _Science_,
+126(3287):1345–1347, 1957. doi: 10.1126/science.126.3287.1345.
+
+
+Hengyuan Hu, Rui Peng, Yu-Wing Tai, and Chi-Keung Tang. Network trimming: A data-driven
+neuron pruning approach towards efficient deep architectures. _arXiv preprint arXiv:1607.03250_,
+2016.
+
+
+Yann LeCun, John S Denker, and Sara A Solla. Optimal brain damage. In _Advances_ _in_ _Neural_
+_Information Processing Systems_, 1990.
+
+
+11
+
+
+Namhoon Lee, Thalaiyasingam Ajanthan, and Philip H. S. Torr. Snip: Single-shot network pruning
+based on connection sensitivity. In _International Conference on Learning Representations_, 2019.
+
+
+Yaron Meirovitch, Core Francisco Park, Lu Mi, Pavel Potocek, Shashata Sawmya, Yicong Li, Yuelong Wu, Richard Schalek, Hanspeter Pfister, Remco Schoenmakers, et al. Smartem: machinelearning guided electron microscopy. _bioRxiv_, 2023. doi: 10.1101/2023.10.05.561103. URL
+[https://www.biorxiv.org/content/10.1101/2023.10.05.561103.](https://www.biorxiv.org/content/10.1101/2023.10.05.561103)
+
+
+Vassil Panayotov, Guoguo Chen, Daniel Povey, and Sanjeev Khudanpur. Librispeech: An ASR
+corpus based on public domain audiobooks. In _ICASSP_, pp. 5206–5210, 2015.
+
+
+Mingjie Sun, Zhuang Liu, Anna Bair, and J. Zico Kolter. A simple and effective pruning approach
+for large language models. In _Proceedings of the Twelfth International Conference on Learning_
+_Representations_, 2024. doi: 10.48550/arXiv.2306.11695. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2306.11695)
+[2306.11695.](https://arxiv.org/abs/2306.11695) ICLR.
+
+
+Hidenori Tanaka, Daniel Kunin, Daniel Yamins, and Surya Ganguli. Pruning neural networks without any data by iteratively conserving synaptic flow. In _Advances in Neural Information Process-_
+_ing Systems_, 2020.
+
+
+Chaoqi Wang, Guodong Zhang, and Roger Grosse. Picking winning tickets before training by
+preserving gradient flow. In _International Conference on Learning Representations_, 2020.
+
+
+12
+
+
+# **APPENDIX for Budgeted Broadcast: An** **Activity-Dependent Pruning Rule for Neural** **Network Efficiency**
+
+
+USAGE OF LLMS
+
+
+LLMs were used to help search prior work and to polish text, and mathematical derivations in the
+appendix. All ideas, designs, and results originate from the authors. Mathematical derivations were
+reviewed and reworked by the authors before inclusion.
+
+
+ETHICS STATEMENT
+
+
+We sparsify ASR and face identification models on public datasets. We report matched-compute
+comparisons and release configs to aid scrutiny. The rare-feature protection mechanism may benefit fairness by preserving signals from underrepresented groups; evaluating this requires careful,
+domain-specific study.
+
+
+STRUCTURE OF THE APPENDIX
+
+
+This appendix is mostly a self-contained companion to the main paper. It is organized into three
+parts that parallel the paper’s pillars: mechanism and theory in **Theoretical** **Foundations** (S1),
+reproducibility and implementation details in **S2.** **Experimental Details and Reproducibility** (S2),
+and additional evidence and support in **Supplementary Results and Analyses** (S3).
+
+
+**S1.** **Theoretical** **Foundations** (§S1). We state the assumptions (A1–A3) and derive a general
+mutual-information bound for linear-Gaussian channels, which we specialize to a traffic surrogate
+depending only on activity and fan-out (§S1.1; Cor. 2). We then present the variational/KKT stationarity that yields the selectivity–audience balance log [1] _[−]_ _ai_ _[a][i]_ = _βki_ and the practical degree controller
+
+it induces (§S1.2). We analyze complementary local linear responses of SP-in and SP-out (§S1.3),
+collect the formal statements (rare-feature safety, SP-out descent step, near-KKT tube) with sketches
+(§S1.4), and summarize extensions and limits, including shadow-price sensitivity and finite-width
+considerations (§S1.5).
+
+
+**S2.** **Experimental** **Details** **and** **Reproducibility** (§S2). We define statistical conventions (§S2.1)
+and the protocols/metrics used across tasks (shock–recovery, balance-plane displacement, decorrelation, MI proxy, representation diversity; §S2.2). Implementation details cover Conv2d instantiation,
+variance-preserving rescale, and selection statistics. Domain-specific setups and hyperparameter
+tables for ASR, Face Identification, Change Detection, and Synapse Prediction appear in §S2.3 (Tables 3–6). We include concise pseudocode for the didactic utilities and the full BB refresh (§S2.4),
+and an actuator taxonomy for quick reference (Table 7).
+
+
+**S3.** **Supplementary** **Results** **and** **Analyses** (§S3). We report mechanistic validation via shocks
+(immediate drop, recovery, edges-removed; §S3.1), empirical tests of the theory’s assumptions
+(§S3.2), controller stability and sensitivity (§S3.3), ablations and learning curves (§S3.4), and representation diversity results (§S3.5). We also provide didactic supporting results, qualitative panels
+for change detection and synapse prediction (§S3.6), actuator schematics (§S3.7), and additional
+change-detection results (§S3.8).
+
+
+**Intuition.** Each unit has a selectivity _a_ (how often it fires) and an audience _k_ (how many downstream targets it talks to). Budgeted Broadcast (BB) balances them by the relation log [1] _[−]_ _a_ _[a]_ = _βk_ :
+
+very selective (rare) units can afford a bigger audience, while frequently active units should broadcast less. SP-in changes _a_ (dendritic pruning), SP-out changes _k_ (axonal pruning); together they
+steer the system toward this balance under a global traffic budget.
+
+
+13
+
+
+S1 THEORETICAL FOUNDATIONS
+
+
+This section provides the formal backing for Budgeted Broadcast (BB). We first upper-bound information under mild assumptions and specialize that bound to a simple traffic surrogate. We then
+show how KKT stationarity induces our degree controller and summarize the complementary local
+linear responses of SP-in and SP-out.
+
+
+**Notation (S1–S3)** (Here _H_ ( _h_ ) denotes entropy; the plain _H_ denotes the EMA horizon.)
+
+
+_h_ Hidden activations; _h_ = max _{_ 0 _, z}_ .
+_ai_ EMA on-rate of unit _i_ (post-ReLU).
+_ki_ Audience (fan-out) of unit _i_ .
+_ti_ Traffic of unit _i_, _ti_ = _aiki_ .
+_β_ Shadow price (dual variable) for the traffic budget.
+_H_ ( _h_ ) Coding entropy of the hidden code.
+_H_ _[∗]_ Entropy at the stationary balance (log 1 _−a_ _[∗]_ _ia_ _[∗]_ _i_ = _βki_ ).
+∆ Mask refresh period; _H_ EMA horizon.
+_τ_ Traffic threshold for shocks/pruning.
+_κ_ 0 Centering constant (intercept) in the OLS balance fit.
+_a_ min Saturation cutoff for on-rate when fitting the balance line.
+_HB_ ( _·_ ) Bernoulli entropy function (used in [�] _i_ _[H][B]_ [(] _[a][i]_ [)][).]
+
+_d_ 0 Baseline degree offset in the controller.
+_m, D_ Degree clip bounds ( _m_ min, _D_ max) in clip( _·, m, D_ ).
+_a_ ˜ _i_ EMA estimate of the on-rate used by the controller.
+_β_ Upper cap for the dual _β_ (practical stability).
+_T_ max Global traffic budget.
+_ε_ Small numerical stabilizer in ratios/entropies.
+
+
+S1.1 ASSUMPTIONS, MI BOUND, AND TRAFFIC BOUND
+
+
+We assume an AWGN readout, decorrelated codes, and bounded edge energy, leading to a mutualinformation (MI) bound and a traffic corollary.
+
+
+**Assumptions.**
+
+
+**Assumption 1** (AWGN readout) **.** _(A1) Y_ = _W_ _[⊤]_ _Z_ + _ε with ε ∼N_ (0 _, σ_ [2] _I_ ) _._
+
+
+**Assumption 2** (Approximate decorrelation) **.** _(A2)_ Cov( _Z_ ) _≈_ diag( _ai_ (1 _−_ _ai_ )) _(weak correlations)._
+
+**Assumption 3** (Bounded edge energy) **.** _(A3) Row energy bounded by degree:_ [�] _j_ _[w]_ _ij_ [2] _[≤]_ _[C k][i][ for a]_
+_constant C._
+
+
+**General MI bound.** For any _Z_ obeying (A1),
+
+
+_I_ ( _Z_ ; _Y_ ) _≤_ 2 _σ_ 1 [2] [tr]               - _W_ _[⊤]_ Cov( _Z_ ) _W_               - _._ (1)
+
+
+**Traffic bound (corollary).** Under (A1)–(A3),
+
+
+_I_ ( _Z_ ; _Y_ ) _≤_ 2 _Cσ_ [2]                  - _ai ki._ (2)
+
+_i_
+
+
+_Proof_ _sketch._ Use data processing ( _I_ ( _Z_ ; _Y_ ) _≤_ _I_ ( _U_ ; _U_ + _ε_ ), _U_ = _W_ _[⊤]_ _Z_ ), Gaussian-input upper
+bound, and log det( _I_ + _A_ ) _≤_ tr( _A_ ) to obtain the general bound. Under (A2),
+
+
+since _ai_ (1 _−_ _ai_ ) _≤_ _ai_ for _ai_ _∈_ [0 _,_ 1]. Under (A3),
+
+[�]
+
+
+_C_            _j_ _[w]_ _ij_ [2] _[≤]_ _[C k][i]_ [, hence] _[ I]_ [(] _[Z]_ [;] _[ Y]_ [ )] _[ ≤]_ 2 _σ_ [2]
+
+
+tr� _W_ _[⊤]_ diag( _ai_ (1 _−_ _ai_ )) _W_ - = 
+
+
+_ai_ (1 _−_ _ai_ )  
+_i_ _j_
+
+
+_wij_ [2] _[≤]_  _j_ _i_
+
+
+_ai_  
+_i_ _j_
+
+
+_wij_ [2] _[,]_
+
+_j_
+
+
+_i_ _[a][i][k][i]_ [.]
+
+
+14
+
+
+S1.2 CONTROLLER DERIVATION AND KKT STATIONARITY
+
+
+Maximizing coding entropy _H_ ( _h_ ) under a global traffic budget [�] _i_ _[a][i][k][i]_ _[≤]_ _[T]_ [max] [yields Lagrangian]
+_L_ = _H_ ( _h_ ) _−_ _β_ �� _i_ _[a][i][k][i][ −]_ _[T]_ [max] �. KKT stationarity gives _∂H/∂ai_ = _βki_, i.e.,
+
+log [1] _[ −]_ _[a][i]_ = _β ki._
+
+_ai_
+
+
+Operationally we implement this fixed point via a degree controller
+
+
+          -           _ki_ _←_ clip _d_ 0 + _β_ _[−]_ [1] log [1] _[ −]_ _[a]_ [˜] _[i]_ _,_ _m,_ _D_ _,_
+
+_a_ ˜ _i_
+
+
+followed by row-wise TopK( _ki_ ) selection at refresh for each unit.
+
+
+_Practical_ _note._ We cap _β_ _≤_ _β_ so the implied degrees stay comfortably inside [ _m, D_ ], preventing
+clip-induced churn.
+
+
+**Rare-feature** **safety.** If a rare input fires with probability _ps_ and you cap its fan-out by _k_ max so
+that _psk_ max _<_ _τ_, then _ts_ = _asks_ _≤_ _psk_ max _<_ _τ_ at all times, so no outgoing edge of _xs_ is ever
+pruned. This formalizes the intuitive protection of “quiet specialists.”
+_Remark_ 1 (Entropy model and proxy) _._ We view the hidden code as a population code with perunit on-rates _ai_ . Under an independence approximation, the coding entropy decomposes as _H_ ( _h_ ) =
+
+
+_i_ _[H][B]_ [(] _[a][i]_ [)][ with] _[ H][B]_ [(] _[p]_ [) =] _[ −][p]_ [ log] _[ p][−]_ [(1] _[−][p]_ [) log(1] _[−][p]_ [)][. When weak correlations exist, maximizing]
+
+_i_ _[H][B]_ [(] _[a][i]_ [)][ acts as a tractable surrogate/upper bound for] _[ H]_ [(] _[h]_ [)][, which is what our controller targets]
+in practice.
+_Remark_ 2 (On-rate vs. source probability in Lemma 3) _._ For an upstream source _xs_ that fires with
+probability _ps_ under stationary sampling, the EMA on-rate _as_ tracks _ps_ . The lemma (see Lemma 3
+in §S1.4) only requires the mild bound _as_ _≤_ _ps_, which holds whenever _xs_ is the sole gate for that
+unit or appears in a conjunction with probability at most _ps_ .
+
+
+S1.3 LOCAL LINEAR-RESPONSE (SP-IN VS SP-OUT)
+
+
+Define Φ _i_ = - log [1] _[−]_ _ai_ _[a][i]_ _−_ _βki_ �2. A small SP-in shock primarily lowers _ai_ at fixed _ki_ (downward
+
+motion), whereas an SP-out shock lowers _ki_ at weakly perturbed _ai_ (leftward motion), yielding
+complementary corrections toward the balance surface.
+
+
+**First-order** **response.** Let _ϕi_ = log [1] _[−]_ _ai_ _[a][i]_ _−_ _βki_ with _ai_ _∈_ (0 _,_ 1). Then _∇_ Φ _i_ =
+
+2 _ϕi_ - _−_ _ai_ (11 _−ai_ ) _[,]_ _[−][β]_ �. For SP-in ( _δai_ _<_ 0 _, δki_ _≈_ 0), _δ_ Φ _i_ _≈_ 2 _ϕi_ - _−_ _ai_ (11 _−ai_ ) - _δai_ ; for SP-out
+
+( _δki_ _<_ 0 _, δai ≈_ 0), _δ_ Φ _i_ _≈_ 2 _ϕi_ ( _−β_ ) _δki_ .
+
+
+S1.4 FORMAL STATEMENTS AND PROOFS
+
+
+**Theorem 1** (Mutual-information bound) **.** _For Y_ = _W_ _[⊤]_ _Z_ + _ε with ε ∼N_ (0 _, σ_ [2] _I_ ) _,_ (1) _holds._
+
+
+_Sketch._ Data processing _I_ ( _Z_ ; _Y_ ) _≤_ _I_ ( _U_ ; _U_ + _ε_ ) with _U_ = _W_ _[⊤]_ _Z_, Gaussian-input upper bound,
+and log det( _I_ + _A_ ) _≤_ tr( _A_ ).
+
+
+**Corollary 2** (Traffic bound) **.** _Under (A1)–(A3),_ (2) _holds._
+
+
+**Lemma 3** (Rare-feature safety) **.** _If an input fires with probability ps and ks_ _≤_ _k_ max _with psk_ max _<_
+_τ_ _, then ts_ = _asks_ _< τ_ _at all times; no outgoing edge of xs_ _is pruned by a τ_ _-threshold rule._
+
+
+_Sketch._ Since _as_ _≤_ _ps_ and _ks_ _≤_ _k_ max by design, we have _ts_ = _asks_ _≤_ _psk_ max _< τ_ at initialization
+and after every refresh. Inducting over refreshes, the threshold rule can never target _xs_ .
+
+
+**Lemma 4** (SP-out descent step under traffic regularization) **.** _For L_ = _Ltask_ + _λ_ [�]
+
+
+**Lemma 4** (SP-out descent step under traffic regularization) **.** _For L_ = _Ltask_ + _λ_ [�] _i_ _[a][i][k][i][, an SP-out]_
+
+_refresh that reduces_ [�] _i_ _[a][i][k][i]_ _[by][ δT]_ _[>]_ [ 0] _[ yields]_ [ ∆] _[L ≤−][λ δT]_ _[(first-order).]_
+
+
+_i_ _[a][i][k][i]_ _[by][ δT]_ _[>]_ [ 0] _[ yields]_ [ ∆] _[L ≤−][λ δT]_ _[(first-order).]_
+
+
+15
+
+
+_Sketch._ At the refresh instant, the task term is unchanged to first order, while the regularizer decreases by _λ δT_ because _δ_ ( [�] _i_ _[a][i][k][i]_ [)] [=] _[−][δT]_ _[<]_ [0] [with] _[a][i]_ [treated] [quasi-static] [during] [selectio][n.]
+
+Hence ∆ _L ≤−λ δT_ up to higher-order effects.
+
+
+**Proposition** **5** (SP-in weakly lowers on-rate under symmetric drive) **.** _Let_ _h_ = max _{_ 0 _, z}_ _with_
+_z_ = [�] _i∈N_ _[w][i][x][i]_ [ +] _[ b][, where]_ [ (] _[x][i]_ [)] _[ are i.i.d., zero-mean, symmetric, and independent of]_ [ (] _[w][i]_ [)] _[.]_ _[Prune]_
+
+_a subset of the smallest-|wi| inputs from a unit’s column and apply the variance-preserving rescale_
+_so that_ Var[ _z_ ] _is unchanged._ _Then the on-rate a_ = Pr[ _h_ _>_ 0] _weakly decreases._ _Consequently, at_
+_fixed audience k, traffic t_ = _a k weakly decreases._
+
+
+_Sketch._ Under symmetric _x_ and fixed variance for _z_, magnitude pruning followed by variancepreserving rescale concentrates mass nearer to zero, which weakly lowers Pr[ _z_ _>_ 0] and thus the
+ReLU on-rate. The conclusion follows by monotonicity of Pr[ _z_ _>_ 0] under such contractions.
+
+
+**Theorem 10** (Static BB convergence on disjoint DNF) **.** _Consider a disjoint DNF with W_ +1 _clauses_
+_and_ _a_ _witness_ _set_ _of_ _size_ 2( _W_ +1) _._ _Train_ _a_ _width-_ ( _W_ +1) _two-layer_ _ReLU_ _under_ _a_ _schedule_ _that_
+_√_
+_alternates_ _K_ = Θ(log _W_ ) _gradient_ _steps_ _(step_ _size_ _η_ = _O_ (1 _/_ _N_ ) _)_ _with_ _BB_ _refreshes_ _using_ _a_
+
+_fixed prune fraction p_ _∈_ (0 _,_ 1) _and threshold τ_ _._ _Suppose degree updates follow the controller with_
+_row-wise Top-k selection and variance-preserving rescale, and that at each refresh true literals rank_
+_above_ _distractors_ _with_ _probability_ _at_ _least_ _p_ 0 _>_ 0 _._ _Then_ _there_ _exists_ _a_ _constant_ _C_ _>_ 0 _such_ _that_
+_after C W_ log _W_ _cycles the network fits the witness set with probability_ 1 _−_ _e_ _[−]_ [Ω(] _[W]_ [ )] _._
+
+
+16
+
+
+**Lemma 6** (Finite number of prune events (no-sprouting regime)) **.** _Under hard-delete refreshes with_
+_no sprouting/regrowth, each prune removes at least one active edge, so_ [�] _i_ _[k][i][ decreases by][ ≥]_ [1] _[ per]_
+
+
+_no sprouting/regrowth, each prune removes at least one active edge, so_ [�] _i_ _[k][i][ decreases by][ ≥]_ [1] _[ per]_
+
+_event._ _Since_ [�] _i_ _[k][i]_ _[≥]_ [0] _[, only finitely many prune events can occur.]_
+
+**Proposition** **7** (Near-KKT _ε_ -tube) **.** _For_ _non-saturated_ _units,_ log [1] _[−]_ _ai_ _[a][i]_ _−_ _βki_ _concentrates_ _with_
+
+_bounded residual; see displacement metric in §S2.2._
+
+
+_i_ _[k][i]_ _[≥]_ [0] _[, only finitely many prune events can occur.]_
+
+
+**Proposition** **7** (Near-KKT _ε_ -tube) **.** _For_ _non-saturated_ _units,_ log [1] _[−][a][i]_
+
+
+_Sketch._ Away from saturation, the OLS fit of log [1] _[−]_ _a_ _[a]_ on _k_ yields sub-Gaussian residuals under weak
+
+dependence, giving a bounded tube whose width matches the empirical displacement.
+
+
+S1.5 EXTENSIONS AND LIMITS
+
+
+We summarize finite-width considerations, shadow-price sensitivity _dTdβ_ max _[<]_ [ 0][, and small-] _[β]_ [ expan-]
+sions; these explain how the global budget maps to ( _β, d_ 0) in practice.
+
+
+**Finite-width considerations.** In lazy/neural tangent kernel (NTK)-like regimes, fixed-magnitude
+pruning can stall when initial effective degree is too low to represent disjoint features; BB avoids
+this by reallocating audience rather than only shrinking weights (see S3 didactic experiments).
+
+**Proposition** **8** (Shadow-price sensitivity (explicit)) **.** _At_ _the_ _KKT_ _stationary_ _point_ log [1] _[−]_ _ai_ _[a][i]_ = _βki_
+
+_with fixed degrees ki, we have_
+
+
+_dβ_ 1
+= _−_ [0] _[.]_
+_dT_ max            - _i_ _[k]_ _i_ [2] _[a][i]_ [(1] _[ −]_ _[a][i]_ [)] _[<]_
+
+
+_i_ _[a][i]_ [(] _[β]_ [)] _[k][i]_ [with] _[a][i]_ [(] _[β]_ [)] [=] 1+ _e_ 1 _[βki]_ [gives] _[dT]_ _dβ_
+
+
+_Sketch._ Differentiating _T_ = [�] _i_ _[a][i]_ [(] _[β]_ [)] _[k][i]_ [with] _[a][i]_ [(] _[β]_ [)] [=] 1+ _e_ 1 _[βki]_ [gives] _[dT]_ _dβ_ [=] _[−]_ [�] _i_ _[k]_ _i_ [2] _[a][i]_ [(1] _[ −]_ _[a][i]_ [)][,]
+
+hence the stated reciprocal.
+
+
+_Sketch._ Differentiating _T_ = [�]
+
+
+_[dT]_ _dβ_ [=] _[−]_ [�]
+
+
+_i_ 1
+**Proposition 9** (Small- _β_ expansion) **.** _At stationarity_ log [1] _[−]_ _a_ _[∗]_ _i_ _[a][∗]_ = _βki, so a_ _[∗]_ _i_ [=] 1+ _e_ _[βki]_ _[.]_ _[For][ |][βk][i][| ≪]_
+1 _,_
+_a_ _[∗]_ _i_ [=] 21 _[−]_ _[β]_ 4 _[k][i]_ [+] _[O]_ �( _βki_ ) [2][�] _,_
+
+_and the budget relation T_ = [�] _i_ _[a]_ _i_ _[∗][k][i]_ _[gives the explicit approximation]_
+
+
+    - 1    _β_ _≈_ [4] 2
+
+
+_as β_ _→_ 0 _._
+_i_ _[k]_ _i_ [2]
+
+
+_i_ _[k][i]_ _[−]_ _[T]_ [max] 
+- [2]
+
+
+_Sketch._ (i) _Latent alignment at init:_ concentration at random initialization yields a constant fraction
+of hidden units weakly aligned to some clause. (ii) _Capture_ _before_ _de-fan-out:_ over the next _K_
+steps, the would-be owner’s output weight grows by Ω( _η_ ) each time its clause is seen while its traffic
+_t_ = _a k_ remains below _τ_, so pruning does not preempt ownership. (iii) _Owner permanence:_ by rarefeature safety (Lemma 3) and monotone activity with fixed degree once _t_ _<_ _τ_, ownership persists.
+(iv) _Coupon collector:_ each cycle an unowned clause is claimed with probability at least a constant
+_p∗_ _>_ 0, so all _W_ +1 clauses are claimed after _C W_ log _W_ cycles with probability 1 _−_ _e_ _[−]_ [Ω(] _[W]_ [ )] .
+
+
+_Remark_ 3 (On the ranking assumption) _._ The constant-success step uses that, at each refresh, true
+literals rank above distractors with probability _p_ 0 _>_ 0 (e.g., a fixed margin event). This can arise
+from mild separation of clause activations or aggregation over mini-batches.
+
+
+**Theorem 11** (Finite-width barrier for lazy learning) **.** _Consider a disjoint DNF with W_ +1 _clauses_
+_and_ _a_ _witness_ _set_ _of_ _size_ 2( _W_ +1) _._ _A_ _width-_ ( _W_ +1) _two-layer_ _ReLU_ _network_ _trained_ _in_ _the_ _lazy_
+_√_
+_regime_ _(GD/SGD_ _with_ _step_ _size_ _η_ = _O_ (1 _/_ _N_ ) _)_ _achieves_ _zero_ _training_ _error_ _with_ _probability_ _at_
+
+_most_ [1] 2 [+] _[ o]_ [(1)] _[.]_
+
+
+1MI proxy: _I_ ˆ = 12  - _j_ [log] �1 + Var( _Uj_ ) _/σ_ ˆ [2][�] with _U_ = _W_ _[⊤]_ _Z_ and _σ_ ˆ [2] estimated per layer from AWGN
+
+residuals via a linear fit on held-out batches (same protocol across tasks).
+
+
+1 
+2
+
+
+_√_
+_Sketch._ (i) With _η_ _≤_ _c/_
+
+
+_Sketch._ (i) With _η_ _≤_ _c/_ _N_ the dynamics stay close to initialization, so training is well
+approximated by linear regression on frozen random features. (ii) Under general position of witnesses and standard concentration for random features, the realized dichotomy among 2( _W_ +1)
+points in R _[W]_ [ +1] is linearly separable with probability at most [1] 2 [+] _[o]_ [(1)] [by] [Cover’s] [counting] [argu-]
+
+ment. Hence zero error occurs with probability _≤_ [1] [+] _[o]_ [(1)][ in the lazy regime.]
+
+
+2 [+] _[o]_ [(1)][ in the lazy regime.]
+
+
+**Proposition** **12** (Static SP-out traffic descent) **.** _With_ _variance-preserving_ _rescale_ _and_ _sufficiently_
+_small refresh steps, an SP-out refresh that reduces total traffic_ [�] _i_ _[a][i][k][i][ yields a monotone descent of]_
+
+_the traffic term and empirically approaches the balance plane (tracked by the displacement metric_
+_in §S2.2)._ _A full proof would require explicit Lipschitz and step-size conditions._
+
+
+S2 EXPERIMENTAL DETAILS AND REPRODUCIBILITY
+
+
+This section serves as the single source of truth for protocols, setups, and hyperparameters.
+
+
+S2.1 STATISTICAL CONVENTIONS
+
+
+Unless stated otherwise, we report mean _±_ SD over independent seeds (didactic: 7; domains: 3–5 as
+specified in S2 tables). Error bars are 95% confidence intervals computed as CI95 = _t_ 0 _._ 975 _,_ _n−_ 1 _·_
+SD _/_ _[√]_ _n_ with _n_ seeds. For matched-sparsity comparisons we report CIs; significance is visual unless
+otherwise noted. Random seeds are fixed per run so that data order and augmentations are consistent
+across methods.
+
+
+S2.2 PROTOCOLS AND METRICS
+
+
+Shock–recovery protocol; balance-plane displacement; lifetime sparseness; effective rank; decorrelation metric; MI proxy. Each method references S1 where theory applies. [1]
+
+
+**Compute** **and** **budget** **parity.** We match training compute across methods as follows: (i)
+same optimizer, schedule, batch size, and number of optimizer updates; (ii) identical data
+pipelines/augmentations and tokenization/decoding settings; (iii) identical mask refresh cadence ∆
+(refresh work counted inside the step budget); and (iv) identical target kept density or global traffic
+budget when applicable. Wall-clock measurements use the hardware listed in the domain tables and
+include pruning/refresh overhead.
+
+
+1MI proxy: _I_ ˆ = 1
+
+
+17
+
+
+**Conv2d** **instantiation** **and** **variance-preserving** **rescale.** For a Conv2d with weights _W_ _∈_
+R _[O][×][I][×][k][×][k]_ we keep a broadcastable fan-in mask _M_ _∈{_ 0 _,_ 1 _}_ _[O][×][I][×]_ [1] _[×]_ [1] and compute _y_ =
+Conv2d( _x,_ _W_ _⊙_ _M_ ). We apply a variance-preserving rescale _s_ [ _o_ ] = ~~�~~ max(1 _,_ [�] _iI_ _[M]_ [[] _[o,i,]_ [1] _[,]_ [1])] [to]
+
+the pre-BN outputs. The activity proxy for output channel _o_ is the EMA of the ReLU on-rate,
+which feeds the degree-setting equation. _Selection statistic._ Unless noted, we use row-wise Top- _k_
+by mean( _|W_ [ _o, i,_ : _,_ :] _|_ ) per out-channel _o_ ; ties break by a stable index order. _Rescale_ _locus._ ASR
+applies the rescale pre-LN in the decoder FFN; Change Detection applies it pre-BN in encoders;
+other tasks apply the rescale pre-activation in masked layers. _min_keep._ We enforce min_keep per
+row to avoid collapse under early shocks.
+
+
+**Didactic hyperparameters.** Rare-feature safety: Three-layer MLP (301 _→_ 128 _→_ 128 _→_ 11), SGD
+(lr=0.01, momentum=0.9), batch size 256, 20k steps with 4k burn-in. Optimization barrier: Twolayer MLP (10 _→_ 32 _→_ 1), SGD (lr=0.01, momentum=0.9), batch size 512, 50–120 epochs; prune
+every ∆ after burn-in _b ∈{_ 0 _,_ 10 _,_ 20 _,_ 40 _}_ with fractions _p ∈{_ 0 _._ 2 _,_ 0 _._ 5 _}_ .
+
+
+S2.3 DOMAIN SETUPS AND HYPERPARAMETERS
+
+
+We list per-domain settings (data, model, schedule, controller) to reproduce results.
+
+
+**ASR** **/** **LibriSpeech** **(seq2seq** **Transformer).** Data splits; model dims; optimizer and schedule;
+sparsification locus (decoder FFN); global density 0.85; refresh ∆= 25; rescale=sqrt; SP-in/SP-out
+controllers with prune-only (LibriSpeech Panayotov et al. (2015)).
+
+
+**Face** **Identification** **/** **VGGFace2-7k** **(ResNet-101).** Placement: 1 _×_ 1 bottleneck convs (SP-in);
+densities _{_ 0 _._ 90 _,_ 0 _._ 70 _,_ 0 _._ 60 _,_ 0 _._ 50 _,_ 0 _._ 40 _,_ 0 _._ 30 _}_ ; refresh ∆= 200; regrowth on; rescale=sqrt (VGGFace2 Cao et al. (2018); ResNet-101 He et al. (2016)).
+
+
+**Change Detection / LEVIR–CD (FC-Siam-conc).** Placement: encoder first 3 _×_ 3 conv per block
+(SP-in); decoder dense; final kept density 0.70 emergent; refresh ∆= 50; warmup 1000; rescale
+pre-BN.
+
+
+**Synapse** **Prediction** **/** **SmartEM** **(3D** **U-Net** **Res–SE).** Placement: all Conv3d in residual/SE
+blocks (SP-in); ConvTranspose and skips dense; target density 0.70; refresh ∆= 200; regrowth
+on; rescale=sqrt.
+
+
+18
+
+
+**Representation diversity (exports and metrics).** For each decoder layer _ℓ_ and maps _W_ 1 [(] _[ℓ]_ [)] _[, W]_ 2 [ (] _[ℓ]_ [)][,]
+export final-epoch histograms of _|∇W_ _|_ (bin centers _bk_, counts _ck_ ). Let _S_ 0 = [�] _k_ _[c][k]_ [,] _[ S]_ [1] [=][ �] _k_ _[c][k][b][k]_ [,]
+
+
+_k_ _[c][k]_ [,] _[ S]_ [1] [=][ �]
+
+
+export final-epoch histograms of _|∇W_ _|_ (bin centers _bk_, counts _ck_ ). Let _S_ 0 = [�] _k_ _[c][k]_ [,] _[ S]_ [1] [=][ �] _k_ _[c][k][b][k]_ [,]
+
+_S_ 2 = [�] _k_ _[c][k][b]_ _k_ [2][.] [We] [compute:] [Coefficient of Variation][ CV] [=] _[σ/]_ [(] _[µ]_ [ +] _[ ε]_ [)][;] [Gini index via pairwise]
+
+
+_S_ 2 = [�] _k_ _[c][k][b]_ _k_ [2][.] [We] [compute:] [Coefficient of Variation][ CV] [=] _[σ/]_ [(] _[µ]_ [ +] _[ ε]_ [)][;] [Gini index via pairwise]
+
+differences; normalized Participation Ratio PRnorm = _S_ 1 [2] _[/]_ [(] _[S]_ [0] _[S]_ [2] [+] _[ ε]_ [)][;] [Shannon] [entropy] [of] _[p][k]_ [=]
+( _ckbk_ ) _/_ ( _S_ 1 + _ε_ ). We report layer-wise ∆% relative to Dense and aggregate over seeds (mean _±_ SD).
+See §S3.5 for a results pointer.
+
+
+**Entropy-at-balance** _H_ _[∗]_ **and** **gap.** Let _H_ ( _h_ ) be the coding entropy of the hidden code and _H_ _[∗]_
+
+
+_i_
+the entropy at the stationary balance solving log [1] _[−]_ _a_ _[∗]_ _i_ _[a][∗]_ = _βki_ under the traffic budget (see S1). We
+report ∆ _H_ _[∗]_ = _H_ _[∗]_ _−_ _H_ ( _h_ ) over training and across seeds.
+
+
+**Balance diagnostic (OLS).** We fit log [1] _[−]_ _ai_ _[a][i]_ = _β_ ( _ki −_ _κ_ 0) on non-saturated units, reporting slope
+
+_β_ ˆ and _R_ [2] per run; saturated units ( _ai_ _∈/_ [ _a_ min _,_ 1 _−_ _a_ min]) are excluded. Unless otherwise noted we
+use _a_ min = 10 _[−]_ [3] and estimate _κ_ 0 as the OLS intercept.
+
+
+**Balance-plane** **displacement.** We measure disp _≡_ ~~�~~ _N_ 1 - _i_ - log [1] _[−]_ _ai_ _[a][i]_ _−_ _βki_ �2 over non
+saturated units, with _β_ taken from the OLS fit unless noted.
+
+
+~~�~~
+**Balance-plane** **displacement.** We measure disp _≡_ _N_ 1 
+
+
+_i_ - log [1] _[−]_ _a_ _[a][i]_
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Table 3: ASR / LibriSpeech (seq2seq Transformer) — data, model, schedule, controller.
+
+
+**Data**
+**features**
+
+
+Train/Val/Test train-clean-100 / dev-clean / test-clean,test-other
+Tokenizer token_type=1k (shared)
+Features 80-dim fbank; norm=cepstral
+Batch/workers batch_size=16, NUM_WORKERS=4
+SpecAugment Freq masks _nf_ =4, width _≤_ 4; Time masks _nt_ =8, width _≤_ 50
+Embed dropout 0.1
+Decoding beam=10, lenpen=1.0, no external LM (greedy for ablations)
+
+
+**Model**
+
+
+_d_ model _/d_ ff 384 / 1536
+Encoder/Decoder 4/8/0.1 each (layers/heads/dropout)
+Strides time_stride=4, feature_stride=2
+
+
+**Optimization**
+**schedule**
+
+
+Optimizer/LR AdamW, 2 _×_ 10 _[−]_ [4] ; WarmupCosine (0.1)
+Stages (S1) Dense 50e; (S2) encoder-only 10e; (S3) fine-tune 60e
+Seeds 5 (mean _±_ std); decoding/tokenization identical
+
+
+**Sparsification (decoder FFN)**
+
+
+Budget target density 0.85 (all methods)
+Refresh ∆= 25; warmup_steps=0
+Rescale variance-preserving (sqrt); min_keep=8
+Methods SP-in (in FFN1), SP-out (FFN2); prune-only
+Hardware 1 _×_ A100 40GB; amp=fp16; cudnn.benchmark=true
+
+
+Table 4: Face Identification / VGGFace2-7k (ResNet-101) — data, schedule, controller.
+
+
+**Model**
+**placement**
+
+
+Backbone ResNet-101; final FC adapted to 7,001 ids
+Placement 1 _×_ 1 bottleneck convs; SP-in (row-wise)
+
+
+**Optimization**
+**schedule**
+
+
+Optimizer/LR/WD AdamW; 1 _×_ 10 _[−]_ [3] ; 1 _×_ 10 _[−]_ [4]
+
+Warmup/epochs 3 / 30; mixed precision fp16; batch 128
+Data pipeline RandResizedCrop(224), RandomHorizontalFlip
+Workers/pin NUM_WORKERS=8, pin_memory=true
+Determinism fixed seeds (report mean _±_ std over 5)
+Eval protocol Identification Top-1 @224; center-crop at test
+
+
+**Sparsification**
+
+
+Budgets kept density {0.90,0.70,0.60,0.50,0.40,0.30}
+Refresh ∆= 200; regrowth on; min_keep=8; rescale=sqrt
+Baselines Magnitude (row-wise); RigL (row-wise refresh); Top- _k_ gating
+Hardware 1 _×_ A100 40GB; amp=fp16
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 5: Change Detection / LEVIR–CD (FC-Siam-conc) — data, model, controller.
+
+
+**Task**
+**metrics**
+
+
+Dataset/input LEVIR–CD; A/B images; resized to 256 _×_ 256
+Loss/metrics BCE-with-logits; mean IoU; mean F1 (threshold 0.5)
+Epochs/runs 30 epochs; 3 runs (report mean _±_ std)
+
+
+**Model**
+
+
+Architecture FC-Siam-conc; shared Siamese encoders + UNet decoder
+Mask placement Encoder: first 3 _×_ 3 conv per block; decoder dense
+Rescale Pre-BN variance preservation ~~�~~ base _/_ kept
+
+
+**Controller**
+
+
+Budget no preset; emergent final kept density 0.70
+Refresh/warmup ∆= 50; warmup_steps=1000
+Allocation _ku_ = _d_ 0 + _β_ _[−]_ [1] log [1] _[−]_ _a_ ˜ _u_ _[a]_ [˜] _[u]_ [; row-wise Top-] _[k][u]_
+
+Selection rule Row-wise Top- _k_ per out-channel by mean( _|W_ _|_ )
+Regrowth on (pruned large-magnitude edges can re-enter)
+Hardware 1 _×_ A100 40GB; amp=fp16
+
+
+Table 6: Synapse Prediction / SmartEM (3D U-Net Res–SE) — data, schedule, controller.
+
+
+**Data**
+**sampling**
+
+
+Dataset/split SmartEM; GT1 train, GT2 test
+Patches (train) 3D crops (5 _,_ 257 _,_ 257) with flips; norm to [ _−_ 1 _,_ 1]
+Batch/workers 2 / 0 (safe)
+
+
+**Optimization**
+**schedule**
+
+
+Optimizer/LR/WD AdamW; 8 _×_ 10 _[−]_ [4] ; 1 _×_ 10 _[−]_ [4] ; grad clip 3.0
+LR scheduler Warmup+Cosine; warmup_steps=1000; MAX_ITERS=20000
+Checkpoints every 5000 steps
+
+
+**Sparsification**
+
+
+Placement All Conv3d in residual/SE blocks; upsamplers/skips dense
+Refresh ∆= 200; regrowth on; min_keep=8; rescale=sqrt
+Target density 0.70
+Inference Sliding window (5 _,_ 257 _,_ 257), stride (2 _,_ 128 _,_ 128); 8 _×_ flip test-time augmentation
+(TTA); reflect padding
+Eval PR-AUC, ROC-AUC; Best-F1 and Best-IoU from threshold sweep; no
+connected-components (CC) post-processing
+Hardware 1 _×_ A100 40GB; amp=fp16
+
+
+S2.4 PSEUDOCODE AND UTILITIES
+
+
+We include the full BB refresh in Alg. 4 and list the didactic EMA/refresh/controller utilities below
+for clarity.
+
+
+**Algorithm 1:** EMA Activity Update (Didactic)
+
+**Input:** activations _h_ for a minibatch, EMA vector _a_, horizon _H_
+**Output:** updated EMA vector _a_
+
+**1** _λ ←_ exp( _−_ 1 _/H_ )
+
+**2** _a ←_ _λ · a_ + (1 _−_ _λ_ ) _·_ mean_over_batch( **1** [ _h >_ 0])
+
+**3** **return** _a_
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+**Algorithm 2:** Mask Refresh (Didactic Traffc-Threshold Rule)
+
+**Input:** weights _W_, mask _M_, degrees _k_, prune fraction _p_, threshold _τ_, EMA _a_, min_keep
+**Output:** updated mask _M_ and degrees _k_
+
+**1** _t ←_ _a ⊙_ _k_
+
+**2** **for** _each channel i with ti_ _> τ_ **do**
+
+**3** _q_ _←_ max _{_ 0 _,_ min _{⌊p · ki⌋,_ _ki −_ min_keep _}}_
+
+**4** _S_ _←_ indices of smallest _q_ outgoing edges from channel _i_
+
+**5** _Mi,S_ _←_ 0
+
+**6** _ki_ _←_ _ki −|S|_
+
+
+**7** **return** _M, k_
+
+
+**Algorithm 3:** Budgeted Broadcast Controller (Didactic)
+**Input:** horizon _H_, refresh period ∆, burn-in _B_, prune frac set _P_, threshold _τ_
+
+**1** initialize EMA _a ←_ 0 _._ 5, degrees _k_ from masks
+
+**2** **for** _epoch e_ = 1 _,_ 2 _, . . ._ **do**
+
+**3** update _a_ via Alg. 1 each step
+
+**4** **if** _e > B_ _and e_ mod ∆= 0 **then**
+
+**5** choose _p ∈P_ (fixed or schedule)
+
+**6** refresh masks via Alg. 2 with ( _p, τ_ )
+
+
+**Algorithm 4:** Budgeted Broadcast (BB) Refresh — Full
+
+**Input:** weights ( _W_ 1 _, W_ 2), masks ( _M_ in _, M_ out), EMA on-rates _a_, degrees _k_, horizon _H_, refresh
+period ∆, min_keep, bounds ( _m, D_ ), controller params ( _d_ 0 _, β, β_ )
+
+**1** **for** _each training step t_ = 1 _,_ 2 _, . . ._ **do**
+
+_▷_ A) EMA update
+
+**2** _a ←_ exp( _−_ 1 _/H_ ) _· a_ + (1 _−_ exp( _−_ 1 _/H_ )) _·_ Ebatch[ **1** [ _h >_ 0]]
+
+**3** **if** _t_ mod ∆= 0 **then**
+
+_▷_ B) Degree update (controller)
+
+**4** _β_ _←_ min( _β,_ _β_ )
+
+       -       **5** _ki_ _←_ clip _d_ 0 + _β_ _[−]_ [1] log [1] _[−]_ _a_ ˜ _i_ _[a]_ [˜] _[i]_ _,_ _m,_ _D_
+
+_▷_ C) Row-wise selection (SP-in locus on _W_ 1)
+
+**6** For each out-channel _o_, rank fan-in indices by mean( _|W_ 1[ _o, i,_ : _,_ :] _|_ ) and set
+_M_ in[ _o, i_ ] _←_ 1 for the top _ko_ entries (others _←_ 0), enforcing min_keep
+
+_▷_ D) Variance-preserving rescale
+
+~~�~~ _I_
+**7** For each out-channel _o_, set _s_ [ _o_ ] = max(1 _,_ [�] _i_ _[M]_ [in][[] _[o,i]_ [])] [and apply the locus-specific]
+
+rescale (pre-LN/BN or pre-activation as in §S2.2)
+
+_▷_ E) Optional SP-out on _W_ 2
+
+**8** If SP-out is enabled, apply the same row-wise Top- _k_ rule on _W_ 2 with degree targets _k_
+
+
+Table 7: Actuator taxonomy and effects.
+
+
+**Actuator** **Mask locus** **Immediate knob** **Immediate** **Traffic variable** **KKT/entropy**
+**effect** **lens**
+
+
+SP-out@ _W_ 1 rows of _W_ 1 _k_ (audience) _↓_ broadcast of _ti_ = _aiki_ Inputs’ _ai_ fixed
+inputs (inputs) by data; treat as
+upstream units
+SP-in columns of _W_ 1 _a_ (selectivity) _↓_ on-rate of _tj_ = _ajkj_ Directly enforces
+hidden unit (hidden) log 1 _−ajaj_ = _βkj_
+
+SP-out@ _W_ 2 rows of _W_ 2 _k_ (audience) _↓_ broadcast of _tj_ = _ajkj_ Consistent with
+hidden unit (hidden) KKT; adjusts _k_
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+0 20 40 60 80 100 120 140
+Training step
+
+
+(a) Entropy [�] _i_ _[H][B]_ [(] _[a][i]_ [)] [vs] [upper] [bound] _[H]_ _[∗]_ [(projec-]
+
+tion window shaded).
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||
+||||||||||||||||||
+||||||||||||||||||
+||||||||||||||||||
+||||||||||||||||||
+||||||||||||||||||
+|||||||||aiki|aiki|aiki|aiki|aiki|aiki|aiki|aiki|aiki|
+|||||||||i<br>Tmax|||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|sp_in<br>sp_o|ut|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+Figure 10: Immediate accuracy drop (didactic MLP; 7 seeds) grows smoothly with shock size ∆ _ρ_ .
+Dashed line: sham (pause only).
+
+
+S3 SUPPLEMENTARY RESULTS AND ANALYSES
+
+
+Breadth and robustness evidence grouped by question. Didactic experiments use 7 seeds; domain
+tasks report 3–5 seeds as specified in S2 tables.
+
+
+S3.1 MECHANISTIC VALIDATION VIA SHOCKS
+
+
+Protocol: every ∆ steps, apply a sham (pause) or a shock of size ∆ _ρ ∈{_ 2 _,_ 5 _,_ 10 _}_ %; freeze training
+for _m_ _∈{_ 200 _,_ 500 _,_ 1000 _}_ steps; measure immediate drop _L_ post _−_ _L_ pre and recovery _L_ rec _−_ _L_ post.
+Plots of immediate drop vs shock size; recovery vs freeze length; drop vs edges removed; and
+difference-in-differences. Pointer to protocol details in §S2.2.
+
+
+To benchmark proximity to the theoretical optimum, we define _H_ _[∗]_ as the maximum coding entropy
+attainable if the network perfectly satisfies the balance with its current fan-outs _ki_ (solve the balance
+relation for the implied activities and sum entropies). The nonnegative gap _δH_ _≡_ _H_ _[∗]_ _−_ _H_ ( _h_ )
+measures distance from this optimal coding state. Panel (a) shows _H_ ( _h_ ) steadily increasing and
+closing the gap to _H_ _[∗]_ ; panel (b) shows total traffic [�] _i_ _[a][i][k][i]_ [rapidly converging to and tracking the]
+
+target budget _T_ max with periodic corrections at each mask refresh.
+
+
+S3.2 EMPIRICAL TESTS OF ASSUMPTIONS
+
+
+Fashion-MNIST-style checks: decorrelation over training; MI vs traffic linear relation.
+
+
+22
+
+
+Budget compliance over training
+
+
+24000
+
+
+22000
+
+
+20000
+
+
+18000
+
+
+16000
+
+
+14000
+
+
+12000
+
+
+0 250 500 750 1000 1250 1500 1750 2000
+Training step
+
+
+(b) Traffic [�] _i_ _[a][i][k][i]_ [tracking] _[ T]_ [max][; refreshes marked.]
+
+
+Figure 9: Population-code optimization and budget tracking during training.
+
+
+1.2
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+2 3 4 5 6 7 8 9 10
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+0.5
+
+
+|Col1|Col2|Col3|Col4|Col5|sp_in,<br>sp_in,|=2%<br>=5%|Col8|sp_<br>sp_|out,<br>out,|=2<br>=5|%<br>%|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||<br>sp_in,|=10%||<br>sp|<br>out,|=1|%|
+||||||||||<br>|<br>||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||sp_in<br>sp_ou|t|
+
+
+Figure 12: Immediate drop (didactic MLP; 7 seeds) increases with the number of edges pruned.
+
+
+S3.3 CONTROLLER STABILITY AND SENSITIVITY
+
+
+Heatmaps over EMA horizon and refresh period for _R_ [2], slope _β_ [ˆ], accuracy, and _H_ _[∗]_ gap.
+
+
+S3.4 ABLATIONS
+
+
+Grouped ablations (e.g., SP-in toggles: regrowth, rescale, refresh, EMA _α_ ) and loss curves; figures
+reused without duplication of prose.
+
+
+S3.5 REPRESENTATION DIVERSITY RESULTS
+
+
+Methods in §S2.2. Layer-wise PR/entropy ∆% panels for all decoders are included in the repository
+and can be regenerated from the exported CSVs (see §S2.2). Representative panels appear in the
+main text; extended per-layer plots can be included here if needed.
+
+
+S3.6 QUALITATIVE PANELS
+
+
+Change detection overlays and synapse overlays; captions reference shared color semantics.
+
+
+S3.7 ACTUATOR SCHEMATICS
+
+
+SP-in and SP-out diagrams shown adjacently for mechanism complementarity.
+
+
+23
+
+
+200 300 400 500 600 700 800 900 1000
+Freeze steps m
+
+
+Figure 11: Recovery gain (didactic MLP; 7 seeds) increases with freeze length _m_ . Points: means
+over seeds; bars: 95% CIs.
+
+
+1.50
+
+
+1.25
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+5000 10000 15000 20000 25000 30000 35000
+Edges pruned
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+0.05
+
+
+0.10
+
+
+0.15
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|sp_in<br>sp_o|ut|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+2 3 4 5 6 7 8 9 10
+
+
+Figure 13: Difference-in-differences (didactic MLP; 7 seeds): drop after subtracting the sham baseline retains the same increasing trend with ∆ _ρ_ .
+
+
+Table 8: FMNIST validation: grid, multi-seed summary, and hubness diagnostics.
+
+
+**Grid (SP-in/SP-out** _× τ_ **)**
+
+
+mode _τ_ Acc (%) Decorr ∆Decorr Traffic drop
+
+
+SP-in 20 88.74 0.1173 _−_ 0.0003 0.208
+SP-in 30 88.72 0.1186 _−_ 0.0017 0.183
+**SP-in** **40** **88.88** **0.1088** **+0.0082** **0.200**
+SP-in 50 89.08 0.1192 _−_ 0.0023 0.190
+SP-out 20 88.74 0.1203 _−_ 0.0033 0.695
+SP-out 30 89.09 0.1180 _−_ 0.0011 0.679
+SP-out 40 88.91 0.1143 +0.0027 0.687
+SP-out 50 88.70 0.1192 _−_ 0.0022 0.645
+
+
+**Multi-seed (epoch 12; mean** _±_ **SD over 5 seeds)**
+
+
+Dense 88 _._ 54 _±_ 0 _._ 42 0 _._ 1120 _±_ 0 _._ 0047
+BB (SP-in, _τ_ =40) 88 _._ 63 _±_ 0 _._ 46 0 _._ 1164 _±_ 0 _._ 0037
+
+
+**Hubness (20-epoch diagnostic)**
+
+
+Model Gini( _a_ ) Gini( _k_ ) Top-5% traffic share
+Dense 0.4085 0.0000 0.1098
+BB (SP-in, _τ_ =40) 0.4050 0.0942 0.1050
+
+
+S3.8 ADDITIONAL CHANGE DETECTION EXAMPLES
+
+
+Table 10: **Llama 3.1-8B on TinyStories.** Perplexity (PPL) by sparsity _s_ and token frequency. BB
+protects rare tokens significantly better than baselines at high sparsity (e.g., at _s_ = 0 _._ 7, BB-G4R is
+_∼_ 2.3 _×_ better than Wanda). **Bold** indicates best value.
+
+
+**All tokens** **Common bucket** **Rare bucket**
+
+
+Method Category _s_ = 0 _._ 5 _s_ = 0 _._ 6 _s_ = 0 _._ 7 _s_ = 0 _._ 5 _s_ = 0 _._ 6 _s_ = 0 _._ 7 _s_ = 0 _._ 5 _s_ = 0 _._ 6 _s_ = 0 _._ 7
+
+
+Dense Baseline - 3.88 - - 3.53 - - 5.90 
+
+BB Unstructured **3.95** **4.49** **7.02** **3.83** **4.31** **6.60** **6.30** **7.08** **11.78**
+WANDA Unstructured 4.43 6.77 23.73 4.38 6.45 21.08 8.51 15.45 100.96
+MAG Unstructured 11.35 23.98 791.34 10.23 17.81 485.62 58.75 234.86 3.5e4
+
+
+BB-G4R N:M 7.11 **7.91** **12.32** 6.82 **7.72** **11.72** 16.69 **19.22** **35.18**
+WANDA N:M **6.83** 8.78 29.22 **6.57** 8.56 25.84 **15.79** 24.19 115.23
+MAG N:M 21.24 65.19 1.4e4 17.63 49.12 1.1e4 165.06 1.3e3 1.5e6
+
+
+24
+
+
+Information vs Traffic (pooled)
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+|Trend (slope: 0.002)|Col2|
+|---|---|
+|Trend (slope: 0.002)||
+|||
+|||
+|||
+|||
+|||
+
+
+100000 105000 110000 115000 120000 125000
+Total Traffic T
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+Decorrelation (Mean ± SD)
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Dense (mea<br>BB (mean)|n)|
+|---|---|---|---|---|---|---|---|---|
+||||||<br>|<br>|||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+Figure 15: Controller sensitivity on XOR MLP. Stable performance over broad bands of ( _H,_ ∆).
+
+
+Figure 16: Balance sanity check: higher log [1] _[−]_ _a_ ˜ _[a]_ [˜] (quieter units) _⇒_ larger _k_ ; pattern stable across
+
+layers.
+
+
+25
+
+
+0.24
+
+
+0.22
+
+
+0.20
+
+
+0.18
+
+
+0.16
+
+
+0.14
+
+
+0.12
+
+
+5
+
+
+10
+
+
+20
+
+
+5
+
+
+10
+
+
+20
+
+
+R [2]
+
+
+10 20 50
+∆ (refresh period)
+
+
+Accuracy
+
+
+10 20 50
+∆ (refresh period)
+
+
+2 4 6 8 10 12
+Epoch
+
+
+0.874
+
+
+0.872
+
+
+0.870
+
+
+0.868
+
+
+0.866
+
+
+0.864
+
+
+0.894
+
+
+0.892
+
+
+0.890
+
+
+0.888
+
+
+0.886
+
+
+0.884
+
+
+Figure 14: Empirical validation: (left) decorrelation over epochs; (right) MI vs traffic.
+
+
+5
+
+
+10
+
+
+20
+
+
+5
+
+
+10
+
+
+20
+
+
+βˆ
+
+
+10 20 50
+∆ (refresh period)
+
+H [∗] Gap
+
+
+10 20 50
+∆ (refresh period)
+
+
+0.118
+
+
+0.116
+
+
+0.114
+
+
+0.112
+
+
+0.110
+
+
+0.108
+
+
+0.19
+
+
+0.18
+
+
+0.17
+
+
+0.16
+
+
+0.15
+
+
+0.14
+
+
+0.13
+
+
+0.12
+
+
+0.11
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+Multi-seed balance statistics (β [ˆ] and R [2] )
+
+
+H1toH2
+
+
+Figure 17: Selectivity–audience balance is stable across 7 seeds (distributions of fitted slope _β_ [ˆ] and
+_R_ [2] ).
+
+
+Figure 18: SP-in ablations on ResNet-101 (VGGFace2-7k). See §S2.3 for exact knobs.
+
+
+Table 9: Change Detection (LEVIR–CD): per-run metrics and mean across 3 runs.
+
+
+**Dense** **BB (SP-in)** **Absolute Gain**
+
+
+**Run** IoU F1 IoU F1 ∆IoU ∆F1
+
+
+1 0.54 0.65 0.55 0.66 +0.01 +0.01
+2 0.47 0.58 0.62 0.71 +0.15 +0.13
+3 0.57 0.66 0.58 0.67 +0.01 +0.01
+
+
+**Mean** 0.527 0.630 **0.583** **0.680** **+0.057** **+0.050**
+
+
+26
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+27
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+Figure 20: Synapse segmentation overlay grid: additional qualitative examples.
+
+
+Figure 21: Synapse prediction at a shared decision threshold vs method-specific Best-F1 threshold
+(qualitative).
+
+
+28
+
+
+a. EM image
+
+
+b. Synapse GT
+
+
+c. Best Threshold
+
+
+d. Same Threshold
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**

@@ -1,0 +1,2305 @@
+# VERIFIER-CONSTRAINED FLOW EXPANSION
+## FOR DISCOVERY BEYOND THE DATA
+
+
+**Riccardo De Santi** [12] _[∗]_ **, Kimon Protopapas** [1] _[∗]_ **, Ya-Ping Hsieh** [1] **, Andreas Krause** [12]
+
+1ETH Zürich, 2ETH AI Center
+{rdesanti,kprotopapas,krausea}@ethz.ch, {yaping.hsieh}@inf.ethz.ch
+
+
+ABSTRACT
+
+
+Flow and diffusion models are typically pre-trained on limited available data (e.g.,
+molecular samples), covering only a fraction of the valid design space (e.g., the full
+molecular space). As a consequence, they tend to generate samples from only a narrow portion of the feasible domain. This is a fundamental limitation for scientific
+discovery applications, where one typically aims to sample valid designs beyond
+the available data distribution. To this end, we address the challenge of leveraging
+access to a verifier (e.g., an atomic bonds checker), to adapt a pre-trained flow
+model so that its induced density expands beyond regions of high data availability,
+while preserving samples validity. We introduce formal notions of _strong_ and
+_weak_ _verifiers_ and propose algorithmic frameworks for _global_ and _local_ _flow_
+_expansion_ via probability-space optimization. Then, we present **F** low **E** xpander
+(FE), a scalable mirror descent scheme that provably tackles both problems by
+verifier-constrained entropy maximization over the flow process noised state space.
+Next, we provide a thorough theoretical analysis of the proposed method, and state
+convergence guarantees under both idealized and general assumptions. Ultimately,
+we empirically evaluate our method on both illustrative, yet visually interpretable
+settings, and on a molecular design task showcasing the ability of FE to expand
+a pre-trained flow model increasing conformer diversity while preserving validity.
+
+
+1 INTRODUCTION
+
+
+Recent years have seen major progress in large-scale generative
+modeling. In particular, flow (Lipman et al., 2022; 2024) and
+diffusion models (Sohl-Dickstein et al., 2015; Song & Ermon,
+2019; Ho et al., 2020) now produce high-fidelity samples
+and have been applied successfully across domains such as
+chemistry (Hoogeboom et al., 2022), biology (Corso et al., 2022),
+and robotics (Chi et al., 2023). These models are typically trained
+via divergence minimization objectives, such as score (Song et al.,
+2020) or flow matching (Lipman et al., 2022), to approximate the
+distribution induced by training data (e.g., molecular samples),
+which typically only cover a tiny subset of the full valid
+
+Figure 1: Limited coverage of the
+
+design space. As a consequence, pre-trained generative models
+
+valid design space leads to gen
+concentrate their density over a narrow region of valid designs,
+
+erating sub-optimal samples for
+
+and are unlikely to generate valid samples beyond areas of high
+
+downstream optimization tasks.
+
+data availability. This is a fundamental limitation for scientific
+discovery tasks such as material design and drug discovery, where one typically wishes to generate
+valid designs beyond the data distribution. In particular, limited coverage of the valid design space
+leads to an irreducible sub-optimality gap in _generative optimization_ (De Santi et al., 2025b; Uehara
+et al., 2024b; Li et al., 2024) problems, where one aims to generate samples maximizing a task-specific
+utility function _f_ : _X_ _→_ R (e.g., binding affinity for protein docking), as illustrated in Figure 1.
+
+
+Prior work has addressed this issue through manifold-exploration schemes that re-balance a pretrained model’s density over diverse, promising modes (e.g., De Santi et al., 2025a;b; Celik et al.,
+2025). However, the validity signal learned by a pre-trained flow model diminishes outside high-data
+
+
+_∗_ Equal contribution. Corresponding author: rdesanti@ethz.ch.
+
+
+1
+
+
+regions. Therefore, seemingly promising low-probability modes that such methods would further
+explore, could turn out to be invalid. This highlights the need to inject further validity information
+into the exploration process via an external _verifier_ (Botta et al., 2025; Wang et al., 2024): formally, a
+function _v_ : _X_ _→{_ 0 _,_ 1 _}_ that provides data-specific validity signal. Luckily, there exists more-or-less
+accurate verifiers for a wide variety of real-world discovery applications, such as atomic-bond checkers for drug discovery (e.g., O’Boyle et al., 2011), protein folding predictors for protein design (e.g.,
+Jumper et al., 2021), as well as physics-based simulators for mechanical and material design (e.g.,
+Kresse & Furthmüller, 1996). Motivated by these insights, in this work we advance flow and diffusionbased design space exploration methods (De Santi et al., 2025a;b) by asking the following question:
+
+
+_How can we leverage a given verifier to adapt a flow or diffusion model to generate designs beyond_
+_high data-availability regions while preserving validity?_
+
+
+Answering this would contribute to the algorithmic-theoretical foundations of _generative exploration_,
+and enable applications of flow-based exploration schemes in diverse scientific discovery tasks.
+
+
+**Our approach** We address this challenge by formally introducing two verifier types. A _strong_
+_verifier_ is a function _v_ : _X_ _→{_ 0 _,_ 1 _}_ that characterizes validity exactly (i.e., _v_ ( _x_ ) = 1 iff _x_ is valid).
+A _weak verifier_ instead acts as a _filter_ : it rejects certain invalid designs but misses others (formally
+_v_ ( _x_ ) = 0 = _⇒_ _x_ is invalid). While the former is arguably rare in scientific discovery applications,
+the latter is ubiquitous. For instance, most molecular checkers examine specific constraints (e.g.,
+atomic bonds, graph topology, or conformer geometry), ruling out certain invalid samples, but without
+guaranteeing validity. We show that strong verifiers allow to adapt a pre-trained model to _globally_
+expand over the entire valid design space. While this is not the case for weak verifiers, they can
+also be leveraged for a more conservative, _local_ expansion. To this end, we introduce mathematical
+frameworks for _global_ and _local flow expansion_ via verifier-constrained entropy maximization (Sec.
+3). Next, we propose **F** low **E** xpander (FE), a scalable mirror descent scheme acting over the flow
+process noised state space that provably tackles both problems by sequentially alternating expansion
+and projection steps (Sec. 4). We provide theoretical guarantees for FE, showing convergence results
+under both idealized and general assumptions via mirror-flow theory (Sec. 5). Ultimately, we evaluate
+our method on both illustrative, yet visually interpretable settings, and on a molecular design task,
+showcasing the ability of FE to expand a pre-trained flow model to increase molecular conformer
+diversity while better preserving validity than current flow-based exploration schemes (Sec. 6).
+
+
+**Our contributions** In this work, we provide the following contributions:
+
+
+- A formalization of _Global_ and _Local Flow Expansion_ via verifier-constrained entropy maximization,
+which formally capture the practically relevant problem of expanding the coverage of a pre-trained
+flow or diffusion model by integrating information from an available strong or weak verifier (Sec. 3).
+
+- _**F**_ _low_ _**E**_ _xpander (_ FE _)_, a principled probability-space optimization scheme that provably solves both
+problems introduced via constrained entropy maximization over the flow noised state space (Sec. 4).
+
+- **N** oised **S** pace **E** xploration (NSE), a noised state space unconstrained exploration scheme, obtained
+as a by product, that outperforms existing flow-based methods for high-dim. exploration (Sec. 4).
+
+- A theoretical analysis of the proposed algorithm providing convergence guarantees under both
+simplified and realistic assumptions via mirror-flow theory (Sec. 5).
+
+- An experimental evaluation of FE, showcasing its practical relevance on both visually interpretable
+illustrative settings, and on a molecular design task aiming to increase conformer diversity. (Sec. 6).
+
+
+2 BACKGROUND AND NOTATION
+
+
+**Mathematical Notation.** Using _X_ _⊆_ R _[d]_ to refer to the design space (an arbitrary set), we denote
+the set of Borel probability measures on _X_ with _**P**_ ( _X_ ), and the set of functionals over the set of
+probability measures _**P**_ ( _X_ ) as _**F**_ ( _X_ ). Given an integer _N_, we define [ _N_ ] := _{_ 1 _, . . ., N_ _}_ .
+
+
+**Flow-based Generative Modeling.** Generative models aim to approximately replicate and sample
+from a data distribution _pdata_ . Flow models tackle this problem by modeling a _flow_, which incrementally transforms samples _X_ 0 = _x_ 0 from a source distribution _p_ 0 into samples _X_ 1 = _x_ 1 from
+the target distribution _pdata_ (Lipman et al., 2024; Farebrother et al., 2025). Formally, a _flow_ is a
+time-dependent map _ψ_ : [0 _,_ 1] _×_ R _[d]_ _→_ R such that _ψ_ : ( _t, x_ ) _→_ _ψt_ ( _x_ ). A _generative flow model_ is
+then defined as a continuous-time Markov process _{Xt}_ 0 _≤t≤_ 1 generated by applying a flow _ψt_ to _X_ 0,
+i.e. _Xt_ = _ψt_ ( _X_ 0) _,_ _t ∈_ [0 _,_ 1] such that _X_ 1 = _ψ_ 1( _X_ 0) _∼_ _pdata_ . In the context of flow modeling, the
+flow _ψ_ is defined by a _velocity field u_ : [0 _,_ 1] _×_ R _[d]_ _→_ R _[d]_, which is a vector field implicitly defining
+
+
+2
+
+
+(a) Global flow expansion (b) Strong and weak verifier sets
+Figure 2: (2a) Pre-trained and globally expanded flow model inducing densities _p_ _[pre]_ 1 and optimal
+density _p_ _[∗]_ 1 [.] [(][2b][) Valid design space][ Ω][, strong and weak verifiers][ Ω] _[v]_ _i_ [,] _[ i][ ∈]_ [[3]][, and their compositions.]
+
+
+_ψ_ via the following ordinary differential equation (ODE), typically referred to as _flow ODE_ :
+
+
+d
+
+_[ψ]_ [0][(] _[x]_ [) = 0] (1)
+d _t_ _[ψ][t]_ [(] _[x]_ [) =] _[ u][t]_ [(] _[ψ][t]_ [(] _[x]_ [))] _[,]_
+
+We write _{pt}t∈_ [0 _,_ 1 to refer to the probability path of _marginal_ _densities_ of the flow model, i.e.,
+_Xt_ = _ψt_ ( _X_ 0) _∼_ _pt_, and denote by _p_ _[u]_ the probability path of marginal densities induced by the
+velocity field _u_ . In practice, Flow Matching (FM) (Lipman et al., 2024) can be used to estimate a
+velocity field _u_ _[θ]_ s.t. the probability path _p_ _[u][θ]_ satisfies _p_ _[u]_ 0 _[θ]_ = _p_ 0 and _p_ _[u]_ 1 _[θ]_ = _pdata_, where _p_ 0 denotes
+the source distribution, and _pdata_ the target data distribution. Typically FM is rendered tractable by
+defining _p_ _[u]_ _t_ [as the marginal of a conditional density] _[ p]_ _t_ _[u]_ [(] _[·|][x]_ [0] _[, x]_ [1][)][, e.g.,:]
+
+_Xt_ _| X_ 0 _, X_ 1 = _κtX_ 0 + _ωtX_ 1 (2)
+
+where _κ_ 0 = _ω_ 1 = 1 and _κ_ 1 = _ω_ 0 = 0 (e.g., _κt_ = 1 _−_ _t_ and _ωt_ = _t_ ). Then _u_ _[θ]_ can be learned by
+regressing onto the conditional velocity field _u_ ( _·|x_ 1) (Lipman et al., 2022). Interestingly, diffusion
+models (Song & Ermon, 2019) (DMs) admit an equivalent ODE-based formulation with identical
+marginal densities to their original SDE dynamics (Lipman et al., 2024, Chapter 10). Consequently,
+while in this work we adopt the notation of flow models, our contributions carry over directly to DMs.
+
+
+**Continuous-time Reinforcement Learning.** We formulate continuous-time reinforcement learning
+(RL) as a specific class of finite-horizon optimal control problems (Wang et al., 2020; Jia & Zhou,
+2022; Treven et al., 2023; Zhao et al., 2024). Given a state space _X_ and an action space _A_, we
+consider the transition dynamics governed by the following ODE:
+
+
+d
+(3)
+d _t_ _[ψ][t]_ [(] _[x]_ [) =] _[ a][t]_ [(] _[ψ][t]_ [(] _[x]_ [))]
+
+where _at_ _∈A_ is a selected action. We consider a state space _X_ := R _[d]_ _×_ [0 _,_ 1], and denote by
+(Markovian) deterministic policy a function _πt_ ( _Xt_ ) := _π_ ( _Xt, t_ ) _∈A_ mapping a state ( _x, t_ ) _∈X_ to
+an action _a ∈A_ such that _at_ = _π_ ( _Xt, t_ ), and denote with _p_ _[π]_ _t_ [the marginal density at time] _[ t]_ [ induced]
+by policy _π_ . Considering the continuous-time reinforcement learning formulation above, a velocity
+field _u_ _[pre]_ can be interpreted as an action process _a_ _[pre]_ _t_ := _u_ _[pre]_ ( _Xt, t_ ), where _a_ _[pre]_ _t_ is determined by a
+continuous-time RL policy via _a_ _[pre]_ _t_ = _π_ _[pre]_ ( _Xt, t_ ) (De Santi et al., 2025a). Therefore, we can express
+the flow ODE induced by a pre-trained flow model by replacing _at_ with _a_ _[pre]_ in Eq. 3, and denote the
+pre-trained model by its policy _π_ _[pre]_, which induces a density _p_ _[pre]_ 1 := _p_ _[π]_ 1 _[pre]_ approximating _pdata_ .
+
+
+3 PROBLEM STATEMENT: GLOBAL AND LOCAL FLOW EXPANSION
+
+Given a pre-trained flow model _π_ _[pre]_ inducing a density _p_ _[pre]_ 1 that covers sufficiently only a limited
+region of the _valid design space_ [1] Ω _⊆_ R _[d]_ (e.g., a molecular space, see Fig. 1), we aim to adapt it
+by leveraging a verifier (e.g., an atomic bonds checker) to compute a model _π_ _[∗]_, inducing a process:
+
+
+d
+_t_ [(] _[ψ][t]_ [(] _[x]_ [))] with _a_ _[∗]_ _t_ [=] _[ π][∗]_ [(] _[x, t]_ [)] _[,]_ (4)
+d _t_ _[ψ][t]_ [(] _[x]_ [) =] _[ a][∗]_
+
+such that its density _p_ _[∗]_ 1 [:=] _[p][π]_ 1 _[∗]_ is more uniformly distributed over the valid design space than
+_p_ _[pre]_ 1 . To this end, we first denote by _verifier_ a scalar function _v_ : _X_ _→{_ 0 _,_ 1 _}_, and indicate by
+Ω _v_ = _{x ∈X_ : _v_ ( _x_ ) = 1 _}_ the _verifier-set_ induced by _v_ . Next, we classify any verifier _v_ as _strong_
+or _weak_ depending on the relationship between its verifier-set Ω _v_ and the valid design space Ω.
+
+
+1In this work, we consider the valid design space to be an unknown, yet bounded set.
+
+
+3
+
+
+**Definition 1** (Strong Verifier) **.** _We denote by_ strong verifier _a function v_ : _X_ _→{_ 0 _,_ 1 _} s.t._ Ω _v_ = Ω _._
+
+
+By Def. 1, _v_ ( _x_ ) = 1 _⇐⇒_ _x ∈_ Ω, hence a strong verifier fully characterizes the valid design space Ω.
+
+
+3.1 AN IDEALIZED PROBLEM: GLOBAL FLOW EXPANSION VIA STRONG VERIFIERS
+
+
+Given a pre-trained flow model _π_ _[pre]_ and a strong verifier _v_ : _X_ _→{_ 0 _,_ 1 _}_ as defined within Def.
+1, one can capture the problem of computing a new flow model _π_ _[∗]_ such that its marginal density
+_p_ _[∗]_ 1 [:=] _[ p]_ 1 _[π][∗]_ covers Ω uniformly via the following verifier-constrained entropy maximization problem.
+
+
+**Global Flow Expansion via Verifier-Constrained Entropy Maximization**
+
+_π_ _[∗]_ _∈_ arg max _H_ ( _p_ _[π]_ 1 [)] subject to _s.t._ _p_ _[π]_ 1 _[∈]_ _**[P]**_ [ (Ω] _[v]_ [)] (5)
+_π_ : _p_ _[∗]_ 0 [=] _[p][pre]_ 0
+
+
+In this formulation, the constraint _p_ _[π]_ 0 [=] _[ p]_ 0 _[pre]_ enforces that the marginal density at _t_ = 0 matches the
+pre-trained model marginal, and _H ∈_ _**F**_ (Ω _v_ ) denotes the differential entropy functional expressed as:
+
+
+               _H_ ( _µ_ ) = _−_ d _µ_ log [d] _[µ]_ _µ ∈_ _**P**_ (Ω _v_ ) (6)
+
+_dx_ _[,]_
+
+
+where Ω _v_ is the bounded verifier-set induced by _v_ . Crucially, Problem 5 computes a flow model _π_ _[∗]_
+
+inducing the density _p_ _[π]_ 1 _[∗]_ with maximum entropy among all densities supported on Ω _v_ . Therefore, the
+optimal density _p_ _[π]_ 1 _[∗]_ according to Problem 5 corresponds to the uniform density over the entire valid
+design space Ω, i.e., _p_ _[π]_ 1 _[∗]_ = _U_ (Ω) - as uniforms are the entropy-maximizing densities on bounded
+sets and Ω _v_ = Ω due to _v_ being a strong verifier. Notably, Problem 5 does not depend on the prior
+generative model _π_ _[pre]_ . In fact, since the strong verifier _v_ fully characterizes the valid design space
+Ω, prior information is not required to compute the maximally explorative, yet valid flow model _π_ _[∗]_ .
+
+
+Problem 5 provides a sharp data-free objective for verifier-based flow/diffusion model learning, well
+capturing the ideal goal of a uniform prior over the valid design space for subsequent use in downstream tasks. Nonetheless, as discussed in Sec. 1, strong verifiers are arguably rare in most scientific
+discovery applications (e.g., material design, drug discovery). Towards overcoming such limitation, in
+the following we sharpen our notion of verifier to one that is ubiquitous in real-world discovery tasks.
+
+
+3.2 A REALISTIC FRAMEWORK: LOCAL FLOW EXPANSION VIA WEAK VERIFIERS
+
+
+We first relax the notion of strong verifier introduced in Def. 1 to the following one of _weak verifier_ .
+
+
+**Definition 2** (Weak Verifier) **.** _We denote by_ weak verifier _a function v_ : _X_ _→{_ 0 _,_ 1 _} s.t._ Ω _v_ _⊃_ Ω _._
+
+
+As Fig. 2b illustrates, Def. 2 requires only the one-sided condition _v_ ( _x_ ) = 0 = _⇒_ _x_ _∈/_ Ω; unlike
+strong verifiers, it does not guarantee _v_ ( _x_ ) = 1 = _⇒_ _x_ _∈_ Ω (i.e., _v_ cannot certify membership
+in Ω). Instead, it represents a superset Ω _v_ _⊃_ Ω and effectively acts as a _filter_ . Moreover, multiple
+weak verifiers _{vi}_ can be combined, yielding Ω _v_ = [�] _i_ [Ω] _[v]_ _i_ [, which is typically tighter to][ Ω] [for more]
+
+diverse verifiers _vi_, e.g., checking atomic bonds, molecular graph topology, and conformer geometry.
+
+
+Given this new realistic notion of verifier, the global flow expansion Problem 5 would evidently
+no longer compute the desired flow model. In fact, for a weak verifier _v_ it holds Ω _v_ _⊃_ Ω, therefore
+the optimal flow density _p_ _[∗]_ = _U_ (Ω _v_ ) would generate invalid designs over Ω _v \_ Ω, as shown in Fig.
+2b. Moreover, weak verifiers typically induce unbounded verifier sets, which would even render
+Problem 5 ill-posed. To address these issues, we introduce the _local flow expansion_ problem, which
+aims to locally expand the prior flow model _π_ _[pre]_ by integrating information from both _v_ and _π_ _[pre]_ .
+
+
+**Local Flow Expansion via KL-regularized Verifier-Constrained Entropy Maximization**
+
+_π_ _[∗]_ _∈_ arg max _H_ ( _p_ _[π]_ 1 [)] _[ −]_ _[α][D][KL]_ [(] _[p][π]_ 1 _[∥][p][pre]_ 1 ) subject to _s.t._ _p_ _[π]_ 1 _[∈]_ _**[P]**_ [ (Ω] _[v]_ [)] (7)
+_π_ : _p_ _[∗]_ 0 [=] _[p][pre]_ 0
+
+
+Here, the weak verifier _v_ acts as a filter preventing the entropy term from driving exploration into
+verifier-rejected regions. Since _v_ cannot detect all invalid areas, expansion must remain conservative
+and leverage the validity signal encoded in the prior model. This is achieved via the _α_ -weighted KL
+divergence between the density _p_ _[π]_ 1 [induced by the fine-tuned model, and] _[ p]_ 1 _[pre]_ . Crucially, this term
+enforces _π_ _[∗]_ to preserve prior validity signal, thus preventing _π_ _[∗]_ from allocating density in regions
+unlikely according to _π_ _[pre]_, even if valid according to the weak verifier. For sufficiently large _α_, the
+
+
+4
+
+
+density induced by the expanded flow model _π_ _[∗]_ stays arbitrarily close to the prior in probability
+space - hence _local_ expansion. In practice, the choice of _α_ should reflect the degree of risk-aversion
+versus novelty-seeking toward the discovery task at hand, as well as the quality of the weak verifier
+_v_ (i.e., how tightly Ω _v_ approximates Ω). Interestingly, in the limit of Ω _v_ _→_ Ω, _α_ should clearly be
+set to 0, which naturally retrieves the presented global flow expansion Problem 5 as a sub-case.
+
+
+4 FLOW-EXPANDER : SCALABLE GLOBAL AND LOCAL EXPANSION
+
+
+In the following, we propose **F** low **E** xpander (FE), which provably solves the global and local flow
+expansion problems (see Eq. 5 and 7). To this end, we first lift their formulations from the probability
+space associated to the last time-step marginal _p_ _[π]_ 1 [to the entire flow process] **[ Q]** _[π]_ [=] _[ {][p][π]_ _t_ _[}]_ _t∈_ [0 _,_ 1] [.]
+
+
+**Flow Expansion via Verifier-Constrained Noised Space Entropy Maximization**
+
+
+              - 1
+_π_ _[∗]_ _∈_ arg max _L_ ( **Q** _[π]_ ) := _λtGt_ ( _p_ _[π]_ _t_ [) d] _[t]_ subject to E [ _v_ ( _x_ )] = 1 (8)
+_π_ : _p_ _[π]_ 0 [=] _[p]_ 0 _[pre]_ 0 _x∼p_ _[π]_ 1
+
+
+Under this unifying formulation, _Gt_ : _**P**_ ( _X_ ) _→_ R is a functional over densities _p_ _[π]_ _t_ [induced by flow] _[ π]_ [.]
+We note that under general regularity assumptions, an optimal policy _π_ _[∗]_ for Problem 8 is optimal also
+for the global and local flow expansion problems (see Eq. 5 and 7) if the functional _G_ is defined as:
+
+
+_Gt_ ( _p_ _[π]_ _t_ [) =] _[ H]_ [(] _[p]_ _t_ _[π]_ [)]
+
+- �� Global Flow Expansion
+
+
+_Gt_ ( _p_ _[π]_ _t_ [) =] _[ H]_ [(] _[p]_ _t_ _[π]_ [)] _[ −]_ _[α][t]_ [D][KL] - _p_ _[π]_ _t_ _[∥]_ _[p]_ _t_ [pre] 
+(9)
+
+- �� Local Flow Expansion ( _α_ 1 = _α_ )
+
+
+Before introducing FE, we first recall the standard notion of first variation of _G_ over a space of probability measures (cf. Hsieh et al., 2019). A functional _G_ _∈_ _**F**_ ( _X_ ), where _G_ : _**P**_ ( _X_ ) _→_ R, has first variation at _µ ∈_ _**P**_ ( _X_ ) if there exists a function _δG_ ( _µ_ ) _∈_ _**F**_ ( _X_ ) such that for all _µ_ _[′]_ _∈_ _**P**_ ( _X_ ) it holds that:
+
+
+_G_ ( _µ_ + _ϵµ_ _[′]_ ) = _G_ ( _µ_ ) + _ϵ⟨µ_ _[′]_ _, δG_ ( _µ_ ) _⟩_ + _o_ ( _ϵ_ ) _._
+
+
+where the inner product is an expectation. Intuitively, _δG_ ( _µ_ ) can be interpreted as an infinitedimensional gradient over probability measures. Given this concept of first variation, FE solves Problem 8 by computing a process **Q** _[k]_ at each iteration _k_ _∈_ [ _K_ ], via the following mirror descent step:
+
+
+**(MD Step) Constrained and Regularized Process Surprise Maximization**
+
+**Q** _[k]_ _∈_ **Q** arg max: _p_ 0= _p_ 0 _[k][−]_ [1] _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ _γ_ [1] _[k]_ _[D][KL]_   - **Q** _∥_ **Q** _[k][−]_ [1][�] s.t. _x∼_ E _p_ 1 [[] _[v]_ [(] _[x]_ [)] = 1] (10)
+
+
+While the MD step in Eq. 10 might seem abstract, the following Lemma 4.1 hints at a more practical
+formulation of the above through the lens of stochastic optimal control (Fleming & Rishel, 2012).
+
+
+**Lemma 4.1** (First Variation of Flow Process Functionals) **.** _For objectives defined in the form of Eq._
+_8, we have:_
+
+
+      - 1
+_⟨δL_ ( **Q** _[k]_ ) _,_ **Q** _⟩_ =
+
+
+_λt_ E  - _δGt_ ( _p_ _[k]_ _t_ [)]  - d _t._ (11)
+0 **Q**
+
+
+Lemma 4.1 factorizes _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩_ into an integral over the flow process of terms _ft_ ( _x_ ) :=
+_λtδGt_ ( _p_ _[k]_ _t_ [)(] _[x]_ [)][.] [Crucially, this time-decomposition allows to rewrite the MD step (Eq.] [10][) as the fol-]
+lowing standard constrained control-affine optimal control problem [2] (Domingo-Enrich et al., 2024):
+
+
+**Constrained and Regularized Process Surprise Maximization via Fine-Tuning**
+
+
+�� 1
+min E
+_π_
+
+0
+
+
+1 2 _[∥][π]_ [(] _[X][t][, t]_ [)] _[∥]_ [2] _[ −]_ _[f][t]_ [(] _[X][t][, t]_ [) d] _[t]_ _s.t._ _x∼_ E _p_ 1 [[] _[v]_ [(] _[x]_ [)] = 1] _[,]_ [with] _[ f][t]_ [(] _[X][t][, t]_ [) =] _[ γ][t][δ][G][t]_ [(] _[p][k]_ _t_ [)(] _[x]_ [)]
+
+
+Concretely, we compute a flow _π_ _[k]_ inducing **Q** _[k]_ (Eq. 10) via EXPANDTHENPROJECT (see Alg. 4),
+which decouples constrained optimization into sequential expansion and projection steps:
+
+
+2We leave standard dynamical system constraints (e.g., Equation 13 Domingo-Enrich et al., 2024) as implicit.
+
+
+5
+
+
+**Algorithm 1** EXPANDTHENPROJECT
+
+
+1: **Input:** _π_ _[k][−]_ [1] : current flow model, _∇xt_ _δG_ : gradients of functional grad., _γk_ : inverse update step-size,
+_{λt}t∈_ [0 _,_ 1]: integral weighting coefficients, _v_ : verifier, _ηk_ : fine-tuning strength
+2: **Expansion** step:
+_π_ ˜ _[k]_ _←_ FINETUNINGSOLVER( _π_ _[k][−]_ [1] _, ∇xt_ _δGt, λt, γk_ ) (12)
+
+
+3: **Projection** step:
+_π_ _[k]_ _←_ FINETUNINGSOLVER(˜ _π_ _[k]_ _,_ log _v, ηk_ ) (13)
+
+
+4: **Output:** Fine-tuned policy _π_ _[k]_
+
+
+**Algorithm 2 F** low **E** xpander (FE)
+
+
+1: **Input:** _π_ _[pre]_ : pre-trained flow model, _{αt}t∈_ [0 _,_ 1] : KL-regularization coefficients, _{γk}_ _[K]_ _k_ =1 [:] [inverse]
+update step-sizes, _{λt}t∈_ [0 _,_ 1] : integral weighting coefficients, _v_ : verifier, _{ηk}_ _[K]_ _k_ =1 [:] [projection strengths]
+2: **Init:** _π_ 0 := _π_ _[pre]_
+
+
+3: **for** _k_ = 1 _,_ 2 _, . . ., K_ **do**
+4: Set:
+
+_∇xt_ _δGt_ ( _p_ _[k]_ _t_ _[−]_ [1] ) =
+
+
+_−_ _s_ _[π]_ _t_ _[k][−]_ [1] **G** lobal **FE** (G-FE) (14)
+
+_−_ _s_ _[π]_ _t_ _[−]_ _[α]_ _t_ [(] _[s][π]_ _t_ _[−]_ _[s]_ _t_ [pre][)] **L** ocal **FE** (L-FE)
+
+
+5: Fine-tune _πk−_ 1 into _πk_ via Algorithm 4:
+
+_πk_ _←_ EXPANDTHENPROJECT( _π_ _[k][−]_ [1] _, ∇xt_ _δGt, γk, {λt}t∈_ [0 _,_ 1] _, v, ηk_ )
+6: **end for**
+7: **Output:** policy _π_ := _πK_
+
+
+**Expansion step.** The unconstrained expansion step is performed over the noised state space, which
+can be tackled by extending established control (or RL) based methods for fine-tuning with the
+running cost _ft_ ( _Xt, t_ ) = _γtδGt_ ( _p_ _[k]_ _t_ [)(] _[x]_ [)][, effectively computing a process] **[Q]** [˜] _[k]_ [such that:]
+
+**Q** ˜ _[k]_ _∈_ arg max _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ [1] _D_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) (15)
+**Q** : _p_ 0= _p_ [pre] 0 _γk_
+
+
+**Projection step.** Given **Q** [˜] _[k]_, the projection step adapts the flow _π_ ˜ _[k]_ to enforce the constraint in Eq.
+10 via reward-guided fine-tuning (e.g., Uehara et al., 2024a, Sec. 8.2):
+
+
+**Q** _[k]_ _∈_ arg max E (16)
+**Q** : _p_ 0= _p_ [pre] 0 _x∼p_ 1 [[log] _[ v]_ [(] _[x]_ [)]] _[ −]_ _[D]_ [KL][(] **[Q]** _[||]_ **[Q]** [ ˜] _[k]_ [)]
+
+
+**Proposition 1.** _The_ EXPANDTHENPROJECT _scheme in Alg._ _4 solves optimization problem 10, i.e., it_
+_returns a flow model π_ _[k]_ _inducing a process_ **Q** _[k]_ _that is a solution to 10._ _Formally, the following holds:_
+
+**Q** _[k]_ _∈_ **Q** arg max: _p_ 0= _p_ _[k]_ 0 _[−]_ [1] _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ _γ_ [1] _[k]_ _[D][KL]_   - **Q** _∥_ **Q** _[k][−]_ [1][�] _s.t._ _x∼_ E _p_ 1 [[] _[v]_ [(] _[x]_ [)] = 1] (17)
+
+
+Notice that this step could alternatively be performed via constrained reward-guided fine-tuning (e.g.,
+Gutjahr et al., 2025). Finally, we present **F** low **E** xpander (FE) in Alg. 2, which effectively approximates the mirror descent scheme presented above by iteratively applying EXPANDTHENPROJECT.
+
+
+**Complete** **algorithm** **execution.** FE takes as inputs: a pre-trained flow model _π_ _[pre]_, KLregularization coefficients _{αt}t∈_ [0 _,_ 1], the number of iterations _K_, inverse step-sizes _{γk}_ _[K]_ _k_ =1 [,]
+integral weighting coefficients _{λt}t∈_ [0 _,_ 1], a verifier _v_, and a projection strength schedule _{ηk}_ _[K]_ _k_ =1 [.]
+At each _k_ _∈_ [ _K_ ], FE computes the gradient (w.r.t. _x_ ) of the first variation at the previous policy _πk−_ 1,
+i.e., _∇xδGt_ ( _p_ 1 _[π][k][−]_ [1] ) (line 4). Then, FE computes the flow model _πk_ via the EXPANDTHENPROJECT
+scheme (see Alg. 4), which takes in input the current flow model _π_ _[k][−]_ [1], the computed gradients, and
+the verifier _v_, and returns the updated flow model _π_ _[k]_ . Ultimately, FE returns the final policy _π_ := _πK_ .
+
+**Closed-form gradient expressions.** FE operates using trajectory reward gradients _∇xtδGt_ ( _p_ _[π]_ _t_ [)][.]
+In fact, while such rewards are difficult to estimate, their gradients admit close-form expressions (De Santi et al., 2025a) that can be approximated via available quantities:
+
+
+_∇xδH_ ( _p_ _[π]_ _t_ [) =] _[ −][s]_ _t_ _[π]_
+
+- �� Global Flow Expansion
+
+
+_∇xtδH_ ( _p_ _[π]_ _t_ [)] _[ −]_ _[α][t]_ _[∇][x][δ]_ [D][KL] - _p_ _[π]_ _t_ _[∥]_ _[p]_ _t_ [pre] - = _−s_ _[π]_ _t_ _[−]_ _[α][t]_ - _s_ _[π]_ _t_ _[−]_ _[s]_ _t_ [pre] 
+(18)
+
+- �� Local Flow Expansion ( _α_ 1 = _α_ )
+
+
+6
+
+
+**Algorithm 3 N** oised **S** pace **E** xploration (NSE)
+
+
+1: **Input:** _π_ _[pre]_ : pre-trained flow model, _{αt}t∈_ [0 _,_ 1] : KL-regularization coefficients, _{γk}_ _[K]_ _k_ =1 [:] [inverse]
+update step-sizes, _{λt}t∈_ [0 _,_ 1] : integral weighting coefficients
+2: **Init:** _π_ 0 := _π_ _[pre]_
+
+3: **for** _k_ = 1 _,_ 2 _, . . ., K_ **do**
+4: Set:
+_∇xt_ _δGt_ ( _p_ _[k]_ _t_ _[−]_ [1] ) = _−s_ _[π]_ _t_ _[−]_ _[α]_ _t_ [(] _[s][π]_ _t_ _[−]_ _[s]_ _t_ [pre][)] (19)
+
+5: **Expansion** step, fine-tune _πk−_ 1 into _πk_ via:
+
+_π_ _[k]_ _←_ FINETUNINGSOLVER( _π_ _[k][−]_ [1] _, ∇xt_ _δGt, λt, γk_ ) (20)
+6: **end for**
+7: **Output:** policy _π_ := _πK_
+
+
+and can simply be plugged into any first-order fine-tuning solver yielding a scalable method. Eq. 18
+depends on the score _s_ _[π]_ _t_ [(] _[x]_ [) =] _[ ∇]_ [log] _[ p]_ _t_ _[π]_ [(] _[x]_ [)][, obtained from the score network or flow field (][Domingo-]
+Enrich et al., 2024). Unlike prior flow-based exploration methods using only the divergent terminal
+score _s_ _[π]_ 1 [(][De Santi et al.][,][ 2025a][;][b][),][ FE][ uses scores across time and allows to downweight] _[ t][ →]_ [1][ via] _[ λ][t]_ [.]
+
+
+Beyond verifier-constrained settings, noised-space exploration also yields a stronger unconstrained exploration scheme. We denote by **N** oised **S** pace **E** xploration (NSE) the variant of FE obtained by removing the projection step; its pseudocode is given in Alg. 3. As shown in Sec. 6, NSE stabilizes diffusionand flow-based exploration in higher dimensions, substantially outperforming existing methods.
+
+
+5 GUARANTEES FOR FLOW-EXPANDER
+
+
+We aim to show that FE admits _provable guarantees_ ensuring reliable behavior in practice. To this end,
+we leverage the flexible framework of _constrained mirror descent_, a classical optimization method that
+has recently found successful applications in sampling and generative modeling (Karimi et al., 2024;
+De Santi et al., 2025a;b). We analyze two regimes. First, an **idealized setting**, where each step of Eq.
+10 can be computed _exactly_ - leading to sharp step-size prescriptions and fast, polynomial convergence
+rates. Then, a **realistic setting**, where each MD step can only be solved _approximately_ - for which
+we show asymptotic convergence to the optimal solution under mild noise and bias assumptions.
+
+**Idealized setting.** We state that the exact updates case admits finite-time convergence guarantee:
+
+
+**Theorem 5.1** (Convergence guarantee in the idealized process-level setting) **.** _Consider the ob-_
+_jective L defined in Equation_ (8) _, and let λ_ _[⋆]_ := �01 _[λ][t]_ [d] _[t][.]_ _[Let][ {]_ **[Q]** _[k][}][ be the iterates generated by]_
+_Equation_ (10) _with γk_ = 1 _/λ_ _[⋆]_ _for all k_ _∈_ [ _K_ ] _._ _Then_
+
+_L_ ( **Q** _[∗]_ ) _−L_ ( **Q** _[K]_ ) _≤_ _[λ][⋆]_ (21)
+
+_K_ _[D][KL]_ [(] **[Q]** _[∗]_ _[∥]_ **[Q]** _[pre]_ [)] _[,]_
+
+_where_ **Q** _[∗]_ _∈_ arg max **Q** _L_ ( **Q** ) _._
+
+
+**General setting.** Recall that **Q** _[k]_ is the _k_ -th iterate of FE. In realistic scenarios, however, Eq. 10 can
+only be solved approximately, so we interpret the update as _approximating_ the idealized iteration:
+
+**Q** _[k]_ _♯_ _[∈]_ [arg max] _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ _γ_ 1 _[k]_ _[D][KL]_   - **Q** _∥_ **Q** _[k][−]_ [1][�] s.t. _x∼_ E _p_ 1 [[] _[v]_ [(] _[x]_ [)] = 1] _[.]_ (22)
+**Q** : _p_ 0= _p_ 0 _[k][−]_ [1]
+
+
+To measure deviations from these idealized iterates, let _Tk_ be the filtration up to step _k_, and decompose
+the oracle into its _bias_ and _noise_ components:
+_bk_ := E� _δL_ ( **Q** _[k]_ ) _−_ _δL_ ( **Q** _[k]_ _♯_ [)] �� _Tk_        - _,_ _Uk_ := _δL_ ( **Q** _[k]_ ) _−_ _δL_ ( **Q** _[k]_ _♯_ [)] _[ −]_ _[b][k][.]_ (23)
+
+
+Here, _bk_ captures systematic error while _Uk_ is conditionally mean-zero. Under mild assumptions on
+noise and bias (see Assumptions E.1 to E.2), we obtain the following guarantee.
+
+
+**Theorem 5.2** (Convergence guarantee in the general process-level setting (informal)) **.** _Suppose_
+_the oracle satisfies finite-variance noise and vanishing bias, and let the step-sizes {γk} follow_
+_the Robbins–Monro rule (_ [�] _[γ][k]_ [=] _[ ∞][,]_ _[γ]_ [2] _[<][ ∞][).]_ _[Then the iterates][ {]_ **[Q]** _[k][}][ generated by]_ [FE]
+
+
+_the Robbins–Monro rule (_ [�] _k_ _[γ][k]_ [=] _[ ∞][,]_ [ �] _k_ _[γ]_ _k_ [2] _[<][ ∞][).]_ _[Then the iterates][ {]_ **[Q]** _[k][}][ generated by]_ [FE]
+
+_satisfy_
+**Q** _[k]_ _⇀_ **Q** _[∗]_ _a.s.,_ (24)
+
+
+_k_ _[γ][k]_ [=] _[ ∞][,]_ [ �]
+
+
+_where_ **Q** _[∗]_ _∈_ arg max **Q** _L_ ( **Q** ) _._
+
+
+7
+
+
+(a) Pre-trained samples (b) G-FE vs S-MEME (c) G-FE vs CONSTR (d) Entropy-Validity
+
+
+(e) G-FE Expansion _K_ =1 (f) G-FE Projection _K_ =1 (g) Entropy evaluation (h) Validity evaluation
+
+Figure 3: (top) **G** lobal **FE** (G-FE) expands the pre-trained flow model _π_ _[pre]_ (3a) into _π_ _[∗]_ (violet, 3b),
+increasing coverage (i.e., entropy), while preserving validity (i.e., red ellipse interior). Compared with
+the unconstrained exploration S-MEME method, and constrained generation (CONSTR), **G** lobal **FE**
+(G-FE) shows best-of-both-worlds behaviour: achieving near-optimal entropy and validity (Fig. 3d).
+
+
+6 EXPERIMENTAL EVALUATION
+
+
+We analyze the ability of **G** lobal **FE** (G-FE) and **L** ocal **FE** (L-FE) to expand flow model densities
+while preserving validity of generated samples, and compare their performance against recent
+flow-based exploration methods, namely FDC (De Santi et al., 2025b), and S-MEME (De Santi et al.,
+2025a), as well as a standard constrained generation scheme, denoted by CONSTR (Sec. 8.2 Uehara
+et al., 2024a). We present experiments on two visually interpretable settings, followed by a molecular
+design task aiming to increase conformer diversity (more details are provided in Apx. G).
+
+
+**Global Flow Expansion via Strong Verifier.** We run G-FE on a pre-trained model _π_ _[pre]_ to globally
+expand its density _p_ _[pre]_ 1 over the valid design space (red ellipse in Figs. 3a-3c, 3e-3f). As shown in
+Fig. 3b and 3c, G-FE (violet) run with _η_ = 2 and _K_ = 10, expands into previously uncovered areas
+(lower right), staying within the valid region. In comparison, S-MEME (black, Fig. 3b) predictably
+fails to restrict density to the valid region (light red area). Symmetrically, CONSTR (see Fig. 3c,
+orange) confines density to the valid space but fails to expand it. Fig. 3d shows that G-FE explores
+nearly as much as S-MEME (i.e., 1 _._ 97 vs. 2 _._ 17 entropy), while retaining significantly higher validity:
+0 _._ 99 against 0 _._ 73 of S-MEME. Remarkably, G-FE preserves the same degree of validity of CONSTR
+while exploring significantly more (1 _._ 97 versus 0 _._ 72 entropy). Figs. 3e-3f show the first expand-thenproject steps of G-FE and Figs. 3g-3h show entropy and validity estimates with 95% CI over 5 seeds
+for G-FE and all baselines. In summary, G-FE achieves both near-optimal exploration and validity.
+
+
+**Local** **Flow** **Expansion** **via** **Weak** **Verifier.** We consider a pre-trained flow model _π_ _[pre]_ whose
+density _p_ _[pre]_ 1 is concentrated in a central high-density region, with low-probability _promising_ modes
+
+on either side (see Fig. 5a). Crucially, while the two right-most modes
+are valid, the left one is not. We fine-tune _π_ _[pre]_ via L-FE for _K_ = 8
+iterations and _α_ = 0 _._ 99 to expand its induced density over diverse
+modes - i.e., perform _mode discovery_ (De Santi et al., 2025b; Morshed
+& Boddeti, 2025). As shown in Fig. 5b FDC, a KL-regularized entropy
+maximization scheme, predictably increases diversity over plausible
+modes by redistributing density to the invalid left one. L-FE, however,
+leverages a weak verifier (gray circled area in Fig. 5c) to prevent Figure 4: Entropy-Validity
+allocating more density to that invalid region, and even removes density
+from that region. 5a, top). Effectively, L-FE uses the weak verifier to perform a form of mode
+selection, i.e., filtering out invalid modes during the expansion process. As shown in Fig. 4, **L** ocal **FE**
+(L-FE) achieves high entropy (i.e., 1 _._ 67 versus 1 _._ 17 and 1 _._ 58 of L-FE), while preserving high validity,
+namely 0 _._ 89 compared to 0 _._ 74 of FDC, almost fully preserving the prior model’s validity of 0 _._ 9.
+
+
+**L-FE increases molecular conformer diversity for de-novo design on QM9.** In this experiment,
+we aim to increase diversity of molecular conformers in a molecular design task. We run FE on
+FlowMol CTMC (Dunn & Koes, 2024) pre-trained on QM9 dataset (Ramakrishnan et al., 2014). Our
+weak verifier is a filter excluding molecules for which any two atoms are closer than 0.975 Ångstroms
+(Å), and validity is evaluated via RDKit (RDKit) sanitization paired with the aforementioned check.
+
+
+8
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.000
+
+
+|2<br>1<br>0<br>1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|2<br>|2<br>|2<br>|2<br>|2<br>|2<br>|
+|0<br>2<br>4|PRE|||||
+|2|2|2|2|2|2|
+|4|PRE|PRE|PRE|PRE|PRE|
+
+
+|2<br>1<br>0<br>1<br>2|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|2<br>1|2<br>1|2<br>1|2<br>1|2<br>1|2<br>1|
+|0<br>2<br>4|FDC|||||
+|2|2|2|2|2|2|
+|4|FDC|FDC|FDC|FDC|FDC|
+
+
+|2<br>1<br>0<br>1<br>2|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|2<br>1|2<br>1|2<br>1|2<br>1|2<br>1|2<br>1|
+|0<br>2<br>4|L-FE|||||
+|2|2|2|2|2|2|
+|4|L-FE|L-FE|L-FE|L-FE|L-FE|
+
+
+0.0 0.2 0.4 0.6 0.8 1.00.0 0.5
+Time p1 [FDC]
+
+(b) FDC samples
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Time
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Time
+
+
+0 1
+p1 [PRE]
+
+
+(c) L-FE samples
+
+
+0 p1 [L] FE 1
+
+
+0.05
+
+
+0.04
+
+
+0.03
+
+
+0.02
+
+
+0.01
+
+
+0.00
+
+
+0.040
+
+0.035
+
+0.030
+
+0.025
+
+0.020
+
+0.015
+
+0.010
+
+0.005
+
+0.000
+
+
+(a) Pre-trained samples
+
+
+(d) QM9 visual diversity (e) C. Vendi - Validity (f) Conformer Vendi (g) Validity
+
+
+Figure 5: (top) L-FE (yellow, 5c) expands the pre-trained flow model _π_ _[pre]_ (green, 5a) over promising
+yet verifier-filtered modes, while FDC (blue, 5b) expands _π_ _[pre]_ over all plausible modes leading to
+increased density in invalid regions (left mode in Fig. 5b). (bottom) FE increases visual (5d), and
+quantitative diversity (5f), while preserving higher validity than FDC (5e-5g)
+
+
+We evaluate diversity of molecular conformers by a _conformer_ VENDI (Friedman & Dieng, 2022)
+metric (see Apx. G.2) capturing diversity over sampled conformers via their fingerprints. L-FE,
+run for _K_ = 5 iterations and _α_ = 9, quantitatively increases diversity compared to the pretrained
+model (Fig 5e, VENDI of 100 vs 89). This is visually shown in Fig 5d, a histogram plot of a
+1-dim PCA projection of molecular fingerprints (see Apx. G for further details). In particular, L-FE
+(violet) expands the pre-trained flow model to explore promising and verifier-certified modes of the
+pre-trained model density (see Fig. 5d). Crucially, L-FE achieves a similar degree of conformer
+diversity (100 vs 103) to FDC, an unconstrained exploration scheme, while preserving significantly
+higher sample validity, i.e., 81% vs 69%, as shown in Figs. 5e, 5f, and 5g.
+
+
+**L-FE increases molecular conformer diversity for de-novo design on GEOM-Drugs.** In this experiment, we aim to increase the diversity of generated molecular conformers in a molecular design task
+with drug-like molecules. We run FE on FlowMol CTMC (Dunn & Koes, 2024) pre-trained on GEOMDrugs (Axelrod & Gomez-Bombarelli, 2022). As in the previous experimental setting, the weak verifier employed is a filter excluding molecules for which any two atoms are closer than 0.975 Ångstroms
+(Å), and validity is evaluated via the RDKit (RDKit) sanitization operation paired with the aforementioned check. We evaluate diversity of molecular conformers by a _conformer_ VENDI (Friedman &
+Dieng, 2022) metric (see Apx. G.2) capturing diversity over sampled conformers via their fingerprints.
+L-FE, run for _K_ = 3 iterations, _α_ = [1] _/_ 9, and _η_ = 5, achieves higher diversity (529 vs 476) and validity
+(82% vs 72%) than the pre-trained model, as shown in Fig. 6a. Similarly, L-FE induces higher diversity (529 vs 508) than FDC, a recent diffusion-based unconstrained exploration method (De Santi et al.,
+2025b), while preserving significantly higher sample validity, i.e., 82% vs 66%, as shown in Fig. 6a.
+
+
+Moreover, within Apx. G.5.4, we report an ablation study for the proposed method parameters.
+Note that L-FE performs consistently better than NSE. Since NSE corresponds to L-FE with _η_ = 0,
+this result illustrates the working mechanism and importance of the projection step (i.e., _η_ _>_ 0).
+Interestingly, G-FE, which is equal to L-FE with _αt_ = 0, shows performance on par with L-FE for
+very conservative parameters ( _γ_ = 0 _._ 0002, _K_ = 3), while gradually degrading for less conservative
+parametrizations. This behaviour is likely due to the implicit KL-regularization between iterates
+within the mirror descent update step (see Eq. 10), which implies prior regularization for small _K_ .
+
+
+**NSE achieves higher exploration performance against current methods.** We evaluate NSE, the
+unconstrained exploration variant of L-FE obtained by removing the projection step (see Alg. 3 in Sec.
+4 for further details), to perform flow-based design space (unconstrained) exploration. We consider
+FlowMol CTMC (Dunn & Koes, 2024) pre-trained on GEOM-Drugs dataset (Axelrod & GomezBombarelli, 2022), and report in Fig. 6b the results for NSE with _K_ = 3 and _α_ = 0. We observe that
+
+
+9
+
+
+(a) L-FE on GEOM-Drugs (b) NSE vs FDC
+
+
+6000
+
+
+4000
+
+3076
+
+2000
+
+
+0
+L-FE FDC NSE
+
+(c) Computational Cost (d) GEOM-drugs molecule
+
+
+Figure 6: (6a) L-FE (violet) achieves higher diversity and validity than FDC on GEOM-Drugs.
+(6b) NSE, the unconstrained variant of L-FE, exhibits superior performance compared with FDC,
+a state-of-the-art diffusion-based unconstrained exploration method. (6c) Computational cost
+comparison of L-FE, FDC, and NSE. (6d) Representative drug-like molecule generated via L-FE.
+
+
+NSE achieves consistently higher diversity (i.e., 519 vs 508) and validity (i.e., 74% vs 66%) against
+FDC (De Santi et al., 2025b), a state-of-the-art method for flow-based unconstrained exploration.
+
+
+**L-FE and** **NSE have computational costs comparable to current exploration schemes.** We report
+in Fig. 6c a comparison of computational cost, measured via the method runtime (seconds [s]) of L-FE
+and NSE compared against FDC (De Santi et al., 2025b). One can notice that although the schemes
+proposed within this work (i.e., L-FE and NSE) perform exploration over the entire flow process
+noised state space, they do not incur in significantly higher computational cost compared with FDC.
+
+
+7 RELATED WORK
+
+
+**Diffusion and flow based design space exploration** Recent works introduced methods for flow
+based design space exploration via maximization of entropy functionals (De Santi et al., 2025a;b) or
+approximations (Celik et al., 2025). While these methods explore by leveraging information from a
+prior model, FE directs exploration either ( _i_ ) exclusively via a verifier (i.e., global expansion, see 5),
+or ( _ii_ ) combining verifier information with prior validity cues (i.e., local expansion, see 7). Moreover,
+while current schemes explore only the last time-step state space, we lift the exploration task to the entire flow process, providing a principled solution to the score divergence problem mentioned in Sec. 4.
+
+
+**Maximum state entropy exploration.** Maximum state entropy exploration, introduced by Hazan
+et al. (2019), tackles the pure-exploration problem of maximizing the entropy of the state distribution
+induced by a policy over a dynamical system’s state space (e.g., Lee et al., 2019; Mutti et al., 2021;
+Guo et al., 2021; De Santi et al., 2024a). The flow expansion problems (Eq. 5 and 7) are closely related,
+with _p_ _[π]_ 1 [representing the state distribution induced by policy] _[ π]_ [ over a subset of the flow process state]
+space (i.e., for time-step _t_ = 1). Recent studies have tackled maximum entropy exploration with finite
+sample budgets (e.g., De Santi et al., 2024b; Prajapat et al., 2023; Mutti et al., 2023; 2022b;a), which
+could be relevant for future work, e.g., design space exploration under a limited samples constraint.
+
+
+**Sample** **diversity** **in** **diffusion** **models** **generation.** A well-known limitation of flow-based
+generation is limited sample diversity. This problem has been recently addressed by numerous
+studies (e.g., Corso et al., 2023; Um et al., 2023; Kirchhof et al., 2024; Sadat et al., 2024; Um &
+Ye, 2024; Klarner et al., 2024). Crucially, such methods are complementary to ours. In fact, they
+can be applied to promote diverse sampling from the expanded model produced by FE. In particular,
+whereas these works aim to maximize diversity of a fixed diffusion model or flow model, we aim
+to sequentially fine-tune a pre-trained flow model so that its induced density is permanently expanded
+over the valid design space. Moreover, our formulations (Eq. 5, 7) and FE scheme increase diversity
+while integrating validity signal from a chosen verifier.
+
+
+8 CONCLUSION
+
+
+This work tackles the fundamental challenge of leveraging a verifier (e.g., an atomic bonds checker), to
+expand a pre-trained model’s density beyond regions of high data availability, while preserving validity
+of the generated samples. To this end, we introduce notions of _strong_ and _weak_ verifiers and cast _global_
+and _local flow expansion_ as probability-space optimization problems. We present **F** low **E** xpander
+(FE), a scalable mirror-descent scheme that _provably_ solves both problems via verifier-constrained
+entropy maximization over the flow process noised state space. We provide a thorough analysis
+showing convergence guarantees for FE under idealized and general assumptions by employing recent
+mirror-flow theory. Ultimately, we empirically evaluate our method on both illustrative settings, and
+a molecular design task showcasing the ability of FE to increase molecular conformer diversity while
+preserving better levels of validity than current flow and diffusion-based exploration methods.
+
+
+10
+
+
+9 ACKNOWLEDGEMENTS
+
+
+This publication was supported by the ETH AI Center doctoral fellowship to Riccardo De Santi. The
+project has received funding from the Swiss National Science Foundation under NCCR Catalysis
+grant number 180544 and NCCR Automation grant agreement 51NF40 180545.
+
+
+10 REPRODUCIBILITY STATEMENT
+
+
+We acknowledge that our work is documented sufficiently to ensure reproducibility of our results.
+We provide implementation details of all algorithms and procedures, such as: complete pseudocode
+in Appendix F, as well as hyperparameter choices and hardware requirements in Appendix Section G.
+We also give a detailed account of our experimental setup in Section 6, including explanations of
+metrics and procedures used to evaluate our algorithms in Appendix G. Finally, our implemented
+version of FE, leverages the well-established Adjoint Matching (Domingo-Enrich et al., 2024) method
+as an oracle.
+
+
+REFERENCES
+
+
+Simon Axelrod and Rafael Gomez-Bombarelli. Geom, energy-annotated molecular conformations
+for property prediction and molecular generation. _Scientific Data_, 9(1):185, 2022.
+
+
+Heinz H Bauschke, Jérôme Bolte, and Marc Teboulle. A descent lemma beyond lipschitz gradient
+continuity: first-order methods revisited and applications. _Mathematics of Operations Research_,
+42(2):330–348, 2017.
+
+
+Michel Benaïm. Dynamics of stochastic approximation algorithms. In _Seminaire de probabilites_
+_XXXIII_, pp. 1–68. Springer, 2006.
+
+
+Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion models
+with reinforcement learning. _arXiv preprint arXiv:2305.13301_, 2023.
+
+
+Edoardo Botta, Yuchen Li, Aashay Mehta, Jordan T Ash, Cyril Zhang, and Andrej Risteski. On the
+query complexity of verifier-assisted language generation. _arXiv preprint arXiv:2502.12123_, 2025.
+
+
+Onur Celik, Zechu Li, Denis Blessing, Ge Li, Daniel Palenicek, Jan Peters, Georgia Chalvatzaki,
+and Gerhard Neumann. Dime: Diffusion-based maximum entropy reinforcement learning. _arXiv_
+_preprint arXiv:2502.02316_, 2025.
+
+
+Cheng Chi, Siyuan Feng, Yilun Du, Zhenjia Xu, Eric Cousineau, Benjamin Burchfiel, and Shuran Song. Diffusion policy: Visuomotor policy learning via action diffusion. _arXiv_ _preprint_
+_arXiv:2303.04137_, 2023.
+
+
+Gabriele Corso, Hannes Stärk, Bowen Jing, Regina Barzilay, and Tommi Jaakkola. Diffdock:
+Diffusion steps, twists, and turns for molecular docking. _arXiv preprint arXiv:2210.01776_, 2022.
+
+
+Gabriele Corso, Yilun Xu, Valentin De Bortoli, Regina Barzilay, and Tommi Jaakkola. Particle
+guidance: non-iid diverse sampling with diffusion models. _arXiv preprint arXiv:2310.13102_, 2023.
+
+
+Riccardo De Santi, Federico Arangath Joseph, Noah Liniger, Mirco Mutti, and Andreas Krause.
+Geometric active exploration in markov decision processes: the benefit of abstraction. _arXiv_
+_preprint arXiv:2407.13364_, 2024a.
+
+
+Riccardo De Santi, Manish Prajapat, and Andreas Krause. Global reinforcement learning: Beyond linear and convex rewards via submodular semi-gradient methods. _arXiv preprint arXiv:2407.09905_,
+2024b.
+
+
+Riccardo De Santi, Marin Vlastelica, Ya-Ping Hsieh, Zebang Shen, Niao He, and Andreas Krause.
+Provable maximum entropy manifold exploration via diffusion models. In _International Conference_
+_on Machine Learning_, 2025a.
+
+
+11
+
+
+Riccardo De Santi, Marin Vlastelica, Ya-Ping Hsieh, Zebang Shen, Niao He, and Andreas Krause.
+Flow density control: Generative optimization beyond entropy-regularized fine-tuning. In _Advances_
+_in Neural Information Processing Systems (NeurIPS)_, December 2025b.
+
+
+Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky TQ Chen. Adjoint matching:
+Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control.
+_arXiv preprint arXiv:2409.08861_, 2024.
+
+
+Ian Dunn and David Ryan Koes. Mixed continuous and categorical flow matching for 3d de novo
+molecule generation. _ArXiv_, pp. arXiv–2404, 2024.
+
+
+Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, Pieter Abbeel,
+Mohammad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Dpok: Reinforcement learning for
+fine-tuning text-to-image diffusion models. _Advances in Neural Information Processing Systems_,
+36:79858–79885, 2023.
+
+
+Jesse Farebrother, Matteo Pirotta, Andrea Tirinzoni, Rémi Munos, Alessandro Lazaric, and Ahmed
+Touati. Temporal difference flows. _arXiv preprint arXiv:2503.09817_, 2025.
+
+
+Wendell H Fleming and Raymond W Rishel. _Deterministic and stochastic optimal control_, volume 1.
+Springer Science & Business Media, 2012.
+
+
+Dan Friedman and Adji Bousso Dieng. The vendi score: A diversity evaluation metric for machine
+learning. _arXiv preprint arXiv:2210.02410_, 2022.
+
+
+Zhaohan Daniel Guo, Mohammad Gheshlaghi Azar, Alaa Saade, Shantanu Thakoor, Bilal Piot,
+Bernardo Avila Pires, Michal Valko, Thomas Mesnard, Tor Lattimore, and Rémi Munos. Geometric
+entropic exploration. _arXiv preprint arXiv:2101.02055_, 2021.
+
+
+Sven Gutjahr, Riccardo De Santi, Luca Schaufelberger, Kjell Jorner, and Andreas Krause. Constrained
+molecular generation via sequential flow model fine-tuning. In _ICML 2025 Generative AI and_
+_Biology (GenBio) Workshop_, 2025.
+
+
+Elad Hazan, Sham Kakade, Karan Singh, and Abby Van Soest. Provably efficient maximum entropy
+exploration. In _International Conference on Machine Learning_, 2019.
+
+
+Jean-Baptiste Hiriart-Urruty and Claude Lemaréchal. _Fundamentals of convex analysis_ . Springer
+Science & Business Media, 2004.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Emiel Hoogeboom, Vıctor Garcia Satorras, Clément Vignac, and Max Welling. Equivariant diffusion
+for molecule generation in 3d. In _International conference on machine learning_, pp. 8867–8887.
+PMLR, 2022.
+
+
+Ya-Ping Hsieh, Chen Liu, and Volkan Cevher. Finding mixed nash equilibria of generative adversarial
+networks. In _International Conference on Machine Learning_, pp. 2810–2819. PMLR, 2019.
+
+
+Yanwei Jia and Xun Yu Zhou. Policy evaluation and temporal-difference learning in continuous time
+and space: A martingale approach. _Journal of Machine Learning Research_, 23(154):1–55, 2022.
+
+
+John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael Figurnov, Olaf Ronneberger,
+Kathryn Tunyasuvunakool, Russ Bates, Augustin Žídek, Anna Potapenko, et al. Highly accurate
+protein structure prediction with alphafold. _nature_, 596(7873):583–589, 2021.
+
+
+Mohammad Reza Karimi, Ya-Ping Hsieh, and Andreas Krause. Sinkhorn flow as mirror flow: A
+continuous-time framework for generalizing the sinkhorn algorithm. In _International Conference_
+_on Artificial Intelligence and Statistics_, pp. 4186–4194. PMLR, 2024.
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In Yoshua Bengio
+and Yann LeCun (eds.), _ICLR_ _(Poster)_, 2015. URL [http://dblp.uni-trier.de/db/](http://dblp.uni-trier.de/db/conf/iclr/iclr2015.html#KingmaB14)
+[conf/iclr/iclr2015.html#KingmaB14.](http://dblp.uni-trier.de/db/conf/iclr/iclr2015.html#KingmaB14)
+
+
+12
+
+
+Michael Kirchhof, James Thornton, Pierre Ablin, Louis Béthune, Eugene Ndiaye, and Marco Cuturi.
+Sparse repellency for shielded generation in text-to-image diffusion models. _arXiv_ _preprint_
+_arXiv:2410.06025_, 2024.
+
+
+Leo Klarner, Tim G. J. Rudner, Garrett M. Morris, Charlotte M. Deane, and Yee Whye Teh. Contextguided diffusion for out-of-distribution molecular and protein design. In _Proceedings of the 41st_
+_International Conference on Machine Learning_, ICML’24. JMLR.org, 2024.
+
+
+G. Kresse and J. Furthmüller. Efficient iterative schemes for ab initio total-energy calculations using
+a plane-wave basis set. _Physical Review B_, 54(16):11169–11186, 1996. doi: 10.1103/PhysRevB.
+54.11169.
+
+
+Lisa Lee, Benjamin Eysenbach, Emilio Parisotto, Eric Xing, Sergey Levine, and Ruslan Salakhutdinov.
+Efficient exploration via state marginal matching. _arXiv preprint arXiv:1906.05274_, 2019.
+
+
+Zihao Li, Hui Yuan, Kaixuan Huang, Chengzhuo Ni, Yinyu Ye, Minshuo Chen, and Mengdi Wang.
+Diffusion model for data-driven black-box optimization. _arXiv preprint arXiv:2403.13219_, 2024.
+
+
+Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching
+for generative modeling. _arXiv preprint arXiv:2210.02747_, 2022.
+
+
+Yaron Lipman, Marton Havasi, Peter Holderrieth, Neta Shaul, Matt Le, Brian Karrer, Ricky TQ Chen,
+David Lopez-Paz, Heli Ben-Hamu, and Itai Gat. Flow matching guide and code. _arXiv preprint_
+_arXiv:2412.06264_, 2024.
+
+
+Haihao Lu, Robert M Freund, and Yurii Nesterov. Relatively smooth convex optimization by
+first-order methods, and applications. _SIAM Journal on Optimization_, 28(1):333–354, 2018.
+
+
+Panayotis Mertikopoulos, Ya-Ping Hsieh, and Volkan Cevher. A unified stochastic approximation
+framework for learning in games. _Mathematical Programming_, 203(1):559–609, 2024.
+
+
+Alexander Mielke and Jia-Jie Zhu. Hellinger-kantorovich gradient flows: Global exponential decay
+of entropy functionals. _arXiv preprint arXiv:2501.17049_, 2025.
+
+
+Mashrur M Morshed and Vishnu Boddeti. Diverseflow: Sample-efficient diverse mode coverage in
+flows. In _Proceedings of the Computer Vision and Pattern Recognition Conference_, pp. 23303–
+23312, 2025.
+
+
+Mirco Mutti, Lorenzo Pratissoli, and Marcello Restelli. Task-agnostic exploration via policy gradient
+of a non-parametric state entropy estimate. In _Proceedings of the AAAI Conference on Artificial_
+_Intelligence_, volume 35, pp. 9028–9036, 2021.
+
+
+Mirco Mutti, Riccardo De Santi, Piersilvio De Bartolomeis, and Marcello Restelli. Challenging common assumptions in convex reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 35:4489–4502, 2022a.
+
+
+Mirco Mutti, Riccardo De Santi, and Marcello Restelli. The importance of non-markovianity in
+maximum state entropy exploration. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+16223–16239. PMLR, 2022b.
+
+
+Mirco Mutti, Riccardo De Santi, Piersilvio De Bartolomeis, and Marcello Restelli. Convex reinforcement learning in finite trials. _Journal of Machine Learning Research_, 24(250):1–42, 2023.
+
+
+Noel M O’Boyle, Michael Banck, Craig A James, Chris Morley, Tim Vandermeersch, and Geoffrey R
+Hutchison. Open Babel: An open chemical toolbox. _Journal of Cheminformatics_, 3(1):33, 2011.
+doi: 10.1186/1758-2946-3-33.
+
+
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and
+E. Duchesnay. Scikit-learn: Machine learning in Python. _Journal of Machine Learning Research_,
+12:2825–2830, 2011.
+
+
+Manish Prajapat, Mojmír Mutn`y, Melanie N Zeilinger, and Andreas Krause. Submodular reinforcement learning. _arXiv preprint arXiv:2307.13372_, 2023.
+
+
+13
+
+
+Raghunathan Ramakrishnan, Pavlo O Dral, Matthias Rupp, and O Anatole Von Lilienfeld. Quantum
+chemistry structures and properties of 134 kilo molecules. _Scientific data_, 1(1):1–7, 2014.
+
+
+RDKit. Rdkit: Open-source cheminformatics. [https://www.rdkit.org.](https://www.rdkit.org) Accessed: YYYYMM-DD.
+
+
+Herbert Robbins and Sutton Monro. A stochastic approximation method. _The annals of mathematical_
+_statistics_, pp. 400–407, 1951.
+
+
+Seyedmorteza Sadat, Jakob Buhmann, Derek Bradley, Otmar Hilliges, and Romann M. Weber. Cads:
+Unleashing the diversity of diffusion models through condition-annealed sampling, 2024. URL
+[https://arxiv.org/abs/2310.17347.](https://arxiv.org/abs/2310.17347)
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International conference on machine learning_,
+pp. 2256–2265. PMLR, 2015.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020.
+
+
+Lenart Treven, Jonas Hübotter, Bhavya Sukhija, Florian Dorfler, and Andreas Krause. Efficient exploration in continuous-time model-based reinforcement learning. _Advances in Neural Information_
+_Processing Systems_, 36:42119–42147, 2023.
+
+
+Masatoshi Uehara, Yulai Zhao, Tommaso Biancalani, and Sergey Levine. Understanding reinforcement learning-based fine-tuning of diffusion models: A tutorial and review, 2024a. URL
+[https://arxiv.org/abs/2407.13734.](https://arxiv.org/abs/2407.13734)
+
+
+Masatoshi Uehara, Yulai Zhao, Kevin Black, Ehsan Hajiramezanali, Gabriele Scalia, Nathaniel Lee
+Diamant, Alex M Tseng, Sergey Levine, and Tommaso Biancalani. Feedback efficient online
+fine-tuning of diffusion models. _arXiv preprint arXiv:2402.16359_, 2024b.
+
+
+Soobin Um and Jong Chul Ye. Self-guided generation of minority samples using diffusion models.
+In _European Conference on Computer Vision_, pp. 414–430. Springer, 2024.
+
+
+Soobin Um, Suhyeon Lee, and Jong Chul Ye. Don’t play favorites: Minority guidance for diffusion
+models. _arXiv preprint arXiv:2301.12334_, 2023.
+
+
+Haoran Wang, Thaleia Zariphopoulou, and Xun Yu Zhou. Reinforcement learning in continuous time
+and space: A stochastic control approach. _Journal of Machine Learning Research_, 21(198):1–34,
+2020.
+
+
+Zihan Wang, Yunxuan Li, Yuexin Wu, Liangchen Luo, Le Hou, Hongkun Yu, and Jingbo Shang.
+Multi-step problem solving through a verifier: An empirical analysis on model-induced process
+supervision. _arXiv preprint arXiv:2402.02658_, 2024.
+
+
+David Weininger. Smiles, a chemical language and information system. 1. introduction to methodology and encoding rules. _J. Chem. Inf. Comput. Sci._, 28(1):31–36, 1988.
+
+
+Hanyang Zhao, Haoxian Chen, Ji Zhang, David D Yao, and Wenpin Tang. Scores as actions: a
+framework of fine-tuning diffusion models by continuous-time reinforcement learning. _arXiv_
+_preprint arXiv:2409.08400_, 2024.
+
+
+14
+
+
+A APPENDIX
+
+
+CONTENTS
+
+
+**B** **Derivation of Gradients of First Variation** **16**
+
+
+**C** **Proof of Proposition 1** **17**
+
+
+**D** **Proof for Theorem 5.1** **19**
+
+
+**E** **Proof for Theorem 5.2** **20**
+
+
+**F** **Detailed Example of Algorithm Implementation** **23**
+
+
+**G** **Experimental Details** **24**
+
+
+G.1 Illustrative Examples Experimental Details . . . . . . . . . . . . . . . . . . . . . 24
+
+
+G.2 Conformer VENDI . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+G.3 PCA Projection for Fig. 5d . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+G.4 Validity Computation in Molecular Experiments . . . . . . . . . . . . . . . . . . . 25
+
+
+G.5 Practical Details for Experiments on Molecules . . . . . . . . . . . . . . . . . . . 25
+
+
+**H** **Update Step Reparametrization** **31**
+
+
+15
+
+
+B DERIVATION OF GRADIENTS OF FIRST VARIATION
+
+
+In this section we present derivations of the results in equation 14 relating the gradient of the first
+variation of the trajectory rewards to the score function. We derive the result for L-FE, the result for
+G-FE follows as a subcase.
+
+
+First, recall the trajectory rewards for L-FE:
+
+
+_∇xtδGt_ ( _p_ _[π]_ _t_ [) =] _[ ∇][x]_ _t_ _[δ]_     - _H_ ( _p_ _[π]_ _t_ [)] _[ −]_ _[α][t][D]_ [KL][(] _[p]_ _t_ _[π][||][p]_ _t_ [pre][)]     - (25)
+
+= _∇xtδH_ ( _p_ _[π]_ _t_ [)] _[ −]_ _[α][t][∇][x]_ _t_ _[δ][D]_ [KL][(] _[p][π]_ _t_ _[||][p]_ _t_ [pre][)] _[ .]_ (by linearity) (26)
+
+
+Thus it suffices to show derivations for _∇xtδH_ ( _p_ _[π]_ _t_ [)][ and] _[ ∇][x]_ _t_ _[δ][D]_ [KL][(] _[p][π]_ _t_ _[||][p]_ _t_ [pre][)][. Starting with the entropy]
+functional, recalling its definition as _H_ ( _p_ _[π]_ _t_ [) =] _[ −]_ �01 _[p]_ _t_ _[π]_ [(] _[x]_ [) log] _[ p]_ _t_ _[π]_ [(] _[x]_ [)] _[dx]_ [ we have:]
+
+
+_∇xtδH_ ( _p_ _[π]_ _t_ [) =] _[ ∇][x]_ _t_ [(1] _[ −]_ [log] _[ p][π]_ _t_ [)] (27)
+= _−∇xt_ log _p_ _[π]_ _t_ (28)
+= _−s_ _[π]_ _t_ (29)
+
+
+Similarly for the second term:
+
+
+_∇xtδD_ KL( _p_ _[π]_ _t_ _[||][p]_ _t_ [pre][) =] _[ ∇][x]_ _t_
+
+
+_p_ _[π]_ _t_ [log] _[ p]_ _t_ _[π][−]_ (30)
+
+
+= _∇xt_ (log _p_ _[π]_ _t_ _[−]_ [1] _[ −]_ [log] _[ p]_ _t_ [pre][)] (31)
+
+= _s_ _[π]_ _t_ _[−]_ _[s]_ _t_ [pre] (32)
+
+
+16
+
+
+C PROOF OF PROPOSITION 1
+
+
+In this section we show that the optimization problem in 10 can be decomposed into an unconstrained
+expansion step followed by a projection into the constrained set. We start by defining the following
+processes:
+
+
+**Q** _[k]_ _∈_ arg max _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ [1] _D_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) s.t. E (33)
+**Q** : _p_ 0= _p_ _[k]_ 0 _[−]_ [1] _γk_ _x∼q_ 1 [[] _[v]_ [(] _[x]_ [)]]
+
+**Q** ˜ _[k]_ _∈_ arg max _⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ [1] _D_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) (34)
+**Q** : _p_ 0= _p_ _[k]_ 0 _[−]_ [1] _γk_
+
+**Q** ¯ _[k]_ _∈_ arg min _D_ KL( **Q** _||_ **Q** [˜] _[k]_ ) s.t. E (35)
+_x∼p_ 1 [[] _[v]_ [(] _[x]_ [)] = 1]
+**Q** : _p_ 0= _p_ _[k]_ 0 _[−]_ [1]
+
+
+**Q** ˆ _[k]_ _∈_ arg max E _D_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) (36)
+**Q** : _p_ 0= _p_ _[k]_ 0 _[−]_ [1] _x∼p_ 1 [[log] _[ v]_ [(] _[x]_ [)]] _[ −]_ _γ_ [1] _k_
+
+
+letting _p_ _[k]_ _t_ [,] _[p]_ [˜] _[k]_ _t_ [,] _[p]_ [¯] _[k]_ _t_ [,] _[p]_ [ˆ] _[k]_ _t_ [refer to their respective marginal densities a time] _[ t]_ [.] [Note that] **[Q]** [˜] _[k]_ [is the output]
+of the projection step in 15, and that **Q** [ˆ] _[k]_ is the output of the projection step in 16. The following
+Lemma asserts that solving the optimization problem in equation 10 is equivalent to solving the
+expansion step of 34 followed by the formal information projection step of 35.
+
+**Lemma C.1.** _Let_ **Q** _[k][−]_ [1] _be the process associated with the previous iterate π_ _[k][−]_ [1] _, and let_ **Q** [˜] _[k]_ _and_
+**Q** ¯ _[k]_ _be defined as above._ _Then_ **Q** ¯ _[k]_ = **Q** _[k]_ _._
+
+
+_Proof._ First, note that the processes **Q** _[k][−]_ [1] and **Q** [˜] _[k]_ _t_ [satisfy] [the] [following] [relationship] [(see] [e.g.]
+Domingo-Enrich et al. (2024) equation 22):
+
+
+_d_ **Q** [˜] _[k]_
+log _d_ **Q** _[k][−]_ [1] [(] _[X]_ [) =] _[ γ][k][δ][L]_ [(] **[Q]** _[k][−]_ [1][)(] _[X]_ [) +][ const] _[ .]_ (37)
+
+
+which implies the following equality for an arbitrary process _q_ (taking the expectation and rearranging):
+
+
+_⟨δL_ ( **Q** _[k][−]_ [1] ) _,_ **Q** _⟩−_ _γkD_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) = _γkD_ KL( **Q** _||_ **Q** [˜] _[k]_ ) _−_ const _._ (38)
+
+
+Therefore the equation below holds for any arbitrary set of processes _A_ :
+
+
+arg max _⟨δL_ ( **Q** _[k][−]_ [1] ) _, q⟩−_ [1] _D_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) = arg min _D_ KL( **Q** _||_ **Q** [˜] _[k]_ ) (39)
+**Q** _∈A_ _γk_ _q∈A_
+
+
+and thus also holds for the set _A_ = _{_ **Q** s.t. _p_ 0 = _p_ 0 _[k][−]_ [1] and E _x∼p_ 1 [ _v_ ( _x_ )] = 1 _}_ : the set of feasible
+solutions to 10.
+
+
+Finally, the following Lemma reformulates the information projection step in 35 as the fine-tuning
+objective in 34:
+
+**Lemma C.2.** _Let_ **Q** [ˆ] _[k]_ _and_ **Q** [¯] _[k]_ _be defined as above._ _Then_ **Q** [ˆ] _[k]_ = **Q** [¯] _[k]_
+
+
+_Proof._ Recall the definition of **Q** [ˆ] _[k]_ :
+
+
+**Q** ˆ _[k]_ _∈_ arg max E _D_ KL( **Q** _||_ **Q** _[k][−]_ [1] ) (40)
+**Q** : _p_ 0= _p_ 0 _[k][−]_ [1] _x∼p_ 1 [[log] _[ v]_ [(] _[x]_ [)]] _[ −]_ _γ_ [1] _k_
+
+
+17
+
+
+and note that the expectation in the first term is finite only if _v_ ( _x_ ) = 0 _,_ _p_ 1 _−_ a.s., in which case it
+vanishes. Thus the maximizer must belong to the set - **Q** : _p_ 0 = _p_ _[k]_ 0 _[−]_ [1] _,_ E _x∼p_ 1[ _v_ ( _x_ )] = 1� effectively
+turning the first term into a constraint.
+
+
+18
+
+
+D PROOF FOR THEOREM 5.1
+
+
+**Theorem 5.1** (Convergence guarantee in the idealized process-level setting) **.** _Consider the objective_
+_L defined in Equation_ (8) _, and let λ_ _[⋆]_ := �01 _[λ][t]_ [d] _[t][. Let][ {]_ **[Q]** _[k][}][ be the iterates generated by Equation]_ [ (][10][)]
+_with γk_ = 1 _/λ_ _[⋆]_ _for all k_ _∈_ [ _K_ ] _._ _Then_
+
+_L_ ( **Q** _[∗]_ ) _−L_ ( **Q** _[K]_ ) _≤_ _[λ][⋆]_ (21)
+
+_K_ _[D][KL]_ [(] **[Q]** _[∗]_ _[∥]_ **[Q]** _[pre]_ [)] _[,]_
+
+_where_ **Q** _[∗]_ _∈_ arg max **Q** _L_ ( **Q** ) _._
+
+
+_Proof._ Fix an initial reference measure **Q** [¯] := **Q** [0], and define the function
+_Q_ ( **Q** ) := _D_ KL� **Q** �� **Q** ¯          - _,_ (41)
+which measures the Kullback–Leibler divergence of **Q** from this reference. This choice of _Q_ will
+serve as the _reference function_ in the framework of _mirror descent with relative smoothness_ (Bauschke
+et al., 2017; Lu et al., 2018). The key point is that the objective _L_ in Equation (8) is not necessarily
+smooth in the classical sense, but it is _λ_ _[⋆]_ _-smooth relative to Q_ .
+
+
+To formalize this, let _DQ_ ( **Q** _,_ **Q** _[′]_ ) denote the _Bregman divergence_ generated by _Q_ . By definition,
+_DQ_ ( **Q** _,_ **Q** _[′]_ ) = _Q_ ( **Q** ) _−Q_ ( **Q** _[′]_ ) _−⟨δQ_ ( **Q** _[′]_ ) _,_ **Q** _−_ **Q** _[′]_ _⟩._
+A direct computation shows that when _Q_ is the KL divergence from a fixed reference measure, the
+Bregman divergence reduces exactly to another KL divergence:
+_DQ_ ( **Q** _,_ **Q** _[′]_ ) = _D_ KL� **Q** �� **Q** _′_          - _._
+This equivalence will allow us to leverage classical properties of relative entropy in the convergence
+analysis.
+
+
+Next, consider the mirror descent iterates _{_ **Q** _[k]_ _}_ for minimizing ( _−L_ ) [3] . By the definition of relative
+smoothness, we have
+( _−L_ )( **Q** _[k]_ ) _≤_ ( _−L_ )( **Q** _[k][−]_ [1] ) + _⟨δ_ ( _−L_ )( **Q** _[k][−]_ [1] ) _,_ **Q** _[k]_ _−_ **Q** _[k][−]_ [1] _⟩_ + _λ_ _[⋆]_ _DQ_ ( **Q** _[k]_ _,_ **Q** _[k][−]_ [1] ) _._ (42)
+Here, the first inequality follows directly from the _λ_ _[⋆]_ _-smoothness of_ ( _−L_ ) _relative to Q_, as defined
+in Equation (41). Intuitively, this is a generalization of the standard quadratic upper bound used in
+classical smooth optimization, but with the Bregman divergence replacing the squared Euclidean
+norm.
+
+
+We can refine this bound further by applying the _three-point inequality_ of the Bregman divergence (Lu
+et al., 2018, Lemma 3.1). Let us define a linearized function
+
+
+_ϕ_ ( **Q** ) := [1]
+
+
+_λ_ _[⋆]_ _[⟨][δ]_ [(] _[−L]_ [)(] **[Q]** _[k][−]_ [1][)] _[,]_ **[ Q]** _[ −]_ **[Q]** _[k][−]_ [1] _[⟩][,]_
+
+
+and let _z_ = **Q** _[k][−]_ [1], _z_ [+] = **Q** _[k]_ . Then the three-point identity gives
+_⟨δ_ ( _−L_ )( **Q** _[k][−]_ [1] ) _,_ **Q** _[k]_ _−_ **Q** _[k][−]_ [1] _⟩≤⟨δ_ ( _−L_ )( **Q** _[k][−]_ [1] ) _, µ −_ **Q** _[k][−]_ [1] _⟩_ + _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** _[k][−]_ [1] ) _−_ _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** _[k]_ ) _,_
+(43)
+for any reference point _µ_ . Combining Equation (42) and Equation (43) yields
+( _−L_ )( **Q** _[k]_ ) _≤_ ( _−L_ )( **Q** _[k][−]_ [1] ) + _⟨δ_ ( _−L_ )( **Q** _[k][−]_ [1] ) _, µ −_ **Q** _[k][−]_ [1] _⟩_ + _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** _[k][−]_ [1] ) _−_ _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** _[k]_ ) _._
+(44)
+
+
+Finally, we can telescope this inequality over _k_ = 1 _, . . ., K_ . Using the monotonicity of ( _−L_ )( **Q** _[k]_ )
+along the iterates and the non-negativity of the Bregman divergence _DQ_, we obtain (Lu et al., 2018):
+
+
+_K_
+
+
+_k_ =1
+
+
+�( _−L_ )( **Q** _[k]_ ) _−_ ( _−L_ )( _µ_ )� _≤_ _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** [0] ) _−_ _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** _[K]_ ) _≤_ _λ_ _[⋆]_ _DQ_ ( _µ,_ **Q** [0] ) _,_ (45)
+
+
+for any **Q** . Dividing both sides by _K_ and rearranging gives a simple _ergodic convergence rate_ :
+
+( _−L_ )( **Q** _[K]_ ) _−_ ( _−L_ )( **Q** ) _≤_ _[λ][⋆][D][Q]_ [(] **[Q]** _[,]_ **[ Q]** [0][)] _,_ (46)
+
+_K_
+
+which shows that the iterates converge at an _O_ (1 _/K_ ) rate in terms of the relative entropy.
+
+
+3We adopt the standard convention of convex _minimization_ rather than concave maximization, which explains
+the negative sign in the formulation.
+
+
+19
+
+
+E PROOF FOR THEOREM 5.2
+
+
+To establish our main convergence theorem, we impose a few auxiliary assumptions that are widely
+used in the analysis of stochastic approximation and gradient flows. These assumptions are mild and
+typically satisfied in practical applications.
+**Assumption E.1** (Precompactness of Dual Iterates) **.** _The sequence of dual variables {δQ_ ( **Q** _[k]_ ) _}k_ _is_
+_precompact in the L∞_ _topology._
+
+
+Precompactness ensures that the interpolated trajectories of the dual iterates remain within a bounded
+region in function space. This property is crucial for applying convergence results based on asymptotic
+pseudotrajectories, and similar precompactness assumptions have appeared in the literature on
+stochastic approximation and continuous-time interpolations of discrete dynamics (Benaïm, 2006;
+Hsieh et al., 2019; Mertikopoulos et al., 2024).
+
+
+In our finite-dimensional parameter space, (E.1) essentially requires that the sequence of iterates
+produced by the solver remains in a bounded set. This is a very mild requirement: it is satisfied
+as soon as the solver does not diverge numerically (e.g., no exploding parameters or NaNs), which
+is exactly what we observe in all our experiments. Moreover, standard practices such as bounded
+initialization, weight decay, and gradient clipping can be viewed as explicit mechanisms that enforce
+this boundedness.
+
+**Assumption E.2** (Noise and Bias Control) **.** _The stochastic approximations in the updates satisfy,_
+_almost surely, the following conditions:_
+
+
+_∥bk∥∞_ _→_ 0 _,_ (47)
+
+     - E� _γk_ [2]     - _∥bk∥_ [2] _∞_ [+] _[ ∥][U][k][∥]_ _∞_ [2] �� _< ∞,_ (48)
+
+
+_k_
+
+     - _γk∥bk∥∞_ _< ∞._ (49)
+
+
+_k_
+
+
+These conditions are standard in the Robbins–Monro framework (Robbins & Monro, 1951; Benaïm,
+2006; Hsieh et al., 2019). They guarantee that the bias of the stochastic updates vanishes asymptotically, and that the cumulative effect of the noise remains controlled. Together, they ensure that
+the stochastic perturbations do not prevent convergence of the iterates to the optima of the target
+objective.
+
+
+With these assumptions in place, we are ready to restate the main result and present its proof.
+
+
+**Theorem E.1** (Convergence guarantee in the general trajectory setting (rigorous)) **.** _Suppose the_
+_oracle satisfies Assumptions E.1 to E.2, and let the step-sizes {γk} follow the Robbins–Monro rule_
+_(_ [�] _[γ][k]_ [=] _[ ∞][,]_ _[γ]_ [2] _[<][ ∞][).]_ _[Then the iterates][ {]_ **[Q]** _[k][}][ generated by]_ [FE] _[ satisfy]_
+
+
+_k_ _[γ]_ _k_ [2] _[<][ ∞][).]_ _[Then the iterates][ {]_ **[Q]** _[k][}][ generated by]_ [FE] _[ satisfy]_
+
+
+_k_ _[γ][k]_ [=] _[ ∞][,]_ [ �]
+
+
+**Q** _[k]_ _⇀_ **Q** _[∗]_ _a.s.,_ (50)
+
+
+_where_ **Q** _[∗]_ _∈_ arg max **Q** _L_ ( **Q** ) _._
+
+
+_Proof._ As in the proof of Theorem 5.1, fix an initial reference measure
+
+
+**Q** ¯ := **Q** [0] _,_
+
+
+and define the relative entropy functional
+
+_Q_ ( **Q** ) := _D_ KL� **Q** �� **¯Q**          - _._ (51)
+
+
+Correspondingly, we introduce the initial dual variable
+
+**h** 0 := _δQ_ ( **Q** [0] ) = _−_ log [d] **[Q]** [0]
+
+d **Q** **[¯]** _[,]_
+
+
+where [d] **[Q]** **[Q]** [¯] [.] [This dual representation]
+
+d **Q** **[¯]** [denotes the Radon–Nikodym derivative of] **[ Q]** [ with respect to]
+encodes the convex geometry of the problem.
+
+
+20
+
+
+**Continuous-time mirror flow.** We now consider the continuous-time mirror flow dynamics
+
+          - **h** ˙ _t_ = _δ_ ( _−L_ )( **Q** _t_ ) _,_ (MF)
+**Q** _t_ = _δQ_ _[⋆]_ ( **h** _t_ ) _,_
+
+
+where _Q_ _[⋆]_ denotes the Fenchel conjugate of the relative entropy functional. Explicitly, we recall that
+
+
+_Q_ _[⋆]_ ( **h** ) = log **¯Q** [E]          - _e_ **[h]** [�] _,_
+
+
+which follows from the variational characterization of the Kullback–Leibler divergence (Hsieh et al.,
+2019; Hiriart-Urruty & Lemaréchal, 2004).
+
+
+**Discrete-to-continuous interpolation.** To connect the discrete algorithm with the flow equation MF,
+we introduce an interpolation of the iterates. Define the linearly interpolated process **h** ( _t_ ) by
+
+
+**h** ( _t_ ) = **h** _[k]_ + _t −_ _τ_ _[k]_ - **h** _[k]_ [+1] _−_ **h** _[k]_ [�] _,_ **h** _[k]_ = _δQ_ ( **Q** _[k]_ ) _,_ _τ_ _[k]_ =
+
+_τ_ _[k]_ [+1] _−_ _τ_ _[k]_
+
+
+_k_
+
+- _αr,_ (Int)
+
+
+_r_ =0
+
+
+where _αr_ are the step sizes. This construction yields a continuous-time trajectory _{_ **h** ( _t_ ) _}t≥_ 0 that
+faithfully tracks the discrete iterates in the limit of vanishing step sizes.
+
+
+**Asymptotic pseudotrajectories.** We recall the notion of an asymptotic pseudotrajectory (APT),
+which provides the precise mathematical bridge between discrete stochastic processes and deterministic flows.
+
+
+Let Θ denote the flow map associated with equation MF; that is, Θ _h_ ( **f** ) is the solution of equation MF
+at time _h_ when initialized at **f** .
+
+
+**Definition 3** (Asymptotic Pseudotrajectory (APT)) **.** _A trajectory_ **h** ( _t_ ) _is called an asymptotic pseu-_
+_dotrajectory (APT) of equation MF if, for every finite horizon T_ _>_ 0 _,_
+
+
+lim _∥_ **h** ( _t_ + _h_ ) _−_ Θ _h_ ( **h** ( _t_ )) _∥∞_ = 0 _._
+_t→∞_ 0 _≤_ [sup] _h≤T_
+
+
+Intuitively, this condition requires that the interpolated sequence asymptotically shadows the exact
+flow on every bounded time interval.
+
+
+**Limit set characterization.** The central result of Benaïm (2006) asserts that the long-term behavior
+of an APT is governed by the internally chain transitive (ICT) sets of the limiting flow.
+
+
+**Theorem E.2** (APT Limit Set Theorem (Benaïm, 2006, Thm. 4.2)) **.** _If_ **h** ( _t_ ) _is a precompact APT of_
+_equation MF, then almost surely its limit set lies within the set of internally chain-transitive (ICT)_
+_points of the flow._
+
+
+**Reduction** **of** **the** **convergence** **proof.** With these tools, the convergence analysis reduces to
+verifying two key claims:
+
+
+**(C1)** Under Assumptions E.1 to E.2, the interpolated sequence _{_ **h** ( _t_ ) _}_ indeed forms a precompact
+APT of equation MF.
+
+
+**(C2)** The set of ICT points of the flow equation MF coincides with the set of stationary points of
+_L_ .
+
+
+**Verification of Claim (C1).** Precompactness follows directly from Assumption E.1, which guarantees uniform tightness of the sequence of measures and hence compactness of their trajectories in the
+weak topology. In addition, standard arguments from stochastic approximation (Hsieh et al., 2019;
+Benaïm, 2006; Mertikopoulos et al., 2024) yield the following quantitative estimate: for every finite
+horizon _T_ _>_ 0, there exists a constant _C_ ( _T_ ) _>_ 0 such that
+
+
+sup _∥_ **h** ( _t_ + _h_ ) _−_ Θ _h_ ( **h** ( _t_ )) _∥≤_ _C_ ( _T_ )�∆( _t −_ 1 _, T_ + 1) + _b_ ( _T_ ) + _γ_ ( _T_ )� _,_
+0 _≤h≤T_
+
+
+21
+
+
+where ∆( _t −_ 1 _, T_ + 1) denotes the cumulative effect of noise over the interval [ _t −_ 1 _, t_ + _T_ + 1],
+while _b_ ( _T_ ) and _γ_ ( _T_ ) capture, respectively, the bias and step-size contributions. This bound quantifies
+the deviation of the interpolated process from the deterministic mirror flow equation MF.
+
+
+**APT approximation.** Under the noise and bias conditions of Assumption E.2, both perturbations
+vanish asymptotically:
+lim [+ 1)] [=] lim [=] [0] _[,]_
+_t→∞_ [∆(] _[t][ −]_ [1] _[, T]_ _t→∞_ _[b]_ [(] _[T]_ [)]
+
+uniformly over bounded horizons _T_ . Consequently, the discrepancy in the above bound vanishes in
+the limit, and the interpolated process **h** ( _t_ ) shadows the continuous-time flow arbitrarily well.
+
+
+Altogether, these arguments show that **h** ( _t_ ) is indeed a precompact asymptotic pseudotrajectory of
+the mirror flow.
+
+
+**Verification** **of** **Claim** **(C2).** The flow equation MF is precisely the continuous-time mirror descent dynamics associated with ( _−L_ ), which is known to be a _gradient_ _flow_ in the spherical
+Hellinger–Kantorovich geometry (Mielke & Zhu, 2025). As such, ( _−L_ ) acts as a strict Lyapunov
+function for the system: along any non-stationary trajectory, _dt_ _[d]_ [(] _[−L]_ [)(] **[Q]** _[t]_ [)] _[ <]_ [ 0][.] [By (][Benaïm][,][ 2006][,]
+
+Corollary 6.6), every precompact APT converges to the set of stationary points of the Lyapunov
+function. Since the objective function _L_ is the relative entropy, and hence strictly convex, its stationary
+point coincide with its global minimizer.
+
+
+**Conclusion.** Combining (C1) and (C2) with Theorem E.2, we deduce that the interpolated process
+**h** ( _t_ ) converges almost surely to the set of minimizers of ( _−L_ ), which readily implies that the original
+sequence _{_ **Q** _[k]_ _}_ inherits the same convergence guarantee.
+
+
+22
+
+
+F DETAILED EXAMPLE OF ALGORITHM IMPLEMENTATION
+
+
+In this section we provide comprehensive pseudocode of an example implementation for the two
+FINETUNINGSOLVER subprocedure in Alg. 4. It is implemented using a variation of Adjoint Matching
+(AM) which is introduced comprehensively in Domingo-Enrich et al. (2024), although we provide
+pseudocode below for completeness. We note that in principle one could substitute for any other
+linear fine-tuning method.
+
+
+Before presenting the implementations, we shortly clarify some relevant notation. The algorithm
+makes explicit use of the interpolant schedules _κt_ and _ωt_ introduced in equation 1. We note that
+in flow model literature they are more commonly known as _αt_ and _βt_ . We denote by _u_ [pre] the
+velocity field corresponding to the pre-trained policy _π_ [pre], and likewise use _u_ [fine] for the velocity field
+corresponding to the fine-tuned policy. In short, FINETUNINGSOLVER first samples trajectories, which
+are then used to approximate the solution of a surrogate ODE whose marginals are used as regression
+targets for the control policy (see Domingo-Enrich et al. (2024) Section 5 for a full discussion). We
+note that FINETUNINGSOLVER can be used for objectives with and without trajectory rewards, simply
+by setting trajectory rewards to zero.
+
+
+**Algorithm 4** Adjoint Matching for fne-tuning Flow Matching models (FINETUNINGSOLVER)
+
+**Require:** _u_ [pre] : pre-trained FM velocity field, _{∇ft}t∈_ [0 _,_ 1]: gradients of trajectory
+rewards, _{λt}t∈_ [0 _,_ 1]: (optional) trajectory reward weights, _γ_ : fine-tuning strength
+1: Initialize fine-tuned vector fields: _u_ [finetune] = _u_ [pre] with parameters _θ_ .
+2: **for** _n ∈{_ 0 _, . . ., N_ _−_ 1 _}_ **do**
+3: Sample _m_ trajectories _**X**_ = ( _Xt_ ) _t∈{_ 0 _,...,_ 1 _}_ with memoryless noise schedule _σ_ ( _t_ ) =
+
+ 2 _κt_   - _ωω_ ˙ _tt_ _[κ][t][ −]_ _[κ]_ [˙] _[t]_ �, e.g.:
+
+
+_ω_ _[ω]_ [˙] _t_ _[t]_ _[X][t]_ - + _√_
+
+
+      _Xt_ + _h_ = _Xt_ + _h_ 2 _u_ [finetune] _θ_ ( _Xt, t_ ) _−_ _ω_ _[ω]_ [˙] _[t]_
+
+
+_Xt_ + _h_ = _Xt_ + _h_ 2 _uθ_ ( _Xt, t_ ) _−_ _ωt_ _[t]_ _[X][t]_ + _h σ_ ( _t_ ) _εt,_ _εt_ _∼N_ (0 _, I_ ) _,_ _X_ 0 _∼N_ (0 _, I_ ) _._
+
+(51)
+4: For each trajectory, solve the _lean adjoint ODE_ backwards in time from _t_ = 1 to 0, e.g.:
+
+
+         -          _a_ ˜ _t−h_ = ˜ _at_ + _h_ ˜ _a_ _[⊤]_ _t_ _[∇][X]_ _t_ 2 _v_ [base] ( _Xt, t_ ) _−_ _[ω]_ _ω_ [˙] _[t]_ _t_ _[X][t]_ _−_ _hγλt∇Xtft_ ( _Xt_ ) _,_ _a_ ˜1 = _γλ_ 1 _∇X_ 1 _f_ 1( _X_ 1) _._
+
+(52)
+5: Note that _Xt_ and ˜ _at_ should be computed without gradients, i.e., _Xt_ = stopgrad( _Xt_ ) _,_ _a_ ˜ _t_ =
+stopgrad(˜ _at_ ).
+6: For each trajectory, compute the following Adjoint Matching objective:
+
+
+        _a_ ˜ _t−h_ = ˜ _at_ + _h_ ˜ _a_ _[⊤]_ _t_ _[∇][X]_ _t_ 2 _v_ [base] ( _Xt, t_ ) _−_ _[ω]_ _ω_ [˙] _[t]_
+
+
+_L_ Adj-Match( _θ_ ) = 
+
+_t∈{_ 0 _,...,_ 1 _−h}_
+
+
+��� _σ_ (2 _t_ ) - _vθ_ [finetune] ( _Xt, t_ ) _−_ _u_ [base] ( _Xt, t_ )� + _σ_ ( _t_ ) ˜ _at_ ���2 _._ (53)
+
+
+7: Compute the gradient _∇θL_ ( _θ_ ) and update _θ_ using favorite gradient descent algorithm.
+8: **end for**
+**Output:** Fine-tuned vector feld _v_ [finetune]
+
+
+Crucially, we employ the fine-tuning oracle in Alg. 8 also to implement the projection step within Sec.
+4, as indicated within Alg. 4. Moreover, in the case of a non-differentiable (weak or strong) verifier,
+the projection step can be implemented via a 0-th order RL-based fine-tuning method, e.g., (Fan et al.,
+2023; Black et al., 2023), which induce the same closed-form solution as Alg. 8.
+
+
+23
+
+
+G EXPERIMENTAL DETAILS
+
+
+G.1 ILLUSTRATIVE EXAMPLES EXPERIMENTAL DETAILS
+
+
+Numerical values in all plots shown within Sec. 6 are means computed over diverse runs of FE via 5
+different seeds. Error bars correspond to 95% Confidence Intervals. For the following comparisons,
+we aimed to tune each algorithm parameters so that the method would work well in the specific
+illustrative example.
+
+
+**Pre-trained** **models.** The pre-trained models appearing in Sec. 6, in the context of illustrative
+examples, are learned on synthetically generated data, via standard learning procedures. In particular,
+in Sec. 6 we always show samples generated by such pre-trained models.
+
+
+**Global Flow Expansion.**
+
+
+    - For G-FE, we use _λt_ = 0 if _t >_ 1 _−_ 0 _._ 05, and _λt_ = 1 _._ 2 otherwise, _γk_ = (1+3(1 _.k_ 5 _−_ 1)) [,] _[ η]_ [= 2]
+and _K_ = 10.
+
+
+    - For CONSTR we employ _η_ = 2.
+
+    - For S-MEME we employ _γk_ = (1+3(0 _._ 345 _k−_ 1)) [and] _[K]_ [=] [10] [and] [use] _[s][π]_ 1 [(] _[x]_ [)] [=] _[s][π]_ 1 _−ϵ_ [(] _[x]_ [)] [with]
+_ϵ_ = 0 _._ 02 as discussed in Sec. 4.
+
+
+**Local Flow Expansion.** The models used act on a 2-dim state ( _x_ 1 _, x_ 2), of which is shown only the _x_ 1
+coordinate in the process-level figures reported in Sec. 6. Since we use as oracle AM, which requires
+differentiable gradient, we consider a binary verifier (shown in Fig. 5c in grey), which we smoothen,
+thus rendering it differentiable and approximate. Notice that differentiability is not required by FE,
+but is rather an implementation detail due to the specific oracle used (i.e., AM (Domingo-Enrich
+et al., 2024), see Sec. F for further details). In particular, there exist several analogous oracles that do
+not require function differentiability (e.g., Fan et al., 2023).
+
+
+    - For L-FE we employ _K_ = 8, _λt_ = 0 if _t_ _>_ 1 _−_ 0 _._ 015, and proportional with the process
+
+variance, i.e., _λt_ = �2( _κt_ ( _ω_ _[ω]_ [˙] _[t]_ _t_ _[κ][t][ −]_ _[κ]_ [˙] _[t]_ [))][, otherwise;] _[ γ][k]_ [= 0] _[.]_ [3][,] _[ η][k]_ [= 0] _[.]_ [1][.]
+
+    - For FDC we use _K_ = 8, _γk_ = 0 _._ 06 and use _s_ _[π]_ 1 [(] _[x]_ [) =] _[ s][π]_ 1 _−ϵ_ [(] _[x]_ [)][ with] _[ ϵ]_ [ = 0] _[.]_ [02][ as discussed in]
+Sec. 4.
+
+
+G.2 CONFORMER VENDI
+
+
+We begin with a detailed explanation of our diversity metric: conformer VENDI. In general, VENDI
+(Friedman & Dieng, 2022) is a diversity metric operating on arbitrary inputs based on a pairwise
+distance kernel _k_ : _X ×X_ _→_ [0 _,_ 1]. For a list of inputs _x_ 1 _, . . ., xn_ and a symmetric pairwise distance
+kernel _k_, VENDI is defined as:
+
+
+_V S_ ( _x_ 1 _, . . ., xn_ ) = exp - _−_
+
+
+_n_
+
+- _λi_ log _λi_ - (52)
+
+
+_i_ =1
+
+
+where _λi_ are eigenvalues of the distance matrix _K_ with _Kij_ = _k_ ( _xi, xj_ ). In our work, we use a
+molecular fingerprinting method combined with a kernel simply defined as the Euclidean distance
+between fingerprints, thereby inducing a kernel on molecules themselves. The particular fingerprinting
+method is defined as the sorted list of pairwise atomic distances. Formally, for a molecule with
+_N_ atoms at positions _a_ 1 _, . . . aN_ we first compute the matrix of pairwise distances _Aij_ = _∥ai_ _−_
+_aj∥_ 2 _,_ 1 _≤_ _i < j_ _≤_ _N_, which is then sorted as _A_ [˜] _i_ 1 _j_ 1 _. . ._ _A_ [˜] _iN_ ( _N_ _−_ 1) _/_ 2 _jN_ ( _N_ _−_ 1) _/_ 2 yielding the fingerprint
+_A_ ˜ _∈_ R _[N]_ [(] _[N]_ _[−]_ [1)] _[/]_ [2] .
+
+
+G.3 PCA PROJECTION FOR FIG. 5D
+
+
+In this section we explain the dimensionality reduction method used to generate the plot in 5d. We first
+generated 25000 molecules from both the pre-trained model _π_ [pre] (yielding _D_ [pre] and the fine-tuned
+
+
+24
+
+
+model _π_ _[K]_ (yielding _D_ [finetuned] ), which was computed by the L-FE algorithm on _π_ [pre] for _K_ = 5
+iterations with _α_ = 9. We then fingerprinted each set of molecules using the method described above,
+and fit a 1-dim PCA on the fingerprints for _D_ [pre] using SCIKIT-LEARN (Pedregosa et al., 2011), which
+was then used to transform both _D_ [pre] and _D_ [finetuned] into 1-dimensional vectors. Fig. 5d corresponds
+to a histogram plot of each of the resulting sets of vectors.
+
+
+G.4 VALIDITY COMPUTATION IN MOLECULAR EXPERIMENTS
+
+
+In the context of our experiments on molecules the concept of validity is defined through a pipeline of
+several checks, defined below. Our validity function passes through each one sequentially, returning
+an invalid result if any fail, and a valid result only if all checks pass.
+
+
+1. First, we attempt to sanitize each molecule using RDKit’s (RDKit) CHEM.SANITIZEMOL
+function. As an added check, we test if it is possible to convert the molecule to and back
+from SMILES (Weininger, 1988) notation.
+
+2. We then iterate over each atom in the molecule, checking for any implicit hydrogens (our
+model must generate explicit hydrogens as FlowMol (Dunn & Koes, 2024) does) or any
+radical electrons which would make the molecule invalid.
+
+3. Finally we perform our weak verifier check, filtering out molecules for which any two atoms
+are closer than 0.9Å. Details on this weak verifier are explained below.
+
+
+The final validity check is evaluate the weak verifier on molecules that pass the previous steps. The
+weak verifier itself is evaluated by first computing the vector of pairwise distances between atoms
+_A_ ˜ (see discussion in Section G.2 above), then taking the minimum element _A_ ˜0 and checking if it is
+lower than 0 _._ 9Å, in which case a molecule is classified as invalid. Including this check in the validity
+function guarantees by construction that the weak verifier satisfies Definition 2, since failing the weak
+verifier check implies failing the validity check as well.
+
+
+G.5 PRACTICAL DETAILS FOR EXPERIMENTS ON MOLECULES
+
+
+In this section we discuss the practical choices behind the molecular design experiments discussed in
+Section 6. We start with a discussion of hyperparameter settings, followed by some implementation
+techniques adapting the verifier feedback for a first-order solver, and finally discuss hardware and
+platform used for training.
+
+
+G.5.1 HYPERPARAMETER CHOICES
+
+
+For our experiments on molecules we use the FlowMol CTMC model from Dunn & Koes (2024)
+trained on the QM9 dataset as a pre-trained model. We run each algorithm (L-FE and FDC) with the
+following parameters:
+
+
+    - _K_ = 5 iterations
+
+    - Regularization strength of _α_ = 9
+
+    - Decreasing stepsize of _γk_ = 1+ _γ_ 0 _k_ [with] _[ γ]_ [0] [= 0] _[.]_ [00001]
+
+
+                
+    - For the trajectory reward weighting (L-FE only) we use _λt_ = _σt_ = 2 _κt_     - _ωω_ ˙ _[κ][t][ −]_ _[κ]_ [˙] _[t]_ �,
+ensuring _λt_ _→_ 0 as _t →_ 1 for stability as discussed at the end of section 4
+
+    - For both, we clip the score near the end of the trajectory as _s_ _[π]_ _t_ [=] _[ s][π]_ _{_ min _t,_ 1 _−ϵ}_ [for] _[ ϵ]_ [ = 0] _[.]_ [005][.]
+
+    - We fix the number of atoms in generated molecules (for model training and metric calculation) to 10, in order to simplify metric calculations.
+
+
+When using Adjoint Matching (AM) (Domingo-Enrich et al., 2024) to implement the subroutines
+of any algorithm we use _N_ = 4 iterations, we sample a batch of _m_ = 4 trajectories of length 40 at
+each iteration and update the parameters _θ_ using Adam Kingma & Ba (2015) with a learning rate of
+0 _._ 00055. We note that since FlowMol CTMC is a mixed categorical and continuous flow model, we
+only use AM to update the parameters corresponding to the continuous outputs of the model, i.e., the
+atom positions.
+
+
+25
+
+
+G.5.2 HYPERPARAMETER CHOICES FOR EXPERIMENTS ON GEOM
+
+
+In order to test the performance of our model in a more practical setting, we performed additional
+experiments using the GEOM dataset. We again use a FlowMol CTMC model from Dunn & Koes
+(2024) as a pre-trained model, however this time using checkpoints from training on the GEOM
+dataset. Note that for simpler hyperparameter search we use the reparametrization discussed in
+section H. The optimal parameter set for each algorithm (L-FE, G-FE, NSE, and FDC) is not identical
+in this setting, therefore we first report the hyperparameters in common before listing the differences
+for each algorithm below:
+
+
+**Common hyperparameters for** **L-FE,** **G-FE,** **NSE,** **FDC** :
+
+
+    - _K_ = 3 iterations
+
+    - Constant (adjusted) stepsize _γ_ ˜ _k_ = _γ_ ˜0, although the magnitude _γ_ ˜0 differs for each algorithm
+
+    - For the trajectory reward weighting (L-FE, G-FE and NSE) we use _λt_ = _σt_ =
+
+  2 _κt_     - _ωω_ ˙ _[κ][t][ −]_ _[κ]_ [˙] _[t]_ �, ensuring _λt_ _→_ 0 as _t_ _→_ 1 for stability as discussed at the end of
+section 4
+
+    - For all methods, we clip the score near the end of the trajectory as _s_ _[π]_ _t_ [=] _[s][π]_ min _{t,_ 1 _−ϵ}_ [for]
+_ϵ_ = 0 _._ 005.
+
+    - We fix the number of atoms in generated molecules (for model training and metric calculation) to 30, in order to simplify metric calculations.
+
+
+**Per-algorithm hyperparameter variations:**
+
+
+    - L-FE:
+
+**–** _β_ = 0 _._ 4
+
+**–** _γ_ ˜ _k_ = 0 _._ 0005 (constant)
+
+**–** _ηk_ = 5 _._ 0 (constant)
+
+    - NSE:
+
+**–** _β_ = 0 _._ 0
+
+**–** _γ_ ˜ _k_ = 0 _._ 0002 (constant)
+
+    - FDC:
+
+**–** _β_ = 0 _._ 9
+
+**–** _γ_ ˜ _k_ = 0 _._ 0005 (constant)
+
+
+When using Adjoint Matching (AM) (Domingo-Enrich et al., 2024) to implement the subroutines
+of any algorithm usign the GEOM FlowMol model we use _N_ = 4 iterations, we sample a batch of
+_m_ = 1 trajectories of length 40 at each iteration and update the parameters _θ_ using Adam Kingma &
+Ba (2015), with a learning rate of 0 _._ 0001. We note that since FlowMol CTMC is a mixed categorical
+and continuous flow model, we only use AM to update the parameters corresponding to the continuous
+outputs of the model, i.e., the atom positions.
+
+
+G.5.3 SMOOTHING THE WEAK VERIFIER
+
+
+Since we use Adjoint Matching for all fine-tuning tasks we need all rewards to be differentiable.
+While our weak verifier is formally defined as _v_ ( _x_ ) = 1 _⇐⇒_ _x_ respects the minimum atom
+separation bound of 0 _._ 9Å, we use the following differentiable approximation using a sigmoid soft
+indicator function:
+
+
+1
+_v_ ( _x_ ) =
+_N_ ( _N_ _−_ 1) _/_ 2
+
+
+_N_ ( _N_ _−_ 1) _/_ 2
+
+ 
+
+_i_ =1
+
+
+exp( _A_ [˜] _i −_ 0 _._ 9)
+(53)
+exp( _A_ [˜] _i −_ 0 _._ 9) + 1
+
+
+where _A_ [˜] _i_ are the pairwise atomic distances introduced in Section G.2 above. This alternative verifier
+is differentiable and provides gradient feedback everywhere and therefore can be used in Adjoint
+Matching.
+
+
+26
+
+
+G.5.4 ABLATION STUDY
+
+
+We report an ablation study of the key hyperparameters _α_, _γk_, and _ηk_ . Notice first that since L-FE is
+a generalisation of both NSE and G-FE, we recover NSE by setting _ηk_ = 0, and recover G-FE by
+instead setting _α_ = 0. The following plot shows a comparison of the Pareto fronts for each method,
+all compared against FDC. Furthermore, at the end of this section, we report results of running the
+projection step alone (effectively setting _γk_ = 0).
+
+
+Figure 7: Comparison of different parametrization of L-FE, G-FE, NSE, FDC, for _K_ = 3. We
+compute Conformer Vendi and validity over 5000 samples, and average results over 8 runs for each
+parameterization with 8 different seeds.
+
+
+In Fig. 7 we report all the Pareto dominant points chosen for each method evaluated in the following
+ranges of hyperparameters (using the reparametrized notation from Appendix H):
+
+
+    - _β_ : 0 _._ 0, 0 _._ 1, 0 _._ 2, 0 _._ 3, 0 _._ 4, 0 _._ 5, 0 _._ 6, 0 _._ 7, 0 _._ 8, 0 _._ 9, 0 _._ 95
+
+
+    - _γ_ ˜ _k_ (constant): 0 _._ 0001, 0 _._ 0002, 0 _._ 0003, 0 _._ 0004, 0 _._ 0005, 0 _._ 001
+
+
+    - _ηk_ (constant): 0 _._ 0, 0 _._ 1, 0 _._ 5, 1 _._ 0, 2 _._ 0, 5 _._ 0
+
+
+For each combination of the hyperparameters above, we run _K_ = 3 iterations of each method
+(L-FE, G-FE and NSE) and average the results across 8 seeds. Conformer Vendi and validity are
+always computed for batches of 5000 samples. For all other hyperparameters refer to the previous
+section G.5.2 discussing general hyperparameter choices for the GEOM model. To build the plot
+above, we simply drop all points that are Pareto dominated (i.e. same/greater Conformer Vendi and
+same/greater validity) by some other point, and plot the remaining points. We also drop all points with
+Conformer Vendi lower than the pre-trained model. The results shown in Fig. 7 clearly demonstrate
+the ability of each method to trade off validity for higher diversity (measured by Conformer Vendi).
+However notice that only G-FE and L-FE can significantly increase validity due to their use of verifier
+information. Overall, notice that both L-FE and G-FE outperform all other methods almost uniformly,
+and NSE uniformly outperforms FDC (both unconstrained exploration algorithms). L-FE is especially
+effective at retaining or even increasing validity: it significantly dominates all other methods in terms
+of validity in the range of 475 to 550 Conformer Vendi (top left of Fig. 7).
+
+
+27
+
+
+G.5.5 TABLES OF RESULTS
+
+
+We report the numerical results (value and confidence interval) for each point in Fig. 7 in the tables
+below. For each method we report the mean and confidence interval corresponding to each point
+from left to right, and report the parameterization ( _β_, _γ_ ˜0 and _η_ if applicable) used to generate the
+point. We acknowledge the size of the confidence intervals increases drastically in the regime of more
+exploratory points (higher Conformer Vendi): increasing stability of exploration methods in that
+regime remains an open problem. Still, we note that L-FE dominates other methods most significantly
+when the Conformer Vendi increase is modest (less than 550 Conformer Vendi), and in that regime
+the confidence intervals are reasonably concentrated.
+
+
+Table 1: Values for L-FE reported in Fig 7 with 95% confidence intervals
+
+
+_β_ _γ_ ˜0 _η_ 0 Mean Validity (95% CI) Mean Conformer Vendi (95% CI)
+
+
+0.3 0.0002 5.0 0.89 (0.87 _±_ 0.91) 481.35 (460.24 _±_ 500.42)
+0.6 0.0005 5.0 0.85 (0.79 _±_ 0.89) 500.11 (460.72 _±_ 546.91)
+0.4 0.0005 5.0 0.83 (0.76 _±_ 0.89) 519.05 (454.45 _±_ 585.99)
+0.1 0.0004 5.0 0.82 (0.70 _±_ 0.90) 529.47 (465.92 _±_ 629.29)
+0.2 0.0004 5.0 0.74 (0.53 _±_ 0.88) 531.90 (452.14 _±_ 633.92)
+0.2 0.0005 5.0 0.70 (0.53 _±_ 0.86) 563.75 (472.19 _±_ 683.79)
+0.2 0.0004 2.0 0.68 (0.50 _±_ 0.83) 581.26 (467.44 _±_ 728.66)
+0.3 0.0005 5.0 0.68 (0.46 _±_ 0.85) 796.64 (475.55 _±_ 1371.21)
+0.2 0.0005 2.0 0.65 (0.43 _±_ 0.84) 831.91 (496.49 _±_ 1423.91)
+0.1 0.0004 2.0 0.62 (0.39 _±_ 0.82) 900.08 (515.31 _±_ 1591.61)
+0.1 0.0005 5.0 0.60 (0.33 _±_ 0.83) 1382.46 (516.37 _±_ 2493.28)
+0.4 0.0005 0.5 0.58 (0.31 _±_ 0.81) 1682.32 (560.86 _±_ 3320.25)
+0.1 0.0005 2.0 0.37 (0.13 _±_ 0.64) 1956.33 (684.10 _±_ 3322.31)
+0.1 0.0005 0.5 0.37 (0.12 _±_ 0.64) 2068.02 (866.88 _±_ 3366.56)
+
+
+Values are mean (95% confidence interval). Confidence intervals computed using bootstrapping and shown to
+two decimal places.
+
+
+Table 2: Values for G-FE reported in Fig 7 with 95% confidence intervals
+
+
+_γ_ ˜0 _η_ 0 Mean Validity (95% CI) Mean Conformer Vendi (95% CI)
+
+
+0.0002 0.5 0.76 (0.69 _±_ 0.83) 485.65 (442.52 _±_ 524.71)
+0.0005 5.0 0.69 (0.46 _±_ 0.86) 890.19 (434.36 _±_ 1731.52)
+0.0004 0.5 0.57 (0.33 _±_ 0.79) 1004.79 (531.74 _±_ 1790.78)
+0.0004 1.0 0.52 (0.27 _±_ 0.77) 1125.94 (521.23 _±_ 2182.77)
+0.0004 0.1 0.48 (0.22 _±_ 0.72) 1676.67 (533.47 _±_ 2888.04)
+0.0005 1.0 0.46 (0.22 _±_ 0.71) 1706.53 (664.86 _±_ 3100.05)
+0.0005 2.0 0.35 (0.12 _±_ 0.60) 1898.72 (796.05 _±_ 3221.32)
+0.0005 0.5 0.31 (0.08 _±_ 0.56) 2245.62 (1135.37 _±_ 3500.43)
+
+
+Values are mean (95% confidence interval). Confidence intervals computed using bootstrapping and shown to
+two decimal places.
+
+
+28
+
+
+Table 3: Values for NSE reported in Fig 7 with 95% confidence intervals
+
+
+_β_ _γ_ ˜0 Mean Validity (95% CI) Mean Conformer Vendi (95% CI)
+
+
+0.0 0.0002 0.74 (0.68 _±_ 0.81) 518.92 (505.70 _±_ 531.90)
+0.4 0.0004 0.68 (0.58 _±_ 0.77) 529.85 (484.34 _±_ 580.24)
+0.3 0.0004 0.68 (0.55 _±_ 0.79) 537.83 (491.25 _±_ 588.98)
+0.1 0.0004 0.60 (0.42 _±_ 0.77) 639.04 (501.23 _±_ 857.00)
+0.2 0.0004 0.57 (0.37 _±_ 0.74) 902.23 (534.29 _±_ 1559.95)
+0.1 0.0005 0.48 (0.25 _±_ 0.69) 1678.29 (669.60 _±_ 3024.30)
+0.0 0.0005 0.19 (0.02 _±_ 0.40) 2151.14 (1256.65 _±_ 3162.47)
+
+
+Values are mean (95% confidence interval). Confidence intervals computed using bootstrapping and shown to
+two decimal places.
+
+
+Table 4: Values for FDC reported in Fig 7 with 95% confidence intervals
+
+
+_β_ _γ_ ˜0 Mean Validity (95% CI) Mean Conformer Vendi (95% CI)
+
+
+0.4 0.0001 0.71 (0.67 _±_ 0.74) 484.34 (461.47 _±_ 506.75)
+0.5 0.0002 0.71 (0.63 _±_ 0.77) 496.06 (467.29 _±_ 523.97)
+0.7 0.0002 0.70 (0.64 _±_ 0.75) 502.49 (483.86 _±_ 526.78)
+0.5 0.0001 0.69 (0.65 _±_ 0.74) 505.84 (468.66 _±_ 538.20)
+0.2 0.0003 0.67 (0.58 _±_ 0.77) 539.29 (504.70 _±_ 585.65)
+0.9 0.001 0.56 (0.49 _±_ 0.62) 601.06 (531.19 _±_ 699.07)
+0.3 0.0004 0.54 (0.34 _±_ 0.72) 664.45 (531.77 _±_ 847.98)
+0.5 0.0005 0.46 (0.30 _±_ 0.66) 674.63 (544.65 _±_ 824.76)
+0.4 0.0005 0.41 (0.25 _±_ 0.58) 768.98 (599.68 _±_ 975.95)
+0.1 0.0004 0.41 (0.24 _±_ 0.56) 1084.21 (574.88 _±_ 2062.43)
+0.1 0.0005 0.40 (0.15 _±_ 0.66) 1774.38 (828.37 _±_ 2904.44)
+0.2 0.0005 0.30 (0.07 _±_ 0.56) 1948.54 (954.87 _±_ 3004.34)
+
+
+Values are mean (95% confidence interval). Confidence intervals computed using bootstrapping and shown to
+two decimal places.
+
+
+G.5.6 ABLATION: PURE EXPAND AND PROJECT STEPS
+
+
+In order to isolate the effects of the EXPAND and PROJECT steps, we report the result of running
+each for _K_ = 3 iterations in Fig. 8. Fig. 8 shows the Pareto optimal points of the following
+hyperparameter combinations:
+
+
+EXPAND step (NSE, black circles in Fig. 8)
+
+
+    - _β_ : 0 _._ 0, 0 _._ 1, 0 _._ 2, 0 _._ 3, 0 _._ 4, 0 _._ 5, 0 _._ 6, 0 _._ 7, 0 _._ 8, 0 _._ 9, 0 _._ 95
+
+
+    - _γ_ ˜0: 0 _._ 0001, 0 _._ 0002, 0 _._ 0003, 0 _._ 0004, 0 _._ 0005
+
+
+PROJECT step (green circles in Fig. 8)
+
+
+    - _ηk_ = _η_ 0 constant set to: 0 _._ 0, 0 _._ 1, 0 _._ 5, 1 _._ 0, 2 _._ 0, 5 _._ 0
+
+
+We remark again that running only the EXPAND step without the PROJECT step is equivalent to
+running NSE. For each parameter combination above we average results over 8 seeds. Notice that the
+EXPAND and PROJECT steps have the reverse effect of each other: the EXPAND step trades off
+validity for increased diversity (Conformer Vendi) where as the PROJECT step increases validity at
+a cost of marginally reduced diversity.
+
+
+29
+
+
+Figure 8: Illustrating the result of isolating the EXPAND step (NSE) and the PROJECT step
+
+
+G.5.7 COMPARISON WITH INFERENCE TIME FILTERING
+
+
+In this section, we consider an additional comparison of the proposed methods against a baseline
+corresponding to FDC plus inference-time filtering. We report the results in Fig. 9 below. In particular,
+we consider the following algorithms:
+
+
+    - FDC (De Santi et al., 2025b) + inference-time filtering (blue in Fig. 9)
+
+    - NSE (Alg. 3 + inference-time filtering (black in Fig. 9)
+
+    - L-FE
+
+
+In particular, for the first two cases above, given a model fine-tuned using FDC or NSE, we filter the
+samples generated at inference time by using the same weak verifier employed by L-FE. We note
+that this schemes induce a closed-form solution formally mathematically equivalent to conditional
+sampling, with the condition that the samples are in Ω _v_ . Thus, this schemes effectively amounts to
+simulating a perfect projection step, albeit at the price of costly per-sample inference-time filtering
+(e.g.,, via rejection sampling). We calculate the Conformer Vendi and validity on each set of 5000
+molecules, and report the results in Fig. 9 below. As one can notice, NSE + filtering shows superior
+performance compared against FDC + filtering, while L-FE shows slightly less validity than NSE +
+filtering, while being significantly cheaper at sampling time, which is a needed requirement for certain
+generative modeling applications. Compared with FDC + filtering, L-FE shows superior exploration
+capabilities and slightly lower validity. Nonetheless, it might be possible to parametrize L-FE to
+achieve lower diversity and higher validity, similarly to FDC + filtering. In particular, these two
+algorithms theoretically have the same closed-form solutions, and the concrete differences amount to
+the high per-sample cost of inference-time filtering, and the superior exploration capabilities of L-FE
+and NSE over FDC likely due to noised space exploration, as discussed in Sec. 2.
+
+
+Each point in Fig. 9 corresponds to a different Pareto optimal parametrization ( _β_, _γ_ and _η_ if applicable)
+for each method. Each method is run for _K_ = 3 iterations, with results averaged across 8 seeds. See
+section G.5.2 for details about other hyperparameters.
+
+
+G.5.8 HARDWARE
+
+
+We ran all of our experiments using a single NVIDIA RTX 2080Ti GPU per run (QM9 experiments)
+or a single NVIDIA RTX 4090 GPU per run (GEOM experiments).
+
+
+30
+
+
+Figure 9: L-FE compared to NSE and FDC with inference-time filtering for different parameterizations.
+We note that L-FE maintains competitive performance with both methods despite having no filter
+applied to the output samples, and NSE still outperforms FDC when both are corrected with an
+inference-time filter.
+
+
+H UPDATE STEP REPARAMETRIZATION
+
+
+Recall the expression for the gradient of running costs in the Local Flow Expander algorithm (Alg. 2,
+equation 14):
+
+
+_λt∇xtδG_ ( _p_ _[π]_ _t_ [) =] _[ λ][t][∇][x]_ _t_ _[δ]_ [(] _[H]_ [(] _[p][π]_ _t_ [)] _[ −]_ _[α][t][D]_ [KL][(] _[p]_ _t_ _[π][||][p]_ _t_ [pre][))] (54)
+
+= _λt_ ( _−s_ _[π]_ _t_ [+] _[ α]_ [(] _[s]_ _t_ _[π]_ _[−]_ _[s]_ _t_ [pre][))] (55)
+
+= _−λt_ (( _α_ + 1) _s_ _[π]_ _t_ _[−]_ _[αs]_ _t_ [pre][)] (56)
+
+
+which are then multiplied by the stepsize _γk_ at each iteration, resulting in the following expression
+being plugged into the Adjoint Matching algorithm as the gradient of the running cost:
+
+
+_∇ft_ = _−γkλt_ (( _α_ + 1) _s_ _[π]_ _t_ _[−]_ _[αs]_ _t_ [pre][)] _[ .]_ (57)
+
+
+While _α_ has an intuitive interpretation as the regularization strength in objective 7, it has the
+unfortunate side-effect of scaling the magnitude of the running cost which could potentially have the
+opposite effect. Indeed, notice that as _α →∞_ the running costs explode. For practical applications it
+seems more suitable to reparametrize the running cost as follows:
+
+
+_∇ft_ = _−γ_ ˜ _kλt_ ( _s_ _[π]_ _t_ _[−]_ _[βs]_ _t_ [pre][)] (58)
+
+
+for _β_ = _αα_ +1 _[∈]_ [[0] _[,]_ [ 1]][, absorbing a][ (] _[α]_ [ + 1)][ factor into the new stepsize][ ˜] _[γ][k]_ [:]
+
+
+_γ_ ˜ _k_ = ( _α_ + 1) _γk ._ (59)
+
+
+Note that this parametrization is as expressive as before but is easier to tune as it disentangles the
+effect of the stepsize and the regularization strength.
+
+
+31

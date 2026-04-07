@@ -1,0 +1,4894 @@
+# BACK TO SQUARE ROOTS: AN OPTIMAL BOUND ON THE MATRIX FACTORIZATION ERROR FOR MULTI- EPOCH DIFFERENTIALLY PRIVATE SGD
+
+
+**Nikita P. Kalinin**
+Institute of Science and Technology (ISTA)
+Klosterneuburg, Austria
+nikita.kalinin@ist.ac.at
+
+
+**Jalaj Upadhyay**
+Rutgers University
+New Jersey, USA
+jalaj.upadhyay@rutgers.edu
+
+
+**Ryan McKenna**
+Google Research
+mckennar@google.com
+
+
+**Christoph H. Lampert**
+Institute of Science and Technology (ISTA)
+Klosterneuburg, Austria
+chl@ist.ac.at
+
+
+ABSTRACT
+
+
+Matrix factorization mechanisms for differentially private training have emerged
+as a promising approach to improve model utility under privacy constraints. In
+practical settings, models are typically trained over multiple epochs, requiring
+matrix factorizations that account for repeated participation. Existing theoretical
+upper and lower bounds on multi-epoch factorization error leave a significant
+gap. In this work, we introduce a new explicit factorization method, Banded
+Inverse Square Root (BISR), which imposes a banded structure on the inverse
+correlation matrix. This factorization enables us to derive an explicit and tight
+characterization of the multi-epoch error. We further prove that BISR achieves
+asymptotically optimal error by matching the upper and lower bounds. Empirically,
+BISR performs on par with state-of-the-art factorization methods, while being
+simpler to implement, computationally efficient, and easier to analyze.
+
+
+1 INTRODUCTION
+
+
+Private machine learning has become increasingly important as the use of sensitive data in model
+training continues to grow. Ensuring privacy while maintaining model accuracy presents a critical
+challenge, particularly in fields like healthcare, finance, and personal data analysis. _Differential_
+_Privacy_ (DP) has emerged as a fundamental framework for formalizing privacy guarantees in machine
+learning. It provides a mathematically rigorous way to limit the influence of any individual data
+point on the model’s output, thereby preserving privacy. One effective approach to achieving DP in
+iterative training is through the use of structured noise mechanisms that balance privacy guarantees
+with model utility.
+
+
+In this work, we focus on the _Matrix Factorization Mechanism_ (see Section 2.1 for a formal description) for ensuring DP. Matrix factorization has been extensively studied in recent years in the broader
+machine learning application (Kairouz et al., 2021; Denisov et al., 2022; Fichtenberger et al., 2023;
+Henzinger et al., 2023; Choquette-Choo et al., 2023b; Andersson & Pagh, 2023; Henzinger et al.,
+2024; Kalinin & Lampert, 2024; Henzinger & Upadhyay, 2025; Pillutla et al., 2025; Henzinger et al.,
+2025b). It has also been investigated in private optimization (Koloskova et al., 2023; Choquette-Choo
+et al., 2024a), federated learning (Zhang et al., 2025; Bienstock et al., 2025), and in the context of
+adaptive optimizers (Kalinin et al., 2025; Ganesh et al., 2025). In particular, memory-efficient matrix
+factorization has attracted significant attention in recent years (McMahan et al., 2024; Dvijotham
+et al., 2024; Andersson & Pagh, 2025; Henzinger et al., 2025a).
+
+
+The approach has also been adopted in practice; for example, Google has reported its use for training
+production on-device language models in their 2024 blog post ”Advances in private training for
+production on-device language models" (Xu & Zhang, 2024). The core idea of the MF mechanism
+
+
+1
+
+
+is to inject correlated noise into the gradients during training. The correlations are determined by
+the inverse of a matrix _C_ _∈_ R _[n][×][n]_, referred to as the _strategy matrix_ . While _C_ serves as a factor
+in the matrix factorization that defines the mechanism and used in calculation of the privacy level,
+its inverse _C_ _[−]_ [1] functions as the _correlation matrix_, specifying how the injected noise is correlated
+across training steps. This structure allows the mechanism to preserve model accuracy while still
+guaranteeing privacy.
+
+
+Intuitively, the mechanism can be seen as follows: at each training step, fresh noise is generated and
+added, but part of the previous noise is stored in a buffer. In subsequent steps, portions of the stored
+noise are subtracted in a controlled manner. This cancellation effect reduces the total amount of noise
+that accumulates in the model, thereby improving utility without weakening privacy guarantees.
+
+
+When computing privacy, we must account for _multi-epoch_ _participation_, since in multi-epoch
+training the same datapoints are used multiple times. The notion of multi-epoch participation in
+the context of matrix factorization was first introduced by Choquette-Choo et al. (2023a), where
+it was formulated as an optimization problem over banded matrices. However, a key limitation of
+existing methods is the lack of precise theoretical guarantees on the _factorization error_ in multi-epoch
+participation. While Kalinin & Lampert (2024) established a general lower bound and provided an
+upper bound for _Square Root Factorization_, the error bounds for _Banded Square Root Factorization_,
+where the correlation matrix _C_ is _p_ -banded, remained imprecise with respect to the bandwidth _p_ .
+
+
+In this work, we propose a novel approach to matrix factorization: rather than imposing a banded
+structure on the correlation matrix _C_, we introduce a _banded_ _inverse_ _square_ _root_, enforcing the
+banded structure on _C_ _[−]_ [1] . This shift [1] offers several key advantages. First, it allows for precise
+control over the resulting factorized matrices, enabling us to derive **explicit upper bounds** on the
+factorization error with clear dependence on the bandwidth. Second, the method is **computationally**
+**efficient**, as it requires one just to convolve the previous noise with a quickly computable fixed
+sequence of coefficients, which can be done for instance via Fast Fourier Transform (FFT), making it
+suitable for large-scale machine learning tasks. Most importantly, we prove that our method achieves
+**asymptotically optimal factorization error** : we establish a **new lower bound** that matches our
+upper bound, closing a significant theoretical gap in the literature.
+
+
+By refining the theoretical understanding of banded factorization in multi-epoch settings, our work
+provides both theoretical insights and practical benefits for privacy-preserving ML training. Our main
+contributions are:
+
+
+1. We introduce a new factorization method, the _**Banded Inverse Square Root (BISR)**_, which is
+scalable, efficient, and agnostic to the underlying training objective.
+2. We prove that BISR is **asymptotically optimal**, by deriving tight upper and lower bounds on the
+multi-epoch factorization error, with explicit dependence on bandwidth and workload properties.
+3. We conduct a thorough empirical evaluation, comparing BISR to existing techniques in multi
+participation trainingincluding Banded Square Root (BSR) (Kalinin & Lampert, 2024), Buffered
+Linear Toeplitz (BLT) (Dvijotham et al., 2024), and Banded Matrix Factorization (Band-MF)
+(McKenna, 2025), showing that BISR achieves a higher or comparable accuracy for the large
+matrix sizes.
+4. In the low-memory regime, we propose an optimization method, **BandInvMF**, which directly
+optimizes the coefficients of the matrix _C_ _[−]_ [1] . This approach achieves error rates comparable to
+state-of-the-art factorization methods, while being easy and efficient to implement.
+
+
+2 BACKGROUND
+
+
+2.1 MATRIX FACTORIZATION (MF)
+
+
+MF mechanisms provide a promising approach to the private matrix multiplication problem, which has
+applications in continual counting and Stochastic Gradient Descent for machine learning. Specifically,
+we aim to estimate the product of a public matrix of coefficients _A_ _∈_ R _[n][×][n]_ and a private matrix
+_X_ _∈_ R _[n][×][d]_ . Instead of doing so directly, we adopt a factorization _A_ = _BC_, allowing us to estimate
+
+
+1The inverse correlation matrix has been receiving more attention recently. In the concurrent work McMahan
+& Pillutla (2025), the authors consider the inverse correlation matrix of BLT.
+
+
+2
+
+
+_AX_ privately as _AX_ = _B_ ( _CX_ + _Z_ ) = _A_ ( _X_ + _C_ _[−]_ [1] _Z_ ). Here, _Z_ _∼N_ (0 _, s_ [2] ) _[n][×][d]_ is appropriately
+
+[�]
+scaled Gaussian noise, which ensures that _CX_ + _Z_ _∈_ R _[n][×][d]_ is private; the multiplication by _B_
+preserves the privacy guarantees due to DP’s post-processing property.
+
+
+The choice of factorization _A_ = _BC_ can significantly impact the quality of the private estimation.
+We quantify the _approximation quality_ by the expected Frobenius error of the estimated product,
+
+_E_ ( _B, C_ ) [2] = [1] _[−]_ _AX_ [�] _∥_ [2] F _[,]_ (1)
+
+_n_ [E] _[Z][∥][AX]_
+
+
+where _∥· ∥_ F is the Frobenius norm. An elementary analysis (Li et al., 2015) shows that
+
+_E_ ( _B, C_ ) [2] = _[s]_ [2] F _[,]_ (2)
+
+_n_ _[∥][B][∥]_ [2]
+
+
+and that the required noise strength, _s_, scales proportionally to the _sensitivity_ of the matrix _C_ . Let
+_X_ _∼_ _X_ _[′]_ indicate that the update vector sequences differ only in the entries corresponding to a single
+data item. Then the sensitivity of the matrix _C_ is defined as
+
+
+sens( _C_ ) := sup _[−]_ _[CX]_ _[′][∥]_ [F] (3)
+_X∼X_ _[′][ ∥][CX]_
+
+
+**Private** **SGD.** In this work, we consider the task of model training with SGD with (optional)
+weight decay and momentum. The corresponding update equations are _θi_ +1 = _αθi_ _−_ _mi_ +1 and
+_mi_ +1 = _βmi_ + _xi_, where _θ_ 1 _, . . ., θn_ _∈_ R _[D]_ are the model parameters after each update step,
+_x_ 1 _, . . ., xn_ are the gradient vectors computed in each update step, 0 _<_ _α_ _≤_ 1 is the weight decay
+factor, and 0 _≤_ _β_ _<_ 1 is the momentum strength [2] .
+
+
+Following Kalinin & Lampert (2024), we rewrite the dynamics in the matrix form as Θ = _Aα,βX_,
+with Θ = ( _θ_ 1 _, . . ., θn_ ) _[⊤]_ _∈_ R _[n][×][D]_, _X_ = ( _x_ 1 _, . . ., xn_ ) _[⊤]_ _∈_ R _[n][×][D]_, and _Aα,β_ is the _SGD workload_
+_matrix_ defined as follows:
+
+
+
+
+
+
+
+
+- _α_ _[j]_ _β_ _[n][−]_ [2] _[−][j]_ _· · ·_ 1
+
+_j_ =0
+
+
+_Aα,β_ =
+
+
+
+
+
+
+
+
+
+
+1 0 _· · ·_ 0
+_α_ + _β_ 1 _· · ·_ 0
+... ... ... ...
+_n−_ 1 _n−_ 2
+
+- _[j]_ _[n][−]_ [1] _[−][j]_ - _[j]_ _[n][−]_ [2] _[−][j]_
+
+
+_n−_ 1 _n−_ 2
+
+- _α_ _[j]_ _β_ _[n][−]_ [1] _[−][j]_ 
+_j_ =0 _j_ =0
+
+
+
+
+ _∈_ R _[n][×][n]_ _._ (4)
+
+
+
+
+
+Note that, in contrast to the naive MF setting, in the SGD case any input data (gradient) _xi_ depends
+on the previously computed model parameters, _θi−_ 1, that is, we aim for _adaptive privacy_ . However,
+Denisov et al. (2022) shows that for Gaussian noise, adaptive privacy follows from the non-adaptive
+one, i.e., it suffices for us to solve the case in which the _X_ matrix is an arbitrary fixed data matrix.
+Consequently, we estimate _Aα,βX_ privately using the form _A_ [�] _α,βX_ = _Aα,β_ ( _X_ + _C_ _[−]_ [1] _Z_ ). This form
+corresponds to running SGD, but each individual gradient update is perturbed by a correlated noise
+vector. That has the advantage that we do not need to store any previous gradients, and we can rely
+on any existing implementation of the SGD procedure.
+
+
+In multi-epoch SGD, each data sample might contribute to more than one gradient update vector. As
+a suitable notion of sensitivity, we adopt the setting of _b_ -min-separated repeated participation (two
+participations of any data point occur at least _b_ update steps apart). The resulting sensitivity can be
+bounded as Choquette-Choo et al. (2023a):
+
+
+sens _k,b_ ( _C_ ) _≤_ max
+_π∈_ Π _k,b_
+
+
+ - _|_ ( _C_ _[⊤]_ _C_ )[ _i,j_ ] _|_ (5)
+
+
+_i,j∈π_
+
+
+where Π _k,b_ denotes the collection of index sets drawn from _{_ 1 _, . . ., n}_ that contains at most _k_
+elements and satisfy the condition that any two distinct indices are separated by at least _b_ positions,
+so that no two indices in the set lie closer than _b_ apart.
+
+
+This bound becomes an equality in the case where all entries of _C_ _[⊤]_ _C_ are non-negative.
+
+
+2For simplicity of exposition, we use an implicit learning rate of 1. Because of the linearity of the operations,
+the general case can be recovered by pre-scaling _x_ 1 _, . . ., xn_ accordingly.
+
+
+3
+
+
+**BISR noise correlation (p = 3)**
+
+
+**Noise Z** **X = C** **[−1]** **Z + X** **Clipped Aggregated**
+
+**Gradients X**
+
+
+c = 1
+0
+
+
+c = −½
+1
+
+
+c = −⅛
+2
+
+
+|z x̂ x<br>1 1 1<br>z x̂ x<br>2 2 2<br>z x̂ x<br>3 3 3<br>z x̂ x<br>4 4 4|z<br>1|Col3|x̂<br>1|Col5|x<br>1|
+|---|---|---|---|---|---|
+|z1<br>z2<br>z3<br>z4<br>x 1<br>x 2<br>x 3<br>x 4<br>x1<br>x2<br>x3<br>x4|z4|z4|x 4|x 4|x4|
+|z1<br>z2<br>z3<br>z4<br>x 1<br>x 2<br>x 3<br>x 4<br>x1<br>x2<br>x3<br>x4|z4|||||
+
+
+|z4 ⋮|Col2|x̂ 4 ⋮|Col4|x4 ⋮|
+|---|---|---|---|---|
+|zn||x n||xn|
+|zn|||||
+
+
+Figure 1: Illustration of noise correlation using the Banded Inverse Square Root (BISR) method with
+bandwidth _p_ = 3. For example, at step 4, we form a new aggregate from a sampled batch of clipped
+gradients _x_ 4. We take the noise vectors _z_ 2 and _z_ 3 from the Noise Buffer and add them to the gradient
+with coefficients _c_ 1 = _−_ [1] [and] _[ c]_ [2] [=] _[ −]_ [1] [, respectively.] [We then generate a new noise vector] _[ z]_ [4][ and]
+
+
+[1] 2 [and] _[ c]_ [2] [=] _[ −]_ [1] 8
+
+
+with coefficients _c_ 1 = _−_ 2 [and] _[ c]_ [2] [=] _[ −]_ 8 [, respectively.] [We then generate a new noise vector] _[ z]_ [4][ and]
+
+add it directly to obtain the private estimate _x_ ˆ4. Finally, we remove _z_ 2 from the buffer and insert _z_ 4
+in its place.
+
+
+2.2 PRIVACY GUARANTEES
+
+
+The privacy analysis of our mechanism relies on the well-established Gaussian mechanism, which
+allows achieving arbitrary ( _ε, δ_ )-differential privacy levels by calibrating the noise variance to the
+sensitivity of the underlying query. In particular, Theorem 2.1 of Denisov et al. (2022) states that the
+guarantees proved for the nonadaptive continual release model extend to the fully adaptive setting
+under a suitable factorization of the query matrix. This ensures that the same differential privacy
+guarantees hold even when the input stream is chosen adaptively. A related multi-epoch variant was
+studied in Choquette-Choo et al. (2023a), which corresponds to a specific choice of the notion of
+neighboring streams.
+**Theorem 1.** (Denisov et al., 2022, Theorem 2.1) _Let A ∈_ R _[n][×][n]_ _be a lower-triangular full-rank query_
+_matrix, and let A_ = _BC_ _be any factorization with the following property:_ _for any two neighboring_
+_streams of vectors G, H_ _∈_ R _[n][×][d]_ _, differing only in positions of participation of a single user, we have_
+_∥C_ ( _G −_ _H_ ) _∥F_ _≤_ _κ._ _Let Z_ _∼N_ (0 _, κ_ [2] _σ_ [2] ) _[n][×][d]_ _with σ large enough so that_
+_M_ ( _G_ ) = _AG_ + _BZ_ = _B_ ( _CG_ + _Z_ )
+
+_satisfies_ ( _ε, δ_ ) _-DP_ _in_ _the_ _nonadaptive_ _continual_ _release_ _model._ _Then_ _M_ _satisfies_ _the_ _same_ _DP_
+_guarantee (with the same parameters) even when the rows of the input are chosen adaptively._
+
+
+Formally, the privacy guarantee of the Gaussian mechanism itself is characterized by the following
+analytic condition due to Balle & Wang (2018), which provides the exact relationship between the
+sensitivity, the privacy parameters, and the variance of the added Gaussian noise:
+**Theorem 2** (Analytic Gaussian Mechanism (Balle & Wang, 2018)) **.** _Let f_ : _X_ _→_ R _[d]_ _be a function_
+_with_ _global_ _ℓ_ 2 _sensitivity_ ∆ _._ _For_ _any_ _ε_ _≥_ 0 _and_ _δ_ _∈_ [0 _,_ 1] _,_ _the_ _Gaussian_ _output_ _perturbation_
+_mechanism M_ ( _x_ ) = _f_ ( _x_ ) + _Z_ _with Z_ _∼N_ (0 _, σ_ [2] I _d_ ) _is_ ( _ε, δ_ ) _-DP if and only if_
+
+
+_[εσ]_ ∆ - _−_ _e_ _[ε]_ Φ� _−_ 2 [∆] _σ_
+
+
+_[εσ]_ ∆ - _≤_ _δ._
+
+
+Φ� 2∆ _σ_ _[−]_ _[εσ]_ ∆
+
+
+2 [∆] _σ_ _[−]_ _[εσ]_ ∆
+
+
+This condition enables tight calibration of the noise level _σ_ for any target privacy parameters ( _ε, δ_ ).
+
+
+**Optimal factorization.** Better choices of factorization matrices can achieve the same privacy levels
+with less added noise, potentially leading to higher utility. Therefore, various factorizations have
+been proposed and studied theoretically as well as empirically.
+
+
+4
+
+
+**Algorithm 1** Differentially Private SGD with Banded Inverse Matrix Factorization
+
+
+**Input:** Initialization _θ_ 0 _∈_ R _[d]_, dataset _D_, batch size _B_, clip norm _ζ_, learning rate _η_ _>_ 0, weight
+decay 0 _< α ≤_ 1, momentum 0 _≤_ _β_ _<_ 1, loss _ℓ_ ( _θ, d_ ), noise multiplier _σϵ,δ_ _>_ 0, coefficients of
+the banded inverse Toeplitz correlation matrix _C_ _[−]_ [1] : ( _c_ 0 _, . . ., cp−_ 1)
+1: Initialize _m_ 0 _←_ **0** _∈_ R _[d]_
+
+2: **for** _i_ = 1 to _n_ **do**
+3: Sample a minibatch _Si_ = _{d_ 1 _, . . ., dB} ⊆D_
+4: **for** _j_ = 1 to _B_ **do**
+5: _gj_ _←∇θ ℓ_ ( _θi−_ 1 _, dj_ )
+6: _g_ ˜ _j_ _←_ min�1 _,_ _∥gζj_ _∥_  - _gj_ _▷_ per-example clipping
+
+7: _xi_ _←_ [�] _[B]_ _j_ =1 _[g]_ [˜] _[j]_ _▷_ aggregate clipped gradients
+
+8: Draw _Zi_ _∼N_ (0 _, σϵ,δ_ [2] [I] _[d]_ [)]
+
+9: _x_ ˆ _i_ _←_ _xi_ + _ζ_ [�] _t_ [min(] =0 _[p,i]_ [)] _[−]_ [1] _ct Zi−t_ _▷_ BISR noise injection
+10: _mi_ _←_ _β mi−_ 1 + ˆ _xi_ _▷_ momentum update
+11: _θi_ _←_ _α θi−_ 1 _−_ _η mi_ _▷_ weight decay + step
+12: **return** _θn_
+
+
+Choquette-Choo et al. (2023a) defines the _optimal factorization_ as the one that minimizes the expected
+approximation error (1), and proposed an optimization problem to (approximately) compute this
+factorization. A downside of this approach is that the optimization problem is computationally
+expensive and the numeric solution does not provide theoretical insights, such as the optimal (i.e.
+lowest) rate of growth of the approximation error.
+
+
+On the other hand, a square root factorization introduced by Henzinger et al. (2024), is an explicit
+factorization, defined by _Aα,β_ = _Cα,β_ [2] [,] [with] [positive] [main] [diagonal.] [Kalinin] [&] [Lampert] [(2024)]
+showed that the factorization error of the square root factorization under multi-epoch participation
+is worse than that of the optimal factorization and they introduced _banded_ _square_ _root_ (BSR)
+factorization, which is defined by making the matrix _Cα,β_ banded. A limitation of BSR is that its
+guarantees are implicit in terms of the used bandwidth, which does not allow concluding how they
+relate to the optimal multi-epoch factorization at a theoretical level.
+
+
+3 BANDED INVERSE SQUARE ROOT FACTORIZATION
+
+
+In this section, we present our main theoretical results: we prove a new lower bound on the achievable
+approximation error (Theorem 3), we introduce the BISR factorization (Definition 1), and we prove
+that BISR achieves this (therefore optimal) rate (Theorem 4).
+
+
+We first show an improved version of the lower bounds of the approximation error for general
+factorizations from Kalinin & Lampert (2024).
+**Theorem 3** (General Multi-Participation Lower Bound) **.** _Let Aα,β_ _∈_ R _[n][×][n]_ _be the SGD workload_
+_matrix_ (4) _, with momentum β_ _>_ 0 _and weight decay α >_ 0 _._ _In the multi-participation setting with_
+_separation_ 1 _≤_ _b ≤_ _n and k_ = _⌈_ _[n]_ _[⌉][, for any factorization][ A][α,β]_ [=] _[ BC][, it holds]_
+
+
+_b_ _[⌉][, for any factorization][ A][α,β]_ [=] _[ BC][, it holds]_
+
+
+_√_
+�Ω(
+_E_ ( _B, C_ ) =
+
+
+(6)
+_k_ ) _if_ _α <_ 1 _._
+
+
+Ω( _k_ log _n_ + _k_ ) _if_ _α_ = 1 _,_
+
+_√_
+Ω _α_ ( _k_ ) _if_ _α <_ 1 _._
+
+
+_√_
+_Proof Sketch._ We use the probabilistic method in Lemma 6 to obtain the bounds Ω _α_ (
+
+
+_Proof Sketch._ We us _√_ e the probabilistic method in Lemma 6 to obtain the bounds Ω _α_ ( _k_ ) for _α <_ 1
+
+and _E_ ( _B, C_ ) = Ω( _k_ log _n_ ) for _α_ = 1. It remains to prove that for _α_ = 1, we also have the lower
+
+bound _E_ ( _B, C_ ) = Ω( _k_ ). For that, we prove a general inequality: given a valid participation vector _**π**_,
+we have _E_ ( _B, C_ ) _≥_ [1] _[∥][A]_ [1] _[,β]_ _**[π]**_ _[∥]_ [2][.]
+
+
+_n_ _[∥][A]_ [1] _[,β]_ _**[π]**_ _[∥]_ [2][.]
+
+
+As our second main contribution, we now introduce the BISR factorization for multi-epoch SGD.
+
+**Definition 1** (Banded Inverse Square Root (BISR)) **.** _For a given workload matrix A, let C_ _be the_
+_matrix square root (i.e. C_ [2] = _A) with positive values on the diagonal._ _Let C_ _[p]_ _be the matrix obtained_
+
+
+5
+
+
+_by:_ _i) computing the inverse matrix C_ _[−]_ [1] _, ii) imposing a banded structure with p bands by setting all_
+_elements below the p-th diagonal to zero, iii) inverting the resulting banded matrix back._ _Then, we_
+_denote by BISR the matrix factorization A_ = _B_ _[p]_ _C_ _[p]_ _, with B_ _[p]_ = _A_ ( _C_ _[p]_ ) _[−]_ [1] _._
+
+
+BISR can be seen as an alternative realization of the insights behind the BSR (Banded Square Root)
+factorization from Kalinin & Lampert (2024). There, the intuition was that making the matrix _C_ _p_ banded reduces its sensitivity without increasing the Frobenius norm of the subsequent postprocessing
+matrix too much, thereby resulting in an overall reduction of the approximation error. The authors
+did not derive exact rates, though, because the dependence on _p_ is not explicit.
+
+
+For BISR, we instead make the matrix _C_ _[−]_ [1] _p_ -banded. This also leads to a reduction of the approximation error compared to the non-banded case, but with two additional advantages. First, the
+resulting algorithm (see Algorithm 1 and Figure 1 for the illustration) is time- and memory-efficient
+because the product of ( _C_ _[p]_ ) _[−]_ [1] _Z_ can be represented as a convolution with _p_ elements. Therefore, the
+computation can be performed efficiently: in a streaming setting, only _p_ rows of the matrix _Z_ need to
+be stored at any time, while in an offline setting (which requires more storage), it can be accelerated
+further using the Fast Fourier Transform. Second, and mainly, it allows us to derive more explicit
+expressions of the approximation error with respect to the bandwidth _p_ . In particular, we show the
+following.
+
+**Theorem 4** (BISR Approximation Error) **.** _For_ 1 _≤_ _p ≤_ _n and_ 1 _≤_ _k_ _≤_ _[n]_ _b_ _[the following upper bound]_
+
+_holds for the matrix factorization error of the BISR Aα,β_ = _Bα,β_ _[p]_ _[C]_ _α,β_ _[p]_ _[(as in Definition 1):]_
+
+
+log _p_ _p_ + ~~�~~ _kp_ log _b_ _p_
+
+
+_b_
+
+
+_for_ _α_ = 1 _,_
+
+
+- _√_ _k_ log _p_ + _nk_
+
+
+_E_ ( _Bα,β_ _[p]_ _[, C]_ _α,β_ _[p]_ [) =]
+
+
+
+
+
+
+ _Oβ_
+
+
+ _O_
+
+
+_√_
+_Oα,β_ (
+
+
+(7)
+_k_ ) _for_ _α <_ 1 _,_
+
+
+~~�~~ _nk_ log _p_
+_b_ [+] _p_
+
+
+_where Oα,β_ _and Oβ_ _indicate that the hidden constant may depend on α and β, respectively._
+
+
+_Proof sketch._ To prove Theorem 4, we use Lemma 11 to bound the Frobenius norm _∥Bα,β_ _[p]_ _[∥][F]_ [ .] [Then,]
+Theorem 2 from Kalinin & Lampert (2024) (see Theorem 5), together with monotonicity of values
+_Cα,β_ _[p]_ [from Lemma 8, provides an explicit way to express the sensitivity][ sens] _[k,b]_ [(] _[C][α,β]_ [)][.] [To bound the]
+sensitivity, we apply Lemma 12 to bound individual values. The product of the bounds on _∥Bα,β_ _[p]_ _[∥][F]_
+and sens _k,b_ ( _Cα,β_ ) yields the result. The full proof of Theorem 4 can be found in the appendix.
+
+
+log _p_ _p_ - + _Op_ ( _√_
+
+
+For comparison, Kalinin & Lampert (2024) proved a bound _O_ �� _nk_ log _p_
+
+
+For comparison, Kalinin & Lampert (2024) proved a bound _O_ _p_ + _Op_ ( _k_ ) on the
+
+approximation error of the BSR in the case _α_ = 1, _β_ = 0. While the first term also appears in (7), the
+second is non-informative about the effect of the bandwidth, _p_ . Therefore, it does not allow making a
+statement about the optimality of the BSR.
+
+
+In contrast, Theorem 4 is explicit about the role of _p_ . Choosing its value to be _O_ ( _b_ log _b_ ), such that
+the occurring terms in (7) are minimized, we obtain the following corollary.
+
+**Corollary 1** (Optimized BISR Approximation Error) **.** _Let Aα,β_ = _Bα,β_ _[p]_ _[C]_ _α,β_ _[p]_ _[be the BISR factor-]_
+_ization defined of Definition 1._ _For_ 1 _≤_ _b_ _≤_ _n let k_ = _⌈_ _[n]_ _b_ _[⌉][.]_ _[Then, for][ p][∗]_ [=] _[O]_ [(] _[b]_ [ log] _[ b]_ [)] _[, the matrix]_
+
+_factorization error admits the following optimized upper bound:_
+
+
+_E_ ( _B_ _[p][∗]_
+
+
+_α,β_ _[p][∗]_ _[, C]_ _α,β_ _[p][∗]_
+
+
+_α,β_ [) =]
+
+
+- - _√_ _Oβ_ _k_ log _n_ + _k_ _,_ _for α_ = 1 _,_
+
+
+_√_
+_Oα,β_ (
+
+
+(8)
+_k_ ) _,_ _for α <_ 1 _._
+
+
+Comparing the upper bound in eq. (8) with the lower bound in eq. (6), we obtain that BISR is an
+**asymptotically optimal** factorization in the multi-participation setting.
+
+
+To use the BISR factorization, we apply the following lemma, which provides analytic expressions
+for the elements of the inverse matrix _Cα,β_ _[−]_ [1] [.]
+
+
+6
+
+
+200
+
+
+180
+
+
+160
+
+
+140
+
+
+120
+
+
+100
+
+
+8.8
+
+
+8.7
+
+
+8.6
+
+
+8.5
+
+
+8.4
+
+
+8.3
+
+
+8.2
+
+
+8.1
+
+
+24
+
+
+22
+
+
+20
+
+
+18
+
+
+16
+
+
+14
+
+
+10 [3] 10 [4]
+Bandwidth (p)
+
+
+(a) _α_ = 1, _β_ = 0
+
+
+10 [3] 10 [4]
+Bandwidth (p)
+
+
+(b) _α_ = 1, _β_ = 0 _._ 9
+
+
+10 [3] 10 [4]
+Bandwidth (p)
+
+
+(c) _α_ = 0 _._ 999, _β_ = 0
+
+
+Figure 2: RMSE comparison for Banded Square Root (BSR) and Banded Inverse Square Root (BISR)
+methods across varying bandwidths ( _p_ ). The results are shown for a fixed matrix size of _n_ = 16384
+and a participation number of _k_ = 8. For BSR, the choice _p_ = _b_ is numerically optimal, while for
+BISR a smaller bandwidth suffices to achieve an optimal value.
+
+
+**Lemma 1** (Inverse Square Root of the Matrix _Aα,β_ ) **.** _For k_ _≥_ 0 _, let_ _r_ ˜ _k_ = ( _−_ 1) _[k]_ [�][1] _k_ _[/]_ [2] - = 2 _−kr−k_ 1 [=]
+
+_−_ 1 - _−_ 1 _/_ 2� [�] _−_ 1 _/_ 2
+2 _k−_ 1 ��� _k_ �� _. The inverse square root of the matrix Aα,β_ _defined in_ (4) _, for_ 0 _≤_ _β_ _< α ≤_ 1 _, is_
+
+
+
+
+
+
+
+
+
+ _where_ _c_ ˜ _[α,β]_ _k_ =
+ _[,]_
+
+
+_k_
+
+- _r_ ˜ _jβ_ _[j]_ _r_ ˜ _k−jα_ _[k][−][j]_ _._ (9)
+
+
+_j_ =0
+
+
+_Cα,β_ _[−]_ [1] [=]
+
+
+
+
+
+
+
+
+1 0 _. . ._ 0
+_c_ ˜ _[α,β]_ 1 1 _. . ._ 0
+_..._ _..._ _..._ _..._
+_c_ ˜ _[α,β]_ _n−_ 1 _c_ ˜ _[α,β]_ _n−_ 2 _. . ._ 1
+
+
+The values of the matrix _Cα,β_ _[−]_ [1] [can then be computed efficiently via the Fast Fourier Transform (FFT)]
+as a convolution of the sequences _r_ ˜ _jα_ _[j]_ and _r_ ˜ _jβ_ _[j]_, where the sequence _r_ ˜ _j_ for _j_ = 1 _, . . ., n_ can be
+computed in linear time using the recursive expression ˜ _rj_ = _[j][−]_ _j_ [3] _[/]_ [2] _r_ ˜ _j−_ 1.
+
+
+Following the work of Andersson & Yehudayoff (2025), we show that the space complexity of the
+matrix ( _Cα,β_ _[p]_ [)] _[−]_ [1] [is equal to] _[ p]_ [, meaning that exact multiplication with a random real vector] _[ z]_ [in a]
+streaming setting, performing continuous operations, requires storing _p_ real values (not including the
+memory needed to store the matrix coefficients). This implies that, for memory-efficient computation,
+one must either use a small bandwidth _p_ or consider approximate multiplication. We formally state
+the result in the following lemma:
+
+
+**Lemma** **2.** _The_ _space_ _complexity–defined_ _as_ _the_ _minimum_ _buffer_ _size_ _required_ _by_ _a_ _streaming_
+_algorithm to correctly process an input–for computing the product of the Toeplitz matrix_ ( _Cα,β_ _[p]_ [)] _[−]_ [1]
+
+_with an arbitrary vector z_ _∈_ R _[n]_ _, for n ≥_ 2 _p −_ 1 _, is exactly p, and at least_ _[n][−]_ 2 [5] _for Cα,β_ _[−]_ [1] _[.]_
+
+
+4 EXPERIMENTS
+
+
+In this section, we present numerical results from evaluating various factorization methods in the
+multi-participation regime.
+
+
+We first study the effect of using different bandwidths for BSR and BISR, as shown in Figure 2. We
+found that, in most settings, the optimal bandwidth for BSR coincides with the separation parameter
+_b_, whereas for BISR a smaller bandwidth suffices; therefore, in future comparisons with BISR, we
+propose optimizing the bandwidth to determine the optimal _p_ _[∗]_ .
+
+
+We compare BISR with several other methods, including Banded Square Root (BSR), Banded
+Matrix Factorization (BandMF), introduced by McKenna (2025), and Buffered Linear Toeplitz (BLT),
+introduced by Dvijotham et al. (2024) and adapted for multi-participation training by McMahan et al.
+(2024). We use a buffer size of 4, as recommended, and observe that the error saturates quickly as the
+buffer size increases. We use BandMF with bandwidth equal to _b_, as we did not observe any benefit
+from using a larger bandwidth. Moreover, we conjecture that optimal multi-epoch participation can
+always be achieved on a banded lower triangular matrix with bandwidth _b_ .
+
+
+7
+
+
+28
+
+26
+
+24
+
+22
+
+20
+
+18
+
+16
+
+14
+
+12
+
+
+14.5
+
+
+14.0
+
+
+13.5
+
+
+13.0
+
+
+12.5
+
+
+12.0
+
+
+11.5
+
+
+220
+
+200
+
+180
+
+160
+
+140
+
+120
+
+100
+
+80
+
+60
+
+
+10 [1] 10 [2] 10 [3] 10 [4] 10 [5] 10 [6]
+Iterations (n)
+
+(a) _k_ = 16, _α_ = 1, _β_ = 0
+
+
+10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+iterations (n)
+
+(b) _k_ = 16, _α_ = 1 _, β_ = 0 _._ 9
+
+
+10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+iterations (n)
+
+(c) _k_ = 16, _α_ = 0 _._ 999 _, β_ = 0
+
+
+5.5
+
+
+5.0
+
+
+4.5
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+4.0
+
+
+3.5
+
+
+10 [1] 10 [2] 10 [3] 10 [4] 10 [5] 10 [6]
+Iterations (n)
+
+(d) _k_ = 4, _α_ = 1, _β_ = 0
+
+
+10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+iterations (n)
+
+(e) _k_ = 4, _α_ = 1 _, β_ = 0 _._ 9
+
+
+10 [1] 10 [2] 10 [3] 10 [4] 10 [5]
+iterations (n)
+
+(f) _k_ = 4, _α_ = 0 _._ 999 _, β_ = 0
+
+
+Figure 3: RMSE across varying matrix sizes for different factorization methods under multiple
+optimizer settings and participation levels. We showed that also in practice, BISR performs on par
+with, or even better than, BSR and BLT. However, methods based on numerical optimization, such as
+BandMF, may achieve superior performance in certain regimes.
+
+
+We emphasize that BLT has only been described, analyzed, and implemented for prefix-sum matrices. [3]
+Therefore, we do not show BLT results for momentum and weight decay plots. For all methods
+except BISR, we use efficient implementations from the jax-privacy library (Balle et al., 2025).
+
+
+Our experiments (Figure 3) show that banded inverse square root factorization consistently matches
+or exceeds BSR in quality across all regimes and outperforms it in scenarios with a large number
+of participations. The improvement is particularly pronounced when the participation count is
+high ( _k_ = 16). BISR achieves RMSE comparable to that of BLT, but has the advantage of easier
+implementation for both factorization and training, as it only requires convolving previous noise with
+a fixed set of coefficientsan "embarrassingly parallel" operation (see McKenna (2025)). While in
+practice, BandMF achieves slightly better RMSE [4] at _k_ = 16, it requires solving a computationally
+expensive optimization problem, making it impractical for matrix sizes beyond _n_ = 4096.
+
+
+5 FROM BISR TO BANDINVMF
+
+
+In the previous sections, we established that BISR has asymptotically optimal rate for large bandwidths
+_p ∼_ _b_ log _b_ . However, in practice, one might want to work with a smaller value of _p_ to save memory
+and computational resources. In this section, we showcase a modification to BISR with improved
+practical properties in this regime. We propose to keep the construction of a banded inverse matrix
+with Toeplitz structure, but to set its values not by the closed form expressions (9) but by a numeric
+optimization. Specifically, we optimize an upper bound on _b_ -min separation participation, given by
+Equation 5.
+
+
+For the sake of numerical optimization, we assume that the optimum is achieved for indices of the
+form _i_ + _kb_ . This assumption can be justified, as we observed that the resulting solution for matrix _C_
+is positive and decreasing, which guarantees optimality. If the sequence is not decreasing, it can be
+uniformly bounded by a decreasing sequence. Specifically, if the values on the diagonals of _C_ are
+_Cj,_ 1, then they are upper bounded by max _t≥j C_ 1 _,t_, which is a decreasing sequence by construction.
+We use banded inverse square root factorization as an initialization for the coefficients. We provide
+an efficient JAX implementation in the Appendix (see Algorithm 1) as well as the convergence plots
+in Figure 6.
+
+
+3In concurrent work by Huang et al. (2025), BLT has been adapted to work with a momentum workload.
+4This is possible because even though we have shown that BISR provides an asymptotically optimal
+factorization, that does not imply that it is superior to all other methods for finite problem sizes.
+
+
+8
+
+
+2 4 6 8 10 12 14 16
+Bandwidth (p)
+
+
+40
+
+
+35
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+600
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+2 4 6 8 10 12 14 16
+Bandwidth (p)
+
+(a) _k_ = 4, _α_ = 1, _β_ = 0
+
+
+2 4 6 8 10 12 14 16
+Bandwidth (p)
+
+(b) _k_ = 4, _α_ = 1, _β_ = 0 _._ 9
+
+
+(c) _k_ = 4, _α_ = 0 _._ 999, _β_ = 0
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+1200
+
+
+1000
+
+
+800
+
+
+600
+
+
+400
+
+
+200
+
+
+2 4 6 8 10 12 14 16
+Bandwidth (p)
+
+(d) _k_ = 16, _α_ = 1, _β_ = 0
+
+
+2 4 6 8 10 12 14 16
+Bandwidth (p)
+
+(e) _k_ = 16, _α_ = 1, _β_ = 0 _._ 9
+
+
+2 4 6 8 10 12 14 16
+Bandwidth (p)
+
+(f) _k_ = 16, _α_ = 0 _._ 999, _β_ = 0
+
+
+Figure 4: RMSE across different factorizations and optimization parameters _α, β_, with small bandwidth. The plot shows that BandInvMF and BISR can significantly reduce RMSE for a small
+bandwidth regime, justifying the use of banded inverse methods instead of banded factorizations.
+
+
+The numerical results are presented in Figure 4 referred to as BandInvMF. We observe that the error
+decreases drastically even with the addition of a single band, compared to a trivial factorization. This
+observation is supported theoretically by the following lemma.
+**Lemma 3** (Optimal Band Inversion Error) **.** _Let the matrix Cλ_ _[−]_ [1] = LTT(1 _, −λ,_ 0 _, . . .,_ 0) _be a lower_
+_triangular Toeplitz matrix with_ 1 _on the main diagonal and −λ on the subdiagonal._ _Then, for a single_
+_participation and the prefix sum matrix A_ 1 _,_ 0 _, the following bound on the matrix factorization error_
+_holds:_
+inf                  - _A_ 1 _,_ 0 _Cλ_ _[−]_ [1] _[, C][λ]_                  - = _O_ ( _n_ [1] _[/]_ [4] ) _._ (10)
+_λ∈_ (0 _,_ 1) _[E]_
+
+
+Lemma 3 shows that the optimized inverse banded matrix factorization can achieve an asymptotically
+better bound than a trivial factorization _A ×_ I, which yields an error of _O_ ( _[√]_ _n_ ). Moreover, from
+Theorem 4, for small _p_, the leading term for banded inverse square root factorization remains of order
+_O_ ( _[√]_ _n_ ). Therefore, we advocate for optimizing the coefficients when the bandwidth is small.
+
+
+We compare Band-Inv-MF with other methods for training the 3-Block ConvNet model on CIFAR-10
+and the BERT-base model ( _∼_ 100M parameters) on IMDB (see Figure 5), both with and without
+amplification by subsampling. For a fairer comparison, we use a recently proposed bins-and-balls
+subsampling mechanism (Chua et al., 2025), which combines the accuracy benefits of Poisson
+subsampling with improved implementation efficiency. More importantly, it supports the matrix
+mechanism via the MCMC accountant (Choquette-Choo et al., 2024b;c), even when the matrix
+_C_ is not banded. Our results indicate that in a low-memory regime, inverse correlation matrix
+methods BISR and Band-Inv-MF achieve significantly higher accuracy than BSR and Band-MF, and
+consistently outperform DP-SGD, with and without amplification. Although Band-Inv-MF achieves
+lower RMSE than BISR, we did not observe a corresponding gain in accuracy. This indicates that
+RMSE alone is not a sufficient proxy for model performance in matrix factorization.
+
+
+6 DISCUSSION
+
+
+This work demonstrates that imposing a banded structure on the inverse correlation matrix, rather
+than on the matrix itself, leads to both theoretical and practical benefits for differentially private
+training across multiple participations. Our Banded Inverse Square Root (BISR) method enables
+explicit factorization, supporting clean error analysis and efficient implementation.
+
+
+We prove that BISR achieves asymptotically optimal factorization error by improving upon previously
+established lower bounds and showing that BISR matches the asymptotics precisely, thereby closing a
+
+
+9
+
+
+60
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+90.0
+
+
+87.5
+
+
+85.0
+
+
+82.5
+
+
+80.0
+
+
+77.5
+
+
+75.0
+
+
+72.5
+
+
+70.0
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+90.0
+
+
+87.5
+
+
+85.0
+
+
+82.5
+
+
+80.0
+
+
+77.5
+
+
+75.0
+
+
+72.5
+
+
+70.0
+
+
+2 4 6 8 10
+Epochs
+
+
+(c) IMDB (Amplified)
+
+
+2 4 6 8 10
+Epochs
+
+
+(a) CIFAR-10 (Amplified)
+
+
+2 4 6 8 10
+Epochs
+
+
+(b) CIFAR-10 (Non-amplified)
+
+
+**regime.** For CIFAR-10, both amplified (left) and non-amplified (right) results show that inverse
+factorization methods, BISR and Band-Inv-MF, achieve significantly higher accuracy compared to
+Band-MF. Both plots correspond to (9 _,_ 10 _[−]_ [5] )-DP, with training performed using momentum _β_ = 0 _._ 9
+and weight decay _α_ = 0 _._ 9999, which we found to be optimal (see Tables 1 and 2 in the appendix).
+For IMDB, we report accuracy from fine-tuning under the same low-memory regime, comparing
+amplified and non-amplified settings, with training performed using momentum _β_ = 0 _._ 95 and weight
+decay _α_ = 0 _._ 99999 (see Tables 3 and 4).
+
+
+fundamental gap in the theory. An interesting direction for future work is to close the gap in constant
+dependence, as numerical optimization methods (e.g., BandMF, BLT), despite their computational
+cost, may outperform BISR.
+
+
+In the low-memory regime, we find it beneficial to optimize directly over the coefficients of the
+inverse correlation matrix. Our Band-Inv-MF method achieves a lower matrix factorization error
+compared to BISR. However, these improvements do not yet translate to gains in model accuracy
+when training with the amplification by subsampling. Future research should focus on optimizing the
+matrix coefficients while explicitly accounting for amplification, in order to bridge this gap.
+
+
+ACKNOWLEDGMENTS
+
+
+We thank Arun Ganesh for providing the code for the MCMC accountant. We thank Joel Andersson,
+Rasmus Pagh and Monika Henzinger for valuable comments on the early version of the draft. We
+thank Christian Lebeda for a fruitful discussion on the lower bound theorem.
+
+
+Jalaj Upadhyays research was funded by the Rutgers Decanal Grant no. 302918, NSF CNS 2433628,
+Google Research Scholar Award, and Google Seed Fund Grant.
+
+
+Nikita Kalinin’s research was funded in part by the Austrian Science Fund (FWF) [10.55776/COE12].
+
+
+10
+
+
+REFERENCES
+
+
+Joel Daniel Andersson and Rasmus Pagh. A smooth binary mechanism for efficient private continual
+observation. In _Conference on Neural Information Processing Systems (NeurIPS)_, 2023.
+
+
+Joel Daniel Andersson and Rasmus Pagh. Streaming private continual counting via binning. In _IEEE_
+_Conference on Secure and Trustworthy Machine Learning (SaTML)_, 2025.
+
+
+Joel Daniel Andersson and Amir Yehudayoff. On the space complexity of online convolution, 2025.
+arXiv preprint arXiv:2505.00181.
+
+
+Borja Balle and Yu-Xiang Wang. Improving the Gaussian mechanism for differential privacy:
+Analytical calibration and optimal denoising. In _International Conference on Machine Learing_
+_(ICML)_, 2018.
+
+
+Borja Balle, Leonard Berrada, Zachary Charles, Christopher A Choquette-Choo, Soham De,
+Vadym Doroshenko, Dj Dvijotham, Andrew Galen, Arun Ganesh, Sahra Ghalebikesabi, Jamie
+Hayes, Peter Kairouz, Ryan McKenna, Brendan McMahan, Aneesh Pappu, Natalia Ponomareva,
+Mikhail Pravilov, Keith Rush, Samuel L Smith, and Robert Stanforth. JAX-Privacy: Algorithms for privacy-preserving machine learning in JAX, 2025. [URL http://github.com/](http://github.com/google-deepmind/jax_privacy)
+[google-deepmind/jax_privacy.](http://github.com/google-deepmind/jax_privacy)
+
+
+Alexander Bienstock, Ujjwal Kumar, and Antigoni Polychroniadou. Dmm: Distributed matrix
+mechanism for differentially-private federated learning based on constant-overhead linear secret
+resharing. In _International Conference on Machine Learing (ICML)_, 2025.
+
+
+A. Böttcher and S. M. Grudsky. _Toeplitz_ _Matrices,_ _Asymptotic_ _Linear_ _Algebra,_ _and_ _Functional_
+_Analysis._ Springer, 2000.
+
+
+C. A. Choquette-Choo, A. Ganesh, R. McKenna, H. B. McMahan, J. K. Rush, A. G. Thakurta, and
+X. Zheng. (Amplified) banded matrix factorization: A unified approach to private training. In
+_Conference on Neural Information Processing Systems (NeurIPS)_, 2023a.
+
+
+Christopher A Choquette-Choo, H Brendan McMahan, Keith Rush, and Abhradeep Thakurta. Multiepoch matrix factorization mechanisms for private machine learning. In _International Conference_
+_on Machine Learing (ICML)_, 2023b.
+
+
+Christopher A Choquette-Choo, Krishnamurthy Dvijotham, Krishna Pillutla, Arun Ganesh, Thomas
+Steinke, and Abhradeep Thakurta. Correlated noise provably beats independent noise for differentially private learning. In _International Conference on_ _Learning_ _Representations (ICLR)_,
+2024a.
+
+
+Christopher A Choquette-Choo, Arun Ganesh, Saminul Haque, Thomas Steinke, and Abhradeep
+Thakurta. Near exact privacy amplification for matrix mechanisms. In _International Conference_
+_on Learning Representations (ICLR)_, 2024b.
+
+
+Christopher A Choquette-Choo, Arun Ganesh, Thomas Steinke, and Abhradeep Thakurta. Privacy
+amplification for matrix mechanisms. In _International Conference on Learning Representations_
+_(ICLR)_, 2024c.
+
+
+Lynn Chua, Badih Ghazi, Charlie Harrison, Ethan Leeman, Pritish Kamath, Ravi Kumar, Pasin Manurangsi, Amer Sinha, and Chiyuan Zhang. Balls-and-Bins sampling for DP-SGD. In _Conference_
+_on Uncertainty in Artificial Intelligence (AISTATS)_, 2025.
+
+
+S. Denisov, H. B. McMahan, J. Rush, A. Smith, and G. A. Thakurta. Improved Differential Privacy for
+SGD via optimal private linear operators on adaptive streams. In _Conference on Neural Information_
+_Processing Systems (NeurIPS)_, 2022.
+
+
+Krishnamurthy Dvijotham, H. Brendan McMahan, Krishna Pillutla, Thomas Steinke, and Abhradeep
+Thakurta. Efficient and near-optimal noise generation for streaming differential privacy. In
+_Symposium on Foundations of Computer Science (FOCS)_, 2024.
+
+
+H. Fichtenberger, M. Henzinger, and J. Upadhyay. Constant matters: Fine-grained complexity of
+differentially private continual observation using completely bounded norms. In _International_
+_Conference on Machine Learing (ICML)_, 2023.
+
+
+11
+
+
+Arun Ganesh, Brendan McMahan, and Abhradeep Thakurta. On design principles for private adaptive
+optimizers, 2025. arXiv preprint arXiv:2507.01129.
+
+
+M. Henzinger, J. Upadhyay, and S. Upadhyay. A unifying framework for differentially private sums
+under continual observation. In _Symposium on Discrete Algorithms (SODA)_, 2024.
+
+
+Monika Henzinger and Jalaj Upadhyay. Improved differentially private continual observation using
+group algebra. In _Symposium on Discrete Algorithms (SODA)_, 2025.
+
+
+Monika Henzinger, Jalaj Upadhyay, and Sarvagya Upadhyay. Almost tight error bounds on differentially private continual counting. In _Symposium on Discrete Algorithms (SODA)_, 2023.
+
+
+Monika Henzinger, Nikita P. Kalinin, and Jalaj Upadhyay. Binned group algebra factorization for
+differentially private continual counting, 2025a. arXiv:2504.04398.
+
+
+Monika Henzinger, Nikita P. Kalinin, and Jalaj Upadhyay. Normalized square root: Sharper matrix factorization bounds for differentially private continual counting, 2025b. arXiv preprint
+arXiv:2509.14334.
+
+
+Yue Huang, Jiaojiao Zhang, and Qing Ling. Memory-efficient correlated noise for locally differentially
+private momentum in distributed learning. In _International Workshop on Machine Learning for_
+_Signal Processing (MLSP)_ . IEEE, 2025.
+
+
+P. Kairouz, B. McMahan, S. Song, O. Thakkar, A. Thakurta, and Z. Xu. Practical and private (deep)
+learning without sampling or shuffling. In _International Conference on Machine Learing (ICML)_,
+2021.
+
+
+N. Kalinin and C. H. Lampert. Banded square root matrix factorization for differentially private
+model training. In _Conference on Neural Information Processing Systems (NeurIPS)_, 2024.
+
+
+Nikita P Kalinin, Jalaj Upadhyay, and Christoph H Lampert. Continual release moment estimation
+with differential privacy. In _Conference on Neural Information Processing Systems (NeurIPS)_,
+2025.
+
+
+Anastasiia Koloskova, Ryan McKenna, Zachary Charles, John Rush, and H. Brendan McMahan.
+Gradient descent with linearly correlated noise: Theory and applications to differential privacy. In
+_Conference on Neural Information Processing Systems (NeurIPS)_, 2023.
+
+
+C. Li, G. Miklau, M. Hay, A. McGregor, and V. Rastogi. The matrix mechanism: Optimizing linear
+counting queries under Differential Privacy. _International Conference on Very Large Data Bases_
+_(VLDB)_, 2015.
+
+
+R. McKenna. Scaling up the banded matrix factorization mechanism for differentially private ML. In
+_International Conference on Learning Representations (ICLR)_, 2025.
+
+
+H. B. McMahan, Z. Xu, and Y. Zhang. A hassle-free algorithm for private learning in practice:
+Don’t use tree aggregation, use BLTs. In _Conference on Empirical Methods on Natural Language_
+_Processing (EMNLP)_, 2024.
+
+
+H Brendan McMahan and Krishna Pillutla. An inversion theorem for Buffered Linear Toeplitz (BLT)
+matrices and applications to streaming differential privacy, 2025. arXiv preprint arXiv:2504.21413.
+
+
+Krishna Pillutla, Jalaj Upadhyay, Christopher A Choquette-Choo, Krishnamurthy Dvijotham, Arun
+Ganesh, Monika Henzinger, Jonathan Katz, Ryan McKenna, H Brendan McMahan, Keith Rush,
+et al. Correlated noise mechanisms for differentially private learning, 2025. arXiv preprint
+arXiv:2506.08201.
+
+
+Gilbert Strang. A proposal for Toeplitz matrix calculations. _Studies in Applied Mathematics_, 1986.
+
+
+Zheng Xu and Yanxiang Zhang. Advances in private training for production on-device language
+models, 2024. Goolge Research Blog.
+
+
+Jiaojiao Zhang, Linglingzhi Zhu, Dominik Fay, and Mikael Johansson. Locally differentially private
+online federated learning with correlated noise. In _IEEE Transactions on Signal Processing_, 2025.
+
+
+12
+
+
+KEY INEQUALITIES AND RELATIONSHIPS
+
+
+This section compiles the fundamental inequalities and key relationships employed throughout this
+study. Each entry is presented with a concise explanation of its origin or the context in which it arises.
+
+
+1. _rk_ =
+����
+
+
+- _−_ 1 _/_ 2 1
+
+=
+
+_k_ ����� 4 _[k]_
+
+
+1
+=
+����� 4 _[k]_
+
+
+�2 _k_
+
+_k_
+
+
+_Henzinger et al. (2024)_
+
+
+1 1
+2. ~~�~~ _π_ ( _k_ + 1) _≤_ _rk_ _≤_ ~~_√_~~ _πk_ _Lemma 2.1 from Dvijotham et al. (2024)_
+
+
+_p−_ 1
+
+
+_k_ =1
+
+
+1
+~~_√_~~ _≤_ 1 + [2] ~~_√_~~ _[√][p]_ _Integral inequality._
+
+_k_ _π_
+
+
+3.
+
+
+4.
+
+
+_p−_ 1
+
+- _rk_ _≤_ 1 + ~~_√_~~ 1
+
+_π_
+_k_ =0
+
+
+_p−_ 1
+
+
+_p−_ 1
+
+
+_rk_ [2] _[≤]_ [1 + log] _[ p]_ _Lemma 5_
+_k_ =0
+
+
+5. _c_ _[α,β]_ _k_ =
+
+
+_k_
+
+
+_α_ _[j]_ _β_ _[k][−][j]_ _rjrk−j_ _Theorem 1 from Kalinin & Lampert (2024)_
+
+_j_ =0
+
+
+1 _−_ [(1] _[ −]_ _[β]_ [)][2]
+
+2 _k_
+
+
+1 _−_ [(1] _[ −]_ _[β]_ [)][2]
+
+
+for _k_ _≥_ 1 _._ _Lemma 10_
+
+
+6. _c_ [1] _k_ _[,β]_ _≤_ _c_ [1] _k_ _[,β]_ _−_ 1
+
+
+_k_
+
+
+_rjβ_ _[j]_ _r_ ˜ _k−j_ _In the proof of Lemma 9_
+
+_j_ =0
+
+
+7.
+
+
+8.
+
+
+9.
+
+
+_k_
+
+- _c_ [1] _j_ _[,β]_ =
+
+_j_ =0
+
+
+_k_
+
+
+_j_ =0
+
+
+_k_
+
+- _c_ [1] _j_ _[,β]_ _β_ _[k][−][j]_ =
+
+_j_ =0
+
+
+_k_
+
+
+_rj_ _[β][r]_ [˜] _[k][−][j]_ _In the proof of Lemma 9_
+_j_ =0
+
+
+_c_ ˜ [1] _j_ _[,β]_ (1 _−_ _β_ _[k][−][j]_ [+1] )
+
+1 _−_ _β_ = _c_ [1] _k_ _[,β]_ _In the proof of Lemma 9_
+
+
+10. _rk_ (1 _−_ _β_ ) _≤_
+
+
+_k_
+
+
+_c_ ˜ [1] _j_ _[,β]_ _≤_ _c_ [1] _k_ _[,β]_ [(1] _[ −]_ _[β]_ [)] _Lemma 9_
+_j_ =0
+
+
+_Lemma 5_
+(1 _−_ _β_ ) [2]
+
+
+log( _k_ + 1)
+11. _≤_
+
+4
+
+
+_k−_ 1
+
+
+�( _c_ [1] _j_ _[,β]_ ) [2] _≤_ [1 + log] (1 _−_ _β_ ) _[ k]_ [2]
+
+_j_ =0
+
+
+_α_ _[j]_
+12. ~~_[√]_~~
+
+
+_α_ _[j]_ _α_ _[j]_
+
+2 ~~_[√]_~~ _j_ + 1 _[≤]_ _[c]_ _j_ _[α,β]_ _≤_ (1 _−_ _β/α_
+
+
+_Lemma 5_
+(1 _−_ _β/α_ ) ~~_[√]_~~ _j_ + 1
+
+
+13. 1 _≤_
+
+
+_k_ - _−_ 1( _c_ _[α,β]_ _j_ ) [2] _≤_ ( _α −_ 1 _β_ ) [2] [log] - 1 _−_ 1 _α_ [2]
+
+_j_ =0
+
+
+_Lemma 5_
+
+
+�1 _/_ 2� _−_ 1
+14. _r_ ˜ _k_ = ( _−_ 1) _[k]_ = _Lemma 1_
+_k_ 2 _k −_ 1 _[r][k]_
+
+
+15. _c_ ˜ _[α,β]_ _k_ =
+
+
+_k_
+
+
+_r_ ˜ _jβ_ _[j]_ _r_ ˜ _k−jα_ _[k][−][j]_ _Lemma 1_
+
+_j_ =0
+
+
+16. _r_ ˜ _k_ (1 + _β_ ) _≤_ _c_ ˜ [1] _k_ _[,β]_ _≤_ 0 _Lemma 7_
+
+
+13
+
+
+A PROOFS
+
+
+We start by stating some auxiliary results that will be extensively used throughout the proofs.
+**Lemma 4** (Theorem 1 in Kalinin & Lampert (2024) – Square Root of the Matrix _Aα,β_ ) **.** _For k_ _≥_ 0 _,_
+
+     - _−_ 1 _/_ 2� [�] 1 _/_ 2
+_let_ _rk_ = ��� _k_ �� _._ _For_ 0 _≤_ _β_ _<_ _α_ _≤_ 1 _,_ _the_ _square_ _root_ _matrix_ _Cα,β_ = _Aα,β_ _[has]_ _[the]_ _[following]_
+_explicit form:_
+
+
+
+
+
+
+
+
+
+ _where_ _c_ _[α,β]_ _k_ =
+ _[,]_
+
+
+_k_
+
+- _α_ _[j]_ _β_ _[k][−][j]_ _rjrk−j,_ (11)
+
+
+_j_ =0
+
+
+_Cα,β_ =
+
+
+
+
+
+
+
+
+1 0 _· · ·_ 0
+_c_ _[α,β]_ 1 1 _· · ·_ 0
+_..._ _..._ _..._ _..._
+_c_ _[α,β]_ _n−_ 1 _c_ _[α,β]_ _n−_ 2 _· · ·_ 1
+
+
+**Theorem 5** (Theorem 2 from Kalinin & Lampert (2024)) **.** _Let M_ _be a lower triangular Toeplitz_
+_matrix with decreasing non-negative entries m_ 0 _≥_ _m_ 1 _≥_ _m_ 2 _≥_ _. . . mn−_ 1 _≥_ 0 _on the diagonals._
+_Then the_ sensitivity _of M_ _in the setting of_ _b_ -min-separation _is_
+
+
+sens _k,b_ ( _M_ ) =
+���
+
+
+_k−_ 1
+
+- _M_ [ _·,_ 1+ _jb_ ] (12)
+
+���2
+_j_ =0
+
+
+_where M_ [ _·,_ 1+ _jb_ ] _denotes the_ (1 + _jb_ ) _-th column of M_ _._
+
+
+**Lemma** **5** (Lemma 7 from Kalinin & Lampert (2024)) **.** _For_ _k_ _∈{_ 1 _, . . ., n}_ _it_ _holds_ _for_ _c_ _[α,β]_ _i_ _as_
+_defined in equation_ (11) _:_
+
+_k−_ 1
+
+log( _k_ + 1) [1 + log] _[ k]_
+
+
+_k−_ 1
+
+
+(13)
+(1 _−_ _β_ ) [2]
+
+
+�( _c_ [1] _i_ _[,β]_ ) [2] _≤_ [1 + log] (1 _−_ _β_ ) _[ k]_ [2]
+
+_i_ =0
+
+
+_≤_
+4
+
+
+_for α_ = 1 _, and otherwise_
+
+
+1 _≤_
+
+
+_k_ - _−_ 1( _c_ _[α,β]_ _i_ ) [2] _≤_ ( _α −_ 1 _β_ ) [2] [log] - 1 _−_ 1 _α_ [2]
+
+_i_ =0
+
+
+_._ (14)
+
+
+**Lemma** **2.** _The_ _space_ _complexity–defined_ _as_ _the_ _minimum_ _buffer_ _size_ _required_ _by_ _a_ _streaming_
+_algorithm to correctly process an input–for computing the product of the Toeplitz matrix_ ( _Cα,β_ _[p]_ [)] _[−]_ [1]
+
+_with an arbitrary vector z_ _∈_ R _[n]_ _, for n ≥_ 2 _p −_ 1 _, is exactly p, and at least_ _[n][−]_ 2 [5] _for Cα,β_ _[−]_ [1] _[.]_
+
+
+_Proof of Lemma 2._ Throughout this proof, we use only results from Andersson & Yehudayoff (2025),
+and thus any reference to a theorem or lemma should be understood as coming from that work. We
+use their Lemma 7, which lower-bounds the space complexity of a Toeplitz matrix using the rank
+of a corresponding Hankel matrix of its coefficients. The matrix _Cα,β_ _[−]_ [1] [has] [a] [generating] [function]
+_f_ = �(1 _−_ _αx_ )(1 _−_ _βx_ ). The proof of their Corollary 16 implies that the Hankel matrix _H_ [ _f_ ] has
+corank at most 3. Thus, Lemma 7 implies that _Cα,β_ _[−]_ [1] [has space complexity at least] _[n]_ [+1] 2 _−_ 3. For the
+
+matrix ( _Cα,β_ _[p]_ [)] _[−]_ [1][, the generating function is a rational function of degree] _[ p]_ [; therefore, for] _[ n][ ≥]_ [2] _[p][ −]_ [1][,]
+their Theorem 2 implies that the space complexity is exactly _p_, concluding the proof.
+
+
+**Theorem 3** (General Multi-Participation Lower Bound) **.** _Let Aα,β_ _∈_ R _[n][×][n]_ _be the SGD workload_
+_matrix_ (4) _, with momentum β_ _>_ 0 _and weight decay α >_ 0 _._ _In the multi-participation setting with_
+_separation_ 1 _≤_ _b ≤_ _n and k_ = _⌈_ _[n]_ _[⌉][, for any factorization][ A][α,β]_ [=] _[ BC][, it holds]_
+
+
+_b_ _[⌉][, for any factorization][ A][α,β]_ [=] _[ BC][, it holds]_
+
+
+_√_
+�Ω(
+_E_ ( _B, C_ ) =
+
+
+(6)
+_k_ ) _if_ _α <_ 1 _._
+
+
+Ω( _k_ log _n_ + _k_ ) _if_ _α_ = 1 _,_
+
+_√_
+Ω _α_ ( _k_ ) _if_ _α <_ 1 _._
+
+
+_√_
+_Proof of Theorem 3._ We us _√_ e the probabilistic method in Lemma 6 to obtain the bounds Ω _α_ ( _k_ ) for
+
+_α <_ 1 and _E_ ( _B, C_ ) = Ω( _k_ log _n_ ) for _α_ = 1. It remains to prove that for _α_ = 1, we also have the
+
+lower bound _E_ ( _B, C_ ) = Ω( _k_ ).
+
+
+We begin with the following observation: given a matrix _C_, we can compute an optimal participation
+scheme represented by a vector with ones at positions corresponding to participating columns,
+
+
+14
+
+
+denoted by _πC_ _[∗]_ [.] [As] [a] [lower] [bound,] [we] [consider] [a] [specific] [participation] [vector] _[π]_ [1][,] [with] [ones] [in]
+columns indexed by 1 + _ib_ for _i_ _∈_ [0 _, k_ _−_ 1], such that _|π_ 1 _|_ = _k_ . By construction, we have
+sens _k,b_ ( _C_ ) := _∥CπC_ _[∗]_ _[∥]_ [2] _[≥∥][Cπ]_ [1] _[∥]_ [2][.] [Therefore, the error can be bounded as follows:]
+
+
+1 1 1 1
+_E_ ( _B, C_ ) = ~~_√_~~ _∥B∥F_ sens _k,b_ ( _C_ ) _≥_ ~~_√_~~ _∥B∥F ∥Cπ_ 1 _∥_ 2 _≥_ ~~_√_~~ _∥BCπ_ 1 _∥_ 2 = ~~_√_~~ _∥A_ 1 _,βπ_ 1 _∥_ 2 _._ (15)
+_n_ _n_ _n_ _n_
+
+
+As a lower bound, we consider _β_ = 0 as _∥A_ 1 _,βπ_ 1 _∥_ 2 _≥∥A_ 1 _,_ 0 _π_ 1 _∥_ 2. The elements of the matrix _A_ 1 _,_ 0
+are positive and non-increasing. Therefore, by Theorem 5, the ( _k, b_ )-sensitivity of _A_ 1 _,_ 0 is exactly
+_∥A_ 1 _,_ 0 _π_ 1 _∥_ 2. By Theorem 9 from Kalinin & Lampert (2024), this sensitivity is at least _[k]_ ~~_√_~~ ~~_[√]_~~ _[n]_
+
+3 [, resulting]
+in the lower bound:
+_E_ ( _B, C_ ) _≥_ ~~_√_~~ _[k]_ (16)
+
+3 [= Ω(] _[k]_ [)] _[,]_
+
+which concludes the proof.
+
+
+**Lemma 6.** _Let Aα,β_ _∈_ R _[n][×][n]_ _be the SGD workload matrix_ (4) _._ _In the multi-participation setting_
+_with separation_ 1 _≤_ _b ≤_ _n and k_ = _⌈_ _[n]_ _[⌉][, for any factorization][ A][α,β]_ [=] _[ BC][, it holds that]_
+
+
+_b_ _[⌉][, for any factorization][ A][α,β]_ [=] _[ BC][, it holds that]_
+
+
+_√_
+�Ω(
+_E_ ( _B, C_ ) = _√_
+
+
+Ω( _k_ log _n_ ) _,_ _α_ = 1
+
+_√_
+Ω( _k_ ) _,_ _α <_ 1
+
+
+(17)
+_k_ ) _,_ _α <_ 1
+
+
+_Proof._ Here, we refine Theorem 8 from Kalinin & Lampert (2024) by removing the assumption that
+the scalar products between the columns of the matrix _C_ are non-negative, i.e., _C_ _[⊤]_ _C_ _≥_ 0. We first
+prove that
+
+sens _k,b_ ( _C_ ) [2] _≥_ [1] _F_ _[.]_ (18)
+
+4 _b_ _[∥][C][∥]_ [2]
+
+
+To do so, we lower bound the _b_ -min separation participation by the ( _k, b_ )-participation, where we
+have a fixed _b_ separation between vectors but are allowed to include only a subset of them. This
+splits the set of all column indices into _b_ disjoint subsets _Sj_ for _j_ _∈_ [1 _, b_ ] with _|Sj| ≤_ _k_ . Then, the
+following inequality holds:
+
+
+�����
+
+
+2
+
+
+sens _k,b_ ( _C_ ) [2] _≥_ max
+_j∈_ [1 _,b_ ] _S_ [sup] _⊆Sj_
+
+
+where _C_ [: _,i_ ] denotes the _i_ -th column of the matrix _C_ .
+
+
+_C_ [: _,i_ ]
+
+_i∈S_
+
+
+�����
+
+
+_,_ (19)
+
+2
+
+
+To prove a lower bound, we use the probabilistic method. Consider i.i.d. random variables _ϵi_ _∼_
+Bernoulli( [1] 2 [)][.] [Then:]
+
+
+2
+
+- _C_ [: _,i_ ] _ϵi_
+
+���2
+_i∈Sj_
+
+
+2 _[≥]_ [E] ��� 
+
+
+2 [1]
+
+2 [=] 2
+
+
+2
+
+
+(20)
+
+
+sup
+_S⊆Sj_
+
+
+Thus,
+
+
+Therefore,
+
+
+��� 
+
+
+2
+
+- _C_ [: _,i_ ]
+
+���2
+_i∈S_
+
+
+- _∥C_ [: _,i_ ] _∥_ [2] 2 [+] [1]
+
+4
+
+_i∈Sj_
+
+
+4
+
+
+_i_ = _i_ _[′]_
+
+_i,i_ _[′]_ _∈Sj_
+
+
+_⟨C_ [: _,i_ ] _, C_ [: _,i′_ ] _⟩_
+
+
+= [1]
+
+4
+
+
+- _∥C_ [: _,i_ ] _∥_ [2] 2 [+] [1]
+
+4
+
+_i∈Sj_
+
+
+4
+
+
+2
+
+2 _[≥]_ 4 [1]
+
+
+4
+
+
+��� 
+
+
+2
+
+- _C_ [: _,i_ ]
+
+���2
+_i∈Sj_
+
+
+- _∥C_ [: _,i_ ] _∥_ [2] 2 _[.]_
+
+_i∈Sj_
+
+
+_F_ _[.]_ (21)
+4 _b_ _[∥][C][∥]_ [2]
+
+
+1
+sens _k,b_ ( _C_ ) [2] _≥_ max
+_j∈_ [1 _,b_ ] 4
+
+
+- _∥C_ [: _,i_ ] _∥_ [2] 2 _[≥]_ [1]
+
+4 _b_
+
+_i∈Sj_
+
+
+4 _b_
+
+
+_n_
+
+
+- _∥C_ [: _,i_ ] _∥_ [2] 2 [=] [1]
+
+4 _b_
+
+_i_ =1
+
+
+1 1
+_E_ ( _B, C_ ) = ~~_√_~~ _∥B∥F_ sens _k,b_ ( _C_ ) _≥_ ~~_√_~~
+_n_ 2
+
+
+1
+_∥B∥F ∥C∥F_ _≥_ ~~_√_~~
+_nb_ 2
+
+
+1
+_∥BC∥∗_ = ~~_√_~~
+_nb_ 2
+
+
+_∥Aα,β∥∗._
+_nb_
+
+
+(22)
+The nuclear norm of the matrix _Aα,β_ has been lower bounded in Lemma 8 of Kalinin & Lampert
+(2024) by Ω( _n_ log _n_ ) for _α_ = 1, and by Ω( _n_ ) for _α_ _<_ 1. Substituting _k_ = _⌈_ _[n]_ _b_ _[⌉]_ [concludes] [t][he]
+
+proof.
+
+
+15
+
+
+**Lemma 1** (Inverse Square Root of the Matrix _Aα,β_ ) **.** _For k_ _≥_ 0 _, let_ _r_ ˜ _k_ = ( _−_ 1) _[k]_ [�][1] _k_ _[/]_ [2] - = 2 _−kr−k_ 1 [=]
+
+_−_ 1 - _−_ 1 _/_ 2� [�] _−_ 1 _/_ 2
+2 _k−_ 1 ��� _k_ �� _. The inverse square root of the matrix Aα,β_ _defined in_ (4) _, for_ 0 _≤_ _β_ _< α ≤_ 1 _, is_
+
+
+
+
+
+
+
+
+
+ _where_ _c_ ˜ _[α,β]_ _k_ =
+ _[,]_
+
+
+_k_
+
+- _r_ ˜ _jβ_ _[j]_ _r_ ˜ _k−jα_ _[k][−][j]_ _._ (9)
+
+
+_j_ =0
+
+
+_Cα,β_ _[−]_ [1] [=]
+
+
+
+
+
+
+
+
+1 0 _. . ._ 0
+_c_ ˜ _[α,β]_ 1 1 _. . ._ 0
+_..._ _..._ _..._ _..._
+_c_ ˜ _[α,β]_ _n−_ 1 _c_ ˜ _[α,β]_ _n−_ 2 _. . ._ 1
+
+
+_Proof._ The matrix for the momentum matrix is given by:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ _[×]_
+
+
+
+
+
+
+
+1 0 _· · ·_ 0
+_β_ 1 _· · ·_ 0
+... ... ... ...
+_β_ _[n][−]_ [1] _β_ _[n][−]_ [2] _· · ·_ 1
+
+
+ (23)
+ _[.]_
+
+
+_Aα,β_ = _Aα,_ 0 _× Aβ,_ 0 =
+
+
+
+
+
+
+
+1 0 _· · ·_ 0
+_α_ 1 _· · ·_ 0
+... ... ... ...
+_α_ _[n][−]_ [1] _α_ _[n][−]_ [2] _· · ·_ 1
+
+
+The inverse square root then takes the form:
+
+_Cα,β_ _[−]_ [1] [=] _[ C]_ _α,_ _[−]_ [1] 0 _[×][ C]_ _β,_ _[−]_ [1] 0 _[,]_ (24)
+
+
+since all lower triangular Toeplitz (LTT) matrices commute (see Strang (1986) or Böttcher & Grudsky
+(2000)). Therefore, it suffices to prove that the inverse square root of the matrix _Cα,_ _[−]_ [1] 0 [is] [a] [lower]
+triangular Toeplitz matrix with elements ˜ _riα_ _[i]_, which would imply the stated formula for ˜ _c_ _[α,β]_ _k_, since
+the product of LTT matrices is given by the convolution of their elements.
+
+The proof for the matrix _Cα,_ _[−]_ [1] 0 [is based on the identities of the generating functions of the sequences]
+_rk_ and ˜ _rk_, derived simultaneously using the binomial formula:
+
+
+(25)
+
+
+_∞_
+
+- _rkα_ _[k]_ _x_ _[k]_ _,_
+
+
+_k_ =0
+
+
+(1 _−_ _αx_ ) _[−]_ [1] _[/]_ [2] =
+
+
+(1 _−_ _αx_ ) [1] _[/]_ [2] =
+
+
+_∞_
+
+
+_k_ =0
+
+_∞_
+
+
+_k_ =0
+
+
+- _−_ 1 _/_ 2�
+
+( _−_ 1) _[k]_ _α_ _[k]_ _x_ _[k]_ =
+
+_k_
+
+
+�1 _/_ 2
+
+_k_
+
+
+( _−_ 1) _[k]_ _α_ _[k]_ _x_ _[k]_ =
+
+
+_∞_
+
+- _r_ ˜ _kα_ _[k]_ _x_ _[k]_ _._
+
+
+_k_ =0
+
+
+Then the generating function of the product of the matrices _Cα_ and the proposed _Cα_ _[−]_ [1] is given by:
+
+
+_∞_
+
+
+_n_ 
+- _rkα_ _[k]_ _r_ ˜ _n−kα_ _[n][−][k]_
+
+
+_k_ =0
+
+
+= (1 _−_ _αx_ ) [1] _[/]_ [2] _×_ (1 _−_ _αx_ ) _[−]_ [1] _[/]_ [2] = 1 _,_ (26)
+
+
+_∞_ - _n_
+
+- _x_ _[n]_ 
+
+_n_ =0 _k_ =0
+
+
+implying that ˜ _riα_ _[i]_ are indeed the coefficients of _Cα_ _[−]_ [1][, which concludes the proof.]
+
+**Lemma 7** (Bounds on diagonal entries of _C_ 1 _[−]_ _,β_ [1][)] **[.]** _[The diagonal elements of the inverse square root]_
+_of_ _the_ _momentum_ _matrix_ _C_ 1 _[−]_ _,β_ [1] _[defined]_ _[in]_ _[equation]_ [(9)] _[with]_ _[parameter]_ [0] _[≤]_ _[β]_ _[<]_ [1] _[,]_ _[denoted]_ _[as]_
+
+(1 _,_ ˜ _c_ [1] 1 _[,β][,]_ [ ˜] _[c]_ 2 [1] _[,β][, . . .,]_ [ ˜] _[c]_ _n_ [1] _[,β]_ _−_ 1 [)] _[, satisfy the following inequality:]_
+
+_r_ ˜ _k_ (1 + _β_ ) _≤_ _c_ ˜ [1] _k_ _[,β]_ _≤_ 0 _,_ _for k_ _≥_ 1 _._ (27)
+
+
+_Proof._ The values ˜ _c_ [1] _k_ _[,β]_ are given by the convolution of ˜ _rk_ and _β_ _[k]_ _r_ ˜ _k_ :
+
+
+_k−_ 1
+
+- _r_ ˜ _jr_ ˜ _k−jβ_ _[j]_ _._ (28)
+
+
+_j_ =1
+
+
+_c_ ˜ [1] _k_ _[,β]_ =
+
+
+_k_
+
+- _r_ ˜ _jr_ ˜ _k−jβ_ _[j]_ = (1 + _β_ _[k]_ )˜ _rk_ +
+
+
+_j_ =0
+
+
+Since ˜ _rj_ is negative for _j_ _≥_ 1, the summation term is positive. Furthermore, 1 + _β_ _[k]_ _≤_ 1 + _β_, and
+since ˜ _rk_ is negative, we obtain the lower bound:
+
+_c_ ˜ [1] _k_ _[,β]_ _≥_ _r_ ˜ _k_ (1 + _β_ ) _._ (29)
+
+This bound is tight for _k_ = 1 as ˜ _c_ [1] 1 _[,β]_ = _−_ [1+] 2 _[β]_ [.]
+
+
+16
+
+
+For the upper bound, we first consider the special cases. When _β_ = 0, we have ˜ _c_ [1] _k_ _[,]_ [0] = _r_ ˜ _k_ _<_ 0. For
+_β_ = 1, we formally obtain:
+
+
+_k_
+
+- _r_ ˜ _jr_ ˜ _k−j_ =
+
+
+_j_ =0
+
+
+_k_
+
+
+
+
+
+
+1 _,_ _k_ = 0 _,_
+
+_−_ 1 _,_ _k_ = 1 _,_ (30)
+0 _,_ otherwise _._
+
+
+_c_ ˜ [1] _k_ _[,]_ [1] =
+
+
+
+
+
+This follows from the observation that _C_ 1 _[−]_ [1] _× C_ 1 _[−]_ [1] = _A_ _[−]_ 1 [1][, which has the structure described in the]
+equation.
+
+Since the inequality holds for _k_ = 1, we now consider _k_ _≥_ 2, where ˜ _c_ [1] _k_ [= 0][.] [We show the following,]
+which establishes the upper bound:
+
+
+**Proposition 1** (Monotonicity of diagonal elements of _C_ 1 _[−]_ _,β_ [1][)] **[.]** _[Let]_ [ ˜] _[c]_ [1] _k_ _[,β]_ _be the diagonal elements of_
+
+_C_ 1 _[−]_ _,β_ [1] _[defined in equation]_ [ (9)] _[.]_ _[Then]_ [ ˜] _[c]_ [1] _k_ _[,β]_ _is an increasing function of β, varying from_ ˜ _rk_ _at β_ = 0 _to_ 0
+_at β_ = 1 _._
+
+
+_Proof._ To do so, we differentiate ˜ _c_ [1] _k_ _[,β]_ with respect to _β_ :
+
+
+
+
+
+ _kr_ ˜ _k_ +
+
+
+_k−_ 1
+
+- _r_ ˜ _jr_ ˜ _k−jjβ_ _[j][−][k]_
+
+
+_j_ =1
+
+
+_k−_ 1
+
+
+
+
+
+ _._ (31)
+
+
+_dc_ ˜ [1] _k_ _[,β]_ = _kr_ ˜ _kβ_ _[k][−]_ [1] +
+_dβ_
+
+
+_k−_ 1
+
+- _r_ ˜ _jr_ ˜ _k−jjβ_ _[j][−]_ [1] = _β_ _[k][−]_ [1]
+
+
+_j_ =1
+
+
+To prove that this expression is positive, we analyze the term in brackets. As _β_ _→_ 0, the term tends
+to positive infinity since ˜ _rjr_ ˜ _k−j_ are positive and _j −_ _k_ is negative. Moreover, this term is decreasing
+as _β_ _→_ 1, so it suffices to check its non-negativity at _β_ = 1, i.e.,
+
+
+_dc_ ˜ [1] _k_ _[,β]_
+_dβ_
+
+
+_≥_ 0 (32)
+���� _β_ =1
+
+
+Setting _β_ = 1 in equation (31), we have
+
+
+_dc_ ˜ [1] _k_ _[,β]_
+_dβ_
+
+
+= _kr_ ˜ _k_ +
+���� _β_ =1
+
+
+_k−_ 1
+
+- _r_ ˜ _jr_ ˜ _k−jj._ (33)
+
+
+_j_ =1
+
+
+To show this, we use an auxiliary identity for the values ˜ _rjj_ :
+
+
+_[r][j]_
+
++ _[r]_ [˜] _[j]_
+2 2
+
+
+(34)
+2 _[.]_
+
+
+_[r][j][j]_ _[−]_ [1]
+
+2 _j −_ 1 [=] 2
+
+
+- _rj_
+_rj_ +
+2 _j −_ 1
+
+
+= _[−][r][j]_
+
+
+_r_ ˜ _jj_ = _−_ _[r][j][j]_
+
+
+2
+
+
+Using the identity (34) in equation (33), we obtain:
+
+
+(35)
+
+
+_d_ (˜ _c_ [1] _k_ _[,β]_ [)]
+_dβ_
+
+
+���� _β_ =1 = [1]
+
+
+[1]
+
+2 _[r]_ [˜] _[k][ −]_ [1] 2
+
+
+[1] [1]
+
+2 _[r][k]_ [ +] 2
+
+
+2
+
+
+_k−_ 1
+
+
+- _r_ ˜ _jr_ ˜ _k−j_ _−_ [1]
+
+2
+
+_j_ =1
+
+
+2
+
+
+_k−_ 1
+
+- _rjr_ ˜ _k−j_
+
+
+_j_ =1
+
+
+= [1]
+
+2
+
+
+_k_
+
+
+- _r_ ˜ _jr_ ˜ _k−j_ _−_ [1]
+
+2
+
+_j_ =0
+
+
+2
+
+
+_k_
+
+- _rjr_ ˜ _k−j_ = 0 _._
+
+
+_j_ =0
+
+
+Since both sums vanish for _k_ _≥_ 2, this concludes the proof of Proposition 1.
+
+
+This completes the proof of the lemma.
+
+
+**Lemma** **8** (Decresing values) **.** _The_ _values_ (1 _, c_ _[α,β]_ 1 _, . . ., c_ _[α,β]_ _p−_ 1 _[, g]_ _p_ _[α,β]_ _, . . ., gn_ _[α,β]_ _−_ 1 [)] _[of]_ _[matrix]_ _[C]_ _α,β_ _[p]_ _[as]_
+_defined in Lemma 12 are decreasing._
+
+
+17
+
+
+_Proof._ The first _p_ values are decreasing, as shown in Kalinin & Lampert (2024). For the remaining
+values, we prove that
+
+
+_gp_ _[α,β]_ + _k_ _[−]_ _[g]_ _p_ _[α,β]_ + _k_ +1 [=]
+
+
+_p−_ 1
+�( _−c_ ˜ _[α,β]_ _j_ )( _gp_ _[α,β]_ + _k−j_ _[−]_ _[g]_ _p_ _[α,β]_ + _k_ +1 _−j_ [)] _[ ≥]_ [0] _[.]_ (36)
+
+_j_ =1
+
+
+In Lemma 7, we prove that ( _−c_ ˜ _[α,β]_ _j_ ) _≥_ 0, so each term in the summation is non-negative. Since
+the differences ( _gi_ _[α,β]_ _−_ _gi_ _[α,β]_ +1 [)][ are also non-negative by the induction step,] [the inequality follo][ws,]
+completing the proof.
+
+**Lemma 9** (Bound on the matrix diagonal sum of _C_ 1 _[−]_ _,β_ [1][)] **[.]** _[The diagonal elements of the inverse square]_
+_root of the momentum matrix C_ 1 _[−]_ _,β_ [1] _[defined in equation]_ [ (9)] _[ with parameter]_ [ 0] _[≤]_ _[β]_ _[<]_ [1] _[, denoted as]_
+
+(1 _,_ ˜ _c_ [1] 1 _[,β][,]_ [ ˜] _[c]_ 2 [1] _[,β][, . . .,]_ [ ˜] _[c]_ _n_ [1] _[,β]_ _−_ 1 [)] _[, satisfy the following inequality:]_
+
+
+_rk_ (1 _−_ _β_ ) _≤_
+
+
+_k_
+
+
+_c_ ˜ [1] _j_ _[,β]_ _≤_ _c_ [1] _k_ _[,β]_ [(1] _[ −]_ _[β]_ [)] _[,]_ _for k_ _≥_ 1 _._ (37)
+_j_ =0
+
+
+_Here_ ˜ _c_ [1] _i_ _[,β]_ _is as defined by equation_ (9) _._
+
+
+_Proof._ We first state several properties of the sums of ˜ _c_ [1] _j_ _[,β]_ :
+
+
+_k_
+
+- _r_ ˜ _jβ_ _[j]_ _rk−j,_
+
+
+_j_ =0
+
+
+(1)
+
+
+(2)
+
+
+(3)
+
+
+_k_
+
+- _c_ ˜ [1] _j_ _[,β]_ =
+
+_j_ =0
+
+
+_k_
+
+
+_j_ =0
+
+
+_k_
+
+- _c_ ˜ [1] _j_ _[,β]_ _β_ _[k][−][j]_ =
+
+_j_ =0
+
+
+_k_
+
+- _rjβ_ _[j]_ _r_ ˜ _k−j,_
+
+
+_j_ =0
+
+
+(38)
+
+
+_c_ ˜ [1] _j_ _[,β]_ (1 _−_ _β_ _[k][−][j]_ [+1] )
+
+1 _−_ _β_ = _c_ [1] _k_ _[,β]_
+
+
+which can be derived from equating the coefficients of the following generating function identities,
+respectively:
+
+
+_√_
+(1) - _√_ 1 _−_ _x_ ~~�~~ 1 _−_ _βx_ - _×_ 1 ~~_√_~~ 1 _−_ _βx_
+1 _−_ _x_ [=] 1 _−_ _x_
+
+
+_√_
+(2) - _√_ 1 _−_ _x_ ~~�~~ 1 _−_ _βx_ - _×_ 1 ~~_√_~~ 1 _−_ _x_
+1 _−_ _βx_ [=] 1 _−_ _βx_
+
+
+(39)
+
+
+(3) - _√_ 1 _−_ _x_ ~~�~~ 1 _−_ _βx_ - _×_ - 1 1
+1 _−_ _βx_ 1 _−_ _x_
+
+
+- 1
+= ~~_√_~~ ~~_√_~~
+1 _−_ _x_ 1 _−_ _βx_
+
+
+**Upper Bound.** First, we rewrite the expression as follows by multiplying and dividing by 1 _−_ _β_
+the terms ˜ _c_ [1] _j_ _[,β]_ :
+
+
+_k_
+
+- _c_ ˜ [1] _j_ _[,β]_ _−_ _c_ [1] _k_ _[,β]_ [(1] _[ −]_ _[β]_ [) = (1] _[ −]_ _[β]_ [)]
+
+_j_ =0
+
+
+_k_
+
+
+_j_ =0
+
+
+_c_ ˜ [1] _j_ _[,β]_ (1 _−_ _β_ _[k][−][j]_ [+1] + _β_ _[k][−][j]_ [+1] ) _−_ _c_ [1] _k_ _[,β]_ [(1] _[ −]_ _[β]_ [)]
+
+1 _−_ _β_
+
+
+_k_
+
+
+_k_ _k_
+
+- _rjβ_ _[j]_ _r_ ˜ _k−j_ = _β_ _[k]_ [+1] 
+
+_j_ =0 _j_ =0
+
+
+- _r_ ˜ _jβ_ _[−][j]_ _rk−j,_
+
+
+_j_ =0
+
+
+(40)
+
+
+= _β_
+
+
+_k_
+
+- _c_ ˜ [1] _j_ _[,β]_ _β_ _[k][−][j]_ = _β_
+
+_j_ =0
+
+
+where the third equality follows from equation 38 (2). For _β_ = 0, the expression is identically 0. So,
+now consider when _β_ _>_ 0. We want to show that
+
+
+_k_
+
+      - _r_ ˜ _jβ_ _[−][j]_ _rk−j_ _≥_ 0 (41)
+
+
+_j_ =0
+
+
+18
+
+
+for all _β_ _∈_ (0 _,_ 1].
+
+
+As _β_ increases from 0 to 1, the sum is clearly increasing, since the only positive term does not have
+a _β_ multiplier. For _β_ = 1, the sum equals zero, as the sequences ˜ _rj_ and _rj_ have inverse generating
+functions. Therefore, the sum remains negative, concluding the proof of the upper bound.
+
+
+**Lower Bound.** For the lower bound, using equation (38) and the recurrence relation of ˜ _rj_ stated in
+Lemma 1, we get
+
+
+_k_
+
+- _c_ ˜ [1] _j_ _[,β]_ _−_ _rk_ (1 _−_ _β_ ) =
+
+_j_ =0
+
+
+_k_
+
+- _r_ ˜ _jβ_ _[j]_ _rk−j_ _−_ _rk_ (1 _−_ _β_ ) =
+
+
+_j_ =0
+
+
+_k_
+
+
+_k_
+
+- _r_ ˜ _jβ_ _[j]_ _rk−j_ + _βrk_
+
+
+_j_ =1
+
+
+_k_
+
+
+_k_
+
+
+_j_ =1
+
+
+
+
+
+ _rk −_
+
+
+_k_
+
+
+_j_ =1
+
+
+
+
+2 _jr −j_ 1 _[r][k][−][j][β][j][−]_ [1]  _≥_ _β_
+
+
+
+
+_rj_
+2 _j −_ 1 _[r][k][−][j]_ 
+
+
+= _β_
+
+
+_≥_ _β_
+
+
+
+
+
+ _rk −_
+
+
+_k_
+
+- _r_ ˜ _jrk−j_ = 0 _,_
+
+
+_j_ =0
+
+
+(42)
+
+
+concluding the proof. In the above, the first inequality follows from the fact that 0 _< β_ _≤_ 1. The fact
+is trivially true for _β_ = 0.
+
+
+**Lemma 10** (Bound on diagonal values of the matrix _C_ 1 _,β_ ) **.** _The diagonal values of the matrix C_ 1 _,β_
+_(see_ _equation_ (11) _)_ _with_ _parameter_ 0 _≤_ _β_ _<_ 1 _,_ _denoted_ _as_ (1 _, c_ [1] 1 _[,β][, c]_ 2 [1] _[,β][, . . ., c]_ _n_ [1] _[,β]_ _−_ 1 [)] _[,]_ _[satisfy]_ _[the]_
+_inequality:_
+
+
+_c_ [1] _k_ _[,β]_ _≤_ _c_ [1] _k_ _[,β]_ _−_ 1
+
+
+1 _−_ [(1] _[ −]_ _[β]_ [)][2]
+
+2 _k_
+
+
+_for_ _k_ _≥_ 1 _._ (43)
+
+
+_Proof._ We first prove that
+_c_ [1] _k_ _[,β]_ _−_ 1 _[−]_ _[c]_ _k_ [1] _[,β]_ _≥_ ( _rk−_ 1 _−_ _rk_ )(1 _−_ _β_ ) _._ (44)
+
+Using the expression of _c_ [1] _k_ _[,β]_ [, we have]
+
+
+_k_
+
+- _rjrk−jβ_ _[j]_ _−_ ( _rk−_ 1 _−_ _rk_ )(1 _−_ _β_ )
+
+
+_j_ =0
+
+
+_c_ [1] _k_ _[,β]_ _−_ 1 _[−]_ _[c]_ _k_ [1] _[,β]_ _−_ ( _rk−_ 1 _−_ _rk_ )(1 _−_ _β_ ) =
+
+
+_k−_ 1
+
+- _rjrk−_ 1 _−jβ_ _[j]_ _−_
+
+
+_j_ =0
+
+
+= _β_ ( _rk−_ 1 _−_ _rk_ ) +
+
+
+
+
+
+_k−_ 1
+
+- _rj_ ( _rk−j−_ 1 _−_ _rk−j_ ) _β_ _[j]_ _−_ _rkβ_ _[k]_
+
+
+_j_ =1
+
+
+
+
+
+
+
+
+_k−_ 1
+
+- _rj_ ( _rk−j−_ 1 _−_ _rk−j_ ) _β_ _[j][−][k]_ _−_ _rk_
+
+
+_j_ =1
+
+
+= _β_ _[k]_
+
+
+ _β_ [1] _[−][k]_ ( _rk−_ 1 _−_ _rk_ ) +
+
+
+We note that _rk_ is a decreasing sequence; therefore, the first two terms inside the brackets are positive,
+and the powers of _β_ in front of them are non-positive. Therefore, as a lower bound, we can substitute
+_β_ = 1 inside the sum:
+
+
+_k−_ 1
+
+- _rj_ ( _rk−j−_ 1 _−_ _rk−j_ ) _−_ _rk_
+
+
+_j_ =1
+
+
+(45)
+
+
+(46)
+
+
+
+
+
+
+
+
+_c_ [1] _k_ _[,β]_ _−_ 1 _[−]_ _[c]_ _k_ [1] _[,β]_ _−_ ( _rk−_ 1 _−_ _rk_ )(1 _−_ _β_ ) _≥_ _β_ _[k]_
+
+
+
+
+
+ _rk−_ 1 _−_ _rk_ +
+
+
+_k−_ 1
+
+
+= _β_ _[k]_ [ _rk−_ 1 _−_ 2 _rk_ + (1 _−_ _rk−_ 1) _−_ (1 _−_ 2 _rk_ )] = 0
+
+
+Using this inequality, we obtain:
+
+
+_c_ [1] _k_ _[,β]_ = _[c]_ _k_ [1] _[,β]_ _−_ 1 _[−]_ [(] _[c]_ _k_ [1] _[,β]_ _−_ 1 _[−]_ _[c]_ _k_ [1] _[,β]_ [)]
+_c_ [1] _k_ _[,β]_ _−_ 1 _c_ [1] _k_ _[,β]_ _−_ 1
+
+
+(1 _−_ _β_ )
+_c_ [1] _k_ _[,β]_ _−_ 1
+
+
+[(] _[c]_ _k−_ 1 _[−]_ _[c]_ _k_ [)]
+
+_≤_ 1 _−_ _[r][k][−]_ [1] _[ −]_ _[r][k]_
+_c_ [1] _k_ _[,β]_ _−_ 1 _c_ [1] _k_ _[,β]_ _−_ 1
+
+
+_[k][−]_ [1] _·_ [1] _[ −]_ _[β]_
+
+2 _k_ _c_ [1] _[,β]_
+
+
+_,_
+2 _k_
+
+
+= 1 _−_ _[r][k][−]_ [1]
+
+
+[1] _[ −]_ _[β]_ _≤_ 1 _−_ [(1] _[ −]_ _[β]_ [)][2]
+
+_c_ [1] _k_ _[,β]_ _−_ 1 2 _k_
+
+
+concluding the proof.
+
+
+19
+
+
+**Lemma 11** (Bounds on diagonals of _Bα,β_ _[p]_ [)] **[.]** _[The matrix][ B]_ _α,β_ _[p]_ _[in the BISR factorization is a lower]_
+_triangular Toeplitz matrix._ _The values on its diagonals are_
+
+
+(1 _, c_ _[α,β]_ 1 _, c_ _[α,β]_ 2 _, . . ., c_ _[α,β]_ _p−_ 1 _[, b]_ _p_ _[α,β]_ _, . . ., b_ _[α,β]_ _n−_ 1 [)] _where_ 0 _≤_ _b_ _[α,β]_ _i_ _≤_ _α_ _[i]_ _c_ [1] _p_ _[,β/α]_ _−_ 1 _for_ _i ≥_ _p_ (47)
+
+
+_where c_ [1] _i_ _[,β/α]_ _for_ 1 _≤_ _i ≤_ _p −_ 1 _is as defined in equation_ (11) _._
+
+
+_Proof._ The first _p_ values are identical to the square root factorization _c_ _[α,β]_ _i_ due to the uniqueness of
+the inverse. The remaining values satisfy the following recurrence:
+
+
+_p−_ 1
+
+_−_ _β_ _[i][−][j]_ [+1] = _α_ _[i]_ 
+_α −_ _β_
+
+
+1 _−_ _β/α_ = _α_ _[i]_ _b_ [1] _i_ _[,β/α]_ _._ (48)
+
+
+- _c_ ˜ [1] _j_ _[,β/α]_ 1 _−_ 1 _−ββ/α_ _[i][−][j]_ [+1]
+
+_j_ =0
+
+
+_b_ _[α,β]_ _i_ =
+
+
+_p−_ 1
+
+
+_p−_ 1
+
+- _c_ ˜ _[α,β]_ _j_ _α_ _[i][−][j]_ [+1] _α −−_ _ββ_ _[i][−][j]_ [+1]
+
+_j_ =0
+
+
+Therefore, it suffices to prove that _b_ [1] _i_ _[,β]_ _≤_ _c_ [1] _p_ _[,β]_ _−_ 1 [, since we can then substitute] _[ β]_ [with] _[ β/α]_ [.]
+
+
+_β_ 1
+
+=
+1 _−_ _β_ 1 _−_ _β_
+
+
+- _c_ ˜ [1] _j_ _[,β]_ 1 _β −_ _[p][−]_ _β_ _[j]_
+
+_j_ =0
+
+
+_p−_ 1
+
+
+_p−_ 1 _p−_ 1
+
+- _c_ ˜ [1] _j_ _[,β]_ _−_ _β_ _[i]_ [+1] _[−][p]_ 
+_j_ =0 _j_ =0
+
+
+1 _−_ _β_
+
+
+_b_ [1] _i_ _[,β]_ =
+
+
+_p−_ 1
+
+
+- _c_ ˜ [1] _j_ _[,β]_ 1 _−_ 1 _−β_ _[i][−]_ _β_ _[j]_ [+1]
+
+_j_ =0
+
+
+_p−_ 1
+
+- _c_ ˜ [1] _j_ _[,β]_ ( _−β_ _[p][−]_ 1 _[j]_ _−_ + 1 _β_ _−_ 1)
+
+_j_ =0
+
+
+1
+=
+1 _−_ _β_
+
+
+_p−_ 1
+
+
+_p−_ 1 _p−_ 1
+
+- _c_ ˜ [1] _j_ _[,β]_ + _β_ _[i]_ [+1] _[−][p]_ 
+_j_ =0 _j_ =0
+
+
+1 _−_ _β_
+
+
+(49)
+
+
+= [1] _[ −]_ _[β][i]_ [+1] _[−][p]_
+
+1 _−_ _β_
+
+
+_p−_ 1
+
+- _c_ ˜ [1] _j_ _[,β]_ + _c_ [1] _p_ _[,β]_ _−_ 1 _[β][i]_ [+1] _[−][p][.]_
+
+_j_ =0
+
+
+We now use Lemma 9 to first show that _b_ [1] _i_ _[,β]_ _≥_ 0, since the sum of ˜ _c_ [1] _j_ _[,β]_ is non-negative and all other
+terms are positive. Second, we establish that:
+
+
+_b_ [1] _i_ _[,β]_ _≤_ [1] _[ −]_ _[β][i]_ [+1] _[−][p]_ (1 _−_ _β_ ) _c_ [1] _p_ _[,β]_ _−_ 1 [+] _[ c]_ _p_ [1] _[,β]_ _−_ 1 _[β][i]_ [+1] _[−][p]_ [=] _[ c]_ [1] _p_ _[,β]_ _−_ 1 _[,]_ (50)
+
+1 _−_ _β_
+
+
+which completes the proof.
+
+
+**Lemma 12** (Bounds on diagonals of _Cα,β_ _[p]_ [)] **[.]** _[The matrix][ C]_ _α,β_ _[p]_ _[in the BISR factorization is a lower]_
+
+_triangular Toeplitz matrix._ _The values on its diagonals are_ (1 _, c_ _[α,β]_ 1 _, c_ _[α,β]_ 2 _, . . ., c_ _[α,β]_ _p−_ 1 _[, g]_ _p_ _[α,β]_ _, . . ., gn_ _[α,β]_ _−_ 1 [)] _[,]_
+
+_where c_ [1] _i_ _[,β/α]_ _(for_ 1 _≤_ _i ≤_ _p −_ 1 _) is as defined in equation_ (11) _and_
+
+
+                0 _≤_ _gi_ _[α,β]_ _≤_ _α_ _[i]_ min - _c_ [1] _i_ _[,β/α]_ _, c_ [1] _p_ _[,β/α]_ _γβ/α_ _[i][−][p]_ - _for_ _γβ/α_ = 1 + 4 [(1] _p_ (1 + _[ −]_ _[β/α]_ _β/α_ [)][2] )
+
+
+- _−_ 1
+_and_ _i ≥_ _p._
+
+
+(51)
+
+
+_Proof._ The first _p_ values of _Cα,β_ _[p]_ [are the same as those of] _[ C][α,β]_ [since the matrix is Lower Triangular]
+Toeplitz (LTT). For the subsequent values, we first prove the following inequality by induction:
+
+
+_p−_ 1
+�( _−c_ ˜ _[α,β]_ _j_ ) _c_ _[α,β]_ _i−j_ _[≤]_
+
+_j_ =1
+
+
+_i_
+�( _−c_ ˜ _[α,β]_ _j_ ) _c_ _[α,β]_ _i−j_ [=] _[ c]_ _i_ _[α,β]_ = _α_ _[i]_ _c_ [1] _i_ _[,β/α]_ _._ (52)
+
+_j_ =1
+
+
+_gi_ _[α,β]_ =
+
+
+_p−_ 1
+�( _−c_ ˜ _[α,β]_ _j_ ) _gi_ _[α,β]_ _−j_ _[≤]_
+
+_j_ =1
+
+
+We observe that for all sequences _c_ _[α,β]_ _i_, ˜ _c_ _[α,β]_ _i_, and _gi_ _[α,β]_, we can factor out _α_ _[i]_ by replacing _β_ with _β/α_ .
+Therefore, it suffices to prove the inequality _gi_ [1] _[,β]_ _≤_ _c_ [1] _p_ _[,β][γ]_ _β_ _[i][−][p]_, after which we may substitute _β_ with
+
+_β/α_ . For the subsequent _p_ values, we establish the stated bound _gi_ [1] _[,β]_ _≤_ _c_ [1] _p_ _[,β][γ]_ _β_ _[i][−][p]_ using Lemma 10.
+
+
+_gp_ [1] + _[,β]_ _k_ _≤_ _c_ [1] _p_ _[,β]_ + _k_
+_c_ [1] _p_ _[,β][γ]_ _β_ _[k]_ _c_ [1] _p_ _[,β]_
+
+
+1 _−_ [(1] _[ −]_ _[β]_ [)][2]
+
+2( _p_ + _j_ )
+
+
+20
+
+
+_k_
+
+
+_j_ =1
+
+
+_≤_ 1 _._ (53)
+
+
+1 + [(1] _[ −]_ _[β]_ [)][2]
+
+4 _p_ (1 + _β_ )
+
+
+- _k_
+=
+
+
+��
+1 + [(1] _[ −]_ _[β]_ [)][2]
+
+4 _p_ (1 + _β_ )
+
+
+Since each term in the product is less than 1 for 2 _p_ + 2 _j_ _≤_ 4 _p_, the inequality holds. For the induction
+step, we show:
+
+
+_p−_ 1
+�( _−c_ ˜ [1] _j_ _[,β]_ ) _γβ_ _[−][j]_ =
+
+_j_ =1
+
+
+_p−_ 1
+
+
+    
+�( _−c_ ˜ [1] _j_ _[,β]_ ) 1 + 4 [(1] _p_ (1 + _[ −]_ _[β]_ _β_ [)][2]
+
+_j_ =1
+
+
+_gp_ [1] + _[,β]_ _k_ 1
+=
+_c_ [1] _p_ _[,β][γ]_ _β_ _[k]_ _c_ [1] _p_ _[,β][γ]_ _β_ _[k]_
+
+
+_p−_ 1
+�( _−c_ ˜ [1] _j_ _[,β]_ ) _gp_ [1] + _[,β]_ _k−j_ _[≤]_
+
+_j_ =1
+
+
+4 _p_ (1 + _β_ )
+
+
+- _j_
+_._
+
+
+(54)
+
+
+For convenience, we denote _φβ_ = [(1] _[−][β]_ [)][2]
+
+
+For convenience, we denote _φβ_ = 1+ _β_ _<_ 1. To proceed, we use the following auxiliary inequality
+
+for _j_ _≤_ _p −_ 1:
+
+         -          - _j_ _jφβ_
+1 + _[φ][β]_ _≤_ _e_ 4 _p_ _≤_ 1 + [5] _[jφ][β]_ _[,]_ (55)
+
+
+_jφβ_
+
+
+(55)
+16 _p_ _[,]_
+
+
+4 _p_
+
+
+- _j_
+_≤_ _e_
+
+
+_jφβ_
+
+4 _p_ _≤_ 1 + [5] _[jφ][β]_
+
+
+since _e_ _[x]_ _≤_ 1 + 1 _._ 25 _x_ for _x ≤_ [1] 4 [.] [Combining this inequality with Lemma 9, we obtain:]
+
+
+_gp_ [1] + _[,β]_ _k_ _≤_
+_c_ [1] _p_ _[,β][γ]_ _β_ _[k]_
+
+
+_p−_ 1
+
+
+   
+�( _−c_ ˜ [1] _j_ _[,β]_ ) 1 + [5] 16 _[jφ]_ _p_ _[β]_
+
+_j_ =1
+
+
+_p−_ 1
+�( _−c_ ˜ [1] _j_ _[,β]_ ) _j._ (56)
+
+_j_ =1
+
+
+16 _p_
+
+
+_≤_ 1 _−_ _rp−_ 1(1 _−_ _β_ ) + [5] _[φ][β]_
+
+16 _p_
+
+
+_≤_ 1 _−_ _rp−_ 1(1 _−_ _β_ ) + [5] _[φ][β]_
+
+
+By Lemma 7, we can upper bound:
+
+
+_jrj_
+( _−c_ ˜ [1] _j_ _[,β]_ ) _j_ _≤_ ( _−r_ ˜ _j_ ) _j_ (1 + _β_ ) = 2 _j −_ 1 [(1 +] _[ β]_ [)] _[ ≤]_ _[r][j]_ [(1 +] _[ β]_ [)] _[.]_ (57)
+
+
+Using the known bounds - _π_ (1 _j_ +1) _[≤]_ _[r][j]_ _[≤]_ ~~_√_~~ 1 _πj_, we conclude:
+
+
+_gp_ [1] + _[,β]_ _k_ _≤_ 1 _−_ [1] ~~_√_~~ _[ −]_ _[β]_ + [5(1] _[ −]_ _[β]_ [)][2]
+_c_ [1] _p_ _[,β][γ]_ _β_ _[k]_ _πp_ 16 _p_ ~~_[√]_~~ _π_
+
+
+_p−_ 1
+
+
+_j_ =1
+
+
+1
+~~_√_~~ _≤_ 1 _−_ [1] ~~_√_~~ _[ −]_ _[β]_ + [5(1] _[ −]_ _[β]_ [)][2] _·_ 2 _[√]_ _p_
+_j_ _πp_ 16 _p_ ~~_[√]_~~ _π_
+
+
+(58)
+
+
+_≤_ 1 _−_ [1] ~~_√_~~ _[ −]_ _[β]_
+_πp_
+
+
+- 1 _−_ [5] _<_ 1 _,_
+
+8 [(1] _[ −]_ _[β]_ [)]
+
+
+where for the second inequality we used the integral estimate [�] _j_ _[k]_ =1 _[−]_ [1] _[j][−]_ [1] _[/]_ [2] _[≤]_ �0 _k_ _[x][−]_ [1] _[/]_ [2] _[dx]_ [ = 2] _√_
+
+Thus, we have shown that _gp_ [1] _[,β]_ + _k_
+_c_ [1] _p_ _[,β]_ _γβ_ _[k]_ _[≤]_ [1][ for all] _[ k]_ [, which completes the proof.]
+
+
+_k_ .
+
+
+**Theorem 4** (BISR Approximation Error) **.** _For_ 1 _≤_ _p ≤_ _n and_ 1 _≤_ _k_ _≤_ _[n]_ _b_ _[the following upper bound]_
+
+_holds for the matrix factorization error of the BISR Aα,β_ = _Bα,β_ _[p]_ _[C]_ _α,β_ _[p]_ _[(as in Definition 1):]_
+
+
+log _p_ _p_ + ~~�~~ _kp_ log _b_ _p_
+
+
+_b_
+
+
+_for_ _α_ = 1 _,_
+
+
+- _√_ _k_ log _p_ + _nk_
+
+
+_E_ ( _Bα,β_ _[p]_ _[, C]_ _α,β_ _[p]_ [) =]
+
+
+
+
+
+
+ _Oβ_
+
+
+ _O_
+
+
+_√_
+_Oα,β_ (
+
+
+(7)
+_k_ ) _for_ _α <_ 1 _,_
+
+
+~~�~~ _nk_ log _p_
+_b_ [+] _p_
+
+
+_where Oα,β_ _and Oβ_ _indicate that the hidden constant may depend on α and β, respectively._
+
+
+_Proof._ We begin with the case _α <_ 1. To analyze this, we first consider the Frobenius norm:
+
+
+_n−_ 1
+�( _b_ _[α,β]_ _i_ ) [2] _≤_
+
+_i_ = _p_
+
+
+- _α_ [2] _[i]_
+
+
+_i_ = _p_
+
+
+_∥Bα,β_ _[p]_ _[∥]_ Fr [2]
+_≤_
+_n_
+
+
+_p−_ 1
+�( _c_ _[α,β]_ _i_ ) [2] +
+
+_i_ =0
+
+
+_p−_ 1
+
+
+_p−_ 1 _n−_ 1
+�( _c_ _[α,β]_ _i_ ) [2] + ( _c_ [1] _p_ _[,β/α]_ _−_ 1 [)][2] 
+_i_ =0 _i_ = _p_
+
+
+(59)
+
+
+- _α_ [2] _[p]_
++ 1 _−_ _α_ [2] [=] _[ O][α,β]_ [(1)] _[,]_
+
+
+- _α_ [2] _[p]_
++
+
+
+1    - 1
+_≤_ ( _α −_ _β_ ) [2] [log] 1 _−_ _α_ [2]
+
+
+where for the second inequality we used Lemma 11, and for the third inequality Lemma 7 from
+Kalinin & Lampert (2024).
+
+For the ( _k, b_ )-sensitivity of the matrix _Cα,β_ _[p]_ [, we use the fact that it is element-wise bounded by the]
+full matrix _Cα,β_ (see Lemma 12). For _Cα,√β_, we apply a bound from Theorem 7 of Kalinin & Lampert
+(2024), yielding sens _k,b_ ( _Cα,β_ ) = _Oα,β_ ( _k_ ), which concludes the case _α <_ 1.
+
+
+21
+
+
+For _α_ = 1, we use Lemma 11 to get:
+
+
+_n−_ 1
+
+- _rp_ [2] _−_ 1
+
+
+_i_ = _p_
+
+
+(60)
+
+
+_∥B_ 1 _[p]_ _,β_ _[∥]_ Fr [2]
+_≤_
+_n_
+
+
+_n−_ 1
+�( _b_ [1] _i_ _[,β]_ ) [2] =
+
+_i_ =0
+
+
+_p−_ 1
+�( _c_ [1] _i_ _[,β]_ ) [2] +
+
+_i_ =0
+
+
+_n−_ 1
+�( _c_ [1] _p_ _[,β]_ _−_ 1 [)][2] [=] 1
+
+(1 _−_ _β_ ) [2]
+_i_ = _p_
+
+
+_n−_ 1
+
+
+_p−_ 1
+
+- _ri_ [2] [+] 1
+
+(1 _−_ _β_ ) [2]
+_i_ =0
+
+
+= _Oβ_
+
+
+log _p_ + _[n]_
+
+_p_
+
+
+log _p_ + _[n]_
+
+
+_._
+
+
+1
+_≤_
+(1 _−_ _β_ ) [2]
+
+
+1 + log _p_ + _[n][ −]_ _[p]_
+
+_pπ_
+
+
+Next, we bound the sensitivity under _k, b_ participation. Using Theorem 5, combined with Lemma 8
+we obtain:
+
+
+_k−_ 1
+
+
+sens [2] _k,b_ [(] _[C]_ 1 _[p]_ _,β_ [) =]
+
+
+_k−_ 1
+
+
+- _⟨_ ( _C_ 1 _[p]_ _,β_ [)][:] _[,ib][,]_ [ (] _[C]_ 1 _[p]_ _,β_ [)][:] _[,jb][⟩][.]_ (61)
+
+_i_ =0
+
+
+_j_ =0
+
+
+We split the sum into the following four terms:
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+min( _p_ + _ib,n_ ) _−_ 1 _−jb_
+
+ - _c_ [1] _t_ _[,β]_ _c_ [1] _jb_ _[,β]_ _−ib_ + _t_
+
+_t_ =0
+
+
+min( _p−_ 1 _,n−_ 1 _−jb_ )
+
+ - _c_ [1] _t_ _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_
+
+_t_ =0
+
+
+min( _p−_ 1 _,n−_ 1 _−jb_ )
+
+ 
+
+
+sens [2] _k,b_ [(] _[C]_ 1 _[p]_ _,β_ [) =]
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
++
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
+- �� _S_ 1
+
+
+- �� _S_ 2
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_n−_ 1 _−jb_
+
+ - _gt_ [1] _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_
+
+_t_ = _p_
+
+
+min( _p−_ 1 _,n−_ 1 _−ib_ )
+
+ 
+
+
+
+
+
+
+
+
+_n−_ 1 _−ib_
+
+- ( _gt_ [1] _[,β]_ ) [2]
+
+_t_ = _p_
+
+
+_n−_ 1 _−ib_
+
+
++
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
++
+
+
+
+
+
+- ( _c_ [1] _t_ _[,β]_ ) [2] +
+
+_t_ =0
+
+
+ - �� _S_ 3
+
+
+- �� _S_ 4
+(62)
+
+
+**Step 1 (** _S_ 1 **Bound)** We note that the case _b < p < n_ has not been considered in Kalinin & Lampert
+(2024) and is technically more challenging. Consider the half of the sum where _j_ _>_ _i_ . The sum
+requires _jb −_ _ib ≤_ _p −_ 1; otherwise, the upper limit would be negative. We bound the sum as follows:
+
+
+min( _p_ + _ib,n_ ) _−_ 1 _−jb_
+
+ 
+
+
+_[r][jb][−][ib]_ 1
+
+1 _−_ _β_ [+] _π_ (1 _−_ _β_ ) [2]
+
+
+1
+
+~~�~~ _t_ ( _jb −_ _ib_ + _t_ )
+
+
+
+
+
+- _c_ [1] _t_ _[,β]_ _c_ [1] _jb_ _[,β]_ _−ib_ + _t_ _[≤]_ _[r][jb][−][ib]_
+
+1 _−_ _β_
+
+_t_ =0
+
+
+_p−_ 1+ _ib−jb_
+
+ 
+
+_t_ =1
+
+
+_p−_ 1+ _ib−jb_
+
+ 
+
+0
+
+
+_dx_
+
+- _x_ ( _jb −_ _ib_ + _x_ )
+
+
+1
+_≤_
+(1 _−_ _β_ ) [2]
+
+
+1
+=
+(1 _−_ _β_ ) [2]
+
+
+
+
+1 + _π_ [1]
+
+
+- - _jb −_ _ib_
+1 + [1]
+
+_π_ _[f]_ _p −_ 1 + _ib −_ _jb_
+
+
+(63)
+
+
+
+
+
+��
+_,_
+
+
+where _f_ ( _a_ ) = 2 log �� _a_ 1 [+ 1 +] ~~�~~ _a_ 1
+
+
+function _f_ ( _a_ ):
+
+
+. We then use the following auxiliary inequality for the
+
+
+       - 1       -       - 1       -       - 1       _f_ ( _a_ ) = log + 2 log 1 + ~~_√_~~ _≤_ log + 2 log 2 _._ (64)
+_a_ [+ 1] _a_ + 1 _a_ [+ 1]
+
+
+This results in the following inequality:
+
+
+min( _p_ + _ib,n_ ) _−_ 1 _−jb_
+
+ - _c_ [1] _t_ _[,β]_ _c_ [1] _jb_ _[,β]_ _−ib_ + _t_ _[≤]_ 1
+
+(1 _−_ _β_ ) [2]
+_t_ =0
+
+
+We can now upper bound the double sum:
+
+
+1 + [2 log 2]
+
+
+[1] - _p −_ 1 + _ib −_ _jb_
+
+_π_ [log] _jb −_ _ib_
+
+
+��
+1 _jb−ib≤p−_ 1 _._
+
+
+(65)
+
+
++ [1]
+_π_ _π_
+
+
+- 3 [1] - _p −_ 1
+2 [+] _π_ [log] _jb −_ _ib_
+
+
+- 3 [1]
+2 [+] _π_
+
+
+min( _k−_ 1 _,i_ + _⌊_ _[p][−]_ _b_ [1] _⌋_ )
+
+ 
+
+
+min( _k−_ 1 _,i_ + _⌊_ _[p][−]_ [1]
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
+min( _p_ + _ib,n_ ) _−_ 1 _−jb_
+
+ - _c_ [1] _t_ _[,β]_ _c_ [1] _jb_ _[,β]_ _−ib_ + _t_ _[≤]_ 2
+
+(1 _−_ _β_ ) [2]
+_t_ =0
+
+
+22
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_j_ = _i_ +1
+
+
+��
+_._
+
+
+(66)
+
+
+The first term gives us:
+
+
+min( _k−_ �1 _,i_ + _⌊_ _[p][−]_ _b_ [1] _⌋_ ) 3 3 _k_
+
+2 _[≤]_ (1 _−_ _β_ ) [2]
+
+_j_ = _i_ +1
+
+
+2
+(1 _−_ _β_ ) [2]
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+- _p −_ 1 
+_._ (67)
+
+_b_
+
+
+The second term is more involved. First, we upper bound the upper limit of the sum min( _k −_ 1 _, i_ +
+_⌊_ _[p][−]_ [1] _[⌋]_ [)][ by] _[ i]_ [ +] _[ ⌊]_ _[p][−]_ [1] _[⌋]_ [, since the summands are positive.] [We can then upper bound the expression by:]
+
+
+[1]
+
+_b_ _[⌋]_ [)][ by] _[ i]_ [ +] _[ ⌊]_ _[p][−]_ _b_ [1]
+
+
+_b_ _[⌋]_ [, since the summands are positive.] [We can then upper bound the expression by:]
+
+
+_i_ + _⌊_ _[p][−]_ [1]
+
+
+- _p−_ 1
+_b_
+_j −_ _i_
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+log
+
+_j_ = _i_ +1
+
+
+_⌊_ _b_ _⌋_
+
+
+[1] _b_
+
+_b_ [)] _[⌊]_ _[p][−]_ [1]
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_b_ _⌋_
+
+
+_b_ _⌋_ _[p][−]_ [1]
+
+[)] _[⌊]_ _[p][−]_ [1] _b_
+
+_b_ [1] _[⌋]_ [)!] = _k_ log [(] ( _⌊_ _[p]_
+
+
+[1] _b_
+
+_b_ [)] _[⌊]_ _[p][−]_ [1]
+
+
+(68)
+
+_[−]_ [1]
+
+_b_ _[⌋]_ [)!] _[.]_
+
+
+_b_ _⌋_
+
+
+= log
+
+
+( _[p][−]_ [1]
+
+
+( _⌊_ _[p][−]_ [1]
+
+
+( _⌊_ _[p][−]_ [1]
+
+
+Using the auxiliary inequality _k_ ! _≥_ ( _[k]_ _e_ [)] _[k]_ [, we show that:]
+
+
+_[−]_ [1] _b_
+
+_b_ [)] _[⌊]_ _[p][−]_ [1]
+
+
+_[p][−]_ [1]
+log [(] _b_
+
+
+_b_ _⌋_
+
+
+[)] _b_ - _p −_ 1
+
+_[−]_ [1] _≤_ _b_
+
+_b_ _[⌋]_ [)!]
+
+
+- - _p −_ 1
+log _[p][ −]_ [1] _−_
+
+_b_ _b_
+
+
+- - _p −_ 1
+log
+_b_
+
+
+- - _p −_ 1
++
+_b_
+
+
+( _⌊_ _[p][−]_ [1]
+
+
+ - _p −_ 1
+=
+_b_
+
+
+- - _p −_ 1
+log
+_b_
+
+
+- - _p −_ 1
++
+_b_
+
+
+- - _p −_ 1
+_≤_
+_b_
+
+
+_._
+
+
+Resulting in:
+
+
+- _p −_ 1 
+_,_
+
+_b_
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
+min( _p_ + _ib,n_ ) _−_ 1 _−jb_
+
+ - _c_ [1] _t_ _[,β]_ _c_ [1] _jb_ _[,β]_ _−ib_ + _t_ _[≤]_ 1
+
+(1 _−_ _β_ ) [2]
+_t_ =0
+
+
+4 _k_
+_≤_
+(1 _−_ _β_ ) [2]
+
+
+- - _p −_ 1
+3 _k_
+_b_
+
+
+- - _p −_ 1
++ [2]
+
+_π_ _[k]_ _b_
+
+
++ [2]
+
+
+��
+
+
+which concludes this part of the calculations.
+
+
+**Step 2 (Bound** _S_ 2 **).** We can bound the inner sum as follows, assuming that _jb −_ _ib ≥_ _p_ :
+
+
+min( _p−_ 1 _,n−_ 1 _−jb_ )
+
+ - _c_ [1] _t_ _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_ _[≤]_ _[c]_ _p_ [1] _[,β]_
+
+_t_ =0
+
+
+_p−_ 1
+
+- _c_ [1] _t_ _[,β]_ _γβ_ _[jb][−][ib]_ [+] _[t][−][p]_ = _c_ [1] _p_ _[,β][γ]_ _β_ _[jb][−][ib][−][p]_
+
+_t_ =0
+
+
+_p−_ 1
+
+- _c_ [1] _t_ _[,β]_ _γβ_ _[t]_
+
+_t_ =0
+
+
+- _p−_ 1 _c_ [1] _t_ _[,β]_ _≤_ _rp_ (1 _γ −β_ _[jb][−]_ _β_ _[ib]_ ) _[−]_ [2] _[p]_
+
+_t_ =0
+
+
+- _p−_ 1 _c_ [1] _t_ _[,β]_ _≤_ _rp_ (1 _γ −β_ _[jb][−]_ _β_ _[ib]_ ) _[−]_ [2] _[p]_
+
+_t_ =0
+
+
+_p−_ 1
+
+
+_t_ =1
+
+
+1
+~~_√_~~
+
+_t_
+
+
+(69)
+
+
+(70)
+
+
+(71)
+
+
+_≤_ _c_ [1] _p_ _[,β][γ]_ _β_ _[jb][−][ib][−][p]_
+
+
+- 1
+1 + ~~_√_~~
+_π_
+
+
+1
+~~_√_~~
+
+
+_≤_ _rpγβ_ _[jb][−][ib][−][p]_ �1 + [2] ~~_√_~~ _[√][p]_
+(1 _−_ _β_ ) [2] _π_
+
+
+- _≤_ 3 _γβ_ _[jb][−][ib][−][p]_
+(1 _−_ _β_ ) [2]
+
+
+_[φ]_ 4 _p_ _[β]_ - _−_ 1, where _φβ_ = [(1] 1+ _[−][β]_ _β_ [)][2]
+
+
+For our specific choice of _γβ_ = 1 _−_ 4 _pφ_ + _βφβ_ [=] �1 + _[φ]_ 4 _p_ _[β]_
+
+
+For our specific choice of _γβ_ = 1 _−_ 4 _p_ + _βφβ_ [=] 1 + 4 _p_ _[β]_, where _φβ_ = 1+ _β_ [.] [We rewrite the]
+
+bound using the following auxiliary inequality:
+
+
+  _γβ_ _[−][p]_ = 1 + _[φ]_ 4 _p_ _[β]_
+
+
+- _p_
+_≤_ _e_ _[φ][β]_ _[/]_ [4] _≤_ _e_ [1] _[/]_ [4] _≤_ [4] (72)
+
+3 _[,]_
+
+
+This yields the upper bound for the whole sum:
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
+min( _p−_ 1 _,n−_ 1 _−jb_ )
+
+ - _c_ [1] _t_ _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_ _[≤]_ 8
+
+(1 _−_ _β_ ) [2]
+_t_ =0
+
+
+_j_ = _k_ - _−i_ +11 _γβ_ _[jb][−][ib]_ _≤_ (1 _−_ _β_ 8) _kγ_ [2] (1 _β_ _[b]_ _−_ _γβ_ _[b]_ [)] (73)
+
+
+We bound _γβ_ _[b]_ [in the following way:]
+
+
+       - _φβ_
+_γβ_ _[b]_ [=] 1 _−_
+4 _p_ + _φβ_
+
+
+- _b_ _≤_ _e−_ 4 _pbφ_ + _βφβ_ = _e−_ _bφpβ_
+
+
+5 _p_ (74)
+
+
+_β_ _p_ _bφβ_
+
+_p_ 4 _p_ +1 _≤_ _e_ _[−]_ 5 _p_
+
+
+23
+
+
+Thus,
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+_k−_ 1
+
+
+_j_ = _i_
+
+
+min( _p−_ 1 _,n−_ 1 _−jb_ )
+
+ - _c_ [1] _t_ _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_ _[≤]_ 8 _k_
+
+_t_ =0 (1 _−_ _β_ ) [2] ( _γβ_ _[−][b]_ _−_ 1)
+
+
+8 _k_
+_≤_
+
+(1 _−_ _β_ ) [2] ( _e_
+
+
+_bφ_ 5 _pβ_ _−_ 1) _≤_ [40] _b_ _[kp]_ (1 _−_ [(1 +] _β_ ) _[ β]_ [4] [)]
+
+
+(75)
+
+
+(76)
+
+
+_bφβ_
+
+
+_b_ (1 _−_ _β_ ) [4] _[.]_
+
+
+**Step 3 (Bound** _S_ 3 **)** We first bound the inner sum, assuming _j_ _> i_ :
+
+
+_n−_ 1 _−jb_
+
+
+1 _−jb_ _n−_ 1 _−jb_
+
+- _gt_ [1] _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_ _[≤]_ [(] _[c]_ _p_ [1] _[,β]_ [)][2] 
+_t_ = _p_ _t_ = _p_
+
+
+- _γβ_ _[t][−][p]_ _γβ_ _[jb][−][ib]_ [+] _[t][−][p]_
+
+_t_ = _p_
+
+
+( _c_ [1] _p_ _[,β]_ [)][2] _[γ]_ _β_ _[jb][−][ib]_ ( _c_ [1] _p_ _[,β]_ [)][2] _[γ]_ _β_ _[jb][−][ib]_ (4 _p_ + _φβ_ )
+_≤_ _≤_
+1 _−_ _γβ_ [2] 2 _φβ_
+
+_≤_ _rp_ [2][(4] _[p]_ [ + 1)] _[γ]_ _β_ _[jb][−][ib]_ _≤_ 5 _rp_ [2] _[γ]_ _β_ _[jb][−][ib]_ _p_
+2 _φβ_ (1 _−_ _β_ ) [2] 2 _φβ_ (1 _−_ _β_ ) [2]
+
+_≤_ 2 _πφ_ 5 _βγ_ (1 _β_ _[jb]_ _−_ _[−][ib]_ _β_ ) [2] _[≤]_ _γβ_ _[jb]_ (1 _[−][ib]_ _−_ (1 + _β_ ) [4] _β_ ) _._
+
+
+This yields the upper bound:
+
+
+_k−_ 1 _k−_ 1
+
+- 
+
+_i_ =0 _j_ = _i_
+
+
+_n−_ 1 _−jb_
+
+
+_k−_ 1
+
+
+_._ (77)
+_b_ (1 _−_ _β_ ) [6]
+
+
+- _gt_ [1] _[,β]_ _gjb_ [1] _[,β]_ _−ib_ + _t_ _[≤]_ [2(1 +] _[ β]_ [)]
+
+(1 _−_ _β_ ) [4]
+
+_t_ = _p_
+
+
+(1 _−_ _β_ ) [4]
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+- _γβ_ _[jb][−][ib]_ _≤_ [10] _b_ _[kp]_ (1 [(1 +] _−_ _β_ _[ β]_ ) [6][)][2]
+
+_j_ = _i_ +1
+
+
+analogously to the previous step.
+
+
+**Step 4 (Bound** _S_ 4 **)** We bound the sum of squared column norms as follows:
+
+
+- 5(1 + _β_ )
+1 + log _p_ +
+2 _π_ (1 _−_ _β_ ) [2]
+
+
+(78)
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+
+
+
+min( _p−_ 1 _,n−_ 1 _−ib_ )
+
+ 
+
+
+
+
+_k_
+ _≤_ (1 _−_ _β_ ) [2]
+
+
+_k_
+_≤_
+(1 _−_ _β_ ) [2]
+
+
+�� _p−_ 1 _rt_ [2] [+] _rp_ [2]
+
+_t_ =0 1 _−_ _γβ_ [2]
+
+
+- _p−_ 1
+
+
+_n−_ 1 _−ib_
+
+ - ( _gt_ [1] _[,β]_ ) [2]
+
+_t_ = _p_
+
+
+_n−_ 1 _−ib_
+
+ 
+
+
+
+
+
+- ( _c_ [1] _t_ _[,β]_ ) [2] +
+
+_t_ =0
+
+
+_._
+
+
+**Step 5 (Combination)** Combining all steps together, we bound the _k, b_ sensitivity as follows:
+
+
+_k−_ 1
+
+- _⟨_ ( _C_ 1 _[p]_ _,β_ [)][:] _[,ib][,]_ [ (] _[C]_ 1 _[p]_ _,β_ [)][:] _[,jb][⟩]_
+
+_i_ =0
+
+
+sens [2] _k,b_ [(] _[C]_ 1 _[p]_ _,β_ [) =]
+
+
+_k−_ 1
+
+
+_j_ =0
+
+
+_b_ (1 _−_ _β_ ) [2]
+
+
+��
+
+
+_k_
+_≤_
+(1 _−_ _β_ ) [2]
+
+
+1 + log _p_ + [5(1 +] _[ β]_ [)]
+
+
+_[ β]_ [)]
+
++ 10 _[p]_ [(1 +] _[ β]_ [)]
+2 _π_ _b_ (1 _−_ _β_ ) [2]
+
+
+- 1 + _β_ - - _p −_ 1
+4 + + 4
+(1 _−_ _β_ ) [2] _b_
+
+
+_≤_ _[k]_ [(1 +] _[ β]_ [)][2]
+
+(1 _−_ _β_ ) [6]
+
+
+2 + log _p_ + 54 _[p]_
+
+_b_
+
+
+Thus,
+
+
+And
+
+
+_E_ ( _B_ 1 _[p]_ _,β_ _[, C]_ 1 _[p]_ _,β_ [)][2] _[≤]_ _[k]_ [(1 +] _[ β]_ [)][2]
+
+(1 _−_ _β_ ) [8]
+
+
+1 + log _p_ + _[n][ −]_ _[p]_
+
+_pπ_
+
+
+��
+2 + log _p_ + 54 _[p]_
+
+_b_
+
+
+(79)
+
+
+(80)
+
+
+- _kp_ log _p_ 
+
+_b_
+
+
+_nk_ log _p_
+
++
+_p_
+
+
+_E_ ( _B_ 1 _[p]_ _,β_ _[, C]_ 1 _[p]_ _,β_ [) =] _[ O][β]_
+
+
+- _√_
+
+
+_k_ log _p_ +
+
+
+~~�~~ _nk_
+
+_b_ [+]
+
+
+24
+
+
+_._ (81)
+
+
+**Lemma 3** (Optimal Band Inversion Error) **.** _Let the matrix Cλ_ _[−]_ [1] = LTT(1 _, −λ,_ 0 _, . . .,_ 0) _be a lower_
+_triangular Toeplitz matrix with_ 1 _on the main diagonal and −λ on the subdiagonal._ _Then, for a single_
+_participation and the prefix sum matrix A_ 1 _,_ 0 _, the following bound on the matrix factorization error_
+_holds:_
+inf                  - _A_ 1 _,_ 0 _Cλ_ _[−]_ [1] _[, C][λ]_                  - = _O_ ( _n_ [1] _[/]_ [4] ) _._ (10)
+_λ∈_ (0 _,_ 1) _[E]_
+
+
+_Proof._ If the matrix _Cλ_ _[−]_ [1] is given by LTT(1 _, −λ,_ 0 _, . . .,_ 0), then its inverse is _Cλ_ =
+LTT(1 _, λ, λ_ [2] _, . . ., λ_ _[n][−]_ [1] ). The product _A_ 1 _,_ 0 _Cλ_ _[−]_ [1] = LTT(1 _,_ 1 _−_ _λ, . . .,_ 1 _−_ _λ_ ), which leads to the
+following error:
+
+
+ -  - _[n]_  - _[−]_ [1]
+
+[1] 1 + (1 _−_ _λ_ ) [2] ( _n −_ 1)
+
+_n_
+
+
+_._ (82)
+_n_ (1 _−_ _λ_ [2] )
+
+
+_E_ ( _A_ 1 _,_ 0 _Cλ_ _[−]_ [1] _[, C][λ]_ [)][2] [=] [1]
+
+
+- _λ_ [2] _[k]_ = [(1 + (1] _[ −]_ _[λ]_ [)][2][(] _[n][ −]_ [1))(1] _[ −]_ _[λ]_ [2] _[n]_ [)]
+
+_n_ (1 _−_ _λ_ [2] )
+
+_k_ =0
+
+
+Therefore,
+
+
+_n_ 2
+
+~~_√_~~ _≤_ ~~_√_~~ _,_ (83)
+_n_ _n_
+
+
+inf _λ_ _[, C][λ]_ [)][2] _[≤]_
+_λ∈_ (0 _,_ 1) _[E]_ [(] _[A]_ [1] _[,]_ [0] _[C]_ _[−]_ [1]
+
+
+�2 _−_ [1]
+
+
+_n_ [1] - [�] 1 _−_ �1 _−_ ~~_√_~~ 1 _n_ - _n_ 
+
+
+when _λ_ = �1 _−_ ~~_√_~~ 1 as 1 _−_ _λ ≤_ 1 _−_ (1 _−_ ~~_√_~~ 1 ) = ~~_√_~~ 1 . The bound follows.
+_n_ _n_ _n_
+
+
+25
+
+
+10
+
+
+9
+
+
+8
+
+
+7
+
+
+6
+
+
+22
+
+
+20
+
+
+18
+
+
+16
+
+
+14
+
+
+6.2
+
+
+6.0
+
+
+5.8
+
+
+5.6
+
+
+5.4
+
+
+5.2
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+0 5 10 15 20 25
+Steps
+
+(a) _k_ = 4, _α_ = 1, _β_ = 0
+
+
+0 5 10 15 20 25
+Steps
+
+(b) _k_ = 4, _α_ = 1, _β_ = 0 _._ 9
+
+
+0 5 10 15 20 25
+Steps
+
+(c) _k_ = 4, _α_ = 0 _._ 999, _β_ = 0
+
+
+17
+
+
+16
+
+
+15
+
+
+14
+
+
+13
+
+
+12
+
+
+220
+
+
+200
+
+
+180
+
+
+160
+
+
+140
+
+
+120
+
+
+0 5 10 15 20 25
+Steps
+
+(f) _k_ = 16, _α_ = 0 _._ 999, _β_ = 0
+
+
+0 5 10 15 20 25
+Steps
+
+(d) _k_ = 16, _α_ = 1, _β_ = 0
+
+
+0 5 10 15 20 25
+Steps
+
+(e) _k_ = 16, _α_ = 1, _β_ = 0 _._ 9
+
+
+Figure 6: Convergence of Band-Inv-MF under different settings: for participation numbers _k_ = 4 _,_ 16,
+with and without momentum ( _β_ ) and weight decay ( _α_ ), across various matrix sizes (iterations). In
+general, we observe that 20 steps are sufficient for the procedure to converge.
+
+
+Table 1: Hyperparameters for CIFAR-10 Experiments. We train all methods with and without
+amplification to achieve (9 _,_ 10 _[−]_ [5] )-differential privacy. Training uses a weight decay of 0 _._ 9999,
+momentum of 0 _._ 9, and batch size 512. Noise multipliers are computed via an MCMC accountant for
+the amplified case, and as _σϵ,δ ×_ sens _k,b_ ( _C_ ) for the non-amplified case, assuming 10 training epochs.
+
+
+**Method** **Noise Multiplier** **Learning Rate** **bandwidth** **Clip Norm**
+
+
+Amplified
+
+
+Non-amplified
+
+
+DP-SGD 1 _._ 2 0 _._ 1 1 10
+BSR 2 _._ 3 0 _._ 3 4 10
+BISR 4 _._ 4 0 _._ 7 4 10
+Band-MF 2 _._ 4 0 _._ 3 4 10
+Band-Inv-MF 8 _._ 2 0 _._ 4 4 10
+
+
+DP-SGD 1 _._ 8 0 _._ 1 1 10
+BSR 3 _._ 3 0 _._ 2 4 10
+BISR 5 _._ 8 0 _._ 7 4 10
+Band-MF 3 _._ 5 0 _._ 2 4 10
+Band-Inv-MF 9 _._ 1 0 _._ 5 4 10
+
+
+B ADDITIONAL MATERIALS
+
+
+Table 2: CIFAR-10 experiments with and without amplification, for _ε_ = 9, _δ_ = 10 _[−]_ [5] showing test
+accuracy (%) over 10 epochs. Mean _±_ standard error computed over 3 runs.
+
+
+**Method** **Epoch 1** **Epoch 2** **Epoch 3** **Epoch 4** **Epoch 5** **Epoch 6** **Epoch 7** **Epoch 8** **Epoch 9** **Epoch 10**
+
+
+Amp.
+
+
+Non-Amp.
+
+
+DP-SGD 12.7 _±_ 2.2 28.0 _±_ 1.1 34.4 _±_ 0.4 37.6 _±_ 0.7 39.8 _±_ 1.2 41.6 _±_ 0.2 42.3 _±_ 0.8 42.8 _±_ 0.3 43.5 _±_ 0.4 44.6 _±_ 0.7
+BSR 28.3 _±_ 0.7 40.2 _±_ 1.1 43.6 _±_ 1.1 46.5 _±_ 0.9 48.0 _±_ 2.0 48.8 _±_ 1.4 48.9 _±_ 1.4 49.4 _±_ 0.7 49.2 _±_ 1.2 49.8 _±_ 0.3
+BISR 32.3 _±_ 0.7 42.7 _±_ 1.1 47.5 _±_ 1.1 50.3 _±_ 0.9 52.8 _±_ 2.0 56.5 _±_ 1.4 57.9 _±_ 1.4 58.5 _±_ 0.7 60.5 _±_ 1.2 61.8 _±_ 0.3
+Band-MF 27.7 _±_ 2.0 38.5 _±_ 0.3 43.1 _±_ 1.6 43.7 _±_ 1.8 46.8 _±_ 0.8 47.7 _±_ 0.3 48.2 _±_ 0.6 47.8 _±_ 2.6 49.1 _±_ 0.6 50.0 _±_ 0.4
+Band-Inv-MF 23.6 _±_ 2.8 34.6 _±_ 1.3 40.0 _±_ 2.4 44.6 _±_ 1.3 48.6 _±_ 1.0 50.4 _±_ 1.0 50.6 _±_ 0.5 53.4 _±_ 0.8 56.2 _±_ 0.6 57.4 _±_ 1.2
+
+
+DP-SGD 19.5 _±_ 3.0 31.0 _±_ 1.1 36.7 _±_ 0.2 37.2 _±_ 0.4 37.7 _±_ 1.2 39.3 _±_ 2.0 39.8 _±_ 1.2 39.1 _±_ 0.3 39.5 _±_ 0.5 39.0 _±_ 0.7
+BSR 25.4 _±_ 1.2 36.7 _±_ 1.2 40.8 _±_ 1.1 41.6 _±_ 2.0 43.6 _±_ 0.9 44.5 _±_ 0.7 45.0 _±_ 0.9 44.4 _±_ 2.1 45.3 _±_ 1.8 45.2 _±_ 0.8
+BISR 31.8 _±_ 1.5 41.7 _±_ 2.2 45.4 _±_ 1.4 48.5 _±_ 1.3 51.1 _±_ 1.0 51.4 _±_ 2.7 53.8 _±_ 1.0 54.0 _±_ 1.2 55.5 _±_ 0.8 56.2 _±_ 0.2
+Band-MF 25.9 _±_ 1.5 36.7 _±_ 0.9 41.1 _±_ 1.4 43.2 _±_ 1.3 42.8 _±_ 1.4 45.0 _±_ 0.2 45.5 _±_ 0.4 45.4 _±_ 1.8 46.7 _±_ 0.9 45.8 _±_ 0.2
+Band-Inv-MF 27.4 _±_ 3.0 36.0 _±_ 2.5 39.5 _±_ 2.4 43.7 _±_ 1.2 46.7 _±_ 0.5 47.0 _±_ 2.0 49.7 _±_ 1.7 53.5 _±_ 0.5 54.4 _±_ 1.5 57.9 _±_ 0.4
+
+
+26
+
+
+Table 3: Hyperparameters for IMDB Sentiment Analysis Experiments with BERT-base. We train all
+methods with and without amplification to achieve (9 _,_ 10 _[−]_ [5] )-differential privacy. Training uses a
+weight decay of 0 _._ 99999, momentum of 0 _._ 95, and batch size 512. Noise multipliers are computed
+via an MCMC accountant for the amplified case, and as _σϵ,δ ×_ sens _k,b_ ( _C_ ) for the non-amplified case,
+assuming 10 training epochs.
+
+
+**Method** **Noise Multiplier** **Learning Rate** **Bandwidth** **Clip Norm**
+
+
+Amplified
+
+
+Non-amplified
+
+
+DP-SGD 1 _._ 2 0 _._ 02 1 10
+BSR 2 _._ 3 0 _._ 02 4 10
+BISR 4 _._ 4 0 _._ 15 4 10
+Band-MF 2 _._ 4 0 _._ 02 4 10
+Band-Inv-MF 8 _._ 2 0 _._ 1 4 10
+
+
+DP-SGD 1 _._ 8 0 _._ 02 1 10
+BSR 3 _._ 3 0 _._ 02 4 10
+BISR 5 _._ 8 0 _._ 15 4 10
+Band-MF 3 _._ 5 0 _._ 02 4 10
+Band-Inv-MF 9 _._ 1 0 _._ 1 4 10
+
+
+Table 4: IMDB sentiment analysis (BERT-base) with and without amplification, for _ε_ = 9, _δ_ = 10 _[−]_ [5]
+showing test accuracy (%) over 10 epochs. Mean _±_ standard error computed over 3 runs.
+
+
+**Method** **Epoch 1** **Epoch 2** **Epoch 3** **Epoch 4** **Epoch 5** **Epoch 6** **Epoch 7** **Epoch 8** **Epoch 9** **Epoch 10**
+
+
+Amp.
+
+
+Non-Amp.
+
+
+DP-SGD 71.23 _±_ 0.79 82.42 _±_ 0.54 84.45 _±_ 0.21 85.57 _±_ 0.19 86.18 _±_ 0.05 86.64 _±_ 0.03 86.93 _±_ 0.03 86.99 _±_ 0.14 87.26 _±_ 0.03 87.43 _±_ 0.12
+BSR 75.26 _±_ 2.67 84.46 _±_ 0.25 86.11 _±_ 0.29 86.96 _±_ 0.11 87.48 _±_ 0.13 87.77 _±_ 0.07 87.84 _±_ 0.08 87.91 _±_ 0.13 88.19 _±_ 0.14 88.11 _±_ 0.06
+BISR 83.27 _±_ 0.21 87.08 _±_ 0.05 88.16 _±_ 0.09 88.83 _±_ 0.06 89.20 _±_ 0.05 89.21 _±_ 0.09 89.49 _±_ 0.03 89.41 _±_ 0.11 89.60 _±_ 0.05 89.58 _±_ 0.17
+Band-MF 76.66 _±_ 1.24 84.66 _±_ 0.17 86.36 _±_ 0.17 87.22 _±_ 0.15 87.62 _±_ 0.40 87.89 _±_ 0.23 88.04 _±_ 0.19 88.16 _±_ 0.21 88.33 _±_ 0.26 88.31 _±_ 0.19
+Band-Inv-MF 82.91 _±_ 0.53 86.92 _±_ 0.31 88.25 _±_ 0.05 88.60 _±_ 0.17 89.02 _±_ 0.19 89.23 _±_ 0.06 89.50 _±_ 0.06 89.50 _±_ 0.06 89.65 _±_ 0.00 89.53 _±_ 0.25
+
+
+DP-SGD 62.94 _±_ 1.47 78.21 _±_ 0.56 83.05 _±_ 0.19 84.17 _±_ 0.20 85.01 _±_ 0.06 85.40 _±_ 0.20 85.53 _±_ 0.17 85.80 _±_ 0.13 85.81 _±_ 0.17 85.71 _±_ 0.09
+BSR 76.74 _±_ 1.04 84.09 _±_ 0.09 85.70 _±_ 0.22 86.59 _±_ 0.26 86.93 _±_ 0.03 87.15 _±_ 0.13 87.20 _±_ 0.11 87.19 _±_ 0.09 87.31 _±_ 0.15 87.18 _±_ 0.10
+BISR 81.85 _±_ 0.86 86.65 _±_ 0.33 87.60 _±_ 0.39 88.64 _±_ 0.10 88.90 _±_ 0.05 88.83 _±_ 0.18 89.02 _±_ 0.09 89.43 _±_ 0.07 89.37 _±_ 0.00 89.42 _±_ 0.15
+Band-MF 73.39 _±_ 1.39 83.63 _±_ 0.38 85.39 _±_ 0.16 86.09 _±_ 0.29 86.99 _±_ 0.06 87.08 _±_ 0.13 87.23 _±_ 0.16 87.34 _±_ 0.14 87.34 _±_ 0.07 87.08 _±_ 0.14
+Band-Inv-MF 81.99 _±_ 0.23 86.06 _±_ 0.19 87.98 _±_ 0.11 88.46 _±_ 0.12 88.63 _±_ 0.03 88.79 _±_ 0.32 88.85 _±_ 0.29 89.02 _±_ 0.21 88.89 _±_ 0.37 89.23 _±_ 0.16
+
+
+27
+
+
+6
+
+
+10
+
+
+13
+
+
+15
+
+
+17
+
+
+24
+
+
+28
+
+
+32
+
+
+35
+
+
+Listing 1: Python code for Band-Inv-MF factorization. The function "Band_Inv_MF" takes the
+matrix size ( _n_ ), the minimum separation ( _b_ ), the number of participations ( _k_ ), the bandwidth ( _p_ ), the
+weight decay ( _α_ ), the momentum ( _β_ ), and the number of optimization steps.
+
+
+28

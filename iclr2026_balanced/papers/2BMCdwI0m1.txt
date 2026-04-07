@@ -1,0 +1,3397 @@
+# FROM AMBIGUOUS FEEDBACK TO VERIFIABLE REPAIR
+## VIA FORMAL SYNTHESIS IN TEXT-TO-SQL
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Large Language Models (LLMs) for Text-to-SQL frequently generate
+formally incorrect queries, yet existing repair methods rely on diagnostically impoverished execution feedback. This forces LLMs to speculate
+on error causes, undermining reliability. We introduce Post-SQLFix, a
+neuro-symbolic framework instigates a paradigm shift from ambiguous
+feedback to verifiable repair, designed to supersede the database execute
+feedback paradigm. Our approach canonicalizes any SQL query into
+a _:::::::::::_ dialect-aware, canonical query structure (CQS) representation. Upon
+CQS, a symbolic engine performs systematic syntactic, context-free, and
+context-sensitive semantic analysis to produce a sound diagnosis. We
+then formalize repair as a constrained synthesis problem: for any detected
+violation, our engine synthesizes a constrained space of formally verifiable repair plans. This transforms the LLM from an unreliable corrector
+into a constrained agent tasked with implementing a valid, synthesized
+plan. On the BIRD and Spider benchmarks, including multi-dialect
+subsets, Post-SQLFix boosts execution accuracy by up to +11.6% and
+reduces repair iterations by 50% compared to execution _:::::::: :::::::_ feedback. By
+replacing ambiguous feedback with formal guarantees, our framework
+represents a significant step towards building robust and trustworthy
+AI-driven code generation.
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) have achieved strong performance in Text-to-SQL translation (Yu
+et al., 2018; Wang et al., 2020; Hwang et al., 2019), demonstrating the ability to map natural-language
+queries to executable SQL. Nevertheless, LLMs remain brittle: they frequently contain syntactic
+violations, schema-entity and type mismatches, or logical errors (e.g., incorrect joins, predicates, or
+aggregation scopes) (Yu et al., 2018; Wang et al., 2020).
+
+
+To mitigate these reliability issues, many systems adopt an **LLM-as-a-judge** self-correction pipeline,
+where the model repairs its own SQL (Pourreza & Rafiei, 2023; Gao et al., 2024). Yet the same
+probabilistic model that produced the error is asked to diagnose and fix it (Madaan et al., 2023);
+studies show such self-correction can stall or even degrade reasoning (Huang et al., 2024; Kamoi
+et al., 2024), underscoring the need for external, trustworthy signals. A complementary thread adds
+external knowledge via retrieval or multi-agent designs. Retrieval-augmented methods supply extra
+context (Talaei et al., 2024; Shi et al., 2025) but trade recall for noise and suffer prompt dilution (Li
+et al., 2023). Multi-agent systems split roles (Wang et al., 2025; Askari et al., 2025; Cen et al.,
+2025) yet introduce coordination overhead and new failure modes (Pan et al., 2025). In both cases,
+arbitration often reverts to an LLM-as-a-judge (Gu et al., 2025), leaving the core reliability gap.
+
+
+Seeking deterministic rather than probabilistic signals, recent work adopts debugger-style **post-**
+**execution validation** (e.g., SQL-PaLM (Sun et al., 2023b), SQL-CRAFT (Xia et al., 2024)), leveraging **database execution feedback (EF)** to guide LLM repairs. Although these engine-generated
+errors are faithful, they are inherently low-level: messages such as ‘ `Syntax` `error` `near` `WHERE` ‘ lack
+schema- and intent-level context, vary across dialects, and provide limited support for root-cause
+analysis. Moreover, EF offers no signal for semantically incorrect yet executable queries (e.g., wrong
+joins, or aggregation scopes) or for empty-result cases, leaving a substantial coverage gap. Conse
+
+1
+
+
+quently, EF shifts rather than resolves the arbitration problem: **a probabilistic model still lifts coarse**
+**messages into high-level diagnoses and actionable repairs** (Chen et al., 2024). In the absence of a
+formal intermediate representation and a principled detection-and-repair procedure, such pipelines
+provide neither soundness (avoiding the introduction of new errors) nor completeness (exhaustively
+identifying statically-detectable violations), and lack a systematic bridge from diagnosis to repair.
+Hence, these observations expose a fundamental arbitration paradox: existing efforts delegate both
+diagnosis and repair decisions to the class of probabilistic models that produced the errors. This
+dependence on indeterminacy judgment creates a bottleneck that manifests as two challenges:
+
+
+**Challenge 1:** **Diagnostic Translation Deficit.** Low-level diagnostics from execution feedback (EF)
+are engine-specific, local, and semantically opaque, offering limited support for root-cause analysis.
+What is missing is a deterministic procedure that lifts ambiguous, low-level observations into precise,
+schema- and intent-aware high-level diagnoses.
+
+
+**Challenge** **2:** **Repair** **Direction** **Deficit.** Even when precise semantic diagnoses are available,
+existing pipelines lack principled mechanisms to derive actionable, correctness-preserving repairs.
+Effective fixing must navigate the correctness–intent trade-off: preserving formal validity (syntax,
+types, and schema constraints) while maintaining the natural-language intent. This calls for a
+systematic method that compiles diagnostic information into constrained, verifiable repair instructions,
+providing soundness guarantees (no new violations), strong intent alignment, and, where applicable,
+completeness over statically detectable errors.
+
+
+This paper introduces Post-SQLFix, a neuro-symbolic framework that shifts Text-to-SQL repair
+from ambiguous, feedback-driven heuristics to **formal, deterministic validation and synthesis** . We
+contend that the reliability of LLM-based SQL generation can be substantially improved by coupling
+neural semantic reasoning with a rigorous symbolic engine. To this end, we perform a two-stage
+query canonicalization that parses any SQL query into a dialect-aware _:::::::::::_, hierarchical **Canonical Query**
+**Structure (CQS)**, which serves as the intermediate representation and contract between the neural
+and symbolic components. Built on CQS, we implement a **hierarchical validator** that analyzes
+queries in a strictly ordered pipeline: Syntactic Analysis, Context-Free Semantic Analysis, and
+Context-Sensitive Semantic Analysis. This procedure yields precise, formal diagnoses of all statically
+detectable violations, providing soundness and, where applicable, completeness. Beyond diagnosis,
+each violation is compiled into a constrained synthesis problem. The symbolic engine enumerates
+a schema-grounded, finite set of repair plans that are provably valid with respect to the constraints
+and introduce no new violations. This design **repositions the LLM from an unreliable arbiter to**
+**a constrained neural agent** that realizes a formally vetted repair specification. The specification
+includes the diagnosis and the admissible repair plans, allowing the LLM to leverage its generative
+strengths while preserving formal guarantees for the final SQL. Our contributions are:
+
+
+    - We introduce a formal, neuro-symbolic framework for Text-to-SQL for repair that provides
+a sound and complete diagnostic engine, designed to supersede the limitations of Execution
+Feedback (EF).
+
+    - We formalize the repair process as a constrained synthesis problem, transforming EF’s
+speculative, multi-turn repair loop into a single-pass, guided generation task.
+
+    - We demonstrate the empirical superiority and generalizability of our formal approach. On
+the BIRD and Spider benchmarks, including multi-dialect subsets, Post-SQLFix significantly
+improves execution accuracy by up to +11.6% and reduces repair iterations by 50% compared
+to the standard EF paradigm.
+
+
+2 RELATED WORK
+
+
+**Neuro-Symbolic** _:::::::::::::::::::::_ **Code** _::::::::::::_ **Generation:** Recent _::::::::::::::::::::_ neuro-symbolic _:::::::::::_ approaches _::::_ to _::::::_ code
+
+generation _::::::::::::_ can _::::_ be _:::::::_ broadly _::::::::::_ categorized _::::_ by _:::::_ their _::::::::::_ intervention _::::::_ point. _:::::::::::::_ Constrained _::::::::_ decoding
+
+methods _::::::: :::::::::::::::::::::::::::::::::::_ (Poesia et al., 2022; M¨undler et al., 2025) enforce _::::::::::::_ formal _::::::::::_ correctness _:::_ by _:::::::::_ restricting _:::_ the
+
+LLM’s _:::::::::::_ output _:::::_ space _::_ at _:::_ the _:::::_ token _::::_ level _::::::_ during _::::::::::_ generation. _:::::_ While _::::::::_ achieving _::::::::_ reduction _::_ in _::::::::::_ compilation
+
+errors _::::: ::::::::::::::::::_ (M¨undler et al., 2025) _:_, _:::_ this _:::::::::::::_ generation-time _:::::::::_ constraint _::::::::_ paradigm _:::::::_ remains _::::::_ limited _::_ to _:::::::_ syntactic
+
+structure _:::::::::::_ and _:::::_ local _::::_ type _:::::::::::::_ constraints—it _:::::::_ cannot _:::::::_ address _::::::::_ complex _::::::::::::::_ context-sensitive _:::::::::::_ consistency
+
+errors _::::: :::::_ where _::::_ root _::::::_ causes _:::_ are _:::::::::_ structurally _::::::_ distant _:::::_ from _::::_ their _:::::::::::_ manifestation _::::::_ points. _:::::::::::::::_ SMT-solver-based
+
+verification _:::::::::::::::::::_ approaches _:::::::::::::::_ (Sun et al., 2023a) _::::::_ provide _::::::::_ rigorous _:::::_ formal _::::::::::_ guarantees _::::::_ through _:::::::::::_ satisfiability
+
+
+2
+
+
+|Hierarchical Validation Syntax|Col2|
+|---|---|
+|||
+|Context-Free|Context-Free|
+|||
+|Context-Sensitive|Context-Sensitive|
+
+
+**Figure 1:** The framework consists of three main stages: (a) Initial LLM proposes a SQL query from
+user question. (b) Formal Diagnosis & Synthesis: the engine validates the query’s formal correctness
+via three layers and synthesizes a valid repair plans for detection violations to guide LLM repair. (c)
+Alignment, a deterministic strategy for handling semantically ambiguous empty-result cases.
+
+
+checking _:::::::::::_ but _::::_ face _::_ a _:::::::_ critical _::::::::::translation_ _::::gap_ : _::::::::::_ converting _::::::::_ abstract _::::::::_ satisfying _:::::::::::_ assignments _::::_ into
+
+semantically _:::::::::::::::::::::_ meaningful, _::::::::::::::_ intent-preserving _:::::_ code _::::::_ repairs _::::_ still _::::::::_ requires _::::::::_ extensive _:::::::_ manual _::::::_ prompt
+
+engineering. _:::::::::::::::::_ Similar _:::::::::_ challenges _::::::_ appear _:::_ in _::::::::::::_ neurosymbolic _:::::_ table _:::::::::_ extraction _:::::::::::::::::::_ (Mehrotra et al., 2025)
+
+_:_ [,] _::::::::::_ highlighting _::::_ that _:::_ this _::::_ gap _:::::::_ between _::::::_ formal _::::::::::_ correctness _:::_ and _::::::::_ practical _:::::_ repair _:::::::::_ represents _:_ a _::::::::_ pervasive
+
+barrier. _:::::: :::_ In _:::::::_ contrast, _::::_ our _:::::_ work _::::::::_ performs _::::::_ holistic _::::::::_ post-hoc _::::::::_ diagnosis _:::_ to _::::::::::::_ systematically _:::::::_ identify _::_ all
+
+error _::::::::_ root _::::::_ causes, _::::_ then _::::::::::::_ automatically _:::::::_ compiles _::::_ this _:::::::_ analysis _::::_ into _:_ a _:::::::_ formal, _::::::::::::::_ LLM-executable _::::::_ Repair
+
+Specification—inspired _::::::::::::::::::::::_ by _::::::::::_ GenSQL’s _:::::::::_ symbolic _::::::::::::_ representation _::::::::::_ framework _::::::::::::::::_ (Huot et al., 2024) _:_ .
+
+This _::::::::::::::::::_ diagnosis-driven _::::::::_ synthesis _::::::::_ paradigm _::::::_ enables _::::::::_ provably _::::::_ sound _:::::::_ handling _:::_ of _:::_ the _::::::::_ complete _:::::_ error
+
+taxonomy _::::::::_ _**:**_ while _::::::::::::::_ eliminating _::_ the _:::::::::_ translation _::::_ gap.
+
+
+**SQL Correction.** SQL repair methodologies can be broadly categorized. A significant work has
+focused on static analysis and rule-based methods to correct a limited set of common syntactic and
+logical errors (Presler-Marshall et al., 2021). While deterministic, these approaches often lack the
+flexibility to handle the diverse and complex errors generated by modern LLMs. In contrast, regardless of their architectural complexity, converge on a different fundamental dependency: **database**
+**execution feedback (EF)** . Post-execution validation methods (Sun et al., 2023b; Xia et al., 2024;
+Chen et al., 2023), multi-agent frameworks (Cen et al., 2025; Wang et al., 2025), and even selfcorrection paradigms (Pourreza & Rafiei, 2023; Askari et al., 2025) all universally rely on EF to
+trigger and guide the repair process. This reliance on EF exposes a critical limitation: database EF
+provide only coarse-grained _symptoms_ rather than precise diagnostic information (Chen et al., 2024).
+While benchmarks like NL2SQL-BUGs (Liu et al., 2025) have established a rich taxonomy for
+these semantic errors, EF provides no direct path to identifying them. Consequently, these methods
+require LLMs to interpret ambiguous error signals, perpetuating rather than resolving the underlying
+probabilistic reasoning challenges, which often degrades performance (Huang et al., 2024; Kamoi
+et al., 2024). Our work moves beyond both template-application and feedback-driven speculation by
+introducing a formal synthesis paradigm grounded in a complete, semantic diagnosis.
+
+
+3 METHODOLOGY
+
+
+This section details the foundations of our work, designed to address the limitations of the prevailing
+database EF. The challenge lies in translating formal validation into actionable guidance for LLMs.
+Our objective is to bridge this neuro-symbolic divide by replacing EF’s speculative repair loop with a
+constrained synthesis problem. To this end, as shown in Figure 1, we introduces a post-hoc repair
+pipeline rather than reinventing SQL generation (part a). This pipeline operates on two distinct tracks:
+a formal synthesis loop for incorrect queries (part b), complemented by a deterministic alignment
+strategy for ambiguous empty-result cases (part c). The entire framework is unified by its central
+abstraction, the Canonical Query Structure (CQS). The following sections will detail the CQS’s
+formal definition (§3.1), its role in our hierarchical validation engine (§3.2), its function within our
+sound repair synthesis (§3.3-§3.4), finally, its application in the LLM-guidance workflow (§3.5).
+
+
+3
+
+
+|Validation Layer|Error Categories|
+|---|---|
+|**Syntactic (**_α_**)**|This layer handles precursors to semantic analysis, such as typos (e.g., ’SEELCT’)|
+|**Context-Free Semantic (**_β_**)**|**Clause-related:** Clause Redundancy<br>**Function-related:** Aggregate Functions, Window Functions<br>**Operator-related:** Logical Operator (precedence issues)<br>**Other:** ASC/DESC, DISTINCT (structural usage)|
+|**Context-Sensitive Semantic (**_γ_**)**|**Attribute-related:** Attribute Mismatch/Missing/Redundancy<br>**Table-related:** Table Mismatch/Missing/Redundancy<br>**Join-related:** Join Condition Mismatch, Join Type Mismatch<br>**Function-related:** Date/Time, Conversion, Math, String, Conditional (type/schema<br>dependent usage)<br>**Value-related:** Data Format Mismatch|
+|**Empty Result Warnings**|**Condition-related:** Explicit Condition Mismatch/Missing<br>**Value-related:** Value Mismatch<br>**Subquery-related:** Subquery Mismatch|
+
+
+**Table 1:** Hierarchical Taxonomy of SQL Validation Errors
+
+3.1 QUERY CANONICALIZATION
+
+
+To overcome syntactic variance across SQL dialects (e.g., SQLite, PostgreSQL), our framework first
+parses any query string _Q_ str into a dialect-aware _:::::::::::_ **Abstract Syntax Tree (AST)** . While the AST unifies
+syntax, it is ill-suited for high-level semantic analysis regarding logical dependencies. We introduce a
+hierarchical representation, **Canonical Query Structure (CQS)**, designed to model a query’s logical
+architecture. The CQS, denoted Φ, is not merely a data structure but a formal abstraction that distills
+a query’s essential operational components. We structure Φ as a 6-tuple:
+
+
+Φ = (Π _, ρ,_ Γ _,_ Ωord _, A, S_ ) _._ (1)
+
+
+This structure is explicitly designed to mirror the relational query evaluation process. It begins
+with the **Source** **Relation** _ρ_, which defines the intermediate working set. This relation is then
+transformed by the **Aggregation** logic Γ. The final result set is determined by the **Projection** Π
+and formatted by the **Presentation** component Ωord. This model is completed by components for
+managing **Aliases** ( _A_ ) and recursively-defined _::::::_ **Nested** _::::::_ **Scopes** ( _S_ ). The _::S :::::::::_ component _::::::::::_ decomposes
+
+complex _:::::::::::::::_ structures _:::::_ (e.g., _::::::_ CTEs, _:::::::_ derived _::::::_ tables) _:::_ into _:::::::::::_ independent _::::::_ logical _:::::_ units, _:::::::::_ providing _:_ a _::::::_ clean,
+
+structured _:::::::::::::_ basis _:::_ for _:::_ all _:::::::::_ subsequent _::::::_ formal _::::::::_ analysis, _::::::::::_ independent _:::_ of _:::_ the _:::::::_ query’s _:::::::_ original _:::::::_ syntactic
+
+form. _::::_ The detailed structural composition of each component is formally defined in Appendix C.1.
+
+
+3.2 HIERARCHICAL VALIDATION ENGINE
+
+
+As shown in Figure 1(b), the Post-SQLFix validation engine systematically inspects the CQS Φ
+against a hierarchy of integrity constraints. Our approach is grounded in the principles of formal
+language theory, mirroring a compiler’s phased analysis. This process is structured into three
+validation layers with a partial ordering, denoted _α_ _≺_ _β_ _≺_ _γ_ ensuring that foundational errors
+are resolved before dependent ones are considered. This strict _:::::::::_ partial _::::::::_ ordering _::_ is _::::::::::_ foundational _::_ to
+
+our _::: :::::::::_ **diagnostic** _:::::::::_ **soundness** . _:::_ By _::::::::_ ensuring _:::_ that _:::::::::::_ foundational _:::::_ errors _:::_ are _:::::::_ resolved _:::::_ before _:::::::::_ dependent _:::::_ ones,
+
+this _:::::::::::::_ hierarchical _::::::::::_ dependency _::::::::::_ **guarantees** _::::_ **zero** _::::_ **false** _::::::::_ **positives** _::::::_ arising _::::_ from _:::::::::_ cascading _::::::_ failures.
+
+
+**Syntactic Analysis (Layer** _α_ **).** This foundational layer validates the basic grammar of the query.
+This layer detects errors such as misspelled keywords or unbalanced parentheses.
+
+
+**Context-Free Semantic Analysis (Layer** _β_ **).** This layer verifies the **intrinsic logical integrity** of the
+CQS Φ, independent of any external schema. It enforces universal constraints of relational logic that
+must hold true for any well-formed query, such as dependencies between clauses. In essence, this
+layer acts as an internal logic check, for example, it detects inconsistencies such as referencing an
+attribute in an `ORDER` `BY` clause that is not available in the `SELECT` list of the query.
+
+
+**Context-Sensitive Semantic Analysis (Layer** _γ_ **).** This layer validates the CQS Φ is semantically
+coherent with respect to the target database environment, (Σ _,_ ∆), where Σ is the database schema
+(defined in Appendix A.1) and ∆ is the **Dialect Specification** . Analogous to a compiler’s semantic
+analysis, this layer ensures **Identifier Binding** and **Type Correctness** against Σ. It also performs
+a **Structural Integrity Analysis** by verifying properties like join path connectivity using Σ’s foreign key constraints. Finally, it enforces dialect conformance, ensuring adherence to the function
+
+
+4
+
+
+signatures and rules defined in ∆. Crucially, _:::::::::::_ the _::::::::_ validation _:::::::_ process _::_ is _::::::::_ recursive. _::::::_ While _:::_ the _::::::_ trigger
+
+for _::::::::::_ checking _::::::_ nested _::::::_ scopes _::::_ lies _::_ in _:::::_ Layer _::γ ::::::_ (which _::::::::_ manages _::::::_ context _::::_ and _:::::::::_ visibility), _:::_ the _::::::::_ execution
+
+involves _:::::::::::::::_ restarting _:::_ the _:::_ full _::::::::_ semantic _::::::::_ validation _:::::::_ pipeline _::::::::::::::_ ( _P_ struct _∧_ _P_ context) _:::_ for _::::_ each _::::::_ nested _::::_ unit. _::::_ This
+
+treats _:::::::::_ every _::::::::_ subquery _:::_ or _::::_ CTE _:::_ as _::_ an _:::::::::::_ independent _:::::_ CQS, _:::::::_ ensuring _::::_ that _::_ it _:::::::_ satisfies _:::_ all _::::::::_ structural _:::_ and
+
+schema _:::::::::::::::_ constraints _::::::::_ internally _::::::_ before _:::::_ being _::::::::_ integrated _::::_ into _:::_ the _::::_ outer _::::::_ query.The detailed formalization
+of these checks is provided in Appendix A.3.
+
+
+This layered architecture provides a systematic engine for error detection. All examples of each
+layers are in Appendix F. We demonstrate that our hierarchy systematically covers the full spectrum
+of error categories cataloged by the NL2SQL-BUGs benchmark (Liu et al., 2025), as detailed in
+Table 1. Furthermore, our formalism extends beyond purely semantic taxonomies by incorporating
+the foundational syntactic layer ( _α_ ) and establishes an extensible framework where new validation
+rules can be integrated into the appropriate layer to support new SQL dialects or database functions.
+
+
+3.2.1 FORMAL CORRECTNESS SPECIFICATION
+
+
+The hierarchical validation process culminates in a formal specification of a query’s correctness. This
+specification operates on a **syntactically well-formed CQS** Φ. The syntactic validation (Layer _α_ )
+acts as a gateway: if a query string _Q_ str cannot be parsed into a CQS, it is rejected outright. For a
+successfully parsed query, we define its semantic correctness through two predicates corresponding
+to other validation layers:
+
+
+A CQS Φ is deemed **semantically valid**, if and only if both predicates are satisfied:
+
+IS VALID(Φ _,_ Σ _,_ ∆) _⇐⇒_ _P_ struct(Φ) _∧_ _P_ context(Φ _,_ Σ _,_ ∆) (2)
+
+
+A **Violation**, _v_, represents a specific instance of a semantic predicate failure. The set of all violations
+for a syntactically correct query is thus defined as:
+_V_ (Φ _,_ Σ _,_ ∆) = _{v_ _| v_ is an atomic predicate that fails for (3)
+_::::::::::::::::::::::::::::_ [(Φ] _[,]_ [ Σ] _[,]_ [ ∆)] _[}]_
+
+
+Consequently, _:::::::::::::_ a _:::::_ query _::_ is _::::::::::_ semantically _::::::_ invalid _::_ if _:::_ and _::::_ only _::_ if _::_ its _::::::::_ violation _:::_ set _::_ is _:::::::::_ non-empty. _:_
+
+
+3.3 A FORMALISM FOR VIOLATION-DRIVEN REPAIR
+
+
+Given a CQS Φ with a non-empty violation set _V_ (Φ _,_ Σ _,_ ∆), the repair task is to synthesize a repair
+plan Λ that transforms Φ into a valid Φ _[′]_ for which _V_ (Φ _[′]_ _,_ Σ _,_ ∆) = _∅_ . Our formalism models this
+as a constrained synthesis problem, built upon the concepts of repair operators and the plans they
+form. The entire process is designed to be violation-driven, ensuring that every synthesized action is
+a direct and relevant response to a detected invalidity.
+
+
+3.3.1 THE BUILDING BLOCKS: OPERATORS AND PLANS
+
+
+Our repair formalism is built upon two core concepts: primitive **operators** that enact atomic changes,
+and **plans** that orchestrate sequences of these operators.
+**Definition** **1** (Repair Operator) **.** _A_ _Repair_ _Operator,_ _ω,_ _is_ _a_ _parametric_ _transformation_ _function_
+_ω_ : Φ _→_ Φ _that_ _applies_ _a_ _targeted,_ _atomic_ _modification_ _to_ _a_ _Canonical_ _Query_ _Structure._ _The_
+_parameters of ω instantiate the operator for a specific application context._
+
+
+Since a single violation may require a sequence of modifications for a complete resolution, we
+introduce the concept of a Repair Plan, which defined as follow:
+**Definition 2** (Repair Plan) **.** _A Repair Plan,_ Λ _, is an ordered sequence of instantiated repair oper-_
+_ators,_ Λ = _⟨ω_ 1 _, ω_ 2 _, . . ., ωn⟩._ _The application of a plan to a CQS, denoted_ Λ(Φ) _, is the functional_
+_composition of its constituent operators,_ ( _ωn ◦· · · ◦_ _ω_ 2 _◦_ _ω_ 1)(Φ) _._
+
+
+These two constructs form the foundational vocabulary for our synthesis process, which we detail in
+the following section.
+
+
+5
+
+
+- _P_ struct(Φ): The _Structural Correctness Predicate_, which holds true if the CQS Φ **and** _::::::_ **all** _::_ **its**
+
+**nested** _:::::::::::_ **scopes** are _:::_ internally consistent (Layer _β_ ).
+
+- _P_ context(Φ _,_ Σ _,_ ∆): The _Contextual Correctness Predicate_, which holds true if Φ recursively _::::::::_
+
+satisfies _::::::_ the database context constraints defined by the schema and the dialect (Layer _γ_ ).
+
+
+3.3.2 VIOLATION-DRIVEN PLAN SYNTHESIS
+
+
+_:_ [It] _::::::::_ provides _:_ a _::::::_ formal _::::::::_ guarantee _::::_ that _:::_ **the** _:::::_ **LLM** _::_ **is** _::::_ **only** _:::::_ **ever** _::::::::_ **presented** _::::_ with _:::::_ repair _::::::::_ strategies _:::_ that _:::_ are
+
+provably _::::::::::::::_ correct. _::::_ This _:::::::::_ guarantee _:::::::::_ eliminates _:::_ the _::::::::::_ speculation _:::::::_ inherent _::_ in _:_ feedback-driven _::::::::_ methods,
+
+underpinning _::::::::::: :::_ the _::::::::_ reliability _::_ of _:::_ our _::::::::::_ framework. _:::::_ While _::::::::_ Theorem _:_ 1 _::::::::::_ establishes the _:::::::::::_ soundness _::_ of _:::::_ single
+
+repair _::::: ::::_ step, _:::_ we _::::::_ extend _::::_ this _::::::_ formal _:::::::_ analysis _::_ to _::::_ the _:::::_ entire _:::::::_ iterative _:::::::_ process _::_ in _:::::::::_ Appendix _::_ G _:::_ and _:::_ we
+
+prove _::::::::::::::::::::::_ **Order-Independent** _:::::::::::_ **Reachability** (Theorem _::::::::::_ 8), _::::::::::::_ demonstrating _::::_ that _::::::_ finding _:::any:::::valid:::::repair_
+
+_sequence:::::::::::::::::guarantees ::::::::::convergence::to::a ::::::correct_ _::::state_ .
+
+
+3.5 FORMAL-GUIDED LLM REPAIR
+
+
+The final stage of our framework leverages the formally synthesized repair space to guide a constrained
+LLM agent. This entire process is orchestrated by our symbolic engine, which we formalize as a
+top-level function.
+
+**Definition 3** (Specification Creation) **.** _Let_ CREATE SPECIFICATION _be the top-level function rep-_
+_resenting our symbolic engine._ _It takes a query string, Qstr, and produces either a formal_ _**Repair**_
+_**Specification**_ _, SR:, ::or:a:::::::special_ _::::::symbol,:::::::valid.::::The:::::::function:::has:::the::::::::following:::::::::signature:_
+
+_:::::::_ CREATE ~~_:_~~ S _:::::::::::::_ PECIFICATION : _Qstr_ _→_ _SR ∪{valid}_
+
+
+6
+
+
+The challenge lies in synthesizing valid and semantically meaningful repair plans. Our framework
+avoids unconstrained search by employing a _::::_ fully _::::::::::::_ deterministic, _:::::::_ symbolic _::::::::::::::_ violation-driven _:::::::_ synthesis
+
+process. _:::::::::::_ This _:::::_ entire _:::::::_ process, _:::::::_ detailed _:::_ in _:::::::::_ Algorithm _::_ 1, _::_ is _::::::::::_ orchestrated _:::_ by _:::_ our _::::::::_ symbolic _::::::_ engine _:::_ and
+
+precedes _::::::::::_ any _:::::::::_ interaction _::::_ with _:::_ the _::::::_ LLM.
+
+The _::::::::::_ process _::::::_ begins _::::_ with _:_ a _:::::::::::_ configurable _:::::::_ strategic _::::::::_ mapping, _::::M_, _:::::::_ designed _:::_ as _::_ an _:::::::::_ extensible _::::::::_ interface.
+It associates each violation type with a set of candidate repair operator schemata known to address it:
+_M_ : _v_ _→_ 2 _[ω]_ [1] _[,ω]_ [2] _[,...]_ _._ (4)
+
+For instance, for an `AttributeNotFound` violation, _M_ would map it to a set of operator schemata
+centered around _ωreplace_ . We provide a detailed instantiation of this mapping for key violation types
+in _::::_ Table _:::_ 14, and a Algorithm 1 first identifies the set of violations _V_ . For each violation, it consults
+the mapping _M_ to retrieve and instantiate relevant operator schemata, which are then composed
+into candidate repair plans Finally, in a critical **verify-before-propose** step, each candidate plan is
+applied to Φ, and the resulting CQS is checked against our correctness specification. Only those
+plans produce a verifiably valid successor state are included in the final output. By construction, this
+space contains a finite, diverse set of formally sound repair strategies, each guaranteed to resolve
+at least one initial violation. This entire process is designed for **repair completeness** : the strategic
+mapping _M_ is constructed to be a total function over the set of all detectable violations, ensuring a
+repair plan can always be synthesized for any error our identifies.
+
+
+3.4 SOUNDNESS OF REPAIR SYNTHESIS
+
+
+A critical property of our violation-driven synthesis process is its soundness, which guarantees that
+every generated repair plan, when applied, results in a formally correct query. This property is a
+direct consequence of the “verify-before-propose” step in our synthesis algorithm. We formalize
+this guarantee as a theorem. _:::_ The _:::::::::_ procedure _:::::::_ detailed _::_ in _:::::::::_ Algorithm _:_ 1 _::::::_ defines _:::_ our _::::::repair ::::plan :::::::synthesis_
+
+_function:::::::_, _:::::::_ denoted _:::::::::::_ SYNTHESIZE ~~_:_~~ P _::::::::::::::_ LANS(Φ _,_ Σ _,_ ∆). _::::_ This _:::::::_ function _:::::_ takes _::_ an _::::::_ invalid _::::_ CQS _::_ Φ _::::_ and returns _:::::_
+
+_:_ [a] _:::_ set _::_ of _::::_ valid _:::::_ repair _::::::_ plans, _::::{_ Λ _}_ . _:_
+**Theorem 1** (Soundness of Repair Synthesis) **.** _For any CQS_ Φ _and its corresponding context_ (Σ _,_ ∆) _,_
+_any repair plan :::::::::::::::_ Λ _∈_ SYNTHESIZE ~~_:_~~ P _:::::::::::::_ LANS(Φ _,_ Σ _,_ ∆) _::::will:::::::produce:a semantically valid CQS when_
+_applied._ _That is:_
+
+
+_∀_ Λ _∈_ SYNTHESIZE PLANS(Φ _,_ Σ _,_ ∆) _,_ IS VALID(APPLY SEQUENCE(Φ _,_ Λ) _,_ Σ _,_ ∆) (5)
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+_Proof._ The proof follows directly from the construction of our _::: :::::::::_ synthesis _::::::::::_ algorithm,
+
+_:::::::::::_ SYNTHESIZE ~~_:_~~ P _:::::_ LANS _:_ (§ 3.3.2). _::::::::::_ Specifically, _:::_ the _:_ final verification step _::_ of _:::_ the _::::::::_ algorithm _:::::_ (Line _:::::_ 9–11
+
+in _::::::::::_ Algorithm _:::_ 1) _::::::::_ explicitly _::::::_ checks _::::_ each _::::::::_ candidate _::::_ plan _::_ Λ _i:::_ by _::::::::_ applying _:_ it _::::_ and _::::::::_ validating _:::_ the _:::::::_ resulting
+
+CQS _::::::::_ with _:::_ IS ~~_:_~~ V _:::::_ ALID _:_ . _::::_ The _::::::::_ function _::_ is _::::::_ defined _:::_ to _::::_ only _:::::::_ include _:::::_ those _:::::_ plans _:::_ for _:::::_ which _::::_ this _::::_ check _::_
+
+succeeds. _::::::::::_ A _::::_ more _:_ detailed proof is provided in Appendix B.
+
+
+A challenging scenario arises when a query is valid but returns an empty result. While an empty result
+can be the correct answer, it can also indicate a subtle semantic error where the query’s logic does not
+align with the user’s likely intent, particularly in question-answering contexts where a non-empty
+result is expected. For such cases, as shown in Figure 1(c), we employ a highly conservative repair
+strategy that prioritizes provable safety over speculative correction. We hypothesize a common cause
+is **Columns Mismatch** within a predicate in the query’s filter conditions _F_ . To preserve the semantic
+anchor provided by the literal value in the predicate, we seeks to identify an alternative attribute that
+would yield a non-empty result. We define a **Alignment Operator**, _ω_ align.
+**Definition 4** (Alignment Operator) **.** _Given a CQS_ Φ _and a target predicate p_ = ( _c, ◦, v_ ) _∈_ _F_ _, the_
+_operator ωalign_ ( _p_ ) _identifies a candidate attribute c_ _[∗]_ _that satisfies the_ _**data-evidence constraint**_ _._ _:::This_
+
+_constraint:::::::::::::::requires::::that ::::there:::::must ::::exist ::at::::least::::one_ _::::tuple::in:::the::::::::database:::::::instance::D:::for::::::which_ _::the_
+
+_original::::::::::::::predicate:::::logic:::::holds :::true::::with:::the::::new::::::::attribute::::::::::::::::::::::::::::::∃_ _tuple ∈_ _D such that tuple_ [ _c_ _[∗]_ ] _◦_ _v_
+
+
+The application of this operator is strictly constrained. First, the search for _c_ _[∗]_ is limited to attributes
+within the relations _Tρ_ of the CQS Φ. Second, the operator is only applied if a viable _c_ _[∗]_ is **uniquely**
+identified, preventing ambiguous repairs. If these conditions are met, the engine synthesizes and
+executes a single repair plan Λ = _⟨ω_ replace( _c, c_ _[∗]_ ) _⟩_ . Otherwise, no action is taken. This design
+guarantees that the alignment process **never introduces any errors**, a claim we empirically validate
+in § 4 and Table 7. The details of the algorithm are in Appendix C.5.
+
+
+**Inference** **Zero-shot** **Accuracy (%)**
+**Method** **Retrieval**
+**Model** **Setting** **Simple** **Moderate** **Challenging** **All**
+Gen-SQL (Shi et al., 2025) Qwen2.5-Coder-7B _×_ ✓ 53.4 34.9 26.9 45.3
+Gen-SQL (Shi et al., 2025) Qwen2.5-Coder-32B _×_ ✓ 61.6 42.2 35.9 53.3
+TA-SQL (Qu et al., 2024) Qwen2.5-Coder-7B ✓ _×_ 54.70 33.41 29.66 45.89
+TA-SQL (Qu et al., 2024) Qwen2.5-Coder-32B ✓ _×_ 66.70 49.14 46.21 59.45
+
+
+Gen-SQL + Post-SQLFix Qwen2.5-Coder-7B _×_ ✓ **63.5** _**↑**_ +10.1 **44.0** _**↑**_ +9.1 **35.2** _**↑**_ +8.3 **54.9** _**↑**_ +9.6
+Gen-SQL + Post-SQLFix Qwen2.5-Coder-32B _×_ ✓ **70.8** _**↑**_ +9.2 **57.1** _**↑**_ +14.9 **51.7** _**↑**_ +15.8 **64.9** _**↑**_ +11.6
+TA-SQL + Post-SQLFix Qwen2.5-Coder-7B ✓ _×_ **64.00** _**↑**_ +9.3 **46.98** _**↑**_ +13.57 **38.62** _**↑**_ +8.96 **56.45** _**↑**_ +10.56
+TA-SQL + Post-SQLFix Qwen2.5-Coder-32B ✓ _×_ **70.49** _**↑**_ +3.8 **56.03** _**↑**_ +6.9 **50.34** _**↑**_ +4.1 **64.21** _**↑**_ +4.8
+
+
+**Table 2:** Execution Accuracy on BIRD Development Dataset.
+
+
+4 EXPERIMENT
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+All experiments are conducted on Ubuntu 22.04 equipped with 64GB RAM and 32-core Intel 5.0GHz
+CPU . Open-source LLMs are deployed locally using 8*80GB GPUs with BF16 precision. All
+reported results are averaged 5 runs with a _::::::::_ standard _::::::::_ deviation _::_ of _:::::_ 0.9% _::_ in _:::::::::_ Gen-SQL _:::_ and _:::::_ 0.7% _::_ in
+
+TA-SQL _:::::::_ to ensure statistical significance. All _:::::::::_ prompt _:::::_ details _:::_ are _::::::::_ provided _::_ in _::::::::_ Appendix _::_ H _:_
+
+
+7
+
+
+_Internally,_ _this_ _function_ _orchestrates:::::::::: :::the :::full::::::::symbolic_ _::::::::pipeline:_ _::it_ _:::first::::::::performs::::::::::::::_ _**canonicalization**_
+_(Qstr_ _→_ Φ _) ::::and_ _::::::::_ _**validation**_ _(_ Φ _→_ _V ).:::If_ _::::::::violations::::are_ _:::::found,::it::::::::proceeds::to:::::_ _**plan**_ _::::::::_ _**synthesis**_ _[by]_ _:_
+
+_invoking::::::: :::::::::::_ SYNTHESIZE ~~_:_~~ P _::::::::::::::_ LANS(Φ _,_ Σ _,_ ∆) _::::(from:::::::::Algorithm::1)::to::::::::generate_ _:a:::set_ _::of_ _:::::sound::::::repair_ _:::::plans,_
+
+_{::::_ Λ _}.:::::These:::::::outputs :::are ::::then ::::::::composed::::into:::the_ _::::::_ _**Repair**_ _:::::::::::_ _**Specification**_ _(::::SR),::a_ _::::tuple::::::::::::::_ ( _Qstr, Vabs,_ Λ _abs_ )
+
+_that::::::::::provides:::the::::::::complete:::::::problem::::::context:::for:::the:::::LLM._
+
+
+With this definition, the neuro-symbolic repair process can be succinctly captured by the _:::::::::::::_ formulation:
+
+
+        -        _Q_ _[′]_ str [=][ LLM][agent] _:::::::_ CREATE ~~_:_~~ S _:::::::::::::_ PECIFICATION( _Q_ str) (6)
+
+
+The LLM is then tasked with a **constrained generation** objective: to produce a new, syntactically
+correct SQL query _Q_ _[′]_ str [that accurately implements a transformation described by one of the plans in]
+Λabs. This formulation explicitly models the neuro-symbolic synergy: the symbolic engine provides
+the formal **what** (the diagnosis) and **how** (the valid repair plans), while the neural agent provides the
+semantic **which** (the most plausible plan). _::::_ This _::::::::::_ architecture _:::::::::_ effectively _:::::::::_ constructs _:_ a _::::::_ **safety** _:::::_ **guard**
+
+around _:::::::::_ the _:::::_ LLM. _::_ It _::_ is _::_ by _::::::::::decoupling_ _::::::validity::::from::::::::semantic::::::::selection_, _:::_ we _::::::_ ensure _:::_ that _:::_ the _:::::::_ **output** _:_ **is**
+
+**bound** _::::::::_ **by** _:::_ **the** _:::::::::_ **reliability** guarantees _::::::::::_ of _:::_ the _::::::::_ symbolic _:::::::_ system.
+
+
+3.6 ALIGNMENT FOR EMPTY RESULTS
+
+
+**Inference** **Zero-shot** **Accuracy (%)**
+**Method** **Retrieval**
+**Model** **Setting** **Simple** **Moderate** **Challenging** **All**
+Gen-SQL (Shi et al., 2025) Qwen2.5-Coder-7B _×_ ✓ 82.6 57.5 50.0 72.1
+Gen-SQL (Shi et al., 2025) Qwen2.5-Coder-32B _×_ ✓ 82.7 58.0 50.6 72.4
+TA-SQL (Qu et al., 2024) Qwen2.5-Coder-7B ✓ _×_ 78.0 59.8 34.7 65.1
+TA-SQL (Qu et al., 2024) Qwen2.5-Coder-32B ✓ _×_ 81.3 71.8 47.1 72.1
+
+
+Gen-SQL + Post-SQLFix Qwen2.5-Coder-7B _×_ ✓ **83.8** _**↑**_ +1.2 **60.9** _**↑**_ +3.4 **52.4** _**↑**_ +2.4 **73.9** _**↑**_ +1.8
+Gen-SQL + Post-SQLFix Qwen2.5-Coder-32B _×_ ✓ **87.2** _**↑**_ +4.5 **67.2** _**↑**_ +9.2 **57.1** _**↑**_ +6.5 **77.6** _**↑**_ +5.2
+TA-SQL + Post-SQLFix Qwen2.5-Coder-7B ✓ _×_ **79.5** _**↑**_ +1.5 **65.5** _**↑**_ +5.7 **47.1** _**↑**_ +12.4 **69.5** _**↑**_ +4.4
+TA-SQL + Post-SQLFix Qwen2.5-Coder-32B ✓ _×_ **83.2** _**↑**_ +1.9 **72.4** _**↑**_ +0.6 **54.7** _**↑**_ +7.6 **75.0** _**↑**_ +2.9
+
+
+**Table 3:** Execution Accuracy on Spider Development Dataset.
+
+
+**Datasets and Metrics** We evaluate our framework on three benchmarks: BIRD (Li et al., 2024a),
+chosen for its real-world complexity, Spider (Yu et al., 2018), for its large-scale, cross-domain
+diversity datasets, and BIRD Mini-Dev(Li et al., 2024b), chosen for its multi-dialects (PostgreSQL
+and MySQL). Our evaluation encompasses 5 key metrics: execution accuracy, token efficiency, time
+efficiency, repair rounds, and residual error count. These metrics collectively assess both effectiveness
+and computational efficiency of our approach and evaluate with the official tools.
+
+
+**Implementation** Our framework is written in over 8k lines of Python code We employ the code
+generation models: Qwen2.5-Coder-7B and 32B as our LLM backbone. The hierarchical rules and
+repair specifications are implemented according to the framework, with complete details provided in
+Appendix C. Temperature is set to 0.8 for balanced exploration. It is crucial to note: our selection
+is not driven by pursuing SOTA execution accuracy on leader boards. Instead, we chose GenSQL and TA-SQL framework as front-end, yet accessible open-source and reproduction models
+and architectures to demonstrate the _universal_ _efficacy_ _and_ _plug-and-play_ of Post-SQLFix. Our
+contribution lies in the **relative improvement** that Post-SQLFix brings to a given model, rather than
+the absolute final score. Three _::::::::_ case _::::::_ studies _:::_ are _::::::_ shown _::_ in _::::::::_ Appendix _:::_ H.
+
+
+4.2 EXPERIMENTAL RESULTS
+
+
+4.2.1 RQ1: FUNDAMENTAL EFFICACY ANALYSIS:
+
+
+Our framework’s hierarchical design enables two distinct modes of operation: as a deeply integrated
+validation layer within a generation pipeline, and as a post-hoc repair module.
+
+
+**Universal Efficacy and Integration:** A key strength of Post-SQLFix is architectural universality. _:::_ The
+
+formalizability _::::::::::::::_ of _::::::::_ database _:::::::_ schemas _::::::_ enables _::::_ our _::::::_ system _::_ to _::::::_ capture _::::_ and _::::::_ rectify _:::_ any _:::::::::::::_ database-related
+
+errors _::::: ::_ in _::::_ LLM _:::::::_ outputs _::_ at _:::_ the _::::::_ earliest _:::::::_ possible _:::::_ stage, _::::::_ before _::::::::::_ propagation _::_ to _::::::::::_ downstream _:::::::::::_ components.
+As demonstrated in Tables 2 and 3, our framework delivers substantial and consistent accuracy
+improvements when integrated into a generation pipeline. This holds true across a wide range of
+setups, including diverse base models and various inference settings such as zero or few-shot, with
+and without retrieval, achieving gains as high as +11.6% on BIRD.
+
+
+**Plug-and-Play:** Beyond this integrated performance, we also verified its utility as a post-hoc repair
+module (Table 4). In this capacity, it still boosts baseline accuracies by over 7% without requiring
+any architectural modifications.
+
+
+8
+
+
+**Generation Method**
+**Metric** **Strategy**
+
+**Gen-SQL** **TA-SQL**
+
+
+Accuracy (%)
+
+
+Left Errors
+
+
+N/A 45.31 45.89
+Reflection 47.07 46.54
+EF 49.88 51.00
+**Our** **53.13** **53.32**
+
+
+N/A 340 306
+Reflection 291 280
+EF 72 60
+**Our** **35** **32**
+
+
+**Table 4:** Performance Comparison of SOTA Methods
+on BIRD (Li et al., 2024a) using Qwen2.5-Coder-7B.
+
+
+**Generation Method**
+**Metric** **Strategy**
+
+**Gen-SQL** **TA-SQL**
+
+
+EF 49.88 51.00
+Accuracy (%)
+**Our** **53.13** **53.32**
+
+
+EF 1,867 2,409
+Tokens (avg)
+**Our** **1,506** **1,679**
+
+
+EF 19.53 17.68
+Time (s)
+**Our** **14.56** **14.91**
+
+
+EF 2.00 2.81
+Rounds (avg)
+**Our** **1.30** **1.40**
+
+
+**Table 5:** Efficiency-Accuracy Analysis for SQL Repair
+Methods in BIRD (Li et al., 2024a) Dataset
+
+
+**Configuration** **Accuracy (%)** **Errors Left** **Empty Results** **Tokens (avg)**
+
+
+Baseline (TA-SQL-7B Generated) 45.89 306 85       
+
+_7B_ Post-SQLFix (Full System) **53.32** **11** 100 **2,034**
+_7B_     - w/o Hierarchical Validation 52.26 39 100 2,426
+_7B_     - w/o Plan Synthesis 50.24 52 101 2,916
+
+
+_32B_ Post-SQLFix (Full System) **54.11** **9** 91 **1,113**
+_32B_      - w/o Hierarchical Validation 52.96 15 95 1,306
+_32B_      - w/o Plan Synthesis 51.26 28 93 1,502
+
+
+**Table 9:** Ablation Study: Component Contributions to Post-SQLFix Performance.
+
+
+The performance gap between the universal and post-hoc approaches (e.g., 54.9% vs. 53.1% for
+Gen-SQL) reveals an insight: _integrated hierarchical validation is fundamentally superior to terminal_
+_correction_ . By intercepting and resolving errors early, our framework prevents their downstream
+propagation, yielding compounding benefits that a simple post-hoc repair tool cannot achieve.
+
+
+**Robustness** _:::::::::::::_ **to** _::::::::::_ **Instruction** _:::::::::::::::::_ **Non-Compliance.** We _::::::::::::_ conducted _::_ a _::::::::_ targeted _:::::::_ analysis _::::_ on _:::_ the
+
+TA-SQL _:::::::::::::_ repair _:::::::_ process _:::_ for _:::_ the _::::::_ BIRD _:::::::_ dataset _::_ to _::::::::_ quantify _::::::::_ instances _:::_ of _:::::_ LLM _:::::::::::::::_ non-compliance.
+
+_:_ [A] _::::::::::::::_ ”non-compliant _::::::_ error” _::_ is _:::::::_ defined _:::_ as _:_ a _:::::_ case _::::::_ where _:::_ the _::::::_ LLM, _::::::_ despite _::::::_ being _:::::_ given _::_ a _::::::_ correct
+
+and _::::::::::::_ complete _::::::_ repair _:::::::::::_ specification _::::::_ ( _SR_ ), _:::::::::_ generates _::_ a _::::::_ query _::::_ that _::::::_ either _:::::_ fails _:::_ to _:::::::::_ implement
+
+the _:::::::_ plan _:::_ or _::::::::::_ introduces _:::::_ new _:::::::_ formal _::::::_ errors. _::::::_ We _::::::_ tested _:::::::_ several _:::::_ code _::::::::::_ generation _::::::::_ models,
+
+with _::::::::::_ results _:::::::::::_ summarized _:::_ in _::::::_ Table _:::_ 6. _:::::::::::::::::Non-compliance_ _:::::_ refers _:::_ to _:::_ the _::::::::_ number _:::_ of _::::::_ LLMs
+
+does _:::: :::_ not _:::::::_ follow _::::_ the _::::::::::_ instructions _:::_ or _::::_ lost _::::_ any _::::::::::_ semantics _::::::_ during _:::::::::_ repairing _:::::::_ process; _::::::::Capture_
+
+_Rate::::_ _:_ [is] _::::_ the _:::::::::::_ percentage _:::_ of _:::::_ these _::::::_ errors _:::::::_ caught _::::_ by _::::_ the _:::::::::_ validation _:::::_ loop _:::::::_ (Figure _:::::_ 1b). _:::_
+
+
+**Error** **Resolution** **Analysis.** Table 8 reveals Post-SQLFix’s superior semantic error handling. While both methods achieve
+perfect syntactic error elimination, PostSQLFix shows 50% better context-free error resolution and 56% improvement in
+context-sensitive errors. More residual
+analysis is in Appendix D.2.
+
+
+The _:::::::::::_ results _:::::::_ reveal
+
+two _:::::::::_ key _:::::::::_ findings.
+
+First, _::::::::::::::::::_ non-compliance
+
+_:_ [is] _::::::_ rare _:::::_ but _::::::_ does
+
+occur, _::::::::::::::::::_ particularly
+
+with _:::::::::::::_ smaller _:::::_ or
+
+less _::::::::::_ mature _::::::::_ models,
+
+while _:::::::::_ the _:::::::::_ powerful
+
+
+_:::::_ **Metric** _:::::::_ **Qwen2.5** _:::::::_ **Qwen2.5** _::::::::_ **Codestral** _::::::_ **gpt-oss** _::::::::_ **Llama-3.1** _::::::_ **Mistral**
+
+_:::_ **-7B** **-32B** _:::_ **-7B** _::_ **-120B** _::::_ _::::_ **-70B** _::::_ **-24B**
+
+
+_::_ EF _::::::::_ Accuracy _:::_ (%) 51.00 _::::_ 52.00 _::::_ 51.37 _::::_ 48.04 _::::_ _::::_ 48.37 _::::_ 48.24
+
+_:::_ Our _:::::::_ Accuracy _:::_ (%) 53.32 _::::_ 54.11 _::::_ 52.80 _::::_ 53.19 _::::_ _::::_ 53.89 _::::_ 54.37
+
+
+_::::::::::::_ Non-compliance _:_ [2] _:_ [0] _:_ [2] 15 _::_ _::_ 15 1
+
+
+_::::::_ Capture _::::_ Rate _:::::_ 100% _:::_ NA 100% _::::_ 100% _::::_ _::::_ 100% 100% _::::_
+
+
+**Table 6:** Analysis _::::::: ::_ of _:::::_ LLM _:::::::::_ Instruction _::::::::::::::_ Non-Compliance _:::_ on _:::::_ BIRD _::::::_ repairs.
+
+
+Qwen2.5-32B _:::::::::::::::::_ model _:::::::::_ exhibited _:::::::_ perfect _::::::::::::::::::_ instruction-following. _:::::::::_ Second, _::::_ and _:::::_ most _:::::::::::_ importantly,
+
+for _::::::::_ every _:::::_ single _::::::::_ instance _:::_ of _::::::::::::::_ non-compliance, _::::_ our _:::::::::::_ framework’s _:::::::::::::_ post-generation _:::::::::_ validation _::::_ loop
+
+
+successfully _:::::::::: :::::::_ captured _:::_ the _:::::_ error, _:::::::::_ preventing _::_ an _:_ incorrect _::::::::::::_ query _::::_ from _:::::_ being _::::::::_ finalized. _:_
+
+
+4.2.2 RQ2: COMPARATIVE ANALYSIS
+
+
+We conduct evaluation of Post-SQLFix vs.
+Execution-Feedback (EF), the established
+post-validation repair standard, across three
+dimensions: accuracy, efficiency, and error
+resolution capability.
+
+
+**Table 7:** Performance Comparison of Different Alignment in BIRD. Alignment-LLM refers the _::::::::_ symbolic
+
+engine _:::::::::::::_ generate _::::::::_ candidate _:::::::_ repairs _:::_ and _::::_ then _::::_ the _:::::_ LLM
+
+
+**Metric** **TA-SQL** **EF** **Alignment-LLM** **Ours**
+
+
+Accuracy (%) 45.89 46.09 45.96 46.09
+Empty Results 85 73 57 82
+Time (s) - 1500 1046 **45**
+Syntax Errors 306 312 327 judge _:::::::_ the _::::::_ intent.
+
+
+**Accuracy and Efficiency:** Table 4 demon- _:::::::::::::_
+strates Post-SQLFix’s consistent accuracy improvements over EF: +4.2% for Gen-SQL and +3.9%
+for TA-SQL. To ensure fair comparison, Table 5 evaluates both methods on identical repairable
+query sets. We achieve substantial efficiency gains: 19.3% token reduction for Gen-SQL, 30.3% for
+TA-SQL, and up to 50% fewer debugging iterations. By resolving all syntactic errors in a single,
+deterministic, LLM-free pass, we completely eliminate what would otherwise be a potentially lengthy
+and unreliable iterative loop with an LLM. This allows the system to immediately focus on the more
+challenging semantic errors, leading to faster convergence on a correct query.
+
+
+**Error Type** **Reflection** **EF** **Our-7B** **Our-32B**
+
+
+Syntactic 61 0 **0** **0**
+Context-Free 17 8 **4** **2**
+Context-Sensitive 200 64 **28** **7**
+
+
+**Table 8:** Residual Error (generated by TA-SQL in BIRD
+dataset) Distribution
+
+
+9
+
+
+**Empty Result Handling.** To analyze our strategy for ambiguous empty-result cases, we compare
+our method against both the standard EF paradigm and a flexible Alignment-LLM baseline, where
+an LLM selects from our formally-vetted candidate columns. Table 7 reveals a critical trade-off.
+Alignment-LLM is most aggressive in reducing 33% empty results (from 85 to 57), but this comes at
+the cost of reliability, as it **introduces 21 new query errors** . In contrast, our approach matches the
+accuracy of the much slower EF baseline while being **over 30** _×_ **faster** . Most importantly, unlike both
+EF and Alignment-LLM which introduce new errors, we can guarantees **a zero error introduction** .
+This result empirically validates our design choice: prioritizing the provable safety and efficiency
+essential for real-world systems over the speculative and unreliable gains from probabilistic repairs.
+
+
+**Multi-Dialect Analysis.** The results, presented in Table 10, demonstrate our framework’s superiority
+is its performance on dialects like MySQL and PostgreSQL. While richer feedback offers a marginal
+benefit to EF’s accuracy, our approach not only achieves a higher final accuracy but does so with an
+**order-of-magnitude greater efficiency** . Notably, EF’s token consumption escalates dramatically
+on these dialects (from 1.8k on SQLite to over 24k on MySQL), likely due to the LLM’s unfamiliarity with their specific error highlights a critical vulnerability of feedback-driven methods. This
+finding confirms our central thesis: the limitation of EF is _:::::::::::_ architectural, _:::_ not _::::::_ merely _::::::::::::_ informational.
+
+
+4.2.3 RQ3: COMPONENT ABLATION ANALYSIS:
+
+
+Table 9 presents results on the same baseline queries (7B-generated) with controlled removal of key
+framework components. For Component Contribution Analysis, both validations and Formal-Guided
+Repair demonstrate substantial individual contributions. Removing Hierarchical Diagnosis results
+in accuracy drops of 1.00% (7B repair) and 1.15% (32B repair), with corresponding increases in
+residual errors (32→39 and 9→15 respectively). Removing Formal-Guided Repair causes more
+severe degradation: 3.02% accuracy loss (7B) and 2.85% (32B), with errors increasing to 52 and
+28 respectively. This pattern indicates that while both components are essential, the repair strategy
+provides greater performance impact than validation refinement. Regarding the influence of LLMs
+on the framework, we also conducted experiments. The result of scaling effects are in Appendix D.1.
+
+
+5 CONCLUSION
+
+
+This paper addressed the reliability bottleneck in Text-to-SQL: the architectural limitations of the
+Execution-Feedback (EF) paradigm, which relies on probabilistic models to interpret ambiguous,
+symptomatic error signals. We introduced Post-SQLFix, a neuro-symbolic framework that instigates
+a paradigm shift from ambiguous feedback to **formal, deterministic synthesis** . By systematically
+separating verifiable diagnosis and repair synthesis (the symbolic engine) from semantic, intent-driven
+selection (the neural agent), our framework transforms the LLM from an unreliable arbiter into a
+constrained, formally-grounded agent. Our evaluation validates this new paradigm, demonstrating
+that Post-SQLFix delivers substantial improvements in accuracy and efficiency. By establishing a
+principled foundation for correctness and providing a blueprint for robust neuro-symbolic synergy, our
+work represents a significant step towards building trustworthy AI-driven code generation systems.
+
+
+10
+
+
+An _:::::::::::::::_ informational _:::::::::_ limitation _::::::_ could _::::_ be
+
+solved _::::::::_ by _:::::::::_ providing _:::::_ more _:::::_ data, _::::_ such _:::_ as
+
+_:_ [a] _:::::_ more _::::::::_ verbose _:::::_ error _:::::::::_ message. _::::::_ Our
+
+results _:::::::::::_ show _::::_ this _::::::_ yields _::::_ only _:::::::::_ marginal
+
+gains. _::::: ::::_ The _::::_ core _::::::::_ problem _::_ is _:::::::::::_ architectural:
+
+the _::::::_ EF _:::::::::_ paradigm _::::::_ forces _::_ a _:::::::::::_ probabilistic
+
+LLM _:::::::_ to _::::_ act _:::_ as _::_ a _::::::::::::_ diagnostician _::::::_ based
+
+on _:::::::::_ textual _:::::::::_ symptoms. _:::::::_ Even _::::_ the _:::::_ most
+
+detailed _::::::::::::::::_ description _:::::::_ remains _::_ a _:::::::::_ symptom
+
+that _::::::::::_ requires _:::::::::_ unreliable _:::::::::::_ speculation. _::::_ In
+
+contrast, _:::::::::::_ our _::::::::::::_ framework’s _:::::::::::_ architecture
+
+employs _::::::: :_ a _::::::::_ symbolic _::::::_ engine _:::_ that _::::_ acts _:::_ like _::_ a
+
+diagnostic _::::::::::::_ tool. _:::_ It _::::::_ doesn’t _:::::_ guess _:::::_ based _:::_ on
+
+the _:::::::::::_ symptom; _::_ it _::::::::_ performs _:_ a _::::::::::::_ deterministic,
+
+
+**Method** **Acc.(%)** **Tokens (avg)** **Time(s)** **Errors**
+
+
+_MySQL_
+Base 41.0  -  - 68
+EF 44.0 24070 7200 23
+**Ours** **45.0** **1553** **15**
+
+_PostgreSQL_
+Base 36.4  -  - 117
+EF 38.0 41670 4323 62
+**Ours** **41.0** **10336** **1378** **30**
+
+
+**Table 10:** Performance Comparison with EF in Minidev for multi-dialect. The ”Base” score represents the
+official benchmark result obtained by testing.
+
+
+root-cause _:::::::::::::::_ analysis _::_ of _:::_ the _:::::::_ query’s _::::::_ formal _:::::::_ structure _:::_ and _::::::::_ provides _:_ a _::::::::_ provably _::::::_ correct _::::::::_ treatment _::::_ plan. _:_
+
+
+6 ETHICS STATEMENT
+
+
+In accordance with the Code of Ethics, we have considered the broader impacts of our work. We
+already open all sources code. The primary positive societal contribution of this research is the
+enhancement of reliability and trustworthiness in AI-driven code generation systems. By providing
+a framework that can formally verify and correct SQL queries, our work can help mitigate the
+risks associated with deploying LLMs in data-critical applications, such as healthcare, finance, and
+scientific research, where an incorrect query could lead to flawed analysis or harmful decisions.
+This contributes to the responsible stewardship of AI by establishing a principled foundation for
+correctness.
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+To facilitate and promote future research, we have made our implementation and all associated
+data publicly available at Anonymous (2025). We will also submit our artifact for evaluation upon
+acceptance.
+
+
+REFERENCES
+
+
+Anonymous. (artifact) from ambiguous feedback to verifiable repair via formal synthesis in text-to-sql,
+September 2025. [URL https://anonymous.4open.science/r/postsqlfix-1BD2.](https://anonymous.4open.science/r/postsqlfix-1BD2)
+
+
+Arian Askari, Christian Poelitz, and Xinye Tang. Magic: Generating self-correction guideline for
+in-context text-to-sql. _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, 39(22):
+23433–23441, Apr. 2025. doi: 10.1609/aaai.v39i22.34511. [URL https://ojs.aaai.org/](https://ojs.aaai.org/index.php/AAAI/article/view/34511)
+[index.php/AAAI/article/view/34511.](https://ojs.aaai.org/index.php/AAAI/article/view/34511)
+
+
+Alexandra Bugariu. _Automatically_ _Identifying_ _Soundness_ _and_ _Completeness_ _Errors_ _in_ _Program_
+_Analysis Tools_ . PhD thesis, ETH Zurich, 2022.
+
+
+Jipeng Cen, Jiaxin Liu, Zhixu Li, and Jingjing Wang. Sqlfixagent: Towards semantic-accurate
+text-to-sql parsing via consistency-enhanced multi-agent collaboration. _Proceedings of the AAAI_
+_Conference on Artificial Intelligence_, 39(1):49–57, Apr. 2025. doi: 10.1609/aaai.v39i1.31979.
+[URL https://ojs.aaai.org/index.php/AAAI/article/view/31979.](https://ojs.aaai.org/index.php/AAAI/article/view/31979)
+
+
+Xinyun Chen, Maxwell Lin, Nathanael Scharli, and Denny Zhou.¨ Teaching large language models to
+self-debug. In _The Twelfth International Conference on Learning Representations, ICLR 2024,_
+_Vienna, Austria, May 7-11, 2024_ . OpenReview.net, 2024. [URL https://openreview.net/](https://openreview.net/forum?id=KuPixIqPiq)
+[forum?id=KuPixIqPiq.](https://openreview.net/forum?id=KuPixIqPiq)
+
+
+Ziru Chen, Shijie Chen, Michael White, Raymond Mooney, Ali Payani, Jayanth Srinivasa, Yu Su,
+and Huan Sun. Text-to-SQL error correction with language models of code. In Anna Rogers,
+Jordan Boyd-Graber, and Naoaki Okazaki (eds.), _Proceedings of the 61st Annual Meeting of the_
+_Association for Computational Linguistics (Volume 2:_ _Short Papers)_, pp. 1359–1372, Toronto,
+Canada, July 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.acl-short.
+117. [URL https://aclanthology.org/2023.acl-short.117/.](https://aclanthology.org/2023.acl-short.117/)
+
+
+Dawei Gao, Haibin Wang, Yaliang Li, Xiuyu Sun, Yichen Qian, Bolin Ding, and Jingren Zhou.
+Text-to-sql empowered by large language models: A benchmark evaluation, 2024. [URL https:](https://www.vldb.org/pvldb/vol17/p1132-gao.pdf)
+[//www.vldb.org/pvldb/vol17/p1132-gao.pdf.](https://www.vldb.org/pvldb/vol17/p1132-gao.pdf)
+
+
+Jiawei Gu, Xuhui Jiang, Zhichao Shi, Hexiang Tan, Xuehao Zhai, Chengjin Xu, Wei Li, Yinghan
+Shen, Shengjie Ma, Honghao Liu, Saizhuo Wang, Kun Zhang, Yuanzhuo Wang, Wen Gao, Lionel
+Ni, and Jian Guo. A survey on llm-as-a-judge, 2025. [URL https://arxiv.org/abs/2411.](https://arxiv.org/abs/2411.15594)
+[15594.](https://arxiv.org/abs/2411.15594)
+
+
+Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Yu, Xinying Song, and Denny Zhou. Large language models cannot self-correct reasoning
+yet. In B. Kim, Y. Yue, S. Chaudhuri, K. Fragkiadaki, M. Khan, and Y. Sun (eds.),
+_International_ _Conference_ _on_ _Representation_ _Learning_, volume 2024, pp. 32808–32824,
+
+
+11
+
+
+2024. URL [https://proceedings.iclr.cc/paper_files/paper/2024/file/](https://proceedings.iclr.cc/paper_files/paper/2024/file/8b4add8b0aa8749d80a34ca5d941c355-Paper-Conference.pdf)
+[8b4add8b0aa8749d80a34ca5d941c355-Paper-Conference.pdf.](https://proceedings.iclr.cc/paper_files/paper/2024/file/8b4add8b0aa8749d80a34ca5d941c355-Paper-Conference.pdf)
+
+
+Mathieu Huot, Matin Ghavami, Alexander K Lew, Ulrich Schaechtle, Cameron E Freer, Zane
+Shelby, Martin C Rinard, Feras A Saad, and Vikash K Mansinghka. Gensql: A probabilistic
+programming system for querying generative models of database tables. _Proceedings of the ACM_
+_on Programming Languages_, 8(PLDI):790–818, 2024. doi: 10.1145/3656409.
+
+
+Wonseok Hwang, Jinyeung Yim, Seunghyun Park, and Minjoon Seo. A comprehensive exploration
+on wikisql with table-aware word contextualization. volume abs/1902.01069, 2019. [URL http:](http://arxiv.org/abs/1902.01069)
+[//arxiv.org/abs/1902.01069.](http://arxiv.org/abs/1902.01069)
+
+
+Ryo Kamoi, Yusen Zhang, Nan Zhang, Jiawei Han, and Rui Zhang. When can llms _Actually_ correct
+their own mistakes? A critical survey of self-correction of llms. _Trans. Assoc. Comput. Linguistics_,
+12:1417–1440, 2024. doi: 10.1162/TACL _\_ ~~A~~ _\_ ~~0~~ 0713. [URL https://doi.org/10.1162/](https://doi.org/10.1162/tacl_a_00713)
+[tacl_a_00713.](https://doi.org/10.1162/tacl_a_00713)
+
+
+Haoyang Li, Jing Zhang, Cuiping Li, and Hong Chen. RESDSQL: decoupling schema linking
+and skeleton parsing for text-to-sql. In Brian Williams, Yiling Chen, and Jennifer Neville (eds.),
+_Thirty-Seventh AAAI Conference on Artificial Intelligence, AAAI 2023, Thirty-Fifth Conference on_
+_Innovative Applications of Artificial Intelligence, IAAI 2023, Thirteenth Symposium on Educational_
+_Advances in Artificial Intelligence, EAAI 2023, Washington, DC, USA, February 7-14, 2023_, pp.
+13067–13075. AAAI Press, 2023. doi: 10.1609/AAAI.V37I11.26535. URL [https://doi.](https://doi.org/10.1609/aaai.v37i11.26535)
+[org/10.1609/aaai.v37i11.26535.](https://doi.org/10.1609/aaai.v37i11.26535)
+
+
+Jinyang Li, Binyuan Hui, Ge Qu, Jiaxi Yang, Binhua Li, Bowen Li, Bailin Wang, Bowen Qin, Ruiying
+Geng, Nan Huo, et al. Can llm already serve as a database interface? a big bench for large-scale
+database grounded text-to-sqls. _Advances in Neural Information Processing Systems_, 36, 2024a.
+
+
+Jinyang Li, Binyuan Hui, Ge Qu, Jiaxi Yang, Binhua Li, Bowen Li, Bailin Wang, Bowen Qin, Ruiying
+Geng, Nan Huo, et al. Can llm already serve as a database interface? a big bench for large-scale
+database grounded text-to-sqls. _Advances in Neural Information Processing Systems_, 36, 2024b.
+
+
+Xinyu Liu, Shuyu Shen, Boyan Li, Nan Tang, and Yuyu Luo. Nl2sql-bugs: A benchmark for detecting
+semantic errors in nl2sql translation, 2025. [URL https://arxiv.org/abs/2503.11984.](https://arxiv.org/abs/2503.11984)
+
+
+Benjamin Livshits, Manu Sridharan, Yannis Smaragdakis, Ondˇrej Lhotak, J Nelson Amaral, Bor-´
+Yuh Evan Chang, Samuel Z Guyer, Uday P Khedker, Anders Møller, and Dimitrios Vardoulakis.
+In defense of soundiness: a manifesto. _Communications of the ACM_, 58(2):44–46, 2015.
+
+
+Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri
+Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et al. Self-refine: Iterative refinement
+with self-feedback. _Advances in Neural Information Processing Systems_, 36, 2023.
+
+
+Nikita Mehrotra, Aayush Kumar, Sumit Gulwani, Arjun Radhakrishna, and Ashish Tiwari. Ten:
+Table explicitization, neurosymbolically. _arXiv preprint arXiv:2508.09324_, 2025.
+
+
+Niels Mundler,¨ Jingxuan He, Hao Wang, Koushik Sen, Dawn Song, and Martin Vechev. Typeconstrained code generation with language models. _arXiv preprint arXiv:2504.09246_, 2025.
+
+
+Melissa Z Pan, Mert Cemri, Lakshya A Agrawal, Shuyi Yang, Bhavya Chopra, Rishabh Tiwari,
+Kurt Keutzer, Aditya Parameswaran, Kannan Ramchandran, Dan Klein, Joseph E. Gonzalez,
+Matei Zaharia, and Ion Stoica. Why do multiagent systems fail? In _ICLR 2025 Workshop on_
+_Building_ _Trust_ _in_ _Language_ _Models_ _and_ _Applications_, 2025. URL [https://openreview.](https://openreview.net/forum?id=wM521FqPvI)
+[net/forum?id=wM521FqPvI.](https://openreview.net/forum?id=wM521FqPvI)
+
+
+Gabriel Poesia, Alex Polozov, Vu Le, Ashish Tiwari, Gustavo Soares, Christopher Meek, and
+Sumit Gulwani. Synchromesh: Reliable code generation from pre-trained language models. In
+_International Conference on Learning Representations_, 2022. [URL https://openreview.](https://openreview.net/forum?id=KmtVD97J43e)
+[net/forum?id=KmtVD97J43e.](https://openreview.net/forum?id=KmtVD97J43e)
+
+
+12
+
+
+Mohammadreza Pourreza and Davood Rafiei. DIN-SQL: decomposed in-context learning of text-tosql with self-correction, 2023. [URL http://papers.nips.cc/paper_files/paper/](http://papers.nips.cc/paper_files/paper/2023/hash/72223cc66f63ca1aa59edaec1b3670e6-Abstract-Conference.html)
+[2023/hash/72223cc66f63ca1aa59edaec1b3670e6-Abstract-Conference.](http://papers.nips.cc/paper_files/paper/2023/hash/72223cc66f63ca1aa59edaec1b3670e6-Abstract-Conference.html)
+[html.](http://papers.nips.cc/paper_files/paper/2023/hash/72223cc66f63ca1aa59edaec1b3670e6-Abstract-Conference.html)
+
+
+Kai Presler-Marshall, Sarah Heckman, and Kathryn T Stolee. Sqlrepair: Identifying and repairing
+mistakes in student-authored sql queries. _arXiv preprint arXiv:2102.05729_, 2021.
+
+
+Ge Qu, Jinyang Li, Bowen Li, Bowen Qin, Nan Huo, Chenhao Ma, and Reynold Cheng. Before generation, align it! A novel and effective strategy for mitigating hallucinations in text-to-sql generation,
+2024. [URL https://doi.org/10.18653/v1/2024.findings-acl.324.](https://doi.org/10.18653/v1/2024.findings-acl.324)
+
+
+Jie Shi, Bo Xu, Jiaqing Liang, Yanghua Xiao, Jia Chen, Chenhao Xie, Peng Wang, and Wei Wang.
+Gen-SQL: Efficient text-to-SQL by bridging natural language question and database schema with
+pseudo-schema. In Owen Rambow, Leo Wanner, Marianna Apidianaki, Hend Al-Khalifa, Barbara Di Eugenio, and Steven Schockaert (eds.), _Proceedings of the 31st International Conference_
+_on Computational Linguistics_, pp. 3794–3807, Abu Dhabi, UAE, January 2025. Association for
+Computational Linguistics. [URL https://aclanthology.org/2025.coling-main.](https://aclanthology.org/2025.coling-main.256/)
+[256/.](https://aclanthology.org/2025.coling-main.256/)
+
+
+Jeff Shute, Shannon Bales, Matthew Brown, Jean-Daniel Browne, Brandon Dolphin, Romit Kudtarkar,
+Andrey Litvinov, Jingchi Ma, John Morcos, Michael Shen, David Wilhite, Xi Wu, and Lulan Yu.
+Sql has problems. we can fix them: Pipe syntax in sql. In _Proceedings of the VLDB Endowment_,
+volume 17, pp. 4051–4063, 2024.
+
+
+Maolin Sun, Yibiao Yang, Yang Wang, Ming Wen, Haoxiang Jia, and Yuming Zhou. Smt solver
+validation empowered by large pre-trained language models. In _2023 38th IEEE/ACM International_
+_Conference on Automated Software Engineering (ASE)_, pp. 1288–1300. IEEE, 2023a. doi: 10.
+1109/ASE56229.2023.00180.
+
+
+Ruoxi Sun, Sercan Ren, Mengjiao Wu, Chenxi Shi, Xinyang Yao, Mohit Bansal, Navin Krishnamurthy, and Pengcheng Yin. Sql-palm: Improved large language model adaptation for text-to-sql.
+_arXiv preprint arXiv:2306.00739_, 2023b.
+
+
+Shayan Talaei, Mohammadreza Pourreza, Yu-Chen Chang, Azalia Mirhoseini, and Amin Saberi.
+Chess: Contextual harnessing for efficient sql synthesis, 2024. [URL https://arxiv.org/](https://arxiv.org/abs/2405.16755)
+[abs/2405.16755.](https://arxiv.org/abs/2405.16755)
+
+
+Bailin Wang, Richard Shin, Xiaodong Liu, Oleksandr Polozov, and Matthew Richardson. Rat-sql:
+Relation-aware schema encoding and linking for text-to-sql parsers. In _International Conference_
+_on Learning Representations_, 2020.
+
+
+Bing Wang, Changyu Ren, Jian Yang, Xinnian Liang, Jiaqi Bai, Linzheng Chai, Zhao Yan, Qian-Wen
+Zhang, Di Yin, Xing Sun, et al. Mac-sql: A multi-agent collaborative framework for text-to-sql.
+In _Proceedings of the 31st International Conference on Computational Linguistics_, pp. 540–557,
+2025.
+
+
+Hanchen Xia, Feng Jiang, Naihao Deng, Cunxiang Wang, Guojiang Zhao, Rada Mihalcea, and Yue
+Zhang. Sql-craft: Text-to-sql through interactive refinement and enhanced reasoning. _CoRR_,
+abs/2402.14851, 2024. doi: 10.48550/ARXIV.2402.14851. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2402.14851)
+[48550/arXiv.2402.14851.](https://doi.org/10.48550/arXiv.2402.14851)
+
+
+Tao Yu, Rui Zhang, Kai Yang, Michihiro Yasunaga, Dongxu Wang, Zifan Li, James Ma, Irene
+Li, Qingning Yao, Shanelle Roman, Zilin Zhang, and Dragomir Radev. Spider: A large-scale
+human-labeled dataset for complex and cross-domain semantic parsing and text-to-sql task. In
+_Proceedings_ _of_ _the_ _2018_ _Conference_ _on_ _Empirical_ _Methods_ _in_ _Natural_ _Language_ _Processing_,
+Brussels, Belgium, 2018. Association for Computational Linguistics.
+
+
+13
+
+
+A DETAILED FORMALIZATION
+
+
+A.1 DATABASE SCHEMA REPRESENTATION
+
+
+We represent a database schema as the 5-tuple:
+
+
+Σ = ( _T, C, K_ pk _, K_ fk _,_ Θ) _,_ (7)
+
+
+where _T_ is a set of table names and _C_ is the set of all fully qualified columns _c_ = ( _t, c_ ) with _t ∈T_
+and _c ∈C_ . Let _table_ ( _c_ ) be the projection of its table. The set of primary key columns is _K_ pk _⊆C_, and
+foreign key relationships are a set of pairs _K_ fk _⊆C × C_ . Finally, Θ : _C_ _→_ Type maps each column to
+its data type.
+
+
+A.2 CANONICAL QUERY STRUCTURE (CQS)
+
+
+**Definition 5** (Canonical Query Structure) **.** _A SQL query Q is represented by a CQS, a hierarchical_
+_structure_ Φ _that models the query’s logical architecture._ _It is defined as a primary tuple:_
+
+
+Φ = (Π _, ρ,_ Γ _,_ Ω _ord, A, S_ )
+
+
+_where the components are logically grouped as follows:_
+
+
+    - Π _:_ _The_ _**Projection Specification**_ _, a set C_ _of projected attributes (columns)._ _Each attribute_
+_is fully qualified with its source relation or alias._
+
+
+    - _ρ:_ _The_ _**Data**_ _**Source**_ _**Specification**_ _,_ _a_ _tuple_ ( _T, J, F_ ) _defining_ _the_ _intermediate_ _working_
+_relation:_
+
+
+**–** _T_ _:_ _A set of base relations (tables)._
+
+**–** _J:_ _A set of join predicates._
+
+**–** _F_ _:_ _A predicate tree for the WHERE clause selection conditions._
+
+
+    - Γ _:_ _The_ _**Aggregation Specification**_ _, a tuple_ ( _G, H_ ) _defining the grouping and aggregation_
+_logic:_
+
+
+**–** _G:_ _An ordered set of grouping attributes._
+
+**–** _H:_ _A predicate tree for the HAVING clause conditions._
+
+
+    - Ω _ord:_ _The_ _**Presentation Specification**_ _, a tuple_ ( _O, L_ ) _defining the final result formatting:_
+
+
+**–** _O:_ _An ordered list of sorting specifications._
+
+**–** _L:_ _An integer for the cardinality limit (LIMIT)._
+
+
+    - _A:_ _A::::set ::of :::::::::::::::_ _**Alias Assignments**_ _, a cross-cutting component mapping relations or attributes_
+_to their aliases:::for :::::::identifier:::::::::resolution._
+
+
+A.3 FORMALIZATION OF LAYER _γ_
+
+
+The Context-Sensitive Semantic Analysis layer ( _γ_ ) verifies a structurally consistent CQS Φ against
+a target environment (Σ _,_ ∆). _::::::::_ Crucially, _::::_ this _::::::_ process _::_ is _:::::::_ defined _:::::::::_ recursively _::_ to _::::::_ handle _::::::_ nested _:::::_ scopes
+
+(CTEs, _:::::: ::::::::::_ subqueries). _::_ Its corresponding predicate, _P_ schema(Φ _,_ Σ _,_ ∆), is a conjunction of five _:::_ subpredicates:
+
+
+_P_ schema(Φ _,_ Σ _,_ ∆) _⇔_ _P_ bind _∧_ _P_ type _∧_ _P_ integrity _:::::::: ∧_ _P_ [dialect] _[∧]_ _::::::_ _[P]_ [recurse]
+
+
+14
+
+
+- _S:_ _A_ _set_ _of_ _**Nested**_ _::::::::::::_ _**Scopes**_ _.:::::This :::::::::component::::::::manages ::::::::recursive ::::::logical::::units:::::(e.g.,::::::CTEs,_
+
+
+_derived::::::::::::tables,:::::::::::subqueries). :::::Each::::::scope_ _::is :::::::::recursively:::::::defined_ _::as:::an:::::::::::independent ::::CQS_
+
+Φ _::_ _[′]_ _, augmented with its contextual role:, :::::::enabling:::::::modular::::::::::verification::of::::::::arbitrary::::::nesting_
+
+
+_depths:::::_ _._
+
+
+**Identifier Binding (** _P_ **bind)** This predicate ensures that all identifiers used within the current _::::::::::_ scope
+
+of _::_ CQS Φ are validly defined in the schema Σ _::_ or _::::_ local _::::::_ aliases.
+
+
+_P_ bind(Φ _,_ Σ) _⇔_ ( _∀t ∈_ _Tρ, t ∈_ Σ _.T_ ) _∧_ ( _∀c ∈_ AllAttributes(Φ) _, ∃t ∈_ _Tρ_ s.t. ( _t, c_ ) _∈_ Σ _.C_ )
+
+
+This check is fundamental for resolving all identifiers before further analysis.
+
+
+**Type** **Correctness** **(** _P_ **type)** This predicate verifies that all operations are type-safe. For every
+operation within Φ’s expressions, it checks:
+
+
+_P_ type(Φ _,_ Σ) _⇔∀_ op( **a** ) _∈O_ (Φ) : COMPATIBLE(op _, τ_ ( **a** )) (8)
+_::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+where:
+
+
+- _O:::::_ (Φ) _::::::_ denotes _:::_ the _:::_ set _::_ of _:::_ all _::::::::_ operation _:::::::::_ expressions _:::_ in _::_ the _:::::_ CQS _::_ Φ.
+
+- _:_ **[a]** _:::::::::_ represents _:::_ the _::::::::_ argument _:::::_ vector _:::::::::::⟨a_ 1 _, . . ., an⟩_ _:::_ for _:::_ the _::::::::_ operation.
+
+- _τ::::_ ( **a** ) _::::::_ applies _:::_ the _::::_ type _::::::::_ resolution _:::::::_ function _:::::τ_ ( _x_ ) _::_ to _::::_ each _::::::::_ argument _::_ in _:::_ the _::::::_ vector.
+
+- _:::::::::::_ COMPATIBLE _::_ is _:_ a _::::::::_ predicate _:::_ that _::::::_ returns _::::_ true _::_ if _::_ the _::::::::_ operation _::::::::_ signature _:::::::_ matches _:::_ the _::::::::_ argument _:::::_ types.
+
+
+**Structural Integrity Analysis (** _P_ **integrity)** This predicate enforces deeper semantic integrity rules
+derived from the schema structure . A primary example is **Join Path Validation** : We construct a
+connectivity graph _G_ Σ = ( _T_ db _, K_ fk) from the schema’s tables and foreign key relationships. This
+check verifies that the subgraph induced by the set of tables _TP_ in the query is a single connected
+component in _G_ Σ. This rule is a powerful heuristic for preventing heuristically prevents semantically
+unintended cartesian products.
+
+
+**Dialect Conformance (** _P_ **dialect)** This predicate enforces rules specific to the target SQL dialect, ∆.
+Crucially, its validation depends only on the query Φ and the dialect specification ∆, not the specific
+user schema Σ.
+
+
+This _:::::::::::_ recursive _:::::::::_ definition _::::::_ ensures _::::_ that _::::::::_ validation _::_ is _:::_ not _::::::_ merely _::::::::_ top-level _:::_ but _:::::::::_ penetrates _:::::_ every _:::::_ logical
+
+unit. _::::::::_ Note _::::_ that _::_ by _::::::::_ invoking _:_ IS ~~_::_~~ VALID _:::::_, _:::_ this _::::::::_ predicate _::::::::_ implicitly _::::::::_ enforces _:_ a _:::_ full _:::::::::::_ re-evaluation _::_ of _::::::_ Layer
+
+_:_ _[β]_ _::::_ and _:::::_ Layer _::γ_ _::::_ rules _:::_ for _:::_ the _::::::_ nested _:::::_ scope, _:::::::::_ effectively _:::::::_ creating _::_ a _::::::::_ validation _:::::_ loop _:::_ that _:::::_ resets _:::_ for _::::_ each
+
+structural _:::::::::::::_ depth.
+
+
+B FORMAL GUARANTEES OF THE POST-SQLFIX FRAMEWORK
+
+
+This appendix provides a formal analysis of the soundness and completeness properties of our
+hierarchical validation and repair framework. We establish theoretical guarantees that our system
+produces no false positives in error detection (soundness of diagnosis) and ensures all synthesized
+repairs are formally correct (soundness of repair). The analysis builds upon the foundational concepts
+established in Section 3.
+
+
+B.1 FOUNDATIONAL DEFINITIONS
+
+
+We begin by formalizing the set of valid queries based on the correctness specification from Section 3.2.1.
+
+
+15
+
+
+**Recursive** _::::::::::::::_ **Scope** _::::::::::_ **Validation** _:::::::::_ **(** _P_ **recurse)** To _:: ::::::_ enable _::::_ the _:::::::::_ ”Recursive _:::::::::::::::_ Decomposition” _:::::::::_ capability
+
+claimed _:::::::::_ in _:::_ our _::::::::::_ framework, _:::_ this _::::::::_ predicate _::::::::_ enforces _:::_ that _:::_ all _::::::_ nested _::::::_ logical _::::_ units _::::::::::_ (e.g.,CTEs, _::::::_ derived
+
+tables) _::::::::::::_ defined _::_ in _:::::::::_ component _::S::_ of _::_ Φ _:::_ are _:::::::::_ themselves _:::::_ valid. _:_
+
+
+_P_ recurse(Φ _,_ Σ _,_ ∆) _⇔∀_ Φ _[′]_ _∈_ Φ _.S_ : IS VALID(Φ _[′]_ _,_ Σ _,_ ∆) (9)
+_:::::::::::::::::::::::::::::::::::::::::::_
+
+
+**Definition 6** (The Set of Valid CQS) **.** _Given a database schema_ Σ _, the set of all valid Canonical_
+_Query Structures, denoted_ Φ _valid_ (Σ) _, is the set of all CQS_ Φ _for which our correctness specification_
+_holds true:_
+Φ _valid_ (Σ) = _{_ Φ _|_ IS VALID(Φ _,_ Σ) = _true}_ (10)
+
+
+_A query string Qstr_ _is considered valid if and only if it can be successfully parsed into a CQS_ Φ _such_
+_that_ Φ _∈_ Φ _valid_ (Σ) _._
+
+
+**Definition 7** (Violation Detection Function) **.** _Our violation detection function, V_ (Φ _,_ Σ) _, as defined_
+_in Equation 3, returns the set of all predicate failures for a given CQS_ Φ _._
+
+
+**Definition 8** (Repair Synthesis Function) **.** _Our repair synthesis function,_ SYNTHESIZE PLANS(Φ _,_ Σ) _,_
+_takes an invalid CQS_ Φ _and a schema_ Σ _as input._ _It generates the Constrained Repair Space, which_
+_is a set of valid Repair Plans:_
+
+
+SYNTHESIZE PLANS(Φ _,_ Σ) (11)
+_::::::::::::::::::::::_ [=] _[ {]_ [Λ] _[ |]_ [ Λ(Φ)] _[ ∈]_ [Φ] _[valid]_ [(Σ)] _[}]_
+
+
+_The function returns an empty set if no valid repair plan can be synthesized._
+
+
+B.2 SOUNDNESS OF DIAGNOSIS
+
+
+**Theorem 2** (Soundness of Violation Detection) **.** _Our violation detection framework is sound._ _For_
+_any CQS_ Φ _and schema_ Σ _, if our engine detects violations, then the CQS is not valid:_
+
+
+_V_ (Φ _,_ Σ) _̸_ = _∅⇒_ Φ _∈/_ Φ _valid_ (Σ) (12)
+
+
+_Proof._ The proof follows directly from the definitions. By Definition 6, a CQS Φ is in Φvalid(Σ) if
+and only if IS VALID(Φ _,_ Σ) is true. By the definition of our violation set _V_ (Equation 3), _V_ (Φ _,_ Σ) is
+non-empty if and only if there is at least one predicate failure in _¬_ IS VALID(Φ _,_ Σ).
+
+
+Therefore, the condition _V_ (Φ _,_ Σ) _̸_ = _∅_ is logically equivalent to _¬_ IS VALID(Φ _,_ Σ), which by definition implies Φ _∈/_ Φvalid(Σ). This guarantees that our framework produces no false positives; every
+reported violation corresponds to a genuine failure to meet the correctness specification.
+
+
+B.3 SOUNDNESS OF REPAIR
+
+
+**Theorem 3** (Soundness of Repair Plan Synthesis) **.** _Our repair synthesis framework is sound._ _For any_
+_CQS_ Φ _and schema_ Σ _, any repair plan_ Λ _generated by our synthesis function produces a valid CQS:_
+
+
+_∀_ Λ _∈_ SYNTHESIZE PLANS(Φ _,_ Σ) (13)
+_::::::::::::::::::::::_ _[,]_ [ Λ(Φ)] _[ ∈]_ [Φ] _[valid]_ [(Σ)]
+
+
+_Proof._ The proof follows from the construction of the synthesis algorithm described in § 3.3.2.
+The final step of the algorithm (Step 3: Plan Composition and Verification) explicitly verifies each
+candidate repair plan Λ _i_ by checking if its application results in a valid CQS: IS VALID(Λ _i_ (Φ) _,_ Σ).
+
+
+The synthesis function SYNTHESIZE PLANS(Φ _,_ Σ) is defined to only include those plans Λ _i_ that
+successfully pass this verification step. Therefore, by definition, any plan Λ returned by the function
+is guaranteed to produce a CQS Φ _[′]_ = Λ(Φ) such that IS VALID(Φ _[′]_ _,_ Σ) holds. This implies Φ _[′]_ _∈_
+Φvalid(Σ).
+
+
+This **verify-before-propose** principle ensures that the LLM is only ever presented with repair
+strategies that are formally guaranteed to be correct, thus ensuring the soundness of the entire repair
+process.
+
+
+B.4 COMPLETENESS CONSIDERATIONS
+
+
+Our framework provides strong, formally-defined completeness guarantees with respect to its operational scope. We distinguish between the completeness of our diagnostic capabilities and our repair
+synthesis capabilities.
+
+
+16
+
+
+B.4.1 DIAGNOSTIC COMPLETENESS
+
+
+We claim that our validation engine is complete for the class of all statically-detectable errors, as
+formally defined by a comprehensive external taxonomy.
+**Theorem 4** (Diagnostic Completeness) **.** _Let Ebugs_ _be the set of all error categories defined in the_
+_NL2SQL-BUGs taxonomy._ _For any query Qstr_ _that contains an error e_ _∈Ebugs, its corresponding_
+_CQS_ Φ _(if parsable) will have a non-empty violation set:_
+
+
+_∀e ∈Ebugs, HasError_ ( _Qstr, e_ ) = _⇒_ _V_ (Φ _,_ Σ) _̸_ = _∅_
+
+
+_Proof Sketch._ The proof proceeds by construction, demonstrating a complete mapping from the error
+categories in _E_ bugs to the validation rules within our three-layer hierarchy.
+
+
+    - **Syntactic** **Errors** (e.g., misspelled keywords, syntax errors from NL2SQL-BUGs) are
+guaranteed to be detected by **Layer** _α_, as they will cause the AST parsing to fail, preventing
+the formation of a valid CQS Φ.
+
+
+    - **Context-Free Semantic Errors** (e.g., GROUP BY clause inconsistencies, invalid use of
+operators) are systematically detected by the universal relational logic rules in **Layer** _β_ . The
+constraints enforced by _P_ struct(Φ) are explicitly designed to cover these internal consistency
+issues.
+
+
+    - **Context-Sensitive Semantic Errors** (e.g., incorrect table/column names, invalid join paths,
+type mismatches) are comprehensively covered by the validation rules in **Layer** _γ_ . The
+_P_ schema(Φ _,_ Σ) predicate performs exhaustive checks of all identifiers and operations against
+the ground-truth schema Σ.
+
+
+A detailed table mapping each specific NL2SQL-BUGs category to its corresponding validation rule
+in our framework is provided in Table 1. This demonstrates that no statically-detectable error defined
+by this comprehensive benchmark can pass our validation engine undetected.
+
+
+B.4.2 REPAIR COMPLETENESS
+
+
+We claim that for any error our engine can diagnose, it can also propose a formally sound solution.
+
+**Proposition 1** (Repair Completeness) **.** _The repair synthesis process is complete with respect to the_
+_set of detectable violations._ _For any CQS_ Φ _and schema_ Σ _such that V_ (Φ _,_ Σ) _̸_ = _∅, the synthesized_
+_set of repair plans is non-empty:_
+
+
+_V_ (Φ _,_ Σ _,_ Λ) _̸_ = _∅_ = _⇒_ SYNTHESIZE PLANS(Φ _,_ Σ _,_ Λ) [=] _[ ∅]_
+_:::::::::::::::::::::::::_
+
+
+_Argument by Design._ This property is a direct consequence of the design of the strategic mapping
+_M_ (Equation 4). _M_ is constructed to be a total function over the domain of all detectable violation
+types _v_ . For every violation _v_ that can be identified by our validation predicates _P_ struct and _P_ schema,
+a corresponding entry in _M_ defines at least one valid operator schema _ω_ . As the synthesis process
+instantiates these schemata, it is guaranteed to generate at least one candidate repair plan. Therefore,
+the completeness of repair is an architectural guarantee of the framework.
+
+
+B.4.3 FORMAL LIMITATION: INTENT-LEVEL COMPLETENESS
+
+
+While our framework guarantees formal correctness, we do not claim **intent-level semantic com-**
+**pleteness** . Ensuring that a formally valid query perfectly matches a user’s unstated intent is formally
+undecidable and remains beyond the scope of any static analysis framework. Our goal is to guarantee
+formal correctness, which is a necessary precondition for achieving intent alignment.
+
+
+C DETAILED FORMALIZATION OF THE VALIDATION ENGINE
+
+
+This appendix provides a detailed, operational formalization of the hierarchical validation engine
+described in § 3.3.1. We specify the structural composition of the Canonical Query Structure (CQS),
+define necessary auxiliary functions, and present the concrete validation rules.
+
+
+17
+
+
+C.1 STRUCTURAL COMPOSITION OF THE CQS
+
+
+The Canonical Query Structure Φ introduced in Definition 5 is composed of several components,
+whose detailed structures are defined as follows. The **Source Relation** _ρ_ is a tuple ( _T, J, F_ ):
+
+
+- _T_ : A set of source table tuples (table ~~n~~ ame, alias), where alias can be NULL.
+
+- _J_ : A set of join tuples (join type, table ~~s~~ pec, predicate), where join ~~t~~ ype includes INNER, LEFT,
+etc.
+
+- _F_ : A set of predicates from the WHERE clause.
+
+
+The **Projection** Π is a set of tuples (expression, alias) from the SELECT clause. The **Aggregation**
+Γ is ( _G, H_ ), where _G_ is a set of grouping expressions and _H_ is a set of HAVING predicates. The
+**Presentation** Ωord is ( _O, L_ ), where _O_ is a set of ordering expressions and _L_ is the limit.
+
+
+This detailed representation explicitly captures modern SQL constructs like JOIN types and aliasing,
+providing the necessary granularity for fine-grained validation.
+
+
+C.2 AUXILIARY FUNCTIONS FOR CQS ANALYSIS
+
+
+Our validation rules rely on a collection of auxiliary functions that extract structural information from
+a CQS Φ and the schema Σ. Key functions are summarized in Table 11.
+
+
+**Function** **Definition**
+
+
+Attributes( _E_ ) Set of all attribute references in an expression set _E_ .
+AllAttributes(Φ) Set of all attributes referenced anywhere in Φ.
+SourceAttributes(Φ _,_ Σ) Set of all valid attributes from the source tables _Tρ_ in schema Σ.
+IsAggregate( _e_ ) Returns true if expression _e_ contains an aggregate function.
+IsTypeCompatible( _op, τ_ 1 _, τ_ 2) Returns true if types _τ_ 1 and _τ_ 2 are compatible for operation _op_ .
+TypeOf( _c,_ Σ) Returns the data type _τ_ of attribute _c_ from schema Σ.
+
+
+**Table 11:** Essential auxiliary functions for CQS analysis.
+
+
+A critical operation is resolving attribute references within the context of aliases defined in Φ. This is
+essential for correctly binding identifiers before schema-level checks.
+
+
+C.3 HIERARCHICAL VALIDATION RULES
+
+
+The validation rules are organized according to the _α_, _β_, _γ_ layers. Each rule is a predicate function
+that returns true if the condition is met. A violation occurs when a rule returns false. Table 12 presents
+a subset of these rules.
+
+
+**ID** **Rule Definition** **Layer**
+
+
+_Rβ,_ 1 _∀c ∈_ Attributes(Π) _,_ (IsAggregate( _c_ ) _∨_ _c ∈_ _G_ Γ) _β_ (Structural)
+_Rβ,_ 2 _∀c ∈_ Attributes( _H_ Γ) _,_ (IsAggregate( _c_ ) _∨_ _c ∈_ _G_ Γ) _β_ (Structural)
+
+
+_Rγ,_ 1 _∀t ∈_ _Tρ, t._ table ~~n~~ ame _∈_ Σ _._ Tables _γ_ (Schema)
+_Rγ,_ 2 _∀c ∈_ AllAttributes(Φ) _, c._ name _∈_ SourceAttributes(Φ _,_ Σ) _γ_ (Schema)
+
+
+**Table 12:** A subset of hierarchical validation rules.
+
+
+The validation predicates _P_ struct(Φ) and _P_ schema(Φ _,_ Σ) from § 3.2.1 are formally defined as the
+conjunction of all rules within their respective layers. For instance:
+
+_P_ struct(Φ) _⇔_            - _Rβ,i_ (Φ) (14)
+
+
+_i_
+
+
+This rule-based formalization provides a concrete and extensible implementation of our high-level
+correctness specification.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+**Algorithm 1** Violation-Driven Repair Plan Synthesis
+
+
+**Require:** Invalid CQS Φinvalid, Schema Σ, Dialect ∆
+**Ensure:** Set of valid repair plans Λvalid
+
+1: Λvalid _←∅_
+2: _V_ _←_ VALIDATEQUERY(Φinvalid _,_ Σ _,_ ∆)
+3: **if** _V_ = _∅_ **then**
+4: **return** Λvalid
+5: **end if**
+6: Ωcand _←∅_
+7: **for all** _v_ _∈_ _V_ **do** _▷_ For each detected violation
+8: Ωschemata _←M_ ( _v_ ) _▷_ Map to repair schemata
+9: **for all** _ωs_ _∈_ Ωschemata **do**
+10: Ωinst _←_ INSTANTIATE( _ωs,_ Φinvalid _,_ Σ _,_ ∆)
+11: Ωcand _←_ Ωcand _∪_ Ωinst
+12: **end for**
+13: **end for**
+14: Λcand _←_ COMPOSEPLANS(Ωcand)
+15: **for all** Λ _∈_ Λcand **do** _▷_ Verify each candidate plan
+16: Φrepaired _←_ Λ(Φinvalid)
+17: **if** VALIDATEQUERY(Φrepaired _,_ Σ _,_ ∆) = _∅_ **then**
+18: Λvalid _←_ Λvalid _∪{_ Λ _}_
+19: **end if**
+20: **end for**
+21: **return** Λvalid
+
+
+C.4 REPAIR PLAN SYNTHESIS ALGORITHM
+
+
+Algorithm 1 details the formal, violation-driven process for synthesizing the Constrained Repair
+Space. It operationalizes the concepts defined in § 3.3.2.
+
+
+C.5 ALIGNMENT ALGORITHM
+
+
+Algorithm 2 details our deterministic alignment operator, Ω. Given a formally valid query with empty
+results, the algorithm first identifies all failing WHERE clause predicates (Line 3) and classifies them
+as either Value Mismatch or Column Mismatch errors (Line 4). In line with our non-speculative repair
+principle, the process terminates if any Value Mismatch is found (Lines 5-7). For Column Mismatch
+errors, the algorithm iterates through each, first computing a set of viable **candidate columns** based
+on data-evidence from the database instance (Line 9). If candidates exist, it selects the best one via a
+scoring function and replaces the original incorrect column (Lines 11-12). The final, modified query
+is then returned.
+
+
+**Algorithm 2** Query Correction Algorithm
+
+
+**Require:** _Q ∈SV_ with _|ϵ_ ( _Q,_ Σ) _|_ = 0
+**Ensure:** _Q_ _[′]_ _∈Q_ target _∪{⊥_ nc _}_
+
+1: Extract failing predicates: _P_ fail = _{_ ( _ci, ◦i, vi_ ) _| |σci◦ivi_ ( _D_ ) _|_ = 0 _}_
+2: Classify errors: _P_ col = _P_ fail _∩E_ col, _P_ val = _P_ fail _∩E_ val
+3: **if** _P_ val = _∅_ **then**
+4: **return** _⊥_ nc _▷_ Uncorrectable value boundary errors
+5: **end if**
+6: Initialize _Q_ _[′]_ _←_ _Q_
+7: **for** each ( _ci, ◦i, vi_ ) _∈P_ col **do**
+8: Compute _Ci_ = _C_ comp( _vi, ◦i, TQ_ )
+9: **if** _Ci_ = _∅_ **then**
+10: Select _c_ _[′]_ _i_ [= arg max] _[c][∈C]_ _i_ [score][(] _[c, v][i][,][ ◦][i]_ [)]
+11: Replace _ci_ with _c_ _[′]_ _i_ [in] _[ Q][′]_
+
+12: **end if**
+13: **end for**
+14: **return** _Q_ _[′]_
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+D MORE EXPERIENCE
+
+
+D.1 MODEL SCALING EFFECTS:
+
+
+We use the same prompts guide different scaling model to repair same errors from Table 4, the result in
+table 8. The 32B repair model amplifies both component benefits and framework effectiveness. Complete Post-SQLFix achieves 72% error reduction with 32B compared to 90% with 7B, demonstrating
+that larger models better leverage structured guidance. Notably, token efficiency improves dramatically with 32B (1,113 vs.2,034 tokens), suggesting that enhanced instruction-following capacity
+reduces iteration requirements even while achieving superior repair quality. In Table 8, Model scaling
+analysis (7B vs. 32B) shows 89% reduction in context-sensitive errors, indicating that framework
+diagnostics are sound, with remaining limitations attributable to LLM instruction-following capacity
+rather than specification inadequacy.
+
+
+D.2 ANALYSIS OF RESIDUAL ERRORS.
+
+
+Our _::::::::::::_ framework _:::::::::_ prioritizes _::::::::::_ **soundness** _::::_ **over** _::::::::::_ **speculative** _::::::::_ **coverage** _:_ . _:::_ By _::::::::_ refusing _::_ to _:::::::_ generate _::::::_ repair
+
+plans _::::::::_ that _::::::_ cannot _:::_ be _::::::::_ formally _:::::::_ verified _::_ as _:::::_ safe, _::::::::::::_ Post-SQLFix _::::::::_ maintains _::_ a _:::::_ “zero _:::::_ false _:::::::::_ positives”
+
+guarantee—essential _::::::::::::::::: :::_ for _::::::::::_ trustworthy _::::::::::_ integration _::::_ into _::::::::::_ production _::::::::::_ workflows. _::::::::::_ Therefore, _:::::_ these
+
+residual _:::::::::::_ cases _::::::::_ represent _:::_ not _::_ a _:::::_ failure _:::_ of _:::::::::::_ Post-SQLFix _:::_ but _:::_ the _:::::::::_ **boundary** _:::::::::_ **conditions** _::::::_ **where** _::::::_ **formal**
+
+**verification** _:::::::::: ::::::::::_ **constraints** **intersect** _::::::::::::_ **with** **LLM** _:::::::::::::::_ **capabilities.** Our _::: ::::::::::_ contribution _::_ is _::::::::::_ establishing _:::_ the _:::_ **first**
+
+**formally** _:::::::::::::_ **sound** _::::::::::::::_ **neuro-symbolic** _::::::::::_ **framework** _:::_ for _::::_ SQL _::::::::_ repair—a _::::::_ robust _:::::::::::_ architectural _:::::::::_ foundation
+
+that _:::::::_ can _::::::::_ naturally _::::::_ expand _:::_ its _::::::::_ coverage _:::_ as _:::::_ LLM _::::::::::_ capabilities _::::::::_ continue _::_ to _::::::::_ improve, _:::::::_ without _:::::_ ever
+
+compromising _::::::::::::::::::::_ soundness _::::::::::_ guarantees.
+
+
+D.3 MODEL ANALYSIS
+
+
+_:::::_ **Model** _:::_ **EF** **(%)** _:::_ _::::_ **Ours** _::::_ **(%)** _:::::::::::_ **Improvement**
+
+_:::::::::::::::_ mamba-codestral-7b 51.37 _::::_ **52.80** _::::_ _::::_ +1.43 _:_
+
+_:::::::::::::::::::_ mistral-small-24b-instruct 48.24 _::::_ **54.37** _::::_ _::::_ +6.13 _:_
+
+_::::::::::::::::_ llama-3.1-70b-instruct _:_ 48.37 _::::_ **53.98** _::::_ _::::_ +5.61 _:_
+
+_::::::::::_ gpt-oss-120b 48.04 _::::_ **53.19** _::::_ _::::_ +5.15 _:_
+
+
+**Table 13:** _::::::_ Model _::::::::_ Accuracy _:::::::::::_ Performance _::::::::::_ Comparison _::_ on _::::::_ BIRD _:::_ Dev _:::_ Set
+
+
+20
+
+
+As _::::::::::_ analyzed _::_ in _::_ § _::::_ D.1, _:::_ the _::::::::_ dominant _:::::::::_ bottleneck _:::_ for _:::::::_ residual _:::::_ errors _::_ is _:::_ not _:::_ the _:::::::::::::_ incompleteness _::_ of _::::_ our
+
+symbolic _:::::::::::::::::_ framework, _:::_ but _::::::_ rather _:::_ the _:::::::::::::::::_ instruction-following _:::::::::_ capability _::_ of _::::::_ LLMs. _:::::::::_ However, _:::_ we _::::_ must
+
+acknowledge _::::::::::::::_ that _::_ a _:::::_ small _::::::_ subset _::_ of _:::::::::_ extremely _::::::::_ complex _:::::_ cases _::::::_ remain _::::::::::::::_ unsolved—those _::::::::_ requiring
+
+non-local, _::::::::::::::_ global _:::::_ code _:::::::::_ refactoring _:::::_ (e.g., _::::::_ deeply _::::::_ nested _:::::::::_ recursive _:::::_ CTEs _::::_ with _::::::::_ intricate _::::::::_ constraint
+
+interactions). _:::::::::::::::::_ These _:::::::_ residual _::::::_ errors _::::_ stem _:::::_ from _:::::::::::_ **engineering** _:::::::::_ **challenges** _:::_ that _::::::_ extend _:::::::_ beyond _::::_ our
+
+current _:::::: :::::::::_ framework. _:::::::::::_ Specifically, _::::::::::_ “engineering _::::::::::_ challenges” _:::::_ refers _::_ to _:_ a _:::::::::::::::_ well-documented _::::::::::_ phenomenon
+
+in _:::::::_ formal _::::::::_ methods _:::_ and _:::::::_ program _::::::::_ analysis: _:::_ **the** _::::::::_ **inherent** _:::_ **gap** _::::::::_ **between** _:::::::::_ **theoretical** _::::::::::::_ **completeness** _:::_ **and**
+
+**practical** _:::::::::::::::::::::::_ **implementability** _:::::_ **when** _::::::::_ **handling** _:::::::_ **complex** _::::::::_ **program** _::::::::::_ **constructs** .
+
+
+Complex _::::::::::::_ SQL _::::::::_ structures _::::_ such _::_ as _::::::::_ recursive _::::::_ CTEs, _:::::_ deeply _::::::_ nested _::::::::::_ subqueries, _:::_ and _:::::::_ intricate _::::::::_ constraint
+
+interactions _::::::::::::::::_ present _:::::::::_ challenges _::::_ that _:::::_ affect _:::_ the _::::::_ entire _:::::::_ research _:::::::::::_ community. _:::::_ Even _::::::_ recent _:::::_ work _::_ on
+
+industrial-scale _::::::::::::::::_ SQL _:::::::_ systems _:::_ by Google _:::::: ::::::::::::::::_ (Shute et al., 2024) acknowledges _:::::::::::::::_ that _::::_ SQL _:::_ has _:::::::::_ “significant
+
+design _:::::::::::::::_ problems” _:::_ that _::::::_ make _::_ it _:::::::::_ inherently _:::::::_ difficult _:::_ to _:::::::_ analyze _::::_ and _::::::::_ transform _::::::::::::::::_ programmatically.
+
+These _::::: ::::::::_ constructs _::::::::_ combine _:::::_ SQL’s _::::::_ legacy _::::::_ design _::::::::::_ complexity _::::_ with _:::_ the _::::_ need _:::_ for _:::::::::::::::::_ semantics-preserving
+
+transformations—a _::::::::::::::::::::::::::_ combination _::::_ that _:::::::_ creates _:::::::::_ substantial _::::::::::_ engineering _:::::::_ hurdles _::::_ for _:::_ any _:::::::::_ automated
+
+repair _::::: ::::::_ system. _:::::_ For _::::_ these _::::::_ cases, _:::_ our _::::::::_ symbolic _::::::_ engine _:::::_ may _::::::::::_ deliberately _::::::_ abstain _:::::_ from _::::::::::_ synthesizing
+
+_:_ [a] _:::::_ repair _:::::_ plan _::_ if _::_ it _::::::_ cannot _:::::::_ provide _::::::_ formal _::::::::::_ correctness _::::::::::_ guarantees. _:::::_ This _::_ is _::::_ not _::_ a _:::::::::_ deficiency, _:::_ but
+
+_:_ [a] _::::::::::_ **principled** _::::::_ **design** _::::::_ **choice** _::::::_ **rooted** _:::_ **in** _::::_ **our** _:::::::::::_ **commitment** _:::_ **to** _::::::::_ **provable** _::::::::::_ **soundness.** This _:::::::::_ design
+
+reflects _:::::: :_ a _:::::::::::::::_ well-documented _::::::_ tension _::_ in _::::::::_ program _:::::::_ analysis _:::::::::::::_ (Bugariu, 2022) _:_ : _:::::_ while _:::::::::_ theoretical _::::::_ designs
+
+may _::::::_ be _::::::_ proven _:::::::_ correct, _::::::::_ achieving _:::::::::::::_ comprehensive _::::::::_ coverage _::_ in _:::::::_ practice _:::::_ often _:::::::_ requires _::::::::::_ engineering
+
+compromises. _:::::::::::::::_ The _:::::::_ concept _::_ of _:::::::::::_ “soundiness” _::::::::::::::::::_ (Livshits et al., 2015) emerged _::::::: :::::::_ precisely _::_ to _::::::::::_ characterize
+
+this _::::::::::_ balance, _::_ as _::::::_ perfect _:::::::::_ soundness _:::::_ across _:::_ all _::::::::_ language _::::::_ features _:::::_ often _::::::_ renders _::::::::_ analyses _:::::::::_ “unscalable _:::_ or
+
+imprecise _:::::::: ::_ to _:::_ the _::::_ point _:::_ of _::::_ being _::::::::_ useless.” _:_
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+**Table 14:** Repair Paradigms by Formal Error Category
+
+
+We _:::::::::_ provide _:_ a _:::::::::::::_ comprehensive _::::::::::_ instantiation _::_ of _:::_ the _:::::_ repair _::::::::_ synthesis _::::::_ process _:::_ for _:::_ key _:::::_ error _:::::::::_ categories. _::_ As
+
+illustrated _::::::::::_ in _:::::_ Table _:::_ 14, _:::_ our _::::::::::_ framework _::::_ does _:::_ not _::::::_ merely _::::::_ report _:::::_ errors; _::_ it _::::::::_ performs _:_ a _:::::_ deep _::::::::_ root-cause
+
+analysis _:::::::::::_ (The _::::::_ ’Why’ _:::::::_ column) _::_ to _:::::::::_ synthesize _:::::_ sound _::::::::_ evidence. _:::::_ This _:::::::_ evidence _::_ is _::::_ then _::::::::_ compiled _::::_ into _:_ a
+
+Repair _::::::::::::::::_ Specification _:::::_ (The _:::::_ ’How’ _::::::::_ column), _:::::_ which _::::_ acts _::_ as _:::_ the _:::::::::::::_ neuro-symbolic _::::::::_ interface. _::::_ This _:::::::_ strictly
+
+defined _:::::::::::::_ interface _:::::::_ ensures _:::_ that _:::_ the _:::::_ LLM _::_ is _:::::_ never _:::::_ asked _::_ to _::::::_ ’guess’ _:::_ the _:::::_ cause _::_ of _:::_ an _::::_ error, _:::_ but _::_ is _::::::_ instead
+
+tasked _:::::::::_ with _::::::::_ executing _::_ a _::::::_ precise, _::::::::::::::_ evidence-backed _:::::_ repair _::::_ plan _:::::::_ derived _::::_ from _:::_ the _::::::_ formal _:::::::::_ diagnosis.
+
+
+21
+
+
+_::::::_ While _::::_ our _:::::::_ primary _::::::::::_ evaluation _:::::::_ focused _:::_ on _::::_ the _:::::::::::_ Qwen-Coder _:::::::_ series, _::_ a _::::::_ central _::::::_ claim _:::_ of _::::_ our
+
+framework _::::::::: ::_ is _:::_ its _:::::::::::::::::::::::::::_ **architectural universality** —the _::::::_ ability _:::_ to _:::::::_ function _:::_ as _::_ a _::::::::::::_ plug-and-play _::::::_ repair
+
+module _:::::::::::::::_ regardless _:::_ of _:::_ the _:::::::::_ upstream _:::::::::_ generator. _::::_ To _:::::::_ validate _::::_ this _::::::_ claim, _::::_ we _:::::_ must _::::::::::_ demonstrate
+
+**agnosticism across different LLM backbones** _:::::::::::::::::::::::::::::::::::::::_, _:::::::_ ensuring _:::_ the _:::::::_ system _::_ is _:::_ not _::::::::_ overfitted _::_ to _::_ a _::::::_ specific
+
+model _:::::::::::_ family. _:::_ To _:::::::::_ empirically _:::::_ verify _::::_ this independence, _::::::::::::::_ as show _::::::_ in _:::::_ Table _:::_ 13, _:::_ we additionally _::::::::::_ evaluate _::::::_
+
+four _:::::::::::_ different _:::::::_ models _::_ of _:::::::_ various _::::::::::::_ specifications _:::_ and _:::::_ from _::::::::_ different _::::::::::::_ manufacturers. _:::::_ We _::::_ used _:::_ the
+
+same _:::::::::::_ settings _::::_ and _:::::::_ prompts. _:::::_ The _::::::_ results _::::::::::_ demonstrate _:::::::::_ consistent _::::::::::_ performance _:::::_ gains _::::::_ across _::::::_ diverse
+
+architectures _:::::::::::::::_ (e.g., _::::::::::_ SSM-based _:::::::_ Mamba _:::_ vs. _:::::::::::::::::_ Transformer-based _::::::_ Llama) _::::_ and _:::::_ scales _::::_ (7B _:::_ to _::::::_ 120B).
+
+This _:::::::::::::_ empirically _::::::::_ validates _:::_ that _:::_ the _:::::::_ efficacy _::_ of _:::::::::::_ Post-SQLFix _::_ is _:::::::_ intrinsic _::_ to _::_ its _::::::::::::::_ neuro-symbolic _::::::_ design,
+
+confirming _::::::::: ::_ its _::::_ role _::_ as _:_ a _::::::_ robust, _:::::::::::::_ model-agnostic _:::::_ repair _:::::::_ module. _:_
+
+
+E THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+In the preparation of this paper, we utilized Large Language Model (LLM), as a general-purpose
+assistant. The LLM’s role was strictly that of a collaborative tool to aid in the articulation and
+formalization of our pre-existing research ideas and results. We, the human authors, take full and
+sole responsibility for all content, claims, and formalisms presented in this paper. The specific
+contributions of the LLM can be categorized as follows:
+
+
+    - Language and Style Enhancement.
+
+
+    - Structural Organization.
+
+
+It is crucial to state that the LLM did not contribute to the original research ideation, the design or
+implementation of the Post-SQLFix framework, the execution of experiments, or the collection and
+analysis of empirical data. All core intellectual contributions, algorithms, and experimental results
+are entirely the work of the human authors _:_ .
+
+
+F LAYERS
+
+
+**Error** **Taxonomy** **&** **Example** **Evidence & Repair Reasoning (Why?)** **Repair Specification (How?)**
+**(What?)**
+
+
+**Syntactic**
+Condition: _α_ : _π_ ( _Q_ ) = _⊥π_
+**Example:** SEELCT order ~~i~~ d
+FROM order
+**Error:** near “order”: syntax error
+
+
+**Context-Free Semantic**
+Condition: _β_ : _ψd_ ( _π_ ( _Q_ )) _̸_ = _∅_
+**Example:** SELECT
+account ~~i~~ d FROM account
+ORDER BY order ~~i~~ d ...
+**Error:** no such column: order ~~i~~ d
+
+
+**Context-Sensitive Semantic**
+Condition: _γ_ :
+_ρd_ ( _π_ ( _Q_ ) _,_ Σ _, G_ Σ) _̸_ = _∅_
+**Example:** SELECT
+Patient ~~I~~ D FROM
+Laboratory
+**Error:** no such column: Laboratory.Patient ID
+
+
+**Grammar-Driven** **Hypothesis** : Use
+fault-tolerant parsing to identify tokenlevel errors (spelling, escaping). Apply
+string similarity (Levenshtein distance)
+to find the intended SQL keyword from
+grammar rules.
+
+
+**Intra-Query** **Structural** **Analysis** : Detect violations of SQL’s built-in semantic rules (e.g., aggregation scope, alias
+conflicts, cross-clause references) by analyzing query structure. Generate specific
+prompts telling LLM which rule is violated and how to fix.
+
+
+**Schema-Grounded** **Entity** **Search** :
+Search database schema Σ for valid alternatives to non-existent tables/columns.
+Use foreign key relationships and string
+similarity as evidence to provide LLM
+with ranked replacement suggestions.
+
+
+Apply direct token replacement based on
+fault-tolerant parsing and string similarity.
+**Example:** _Replace_ _‘order’_ _with_ _‘\order\’_
+_based on SQLite grammar matching_
+
+
+**Prompts:** Generate structured prompts detailing the violation and required action.
+**Example:** _“CROSS-CLAUSE REFERENCE_
+_VIOLATION: Column ‘order_ ~~_i_~~ _d’ appears in_
+_ORDER BY but not in SELECT clause._ _Re-_
+_quired action:_ _ADD ‘order_ _id’ to SELECT_
+_clause or REMOVE from ORDER BY clause”_
+
+
+**Prompts:** Generate schema-grounded
+prompts with ranked replacement suggestions.
+**Example:** _“COLUMN NOT FOUND: Col-_
+_umn_ _‘Patient_ ~~_I_~~ _D’_ _does_ _not_ _exist_ _in_ _ta-_
+_ble_ _‘Laboratory’._ _Hint:_ _REPLACE_ _‘Lab-_
+_oratory.Patient_ ~~_I_~~ _D’_ _WITH_ _‘Laboratory.ID’_
+_based on schema analysis”_
+
+
+**1134**
+
+
+**1135**
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+
+**1140**
+
+**1141**
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+
+**1146**
+
+**1147**
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+
+**1152**
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+
+**1158**
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+
+**1163**
+
+**1164**
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+
+**1169**
+
+**1170**
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+
+**1175**
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+
+**1181**
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+
+**1186**
+
+**1187**
+
+
+G _:::::::::::_ ANALYSIS _:::_ OF _:::::_ THE _::::::::_ REPAIR _::::::::::_ PROCESS
+
+
+_maintains:::::::::::the_ _::::::::existence_ _::of ::::::::detectable::::::errors::_
+
+_∀q_ _∈_ _Q, e ∈_ _E, a ∈_ _A. q_ _̸≡σ_ _qtarget ∧_ _e ∈_ _diagnose_ ( _q, σ_ ) _∧_ _a ∈_ _generate_ ~~_a_~~ _ctions_ ( _e, q, σ_ )
+
+= _⇒_ _diagnose_ ( _q_ _[′]_ _, σ_ ) _̸_ = _∅∨_ _q_ _[′]_ _≡σ_ _qtarget_
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+_where::::: :::::::::q_ _[′]_ = _apply_ ~~_:a_~~ _::::::::::ction_ ( _q, a_ ) _._
+
+
+22
+
+
+This _::::::::::_ section _::::::::_ presents _::_ a _::::::::_ complete _::::::::::::_ formalization _:::_ of _:::_ the _::::::::::::_ Post-SQLFix _::::::_ repair _::::::::::_ framework. _:::::_ The
+
+formalization _::::::::::: :::::::_ validates _:::_ the _:::::::::_ soundness _::_ of _::::_ our _::::::::_ axiomatic _::::::_ system _::::_ and _:::::::_ confirms _::::_ that _:::_ the _:::::_ repair _::::::_ process
+
+exhibits _::::::::::::::::::::::_ order-independent _:::::::::::_ convergence. _:::_ At _:::_ the _::::_ same _:::::_ time, _::_ it _:::::::_ ensures _:::_ that _::::_ even _::::_ the _::::_ most _::::::::_ complex
+
+nested _::::::::::_ errors _::::_ can _::_ be _:::::::_ resolved _:::::::_ through _:_ a _:::::_ series _:::_ of _::::::_ correct _::::_ fixes _:::_ and _::::_ will _:::::::::_ eventually _::::::::_ converge.
+
+
+G.1 _::::::::::::::_ FOUNDATIONAL _::::::::::::_ DEFINITIONS _::::_ AND _:::::_ TYPE _::::::::_ SYSTEM
+
+
+We _::::::::_ begin _:::_ by _::::::::::_ establishing _:::_ the _:::::::::::_ foundational _::::_ type _:::::::_ system _:::_ that _:::::::_ mirrors _:::_ the _::::::::::::_ mathematical _::::::::_ structures
+
+defined _::::::::::_ here. _:_
+**Definition 9** (Core Types) **.** _:::The::::::repair :::::::::framework::is ::::::::::::parameterized ::by::::four:::::::::::fundamental_ _:::::types:_
+
+
+    - _Q:::: ::::Type::—::::The:::::query:::::space_
+
+
+    - _:_ [Σ] _::_ _[:]_ _::::Type::—::::The ::::::schema:::::space:_
+
+
+    - _E:::: ::::Type::—::::The:::::error_ _:::type:::::(with::::::::decidable::::::::equality)_
+
+
+    - _A:::: ::::Type::—::::The :::::repair::::::action ::::type_ _::::(with::::::::decidable::::::::equality):_
+**Definition 10** (System Functions) **.** _:::The::::::repair::::::system_ _::is :::::::::::characterized:::by_ _:::the_ _::::::::following::::::::axiomatic_
+
+_functions::::::::::_
+
+
+_diagnose_ (15)
+_:::::::_ [:] _:::::::::::::::_ _[ Q][ →]_ [Σ] _[ →P]_ [(] _[E]_ [)]
+
+
+_generate_ ~~_a_~~ _ctions_ _[→]_ _[Q][ →]_ [Σ] _[ →P]_ [(] _[A]_ [)] (16)
+_:::::::::::::_ [:] _:::::::::::::::::::_ _[ E]_
+
+
+_apply_ ~~_a_~~ _ction_ (17)
+_::::::::::_ [:] _:::::::::::_ _[ Q][ →]_ _[A][ →]_ _[Q]_
+
+
+_semantic_ ~~_e_~~ _quiv_ (18)
+_::::::::::::_ [:] _::::::::::::::::::_ _[ Q][ →]_ _[Q][ →]_ [Σ] _[ →]_ _[Prop]_
+
+
+**Definition** **11** (Semantic Equivalence Relation) **.** _:::The:::::::::semantic :::::::::::equivalence_ _:::::::relation::::≡σ ::is_
+
+_axiomatized:::::::::: ::as::an::::::::::equivalence:::::::relation:::::::::satisfying::_
+
+
+    - _**Reflexivity:**_ _:::::::::_ _∀:::::::::::::::::::q_ _∈_ _Q, σ_ _∈_ Σ _. q_ _≡σ_ _q_
+
+
+    - _**Symmetry:**_ _:::::::::_ _∀::::::::::::::::::::::::::::::::::::q_ 1 _, q_ 2 _∈_ _Q, σ_ _∈_ Σ _. q_ 1 _≡σ_ _q_ 2 = _⇒_ _q_ 2 _≡σ_ _q_ 1 _:_
+
+
+    - _**Transitivity:**_ _::::::::::_ _∀:::::::::::::::::::::::::::::::::::::::::::::::::q_ 1 _, q_ 2 _, q_ 3 _∈_ _Q, σ_ _∈_ Σ _. q_ 1 _≡σ_ _q_ 2 _∧_ _q_ 2 _≡σ_ _q_ 3 = _⇒_ _q_ 1 _≡σ_ _q_ 3
+
+
+G.2 _::::::::::_ AXIOMATIC _::::::::_ SYSTEM
+
+
+The _:::::::::::::_ correctness _::_ of _:::_ the _:::::_ repair _:::::::::_ framework _::_ is _:::::::::_ guaranteed _:::_ by _::::_ three _:::::::::::_ fundamental _:::::::_ axioms, _:::::::::::_ corresponding
+
+precisely _:::::::::_ to _:::::_ those _::_ in _:::::::_ Section _:::_ F.3. _:_
+**Axiom** **1** (Completeness of Diagnosis) **.** _Let::::::::::::qtarget_ _∈_ _Q_ _::be::a::::::::formally::::::correct::::::query::::such::::that_
+
+_diagnose:::::::::::::::::::_ ( _qtarget, σ_ ) = _∅.::::::Then:_
+
+
+_∀q_ _∈_ _Q. q_ _̸≡σ_ _qtarget_ = _⇒_ _diagnose_ ( _q, σ_ ) _̸_ = _∅_ (19)
+_:::::::::::::::::::::::::::::::::::::_
+
+
+**Axiom 2** (Soundness of Diagnosis) **.** _:::::::::Conversely,:::for::::any_ _:::::query_ _::::::::::semantically:::::::::equivalent::to:::the::::::target:_
+
+
+_∀q_ _∈_ _Q. q_ _≡σ_ _qtarget_ = _⇒_ _diagnose_ ( _q, σ_ ) = _∅_ (20)
+_:::::::::::::::::::::::::::::::::::::_
+
+
+**Axiom** **3** (Soundness of Actions) **.** _:::::Every:::::::::generated :::::repair::::::action::::::either_ _:::::::::eliminates_ _::all::::::errors::or_
+
+
+(21)
+
+
+**1188**
+
+
+**1189**
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+
+**1194**
+
+**1195**
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+
+**1200**
+
+**1201**
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+
+**1206**
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+
+**1212**
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+
+**1217**
+
+**1218**
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+
+**1223**
+
+**1224**
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+
+**1229**
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+
+**1235**
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+
+**1240**
+
+**1241**
+
+
+**Lemma 1** (Well-Foundedness of Convergence) **.** _:::The::::::closer ::::::relation::is::::::::::::well-founded:_
+_WellFounded_ ( _closerµ_ ) (24)
+_:::::::::::::::::_
+
+
+_Proof._ The _::::::::::_ relation _::::::_ closer _µ:::_ is _:::_ the _::::::_ inverse _::::::_ image _::_ of _:::_ the _::::::::_ standard _:::::::_ less-than _:::::::_ relation _:::_ on _::_ N _:::::_ under _:::µ_ .
+
+Since _::::::<:::_ on _::_ N _::_ is _:::::::::::_ well-founded, _:::::::_ closer _µ ::::::_ inherits _:::::::::::::::_ well-foundedness. _:_
+
+
+G.3 _:::::_ CORE _::::::::::_ THEOREMS _:::::_ AND _:::::::_ PROOFS
+
+
+**Definition** **13** (Reachability) **.** _[A]_ _::::::query::q ::is_ _::::::::_ reachable _:if:::::there:::::exists::a_ _:::::finite_ _::::::::sequence ::of::::::actions_
+
+_leading::::::_ _**:**_ _to:::a_ _::::::correct :::::state:_
+_Reachable_ ( _q_ ) _⇐⇒∃L_ = ~~_[s]_~~ _[equence]_ [(] _[q, L]_ [)] _[ ≡][σ]_ _[q][target]_ (25)
+_:::::::::::::::::::::_ [[] _[a]_ _::::::::_ [1] _[, . . ., a][m]_ []] _[∈]_ _::::::::::::::::::::::::::::::_ _[A][∗][.][ apply]_
+
+
+_where::::: ::::apply_ ~~_::s_~~ _:::::::::::::::::::::::::equence_ ( _q, L_ ) = _L.foldl_ ( _apply_ ~~_:a_~~ _::::::::ction, q_ ) _.:_
+**Definition** **14** (Bounded Reachability) **.** _:A::::::query_ _:q::is::::::::::n_ -bounded _::::::::_ reachable _::if_ _:it::is:::::::::reachable :::via_ _:a_
+
+_sequence:::::::::of::::::length::at::::most:::n:_
+_BoundedReachable_ ( _q, n_ ) _⇐⇒∃L ∈_ _A_ _[∗]_ _, |L| ≤_ _n ∧_ _apply_ ~~_s_~~ _equence_ ( _q, L_ ) _≡σ_ _qtarget_ (26)
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+**Theorem 5** (Bounded Reachability) **.** _:::For::::any_ _query::::::::::::qinit_ _∈_ _Q,:::::there :::::exists_ _:a:::::repair::::::::sequence::of:::::length_
+
+_at::::::most_ _::::::µ_ ( _qinit_ ) _::::that_ _::::::reaches::a ::::::correct:::::state:_
+_∀qinit_ _∈_ _Q. BoundedReachable_ ( _qinit, µ_ ( _qinit_ )) (27)
+_:::::::::::::::::::::::::::::::::::_
+
+
+_Proof._ By _:::::::::::::_ well-founded _:::::::::_ induction _::_ on _::::::_ closer _µ::::::::_ (Lemma _::_ 1). _:_
+
+**Base** _:::::::::_ **case:** _::_ [If] _::::::::::q_ _≡σ_ _q_ target, _:::::_ then _::::_ the _::::::_ empty _::::::::_ sequence _:::::::L_ = [] _:::::::_ satisfies _::::_ the _:::::::::::_ requirement, _::::_ and
+
+_|:::::::::::::L|_ = 0 _≤_ _µ_ ( _q_ ). _:_
+
+**Inductive** _:::::::::::::_ **case:** Assume _::::::::::::::::q_ _̸≡σ_ _q_ target. _:::_ By _::::::_ Axiom _::_ 4, _:::::_ there _:::::_ exists _::_ an _:::::_ error _::::::::::::::::e ∈_ diagnose( _q, σ_ ) _:::_ and _::_ an
+
+action _:::::::::::::::a ∈_ generate ~~_::_~~ ~~a~~ _:::::::::::_ ctions( _e, q, σ_ ) _:::::_ such _:::_ that _::::::::::::µ_ ( _q_ _[′]_ ) _< µ_ ( _q_ ), _:::::_ where _:::::::::q_ _[′]_ = apply ~~_::_~~ ~~a~~ ction _:::::::::_ ( _q, a_ ). _:_
+
+By _::::::_ the _:::::::::_ induction _::::::::::_ hypothesis, _::::::_ there _::::::_ exists _::_ a _:::::::::_ sequence _::::L_ rest _:::::_ with _:::::::::::::|L_ rest _| ≤_ _µ_ ( _q_ _[′]_ ) _:::::_ such _::::_ that
+
+apply _::::_ ~~_::_~~ ~~s~~ equence _::::::::::::::::::::::_ ( _q_ _[′]_ _, L_ rest) _≡σ_ _q_ target. _:_
+
+Construct _:::::::: ::::::::::::::L_ = [ _a_ ] ++ _L_ rest. _:::::_ Then: _:_
+
+
+    - apply _::::_ ~~_::_~~ ~~s~~ equence _::::::::::::::::::_ ( _q, L_ ) = apply ~~_::_~~ ~~s~~ equence _::::::::::::::::::::::_ ( _q_ _[′]_ _, L_ rest) _≡σ_ _q_ target
+
+    - _|:::::::::::::::::::::::::::::::::::::::::::L|_ = 1 + _|L_ rest _| ≤_ 1 + _µ_ ( _q_ _[′]_ ) _<_ 1 + _µ_ ( _q_ ) _−_ 1 = _µ_ ( _q_ ) _:_
+
+
+This _::::::::::::_ completes _:::_ the _:::::::::_ induction.
+
+
+**Theorem 6** (Reachability) **.** _Every:::::::::query::is:::::::::reachable::_
+_∀qinit_ _∈_ _Q. Reachable_ ( _qinit_ ) (28)
+_:::::::::::::::::::::_
+
+
+_Proof._ Immediate _:::::::::::::_ from _::::::::_ Theorem _::_ 5.
+
+
+**Corollary** **1** (Termination with Explicit Bound) **.** _:::For_ _::::any_ _:::::initial:::::query:::::qinit,_ _:::the::::::repair ::::::process_
+
+_terminates::::::::::::::within::::::µ_ ( _qinit_ ) _:::::steps::_
+_∃L ∈_ _A_ _[∗]_ _. |L| ≤_ _µ_ ( _qinit_ ) _∧_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ ) _≡σ_ _qtarget_ (29)
+_::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+23
+
+
+**Definition 12** (Convergence Relation) **.** _:::::Given::a :::::::potential:::::::function::::::::::µ_ : _Q →_ N _,:::we:::::define:::the::::::_ closer
+
+_relation:::::::::_
+_closerµ_ ( _q_ 1 _, q_ 2) _⇐⇒_ _µ_ ( _q_ 1) _< µ_ ( _q_ 2) (22)
+_:::::::::::::::::::::::::::::_
+
+**Axiom 4** (Weak Convergence) **.** _:::For::::any_ _:::::::incorrect::::::query, ::::there:::::exists::at:::::least_ _:::one:::::repair::::::action_ _:::that_
+
+
+_strictly::::::::::::::decreases_ _:::the ::::::::potential::_
+_∀q_ _∈_ _Q. q_ _̸≡σ_ _qtarget_ = _⇒∃e ∈_ _diagnose_ ( _q, σ_ ) _, ∃a ∈_ _generate_ ~~_a_~~ _ctions_ ( _e, q, σ_ ) _._
+_µ_ ( _apply_ ~~_a_~~ _ction_ ( _q, a_ )) _< µ_ ( _q_ )
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+(23)
+
+
+**1242**
+
+
+**1243**
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+
+**1248**
+
+**1249**
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+
+**1254**
+
+**1255**
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+
+**1260**
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+
+**1266**
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+
+**1271**
+
+**1272**
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+
+**1277**
+
+**1278**
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+
+**1283**
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+
+**1289**
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+
+**1294**
+
+**1295**
+
+
+G.4 _:::::::::_ SEMANTIC _::::::::::::_ UNIQUENESS _:::::_ AND _::::_ PATH _:::::::::::::_ EQUIVALENCE
+
+
+**Lemma 2** (Equivalence Implies No Errors) **.** _Any::::::::query:::::::::::semantically :::::::::equivalent_ _::to_ _:::the_ _:::::target :::has::no_
+
+_detectable::::::::::::::errors::_
+_∀q_ _∈_ _Q. q_ _≡σ_ _qtarget_ = _⇒_ _diagnose_ ( _q, σ_ ) = _∅_ (30)
+_:::::::::::::::::::::::::::::::::::::_
+
+
+_Proof._ Direct _::::::::::::::_ application _:::_ of _::::::_ Axiom _::_ 2.
+
+
+**Lemma 3** (Path Equivalence) **.** _:::Any::::two ::::::::::successfully_ _terminating:::::::::::::::repair ::::::::sequences:::::reach::::::::::semantically_
+
+_equivalent::::::::::::::states::_
+
+_∀L_ 1 _, L_ 2 _∈_ _A_ _[∗]_ _. diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _, σ_ ) = _∅∧_
+_diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2) _, σ_ ) = _∅_
+= _⇒_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _≡σ_ _qtarget ∧_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2) _≡σ_ _qtarget_
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+(31)
+
+
+_Proof._ Let _::::::::::::q_ 1 = apply ~~_:_~~ ~~s~~ _:::::::::::::::_ equence( _q_ init _, L_ 1) _:::_ and _:::::::::q_ 2 = apply ~~_::_~~ ~~s~~ equence _:::::::::::::::_ ( _q_ init _, L_ 2).
+
+Assume _:::::::::::::::::q_ 1 _̸≡σ_ _q_ target. _::::_ By _::::::_ Axiom _::_ 1, _:::::::::::::::::_ diagnose( _q_ 1 _, σ_ ) _̸_ = _∅_, _::::::::::::_ contradicting _:::_ the _::::::::::_ hypothesis. _::::::::_ Therefore
+
+_q::::::::::_ 1 _≡σ_ _q_ target. _:_
+
+By _:::::_ the _:::::_ same _::::::::_ argument, _:::::::::::q_ 2 _≡σ_ _q_ target. _:_
+
+**Theorem 7** (Semantic Uniqueness of Repair) **.** _All::::::::::::successfully::::::::::terminating::::::repair_ _::::::::sequences::::from_
+
+_the:::::::same:::::initial:::::query:::::reach:::::::::::semantically:::::::::equivalent ::::::states:_
+
+
+_Proof._ By _:::::::::_ Lemma _:::_ 3, _::::_ both _:::::::::q_ 1 = apply ~~_::_~~ ~~s~~ _::::::::::::::_ equence( _q_ init _, L_ 1) _::::_ and _:::::::::q_ 2 = apply ~~_::_~~ ~~s~~ _::::::::::::::_ equence( _q_ init _, L_ 2) _:::_ are
+
+semantically _:::::::::::::::::::_ equivalent _::_ to _:::::q_ target: _:_
+
+_q:_ 1 _[≡]_ _:::::::_ _[σ]_ _[q]_ [target] (33)
+
+_q:_ 2 _[≡]_ _:::::::_ _[σ]_ _[q]_ [target] (34)
+
+
+By _:::::::::::_ symmetry _::_ of _::::≡σ_, _::_ we _:::::_ have _::::::::::q_ target _≡σ_ _q_ 2. _:::_ By _::::::::::_ transitivity: _:_
+
+_q_ 1 _≡σ_ _q_ target _∧_ _q_ target _≡σ_ _q_ 2 = _⇒_ _q_ 1 _≡σ_ _q_ 2 (35)
+_::::::::::::::::::::::::::::::::::_
+
+
+G.5 _:::::_ MAIN _::::::::_ RESULT: _::::::::::::::::::::_ ORDER-INDEPENDENT _::::::::::::::_ CONVERGENCE
+
+
+**Theorem 8** (Complete Order Independence of Repair) **.** _:::The::::::repair ::::::process:::::::exhibits::::::::complete_ _::::order_
+
+_independence:::::::::::::::with:::the::::::::following::::::::::guarantees::_
+
+_**(1)**_ _:::::::::::_ _**Existence:**_ _::At::::least::::one_ _:::::repair::::path::::::exists:_
+
+_∃L ∈_ _A_ _[∗]_ _. apply_ ~~_s_~~ _equence_ ( _qinit, L_ ) _≡σ_ _qtarget_ (36)
+_:::::::::::::::::::::::::::::::::::_
+
+
+_**(2)**_ _:::::::::::::_ _**Universality:**_ _:::Any:::::::::productive:::::::strategy:::::::::terminates:::::within:::the:::::::bound:_
+
+_∀L ∈_ _A_ _[∗]_ _._ ( _∀i < |L|. µ_ ( _qi_ +1) _< µ_ ( _qi_ )) = _⇒|L| ≤_ _µ_ ( _qinit_ ) (37)
+_:::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+_where::::: :::::::::qi_ = _apply_ ~~_:s_~~ _::::::::::::::::::equence_ ( _qinit, L_ [0 _..i_ ]) _.:_
+
+
+24
+
+
+_∀qinit_ _∈_ _Q, ∀L_ 1 _, L_ 2 _∈_ _A_ _[∗]_ _. diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _, σ_ ) = _∅∧_
+_diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2) _, σ_ ) = _∅_
+= _⇒_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _≡σ_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2)
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+(32)
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+_**(3)**_ _:::::::::::::_ _**Uniqueness:**_ _All:::::::::::successful ::::::::strategies:::::reach_ _::::::::::semantically:::::::::equivalent::::::states::_
+
+_∀L_ 1 _, L_ 2 _∈_ _A_ _[∗]_ _. diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _, σ_ ) = _∅∧_
+_diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2) _, σ_ ) = _∅_
+= _⇒_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _≡σ_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2)
+_:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+_Proof._ **(1)** _::_ Follows _:::::::::::::::::_ immediately _::::_ from _::::::::_ Theorem _::_ 6.
+
+
+This _:::::::::::::::_ formalization _::::::_ serves _::_ as _::::_ both _::_ a _:::::::::_ validation _::_ of _:::_ the _:::::::::_ theoretical _::::::::::_ framework _:::_ and _::_ a _:::::::::_ foundation _::::_ for
+
+certified _::::::::::::::::::::_ implementation _::_ of _:::_ the _:::::::::::_ Post-SQLFix _::::::_ system.
+
+
+H PROMPTS FOR LLMS
+
+
+25
+
+
+(38)
+
+
+**(2)** _::_ _::_ By _:::::::::_ induction _:::_ on _:::_ the _::::::_ length _::_ of _::::::_ strictly _::::::::::_ decreasing _:::::::::_ sequences _:::::_ under _:::_ the _::::::::::::_ well-founded _::::::_ relation
+
+closer _::::::µ_ . _:_
+
+**(3)** _::_ Direct _::::::::::::::_ application _::_ of _::::::::_ Theorem _::_ 7. _:_
+
+
+G.6 _::::_ KEY _:::::::::::::_ COROLLARIES
+
+
+**Corollary 2** (Any Productive Strategy Succeeds) **.** _Any::::::::repair:::::::strategy::::that::::::::::consistently::::::::decreases_
+
+_the::::::::::potential:::::::::eventually ::::::reaches::a_ _::::::correct:::::state::_
+_∀L ∈_ _A_ _[∗]_ _._ ( _∀i < |L|. µ_ ( _qi_ +1) _< µ_ ( _qi_ )) = _⇒∃qfinal. qfinal_ _≡σ_ _qtarget_ (39)
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+**Corollary 3** (Repair Order Affects Efficiency, Not Correctness) **.** _The:::choice:::::::of:::::repair:::::order::::::::influences_
+
+_only::::::the::::::length::of:::the:::::repair:::::path,_ _:::not:::the_ _:::::::semantic::::::::::correctness::of:::the::::::::outcome::_
+_∀L_ 1 _, L_ 2 _∈_ _A_ _[∗]_ _. both successful_ = _⇒_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 1) _≡σ_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ 2) (40)
+_:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+
+**Corollary** **4** (Semantic Determinism) **.** _The:::::::::repair_ _::::::process::is:::::::::::deterministic:::at :::the::::::::semantic :::::level:_
+
+_there:::::::::exists:a::::::unique::::::::semantic::::::::::equivalence:::::class_ _::of_ _::::::correct :::::::repairs:_
+
+_∃::::::::::::_ ! _C_ _⊆_ _Q. C_ = [[] _[q]_ _::::_ _[target]_ []] _[≡]_ _::::::::::::::::::::::::::::::::::::::::::::::::::::_ _[σ]_ _[∧∀][L][ ∈]_ _[A][∗][.][ successful]_ [(] _[L]_ [)] [=] _[⇒]_ _[apply]_ ~~_[s]_~~ _[equence]_ [(] _[q][init][, L]_ [)] _[ ∈]_ _[C]_ (41)
+
+
+**Theorem 9** (Repair as Total Semantic Function) **.** _:::The::::::repair ::::::process::::::defines::a::::total:::::::function::::from_
+
+_queries::::::::to::::their::::::unique::::::::semantic ::::::::::equivalence_ _:::::class::_
+_∀qinit_ _∈_ _Q. ∃L ∈_ _A_ _[∗]_ _. diagnose_ ( _apply_ ~~_s_~~ _equence_ ( _qinit, L_ ) _, σ_ ) = _∅∧_ _apply_ ~~_s_~~ _equence_ ( _qinit, L_ ) _≡σ_ _qtarget_
+_::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::_
+
+(42)
+
+
+G.7 _:::::::::::::::_ INTERPRETATION _::::_ AND _:::::::::::::_ IMPLICATIONS
+
+
+The _::::::::::::::_ formalization _::_ in _:::::_ Lean _:_ 4 _::::::::_ provides _::::::_ several _::::::_ critical _:::::::_ insights: _:_
+
+
+1. **Mechanical** _:::::::::::::::::::::_ **Verification:** All _::::::::::_ theorems _:::_ are _::::::::::::::::_ machine-checkable, _::::::::::_ eliminating _:::_ the _::::::::_ possibility
+
+of _:: :::::_ subtle _::::::_ logical _:::::_ errors _::_ in _:::_ the _::::::_ proofs. _:_
+2. **Constructive** _:::::::::::::::::::_ **Content:** _:::_ The _:::::_ proof _:::_ of _:::::::_ Theorem _::_ 5 _::_ is _:::::::::::_ constructive, _::::::::_ providing _:::_ an _::::::::_ algorithm
+
+for _::::::::_ finding _**:**_ _:::::_ repair _:::::::::_ sequences.
+
+
+3. **Precise** _::::::::::::::::_ **Semantics:** _:::_ The _::::::::::::_ formalization _:::::::_ clarifies _:::_ the _:::::_ exact _::::::::::_ relationship _:::::::_ between _::::::::_ syntactic
+
+correctness _:::::::::::::::_ (empty _:::::_ error _:::_ set) _:::_ and _::::::::_ semantic _::::::::::_ equivalence. _:_
+4. **Robustness** _:::::::::::::::::::::_ **Guarantee:** _:::::::_ Theorem _:::_ 8 _::::::::_ formally _::::::::::_ establishes _::::_ that _::::_ the _:::::::::::::_ ”combinatorial
+
+
+explosion” _::::::::::::::::_ problem _::_ is _:::::::::::::_ benign—while _:::::_ many _:::::_ paths _:::::_ exist, _:::_ all _:::::_ valid _:::::_ paths _::::::::_ converge _::_ to _:::_ the
+
+
+same _::::::::::::_ semantic _::::::::_ outcome.
+
+
+5. **Efficiency** _:::::::::::_ **vs.** _::::::::::::_ **Correctness:** Corollary _:::::::::_ 3 _:::::::::_ rigorously _::::::::_ separates _::::::::_ concerns: _:::::_ repair _:::::_ order _::_ is _::_ an
+
+optimization _::::::::::::::::::_ problem, _:::_ not _:_ a _::::::::::_ correctness _:::::_ issue.
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+**Figure 2:** An example prompt generated by Post-SQLFix. Our framework provides a structured,
+formal diagnosis and an actionable hint, transforming the LLM’s task from ambiguous debugging to
+a constrained, formally-guided correction.
+
+
+26
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+**Figure 3:** Example of a Formally-Guided Prompt Generated by Post-SQLFix in BIRD dataset.
+
+
+27
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+**Figure 4:** An example of a complex repair task (real question 11 in BIRD Mini-dev). Post-SQLFix
+simultaneously diagnoses and provides actionable hints for multiple, cross-layer violations, including
+a subtle, dialect-specific type incompatibility within the ROUND function. This transforms a
+challenging, multi-turn debugging process into a single, constrained correction.
+
+
+28

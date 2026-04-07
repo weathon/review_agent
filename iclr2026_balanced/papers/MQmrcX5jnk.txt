@@ -1,0 +1,4105 @@
+# LEARNING BOLTZMANN GENERATORS VIA CON## STRAINED MASS TRANSPORT
+
+
+**Christopher von Klitzing** [1] **Denis Blessing** [1] _[∗]_ **Henrik Schopmans** [2] _[∗]_
+
+
+**Pascal Friederich** [2] **Gerhard Neumann** [1]
+
+
+1 Autonomous Learning Robots, Karlsruhe Institute of Technology
+2 Artificial Intelligence for Materials Sciences, Karlsruhe Institute of Technology
+
+
+ABSTRACT
+
+
+Efficient sampling from high-dimensional and multimodal unnormalized probability distributions is a central challenge in many areas of science and machine
+learning. We focus on Boltzmann generators (BGs) that aim to sample the Boltzmann distribution of physical systems, such as molecules, at a given temperature.
+Classical variational approaches that minimize the reverse Kullback–Leibler divergence are prone to mode collapse, while annealing-based methods, commonly
+using geometric schedules, can suffer from mass teleportation and rely heavily on
+schedule tuning. We introduce _Constrained Mass Transport_ (CMT), a variational
+framework that generates intermediate distributions under constraints on both the
+KL divergence and the entropy decay between successive steps. These constraints
+enhance distributional overlap, mitigate mass teleportation, and counteract premature convergence. Across standard BG benchmarks and the here introduced
+_ELIL tetrapeptide_, the largest system studied to date without access to samples
+from molecular dynamics, CMT consistently surpasses state-of-the-art variational
+methods, achieving more than 2.5× higher effective sample size while avoiding
+mode collapse.
+
+
+1 INTRODUCTION
+
+We _p_ ( _x_ )consider�= _[p]_ [˜][(] _[x]_ [)] _/Z_ thewhereproblem _p_ ˜ _∈_ _C_ of(Rsampling _[d]_ _,_ R _≥_ 0) can be evaluated pointwise but the normalization constantfrom a target probability measure _p_ _∈P_ (R _[d]_ ) given by
+_Z_ = R _[d]_ _[p]_ [˜][(] _[x]_ [) d] _[x]_ [ is intractable. Sampling from unnormalized densities arises in many areas, including]
+
+Bayesian statistics (Gelman et al., 1995), reinforcement learning (Celik et al., 2025), and the natural
+sciences (Stoltz et al., 2010).
+
+
+A promising alternative to classical Monte Carlo methods (Hammersley, 2013) is offered by variational approaches (Struwe & Struwe, 2000), which aim to minimize a statistical divergence between a
+variational probability measure _q_ _∈P_ (R _[d]_ ) and the target _p_, commonly the reverse Kullback–Leibler
+(KL) divergence
+_q_ _[∗]_ = arg min _D_ KL( _q_ _p_ ) _,_ (1)
+_q∈P_ (R _[d]_ ) _∥_
+
+whose unique minimizer is _q_ _[∗]_ = _p_ . A prominent example is the variational learning of molecular
+Boltzmann generators (BGs) (Noe et al., 2019)´, for which _p_ ˜( _x_ ) = exp( _[−][E]_ [(] _[x]_ [)] _/kB_ _T_ ) _,_ with _E_ being an
+energy function, _T_ the temperature, and _kB_ the Boltzmann constant. BGs enable efficient sampling
+of thermodynamic ensembles, thereby bypassing costly molecular dynamics (MD) simulations and
+accelerating the exploration of rare but physically important states. However, learning BGs is
+challenging as the state space is typically high-dimensional, the target distribution is often highly
+multimodal, and evaluating _E_ ( _x_ ) can be very costly, especially when using accurate energies such as
+those from density-functional theory (Argaman & Makov, 2000).
+
+
+Furthermore, directly minimizing the reverse KL divergence tends to suffer from mode collapse,
+ignoring low-probability modes of the target (Blessing et al., 2024; Soletskyi et al., 2025). To
+address this, a number of recent approaches have proposed to construct a sequence of intermediate
+
+
+*Equal contribution. Correspondence to denis.blessing@kit.edu and henrik.schopmans@kit.edu.
+
+
+1
+
+
+distributions that transport probability mass from a tractable base distribution _q_ 0 to the target (Arbel
+et al., 2021; Matthews et al., 2022; Vargas et al., 2023; Tian et al., 2024; Albergo & Vanden-Eijnden,
+2024). This idea, which dates back more than two decades to annealed importance sampling (Neal,
+2001), is most often realized through a geometric annealing path, which is defined as a sequence of
+(that _qi_ ) _[I]_ _i q_ =1 _I_ = [which follows] _p_ . Despite its simplicity, geometric annealing can suffer from mass teleportation, where _[ q][i]_ _[∝]_ _[q]_ 0 [1] _[−][β][i]_ _p_ ˜ _[β][i]_, where the corresponding annealing schedule ( _βi_ ) _[I]_ _i_ =1 [ensures]
+large portions of the probability mass shift to disjoint regions between successive steps, complicating
+mass transport (Akhound-Sadegh et al., 2025; Maurais et al., 2025; Chehab & Korba, 2024; Bereux´
+et al., 2024). Moreover, its performance critically depends on the choice of annealing schedule (Syed
+et al., 2024). By “mass teleportation”, we refer to the failure mode of geometric annealing in which
+probability mass abruptly shifts to regions where the current intermediate has negligible density,
+blocking effective transport. This differs from the definition of Mat´ e & Fleuret (2023)´, who focus on
+preserving relative weights (often termed “mode switching” (Phillips et al., 2024)).
+
+
+To counteract this, we build on ideas from reinforcement learning (Schulman et al., 2015) and
+use a trust-region constraint that modifies (1) by bounding the KL divergence between successive
+distributions, which results in the geometric annealing path with automatic schedule tuning. Adapting
+these ideas to sampling problems, we further introduce a constraint that explicitly controls the rate at
+which the entropy of the variational distribution decreases along the transport path. This added degree
+of freedom enables deviations from the standard geometric annealing path, mitigating issues such as
+mass teleportation and premature convergence, while fostering greater overlap between consecutive
+distributions. These contributions culminate in _Constrained_ _Mass_ _Transport_ (CMT), a general
+framework for transporting variational densities along well-defined annealing paths. To highlight
+its practical utility, we instantiate the framework with normalizing flows and demonstrate that it
+consistently outperforms state-of-the-art approaches, often by a substantial margin when learning
+molecular Boltzmann generators directly from energy evaluations, without reliance on additional MD
+samples.
+
+
+**Contributions.** Our contributions can be summarized as follows:
+
+
+- We introduce a general framework for addressing sampling problems through a sequence of
+constrained variational problems, considering trust-region, entropy, and hybrid constraints.
+
+- We establish a connection between these sequences and annealing paths, which interpolate between
+a tractable prior and the target distribution.
+
+- We instantiate our framework in practice by employing normalizing flows (Papamakarios et al.,
+2021) to learn molecular Boltzmann generators (No´e et al., 2019).
+
+- We show that our method, _Constrained Mass Transport_ (CMT), consistently surpasses state-of-theart approaches, often by a significant margin when learning molecular Boltzmann generators solely
+from energy evaluations, without relying on additional MD samples.
+
+- We introduce a new benchmark, the _ELIL tetrapeptide_, which, to the best of our knowledge, is the
+largest system studied to date under the setting of learning exclusively from energy evaluations.
+
+
+2 CONSTRAINED MASS TRANSPORT
+
+
+Here, we denote by _P_ (R _[d]_ ) the space of probability measures on R _[d]_ that are absolutely continuous
+with respect to Lebesgue measure and admit smooth densities. We approach the sampling problem
+by dividing (1) into a sequence of constrained optimization problems that result in an annealing path
+of intermediate densities ( _qi_ ) _[I]_ _i_ =0 [that bridge between a tractable prior] _[ q]_ [0][ and the target] _[ p]_ [.]
+
+
+**Trust-region** **constraint.** Trust regions aim at dividing the problem (1) into subproblems by
+constraining the updated density to be close to the old density in terms of KL divergence. Formally,
+this is given by the iterative optimization scheme [1]
+
+
+_qi_ +1 = arg min _D_ KL( _q_ _p_ ) s.t. _D_ KL( _q_ _qi_ ) _ε_ tr _,_ (2)
+_q∈P_ (R _[d]_ ) _∥_ _∥_ _≤_
+
+1To ensure that _q_ _∈P_ (R _d_ ) we need an additional constraint   - _q_ ( _x_ )d _x_ = 1 which we omitted in the main
+part of the paper for readability.
+
+
+2
+
+
+Geometric AP
+linear schedule
+
+
+Geometric AP
+via (2)
+
+
+Tempered AP
+via (7)
+
+
+Geometric-tempered AP
+via (9)
+
+
+Figure 1: Illustration of the annealing paths (AP) obtained by solving the variational problems (2),
+(7), or (9). Trust-region–based optimization (2) mitigates the irregularities of naive schedules (e.g.,
+the linear schedule), but the resulting geometric AP suffers from mass teleportation as the right mode
+of the target distribution _p_ emerges without overlap with earlier intermediate densities. Constraining
+the entropy decay between successive densities (7) prevents mass teleportation, yet fails to guarantee
+sufficient overlap between the initial distribution _q_ 0 and subsequent intermediate densities. In contrast,
+combining both constraints (9) yields APs that both maintain overlap between successive densities
+and avoid mass teleportation.
+
+
+for _i_ N, trust-region bound _ε_ tr _>_ 0 and some _q_ 0 (R _[d]_ ). Due to the convexity of the KL
+_∈_ _∈P_
+divergence, we can show that in all but the last step we actually have an equality constraint in (2);
+see Appendix A. Thus, there exists an _I_ N such that _qI_ = _q_ _[∗]_ (= _p_ ). Under suitable regularity
+_∈_
+assumptions, we can approach the above constrained optimization problem using a relaxed Lagrangian
+formalism, i.e.,
+tr ( _q, λ_ ) = _D_ KL( _q_ _p_ ) + _λ_ ( _D_ KL( _q_ _qi_ ) _ε_ tr) (3)
+_L_ [(] _[i]_ [+1)] _∥_ _∥_ _−_
+where _λ ≥_ 0 is a Lagrangian multiplier, and solve the saddle point problems
+
+
+max _λ≥_ 0 _q∈P_ min(R _[d]_ ) _[L]_ tr [(] _[i]_ [)][(] _[q, λ]_ [)] _[.]_ (4)
+
+
+We note that _L_ tr [(] _[i]_ [)] [is convex in] _[ q]_ [ by convexity of the KL divergence and the dual function]
+
+
+_g_ tr [(] _[i]_ [+1)] ( _λ_ ) := _q∈P_ min(R _[d]_ ) _[L]_ tr [(] _[i]_ [)][(] _[q, λ]_ [)]
+
+
+concave in _λ_ since it is the pointwise minimum of a family of linear functions of _λ_ . Thus, (4) has
+unique optima which we denote by _qi_ +1 and _λi_, respectively. Indeed, (2) admits an analytical solution
+which is characterized by Proposition 2.1. We refer to Appendix A for a proof and further details on
+problem (2).
+
+**Proposition 2.1** (Optimal intermediate trust-region densities) **.** _The intermediate optimal densities_
+_that solve_ (2) _satisfy_
+
+
+_λ_ 1
+1+ _λ_ _p_ ˜( _x_ ) 1+ _λ_
+_qi_ +1( _x, λ_ ) = _[q][i]_ [(] _[x]_ [)]
+
+
+[)] 1+ _λ_ _p_ ˜( _x_ ) 1+ _λ_ - _λ_ 1
+
+_,_ _with_ _i_ +1( _λ_ ) = _qi_ ( _x_ ) 1+ _λ_ _p_ ˜( _x_ ) 1+ _λ_ d _x,_ (5)
+_i_ +1( _λ_ ) _Z_
+_Z_
+
+
+_where qi_ +1 _are the unique optima of the Lagrangian corresponding to_ (2) _._
+
+
+The optimal multiplier _λi_ that solves (2) is obtained by plugging _qi_ +1( _λ_ ) in the Lagrangian (3) to
+obtain the dual function _g_ tr _C_ (R _,_ R) given by
+_∈_
+
+
+_g_ tr [(] _[i]_ [+1)] ( _λ_ ) := tr ( _qi_ +1( _λ_ ) _, λ_ ) = (1 + _λ_ ) log _i_ +1( _λ_ ) _λε_ tr _._ (6)
+_L_ [(] _[i]_ [+1)] _−_ _Z_ _−_
+
+
+Assuming access to _Zi_ +1( _λ_ ) one can solve _λi_ = arg max _λ≥_ 0 _g_ tr [(] _[i]_ [+1)] ( _λ_ ) to obtain the optimal
+_q_ (R _[d]_ ) that solves (2) as _qi_ +1 := _qi_ +1( _λi_ ).
+_∈P_
+
+
+**Entropy constraint.** In a similar fashion to (2), we can avoid premature convergence by regulating
+the entropy decay of the model by constructing a sequence of intermediate densities whose change in
+entropy is constrained. Formally, we aim to solve the following problem
+
+
+_qi_ +1 = arg min _D_ KL( _q_ _p_ ) s.t. _H_ ( _qi_ ) _H_ ( _q_ ) _ε_ ent _,_ (7)
+_q∈P_ (R _[d]_ ) _∥_ _−_ _≤_
+
+where _H_ ( _q_ ) = - _q_ ( _x_ ) log _q_ ( _x_ )d _x_ is the Shannon entropy and _ε_ ent _>_ 0 the entropy bound. We can
+_−_
+again approach (7) using a Lagrangian formalism by introducing a Lagrangian multiplier _η_ _≥_ 0. The
+analytical solution to (7) is characterized by Proposition 2.2 whose proof can be found in Appendix A.
+
+
+3
+
+
+**Proposition 2.2** (Optimal intermediate densities for entropy constraint) **.** _The intermediate optimal_
+_densities that solve_ (7) _satisfy_
+
+
+1
+1+ _η_                   - 1
+_qi_ +1( _x, η_ ) = _[p]_ [˜][(] _[x]_ [)] _with_ _i_ +1( _η_ ) = _p_ ˜( _x_ ) 1+ _η_ d _x,_ (8)
+
+_i_ +1( _η_ ) _[,]_ _Z_
+_Z_
+
+_where qi_ +1 _are the unique optima of the Lagrangian corresponding to_ (7) _._
+
+
+Despite the potential of (7) for counteracting premature convergence, we identify two challenges
+depending on the entropy of the initial density _H_ ( _q_ 0): First, if _H_ ( _q_ 0) _<_ _H_ ( _p_ ) then the constraint
+is inactive resulting in _η_ 0 = 0, reducing (7) to the optimization problem as stated in (1). Second, if
+_H_ ( _q_ 0) _H_ ( _p_ ) then the KL divergence between _q_ 0 and _q_ 1 _p_ [1] _[/]_ [1+] _[η]_ [0] can be arbitrarily large and
+_≫_ _∝_
+therefore could cause instabilities due to a lack of overlap between the successive densities. While
+the former challenge can typically be addressed by initializing _q_ 0 with large entropy, the second can
+be more intricate. In the following, we explain how this challenge can be addressed by combining the
+trust-region and entropy constraint.
+
+
+**Combining both constraints.** One can straightforwardly combine the constraints in (2) and (7)
+into a single iterative optimization scheme defined as
+
+
+               - _D_ KL( _q_ _qi_ ) _ε_ tr _,_
+_qi_ +1 = arg min _D_ KL( _q_ _p_ ) s.t. _∥_ _≤_ (9)
+_q∈P_ (R _[d]_ ) _∥_ _H_ ( _qi_ ) _−_ _H_ ( _q_ ) _≤_ _ε_ ent _._
+
+In analogy to the previous section, we introduce Lagrangian multipliers _λ_ and _η_ for the trust-region
+and entropy constraint, respectively. Indeed, one can again obtain an analytical expression for the
+evolution of the optimal densities, see Proposition 2.3 and Appendix A for a proof.
+
+
+**Proposition 2.3** (Optimal intermediate densities for entropy and trust-region constraint) **.** _The inter-_
+_mediate optimal densities that solve_ (9) _satisfy_
+
+
+_λ_ 1
+1+ _λ_ + _η_ _p_ ˜( _x_ ) 1+ _λ_ + _η_
+_qi_ +1( _x, λ, η_ ) = _[q][i]_ [(] _[x]_ [)]
+
+
+1+ _λ_ + _η_ _p_ ˜( _x_ ) 1+ _λ_ + _η_ - _λ_ 1
+
+_with_ _i_ +1( _λ, η_ ) = _qi_ ( _x_ ) 1+ _λ_ + _η_ _p_ ˜( _x_ ) 1+ _λ_ + _η_ ( _x_ )d _x,_
+_i_ +1( _λ, η_ ) _Z_
+_Z_
+
+
+(10)
+_where qi_ +1 _are the unique optima of the Lagrangian corresponding to_ (9) _._
+
+
+Clearly, if _H_ ( _q_ 0) _≫_ _H_ ( _p_ ), the trust-region constraint ensures that the KL divergence between _q_ 0 and
+_q_ 1 is at most _ε_ tr and, therefore, for a suitable choice of _ε_ tr ensures that two consecutive densities
+have sufficient overlap. Lastly, the Lagrangian dual function _g_ tr-ent _C_ (R [2] _,_ R) corresponding to (9),
+_∈_
+that is,
+_g_ tr-ent [(] _[i]_ [+1)][(] _[λ, η]_ [) :=] _[ −]_ [(1 +] _[ λ]_ [ +] _[ η]_ [) log] _[ Z][i]_ [+1][(] _[λ, η]_ [)] _[ −]_ _[λε]_ [tr] (11)
+
+_[−]_ _[η]_ [(] _[H]_ [(] _[q][i]_ [)] _[ −]_ _[ε]_ [ent][)] _[,]_
+
+requires solving a two-dimensional convex optimization problem to obtain _λi, ηi_ which can be done
+efficiently in practice; see Section 3 for additional details.
+
+
+**Connection to annealing paths.** Iteratively solving (2), (7) or (9) induces an _annealing path_, that
+is, a sequence of densities ( _qi_ ) _i∈_ N that interpolates between _q_ 0 and _p_ . We characterize these paths in
+Theorem 2.4; See Appendix A for a proof.
+
+**Theorem 2.4** (Annealing paths) **.** _Let p_ (R _[d]_ ) _be the target density and q_ 0 (R _[d]_ ) _some initial_
+_∈P_ _∈P_
+_density._ _The intermediate optimal densities that solve_ (2) _,_ (7) _and_ (9) _satisfy_
+
+
+_qi_ _q_ 0 [1] _[−][β][i]_ _p_ ˜ _[β][i]_ _,_ _qi_ _p_ ˜ _[α][i]_ ( _i_ 1) _,_ _and_ _qi_ _q_ 0 [1] _[−][β][i]_ (˜ _p_ _[α][i]_ ) _[β][i]_ _,_ (12)
+_∝_ _∝_ _≥_ _∝_
+
+_respectively, with β and α being functions of the corresponding Lagrangian multipliers._ _Moreover,_
+_the sequencessome I_ _∈_ N+ _and_ ( _αi_ ) ( _i∈β_ N _i_ )0 _i∈and_ N0 ( _is monotonically increasing.βi_ ) _i∈_ N0 _take values in_ [0 _,_ 1] _, satisfy α_ 0 = _β_ 0 = 0 _and αI_ = _βI_ = 1 _for_
+
+
+In what follows, we refer to the annealing paths in (12) as geometric (G), tempered (T), and geometrictempered (GT) annealing paths, respectively. We further refer to Figure 1 for an illustration of the
+impact of the introduced constraints on the annealing paths.
+
+
+4
+
+
+3 LEARNING THE INTERMEDIATE DENSITIES
+
+
+**A general recipe.** So far, we discussed how one can construct a sequence of intermediate measures
+( _qi_ ) _i∈_ N using our constrained mass transport formulation. However, despite having access to the
+analytical form of _qi_, it is typically not possible to sample from it directly. As such, we approximate
+each _qi_ by a distribution from a tractable class _Q ⊂P_ (R _[d]_ ) that permits efficient sampling and density
+evaluation. Given an approximation family, we select _q_ ˆ _i_ to approximate _qi_ by solving
+_Q_ _∈Q_
+
+_q_ ˆ _i_ = arg min _D_ ( _qi, q_ ) _,_ (13)
+_q∈Q_
+
+where _D_ is an arbitrary statistical divergence between probability measures. This formulation is
+general: the choice of _Q_ and _D_ determines the trade-off between expressivity, computational cost,
+and statistical properties such as mode coverage or robustness.
+
+
+**Practical algorithm.** In this work, we choose _Q_ to be a normalizing flow family constructed via
+push-forwards of a simple base measure (Rezende & Mohamed, 2015; Dinh et al., 2016; Durkan
+et al., 2019; Kingma & Dhariwal, 2018; Gabrie et al., 2022; Kolesnikov et al., 2024; Zhai et al., 2024)´ .
+Let _qz_ (R _[d]_ ) be an easy-to-sample base measure (e.g., a standard Gaussian), and let be a class
+of smooth invertible maps _∈P_ _f_ : R _[d]_ _→_ R _[d]_ . We define _F_
+
+
+NF := _f_ # _qz_ _f_ _,_ with ( _f_ # _qz_ )( _z_ ) = _qz_ - _f_ ( _z_ )� [�] det _∂f_ _[−]_ [1] ( _z_ )
+_Q_ _{_ _|_ _∈F }_ _[−]_ [1] ��� _∂z_
+
+
+_._ (14)
+����
+
+
+with push-forward _f_ # _qz_ . To fit _q_ ˆ _i_ within this family, we take _D_ to be the importance-weighted
+forward KL divergence
+
+
+��
+(15)
+
+
+_q_ ˆ _i_ +1 = arg min _q∈Q_ NF _D_ KL( _qi_ +1 _∥q_ ) with _D_ KL( _qi_ +1 _∥q_ ) = E _x∼qi_
+
+
+- _qi_ +1( _x_ ) - _qi_ +1( _x_ )
+_qi_ ( _x_ ) [log] _q_ ( _x_ )
+
+
+This choice offers several advantages. First, forward KL strongly penalizes underestimating the
+support of _qi_ +1, encouraging mode coverage and reducing the risk of mode collapse. Second, because
+_qi_ +1 is available in closed form from the constrained transport updates (see Proposition 2.1, 2.2 and
+2.3), the importance weights _[q][i]_ [+1][(] _[x]_ [)] _/qi_ ( _x_ ) can be computed solely from _qi_ and ˜ _p_ . Third, the importanceweighted formulation allows us to reuse samples drawn from _qi_, enabling a seamless integration of
+replay buffers, resulting in increased sample efficiency. Lastly, the trust-region constraint controls the
+variance of the importance weights, keeping it approximately constant, independent of the problem
+dimension _d_ (see Appendix C.3), resulting in a highly scalable algorithm. Details regarding this
+specific form of CMT are provided in Appendix C.2.
+
+
+**Lagrangian dual optimization.** Maximizing the concave dual function (11) requires evaluating
+intermediate normalization constants _Zi_ +1. This can be done efficiently by expressing _Zi_ +1 as an
+expectation under _qi_ and using Monte Carlo estimation. For instance, the expression for _i_ +1 in (10)
+_Z_
+can be estimated as
+
+
+_≈_ _N_ [1]
+
+
+1
+
+- 1+ _λ_ + _η_ [�]
+
+
+1
+
+- 1+ _λ_ + _η_
+_._ (16)
+
+
+_xn∼qi_
+
+
+- _p_ ˜( _xi_ )
+_qi_ ( _xi_ ) [1+] _[η]_
+
+
+_Zi_ +1( _λ, η_ ) = E _x∼qi_
+
+
+��
+_p_ ˜( _x_ )
+_qi_ ( _x_ ) [1+] _[η]_
+
+
+We note that, in contrast to estimating the normalization constant of the target _Z_, estimation of the
+normalization constant of the intermediate distributions _Zi_ +1 can be performed with low variance
+since the trust-region constraint ensures sufficient overlap with the next intermediate distribution.
+Furthermore, samples _xn_ _qi_ and the corresponding evaluations _qi_ ( _xn_ ) and _p_ ˜( _xn_ ) are typically
+_∼_
+already computed when solving (13), so the additional cost of determining the Lagrangian multipliers
+is negligible (see Appendix D.4). For example, on alanine dipeptide, it accounts for only about 0 _._ 01%
+of the total training time. Details of the dual optimization procedure are provided in Appendix C.1,
+including a code example. Lastly, we refer to Algorithm 1 for an algorithmic overview of the trained
+measure transport method.
+
+
+4 RELATED WORK
+
+
+**Boltzmann generators.** Learning molecular Boltzmann generators (Noe et al., 2019)´ purely from
+energy evaluations has been explored with both flow-based methods (Stimper et al., 2022b; Midgley
+
+
+5
+
+
+**Algorithm 1** Constrained mass transport
+
+
+**Require:** Initial measure _q_ 0, target measure _p_ ˜, divergence _D_, approximation family, buffer size _N_
+_Q_
+
+
+**for** _i ←_ 0 _, . . ., I_ _−_ 1 **do**
+
+
+Draw _N_ samples _xn_ _∼_ _qi_, evaluate _qi_ ( _xn_ ) _,_ ˜ _p_ ( _xn_ )
+Initialize buffer = ( _xn, qi_ ( _xn_ ) _,_ ˜ _p_ ( _xn_ )) _[N]_ _n_ =1
+_B_ [(] _[i]_ [)]
+Compute multipliers _λi, ηi_ = arg max _λ,η∈_ R+ _g_ tr-ent [(] _[i]_ [+1)][(] _[λ, η]_ [)][ using] _[ B]_ [(] _[i]_ [)]
+
+
+Compute _qi_ +1 _q_ ˆ _i_ +1 = arg min _q∈Q_ _D_ ( _qi_ +1 _, q_ ) using
+**return** _q_ ˆ _I_ _≈_ _p_ _≈_ _B_ [(] _[i]_ [)]
+
+
+et al., 2022; Schopmans & Friederich, 2025) and diffusion-based methods (Liu et al., 2025; Choi
+et al., 2025; Kim et al., 2025). While flow-based approaches have demonstrated strong performance,
+their diffusion-based counterparts remain less competitive on molecular systems, often struggling
+with mode collapse, even on relatively small systems.
+
+
+Next to purely energy-based approaches, recent work showed success in leveraging samples from a
+higher temperature, which are typically easier to obtain, and transferring the distribution to a lower
+target temperature (Dibak et al., 2022a; Wahl et al., 2025; Schopmans & Friederich, 2025; Rissanen
+et al., 2025; Akhound-Sadegh et al., 2025).
+
+
+Alternative methods train on samples from molecular dynamics (Klein et al., 2023; Midgley et al.,
+2023; Tan et al., 2025a; Peng & Gao, 2025), allowing for amortized sampling due to transferability to
+unseen systems (Jing et al., 2022; Abdin & Kim, 2023; Klein & No´e, 2024; Jing et al., 2024; Lewis
+et al., 2025; Tan et al., 2025b).
+
+
+**Constrained optimization.** Trust-region methods have a long history as robust optimization algorithms that iteratively minimize an objective within an adaptively sized “trust region”; see Conn et al.
+(2000) for an overview. Beyond classical optimization, these methods have been extended to operate
+over spaces of probability distributions, with applications in reinforcement learning (Peters et al.,
+2010; Schulman et al., 2015; 2017; Achiam et al., 2017; Pajarinen et al., 2019; Akrour et al., 2019;
+Yang et al., 2020; Otto et al., 2021; Xu et al., 2024; Wu et al., 2017; Abdolmaleki et al., 2018b;a;
+Meng et al., 2021), black-box optimization (Sun et al., 2009; Wierstra et al., 2014; Abdolmaleki
+et al., 2015), variational inference (Arenz et al., 2020; 2022), and path integral control (Gomez´
+et al., 2014; Thalmeier et al., 2020). The first explicit link between trust-region optimization and
+geometric annealing paths was established by Blessing et al. (2025) for path space measures in the
+setting of stochastic optimal control. Entropy constraints, often introduced as entropy regularization,
+have also been studied in policy optimization and reinforcement learning, either in the form of soft
+constraints (Ahmed et al., 2019; Mnih et al., 2016; O’Donoghue et al., 2016) or hard constraints (Abdolmaleki et al., 2015; Pajarinen et al., 2019; Akrour et al., 2016; 2018; 2019). However, prior
+work typically constrains the absolute entropy value, which is problematic for inference tasks, since
+it requires prior knowledge of the target density’s entropy. To the best of our knowledge, such
+methods have not yet been extended to sampling problems. Furthermore, the connection between
+entropy-constrained optimization and annealing paths has not previously been established.
+
+
+**Improved annealing paths.** Research on improving annealing paths (APs) has largely focused
+on geometric APs in the context of annealed importance sampling (AIS) (Neal, 2001) and their
+extensions to sequential Monte Carlo (SMC) (Del Moral et al., 2006); see Jasra et al. (2011);
+Goshtasbpour et al. (2023); Chopin et al. (2023); Syed et al. (2024). Beyond the standard geometric
+AP, alternative constructions have been proposed, such as the moment-averaging path for exponential
+family distributions (Grosse et al., 2013) and the arithmetic mean path (Chen et al., 2021). The
+geometric path itself can be interpreted as a quasi-arithmetic mean (Kolmogorov & Castelnuovo,
+1930) under the natural logarithm, which motivated Brekelmans et al. (2020) to propose APs based
+on the deformed logarithm transformation. A variational characterization of these paths was later
+analysed by Brekelmans & Nielsen (2024). Related work also explores improved schedules for
+parallel tempering Surjanovic et al. (2022); Syed et al. (2021) and for the diffusion coefficient in
+ergodic Ornstein–Uhlenbeck processes used to train denoising diffusion models (Ho et al., 2020;
+
+
+6
+
+
+Song et al., 2020); see, e.g., Nichol & Dhariwal (2021); Williams et al. (2024); Benita et al. (2025);
+Zhang (2025).
+
+
+5 NUMERICAL EVALUATION
+
+
+Table 1: Results for all systems of varying dimensionality _d_ . Evaluation criteria include the number
+of target evaluations (TARGET EVALS), the evidence upper bound (EUBO), the reverse effective
+sample size (ESS) and the average total variation distance to the Ramachandran plots generated from
+molecular dynamics samples (RAM TV). Details on all metrics can be found in Appendix D.3. Each
+value is shown as the mean _±_ standard error over four independent runs. An exception is TA-BG on
+the ELIL tetrapeptide, for which only two runs were successful due to numerical instabilities. The
+best results are highlighted in bold, except for the forward KL and reverse KL. Reverse KL is prone
+to mode collapse, which makes ESS values not directly comparable, and forward KL is trained from
+samples rather than from energy.
+
+
+**SYSTEM** **METHOD** **TARGET** **EVALS** _↓_ **EUBO** _↓_ **ESS** **[%]** _↑_ **RAM TV** _↓_
+
+
+ALANINE
+DIPEPTIDE
+
+
+( _d_ = 60)
+
+
+ALANINE
+TETRAPEPTIDE
+
+
+( _d_ = 120)
+
+
+ALANINE
+HEXAPEPTIDE
+
+
+( _d_ = 180)
+
+
+ELIL
+TETRAPEPTIDE
+
+
+( _d_ = 219)
+
+
+FRORWARDEVERSE KL KL 2 _._ 556 _× ×_ 10 10 [9] [8] _−−_ 174174 _.._ 9296 _± ±_ 0 0 _.._ 0000 (82(94 _.._ 1413 _± ±_ 0 0 _.._ 08) %21) % (1(1 _.._ 0936 _± ±_ 0 0 _.._ 01)05) _× ×_ 10 10 _[−][−]_ [2][2]
+
+FABTA-BG 2 _._ 113 _× ×_ 10 10 [8][8] [8] _−−_ 174174 _.._ 9899 _± ±_ 0 0 _.._ 0000 (94(95 _.._ 8076 _± ±_ 0 0 _.._ 04) %13) % (1(1 _.._ 0324 _± ±_ 0 0 _.._ 01)07) _× ×_ 10 10 _[−][−]_ [2][2]
+
+
+TA-BG 8 _×_ 10 [8][8] _−_ 277 _._ 40 _±_ 0 _._ 06 (13 _._ 75 _±_ 1 _._ 42) % **(2** _**.**_ **54** _**±**_ **0** _**.**_ **13)** _**×**_ **10** _**[−]**_ [2] **[2]**
+
+
+CMT (OURS) 8 _×_ 10 [8] _**−**_ _**.**_ **83** _**±**_ **0** _**.**_ **00** **(26** _**.**_ **06** _**±**_ **0** _**.**_ **26) %** (3 _._ 13 _±_ 0 _._ 03) _×_ 10 _[−]_ [2]
+
+
+CMT (OURS) 1 _×_ 10 [8] _**−**_ _**.**_ **00** _**±**_ **0** _**.**_ **00** **(97** _**.**_ **69** _**±**_ **0** _**.**_ **03) %** **(9** _**.**_ **43** _**±**_ **0** _**.**_ **08)** _**×**_ **10** _**[−]**_ **[3]**
+
+
+FRORWARDEVERSE KL KL 24 _.._ 562 _× ×_ 10 10 [9][8] _−−_ 333332 _.._ 7996 _± ±_ 0 0 _.._ 0013 (45(75 _.._ 2906 _± ±_ 0 3 _.._ 11) %50) % (1(2 _.._ 4789 _± ±_ 0 0 _.._ 03)02) _× ×_ 10 10 _[−][−]_ [2][2]
+
+FABTA-BG 2 _._ 113 _× ×_ 10 10 [8][8] [8] _−−_ 333333 _.._ 9399 _± ±_ 0 0 _.._ 0000 (63(65 _.._ 5981 _± ±_ 0 0 _.._ 23) %24) % (3(1 _.._ 1053 _± ±_ 0 0 _.._ 04)09) _× ×_ 10 10 _[−][−]_ [2][2]
+
+
+CMT (OURS) 1 _×_ 10 [8] _**−**_ _**.**_ **00** _**±**_ **0** _**.**_ **00** **(68** _**.**_ **60** _**±**_ **0** _**.**_ **21) %** **(1** _**.**_ **43** _**±**_ **0** _**.**_ **03)** _**×**_ **10** _**[−]**_ **[2]**
+
+
+FRORWARDEVERSE KL KL 24 _.._ 562 _× ×_ 10 10 [9][8] _−−_ 533529 _.._ 1626 _± ±_ 0 0 _.._ 0126 (10(21 _.._ 9883 _± ±_ 0 1 _.._ 11) %30) % (1(7 _.._ 8873 _± ±_ 0 0 _.._ 01)63) _× ×_ 10 10 _[−][−]_ [2][2]
+
+FABTA-BG 44 _._ 2 _× ×_ 10 10 [8][8][8] _−−_ 533532 _.._ 4398 _± ±_ 0 0 _.._ 0001 (18(14 _.._ 2255 _± ±_ 0 0 _.._ 15) %05) % (2(6 _.._ 5943 _± ±_ 0 0 _.._ 03)03) _× ×_ 10 10 _[−][−]_ [2][2]
+
+
+CMT (OURS) 4 _×_ 10 [8] _**−**_ _**.**_ **51** _**±**_ **0** _**.**_ **01** **(29** _**.**_ **63** _**±**_ **0** _**.**_ **08) %** **(2** _**.**_ **48** _**±**_ **0** _**.**_ **02)** _**×**_ **10** _**[−]**_ **[2]**
+
+
+FRORWARDEVERSE KL KL 24 _.._ 562 _× ×_ 10 10 [9][8] _−−_ 276262 _.._ 7634 _± ±_ 0 3 _.._ 0048 (5(1 _.._ 8526 _± ±_ 0 0 _.._ 03) %53) % (1(2 _.._ 5861 _± ±_ 0 0 _.._ 01)27) _× ×_ 10 10 _[−][−]_ [2][1]
+
+FAB 8 _._ 43 _×_ 10 [8] [8] _−_ 276 _._ 67 _±_ 0 _._ 01 (7 _._ 21 _±_ 0 _._ 08) % (7 _._ 54 _±_ 0 _._ 14) _×_ 10 _[−]_ [2]
+
+
+In this section, we compare our approach against state-of-the-art methods on four challenging
+molecular systems. We provide a brief overview of the experimental setup here, with full details
+in Appendix D. Additional experimental results are provided in Appendix B, including extended
+performance metrics, an ablation study on the effect of both constraints, and an analysis of different
+trust-region bounds across systems of different dimensionality.
+
+
+5.1 EXPERIMENTAL SETUP
+
+
+**Benchmark** **problems.** Our evaluation covers a range of molecular systems, beginning with
+the well-studied alanine dipeptide ( _d_ = 60) (Dibak et al., 2022b; Stimper et al., 2022b; Midgley
+et al., 2022; Tan et al., 2025a), and extending to the larger alanine tetrapeptide ( _d_ = 120) and
+alanine hexapeptide ( _d_ = 180), which have only recently been addressed using variational methods
+(Schopmans & Friederich, 2025). In addition, we introduce a new benchmark, the ELIL tetrapeptide
+( _d_ = 219), which is higher-dimensional and which contains more complex side chain interactions
+compared to the alanine hexapeptide. To the best of our knowledge, this represents the largest
+and most complex molecular system investigated using variational approaches to date. A detailed
+description of all benchmark systems is provided in Appendix D.2, and visualizations of all systems
+can be found next to Table 1.
+
+
+While using Lagrangian multipliers as a stopping criterion is possible (as _λ_ = _η_ = 0 implies satisfied
+constraints), we use a fixed number of annealing steps _I_ [˜] to strictly control the computational budget
+for fair benchmarking (see Algorithm 2).
+
+
+7
+
+
+**Baseline methods.** Our main baselines are Flow Annealed Importance Sampling Bootstrap (FAB)
+(Midgley et al., 2022) and Temperature-Annealed Boltzmann Generators (TA-BG) (Schopmans &
+Friederich, 2025), which currently define the state of the art for variational sampling of molecular
+systems. For reference, we also include reverse and forward KL training; the latter leverages ground
+truth samples obtained from molecular dynamics (MD) simulations (see Appendix D.2). To ensure a
+fair comparison, all methods use neural spline flows (Durkan et al., 2019) and identical architectures.
+
+
+**Performance** **criteria.** We evaluate methods primarily using three criteria. First, the evidence
+upper bound (EUBO), computed with ground truth MD samples. Up to an additive constant, the
+EUBO corresponds to the forward KL divergence and is therefore well suited for detecting mode
+collapse (Blessing et al., 2024). Second, we consider the effective sample size (ESS), defined as
+ESS( _q, p_ ) := - E _x∼q_ �( _[p]_ [(] _[x]_ [)] _/q_ ( _x_ )) [2][��] _[−]_ [1] . ESS is a common measure of sample quality, but it is known
+to be less reliable for assessing mode collapse (Blessing et al., 2024).
+
+
+Finally, we consider Ramachandran plots as a qualitative criterion for assessing mode collapse. These
+plots visualize the 2D log-density of the joint distribution of a pair of dihedral angles in a peptide’s
+backbone. This is a low-dimensional representation of important molecular configurations, making it
+possible to assess whether the generated samples capture all relevant modes of the distribution or
+fail to represent certain regions of the state space. For more details on Ramachandran plots, we refer
+to Appendix D.3 and Schopmans & Friederich (2025). To assess the quality of the Ramachandran
+plots, we use the total variation distance (Ram TV) between the model-sampled and ground-truth
+(MD) Ramachandran histograms, as the TV distance is symmetric and more naturally reflects the
+bidirectional nature of matching generated and target Boltzmann distributions, thereby also penalizing
+overestimation of density by the model.
+
+
+For details on all metrics, we refer to Appendix D.3. Since evaluating the target density of molecular
+systems is typically expensive, we also report the number of target evaluations required by each
+method.
+
+
+5.2 RESULTS
+
+
+**Main results.** The main findings are summarized in Table 1. Across all systems and metrics, our
+method outperforms the baselines while requiring the same or fewer target evaluations. It produces
+samples closer to the ground-truth distribution (EUBO), allows more efficient importance sampling
+(ESS), and provides superior mode coverage and resolution of metastable high-energy regions (RAM
+TV). While the performance gap between our method and the baselines is less pronounced for smaller
+systems, it widens substantially for the larger ones. In particular, on alanine hexapeptide and ELIL
+tetrapeptide, our method attains approximately twice the ESS of competing approaches, while also
+avoiding mode collapse, as reflected in improved EUBO and Ram TV values. In contrast, the reverse
+KL objective exhibits significant mode collapse, as evidenced by the widening gap in EUBO and
+Ram TV relative to the other methods, with the most pronounced discrepancy observed on the largest
+system, ELIL tetrapeptide.
+
+
+Taken together, the consistency of these trends across metrics and systems highlights the robustness
+of our method, particularly in challenging high-dimensional systems.
+
+
+**Ablation** **study** **for** **constraints.** Additionally, we investigate the effect of different constraint
+choices on the performance of the alanine hexapeptide system. Specifically, we compare four
+settings: using both constraints, each constraint individually, and no constraint (which corresponds
+to importance-weighted forward KL minimization). The results are summarized in Figure 2 and
+Figure 3. Figure 2a shows that omitting the trust-region constraint causes entropy to decrease rapidly,
+which leads to mode collapse during training. Moreover, using only the entropy constraint yields
+unstable training, as evidenced by violations of the prescribed linear entropy decay. In contrast,
+incorporating a trust-region constraint stabilizes training, as reflected in Figure 2b, where it produces
+a substantially higher ESS between successive intermediate densities. Figure 3 shows Ramachandran
+plots of alanine hexapeptide with the constraints selectively enabled or disabled. Visible signs of
+mode collapse appear in all cases except for the tempered (7) and geometric-tempered (9) variants,
+with the most accurate Ramachandran plot observed in the latter. Overall, our findings indicate
+that both constraints are necessary to achieve high ESS values while simultaneously avoiding mode
+collapse.
+
+
+8
+
+
+No constraint Geometric via (2) Tempered via (7) Geometric-tempered via (9)
+
+
+|533.49<br>533.05 533.06|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|533_._49<br>533_._05<br>533_._06|||||||
+||||||||
+|||||||531_._48|
+
+
+(c) _−_ EUBO
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|29_._63<br>33_._42<br>⋆<br>⋆|
+|||||25_._57|25_._57|25_._57|25_._57|25_._57|
+|||||15_._11|15_._11|15_._11|||
+|||||15_._11|||||
+||||||||||
+
+
+(d) ESS(ˆ _qI_ _, p_ ) [%]
+
+
+534
+
+
+533
+
+
+532
+
+
+531
+
+
+_−_ 300
+
+
+_−_ 400
+
+
+_−_ 500
+
+
+|Col1|Col2|Col3|tr|Col5|
+|---|---|---|---|---|
+|||no co<br>tr|ent<br>nstrain<br>+ent|t|
+||||||
+||||||
+
+
+0 1 2 3 4
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+|Col1|no|tr<br>tr+ent<br>constraint|
+|---|---|---|
+|||ent|
+||||
+||||
+||||
+
+
+0 1 2 3 4
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+Target Evaluations
+
+
+(a) _H_ (ˆ _qi_ )
+
+
+(b) ESS(ˆ _qi−_ 1 _, qi_ ) [%]
+
+
+_·_ 10 [8]
+
+
+_·_ 10 [8]
+
+
+Target Evaluations
+
+
+Figure 2: Impact of the trust-region and entropy constraint visualized on alanine hexapeptide.
+Figure 2a visualizes the model entropy over the course of the training. Analogously, Figure 2b
+shows the importance-weight effective sample size (ESS) between successive intermediate densities.
+Figures 2c and 2d depict the final log-likelihood and ESS to the target density, respectively. The
+variants in Figure 2d marked with ”⋆” exhibit visible mode-collapse on the Ramachandran plots; see
+Figure 3. The ESS is therefore not directly comparable to the other methods. We denote by _q_ ˆ _i_ the
+variational approximation of the intermediate density _qi_ .
+
+
+**Ground truth** **No constraint** **Geometric** **Tempered** **Geometric-tempered**
+
+
+10
+
+
+φ2
+
+
+φ2 φ2 φ2 φ2
+
+
+5
+
+
+0
+
+
+Figure 3: Ramachandran plots for alanine hexapeptide with trust-region and entropy constraints
+selectively enabled or disabled. Using a single or no constraint leads to mode collapse, whereas
+combining both constraints avoids it. See Appendix D.3 for details.
+
+
+6 CONCLUSION
+
+
+We have introduced _Constrained Mass Transport_ (CMT), a variational framework for constructing
+intermediate distributions that transport probability mass from a tractable base measure to a complex,
+unnormalized target. By enforcing constraints on both the KL divergence and the entropy decay
+between successive steps, CMT balances exploration and convergence, thereby mitigating mass
+teleportation, reducing mode collapse, and promoting smooth distributional overlap. Our empirical evaluation across established Boltzmann generator benchmarks and the here proposed _ELIL_
+_tetrapeptide_, learned purely from energy evaluations without access to molecular dynamics samples,
+demonstrates that CMT consistently outperforms existing annealing-based and variational baselines,
+achieving over 2 _._ 5 _×_ higher effective sample size while preserving mode diversity.
+
+Promising directions for future work include exploring alternative approximation families _Q_ and
+divergences _D_ for learning intermediate densities, which may lead to further performance improvements. Applying our method in Cartesian coordinate representations also presents an interesting
+avenue, as it facilitates transferability across different molecular systems (Klein & Noe, 2024; Tan´
+et al., 2025b). A key limitation of the current approach is the large number of gradient updates needed
+to approximate each intermediate target during training. Future work could investigate using more
+efficient loss functions, such as the log-variance loss (Richter et al., 2020), to reduce computational
+cost and improve scalability.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+The source code for all experiments is available at [https://github.com/](https://github.com/ChristophervonKlitzing/CMT-Molecular)
+[ChristophervonKlitzing/CMT-Molecular.](https://github.com/ChristophervonKlitzing/CMT-Molecular) The ground-truth molecular dynamics data
+[have been made publicly accessible at https://doi.org/10.5281/zenodo.18822445.](https://doi.org/10.5281/zenodo.18822445)
+
+
+9
+
+
+ACKNOWLEDGMENTS
+
+
+The authors acknowledge support by the state of Baden-Wurttemberg through bwHPC. This work is¨
+supported by the Helmholtz Association Initiative and Networking Fund on the HAICORE@KIT
+partition. D.B. acknowledges support by funding from the pilot program Core Informatics of
+the Helmholtz Association (HGF). H.S. acknowledges financial support by the German Research
+Foundation (DFG) through the Research Training Group 2450 “Tailored Scale-Bridging Approaches
+to Computational Nanoscience”. P.F. acknowledges funding from the Klaus Tschira Stiftung gGmbH
+(SIMPLAIX project) and the pilot program Core-Informatics of the Helmholtz Association (KiKIT
+project).
+
+
+10
+
+
+REFERENCES
+
+
+Osama Abdin and Philip M Kim. Pepflow: direct conformational sampling from peptide energy
+landscapes through hypernetwork-conditioned diffusion. _bioRxiv_, pp. 2023–06, 2023.
+
+
+Abbas Abdolmaleki, Rudolf Lioutikov, Jan R Peters, Nuno Lau, Luis Pualo Reis, and Gerhard
+Neumann. Model-based relative entropy stochastic search. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 28, 2015.
+
+
+Abbas Abdolmaleki, Jost Tobias Springenberg, Jonas Degrave, Steven Bohez, Yuval Tassa, Dan
+Belov, Nicolas Heess, and Martin Riedmiller. Relative entropy regularized policy iteration. _arXiv_
+_preprint arXiv:1812.02256_, 2018a.
+
+
+Abbas Abdolmaleki, Jost Tobias Springenberg, Yuval Tassa, Remi Munos, Nicolas Heess, and Martin
+Riedmiller. Maximum a posteriori policy optimisation. _arXiv preprint arXiv:1806.06920_, 2018b.
+
+
+Joshua Achiam, David Held, Aviv Tamar, and Pieter Abbeel. Constrained policy optimization. In
+_International conference on machine learning_, pp. 22–31. PMLR, 2017.
+
+
+Zafarali Ahmed, Nicolas Le Roux, Mohammad Norouzi, and Dale Schuurmans. Understanding the
+impact of entropy on policy optimization. In _International conference on machine learning_, pp.
+151–160. PMLR, 2019.
+
+
+Tara Akhound-Sadegh, Jungyoon Lee, Joey Bose, Valentin De Bortoli, Arnaud Doucet, Michael M.
+Bronstein, Dominique Beaini, Siamak Ravanbakhsh, Kirill Neklyudov, and Alexander Tong.
+Progressive inference-time annealing of diffusion models for sampling from boltzmann densities. In _ICML_ _2025_ _Generative_ _AI_ _and_ _Biology_ _(GenBio)_ _Workshop_, 2025. URL [https:](https://openreview.net/forum?id=uoU24LvcuV)
+[//openreview.net/forum?id=uoU24LvcuV.](https://openreview.net/forum?id=uoU24LvcuV)
+
+
+Riad Akrour, Gerhard Neumann, Hany Abdulsamad, and Abbas Abdolmaleki. Model-free trajectory
+optimization for reinforcement learning. In _International Conference on Machine Learning_, pp.
+2961–2970. PMLR, 2016.
+
+
+Riad Akrour, Abbas Abdolmaleki, Hany Abdulsamad, Jan Peters, and Gerhard Neumann. Model-free
+trajectory-based policy optimization with monotonic improvement. _Journal of machine learning_
+_research_, 19(14):1–25, 2018.
+
+
+Riad Akrour, Joni Pajarinen, Jan Peters, and Gerhard Neumann. Projections for approximate policy
+iteration algorithms. In _International Conference on Machine Learning_, pp. 181–190. PMLR,
+2019.
+
+
+Michael S Albergo and Eric Vanden-Eijnden. Nets: A non-equilibrium transport sampler. _arXiv_
+_preprint arXiv:2410.02711_, 2024.
+
+
+Michael Arbel, Alex Matthews, and Arnaud Doucet. Annealed flow transport monte carlo. In
+_International Conference on Machine Learning_, pp. 318–330. PMLR, 2021.
+
+
+Oleg Arenz, Mingjun Zhong, and Gerhard Neumann. Trust-region variational inference with gaussian
+mixture models. _Journal of Machine Learning Research_, 21(163):1–60, 2020.
+
+
+Oleg Arenz, Philipp Dahlinger, Zihan Ye, Michael Volpp, and Gerhard Neumann. A unified perspective on natural gradient variational inference with gaussian mixture models. _arXiv preprint_
+_arXiv:2209.11533_, 2022.
+
+
+Nathan Argaman and Guy Makov. Density functional theory: An introduction. _American Journal_
+_of Physics_, 68(1):69–79, January 2000. ISSN 1943-2909. doi: 10.1119/1.19375. [URL http:](http://dx.doi.org/10.1119/1.19375)
+[//dx.doi.org/10.1119/1.19375.](http://dx.doi.org/10.1119/1.19375)
+
+
+Roi Benita, Michael Elad, and Joseph Keshet. Spectral analysis of diffusion models with application
+to schedule design. _arXiv preprint arXiv:2502.00180_, 2025.
+
+
+Nicolas Bereux,´ Aurelien´ Decelle, Cyril Furtlehner, Lorenzo Rosset, and Beatriz Seoane. Fast
+training and sampling of restricted boltzmann machines. _arXiv preprint arXiv:2405.15376_, 2024.
+
+
+11
+
+
+Denis Blessing, Xiaogang Jia, Johannes Esslinger, Francisco Vargas, and Gerhard Neumann. Beyond
+ELBOs: A large-scale evaluation of variational methods for sampling. In Ruslan Salakhutdinov, Zico Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix
+Berkenkamp (eds.), _Proceedings of the 41st International Conference on Machine Learning_, volume 235 of _Proceedings of Machine Learning Research_, pp. 4205–4229. PMLR, 21–27 Jul 2024.
+[URL https://proceedings.mlr.press/v235/blessing24a.html.](https://proceedings.mlr.press/v235/blessing24a.html)
+
+
+Denis Blessing, Julius Berner, Lorenz Richter, Carles Domingo-Enrich, Yuanqi Du, Arash Vahdat,
+and Gerhard Neumann. Trust region constrained measure transport in path space for stochastic
+optimal control and inference, 2025. [URL https://arxiv.org/abs/2508.12511.](https://arxiv.org/abs/2508.12511)
+
+
+Stephen Boyd and Lieven Vandenberghe. _Convex_ _Optimization_ . Cambridge University Press,
+Cambridge, UK, 2004. ISBN 9780521833783. Seventh printing with corrections, 2009.
+
+
+Rob Brekelmans and Frank Nielsen. Variational representations of annealing paths: Bregman
+information under monotonic embedding. _Information Geometry_, 7(1):193–228, 2024.
+
+
+Rob Brekelmans, Vaden Masrani, Thang Bui, Frank Wood, Aram Galstyan, Greg Ver Steeg, and
+Frank Nielsen. Annealed importance sampling with q-paths. _arXiv preprint arXiv:2012.07823_,
+2020.
+
+
+Richard P Brent. _Algorithms for minimization without derivatives_ . Courier Corporation, 2013.
+
+
+Onur Celik, Zechu Li, Denis Blessing, Ge Li, Daniel Palenicek, Jan Peters, Georgia Chalvatzaki,
+and Gerhard Neumann. Dime: Diffusion-based maximum entropy reinforcement learning. _arXiv_
+_preprint arXiv:2502.02316_, 2025.
+
+
+Omar Chehab and Anna Korba. A practical diffusion path for sampling. _arXiv_ _preprint_
+_arXiv:2406.14040_, 2024.
+
+
+Junya Chen, Danni Lu, Zidi Xiu, Ke Bai, Lawrence Carin, and Chenyang Tao. Variational inference
+with holder bounds. _arXiv preprint arXiv:2111.02947_, 2021.
+
+
+Jaemoo Choi, Yongxin Chen, Molei Tao, and Guan-Horng Liu. Non-equilibrium annealed adjoint
+sampler. _arXiv preprint arXiv:2506.18165_, 2025.
+
+
+Nicolas Chopin, Omiros Papaspiliopoulos, et al. _An introduction to sequential Monte Carlo_, volume 4.
+Springer, 2020.
+
+
+Nicolas Chopin, Francesca R Crucinio, and Anna Korba. A connection between tempering and
+entropic mirror descent. _arXiv preprint arXiv:2310.11914_, 2023.
+
+
+Andrew R Conn, Nicholas IM Gould, and Philippe L Toint. _Trust region methods_ . SIAM, 2000.
+
+
+Thomas M Cover. _Elements of information theory_ . John Wiley & Sons, 1999.
+
+
+Pierre Del Moral, Arnaud Doucet, and Ajay Jasra. Sequential monte carlo samplers. _Journal of the_
+_Royal Statistical Society Series B: Statistical Methodology_, 68(3):411–436, 2006.
+
+
+Manuel Dibak, Leon Klein, Andreas Kramer,¨ and Frank Noe.´ Temperature steerable flows and
+boltzmann generators. _Physical Review Research_, 4(4):L042005, 2022a.
+
+
+Manuel Dibak, Leon Klein, Andreas Kramer,¨ and Frank Noe.´ Temperature steerable flows and
+Boltzmann generators. _Physical Review Research_, 4(4):L042005, October 2022b. doi: 10.1103/
+PhysRevResearch.4.L042005.
+
+
+Laurent Dinh, Jascha Sohl-Dickstein, and Samy Bengio. Density estimation using real nvp. _arXiv_
+_preprint arXiv:1605.08803_, 2016.
+
+
+Simon Duane, A. D. Kennedy, Brian J. Pendleton, and Duncan Roweth. Hybrid Monte Carlo. _Physics_
+_Letters_ _B_, 195(2):216–222, September 1987. ISSN 0370-2693. doi: 10.1016/0370-2693(87)
+91197-X.
+
+
+Conor Durkan, Artur Bekasov, Iain Murray, and George Papamakarios. Neural spline flows. _Advances_
+_in neural information processing systems_, 32, 2019.
+
+
+12
+
+
+Conor Durkan, Artur Bekasov, Iain Murray, and George Papamakarios. nflows: normalizing flows in
+PyTorch, November 2020. [URL https://doi.org/10.5281/zenodo.4296287.](https://doi.org/10.5281/zenodo.4296287)
+
+
+Peter Eastman, Raimondas Galvelis, Raul P. Pel´ aez, Charlles R. A. Abreu, Stephen E. Farr, Emilio´
+Gallicchio, Anton Gorenko, Michael M. Henry, Frank Hu, Jing Huang, Andreas Kramer, Julien¨
+Michel, Joshua A. Mitchell, Vijay S. Pande, Joao PGLM Rodrigues,˜ Jaime Rodriguez-Guerra,
+Andrew C. Simmonett, Sukrit Singh, Jason Swails, Philip Turner, Yuanqing Wang, Ivy Zhang,
+John D. Chodera, Gianni De Fabritiis, and Thomas E. Markland. OpenMM 8: Molecular Dynamics
+Simulation with Machine Learning Potentials. _J. Phys. Chem. B_, 128(1):109–116, January 2024.
+ISSN 1520-6106. doi: 10.1021/acs.jpcb.3c06662.
+
+
+Marylou Gabrie, Grant M Rotskoff, and Eric Vanden-Eijnden.´ Adaptive monte carlo augmented
+with normalizing flows. _Proceedings of the National Academy of Sciences_, 119(10):e2109420119,
+2022.
+
+
+Andrew Gelman, John B Carlin, Hal S Stern, and Donald B Rubin. _Bayesian data analysis_ . Chapman
+and Hall/CRC, 1995.
+
+
+Vicenc¸ Gomez, Hilbert J Kappen, Jan Peters, and Gerhard Neumann.´ Policy search for path integral
+control. In _Machine Learning and Knowledge Discovery in Databases:_ _European Conference,_
+_ECML PKDD 2014, Nancy, France, September 15-19, 2014. Proceedings, Part I 14_, pp. 482–497.
+Springer, 2014.
+
+
+Shirin Goshtasbpour, Victor Cohen, and Fernando Perez-Cruz. Adaptive annealed importance
+sampling with constant rate progress. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+11642–11658. PMLR, 2023.
+
+
+Roger B Grosse, Chris J Maddison, and Russ R Salakhutdinov. Annealing between distributions by
+averaging moments. _Advances in Neural Information Processing Systems_, 26, 2013.
+
+
+John Hammersley. _Monte carlo methods_ . Springer Science & Business Media, 2013.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Ajay Jasra, David A Stephens, Arnaud Doucet, and Theodoros Tsagaris. Inference for levy-driven´
+stochastic volatility models via adaptive sequential monte carlo. _Scandinavian Journal of Statistics_,
+38(1):1–22, 2011.
+
+
+Bowen Jing, Gabriele Corso, Jeffrey Chang, Regina Barzilay, and Tommi Jaakkola. Torsional
+diffusion for molecular conformer generation. _Advances in neural information processing systems_,
+35:24240–24253, 2022.
+
+
+Bowen Jing, Bonnie Berger, and Tommi Jaakkola. Alphafold meets flow matching for generating
+protein ensembles. _arXiv preprint arXiv:2402.04845_, 2024.
+
+
+Minkyu Kim, Kiyoung Seong, Dongyeop Woo, Sungsoo Ahn, and Minsu Kim. On scalable and
+efficient training of diffusion samplers. _arXiv preprint arXiv:2505.19552_, 2025.
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization, January 2017.
+
+
+Durk P Kingma and Prafulla Dhariwal. Glow: Generative flow with invertible 1x1 convolutions.
+_Advances in neural information processing systems_, 31, 2018.
+
+
+Leon Klein and Frank Noe.´ Transferable boltzmann generators. _Advances in Neural Information_
+_Processing Systems_, 37:45281–45314, 2024.
+
+
+Leon Klein, Andreas Kramer,¨ and Frank Noe.´ Equivariant flow matching. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 36:59886–59910, 2023.
+
+
+Alexander Kolesnikov, Andre Susano Pinto, and Michael Tschannen.´ Jet: A modern transformerbased normalizing flow. _arXiv preprint arXiv:2412.15129_, 2024.
+
+
+Andre˘ı Nikolaevich Kolmogorov and Guido Castelnuovo. _Sur la notion de la moyenne_ . G. Bardi, tip.
+della R. Accad. dei Lincei, 1930.
+
+
+13
+
+
+Sarah Lewis, Tim Hempel, Jose´ Jimenez-Luna,´ Michael Gastegger, Yu Xie, Andrew YK Foong,
+Victor Garc´ıa Satorras, Osama Abdin, Bastiaan S Veeling, Iryna Zaporozhets, et al. Scalable
+emulation of protein equilibrium ensembles with generative deep learning. _Science_, pp. eadv9817,
+2025.
+
+
+Guan-Horng Liu, Jaemoo Choi, Yongxin Chen, Benjamin Kurt Miller, and Ricky TQ Chen. Adjoint
+schr _\_ ” odinger bridge sampler. _arXiv preprint arXiv:2506.22565_, 2025.
+
+
+Balint M´ at´ e and Fran´ c¸ois Fleuret. Learning interpolations between boltzmann densities, 2023. _URL_
+_https://arxiv. org/abs/2301.07388_, 2023.
+
+
+Alex Matthews, Michael Arbel, Danilo Jimenez Rezende, and Arnaud Doucet. Continual repeated
+annealed flow transport monte carlo. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+15196–15219. PMLR, 2022.
+
+
+Aimee Maurais, Bamdad Hosseini, and Youssef Marzouk. Learning paths for dynamic measure
+transport: A control perspective. _arXiv preprint arXiv:2511.03797_, 2025.
+
+
+Wenjia Meng, Qian Zheng, Yue Shi, and Gang Pan. An off-policy trust region policy optimization method with monotonic improvement guarantee for deep reinforcement learning. _IEEE_
+_Transactions on Neural Networks and Learning Systems_, 33(5):2223–2235, 2021.
+
+
+Laurence Midgley, Vincent Stimper, Javier Antoran,´ Emile Mathieu, Bernhard Scholkopf,¨ and
+Jose Miguel Hern´ andez-Lobato.´ Se (3) equivariant augmented coupling flows. _Advances in Neural_
+_Information Processing Systems_, 36:79200–79225, 2023.
+
+
+Laurence Illing Midgley, Vincent Stimper, Gregor NC Simm, Bernhard Scholkopf,¨ and
+Jose Miguel Hern´ andez-Lobato.´ Flow annealed importance sampling bootstrap. _arXiv preprint_
+_arXiv:2208.01893_, 2022.
+
+
+Volodymyr Mnih, Adria Puigdomenech Badia, Mehdi Mirza, Alex Graves, Timothy Lillicrap, Tim
+Harley, David Silver, and Koray Kavukcuoglu. Asynchronous methods for deep reinforcement
+learning. In _International conference on machine learning_, pp. 1928–1937. PmLR, 2016.
+
+
+Radford M Neal. Annealed importance sampling. _Statistics and computing_, 11(2):125–139, 2001.
+
+
+Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models.
+In _International conference on machine learning_, pp. 8162–8171. PMLR, 2021.
+
+
+Frank Noe, Simon Olsson, Jonas K´ ohler, and Hao Wu.¨ Boltzmann generators: Sampling equilibrium
+states of many-body systems with deep learning. _Science_, 365(6457):eaaw1147, 2019.
+
+
+Frank Noe´ and co workers. bgflow: Boltzmann generators and normalizing flows
+in pytorch, 2025. URL [https://github.com/noegroup/bgflow.](https://github.com/noegroup/bgflow) Commit
+fbba56fac3eb88f6825d2bd4f745ee75ae9715e1.
+
+
+Brendan O’Donoghue, Remi Munos, Koray Kavukcuoglu, and Volodymyr Mnih.´ Pgq: Combining
+policy gradient and q-learning. _CoRR_, 2016.
+
+
+Fabian Otto, Philipp Becker, Ngo Anh Vien, Hanna Carolin Ziesche, and Gerhard Neumann. Differentiable trust region layers for deep reinforcement learning. _arXiv preprint arXiv:2101.09207_,
+2021.
+
+
+Joni Pajarinen, Hong Linh Thai, Riad Akrour, Jan Peters, and Gerhard Neumann. Compatible natural
+gradient policy search. _Machine Learning_, 108:1443–1466, 2019.
+
+
+George Papamakarios, Eric Nalisnick, Danilo Jimenez Rezende, Shakir Mohamed, and Balaji
+Lakshminarayanan. Normalizing flows for probabilistic modeling and inference. _Journal_ _of_
+_Machine Learning Research_, 22(57):1–64, 2021.
+
+
+14
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Kopf, Edward
+Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner,
+Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance
+deep learning library. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alche-Buc, E. Fox, and´
+R. Garnett (eds.), _Advances in Neural Information Processing Systems_, volume 32. Curran Associates, Inc., 2019. [URL https://proceedings.neurips.cc/paper_files/paper/](https://proceedings.neurips.cc/paper_files/paper/2019/file/bdbca288fee7f92f2bfa9f7012727740-Paper.pdf)
+[2019/file/bdbca288fee7f92f2bfa9f7012727740-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2019/file/bdbca288fee7f92f2bfa9f7012727740-Paper.pdf)
+
+
+Xin Peng and Ang Gao. Flow perturbation to accelerate boltzmann sampling. _Nature Communications_,
+16(1):6604, 2025.
+
+
+Jan Peters, Katharina Mulling, and Yasemin Altun. Relative entropy policy search. In _Proceedings of_
+_the AAAI Conference on Artificial Intelligence_, volume 24, pp. 1607–1612, 2010.
+
+
+Angus Phillips, Hai-Dang Dau, Michael John Hutchinson, Valentin De Bortoli, George Deligiannidis,
+and Arnaud Doucet. Particle denoising diffusion sampler. In Ruslan Salakhutdinov, Zico Kolter,
+Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp (eds.),
+_Proceedings of the 41st International Conference on Machine Learning_, volume 235 of _Proceedings_
+_of_ _Machine_ _Learning_ _Research_, pp. 40688–40724. PMLR, 21–27 Jul 2024. URL [https://](https://proceedings.mlr.press/v235/phillips24a.html)
+[proceedings.mlr.press/v235/phillips24a.html.](https://proceedings.mlr.press/v235/phillips24a.html)
+
+
+Danilo Rezende and Shakir Mohamed. Variational inference with normalizing flows. In _International_
+_conference on machine learning_, pp. 1530–1538. PMLR, 2015.
+
+
+Danilo Jimenez Rezende, George Papamakarios, Sebastien Racaniere, Michael Albergo, Gurtej
+Kanwar, Phiala Shanahan, and Kyle Cranmer. Normalizing Flows on Tori and Spheres. In
+_Proceedings of the 37th International Conference on Machine Learning_, pp. 8083–8092. PMLR,
+November 2020.
+
+
+Lorenz Richter, Ayman Boustati, Nikolas Nusken, Francisco Ruiz, and Omer Deniz Akyildiz. Vargrad:¨
+a low-variance gradient estimator for variational inference. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 33:13481–13492, 2020.
+
+
+Severi Rissanen, RuiKang OuYang, Jiajun He, Wenlin Chen, Markus Heinonen, Arno Solin, and
+Jose Miguel Hern´ andez-Lobato.´ Progressive Tempering Sampler with Diffusion. In _Forty-Second_
+_International Conference on Machine Learning_, June 2025.
+
+
+Henrik Schopmans and Pascal Friederich. Conditional Normalizing Flows for Active Learning of
+Coarse-Grained Molecular Representations. In _Forty-First International Conference on Machine_
+_Learning_, June 2024.
+
+
+Henrik Schopmans and Pascal Friederich. Temperature-annealed boltzmann generators. In _Forty-_
+_second International Conference on Machine Learning_, 2025. [URL https://openreview.](https://openreview.net/forum?id=RqtRSrCbNu)
+[net/forum?id=RqtRSrCbNu.](https://openreview.net/forum?id=RqtRSrCbNu)
+
+
+John Schulman, Sergey Levine, Pieter Abbeel, Michael Jordan, and Philipp Moritz. Trust region
+policy optimization. In _International conference on machine learning_, pp. 1889–1897. PMLR,
+2015.
+
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms. _arXiv preprint arXiv:1707.06347_, 2017.
+
+
+Roman Soletskyi, Marylou Gabrie, and Bruno Loureiro.´ A theoretical perspective on mode collapse
+in variational inference. _Machine Learning:_ _Science and Technology_, 6(2):025056, 2025.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020.
+
+
+Vincent Stimper, Laurence I. Midgley, Gregor N. C. Simm, Bernhard Scholkopf, and Jos¨ e Miguel´
+Hernandez-Lobato.´ Alanine dipeptide in an implicit solvent at 300K. August 2022a. doi:
+10.5281/zenodo.6993124.
+
+
+15
+
+
+Vincent Stimper, Bernhard Scholkopf,¨ and Jose Miguel Hernandez-Lobato. Resampling Base
+Distributions of Normalizing Flows. In _Proceedings_ _of_ _The_ _25th_ _International_ _Conference_ _on_
+_Artificial Intelligence and Statistics_, pp. 4915–4936. PMLR, May 2022b.
+
+
+Gabriel Stoltz, Mathias Rousset, et al. _Free energy computations:_ _A mathematical perspective_ . World
+Scientific, 2010.
+
+
+Michael Struwe and M Struwe. _Variational methods_, volume 991. Springer, 2000.
+
+
+Yuji Sugita and Yuko Okamoto. Replica-exchange molecular dynamics method for protein folding.
+_Chemical Physics Letters_, 314(1):141–151, November 1999. ISSN 0009-2614. doi: 10.1016/
+S0009-2614(99)01123-9.
+
+
+Yi Sun, Daan Wierstra, Tom Schaul, and Jurgen Schmidhuber.¨ Efficient natural evolution strategies.
+In _Proceedings_ _of_ _the_ _11th_ _Annual_ _conference_ _on_ _Genetic_ _and_ _evolutionary_ _computation_, pp.
+539–546, 2009.
+
+
+Nikola Surjanovic, Saifuddin Syed, Alexandre Bouchard-Cotˆ e,´ and Trevor Campbell. Parallel
+tempering with a variational reference. _Advances in Neural Information Processing Systems_, 35:
+565–577, 2022.
+
+
+Saifuddin Syed, Vittorio Romaniello, Trevor Campbell, and Alexandre Bouchard-Cotˆ e.´ Parallel
+tempering on optimized paths. In _International Conference on Machine Learning_, pp. 10033–
+10042. PMLR, 2021.
+
+
+Saifuddin Syed, Alexandre Bouchard-Cotˆ e, Kevin Chern, and Arnaud Doucet.´ Optimised annealed
+sequential monte carlo samplers. _arXiv preprint arXiv:2408.12057_, 2024.
+
+
+Charlie B. Tan, Joey Bose, Chen Lin, Leon Klein, Michael M. Bronstein, and Alexander Tong. Scalable Equilibrium Sampling with Sequential Boltzmann Generators. In _Forty-Second International_
+_Conference on Machine Learning_, June 2025a.
+
+
+Charlie B Tan, Majdi Hassan, Leon Klein, Saifuddin Syed, Dominique Beaini, Michael M Bronstein,
+Alexander Tong, and Kirill Neklyudov. Amortized sampling with transferable normalizing flows.
+In _ICML 2025 Generative AI and Biology (GenBio) Workshop_, 2025b.
+
+
+Dominik Thalmeier, Hilbert J Kappen, Simone Totaro, and Vicenc¸ Gomez.´ Adaptive smoothing for
+path integral control. _Journal of Machine Learning Research_, 21(191):1–37, 2020.
+
+
+Yifeng Tian, Nishant Panda, and Yen Ting Lin. Liouville flow importance sampler. _arXiv preprint_
+_arXiv:2405.06672_, 2024.
+
+
+Francisco Vargas, Shreyas Padhy, Denis Blessing, and Nikolas Nusken.¨ Transport meets variational
+inference: Controlled monte carlo diffusions. _arXiv preprint arXiv:2307.01050_, 2023.
+
+
+Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau,
+Evgeni Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, Stefan´ J. van der Walt,
+Matthew Brett, Joshua Wilson, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J. Nelson, Eric
+Jones, Robert Kern, Eric Larson, C J Carey, [˙] Ilhan Polat, Yu Feng, Eric W. Moore, Jake VanderPlas,
+Denis Laxalde, Josef Perktold, Robert Cimrman, Ian Henriksen, E. A. Quintero, Charles R. Harris,
+Anne M. Archibald, Antonio H. Ribeiro, Fabian Pedregosa, Paul van Mulbregt, and SciPy 1.0ˆ
+Contributors. SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python. _Nature_
+_Methods_, 17:261–272, 2020. doi: 10.1038/s41592-019-0686-2.
+
+
+Stefan Wahl, Armand Rousselot, Felix Draxler, and Ullrich Koethe. TRADE: Transfer of Distributions
+between External Conditions with Normalizing Flows. In _The 28th International Conference on_
+_Artificial Intelligence and Statistics_, February 2025.
+
+
+Daan Wierstra, Tom Schaul, Tobias Glasmachers, Yi Sun, Jan Peters, and Jurgen¨ Schmidhuber.
+Natural evolution strategies. _The Journal of Machine Learning Research_, 15(1):949–980, 2014.
+
+
+Christopher Williams, Andrew Campbell, Arnaud Doucet, and Saifuddin Syed. Score-optimal
+diffusion schedules. _Advances in Neural Information Processing Systems_, 37:107960–107983,
+2024.
+
+
+16
+
+
+Yuhuai Wu, Elman Mansimov, Roger B Grosse, Shun Liao, and Jimmy Ba. Scalable trust-region
+method for deep reinforcement learning using kronecker-factored approximation. _Advances in_
+_neural information processing systems_, 30, 2017.
+
+
+Haotian Xu, Junyu Xuan, Guangquan Zhang, and Jie Lu. Trust region policy optimization via entropy
+regularization for kullback–leibler divergence constraint. _Neurocomputing_, 589:127716, 2024.
+
+
+Tsung-Yen Yang, Justinian Rosca, Karthik Narasimhan, and Peter J Ramadge. Projection-based
+constrained policy optimization. _arXiv preprint arXiv:2010.03152_, 2020.
+
+
+Shuangfei Zhai, Ruixiang Zhang, Preetum Nakkiran, David Berthelot, Jiatao Gu, Huangjie Zheng,
+Tianrong Chen, Miguel Angel Bautista, Navdeep Jaitly, and Josh Susskind. Normalizing flows are
+capable generative models. _arXiv preprint arXiv:2412.06329_, 2024.
+
+
+Leo Zhang. The cosine schedule is fisher-rao-optimal for masked discrete diffusion models. _arXiv_
+_preprint arXiv:2508.04884_, 2025.
+
+
+Ciyou Zhu, Richard H Byrd, Peihuang Lu, and Jorge Nocedal. Algorithm 778: L-bfgs-b: Fortran
+subroutines for large-scale bound-constrained optimization. _ACM Transactions on mathematical_
+_software (TOMS)_, 23(4):550–560, 1997.
+
+
+17
+
+
+APPENDIX
+
+
+**A** **Proofs** **19**
+
+
+**B** **Extended numerical evaluation** **22**
+
+
+**C** **Further details on constrained mass transport** **27**
+
+
+C.1 Dual optimization in practice . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+C.2 CMT with normalizing flows . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+
+
+C.3 Connection to importance-weight variance . . . . . . . . . . . . . . . . . . . . . . 29
+
+
+C.4 Guidance for hyperparameter selection . . . . . . . . . . . . . . . . . . . . . . . . 31
+
+
+C.5 Annealing path visualizations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+**D** **Experimental setup** **32**
+
+
+D.1 Architecture . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+
+
+D.2 Target densities . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+
+
+D.3 Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+D.3.1 Task-agnostic metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+
+
+D.3.2 Task-specific metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+
+
+D.4 Computational cost . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+
+
+D.5 Hyperparameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+
+
+18
+
+
+A PROOFS
+
+
+_Proof of Propositions 2.1 to 2.3._ We divide the proof into two parts and start with the most general
+formulation using both constraints, referring to Proposition 2.3. We will then derive the solution with
+just the trust-region (Proposition 2.1) and just the entropy constraint (Proposition 2.2), as they can be
+interpreted as special cases of the more general formulation.
+
+
+**General formulation.** Consider the constrained optimization problem
+
+
+                              _qi_ +1 = arg min _D_ KL( _q_ _p_ ) s.t. _D_ KL( _q_ _qi_ ) _ε_ tr _,_ _H_ ( _qi_ ) _H_ ( _q_ ) _ε_ ent _,_ d _q_ = 1 (17)
+_q∈P_ (R _[d]_ ) _∥_ _∥_ _≤_ _−_ _≤_
+
+and its corresponding Lagrangian
+
+
+tr ( _q, λ, η, ω_ ) = _D_ KL( _q_ _p_ ) + _λ_ ( _D_ KL( _q_ _qi_ ) _ε_ tr)
+_L_ [(] _[i]_ [+1)] _∥_ _∥_ _−_
++ _η_ ( _H_ ( _qi_ ) _H_ ( _q_ ) _ε_ ent)
+_−_ _−_
+
+��            + _ω_ d _q −_ 1 _._
+
+
+(18)
+
+
+Using the convexity of the KL divergence in its arguments, the convexity of the negative Shannon
+entropy, and that the integral is a linear functional, the objective from Equation (17) and its Lagrangian,
+given by Equation (18), are convex in _q_ . Using that _P_ (R _[d]_ ) is continuous, there always exists a measure
+_q_ ˜ = _qi_ with _D_ KL(˜ _q_ _qi_ ) _<_ _ε_ tr and _H_ ( _qi_ ) _H_ (˜ _q_ ) _<_ _ε_ ent that satisfies the inequality constraints
+_∥_ _−_
+strictly. Following Boyd & Vandenberghe (2004) (Sec. 5.2.3), Slater’s condition holds, implying
+strong duality. We can therefore instead solve the dual problem.
+
+
+We start by setting up the Euler-Lagrange equation, given by
+_∂_
+_∂q_ tr ( _q, λ, η, ω_ ) = 0 _,_
+
+_[L]_ [(] _[i]_ [+1)]
+
+using
+
+
+          tr ( _q, λ, η, ω_ ) = _q_ ( _x_ )�(1 + _λ_ + _η_ ) log _q_ ( _x_ ) log _p_ ( _x_ ) _λ_ log _qi_ ( _x_ ) + _ω_ �d _x_
+_L_ [(] _[i]_ [+1)] _−_ _−_
+
+
+_−_ _λε_ tr + _η_ ( _H_ ( _qi_ ) _−_ _ε_ ent) _−_ _ω_
+and solve for _q_ . Hence, we get
+_∂_
+tr ( _q, λ, η, ω_ ) = (1 + _λ_ + _η_ )(log _q_ + 1) log _p_ _λ_ log _qi_ + _ω_ = 0
+_∂q_ _[L]_ [(] _[i]_ [+1)] _−_ _−_
+
+
+    _⇔_ log _q_ = log _q_
+
+
+_i_ 1+ _λλ_ + _η_ _p_ 1+ _λ_ 1+ _η_ - _−_ - 1 + _λω_ + _η_ [+ 1] - _._ (19)
+
+
+Using this, we can further determine _ω_ using
+
+- - _λ_ 1 - _ω_ d _q_ = _qi_ ( _x_ ) 1+ _λ_ + _η_ _p_ ( _x_ ) 1+ _λ_ + _η_ d _x/_ exp = 1
+1 + _λ_ + _η_ [+ 1]
+
+                        - _λ_ 1
+_ω_ = (1 + _λ_ + _η_ )(log [¯] _i_ +1( _λ, η_ ) 1) _,_ with ¯ _i_ +1( _λ, η_ ) = _qi_ ( _x_ ) 1+ _λ_ + _η_ _p_ ( _x_ ) 1+ _λ_ + _η_ ( _x_ )d _x._
+_⇔_ _Z_ _−_ _Z_
+
+
+Substituting _ω_ back into (19) and simplifying the fraction using _λ_ 1 _p_ ˜ = _Zp_ yields
+
+
+_λ_ 1
+1+ _λ_ + _η_ _p_ ˜( _x_ ) 1+ _λ_ + _η_
+_qi_ +1( _x, λ, η_ ) = _[q][i]_ [(] _[x]_ [)]
+
+
+1+ _λ_ + _η_ _p_ ˜( _x_ ) 1+ _λ_ + _η_ - _λ_ 1
+
+with _i_ +1( _λ, η_ ) = _qi_ ( _x_ ) 1+ _λ_ + _η_ _p_ ˜( _x_ ) 1+ _λ_ + _η_ ( _x_ )d _x,_
+_i_ +1( _λ, η_ ) _Z_
+_Z_
+
+
+which uses the unnormalized target _p_ ˜, proving Proposition 2.3.
+
+
+**Special** **cases.** Setting _ε_ ent = or _ε_ tr = effectively deactivates the respective constraint,
+_∞_ _∞_
+yielding the trust-region objective (2) or the entropy objective (7), respectively. This is equivalent
+to setting the Lagrangian multipliers _η_ = 0 or _λ_ = 0, proving Proposition 2.1 and Proposition 2.2,
+respectively.
+
+
+_Proof of Theorem 2.4._ We divide the proof into three parts and start with the most general formulation
+using both constraints. The first two parts will show form and monotonicity, while part three will
+derive the special cases with just the trust-region and just the entropy constraint.
+
+
+19
+
+
+( **General** _ηi_ ) _i∈_ N0 _≥_ **form** 0. We now aim to proof that the sequence **(part** **1).** Given are the sequences (of _qi_ Lagrangian) _i∈_ N0, given bymultipliers ( _λi_ ) _i∈_ N0 _≥_ 0 and
+
+
+_q_ ˜ _i_ =
+
+
+
+
+
+
+_q_ 0 _,_ _i_ = 0
+
+
+_q_ ˜
+
+
+1 _,_ (20)
+1+ _λi−_ 1+ _ηi−_ 1 _,_ _i ≥_ 1
+
+
+
+
+
+_λi−_ 1
+_i_ 1+ _−_ 1 _λi−_ 1+ _ηi−_ 1 _p_ ˜
+
+
+takes the form
+
+
+_q_ ˜ _i_ = _q_ 0 [1] _[−][β][i]_ (˜ _p_ _[α][i]_ ) _[β][i]_ with _βi_ = 1
+_−_
+
+
+_i_ - _−_ 1
+
+
+_j_ =0
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+�0 _,_ _i_ = 0
+
+and _αi_ = 1 _βi_ - _ik−_ =01 1+ _ληkk_ + _ηk_ - _ij−_ =1 _k_ +1 1+ _λλjj_ + _ηj_ _,_ _i_ 1 _._
+
+_−_ [1] _≥_
+
+
+We use the common convention that empty products evaluate to one.
+
+
+**Base case (** _i_ = 0 **):** The simplest case
+
+_q_ ˜0 = _q_ 0 [1] _[−][β]_ [0] (˜ _p_ _[α]_ [0] ) _[β]_ [0]
+
+holds due to _β_ 0 = 0 (using empty product convention).
+
+
+**Inductive** **step:** We start from Equation (20) and transform it using the assumption that _q_ ˜ _i_ =
+_q_ 0 [1] _[−][β][i]_ (˜ _p_ _[α][i]_ ) _[β][i]_ holds for some arbitrary but fixed _i_ N0, yielding
+_∈_
+
+
+_λi_
+_i_ 1+ _λi_ + _ηi_ _p_ ˜
+
+
+_q_ ˜ _i_ +1 = _q_ ˜
+
+
+1
+1+ _λi_ + _ηi_
+
+
+_λi_
+= - _q_ 0 [1] _[−][β][i]_ (˜ _p_ _[α][i]_ ) _[β][i]_ [�] 1+ _λi_ + _ηi_ _p_ ˜
+
+
+1
+1+ _λi_ + _ηi_
+
+
+_λi_ 1
+= _q_ 0 [1] _[−][β][i]_ [+1] _p_ ˜ _[α][i][β][i]_ 1+ _λi_ + _ηi_ [+] 1+ _λi_ + _ηi_ _._
+
+
+Using
+
+
+_λi_ _λi_
+_βi_ =
+1 + _λi_ + _ηi_ 1 + _λi_ + _ηi_ _−_
+
+
+_i_
+
+
+_j_ =0
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+_i_
+
+= 1 1 + _ηi_ _−_ 1 + _λi_ + _ηi_ _−_ _j_ =0
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+1 + _ηi_
+= _βi_ +1 _,_
+_−_ 1 + _λi_ + _ηi_
+
+we now can rewrite the exponent of _p_ yielding
+
+_λi_ 1
+_αiβi_ +
+1 + _λi_ + _ηi_ 1 + _λi_ + _ηi_
+
+
+- _i−_ 1
+
+
+_k_ =0
+
+
+_ηk_ _i_   - _−_ 1
+1 + _λk_ + _ηk_ _j_ = _k_ +1
+
+
+
+
+_λi_ 1
+ 1 + _λi_ + _ηi_ + 1 + _λi_ + _ηi_
+
+
+=
+
+
+
+
+
+ _βi_
+_−_
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+1 + _ηi_
+= _βi_ +1
+_−_ 1 + _λi_ + _ηi_ _−_
+
+
+- _i−_ 1
+
+
+_k_ =0
+
+
+_ηk_
+1 + _λk_ + _ηk_
+
+
+_i_
+
+
+_j_ = _k_ +1
+
+
+_λj_ 1
++
+1 + _λj_ + _ηj_ 1 + _λi_ + _ηi_
+
+
+_i_
+
+
+_j_ = _k_ +1
+
+
+_λj_
+_,_
+1 + _λj_ + _ηj_
+
+
+= _βi_ +1
+_−_
+
+
+_i_
+
+
+_k_ =0
+
+
+_ηk_
+1 + _λk_ + _ηk_
+
+
+= _αi_ +1 _βi_ +1 _,_
+
+
+again using the convention that an empty product evaluates to one. It directly follows
+
+
+which completes the induction.
+
+
+_qi_ +1 _q_ ˜ _i_ +1 = _q_ 01 _−βi_ +1(˜ _pαi_ +1) _βi_ +1 _,_
+_∝_
+
+
+20
+
+
+**Monotonicity (part 2).** _α_ 0 = _β_ 0 = 0 and _αI_ = _βI_ It remains to show that= 1 for some _I_ _∈_ N+ and ( _α_ ( _i_ ) _βi∈i_ )N _i_ 0 _∈_ Nand0 is monotonically increasing. ( _βi_ ) _i∈_ N0 take values in [0 _,_ 1] with
+
+The first case ( _α_ 0 = _β_ 0 = 0) holds by definition. Assuming that there exists an _I_ N+, such that
+_∈_
+_λI−_ 1 = _ηI−_ 1 = 0,
+
+
+_i_ = _≥I_ 1
+
+
+_βi_ = 1
+_−_
+
+
+_i_ - _−_ 1
+
+
+_j_ =0
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+and
+
+
+_i_  - _−_ 1
+
+
+_j_ = _k_ +1
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+_αi_ = 1
+_−_ _β_ [1] _i_
+
+
+- _i−_ 1
+
+
+_k_ =0
+
+
+_ηk_
+1 + _λk_ + _ηk_
+
+
+_i_ = _≥I_ 1
+
+
+followthe optimumdirectlyandfordoallnot _i_ _≥_ prevent _I_ . Both( _qi_ )the _i∈_ Ntrust-region0 from reachingand entropythe uniqueconstraintsoptimumbecome _p_ ( _ε_ tr _, ε_ inactiveent _>_ 0at).
+Consequently, both Lagrangian multipliers will eventually vanish, motivating the existence of some
+_I_ _∈_ N+, such that _λI−_ 1 = _ηI−_ 1 = 0.
+
+We now show monotonicity of ( _βi_ ) _i∈_ N0 using ( _λi_ ) _i∈_ N0 _≥_ 0 and ( _ηi_ ) _i∈_ N0 _≥_ 0. Let _i_ _∈_ N0 be
+arbitrary. As a direct consequence of
+
+
+_i_
+
+
+_j_ =0
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+_βi_ +1 _βi_ =
+_−_
+
+
+=
+
+
+=
+
+
+_i_ - _−_ 1
+
+
+_j_ =0
+
+
+ _i_ - _−_ 1
+
+
+
+_j_ =0
+
+ _i_ - _−_ 1
+
+
+
+_j_ =0
+
+
+_λj_
+1 + _λj_ + _ηj_ _−_
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+_λj_
+1 + _λj_ + _ηj_
+
+
+
+
+ - _λi_
+ 1 _−_ 1 + _λi_ + _ηi_
+
+
+
+
+ - 1 + _ηi_
+ 1 + _λi_ + _ηi_
+
+
+
+
+
+- _[λ]_ _∀_ _[j]_ _j_ _[,η]_ _∈_ _[j]_ N _[≥]_ 0 [0]
+_≥_ 0 _,_
+
+
+the sequence ( _βi_ ) _i∈_ N0 must be monotonically increasing.
+
+
+**Special cases (part 3).** We now consider the special cases in which only the trust-region constraint
+or the entropy constraint is active by setting the Lagrangian multiplier sequence of the other constraint
+to zero.
+
+
+We first consider only the trust-region constraint (2), which corresponds to setting the Lagrangian
+multiplier of the entropy constraint to zero, i.e., _ηi_ = 0 for all _i_ N0. In this scenario, _αi_ simplifies
+_∈_
+to _α_ 0 = 0 and _αi_ = 1 for all _i_ 1. Consequently, and using _β_ 0 = 0, the iterates take the form
+_≥_
+
+_qi_ _q_ ˜ _i_ = _q_ 0 [1] _[−][β][i]_ _p_ ˜ _[β][i]_ _,_ _i_ N0 _,_
+_∝_ _∈_
+
+as claimed.
+
+
+Analogously, the trust-region constraint can be rendered inactive by setting _λi_ = 0 for all _i_ N0,
+_∈_
+leaving only the entropy constraint active, corresponding to Equation (7). In this case, _β_ 0 = 0 and
+_βi_ = 1 for all _i_ 1, yielding
+_≥_
+
+_qi_ _∝_ _q_ ˜ _i_ =                    - _qp_ ˜0 _[α][i]_ _,,_ _ii_ = 01 _,,_
+_≥_
+
+which concludes the proof.
+
+
+_Proof of uniqueness and tightness of the trust-region solution._ Closely following Blessing et al.
+(2025), we now establish the uniqueness of the trust-region solution and show that the trust-region
+constraint is tight for all but the final step. Specifically, we show
+
+
+_D_ KL( _qi_ _p_ ) _< ε_ tr = _qi_ = _p_
+_∥_ _⇒_
+_qi_ = arg min _D_ KL( _q∥p_ ) s.t. _D_ KL( _q∥qi−_ 1) _≤_ _ε_ tr is unique
+
+
+21
+
+
+If _D_ KL( _qi_ _p_ ) _<_ _ε_ tr, the KKT conditions imply that the Lagrangian multiplier satisfies _λi_ = 0, so
+_∥_
+the constraint is inactive. Consequently, _qi_ must solve the strictly convex unconstrained problem
+
+
+min
+_q_ (R _[d]_ ) _[D]_ [KL][(] _[q][∥][p]_ [)] _[,]_
+_∈P_
+
+which has the unique minimizer _p_ . Since _p_ is feasible ( _D_ KL( _p_ _p_ ) = 0 _ε_ tr), it follows that _qi_ = _p_ .
+_∥_ _≤_
+
+Uniqueness of _qi_ further follows from the convexity of the feasible set _q_ _D_ KL( _q_ _qi_ ) _ε_ tr
+_{_ _∈P|_ _∥_ _≤_ _}_
+together with the strict convexity of the objective in _q_ when _p_ is fixed.
+
+
+B EXTENDED NUMERICAL EVALUATION
+
+
+10
+
+
+φ1
+
+
+φ1
+
+
+φ2
+
+
+φ2
+
+
+φ1
+
+
+φ1
+
+
+φ2
+
+
+φ2
+
+
+φ1
+
+
+φ1
+
+
+φ2
+
+
+φ2
+
+
+5
+
+
+0
+
+
+10
+
+
+5
+
+
+0
+
+
+10
+
+
+5
+
+
+0
+
+
+10
+
+
+5
+
+
+0
+
+
+φ1
+
+
+φ1
+
+
+φ2
+
+
+φ2
+
+
+Figure 4: Comparison of Ramachandran plots of backbone dihedral angle pairs obtained with different
+methods. See Appendix D.3 for details on Ramachandran plots.
+
+
+Complementing the results of Section 5, this section reports additional metrics for the main method
+comparison in Table 2 (see also the corresponding Ramachandran plots in Figure 4), an ablation study
+on the effect of both constraints (see Table 3 and Figure 5), and an ablation study on the trust-region
+constraint and its effect on bounding importance-weight variance across different system sizes and
+trust-region bounds _ε_ tr (see Figure 6).
+
+
+**Main results.** We begin with Table 2, which introduces several additional metrics, such as Ram KL
+and Ram KL w. RW, to quantify the discrepancy between the ground truth and method-generated
+Ramachandran plots (see Appendix D.3 for details on all metrics). Substantially elevated Ram KL
+values serve as robust indicators of mode collapse, as exemplified by the results for reverse KL
+training, where the Ram KL values are consistently at least an order of magnitude higher than those
+observed for other methods. Corresponding Ramachandran plots for the different methods are shown
+in Figure 4. We include Ram KL in our evaluation, despite its asymmetry, to ensure comparability
+with previous work (Midgley et al., 2022; Schopmans & Friederich, 2025). For the same reason, we
+
+
+22
+
+
+Table 2: Comparison of metrics obtained for all four peptide systems. To remain comparable to FAB
+(Midgley et al., 2022) and TA-BG (Schopmans & Friederich, 2025), we first report the number of
+target evaluations (TARGET EVALS), the negative log-likelihood (NLL), the reverse effective sample
+size (ESS), the average forward KL divergence to the Ramachandran plots (RAM KL) generated
+from molecular dynamics (MD) samples, and its importance-weighted version (RAM KL W. RW).
+We then report the evidence lower bound (ELBO), the estimated target log normalization constant
+(log _Z_ ), the evidence upper bound (EUBO), the average total variation distance to the Ramachandran
+plots from MD samples and its importance-weighted version, and the torus Wasserstein-2 distance
+(RAM T- 2). The torus Wasserstein-2 distance was computed using only 10 [4] samples due to its high
+_W_
+computational cost, making it less reliable. All values are presented as the mean _±_ standard error
+across four independent experiments. An exception is TA-BG on the ELIL tetrapeptide, for which
+only two runs were successful due to numerical instabilities. The best-performing variational method
+for each metric is highlighted in bold. Reverse KL was excluded, as it tends to suffer from mode
+collapse, making the corresponding metrics incomparable. The ELBO is marked with ”⋆” because
+rare extreme log-importance weights can dominate its mean, making it unreliable for comparing
+Boltzmann generators (see Appendix D.3 for details).
+
+
+**SYSTEM** **METHOD** **TARGET** **EVALS** _↓_ **NLL** _↓_ **ESS [%]** _↑_ **RAM KL** _↓_ **RAM KL** **W.** **RW** _↓_
+
+
+ALANINE
+DIPEPTIDE
+( _d_ = 60)
+
+
+ALANINE
+TETRAPEPTIDE
+( _d_ = 120)
+
+
+ALANINE
+HEXAPEPTIDE
+( _d_ = 180)
+
+
+ELIL
+TETRAPEPTIDE
+( _d_ = 219)
+
+
+FRORWARDEVERSE KL KL 2 _._ 556 _× ×_ 10 10 [9] [8] _−−_ 214214 _.._ 358398 _± ±_ 0 0 _.._ 000001 (82(94 _.._ 1413 _± ±_ 0 0 _.._ 08) %21) % (2(1 _.._ 1766 _± ±_ 0 0 _.._ 05)25) _× ×_ 10 10 _[−][−]_ [3][2] (1(1 _.._ 8957 _± ±_ 0 0 _.._ 06)26) _× ×_ 10 10 _[−][−]_ [3][2]
+
+
+CMT (OURS) 4 _×_ 10 [8] _**−**_ _**.**_ _**±**_ **0** _**.**_ **(29** _**.**_ **63** _**±**_ **0** _**.**_ **08) %** (1 _._ 18 _±_ 0 _._ 05) _×_ 10 _[−]_ [2] (1 _._ 15 _±_ 0 _._ 01) _×_ 10 _[−]_ [2]
+
+FRORWARDEVERSE KL KL 24 _.._ 562 _× ×_ 10 10 [9][8] _−−_ 601586 _.._ 197781 _± ±_ 0 3 _.._ 005485 (5(1 _.._ 8526 _± ±_ 0 0 _.._ 03) %53) % (2(1 _._ 68 _._ 32 _± ±_ 0 0 _._ 05) _._ 34) _× ×_ 10 10 _[−]_ [0][3] (8(1 _._ 98 _._ 27 _± ±_ 0 0 _._ 07) _._ 38) _× ×_ 10 10 _[−]_ [0][3]
+
+FABTA-BG 8 _._ 843 _× ×_ 10 10 [8][8] [8] _−−_ 601601 _.._ 105840 _± ±_ 0 0 _.._ 009064 (13(7 _.._ 2175 _± ±_ 0 1 _.._ 08) %42) % **(6** (2 _**.**_ **24** _._ 49 _**±**_ _±_ **0** 0 _**.**_ _._ **84)** 10) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [2][3] **[3]** (1(6 _.._ 2522 _± ±_ 0 0 _.._ 10)51) _× ×_ 10 10 _[−][−]_ [2][3]
+
+
+FAB 2 _._ 13 _×_ 10 [8] [8] _−_ 214 _._ 410 _±_ 0 _._ 000 (94 _._ 80 _±_ 0 _._ 04) % (1 _._ 52 _±_ 0 _._ 04) _×_ 10 _[−]_ [3][3] **(1** _**.**_ **23** _**±**_ **0** _**.**_ **01)** _**×**_ **10** _**[−]**_ [3] **[3]**
+
+
+TA-BGCMT (OURS) 11 _× ×_ 10 10 [8][8] _**−**_ _−_ 214 _**.**_ _._ 419 _±_ _**±**_ 0 **0** _._ 001 _**.**_ **(97** (95 _**.**_ _._ **69** 76 _**±**_ _±_ 0 **0** _._ _**.**_ 13) % **03) %** **(1** (1 _**.**_ **48** _._ 92 _**±**_ _±_ **0** 0 _**.**_ _._ **03)** 07) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [3] **[3]** (1(1 _.._ 3735 _± ±_ 0 0 _.._ 02)03) _× ×_ 10 10 _[−][−]_ [3][3]
+
+FRORWARDEVERSE KL KL 24 _.._ 562 _× ×_ 10 10 [9][8] _−−_ 332331 _.._ 020189 _± ±_ 0 0 _.._ 001126 (45(75 _.._ 2906 _± ±_ 0 3 _.._ 11) %50) % (2(3 _.._ 3305 _± ±_ 0 0 _.._ 06)35) _× ×_ 10 10 _[−][−]_ [3][1] (2(2 _.._ 3393 _± ±_ 0 0 _.._ 04)40) _× ×_ 10 10 _[−][−]_ [3][1]
+
+
+FAB 2 _._ 13 _×_ 10 [8] [8] _−_ 332 _._ 158 _±_ 0 _._ 002 (63 _._ 59 _±_ 0 _._ 23) % (7 _._ 00 _±_ 0 _._ 25) _×_ 10 _[−]_ _**[−]**_ [3] **[3]** **(1** _**.**_ **13** _**±**_ **0** _**.**_ **01)** _**×**_ **10** _**[−]**_ [3] **[3]**
+
+
+TA-BGCMT (OURS) 11 _× ×_ 10 10 [8][8] _**−**_ _−_ 332 _**.**_ _._ 219 _±_ _**±**_ 0 **0** _._ 003 _**.**_ **(68** (65 _**.**_ _._ **60** 81 _**±**_ _±_ 0 **0** _._ _**.**_ 24) % **21) %** **(1** (2 _**.**_ **92** _._ 17 _**±**_ _±_ **0** 0 _**.**_ _._ **08)** 09) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [3] **[3]** (1(1 _.._ 5657 _± ±_ 0 0 _.._ 03)09) _× ×_ 10 10 _[−][−]_ [3][3]
+
+FRORWARDEVERSE KL KL 24 _.._ 562 _× ×_ 10 10 [9][8] _−−_ 504500 _.._ 528625 _± ±_ 0 0 _.._ 005265 (10(21 _.._ 9883 _± ±_ 0 1 _.._ 11) %30) % (4(5 _.._ 0914 _± ±_ 0 0 _.._ 23)36) _× ×_ 10 10 _[−][−]_ [3][1] (7(5 _.._ 4907 _± ±_ 0 0 _.._ 06)35) _× ×_ 10 10 _[−][−]_ [3][1]
+
+FAB 4 _._ 2 _×_ 10 [8][8] _−_ 504 _._ 346 _±_ 0 _._ 009 (14 _._ 55 _±_ 0 _._ 05) % (2 _._ 16 _±_ 0 _._ 02) _×_ 10 _[−]_ _**[−]**_ [2] **[3]** (1 _._ 06 _±_ 0 _._ 02) _×_ 10 _[−]_ [2]
+
+
+TA-BG 4 _×_ 10 [8][8] _−_ 504 _._ 792 _±_ 0 _._ 005 (18 _._ 22 _±_ 0 _._ 15) % **(6** _**.**_ **33** _**±**_ **0** _**.**_ **12)** _**×**_ **10** _**[−]**_ [2] **[3]** **(6** _**.**_ **27** _**±**_ **0** _**.**_ **10)** _**×**_ **10** _**[−]**_ [2] **[3]**
+
+
+CMT (OURS) 8 _×_ 10 [8] _**−**_ _**.**_ _**±**_ **0** _**.**_ **(26** _**.**_ **06** _**±**_ **0** _**.**_ **26) %** (7 _._ 95 _±_ 0 _._ 11) _×_ 10 _[−]_ [3] **(4** _**.**_ **79** _**±**_ **0** _**.**_ **06)** _**×**_ **10** _**[−]**_ **[3]**
+
+
+**SYSTEM** **METHOD** **ELBO** _↑_ ⋆ _**≤**_ **log** _**Z**_ _**≤**_ **EUBO** _↓_ **RAM TV** _↓_ **RAM TV** **W.** **RW** _↓_
+
+
+ALANINE
+DIPEPTIDE
+( _d_ = 60)
+
+
+ALANINE
+TETRAPEPTIDE
+( _d_ = 120)
+
+
+ALANINE
+HEXAPEPTIDE
+( _d_ = 180)
+
+
+ELIL
+TETRAPEPTIDE
+( _d_ = 219)
+
+
+FRORWARDEVERSE KL KL _−−_ 175175 _.._ 9134 _± ±_ 0 0 _.._ 3710 _−−_ 175175 _.._ 010010 _± ±_ 0 0 _.._ 000000 _−−_ 174174 _.._ 9296 _± ±_ 0 0 _.._ 0000 (1(1 _.._ 0936 _± ±_ 0 0 _.._ 01)05) _× ×_ 10 10 _[−][−]_ [2][2] (9(9 _.._ 1336 _± ±_ 0 0 _.._ 05)05) _× ×_ 10 10 _[−][−]_ [3][3]
+
+FABTA-BG _−−_ 335175 _.._ 7504 _± ±_ 21 0 _.._ 0027 _−−_ 175175 _.._ 010009 _± ±_ 0 0 _.._ 000000 _−−_ 174174 _.._ 9899 _± ±_ 0 0 _.._ 0000 (1(1 _.._ 0324 _± ±_ 0 0 _.._ 01)07) _× ×_ 10 10 _[−][−]_ _**[−]**_ [2][2] **[3]** (8(8 _.._ 6467 _± ±_ 0 0 _.._ 08)10) _× ×_ 10 10 _[−][−]_ [3][3]
+
+
+CMT (OURS) _−_ 56239 _._ 16 _±_ 5690 _._ 68 _−_ 534 _._ 428 _±_ 0 _._ 001 _**−**_ _**.**_ **51** _**±**_ **0** _**.**_ **01** **(2** _**.**_ **48** _**±**_ **0** _**.**_ **02)** _**×**_ **10** _**[−]**_ **[2]** (1 _._ 97 _±_ 0 _._ 01) _×_ 10 _[−]_ [2]
+
+FRORWARDEVERSE KL KL _−_ 75532 _−_ 282 _.._ 8653 _± ±_ 9545 0 _._ 59 _._ 42 _−−_ 278279 _.._ 483079 _± ±_ 0 0 _.._ 000156 _−−_ 276262 _.._ 7634 _± ±_ 0 3 _.._ 0048 (1(2 _.._ 5861 _± ±_ 0 0 _.._ 01)27) _× ×_ 10 10 _[−][−]_ [2][1] (2(1 _.._ 7267 _± ±_ 0 0 _.._ 03)27) _× ×_ 10 10 _[−][−]_ [2][1]
+
+FABTA-BG _−−_ 54453823950 _.._ 2458 _± ±_ 16286 4259 _._ 44 _._ 19 _−−_ 278278 _.._ 479480 _± ±_ 0 0 _.._ 002002 _−−_ 276277 _.._ 6740 _± ±_ 0 0 _.._ 0106 **(2** (7 _**.**_ **54** _._ 54 _**±**_ _±_ **0** 0 _**.**_ _._ **13)** 14) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [2] **[2]** (2(3 _.._ 1838 _± ±_ 0 0 _.._ 11)10) _× ×_ 10 10 _[−][−]_ [2][2]
+
+[2]
+
+
+CMT (OURS) _−_ 175 _._ 05 _±_ 0 _._ 01 _−_ 175 _._ 009 _±_ 0 _._ 000 _**−**_ _**.**_ **00** _**±**_ **0** _**.**_ **00** **(9** _**.**_ **43** _**±**_ **0** _**.**_ **08)** _**×**_ **10** _**[−]**_ **[3]** **(8** _**.**_ **51** _**±**_ **0** _**.**_ **06)** _**×**_ **10** _**[−]**_ **[3]**
+
+
+FRORWARDEVERSE KL KL _−−_ 525334 _.._ 1840 _± ±_ 44 0 _.._ 0170 _−−_ 334334 _.._ 193233 _± ±_ 0 0 _.._ 000007 _−−_ 333332 _.._ 7996 _± ±_ 0 0 _.._ 0013 (1(2 _.._ 4789 _± ±_ 0 0 _.._ 03)02) _× ×_ 10 10 _[−][−]_ [2][2] (1(2 _.._ 0475 _± ±_ 0 0 _.._ 01)04) _× ×_ 10 10 _[−][−]_ [2][2]
+
+
+FAB _−_ 17658 _._ 25 _±_ 3804 _._ 78 _−_ 334 _._ 193 _±_ 0 _._ 000 _−_ 333 _._ 93 _±_ 0 _._ 00 (3 _._ 10 _±_ 0 _._ 04) _×_ 10 _[−]_ [2] **(8** _**.**_ **85** _**±**_ **0** _**.**_ **04)** _**×**_ **10** _**[−]**_ **[3]**
+
+[2] [3]
+
+
+TA-BGCMT (OURS) _−−_ 399334 _.._ 3474 _± ±_ 15 0 _.._ 0776 _−−_ 334334 _.._ 193193 _± ±_ 0 0 _.._ 001000 _**−**_ _−_ 333 _**.**_ _._ **00** 99 _±_ _**±**_ 0 **0** _._ 00 _**.**_ **00** **(1** (1 _**.**_ **43** _._ 53 _**±**_ _±_ **0** 0 _**.**_ _._ **03)** 09) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [2] **[2]** (9(9 _.._ 2965 _± ±_ 0 0 _.._ 14)27) _× ×_ 10 10 _[−][−]_ [3][3]
+
+FRORWARDEVERSE KL KL _−_ 86802 _−_ 535 _.._ 4346 _± ±_ 1275 0 _._ 20 _._ 91 _−−_ 534534 _.._ 412547 _± ±_ 0 0 _.._ 002009 _−−_ 533529 _.._ 1626 _± ±_ 0 0 _.._ 0126 (1(7 _.._ 8873 _± ±_ 0 0 _.._ 01)63) _× ×_ 10 10 _[−][−]_ [2][2] (1(5 _.._ 9341 _± ±_ 0 0 _.._ 01)41) _× ×_ 10 10 _[−][−]_ [2][2]
+
+FAB _−_ 417884 _._ 37 _±_ 11132 _._ 83 _−_ 534 _._ 420 _±_ 0 _._ 003 _−_ 532 _._ 98 _±_ 0 _._ 01 (6 _._ 43 _±_ 0 _._ 03) _×_ 10 _[−]_ [2] (2 _._ 14 _±_ 0 _._ 01) _×_ 10 _[−]_ [2]
+
+[2]
+
+
+TA-BG _−_ 51042 _._ 60 _±_ 4923 _._ 09 _−_ 534 _._ 416 _±_ 0 _._ 002 _−_ 533 _._ 43 _±_ 0 _._ 00 (2 _._ 59 _±_ 0 _._ 03) _×_ 10 _[−]_ _**[−]**_ [2] **[2]** **(1** _**.**_ **85** _**±**_ **0** _**.**_ **01)** _**×**_ **10** _**[−]**_ [2] **[2]**
+
+
+CMT (OURS) _−_ 990 _._ 75 _±_ 164 _._ 10 _−_ 278 _._ 481 _±_ 0 _._ 001 _**−**_ _**.**_ **83** _**±**_ **0** _**.**_ **00** (3 _._ 13 _±_ 0 _._ 03) _×_ 10 _[−]_ [2] **(1** _**.**_ **68** _**±**_ **0** _**.**_ **01)** _**×**_ **10** _**[−]**_ **[2]**
+
+
+also report the negative log-likelihood (NLL), which is equivalent to the EUBO and forward KL up
+to an additive constant. Further details on all metrics are provided in Appendix D.3.
+
+
+23
+
+
+Table 3: Performance of CMT with the trust-region and entropy constraints selectively enabled or
+disabled.
+
+
+**SYSTEM** **TRUST-RCONSTRAINTEGION** **ENTROPY** **TARGET EVALS** _↓_ **EUBO** _↓_ **RAM KL** _↓_ **RAM KL** **W.** **RW** _↓_ **RAM TV** _↓_ **RAM TV** **W.** **RW** _↓_
+
+
+ALANINE
+DIPEPTIDE
+( _d_ = 60)
+
+
+ALANINE
+TETRAPEPTIDE
+( _d_ = 120)
+
+
+ALANINE
+HEXAPEPTIDE
+( _d_ = 180)
+
+
+✓✓✗✗ ✓✓✗✗ 1111 _× × × ×_ 10 10 10 10 [8][8][8][8] _**−−−−**_ **175175175175** _**....**_ **00000000** _**± ± ± ±**_ **0 0 0 0** _**....**_ **00000000** **(1** (1(1(1 _**.**_ **45** _..._ 474848 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **03)** 02)01)03) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [3][3][3] **[3]** (1(1(1(1 _...._ 29354638 _± ± ± ±_ 0 0 0 0 _...._ 01)02)02)03) _× × × ×_ 10 10 10 10 _[−][−][−][−]_ [3][3][3][3] **(9** (9(9(9 _**.**_ **13** _..._ 165843 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **05)** 06)04)08) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [3][3][3] **[3]** **(8** (8(8(8 _**.**_ **51** _..._ 655954 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **06)** 05)02)04) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [3][3][3] **[3]**
+
+✓✓✗✗ ✓✓✗✗ 1111 _× × × ×_ 10 10 10 10 [8][8][8][8] _**−**_ _−−−_ 333333333 _**.**_ _..._ **00** 619996 _± ± ±_ _**±**_ 0 0 0 **0** _..._ 230000 _**.**_ **00** **(2** (7(2(2 _**.**_ **16** _..._ 364617 _**±**_ _± ± ±_ **0** 4 0 0 _**.**_ _..._ **05)** 22)05)09) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [2][3][3] **[3]** **(1** (7(1(1 _**.**_ **57** _..._ 029368 _**±**_ _± ± ±_ **0** 4 0 0 _**.**_ _..._ **09)** 00)04)03) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [2][3][3] **[3]** **(1** (1(1(1 _**.**_ **24** _..._ 706243 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **02)** 27)02)03) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [2][2][2] **[2]** **(9** (1(9(9 _**.**_ **55** _..._ 488865 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **14)** 32)10)27) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [2][3][3] **[3]**
+
+✓✓✗✗ ✓✓✗✗ 4444 _× × × ×_ 10 10 10 10 [8][8][8][8] _**−**_ _−−−_ 531533533 _**.**_ _..._ **49** 480506 _± ± ±_ _**±**_ 0 0 0 **0** _..._ 212702 _**.**_ **01** **(1** (2(4(1 _**.**_ **25** _..._ 562928 _**±**_ _± ± ±_ **0** 0 1 0 _**.**_ _..._ **05)** 37)62)10) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [1][2][2] **[2]** **(1** (2(4(1 _**.**_ **21** _..._ 521139 _**±**_ _± ± ±_ **0** 0 1 0 _**.**_ _..._ **02)** 43)57)12) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [1][2][2] **[2]** **(2** (3(2(3 _**.**_ **48** _..._ 757819 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **02)** 04)29)63) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [2][2][2] **[2]** **(1** (3(2(2 _**.**_ **97** _..._ 683520 _**±**_ _± ± ±_ **0** 0 0 0 _**.**_ _..._ **01)** 09)29)02) _× × ×_ _**×**_ 10 10 10 **10** _[−][−][−]_ _**[−]**_ [2][2][2] **[2]**
+
+
+No constraint Geometric via (2) Tempered via (7) Geometric-tempered via (9)
+
+
+_−_ 140
+
+
+_−_ 200
+
+
+_−_ 160
+
+
+_−_ 180
+
+
+_−_ 200
+
+
+_−_ 220
+
+200
+
+
+100
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|t|r|Col7|
+|---|---|---|---|---|---|---|
+|||||e<br>no con|nt<br>strain|t|
+|||||tr+|ent||
+||||||||
+||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+
+
+0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1
+
+
+_−_ 300
+
+
+_−_ 400
+
+
+_−_ 500
+
+
+300
+
+
+200
+
+
+100
+
+
+0
+
+|Col1|Col2|Col3|Col4|tr|Col6|
+|---|---|---|---|---|---|
+||||no co<br>tr|ent<br>nstrain<br>+ent|t|
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+0 1 2 3 4
+
+
+_−_ 250
+
+
+_−_ 300
+
+
+200
+
+
+100
+
+
+0
+
+
+|Col1|Col2|Col3|t|r|Col6|
+|---|---|---|---|---|---|
+||||e<br>no con<br>tr+|nt<br>strain<br>ent|t|
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+
+0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1
+
+
+Target Evaluations
+
+
+(a) Alanine Dipeptide
+
+
+Target Evaluations
+
+
+(c) Alanine Hexapeptide
+
+
+_·_ 10 [8]
+
+
+_·_ 10 [8]
+
+
+Target Evaluations
+
+
+(b) Alanine Tetrapeptide
+
+
+_·_ 10 [8]
+
+
+Figure 5: Effect of trust-region and entropy constraint on the model entropy (top row) and the gradient
+norm (bottom row) across different molecular systems.
+
+
+**Ablation study for constraints.** Table 3 presents the performance of our method under different
+configurations, with the trust-region and entropy constraints selectively enabled or disabled. In
+addition to the alanine hexapeptide results shown in the main paper, we also report results for
+alanine dipeptide and alanine tetrapeptide. The absence of both constraints effectively corresponds to
+importance-weighted forward KL training. Considering the EUBO, which serves as a forward metric,
+it becomes clear that both constraints are necessary to achieve optimal performance. Variants of the
+method without the entropy constraint showed at least partial mode collapse, making the reverse
+ESS mostly incomparable. For this reason, in addition to reporting the EUBO, we also provide
+Ramachandran plot-based metrics to better assess mode collapse.
+
+
+Figure 5 depicts the evolution of model entropy and the gradient norm (prior to clipping) during
+training across different systems. Training with only the entropy constraint yields an approximately
+linear decay of entropy for both alanine dipeptide and alanine hexapeptide. In the case of alanine
+hexapeptide, however, the entropy constraint is noticeably violated, likely due to the system’s higher
+dimensionality and the pronounced discrepancy between the initial model distribution _q_ 0 and the
+first intermediate distribution _q_ 1. Larger system sizes also tend to increase the gradient norm, most
+prominently in alanine hexapeptide. The combination of the trust-region and entropy constraints
+produces the most stable gradient norms, while the approximately linear entropy decay indicates
+that the entropy constraint is effectively enforced, thereby enabling its practical application even in
+the case of alanine hexapeptide. By contrast, the trust-region constraint alone leads to a more rapid
+
+
+24
+
+
+entropy collapse, which reduces exploration and ultimately limits the algorithm’s final performance
+in practice.
+
+
+100
+
+
+50
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|||_ϵ_tr <br>_ϵ_tr <br>_ϵ_tr <br>_ϵ_tr <br>_ϵ_tr|= 0_._0<br>= 0_._0<br> = 0_._1<br> = 0_._2<br> = 0_._3|5<br><br><br>|
+|||<br>_ϵ_tr|<br> =_ ∞_||
+||||||
+
+
+0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+||||_ϵ_tr = 0_._01<br>_ϵ_tr = 0_._05<br>_ϵ_tr = 0_._1<br>_ϵ_tr = 0_._2<br>_ϵ_tr = 0_._3|
+||||<br>_ϵ_tr =_ ∞_|
+|||||
+
+
+0 0 _._ 2 0 _._ 4 0 _._ 6 0 _._ 8 1
+
+
+|Col1|εtr =|0.3 εt|tr = ∞|
+|---|---|---|---|
+|||||
+|||_ϵ_t<br>_ϵ_t<br>_ϵ_<br>_ϵ_<br>_ϵ_|r = 0_._01<br>r = 0_._05<br>tr = 0_._1<br>tr = 0_._2<br>r = 0_._3|
+|||_ϵ_|<br>tr =_ ∞_|
+|||||
+
+
+0 1 2 3 4
+
+
+100
+
+
+50
+
+
+0
+
+
+100
+
+
+50
+
+
+0
+
+
+Target Evaluations
+
+
+(a) Alanine Dipeptide
+
+
+_·_ 10 [8]
+
+
+Target Evaluations
+
+
+(b) Alanine Tetrapeptide
+
+
+_·_ 10 [8]
+
+
+Target Evaluations
+
+
+(c) Alanine Hexapeptide
+
+
+_·_ 10 [8]
+
+
+Figure 6: Importance-weight variance between successive intermediate distributions, shown in terms
+of effective sample size (ESS), for different trust-region bounds and system sizes. Each trust-region
+bound _ε_ tr defines an approximate lower bound on the ESS, indicated by dashed lines.
+
+
+**Ablation study on the trust-region bound.** Figure 6 illustrates the importance-weight variance
+of CMT across different trust-region bounds and system sizes, highlighting the approximate direct
+relationship between the trust-region bound and the variance of importance weights between consecutive intermediate distributions. Importance-weight variance is expressed in terms of effective
+sample size (ESS). In the absence of a trust-region constraint ( _ε_ tr = ), the ESS decreases with
+_∞_
+increasing system size. By contrast, finite trust-region bounds yield a substantially larger and more
+stable ESS, with the approximate lower bound on the ESS becoming increasingly well realized as
+the trust-region bound _ε_ tr decreases. Notably, this approximate lower bound is independent of the
+problem’s dimensionality, a property that is empirically supported.
+
+
+**Comparison to non-adaptive schedules** To assess the importance of adaptivity, we performed two
+additional experiments on alanine hexapeptide comparing CMT to non-adaptive alternatives. We omit
+numerical results in this section, as they would not provide meaningful insight: both non-adaptive
+baselines exhibit substantially lower performance across all relevant metrics.
+
+
+_Constant trust-region multiplier._ In the first experiment, we replace the adaptive trust-region schedule
+by a constant multiplier _λi_ = 43 _._ 3 for all _i_ N and remove the entropy constraint. The corresponding
+_∈_
+schedule is visualized in Figure 7. In practice, the non-adaptive variant performs significantly worse:
+training becomes unstable and exhibits substantial mode collapse, failing to adequately cover the
+target distribution.
+
+
+_TA-BG with more annealing steps._ In the second experiment, we compare CMT to TA-BG with a
+fixed (non-adaptive) annealing schedule and varying numbers of annealing steps. TA-BG consists of
+a pre-training phase followed by a main training phase with annealing. To ensure a fair comparison
+with CMT (which uses 400 annealing steps and a total of 800 000 gradient updates), we account
+for the fact that TA-BG uses 250 000 steps to pre-training and 550 000 steps to annealed training.
+Matching the total number of updates yields an effective number of annealing steps
+
+
+550 000
+250 000 + 550 000
+
+_[×]_ [ 400 = 275] _[.]_
+
+We therefore tested both 275 and 400 annealing steps. Across both settings, TA-BG performs
+significantly worse.
+
+
+**Energy histograms and TICA projections** The target energy histograms for the different methods
+and systems are shown in Figure 8.
+
+
+We further report the Wasserstein-2 distance relative to the ground-truth MD data, using 10 [4] samples
+for both the energy histograms and the TICA projections, as shown in Table 4.
+
+
+25
+
+
+CMT      - adaptive ( _λi_ ) _i_ CMT      - constant ( _λi_ ) _i_
+
+
+10 [8]
+
+
+10 [5]
+
+
+10 [2]
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|||||CMT<br>CMT|
+||||||
+||||||
+
+
+0 100 200 300 400
+
+Annealing Steps _i_
+
+
+1
+
+
+0 _._ 5
+
+
+0
+
+
+10 _[−]_ [1]
+0 100 200 300 400
+
+Annealing Steps _i_
+
+
+Figure 7: Visualization of a constant Lagrangian multiplier schedule ( _λi_ ) _i_ compared to an adaptive
+one using CMT on alanine hexapeptide. Both variants were performed without an entropy constraint.
+
+
+Ground truth Predicted Predicted with reweighting
+
+
+**CMT (ours)** **TA-BG** **FAB**
+
+
+_−_ 70 _−_ 60 _−_ 50 _−_ 40 _−_ 30 _−_ 20 _−_ 10 0
+
+
+_−_ 40 _−_ 30 _−_ 20 _−_ 10 0 10 20 30 40 50
+
+
+_−_ 40 _−_ 20 0 20 40 60 80 100 120
+
+
+_−_ 380 _−_ 360 _−_ 340 _−_ 320 _−_ 300 _−_ 280 _−_ 260 _−_ 240
+
+Energy / _kBT_
+
+
+_−_ 70 _−_ 60 _−_ 50 _−_ 40 _−_ 30 _−_ 20 _−_ 10 0
+
+
+_−_ 40 _−_ 30 _−_ 20 _−_ 10 0 10 20 30 40 50
+
+
+_−_ 40 _−_ 20 0 20 40 60 80 100 120
+
+
+_−_ 380 _−_ 360 _−_ 340 _−_ 320 _−_ 300 _−_ 280 _−_ 260 _−_ 240
+
+
+0 _._ 08
+
+
+0 _._ 06
+
+
+0 _._ 04
+
+
+0 _._ 02
+
+
+0
+
+
+0 _._ 05
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+_−_ 70 _−_ 60 _−_ 50 _−_ 40 _−_ 30 _−_ 20 _−_ 10 0
+
+
+_−_ 40 _−_ 30 _−_ 20 _−_ 10 0 10 20 30 40 50
+
+
+_−_ 40 _−_ 20 0 20 40 60 80 100 120
+
+
+_−_ 380 _−_ 360 _−_ 340 _−_ 320 _−_ 300 _−_ 280 _−_ 260 _−_ 240
+
+
+0 _._ 08
+
+
+0 _._ 06
+
+
+0 _._ 04
+
+
+0 _._ 02
+
+
+0
+
+
+0 _._ 05
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 08
+
+
+0 _._ 06
+
+
+0 _._ 04
+
+
+0 _._ 02
+
+
+0
+
+
+0 _._ 05
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+0 _._ 04
+
+
+0 _._ 03
+
+
+0 _._ 02
+
+
+0 _._ 01
+
+
+0
+
+
+Figure 8: Comparison of target energy histograms shown as normalized density for different molecular
+systems (rows) and methods (columns).
+
+
+We also ask the reader to focus on Figure 9, which shows several TICA projections of ELIL
+tetrapeptide. We chose this peptide because it most clearly illustrates the issue with using only 10 [4]
+samples for the Wasserstein metrics. Figure 9 qualitatively demonstrates that the Wasserstein-2 metric
+on the TICA projections using 10 [4] samples cannot reliably assess their quality. To further support
+this, we also report the TICA KL divergence between the MD TICA histogram and the predicted
+TICA histogram computed using 10 [7] samples on ELIL tetrapeptide in direct comparison to the TICA
+Wasserstein distance using 10 [4] samples (see Table 5).
+
+
+26
+
+
+Table 4: Wasserstein-2 distances for the Ramachandran plots (Ram-T- 2, Ram-T- 2 RW), energy
+_W_ _W_
+histograms ( _E_ - _W_ 2 RW), and TICA projections (TICA- _W_ 2, TICA- _W_ 2 RW), evaluated against the
+generated ground-truth MD data using 10 [4] samples. We report the Wasserstein-2 distance on the
+energy histograms only after reweighting (RW) to the target distribution, both to avoid domination
+by rare extreme target-energy values and to stay consistent with related work (Tan et al., 2025b;a).
+We also wish to emphasize that the Wasserstein metrics often exhibit large standard errors due to the
+comparatively small sample size used (10 [4] ). For the same reason the Wasserstein-2 distance does not
+seem to be a reliable metric for comparing TICA projection quality. Further details are provided in
+Figure 9.
+
+
+**SYSTEM** **METHOD** **RAM-** T **-** _**W**_ **2** **RAM-** T **-** _**W**_ **2** **RW** _**E**_ **-** _**W**_ **2** **RW** **TICA-** _**W**_ **2** **TICA-** _**W**_ **2** **RW**
+_↓_ _↓_ _↓_
+
+
+ALANINE
+DIPEPTIDE
+
+
+ALANINE
+TETRAPEPTIDE
+
+
+ALANINE
+HEXAPEPTIDE
+
+
+ELIL
+TETRAPEPTIDE
+
+
+FABTA-BGCMT (OURS) **0** 00 _**.**_ _.._ 078064 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 007002 **0** 00 _**.**_ _.._ 085073 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 012002 **0** 00 _**.**_ _.._ 232202 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 028031 **00** 0 _**..**_ **015015** _._ 025 _**± ±**_ _±_ 0 **0 0** _._ _**..**_ 004 **001002** **0** 00 _**.**_ _.._ 016021 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 003003 FABTA-BGCMT (OURS) **0** 00 _**.**_ _.._ 617492 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 010006 **0** 00 _**.**_ _.._ 517517 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 008011 **0** 00 _**.**_ _.._ 263235 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 053035 **0** 00 _**.**_ _.._ 080054 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 008003 **0** 00 _**.**_ _.._ 045048 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 004007 FABTA-BGCMT (OURS) **0** 10 _**.**_ _.._ 089838 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 001006 **1** 11 _**.**_ _.._ 055101 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 015153 **0** 00 _**.**_ _.._ 475817 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 053314 **0** 00 _**.**_ _.._ 183087 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 005006 **0** 00 _**.**_ _.._ 117114 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 026012 FABTA-BGCMT (OURS) **0** 00 _**.**_ _.._ 813631 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 011008 **0** 00 _**.**_ _.._ 829628 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 077048 **0** 10 _**.**_ _.._ 133450 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 418067 **0** 00 _**.**_ _.._ 153150 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 013003 **0** 00 _**.**_ _.._ 184084 _**±**_ _± ±_ 0 0 **0** _.._ _**.**_ 034011 Table 5: TICA KL divergences (TICA KL and TICA KL RW) evaluated against the ground-truth
+MD data using 10 [7] samples, shown alongside the TICA Wasserstein distances computed with 10 [4]
+samples for comparison. Unlike the Wasserstein metric, which is less sensitive to fine details, the
+TICA KL with a larger sample size is more sensitive, as reflected in this table.
+
+
+**SYSTEM** **METHOD** **TICA KL** **TICA KL RW** **TICA-** _**W**_ **2** **TICA-** _**W**_ **2** **RW**
+_↓_ _↓_
+
+TETRAPEPTIDEELIL FABCMT **(8** (6 _**.**_ **58** _._ 82 _**±**_ _±_ **0** 0 _**.**_ _._ **22)** 41) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [2] **[3]** **(1** (4 _**.**_ **05** _._ 37 _**±**_ _±_ **0** 0 _**.**_ _._ **05)** 37) _×_ _**×**_ 10 **10** _[−]_ _**[−]**_ [2] **[2]** **0** 0 _**.**_ _._ 153 _**±**_ _±_ 0 **0** _._ _**.**_ 003 **0** 0 _**.**_ _._ 184 _**±**_ _±_ 0 **0** _._ _**.**_ 034 **Ablation on different entropy bounds** We visualize the final performance of CMT on alanine
+hexapeptide for different entropy bounds _ε_ ent in Figure 10. While the optimal entropy bound _ε_ ent
+varies slightly between systems, we note that they are all in the same order of magnitude. Most
+hyperparameters of CMT remain constant across systems, making the entropy bound one of the few
+hyperparameters that requires some tuning. However, tuning _ε_ ent is straightforward in practice and
+described in detail in Appendix C.4.
+
+
+**Comparison of CMT to MD** To compare CMT to MD, we analyze the mean absolute error (MAE)
+of the free energy profile along the _ϕ_ dihedral angle, which is the slowest mode of the system, over
+the course of an MD simulation. We visualize the MAE as a function of target energy evaluations
+in Figure 11 and compare with the MAE obtained by CMT (using 1 _×_ 10 [8] target evaluations).
+MD requires approximately one order of magnitude more target evaluations to yield a similarly
+well-equilibrated free energy profile as CMT.
+
+
+C FURTHER DETAILS ON CONSTRAINED MASS TRANSPORT
+
+
+In this section, we provide some additional details on constrained mass transport, including practical
+tips for hyperparameter selection, implementation and the connection to importance-weight variance.
+
+
+C.1 DUAL OPTIMIZATION IN PRACTICE
+
+
+The concavity of the dual functions permits the use of any suitable nonlinear optimization algorithm. For one-dimensional dual optimization, we employ the bounded Brent method (Brent, 2013),
+
+
+27
+
+
+**10** **[4]** **samples** **10** **[4]** **samples RW** **10** **[7]** **samples** **10** **[7]** **samples RW**
+
+
+Figure 9: TICA projections for ground truth (MD), FAB, and CMT on ELIL tetrapeptide using
+10 [4] and 10 [7] samples with and without reweighting to the target distribution. The TICA projection
+of CMT with 10 [7] samples is visibly more accurate, in contrast to FAB’s, which appears slightly
+blurred or smoothed. For computational reasons, the Wasserstein metrics can only be computed using
+10 [4] samples. The corresponding TICA projections are shown in the first column and clearly lack
+sufficient detail to accurately assess TICA projection quality.
+
+
+CMT
+TA-BG
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+|Col1|Col2|Col3|Col4|CMT<br>TA-B|G|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+1 1 _._ 2 1 _._ 4 1 _._ 6 1 _._ 8
+
+Entropy bound _ε_ ent
+
+
+_−_ 504 _._ 7
+
+
+_−_ 504 _._ 8
+
+
+_−_ 504 _._ 9
+
+
+|Col1|Col2|Col3|Col4|CMT<br>TA-B|G|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+
+
+Entropy bound _ε_ ent
+
+
+Figure 10: NLL and ESS performance with different entropy bounds for CMT on alanine hexapeptide.
+
+
+implemented via scipy.optimize.minimize ~~s~~ calar (Virtanen et al., 2020), which is the
+library’s default 1D algorithm due to its robustness and efficiency. A minimal working example
+on how a Lagrangian multiplier is estimated is given in Code Example 1. For 2D duals, we use
+scipy.optimize.minimize with the L-BFGS-B algorithm (Zhu et al., 1997), one of SciPy’s
+default quasi-Newton algorithms. There, we additionally passed the dual gradient function, which
+we obtained through automatic differentiation. Due to the constraints _λ, η_ _≥_ 0, and to avoid
+numerical overflow, we bound both optimizers to stay within the interval [0 _,_ 10 [10] ]. The method
+scipy.optimize.minimize requires an initial guess, which we set to 1 _×_ 10 _[−]_ [20], a value
+chosen to be close to the lower bound.
+
+
+We note that the pure dual optimization is very fast in practice. For alanine dipeptide, dual optimization
+time makes up approximately 0 _._ 01 % of the total training time. Details can be found in Appendix D.4.
+
+
+28
+
+
+Figure 11: Comparison of CMT with molecular dynamics for alanine dipeptide. We show the mean
+absolute error of the free energy profile along the _ϕ_ dihedral angle, which is the slowest mode of the
+system, as a function of the number of target evaluations.
+
+
+C.2 CMT WITH NORMALIZING FLOWS
+
+
+Algorithm 1 allows for multiple variants. Algorithm 2 presents a specific instance of Algorithm 1, in
+which the KL-divergence is employed to update the normalizing flow model to the next intermediate
+distribution at each annealing step by adjusting its parameters. The dual function _gε_ [(] _[i]_ tr [+1)] _,ε_ ent [is defined]
+as in Equation (11), with Equation (16) providing the sample-based approximation. As is observable
+in Algorithm 2, the optimization of the Lagrangian multipliers and the computation of importance
+weights only add negligible computational and memory overhead, as they reuse the same buffer
+samples subsequently employed to update the flow model itself.
+
+
+C.3 CONNECTION TO IMPORTANCE-WEIGHT VARIANCE
+
+
+In this section, we show that using the trust-region constraint yields an approximate lower bound for
+the effective sample size between any two consecutive distributions _qi_ and _qi_ +1. This approximate
+lower bound only depends on _ε_ tr.
+
+
+This idea parallels common practice in sequential Monte Carlo (SMC). As stated by Chopin et al.
+(2023), line search on the _χ_ [2] -divergence between consecutive distributions is commonly used to
+control the ESS. By restricting the _χ_ [2] -divergence, SMC ensures that the importance weights do not
+degenerate, effectively enforcing a minimum ESS between intermediate distributions. Similarly, our
+trust-region constraint guarantees a conservative lower bound on ESS, providing a principled way to
+adaptively select the sequence of distributions.
+
+
+The variance of the importance weights
+
+
+1
+1  - _p_ ˜( _x_ )  - 1+ _λi_ with trust-region constraint (2)
+_Zi_ +1( _λi_ ) _qi_ ( _x_ ) 1
+
+1   - _p_ ˜( _x_ )   - 1+ _λi_ + _ηi_ with trust-region + entropy constraint (9)
+_i_ +1( _λi,ηi_ ) _qi_ ( _x_ ) [1+] _[ηi]_
+_Z_
+
+
+_qi_ +1( _x_ )
+
+=
+_qi_ ( _x_ )
+
+
+
+
+
+
+
+
+
+between two normalized consecutive distributions is closely connected to the effective sample size
+via
+
+
+1
+ESS( _qi, qi_ +1) =
+
+
++1( _x_ ) - _,_
+
+_qi_ ( _x_ )
+
+
+1 + Var _qi_ - _qi_ +1( _x_ )
+
+
+also explained in Appendix D.3. The relation Var _qi_ ( _qi_ +1( _x_ ) _/qi_ ( _x_ )) = _χ_ [2] ( _qi_ +1 _qi_ ) (Chopin et al.,
+_|_
+2020) and the well-known Taylor approximation _χ_ [2] ( _qi_ +1 _qi_ ) 2 _D_ KL( _qi_ +1 _qi_ ) (Cover, 1999) lets
+_|_ _≈_ _∥_
+us rewrite the effective sample size in terms of the Kullback-Leibler (KL) divergence between _qi_ +1
+and _qi_, yielding
+
+1
+ESS( _qi, qi_ +1)
+_≈_ 1 + 2 _D_ KL( _qi_ +1 _qi_ )
+_∥_
+
+
+29
+
+
+Code Example 1: Minimal working example of the dual optimization for objective (2).
+
+
+**import** **numpy** **as** **np**
+**import** **torch**
+**from** **scipy.optimize** **import** minimize_scalar
+
+
+**def** estimate_log_Z(
+model_log_prob: torch.Tensor,
+target_log_prob: torch.Tensor,
+tr_mul: float,
+) -> torch.Tensor:
+
+_"""Estimate_ _log-partition_ _function_ _of_ _next_ _intermediate_ _density"""_
+log_N = torch.tensor(target_log_prob.shape[0]).log()
+log_iw = (target_log_prob   - model_log_prob) / (1 + tr_mul)
+log_Z = torch.logsumexp(log_iw, dim=0)   - log_N
+**return** log_Z
+
+
+**def** find_best_kl_multiplier(
+model_log_prob: torch.Tensor,
+target_log_prob: torch.Tensor,
+eps_tr: float,
+max_multiplier: float = 1e10,
+) -> float:
+
+_"""Finds_ _the_ _best_ _Lagrangian_ _multiplier_ _by_ _maximizing_ _the_ _dual"""_
+_#_ _define_ _dual_ _function_ _(dependent_ _on_ _Lagrangian_ _multiplier)_
+**def** dual(tr_mul: float):
+log_Z = estimate_log_Z(
+model_log_prob=model_log_prob,
+target_log_prob=target_log_prob,
+tr_mul=tr_mul,
+)
+dual_value = -(1 + tr_mul)     - log_Z     - tr_mul     - eps_tr
+**return** dual_value.item()
+
+
+neg_dual = **lambda** mul: -dual(mul) _#_ _concave_ _->_ _convex_
+
+
+res = minimize_scalar(
+neg_dual,
+bounds=(0.0, max_multiplier),
+method="Bounded"
+)
+best_tr_mul = float(res.x)
+**return** best_tr_mul
+
+
+as an approximation for the effective sample size. This approximation is justified under the assumption
+that _qi_ +1 is close to _qi_, a condition that is satisfied by the design of the problem for a small trustregion bound _ε_ tr _>_ 0. Due to _qi_ +1 being the optimal solution to an objective with the constraint
+_D_ KL( _q_ _qi_ ) _ε_ tr, the constraint must also hold for _q_ = _qi_ +1 resulting in the approximate lower
+_∥_ _≤_
+bound
+
+
+1
+ESS( _qi, qi_ +1) ⪆ (21)
+1 + 2 _ε_ tr
+
+
+for the effective sample size of the importance weights with equality in all but the last step.
+
+
+This approximate lower bound justifies the use of Monte Carlo approximations in Section 3, helping
+to stabilize training independent of the problem’s dimensionality. Empirical results on this property
+are provided in Appendix B.
+
+
+30
+
+
+**Algorithm 2** CMT with normalizing flows
+
+
+**Require:** Initial normalizing flow _qθ_ 0, unnormalized target density _p_ ˜, buffer size _N_, batch size _B_, chosen
+number of annealing steps _I_ [˜], number of iterations _K_ per annealing step, trust-region bound _ε_ tr, entropy bound
+_ε_ ent
+**for** _i ←_ 0 _, . . .,_ _I_ [˜] _−_ 1 **do**
+
+Draw _N_ samples _xn_ _qθi_ ( _x_ ), evaluate _qθi_ ( _xn_ ) _,_ ˜ _p_ ( _xn_ )
+_∼_
+Initialize buffer = ( _xn, qθi_ ( _xn_ ) _,_ ˜ _p_ ( _xn_ )) _[N]_ _n_ =1
+_B_ [(] _[i]_ [)]
+Compute multipliers _λi, ηi_ = arg max _λ,η∈_ R+ _gε_ [(] _[i]_ tr [+1)] _,ε_ ent [(] _[λ, η]_ [)][ using] _[ B]_ [(] _[i]_ [)]
+
+
+Define _qθi,_ 0 := _qθi_
+
+
+// Update flow to fit _qi_ +1:
+**for** _k_ _←_ 0 _, . . ., K −_ 1 **do**
+
+
+// Compute importance weights from _B_ [(] _[i]_ [)] :
+Retrieve mini-batch _bk_ = ( _xn, qθi_ ( _xn_ ) _,_ ˜ _p_ ( _xn_ )) _[B]_ _n_ =1 [from] _[ B]_ [(] _[i]_ [)]
+
+_[B]_
+
+
+Compute ( _qi_ +1( _xn_ )) _[B]_ _n_ =1 [from] _[ b]_ _k_ [and multipliers] _[ λ]_ _i_ _[, η]_ _i_
+Compute importance weights ( _wn_ ) _[B]_ _n_ =1 [as] _[ w]_ _n_ [=] _[ q]_ _i_ +1 [(] _[x]_ _n_ [)] _[/q]_ _θi_ [(] _[x]_ _n_ [)][ for] _[ n]_ [ = 1] _[ . . . B]_
+
+
+// Update flow model:
+Define loss _lk_ = _B_    - _Bn_ =1 _[w][n]_ [ log] _[ q][θ]_ _i,k_ [(] _[x][n]_ [)][ // loss derived from] _[ D]_ [KL][(] _[q][i]_ [+1] _[∥][q][θ]_ _i,k_ [)]
+_−_ [1]
+
+Update parameters from _θi,k_ to _θi,k_ +1 using _lk_
+Define _qθi_ +1 := _qθi,K_
+**return** _qθI_ _p_
+_≈_
+
+
+C.4 GUIDANCE FOR HYPERPARAMETER SELECTION
+
+
+Owing to the relationship between the trust-region constraint and the variance of importance weights,
+it may appear sensible to choose a very small trust-region bound. While doing so indeed improves the
+quality of the importance weights by lowering their variance, it simultaneously increases the number
+of intermediate annealing steps required for convergence. In practice, we observed this to constitute a
+trade-off between training stability and computational efficiency. For this reason, we adopted a fixed
+trust-region bound of _ε_ tr = 0 _._ 3, which consistently yielded the best performance across all systems
+under a fixed number of target evaluations.
+
+Assuming the target entropy were known and the number of intermediate densities fixed to _I_ [˜] N+,
+_∈_
+one could select the entropy bound as
+
+
+_ε_ ent _≥_ _[H]_ [(] _[q]_ [0][)] _[ −]_ _I_ ˜ _[H]_ [(] _[p]_ [)] _,_
+
+
+where the inequality allows for the possibility that the entropy constraint becomes inactive earlier
+during training. In practice, however, the target entropy is rarely available. The design of our entropy
+constraint mitigates this issue by restricting the search domain for _ε_ ent to R [+] . This restriction makes
+it straightforward to identify a suitable range for _ε_ ent. Due to the approximately linear entropy
+decay, empirically validated in Figure 5, the relationship between the iteration at which the entropy
+constraint becomes inactive and the entropy bound _ε_ ent is likewise approximately linear, which makes
+tuning _ε_ ent straightforward.
+
+
+Across all molecular systems, suitable values for _ε_ ent fall within the range [0 _._ 8 _,_ 1 _._ 8]. We aimed for
+the entropy constraint to become inactive after roughly half of the total training iterations, as this
+consistently yielded the best final performance. The entropy bound was tuned only to the first decimal
+place, with most other hyperparameters remaining fixed across systems.
+
+
+31
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||CM<br>CMT<br>CMT<br>CMT<br>CM||
+||||||||
+||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|CMT<br>CMT|Col7|
+|---|---|---|---|---|---|---|
+||||||CMT<br>CMT<br>CMT||
+||||||||
+
+
+0
+
+|Col1|Col2|Col3|Col4|Col5|CMT<br>CMT|Col7|
+|---|---|---|---|---|---|---|
+||||||CM<br>CMT<br>CM||
+||||||CMT||
+||||||||
+
+0 100 200 300 400
+
+Annealing Steps _i_
+
+
+1
+
+
+0 _._ 5
+
+
+0
+
+
+1
+
+
+0 _._ 5
+
+
+0
+
+
+0 100 200 300 400
+
+Annealing Steps _i_
+
+|Col1|Col2|Col3|Col4|Col5|CMT|T|
+|---|---|---|---|---|---|---|
+||||||CMT<br>CMT<br>CMT<br>CMT<br>CM||
+||||||CMT||
+||||||||
+
+
+0 100 200 300 400
+
+Annealing Steps _i_
+
+
+10
+
+
+5
+
+
+0
+0 100 200 300 400
+
+Annealing Steps _i_
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+_ε_ tr = 0 _._ 01
+_ε_ tr = 0 _._ 05
+_ε_ tr = 0 _._ 1
+_ε_ tr = 0 _._ 2
+_ε_ tr = 0 _._ 3
+
+
+_ε_ ent = 1 _._ 0
+_ε_ ent = 1 _._ 1
+_ε_ ent = 1 _._ 2
+_ε_ ent = 1 _._ 3
+_ε_ ent = 1 _._ 4
+_ε_ ent = 1 _._ 5
+
+
+Figure 12: Visualization of _βi_ and _Ti_ = 1 _/αi_ over the annealing steps _i_ on alanine hexapeptide for
+different trust-region bounds (first row) and entropy bounds (second row), each evaluated while the
+other bound is kept fixed ( _ε_ tr = 0 _._ 3 and _ε_ ent = 1 _._ 4). Varying the trust-region bound visibly changes
+the convergence speed of both ( _βi_ ) _i_ and ( _Ti_ ) _i_ along the annealing path, whereas varying the entropy
+bound seems to lead to similar behavior for ( _βi_ ) _i_ but strongly affects the temperature behavior ( _Ti_ ) _i_ .
+We further emphasize that the displayed _βi_ does not accurately represent the actual “closeness” of
+_qi_ to the target distribution _p_ during training. Each intermediate density is only approximated via
+_q_ ˆ _i_ = arg min _q D_ ( _qi, q_ ), so the sequence (ˆ _qi_ ) _i_ does not follow the analytical annealing path exactly.
+As a consequence, the calculated evolution of _βi_ does not provide a reliable absolute measure of how
+close _qi_ is to _p_ in terms of KL divergence.
+
+
+C.5 ANNEALING PATH VISUALIZATIONS
+
+
+To complement Figure 1, we provide visualizations of the sequences ( _αi_ ) _i_ and ( _βi_ ) _i_ along the
+annealing path
+_qi_ _∝_ _q_ 0 _[β][i]_ [(] _[p][α][i]_ [)][1] _[−][β][i]_
+
+in Figure 12, illustrating the effects of different trust-region and entropy bounds.
+
+
+D EXPERIMENTAL SETUP
+
+
+D.1 ARCHITECTURE
+
+
+Our normalizing flow architecture closely follows the one used in previous works (Midgley et al.,
+2022; Schopmans & Friederich, 2025; 2024). We represent the conformations of the studied molecular
+systems using internal coordinates based on bond lengths, angles, and dihedral angles.
+
+
+We use 8 pairs of neural spline coupling layers based on monotonic rational-quadratic splines (Durkan
+et al., 2019). The splines map from [0 _,_ 1] to [0 _,_ 1] using 8 bins. We use a random mask to select
+transformed and conditioned dimensions in the first coupling of each pair, and the corresponding
+inverted mask for the second coupling. The dihedral angle dimensions are modeled with circular
+splines (Rezende et al., 2020) to respect their topology, with a random (fixed) periodic shift applied
+after each coupling layer. The parameter networks that calculate the spline parameters in each coupling
+are fully connected neural networks with hidden dimensions [256 _,_ 256 _,_ 256 _,_ 256 _,_ 256] and ReLU
+activation functions. To capture their periodicity, dihedral angles _ψi_ are encoded as (cos _ψi,_ sin _ψi_ )
+when passing them to the parameter network.
+
+
+As the base distribution of the normalizing flow, we use a uniform distribution in [0 _,_ 1] for the dihedral
+angles and a Gaussian truncated to [0 _,_ 1] with mean _µ_ = 0 _._ 5 and standard deviation _σ_ = 0 _._ 1 for the
+bond lengths and angles.
+
+
+32
+
+
+Table 6: Overview of the molecular systems and corresponding force field parametrization.
+
+
+NAME SEQUENCE NO. ATOMS FORCE FIELD CONSTRAINTS
+
+
+AMBER FF96
+ALANINE
+DIPEPTIDE ACE-ALA-NME 22 WITH OBC1 NONE
+IMPLICIT SOLVATION
+
+
+AMBER99SB-ILDN
+ALANINE HYDROGEN
+TETRAPEPTIDE ACE-3 ALA-NME 42 WITH AMBER99 OBC BOND LENGTHS
+
+_·_ IMPLICIT SOLVATION
+
+
+AMBER99SB-ILDN
+ALANINE HYDROGEN
+HEXAPEPTIDE ACE-5 ALA-NME 62 WITH AMBER99 OBC BOND LENGTHS
+
+_·_ IMPLICIT SOLVATION
+
+
+AMBER99SB-ILDN
+ELIL HYDROGEN
+TETRAPEPTIDE GLU-LEU-ILE-LEU 75 WITH AMBER99 OBC BOND LENGTHS
+IMPLICIT SOLVATION
+
+
+We follow Schopmans & Friederich (2025) to map the internal coordinates to the range [0 _,_ 1] of the
+spline transformations: Dihedral angles are divided by 2 _π_ . Bond lengths and angles are shifted and
+scaled as _ηi_ _[′]_ [= (] _[η][i][ −]_ _[η][i]_ [;][min][)] _[/σ]_ [ + 0] _[.]_ [5][, where] _[ η][i]_ [;][min][ is obtained from a minimum energy structure after]
+energy minimization. _σ_ was set to 0 _._ 07 nm for bond lengths and 0 _._ 5730 for angle dimensions.
+
+
+The studied molecular systems have two chiral forms (mirror images), L- and R-chirality, while in
+nature, one almost only finds the L-chirality. To constrain the generated molecular configurations to
+the L-chirality, we constrain the spline output ranges of the relevant dihedral angles (Schopmans &
+Friederich, 2025). Similarly, some atoms and groups (such as the hydrogen atoms in CH3 groups) are
+permutation invariant in the force field energy parametrization, but have a preference in the ground
+truth molecular dynamics data due to very large barriers. Similarly to the chirality constraints, we
+constrain the splines such that only the permutation found in the ground truth data can be generated
+(Schopmans & Friederich, 2025).
+
+
+D.2 TARGET DENSITIES
+
+
+The goal of all our experiments is to sample molecular systems at 300 K. An overview of the studied
+molecular systems, including their force field parametrization, is given in Table 6. We explicitly note
+that the largest studied system, ELIL tetrapeptide, does not contain capping groups, in contrast to the
+other three systems.
+
+
+The energy evaluations during training were performed with the OpenMM 8.0.0 (Eastman et al.,
+2024) CPU platform, using 18 workers in parallel.
+
+
+Following previous work (Midgley et al., 2022; Schopmans & Friederich, 2025), we use a regularized
+energy function to avoid large van der Waals energies due to atom clashes:
+
+
+_E_ reg.( _E_ ) =
+
+
+
+
+
+
+_E,_ if _E_ _E_ high _,_
+_≤_
+log( _E −_ _E_ high + 1) + _E_ high _,_ if _E_ high _< E_ _≤_ _E_ max _,_ (22)
+log( _E_ max _−_ _E_ high + 1) + _E_ high _,_ if _E_ _> E_ max _._
+
+
+
+
+
+We set _E_ high = 1 10 [8] and _E_ max = 1 10 [20] (Midgley et al., 2022).
+_×_ _×_
+
+
+DATASETS
+
+
+We employed extensive molecular dynamics simulations to generate training and validation datasets
+with 10 [6] samples and test datasets with 10 [7] samples to calculate the metrics reported in Table 1. For
+each system, one molecular dynamics simulation was used to construct the training and validation
+dataset, and a separate simulation was performed for the test dataset. We used slightly updated
+simulation parameters compared to Midgley et al. (2022) and Schopmans & Friederich (2025) to
+obtain better-equilibrated data, which became especially relevant for alanine dipeptide, where we
+
+
+33
+
+
+noticed a small bias in the energy histogram of the MD data provided by Midgley et al. (2022)
+(Stimper et al., 2022a) and used by Schopmans & Friederich (2025).
+
+
+1. For alanine dipeptide, molecular dynamics simulations were carried out using the OpenMM
+LangevinMiddle integrator with a time step of 1 fs. The system was initially equilibrated for
+200 ns, after which a production run of 5 µs was performed.
+2. For alanine tetrapeptide, alanine hexapeptide, and ELIL tetrapeptide, we conducted replicaexchange molecular dynamics (Sugita & Okamoto, 1999) simulations at temperatures of 300 _._ 0 K,
+332 _._ 27 K, 368 _._ 01 K, 407 _._ 60 K, 451 _._ 44 K, and 500 _._ 0 K using the OpenMM LangevinMiddle
+integrator with a time step of 1 fs. Each replica was first equilibrated independently for 200 ns
+without exchanges, followed by an additional 200 ns of equilibration with exchanges. Production
+simulations of 2 µs per replica were then carried out. For dataset construction, we used the
+trajectory from the 300 _._ 0 K replica.
+
+
+D.3 METRICS
+
+
+In this section, we present metrics used for both theoretical analysis and experimental evaluation.
+Unless stated otherwise, all metrics were evaluated using 10 [7] samples.
+
+
+D.3.1 TASK-AGNOSTIC METRICS
+
+
+We begin with the forward metrics _evidence_ _upper_ _bound_ (EUBO) and the related _negative_ _log_
+_likelihood_ (NLL). We then turn to the reverse metric _evidence_ _lower_ _bound_ (ELBO), discuss its
+limitations in the context of Boltzmann generators, and conclude with the _effective sample size_ (ESS)
+as a measure of sample quality. For details on these metrics, we refer to Blessing et al. (2024).
+
+
+**Evidence upper bound (EUBO) and negative log-likelihood (NLL).** EUBO and NLL are both
+forward metrics, each equivalent to the forward KL divergence up to an additive constant. They are
+defined via
+
+
+_D_ KL( _p_ _q_ ) = E _p_ ( _x_ )
+_∥_
+
+
+log _[p]_ [˜][(] _[x]_ [)]
+
+_q_ ( _x_ )
+
+
+ - ��  EUBO
+
+= _−_ E _p_ ( _x_ ) [log _q_ ( _x_ )]
+
+ - ��  NLL
+
+
+_−_ log���� _Z_
+const. w.r.t. _q_
+
+
+_−_ _H_ ( _p_ ) _._
+����
+const. w.r.t. _q_
+
+
+**Evidence lower bound (ELBO).** The ELBO is defined as
+
+ELBO = E _q_ ( _x_ )� log _p_ ( _x_ ) log _q_ ( _x_ )� _,_
+_−_
+
+where _q_ is the variational distribution and _p_ the target distribution. The ELBO provides a lower
+bound on log _Z_, while the EUBO provides an upper bound on log _Z_ . Typically, both bounds are
+reported, as the difference between them, the EUBO–ELBO gap, gives a useful measure of how
+tight the variational approximation is. A small gap indicates that the variational distribution closely
+approximates the true target, while a large gap signals that the approximation may be poor.
+
+
+**Important note on ELBO.** In our experiments, we found that the ELBO is not a reliable metric
+for comparing molecular Boltzmann generators. The Boltzmann distribution of molecular systems
+contains extremely steep regions due to the repulsive term of the Lennard-Jones interaction, which
+grows with 1 _/r_ [12] when the distance _r_ between two atoms becomes small. Boltzmann generators
+typically cannot fully capture this behavior, resulting in a small number of samples with extremely
+small log importance weights. These outliers dominate the mean, making it unrepresentative of actual
+model performance. This issue does not affect metrics such as reverse ESS (and thus importance
+sampling performance), which are computed directly on the importance weights rather than their
+logarithms, nor forward metrics evaluated under the support of the ground truth data (e.g., EUBO). To
+mitigate this problem, we clamped the lowest 0 _._ 01% of log importance weights to the highest observed
+value among them when computing the ELBO. While this approach works reasonably well for alanine
+dipeptide, it is insufficient for the other systems, which likely require even more aggressive clamping.
+However, we decided to keep the same threshold for all systems for consistency. Consequently, we
+caution against using the ELBO for quantitative comparisons on molecular Boltzmann distributions.
+
+
+34
+
+
+_φ_ 2
+
+
+10
+
+
+5
+
+
+0
+
+
+Figure 13: Illustration of mode collapse in Ramachandran plots. The figure highlights high-energy
+regions where mode collapse often occurs (e.g., under reverse KL training) but which remain
+important for accurately capturing of the peptide backbone distribution. Mode collapse is visible as
+the absence of density in these regions.
+
+
+**Effective sample size (ESS).** The ESS is defined as
+
+
+1
+ESS( _a, b_ ) =          - _b_ ( _x_ )          - _,_ _a, b ∈P_ (R _[d]_ ) _._
+
+1 + Var _a_ ( _x_ ) _a_ ( _x_ )
+
+
+Closely following the notation of Blessing et al. (2024), the reverse ESS
+
+
+_r_
+ESS( _q, p_ ) = _Z_
+
+
+- _p_ ˜( _x_ )
+_q_ ( _x_ )
+
+
+E
+_q_ ( _x_ )
+
+
+�� _p_ ˜( _x_ ) �2 [�] _[,]_ with _Zr_ = E _q_ ( _x_ )
+_q_ ( _x_ )
+
+
+can be directly estimated via Monte Carlo using samples from the model _q_ and the unnormalized
+target _p_ ˜.
+
+
+Following Midgley et al. (2022); Schopmans & Friederich (2025), for reverse ESS, we clipped the
+top 0 _._ 01% importance-weights, setting them to the smallest value among them for numerical reasons.
+Furthermore, ESS is computed using the regularized energy function, defined in Equation (22).
+
+
+Although forward ESS could be computed using samples from the target distribution, Schopmans
+& Friederich (2025) found it to be extremely sensitive to the chosen clipping threshold and prone
+to instability. Consequently, only the reverse ESS was used, even though it may not fully capture
+phenomena such as mode collapse.
+
+
+D.3.2 TASK-SPECIFIC METRICS
+
+
+**Ramachandran plots.** A Ramachandran plot visualizes the 2D log-density of the joint distribution
+of a pair of dihedral angles in a peptide’s backbone. For more details, we refer to Schopmans &
+Friederich (2025). These plots are used to visualize a peptide’s main degrees of freedom and are
+likely to show mode collapse if it occurs. A Ramachandran plot is effectively a histogram of the
+occurrence of dihedral angle values and is computed solely from model or ground-truth samples.
+
+
+How mode collapse can be detected and where the high-energy density region is located in a
+Ramachandran plot is illustrated in Figure 13.
+
+
+For alanine tetrapeptide, alanine hexapeptide, and the ELIL tetrapeptide, which contain multiple
+backbone dihedral angle pairs, we always show the pair exhibiting the most pronounced deviation
+from the ground truth, which is the same across methods. Among the four runs made per method in
+Figure 4, we selected the one with the lowest Ram KL value. For Figure 3, we always selected the
+run with the highest Ram KL value to illustrate that variations with fewer constraints are more likely
+to exhibit mode collapse.
+
+
+**Ramachandran KL (Ram KL) and Ramachandran KL with reweighting (Ram KL w.** **RW).**
+Ram KL and Ram KL w. RW can be used to quantify deviation from the ground truth Ramachandran
+histograms. Following Midgley et al. (2022); Schopmans & Friederich (2025), we computed the
+forward KL divergence between the Ramachandran histograms from ground truth and model samples
+
+
+35
+
+
+Table 7: Computational cost (in hours) of FAB, TA-BG, and CMT on different molecular systems,
+reporting pre-training, training and total time. For all systems, we performed four parallel runs on a
+single node equipped with 4 _×_ NVIDIA A100-SXM4-40GB and 2 _×_ AMD EPYC Rome 7402 CPU
+with 48 cores in total.
+
+
+**SYSTEM** **METHOD** **PRE-TRAINING** **TRAINING** **TOTAL**
+
+
+FAB             - 18 _._ 1 h 18 _._ 1 h
+ALANINE DIPEPTIDE
+TA-BG 6 _._ 2 h 16 _._ 9 h 23 _._ 2 h
+CMT (OURS)               - 20 _._ 4 h 20 _._ 4 h
+
+
+FAB             - 19 _._ 5 h 19 _._ 5 h
+ALANINE TETRAPEPTIDE
+TA-BG 7 _._ 2 h 24 _._ 3 h 31 _._ 5 h
+CMT (OURS)               - 21 _._ 7 h 21 _._ 7 h
+
+
+FAB             - 41 _._ 0 h 41 _._ 0 h
+ALANINE HEXAPEPTIDE
+TA-BG 22 _._ 1 43 _._ 7 h 65 _._ 8 h
+CMT (OURS)               - 64 _._ 3 h 64 _._ 3 h
+
+
+FAB             - 56 _._ 6 h 56 _._ 6 h
+ELIL TETRAPEPTIDE
+TA-BG 22 _._ 3 116 _._ 1 h 138 _._ 4 h
+CMT (OURS)               - 138 _._ 2 h 138 _._ 2 h
+
+
+(Ram KL). For this, we used 100 _×_ 100 bins and 1 _×_ 10 [7] samples. Additionally, we also computed a
+reweighted version of the metric (Ram KL w. RW) where the model samples were first reweighted to
+the target distribution before generation of Ramachandran histograms. For the larger systems, where
+more than one Ramachandran plot exists, we reported the average.
+
+
+**Ramachandran total variation (Ram TV)** The Ram TV and Ram TV w. RW (with reweighting)
+distance complement the existing Ram KL and Ram KL w. RW metrics. While the KL-based metrics
+are asymmetric and computed with respect to the support of the ground-truth distribution, the total
+variation metrics are symmetric, allowing them to capture discrepancies both within and outside the
+support of the ground truth. This provides a more balanced assessment of how accurately the model
+represents the overall distribution. The total variation distance on Ramachandran plots, which are 2D
+discrete normalized histograms, is defined as
+
+
+TVD(P, Q) = [1]
+
+2
+
+
+- _Pij_ _Qij_ _aij,_
+
+_|_ _−_ _|_
+_i,j_
+
+
+where _P_ and _Q_ are the Ramachandran plots of the target _p_ and the model _q_, respectively. The factor
+_aij_ corresponds to the area of bin ( _i, j_ ); in our setting, all bins have equal area _aij_ = (2 _π/_ 100) [2] .
+
+
+**TICA** **KL** Similarly to the Ramachandran KL, we also computed the TICA KL on the TICA
+histograms, using the range from the test dataset to define the domain.
+
+
+**Wasserstein distance** We report several Wasserstein-2 distances for evaluation: on the Ramachandran plots (Ram T- 2), on the ground-truth energies of the predicted samples ( - 2), and on the
+_W_ _E_ _W_
+TICA vectors (TICA- 2). Details on the Wasserstein metric and its implementation can be found in
+_W_
+Tan et al. (2025a). Loosely speaking, the Wasserstein-2 distance quantifies how much probability
+mass must be transported to transform one distribution into another. We apply it to the periodic
+dihedral angle pairs forming the Ramachandran plots by defining the distance on the resulting torus,
+thus respecting the periodicity of the angles. For details, see Tan et al. (2025a) (App. E.1). For
+computational reasons, we also only used 10 [4] samples, as the Wasserstein distance does not scale
+well to substantially larger sample sizes, which limits sensitivity to mode collapse in high-energy
+metastable regions.
+
+
+D.4 COMPUTATIONAL COST
+
+
+**Total training time** To provide an indication of computational cost, we report extrapolated training
+times for FAB, TA-BG, and CMT across different molecular systems in Table 7. Because training
+
+
+36
+
+
+Table 8: Dual optimization time of CMT on different systems per annealing step and in total.
+
+
+**SYSTEM** **PER ANNEALING STEP** **TOTAL**
+
+
+ALANINE DIPEPTIDE 53 _._ 31 ms 10 _._ 6 s
+
+
+ALANINE TETRAPEPTIDE 52 _._ 48 ms 10 _._ 50 s
+
+
+ALANINE HEXAPEPTIDE 61 _._ 25 ms 24 _._ 50 s
+
+
+ELIL TETRAPEPTIDE 77 _._ 17 ms 61 _._ 74 s
+
+
+Table 9: Number of flow parameters for each system. The number of parameters is completely
+determined by a molecular system’s size, as the architecture is the same across all systems.
+
+
+ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+NUMBER OF PARAMETERS 7 421 512 9 452 376 12 124 616 13 727 952
+
+
+molecular Boltzmann generators is computationally expensive, the reported values are based on
+extrapolation and reflect pure training time only, excluding evaluation steps and other overhead.
+
+
+Compared to Schopmans & Friederich (2025), we increased the total number of target evaluations
+and gradient descent steps for TA-BG to match those used for CMT, ensuring a fair comparison.
+While this modification improves the final performance of TA-BG, it also raises its computational
+cost to a level comparable to CMT. Since both CMT and TA-BG rely on similar training routines,
+their overall computational demands are generally comparable.
+
+
+The comparatively high computational cost observed for CMT may be reduced through further
+optimization, for example by refining the loss function or decreasing the number of gradient descent
+steps and target evaluations. Its adaptive schedule and use of importance weights rather than
+resampling may also improve robustness when using smaller buffer sizes compared to TA-BG. We
+further emphasize, that our implementation represents a specific realization of a broader algorithmic
+framework, and additional efficiency improvements may be possible.
+
+
+For FAB, we report training time using an updated number of target evaluations but retain the original
+number of gradient descent steps from (Midgley et al., 2022), thereby providing a low-computationalcost baseline.
+
+
+The dual optimization time of all methods is negligible and summarized in Table 8.
+
+
+**Inference time** The inference time of all methods is identical, as they share the same underlying
+normalizing flow architecture, with its size varying only between systems but not between methods.
+Details on the architecture are provided in Appendix D.1.
+
+
+D.5 HYPERPARAMETERS
+
+
+Hyperparameters play a crucial role in the performance of all models. Common hyperparameters
+include the choice of optimizer, learning rate, batch size, gradient steps, and weight decay. Below,
+we provide a description of the hyperparameters for each method, emphasizing any method-specific
+choices.
+
+
+All experiments employed the Adam optimizer (Kingma & Ba, 2017). Our implementation builds on
+the Python packages _bgflow_ (Noe & co workers, 2025)´, _nflows_ (Durkan et al., 2020), and _PyTorch_
+(Paszke et al., 2019). The number of parameters in the normalizing flow architecture for each system
+is summarized in Table 9.
+
+
+CMT
+
+
+We refer to Table 10 for the general and method-specific hyperparameters of CMT. The number of
+annealing steps _I_ [˜] is defined implicitly by the total number of gradient descent steps and the number
+of gradient descent steps per annealing step, and it is summarized in Table 11.
+
+
+37
+
+
+Table 10: Hyperparameter settings for CMT (general and method-specific) for all systems.
+
+
+HYPERPARAMETERS ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+GENERAL
+
+
+METHODSPECIFIC
+
+
+BATCH SIZE 1000 1000 2000 2000
+LLREARNINGSCHEDULERRATE 4COSINE _×_ 10 _[−]_ [5] 5COSINE _×_ 10 _[−]_ [5] 5COSINE _×_ 10 _[−]_ [5] 5COSINE _×_ 10 _[−]_ [5]
+GRADIENT DESCENT STEPS 400 000 400 000 800 000 1 600 000
+LR LINEARWEIGHT WARMUP-DECAY STEPS 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5]
+MAX GRAD NORM 100 _._ 0 100 _._ 0 100 _._ 0 100 _._ 0
+
+
+TRUST-REGION BOUND 0 _._ 3 0 _._ 3 0 _._ 3 0 _._ 3
+ENTROPY BOUND 0 _._ 8 1 _._ 8 1 _._ 4 0 _._ 7
+BUFFER SIZE 500 000 500 000 1 000 000 1 000 000
+GRADIENT DESCENT STEPS
+2000 2000 2000 2000
+PER ANNEALING STEP
+
+
+Table 11: Fixed number annealing steps _I_ [˜] for CMT for each system. The number is implicitly defined
+by the total number of gradient descent steps and the number gradient descent steps per annealing
+step. We keep it fixed to strictly control the computational budget for fair benchmarking.
+
+
+ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+NUMBER OF ANNEALING STEPS 200 200 400 800
+
+
+TA-BG
+
+
+Table 12 summarizes the hyperparameters for the pre-training of TA-BG (Schopmans & Friederich,
+2025) using the reverse KL divergence.
+
+
+After pre-training, the temperature is annealed with a geometrically decaying temperature sequence
+and the hyperparameters summarized in Table 13. The TA-BG experiments on alanine dipeptide and
+alanine tetrapeptide used the geometric temperature annealing sequence
+
+1200 K _→_ 1028 _._ 69 K _→_ 881 _._ 84 K _→_ 755 _._ 95 K _→_ 648 _._ 04 K _→_ 555 _._ 52 K
+_→_ 476 _._ 22 K _→_ 408 _._ 24 K _→_ 349 _._ 96 K _→_ 300 _._ 00 K _→_ 300 _._ 00 K _._
+
+Including an additional finetuning step per temperature, TA-BG employs the temperature sequence
+
+1200 K _→_ 1028 _._ 69 K _→_ 1028 _._ 69 K _→_ 881 _._ 84 K _→_ 881 _._ 84 K _→_ 755 _._ 95 K
+_→_ 755 _._ 95 K _→_ 648 _._ 04 K _→_ 648 _._ 04 K _→_ 555 _._ 52 K _→_ 555 _._ 52 K _→_ 476 _._ 22 K
+_→_ 476 _._ 22 K _→_ 408 _._ 24 K _→_ 408 _._ 24 K _→_ 349 _._ 96 K _→_ 349 _._ 96 K _→_ 300 _._ 00 K _→_ 300 _._ 00 K
+
+on alanine hexapeptide. On the ELIL tetrapeptide, reverse KL pre-training suffers from mode-collapse
+at 1200 K. Therefore, the temperature annealing starts at 3000 K, resulting in the temperature
+sequence
+
+3000 _._ 00 K _→_ 2573 _._ 09 K _→_ 2573 _._ 09 K _→_ 2573 _._ 09 K _→_ 2206 _._ 93 K _→_ 2206 _._ 93 K
+_→_ 2206 _._ 93 K _→_ 1892 _._ 88 K _→_ 1892 _._ 88 K _→_ 1892 _._ 88 K _→_ 1623 _._ 52 K _→_ 1623 _._ 52 K
+_→_ 1623 _._ 52 K _→_ 1392 _._ 49 K _→_ 1392 _._ 49 K _→_ 1392 _._ 49 K _→_ 1194 _._ 33 K _→_ 1194 _._ 33 K
+_→_ 1194 _._ 33 K _→_ 1024 _._ 37 K _→_ 1024 _._ 37 K _→_ 1024 _._ 37 K _→_ 878 _._ 60 K _→_ 878 _._ 60 K
+_→_ 878 _._ 60 K _→_ 753 _._ 57 K _→_ 753 _._ 57 K _→_ 753 _._ 57 K _→_ 646 _._ 34 K _→_ 646 _._ 34 K
+_→_ 646 _._ 34 K _→_ 554 _._ 36 K _→_ 554 _._ 36 K _→_ 554 _._ 36 K _→_ 475 _._ 48 K _→_ 475 _._ 48 K
+_→_ 475 _._ 48 K _→_ 407 _._ 81 K _→_ 407 _._ 81 K _→_ 407 _._ 81 K _→_ 349 _._ 78 K _→_ 349 _._ 78 K
+_→_ 349 _._ 78 K _→_ 300 _._ 00 K _→_ 300 _._ 00 K _._
+
+
+FAB
+
+
+The used hyperparameters for FAB (Midgley et al., 2022) can be found in Table 14. Furthermore, we
+used a step size of 0 _._ 05 for the Hamiltonian Monte Carlo (Duane et al., 1987) transitions. For details
+on the method and its hyperparameters, we refer to Midgley et al. (2022).
+
+
+38
+
+
+Table 12: Hyperparameter settings for TA-BG pre-training for all systems.
+
+
+HYPERPARAMETERS ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+GENERAL
+
+
+TARGET TEMPERATURE 1200 K 1200 K 1200 K 3000 K
+BATCH SIZE 256 256 512 512
+LLREARNINGSCHEDULERRATE 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4]
+GRADIENT DESCENT STEPS 100 000 100 000 250 000 250 000
+LR LINEARWEIGHT WARMUP-DECAY STEPS 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5]
+MAX GRAD NORM 100 _._ 0 100 _._ 0 100 _._ 0 100 _._ 0
+NO. HIGHEST ENERGY
+10 10 20 20
+VALUES REMOVED
+
+
+Table 13: Hyperparameter settings for TA-BG (general and method-specific) for all systems.
+
+
+HYPERPARAMETERS ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+GENERAL
+
+
+METHODSPECIFIC
+
+
+BATCH SIZE 2048 4096 2048 2048
+LLREARNINGSCHEDULERRATE (PER ANNEALING5COSINE _×_ 10 _[−]_ [6] STEP) 1 _×_ 10- _[−]_ [5] 5 _×_ 10- _[−]_ [6] 5 _×_ 10- _[−]_ [6]
+
+GRADIENT DESCENT STEPS 300 000 300 000 550 008 1 350 000
+
+
+BUFFER SIZE 7 440 000 7 440 000 15 111 111 22 400 000
+BUFFER RESAMPLED TO 2 000 000 2 000 000 2 000 000 22 400 000
+GRADIENT DESCENT STEPS
+30 000 30 000 30 556 45 000
+PER ANNEALING STEP
+
+
+Table 14: Hyperparameter settings of FAB (general and method-specific) for all systems.
+
+
+HYPERPARAMETERS ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+GENERAL
+
+
+BATCH SIZE 1024 1024 1024 2048
+LLREARNINGSCHEDULERRATE 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4] 2COSINE _×_ 10 _[−]_ [4]
+GRADIENT DESCENT STEPS 50 000 50 000 50 000 25 000
+LR LINEARWEIGHT WARMUP-DECAY STEPS 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5]
+MAX GRAD NORM 1000 _._ 0 1000 _._ 0 1000 _._ 0 1000 _._ 0
+
+
+METHOD- NO. INTERMED. DIST. 8 8 8 16
+SPECIFIC NO. INNER HMC STEPS 4 4 8 8
+
+
+FORWARD AND REVERSE KL
+
+
+This section reports the used hyperparameters for training with the forward KL divergence on MD
+data (Table 15) and the hyperparameters for training with the reverse KL divergence (Table 16). A
+description of how the MD data was obtained can be found in Appendix D.2.
+
+
+39
+
+
+Table 15: Hyperparameter settings of forward KL training using MD data for all systems.
+
+
+HYPERPARAMETERS ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+GENERAL
+
+
+GENERAL
+
+
+BATCH SIZE 1024 1024 1024 1024
+LLREARNINGSCHEDULERRATE 5COSINE _×_ 10 _[−]_ [5] 5COSINE _×_ 10 _[−]_ [5] 5COSINE _×_ 10 _[−]_ [5] 5COSINE _×_ 10 _[−]_ [5]
+GRADIENT DESCENT STEPS 100 000 100 000 120 000 140 000
+
+
+Table 16: Hyperparameter settings of reverse KL training for all systems.
+
+
+HYPERPARAMETERS ALANINE DIPEPTIDE ALANINE TETRAPEPTIDE ALANINE HEXAPEPTIDE ELIL
+
+
+BATCH SIZE 1024 1024 1024 1024
+LLREARNINGSCHEDULERRATE 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4] 1COSINE _×_ 10 _[−]_ [4]
+GRADIENT DESCENT STEPS 250 000 250 000 250 000 250 000
+LR LINEARWEIGHT WARMUP-DECAY STEPS 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5] 1 _×_ 1000 10 _[−]_ [5]
+MAX GRAD NORM 100 _._ 0 100 _._ 0 100 _._ 0 100 _._ 0
+NO. HIGHEST ENERGY
+40 40 40 40
+VALUES REMOVED
+
+
+40

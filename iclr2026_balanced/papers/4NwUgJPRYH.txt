@@ -1,0 +1,2307 @@
+# WHAT ARE KEY FACTORS FOR UPDATES IN RL FOR LLM REASONING?
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Reinforcement Learning from Verifiable Rewards (RLVR) has emerged as a
+promising framework for enhancing the reasoning ability of large language models. However, much of the existing work is guided by heuristic intuition, leading
+to divergent algorithmic choices, even contradictory ones that nevertheless report
+empirical gains. To better understand this phenomenon, we conduct a theoretical
+analysis of RLVR updates. Our study reveals that differences in off-policy degree, determined by the number of gradient steps per rollout, substantially affect
+the distribution of importance sampling ratios and their clipping behavior, thereby
+altering which tokens dominate the update. Building on this insight, we characterize gradient expectation as the central quantity governing update dynamics and
+analyze the roles of token probability, advantage, and importance sampling ratio. Motivated by these findings, we propose Adaptive Clip Policy Optimization
+(ACPO), which adjusts clipping boundaries across token groups according to the
+empirical variance of their importance sampling ratios. Experiments on models of
+varying scales (3B, and 7B) and diverse reasoning benchmarks—including mathematical problem solving, tabular question answering, and logic puzzles—show
+that ACPO outperforms strong baselines such as DAPO and CISPO. These results demonstrate that principled, analysis-driven approaches yield more robust
+and effective RLVR methods.
+
+
+1 INTRODUCTION
+
+
+Reinforcement Learning from Verifiable Rewards (RLVR) aims to enhance the reasoning ability
+of large language models (LLMs) by optimizing against checkable signals, such as mathematical
+correctness or logical validity (Shao et al., 2024; Guo et al., 2025a; Lambert et al., 2024; Jaech
+et al., 2024; Chen et al., 2025c; Yang et al., 2025a). This setting provides a scalable way to directly
+reward structured reasoning, making RLVR a central approach for advancing reliability in complex
+problem-solving tasks.
+
+
+Despite lots of progress in this direction, much of the current work on RLVR remains driven by
+heuristic intuition rather than systematic analysis. As a result, a wide variety of algorithmic choices
+have been proposed (Yu et al., 2025; Yue et al., 2025; Su et al., 2025; Zheng et al., 2025a), but the
+effectiveness of these improvements is not well understood. There are even studies that adopt opposite approaches yet report empirical improvements. A notable example concerns how tokens with
+different probability or entropy levels are treated during optimization. Wang et al. (2025b) argues
+for emphasizing high-entropy tokens while masking low-entropy ones, on the premise that uncertain tokens are more important in the reasoning process. In contrast, Yang et al. (2025b) suggests
+emphasizing high-probability tokens to prevent low-probability tokens dominating updating, since
+low-probability token leads to larger gradients. Given the positive correlation between token entropy and probability, these strategies are effectively opposite in design, yet both have demonstrated
+benefits in practice.
+
+
+Considering the importance of understanding RLVR updates at the token level (Yang et al., 2025b;
+Wang et al., 2025b; Cui et al., 2025; Chen et al., 2025a; Wang et al., 2025a), in this work, we conduct
+a detailed analysis of the update step in RLVR. Our investigation begins with a key observation: the
+two aforementioned studies have a key difference in their experimental settings. The work emphasizing high-entropy tokens performs 16 gradient steps per rollout step, resulting in an updating that
+
+
+1
+
+
+is closer to off-policy learning. In contrast, the work emphasizing high-probability tokens applies
+only 2 gradient steps per rollout step, which corresponds to a more on-policy update. This difference
+has a significant effect on the distribution of importance sampling (IS) ratios and the extent to which
+they are clipped. Since clipped tokens no longer contribute to the update, the critical insight is that
+_the_ _analysis_ _must_ _move_ _beyond_ _the_ _effect_ _of_ _individual_ _tokens_ _and_ _instead_ _consider_ _the_ _collective_
+_contribution of all tokens that actively participate in gradient updates, that is, the expectation of the_
+_gradient_ . Building on this perspective, we provide a deeper theoretical analysis and demonstrate
+that greater degree of off-policy increases the variance of IS ratio, which in turn alters the gradient
+expectation and leads to different sets of tokens dominating the update under varying degrees of
+off-policy.
+
+
+Extending the perspective of analyzing gradient expectation, we further analyze other key factors
+that influence the update dynamics in RLVR. These include (1) intrinsic token properties such as
+probability, (2) the sign and magnitude of the corresponding advantage, and (3) the importance
+sampling ratio. Taken together, these factors indicate that an effective update must account for their
+joint impact. In particular, the commonly used uniform clipping strategy fails to adequately reflect
+these heterogeneous influences. To address this limitation, we further propose Adaptive Clip Policy
+Optimization ( **ACPO** ). Rather than applying a fixed clipping range, ACPO calibrates the clipping
+boundary for different groups of tokens by setting it according to the empirical standard deviation
+of the importance sampling ratios within each group. This design is theoretically supported by our
+characterization of gradient expectation and provides a more principled mechanism for balancing
+stability and learning efficiency.
+
+
+We validate the effectiveness of ACPO across models of different scales (3B, and 7B parameters) and
+a diverse set of reasoning tasks, including mathematical problem solving, tabular question answering, and logic puzzles. Experimental results demonstrate that ACPO consistently outperforms strong
+baselines such as DAPO (Yu et al., 2025) and CISPO (Chen et al., 2025a). These extensive evaluations highlight that a more comprehensive approach, derived from careful analysis, yields greater
+robustness and adaptability, enabling effective learning across varying base models and datasets.
+
+
+Figure 1: (a) Prior work shows seemingly conflicting results: updating high-entropy tokens improves
+performance, while over-dominance of low-probability tokens harms stability. (b) Our unified analysis reveals that these conflicts arise from gradient dynamics controlled by token probability, advantage, and importance sampling, shifting with the degree of off-policy divergence. (c) Based on these
+insights, we propose Adaptive Clip Policy Optimization (ACPO), which dynamically calibrates clipping ranges and outperforms fixed-clip baselines in both near on-policy and off-policy settings.
+
+
+2 THEORETICAL ANALYSIS OF EMPIRICAL CONTRADICTIONS
+
+
+2.1 PRELIMINARY
+
+
+In contrast to traditional actor-critic algorithms such as Proximal Policy Optimization (PPO) (Schulman et al., 2017), Group Relative Policy Optimization (GRPO) (Shao et al., 2024) removes the critic
+
+
+2
+
+
+(of comparable size to the policy) and estimates advantages by standardizing rewards within a sampled group. For each prompt _q_ _∼_ _P_ ( _Q_ ), the policy _πθ_ samples _G_ responses _{oi}_ _[G]_ _i_ =1 [,] [each scored]
+
+_ri−_ mean( _{rj_ _}_ _[G]_ _j_ =1 [)]
+by a rule-based reward _ri_ = _R_ ( _oi_ ). The (intra-group) relative advantage is _Ai_ = std( _{rj_ _}_ _[G]_ _j_ =1,
+
+where mean and std denote the sample mean and standard deviation, respectively. The objective is:
+
+
+where _ρi,t_ = _πθoldπθ_ ( _o_ ( _i,toi,t|q,o|q,oi,<ti,<t_ ) ) [is] [the importance sampling (IS) ratio,] [used to correct for off-policy]
+updates. The clipping function _clip_ ( _·,_ 1 _−_ _ϵl,_ 1 + _ϵh_ ) restricts this ratio to [1 _−_ _ϵl,_ 1 + _ϵh_ ] for stable
+updates. GRPO typically uses symmetric clipping ( _ϵl_ = _ϵh_ ), while DAPO (Yu et al., 2025) adopts
+asymmetric clipping ( _ϵh_ _>_ _ϵl_ ) to mitigate entropy collapse. Following recent practice (Yu et al.,
+2025; Su et al., 2025; Chen et al., 2025a), we omit the KL penalty.
+
+
+2.2 CONTRADICTORY EMPIRICAL RESULTS
+
+
+The limitations of a heuristic-driven approach are highlighted by recent, conflicting findings. Wang
+et al. (2025b) report faster convergence and superior accuracy by selectively updating high-entropy
+tokens, since these tokens tend to have higher uncertainty and play a more important role in the
+reasoning process. In contrast, Yang et al. (2025b) argue against amplifying the influence of lowprobability tokens, demonstrating that exclusively updating them leads to slow convergence and
+suboptimal performance. Their work suggests that the large, high-variance gradients from these tokens can destabilize training. This creates a paradox, as high-entropy tokens are often those with low
+generation probabilities Guo et al. (2025b); Zheng et al. (2025b). The fact that two strategies targeting overlapping token populations yield divergent outcomes suggests that a critical factor is being
+overlooked. This puzzling discrepancy motivates our investigation into the fundamental structure of
+the policy gradient.
+
+
+Figure 2: Overview of empirical validations for importance sampling ratio variance and gradient
+dominance. (a) Distribution of the importance sampling ratio, showing significantly higher variance
+for low-probability tokens. (b) The reversal of gradient dominance from low- to high-probability
+tokens as the off-policy degree _κ_ increases. (c) Correlation between token probability and entropy.
+
+
+2.3 EXPLAIN THE DIFFERENCE VIA THEORETICAL ANALYSIS
+
+
+2.3.1 FINDING: DEGREE OF OFF-POLICY IS THE KEY
+
+
+We observe a substantial difference in the experimental setting of two closely related studies.
+In one (Yang et al., 2025b), a single rollout batch is used to perform two update steps; in the
+other (Wang et al., 2025b), the same batch is used for 16 updates. After the first update, the current
+policy diverges from the behavior policy that generated the rollouts, and additional updates enlarge
+
+
+3
+
+
+_|oi|_
+
+
+_t_ =1
+
+
+1
+_J_ GRPO( _θ_ ) = E _q∼P_ ( _Q_ ) _,{oi}Gi_ =1 _[∼][π][θ]_ old [(] _[·|][q]_ [)] _G_
+
+
+_G_
+
+
+_i_ =1
+
+
+1
+_|oi|_
+
+
+- min( _ρi,tAi,_ clip( _ρi,t,_ 1 _−_ _ϵl,_ 1 + _ϵh_ ) _Ai_ ) (1)
+
+
+this divergence. Consequently, the two settings differ markedly in their degree of off-policy divergence. Moreover, as indicated by Eq. equation 1, the importance sampling (IS) ratio used to correct
+off-policy data is clipped, and tokens whose ratios are clipped will not contribute to the gradient
+update. Under different levels of off-policy divergence, therefore, both the number and the distribution of tokens that actually influence learning change, potentially leading to qualitatively different
+outcomes. These observations suggest that _analyses_ _based_ _solely_ _on_ _gradients_ _from_ _individual_ _to-_
+_kens are incomplete;_ _a more comprehensive perspective is to examine the_ _**gradient expectation**_ _by_
+_aggregating contributions across all tokens that participate in the update_ .
+
+
+2.3.2 DETAILED ANALYSIS
+
+
+The gradient of the GRPO objective with respect to the model parameters _θ_ is given by:
+
+
+To analyze the update on the model parameters _θ_, our work focuses on the gradient with respect to
+the pre-softmax logits _zk_ . Via the chain rule, the full gradient _∇θ_ log _πθ_ ( _oi,t_ ) in Eq. 2 is propagated
+from these logits. We analyze this initial update signal, specifically _∂_ log _πk/∂zk_ = (1 _−_ _πk_ ) for
+a sampled token _k_ . In this setting, the indicator function Iclip set to zero means that the tokens is
+clipped and they have no contributions to the gradient. Therefore, the core factors that influence the
+gradient signal can be defined as:
+
+
+_Gk_ = (1 _−_ _πk_ ) _· ρk · A ·_ Iclip( _rk, A_ ) (3)
+
+
+Our objective is to analyze the expectation of this quantity, E[ _Gk_ ], particularly how it is influenced
+by the token probability _πk_ and the degree of off-policy during training.
+
+
+**Distribution** **of** **Importance** **Sampling** **Ratio** To analyze the impact of the clipping mechanism
+on the gradient expectation E[ _Gk_ ], it is important to characterize the distribution of the importance
+sampling ratio, _ρk_ . Assume _ρk_ follows a normal distribution, _N_ (1 _, σρ_ [2][)][.] [Its mean is 1 as the policy]
+update step can stochastically increase or decrease a token’s probability. Then, the primary challenge
+lies in determining its variance, _σρ_ [2][,] [which] [dictates] [the] [likelihood] [of] [clipping.] [By] [performing] [a]
+second-order Taylor expansion of the policy function, we approximate how _σρ_ [2] [evolves from a single]
+gradient update step (see Appendix B.1 for details). This derivation yields our first key result:
+
+
+**Lemma** **1** **(Variance** **of** **Importance** **Sampling** **Ratio).** _Consider_ _a_ _single-step_ _gradient_ _update_
+_from_ _policy_ _πold_ _to_ _π,_ _the_ _variance_ _of_ _the_ _importance_ _sampling_ _ratio,_ _σρ_ [2] _[,]_ _[can]_ _[be]_ _[expressed]_ _[as]_ _[a]_
+_function of the token probability πk_ _as follows:_
+
+_σρ_ [2][(] _[π][k]_ [) =] _[ κ]_ [2][(1] _[ −]_ _[π][k]_ [)][4][ +] _[ O]_ [(] _[κ]_ [3][)] (4)
+
+_Here,_ _κ_ = ( _T_ _[η]_ [2] [)] _[σ][A]_ _[is]_ _[a]_ _[coefficient]_ _[related]_ _[to]_ _[the]_ _[learning]_ _[rate]_ _[η][,]_ _[the]_ _[temperature]_ _[T]_ _[and]_ _[the]_ _[ad-]_
+
+_vantage_ _variance_ _σA_ [2] _[.]_ _[A]_ _[larger]_ _[κ]_ _[corresponds]_ _[to]_ _[a]_ _[greater]_ _[per-step]_ _[off-policy]_ _[shift,]_ _[since]_ _[for]_ _[the]_
+_same_ _token_ _probability_ _πk,_ _increasing_ _κ_ _proportionally_ _enlarges_ _σρ_ [2][(] _[π][k]_ [)] _[.]_ _[The]_ _[term]_ _[O]_ [(] _[κ]_ [3][)] _[repre-]_
+_sents higher-order terms, which are negligible under the standard assumption that the learning step_
+_is small (i.e., κ ≪_ 1 _)._
+
+
+Figure 2 provides an empirical visualization of this principle. The distribution of the IS ratio for
+low-probability tokens is shown to have a much larger spread and numerous outliers compared to
+that of high-probability tokens.
+
+
+**Expectation** **of** **Gradient** With the distribution of the IS ratio established in Lemma 1, we can
+now derive an analytical approximation for the gradient expectation magnitude, E[ _Gk_ ]. We assume
+the advantage _A_ follows a zero-mean normal distribution, _N_ (0 _, σA_ [2] [)][.] [The full derivation is provided]
+in Appendix B.2.
+
+
+4
+
+
+1
+_∇θJ_ GRPO( _θ_ ) = E _q∼P_ ( _Q_ ) _,{oi}Gi_ =1 _[∼][π][θ]_ _old_ [(] _[O][|][q]_ [)] _G_
+
+
+_G_
+
+
+_i_ =1
+
+
+1
+_|oi|_
+
+
+_|oi|_
+
+
+[ _ρi,tAi ·_ Iclip ( _ρi,t, Ai_ )] _· ∇θ_ log _πθ_ ( _oi,t_ )
+
+_t_ =1
+
+
+(2)
+
+
+_._
+
+
+    -    where Iclip _ρi,t,_ _A_ [ˆ] _i,t_ =
+
+
+
+
+
+
+0 - if _A_ [ˆ] _i,t_ _>_ 0 and _ρi,t_ _>_ 1 + _ϵh_
+
+if _A_ [ˆ] _i,t_ _<_ 0 and _ρi,t_ _<_ 1 _−_ _ϵl_
+
+1 otherwise
+
+
+0
+
+
+
+
+
+**Proposition** **1** **(Gradient** **Expectation** **Magnitude).** _For_ _a_ _token_ _with_ _probability_ _π,_ _its_ _gradient_
+_Expectation magnitude_ E[ _G|π_ ] _can be expressed as:_
+
+E[ _G | π_ ] = (1 _−_ _π_ ) ~~_√_~~ _[σ][A]_ (5)
+
+2 _π_ _[·][ F]_ [(] _[π]_ [;] _[ κ, ϵ][h][, ϵ][l]_ [)]
+
+
+_where the function F_ ( _·_ ) _is defined as:_
+
+_F_ ( _π_ ; _κ, ϵh, ϵl_ ) = Φ� _σρϵ_ ( _hπ_ )    - _−_ Φ� _σρϵ_ ( _lπ_ )    - _−_ _σρ_ ( _π_ )� _ϕ_    - _σρϵ_ ( _hπ_ )    - + _ϕ_    - _σρϵ_ ( _lπ_ ) �� (6)
+
+
+_Here,_ Φ( _·_ ) _and ϕ_ ( _·_ ) _are the CDF and PDF of the standard normal distribution, respectively._ _1._
+
+
+The function _F_ ( _·_ ) captures the effect of clipping. Its behavior is governed by the standardized
+clipping thresholds, _ϵh/σρ_ ( _π_ ) and _ϵl/σρ_ ( _π_ ).
+
+
+**Two** **Different** **Gradient** **Dominances** Proposition 1 provides the analytical tool to explain the
+empirical contradictions outlined in Section 2.2. We partition tokens into two groups based on their
+predicted probability _π_ : low-probability tokens with _π_ _∈_ [0 _, pL_ ] and high-probability tokens with
+_π_ _∈_ [ _pH_ _,_ 1), for some thresholds _pL_ _<_ _pH_ . We then compare the average gradient expectation
+magnitudes of low-probability tokens, denoted _|G_ [¯] _L|_, with those of high-probability tokens, _|G_ [¯] _H_ _|_ as
+follows (detailed derivations are in Appendix B.3).
+
+
+**Remark** **1** **(Gradient** **Dominance** **Reversal).** _There_ _exists_ _a_ _critical_ _threshold_ _for_ _the_ _degree_ _of_
+_off-policy, κc_ _>_ 0 _, that dictates a reversal in which token population dominates the gradient expec-_
+_tation:_
+
+
+_1._ _**Near On-Policy (**_ _κ_ _<_ _κc_ _**):**_ _The average gradient expectation from low-probability tokens_
+_are_ _greater_ _in_ _magnitude_ _than_ _from_ _high-probability_ _tokens,_ _i.e.,_ _|G_ [¯] _L|_ _>_ _|G_ [¯] _H_ _|._ _Low-_
+_probability tokens dominate the updates._
+
+
+_2._ _**Sufficiently**_ _**Off-Policy**_ _**(**_ _κ_ _>_ _κc_ _**):**_ _The_ _relationship_ _inverts,_ _with_ _|G_ [¯] _H_ _|_ _>_ _|G_ [¯] _L|._ _High-_
+_probability tokens now dominate._
+
+
+This corollary offers a theoretically-grounded resolution to the empirical conflict, and the predicted
+dominance reversal is empirically validated in Figure 2. We can now contextualize the conflicting
+findings of prior work. The training regime of Yang et al. (2025b), with its small number of updates
+per batch, operates in the **near** **on-policy** region (small _κ_ ), where low-probability tokens provide
+the dominant gradient signal according to our analysis. Conversely, the method from Wang et al.
+(2025b) employs a high number of updates, pushing the training into a **sufficiently off-policy** regime
+(large _κ_ ). In this scenario, the extreme IS ratio variance of low-probability tokens leads to frequent
+clipping that suppresses their gradient contribution and high-probability dominate updating. Furthermore, the choice of entropy as a heuristic is particularly effective because, as shown in Figure 2
+right, it also implicitly filters out the most unstable low-probability, low-entropy tokens (see Appendix C for a detailed analysis). Therefore, targeting high-entropy tokens balances contributions
+from different token populations, allowing for more stable updates.
+
+
+Our analysis reveals that the question of which tokens are more important for optimization does not
+have a static answer. Instead, the optimal focus of gradient updates is conditional on the degree of
+off-policy during training.
+
+
+3 KEY FACTORS INFLUENCING UPDATES IN RL FOR LLMS
+
+
+Following the perspective of analyzing gradients and learning dynamics of GRPO, we further provide a more comprehensive investigation on the key factors governing the GRPO policy gradient.
+
+
+3.1 ANALYTICAL FRAMEWORK
+
+
+We analyze the gradients in two aspects: its magnitude and direction. First, we measure gradient
+magnitude via the gradient expectation, E[ _G|π_ ] (Proposition 1), to identify which token populations dominate the update. Second, to analyze the high-dimensional gradient direction, we adopt
+
+
+5
+
+
+a layer-wise geometric approach. We use Singular Value Decomposition (SVD) to identify dominant update directions within a layer’s gradient matrix and quantify their alignment using Principal
+Angles Between Subspaces (PABS).
+
+
+For a gradient matrix _W_ _∈_ R _[m][×][n]_, its SVD is _W_ = _U_ Σ _V_ _[⊤]_ . We focus on the subspace spanned by
+the top- _k_ right singular vectors, _Vk_ . Given two such subspaces from different gradients, represented
+by orthonormal bases _Q_ _[A]_ and _Q_ _[B]_, the _k_ principal angles are:
+
+
+_θi_ = arccos( _si_ ) _,_ for _i_ = 1 _, . . ., k,_ (7)
+
+
+where _si_ are the singular values of the cross-Gram matrix ( _Q_ _[A]_ ) _[⊤]_ _Q_ _[B]_ . An angle of 0 _[◦]_ indicates
+perfect alignment, while 90 _[◦]_ implies orthogonality. We set _k_ = 128 and clamp singular values to
+
+[0 _,_ 1] for numerical stability.
+
+
+3.2 KEY FACTORS
+
+
+The GRPO gradient (Eq. 2) is shaped by three principal components, each influencing its final magnitude and direction. First, the **token’s properties** determine the base update vector _∇θ_ log _πθ_ ( _oi,t_ ).
+Second, the **advantage** _Ai_ acts as a weight. Its magnitude scales the update, and its sign determines
+whether the action is reinforced or suppressed. Finally, the **importance** **sampling** ratio _ρi,t_ and
+its associated clipping mechanism further modulate the update, selectively filtering contributions to
+correct for the off-policy mismatch and fundamentally altering the final gradient’s composition. In
+the following sections, we dissect each of these components.
+
+
+**Token** **Properties** The policy gradient is primarily driven by signals from a small subset of lowprobability tokens. Our analysis (Appendix D.1) shows these tokens contribute a gradient with
+disproportionately large magnitude and strong alignment with the overall update direction, whereas
+high-probability tokens have a much smaller contribution. This explains why heuristics like updating
+high-entropy tokens are effective: they implicitly balance the potent but potentially unstable signals
+from the distribution’s tail against policy stability. This underscores the need for a more principled
+mechanism to manage this trade-off.
+
+
+**Sign** **of** **Advantage** The advantage sign introduces a critical asymmetry in the update dynamics.
+While positive and negative advantage samples yield gradients of comparable magnitude, by analyzing the direction, we find that the negative-advantage gradient is substantially better aligned with
+the final update direction (see Appendix D.2 for details). This indicates that the learning trajectory
+might be predominantly shaped by corrective signals from suboptimal actions ( _A_ _<_ 0) rather than
+by reinforcing optimal ones ( _A_ _>_ 0). This finding highlights the importance of negative samples
+in RL, which is a key differentiation with supervised learning, where the model only learns to fit
+positive samples.
+
+
+**Importance** **Sampling** The clipping mechanism in off-policy learning, while essential for stability, fundamentally alters the optimization path. By comparing the direction between the off-policy
+gradient and on-policy gradient by aggregating all samples in one step, we find that they diverge
+significantly ( _≈_ 47 _[◦]_ ) even when their magnitudes are nearly identical (see Appendix D.3 for more
+details). This demonstrates that clipping is not a neutral stabilizer; it actively shapes the gradient
+by systematically filtering high-variance updates, prioritizing magnitude stability at the cost of directional fidelity to the on-policy ideal. This trade-off, further highlighted by comparing different
+clipping strategies, suggests an opportunity for adaptive mechanisms that can better preserve onpolicy direction while retaining off-policy efficiency.
+
+
+3.3 SUMMARY OF ANALYSIS
+
+
+Our analysis of the policy gradient dynamics yields the following key insights. _(1) Uniformly clip-_
+_ping_ _for_ _all_ _tokens_ _is_ _suboptimal_, since it ignores the probability-dependent nature of importance
+sampling variance (Lemma 1), treating all tokens uniformly despite their vastly different contributions to gradient instability. _(2)_ _Clipping_ _stabilizes_ _updating_ _but_ _alters_ _optimization_ _direction._
+Although clipping is critical for variance control, it can largely change gradient direction compared
+with pure on-policy updates. This reflects an inherent trade-off: enforcing stability through clipping
+reshapes the optimization trajectory, potentially sacrificing alignment with the on-policy update, also
+motivates us to introduce more careful designs on clipping.
+
+
+6
+
+
+Besides clipping, we also have some observations on other factors. _(1)_ _Low-probability_ _tokens_
+_dominate_ _the_ _gradient._ The update signal is disproportionately driven by these tokens, which are
+the major information source of updating, but may cause unstable learning signal. _(2) Samples with_
+_negative_ _advantage_ _play_ _a_ _critical_ _role_ _in_ _shaping_ _the_ _update_ _direction._ The learning trajectory is
+primarily dictated by corrective signals from negative-advantage samples ( _A_ _<_ 0), suggesting that
+error correction is more influential than simple reinforcement in defining the optimization path.
+
+
+4 ADAPTIVE CLIP POLICY OPTIMIZATION
+
+
+Building upon the theoretical analysis (Section 2.3), empirical observations (Figure 2), and analysis
+on gradients (Section 3), a key insight is that the variance of the importance sampling (IS) ratio
+is not static. Instead, it is dynamically influenced by multiple factors, including a token’s intrinsic
+probability, the degree of off-policy, and the current training stage.
+
+
+Despite this inherent dynamism, most existing methods employ a fixed clipping range. This uniform approach is suboptimal, as it fails to account for the heterogeneous stability profiles of different tokens under varying conditions. To address this limitation, we propose **Adaptive Clip Policy**
+**Optimization (ACPO)**, a method that dynamically calibrates the clipping boundaries in proportion
+to the empirically measured standard deviation of the IS ratio. ACPO starts from a more comprehensive consideration on token properties, and thus is designed to adapt to various learning process
+with different models and datasets.
+
+
+4.1 METHOD
+
+
+Inspired by our analysis in Lemma 1, which shows that IS ratio variance is highly dependent on
+token probability, ACPO replaces the fixed, global clipping range with one tailored for different
+token groups. Specifically, tokens within a batch are grouped into bins (five in experiments) based
+on their generation probabilities. The ACPO objective is then applied to each bin:
+
+
+The adaptive clipping range _ϵa_ is computed dynamically for each bin as _ϵa_ = _α · σρ_ + _ϵb_ . Here, _σρ_
+is the empirical standard deviation of IS ratios within the bin, measuring the local policy shift. The
+hyperparameter _α_ scales the sensitivity to this shift; we find _α_ = 3 to be effective, inspired by the
+three-sigma rule. The term _ϵb_ is a small base value that ensures a minimum clipping range for stability, preventing the trust region from shrinking too much. This formulation allows the optimization
+to self-regulate: it automatically widens the trust region to accommodate larger updates when the
+policy shift is high and tightens it for stable fine-tuning as the policy converges.
+
+
+4.2 EXPERIMENTAL SETUP AND RESULTS
+
+
+We implement our method on three reasoning tasks: **ORZ-57K** (Hu et al., 2025) for mathematical problem solving, **HiTab** (Cheng et al., 2022) for tabular question answering, and **Countdown**
+(Jackson, 2025) for arithmetic-based puzzles. Experiments are conducted with Qwen2.5-3B (Yang
+et al., 2024), Qwen2.5-3B-Instruct, and Qwen2.5-7B to examine its efficiency and scalability. We compare our method against two strong baselines: **DAPO** (Yu et al., 2025), an adaptive
+variant derived from GRPO (since our focus is specifically on the effect of clip ranges, we only apply its clip-higher component while keeping the rest identical to vanilla GRPO), and **CISPO** (Chen
+et al., 2025a), which modifies REINFORCE by clipping only the importance sampling ratios rather
+than gating token updates, thereby stabilizing training. Following Yang et al. (2025b) and Wang
+et al. (2025b), we evaluate both **near On-Policy** (N-OnP, 2-step update per rollout) and sufficiently
+**Off-Policy** (OffP, 16-step update per rollout) regimes to assess whether our method adapts effectively under different levels of policy divergence. For models trained on **ORZ-57K**, we additionally
+evaluate their out-of-distribution generalization on other mathematical reasoning benchmarks, including **AMC2023**, **Minerva**, **Math500** (Hendrycks et al., 2021), and **OlympiadBench** (He et al.,
+2024), in order to verify robustness across diverse math domains.
+
+
+7
+
+
+1
+_JACP O_ ( _θ_ ) = E _q∼P_ ( _Q_ ) _,{oi}Gi_ =1 _[∼][π][θ]_ _old_ [(] _[O][|][q]_ [)] _G_
+
+
+_G_
+
+
+_i_ =1
+
+
+1
+_|oi|_
+
+
+_|oi|_
+
+- _{min_ [ _ρi,tAi, clip_ ( _ρi,t,_ 1 _−_ _ϵa,_ 1 + _ϵa_ ) _Ai_ ] _}_ (8)
+
+
+_t_ =1
+
+
+Table 1: Results trained on Countdown and HiTab datasets. We report the best validation reward
+under N-OnP. and OffP. training regimes, with results given as the average accuracy over 4 evaluations per benchmark.
+
+
+Table 2: Results of Qwen2.5-7B model trained on the ORZ-57K dataset, reported as average accuracy over 8 evaluation runs across benchmarks.
+
+
+**AMC2023** **Minerva** **Math500** **Olympiad**
+Method Avg.
+**N-OnP.** **OffP.** **N-OnP.** **OffP.** **N-OnP.** **OffP.** **N-OnP.** **OffP.**
+
+
+Base Model 26.20 13.32 41.48 18.02 24.76
+DAPO 41.11 42.47 25.74 **26.19** 69.55 70.53 31.63 31.94 42.40
+CISPO 39.46 **43.37** 26.24 26.15 70.80 70.58 31.46 31.72 42.47
+ACPO (Ours) **41.42** 42.62 **26.52** 26.15 **71.15** **71.35** **31.76** **32.26** **42.90**
+
+
+**Main Results** . **Tables 1–2** and **Figure 3** demonstrate that ACPO consistently outperforms baseline
+methods across all three reasoning tasks and model scales. The improvements are particularly notable in challenging off-policy scenarios: ACPO achieves the highest performance on ORZ (73.2%),
+HiTab (69.83%), and Countdown (76.27%).
+
+
+A key observation is ACPO’s stable performance across both near on-policy and off-policy training
+regimes, while baselines show varying degrees of instability. Most notably, CISPO suffers a dramatic performance collapse on Countdown (from 74.25% to 55.12%), illustrating the brittleness of
+heuristic-based approaches when policy divergence increases. In contrast, ACPO maintains consistent gains in both near on-policy and sufficiently off-policy settings.
+
+
+These results validate our theoretical framework in two critical ways. First, the consistent crossregime performance confirms that our adaptive clipping mechanism successfully handles the gradient dominance reversal predicted in Corollary 1. Second, the unified improvements across diverse
+reasoning tasks demonstrate that context-aware optimization provides more robust benefits than
+static, heuristic-based modifications. The experimental evidence thus supports our central claim that
+effective RLVR requires principled, adaptive approaches rather than fixed update strategies.
+
+
+Figure 3: Training curves and validation rewards on Countdown dataset with near on-policy and
+off-policy updates.
+
+
+8
+
+
+(a) Performance of Qwen2.5-3B-Instruct
+model trained on the Countdown dataset.
+
+
+**Qwen2.5-3B-Instruct**
+**Method**
+
+**N-OnP.** **OffP.**
+
+
+Base Model 6.90
+DAPO 73.27 74.38
+CISPO 74.25 55.12
+ACPO **75.74** **76.27**
+
+
+(b) Performance of Qwen2.5-3B and Qwen2.5-7B model
+trained on the HiTab dataset.
+
+
+**Qwen2.5-3B** **Qwen2.5-7B**
+**Method**
+
+**N-OnP.** **OffP.** **N-OnP.** **OffP.**
+
+
+Base Model 17.50 31.25
+DAPO 44.33 44.00 68.42 65.75
+CISPO 43.92 44.83 69.17 65.67
+ACPO **45.50** **46.42** **69.83** **66.58**
+
+
+Table 3: Ablation study results on the Countdown benchmark with Qwen2.5-3B-Instruct.
+
+
+**Method / Setting** **N-OnP.** **OffP.**
+
+
+DAPO (Baseline) 73.27 74.38
+DAPO (Clip-High=Max) 74.65 75.86
+GRPO (Clip=Avg) 72.55 74.16
+**ACPO** **75.74** **76.27**
+
+
+4.3 ABLATION STUDY
+
+
+To isolate the contribution of adaptive clipping, we conduct ablation experiments on the Countdown
+task with Qwen2.5-3B-Instruct (Table 3). We evaluate two controlled settings for DAPO and GRPO:
+(1) **DAPO (Clip-High=Max)**, where the upper threshold is set to ACPO’s maximum observed clip
+range, while keeping the lower bound unchanged. These settings ensure that any performance difference cannot be attributed to trivial changes in clipping magnitudes. (2) **GRPO (Clip=Avg)**, where
+GRPO’s upper and lower clipping thresholds are both set to the weighted average of ACPO’s pertoken clip ranges.
+
+
+Under the _avg_ setting, ACPO’s average clip range yields a uniform threshold that is **more restrictive**
+than standard GRPO, since it is dominated by high-probability tokens with low variance. This overly
+tight bound suppresses valuable updates from low-probability tokens, thus reducing performance
+(72.55% vs. 73.27% baseline).
+
+
+Under the _max_ setting, raising DAPO’s clip-range upper bound to match ACPO’s maximum observed range admits more signals and yields modest gains (74.65% vs. 73.27%). However, this
+uniform expansion ignores token-level variance: some tokens remain over-clipped, while others
+become overly permissive, leaving performance still below ACPO’s dynamic calibration.
+
+
+This gap demonstrates that ACPO’s benefit stems from adaptive calibration rather than simply using
+different threshold values. Unlike static approaches that apply uniform bounds across all tokens,
+ACPO’s variance-aware mechanism enables token-specific adjustments that balance stability with
+gradient informativeness, leading to consistent improvements across training regimes.
+
+
+5 RELATED WORKS
+
+
+**Reinforcement Learning for Large Language Models.** The application of reinforcement learning
+to LLMs has transitioned from preference alignment via RLHF (Ouyang et al., 2022) to directly optimizing reasoning abilities with Reinforcement Learning from Verifiable Rewards (RLVR) (Lambert
+et al., 2024). This paradigm uses objective feedback signals, such as mathematical correctness, to
+train models. Pioneered by early work like OpenAI’s o1 (Jaech et al., 2024) and advanced by algorithms such as GRPO (Shao et al., 2024), RLVR has become a central methodology for developing
+state-of-the-art reasoning agents, demonstrating that complex skills can emerge from outcome-based
+optimization.
+
+
+**Token-Level Update Strategies.** The success of RLVR is highly dependent on the token-level update mechanism. A diverse range of heuristic strategies has been proposed, focusing on areas like
+entropy-based modulation (Wang et al., 2025b; Cui et al., 2025), gradient clipping (Chen et al.,
+2025a; Zheng et al., 2025a), and advantage function design. However, these methods often yield
+conflicting conclusions. For instance, a key debate exists on whether to prioritize high-entropy tokens to encourage exploration in reasoning (Wang et al., 2025b) or to suppress them to mitigate
+high-variance gradients (Yang et al., 2025b). Such contradictions highlight a lack of a unified understanding of RLVR’s update dynamics, motivating the need for the systematic, component-wise
+analysis presented in our work.
+
+
+6 CONCLUSION
+
+
+In this work, we moved beyond the heuristic-driven design of RLVR algorithms by conducting a
+systematic analysis of token-level update dynamics. Our core contribution is revealing that the degree of off-policy learning reconciles contradictory findings in prior work, such as the debate over
+
+
+9
+
+
+prioritizing high-entropy versus high-probability tokens. By analyzing the gradient expectation, we
+show that off-policy updates alter the distribution of importance sampling ratios, which in turn determines which tokens dominate the learning process. This insight exposes the limitations of uniform
+clipping and motivates our proposed method, Adaptive Clip Policy Optimization (ACPO), which
+calibrates clipping boundaries for different token groups based on their empirical IS ratio statistics.
+Extensive experiments across various models (3B/7B) and diverse reasoning tasks demonstrate that
+ACPO consistently outperforms strong baselines, underscoring that a principled, analytical approach
+is crucial for developing more robust and effective methods to enhance the reasoning capabilities of
+large language models.
+
+
+ETHICS STATEMENT
+
+
+The primary objective of this work is to enhance the systematic understanding and reliability of
+reasoning in large language models. We view this as a crucial contribution to the development
+of safer and more predictable AI. All experiments were conducted on publicly available, standard
+academic datasets and utilized open-source base models. These resources do not contain any personally identifiable information or sensitive user data. While the base models may inherit societal
+biases from their pre-training data, our research focuses on optimizing for objective, verifiable tasks
+such as mathematical and logical correctness. This problem formulation is less susceptible to subjective biases, though we acknowledge that addressing underlying model bias remains a critical
+and ongoing challenge for the community. We also recognize that advancements in AI capabilities
+carry a potential for dual use, and we encourage the responsible development and deployment of
+these technologies. Our work is intended for a research audience to foster a deeper, more principled
+understanding of AI systems.
+
+
+REPRODUCIBILITY
+
+
+To ensure the reproducibility of our findings, we provide comprehensive details of our training process, including all hyperparameters and experimental configurations, in Appendix F. Furthermore, our code and training scripts are made publicly available at the following repository:
+[https://anonymous.4open.science/r/ACPO.](https://anonymous.4open.science/r/ACPO)
+
+
+REFERENCES
+
+Charles Arnal, Ga A [˘] Ttan [ˇ] Narozniak, Vivien Cabannes, Yunhao Tang, Julia Kempe, and Remi
+Munos. Asymmetric reinforce for off-policy reinforcement learning: Balancing positive and negative rewards. _arXiv preprint arXiv:2506.20520_, 2025.
+
+
+Aili Chen, Aonian Li, Bangwei Gong, Binyang Jiang, Bo Fei, Bo Yang, Boji Shan, Changqing Yu,
+Chao Wang, Cheng Zhu, et al. Minimax-m1: Scaling test-time compute efficiently with lightning
+attention. _arXiv preprint arXiv:2506.13585_, 2025a.
+
+
+Minghan Chen, Guikun Chen, Wenguan Wang, and Yi Yang. Seed-grpo: Semantic entropy enhanced
+grpo for uncertainty-aware policy optimization. _arXiv preprint arXiv:2505.12346_, 2025b.
+
+
+Yang Chen, Zhuolin Yang, Zihan Liu, Chankyu Lee, Peng Xu, Mohammad Shoeybi, Bryan Catanzaro, and Wei Ping. Acereason-nemotron: Advancing math and code reasoning through reinforcement learning. _arXiv preprint arXiv:2505.16400_, 2025c.
+
+
+Daixuan Cheng, Shaohan Huang, Xuekai Zhu, Bo Dai, Wayne Xin Zhao, Zhenliang Zhang, and
+Furu Wei. Reasoning with exploration: An entropy perspective. _arXiv preprint arXiv:2506.14758_,
+2025.
+
+
+Zhoujun Cheng, Haoyu Dong, Zhiruo Wang, Ran Jia, Jiaqi Guo, Yan Gao, Shi Han, Jian-Guang
+Lou, and Dongmei Zhang. HiTab: A hierarchical table dataset for question answering and natural
+language generation. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (eds.), _Pro-_
+_ceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1:_
+_Long_ _Papers)_, pp. 1094–1110, Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.acl-long.78. [URL https://aclanthology.org/2022.](https://aclanthology.org/2022.acl-long.78/)
+[acl-long.78/.](https://aclanthology.org/2022.acl-long.78/)
+
+
+10
+
+
+Ganqu Cui, Yuchen Zhang, Jiacheng Chen, Lifan Yuan, Zhi Wang, Yuxin Zuo, Haozhan Li, Yuchen
+Fan, Huayu Chen, Weize Chen, et al. The entropy mechanism of reinforcement learning for
+reasoning language models. _arXiv preprint arXiv:2505.22617_, 2025.
+
+
+Yuqian Fu, Tinghong Chen, Jiajun Chai, Xihuai Wang, Songjun Tu, Guojun Yin, Wei Lin, Qichao
+Zhang, Yuanheng Zhu, and Dongbin Zhao. Srft: A single-stage method with supervised and
+reinforcement fine-tuning for reasoning. _arXiv preprint arXiv:2506.19767_, 2025.
+
+
+Zitian Gao, Lynx Chen, Haoming Luo, Joey Zhou, and Bryan Dai. One-shot entropy minimization.
+_arXiv preprint arXiv:2505.20282_, 2025.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+via reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025a.
+
+
+Yiran Guo, Lijie Xu, Jie Liu, Dan Ye, and Shuang Qiu. Segment policy optimization: Effective segment-level credit assignment in rl for large language models. _arXiv_ _preprint_
+_arXiv:2505.23564_, 2025b.
+
+
+Chaoqun He, Renjie Luo, Yuzhuo Bai, Shengding Hu, Zhen Leng Thai, Junhao Shen, Jinyi
+Hu, Xu Han, Yujie Huang, Yuxiang Zhang, Jie Liu, Lei Qi, Zhiyuan Liu, and Maosong Sun.
+Olympiadbench: A challenging benchmark for promoting agi with olympiad-level bilingual multimodal scientific problems, 2024. [URL https://arxiv.org/abs/2402.14008.](https://arxiv.org/abs/2402.14008)
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset, 2021.
+[URL https://arxiv.org/abs/2103.03874.](https://arxiv.org/abs/2103.03874)
+
+
+Jingcheng Hu, Yinmin Zhang, Qi Han, Daxin Jiang, Xiangyu Zhang, and Heung-Yeung Shum.
+Open-reasoner-zero: An open source approach to scaling up reinforcement learning on the base
+model, 2025. [URL https://arxiv.org/abs/2503.24290.](https://arxiv.org/abs/2503.24290)
+
+
+Alex Jackson. Countdown numbers game dataset, 2025. Released under the MIT License.
+
+
+Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec
+Helyar, Aleksander Madry, Alex Beutel, Alex Carney, et al. Openai o1 system card. _arXiv_
+_preprint arXiv:2412.16720_, 2024.
+
+
+Nathan Lambert, Jacob Morrison, Valentina Pyatkin, Shengyi Huang, Hamish Ivison, Faeze Brahman, Lester James V. Miranda, Alisa Liu, Nouha Dziri, Shane Lyu, Yuling Gu, Saumya Malik,
+Victoria Graf, Jena D. Hwang, Jiangjiang Yang, Ronan Le Bras, Oyvind Tafjord, Chris Wilhelm,
+Luca Soldaini, Noah A. Smith, Yizhong Wang, Pradeep Dasigi, and Hannaneh Hajishirzi. T¨ulu 3:
+Pushing frontiers in open language model post-training. _arXiv preprint arXiv:2411.15124_, 2024.
+[URL https://arxiv.org/abs/2411.15124.](https://arxiv.org/abs/2411.15124)
+
+
+Zihe Liu, Jiashun Liu, Yancheng He, Weixun Wang, Jiaheng Liu, Ling Pan, Xinyu Hu, Shaopan
+Xiong, Ju Huang, Jian Hu, et al. Part i: Tricks or traps? a deep dive into rl for llm reasoning.
+_arXiv preprint arXiv:2508.08221_, 2025.
+
+
+Lu Ma, Hao Liang, Meiyi Qiang, Lexiang Tang, Xiaochen Ma, Zhen Hao Wong, Junbo Niu,
+Chengyu Shen, Runming He, Bin Cui, et al. Learning what reinforcement learning can’t: Interleaved online fine-tuning for hardest questions. _arXiv preprint arXiv:2506.07527_, 2025.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. _Advances in neural information processing systems_, 35:
+27730–27744, 2022.
+
+
+Nicolas Le Roux, Marc G Bellemare, Jonathan Lebensold, Arnaud Bergeron, Joshua Greaves,
+Alex Fr´echette, Carolyne Pelletier, Eric Thibodeau-Laufer, S´andor Toth, and Sam Work. Tapered off-policy reinforce: Stable and efficient reinforcement learning for llms. _arXiv_ _preprint_
+_arXiv:2503.14286_, 2025.
+
+
+11
+
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms. _arXiv preprint arXiv:1707.06347_, 2017.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+Guangming Sheng, Chi Zhang, Zilingfeng Ye, Xibin Wu, Wang Zhang, Ru Zhang, Yanghua Peng,
+Haibin Lin, and Chuan Wu. Hybridflow: A flexible and efficient rlhf framework. _arXiv preprint_
+_arXiv:_ _2409.19256_, 2024.
+
+
+Zhenpeng Su, Leiyu Pan, Xue Bai, Dening Liu, Guanting Dong, Jiaming Huang, Wenping Hu, and
+Guorui Zhou. Klear-reasoner: Advancing reasoning capability via gradient-preserving clipping
+policy optimization. _arXiv preprint arXiv:2508.07629_, 2025.
+
+
+Qwen Team. Qwq-32b: Embracing the Power of Reinforcement Learning. [https://qwenlm.](https://qwenlm.github.io/blog/qwq-32b/)
+[github.io/blog/qwq-32b/, March 2025.](https://qwenlm.github.io/blog/qwq-32b/) Accessed: 2025-09-14.
+
+
+Jiakang Wang, Runze Liu, Fuzheng Zhang, Xiu Li, and Guorui Zhou. Stabilizing knowledge, promoting reasoning: Dual-token constraints for rlvr. _arXiv preprint arXiv:2507.15778_, 2025a.
+
+
+Shenzhi Wang, Le Yu, Chang Gao, Chujie Zheng, Shixuan Liu, Rui Lu, Kai Dang, Xionghui Chen,
+Jianxin Yang, Zhenru Zhang, et al. Beyond the 80/20 rule: High-entropy minority tokens drive
+effective reinforcement learning for llm reasoning. _arXiv preprint arXiv:2506.01939_, 2025b.
+
+
+Wei Xiong, Jiarui Yao, Yuhui Xu, Bo Pang, Lei Wang, Doyen Sahoo, Junnan Li, Nan Jiang, Tong
+Zhang, Caiming Xiong, et al. A minimalist approach to llm reasoning: from rejection sampling
+to reinforce. _arXiv preprint arXiv:2504.11343_, 2025.
+
+
+Jianhao Yan, Yafu Li, Zican Hu, Zhi Wang, Ganqu Cui, Xiaoye Qu, Yu Cheng, and Yue Zhang.
+Learning to reason under off-policy guidance. _arXiv preprint arXiv:2504.14945_, 2025.
+
+
+An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li,
+Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang,
+Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin
+Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li,
+Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan,
+Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. Qwen2.5 technical report. _arXiv preprint_
+_arXiv:2412.15115_, 2024.
+
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu,
+Chang Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 technical report. _arXiv_ _preprint_
+_arXiv:2505.09388_, 2025a.
+
+
+Zhihe Yang, Xufang Luo, Zilong Wang, Dongqi Han, Zhiyuan He, Dongsheng Li, and Yunjian Xu.
+Do not let low-probability tokens over-dominate in rl for llms. _arXiv preprint arXiv:2505.12929_,
+2025b.
+
+
+Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xiaochen Zuo, Yu Yue, Weinan Dai, Tiantian
+Fan, Gaohong Liu, Lingjun Liu, et al. Dapo: An open-source llm reinforcement learning system
+at scale. _arXiv preprint arXiv:2503.14476_, 2025.
+
+
+Yu Yue, Yufeng Yuan, Qiying Yu, Xiaochen Zuo, Ruofei Zhu, Wenyuan Xu, Jiaze Chen, Chengyi
+Wang, TianTian Fan, Zhengyin Du, et al. Vapo: Efficient and reliable reinforcement learning for
+advanced reasoning tasks. _arXiv preprint arXiv:2504.05118_, 2025.
+
+
+Chujie Zheng, Shixuan Liu, Mingze Li, Xiong-Hui Chen, Bowen Yu, Chang Gao, Kai Dang,
+Yuqiong Liu, Rui Men, An Yang, et al. Group sequence policy optimization. _arXiv_ _preprint_
+_arXiv:2507.18071_, 2025a.
+
+
+Tianyu Zheng, Tianshun Xing, Qingshui Gu, Taoran Liang, Xingwei Qu, Xin Zhou, Yizhi Li, Zhoufutu Wen, Chenghua Lin, Wenhao Huang, et al. First return, entropy-eliciting explore. _arXiv_
+_preprint arXiv:2507.07017_, 2025b.
+
+
+Xinyu Zhu, Mengzhou Xia, Zhepei Wei, Wei-Lin Chen, Danqi Chen, and Yu Meng. The surprising
+effectiveness of negative reinforcement in llm reasoning. _arXiv preprint arXiv:2506.01347_, 2025.
+
+
+12
+
+
+A USE OF LARGE LANGUAGE MODELS (LLMS) STATEMENT
+
+
+We used Large Language Models (LLMs) only as auxiliary tools during the preparation of this
+paper. Specifically, LLMs were employed for proofreading, grammar correction, and improving the
+readability of sentences. They were also occasionally used to assist with LaTeX formatting (e.g.,
+tables and figures). All technical ideas, experimental design, analysis, and scientific claims are
+solely the work of the authors.
+
+
+The authors take full responsibility for the content of the manuscript, including any text generated
+or polished by the LLM. We have ensured that the LLM-generated text adheres to ethical guidelines
+and does not contribute to plagiarism or scientific misconduct.
+
+
+B DETAILED THEORETICAL DERIVATIONS
+
+
+B.1 DERIVATION OF LEMMA 1
+
+
+This appendix provides a detailed derivation for the relationship between the variance of the importance sampling ratio, _σρ_ [2][,] [and] [the] [token] [probability,] _[π][k]_ [,] [as] [stated] [in] [Lemma] [1.] [We] [begin] [by]
+performing a second-order Taylor expansion of the policy function to approximate its change after
+a single gradient update.
+
+
+B.1.1 SECOND-ORDER TAYLOR EXPANSION OF THE POLICY
+
+
+Let _πk_ be the probability of sampling token _k_ from the vocabulary, which is produced by a softmax
+function with temperature _T_ over the logits _y_ : _πk_ = �exp( _yk/T_ ) [A single-step policy gradient up-]
+
+_j_ [exp(] _[y][j]_ _[/T]_ [ )] [.]
+date changes the logits _yi_ by ∆ _yi_ . The change in the probability of token _k_, _πk_, can be approximated
+by a second-order Taylor expansion with respect to the logit changes:
+
+
+_≈_ _[ηAρ]_ _T_ [2] _[k]_ _[π][k]_ [(1] _[ −]_ _[π][k]_ [)][2] (15)
+
+
+13
+
+
+_πk_ _[′]_ _[≈]_ _[π][k]_ [+]           
+_i_
+
+
+where _πk_ _[′]_ [is the updated probability.]
+
+
+_∂πk_
+
+
+_∂πk_
+
+∆ _yi_ + [1]
+_∂yi_ 2
+
+
+_∂_ [2] _πk_
+∆ _yi_ ∆ _yj_ (9)
+_∂yi∂yj_
+
+
+2
+
+
+_i,j_
+
+
+The gradient of the softmax function with temperature _T_ is:
+
+
+_∂πk_
+
+= [1]
+_∂yi_ _T_
+
+
+_∂πk_
+
+
+(10)
+_T_ _[π][k]_ [(] _[δ][ik][ −]_ _[π][i]_ [)]
+
+
+where _δik_ is the Kronecker delta.
+
+
+The logit update ∆ _yi_ from a single policy gradient step (e.g., in PPO) is given by:
+
+∆ _yi_ = _η ·_ _[A]_ (11)
+
+_T_ _[ρ][k][ ·]_ [ (] _[δ][ik][ −]_ _[π][i]_ [)]
+
+where _η_ is the learning rate, _A_ is the estimated advantage for sampling token _k_, and _ρk_ := _πk_ _[′]_ _[/π][k]_ [is]
+the importance sampling ratio we aim to analyze.
+
+
+**First-order term:** The first-order term of the Taylor expansion is:
+
+ - _∂πk_ - _∂πk_
+
+_[∂π][k]_
+
+
+_∂πk_
+
+
+_[k]_ ∆ _yk_ +     
+_∂yk_
+
+
+_i_ = _k_
+
+
+_∂πk_
+
+
+∆ _yi_ (12)
+_∂yi_
+
+
+_i_
+
+
+_∂πk_
+
+∆ _yi_ = _[∂π][k]_
+_∂yi_ _∂yk_
+
+
+ - 1 ��
+= _η_ _[A]_
+_T_ _[π][k]_ [(1] _[ −]_ _[π][k]_ [)] _T_
+
+
+    
+   
+_[A]_ +
+
+_T_ _[ρ][k]_ [(1] _[ −]_ _[π][k]_ [)]
+
+
+_i_ = _k_
+
+
+�� _η_ _[A]_ - (13)
+
+_T_ _[ρ][k]_ [(] _[−][π][i]_ [)]
+
+
+_−_ [1]
+
+_T_ _[π][k][π][i]_
+
+
+= _[ηAρ][k]_
+
+
+_[k]_
+
+_[ηAρ][k]_
+_T_ [2] _[π][k]_ [(1] _[ −]_ _[π][k]_ [)][2][ +] _T_ [2]
+
+
+_T_ [2] _[k]_ _[π][k]_ 
+
+
+- _πi_ [2] (14)
+
+
+_i_ = _k_
+
+
+The approximation in the last step holds because [�] _i_ = _k_ _[π]_ _i_ [2] [is] [typically] [small,] [especially] [when] [the]
+
+vocabulary size is large and probabilities are diffuse. For simplicity and consistency with your draft,
+we will proceed with only the dominant term related to the update of the chosen token’s logit, which
+is a common simplification.
+
+
+**Second-order term:** For the second-order term, we focus on the diagonal element of the Hessian
+corresponding to the sampled token _k_ (i.e., _i_ = _j_ = _k_ ), as it contributes most significantly to the
+change. The second derivative is:
+
+
+We find the derivative _[∂ρ]_ _∂A_ _[k]_ [using implicit differentiation on Equation 24.] [Differentiating both sides]
+
+with respect to _A_ :
+_∂_ �( _K_ 1 [2] _[K]_ [3][)] _[ρ]_ [2] _k_ [+ (] _[K]_ [1] _[K]_ [2] _[−]_ [1)] _[ρ][k]_ [+ 1]           - = 0 (26)
+_∂A_
+
+
+14
+
+
+_∂_ [2] _πk_ _∂_
+
+=
+_∂yk_ [2] _∂yk_
+
+
+- 1 (16)
+_T_ _[π][k]_ [(1] _[ −]_ _[π][k]_ [)]
+
+
+= [1]
+
+
+[1]
+
+_T_ [(1] _[ −]_ [2] _[π][k]_ [)] _[∂π]_ _∂yk_ _[k]_
+
+
+(17)
+_∂yk_
+
+
+= _T_ [1][2] _[π][k]_ [(1] _[ −]_ [2] _[π][k]_ [)(1] _[ −]_ _[π][k]_ [)] (18)
+
+
+The contribution from this term (omitting the 1 _/_ 2 factor for simplicity in this approximation, following the draft) is:
+
+
+_∂_ [2] _πk_
+
+
+_[A]_ �2 (19)
+
+_T_ _[ρ][k]_ [(1] _[ −]_ _[π][k]_ [)]
+
+
+_∂_ [2] _πk_ - 1 ��
+
+(∆ _yk_ ) [2] = _η_ _[A]_
+_∂yk_ [2] _T_ [2] _[π][k]_ [(1] _[ −]_ [2] _[π][k]_ [)(1] _[ −]_ _[π][k]_ [)] _T_
+
+
+= _[η]_ [2] _[A]_ _T_ [2][4] _[ρ]_ _k_ [2] _πk_ (1 _−_ 2 _πk_ )(1 _−_ _πk_ ) [3] (20)
+
+
+Combining the first-order and second-order terms, the updated probability is:
+
+
+_k_
+
+_πk_ _[′]_ _[≈]_ _[π][k]_ [+] _[ηAρ]_ _T_ [2] _[k]_ _[π][k]_ [(1] _[ −]_ _[π][k]_ [)][2][ +] _[η]_ [2] _[A]_ _T_ [2][4] _[ρ]_ [2] _πk_ (1 _−_ 2 _πk_ )(1 _−_ _πk_ ) [3] (21)
+
+Dividing by _πk_ gives an equation for the importance sampling ratio _ρk_ = _πk_ _[′]_ _[/π][k]_ [:]
+
+
+   - _ηA_
+_ρk_ _≈_ 1 + _T_ [2]
+
+
+- - _ηA_
+_ρk_ (1 _−_ _πk_ ) [2] + _T_ [2]
+
+
+�2
+_ρ_ [2] _k_ [(1] _[ −]_ [2] _[π][k]_ [)(1] _[ −]_ _[π][k]_ [)][3] (22)
+
+
+To simplify, let’s define the following variables:
+
+
+    - _K_ 1 = _[ηA]_ _T_ [2]
+
+    - _K_ 2 = (1 _−_ _πk_ ) [2]
+
+    - _K_ 3 = (1 _−_ 2 _πk_ )(1 _−_ _πk_ ) [3]
+
+
+Substituting these into the equation for _ρk_ yields:
+
+_ρk_ _≈_ 1 + _K_ 1 _K_ 2 _ρk_ + _K_ 1 [2] _[K]_ [3] _[ρ]_ [2] _k_ (23)
+
+
+Rearranging this gives a quadratic equation in _ρk_ :
+
+( _K_ 1 [2] _[K]_ [3][)] _[ρ]_ [2] _k_ [+ (] _[K]_ [1] _[K]_ [2] _[−]_ [1)] _[ρ][k]_ [+ 1 = 0] (24)
+
+
+B.1.2 VARIANCE OF THE IMPORTANCE SAMPLING RATIO
+
+
+We now estimate the variance of _ρk_, denoted as _σρ_ [2][.] [We treat the advantage] _[ A]_ [ as a random variable]
+with variance _σA_ [2] [.] [Using the principle of **propagation of uncertainty**, the variance of] _[ ρ][k]_ [can be]
+approximated as:
+
+
+  - _∂ρk_
+_σρ_ [2] _[≈]_
+_∂A_
+
+
+�2
+_σA_ [2] (25)
+
+
+By defining the coefficient _κ_ := _Tη_ [2] _[σ][A]_ [, we arrive at our final result:]
+
+_σρ_ [2][(] _[π][k]_ [)] _[ ≈]_ _[κ]_ [2][(1] _[ −]_ _[π][k]_ [)][4] (36)
+
+
+This concludes the derivation of Lemma 1. This result shows that the variance of the importance
+sampling ratio is monotonically decreasing with the token probability _πk_, as its derivative with
+respect to _πk_ is negative for _πk_ _∈_ (0 _,_ 1).
+
+
+B.2 DERIVATION OF PROPOSITION 1
+
+
+This section provides a detailed derivation for the expected gradient magnitude, E[ _G|π_ ], as stated in
+Proposition 1.
+
+
+B.2.1 PROBLEM FORMULATION
+
+
+The policy gradient in a PPO-style objective, ignoring other terms like the KL divergence penalty,
+is given by:
+_∇θJ_ ( _θ_ ) = E _πold_ [ _∇θ_ log _πθ_ ( _ot_ ) _· wt_ ] (37)
+where _wt_ is the weighting term after clipping. The policy update for a specific token _k_ with probability _πk_ is proportional to the gradient of the log-probability, _∇θ_ log _πθ_ ( _k_ ), weighted by _ρkA_ [ˆ] _k_,
+where _ρk_ = _πθ_ ( _k_ ) _/πold_ ( _k_ ) is the importance sampling ratio and _A_ [ˆ] _k_ is the advantage. The clipping
+mechanism effectively sets the gradient to zero if the update moves outside the trust region. This
+can be expressed using an indicator function Itrust:
+
+�1 if ( _A_ [ˆ] _k_ _>_ 0 and _ρk_ _≤_ 1 + _ϵh_ ) or ( _A_ [ˆ] _k_ _<_ 0 and _ρk_ _≥_ 1 _−_ _ϵl_ )
+Itrust( _ρk,_ _A_ [ˆ] _k_ ) = (38)
+0 otherwise
+
+
+15
+
+
+Since _K_ 1 is a function of _A_ ( _[∂K]_ _∂A_ [1] [=] _Tη_ [2] [), while] _[ K]_ [2] [and] _[ K]_ [3] [are not, applying the chain and product]
+
+rules gives:
+
+   - _∂K_ 1 _∂ρk_   -   - _∂K_ 1   2 _K_ 1 _[K]_ [3] _[ρ]_ _k_ [2] [+] _[ K]_ 1 [2] _[K]_ [3] _[·]_ [ 2] _[ρ][k]_ + _[K]_ [2] _[ρ][k]_ [ + (] _[K]_ [1] _[K]_ [2] _[ −]_ [1)] _[∂ρ][k]_ = 0 (27)
+
+
+Since _K_ 1 is a function of _A_ ( _[∂K]_ _∂A_ [1]
+
+
+_∂K_ 1 _k_ [+] _[ K]_ 1 [2] _[K]_ [3] _[·]_ [ 2] _[ρ][k]_ _∂ρk_
+
+_∂A_ _[K]_ [3] _[ρ]_ [2] _∂A_
+
+
+_∂A_
+
+
+- - _∂K_ 1
++
+_∂A_ _[K]_ [2] _[ρ][k]_ [ + (] _[K]_ [1] _[K]_ [2] _[ −]_ [1)] _[∂ρ]_ _∂A_ _[k]_
+
+
+_∂A_
+
+
+= 0 (27)
+
+
+Grouping terms with _[∂ρ]_ _∂A_ _[k]_ [:]
+
+
+_∂ρk_ - _∂K_ 1
+
+_∂A_ [(2] _[ρ][k][K]_ 1 [2] _[K]_ [3] [+] _[ K]_ [1] _[K]_ [2] _[−]_ [1) =] _[ −]_ 2 _K_ 1 _K_ 3 _ρ_ [2] _k_ _∂A_
+
+
+_∂A_
+
+
+_∂ρk_
+
+
+_∂K_ 1 _∂K_ 1
+
+_∂A_ [+] _[ K]_ [2] _[ρ][k]_ _∂A_
+
+
+(28)
+
+
+Solving for _[∂ρ][k]_
+
+
+_[k]_
+
+_∂A_ [:]
+_∂ρk_
+
+
+_Tη_ [2] [(2] _[K]_ [1] _[K]_ [3] _[ρ]_ [2] _k_ [+] _[ K]_ [2] _[ρ][k]_ [)] (29)
+2 _ρkK_ 1 [2] _[K]_ [3][ +] _[ K]_ [1] _[K]_ [2] _[ −]_ [1]
+
+
+_∂A_ [=] _[ −]_
+
+
+To simplify this expression, we consider the case of a small learning step, which is a standard
+assumption in such analyses. For a small update, the advantage _A_ is typically close to its mean (often
+assumed to be zero), and the policy does not change much, so _ρk_ _≈_ 1. Under the approximation that
+_A →_ 0, we have _K_ 1 = _[ηA]_ _T_ [2] _[→]_ [0][.] [The expression for the derivative simplifies significantly:]
+
+
+_∂ρk_
+lim
+_A→_ 0 _∂A_ [=] _[ −]_
+
+
+_Tη_ [2] [(0 +] _[ K]_ [2] _[·]_ [ 1)] (30)
+
+0 + 0 _−_ 1
+
+
+= _T_ _[η]_ [2] _[K]_ [2] (31)
+
+= _T_ _[η]_ [2] [(1] _[ −]_ _[π][k]_ [)][2] (32)
+
+
+Now, we can approximate the variance of the importance sampling ratio:
+
+
+   - _∂ρk_
+_σρ_ [2][(] _[π][k]_ [)] _[ ≈]_
+_∂A_
+
+
+�2
+_σA_ [2] (33)
+
+
+ - _η_
+_≈_ _T_ [2] [(1] _[ −]_ _[π][k]_ [)][2][�][2] _σA_ [2] (34)
+
+
+ - _η_
+=
+_T_ [2]
+
+
+�2
+_σA_ [2] [(1] _[ −]_ _[π][k]_ [)][4] (35)
+
+
+The gradient with respect to the pre-softmax logits for token _k_ is proportional to (1 _−_ _πk_ ). We define
+the gradient magnitude component, _Gk_, for a token _k_ as:
+
+
+_Gk_ := (1 _−_ _πk_ ) _ρkA_ [ˆ] _k_ Itrust( _ρk,_ _A_ [ˆ] _k_ ) _._ (39)
+
+
+To derive its expectation, we make the following simplifying assumptions:
+
+
+1. The advantage _A_ [ˆ] is a random variable following a zero-mean normal distribution: _A_ [ˆ] _∼_
+_N_ (0 _, σA_ [2] [)][.]
+
+
+2. For a small update step, the importance sampling ratio _ρ_ is approximately normally distributed around 1: _ρ ∼N_ (1 _, σρ_ [2][)][, where] _[ σ]_ _ρ_ [2] [is its variance.]
+
+
+3. The random variables _A_ [ˆ] and _ρ_ are treated as independent.
+
+
+B.2.2 DECOMPOSING THE EXPECTATION
+
+
+The expectation of _Gk_ can be split into two parts based on the sign of the advantage:
+
+
+E[ _Gk_ ] = E[(1 _−_ _πk_ ) _ρkA_ [ˆ] _k_ Itrust] (40)
+
+
+           -            = (1 _−_ _πk_ ) E[ _ρkA_ [ˆ] _k_ **1** _A_ ˆ _k>_ 0 _,ρk≤_ 1+ _ϵh_ [] +][ E][[] _[ρ][k][A]_ [ˆ] _[k]_ **[1]** [ ˆ] _Ak<_ 0 _,ρk≥_ 1 _−ϵl_ []] (41)
+
+
+By the independence of _ρk_ and _A_ [ˆ] _k_, we can separate the expectations:
+
+
+          -          E[ _Gk_ ] = (1 _−_ _πk_ ) E[ _A_ [ˆ] _k_ **1** ˆ _Ak>_ 0 []][E][[] _[ρ][k]_ **[1]** _[ρ][k][≤]_ [1+] _[ϵ][h]_ [] +][ E][[ ˆ] _[A][k]_ **[1]** _A_ [ ˆ] _k<_ 0 []][E][[] _[ρ][k]_ **[1]** _[ρ][k][≥]_ [1] _[−][ϵ][l]_ []] (42)
+
+
+B.2.3 COMPUTING TRUNCATED NORMAL EXPECTATIONS
+
+
+We use the standard formula for the first moment of a truncated normal distribution. If _Z_ _∼_
+_N_ ( _µ, σ_ [2] ) and _α_ = ( _a −_ _µ_ ) _/σ_, then:
+
+
+E[ _Z_ **1** _Z≤a_ ] = _µ_ Φ( _α_ ) _−_ _σϕ_ ( _α_ ) (43)
+E[ _Z_ **1** _Z≥a_ ] = _µ_ (1 _−_ Φ( _α_ )) + _σϕ_ ( _α_ ) (44)
+
+
+where Φ( _·_ ) and _ϕ_ ( _·_ ) are the CDF and PDF of the standard normal distribution, respectively.
+
+
+**For the Advantage** _A_ [ˆ] _∼N_ (0 _, σA_ [2] [)] **[:]** Here, _µ_ = 0 _, σ_ = _σA_ .
+
+
+1
+E[ _A_ [ˆ] **1** _A>_ ˆ 0 [] = 0] _[ ·]_ [ (1] _[ −]_ [Φ(0)) +] _[ σ][A][ϕ]_ [(0) =] _[ σ][A]_ ~~_√_~~ (45)
+
+2 _π_
+
+
+1
+E[ _A_ [ˆ] **1** _A<_ ˆ 0 [] = 0] _[ ·]_ [ Φ(0)] _[ −]_ _[σ][A][ϕ]_ [(0) =] _[ −][σ][A]_ ~~_√_~~ (46)
+
+2 _π_
+
+
+  - _ϵl_  -  - _ϵl_
+= Φ + _σρϕ_
+_σρ_ _σρ_
+
+
+**For the IS Ratio** _ρ ∼N_ (1 _, σρ_ [2][)] **[:]** Here, _µ_ = 1 _, σ_ = _σρ_ . For the upper clip boundary _ah_ = 1 + _ϵh_,
+the standardized value is _αh_ = [(1+] _[ϵ][h]_ [)] _[−]_ [1] = _[ϵ][h]_
+
+[.]
+
+
+_σ_ _[ϵ][h]_ _ρ_ [)] _[−]_ [1] = _σ_ _[ϵ][h]_ _ρ_
+
+
+_[h]_
+
+_σρ_ [.]
+
+
+E[ _ρ_ **1** _ρ≤_ 1+ _ϵh_ ] = 1 _·_ Φ( _αh_ ) _−_ _σρϕ_ ( _αh_ ) (47)
+
+
+For the lower clip boundary _al_ = 1 _−_ _ϵl_, the standardized value is _αl_ = [(1] _[−][ϵ][l]_ [)] _[−]_ [1]
+
+
+_[l]_
+
+_σρ_ [.]
+
+
+_σ_ _[ϵ][l]_ _ρ_ [)] _[−]_ [1] = _−_ _σ_ _[ϵ][l]_
+
+
+E[ _ρ_ **1** _ρ≥_ 1 _−ϵl_ ] = 1 _·_ (1 _−_ Φ( _αl_ )) + _σρϕ_ ( _αl_ ) (48)
+= Φ( _−αl_ ) + _σρϕ_ ( _−αl_ ) (since 1 _−_ Φ( _x_ ) = Φ( _−x_ ) and _ϕ_ ( _x_ ) = _ϕ_ ( _−x_ )) (49)
+
+
+(50)
+
+
+16
+
+
+B.2.4 ASSEMBLING THE FINAL EXPRESSION
+
+
+Let’s substitute these results back into Equation 42. For clarity, let _CA_ = ~~_√_~~ _σA_
+
+2 _π_ [.]
+
+
+_G_ ¯ _L_ _≈_ _C_ ~~_√_~~ _A_
+_pL_ 2 _π_
+
+
+_G_ ¯ _L_ _≈_ _C_ ~~_√_~~ _A_
+_pL_
+
+
+_σ_ _[ϵ][l]_ _ρ_ [)] �� (51)
+
+
+        -         E[ _Gk_ ] = (1 _−_ _πk_ ) _CA_ Φ( _[ϵ][h]_
+
+
+_σ_ _[ϵ][h]_ _ρ_ [)] - _−_ _CA_ �Φ( _σ_ _[ϵ][l]_ _ρ_
+
+
+_[ϵ][h]_ _[ϵ][h]_
+
+_σρ_ [)] _[ −]_ _[σ][ρ][ϕ]_ [(] _σρ_
+
+
+_[ϵ][l]_ _[ϵ][l]_
+
+_σρ_ [) +] _[ σ][ρ][ϕ]_ [(] _σ_
+
+
+- _−_ Φ - _ϵl_
+_σρ_
+
+
+_−_ _σρ_
+
+
+- - _ϵh_
+_ϕ_
+_σρ_
+
+
+- - _ϵl_
++ _ϕ_
+_σρ_
+
+
+���
+(52)
+
+
+= (1 _−_ _πk_ ) ~~_√_~~ _[σ][A]_
+
+2 _π_
+
+
+- - _ϵh_
+Φ
+_σρ_
+
+
+Finally, we substitute the expression for _σρ_ from Lemma 1, _σρ_ ( _π_ ) = _κ_ (1 _−_ _π_ ) [2] . For a generic token
+with probability _π_, the expected gradient magnitude becomes:
+
+
+E[ _G | π_ ] = (1 _−_ _π_ ) ~~_√_~~ _[σ][A]_
+
+2 _π_
+
+
+�Φ� _σρϵ_ ( _hπ_ ) - _−_ Φ� _σρϵ_ ( _lπ_ ) - _−_ _σρ_ ( _π_ )� _ϕ_ - _σρϵ_ ( _hπ_ ) - + _ϕ_ - _σρϵ_ ( _lπ_ ) ��� (53)
+
+
+This matches the form in Proposition 1, where _F_ ( _π_ ; _κ, ϵh, ϵl_ ) is the term in the brackets. This
+completes the derivation.
+
+
+B.3 DERIVATION OF COROLLARY 1
+
+
+This appendix provides a detailed asymptotic analysis to prove the gradient dominance reversal
+phenomenon stated in Corollary 1. We analyze the average gradient expectation magnitude for
+low- and high-probability tokens and show how their relationship inverts as the degree of off-policy,
+represented by _κ_, changes.
+
+
+B.3.1 SETUP AND DEFINITIONS
+
+
+We partition the token probability space into a low-probability interval _IL_ = [0 _, pL_ ] and a highprobability interval _IH_ = [ _pH_ _,_ 1), for some thresholds 0 _<_ _pL_ _<_ _pH_ _<_ 1. We then define the
+average gradient expectation magnitude for each group, assuming a uniform distribution of probabilities within these intervals for analytical tractability:
+
+
+1
+_|G_ [¯] _L|_ :=
+���� _pL_
+
+
+- _pL_
+
+E[ _G | π_ ] _dπ_ (54)
+0 ����
+
+
+1
+_|G_ [¯] _H_ _|_ :=
+���� 1 _−_ _pH_
+
+
+- 1
+
+E[ _G | π_ ] _dπ_ (55)
+_pH_ ����
+
+
+where E[ _G | π_ ] = (1 _−_ _π_ ) ~~_√_~~ _[σ][A]_
+
+
+_A_
+
+2 _π_ [.]
+
+
+2 _[A]_ _π_ _[F]_ [(] _[π]_ [;] _[ κ, ϵ][h][, ϵ][l]_ [)][.] [Let] _[ C][A]_ [=] ~~_√_~~ _σ_ 2 _A_
+
+
+B.3.2 ASYMPTOTIC ANALYSIS FOR LOW-PROBABILITY TOKENS ( _|G_ [¯] _L|_ )
+
+
+For low-probability tokens ( _π_ _∈_ _IL_ ), the term (1 _−_ _π_ ) [2] is close to 1. When training becomes
+sufficiently off-policy, _κ_ becomes large, causing _σρ_ ( _π_ ) = _κ_ (1 _−_ _π_ ) [2] to be large. Consequently, the
+standardized clipping thresholds _αh_ = _ϵh/σρ_ ( _π_ ) and _βl_ = _ϵl/σρ_ ( _π_ ) become small ( _≪_ 1). We can
+approximate the function _F_ ( _·_ ) using a first-order Taylor expansion for Φ( _x_ ) around _x_ = 0, where
+_√_ _√_
+Φ( _x_ ) _≈_ 0 _._ 5 + _x/_ 2 _π_, and a zeroth-order expansion for _ϕ_ ( _x_ ) _≈_ 1 _/_ 2 _π_ :
+
+
+_√_
+2 _π_, and a zeroth-order expansion for _ϕ_ ( _x_ ) _≈_ 1 _/_
+
+
+2 _π_ :
+
+
+_F_ ( _π_ ) = Φ( _αh_ ) _−_ Φ( _−βl_ ) _−_ _σρ_ ( _π_ )[ _ϕ_ ( _αh_ ) + _ϕ_ ( _−βl_ )] (56)
+
+
+ - _αh_ + _βl_
+_≈_ ~~_√_~~
+
+2 _π_
+
+
+- - 2
+
+_−_ _σρ_ ( _π_ ) ~~_√_~~
+
+2 _π_
+
+
+(57)
+
+
+1
+= ~~_√_~~
+
+2 _π_
+
+
+1
+= ~~_√_~~
+
+2 _π_
+
+
+- _ϵh_ + _ϵl_ (58)
+_σρ_ ( _π_ ) _[−]_ [2] _[σ][ρ]_ [(] _[π]_ [)]
+
+- _ϵh_ + _ϵl_ _κ_ (1 _−_ _π_ ) [2] _[−]_ [2] _[κ]_ [(1] _[ −]_ _[π]_ [)][2] (59)
+
+
+Substituting this into the integral for _G_ [¯] _L_ :
+
+
+- _pL_ - _ϵh_ + _ϵl_ 
+0 (1 _−_ _π_ ) _κ_ (1 _−_ _π_ ) [2] _[−]_ [2] _[κ]_ [(1] _[ −]_ _[π]_ [)][2] _dπ_ (60)
+
+
+17
+
+
+Since _κ_ [2] _c_ [must] [be] [positive,] [a] [physically] [meaningful] [solution] [exists.] [This] _[κ][c]_ [marks] [the] [boundary]
+between two distinct optimization regimes:
+
+
+18
+
+
+The integral can be solved analytically:
+
+         - _pL_
+
+
+ - _L_ 1
+
+0 1 _−_ _π_ _[dπ]_ [= [] _[−]_ [ln(1] _[ −]_ _[π]_ [)]] _[p]_ 0 _[L]_ = _−_ ln(1 _−_ _pL_ ) (61)
+
+- _pL_ [4] [4]
+
+
+0
+
+
+_pL_
+
+(1 _−_ _π_ ) [3] _dπ_ = [ _−_ [(1] _[ −]_ _[π]_ [)][4]
+0 4
+
+
+_[π]_ [)][4]
+
+4 ] _[p]_ 0 _[L]_ = [1] _[ −]_ [(1] _[ −]_ 4 _[p][L]_ [)][4]
+
+
+(62)
+4
+
+
+This yields an expression for _G_ [¯] _L_ that depends on both _κ_ and 1 _/κ_ :
+
+
+(63)
+�����
+
+
+_|G_ [¯] _L| ≈_ _C_ ~~_√_~~ _A_
+_pL_ 2 _π_
+
+
+_ϵh_ + _ϵl_
+���� _κ_
+
+
+_ϵl_  - 1 _−_ (1 _−_ _pL_ )4
+
+( _−_ ln(1 _−_ _pL_ )) _−_ 2 _κ_
+_κ_ 4
+
+
+4
+
+
+This shows that for low-probability tokens, the gradient magnitude has competing dependencies on
+_κ_ .
+
+
+B.3.3 ASYMPTOTIC ANALYSIS FOR HIGH-PROBABILITY TOKENS ( _|G_ [¯] _H_ _|_ )
+
+
+For high-probability tokens ( _π_ _∈_ _IH_ ), _s_ = 1 _−_ _π_ is small. In the near on-policy regime where _κ_
+is small, _σρ_ ( _π_ ) = _κs_ [2] is very small. This results in large standardized clipping thresholds _αh_ _≫_ 1
+and _βl_ _≫_ 1. We use the tail approximation for the standard normal CDF, 1 _−_ Φ( _x_ ) _≈_ _ϕ_ ( _x_ ) _/x_ for
+large _x_ .
+
+
+_F_ ( _π_ ) = Φ( _αh_ ) _−_ (1 _−_ Φ( _βl_ )) _−_ _σρ_ ( _π_ )[ _ϕ_ ( _αh_ ) + _ϕ_ ( _βl_ )] (64)
+
+
+ _≈_ 1 _−_ _[ϕ]_ [(] _[α][h]_ [)]
+
+_αh_
+
+
+_−_ _[ϕ]_ [(] _[β][l]_ [)] _−_ _σρ_ ( _π_ )[ _ϕ_ ( _αh_ ) + _ϕ_ ( _βl_ )] (65)
+
+_βl_
+
+
+_−_ _[ϕ]_ [(] _[β][l]_ [)]
+
+
+Since _αh, βl_ _≫_ 1, the terms involving _ϕ_ ( _·_ ) decay exponentially fast. The gradient contribution
+is non-negligible only when clipping is not guaranteed, i.e., when _σρ_ is not vanishingly small. A
+more careful analysis (as sketched in the draft) shows that the integral is dominated by terms that
+scale inversely with _κ_ . The integration via a change of variables _u_ = _ϵl/_ ( _κs_ [2] ) and subsequent tail
+approximation of the resulting integral reveals the dominant behavior:
+
+_|G_ [¯] _H_ _| ≈_ _CA_ _cH_ (66)
+
+_κ_
+
+where _cH_ is a positive constant that aggregates terms related to _pH_ _, ϵl_, and the value of the asymptotic integral. This key result indicates that the average gradient magnitude from high-probability
+tokens is largest near the on-policy setting (small _κ_ ) and decays as the policy moves further offpolicy.
+
+
+B.3.4 THE GRADIENT DOMINANCE REVERSAL
+
+
+We can now find the critical threshold _κc_ by equating the magnitudes of the two gradient contributions, _|G_ [¯] _L|_ _≈|G_ [¯] _H_ _|_ . We are interested in the transition from the regime where ‘near on-policy’
+behavior dominates. For small _κ_, the 1 _/κ_ term in _|G_ [¯] _L|_ dominates. For large _κ_, the _κ_ term dominates. The reversal occurs when these competing effects balance out. Equating the dominant behaviors in the respective regimes yields an equation for a crossover point. Let’s analyze the equation
+_|G_ [¯] _L|_ = _|G_ [¯] _H_ _|_ :
+_C_ ~~_√_~~ _A_ _LL_ = _CA_ _cH_ (67)
+_pL_ 2 _π_ ���� _κ_ _[−]_ _[κQ][L]_ ���� _κ_
+
+where _LL_ = ( _ϵh_ + _ϵl_ )( _−_ ln(1 _−pL_ )) and _QL_ = (1 _−_ (1 _−pL_ ) [4] ) _/_ 2 are positive constants. Multiplying
+by _κ_ and rearranging gives a quadratic equation in _κ_ [2] :
+
+
+_cH_
+= _CA_
+���� _κ_
+
+
+(67)
+_κ_
+
+
+2 _π_
+
+
+_LL_
+���� _κ_
+
+
+_κ_ _[−]_ _[κQ][L]_
+
+
+_Q_ ~~_√_~~ _L_
+_pL_
+
+
+_L_ ~~_√_~~ _L_
+2 _π_ _[κ]_ [2] _[ −]_ _pL_ 2
+
+
+(68)
+2 _π_ [=] _[ ±][c][H]_
+
+
+Solving for _κ_ [2] gives the critical threshold:
+
+
+_√_
+_κ_ [2] _c_ [=] _[L][L][ ±][ c][H]_ _[p][L]_
+
+
+_[H]_ _[p][L]_ 2 _π_
+
+(69)
+_QL_
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+- When _**κ**_ _**<**_ _**κc**_ (Near On-Policy): The 1 _/κ_ terms dominate. The analysis shows that the
+constant factor for _|G_ [¯] _L|_ is typically larger than for _|G_ [¯] _H_ _|_, resulting in _|G_ [¯] _L|_ _>_ _|G_ [¯] _H_ _|_ . Lowprobability tokens provide the dominant gradient signal.
+
+    - When _**κ > κc**_ (Sufficiently Off-Policy): For _|G_ [¯] _L|_, the linear term in _κ_ would grow, but this
+is an artifact of an approximation breaking down; in reality, extreme clipping suppresses
+the contribution, causing _|G_ [¯] _L|_ to fall off. Meanwhile, _|G_ [¯] _H_ _|_ has already decayed as 1 _/κ_ .
+In this regime, the more stable, albeit decayed, contribution from high-probability tokens
+becomes dominant, leading to _|G_ [¯] _H_ _| > |G_ [¯] _L|_ .
+
+
+This completes the theoretical justification for the gradient dominance reversal described in Corollary 1.
+
+
+C RECONCILING HEURISTICS: PROBABILITY, ENTROPY, AND CLIPPING
+DYNAMICS
+
+
+The empirical contradiction is resolved by examining the interplay between probability, entropy,
+and the clipping mechanism. While a token’s probability _π_ and the vocabulary’s entropy _H_ are
+correlated, their formal relationship is bounded:
+
+
+Figure 2 right visualizes these bounds and provides the crucial insight: clipped tokens (red crosses)
+are not randomly distributed but are overwhelmingly concentrated in the low-probability, lowentropy region.
+
+
+This single observation directly reconciles the conflicting findings:
+
+
+    - Updating **low-probability** **tokens** (Yang et al., 2025b) is suboptimal because this population is dominated by dynamically unstable, low-entropy tokens. As established in
+Lemma 1, these tokens are highly susceptible to clipping, which attenuates their gradient
+contribution.
+
+    - Conversely, updating **high-entropy** **tokens** (Wang et al., 2025b) succeeds because it acts
+as an effective filter for stability. This heuristic implicitly avoids the heavily clipped region,
+selecting for tokens from more uniform distributions that are robust to policy updates.
+
+
+Therefore, entropy is not merely a proxy for low probability but a more discerning indicator of a
+token’s dynamic stability under the clipping pressures that govern off-policy optimization.
+
+
+D DETAILED GRADIENT ANALYSIS
+
+
+D.1 TOKEN PROPERTY ANALYSIS
+
+
+To understand the fundamental composition of the policy gradient, we analyze the contributions
+of different token subsets based on their intrinsic properties. Our analysis, presented in Figure 4
+left, isolates the gradient signals originating from distinct populations of tokens, revealing that the
+update is overwhelmingly dominated by a small, low-probability subset. Consistent with Yang et al.
+(2025b), tokens with _πk_ _<_ 0 _._ 2 produce a gradient with a norm 409% that of the full gradient and
+are exceptionally well-aligned with its direction (27.8 _[◦]_ mean principal angle). In stark contrast,
+high-probability tokens ( _πk_ _>_ 0 _._ 8) contribute a much smaller, less aligned gradient (50% norm,
+42.8 _[◦]_ angle). This confirms that the policy gradient is primarily driven by powerful but potentially
+unstable signals from the tail of the probability distribution.
+
+
+The strategy of updating high-entropy tokens, proposed by Wang et al. (2025b), can be understood
+as an effective heuristic for managing this instability. The high-entropy subset produces a gradient
+with a substantial magnitude (340% of original) but a weaker directional alignment (44.2 _[◦]_ ) than
+
+
+19
+
+
+_−π_ log _π −_ (1 _−_ _π_ ) log(1 _−_ _π_ )
+
+- �� _H_ min( _π_ )
+
+
+         - 1 _−_ _π_
+_≤_ _H_ _≤−π_ log _π −_ (1 _−_ _π_ ) log
+_V_ _−_ 1
+
+
+- �� _H_ max( _π_ )
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+|Col1|H(Migahg-nEintutrdoep:y 340)<br>K(Meaegpn (ipt u<d 0e.2: )409)<br>44.2°<br>27.8°|
+|---|---|
+||Original<br>(Magnitude: 100)<br>Keep (p > 0.8)<br>(Magnitude: 50)<br>42.9°<br><br>48.7°|
+
+
+|Col1|Advantage (Magnitud|
+|---|---|
+||Origin<br>(Magnitud<br>28.0°|
+||<br>40.5°|
+
+
+|Col1|49 1.7 .3° °Of(fM-Paoglnicityu (dBeN(a M:os 1Ce g0ll niip0in u()eHd)ieg:<br>a t|
+|---|---|
+||On-Policy<br>(Magnitude: 98)<br>47.4°<br>50.7°|
+
+
+Figure 4: The impact of different key factors on RL updates.
+
+
+the pure low-probability set. This suggests the high-entropy criterion functions as a filter: it selects
+for tokens that are informative (often having low to moderate probability) but originate from flatter,
+more uncertain distributions. As we will show, these flatter distributions are inherently more stable
+under policy updates. Therefore, the heuristic succeeds by implicitly balancing gradient magnitude against stability. This success underscores the need for a more principled mechanism that can
+dynamically manage this trade-off.
+
+
+D.2 ADVANTAGE SIGN ANALYSIS
+
+
+The advantage function, _A_, guides learning by signaling whether an action should be reinforced
+( _A_ _>_ 0) or suppressed ( _A_ _<_ 0). To understand their distinct roles, we analyze the gradient contributions from these two subsets separately, as shown in Figure 4 middle. Our analysis reveals a
+critical asymmetry: while the gradient norms from positive (122% of original) and negative (92%)
+advantage samples are comparable, their directional guidance differs markedly. The gradient from
+negative-advantage samples is substantially better aligned with the total gradient direction (28.0 _[◦]_
+mean principal angle) than that from positive-advantage samples (40.5 _[◦]_ ). This indicates that the
+overall update direction is predominantly dictated by corrective signals from suboptimal actions.
+
+
+This directional dominance stems from the fundamentally different effects of positive and negative
+updates. An update with _A_ _>_ 0 reinforces a single action, implicitly suppressing all alternatives
+and potentially narrowing the policy. Conversely, an update with _A_ _<_ 0 penalizes a specific action, which effectively redistributes probability mass across the rest of the vocabulary. This latter
+mechanism, a form of error correction, promotes exploration and enhances policy diversity. The
+geometric dominance of negative-advantage gradients therefore suggests that learning in complex
+tasks is driven more by correcting errors than by reinforcing known correct pathways, a process crucial for discovering robust strategies. While Zhu et al. (2025) also noted the importance of negative
+samples, our work provides a novel perspective by demonstrating their dominant role in shaping the
+gradient’s geometric direction.
+
+
+D.3 IMPORTANCE SAMPLING ANALYSIS
+
+
+To improve sample efficiency, off-policy reinforcement learning corrects for the policy distribution
+mismatch using Importance Sampling (IS). However, the high variance of the IS ratio necessitates a
+stabilization mechanism like clipping, which modulates the raw gradient into a stable update signal.
+To dissect this process, we compare our baseline off-policy GRPO update against several variants
+(Figure 4 right). The indispensability of clipping is starkly illustrated by its removal: the gradient
+norm explodes to **20,177%** of the baseline, and its direction severely deviates ( **50.7** _[◦]_ mean principal
+angle). This confirms clipping is crucial not just for controlling magnitude but also for maintaining
+a stable optimization path.
+
+
+Perhaps the most revealing finding is the significant directional divergence ( **47.4** _[◦]_ ) between the onpolicy and standard off-policy (GRPO) gradients, despite their nearly identical magnitudes (98% vs.
+100%). This highlights a fundamental trade-off: to maintain magnitude stability, GRPO’s fixed clip
+
+20
+
+
+Gradient Decomposition by Token Properties
+
+
+Gradient Decomposition based on the Sign of the Advantage
+
+
+The Impact of Importance Sampling and Clipping on Gradient Updates(Vectors with magnitude > 200 are truncated for visualization)
+
+
+CISPO(Magnitude: 3273)
+
+
+Off-Policy (No Clip)(Magnitude: 20179)
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+ping mechanism systematically filters out certain updates (predominantly from high-variance, lowprobability tokens), creating a gradient direction that is geometrically distinct from the on-policy
+ideal. This implies that while off-policy learning is sample-efficient, its optimization trajectory can
+substantially differ from its on-policy counterpart.
+
+
+The specific design of the clipping strategy further modulates this trade-off. For instance, CISPO,
+which clamps the IS ratio instead of gating the entire gradient to zero, retains more signal from
+outlier tokens. This results in a substantially larger gradient norm ( **3,268%** ) and a similarly large directional shift ( **49.7** _[◦]_ ), reflecting a more aggressive update policy. In contrast, a simple asymmetric
+clipping scheme ( _ϵh_ _>_ _ϵl_ ), inspired by DAPO, showed negligible impact in our setting (1.3 _[◦]_ divergence). These comparisons reveal that the standard clipping in methods like PPO/GRPO is not a
+neutral stabilizer; it actively shapes the gradient by discarding certain information. This suggests an
+opportunity for adaptive mechanisms that can better preserve the on-policy direction while retaining
+off-policy efficiency.
+
+
+E MORE RELATED WORKS
+
+
+**Reinforcement Learning for Large Language Models.** Reinforcement learning has evolved from
+a tool for preference alignment to a key technique for enhancing reasoning capabilities in large language models. Initially pioneered through Reinforcement Learning from Human Feedback (RLHF),
+RL methods like PPO (Schulman et al., 2017) were used to align models with human preferences
+using human-annotated data (Ouyang et al., 2022). The landscape shifted dramatically with the
+emergence of RL with verifiable rewards (RLVR), which leverages objective, automatically verifiable feedback signals instead of subjective human preferences (Lambert et al., 2024). OpenAI’s o1
+model (Jaech et al., 2024) first showcased that RLVR can effectively incentivize reasoning at scale,
+particularly in tasks like mathematics and programming. Building on this foundation, researchers
+developed improved algorithmic methods such as GRPO (Shao et al., 2024) and its variants (e.g.,
+DAPO (Yu et al., 2025)). Subsequent models trained with these methods, including DeepSeekR1 (Guo et al., 2025a), QwQ (Team, 2025), and AceReason-Nemotron (Chen et al., 2025c), demonstrate that strong reasoning capabilities can emerge through outcome-based optimization with online RL algorithms, establishing RLVR as a promising paradigm for developing reasoning-capable
+LLMs.
+
+
+**Token-Level Dynamics and Update Strategies.** While RLVR has demonstrated strong potential,
+its effectiveness is often determined by how token-level updates are applied during training. Recent research has explored multiple related directions : entropy- or probability-based methods that
+incorporate or reduce uncertainty (Wang et al., 2025b; Yang et al., 2025b; Cheng et al., 2025; Cui
+et al., 2025; Gao et al., 2025; Chen et al., 2025b), modifications to importance-sampling and clipping
+that stabilize gradients (Roux et al., 2025; Chen et al., 2025a; Su et al., 2025; Zheng et al., 2025a;
+Wang et al., 2025a), advantage design strategies ranging from negative reinforcement to minimalist
+or segment-level credit assignment (Zhu et al., 2025; Xiong et al., 2025), and off-policy approaches
+that reshape update distributions (Yan et al., 2025; Ma et al., 2025; Fu et al., 2025; Arnal et al.,
+2025). However, studies in this area sometimes yield conflicting conclusions: for example, Wang
+et al. (2025b) emphasize that high-entropy minority tokens drive effective learning, whereas Yang
+et al. (2025b) show that low-probability(usually high-entropy) tokens can over-dominate gradients
+and should be suppressed. Such inconsistencies calls for a deeper, component-wise analysis of the
+RL update pipeline. While recent work has started to examine how individual training techniques affect RL dynamics (Liu et al., 2025), we still lack a comprehensive framework that can systematically
+explain how these components work together to drive effective policy updates in LLM reasoning.
+
+
+F TRAINING DETAILS
+
+
+Our training code is adapted from the VeRL framework (Sheng et al., 2024). To evaluate the effects
+of on-policy and off-policy settings, we use a training batch size of 512, with mini-batch sizes of 256
+and 32 for the respective settings, resulting in 2 update steps for per training batch for near on-policy
+training, and 16 update steps for off-policy training. The learning rate is set to 1e-6. Additional taskspecific hyperparameters can be found in the scripts provided in our GitHub repository.
+
+
+21

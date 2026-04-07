@@ -1,0 +1,1105 @@
+# MED-SEGNET: A HIERARCHICAL ARCHITECTURE FOR BINARY MEDICAL IMAGE SEGMENTATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Medical image segmentation requires both fine local detail and reliable global
+context, yet common solutions trade accuracy for efficiency: CNNs are local and
+cheap, transformers are global but quadratic. We introduce Med-SegNet, a compact encoder–bottleneck–decoder architecture that couples inverted residual SE
+blocks with a Circulant Layer Token Mixer (CLTM) placed once at the bottleneck. CLTM performs a single global information exchange by projecting multiscale encoder features to a shared token space and applying a depthwise 1D circular convolution with pre/post normalization, then re-projecting the mixed tokens
+back to each scale through residual connections. This attention-free design uses
+only standard convolutions, yielding near-linear mixing cost, low memory, and
+hardware-friendly deployment. Across 20 public datasets spanning 12 modalities,
+Med-SegNet with CLTM improves Dice on every dataset (20/20) over the ablated
+model, raising the mean from 0.8977 to 0.9161. Gains are largest on challenging,
+low-contrast settings such as BUSI ultrasound (+6.31 points) and RaViR ophthalmology (+6.12), while preserving near-ceiling performance on easier benchmarks. Despite a budget of roughly 2.07M parameters, Med-SegNet attains leading or competitive results, including Kvasir-SEG 0.9672, CVC-ClinicDB 0.9666,
+and ETIS 0.9612. By supplying global context at minimal cost, CLTM delivers
+sharper boundaries, improved long-range coherence, and practical latency offering an accuracy–efficiency point well suited to real-world clinical workflows.
+
+
+1 INTRODUCTION
+
+
+Medical image segmentation has become a cornerstone of modern clinical practice, enabling the
+precise delineation of anatomical structures and pathological regions that are critical for diagnosis,
+treatment planning, and longitudinal monitoring of disease progression. The advent of deep learning, and particularly convolutional neural networks (CNNs), has transformed segmentation tasks by
+allowing models to learn hierarchical feature representations directly from raw data, outperforming
+traditional approaches based on handcrafted features. Among these methods, U-Net Ronneberger
+et al. (2015a) and its numerous extensions have become the standard backbone for biomedical segmentation, achieving remarkable success in domains such as histopathology, retinal vessel segmentation, and brain tumor delineation.
+
+
+Convolutional networks encode strong locality via hierarchical receptive fields that expand only
+gradually with depth Araujo et al. (2019). This can miss long-range structure in medical images
+(e.g., elongated vessels, diffuse tumor boundaries, irregular glands) unless additional context pathways are introduced. To address this, prior U-Net variants enhance feature recalibration and saliency
+focusing e.g., Attention U-Net, USE-Net, and DCSAU-Net Oktay et al. (2018a); Rundo et al. (2019);
+Xu et al. (2023) while automated configuration frameworks such as nnU-Net improve generalization
+across datasets Isensee et al. (2021). The practical trade-off is that deeper convolutional stacks and
+attention modules increase compute and memory, constraining high-resolution deployment.
+
+
+Transformer-based encoders (e.g., TransUNet, Segtran, MIST) bring explicit global modeling to
+medical segmentation but inherit the quadratic cost of self-attention Chen et al. (2021b); Li et al.
+(2021); Rahman et al. (2023); Vaswani et al. (2017). To reduce this overhead, “attention-free” token mixers enable global information flow without attention: MLP-Mixer alternates channel and
+token MLPs, S [2] -MLP applies spatial shifts before mixing, CycleMLP uses structured mixing tai
+
+1
+
+
+Figure 1: Evolution of medical image segmentation (2015–2025). Timeline from early CNN encoder–decoders and Attention UNet (2015–2018) through task-specific U-Net variants (PraNet/DoubleU-Net, 2020), transformer-based U-Nets and efficient CNNs (TransUNet/MedT, HarDNet-MSEG, 2021), and token-/structure-mixers (UNETR, Swin-UNet, AFTer-UNet, 2022). The dashed block marks
+the 2023–2024 shift to foundation-model adaptations (MedSAM, SAMed, Swin-UNet3D, MIST) and state-space/Mamba families (VMUNet/VNet, SegMamba, SegFormer-3D, DA-TransUNet). The arc summarizes the overall trend: Dice ↑ with FLOPs ↓, culminating in
+our CLTM module (2025). Meta analysis can be found on Appendix Reported Results Supporting Figure 1 section.
+
+
+lored for dense prediction, and circulant/Fourier mixers exploit the diagonalization of circulant operators for near-linear global communication Tolstikhin et al. (2021); Yu et al. (2022); Chen et al.
+(2022); Yu et al. (2021); Liu et al. (2022b). Motivated by this efficiency context balance, we introduce _Med-SegNet_, a lightweight encoder built from IR-SE blocks that combine pointwise expansion,
+depthwise convolution, SE gating Hu et al. (2018), and residual projection to yield multi-scale features under a tight parameter budget.
+
+
+We introduce the Circulant Layer Token Mixer (CLTM), a lightweight bottleneck module that
+aggregates tokens from multiple encoder scales, performs a single global mixing step via depthwise 1D convolution, and feeds the result back to each scale through residual re-projection with
+pre/post-normalization. By replacing quadratic self-attention with near-linear compute, CLTM improves long-range coherence and boundary precision while keeping parameters and FLOPs low
+for high-resolution workloads. Unlike prior circulant/Fourier mixers that rely on FFTs, CLTM operates directly in the time domain using standard convolutional primitives and is explicitly wired
+for encoder–decoder segmentation through cross-scale mixing at the bottleneck. Integrated into
+Med-Segnet, this design achieves state-of-the-art accuracy with substantially fewer parameters and
+FLOPs, making it well suited to resource-constrained clinical settings. Our main contributions are
+as follows.
+
+
+    - **IR–SE** **Block.** A compact unit that couples pointwise expansion, depthwise convolution,
+squeeze and excitation gating Hu et al. (2018), and a residual projection that delivers strong
+features at low cost for our encoder stages.
+
+
+    - **CLTM.** An attention-free token mixer that replaces quadratic self–attention with a depthwise 1D convolution surrogate. It operates at the bottleneck to mix concatenated
+multi–scale tokens and then reprojects them to their native maps with a residual add, enabling near–linear global context modeling on high–resolution images.
+
+
+    - **Multi-scale** **bottleneck** **integration.** A cross-scale formulation that fuses encoder
+features in a single global mixing step and returns information to each scale via
+split–project–reshape with pre/post-normalization improving boundary precision and longrange consistency at modest compute and memory.
+
+
+2
+
+
+2 RELATED WORK
+
+
+Deep convolutional neural networks (CNNs) have dominated medical image segmentation for the
+past decade. U-Net Ronneberger et al. (2015a) remains the most influential encoder–decoder template, inspiring derivatives that extend its capacity and robustness. Examples include attention or
+cascaded designs (Attention U-Net, USE-Net, DoubleU-Net) that enhance feature recalibration and
+multi-stage refinement Oktay et al. (2018a); Rundo et al. (2019); Jha et al. (2020b); context encoder and residual modules (CE-Net) Gu et al. (2019b); and redesigned skip connections for multiscale aggregation (U-Net++) Zhou et al. (2018b). Large-scale frameworks such as nnU-Net Isensee
+et al. (2021) automate architecture and hyperparameter selection, showing strong adaptability across
+datasets. Despite these advances, CNNs rely on local receptive fields; capturing long-range context
+often requires deeper stacks or dilated convolutions Yu & Koltun (2016), increasing parameters and
+compute.
+
+
+Non-local neural networks Wang et al. (2018) introduced self-attention for global aggregation in vision and inspired medical adaptations such as Attention U-Net and DCSAU-Net Oktay et al. (2018a);
+Xu et al. (2023). Channel/spatial attention (e.g., SENet, CBAM) is also widely integrated to emphasize informative features Hu et al. (2018); Woo et al. (2018). Hybrid CNN–attention models (e.g.,
+TransFuse, Attention-UNet++) insert attention blocks into encoder–decoder pipelines Zhang et al.
+(2021b); Mou et al. (2021). While effective, attention layers typically incur quadratic complexity
+with respect to the number of tokens Vaswani et al. (2017), which hinders scaling to high-resolution
+modalities (e.g., histopathology, 3D volumes).
+
+
+Transformers Vaswani et al. (2017) provide explicit global modeling and have been adapted to segmentation via token-based encoders. ViT/DeiT demonstrated feasibility in vision Dosovitskiy et al.
+(2020); Touvron et al. (2021b), leading to medical hybrids such as TransUNet Chen et al. (2021b),
+hierarchical variants like Swin-UNet Cao et al. (2021a), and other task-tailored designs (MISSFormer, SegTran, MEDT, MISS) Huang et al. (2022); Li et al. (2021); Valanarasu & Patel (2021);
+Rahman et al. (2023). However, quadratic self-attention remains a practical bottleneck for clinical
+resolutions.
+
+
+To reduce quadratic cost, attention-free mixers propagate information across tokens without selfattention. MLP-Mixer alternates channel and token MLPs Tolstikhin et al. (2021); ResMLP and
+gMLP refine this principle Touvron et al. (2021a); Liu et al. (2021). Spatially structured mixers
+such as S [2] -MLP and CycleMLP add architectural bias for efficiency and dense prediction Yu et al.
+(2022); Chen et al. (2022). Fourier-/circulant-based designs exploit diagonalization of circulant operators to provide near-linear global communication Yu et al. (2021); Liu et al. (2022b). In contrast,
+CLTM (this work) performs a time-domain, depthwise circular 1D convolution over a single crossscale token stream with pre/post normalization, yielding linear-time _O_ ( _Nk_ ) mixing with _O_ ( _k · d_ )
+parameters and explicit multi-scale coupling rather than per-scale mixers or frequency-domain parameterizations.
+
+
+Recent state-space models provide linear-time global modeling via learned input-dependent recurrences implemented with convolutional kernels. Mamba-style variants adapted to segmentation
+(e.g., U-Mamba, Swin-UMamba) replace or augment attention blocks with SSM layers and report
+strong accuracy–efficiency trade-offs Ma et al. (2024a); Liu et al. (2024). Conceptually, SSMs propagate information through recurrent state dynamics, whereas CLTM executes a single depthwise
+circular mixing pass over a concatenated cross-scale token stream. These choices induce different
+inductive biases (recurrent vs. convolutional), memory footprints, and stability behaviors.
+
+
+Med-SegNet follows an encoder bottleneck decoder design that pairs efficient local modeling with
+one explicit global exchange step. The encoder uses IR-SE blocks pointwise expansion, depthwise
+convolution, squeeze-and-excitation, and residual projection to form a compact multi-scale feature
+pyramid Hu et al. (2018). At the bottleneck, CLTM concatenates tokens from all encoder scales, applies a depthwise circular 1D convolution under pre/post normalization, then split–project–reshapes
+the mixed signal back to each scale with residual integration. This time-domain, cross-scale pass
+preserves fine anatomy while injecting long-range context, with linear-time mixing ( _∼_ _O_ ( _Nk_ )) and
+favorable memory characteristics for high-resolution clinical workloads.
+
+
+3
+
+
+3 METHODOLOGY
+
+
+3.1 PROBLEM FORMULATION AND MOTIVATION
+
+
+Medical image segmentation is a dense prediction task aimed at learning a mapping _f_ : _X_ _→_
+_Y_, where _X_ _∈_ R _[H][×][W][ ×][C]_ is the input image space and _Y_ _∈{_ 0 _,_ 1 _}_ _[H][×][W][ ×][K]_ is the pixel-wise
+label space for _K_ anatomical classes. The central challenge lies in designing a model that captures
+both fine-grained local details and long-range anatomical dependencies, a problem we term the
+locality-globality paradox. This challenge exposes the inherent limitations of current deep learning
+paradigms. CNNs are adept at learning local features but possess a constrained receptive field,
+preventing them from modeling global anatomical context effectively. Transformers achieve a global
+receptive field but their self-attention mechanism incurs a quadratic computational complexity of
+_O_ (( _HW_ ) [2] ), making them prohibitively expensive for high-resolution medical images.
+
+
+To overcome this trade-off, we propose Med-Segnet. Our core contribution is the Circulant Linear
+Token Mixer (CLTM), a mathematically principled operator that achieves global token interaction
+with near-linear complexity. This approach resolves the efficiency bottleneck of attention mechanisms while providing the global context missing in standard CNNs, offering a computationally
+tractable and accurate solution for medical image segmentation.
+
+
+3.2 ARCHITECTURAL OVERVIEW
+
+
+Figure 2: Med-Segnet at a glance. An IR-SE encoder distills a compact multi-scale pyramid; the CLTM bottleneck then unifies all
+scales in a single, near-linear global mixing pass (depthwise 1D convolution + normalization) and returns the context to each scale through
+residual re-projection. The decoder fuses these enriched features via skip connections to yield crisp, clinically reliable segmentations capturing
+long-range structure
+
+
+Med-Segnet employs a hierarchical encoder-decoder architecture, with our novel Circulant Linear
+Token Mixer (CLTM) serving as a global context bottleneck. The model is designed to efficiently
+process multi-scale features for dense prediction. The overall data flow is a functional composition
+of its three main components: an encoder ( _E_ ), the CLTM, and a decoder ( _D_ ). The encoder first
+transforms an input image **I** into a set of multi-scale feature maps, which are then globally mixed by
+the CLTM and finally reconstructed into a segmentation map **Y** by the decoder. This process can be
+expressed as:
+**Y** = _D_     - CLTM( _{_ **F** [(] _[ℓ]_ [)] _}_ _[L]_ _ℓ_ =1 [)]     - _,_ where _{_ **F** [(] _[ℓ]_ [)] _}_ _[L]_ _ℓ_ =1 [=] _[ E]_ [(] **[I]** [)] (1)
+
+
+This architecture synergistically combines a multi-scale encoder, which uses compound scaling to
+generate a rich feature pyramid, with the CLTM’s efficient global context fusion. The decoder
+
+
+4
+
+
+then leverages these globally-aware features with high-resolution skip connections to ensure both
+anatomical coherence and precise localization in the final segmentation.
+
+
+3.3 THE HIERARCHICAL ENCODER ARCHITECTURE
+
+
+The encoder is engineered to transform an input image **I** _∈_ R _[H]_ [0] _[×][W]_ [0] _[×][C]_ [0] into a feature pyramid,
+a set of multi-scale feature maps _{_ **E** _ℓ}_ _[L]_ _ℓ_ =1 [.] [Each] [feature] [map] **[E]** _[ℓ]_ _[∈]_ [R] _[H][ℓ][×][W][ℓ][×][C][ℓ]_ [in] [this] [hierarchy]
+captures increasingly abstract semantic information at progressively lower spatial resolutions. This
+is achieved through a sequence of _L_ stages, each implementing a sophisticated dual-stream architecture for comprehensive feature extraction and refinement. The macro-architecture of each stage _ℓ_
+first downsamples the preceding feature map **E** _ℓ−_ 1 via a stride-2 pointwise convolution, _Dℓ_ . The result is then processed by a primary feature extraction block, _Bℓ_, to produce the main feature stream,
+**F** _ℓ,_ main. This stream is simultaneously refined by an auxiliary enhancement module, _Mℓ_, whose
+output is added residually. This dual-stream process is defined by:
+
+
+**F** _ℓ,_ main = _Bℓ_ ( _Dℓ_ ( **E** _ℓ−_ 1)) (2)
+**E** _ℓ_ = **F** _ℓ,_ main + _Mℓ_ ( **F** _ℓ,_ main) (3)
+
+
+The primary block, _Bℓ_, is composed of a series of our core computational unit, the Inverted Residual
+Squeeze-and-Excitation (IR-SE) Block. This unit performs a transformation, _FIRB_, on an input
+tensor **X** _in_ using a residual connection around a four-stage composite function:
+
+
+_FIRB_ ( **X** _in_ ) = **X** _in_ + _Fproj_ (SE( _Fdw_ ( _Fexp_ ( **X** _in_ )))) (4)
+
+
+The process begins with the expansion operator, _Fexp_, which uses a 1 _×_ 1 convolution to project
+**X** _in_ into a high-dimensional space with _t_ = 6 times the channels. This is followed by the depthwise
+convolution operator, _Fdw_, which applies efficient _k×k_ spatial filtering. The third stage is the critical
+Squeeze-and-Excitation (SE) operator, which adaptively recalibrates channel-wise feature responses
+by explicitly modeling interdependencies between channels. The entire SE process, which takes a
+feature map **u** as input, can be succinctly captured in the following annotated formulation:
+
+
+_Z_ = [ _T_ 1; _. . ._ ; _TS_ ] _∈_ R _[B][×][N]_ _[×][d]_ _,_ _N_ =
+
+
+5
+
+
+Squeeze
+
+             - ��             
+SE( **u** ) = _σ_ ( **W** 2( _Aelu_ ( **W** 1 GlobalAvgPool( **u** ))))
+
+
+     - ��     Excite
+
+
+_⊙_ **u** (5)
+
+
+Here, the Squeeze operation first aggregates global spatial information into a channel descriptor
+vector. The Excite mechanism, a two-layer MLP with weights **W** 1 and **W** 2 and a reduction ratio
+_R_ = 24, then generates a collection of per-channel modulation weights. These weights are applied
+to the feature map **u** via channel-wise multiplication _⊙_ . Finally, the projection operator, _Fproj_,
+uses a linear 1 _×_ 1 convolution to project the recalibrated features back to their original channel
+dimension. The auxiliary module _Mℓ_ concurrently applies a separate dual-path depthwise convolution for complementary feature refinement. This entire hierarchical process yields the set of feature
+maps _{_ **E** _ℓ}_ _[L]_ _ℓ_ =1 [,] [which] [possess] [the] [rich,] [multi-scale,] [and] [context-aware] [properties] [essential] [for] [the]
+subsequent stages of the network.
+
+
+3.4 CIRCULANT LAYER TOKEN MIXER (CLTM)
+
+
+CLTM performs a single global information exchange across all spatial locations and across encoder
+scales at the bottleneck, while preserving per-scale detail. The encoder produces _S_ multi-resolution
+feature maps _Fi_ _∈_ R _[B][×][H][i][×][W][i][×][C][i]_ with _Ni_ = _HiWi_ tokens per scale. Each _Fi_ is mapped to a
+shared embedding width _d_ and flattened along the spatial dimensions to form a token sequence
+
+
+_Ti_ = Vec( _Fi_ ) _Qi,_ _Qi_ _∈_ R _[C][i][×][d]_ _,_ _Ti_ _∈_ R _[B][×][N][i][×][d]_ _._
+
+
+Here, Vec( _·_ ) rearranges the ( _Hi, Wi_ ) grid into a sequence of length _Ni_ (batch dimension _B_ preserved), and _Qi_ is a learned linear map that aligns channels from _Ci_ to the shared width _d_ . To
+expose cross-scale context to a single mixer, the per-scale token sequences are concatenated along
+the token axis in a fixed order (e.g., coarse-to-fine):
+
+
+_S_
+
+- _Ni._
+
+
+_i_ =1
+
+
+_√_
+Before mixing, the sequence is scaled by 1 _/_ _d_ to keep activations in a stable range. Global token
+
+exchange is implemented in the time domain as a depthwise one-dimensional circular convolution
+along the token axis with pre- and post-normalization:
+
+_Z_ _[′]_ = PreNorm( _Z_ ) _,_ _Z_ ˜ = DWConv1Dcirc( _Z_ _[′]_ ; _K_ ) _,_ _Z_ mixed = PostNorm( _Z_ [˜] ) _,_
+where _K_ _∈_ R _[k][×][d]_ is a learnable kernel of length _k_ applied per channel (groups = _d_ ), and “circ”
+denotes circular padding over the _N_ tokens. Per channel, this operation is equivalent to multiplying
+by a banded circulant matrix whose nonzero diagonals are learned via _K_ ; it provides global communication with linear cost in _N_ for fixed _k_ . After mixing, the concatenated sequence is sliced back
+to per-scale segments _Ti_ _[′]_ _[∈]_ [R] _[B][×][N][i][×][d]_ [.] [Each] [segment] [is] [projected] [to] [its] [native] [channel] [space] [and]
+reshaped to the original spatial layout; a residual connection preserves local detail:
+
+_Fi_ _[′]_ [=] _[ F][i]_ [+ Reshape]            - _Ti_ _[′][P][i]_            - _,_ _Pi_ _∈_ R _[d][×][C][i]_ _._
+The overall procedure is: concatenate tokens across scales _→_ apply a single global mix _→_ split,
+project, and reshape per scale. This single-pass cross-scale wiring enforces explicit multi-scale
+coupling without introducing multiple per-scale mixers. PreNorm and PostNorm are lightweight
+per-token normalizations (e.g., LayerNorm over the _d_ channels) applied before and after the depthwise convolution. They constrain operator gain, stabilize training at high resolution, and keep the
+pipeline entirely real-valued. Let _N_ be the total number of tokens, _d_ the channel width, and _k_ the
+kernel length. The depthwise circular 1D mixing has
+Params = _k d,_ FLOPs = _O_ ( _N k d_ ) _._
+For comparison, token-MLP mixers across tokens typically require _O_ ( _N d_ [2] ) parameters/FLOPs
+(quadratic in _d_, and effectively quadratic in _N_ if the token-MLP width scales with sequence length),
+whereas Fourier/circulant mixers computed in the frequency domain incur _O_ ( _N_ log _N_ _· d_ ) FLOPs
+due to FFTs and often necessitate complex-valued normalization. We use _k_ = 5 by default. The
+mixer is realized with a 1D convolution using groups = _d_ (depthwise) and circular padding along
+the token axis. The projections _Qi_ and _Pi_ are 1 _×_ 1 linear maps applied before flattening and after
+reshaping, respectively. CLTM is inserted once at the bottleneck; all other layers remain unchanged.
+
+
+3.5 DECODER NETWORK: HIERARCHICAL FEATURE SYNTHESIS (BINARY)
+
+
+The decoder fuses global context from CLTM with high-frequency detail from encoder skips to
+produce a full-resolution binary mask. Let _{_ **F** _[′]_ _ℓ_ _[}][L]_ _ℓ_ =1 [be] [the] [globally] [enriched] [features] [(coarsest] [at]
+_ℓ_ = _L_ ), and initialize **D** _L_ = **F** _[′]_ _L_ [.] [For] _[ ℓ]_ [=] _[ L][−]_ [1] _[, . . .,]_ [ 1][ the decoder applies upsample–concat–refine:]
+**U** _ℓ_ = Upsample( **D** _ℓ_ +1) _,_ **C** _ℓ_ = Concat( **U** _ℓ,_ **F** _[′]_ _ℓ_ [)] _[,]_ **D** _ℓ_ = _Rℓ_ ( **C** _ℓ_ ) _,_
+where Upsample increases spatial resolution, Concat is channel-wise, and _Rℓ_ is a residual refinement block. After the final stage yields **D** 1, a 1 _×_ 1 convolution and sigmoid produce per-pixel
+probabilities:
+**y** ˆ = _σ_ �Conv1 _×_ 1( **D** 1)� _._
+This bottom-up pathway couples skip-driven anatomical detail with CLTM-supplied global context
+to yield accurate, full-resolution masks.
+
+
+4 EXPERIMENTAL SETUP
+
+
+To thoroughly assess the effectiveness and resilience of our model, we conducted an extensive series of experiments across 20 publicly available datasets which are represented in Table 1, carefully
+selected for their diversity in modality, anatomical regions, and clinical targets. To enhance the generalization ability of the model, we applied a wide range of data augmentation techniques Buslaev
+et al. (2020) and fine-tuned hyperparameters. In certain cases, to ensure consistency and fairness in
+comparison, we adhered to the same dataset split methods as prior works; for example, DUCK-Net
+Dumitru et al. (2023) for polyp segmentation. This careful design ensures that our evaluation reflects the true resilience of our model across a wide spectrum of biomedical imaging challenges. We
+resized all images to 256x256 pixels, with some datasets scaled to 512x512 as noted in the result
+table. Using a batch size of 128 and the Adam optimizer (learning rate: 0.0175), we trained the
+Med-Segnet with mixed activation functions ELU and sigmoid in the encoder, ReLU in the decoder
+for stronger feature extraction and decoding More comparisons and information can be found in
+the supplementary material. Further details of the experimental setup are provided in the Appendix
+Experimental setup section.
+
+
+6
+
+
+5 RESULT ANALYSIS
+
+
+This section presents a comprehensive analysis of Med-Segnet’s performance, with a particular focus on the contribution of the Circulant Layer Token Mixer (CLTM). Our quantitative findings,
+detailed in Table 1, and the qualitative results, visualized in Figure 3, provide a holistic view of the
+model’s capabilities and the tangible benefits of incorporating an efficient global context module.
+
+Table 1: Dice across 20 datasets and 12 modalities. For each dataset (polyp, dermoscopy, fundus/retina, ophthalmology, chest X-ray,
+ultrasound, histology, MRI, CT, endoscopy, and hematology), we report the listed input size, with and without the CLTM bottleneck. CLTM
+yields consistent improvements on nearly every benchmark, with gains ranging from +0.5 to +6.3 Dice points largest on BUSI ultrasound and
+RaViR fundus—and notable boosts on PH2, LiTS, ISIC-2018, CoNIC, and EndoVis-2017, while preserving strong performance on easier sets
+such as Chest X-ray and Kvasir-SEG.
+
+
+MRI Brain Tumor Buda et al. (2019) 256 _×_ 256 0.9144 0.9256
+
+
+CT LiTS Bilic et al. (2023) 256 _×_ 256 0.9202 0.9356
+
+
+EndoVis 2017 (Binary) Allan et al. (2019) 256 _×_ 256 0.9307 0.9543
+Endoscopy
+
+Hematology Cell Nuclei Segmentation (Blood) Depto et al. (2021) 512 _×_ 512 0.9267 0.9527
+
+
+Across all evaluated datasets, the CLTM-augmented Med-Segnet delivers consistent, statistically
+meaningful Dice gains over the baseline improving challenging low-contrast cases while preserving
+near-ceiling performance on easier benchmarks, with no observed regressions. Aggregated across
+all datasets, the mean Dice improves from 0 _._ 8977 to 0 _._ 9161 (+0 _._ 0184 absolute; +2 _._ 05% relative),
+with a median gain of +0 _._ 0121. Notably, every dataset improves (20/20), indicating a systematic
+benefit rather than gains concentrated in a small subset of favorable cases. The most pronounced
+improvements occur where local evidence is weak and long-range dependencies are critical. On
+BUSI ultrasound, Dice rises from 0 _._ 7997 to 0 _._ 8628 (+0 _._ 0631; +7 _._ 9%). RaViR ophthalmic fundus
+similarly improves from 0 _._ 7705 to 0 _._ 8317 (+0 _._ 0612; +7 _._ 9%). Within retinal vessel segmentation,
+CHASE-DB1 increases from 0 _._ 7767 to 0 _._ 8167 (+0 _._ 0400; +5 _._ 2%), reflecting better recovery of thin,
+tortuous structures. Additional strong uplifts are observed for Hematology (blood nuclei) (+0 _._ 0260),
+EndoVis-2017 (+0 _._ 0236), and RIM-ONE (+0 _._ 0200), consistent with improved instance separation
+in crowded fields and enhanced structural continuity.
+
+
+Averaged within modality, CLTM yields +0 _._ 0631 on ultrasound, +0 _._ 0612 on ophthalmology
+(RaViR), +0 _._ 0260 on fundus/retina (DRIVE, CHASE-DB1) plus +0 _._ 0200 on retinography (RIMONE), +0 _._ 0260 on hematology, +0 _._ 0236 on endoscopy, +0 _._ 0154 on CT (LiTS; to 0 _._ 9356),
++0 _._ 0112 on MRI (to 0 _._ 9256), and +0 _._ 0120 on histology (CoNIC, GlaS A/B, HuBMAP). Dermoscopy improves by +0 _._ 0143 on average (ISIC-2018, PH2), with PH2 reaching 0 _._ 9828. Although
+chest X-ray begins near ceiling, it still gains +0 _._ 0057 to 0 _._ 9841. Polyp datasets—already strong
+(mean 0 _._ 9539 without CLTM) retain headroom for a consistent +0 _._ 0062 average uplift, led by
+ETIS (+0 _._ 0074). As expected, improvements are smaller on the easiest and highest-contrast sets
+(for example, Kvasir-SEG, CVC-ClinicDB, chest X-ray), where Dice already exceeds 0 _._ 95; nev
+
+7
+
+
+**MED**
+**Modality** **Dataset** **Image Size** **(w/o CLTM)**
+**DSC**
+
+
+**MED**
+**(w/ CLTM)**
+**DSC**
+
+
+Polyp
+
+
+Kvasir-SEG Jha et al. (2020a) 256 _×_ 256 0.9578 0.9672
+Kvasir-Capsule Smedsrud et al. (2021) 256 _×_ 256 0.9494 0.9554
+CVC-ClinicDB Bernal et al. (2015) 256 _×_ 256 0.9605 0.9666
+CVC-ColonDB V´azquez et al. (2017) 256 _×_ 256 0.9478 0.9498
+ETIS-LaribPolypDB Bernal et al. (2017a) 256 _×_ 256 0.9538 0.9612
+
+
+ISIC 2018 Tschandl et al. (2018) 256 _×_ 256 0.9128 0.9226
+Dermoscopy
+PH2 Mendonc¸a et al. (2013) 256 _×_ 256 0.9641 0.9828
+
+
+DRIVE Staal et al. (2004) 512 _×_ 512 0.8182 0.8301
+Fundus
+CHASE-DB1 Fraz et al. (2012) 512 _×_ 512 0.7767 0.8167
+
+
+Retinography RIM-ONE Batista et al. (2020) 128 _×_ 128 0.8834 0.9034
+
+
+Ophthalmology RaViR Hatamizadeh et al. (2022) 512 _×_ 512 0.7705 0.8317
+
+
+X-rays Chest X-ray (Lung) Candemir et al. (2013) 256 _×_ 256 0.9784 0.9841
+
+
+Ultrasound Breast Ultrasound Images (BUSI) Al-Dhabyani et al. (2020) 256 _×_ 256 0.7997 0.8628
+
+
+Histology
+
+
+CoNIC Graham et al. (2024) 256 _×_ 256 0.8356 0.8492
+GlaS (Test A) Sirinukunwattana et al. (2017) 256 _×_ 256 0.9125 0.9246
+GlaS (Test B) Sirinukunwattana et al. (2017) 256 _×_ 256 0.9056 0.9106
+HuBMAP (Kidney) Howard et al. (2023) 256 _×_ 256 0.8338 0.8512
+
+
+ertheless, CLTM contributes robust +0 _._ 6–+1 _._ 0 point gains. The smallest change is observed on
+CVC-ColonDB (+0 _._ 002), suggesting limited headroom rather than a failure case.
+
+
+Figure 3: Qualitative results on 12 medical benchmarks (from 19 datasets). Columns: Brain MRI, BUSI, Chest X-ray, CoNIC, DRIVE,
+ETIS, GlaS, HuBMAP, ISIC-2018, Kvasir-SEG, LiTS, RAVIR. Rows: input, ground truth, prediction. The model generalizes across modalities
+capturing fine vessels, clustered nuclei/glands, and fuzzy-boundary lesions.
+
+
+The visual comparisons in Figure 3 mirror the statistics. CLTM reduces spurious activations and
+sharpens boundaries in dermoscopy (PH2 and ISIC-2018), enhances vascular continuity in retina
+and ophthalmology (DRIVE and RaViR), and improves separation of clustered histology instances
+(CoNIC and GlaS). These effects align with the role of a lightweight global token mixer: reconciling
+distant but semantically linked regions to disambiguate locally ambiguous evidence.
+
+
+Table 2: Results on binary medical image segmentation (Polyp, Skin Lesion, Retinal Blood Vessels, and Breast Ultrasound). Results for
+other methodologies are copied as reported in their original papers (not re-trained here) . Our Med-SegNet results are produced under the
+unifed setup described in Experimental Setup. Bold indicates best (SOTA) within each dataset.
+
+**Parameter**
+**Dataset** **Method** **(in Millions)** **DSC**
+PVT-EMCAD-B2 Rahman et al. (2024) 26.76 0.9275
+DUCK-Net (34 filters) Dumitru et al. (2023) 155.4 0.9502
+Kvasir-SEG Jha et al. (2020a) RAPUNet Lee & Yoo (2024) 43.85 0.9390
+UNet++ Zhou et al. (2018a) 9.04 0.9531
+
+**Med-Segnet with CLTM** **2.07** **0.9672**
+PVT-EMCAD-B2 Rahman et al. (2024) 26.76 0.9521
+DUCK-Net (34 filters) Dumitru et al. (2023) 155.4 0.9478
+CVC-ClinicDB Bernal et al. (2015) RAPUNet Lee & Yoo (2024) 43.85 0.9610
+PraNet Fan et al. (2020) 22.0 0.9575
+
+**Med-Segnet with CLTM** **2.07** **0.9666**
+PVT-EMCAD-B2 Rahman et al. (2024) 26.76 0.9231
+DUCK-Net (17 filters) Dumitru et al. (2023) 38.92 0.9353
+CVC-ColonDB V´azquez et al. (2017) RAPUNet Lee & Yoo (2024) 43.85 **0.9526**
+ResUNet Xiao et al. (2018) 7.7 0.9315
+
+Med-Segnet with CLTM **2.07** 0.9498
+PVT-EMCAD-B2 Rahman et al. (2024) 26.76 0.9229
+DUCK-Net (34 filters) Dumitru et al. (2023) 155.4 0.9354
+ETIS-LARIBPOLYPDB Bernal et al. (2017b) RAPUNet Lee & Yoo (2024) 43.85 0.9572
+HED-UNet Wang et al. (2019) 34.0 0.9520
+
+**Med-Segnet with CLTM** **2.07** **0.9612**
+PVT-GCASCADE Rahman & Marculescu (2024) 3.32 0.9151
+TransFuse Zhang et al. (2021a) 26.3 0.9010
+ISIC 2018 Codella et al. (2019) UCTransNet Wang et al. (2022) 65.6 0.9050
+SegNet Badrinarayanan et al. (2017) 29.5 0.8950
+
+**Med-Segnet with CLTM** **2.07** **0.9226**
+MERIT-CASCADE Rahman & Marculescu (2023) 147.86 0.8221
+MERIT-GCASCADE Rahman & Marculescu (2024) 5.99 0.8290
+DRIVE Asad et al. (2014) FR-UNet Liu et al. (2022a)  - 0.8316
+IterNet Gu et al. (2019a) 3.2 0.8280
+
+Med-Segnet with CLTM **2.07** 0.8301
+U-Net Ronneberger et al. (2015b) 7.7 0.7850
+Attention U-Net Oktay et al. (2018b) 9.2 0.8120
+BUSI Al-Dhabyani et al. (2020) TransUNet Chen et al. (2021a) 106.0 0.8250
+Swin-UNet Cao et al. (2021c) 27.9 0.8400
+
+Med-Segnet with CLTM **2.07** **0.8628**
+
+
+8
+
+
+6 COMPARATIVE ANALYSIS
+
+
+When benchmarked against a wide array of contemporary state-of-the-art models, Med-Segnet with
+CLTM consistently establishes a new benchmark for both segmentation accuracy and computational
+efficiency across diverse medical imaging tasks. As detailed in Table 2, our model not only achieves
+superior performance but does so with a significantly reduced parameter footprint compared to competing architectures. This remarkable efficiency and dice are evident across nearly all tested datasets.
+On the Kvasir-SEG dataset, for instance, Med-Segnet with CLTM achieves a leading Dice Similarity
+Coefficient (DSC) of 0.9672 with an exceptionally low parameter count of just 2.07 million. This decisively outperforms models like DUCK-Net, which uses over 75 times more parameters (155.4M)
+to achieve a lower DSC of 0.9502. Similarly, for CVC-ClinicDB and ETIS-LARIBPOLYPDB, our
+model secures the highest DSCs of 0.9666 and 0.9612 respectively, again demonstrating superior
+performance with vastly fewer parameters than top-performing alternatives. On the ISIC 2018 skin
+lesion benchmark, Med-Segnet with CLTM also achieves the highest DSC of 0.9226, surpassing
+other specialized methods. Furthermore, for Breast Ultrasound Images (BUSI), our model achieves
+a DSC of 0.8628, outperforming established baselines such as Swin-UNet (0.8400) and TransUNet
+(0.8250).
+
+
+While a competing method, RAPUNet, achieves a slightly higher DSC on CVC-ColonDB (0.9526
+vs. our 0.9498) and FR-UNet for DRIVE (0.8316 vs. our 0.8301), our model remains highly competitive on these datasets while maintaining its substantial advantage in parameter efficiency. This
+consistent performance-to-parameter ratio across various modalities underscores the power of our
+design. By combining parameter-efficient IR-SE Blocks with the efficient global context aggregation of the CLTM, Med-Segnet delivers state-of-the-art or highly competitive performance without
+the computational burden of larger, more complex models, making it an ideal solution for practical
+clinical deployment where real-time inference and constrained hardware resources are critical.
+
+
+7 ABLATION STUDY
+
+
+We evaluated the contribution of CLTM through an ablation on twenty medical datasets (Table 1),
+comparing MED SegNet with and without the module. Across all datasets, adding CLTM increased
+the Dice score, with the largest gains on visually challenging, low-contrast modalities. For example,
+Ophthalmology (RaViR) improved from 0.7705 to 0.8317, and Breast Ultrasound (BUSI) improved
+from 0.7997 to 0.8628. Similar, though smaller, improvements were observed on high-contrast
+tasks, indicating that CLTM helps even when baselines are already strong. Overall, these results
+show that CLTM supplies the missing global context, improves long-range coherence and boundary
+precision, and is therefore a central component for achieving consistent accuracy across diverse
+medical imaging settings.
+
+
+8 CONCLUSION.
+
+
+Med-SegNet shows that injecting a single, lightweight global mixing step at the bottleneck via the
+Circulant Layer Token Mixer (CLTM) is a simple yet powerful way to improve binary segmentation
+across diverse modalities while preserving efficiency. By projecting multi-scale encoder features
+into a shared token space, performing near-linear circulant mixing, and re-projecting back to each
+scale, CLTM enhances long-range coherence and boundary precision with minimal parameter. Consistent gains appear on challenging, low-contrast settings (e.g., ophthalmic fundus and breast ultrasound), and performance remains robust on near-ceiling benchmarks, indicating that global context
+is added without harming easy regimes.
+
+
+We note limitations: evaluation is confined to 2D inputs; robustness and calibration under distribution shift warrant deeper analysis; and comparisons for other methodologies are based on reported
+numbers. Future work will extend CLTM to volumetric (3D) data, study robustness across devices/centers/protocols, integrate lightweight uncertainty estimation, and refine accuracy–latency
+trade-offs for interactive clinical use. Overall, Med-SegNet provides a compact, general recipe for
+coupling strong local encoders with efficient global context, advancing practical, universal binary
+medical image segmentation.
+
+
+9
+
+
+REFERENCES
+
+
+Walid Al-Dhabyani, Mohammed Gomaa, Hussien Khaled, and Aly Fahmy. Dataset of breast ultrasound images. _Data in Brief_, 28:104863, 2020. ISSN 2352-3409. doi: https://doi.org/10.1016/
+j.dib.2019.104863. URL [https://www.sciencedirect.com/science/article/](https://www.sciencedirect.com/science/article/pii/S2352340919312181)
+[pii/S2352340919312181.](https://www.sciencedirect.com/science/article/pii/S2352340919312181)
+
+
+Max Allan, Alex Shvets, Thomas Kurmann, Zichen Zhang, Rahul Duggal, Yun-Hsuan Su, Nicola
+Rieke, Iro Laina, Niveditha Kalavakonda, Sebastian Bodenstedt, et al. 2017 robotic instrument
+segmentation challenge. _arXiv preprint arXiv:1902.06426_, 2019.
+
+
+Andre Araujo, Wade Norris, and Jack Sim. Computing receptive fields of convolutional neural
+networks. _Distill_, 2019.
+
+
+Ahmed Asad, Ahmad Taher Azar, Nashwa El-Bendary, Aboul Ella Hassaanien, et al. Ant colony
+based feature selection heuristics for retinal vessel segmentation. _arXiv preprint arXiv:1403.1735_,
+2014.
+
+
+Vijay Badrinarayanan, Alex Kendall, and Roberto Cipolla. Segnet: A deep convolutional encoderdecoder architecture for image segmentation. _IEEE transactions on pattern analysis and machine_
+_intelligence_, 39(12):2481–2495, 2017.
+
+
+Francisco Jos´e Fumero Batista, Tinguaro Diaz-Aleman, Jose Sigut, Silvia Alayon, Rafael Arnay,
+and Denisse Angel-Pereira. Rim-one dl: A unified retinal image database for assessing glaucoma
+using deep learning. _Image Analysis & Stereology_, 39(3):161–167, 2020.
+
+
+Jorge Bernal, F Javier S´anchez, Gloria Fern´andez-Esparrach, Debora Gil, Cristina Rodr´ıguez, and
+Fernando Vilari˜no. Wm-dova maps for accurate polyp highlighting in colonoscopy: Validation
+vs. saliency maps from physicians. _Computerized_ _medical_ _imaging_ _and_ _graphics_, 43:99–111,
+2015.
+
+
+Jorge Bernal, Nima Tajkbaksh, Francisco Javier Sanchez, Bogdan J Matuszewski, Hao Chen,
+Lequan Yu, Quentin Angermann, Olivier Romain, Bjørn Rustad, Ilangko Balasingham, et al.
+Comparative validation of polyp detection methods in video colonoscopy: results from the miccai
+2015 endoscopic vision challenge. _IEEE_ _Transactions_ _on_ _Medical_ _Imaging_, 36(6):1231–1249,
+2017a.
+
+
+Jorge Bernal, Nima Tajkbaksh, Francisco Javier S´anchez, Bogdan J. Matuszewski, Hao Chen,
+Lequan Yu, Quentin Angermann, Olivier Romain, Bjørn Rustad, Ilangko Balasingham, Konstantin Pogorelov, Sungbin Choi, Quentin Debard, Lena Maier-Hein, Stefanie Speidel, Danail
+Stoyanov, Patrick Brandao, Henry C´ordova, Cristina S´anchez-Montes, Suryakanth R. Gurudu,
+Gloria Fern´andez-Esparrach, Xavier Dray, Jianming Liang, and Aymeric Histace. Comparative
+validation of polyp detection methods in video colonoscopy: Results from the miccai 2015 endoscopic vision challenge. _IEEE Transactions on Medical Imaging_, 36(6):1231–1249, 2017b. doi:
+10.1109/TMI.2017.2664042.
+
+
+Patrick Bilic, Patrick Christ, Hongwei Bran Li, Eugene Vorontsov, Avi Ben-Cohen, Georgios
+Kaissis, Adi Szeskin, Colin Jacobs, Gabriel Efrain Humpire Mamani, Gabriel Chartrand, et al.
+The liver tumor segmentation benchmark (lits). _Medical Image Analysis_, 84:102680, 2023.
+
+
+Mateusz Buda, Ashirbani Saha, and Maciej A. Mazurowski. Association of genomic subtypes of lower-grade gliomas with shape features automatically extracted by a deep learning algorithm. _Computers_ _in_ _Biology_ _and_ _Medicine_, 109:218–225, June 2019. ISSN 00104825. doi: 10.1016/j.compbiomed.2019.05.002. URL [http://dx.doi.org/10.1016/](http://dx.doi.org/10.1016/j.compbiomed.2019.05.002)
+[j.compbiomed.2019.05.002.](http://dx.doi.org/10.1016/j.compbiomed.2019.05.002)
+
+
+Alexander Buslaev, Vladimir I Iglovikov, Eugene Khvedchenya, Alex Parinov, Mikhail Druzhinin,
+and Alexandr A Kalinin. Albumentations: fast and flexible image augmentations. _Information_,
+11(2):125, 2020.
+
+
+Sema Candemir, Stefan Jaeger, Kannappan Palaniappan, Jonathan P Musco, Rahul K Singh, Zhiyun
+Xue, Alexandros Karargyris, Sameer Antani, George Thoma, and Clement J McDonald. Lung
+segmentation in chest radiographs using anatomical atlases with nonrigid registration. _IEEE trans-_
+_actions on medical imaging_, 33(2):577–590, 2013.
+
+
+10
+
+
+Hu Cao, Yue Wang, Jieneng Chen, Deyu Jiang, Xiangming Zhang, and Qi Tian. Swin-unet: Unetlike pure transformer for medical image segmentation. In _arXiv_ _preprint_ _arXiv:2105.05537_,
+2021a.
+
+
+Hu Cao, Yueyue Wang, Joy Chen, Dongsheng Jiang, Xiaopeng Zhang, Qi Tian, and Manning Wang.
+Swin-unet: Unet-like pure transformer for medical image segmentation. _arXiv:2105.05537_,
+2021b. [URL https://arxiv.org/abs/2105.05537.](https://arxiv.org/abs/2105.05537)
+
+
+Hu Cao Cao, Huiquan Wang, Yang Chen, Dandan Jiang, Xiaofeng Zhang, and Qi Tian. Swin-unet:
+Unet-like pure transformer for medical image segmentation. _arXiv_ _preprint_ _arXiv:2105.05537_,
+2021c.
+
+
+Jieneng Chen, Yonghong Lu, Quanyi Yu, Xiangde Luo, Tianming Zhou, Shaoting Xiao, and Zaiyi
+Wang. Transunet: Transformers make strong encoders for medical image segmentation. _arXiv_
+_preprint arXiv:2102.04306_, 2021a.
+
+
+Jieneng Chen, Yongyi Lu, Qihang Yu, Xiangde Luo, Ehsan Adeli, Yan Wang, Le Lu, Alan L. Yuille,
+and Yuyin Zhou. Transunet: Transformers make strong encoders for medical image segmentation.
+_arXiv preprint arXiv:2102.04306_, 2021b.
+
+
+Shuxuan Chen, Shun Zhang, Yu Li, et al. Cyclemlp: A mlp-like architecture for dense prediction.
+In _ICLR_, 2022.
+
+
+Noel Codella, Veronica Rotemberg, Philipp Tschandl, M. Emre Celebi, Stephen Dusza, David Gutman, Brian Helba, Aadi Kalloo, Konstantinos Liopyris, Michael Marchetti, Harald Kittler, and
+Allan Halpern. Skin lesion analysis toward melanoma detection 2018: A challenge hosted by the
+international skin imaging collaboration (isic), 2019.
+
+
+Deponker Sarker Depto, Shazidur Rahman, Md. Mekayel Hosen, Mst Shapna Akter, Tamanna Rahman Reme, Aimon Rahman, Hasib Zunair, M. Sohel Rahman, and M.R.C. Mahdy. Automatic
+segmentation of blood cells from microscopic slides: A comparative analysis. _Tissue and Cell_, 73:
+101653, 2021. ISSN 0040-8166. doi: https://doi.org/10.1016/j.tice.2021.101653. [URL https:](https://www.sciencedirect.com/science/article/pii/S0040816621001695)
+[//www.sciencedirect.com/science/article/pii/S0040816621001695.](https://www.sciencedirect.com/science/article/pii/S0040816621001695)
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at
+scale. In _ICLR_, 2020.
+
+
+Razvan-Gabriel Dumitru, Darius Peteleaza, and Catalin Craciun. Using duck-net for polyp image
+segmentation. _Scientific Reports_, 13(1):9803, 2023.
+
+
+Deng-Ping Fan, Ge-Peng Ji, Tao Zhou, Geng Chen, Huazhu Fu, Jianbing Shen, and Ling Shao.
+Pranet: Parallel reverse attention network for polyp segmentation. In _International conference on_
+_medical image computing and computer-assisted intervention_, pp. 263–273. Springer, 2020.
+
+
+Lucas Fidon, Suprosanna Shit, Ivan Ezhov, Johannes C. Paetzold, S´ebastien Ourselin, and Tom
+Vercauteren. Generalized wasserstein dice loss, test-time augmentation, and transformers for the
+brats 2021 challenge. _arXiv:2112.13054_, 2021. URL [https://arxiv.org/abs/2112.](https://arxiv.org/abs/2112.13054)
+[13054.](https://arxiv.org/abs/2112.13054)
+
+
+Muhammad Moazam Fraz, Paolo Remagnino, Andreas Hoppe, Bunyarit Uyyanonvara, Alicja R
+Rudnicka, Christopher G Owen, and Sarah A Barman. An ensemble classification-based approach
+applied to retinal blood vessel segmentation. _IEEE Transactions on Biomedical Engineering_, 59
+(9):2538–2548, 2012.
+
+
+Simon Graham, Quoc Dang Vu, Mostafa Jahanifar, Martin Weigert, Uwe Schmidt, Wenhua Zhang,
+Jun Zhang, Sen Yang, Jinxi Xiang, Xiyue Wang, et al. Conic challenge: Pushing the frontiers of
+nuclear detection, segmentation, classification and counting. _Medical image analysis_, 92:103047,
+2024.
+
+
+Li Gu, Jie Zhang, Yuan Zheng, Ruixuan Wu, Yuqian Xu, and Zhaoguang Pan. Context-aware
+recurrent neural network for retinal vessel segmentation. _IEEE transactions on medical imaging_,
+38(4):948–959, 2019a.
+
+
+11
+
+
+Zhengyang Gu, Jun Cheng, Huazhu Fu, Kang Zhou, Huaying Hao, Yan Zhang, Tianzi Jiang, and
+Jiang Liu. Ce-net: Context encoder network for 2d medical image segmentation. _IEEE Transac-_
+_tions on Medical Imaging_, 38(10):2281–2292, 2019b.
+
+
+Ali Hatamizadeh, Hamid Hosseini, Niraj Patel, Jinseo Choi, Cameron C. Pole, Cory M. Hoeferlin,
+Steven D. Schwartz, and Demetri Terzopoulos. Ravir: A dataset and methodology for the semantic segmentation and quantitative analysis of retinal arteries and veins in infrared reflectance
+imaging, 2022.
+
+
+Addison Howard, HCL-Jevster, Katherine Gustilo, Katy Borner, Ryan Holbrook, and Yashvardhan Jain. Hubmap  - hacking the human vasculature, 2023. URL [https://kaggle.com/](https://kaggle.com/competitions/hubmap-hacking-the-human-vasculature)
+[competitions/hubmap-hacking-the-human-vasculature.](https://kaggle.com/competitions/hubmap-hacking-the-human-vasculature)
+
+
+Jie Hu, Li Shen, and Gang Sun. Squeeze-and-excitation networks. In _CVPR_, pp. 7132–7141, 2018.
+
+
+Chien-Hsiang Huang et al. Hardnet-mseg: A simple encoder-decoder polyp segmentation neural
+network that achieves over 0.9 mean dice and 86 fps. _arXiv:2101.07172_, 2021. URL [https:](https://arxiv.org/abs/2101.07172)
+[//arxiv.org/abs/2101.07172.](https://arxiv.org/abs/2101.07172)
+
+
+Xing Huang et al. Missformer: Multi-scale vision transformer for medical image segmentation. In
+_Medical Image Analysis_, 2022.
+
+
+Fabian Isensee, Paul F. Jaeger, Simon A. A. Kohl, Jens Petersen, and Klaus H. Maier-Hein. nnu-net:
+A self-adapting framework for u-net-based medical image segmentation. _Nature_ _Methods_, 18:
+203–211, 2021.
+
+
+Debesh Jha, Pia H Smedsrud, Michael A Riegler, P˚al Halvorsen, Thomas De Lange, Dag Johansen,
+and H˚avard D Johansen. Kvasir-seg: A segmented polyp dataset. In _MultiMedia modeling:_ _26th_
+_international_ _conference,_ _MMM_ _2020,_ _Daejeon,_ _South_ _Korea,_ _January_ _5–8,_ _2020,_ _proceedings,_
+_part II 26_, pp. 451–462. Springer, 2020a.
+
+
+Debesh Jha, Pia H. Smedsrud, Michael A. Riegler, Dag Johansen, P˚al Halvorsen, and H˚avard D.
+Johansen. Doubleu-net: A deep convolutional neural network for medical image segmentation.
+In _2020 IEEE 33rd International Symposium on Computer-Based Medical Systems (CBMS)_, pp.
+558–564, 2020b.
+
+
+Debesh Jha et al. Doubleu-net: A deep convolutional neural network for medical image segmentation. _IEEE_ _Access_, 2020c. doi: 10.1109/ACCESS.2020.
+3002541. URL [https://web-backend.simula.no/sites/default/files/](https://web-backend.simula.no/sites/default/files/publications/files/09183321_1.pdf)
+[publications/files/09183321_1.pdf.](https://web-backend.simula.no/sites/default/files/publications/files/09183321_1.pdf)
+
+
+Hyunnam Lee and Juhan Yoo. Metaformer and cnn hybrid model for polyp image segmentation.
+_IEEE Access_, 2024.
+
+
+Wenxuan Li, Lei Yang, Fei Xing, Zongwei Chen, Wenlong Lu, and Lei Xing. Segtran: Rethinking
+transformers for medical image segmentation. In _MICCAI_, pp. 55–64, 2021.
+
+
+Hanxiao Liu, Zihang Dai, David So, and Quoc V. Le. Pay attention to mlps. In _NeurIPS_, 2021.
+
+
+Jiarun Liu, Hao Yang, Hong-Yu Zhou, Yan Xi, Lequan Yu, Cheng Li, Yong Liang, Guangming
+Shi, Yizhou Yu, Shaoting Zhang, et al. Swin-umamba: Mamba-based unet with imagenet-based
+pretraining. In _International_ _Conference_ _on_ _Medical_ _Image_ _Computing_ _and_ _Computer-Assisted_
+_Intervention_, pp. 615–625. Springer, 2024.
+
+
+Wentao Liu, Huihua Yang, Tong Tian, Zhiwei Cao, Xipeng Pan, Weijin Xu, Yang Jin, and Feng Gao.
+Full-resolution network and dual-threshold iteration for retinal vessel and coronary angiograph
+segmentation. _IEEE_ _Journal_ _of_ _Biomedical_ _and_ _Health_ _Informatics_, 26(9):4623–4634, 2022a.
+doi: 10.1109/JBHI.2022.3188710.
+
+
+Zhuang Liu, Yutong Lin, Yue Cao, et al. On the receptive fields of mlp-based models. In _CVPR_,
+2022b.
+
+
+Jun Ma, Feifei Li, and Bo Wang. U-mamba: Enhancing long-range dependency for biomedical
+image segmentation. _arXiv preprint arXiv:2401.04722_, 2024a.
+
+
+12
+
+
+Jun Ma et al. Segment anything in medical images. _Nature_ _Communications_, 2024b.
+doi: 10.1038/s41467-024-44824-z. URL [https://www.nature.com/articles/](https://www.nature.com/articles/s41467-024-44824-z)
+[s41467-024-44824-z.](https://www.nature.com/articles/s41467-024-44824-z)
+
+
+Teresa Mendonc¸a, Pedro M. Ferreira, Jorge S. Marques, Andr´e R. S. Marcal, and Jorge Rozeira.
+Ph2  - a dermoscopic image database for research and benchmarking. In _2013_ _35th_ _Annual_ _In-_
+_ternational_ _Conference_ _of_ _the_ _IEEE_ _Engineering_ _in_ _Medicine_ _and_ _Biology_ _Society_ _(EMBC)_, pp.
+5437–5440, 2013. doi: 10.1109/EMBC.2013.6610779.
+
+
+Linyang Mou et al. Attention-unet++: Redesigning skip connections to exploit attention for medical
+image segmentation. In _ICASSP_, 2021.
+
+
+Ozan Oktay, Jo Schlemper, Loic Le Folgoc, Matthew Lee, Mattias Heinrich, Kazunari Misawa, Kensaku Mori, Steven McDonagh, Nils Y. Hammerla, Bernhard Kainz, Ben Glocker, and
+Daniel Rueckert. Attention u-net: Learning where to look for the pancreas. _arXiv_ _preprint_
+_arXiv:1804.03999_, 2018a.
+
+
+Ozan Oktay, Jo Schlemper Schlemper, L. Folgoc, Matthew Lee, Matt Heinrich, Mark Sandler, Kevin
+Reiser, J. de Fauw, A. Gritsenko, A. Khan, et al. Attention u-net: Learning where to look for the
+pancreas. _Medical Image Analysis_, 56:188–202, 2018b.
+
+
+Md Mahfuzur Rahman, M. Ziaul Ahmed, Nirmalya Dey, et al. Mist: Medical image segmentation
+transformer. In _MICCAI_, 2023.
+
+
+Md Mostafijur Rahman and Radu Marculescu. Medical image segmentation via cascaded attention
+decoding. In _2023_ _IEEE/CVF_ _Winter_ _Conference_ _on_ _Applications_ _of_ _Computer_ _Vision_ _(WACV)_,
+pp. 6211–6220, 2023. doi: 10.1109/WACV56688.2023.00616.
+
+
+Md Mostafijur Rahman and Radu Marculescu. G-cascade: Efficient cascaded graph convolutional
+decoding for 2d medical image segmentation. In _Proceedings of the IEEE/CVF Winter Conference_
+_on Applications of Computer Vision_, pp. 7728–7737, 2024.
+
+
+Md Mostafijur Rahman, Mustafa Munir, and Radu Marculescu. Emcad: Efficient multi-scale convolutional attention decoding for medical image segmentation. In _Proceedings of the IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 11769–11779, 2024.
+
+
+Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In _MICCAI_, pp. 234–241, 2015a.
+
+
+Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical image segmentation. In _Medical_ _Image_ _Computing_ _and_ _Computer-Assisted_ _Intervention–_
+_MICCAI 2015:_ _18th International Conference,_ _Munich,_ _Germany,_ _October 5-9,_ _2015,_ _Proceed-_
+_ings, Part III 18_, pp. 234–241. Springer, 2015b.
+
+
+Jiacheng Ruan, Jincheng Li, and Suncheng Xiang. Vm-unet: Vision mamba unet for medical image
+segmentation. _arXiv:2402.02491_, 2024. [URL https://arxiv.org/abs/2402.02491.](https://arxiv.org/abs/2402.02491)
+
+
+Leonardo Rundo, Changhee Han, Yasuhito Nagano, Rie Hataya, Yukihiro Furukawa, Concetto
+Militello, Andrea Tangherloni, Maurizio S. Nobile, Claudio Ferretti, Daniela Besozzi, and Paolo
+Cazzaniga. Use-net: Incorporating squeeze-and-excitation blocks into u-net for medical image
+segmentation. _IEEE Access_, 7:143402–143414, 2019.
+
+
+Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, and
+Fahad Shahbaz Khan. Unetr++: Delving into efficient and accurate 3d medical image segmentation. _arXiv:2212.04497_, 2023. [URL https://arxiv.org/abs/2212.04497.](https://arxiv.org/abs/2212.04497)
+
+
+Korsuk Sirinukunwattana, Josien PW Pluim, Hao Chen, Xiaojuan Qi, Pheng-Ann Heng, Yun Bo
+Guo, Li Yang Wang, Bogdan J Matuszewski, Elia Bruni, Urko Sanchez, et al. Gland segmentation
+in colon histology images: The glas challenge contest. _Medical_ _image_ _analysis_, 35:489–502,
+2017.
+
+
+Pia H Smedsrud, Vajira Thambawita, Steven A Hicks, Henrik Gjestang, Oda Olsen Nedrejord, Espen
+Næss, Hanna Borgli, Debesh Jha, Tor Jan Derek Berstad, Sigrun L Eskeland, et al. Kvasir-capsule,
+a video capsule endoscopy dataset. _Scientific Data_, 8(1):142, 2021.
+
+
+13
+
+
+J. Staal, M. D. Abr`amoff, M. Niemeijer, M. A. Viergever, and B. van Ginneken. Ridge-based vessel
+segmentation in color images of the retina. _IEEE Transactions on Medical Imaging_, 23(4):501–
+509, 2004. doi: 10.1109/TMI.2004.825627.
+
+
+Ilya O. Tolstikhin, Neil Houlsby, Alexander Kolesnikov, Lucas Beyer, Xiaohua Zhai, Thomas Unterthiner, Jessica Yung, Andreas Steiner, Daniel Keysers, Jakob Uszkoreit, Mario Lucic, and
+Alexey Dosovitskiy. Mlp-mixer: An all-mlp architecture for vision. In _NeurIPS_, pp. 24261–
+24272, 2021.
+
+
+Hugo Touvron, Piotr Bojanowski, Matthijs Douze, Matthieu Cord, and Herv´e J´egou. Resmlp:
+Feedforward networks for image classification with data-efficient training. In _arXiv_ _preprint_
+_arXiv:2105.03404_, 2021a.
+
+
+Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, and
+Herv´e J´egou. Training data-efficient image transformers & distillation through attention. In
+_ICML_, 2021b.
+
+
+Philipp Tschandl, Cliff Rosendahl, and Harald Kittler. The ham10000 dataset, a large collection of
+multi-source dermatoscopic images of common pigmented skin lesions. _Scientific data_, 5(1):1–9,
+2018.
+
+
+Jeya Maria Jose Valanarasu and Vishal M. Patel. Medical transformer: Gated axial-attention for
+medical image segmentation. In _MICCAI_, 2021.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In _NeurIPS_, pp. 5998–6008,
+2017.
+
+
+David V´azquez, Jorge Bernal, F Javier S´anchez, Gloria Fern´andez-Esparrach, Antonio M L´opez,
+Adriana Romero, Michal Drozdzal, and Aaron Courville. A benchmark for endoluminal scene
+segmentation of colonoscopy images. _Journal of healthcare engineering_, 2017(1):4037190, 2017.
+
+
+Haonan Wang, Peng Cao, Jiaqi Wang, and Osmar R. Zaiane. Uctransnet: Rethinking the skip connections in u-net from a channel-wise perspective with transformer. _Proceedings of the AAAI Con-_
+_ference_ _on_ _Artificial_ _Intelligence_, 36(3):2441–2449, Jun. 2022. doi: 10.1609/aaai.v36i3.20144.
+[URL https://ojs.aaai.org/index.php/AAAI/article/view/20144.](https://ojs.aaai.org/index.php/AAAI/article/view/20144)
+
+
+Peng Wang, Yunling Yan, Kai Wang, Yaping Zhang, Junsong Wang, and Xiaohui Zheng. Hed-unet:
+Combined hed and u-net for small vessel segmentation. In _International conference on medical_
+_image computing and computer-assisted intervention_, pp. 62–70. Springer, 2019.
+
+
+Xiaolong Wang, Ross Girshick, Abhinav Gupta, and Kaiming He. Non-local neural networks. In
+_CVPR_, 2018.
+
+
+Sanghyun Woo, Jongchan Park, Joon-Young Lee, and In So Kweon. Cbam: Convolutional block
+attention module. In _ECCV_, 2018.
+
+
+Ying Xiao, Jianxun Wu, Haokun Lin, and Li Han. Anatomical part segmentation in medical images
+with deep learning: a review. _Artificial Intelligence in Medicine_, 88:167–181, 2018.
+
+
+Yong Xu, Chen Xu, Wei Wang, Chang Li, Liang Zhou, and Xulei Yang. Dcsau-net: Dual crossspatial attention u-net for medical image segmentation. _Medical_ _Image_ _Analysis_, 83:102670,
+2023.
+
+
+Fisher Yu and Vladlen Koltun. Multi-scale context aggregation by dilated convolutions. In _ICLR_,
+2016.
+
+
+Tan Yu, Si Si, Changwei Hu, et al. Cirmlp: Circulant mlp for efficient token mixing. _arXiv preprint_
+_arXiv:2105.03824_, 2021.
+
+
+Tan Yu, Jie Guo, Jiayi Zhao, et al. S²-mlp: Spatial-shift mlp for vision. In _CVPR_, 2022.
+
+
+14
+
+
+Yundong Zhang, Huiye Liu, and Qiang Hu. Transfuse: Fusing transformers and cnns for medical
+image segmentation. In _Medical image computing and computer assisted intervention–MICCAI_
+_2021:_ _24th_ _international_ _conference,_ _Strasbourg,_ _France,_ _September_ _27–October_ _1,_ _2021,_ _pro-_
+_ceedings, Part I 24_, pp. 14–24. Springer, 2021a.
+
+
+Yundong Zhang et al. Transfuse: Fusing transformers and cnns for medical image segmentation. In
+_MICCAI_, 2021b.
+
+
+Zongwei Zhou, Md Mahfuzur Rahman Siddiquee, Nima Tajbakhsh, and Jianming Liang. Unet++:
+A nested u-net architecture for medical image segmentation. In _Deep Learning in Medical Image_
+_Analysis_ _and_ _Multimodal_ _Learning_ _for_ _Clinical_ _Decision_ _Support:_ _4th_ _International_ _Workshop,_
+_DLMIA 2018, and 8th International Workshop, ML-CDS 2018, Held in Conjunction with MICCAI_
+_2018, Granada, Spain, September 20, 2018, Proceedings 4_, pp. 3–11. Springer, 2018a.
+
+
+Zongwei Zhou, Md. Mahfuzur Rahman Siddiquee, Nima Tajbakhsh, and Jianming Liang. Unet++:
+A nested u-net architecture for medical image segmentation. In _Deep Learning in Medical Image_
+_Analysis (DLMIA), MICCAI_, 2018b.
+
+
+A APPENDIX
+
+
+REPORTED RESULTS SUPPORTING FIGURE 1
+
+
+To substantiate the qualitative trend in Fig. 1 (“Dice _↑_ / FLOPs _↓_ ”), we compile representative, as-reported Dice scores and efficiency notes from widely referenced methods across standard
+benchmarks. The objective is not exhaustiveness, but a defensible evidentiary backbone spanning
+2015–2025. Reported numbers follow each paper’s settings (splits, input size, pre/post-processing).
+For Synapse, many works use the 18/12 train/test split with inputs resized to 224 _×_ 224; absolute
+values may vary under re-implementations, but cross-era patterns are consistent.
+
+
+Table 3: Representative reported results anchoring the timeline in Fig. 1. “Notes” highlight effciency evidence when available.
+
+**Dataset** **Method (Year)** **Reported Dice** **Notes / Evidence**
+
+
+Kvasir-SEG PraNet (2020) Fan et al. (2020) **0.898** Strong 2020 baseline without pre/post-processing.
+Kvasir-SEG HarDNet-MSEG (2021) Huang et al. (2021) **0.904** _∼_ 86.7 FPS on RTX 2080Ti (accuracy & speed).
+Kvasir-SEG DoubleU-Net (2020) Jha et al. (2020c)  - Improves over U-Net/ResUNet on Kvasir-SEG/CVC-ClinicDB.
+
+
+Synapse (8 organs) TransUNet (2021) Chen et al. (2021a) _∼_ **77.5%** Early transformer U-Net; global context helps.
+Synapse (8 organs) Swin-UNet (2021/22) Cao et al. (2021b) _∼_ **79.13%** Windowed attention; hierarchical token mixing.
+Synapse (8 organs) UNETR++ (2023) Shaker et al. (2023) **87.2%** _>_ 71% fewer params/FLOPs vs. prior best.
+
+
+BraTS-2021 (MRI) 3D U-Net ensemble (2021) Fidon et al. (2021) **89.4%** 7-model ensemble with TTA on test set.
+
+
+Task-specific FM MedSAM (2024) Ma et al. (2024b) **87.8%** (median) Nasopharynx; large gains vs. SAM/U-Net/DeepLabV3+.
+ISIC/Synapse VM-UNet (2024) Ruan et al. (2024)  - SSM/Mamba-based; linear-time token mixing; competitive.
+
+
+The evidence shows steady accuracy gains from task-specific U-Nets (PraNet/DoubleU-Net)
+through transformer/token-mixer families (TransUNet, Swin-UNet) to efficiency-focused designs
+(UNETR++) and FM/SSM approaches (MedSAM, VM-UNet). Crucially, several advances increase
+Dice while reducing compute, directly supporting the “Dice _↑_ / FLOPs _↓_ ” arc in Fig. 1.
+
+
+EXPERIMENTAL SETUP (TPU RUNTIME, 300 EPOCHS)
+
+
+All experiments are conducted on Kaggle’s TPU runtime (Google TPU v3-8) using TensorFlow 2.x with tf.distribute.TPUStrategy. Computation uses bfloat16 with float32 master
+weights; checkpoints and logs are saved via ModelCheckpoint, BackupAndRestore, and
+CSVLogger. Unless noted otherwise, inputs are RGB images resized to 256 _×_ 256; masks are
+single-channel and resampled with nearest-neighbor. Training uses batch size 128 on TPU; evaluation uses batch size 32.
+
+
+**Data** **splits.** If an official split exists, we follow it. Otherwise, we construct an 80/10/10
+train/validation/test split at the image (or patient) level and reserve a disjoint test set for final reporting. Validation is used only for model selection and scheduling; test data never influences hyperparameters.
+
+
+15
+
+
+**Preprocessing** **and** **paired** **augmentation.** Images are read via OpenCV (BGR _→_ RGB)
+and scaled to [0 _,_ 1]. Masks remain binary ( _{_ 0 _,_ 1 _}_ ). We apply a single Albumentations Compose that transforms image and mask identically for spatial ops: (i) geometric
+flips/rotations: HorizontalFlip ( _p_ =0 _._ 5), VerticalFlip ( _p_ =0 _._ 2), RandomRotate90
+( _p_ =0 _._ 3); (ii) mild affine: ShiftScaleRotate (shift _≤_ 0 _._ 08, scale _≤_ 0 _._ 15, rotate _≤_
+25 _[◦]_, border ~~m~~ ode=REFLECT ~~1~~ 01, _p_ =0 _._ 5); (iii) one-of elastic/grid/optical distortions:
+ElasticTransform, GridDistortion, OpticalDistortion (overall _p_ =0 _._ 35); (iv)
+one-of photometric (image-only): RandomBrightnessContrast, CLAHE, RandomGamma,
+HueSaturationValue (overall _p_ =0 _._ 6); (v) occasional blur/noise: GaussianBlur,
+MedianBlur, GaussNoise (overall _p_ =0 _._ 25); (vi) final Resize to 256 _×_ 256 (bilinear for images, nearest for masks). For scale-up, we optionally pre-generate large augmented corpora offline
+with the same pipeline (lossless PNG masks).
+
+
+**Architecture and losses.** The network is an encoder–decoder with inverted residual blocks (pointwise expansion _→_ depthwise _k×k →_ squeeze-and-excitation _→_ pointwise projection with residual),
+ELU activations, He-uniform initialization, and residual refinement in the decoder. The CLTM bottleneck mixes multi-scale tokens via a depthwise 1-D circulant mixer with pre/post LayerNorm and
+residual re-projection back to each scale. The head is a 1 _×_ 1 convolution with sigmoid for binary
+segmentation. The training loss is Dice loss; we report Dice.
+
+
+**Optimization and schedule.** We train for **300 epochs** with Adam (base learning rate 7 _._ 5 _×_ 10 _[−]_ [4] )
+and a cosine-decay schedule via LearningRateScheduler. Convolutional layers use _ℓ_ 2 regularization (as in implementation), and dropout _p_ =0 _._ 15 is applied in the blocks. Early stopping is
+disabled for the main runs; the final checkpoint is chosen by the best validation Dice loss.
+
+
+**Timing and throughput.** On TPU v3-8 at 256 _×_ 256 with batch = 128, steady-state step time after
+warm-up is _∼_ 0 _._ 20 _−_ 0 _._ 25 s/step. With
+
+
+typical epoch durations are: _N_ train=20 _,_ 000 _⇒_ 31 _−_ 39 s/epoch; 60 _,_ 000 _⇒_ 94 _−_ 117 s/epoch;
+90 _,_ 000 _⇒_ 141 _−_ 176 s/epoch. Inference on the held-out test set of **images** at 256 _×_ 256 with
+batch = 32 completes in **1** **min** **36** **s** end-to-end, corresponding to _∼_ 3 _._ 1 images/s overall and
+_∼_ 0 _._ 32 s/image (includes I/O and post-processing).
+
+
+**Use** **of** **Large** **Language** **Models** **(LLMs).** We used a large language model (ChatGPT; GPT-5
+class) only to aid and polish writing. Specifically, we asked the LLM to: improve grammar and style;
+tighten phrasing; suggest alternate wordings for clarity; and standardize terminology across sections.
+The LLM did not generate research ideas, methods, proofs, experiments, figures, tables, results, or
+code; all technical content (algorithms, model designs, experiments, analyses, and conclusions) was
+authored and verified by the human authors. All LLM outputs were reviewed, edited, and approved
+by the authors, with factual and mathematical statements cross-checked against our source materials
+and experimental logs. No proprietary or sensitive data were provided to the LLM beyond text
+already intended for public disclosure in the manuscript. The authors retain full responsibility for
+the content of the paper.
+
+
+16
+
+
+     - _N_ train
+steps/epoch =
+128
+
+
+_,_

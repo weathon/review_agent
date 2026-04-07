@@ -1,0 +1,1379 @@
+# TNT: IMPROVING CHUNKWISE TRAINING FOR TEST- TIME MEMORIZATION
+
+
+**Zeman Li** [1] _[,]_ [2] _[∗]_ **Ali Behrouz** [2] **Yuan Deng** [2] **Peilin Zhong** [2] **Praneeth Kacham** [2] **Mahdi Karami** [2]
+
+**Meisam Razaviyayn** [1] _[,]_ [2] **Vahab Mirrokni** [2]
+
+
+1University of Southern California 2Google Research
+
+
+_{_ zemanli, alibehrouz, dengyuan, pkacham, mahdika, razaviyayn, mirrokni _}_ @google.com
+
+peilin.zhong@columbia.edu
+
+
+ABSTRACT
+
+
+Recurrent neural networks (RNNs) with deep test-time memorization modules,
+such as Titans and TTT, represent a promising, linearly-scaling paradigm distinct
+from Transformers. While these expressive models do not yet match the peak
+performance of state-of-the-art Transformers, their potential has been largely untapped due to prohibitively slow training and low hardware utilization. Existing
+parallelization methods force a fundamental conflict governed by the chunksize
+hyperparameter: large chunks boost speed but degrade performance, necessitating a fixed, suboptimal compromise. To solve this challenge, we introduce TNT,
+a novel training paradigm that decouples training efficiency from inference performance through a two-stage process. Stage one is an efficiency-focused pretraining phase utilizing a hierarchical memory. A global module processes large,
+hardware-friendly chunks for long-range context, while multiple parallel local
+modules handle fine-grained details. Crucially, by periodically resetting local
+memory states, we break sequential dependencies to enable massive context parallelization. Stage two is a brief fine-tuning phase where only the local memory
+modules are adapted to a smaller, high-resolution chunksize, maximizing accuracy with minimal overhead. Evaluated on Titans and TTT models, TNT achieves
+a substantial acceleration in training speed—up to 17 _×_ faster than the most accurate baseline configuration—while simultaneously improving model accuracy.
+This improvement removes a critical scalability barrier, establishing a practical
+foundation for developing expressive RNNs and facilitating future work to close
+the performance gap with Transformers.
+
+
+1 INTRODUCTION
+
+
+The demand for modeling long sequences highlights a fundamental limitation of standard softmax
+attention (Vaswani et al., 2017): its quadratic complexity bottlenecks scaling. This has spurred
+extensive research into more efficient architectures.
+
+
+Among these emerging paradigms, a particularly powerful approach is rooted in test-time memorization (Sun et al., 2024). Architectures leveraging this principle, which we refer to as **deep mem-**
+**ory modules**, utilize a deep, online-adapted sub-network whose parameters are rapidly updated to
+encode in-context information. Prominent examples include Titans (Behrouz et al., 2025d) and Atlas (Behrouz et al., 2025a). This method stands in sharp contrast to **linear memory modules** (Yang
+et al., 2024a;b; Dao & Gu, 2024; Sun et al., 2023), which, despite their efficiency, are constrained by
+matrix-valued hidden states and linear state transitions. By leveraging expressive non-linear objectives and update rules, deep memory modules can theoretically overcome these limitations. While
+these methods generally do not yet achieve the state-of-the-art performance of Transformers, they
+represent a potentially promising paradigm for efficient sequence modeling, provided their training
+bottlenecks can be resolved.
+
+
+Despite their expressive advantages, deep memory modules lack the efficient training algorithms
+of their linear counterparts, leading to low hardware utilization. Unlike linear memory modules,
+
+
+_∗_ Work done while interning at Google Research.
+
+
+1
+
+
+_**Sequence L**_ **×** _**D**_ _t_
+
+
+Figure 1: The basic diagram for illustraing TNT memory hierarchy. In each row, the updates at the
+same value of _t_ ran at the same time (run in parrallel). _t_ = 0 is the initialization of the memory.
+
+
+which utilize hardware-efficient parallelization, deep memory modules face challenges stemming
+from non-linear recurrences (e.g., LayerNorm between chunks) and the complexity of their deep
+structures. In practice, these challenges constrain their training to more frequent online updates on
+small data segments, resulting in poor computational throughput in training. This creates an inherent tension, as these models typically rely on a fixed, small chunk size (e.g., 16 to 64 tokens)
+to balance memory layer expressiveness against training efficiency. Consequently, this trade-off
+between in-context learning capability and computational performance has become a critical bottleneck preventing the application of these models to truly long sequences in practice. Resolving this
+fundamental tension is the primary goal of this work.
+
+
+Recent work attempts to mitigate this issue. Zhang et al. (2025) combines large chunks with local
+attention to enhance parallelism. However, this circumvents the inefficiency rather than solving it,
+complicates the analysis by mixing memory and attention, and neglects the need for small chunks
+(ideally 1) during inference. Concurrently, Guo et al. (2025) proposed a hierarchical memory system, but it is limited to linear memory modules and does not support short-term memories.
+
+
+To resolve this tension, we introduce TNT [1], a novel training paradigm for deep memory modules.
+Our core insight is that different components of the model should process information at different
+granularities during distinct training stages. TNT begins with an **efficiency-focused** **pre-training**
+**stage** designed to maximize throughput. This is achieved via a hierarchical memory system: a **global**
+**memory** module operates on large, hardware-friendly chunks to capture long-range context, while
+multiple **local** **memory** modules handle fine-grained details in parallel. Crucially, we introduce a
+periodic reset mechanism for the local memory states. This breaks the sequential dependencies inherent even in non-linear RNNs (e.g., those with normalization between steps), enabling massive
+context parallelization. This is a key innovation, as efficiently parallelizing _non-linear_ recurrences
+across the sequence length is a long-standing challenge, largely unsolved outside of Transformers
+and specialized linear RNNs (where parallel scans apply). Subsequently, a **performance-focused**
+**fine-tuning stage** adapts the model for optimal inference. During this stage, only the local memory
+modules are adjusted to use smaller chunk sizes, achieving high-resolution accuracy with minimal
+additional computational cost. This two-stage approach effectively decouples training efficiency
+from inference performance, significantly improving training scalability while addressing a key limitation of prior architectures. Furthermore, the local memory system itself can be hierarchical, employing multiple modules operating at different resolutions. This _multi-resolution_ approach allows
+the model to capture _complex,_ _multi-scale_ _temporal_ _dynamics_ more effectively than a single fixed
+chunk size.
+
+
+TNT is a general training paradigm applicable to any deep memory module rather than a specific
+architecture. By decoupling training throughput from inference accuracy, we resolve a fundamental tension constraining prior work. This removes dependency on hardware-specific optimizations
+for small chunks and enables flexible exploration of the architectural design space. We believe this
+paradigm will open new research avenues towards replacing softmax attention. Our main contributions are summarized as follows:
+
+
+1TNT can be viewed as an abbreviation of _Two-stage Non-linear Training_ or _TTT iNside TTT_ . It also hints
+to its “explosive” impact on training efficiency.
+
+
+2
+
+
+- We identify three fundamental challenges limiting the scalability and performance of deep memory modules: 1) domain mismatch between memory compression and retrieval; 2) tradeoff between memory performance and computational efficiency; 3) chunksize mismatch between training and inference (Section 3).
+
+
+- We introduce Q-K Projection, an efficient mechanism to resolve the domain mismatch between
+memory compression and retrieval (Section 4.1.2).
+
+
+- We introduce a novel hierarchical memory architecture with periodic state resets, enabling context
+parallelism for non-linear deep memory modules (Section 4.1).
+
+
+- We introduce an efficient fine-tuning mechanism to address chunksize mismatch between training
+and inference in deep memory modules (Section 4.2).
+
+
+- Putting all above together, we introduce TNT, a general two-stage training paradigm that decouples training efficiency from inference performance by combining efficient pre-training with
+high-resolution fine-tuning (Figure 1, Figure 3, Section 4).
+
+
+- We validate TNT on the Titans architecture, achieving up to a 17 _._ 37 _×_ training speedup while
+improving accuracy, significantly advancing the practicality of expressive RNNs (Section 5).
+
+
+**Problem Definition and Notations** We aim to train a neural network with parameters _**θ**_ _∈_ R _[d][m]_
+to perform next-token prediction. Given a sequence **x** = ( _x_ 1 _, . . ., xL_ ), the model’s objective is
+to predict each token _xt_ using the context of its preceding tokens ( _x_ 1 _, . . ., xt−_ 1). Following the
+attention formulation, each token _xt_ is represented by a _d_ -dimensional vector. Each input token **x** _t_
+is projected into query, key, and value vectors: _qt, kt, vt_ _∈_ R _[d]_ . For ease of notation in subsequent
+chunkwise operations, we define a function _ξ_ ( _i, j_ ) := _i −_ ( _i_ mod _j_ ), which finds the beginning of
+the chunk containing index _i_ for a chunk size _j_ .
+
+
+2 PRELIMINARY
+
+
+This section reviews preliminaries. Expanded related work is in Appendix A.
+
+
+2.1 DEEP MEMORY MODULES VIA TEST-TIME MEMORIZATION
+
+
+A powerful paradigm for sequence modeling is Test-Time Memorization (Sun et al., 2024), which
+enhances models by incorporating a secondary, rapidly adaptable neural network. Unlike the primary model parameters, or “slow weights” ( _θ_ ) updated only during training, this approach introduces
+“fast weights” (Schlag et al., 2021). These fast weights, denoted by _W_, parameterize a sub-network,
+_f_ ( _W, ·_ ) : R _[d]_ _→_ R _[d]_, that is updated online-during both training and inference-based on incoming tokens to dynamically store contextual information. While these modules do not yet achieve
+SOTA results compared to Transformers (Arora et al., 2024; Behrouz et al., 2025a), improving their
+training efficiency is crucial for enabling the wider experimentation needed to close this gap.
+
+
+In this work, we focus on a similar/relevant principle: **deep** **memory** **modules** (Irie et al., 2021;
+Sun et al., 2024; Behrouz et al., 2025d;a;c). In contrast to **linear** **memory** **modules** (Sun et al.,
+2023; Yang et al., 2024b; Dao & Gu, 2024; Karami & Mirrokni, 2025; Hu et al., 2025), which are
+characterized by linear state transitions, deep memory modules employ non-linear recurrence rules
+and complex memory structures.
+
+
+The core mechanism of a deep memory module can be distilled into two sequential operations for
+each input token: _1._ _Memory Compression_ and _2._ _Memory Retrieval_ . These are formally defined as:
+_Memory Compression:_ _Wt_ _←_ _Wt−_ 1 _−_ _ηt∇W L_       - _f_ ( _Wt−_ 1 _, kt_ ) _, vt_       - (1)
+
+_Memory Retrieval:_ _ot_ = _f_ ( _Wt, qt_ ) (2)
+
+
+In _Memory_ _Compression_, the fast weights _W_ are updated via gradient descent, guided by a selfsupervised loss _L_ ( _·, ·_ ) (e.g., MSE) and a learned learning rate _ηt_ . The objective associates a transformed key, _f_ ( _Wt−_ 1 _, kt_ ), with its value, _vt_, compressing information into the fixed-size neural
+memory (Wang et al., 2025; Behrouz et al., 2025b). In _Memory Retrieval_, the updated _Wt_ processes
+a query _qt_ to produce _ot_ . These two operations are performed iteratively for each token.
+
+
+3
+
+
+2.2 CHUNKWISE PARALLEL TRAINING
+
+
+The sequential dependency ( _Wt_ depends on _Wt−_ 1) in Eqs. 1-2 prevents parallelization across the
+sequence length. To address this, deep memory modules adopt chunkwise parallel training (Hua
+et al., 2022; Sun et al., 2023) to enable hardware-efficient training.
+
+
+The core principle is to divide the input sequence into non-overlapping chunks of size _C_ . Within
+each chunk, an approximation of the gradient of the loss for every token is computed with respect
+to the fast-weight state from the beginning of that chunk. This formulation breaks the sequential
+token-to-token dependency for gradient calculation, which allows the updates for all tokens within
+the chunk to be computed in parallel. The formal operations for a token at time step _t_ are as follows:
+
+
+_Chunkwise Memory Compression:_ _Wt_ _←_ _Wξ_ ( _t,C_ ) _−_
+
+
+_t_
+
+ - _ητ_ _∇W L_ - _f_ ( _Wξ_ ( _t,C_ ) _, kτ_ ) _, vτ_ - (3)
+
+
+_τ_ = _ξ_ ( _t,C_ )
+
+
+_Chunkwise Memory Retrieval:_ _ot_ = _f_ ( _Wt, qt_ ) (4)
+Here, _Wξ_ ( _t,C_ ) denotes the state of the fast weights at the start of the chunk containing token _t_ (See
+the definition of _ξ_ ( _·, ·_ ) at the end of Section 1). Although the update to obtain _Wt_ still depends on
+prior tokens within its chunk, the summation of gradients can be implemented efficiently using parallel operations (e.g., cumulative summation), significantly improving hardware utilization during
+training. However, a sequential dependency remains: the final state of the fast weights from the _k_ -th
+chunk, _WkC_, is used as the initial state for the ( _k_ + 1)-th chunk.
+
+
+3 CHALLENGES IN DEEP MEMORY MODULES
+
+
+While chunkwise parallelization enables deep memory modules to train on long sequences, this
+paradigm introduces significant challenges that limit their practical performance and scalability. In
+this section, we outline three fundamental challenges with deep memory modules.
+
+
+**Challenge 1:** **Lack of Efficient Training Implementations.** A primary challenge for deep memory modules is the inefficiency of their training process, which leads to poor hardware utilization.
+While chunkwise parallelization theoretically enables sub-quadratic scaling, in practice, the training
+throughput lags significantly behind that of linear memory modules. This discrepancy arises from a
+fundamental tension between model expressiveness and computational efficiency.
+
+
+To maintain a fine-grained learning signal, deep
+memory modules require small chunk sizes
+(e.g., 16-64 tokens) (Sun et al., 2024), which
+fail to saturate accelerators, making training
+memory-bound (rather than compute-bound).
+While linear memory modules use customized
+kernels (e.g., leveraging SRAM) (Sun et al.,
+2023; Gu & Dao, 2023; Qin et al., 2024; Yang
+et al., 2024a;c), this relies on linear state transitions and is incompatible with the large, nonlinear states of deep memory modules.
+
+
+40
+
+
+35
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+|Col1|Col2|36.45|Col4|Col5|Tr|ain Ch|unksize|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||~~**34.15**~~||||||
+||||||||||
+|||||~~24.23~~||~~17~~|~~88~~<br>~~2~~|~~.4~~|
+||||||15|.5<br>|||
+|||||13.|78||||
+||||||||||
+
+
+The consequence is that deep memory modules suffer from extremely low FLOPs utilization, often falling below 5-10% of peak Figure
+hardware performance (Zhang et al., 2025). a 550
+This severe inefficiency makes pre-training prohibitively slow and costly, creating a major bottleneck that undermines the practical application of these expressive models to truly long sequences.
+
+
+8 16 32 64 128 256 512
+Inference Chunksize ( _C_ )
+
+
+Figure 2: Sensitivity of inference chunk size on
+a 550M Titans model pre-trained with _C_ = 64.
+Performance is optimal when the inference chunk
+size matches the training one.
+
+
+**Challenge 2:** **Inconsistency Between Memory Compression and Retrieval.** A fundamental inconsistency exists between how the memory sub-network is trained and how it is utilized. During
+Memory Compression (Eq. 1), the sub-network _f_ ( _W, ·_ ) is optimized to learn a mapping from the
+
+
+4
+
+
+key space to the value space by associating keys ( _kt_ ) with values ( _vt_ ). However, during Memory
+Retrieval (Eq. 2), the network is queried using a query vector ( _qt_ ) instead of a key. This substitution violates the intended input domain of the learned function, creating a discrepancy between the
+training objective and the retrieval task. This domain shift can degrade the integrity of the learned
+mapping and limit the model’s retrieval performance. Our empirical validation can be found in
+Section 5.4
+
+
+**Challenge 3:** **Performance Sensitivity to a Fixed Pre-training Chunksize.** The chunk size hyperparameter, _C_, governs the trade-off between training throughput and model expressiveness. Current practice for deep memory modules is to use the same fixed chunk size for both pre-training
+and inference. However, we observe that inference-time performance is highly sensitive to this pretraining choice. For example, as shown in Figure 2, a model pre-trained with a chunk size of 64
+achieves optimal perplexity only when evaluated with that same chunk size.
+
+
+This result reveals a critical train-test mismatch and contradicts the intuition that smaller chunks at
+inference should yield superior performance by capturing fine-grained dependencies with a ”fresher”
+learning signal. Instead, the model becomes over-specialized to the specific chunk resolution seen
+during training. This inflexibility is a significant limitation; ideally, a model pre-trained with a large,
+hardwarefriendly chunk size should be adaptable enough to perform even better with smaller, more
+precise chunk sizes at inference. Current deep memory modules fail to achieve this adaptability.
+
+
+4 TNT: AN IMPROVED TRAINING FRAMEWORK FOR DEEP MEMORY
+
+
+To address the challenges outlined in
+Section 3, we introduce TNT, an improved training paradigm for deep memory modules. Our framework is structured
+around a two-stage process designed to resolve the inherent tension between training efficiency and inference performance:
+an **Efficiency-focused Pre-training Stage**
+and a **Performance-focused** **Fine-tuning**
+**Stage** .
+
+
+chical memory architecture that enables
+
+objectives (Challenges 1-2). The second
+stage employs an efficient fine-tuning Figure 3: Architectural overview of TNT Stage 1.
+strategy that adapts the model to highresolution, small-chunk inference, resolving the sensitivity to the pre-training chunk size (Challenge
+3). This two-stage approach effectively decouples training efficiency from inference performance,
+overcoming a key limitation of prior deep memory architectures.
+
+
+_t_
+
+
+Figure 3: Architectural overview of TNT Stage 1.
+
+
+4.1 TNT STAGE 1: EFFICIENT-FOCUSED PRE-TRAINING
+
+
+4.1.1 TNT MEMORY COMPRESSION: HIERARCHY MEMORY
+
+
+Sequential state dependency prevents context parallelism (processing sequence shards in parallel
+across devices). To enable this, we propose that all parallel shards initialize their **local memory** with
+the same learned state, _Winit_ . This breaks inter-chunk dependency, allowing massive parallelization.
+However, this causes local memory modules to lose the global context. To solve this, we introduce
+a **global** **memory** module, parameterized by _V_, that operates in parallel with the sharded local
+memories. The global memory processes the sequence with a relatively large chunk size (e.g.,
+2048 or greater), allowing it to efficiently capture long-range dependencies while maintaining high
+
+
+5
+
+
+hardware utilization. This creates a hierarchical system where local memories handle fine-grained
+information within parallel shards, while the global memory provides the overarching context.
+
+
+This hierarchical structure is flexible; a model can be designed with 1 global and _N_ local memory
+modules, each operating at a different resolution. For clarity of illustration, we will assume the
+simplest case where _N_ = 1. We defer the generalized formulation of TNT to Appendix E. We now
+formally define our memory compression mechanism.
+
+
+The global memory update (Eq. 5) follows a standard chunkwise formulation where the state is
+carried over sequentially between large chunks. To maximize training throughput, the gradient for
+all tokens within a global chunk is computed with respect to the initial state of that chunk, allowing
+for a highly parallelized update.
+
+
+In contrast, the local memory update (Eq. 6) introduces our key innovation: a periodic state reset.
+This rule enforces that the local memory state, _Wt_, is reset to a shared, learnable initial state _Winit_ at
+the beginning of each segment of length _SL_ . This periodic reset is the critical mechanism that breaks
+the long-range sequential dependency across the input, thereby enabling true context parallelism for
+the fine-grained local memory modules.
+
+
+The hierarchical design of deep memory modules boosts training efficiency through a two-pronged
+approach. Global modules create hardware-saturating, compute-intensive operations by processing
+large chunks. Concurrently, the local memory’s reset mechanism enables context parallelism, where
+the sequence is processed as independent chunks that can be distributed across devices or stacked
+on a single accelerator to substantially increase training throughput.
+4.1.2 TNT MEMORY RETRIEVAL: Q-K PROJECTION
+
+
+As identified in Challenge 2, the memory compression step (Eq. 6) optimizes _f_ ( _W, ·_ ) to map the key
+space to the value space. However, at retrieval, the network is queried using a query vector, _qt_, which
+may lie outside the learned key domain, degrading performance. To resolve this, we propose _Q-K_
+_Projection_ : projecting the query _qt_ onto the subspace spanned by previously observed keys. This
+ensures the input to the memory function is in the space memory was trained on. The final output
+combines retrieval from the global memory (raw query) and the local memory (projected query).
+We apply projection only locally as its fine-grained nature makes it more sensitive to the mismatch
+
+
+Crucially, this Q-K Projection does not require storing all past keys, which would be computationally
+and memory prohibitive. Instead, the projection matrix, [�] _τ_ _[t]_ =1 _∥kkττ k ∥τ_ _[⊤]_ [2] _[∈]_ [R] _[d][×][d]_ [, can be maintained as]
+a running sum. This results in a constant-size state that is updated efficiently in a chunkwise parallel
+manner. Since many modern deep memory modules normalize the query ( _qt_ ) and key ( _kt_ ) vectors
+by their L2 norm, the denominator in the Q-K projection can simplify to [�] _τ_ _[t]_ =1 _[k][τ]_ _[k]_ _τ_ _[⊤]_ [.] [We provide]
+further details on this efficient implementation in Appendix C.
+
+
+6
+
+
+Table 1: TNT reaches the target training loss up to 17× faster than the baseline Titans. The table
+compares the time required for different 150M models to reach the same target loss 3 _._ 20.
+
+|Models Implementation C or CL<br>Titans JAX 8<br>Titans JAX 16<br>Titans JAX 32<br>Titans JAX 64<br>Titans JAX 128<br>Transformer (w/o gating) JAX -<br>Transformer (w gating) JAX -<br>Transformer (w/o gating) FlashAttention (Pallas) -<br>Transformer (w gating) FlashAttention (Pallas) -|Training Time (hrs) Speedup<br>19.48 1.00×<br>10.79 1.81×<br>6.45 3.02×<br>4.18 4.67×<br>3.71 5.25×<br>1.74 11.18×<br>1.38 14.10×<br>1.23 15.90×<br>0.96 20.22×|
+|---|---|
+|TNT<br>JAX<br>_{_8_}_<br>TNT<br>JAX<br>_{_16_}_<br>TNT<br>JAX<br>_{_32_}_<br>TNT<br>JAX<br>_{_64_}_<br>TNT<br>JAX<br>_{_128_}_|2.54<br>7_._68_×_<br>1.65<br>11_._78_×_<br>1.22<br>15_._92_×_<br>1.12<br>17_._37_×_<br>1.16<br>16_._75_×_|
+
+
+4.2 TNT STAGE 2: PERFORMANCE-FOCUSED FINE-TUNING AT FINER RESOLUTION
+
+
+Having addressed training efficiency in Stage 1, we now turn to optimizing for inference performance. An intuitive approach to enhance model resolution would be to evaluate the pre-trained
+model using a smaller chunk size. However, as established in Challenge 3, a direct mismatch between the pre-training and evaluation chunk sizes leads to significant performance degradation.
+
+
+Our key insight is that this train-test discrepancy can be rectified with minimal computational overhead. We empirically observe that a brief fine-tuning phase, where the pre-trained model is updated
+for a small number of steps using a smaller local memory chunk size, not only recovers but often
+surpasses the original performance.
+
+
+Based on this finding, we introduce Stage 2 of our TNT framework: a **Performance-focused Fine-**
+**tuning** **Stage** . In this stage, we continue training the efficiently pre-trained model with a smaller
+local chunk size ( _CL_ _[′]_ _[<]_ _[C][L]_ [).] [This] [process] [adapts] [the] [model] [to] [the] [higher] [resolution] [required] [for]
+optimal inference at a fraction of the cost of pre-training. By doing so, Stage 2 directly resolves
+Challenge 3, bridging the gap between the large chunk sizes required for efficient training and the
+small chunk sizes that yield the best performance at inference.
+
+
+This two-stage process decouples pre-training efficiency from inference requirements. The bulk of
+training uses maximum throughput (large chunks), while the final model is produced with minimal
+overhead. Furthermore, fine-tuning specializes the model for the ideal inference scenario: a local
+chunk size of one ( _CL_ _[′]_ [=] [1)][.] [This aligns with the standard prefill-and-decode paradigm of autore-]
+gressive generation. The global memory handles the context prefill, and the optimized local memory
+handles iterative decoding.
+
+5 EXPERIMENTS
+We empirically evaluate our two-stage training framework, TNT. While TNT is model-agnostic, we
+instantiate it with a strong deep memory model, Titans (Behrouz et al., 2025d), to demonstrate its
+effectiveness. We validate claims about training time and model accuracy in our experiments.
+5.1 EXPERIMENTAL SETUP
+
+
+**Baselines.** We compare against several strong long-context architectures. Our primary comparison
+is Titans (Behrouz et al., 2025d), our base model. We also benchmark against vanilla Transformer
+(Vaswani et al., 2017), Gated Transformer (Qiu et al., 2025), and TTT (Sun et al., 2024).
+
+
+**Training** **and** **TNT** **Configuration.** We train 150M parameter models following (Behrouz et al.,
+2025d), using a T5 tokenizer (32k vocab). We use the AdamW optimizer (Loshchilov & Hutter,
+2017) with 0.1 weight decay and a cosine schedule (peak LR 1 _×_ 10 _[−]_ [3] ). Experiments are conducted
+on a TPUv4 pod (2x2x2 topology, model parallelism 2). For TNT, the _N_ local modules configuration
+is denoted by their chunksizes, _CL_ = _{CL,_ 1 _, ..., CL,N_ _}_ . For instance, _CL_ = _{_ 8 _,_ 16 _}_ indicates two
+local modules with chunksizes 8 and 16. The global memory uses _CG_ = 2048.
+
+
+_Experimental Configurations._ For efficiency benchmarks (Sec. 5.2), we vary context length (2k-32k)
+with a 0.5M token batch size and local window _SL_ = 2048. For performance evaluation (Sec 5.3),
+we use a 16k context length, 1M token batch size, and _SL_ = 4096.
+
+
+7
+
+
+5.2 FASTER MEMORY TRAINING WITH TNT
+
+
+**Linear** **Runtime** **Scaling** **with** **Sequence** **Length.** We first analyze single-step runtime performance by varying the sequence length while keeping the number of tokens per batch fixed. As shown
+in Figure 4, TNT’s runtime grows linearly with sequence length, in contrast to the quadratic growth
+of Titans and standard attention. This scaling advantage is significant at long contexts. At a 32K sequence length, TNT is **5.1** _×_ **faster** than a comparable Titans model with the same memory chunksize
+( _CL_ = _C_ = 16). We also observe that larger local chunk sizes consistently improve TNT’s speed;
+with _CL_ = _{_ 128 _}_, TNT is **1.3** _×_ **faster** than the highly optimized FlashAttention kernel (Dao, 2024).
+
+
+TNT’s highly parallelizable architecture
+achieves a runtime that scales linearly with
+sequence length, a key advantage over the
+quadratic complexity of standard attention.
+Although models like Titans are also theoretically linear, their inherent sequential
+dependencies impede effective parallelization, resulting in poor hardware utilization
+and slower wall-clock times on long
+sequences. As sequence length increases,
+TNT’s superior scalability creates a crossover
+point where it becomes significantly faster.
+This efficiency is most pronounced at very
+long contexts; for instance, at a sequence
+length of 32 _K_, a native JAX implementation
+of TNT ( _CL_ = 128) outperforms even the
+highly optimized FlashAttention kernel,
+confirming its suitability for demanding
+long-context training scenarios.
+
+
+10 [3]
+
+
+|Col1|FlashAttenti<br>JAX Attenti|on<br>on|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+||Titans (C=<br>TNT (_CL_=<br>TNT (_CL_=|6)<br>16)<br>128)||||
+|||||||
+|||||||
+
+
+2048 4096 8192 16384 32768
+Sequence Length
+
+
+Figure 4: Runtime comparison of different models and implementations across varying sequence
+lengths, with the number of tokens per batch fixed at
+0.5M. Additional results are presented in Figure 5.
+
+
+**Time-to-Quality Comparison.** We next translate these single-step runtime gains into a practical
+time-to-quality setting. As shown in Table 1, our TNT framework significantly accelerates the total training time required to reach a target model quality. Our best configuration achieves this up
+to **17.4** _×_ **faster** than the original Titans baseline. This efficiency gain is fundamental to the architecture; for instance, using an identical local memory chunksize of 8, TNT is already **7.7** _×_ **faster**
+than its Titans counterpart. While competitive with standard vanilla Transformers in JAX, our implementation does not yet outperform highly optimized baselines like the Gated Transformer with
+FlashAttention (Dao et al., 2022). This is an expected result, as TNT currently lacks a custom kernel,
+which we leave for future work. Nonetheless, these results establish TNT as an efficient foundation
+for research on recurrent models, with a clear path toward matching the speed of state-of-the-art
+Transformers.
+
+
+5.3 TNT IMPROVES MODEL QUALITY
+
+
+Our TNT framework significantly enhances model quality, outperforming strong RNN-based baselines and standard Transformer implementations. As detailed in Table 2, the initial **Stage** **1** **pre-**
+**training** is highly effective on its own. Our best Stage 1 model achieves an average perplexity of
+**23.13**, a marked improvement over the best-performing Titans model (25.07) and the vanilla Transformer (23.58). While TNT does not fully match the perplexity of the state-of-the-art Gated Transformer (22.39), it achieves a higher average accuracy on common-sense reasoning tasks ( **41.0%** vs.
+39.7%). At this scale, we consider perplexity a more stable metric for language modeling capability,
+as downstream task accuracy can be subject to higher variance.
+
+
+Furthermore, the **Stage** **2** **fine-tuning** process offers an efficient method to further boost performance. This stage is computationally inexpensive, requiring only an additional 5% of the original
+pre-training compute (see Table 4), yet it consistently lowers the average perplexity to a final value
+of **23.09** . These results validate TNT as an effective framework for producing high-quality models
+that surpass the limitations of prior RNN-based architectures and stand as a strong alternative to
+standard Transformers.
+
+
+8
+
+
+Table 2: Performance of TNT (150M parameters) and baselines on language modeling and
+common-sense reasoning tasks, trained on 10B tokens. For TNT models, we only use 1 global
+memory and use _CG_ to denote the global chunksize and the _N_ local modules configuration is denoted by their chunksizes, _CL_ = _{CL,_ 1 _, ..., CL,N_ _}_ . For instance, _CL_ = _{_ 8 _,_ 16 _}_ indicates two local
+modules with chunksizes 8 and 16. The best results within a block are highlighted . The detailed
+training time is reported in Table 4
+
+**Model** _CG_ _C_ or _CL_ **C4** **FineWeb** **PG19** **Avg.** **PIQA** **Hella.** **ARC-e** **CSQA** **Avg.**
+ppl _↓_ ppl _↓_ ppl _↓_ ppl _↓_ acc _↑_ acc _↑_ acc _↑_ acc _↑_ acc _↑_
+
+
+**150M params / 10B tokens**
+
+
+**TNT Stage 1:** **Efficiency-Focused Pre-training**
+
+
+**TNT Stage 2:** **Performance-Focused Fine-tuning on Stage 1 models**
+
+
+5.4 ABLATION STUDY
+
+
+We conducted an ablation study to validate
+TNT’s key design choices, with results summarized in Table 3.
+
+
+**Hierarchical** **Memory.** The effectiveness of
+our hierarchical design is evident. Incrementally adding local memory modules consistently improves performance over the Titans
+baseline, reducing perplexity from 23.53 to
+20.15 with four local modules. Conversely, removing the global memory is detrimental (PPL
+increases to 25.60), confirming its critical role
+in capturing long-range dependencies that are
+otherwise lost due to the local memories’ reset
+mechanism.
+
+
+Table 3: Ablation study on TNT. The results show
+the contribution of each proposed change to the
+deep memory modules.
+
+
+**TNT** _N_ **Language Modeling** **C.S. Reasoning**
+ppl _↓_ acc _↑_
+
+
+Base Model (Titans) - 23.53 38.8
+
+
+**TNT Stage 1 (1** **Global** **Memory)**
++1 Local Memory 1 21.04 40.6
++2 Local Memory 2 20.74 41.0
++3 Local Memory 3 20.47 40.2
++4 Local Memory 4 20.15 40.6
+
+
+TNT Stage 1 1 21.04 40.6
+w/o global memory - 25.60 35.5
+w/o Q-K projection 1 22.01 36.4
+w Stage 2 1 20.86 40.9
+
+
+**Q-K Projection.** The query-key projection proves essential for performance. Its removal incurs a
+substantial penalty (PPL increases from 21.04 to 22.01), validating our hypothesis that it is necessary
+to mitigate the compression-retrieval mismatch (Challenge 2).
+
+
+**Stage 2 Fine-tuning.** Applying Stage 2 fine-tuning further enhances model capabilities, improving
+both language modeling (20.86 PPL) and common-sense reasoning (40 _._ 9%). This demonstrates its
+effectiveness in adapting the pre-trained models for high-resolution inference.
+6 CONCLUSION
+
+
+We introduce TNT, a two-stage training framework that resolves the fundamental conflict between
+training efficiency and inference performance in deep memory modules. By leveraging a hierarchical memory architecture with periodic state resets, TNT enables massive context parallelism
+during pre-training, followed by efficient fine-tuning for high-resolution inference. Our experiments
+demonstrate up to a 17 _×_ speedup compared to the most accurate RNN baselines while simultaneously improving performance. TNT removes a critical scalability bottleneck, significantly improving the practicality of deep memory modules and facilitating future research to close the performance
+gap with Transformers.
+
+
+9
+
+
+REFERENCES
+
+
+Simran Arora, Sabri Eyuboglu, Michael Zhang, Aman Timalsina, Silas Alberti, James Zou, Atri
+Rudra, and Christopher Re. Simple linear attention language models balance the recall-throughput
+tradeoff. In _Forty-first_ _International_ _Conference_ _on_ _Machine_ _Learning_, 2024. URL [https:](https://openreview.net/forum?id=e93ffDcpH3)
+[//openreview.net/forum?id=e93ffDcpH3.](https://openreview.net/forum?id=e93ffDcpH3)
+
+
+Ali Behrouz, Zeman Li, Praneeth Kacham, Majid Daliri, Yuan Deng, Peilin Zhong, Meisam Razaviyayn, and Vahab Mirrokni. Atlas: Learning to optimally memorize the context at test time.
+_arXiv preprint arXiv:2505.23735_, 2025a.
+
+
+Ali Behrouz, Meisam Razaviyayn, Peilin Zhong, and Vahab Mirrokni. It’s all connected: A journey
+through test-time memorization, attentional bias, retention, and online optimization, 2025b. URL
+[https://arxiv.org/abs/2504.13173.](https://arxiv.org/abs/2504.13173)
+
+
+Ali Behrouz, Meisam Razaviyayn, Peilin Zhong, and Vahab Mirrokni. It’s all connected: A journey through test-time memorization, attentional bias, retention, and online optimization. _arXiv_
+_preprint arXiv:2504.13173_, 2025c.
+
+
+Ali Behrouz, Peilin Zhong, and Vahab Mirrokni. Titans: Learning to memorize at test time. _Ad-_
+_vances in Neural Information Processing Systems_, 38, 2025d.
+
+
+R´obert Csord´as, Christopher Potts, Christopher D Manning, and Atticus Geiger. Recurrent neural
+networks learn to store and generate sequences using non-linear representations. In _Proceedings_
+_of_ _the_ _7th_ _BlackboxNLP_ _Workshop:_ _Analyzing_ _and_ _Interpreting_ _Neural_ _Networks_ _for_ _NLP_, pp.
+248–262, 2024.
+
+
+Tri Dao. Flashattention-2: Faster attention with better parallelism and work partitioning. In
+_The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https://](https://openreview.net/forum?id=mZn2Xyh9Ec)
+[openreview.net/forum?id=mZn2Xyh9Ec.](https://openreview.net/forum?id=mZn2Xyh9Ec)
+
+
+Tri Dao and Albert Gu. Transformers are ssms: Generalized models and efficient algorithms through
+structured state space duality. _arXiv preprint arXiv:2405.21060_, 2024.
+
+
+Tri Dao, Dan Fu, Stefano Ermon, Atri Rudra, and Christopher R´e. Flashattention: Fast and memoryefficient exact attention with io-awareness. _Advances in neural information processing systems_,
+35:16344–16359, 2022.
+
+
+Xavier Gonzalez, Andrew Warrington, Jimmy Smith, and Scott Linderman. Towards scalable and
+stable parallelization of nonlinear rnns. _Advances in Neural Information Processing Systems_, 37:
+5817–5849, 2024.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023.
+
+
+Han Guo, Songlin Yang, Tarushii Goel, Eric P Xing, Tri Dao, and Yoon Kim. Log-linear attention.
+_arXiv preprint arXiv:2506.04761_, 2025.
+
+
+Ramin Hasani, Mathias Lechner, Tsun-Hsuan Wang, Makram Chahine, Alexander Amini, and
+Daniela Rus. Liquid structural state-space models. In _The_ _Eleventh_ _International_ _Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2023. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=g4OTKRKfS7R)
+[g4OTKRKfS7R.](https://openreview.net/forum?id=g4OTKRKfS7R)
+
+
+Donald Olding Hebb. _The_ _organization_ _of_ _behavior:_ _A_ _neuropsychological_ _theory_ . Psychology
+press, 2005.
+
+
+John J Hopfield. Neural networks and physical systems with emergent collective computational
+abilities. _Proceedings of the national academy of sciences_, 79(8):2554–2558, 1982.
+
+
+Jerry Yao-Chieh Hu, Dennis Wu, and Han Liu. Provably optimal memory capacity for modern
+hopfield models: Transformer-compatible dense associative memories as spherical codes. _arXiv_
+_preprint arXiv:2410.23126_, 2024.
+
+
+10
+
+
+Jiaxi Hu, Yongqi Pan, Jusen Du, Disen Lan, Xiaqiang Tang, Qingsong Wen, Yuxuan Liang, and
+Weigao Sun. Comba: Improving nonlinear rnns with closed-loop control. _arXiv_ _preprint_
+_arXiv:2506.02475_, 2025.
+
+
+Weizhe Hua, Zihang Dai, Hanxiao Liu, and Quoc V. Le. Transformer quality in linear time, 2022.
+[URL https://arxiv.org/abs/2202.10447.](https://arxiv.org/abs/2202.10447)
+
+
+Kazuki Irie, Imanol Schlag, Robert Csordas, and Jurgen Schmidhuber. Going beyond linear transformers with recurrent fast weight programmers. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 34:7703–7717, 2021.
+
+
+Keller Jordan, Yuchen Jin, Vlado Boza, Jiacheng You, Franz Cesista, Laker Newhouse, and Jeremy
+Bernstein. Muon: An optimizer for hidden layers in neural networks, 2024. URL [https:](https://kellerjordan.github.io/posts/muon/)
+[//kellerjordan.github.io/posts/muon/.](https://kellerjordan.github.io/posts/muon/)
+
+
+M. Karami and V. Mirrokni. Lattice: Learning to efficiently compress the memory, 2025.
+
+
+Mahdi Karami, Ali Behrouz, Praneeth Kacham, and Vahab Mirrokni. TRELLIS: Learning to compress key-value memory in attention models. In _Second Conference on Language Modeling_, 2025.
+[URL https://openreview.net/forum?id=r61s1FNYlj.](https://openreview.net/forum?id=r61s1FNYlj)
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Dmitry Krotov. Hierarchical associative memory. _arXiv preprint arXiv:2107.06446_, 2021.
+
+
+Dmitry Krotov and John J Hopfield. Dense associative memory for pattern recognition. _Advances_
+_in neural information processing systems_, 29, 2016.
+
+
+Xiaoyu Li, Yuanpeng Li, Yingyu Liang, Zhenmei Shi, and Zhao Song. On the expressive power of
+modern hopfield networks. _arXiv preprint arXiv:2412.05562_, 2024.
+
+
+Yi Heng Lim, Qi Zhu, Joshua Selfridge, and Muhammad Firmansyah Kasim. Parallelizing
+non-linear sequential models over the sequence length. In _The_ _Twelfth_ _International_ _Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2024. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=E34AlVLN0v)
+[E34AlVLN0v.](https://openreview.net/forum?id=E34AlVLN0v)
+
+
+Bo Liu, Rui Wang, Lemeng Wu, Yihao Feng, Peter Stone, and Qiang Liu. Longhorn: State space
+models are amortized online learners. _arXiv preprint arXiv:2407.14207_, 2024.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. _arXiv_ _preprint_
+_arXiv:1711.05101_, 2017.
+
+
+Carlo Lucibello and Marc M´ezard. Exponential capacity of dense associative memories. _Physical_
+_Review Letters_, 132(7):077301, 2024.
+
+
+William Merrill, Jackson Petty, and Ashish Sabharwal. The illusion of state in state-space models. In _Forty-first_ _International_ _Conference_ _on_ _Machine_ _Learning_, 2024. URL [https:](https://openreview.net/forum?id=QZgo9JZpLq)
+[//openreview.net/forum?id=QZgo9JZpLq.](https://openreview.net/forum?id=QZgo9JZpLq)
+
+
+Tsendsuren Munkhdalai and Hong Yu. Neural semantic encoders. In _Proceedings of the conference._
+_Association for Computational Linguistics. Meeting_, volume 1, pp. 397. NIH Public Access, 2017.
+
+
+Tsendsuren Munkhdalai, Alessandro Sordoni, Tong Wang, and Adam Trischler. Metalearned neural
+memory. _Advances in Neural Information Processing Systems_, 32, 2019.
+
+
+Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho, Stella Biderman,
+Huanqi Cao, Xin Cheng, Michael Chung, Matteo Grella, et al. Rwkv: Reinventing rnns for
+the transformer era. _arXiv preprint arXiv:2305.13048_, 2023.
+
+
+Bo Peng, Daniel Goldstein, Quentin Anthony, Alon Albalak, Eric Alcaide, Stella Biderman, Eugene
+Cheah, Teddy Ferdinan, Haowen Hou, Przemysław Kazienko, et al. Eagle and finch: Rwkv with
+matrix-valued states and dynamic recurrence. _arXiv preprint arXiv:2404.05892_, 2024.
+
+
+11
+
+
+Bo Peng, Ruichong Zhang, Daniel Goldstein, Eric Alcaide, Haowen Hou, Janna Lu, William Merrill,
+Guangyu Song, Kaifeng Tan, Saiteja Utpala, et al. Rwkv-7” goose” with expressive dynamic state
+evolution. _arXiv preprint arXiv:2503.14456_, 2025.
+
+
+Hao Peng, Jungo Kasai, Nikolaos Pappas, Dani Yogatama, Zhaofeng Wu, Lingpeng Kong, Roy
+Schwartz, and Noah A. Smith. ABC: Attention with bounded-memory control. In Smaranda
+Muresan, Preslav Nakov, and Aline Villavicencio (eds.), _Proceedings_ _of_ _the_ _60th_ _Annual_ _Meet-_
+_ing_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_ _Papers)_, pp. 7469–7483,
+Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/2022.
+acl-long.515. [URL https://aclanthology.org/2022.acl-long.515/.](https://aclanthology.org/2022.acl-long.515/)
+
+
+DL Prados and SC Kak. Neural network capacity using delta rule. _Electronics_ _Letters_, 25(3):
+197–199, 1989.
+
+
+Zhen Qin, Weigao Sun, Dong Li, Xuyang Shen, Weixuan Sun, and Yiran Zhong. Various lengths,
+constant speed: Efficient language modeling with lightning attention. In _Forty-first International_
+_Conference on Machine Learning_, 2024.
+
+
+Zihan Qiu, Zekun Wang, Bo Zheng, Zeyu Huang, Kaiyue Wen, Songlin Yang, Rui Men, Le Yu, Fei
+Huang, Suozhi Huang, et al. Gated attention for large language models: Non-linearity, sparsity,
+and attention-sink-free. _arXiv preprint arXiv:2505.06708_, 2025.
+
+
+Hubert Ramsauer, Bernhard Sch¨afl, Johannes Lehner, Philipp Seidl, Michael Widrich, Lukas Gruber, Markus Holzleitner, Thomas Adler, David Kreil, Michael K Kopp, G¨unter Klambauer, Johannes Brandstetter, and Sepp Hochreiter. Hopfield networks is all you need. In _International_
+_Conference on Learning Representations_ [, 2021. URL https://openreview.net/forum?](https://openreview.net/forum?id=tL89RnzIiCd)
+[id=tL89RnzIiCd.](https://openreview.net/forum?id=tL89RnzIiCd)
+
+
+Imanol Schlag, Kazuki Irie, and J¨urgen Schmidhuber. Linear transformers are secretly fast weight
+programmers. In _International Conference on Machine Learning_, pp. 9355–9366. PMLR, 2021.
+
+
+J¨urgen Schmidhuber. Learning to control fast-weight memories: An alternative to dynamic recurrent
+networks. _Neural Computation_, 4(1):131–139, 1992.
+
+
+J¨urgen Schmidhuber. Reducing the ratio between learning complexity and number of time varying
+variables in fully recurrent nets. In _ICANN’93:_ _Proceedings of the International Conference on_
+_Artificial Neural Networks Amsterdam, The Netherlands 13–16 September 1993 3_, pp. 460–463.
+Springer, 1993.
+
+
+Mark Sch¨one, Babak Rahmani, Heiner Kremer, Fabian Falck, Hitesh Ballani, and Jannes Gladrow.
+Implicit language models are rnns: Balancing parallelization and expressivity. _arXiv_ _preprint_
+_arXiv:2502.07827_, 2025.
+
+
+Julien Siems, Timur Carstensen, Arber Zela, Frank Hutter, Massimiliano Pontil, and Riccardo
+Grazzi. Deltaproduct: Increasing the expressivity of deltanet through products of householders.
+_arXiv preprint arXiv:2502.10297_, 2025.
+
+
+Jimmy T.H. Smith, Andrew Warrington, and Scott Linderman. Simplified state space layers for sequence modeling. In _The Eleventh International Conference on Learning Representations_, 2023.
+[URL https://openreview.net/forum?id=Ai8Hw3AXqks.](https://openreview.net/forum?id=Ai8Hw3AXqks)
+
+
+Yu Sun, Xinhao Li, Karan Dalal, Jiarui Xu, Arjun Vikram, Genghan Zhang, Yann Dubois, Xinlei
+Chen, Xiaolong Wang, Sanmi Koyejo, et al. Learning to (learn at test time): Rnns with expressive
+hidden states. _arXiv preprint arXiv:2407.04620_, 2024.
+
+
+Yutao Sun, Li Dong, Shaohan Huang, Shuming Ma, Yuqing Xia, Jilong Xue, Jianyong Wang, and
+Furu Wei. Retentive network: A successor to transformer for large language models. _arXiv_
+_preprint arXiv:2307.08621_, 2023.
+
+
+Matteo Tiezzi, Michele Casoni, Alessandro Betti, Tommaso Guidi, Marco Gori, and Stefano
+Melacci. On the resurgence of recurrent models for long sequences: Survey and research opportunities in the transformer era. _arXiv preprint arXiv:2402.08132_, 2024.
+
+
+12
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Ke Alexander Wang, Jiaxin Shi, and Emily B. Fox. Test-time regression: a unifying framework
+for designing sequence models with associative memory, 2025. [URL https://arxiv.org/](https://arxiv.org/abs/2501.12352)
+[abs/2501.12352.](https://arxiv.org/abs/2501.12352)
+
+
+Songlin Yang, Bailin Wang, Yikang Shen, Rameswar Panda, and Yoon Kim. Gated linear attention
+transformers with hardware-efficient training. In _International Conference on Machine Learning_,
+pp. 56501–56523. PMLR, 2024a.
+
+
+Songlin Yang, Bailin Wang, Yu Zhang, Yikang Shen, and Yoon Kim. Parallelizing linear transformers with the delta rule over sequence length. _Advances in neural information processing systems_,
+37:115491–115522, 2024b.
+
+
+Songlin Yang, Bailin Wang, Yu Zhang, Yikang Shen, and Yoon Kim. Parallelizing linear transformers with the delta rule over sequence length. In _The Thirty-eighth Annual Conference on Neural_
+_Information Processing Systems_, 2024c.
+
+
+Songlin Yang, Jan Kautz, and Ali Hatamizadeh. Gated delta networks: Improving mamba2 with
+delta rule. _arXiv preprint arXiv:2412.06464_, 2025.
+
+
+Tianyuan Zhang, Sai Bi, Yicong Hong, Kai Zhang, Fujun Luan, Songlin Yang, Kalyan
+Sunkavalli, William T Freeman, and Hao Tan. Test-time training done right. _arXiv_ _preprint_
+_arXiv:2505.23884_, 2025.
+
+
+Yu Zhang, Songlin Yang, Rui-Jie Zhu, Yue Zhang, Leyang Cui, Yiqiao Wang, Bolun Wang, Freda
+Shi, Bailin Wang, Wei Bi, et al. Gated slot attention for efficient linear-time sequence modeling.
+_Advances in Neural Information Processing Systems_, 37:116870–116898, 2024.
+
+
+13
+
+
+A RELATED WORK
+
+
+**Modern** **Linear** **Recurrent** **Neural** **Networks** Due to the quadratic complexity of transformers,
+recently developing alternative architectures have gained attention, which led to the development
+of efficient recurrent alternatives (Tiezzi et al., 2024). Initial advancements in this domain, starts
+with models such as RetNet (Sun et al., 2023), RWKV (Peng et al., 2023), and S5 (Smith et al.,
+2023), which employed data-independent transition matrices coupled with Hebbian-like update
+mechanisms. Subsequently, a second generation of models emerged, incorporating input-dependent
+parameters within these linear architectures (e.g., linear RNNs (Hasani et al., 2023; Smith et al.,
+2023), RWKV6 (Peng et al., 2024)). These models also explored more expressive memory updating rules, notably those based on the delta rule (Peng et al., 2025; Schlag et al., 2021; Yang et al.,
+2024b;a; Liu et al., 2024). Further evolution in this line of research has extended these memory
+architectures to deeper models, while concurrently utilizing delta-rule-like update mechanisms (Sun
+et al., 2024) or data-dependent momentum-based update rules with forget gating (Behrouz et al.,
+2025d). More recently, to augment the performance of delta-rule-based sequential models, Siems
+et al. (2025) have proposed the application of multiple gradient descent updates per token, thereby
+yielding more expressive sequence models, particularly in state tracking tasks. In addition to the
+above fast linear recurrent sequence models, several studies have focused on RNNs with non-linear
+recurrence (Behrouz et al., 2025d;b;a; Csord´as et al., 2024; Merrill et al., 2024; Lim et al., 2024;
+Sch¨one et al., 2025; Karami & Mirrokni, 2025; Gonzalez et al., 2024), and how their training can be
+faster (Gonzalez et al., 2024; Lim et al., 2024; Sch¨one et al., 2025).
+
+
+**Fast** **Weight** **Programs** The conceptualization of linear layers as key-value associative memory
+systems can be traced back to Hopfield networks (Hopfield, 1982). This concept was subsequently
+developed in the context of fast weight programmers, wherein dynamic fast programs are integrated
+into recurrent neural networks to serve as writable memory stores (Schlag et al., 2021; Schmidhuber,
+1992; 1993). Among the learning paradigms for such systems, Hebbian learning (Hebb, 2005) and
+the delta rule (Prados & Kak, 1989) have emerged as the most prominent. Both learning rules
+have been the subject of extensive investigation within the existing literature (Munkhdalai & Yu,
+2017; Schmidhuber, 1992; Munkhdalai et al., 2019; Schlag et al., 2021; Irie et al., 2021; Yang et al.,
+2024b;a).
+
+
+**Hopfield Networks** Our formulation is architecturally founded upon the broad concept of associative memory, wherein the primary objective is to learn an underlying mapping between keys and
+values. Seminal work by Hopfield (1982) on Hopfield Networks introduced one of the earliest neural architectures explicitly based on associative memory, defining it through the minimization of an
+energy function for storing key-value pairs. Although traditional Hopfield networks have seen diminished applicability in recent years, primarily due to constraints in vector-valued memory capacity and the nature of their energy function, several contemporary studies have focused on enhancing
+their capacity through various methodologies. These include efforts by Krotov (2021), Li et al.
+(2024), and Krotov & Hopfield (2016). Notably, extensions to the energy function of these models,
+often incorporating exponential kernels, have been explored (Krotov & Hopfield, 2016; Lucibello
+& M´ezard, 2024). Furthermore, the relationship between these modernized Hopfield networks and
+Transformer architectures has been a subject of recent investigation (Ramsauer et al., 2021; Hu et al.,
+2024).
+
+
+B CONNECTION OF QK-PROJECTION WITH MEMORY BOUNDED
+TRANSFORMERS
+
+
+Revisiting our QK-Projection retrieval process, we first project the query vector into the space of
+stored keys and then retrieve its corresponding value by a forward pass on the memory module. In
+particular, given query _qt_ and stored keys of _{ki}_ _[t]_ _i_ =1 [,] [the] [output] [corresponds] [to] [query] _[q][t]_ [can] [be]
+calcualted as:
+
+
+_t_
+
+
+_τ_ =1
+
+
+14
+
+
+_∥kkττk∥τ_ _[⊤]_ [2] _[q][t]_
+
+
+_ot_ = _f_
+
+
+_Wt,_
+
+
+_._ (8)
+
+
+Given a normalization of keys, i.e., _∥kτ_ _∥_ 2 = 1, this formulation, can be re-written as:
+
+
+_t_
+
+- _kτ_ _kτ_ _[⊤][q][t]_
+
+_τ_ =1
+
+
+_ot_ = _f_
+
+
+_Wt,_
+
+
+_,_ (9)
+
+
+in which the second element, [�] _τ_ _[t]_ =1 _[k][τ]_ _[k]_ _τ_ _[⊤][q][t]_ [, is equivalent to a simple forward pass for query] _[ q][t]_ [over]
+a linear memory module of _M_ _[′]_ _t_ [=][ �] _[t]_ _τ_ =1 _[k][τ]_ _[k]_ _τ_ _[⊤]_ [with recurrence of:]
+
+_M_ _[′]_ _t_ [=] _[ M]_ _t_ _[′]_ _−_ 1 [+] _[ k][t][k]_ _t_ _[⊤][.]_ (10)
+Such formulation of QK-Projection can remind us the two-pass process of memory bounded Transformers (Peng et al., 2022; Zhang et al., 2024; Karami et al., 2025), where in the simple linear
+attention form (Peng et al., 2022), the retrieval process can be written as:
+
+_Wt_ = _Wt−_ 1 + _φtvt_ _[⊤][,]_ (11)
+
+
+_ot_ = _Wt_ softmax
+
+
+�� _t_
+
+ - _kφφ_ _[⊤]_ _τ_
+
+_τ_ =1
+
+
+_qt_
+
+
+_._ (12)
+
+
+Comparing with above two-pass process of ABC (Peng et al., 2022), our QK-projection method is
+applicable to both deep and linear memory. Furthermore, parameters of _φt_ as well as _kt_ are tied and
+so the learning process is considerably easier, making the model more adaptable to new data/tasks.
+Moreover, when employ this projection in the local memory, we only do the summations starting
+from the “reset” state of the memory rather than starting from _τ_ = 1.
+
+
+C EFFICIENT IMPLEMENTATION OF QK-PROJECTION
+
+
+This section details the efficient, parallelizable implementation of the QK-Projection mechanism.
+We demonstrate that this projection can be integrated into the chunkwise training paradigm without
+introducing sequential bottlenecks, thereby preserving the training efficiency of the TNT architecture.
+
+
+The QK-Projection relies on a projection matrix, _Mt_, which accumulates the outer products of keys
+within the current local memory shard (length _SL_ ). Assuming normalized keys ( _∥kτ_ _∥_ = 1), this
+matrix is defined by the following recurrence:
+
+_Mt_ =        - _kMtktt⊤−_ 1 + _ktkt_ _[⊤]_ ifotherwise _t ≡_ 1 (mod _SL_ )
+This rule ensures that the projection state _Mt_ is reset at the beginning of each shard, mirroring the
+reset of the local memory state _Wt_ . The local memory retrieval is then computed as _f_ ( _Wt, Mtqt_ ).
+
+
+**Chunkwise Parallel Computation.** To maintain training efficiency, _Mt_ is computed in a chunkparallel manner. For any time step _t_ within a chunk of size _CL_, the projection matrix can be decomposed into two components:
+
+
+_Mt_ = _Mξ_ ( _t,CL_ ) _−_ 1
+
+   - ��    Carry-over State
+
+
++
+
+
+_t_
+
+ - _kτ_ _kτ_ _[⊤]_
+
+_τ_ = _ξ_ ( _t,CL_ )
+
+
+                        - ��                        Intra-chunk Sum
+The first term is the final state from the previous chunk, which is carried over. The second term, the
+intra-chunk sum, is computed efficiently for all steps in the chunk simultaneously using a parallel
+prefix sum (scan) operation over the sequence of outer products _{kτ_ _kτ_ _[⊤][}]_ [.]
+
+
+This implementation preserves end-to-end parallelism. The state passed between chunks is a single, constant-size matrix ( _d_ _×_ _d_ ), incurring minimal overhead. The periodic reset is handled by
+re-initializing this carry-over state at shard boundaries. Thus, QK-Projection enhances the model’s
+retrieval mechanism without compromising the training efficiency fundamental to the TNT architecture.
+
+
+15
+
+
+D TNT APPLICABILITY
+
+
+In this paper, we have focused on showing the effectiveness and efficiency of TNT and so for the
+sake of clarity, we use a simple memory module that optimizes its inner-loop with gradient descent.
+However, TNT recipes are applicable to different deep memory and non-linear architectures. For
+example, one can adapt the gating formulation in Titans (Behrouz et al., 2025d) or Mamba2 (Dao
+& Gu, 2024) for each of the local memories as well as the global memory. Another potential exploration is to incorporate closed feedback loop in the objective of the inner-loop as it has done in
+Hu et al. (2025). Similarly, one can employ more expressive optimizers as the inner-loop optimizers
+such as gradient descent with momentum, AdamW (Kingma & Ba, 2014), or muon (Jordan et al.,
+2024) as it has been done by Behrouz et al. (2025a); Zhang et al. (2025). While exploring all these
+combinations with TNT is a promising direction, for the sake of clarity and space constraint, we
+leave them for future studies.
+
+
+E TNT GENERALIZATION FORMULATION
+
+
+The TNT architecture can be generalized to a hierarchical system comprising one global memory
+and _N_ parallel local memories. This allows the model to capture information at multiple timescales
+and resolutions simultaneously. Each local memory, denoted by _W_ [(] _[i]_ [)] for _i_ _∈{_ 1 _, . . ., N_ _}_, operates
+with its own distinct chunk size _CLi_, shard length _SLi_, and learnable initial state _W_ init [(] _[i]_ [)][.]
+
+
+E.1 GENERALIZED MEMORY UPDATE
+
+
+The update rules are extended as follows: the single global memory evolves sequentially, while the
+_N_ local memories are updated in parallel, each with its independent schedule.
+
+
+**Global Memory Update.** The global memory state _V_ is updated sequentially with a large chunk
+size _CG_, identical to the base case.
+
+
+_V_ ( _k_ +1) _CG_ _←_ _VkCG_ _−_
+
+
+( _k_ +1) _CG_
+
+ - _ηt∇V L_ ( _f_ ( _VkCG_ _, kt_ ) _, vt_ ) (13)
+
+_t_ = _kCG_
+
+
+**N-Local Memories Update.** Each of the _N_ local memories _W_ [(] _[i]_ [)] operates in parallel. The state
+of each memory is reset periodically according to its specific shard length _SLi_, enabling multiresolution context parallelism.
+
+
+_Wt_ [(] _[i]_ [)] _←_
+
+
+- _W_ init [(] _[i]_ [)] if 0 _≡_ _t_ (mod _SLi_ )
+_Wt_ [(] _−_ _[i]_ [)] 1 _[−]_ [�] _[t]_ _τ_ = _ξ_ ( _t,CLi_ ) _[η][τ]_ _[∇]_ _W_ [ (] _[i]_ [)] _[L]_  - _f_ ( _Wξ_ [(] ( _[i]_ _t,C_ [)] _Li_ ) _[, k][τ]_ [)] _[, v][τ]_  - Otherwise
+
+
+(14)
+where _i_ = 1 _, . . ., N_ .
+
+
+E.2 GENERALIZED MEMORY RETRIEVAL
+
+
+During retrieval, the final output is a composition of the outputs from the global memory and all _N_
+local memories. The global memory uses the raw query _qt_, while each local memory uses a Q-K
+projection tailored to its specific context window, determined by its chunk size _CLi_ .
+
+
+**TNT Generalized Retrieval Rule.** The hierarchical memory is retrieved by summing the contributions from each memory module.
+
+
+_t_
+
+ 
+
+_τ_ = _ξ_ ( _t,CLi_ )
+
+
+_∥kkττk∥τ_ _[⊤]_ [2] _[q][t]_
+
+
+
+
+ _Wt_ [(] _[i]_ [)] _[,]_
+
+
+
+
+
+ (15)
+
+
+_ot_ = _f_ ( _Vξ_ ( _t,CG_ ) _, qt_ ) +
+
+
+_N_
+
+- _f_
+
+
+_i_ =1
+
+
+This formulation allows the network to integrate long-range dependencies from the global memory with fine-grained, parallel-processed information from a diverse set of local memories, each
+specializing in different temporal patterns.
+
+
+16
+
+
+10 [4]
+
+
+10 [3]
+
+
+2048 4096 8192 16384 32768
+Sequence Length
+
+
+FlashAttention
+
+
+JAX Attention
+
+
+Titans (C=8)
+
+
+Titans (C=16)
+
+
+Titans (C=32)
+
+
+TNT ( _CL_ =8)
+
+
+TNT ( _CL_ =16)
+
+
+TNT ( _CL_ =32)
+
+
+TNT ( _CL_ =64)
+
+
+TNT ( _CL_ =128)
+
+
+Figure 5: Runtime comparison of different models and implementations across varying sequence
+lengths, with the number of tokens per batch fixed at 0.5M.
+
+
+Table 4: Training time for 150M parameter models trained on 10B tokens. For TNT models, the
+global chunksize is fixed at _CG_ = 2048, and _CL_ denotes the set of chunksizes for the local memory
+modules.
+
+**Model** _C_ or _CL_ **Training Time (hrs)**
+
+
+**150M params / 10B tokens**
+
+
+Transformer (w/o gating)                 - 0.80
+Transformer (w gating)                 - 0.82
+TTT (2024) 256 1.69
+Titans (2025d) 256 1.99
+Titans 8 8.44
+
+
+**TNT Stage 1**
+
+
+TNT Stage 1 _{_ 8 _}_ 3.06
+_{_ 8,16 _}_ 4.24
+_{_ 4,8,16 _}_ 5.00
+_{_ 4,8,16,32 _}_ 5.55
+
+
+**TNT Stage 2**
+
+
+TNT Stage 2 _{_ 1 _}_ 0.15
+_{_ 2,4 _}_ 0.23
+_{_ 2,4,8 _}_ 0.26
+_{_ 2,4,8,16 _}_ 0.46
+
+
+Table 5: The scaling behavior of local memory depth ( _N_ ) on model performance. The depth is
+varied from _N_ = 1 to _N_ = 9. A clear improvement in performance is observed as the depth
+increases.
+
+**Model** _CG_ _C_ or _CL_ **C4** **FineWeb** **PG19** **Avg.** **PIQA** **Hella.** **ARC-e** **CSQA** **Avg.**
+ppl _↓_ ppl _↓_ ppl _↓_ ppl _↓_ acc _↑_ acc _↑_ acc _↑_ acc _↑_ acc _↑_
+
+
+**150M params / 10B tokens**
+
+
+17
+
+
+Table 6: Impact of global memory chunk size on the TNT model’s performance. This is evaluated
+at four fixed local memory sizes ( _CL_ = _{_ 4 _,_ 8 _,_ 16 _,_ 32 _}_ ). No clear correlation was observed between
+global chunk size and performance.
+
+**Model** _CG_ _C_ or _CL_ **C4** **FineWeb** **PG19** **Avg.** **PIQA** **Hella.** **ARC-e** **CSQA** **Avg.**
+ppl _↓_ ppl _↓_ ppl _↓_ ppl _↓_ acc _↑_ acc _↑_ acc _↑_ acc _↑_ acc _↑_
+
+
+**150M params / 10B tokens**
+
+
+Table 7: Impact of local memory chunk size on the TNT model’s performance. We use a fixed
+global memory ( _CG_ = 2048) and vary the chunksize size _CL_ of a single local memory. Smaller
+local memory sizes are shown to yield improved performance.
+
+**Model** _CG_ _C_ or _CL_ **C4** **FineWeb** **PG19** **Avg.** **PIQA** **Hella.** **ARC-e** **CSQA** **Avg.**
+ppl _↓_ ppl _↓_ ppl _↓_ ppl _↓_ acc _↑_ acc _↑_ acc _↑_ acc _↑_ acc _↑_
+
+
+**150M params / 10B tokens**
+
+
+Table 8: This analysis investigates different local memory configurations. We observe that the
+best performance is achieved with an optimal configuration of heterogeneous local memories (i.e.,
+having different resolutions), which aligns with the core hypothesis of TNT.
+
+**Model** _CG_ _C_ or _CL_ **C4** **FineWeb** **PG19** **Avg.** **PIQA** **Hella.** **ARC-e** **CSQA** **Avg.**
+ppl _↓_ ppl _↓_ ppl _↓_ ppl _↓_ acc _↑_ acc _↑_ acc _↑_ acc _↑_ acc _↑_
+
+
+**150M params / 10B tokens**
+
+
+F ADDITIONAL EXPERIMENT RESULTS
+
+
+In this section, we provide extended ablation studies on the memory hyperparameters of the TNT
+framework, including local memory depth and chunk sizes, as well as comparisons against additional
+modern RNN baselines.
+
+
+**Scaling of Local Memory Depth (** _N_ **).** To evaluate the benefits of deeper local modules, we experimented with increasing the local memory depth from _N_ = 1 to _N_ = 9. As shown in Table 5,
+performance steadily improves with depth: average perplexity decreases from 24.10 to 22.97, and
+
+
+18
+
+
+downstream accuracy increases from 40.6 to 41.6. This demonstrates that deeper local memory
+continuously improves performance, highlighting the scalability of the TNT framework.
+
+
+**Impact** **of** **Global** **Memory** **Chunk** **Size** **(** _CG_ **).** We evaluated the effect of varying the global
+chunk size _CG_ from 32 to 8192 (Table 6). We observe that while a smaller _CG_ = 128 yields a
+slightly better average perplexity (23.21) compared to our default setting of _CG_ = 2048 (23.23),
+the improvement is marginal. This minor gain does not justify the additional computational cost,
+as smaller chunks reduce opportunities for parallelization. Therefore, our original configuration
+provides a strong balance between performance and computational efficiency.
+
+
+**Impact** **of** **Local** **Memory** **Chunk** **Size** **(** _CL_ **).** Fixing the global memory ( _CG_ = 2048), we also
+varied the local memory chunk size _CL_ . As shown in Table 7, our results indicate that smaller local
+memory chunk sizes generally yield improved performance.
+
+
+**Optimal** **Local** **Memory** **Configurations.** To determine the optimal chunk sizes for multi-local
+setups, we experimented with different memory hierarchies (Table 8). We find that the optimal configuration utilizes heterogeneous local memories with varying resolutions. As a practical heuristic,
+we suggest starting with an exponential progression (e.g., 2 [1] _,_ 2 [2] _, . . .,_ 2 _[N]_ or 4 [1] _,_ 4 [2] _, . . .,_ 4 _[N]_ for _N_
+local memories). This rule of thumb generally yields strong and stable performance across different
+setups.
+
+
+G LLM USAGE
+
+
+We acknowledge the use of a large language model (LLM) solely for improving the linguistic quality
+and clarity of this manuscript. The model was not used for ideation, research methodology, or
+generating the scientific content presented in this work.
+
+
+19

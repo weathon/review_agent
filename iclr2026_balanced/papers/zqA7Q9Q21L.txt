@@ -1,0 +1,1808 @@
+# R2PS: WORST-CASE ROBUST REAL-TIME PURSUIT STRATEGIES UNDER PARTIAL OBSERVABILITY
+
+
+**Runyu Lu** [1] _[,]_ [2] **, Ruochuan Shi** [2] _[,]_ [1] **, Yuanheng Zhu** [2] _[,]_ [1] _[,][†]_ **, Dongbin Zhao** [2] _[,]_ [1]
+
+
+1 School of Artificial Intelligence, University of Chinese Academy of Sciences _∗_
+
+
+2 State Key Laboratory of Multimodal Artificial Intelligence Systems,
+Institute of Automation, Chinese Academy of Sciences
+lurunyu17@mails.ucas.ac.cn
+_{_ ruochuan.shi,yuanheng.zhu,dongbin.zhao _}_ @ia.ac.cn
+
+
+ABSTRACT
+
+
+Computing worst-case robust strategies in pursuit-evasion games (PEGs) is timeconsuming, especially when real-world factors like partial observability are considered. While important for general security purposes, real-time applicable pursuit
+strategies for graph-based PEGs are currently missing when the pursuers only
+have imperfect information about the evader’s position. Although state-of-the-art
+reinforcement learning (RL) methods like Equilibrium Policy Generalization (EPG)
+and Grasper provide guidelines for learning graph neural network (GNN) policies
+robust to different game dynamics, they are restricted to the scenario of perfect
+information and do not take into account the possible case where the evader can
+predict the pursuers’ actions. This paper introduces the first approach to worst-case
+robust real-time pursuit strategies (R2PS) under partial observability. We first
+prove that a traditional dynamic programming (DP) algorithm for solving Markov
+PEGs maintains optimality under the asynchronous moves by the evader. Then,
+we propose a belief preservation mechanism about the evader’s possible positions,
+extending the DP pursuit strategies to a partially observable setting. Finally, we
+embed the belief preservation into the state-of-the-art EPG framework to finish our
+R2PS learning scheme, which leads to a real-time pursuer policy through crossgraph reinforcement learning against the asynchronous-move DP evasion strategies.
+After reinforcement learning, our policy achieves robust zero-shot generalization to
+unseen real-world graph structures and consistently outperforms the policy directly
+trained on the test graphs by the existing game RL approach.
+
+
+1 INTRODUCTION
+
+
+Pursuit-evasion game (PEG) is an important topic long examined in the fields of robotics and security
+(Vidal et al., 2001; 2002; Chung et al., 2011). Many real-world tasks can benefit from the solution to
+an abstracted PEG, e.g., guiding a team of cops to capture a robber and aligning a team of guards to
+defend against an intruder. In comparison with traditional differential games (Margellos & Lygeros,
+2011; Zhou et al., 2012), graph-based PEGs are convenient for describing complicated scenarios,
+possibly with a large scale. When we use graphs as a common structural representation, the actions
+of the pursuers and the evader can be abstracted as moving from a vertex to an adjacent one at each
+discrete timestep. The edges between the vertices can possibly represent urban streets in reality.
+
+
+However, exactly solving graph-based PEGs is computationally expensive (see Goldstein & Reingold
+(1995)). Even under a slight structural change, the worst-case robust pursuit strategies can be different
+and thus require a large amount of time to be recomputed. For example, when a traffic jam happens
+in the city, the related edges in the PEG graph can be frequently removed and added. This severely
+limits the real-time applicability of the existing methods featuring mathematical programming (Vieira
+et al., 2008; Horak & Bo´ sanskˇ y, 2017).` Besides, real-world factors like partial observability, which
+
+
+_∗_ This work was supported in part by the National Natural Science Foundation of China under Grants
+62293541 and 62136008 and in part by the Beijing Nova Program under Grant 20240484514.
+
+
+1
+
+
+leads to PSPACE-hardness even under a fixed opponent (see Papadimitriou & Tsitsiklis (1987)),
+further increase the difficulty of deriving a well-performing pursuit strategy within a time limit.
+
+
+Reinforcement learning (RL), which has demonstrated strong generalization capabilities in domains
+like large language models (see Chu et al. (2025)), provides an alternative solution to this problem.
+We may train a parameterized policy represented by a suitable neural network, e.g., a graph neural
+network (GNN) (Wu et al., 2020), on a diverse set of graphs and then generalize it to the unseen
+graph structures. Unfortunately, while RL has been applied to solving large-scale PEGs (Xue et al.,
+2022; 2021), existing research focuses more on its scalability rather than generalization capability.
+The methods like MT-PSRO (Li et al., 2023) and Grasper (Li et al., 2024) are limited to few-shot
+generalization to unseen opponent strategies and initial conditions. As is pointed out by Zhuang
+et al. (2025), they still have difficulty adapting to rapid changes of graph structures. The state-of-theart method, Equilibrium Policy Generalization (EPG) (Lu et al., 2025a), first examines zero-shot
+generalization at the level of graphs. However, whether the paradigm of EPG works under partial
+observability remains underexplored. Besides, all of the mentioned works do not consider the possible
+case that the evader may have stronger observation capabilities than the pursuers. This makes the
+strength of the learned pursuit strategies less convincing for real-world security purposes.
+
+
+In this paper, we present an approach to finding pursuit strategies that are both worst-case robust
+and real-time applicable under partial observability. We start by analyzing a dynamic programming
+(DP) algorithm for efficiently solving Markov PEGs and proving that it also finds optimal strategies
+when the evader can predict the pursuer’s action and move asynchronously. With a belief update
+mechanism, we further extend the DP policies to a partially observable setting. The belief preservation
+serves to avoid the complexity of recording all observation histories through abstracting opponent
+information for effective decision-making. Finally, we embed the belief preservation mechanism into
+the reinforcement learning framework of EPG and train a generalized GNN pursuer policy under
+partial observability. We then evaluate the worst-case robustness of our real-time RL pursuer policy.
+
+
+Specifically, the contributions of this paper are threefold:
+
+
+    - We theoretically analyze a dynamic programming (DP) algorithm and extend the optimal
+strategies induced by this algorithm to asynchronous-move and partially observable scenarios.
+We prove that the DP algorithm induces strictly optimal pursuit and evasion strategies when
+the evader moves asynchronously and design a belief preservation mechanism against the
+possibly unobserved evaders. Under belief preservation, we verify that the extended pursuer
+policy remains strong against the provably optimal perfect-information evader.
+
+
+    - We practically train an observation-based pursuer policy across different graph structures,
+deriving the first worst-case robust real-time pursuit strategies (R2PS) applicable to dynamically changing PEGs with partial observations. We combine our belief preservation
+mechanism with the state-of-the-art robust policy generalization paradigm, EPG, and provide
+an inference time complexity bound for our GNN-represented RL pursuer policy.
+
+
+    - Through extensive experiments, we verify that under partial observability, our RL training
+against the asynchronous-move DP evaders under a diverse set of graphs leads to robust zeroshot performance in unseen real-world graphs. Comparative results reveal the superiority of
+our RL approach over the standard game RL approach, PSRO (Lanctot et al., 2017).
+
+
+2 PRELIMINARIES
+
+
+2.1 PROBLEM FORMULATION
+
+
+Adversarial games with partial observability can be generally represented by partially observable
+stochastic games (POSGs), where equilibrium learning has been rigorously examined in existing
+game-theoretic research (e.g., Lu et al. (2025b;c)). However, this formulation considers all possible
+observation histories and leads to a large set of decision points whose size is possibly exponential
+in the time horizon of the game. For the worst scenario of pursuit-evasion, while the pursuers have
+limited observation capabilities, the evader could still obtain the global information of the game.
+Since at least one side of the players possesses perfect information, we consider first expressing PEGs
+as two-player zero-sum Markov games and then extending the definitions to incorporate practical
+adversarial factors like partial observability and asynchronous moves of the evader.
+
+
+2
+
+
+**Two-player zero-sum Markov game.** An infinite-horizon two-player zero-sum Markov game is
+represented by a tuple ( _S, A, B, P, r, γ_ ), where _S_ is the state space, _A_ is the action space of the
+max-player (who aims to maximize the cumulative reward), _B_ is the action space of the min-player
+(who aims to minimize the cumulative reward), _P_ _∈_ [0 _,_ 1] _[|][S][||A||B|×|][S][|]_ is the transition probability
+matrix, _r_ _∈_ [0 _,_ 1] _[|][S][||A||B|]_ is the reward vector, and _γ_ _∈_ (0 _,_ 1) is the discount factor. In PEGs, the
+max-player is the team of _m_ pursuers, and the min-player is the evader. We use a termination function
+_f_ : _S_ _→{_ 0 _,_ 1 _}_ to mark the states where the pursuit is successful. When _f_ ( _s_ ) = 1, the game is
+terminated, and a reward of +1 is received. Otherwise, a reward of 0 is received. The discount factor
+_γ_ _<_ 1 encourages the pursuers to capture the evader as soon as possible.
+
+
+**Graph-based** **pursuit-evasion** **game.** Considering the requirements of formulating large-scale
+real-world scenarios, we describe states and actions on a graph structure _G_ = _⟨V, E⟩_ : _V_ is the
+set of vertices _v_ . The global state _s_ = ( _sp, se_ ) in a game is an element of _V_ _[m]_ _× V_, where _sp_ =
+( _vp_ [1] _[, v]_ _p_ [2] _[,][ · · ·]_ _[, v]_ _p_ _[m]_ [)] _[ ∈V]_ _[m]_ [, and] _[ s][e]_ [=] _[ v][e]_ _[∈V]_ [.] [An edge] _[ e]_ [ = (] _[v, v][′]_ [)] _[ ∈]_ _[E]_ [defines the adjacency between]
+two vertices _v, v_ _[′]_ _∈V_ . For example, when we represent an urban scenario by a graph _G_, an edge _e_
+can be used to describe a unit length of streets. The valid actions of the _m_ + 1 agents in a graph-based
+PEG are either moving to an adjacent vertex via an edge or staying at the current node.
+
+
+**Policy** **and** **value** **function.** Following common notations, we denote by ( _µ, ν_ ) the joint policy
+of the two players, where _µ_ is the policy of the max-player (pursuers) and _ν_ is the policy of the
+min-player (evader): _µ_ ( _s_ ) _∈_ ∆( _A_ ) (resp., _ν_ ( _s_ ) _∈_ ∆( _B_ )) is the max-player’s (resp., min-player’s)
+action distribution at state _s ∈_ _S_ . Since ∆( _A_ ) is the probability simplex over _A_, _µ_ ( _s, a_ ) corresponds
+to the probability of selecting action _a ∈A_ at state _s_ . Given the joint policy, we further define the
+value function _V_ _[µ,ν]_ ( _s_ ) = E [ [�] _[∞]_ _t_ =0 _[γ][t][r]_ [(] _[s][t][, a][t][, b][t]_ [)] _[ |][s]_ [0] [=] _[ s]_ [;] _[ µ, ν]_ [ ]][ as in Markov decision processes.]
+
+
+**Solution concept.** A Nash equilibrium (NE) in a game is a joint policy where each individual player
+cannot benefit from unilaterally deviating from his/her own policy (Roughgarden, 2016). Specifically,
+in a two-player zero-sum MG, an NE ( _µ_ _[∗]_ _, ν_ _[∗]_ ) satisfies _V_ _[µ,ν][∗]_ _≤_ _V_ _[µ][∗][,ν][∗]_ _≤_ _V_ _[µ][∗][,ν]_ for any _µ_ and _ν_ at
+all states. As is well known, every MG with finite states and actions has at least one NE, and all NEs
+in a two-player zero-sum MG share the same value _V_ _[∗]_ ( _s_ ) = _V_ _[µ][∗][,ν][∗]_ ( _s_ ) = max _µ_ min _νV_ _[µ,ν]_ ( _s_ ) =
+min _ν_ max _µV_ _[µ,ν]_ ( _s_ ) (Shapley, 1953). In two-player zero-sum Markov games, Nash equilibrium can
+be viewed as a globally optimal joint policy since both players cannot be exploited by their worst-case
+opponents when the players move synchronously (simultaneously).
+
+
+**Game extension.** Since Markov games only take into account synchronous moves and full observations, we further allow for two variations concerning asynchronous moves and partial observability.
+In reality, the worst evader (from the pursuers’ perspective) may have good predictions of the pursuit
+actions. Therefore, we allow it to decide after the pursuers’ move _a_ at each timestep. In this case,
+the evader policy _ν_ ( _s_ ) is transformed into an asynchronous one _ν_ ( _s, a_ ), and we say that a strategy is
+optimal for the pursuer/evader side at state _s_ if the worst-case termination timesteps of all possible
+trajectories starting from _s_ are maximized/minimized. Besides, the availability of sensors may not
+allow the pursuers to observe an agent that is far away (while the worst evader can). In this case, the
+pursuer policy _µ_ ( _s_ ) is transformed into _µ_ ( _o_ ), where _o_ is the history of the pursuers’ local observations.
+
+
+2.2 DYNAMIC PROGRAMMING FOR MARKOV PEGS
+
+
+The traditional marking algorithm (Chung et al., 2011) provides a general idea of recursively finding
+optimal strategies in perfect-information PEGs. If all possible evading actions lead to the states that
+have been marked, then we can also mark the current state, which means the pursuers can capture the
+evader starting from this state. However, a direct implementation of the marking algorithm incurs
+a time complexity much higher than the theoretical lower bound Ω( _|S|_ ). In view of this gap, Lu
+et al. (2025a) introduce a dynamic programming (DP) algorithm (see Algorithm 1) that guarantees
+near-optimal time complexity for solving Markov PEGs.
+
+
+Algorithm 1 computes a distance table _D_ through preserving a queue _Q_ . Intuitively, the distance
+value _D_ ( _s_ ) indicates the worst-case timestep for the pursuer side to capture the evader starting from
+the global state _s_ = ( _sp, se_ ), which is guaranteed through the use of a minimax policy
+
+
+_µ_ _[∗]_ ( _sp, se_ ) = arg min
+neighbor _np_ of _sp_
+
+
+- max _._ (1)
+neighbor _ne_ of _se_ _[D]_ [(] _[n][p][, n][e]_ [)]
+
+
+3
+
+
+**Algorithm 1:** Dynamic Programming for Markov PEGs
+**Input:** Graph _G_ = _⟨V, E⟩_, Pursuer Number _m_, and Termination Function _f_ : _V_ _[m]_ _× V_ _→{_ 0 _,_ 1 _}_
+
+**1** Initialize an empty queue _Q_ and the distance table _D_ = _∞_
+
+**2** **for** _pursuer state (positions) sp_ _∈V_ _[m]_ **do**
+
+**3** **for** _evader state se_ _∈V_ **do**
+
+**4** **if** _f_ ( _sp, se_ ) = 1 **then**
+
+**5** _D_ ( _sp, se_ ) _←_ 0
+
+**6** Push ( _sp, se_ ) into _Q_
+
+**7** **end**
+
+**8** **end**
+
+**9** **end**
+
+**10** **while** _Q is not empty_ **do**
+
+
+**11** Pop the first element ( _sp, se_ ) from _Q_
+
+
+**12** **for** _evader neighbor ne_ _∈_ Neighbor( _se_ ) _,_ ∄ _n_ _[′]_ _e_ _[∈V][,]_ [ (] _[n][e][, n]_ _e_ _[′]_ [)] _[ ∈]_ _[E, D]_ [(] _[s][p][, n]_ _e_ _[′]_ [)] _[ > D]_ [(] _[s][p][, s][e]_ [)] **[ do]**
+
+
+**13** **for** _pursuer neighbor np_ _∈_ Neighbor( _sp_ ) _⊂V_ _[m]_ _, D_ ( _np, ne_ ) = _∞_ **do**
+
+
+**14** _D_ ( _np, ne_ ) _←_ _D_ ( _sp, se_ ) + 1
+
+**15** Push ( _np, ne_ ) into _Q_
+
+**16** **end**
+
+**17** **end**
+
+**18** **end**
+
+**Output:** Distance Table _D_
+
+
+Under synchronous moves, the evader’s policy is symmetrically defined as
+
+
+_ν_ _[∗]_ ( _sp, se_ ) = arg max
+neighbor _ne_ of _se_
+
+
+- min _._ (2)
+neighbor _np_ of _sp_ _[D]_ [(] _[n][p][, n][e]_ [)]
+
+
+Using mathematical induction, Lu et al. (2025a) prove that the joint policy ( _µ_ _[∗]_ _, ν_ _[∗]_ ) is a near-optimal
+pure strategy (the proof can be found in Appendix A.1):
+
+**Theorem 1.** _If there exists a pure-strategy Nash equilibrium in the Markov PEG, then the joint policy_
+( _µ_ _[∗]_ _, ν_ _[∗]_ ) _defined by (1) and (2) is a Nash equilibrium._
+
+
+3 EXTENDING DYNAMIC PROGRAMMING POLICIES TO ASYNCHRONOUS
+MOVES AND PARTIAL OBSERVABILITY
+
+
+In this section, we further show that the distance table _D_ generated by the DP algorithm (Algorithm
+1) can also be used to construct the optimal evader policy under asynchronous moves, as well as the
+observation-based pursuer policies under partial observability.
+
+
+3.1 ASYNCHRONOUS-MOVE SETTING
+
+
+When the evader moves asynchronously, we define the DP policy for the evader as
+
+_ν_ _[∗]_ ( _sp, se, np_ ) = arg max _{D_ ( _np, ne_ ) _},_ (3)
+neighbor _ne_ of _se_
+
+
+where _np_ is the neighbor of _sp_ that the pursuers choose to move to in the current decision step, which
+is perceived or predicted by the evader in advance. With this information as an additional input, the
+evader can decide based on the pursuers’ positions after their decision rather than before. As a result,
+the policy (3) no longer requires the inner enumeration in (2).
+
+
+In this case, we can show that the pursuer policy (1) and evader policy (3) induced by the distance
+table _D_ are strictly optimal at all states. We start our analysis by proving Lemma 1, which reveals the
+minimax essence of the distance table _D_ . The detailed proof can be found in Appendix A.2.
+**Lemma 1.** _When D_ ( _np, ne_ ) _>_ 0 _, Algorithm 1 guarantees that_
+
+
+_D_ ( _np, ne_ ) = min
+neighbor _sp_ of _np_
+
+
+- max + 1 _._
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+4
+
+
+Using Lemma 1, we can further prove that _D_ ( _s_ ) implies the best possible worst-case timesteps
+starting from state _s_ for both pursuer and evader sides under the asynchronous-move setting. The
+main results are shown as follows, and the omitted proofs can be found in Appendix A.3-A.5.
+**Theorem 2.** _Starting from any state s_ = ( _sp, se_ ) _satisfying D_ ( _s_ ) = _d < ∞, µ_ _[∗]_ _guarantees pursuit_
+_within d steps against any evasion strategy, and ν_ _[∗]_ _avoids being captured in less than d steps by any_
+_pursuit strategy._
+
+
+Based on the definition of optimal strategies in the asynchronous-move setting (see Section 2.1),
+Theorem 2 directly implies the following corollary:
+**Corollary 1.** _For any state s_ = ( _sp, se_ ) _with D_ ( _s_ ) _< ∞, both µ_ _[∗]_ _and ν_ _[∗]_ _are optimal strategies._
+
+
+Furthermore, we use Theorem 3 to show that whether _m_ perfect-information pursuers are sufficient
+to capture the evader starting from state _s_ can be determined by whether _D_ ( _s_ ) _< ∞_ :
+**Theorem 3.** _Starting from any state s_ = ( _sp, se_ ) _with D_ ( _s_ ) = _∞, ν_ _[∗]_ _can never be captured by any_
+_pursuit strategy._
+
+
+3.2 PARTIALLY OBSERVABLE SETTING
+
+
+Since the DP algorithm provably generates optimal strategies when both pursuer and evader sides
+have full observations, it is appealing to reuse the distance table _D_ to construct a pursuit strategy
+under partial observability for real-world security purposes. We expect that the observation-based
+pursuer policy, which is extended from the DP policy under perfect information, should effectively
+extract history information and align with the original policy when the observation range is infinity.
+
+
+We consider the following partially observable setting for the pursuers, who may serve as guards in a
+large area. The PEG begins because an intruder is observed, whose initial position is revealed to the
+pursuers. Once the game starts, the position of the evader (intruder) can no longer be detected unless
+it is in the observation range of at least one pursuer. For example, setting the observation range to be
+2 means that the evader can be detected only when its distance to one pursuer is less than 3.
+
+
+Under the partially observable setting, the observation history _o_ induces the possible positions of the
+evader, which we denote by a set Pos. This set is initialized as _{se}_, where _se_ is the initial position of
+the evader. As the game proceeds, it is updated based on the pursuers’ observations at each timestep:
+
+Posnew = �Remove(Neighbor _{se}_ (Posold)) evader is observed atevader is not observed _se.,_ (4)
+
+
+where the operator Remove( _·_ ) excludes all currently observed positions (since the evader is currently
+unobserved) from the possible evader positions represented by Neighbor(Posold), which corresponds
+to the set of one-step neighbors of the nodes in Posold.
+
+
+Given Pos, we can express _µ_ ( _o_ ) as _µ_ ( _sp,_ Pos) and construct a minimax policy that bounds the
+worst-case pursuit timesteps if we assume that the pursuers resume full observability after this step:
+
+
+_µ_ ( _sp,_ Pos) = arg min
+neighbor _np_ of _sp_
+
+
+= arg min
+neighbor _np_ of _sp_
+
+
+- max max
+_se∈_ Pos neighbor _ne_ of _se_ _[D]_ [(] _[n][p][, n][e]_ [)]
+
+(5)
+
+- max _._
+_ne∈_ Neighbor(Pos) _[D]_ [(] _[n][p][, n][e]_ [)]
+
+
+While this policy is applicable to the case of partial observability, it is based on an assumption that the
+observation limitation is not continual. Under continual partial observability, we find that averaging
+the timesteps through preserving a **belief** about the evader’s position can further encourage effective
+pursuit, especially when the set Pos is large. The belief-averaged pursuer policy is expressed as
+
+
+
+
+
+(6)
+ _[,]_
+
+
+- belief(se) max
+
+se neighbor ne of se [D(n][p] _[,]_ [ n][e][)]
+
+  
+
+
+belief(se)
+se
+
+
+_µ_ ( _sp,_ belief) = arg min
+neighbor np of sp
+
+
+
+
+
+
+
+
+
+where the belief function is initialized to be 0 except for the initial evader position and updated by
+
+
+belief new(se) _←_
+
+
+- 0 _se_ _∈/_ Pos _,_
+
+  - _ν_ ( _v, se_ )belief old(v) _se_ _∈_ Pos _._ (7)
+
+neighbor _v_ of _se_
+
+
+5
+
+
+Since the pursuer side cannot obtain the evader’s policy _ν_ when no prior knowledge is available, _ν_ ( _v_ )
+is set to be a uniform distribution over Neighbor( _v_ ) by default.
+
+
+As the original DP policy _µ_ _[∗]_ ( _s_ ) is provably optimal, Lemma 2 guarantees that both the positionextended policy _µ_ ( _sp,_ Pos) and the belief-averaged policy _µ_ ( _sp,_ belief) maintain the pursuit optimality when there is unlimited observation capability. The proof can be found in Appendix A.6.
+
+**Lemma 2.** _When_ Pos _is always a singleton, both pursuer policies (5) and (6) will be reduced to their_
+_perfect-information counterpart (1)._
+
+
+Note that the time complexity of preserving Pos and belief is only _O_ [˜] ( _|V|_ ) at each timestep, where _O_ [˜]
+hides the additional factor of enumerating the neighbors. Since the average degree in the real-world
+graphs can be small (see Table 1 in Section 5), the computation is practically efficient. In Appendix
+B, we provide the illustrations of the belief preservation process for a more intuitive understanding.
+
+
+4 FINDING ROBUST REAL-TIME PURSUIT STRATEGIES (R2PS) VIA
+ADVERSARIAL REINFORCEMENT LEARNING ACROSS GRAPHS
+
+
+4.1 ADVERSARIAL REINFORCEMENT LEARNING
+
+
+Since the DP algorithm has a lower-bound time complexity exponential in the agent number, it
+can be impractical to directly apply the DP policies in real time when the graph structure of the
+game dynamically changes. In view of this problem, we further combine our belief preservation
+mechanism with the idea of Equilibrium Policy Generalization (EPG) (Lu et al., 2025a) to construct
+a reinforcement learning method, which makes use of some preprocessed _D_ tables and the induced
+policies to train a generalized pursuer policy across a diverse set of graphs. We use the cross-graph
+RL policy for zero-shot generalization under unseen graph structures, aiming to derive worst-case
+robust real-time pursuit strategies (R2PS) under partial observability.
+
+
+Training Set
+
+
+Figure 1: Cross-Graph Reinforcement Learning of Generalized Pursuer Policy
+
+
+Figure 1 illustrates the cross-graph reinforcement learning pipeline, which features unexploitable
+evader policies as adversaries. The training set contains graphs with various topologies _Gi_ and the
+DP policies ( _µ_ _[∗]_ _i_ _[, ν]_ _i_ _[∗]_ [)][ induced by the preprocessed] _[ D]_ [ tables.] [In each iteration, a graph] _[ G][i]_ [ along with]
+the policy ( _µ_ _[∗]_ _i_ _[, ν]_ _i_ _[∗]_ [)][ is sampled.] [Under graph] _[ G]_ [=] _[G][i]_ [, we use] _[ µ][∗]_ [=] _[µ][∗]_ _i_ [as the reference policy to]
+guide policy training and use _ν_ _[∗]_ = _νi_ _[∗]_ [as the adversarial policy.] [Following the principle of EPG, we]
+train a cross-graph pursuer policy through reinforcement learning against _ν_ _[∗]_ with the guidance of _µ_ _[∗]_ .
+
+
+Specifically, for a transition ( _s, a, b, r, s_ _[′]_ ) in the replay buffer: _s_ is a randomly generated global state
+in the sampled graph; _a_ is the pursuers’ joint action sampled from the current policy model _πθ_, which
+is ideally a graph neural network (Wu et al., 2020) with parameter _θ_ that enables real-time inference;
+_b_ is the evader’s action generated from the asynchronous-move opponent policy _ν_ _[∗]_ (3); the instant
+reward _r_ and the next state _s_ _[′]_ are generated by the PEG dynamics under graph structure _G_ = _⟨V, E⟩_ .
+
+
+6
+
+
+Given state _s_, the reference policy _µ_ _[∗]_ generates a deterministic reference action _a_ _[∗]_ = _µ_ _[∗]_ ( _s_ ) and
+serves to construct the policy loss
+
+_L_ ( _θ |s_ ) = _Jπ_ ( _θ |s_ ) + _βD_ KL ( _µ_ _[∗]_ ( _s_ ) _, π_ ( _s_ )) = _Jπ_ ( _θ |s_ ) _−_ _β_ log _πθ_ ( _s, a_ _[∗]_ ) _,_ (8)
+
+
+where _Jπ_ ( _θ |s_ ) is the original policy loss of any backbone (multi-agent) reinforcement learning
+algorithm (e.g., MAPPO (Yu et al., 2022)), and _β_ is a hyperparameter that balances policy guidance
+(for efficient exploration) and reinforcement learning loss (for policy optimization).
+
+
+When training pursuers under partial observability, we transform the input of the policy model _πθ_ by
+
+
+_s ←_ ( _sp,_ Pos _,_ belief)
+
+
+and use the observation-based policy _µ_ ( _sp,_ Pos) (5) or _µ_ ( _sp,_ belief) (6) to replace _µ_ _[∗]_ ( _s_ ) (1), where
+Pos and belief are the preserved evader information under partial observability.
+
+
+For dynamic games like PEGs, the policy space has certain transitivity structures. Czarnecki et al.
+(2020) show that the strategies in real-world games have different levels of transitive strength, with
+Nash equilibrium being the strongest. In a single-graph PEG, reinforcement learning against the
+optimal evader policy _ν_ _[∗]_ helps to exclude the pursuer policies that are transitively weaker. Crossgraph training is similar to finding the joint part of the remaining strategies and abstracting them
+to a worst-case robust policy under a diverse set of graph structures, where the divisions on the
+policy space through adversarial RL can be different. Imagine that a half space is excluded after each
+single-graph division and that the division criteria of different graphs are independent due to structural
+distinctions. In this ideal case, the cross-graph policy will be improved at an exponential level across
+a diverse training corpus, leading to robust pursuit strategies even under partial observability.
+
+
+4.2 IMPLEMENTATION AND COMPLEXITY ANALYSIS
+
+
+Technically, we use soft-actor critic (SAC) (Haarnoja et al., 2018; Christodoulou, 2019) as the
+backbone RL algorithm and employ a decentralized architecture with a parameter-sharing graph
+neural network (GNN) (Cao et al., 2023; Lu et al., 2025a) to represent the graph-based policy of
+the homogeneous pursuers. The SAC algorithm features a self-adaptive entropy regularization that
+balances exploration and exploitation, with double Q-learning (Hasselt, 2010) employed to avoid
+overestimation. The GNN architecture combines multi-head self-attention (Vaswani et al., 2017) with
+adjacent-matrix masks to encode graph-based states. The state embedding is then sent into a decoder
+followed by a pointer network (Vinyals et al., 2015) for graph-based policy output.
+
+
+The implementation details and hyperparameter setting are reserved in Appendix C to save space [1] .
+According to the corresponding analysis, the overall time complexity of computing the graph-based
+state feature is _O_ ( _n_ [2] _m_ ), where _n_ = _|V|_ is the number of vertices in the graph, and _m_ is the number
+of pursuers. Since the complexity of GNN queries is also _O_ ( _n_ [2] _m_ ), and the complexity of preserving
+Pos and belief is _O_ [˜] ( _n_ ), the overall inference time complexity of the RL pursuer policy at each
+timestep is only _O_ ( _n_ [2] _m_ ) + _O_ ( _n_ [2] _m_ ) + _O_ [˜] ( _n_ ) = _O_ ( _n_ [2] _m_ ). In comparison, the time complexity of
+recomputing DP policies is _O_ [˜] ( _n_ _[m]_ [+1] ) under dynamically changing graph structures (see Lu et al.
+(2025a)), as Algorithm 1 needs to be repeatedly executed. Here we briefly show the inference time
+gap arising from this complexity distinction. When _n_ = 1000 and _m_ = 2, it takes over 2 minutes to
+run Algorithm 1 at each timestep using an Intel Core i9-13900HX CPU. The inference time of our
+GNN-represented RL policy, however, is less than 1 second under the same condition. Our subsequent
+tests further show this inference can be reduced to below 0 _._ 01 seconds under GPU accelerations.
+
+
+5 EVALUATIONS
+
+
+Here we provide our experimental evaluations of single-graph DP pursuers and cross-graph RL
+pursuers under partial observability. We assume that there are two pursuers ( _m_ = 2) against the
+single evader. This is a reasonable setting in view of the graph-theoretic result that 3 pursuers with
+full observations can always capture the evader in any planar graph (Fromme & Aigner, 1984). The
+initial position is randomly generated under the restriction that the distance between the evader and
+the pursuers is larger than the observation range of 2. Besides, no observation sensors except for the
+
+
+1Code can be found at https://github.com/Cahemgco/EPG ~~c~~ ode.
+
+
+7
+
+
+pursuers themselves are allowed. The test graphs include Grid Map (a 10 _×_ 10 grid), Scotland-Yard
+Map (from the board game Scotland-Yard), Downtown Map (a real-world location from Google
+Maps), and 7 famous real-world spots (from Times Square to Sydney Opera House). The graph
+details are shown in Appendix D.1, and the statistics of these graphs are shown in Table 1 (left).
+
+
+Table 1: Graph Data (Total Node Number, Average Degree, Diameter) and Success Rate Comparison
+
+|Col1|Node Degree Diameter|Shortest Path DP DP<br>Pos belief|
+|---|---|---|
+|Grid Map<br>Scotland-Yard Map<br>Downtown Map<br>Times Square<br>Hollywood Walk of Fame<br>Sagrada Familia<br>The Bund<br>Eiffel Tower<br>Big Ben<br>Sydney Opera House|100<br>3.60<br>18<br>200<br>3.91<br>19<br>206<br>2.98<br>19<br>171<br>2.58<br>22<br>201<br>2.42<br>31<br>231<br>2.60<br>25<br>200<br>2.53<br>29<br>202<br>2.34<br>38<br>192<br>2.48<br>34<br>183<br>2.33<br>37|0.00<br>0.59<br>**0.78**<br>0.00<br>0.44<br>**0.63**<br>0.02<br>0.73<br>**0.90**<br>0.01<br>0.41<br>**0.69**<br>0.01<br>0.25<br>**0.48**<br>0.00<br>0.24<br>**0.36**<br>0.03<br>0.30<br>**0.57**<br>0.29<br>0.69<br>**0.94**<br>0.08<br>0.54<br>**0.74**<br>0.05<br>0.47<br>**0.87**|
+
+
+5.1 EVALUATIONS OF EXTENDED DP PURSUERS
+
+
+We first evaluate the strength of the extended DP pursuers under partial observability (Section 3.2).
+We denote by DPPos the position-extended pursuer (5) and by DPbelief the belief-averaged pursuer
+(6). The pursuers succeed ( _f_ ( _s_ ) = 1) when at least one of them is adjacent to the evader on the graph
+within 128 timesteps, and the success rates are averaged over 500 tests. To simulate the difficult
+case for security purposes, the evader is set to be the provably optimal DP evader (3) with global
+observations and asynchronous moves. For an intuitive comparison, we also include the result of
+directly following the shortest path to the evader under full observability.
+
+
+As is shown in Table 1 (right), the shortest-path strategy can hardly capture the optimal DP evader. In
+comparison, though under a limited observation range of 2, the extended DP pursuers demonstrate
+significantly higher success rates. Besides, DPbelief consistently outperforms DPPos. This result
+verifies that the direct minimax policy (5) can be improved through belief averaging. Actually, since
+equation (5) treats all possible positions as equal, the result of the inner max can be very large when
+the size of Pos is large, leading to pessimistic pursuit behaviors like staying at certain “rest points.”
+
+
+We further take a look at how observation capabilities could affect success rates. We increase the
+observation range and evaluate the performance of DPbelief (6). As is shown in Table 6 (Appendix
+D.2), the success rates monotonically increase with the observation range and reach 100% when the
+range exceeds 5. While _D_ ( _·_ ) is an accurate estimator of the worst-case pursuit distance in Markov
+PEGs, it becomes an optimistic one under partial observability. Nevertheless, the experimental results
+show that combining this optimistic estimator with belief information can maintain the strength of
+the DP-based pursuit strategies, even under very limited observation capabilities.
+
+
+5.2 EVALUATIONS OF GENERALIZED RL PURSUERS
+
+
+Now, we implement and evaluate our cross-graph reinforcement learning method aimed at R2PS
+(Section 4). We discretize the maps from the Dungeon environment (Chen et al., 2019) to construct a
+synthetic training set containing 150 graphs and further include 150 random urban locations from
+Google Maps to create a large training set with a total of 300 graphs, where the maximum node
+number is no more than 500. We apply the R2PS learning scheme to the synthetic training set and the
+large training set. Appendix C.4 provides the learning curves of the pursuer policies under partial
+observability. As is shown in Figure 4, using the extended DP pursuers as guidance ( _β_ = 0 _._ 1) helps
+to improve the training efficiency over pure reinforcement learning ( _β_ = 0) under either training set.
+
+
+Policy-Space Response Oracles (PSRO) (Lanctot et al., 2017) is a general reinforcement learning
+method extended from the game-theoretic approach of double oracle (DO) (McMahan et al., 2003)
+for equilibrium finding. Here we compare the zero-shot performance of our generalized pursuer
+policy with a PSRO policy that is directly trained on the 10 test graphs using 10 iterations (10000
+
+
+8
+
+
+Table 2: Success Rate Comparison across Different Graphs and Strategies
+
+|Evader Policy|Stay|DP<br>sync|DP<br>async|BR<br>async|
+|---|---|---|---|---|
+|Pursuer Policy|Ours<br>PSRO|Ours<br>PSRO|Ours<br>PSRO|Ours|
+|Grid Map<br>Scotland-Yard Map<br>Downtown Map<br>Times Square<br>Hollywood Walk of Fame<br>Sagrada Familia<br>The Bund<br>Eiffel Tower<br>Big Ben<br>Sydney Opera House|**1.00**<br>**1.00**<br>**1.00**<br>**1.00**<br>**1.00**<br>0.99<br>**1.00**<br>0.93<br>**1.00**<br>0.95<br>**0.99**<br>0.93<br>**1.00**<br>0.95<br>**1.00**<br>0.99<br>**1.00**<br>0.99<br>**1.00**<br>0.98|**1.00**<br>0.94<br>**1.00**<br>0.47<br>**1.00**<br>0.88<br>**1.00**<br>0.16<br>**0.90**<br>0.00<br>**0.96**<br>0.07<br>**0.92**<br>0.31<br>**1.00**<br>0.97<br>**1.00**<br>0.29<br>**1.00**<br>0.07|**1.00**<br>0.88<br>**0.76**<br>0.00<br>**0.99**<br>0.03<br>**0.95**<br>0.04<br>**0.38**<br>0.00<br>**0.20**<br>0.00<br>**0.25**<br>0.04<br>**1.00**<br>0.52<br>**0.82**<br>0.24<br>**0.95**<br>0.11|1.00<br>0.73<br>0.92<br>0.27<br>0.10<br>0.20<br>0.23<br>0.55<br>0.65<br>0.31|
+
+
+episodes per iteration). Our RL policy aimed at R2PS, however, is pretrained under the synthetic
+training set with 150 graphs for 30000 episodes ( _β_ = 0 _._ 1) and then trained under the 150 random
+urban graphs for 70000 episodes. Since our training process never comes across the test graphs, our
+RL policy has to zero-shot generalize to these unseen graph structures during evaluations.
+
+
+As is shown in Table 2, our pursuer policy consistently outperforms the PSRO pursuer policy in the
+real-world graphs against a variety of opponents, where:
+
+
+    - Stay corresponds to an evader that stays at the initial position. Since the initial distance
+between the pursuers and the evader is larger than the observation range, and the pursuers
+have no prior knowledge about the evader’s policy, staying still is a reasonable strategy and
+leads to the occasional failure of these RL pursuers.
+
+    - DPsync corresponds to the DP evader policy (2) under synchronous moves, and DPasync
+corresponds to the strictly optimal policy (3) under asynchronous moves. It is clear that
+the asynchronous-move evaders are much stronger than the synchronous-move ones due to
+the advantage of forecasting the pursuers’ decisions. Against DPasync, the PSRO pursuers
+struggle under most of the test graphs in comparison with ours.
+
+    - BRasync corresponds to the best-responding asynchronous-move evader directly trained
+against our RL pursuers in the test graphs for 30000 episodes (converged). Even under this
+worst case, the success rates of our generalized pursuers are over 50% in half of the graphs.
+
+
+Since our worst-case zero-shot performance is clearly better than the PSRO policy directly trained
+on the test graphs, we can say that our real-time strategies are worst-case robust even under varying
+graph structures, which implies that our approach achieves R2PS under partial observability.
+
+
+5.3 SCALABILITY TESTS AND ABLATION STUDIES
+
+
+Table 3: RL Success Rate (against DPasync) and Comparison of Inference Time in Large Graphs
+
+|Col1|Node Number|Sucess Rate|RL Time (s)|DP Time (s)|
+|---|---|---|---|---|
+|Times Square<br>Hollywood Walk of Fame<br>Sagrada Familia<br>The Bund<br>Eiffel Tower<br>Big Ben<br>Sydney Opera House|1805<br>1251<br>2065<br>1723<br>1825<br>1681<br>744|0.56<br>0.46<br>0.33<br>0.46<br>0.41<br>0.49<br>0.76|0.009837<br>0.007917<br>0.009895<br>0.008117<br>0.009616<br>0.007752<br>0.007648|101<br>33<br>139<br>83<br>96<br>79<br>6|
+
+
+Now we further verify the real-time pursuit capability under the graphs with higher complexity.
+We create another set of test graphs based on the seven famous locations in Table 1 (from Times
+Square to Sydney Opera House). Compared to the original graphs, the new graphs double both
+
+
+9
+
+
+the map range and the discretization accuracy, leading to significantly larger node numbers. The
+success rates of our RL pursuer policy against the optimal evader DPasync and the inference time
+comparisons under an NVIDIA GeForce RTX 2080 Ti GPU are shown in Table 3. Clearly, our RL
+policy requires significantly smaller inference time in comparison with DP and maintains desirable
+overall performance under large graphs in comparison with the results in Table 2. Figure 6 (Appendix
+D.2) provides the scaling plots of our GNN-based RL policy inference and DP computation time.
+
+
+We are also curious about whether our RL policy trained under the limited observation range of 2 can
+demonstrate better performance when the observation range is larger during inference time. As is
+shown in Table 7 (Appendix D.2), the success rates of our RL pursuers monotonically increase with
+the observation range. This additional result implies that our RL policy trained with the minimum
+observability can be directly applied to the cases with better sensing capabilities.
+
+
+Finally, we examine how the belief updates affect pursuit performance. As we have mentioned,
+our belief preservation (7) always employs a uniform evader policy _ν_ since we could not access
+prior information about the true opponent. However, if we manage to obtain such information in
+reality, we can instantly improve the pursuit performance by replacing _ν_ with the actual evader policy.
+As is shown in Table 4, utilizing known opponent information improves success rates against the
+best-responding evader BRasync. On the other hand, if we reduce the belief update frequency from
+every single step (original) to every 2 or 3 steps, then the pursuit success rates will instantly decline.
+This result further demonstrates the benefits of our belief update mechanism.
+
+
+Table 4: RL Success Rate (against BRasync) Comparison under Different Belief Update Conditions
+
+|Belief Update Condition|Known Opponent|Original|Every 2 Steps|Every 3 Steps|
+|---|---|---|---|---|
+|Grid Map<br>Scotland-Yard Map<br>Downtown Map<br>Times Square<br>Hollywood Walk of Fame<br>Sagrada Familia<br>The Bund<br>Eiffel Tower<br>Big Ben<br>Sydney Opera House|1.00<br>0.99<br>1.00<br>0.42<br>0.13<br>0.28<br>0.54<br>0.81<br>0.82<br>0.54|1.00<br>0.73<br>0.92<br>0.27<br>0.10<br>0.20<br>0.23<br>0.55<br>0.65<br>0.31|0.60<br>0.34<br>0.61<br>0.18<br>0.04<br>0.12<br>0.13<br>0.32<br>0.40<br>0.22|0.42<br>0.28<br>0.39<br>0.17<br>0.03<br>0.05<br>0.12<br>0.29<br>0.25<br>0.15|
+
+
+6 CONCLUSION
+
+
+This paper presents a general approach to worst-case robust real-time pursuit strategies under partial
+observability and varying graph structures. We first theoretically examine a dynamic programming
+(DP) algorithm and prove that it can unify the solutions to Markov PEGs with either synchronous
+moves or asynchronous moves. Then, we propose a belief preservation mechanism to efficiently
+abstract evader information from the observation histories of the pursuers and thus construct the
+observation-based pursuer policies. Finally, we embed the belief preservation mechanism into the
+framework of EPG (Lu et al., 2025a) to find robust real-time pursuit strategies, fulfilling crossgraph reinforcement learning against the asynchronous-move DP evader under partial observability.
+Experiments show that our observation-based DP pursuers can be used as guidance to facilitate
+efficient policy exploration during RL training. Under unseen real-world graph structures, our crossgraph policy manages to generate real-time pursuit strategies with worst-case robustness, consistently
+outperforming the PSRO policy directly trained under the test graphs. Comparative results also reveal
+that the pursuers can benefit from belief updates, while the evader benefits from asynchronous moves.
+
+
+In this work, the belief preservation mechanism provides an affordable way to handle partial observability in real time. We show that this mechanism can be effectively combined with the existing PEG
+methods like DP and EPG. After adversarial reinforcement learning across graphs, a generalized
+pursuer policy under belief preservation is eventually derived, leading to the first worst-case robust
+real-time pursuit strategies under partial observability. Hopefully, the current research on PEGs could
+encourage subsequent works on the broader research topics concerning real-world security.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+This work was supported in part by the National Natural Science Foundation of China under Grants
+62293541 and 62136008 and in part by the Beijing Nova Program under Grant 20240484514. We
+also thank all the reviewers for their helpful suggestions during the ICLR review process.
+
+
+REFERENCES
+
+
+Yuhong Cao, Tianxiang Hou, Yizhuo Wang, Xian Yi, and Guillaume Sartoretti. Ariadne: A reinforcement learning approach using attention-based deep networks for exploration. In _2023 IEEE_
+_International Conference on Robotics and Automation (ICRA)_, pp. 10219–10225. IEEE, 2023.
+
+
+Jiajun Chai, Zijie Zhao, Yuanheng Zhu, and Dongbin Zhao. A survey of cooperative multi-agent
+reinforcement learning for multi-task scenarios. _Artificial Intelligence Science and Engineering_, 1
+(2):98–121, 2025. [doi:10.23919/AISE.2025.000008.](https://doi.org/10.23919/AISE.2025.000008)
+
+
+Fanfei Chen, Shi Bai, Tixiao Shan, and Brendan Englot. Self-learning exploration and mapping for
+mobile robots via deep reinforcement learning. In _Aiaa scitech 2019 forum_, pp. 0396, 2019.
+
+
+Petros Christodoulou. Soft actor-critic for discrete action settings. _arXiv preprint arXiv:1910.07207_,
+2019.
+
+
+Tianzhe Chu, Yuexiang Zhai, Jihan Yang, Shengbang Tong, Saining Xie, Dale Schuurmans, Quoc V
+Le, Sergey Levine, and Yi Ma. SFT memorizes, RL generalizes: A comparative study of foundation
+model post-training. In _Forty-second International Conference on Machine Learning_, 2025.
+
+
+Timothy H Chung, Geoffrey A Hollinger, and Volkan Isler. Search and pursuit-evasion in mobile
+robotics: A survey. _Autonomous robots_, 31:299–316, 2011.
+
+
+Wojciech M Czarnecki, Gauthier Gidel, Brendan Tracey, Karl Tuyls, Shayegan Omidshafiei, David
+Balduzzi, and Max Jaderberg. Real world games look like spinning tops. _Advances in Neural_
+_Information Processing Systems_, 33:17443–17454, 2020.
+
+
+M Fromme and M Aigner. A game of cops and robbers. _Discrete Appl. Math_, 8:1–12, 1984.
+
+
+Arthur S Goldstein and Edward M Reingold. The complexity of pursuit on a graph. _Theoretical_
+_computer science_, 143(1):93–112, 1995.
+
+
+Tuomas Haarnoja, Aurick Zhou, Kristian Hartikainen, George Tucker, Sehoon Ha, Jie Tan, Vikash
+Kumar, Henry Zhu, Abhishek Gupta, Pieter Abbeel, et al. Soft actor-critic algorithms and
+applications. _arXiv preprint arXiv:1812.05905_, 2018.
+
+
+Hado Hasselt. Double Q-learning. _Advances in Neural Information Processing Systems_, 23, 2010.
+
+
+Karel Horak and Branislav Bo´ sanskˇ y.` Dynamic programming for one-sided partially observable
+pursuit-evasion games. In _International Conference on Agents and Artificial Intelligence_, volume 2,
+pp. 503–510. SCITEPRESS, 2017.
+
+
+Marc Lanctot, Vinicius Zambaldi, Audrunas Gruslys, Angeliki Lazaridou, Karl Tuyls, Julien Perolat,´
+David Silver, and Thore Graepel. A unified game-theoretic approach to multiagent reinforcement
+learning. _Advances in Neural Information Processing Systems_, 30, 2017.
+
+
+Pengdeng Li, Shuxin Li, Xinrun Wang, Jakub Cerny, Youzhi Zhang, Stephen McAleer, Hau Chan,`
+and Bo An. Grasper: A generalist pursuer for pursuit-evasion problems. In _Proceedings of the 23rd_
+_International Conference on Autonomous Agents and Multiagent Systems_, pp. 1147–1155, 2024.
+
+
+Shuxin Li, Xinrun Wang, Youzhi Zhang, Wanqi Xue, Jakub Cern [ˇ] y, and Bo An.` Solving large-scale
+pursuit-evasion games using pre-trained strategies. In _Proceedings of the AAAI Conference on_
+_Artificial Intelligence_, volume 37, pp. 11586–11594, 2023.
+
+
+Runyu Lu, Peng Zhang, Ruochuan Shi, Yuanheng Zhu, Dongbin Zhao, Yang Liu, Dong Wang, and
+Cesare Alippi. Equilibrium policy generalization: A reinforcement learning framework for crossgraph zero-shot generalization in pursuit-evasion games. In _The Thirty-ninth Annual Conference_
+_on Neural Information Processing Systems_, 2025a.
+
+
+11
+
+
+Runyu Lu, Yuanheng Zhu, and Dongbin Zhao. Divergence-regularized discounted aggregation:
+Equilibrium finding in multiplayer partially observable stochastic games. In _The_ _Thirteenth_
+_International Conference on Learning Representations_, 2025b.
+
+
+Runyu Lu, Yuanheng Zhu, Dongbin Zhao, Yu Liu, and You He. Last-iterate convergence to approximate Nash equilibria in multiplayer imperfect information games. _IEEE Transactions on Neural_
+_Networks and Learning Systems_, 36(8):13859–13873, 2025c. [doi:10.1109/TNNLS.2024.3516693.](https://doi.org/10.1109/TNNLS.2024.3516693)
+
+
+Kostas Margellos and John Lygeros. Hamilton-Jacobi formulation for reach-avoid differential games.
+_IEEE Transactions on Automatic Control_, 56(8):1849–1861, 2011.
+
+
+H Brendan McMahan, Geoffrey J Gordon, and Avrim Blum. Planning in the presence of cost
+functions controlled by an adversary. In _Proceedings of_ _the 20th International_ _Conference_ _on_
+_Machine Learning (ICML-03)_, pp. 536–543, 2003.
+
+
+Christos H Papadimitriou and John N Tsitsiklis. The complexity of Markov decision processes.
+_Mathematics of operations research_, 12(3):441–450, 1987.
+
+
+Tim Roughgarden. _Twenty lectures on algorithmic game theory_ . Cambridge University Press, 2016.
+
+
+Lloyd S Shapley. Stochastic games. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 39(10):
+1095–1100, 1953.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in Neural Information Processing_
+_Systems_, 30, 2017.
+
+
+Rene Vidal, Shahid Rashid, Cory Sharp, Omid Shakernia, Jin Kim, and Shankar Sastry. Pursuitevasion games with unmanned ground and aerial vehicles. In _Proceedings_ _2001_ _ICRA._ _IEEE_
+_International_ _Conference_ _on_ _Robotics_ _and_ _Automation_ _(Cat._ _No._ _01CH37164)_, volume 3, pp.
+2948–2955. IEEE, 2001.
+
+
+Rene Vidal, Omid Shakernia, H Jin Kim, David Hyunchul Shim, and Shankar Sastry. Probabilistic
+pursuit-evasion games: Theory, implementation, and experimental evaluation. _IEEE Transactions_
+_on Robotics and Automation_, 18(5):662–669, 2002.
+
+
+Marcos AM Vieira, Ramesh Govindan, and Gaurav S Sukhatme. Optimal policy in discrete pursuitevasion games. _Department of Computer Science, University of Southern California, Tech. Rep_,
+2008.
+
+
+Oriol Vinyals, Meire Fortunato, and Navdeep Jaitly. Pointer networks. _Advances in Neural Informa-_
+_tion Processing Systems_, 28, 2015.
+
+
+Zonghan Wu, Shirui Pan, Fengwen Chen, Guodong Long, Chengqi Zhang, and Philip S Yu. A
+comprehensive survey on graph neural networks. _IEEE Transactions on Neural Networks and_
+_Learning Systems_, 32(1):4–24, 2020.
+
+
+Wanqi Xue, Youzhi Zhang, Shuxin Li, Xinrun Wang, Bo An, and Chai Kiat Yeo. Solving large-scale
+extensive-form network security games via neural fictitious self-play. In _Proceedings of the 28th_
+_International Joint Conference on Artificial Intelligence_, 2021.
+
+
+Wanqi Xue, Bo An, and Chai Kiat Yeo. NSGZero: Efficiently learning non-exploitable policy in
+large-scale network security games with neural Monte Carlo tree search. In _Proceedings of the_
+_AAAI Conference on Artificial Intelligence_, volume 36, pp. 4646–4653, 2022.
+
+
+Chao Yu, Akash Velu, Eugene Vinitsky, Jiaxuan Gao, Yu Wang, Alexandre Bayen, and Yi Wu. The
+surprising effectiveness of PPO in cooperative multi-agent games. _Advances in Neural Information_
+_Processing Systems_, 35:24611–24624, 2022.
+
+
+Zijie Zhao, Honglei Guo, Shengqian Chen, Kaixuan Xu, Bo Jiang, Yuanheng Zhu, and Dongbin Zhao.
+Empowering multi-robot cooperation via sequential world models. In _The Thirteenth International_
+_Conference on Learning Representations_, 2026.
+
+
+12
+
+
+Zhengyuan Zhou, Ryo Takei, Haomiao Huang, and Claire J Tomlin. A general, open-loop formulation
+for reach-avoid games. In _2012 IEEE 51st IEEE Conference on Decision and Control (CDC)_, pp.
+6501–6506. IEEE, 2012.
+
+
+Shuxin Zhuang, Shuxin Li, Tianji Yang, Muheng Li, Xianjie Shi, Bo An, and Youzhi Zhang. Solving
+urban network security games: Learning platform, benchmark, and challenge for AI research.
+_arXiv preprint arXiv:2501.17559_, 2025.
+
+
+13
+
+
+A OMITTED PROOFS
+
+
+A.1 PROOF OF THEOREM 1
+
+
+_Proof._ For no-exit PEGs, the Nash value satisfies the following Bellman minimax equation:
+
+
+   
+- _µ_ ( _s, a_ ) _r_ ( _s, a, b_ ) + _γ_ [�]
+
+_a∈A_ _s_ _[′]_ _∈_
+
+
+1 _f_ ( _s_ ) = 1 _._
+
+
+       
+[�] _P_ ( _s, a, b, s_ _[′]_ ) _V_ _[∗]_ ( _s_ _[′]_ ) _f_ ( _s_ ) = 0 _,_
+
+_s_ _[′]_ _∈S_
+
+
+_V_ _[∗]_ ( _s_ ) =
+
+
+
+
+
+
+ max 
+_µ_ ( _s_ ) _∈_ ∆( _A_ ) [min] _b∈B_ _a_
+
+
+
+Since the transition is deterministic and a non-zero reward is received only when a termination state
+is reached, we can simplify the Bellman equation as follows:
+
+
+_V_ _[∗]_ ( _s_ ) =
+
+
+- max - _µ_ ( _s, a_ ) _γV_ _[∗]_ ( _s_ _[′]_ = _P_ ( _s, a, b_ )) _f_ ( _s_ ) = 0 _,_
+_µ_ ( _s_ ) _∈_ ∆( _A_ ) [min] _b∈B_ _a∈A_
+
+1 _f_ ( _s_ ) = 1 _._
+
+
+The equilibrium policy for the max-player satisfies:
+
+
+          
+
+
+_µ_ _[∗]_ ( _s_ ) _∈_ arg max
+_µ_ ( _s_ ) _∈_ ∆( _A_ )
+
+
+min
+_b∈B_
+
+
+- _µ_ ( _s, a_ ) _V_ _[∗]_ ( _s_ _[′]_ = _P_ ( _s, a, b_ ))
+
+
+_a∈A_
+
+
+_._
+
+
+When there is a pure-strategy Nash equilibrium in the game, the arg max has a pure-strategy solution,
+and the Bellman equation can be further simplified:
+
+
+_V_ _[∗]_ ( _s_ ) = _γ_ max _[∗]_ [(] _[s][′]_ [=] _[ P]_ [(] _[s, a, b]_ [))] _[.]_ (9)
+_a∈A_ [min] _b∈B_ _[V]_
+
+
+Note that the Nash value has the form of _V_ _[∗]_ ( _s_ ) = _γ_ _[d]_ ( _d_ _∈_ N). Therefore, we consider using
+mathematical induction. We assume that _V_ _[∗]_ ( _s_ ) = _γ_ _[D]_ [(] _[s]_ [)] holds for all states _s_ that satisfies either
+_V_ _[∗]_ ( _s_ ) = _γ_ _[d]_ or _D_ ( _s_ ) = _d_ when _d < k_ ( _γ_ _[d]_ _> γ_ _[k]_ ). We want to prove that _V_ _[∗]_ ( _s_ ) = _γ_ _[D]_ [(] _[s]_ [)] holds for
+all states _s_ that satisfies either _V_ _[∗]_ ( _s_ ) = _γ_ _[k]_ or _D_ ( _s_ ) = _k_ . Clearly, our initialization guarantees that
+the proposition holds for _k_ = 0. Our update condition _D_ ( _np, ne_ ) = _∞_ guarantees that every state
+_s_ _∈_ _S_ is pushed into and popped from _Q_ at most once. Note that the following proof reverses the
+notations of _s_ and _s_ _[′]_ in (9) to better align with _s_ = ( _sp, se_ ) in Algorithm 1.
+
+Now, we prove the first half of the proposition. For an arbitrary state _s_ _[′]_ = ( _np, ne_ ) that satisfies
+_V_ _[∗]_ ( _s_ _[′]_ ) = _γ_ _[k]_, the simplified Bellman equation (9) guarantees that there exists _a_ = _sp_ _∈A_ ( _np_ ) and
+_b_ = _se_ _∈B_ ( _ne_ ) such that _V_ _[∗]_ ( _s_ _[′]_ ) = _γV_ _[∗]_ ( _s_ = _P_ ( _s_ _[′]_ _, a, b_ )). Therefore, there exists _s_ = ( _sp, se_ )
+such that _V_ _[∗]_ ( _s_ ) = _γ_ _[k][−]_ [1] . According to the first half of the induction hypothesis, we have that
+_D_ ( _s_ ) = _k −_ 1 _< ∞_, which implies that the algorithm once pushed _s_ _[′]_ into _Q_ . Besides, the Bellman
+equation guarantees that _∀b_ _[′]_ _∈B_ ( _ne_ ) _, V_ _[∗]_ ( _P_ ( _s_ _[′]_ _, a, b_ _[′]_ )) _≥_ _V_ _[∗]_ ( _P_ ( _s_ _[′]_ _, a, b_ )) = _V_ _[∗]_ ( _s_ ) = _γ_ _[k][−]_ [1] _>_ _γ_ _[k]_ .
+By induction hypothesis, _D_ ( _sp, n_ _[′]_ _e_ [)] _[≤]_ _[D]_ [(] _[s][p][, s][e]_ [)][ holds for any neighbor] _[ n][′]_ _e_ [of] _[ n][e]_ [.] [Therefore, the]
+algorithm must enumerate _ne_ when popping _s_ = ( _sp, se_ ). If we have _D_ ( _np, ne_ ) = _∞_ at the moment,
+then _np_ will be enumerated in the inner loop, and we will have _D_ ( _np, ne_ ) = _D_ ( _sp, se_ ) + 1 = _k_ .
+Now we complete the proof by showing that _D_ ( _np, ne_ ) _< ∞_ implies _D_ ( _np, ne_ ) = _k_ . Actually, if
+_k_ _< D_ ( _np, ne_ ) _< ∞_, then _D_ ( _s_ _[′]_ ) must be computed by adding 1 to some _D_ ( _s_ _[′′]_ ) _≥_ _k_ . Since _s_ _[′′]_ must
+be popped from _Q_ no later than _s_, it is contradictory to the fact that _D_ ( _s_ _[′′]_ ) _>_ _D_ ( _s_ ) = _k −_ 1. If
+_D_ ( _np, ne_ ) _< k_, then the second half of the induction hypothesis implies that _V_ _[∗]_ ( _s_ _[′]_ ) = _γ_ _[D]_ [(] _[n][p][,n][e]_ [)],
+which is contradictory to the fact that _V_ _[∗]_ ( _s_ _[′]_ ) = _γ_ _[k]_ .
+
+
+Then, we prove the second half of the proposition. For an arbitrary state _s_ _[′]_ = ( _np, ne_ ) that satisfies
+_D_ ( _s_ _[′]_ ) = _k_, the _D_ ( _s_ ) must be computed by adding 1 to some _D_ ( _s_ ) = _k −_ 1, where _s_ = ( _sp, se_ ).
+According to the first half of the induction hypothesis, we have _V_ _[∗]_ ( _s_ ) = _γ_ _[k]_ . The algorithm guarantees
+that _D_ ( _sp, n_ _[′]_ _e_ [)] _[ ≤]_ _[D]_ [(] _[s][p][, s][e]_ [) =] _[ k][−]_ [1][ holds for any neighbor] _[ n][′]_ _e_ [of] _[ n][e]_ [. By induction hypothesis, it holds]
+that _∀b_ _[′]_ _∈B_ ( _ne_ ) _, V_ _[∗]_ ( _P_ ( _s_ _[′]_ _, a, b_ _[′]_ )) _≥_ _V_ _[∗]_ ( _P_ ( _s_ _[′]_ _, a, b_ )) when _a_ = _sp_ _∈A_ ( _np_ ) and _b_ = _se_ _∈B_ ( _ne_ ).
+Therefore, min _[∗]_ [(] _[P]_ [(] _[s][′][, a, b]_ [)) =] _[ γ][k][−]_ [1][ when] _[ a]_ [ =] _[ s][p]_ _[∈A]_ [(] _[n][p]_ [)][.] [If there exists] _[ a][†]_ [=] _[ s][†]_ _p_ _[∈A]_ [(] _[n][p]_ [)]
+_b∈B_ ( _ne_ ) _[V]_
+
+such that min _[∗]_ [(] _[P]_ [(] _[s][′][, a][′][, b]_ [))] _[>]_ _[γ][k][−]_ [1][,] [then] [we] [let] _[b][†]_ [=] [arg min] _V_ _[∗]_ ( _P_ ( _s_ _[′]_ _, a_ _[†]_ _, b_ )) _>_ _γ_ _[k][−]_ [1]
+_b∈B_ ( _ne_ ) _[V]_ _b∈B_ ( _ne_ )
+
+
+14
+
+
+and let _s_ _[†]_ = ( _s_ _[†]_ _p_ _[, s][†]_ _e_ [=] _[b][†]_ [)][.] [According] [to] [the] [first] [half] [of] [the] [induction] [hypothesis,] _[D]_ [(] _[s][†]_ _p_ _[, n][′]_ _e_ [)] _[≤]_
+_D_ ( _s_ _[†]_ _p_ _[, s][†]_ _e_ [)] _[ < k][ −]_ [1][ holds for any neighbor] _[ n][′]_ _e_ [of] _[ n][e]_ [.] [Since] _[ D]_ [(] _[s][†]_ _p_ _[, s][†]_ _e_ [)] _[ < D]_ [(] _[s][p][, s][e]_ [)][,] _[ s][†]_ [ must be popped]
+from _Q_ earlier than _s_, which means that _D_ ( _s_ ) = _∞_ when _s_ _[†]_ is popped. Therefore, _s_ _[′]_ = ( _np, ne_ )
+must be enumerated when _s_ _[†]_ is popped, which is contradictory to the fact that _D_ ( _s_ _[′]_ ) = _∞_ when _s_ is
+popped. Therefore, _V_ _[∗]_ ( _s_ _[′]_ ) = _γ_ max _[∗]_ [(] _[P]_ [(] _[s][′][, a, b]_ [)) =] _[ γ][k]_ [.]
+_a∈A_ [min] _b∈B_ _[V]_
+
+
+For now, we have proved that _V_ _[∗]_ ( _s_ ) = _γ_ _[D]_ [(] _[s]_ [)] . Therefore:
+
+
+_µ_ _[∗]_ ( _sp, se_ ) = arg min
+neighbor _np_ of _sp_
+
+
+_ν_ _[∗]_ ( _sp, se_ ) = arg max
+neighbor _ne_ of _se_
+
+
+- max _⇒_ _µ_ _[∗]_ ( _s_ ) = arg max min _[∗]_ [(] _[P]_ [(] _[s, a, b]_ [))] _[,]_
+neighbor _ne_ of _se_ _[D]_ [(] _[n][p][, n][e]_ [)] _a∈A_ _b∈B_ _[V]_
+
+
+- min _⇒_ _ν_ _[∗]_ ( _s_ ) = arg min max _[∗]_ [(] _[P]_ [(] _[s, a, b]_ [))] _[.]_
+neighbor _np_ of _sp_ _[D]_ [(] _[n][p][, n][e]_ [)] _b∈B_ _a∈A_ _[V]_
+
+
+As there exists a pure-strategy Nash equilibrium, it is directly guaranteed that ( _µ_ _[∗]_ _, ν_ _[∗]_ ) is a Nash
+equilibrium.
+
+
+15
+
+
+A.2 PROOF OF LEMMA 1
+
+
+_Proof._ We consider the cases of _D_ ( _np, ne_ ) = _∞_ and 0 _< D_ ( _np, ne_ ) _< ∞_, separately.
+
+
+The first case is _D_ ( _np, ne_ ) = _∞_, which implies that ( _np, ne_ ) is never enqueued:
+
+
+Suppose that min
+neighbor _sp_ of _np_
+
+
+- max _< ∞_ . Then, we let
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+_sp_ = arg min
+neighbor _sp_ of _np_
+
+
+- max _, se_ = arg max _D_ ( _sp, se_ ) _._
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)] neighbor _se_ of _ne_
+
+
+Since _D_ ( _sp, se_ ) = min
+neighbor _sp_ of _np_
+
+
+- max _< ∞_, ( _sp, se_ ) is once enqueued.
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+Since _se_ = arg max _D_ ( _sp, se_ ), we have that ∄ _n_ _[′]_ _e_ _[∈V][,]_ [ (] _[n][e][, n]_ _e_ _[′]_ [)] _[∈]_ _[E, D]_ [(] _[s][p][, n][′]_ _e_ [)] _[>]_ _[D]_ [(] _[s][p][, s][e]_ [)][.]
+neighbor _se_ of _ne_
+
+Since _D_ ( _np, ne_ ) = _∞_, state ( _np, ne_ ) will be enumerated when ( _sp, se_ ) is dequeued. Then, _D_ ( _np, ne_ )
+is enqueued, which leads to a contradition.
+
+
+Therefore, we have min
+neighbor _sp_ of _np_
+
+in the first case.
+
+
+- max = _∞_, which means the equation holds
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+The second case is 0 _<_ _D_ ( _np, ne_ ) _<_ _∞_, which implies that ( _np, ne_ ) is once enumerated when
+a state ( _sp, se_ ) _∈_ Neighbor( _np, ne_ ) is dequeued. According to the enumeration rule, we have
+∄ _n_ _[′]_ _e_ _[∈V][,]_ [ (] _[n][e][, n]_ _e_ _[′]_ [)] _[ ∈]_ _[E, D]_ [(] _[s][p][, n][′]_ _e_ [)] _[ > D]_ [(] _[s][p][, s][e]_ [)][, which implies] _[ s][e]_ [=] arg max _D_ ( _sp, se_ ). Since
+neighbor _se_ of _ne_
+
+_D_ ( _np, ne_ ) = _D_ ( _sp, se_ ) + 1, we have:
+
+
+_D_ ( _np, ne_ ) _≥_ min
+neighbor _sp_ of _np_
+
+
+- max + 1 _._
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+Now redefine _sp_ = arg min
+neighbor _sp_ of _np_
+
+
+- max _, se_ = arg max _D_ ( _sp, se_ ).
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)] neighbor _se_ of _ne_
+
+
+Then, we have _D_ ( _sp, se_ ) = min
+neighbor _sp_ of _np_
+
+
+- max and ∄ _n_ _[′]_ _e_ _[∈V][,]_ [ (] _[n][e][, n]_ _e_ _[′]_ [)] _[∈]_
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+_E, D_ ( _sp, n_ _[′]_ _e_ [)] _[>]_ _[D]_ [(] _[s][p][, s][e]_ [)][.] [Since] [the] _[D]_ [values] [in] _[Q]_ [do] [not] [decrease,] [we] [have] _[D]_ [(] _[n][p][, n][e]_ [)] _[≤]_
+
+
+_D_ ( _sp, se_ ) + 1 = min
+neighbor _sp_ of _np_
+
+
+- max + 1.
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+Therefore, _D_ ( _np, ne_ ) = min
+neighbor _sp_ of _np_
+
+
+- max + 1 holds in the second case.
+neighbor _se_ of _ne_ _[D]_ [(] _[s][p][, s][e]_ [)]
+
+
+To conclude, the equation always holds when _D_ ( _np, ne_ ) _>_ 0.
+
+
+16
+
+
+A.3 PROOF OF THEOREM 2
+
+
+_Proof._ First, we prove that for any state _s_ = ( _sp, se_ ) satisfying _D_ ( _s_ ) = _d_ _<_ _∞_, _µ_ _[∗]_ guarantees
+pursuit within _d_ steps against any evasion strategy:
+
+
+Clearly, the proposition holds true when _d_ = 0. Assume that the proposition holds for all _d_ _<_ _k_ .
+
+
+When _d_ = _k_, we let _np_ = arg min
+neighbor _np_ of _sp_
+
+
+- max _, ne_ = arg max _D_ ( _np, ne_ ).
+neighbor _ne_ of _se_ _[D]_ [(] _[n][p][, n][e]_ [)] neighbor _ne_ of _se_
+
+
+By Lemma 1, we have _D_ ( _np, n_ _[′]_ _e_ [)] _[ ≤]_ _[D]_ [(] _[n][p][, n][e]_ [) =] _[ D]_ [(] _[s][p][, s][e]_ [)] _[ −]_ [1] _[ ≤]_ _[k][ −]_ [1] _[ < k,][ ∀][n]_ _e_ _[′]_ _[∈]_ [Neighbor][(] _[s][e]_ [)][.]
+By induction hypothesis, _µ_ _[∗]_ guarantees pursuit within _k −_ 1 steps for the states ( _np, n_ _[′]_ _e_ [)][ that satisfies]
+_n_ _[′]_ _e_ _[∈]_ [Neighbor][(] _[s][e]_ [)][.] [Therefore,] _[µ][∗]_ [(] _[s]_ [)] [=] _[n][p]_ [guarantees pursuit within] _[ k]_ [steps.] [By induction,] [the]
+proposition holds true for all _d < ∞_ .
+
+
+Second, we prove that for any state _s_ = ( _sp, se_ ) satisfying _D_ ( _s_ ) = _d < ∞_, _ν_ _[∗]_ avoids being captured
+in less than _d_ steps by any pursuit strategy:
+
+Suppose there exists a pursuit movement sequence - _n_ [0] _p_ _[, n]_ [1] _p_ _[,][ · · ·]_ _[, n][T]_ _p_ _[ −]_ [1] - that captures the evader
+within _T_ _< d_ steps under policy _ν_ _[∗]_ . Then, we denote by - _s_ [0] _, s_ [1] _, s_ [2] _, · · ·_ _, s_ _[T]_ [ �] the corresponding state
+sequence, where _s_ 0 = _s_ and _D_ ( _s_ _[T]_ ) = 0. By Lemma 1, _D_ ( _sp, se_ ) = min
+neighbor _np_ of _sp_ _[{][ν][∗]_ [(] _[s][p][, s][e][, n][p]_ [)] _[}]_ [+]
+
+1, which implies that _D_ ( _sp, se_ ) _≥_ _D_ ( _np, ν_ _[∗]_ ( _sp, se, np_ )) + 1 _, ∀np_ . Therefore, _D_ ( _s_ _[t]_ ) = _D_ ( _s_ _[t]_ _p_ _[, s][t]_ _e_ [)] _[ ≥]_
+_D_ ( _n_ _[t]_ _p_ _[, ν][∗]_ [(] _[s][t]_ _p_ _[, s][t]_ _e_ _[, n][t]_ _p_ [)) + 1] [=] _[D]_ [(] _[s][t]_ _p_ [+1] _, s_ _[t]_ _e_ [+1] ) + 1 = _D_ ( _s_ _[t]_ [+1] ) + 1. This leads to a contradiction:
+_D_ ( _s_ ) = _D_ ( _s_ [0] ) _≥_ _D_ ( _s_ [1] ) + 1 _≥_ _D_ ( _s_ [2] ) + 2 _≥_ _D_ ( _s_ _[T]_ ) + _T_ = _T_ _< d_ = _D_ ( _s_ ) _._ Therefore, _ν_ _[∗]_ always
+avoids being captured in less than _d_ steps when _D_ ( _s_ ) = _d < ∞_ .
+
+
+A.4 PROOF OF COROLLARY 1
+
+
+_Proof._ By Theorem 2:
+
+
+For _s_ = ( _sp, se_ ) with _D_ ( _s_ ) = _d < ∞_, since _µ_ _[∗]_ guarantees pursuit within _d_ steps against any evasion
+strategy, no evader can guarantee evasion for _d_ steps against a worst-case pursuit strategy. Since _ν_ _[∗]_
+avoids being captured in less than _d_ steps by any pursuit strategy, _ν_ _[∗]_ is the optimal evasion strategy.
+
+
+For _s_ = ( _sp, se_ ) with _D_ ( _s_ ) = _d_ _<_ _∞_, since _ν_ _[∗]_ avoids being captured in less than _d_ steps by any
+pursuit strategy, no pursuer can guarantee pursuit in less than _d_ steps against a worst-case evasion
+strategy. Since _µ_ _[∗]_ guarantees pursuit within _d_ steps against any evasion strategy, _µ_ _[∗]_ is the optimal
+pursuit strategy.
+
+
+A.5 PROOF OF THEOREM 3
+
+
+_Proof._ Suppose that there exists a pursuit strategy that captures _ν_ _[∗]_ within _T_ steps.
+
+
+In this case, we denote by - _s_ [0] _, s_ [1] _, s_ [2] _, · · ·_ _, s_ _[T]_ [ �] the state sequence of a successful pursuit, where
+_s_ 0 = _s_ and _D_ ( _s_ _[T]_ ) = 0. By Lemma 1, _D_ ( _sp, se_ ) = min [which]
+neighbor _np_ of _sp_ _[{][D]_ [(] _[n][p][, ν][∗]_ [(] _[n][p]_ [))] _[}]_ [ + 1][,]
+
+implies _D_ ( _np, ν_ _[∗]_ ( _np_ )) = _∞, ∀np_ _∈_ Neighbor( _sp_ ). Then, we have _D_ ( _s_ [0] ) = _∞⇒_ _D_ ( _s_ [1] ) = _∞⇒_
+
+_· · · ⇒_ _D_ ( _s_ _[T]_ ) = _∞_, which leads to a contradiction.
+
+
+Therefore, for _s_ = ( _sp, se_ ) with _D_ ( _s_ ) = _∞_, _ν_ _[∗]_ can never be captured by any pursuit strategy.
+
+
+17
+
+
+A.6 PROOF OF LEMMA 2
+
+
+_Proof._ When Pos is a singleton, we have Pos = _{_ se _}_ . Therefore,
+
+
+_µ_ ( _sp,_ Pos) = arg min
+neighbor _np_ of _sp_
+
+
+= arg min
+neighbor _np_ of _sp_
+
+
+Besides, we have
+
+
+- max
+_ne∈_ Neighbor(Pos) _[D]_ [(] _[n][p][, n][e]_ [)]
+
+
+- max = _µ_ _[∗]_ ( _sp, se_ ) _._
+neighbor _ne_ of _se_ _[D]_ [(] _[n][p][, n][e]_ [)]
+
+
+belief(s) =
+
+
+- 0 _s_ _∈/_ Pos
+
+ - _ν_ ( _v, s_ )belief old(v) _s ∈_ Pos
+
+neighbor _v_ of _s_
+
+
+= I [ _s_ = _se_ ] belief new(se) _._
+
+
+Therefore, it holds that
+
+
+_µ_ ( _sp,_ belief) = arg min
+neighbor _np_ of _sp_
+
+
+= arg min
+neighbor _np_ of _sp_
+
+
+- max = _µ_ _[∗]_ ( _sp, se_ ) _._
+neighbor _ne_ of _se_ _[D]_ [(] _[n][p][, n][e]_ [)]
+
+
+18
+
+
+
+
+
+
+
+
+
+belief new(se) max
+neighbor ne of se [D(n][p] _[,]_ [ n][e][)]
+
+belief new(se)
+
+
+
+
+
+
+
+
+
+Figure 2: Pursuit Initialization under Limited Observation Range (Nodes with Blue Outlines)
+
+
+Figure 2 illustrates the initial state of one pursuit episode. Two green pursuers with an observation
+range of 2 are going to capture the red evader that stays still within a total of 13 steps. The purple
+nodes are some auxiliary sensors that provide additional information for the pursuers (also with an
+observation range of 2). Therefore, all of the nodes with dark blue outlines can be observed by the
+pursuers, while the other nodes cannot. At the first step, only the red node has non-zero belief and is
+marked as high probability (represented by the yellow star).
+
+
+Figure 3 illustrates the pursuit process under belief preservation, where the black or shadowed area
+around the evader corresponds to belief and the darkness of the nodes indicates the current belief
+distribution. Following (7), the belief is spread as the game proceeds (see timesteps 2 _,_ 4 _,_ 6 _,_ 8 _,_ 10) and
+used to generate the pursuit strategy (6) under partial observability. At timestep 12, the evader is
+eventually observed. Since Pos becomes a singleton by (4), the shadowed area disappears, and the
+observed evader node is marked as high probability again.
+
+
+Note that when the observed area covers all nodes, the game will be reduced to its perfect-information
+counterpart, where the DP pursuer policy is provably optimal.
+
+
+19
+
+
+Figure 3: Pursuit Illustration under Belief Preservation (Shadowed Area around Evader)
+
+
+20
+
+
+C IMPLEMENTATION DETAILS
+
+
+C.1 SOFT ACTOR-CRITIC (SAC)
+
+
+To fulfill R2PS training, we use discrete-action soft-actor critic (SAC) (Christodoulou, 2019) as the
+backbone RL algorithm, where:
+
+
+The value function is defined as
+
+
+_V_ ( _s_ ) = E _a∼π_ ( _s_ ) [ _Q_ ( _s, a_ ) _−_ _α_ log _π_ ( _s, a_ )] _._
+
+
+The loss of the value network _Qϕ_ is computed as
+
+
+_JQ_ ( _ϕ_ ) = E _s,a_
+
+
+- 1 _._
+2 [(] _[Q][ϕ]_ [(] _[s, a]_ [)] _[ −]_ [(] _[r]_ [ +] _[ γ]_ [E] _[s][′]_ [ [] _[V]_ [ (] _[s][′]_ [)]))][2]
+
+
+The loss of the policy network _πθ_ is computed as
+
+_Jπ_ ( _θ_ ) = E _s,a∼πθ_ ( _s_ ) [ _α_ log _πθ_ ( _s, a_ ) _−_ _Q_ ( _s, a_ )] _._
+
+
+The temperature _α_ under target entropy _H_ is adaptively updated under loss
+
+_J_ ( _α_ ) = E _s,a_            - _−α_ �log _π_ ( _s, a_ ) + _H_ ~~�~~            - _._
+
+
+C.2 GRAPH NEURAL NETWORK (GNN)
+
+
+We employ a sequence model with a parameter-sharing graph neural network (GNN) architecture (Lu
+et al., 2025a) to represent the graph-based policy of the homogeneous pursuers:
+
+
+Under the principle of sequential decision-making, a joint policy can be decomposed as
+
+_π_ ( _a_ 1 _, a_ 2 _, · · ·_ _, am|s_ ) =         - _m_ _[, a][l][−]_ [1][)] _[,]_
+
+_l_ =1 _[π]_ [(] _[a][l][|][s, a]_ [1] _[,][ · · ·]_
+
+where ( _s, a_ 1 _, · · ·_ _, al−_ 1) indicates the global state after the first _l −_ 1 pursuers take actions ( _ai_ ) _i∈_ [ _l−_ 1].
+
+
+For a team of pursuers with _m_ agents, the sequence model queries the policy network _m_ times under
+a fixed adjacent matrix _M_ _∈{_ 0 _,_ 1 _}_ _[n][×][n]_ ( _n_ = _|V|_ ) for the current graph. The input is composed of
+a state feature _sf_ and the information of node index _c_ for the current acting agent. Note that under
+partial observability, the global state _s_ is replaced by ( _sp,_ Pos _,_ belief). We use the shortest path
+distances to the _m_ pursuers as the initial feature of each node _v_ _∈V_ . The normalized features of
+all _n_ nodes are concatenated with (Pos _,_ belief) to construct the state feature _sf_ . Also note that the
+distances between one node and all other nodes can be computed using the _O_ ( _n_ [2] ) Dijkstra algorithm.
+
+
+Given the state feature input _sf_, we embed it into R _[d][×][n]_ and send the result into an encoder composed
+of 6 self-attention layers, where _d_ is the embedding dimension. Each layer takes the output _h_ of the
+last layer as the input and outputs _h_ _[′]_ using a masked attention, whose time complexity is also _O_ ( _n_ [2] ):
+
+
+_qi_ = _WQhi, ki_ = _WKhi,_ _vi_ = _WV hi, uij_ = _[q]_ ~~_√_~~ _i_ _[T]_ _[k][j]_ _, wij_ = - _ne_ _[u][ij]_ _[, h]_ _i_ _[′]_ [=]
+
+_d_ _t_ =1 _[e][u][it]_
+
+
+_n_
+
+- min _{wij, Mij} vj,_
+
+
+_j_ =1
+
+
+where _WQ, WK, WV_ _∈_ R _[d][×][d]_ are the weights to be learned.
+
+
+Given the output of the encoder _h_ [ˆ], we employ a decoder without masks to gather global information.
+The decoder uses _h_ [ˆ] _c_ to query in the output features _h_ [ˆ] of all nodes, with the keys equal to the values:
+
+
+_q_ = _WQh_ [ˆ] _c, ki_ = _WKh_ [ˆ] _i, vi_ = _WV_ _h_ [ˆ] _i, uj_ = _[q]_ ~~_√_~~ _[T][ k][j]_
+
+
+_j_ =1 _[w][j][v][j][.]_
+
+
+_d_ _[j]_ _, wj_ = - _nte_ =1 _[u][j][e][u][t]_ _[,]_ [ ˜] _[h][c]_ [=] - _nj_
+
+
+The decoder output _h_ [˜] _c_ is further concatenated with _h_ [ˆ] _c_ and projected into R _[d]_ . Then, it is used as a
+query for a pointer network, which takes the features of the neighbor nodes _h_ [ˆ] _ne_ for the current agent
+as the keys and values. The pointer network directly outputs the attention vector _w_ as the current
+policy _π_ ( _·|s_ ) since the number of the neighbors aligns with the number of the valid actions. After the
+first query through the policy network, an action _a_ 1 for the first agent is sampled from _π_ ( _·|s_ ), and the
+state is updated as _s_ _[′]_ = ( _s, a_ 1). The subsequent _m −_ 1 queries follow the same process as above.
+
+
+21
+
+
+C.3 HYPERPARAMETER SETTING
+
+
+Table 5 shows the detailed hyperparameter setting used in the training of our RL pursuer policy.
+
+|e 5: Hyperparameter Setting of|R2PS Trai|
+|---|---|
+|Discount factor_ γ_|0.99|
+|SAC target entropy coeffcien|t<br>0.05|
+|GNN embedding dimension_ d_|<br>128|
+|GNN attention heads|8|
+|Batch size|128<br>|
+|Learning rate|10_−_5|
+|Update epoch|8|
+
+
+C.4 LEARNING CURVES OF RL PURSUERS
+
+
+Synthetic Training Set ( = 0.1)
+Synthetic Training Set ( = 0)
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Episode ×105
+
+
+Large Training Set ( = 0.1)
+Large Training Set ( = 0)
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Episode ×105
+
+
+Figure 4: Cross-Graph Learning Curves of Generalized Pursuer Policies
+
+
+During the cross-graph R2PS training, we consider the use of _β_ = 0 _._ 1 and _β_ = 0 in the policy loss
+_L_ ( _θ_ ) (8). For the former, we employ the belief-averaged DP policy (6) as the reference policy. For
+the latter, it means that the training process is without policy guidance. Figure 4 shows the learning
+curves of our RL pursuer policies. Clearly, training with policy guidance is more efficient than pure
+reinforcement learning under SAC loss. This comparison verifies that the DP pursuer policy can serve
+as guidance to facilitate efficient exploration of the cross-graph RL policy. Besides, training under
+the synthetic training set is relatively easier than under the large one that contains more real-world
+graph structures. Nevertheless, our R2PS learning scheme gradually improves the quality of the RL
+pursuer policies under all of the four settings, using a very limited observation range of 2.
+
+
+22
+
+
+D EXPERIMENTAL DETAILS
+
+
+D.1 DETAILS OF TEST GRAPHS
+
+
+Figure 5: Illustration of Test Graphs (Starting from Scotland-Yard Map)
+
+
+The test graphs for both DP and RL pursuers include Grid Map (a 10 _×_ 10 grid), Scotland-Yard Map
+(from the board game Scotland-Yard), Downtown Map (a real-world location from Google Maps),
+and 7 famous real-world spots (from Times Square to Sydney Opera House). The graph structures
+are illustrated in Figure 5, following the order in Table 1.
+
+
+The real-world graphs are generated through a program designed for discretizing the regions around
+the location centers in Google Maps. The map range is set to be 600 by default (corresponding to
+a radius of 600 meters). Nodes correspond to actual road intersections, endpoints, and geometrydefined shape points along roadways. Edges represent the physical road segments connecting these
+nodes, typically encoded as polylines that capture the true geometry of each street. To ensure a
+topologically coherent intersection structure, closely spaced intersection points (within 20 meters of
+one another) are abstracted into single representative nodes. After establishing the intersection-level
+skeleton, the program further adjusts the spatial resolution by subdividing any road segment whose
+length exceeds 100 (discretization granularity) meters. For such long segments, the program inserts
+additional intermediate points at regular intervals along the original road geometry. These newly
+added points are treated as supplementary nodes, and the original long segment is replaced by several
+shorter segments. The resulting graph therefore adopts a hybrid granularity: true intersections are
+preserved as primary nodes, while long road segments are discretized into shorter units of no more
+than 100 (discretization granularity) meters.
+
+
+D.2 ADDITIONAL RESULTS
+
+
+Table 6: Success Rates of Belief-Averaged DP Pursuers under Different Observation Ranges
+
+|Observation Range|2|3|4|5|6|
+|---|---|---|---|---|---|
+|Grid Map<br>Scotland-Yard Map<br>Downtown Map<br>Times Square, New York<br>Hollywood Walk of Fame, LA<br>Sagrada Familia, Barcelona<br>The Bund, Shanghai<br>Eiffel Tower, Paris<br>Big Ben, London<br>Sydney Opera House, Sydney|0.78<br>0.63<br>0.90<br>0.69<br>0.48<br>0.36<br>0.57<br>0.94<br>0.74<br>0.87|0.92<br>0.95<br>1.00<br>0.88<br>0.79<br>0.70<br>0.87<br>0.98<br>0.94<br>0.96|0.99<br>1.00<br>1.00<br>1.00<br>0.94<br>0.92<br>0.97<br>0.99<br>1.00<br>0.99|1.00<br>1.00<br>1.00<br>1.00<br>0.98<br>0.96<br>0.99<br>1.00<br>1.00<br>0.99|1.00<br>1.00<br>1.00<br>1.00<br>1.00<br>1.00<br>1.00<br>1.00<br>1.00<br>1.00|
+
+
+23
+
+
+Table 7: Success Rates of RL Pursuers under Different Observation Ranges
+
+|Observation Rang|e 2|3|4|5|6|
+|---|---|---|---|---|---|
+|Grid Map<br>Scotland-Yard Ma<br>Downtown Map<br>Times Square, New Y<br>Hollywood Walk of Fam<br>Sagrada Familia, Barc<br>The Bund, Shangh<br>Eiffel Tower, Paris<br>Big Ben, London<br>Sydney Opera House, S|1.00<br> p<br>0.76<br>0.99<br>  ork<br>0.95<br>  e, LA<br>0.38<br> elona<br>0.20<br> ai<br>0.25<br> <br>1.00<br>0.82<br>  ydney<br>0.95|1.00<br>0.98<br>0.99<br>0.98<br>0.59<br>0.72<br>0.55<br>1.00<br>0.95<br>0.98|1.00<br>0.99<br>1.00<br>1.00<br>0.96<br>0.88<br>0.82<br>1.00<br>0.98<br>1.00|1.00<br>0.99<br>1.00<br>1.00<br>1.00<br>0.95<br>0.82<br>1.00<br>0.99<br>1.00|1.00<br>1.00<br>1.00<br>1.00<br>1.00<br>0.96<br>0.83<br>1.00<br>0.99<br>1.00|
+
+
+We may find that Hollywood Walk of Fame, Sagrada Familia, and The Bund are relatively more
+difficult for the pursuers, especially under small observation ranges. Based on the statistics of the test
+graphs in Table 1 (left), here we provide a rough analysis of this phenomenon. In planar graphs, a
+large average degree generally implies the existence of small cycles. For example, in Grid Map, all
+minimal cycles’ length is only 4. Since successful evasions benefit more from large cycles, graphs
+like Grid Map, Scotland-Yard Map, and Downtown Map are easier for pursuit. Besides, Eiffel Tower,
+Big Ben, and Sydney Opera House all have large diameters, which implies the existence of long
+“links” that have poor connectivity with other nodes (see the last three graphs in Figure 5). Therefore,
+these graphs also benefit pursuit rather than evasion. As Hollywood Walk of Fame, Sagrada Familia,
+and The Bund do not have the mentioned characteristics, these graphs are harder for the pursuers.
+
+
+Figure 6 provides the scaling plots of the computation (inference) time of DP and RL policies under
+an NVIDIA GeForce RTX 2080 Ti GPU, with the log-log plots on the right. Clearly, the time of DP
+computations significantly increases with the graph sizes. In comparison, the inference time of our
+GNN-based RL policy is only slightly longer in large graphs than in small graphs.
+
+
+140
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+|Col1|Col2|DP In|feren|ce Tim|e|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+250 500 750 1000 1250 1500 1750 2000
+Node Number
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+|Col1|DP Inf|erence|Tim|e|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+10 [2] 10 [3]
+Node Number
+
+
+Figure 6: Scaling Plots of RL and DP Inference Time
+
+
+24
+
+
+D.3 RL PERFORMANCE UNDER MORE PURSUERS
+
+
+Table 8: Success Rates of RL Policy under Different Pursuer Numbers
+
+|Pursuer Number|m = 2|m = 4|m = 6|
+|---|---|---|---|
+|Grid Map<br>Scotland-Yard Map<br>Downtown Map<br>Times Square, New York<br>Hollywood Walk of Fame, LA<br>Sagrada Familia, Barcelona<br>The Bund, Shanghai<br>Eiffel Tower, Paris<br>Big Ben, London<br>Sydney Opera House, Sydney|1.00<br>0.76<br>0.99<br>0.95<br>0.38<br>0.20<br>0.25<br>1.00<br>0.82<br>0.95|1.00<br>0.99<br>1.00<br>0.97<br>0.82<br>0.74<br>0.99<br>1.00<br>1.00<br>0.99|1.00<br>1.00<br>1.00<br>1.00<br>0.93<br>0.94<br>1.00<br>1.00<br>1.00<br>1.00|
+
+
+As our R2PS training is established upon the framework of EPG (Lu et al., 2025a), we can also
+employ the grouping mechanism proposed by Lu et al. (2025a) to derive pursuer and evader policies
+when the pursuer number _m_ is large. Table 8 compares the pursuit success rates of the multi-agent
+RL policies against the asynchronous-move DP evader under different pursuer numbers _m_ . Clearly,
+the 4-pursuer policy can significantly increase the original success rates for _m_ = 2. When _m_ = 6,
+the success rates are close to 1 even under the fixed observation range of 2. Figure 7 further illustrates
+the FLOPs of our RL inference under different graph sizes and pursuer numbers.
+
+
+20.0
+
+
+17.5
+
+
+15.0
+
+
+12.5
+
+
+10.0
+
+
+7.5
+
+
+5.0
+
+
+2.5
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||~~=2~~<br>m=4<br>|||||||||
+||~~=6~~|~~=6~~||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+250 500 750 1000 1250 1500 1750 2000
+Node Number
+
+
+Figure 7: Scaling Plots of Floating-Point Operations under Different RL Pursuer Numbers
+
+
+25
+
+
+E RELATED WORK
+
+
+**Finding optimal strategies in PEGs.** Graph-based pursuit-evasion games (PEGs) can be categorized
+into no-exit PEGs and multi-exit PEGs. The former is the primary form of pursuit-evasion and also
+the focus of this paper, while the latter is sometimes referred to as network security games. For no-exit
+PEGs, the early theoretical work (Goldstein & Reingold, 1995) proves that it requires exponential
+time to determine whether _m_ pursuers are sufficient to capture one evader on a given graph under
+perfect information. Vieira et al. (2008) provide the provably optimal method for solving sequential
+PEGs, and Chung et al. (2011) show that the basic idea behind PEG solving can be represented by a
+marking algorithm featuring state expansion. Horak & Bo´ sanskˇ y (2017) consider the case where the`
+pursuers only have partial observation and provide a dynamic programming algorithm in the form of
+value iteration for finding Nash equilibrium. Lu et al. (2025a) show that an expansion-based dynamic
+programming algorithm can solve Markov PEGs under a near-optimal time complexity. Recent works
+(Xue et al., 2021; 2022) combine neural networks with fictitious self-play and Monte-Carlo tree
+search to construct scalable deep reinforcement learning (RL) algorithms for finding robust pursuit
+strategies in network security games.
+
+
+**Policy generalization in PEGs.** Policy-Space Response Oracles (PSRO) (Lanctot et al., 2017) is
+a standard game RL paradigm extended from the game-theoretic approach of double oracle (DO)
+(McMahan et al., 2003) for robust policy learning. While the approach itself is general, it can only
+solve PEGs on a designated graph structure, just like the methods above. As we have mentioned,
+policy generalization is crucial to real-time applications under real-world PEGs, becoming a focus
+of recent research. MT-PSRO (Li et al., 2023) combines multi-task policy pre-training with PSRO
+fine-tuning to enable few-shot generalization to unseen real-world opponents. Grasper (Li et al.,
+2024) proposes a two-stage pre-training method to facilitate few-shot generalization to unseen initial
+conditions of the game. Equilibrium Policy Generalization (EPG) (Lu et al., 2025a) provides a
+fundamentally novel paradigm to learn generalized policies across the underlying structures of PEGs
+through the construction of equilibrium oracles, guaranteeing robust zero-shot generalization to
+unseen graph structures in Markov PEGs. As EPG does not require the time-consuming PSRO tuning,
+the pursuit strategies are real-time applicable under full observability. However, as is mentioned
+in Lu et al. (2025a), whether such a kind of generalization can be applied to the case of imperfect
+information remains unclear. Since partial observability leads to the inherent PSPACE-hardness (see
+Papadimitriou & Tsitsiklis (1987)) and exponentially many information sets (see Lu et al. (2025b)),
+constructing equilibrium oracles directly under partial observability can be intractable.
+
+
+26

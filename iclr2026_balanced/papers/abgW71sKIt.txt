@@ -1,0 +1,1262 @@
+# RETHINKING OUTPUT ALIGNMENT FOR 1-BIT POST- TRAINING QUANTIZATION OF LARGE LANGUAGE MODELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Large Language Models (LLMs) deliver strong performance across a wide range
+of NLP tasks, but their massive sizes hinder deployment on resource-constrained
+devices. To reduce their computational and memory burden, various compression
+techniques have been proposed, including quantization, pruning, and knowledge
+distillation. Among these, post-training quantization (PTQ) is widely adopted for
+its efficiency, as it requires no retraining and only a small dataset for calibration,
+enabling low-cost deployment. Recent advances for post-training quantization
+have demonstrated that even sub-4-bit methods can maintain most of the original model performance. However, 1-bit quantization that converts floating-point
+weights to _±_ 1, remains particularly challenging, as existing 1-bit PTQ methods often suffer from significant performance degradation compared to the full-precision
+models. Specifically, most of existing 1-bit PTQ approaches focus on weight
+alignment, aligning the full-precision model weights with those of the quantized
+models, rather than directly aligning their outputs. Although the output-matching
+approach objective is more intuitive and aligns with the quantization goal, naively
+applying it in 1-bit LLMs often leads to notable performance degradation. In this
+paper, we investigate why and under what conditions output-matching fails, in the
+context of 1-bit LLM quantization. Based on our findings, we propose a novel
+data-aware PTQ approach for 1-bit LLMs that explicitly accounts for activation
+error accumulation while keeping optimization efficient. Empirical experiments
+demonstrate that our solution consistently outperforms existing 1-bit PTQ methods with minimal overhead.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) (Wei et al., 2022; Radford et al., 2019b; Zhang et al., 2022;
+Brown et al., 2020b) have become a focal point of both academic research and industrial development, thanks to their strong capabilities across a wide range of natural language processing
+tasks (Hendrycks et al., 2020; Bisk et al., 2020b), including question answering (Devlin et al.,
+2019), machine translation (Fan et al., 2020; Lepikhin et al., 2020), summarization (Zhang et al.,
+2019; Lewis et al., 2019) and language generation (Radford et al., 2019a; Brown et al., 2020a).
+Despite these advances, the massive scale of modern LLMs, which often involving billions of parameters, poses substantial challenges for efficient inference and deployment. To address this, the
+community has explored various compression approaches, such as neural architecture search (Zoph
+& Le, 2016), knowledge distillation (Hinton et al., 2015), network quantization (Choi et al., 2018;
+Frantar et al., 2023), and pruning (Han et al., 2015). However, many of these approaches depend
+on large-scale training data and costly retraining, which limits their practicality. In contrast, posttraining quantization (PTQ) (Liu et al., 2025; Sun et al., 2025) requires only a small calibration set
+and modest computational resources, making it a practical choice for compressing LLMs. Despite
+the impressive performance of sub-4-bit PTQ methods, the most extreme case, 1-bit quantization,
+remains challenging, which maps floating-point parameters to binary states, and can greatly lower
+memory consumption.
+
+
+Existing 1-bit quantization approaches can be broadly grouped into two categories: (1) _weight-_
+_matching_ _methods_, which minimize _∥W_ _−_ _W_ [�] _∥_ (referred as the **Weight** **Error**, _i.e._, the distance
+
+
+1
+
+
+between full-precision weights _W_ and binarized weights _W_ ) (Xu et al., 2018; Shang et al., 2023),
+
+[�]
+and (2) _output-matching_ _methods_, which minimize _∥XW_ [�] _−_ _X_ [�] _W_ [�] _∥_ (referred to as **Activation-**
+**conditioned Error**, since it compares outputs given the same quantized model’s layer inputs _X_ (Li
+
+[�]
+et al., 2024).
+
+
+In the context of LLM quantization, the primary objective is to align the outputs of the quantized model with those of the full-precision model. Weight-matching methods, which minimize
+_||W_ _−_ _W_ [�] _||_, are simple and stable but do not directly optimize the output-alignment objective. Despite recent advances, most 1-bit PTQ techniques remain weight-centric (Huang et al., 2024; Li
+et al., 2024; Dong et al., 2024; Shang et al., 2023). ARB-X (Li et al., 2024) is an exception, which
+incorporates **Activation-conditioned** **Error**, _i.e._, minimizing _∥XW_ [�] _−_ _X_ [�] _W_ [�] _∥_ . However, ARB-X
+has two primary limitations. Firstly, it naively applies output alignment in a layer-wise manner,
+which does not guarantee improvement at the block-level or at the final output due to inter-layer
+dependencies. Secondly, by conditioning on _X_ rather than the true full-precision input _X_, the ob
+[�]
+jective _||XW_ _−_ _X_ [�] _W_ [�] _||_ is only an approximation; as quantization errors accumulate across layers,
+
+[�]
+the approximated target outputs _W_ _X_ diverge from the true full-precision target _WX_, reducing the
+
+[�]
+effectiveness of layer-wise output alignment in PTQ.
+
+
+Motivated by the above analysis, in this paper, we propose a selective layer-wise output matching method to ensure block-level loss reduction. Our objective explicitly accounts for accumulated
+quantization errors by directly matching the output of the quantized model with the true target output **Output Error**, _i.e._, _||WX_ _−_ _W_ [�] _X||_ . Furthermore, we observe that the effectiveness of output
+
+[�]
+alignment is architecture-dependent: indiscriminate application can significantly degrade attention
+mechanisms, particularly in architectures such as LLaMA. To mitigate this issue, we introduce a
+novel masking mechanism, termed Attention Matrix Preservation (AMP), which preserves attention
+behavior and prevents performance degradation. These design choices collectively yield a simple
+yet effective data-aware 1-bit quantization strategy for LLMs.
+
+
+The main contributions of this paper can be summarized as follows:
+
+
+  - We systematically examine the influence of calibration data on 1-bit post-training quantization for LLMs, revealing the insight that while output matching aligns with the quantization
+objective, its effectiveness can vary depending on model architecture and layer characteristics.
+
+  - Our study identifies three key challenges in naive layer-wise output alignment: (i) it does
+not necessarily reduce block-level loss, (ii) quantization errors accumulate across layers, diminishing alignment effectiveness, and (iii) indiscriminate output matching can disrupt token
+interactions, degrading attention mechanisms, particularly in LLMs.
+
+  - To address these challenges, we propose a selective layer-wise output alignment strategy that
+modifies the quantization objective to explicitly account for accumulated errors. Moreover, we
+also introduce an attention-aware masking mechanism AMP to preserve attention behavior.
+
+  - Extensive experiments demonstrate that our method consistently improves performance over
+existing 1-bit PTQ techniques for LLMs.
+
+
+2 RELATED WORKS
+
+
+**Quantization** **in** **LLMs.** Post-Training Quantization (PTQ) has emerged as the most practical
+strategy for compressing large language models (LLMs), as it applies quantization directly to pretrained models with minimal calibration data, avoiding the prohibitive cost of Quantization-Aware
+Training (QAT). A range of PTQ methods have been developed to mitigate quantization error including GPTQ (Frantar et al., 2023) that leverages second-order Hessian information for layer-wise
+error compensation; AWQ (Lin et al., 2023) and SmoothQuant (Xiao et al., 2023) that incorporate
+activation statistics to identify and preserve critical weights; and ZeroQuant (Yao et al., 2022) that
+introduces fine-grained schemes for improved flexibility. More recent efforts such as QuIP (Tseng
+et al., 2024) and QuaRot (Ashkboos et al., 2024) extend PTQ with rotation or vector quantization
+to better distribute outliers, though often at the expense of higher computational overhead. Collectively, these efforts have helped LLMs maintain strong performance under moderate precision
+settings (e.g., 4–8 bits), yet the models still suffer from substantial degradation when pushed to
+extreme regimes such as 1-bit quantization.
+
+
+2
+
+
+**1-Bit Quantization for Language Languages Models.** Binarization, where weights are restricted
+to _±_ 1, represents the most aggressive form of quantization. It was first explored in computer vision
+with specialized binary architectures such as XNOR-Net (Rastegari et al., 2016) and Bi-Real Net
+(Liu et al., 2018), which showed that binary parameters could still capture meaningful representations. Follow-up studies (Guo et al., 2017; Xu et al., 2018) improved 1-bit quantization through enhanced coding schemes and optimized search strategies, enabling more accurate approximations of
+full-precision weights. Inspired by these advances, recent work has extended binarization to LLMs.
+Training-based approaches, such as BitNet (Wang et al., 2023), demonstrated that end-to-end training with binary weights is feasible. In contrast, post-training quantization (PTQ) approaches aim
+to binarize pretrained models with minimal retraining. BiLLM (Huang et al., 2024) selectively
+quantizes salient weights with low-bit precision while binarizing the rest, guided by Hessian-based
+importance and residual-aware masks. STB-LLM (Dong et al., 2024) combines pruning and quantization with fine-grained grouping, achieving sub-1-bit average precision while maintaining accuracy, albeit with added kernel and storage costs. Other methods leverage codebook representations
+to capture repeating binary patterns, improving compression without requiring sparsity. Most recently, research has shifted toward data-aware and fine-grained quantizers tailored for 1-bit PTQ.
+ARB (Li et al., 2024) introduces grouping and refinement strategies to reduce quantization error,
+and its data-aware extension ARB-X further optimize the output alignment.
+
+
+3 PRELIMINARY ANALYSIS
+
+
+In the following, we provide a preliminary analysis of how data and output alignment affect 1-bit
+LLM quantization. Although **Activation-Conditioned Error** is more aligned with the quantization
+objective, most existing 1-bit PTQ for LLMs approaches instead try to minimize **Weight** **Error**
+during the quantization process. We aim to understand why output alignment is less widely adopted,
+and why naive output alignment does not necessarily improve model performance.
+
+
+3.1 EFFECT OF LAYER OUTPUT MATCHING ON BLOCK-LEVEL PERFORMANCE
+
+
+Quantization objectives are typically formulated at the layer-wise, block-wise, or network-wise
+level. Prior work such as BRECQ (Li et al., 2021) has shown that block-wise quantization is particularly effective, since layers within the same block are highly interdependent. This suggests that
+minimizing the error at the block level is more critical than focusing solely on individual layers.
+
+
+To assess the impact of layer-wise output matching on block-level loss, we conduct a preliminary
+analysis using ARB and ARB-X Li et al. (2024). ARB performs layer-wise weight alignment by
+minimizing the **Weight Error** _||W_ _−_ _W_ [�] _||_, whereas ARB-X extends this to layer-wise output alignment, _i.e._, the **Activation-conditioned** **Error** . The evaluation is performed on the LLaMA-2-7B
+model using the C4 calibration set. For each transformer block, we measure the block-level output
+loss when applying ARB or ARB-X to an individual layer while keeping all other layers in the block
+at full precision, as illustrated in Fig. 1. Notably, some layers show higher block-level loss under
+ARB-X compared to ARB, despite ARB-X reducing the corresponding layer-level loss. This result
+demonstrates that naive layer-wise output alignment does not necessarily improve block-level performance relative to weight alignment, revealing a fundamental limitation of ARB-X and its output
+matching.
+
+
+3.2 IMPACT OF ACCUMULATED QUANTIZATION ERROR ON OUTPUT ALIGNMENT
+
+
+We next study how accumulated error affects the quantized model over time, which can influence the
+effectiveness of the output alignment objective. To do so, we leverage ARB-X (Li et al., 2024) as the
+baseline for output alignment analysis, and evaluate it on the Llama-2-7B model using C4 calibration
+sets. We evaluate two types of errors: (1) **Activation-conditioned** **Error**, _i.e._, _||XW_ _−_ _X_ [�] _W_ [�] _||_,
+
+[�]
+which is the objective of ARB-X (Li et al., 2024), and (2) **Output Error**, _i.e._, _||XW_ _−_ _X_ [�] _W_ [�] _||_, the
+discrepancy between the quantized and full-precision layer outputs. In parallel, we present cosine
+similarity measures, by replacing the MSE loss with the cosine similarity, denoted as (1) **Activation-**
+**conditioned** **Similarity** and (2) **Output** **Similarity** . Both metrics are measured in a block-wise
+manner across all 32 blocks of the architecture during the quantization process.
+
+
+3
+
+
+Layer Index
+
+
+0 5 10 15 20 25 30
+Block index
+
+
+Figure 2: Accumulated quantization error in LLaMA-2-7B under ARB-X. The top plot reports
+cosine similarity and MSE between block outputs of the quantized and full-precision models. While
+ARB-X maintains low cosine similarity loss between pre- and post-quantization outputs, the MSE
+relative to the full-precision baseline grows with depth, indicating error accumulation. The bottom
+plot reports the MSE loss for token similarity matrices, computed as pairwise cosine similarities
+between token representations within each sample. These matrices also drift from the full-precision
+baseline after quantization, suggesting that ARB-X’s output alignment may degrade the learned
+attention mask in subsequent layers.
+
+
+As shown in the upper-right panel of Figure 2, ARB-X maximizes the cosine similarity between the
+layer outputs before and after the quantization of that layer, _XW_ and _XW_ [�] . However, the mean
+
+[�] [�]
+squared error (MSE) remains substantial, and the cosine similarity with the actual full-precision
+output _XW_ decreases throughout the quantization process. This illustrates the limitation of naive
+output alignment: as quantization errors accumulate across layers, the optimization objective progressively deviates from the true target, thereby diminishing its effectiveness.
+
+
+3.3 EFFECT OF OUTPUT MATCHING ON ATTENTION MECHANISM
+
+
+The growing discrepancy in layer outputs suggests that token-to-token interactions, which underlie
+attention patterns, may be affected during quantization. To investigate this, we extend the evaluation protocol described in Section 3.2 and analyze the Llama-2-7B model using ARB-X. For
+
+
+4
+
+
+Figure 1: Comparison of block-level loss under ARB (weight alignment) versus ARB-X (layerwise output alignment) for each layer of LLaMA-2-7B. Bar color denotes which method incurs
+lower block loss: blue for ARB, red for ARB-X. Several layers demonstrate that minimizing layerlevel loss via ARB-X does not necessarily achieve lower block-level loss than ARB, indicating the
+limitations of naive layer-wise output alignment.
+
+
+10 [5]
+
+
+10 [4]
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [5]
+
+
+10 [4]
+
+
+10 [3]
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0 5 10 15 20 25 30
+Block index
+
+
+0 5 10 15 20 25 30
+Block index
+
+
+2                       -                       _L_ ( _X, l_ ) = _XW_ _−_ _X_ [�] _W_ [�] ( _W_ _−_ _W_ [�] ) _[⊤]_ _S_ ( _W_ _−_ _W_ [�] ) _,_ (2)
+���� ��� _F_ [= Tr]
+
+
+where _S_ = _X_ _[⊤]_ _X_ [�] is the Gram matrix of the quantized activations. However, this objective does not
+
+[�] [�]
+take into account the accumulation error of the quantization process from prior layers. Therefore,
+we modify the optimization objective, by adopting the full-precision input _X_ for the target output as
+follows:
+
+2                     _L_ ( _X, l_ ) = _XW_ _−_ _X_     - _W_ [�] ( _XW_ _−_ _X_ [�] _W_ [�] )( _XW_ _−_ _X_ [�] _W_ [�] ) _[⊤]_ [�] _._ (3)
+��� ��� _F_ [= Tr]
+
+
+We following a similar strategy in ARB-RC (Li et al., 2024) to parameterize the quantized model
+weight _W_ [�] = diag( _αr_ ) _B_ diag( _αc_ ), where _B_ _∈{−_ 1 _,_ 1 _}_ _[d]_ [in] _[×][d]_ [out], _αr_ _∈_ R _[d]_ [in] and _αc_ _∈_ R _[d]_ [out] and
+
+
+5
+
+
+each sample _X_ [�] _i_, we compute token similarity matrices as _X_ [�] _iW_ [�] _W_ [�] _[⊤]_ _X_ [�] _i_ _[⊤]_ [,] [after] [row-normalizing]
+_X_ - _iW_ [�], so that entry ( _j, k_ ) represents the cosine similarity between tokens _j_ and _k_ in the quantized
+layer output. For methods minimizing **Activation-conditioned Error**, the target similarity matrix
+is _X_ [�] _iWW_ _[⊤]_ _X_ [�] _i_ _[⊤]_ [, while for methods minimizing] **[ Output Error]** [, it is] _[ X][i][WW][ ⊤][X]_ _i_ _[⊤]_ [.] [These matrices]
+serve as a proxy for the attention mask learned by the model. We quantify deviations using (1)
+**Activation-conditioned token-similarity error**, defined as [�] _i_ ��� _XiW_ [�] _W_ [�] _[⊤]_ _X_ [�] _i_ _[⊤]_ _[−]_ _X_ [�] _iWW_ _[⊤]_ _X_ [�] _i_ _[⊤]_ ��,
+
+
+**Activation-conditioned token-similarity error**, defined as [�] _i_ ��� _XiW_ [�] _W_ [�] _[⊤]_ _X_ [�] _i_ _[⊤]_ _[−]_ _X_ [�] _iWW_ _[⊤]_ _X_ [�] _i_ _[⊤]_ ��,
+
+and (2) **Output token-similarity error**, defined as [�] _i_ ��� _XiW_ [�] _W_ [�] _[⊤]_ _X_ [�] _i_ _[⊤]_ _[−]_ _[X][i][WW][ ⊤][X]_ _i_ _[⊤]_ ��.
+
+This evaluation captures how well the quantized model preserves self-attention interactions. As
+shown in the lower part of Figure 2, the token similarity matrices gradually diverge from the fullprecision baseline as depth increases. These results suggest that naive output alignment frameworks
+such as ARB-X may inadvertently distort attention masks in deeper layers, thereby weakening the
+token-level relational structure. This arises because, when the output matching loss remains large,
+the optimization tends to prioritize reducing errors along high-magnitude channels. While this reduces Euclidean distance, it often comes at the expense of preserving the directional alignment of
+representations, ultimately degrading similarity across tokens.
+
+
+By focusing on token-level interactions, this insight complements the previous analysis: it highlights
+that output alignment should be designed with awareness of attention patterns to better preserve the
+learned token relationships in deeper layers.
+
+
+4 METHOD
+
+
+In this section, we present our data-aware quantization strategy for 1-bit post-training quantization
+(PTQ) of large language models (LLMs). Our design is motivated by three key observations from
+the preliminary analysis: (i) layer-wise output matching does not necessarily lead to block-level loss
+reduction, (ii) activation mismatches can accumulate across layers, and (iii) naive output alignment
+may disrupt token interactions, thereby degrading the attention mask. To address these issues, our
+strategy (a) applies output matching selectively at the block level, (b) modifies the quantization objective to account for accumulated errors, and (c) introduces attention-aware adjustments to preserve
+attention behavior.
+
+
+Consider a neural network with _L_ layers, trained with a loss function _ℓ_ on a calibration dataset of
+size _n_ . Let _W_ _∈_ R _[d]_ [in] _[×][d]_ [out] denote the full-precision weight matrix and _W_ its quantized version.
+
+[�]
+Given the full-precision layer input _X_ _∈_ R _[n][×][d]_ [in], the full-precision layer output is _Z_ = _XW_ . In the
+quantized model, the input _X_ denotes the activations produced after quantizing all previous _l −_ 1
+
+[�]
+layers, and the corresponding layer output of the quantized model is _Z_ = _XW_ [�] .
+
+[�] [�]
+
+Most PTQ methods for 1-bit LLMs minimize the weight alignment loss for the layer _l_ as follows:
+
+
+_L_ ( _X, l_ ) = _∥W_ _−_ _W_ [�] _∥_ [2] _F_ _[,]_ (1)
+
+
+where _∥.∥F_ denotes the Frobenius norm. ARB-X (Li et al., 2024), a recent PTQ method, proposes
+to minimize the layer-wise output reconstruction error for the layer indexed by _l_ as follows:
+
+
+_i_ ��� _XiW_ [�] _W_ [�] _[⊤]_ _X_ [�] _i_ _[⊤]_ _[−]_ _[X][i][WW][ ⊤][X]_ _i_ _[⊤]_ ��.
+
+
+diag( _._ ) denotes the diagonal matrix. The optimization objective can then be written as follows:
+
+_L_ ( _X, L_ ) = _∥fQ_ ( _X_ ) _−_ _fF P_ ( _X_ ) _∥_ [2] _F_
+
+         = Tr ( _XW_ _−_ _X_ [�] _W_ [�] )( _XW_ _−_ _X_ [�] _W_ [�] ) _[⊤]_ [�]
+
+
+         = Tr ( _XW_ _−_ _X_ [�] diag( _αr_ ) _B_ diag( _αc_ ))( _XW_ _−_ _X_ [�] diag( _αr_ ) _B_ diag( _αc_ )) _[⊤]_ [�] _._
+
+
+_M_ _[r]_ = _AMP_ ( _αr_ ) = sign(Diag( _M_ _W_ [�] diag( _αc_ ) _B_ _[⊤]_ ))
+
+_M_ _[B]_ = _AMP_ ( _B_ ) = sign(diag( _αr_ ) _M_ _W_ [�] diag( _αc_ ))
+
+
+6
+
+
+(4)
+
+
+We have three parameters to optimize, including _αr_, _αc_ and _B_ . Regarding the parameter _αc_, we can
+obtain its optimal closed-form by setting the gradient of _αc_ to 0. The optimal solution for _αc_ can be
+derived as follows:
+
+
+Diag( _B_ _[⊤]_ diag( _αr_ ) _SW_ )
+_αc_ _[∗]_ [=]
+
+
+(5)
+Diag( _B_ _[⊤]_ diag( _αr_ ) _S_ [�] diag( _αr_ ) _B_ )
+
+
+with _S_ = _X_ _[⊤]_ _X_, and Diag( _._ ) denotes the diagonal vector of the input.
+
+[�]
+
+For the binary matrix _B_, as it has binary constraint, we cannot get its optimal solution by setting
+the gradient of the objective loss _B_ to 0. However, inspired by (Shen et al., 2015), we can derive
+the optimal closed-form solution for each row _i_ in _B_ while keeping other rows of _B_ fixed. Let
+_N_ = diag( _αr_ ) _S_ diag( _αr_ ), _K_ = diag( _αc ⊙_ _αc_ ) and _P_ = diag( _αc_ ) _W_ _[⊤]_ _S_ diag( _αr_ ). Each row of _B_
+then has the optimal closed-form solution as follows:
+_Bi,_ _[∗]_ : [= sign(] _[N][F]_ _[BK][ −]_ [2] _[P]_ [)] _[i,]_ [:] _[,]_ (6)
+where _NF_ = _N_ _−_ diag(diagonal( _N_ )) is the matrix _N_ but its diagonal is set to 0.
+
+
+Regarding the parameter _αr_, we approximate its closed-form solution by solving the following:
+�� _S ⊙_ _C_           - _αr_ = Diag� _SW_ diag( _αc_ ) _B_ _[⊤]_ [�] _,_ (7)
+
+where _C_ = _B_ diag( _αc ⊙_ _αr_ ) _B_ _[⊤]_ . This yields the closed-form expression.
+
+_αr_ _[∗]_ [=] �� _S ⊙_ _C_            - _−_ 1 Diag� _SW_ diag( _αc_ ) _B_ _[⊤]_ [�] _,_ (8)
+
+where �� _S_ _⊙_ _C_ - _−_ 1 denotes the Moore–Penrose pseudoinverse. In practice, directly computing the
+pseudoinverse can be numerically unstable. Instead, we employ the torch.linalg.lstsq
+function to obtain a stable least-squares solution. Full derivations for all variables are provided
+in Appendix B.
+
+
+4.1 ATTENTION MATRIX PRESERVATION
+
+
+As demonstrated in Section 3.3, LLM architectures such as Llama witness significant degradation
+in the attention masks when using output alignment. In order to mitigate this problem during the
+quantization process, we propose a novel Attention Matrix Preservation (AMP) mechanism, that
+avoids the degradation of the attention masks. Specifically, the token-similarity matrix of the model’s
+output at a layer _l_ of input _X_ is defined as _XW_ [�] _W_ _[⊤]_ _X_ [�] _[⊤]_ after normalizing _XW_ [�] . Similarly, the token
+[�] [�] [�] [�]
+similarity matrix of the full precision output is denoted as _XWW_ _[⊤]_ _X_ _[⊤]_ . Since the attention mask
+is closely correlated with the similarity matrix across tokens, the objective to minimize the attention
+degradation problem is defined as:
+
+max _LAMP_ = ���( _X_        - _W_ [�] _W_ [�] _[⊤]_ _X_ [�] _[⊤]_ ) _⊙_ ( _XWW_ _[⊤]_ _X_ _[⊤]_ )���
+
+= Tr               - _X_               - _W_ [�] _W_ [�] _[⊤]_ _X_ [�] _[⊤]_ _XWW_ _[⊤]_ _X_ _[⊤]_ [�]
+
+= Tr               - _W_               - _[⊤]_ _X_ [�] _[⊤]_ _XWW_ _[⊤]_ _X_ _[⊤]_ _X_ [�] _W_               
+                      - ��                      - [�]
+
+
+= Tr - _W_ - _[⊤]_ _M_ _W_ ��
+
+
+(9)
+
+
+For each quantization parameter _αc_, _αr_ and _B_, we assign them an AMP mask, defined as the sign
+of the gradient of _LAMP_ w.r.t. these parameters:
+
+_M_ _[c]_ = _AMP_ ( _αc_ ) = sign(Diag( _B_ _[⊤]_ diag( _αr_ ) _M_ _W_ [�] ))
+
+
+(10)
+
+
+In order to avoid the degradation of the token similarity matrix, once we obtain the AMP mask for
+each variable _αc_, _αr_ and _B_, we update them with:
+_αr_ = _αr ∗_ (1 _−_ _M_ _[r]_ ) + _αr_ _[∗]_ _[∗]_ _[M][ r]_
+
+
+4.2 FINAL OPTIMIZATION
+
+
+Using the closed-form solution above, we jointly optimize all three variables until convergence.
+However, as shown in Section 3.1, naively applying output alignment to all layers within a block
+does not necessarily minimize the block-level loss. To address this, we adopt a selective layer-wise
+output approach, by restricting the output alignment to only the last fully connected layer of each
+block, since it has the most direct impact on the block loss, while employing weight alignment
+methods such as ARB-RC (Li et al., 2024) for quantizing the remaining layers of each block. Our
+complete algorithm is provided in Algorithm 1 (see Appendix E).
+
+
+5 EXPERIMENTS
+
+
+In this section, we conduct extensive experiments to validate the effectiveness and superiority of our
+proposed method compared to current SOTA 1-bit LLM quantization frameworks.
+
+
+5.1 SETUP
+
+
+**Models and datasets.** Our experiments are conducted on the OPT (Zhang et al., 2022), covering
+parameter scales from 1.3B up to 30B, and LLaMA model families, including LLaMA-2 (Touvron
+et al., 2023) and the recently released LLaMA-3 (Dubey et al., 2024). We do not include LLaMA-1
+in our evaluation since the original pretrained checkpoints are not officially available through Hugging Face or other standard model hubs. For evaluation, we adopt widely used benchmarks in prior
+1-bit LLM quantization works. Perplexity is reported on WikiText2 (Merity et al., 2016), PTB
+(Marcus et al., 1993), and C4 (Raffel et al., 2020), which are standard for measuring language modeling quality. To further assess downstream capability, we also measure zero-shot performance on
+seven QA datasets: ARC-Easy and ARC-Challenge (Clark et al., 2018), PIQA (Bisk et al., 2020a),
+BoolQ (Clark et al., 2019), HellaSwag (Zellers et al., 2019), WinoGrande (Sakaguchi et al., 2021)
+and OBQA (Mihaylov et al., 2018). Additionally, we also provide the zero-shot performance of
+our method on Llama models, adding LAMBADA Paperno et al. (2016) for long-context reasoning
+evaluation. Please refer to the Appendix for the zero-shot results on Llama models.
+
+
+**Baseline** **methods.** We compare our method against several state-of-the-art 1-bit PTQ methods,
+including BiLLM (Huang et al., 2024), ARB-LLM(Li et al., 2024) and PB-LLM (Shang et al.,
+2023), ensuring that all implementations adhere to the details provided in their respective papers.
+BiLLM (Huang et al., 2024), ARB-LLM(Li et al., 2024) and PB-LLM (Shang et al., 2023) all utilize
+the PTQ approach for model calibration through OBQ based method of GPTQ. For ARB-LLM, we
+evaluate two of its best performing variants, ARB-X and ARB-RC. The ARB-RC results in Tables
+1 and 2 were obtained by running the original ARB-RC implementation.
+
+
+5.2 EXPERIMENTAL RESULTS
+
+
+**Results on Language Generation Tasks.** We evaluate our method in terms of perplexity for both
+OPT and LLaMA models. Table 1 presents perplexity results for OPT models across the C4 and
+WikiText-2 datasets, including OPT-1.3B, OPT-2.7B, OPT-6.7B, OPT-13B, and OPT-30B. Table 1
+also reports the average accuracy of our method on seven zero-shot QA datasets for OPT models.
+For LLaMA models, Table 2 reports results for LLaMA-2-7B, LLaMA-2-13B, and LLaMA-3-8B.
+Our method consistently outperforms previous state-of-the-art quantization approaches across all
+benchmarks. Notably, for more challenging settings such as OPT-1.3B and OPT-2.7B, we achieve
+up to 4.85 and 3.42 reductions in perplexity, highlighting the robustness and effectiveness of our
+approach. For the performance of the method on Llama models, we achieve from 0.22-2.22 reduction across benchmarks, with the exception of Llama-2-7B model evaluated on PTB dataset.
+
+
+7
+
+
+_αc_ = _αc ∗_ (1 _−_ _M_ _[c]_ ) + _αc_ _[∗]_ _[∗]_ _[M][ c]_
+
+_Bi,_ : = _Bi,_ : _∗_ (1 _−_ _Mi,_ _[B]_ : [) +] _[ B]_ _i,_ _[∗]_ : _[∗]_ _[M][ B]_ _i,_ :
+
+
+(11)
+
+
+Table 1: Comparison of our method with different 1-bit quantization methods for OPT models.
+Perplexity ( _↓_ ) is reported for C4, WikiText2, and PTB, while Accuracy ( _↑_ ) is reported for Zeroshot QA datasets. Alignment Type denotes if the method use Weight Alignment (WA) or Output
+Alignment (OA)
+
+|Dataset Metric Method Alignment Type Block Size Weight Bits 1.3B 2.7B 6.7B 13B 30B<br>WA OA|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|**C4**|PPL (_↓_)|Full Precision<br>PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓|-<br>128<br>128<br>128<br>128<br>128|16<br>16.07<br>14.34<br>12.71<br>12.06<br>11.45<br>1.7<br>168.12<br>222.15<br>104.78<br>57.84<br>27.67<br>1.11<br>64.14<br>44.77<br>42.13<br>19.83<br>16.17<br>1.11<br>27.70<br>21.46<br>16.97<br>15.07<br>13.34<br>1.11<br>47.60<br>34.97<br>22.54<br>17.71<br>14.71<br>1.11<br>**24.69**<br>**19.90**<br>**16.22**<br>**14.71**<br>**13.15**|
+|**WikiText2**|PPL (_↓_)|Full Precision<br>PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓|-<br>128<br>128<br>128<br>128<br>128|16<br>14.62<br>12.47<br>10.86<br>10.13<br>9.56<br>1.7<br>239.81<br>278.27<br>144.25<br>74.59<br>28.30<br>1.11<br>69.05<br>48.61<br>47.65<br>18.75<br>13.86<br>1.11<br>26.40<br>19.84<br>14.92<br>13.10<br>11.19<br>1.11<br>45.40<br>34.37<br>20.07<br>15.47<br>12.36<br>1.11<br>**24.30**<br>**18.25**<br>**14.56**<br>**12.84**<br>**10.94**|
+|**PTB**|PPL (_↓_)|Full Precision<br>PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓|-<br>128<br>128<br>128<br>128<br>128|16<br>20.29<br>17.97<br>15.77<br>14.52<br>14.04<br>1.7<br>324.62<br>183.97<br>169.49<br>101.00<br>41.87<br>1.11<br>115.94<br>88.52<br>69.41<br>27.16<br>21.41<br>1.11<br>43.03<br>31.77<br>22.31<br>19.09<br>16.88<br>1.11<br>71.96<br>54.28<br>31.23<br>23.46<br>19.28<br>1.11<br>**38.18**<br>**28.35**<br>**21.45**<br>**18.85**<br>**16.75**|
+|**AveQA**|Acc. (_↑_)|PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|✓<br>✓<br>✓<br>✓<br>✓|128<br>128<br>128<br>128<br>128|1.7<br>36.60<br>37.06<br>35.95<br>37.40<br>43.70<br>1.11<br>38.89<br>40.44<br>38.27<br>47.00<br>49.61<br>1.11<br>45.22<br>48.25<br>52.58<br>55.01<br>57.11<br>1.11<br>40.52<br>42.21<br>46.57<br>49.19<br>51.77<br>1.11<br>**45.76**<br>**49.03**<br>**53.33**<br>**55.06**<br>**57.70**|
+
+
+Table 2: Perplexity ( _↓_ ) of LLaMA-2 and LLaMA-3 models under different quantization methods
+for C4, WikiText2, and PTB datasets. Alignment Type denotes if the method use Weight Alignment
+(WA) or Output Alignment (OA)
+
+|Dataset Method Alignment Type Block Size Weight Bits LLaMA-2 LLaMA-3<br>WA OA 7/8B 13B 8B|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|**C4**|Full Precision<br>PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓|-<br>128<br>128<br>128<br>128<br>128|16<br>1.7<br>1.06<br>1.06<br>1.06<br>1.06|7.26<br>6.73<br>80.69<br>184.67<br>39.38<br>25.87<br>20.4<br>14.77<br>28.02<br>19.82<br>**19.25**<br>**13.8**|9.45<br>104.15<br>61.04<br>36.04<br>41.86<br>**35.14**|
+|**WikiText2**|Full Precision<br>PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓|-<br>128<br>128<br>128<br>128<br>128|16<br>1.7<br>1.06<br>1.06<br>1.06<br>1.06|5.47<br>4.88<br>66.41<br>236.40<br>32.31<br>21.35<br>16.25<br>12.47<br>21.61<br>14.86<br>**15.42**<br>**11.5**|6.14<br>73.08<br>55.80<br>27.42<br>31.98<br>**27.20**|
+|**PTB**|Full Precision<br>PB-LLM<br>BiLLM<br>ARB-RC<br>ARB-X<br>**Ours**|-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓|-<br>128<br>128<br>128<br>128<br>128|16<br>1.7<br>1.06<br>1.06<br>1.06<br>1.06|37.91<br>50.93<br>**657.24**<br>816.31<br>5243.01<br>309.12<br>763.19<br>197.70<br>681.24<br>182.10<br>3166<br>**196.64**|11.18<br>106.25<br>87.25<br>47.88<br>53.86<br>**45.66**|
+
+
+However, the large perplexity indicates that the metric cannot provide a meaningful evaluation. For
+the evaluation on QA datasets, our method consistently outperforms all other methods, up to 0.78%
+improvement.
+
+
+8
+
+
+|Table 3: Layer-wise ablation (AMP) for LLaMA-2-7B and OPT-6.7B.|Col2|
+|---|---|
+|**Model / Mtd.**<br>**PPL** (_↓_)<br>**C4**<br>**WikiText2**|**Model / Mtd.**<br>**PPL** (_↓_)<br>**C4**<br>**WikiText2**|
+|**LLaMA-2-7B**|No AMP<br>AMP|
+|**OPT-6.7B**|No AMP<br>AMP|
+
+
+5.3 ABLATION STUDY
+
+
+|Table 4: Ablation on activation/output error ob- jectives for LLaMA-2-7B and OPT-6.7B.|Col2|
+|---|---|
+|**Model / Obj**<br>**PPL** (_↓_)<br>**C4**<br>**WikiText2**|**Model / Obj**<br>**PPL** (_↓_)<br>**C4**<br>**WikiText2**|
+|**LLaMA-2-7B**<br>Act. Error<br>19.97<br>15.66<br>Out. Error<br>**19.25**<br>**15.42**<br>**OPT-6.7B**<br>Act. Error<br>16.91<br>14.83<br>Out. Error<br>**16.22**<br>**14.74**|**LLaMA-2-7B**<br>Act. Error<br>19.97<br>15.66<br>Out. Error<br>**19.25**<br>**15.42**<br>**OPT-6.7B**<br>Act. Error<br>16.91<br>14.83<br>Out. Error<br>**16.22**<br>**14.74**|
+|**OPT-6.7B**|Act. Error<br>Out. Error|
+
+
+To analyze the effectiveness of our proposed method, we perform ablation experiments on OPT and
+Llama models. Please refer to our Appendix for more ablation studies and results.
+
+
+**Impact** **of** **activation** **accumulation** **error.** To investigate the impact of accumulated error on
+model performance and assess the effectiveness of our method, we conduct an ablation study where
+we optimize our method using the **Activation-conditioned** **Error** (the same objective as ARBX Li et al. (2024)) instead of the **Output** **Error** . The results are presented in Table 4. As shown,
+explicitly accounting for accumulated error in our optimization objective yields a 0.7 improvement
+in perplexity on the C4 dataset.
+
+
+**Impact of Attention Matrix Preservation.** To evaluate the impact of our proposed Attention Matrix Preservation (AMP) on model performance, we conduct an ablation study comparing settings
+with and without AMP (Table 3). Figure 3 in the Appendix visualizes the token similarity matrices of LLaMA-2-7B under our method using the C4 calibration set. Overall, model performance
+degrades for both OPT and LLaMA models without AMP. Notably, LLaMA suffers severe degradation, with perplexity increasing by over 10 points, indicating that its token similarity deteriorates
+more than in OPT. We hypothesize that this sensitivity arises because LLaMA uses RMSNorm instead of LayerNorm: RMSNorm normalizes each token to unit norm before applying a learned scale,
+making the model more dependent on the direction of representations and therefore more vulnerable
+to quantization-induced deviations. AMP plays a key role in mitigating this degradation by preserving the token similarity structure, which helps maintain the integrity of attention patterns during
+quantization.
+
+
+**Overhead Analysis.** Please refer to Appendix D
+
+
+6 CONCLUSION
+
+
+In this work, we investigated the role of calibration data in 1-bit post-training quantization of large
+language models. Our analysis revealed important insights: layer-wise output matching does not
+necessarily reduce block-level error; activation mismatches can accumulate across layers; and naive
+output alignment may degrade attention masking, all of which can negatively impact the effectiveness of output matching for 1-bit post-training quantization. These findings provide a deeper understanding of the limitations of existing PTQ objectives and constitute a contribution on their own.
+Building on these insights, we introduced a quantization strategy that selectively applies output
+alignment at the block level, incorporates attention-aware masking, and reformulates the quantization objective to account for accumulated error. Extensive experiments demonstrate that our method
+consistently outperforms prior 1-bit PTQ approaches for LLMs.
+
+
+REFERENCES
+
+
+Saleh Ashkboos, Amirkeivan Mohtashami, Maximilian Croci, Bo Li, Pashmina Cameron, Martin
+Jaggi, Dan Alistarh, Torsten Hoefler, and James Hensman. Quarot: Outlier-free 4-bit inference in
+rotated llms. _NeurIPS_, 2024.
+
+
+9
+
+
+Yonatan Bisk, Rowan Zellers, Jianfeng Gao, Yejin Choi, et al. Piqa: Reasoning about physical commonsense in natural language. In _Proceedings of the AAAI conference on artificial intelligence_,
+volume 34(05), pp. 7432–7439, 2020a.
+
+
+Yonatan Bisk, Rowan Zellers, Ronan Le bras, Jianfeng Gao, and Yejin Choi. Piqa: Reasoning about
+physical commonsense in natural language. _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_
+_Intelligence_, pp. 7432–7439, Jun 2020b. doi: 10.1609/aaai.v34i05.6239. URL [http://dx.](http://dx.doi.org/10.1609/aaai.v34i05.6239)
+[doi.org/10.1609/aaai.v34i05.6239.](http://dx.doi.org/10.1609/aaai.v34i05.6239)
+
+
+Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, T. J. Henighan, Rewon Child, Aditya Ramesh,
+Daniel M. Ziegler, Jeff Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler,
+Ma teusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot
+learners. _ArXiv_, abs/2005.14165, 2020a. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:218971783)
+[CorpusID:218971783.](https://api.semanticscholar.org/CorpusID:218971783)
+
+
+TomB. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel
+Herbert-Voss, Gretchen Krueger, Thomas Henighan, Rewon Child, Aditya Ramesh, DanielM.
+Ziegler, Jeffrey Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler, Mateusz Litwin,
+Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Samuel McCandlish, Alec Radford,
+Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. _arXiv:_ _Computation_
+_and Language,arXiv:_ _Computation and Language_, May 2020b.
+
+
+Jungwook Choi, Pierce I-Jen Chuang, Zhuo Wang, Swagath Venkataramani, Vijayalakshmi Srinivasan, and Kailash Gopalakrishnan. Bridging the accuracy gap for 2-bit quantized neural networks (qnn). _arXiv preprint arXiv:1807.06964_, 2018.
+
+
+Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina
+Toutanova. Boolq: Exploring the surprising difficulty of natural yes/no questions. _arXiv_, 2019.
+
+
+Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and
+Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge.
+_arXiv_, 2018.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep
+bidirectional transformers for language understanding. In _North American Chapter of the Associ-_
+_ation for Computational Linguistics_, 2019. [URL https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:52967399)
+[CorpusID:52967399.](https://api.semanticscholar.org/CorpusID:52967399)
+
+
+Peijie Dong, Lujun Li, Dayou Du, Yuhan Chen, Zhenheng Tang, Qiang Wang, Wei Xue, Wenhan
+Luo, Qi fei Liu, Yi-Ting Guo, and Xiaowen Chu. Stbllm: Breaking the 1-bit barrier with structured binary llms. _ArXiv_, abs/2408.01803, 2024. [URL https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:271710591)
+[org/CorpusID:271710591.](https://api.semanticscholar.org/CorpusID:271710591)
+
+
+Angela Fan, Shruti Bhosale, Holger Schwenk, Zhiyi Ma, Ahmed El-Kishky, Siddharth Goyal, Mandeep Baines, Onur C¸ elebi, Guillaume Wenzek, Vishrav Chaudhary, Naman Goyal, Tom Birch,
+Vitaliy Liptchinsky, Sergey Edunov, Edouard Grave, Michael Auli, and Armand Joulin. Beyond
+english-centric multilingual machine translation. _J._ _Mach._ _Learn._ _Res._, 22:107:1–107:48, 2020.
+[URL https://api.semanticscholar.org/CorpusID:224814118.](https://api.semanticscholar.org/CorpusID:224814118)
+
+
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. Gptq: Accurate post-training
+quantization for generative pre-trained transformers. _ICLR_, 2023.
+
+
+Yiwen Guo, Anbang Yao, Hao Zhao, and Yurong Chen. Network sketching: Exploiting binary structure in deep cnns. _2017_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recog-_
+_nition_ _(CVPR)_, pp. 4040–4048, 2017. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:11244259)
+[CorpusID:11244259.](https://api.semanticscholar.org/CorpusID:11244259)
+
+
+Song Han, Huizi Mao, and William J Dally. Deep compression: Compressing deep neural networks
+with pruning, trained quantization and huffman coding. _arXiv preprint arXiv:1510.00149_, 2015.
+
+
+10
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. Measuring massive multitask language understanding. _Cornell_ _University_ _-_
+_arXiv,Cornell University - arXiv_, Sep 2020.
+
+
+Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the knowledge in a neural network. _arXiv_
+_preprint arXiv:1503.02531_, 2015.
+
+
+Wei Huang, Yangdong Liu, Haotong Qin, Ying Li, Shiming Zhang, Xianglong Liu, Michele Magno,
+and Xiaojuan Qi. Billm: Pushing the limit of post-training quantization for llms. _arXiv preprint_
+_arXiv:2402.04291_, 2024.
+
+
+Dmitry Lepikhin, HyoukJoong Lee, Yuanzhong Xu, Dehao Chen, Orhan Firat, Yanping Huang,
+Maxim Krikun, Noam M. Shazeer, and Z. Chen. Gshard: Scaling giant models with conditional
+computation and automatic sharding. _ArXiv_, abs/2006.16668, 2020. URL [https://api.](https://api.semanticscholar.org/CorpusID:220265858)
+[semanticscholar.org/CorpusID:220265858.](https://api.semanticscholar.org/CorpusID:220265858)
+
+
+Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdel rahman Mohamed,
+Omer Levy, Veselin Stoyanov, and Luke Zettlemoyer. Bart: Denoising sequence-to-sequence
+pre-training for natural language generation, translation, and comprehension. In _Annual_
+_Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_, 2019. URL [https://api.](https://api.semanticscholar.org/CorpusID:204960716)
+[semanticscholar.org/CorpusID:204960716.](https://api.semanticscholar.org/CorpusID:204960716)
+
+
+Yuhang Li, Ruihao Gong, Xu Tan, Yang Yang, Peng Hu, Qi Zhang, Fengwei Yu, Wei Wang, and
+Shi Gu. Brecq: Pushing the limit of post-training quantization by block reconstruction. _arXiv_
+_preprint arXiv:2102.05426_, 2021.
+
+
+Zhiteng Li, Xianglong Yan, Tianao Zhang, Haotong Qin, Dong Xie, Jiang Tian, Zhongchao
+Shi, Linghe Kong, Yulun Zhang, and Xiaokang Yang. Arb-llm: Alternating refined binarizations for large language models. _ArXiv_, abs/2410.03129, 2024. URL [https://api.](https://api.semanticscholar.org/CorpusID:273163233)
+[semanticscholar.org/CorpusID:273163233.](https://api.semanticscholar.org/CorpusID:273163233)
+
+
+Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Xingyu Dang, and Song Han. Awq:
+Activation-aware weight quantization for llm compression and acceleration. _arXiv_ _preprint_
+_arXiv:2306.00978_, 2023.
+
+
+Zechun Liu, Baoyuan Wu, Wenhan Luo, Xin Yang, W. Liu, and K. Cheng. Bi-real net: Enhancing
+the performance of 1-bit cnns with improved representational capability and advanced training
+algorithm. _ArXiv_, abs/1808.00278, 2018. [URL https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:51892264)
+[CorpusID:51892264.](https://api.semanticscholar.org/CorpusID:51892264)
+
+
+Zechun Liu, Changsheng Zhao, Igor Fedorov, Bilge Soran, Dhruv Choudhary, Raghuraman Krishnamoorthi, Vikas Chandra, Yuandong Tian, and Tijmen Blankevoort. Spinquant: LLM quantization with learned rotations. In _ICLR_, 2025.
+
+
+Mitchell P. Marcus, Beatrice Santorini, and Mary Ann Marcinkiewicz. Building a large annotated
+corpus of English: The Penn Treebank. _Computational Linguistics_, 19(2):313–330, 1993. URL
+[https://aclanthology.org/J93-2004/.](https://aclanthology.org/J93-2004/)
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer sentinel mixture
+models. _arXiv preprint arXiv:1609.07843_, 2016.
+
+
+Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct
+electricity? a new dataset for open book question answering. In Ellen Riloff, David Chiang,
+Julia Hockenmaier, and Jun’ichi Tsujii (eds.), _Proceedings_ _of_ _the_ _2018_ _Conference_ _on_ _Empir-_
+_ical_ _Methods_ _in_ _Natural_ _Language_ _Processing_, pp. 2381–2391, Brussels, Belgium, OctoberNovember 2018. Association for Computational Linguistics. doi: 10.18653/v1/D18-1260. URL
+[https://aclanthology.org/D18-1260/.](https://aclanthology.org/D18-1260/)
+
+
+Denis Paperno, Germ´an Kruszewski, Angeliki Lazaridou, Quan Ngoc Pham, Raffaella Bernardi,
+Sandro Pezzelle, Marco Baroni, Gemma Boleda, and Raquel Fern´andez. The lambada dataset:
+Word prediction requiring a broad discourse context. _arXiv preprint arXiv:1606.06031_, 2016.
+
+
+Alec Radford, Jeff Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever. Language
+models are unsupervised multitask learners. _OpenAI blog_, 2019a.
+
+
+11
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019b.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _The Journal of Machine Learning Research_, 21(1):5485–5551, 2020.
+
+
+Mohammad Rastegari, Vicente Ordonez, Joseph Redmon, and Ali Farhadi. Xnor-net: Imagenet
+classification using binary convolutional neural networks. In _European Conference on Computer_
+_Vision_, 2016. [URL https://api.semanticscholar.org/CorpusID:14925907.](https://api.semanticscholar.org/CorpusID:14925907)
+
+
+Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An adversarial winograd schema challenge at scale. _Communications of the ACM_, 64(9):99–106, 2021.
+
+
+Yuzhang Shang, Zhihang Yuan, Qiang Wu, and Zhen Dong. Pb-llm: Partially binarized large language models. _arXiv_, 2023.
+
+
+Fumin Shen, Chunhua Shen, W. Liu, and Heng Tao Shen. Supervised discrete hashing. _2015_
+_IEEE Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 37–45, 2015. URL
+[https://api.semanticscholar.org/CorpusID:11307479.](https://api.semanticscholar.org/CorpusID:11307479)
+
+
+Yuxuan Sun, Ruikang Liu, Haoli Bai, Han Bao, Kang Zhao, Yuening Li, Jiaxin Hu, Xianzhi Yu,
+Lu Hou, Chun Yuan, et al. Flatquant: Flatness matters for llm quantization. In _ICML_, 2025.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv_, 2023.
+
+
+Albert Tseng, Jerry Chee, Qingyao Sun, Volodymyr Kuleshov, and Christopher De Sa. Quip#: Even
+better llm quantization with hadamard incoherence and lattice codebooks. _ICML_, 2024.
+
+
+Hongyu Wang, Shuming Ma, Li Dong, Shaohan Huang, Huaijie Wang, Lingxiao Ma, Fan Yang,
+Ruiping Wang, Yi Wu, and Furu Wei. Bitnet: Scaling 1-bit transformers for large language
+models. _ArXiv_, abs/2310.11453, 2023. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:264172438)
+[CorpusID:264172438.](https://api.semanticscholar.org/CorpusID:264172438)
+
+
+Jason Wei, Yi Tay, Rishi Bommasani, Colin Raffel, Barret Zoph, Sebastian Borgeaud, Dani Yogatama, Maarten Bosma, Denny Zhou, Donald Metzler, EdH. Chi, Tatsunori Hashimoto, Oriol
+Vinyals, Percy Liang, Jeff Dean, and William Fedus. Emergent abilities of large language models. _Transactions on Machine Learning Research_, Jun 2022.
+
+
+Guangxuan Xiao, Ji Lin, Mickael Seznec, Hao Wu, Julien Demouth, and Song Han. Smoothquant:
+Accurate and efficient post-training quantization for large language models. In _ICML_, 2023.
+
+
+Chen Xu, Jianqiang Yao, Zhouchen Lin, Wenwu Ou, Yuanbin Cao, Zhirong Wang, and Hongbin
+Zha. Alternating multi-bit quantization for recurrent neural networks. In _International_ _Con-_
+_ference_ _on_ _Learning_ _Representations_, volume abs/1802.00150, 2018. URL [https://api.](https://api.semanticscholar.org/CorpusID:8257350)
+[semanticscholar.org/CorpusID:8257350.](https://api.semanticscholar.org/CorpusID:8257350)
+
+
+Zhewei Yao, Reza Yazdani Aminabadi, Minjia Zhang, Xiaoxia Wu, Conglong Li, and Yuxiong
+He. Zeroquant: Efficient and affordable post-training quantization for large-scale transformers.
+_Advances in Neural Information Processing Systems_, 35:27168–27183, 2022.
+
+
+Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine really finish your sentence? _arXiv_, 2019.
+
+
+Jingqing Zhang, Yao Zhao, Mohammad Saleh, and Peter J. Liu. Pegasus: Pre-training with extracted
+gap-sentences for abstractive summarization. _ArXiv_, abs/1912.08777, 2019. URL [https://](https://api.semanticscholar.org/CorpusID:209405420)
+[api.semanticscholar.org/CorpusID:209405420.](https://api.semanticscholar.org/CorpusID:209405420)
+
+
+Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen, Christopher Dewan, Mona Diab, Xian Li, Victoria Lin, Todor Mihaylov, Myle Ott, Sam Shleifer, Kurt
+Shuster, Daniel Simig, Singh Koura, Anjali Sridhar, Tianlu Wang, and Luke Zettlemoyer. Opt:
+Open pre-trained transformer language models. _arXiv preprint arXiv:2205.01068_, 2022.
+
+
+12
+
+
+Barret Zoph and QuocV. Le. Neural architecture search with reinforcement learning. _International_
+_Conference on Learning Representations,International Conference on Learning Representations_,
+Nov 2016.
+
+
+13
+
+
+A APPENDIX
+
+
+**THE** **USE** **OF** **LARGE** **LANGUAGE** **MODELS** We used a large language model (ChatGPT)
+to help with editing this paper. It was only used for simple tasks such as fixing typos, rephrasing
+sentences for clarity, and improving word choice. All ideas, experiments, and analyses were done
+by the authors, and the use of LLMs does not affect the reproducibility of our work.
+
+
+B DERIVATION OF CLOSED-FORMS
+
+
+**Derivation for** _αc_ The gradient of the objective w.r.t _αc_ is:
+
+
+      -      -      -      = Tr diag( _αr_ ) _S_ diag( _αr_ ) _−_ 2 _∗_ Tr diag( _αc_ ) _SW_ diag( _αr_ )
+
+       - ��        - _[B]_ [ diag(]        - _[α]_        - _[c]_        - _[ ⊙]_ _[α][c]_        - [)] _[B][⊤]_        - ��        - _[B][⊤]_
+
+= Tr    - _N_ _B_ _K_ _B_ _[⊤]_ [�] _−_ 2 _∗_ Tr    - _P_ _B_ _[⊤]_ [�]
+
+(16)
+
+
+We denote _B_ [�] _−i_ and _N_ [�] _−i_ respectively as the matrix _B_ and _N_ exclude the row _i_ . Similarly, _N_ [�] _i,−j_
+denotes the row i of matrix _N_ excluded the _j_ element. Given a row _i_ of _B_, keeping the other row of
+
+
+14
+
+
+_∂L_ _∂L_
+_∂_ diag( _αc_ ) [=] _∂_ ( _XW_ _−_ _X_ [�] _W_ [�] )
+
+
+_∂_ ( _XW_ _−_ _X_ [�] _W_ [�] )
+_∂αc_
+
+
+= _−_ 2 _∗_ _B_ _[⊤]_ diag( _αr_ ) _X_ [�] _[⊤]_ ( _XW_ _−_ _X_ [�] _W_ [�] )
+
+= _−_ 2 _∗_ _B_ _[⊤]_ diag( _αr_ ) _X_ [�] _[⊤]_ ( _XW_ _−_ _X_ [�] diag( _αr_ ) _B_ diag( _αc_ ))
+
+
+Setting the diagonal of this gradient to 0, we have:
+
+
+diagonal( _B_ _[⊤]_ diag( _αr_ ) _S_ [�] diag( _αr_ ) _B_ ) _⊙_ _αc_ = diagonal( _B_ _[⊤]_ diag( _αr_ ) _SW_ )
+
+diagonal( _B_ _[T]_ diag( _αr_ ) _SW_ )
+= _⇒_ _αc_ =
+
+diagonal( _B_ _[T]_ diag( _αr_ ) _S_ [�] diag( _αr_ ) _B_ )
+
+
+**Derivation for** _αr_
+
+
+_∂L_ _∂L_
+_∂_ diag( _αr_ ) [=] _∂_ ( _XW_ _−_ _X_ [�] _W_ [�] )
+
+
+_∂_ ( _XW_ _−_ _X_ [�] _W_ [�] )
+_∂αr_
+
+
+= _−_ 2 _∗_ _X_ [�] _[⊤]_ ( _XW_ _−_ _X_ [�] _W_ [�] )diag( _αc_ ) _B_ _[⊤]_
+
+= _−_ 2 _∗_ _X_ [�] _[⊤]_ ( _XW_ _−_ _X_ [�] diag( _αr_ ) _B_ diag( _αc_ ))diag( _αc_ ) _B_ _[⊤]_
+
+
+Setting the diagonal of this gradient to 0, we have:
+
+
+diagonal( _S_ [�] diag( _αr_ ) _B_ diag( _αc ⊙_ _αc_ ) _B_ _[⊤]_
+
+                - ��                 - [) = diagonal(] _[SW]_ [diag(] _[α][c]_ [)] _[B][⊤]_ [)]
+
+= _⇒_ diagonal( _S_ [�] diag( _αr_ ) _B_ ) = diagonal( _SW_ diag( _αc_ ) _B_ _[⊤]_ )
+
+= _⇒_ ( _S_ [�] _⊙B_ ) _αr_ = diagonal( _SW_ diag( _αc_ ) _B_ _[⊤]_ )
+
+
+**Derivation for** _B_ Explanding the objective loss _L_ ( _._ ) out we have:
+
+
+       _L_ ( _X, L_ ) = Tr ( _XW_ _−_ _X_ [�] _W_ [�] )( _XW_ _−_ _X_ [�] _W_ [�] ) _[T]_ [ �]
+
+= Tr    - _X_    - _W_ [�] _W_ [�] _[⊤]_ _X_ [�] _[⊤]_ _−_ 2 _∗_ _XW_ _W_ [�] _[⊤]_ _X_ [�] _[⊤]_ + const�
+
+_∝_ Tr   - _X_   - _[⊤]_ _X_ [�] _W_ [�] _W_ [�] _[⊤]_ [�] _−_ 2 _∗_ Tr   - _X_   - _[⊤]_ _XW_ _W_ [�] _[⊤]_ [�]
+
+= Tr    - _S_    - _W_    - _W_ [�] _[⊤]_ [�] _−_ 2 _∗_ Tr    - _SW_ _W_ [�] _[⊤]_ [�]
+
+
+(12)
+
+
+(13)
+
+
+(14)
+
+
+(15)
+
+
+_B_ as constant, the loss can be expanded as a function of _Bi,_ : as:
+
+_LMSE_ ( _X, L_ ) _∝_ Tr      - _NBKB_ _[⊤]_ [�] _−_ 2 _∗_ Tr      - _PB_ _[⊤]_ [�]
+
+= �( _Ni,_ : _BKBi,_ _[⊤]_ : _[−]_ [2] _[P][i,]_ [:] _[B]_ _i,_ _[⊤]_ : [)]
+
+_i_
+
+= �( _Ni,iBi,_ : _KBi,_ _[⊤]_ : [+] _N_ [�] _i,−iB_ [�] _−iKBi,_ _[⊤]_ : _[−]_ [2] _[P][i,]_ [:] _[B]_ _i,_ _[⊤]_ : [)]
+
+_i_
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+|||~~AMP~~<br>No AMP|||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+Figure 3: Block-wise MSE reconstruction error between quantized and full-precision attention score
+in LLaMA-2-7B. Two curves represent the errors of quantized models with and without the AMP
+mask, computed over C4 calibration data.
+
+
+D ADDITIONAL RESULTS
+
+
+**Additional** **Details** **of** **Experiments.** All experiments are implemented in PyTorch and executed
+on a single NVIDIA GeForce RTX A100 GPU. Consistent with prior studies such as GPTQ (Frantar
+et al., 2023) and BiLLM (Huang et al., 2024), we use the C4 dataset with a sequence length of 2048
+as calibration data to enable fair comparison. The quantization block size is fixed at 128 following
+ARB (Li et al., 2024)
+
+
+15
+
+
+(17)
+
+
+_∝_ �( _N_ [�] _i,−iB_ [�] _−iK −_ 2 _Pi,_ :) _Bi,_ _[⊤]_ :
+
+_i_
+
+Since _Bi,_ : is a binary vector, it has a closed-form solution:
+
+
+_Bi,_ : = sign( _N_ [�] _i,−iB_ [�] _−iK −_ 2 _Pi,_ :) (18)
+
+The more compacted form of the whole _B_ using this closed-form for each row can be computed as:
+_B_ = sign( _NF BK −_ 2 _P_ ) (19)
+with _NF_ = _N_ _−_ diag(diagonal( _N_ )) is the matrix _N_ setting its diagonal to 0.
+
+
+C VISUALIZATION OF THE IMPACT OF AMP MASK TO ATTENTION
+
+MECHANISM DEGRADATION
+
+
+We provide visualization of the impact our AMP mask in mitigating the attention degradation problem of output alignment.
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+0 5 10 15 20 25 30
+Layer
+
+
+Table 5: Ablation study of applying our method to different layers (Q, K, V, Out, Final) of each
+block for LLaMA-2-7B and OPT-6.7B, evaluated on C4 and WikiText2.
+
+**PPL** ( _↓_ )
+**Model / Layer**
+
+**C4** **WikiText2**
+
+
+|Llama-2-7B|Query<br>Key<br>Value<br>Attn Out<br>Final FC|
+|---|---|
+|**OPT-6.7B**|Query<br>Key<br>Value<br>Attn Out<br>**Final FC**|
+
+
+**Ablation** **study** **for** **output** **alignment** **of** **different** **layers.** To investigate the impact of output
+alignment at different layers on model performance, we conduct an ablation study applying our
+method to individual layers within each block of OPT and Llama models. The results are presented
+in Table 5. As observed, output alignment is most effective and consistent when applied to the final
+layer of each block, for both Llama and OPT models.
+
+
+**Inference** **and** **Storage** **Overhead** **Analysis.** Our method introduces **no** **additional** **inference** **or**
+**storage** **overhead**, as it does not add any new quantization parameters and leaves both the model
+architecture and forward-pass computations unchanged. Consequently, the memory footprint and
+runtime during inference are identical to ARB-RC. As reported in ARB (Li et al., 2024), ARBRC achieves similar inference time to BiLLM (Huang et al., 2024), 4 _._ 3–4 _._ 6 _×_ faster than PBLLM (Shang et al., 2023) and 4 _._ 4–5 _._ 1 _×_ faster than the full-precision model, hence these performance gains also apply to our method.
+
+
+**Quantization** **Overhead.** We provide in detail the quantization time of our method, compared
+to ARB-X and ARB-RCLi et al. (2024), across architecture. While our method incurs slightly
+higher overhead than ARB-RC due to the additional closed-form computations and AMP mask, it
+remains more efficient than ARB-X. Importantly, post-training quantization for LLMs is already
+highly efficient; for example, quantizing Llama-2-13B requires only about two hours on a single
+A100 GPU. Since quantization is a one-time process, this modest overhead is practically negligible
+and does not affect inference speed or deployment efficiency.
+
+
+Table 6: Quantization time comparison between 1-bit LLM methods and ours across different models.
+
+**Model** **ARB-X** **ARB-RC** **Ours**
+
+
+**OPT-6.7B** 87m 65m 90m
+**Llama-2-7B** 91m 54m 73m
+**Llama-2-13B** 147m 100m 116m
+
+
+**Additional** **zero-shot** **QA** **results** **for** **LLama** **models.** We provide additional results of our
+method using 8 different zero-shot QA datasets, over Llama architectures
+
+
+16
+
+
+Table 7: Evaluation the accuracy ( _↑_ ) of LLaMA models using ARB-RC and our method over zeroshot QA benchmarks.
+
+|Model Size|Method|Bits|Boolq Lambada Piqa OPQA Winogrande Arc-E Arc-C Hellaswag Avg|
+|---|---|---|---|
+|**LLaMA-2-7B**|ARB-RC<br>**Ours**|1.06<br>1.06|67.74<br>51.87<br>65.51<br>29.8<br>59.98<br>46.8<br>28.24<br>48.1<br>49.75<br>66.45<br>52.53<br>68.12<br>29.8<br>56.99<br>30.3<br>51.56<br>49.24<br>**50.62**|
+|**LLaMA-2-13B**|ARB-RC<br>**Ours**|1.06<br>1.06|74.86<br>66.23<br>71.16<br>33.0<br>62.04<br>57.37<br>33.36<br>50.46<br>56.06<br>72.02<br>68.99<br>72.58<br>36.0<br>63.14<br>59.85<br>33.7<br>53.92<br>**57.53**|
+|**LLaMA-3-8B**|ARB-RC<br>**Ours**|1.06<br>1.06|67.58<br>48.85<br>62.73<br>29.2<br>57.38<br>42.97<br>24.57<br>43.63<br>47.11<br>66.54<br>49.35<br>63.33<br>30.4<br>56.2<br>45.66<br>26.02<br>44.21<br>**47.71**|
+
+
+**Ablation study for the hyper-parameter** _k_ We provide additional ablation study for the hyperparameter _k_ in Table 8. In practice, we adopt _k_ = 5 for stable performance across architecture.
+
+
+Table 8: Ablation study for the hyper-parameter _k_ .
+
+
+PPL _↓_
+**Model** **k**
+
+C4 WikiText2
+
+
+OPT-6.7B
+
+
+LLaMA2-7B
+
+
+1 16.24 14.67
+5 16.22 14.56
+10 16.21 14.40
+
+
+1 20.16 16.26
+5 19.25 15.42
+10 20.00 16.42
+
+
+E PROPOSED LEARNING ALGORITHM
+
+
+**Algorithm 1** Our-RC
+
+
+1: **procedure** OUR-RC( _W, S,_ _S, T, k_ )
+
+[�]
+2: _▷W_ _∈_ R _[d][in][×][d][out]_ _:_ _full-precision weight_ _◁_
+3: _▷S_ _∈_ R _[d][in][×][d][in]_ _:_ _Gram matrix X_ _[⊤]_ _X_ [�] _◁_
+4: _▷_ _S_ [ˆ] _∈_ R _[d][in][×][d][in]_ _:_ _Gram matrix_ _X_ _[⊤]_ _X_ [�] _◁_
+
+[�]
+5: _▷T_ _:_ _iteration rounds_ _◁_
+6: Initialize _W, α_ [�] _r, αc, B_
+7: Initialize _M_ _←_ _SWW_ _[T]_ _S_ _[T]_
+
+
+8: **for** iter = 1: _T_ **do**
+9: _αr_ _[∗]_ _[←]_ [REFINE][-] _[α][r]_ [(] _[S,]_ _[S, W, B, α]_ [�] _[c][, M]_ [)]
+10: _M_ _[r]_ _←_ AMP- _αr_ ( _M, B, αr, αc_ )
+11: _αr_ _←_ _αr ∗_ (1 _−_ _M_ _[r]_ ) + _αr_ _[∗]_ _[∗]_ _[M][ r]_
+
+
+12: **if** (iter + 1) mod _k_ == 0 **then**
+13: _αc_ _[∗]_ _[←]_ [refine-] _[α][c]_ [(] _[S,]_ _[S, W, B, α]_ [�] _[r]_ [)]
+14: _M_ _[c]_ _←_ AMP- _αc_ ( _M, B, αr, αc_ )
+15: _αc_ _←_ _αc ∗_ (1 _−_ _M_ _[c]_ ) + _αc_ _[∗]_ _[∗]_ _[M][ c]_
+
+
+16: _B_ _[∗]_ _←_ REFINE-B( _S,_ _S, W, B, α_ [�] _c_ )
+17: _M_ _[B]_ _, i ←_ AMP-B( _M, B, αr, αc_ )
+18: _Bi,_ : _←_ _Bi,_ : _∗_ (1 _−_ _Mi,_ _[B]_ : [) +] _[ B]_ _i,_ _[∗]_ : _[∗]_ _[M][ B]_ _i,_ :
+19: _B_ _[∗]_ _←_ REFINE-B( _S,_ _S, W, B, α_ [�] _c_ )
+20: _M_ _[B]_ _, i ←_ AMP-B( _M, B, αr, αc_ )
+21: _Bi,_ : _←_ _Bi,_ : _∗_ (1 _−_ _Mi,_ _[B]_ : [) +] _[ B]_ _i,_ _[∗]_ : _[∗]_ _[M][ B]_ _i,_ :
+22: **return** _W_
+
+[�]
+
+
+17
+
+
+**Algorithm 2** Auxiliary functions
+
+
+1: **procedure** REFINE- _αr_ ( _S,_ _S, W, B, α_ [�] _c, M_ )
+2: _B_ = _B_ diag( _αc ⊙_ _αr_ ) _B_ _[⊤]_
+
+3: matrix := _S ⊙B_
+
+[�]
+4: target := _SW_ diag( _αc_ ) _B_ _[⊤]_
+
+5: _αr_ _←_ SOLVE(matrix, target)
+6: **return** _αr_
+
+
+7: **procedure** REFINE- _αc_ ( _S,_ _S, W, B, α_ [�] _r_ )
+8: num := Diag( _B_ _[⊤]_ diag( _αr_ ) _SW_ )
+9: den :=
+Diag( _B_ _[⊤]_ diag( _αr_ ) _S_ [�] diag( _αr_ ) _B_ )
+10: _αc_ := num _/_ den
+11: **return** _αc_
+
+
+12: **procedure** REFINE-B( _S,_ _S, W, α_ [�] _r, αc_ )
+13: _N_ = diag( _αr_ ) _S_ diag( _αr_ )
+14: _K_ = diag( _αc ⊙_ _αc_ )
+15: _P_ = diag( _αc_ ) _W_ _[⊤]_ _S_ diag( _αr_ )
+16: **B** = _NF BK −_ 2 _P_
+
+
+18
+
+
+17: _B_ _[∗]_ = sign( _B_ )
+18: _i ←_ argmax _j_ - _k_ [(] _[B][ ⊙]_ **[B]** [)] _j,k_
+
+19: **return** _B_ _[∗]_ _, i_
+
+
+20: **procedure** AMP B( _M, B, αr, αc_ )
+21: _W_ - = diag( _αr_ ) _B_ diag( _αc_ )
+
+22: _M_ _[B]_ = sign(diag( _αr_ ) _M_ _W_ [�] diag( _αc_ ))
+23: **return** _M_ _[B]_
+
+
+24: **procedure** AMP- _αr_ ( _M, B, αr, αc_ )
+25: _W_ - = diag( _αr_ ) _B_ diag( _αc_ )
+
+26: _M_ _[r]_ = sign(Diag( _M_ _W_ [�] diag( _αc_ ) _B_ _[⊤]_ ))
+27: **return** _M_ _[r]_
+
+
+28: **procedure** AMP- _αc_ ( _M, B, αr, αc_ )
+29: _W_ - = diag( _αr_ ) _B_ diag( _αc_ )
+
+30: _M_ _[c]_ = sign(Diag( _B_ _[⊤]_ diag( _αr_ ) _M_ _W_ [�] ))
+31: **return** _M_ _[c]_

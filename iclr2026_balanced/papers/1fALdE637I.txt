@@ -1,0 +1,8889 @@
+# CONSTRAINED DIFFUSION POLICY OPTIMIZATION FOR OFFLINE REINFORCEMENT LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In this paper, we propose the two-fold improved diffusion policy (TDP) for offline reinforcement learning. We first propose the constrained diffusion policy
+optimization (CDPO) framework, which unifies existing diffusion-based policy
+constraint methods. TDP harnesses the full potential of CDPO by initializing with
+the closed-form solution of a constrained optimization problem and then applying
+another constrained policy optimization for further refinement. We establish the theoretical properties of TDP, including expected policy improvement, in-distribution
+property, and approximate gains over existing diffusion policies. We also propose
+a design method for estimating the desired policy in the TDP loss function to
+achieve the aforementioned performance improvements. Empirical results on the
+D4RL benchmark show that TDP outperforms most existing offline reinforcement
+learning methods.
+
+
+1 INTRODUCTION
+
+
+Offline reinforcement learning (RL) has gained attention for training agents using precollected
+datasets, avoiding costly and risky online interactions common in real-world applications like
+autonomous vehicles and robotics. One of the crucial challenges in offline RL is overestimation in
+out-of-distribution (OOD) regions due to the limited coverage of the static dataset and the lack of
+function approximation error correction through online interactions.
+
+
+Policy constraint methods (Levine et al., 2020) are widely used in offline RL to mitigate overestimation
+in OOD regions by keeping the learned policy close to the behavior policy, namely constrained policy
+optimization (CPO) (Achiam et al., 2017). Explicit methods (Wu et al., 2019; Fujimoto & Gu,
+2021) combine a Q loss term to encourage high-value actions, with a divergence penalty from the
+behavior policy, while implicit methods (Nair et al., 2020; Kostrikov et al., 2022) directly regress
+toward a closed-form optimal policy, with the reverse KL constraint (Peters et al., 2010). Despite
+their popularity, these methods face key limitations: explicit methods often fail to reliably prevent
+OOD actions due to indirect guidance, especially on suboptimal datasets, while implicit methods
+suffer from limited functional diversity and may generate suboptimal actions. Furthermore, the
+expressiveness of the policy model is crucial to realizing the benefits of these objectives fully.
+
+
+Recently, diffusion policies (Wang et al., 2023; Hansen-Estruch et al., 2023; Fang et al., 2024)
+have emerged as highly expressive policies, using diffusion models (Sohl-Dickstein et al., 2015;
+Ho et al., 2020; Song et al., 2021) to capture complex multimodal structures in data distributions
+and environment dynamics. Among them, DQL (Wang et al., 2023) is an explicit policy constraint
+method that balances a Q loss with a diffusion loss, where the latter serves as a divergence-like
+penalty. However, unlike standard divergence-based regularizers, the diffusion loss lacks rigorous
+theoretical grounding, and diffusion models trade some stability for expressiveness. Consequently,
+while DQL achieves strong performance, it also shows training instability in some tasks with a limited
+theoretical foundation.
+
+
+In this paper, we introduce _constrained_ _diffusion_ _policy_ _optimization_ (CDPO), a framework that
+generalizes CPO, with high-expressiveness diffusion policies. CDPO relaxes the limitation that the
+learned policy must remain close to the behavior policy by interpreting implicit methods as mimicking
+an improved, yet still in-distribution, _anchor policy_ without relying on the Q loss. Prior approaches
+within this framework have not fully exploited its design flexibility, leading to inevitable trade-offs.
+To address this, we propose the _two-fold improved diffusion policy_ (TDP), which fully utilizes the
+
+
+1
+
+
+CDPO design variables. TDP begins with an enhanced version of the behavior policy from implicit
+methods, and then applies generalized CPO by utilizing _noise-free estimation_ for further refinement.
+
+
+Theoretically, we first show that the diffusion loss corresponds to a divergence from an optimization
+perspective and further establish a stronger result, the _policy enhancement theorem_ . As a corollary,
+we prove that TDP theoretically outperforms several CDPO policies under mild conditions. We
+also reformulate the notion of in-distribution policies and demonstrate that CDPO (and, of course,
+TDP) satisfies this property. To bridge these theoretical insights with practice, we develop a practical
+TDP algorithm. Empirically, we demonstrate that TDP achieves state-of-the-art performance across
+diverse tasks in the D4RL benchmark (Fu et al., 2020), and validate its effectiveness through 2D
+bandit visualizations and ablation studies, including a flow policy variant (Lipman et al., 2023; Park
+et al., 2025) that highlights the role of policy expressiveness.
+
+
+Our contributions are summarized as follows:
+
+
+    - We introduce TDP, a simple yet effective offline RL algorithm within the CDPO framework,
+and its practical implementation to achieve consistent performance improvements.
+
+
+    - We prove several theoretical properties of CDPO and TDP, including policy enhancement,
+in-distribution behavior, and approximate gains over existing diffusion policies.
+
+
+    - We provide numerical results, visualizations, and ablation studies demonstrating the remarkable performance improvements and effectiveness of the proposed TDP algorithm.
+
+
+2 PRELIMINARY
+
+
+**Offline RL** RL is typically modeled as a Markov decision process (MDP) _M_ = _⟨S, A, R, P, d_ 0 _, γ⟩_,
+where _S, A_ are the state and action spaces, _R_ the reward, _P_ the dynamics, _d_ 0 the initial distribution, and _γ_ the discount factor. The goal is to learn a policy _π_ that maximizes _J_ ( _π_ ) =
+E _s_ 0 _∼d_ 0 _,π_ [ [�] _[∞]_ _t_ =0 _[γ][t][R]_ [(] _[s][t][, a][t]_ [)]][.] [In] [offline] [RL,] [only] [a] [fixed] [dataset] _[D]_ [from] [a] [behavior] [policy] _[π][β]_
+is available, so ( _s, a_ ) _∼D_ means _s ∼_ _ρ_ _[π][β]_ _, a ∼_ _πβ_ ( _·|s_ ), where _ρ_ _[π][β]_ is the state visitation distribution.
+
+
+**Policy Constraint Methods** Policy constraint methods (Levine et al., 2020) are the value-based
+offline RL methods using the following constrained policy optimization (CPO) (Achiam et al., 2017)
+for actor optimization:
+
+
+_π_ [(] _[t]_ [+1)] = arg max _LQπ_ ( _t_ ) ( _π_ ) s.t. E _s∼ρ_ _[π]_ _β_ [ _D_ ( _πβ_ ( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _≤_ _εb,_ (1)
+_π_
+
+
+where _D_ is a divergence and _LQπ_ ( _t_ ) ( _π_ ) := E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )] is the expected Q value
+under _π_, namely Q loss. This optimizes the policy to maximize the expected Q value, namely Q loss,
+while remaining close to the behavior policy _πβ_ . If _D_ is an _f_ -divergence (Amari, 2016), the problem
+reduces to the dual form
+
+
+_π_ [(] _[t]_ [+1)] = arg min _{_ E _s∼ρ_ _[π]_ _β_ [ _D_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _−_ _ζtLQπ_ ( _t_ ) ( _π_ ) _},_ (2)
+_π_
+
+
+where _ζt_ matches the divergence constraint _εb_ in the primal form. To implement this update in deep
+RL, it is customary to convert (2) into the following _loss function form_ :
+
+
+_L_ ( _θ_ ) := E _s∼D_ [ _D_ ( _πβ_ ( _·|s_ ) _∥_ _πθ_ ( _·|s_ ))] _−_ _ζtLQϕ_ ( _θ_ ) _,_ (3)
+
+
+where _LQϕ_ ( _θ_ ) := E _s∼D,a∼πθ_ ( _·|s_ ) [ _Qϕ_ ( _s, a_ )], which we also call as Q loss. Explicit policy constraint
+methods (Wu et al., 2019; Fujimoto & Gu, 2021) directly use (3) with a relaxation by _ζt_ _≡_ _ζ_, while implicit methods (Nair et al., 2020; Fang et al., 2024) regress to _πη_ _[∗]_ [(] _[a][|][s]_ [) =] _Z_ (1 _s_ ) _[π][β]_ [(] _[a][|][s]_ [) exp(] _η_ [1] _[Q][ϕ]_ [(] _[s, a]_ [))][,]
+
+
+plicit methods (Nair et al., 2020; Fang et al., 2024) regress to _πη_ [(] _[a][|][s]_ [) =] _Z_ ( _s_ ) _[π][β]_ [(] _[a][|][s]_ [) exp(] _η_ _[Q][ϕ]_ [(] _[s, a]_ [))][,]
+
+a closed-form solution of (3) when _D_ is the reverse KL divergence with _ζt_ _←_ _η_ [1] [(Peters et al., 2010).]
+
+
+Although policy constraint methods are originally defined with temporal difference (TD) learning for
+the critic, in this paper, we use the term more broadly, without restricting the critic learning algorithm.
+
+
+**Diffusion Policies** Diffusion policies (Wang et al., 2023; Hansen-Estruch et al., 2023; Fang et al.,
+2024) are value-based offline RL methods, whose policies are represented by a diffusion model
+
+
+2
+
+
+_η_ [(Peters et al., 2010).]
+
+
+(Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021), defined as
+
+
+where _ϵ ∼N_ (0 _, I_ ) is the true noise generating _a_ _[k]_ = _α_ ¯ _[k]_ _a_ [0] + 1 _−_ _α_ ¯ _[k]_ _ϵ_ and _U_ [1 _, K_ ] is a uniform
+
+distribution on _{_ 1 _, · · ·_ _, K}_ . DQL (Wang et al., 2023) mimics an explicit policy constraint method,
+using TD learning for the actor and treating the diffusion loss as if it were an _f_ -divergence, yielding
+
+
+_L_ ( _θ_ ) := _L_ diff( _θ_ ) _−_ _ζLQϕ_ ( _θ_ ) _,_ (6)
+
+
+with Q loss actions taken from fully denoised samples. See Appendix A for more about diffusion
+models and DDPM.
+
+
+3 METHOD
+
+
+In this section, we introduce constrained diffusion policy optimization (CDPO) and propose two-fold
+improved diffusion policy (TDP), followed by 2D bandit experiments and practicalization methods.
+
+
+3.1 CONSTRAINED DIFFUSION POLICY OPTIMIZATION (CDPO)
+
+
+Policy constraint methods, introduced in Sec. 2, use constrained policy optimization (CPO) (Achiam
+et al., 2017) (1) for actor learning. Explicit methods apply the dual form (3), while implicit methods
+regress toward the closed-form solution _πη_ _[∗]_ [.] [Both are commonly viewed as different realizations of]
+the same principle, namely maximizing the Q loss while keeping _πθ_ close to the behavior policy _πβ_ .
+
+From another perspective, implicit methods can be viewed as mimicking _πη_ _[∗]_ [without] [the] [Q] [loss.]
+Thus, explicit and implicit methods span two complementary axes: explicit methods emphasize
+Q loss-driven optimization, while implicit methods emphasize flexibility through the choice of an
+_anchor policy_, i.e., the policy to remain close to. This motivates a more general formulation in which
+the policy is not restricted to _πβ_ . We therefore define _generalized CPO_, which replaces _πβ_ with a
+flexible anchor policy _π_ 0. Generalized CPO admits a dual form
+
+_π_ [(] _[t]_ [+1)] = arg min _{_ E _s∼ρ_ _[π]_ _β_ [ _D_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _−_ _ζtLQπ_ ( _t_ ) ( _π_ ) _},_ (7)
+_π_
+
+where _LQπ_ ( _t_ ) ( _π_ ) := E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )], _π_ [(0)] = _π_ 0, and _ζt_ matches the divergence constraint _εb_ in the primal form.
+
+
+Since the full applicability of the above loss requires policies with sufficient expressiveness, we
+instantiate this framework with diffusion policies. Unlike unimodal policies, diffusion policies are
+inherently multimodal and can therefore capture a much broader range of distributions. We refer to
+the resulting framework as _constrained diffusion policy optimization_ (CDPO). CDPO unifies and
+extends existing diffusion policy methods within a single framework. In particular, most explicit
+policy constraint methods, such as DQL (Wang et al., 2023) and its variants (He et al., 2023; Kang
+et al., 2023), correspond to the case _ζt_ _≡_ _ζ_ with _π_ 0 = _πβ_, while most implicit policy constraint
+methods, such as DAC (Fang et al., 2024), correspond to _ζt_ _≡_ 0 with _π_ 0 = _πη_ _[∗]_ [.] [We also note that]
+simple BC training, as in IDQL (Hansen-Estruch et al., 2023), falls under the case _ζt_ _≡_ 0 with
+_π_ 0 = _πβ_ . Beyond these restricted cases, CDPO has full flexibility in the choice of _ζt_ and _π_ 0.
+
+
+3.2 TWO-FOLD IMPROVED DIFFUSION POLICY (TDP)
+
+
+Existing policy constraint methods face drawbacks. Explicit methods, such as DQL, risk out-ofdistribution (OOD) actions since the constraint only indirectly regularizes the policy. This becomes
+
+
+3
+
+
+_πθ_ ( _a_ [0:] _[K]_ _|s_ ) := _N_ (0 _, I_ )
+
+       - ���
+_∼a_ _[K]_
+
+
+_K_
+
+- _πθ_ ( _a_ _[k][−]_ [1] _|a_ _[k]_ _, s_ ) _,_ (4)
+
+
+_k_ =1
+
+
+where _K_ is the number of diffusion steps and the action _a_ is taken as the final output of the denoising
+process, i.e., _a_ = _a_ [0] . The reverse sampling distribution _πθ_ ( _a_ _[k][−]_ [1] _|a_ _[k]_ _, s_ ) for denoising is realized as
+_a_ _[k][−]_ [1] = ~~_√_~~ 1 _α_ _[k]_ [(] _[a][k][ −]_ ~~_√_~~ 1 _−_ 1 _−αα_ ¯ _[k][k]_ _[ϵ][θ]_ [(] _[a][k][, k, s]_ [)) +] **[ 1]** _[k>]_ [1] _[σ][k][z]_ [, where] _[ z]_ _[∼N]_ [(0] _[, I]_ [)][ and] _[ ϵ][θ]_ [(] _[a][k][, k, s]_ [)][ is the noise]
+
+model. Thus, learning _πθ_ reduces to learning _ϵθ_, trained with DDPM diffusion loss (Ho et al., 2020)
+
+
+1 _α_ _[k]_ [(] _[a][k][ −]_ ~~_√_~~ 1 _−_ 1 _−α_ ¯ _[k]_
+
+
+_−_ 1 _−αα_ ¯ _[k]_ _[ϵ][θ]_ [(] _[a][k][, k, s]_ [)) +] **[ 1]** _[k>]_ [1] _[σ][k][z]_ [, where] _[ z]_ _[∼N]_ [(0] _[, I]_ [)][ and] _[ ϵ][θ]_ [(] _[a][k][, k, s]_ [)][ is the noise]
+
+
+_L_ diff( _θ_ ) := E( _s,a_ 0) _∼D,k∼U_ [1 _,K_ ][ _||ϵθ_ ( _a_ _[k]_ _, k, s_ ) _−_ _ϵ||_ [2] ] _,_ (5)
+
+
+_√_
+where _ϵ ∼N_ (0 _, I_ ) is the true noise generating _a_ _[k]_ =
+
+
+_√_
+_α_ ¯ _[k]_ _a_ [0] +
+
+
+especially pronounced on suboptimal datasets, where the behavior policy and the desired policy differ
+substantially, making indirect regularization prone to generating an OOD policy. Implicit methods,
+such as DAC, instead suffer from inherently low functional diversity: the policy is restricted to _πη_ _[∗]_ [,]
+a reweighted version of _πβ_, which narrows the policy class and limits suppression of suboptimal
+regions. These limitations are intrinsic to their formulations, motivating the need for a new direction.
+
+
+To improve upon both classes of methods, we propose to exploit both axes of CDPO by setting
+_π_ 0 = _πβ_ and _ζt_ _̸≡_ 0. In particular, choosing _π_ 0 = _πη_ _[∗]_ [provides a strong starting point while preserving]
+in-distribution properties. This motivates our _two-fold improved diffusion policy_ (TDP), consisting
+of: (i) starting with _πη_ _[∗]_ [, which is stronger than] _[ π][β]_ [yet remains in-distribution,][ to overcome the limit]
+of explicit methods, and (ii) optimizing with (7) using _ζt_ _̸≡_ 0, enabling further gains through the Q
+loss beyond the solution obtained by implcit methods. In this way, TDP mitigates the drawbacks of
+implicit methods by exploring from _πη_ _[∗]_ [toward higher-Q policies, and addresses the drawbacks of]
+explicit methods by ensuring the Q loss refines a high-quality policy rather than potentially pushing it
+OOD. Thus, TDP achieves stronger performance while reliably maintaining in-distribution behavior,
+especially in challenging tasks, as visualized in Sec. 3.3 and as shown in the main experiments.
+
+
+The CDPO dual form of TDP directly follows as
+
+
+_π_ [(] _[t]_ [+1)] = arg min _{_ E _s∼ρ_ _[π]_ _β_       - _D_ ( _πη_ _[∗]_ [(] _[·|][s]_ [)] _[ ∥]_ _[π]_ [(] _[·|][s]_ [))]       - _−_ _ζtLQπ_ ( _t_ ) ( _π_ ) _}._ (8)
+_π_
+
+
+For practical implementation, we convert (8) into a loss function form analogous to (3). This yields
+the TDP loss
+
+
+_L_ ( _θ_ ) := _L_ _[∗]_ _η_ [(] _[θ]_ [)] _[ −]_ _[ζ][t][L][Q]_ _ϕ_ [(] _[θ]_ [)] _[,]_ (9)
+
+
+where
+
+
+_L_ _[∗]_ _η_ [(] _[θ]_ [) :=][ E] _[s][∼D]_         - _D_ ( _πη_ _[∗]_ [(] _[·|][s]_ [)] _[ ∥]_ _[π][θ]_ [(] _[·|][s]_ [))]         - _._ (10)
+
+
+For divergence _D_, the natural choice is the divergence induced by the diffusion loss _L_ diff( _θ_ ), which
+we refer to as the _diffusion divergence D_ diff. Under this choice, the term _L_ _[∗]_ _η_ [(] _[θ]_ [)][ can be written in the]
+same form as the diffusion loss, except that actions are sampled from _πη_ _[∗]_ [:]
+
+
+_L_ _[∗]_ _η_ [(] _[θ]_ [) :=][ E] _s∼D,a_ [0] _∼πη_ _[∗]_ ( _a_ [0] _|s_ ) _,k∼U_ [1 _,K_ ]       - _||ϵθ_ ( _a_ _[k]_ _, k, s_ ) _−_ _ϵ||_ [2][�] _._ (11)
+
+
+This is infeasible since we cannot directly sample from _πη_ _[∗]_ [.] [For this,][ we aim to construct a surrogate of]
+(11) that _preserves its minimizer_ . By the minimum mean square error (MMSE) estimator property, the
+minimizer of (11) is E _a_ 0 _∼πη∗_ ( _a_ 0 _|ak,s_ )[ _ϵ_ ], which we denote to _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)][.] [Analogously, the minimizer]
+of (5) is _ϵβ_ ( _a_ _[k]_ _, k, s_ ) := E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )[ _ϵ_ ].
+
+
+To obtain a tractable surrogate that preserves the minimizer of (11), the simplest approach is to sample
+state–action pairs ( _s, a_ [0] ) directly from the dataset _D_ . As a result, natural surrogate loss becomes
+
+
+_L_ _[∗]_ _η_ [(] _[θ]_ [) :=][ E] ( _s,a_ ) _∼D,k∼U_ [1 _,K_ ]        - _||ϵθ_ ( _a_ _[k]_ _, k, s_ ) _−_ _ϵ_ ˆ _||_ [2][�] _._ (12)
+
+
+By the MMSE estimator property, the minimizer of (12) is E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )[ˆ _ϵ_ ]. Since _ϵβ_ ( _a_ _[k]_ _, k, s_ )
+is defined as _ϵβ_ ( _a_ _[k]_ _, k, s_ ) := E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )[ _ϵ_ ], our choice is _ϵ_ ˆ := _ϵ_ + _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)] _[ −]_ _[ϵ][β]_ [(] _[a][k][, k, s]_ [)][.]
+With this construction, the conditional expectation of ˆ _ϵ_ becomes exactly _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)][.] [Therefore, the]
+minimizer of the surrogate loss (12) coincides with the minimizer of the original objective (11).
+
+Though _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)][ nor] _[ ϵ][β]_ [(] _[a][k][, k, s]_ [)][ is directly computable,] [we only need their difference to con-]
+struct ˆ _ϵ_ . To make this computable, we first express them by the score functions of the noisy action
+distributions, which are induced by the noise-free action policies. For _πη_ _[∗]_ [(] _[a]_ [0] _[|][s]_ [)][,] [the] [correspond-]
+ing distribution over the noisy action _a_ _[k]_ is obtained by marginalizing the noise-free action _a_ [0]
+through the forward diffusion kernel _q_ ( _a_ _[k]_ _|a_ [0] ), i.e., _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] [:=] - _πη_ _[∗]_ [(] _[a]_ [0] _[|][s]_ [)] _[q]_ [(] _[a][k][|][a]_ [0][)] _[da]_ [0][.] [Simi-]
+larly, the noisy action distribution induced by _πβ_ ( _a_ [0] _|s_ ) is _πβ_ ( _a_ _[k]_ _|s_ ) := - _πβ_ ( _a_ [0] _|s_ ) _q_ ( _a_ _[k]_ _|a_ [0] ) _da_ [0] .
+These noisy distributions admit a score function relationship with the corresponding noise estimates. As shown in prior works (Luo, 2022; Fang et al., 2024), along with full derivation
+_√_
+in Appendix D.7, we get _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)] [=] _[−]_ 1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] [and] _[ϵ][β]_ [(] _[a][k][, k, s]_ [)] [satisfies]
+
+
+in Appendix D.7, we get _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)] [=] _[−]_ 1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] [and] _[ϵ][β]_ [(] _[a][k][, k, s]_ [)] [satisfies]
+
+_√_
+_ϵβ_ ( _a_ _[k]_ _, k, s_ ) = _−_ 1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πβ_ ( _a_ _[k]_ _|s_ ).
+
+
+1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πβ_ ( _a_ _[k]_ _|s_ ).
+
+
+4
+
+
+From the relationships above, we have
+
+
+~~�~~
+_ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)] _[ −]_ _[ϵ][β]_ [(] _[a][k][, k, s]_ [) =] _[ −]_ 1 _−_ _α_ ¯ _[k]_ _∇ak_ (log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] _[ −]_ [log] _[ π][β]_ [(] _[a][k][|][s]_ [))] _[.]_ (13)
+
+Instead of directly using _g_ ( _a_ _[k]_ _, k, s_ ) := log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] _[ −]_ [log] _[ π][β]_ [(] _[a][k][|][s]_ [)][, Lu et al. (2023) has shown that]
+
+_f_ ( _a_ _[k]_ _, k, s_ ) := log E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ ) �exp    - _η_ 1 _[Q][ϕ]_ [(] _[s, a]_ [0][)] �� = _g_ ( _a_ _[k]_ _, k, s_ ) + log _Z_ ( _s_ ) _,_ (14)
+
+
+where _Z_ ( _s_ ) is the partition function in _πη_ _[∗]_ [(] _[a]_ [0] _[|][s]_ [) =] _Z_ (1 _s_ ) _[π][β]_ [(] _[a]_ [0] _[|][s]_ [) exp(] _η_ [1] _[Q][ϕ]_ [(] _[s, a]_ [))][.] [Since] _[ Z]_ [(] _[s]_ [)][ does]
+
+not depend on _a_ _[k]_, it disappears when taking the gradient with respect to _a_ _[k]_ . Therefore, _f_ ( _a_ _[k]_ _, k, s_ )
+can be used equivalently to _g_ ( _a_ _[k]_ _, k, s_ ) for constructing the noise update.
+
+
+However, this formulation would require training auxiliary models for both _πβ_ and _f_, which makes the
+procedure computationally expensive and unnecessarily complex. Our goal is to avoid introducing any
+additional models. To achieve this, we approximate _f_ ( _a_ _[k]_ _, k, s_ ) using a first-order Taylor expansion,
+which gives
+
+_f_ ˜( _a_ _[k]_ _, k, s_ ) := _η_ [1] [E] _[a]_ [0] _[∼][π][β]_ [(] _[a]_ [0] _[|][a][k][,s]_ [)][[] _[Q][ϕ]_ [(] _[s, a]_ [0][)]] _[.]_ (15)
+
+One can easily show that using the following one-sample estimate is equivalent to using _f_ [ˆ] ( _a_ _[k]_ _, k, s_ )
+by MMSE estimator property:
+
+
+Next, we examine the bias introduced by this approximation. The bias of _f_ [ˆ] ( _a_ _[k]_ _, k, s_ ) relative to
+_f_ ( _a_ _[k]_ _, k, s_ ) is (see Appendix D.7 for the full proof)
+
+_f_ ˆ( _a_ _[k]_ _, k, s_ ) _−_ _f_ ( _a_ _[k]_ _, k, s_ ) = _−D_ KL( _πβ_ ( _a_ [0] _|a_ _[k]_ _, s_ ) _∥_ _πη_ _[∗]_ [(] _[a]_ [0] _[|][a][k][, s]_ [))] _[.]_ (17)
+
+When _πη_ _[∗]_ [(] _[a]_ [0] _[|][a][k][, s]_ [)][ strongly favors high Q actions, the discrepancy between the two posteriors grows,]
+and the negative KL term counteracts such shifts. This conservativeness suppresses movement away
+from the dataset distribution, thereby mitigating OOD action generation.
+
+
+Alternative strategies for estimating _f_ include: (i) generating multiple _a_ [0] samples from a pretrained
+diffusion BC model to compute (14), and (ii) _noisy estimation_ (Fang et al., 2024), which replaces
+_∇ak_ _Qϕ_ ( _s, a_ [0] ) with _∇ak_ _Qϕ_ ( _s, a_ _[k]_ ), relying on a naive extension of _Qϕ_ to the noise domain. The
+first option adds cost without gains, while the second is unreliable since _Qϕ_ is not trained on _a_ _[k]_,
+potentially making such inputs OOD. We therefore regard noise-free estimation as important to the
+success of TDP. Results for (i) appear in Appendix F.3, (ii) are illustrated in Sec. 3.3.
+
+
+3.3 2D BANDIT EXPERIMENTS
+
+
+To further validate both noise-free estimation and the two-fold improvement, we consider the 2D
+bandit environment. Following Wang et al. (2023), we adopt their setup and use the original DQL
+implementation (as an explicit method) to avoid bias, while reimplementing the other methods to
+reflect our design choices for consistency. In the 2D bandit experiments, each algorithm reflects the
+actor loss design of its offline RL counterpart, while all other components are aligned, enabling a
+controlled comparison of actor loss designs.
+
+
+**Settings** The 2D bandit experiment uses a single state with a 2D box action space containing four
+clusters. The objective is to imitate the highest-reward cluster (bottom right, red) while remaining
+within the in-distribution regions (purple). To compare noise-free and noisy estimation, we evaluate
+four variants: TDP itself (“TDP”), the noisy estimate (“Noisy”), TDP without the Q loss (“Implicit”),
+and their combination (“Noisy+Implicit”). In addition, we compare TDP with explicit (“Explicit”)
+and implicit (“Implicit”) policy constraint methods. The results are visualized in Fig. 1. Additional
+details are provided in Appendix E.1 and Wang et al. (2023).
+
+
+5
+
+
+ _η_ [1] 1 _−_ _α_ ¯ _[k]_ _∇ak_ _Qϕ_ ( _s, a_ [0] ) _,_ (16)
+
+
+_ϵ_ ˆ _≈_ _ϵ −_ [1]
+
+
+_√_
+where _a_ [0] is a _true_ noise-free action generating _a_ _[k]_ during training with _a_ _[k]_ =
+
+
+_√_
+_α_ ¯ _[k]_ _a_ [0] +
+
+
+where _a_ [0] is a _true_ noise-free action generating _a_ _[k]_ during training with _a_ _[k]_ = _α_ ¯ _[k]_ _a_ [0] + 1 _−_ _α_ ¯ _[k]_ _ϵ_
+
+and _ϵ ∼N_ (0 _, I_ ). We call this _noise-free estimation_, which works in the noise domain but relies only
+on noise-free actions. Though slightly biased, it is simple, reduces variance, and is highly effective in
+
+
+_∂a_ _[∂a][k]_ [0] _[· ∇][a]_ [0] _[Q][ϕ]_ [(] _[s, a]_ [0][)][ is well-defined with] _∂a_ _[∂a][k]_ [0]
+
+
+practice. Note that _∇ak_ _Qϕ_ ( _s, a_ [0] ) = _[∂a][k]_ [0]
+
+
+_∂a_ _[∂a][k]_ [0] [=] ~~�~~ _α_ ¯1 _[k]_ [.]
+
+
+1
+
+
+1
+
+
+0
+
+
+1
+
+
+0
+
+
+1
+
+
+1
+
+
+0
+
+
+1
+
+
+|r N(3.0, 0.5)<br>r N(0.0, 0.5)<br>r N(1.5, 0.5)<br>r N(5.0, 0.5)|Col2|
+|---|---|
+|1<br>0<br>1|1<br>0<br>1|
+
+
+|TDP|Col2|
+|---|---|
+|99% CR||
+|1<br>0<br>1|1<br>0<br>1|
+
+
+|Noisy|Col2|
+|---|---|
+|||
+|1<br>0<br>1|1<br>0<br>1|
+
+
+|Implicit|Col2|
+|---|---|
+|||
+|1<br>0<br>1|1<br>0<br>1|
+
+
+|Col1|Col2|
+|---|---|
+|1<br>0<br>1|1<br>0<br>1|
+
+
+where _a_ _[k]_ = _α_ ¯ _[k]_ _a_ [0] + 1 _−_ _α_ ¯ _[k]_ _ϵ_, ( _s, a_ [0] ) _∼D_, and _ϵ ∼N_ (0 _, I_ ). This reduces computation by using
+
+a one-step gradient, while reusing the same _ϵθ_ values as in _L_ _[∗]_ _η_ [(] _[θ]_ [)][.] [Overall, these techniques make]
+TDP both efficient and stable in practice.
+
+
+We provide the additional algorithm details and algorithm pseudocodes in Appendix C.
+
+**Remark** Our two-fold approach, optimizing _πθ_ to be close to _πη_ _[∗]_ [and to maximize the Q value in]
+addition, can be applied to other expressive policies like recent flow-based policies. Our two-fold
+approach increases performance again when applied to flow-based policies, as shown in Sec. 6.3.
+
+
+6
+
+
+1
+
+
+0
+
+
+1
+
+
+x
+
+
+1
+
+
+0
+
+
+1
+
+
+0
+
+
+1
+
+
+Figure 1: A visualization of sampled actions from various algorithms in the 2D bandit experiments.
+
+
+**Noise-Free vs.** **Noisy Estimation** TDP matches the desired distribution without producing OOD
+actions, while the noisy estimate variant yields biased OOD actions with incorrect centers. Removing
+the Q loss makes both suboptimal, but the noise-free version stays in-distribution, while the noisy
+one fails and produces OOD actions. Overall, only TDP successfully recovers the optimal region.
+
+
+**Two-Fold vs.** **Explicit vs.** **Implicit** As mentioned in Sec. 3.1, explicit methods tend to generate
+OOD samples, while implicit methods fail to eliminate suboptimal ones. Both effects appear in the 2D
+bandit experiments, while TDP succeeds, demonstrating the strength of the two-fold improvement.
+
+
+3.4 PRACTICAL IMPLEMENTATION
+
+
+We now present additional implementation details of TDP, including critic and actor updates, together
+with computation-saving techniques for the actor to reduce computations. These components ensure
+robust and efficient training while realizing the Q function–oriented two-fold improvement.
+
+
+**Critic Update** We use temporal difference (TD) learning for critic updates and additionally apply
+the lower confidence bound (LCB) of the Q ensemble (Ghasemipour et al., 2022; Fang et al., 2024)
+to enhance robustness. The LCB is defined as _Qϕ_ ¯ = E[ _Qϕ_ ¯] _−_ _ρσ_ ¯ _ϕ_, where _ρ_ controls the confidence
+interval and _σ_ ¯ _ϕ_ is the ensemble standard deviation. As in Fang et al. (2024), we also sample _Na_
+actions from the diffusion policy and compute mean LCB targets over them.
+
+
+**Actor Update with Computation-Saving Techniques** Recall the actor loss (9). For theoretical
+analysis, we assume a fixed target divergence value _εb_ across timesteps (Sec. 4). In practice, however,
+adaptively changing _ζt_ according to _εb_ is difficult. Following prior works, we therefore fix _ζt_ to a
+constant _ζ_, justified by the empirical observation that _L_ _[∗]_ _η_ [(] _[θ]_ [)][ converges rapidly.]
+
+
+Since we employ Q ensembles to improve critic quality, the actor update must be made more efficient
+to remain computationally feasible. We focus on three parts of the actor loss training for cost
+reduction: (i) the actor update itself, (ii) Q gradient computation in _L_ _[∗]_ _η_ [(] _[θ]_ [)][, and (iii) the Q loss term.]
+
+
+For the actor update itself, we apply a delayed policy update, which updates the actor every _d >_ 1
+steps (typically _d_ = 2) instead of after each Q update, following He et al. (2023). For Q gradient
+computation and Q loss, we use only half of the batches, which we found to have no noticeable effect
+on performance. Additionally for the Q loss, we adopt the EDP (Kang et al., 2023)-style formulation,
+replacing full-step denoising (from _a_ _[K]_ _∼N_ (0 _, I_ )) with a one-step estimate,
+
+
+_√_
+_a_ ˆ [0] := _[a][k][ −]_
+
+
+1 _−_ ~~_√_~~ _α_ ¯ _[k]_ _ϵθ_ ( _a_ _[k]_ _, k, s_ ) _,_ (18)
+
+_α_ ¯ _[k]_
+
+
+_√_
+where _a_ _[k]_ =
+
+
+_√_
+_α_ ¯ _[k]_ _a_ [0] +
+
+
+4 THEORETICAL ANALYSIS
+
+
+We now turn to the theoretical properties of CDPO and TDP. As the diffusion divergence is not an
+_f_ -divergence (with respect to _a_ [0] ), we first establish strong duality to ensure the equivalence of the
+primal and the dual form of CDPO, as mentioned in Appendix D.1.3. This serves as the foundation
+for our main result, the _policy_ _enhancement_ _theorem_, which provides a stronger guarantee than
+strong duality. As a corollary, we derive an _approximate improvement_ result. Finally, we present
+an approximate in-distribution property for CDPO, based on a novel formulation of in-distribution.
+Before we start
+
+
+**Policy** **Enhancement** **Theorem** One challenge is that the _diffusion_ _divergence_, induced by the
+diffusion loss, is not an _f_ -divergence, raising concerns about the validity of the CDPO dual form.
+Fortunately, it can be viewed as a _pathwise forward KL divergence_ (See Appendix D.2), resolving
+this issue. Utilizing this with assuming a fixed divergence constraint _εb_ across timesteps, we establish
+the policy enhancement theorem, which guarantees monotone policy improvement for CDPO.
+
+**Theorem 4.1** (Policy enhancement theorem) **.** _For CDPO, we can achieve_ _**policy improvement**_ _for_
+_the first iteration step, i.e._
+_J_ ( _π_ [(1)] ) _≥_ _J_ ( _π_ [(0)] ) = _J_ ( _π_ 0) _,_ (19)
+_where_ _J_ ( _π_ ) _is_ _the_ _expected_ _return_ _of_ _policy_ _π._ _Furthermore,_ _we_ _can_ _achieve_ _**expected**_ **Q** _**value**_
+_**improvement**_ _for all the other iteration steps, i.e._ _for t ≥_ 1 _,_
+
+E _s∼ρ_ _[π]_ _β,a∼π_ ( _t_ +1)[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )] _≥_ E _s∼ρ_ _[π]_ _β,a∼π_ ( _t_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )] _._ (20)
+
+
+Due to the offline nature, we could not achieve a stronger result, and Theorem 4.1 can be considered
+as an offline version of the policy improvement theorem.
+
+
+**Approximate Improvement** Based on Theorem 4.1, it is straightforward to compare several CDPO
+algorithms summarized in the following corollaries:
+**Corollary 4.2.** _1) πDQL_ ≳ _πβ, 2) πη_ _[∗]_ [≳] _[π][β][, and 3)][ π][TDP]_ [≳] _[π]_ _η_ _[∗][.]_ _[Here,][ π]_ [1] [≳] _[π]_ [2] _[means that policy][ π]_ [1]
+_is approximately better than policy π_ 2 _in the sense of (19) and (20)._
+**Corollary 4.3.** _πη_ _[∗]_ _[is approximately better than][ π][DQL]_ _[in the following sense.]_ _[For][ π][β]_ _[satisfying some]_
+_mild conditions, for any ζt there exists properly chosen η satisfying_
+
+E _s∼ρ_ _[π]_ _β,a∼πη∗_ [ _Q_ _[π][β]_ ( _s, a_ )] _≥_ E _s∼ρπβ,a∼πDQL_ (1) [[] _[Q][π][β]_ [(] _[s, a]_ [)]] (21)
+
+
+In other words, TDP is theoretically guaranteed to achieve approximate improvements over existing
+diffusion policies such as DQL (Wang et al., 2023) and DAC (Fang et al., 2024), and this advantage
+is further supported by the empirical results in Fig. 1 and Sec. 6.
+
+
+**In-Distribution Property** We now examine the in-distribution property of CDPO. To this end,
+we first reformulate the notions of OOD actions and the in-distribution policy. While the natural
+definition of an OOD action is _πβ_ ( _a|s_ ) = 0, this condition rarely occurs in continuous control.
+Instead, we adopt _πβ_ ( _a|s_ ) _< δ_ for some small _δ_ as the criterion for OOD actions. Moreover, since
+completely preventing OOD actions is infeasible, we relax this requirement by considering averages.
+In this line, we define a ( _δ, ε_ )-in-distribution policy as follows:
+**Definition** **4.4.** For ( _δ, ε_ ) _∈_ (0 _,_ 1) [2], the policy _π_ is a ( _δ, ε_ )-in-distribution policy if and only if
+E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[P[ _πβ_ ( _a|s_ ) _< δ_ ]] _< ε_ .
+
+
+We can ensure a ( _δ, ε_ )-in-distribution CDPO policy by controlling the expected diffusion divergence.
+**Theorem** **4.5.** _For_ _any_ _π_ 0 _,_ _proper_ _ε, δ_ _>_ 0 _,_ _with_ _a_ _box_ _action_ _space_ _A_ = [ _−_ 1 _,_ 1] _[d]_ _,_ _there_ _exists_
+_Dmax_ _>_ 0 _such_ _that_ _any_ _policy_ _π_ _with_ E _s∼ρ_ _[π]_ _β_ [ _Ddiff_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _≤_ _Dmax_ _is_ _an_ _(δ, ϵ)-in-_
+_distribution policy._
+
+
+This implies that the OOD measure of TDP can be bounded through the expected diffusion divergence,
+ensuring both a ( _δ, ε_ )-in-distribution policy and the correctness of the Q function.
+
+
+See Appendices D.3, D.4, D.5, and D.6 for proofs of Theorem 4.1, Corollaries 4.2 and 4.3, and
+Theorem 4.5, respectively.
+
+
+7
+
+
+**Remark** Theorem 4.1 is first proven for the general _f_ -divergence case and Theorem 4.5 for forward
+and reverse KL divergences, before both are specialized to CDPO. As a result, these theorems extend
+naturally to generalized CPO and ordinary policy constraint methods, thereby unifying CDPO with
+the classical theory and providing a solid foundation for theoretical analyses.
+
+
+5 RELATED WORKS
+
+
+**Policy Constraint Methods for Offline RL** Policy constraint methods are widely used in offline
+RL, with explicit or implicit forms. Explicit methods use BC-based divergences (Fujimoto & Gu,
+2021; Wang et al., 2023) or reverse KL by policy log-likelihood (An et al., 2021) or convex conjugate
+formulation (Wu et al., 2019). Implicit methods mimic the reverse KL-constrained optimal policy
+through weighted losses (Nair et al., 2020; Kostrikov et al., 2022) or energy guidance (Lu et al.,
+2023; Fang et al., 2024). Some approaches use non-Gaussian BC models to more effectively compute
+forward KL–like losses (Wu et al., 2022; Zhang et al., 2023). Variants include BC with Q loss
+under Decision Transformer (Chen et al., 2021) backbones (Hu et al., 2024; Kim et al., 2024). Other
+approaches (Kumar et al., 2020; Mao et al., 2023; Xu et al., 2023; Tarasov et al., 2023) propose
+alternative actor losses, which can more broadly be interpreted as policy constraint methods.
+
+
+**Diffusion Models for Offline RL** Building on the success of diffusion models (Sohl-Dickstein
+et al., 2015; Ho et al., 2020; Song et al., 2021), early offline RL works applied them to return-guided
+trajectory planning (Janner et al., 2022; Ajay et al., 2023). Wang et al. (2023) introduced diffusion
+policies by state-conditioned action denoising with a linear combination of diffusion and Q losses.
+Extensions include Q value-based action selection (Hansen-Estruch et al., 2023), external energy
+guidance (Lu et al., 2023), integrated guidance (Fang et al., 2024), one-step Q loss estimation (Kang
+et al., 2023), and adaptive Q loss weighting (He et al., 2023). Recent works apply reverse KL–based
+formulations for improved optimization (Zhang et al., 2024; Gao et al., 2025), while others distill
+diffusion BC policies into deterministic or Gaussian models (Chen et al., 2024a;b).
+
+
+**Diffusion Models for Online RL** Diffusion models have also been extended to online RL, taking
+advantage of their policy-based structure for direct interaction with the environment. Early work
+applies action gradient updates to dataset actions with the diffusion loss (Yang et al., 2023). Subsequent approaches introduce energy-based formulations with noisy estimation (Psenka et al., 2024),
+TD3-style training with Gaussian mixture models for noise scale adjustment (Wang et al., 2024), or
+mixing diffusion losses from uniformly sampled actions combined with rejection sampling (Ding
+et al., 2024). Recent work further employs energy-based Q weighting with reverse sampling to
+improve sample efficiency (Ma et al., 2025).
+
+
+6 EXPERIMENTS
+
+
+In this section, we evaluate TDP on the D4RL benchmark (Fu et al., 2020) and perform ablations on
+noise-free approximation and policy expressiveness with flow policies.
+
+
+6.1 EXPERIMENTAL SETUP
+
+
+**Environments** We evaluated TDP on D4RL MuJoCo (Todorov et al., 2012) locomotion, Antmaze,
+and Kitchen tasks. The benchmark includes nine locomotion tasks (three agents _×_ three optimality
+levels), six standard and two ultra Antmaze tasks (Jiang et al., 2023), and Kitchen partial and mixed.
+Final scores are reported, and implementation and hyperparameter details are in Appendix E.2.
+
+
+**Baselines** TDP inherits the following features: two-fold improvement, noise-free estimation. diffusion policy, and Q ensemble. We compared it against policy constraint methods (Kumar et al., 2020;
+Kostrikov et al., 2022; Tarasov et al., 2023; Mao et al., 2023), diffusion policies (Wang et al., 2023;
+Lu et al., 2023; He et al., 2023; Fang et al., 2024), and Q ensemble methods (An et al., 2021) for
+locomotion. Note that Fang et al. (2024) also corresponds to an implicit method with noisy estimation.
+For Antmaze, we used goal-conditioned baselines (Kostrikov et al., 2022; Xu et al., 2022; Zeng et al.,
+2023; Park et al., 2023), and for Kitchen, DT (Chen et al., 2021). Details are in Appendix E.4.
+
+
+8
+
+
+Table 1: The normalized scores in locomotion tasks. The best score for each task is in bold. Here,
+“m” denotes medium, “m-r” denotes medium-replay, and “m-e” denotes medium-expert.
+
+
+**Policy Constraint** **Diffusion Policy** **Q Ensemble**
+**Dataset**
+
+**IQL** **ReBRAC** **SVR** **DQL** **QGPO** **DiffCPS** **DAC** **SAC-N** **EDAC** **TDP**
+
+
+Halfcheetah m 47.4 65.6 60.5 51.1 54.1 **71.0** 59.1 67.5 65.9 69.7 _±_ 0.9
+Hopper m 66.3 102.0 **103.5** 90.5 98.0 100.1 101.2 100.3 101.6 103.0 _±_ 0.1
+Walker2d m 78.3 82.5 92.4 87.0 86.0 90.9 96.8 87.9 92.5 **108.0** _±_ 2.0
+
+
+Halfcheetah m-r 44.2 51.0 52.5 47.8 47.6 50.5 55.0 **63.9** 61.3 58.5 _±_ 0.6
+Hopper m-r 94.7 98.1 103.7 101.3 96.9 101.1 103.1 101.8 101.0 **104.4** _±_ 0.2
+Walker2d m-r 73.9 77.3 95.6 95.5 84.4 91.3 96.8 78.7 87.1 **109.2** _±_ 3.1
+
+
+Halfcheetah m-e 86.7 101.1 94.2 96.8 93.5 100.3 99.1 **107.1** 106.3 100.3 _±_ 0.2
+Hopper m-e 91.5 107.0 111.2 111.1 108.0 **112.1** 111.7 110.1 110.7 111.4 _±_ 0.6
+Walker2d m-e 109.6 111.6 109.3 110.1 110.7 113.1 113.6 **116.7** 114.7 113.6 _±_ 0.6
+
+
+Average 77.0 88.5 91.4 87.9 86.6 92.3 92.9 92.7 93.5 **97.6**
+
+
+Table 2: The normalized scores in Antmaze tasks. The best score for each task is in bold. Here, “p”
+denotes play and “d” denotes diverse.
+
+
+**Policy Constraint** **Diffusion Policy** **Goal-Conditioned**
+**Dataset**
+
+**IQL** **DQL** **QGPO** **DiffCPS** **DAC** **GC-IQL** **GC-POR** **HIQL** **GCPC** **TDP**
+
+
+Umaze 92.8 93.4 96.4 97.4 **99.5** 91.6 90.6 86.5 71.2 98.5 _±_ 1.7
+Umaze d 71.2 66.2 74.4 87.4 85.0 **88.8** 71.3 83.5 71.2 73.0 _±_ 4.1
+Medium p 75.8 76.6 83.6 88.2 85.8 82.6 71.4 84.1 70.8 **92.5** _±_ 4.3
+Medium d 76.6 78.6 83.8 87.8 84.0 76.2 74.8 86.8 72.2 **90.5** _±_ 3.3
+Large p 50.0 46.4 66.6 65.6 50.3 40.0 63.2 **86.1** 78.2 81.0 _±_ 8.7
+Large d 52.6 56.6 64.8 63.6 55.3 29.8 49.0 **88.2** 80.6 78.0 _±_ 3.2
+Ultra p 21.2 22.0 7.0 14.5 39.0 20.6 31.0 39.2 56.6 **69.5** _±_ 6.4
+Ultra d 17.8 26.0 12.0 42.5 53.0 28.4 29.8 52.9 54.6 **62.5** _±_ 3.0
+
+
+Average 57.2 58.2 61.1 68.4 69.0 57.2 60.1 75.9 69.4 **80.7**
+
+
+Table 3: The normalized scores in Kitchen tasks. The best score for each task is in bold. Here, “p”
+denotes partial and “m” denotes mixed.
+
+
+**Dataset** **CQL** **IQL** **DQL** **DAC** **DT** **GC-IQL** **GCPC** **TDP**
+
+
+Kitchen p 49.8 46.3 60.5 50.0 48.6 74.7 90.2 **99.0** _±_ 1.7
+Kitchen m 51.0 51.0 62.6 60.2 50.0 74.6 75.6 **100.0** _±_ 0.0
+
+
+6.2 RESULTS
+
+
+As shown in Table 1, TDP achieves strong performance across all locomotion tasks, attaining the
+highest average score. In particular, it yields large gains on suboptimal datasets, surpassing the best
+baseline by 11.2 and 12.4 points on Walker2d medium and medium-replay, respectively. Given that
+locomotion performance is already highly saturated, even a margin of 4-5 points on average over
+strong baselines represents a significant improvement.
+
+
+As shown in Table 2, TDP outperforms all baselines by at least 4.8 points on average in Antmaze,
+including goal-conditioned methods, and achieves notable gains on the ultra tasks. This stems from
+its mechanism: since TD targets rely on _a_ _[′]_ _∼_ _πθ_ ¯( _·|s_ _[′]_ ), TD-based methods need a strong policy to
+improve the Q function, forming a positive feedback loop. With its two-fold improvement, TDP
+enables progress even with suboptimal Q functions, which is critical for long-horizon, sparse-reward
+tasks such as Antmaze ultra.
+
+
+As shown in Table 3, TDP surpasses all baselines by a wide margin in Kitchen environments and is
+the first to achieve near-perfect completions on partial and mixed tasks. Given the sparse-reward and
+multi-turn nature of Kitchen, these results underscore the effectiveness of two-fold improvements.
+
+
+The key strength of TDP lies in its robustness across diverse environments. Unlike prior methods
+that excel only in specific domains, TDP consistently shows strong results. It achieves substantial
+
+
+9
+
+
+gains on suboptimal datasets and on challenging sparse-reward, long-horizon, or multi-turn tasks,
+where leveraging the Q function is critical, even surpassing goal-conditioned methods tailored to
+such settings. At the same time, TDP remains competitive on high-optimality datasets, which rely
+less on Q function-based optimization, demonstrating both versatility and reliability.
+
+
+We provide the learning curves of TDP in Appendix G.
+
+
+6.3 ABLATIONS
+
+
+In this section, we empirically verify two aspects of our approach: (i) the effectiveness of noise-free
+estimation by comparing TDP with its noisy estimation variant on Antmaze large and ultra, and
+(ii) the role of policy expressiveness by implementing two-fold improvement in the flow policy
+framework (Park et al., 2025; Alles et al., 2025), which uses flow matching (Lipman et al., 2023)
+with a vector field model.
+
+
+**Noise-Free** **vs.** **Noisy** **Estimation** **in** **Complex** **Tasks** As discussed in Sec. 3.2, TDP employs
+noise-free estimation, _f_ ( _a_ _[k]_ _, k, s_ ) _≈_ _η_ [1] _[Q][ϕ]_ [(] _[s, a]_ [0][)][, while an alternative noisy estimation,] _[ f]_ [(] _[a][k][, k, s]_ [)] _[ ≈]_
+
+_η_ 1 _[Q][ϕ]_ [(] _[s, a][k]_ [)][,] [is] [also] [possible.] [We] [compared] [the] [two] [estimations] [on] [Antmaze] [large] [and] [ultra.] [As]
+shown in Table 4, noise-free estimation consistently outperforms noisy estimation, confirming the
+effectiveness of noise-free estimation. Additional results are provided in Appendix F.1.
+
+
+**Flow Policy Variant** As mentioned in Sec. 3.1, policy expressiveness is a key to realizing optimization benefits. Flow policies (Park et al., 2025; Alles et al., 2025) are fast and expressive, but generally
+fall slightly behind diffusion policies on locomotion tasks and lack the theoretical guarantees of Sec.
+4. To test the universality of expressiveness, we implemented the _two-fold improved flow policy_ (TFP)
+with noise-free estimation, building on FlowQ (Alles et al., 2025), without extra techniques such as
+Q ensembles. We evaluated TFP on nine locomotion and six Antmaze tasks against TDP and flow
+policy baselines. Each flow policy baseline corresponds to a diffusion policy: FBRAC corresponds to
+DQL, IFQL to IDQL Hansen-Estruch et al. (2023), FlowQ to DAC, and FQL to DQL with distillation.
+As shown in Table 5, TFP consistently outperforms flow policy baselines and performs comparably to
+TDP, showing that policy expressiveness is important and that two-fold improvement with noise-free
+estimation is effective across expressive policies. Further details are in Appendices B, E.3, and E.4.
+
+
+Ablations on various hyperparameters are provided in Appendix F.1, and Appendix F.2 shows training
+and evaluation time comparisons.
+
+
+7 CONCLUSION
+
+
+In this work, we organized CDPO, a generalized framework for policy constraint methods with
+diffusion policies that unifies explicit and implicit approaches. Within this framework, we proposed
+TDP, which aims to stay close to the reverse KL-constrained optimal policy and incorporates a
+nonzero Q loss. A key ingredient is noise-free estimation, reducing variance with a single unnoised
+action sample. We provided theoretical guarantees, including policy enhancement, approximate performance lower bound, and in-distribution properties, and showed empirically that TDP consistently
+outperforms most offline RL algorithms. Future work includes exploring stronger anchor policies,
+possibly the optimal one, and improving critic learning beyond TD methods to further enhance TDP,
+especially on high-optimality datasets.
+
+
+10
+
+
+Table 4: The normalized final scores of TDP
+and its noisy estimation variant in Antmaze
+large and ultra tasks. The best score for each
+task is in bold.
+
+
+**Algorithm** **Large p** **Large d** **Ultra p** **Ultra d**
+
+
+TDP **81.0** **78.0** **69.5** **62.5**
+
+
+Noisy Estimation 78.0 69.0 66.5 50.0
+
+
+Table 5: The average normalized scores of TFP in
+locomotion and Antmaze tasks. The best score is
+in bold. Locomotion tasks include all 9 tasks in
+main experiments, and Antmaze tasks include 6
+tasks, from umaze to large diverse.
+
+
+**Dataset** **FQL** **FBRAC** **IFQL** **FlowQ** **TDP** **TFP**
+
+
+Locomotion 79.3 82.0 74.2 85.6 **96.7** 93.1
+
+
+Antmaze 83.5 63.7 64.8 69.3 85.6 **87.5**
+
+
+REFERENCES
+
+
+Joshua Achiam, David Held, Aviv Tamar, and Pieter Abbeel. Constrained policy optimization.
+_International Conference on Machine Learning_, 2017.
+
+
+Anurag Ajay, Yilun Du, Abhi Gupta, Joshua Tenenbaum, Tommi Jaakkola, and Pulkit Agrawal. Is
+conditional generative modeling all you need for decision-making? _International Conference on_
+_Learning Representations_, 2023.
+
+
+Marvin Alles, Nutan Chen, Patrick van der Smagt, and Botond Cseke. Flowq: Energy-guided flow
+policies for offline reinforcement learning. _arXiv preprint arXiv:2505.14139_, 2025.
+
+
+Shun-ichi Amari. _Information geometry and its applications_, volume 194. Springer, 2016.
+
+
+Gaon An, Seungyong Moon, Jang-Hyun Kim, and Hyun Oh Song. Uncertainty-based offline
+reinforcement learning with diversified q-ensemble. _Advances in Neural Information Processing_
+_Systems_, 34:7436–7447, 2021.
+
+
+Huayu Chen, Cheng Lu, Zhengyi Wang, Hang Su, and Jun Zhu. Score regularized policy optimization
+through diffusion behavior. _International Conference on Learning Representations_, 2024a.
+
+
+Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Misha Laskin, Pieter Abbeel,
+Aravind Srinivas, and Igor Mordatch. Decision transformer: Reinforcement learning via sequence
+modeling. _Advances in Neural Information Processing Systems_, 34:15084–15097, 2021.
+
+
+Tianyu Chen, Zhendong Wang, and Mingyuan Zhou. Diffusion policies creating a trust region for
+offline reinforcement learning. _arXiv preprint arXiv:2405.19690_, 2024b.
+
+
+Shutong Ding, Ke Hu, Zhenhao Zhang, Kan Ren, Weinan Zhang, Jingyi Yu, Jingya Wang, and Ye Shi.
+Diffusion-based reinforcement learning via q-weighted variational policy optimization. _Advances_
+_in Neural Information Processing Systems_, 37:53945–53968, 2024.
+
+
+Zibin Dong, Yifu Yuan, Jianye Hao, Fei Ni, Yi Ma, Pengyi Li, and Yan Zheng. Cleandiffuser:
+An easy-to-use modularized library for diffusion models in decision making. _arXiv_ _preprint_
+_arXiv:2406.09509_, 2024.
+
+
+Linjiajie Fang, Ruoxue Liu, Jing Zhang, Wenjia Wang, and Bing-Yi Jing. Diffusion actor-critic:
+Formulating constrained policy iteration as diffusion noise regression for offline reinforcement
+learning. _arXiv preprint arXiv:2405.20555_, 2024.
+
+
+Justin Fu, Aviral Kumar, Ofir Nachum, George Tucker, and Sergey Levine. D4rl: Datasets for deep
+data-driven reinforcement learning. _arXiv preprint arXiv:2004.07219_, 2020.
+
+
+Scott Fujimoto and Shixiang Shane Gu. A minimalist approach to offline reinforcement learning.
+_Advances in Neural Information Processing Systems_, 34:20132–20145, 2021.
+
+
+Chen-Xiao Gao, Chenyang Wu, Mingjun Cao, Chenjun Xiao, Yang Yu, and Zongzhang Zhang.
+Behavior-regularized diffusion policy optimization for offline reinforcement learning. In _Forty-_
+_second International Conference on Machine Learning_, 2025. [URL https://openreview.](https://openreview.net/forum?id=pUCYJ9JJuZ)
+[net/forum?id=pUCYJ9JJuZ.](https://openreview.net/forum?id=pUCYJ9JJuZ)
+
+
+Kamyar Ghasemipour, Shixiang Shane Gu, and Ofir Nachum. Why so pessimistic? estimating
+uncertainties for offline rl through ensembles, and why their independence matters. _Advances in_
+_Neural Information Processing Systems_, 35:18267–18281, 2022.
+
+
+Philippe Hansen-Estruch, Ilya Kostrikov, Michael Janner, Jakub Grudzien Kuba, and Sergey Levine.
+Idql: Implicit q-learning as an actor-critic method with diffusion policies. _arXiv_ _preprint_
+_arXiv:2304.10573_, 2023.
+
+
+Hado Hasselt. Double q-learning. _Advances in neural information processing systems_, 23, 2010.
+
+
+Longxiang He, Li Shen, Linrui Zhang, Junbo Tan, and Xueqian Wang. Diffcps: Diffusion model based
+constrained policy search for offline reinforcement learning. _arXiv preprint arXiv:2310.05333_,
+2023.
+
+
+11
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_Neural Information Processing Systems_, 33:6840–6851, 2020.
+
+
+Shengchao Hu, Ziqing Fan, Chaoqin Huang, Li Shen, Ya Zhang, Yanfeng Wang, and Dacheng Tao.
+Q-value regularized transformer for offline reinforcement learning. _International Conference on_
+_Machine Learning_, 2024.
+
+
+Michael Janner, Yilun Du, Joshua B Tenenbaum, and Sergey Levine. Planning with diffusion for
+flexible behavior synthesis. _International Conference on Machine Learning_, 2022.
+
+
+Zhengyao Jiang, Tianjun Zhang, Michael Janner, Yueying Li, Tim Rocktäschel, Edward Grefenstette,
+and Yuandong Tian. Efficient planning in a compact latent action space. _International Conference_
+_on Learning Representations_, 2023.
+
+
+Bingyi Kang, Xiao Ma, Chao Du, Tianyu Pang, and Shuicheng Yan. Efficient diffusion policies for
+offline reinforcement learning. _Advances in Neural Information Processing Systems_, 36, 2023.
+
+
+Jeonghye Kim, Suyoung Lee, Woojun Kim, and Youngchul Sung. Adaptive _Q_ -aid for conditional
+supervised learning in offline reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 2024.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _International_
+_Conference on Learning Representations_, 2015.
+
+
+Ilya Kostrikov, Ashvin Nair, and Sergey Levine. Offline reinforcement learning with implicit
+q-learning. _International Conference on Learning Representations_, 2022.
+
+
+Aviral Kumar, Aurick Zhou, George Tucker, and Sergey Levine. Conservative q-learning for offline
+reinforcement learning. _Advances in Neural Information Processing Systems_, 33:1179–1191, 2020.
+
+
+Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E Hinton. Layer normalization. _arXiv_ _preprint_
+_arXiv:1607.06450_, 2016.
+
+
+Sergey Levine, Aviral Kumar, George Tucker, and Justin Fu. Offline reinforcement learning: Tutorial,
+review, and perspectives on open problems. _arXiv preprint arXiv:2005.01643_, 2020.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. _International Conference on Learning Representations_, 2023.
+
+
+Ilya Loshchilov and Frank Hutter. Sgdr: Stochastic gradient descent with warm restarts. _International_
+_Conference on Learning Representations_, 2017.
+
+
+Cheng Lu, Huayu Chen, Jianfei Chen, Hang Su, Chongxuan Li, and Jun Zhu. Contrastive energy
+prediction for exact energy-guided diffusion sampling in offline reinforcement learning. In
+_International Conference on Machine Learning_, pp. 22825–22855. PMLR, 2023.
+
+
+Calvin Luo. Understanding diffusion models: A unified perspective. _arXiv preprint arXiv:2208.11970_,
+2022.
+
+
+Haitong Ma, Tianyi Chen, Kai Wang, Na Li, and Bo Dai. Efficient online reinforcement learning for
+diffusion policy. _arXiv preprint arXiv:2502.00361_, 2025.
+
+
+Yixiu Mao, Hongchang Zhang, Chen Chen, Yi Xu, and Xiangyang Ji. Supported value regularization
+for offline reinforcement learning. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 36:
+40587–40609, 2023.
+
+
+Diganta Misra. Mish: A self regularized non-monotonic activation function. _British Machine Vision_
+_Conference_, 2020.
+
+
+Ashvin Nair, Abhishek Gupta, Murtaza Dalal, and Sergey Levine. Awac: Accelerating online
+reinforcement learning with offline datasets. _arXiv preprint arXiv:2006.09359_, 2020.
+
+
+Seohong Park, Dibya Ghosh, Benjamin Eysenbach, and Sergey Levine. Hiql: Offline goal-conditioned
+rl with latent states as actions. _Advances in Neural Information Processing Systems_, 36, 2023.
+
+
+12
+
+
+Seohong Park, Qiyang Li, and Sergey Levine. Flow q-learning. _International Conference on Machine_
+_Learning_, 2025.
+
+
+Jan Peters, Katharina Mulling, and Yasemin Altun. Relative entropy policy search. In _Proceedings of_
+_the AAAI Conference on Artificial Intelligence_, volume 24, pp. 1607–1612, 2010.
+
+
+Michael Psenka, Escontrela. Alejandro, Pieter Abbeel, and Yi Ma. Learning a diffusion model policy
+from rewards via q-score matching. _International Conference on Machine Learning_, 2024.
+
+
+Alfréd Rényi. On measures of entropy and information. In _Proceedings_ _of_ _the_ _fourth_ _Berkeley_
+_symposium on mathematical statistics and probability, volume 1:_ _contributions to the theory of_
+_statistics_, volume 4, pp. 547–562. University of California Press, 1961.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. _International Conference on Machine Learning_,
+2015.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _International_
+_Conference on Learning Representations_, 2021.
+
+
+Richard S Sutton and Andrew G Barto. _Reinforcement learning:_ _An introduction_ . MIT press, 2018.
+
+
+Denis Tarasov, Vladislav Kurenkov, Alexander Nikulin, and Sergey Kolesnikov. Revisiting the
+minimalist approach to offline reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 36, 2023.
+
+
+Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control.
+In _IEEE/RSJ International Conference on Intelligent Robots and Systems_, pp. 5026–5033, 2012.
+
+
+Pascal Vincent. A connection between score matching and denoising autoencoders. _Neural computa-_
+_tion_, 23(7):1661–1674, 2011.
+
+
+Yinuo Wang, Likun Wang, Yuxuan Jiang, Wenjun Zou, Tong Liu, Xujie Song, Wenxuan Wang,
+Liming Xiao, Jiang Wu, Jingliang Duan, et al. Diffusion actor-critic with entropy regulator.
+_Advances in Neural Information Processing Systems_, 37:54183–54204, 2024.
+
+
+Zhendong Wang, Jonathan J Hunt, and Mingyuan Zhou. Diffusion policies as an expressive policy
+class for offline reinforcement learning. _International Conference on Learning Representations_,
+2023.
+
+
+Jialong Wu, Haixu Wu, Zihan Qiu, Jianmin Wang, and Mingsheng Long. Supported policy optimization for offline reinforcement learning. _Advances in Neural Information Processing Systems_, 35:
+31278–31291, 2022.
+
+
+Yifan Wu, George Tucker, and Ofir Nachum. Behavior regularized offline reinforcement learning.
+_arXiv preprint arXiv:1911.11361_, 2019.
+
+
+Haoran Xu, Li Jiang, Li Jianxiong, and Xianyuan Zhan. A policy-guided imitation approach for
+offline reinforcement learning. _Advances in Neural Information Processing systems_, 35:4085–4098,
+2022.
+
+
+Haoran Xu, Li Jiang, Jianxiong Li, Zhuoran Yang, Zhaoran Wang, Victor Wai Kin Chan, and
+Xianyuan Zhan. Offline rl with no ood actions: In-sample learning via implicit value regularization.
+_arXiv preprint arXiv:2303.15810_, 2023.
+
+
+Long Yang, Zhixiong Huang, Fenghao Lei, Yucun Zhong, Yiming Yang, Cong Fang, Shiting
+Wen, Binbin Zhou, and Zhouchen Lin. Policy representation via diffusion probability model for
+reinforcement learning. _arXiv preprint arXiv:2305.13122_, 2023.
+
+
+Zilai Zeng, Ce Zhang, Shijie Wang, and Chen Sun. Goal-conditioned predictive coding for offline
+reinforcement learning. _Advances in Neural Information Processing Systems_, 36, 2023.
+
+
+Jing Zhang, Chi Zhang, Wenjia Wang, and Bing-Yi Jing. Apac: Authorized probability-controlled
+actor-critic for offline reinforcement learning. _arXiv preprint arXiv:2301.12130_, 2023.
+
+
+13
+
+
+Tianle Zhang, Jiayi Guan, Lin Zhao, Yihang Li, Dongjiang Li, Zecui Zeng, Lei Sun, Yue Chen, Xuelong Wei, Lusong Li, et al. Preferred-action-optimized diffusion policies for offline reinforcement
+learning. _arXiv preprint arXiv:2405.18729_, 2024.
+
+
+14
+
+
+A DETAILS OF DIFFUSION MODELS AND DDPM
+
+
+Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021) were originally
+proposed for image generation by learning the data distribution through a progressive noising and
+denoising process. Given an image sample _x_ [0], the model gradually transforms it into a standard
+Gaussian variable _x_ _[K]_ . By learning the reverse denoising dynamics, the model can generate realistic
+images from Gaussian noise.
+
+
+The _k_ -th step of the forward process, which adds independent noise to a scaled version of the previous
+output, follows a Gauss-Markov process:
+
+
+_q_ ( _x_ _[k]_ _|x_ _[k][−]_ [1] ) := _N_ ( ~~�~~ 1 _−_ _β_ _[k]_ _x_ _[k][−]_ [1] _, β_ _[k]_ _I_ ) (22)
+
+
+for _k_ = 1 _, · · ·_ _, K_ . Combining the steps up to _k_, we have
+
+
+where _z_ _∼N_ (0 _,_ **I** ). With _pθ_ and _x_ _[K]_ _∼N_ (0 _,_ **I** ), we can get a generated image _x_ [0] by iteratively
+applying the reverse step (27) for _k_ = _K, K −_ 1 _, · · ·_ _,_ 1. Note that we can realize the samples of a
+complex distribution through _K_ iterative applications of the sampling process (27) although we learn
+the single noise model _ϵθ_ ( _x_ _[k]_ _, k_ ) only.
+
+
+In the training phase, we have _x_ [0], generate _ϵ_ and _x_ _[k]_ according to (24). Hence, we know ( _x_ [0] _, x_ _[k]_ _, ϵ_ )
+for the training dataset. To train the noise model _ϵθ_ ( _x_ _[k]_ _, k_ ), DDPM uses evidence lower bound
+(ELBO)-based loss, which is lower bounded by E _x_ 0 _∼q_ ( _x_ 0)[ _−_ log _pθ_ ( _x_ 0)], and it is simplified as the
+following mean squared error (MSE) loss:
+
+
+_L_ [DDPM] diff ( _θ_ ) := E _x_ 0 _∼q_ ( _x_ 0) _,k∼U_ [1 _,K_ ]       - _w_ ( _k_ ) _∥ϵθ_ ( _x_ _[k]_ _, k_ ) _−_ _ϵ∥_ [2][�] _,_ (28)
+
+
+where _w_ ( _k_ ) is a proper weight to match the original loss. Practically, DDPM uses _w_ ( _k_ ) _≡_ 1, which
+is used in this paper too, but for theoretical analysis, we use the formulation of (28).
+
+
+15
+
+
+_√_
+_q_ ( _x_ _[k]_ _|x_ [0] ) := _N_ (
+
+
+_α_ ¯ _[k]_ _x_ [0] _,_ (1 _−_ _α_ ¯ _[k]_ ) _I_ ) _,_ (23)
+
+
+where _α_ _[k]_ := 1 _−_ _β_ _[k]_ and _α_ ¯ _[k]_ := [�] _l_ _[k]_ =1 _[α][l]_ [, or equivalently,]
+
+
+_√_
+_x_ _[k]_ =
+
+
+  _α_ ¯ _[k]_ _x_ [0] + 1 _−_ _α_ ¯ _[k]_ _ϵ,_ with _ϵ ∼N_ (0 _, I_ ) _._ (24)
+
+
+The reverse process in the denoising diffusion probabilistic model (DDPM) consists of _K_ steps,
+where each step is derived using Bayes’ rule. Specifically, given _x_ [0], the _k_ -th reverse step can be
+obtained from equations (22) and (23) as follows:
+
+
+_√_
+
+_[k][−]_ [1][)] _[q]_ [(] _[x][k][−]_ [1] _[|][x]_ [0][)] = _N_ (�1 _−_ _β_ _[k]_ _x_ _[k][−]_ [1] _, β_ _[k]_ **I** ) _[N]_ [(]
+
+_q_ ( _x_ _[k]_ _|x_ [0] ) _N_
+
+
+_q_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ _, x_ [0] ) = _[q]_ [(] _[x][k][|][x][k][−]_ [1][)] _[q]_ [(] _[x][k][−]_ [1] _[|][x]_ [0][)]
+
+
+~~_√_~~
+_N_ (
+
+
+_α_ ¯ _[t][−]_ [1] _x_ [0] _,_ (1 _−_ _α_ ¯ _[k][−]_ [1] ) _I_ )
+
+
+_,_
+_α_ ¯ _[k]_ _x_ _[k]_ _,_ (1 _−_ _α_ ¯ _[k]_ ) _I_ )
+
+
+(25)
+
+
+which is Gaussian. Our goal is to model this reverse process without knowing _x_ [0] . For this, we use
+the following formulation:
+
+
+_pθ_ ( _x_ [0:] _[K]_ ) = _N_ (0 _, I_ )
+
+���     _∼x_ _[K]_
+
+
+_K_
+
+- _pθ_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ ) _._ (26)
+
+
+_k_ =1
+
+
+Since we do not know _x_ [0] in the reverse process, we use its estimate _x_ ˆ [0] by using a noise prediction
+model _ϵθ_ ( _x_ _[k]_ _, k_ ), which predicts the noise _ϵ_ added to _x_ [0] to generate _x_ _[k]_ in (24). Then, from (24) we
+
+
+_θ_
+
+have _x_ ˆ [0] = _[x][k][−][√]_
+
+
+1 _−_ ~~_√_~~ _α_ ¯ _[k]_ _ϵθ_ ( _x_ _[k]_ _,k_ )
+
+
+have _x_ ˆ [0] = ~~_√_~~ _θ_ _._ By plugging this to (25), we obtain distribution _pθ_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ ), which
+
+_α_ ¯ _[k]_
+is an approximate of _q_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ _, x_ [0] ), as follows:
+
+
+1
+
+_α_ _[k]_ [(] _[x][k][ −]_ ~~_√_~~ [1] 1 _[ −]_ _−_ _[α]_ _α_ ¯ _[k]_
+
+
+     - 1
+_pθ_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ ) = _N_ ~~_√_~~
+
+
+~~_√_~~
+
+
+_[ −]_ _[α][k]_
+
+1 _−_ _α_ ¯ _[k]_ _[ϵ][θ]_ [(] _[x][k][, k]_ [))] _[,]_ [ (] _[β][k]_ [)][2][ 1] _[ −]_ 1 _−_ _[α]_ [¯] _α_ ¯ _[k][−][k]_ [1]
+
+
+_[ −]_ _[α]_ [¯] _[k][−]_ [1] 
+1 _−_ _α_ ¯ _[k]_ **[I]** _._
+
+
+Then, the _k_ -th reverse sampling step is given as
+
+
+1 _−_ _α_ ¯ _[k]_ _[z,]_ (27)
+
+
+1
+_x_ _[k][−]_ [1] = ~~_√_~~
+
+_α_ _[k]_
+
+
+_x_ _[k]_ _−_ ~~_√_~~ [1] _[ −]_ _[α][k]_
+
+
+~~_√_~~
+
+
+      
+_[ −]_ _[α][k]_ - 1 _−_ _α_ ¯ _[k][−]_ [1]
+
++ **1** _k>_ 1 _β_ _[k]_
+1 _−_ _α_ ¯ _[k]_ _[ϵ][θ]_ [(] _[x][k][, k]_ [)] 1 _−_ _α_ ¯ _[k]_
+
+
+B FLOW MATCHING AND FM POLICIES
+
+
+B.1 FLOW MATCHING
+
+
+Flow matching (Lipman et al., 2023) is a generative modeling approach for multimodal distributions.
+Unlike diffusion models, which rely on stochastic differential equations (SDEs), flow matching
+employs ordinary differential equations (ODEs), simplifying training and often enabling faster
+inference with competitive or superior sample quality.
+
+
+The key idea is to learn a vector field _u_ ( _x_ _[t]_ _, t_ ) that transports samples from a noise distribution
+_p_ 0 = _N_ (0 _, I_ ) to the target distribution _p_ 1, whose probability density is unknown but from which we
+can draw samples. Formally, the flow _ψ_ ( _x_ [0] _, t_ ) satisfies
+
+
+_dtd_ _[ψ]_ [(] _[x]_ [0] _[, t]_ [) =] _[ u]_ [(] _[ψ]_ [(] _[x]_ [0] _[, t]_ [)] _[, t]_ [)] _[,]_ (29)
+
+so that for _x_ [0] _∼_ _p_ 0, the trajectory _x_ _[t]_ = _ψ_ ( _x_ [0] _, t_ ) induces an intermediate distribution _pt_ := _ψ_ ( _·, t_ ) _♯p_ 0.
+
+Since the probability density of _p_ 1 is unknown, we cannot compute _u_ ( _x_ _[t]_ _, t_ ) directly. Instead, flow
+matching trains a parameterized vector field _uθ_ ( _x_ _[t]_ _, t_ ) to approximate it with the conditional flow
+matching (CFM) loss
+
+_L_ ( _θ_ ) := E _x_ 0 _∼p_ 0 _,x_ 1 _∼p_ 1 _,t∼U_ ([0 _,_ 1])      - _||uθ_ ( _x_ _[t]_ _, t_ ) _−_ _u_ ( _x_ _[t]_ _, t|x_ [1] ) _||_ [2][�] _,_ (30)
+
+
+where _u_ ( _x_ _[t]_ _, t|x_ [1] ) is a conditional vector field.
+
+
+This gives rise to _conditional flow matching_, which defines an interpolation distribution
+
+
+_pt_ ( _·|x_ [1] ) = _N_ ( _µ_ ( _x_ [1] _, t_ ) _, σ_ ( _t_ ) [2] _I_ ) _,_
+
+
+with interpolated samples _x_ _[t]_ = _ψ_ ( _x_ [0] _|x_ [1] ) = _µ_ ( _x_ [1] _, t_ ) _x_ [1] + _σ_ ( _t_ ) _x_ [0] and target vector field
+
+_u_ ( _x_ _[t]_ _, t|x_ [1] ) = _µ_ _[′]_ ( _t_ ) _x_ [1] _−_ _[σ]_ _σ_ _[′]_ ( [(] _t_ _[t]_ ) [)] [(] _[x][t][ −]_ _[µ]_ [(] _[x]_ [1] _[, t]_ [)] _[x]_ [1][)] _[.]_
+
+
+In practice, _µ_ and _σ_ are often chosen according to optimal transport (OT), i.e., _µ_ ( _x_ [1] _, t_ ) = _t_ and
+_σ_ ( _t_ ) = 1 _−_ _t_, yielding the simple interpolation
+
+
+_x_ _[t]_ = _tx_ [1] + (1 _−_ _t_ ) _x_ [0] _,_ _u_ ( _x_ _[t]_ _, t|x_ [1] ) = _x_ [1] _−_ _x_ [0] _,_
+
+
+which is widely used in flow matching algorithms.
+
+
+For sampling, we first draw _x_ [0] _∼_ _p_ 0 = _N_ (0 _, I_ ) and then integrate the learned vector field _uθ_ ( _x_ _[t]_ _, t_ )
+using an ODE solver (Euler method in our case). Importantly, the loss in (30) is valid because
+it induces, in expectation, the same gradient as training against the true field _u_ ( _x_ _[t]_ _, t_ ), ensuring
+theoretical correctness (Lipman et al., 2023).
+
+
+Unlike diffusion models, flow models allow direct computation of log probabilities using the continuity equation (Lipman et al., 2023). However, the CFM loss is not related to any _f_ -divergence, making
+theoretical analysis of flow models and flow policies more challenging.
+
+
+B.2 FLOW POLICIES
+
+
+Analogous to diffusion policies, we can define _flow policies_ using flow matching, with the CFM loss
+
+
+_L_ CFM( _θ_ ) := E _a_ 0 _∼N_ (0 _,I_ ) _,_ ( _s,a_ 1) _∼D,t∼U_ ([0 _,_ 1])    - _||uθ_ ( _a_ _[t]_ _, t|s_ ) _−_ _u_ ( _a_ _[t]_ _, t|a_ [1] _, s_ ) _||_ [2][�] _._ (31)
+
+
+Park et al. (2025) introduced algorithms that use this formulation.
+
+
+First, FBRAC corresponds to DQL (Wang et al., 2023), combining TD learning with the actor loss
+
+
+_L_ ( _θ_ ) := _βL_ CFM( _θ_ ) _−_ _LQϕ_ ( _θ_ ) _,_ (32)
+
+
+where _LQϕ_ ( _θ_ ) evaluates full-step denoised actions from _x_ [0] _∼N_ (0 _, I_ ) using _uθ_ ( _x_ _[t]_ _, t|s_ ) with Euler
+method.
+
+
+Second, IFQL follows an IDQL-style approach (Hansen-Estruch et al., 2023), training Q and V
+functions and applying rejection sampling based on the Q function, while the flow policy itself is
+trained with _L_ CFM( _θ_ ).
+
+
+16
+
+
+Third, following the argument of Kang et al. (2023), Park et al. (2025) observed that the full-step
+denoising in FBRAC is computationally expensive. To reduce this cost, they proposed a _one-step_
+_policy vθ_ that maps ( _s, a_ [0] ) directly to _a_ [1] by distilling the flow BC model _uϕ_ . Let _aψ_ ( _a_ [0] _, s_ ) denote the
+output of the flow BC policy (with Euler method) and _aθ_ ( _a_ [0] _, s_ ) the one-step policy. The distillation
+is trained with
+
+_L_ distill( _θ_ ) := E _a_ 0 _∼N_ (0 _,I_ ) _,s∼D,t∼U_ ([0 _,_ 1])      - _||aθ_ ( _a_ [0] _, s_ ) _−_ _aψ_ ( _a_ [0] _, s_ ) _||_      - _,_ (33)
+
+
+ensuring that the one-step policy mimics the flow BC policy, given the same noise input.
+
+
+Building on this, FQL jointly trains the diffusion BC policy with _L_ CFM( _ψ_ ) and the one-step policy
+with
+
+
+_L_ ( _θ_ ) := _βL_ distill( _θ_ ) _−_ _LQϕ_ ( _θ_ ) _,_ (34)
+
+
+where _LQϕ_ ( _θ_ ) (together with the TD loss) relies on the one-step policy, thereby accelerating training
+and evaluation while preserving multimodality.
+
+
+Finally, Alles et al. (2025) proposes FlowQ, an implicit policy constraint method using flow policy
+and noisy estimation, built on FBRAC and incorporating energy guidance (Sohl-Dickstein et al.,
+2015; Lu et al., 2023). Starting from _πη_ _[∗]_ [(] _[a][t][|][s]_ [) =] _Z_ ˜ _[t]_ 1( _s_ ) _[π][β]_ [(] _[a][t][|][s]_ [) exp (] _[f]_ [(] _[a][t][, t, s]_ [))][, they set]
+
+
+_f_ ( _a_ _[t]_ _, t, s_ ) = _αh_ ( _t_ ) _Q_ ( _a_ _[t]_ _, t, s_ ) _,_
+
+where _α_ = _η_ [1] [,] _[ Q]_ [(] _[a][t][, t, s]_ [)][ is the noisy-domain counterpart of] _[ Q][ϕ]_ [, and] _[ h]_ [(] _[t]_ [)][ is a function with] _[ h]_ [(0) = 0][.]
+
+To ensure that _πη_ _[∗]_ [(] _[a][t][|][a]_ [1] _[, s]_ [)][ remains Gaussian, they applied a first-order Taylor expansion,]
+
+
+_Q_ ( _a_ _[t]_ _, t, s_ ) _≈_ _Q_ ( _s, ta_ [1] ) +      - _∇ta_ 1 _Q_ ( _s, ta_ [1] ) _,_ ( _a_ _[t]_ _−_ _ta_ [1] )� _,_ (35)
+
+
+This yields
+
+_a_ _[t]_ = _ta_ [1] + (1 _−_ _t_ ) _a_ [0] + _α_ (1 _−_ _t_ ) [2] _h_ ( _t_ ) _∇ta_ 1 _Q_ ( _s, ta_ [1] ) _,_ (36)
+
+
+and
+
+_u_ ˆ( _a_ _[t]_ _, t|a_ [1] _, s_ ) = _[a]_ [1] 1 _[−]_ _−_ _[a]_ _t_ _[t]_ _[−]_ _[α]_ [(1] _[ −]_ _[t]_ [)(] _[h]_ [(] _[t]_ [)] _[ −]_ [(1] _[ −]_ _[t]_ [)] _[h][′]_ [(] _[t]_ [))] _[∇][ta]_ [1] _[Q]_ [(] _[s, ta]_ [1][) +] _[ α]_ [(1] _[ −]_ _[t]_ [)][2] _[h]_ [(] _[t]_ [)] - _∇_ [2] _ta_ [1] _[Q]_ [(] _[s, ta]_ [1][)] _[, a]_ [1][�] _._
+
+(37)
+
+
+_t_ [2]
+Among various choices of _h_, _h_ ( _t_ ) = 1 _−t_ [empirically performs the best, giving simplified expressions:]
+
+_a_ _[t]_ = _ta_ [1] + (1 _−_ _t_ ) _a_ [0] + _αt_ [2] (1 _−_ _t_ ) _∇ta_ 1 _Q_ ( _s, ta_ [1] ) _,_ (38)
+
+
+and
+
+_u_ ˆ( _a_ _[t]_ _, t|a_ [1] _, s_ ) = _a_ [1] _−_ _a_ [0] + _αt_ (2 _−_ 3 _t_ ) _∇ta_ 1 _Q_ ( _s, ta_ [1] ) + _αt_ [2] (1 _−_ _t_ )  - _∇_ [2] _ta_ [1] _[Q]_ [(] _[s, ta]_ [1][)] _[, a]_ [1][�] _._ (39)
+
+
+The resulting actor loss for FlowQ is
+
+_L_ ( _θ_ ) := E _a_ 0 _∼N_ (0 _,I_ ) _,_ ( _s,a_ 1) _∼D,t∼U_ ([0 _,_ 1])     - _∥uθ_ ( _a_ _[t]_ _, t|s_ ) _−_ _u_ ˆ( _a_ _[t]_ _, t|a_ [1] _, s_ ) _∥_ [2][�] _,_ (40)
+
+
+while the critic is trained with a standard TD loss, as in FBRAC.
+
+
+B.3 TWO-FOLD IMPROVED FLOW POLICY (TFP)
+
+
+We now introduce the two-fold improved flow policy (TFP), a flow-policy analogue of TDP that
+improves FlowQ with the same core arguments.
+
+
+For noise-free estimation, we use
+
+
+_Q_ ( _a_ _[t]_ _, t, s_ ) _≈_ _Q_ ( _s, a_ [1] ) _,_ (41)
+
+
+which yields
+
+_a_ _[t]_ = _ta_ [1] + (1 _−_ _t_ ) _a_ [0] + _α_ (1 _−_ _t_ ) [2] _h_ ( _t_ ) _∇a_ 1 _Q_ ( _s, a_ [1] ) _,_ (42)
+
+
+and
+
+_u_ ˆ( _a_ _[t]_ _, t|a_ [1] _, s_ ) = _[a]_ [1] 1 _[−]_ _−_ _[a]_ _t_ _[t]_ _[−]_ _[α]_ [(1] _[ −]_ _[t]_ [)(] _[h]_ [(] _[t]_ [)] _[ −]_ [(1] _[ −]_ _[t]_ [)] _[h][′]_ [(] _[t]_ [))] _[∇][a]_ [1] _[Q]_ [(] _[s, a]_ [1][)] _[.]_ (43)
+
+
+17
+
+
+_t_ [2]
+Using _h_ ( _t_ ) = 1 _−t_ [(Alles et al., 2025), these simplify to]
+
+
+_a_ _[t]_ = _ta_ [1] + (1 _−_ _t_ ) _a_ [0] + _αt_ [2] (1 _−_ _t_ ) _∇a_ 1 _Q_ ( _s, a_ [1] ) _,_ (44)
+
+
+and
+
+
+_u_ ˆ( _a_ _[t]_ _, t|a_ [1] _, s_ ) = _a_ [1] _−_ _a_ [0] + _αt_ (2 _−_ 3 _t_ ) _∇a_ 1 _Q_ ( _s, a_ [1] ) _._ (45)
+
+
+By defining
+
+_L_ _[∗]_ _α_ [(] _[θ]_ [) :=][ E] _a_ [0] _∼N_ (0 _,I_ ) _,_ ( _s,a_ [1] ) _∼D,t∼U_ ([0 _,_ 1])    - _||uθ_ ( _a_ _[t]_ _, t|s_ ) _−_ _u_ ˆ( _a_ _[t]_ _, t|a_ [1] _, s_ ) _||_ [2][�] _,_ (46)
+
+
+the TFP actor loss becomes
+
+_L_ ( _θ_ ) := _βL_ _[∗]_ _α_ [(] _[θ]_ [)] _[ −]_ _[L][Q]_ _ϕ_ [(] _[θ]_ [)] _[,]_ (47)
+
+
+where _LQϕ_ ( _θ_ ) and critic loss follows FBRAC.
+
+
+To isolate the effect of our core idea, we intentionally omit practical enhancements such as Q ensemble
+LCB regularization (Ghasemipour et al., 2022; Fang et al., 2024) (instead we use double Q-learning
+(Hasselt, 2010)), delayed policy updates, EDP (Kang et al., 2023)-style Q loss, and adaptive _η_ (here
+_α_ ).
+
+
+The main limitation of TFP is that, due to the properties of the CFM loss, it cannot be directly linked
+to the theoretical analyses in Sec. 4.
+
+
+B.4 FULL RESULTS
+
+
+Here, we present the complete results of TFP and the baselines from Sec. 6.3. As shown in Tables 6 and 7, TFP consistently outperforms other flow policy baselines. We highlight comparisons
+with FBRAC and FlowQ, which represent explicit and implicit policy-constraint approaches with
+flow policies, making them particularly relevant baselines for TFP. Furthermore, despite the inherent limitations of flow policies relative to diffusion policies and the omission of certain practical
+implementation techniques, TFP achieves performance competitive with TDP.
+
+
+Table 6: The normalized scores in locomotion tasks. The best score for each task is in bold. Here,
+“m” denotes medium, “m-r” denotes medium-replay, and “m-e” denotes medium-expert.
+
+
+**Dataset** **FQL** **FBRAC** **IFQL** **FlowQ** **TDP** **TFP**
+
+
+Halfcheetah m 62.8 47.6 53.6 56.8 69.7 **72.6** _±_ 1.3
+Hopper m 81.9 65.7 86.7 88.9 **103.0** 101.9 _±_ 0.5
+Walker2d m 79.8 83.7 78.2 84.9 **108.0** 87.0 _±_ 0.5
+
+
+Halfcheetah m-r 52.3 44.6 45.5 50.3 58.5 **61.2** _±_ 2.6
+Hopper m-r 65.0 98.3 79.4 99.2 **104.4** 102.2 _±_ 0.2
+Walker2d m-r 80.8 86.2 68.0 88.5 109.2 93.9 _±_ 0.5
+
+
+Halfcheetah m-e **105.9** 93.0 86.4 89.6 100.3 99.5 _±_ 2.0
+Hopper m-e 75.7 109.6 61.8 103.5 **111.4** 108.9 _±_ 3.8
+Walker2d m-e 109.1 109.0 108.5 109.1 **113.6** 111.0 _±_ 0.5
+
+
+Average 79.3 82.0 74.2 85.6 **97.6** 93.1
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Table 7: The normalized scores in Antmaze tasks. The best score for each task is in bold. Here, “p”
+denotes play and “d” denotes diverse.
+
+
+**Dataset** **FQL** **FBRAC** **IFQL** **FlowQ** **TDP** **TFP**
+
+
+Umaze 96.0 94.0 92.0 92.8 **98.5** **98.5** _±_ 1.7
+Umaze d 89.0 82.0 62.0 65.2 73.0 **91.5** _±_ 3.8
+Medium p 78.0 77.0 56.0 84.8 **92.5** 89.0 _±_ 5.4
+Medium d 71.0 77.0 60.0 44.7 90.5 78.5 _±_ 11.1
+Large p **84.0** 32.0 55.0 72.4 81.0 82.0 _±_ 2.8
+Large d 83.0 20.0 64.0 55.8 78.0 **85.5** _±_ 0.9
+
+
+Average 83.5 63.7 64.8 69.3 85.6 **87.5**
+
+
+C ALGORITHM DETAILS AND PSEUDOCODE
+
+
+In this section, we first provide additional techniques applied to the TDP actor update. Then, we
+provide pseudocode for the training of TDP in Algorithm 1, along with loss functions per minibatch.
+
+
+C.1 ADDITIONAL ACTOR UPDATE TECHNIQUES
+
+
+Although _L_ _[∗]_ _η_ [(] _[θ]_ [)][ in (12) with (16) can be used directly, it is more practical to reformulate the loss]
+so that the constituent terms are more interpretable and the _η_ -related hyperparameters are easier
+to handle. This can be achieved by expanding the expression, discarding constants, and rescaling
+(multiplying by _η/_ 2 and then substituting _η/_ 2 _�→_ _η_ ) (Fang et al., 2024). The resulting form of _L_ _[∗]_ _η_ [is]
+
+_L_ _[∗]_ _η_ [(] _[θ]_ [) =] _[ ηL]_ [diff][(] _[θ]_ [) +] _[ L]_ [guide][(] _[θ]_ [)] _[,]_ (48)
+
+
+where _L_ diff( _θ_ ) is the diffusion loss in (5) and _L_ guide( _θ_ ) captures gradient alignment between the policy
+and critic, defined as
+
+_L_ guide( _θ_ ) := E( _s,a_ 0) _∼D,k∼U_ [1 _,K_ ] ��1 _−_ _α_ ¯ _[k]_ [�] _∇ak_ _Qϕ_ ( _s, a_ [0] ) _, ϵθ_ ( _a_ _[k]_ _, k, s_ )� [�] _,_ (49)
+
+
+with _⟨·, ·⟩_ denoting the inner product. The full TDP loss is then
+
+
+_L_ TDP( _θ_ ) = _ηL_ diff( _θ_ ) + _L_ guide( _θ_ ) _−_ _ζLQϕ_ ( _θ_ ) _._ (50)
+
+
+We further introduce practical modifications to improve stability and simplify tuning. First, instead of
+fixing _η_ directly, we set a target diffusion divergence _ε_ _[η]_ _b_ [between] _[ π][β]_ [and] _[ π]_ _η_ _[∗]_ [, which provides more]
+intuitive control and often improves stability (He et al., 2023; Fang et al., 2024):
+
+_ηt_ = _ηt−_ 1 + _αη_ ( _L_ diff( _θ_ ) _−_ _ε_ _[η]_ _b_ [)] _[,]_ (51)
+
+where _αη_ is a learning rate and _ε_ _[η]_ _b_ [the target divergence.] [This update is applied in some environments]
+as needed.
+
+
+Second, for convenience, we adopt a slightly modified actor loss:
+
+_L_ _[′]_ TDP [(] _[θ]_ [) =] _[ ηL]_ [diff][(] _[θ]_ [) + (1] _[ −]_ _[λ]_ [)] _[L]_ [guide][(] _[θ]_ [)] _[ −]_ _[λL][Q]_ _ϕ_ [(] _[θ]_ [)] _[,]_ (52)
+
+
+where a balance coefficient 0 _≤_ _λ ≤_ 1 balances _L_ guide and _LQϕ_ with a single hyperparameter, tuned
+in place of _ζt_ .
+
+
+C.2 CRITIC UPDATE
+
+
+For each sample ( _sb, ab, rb, s_ _[′]_ _b_ _[, T][b]_ [)] [in] [the] [minibatch,] [we] [use] [the] [TD] [loss] [for] [each] _[Q][ϕ]_ _n_ [(] _[n]_ [=]
+1 _, · · ·_ _, Nq_ ) as the critic loss _L_ ( _ϕn_ ) defined as:
+
+
+_L_ ( _ϕn_ ) = [1]
+
+_B_
+
+
+_B_
+
+- ( _Qϕn_ ( _sb, ab_ ) _−_ _yb_ ) [2] _,_ (53)
+
+
+_b_ =1
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**Algorithm 1** Training of Two-Fold Improved Diffusion Policy (TDP)
+**Hyperparameters:** Number of steps _M_, batch size _B_, target diffusion divergence value _ε_ _[η]_ _b_ [, LCB]
+confidence interval _ρ_, balance coefficient _λ_, policy update interval _d_, number of Q ensembles _Nq_,
+number of actions for critic learning _Na_, actor learning rate _αθ_, critic learning rate _αϕ_, _η_ learning
+rate _αη_, EMA update rate _τ_ .
+
+1: **Initialize:** Actor noise model _ϵθ_, target actor noise model _ϵθ_ ¯ _←_ _ϵθ_, ensemble critics _{Q_ _[n]_ _ϕ_ _[}]_ _n_ _[N]_ =1 _[q]_ [,]
+
+target ensemble critics _{Qϕ_ ¯ _n}_ _[N]_ _n_ =1 _[q]_ _[←{][Q][ϕ]_ _n_ _[}][N]_ _n_ =1 _[q]_
+2: **for** _m_ = 1 **to** _M_ **do**
+3: Sample size _B_ minibatch _{_ ( _sb, ab, rb, s_ _[′]_ _b_ _[, T][b]_ [)] _[}][B]_ _b_ =1 [from dataset] _[ D]_
+4: Update each critic using TD loss with _a_ _[′]_ _∼_ _πθ_ ¯( _·|s_ _[′]_ ): _ϕn_ _←_ _ϕn_ _−_ _αϕ∇ϕnL_ ( _ϕn_ ) for _n_ =
+1 _, . . ., Nq_ (53)
+5: **if** _m_ mod _d ≡_ 0 **then**
+6: Update actor using TDP loss: _θ_ _←_ _θ −_ _αθ∇θL_ ( _θ_ ) (56)
+7: _η_ update: _η_ _←_ _η_ + _αη_ ( _L_ diff( _θ_ ) _−_ _ε_ _[η]_ _b_ [)]
+8: **end if**
+9: EMA target update: _θ_ [¯] _←_ _τ_ _θ_ [¯] + (1 _−_ _τ_ ) _θ_, _ϕ_ [¯] _n_ _←_ _τ_ _ϕ_ [¯] _n_ + (1 _−_ _τ_ ) _ϕn_ for _n_ = 1 _, . . ., Nq_
+10: **end for**
+
+
+where _B_ is the minibatch size, _yb_ = _rb_ + _γ_ (1 _−_ _Tb_ ) _· Q_ targ _,b_ ( _Tb_ = 1 if terminal, _Tb_ = 0 otherwise)
+and
+
+
+_√_
+_b_ _[−]_
+_a_ ˆ [0] _b_ [=] _[a][k]_
+
+
+_Na_
+
+
+_Qϕ_ ¯ _n_ ( _s_ _[′]_ _b_ _[, a]_ _l,b_ _[′]_ [)] [with] _[a][′]_ _l,b_ _[∼]_ _[π]_ _θ_ [¯][(] _[·|][s][′]_ _b_ [)] _[,]_ (54)
+_l_ =1
+
+
+1
+_Q_ targ _,b_ =
+_NqNa_
+
+
+for the ordinary case, and
+
+
+_Nq_
+
+
+_n_ =1
+
+
+_Q_ targ _,b_ = [1]
+
+_Nq_
+
+
+_Nq_
+
+
+max _Qϕ_ ¯ _n_ ( _s_ _[′]_ _b_ _[, a]_ _l,b_ _[′]_ [)] [with] _[a][′]_ _l,b_ _[∼]_ _[π]_ _θ_ [¯][(] _[·|][s][′]_ _b_ [)] _[,]_ (55)
+_l_
+_n_ =1
+
+
+for the max Q backup case (Kumar et al., 2020), typically used in environments like Antmaze.
+
+
+C.3 ACTOR UPDATE
+
+
+For each sample ( _sb, ab, rb, s_ _[′]_ _b_ _[, T][b]_ [)][ in t] _√_ [he m][inibatch, we first sample noise steps] _√_ _[ k][b]_ _[∼]_ _[U]_ [[1] _[, K]_ []][ and]
+compute the noised action as _a_ _[k]_ _b_ _[b]_ = _α_ ¯ _[k]_ _a_ [0] _b_ [+] 1 _−_ _α_ ¯ _[k]_ _ϵb_, where _ϵb_ _∼N_ (0 _, I_ ), for _b_ = 1 _, . . ., B_ .
+
+
+_√_
+_α_ ¯ _[k]_ _a_ [0] _b_ [+]
+
+
+compute the noised action as _ab_ _[b]_ = _α_ ¯ _[k]_ _a_ [0] _b_ [+] 1 _−_ _α_ ¯ _[k]_ _ϵb_, where _ϵb_ _∼N_ (0 _, I_ ), for _b_ = 1 _, . . ., B_ .
+
+The actor loss _L_ ( _θ_ ) is defined as:
+
+
+_L_ ( _θ_ ) = _ηL_ diff( _θ_ ) + (1 _−_ _λ_ ) _L_ guide( _θ_ ) _−_ _λLQϕ_ ( _θ_ ) _._ (56)
+
+
+where the diffusion loss _L_ diff( _θ_ ), the guidance loss _L_ guide( _θ_ ), and the Q value regularization term
+_LQϕ_ ( _θ_ ) are defined as
+
+
+_L_ diff( _θ_ ) = [1]
+
+_B_
+
+
+_B_
+
+
+_b_ =1
+
+
+2
+��� _ϵθ_ ( _akb_ _b_ _[, k][b][, s][b]_ [)] _[ −]_ _[ϵ][b]_ ��� _,_ (57)
+
+
+1
+_L_ guide( _θ_ ) =
+_BC_
+
+
+_B_
+
+
+_b_ =1
+
+
+1 _−_ _α_ ¯ _b_ _[k][b]_ _[∇]_ _akbb_ _[Q]_ [ref][(] _[s][b][, a]_ _b_ [0][)] _[ ◦]_ _[ϵ][θ]_ [(] _[a][k]_ _b_ _[b]_ _[, k][b][, s][b]_ [)] _[,]_ (58)
+
+
+_Nq_
+
+- _Qϕn_ ( _sb,_ ˆ _a_ [0] _b_ [)] _[,]_ (59)
+
+_n_ =1
+
+
+1
+_LQϕ_ ( _θ_ ) = _BC_ _[′]_ _Nq_
+
+
+_B_
+
+
+_b_ =1
+
+
+where _Q_ ref( _s, a_ ) = _N_ 1 _q_ - _Nn_ =1 _q_ _[Q][ϕ]_ _n_ [(] _[s, a]_ [)][ is the average of] _[ N][q]_ [ensemble Q values, the reconstructed]
+action ˆ _a_ [0] _b_ [from] _[ a]_ _b_ _[k]_ [is defined as]
+
+
+1 _−_ _α_ ¯ _[k]_ _ϵθ_ ( _a_ _[k]_ _b_ _[, k, s]_ [)]
+~~_√_~~ _,_ (60)
+
+_α_ ¯ _[k]_
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+and the normalization constant _C, C_ _[′]_ are defined as:
+
+
+The gradient _∇akbb_ _[Q]_ [ref][(] _[s][b][, a]_ _b_ [0][)][ in (58) is computed via the chain rule.] [When using only half of the]
+batch for Q gradient and Q loss calculation, as mentioned in Sec. 3.4, the batch size for _L_ guide( _θ_ ),
+_LQϕ_ ( _θ_ ), _C_, and _C_ _[′]_ is reduced from _B_ to _B/_ 2. In this case, the indices are restricted to a randomly
+chosen subset _{b_ 1 _, . . ., bB/_ 2 _} ⊂{_ 1 _, . . ., B}_ .
+
+
+21
+
+
+_Nq_
+
+
+_n_ =1
+
+
+_Nq_
+
+
+_n_ =1
+
+
+1
+_C_ =
+_BNq_
+
+
+1
+_C_ _[′]_ =
+_BNq_
+
+
+_B_
+
+
+_b_ =1
+
+
+_B_
+
+
+_b_ =1
+
+
+0
+�� _Qϕ_ ¯ _n_ ( _sb, ab_ [)] �� _,_ (61)
+
+
+0
+�� _Qϕ_ ¯ _n_ ( _sb,_ ˆ _ab_ [)] �� _._ (62)
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+D PROOFS
+
+
+D.1 NOTATIONS AND DEFINITIONS
+
+
+D.1.1 _f_ -DIVERGENCE
+
+
+Consider the strictly convex function _f_ : [0 _, ∞_ ) _→_ ( _−∞, ∞_ ] satisfying the following conditions:
+
+
+_Condition 1._ _f_ (1) = 0,
+
+
+_Condition 2._ _f_ (0) = lim _x→_ 0+ _f_ ( _x_ ), and
+
+_Condition 3._ _f_ ( _x_ ) _< ∞∀x >_ 0.
+
+
+Let _p_ and _q_ be two probability distributions. Then the _f_ -divergence between _p_ and _q_ (denoted by
+_Df_ ( _p ∥_ _q_ )) induced by _f_ is (Rényi, 1961):
+
+
+                        -                        - _p_ ( _x_ ) ��
+_Df_ ( _p ∥_ _q_ ) := E _x∼q_ ( _x_ ) _f_ _q_ ( _x_ ) _._ (63)
+
+
+For _f_ -divergences, we have the following useful properties:
+
+
+(i) For any _f_ -divergence _Df_ generated by _f_, _f_ is strictly convex with respect to any _p_ ( _x_ ) _≥_ 0,
+even with violation of _p_ being probability distribution.
+
+(ii) For any valid (piecewise) differentiable _f_ for _f_ -divergence, ( _f_ _[′]_ ) _[−]_ [1] is well-defined and
+strictly increasing because of strict convexity of _f_ .
+
+(iii) For any _f_ -divergence _Df_ generated by _f_, for _g_ ( _u_ ) := _uf_ ( _u_ [1] [)][,] _[ D][g]_ [generated by] _[ g]_ [ is also an]
+
+_f_ -divergence and satisfies the following (Amari, 2016):
+
+
+_Df_ ( _p ∥_ _q_ ) = _Dg_ ( _q_ _∥_ _p_ ) _._ (64)
+
+
+We use the notation _Df_ for Appendix D.3. For special cases, _Df_ includes the forward KL divergence,
+the reverse KL divergence, or the diffusion divergence, each of which will be defined below. For
+_f_ ( _t_ ) = _t_ log _t_, we get KL divergence:
+
+
+                        -                         _D_ KL( _p ∥_ _q_ ) := E _x∼p_ ( _x_ ) log _[p]_ _q_ ( [(] _x_ _[x]_ ) [)] (65)
+
+
+(i) If _D_ ( _p ∥_ _q_ ) refers to the forward KL divergence between _p_ and _q_ (denoted by _D_ FKL( _p, q_ )),
+then
+
+
+                                -                                 _D_ ( _p ∥_ _q_ ) = _D_ FKL( _p ∥_ _q_ ) := _D_ KL( _p ∥_ _q_ ) = E _x∼p_ ( _x_ ) log _[p]_ _q_ ( [(] _x_ _[x]_ ) [)] (66)
+
+
+(ii) If _D_ ( _p ∥_ _q_ ) refers to the reverse KL divergence between _p_ and _q_ (denoted by _D_ RKL( _p ∥_ _q_ )),
+then
+
+
+                                -                                 _D_ ( _p ∥_ _q_ ) = _D_ RKL( _p ∥_ _q_ ) := _D_ KL( _q_ _∥_ _p_ ) = E _x∼q_ ( _x_ ) log _p_ _[q]_ [(] ( _[x]_ _x_ [)] ) (67)
+
+
+(iii) If _D_ ( _p ∥_ _q_ ) refers to the diffusion divergence (Proposition D.1) between _p_ and _q_ (denoted
+by _D_ diff( _p ∥_ _q_ )), then
+
+
+_D_ ( _p ∥_ _q_ ) = _D_ diff( _p ∥_ _q_ ) := _D_ KL( _p_ ( _x_ [0:] _[K]_ ) _∥_ _q_ ( _x_ [0:] _[K]_ )) (68)
+
+
+We define the diffusion divergence as an extension of the KL divergence, applied to the
+probability distributions of a sequence of variables _x_ [0:] _[K]_ := ( _x_ [0] _, x_ [1] _, · · ·_ _, x_ _[K]_ ) in a diffusion
+process with _K_ steps, rather than a single variable _x_ .
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+D.1.2 DIFFUSION DIVERGENCE
+
+
+In other words, diffusion divergence is simply a **pathwise forward KL divergence** up to a constant.
+From this result, we can use the properties of the forward KL divergence in analyzing the diffusion
+divergence. Specifically, we may first establish inequalities using the forward KL divergence and subsequently apply marginalization. As a direct consequence, convexity follows immediately. Moreover,
+by the data processing inequality for the KL divergence, we obtain:
+
+
+_D_ KL( _q_ ( _x_ [0] ) _∥_ _pθ_ ( _x_ [0] )) _≤_ _D_ diff( _q_ _∥_ _pθ_ ) _,_ (69)
+
+
+which we utilize in the proof of Theorem 4.5. Note that the loss weight simplification (Ho et al.,
+2020), i.e., _w_ ( _k_ ) _≡_ 1 is applied, as mentioned in Appendix A.
+
+
+Proof of Lemma D.1 is provided in Appendix D.2.
+
+
+23
+
+
+We define the _diffusion divergence_ as the divergence induced by _L_ [DDPM] diff ( _θ_ ) in (28).
+
+
+_√_
+**Lemma D.1.** _Consider a diffusion model on x_ [0:] _[K]_ = ( _x_ [0] _, . . ., x_ _[K]_ ) _with x_ _[k]_ =
+
+
+_√_
+1 _−_ _α_ ¯ _[k]_ _x_ [0] +
+
+
+**Lemma D.1.** _Consider a diffusion model on x_ [0:] _[K]_ = ( _x_ [0] _, . . ., x_ _[K]_ ) _with x_ _[k]_ = 1 _−_ _α_ ¯ _[k]_ _x_ [0] + _α_ ¯ _[k]_ _ϵ,_
+
+_ϵ_ _∼N_ (0 _, I_ ) _._ _Let q_ ( _x_ [0:] _[K]_ ) _be the forward distribution with initial q_ ( _x_ [0] ) _, and pθ_ ( _x_ [0:] _[K]_ ) _the reverse_
+_denoising_ _process_ _parameterized_ _by_ _ϵθ_ ( _x_ _[k]_ _, k_ ) _with_ _p_ ( _x_ _[K]_ ) = _N_ (0 _, I_ ) _._ _The_ _diffusion_ _divergence_
+_Ddiff_ ( _q_ _∥_ _pθ_ ) _, induced by the DDPM loss L_ _[DDPM]_ _diff_ ( _θ_ ) = E _x_ 0 _∼q_ ( _x_ 0) _,k∼U_ [1 _,K_ ][ _w_ ( _k_ ) _||ϵθ_ ( _x_ _[k]_ _, k_ ) _−_ _ϵ||_ [2] ] _,_
+_coincides with the KL divergence DKL_ ( _q_ ( _x_ [0:] _[K]_ ) _∥_ _pθ_ ( _x_ [0:] _[K]_ )) _up to a constant._
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+D.1.3 CONSTRAINED DIFFUSION POLICY OPTIMIZATION (CDPO)
+
+
+As mentioned in Sec. 3.1, CDPO is a generalized constrained policy optimization (CPO) (Achiam
+et al., 2017) with diffusion policy and the associated diffusion divergence. To analyze this connection
+in more detail, we first formalize the generalized CPO framework, with the primal form:
+
+
+_π_ [(] _[t]_ [+1)] = arg max E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ [(] _[π]_ [(] _[t]_ [)] ( _s, a_ )] : (70)
+_π∈_ Π
+
+E _s∼ρ_ _[π]_ _β_ [ _D_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _≤_ _εb,_ (71)
+
+
+where _π_ [(] _[t]_ [)] is the policy at iteration _t_, Π denotes the set of policies _π_ : _S_ _→_ _P_ ( _A_ ), _ρ_ _[π][β]_ is the state
+visitation distribution of the behavior policy _πβ_, _D_ is a divergence, _π_ 0 := _π_ [(0)] is the anchor policy,
+and _εb_ is a divergence threshold such that
+
+0 _< εb_ _< ε_ [upper] _b_ := E _s∼ρ_ _[π]_ _β_ [ _D_ ( _π_ 0( _·|s_ ) _∥_ _π_ _[∗]_ ( _·|s_ ))] _,_ (72)
+
+
+where _π_ _[∗]_ := arg max _π_ E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )]. We assume _ρ_ _[π][β]_ ( _s_ ) _>_ 0 for all _s_ _∈S_ . This
+constraint ensures that the updated policy remains sufficiently close to the anchor policy _π_ 0.
+
+
+Our main concern is whether the dual form (7) is equivalent to the primal form, i.e., whether strong
+duality holds. When _D_ is an _f_ -divergence, this holds because the objective is linear, the equality
+constraints are convex, and Slater’s condition is satisfied by setting _π_ _≡_ _πβ_ (see Step 1 in Appendix
+D.3). In this case, (7) follows from the dual formulation after rescaling by a Lagrange multiplier,
+with _ζt_ depending on _εb_, _ρ_ _[π][β]_, and _Qϕ_ .
+
+
+Since the diffusion divergence can be expressed as a pathwise forward KL divergence (Lemma D.1),
+which is an _f_ -divergence, CDPO inherits the same property. This holds whether _π_ is defined over the
+full path ( _a_ [0] _, . . ., a_ _[K]_ ) or marginalized, since the integral operator is linear. Hence, strong duality is
+guaranteed for CDPO.
+
+
+D.1.4 SPECIAL CASES OF CDPO POLICIES
+
+
+As mentioned in Section 3.1, CDPO includes several algorithms and their corresponding solutions as
+special cases. For this, first recall (7):
+
+
+_π_ [(] _[t]_ [+1)] = arg min _{_ E _s∼ρ_ _[π]_ _β_ [ _D_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _−_ _ζtLQπ_ ( _t_ ) ( _π_ ) _}_ (73)
+_π_
+
+
+For convenience, define _L_ ( _π_ ; _π_ 0 _, D, ζt_ ) := E _s∼ρ_ _[π]_ _β_ [ _D_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _−_ _ζtLQπ_ ( _t_ ) ( _π_ ). In what
+follows, we focus on four representative policies: the behavior policy _πβ_, the reverse KL constrained
+optimal policy and implicit method _πη_ _[∗]_ [, the explicit method] _[ π]_ [DQL][, and our proposed] _[ π]_ [TDP][, which are]
+defined as follows.
+
+
+1. _πβ_ denotes a behavior policy. Note that _πβ_ is a solution of CDPO with _π_ 0 = _πβ_ and _ζt_ = 0.
+
+2. We use two different definitions of _πη_ _[∗]_ [:]
+
+(i) _πη_ _[∗]_ [(] _[a][|][s]_ [) =] _[ π][β]_ [(] _[a][|][s]_ [)] _[ ·]_ [ exp (] _η_ [1] _[Q][π][′]_ [(] _[s, a]_ [))] _[/Z]_ [(] _[s]_ [)][ for some policy] _[ π][′]_ [.] _[Z]_ [(] _[s]_ [)][ is the partition]
+
+function.
+(ii) _πη_ _[∗]_ [denotes a set of] _[ π]_ _L_ [(] _[t]_ [)] [with] _[ L]_ [ =] _[ L]_ [(] _[π]_ [;] _[ π][β][, D]_ [RKL] _[, ζ][t]_ [)][ defined in (7).]
+
+3. _π_ DQL denotes a set of _πL_ [(] _[t]_ [)] [with] _[ L]_ [ =] _[ L]_ [(] _[π]_ [;] _[ π][β][, D]_ [diff] _[, ζ][t]_ [)][ defined in (7).]
+Note that _π_ DQL refers to the policy derived from DQL (Wang et al., 2023).
+
+4. _π_ TDP denotes a set of _πL_ [(] _[t]_ [)] [with] _[ L]_ [=] _[L]_ [(] _[π]_ [;] _[ π]_ _η_ _[∗][, D]_ [diff] _[, ζ][t]_ [)][ in (7).] [TDP refers to the proposed]
+algorithm.
+
+
+Note that the formulation of _πη_ _[∗]_ [in 2-(ii) does not strictly correspond to CDPO; however, it is necessary]
+for establishing the approximate relations in Appendix D.5. To support this, we prove the policy
+enhancement theorem (Appendix D.3) for the CPO setting defined above, assuming an _f_ -divergence
+as the constraint measure.
+
+
+24
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+D.1.5 APPROXIMATE RELATION
+
+
+**Definition D.2.** Let _π_ 1 and _π_ 2 be the policies within the CDPO formulation defined by Section D.1.3
+with _L_ = _L_ 1 and _L_ = _L_ 2, respectively and _π_ 1 [(0)] = _π_ 2 [(0)] = _π_ 0. Define the approximate relation
+denoted by ≳ as follows: _π_ 1 ≳ _π_ 2 if
+
+E _s∼ρπβ,a∼π_ 1(1)( _·|s_ ) [[] _[Q][π]_ [0][(] _[s, a]_ [)]] _[ ≥]_ [E] _s∼ρ_ _[πβ]_ _,a∼π_ 2 [(1)] ( _·|s_ ) [[] _[Q][π]_ [0][(] _[s, a]_ [)]] _[.]_ (74)
+
+where _J_ ( _π_ ) := E _s_ 0 _∼d_ 0 _,π_ [ [�] _[∞]_ _t_ =0 _[γ][t][R]_ [(] _[s][t][, a][t]_ [)]][ is the expected return of policy] _[ π]_ [.]
+
+
+Using Definition D.2, we consider the relation between two CDPO policies _π_ 1 and _π_ 2 sharing the same
+_π_ 0 with different CPO losses _L_ = _L_ 1 and _L_ = _L_ 2, respectively. We assume that the leap of the _first_
+step is highly related to the subsequent steps. Therefore, we compare E _s∼ρπβ,a∼π_ 1(1)( _·|s_ ) [[] _[Q][π]_ [0][(] _[s, a]_ [)]]
+and E _s∼ρπβ,a∼π_ 2(1)( _·|s_ ) [[] _[Q][π]_ [0][(] _[s, a]_ [)]] [to] [determine] [which] [policy] [approximately] [achieves] [a] [higher] [ex-]
+pected return.
+
+
+Observe that this statement depends on _ζt_ . Therefore, if we want to say that _π_ 1 ≳ _π_ 2 with _L_ 1 and _L_ 2
+without fixing certain _ζt_, such as _π_ DQL or _πη_ _[∗]_ [, we either confine] _[ ζ][t]_ [of] _[ L]_ [2] [or some other components]
+and find _ζt_ of _L_ 1 which satisfy (74).
+
+
+As a special case, when the CDPO policy _π_ is initialized with _π_ [(0)] = _π_ 0, including cases where the
+loss is not diffusion-based, we have _π_ ≳ _π_ 0. This guarantee holds regardless of the choice of _ζt_ .
+
+
+25
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+D.2 PROOF OF LEMMA D.1
+
+
+Therefore, we conclude that the expression in (79) coincides with the KL divergence _D_ KL( _q_ ( _x_ [0:] _[K]_ ) _∥_
+(1 _−α_ _[k]_ ) [2]
+_p_ ( _x_ [0:] _[K]_ )) up to an additive constant, with _w_ ( _k_ ) = 2( _σ_ _[k]_ ) [2] _α_ _[k]_ (1 _−α_ ¯ _[k]_ ) [, following the derivation in the]
+
+DDPM paper (Ho et al., 2020).
+
+
+26
+
+
+_√_
+**Lemma D.1.** _Consider a diffusion model on x_ [0:] _[K]_ = ( _x_ [0] _, . . ., x_ _[K]_ ) _with x_ _[k]_ =
+
+
+_√_
+1 _−_ _α_ ¯ _[k]_ _x_ [0] +
+
+
+**Lemma D.1.** _Consider a diffusion model on x_ [0:] _[K]_ = ( _x_ [0] _, . . ., x_ _[K]_ ) _with x_ _[k]_ = 1 _−_ _α_ ¯ _[k]_ _x_ [0] + _α_ ¯ _[k]_ _ϵ,_
+
+_ϵ_ _∼N_ (0 _, I_ ) _._ _Let q_ ( _x_ [0:] _[K]_ ) _be the forward distribution with initial q_ ( _x_ [0] ) _, and pθ_ ( _x_ [0:] _[K]_ ) _the reverse_
+_denoising_ _process_ _parameterized_ _by_ _ϵθ_ ( _x_ _[k]_ _, k_ ) _with_ _p_ ( _x_ _[K]_ ) = _N_ (0 _, I_ ) _._ _The_ _diffusion_ _divergence_
+_Ddiff_ ( _q_ _∥_ _pθ_ ) _, induced by the DDPM loss L_ _[DDPM]_ _diff_ ( _θ_ ) = E _x_ 0 _∼q_ ( _x_ 0) _,k∼U_ [1 _,K_ ][ _w_ ( _k_ ) _||ϵθ_ ( _x_ _[k]_ _, k_ ) _−_ _ϵ||_ [2] ] _,_
+_coincides with the KL divergence DKL_ ( _q_ ( _x_ [0:] _[K]_ ) _∥_ _pθ_ ( _x_ [0:] _[K]_ )) _up to a constant._
+
+
+_Proof._ Our goal is to show that for _D_ diff( _q_ _∥_ _pθ_ ) := _D_ KL( _q_ ( _x_ [0:] _[K]_ ) _∥_ _pθ_ ( _x_ [0:] _[K]_ )), there exists a proper
+choice of _w_ ( _k_ ) and a constant _C_ independent of _pθ_ such that the following holds:
+
+
+E _x_ 0 _∼q_ ( _x_ 0) _,k∼U_ [1 _,K_ ][ _w_ ( _k_ ) _||ϵ −_ _ϵθ_ ( _x_ _[k]_ _, k_ ) _||_ [2] ] + _C_ = _D_ diff( _q_ _∥_ _pθ_ ) = _D_ KL( _q_ ( _x_ [0:] _[K]_ ) _∥_ _pθ_ ( _x_ [0:] _[K]_ )) _._
+(75)
+
+
+First, observe that the following identity holds:
+
+
+                           -                           _D_ diff( _q_ _∥_ _pθ_ ) := _D_ KL( _q_ ( _x_ [0:] _[K]_ ) _∥_ _pθ_ ( _x_ [0:] _[K]_ )) = E _x_ 0: _K_ _∼q_ ( _x_ 0: _K_ ) _−_ log _[p]_ _q_ _[θ]_ ( [(] _x_ _[x]_ [0:][0:] _[K][K]_ ) [)] (76)
+
+= E _x_ 0: _K_ _∼q_ ( _x_ 0: _K_ )                 - _−_ log _qp_ ( _xθ_ ( [1:] _x_ _[K]_ [0:] _|_ _[K]_ _x_ [0] )) [+ log] _[ q]_ [(] _[x]_ [0][)]                 - (77)
+
+= E _x_ 0: _K_ _∼q_ ( _x_ 0: _K_ )                 - _−_ log _qp_ ( _xθ_ ( [1:] _x_ _[K]_ [0:] _|_ _[K]_ _x_ [0] ))                 - _−_ _H_ ( _q_ ( _x_ [0] )) _._
+
+(78)
+
+
+The second term is a constant, and according to the DDPM paper (Ho et al., 2020), the first term is
+given by:
+
+
+_K_
+
+      -       -       E _x_ 0: _K_ _∼q_ ( _x_ 0: _K_ ) _D_ KL( _q_ ( _x_ _[K]_ _|x_ [0] ) _∥_ _p_ ( _x_ _[K]_ )) + _D_ KL( _q_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ _, x_ [0] ) _∥_ _pθ_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ )) _−_ log _pθ_ ( _x_ [0] _|x_ [1] ) _._
+
+
+_k_ =2
+
+(79)
+
+
+Since _q_ ( _x_ _[K]_ _|x_ [0] ), _p_ ( _x_ _[K]_ ), and _q_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ _, x_ [0] ) ( _k_ = 2 _, · · ·_ _, K_ ) are all Gaussian, and _pθ_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ ) is
+also Gaussian with a mean parameterized by the noise model _ϵθ_ ( _x_ _[k]_ _, k_ ) as:
+
+
+     _pθ_ ( _x_ _[k][−]_ [1] _|x_ _[k]_ ) = _N_ ~~_√_~~ 1
+
+_α_ _[k]_
+
+
+- _x_ _[k]_ _−_ ~~_√_~~ 1 _−_ 1 _−αα_ ¯ _[k][k]_ _[ϵ][θ]_ [(] _[x][k][, k]_ [)] _,_ - _σ_ _[k]_ ) [2] _I_ - [�] _._ (80)
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+D.3 PROOF OF THEOREM 4.1
+
+
+**Theorem 4.1.** _For CDPO, we can achieve_ _**policy improvement**_ _for the first iteration step, i.e.,_
+
+
+_J_ ( _π_ [(1)] ) _≥_ _J_ ( _π_ [(0)] ) = _J_ ( _π_ 0) _,_ (81)
+
+
+_where_ _J_ ( _π_ ) _is_ _the_ _expected_ _return_ _of_ _policy_ _π._ _Furthermore,_ _we_ _can_ _achieve_ _**expected**_ **Q** _**value**_
+_**improvement**_ _for all the other iteration steps, i.e._ _for t ≥_ 1 _,_
+
+
+E _s∼ρ_ _[π]_ _β,a∼π_ ( _t_ +1)[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )] _≥_ E _s∼ρ_ _[π]_ _β,a∼π_ ( _t_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _s, a_ )] _._ (82)
+
+
+We first prove this for generalized CPO with diffusion divergence or _f_ -divergences for Corollary 4.2
+(Steps 1-3), and then smoothly extend to CDPO cases (Step 4).
+
+
+_Proof_ _of_ _(81)._ For simplicity, we prove (81) in the tabular setting, where _S_ = _{s_ 1 _, . . ., sm}_ and
+_A_ = _{a_ 1 _, . . ., an}_ . Nonetheless, the proof can be readily extended to continuous control settings.
+We assume _ρ_ _[π][β]_ ( _s_ ) _>_ 0 for all _s ∈S_, which is standard in continuous control and can be generalized
+to cases involving the _support_ of _ρ_ _[π][β]_ . The result is proven for general _f_ -divergences as needed in
+Appendix D.5. Our argument is based on the constrained form of CDPO (or generalized CPO with
+_f_ -divergences) described in Appendix D.1.3, which is equivalent to its unconstrained version by the
+transformation discussed in Appendix D.1.3.
+
+
+_Proof of (82)._ We first prove this for generiazed CPO with _f_ -divergences.
+
+
+_**(Step**_ _**1.)**_ First, we verify whether strong duality holds for the hard formulation of generalized
+CPO introduced in Appendix D.1.3. To this end, we restate the hard formulation of generalized
+CPO in the tabular case, explicitly incorporating the normalization constraints. We also express the
+divergence as _Dg_ ( _π_ ( _·|s_ ) _∥_ _π_ 0( _·|s_ )) instead of _Df_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ )) by applying the transformation
+_g_ ( _u_ ) := _uf_ ( _u_ [1] [)][.]
+
+
+By the strong duality, we can swap the order of min and max operators:
+
+min min _t_ _[, ν]_ _t_ _[∗]_ [(] _[s]_ [))] _[,]_ (87)
+_µt≥_ 0 _,νt_ ( _s_ ) [max] _π≥_ 0 _[L]_ [(] _[π, µ][t][, ν][t]_ [(] _[s]_ [)) = max] _π≥_ 0 _µt≥_ 0 _,νt_ ( _s_ ) _[L]_ [(] _[π, µ][t][, ν][t]_ [(] _[s]_ [)) = max] _π≥_ 0 _[L]_ [(] _[π, µ][∗]_
+
+
+27
+
+
+_π_ [(] _[t]_ [+1)] = arg max
+_π≥_ 0
+
+
+_m_
+
+- _ρ_ _[π][β]_ ( _si_ )
+
+
+_i_ =1
+
+
+_n_
+
+- _π_ ( _aj|si_ ) _Q_ [(] _[t]_ [)] ( _si, aj_ ) : (83)
+
+
+_j_ =1
+
+
+_n_
+
+
+_m_
+
+     - _ρ_ _[π][β]_ ( _si_ ) _Dg_ ( _π_ ( _·|si_ ) _∥_ _π_ 0( _·|si_ )) _≤_ _εb,_ (84)
+
+
+_i_ =1
+
+_n_
+
+     - _π_ ( _aj|si_ ) = 1 _∀_ 1 _≤_ _i ≤_ _m._ (85)
+
+
+_j_ =1
+
+
+Since _{π_ : _π_ _≥_ 0 _}_ is a convex set, the objective is linear, for each _π_ ( _a|s_ ), the inequality constraint
+is convex as mentioned in Appendix D.1.1, and the equality constraint is affine, we conclude that
+the optimization problem is convex. Also, by using _Dg_ ( _π_ 0( _·|si_ ) _∥_ _π_ 0( _·|si_ )) = 0 _∀si_ _∈S_ and
+that _π_ 0 _≥_ 0, we get [�] _i_ _[m]_ =1 _[ρ][π][β]_ [(] _[s][i]_ [)] _[D][g]_ [(] _[π]_ [0][(] _[·|][s][i]_ [)] _[∥]_ _[π]_ [0][(] _[·|][s][i]_ [))] [=] [0] _[<]_ _[ε][b]_ [, satisfying Slater’s condition.]
+Therefore, the KKT condition holds, and the strong duality holds.
+
+
+_**(Step 2.)**_ Next, we aim to express _π_ [(] _[t]_ [+1)] in terms of _π_ 0 and _Q_ [(] _[t]_ [)] for each ( _si, aj_ ). We write the dual
+problem for timestep _t_ :
+
+
+_n_
+
+- _π_ ( _aj|si_ ) _Q_ [(] _[t]_ [)] ( _si, aj_ )
+
+
+_j_ =1
+
+
+min
+_µt≥_ 0 _,νt_ ( _s_ ) [max] _π≥_ 0 _[L]_ [(] _[π, µ][t][, ν][t]_ [(] _[s]_ [)) :=]
+
+
+_m_
+
+- _ρ_ _[π][β]_ ( _si_ )
+
+
+_i_ =1
+
+
+_π_ ( _aj|si_ )
+
+_j_ =1
+
+
+- _ρ_ _[π][β]_ ( _si_ ) _Dg_ ( _π_ ( _·|si_ ) _∥_ _π_ 0( _·|si_ ))
+
+
+_i_ =1
+
+
++
+
+
+
+
+
+1 _−_
+
+
+_n_
+
+
+
+
+
+ _._ (86)
+
+
++ _µt_
+
+
+_εb −_
+
+
+_m_
+
+
+_m_
+
+- _νt_ ( _si_ )
+
+
+_i_ =1
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+where ( _µ_ _[∗]_ _t_ _[, ν]_ _t_ _[∗]_ [(] _[s]_ [))][ are dual optimal points.] [Note that by Lemma D.3 (which will be stated and proved]
+later), _µ_ _[∗]_ _t_ _[>]_ [ 0][.] [By taking the partial derivative of] _[ L]_ [(] _[π, µ][∗]_ _t_ _[, ν]_ _t_ _[∗]_ [(] _[s]_ [))][ with respect to] _[ π]_ [(] _[a][j][|][s][i]_ [)][ for each]
+( _si, aj_ ), we get the following: for each 1 _≤_ _i ≤_ _m,_ 1 _≤_ _j_ _≤_ _n_,
+
+
+where _A_ _⇐⇒_ _B_ denotes “ _A_ if and only if _B_ ”. For each fixed _si_ _∈S_ and _aj_ _∈A_, _π_ [(] _[t]_ [+1)] ( _aj|si_ ) is
+reweighted as follows:
+
+
+Case 1. for _aj_ _∈A_ with _Q_ [ˆ][(] _[t]_ [)] ( _si, aj_ ) = 0, we have _π_ [(] _[t]_ [+1)] ( _aj|si_ ) = _π_ 0( _aj|si_ ) by (90-91).
+
+Case 2. for _aj_ _∈A_ with _Q_ [ˆ][(] _[t]_ [)] ( _si, aj_ ) _>_ 0, we have _π_ [(] _[t]_ [+1)] ( _aj|si_ ) _>_ _π_ 0( _aj|si_ ) by (90-91) and
+strictly increasing _g_ _[′]_ .
+
+Case 3. for _aj_ _∈A_ with _Q_ [ˆ][(] _[t]_ [)] ( _si, aj_ ) _<_ 0, we have _π_ [(] _[t]_ [+1)] ( _aj|si_ ) _<_ _π_ 0( _aj|si_ ) by (90-91) and
+strictly increasing _g_ _[′]_ .
+
+
+Therefore, (92-94) holds.
+
+
+By plugging _t_ = 0 and _π_ 0 = _π_ [(0)], we conclude:
+
+E _a∼π_ (1)( _·|si_ )[ _Q_ _[π]_ [(0)] ( _si, a_ )] _≥_ E _a∼π_ (0)( _·|si_ )[ _Q_ _[π]_ [(0)] ( _si, a_ )] _∀si_ _∈S,_ (95)
+
+
+satisfying the policy improvement theorem (Sutton & Barto, 2018).
+
+
+_**(Step 4.)**_ To extend this to the diffusion divergence, we can apply this with respect to the paths, namely
+_π_ ( _a_ [0:] _[K]_ _|s_ ) and _π_ 0( _a_ [0:] _[K]_ _|s_ ), instead of _π_ ( _a|s_ ) (i.e., _π_ ( _a_ [0] _|s_ )) and _π_ 0( _a|s_ ) (i.e., _π_ 0( _a_ [0] _|s_ )). Following
+the same argument, we arrive at the same conclusion by marginalizing over the paths, using the
+relation
+
+    -    -    -    
+_· · ·_ _π_ ( _a_ [0:] _[K]_ _|s_ ) _da_ [1:] _[K]_ = _π_ ( _a_ [0] _|s_ ) _· · ·_ _π_ ( _a_ [1:] _[K]_ _| a_ [0] _, s_ ) _da_ [1:] _[K]_ = _π_ ( _a_ [0] _|s_ ) _._
+
+
+28
+
+
+_−_ _νt_ _[∗]_ [(] _[s][i]_ [)] _[.]_
+
+
+(88)
+
+
+����� _π≡π_ [(] _[t]_ [+1)]
+
+
+_∂L_ ( _π,µ_ _[∗]_ _t_ _[,ν]_ _t_ _[∗]_ [(] _[s]_ [))]
+_∂π_ ( _aj_ _|si_ )
+
+
+= _ρ_ _[π][β]_ ( _si_ )
+����� _π≡π_ [(] _[t]_ [+1)]
+
+
+_Q_ [(] _[t]_ [)] ( _si, aj_ ) _−_ _µ_ _[∗]_ _t_ _[·]_ _[∂D][g]_ [(] _[π]_ _∂π_ [0][(] _[·|]_ ( _a_ _[s]_ _j_ _[i]_ _|_ [)] _s_ _[∥]_ _i_ _[π]_ ) [(] _[·|][s][i]_ [))]
+
+
+By the strong duality, for all 1 _≤_ _i_ _≤_ _m,_ 1 _≤_ _j_ _≤_ _n_, we have either ( _i_ ) (88) is zero or ( _ii_ )
+_π_ [(] _[t]_ [+1)] ( _aj|si_ ) = 0 if (88) is zero at _π_ [(] _[t]_ [+1)] ( _aj|si_ ) _<_ 0. By the definition of _f_ -divergence, _ρ_ _[π][β]_ ( _si_ ) _>_ 0
+_∀si_ _∈S_, and _µ_ _[∗]_ _t_ _[>]_ [ 0][, we rearrange (88):]
+
+
+_g_ _[′]_ [ �] _π_ [(] _[t]_ [+1)] ( _aj_ _|si_ )
+
+
+_∂π_ ( _aj_ _|si_ )
+
+
+_π_ _[t]_ [+1)] 0( _a_ ( _ja|sji|s_ ) _i_ ) - = _[∂D][g]_ [(] _[π]_ _∂π_ [(] _[·|]_ ( _[s]_ _a_ _[i]_ _j_ [)] _[∥]_ _|s_ _[π]_ _i_ [0] ) [(] _[·|][s][i]_ [))]
+
+
+= _[Q]_ [(] _[t]_ [)][(] _[s][i][,a][j]_ [)] _[−]_ _µ_ _[ν]_ _t_ _[∗]_ _t_ _[∗]_ [(] _[s][i]_ [)] _[/ρ][πβ]_ [ (] _[s][i]_ [)] (89)
+����� _π≡π_ [(] _[t]_ [+1)]
+
+
+or _π_ [(] _[t]_ [+1)] ( _aj|si_ ) = 0 if (88) is zero at _π_ [(] _[t]_ [+1)] ( _aj|si_ ) _<_ 0. Thus, we can express _π_ [(] _[t]_ [+1)] ( _aj|si_ ) for
+each ( _si, aj_ ) as:
+
+
+              - _Q_ [(] _[t]_ [)] ( _si,aj_ ) _−νt_ _[∗]_ [(] _[s][i]_ [)] _[/ρ][πβ]_ [ (] _[s][i]_ [)]
+_π_ [(] _[t]_ [+1)] ( _aj|si_ ) = _π_ 0( _aj|si_ ) _·_ max ( _g_ _[′]_ ) _[−]_ [1][ �] _µ_ _[∗]_ _t_
+
+
+Note that _g_ _[′]_ is strictly increasing, and so is ( _g_ _[′]_ ) _[−]_ [1] .
+
+
+- _,_ 0 _,_ (90)
+
+
+_**(Step 3.)**_ Finally, we are ready to prove (81) for generalized CPO with _f_ -divergence. Let
+
+_Q_ ˆ [(] _[t]_ [)] ( _si, aj_ ) := _[Q]_ [(] _[t]_ [)][(] _[s][i][,a][j]_ [)] _[−]_ _µ_ _[ν]_ _t_ _[∗]_ _t_ _[∗]_ [(] _[s][i]_ [)] _[/ρ][πβ]_ [ (] _[s][i]_ [)] _−_ _g_ _[′]_ (1) (91)
+
+Since _µ_ _[∗]_ _t_ [(] _[s][i]_ [)][,] _[ ρ][π][β]_ [(] _[s][i]_ [)][,] _[ µ]_ _t_ _[∗]_ [, and] _[ g][′]_ [(1)][ do not depend on actions] _[ a][j]_ [, we have]
+
+E _a∼π_ ( _t_ +1)( _·|si_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _si, a_ )] _≥_ E _a∼π_ 0( _·|si_ )[ _Q_ _[π]_ [(] _[t]_ [)] ( _si, a_ )] _∀si_ _∈S._ (92)
+
+
+_n_
+
+- _π_ 0( _aj|si_ ) _Q_ [(] _[t]_ [)] ( _si, aj_ ) _∀si_ _∈S._ (93)
+
+
+_j_ =1
+
+
+_n_
+
+- _π_ 0( _aj|si_ ) _Q_ [ˆ][(] _[t]_ [)] ( _si, aj_ ) _∀si_ _∈S._ (94)
+
+
+_j_ =1
+
+
+_⇐⇒_
+
+
+_⇐⇒_
+
+
+_n_
+
+- _π_ [(] _[t]_ [+1)] ( _aj|si_ ) _Q_ [(] _[t]_ [)] ( _si, aj_ ) _≥_
+
+
+_j_ =1
+
+
+_n_
+
+- _π_ [(] _[t]_ [+1)] ( _aj|si_ ) _Q_ [ˆ][(] _[t]_ [)] ( _si, aj_ ) _≥_
+
+
+_j_ =1
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+**1524**
+
+**1525**
+
+
+**1526**
+
+**1527**
+
+**1528**
+
+**1529**
+
+**1530**
+
+
+**1531**
+
+**1532**
+
+**1533**
+
+**1534**
+
+**1535**
+
+**1536**
+
+
+**1537**
+
+**1538**
+
+**1539**
+
+**1540**
+
+**1541**
+
+**1542**
+
+
+**1543**
+
+**1544**
+
+**1545**
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**
+
+**1553**
+
+
+**1554**
+
+**1555**
+
+**1556**
+
+**1557**
+
+**1558**
+
+**1559**
+
+
+**1560**
+
+**1561**
+
+**1562**
+
+**1563**
+
+**1564**
+
+**1565**
+
+
+Note that for forward and reverse KL divergences (and thus diffusion divergence), _π_ [(] _[t]_ [+1)] ( _a|s_ ) = 0
+never happens because _g_ _[′]_ ( _t_ ) = _−_ [1] _t_ [and][ 1 + log] _[ t]_ [, respectively, where][ lim] _[t][→]_ [0][+] _[ g][′]_ [(] _[t]_ [) =] _[ −∞]_ [.]
+
+
+_Proof of (82)._ Since _π_ [(] _[t]_ [+1)] = arg max _π∈_ Π E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ [(] _[t]_ [)] ( _s, a_ )], (82) holds if the constrained
+variant of CDPO in Section D.1.3 is feasible for all _t_ . (81) implies that the problem is feasible at
+_t_ = 0. Also, if the problem is feasible at _t_, then it is also feasible at _t_ + 1 because _π_ [(] _[t]_ [+1)] = _π_ [(] _[t]_ [)] is
+feasible. Thus, we conclude that (82) holds for all _t_ .
+
+
+**Lemma D.3.** _For (87), µ_ _[∗]_ _t_ _[>]_ [ 0] _[.]_
+
+
+_Proof._ It is given that _µ_ _[∗]_ _t_ _[≥]_ [0][, and we claim that] _[ µ]_ _t_ _[∗]_ [= 0][.] [Suppose] _[ µ][∗]_ _t_ [= 0][.] [We already showed that]
+Slater’s condition holds. Let _π_ ˜ [(] _[t]_ [+1)] be a point that satisfies Slater’s condition. Then, _π_ ˜ [(] _[t]_ [+1)] _∈_ Π and
+the dual problem (87) becomes
+
+
+_π_ [(] _[t]_ [+1)] = arg max _L_ ( _π,_ 0 _, νt_ _[∗]_ [(] _[s]_ [)) = arg max] E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ [(] _[t]_ [)] ( _s, a_ )] _._ (96)
+_π∈_ Π _π∈_ Π
+
+
+Therefore, _π_ [(] _[t]_ [+1)] = _π_ _[∗]_ by definition, and E _s∼ρ_ _[π]_ _β_ [ _Dg_ ( _π_ 0( _·|s_ ) _∥_ _π_ _[∗]_ ( _·|s_ ))] _≤_ _εb_ . However, in (72),
+we assumed that _εb_ _< ε_ _[upper]_ _b_ := E _s∼ρ_ _[π]_ _β_ [ _Dg_ ( _π_ 0( _·|s_ ) _∥_ _π_ _[∗]_ ( _·|s_ ))], which is a contradiction.
+
+
+29
+
+
+**1566**
+
+**1567**
+
+
+**1568**
+
+**1569**
+
+**1570**
+
+**1571**
+
+**1572**
+
+**1573**
+
+
+**1574**
+
+**1575**
+
+**1576**
+
+**1577**
+
+**1578**
+
+**1579**
+
+
+**1580**
+
+**1581**
+
+**1582**
+
+**1583**
+
+**1584**
+
+
+**1585**
+
+**1586**
+
+**1587**
+
+**1588**
+
+**1589**
+
+**1590**
+
+
+**1591**
+
+**1592**
+
+**1593**
+
+**1594**
+
+**1595**
+
+**1596**
+
+
+**1597**
+
+**1598**
+
+**1599**
+
+**1600**
+
+**1601**
+
+**1602**
+
+
+**1603**
+
+**1604**
+
+**1605**
+
+**1606**
+
+**1607**
+
+
+**1608**
+
+**1609**
+
+**1610**
+
+**1611**
+
+**1612**
+
+**1613**
+
+
+**1614**
+
+**1615**
+
+**1616**
+
+**1617**
+
+**1618**
+
+**1619**
+
+
+D.4 PROOF OF COROLLARY 4.2
+
+
+**Corollary 4.2.** _Let π_ 1 ≳ _π_ 2 _denote that policy π_ 1 _is is approximately better than policy π_ 2 _in the_
+_sense of (19) and (20)._ _Then,_
+
+
+_1)_ _πDQL_ ≳ _πβ,_
+
+_2)_ _πη_ _[∗]_ [≳] _[π][β][, and]_
+
+_3)_ _πTDP_ ≳ _πη_ _[∗][.]_
+
+
+_Proof._ Observe that in all three cases, the latter policy coincides with the anchor policy _π_ 0 of the
+preceding one, thereby the approximate relationship holds in each case.
+
+
+30
+
+
+**1620**
+
+**1621**
+
+
+**1622**
+
+**1623**
+
+**1624**
+
+**1625**
+
+**1626**
+
+**1627**
+
+
+**1628**
+
+**1629**
+
+**1630**
+
+**1631**
+
+**1632**
+
+**1633**
+
+
+**1634**
+
+**1635**
+
+**1636**
+
+**1637**
+
+**1638**
+
+
+**1639**
+
+**1640**
+
+**1641**
+
+**1642**
+
+**1643**
+
+**1644**
+
+
+**1645**
+
+**1646**
+
+**1647**
+
+**1648**
+
+**1649**
+
+**1650**
+
+
+**1651**
+
+**1652**
+
+**1653**
+
+**1654**
+
+**1655**
+
+**1656**
+
+
+**1657**
+
+**1658**
+
+**1659**
+
+**1660**
+
+**1661**
+
+
+**1662**
+
+**1663**
+
+**1664**
+
+**1665**
+
+**1666**
+
+**1667**
+
+
+**1668**
+
+**1669**
+
+**1670**
+
+**1671**
+
+**1672**
+
+**1673**
+
+
+D.5 PROOF OF COROLLARY 4.3
+
+
+**Corollary 4.3.** _πη_ _[∗]_ _[is approximately better than][ π][DQL]_ _[in the following sense.]_ _[For][ π][β]_ _[satisfying some]_
+_mild conditions, for any ζt there exists properly chosen η satisfying_
+
+E _s∼ρ_ _[π]_ _β,a∼πη∗_ [ _Q_ _[π][β]_ ( _s, a_ )] _≥_ E _s∼ρπβ,a∼πDQL_ (1) [[] _[Q][π][β]_ [(] _[s, a]_ [)]] (97)
+
+
+We first define the terms and conditions necessary for the proof. Assume that _Q_ _[π][β]_ ( _s, a_ ) is bounded
+_∀s ∈S, a ∈A_ . For states _s_ with a normalization factor _N_ ( _s_ ) := sup _a′∈A Q_ _[π][β]_ ( _s, a_ _[′]_ ) _−_ _V_ _[π][β]_ ( _s_ ) _>_ 0,
+we first define the normalized advantage _A_ [¯] _[π][β]_ ( _s, a_ ) as follows:
+
+_A_ ¯ _[π][β]_ ( _s, a_ ) := _[Q][πβ]_ [ (] _[s,a]_ _N_ [)] ( _[−]_ _s_ ) _[V]_ _[πβ]_ [ (] _[s]_ [)] _,_ (98)
+
+
+where _A_ [¯] _[π][β]_ ( _s, a_ ) _≤_ 1 with equality when _Q_ _[π][β]_ ( _s, a_ ) = sup _a′∈A Q_ _[π][β]_ ( _s, a_ _[′]_ ). For states _s_ with
+_N_ ( _s_ ) = 0, we regard that all actions achieve _A_ [¯] _[π][β]_ ( _s, a_ ) = 1 for generality.
+
+
+We also define the cumulative distribution function (CDF) _F_ ¯ _A_ [(] _[r][|][π, s]_ [)][ and the probability density]
+function (PDF) _fA_ ¯ [(] _[r][|][π, s]_ [)][ of] _[A]_ [¯] _[π][β]_ [(] _[s, a]_ [)][ with respect to policy] _[ π]_ [ as]
+
+_F_ ¯ _A_ [(] _[r][|][π, s]_ [) :=][ P] _a∼π_ ( _·|s_ ) [[ ¯] _[A][π][β]_ [(] _[s, a]_ [)] _[ ≤]_ _[r]_ []] _[,]_ (99)
+
+
+_∂_
+_fA_ ¯ [(] _[r][|][π, s]_ [) :=] _∂r_ _[F]_ [ ¯] _A_ [(] _[r][|][π, s]_ [)] _[.]_ (100)
+
+
+For typical suboptimal behavior policy _πβ_, since the policy struggles to select the best action,
+_fA_ ¯ [(] _[r][|][π][β][, s]_ [)][ would be small for] _[ r]_ [ close to][ 1][, and even with a large decay.] [In this line, we define a set]
+of such states, _S_ ( _c, n, t_ ), as:
+
+
+            _S_ ( _c, n, t_ ) := _s ∈S_ : _fA_ ¯ [(] _[r][|][π][β][, s]_ [)] _[ ≤]_ _[c]_ [(1] _[ −]_ _[r][n]_ [)] _[ ∀][t][ ≤]_ _[r]_ _[<]_ [ 1]
+
+and _πβ_ ( _a|s_ ) = 0 _∀a_ s.t. _Q_ _[π][β]_ ( _s, a_ ) = sup _Q_ _[π][β]_ ( _s, a_ _[′]_ )� (101)
+_a_ _[′]_ _∈A_
+
+
+for _c_ _>_ 0, _n_ _∈_ N, 0 _≤_ _t_ _<_ 1 with _cn_ (1 _−_ _t_ ) _<_ 1. Note that for _s_ with _N_ ( _s_ ) = 0, _fA_ ¯ [(] _[r][|][π][β][, s]_ [)] [=]
+_δ_ ( _r −_ 1), where _δ_ ( _·_ ) is a Dirac delta function, by our formulation, we conclude that such _s_ cannot
+belong to _S_ ( _c, n, t_ ).
+
+
+For the proof, we have the following assumptions on _πβ_ :
+
+
+Assumption 1. _Q_ _[π][β]_ ( _s, a_ ) is bounded.
+
+Assumption 2. _πβ_ ( _a|s_ ) _>_ 0 _∀s ∈S_, _∀a ∈A_ : _Q_ _[π][β]_ ( _s, a_ ) _<_ sup _a′∈A Q_ _[π][β]_ ( _s, a_ _[′]_ )
+
+
+Assumption 4. for each _s_ with _N_ ( _s_ ) _>_ 0, there exists _l_ ( _s_ ) _<_ 1 such that _fA_ ¯ [(] _[r][|][π][β][, s]_ [)] _[ >]_ [ 0][ for all]
+_l_ ( _s_ ) _≤_ _r_ _<_ 1.
+
+
+31
+
+
+_S_ ( _c,n,t_ ) _[ρ][π][β]_ [(] _[s]_ [)] _[N]_ [(] _[s]_ [)] _[ds >]_ [ 0][ for some] _[ c >]_ [ 0][,] _[ n][ ∈]_ [N][,][ 0] _[ ≤]_ _[t <]_ [ 1][ with] _[ cn]_ [(1] _[−]_ _[t]_ [)] _[ <]_ [ 1][.]
+
+
+Assumption 3.
+
+
+**1674**
+
+**1675**
+
+
+**1676**
+
+**1677**
+
+**1678**
+
+**1679**
+
+**1680**
+
+**1681**
+
+
+**1682**
+
+**1683**
+
+**1684**
+
+**1685**
+
+**1686**
+
+**1687**
+
+
+**1688**
+
+**1689**
+
+**1690**
+
+**1691**
+
+**1692**
+
+
+**1693**
+
+**1694**
+
+**1695**
+
+**1696**
+
+**1697**
+
+**1698**
+
+
+**1699**
+
+**1700**
+
+**1701**
+
+**1702**
+
+**1703**
+
+**1704**
+
+
+**1705**
+
+**1706**
+
+**1707**
+
+**1708**
+
+**1709**
+
+**1710**
+
+
+**1711**
+
+**1712**
+
+**1713**
+
+**1714**
+
+**1715**
+
+
+**1716**
+
+**1717**
+
+**1718**
+
+**1719**
+
+**1720**
+
+**1721**
+
+
+**1722**
+
+**1723**
+
+**1724**
+
+**1725**
+
+**1726**
+
+**1727**
+
+
+_proof._ Let _M_ ( _η_ ) and _M_ be defined by
+
+_M_ ( _η_ ) := E _s∼ρ_ _[π]_ _β,a∼πη∗_ [(] _[·|][s]_ [)][[] _[Q][π][β]_ [(] _[s, a]_ [)]] _[,]_ (102)
+
+_M_ := E _s∼ρ_ _[π]_ _β_ [ sup _Q_ _[π][β]_ ( _s, a_ _[′]_ )] _._ (103)
+_a_ _[′]_ _∈A_
+
+
+_>_ 0 _._ (by Assumption 3) (115)
+
+
+Since _M_ _>_ E _s∼ρπβ,a∼π_ DQL(1) [(] _[·|][s]_ [)][[] _[Q][π][β]_ [(] _[s, a]_ [)]][,] [there] [exists] _[η]_ _>_ 0 that satisfies _M_ ( _η_ ) _≥_
+
+E _s∼ρπβ,a∼π_ DQL(1) [(] _[·|][s]_ [)][[] _[Q][π][β]_ [(] _[s, a]_ [)]][.]
+
+
+32
+
+
+exp ( [1]
+
+_η_
+
+Note that _M_ ( _η_ ) _≤_ _M_ for _η_ _>_ 0. Also, since _πη_ _[∗]_ [(] _[a][|][s]_ [) =] _[ π][β]_ [(] _[a][|][s]_ [)]
+
+
+_η_ _[Q][πβ]_ [ (] _[s,a]_ [))]
+
+
+Note that _M_ ( _η_ ) _≤_ _M_ for _η_ _>_ 0. Also, since _πη_ [(] _[a][|][s]_ [) =] _[ π][β]_ [(] _[a][|][s]_ [)] _Z_ ( _s_ ) and by Assumptions
+
+2 and 4,
+
+
+lim [lim] (104)
+_η→_ 0 [+][ E] _[s][∼][ρ][πβ][,a][∼][π][η][∗]_ [(] _[·|][s]_ [)][[] _[Q][π][β]_ [(] _[s, a]_ [)] =] _η→_ 0 [+] _[ M]_ [(] _[η]_ [) =] _[ M.]_
+
+
+We aim to show that _M_ _−_ E _s∼ρπβ,a∼π_ DQL(1) [(] _[·|][s]_ [)][[] _[Q][π][β]_ [(] _[s, a]_ [)]] _[ >]_ [ 0][.]
+
+By definition of _A_ [¯] _[π][β]_ ( _s, a_ ), for _s_ with _N_ ( _s_ ) _>_ 0, we have 1 _−_ E _a∼π_ ( _·|s_ )[ _A_ [¯] _[π][β]_ ( _s, a_ )] _≥_ 0 and
+
+
+_N_ [ (] ( _[s,a]_ _s_ ) _[′]_ [)] _[−][V]_ _[πβ]_ [ (] _[s]_ [)] _−_ E _a∼π_ ( _·|s_ )[ _Q_ _[πβ]_ _N_ (( _ss,a_ ) )] _−V_ _[πβ]_ ( _s_ )
+
+
+_[πβ]_ [ (] _[s]_ [)]
+1 _−_ E _a∼π_ ( _·|s_ )[ _A_ [¯] _[π][β]_ ( _s, a_ )] = [sup] _[a][′]_ _[∈A][ Q][πβ]_ [ (] _[s,a][′]_ [)] _[−][V]_
+
+
+_N_ ( _s_ ) (105)
+
+
+= sup _a′_ _∈A_ _Q_ _[πβ]_ ( _s,a_ _[′]_ _N_ ) _−_ (E _s_ ) _a∼π_ ( _·|s_ )[ _Q_ _[πβ]_ ( _s,a_ )] _._ (106)
+
+
+By the fact that _fA_ ¯ [(] _[r][|][π, s]_ [)][ is a probability density function, we also have]
+
+
+           - 1
+1 _−_ E _a∼π_ ( _·|s_ )[ _A_ [¯] _[π][β]_ ( _s, a_ )] =
+
+
+1 - 1
+
+_rfA_ ¯ [(] _[r][|][π, s]_ [)] _[dr]_ [=]
+_−∞_
+
+
+1 - 1
+
+_fA_ ¯ [(] _[r][|][π, s]_ [)] _[dr][ −]_
+_−∞_
+
+
+(1 _−_ _r_ ) _fA_ ¯ [(] _[r][|][π, s]_ [)] _[dr.]_
+_−∞_
+
+
+(107)
+
+
+By (106) and (107), we have
+
+
+                    - 1
+sup _Q_ _[π][β]_ ( _s, a_ _[′]_ ) _−_ E _a∼π_ ( _·|s_ )[ _Q_ _[π][β]_ ( _s, a_ )] = _N_ ( _s_ ) (1 _−_ _r_ ) _fA_ ¯ [(] _[r][|][π, s]_ [)] _[dr]_ _[≥]_ [0] _[.]_ (108)
+_a_ _[′]_ _∈A_ _−∞_
+
+
+Note that (108) also holds for _s_ with _N_ ( _s_ ) = 0. Then, taking the expectations with respect to _s ∼_ _ρ_ _[π][β]_
+on (108) yields
+
+
+     - 1
+_ρ_ _[π][β]_ ( _s_ ) _N_ ( _s_ )
+_S_
+
+
+             _M_ _−_ E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[ _Q_ _[π][β]_ ( _s, a_ )] =
+
+
+(1 _−_ _r_ ) _fA_ ¯ [(] _[r][|][π, s]_ [)] _[drds][ ≥]_ [0] _[.]_ (109)
+_−∞_
+
+
+Therefore, by Lemma D.4 (which will be stated and proved later), (109) with _π_ = _π_ DQL [(1)] [becomes]
+
+_M_ _−_ E _s∼ρπβ,a∼π_ DQL(1) [(] _[·|][s]_ [)][[] _[Q][π][β]_ [(] _[s, a]_ [)]] (110)
+
+
+     - 1
+_ρ_ _[π][β]_ ( _s_ ) _N_ ( _s_ )
+_S_
+
+
+ =
+
+
+(1 _−_ _r_ ) _fA_ ¯ [(] _[r][|][π]_ DQL [(1)] _[, s]_ [)] _[drds]_ (by (109)) (111)
+_−∞_
+
+
+        - 1
+_ρ_ _[π][β]_ ( _s_ ) _N_ ( _s_ )
+_S_ ( _c,n,t_ )
+
+
+ _≥_
+
+
+(1 _−_ _r_ ) _fA_ ¯ [(] _[r][|][π]_ DQL [(1)] _[, s]_ [)] _[drds]_ ( _S_ _⊇S_ ( _c, n, t_ )) (112)
+_−∞_
+
+
+    _≥_ (1 _−_ _t_ ) _ρ_ _[π][β]_ ( _s_ ) _N_ ( _s_ ) _F_ ¯ _A_ [(] _[t][|][π]_ DQL [(1)] _[, s]_ [)] _[ds]_ (113)
+
+_S_ ( _c,n,t_ )
+
+
+          _≥_ (1 _−_ _t_ )(1 _−_ _cn_ (1 _−_ _t_ )) _ρ_ _[π][β]_ ( _s_ ) _N_ ( _s_ ) _ds_ (by Lemma D.4) (114)
+
+_S_ ( _c,n,t_ )
+
+
+**1728**
+
+**1729**
+
+
+**1730**
+
+**1731**
+
+**1732**
+
+**1733**
+
+**1734**
+
+**1735**
+
+
+**1736**
+
+**1737**
+
+**1738**
+
+**1739**
+
+**1740**
+
+**1741**
+
+
+**1742**
+
+**1743**
+
+**1744**
+
+**1745**
+
+**1746**
+
+
+**1747**
+
+**1748**
+
+**1749**
+
+**1750**
+
+**1751**
+
+**1752**
+
+
+**1753**
+
+**1754**
+
+**1755**
+
+**1756**
+
+**1757**
+
+**1758**
+
+
+**1759**
+
+**1760**
+
+**1761**
+
+**1762**
+
+**1763**
+
+**1764**
+
+
+**1765**
+
+**1766**
+
+**1767**
+
+**1768**
+
+**1769**
+
+
+**1770**
+
+**1771**
+
+**1772**
+
+**1773**
+
+**1774**
+
+**1775**
+
+
+**1776**
+
+**1777**
+
+**1778**
+
+**1779**
+
+**1780**
+
+**1781**
+
+
+**Lemma D.4.** _Assuming four assumptions in the main proof, ∀s ∈S_ ( _c, n, t_ ) _the following holds:_
+
+
+_F_ ¯ _A_ [(] _[t][|][π]_ _DQL_ [(1)] _[, s]_ [)] _[ ≥]_ [1] _[ −]_ _[cn]_ [(1] _[ −]_ _[t]_ [)] _[ >]_ [ 0] _[.]_ (116)
+
+
+_Proof._ We start from (90) in Section D.3 (the proof of Theorem 4.1). DQL uses diffusion divergence
+_D_ diff( _q_ _∥_ _pθ_ ) := _D_ FKL( _q_ ( _x_ [0:] _[K]_ ) _∥_ _pθ_ ( _x_ [0:] _[K]_ )) and for the forward KL divergence, ( _g_ _[′]_ ) _[−]_ [1] ( _u_ ) = _−_ _u_ [1] [.]
+
+As in the proof of Theorem 4.1, we assume that _ρ_ _[π][β]_ ( _s_ ) _>_ 0 _∀s ∈S_ . Then we get _π_ DQL [(1)] [(] _[a]_ [0:] _[K][|][s]_ [)][ for]
+each _s ∈S_, _a ∈A_ as
+
+_π_ DQL [(1)] [(] _[a]_ [0:] _[K][|][s]_ [) =] _[ π][β]_ [(] _[a]_ [0:] _[K][|][s]_ [)] _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ]_ ~~_[π]_~~ _[β]_ [(] _[s]_ _µ_ [)] _[∗]_ _t_ _[−][Q]_ ~~_[π]_~~ _[β]_ [(] _[s,a]_ [0][)] _[.]_ (117)
+
+By integrating both sides over _a_ [1:] _[K]_, and taking _a_ [0] = _a_, we get
+
+_π_ DQL [(1)] [(] _[a][|][s]_ [) =] _[ π][β]_ [(] _[a][|][s]_ [)] _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ]_ ~~_[π]_~~ _[β]_ [(] _µ_ _[s][∗]_ _t_ [)] _[−][Q]_ ~~_[π]_~~ _[β]_ [(] _[s,a]_ [)] _[.]_ (118)
+
+
+_**(Step 1.)**_ We will show that for _s ∈S_ with _N_ ( _s_ ) := sup _a′∈A Q_ _[π][β]_ ( _s, a_ _[′]_ ) _−_ _V_ _[π][β]_ ( _s_ ) _>_ 0, _a ∈A_, and
+0 _≤_ _r_ _<_ 1 with _r_ = _A_ [¯] _[π][β]_ ( _s, a_ ):
+
+_νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[Q][π][β]_ [(] _[s, a]_ [)] _[ ≥]_ [(1] _[ −]_ _[r]_ [)] _[µ]_ _t_ _[∗][.]_ (119)
+
+
+Note that _π_ DQL [(1)] [in (118) is well-defined, i.e.,] _[ π]_ DQL [(1)] [(] _[a][|][s]_ [)] _[≥]_ [0][ for all] _[ s]_ _[∈S]_ [,] _[ a]_ _[∈A]_ [.] [By Lemma D.3]
+_µ_ _[∗]_ _t_ _[>]_ [ 0][.] [Therefore, the denominator must be positive, i.e.,]
+
+_νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[Q][π][β]_ [(] _[s, a]_ [)] _[ >]_ [ 0][ for all] _[ s][ ∈S][, a][ ∈A][.]_ (120)
+
+Next, by integrating both sides of (118) with respect to _a ∈A_,
+
+
+(121)
+
+Since _µ_ _[∗]_ _t_ _[>]_ [ 0][ is a constant, this implies that]
+
+( _µ_ _[∗]_ _t_ [)] _[−]_ [1] [=][ E] _a∼πβ_ ( _·|s_ ) [[(] _[ν]_ _t_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[Q][π][β]_ [(] _[s, a]_ [))] _[−]_ [1][]] (122)
+
+_≥_ �E _a∼πβ_ ( _·|s_ )[( _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[Q][π][β]_ [(] _[s, a]_ [))]]        - _−_ 1 (123)
+
+= ( _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[V]_ _[π][β]_ [(] _[s]_ [))] _[−]_ [1] (124)
+
+where the inequality holds by Jensen’s inequality E[ _f_ ( _x_ )] _≥_ _f_ (E[ _x_ ]) for a convex function _f_ ( _x_ ) =
+_x_ _[−]_ [1] on _x >_ 0, which is valid due to (120). Therefore,
+
+_νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[V]_ _[π][β]_ [(] _[s]_ [)] _[ ≥]_ _[µ][∗]_ _t_ _[.]_ (125)
+
+Also, due to (120), _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ [sup] _a_ _[′]_ _∈A_ _[Q][π][β]_ [(] _[s, a][′]_ [)] _[ ≥]_ [0][, hence]
+
+_N_ ( _s_ ) := sup _Q_ _[π][β]_ ( _s, a_ _[′]_ ) _−_ _V_ _[π][β]_ ( _s_ ) _≤_ _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[V]_ _[π][β]_ [(] _[s]_ [)] (126)
+_a_ _[′]_ _∈A_
+
+
+Therefore, for ( _s, a_ ) with _A_ [¯] _[π][β]_ ( _s, a_ ) = _r_, we have _Q_ _[π][β]_ ( _s, a_ ) = _V_ _[π][β]_ ( _s, a_ ) + _rN_ ( _s_ ) and:
+
+_νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[Q][π][β]_ [(] _[s, a]_ [) = (] _[ν]_ _t_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[V]_ _[π][β]_ [(] _[s]_ [))] _[ −]_ _[rN]_ [(] _[s]_ [)] (127)
+_≥_ (1 _−_ _r_ )( _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ][π][β]_ [(] _[s]_ [)] _[ −]_ _[V]_ _[π][β]_ [(] _[s]_ [))] (by (125)) (128)
+_≥_ (1 _−_ _r_ ) _µ_ _[∗]_ _t_ _[.]_ (by (126)) (129)
+
+
+_**(Step 2.)**_ Plugging (119) into (118), we get
+
+_π_ DQL [(1)] [(] _[a][|][s]_ [)] _[ ≤]_ 1 _−_ 1 _r_ _[π][β]_ [(] _[a][|][s]_ [)] _[.]_ (130)
+
+
+Note that for _s_ with _N_ ( _s_ ) = 0, (130) also holds because _fA_ ¯ [(] _[r][|][π][β][, s]_ [) =] _[ δ]_ [(] _[r]_ _[−]_ [1)][ for] _[ s]_ [ with] _[ N]_ [(] _[s]_ [) = 0][,]
+which implies _π_ DQL [(1)] [(] _[a][|][s]_ [)] [=] [0] _[∀][a]_ [with] [0] _[≤]_ _[r]_ _[<]_ [1][.] [By] [integrating] [the] [both] [sides] [of] [(130)] [over]
+_{a ∈A_ : _A_ [¯] _[π][β]_ ( _s, a_ ) _≤_ _r}_ and by definition of _FA_ and _fA_ in (99-100), we obtain
+
+
+1
+_fA_ ¯ [(] _[r][|][π]_ DQL [(1)] _[, s]_ [)] _[ ≤]_ 1 _−r_ _[f]_ _A_ [ ¯][(] _[r][|][π][β][, s]_ [)] _[∀][s][ ∈S][,]_ [ 0] _[ ≤]_ _[r]_ _[<]_ [ 1] _[.]_ (131)
+
+
+33
+
+
+  1 =
+
+
+_πβ_ ( _a|s_ ) _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ]_ ~~_[π]_~~ _[β]_ [(] _µ_ _[s][∗]_ _t_ [)] _[−][Q]_ ~~_[π]_~~ _[β]_ [(] _[s,a]_ [)] _[da]_ [ =][ E] _[a][∼][π][β]_ [(] _[·|][s]_ [)]  - _νt_ _[∗]_ [(] _[s]_ [)] _[/ρ]_ ~~_[π]_~~ _[β]_ [(] _µ_ _[s][∗]_ _t_ [)] _[−][Q]_ ~~_[π]_~~ _[β]_ [(] _[s,a]_ [)]  _A_
+
+
+       _π_ DQL [(1)] [(] _[a][|][s]_ [)] _[da]_ [ =]
+_A_
+
+
+**1782**
+
+**1783**
+
+
+**1784**
+
+**1785**
+
+**1786**
+
+**1787**
+
+**1788**
+
+**1789**
+
+
+**1790**
+
+**1791**
+
+**1792**
+
+**1793**
+
+**1794**
+
+**1795**
+
+
+**1796**
+
+**1797**
+
+**1798**
+
+**1799**
+
+**1800**
+
+
+**1801**
+
+**1802**
+
+**1803**
+
+**1804**
+
+**1805**
+
+**1806**
+
+
+**1807**
+
+**1808**
+
+**1809**
+
+**1810**
+
+**1811**
+
+**1812**
+
+
+**1813**
+
+**1814**
+
+**1815**
+
+**1816**
+
+**1817**
+
+**1818**
+
+
+**1819**
+
+**1820**
+
+**1821**
+
+**1822**
+
+**1823**
+
+
+**1824**
+
+**1825**
+
+**1826**
+
+**1827**
+
+**1828**
+
+**1829**
+
+
+**1830**
+
+**1831**
+
+**1832**
+
+**1833**
+
+**1834**
+
+**1835**
+
+
+_**(Step 3.)**_ Now we are ready to prove (D.4). For all _s ∈S_ ( _c, n, t_ ),
+
+
+       - _t_
+_F_ ¯ _A_ [(] _[t][|][π]_ DQL [(1)] _[, s]_ [) =] _fA_ ¯ [(] _[r][|][π]_ DQL [(1)] _[, s]_ [)] _[dr]_ (132)
+
+_−∞_
+
+        - 1
+= 1 _−_ _fA_ ¯ [(] _[r][|][π]_ DQL [(1)] _[, s]_ [)] _[dr]_ (133)
+
+_t_
+
+
+   - 1
+= 1 _−_ _c_ (1 + _r_ + _· · ·_ + _r_ _[n][−]_ [1] ) _dr_ (by factor theorem and definition of _S_ ( _c, n, t_ )))
+
+_t_
+
+(136)
+
+
+   - 1
+_≥_ 1 _−_ _cndr_ (∵ 0 _≤_ _r_ _<_ 1)
+
+_t_
+
+(137)
+
+
+= 1 _−_ _cn_ (1 _−_ _t_ ) (138)
+
+_>_ 0 _._ (by Assumption 3)
+(139)
+
+
+34
+
+
+   - 1
+_≥_ 1 _−_
+
+_t_
+
+
+   - 1
+_≥_ 1 _−_
+
+_t_
+
+
+1 _−_ 1 _r_ _[f]_ _A_ [ ¯][(] _[r][|][π][β][, s]_ [)] _[dr]_ (by (131))
+
+
+(134)
+
+
+1 _−_ 1 _r_ _[c]_ [(1] _[ −]_ _[r][n]_ [)] _[dr]_ (by definition of _S_ ( _c, n, t_ )
+
+
+(135)
+
+
+**1836**
+
+**1837**
+
+
+**1838**
+
+**1839**
+
+**1840**
+
+**1841**
+
+**1842**
+
+**1843**
+
+
+**1844**
+
+**1845**
+
+**1846**
+
+**1847**
+
+**1848**
+
+**1849**
+
+
+**1850**
+
+**1851**
+
+**1852**
+
+**1853**
+
+**1854**
+
+
+**1855**
+
+**1856**
+
+**1857**
+
+**1858**
+
+**1859**
+
+**1860**
+
+
+**1861**
+
+**1862**
+
+**1863**
+
+**1864**
+
+**1865**
+
+**1866**
+
+
+**1867**
+
+**1868**
+
+**1869**
+
+**1870**
+
+**1871**
+
+**1872**
+
+
+**1873**
+
+**1874**
+
+**1875**
+
+**1876**
+
+**1877**
+
+
+**1878**
+
+**1879**
+
+**1880**
+
+**1881**
+
+**1882**
+
+**1883**
+
+
+**1884**
+
+**1885**
+
+**1886**
+
+**1887**
+
+**1888**
+
+**1889**
+
+
+D.6 PROOF OF THEOREM 4.5
+
+
+For this proof, we concretize the statements of Theorem 4.5.
+
+
+**Theorem** **3.6.** _Let_ _A_ = [ _−_ 1 _,_ 1] _[d]_ _be_ _an_ _action_ _space._ _For_ _any_ _δ_ _>_ 0 _,_ _with_ _ε_ _>_ 2 _[d]_ _δ_ +
+2E _s∼ρ_ _[π]_ _β_ [ _DTV_ _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))]] _[, where]_
+
+
+_≥_ E _a∼π_ ( _·|s_ )[P[ _πβ_ ( _a|s_ ) _< δ_ ]] _−_ 2 _[d]_ _δ −_ 2 _D_ TV _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))] (by (145)) _._
+
+
+We get the conclusion by taking expectations along _ρ_ _[π][β]_ on both sides.
+
+
+35
+
+
+_DTV_ _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [)) :=] [1]
+
+2
+
+
+_|πβ_ ( _a|s_ ) _−_ _π_ 0( _a|s_ ) _|da,_ (140)
+_a∈A_ : _πβ_ ( _a|s_ ) _<δ_
+
+
+_any policy π satisfying_
+
+E _s∼ρ_ _[π]_ _β_ [ _Ddiff_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _<_ [1] _TV_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))])][2] (141)
+
+2 [(] _[ε][ −]_ [2] _[d][δ][ −]_ [2][E] _[s][∼][ρ][πβ]_ [ [] _[D][δ]_
+
+
+_is an (ϵ, δ)-in-distribution policy._
+_Note that_ E _s∼ρ_ _[π]_ _β_ [ _DTV_ _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π][β]_ [(] _[·|][s]_ [))] = 0] _[ and]_ [ E] _s∼ρ_ _[πβ]_ [ [] _[D]_ _TV_ _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ _η_ _[∗]_ [(] _[·|][s]_ [))]] _[ is small when][ η][ is]_
+_large enough._
+
+
+We first introduce lemmas to simplify the mathematical derivations, followed by the main proof.
+
+**Lemma D.5.** _For any δ_ _>_ 0 _and A_ = [ _−_ 1 _,_ 1] _[d]_ _, the following holds:_
+
+
+E _s∼ρ_ _[π]_ _β_ [2 _DTV_ ( _π_ ( _·|s_ ) _, π_ 0( _·|s_ ))] _>_ E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[P[ _πβ_ ( _a|s_ ) _< δ_ ]] _−_ 2 _[d]_ _δ −_ 2E _s∼ρ_ _[π]_ _β_ [ _DTV_ _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))]] _[.]_
+(142)
+
+
+_Proof._ For each _s ∈S_, define
+
+
+_A_ ( _s, δ_ ) := _{a ∈A_ = [ _−_ 1 _,_ 1] _[d]_ : _πβ_ ( _a|s_ ) _< δ}_ (143)
+
+
+By the definition of _A_ ( _s, δ_ ) and _m_ ( _A_ ( _s, δ_ )) _≤_ _m_ ( _A_ ) = 2 _[d]_ for Lebesgue measure _m_ ( _·_ ), we get
+
+           -           
+
+
+       _πβ_ ( _a|s_ ) _da <_
+_A_ ( _s,δ_ )
+
+
+_δ da ≤_ 2 _[d]_ _δ,_ (144)
+_A_ ( _s,δ_ )
+
+
+and by definition of _A_ ( _s, δ_ ), we get
+
+     -     
+
+
+       _π_ ( _a|s_ ) _da_ =
+_A_ ( _s,δ_ )
+
+
+_π_ ( _a|s_ ) **1** [ _πβ_ ( _a|s_ ) _<δ_ ] _da_ = E _a∼π_ ( _·|s_ )[P[ _πβ_ ( _a|s_ ) _< δ_ ]] _._ (145)
+_A_
+
+
+Then, we have
+
+
+2 _D_ TV( _π_ ( _·|s_ ) _, π_ 0( _·|s_ ))
+
+
+  := _|π_ ( _a|s_ ) _−_ _π_ 0( _a|s_ ) _|da_ (by definition of TV distance)
+
+_A_
+
+ _≥_ _|π_ ( _a|s_ ) _−_ _π_ 0( _a|s_ ) _|da_ (∵ _A_ ( _s, δ_ ) _⊆A, |π_ ( _a|s_ ) _−_ _π_ 0( _a|s_ ) _| ≥_ 0)
+
+_A_ ( _s,δ_ )
+
+
+ _≥_
+
+
+           _|π_ ( _a|s_ ) _−_ _πβ_ ( _a|s_ ) _|da −_
+_A_ ( _s,δ_ )
+
+
+_|πβ_ ( _a|s_ ) _−_ _π_ 0( _a|s_ ) _|da_ (by triangular inequality)
+_A_ ( _s,δ_ )
+
+
+ _≥_
+
+
+       _π_ ( _a|s_ ) _da −_
+_A_ ( _s,δ_ )
+
+
+       _π_ ( _a|s_ ) _da −_
+_A_ ( _s,δ_ )
+
+
+       _πβ_ ( _a|s_ ) _da −_
+_A_ ( _s,δ_ )
+
+
+_|πβ_ ( _a|s_ ) _−_ _π_ 0( _a|s_ ) _|da_ (by triangular inequality)
+_A_ ( _s,δ_ )
+
+
+ =
+
+
+_πβ_ ( _a|s_ ) _da −_ 2 _D_ TV _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))] (by def. of _D_ TV _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [)))]
+_A_ ( _s,δ_ )
+
+
+ 
+_>_ _π_ ( _a|s_ ) _da −_ 2 _[d]_ _δ −_ 2 _D_ TV _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))] (by (144))
+
+_A_ ( _s,δ_ )
+
+
+**1890**
+
+**1891**
+
+
+**1892**
+
+**1893**
+
+**1894**
+
+**1895**
+
+**1896**
+
+**1897**
+
+
+**1898**
+
+**1899**
+
+**1900**
+
+**1901**
+
+**1902**
+
+**1903**
+
+
+**1904**
+
+**1905**
+
+**1906**
+
+**1907**
+
+**1908**
+
+
+**1909**
+
+**1910**
+
+**1911**
+
+**1912**
+
+**1913**
+
+**1914**
+
+
+**1915**
+
+**1916**
+
+**1917**
+
+**1918**
+
+**1919**
+
+**1920**
+
+
+**1921**
+
+**1922**
+
+**1923**
+
+**1924**
+
+**1925**
+
+**1926**
+
+
+**1927**
+
+**1928**
+
+**1929**
+
+**1930**
+
+**1931**
+
+
+**1932**
+
+**1933**
+
+**1934**
+
+**1935**
+
+**1936**
+
+**1937**
+
+
+**1938**
+
+**1939**
+
+**1940**
+
+**1941**
+
+**1942**
+
+**1943**
+
+
+**Lemma D.6.** _The following holds:_
+
+
+~~�~~
+E _s∼ρ_ _[π]_ _β_ [2 _DTV_ ( _π_ 0( _·|s_ ) _, π_ ( _·|s_ ))] _≤_ E _s∼ρ_ _[π]_ _β_ [ 2 _Ddiff_ ( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _._ (146)
+
+
+_where DTV_ ( _·, ·_ ) _denotes the total variation distance._
+
+
+_Proof._ By Pinsker’s inequality and the property that _D_ FKL( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ )) _≤_ _D_ diff( _π_ 0( _·|s_ ) _∥_
+_π_ ( _·|s_ )) _[′]_, we get:
+
+
+            E _s∼ρ_ _[π]_ _β_ [2 _D_ TV( _π_ 0( _·|s_ ) _, π_ ( _·|s_ ))] _≤_ E _s∼ρ_ _[π]_ _β_ [ 2 _D_ FKL( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))]
+
+
+            _≤_ E _s∼ρ_ _[π]_ _β_ [ 2 _D_ diff( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _._ (147)
+
+
+_Proof_ _of_ _Theorem_ _4.5._ Here we write _C_ ( _δ, πβ, π_ 0) = 2 _[d]_ _δ_ + E _s∼ρ_ _[π]_ _β_ [ _D_ TV _[δ]_ [(] _[π][β]_ [(] _[·|][s]_ [)] _[, π]_ [0][(] _[·|][s]_ [))]] [for]
+simplicity.
+
+
+E _s∼ρ_ _[π]_ _β,a∼π_ ( _·|s_ )[P[ _πβ_ ( _a|s_ ) _< δ_ ]] (148)
+
+
+~~�~~
+_<_ E _s∼ρ_ _[π]_ _β_ [ 2 _D_ TV( _π_ ( _·|s_ ) _, π_ 0( _·|s_ ))] + _C_ ( _δ, πβ, π_ 0) (by Lemma _D._ 5) (149)
+
+
+~~�~~
+_≤_ E _s∼ρ_ _[π]_ _β_ [ 2 _D_ diff( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] + _C_ ( _δ, πβ, π_ 0) (by Lemma _D._ 6) (150)
+
+
+  _≤_ 2E _s∼ρ_ _[π]_ _β_ [ _D_ diff( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] + _C_ ( _δ, πβ, π_ 0) (by Jensen’s inequality) (151)
+
+
+  _≤_ 2 _·_ [1] 2 [(] _[ε][ −]_ _[C]_ [(] _[δ, π][β][, π]_ [0][))][2] [+] _[ C]_ [(] _[δ, π][β][, π]_ [0][)] (by (141)) (152)
+
+= ( _ε −_ _C_ ( _δ, πβ, π_ 0)) + _C_ ( _δ, πβ, π_ 0) (by the condition for _ε_ ) _,_ (153)
+= _ε,_ (154)
+
+
+Therefore, by Definition 4.4 in Section 4, _π_ is an ( _ε, δ_ )-in-distribution policy.
+
+
+**Remark** Similarly, Theorem 4.5 can also be established for forward and reverse KL divergences in
+place of diffusion divergence. For these divergences, observe that the key requirement is the form
+(146) from Lemma D.6.
+
+
+For the forward KL divergence, the result follows directly from (147). For the reverse KL divergence,
+we use the symmetry of the total variation distance. Specifically, observe that
+
+
+E _s∼ρ_ _[π]_ _β_ [2 _D_ TV( _π_ 0( _·|s_ ) _, π_ ( _·|s_ ))] = E _s∼ρ_ _[π]_ _β_ [2 _D_ TV( _π_ ( _·|s_ ) _, π_ 0( _·|s_ ))] _,_ (155)
+
+
+and
+
+
+            E _s∼ρ_ _[π]_ _β_ [2 _D_ TV( _π_ ( _·|s_ ) _, π_ 0( _·|s_ ))] _≤_ E _s∼ρ_ _[π]_ _β_ [ 2 _D_ FKL( _π_ ( _·|s_ ) _∥_ _π_ 0( _·|s_ ))]
+
+
+            = E _s∼ρ_ _[π]_ _β_ [ 2 _D_ RKL( _π_ 0( _·|s_ ) _∥_ _π_ ( _·|s_ ))] _,_ (156)
+
+
+which gives the desired result.
+
+
+36
+
+
+**1944**
+
+**1945**
+
+
+**1946**
+
+**1947**
+
+**1948**
+
+**1949**
+
+**1950**
+
+**1951**
+
+
+**1952**
+
+**1953**
+
+**1954**
+
+**1955**
+
+**1956**
+
+**1957**
+
+
+**1958**
+
+**1959**
+
+**1960**
+
+**1961**
+
+**1962**
+
+
+**1963**
+
+**1964**
+
+**1965**
+
+**1966**
+
+**1967**
+
+**1968**
+
+
+**1969**
+
+**1970**
+
+**1971**
+
+**1972**
+
+**1973**
+
+**1974**
+
+
+**1975**
+
+**1976**
+
+**1977**
+
+**1978**
+
+**1979**
+
+**1980**
+
+
+**1981**
+
+**1982**
+
+**1983**
+
+**1984**
+
+**1985**
+
+
+**1986**
+
+**1987**
+
+**1988**
+
+**1989**
+
+**1990**
+
+**1991**
+
+
+**1992**
+
+**1993**
+
+**1994**
+
+**1995**
+
+**1996**
+
+**1997**
+
+
+D.7 PROOFS FOR SEC. 3.2
+
+
+We begin with the formal definition of the MMSE estimator property.
+
+**Definition** **D.7** (MMSE estimator property) **.** Let _y_ denote the measurements, and let _x_ ˆ( _y_ ) be an
+estimator of _x_ . The mean squared error (MSE) loss is defined as
+
+
+E _x∼p_ ( _x|y_ )            - _||x_ ˆ( _y_ ) _−_ _x||_ [2][�] _._
+
+
+The estimator that minimizes this loss is unique and is given by
+
+
+_x_ ˆMMSE( _y_ ) := E _x∼p_ ( _x|y_ )[ _x_ ] _._
+
+
+With this, by choosing _y_ = ( _a_ _[k]_ _, k, s_ ) and _x_ = _ϵ_ and noticing that _ϵ_ is a function of ( _a_ [0] _, a_ _[k]_ _, k_ ), we get
+
+
+_ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [) =][ E] _a_ [0] _∼πη_ _[∗]_ ( _a_ [0] _|a_ _[k]_ _,s_ ) [[] _[ϵ]_ [] =][ E] _ϵ∼πη_ _[∗]_ ( _ϵ|a_ _[k]_ _,s_ ) [[] _[ϵ]_ []]
+
+
+as the minimizer of (11), which is written again as
+
+_L_ _[∗]_ _η_ [(] _[θ]_ [) =][ E] _s∼D,a_ [0] _∼πη_ _[∗]_ ( _a_ [0] _|s_ ) _,k∼U_ [1 _,K_ ]       - _||ϵθ_ ( _a_ _[k]_ _, k, s_ ) _−_ _ϵ||_ [2][�] _._ (157)
+
+
+Note that the minimizer is defined for each _y_ = ( _a_ _[k]_ _, k, s_ ) and the similar thing holds for
+_ϵβ_ ( _a_ _[k]_ _, k, s_ ) = E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )[ _ϵ_ ].
+
+
+1 ��   = _πη_ _[∗]_ [(] _[a]_ [0] _[|][s]_ [)] _[q]_ [(] _[a][k][|][a]_ [0][)] _[da]_ [0] (by Leibniz rule)
+_πη_ _[∗]_ ( _a_ _[k]_ _|s_ ) _[∇][a][k]_
+
+1
+= _η_ [(] _[a][k][|][s]_ [)] (by definition of _πη_ _[∗]_ [(] _[a][k][|][s]_ [)][)]
+_πη_ _[∗]_ ( _a_ _[k]_ _|s_ ) _[∇][a][k]_ _[π][∗]_
+
+= _∇ak_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] _[.]_ (by log-derivative trick)
+
+
+37
+
+
+_√_
+_Proof of ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)] [=] _[−]_
+
+
+_Proof of ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [)] [=] _[−]_ 1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] _[.]_ [Consider the following score matching loss]
+
+Song et al. (2021):
+
+
+E _s∼D,a_ 0 _∼πη∗,k∼U_ [1 _,K_ ]       - _||sθ_ ( _a_ _[k]_ _, k, s_ ) _−∇ak_ log _q_ ( _a_ _[k]_ _|a_ [0] ) _||_ [2][�] _._ (158)
+
+
+By Lemma 1 of Fang et al. (2024), one has
+
+
+_√_
+when _a_ _[k]_ =
+
+
+_√_
+_α_ ¯ _[k]_ _a_ [0] +
+
+
+_ϵ_
+_∇ak_ log _q_ ( _a_ _[k]_ _|a_ [0] ) = _−_ ~~_√_~~
+
+1 _−_ _α_ ¯ _[k]_
+
+
+1 _−_ _α_ ¯ _[k]_ _ϵ_ . Therefore, (158) is equivalent to
+
+
+����2 [�]
+
+
+E _s∼D,a_ 0 _∼πη∗,k∼U_ [1 _,K_ ]
+
+
+_sθ_ ( _ak, k, s_ ) + ~~_√_~~ _ϵ_
+����� 1 _−_ _α_ ¯ _[k]_
+
+
+_._ (159)
+
+
+By the MMSE estimator property, the minimizer of (159) is
+
+
+_η_ [(] _[a][k][, k, s]_ [)]
+
+_−_ _[ϵ][∗]_ ~~_√_~~
+
+1 _−_ _α_ ¯ _[k]_ _[.]_
+
+
+Alternatively, applying the MMSE property directly to (158) gives
+
+
+E _a_ 0 _∼πη∗_ ( _a_ 0 _|ak,s_ )          - _∇ak_ log _q_ ( _a_ _[k]_ _|a_ [0] )� _,_
+
+
+noting that _∇ak_ log _q_ ( _a_ _[k]_ _|a_ [0] ) is a function of ( _a_ [0] _, a_ _[k]_ _, k_ ). We directly compute this conditional
+expectation:
+
+
+              E _a_ 0 _∼πη∗_ ( _a_ 0 _|ak,s_ )[ _∇ak_ log _q_ ( _a_ _[k]_ _|a_ [0] )] = _πη_ _[∗]_ [(] _[a]_ [0] _[|][a][k][, s]_ [)] _[∇]_ _a_ _[k]_ [ log] _[ q]_ [(] _[a][k][|][a]_ [0][)] _[da]_ [0]
+
+
+              = _πη_ _[∗]_ [(] _[a]_ [0] _[|][a][k][, s]_ [)] _[∇][a][k]_ _[q]_ [(] _[a][k][|][a]_ [0][)] _da_ [0] (by log-derivative trick)
+
+_q_ ( _a_ _[k]_ _|a_ [0] )
+
+
+ - _πη∗_ [(] _[a]_ [0] _[|][s]_ [)] _[q]_ [(] _[a][k][|][a]_ [0][)]
+=
+
+
+_a_ _da_ [0] (by Bayes’ rule)
+
+_q_ ( _a_ _[k]_ _|a_ [0] )
+
+
+_[a]_ [0] _[|][s]_ [)] _[q]_ [(] _[a][k][|][a]_ [0][)] _∇ak_ _q_ ( _a_ _[k]_ _|a_ [0] )
+
+_πη_ _[∗]_ ( _a_ _[k]_ _|s_ ) _q_ ( _a_ _[k]_ _|a_ [0] )
+
+
+**1998**
+
+**1999**
+
+
+**2000**
+
+**2001**
+
+**2002**
+
+**2003**
+
+**2004**
+
+**2005**
+
+
+**2006**
+
+**2007**
+
+**2008**
+
+**2009**
+
+**2010**
+
+**2011**
+
+
+**2012**
+
+**2013**
+
+**2014**
+
+**2015**
+
+**2016**
+
+
+**2017**
+
+**2018**
+
+**2019**
+
+**2020**
+
+**2021**
+
+**2022**
+
+
+**2023**
+
+**2024**
+
+**2025**
+
+**2026**
+
+**2027**
+
+**2028**
+
+
+**2029**
+
+**2030**
+
+**2031**
+
+**2032**
+
+**2033**
+
+**2034**
+
+
+**2035**
+
+**2036**
+
+**2037**
+
+**2038**
+
+**2039**
+
+
+**2040**
+
+**2041**
+
+**2042**
+
+**2043**
+
+**2044**
+
+**2045**
+
+
+**2046**
+
+**2047**
+
+**2048**
+
+**2049**
+
+**2050**
+
+**2051**
+
+
+= _−D_ KL( _πβ_ ( _a_ [0] _|a_ _[k]_ _, s_ ) _∥_ _πη_ _[∗][,]_ (by definition of KL divergence)
+
+
+completing the proof.
+
+
+**Remark** It follows that (12) and (11) share the same minimizer. The surrogate proposed by Fang et al.
+(2024) appears similar to (12) but is derived differently. Their approach relies on the score function
+relation with a relaxation where the expectation is taken under _πβ_ instead of _πη_ _[∗]_ [, without addressing]
+minimizer preservation. It also employs the inner product technique of Vincent (2011), which is less
+intrinsic than the MMSE estimator property, together with a smooth extension assumption (referred
+to as the “naive extension” in Sec. 3.2). In contrast, our construction establishes a stronger theoretical
+correspondence and offers clearer interpretability.
+
+
+38
+
+
+Thus,
+
+
+_η_ [(] _[a][k][, k, s]_ [)]
+_∇ak_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [) =][ E] _a_ [0] _∼πη_ _[∗]_ ( _a_ [0] _|a_ _[k]_ _,s_ ) [[] _[∇]_ _a_ _[k]_ [ log] _[ q]_ [(] _[a][k][|][a]_ [0][)] =] _[ −]_ _[ϵ][∗]_ ~~_√_~~ 1 _−_ _α_ ¯ _[k]_ _[,]_
+
+
+or equivalently,
+
+         _ϵ_ _[∗]_ _η_ [(] _[a][k][, k, s]_ [) =] 1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] _[.]_
+
+completing the proof.
+
+
+_√_
+Note that _ϵβ_ ( _a_ _[k]_ _, k, s_ ) = _−_
+
+
+_Proof of (17)._ Recall that
+
+
+1 _−_ _α_ ¯ _[k]_ _∇ak_ log _πβ_ ( _a_ _[k]_ _|s_ ) can be proven in the similar way.
+
+
+_f_ ( _a_ _[k]_ _, k, s_ ) = log _πη_ _[∗]_ [(] _[a][k][|][s]_ [)] _[ −]_ [log] _[ π][β]_ [(] _[a][k][|][s]_ [) + log] _[ Z]_ [(] _[s]_ [)] (160)
+
+
+and
+
+1
+_η_ [(] _[a]_ [0] _[|][s]_ [)] _[ −]_ [log] _[ π][β]_ [(] _[a]_ [0] _[|][s]_ [) + log] _[ Z]_ [(] _[s]_ [)] _[.]_ (161)
+_η_ _[Q][ϕ]_ [(] _[s, a]_ [0][) = log] _[ π][∗]_
+
+
+Then, we get
+
+
+_f_ ˜( _a_ _[k]_ _, k, s_ ) _−_ _f_ ( _a_ _[k]_ _, k, s_ )
+
+= _η_ [1] [E] _[a]_ [0] _[∼][π][β]_ [(] _[a]_ [0] _[|][a][k][,s]_ [)] - _Qϕ_ ( _s, a_ [0] )� _−_ log _πη_ _[∗]_ [(] _[a][k][|][s]_ [) + log] _[ π][β]_ [(] _[a][k][|][s]_ [)] _[ −]_ [log] _[ Z]_ [(] _[s]_ [)] (by(15 _,_ 160))
+
+
+= E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )
+
+
+- 1 _η_ [(] _[a][k][|][s]_ [) + log] _[ π][β]_ [(] _[a][k][|][s]_ [)] _[ −]_ [log] _[ Z]_ [(] _[s]_ [)] (by definition of expectation)
+_η_ _[Q][ϕ]_ [(] _[s, a]_ [0][)] _[ −]_ [log] _[ π][∗]_
+
+
+= E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ ) �log _πη_ _[∗]_ [(] _[a]_ [0] _[|][s]_ [)] _[ −]_ [log] _[ π][β]_ [(] _[a]_ [0] _[|][s]_ [) + log] _[ π]_ _η_ _[∗]_ [(] _[a][k][|][s]_ [) + log] _[ π][β]_ [(] _[a][k][|][s]_ [)] - (by (161))
+
+
+_η_ [(] _[a]_ [0] _[|][a][k][, s]_ [)]
+log _[π][∗]_
+_πβ_ ( _a_ [0] _|a_ _[k]_ _, s_ )
+
+
+= E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )
+
+
+= E _a_ 0 _∼πβ_ ( _a_ 0 _|ak,s_ )
+
+
+_η_ [(] _[a]_ [0] _[|][s]_ [)] _[q]_ [(] _[a][k][|][a]_ [0][)] _[/π]_ _η_ _[∗]_ [(] _[a][k][|][s]_ [)]
+log _[π][∗]_
+_πβ_ ( _a_ [0] _|s_ ) _q_ ( _a_ _[k]_ _|a_ [0] ) _/πβ_ ( _a_ _[k]_ _|s_ )
+
+
+(by Bayes’ rule)
+
+
+**2052**
+
+**2053**
+
+
+**2054**
+
+**2055**
+
+**2056**
+
+**2057**
+
+**2058**
+
+**2059**
+
+
+**2060**
+
+**2061**
+
+**2062**
+
+**2063**
+
+**2064**
+
+**2065**
+
+
+**2066**
+
+**2067**
+
+**2068**
+
+**2069**
+
+**2070**
+
+
+**2071**
+
+**2072**
+
+**2073**
+
+**2074**
+
+**2075**
+
+**2076**
+
+
+**2077**
+
+**2078**
+
+**2079**
+
+**2080**
+
+**2081**
+
+**2082**
+
+
+**2083**
+
+**2084**
+
+**2085**
+
+**2086**
+
+**2087**
+
+**2088**
+
+
+**2089**
+
+**2090**
+
+**2091**
+
+**2092**
+
+**2093**
+
+
+**2094**
+
+**2095**
+
+**2096**
+
+**2097**
+
+**2098**
+
+**2099**
+
+
+**2100**
+
+**2101**
+
+**2102**
+
+**2103**
+
+**2104**
+
+**2105**
+
+
+E EXPERIMENTAL DETAILS
+
+
+E.1 2D BANDIT EXPERIMENT
+
+
+**Settings** We mostly followed the setup from the 2D bandit experiment in DQL codebase (Wang
+et al., 2023). The environment consists of a single state and a 2D box action space [ _−_ 1 _,_ 1] [2] . The
+dataset contains four Gaussian clusters centered at ( _±_ 0 _._ 8 _, ±_ 0 _._ 8) with standard deviation 0 _._ 05 per
+dimension, each containing 2500 samples. The reward function _R_ ( _a_ ) assigns Gaussian rewards with
+means of 3.0, 1.5, 5.0, and 0.0, starting from the top-left corner and proceeding clockwise, each with
+standard deviation 0.5.
+
+
+We regarded the 99% confidence regions (CR) of each cluster as in-distribution, computed using the
+_χ_ [2] distribution with 2 degrees of freedom centered at ( _±_ 0 _._ 8 _, ±_ 0 _._ 8). The threshold radii were set to
+0 _._ 05 _×_ 3 _._ 03, where _Fχ_ _[−]_ [2][1] (2) [(0] _[.]_ [99)] _[ ≈]_ [3] _[.]_ [03][.]
+
+
+**Algorithm Implementation** We adopted double Q-learning (Hasselt, 2010) and trained the critic
+with simple MSE regression toward _R_ ( _a_ ). Noise models were optimized using algorithm-specific
+actor losses. Except for “Explicit”, we employed the formulation in (50) (see Appendix C.1):
+
+
+_L_ TDP( _θ_ ) = _ηL_ diff( _θ_ ) + _L_ guide( _θ_ ) _−_ _ζLQϕ_ ( _θ_ ) _,_ (162)
+
+
+with _L_ guide defined as
+
+_L_ guide( _θ_ ) := E( _s,a_ 0) _∼D,k∼U_ [1 _,K_ ] ��1 _−_ _α_ ¯ _[k]_ [�] _∇ak_ _Qϕ_ ( _s, a_ [0] ) _, ϵθ_ ( _a_ _[k]_ _, k, s_ )� [�] _,_ (163)
+
+
+where _⟨·, ·⟩_ denotes the inner product.
+
+
+For noisy estimation variants, the only difference lies in the definition of _L_ guide, which is replaced by
+
+
+                   - ~~�~~                    - [�]
+_L_ _[′]_ guide [(] _[θ]_ [) :=][ E] ( _s,a_ [0] ) _∼D,k∼U_ [1 _,K_ ] 1 _−_ _α_ ¯ _[k]_ [�] _∇ak_ _Qϕ_ ( _s, a_ _[k]_ ) _, ϵθ_ ( _a_ _[k]_ _, k, s_ ) _._ (164)
+
+
+As a result, “TDP” used the actor loss
+
+
+_L_ ( _θ_ ) = _ηL_ diff( _θ_ ) + _L_ guide( _θ_ ) _−_ _ζLQϕ_ ( _θ_ ) _,_ (165)
+
+
+while “Noisy” used
+
+_L_ ( _θ_ ) = _ηL_ diff( _θ_ ) + _L_ _[′]_ guide [(] _[θ]_ [)] _[ −]_ _[ζL][Q]_ _ϕ_ [(] _[θ]_ [)] _[.]_ (166)
+
+
+The “Implicit” and “Noisy+Implicit” variants correspond to (165) and (166), respectively, with the
+_ζLQϕ_ ( _θ_ ) term removed. Finally, “Explicit” used
+
+
+_L_ ( _θ_ ) = _L_ diff( _θ_ ) _−_ _ζLQϕ_ ( _θ_ ) _._ (167)
+
+
+**Model Structure** We used the default settings in Wang et al. (2023): each Q network and noise
+model is a three-layer MLP with 256 hidden units per layer and Mish activation (Misra, 2020). The
+noise model also incorporates sinusoidal time embeddings.
+
+
+**Common** **hyperparameters** We sampled 100 samples for visualization. We used the Adam
+optimizer (Kingma & Ba, 2015) for training. The learning rate for the actor and critic updates is set
+to 3 _×_ 10 _[−]_ [4] . We adopted the implementation of DDPM (Ho et al., 2020) for the diffusion model with
+50 diffusion steps ( _K_ ) and variance-preserving (VP) scheduling (Song et al., 2021). An exponential
+moving average (EMA) update is applied with a decay rate _τ_ = 0 _._ 995 on actor networks. All models
+are trained for 1000 epochs with a batch size 100 ( _B_ ), where each epoch consists of a single full
+sweep of the dataset.
+
+
+**Per-Algorithm Hyperparameters** We used _ζ_ = 2 _._ 5 for “DQL”, following the default setting from
+the original codebase. For “TDP” and “ _a_ [0] _→_ _a_ _[k]_ ”, we set ( _η, ζ_ ) = (0 _._ 05 _,_ 2 _._ 5), while for “No Q Loss”
+and “Both”, we used ( _η, ζ_ ) = (0 _._ 05 _,_ 0), which were found to yield the best qualitative performance.
+
+
+39
+
+
+**2106**
+
+**2107**
+
+
+**2108**
+
+**2109**
+
+**2110**
+
+**2111**
+
+**2112**
+
+**2113**
+
+
+**2114**
+
+**2115**
+
+**2116**
+
+**2117**
+
+**2118**
+
+**2119**
+
+
+**2120**
+
+**2121**
+
+**2122**
+
+**2123**
+
+**2124**
+
+
+**2125**
+
+**2126**
+
+**2127**
+
+**2128**
+
+**2129**
+
+**2130**
+
+
+**2131**
+
+**2132**
+
+**2133**
+
+**2134**
+
+**2135**
+
+**2136**
+
+
+**2137**
+
+**2138**
+
+**2139**
+
+**2140**
+
+**2141**
+
+**2142**
+
+
+**2143**
+
+**2144**
+
+**2145**
+
+**2146**
+
+**2147**
+
+
+**2148**
+
+**2149**
+
+**2150**
+
+**2151**
+
+**2152**
+
+**2153**
+
+
+**2154**
+
+**2155**
+
+**2156**
+
+**2157**
+
+**2158**
+
+**2159**
+
+
+E.2 IMPLEMENTATION AND HYPERPARAMETERS
+
+
+**Codes** Our implementation is based on the CleanDiffuser (Dong et al., 2024) codebase, with
+semantic references to DAC (Fang et al., 2024). We also drew implementation guidance from the
+codebases of DQL (Wang et al., 2023) and DiffCPS (He et al., 2023).
+
+
+**Model Structure** We adopted the noise model structure of DQL (Wang et al., 2023), which uses an
+MLP-based model architecture. We enhanced this with Fourier time embeddings, following DAC.
+Each Q network is modeled as a three-layer MLP with 256 hidden units per layer, employing layer
+normalization (Lei Ba et al., 2016) followed by Mish activation (Misra, 2020).
+
+
+**Common** **Hyperparameters** We used the Adam optimizer (Kingma & Ba, 2015) with cosine
+learning rate decay (Loshchilov & Hutter, 2017), setting the minimum learning rate to one-tenth
+of the initial value. State normalization was applied to all environments. The learning rate for the
+actor, critic, and _η_ updates was set to 3 _×_ 10 _[−]_ [4] across all tasks. Following DQL (Wang et al., 2023),
+we implemented the DDPM diffusion model (Ho et al., 2020) with 5 diffusion steps ( _K_ ) and a
+variance-preserving (VP) noise schedule (Song et al., 2021). Consistent with DAC (Fang et al., 2024),
+we used 10 Q ensembles ( _Nq_ ) and 10 action samples ( _Na_ ) for actor learning. For action selection,
+we sampled 50 candidates ( _Nc_ ) and performed hard maximization. An exponential moving average
+(EMA) update with decay 0 _._ 995 ( _τ_ ) was applied to both the actor and critic networks. All models
+were trained for 2 million steps (M) with a batch size 256 (B). We evaluated each environment
+using four random seeds, with 50 evaluations per model, and reported the final scores. To reduce
+computational overhead, we computed the guidance and Q losses for actor updates using only half of
+the batch. Additionally, we adopted low-temperature sampling by initializing the sampling procedure
+in the evaluation phase from _a_ _[K]_ _∼_ 0 _._ 5 _· N_ (0 _, I_ ), following DD (Ajay et al., 2023).
+
+
+**Basic Per-Environment Training Hyperparameters** For MuJoCo (Todorov et al., 2012) locomotion tasks, we adopted the reward tuning scheme from IQL (Kostrikov et al., 2022). For Antmaze, we
+applied customized scaling by mapping rewards 0 _�→−_ 1 and 1 _�→_ 10, while Kitchen tasks used the
+raw rewards. The policy update period was set to 1 for Antmaze and 2 for all other environments. The
+discount factor was _γ_ = 0 _._ 995 for Antmaze and _γ_ = 0 _._ 99 elsewhere. For Antmaze, we additionally
+employed max Q backup (Kumar et al., 2020). We primarily followed DAC (Fang et al., 2024)
+for hyperparameter choices where applicable, including _ε_ _[η]_ _b_ [(or] _[η]_ [)] [and] _[ρ]_ [,] [to] [reduce] [tuning] [effort.]
+Additional implementation details are provided in the corresponding paragraphs.
+
+
+**Locomotion Tasks** In Table 8, we provide per-environment hyperparameters for MuJoCo locomotion environments. For _ε_ _[η]_ _b_ [, if DAC used] _[ ε][η]_ _b_ [= 1] _[.]_ [0][, we tuned within] _[ {]_ [0] _[.]_ [8] _[,]_ [ 1] _[.]_ [0] _[}]_ [ and followed DAC’s]
+setting elsewhere. For _ρ_, we adopted values of DAC when available: if _ρ_ = 1 _._ 0 (in Hopper and
+Walker2d), we tuned within _{_ 1 _._ 0 _,_ 1 _._ 25 _}_ ; if _ρ_ = 0 (in Halfcheetah), we kept _ρ_ = 0. For the balance
+coefficient _λ_, we tuned over _{_ 0 _._ 1 _,_ 0 _._ 2 _,_ 0 _._ 5 _,_ 0 _._ 8 _,_ 0 _._ 9 _}_ . Notably, tasks with higher stability, either due
+to dataset coverage (medium-replay) or physical agent characteristics (Halfcheetah, which has two
+contact points and a low center of mass), can tolerate higher _λ_ values.
+
+
+**Antmaze Tasks** In Table 9, we provide per-environment hyperparameters for Antmaze environments. For these tasks, we fixed _η_ due to its high sensitivity to _ε_ _[η]_ _b_ [and for consistency with DAC.]
+Instead of tuning _ε_ _[η]_ _b_ [, we directly tuned] _[ η]_ [ along with] _[ ρ]_ [ and] _[ λ]_ [.] [We adopted][ (] _[η, ρ, λ]_ [) = (0] _[.]_ [1] _[,]_ [ 1] _[.]_ [0] _[,]_ [ 0] _[.]_ [5)]
+as the default configuration from DAC and modified at most one of these values per environment.
+
+
+**Kitchen Tasks** In Table 10, we provide per-environment hyperparameters for Kitchen environments.
+For Kitchen tasks, we tuned ( _ε_ _[η]_ _b_ _[, ρ, λ]_ [)][ following as for locomotion tasks.] [Since we do not know the]
+hyperparameters used for Kitchen in DAC, we referred to the extremely low _η_ used in DQL (Wang
+et al., 2023), which corresponds to the reciprocal of _ζ_ in TDP, and accordingly chose low values for
+_ε_ _[η]_ _b_ [and] _[ λ]_ [.] [Further tuning was guided by keeping at least two of the three hyperparameters consistent]
+across Kitchen partial and mixed.
+
+
+40
+
+
+**2160**
+
+**2161**
+
+
+**2162**
+
+**2163**
+
+**2164**
+
+**2165**
+
+**2166**
+
+**2167**
+
+
+**2168**
+
+**2169**
+
+**2170**
+
+**2171**
+
+**2172**
+
+**2173**
+
+
+**2174**
+
+**2175**
+
+**2176**
+
+**2177**
+
+**2178**
+
+
+**2179**
+
+**2180**
+
+**2181**
+
+**2182**
+
+**2183**
+
+**2184**
+
+
+**2185**
+
+**2186**
+
+**2187**
+
+**2188**
+
+**2189**
+
+**2190**
+
+
+**2191**
+
+**2192**
+
+**2193**
+
+**2194**
+
+**2195**
+
+**2196**
+
+
+**2197**
+
+**2198**
+
+**2199**
+
+**2200**
+
+**2201**
+
+
+**2202**
+
+**2203**
+
+**2204**
+
+**2205**
+
+**2206**
+
+**2207**
+
+
+**2208**
+
+**2209**
+
+**2210**
+
+**2211**
+
+**2212**
+
+**2213**
+
+
+Table 8: Per-environment hyperparameters in MuJoCo locomotion environments.
+
+
+**Environment** _ε_ _[η]_ _b_ _ρ_ _λ_
+
+
+Halfcheetah m 0.8 0.0 0.9
+Halfcheetah m-r 0.8 0.0 0.8
+Halfcheetah m-e 0.1 0.0 0.5
+
+
+Hopper m 1.0 1.25 0.1
+Hopper m-r 1.0 1.25 0.8
+Hopper m-e 0.05 1.25 0.1
+
+
+Walker2d m 0.8 1.25 0.2
+Walker2d m-r 1.0 1.0 0.9
+Walker2d m-e 1.0 1.25 0.1
+
+
+Table 9: Per-environment hyperparameters in Antmaze environments.
+
+
+**Environment** _η_ _ρ_ _λ_
+
+
+Umaze 5.0 1.0 0.5
+Umaze d 0.1 1.0 0.5
+
+
+Medium p 0.1 1.0 0.2
+Medium d 0.1 1.0 0.5
+
+
+Large p 0.05 1.0 0.5
+Large d 0.1 1.25 0.5
+
+
+Ultra p 0.1 1.0 0.5
+Ultra d 0.1 1.0 0.2
+
+
+Table 10: Per-environment hyperparameters in Kitchen environments.
+
+
+**Environment** _ε_ _[η]_ _b_ _ρ_ _λ_
+
+
+Kitchen p 0.005 0.5 0.1
+Kitchen m 0.01 0.5 0.1
+
+
+E.3 IMPLEMENTATION AND HYPERPARAMETERS FOR FLOW MATCHING VARIANTS
+
+
+**Codes** Our implementation builds on the FQL (Park et al., 2025) codebase, with additional guidance
+taken from diffusion policy implementations mentioned in Appendix E.2.
+
+
+**Model Structure** We adopted the vector field architecture of FQL, where the time input (0–1) is
+concatenated into an MLP. Each Q network is a three-layer MLP with 256 hidden units per layer
+for locomotion tasks, and a four-layer MLP with 512 units for Antmaze, using layer normalization
+(Lei Ba et al., 2016) (Antmaze only) and Mish activation (Misra, 2020). The policy network has the
+same size as the Q network.
+
+
+**Common Hyperparameters** We used the Adam optimizer (Kingma & Ba, 2015) with a learning
+rate of 3 _×_ 10 _[−]_ [4] for both actor and critic. Following FQL (Park et al., 2025), the continuous-time
+flow vector field was implemented with 10 steps ( _N_ ) using the Euler method. For action selection,
+we sampled 50 candidates ( _Nc_ ) and applied soft maximization with temperature 1. All models were
+trained for 2M steps on locomotion tasks and 1M on Antmaze, following Alles et al. (2025), with
+batch size 256 (B). Each environment was evaluated with four random seeds, using 10 rollouts per
+seed for locomotion and 50 for Antmaze, also following Alles et al. (2025), and we report the final
+scores.
+
+
+41
+
+
+**2214**
+
+**2215**
+
+
+**2216**
+
+**2217**
+
+**2218**
+
+**2219**
+
+**2220**
+
+**2221**
+
+
+**2222**
+
+**2223**
+
+**2224**
+
+**2225**
+
+**2226**
+
+**2227**
+
+
+**2228**
+
+**2229**
+
+**2230**
+
+**2231**
+
+**2232**
+
+
+**2233**
+
+**2234**
+
+**2235**
+
+**2236**
+
+**2237**
+
+**2238**
+
+
+**2239**
+
+**2240**
+
+**2241**
+
+**2242**
+
+**2243**
+
+**2244**
+
+
+**2245**
+
+**2246**
+
+**2247**
+
+**2248**
+
+**2249**
+
+**2250**
+
+
+**2251**
+
+**2252**
+
+**2253**
+
+**2254**
+
+**2255**
+
+
+**2256**
+
+**2257**
+
+**2258**
+
+**2259**
+
+**2260**
+
+**2261**
+
+
+**2262**
+
+**2263**
+
+**2264**
+
+**2265**
+
+**2266**
+
+**2267**
+
+
+**Basic Per-Environment Training Hyperparameters** For Antmaze, we applied IQL (Kostrikov
+et al., 2022) tuning, i.e., mapping rewards of 0 to _−_ 1 and 1 to 0. The discount factor was set to
+_γ_ = 0 _._ 995 for Antmaze and _γ_ = 0 _._ 99 for locomotion. We tuned _α_ and _β_, corresponding to _η_ [1] [and] _ζ_ [1] [,]
+
+respectively. For _β_, our tuning strategy for locomotion mostly follows the “Tips for hyperparameter
+tuning” in FQL codebase website (Park et al., 2025). Further implementation details are given in the
+corresponding sections.
+
+
+**Locomotion Tasks** In Table 11, we provide per-environment hyperparameters for MuJoCo locomotion environments. We searched 1–3 (mostly 2) candidate values of _α_ or _β_ per environment by using
+only one of the two, and selected the final value while avoiding over-diversification.
+
+
+**Antmaze Tasks** In Table 9, we provide per-environment hyperparameters for Antmaze environments. For these tasks, we fixed _β_ = 10 and chose _α ∈{_ 2 _,_ 5 _}_ per environment.
+
+
+Table 11: Per-environment hyperparameters in MuJoCo locomotion environments.
+
+
+**Environment** _α_ _β_
+
+
+Halfcheetah m 0.05 0.001
+Halfcheetah m-r 0.05 0.001
+Halfcheetah m-e 0.05 0.1
+
+
+Hopper m 0.01 0.1
+Hopper m-r 0.01 0.1
+Hopper m-e 0.01 3
+
+
+Walker2d m 0.05 0.3
+Walker2d m-r 0.05 0.3
+Walker2d m-e 0.05 0.1
+
+
+Table 12: Per-environment hyperparameters in Antmaze environments.
+
+
+**Environment** _α_ _β_
+
+
+Umaze 5 10
+Umaze d 2 10
+
+
+Medium p 2 10
+Medium d 2 10
+
+
+Large p 2 10
+Large d 5 10
+
+
+42
+
+
+**2268**
+
+**2269**
+
+
+**2270**
+
+**2271**
+
+**2272**
+
+**2273**
+
+**2274**
+
+**2275**
+
+
+**2276**
+
+**2277**
+
+**2278**
+
+**2279**
+
+**2280**
+
+**2281**
+
+
+**2282**
+
+**2283**
+
+**2284**
+
+**2285**
+
+**2286**
+
+
+**2287**
+
+**2288**
+
+**2289**
+
+**2290**
+
+**2291**
+
+**2292**
+
+
+**2293**
+
+**2294**
+
+**2295**
+
+**2296**
+
+**2297**
+
+**2298**
+
+
+**2299**
+
+**2300**
+
+**2301**
+
+**2302**
+
+**2303**
+
+**2304**
+
+
+**2305**
+
+**2306**
+
+**2307**
+
+**2308**
+
+**2309**
+
+
+**2310**
+
+**2311**
+
+**2312**
+
+**2313**
+
+**2314**
+
+**2315**
+
+
+**2316**
+
+**2317**
+
+**2318**
+
+**2319**
+
+**2320**
+
+**2321**
+
+
+E.4 DETAILS ON BASELINES
+
+
+The policy constraint method baselines include CQL (Kumar et al., 2020), IQL (Kostrikov et al.,
+2022), ReBRAC (Tarasov et al., 2023), and QCS (Kim et al., 2024). Diffusion policies include
+DQL (Wang et al., 2023), QGPO (Lu et al., 2023), DiffCPS (He et al., 2023), and DAC (Fang et al.,
+2024). Q ensemble-based algorithms include SAC-N and EDAC (An et al., 2021). Goal-conditioned
+methods consist of GC-IQL (Kostrikov et al., 2022), GC-POR (Xu et al., 2022), HIQL (Park et al.,
+2023), and GCPC (Zeng et al., 2023). We detail the source of the performance scores below.
+
+
+**Locomotion** All baseline scores were obtained from their respective original papers.
+
+
+**Antmaze** Performance scores for the baselines were primarily obtained from their original papers,
+with the following exceptions: scores for IQL, GC-IQL, and GCPC on Antmaze tasks were sourced
+from (Zeng et al., 2023), and GC-POR results were taken from its original paper for umaze tasks and
+from (Park et al., 2023) for the remaining Antmaze tasks. Additionally, we conducted experiments
+for settings not covered in prior work, including diffusion policy baselines on Antmaze ultra tasks
+and HIQL on umaze tasks.
+
+
+Several baselines did not report results for specific Antmaze tasks, namely, the ultra tasks for
+DQL(Wang et al., 2023), QGPO (Lu et al., 2023), DiffCPS (He et al., 2023), and DAC (Fang et al.,
+2024), and the umaze tasks for HIQL (Park et al., 2023). Therefore, we reproduced those results. For
+DQL, DiffCPS, and DAC, we tuned hyperparameters for the Antmaze ultra datasets based on those
+used for the corresponding large tasks: we adopted the Antmaze large-play settings for ultra-play and
+the large-diverse settings for ultra-diverse. Each method was evaluated using two discount factors,
+_γ_ _∈{_ 0 _._ 99 _,_ 0 _._ 995 _}_, and the better-performing result was reported.
+
+
+For QGPO, we selected the best performance among 12 configurations by sweeping _γ_ _∈_
+_{_ 0 _._ 99 _,_ 0 _._ 995 _}_ and guidance scale values from _{_ 1 _._ 0 _,_ 1 _._ 5 _,_ 2 _._ 0 _,_ 2 _._ 5 _,_ 3 _._ 0 _,_ 4 _._ 0 _}_, where the latter sweep
+follows the configuration range suggested in the original paper. For HIQL, we applied the hyperparameter configuration from Antmaze large-diverse uniformly across both umaze tasks.
+
+
+DQL and DiffCPS were evaluated using online model selection (OMS), where the best return per seed
+was selected across evaluation checkpoints. To improve selection stability, the evaluation interval
+was increased from the standard 10K steps to 50K steps. For all other algorithms, we reported the
+final evaluation scores.
+
+
+All algorithms were evaluated with four random seeds, using 100 evaluation episodes per model.
+
+
+**Kitchen** The scores for CQL, IQL, DQL, and DAC were obtained from Fang et al. (2024), and the
+scores for DT, GC-IQL, and GCPC for Kitchen tasks were obtained from Zeng et al. (2023).
+
+
+**Flow** **Policies** The scores for FlowQ were obtained from their respective original papers. The
+scores for FBRAC for locomotion tasks were obtained from Alles et al. (2025) (as the name “(FM)
+DiffusionQL”). The scores for FQL, FBRAC, and IFQL for Antmaze tasks were obtained from Park
+et al. (2025). The scores for TDP were from Tables 1 and 2.
+
+
+Since the scores for FQL and IFQL on locomotion tasks are not provided in Park et al. (2025), we
+reproduced using FQL codebase with almost the same basic hyperparameter settings for TFP, except
+for the inclusion of layer normalization for Q network, which is the default setting of FQL.
+
+
+For FQL, we tuned _β_ by following “Tips for hyperparameter tuning” in FQL codebase website (Park
+et al., 2025). For IFQL, we used expectile _τ_ = 0 _._ 7, following IQL (Kostrikov et al., 2022) and IDQL
+(Hansen-Estruch et al., 2023). For action selection, we tested _{_ 32 _,_ 64 _,_ 128 _}_ action candidates with
+hard maximization, and found that 32 candidates showed the best result and reported the scores from
+such a configuration.
+
+
+43
+
+
+**2322**
+
+**2323**
+
+
+**2324**
+
+**2325**
+
+**2326**
+
+**2327**
+
+**2328**
+
+**2329**
+
+
+**2330**
+
+**2331**
+
+**2332**
+
+**2333**
+
+**2334**
+
+**2335**
+
+
+**2336**
+
+**2337**
+
+**2338**
+
+**2339**
+
+**2340**
+
+
+**2341**
+
+**2342**
+
+**2343**
+
+**2344**
+
+**2345**
+
+**2346**
+
+
+**2347**
+
+**2348**
+
+**2349**
+
+**2350**
+
+**2351**
+
+**2352**
+
+
+**2353**
+
+**2354**
+
+**2355**
+
+**2356**
+
+**2357**
+
+**2358**
+
+
+**2359**
+
+**2360**
+
+**2361**
+
+**2362**
+
+**2363**
+
+
+**2364**
+
+**2365**
+
+**2366**
+
+**2367**
+
+**2368**
+
+**2369**
+
+
+**2370**
+
+**2371**
+
+**2372**
+
+**2373**
+
+**2374**
+
+**2375**
+
+
+F ADDITIONAL EXPERIMENTAL RESULTS
+
+
+F.1 ABLATIONS
+
+
+**Additional Experiments on Noise Estimation and Q loss** In addition to the 2D bandit experiments
+in Sec. 3.3 and the Antmaze ablations in Sec. 6.3, we conducted further experiments on D4RL
+locomotion environments to assess the effects of noise-free estimation and the presence of the Q loss.
+Specifically, we evaluated “TDP”, “Noisy”, “Implicit”, and “Noisy+Implicit” across nine locomotion
+tasks. The results for “TDP” and “Noisy+Implicit” (corresponding to DAC) were taken directly from
+Table 1, while “Noisy” and “Implicit” were obtained through reimplementations of TDP.
+
+
+As shown in Table 13, the inclusion of the Q loss term has a more substantial impact on performance
+than noise-free estimation. The effect of noise-free estimation is less pronounced in most locomotion
+tasks, which are generally more tolerant to out-of-distribution (OOD) actions due to their broader
+and more connected in-distribution regions. In contrast, the 2D bandit environment contains four
+disconnected clusters with large gaps, making it highly sensitive to OOD behavior.
+
+
+Nevertheless, noise-free estimation remains important. In environments such as Hopper medium and
+Walker2d medium-expert, “Noisy” suffered from severe performance degradation, indicating that
+noisy estimation can increase OOD risk. Consequently, its average performance becomes comparable
+to “Noisy+Implicit” (DAC), despite achieving high scores in environments such as Halfcheetah
+medium and Walker2d medium.
+
+
+Finally, we observe a general trend in which larger _λ_ values, corresponding to stronger weighting on
+the Q loss, consistently improve policy performance with the presence of the Q loss. This pattern
+holds across most environments, with the exception of Walker2d medium, where smaller _λ_ values
+had a pronounced effect.
+
+
+Table 13: Comparison of “TDP”, “Noisy”, “Implicit”, and “Noisy+Implicit” (DAC) on locomotion
+tasks. For each task, the highest score is in bold. Values in parentheses indicate the _λ_ used for “TDP”
+and “Noisy”.
+
+
+**Halfcheetah** **Hopper** **Walker2d**
+**Dataset** **m (0.9)** **m-r (0.8)** **m-e (0.5)** **m (0.1)** **m-r (0.8)** **m-e (0.1)** **m (0.2)** **m-r (0.9)** **m-e (0.1)** **Mean**
+
+
+TDP 69.7 **58.5** **100.3** **103.0** **104.4** 111.4 **108.0** **109.2** **113.6** **97.6**
+
+
+Noisy **70.7** 58.3 98.4 80.1 103.5 111.6 107.8 103.3 98.4 92.5
+
+
+Implicit 58.9 51.1 97.9 99.8 102.8 111.4 94.6 97.9 113.0 92.0
+
+
+Noisy+Implicit 59.1 55.0 99.1 101.2 103.1 **111.7** 96.8 96.8 **113.6** 92.9
+
+
+44
+
+
+**2376**
+
+**2377**
+
+
+**2378**
+
+**2379**
+
+**2380**
+
+**2381**
+
+**2382**
+
+**2383**
+
+
+**2384**
+
+**2385**
+
+**2386**
+
+**2387**
+
+**2388**
+
+**2389**
+
+
+**2390**
+
+**2391**
+
+**2392**
+
+**2393**
+
+**2394**
+
+
+**2395**
+
+**2396**
+
+**2397**
+
+**2398**
+
+**2399**
+
+**2400**
+
+
+**2401**
+
+**2402**
+
+**2403**
+
+**2404**
+
+**2405**
+
+**2406**
+
+
+**2407**
+
+**2408**
+
+**2409**
+
+**2410**
+
+**2411**
+
+**2412**
+
+
+**2413**
+
+**2414**
+
+**2415**
+
+**2416**
+
+**2417**
+
+
+**2418**
+
+**2419**
+
+**2420**
+
+**2421**
+
+**2422**
+
+**2423**
+
+
+**2424**
+
+**2425**
+
+**2426**
+
+**2427**
+
+**2428**
+
+**2429**
+
+
+**Selection of Target Diffusion Divergence Value** TDP employs the target diffusion value _ε_ _[η]_ _b_ [to]
+indirectly regulate _η_, by controlling diffusion divergence. For locomotion tasks, we considered
+_{_ 0 _._ 8 _,_ 1 _._ 0 _}_ for Halfcheetah medium, Halfcheetah medium-replay, Hopper medium, and Hopper
+medium-replay, and _{_ 0 _._ 05 _,_ 0 _._ 1 _}_ for Halfcheetah medium-expert and Hopper medium-expert. For
+each task, one candidate value was selected, and the unselected one was used as an ablation. As
+shown in Tables 14 and 15, the choice of target value had only a minor effect on performance.
+
+
+Table 14: The normalized scores of TDP with varying _ε_ _[η]_ _b_ [.] [The best score is in bold and the main]
+reported score is underlined.
+
+
+_ε_ _[η]_ **b** **0.8** **1.0**
+
+
+Halfcheetah m **69.7** 68.6
+
+
+Halfcheetah m-r **58.5** 57.6
+
+
+Hopper m 101.9 **103.0**
+
+
+Hopper m-r 104.3 **104.4**
+
+
+Table 15: The normalized scores of TDP with adaptive or fixed _η_ . The best score is in bold and the
+main reported score is underlined.
+
+
+_ε_ _[η]_ **b** **0.05** **0.1**
+
+
+Halfcheetah m-e 100.1 **100.3**
+
+
+Hopper m-e **111.4** 111.2
+
+
+**Adaptive vs.** **Fixed** _η_ TDP employs adaptive _η_ by setting _ε_ _[η]_ _b_ [to achieve more stable results.] [For]
+comparison, we also evaluated fixed _η_, chosen to approximately match the average of the finalized
+_η_ values in each environment. As shown in Table 16, the performance differences are minimal.
+Nevertheless, we adopted adaptive _η_ because it yields consistent target values (0 _._ 05 _,_ 0 _._ 1 _,_ 0 _._ 8 _,_ 1 _._ 0),
+while fixed _η_ values vary substantially across environments.
+
+
+Table 16: The normalized scores of TDP with varying _ε_ _[η]_ _b_ [.] [The best score is in bold and the main]
+reported score is underlined.
+
+
+_η_ **Adaptive** **Fixed**
+
+
+Halfcheetah m 69.7 **69.9**
+
+
+Halfcheetah m-r 58.5 **58.6**
+
+
+Halfcheetah m-e **100.3** 99.8
+
+
+Hopper m **103.0** 97.9
+
+
+Hopper m-r **104.4** 104.2
+
+
+Hopper m-e 111.4 **111.9**
+
+
+45
+
+
+**2430**
+
+**2431**
+
+
+**2432**
+
+**2433**
+
+**2434**
+
+**2435**
+
+**2436**
+
+**2437**
+
+
+**2438**
+
+**2439**
+
+**2440**
+
+**2441**
+
+**2442**
+
+**2443**
+
+
+**2444**
+
+**2445**
+
+**2446**
+
+**2447**
+
+**2448**
+
+
+**2449**
+
+**2450**
+
+**2451**
+
+**2452**
+
+**2453**
+
+**2454**
+
+
+**2455**
+
+**2456**
+
+**2457**
+
+**2458**
+
+**2459**
+
+**2460**
+
+
+**2461**
+
+**2462**
+
+**2463**
+
+**2464**
+
+**2465**
+
+**2466**
+
+
+**2467**
+
+**2468**
+
+**2469**
+
+**2470**
+
+**2471**
+
+
+**2472**
+
+**2473**
+
+**2474**
+
+**2475**
+
+**2476**
+
+**2477**
+
+
+**2478**
+
+**2479**
+
+**2480**
+
+**2481**
+
+**2482**
+
+**2483**
+
+
+**Selection of Confidence Interval** We varied _ρ_ to investigate the effect of the confidence interval of
+LCB used for critic learning. As shown in Table 17, increasing _ρ_ slightly reduces performance but
+has a small impact overall, especially on the Halfcheetah medium-expert (m-e) task. These results
+support both the validity of the choice of _ρ_ = 0 and the robustness of TDP to variations in _ρ_ .
+
+
+Table 17: The normalized scores of TDP with varying _ρ_ . The best score is in bold and the main
+reported score is underlined.
+
+
+_ρ_ **0** **0.5** **1.0** **1.25**
+
+
+Halfcheetah m **69.7** 68.2 66.4 64.6
+
+
+Halfcheetah m-r **58.5** 57.4 52.6 50.6
+
+
+Halfcheetah m-e 100.3 100.3 **100.9** 98.9
+
+
+**Selection of Balance Coefficient** As noted in Appendix C.1, TDP introduces a balance coefficient
+_λ_ to trade off between the Q loss and guidance terms: _λ_ = 0 applies only the guidance term, while
+_λ_ = 1 applies only the Q loss. We varied _λ_ on Halfcheetah medium and Hopper medium tasks. As
+shown in Table 18, though tuning _λ_ matters, TDP remains stable under small deviations from the
+values used in the main experiments.
+
+
+Table 18: The normalized final scores of TDP with varying _λ_ . For each task, the best score is in bold
+and the main reported score is underlined.
+
+
+_λ_ **0** **0.1** **0.2** **0.5** **0.8** **0.9** **1.0**
+
+
+Halfcheetah m 58.9 60.0 61.1 65.9 67.4 69.7 **70.3**
+
+
+Hopper m 99.8 **103.0** 99.1 97.1 71.8 37.9 8.0
+
+
+46
+
+
+**2484**
+
+**2485**
+
+
+**2486**
+
+**2487**
+
+**2488**
+
+**2489**
+
+**2490**
+
+**2491**
+
+
+**2492**
+
+**2493**
+
+**2494**
+
+**2495**
+
+**2496**
+
+**2497**
+
+
+**2498**
+
+**2499**
+
+**2500**
+
+**2501**
+
+**2502**
+
+
+**2503**
+
+**2504**
+
+**2505**
+
+**2506**
+
+**2507**
+
+**2508**
+
+
+**2509**
+
+**2510**
+
+**2511**
+
+**2512**
+
+**2513**
+
+**2514**
+
+
+**2515**
+
+**2516**
+
+**2517**
+
+**2518**
+
+**2519**
+
+**2520**
+
+
+**2521**
+
+**2522**
+
+**2523**
+
+**2524**
+
+**2525**
+
+
+**2526**
+
+**2527**
+
+**2528**
+
+**2529**
+
+**2530**
+
+**2531**
+
+
+**2532**
+
+**2533**
+
+**2534**
+
+**2535**
+
+**2536**
+
+**2537**
+
+
+**Selection of Number of Qs** TDP employs a Q ensemble to enhance performance. To evaluate
+its impact, we varied the number of Q networks, including _Nq_ = 2, which corresponds to standard
+double Q-learning (Hasselt, 2010). As shown in Table 19, increasing the ensemble size provides
+limited additional benefit. Notably, double Q-learning led to slightly lower scores on Halfcheetah
+medium (m) and a more pronounced drop on Halfcheetah medium-replay (m-r). In conclusion, while
+the Q ensemble contributes to the performance of TDP, the results indicate that TDP does not heavily
+rely on it to achieve strong performance.
+
+
+Table 19: The normalized scores of TDP with varying _Nq_ . The best score is in bold and the main
+reported score is underlined.
+
+
+**Nq** **2 (double Q)** **5** **10** **20**
+
+
+Halfcheetah m 66.8 **70.0** 69.7 69.2
+
+
+Halfcheetah m-r 52.5 55.9 58.5 **58.6**
+
+
+Halfcheetah m-e **100.4** 99.8 100.3 99.3
+
+
+**Policy Update Intervals** For the locomotion and Kitchen tasks, we adopted delayed policy updates
+with an interval of _d_ = 2. To evaluate the impact of this choice, we compared performance with
+_d_ _∈{_ 1 _,_ 2 _,_ 4 _}_ on the Hopper tasks. Fig. 2 presents the resulting learning curves. As shown, _d_ = 2
+offers the best training stability, followed by _d_ = 1 and _d_ = 4. While the overall performance
+differences across values of _d_ are modest, the Hopper medium task shows a notable advantage with
+_d_ = 2.
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||d=<br>~~d~~|2 (Ours)<br>~~1~~|
+|||d=|4|
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||d|2 (Ours)|
+|||<br>d<br>d|<br>=1<br>=4|
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+||d=||
+||d=|2 (Ours)|
+||<br>d=<br>~~d~~|<br>1<br>~~4~~|
+||||
+
+
+Figure 2: Learning curves of MuJoCo Hopper tasks with varying policy update interval _d_ .
+
+
+47
+
+
+0.0 0.5 1.0 1.5 2.0
+Steps 1e6
+
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+20
+
+
+0.0 0.5 1.0 1.5 2.0
+Steps 1e6
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+0.0 0.5 1.0 1.5 2.0
+Steps 1e6
+
+
+**2538**
+
+**2539**
+
+
+**2540**
+
+**2541**
+
+**2542**
+
+**2543**
+
+**2544**
+
+**2545**
+
+
+**2546**
+
+**2547**
+
+**2548**
+
+**2549**
+
+**2550**
+
+**2551**
+
+
+**2552**
+
+**2553**
+
+**2554**
+
+**2555**
+
+**2556**
+
+
+**2557**
+
+**2558**
+
+**2559**
+
+**2560**
+
+**2561**
+
+**2562**
+
+
+**2563**
+
+**2564**
+
+**2565**
+
+**2566**
+
+**2567**
+
+**2568**
+
+
+**2569**
+
+**2570**
+
+**2571**
+
+**2572**
+
+**2573**
+
+**2574**
+
+
+**2575**
+
+**2576**
+
+**2577**
+
+**2578**
+
+**2579**
+
+
+**2580**
+
+**2581**
+
+**2582**
+
+**2583**
+
+**2584**
+
+**2585**
+
+
+**2586**
+
+**2587**
+
+**2588**
+
+**2589**
+
+**2590**
+
+**2591**
+
+
+**Number of the Action Candidates** As mentioned in Appendix E, we used _Nc_ = 50 action candidates for diffusion policy action sampling. Table 20 reports the results for _Nc_ _∈{_ 10 _,_ 50 _,_ 100 _,_ 200 _}_ .
+As shown, using _Nc_ = 10 slightly degrades performance, whereas _Nc_ _∈{_ 50 _,_ 100 _,_ 200 _}_ yield comparable results. Thus, _Nc_ = 50 serves as a standard and effective choice, balancing performance and
+evaluation efficiency.
+
+
+Table 20: The normalized scores of TDP with varying _Nc_ . The best score is in bold and the main
+reported score is underlined.
+
+
+**Nc** **10** **50** Halfcheetah m-r 58.5 _±_ 0.7 58.5 _±_ 0.6 **58.6** _±_ 0.6 **58.6** _±_ 0.7
+
+
+Hopper m 100.0 _±_ 0.5 103.0 _±_ 0.1 103.0 _±_ 0.1 **103.1** _±_ **0.1**
+
+
+Walker2d m-e 113.4 _±_ 0.5 113.6 _±_ 0.6 **113.7** _±_ 0.5 113.6 _±_ 0.6
+
+
+**Temperature** As mentioned in Appendix E, we used a temperature of 0.5, i.e., _a_ _[K]_ _∼_ 0 _._ 5 _· N_ (0 _, I_ ),
+following DD (Ajay et al., 2023). Table 21 presents the results of TDP with temperatures 0, 0.5, and
+1. As shown, TDP has little sensitivity to the choice of temperature.
+
+
+Table 21: The normalized scores of TDP with varying temperatures. The best score is in bold and the
+main reported score is underlined.
+
+
+**Temperature** **0.0** **0.5** **1.0**
+
+
+Halfcheetah m-r 58.7 _±_ 0.8 58.5 _±_ 0.6 **58.8** _±_ 0.7
+
+
+Hopper m 102.8 _±_ 0.3 **103.0** _±_ 0.1 102.9 _±_ 0.1
+
+
+Walker2d m-e **113.6** _±_ 0.6 **113.6** _±_ 0.6 **113.6** _±_ 0.5
+
+
+**Diffusion Steps** As mentioned in Appendix E, we used _K_ = 5 diffusion steps for TDP. Table 22
+reports the performance of TDP with _K_ _∈{_ 5 _,_ 10 _,_ 20 _}_ . As shown, longer diffusion steps slightly
+degrade performance, consistent with prior findings (He et al., 2023), and thus validate the correct
+implementation of TDP.
+
+
+Table 22: The normalized scores of TDP with varying Diffusion steps. The best score is in bold and
+the main reported score is underlined.
+
+
+**Diffusion Steps** **5** **10** **20**
+
+
+Halfcheetah m **69.7** _±_ 0.9 68.6 _±_ 0.6 68.7 _±_ 1.0
+
+
+Halfcheetah m-r **58.5** _±_ 0.6 58.1 _±_ 0.7 57.4 _±_ 0.7
+
+
+Halfcheetah m-e 100.3 _±_ 0.2 100.4 _±_ 0.2 **100.5** _±_ 0.1
+
+
+48
+
+
+**2592**
+
+**2593**
+
+
+**2594**
+
+**2595**
+
+**2596**
+
+**2597**
+
+**2598**
+
+**2599**
+
+
+**2600**
+
+**2601**
+
+**2602**
+
+**2603**
+
+**2604**
+
+**2605**
+
+
+**2606**
+
+**2607**
+
+**2608**
+
+**2609**
+
+**2610**
+
+
+**2611**
+
+**2612**
+
+**2613**
+
+**2614**
+
+**2615**
+
+**2616**
+
+
+**2617**
+
+**2618**
+
+**2619**
+
+**2620**
+
+**2621**
+
+**2622**
+
+
+**2623**
+
+**2624**
+
+**2625**
+
+**2626**
+
+**2627**
+
+**2628**
+
+
+**2629**
+
+**2630**
+
+**2631**
+
+**2632**
+
+**2633**
+
+
+**2634**
+
+**2635**
+
+**2636**
+
+**2637**
+
+**2638**
+
+**2639**
+
+
+**2640**
+
+**2641**
+
+**2642**
+
+**2643**
+
+**2644**
+
+**2645**
+
+
+**Noise Schedule** As mentioned in Appendix E, we used a variance-preserving (VP) noise schedule
+as the default setting, following most diffusion policies (Wang et al., 2023; He et al., 2023; Fang
+et al., 2024). Table 23 presents the results of TDP with VP and cosine scheduling. As shown, using a
+cosine schedule leads to a slight performance drop, but the effect is not substantial.
+
+
+Table 23: The normalized scores of TDP with varying noise schedule. The best score is in bold and
+the main reported score is underlined.
+
+
+**Noise Schedule** **VP** **Cosine**
+
+
+Halfcheetah m **69.7** _±_ 0.9 63.6 _±_ 0.6
+
+
+Halfcheetah m-r **58.5** _±_ 0.6 52.5 _±_ 0.7
+
+
+Halfcheetah m-e **100.3** _±_ 0.2 97.3 _±_ 0.2
+
+
+**Critic Structure** As mentioned in Appendix E, we used a temporal difference (TD) learning for
+critic updates. Table 24 presents the results of TDP with TD and IQL critic update. As shown, using
+TD learning for the critic is essential for achieving strong performance.
+
+
+Table 24: The normalized scores of original TDP and TDP with IQL critic. The best score is in bold
+and the main reported score is underlined.
+
+
+**Critic** **TD** **IQL**
+
+
+Halfcheetah m **69.7** _±_ 0.9 59.3 _±_ 0.7
+
+
+Halfcheetah m-r **58.5** _±_ 0.6 39.1 _±_ 3.3
+
+
+Halfcheetah m-e **100.3** _±_ 0.2 84.1 _±_ 3.7
+
+
+49
+
+
+**2646**
+
+**2647**
+
+
+**2648**
+
+**2649**
+
+**2650**
+
+**2651**
+
+**2652**
+
+**2653**
+
+
+**2654**
+
+**2655**
+
+**2656**
+
+**2657**
+
+**2658**
+
+**2659**
+
+
+**2660**
+
+**2661**
+
+**2662**
+
+**2663**
+
+**2664**
+
+
+**2665**
+
+**2666**
+
+**2667**
+
+**2668**
+
+**2669**
+
+**2670**
+
+
+**2671**
+
+**2672**
+
+**2673**
+
+**2674**
+
+**2675**
+
+**2676**
+
+
+**2677**
+
+**2678**
+
+**2679**
+
+**2680**
+
+**2681**
+
+**2682**
+
+
+**2683**
+
+**2684**
+
+**2685**
+
+**2686**
+
+**2687**
+
+
+**2688**
+
+**2689**
+
+**2690**
+
+**2691**
+
+**2692**
+
+**2693**
+
+
+**2694**
+
+**2695**
+
+**2696**
+
+**2697**
+
+**2698**
+
+**2699**
+
+
+F.2 TRAINING AND EVALUATION TIME
+
+
+Since TDP employs both a Q ensemble and a guidance loss, concerns may arise regarding excessive
+training and evaluation time. However, as shown in Table 25, both remain within twice that of DQL.
+This efficiency primarily stems from the use of an EDP-style Q loss (Kang et al., 2023), which
+reduces training time compared to the full-step Q loss in DQL. Additional time-saving techniques,
+such as delayed policy updates and computing the guidance loss using only half of the samples, also
+contribute to the improved efficiency. Evaluation time is almost solely affected by the number of Q
+ensembles.
+
+
+Table 25: The relative training and evaluation times of various diffusion policies, normalized to DQL
+(set as 100%), are reported. Since DAC originally uses a different library, making direct comparison
+difficult, we re-implemented DAC using the CleanDiffuser (Dong et al., 2024) library, which is also
+used for TDP. Here, DAC* denotes the version with all TDP time-saving techniques applied, while
+DAC** refers to the version without these optimizations.
+
+
+**Algorithm** **TDP** **DAC*** **DAC**** **DQL** **DiffCPS**
+
+
+Training time (relative) 172.1% 141.1% 175.2% 100.0% 72.6%
+
+
+Evaluation time (relative) 179.9% 172.0% 170.4% 100.0% 102.3%
+
+
+F.3 FIRST ALTERNATIVE OF _ϵ_ _[∗]_ _η_ [E][STIMATION]
+
+
+To test the first alternative, we pretrained a diffusion BC model and used five _a_ [0] samples to estimate
+_f_ ( _a_ _[k]_ _, k, s_ ) according to (14). We trained in the Halfcheetah and Hopper environments. As shown in
+Table 26, this approach yielded neither meaningful performance improvements nor greater stability.
+Moreover, it required an additional diffusion BC model, leading to about 20% longer training time
+(excluding the pretraining phase) and increased training complexity. For these reasons, we decided
+not to adopt this alternative.
+
+
+Table 26: The normalized scores of TDP with varying number of noise-free action samples. The best
+score is in bold.
+
+
+**# samples** **1 (TDP)** **5 (Alternative 1)**
+
+
+Halfcheetah m 69.7 _±_ 0.9 **70.0** _±_ 0.7
+
+
+Halfcheetah m-r **58.5** _±_ 0.6 57.4 _±_ 0.4
+
+
+Halfcheetah m-e **100.3** _±_ 0.2 100.2 _±_ 0.3
+
+
+Hopper m **103.0** _±_ 0.1 102.7 _±_ 0.6
+
+
+Hopper m-r **104.4** _±_ 0.2 103.9 _±_ 0.7
+
+
+Hopper m-e **111.4** _±_ 0.6 111.1 _±_ 1.2
+
+
+50
+
+
+**2700**
+
+**2701**
+
+
+**2702**
+
+**2703**
+
+**2704**
+
+**2705**
+
+**2706**
+
+**2707**
+
+
+**2708**
+
+**2709**
+
+**2710**
+
+**2711**
+
+**2712**
+
+**2713**
+
+
+**2714**
+
+**2715**
+
+**2716**
+
+**2717**
+
+**2718**
+
+
+**2719**
+
+**2720**
+
+**2721**
+
+**2722**
+
+**2723**
+
+**2724**
+
+
+**2725**
+
+**2726**
+
+**2727**
+
+**2728**
+
+**2729**
+
+**2730**
+
+
+**2731**
+
+**2732**
+
+**2733**
+
+**2734**
+
+**2735**
+
+**2736**
+
+
+**2737**
+
+**2738**
+
+**2739**
+
+**2740**
+
+**2741**
+
+
+**2742**
+
+**2743**
+
+**2744**
+
+**2745**
+
+**2746**
+
+**2747**
+
+
+**2748**
+
+**2749**
+
+**2750**
+
+**2751**
+
+**2752**
+
+**2753**
+
+
+G LEARNING CURVES
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+Figure 3: Learning curves of MuJoCo locomotion tasks.
+
+
+51
+
+
+70
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+20
+
+
+140
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+
+Steps 1e6
+
+
+1e6
+
+
+Steps 1e6
+
+
+1e6
+
+
+Steps 1e6
+
+
+1e6
+
+
+0.0 0.5 1.0 1.5 2.0
+Steps 1e6
+
+
+1e6
+
+
+60
+
+
+55
+
+
+50
+
+
+45
+
+
+40
+
+
+35
+
+
+30
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+110
+
+
+100
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+0.0 0.5 1.0 1.5 2.0
+Steps 1e6
+
+
+1e6
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+0
+
+
+0.0 0.5 1.0 1.5 2.0
+Steps 1e6
+
+
+1e6
+
+
+Steps 1e6
+
+
+Steps 1e6
+
+
+Steps 1e6
+
+
+**2754**
+
+**2755**
+
+
+**2756**
+
+**2757**
+
+**2758**
+
+**2759**
+
+**2760**
+
+**2761**
+
+
+**2762**
+
+**2763**
+
+**2764**
+
+**2765**
+
+**2766**
+
+**2767**
+
+
+**2768**
+
+**2769**
+
+**2770**
+
+**2771**
+
+**2772**
+
+
+**2773**
+
+**2774**
+
+**2775**
+
+**2776**
+
+**2777**
+
+**2778**
+
+
+**2779**
+
+**2780**
+
+**2781**
+
+**2782**
+
+**2783**
+
+**2784**
+
+
+**2785**
+
+**2786**
+
+**2787**
+
+**2788**
+
+**2789**
+
+**2790**
+
+
+**2791**
+
+**2792**
+
+**2793**
+
+**2794**
+
+**2795**
+
+
+**2796**
+
+**2797**
+
+**2798**
+
+**2799**
+
+**2800**
+
+**2801**
+
+
+**2802**
+
+**2803**
+
+**2804**
+
+**2805**
+
+**2806**
+
+**2807**
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+Figure 5: Learning curves of Kitchen tasks.
+
+
+52
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Steps 1e6
+
+
+1e6
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Steps 1e6
+
+
+1e6
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Steps 1e6
+
+
+1e6
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+80
+
+70
+
+60
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+
+
+Steps 1e6
+
+
+1e6
+
+
+Steps 1e6
+
+
+Steps 1e6
+
+
+Steps 1e6
+
+
+Steps 1e6
+
+
+Figure 4: Learning curves of Antmaze tasks.
+
+
+Steps 1e6
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Steps 1e6
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+**2808**
+
+**2809**
+
+
+**2810**
+
+**2811**
+
+**2812**
+
+**2813**
+
+**2814**
+
+**2815**
+
+
+**2816**
+
+**2817**
+
+**2818**
+
+**2819**
+
+**2820**
+
+**2821**
+
+
+**2822**
+
+**2823**
+
+**2824**
+
+**2825**
+
+**2826**
+
+
+**2827**
+
+**2828**
+
+**2829**
+
+**2830**
+
+**2831**
+
+**2832**
+
+
+**2833**
+
+**2834**
+
+**2835**
+
+**2836**
+
+**2837**
+
+**2838**
+
+
+**2839**
+
+**2840**
+
+**2841**
+
+**2842**
+
+**2843**
+
+**2844**
+
+
+**2845**
+
+**2846**
+
+**2847**
+
+**2848**
+
+**2849**
+
+
+**2850**
+
+**2851**
+
+**2852**
+
+**2853**
+
+**2854**
+
+**2855**
+
+
+**2856**
+
+**2857**
+
+**2858**
+
+**2859**
+
+**2860**
+
+**2861**
+
+
+H DECLARATION OF LLM USAGE
+
+
+The authors used GPT-4o and 5 to correct grammatical errors, to polish texts to improve readability,
+and to embellish writings at the paragraph level. The outputs were verified and additionally refined by
+the authors without the assistance of LLM, to ensure coherence across paragraphs and sections and to
+use preferred terminologies. The authors did not use LLM for generating the core ideas, proofs, and
+experiments.
+
+
+53

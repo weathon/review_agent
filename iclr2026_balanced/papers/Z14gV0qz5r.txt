@@ -1,0 +1,374 @@
+# QUANTIZATION-ENHANCED HNSW FOR SCALABLE APPROXIMATE VECTOR SEARCH
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Graph-based approximate nearest neighbor search, specifically Hierarchical Navigable Small World (HNSW), remains the standard for low-latency vector retrieval.
+However, as datasets grow to millions of high-dimensional embeddings, the RAM
+requirements for full-precision (float32) indices become prohibitive. While Scalar
+Quantization (SQ) can reduce this footprint, naive min-max scaling often fails in
+practice: a handful of outliers can stretch the quantization bins, causing “collapse”
+where useful data distinctions are lost. We propose **LAVQ** **(Locally** **Adaptive**
+**Vector Quantization)**, a modification to HNSW that employs a percentile-based
+clipping strategy. By dynamically adapting quantization bounds per dimension,
+LAVQ ignores statistical outliers to preserve fidelity in the dense regions of the
+vector space. We further accelerate search using custom AVX2 integer intrinsics.
+On the **SIFT1M benchmark**, LAVQ cuts memory usage by 3 _._ 8 _×_ and improves
+query throughput (QPS) by 4 _._ 4 _×_ over float32 baselines, achieving recall comparable to state-of-the-art implementations like FAISS.
+
+
+1 INTRODUCTION
+
+
+Modern vector search is a balancing act between recall and latency. Applications like RetrievalAugmented Generation (RAG) and semantic search rely heavily on the Hierarchical Navigable Small
+World (HNSW) algorithm ( **?** ) because of its logarithmic search complexity. Yet, HNSW has a major
+scalability flaw: it requires storing raw vectors in RAM. For a production dataset of 100 million
+vectors (e.g., typical OpenAI embeddings), the vectors alone can consume over 600 GB of memory,
+forcing engineers to choose between expensive hardware or slower disk-based solutions.
+
+
+Vector Quantization (VQ) offers a path to compression, but usually at a cost. Product Quantization
+(PQ) ( **?** ) compresses effectively but requires expensive codebook lookups that slow down distance
+calculations. Scalar Quantization (SQ) is faster, mapping floats to 8-bit integers, but it is notoriously
+brittle. Standard SQ looks at the global minimum and maximum of a dimension to set its range. If
+a dimension has values mostly between -1.0 and 1.0, but a single outlier at 100.0, standard SQ will
+allocate almost all 256 integer bins to the empty space between 1 and 100, destroying the resolution
+where the actual data lives.
+
+
+In this work, we present **HNSW-LAVQ** to solve this specific “outlier problem.” Our approach differs
+from standard implementations in three ways:
+
+
+1. **Outlier-Awareness:** Instead of absolute min/max, we use percentile clipping. We intentionally discard the tails of the distribution to maximize resolution for the majority of the
+data.
+
+
+2. **Hardware Efficiency:** We replace floating-point arithmetic with an optimized AVX2 integer kernel, allowing us to process 32 dimensions in a single CPU cycle.
+
+
+3. **Real-World** **Validation:** We validate our results on SIFT1M, ensuring our latency and
+memory claims hold up under realistic cache pressure, rather than using toy datasets that
+fit entirely in L3 cache.
+
+
+1
+
+
+Density
+
+
+Value _x_
+
+
+256 Uniform Integer Bins
+
+
+Figure 1: Visualization of Outlier-Aware Clipping. Standard Min-Max scaling would include the
+sparse tails (0 to 8), wasting integer resolution on empty space. LAVQ clips to the 1 _[st]_ and 99 _[th]_
+percentiles (1.5 to 6.5), forcing the 8 bits of precision to cover the data-dense region.
+
+
+2 RELATED WORK
+
+
+**Graph-Based Indexing:** HNSW is dominant because of its navigation properties, but it is memoryhungry. **?** introduced Scalar Quantization into the FAISS library to mitigate this, using global range
+parameters. Our work refines this by calculating parameters locally per dimension and applying
+aggressive statistical clipping.
+
+
+**Quantization Techniques:** There is a rich history of quantization in search. Product Quantization
+(PQ) splits vectors into subspaces, but the distance estimation is an approximation that often requires
+a re-ranking step. Recent approaches like ScaNN ( **?** ) use anisotropic quantization, which optimizes
+for the dot product interaction between query and datapoint. Our work is orthogonal to this: we
+focus on the robustness of the scalar mapping itself, ensuring that simple int8 quantization remains
+effective even in heterogeneous vector spaces with noisy distributions.
+
+
+3 METHODOLOGY: HNSW-LAVQ
+
+
+Our architecture modifies the HNSW storage layer and the distance kernel. We do not alter the
+graph construction logic itself, meaning LAVQ remains compatible with standard HNSW insertion
+parameters.
+
+
+3.1 LOCALLY ADAPTIVE QUANTIZATION WITH CLIPPING
+
+
+The primary weakness of standard SQ is its sensitivity to outliers. If we map the full range
+
+[ _Min, Max_ ] to [0 _,_ 255], a single outlier dictates the bin width. LAVQ effectively “zooms in” on
+the dense part of the data distribution.
+
+
+For every dimension _j_, we identify the 1 _[st]_ percentile ( _P_ 1 _,j_ ) and 99 _[th]_ percentile ( _P_ 99 _,j_ ). We set our
+clipping bounds [ _Lj, Uj_ ] = [ _P_ 1 _,j, P_ 99 _,j_ ]. Any value falling outside this range is clamped.
+
+
+_x_ clip = min(max( _x, Lj_ ) _, Uj_ ) (1)
+
+
+              - _x_ clip _−_ _Lj_              _qj_ = _×_ 255 + 0 _._ 5 (2)
+_Uj_ _−_ _Lj_
+
+This strategy accepts a small amount of error at the tails to significantly lower the Mean Squared
+Error (MSE) for the vast majority of points.
+
+
+3.2 SEARCH ALGORITHM IMPLEMENTATION
+
+
+Algorithm 1 outlines our search procedure. The critical difference from standard HNSW is that
+we never load floating-point vectors into the CPU cache during traversal. We stream int8 vectors
+directly into AVX registers.
+
+
+2
+
+
+**Algorithm 1** LAVQ Greedy Search with SIMD Distance
+**Require:** Query _q_ (float), Entry point _ep_, Graph _G_, Quantizer parameters _L, U_
+**Ensure:** Nearest Neighbors _W_
+
+1: _qint_ 8 _←_ Quantize( _q, L, U_ ) _{_ SIMD Quantization _}_
+2: _C_ _←{ep} {_ Candidate set (Min-Heap) _}_
+3: _V_ _←{ep} {_ Visited set _}_
+4: _W_ _←{ep} {_ Result set (Max-Heap) _}_
+5: **while** _C_ = _∅_ **do**
+6: _curr_ _←_ ExtractNearest( _C_ )
+7: **if** Dist( _curr, q_ ) _>_ Dist(Furthest( _W_ ) _, q_ ) **then**
+8: **end if**
+9: **for all** _neighbor_ _∈_ _G.adj_ ( _curr_ ) **do**
+10: **if** _neighbor_ _∈/_ _V_ **then**
+11: _V.add_ ( _neighbor_ )
+12: _d ←_ AVX2 ~~L~~ 2 ~~D~~ ist( _qint_ 8 _, G.vectors_ [ _neighbor_ ])
+13: **if** _d <_ Dist(Furthest( _W_ ) _, q_ ) **or** _|W_ _| < ef_ **then**
+14: _C.push_ ( _neighbor_ )
+15: _W.push_ ( _neighbor_ )
+16: **if** _|W_ _| > ef_ **then**
+17: _W.pop_ ()
+18: **end if**
+19: **end if**
+20: **end if**
+21: **end for**
+22: **end while**
+23: **return** _W_
+
+
+3.3 COMPLEXITY ANALYSIS
+
+
+**Time Complexity:** HNSW search is _O_ (log _N_ ), but the constant factor is what matters in practice.
+Let _Tfloat_ be the cycle cost for a float operation and _Tint_ for an integer operation. With AVX2, we
+can process 32 bytes per instruction. The theoretical speedup _S_ is:
+
+
+_d · Tfloat_
+_S_ = (3)
+_⌈d/_ 32 _⌉· Tint_ + _Toverhead_
+
+
+For _d_ = 128, we observe _S_ _≈_ 4 _._ 4. The overhead comes from the need to unpack 8-bit integers into
+32-bit accumulators to prevent overflow during summation.
+
+
+**Space Complexity:** The memory usage drops from 4 _ND_ bytes (float32) to 1 _ND_ bytes (int8). The
+storage required for the min/max bounds (2 _· D ·_ 4B) is negligible—less than 1KB total.
+
+
+4 SYSTEM IMPLEMENTATION DETAILS
+
+
+We implemented the system in C++. To ensure maximum throughput, we align all quantized vector
+storage to 32-byte boundaries, ensuring that a single memory fetch populates a full 256-bit YMM
+register.
+
+
+**Data** **Layout:** We use a struct-of-arrays (SoA) layout. The graph topology (links) is stored separately from the vector data. This improves cache locality during the distance calculation phase, as
+we are not polluting the cache lines with graph pointers when we only need vector data.
+
+
+**SIMD Kernel:** We rely on the ~~m~~ m256 ~~s~~ ubs ~~e~~ pu8 intrinsic for saturated subtraction, followed by
+
+~~m~~ m256 ~~m~~ addubs ~~e~~ pi16 for squaring. This avoids the latency of standard integer multiplication.
+
+
+3
+
+
+5 EXPERIMENTS
+
+
+5.1 SETUP
+
+
+**Dataset:** We use **SIFT1M** (1,000,000 vectors, 128 dimensions). We specifically avoided smaller
+datasets like SIFT10K because they fit entirely in CPU cache, which masks the memory bandwidth
+bottlenecks that quantization aims to solve. **Environment:** AMD Ryzen 7 5800H (Single Thread),
+16 GB RAM. **Baselines:** 1. **HNSW (Float32):** Standard hnswlib. 2. **FAISS (HNSW+SQ):** The
+current state-of-the-art for quantized graph search.
+
+
+5.2 MEMORY EFFICIENCY
+
+
+As detailed in Table 1, LAVQ reduces total RAM usage by nearly 3 _×_ . The vector storage itself
+shrinks by exactly 4 _×_ (from 512MB to 128MB). The remaining memory overhead comes from the
+graph links, which are structurally identical across all methods.
+
+
+Table 1: Memory Footprint on SIFT1M (1M Vectors, 128D, _M_ = 16).
+
+Method Vector Storage Graph Structure Total RAM
+
+
+HNSW (Float32) 512 MB _≈_ 64 MB 576 MB
+FAISS (HNSW+SQ) 128 MB _≈_ 64 MB 192 MB
+**HNSW-LAVQ (Ours)** **128 MB** _≈_ **64 MB** **192 MB**
+
+
+5.3 SPEED AND RECALL TRADE-OFF
+
+
+Table 2 shows the trade-off between speed and accuracy. Our hardware-optimized kernel allows
+LAVQ to process nearly 3,600 queries per second (QPS), a 4 _._ 4 _×_ speedup over the float baseline.
+More importantly, our outlier-aware clipping achieves a Recall@1 of 97.2%, slightly edging out
+FAISS (96.5%) while running faster.
+
+
+Table 2: Performance on SIFT1M (Recall@1 vs QPS). Latency measured on a single thread.
+
+
+Method Recall@1 Latency (ms) QPS Speedup
+
+
+HNSW (Float32) 99.8% 1.25 ms 800 1.0 _×_
+FAISS (HNSW+SQ) 96.5% 0.32 ms 3125 3.9 _×_
+**HNSW-LAVQ** **97.2%** **0.28 ms** **3570** **4.4** _×_
+
+
+5.4 HYPERPARAMETER SENSITIVITY ANALYSIS
+
+
+We analyzed how quantization interacts with the graph density parameter _M_ . As shown in Figure 2,
+LAVQ is robust even at lower _M_ values.
+
+
+Interestingly, the relative speedup of LAVQ over Float32 actually *increases* as we increase _M_ .
+Denser graphs require more distance computations per hop; thus, the efficiency of our AVX2 kernel
+becomes the dominant factor in total runtime. We also suspect that the quantization noise acts as
+a mild form of regularization, preventing the greedy search from over-fitting to local paths, which
+allows us to use a smaller beam width ( _efsearch_ ) for similar recall.
+
+
+5.5 ABLATION: IS CLIPPING NECESSARY?
+
+
+To verify that clipping is the source of our accuracy gains (and not just luck), we ran a version of
+LAVQ using naive Min-Max quantization.
+
+
+    - **Naive Min-Max:** Recall@1 = 84.3%
+
+
+    - **LAVQ (Clipped):** Recall@1 = 97.2%
+
+
+4
+
+
+Figure 2: Recall vs. QPS trade-off for varying _M_ values. HNSW-LAVQ (Red) maintains high recall
+even as the graph becomes sparser, offering a better Pareto frontier than the baselines.
+
+
+The massive drop in accuracy (over 12 percentage points) confirms that SIFT descriptors contain
+significant outliers. Without clipping, the quantization grid is stretched thin, losing the ability to
+distinguish between near neighbors.
+
+
+6 LIMITATIONS AND FUTURE WORK
+
+
+While LAVQ succeeds on SIFT1M, we acknowledge that quantization parameters are currently
+static. In streaming settings where data distribution shifts (concept drift), these bounds might become stale. Future work will explore _Online_ _LAVQ_, where _P_ 1 and _P_ 99 are updated incrementally
+using a sliding window sketch. Additionally, we aim to extend this work to GPU kernels to investigate if the outlier-aware clipping benefits massive parallelism in CUDA environments.
+
+
+7 CONCLUSION
+
+
+We presented HNSW-LAVQ, a scalable search architecture that makes integer-based graph search
+practical for high-recall applications. By swapping brittle min-max scaling for percentile-based
+clipping and optimizing the distance kernel for AVX2, we achieved a 4 _._ 4 _×_ speedup and 3 _×_ memory
+reduction on SIFT1M. Our findings suggest that with careful handling of data distribution statistics,
+integer-based search can rival floating-point precision, offering a viable path for deploying billionscale indices on commodity hardware.
+
+
+REFERENCES
+
+
+Cecilia Aguerrebere, Inder Bhati, Mark Hildebrand, Mariano Tepper, and Thomas Willke. Similarity
+search in the blink of an eye with compressed indices. _Proceedings of the VLDB Endowment_, 16
+(12):3433–3446, 2023.
+
+
+5
+
+
+Ruiqi Guo, Philip Sun, Erik Lindgren, Quan Geng, David Simcha, Felix Chern, and Sanjiv Kumar.
+Accelerating large-scale inference with anisotropic vector quantization. In _Proceedings_ _of_ _the_
+_37th International Conference on Machine Learning_, ICML, pp. 3887–3896. PMLR, 2020.
+
+
+Herv´e J´egou, Matthijs Douze, and Cordelia Schmid. Product quantization for nearest neighbor
+search. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 33(1):117–128, 2011.
+
+
+Jeff Johnson, Matthijs Douze, and Herv´e J´egou. Billion-scale similarity search with gpus. _IEEE_
+_Transactions on Big Data_, 7(3):535–547, 2019.
+
+
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal,
+Heinrich K¨uttler, Mike Lewis, Wen-tau Yih, Tim Rockt¨aschel, Sebastian Riedel, and Douwe
+Kiela. Retrieval-augmented generation for knowledge-intensive nlp tasks. In _Advances in Neural_
+_Information Processing Systems_, volume 33, pp. 9459–9474, 2020.
+
+
+Yu A. Malkov and Dmitry A. Yashunin. Efficient and robust approximate nearest neighbor search
+using hierarchical navigable small world graphs. _IEEE_ _Transactions_ _on_ _Pattern_ _Analysis_ _and_
+_Machine Intelligence_, 42(4):824–836, 2020.
+
+
+Suhas Jayaram Subramanya, Devvrit, Rohan Kadekodi, Ravishankar Krishnaswamy, and Harsha Vardhan Simhadri. Diskann: Fast accurate billion-point nearest neighbor search on a single
+node. In _Advances in Neural Information Processing Systems_, volume 32, 2019.
+
+
+Seunghyeok Yoon, Jeongwoo Heo, Jaehyeon Kim, and Jinwoo Kim. Integer quantization for efficient vector similarity search. _Neurocomputing_, 455:270–279, 2021.
+
+
+6
+
+
+A APPENDIX: HYPERPARAMETER DETAILS
+
+
+For reproducibility, we detail the HNSW construction parameters used in Section 5.
+
+
+    - **Construction:** We set the construction beam width _efconstruction_ = 200 to ensure a highquality graph. The maximum number of links _M_ varied between 12 and 48 for the sensitivity analysis in Figure 2, with a default of _M_ = 16 for the main tables.
+
+
+    - **Search:** The search beam width _efsearch_ was dynamically varied between 10 and 200 to
+generate the Recall-QPS curves.
+
+
+    - **Baselines:** For the FAISS baseline, we used the standard HNSW32,ScalarQuantizer
+index factory string with default auto-tuned settings.
+
+
+7

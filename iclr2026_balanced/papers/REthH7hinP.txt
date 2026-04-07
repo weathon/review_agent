@@ -1,0 +1,2543 @@
+# ON FINETUNING TABULAR FOUNDATION MODELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Foundation models are an emerging research direction in tabular deep learning.
+Notably, TabPFNv2 recently claimed superior performance over traditional GBDTbased methods on small-scale datasets using an in-context learning paradigm,
+which does not adapt model parameters to target datasets. However, the optimal
+finetuning approach for adapting tabular foundational models, and how this adaptation reshapes their internal mechanisms, remains underexplored. While prior
+works studied finetuning for earlier foundational models, inconsistent findings and
+TabPFNv2’s unique architecture necessitate fresh investigation. To address these
+questions, we first systematically evaluate various finetuning strategies on diverse
+datasets. Our findings establish full finetuning as the most practical solution for
+TabPFNv2 in terms of time-efficiency and effectiveness. We then investigate how
+finetuning alters TabPFNv2’s inner mechanisms, drawing an analogy to retrievalaugmented models. We reveal that the success of finetuning stems from the fact
+that after gradient-based adaptation, the dot products of the query-representations
+of test objects and the key-representations of in-context training objects more
+accurately reflect their target similarity. This improved similarity allows finetuned
+TabPFNv2 to better approximate target dependency by appropriately weighting
+relevant in-context samples, improving the retrieval-based prediction logic. From
+the practical perspective, we managed to finetune TabPFNv2 on datasets with up
+to 50K objects, observing performance improvements on almost all tasks. More
+precisely, on academic datasets with I.I.D. splits, finetuning allows TabPFNv2 to
+achieve state-of-the-art results, while on datasets with gradual temporal shifts and
+rich feature sets, TabPFNv2 is less stable and prior methods remain better.
+
+
+1 INTRODUCTION
+
+
+Recently, deep learning for tabular data has rapidly advanced (Gorishniy et al., 2021; Somepalli
+et al., 2021; Gorishniy et al., 2024; Hollmann et al., 2023; Ye et al., 2024; Holzmüller et al., 2024),
+frequently drawing inspiration from natural language processing (NLP) and computer vision (CV),
+where foundational models — large-scale architectures pretrained on vast datasets and adaptable to
+diverse tasks (Radford et al., 2021; Ramesh et al., 2021; Alayrac et al., 2022) — have become pivotal
+for sample-efficient learning. The application of such models to the tabular domain was initially
+uncertain due to its inherent heterogeneity and the scarcity of large, public pretraining datasets.
+However, TabPFN (Hollmann et al., 2023) demonstrated their potential by pioneering pretraining on
+diverse synthetic datasets designed to mimic real-world distributions. Its recent successor, TabPFNv2
+(Hollmann et al., 2025), further validated this approach, showing its synthetically learned priors
+enable it to outperform leading GBDT implementations (Prokhorenkova et al., 2018; Ke et al., 2017;
+Chen & Guestrin, 2016) on small tabular datasets.
+
+While TabPFNv2’s superiority over GBDTs was demonstrated using in-context learning — where
+the entire training set serves as its input prompt — it is not entirely clear how more computationally
+intensive gradient-based adaptations, such as full/partial finetuning or parameter-efficient methods
+like LoRA (Hu et al., 2021), might affect its performance. This uncertainty is particularly noteworthy
+because, while common sense intuition implies that finetuning is universally beneficial, the recent
+NLP findings report that pure in-context learning can sometimes outperform finetuning (Yin et al.,
+2024). Although several recent works (Feuer et al., 2024; Thomas et al., 2024; Ma et al., 2024; Xu
+et al., 2024; den Breejen et al., 2023) have finetuned tabular foundational models, these efforts were
+often not systematic, formed part of larger pipelines, largely focused on the outdated TabPFN model,
+and crucially, did not analyze how finetuning alters the internal mechanisms of foundational models.
+
+
+1
+
+
+The main focus of our work is to understand how finetuning impacts the inner logic of TabPFNv2. To
+identify the optimal finetuning regime for this in-depth analysis, we first systematically compared
+various strategies on a diverse set of datasets with up to _≈_ 1M total cells (columns _×_ rows) [1] .
+Contrary to previous works (Xu et al., 2024; Feuer et al., 2024) that advocate for partial model
+adaptation to prevent overfitting, our findings indicate that full finetuning, when properly configured
+(including hyperparameter ablation for efficient and stable adaptation), appears to be the superior
+option compared to partial and parameter-efficient alternatives. This result led us to select full
+finetuning as our chosen method for detailed investigation.
+
+Our subsequent analysis draws parallels between retrieval-based tabular models and TabPFNv2.
+Within TabPFNv2’s last layer, the dot products between query-representations of test objects and keyrepresentations of in-context samples provide signals used by attention to weight training examples.
+We find that after task-specific finetuning, these query-key dot products exhibit a significantly stronger
+alignment with actual target similarity. This more precise correspondence, a direct result of finetuning,
+greatly simplifies the problem for attention, which can more effectively approximate the test label by
+precisely weighting the most relevant in-context samples. In particular, we observe that the majority
+of finetuning performance gains come from samples where inter-sample attention becomes more
+sharply concentrated after finetuning.
+
+Finally, we put the TabPFNv2 model and its finetunes in the modern tabular DL context and compare
+it to the recent SoTA models (Ye et al., 2024; Gorishniy et al., 2025) and additionally evaluate it on a
+new challenging benchmark (Rubachev et al., 2025).
+
+To sum up, our contributions are the following:
+
+
+1. We extensively compare different finetuning regimes for the TabPFNv2 model and establish
+simple full finetuning as a strong and stable baseline for TabPFNv2 adaptation, contrary
+to prior work (Feuer et al., 2024; Xu et al., 2024) where the necessity of partial finetuning
+methods was emphasized for preventing overfitting.
+
+2. We analyse the finetuning’s impact drawing a parallel between TabPFNv2 and retrieval-based
+models. We demonstrate that finetuning refines TabPFNv2 by ensuring the dot products of
+query-representations (test object tokens in inter-sample attention) and key-representations
+(in-context samples) more accurately reflect target similarity. This improved alignment
+simplifies the prediction problem for the model, enabling it to more effectively approximate
+the target based on in-context examples.
+
+3. We provide a thorough comparison of original and finetuned TabPFNv2 against the stateof-the-art tabular deep learning methods. Our analysis includes datasets with up to 1M
+cells (rows _×_ columns) – reflecting the current computational limit for the straightforward
+finetuning – and spans both traditional academic benchmarks and more challenging realworld datasets with temporal shifts and rich feature sets. On academic benchmarks, we
+find that non-finetuned TabPFNv2 performs on par with strong MLP-PLR baseline and
+the finetuned version achieves state-of-the-art results. Conversely, on more challenging
+real-world datasets, both TabPFNv2 and its finetunes often perform less stable compared to
+non-foundational DL methods.
+
+
+2 RELATED WORK
+
+
+Here we briefly outline research lines relevant to our study.
+
+**Tabular Deep Learning** . In recent years, deep learning models for tabular data have emerged as
+strong contenders to traditional “shallow” methods like Gradient Boosting Decision Trees (GBDTs).
+Indeed, recent DL models (Gorishniy et al., 2024; Holzmüller et al., 2024; Ye et al., 2024; Gorishniy
+et al., 2025; Hollmann et al., 2025) have often matched or surpassed leading GBDT implementations
+(Prokhorenkova et al., 2018; Ke et al., 2017; Chen & Guestrin, 2016). This progress stems from
+innovations in architectures (Gorishniy et al., 2021; Somepalli et al., 2021), regularizations (Jeffares
+et al., 2023), and learning protocols (Holzmüller et al., 2024; Bahri et al., 2021; Rubachev et al., 2022),
+
+
+1We use datasets generally larger than those in the TabPFNv2 paper (Hollmann et al., 2025), but only those
+where finetuning on a single 80GB GPU is possible.
+
+
+2
+
+
+leveraging the models capabilities not readily available to GBDTs. Our work explores foundational
+models, a paradigm that is also inherently applicable only for deep learning models.
+
+**Foundational Models** currently dominate among deep learning solutions for CV and NLP problems
+and have become a key component in the most state-of-the-art systems Radford et al. (2021); Alayrac
+et al. (2022). To put simply, foundational models are the models pretrained on vast amounts of
+available data from some domain that can then be adapted to a wide number of downstream tasks
+from this domain. The knowledge captured during pretraining often acts as a valuable prior, which is
+particularly beneficial in few-shot learning scenarios.
+
+Adapting foundational models to specific tasks typically follows one of two main pathways. The first,
+finetuning, involves further training the model on the downstream dataset to optimize its parameters
+for the new task. For enhanced sample and runtime efficiency, this often includes updating only a
+subset of parameters, such as specific layers, low-rank adapters (LoRA) (Hu et al., 2021), or learnable
+prompts (Lester et al., 2021). In contrast, in-context learning adapts the model without altering its
+parameters, instead providing downstream training samples as part of the input prompt or context
+(Brown et al., 2020). The choice between finetuning and in-context learning often depends on factors
+like downstream dataset size, computational resources, and the need for multi-task adaptation. While
+finetuning is often considered more effective (Liu et al., 2022), recent studies suggest in-context
+learning can be competitive or even preferable in certain setups (Yin et al., 2024).
+
+**TabPFN** (Hollmann et al., 2023), the pioneering foundational model for tabular data, was designed
+to address a wide array of tabular tasks off-the-shelf. It employs a transformer-like architecture
+and utilizes in-context learning, with the entire downstream training set serving as its prompt. Its
+pretraining relies on numerous synthetic datasets engineered to mirror common application-specific
+tabular tasks. The successor, TabPFNv2 (Hollmann et al., 2025), enhances this with a more powerful
+architecture, pretraining on a broader spectrum of synthetic data, and sophisticated feature and target
+preprocessing, demonstrating superior performance over GBDTs, especially on small-scale datasets.
+Our work builds upon this by systematically investigating gradient-based finetuning specifically for
+TabPFNv2. While some recent studies (Feuer et al., 2024; Thomas et al., 2024; Ma et al., 2024;
+Xu et al., 2024; den Breejen et al., 2023) have explored aspects of finetuning tabular foundational
+models, these explorations were often secondary to their main objectives. Furthermore, these
+studies predominantly used the original TabPFN model, which differs significantly from TabPFNv2
+in capability and architecture, meaning their conclusions might not directly apply. For example,
+Feuer et al. (2024) noted potential overfitting with full finetuning of TabPFN on validation sets, a
+phenomenon we did not encounter in our TabPFNv2 experiments. Importantly, the original paper
+(Hollmann et al., 2025) benchmarks TabPFNv2 primarily against GBDT-based baselines. To obtain
+a broader understanding of TabPFNv2 relative performance, we thoroughly compare it to existing
+non-foundational tabular DL models and show that it is specifically finetuning that enables TabPFNv2
+to achieve the state-of-the-art performance.
+
+
+3 REVISITING FINETUNING STRATEGIES FOR TABPFNV2
+
+
+In this section, we systematically evaluate different finetuning techniques for TabPFNv2. Through
+this evaluation we aim to establish a strong finetuning baseline for the TabPFNv2 model to address
+the lack of consensus or information (in case of the second version) on best TabPFN finetuning
+methodology in literature.
+
+**Evaluation** **Protocol** . We experiment with finetuning TabPFNv2 on two established tabular DL
+benchmarks from (Grinsztajn et al., 2022) and (Gorishniy et al., 2024). We use only the datasets for
+which it is possible to finetune TabPFNv2 using the entire dataset as an input prompt on a single GPU
+with 80GB of memory. We provide a list of datasets we have used with their characteristics in Table 6.
+Our benchmark covers larger datasets than those used for evaluation in Hollmann et al. (2025) – the
+average dataset size used in our paper is approximately 15K examples, while the average dataset
+size in Hollmann et al. (2025) is at approximately 3K. This potentially presents a more challenging
+setting for the TabPFNv2 model and it also allows us to compare the foundational model to strong
+non-foundational tabular DL baselines, while in Hollmann et al. (2025) comparison is limited to
+GBDTs and simple baselines like SVMs.
+
+
+3
+
+
+For all TabPFNv2 finetuning runs and ablations, we tune the learning rate on the validation set
+using the logspace grid with 10 learning rate values: logspace(5e-6, 5e-4). For other
+baselines, we use hyperparameter grids from (Gorishniy et al., 2025) and tune for 100 iterations.
+We always use 1024 objects to calculate the loss per gradient step (except the batch size ablations
+below), while the rest objects are used as an input prompt. For early stopping, we compute the
+performance on the validation subset every ten gradient steps and stop the finetuning after 16
+non-improving evaluations. We report the RMSE and classification accuracy for regression and
+classification problems, respectively. Additionally, we use the relative improvement to the MLP
+baseline metric introduced in Gorishniy et al. (2025) (the _R_ [2] and accuracy are used to compute
+the relative improvement to the tuned MLP configuration). For additionall details regarding the
+experimental protocol refer to the Appendix A. Below we provide a brief overview of the finetuning
+strategies we are re-evaluating for TabPFNv2.
+
+**Full finetuning** is the most straightforward way to adapt pretrained models, used in other domains
+like NLP (Howard & Ruder, 2018; He et al., 2015) and computer vision (Kolesnikov et al., 2020;
+Beyer et al., 2024). But there is no consensus in prior work on finetuning tabular foundation models
+(Feuer et al., 2024; den Breejen et al., 2023) – albeit, based on TabPFNv1.
+
+**Parameter-efficient** **finetuning** **(PEFT)** is popular for LLM adaptation. While with the current
+tabular foundation model scale (7M parameters) the memory efficiency gains from PEFT are not very
+important, the inductive biases and potential implicit regularization of partial finetuning might be
+beneficial to prevent overfitting, as previously hypothesized in Feuer et al. (2024). We consider the
+following options for parameter-efficient finetuning:
+
+
+    - **Low** **Rank** **Adapters** **(LoRA)**     - Hu et al. (2021) is a widely used parameter-efficient
+finetuning method that uses two low-rank matrices to update a pretrained full-rank matrix.
+
+    - **Last layers**     - finetuning only the upper layer is also a popular partial finetuning method, that
+is occasionally used for finetuning pretrained models in other modalities (Hu et al., 2021;
+Lee et al., 2019).
+
+    - **LayerNorm, Head and Embeddings**     - finetuning only the feature and target linear embedding layers, MLP prediction head and the affine layer normalization parameters. These
+parameters represent a small fraction of the whole model parameters, but have been found
+important in the model adaptation literature (Zhao et al., 2024; Chen et al., 2024).
+
+    - **Numerical Feature Embeddings** are a popular and useful technique in the recent tabular
+DL architectures (Gorishniy et al., 2022; 2025; Holzmüller et al., 2024), which is not yet
+exploited in tabular foundation models (especially its interaction with TabPFNv2). We
+experiment with adding the embedding modules before the main TabPFNv2 backbone and
+finetuning them together with the model.
+
+
+**Practical observations about finetuning & Training Time** . Before comparing all the performance
+results we highlight some practical observations. First, we measure the training times of different
+finetuning methods. We can see in Table 1 that _full finetuning is the most efficient finetuning method_
+_in terms of convergence speed_ . Second, _we demonstrate that using larger batches during finetuning_
+_improves the finetuning performance_ . In more details, we keep the training context size fixed and
+increase the prediction sequence length. From results in Table 2 we can see that larger batches
+result in the higher performance of finetuned models. Furthermore, we provide a discussion on
+computational complexity related to finetuning the TabPFNv2 model in Appendix D.
+
+
+**Optimal finetuning strategy** . We summarize the results in Figure 1, the full results are available in
+Table F. We can see that _fine-tuning in general makes a significant impact on model performance_
+_compared to pure in-context performance_ . However, the difference between full finetuning and all
+
+
+4
+
+
+Table 1: Comparison of time in seconds spent on
+finetuning (FT.) and in-context prediction (No
+FT.).
+
+
+**CA** _↓_ **HO** _↓_ **DI** _↓_ **CH** _↑_ **AD** _↑_
+
+LORA 328 1330 3607 105 4155
+EMB.,LN, HEAD 390 766 995 122 1978
+FULL 155 468 1777 74 1480
+
+NO FT. 12 24 36 1 18
+
+
+Table 2: The effect of the number of objects
+used in prediction during training. We can see
+that using more objects to make one gradient
+estimation is beneficial.
+
+
+Pred. Length **CA** _↓_ **HO** _↓_ **DI** _↓_ **CH** _↑_ **AD** _↑_
+
+2 0.3963 3.0755 0.1332 0.8535 0.8588
+128 0.3839 **2.9930** 0.1303 0.8488 0.8680
+1024 **0.3822** **2.9919** **0.1275** **0.8647** **0.8710**
+
+
+considered PEFT variations is minimal. This observation and training efficiency results in Table 1
+make _full finetuning_ a _go-to simple baseline for TabPFNv2 adaptation_ .
+
+Furthermore, introducing untied (non-shared) linear or advanced piecewise-linear embeddings has
+marginal effect on finetuning performance and indicates that either the TabPFNv2 model has already
+learned the feature transforms and advanced embeddings are not needed or there needs to be a
+more sophisticated embedding scheme (e.g. during pretraining), which is an interesting exploration
+direction for future work.
+
+
+Figure 1: Comparison of different TabPFNv2 finetuning methods. The plot summarizes the relative
+performance improvement over a tuned MLP baseline. We consider off-the-shelf **No FT** TabPFNv2
+with no finetuning compared to parameter efficient tuning methods **PEFT**, full model finetuning **Full**
+and finetuning with modified **Feature Embeddings** . Box plots summarize the results on all datasets
+from Table 6, bars represent the 25th, 50th and 75th percentiles, whiskers represent the 10th and
+90th percentiles (visualization from Gorishniy et al. (2025)). The numbers at the bottom of the plot
+present average improvement over MLP and average ranks.
+
+
+HOW DOES FINETUNING COMPARE TO TRAINING FROM RANDOM INITIALIZATION?
+
+
+Relative training size
+
+
+Figure 2: Performance of different methods on subsamples of four datasets. Churn and Adult are
+binary classification datasets and the metric is accuracy (higher is better), California and House
+are regression datasets with the RMSE test metric (lower is better, axis flipped). The shaded area
+represents 2 standard deviations in both directions from the average accuracy.
+
+
+When we can afford finetuning a TabPFNv2 model – we can also pretrain the model from scratch on
+a target dataset. In this section, we study how pretraining on around 130M synthetic datasets used for
+TabPFNv2 compares to training from scratch on a target dataset depending on its size. Furthermore
+we study how the benefits that come from finetuning change with varying dataset sizes.
+
+To answer these questions, we perform the following experiments. First, for four datasets (Churn,
+California, House, Adult), we create their subsamplings, with a train set in each following subsampling
+being half of the previous one, while validation and test sets are the same. We then compare the
+performances of the finetuned TabPFNv2 model, original TabPFNv2 model, and the model with the
+TabPFNv2 architecture trained from scratch on each of the subsampled versions of each dataset.
+
+Figure 2 shows that _finetuning TabPFNv2 provides more benefits for larger target datasets_ (clearly
+seen on House and Adult), while for smaller datasets the performance improvements from finetuning
+are often statistically insignificant compared to pure in-context learning.
+
+
+5
+
+
+0 _._ 87
+
+
+0 _._ 86
+
+
+0 _._ 85
+
+
+0 _._ 84
+
+
+0 _._ 83
+
+
+1/32 1/16 1/8 1/4 1/2 full = 14,581
+
+
+1/32 1/16 1/8 1/4 1/2 full = 26,048
+
+
+30000
+
+
+32000
+
+
+34000
+
+
+36000
+
+
+38000
+
+
+40000
+
+1/32 1/16 1/8 1/4 1/2 full = 13,209
+
+
+0 _._ 86
+
+
+0 _._ 84
+
+
+0 _._ 82
+
+
+0 _._ 80
+
+
+0 _._ 40
+
+
+0 _._ 45
+
+
+0 _._ 50
+
+
+0 _._ 55
+
+
+0 _._ 60
+
+
+0 _._ 65
+
+
+1/32 1/16 1/8 1/4 1/2 full = 6,400
+
+
+Furthermore, while on some datasets, such as Adult and Churn, training from scratch comes close to
+the performance of the pretrained TabPFNv2 (especially for large problem sizes), there are datasets
+(e.g. California), where for all problem sizes pretraining gives a significant boost to performance,
+which is not achieved with training from scratch, but is further amplified via finetuning. This variance
+in the performance of pre-trained model and efficacy of finetuning warrants a deeper investigation
+into the inner workings of TabPFNv2 and its finetunes, which we describe in the following section.
+
+
+4 DISSECTING FINETUNING’S IMPACT ON TABPFNV2
+
+
+As shown in the previous section, finetuning significantly enhances TabPFNv2 performance on our
+testbed of medium-scale datasets. In this section we aim to understand how and to what extent
+these improvements are achieved by examining finetuning influence on TabPFNv2 internal behavior,
+particularly its (inter-sample) attention mechanism.
+
+Our analysis is based on the intuition that pretrained TabPFNv2 functions similarly to retrievalaugmented models like ModernNCA (Ye et al., 2024) or TabR (Gorishniy et al., 2024) when making
+predictions, this contrasts with alternative explanations of in-context learning in other modalities
+through e.g. performing implicit SGD (Von Oswald et al., 2023), or implementing complex algorithmic circuits (Olsson et al., 2022; Nanda et al., 2023).
+
+Specifically, we conjecture that an impor
+Table 3: Comparison of weighted kNN prediction (or
+
+tant part of TabPFNv2 prediction mechan
+MNCA-like prediction) with attention scores from last
+
+ics is an implicit retrieval mechanism im
+layer of TabPFNv2 as a proxy of similarity between in
+plemented via inter-sample attention over
+
+stances. Attention weights after finetuning better reflect
+
+train dataset objects (in particular, the la
+similarity that results in more accurate predictions. The
+
+bels) – resembling retreival-based models,
+
+test scores are calculated on a single seed.
+
+which perform this explicitly. The first
+evidence supporting this analogy comes **CA** _↓_ **HO** _↓_ **DI** _↓_ **CH** _↑_ **AD** _↑_ **pol** _↓_
+from comparing performance gains over an **TabPFNv2 performance** :
+MLP baseline achieved by the in-context
+
+No FT 0.398 3.105 0.137 0.859 0.859 4.830
+
+TabPFNv2, ModernNCA, and MLP-PLR Finetuned 0.382 2.960 0.127 0.867 0.872 2.801
+across all datasets in our benchmark. Im- **TabPFNv2 attn.** **weighted kNN performance** :
+provements from TabPFNv2 showed a high kNN via No FT 0.473 3.404 0.183 0.856 0.856 6.845
+correlation ( **0** _._ **89** Pearson correlation) with kNN via Finetune 0.407 3.313 0.155 0.866 0.872 3.165
+improvements from ModernNCA, while a
+similar correlation for the identically performant MLP-PLR model is more mild ( **0** _._ **53** Pearson correlation). These results support characterizing TabPFNv2 as an advanced implicit retriever, guiding our subsequent investigation of
+finetuning.
+
+Based on this intuition, we hypothesize that a primary effect of finetuning is the refinement of the
+similarity signals that TabPFNv2 uses to weight in-context examples. Specifically, we propose that
+finetuning improves how accurately the dot products between the query-representations (derived from
+test objects) and key-representations (derived from in-context training examples) in the model’s final
+layer reflect the true target similarity between these objects. A more accurate underlying similarity
+measure would allow the attention softmax to more effectively identify and upweight the most
+informative training examples for predicting the test object’s label.
+
+To verify this hypothesis, we designed an experiment to directly assess the quality of the attention
+scores as proxies for target relevance. For both the original and the finetuned TabPFNv2 models, we
+extracted the attention scores assigned by the final layer’s attention mechanism to each in-context
+training example for a given test instance. These attention weights were then used to compute a
+weighted average of the corresponding training example targets. The intuition behind this experiment
+is straightforward: if the attention scores accurately capture the relevance of training examples to a
+test example’s target, then a weighted average of training targets using these scores should yield a
+good approximation of the test target. Thus, higher quality attention weights, better reflecting target
+similarity, should result in a more accurate target prediction. The results of this analysis, presented
+in Table 3, demonstrate a marked improvement: the weighted average of targets computed using
+attention scores from the finetuned TabPFNv2 aligns significantly more closely with the groundtruth
+test targets compared to those from the original TabPFNv2. This finding strongly supports our
+
+
+6
+
+
+Table 3: Comparison of weighted kNN prediction (or
+MNCA-like prediction) with attention scores from last
+layer of TabPFNv2 as a proxy of similarity between instances. Attention weights after finetuning better reflect
+similarity that results in more accurate predictions. The
+test scores are calculated on a single seed.
+
+
+**CA** _↓_ **HO** _↓_ **DI** _↓_ **CH** _↑_ **AD** _↑_ **pol** _↓_
+
+
+**TabPFNv2 performance** :
+
+
+No FT 0.398 3.105 0.137 0.859 0.859 4.830
+Finetuned 0.382 2.960 0.127 0.867 0.872 2.801
+
+
+**TabPFNv2 attn.** **weighted kNN performance** :
+
+
+kNN via No FT 0.473 3.404 0.183 0.856 0.856 6.845
+kNN via Finetune 0.407 3.313 0.155 0.866 0.872 3.165
+
+
+hypothesis that finetuning refines the query-key dot products to better reflect true target closeness,
+thereby simplifying the task for the attention mechanism and improving the hypothesized “implicit
+retrieval”.
+
+Interestingly, the effect described above also affects the attention distribution itself. As shown by
+the histograms in Figure 3, for most datasets, finetuning leads to a notable decrease in the entropy
+of the attention distribution over the in-context training examples for a significantly large subset of
+test instances. This indicates that for these instances the finetuned model becomes “more focused”,
+concentrating its attention mass on a smaller subset of training examples. This behavior is consistent
+with our earlier finding: if the underlying query-key dot products provide a clearer signal of which
+examples are truly most similar in terms of their targets, the model can confidently allocate higher
+attention to these few, most relevant neighbors, rather than spreading its attention more diffusely.
+
+
+Index of test sample, sorted by ∆ _H_
+
+
+Figure 4: Dependency between the sample-wise change in prediction error (finetuned vs. original
+TabPFNv2) and the corresponding change in entropy of attention weights. In most cases, finetuned
+model considerably improves error on samples where entropy dropped significantly (indices closer
+to zero), i.e. where attention weights became more concentrated. The details are provided in
+Appendix C.
+
+
+The results reveal an apparent regularity: the test datapoints contributing most substantially to the
+overall performance improvement (in other words, corresponding to the most negative ∆ _Error_
+values) are those for which attention entropy decreased. Conversely, while some test datapoints do
+
+
+2The details of plotting these graphs are presented in Appendix C
+
+
+7
+
+
+California
+
+
+0 _._ 2 0 _._ 3 0 _._ 4 0 _._ 5 0 _._ 6 0 _._ 7
+
+Churn
+
+
+0 _._ 6 0 _._ 7 0 _._ 8 0 _._ 9
+Normalized entropy
+
+
+Adult
+
+
+0 _._ 5 0 _._ 6 0 _._ 7 0 _._ 8 0 _._ 9
+
+Diamond
+
+
+0 _._ 0 0 _._ 2 0 _._ 4 0 _._ 6
+Normalized entropy
+
+
+House
+
+
+0 _._ 3 0 _._ 4 0 _._ 5 0 _._ 6 0 _._ 7 0 _._ 8 0 _._ 9
+
+Pol
+
+
+0 _._ 4 0 _._ 5 0 _._ 6 0 _._ 7 0 _._ 8 0 _._ 9
+Normalized entropy
+
+
+Figure 3: Normalized entropy of the attention weights from the last layer of TabPFNv2 (on test
+samples). On California, Adult and Diamond, attention weights consistently become more concentrated after finetuning. On Churn dataset, there is no notable shift, and high entropy indicates
+smooth distribution of weights. On House and Pol datasets, for almost 70-80% of the samples entropy
+increased but on Figure 4 we show that the most performance gains are obtained from those samples
+where entropy dropped. More detailed explaination is provided in Appendix C.
+
+
+Finally, to connect these changes in the attention behaviour directly to predictive performance, we
+examined the relationship between the sample-wise change in the attention entropy (occured due to
+finetuning) and the corresponding sample-wise change in a chosen performance metric. Figure 4
+plots this dependency. [2]
+
+
+California
+
+0 _._ 00
+
+
+_−_ 0 _._ 02
+
+
+0 1000 2000 3000 4000
+
+
+0
+
+
+_−_ 25
+
+
+Pol
+0
+
+
+_−_ 1
+
+_−_ 2
+
+
+0 500 1000 1500 2000 2500 3000 3500
+
+
+0 _._ 0
+
+
+_−_ 0 _._ 2
+
+
+_−_ 0 _._ 4
+
+
+0
+
+
+_−_ 5
+
+
+_−_ 10
+
+
+Adult
+
+
+0 2500 5000 7500 10000 12500 15000
+
+
+0 2000 4000 6000 8000 10000
+
+
+0 _._ 0
+
+
+_−_ 0 _._ 2
+
+
+House
+
+
+0 1000 2000 3000 4000
+
+
+exhibit an increase in attention entropy after finetuning, their collective contribution to the overall
+performance change is substantially smaller. This nuanced observation reinforces the idea that the
+primary driver of finetuning’s benefit lies in its ability to sharpen the model’s focus on the most
+relevant in-context examples by improving the underlying similarity representations that guide the
+attention mechanism.
+
+
+5 TABPFNV2 AND ITS FINETUNES IN A BROADER TABULAR DL CONTEXT
+
+
+In this section, we compare the original TabPFNv2 model and its finetuned variant to the nonfoundational state-of-the-art tabular DL models. Additionally, we evaluate TabPFNv2 on a subsampled versions of the TabReD benchmark (Rubachev et al., 2025) datasets. [3]
+
+The original TabPFNv2 paper (Hollmann et al., 2025) reports the state-of-the-art results on small
+datasets and compares to classical “shallow” models and AutoML solutions. We aim to extend the
+scope of the experiments to bigger datasets and new dataset characteristics (like temporal shift and
+extensive feature engineering in TabReD) and compare to contemporary tabular DL methods that
+achieve the state-of-the-art performance in this setting (Ye et al., 2024; Gorishniy et al., 2025).
+
+
+5.1 COMPARISON WITH SOTA TABULAR DL BASELINES
+
+
+To evaluate TabPFNv2, we use the original in-context version and the in-context ensemble version
+(ensembled over different input and target preprocessing and transformations). Furthermore, we
+evaluate finetuned TabPFNv2, and its deep ensemble variant. We use five finetuning runs to construct
+the ensemble.
+
+We compare TabPFNv2 and its finetuned versions to the following DL methods and classical ML
+baselines:
+
+
+    - **MLP** [PLR]     - MLP with periodic numerical feature embeddings (Gorishniy et al., 2022).
+
+    - **MNCA** : ModernNCA – a state-of-the-art non-parametric tabular DL model (Ye et al., 2024).
+
+    - **TabM** [†] mini     - A recent state-of-the-art parametric tabular DL model. We evaluate a variant
+that uses piece-wise linear numerical feature embeddings (denoted by †).
+
+    - **XGBoost** : In addition to deep models, we use a tuned GBDT model as a commonly accepted
+strong “shallow” baseline.
+
+
+|DL baselines<br>TabPFNv2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Full FT<br>Mean|Full FT<br>Mean||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+
+
+Figure 5: Comparison of TabPFNv2 (with and without finetuning) with other state-of-the-art tabular
+DL methods. The plot summarizes the relative performance improvement over a tuned MLP baseline.
+Box plots summarize the results on all datasets from Table 6. Notation follows Figure 1.
+
+
+**Results summary** . Results of the comparison are provided in Figure 5. Below, we highlight our
+key observations. The original _TabPFNv2 used in the in-context learning regime and its ensemble_
+_variations are generally inferior to the up-to-date strong tabular DL models on academic datasets_
+_with up to 1M table cells_ (rows _×_ columns). Nevertheless, its performance is close to MLP-PLR,
+which is a strong baseline.
+
+
+3Subsampling is done due to computational and engineering constraints
+
+
+8
+
+
+8%
+
+
+6%
+
+
+4%
+
+
+2%
+
+
+0%
+
+
+_−_ 2%
+
+Increase:
+
+Rank:
+
+
+XGBoost
+2 _._ 35 _±_ 6 _._ 2%
+
+3 _._ 57 _±_ 2 _._ 1
+
+
+Full
+3 _._ 17 _±_ 4 _._ 7%
+
+1 _._ 81 _±_ 0 _._ 7
+
+
+MNCA
+2 _._ 09 _±_ 5 _._ 2%
+
+3 _._ 71 _±_ 2 _._ 0
+
+
+TabM _[†]_ mini _[,][×]_ [5]
+2 _._ 92 _±_ 4 _._ 7%
+
+2 _._ 38 _±_ 1 _._ 4
+
+
+MLP [PLR]
+
+1 _._ 29 _±_ 1 _._ 7%
+
+3 _._ 48 _±_ 1 _._ 7
+
+
+TabM _[†]_ mini
+2 _._ 54 _±_ 4 _._ 1%
+
+2 _._ 76 _±_ 1 _._ 7
+
+
+No FT
+1 _._ 15 _±_ 2 _._ 6%
+
+3 _._ 24 _±_ 1 _._ 8
+
+
+TabPFNv2 _[×]_ [8]
+
+1 _._ 23 _±_ 3 _._ 3%
+
+2 _._ 62 _±_ 1 _._ 6
+
+
+Full _[×]_ [5]
+
+3 _._ 90 _±_ 5 _._ 9%
+
+1 _._ 05 _±_ 0 _._ 2
+
+
+_Finetuning TabPFNv2 results in consistent improvements_ . Furthermore, ensembling the finetuned
+TabPFNv2 model produces substantial performance improvements on top of single finetuned model,
+elaborating on efficient ensembling may be an interesting future research direction.
+
+Overall, finetuned TabPFNv2 is a SoTA model on academic datasets where finetuning is computationally feasible on a single GPU. However it has inherent limitations in scalability due to finetuning and
+its similarity to retrieval-based models. We expand upon these limitations in the following subsection.
+
+
+5.2 EVALUATION ON TABRED SUBSAMPLES
+
+
+We provide the results of evaluating TabM [†] mini, MNCA, TabPFNv2 and finetuned TabPFNv2 in
+Figure 6. We can see that on this version of the TabReD datasets the TabPFNv2 without finetuning
+is less stable compared to the current SoTA model “TabM”. On almost all datasets finetuning does
+improve upon the in-context version (except Sberbank Housing where it often degrades performance).
+
+
+|Col1|DL baselines Full FT<br>TabPFNv2 Mean|
+|---|---|
+|||
+|||
+|||
+
+
+Figure 6: Results on five different TabReD dataset subsamples. We report average improvement over
+the tuned MLP baseline across five different subsamples for each dataset. For each subsample we
+average the score over five random seeds.
+
+
+Overall, TabPFNv2 results on TabReD subsamples are less stable compared to the results on the
+academic benchmarks from previous sections – this may be related to the presence of temporal shift
+in these datasets which may pose challenges for models implementing retrieval-based predictions.
+We further discuss this in Appendix E. Furthermore, scaling finetuning to the full-sized datasets
+requires significant engineering efforts.
+
+
+6 LIMITATIONS
+
+
+**Choice of datasets.** In our experiments we use only the datasets that can fully be handled by the
+TabPFNv2 model on a single 80 GB GPU. Therefore, our conclusions should be additionally verified
+for the large-scale downstream problems, where data has to be fed to TabPFNv2 by chunks and the
+finetuning procedure should be sufficiently altered.
+
+**Different feature and target preprocessing.** In the comparison to the non-foundational tabular DL
+models, we did not standardize the data/target preprocessing across TabPFNv2 and other methods.
+We assumed that the preprocessing recommendations provided by the authors of each method were
+close to optimal and decided to use them as prescribed in the original papers.
+
+
+7 CONCLUSION
+
+
+In this paper, we systematically investigated gradient-based adaptation for TabPFNv2. Our findings
+establish full finetuning as the optimal strategy, crucially revealing its success stems from refining
+internal similarity assessments for improved retrieval-based prediction. While it elevates finetuned
+TabPFNv2 to state-of-the-art performance on academic datasets where finetuning is technically
+feasible (currently there is a limit in dataset size), significant challenges persist regarding scalability
+and robustness to real-world data complexity like shifts or complex real-world features. Future
+research should therefore prioritize developing scalable adaptation methods and enhancing resilience
+to the complexities of diverse tabular data.
+
+
+9
+
+
+Sberbank Housing
+
+
+Maps Routing
+
+
+4%
+
+
+2%
+
+
+0%
+
+
+_−_ 2%
+
+_−_ 4%
+
+TabM _[†]_ mini MNCA No FT Full
+
+Delivery Eta
+
+
+10%
+
+
+5%
+
+
+0%
+
+
+_−_ 5%
+
+_−_ 10%
+
+TabM _[†]_ mini MNCA No FT Full
+
+
+Homesite Insurance
+
+
+10%
+
+
+5%
+
+
+0%
+
+
+_−_ 5%
+
+_−_ 10%
+
+TabM _[†]_ mini MNCA No FT Full
+
+Weather
+
+
+4%
+
+
+2%
+
+
+0%
+
+
+_−_ 2%
+
+_−_ 4%
+
+TabM _[†]_ mini MNCA No FT Full
+
+
+20%
+
+
+0%
+
+
+_−_ 20%
+
+
+TabM _[†]_ mini MNCA No FT Full
+
+Cooking Time
+
+
+4%
+
+
+2%
+
+
+0%
+
+
+_−_ 2%
+
+_−_ 4%
+
+TabM _[†]_ mini MNCA No FT Full
+
+
+Ecom Ofers
+
+
+10%
+
+
+5%
+
+
+0%
+
+
+_−_ 5%
+
+_−_ 10%
+
+TabM _[†]_ mini MNCA No FT Full
+
+Homecredit Default
+
+
+4%
+
+
+2%
+
+
+0%
+
+
+_−_ 2%
+
+_−_ 4%
+
+TabM _[†]_ mini MNCA No FT Full
+
+
+REFERENCES
+
+Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel
+Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, et al. Flamingo: a visual language
+model for few-shot learning. _Advances in neural information processing systems_, 35:23716–23736,
+2022.
+
+
+Dara Bahri, Heinrich Jiang, Yi Tay, and Donald Metzler. SCARF: Self-supervised contrastive learning
+using random feature corruption. In _ICLR_, 2021.
+
+
+Lucas Beyer, Andreas Steiner, André Susano Pinto, Alexander Kolesnikov, Xiao Wang, Daniel
+Salz, Maxim Neumann, Ibrahim Alabdulmohsin, Michael Tschannen, Emanuele Bugliarello, et al.
+Paligemma: A versatile 3b vlm for transfer. _arXiv preprint arXiv:2407.07726_, 2024.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Tianqi Chen and Carlos Guestrin. XGBoost: A scalable tree boosting system. In _SIGKDD_, 2016.
+
+
+Yukang Chen, Shengju Qian, Haotian Tang, Xin Lai, Zhijian Liu, Song Han, and Jiaya Jia. LongloRA: Efficient fine-tuning of long-context large language models. In _The Twelfth International_
+_Conference on Learning Representations_, 2024. [URL https://openreview.net/forum?](https://openreview.net/forum?id=6PmJoRfdaK)
+[id=6PmJoRfdaK.](https://openreview.net/forum?id=6PmJoRfdaK)
+
+
+Felix den Breejen, Sangmin Bae, Stephen Cha, Tae-Young Kim, Seoung Hyun Koh, and Se-Young
+Yun. Fine-tuning the retrieval mechanism for tabular deep learning. In _NeurIPS 2023 Second Table_
+_Representation Learning Workshop_, 2023.
+
+
+Benjamin Feuer, Robin Tibor Schirrmeister, Valeriia Cherepanova, Chinmay Hegde, Frank Hutter,
+Micah Goldblum, Niv Cohen, and Colin White. Tunetables: Context optimization for scalable
+prior-data fitted networks. _arXiv preprint arXiv:2402.11137_, 2024.
+
+
+Yury Gorishniy, Ivan Rubachev, Valentin Khrulkov, and Artem Babenko. Revisiting deep learning
+models for tabular data. In _NeurIPS_, 2021.
+
+
+Yury Gorishniy, Ivan Rubachev, and Artem Babenko. On embeddings for numerical features in
+tabular deep learning. In _NeurIPS_, 2022.
+
+
+Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, and Artem
+Babenko. TabR: Tabular deep learning meets nearest neighbors. In _ICLR_, 2024.
+
+
+Yury Gorishniy, Akim Kotelnikov, and Artem Babenko. Tabm: Advancing tabular deep learning with
+parameter-efficient ensembling. In _ICLR_, 2025.
+
+
+Leo Grinsztajn, Edouard Oyallon, and Gael Varoquaux. Why do tree-based models still outperform
+deep learning on typical tabular data? In _NeurIPS, the "Datasets and Benchmarks" track_, 2022.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving deep into rectifiers: Surpassing
+human-level performance on imagenet classification. In _ICCV_, 2015.
+
+
+Noah Hollmann, Samuel Müller, Katharina Eggensperger, and Frank Hutter. TabPFN: A transformer
+that solves small tabular classification problems in a second. In _ICLR_, 2023.
+
+
+Noah Hollmann, Samuel Müller, Lennart Purucker, Arjun Krishnakumar, Max Körfer, Shi Bin Hoo,
+Robin Tibor Schirrmeister, and Frank Hutter. Accurate predictions on small data with a tabular
+foundation model. _Nature_, 637(8045):319–326, 2025.
+
+
+David Holzmüller, Leo Grinsztajn, and Ingo Steinwart. Better by default: Strong pre-tuned mlps
+and boosted trees on tabular data. In _The Thirty-eighth Annual Conference on Neural Information_
+_Processing Systems_, 2024.
+
+
+10
+
+
+Jeremy Howard and Sebastian Ruder. Universal language model fine-tuning for text classification. In
+_ACL 2018-56th Annual Meeting of the Association for Computational Linguistics, Proceedings of_
+_the Conference (Long Papers)_, volume 1, pp. 328–339. Association for Computational Linguistics,
+2018.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Alan Jeffares, Tennison Liu, Jonathan Crabbé, Fergus Imrie, and Mihaela van der Schaar. TANGOS:
+Regularizing tabular neural networks through gradient orthogonalization and specialization. In
+_ICLR_, 2023.
+
+
+Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan
+Liu. LightGBM: A highly efficient gradient boosting decision tree. _Advances in neural information_
+_processing systems_, 30:3146–3154, 2017.
+
+
+Alexander Kolesnikov, Lucas Beyer, Xiaohua Zhai, Joan Puigcerver, Jessica Yung, Sylvain Gelly, and
+Neil Houlsby. Big transfer (bit): General visual representation learning. In _Computer Vision–ECCV_
+_2020:_ _16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part V 16_, pp.
+491–507. Springer, 2020.
+
+
+Jaejun Lee, Raphael Tang, and Jimmy Lin. What would elsa do? freezing layers during transformer
+fine-tuning. _arXiv preprint arXiv:1911.03090_, 2019.
+
+
+Brian Lester, Rami Al-Rfou, and Noah Constant. The power of scale for parameter-efficient prompt
+tuning. _arXiv preprint arXiv:2104.08691_, 2021.
+
+
+Haokun Liu, Derek Tam, Mohammed Muqeeth, Jay Mohta, Tenghao Huang, Mohit Bansal, and
+Colin A Raffel. Few-shot parameter-efficient fine-tuning is better and cheaper than in-context
+learning. _Advances in Neural Information Processing Systems_, 35:1950–1965, 2022.
+
+
+Junwei Ma, Valentin Thomas, Guangwei Yu, and Anthony Caterini. In-context data distillation with
+tabpfn. _arXiv preprint arXiv:2402.06971_, 2024.
+
+
+Neel Nanda, Lawrence Chan, Tom Lieberum, Jess Smith, and Jacob Steinhardt. Progress measures for
+grokking via mechanistic interpretability. In _The Eleventh International Conference on Learning_
+_Representations_, 2023. [URL https://openreview.net/forum?id=9XFSbDPmdW.](https://openreview.net/forum?id=9XFSbDPmdW)
+
+
+Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas Joseph, Nova DasSarma, Tom Henighan,
+Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, Dawn Drain, Deep Ganguli,
+Zac Hatfield-Dodds, Danny Hernandez, Scott Johnston, Andy Jones, Jackson Kernion, Liane
+Lovitt, Kamal Ndousse, Dario Amodei, Tom Brown, Jack Clark, Jared Kaplan, Sam McCandlish,
+and Chris Olah. In-context learning and induction heads. _Transformer Circuits Thread_, 2022.
+https://transformer-circuits.pub/2022/in-context-learning-and-induction-heads/index.html.
+
+
+Liudmila Prokhorenkova, Gleb Gusev, Aleksandr Vorobev, Anna Veronika Dorogush, and Andrey
+Gulin. CatBoost: unbiased boosting with categorical features. In _NeurIPS_, 2018.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Aditya Ramesh, Mikhail Pavlov, Gabriel Goh, Scott Gray, Chelsea Voss, Alec Radford, Mark Chen,
+and Ilya Sutskever. Zero-shot text-to-image generation. In _International conference on machine_
+_learning_, pp. 8821–8831. Pmlr, 2021.
+
+
+Ivan Rubachev, Artem Alekberov, Yury Gorishniy, and Artem Babenko. Revisiting pretraining
+objectives for tabular deep learning. _arXiv_, 2207.03208v1, 2022.
+
+
+Ivan Rubachev, Nikolay Kartashev, Yury Gorishniy, and Artem Babenko. TabReD: Analyzing Pitfalls
+and Filling the Gaps in Tabular Deep Learning Benchmarks. In _arXiv_, 2025.
+
+
+11
+
+
+Gowthami Somepalli, Micah Goldblum, Avi Schwarzschild, C. Bayan Bruss, and Tom Goldstein.
+SAINT: improved neural networks for tabular data via row attention and contrastive pre-training.
+_arXiv_, 2106.01342v1, 2021.
+
+
+Valentin Thomas, Junwei Ma, Rasa Hosseinzadeh, Keyvan Golestan, Guangwei Yu, Maksims
+Volkovs, and Anthony Caterini. Retrieval & fine-tuning for in-context tabular models. _arXiv_
+_preprint arXiv:2406.05207_, 2024.
+
+
+Johannes Von Oswald, Eyvind Niklasson, Ettore Randazzo, João Sacramento, Alexander Mordvintsev,
+Andrey Zhmoginov, and Max Vladymyrov. Transformers learn in-context by gradient descent. In
+_International Conference on Machine Learning_, pp. 35151–35174. PMLR, 2023.
+
+
+Derek Xu, Olcay Cirit, Reza Asadi, Yizhou Sun, and Wei Wang. Mixture of in-context prompters for
+tabular pfns. _arXiv preprint arXiv:2405.16156_, 2024.
+
+
+Han-Jia Ye, Huai-Hong Yin, and De-Chuan Zhan. Modern neighborhood components analysis: A
+deep tabular baseline two decades later. _arXiv_, 2407.03257v1, 2024.
+
+
+Qingyu Yin, Xuzheng He, Luoao Deng, Chak Tou Leong, Fan Wang, Yanzhao Yan, Xiaoyu Shen, and
+Qiang Zhang. Deeper insights without updates: The power of in-context learning over fine-tuning.
+_arXiv preprint arXiv:2410.04691_, 2024.
+
+
+Bingchen Zhao, Haoqin Tu, Chen Wei, Jieru Mei, and Cihang Xie. Tuning layernorm in attention:
+Towards efficient multi-modal llm finetuning. In _The Twelfth International Conference on Learning_
+_Representations_, 2024.
+
+
+A REPRODUCIBILITY STATEMENT
+
+
+We provide the code for TabPFNv2 finetuning in the supplementary material as an archive with the
+
+
+B THE USE OF LARGE LANGUAGE MODELS
+
+
+Our use of LLMs is limited to writing aid and basic controlled coding assistance (e.g. text stylistic
+improvements, grammar checking, code for polishing figures and/or tables).
+
+
+C DETAILS OF ANALYSIS OF THE TABPFNV2 FINETUNING
+
+
+First, we briefly explain the methodology used to obtain Table 3. Then, we expand on the technical
+details of generating the results shown in Figure 3 and Figure 4. Finally, we provide an extended
+discussion and interpretation of these figures.
+
+**kNN Score Calculation in Table 3.** To understand how finetuning affects the ability of TabPFNv2 to
+reflect target similarity, we employ a retrieval-like prediction mechanism based on attention scores.
+For each test sample, we extract attention scores from the last layer of TabPFNv2. Since attention
+is calculated between the test sample and each train sample, attention scores form a similarity
+distribution over train samples. These attention scores - _w_ _∈_ R _[N][train]_ [�] are then used for each test
+sample to make a weighted average prediction over train set, i.e. for regression, _y_ ˆ = [�] _i_ _[N][train]_ _yiwi_
+and, for classification, we sum the logits of the corresponding class of train neighbors.
+
+**Normalized** **Entropy** **Calculation.** The normalized entropy is computed using the same lastlayer attention scores from TabPFNv2. For each test sample we calculate the entropy of the score
+distribution over train samples and normalize it dividing by ln(train size). Figure 3 shows the
+distribution of this normalized entropy across the test set for six different datasets.
+
+**Generation** **of** **Figure** **4.** For each test sample, we calculate the error (MSE/LogLoss) and the
+normalized attention entropy for both the finetuned (FT) and the off-the-shelf TabPFNv2 (No FT).
+
+
+12
+
+
+Test samples are then sorted based on the change in normalized entropy in ascending order. The
+vertical axis of the plots the change in error for each sample. So, y-axis shows the change in error
+between ‘FT‘ and ‘No FT‘ (lower difference means FT is better), and x-axis shows an index of test
+sample, with lower indices corresponding to larger decreases in entropy. The red line shows the index
+where entropy change becomes positive (∆ _H_ = 0). The blue line shows the change in error after
+smoothing with a Gaussian filter to illustrate the overall trend.
+
+**Interpretation and Discussion.** Overall, these three artifacts collectively support the hypothesis that
+a primary effect of finetuning is the refinement of the similarity signals that TabPFNv2 uses to weight
+in-context examples:
+
+
+    - Table 3 shows that for all datasets attention scores after finetuning more accurately reflect
+similarity of targets _on_ _average_ across test samples. However, Table 3 does not specify
+which individual samples benefit most from finetuning.
+
+    - Figure 3 shows the change in distribution of attention scores. For California, Adult and
+Diamond the distribution of the attention scores becomes consistently more concetrated –
+for 80-100% of the test samples entropy decreased. We believe that this concentration is a
+primary driver of finetuning benefits. Lower entropy suggests that higher attention weights
+are assigned to the “closest” neighbors, indicating improved latent space for calculating
+similarity between objects – since the metrics in Table 3 improved. However, the patterns
+on House and Pol are more nuanced, necessitating a deeper analysis via Figure 4.
+
+    - Figure 4 reveals that for all datasets, except Churn, the error improved the most on those test
+samples where entopy decreased the most. In other words, the test datapoints contributing
+most substantially to the overall performance improvement (lowest ∆ _Error_ ) are those
+for which attention entropy decreased the most (∆ _H_ _<_ 0). Even for House and Pol the
+error clearly improves on samples where entropy decreased but this improvement decays on
+samples where entropy increased (indices to the right of the red line).
+
+    - The results on Churn dataset are not fully aligned with all our findings, we keep them
+for transparency. Although entropy distribution remains unchanged and the trend line in
+Figure 4 does not reflect the effects described above, the attention weights still improve
+after finetuning as can be seen by results in Table 3. This observation motivates deeper
+investigation into the inner workings of the model, and the particular mechanisms which
+improve the latent space for calculating similarity between objects. A more thorough
+analysis of such cases is reserved for future work.
+
+
+D EFFICIENCY DISCUSSION
+
+
+Here we discuss the efficiency aspects that are relevant for tabular foundation models sharing the
+TabPFNv2 architecture and especially noticable on bigger datasets. We provide per-epoch timings
+and relevant dataset dimensions in Table 4.
+
+As described in the main paper, we limit all experiments to 1 M cells ( _N_ _· M_ _≤_ 10 [6], where _N_ is the
+number of rows and _M_ is the number of features). TabPFNv2 uses attention over rows and attention
+over features, so the total number of attention operations scales as _O_ - _NMd_ ( _N_ + _M_ + 2 _d_ )� _,_ with _d_
+denoting the query/key/value dimension. So, the DI dataset — which incurs the most operations—is
+the slowest. We also include the Cooking and Homesite datasets, which have many features but
+few samples. While these datasets involve fewer operations than DI, their per-epoch time is high
+because gradient checkpointing is enabled only for these two datasets (due to high memory demands
+due to large intermidiate activations required for backprop in finetuning). Overall, the hard limit
+for finetuning on one GPU without resorting to parallelism is at 1M cells (because of activation
+memory) and time-wise performance is summarized by the number of attention operations which is
+_O_ - _NMd_ ( _N_ + _M_ + 2 _d_ )�.
+
+
+E ANALYSIS OF THE FINETUNING FAILURES
+
+
+In this section we look into the few failure cases of the TabPFNv2 finetuning. There are two
+datasets (sberbank-housing subsample and KDDCup09_upselling) where finetuning actually degrades
+performance of the base TabPFNv2. We link this to overfitting as explained below.
+
+
+13
+
+
+Table 4: Dataset Properties, Computational Requirements and the actual time per epoch
+
+
+Property/Dataset CH CA HO AD DI Cooking Homesite
+Subsample Subsample
+
+# Rows ( _N_ ) 6400 13 209 14 581 26 048 34 521 5208 3344
+# Features ( _M_ ) 11 8 16 14 9 190 299
+# Attention ops. 9.2e10 2.8e11 6.7e11 1.9e12 2.1e12 1.1e12 7.7e11
+Time per epoch 3s 8s 16s 39s 46s 41s 34s
+
+
+Both datasets have extreme feature-to-sample ratios, with KDD Upselling having the highest ratio
+among our 21 academic datasets. The sberbank-housing dataset additionally possesses a temporal
+shift (Rubachev et al., 2025) which may make it even more prone to overfitting during finetuning.
+
+To investigate temporal shift specifically, we evaluated sberbank-housing on temporal vs. random
+splits (5 splits, 5 seeds each). The results in Table 5 demonstrate that temporal shifts causes
+performance degradation. Fine-tuned TabPFNv2 achieves best performance on random splits but
+suffers under temporal distribution shift, while TabM excels on temporal splits.
+
+
+Table 5: Model Performance Comparison Across Different Splits
+
+
+Split/Model MLP MNCA TabM_mini No FT Full FT
+
+Temporal 0 _._ 262 _±_ 0 _._ 012 0 _._ 273 _±_ 0 _._ 028 0 _._ 249 _±_ 0 _._ 009 0 _._ 291 _±_ 0 _._ 026 0 _._ 317 _±_ 0 _._ 041
+Random 0 _._ 270 _±_ 0 _._ 007 0 _._ 270 _±_ 0 _._ 006 0 _._ 266 _±_ 0 _._ 007 0 _._ 258 _±_ 0 _._ 007 **0** _._ _±_ **0** _._ Overall, these results **support** **overfitting** **as** **an** **explanation** **to** **perfomance** **degradation** . The
+reasons for overfitting can be both - temporal shift and complex features, as we can see in our
+benchmark (Sberbank suffers more from temporal shift, KDD does not have shift, but still has
+performance degradation – which may stem from large feature-to-sample ratio leading to overfitting).
+
+
+F DATASETS AND EXTENDED RESULTS
+
+
+|DL baselines<br>TabPFNv2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+
+
+Figure 7: Extended version of Figure 5 with ensembles for all the methods included.
+
+
+14
+
+
+8%
+
+
+6%
+
+
+4%
+
+
+2%
+
+
+0%
+
+
+_−_ 2%
+
+Increase:
+
+Rank:
+
+
+XGBoost
+23 _._ 35 _._ 86 _± ±_ 6 2 _._ 2% _._ 4
+
+
+MLP [PLR]
+
+13 _._ 29 _._ 81 _± ±_ 1 2 _._ 7% _._ 2
+
+
+MNCA [PLR]
+
+22 _._ 61 _._ 95 _± ±_ 5 1 _._ 5% _._ 8
+
+
+TabM _[†]_ mini
+22 _._ 54 _._ 86 _± ±_ 4 1 _._ 1% _._ 8
+
+
+Full
+31 _._ 17 _._ 86 _± ±_ 4 0 _._ 7% _._ 9
+
+
+MLP [PLR] _[,][×]_ [5]
+
+23 _._ 17 _._ 10 _± ±_ 3 2 _._ 5% _._ 1
+
+
+MNCA [PLR] _[,][×]_ [5]
+
+32 _._ 14 _._ 48 _± ±_ 6 1 _._ 2% _._ 4
+
+
+TabM _[†]_ mini _[,][×]_ [5]
+22 _._ 92 _._ 38 _± ±_ 4 1 _._ 7% _._ 4
+
+
+TabPFNv2 _[×]_ [8]
+
+12 _._ 23 _._ 71 _± ±_ 3 1 _._ 3% _._ 8
+
+
+XGBoost _[×]_ [5]
+
+23 _._ 57 _._ 43 _± ±_ 6 2 _._ 3% _._ 4
+
+
+Full _[×]_ [5]
+
+31 _._ 90 _._ 10 _± ±_ 5 0 _._ 9% _._ 3
+
+
+Table 6: The datasets used in our experiments. # num. refers to the number of numerical features, #
+bin. refers to the number of binary features, # cat. refers to the number of categorical features.
+
+
+Name Train size Val. size Test size # num. # bin. # cat. Task type
+
+
+**Datasets from Grinsztajn et al. (2022)**
+
+wine 1,787 230 537 11 0 0 binary classification
+phoneme 2,220 285 667 5 0 0 binary classification
+KDDCup09_upselling 3,589 461 1,078 34 1 14 binary classification
+kdd_ipums_la_97-small 3,631 467 1,090 20 0 0 binary classification
+bank-marketing 7,404 952 2,222 7 0 0 binary classification
+MagicTelescope 9,363 1,203 2,810 10 0 0 binary classification
+credit 10,000 2,014 4,700 10 0 0 binary classification
+pol 10,000 1,500 3,500 26 0 0 regression
+wine_quality 4,547 585 1,365 11 0 0 regression
+Brazilian_houses 7,484 962 2,246 8 0 0 regression
+Ailerons 9,625 1,237 2,888 33 0 0 regression
+MiamiHousing2016 9,752 1,254 2,926 13 0 0 regression
+elevators 10,000 1,979 4,620 16 0 0 regression
+fifa 10,000 2,418 5,645 5 0 0 regression
+house_sales 10,000 3,483 8,130 15 0 0 regression
+medical_charges 10,000 45,919 50,000 3 0 0 regression
+
+
+**Datasets from Gorishniy et al. (2021)**
+
+churn 6,400 1,600 2,000 7 3 1 binary classification
+adult 26,048 6,513 16,281 6 1 7 binary classification
+california 13,209 3,303 4,128 8 0 0 regression
+house 14,581 3,646 4,557 16 0 0 regression
+diamond 34,521 8,631 10,788 6 0 3 regression
+
+
+**Subsamples from TabReD Rubachev et al. (2025)**
+
+Ecom Offers 8403 10000 10000 113 6 0 binary classification
+Homesite Insurance 3344 10000 10000 253 23 23 binary classifiation
+Homecredit Default 1436 10000 10000 612 2 82 binary classification
+Maps Routing 1014 10000 10000 984 0 2 regression
+Cooking Time 5208 10000 10000 186 3 3 regression
+Delivery ETA 4484 10000 10000 221 1 1 regression
+Weather 9708 10000 10000 100 3 0 regression
+Sberbank Housing 2551 4827 4647 365 17 10 regression
+
+
+Table 7: Extended results for the benchmark. Results are grouped by datasets.
+
+
+Ailerons ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 0002 _±_ 0 _._ 0000 0 _._ 0002 _±_ 0 _._ 0000
+XGBoost 0 _._ 0002 _±_ 0 _._ 0000 0 _._ 0002 _±_ 0 _._ 0000
+MLP [PLR] 0 _._ 0002 _±_ 0 _._ 0000 0 _._ 0002 _±_ 0 _._ 0000
+MNCA 0 _._ 0002 _±_ 0 _._ 0000 0 _._ 0002 _±_ 0 _._ 0000
+TabM _[†]_ mini 0 _._ 0002 0 _._ 0000 0 _._ 0002 0 _._ 0000
+_±_ _±_
+NO FT 0 _._ 0002 _±_ 0 _._ 0000 TabPFNv2 _[×]_ [8] 0 _._ 0002 _±_ 0 _._ 0000 LAST LAYERS 0 _._ 0001 _±_ 0 _._ 0000 LORA 0 _._ 0002 _±_ 0 _._ 0000 FULL [untied] 0 _._ 0001 _±_ 0 _._ 0000 FULL [PLE] 0 _._ 0001 _±_ 0 _._ 0000 EMB.,LN,HEAD 0 _._ 0001 _±_ 0 _._ 0000 0 _._ 0001 _±_ 0 _._ 0000
+FULL 0 _._ 0001 _±_ 0 _._ 0000 0 _._ 0001 _±_ 0 _._ 0000
+
+
+15
+
+
+Brazilian_houses ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 0469 _±_ 0 _._ 0178 0 _._ 0440 _±_ 0 _._ 0207
+XGBoost 0 _._ 0541 _±_ 0 _._ 0279 0 _._ 0535 _±_ 0 _._ 0287
+MLP [PLR] 0 _._ 0422 _±_ 0 _._ 0182 0 _._ 0397 _±_ 0 _._ 0206
+MNCA 0 _._ 0525 _±_ 0 _._ 0160 0 _._ 0509 _±_ 0 _._ 0180
+TabM _[†]_ mini 0 _._ 0459 0 _._ 0204 0 _._ 0439 0 _._ 0228
+_±_ _±_
+NO FT 0 _._ 0457 _±_ 0 _._ 0032 TabPFNv2 _[×]_ [8] 0 _._ 0199 _±_ 0 _._ 0210 LAST LAYERS 0 _._ 0438 _±_ 0 _._ 0039 LORA 0 _._ 0447 _±_ 0 _._ 0038 FULL [untied] 0 _._ 0495 _±_ 0 _._ 0127 FULL [PLE] 0 _._ 0624 _±_ 0 _._ 0244 EMB.,LN,HEAD 0 _._ 0465 _±_ 0 _._ 0026 0 _._ 0465 _±_ 0 _._ 0030
+FULL 0 _._ 0569 _±_ 0 _._ 0241 0 _._ 0506 _±_ 0 _._ 0228
+
+
+KDDCup09_upselling ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 7763 _±_ 0 _._ 0150 0 _._ 7806 _±_ 0 _._ 0125
+XGBoost 0 _._ 7922 _±_ 0 _._ 0114 0 _._ 7950 _±_ 0 _._ 0102
+MLP [PLR] 0 _._ 7983 _±_ 0 _._ 0088 0 _._ 7995 _±_ 0 _._ 0105
+MNCA 0 _._ 7929 _±_ 0 _._ 0087 0 _._ 7989 _±_ 0 _._ 0115
+TabM _[†]_ mini 0 _._ 8042 0 _._ 0144 0 _._ 8039 0 _._ 0114
+_±_ _±_
+NO FT 0 _._ 8109 _±_ 0 _._ 0096  TabPFNv2 _[×]_ [8] 0 _._ 8046 _±_ 0 _._ 0129  LAST LAYERS 0 _._ 8022 _±_ 0 _._ 0106  LORA 0 _._ 8077 _±_ 0 _._ 0053 FULL [untied] 0 _._ 7995 _±_ 0 _._ 0124  FULL [PLE] 0 _._ 7999 _±_ 0 _._ 0138  EMB.,LN,HEAD 0 _._ 8054 _±_ 0 _._ 0062 0 _._ 8066 _±_ 0 _._ 0091
+FULL 0 _._ 7983 _±_ 0 _._ 0087 0 _._ 8056 _±_ 0 _._ 0116
+
+MiamiHousing2016 ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 1613 _±_ 0 _._ 0029 0 _._ 1574 _±_ 0 _._ 0043
+XGBoost 0 _._ 1439 _±_ 0 _._ 0030 0 _._ 1434 _±_ 0 _._ 0029
+MLP [PLR] 0 _._ 1519 _±_ 0 _._ 0028 0 _._ 1479 _±_ 0 _._ 0017
+MNCA 0 _._ 1501 _±_ 0 _._ 0037 0 _._ 1477 _±_ 0 _._ 0032
+TabM _[†]_ mini 0 _._ 1412 0 _._ 0017 0 _._ 1387 0 _._ 0008
+_±_ _±_
+NO FT 0 _._ 1369 _±_ 0 _._ 0023  TabPFNv2 _[×]_ [8] 0 _._ 1349 _±_ 0 _._ 0026  LAST LAYERS 0 _._ 1329 _±_ 0 _._ 0019  LORA 0 _._ 1333 _±_ 0 _._ 0031 FULL [untied] 0 _._ 1341 _±_ 0 _._ 0021  FULL [PLE] 0 _._ 1337 _±_ 0 _._ 0026  EMB.,LN,HEAD 0 _._ 1339 _±_ 0 _._ 0023 0 _._ 1334 _±_ 0 _._ 0028
+FULL 0 _._ 1334 _±_ 0 _._ 0035 0 _._ 1316 _±_ 0 _._ 0031
+
+bank-marketing ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 7860 _±_ 0 _._ 0055 0 _._ 7887 _±_ 0 _._ 0052
+XGBoost 0 _._ 8014 _±_ 0 _._ 0088 0 _._ 8030 _±_ 0 _._ 0076
+MLP [PLR] 0 _._ 7946 _±_ 0 _._ 0100 0 _._ 7977 _±_ 0 _._ 0117
+MNCA 0 _._ 7955 _±_ 0 _._ 0075 0 _._ 8003 _±_ 0 _._ 0077
+TabM _[†]_ mini 0 _._ 7992 0 _._ 0093 0 _._ 8017 0 _._ 0087
+_±_ _±_
+NO FT 0 _._ 8025 _±_ 0 _._ 0078  TabPFNv2 _[×]_ [8] 0 _._ 8026 _±_ 0 _._ 0075  LAST LAYERS 0 _._ 8031 _±_ 0 _._ 0099  LORA 0 _._ 8053 _±_ 0 _._ 0069 FULL [untied] 0 _._ 8044 _±_ 0 _._ 0087  FULL [PLE] 0 _._ 8013 _±_ 0 _._ 0077  EMB.,LN,HEAD 0 _._ 8044 _±_ 0 _._ 0076 0 _._ 8051 _±_ 0 _._ 0077
+FULL 0 _._ 8032 _±_ 0 _._ 0074 0 _._ 8048 _±_ 0 _._ 0075
+
+
+16
+
+
+MagicTelescope ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 8536 _±_ 0 _._ 0063 0 _._ 8566 _±_ 0 _._ 0061
+XGBoost 0 _._ 8539 _±_ 0 _._ 0100 0 _._ 8589 _±_ 0 _._ 0110
+MLP [PLR] 0 _._ 8583 _±_ 0 _._ 0058 0 _._ 8626 _±_ 0 _._ 0044
+MNCA 0 _._ 8580 _±_ 0 _._ 0059 0 _._ 8628 _±_ 0 _._ 0041
+TabM _[†]_ mini 0 _._ 8637 0 _._ 0094 0 _._ 8646 0 _._ 0075
+_±_ _±_
+NO FT 0 _._ 8647 _±_ 0 _._ 0059 TabPFNv2 _[×]_ [8] 0 _._ 8695 _±_ 0 _._ 0073 LAST LAYERS 0 _._ 8765 _±_ 0 _._ 0051 LORA 0 _._ 8738 _±_ 0 _._ 0059 FULL [untied] 0 _._ 8780 _±_ 0 _._ 0052 FULL [PLE] 0 _._ 8778 _±_ 0 _._ 0073 EMB.,LN,HEAD 0 _._ 8765 _±_ 0 _._ 0051 0 _._ 8772 _±_ 0 _._ 0062
+FULL 0 _._ 8765 _±_ 0 _._ 0056 0 _._ 8803 _±_ 0 _._ 0061
+
+adult ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 8548 _±_ 0 _._ 0006 0 _._ 8559 _±_ 0 _._ 0011
+XGBoost 0 _._ 8719 _±_ 0 _._ 0008 0 _._ 8723 _±_ 0 _._ 0002
+MLP [PLR] 0 _._ 8690 _±_ 0 _._ 0006 0 _._ 8702 _±_ 0 _._ 0006
+MNCA 0 _._ 8676 _±_ 0 _._ 0021 0 _._ 8696 _±_ 0 _._ 0003
+TabM _[†]_ mini 0 _._ 8675 0 _._ 0018 0 _._ 8690 0 _._ 0005
+_±_ _±_
+NO FT 0 _._ 8588 _±_ 0 _._ 0004 TabPFNv2 _[×]_ [8] 0 _._ 8611 _±_ 0 _._ 0007 LAST LAYERS 0 _._ 8702 _±_ 0 _._ 0006 LORA 0 _._ 8704 _±_ 0 _._ 0011 FULL [untied] 0 _._ 8719 _±_ 0 _._ 0010 FULL [PLE] 0 _._ 8723 _±_ 0 _._ 0004 EMB.,LN,HEAD 0 _._ 8705 _±_ 0 _._ 0009 0 _._ 8713 _± nan_
+FULL 0 _._ 8710 _±_ 0 _._ 0014 0 _._ 8723 _± nan_
+
+california ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 4935 _±_ 0 _._ 0042 0 _._ 4880 _±_ 0 _._ 0022
+XGBoost 0 _._ 4319 _±_ 0 _._ 0018 0 _._ 4316 _±_ 0 _._ 0007
+MLP [PLR] 0 _._ 4659 _±_ 0 _._ 0035 0 _._ 4549 _±_ 0 _._ 0006
+MNCA 0 _._ 4236 _±_ 0 _._ 0008 0 _._ 4231 _±_ 0 _._ 0005
+TabM _[†]_ mini 0 _._ 4323 0 _._ 0046 0 _._ 4261 0 _._ 0019
+_±_ _±_
+NO FT 0 _._ 3987 _±_ 0 _._ 0003 TabPFNv2 _[×]_ [8] 0 _._ 4038 _±_ 0 _._ 0016 LAST LAYERS 0 _._ 3897 _±_ 0 _._ 0027 LORA 0 _._ 3836 _±_ 0 _._ 0010 FULL [untied] 0 _._ 3827 _±_ 0 _._ 0038 FULL [PLE] 0 _._ 3843 _±_ 0 _._ 0024 EMB.,LN,HEAD 0 _._ 3880 _±_ 0 _._ 0014 0 _._ 3862 _± nan_
+FULL 0 _._ 3822 _±_ 0 _._ 0011 0 _._ 3789 _± nan_
+
+
+churn ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 8575 _±_ 0 _._ 0028 0 _._ 8582 _±_ 0 _._ 0008
+XGBoost 0 _._ 8610 _±_ 0 _._ 0018 0 _._ 8608 _±_ 0 _._ 0013
+MLP [PLR] 0 _._ 8628 _±_ 0 _._ 0009 0 _._ 8638 _±_ 0 _._ 0012
+MNCA 0 _._ 8584 _±_ 0 _._ 0023 0 _._ 8615 _±_ 0 _._ 0013
+TabM _[†]_ mini 0 _._ 8606 0 _._ 0023 0 _._ 8592 0 _._ 0003
+_±_ _±_
+NO FT 0 _._ 8590 _±_ 0 _._ 0008  TabPFNv2 _[×]_ [8] 0 _._ 8637 _±_ 0 _._ 0012  LAST LAYERS 0 _._ 8628 _±_ 0 _._ 0021  LORA 0 _._ 8609 _±_ 0 _._ 0018 FULL [untied] 0 _._ 8631 _±_ 0 _._ 0026  FULL [PLE] 0 _._ 8631 _±_ 0 _._ 0015  EMB.,LN,HEAD 0 _._ 8605 _±_ 0 _._ 0023 0 _._ 8605 _± nan_
+FULL 0 _._ 8647 _±_ 0 _._ 0028 0 _._ 8665 _± nan_
+
+diamond ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 1402 _±_ 0 _._ 0016 0 _._ 1362 _±_ 0 _._ 0003
+XGBoost 0 _._ 1368 _±_ 0 _._ 0002 0 _._ 1363 _±_ 0 _._ 0001
+MLP [PLR] 0 _._ 1341 _±_ 0 _._ 0009 0 _._ 1325 _±_ 0 _._ 0004
+MNCA 0 _._ 1368 _±_ 0 _._ 0010 0 _._ 1348 _±_ 0 _._ 0005
+TabM _[†]_ mini 0 _._ 1314 0 _._ 0011 0 _._ 1307 0 _._ 0005
+_±_ _±_
+NO FT 0 _._ 1370 _±_ 0 _._ 0002  TabPFNv2 _[×]_ [8] 0 _._ 1311 _±_ 0 _._ 0005  LAST LAYERS 0 _._ 1302 _±_ 0 _._ 0006  LORA 0 _._ 1300 _±_ 0 _._ 0017 FULL [untied] 0 _._ 1285 _±_ 0 _._ 0009  FULL [PLE] 0 _._ 1275 _±_ 0 _._ 0011  EMB.,LN,HEAD 0 _._ 1323 _±_ 0 _._ 0006 0 _._ 1320 _± nan_
+FULL 0 _._ 1275 _±_ 0 _._ 0007 0 _._ 1245 _± nan_
+
+ffa ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 8038 _±_ 0 _._ 0125 0 _._ 8011 _±_ 0 _._ 0143
+XGBoost 0 _._ 7799 _±_ 0 _._ 0110 0 _._ 7795 _±_ 0 _._ 0114
+MLP [PLR] 0 _._ 7935 _±_ 0 _._ 0127 0 _._ 7898 _±_ 0 _._ 0141
+MNCA 0 _._ 7956 _±_ 0 _._ 0140 0 _._ 7933 _±_ 0 _._ 0145
+TabM _[†]_ mini 0 _._ 7783 0 _._ 0128 0 _._ 7768 0 _._ 0123
+_±_ _±_
+NO FT 0 _._ 7833 _±_ 0 _._ 0085  TabPFNv2 _[×]_ [8] 0 _._ 7815 _±_ 0 _._ 0106  LAST LAYERS 0 _._ 7820 _±_ 0 _._ 0150  LORA 0 _._ 7834 _±_ 0 _._ 0085 FULL [untied] 0 _._ 7845 _±_ 0 _._ 0126  FULL [PLE] 0 _._ 7818 _±_ 0 _._ 0111  EMB.,LN,HEAD 0 _._ 7773 _±_ 0 _._ 0126 0 _._ 7764 _±_ 0 _._ 0168
+FULL 0 _._ 7834 _±_ 0 _._ 0106 0 _._ 7779 _±_ 0 _._ 0127
+
+
+17
+
+
+credit ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 7737 _±_ 0 _._ 0052 0 _._ 7729 _±_ 0 _._ 0047
+XGBoost 0 _._ 7688 _±_ 0 _._ 0025 0 _._ 7706 _±_ 0 _._ 0029
+MLP [PLR] 0 _._ 7753 _±_ 0 _._ 0053 0 _._ 7767 _±_ 0 _._ 0075
+MNCA 0 _._ 7737 _±_ 0 _._ 0033 0 _._ 7757 _±_ 0 _._ 0026
+TabM _[†]_ mini 0 _._ 7749 0 _._ 0031 0 _._ 7757 0 _._ 0036
+_±_ _±_
+NO FT 0 _._ 7746 _±_ 0 _._ 0019 TabPFNv2 _[×]_ [8] 0 _._ 7735 _±_ 0 _._ 0030 LAST LAYERS 0 _._ 7720 _±_ 0 _._ 0044 LORA 0 _._ 7746 _±_ 0 _._ 0032 FULL [untied] 0 _._ 7743 _±_ 0 _._ 0039 FULL [PLE] 0 _._ 7737 _±_ 0 _._ 0041 EMB.,LN,HEAD 0 _._ 7756 _±_ 0 _._ 0036 0 _._ 7754 _±_ 0 _._ 0041
+FULL 0 _._ 7730 _±_ 0 _._ 0035 0 _._ 7749 _±_ 0 _._ 0030
+
+elevators ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 0020 _±_ 0 _._ 0000 0 _._ 0019 _±_ 0 _._ 0000
+XGBoost 0 _._ 0020 _±_ 0 _._ 0000 0 _._ 0020 _±_ 0 _._ 0000
+MLP [PLR] 0 _._ 0018 _±_ 0 _._ 0000 0 _._ 0018 _±_ 0 _._ 0000
+MNCA 0 _._ 0019 _±_ 0 _._ 0000 0 _._ 0019 _±_ 0 _._ 0000
+TabM _[†]_ mini 0 _._ 0018 0 _._ 0000 0 _._ 0018 0 _._ 0000
+_±_ _±_
+NO FT 0 _._ 0019 _±_ 0 _._ 0000 TabPFNv2 _[×]_ [8] 0 _._ 0019 _±_ 0 _._ 0000 LAST LAYERS 0 _._ 0018 _±_ 0 _._ 0000 LORA 0 _._ 0018 _±_ 0 _._ 0000 FULL [untied] 0 _._ 0018 _±_ 0 _._ 0000 FULL [PLE] 0 _._ 0018 _±_ 0 _._ 0000 EMB.,LN,HEAD 0 _._ 0018 _±_ 0 _._ 0000 0 _._ 0018 _±_ 0 _._ 0000
+FULL 0 _._ 0018 _±_ 0 _._ 0000 0 _._ 0018 _±_ 0 _._ 0000
+
+house ↓
+Method Single model Ensemble
+
+
+MLP 3 _._ 1163 _±_ 0 _._ 0248 3 _._ 0706 _±_ 0 _._ 0140
+XGBoost 3 _._ 1703 _±_ 0 _._ 0098 3 _._ 1644 _±_ 0 _._ 0068
+MLP [PLR] 3 _._ 0546 _±_ 0 _._ 0288 3 _._ 0170 _±_ 0 _._ 0070
+MNCA 3 _._ 0928 _±_ 0 _._ 0340 3 _._ 0538 _±_ 0 _._ 0072
+TabM _[†]_ mini 2 _._ 9829 0 _._ 0225 2 _._ 9648 0 _._ 0035
+_±_ _±_
+NO FT 3 _._ 1100 _±_ 0 _._ 0053 TabPFNv2 _[×]_ [8] 3 _._ 0637 _±_ 0 _._ 0045 LAST LAYERS 2 _._ 9826 _±_ 0 _._ 0335 LORA 2 _._ 9901 _±_ 0 _._ 0235 FULL [untied] 2 _._ 9696 _±_ 0 _._ 0275 FULL [PLE] 2 _._ 9783 _±_ 0 _._ 0491 EMB.,LN,HEAD 3 _._ 0748 _±_ 0 _._ 0135 3 _._ 0660 _± nan_
+FULL 2 _._ 9919 _±_ 0 _._ 0268 2 _._ 9036 _± nan_
+
+
+house_sales ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 1791 _±_ 0 _._ 0009 0 _._ 1763 _±_ 0 _._ 0003
+XGBoost 0 _._ 1693 _±_ 0 _._ 0002 0 _._ 1689 _±_ 0 _._ 0001
+MLP [PLR] 0 _._ 1693 _±_ 0 _._ 0005 0 _._ 1687 _±_ 0 _._ 0007
+MNCA 0 _._ 1740 _±_ 0 _._ 0018 0 _._ 1714 _±_ 0 _._ 0005
+TabM _[†]_ mini 0 _._ 1658 0 _._ 0005 0 _._ 1647 0 _._ 0002
+_±_ _±_
+NO FT 0 _._ 1632 _±_ 0 _._ 0000  TabPFNv2 _[×]_ [8] 0 _._ 1601 _±_ 0 _._ 0001  LAST LAYERS 0 _._ 1612 _±_ 0 _._ 0003  LORA 0 _._ 1592 _±_ 0 _._ 0002 FULL [untied] 0 _._ 1589 _±_ 0 _._ 0006  FULL [PLE] 0 _._ 1588 _±_ 0 _._ 0004  EMB.,LN,HEAD 0 _._ 1605 _±_ 0 _._ 0001 0 _._ 1603 _± nan_
+FULL 0 _._ 1586 _±_ 0 _._ 0005 0 _._ 1579 _± nan_
+
+medical_charges ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 0816 _±_ 0 _._ 0002 0 _._ 0814 _±_ 0 _._ 0000
+XGBoost 0 _._ 0825 _±_ 0 _._ 0001 0 _._ 0825 _±_ 0 _._ 0000
+MLP [PLR] 0 _._ 0812 _±_ 0 _._ 0002 0 _._ 0810 _±_ 0 _._ 0000
+MNCA 0 _._ 0811 _±_ 0 _._ 0000 0 _._ 0810 _±_ 0 _._ 0000
+TabM _[†]_ mini 0 _._ 0812 0 _._ 0001 0 _._ 0812 0 _._ 0000
+_±_ _±_
+NO FT 0 _._ 0812 _±_ 0 _._ 0000  TabPFNv2 _[×]_ [8] 0 _._ 0813 _±_ 0 _._ 0000  LAST LAYERS 0 _._ 0808 _±_ 0 _._ 0000  LORA 0 _._ 0809 _±_ 0 _._ 0000 FULL [untied] 0 _._ 0809 _±_ 0 _._ 0000  FULL [PLE] 0 _._ 0808 _±_ 0 _._ 0000  EMB.,LN,HEAD 0 _._ 0809 _±_ 0 _._ 0000 0 _._ 0808 _± nan_
+FULL 0 _._ 0808 _±_ 0 _._ 0000 0 _._ 0807 _± nan_
+
+pol ↓
+Method Single model Ensemble
+
+
+MLP 5 _._ 5216 _±_ 0 _._ 6947 4 _._ 9945 _±_ 0 _._ 5923
+XGBoost 4 _._ 3030 _±_ 0 _._ 0677 4 _._ 2548 _±_ 0 _._ 0488
+MLP [PLR] 2 _._ 8846 _±_ 0 _._ 3192 2 _._ 5266 _±_ 0 _._ 0605
+MNCA 5 _._ 7569 _±_ 0 _._ 5465 5 _._ 3773 _±_ 0 _._ 5463
+TabM _[†]_ mini 2 _._ 4521 0 _._ 1371 2 _._ 4175 0 _._ 1124
+_±_ _±_
+NO FT 4 _._ 8233 _±_ 0 _._ 0533  TabPFNv2 _[×]_ [8] 3 _._ 4119 _±_ 0 _._ 1679  LAST LAYERS 2 _._ 8283 _±_ 0 _._ 2159  LORA 2 _._ 5989 _±_ 0 _._ 0357 FULL [untied] 5 _._ 3104 _±_ 7 _._ 8499  FULL [PLE] 2 _._ 7128 _±_ 0 _._ 1078  EMB.,LN,HEAD 2 _._ 8319 _±_ 0 _._ 2250 2 _._ 7829 _±_ 0 _._ 2584
+FULL 2 _._ 6424 _±_ 0 _._ 1172 2 _._ 3375 _±_ 0 _._ 1385
+
+
+18
+
+
+kdd_ipums_la_97-small ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 8831 _±_ 0 _._ 0068 0 _._ 8845 _±_ 0 _._ 0055
+XGBoost 0 _._ 8830 _±_ 0 _._ 0086 0 _._ 8835 _±_ 0 _._ 0085
+MLP [PLR] 0 _._ 8758 _±_ 0 _._ 0112 0 _._ 8765 _±_ 0 _._ 0108
+MNCA 0 _._ 8807 _±_ 0 _._ 0046 0 _._ 8832 _±_ 0 _._ 0048
+TabM _[†]_ mini 0 _._ 8765 0 _._ 0091 0 _._ 8780 0 _._ 0099
+_±_ _±_
+NO FT 0 _._ 8810 _±_ 0 _._ 0028 TabPFNv2 _[×]_ [8] 0 _._ 8824 _±_ 0 _._ 0059 LAST LAYERS 0 _._ 8828 _±_ 0 _._ 0054 LORA 0 _._ 8823 _±_ 0 _._ 0045 FULL [untied] 0 _._ 8761 _±_ 0 _._ 0153 FULL [PLE] 0 _._ 8840 _±_ 0 _._ 0061 EMB.,LN,HEAD 0 _._ 8821 _±_ 0 _._ 0041 0 _._ 8820 _±_ 0 _._ 0055
+FULL 0 _._ 8831 _±_ 0 _._ 0063 0 _._ 8862 _±_ 0 _._ 0078
+
+phoneme ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 8548 _±_ 0 _._ 0132 0 _._ 8635 _±_ 0 _._ 0099
+XGBoost 0 _._ 8708 _±_ 0 _._ 0134 0 _._ 8771 _±_ 0 _._ 0156
+MLP [PLR] 0 _._ 8744 _±_ 0 _._ 0105 0 _._ 8861 _±_ 0 _._ 0071
+MNCA 0 _._ 8810 _±_ 0 _._ 0090 0 _._ 8861 _±_ 0 _._ 0057
+TabM _[†]_ mini 0 _._ 8798 0 _._ 0088 0 _._ 8885 0 _._ 0056
+_±_ _±_
+NO FT 0 _._ 8837 _±_ 0 _._ 0074 TabPFNv2 _[×]_ [8] 0 _._ 8871 _±_ 0 _._ 0064 LAST LAYERS 0 _._ 8883 _±_ 0 _._ 0098 LORA 0 _._ 8919 _±_ 0 _._ 0073 FULL [untied] 0 _._ 8721 _±_ 0 _._ 0566 FULL [PLE] 0 _._ 8916 _±_ 0 _._ 0085 EMB.,LN,HEAD 0 _._ 8913 _±_ 0 _._ 0082 0 _._ 8918 _±_ 0 _._ 0105
+FULL 0 _._ 8925 _±_ 0 _._ 0104 0 _._ 9013 _±_ 0 _._ 0071
+
+wine ↑
+Method Single model Ensemble
+
+
+MLP 0 _._ 7782 _±_ 0 _._ 0145 0 _._ 7907 _±_ 0 _._ 0117
+XGBoost 0 _._ 7927 _±_ 0 _._ 0209 0 _._ 8010 _±_ 0 _._ 0186
+MLP [PLR] 0 _._ 7774 _±_ 0 _._ 0154 0 _._ 7964 _±_ 0 _._ 0146
+MNCA 0 _._ 7879 _±_ 0 _._ 0150 0 _._ 8005 _±_ 0 _._ 0121
+TabM _[†]_ mini 0 _._ 7908 0 _._ 0167 0 _._ 7963 0 _._ 0113
+_±_ _±_
+NO FT 0 _._ 7865 _±_ 0 _._ 0132 TabPFNv2 _[×]_ [8] 0 _._ 7958 _±_ 0 _._ 0092 LAST LAYERS 0 _._ 7983 _±_ 0 _._ 0195 LORA 0 _._ 8024 _±_ 0 _._ 0137 FULL [untied] 0 _._ 8024 _±_ 0 _._ 0152 FULL [PLE] 0 _._ 8020 _±_ 0 _._ 0141 EMB.,LN,HEAD 0 _._ 8021 _±_ 0 _._ 0131 0 _._ 8074 _±_ 0 _._ 0145
+FULL 0 _._ 7979 _±_ 0 _._ 0139 0 _._ 8060 _±_ 0 _._ 0118
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+wine_quality ↓
+Method Single model Ensemble
+
+
+MLP 0 _._ 6703 _±_ 0 _._ 0170 0 _._ 6530 _±_ 0 _._ 0152
+XGBoost 0 _._ 6035 _±_ 0 _._ 0142 0 _._ 6025 _±_ 0 _._ 0139
+MLP [PLR] 0 _._ 6537 _±_ 0 _._ 0235 0 _._ 6328 _±_ 0 _._ 0155
+MNCA 0 _._ 6151 _±_ 0 _._ 0092 0 _._ 6058 _±_ 0 _._ 0149
+TabM _[†]_ mini 0 _._ 6270 0 _._ 0153 0 _._ 6194 0 _._ 0150
+_±_ _±_
+NO FT 0 _._ 6841 _±_ 0 _._ 0209  TabPFNv2 _[×]_ [8] 0 _._ 6932 _±_ 0 _._ 0244  LAST LAYERS 0 _._ 6245 _±_ 0 _._ 0073  LORA 0 _._ 6160 _±_ 0 _._ 0108 FULL [untied] 0 _._ 6224 _±_ 0 _._ 0117  FULL [PLE] 0 _._ 6216 _±_ 0 _._ 0109  EMB.,LN,HEAD 0 _._ 6115 _±_ 0 _._ 0174 0 _._ 6077 _±_ 0 _._ 0188
+FULL 0 _._ 6206 _±_ 0 _._ 0099 0 _._ 6068 _±_ 0 _._ 0145
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 8: Extended results for the subsampled TabReD benchmark. Results are grouped by datasets.
+
+
+sberbank-housing ↓
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 2530 _±_ 0 _._ 0075 MLP [PLR] 0 _._ 2473 _±_ 0 _._ 0010 MNCA 0 _._ 2512 _±_ 0 _._ 0017 TabM _[†]_ mini 0 _._ 2393 0 _._ 0032 _±_
+NO FT 0 _._ 3020 _±_ 0 _._ 0026 FULL 0 _._ 3552 _±_ 0 _._ 0213 
+split-1
+
+MLP 0 _._ 2650 _±_ 0 _._ 0113 MLP [PLR] 0 _._ 2593 _±_ 0 _._ 0068 MNCA 0 _._ 2907 _±_ 0 _._ 0128 TabM _[†]_ mini 0 _._ 2611 0 _._ 0057 _±_
+NO FT 0 _._ 2980 _±_ 0 _._ 0028 FULL 0 _._ 3090 _±_ 0 _._ 0271 
+split-2
+
+MLP 0 _._ 2621 _±_ 0 _._ 0060 MLP [PLR] 0 _._ 2573 _±_ 0 _._ 0026 MNCA 0 _._ 2821 _±_ 0 _._ 0239 TabM _[†]_ mini 0 _._ 2553 0 _._ 0064 _±_
+NO FT 0 _._ 2808 _±_ 0 _._ 0020 FULL 0 _._ 3113 _±_ 0 _._ 0309 
+split-3
+
+MLP 0 _._ 2656 _±_ 0 _._ 0124 MLP [PLR] 0 _._ 2461 _±_ 0 _._ 0007 MNCA 0 _._ 2838 _±_ 0 _._ 0495 TabM _[†]_ mini 0 _._ 2454 0 _._ 0034 _±_
+NO FT 0 _._ 3237 _±_ 0 _._ 0026 FULL 0 _._ 3473 _±_ 0 _._ 0269 
+split-4
+
+MLP 0 _._ 2624 _±_ 0 _._ 0177 MLP [PLR] 0 _._ 2482 _±_ 0 _._ 0017 MNCA 0 _._ 2580 _±_ 0 _._ 0063 TabM _[†]_ mini 0 _._ 2433 0 _._ 0018 _±_
+NO FT 0 _._ 2484 _±_ 0 _._ 0005 FULL 0 _._ 2608 _±_ 0 _._ 0083 
+
+
+ecom-offers ↑
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 5986 _±_ 0 _._ 0032 MLP [PLR] 0 _._ 5955 _±_ 0 _._ 0060 MNCA 0 _._ 5876 _±_ 0 _._ 0011 TabM _[†]_ mini 0 _._ 5895 0 _._ 0042 _±_
+NO FT 0 _._ 5595 _±_ 0 _._ 0006 FULL 0 _._ 5808 _±_ 0 _._ 0099 
+split-1
+
+MLP 0 _._ 6031 _±_ 0 _._ 0012 MLP [PLR] 0 _._ 5913 _±_ 0 _._ 0070 MNCA 0 _._ 5961 _±_ 0 _._ 0074 TabM _[†]_ mini 0 _._ 6024 0 _._ 0030 _±_
+NO FT 0 _._ 5514 _±_ 0 _._ 0006 FULL 0 _._ 5930 _±_ 0 _._ 0054 
+split-2
+
+MLP 0 _._ 6021 _±_ 0 _._ 0026 MLP [PLR] 0 _._ 5939 _±_ 0 _._ 0094 MNCA 0 _._ 5858 _±_ 0 _._ 0058 TabM _[†]_ mini 0 _._ 5944 0 _._ 0023 _±_
+NO FT 0 _._ 5570 _±_ 0 _._ 0008 FULL 0 _._ 5767 _±_ 0 _._ 0359 
+split-3
+
+MLP 0 _._ 6076 _±_ 0 _._ 0012 MLP [PLR] 0 _._ 5921 _±_ 0 _._ 0127 MNCA 0 _._ 5924 _±_ 0 _._ 0145 TabM _[†]_ mini 0 _._ 5952 0 _._ 0022 _±_
+NO FT 0 _._ 5608 _±_ 0 _._ 0010 FULL 0 _._ 5958 _±_ 0 _._ 0062 
+split-4
+
+MLP 0 _._ 6010 _±_ 0 _._ 0011 MLP [PLR] 0 _._ 5939 _±_ 0 _._ 0015 MNCA 0 _._ 5830 _±_ 0 _._ 0086 TabM _[†]_ mini 0 _._ 5890 0 _._ 0039 _±_
+NO FT 0 _._ 5538 _±_ 0 _._ 0007 FULL 0 _._ 5741 _±_ 0 _._ 0086 
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+maps-routing ↓
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 1901 _±_ 0 _._ 0015 MLP [PLR] 0 _._ 1915 _±_ 0 _._ 0058 MNCA 0 _._ 2032 _±_ 0 _._ 0023 TabM _[†]_ mini 0 _._ 1946 0 _._ 0017 _±_
+NO FT 0 _._ 1717 _±_ 0 _._ 0000  FULL 0 _._ 1703 _±_ 0 _._ 0002  
+split-1
+
+MLP 0 _._ 1814 _±_ 0 _._ 0005 MLP [PLR] 0 _._ 1793 _±_ 0 _._ 0008 MNCA 0 _._ 1815 _±_ 0 _._ 0004 TabM _[†]_ mini 0 _._ 1787 0 _._ 0003 _±_
+NO FT 0 _._ 1776 _±_ 0 _._ 0000  FULL 0 _._ 1764 _±_ 0 _._ 0004  
+split-2
+
+MLP 0 _._ 1778 _±_ 0 _._ 0009 MLP [PLR] 0 _._ 1761 _±_ 0 _._ 0013 MNCA 0 _._ 1787 _±_ 0 _._ 0008 TabM _[†]_ mini 0 _._ 1760 0 _._ 0003 _±_
+NO FT 0 _._ 1718 _±_ 0 _._ 0000  FULL 0 _._ 1736 _±_ 0 _._ 0011  
+split-3
+
+MLP 0 _._ 1810 _±_ 0 _._ 0007 MLP [PLR] 0 _._ 1797 _±_ 0 _._ 0011 MNCA 0 _._ 1828 _±_ 0 _._ 0003 TabM _[†]_ mini 0 _._ 1786 0 _._ 0010 _±_
+NO FT 0 _._ 1766 _±_ 0 _._ 0001  FULL 0 _._ 1761 _±_ 0 _._ 0012  
+split-4
+
+MLP 0 _._ 1781 _±_ 0 _._ 0004 MLP [PLR] 0 _._ 1761 _±_ 0 _._ 0005 MNCA 0 _._ 1783 _±_ 0 _._ 0004 TabM _[†]_ mini 0 _._ 1756 0 _._ 0003 _±_
+NO FT 0 _._ 1729 _±_ 0 _._ 0000  FULL 0 _._ 1729 _±_ 0 _._ 0006  
+
+21
+
+
+homesite-insurance ↑
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 9067 _±_ 0 _._ 0014 MLP [PLR] 0 _._ 9282 _±_ 0 _._ 0019 MNCA 0 _._ 9096 _±_ 0 _._ 0019 TabM _[†]_ mini 0 _._ 9399 0 _._ 0016 _±_
+NO FT 0 _._ 9510 _±_ 0 _._ 0001 FULL 0 _._ 9538 _±_ 0 _._ 0011 
+split-1
+
+MLP 0 _._ 9007 _±_ 0 _._ 0014 MLP [PLR] 0 _._ 9120 _±_ 0 _._ 0035 MNCA 0 _._ 8999 _±_ 0 _._ 0027 TabM _[†]_ mini 0 _._ 9355 0 _._ 0009 _±_
+NO FT 0 _._ 9437 _±_ 0 _._ 0001 FULL 0 _._ 9480 _±_ 0 _._ 0027 
+split-2
+
+MLP 0 _._ 9067 _±_ 0 _._ 0011 MLP [PLR] 0 _._ 8537 _±_ 0 _._ 1013 MNCA 0 _._ 9060 _±_ 0 _._ 0025 TabM _[†]_ mini 0 _._ 9406 0 _._ 0012 _±_
+NO FT 0 _._ 9488 _±_ 0 _._ 0001 FULL 0 _._ 9521 _±_ 0 _._ 0007 
+split-3
+
+MLP 0 _._ 9019 _±_ 0 _._ 0011 MLP [PLR] 0 _._ 9187 _±_ 0 _._ 0021 MNCA 0 _._ 9048 _±_ 0 _._ 0028 TabM _[†]_ mini 0 _._ 9431 0 _._ 0008 _±_
+NO FT 0 _._ 9472 _±_ 0 _._ 0001 FULL 0 _._ 9519 _±_ 0 _._ 0014 
+split-4
+
+MLP 0 _._ 9087 _±_ 0 _._ 0010 MLP [PLR] 0 _._ 9239 _±_ 0 _._ 0026 MNCA 0 _._ 9077 _±_ 0 _._ 0033 TabM _[†]_ mini 0 _._ 9423 0 _._ 0012 _±_
+NO FT 0 _._ 9441 _±_ 0 _._ 0001 FULL 0 _._ 9489 _±_ 0 _._ 0013 
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+cooking-time ↓
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 4893 _±_ 0 _._ 0005 MLP [PLR] 0 _._ 4819 _±_ 0 _._ 0011 MNCA 0 _._ 4887 _±_ 0 _._ 0021 TabM _[†]_ mini 0 _._ 4816 0 _._ 0010 _±_
+NO FT 0 _._ 6283 _±_ 0 _._ 0244  FULL 0 _._ 4860 _±_ 0 _._ 0006  
+split-1
+
+MLP 0 _._ 4950 _±_ 0 _._ 0012 MLP [PLR] 0 _._ 4926 _±_ 0 _._ 0011 MNCA 0 _._ 5010 _±_ 0 _._ 0005 TabM _[†]_ mini 0 _._ 4916 0 _._ 0012 _±_
+NO FT 0 _._ 4958 _±_ 0 _._ 0001  FULL 0 _._ 4938 _±_ 0 _._ 0027  
+split-2
+
+MLP 0 _._ 4927 _±_ 0 _._ 0007 MLP [PLR] 0 _._ 4910 _±_ 0 _._ 0007 MNCA 0 _._ 4957 _±_ 0 _._ 0020 TabM _[†]_ mini 0 _._ 4881 0 _._ 0005 _±_
+NO FT 0 _._ 4867 _±_ 0 _._ 0000  FULL 0 _._ 4861 _±_ 0 _._ 0009  
+split-3
+
+MLP 0 _._ 4967 _±_ 0 _._ 0007 MLP [PLR] 0 _._ 4917 _±_ 0 _._ 0009 MNCA 0 _._ 4981 _±_ 0 _._ 0009 TabM _[†]_ mini 0 _._ 4904 0 _._ 0006 _±_
+NO FT 0 _._ 4889 _±_ 0 _._ 0000  FULL 0 _._ 4886 _±_ 0 _._ 0013  
+split-4
+
+MLP 0 _._ 4972 _±_ 0 _._ 0009 MLP [PLR] 0 _._ 4932 _±_ 0 _._ 0016 MNCA 0 _._ 5009 _±_ 0 _._ 0022 TabM _[†]_ mini 0 _._ 4920 0 _._ 0014 _±_
+NO FT 0 _._ 4903 _±_ 0 _._ 0000  FULL 0 _._ 4894 _±_ 0 _._ 0003  
+
+22
+
+
+homecredit-default ↑
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 7788 _±_ 0 _._ 0037 MLP [PLR] 0 _._ 7721 _±_ 0 _._ 0137 MNCA 0 _._ 7935 _±_ 0 _._ 0062 TabM _[†]_ mini 0 _._ 7774 0 _._ 0081 _±_
+NO FT 0 _._ 7304 _±_ 0 _._ 0011 FULL 0 _._ 7333 _±_ 0 _._ 0137 
+split-1
+
+MLP 0 _._ 7407 _±_ 0 _._ 0021 MLP [PLR] 0 _._ 7543 _±_ 0 _._ 0063 MNCA 0 _._ 7557 _±_ 0 _._ 0032 TabM _[†]_ mini 0 _._ 7629 0 _._ 0043 _±_
+NO FT 0 _._ 7301 _±_ 0 _._ 0012 FULL 0 _._ 7493 _±_ 0 _._ 0073 
+split-2
+
+MLP 0 _._ 7739 _±_ 0 _._ 0047 MLP [PLR] 0 _._ 7761 _±_ 0 _._ 0055 MNCA 0 _._ 7635 _±_ 0 _._ 0051 TabM _[†]_ mini 0 _._ 7785 0 _._ 0020 _±_
+NO FT 0 _._ 7722 _±_ 0 _._ 0005 FULL 0 _._ 7688 _±_ 0 _._ 0028 
+split-3
+
+MLP 0 _._ 7569 _±_ 0 _._ 0035 MLP [PLR] 0 _._ 7694 _±_ 0 _._ 0057 MNCA 0 _._ 7663 _±_ 0 _._ 0048 TabM _[†]_ mini 0 _._ 7726 0 _._ 0040 _±_
+NO FT 0 _._ 6995 _±_ 0 _._ 0013 FULL 0 _._ 7169 _±_ 0 _._ 0169 
+split-4
+
+MLP 0 _._ 7500 _±_ 0 _._ 0023 MLP [PLR] 0 _._ 7561 _±_ 0 _._ 0083 MNCA 0 _._ 7492 _±_ 0 _._ 0081 TabM _[†]_ mini 0 _._ 7820 0 _._ 0071 _±_
+NO FT 0 _._ 7386 _±_ 0 _._ 0003 FULL 0 _._ 7556 _±_ 0 _._ 0193 
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+delivery-eta ↓
+Method Single model Ensemble
+
+
+split-0
+
+MLP 0 _._ 5742 _±_ 0 _._ 0053 MLP [PLR] 0 _._ 5692 _±_ 0 _._ 0017 MNCA 0 _._ 5708 _±_ 0 _._ 0025 TabM _[†]_ mini 0 _._ 5695 0 _._ 0045 _±_
+NO FT 0 _._ 5671 _±_ 0 _._ 0002  FULL 0 _._ 5630 _±_ 0 _._ 0014  
+split-1
+
+MLP 0 _._ 5684 _±_ 0 _._ 0009 MLP [PLR] 0 _._ 5628 _±_ 0 _._ 0024 MNCA 0 _._ 5648 _±_ 0 _._ 0002 TabM _[†]_ mini 0 _._ 5662 0 _._ 0020 _±_
+NO FT 0 _._ 5629 _±_ 0 _._ 0001  FULL 0 _._ 5642 _±_ 0 _._ 0014  
+split-2
+
+MLP 0 _._ 5803 _±_ 0 _._ 0076 MLP [PLR] 0 _._ 5636 _±_ 0 _._ 0020 MNCA 0 _._ 5651 _±_ 0 _._ 0026 TabM _[†]_ mini 0 _._ 5600 0 _._ 0028 _±_
+NO FT 0 _._ 5632 _±_ 0 _._ 0001  FULL 0 _._ 5607 _±_ 0 _._ 0018  
+split-3
+
+MLP 0 _._ 5587 _±_ 0 _._ 0013 MLP [PLR] 0 _._ 5537 _±_ 0 _._ 0012 MNCA 0 _._ 5588 _±_ 0 _._ 0012 TabM _[†]_ mini 0 _._ 5564 0 _._ 0022 _±_
+NO FT 0 _._ 5516 _±_ 0 _._ 0000  FULL 0 _._ 5518 _±_ 0 _._ 0017  
+split-4
+
+MLP 0 _._ 5630 _±_ 0 _._ 0011 MLP [PLR] 0 _._ 5611 _±_ 0 _._ 0015 MNCA 0 _._ 5623 _±_ 0 _._ 0015 TabM _[†]_ mini 0 _._ 5566 0 _._ 0018 _±_
+NO FT 0 _._ 5649 _±_ 0 _._ 0002  FULL 0 _._ 5588 _±_ 0 _._ 0011  
+
+23
+
+
+weather ↓
+Method Single model Ensemble
+
+
+split-0
+
+MLP 1 _._ 7852 _±_ 0 _._ 0068 MLP [PLR] 1 _._ 7235 _±_ 0 _._ 0192 MNCA 1 _._ 7741 _±_ 0 _._ 0111 TabM _[†]_ mini 1 _._ 6804 0 _._ 0049 _±_
+NO FT 1 _._ 7334 _±_ 0 _._ 0004 FULL 1 _._ 6129 _±_ 0 _._ 0095 
+split-1
+
+MLP 1 _._ 6970 _±_ 0 _._ 0082 MLP [PLR] 1 _._ 6389 _±_ 0 _._ 0042 MNCA 1 _._ 6805 _±_ 0 _._ 0079 TabM _[†]_ mini 1 _._ 6167 0 _._ 0028 _±_
+NO FT 1 _._ 7161 _±_ 0 _._ 0003 FULL 1 _._ 6241 _±_ 0 _._ 0105 
+split-2
+
+MLP 1 _._ 6961 _±_ 0 _._ 0098 MLP [PLR] 1 _._ 6355 _±_ 0 _._ 0049 MNCA 1 _._ 6787 _±_ 0 _._ 0032 TabM _[†]_ mini 1 _._ 6164 0 _._ 0049 _±_
+NO FT 1 _._ 7307 _±_ 0 _._ 0005 FULL 1 _._ 6216 _±_ 0 _._ 0110 
+split-3
+
+MLP 1 _._ 6694 _±_ 0 _._ 0042 MLP [PLR] 1 _._ 6098 _±_ 0 _._ 0028 MNCA 1 _._ 6548 _±_ 0 _._ 0047 TabM _[†]_ mini 1 _._ 5806 0 _._ 0061 _±_
+NO FT 1 _._ 7011 _±_ 0 _._ 0010 FULL 1 _._ 5921 _±_ 0 _._ 0111 
+split-4
+
+MLP 1 _._ 7196 _±_ 0 _._ 0064 MLP [PLR] 1 _._ 6567 _±_ 0 _._ 0042 MNCA 1 _._ 6825 _±_ 0 _._ 0038 TabM _[†]_ mini 1 _._ 6213 0 _._ 0062 _±_
+NO FT 1 _._ 7453 _±_ 0 _._ 0014 FULL 1 _._ 6443 _±_ 0 _._ 0029

@@ -1,0 +1,3112 @@
+# A [3] : AN ANALYTICAL LOW-RANK APPROXIMATION FRAMEWORK FOR ATTENTION
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Large language models have demonstrated remarkable performance; however,
+their massive parameter counts make deployment highly expensive. Low-rank
+approximation offers a promising compression solution, yet existing approaches
+have two main limitations: (1) They focus on minimizing the output error of
+individual linear layers, without considering the architectural characteristics of
+Transformers, and (2) they decompose a large weight matrix into two small lowrank matrices. Consequently, these methods often fall short compared to other
+compression techniques like pruning and quantization, and introduce runtime
+overhead such as the extra GEMM kernel launches and memory operations for
+decomposed small matrices. To address these limitations, we propose A [3], a posttraining low-rank approximation framework. A [3] splits a Transformer layer into
+three functional components, namely QK, OV, and MLP. For each component, A [3]
+provides an analytical solution that reduces the hidden dimension size inside each
+component while minimizing the component’s functional loss ( _i.e._, error in attention
+scores, attention outputs, and MLP outputs). This approach directly reduces model
+sizes, KV cache sizes, and FLOPs without introducing any runtime overheads. In
+addition, it provides a new narrative in advancing the optimization problem from
+singular linear layer loss optimization toward improved end-to-end performance.
+Through extensive experiments, we show that A [3] maintains superior performance
+compared to SoTAs. For example, under the same reduction budget in computation
+and memory, our low-rank approximated LLaMA 3.1-70B achieves a perplexity of
+4.69 on WikiText-2, outperforming the previous SoTA’s 7.87 by 3.18. We also show
+versatile applications of A [3], including its use in KV cache compression, integration
+with quantization, fine-tuning and mixed-rank assignments for further performance
+improvements.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have shown exceptional performance in various applications, including language understanding, code completion, and reasoning tasks (Vaswani et al., 2017; Brown
+et al., 2020; Chen et al., 2021a; Wei et al., 2022). However, these models usually contain billions of
+parameters, resulting in high computational costs and memory requirements. Linear layers and the
+attention mechanism contribute significantly to the model size and computational complexity, while
+the KV cache produced during generation further exacerbates the memory burden.
+
+
+Low-rank approximation is a promising technique that breaks down a matrix into smaller sub-matrices,
+directly reducing computational complexity and memory usage without the need of additional
+specialized hardware support. Usually a trained linear layer _**W**_ _∈_ R _[m][×][n]_ is approximated by
+_**W**_ - _r_ = _**A**_ _r_ _**B**_ _r_, where _**A**_ _r_ _∈_ R _[m][×][r]_ and _**B**_ _r_ _∈_ R _[r][×][n]_ are two rank- _r_ matrices with _r_ _≪_ _m, n_ . At
+inference time, the original GEMM operation _**XW**_ is replaced by two smaller GEMM operations
+_**XA**_ _r_ and ( _**XA**_ _r_ ) _**B**_ _r_ . The challenge is to construct the optimal _**A**_ _r_ and _**B**_ _r_ that maintains the
+end-to-end model performance. Recent studies show that minimizing the layer output error instead of
+the weight error gives better model performance (Zhang et al., 2024a;b; Mozaffari & Dehnavi, 2024),
+thus various activation-aware methods have been proposed, such as SVD-LLM (Wang et al., 2024),
+
+
+1Shared first authorship. Alphabetical by last name.
+
+
+1
+
+
+Note that there is a head dimension _d_ vo shared by _**V**_ _i_ and _**W**_ - _,i_ . In practice, _**W**_ - _,i_ are usually
+
+                   -                    - _T_
+concatenated as a single linear layer, _**W**_ _o_ = _**W**_ _o,_ _[T]_ 1 _[,]_ _**[ W]**_ _o,_ _[ T]_ 2 _[, . . .,]_ _**[ W]**_ _o,h_ _[ T]_ q .
+
+
+The classic MLP in a Transformer has two linear layers with a ReLU activation function in between:
+
+
+_**X**_ d = ReLU( _**X**_ mlp _**W**_ u) _,_ _**Y**_ mlp = _**X**_ d _**W**_ d _._ (3)
+
+_**W**_ u and _**W**_ d scale the input dimension _d_ m to the intermediate dimension _d_ inter and back to _d_ m.
+
+
+Following the vanilla MHA, numerous Transformer variants have been proposed (Ainslie et al., 2023;
+Shazeer, 2019; Liu et al., 2024). In recent models, the 2-layer MLP is usually replaced with a 3-layer
+variant (Shazeer, 2020):
+
+
+_**Y**_ g = _**X**_ mlp _**W**_ g _,_ _**Y**_ u = _**X**_ mlp _**W**_ u _,_ _**X**_ d = SiLU( _**Y**_ g) _⊗_ _**Y**_ u _,_ _**Y**_ mlp = _**X**_ d _**W**_ d _,_ (4)
+
+
+2
+
+
+ASVD (Yuan et al., 2023), FWSVD (Hsu et al., 2022). However, these methods usually target general
+linear layers, which save FLOPs and memory proportional to _[m]_ _mn_ [+] _[n]_ _[r]_ [ (Note that] _[m]_ _mn_ [+] _[n]_ _[r]_ _[< r]_ [ for any]
+
+_m, n >_ 2). Moreover, these methods rarely consider the architectural characteristics of Transformer,
+and suffer from severe performance degradation when compared to pruning and quantization.
+
+
+To address these limitations, we propose A [3], a new analytical framework for post-training low-rank
+approximation. A [3] splits the Transformer architecture into three functional components: query-key
+(QK) component, output-value (OV) component, and multi-layer perceptron (MLP) component, and
+minimizes the functional loss of each component. This three-part decomposition is inspired by the
+mechanistic interoperability of the Transformer architecture (Elhage et al., 2021), allowing a close
+alignment of local optimization goals with the overall end-to-end model performance.
+
+
+We highlight the following contributions of A [3] :
+
+
+    - We propose a three-part low-rank approximation setup for multi-head attention (MHA),
+which formulates the problem as three separate objectives: minimizing the functional loss
+of (1) QK’s attention score, (2) OV’s attention output, and (3) MLP’s layer output.
+
+    - We derive closed-form solutions for the three objectives, which reduces the hidden dimensions shared within each component: QK head dimension, OV head dimension, and MLP
+intermediate size. This naturally reduces model sizes, KV cache sizes, FLOPs, and avoids
+runtime overheads like extra GEMM operations. Moreover, A [3] trims both FLOPs/memory
+and information energy proportionally to the rank _r_, enabling a more effective trade-off
+between model performance and hardware efficiency.
+
+    - We have adapted A [3] for use with diverse Transformer architectures, including group query
+attention (GQA) and rotary position embedding (RoPE), which allows the application of
+A [3] across a broad spectrum of models. This overcomes the limitation of existing low-rank
+approximation methods, which can only be applied on the vanilla MHA architecture.
+
+    - We conduct extensive experiments on various LLMs, and show that A [3] outperforms SoTA
+low-rank methods by a significant margin. For example, our compressed LLaMA 3.1-70B
+achieves a perplexity of 4.69 on WikiText-2, outperforming SoTA method’s 7.87 by 3.18. We
+also demonstrate further applications of A [3], such as its effectiveness in KV cache reduction,
+combination with quantization, and mixed-rank assignments for better performance.
+
+
+2 RELATED WORK
+
+
+**Transformer and its variants** The attention layer and the multi-layer perceptron layer (MLP) are
+two main modules of the Transformer architecture. In vanilla multi-head attention (MHA) (Vaswani
+et al., 2017), QK component computes the attention scores as follows:
+
+_**A**_ _[′]_ _i_ [= row][_][softmax(] _**[A]**_ _[i][/]_     - _d_ qk) = row_softmax( _**Q**_ _i_ _**K**_ _i_ _[T]_ _[/]_     - _d_ qk) _._ (1)
+where _**A**_ _i_ is the pre-softmax attention score of _i_ -th head, and _d_ qk is the head dimension shared by
+_**Q**_ _i_ and _**K**_ _i_ . The post-softmax attention score is then multiplied with the value and summed over all
+heads to form the attention output:
+
+
+_**O**_ =
+
+
+_h_ q
+
+- _**A**_ _[′]_ _i_ _**[V]**_ _[i]_ _**[W]**_ [o] _[,i]_ _[.]_ (2)
+
+
+_i_
+
+
+Interestingly, there are several works proposing or leveraging the solution in Equation (8) for
+various applications. DRONE (Chen et al., 2021b) and SVD-LLM (Wang et al., 2024) directly
+apply the solution to approximate all linear layers in Transformers. QERA (Zhang et al., 2024b)
+uses it to build high-precision low-rank terms to compensate for output quantization error, while
+
+
+3
+
+
+Figure 1: High-level overview of A [3] . A [3] performs a low-rank approximation on each QK, OV, and
+MLP component, reducing the head dimensions in QK and OV, and the intermediate dimension in
+MLP.
+
+
+where _⊗_ denotes element-wise multiplication. _**W**_ u and _**W**_ g upscale the input dimension _d_ m to _d_ inter
+and _**W**_ d downscale it back to _d_ m. Group query attention (GQA) (Ainslie et al., 2023) is another
+widely adopted variant sharing a reduced number of key and value heads among groups of query
+heads. Besides, many LLMs adopt rotary positional embedding (RoPE) (Su et al., 2024).
+
+
+Inspired by (Elhage et al., 2021), we split the Transformer layer into three key components: QK
+(Equation (1)), OV (Equation (2)), and MLP (Equation (3)). We highlight that there are three hidden
+dimensions, the two head dimensions _d_ qk and _d_ vo, and one MLP intermediate size _d_ inter, shared within
+each component but reduced inside the component, while the inter-Transformer layer dimensions are
+kept at _d_ m. Accordingly, as shown in Figure 1, our method A [3] consists of three parts, A [3] -QK, A [3] -OV,
+and A [3] -MLP, to compresses the three hidden dimensions.
+
+
+**Low-rank approximation for compressing Transformers** The linear layer takes a simple form but
+contributes most parameters to Transformer. For compressing large Transformer models like LLMs,
+low-rank approximation has been widely studied (Chen et al., 2021b; Saha et al., 2024). Usually a
+trained linear layer _**W**_ _∈_ R _[m][×][n]_ is approximated by _**W**_ _≈_ _**W**_ [�] _r_ = _**A**_ _r_ _**B**_ _r_, where _**A**_ _r_ _∈_ R _[m][×][r]_ and
+_**B**_ _r_ _∈_ R _[r][×][n]_ are two rank- _r_ matrices that effectively reduce the number of parameters and FLOPs
+with a small enough _r_ . The problem is how to find the optimized _**A**_ _r_ and _**B**_ _r_ that maintains the model
+performance. If the objective is to minimize the Frobenius (or spectral) norm of the weight error,
+
+
+argmin _**W**_           - _r_ _[∥]_ _**[W]**_ _[−]_ _**W**_ [�] _r∥_ [2] _F_ s.t. rank( _**W**_ [�] _r_ ) = _r_ _,_ (5)
+
+
+according to Eckart-Young theorem (Eckart & Young, 1936a), the optimal solution is to perform
+truncated singular value decomposition (SVD) on the weight matrix _**W**_ .
+
+
+_**W**_ = _**U**_ **Σ** _**V**_ _[T]_ _,_ _**W**_     - _r_ = SVD _r_ ( _**W**_ ) = _**U**_ : _,_ : _r_ **Σ** : _k,_ : _r_ _**V**_ : _r,_ _[T]_ : _[,]_ (6)
+
+
+where _**U**_ _∈_ R _[m][×][k]_ and _**V**_ _∈_ R _[k][×][n]_ are the left and right singular vectors and **Σ** _∈_ R _[k][×][k]_ is the
+diagonal matrix of singular values. Recent studies show that minimizing the layer output error instead
+of the weight error gives better end-to-end model performance (Zhang et al., 2024a;b),
+
+
+argmin _**W**_          - _r_ _[∥]_ _**[XW]**_ _[−]_ _**[X]**_ [ �] _**W**_ _k∥_ [2] 2 s.t. rank( _**W**_ [�] _k_ ) = _r_ _,_ (7)
+
+
+where _**X**_ _∈_ R _[l][×][d]_ denotes the activation of _**W**_ . The objective above minimizes the expected _l_ 2-norm
+of layer output error. Recent studies find the optimal solution is:
+
+
+1
+
+_**W**_ - _k_ = ( _**R**_ XX2 [)] _[−]_ [1][SVD] _[r]_ [(] _**[R]**_
+
+
+1
+XX2 _**[W]**_ [ )] _[,]_ (8)
+
+
+[1] _l_ _**[X]**_ _[T]_ _**[ X]**_ [is the autocorrelation matrix with respect]
+
+
+assuming _**R**_ XX is positive definite, where _**R**_ XX = [1] _l_
+
+
+to _**X**_, and _**R**_
+
+
+1
+2
+XX [denotes the unique symmetric square root of] _**[ R]**_ [XX][.]
+
+
+_where_ SVD _r_ ( _·_ ) _denotes the truncated SVD operator._
+
+
+4
+
+
+CALDERA (Saha et al., 2024) further proposes iterative methods to quantize the low-rank terms,
+achieving performant sub-2.5-bit post-training quantization. Palu (Chang et al., 2024) reduces KV
+cache size by decomposing key and value weight matrices with the solution and caching smaller
+intermediate activations instead of original keys and values. ESPACE (Sakr & Khailany, 2024)
+extends the base _L_ 2 objective by incorporating outlier, gradient information, and per-layer selection
+of the calibration strategy to maximize fine-tuning accuracy recovery. SLiM (Mozaffari & Dehnavi,
+2024) and Oats (Zhang & Papyan, 2024) incorporate sparsity with low-rank to achieve an overall
+compression gain. Beyond low-rank methods, quantization techniques such as Quarot (Ashkboos
+et al., 2024), AWQ (Lin et al., 2024), GPTQ (Frantar et al., 2022) and HQQ Badri & Shaji (2023) are
+also widely used for model compression, and they are often compatible with low-rank approaches for
+multiplicative gains such as Palu, SLiM and QERA. We show that A [3] can also be effectively combined
+with quantization @Reviewer gBeN and creates a continuous spectrum of compression levels between
+discrete quantization points, yielding a way better Pareto frontier at extreme compression.
+
+
+However, these works target general linear layers and minimize the linear layer output error without
+considering architectural characteristics. In this work, we step forward to the optimization for
+functional components. We propose analytical low-rank approximation methods of compressing
+the QK, OV, and MLP components that minimize the functional errors of attention scores, attention
+outputs, and MLP outputs, respectively.
+
+
+3 THE A [3] FRAMEWORK
+
+
+In this section, for each component (QK, OV, MLP), we define the problem (optimization objectives),
+clarify the assumptions if any, and propose our analytical solutions. The proof for each lemma
+and theorem is provided in the Appendix. We also provide notation tables in Tables 4 and 5 in the
+appendix for the ease of reading.
+
+
+3.1 A [3] -QK
+
+
+In the QK component, each head computes its pre-softmax attention scores between queries and keys:
+
+_**A**_ _i_ = _**Q**_ _i_ _**K**_ _i_ _[T]_ [=] _**[ XW]**_ [q] _[,i]_ _**[W]**_ _[ T]_ k _,i_ _**[X]**_ _[T]_ [=] _**[ XW]**_ [qk] _[,i]_ _**[X]**_ _[T]_ _[,]_ (9)
+
+where _**X**_ q _∈_ R _[l]_ [q] _[×][d]_ [m] _,_ _**X**_ kv _∈_ R _[l]_ [kv] _[×][d]_ [m] are the input of query layer and key/value layer respectively,
+and _**W**_ qk _,i_ := _**W**_ q _,i_ _**W**_ k _[T]_ _,i_ [denotes the fused weight matrix of the] _[ i]_ [-th head.] [We seek for the low-rank]
+approximation of _**W**_ qk _,i_ that minimizes the error of pre-softmax attention scores.
+**Problem 1** (Minimization of the pre-softmax attention score error) **.** Given a pretrained Transformer
+layer, for the _i_ -th head of QK component _**A**_ _i_ = _**X**_ q _**W**_ qk _,i_ _**X**_ kv _T_ and its rank- _r_ approximated form
+_**A**_ - _i_ = _**X**_ q _**W**_ [�] qk _,i_ _**X**_ kv _T_, approximating the head by minimizing the error between _**A**_ _i_ and _**A**_ - _i_ on a
+calibration set:
+
+argmin _**W**_ �qk _,i_ _[∥]_ _**[X]**_ [q][(] _**[W]**_ [qk] _[,i][ −]_ _**W**_ [�] qk _,i_ ) _**X**_ kv _T ∥_ 2 _F_ s.t. rank( _**W**_ [�] qk _,i_ ) = _r_ _,_ (10)
+
+
+where _**X**_ q _∈_ R _[l]_ [q] _[×][d]_ [m] and _**X**_ kv _∈_ R _[l]_ [kv] _[×][d]_ [m] denote the inputs for query and key/value projections, which
+can also be considered as the calibration set when _l_ q and _l_ kv are sufficiently large.
+**Lemma 1** (Equivalent form of Problem 1) **.** _The objective in Problem 1 is equivalent to:_
+
+
+1
+X2 _kv_ X _kv_ _[∥]_ _F_ [2] _[,]_ (11)
+
+
+argmin
+_**W**_   - _qk,i_ _[∥]_ _**[R]**_
+
+
+1
+X2 _q_ X _q_ [(] _**[W]**_ _[qk][,i][ −]_ _**W**_ [�] _qk,i_ ) _**R**_
+
+
+_l_ [1] _q_ _**[X]**_ _[q]_ _T_ _**X**_ _q and_ _**R**_ X _kv_ X _kv_ := _l_ 1 _kv_ _**[X]**_ _[kv]_ _T_ _**X**_ _kv are the autocorrelation matrices of the query_
+
+
+_where_ _**R**_ X _q_ X _q_ := _l_ [1]
+
+
+1 1
+
+_and_ _key/value_ _calibration_ _activations_ _respectively,_ _and_ _**R**_ X2 _q_ X _q_ _[,]_ _**[R]**_ X2 _kv_ X _kv_ _[denote]_ _[the]_ _[corresponding]_
+
+_unique symmetric matrix square roots._
+
+
+_and_ _key/value_ _calibration_ _activations_ _respectively,_ _and_ _**R**_
+
+
+1
+X2 _q_ X _q_ _[,]_ _**[R]**_
+
+
+The complete derivation of Lemma 1 is given in Section B.1.1.
+**Theorem 2** (A [3] -QK for MHA-NoPE) **.** _The optimal solution to Problem 1 is_
+
+
+1
+2
+X _q_ X _q_ _**[W]**_ _[qk][,i]_ _**[R]**_
+
+
+1
+2
+X _kv_ X _kv_
+
+
+- _−_ 1
+_,_ (12)
+
+
+- _−_ 1 SVD _r_ _**R**_
+
+
+   _**W**_ - _qk,i_ = _**R**_
+
+
+1
+2
+X _q_ X _q_
+
+
+��
+_**R**_
+
+
+1
+2
+X _kv_ X _kv_
+
+
+to get the approximated value and output weights of head- _i_ with a smaller head dimension _r_ _< d_ vo.
+
+
+3.3 A [3] -MLP
+
+
+The non-linear activation function in MLP component prohibits us from directly applying SVD.
+Instead, we first derive an objective for minimizing the MLP output error, and uses CUR decomposition (Mahoney & Drineas, 2009) to find the low-rank form of MLP weights.
+
+
+5
+
+
+The proof of Theorem 2 is given in Appendix B.1.2. In practice, we apply Theorem 2 to all pairs of
+QK heads ( _i_ = 1 _, . . ., h_ q), and assign
+
+
+1
+2
+XkvXkv
+
+
+- _−_ 1 _**U**_ : _,_ : _k,_ _**W**_ �k _[T]_ _,i_ [:=] **[ Σ]** [:] _[k,]_ [:] _[k]_ _**[V]**_ : _k,_ _[T]_ : - _**R**_
+
+
+- _−_ 1
+_,_ (13)
+
+
+   _**W**_ �q _,i_ := _**R**_
+
+
+1
+2
+XqXq
+
+
+where _**U**_ : _,_ : _k_, **Σ** : _k,_ : _k_, and _**V**_ : _k,_ _[T]_ : [are the truncated SVD components given by Theorem 2.] [This gives]
+approximated query and key weights with a new smaller head dimension _r_ _< d_ qk. Note that though
+Theorem 2 is performed on each head separately, the low-rank head weights can still be concatenated
+together and implemented as a single linear layer.
+
+
+3.2 A [3] -OV
+
+
+Expand the summation over all OV head outputs in Equation (2). The matrix form of the attention
+layer output _**O**_ _∈_ R _[l]_ [q] _[×][d]_ [m] can be expressed as
+
+
+_h_ q
+
+- **P** _i_ _**W**_ vo _,i_ _,_ (14)
+
+
+_i_ =1
+
+
+_h_ q
+
+- _**A**_ _[′]_ _i_ _**[X]**_ [kv] _**[W]**_ [v] _[,i]_ _**[W]**_ [o] _i_ [=]
+
+_i_ =1
+
+
+_h_ q
+
+
+_**O**_ =
+
+
+_h_ q
+
+- _**O**_ _i_ =
+
+
+_i_ =1
+
+
+_h_ q
+
+
+where _**P**_ _i_ := _**A**_ _[′]_ _i_ _**[X]**_ [kv] _[∈]_ [R] _[l]_ [q] _[×][d]_ [m] [is the product between post-softmax attention score and the input]
+matrix of key/value layer, and _**W**_ vo _,i_ := _**W**_ v _,i_ _**W**_ - _i_ _∈_ R _[d]_ [m] _[×][d]_ [m] denotes the fused weight matrix of
+the _i_ -th head. Now each term _**O**_ _i_ takes the form of a linear layer _**O**_ _i_ = _**P**_ _i_ _**W**_ vo _,i_ . If _**O**_ [�] _i_ = _**P**_ _i_ _**W**_ [�] vo _,i_
+denotes the approximated _**O**_ _i_, the upper bound of the attention output error can be derived as follows:
+
+
+_h_ q
+�( _**O**_ _i −_ _**O**_ [�] _i_ ) _∥_ [2] 2 _[≤]_
+
+_i_ =1
+
+
+_h_ q
+
+
+_h_ q
+
+- _∥_ _**O**_ _i −_ _**O**_ [�] _i∥_ [2] 2 _[.]_ (15)
+
+_i_ =1
+
+
+_∥_ _**O**_ _−_ _**O**_ [�] _∥_ [2] 2 [=] _[ ∥]_
+
+
+Though _∥_ _**O**_ _−_ _**O**_ [�] _∥_ [2] 2 [can be directly minimized via matrix stacking and truncated SVD, its closed-form]
+solution incurs a higher computational cost, as elaborated in Section B.2.3. Here, we treat minimizing
+each error term _∥_ _**O**_ _i −_ _**O**_ [�] _i∥_ [2] 2 [as an independent problem.] [Thus the optimal solution to] _**W**_ [�] vo _,i_ is already
+given by Equation (8).
+
+
+**Problem 2** (Minimization of per-head attention output error) **.** Given a pretrained Transformer layer,
+for the _i_ -th head of OV component _**O**_ _i_ = _**P**_ _i_ _**W**_ vo _,i_ and its approximated form _**O**_ [�] _i_ = _**P**_ _i_ _**W**_ [�] vo _,i_,
+approximating the head by minimizing the head output error is to minimize the following loss:
+
+
+argmin _**W**_ �vo _,i_ _[∥]_ _**[P]**_ _[i]_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _∥_ [2] _F_ s.t. rank( _**W**_ [�] vo _,i_ ) = _r_ _._ (16)
+
+
+**Theorem 3** (A [3] -OV for MHA-NoPE) **.** _The optimal solution to Problem 2 is_
+
+
+_**W**_ - _vo,i_ = - _**R**_ X12 _**p**_ _i_ X _**p**_ _i_
+
+
+- _−_ 1 SVD _r_ ( _**R**_ X12 _**p**_ _i_ X _**p**_ _i_ _**[W]**_ _[vo][,i]_ [)] _[,]_ (17)
+
+
+1
+
+1 2
+_where_ _**R**_ X _**p**_ _i_ X _**p**_ _i_ = _lq_ _**[P]**_ _[ T]_ _i_ _**[P]**_ _[i]_ _[is]_ _[the]_ _[autocorrelation]_ _[matrix]_ _[of]_ _**[P]**_ _[i]_ _[and]_ _**[R]**_ X _**p**_ _i_ X _**p**_ _i_ _[denotes]_ _[its]_ _[unique]_
+
+_symmetric matrix square root._
+
+
+Similar to QK component, in practice we assign
+
+
+1
+2
+X _**p**_ _i_ X _**p**_ _i_
+
+
+- _−_ 1 _**U**_ : _,_ : _k,_ _**W**_ �vo _,i_ := **Σ** : _k,_ : _k_ _**V**_ : _k,_ _[T]_ : - _**R**_
+
+
+- _−_ 1
+_,_
+
+
+   _**W**_ �v _,i_ := _**R**_
+
+
+1
+2
+X _**p**_ _i_ X _**p**_ _i_
+
+
+to build the _i_ -th head’s approximated query weights _**W**_ [�] q _,i_ and the shared head key weights _**W**_ [�] k,shared.
+The subscript with colons, _e.g._, **Σ** : _r_ : _r_, denotes array slicing. Similarly, we can apply joint SVD to the
+OV component by concatenating the scaled error matrices along the column dimension. A detailed
+description can be found in Section B.4.
+
+
+6
+
+
+**Problem 3** (Minimization of MLP output error) **.** Given a pretrained down projection layer _**Y**_ mlp =
+_**X**_ d _**W**_ d in MLP and its approximated low-rank form _**Y**_ [�] mlp = _**X**_ [�] d _**W**_ [�] d = _**X**_ d _**UW**_ d, minimizing the
+MLP output error is to minimize the following loss:
+argmin _**U**_ =diag( _u_ 1 _,u_ 2 _,...,ud_ inter ) _∥_ _**X**_ d _**UW**_ d _−_ _**X**_ d _**W**_ d _∥_ [2] _F_ s.t. rank( _**U**_ ) = _r_ _,_ (18)
+
+where _**X**_ d _∈_ R _[l]_ [down] _[×][d]_ [inter] is the matrix of intermediate activation vectors, and _**U**_ _∈_ R _[d]_ [inter] _[×][d]_ [inter] is a
+diagonal matrix determining which _r_ columns of _**W**_ d to keep.
+**Lemma 4** (Equivalent form of Problem 3) **.** _The objective in Problem 3 is equivalent to the following_
+_error on the calibration dataset:_
+
+
+argmin _**U**_ =diag( _u_ 1 _,u_ 2 _,...,udinter_ ) _∥_ _**R**_
+
+
+1 1
+X2 _d_ X _d_ _**[UW]**_ _[d][ −]_ _**[R]**_ X2 _d_ X _d_ _**[W]**_ _[d][∥]_ _F_ [2] _s.t._ _rank_ ( _**U**_ ) = _r_ _,_ (19)
+
+
+1 _T_
+_where_ _**R**_ X _d_ X _d_ := _ldown_ _**[X]**_ _[d]_ _**X**_ _d_ _is the autocorrelation matrix of the calibration set_ _**X**_ _d._
+
+
+The derivation of Lemma 4 is in Section B.3.1. This CUR approximation is a well-studied NP-hard
+problem, and various CUR methods have been proposed (Boutsidis & Woodruff, 2014; Drineas et al.,
+2006). We thus pick a simple but effective solution from Drineas et al. (2006) and name this approach
+A [3] -MLP.
+
+
+Following Drineas et al. (2006), we build _**U**_ by sorting the F-norm of the outer product between the
+
+1
+
+coloumns of _**R**_ X2dXd [and the rows of] _**[ W]**_ [d][:]
+
+_λi_ = _∥_ _**r**_ _i_ _[T]_ _**[w]**_ _[i][∥]_ _F_ [2] [=] _[ ∥]_ _**[r]**_ _[i][∥]_ 2 [2] _[· ∥]_ _**[w]**_ _[i][∥]_ 2 [2] _[,]_ (20)
+
+1
+
+where _**r**_ _i_ is the _i_ -th column of _**R**_ X2dXd [and] _**[ w]**_ _[i]_ [is the] _[ i]_ [-th row of] _**[ W]**_ [d][.] [Then] _**[ U]**_ [is built by selecting the]
+
+indexes that gives the top- _r λi_ :
+
+1
+_**U**_ = diag( _u_ 1 _, u_ 2 _, . . ., ud_ inter ) where _ui_ = _rλi_ if _i ∈_ top- _r_ ( _λi_ ) else 0 _._ (21)
+
+In practice, we compute _λi_ for all _i_ = 1 _, . . ., d_ inter. Then we select the _r_ rows of _**W**_ d that has _r_
+largest non-zero _λi_ to form _**W**_ [�] d _∈_ R _[r][×][d]_ [m] . Accordingly, _**W**_ [�] u _,_ _**W**_ [�] g _∈_ R _[d]_ [m] _[×][r]_ are formed by selecting
+the corresponding columns of _**W**_ u and _**W**_ g respectively.
+
+
+Note that most related works, _e.g._, the ones introduced in Section 2, target general linear layers and
+replace a weight matrix with two low-rank matrices _**XW**_ _≈_ ( _**XA**_ _r_ ) _**B**_ _r_, which introduces one more
+GEMM operation per linear layer at inference time. In contrast, _all of our three solutions only reduce_
+_the hidden dimensions of the components (hq, dvo, and dinter), resulting in the same number of GEMM_
+_operations with smaller problem sizes._ _This naturally enables reduced model sizes, saved the FLOPs_
+_of both linear layers and attention, compressed KV cache, without introducing any runtime overhead._
+
+
+3.4 ADAPTING A [3] FOR GQA AND ROPE
+
+
+Our A [3] -QK and A [3] -OV described above is for standard MHA. In this subsection, we extend A [3] for
+GQA and RoPE, enabling a wider range of applicable models.
+
+
+**Joint** **SVD** **for** **GQA** **(A** **[3]** **-QK** **and** **A** **[3]** **-OV** **for** **GQA-NoPE)** In GQA, a key head is shared with
+multiples query heads in the same QK group. This grouping prevents us from applying Theorem 2
+to each QK head independently. Inspired by (Ji et al., 2025), we first concatenate the scaled error
+matrices in Equation (12) within the same QK group and apply joint SVD:
+
+
+
+
+
+
+
+
+_**R**_
+
+
+
+
+
+
+
+
+1 1
+2 2
+XqXq _**[W]**_ [qk] _[,]_ [1] _**[R]**_ XkvXkv
+
+...
+
+
+1
+2
+XqXq _**[W]**_ [qk] _[,g]_ _**[R]**_
+
+
+SVD
+
+
+
+
+
+
+
+1
+2
+XkvXkv
+
+
+ _[T]_ _[,]_ (22)
+
+ [=] _[ U]_ [Σ] _[V]_
+
+
+ _[T]_ _[,]_ (22)
+ [=] _[ U]_ [Σ] _[V]_
+
+
+_**R**_
+
+
+where _g_ := _⌊h_ q _/h_ kv _⌋_ is the number of query heads in this group. Then for this group, we assign
+
+
+1
+2
+XkvXkv
+
+
+1
+
+_**W**_ �qk _,i_ := _**R**_ X2qXq
+
+
+_−_ 1 _Uid_ m:( _i_ +1) _d_ m _,_ : _r_ _,_ _**W**_ �k, shared := **Σ** : _r,_ : _rV_ : _[T]_ _r,_ : _d_ m - _**R**_
+
+
+- _−_ 1
+_,_ (23)
+
+
+argmin _**U**_ =diag( _u_ 1 _,u_ 2 _,...,ud_ qk ) _∥_ _**LUR**_ _−_ _**LR**_ _∥_ [2] _F_ s.t. rank( _**U**_ ) = _r_ _,_ (25)
+
+Instead of sorting by the product of _l_ 2-norm, _i.e._, _λi_ = _∥_ _**L**_ : _, i∥_ [2] 2 _[· ∥]_ _**[R]**_ _[i,]_ [ :] _[∥]_ 2 [2][, for] _[ i]_ [ = 0] _[,]_ [ 1] _[, . . ., d]_ [qk] _[−]_ [1][,]
+we sort by the sum of _λi_ of adjacent pairs (Check Section B.5). This will drop pairs of less important
+columns in _**L**_ and rows in _**R**_, as well as the corresponding pairs of RoPE frequencies. Our adaptation
+for RoPE can be combined with the joint SVD for GQA, allowing A [3] to be applied to various models.
+The evaluation in Section 4 includes standard MHA, MHA with RoPE, and GQA with RoPE.
+
+
+4 EXPERIMENTS
+
+
+**Baselines** We compare A [3] against a range of baselines, including vanilla low-rank approximation
+using SVD and weight-magnitude-based column/row pruning, as well as SoTA approaches, including
+FWSVD (Hsu et al., 2022), ASVD (Yuan et al., 2023), SVD-LLM (Wang et al., 2024), SVD-LLM
+v2 (Wang et al., 2024), Palu (Chang et al., 2024), Wanda (Sun et al., 2023), and CLOVER (Meng et al.,
+2025). However, only several baselines support approximating all the three components (QK, OV,
+MLP), including SVD, FWSVD, ASVD, SVD-LLM, and SVD-LLM-v2. We conduct a comprehensive
+comparison against these methods. For other baselines, we align the components to approximate and
+present results in the ablation study. @Reviewer n81d We define the compression ratio based on
+parameter count to ensure consistent comparison across all baselines. Unless otherwise specified, all
+subsequent experiments are conducted under this matched-compression setup.
+
+
+**Models and benchmarks** Our evaluation covers vanilla Transformer and its variants, including
+MHA without RoPE, denoted as MHA-NoPE, (MPT (Team et al., 2023)), MHA-RoPE (LLaMA
+1&2 (Touvron et al., 2023a;b)), and GQA-RoPE (LLaMA 3.1 (Grattafiori et al., 2024), Phi 3 (Abdin
+et al., 2024)). We evaluate on pretraining tasks (WikiText-2 (Merity et al., 2016), C4 (Raffel et al.,
+2020), and SlimPajama (Shen et al., 2023)) using SVD-LLM’s perplexity evaluation code snippet, and
+downstream tasks (ARC-Challenge, BoolQ, Winogrande, GSM8K (strict match), and MMLU) using
+lm-eval-harness (Gao et al., 2024). All experiments are post-training low-rank approximation
+_without fine-tuning_ . We use 128 random 2048-token sequences from SlimPajama for all evaluations,
+except in Figure 2, where we calibrate on WikiText2 to match SVD-LLM’s setup (see Section C for
+details).
+
+
+4.1 MAIN RESULTS
+
+
+This section presents the main evaluation results where we compare A [3] against all the baselines that
+can be applied to all of the three main components (QK, OV, MLP) in Transformer. We first simply
+evaluate on LLaMA-7B and eliminate less promising baselines, then conduct a comprehensive evaluation on more models and tasks. Lastly, we present profiling results to highlight A [3] ’s improvement
+on hardware efficiency.
+
+
+**Preliminary experiments** We first apply plain SVD, FWSVD, SVD-LLM, and A [3] on LLaMA-7B
+with 20%, 40%, and 60% compression ratios and compare the perplexity (PPL _↓_ ) results on WikiText2 to find the most promising baselines. As shown in Figure 2, SVD-LLM and A [3] achieve perplexities
+smaller than others by two to three orders of magnitude. We thus conduct further experiments on
+SVD-LLM and A [3] .
+
+
+7
+
+
+**CUR Approximation for MHA with RoPE (A** **[3]** **-QK for RoPE)** Recent works have shown that
+not all RoPE frequencies are helpful for the model performance (Barbero et al., 2024; Ji et al.,
+2025). These findings motivate our adaptation of A [3] -QK for attention with RoPE. RoPE inserts a
+position-dependent operation before the dot product between queries and keys:
+
+RoPE( _**q**_ q _,i, m,_ _**k**_ k _,i, n_ ) = _**q**_ q _,i_ **Φ** _m_ **Φ** _[T]_ _n_ _**[k]**_ [k] _[,i]_ _T_ _,_ (24)
+
+where _m_ and _n_ are the position indexes of _**q**_ q _,i_ and _**k**_ k _,i_, **Φ** _m,_ **Φ** _n_ _∈_ R _[d]_ [qk] _[×][d]_ [qk] are matrices rotating
+adjacent pairs of query elements and key elements. To deal with these pairwise rotations, we use
+CUR approximation to solve the problem in Lemma 1. Similar to A [3] -MLP, we seek for a rank- _r_ CUR
+
+1 1
+
+approximation of ( _**R**_ 2 _**[W]**_ [q] _[,i]_ [)(] _**[W]**_ _[ T]_ _**[R]**_ 2 [)][ that extracts the most important head dimensions as]
+
+
+1
+2
+XqXq _**[W]**_ [q] _[,i]_ [)(] _**[W]**_ k _[ T]_ _,i_ _**[R]**_
+
+
+1
+2
+XkvXkv [)][ that extracts the most important head dimensions as]
+
+
+1
+
+well as RoPE frequencies. Assign _**L**_ := _**R**_ X2qXq _**[W]**_ [q] _[,i]_ [and] _**[ R]**_ [ =] _**[ W]**_ k _[ T]_ _,i_ _**[R]**_
+
+
+1
+2
+XkvXkv [, the objective is]
+
+
+|Col1|Col2|Col3|%|
+|---|---|---|---|
+|||||
+|||||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+
+
+We conduct ablation studies to evaluate A [3] ’s impact on individual components (QK, OV, MLP). We
+also include baselines that can be applied to the target components to show A [3] ’s advantage.
+
+
+**Attention without RoPE** Theorem 2 (A [3] -QK) and Theorem 3 (A [3] -OV) provide optimal solutions
+for MHA-NoPE’s QK and OV components without the need of adaptation. We evaluate the increased
+perplexity (∆PPL _↓_ ) of A [3] -QK and A [3] -OV on MPT-7B (MHA-NoPE) in Figure 4a, comparing against
+CLOVER (Meng et al., 2025) and Palu (Chang et al., 2024), with compression ratio=20%. CLOVER is
+equivalent to A [3] -QK but assumes _**R**_ XqXq and _**R**_ XkvXkv are identity matrices (no activation information).
+The bars are grouped by the component being approximated (QK, OV). We add two bars representing
+simplified version A [3] -QK in the QK group, A [3] -Q-only and A [3] -K-only. A [3] -Q-only (K-only) replaces
+the autocorrelation matrix of key (query) in Equation (12) with an identity matrix. We also add a
+simplified version A [3] -OV in the OV group, A [3] -Xkv, which replaces the autocorrelation matrix of
+_**p**_ _i_ in Equation (17) with the autocorrelation matrix of _**x**_ kv. The auto-correlation matrices of these
+simplified versions of A [3] are cheaper to calibrate. We observe that A [3] -QK-SVD and A [3] -OV-SVD and
+their simplified versions outperform CLOVER and Palu by a clear margin.
+
+
+8
+
+
+SVD FWSVD SVD-LLM A [3]
+
+
+**Pretraining tasks and downstream tasks** In Table 1,
+we include more models to compare A [3] against SVD-LLM
+
+10 [4]
+
+on WikiText-2, C4, and SlimPajama, covering MHARoPE and GQA-RoPE architectures. A [3] outperforms 10 [2]
+SVD-LLM by a large margin most of the time. Remarkably, A [3] achieves a perplexity of 4.69 on WikiText-2 with 20% 40% 60%
+LLaMA 3.1-70B, which is 3.18 lower than SVD-LLM’s Compression Ratio
+7.87 (a perplexity reduction of 58.6%) at 10% compression
+ratio. We present the downstream task results in Table 2, Figure 2: LLaMA-7b PPL on C4, comwhere A [3] consistently outperforms SVD-LLM in terms of pared to SVD, FWSVD and SVD-LLM.
+average accuracy ( _↑_ ) across all five tasks. We observe that the advantage of A [3] is more pronounced
+when the compression ratio is small (10%). We attribute this to the adaptation of A [3] for RoPE and
+GQA, which we will discuss in Section 4.2. Results on Phi 3 are presented in Appendix G.
+
+
+10 [4]
+
+
+10 [2]
+
+
+20% 40% 60%
+Compression Ratio
+
+
+Figure 2: LLaMA-7b PPL on C4, compared to SVD, FWSVD and SVD-LLM.
+
+
+Table 1: A comparison of perplexity ( _↓_ ) on WikiText2, C4, and SlimPajama.
+
+
+10% 20%
+Model Method
+
+WikiText-2 C4 SlimPajama WikiText-2 C4 SlimPajama
+
+
+LLaMA-2-7B SVD-LLM 8.78 (+3.30) 11.73 (+4.14) 9.49 (+3.35) 11.58 (+6.1) 14.91 (+7.32) 11.93 (+5.79)
+(MHA-RoPE) A [3] **5.96 (+0.48)** **8.34 (+0.74)** **6.68 (+0.54)** **7.22 (+1.73)** **9.91 (+2.31)** **7.91 (+1.77)**
+
+
+LLaMA-2-13B SVD-LLM 7.09 (+2.19) 9.98 (+2.92) 7.95 (+2.26) 9.03 (+4.13) 12.35 (+5.29) 9.75 (+4.06)
+(MHA-RoPE) A [3] **5.32 (+0.42)** **7.65 (+0.59)** **7.65 (+1.97)** **6.24 (+1.34)** **8.99 (+1.92)** **7.15 (+1.47)**
+
+
+LLaMA-3.1-8B SVD-LLM 19.12 (+12.86) 19.37 (+9.33) 15.14 (+7.57) 42.28 (+36.02) 33.6 (+23.56) 27.44 (+19.86)
+(GQA-RoPE) A [3] **7.93 (+1.67)** **12.56 (+2.52)** **9.52 (+1.94)** **11.36 (+5.1)** **17.87 (+10.29)** **13.58 (+3.54)**
+
+
+LLaMA-3.1-70B SVD-LLM 7.87 (+5.07) 11.3 (+3.76) 8.43 (+2.94) 9.75 (+6.95) **13.77 (+6.23)** 10.44 (+4.95)
+(GQA-RoPE) A [3] **4.69 (+1.90)** **8.83 (+1.31)** **6.59 (+1.10)** **8.32 (+5.52)** 13.94 (+6.40) **10.02 (+4.53)**
+
+
+**Higher inference throughput** The low-rank approximation methods that target general linear layers only save the
+FLOPs of GEMM in linear layers, but induce runtime overhead like extra GEMM kernel launches and read/write for
+small matrices. In contrast, A [3] saves the GEMM FLOPs
+in both linear layers and attention, without inducing these
+overheads. We profile prefilling throughput measured in
+TPS (tokens/sec) of LLaMA-2-13B on an A100 40GB,
+and visualize the speedup in Figure 3. SVD-LLM only
+has speedup for aggressive compression, while A [3] always
+achieves a speedup, higher than SVD-LLM. More runtime
+analysis can be found in Appendix 11.
+
+
+4.2 ABLATION
+STUDY AND IMPROVEMENT OVER OTHER BASELINES
+
+
+8k
+
+6k
+
+4k
+
+2k
+
+0k
+
+-2k
+
+
+SVD-LLM A [3] Eager SDPA
+
+
+20% 40% 60%
+Compression Ratio
+
+
+Figure 3: Performance comparisons in
+Tokens per Second (TPS) of A [3] and
+SVD-LLM (LLaMA-2-13b, A100 40GB,
+batch size=2, sequence length=2048, attention backend=Eager/SDPA).
+
+
+**Stronger** **KV** **Cache** **Compression** @Reviewer n81d, @Reviewer gBeN Table 3 extends our
+attention ablation by comparing A [3] with Clover and Palu across the full range of compression
+ratios on SlimPajama, C4, and WikiText-2, using both MPT-7B and MPT-30B. Although all three
+methods reduce parameters and KV-cache size by the **same** amount at a given compression ratio,
+their perplexity trends diverge significantly. Clover’s performance degrades sharply, even at only
+20% compression, its perplexity rises above 40 on the MPT-7B model. Palu is closer to A [3], but it still
+underperforms by a large margin because its objective only reduces loss in the K and V projection
+outputs.
+
+
+@Reviewer voSr In contrast, A [3] consistently achieves the lowest perplexity across all datasets and
+model sizes. This performance gap widens at higher compression levels and with larger model sizes:
+on MPT-30B, A [3] is the **only** method that stays below 50 perplexity at 80% compression, and on
+MPT-7B it is the only one that remains below 1k perplexity.
+
+
+Table 3: A comparison of perplexity ( _↓_ ) on WikiText2, C4, and SlimPajama. CRatio indicates
+compression ratio on both KV-Cache and Parameter count.
+
+|MPT-7B|SlimPajama|C4|Wikitext-2|
+|---|---|---|---|
+|CRatio|Clover<br>Palu<br>A3|Clover<br>Palu<br>A3|Clover<br>Palu<br>A3|
+|20%<br>40%<br>60%<br>80%|48.11<br>9.67<br>**8.88**<br>383<br>11.51<br>**9.90**<br>5397<br>25.73<br>**15.34**<br>15467<br>5270<br>|53.29<br>11.74<br>**10.77**<br>408<br>14.18<br>**12.20**<br>4919<br>32.26<br>**18.71**<br>11661<br>3210<br>|77.78<br>8.73<br>**8.05**<br>795<br>10.60<br>**9.19**<br>7895<br>25.09<br>**15.58**<br>14434<br>13714<br>|
+
+
+|MPT-30B|SlimPajama|C4|Wikitext-2|
+|---|---|---|---|
+|CRatio|Clover<br>Palu<br>A3|Clover<br>Palu<br>A3|Clover<br>Palu<br>A3|
+|20%<br>40%<br>60%<br>80%|11.52<br>7.91<br>**7.71**<br>18.00<br>8.99<br>**8.33**<br>54.97<br>15.59<br>**11.52**<br>779<br>211<br>**37.09**|14.53<br>9.87<br>**9.59**<br>22.43<br>11.30<br>**10.44**<br>70.65<br>18.91<br>**14.22**<br>732<br>253<br>**42.85**|13.07<br>7.04<br>**6.73**<br>23.47<br>8.40<br>**7.40**<br>95.45<br>18.88<br>**11.28**<br>1524<br>339<br>**46.72**|
+
+
+9
+
+
+Table 2: A comparison of downstream task accuracy ( _↑_ ).
+
+
+Model CRatio Method ARC-c BoolQ Winogrande GSM8k MMLU Avg.
+
+
+              - Original 0.4829 0.7777 0.7498 0.1387 0.4582 0.5158
+
+
+LLaMA-2-7b
+(MHA-RoPE)
+
+
+LLaMA-2-13b
+(MHA-RoPE)
+
+
+LLaMA-3.1-8B
+(GQA-RoPE)
+
+
+LLaMA-3.1-70B
+(GQA-RoPE)
+
+
+SVD-LLM 0.3882 0.6749 0.6803 0.0129 0.3477 0.4166
+10%
+A [3] **0.4761** **0.7330** **0.7435** **0.1130** **0.4398** **0.4960**
+
+
+SVD-LLM 0.3139 0.6602 0.6464 0.0045 0.3119 0.3837
+20%
+A [3] **0.4369** **0.7174** **0.7072** **0.0751** **0.3979** **0.4621**
+
+
+ - Original 0.5538 0.8086 0.7711 0.2343 0.5513 0.5774
+
+
+SVD-LLM 0.4206 **0.8061** 0.7308 0.0902 0.4772 0.5000
+10%
+A [3] **0.5213** 0.7865 **0.7743** **0.1971** **0.5324** **0.5560**
+
+
+SVD-LLM 0.3472 **0.7877** 0.6898 0.0379 0.4318 0.4546
+20%
+A [3] **0.4727** 0.7654 **0.7364** **0.1645** **0.4804** **0.5180**
+
+
+ - Original 0.5401 0.8190 0.7822 0.4920 0.6535 0.6484
+
+
+SVD-LLM 0.3575 0.7458 **0.7111** 0.0447 0.4708 0.4603
+10%
+A [3] **0.4565** **0.7884** 0.7072 **0.2388** **0.5922** **0.5500**
+
+
+SVD-LLM 0.2534 **0.6948** **0.6440** 0.0113 0.3604 0.3880
+20%
+A [3] **0.3345** 0.6823 0.6417 **0.0705** **0.4649** **0.4336**
+
+
+ - Original 0.6536 0.8538 0.8445 0.8036 0.7864 0.7768
+
+
+SVD-LLM 0.5742 0.8401 0.8051 0.5087 0.7181 0.6797
+10%
+A [3] **0.6323** **0.8532** **0.8335** **0.7453** **0.7470** **0.7508**
+
+
+SVD-LLM **0.4957** **0.8226** **0.7727** 0.3040 **0.6620** 0.6025
+20%
+A [3] 0.4667 0.8144 0.6875 **0.4951** 0.6145 **0.6071**
+
+
+|QK|93|
+|---|---|
+|OV|+<br>0|
+|.31<br>6<br><br>+0.9<br>7<br>24|.31<br>6<br><br>+0.9<br>7<br>24|
+|+0<br>+0.1<br>0.09<br>0.09<br>0.08<br>0.5<br>+0.|+0<br>+0.1<br>0.09<br>0.09<br>0.08<br>0.5<br>+0.|
+|+<br>+<br>+<br>+|+<br>+<br>+<br>+|
+
+
+|8125|QK-RoPE<br>MLP|9469 2|
+|---|---|---|
+|+<br>23<br>7<br>+<br>+1.1<br>+1.02<br>|+<br>23<br>7<br>+<br>+1.1<br>+1.02<br>|+<br>23<br>7<br>+<br>+1.1<br>+1.02<br>|
+|+0.<br>+0.1|+0.<br>+0.1|+0.<br>+0.1|
+
+
+6 CONCLUSION
+
+
+We propose A [3], an analytical framework that decomposes the transformer into its core components,QK,
+OV, MLP, and compresses them by minimizing their respective errors. This method reduces model
+size, KV cache, and FLOPs without runtime overhead, while achieving state-of-the-art performance.
+
+
+1In the case of Equation (25), abs( _w_ ) drops columns (rows) by the column (row) sum of magnitudes of _**W**_ q _,i_
+( _**W**_ k _[T]_ _,i_ [), while Wanda assumes non-diagonal elements in] _**[ R]**_ [X] q [X] q [and] _**[ R]**_ [X] kv [X] kv [are all zeros.]
+
+
+10
+
+
+**Attention with RoPE** In Section 3.4 we propose using
+CUR approximation to solve Problem 1 for attention with
+RoPE, which follows a similar approach as A [3] -MLP in Section 3.3. Here we compare against structured pruning
+baselines that can be adapted for this problem, including
+abs( _w_ ) and Wanda (Sun et al., 2023). abs( _w_ ) represents
+the classic pruning method that drops weights with smaller
+magnitudes, while Wanda sorts by the product between
+the weight magnitude and the average _l_ 2-norm of the corresponding activation row [1] . Figure 4b illustrates ∆PPL
+of LLaMA-2-7B on WikiText2, indicating the advantage
+of A [3] over abs( _w_ ) and Wanda.
+
+
+5 DISCUSSION
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+
+(a) QK and OV (MHA-NoPE).
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+(b) QK-RoPE and MLP (MHA-RoPE).
+
+
+In Section D, we showcase various applications of A [3],
+highlighting its compatibility with quantization, lora fine- Figure 4: Ablation study of A [3] compotuning and extensibility to mixed-rank allocation for ad- nents. (a) QK and OV on MPT-7B. (b)
+ditional performance gains. We find A [3] is orthogonal QK-RoPE and MLP on LLaMA-2-7B.
+to weight-only quantization methods like HQQ (Badri &
+Shaji, 2023) and a simple mixed-rank A [3] outperforms ASVD and SVD-LLM v2. @Reviewer gBeN
+When combined with quantization, it yields a better Pareto frontier than using quantization alone
+at sub-4-bit setting. We also discuss the limitations of A [3] in Section D, mainly caused by the
+sub-optimality of CUR decomposition, a compromise to RoPE. @Reviewer n81d Additionally, we
+provide empirical diagnostics that link the reductions in individual local objectives for QK and OV to
+the overall end-to-end perplexity. Finally, we explore the impact of calibration set selection on overall
+method performance, showing that a mixture of calibration datasets boosts accuracies on downstream
+tasks like Winogrande.
+
+
+Figure 4: Ablation study of A [3] components. (a) QK and OV on MPT-7B. (b)
+QK-RoPE and MLP on LLaMA-2-7B.
+
+
+REFERENCES
+
+
+Marah Abdin, Jyoti Aneja, Hany Awadalla, Ahmed Awadallah, Ammar Ahmad Awan, et al. Phi-3
+technical report: A highly capable language model locally on your phone, 2024. [URL https:](https://arxiv.org/abs/2404.14219)
+[//arxiv.org/abs/2404.14219.](https://arxiv.org/abs/2404.14219)
+
+
+Joshua Ainslie, James Lee-Thorp, Michiel De Jong, Yury Zemlyanskiy, Federico Lebrón, and Sumit
+Sanghai. Gqa: Training generalized multi-query transformer models from multi-head checkpoints.
+_arXiv preprint arXiv:2305.13245_, 2023.
+
+
+Saleh Ashkboos, Amirkeivan Mohtashami, Maximilian L Croci, Bo Li, Pashmina Cameron, Martin
+Jaggi, Dan Alistarh, Torsten Hoefler, and James Hensman. Quarot: Outlier-free 4-bit inference in
+rotated llms. _Advances in Neural Information Processing Systems_, 37:100213–100240, 2024.
+
+
+Hicham Badri and Appu Shaji. Half-quadratic quantization of large machine learning models. _Dan_
+_Hendrycks,_ _Collin_ _Burns,_ _Steven_ _Basart,_ _Andy_ _Zou,_ _Mantas_ _Mazeika,_ _Dawn_ _Song,_ _and_ _Jacob_,
+2023.
+
+
+Federico Barbero, Alex Vitvitskyi, Christos Perivolaropoulos, Razvan Pascanu, and Petar Veliˇckovi´c.
+Round and round we go! what makes rotary positional encodings useful? _arXiv_ _preprint_
+_arXiv:2410.06205_, 2024.
+
+
+Christos Boutsidis and David P Woodruff. Optimal cur matrix decompositions. In _Proceedings of the_
+_forty-sixth annual ACM symposium on Theory of computing_, pp. 353–362, 2014.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Chi-Chih Chang, Wei-Cheng Lin, Chien-Yu Lin, Chong-Yan Chen, Yu-Fang Hu, Pei-Shuo Wang,
+Ning-Chi Huang, Luis Ceze, Mohamed S Abdelfattah, and Kai-Chiang Wu. Palu: Compressing
+kv-cache with low-rank projection. _arXiv preprint arXiv:2407.21118_, 2024.
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large
+language models trained on code. _arXiv preprint arXiv:2107.03374_, 2021a.
+
+
+Patrick Chen, Hsiang-Fu Yu, Inderjit Dhillon, and Cho-Jui Hsieh. Drone: Data-aware low-rank
+compression for large nlp models. _Advances in neural information processing systems_, 34:29321–
+29334, 2021b.
+
+
+Petros Drineas, Ravi Kannan, and Michael W Mahoney. Fast monte carlo algorithms for matrices i:
+Approximating matrix multiplication. _SIAM Journal on Computing_, 36(1):132–157, 2006.
+
+
+Carl Eckart and Gale Young. The approximation of one matrix by another of lower rank. _Psychome-_
+_trika_, 1(3):211–218, 1936a.
+
+
+Carl Eckart and Gale Young. The approximation of one matrix by another of lower rank. _Psychome-_
+_trika_, 1(3):211–218, 1936b.
+
+
+Nelson Elhage, Neel Nanda, Catherine Olsson, Tom Henighan, Nicholas Joseph, Ben Mann, Amanda
+Askell, Yuntao Bai, Anna Chen, Tom Conerly, et al. A mathematical framework for transformer
+circuits. _Transformer Circuits Thread_, 1(1):12, 2021.
+
+
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. Gptq: Accurate post-training
+quantization for generative pre-trained transformers. _arXiv preprint arXiv:2210.17323_, 2022.
+
+
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster,
+Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muennighoff,
+Chris Ociepa, Jason Phang, Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang Sutawika,
+Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. The language model evaluation
+harness, 07 2024. [URL https://zenodo.org/records/12608602.](https://zenodo.org/records/12608602)
+
+
+11
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd of
+models. _arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Yen-Chang Hsu, Ting Hua, Sungen Chang, Qian Lou, Yilin Shen, and Hongxia Jin. Language model
+compression with weighted low-rank factorization. _arXiv preprint arXiv:2207.00112_, 2022.
+
+
+Tao Ji, Bin Guo, Yuanbin Wu, Qipeng Guo, Lixing Shen, Zhan Chen, Xipeng Qiu, Qi Zhang, and
+Tao Gui. Towards economical inference: Enabling deepseek’s multi-head latent attention in any
+transformer-based llms. _arXiv preprint arXiv:2502.14837_, 2025.
+
+
+Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Wei-Ming Chen, Wei-Chen Wang, Guangxuan
+Xiao, Xingyu Dang, Chuang Gan, and Song Han. Awq: Activation-aware weight quantization for
+on-device llm compression and acceleration. _Proceedings of machine learning and systems_, 6:
+87–100, 2024.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024.
+
+
+Michael W Mahoney and Petros Drineas. Cur matrix decompositions for improved data analysis.
+_Proceedings of the National Academy of Sciences_, 106(3):697–702, 2009.
+
+
+Fanxu Meng, Pingzhi Tang, Fan Jiang, and Muhan Zhang. Clover: Cross-layer orthogonal vectors
+pruning. In _Forty-second International Conference on Machine Learning_, 2025.
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer sentinel mixture
+models. _arXiv preprint arXiv:1609.07843_, 2016.
+
+
+Mohammad Mozaffari and Maryam Mehri Dehnavi. Slim: One-shot quantized sparse plus low-rank
+approximation of llms. 2024.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _Journal of machine learning research_, 21(140):1–67, 2020.
+
+
+Rajarshi Saha, Naomi Sagan, Varun Srivastava, Andrea Goldsmith, and Mert Pilanci. Compressing
+large language models using low rank and low precision decomposition. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 37:88981–89018, 2024.
+
+
+Charbel Sakr and Brucek Khailany. Espace: Dimensionality reduction of activations for model
+compression. _Advances in Neural Information Processing Systems_, 37:17489–17517, 2024.
+
+
+Noam Shazeer. Fast transformer decoding: One write-head is all you need. _arXiv_ _preprint_
+_arXiv:1911.02150_, 2019.
+
+
+Noam Shazeer. Glu variants improve transformer. _arXiv preprint arXiv:2002.05202_, 2020.
+
+
+Zhiqiang Shen, Tianhua Tao, Liqun Ma, Willie Neiswanger, Zhengzhong Liu, Hongyi Wang, Bowen
+Tan, Joel Hestness, Natalia Vassilieva, Daria Soboleva, et al. Slimpajama-dc: Understanding data
+combinations for llm training. _arXiv preprint arXiv:2309.10818_, 2023.
+
+
+Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. Roformer: Enhanced
+transformer with rotary position embedding. _Neurocomputing_, 568:127063, 2024.
+
+
+Mingjie Sun, Zhuang Liu, Anna Bair, and J Zico Kolter. A simple and effective pruning approach for
+large language models. _arXiv preprint arXiv:2306.11695_, 2023.
+
+
+MosaicML NLP Team et al. Introducing mpt-7b: A new standard for open-source, commercially
+usable llms. _DataBricks (May, 2023) www. mosaicml. com/blog/mpt-7b_, 2023.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée
+Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models. _arXiv preprint arXiv:2302.13971_, 2023a.
+
+
+12
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay
+Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation
+and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023b.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing_
+_systems_, 30, 2017.
+
+
+Xin Wang, Yu Zheng, Zhongwei Wan, and Mi Zhang. Svd-llm: Truncation-aware singular value
+decomposition for large language model compression. _arXiv preprint arXiv:2403.07378_, 2024.
+
+
+Xin Wang, Samiul Alam, Zhongwei Wan, Hui Shen, and Mi Zhang. Svd-llm v2: Optimizing singular
+value truncation for large language model compression. _arXiv preprint arXiv:2503.12340_, 2025.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_
+_neural information processing systems_, 35:24824–24837, 2022.
+
+
+Zhihang Yuan, Yuzhang Shang, Yue Song, Qiang Wu, Yan Yan, and Guangyu Sun. Asvd: Activationaware singular value decomposition for compressing large language models. _arXiv_ _preprint_
+_arXiv:2312.05821_, 2023.
+
+
+Cheng Zhang, Jianyi Cheng, George A Constantinides, and Yiren Zhao. Lqer: Low-rank quantization
+error reconstruction for llms. _arXiv preprint arXiv:2402.02446_, 2024a.
+
+
+Cheng Zhang, Jeffrey TH Wong, Can Xiao, George A Constantinides, and Yiren Zhao. Qera: an
+analytical framework for quantization error reconstruction. _arXiv_ _preprint_ _arXiv:2410.06040_,
+2024b.
+
+
+Stephen Zhang and Vardan Papyan. Oats: Outlier-aware pruning through sparse and low rank
+decomposition. _arXiv preprint arXiv:2409.13652_, 2024.
+
+
+13
+
+
+A NOTATIONS
+
+
+Table 4 includes the notations of matrices and vectors and Table 5 summarizes the notations of
+dimensions in this paper.
+
+
+Table 4: Notation of matrices and vectors in this paper.
+
+
+Notation Description
+
+
+[1] _l_ _**[X]**_ _[T]_ _**[X]**_
+
+
+_**R**_ XX The autocorrelation matrices of _**X**_ _∈_ R _[l][×][d]_ computed as [1]
+
+
+_**R**_
+
+
+1
+2
+XX The corresponding unique symmetric matrix square roots of _**R**_ XX
+
+
+_**q**_ q _,i_ An input row vector to qery projection of _i_ -th head
+_**k**_ k _,i_ An input row vector to key/value projection of _i_ -th head
+_**X**_ _q_ Input activation to the query layer
+_**X**_ kv Input activation to the key/value layer
+_**W**_ _q,i_ Weight of qery projection of _i_ -th head
+_**W**_ _k,i_ Weight of key projection of _i_ -th head
+_**W**_ qk _,i_ Fused weight of query/key projection of _i_ -th head
+_**W**_ �qk _,i_ Low-rank approximation of _**W**_ qk _,i_
+_**W**_ �q _,i_ Approximated _**W**_ _q,i_, left low-rank matrix of _**W**_ [�] qk _,i_
+_**W**_ �k _,i_ Approximated _**W**_ _k,i_, right low-rank matrix of _**W**_ [�] qk _,i_
+_**Q**_ _i_ Query of _i_ -th head
+_**K**_ _i_ Key of _i_ -th head
+_ai_ A single attention score of _i_ -th head
+_**A**_ _i_ Pre-softmax attention score of _i_ -th head
+_**A**_ _[′]_ _i_ Post-softmax attention score of _i_ -th head
+
+
+_**W**_ _v,i_ Weight of value projection of _i_ -th head
+_**W**_ _o,i_ Weight of output projection of _i_ -th head
+_**W**_ vo _,i_ Fused weight of value/output projection of _i_ -th head
+_**W**_ �vo _,i_ Low-rank approximation of _**W**_ vo _,i_
+
+_**o**_ A row of attention output
+
+_**o**_ _i_ A row of attention output _i_ -th head
+
+_**o**_ Low-rank approximation of _**o**_
+
+_**O**_ Attention output matrix
+
+
+_**x**_ d An input row vector of down projection layer in MLP
+_**x**_ �d An input row vector of down projection layer in MLP after low-rank approximation
+_**y**_ mlp Output vectors of down projection layer in MLP after low-rank approximation
+_**X**_ mlp Input of MLP in transformer
+_**X**_ d Input of down projection layer in MLP
+_**Y**_ d Output of gate projection layer in MLP
+_**Y**_ u Output of up projection layer in MLP
+_**Y**_ mlp Output of down projection layer in MLP
+_**W**_ u Weight of up projection layer in MLP
+_**W**_ d Weight of down projection layer in MLP
+_**W**_ g Weight of gate projection layer in MLP
+_**W**_ �d Weight of up projection layer in low-rank approximated MLP
+_**W**_ �d Weight of down projection layer in low-rank approximated MLP
+_**W**_ �d Weight of gate projection layer in low-rank approximated MLP
+
+
+1
+
+_**r**_ _i_ The _i_ -th column of _**R**_ X2dXd
+
+_**w**_ _i_ The _i_ -th row of _**W**_ d
+
+
+_**r**_ _i_ The _i_ -th column of _**R**_
+
+
+14
+
+
+Table 5: Notation of dimensions in this paper.
+
+
+Notation Description
+
+
+_l_ q Query sequence length
+_l_ kv Key and value sequence length
+_l_ down Down layer sequence length
+_d_ m Model hidden size
+_h_ q Number of attention (query) heads
+_h_ kv Number of key and value heads
+_g_ := _⌊h_ q _/h_ kv _⌋_ Number of query heads per key/value head in GQA
+_d_ vo Head dimension shared by value and head output projection
+_d_ qk Head dimension shared by query and key
+_d_ inter Intermediate size of FFN
+
+
+B DERIVATIONS FOR A [3]
+
+
+B.1 A [3] -QK
+
+
+B.1.1 EQUIVALENT OBJECTIVE
+
+
+Here we provide the full derivation for Lemma 1 from Problem 1:
+
+
+argmin _**W**_ �qk _,i_ _[∥]_ _**[X]**_ [q][(] _**[W]**_ [qk] _[,i][ −]_ _**W**_ [�] qk _,i_ ) _**X**_ kv _T ∥_ 2 _F_ s.t. rank( _**W**_ [�] qk _,i_ ) = _r_
+
+
+1 (26)
+2
+XkvXkv _[∥]_ _F_ [2] _[.]_
+
+
+_⇒_ argmin
+_**W**_ �qk _,i_ _[∥]_ _**[R]**_
+
+
+1
+X2qXq [(] _**[W]**_ [qk] _[,i][ −]_ _**W**_ [�] qk _,i_ ) _**R**_
+
+
+We begin with the right-hand side (RHS) of Equation (26). For clarity, we define some intermediate
+variables:
+_∥_ _**X**_ q( _**W**_ qk _,i −_ _**W**_ [�] qk _,i_ ) _**X**_ kv _T ∥_ 2 _F_
+= _Tr_ ( _**X**_ _kv_ ( _**W**_ qk _,i −_ _**W**_ [�] qk _,i_ ) _[T]_ _**X**_ _q_ _[T]_ _**[X]**_ _[q]_ [(] _**[W]**_ [qk] _[,i]_ _[−]_ _**W**_ [�] qk _,i_ ) _**X**_ _kv_ _[T]_ [)] (27)
+
+= _Tr_ ( _**X**_ _kv_ _[T]_ _**[X]**_ _[kv]_ [(] _**[W]**_ [qk] _[,i]_ _[−]_ _**W**_ [�] qk _,i_ ) _[T]_ _**X**_ _q_ _[T]_ _**[X]**_ _[q]_ [(] _**[W]**_ [qk] _[,i]_ _[−]_ _**W**_ [�] qk _,i_ )) _,_
+
+
+If we assign _**R**_ XkvXkv = _l_ 1kv _**[X]**_ _kv_ _[T]_ _**[X]**_ _[kv]_ [, and] _**[ R]**_ [X] q [X] q [=] _l_ [1] q _**[X]**_ _q_ _[T]_ _**[X]**_ _[q]_ [,]
+
+
+_LHS_ = _Tr_ ( _l_ kv _l_ q _**R**_ XkvXkv (( _**W**_ qk _,i −_ _**W**_ [�] qk _,i_ ) _[T]_ _**R**_ XqXq (( _**W**_ qk _,i −_ _**W**_ [�] qk _,i_ ))
+
+
+1 1
+
+= _l_ kv _l_ q _||_ _**R**_ X2kvXkv [(] _**[W]**_ [qk] _[,i][ −]_ _**W**_ [�] qk _,i_ ) _**R**_ X2qXq _[||]_ _F_ [2]
+
+
+(28)
+
+
+1 1
+
+= _||_ _**R**_ X2kvXkv [(] _**[W]**_ [qk] _[,i][ −]_ _**W**_ [�] qk _,i_ ) _**R**_ X2qXq _[||]_ _F_ [2] _[.]_
+
+
+the positive _l_ q _l_ kv can be dropped since they do not affect the minimizer.
+
+
+B.1.2 ANALYTICAL SOLUTION
+
+
+Here we provide the proof of Theorem 2:
+
+
+_Proof._ We continue with Lemma 1.
+
+
+argmin
+_**W**_ �qk _,i_ _[∥]_ _**[R]**_
+
+
+1
+X2qXq [(] _**[W]**_ [qk] _[,i][ −]_ _**W**_ [�] qk _,i_ ) _**R**_
+
+
+1
+X2kvXkv _[∥]_ _F_ [2] s.t. rank( _**W**_ [�] qk _,i_ ) = _r_
+
+
+1 1
+X2kvXkv _[−]_ _**[R]**_ X2qXq _**W**_ qk _,i_ _**R**_
+
+[�]
+
+
+1 (29)
+2
+XkvXkv _[∥]_ _F_ [2] _[.]_
+
+
+_⇒_ argmin
+_**W**_ �qk _,i_ _[∥]_ _**[R]**_
+
+
+1
+2
+XqXq _**[W]**_ [qk] _[,i]_ _**[R]**_
+
+
+1 1
+
+Note that multiplication by the invertible matrix _**R**_ X2qXq [and] _**[ R]**_ X2kvXkv [does not change the rank of the]
+
+matrix _**W**_ qk _,i_ . According to the Eckart-Young-Mirsky theorem (Eckart & Young, 1936b), the optimal
+
+
+Note that multiplication by the invertible matrix _**R**_
+
+
+1
+2
+XqXq [and] _**[ R]**_
+
+
+1
+2
+XkvXkv [)][ is the truncated SVD of][ (] _**[R]**_
+
+
+15
+
+
+1
+2
+XqXq _**[W]**_ [qk] _[,i]_ _**[R]**_
+
+
+1
+2
+XkvXkv [)][:]
+
+
+rank r approximation to ( _**R**_
+
+
+1
+2
+XqXq _**[W]**_ [qk] _[,i]_ _**[R]**_
+
+
+1
+
+( _**R**_ X2qXq _**[W]**_ [qk] _[,i]_ _**[R]**_
+
+
+1
+X2kvXkv [)] _[r]_ [=] _**[ U]**_ [:] _[,]_ [:] _[r]_ **[Σ]** [:] _[r,]_ [:] _[r]_ _**[V]**_ : _r,_ _[T]_ : _[,]_ (30)
+
+
+. Thus the optimal rank-k solution to _**W**_ [�] qk _,i_ is:
+
+
+1
+2
+XkvXkv
+
+
+        where _**U**_ **Σ** _**V**_ _[T]_ = SVD _**R**_
+
+
+1
+2
+XqXq _**[W]**_ [qk] _[,i]_ _**[R]**_
+
+
+1
+2
+XqXq _**[W]**_ [qk] _[,i]_ _**[R]**_
+
+
+- _−_ 1 SVD _r_ _**R**_
+
+
+1
+2
+XkvXkv
+
+
+   _**W**_ �qk _,i_ = _**R**_
+
+
+1
+2
+XqXq
+
+
+��
+_**R**_
+
+
+X12kvXkv� _−_ 1 _._ (31)
+
+
+B.2 A [3] -OV
+
+
+B.2.1 EQUIVALENT OBJECTIVE
+
+
+Similarly, we provide the derivation of the equivalent objective in Problem 2:
+
+
+argmin _**W**_ �vo _,i_ _[∥]_ _**[P]**_ _[i]_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _∥_ [2] _F_ s.t. rank( _**W**_ [�] vo _,i_ ) = _r_
+
+
+1 (32)
+X2 _**p**_ _i_ X _**p**_ _i_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _∥_ [2] _F_ _[.]_
+
+
+_⇒_ argmin
+_**W**_ �vo _,i_ _[∥]_ _**[R]**_
+
+
+_Proof._ We begin with the right-hand side (RHS) of Equation (32).
+
+
+_||_ _**O**_ _i −_ _**O**_ [˜] _i||_ [2] _F_ [=] _[ ||]_ _**[P]**_ _[i]_ [(] _**[W]**_ [vo] _[,i]_ _[−]_ _**W**_ [�] vo _,i_ ) _||_ [2] _F_
+(33)
+= _Tr_ (( _**W**_ vo _,i −_ _**W**_ [�] vo _,i_ ) _[T]_ _**P**_ _i_ _[T]_ _**[P]**_ _[i]_ [(] _**[W]**_ [vo] _[,i]_ _[−]_ _**W**_ [�] vo _,i_ )) _,_
+
+
+If we assign _**R**_ X _**p**_ _i_ X _**p**_ _i_ = _l_ [1] q _**[P]**_ _[ T]_ _i_ _**[P]**_ _[i]_ [,]
+
+
+_LHS_ = _Tr_ ( _l_ q( _**W**_ vo _,i −_ _**W**_ [�] vo _,i_ ) _[T]_ _**R**_ X _**p**_ _i_ X _**p**_ _i_ ( _**W**_ vo _,i −_ _**W**_ [�] vo _,i_ ))
+
+= _l_ q _||_ _**R**_ X [1] _[/]_ _**p**_ [2] _i_ X _**p**_ _i_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _||_ [2] _F_
+
+= _||_ _**R**_ X [1] _[/]_ _**p**_ [2] _i_ X _**p**_ _i_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _||_ [2] _F_ _[.]_
+
+
+the positive _l_ q can be dropped since they do not affect the minimizer.
+
+
+B.2.2 ANALYTICAL SOLUTION
+
+
+Here we provide the proof of Theorem 3.
+
+
+_Proof._ We continue with Equation 34:
+
+
+(34)
+
+
+argmin _**W**_ �vo _,i_ _[∥]_ _**[P]**_ _[i]_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _∥_ [2] _F_ s.t. rank( _**W**_ [�] vo _,i_ ) = _r_
+
+
+1 (35)
+X2 _**p**_ _i_ X _**p**_ _i_ [(] _**[W]**_ [vo] _[,i][ −]_ _**W**_ [�] vo _,i_ ) _∥_ [2] _F_ _[.]_
+
+
+_⇒_ argmin
+_**W**_ �vo _,i_ _[∥]_ _**[R]**_
+
+
+Note that multiplication by the invertible matrix _**R**_ X _**p**_ _i_ X _**p**_ _i_ does not change the rank of the matrix
+_**W**_ vo _,i_ . According to the Eckart-Young-Mirsky theorem (Eckart & Young, 1936b), the optimal rank _r_
+
+
+1
+2
+X _**p**_ _i_ X _**p**_ _i_ _**[W]**_ [vo] _[,i]_ [)][:]
+
+
+approximation to ( _**R**_
+
+
+1
+2
+X _**p**_ _i_ X _**p**_ _i_ _**[W]**_ [vo] _[,i]_ [)][ is the truncated SVD of][ (] _**[R]**_
+
+
+1
+
+( _**R**_ X2 _**p**_ _i_ X _**p**_ _i_ _**[W]**_ [vo] _[,i]_ [)] _[r]_ [=] _**[ U]**_ [:] _[,]_ [:] _[r]_ **[Σ]** [:] _[r,]_ [:] _[r]_ _**[V]**_ : _r,_ _[T]_ : _[,]_ (36)
+
+
+        where _**U**_ **Σ** _**V**_ _[T]_ = SVD _**R**_
+
+
+X21 _**p**_ _i_ X _**p**_ _i_ _**[W]**_ [vo] _[,i]_ �. Thus the optimal rank-k solution to _**W**_ [�] vo _,i_ is:
+
+
+_**W**_ �vo _,i_ = - _**R**_ X12qXq
+
+
+- _−_ 1 SVD _r_ _**R**_
+
+
+16
+
+
+X12 _**p**_ _i_ X _**p**_ _i_ _**[W]**_ [vo] _[,i]_ - _._ (37)
+
+
+_⇒_ argmin _**U**_ =diag( _u_ 1 _,u_ 2 _,...,ud_ inter ) _∥_ _**R**_
+
+
+B.2.3 ALTERNATIVE SOLUTION TO A [3] -OV
+
+
+Here we elaborate on the alternative solution to Problem 2 by directly minimizing _∥_ _**O**_ _−_ _**O**_ [�] _∥_ [2] _F_ [through]
+matrix stacking. With matrix stacking, we can write the overall attention output as two matrix
+multiplications:
+
+
+
+
+
+_**W**_ vo _,_ 1
+_**W**_ vo _,_ 2
+...
+_**W**_ vo _,h_ q
+
+
+_h_ q
+
+- **P** _i_ _**W**_ vo _,i_ = - _**P**_ 1 _**P**_ 2 _. . ._ _**P**_ _hq_ 
+
+_i_ =1
+
+
+
+
+
+= _**P**_ cat _**W**_ vo _,_ cat _,_ (38)
+
+
+
+_**O**_ =
+
+
+_h_ q
+
+- _**O**_ _i_ =
+
+
+_i_ =1
+
+
+
+
+
+where _**P**_ cat _∈_ R _[l]_ [q] _[×][d]_ [m] _[d][h]_ [kv] _,_ _**W**_ vo _,_ cat _∈_ R _[d]_ [m] _[d][h]_ [kv] _[×][d]_ [m] denote the concatenated attention score weighted
+values and the fused value/output projection.
+
+
+The overall term _**O**_ takes the form of a linear layer _**O**_ = _**P**_ cat _**W**_ vo _,_ cat. If _**O**_ [�] = _**P**_ cat _**W**_ [�] vo _,_ cat denotes the
+approximated _**o**_, the optimal solution to _**W**_ [�] vo _,_ cat is already given by Equation (8).
+**Problem 4** (Minimization of overall attention output error) **.** Given a pretrained Transformer layer,
+the attention output of OV component _**O**_ = _**P**_ cat _**W**_ vo _,_ cat and its approximated form _**O**_ [�] = _**P**_ cat _**W**_ [�] vo _,_ cat,
+approximating the fused value/output projection by minimizing the output error is to minimize the
+following error:
+_∥_ _**P**_ cat( _**W**_ vo _,_ cat _−_ _**W**_ [�] vo _,_ cat) _∥_ [2] _F_ s.t. rank( _**W**_ [�] vo _,_ cat) = _r_ _._ (39)
+**Theorem 5** (A [3] -OV-overall for MHA-NoPE) **.** _The optimal solution to Problem 4 is_
+
+
+1
+X2 _**p**_ _cat_ X _**p**_ _cat_ _**[W]**_ _[vo][,][cat]_ [)] _[,]_ (40)
+
+
+- _−_ 1
+SVD _r_ ( _**R**_
+
+
+    _**W**_ - _vo,cat_ = _**R**_
+
+
+1
+2
+X _**p**_ _cat_ X _**p**_ _cat_
+
+
+1
+2
+
+_where_ _**R**_ X _**p**_ _cat_ X _**p**_ _cat_ _is_ _the_ _autocorrelation_ _matrix_ _respect_ _to_ _**P**_ _cat_ _and_ _**R**_ X _**p**_ _cat_ X _**p**_ _cat_ _[denotes]_ _[its]_ _[unique]_
+
+_symmetric matrix square root._
+
+
+Similar to QK component, in practice we assign
+
+
+- _−_ 1
+_,_
+
+
+_**L**_ _vo_ := - _**R**_ X12 _**p**_ cat X _**p**_ cat
+
+
+- _−_ 1 _**U**_ : _,_ : _k,_ _**R**_ _vo_ := **Σ** : _k,_ : _k_ _**V**_ : _k,_ _[T]_ : - _**R**_ X21 _**p**_ cat X _**p**_ cat
+
+
+to get the approximated fused value/output weights with two low-rank matrices. In terms of attention
+head, _**L**_ _vo_ can be viewed as concatenating all value heads with head dimension of _r_ together, and
+_**R**_ _vo_ can be viewed as a shared output head across the values:
+
+
+
+
+
+
+
+
+_,_ _**R**_ _vo_ = _**R**_ _o_ _,_
+
+
+
+_**L**_ _vo_ :=
+
+
+
+
+
+_**L**_ _v,_ 1
+_**L**_ _v,_ 2
+...
+_**L**_ _v,h_ q
+
+
+where _**L**_ _v,i_ _∈_ R _[d]_ [m] _[×][r]_ and _**R**_ _o_ _∈_ R _[r][×][d]_ [m] . Attention output can then be computed as follows:
+
+
+_**O**_ =
+
+
+_h_ q
+
+- _**P**_ _i_ _**X**_ _kv_ _**L**_ _v,i_ _**R**_ _o_ _._ (41)
+
+
+_i_ =1
+
+
+Although this solution can theoretically save more parameters than minimizing the per-head attention
+output loss under the same model performance, it requires significantly more KV-cache storage,
+even exceeding that of the uncompressed model. This is because the shared rank _r_ across all heads
+typically needs to be larger than _d_ vo of one head to maintain competitive performance. As a result,
+the KV-cache size increases by a factor of _dr_ vo [compared to uncompressed models.]
+
+
+B.3 A [3] -MLP
+
+
+B.3.1 EQUIVALENT OBJECTIVE
+
+
+Here we provide the derivation of Lemma 4 in Problem 3:
+argmin _**U**_ =diag( _u_ 1 _,u_ 2 _,...,ud_ inter ) _∥_ _**X**_ d _**UW**_ d _−_ _**X**_ d _**W**_ d _∥_ [2] _F_ s.t. rank( _**U**_ ) = _r_ _,_
+
+
+1 (42)
+2
+XdXd _**[W]**_ [d] _[∥]_ _F_ [2] _[.]_
+
+
+1
+2
+XdXd _**[UW]**_ [d] _[ −]_ _**[R]**_
+
+
+17
+
+
+Note that in Equation (46) we use _**R**_ XkvXkv instead of _**R**_ X _**p**_ _i_ X _**p**_ _i_, because _**R**_ X _**p**_ _i_ X _**p**_ _i_ is head-specific,
+
+which prevents us from building a shared _**W**_ [�] v,shared for all heads in the same GQA group. We name
+these two methods A [3] -QK-CR and A [3] -OV-CR for GQA’s QK and OV components respectively.
+
+
+B.5 EXTENDING A [3] FOR ROPE
+
+
+Instead of sorting by the product of _l_ 2-norm, _λi_ = _∥_ _**L**_ : _, i∥_ [2] 2 _[· ∥]_ _**[R]**_ _[i,]_ [ :] _[∥]_ 2 [2][, for] _[ i]_ [ = 0] _[,]_ [ 1] _[, . . ., d]_ [qk] _[−]_ [1][, we]
+sort by the sum of _λi_ of adjacent pairs:
+
+_λ_ 2 _i_ = _∥_ _**L**_ : _,_ 2 _i∥_ [2] 2 _[· ∥]_ _**[R]**_ [2] _[i,]_ [ :] _[∥]_ 2 [2] [+] _[ ∥]_ _**[L]**_ [:] _[,]_ [ 2] _[i]_ [+1] _[∥]_ 2 [2] _[· ∥]_ _**[R]**_ [2] _[i]_ [+1] _[,]_ [ :] _[∥]_ 2 [2] for _i_ = 0 _,_ 1 _, . . .,_ _[d]_ [qk] (48)
+
+2 _[−]_ [1] _[ .]_
+
+This will drop pairs of less important columns in _**L**_ and rows in _**R**_, as well as the corresponding pairs
+of RoPE frequencies. This requires a frequency index array for each QK pair, and indexing the RoPE
+constants at runtime. Usually the head dimension _d_ qk is 64 or 128, so the RoPE frequency indices
+can be saved in a compact INT8 array. However, to achieve high throughput/low latency, a custom
+kernel is needed to fuse indexing and rotation together, which is out of the scope of this paper.
+
+
+This RoPE extension can be combined with the GQA extension, which means the sorting in Equation (48) is done on the concatenated _**L**_ and _**R**_ matrices in Equation (22).
+
+
+18
+
+
+_Proof._ We begin with the right-hand side (RHS) of Equation (42). For clarity, we define some
+intermediate variables:
+
+
+_**V**_ := ( _**UW**_ _down −_ _**W**_ _down_ ) = - _**v**_ 1 _T_ _[,]_ _**[ v]**_ 2 _[T]_ _[, . . .,]_ _**[ v]**_ _d_ _[T]_ inter - _T_ _,_ _**x**_ _down_ = [ _x_ 1 _x_ 2 _. . ._ _xd_ inter] _._ (43)
+
+
+We continue by substituting Equation (43) to RHS of Equation (42):
+
+
+_∥_ _**X**_ d _**UW**_ d _−_ _**X**_ d _**W**_ d _∥_ [2] _F_
+= _∥_ _**X**_ d _**V**_ _∥_ [2] _F_
+= Tr(( _**X**_ d _**V**_ ) _[T]_ _**X**_ d _**V**_ )
+
+= Tr( _**V**_ _[T]_ _**X**_ d _T_ _**X**_ d _**V**_ )
+
+= Tr( _**X**_ d _T_ _**X**_ d _**V V**_ _T_ ) _,_
+
+
+1 _T_
+If we assign _**R**_ X _d_ X _d_ = _l_ down _**[X]**_ [d] _**X**_ d,
+
+
+_LHS_ = Tr( _**R**_ XdXd _**V V**_ _[T]_ )
+
+
+(44)
+
+
+(45)
+
+
+= Tr( _l_ down _**R**_
+
+
+1 1
+X2dXd _**[V V]**_ _[T]_ [ (] _**[R]**_ X2dXd [)] _[T]_ [ )]
+
+
+1
+2
+XdXd _**[W]**_ [d] _[∥]_ _F_ [2]
+
+
+= _l_ down _∥_ _**R**_
+
+
+= _l_ down _∥_ _**R**_
+
+
+1
+2
+XdXd _**[V]**_ _[ ∥]_ _F_ [2]
+
+
+1
+2
+XdXd _**[UW]**_ [d] _[ −]_ _**[R]**_
+
+
+1
+
+= _∥_ _**R**_ X2dXd _**[UW]**_ [d] _[ −]_ _**[R]**_
+
+
+1
+2
+XdXd _**[W]**_ [d] _[∥]_ _F_ [2] _[.]_
+
+
+the positive _l_ down can be dropped since they do not affect the minimizer.
+
+
+B.4 EXTENDING A [3] FOR GQA
+
+
+Similar to GQA’s QK Component, we can apply joint SVD to the OV component. The concatenation
+is done along the second dimension:
+
+
+��
+SVD _**R**_
+
+
+1 1 ��
+X2kvXkv _**W**_ vo _,_ 1 _. . ._ _**R**_ X2kvXkv _**W**_ vo _,g_ = _U_ Σ _V_ _[T]_ _._ (46)
+
+[�] [�]
+
+
+Then we make the assignment below to build the shared value head weights _**W**_ [�] v, shared and the _i_ -th
+approximated output head weights _**W**_ [�] - _,i_ for this group.
+
+
+- _−_ 1
+_,_ _**W**_ �v, shared := _U_ : _,_ : _r_ Σ: _r,_ : _r_ _._ (47)
+
+
+_**W**_ �o _,i_ := _V_ : _[T]_ _r, id_ m:( _i_ +1) _d_ m - _**R**_
+
+
+1
+2
+XkvXkv
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+**Quantization compatibility** Here we show that A [3] can
+be combined together with quantization. Figure 5 presents
+the perplexity of quantized LLaMA-3.1-8B with HQQ 4bit quantization, before and after applying A [3] . The small
+amount of extra model performance degradation caused
+by A [3] indicates its orthogonality to quantization.
+
+
+@Reviewer gBeN For extreme compression regimes, combining low-rank methods with quantization creates a continuous spectrum of compression levels between discrete
+quantization points and can yield a way better Pareto frontier. As shown in Figure 6, sub-3-bit quantization alone
+destabilizes the model, whereas A [3] + quantization provides
+a significantly better accuracy vs compression trade-off
+than quantization along.
+
+
+**Mixed-rank** **allocation** SVD-LLM v2 (Wang et al.,
+2025) and ASVD(Yuan et al., 2023) have demonstrated
+that different layers exhibit varying sensitivity to rank
+reduction. Here we show that A [3] can also benefit from
+mixed-rank allocation, achieving performance gain with
+minimal effort. Specifically, we conduct a simple search
+over rank allocations for each decoder layer in LLaMA7b. As shown in Table 6, A [3] -mixed outperforms both the
+uniform A [3] and other mixed-rank approaches.
+
+
+**Limitation of CUR decomposition** One limitation of
+A [3] is its reliance on CUR decomposition for RoPE-based
+
+
+19
+
+
+|Col1|Col2|Col3|2.1875|Col5|Col6|
+|---|---|---|---|---|---|
+||||~~2.1875~~|~~A3 + HQ~~<br>HQQ|~~  Q~~|
+||||~~2.1875~~|||
+|||2.|375|||
+|||||||
+|||||||
+|3.375||||||
+|||||||
+
+
+Figure 6: A comparison of perplexity ( _↓_ )
+on WikiText-2 for HQQ + A [3] relative
+to applying HQQ alone in the sub–4-bit
+setting on LLaMA-3.1-8B.
+
+
+C DETAILED EXPERIMENT SETUP
+
+
+**Calibration** We concatenate the texts in SlimPajama and randomly sample 128 sequences of 2048
+tokens for calibration. We only calibrate on WikiText-2 for Table 8. SlimPajama is a pretraining
+dataset of high-quality corpus, better capturing the statistics of auto-correlation than WikiText2. We
+calibrate the auto-correlation matrix using BF16 models, but accumulate the outer product in FP64.
+
+
+**Approximation** Since the autocorrelation matrix is symmetric and positive semi-definite, we used
+SVD to calculate its inverse and matrix square root, which improves the numerical stability. For GQA
+models, we also use torch.svd_lowrank instead of torch.linalg.svd for faster solving.
+@Reviewer voSr, @Reviewer n81d In cases where the autocorrelation matrices are ill-conditioned,
+we follow the approach of GPTQ (Frantar et al., 2022) and add a small damping term to the zero
+eigenvalues. In all of our experiments across different calibration datasets, the autocorrelation
+matrices were always invertible.
+
+
+**Downstream** **evaluation** We use 0-shot prompting for BoolQ and OpenBookQA, 5-shot for
+Winogrande, GSM8K, and MMLU, 25-shot for ARC-c. Other evaluation parameters are kept as the
+default provided by lm-eval-harness.
+
+
+**@Reviewer** **gBeN** **Server** **specs** We run all the experiments on two GPU boxes, one with two
+NVIDIA H100s, and the other with 8 NVIDIA A100s. In total, we spent around 1200 GPU hours
+on running A [3], and 800 hours on baselines. Specifically, for MHA models, most of the GPU hours
+were spent on calibration and VO solving. For GQA models, torch.svd_lowrank speeds up
+the VO solving, with most of the GPU hours on calibration and FFN solving. For the ASVD baseline,
+most of the GPU hours were on the mixed-rank search, while other baselines took most of the time
+on calibration and approximation. Since all the calibration, approximation, and evaluation were run
+on GPUs, our experiments were not bottlenecked by CPUs.
+
+
+D DISCUSSION
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+Original HQQ A [3] A [3] -HQQ
+
+
+0% 10% 20%
+Compression Ratio
+
+
+Figure 5: A comparison of perplexity
+( _↓_ ) on WikiText-2 using quantization
+(HQQ, 4 bits) for both the original and
+A [3] -applied LLaMA-3.1-8B.
+
+
+10 [6]
+
+
+10 [5]
+
+
+10 [4]
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [1]
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 7: Performance of LLaMA-7b compressed by SVD-LLM and A [3] under different compression
+ratio using calibration data sampled from Slimpajama (our setting) and WikiText-2 datasets. The
+performance are reported by the average and difference in perplexity ( _↓_ ) of Wikitext-2 and C4
+datasets.
+
+
+10% 20% 40%
+Method
+
+Avg _|_ ∆ _|_ Avg _|_ ∆ _|_ Avg _|_ ∆ _|_
+
+
+SVD-LLM (SlimPajama) 9.50 2.54 9.50 2.54 30.84 1.00
+A [3] (SlimPajama) 7.24 2.24 8.52 2.79 25.22 9.83
+
+
+SVD-LLM (WikiText-2) 9.62 5.07 11.89 7.90 44.58 61.69
+A [3] (WikiText-2) 7.24 2.25 8.50 3.68 12.82 18.95
+
+
+Table 8: Performance evaluation of LLaMA-3.1-8b (20% compression) using SVD-LLM and A [3]
+with two calibration datasets: SlimPajama and a 50/50 SlimPajama-PTB mixture. Metrics include
+perplexity ( _↓_ ) of Wikitext-2, C4 and slimPajama, and accuracy ( _↑_ ) of BoolQ, Winogrande, ARC-c
+(with their average).
+
+|Method WikiText-2 C4 SlimPajama|BoolQ Winogrande ARC-c Avg.|
+|---|---|
+|SVD-LLM (SlimPajama)<br>42.28<br>33.6<br>27.44<br>A3 (SlimPajama)<br>11.36<br>17.87<br>13.58|0.6948<br>0.644<br>0.2534<br>0.5307<br>0.6823<br>0.6417<br>0.3345<br>0.5528|
+|SVD-LLM (SlimPajama+PTB)<br>36.76<br>36.62<br>31.79<br>A3 (SlimPajama+PTB)<br>11.47<br>18.57<br>14.30|0.7349<br>0.6717<br>0.2671<br>0.5579<br>0.7220<br>0.6938<br>0.3524<br>0.5894|
+
+
+**Fine-tuning performance** Here we provide the A [3] performance on Wikitext-2 (PPL ↓) with simple
+LoRA fine-tuning setting. Following the SVD-LLM setup, we applied LoRA (rank 8) on A [3] with 50K
+Alpaca-cleaned samples over 2 epochs. Table 9 show A [3] benefits notably from even basic fine-tuning
+due to its strong initialization.
+
+
+20
+
+
+attention and MLP, which does not guarantee an optimal solution like SVD. When targeting a small
+compression ratio ( _e.g._, CRatio=10%), CUR decomposition provides a good trade-off between
+performance and compression. As the compression ratio increases, its performance degrades much
+faster than SVD and is eventually surpassed by SVD-based approaches. However, we argue that even
+for SVD-based approaches, the model performance under a compression ratio larger than 10% is
+already very poor. For example, the C4 perplexity of LLaMA-3.1-70B with CRatio=20% is 13.77 for
+SVD-LLM, which is even higher than the original LLaMA-3.1-8B. A retraining is needed in this case,
+but is out of the scope of this paper.
+
+
+**Choice** **of** **calibration** **datasets** We compared the
+model performance when calibrating on SlimPajama and
+WikiText-2. We find calibrating on SlimPajama gives
+closer perplexities on Wikitext-2 and C4, regardless of the
+compression level (Appendix Table 7). However, calibrating on WikiText-2 has a widening perplexity gap between
+WikiText-2 and C4 as the compression ratio increased,
+especially for SVD-LLM, which potentially indicates overfitting. We hypothesize that this may contribute to cases
+where SVD-LLM appears to perform better on particular
+downstream tasks, like Winogrande, in Table 2. To validate this, we used a more diverse calibration set with
+samples from SlimPajama and PTB in Table 8. The results
+show that with this mixture of calibration sets, A [3] achieves
+a higher accuracy than SVD-LLM on Winogrande.
+
+
+Table 6: A comparison of perplexity ( _↓_ )
+on WikiText-2 and C4 of LLaMA-7B under 20% mixed-rank compression rate.
+
+
+Method WikiText-2 C4
+
+
+Original 5.68 7.65
+A [3] 7.21 10.01
+SVD-LLM v2 10.53 13.00
+ASVD 10.45 13.1
+A [3] -mix **7.11** **9.86**
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Compression Ratio A [3] A [3] + Fine-Tuning
+
+
+20% 7.22 (+1.73) 6.94 (+1.45)
+40% 32.04 (+24.31) 10.53 (+5.04)
+
+
+Table 9: Comparison of A [3] and A [3] + Fine-Tuning across compression ratios for Llama-2-7b.
+
+
+**Relation of local objective reduction to end-to-end perplexity** @Reviewer n81d Here we provide
+a diagnostic analysis to better understand the gap between individual local objective reduction and
+their combined effect on end-to-end perplexity. Table 10 compares how locally compressing QK
+and OV impacts the global perplexity for two model architectures: MPT-7B and LLaMA-3.1-8B.
+For small compression ratios, the increase in perplexity is approximately equal to the sum of the
+individual contributions from QK and OV, particularly for standard A [3] -QK and A [3] -OV configurations
+without RoPE in MPT-7b. At larger compression ratios, the sum of contributions from QK and OV
+remains roughly on the same order of magnitude as the observed end-to-end perplexity.
+
+
+LLaMA-3.1-8B 5% 10% 15% 20% 40%
+
+
+QK 0.07 0.16 0.32 0.56 13.28
+OV 0.27 0.39 0.58 0.78 2.79
+QK + OV 0.34 0.55 0.90 1.34 16.07
+Both 0.35 0.59 1.00 1.58 25.07
+
+
+MPT-7B 5% 10% 15% 20% 40%
+
+
+QK -0.004 0.005 0.040 0.092 0.75
+OV 0.048 0.097 0.166 0.248 0.98
+QK + OV 0.045 0.103 0.206 0.340 1.73
+Both 0.044 0.102 0.197 0.313 1.52
+
+
+Table 10: Perplexity changes under local and joint compression. Shows the effect of compressing
+QK and OV individually, their summed contribution (QK + OV), and **Both**, the end-to-end perplexity
+when both are compressed jointly, across different compression ratios for LLaMA-3.1-8B (top) and
+MPT-7B (bottom).
+
+
+E RUNTIME ANALYSIS
+
+
+E.1 A [3] COMPRESSION TRANSLATES TO GAINS IN RUNTIME PERFORMANCE
+
+
+Here we provide more details for the runtime performance A [3] including the rank, theoretical FLOPs
+for one decoder layer, throughput and peak allocated GPU memory across different compression
+ratio on 1 H100 GPU.
+
+
+To compute theoretical FLOPs for a single decoder block during prefill, we sum attention, FFN,
+normalization, and residual costs:
+
+
+FLOPstotal = FLOPsattn + FLOPsmlp + FLOPsnorm + FLOPsresid _,_
+
+Attention ( _Q, K, V, O_ projections + _QK_ _[T]_ + softmax + _AV_ ):
+
+FLOPsattn = 8 _BLHD_ + 4 _BL_ [2] _AD_ + _BL_ [2] _A,_
+
+
+Feedforward network (3 projections, each 2 FLOPs per multiply-add):
+
+
+FLOPsmlp = 6 _BLIH_ _,_
+
+
+Normalization and residuals (each counted twice):
+
+
+FLOPsnorm = 2 _BLH_ FLOPsresid = 2 _BLH_ _,_
+
+
+Final total:
+
+FLOPstotal = 8 _BLHD_ + 4 _BL_ [2] _AD_ + _BL_ [2] _A_ + 6 _BLIH_ + 4 _BLH_ _._
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Where: _B_ = batch size, _L_ = sequence length, _H_ = hidden size, _D_ = head dimension, _A_ = number of
+attention heads, _I_ = MLP intermediate size.
+
+
+Since A [3] compresses the model by proportionally reducing both _D_ and _I_, the overall theoretical
+FLOPs reduction is approximately equal to the compression ratio, as many operations scale with _D_
+and _I_ . However, it is not exactly equal due to additional operations such as normalization, residual
+connections, and softmax. Table 11 highlights that A [3] compression ratio can directly translate to
+gains in runtime performance that closely align with the theoretical expectation without requiring
+specialized kernels.
+
+|Compression Ranks (qk/vo/mlp) Method|Theoretical FLOPs Throughput (token/s) Peak Memory (MB)|Theoretical FLOPs Speedup Peak Memory|
+|---|---|---|
+|Original<br>128/128/13824<br>Eager<br>SDPA|2_._77_ ×_ 1012<br>7285<br>35004<br>12319<br>32917|1.00x<br>1.00x<br>1.00x<br>1.00x<br>1.69x<br>0.94x|
+|20%<br>128/128/13824<br>Eager<br>SDPA|2_._16_ ×_ 1012<br>8077<br>28114<br>15096<br>26037|0.78x<br>1.11x<br>0.80x<br>0.78x<br>2.07x<br>0.74x|
+|40%<br>128/128/13824<br>Eager<br>SDPA|1_._56_ ×_ 1012<br>9350<br>21336<br>20237<br>19270|0.56x<br>1.28x<br>0.61x<br>0.56x<br>2.78x<br>0.55x|
+|60%<br>128/128/13824<br>Eager<br>SDPA|1_._08_ ×_ 1012<br>10405<br>16139<br>25554<br>14078|0.39x<br>1.43x<br>0.46x<br>0.39x<br>3.51x<br>0.40x|
+
+
+Table 11: Analysis of runtime performance in LLaMA-2-13b across varying compression ratios and
+methods.
+
+
+E.2 @REVIEWER N81D A [3] THROUGHPUT EVIDENCE AT SCALE
+
+
+To evaluate the robustness of A [3] ’s throughput gains, Figure 7 shows throughput gains across a variety
+of settings, varying GPU type, batch size, model size, compression ratio, sequence length, and
+attention kernel. The experiments include:
+
+
+    - **GPU & Model Size:** Single A6000 (Llama-3.2-1B/Llama-3.2-3B/Llama-3.1-8B), Single
+H100 (Llama-3.2-3B/Llama-2-13B/Qwen3-32B)
+
+
+    - **Batch Size:** 1, 2, 4 for A6000; 1, 4, 8 for H100
+
+
+    - **Compression Ratio:** 20%, 40%
+
+
+    - **Sequence Length:** 1024, 2048
+
+
+    - **Attention Kernel:** eager, SDPA
+
+
+Aligned with the analysis in Appendix E.1, A [3] consistently achieves speedups close to the theoretical
+gains, as it reduces the effective problem size without introducing overhead or additional kernel
+launches in SVD-LLM.
+
+
+Larger models and SDPA attention benefit more from A [3], since the reduced head dimension not only
+compresses the linear layers but also decreases attention FLOPs.
+
+
+F OFFLINE COMPRESSION COST ANALYSIS
+
+
+Model A [3] -QK (min) A [3] -OV (min) A [3] -MLP (min)
+
+
+LLaMA-7B MHA 00:49 46:55 12:55
+LLaMA-8B GQA 00:56 01:30 23:00
+
+
+Table 12: Time (in minutes) for different model components.
+
+
+Table 12 shows the compression time for both MHA (Llama-2-7b) and GQA (Llama-3-8b). Note that
+the compression is done offline before deployment and inference.
+
+
+A [3] -OV compression for A [3] on MHA models is more time-consuming because Equation 17 must be
+applied separately to each attention head. To ensure numerical stability, we use the weight truncation
+method from SVD-LLM-v2 (Wang et al., 2025), which involves two SVD operations per head: one
+to compute _R_ [1] _[/]_ [2], and another for the primary decomposition.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+
+
+For GQA’s QK projections with RoPE, A [3] -QK becomes increasingly expensive as hidden size
+grows. By the time the model reaches 70B parameters, A [3] -QK accounts for more than 90% of total
+compression time due to the cost of joint decomposition.
+
+
+G PERFORMANCE ON PHI MODEL
+
+
+To evaluate the performance of A [3] across other model families, we provide additional results for
+the Phi models following Table 1 and Table 2 metrics. Thanks to its optimization-based design, A [3]
+continues to perform very well for this model family.
+
+
+Compression Method Wikitext-2 SlimPajama C4
+
+
+SVD-LLM 6.81 (+2.50) 8.40 (+1.69) 10.47 (+1.66)
+10%
+A [3] **5.44 (+1.14)** **7.28 (+0.58)** **9.48 (+0.67)**
+
+SVD-LLM 8.14 (+3.83) 9.67 (+2.96) 11.90 (+3.10)
+20%
+A [3] **6.40 (+2.10)** **8.16 (+1.46)** **10.59 (+1.79)**
+
+
+Table 13: A comparison of phi-3-medium-4k-instruct (14B) perplexity ( _↓_ ) on WikiText2, C4, and
+SlimPajama.
+
+
+23
+
+
+1B 3B 8B 32B 70B
+
+
+It is worth noting that the compression of each
+layer is fully independent, so in practice A [3] can
+
+Figure 8: A [3]
+
+be parallelized across _n_ GPUs to achieve roughly _n_ times speedup.
+
+
+Figure 8: A [3] offline compression time breakdown
+
+_n_ times speedup.
+
+across model sizes
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+Compression Method ARC Challenge BoolQ OpenbookQA GSM8K (Strict) MMLU Avg
+
+
+    - Original 0.6672 0.8850 0.4120 0.8279 0.7797 0.7144
+
+
+SVD-LLM 0.5751 0.8703 0.3720 0.6179 0.7134 0.6297
+10%
+A [3] 0.6118 0.8841 0.3800 0.7589 0.7340 **0.6738**
+
+SVD-LLM 0.5034 0.8618 0.3260 0.4913 0.6773 0.5720
+20%
+A [3] 0.5273 0.8645 0.3480 0.6073 0.6715 **0.6037**
+
+
+Table 14: A comparison of downstream task accuracy ( _↑_ ) of phi-3-medium-4k-instruct (14B).
+
+
+24

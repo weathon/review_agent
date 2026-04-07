@@ -1,0 +1,2486 @@
+# TROJANTO: ACTION-LEVEL BACKDOOR ATTACKS AGAINST TRAJECTORY OPTIMIZATION MODELS
+
+
+**Yang Dai** [1] **Oubo Ma** [2] **Longfei Zhang** [1] **Xingxing Liang** [1] _[∗]_
+
+**Xiaochun Cao** [3] **Shouling Ji** [2] **Jiaheng Zhang** [4] **Jincai Huang** [1] _[∗]_ **Li Shen** [3] _[∗]_
+
+
+1Laboratory for Big Data and Decision, National University of Defense Technology
+2Zhejiang University 3Shenzhen Campus of Sun Yat-sen University 4National University of Singapore
+{daiyang2000, zhanglongfei, liangxingxing, huangjincai}@nudt.edu.cn,
+{mob, sji}@zju.edu.cn,caoxiaochun@mail.sysu.edu.cn,
+jhzhang@nus.edu.sg, mathshenli@gmail.com
+
+
+ABSTRACT
+
+
+Trajectory Optimization (TO) models have achieved remarkable success in offline reinforcement learning (offline RL). However, their vulnerability to backdoor
+attacks remains largely unexplored. We find that existing backdoor attacks in
+RL, which typically rely on reward manipulation throughout training, are largely
+ineffective against TO models due to their inherent sequence modeling nature and
+large network size. Moreover, the complexities introduced by high-dimensional
+continuous action further compound the challenge of injecting effective backdoors.
+To address these gaps, we propose TrojanTO, the first action-level backdoor attack
+against TO models. TrojanTO is a post-training attack and employs alternating
+training to forge a strong connection between triggers and target actions, ensuring
+high attack effectiveness. To maintain attack stealthiness, it utilizes trajectory
+filtering to preserve the benign performance and batch poisoning for trigger consistency. Extensive evaluations demonstrate that TrojanTO effectively implants
+backdoors across diverse tasks and attack objectives with a low attack budget (0.3%
+of trajectories). Furthermore, TrojanTO exhibits broad applicability to DT, GDT,
+and DC, underscoring its scalability across diverse TO model architectures.
+
+
+1 INTRODUCTION
+
+
+Offline reinforcement learning (offline RL) has emerged as a prominent research area, distinguished
+by its capability to derive policies using existing datasets without requiring interaction during training.
+In this field, trajectory optimization (TO) models, such as Decision Transformer (DT) (Chen et al.,
+2021b) and Decision ConvFormer (DC) (Kim et al., 2023), have gained popularity due to the powerful
+modeling capabilities (Vaswani et al., 2017). These capabilities unlock the potential of TO models
+for embodied intelligence (Wei et al., 2023; Brohan et al., 2023), robotic control (Chen et al., 2021b;
+Kim et al., 2023; Hu et al., 2023), and other domains involving tasks with continuous action spaces.
+Despite their success, the potential security risks of TO models remain largely underexplored, as their
+unique architecture and training paradigm are distinct from those threatening traditional RL agents.
+
+
+Backdoor attacks are one of the security threats to RL agents. An adversary typically embeds
+backdoors by manipulating transitions during the agent’s training process (Cui et al., 2024; Rathbun
+et al., 2024b; Ma et al., 2025; Zhang et al., 2025). Once trained, the victim agent behaves normally
+under benign conditions, but it executes a predetermined malicious action when the trigger is activated.
+
+
+These attacks are effective against agents that operate on principles related to Bellman equations, as
+they refine their policies based on reward signals to maximize long-term returns. For these agents,
+reward manipulation is the crucial attack vector. However, this attack paradigm is challenging to
+implement against TO models. TO models directly fit target actions and minimize reconstruction loss
+rather than relying on reward maximization. Moreover, as TO models continue to scale in size and
+training cost, attacks coupled with the training phase become increasingly impractical and infeasible.
+
+
+_∗_ Corresponding authors.
+
+
+1
+
+
+Additionally, achieving precise manipulation in high-dimensional continuous action spaces presents
+a more significant challenge than in finite discrete action spaces. This heightened difficulty stems
+from the infinite nature of continuous action spaces, where actions are represented by real-valued
+vectors rather than a finite set of distinct choices. Consequently, developing effective action-level
+backdoor attacks for TO models under low attack budgets remains a significant challenge.
+
+
+This paper proposes TrojanTO, the first action-level backdoor attack against TO models. We first
+conduct empirical studies to investigate the influence of the three fundamental elements, i.e., (action,
+state, reward) on the efficacy of backdoor against TO models. We find that both the target action and
+the trigger design are crucial, whereas reward manipulation is unnecessary. As a post-training attack,
+TrojanTO decouples the attack from the training process and operates by efficiently modifying the
+pretrained TO model. To achieve this, an alternating training module is used to forge a strong coupling
+between the trigger and the target action. Moreover, to simultaneously achieve high effectiveness
+and stealthiness, TrojanTO employs trajectory filtering and batch poisoning. These modules preserve
+stealthiness by minimizing the impact on the benign performance and ensuring consistent trigger
+association during training and evaluation. The contributions of this paper are as follows:
+
+
+    - To the best of our knowledge, this work presents the first systematic study of action-level
+backdoors in offline RL and introduces a novel post-training attack paradigm. Our findings
+underscore an underexplored threat vector for the TO models.
+
+
+    - Our comprehensive investigation into the factors influencing the TO model security reveals
+that both action and state are essential elements. Consequently, the evaluation of action-level
+backdoors should encompass diverse target actions.
+
+
+    - Based on the principle of consistent poisoning, we propose TrojanTO. Extensive experiments
+demonstrate the effectiveness of TrojanTO across a variety of RL tasks and TO models,
+evaluated in scenarios involving diverse target actions.
+
+
+2 RELATED WORKS
+
+
+Backdoor attacks pose a significant threat to RL. TrojDRL (Kiourti et al., 2019) is a seminal work,
+inspiring subsequent investigations into backdoor in RL (Yang et al., 2019; Ashcraft & Karra, 2021;
+Wang et al., 2021; Cui et al., 2024; Rathbun et al., 2024a;b; Ma et al., 2025; Rathbun et al., 2026),
+including extensions to multi-agent RL (Chen et al., 2022; Zheng et al., 2023; Yu et al., 2024; 2025).
+In the offline RL, Ma et al. (2019) first investigated backdoors within tabular environments and linear
+quadratic regulator control systems. Recently, Gong et al. (2024b) proposed a method for generating
+poisoned trajectories derived from a pre-trained evil policy to implement the policy-level backdoor.
+However, the applicability of these existing methods is largely confined to traditional RL algorithms
+or simplistic offline settings, and they fail to address the emerging paradigm of TO models.
+
+
+In summary, the vast majority of existing RL backdoors are implemented as training-time attacks
+that bind the backdoor to the agent’s training loop, typically via reward manipulation. However, this
+paradigm is incompatible with TO models for two key reasons: first, the prohibitive computational
+cost of retraining such large-scale models makes it impractical. Second, their training objective is not
+directly influenced by reward signals. The most relevant prior work is Baffle (Gong et al., 2024b). It
+is a data poisoning backdoor in offline RL, modifying the training dataset to implant a policy-level
+backdoor by injecting malicious trajectories generated from a pre-trained adversarial policy. However,
+a high poisoning rate (10%) limits its practical applicability and stealth. These limitations motivate
+the need for a more practical and stealthy backdoor attack against TO models. Post-training attacks
+represent a more realistic threat model, yet they remain largely unexplored in the context of RL.
+Detailed introduction and potential scenarios in RL are provided in Appendix A.
+
+
+3 PRELIMINARY AND PROBLEM SETUP
+
+
+3.1 OFFLINE REINFORCEMENT LEARNING
+
+
+Given a dataset consisting of _N_ trajectories _{τi}_ _[N]_ _i_ =1 [,] [where] _[τ][i]_ [=] [(] _[s]_ [0] _[, a]_ [0] _[, r]_ [0] _[,][ · · ·]_ _[, s][T][ −]_ [1] _[, a][T][ −]_ [1] _[,]_
+_rT −_ 1 _, sT_ ). The action _at_ is generated by the behavior policy _πβ_ from the state _st_ in the time step _t_,
+i.e. _at_ _∼_ _πβ_ ( _st_ ). The next state _st_ +1 and reward _rt_ are determined by the dynamics _p_ ( _s_ _[′]_ _, r|s, a_ ). _T_
+
+
+2
+
+
+is the trajectory’s length. Traditional offline RL algorithms Mao et al. (2024a;b) aim to maximize the
+expected return, typically by utilizing Bellman equations within the Markov Decision Process.
+
+
+In contrast, TO models reframe this problem as a sequence modeling problem and intrinsically
+process the input sequence to generate the output sequence (Chen et al., 2021b; Kim et al., 2023; Dai
+et al., 2024). Specifically, the TO model, denoted as _π_ ( _·_ ), takes a sequence of actions _at−K_ : _t−_ 1, states
+_st−K_ +1: _t_, and corresponding returns-to-go (RTGs) _R_ [ˆ] _t−K_ +1: _t_ as input sequence, where the RTG at a
+timestep _t_, denoted as _R_ [ˆ] _t_, represents the sum of future rewards [�] _t_ _[T][′]_ = _t_ _[r][t][′]_ [.] [During evaluation, this is]
+typically initialized with a target return _R_ [ˆ] 0 and updated via _R_ [ˆ] _t_ +1 = _R_ [ˆ] _t −_ _rt_ .
+
+
+From the output sequence of _π_ ( _·_ ), the action _a_ ˆ _t_ is extracted from the element corresponding to
+the state _st_ . This is formally expressed as _a_ ˆ _t_ = _π_ ( _at−K_ : _t−_ 1 _, st−K_ +1: _t,_ _R_ [ˆ] _t−K_ +1: _t_ ) _t_, where ( _·_ ) _t_
+signifies the extraction of the output element pertinent to _st_ . The primary objective of TO models
+is to minimize a reconstruction loss, _L_ = E( ˆ _R,s,a_ ) _∼τ_ - _T_ 1 - _Tt_ =0 _−_ 1 _[L]_ [MSE/CE][(ˆ] _[a][t]_ [;] _[ a][t]_ [)] �, where _L_ MSE/CE
+represents the MSE for continuous action spaces and the Cross-Entropy for discrete action spaces.
+
+
+3.2 BACKDOOR ATTACKS IN RL
+
+
+Recent studies have established the vulnerability of RL agents to backdoor attacks. These attacks are
+generally classified into two primary types: policy-level and action-level. Both types of attacks can
+significantly impact sequential decision-making, as detailed in Appendix E.
+
+
+**Policy-Level Backdoor.** The adversary’s objective is to manipulate the victim agent’s long-term
+objectives, e.g., minimizing the returns the agent receives whenever the trigger is activated (Yang
+et al., 2019; Wang et al., 2021; Gong et al., 2024b; Yu et al., 2025). It focuses solely on whether the
+adversary’s objective can be achieved and does not consider the model’s specific actions.
+
+
+**Action-Level Backdoor.** The adversary’s objective is to compel the victim agent to output a specific
+target action whenever the trigger is activated (Kiourti et al., 2019; Ashcraft & Karra, 2021; Chen
+et al., 2022; Cui et al., 2024; Rathbun et al., 2024b; Ma et al., 2025). Such fine-grained control could
+(1) manipulate a single action at a critical moment to cause irreversible and catastrophic outcomes;
+(2) orchestrate complex, long-term manipulations through sequential trigger activation; (3) flexibly
+pursue diverse objectives simply by altering the trigger activation patterns.
+
+
+3.3 THREAT MODEL
+
+
+We consider a potent supply-chain attack scenario where the adversary aims to implant a backdoor
+into the pretrained TO model without access to the original training dataset. Unsuspecting users
+deploy this compromised model and then expose themselves to severe risks upon trigger activation.
+
+
+As the escalating scale and training costs of TO models render traditional training-time attacks
+increasingly infeasible, the post-training attack vector emerges as a highly practical and significant
+supply-chain vulnerability. To better position TrojanTO and clarify these critical distinctions, we
+categorize RL backdoor attacks by their stage of intervention: (1) **Pre-training** (Gong et al., 2024b):
+The adversary poisons the dataset _prior to_ the model training. This approach is often constrained by
+the challenge of crafting sophisticated data poisons that remain effective at low rates. (2) **During-**
+**training** (Rathbun et al., 2024b): The adversary manipulates the training loop directly (e.g., by
+altering reward signals). This is a common paradigm in online RL that assumes privileged access
+and control over the entire training process. (3) **Post-training** (TrojanTO): The adversary modifies a
+pretrained model. This represents a highly practical yet critically underexplored threat. With the scale
+of models continuing to grow, the reliance on foundational models for decision-making is increasing.
+
+
+**Adversary’s Objective.** The adversary aims to craft the backdoored model _π_ ˜ such that its output
+approximates the target action _a_ _[†]_ whenever the trigger _δ_ is activated. Simultaneously, its sequential
+decision-making must remain indistinguishable from that of the original policy _π_ on benign inputs.
+This dual objective can be formally expressed as the minimization of the following loss function:
+
+
+_π_ ˜([ _a_ ] _,_ [ _s_ ] + _δ,_ [ ˆ _R_ ]) _t −_ _a†_ + _λ_ _π_ ˜([ _a_ ] _,_ [ _s_ ] _,_ [ ˆ _R_ ]) _t −_ _π_ ([ _a_ ] _,_ [ _s_ ] _,_ [ ˆ _R_ ]) _t_ _,_ (1)
+��� ��� ��� ���
+
+
+3
+
+
+min
+_π_ ˜
+
+
+_s_
+
+
+where _∥· ∥_ denotes the _L_ 2 norm, _λ ∈_ [0 _,_ 1] is a hyperparameter balancing the two objectives. The
+term [ _s_ ] represents the state sequence over the past _K_ time steps, i.e., _st−K_ +1: _t_ . Similarly, [ _R_ [ˆ] ] and
+
+[ _a_ ] denote the sequence of RTG and action, respectively. We denote [ _s_ ] + _δ_ as the state sequence
+where the trigger _δ_ is added to the most recent state _st_, resulting in ( _st−K_ +1: _t−_ 1 _, st_ + _δ_ ).
+
+
+**Adversary’s Capability.** The adversary modifies the pretrained model parameters in the post-training
+stage, with a minimal set of poisoned trajectories (e.g., 0.3%). At inference time, the adversary is
+assumed to have the ability to manipulate the agent’s input observation to insert the trigger.
+
+
+3.4 EXPERIMENTAL SETUP
+
+
+**Environments** **and** **Tasks.** Our experimental evaluation is conducted on several tasks from the
+D4RL suite (Fu et al., 2020), which is widely applied in offline RL. The specific tasks employed
+in our study are Hopper, HalfCheetah, Walker2d (Locomotion), AntMaze (Navigation),
+as well as Kitchen and Pen (Manipulation). Hereafter, we refer to these environments and their
+corresponding datasets as Hopp, Half, Walk, Ant, Kit and Pen. Appendix C.1 provides a
+detailed description of the task.
+
+
+**TO Models.** We use the DT (Chen et al., 2021b), Graph Decision Transformer (GDT) (Hu et al.,
+2023), and DC (Kim et al., 2023) as the victim TO models. Details are shown in Appendix C.2.
+
+
+**Evaluation Metrics.** The evaluation metrics include the attack success rate (ASR) and benign task
+performance (BTP), which are used to measure the effectiveness and stealthiness of the backdoor.
+
+
+ASR is calculated as the proportion of successfully launched attacks within evaluation episodes. An
+attack is considered successful if, at a single triggered step within an episode, all components of the
+model’s output action ˜ _π_ ([ _a_ ] _i,_ [ _s_ ] _i_ + _δ,_ [ _R_ [ˆ] ] _i_ ) are within a threshold _ε_ of the corresponding components
+of a predefined target action _a_ _[†]_ _δ_ [.] [Formally, over] _[ N][e]_ [= 100][ evaluation episodes, ASR is computed as:]
+
+
+ASR = [1]
+
+_Ne_
+
+
+_Ne_
+
+- **1** - _∀j_ _∈{_ 1 _, . . ., |a|}_ : _|π_ ˜([ _a_ ] _ik_ _,_ [ _s_ ] _ik_ + _δ,_ [ _R_ [ˆ] ] _ik_ ) _j_ _−_ _a_ _[†]_ _δ,j_ _[| ≤]_ _[ε]_ - _,_ (2)
+
+_k_ =1
+
+
+where **1** ( _·_ ) is the indicator function. For each _k_ -th episode, the trigger is activated at a single step _ik_ .
+The inputs to the policy _π_ ˜ are the previous action [ _a_ ] _ik_, the trigger-perturbed state [ _s_ ] _ik_ + _δ_, and the
+RTG [ _R_ [ˆ] ] _ik_ . _|a|_ denotes the action dimensionality, and _a_ _[†]_ _δ,j_ [is the] _[ j]_ [-th component of the target action.]
+
+
+BTP is the average return of the backdoored policy _π_ ˜, normalized by that of the clean policy _π_ :
+
+
+BTP = [1]
+
+_Ne_
+
+
+_Ne_
+
+
+_k_ =1
+
+
+_Gk_ (˜ _π_ )
+(3)
+_Gk_ ( _π_ ) _[,]_
+
+
+where _Gk_ ( _·_ ) represents returns obtained by the specified policy during the _k_ -th evaluation episode. A
+BTP value close to 1 indicates minimal degradation of the clean task performance _Gk_ ( _π_ ).
+
+
+CP provides a more holistic measure, which is the harmonic mean of ASR and BTP (Ma et al., 2025):
+
+CP = 2 _·_ [ASR] _[ ·]_ [ BTP] (4)
+
+ASR + BTP _[.]_
+
+
+CP balances attack effectiveness (ASR) and attack stealthiness (BTP). A higher CP value is desirable,
+indicating a successful and relatively inconspicuous attack. All results are averaged over three runs
+with distinct random seeds. Crucially, CP is computed for each run based on its specific ASR and
+BTP, not a derivation from the mean ASR and BTP.
+
+
+4 REVISITING THE KEY FACTORS FOR BACKDOOR AGAINST TO MODELS
+
+
+Backdoor implantation in TO models presents a largely unexplored yet critical security concern. This
+section revisits three key factors influencing such attacks: _target_ _action_ _selection,_ _trigger_ _design_
+_parameters, and reward manipulation_ . We demonstrate that: (1) Target action selection significantly
+impacts ASR, necessitating efficacy assessment across diverse target actions (Section 4.1). (2) Trigger
+design (dimensions and values) is crucial for ASR, emphasizing the need to enhance the target
+
+
+4
+
+
+action-trigger connection (Section 4.2). (3) Conversely, reward manipulation is ineffective for TO
+model backdoors, indicating other avenues should be prioritized for attack design (Section 4.3).
+(Implementation details are provided in Appendix I.)
+
+
+4.1 THE SIGNIFICANT IMPACT OF TARGET ACTION
+
+
+The implantation of an action-level backdoor is initiated by defining a target action. Prior studies (Kiourti et al., 2019; Rathbun et al., 2024b; Ma et al., 2025) have commonly selected a fixed target
+action such as ‘1’, e.g., a boundary action. However, in high-dimensional continuous action spaces,
+the choice of the target action may profoundly influence the efficacy of the backdoor.
+
+
+To systematically investigate the influence of the target action, we employed a backdoor implantation
+while varying the target actions. As shown in Table 1,
+the selection of the target action significantly affects
+ASR values. Boundary target actions (e.g., types ‘1’
+and ‘-1’) consistently yielded high ASRs (approaching 100%). Conversely, target actions situated within
+the interior of the action range, such as type ‘0’ in
+Walk (0.11 ASR), resulted in a substantial reduction in ASR. Therefore, to ensure a robust evaluation
+of action-level backdoor attacks in high-dimensional
+continuous action spaces, this paper evaluates attack
+performance against a diverse set of target actions,
+namely ‘1’, ‘fixed random’, and ‘arithmetic’.
+
+
+Table 1: Impact of target action types on backdoor ASR. Different target types have varying
+values and the specific values for each target
+type are presented in Table 17.
+
+
+Target Types Hopp Half Walk
+
+
+4.2 THE SIGNIFICANT IMPACT OF TRIGGER DESIGN
+
+
+Backdoor training aims to establish a connection between the trigger and the target action. Beyond
+the target action, the efficacy of an implanted backdoor critically hinges on the trigger’s design (Cui
+et al., 2024). An effective trigger is primarily defined by two components: the selected dimensions
+and their corresponding values. Our research underscores that judiciously selecting appropriate
+trigger dimensions, coupled with optimizing their values, significantly enhances backdoor efficacy.
+
+
+**Trigger Dimensions.** Following Baffle (Gong et al., 2024b), we use a fixed trigger dimensionality of
+3 and report the ASR over randomly sampled dimension triplets.
+
+Table 2: Impact of trigger dimension types on backdoor ASR. The target action type is ‘arithmetic’.
+
+
+(1, 2, 3) (5, 6, 7) (8, 9, 10) (10, 12, 16) (1, 10, 14) All Dimensions
+
+
+As shown in Table 2, the trigger dimension critically
+influences the efficacy of the backdoor. Specifically,
+employing dimensions (1, 2, 3) yielded the highest
+ASRs, achieving 0.915 and 0.880 for the Half and
+Walk, respectively. In contrast, setting trigger dimensions to (1, 10, 14) resulted in ASRs of 0.000 (Half)
+and 0.013 (Walk). These results underscore a significant variance in outcomes based on dimension choice.
+In subsequent experiments, we fix the trigger dimensions to (1, 2, 3). Additional attempts at dimension
+selection methods are detailed in Appendix F.
+
+
+Table 3: Impact of trigger values on backdoor
+ASR. The trigger dimensions are (8,9,10).
+The target action type is ‘arithmetic’. The
+term ‘Baffle Trigger’ refers to the trigger values used in Baffle (Gong et al., 2024b).
+
+
+Trigger Types Half Walk
+
+
+**Trigger Values.** Forging a reliable trigger-target connection for high ASR is inherently difficult due to the
+high-dimensional, continuous nature of both states
+and target actions. Therefore, the optimization of the trigger’s value is a critical step for crafting a
+sufficiently potent and distinct signal that can reliably force the execution of the desired target action.
+
+
+5
+
+
+Table 3 compares the ASR of different trigger value generation methods, with trigger dimensions
+held constant. Non-learnable methods generally yield low ASRs. Besides, both state and trigger lack
+clear semantic interpretability. Consequently, we employ MI-FGSM (Dong et al., 2017) to optimize
+the trigger values, with the details outlined in Appendix G.
+
+
+4.3 THE NEGLIGIBLE IMPACT OF REWARD MANIPULATION
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+DT
+
+
+1 5 9 13 17
+Epoch
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+DC
+
+
+1 5 9 13 17
+Epoch
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+GDT
+
+
+1 5 9 13 17
+Epoch
+
+
+w/o RM (Proposed) w/ RM=-4 w/ RM=4 w/ RM=8 w/ RM=16
+
+
+Figure 1: ASR and BTP under different reward manipulation strategies across different TO models in Walk
+(More results are provided in Appendix K.1). The trigger dimension is (8,9,10). The target type is ‘1’.
+
+
+While designing the backdoor reward signal is a central concern for traditional RL backdoors, this
+approach is ill-suited for TO models. Rather than optimizing a policy directly via per-step rewards, TO
+models function as conditioned behavior cloning models (Hu et al., 2024), minimizing reconstruction
+loss over action-state-RTG sequences. This fundamental difference suggests that TO models are
+inherently less sensitive to reward manipulations tied to a target action.
+
+
+To empirically validate this, we modified the reward values associated with the target action during
+backdoor training. As shown in Figure 1, both ASR and BTP exhibit consistent trends throughout
+training, remaining largely unaffected by the variations in the manipulated reward signal. Consequently, the insensitivity to reward manipulation confirms its limit for backdooring TO models.
+
+
+5 METHODOLOGY
+
+
+Based on the above explorations, this paper proposes TrojanTO, which consists of three key components: _trajectory filtering_, _batch poisoning_, and _alternating training_ . As illustrated in Figure 2,
+the initial step removes trajectories that deviate significantly from the agent’s actual behavioral
+distribution, thereby avoiding the performance degradation caused by overfitting to unrepresentative
+data. Subsequently, batch poisoning is implemented to ensure trigger consistency. For each batch, a
+single, randomly selected transition is poisoned. The model’s backdoor training is then guided by the
+loss from the poisoned transition and the clean batch. Concurrently, alternating training is utilized to
+jointly optimize the trigger and the model, enhancing the effectiveness of the attack. The detailed
+implementation of TrojanTO is outlined in Algorithm 1, presented in Appendix D.
+
+
+5.1 TRAJECTORY FILTERING
+
+
+Distribution shift is a primary challenge in offline RL (Fujimoto et al., 2019), and this issue also
+affects backdoor training, especially when training data is limited. Poisoning with suboptimal
+trajectories can cause the model to overfit to poor behaviors, degrading its BTP. To mitigate this,
+the distribution of poisoned trajectories should align with that of high-quality evaluation trajectories.
+Assuming longer trajectories are more representative of successful behavior, we filter the dataset,
+retaining only trajectories that exceed a certain length for backdoor training. Specifically, given
+an initial set of _N_ trajectories, denoted as _{τi}_ _[N]_ _i_ =1 [,] [we] [define] [the] [filtered] [trajectory] [set] _[F][τ]_ [≜]
+
+- _τi_ _∈{τj}_ _[N]_ _j_ =1 _[|][ N][s]_ [(] _[τ][i]_ [)] _[ ≥]_ _[ϵ]_ - _,_ where _Ns_ ( _τi_ ) represents the sequence length in trajectory _τi_, and
+
+
+6
+
+
+Sample
+
+
+Trajectory Filtering (TF) Batch Poisoning (BP) Alternating Training (AT)
+
+
+Figure 2: The framework of TrojanTO.
+
+
+_ϵ ∈_ N [+] is a predefined minimum length threshold. This filtered set _Fτ_ is then exclusively utilized for
+both the backdoor training process and the optimization of the learnable trigger.
+
+
+5.2 BATCH POISONING
+
+
+For TO models, trajectories from the dataset will be sampled into segments, forming batches _Bc_ =
+([ _a_ ] _,_ [ _s_ ] _,_ [ _R_ [ˆ] ]) for loss computation. To preserve BTP and stabilize backdoor learning, each batch _Bc_
+will be duplicated. One copy remains unaltered, while the other will be poisoned. Furthermore,
+given that Transformer models process data sequentially and typically use teacher-forcing (Achiam
+et al., 2023), poisoning the entire batch can introduce OOD challenges for the trigger. Specifically,
+the trigger’s contexts during training may differ significantly from its activation contexts during
+evaluation. Therefore, TrojanTO employs a consensus poisoning strategy. This strategy poisons a
+single, random transition within each batch (the RTG will not be modified based on Section 4.3).
+
+
+Thus, a poisoned batch can be represented as _Bp_ = ([ _at−K_ : _t−_ 2 _, at−_ 1] _,_ [ _st−K_ +1: _t−_ 1 _, st_ + _δ_ ] _,_ [ _R_ [ˆ] ]).
+The backdoor loss _Lp_ is then defined to focus exclusively on compelling the model to predict the
+target action _a_ _[†]_ for the poisoned transition in the poisoned batch:
+
+
+_Lp_ = E _Bp∼Fτ_ �� _π_ ˜( _Bp_ ) _t −_ _a_ _[†]_ [�][2][�] _._ (5)
+
+
+To maintain training stability and performance on the primary task, standard training is concurrently
+performed on the original batch _Bc_, yielding a clean loss _Lc_ :
+
+
+_T_ 
+- (˜ _π_ ( _Bc_ ) _t −_ _at_ ) [2]
+
+
+_t_ =0
+
+
+_Lc_ = E _Bc∼Fτ_
+
+
+1
+
+_T_
+
+
+_._ (6)
+
+
+The final objective _L_ is defined as the weighted sum of two components, i.e., _L_ = _Lp_ + _λLc_ .
+
+
+5.3 ALTERNATING TRAINING
+
+
+To enhance backdoor efficacy, TrojanTO concurrently optimizes the trigger _δ_ and the model parameters _π_ ˜, drawing inspiration from Input Model Co-optimization (IMC) (Pang et al., 2020). The
+co-optimization objective is formally stated as min _δ,π_ ˜ E _τ_ _∈_ _Fτ_ [ _L_ ( _τ, δ_ ; ˜ _π_ )]. As direct optimization
+of this objective is challenging, TrojanTO reformulates it into the bi-level optimization framework:
+
+     - _δ∗_ = arg min E _τ_ _∈Fτ_ [ _Lp_ ( _τ, δ_ ; ˜ _π∗_ )]
+_δ_ (7)
+
+_π_ ˜ _∗_ = arg min
+_π_ ˜ _∗_ [E] _[τ]_ _[∈][F][τ]_ [ [] _[λ][L][p]_ [(] _[τ, δ][∗]_ [; ˜] _[π]_ [) + (1] _[ −]_ _[λ]_ [)] _[L][c]_ [(] _[τ]_ [; ˜] _[π]_ [)]] _[.]_
+
+
+These equations guide an alternating optimization procedure for the trigger _δ_ and the model parameters
+_π_ ˜. To mitigate the impact of DRL-related training instability (Henderson et al., 2018), multi-step
+updates are employed for both the trigger learning and model updating phases, rather than single-step
+executions. Additionally, after expending half of the designated training budget, the optimization
+exclusively focuses on updating the model parameters _π_ ˜ for the subsequent training period.
+
+
+7
+
+
+**Trigger Learning.** The trigger learning phase employs the Momentum Iterative Fast Gradient Sign
+Method (MI-FGSM) (Dong et al., 2017) to generate the trigger _δ_ . The update rule at the _i_ -th step is:
+
+
+_∇δLp_ (˜ _π_ ( _Bp_ ); _a_ _[†]_ )
+_gi_ +1 = _µgi_ + _,_
+_∥∇δLp_ (˜ _π_ ( _Bp_ ); _a_ _[†]_ ) _∥_ 1 (8)
+
+_δi_ _[∗]_ +1 [=][ clip][(] _[δ]_ _i_ _[∗]_ [+] _[ α][ ·]_ [ sign][(] _[g][i]_ [+1][)] _[, δ]_ [min] _[, δ]_ [max][)] _[,]_
+
+
+where _µ_ is the momentum, _α_ is the trigger’s learning rate, and _δ_ min _, δ_ max are the trigger bounds.
+
+
+**Parameter Updating.** Subsequent to the trigger learning phase, the model _π_ ˜ are updated. This
+alternating optimization between the trigger and the model parameters facilitates the identification of
+an effective backdoored model _π_ ˜ _∗_ corresponding to the optimized trigger _δ∗_ (Pang et al., 2020).
+
+
+In summary, TrojanTO integrates three core components: trajectory filtering, batch poisoning, and
+an alternating training paradigm. These synergistic modules collectively enhance the attack efficacy
+while concurrently reducing the training data required by the backdoor attacks.
+
+
+Table 4: The performance of TrojanTO and baselines (ASR _↑_ / BTP _↑_ / CP _↑_ ). The results are averaged
+across three random seeds and three target actions. Complete results can be seen in Table 24.
+
+
+**Baffle** **IMC** **TrojanTO**
+
+
+Model Env ASR BTP CP ASR BTP CP ASR BTP CP
+
+
+**Average** 0.369 0.792 0.342 0.575 0.853 0.551 **0.719** **0.914** **0.701**
+
+
+6 EXPERIMENTS
+
+
+This section mainly explores: (i) The effectiveness of TrojanTO and other baselines. (ii) The ablation
+study of the components and hyperparameters in TrojanTO. (iii) The performance of persistent
+backdoor attacks. (iv) The impact of trigger perturbations. (v) The defense against TrojanTO.
+
+
+6.1 ATTACK PERFORMANCE
+
+
+We conducted extensive experiments to evaluate the performance of TrojanTO against established
+baselines, Baffle (Gong et al., 2024b) and IMC (Pang et al., 2020), across six diverse D4RL environments (Fu et al., 2020). The evaluation averaged results over three random seeds and three
+distinct target actions for three TO model variants. The aggregated performance metrics are presented
+
+
+8
+
+
+in Table 4. Overall, TrojanTO achieved an outstanding average CP of 0.701. This represents a
+substantial improvement of approximately 105.0% compared to Baffle (0.342 CP) and a significant
+27.2% gain over IMC (0.551 CP).
+
+
+Specifically, TrojanTO’s efficacy is further highlighted by ASR and efficiency. It attained a high ASR
+of 0.719 while requiring a remarkably low average data poisoning rate of merely **0.3%** . In contrast,
+Baffle only reached an ASR of 0.369 despite a considerably higher 10% poisoning rate, underscoring
+TrojanTO’s superior stealth and attack efficiency. Furthermore, TrojanTO also excels in maintaining
+BTP, achieving an average of 0.914. This is notably higher than Baffle (0.792) and IMC (0.853).
+
+
+TrojanTO also exhibits consistent robustness and stability across varied tasks and TO model architectures. Conversely, baseline methods demonstrate notable vulnerabilities in specific settings. For
+instance, when deployed with the DT model, the CP of IMC drastically reduces to a mere 0.013
+in the Hopp and 0.133 in the Ant. Furthermore, Baffle exhibits a complete performance collapse
+in the Walk when against DT. Such critical shortcomings in baseline methods underscore their
+limited applicability and potential unreliability in TO models and highlight the superior reliability of
+TrojanTO. Complete results are detailed in Appendix K.3.
+
+
+6.2 ABLATION STUDY
+
+
+To assess the contribution of each component within the TrojanTO, we conduct comprehensive
+ablation studies on the three modules illustrated in Figure 2. Specifically, TrojanTO w/o TF refers to
+the method that excludes trajectory filtering. TrojanTO w/o BP denotes the method removes batch
+poisoning, where the trigger is applied to all states within the poisoned batch. TrojanTO w/o AT
+denotes the method without alternate training, wherein the trigger learning is performed for an equal
+number of iterations before model updates.
+
+
+Table 5: Average results of module ablation. Complete results can be seen in Table 23.
+
+
+TrojanTO w/o TF TrojanTO w/o BP TrojanTO w/o AT **TrojanTO**
+
+
+ASR BTP CP ASR BTP CP ASR BTP CP ASR BTP CP
+
+
+**Average** 0.678 0.850 0.657 0.528 0.836 0.517 0.507 0.911 0.517 **0.719** **0.914** **0.701**
+
+
+Table 5 presents the component-level ablation study results. Generally, all modules contribute
+positively. Specifically, for ASR, the ‘BP’ and ‘AT’ components exert a substantial influence:
+removing them causes ASR to decrease from 0.719 to 0.528 and 0.507 respectively. Regarding BTP,
+the ‘TF’ and ‘BP’ components are highly impactful, with their exclusion leading to a BTP reduction
+from 0.914 to 0.850 and 0.836 respectively. These findings confirm that the ‘AT’ component enhances
+attack effectiveness, while the ‘TF’ and ‘BP’ components, guided by the principle of precise poisoning,
+contribute significantly to attack stealth. We also conducted parameter-level ablation studies and
+investigated the impact of varying poisoning rates. These results are presented in Appendix J.
+
+
+6.3 PERSISTENT BACKDOOR ATTACK
+
+
+A _persistent backdoor attack_ is defined as an actionlevel backdoor where, once the trigger _δ_ (applied
+to _st−k_ ) is activated, the target action will output
+consistently for the subsequent _k_ time steps. Unlike
+policy-level attacks, its malicious effect is persistent
+for a fixed duration of _k_ steps.
+
+
+0 0.922 _±_ 0.000 0.972 _±_ 0.000 0.993 _±_ 0.000
+5 0.898 _±_ 0.000 0.965 _±_ 0.000 0.876 _±_ 0.000
+10 0.847 _±_ 0.012 0.954 _±_ 0.001 0.928 _±_ 0.000
+15 0.880 _±_ 0.001 0.948 _±_ 0.000 0.973 _±_ 0.000
+
+
+Table 6: The CP of the persistent backdoor
+attack with TrojanTO. The target type is ‘1’.
+
+
+k Hopp Half Walk
+
+
+Table 6 demonstrates the efficacy of the persistent 10 0.847 _±_ 0.012 0.954 _±_ 0.001 0.928 _±_ 0.000
+TrojanTO backdoor. The results confirm that upon 15 0.880 _±_ 0.001 0.948 _±_ 0.000 0.973 _±_ 0.000
+trigger activation, the model consistently executes the
+target action for the specified duration. Crucially, this sustained malicious behavior is maintained
+with only a minor degradation in CP as the persistence duration increases. However, the maximum
+
+
+9
+
+
+duration is fundamentally bounded by the TO model’s finite context window (e.g., fewer than 20
+steps). Beyond this context, the trigger is pushed out of context, causing the backdoor to deactivate.
+
+
+6.4 TRIGGER PERTURBATIONS
+
+
+To assess the robustness of the backdoor under environmental uncertainties, we inject multiplicative
+noise on the trigger, where each dimension is scaled by (1 + _ηd_ ), where _ηd_ _∼U_ ( _−ϵ, ϵ_ ). _U_ denotes a
+uniform distribution over the interval ( _−ϵ, ϵ_ ), and _ϵ_ is the relative noise level.
+
+
+The results shown in Table 7 reveal that the backdoor
+exhibits a gradual degradation in performance when
+subjected to perturbations, rather than an abrupt failure. This is consistent with the inherent smoothness
+of continuous models. The robustness to noise significantly amplifies the potential real-world security
+threats, as it allows adversaries to successfully activate the backdoor trigger even under diverse noisy
+conditions. However, as highlighted in (Guo et al.,
+2023), this robustness can also inadvertently lead to
+the emergence of pseudo triggers, which may ultimately compromise the stealthiness of the attack.
+
+
+6.5 DEFENSE
+
+
+Table 7: ASR under trigger perturbations.
+The trigger dimensions are (1,2,3). The target
+type is ‘1’.
+
+
+_ηd_ Hopp Half Walk
+
+
+0% 0.895 _±_ 0.000 1.000 _±_ 0.000 0.980 _±_ 0.001
+1% 0.895 _±_ 0.000 1.000 _±_ 0.000 0.970 _±_ 0.001
+5% 0.885 _±_ 0.000 1.000 _±_ 0.000 0.897 _±_ 0.005
+10% 0.870 _±_ 0.000 1.000 _±_ 0.000 0.777 _±_ 0.025
+
+
+The paradigm shift from discrete to continuous action spaces introduces profound changes to the
+characteristics of backdoors against TO models. This motivated us to establish defenses against
+backdoor attacks in this new setting. We tested several baseline defense methods, including weight
+pruning, provable defense (Bharti et al., 2022), spectral analysis, activation clustering (Chen et al.,
+2018), and fine-tuning. Our results show that fine-tuning is the most effective defense, while the other
+tested methods proved largely ineffective in mitigating our TrojanTO attack. Detailed descriptions of
+these methods, experimental results, and ablation studies are provided in Appendix B.1.
+
+
+7 CONCLUSION
+
+
+This paper proposes TrojanTO, a novel post-training, action-level backdoor attack framework for TO
+models. It demonstrates effectiveness across different RL tasks, TO models, and attack scenarios.
+A comprehensive investigation reveals that the core of action-level backdoors against TO models
+lies in the design of triggers rather than in reward manipulation. Guided by this insight, TrojanTO
+leverages a consistency poisoning strategy to construct backdoors with a minimal attack budget, while
+maintaining a negligible impact on the agent’s benign performance. We hope this study facilitates
+further research into the security of TO models and raises community awareness.
+
+
+8 REPRODUCIBILITY STATEMENT
+
+
+To ensure reproducibility, we have included the source code in the supplementary materials. All
+experimental details, including hyperparameter settings, dataset specifications, and implementation
+specifics for our proposed attack, are documented in Appendix C and I. Our code is available at
+[https://github.com/AndssY/TrojanTO.](https://github.com/AndssY/TrojanTO)
+
+
+ACKNOWLEDGMENT
+
+
+This work is supported by the National Natural Science Foundation of China (Grant No. U25B2047,
+No. 72301289, No. 62576351, No. 62576364, No. 62441619, No. 62411540034, No. U2441239,
+and No. U24A20336), Shenzhen Basic Research Project (Natural Science Foundation) Basic
+Research Key Project (No. JCYJ20241202124430041), Shenzhen Science and Technology Program(NO.SYSRD20250529113401002).
+
+
+10
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman,
+Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 Technical
+Report. _arXiv_, 2023.
+
+
+Zahra Rahimi Afzal, Tara Esmaeilbeig, Mojtaba Soltanalian, and Mesrob I Ohannessian. Can the
+spectrum of the neural tangent kernel anticipate fine-tuning performance? In _Adaptive Foundation_
+_Models:_ _Evolving AI for Personalized and Efficient Learning_, 2024.
+
+
+Chace Ashcraft and Kiran Karra. Poisoning deep reinforcement learning agents with in-distribution
+triggers. _arXiv preprint arXiv:2106.07798_, 2021.
+
+
+Fengshuo Bai, Runze Liu, Yali Du, Ying Wen, and Yaodong Yang. Rat: Adversarial attacks on deep
+reinforcement agents for targeted behaviors. _arXiv preprint arXiv:2412.10713_, 2024.
+
+
+David Bau, Steven Liu, Tongzhou Wang, Jun-Yan Zhu, and Antonio Torralba. Rewriting a deep
+generative model. In _Computer Vision–ECCV 2020:_ _16th European Conference, Glasgow, UK,_
+_August 23–28, 2020, Proceedings, Part I 16_, pp. 351–369. Springer, 2020.
+
+
+Tim Baumgärtner, Yang Gao, Dana Alon, and Donald Metzler. Best-of-venom: Attacking rlhf by
+injecting poisoned preference data. _COLM_, 2024.
+
+
+Vahid Behzadan and Arslan Munir. Vulnerability of Deep Reinforcement Learning to Policy Induction
+Attacks. In _International Conference on Machine Learning and Data Mining in Pattern Recognition_,
+2017.
+
+
+Shubham Bharti, Xuezhou Zhang, Adish Singla, and Jerry Zhu. Provable defense against backdoor
+policies in reinforcement learning. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:
+14704–14714, 2022.
+
+
+Anthony Brohan, Noah Brown, Justice Carbajal, Yevgen Chebotar, Xi Chen, Krzysztof Choromanski,
+Tianli Ding, Danny Driess, Avinava Dubey, Chelsea Finn, Pete Florence, Chuyuan Fu, Montse Gonzalez Arenas, Keerthana Gopalakrishnan, Kehang Han, Karol Hausman, Alex Herzog, Jasmine
+Hsu, Brian Ichter, Alex Irpan, Nikhil Joshi, Ryan Julian, Dmitry Kalashnikov, Yuheng Kuang,
+Isabel Leal, Lisa Lee, Tsang-Wei Edward Lee, Sergey Levine, Yao Lu, Henryk Michalewski,
+Igor Mordatch, Karl Pertsch, Kanishka Rao, Krista Reymann, Michael Ryoo, Grecia Salazar,
+Pannag Sanketi, Pierre Sermanet, Jaspiar Singh, Anikait Singh, Radu Soricut, Huong Tran, Vincent
+Vanhoucke, Quan Vuong, Ayzaan Wahid, Stefan Welker, Paul Wohlhart, Jialin Wu, Fei Xia, Ted
+Xiao, Peng Xu, Sichun Xu, Tianhe Yu, and Brianna Zitkovich. Rt-2: Vision-language-action
+models transfer web knowledge to robotic control. In _arXiv preprint arXiv:2307.15818_, 2023.
+
+
+Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung
+Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by
+activation clustering. _arXiv preprint arXiv:1811.03728_, 2018.
+
+
+Kangjie Chen, Shangwei Guo, Tianwei Zhang, Shuxin Li, and Yang Liu. Temporal watermarks for
+deep reinforcement learning models. In _AAMAS_, 2021a.
+
+
+Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Misha Laskin, Pieter Abbeel,
+Aravind Srinivas, and Igor Mordatch. Decision transformer: Reinforcement learning via sequence
+modeling. _Advances in neural information processing systems_, 34:15084–15097, 2021b.
+
+
+Yanjiao Chen, Zhicong Zheng, and Xueluan Gong. Marnet: Backdoor attacks against cooperative
+multi-agent reinforcement learning. _IEEE Transactions on Dependable and Secure Computing_, 20
+(5):4188–4198, 2022.
+
+
+Jing Cui, Yufei Han, Yuzhe Ma, Jianbin Jiao, and Junge Zhang. BadRL: Sparse Targeted Backdoor
+Attack against Reinforcement Learning. In _AAAI_, 2024.
+
+
+Yang Dai, Oubo Ma, Longfei Zhang, Xingxing Liang, Shengchao Hu, Mengzhu Wang, Shouling
+Ji, Jincai Huang, and Li Shen. Is mamba compatible with trajectory optimization in offline
+reinforcement learning? _arXiv preprint arXiv:2405.12094_, 2024.
+
+
+11
+
+
+Yinpeng Dong, Fangzhou Liao, Tianyu Pang, Xiaolin Hu, and Jun Zhu. Discovering adversarial
+examples with momentum. _arXiv preprint arXiv:1710.06081_, 5, 2017.
+
+
+Linkang Du, Min Chen, Mingyang Sun, Shouling Ji, Peng Cheng, Jiming Chen, and Zhikun Zhang.
+Orl-auditor: Dataset auditing in offline deep reinforcement learning. _NDSS_, 2024.
+
+
+Justin Fu, Aviral Kumar, Ofir Nachum, George Tucker, and Sergey Levine. D4rl: Datasets for deep
+data-driven reinforcement learning. _arXiv preprint arXiv:2004.07219_, 2020.
+
+
+Scott Fujimoto, David Meger, and Doina Precup. Off-policy deep reinforcement learning without
+exploration. In _International conference on machine learning_, pp. 2052–2062. PMLR, 2019.
+
+
+Adam Gleave, Michael Dennis, Cody Wild, Neel Kant, Sergey Levine, and Stuart Russell. Adversarial
+Policies: Attacking Deep Reinforcement Learning. In _ICLR_, 2020.
+
+
+Chen Gong, Kecen Li, Jin Yao, and Tianhao Wang. Trajdeleter: Enabling trajectory forgetting in
+offline reinforcement learning agents. _arXiv preprint arXiv:2404.12530_, 2024a.
+
+
+Chen Gong, Zhou Yang, Yunpeng Bai, Junda He, Jieke Shi, Kecen Li, Arunesh Sinha, Bowen Xu,
+Xinwen Hou, David Lo, et al. Baffle: Hiding backdoors in offline reinforcement learning datasets.
+In _2024 IEEE Symposium on Security and Privacy (SP)_, pp. 2086–2104. IEEE, 2024b.
+
+
+Dongliang Guo, Mengxuan Hu, Zihan Guan, Junfeng Guo, Thomas Hartvigsen, and Sheng Li.
+Backdoor in seconds: Unlocking vulnerabilities in large pre-trained models via model editing.
+_arXiv preprint arXiv:2410.18267_, 2024a.
+
+
+Ji Guo, Peihong Chen, Wenbo Jiang, and Guoming Lu. Trojanedit: Backdooring text-based image
+editing models. _arXiv preprint arXiv:2411.14681_, 2024b.
+
+
+Junfeng Guo, Ang Li, Lixu Wang, and Cong Liu. Policycleanse: Backdoor detection and mitigation
+for competitive reinforcement learning. In _Proceedings of the IEEE/CVF International Conference_
+_on Computer Vision_, pp. 4699–4708, 2023.
+
+
+Peter Henderson, Riashat Islam, Philip Bachman, Joelle Pineau, Doina Precup, and David Meger.
+Deep reinforcement learning that matters. In _Proceedings of the AAAI conference on artificial_
+_intelligence_, volume 32, 2018.
+
+
+Sanghyun Hong, Nicholas Carlini, and Alexey Kurakin. Handcrafted backdoors in deep neural
+networks. _Advances in Neural Information Processing Systems_, 35:8068–8080, 2022.
+
+
+Shengchao Hu, Li Shen, Ya Zhang, and Dacheng Tao. Graph decision transformer. _arXiv preprint_
+_arXiv:2303.03747_, 2023.
+
+
+Shengchao Hu, Li Shen, Ya Zhang, Yixin Chen, and Dacheng Tao. On transforming reinforcement
+learning with transformers: The development trajectory. _IEEE Transactions on Pattern Analysis_
+_and Machine Intelligence_, 2024.
+
+
+Shengyi Huang, Rousslan Fernand Julien Dossa, Chang Ye, Jeff Braga, Dipam Chakraborty, Kinal
+Mehta, and JoÃG, [o] [GM] [AraÃšjo.] [Cleanrl:] [High-quality] [single-file] [implementations] [of] [deep]
+reinforcement learning algorithms. _Journal of Machine Learning Research_, 23(274):1–18, 2022.
+
+
+Jeonghye Kim, Suyoung Lee, Woojun Kim, and Youngchul Sung. Decision convformer: Local
+filtering in metaformer is sufficient for decision making. _arXiv preprint arXiv:2310.03022_, 2023.
+
+
+Panagiota Kiourti, Kacper Wardega, Susmit Jha, and Wenchao Li. Trojdrl: Trojan attacks on deep
+reinforcement learning agents. _arXiv preprint arXiv:1903.06638_, 2019.
+
+
+Xian Yeow Lee, Sambit Ghadai, Kai Liang Tan, Chinmay Hegde, and Soumik Sarkar. Spatiotemporally Constrained Action Space Attacks on Deep Reinforcement Learning Agents. In _AAAI_,
+2020.
+
+
+Linyang Li, Demin Song, Xiaonan Li, Jiehang Zeng, Ruotian Ma, and Xipeng Qiu. Backdoor attacks
+on pre-trained models by layerwise weight poisoning. _arXiv preprint arXiv:2108.13888_, 2021.
+
+
+12
+
+
+Guanlin Liu and Lifeng Lai. Efficient adversarial attacks on online multi-agent reinforcement learning.
+_Advances in Neural Information Processing Systems_, 36:24401–24433, 2023.
+
+
+Oubo Ma, Yuwen Pu, Linkang Du, Yang Dai, Ruo Wang, Xiaolei Liu, Yingcai Wu, and Shouling Ji.
+SUB-PLAY: Adversarial Policies against Partially Observed Multi-Agent Reinforcement Learning
+Systems. _CCS_, 2024.
+
+
+Oubo Ma, Linkang Du, Yang Dai, Chunyi Zhou, Qingming Li, Yuwen Pu, and Shouling Ji. Unidoor:
+A universal framework for action-level backdoor attacks in deep reinforcement learning, 2025.
+[URL https://arxiv.org/abs/2501.15529.](https://arxiv.org/abs/2501.15529)
+
+
+Yuzhe Ma, Xuezhou Zhang, Wen Sun, and Jerry Zhu. Policy poisoning in batch reinforcement
+learning and control. _Advances in Neural Information Processing Systems_, 32, 2019.
+
+
+Laurens van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. _Journal of machine_
+_learning research_, 9(Nov):2579–2605, 2008.
+
+
+Yixiu Mao, Qi Wang, Chen Chen, Yun Qu, and Xiangyang Ji. Offline reinforcement learning with
+ood state correction and ood action suppression. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 37:93568–93601, 2024a.
+
+
+Yixiu Mao, Qi Wang, Yun Qu, Yuhang Jiang, and Xiangyang Ji. Doubly mild generalization for offline
+reinforcement learning. _Advances in Neural Information Processing Systems_, 37:51436–51473,
+2024b.
+
+
+Sarah Meiklejohn, Hayden Blauzvern, Mihai Maruseac, Spencer Schrock, Laurent Simon, and
+Ilia Shumailov. Machine learning models have a supply chain problem. _arXiv_ _preprint_
+_arXiv:2505.22778_, 2025.
+
+
+Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. Locating and editing factual
+associations in gpt. _Advances in Neural Information Processing Systems_, 35:17359–17372, 2022.
+
+
+Ren Pang, Hua Shen, Xinyang Zhang, Shouling Ji, Yevgeniy Vorobeychik, Xiapu Luo, Alex Liu, and
+Ting Wang. A tale of evil twins: Adversarial inputs versus poisoned models. In _Proceedings of the_
+_2020 ACM SIGSAC conference on computer and communications security_, pp. 85–99, 2020.
+
+
+Pankayaraj Pathmanathan, Souradip Chakraborty, Xiangyu Liu, Yongyuan Liang, and Furong Huang.
+Is poisoning a real threat to llm alignment? maybe more so than you think. 2025.
+
+
+Ethan Rathbun, Christopher Amato, and Alina Oprea. Adversarial inception for bounded backdoor
+poisoning in deep reinforcement learning. _arXiv preprint arXiv:2410.13995_, 2024a.
+
+
+Ethan Rathbun, Christopher Amato, and Alina Oprea. Sleepernets: Universal backdoor poisoning
+attacks against reinforcement learning agents. _arXiv preprint arXiv:2405.20539_, 2024b.
+
+
+Ethan Rathbun, Wo Wei Lin, Alina Oprea, and Christopher Amato. Beware untrusted simulators–
+reward-free backdoor attacks in reinforcement learning. _arXiv preprint arXiv:2602.05089_, 2026.
+
+
+Scott Reed, Konrad Zolna, Emilio Parisotto, Sergio Gomez Colmenarejo, Alexander Novikov, Gabriel
+Barth-Maron, Mai Gimenez, Yury Sulsky, Jackie Kay, Jost Tobias Springenberg, et al. A generalist
+agent. _arXiv preprint arXiv:2205.06175_, 2022.
+
+
+Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh,
+and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localization. In _Proceedings of the IEEE international conference on computer vision_, pp. 618–626,
+2017.
+
+
+Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control.
+In _2012 IEEE/RSJ International Conference on Intelligent Robots and Systems_, pp. 5026–5033.
+IEEE, 2012. doi: 10.1109/IROS.2012.6386109.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing_
+_systems_, 30, 2017.
+
+
+13
+
+
+Quan Vuong, Sergey Levine, Homer Rich Walke, Karl Pertsch, Anikait Singh, Ria Doshi, Charles
+Xu, Jianlan Luo, Liam Tan, Dhruv Shah, et al. Open x-embodiment: Robotic learning datasets and
+rt-x models. In _Towards Generalist Robots:_ _Learning Paradigms for Scalable Skill Acquisition@_
+_CoRL2023_, 2023.
+
+
+Lun Wang, Zaynah Javed, Xian Wu, Wenbo Guo, Xinyu Xing, and Dawn Song. Backdoorl: Backdoor
+attack against competitive reinforcement learning. _arXiv preprint arXiv:2105.00579_, 2021.
+
+
+Mengru Wang, Yunzhi Yao, Ziwen Xu, Shuofei Qiao, Shumin Deng, Peng Wang, Xiang Chen,
+Jia-Chen Gu, Yong Jiang, Pengjun Xie, et al. Knowledge mechanisms in large language models: A
+survey and perspective. _arXiv preprint arXiv:2407.15017_, 2024.
+
+
+Tony Tong Wang, Adam Gleave, Tom Tseng, Kellin Pelrine, Nora Belrose, Joseph Miller, Michael D
+Dennis, Yawen Duan, Viktor Pogrebniak, Sergey Levine, et al. Adversarial Policies Beat Superhuman Go AIs. In _ICML_, 2023.
+
+
+Yao Wei, Yanchao Sun, Ruijie Zheng, Sai Vemprala, Rogerio Bonatti, Shuhang Chen, Ratnesh
+Madaan, Zhongjie Ba, Ashish Kapoor, and Shuang Ma. Is imitation all you need? generalized decision-making with dual-phase training. In _Proceedings of the IEEE/CVF International_
+_Conference on Computer Vision_, pp. 16221–16231, 2023.
+
+
+Baoyuan Wu, Zihao Zhu, Li Liu, Qingshan Liu, Zhaofeng He, and Siwei Lyu. Attacks in adversarial machine learning: A systematic survey from the life-cycle perspective. _arXiv_ _preprint_
+_arXiv:2302.09457_, 2023a.
+
+
+Young Wu, Jeremy McMahan, Xiaojin Zhu, and Qiaomin Xie. Reward poisoning attacks on offline
+multi-agent reinforcement learning. In _Proceedings of the aaai conference on artificial intelligence_,
+volume 37, pp. 10426–10434, 2023b.
+
+
+Yinglun Xu, Rohan Gumaste, and Gagandeep Singh. Reward poisoning attack against offline
+reinforcement learning. _arXiv preprint arXiv:2402.09695_, 2024.
+
+
+Zhaoyuan Yang, Naresh Iyer, Johan Reimann, and Nurali Virani. Design of Intentional Backdoors in
+Sequential Models. _arXiv_, 2019.
+
+
+Dayong Ye, Tianqing Zhu, Congcong Zhu, Derui Wang, Kun Gao, Zewei Shi, Sheng Shen, Wanlei
+Zhou, and Minhui Xue. Reinforcement unlearning. In _NDSS_, 2025.
+
+
+Weihao Yu, Mi Luo, Pan Zhou, Chenyang Si, Yichen Zhou, Xinchao Wang, Jiashi Feng, and
+Shuicheng Yan. Metaformer is actually what you need for vision. In _Proceedings of the IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 10819–10829, 2022.
+
+
+Yinbo Yu, Saihao Yan, and Jiajia Liu. A spatiotemporal stealthy backdoor attack against cooperative
+multi-agent deep reinforcement learning. _arXiv preprint arXiv:2409.07775_, 2024.
+
+
+Yinbo Yu, Saihao Yan, Xueyu Yin, Jing Fang, and Jiajia Liu. Blast: A stealthy backdoor leverage
+attack against cooperative multi-agent deep reinforcement learning based systems. _arXiv preprint_
+_arXiv:2501.01593_, 2025.
+
+
+Mingxuan Zhang, Oubo Ma, Kang Wei, Songze Li, and Shouling Ji. Toobadrl: Trigger optimization to boost effectiveness of backdoor attacks on deep reinforcement learning. _arXiv preprint_
+_arXiv:2506.09562_, 2025.
+
+
+Haibin Zheng, Xiaohao Li, Jinyin Chen, Jianfeng Dong, Yan Zhang, and Changting Lin. One4all:
+Manipulate one agent to poison the cooperative multi-agent reinforcement learning. _Computers &_
+_Security_, 124:103005, 2023.
+
+
+14
+
+
+## SUPPLEMENTARY MATERIAL FOR TROJANTO: ACTION-LEVEL BACKDOOR ATTACKS AGAINST TRAJECTORY OPTIMIZATION MODELS
+
+
+**A** **Related Work** **16**
+
+A.1 Post-training Backdoors . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+A.2 More Threats in Reinforcement Learning . . . . . . . . . . . . . . . . . . . . . . 16
+
+
+**B** **Discussion** **16**
+
+B.1 Defenses . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+B.2 Limitation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+B.3 Ethics statement . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+B.4 The Use of Large Language Models . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+**C** **Experimental Setup** **19**
+
+C.1 Environments and Datasets . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+C.2 Victim Model and Hyperparameters . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+C.3 Training Resources . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+**D** **Algorithm** **21**
+
+
+**E** **Two Types of Backdoor Attacks** **22**
+
+
+**F** **The Importance of Trigger Dimensions** **23**
+
+
+**G** **The Triggers’ Values** **24**
+
+
+**H** **The Target Types** **24**
+
+
+**I** **The Implementation Details** **25**
+
+I.1 Target Action’s Implementation Details . . . . . . . . . . . . . . . . . . . . . . . 25
+
+I.2 Trigger Dimension’s Implementation Details . . . . . . . . . . . . . . . . . . . . . 25
+
+I.3 Trigger value’s Implementation Details . . . . . . . . . . . . . . . . . . . . . . . . 25
+
+I.4 Reward Hacking’s Implementation Details . . . . . . . . . . . . . . . . . . . . . . 26
+
+
+**J** **Ablation Studies** **26**
+
+J.1 The Formulation of Batch Poisoning . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+J.2 The frequency of alternating . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+J.3 The Selection of Backdoor Data . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+J.4 the Attack Budget of Baffle . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+J.5 The Attack Budget of TrojanTO . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+**K** **More Results** **28**
+
+K.1 ASR and BTP comparison in Hopper . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+K.2 Complete Ablation Result . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+K.3 Complete Performance of TrojanTO and Baselines . . . . . . . . . . . . . . . . . 29
+
+
+15
+
+
+A RELATED WORK
+
+
+A.1 POST-TRAINING BACKDOORS
+
+
+While early backdoor research focused on training-time attacks, a more flexible and practical threat
+vector has emerged in the form of post-training attacks (Wu et al., 2023a; Meiklejohn et al., 2025).
+These attacks target pre-trained benign models and are highly efficient (Li et al., 2021; Hong et al.,
+2022; Guo et al., 2024a). An adversary only needs write access to the model weights and a minimal
+data budget to rapidly implant a backdoor. Their low cost and high speed make them a potent
+threat vector within the supply chain, especially in scenarios involving model sharing and third-party
+fine-tuning.
+
+
+Despite its prevalence in other fields, this class of post-hoc vulnerability has been largely overlooked
+in RL. However, this oversight is becoming increasingly dangerous as large-scale models (e.g., TO
+models) become foundational for solving real-world decision-making tasks (Reed et al., 2022; Vuong
+et al., 2023), the community will inevitably rely on these pre-trained models. This makes it imperative
+to investigate security vulnerabilities in the post-training supply chain. The scenarios where a posttraining attack could occur include: (1) An organization downloads a state-of-the-art pre-trained
+policy from a public platform like CleanRL (Huang et al., 2022) in Hugging Face. An adversary
+has previously compromised this model by fine-tuning it with a tiny, malicious dataset, embedding
+a hidden backdoor before it was uploaded. (2) A malicious employee with legitimate access to a
+company’s model weights uses a small, crafted dataset to covertly perform post-training fine-tuning,
+embedding a backdoor for later exploitation. (3) An adversary first embeds a subtle backdoor via
+a during-training attack. Later, a post-training attack is used to implant a second backdoor into the
+victim model, creating a layered threat or adapting the model for a new malicious objective.
+
+
+A.2 MORE THREATS IN REINFORCEMENT LEARNING
+
+
+In addition to backdoors, various other threats exist. For instance, adversarial perturbations can be
+introduced to the observations (Behzadan & Munir, 2017; Liu & Lai, 2023; Bai et al., 2024), actions (Lee et al., 2020), or rewards (Wu et al., 2023b; Xu et al., 2024) of the victim, thereby disrupting
+decision-making. Notably, reward poisoning can extend to safety alignment in RLHF (Baumgärtner
+et al., 2024; Pathmanathan et al., 2025), posing significant risks. Furthermore, adversarial policies (Gleave et al., 2020; Wang et al., 2023; Ma et al., 2024) can be employed to indirectly generate
+adversarial perturbations that disrupt the victim’s decision-making. For instance, (Wang et al., 2023)
+successfully defeated the superhuman-level Go AI by using adversarial policies, highlighting the
+security threats these vulnerabilities pose to real-world decision-making systems.
+
+
+There is also increasing attention on privacy protection concerning policies (Chen et al., 2021a),
+trajectories (Du et al., 2024; Gong et al., 2024a), and environments (Ye et al., 2025). It is essential to
+safeguard sensitive information in decision-making systems.
+
+
+B DISCUSSION
+
+
+B.1 DEFENSES
+
+
+This appendix details our evaluation of various backdoor defenses against the TrojanTO attack. We
+assessed five baseline methods: weight pruning, provable defense (Bharti et al., 2022), spectral
+analysis, activation clustering (Chen et al., 2018), and fine-tuning. For all experiments, we used the
+Decision Transformer (DT) as the victim model, a fixed random seed of ‘1’ and a target action of ‘1’.
+
+
+**Weight** **Pruning.** We evaluated two structured pruning methods. (1) Activation-based Pruning:
+Removes neurons whose activation changes most significantly between clean and triggered inputs.
+(2) Magnitude-based Pruning: Removes neurons with the lowest L1-norm weight magnitude.
+
+
+As shown in Table 8, our experiments show that magnitude-based pruning is completely ineffective,
+failing to reduce the Attack Success Rate (ASR). Activation-based pruning slightly reduces ASR
+but at the cost of a severe drop in Benign Task Performance (BTP). Simple weight pruning is a
+poor trade-off, as it sacrifices significant BTP for incomplete and unreliable backdoor removal. This
+
+
+16
+
+
+outcome suggests that backdoors in continuous action spaces may be different from those in discrete
+domains like classification.
+
+
+Table 8: ASR and BTP before and after applying defense at various pruning rates in Hopp, Walk, and
+Half. The best score after defense is highlighted in bold.
+
+
+Before Defense After Defense
+
+
+Method Rate ASR BTP ASR BTP
+
+
+activation
+
+
+magnitude
+
+
+0.01 1.000 0.847 0.920 0.674
+0.02 1.000 0.882 0.667 **0.760**
+0.03 1.000 0.846 0.667 0.584
+0.04 1.000 0.850 0.667 0.483
+0.05 1.000 0.628 0.573 0.407
+0.10 1.000 0.717 0.573 0.438
+0.15 1.000 0.687 0.440 0.210
+0.20 1.000 0.723 **0.333** 0.379
+
+
+0.01 1.000 0.836 1.000 0.663
+0.02 1.000 0.865 1.000 **0.804**
+0.03 1.000 0.870 1.000 0.579
+0.04 1.000 0.845 1.000 0.451
+0.05 1.000 0.782 1.000 0.503
+0.10 1.000 0.817 1.000 0.558
+0.15 1.000 0.807 1.000 0.344
+0.20 1.000 0.802 1.000 0.290
+
+
+**Provable Defense.** This defense sanitizes the incoming state by projecting it onto a safe subspace.
+The subspace is built via SVD on a few clean states to identify their principal components, effectively
+learning the manifold of clean states. During deployment, this projection filters out-of-distribution
+triggers before the state reaches the model, aiming to neutralize the attack.
+
+
+As shown in Table 9, the defense successfully reduces the ASR to near-zero. However, it also destroys
+the BTP, rendering the agent unusable for its intended task. This failure likely stems from the core
+assumption of the safe subspace not holding in continuous state spaces. Consequently, the projection
+discards not only the trigger but also critical state features, rendering the agent unusable.
+
+
+Table 9: ASR and BTP before and after applying defense with different quantities of clean trajectories
+and projection dimensions in Hopp, Walk, and Half.
+
+
+Before Defense After Defense
+
+
+# Clean data Dimension ASR BTP ASR BTP
+
+
+5 1.000 0.838 0.000 0.011
+10 8 1.000 0.882 0.000 0.050
+10 1.000 0.841 0.093 0.124
+
+
+5 1.000 0.908 0.000 0.011
+50 8 1.000 0.825 0.000 0.039
+10 1.000 0.897 0.167 0.112
+
+
+5 1.000 0.878 0.000 0.017
+100 8 1.000 0.834 0.000 0.083
+10 1.000 0.799 0.188 0.161
+
+
+5 1.000 0.916 0.000 0.016
+all 8 1.000 0.857 0.000 0.010
+10 1.000 0.856 0.333 0.049
+
+
+**Spectral Analysis.** We use spectral analysis on internal network activations to identify the "spectral
+signature" of normal, benign data. Inputs that cause activations to deviate significantly from this
+signature, such as those with a trigger, are then flagged as malicious.
+
+
+17
+
+
+As shown in Table 10, the spectral analysis detector is impractical due to the true positive rate (TPR)
+exhibiting significant variance across different environments and hyperparameters.
+
+
+Table 10: TPR and FPR in Hopp, Half, and Walk at different detection thresholds.
+
+
+Env threshold TPR FPR Env threshold TPR FPR Env threshold TPR FPR
+
+
+1.0 0.00 0.08 1.0 **1.00** 0.37 1.0 0.01 0.32
+1.5 0.00 0.05 1.5 **1.00** 0.15 1.5 0.00 0.12
+Hopp 2.0 0.00 0.04 Half 2.0 **1.00** 0.03 Walk 2.0 0.00 0.04
+2.5 0.00 0.03 2.5 0.00 0.00 2.5 0.00 0.01
+3.0 0.00 0.02 3.0 0.00 0.00 3.0 0.00 0.00
+
+
+**Activation** **Clustering.** Consistent with Baffle (Gong et al., 2024b), we employed Activation
+Clustering (AC) (Chen et al., 2018) as a detection-based defense. Remarkably, AC was entirely
+incapable of detecting the backdoor within TO models, resulting in a Precision and a Recall of 0%.
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+10
+
+
+20
+
+
+30
+
+
+Figure 3: t-SNE result of the activations.
+
+
+To elucidate this striking result, we performed a t-SNE visualization (Maaten & Hinton, 2008) of the
+internal activations produced by benign and backdoored models on clean trajectories. As illustrated
+in Figure 3, the t-SNE clusters from the two models are virtually indistinguishable. This observation
+explains why AC is unable to distinguish between a compromised model and a benign one.
+
+
+We attribute this inseparability to a distinctive property of the TO model architecture. After the input
+tokens ( _s, a,_ _R_ [ˆ] ) are embedded and concatenated, the variance of activations across different input
+types, which we term inter-type variance, substantially exceeds the intra-type variance induced by the
+trigger perturbation (i.e., between _s_ and _s_ + _δ_ ).
+
+
+Consequently, the model’s internal activation space is dominated by the variations between input
+modalities ( _s, a,_ _R_ [ˆ] ), effectively masking the subtle changes introduced by the trigger. This inherent
+characteristic renders activation-based detection methods ineffective and exposes a fundamental
+security vulnerability in TO models.
+
+
+Table 11: Fine-tuning Defense Performance in Half. Results show ASR and BTP before and after
+fine-tuning on 10 clean trajectories.
+
+
+Steps 0 1000 2000 3000 4000 5000 6000 7000 8000 9000 10000
+
+
+BTP 0.964 0.986 0.971 0.985 0.948 0.950 0.920 0.978 0.892 0.928 0.917
+ASR 1.000 1.000 1.000 1.000 1.000 1.000 0.960 0.760 0.480 0.280 0.040
+
+
+18
+
+
+**Fine-tuning.** Fine-tuning serves as an effective defense that suppresses the backdoor attack. As
+shown in Table 11, using only 10% of the original training steps, it reduces the ASR to near zero
+while maintaining the BTP. However, while it successfully reduces the ASR, a residual effect from
+the attack persists, as the output action’s continued proximity to the target action.
+
+
+B.2 LIMITATION
+
+
+This paper explores the efficient implantation of backdoors into trajectory optimization (TO) models in offline reinforcement learning (offline RL). We introduce TrojanTO, which enables precise
+manipulation of TO models under various target action conditions with just a small amount of data.
+
+
+(1) However, it is still necessary to fine-tune the models for embedding the backdoor. Recently, a
+series of model editing methods (Bau et al., 2020; Meng et al., 2022; Wang et al., 2024) have been
+proposed. These model editing techniques can be applied to implant backdoors into Large Language
+Models (Guo et al., 2024a;b) and require no fine-tuning or extensive training; instead, they can inject
+backdoors with just a small number of samples and a few seconds of processing time. Applying
+model editing methods for backdoor implantation in RL models is a promising approach.
+
+
+(2) We find that both the trigger dimensions and the selection of the target action significantly affect
+the backdoor’s efficacy. However, there is currently a lack of automated methods for selecting trigger
+dimensions and evaluation methods for the difficulty of target actions. We explored several gradientbased methods for selecting the backdoor’s dimensions. Nevertheless, there was no correlation
+between the dimension chosen based on gradient information and the backdoor’s effectiveness.
+Future work could focus on addressing these two aspects.
+
+
+(3) This paper explores the security threats posed by action-level backdoor attacks on TO models
+in continuous state spaces. Extending backdoor attacks to settings with image-based states and
+continuous actions is a crucial step towards evaluating their real-world implications, as it enables the
+study of triggers with greater physical plausibility.
+
+
+B.3 ETHICS STATEMENT
+
+
+The primary goal of this work is to advance the security of machine learning systems. We acknowledge
+the dual-use nature of our proposed backdoor attack on Decision Transformers. While the technique
+could be exploited for malicious purposes, our core motivation is defensive. By demonstrating a
+concrete and potent vulnerability, we aim to raise awareness within the research community and
+provide a clear benchmark for the development and evaluation of effective countermeasures. We
+believe that proactively identifying and understanding such threats is an essential and responsible
+step toward building more robust and trustworthy AI systems.
+
+
+B.4 THE USE OF LARGE LANGUAGE MODELS
+
+
+We utilized a Large Language Model to assist with grammar checking, spell checking, and improving
+the overall clarity and readability of this paper. Furthermore, we employed the model to generate
+auxiliary code snippets, such as statistical analysis and data visualization.
+
+
+C EXPERIMENTAL SETUP
+
+
+C.1 ENVIRONMENTS AND DATASETS
+
+
+All datasets utilized in our experiments are sourced from the D4RL benchmark suite (Fu et al., 2020),
+which provides a standardized collection of datasets for offline RL research. These datasets cover
+a range of challenging tasks, including continuous control, navigation, and complex manipulation.
+Below, we detail the specific environments and datasets employed.
+
+
+**MuJoCo Locomotion.** The MuJoCo (Todorov et al., 2012) locomotion tasks are standard benchmarks for evaluating RL algorithms in continuous control. Following the experimental setup of Baffle (Gong et al., 2024b), we selected the following D4RL datasets: Hopper-Medium-Expert-v2,
+HalfCheetah-Medium-v2, and Walker2D-Medium-v2. These datasets represent varying
+
+
+19
+
+
+qualities of data: ‘Medium’ datasets are generated by a SAC agent trained to a moderate level of
+performance, while ‘Medium-Expert’ datasets mix data from a medium-level policy with data from
+an expert policy. Hereafter, we refer to these environments and their corresponding datasets as Hopp,
+Half, and Walk respectively.
+
+
+**AntMaze Navigation.** The AntMaze environments present challenging navigation tasks characterized by sparse rewards, where an ant-like agent must traverse complex mazes. We focus on the
+AntMaze-Umaze-v2 dataset (hereafter Ant). The Umaze designation within this dataset indicates
+tasks set in simpler, U-shaped maze configurations.
+
+
+**Kitchen Manipulation.** The Kitchen environment involves multi-stage, long-horizon manipulation
+tasks where a multi-jointed arm needs to interact with various objects in a kitchen setting (e.g.,
+opening a microwave, turning on a burner). We used the dataset Kitchen-Partial-v0, which
+may only contain demonstrations for some of the sub-tasks. Hereafter, we refer to this environment
+and its corresponding dataset as Kit.
+
+
+**Pen Manipulation.** The Pen environment centers on dexterous manipulation, requiring a simulated
+anthropomorphic hand to reorient a pen to a target configuration. We employ the Pen-Cloned-v1
+dataset (hereafter Pen), which is generated by a policy trained to imitate a suboptimal demonstrator.
+
+
+**Observation and Action Space.** Finally, the specifications of the observation and action spaces for
+each environment are provided in Table 12. As is evident, both the observation and the action output
+for each environment are high-dimensional continuous vectors. A fundamental prerequisite for an
+effective action-level backdoor is that all components of the agent’s outputted action must achieve
+proximity to the corresponding components of the target action. Consequently, the high-dimensional
+and continuous nature of these action spaces presents considerable challenges to the successful
+implementation of action-level backdoor attacks.
+
+
+**Poisoning** **Rate.** For the TrojanTO attack, the adversary utilizes 10 trajectories to implant the
+backdoor during the post-training phase. These trajectories can be obtained by interacting with the
+environment using the target TO model or another agent on the same task. Since only a small number
+of trajectories is needed, these interactions can be seen as routine testing. For instance, it is common
+practice to run a few test episodes after loading a model to verify its performance and ensure it has
+been loaded correctly. An adversary’s data collection perfectly mimics this type of routine check,
+making it stealthy and practically undetectable.
+
+
+In our experiments, we simulate this process by randomly sampling from the provided dataset. As
+shown in Table 12, the datasets contain an average of 3318 trajectories. Therefore, the poisoning rate
+for the TrojanTO attack is 10/3318, which is approximately 0.3%.
+
+
+Table 12: Information for Each Environment.
+
+
+Information Hopp Half Walk Ant Kit Pen Average
+
+
+Observation Space 11 17 17 27 59 45 29
+Action Space 3 6 6 8 9 24 9
+# trajectories 3213 1000 1190 10153 600 3754 3318
+
+
+C.2 VICTIM MODEL AND HYPERPARAMETERS
+
+
+**Victim Models.** We select three prominent TO models as victims for our study: DT(Chen et al.,
+2021b), Graph Decision Transformer (GDT)(Hu et al., 2023), and Decision ConvFormer (DC)(Kim
+et al., 2023). DT serves as a foundational TO model. GDT enhances DT by explicitly modeling input
+sequences as causal graphs, thereby capturing potential dependencies between different concepts
+and facilitating the learning of temporal and causal relationships. DC, based on the MetaFormer(Yu
+et al., 2022) architecture, offers another distinct approach. DC addresses compatibility issues between
+attention modules and Markov Decision Processes (MDPs) by employing local convolution filtering
+as a token mixer, which effectively captures inherent local correlations within RL datasets. Both
+
+
+20
+
+
+GDT and DC represent significant advancements in TO model design. Furthermore, each model was
+trained using three different random seeds to account for training variability.
+
+
+**Hyperparameters.** Table 13 details the hyperparameters for DT, GDT, and DC on the D4RL tasks.
+To ensure a fair and consistent comparison, our hyperparameter settings are largely aligned with those
+established for the original DT implementation. This includes shared parameters such as the number
+of transformer layers, the number of multi-head self-attention heads, embedding dimensions, as well
+as learning rate and optimizer configurations. For hyperparameters unique to GDT and DC, we
+adopted the default settings as reported in their respective original papers or official implementations.
+
+
+Table 13: Hyperparameters of three TO models in D4RL tasks.
+
+
+Hyperparameters Value
+
+
+Layers 3
+Embedding dimension 128(DT, GDT) 256(DC) for MuJoCo tasks
+256(DT, GDT, DC) for other tasks
+Batch size 64
+Context length _K_ 20
+Dropout 0.1
+Learning rate 10 _[−]_ [4]
+Grad norm clip 0.25
+Weight decay 10 _[−]_ [4]
+
+Learning rate decay Linear warmup for first 10 [5] training steps
+num_eval_episodes 100
+max_iters 10
+num_steps_per_iter 10000
+
+
+**Raw Performance.** The raw return scores for the DT, GDT, and DC models, averaged over three
+random seeds per environment, are detailed in Table 14. The benign task performance (BTP) is
+subsequently defined as the current reward normalized by its corresponding baseline, with the final
+quotient clipped to the unit interval [0, 1].
+
+
+Table 14: Raw return scores of three TO models.
+
+
+Hopp Half Walk Ant Kit Pen
+
+
+DT 3081 4994 3366 0.58 1.39 1908
+DC 3054 4731 3001 0.55 0.46 2229
+GDT 3358 4477 2851 0.55 0.58 1966
+
+
+C.3 TRAINING RESOURCES
+
+
+We use the NVIDIA GeForce RTX 3090 and RTX 4090 to train each model. Models in each
+environment are trained three times with different seeds. During the backdoor implantation process,
+three distinct target actions were evaluated simultaneously to ensure the effectiveness of the backdoor
+attack method. To provide a comprehensive overview, the main results are presented in Table 4. In
+total, this extensive experimental setup involved conducting 3 _×_ 3 _×_ 6 + 3 _×_ 3 _×_ 3 _×_ 3 _×_ 6 = 540
+unique experiments.
+
+
+D ALGORITHM
+
+
+Algorithm 1 summarizes the implementation details of the TrojanTO method.
+
+
+21
+
+
+**Algorithm 1** TrojanTO
+
+
+**input** Pre-trained TO model _π_, target action _a_ _[†]_, initial trigger _δ_,
+trigger bounds _δ_ min _, δ_ max, max iterations _M_, inner iterations
+_N_ 1 _, N_ 2,
+trajectory dataset _{τi}i∈N_, parameters _µ, α_ .
+1: Select the trigger dimensions _M_ for optimization.
+2: // Initialization
+3: _δ_ _[k]_ = _Mask_ _ _Initialize_ ( _M_ ) _,_ ˜ _π_ _[k]_ = _π_ .
+4: _Fτ_ = _Trajectory_ _ _Filtering_ ( _{τi}i∈N_ )
+5: _Bc, Bp_ = _Batch_ _ _Poisoning_ ( _Fτ_ )
+6: **for** _k_ _≤_ _M//_ 2 **do**
+7: **for** _i ≤_ _N_ 1 **do**
+8: _δi_ _[k]_ [=] _[ Trigger]_ [_] _[Learning]_ [(] _[δ]_ _i_ _[k]_ _−_ 1 _[,]_ [ ˜] _[π][k][, µ, α, B][p][, δ]_ [min] _[, δ]_ [max][)][.]
+9: **end for**
+10: **for** _j_ _≤_ _N_ 2 **do**
+11: _π_ ˜ _j_ _[k]_ [=] _[ Parameter]_ [_] _[Updating]_ [(˜] _[π]_ _j_ _[k]_ _−_ 1 _[, δ][k][, B][c][, B][p]_ [)][.]
+12: **end for**
+13: **end for**
+14: **for** _j_ _≤_ _M//_ 2 _∗_ _N_ 2 **do**
+15: _π_ ˜ _j_ _[k]_ [=] _[ Parameter]_ [_] _[Updating]_ [(˜] _[π]_ _j_ _[k]_ _−_ 1 _[, δ][k][, B][c][, B][p]_ [)][.]
+16: **end for**
+**output** _δ_ _[k]_ and _π_ ˜ _[k]_ .
+
+
+E TWO TYPES OF BACKDOOR ATTACKS
+
+
+**Policy-Level Backdoor.** This type of backdoor targets the long-term objectives of the victim agent,
+where each trigger is linked to a specific target policy.
+
+
+For instance, an adversary could activate the backdoor at a critical moment to redirect an autonomous
+vehicle’s destination from a school to a hospital, regardless of the route taken.
+
+
+**Action-Level** **Backdoor.** This type of backdoor concentrates on precise control over individual
+actions at each time step, with each trigger corresponding to a desired action. Action-level backdoor
+attacks offer a versatile range of malicious capabilities. First, they can cause catastrophic failure
+by compromising just a single critical action. Second, through repeated trigger activations, they
+allow an adversary to orchestrate complex, multi-step malicious manipulations. Finally, they provide
+significant tactical flexibility, as different long-term objectives can be pursued simply by altering the
+activation patterns of the trigger.
+
+
+For example, consider an adversary targeting an autonomous driving agent. The backdoor’s capabilities can be deployed at three distinct levels of sophistication:
+
+
+(1) The adversary could compel the agent to make an abrupt, dangerous turn at a pivotal moment, such
+as a crowded intersection. This single malicious action is designed to directly cause a catastrophic
+outcome like a collision.
+
+
+(2) The adversary could execute a multi-step plan to subtly guide the vehicle off its intended route to
+a malicious location. This might involve a sequence of seemingly innocuous actions: ignoring the
+correct highway exit, taking an unusual side street, and finally stopping in a secluded area—a plan
+composed of multiple triggered actions.
+
+
+(3) The adversary could use the same backdoor for an entirely different purpose. The adversary could
+dynamically alter the trigger activation strategy to redirect the vehicle to a totally different destination,
+all without retraining or re-implanting the backdoor. This demonstrates the ability to change the
+long-term malicious objective at will.
+
+
+To substantiate that action-level backdoors are the foundational building blocks for complex policy
+manipulation, and to simultaneously assess the long-term effectiveness of TrojanTO, we conducted
+an in-depth investigation of various trigger activation strategies, adopting the methodology of Baffle.
+
+
+22
+
+
+Table 15: The performance of the backdoored model under various trigger activation strategies.
+Results are averaged over 5 random seeds.
+
+
+Trigger Interval Trigger Length
+Method BTP 10 20 50 5 10 20
+
+
+Baffle 0.751 0.479± 0.014 0.558±0.022 0.619±0.011 0.514±0.008 0.558±0.014 0.484±0.004
+TrojanTO 0.866 0.162±0.000 0.273±0.002 0.398±0.032 0.766±0.039 0.018±0.000 0.018±0.000
+
+
+The results in Table 15 demonstrate TrojanTO’s ability to manipulate long-term rewards. While the
+backdoor by Baffle impact is moderate, the backdoor by TrojanTO causes a catastrophic performance
+collapse. Sustained triggers drive the agent’s reward to nearly zero, proving that our action-level
+attack can successfully hijack the entire policy trajectory.
+
+
+F THE IMPORTANCE OF TRIGGER DIMENSIONS
+
+
+In tasks like image classification, models typically focus on different regions of the input image.
+A widely used approach to visualize this attention is through saliency maps. One such method,
+Grad-Cam, visualizes the model’s focus by calculating the gradient of the predicted class score _y_ _[c]_
+with respect to the feature map _A_ _[k]_ produced by the last convolutional layer. The gradient with respect
+to _A_ _[k]_ is computed as follows:
+
+
+_∂y_ _[c]_
+
+_∂A_ _[k]_ _[.]_
+
+
+Subsequently, the gradients are aggregated by averaging over all spatial locations in the feature map:
+
+
+_α_ _[k]_ = [1]
+
+_Z_
+
+
+_i,j_
+
+
+_∂y_ _[c]_
+
+_,_
+_∂A_ _[k]_ _ij_
+
+
+_∂y_ _[c]_
+where _Z_ is the total number of spatial positions in the feature map, and
+
+_[k]_
+
+
+_∂A_ _[k]_ _ij_ [represents the gradient]
+
+
+of the class score with respect to the ( _i, j_ )-th spatial location in the feature map _A_ _[k]_ _._
+
+
+The aggregated gradients _α_ _[k]_ are then used as weights to combine the feature maps, which are summed
+across all channels:
+
+
+��    
+_L_ GradCam = ReLU _α_ _[k]_ _A_ _[k]_
+
+
+_k_
+
+
+_._
+
+
+The ReLU activation ensures that only the positively contributing regions are visualized, as negative
+influences are generally not informative for the interpretation of attention maps.
+
+
+Finally, the resulting map _L_ GradCam is upsampled to match the dimensions of the input image,
+generating a heatmap that highlights the areas of the image the model attends to when making
+predictions.
+
+
+Inspired by this approach, we applied the Grad-Cam method to DT, and the resulting attention map
+is shown in Figures 4-6. The horizontal axis represents each decision time step, while the vertical
+axis represents the current time step. The model’s attention to different input dimensions is depicted,
+which corresponds to the average gradient values computed using Grad-Cam. The DT model is an
+in-context model, and here we only visualize the model’s attention to the current state, disregarding
+historical information.
+
+
+In order to select trigger dimensions for the effective implantation of backdoors, we employed the
+Gradient-weighted Class Activation Mapping (Grad-CAM) method (Selvaraju et al., 2017) to obtain
+the heat map for different input dimensions of each time step.
+
+
+23
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58 60 62 64 66 68 70 72 74 76 78 80 82 84 86 88 90 92 94 96 98
+Column Index
+
+
+Figure 4: The heatmap of the Hopper environment, decision time steps from 20 to 120.
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58 60 62 64 66 68 70 72 74 76 78 80 82 84 86 88 90 92 94 96 98
+Column Index
+
+
+Figure 5: The heatmap of the Halfcheetah environment, decision time steps from 20 to 120.
+
+
+0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58 60 62 64 66 68 70 72 74 76 78 80 82 84 86 88 90 92 94 96 98
+Column Index
+
+
+Figure 6: The heatmap of the Walker2d environment, decision time steps from 20 to 120.
+
+
+6
+
+4
+
+2
+
+
+6
+
+4
+
+2
+
+
+6
+
+
+4
+
+
+2
+
+
+It can be observed that the model’s attention varies across different input dimensions at the same time
+step and shifts across different time steps. However, overall, certain dimensions consistently receive
+more attention from the model.
+
+
+However, using these attention-focused dimensions as trigger dimensions does not improve the
+effectiveness of backdoor implantation. We identified the three least significant dimensions in the
+Walker2D environment: [13, 0, 4], and the three most significant dimensions: [1, 15, 6], while also
+randomly selecting some trigger dimensions. We observe that there is a significant variation in the
+ASR (Attack Success Rate) for different trigger dimensions, highlighting the importance of selecting
+the right trigger dimensions. However, regardless of whether the dimensions are highly significant or
+not, the backdoor implantation performance is inferior to that achieved with randomly chosen trigger
+dimensions. This indicates that further research is needed to select trigger dimensions for efficient
+backdoor implantation.
+
+
+In addition, we also referred to the method that uses the Spectrum of the Neural Tangent Kernel
+(NTK) to predict fine-tuning performance (Afzal et al., 2024), which suggests a negative correlation
+between the Spectrum of NTK and fine-tuning performance. We computed the Spectrum of NTK
+under different triggers but found no significant correlation. Therefore, it is concluded that gradient
+information may not be effective for selecting the trigger dimensions. Future research could explore
+the use of search algorithms to efficiently identify the trigger dimensions.
+
+
+G THE TRIGGERS’ VALUES
+
+
+We present the trigger values obtained using different methods for the dimensions (8, 9, 10). The
+‘Handcrafted Trigger’ is designed through empirical experience. The ‘Baffle Trigger’ refers to the
+trigger values used in (Gong et al., 2024b). The ‘Dataset Trigger’ is derived by searching for the
+state values corresponding to the actions closest to the target action (arithmetic) in the dataset. The
+‘Learnable Trigger’ is optimized using the MI-FGSM method, and the ‘Over-bound Trigger’ is
+generated by directly setting values that exceed the normal state space.
+
+
+H THE TARGET TYPES
+
+
+As shown in Table 17, we consider the following six target actions. These include boundary values
+(‘1’, ‘-1’), intermediate values (‘0’, ‘0.5staggered’), regular patterns (‘arithmetic’), and randomly
+generated actions (‘fixed random’). We selected three target actions, namely ‘1’, ‘arithmetic’, and
+‘fixed random’, to assess the effectiveness of the backdoor. However, future research could focus on
+developing a rapid method to evaluate the difficulty of various target actions.
+
+
+24
+
+
+Table 16: Trigger values used for different environments in trigger value’s experience within the
+dimensions of (8,9,10).
+
+
+Halfcheetah Walker2d
+
+
+Handcrafted Trigger (0.479, 3.127, 4.433) (-4.111, 2.209, -0.837)
+Baffle Trigger (4.561, -0.060, -0.114) (2.022, -0.210, -0.374)
+Dataset Trigger (1.953, -0.264, -1.665) (1.536,-0.033,2.571)
+Learnable Trigger ( -5.650, 6.800, -8.510) (-3.750, -9.800, -9.800)
+Over-bound Trigger (-100, 100, 100) (-100, 100, 100)
+
+
+Table 17: The type and corresponding value of the target action. The listed values are truncated to
+align with the action space dimension of each specific environment.
+
+
+Target Type Action Value
+
+
+‘0’ [0, 0, 0, ..., 0, 0, 0]
+‘1’ [1, 1, 1, ..., 1, 1, 1]
+‘-1’ [-1, -1, -1, ..., -1, -1, -1]
+‘fixed random’ [0.497, 0.695, -0.711, -0.336, 0.141, -0.374, -0.450, 0.640, 0.160, -0.370,
+0.177, 0.681, -0.625, -0.435, 0.714, -0.392, 0.944, -0.649, 0.266, -0.691,
+-0.167, 0.468, -0.390, 0.202]
+‘arithmetic’ [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, ...]
+‘0.5staggered’ [0.5, -0.5, 0.5, -0.5, 0.5, -0.5, ...]
+
+
+I THE IMPLEMENTATION DETAILS
+
+
+This section provides a detailed setup for each experiment.
+
+
+I.1 TARGET ACTION’S IMPLEMENTATION DETAILS
+
+
+For the investigation of the target action experiments. We employed the baffle attack (Gong et al.,
+2024b) for the Halfcheetah and Walker2d environments. The trigger dimensions selected are (8, 9,
+10), with the trigger values specified in Table 16, and the action values corresponding to different
+target actions are also listed in Table 17. We modify 10% of the trajectories in the dataset by adding
+the trigger to the states, changing the actions to the target actions, and adjusting the reward value to 4.
+These backdoored data are then used for training. The training process consists of 20,000 steps, with
+evaluations conducted every 1,000 steps over 100 episodes. For the Hopper environment, we use
+TrojanTO. In the trigger learning process, the learning rate was set to 0.001, with a momentum of 0.9.
+The number of internal iterations was specified as 10, while the number of external iterations was set
+to 200. Model updates and trigger learning were alternated every 1,000 steps, and after 10,000 steps,
+only model updates were performed.
+
+
+I.2 TRIGGER DIMENSION’S IMPLEMENTATION DETAILS
+
+
+We utilized TrojanTO for the implementation of the triggers. For the Halfcheetah environment, the
+learning rate during the trigger learning phase was set to 0.001, accompanied by a momentum of 0.9.
+The number of internal iterations was specified as 10, while the number of external iterations was set
+to 200. In the case of the Walker2d environment, the number of internal iterations was increased to
+20, with external iterations set to 300.
+
+
+I.3 TRIGGER VALUE’S IMPLEMENTATION DETAILS
+
+
+Since both the dimensions and values of the triggers have been predetermined, we employ TrojanTO
+without Trigger Learning (TrojanTO w/o TL), which means that we refrain from using trigger learning
+and alternate optimization. Instead, we utilize trajectory filtering and batch poisoning methods in
+TrojanTO.
+
+
+25
+
+
+I.4 REWARD HACKING’S IMPLEMENTATION DETAILS
+
+
+We use TrojanTO w/o BP. While maintaining the core architecture of TrojanTO w/o BP, we implement
+two critical modifications in reward hacking experiments: (1) During poisoned data construction,
+we systematically replace original reward values with predetermined experimental targets to create
+controlled reward manipulation scenarios; (2) We adopt a persistent alternating training protocol where
+trigger learning and parameter updating occur synchronously every epoch. All other hyperparameters
+are maintained identical to the original TrojanTO configuration to ensure experimental comparability.
+
+
+J ABLATION STUDIES
+
+
+J.1 THE FORMULATION OF BATCH POISONING
+
+
+The batch poisoning (BP) module of TrojanTO employs a joint optimization strategy, where the final
+loss is a weighted combination of the backdoor loss (Equation 5) and the clean loss (Equation 6). We
+performed an ablation study against a naive single-objective approach, which optimizes only Equation 6 across all data, including poisoned ones. As demonstrated in Table 18, our joint optimization
+method yields substantially higher ASR and CP.
+
+
+Table 18: The comparison of different optimization formulations in the BP module. Experiments were
+performed on the Hopp, Half, Walk with three target action types: ‘-1’, ‘1’, and ‘fixed-random’.
+
+
+Formulation ASR BTP CP
+
+
+Single-objective Optimization 0.474 **0.938** 0.494
+Joint Optimization **0.667** 0.916 **0.649**
+
+
+This joint optimization is crucial because it explicitly decouples the learning of benign and malicious
+behaviors. It instills a precise conditional policy by training the model to associate the trigger with
+the target action (Equation 5), while simultaneously ensuring that the agent’s behavior remains
+unchanged on clean data (Equation 6). Conversely, the naive single-objective approach would face an
+ambiguous learning signal, leading to ineffective backdoor learning if only optimizing (Equation 6)
+over all data points (including poisoned ones).
+
+
+J.2 THE FREQUENCY OF ALTERNATING
+
+
+We conducted ablation studies on the alternating training (AT) module, with results shown in the
+Table 19. The empirical analysis reveals that performance first increases and then decreases as the
+alternating frequency increases. Given the high volatility of RL tasks, we suggest reducing the
+alternating frequency when facing difficult tasks.
+
+
+Table 19: Impact of Alternation Frequency on Performance. Results are averaged across three
+target actions (‘1’, ‘arithmetic’, ‘fixed random’), three victim models (DT, DC, GDT), and three
+tasks (Hopp, Half, Walk). "Low Frequency" refers to 2 alternations between trigger learning and
+parameter updates, with others being similar.
+
+
+ASR BTP CP
+
+
+TrojanTO w/o AT 0.59 0.93 0.59
+Low Frequency (2 alternation) 0.78 **0.94** 0.76
+Middle Frequency (10 alternation) **0.80** **0.94** **0.80**
+High Frequency (100 alternation) 0.66 0.90 0.66
+Highest Frequency (10000 alternations) 0.53 0.82 0.51
+
+
+26
+
+
+J.3 THE SELECTION OF BACKDOOR DATA
+
+
+Intuitively, high-quality trajectories are crucial for training TO models, especially when the training
+data are limited. When failed trajectories are chosen for backdoor training, the model is likely to
+overfit these trajectories, leading to a significant degradation in performance on the normal task.
+
+
+We conduct ablation experiments employing different data selection methods to select the trajectories
+used in backdoor training. As shown in Table 20, the ‘Bad’ method exhibits poor training data
+quality, resulting in significantly lower CP across most environments. In contrast, the ‘Random’
+method demonstrates better performance. The ‘Filtering’ method achieves the highest CP, which
+demonstrates that high-quality trajectories are crucial for effective backdoor implantation.
+
+
+Table 20: The CP under different data selection methods. The target type is ‘1’. The ‘Bad’ method
+retains only the shortest trajectories. The ‘Random’ method does not apply any trajectory filtering.
+The ‘Filtering’ method utilizes the previously mentioned trajectory filtering approach.
+
+
+Methods Hopp Half Walk
+
+
+Bad 0.130 _±_ 0.000 0.970 _±_ 0.000 0.401 _±_ 0.007
+Random 0.344 _±_ 0.093 0.969 _±_ 0.000 0.943 _±_ 0.000
+Filtering **0.670** _±_ 0.127 **0.972** _±_ 0.000 **0.993** _±_ 0.000
+
+
+J.4 THE ATTACK BUDGET OF BAFFLE
+
+
+We employ batch poisoning rather than trajectory poisoning to implant a backdoor efficiently. The
+batch poisoning method ensures consistent triggering of the backdoor during both the training and
+evaluation phases, thereby enhancing the efficiency and effectiveness of the poisoning process.
+
+
+Table 21: The performance of the trajectory poisoning method with different poisoning rates and
+TrojanTO (ASR _↑_ / BTP _↑_ / CP _↑_ ).
+
+|Trajectory Poisoning|TrojanTO|
+|---|---|
+|Poisoning Rate<br>10%<br>30%<br>50%<br>70%<br>90%||
+|ASR<br>0.623_±_0.045<br>0.907_±_0.002<br>0.960_±_0.003<br>0.967_±_0.002<br>**1.000**_±_0.000<br>Hopp<br>BTP<br>0.986_±_0.000<br>0.955_±_0.000<br>0.972_±_0.000<br>0.890_±_0.003<br>0.848_±_0.010<br>CP<br>0.743_±_0.031<br>0.930_±_0.001<br>**0.965**_±_0.001<br>0.927_±_0.003<br>0.914_±_0.004|0.860_±_0.001<br>**1.000**_±_0.000<br>0.926_±_0.000|
+|ASR<br>0.093_±_0.002<br>0.203_±_0.016<br>0.227_±_0.027<br>0.300_±_0.032<br>0.177_±_0.035<br>Half<br>BTP<br>0.930_±_0.000<br>0.938_±_0.000<br>**0.945**_±_0.000<br>0.925_±_0.000<br>0.892_±_0.002<br>CP<br>0.166_±_0.005<br>0.316_±_0.025<br>0.337_±_0.040<br>0.418_±_0.053<br>0.249_±_0.055|**1.000**_±_0.000<br>**0.945**_±_0.000<br>**0.972**_±_0.000|
+|ASR<br>0.000_±_0.000<br>0.017_±_0.000<br>0.030_±_0.001<br>0.267_±_0.035<br>**1.000**_±_0.000<br>Walk<br>BTP<br>0.983_±_0.000<br>0.970_±_0.000<br>0.933_±_0.002<br>0.542_±_0.103<br>0.064_±_0.000<br>CP<br>0.000_±_0.000<br>0.032_±_0.001<br>0.056_±_0.004<br>0.241_±_0.031<br>0.121_±_0.000|**1.000**_±_0.000<br>**0.987**_±_0.000<br>**0.993**_±_0.000|
+
+
+To validate the effectiveness of batch poisoning, we compare TrojanTO and trajectory poisoning
+methods with different poisoning rates. As shown in Table 21, the trajectory poisoning method’s
+CP exhibits a pattern of initially increasing and then subsequently decreasing as the poisoning rate
+rises. This phenomenon can be primarily attributed to an increase in the ASR, while the BTP
+declines. Trajectory poisoning has not been successful across all environments. In contrast, TrojanTO
+demonstrates consistently robust performance across all three evaluated environments.
+
+
+J.5 THE ATTACK BUDGET OF TROJANTO
+
+
+We performed an ablation study with varying attack budgets. As shown in Table 22, the CP values
+for attack budgets of 0.31%, 1.1%, 3.1%, and 16% are 0.63, 0.65, 0.70, and 0.70, respectively. An
+increased attack budget improves performance. However, beyond a certain point, it plateaus.
+
+
+27
+
+
+Table 22: The impact of the attack budget on TrojanTO attack (ASR↑ / BTP↑ / CP↑). The results are
+averaged across three seeds and two victim models (DT, DC). The experiments were conducted in
+the Hopp environment.
+
+
+Target Action
+
+
+Attack Budget 1 arithmetic fixed random Average
+
+
+0.31% (10 trajectories) 1.00/0.89/0.94 0.48/0.91/0.47 0.47/0.82/0.48 0.65/0.87/0.63
+1.1% (36 trajectories) 1.00/0.92/0.95 0.41/0.93/0.50 0.48/1.00/0.49 0.63/0.95/0.65
+3.1% (100 trajectories) 0.96/0.98/0.98 0.56/1.00/0.63 0.49/1.00/0.50 0.67/0.99/ **0.70**
+16% (500 trajectories) 1.00/1.00/1.00 0.50/1.00/0.50 0.54/1.00/0.60 **0.68** / **1.00** / **0.70**
+31% (1000 trajectories) 0.94/1.00/0.97 0.32/1.00/0.37 0.58/1.00/0.67 0.61/ **1.00** /0.67
+
+
+K MORE RESULTS
+
+
+K.1 ASR AND BTP COMPARISON IN HOPPER
+
+
+As shown in Figure 7, both ASR and BTP exhibit consistent trends throughout training, remaining
+largely unaffected by the variations in the manipulated reward signal. Consequently, the insensitivity
+to reward manipulation confirms its limit for backdooring TO models.
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+DT
+
+
+1 5 9 13 17
+Epoch
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+DC
+
+
+1 5 9 13 17
+Epoch
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+GDT
+
+
+1 5 9 13 17
+Epoch
+
+
+w/o RM (Proposed) w/ RM=-4 w/ RM=4 w/ RM=8 w/ RM=16
+
+
+Figure 7: ASR and BTP comparison under different reward manipulation strategies across different
+TO models in Hopp. The trigger dimension is (8,9,10). The target type is ‘1’.
+
+
+K.2 COMPLETE ABLATION RESULT
+
+
+To validate the individual contributions of TrojanTO’s key components, we conducted a comprehensive ablation study. The results, averaged across three seeds and detailed in Table 23, demonstrate the
+integral role of each component in achieving the overall efficacy of TrojanTO.
+
+
+Removing the module responsible for trigger generation (TrojanTO w/o TF) led to a notable decrease
+in average CP from 0.701 to 0.657, and ASR from 0.719 to 0.678. This indicates the significance
+of the specialized trigger design for effective attack execution. The absence of the adversarial
+training component (TrojanTO w/o AT) resulted in a more pronounced degradation, particularly in
+attack efficacy. Average ASR dropped sharply to 0.507, and CP reduced to 0.517, underscoring
+this module’s critical contribution to enhancing the potency and stealth of the embedded backdoor.
+Similarly, omitting the benign preservation component (TrojanTO w/o BP) also significantly impacted
+overall performance. Average CP fell to 0.517, and ASR to 0.528. Crucially, this ablation also led to
+a marked decrease in BTP from 0.914 to 0.836, highlighting this module’s dual function in not only
+supporting the attack’s objectives but also in safeguarding the agent’s original task capabilities.
+
+
+28
+
+
+These findings collectively affirm that each ablated module plays an indispensable and synergistic
+role in achieving the superior attack performance and robust benign task preservation characteristic
+of the complete TrojanTO framework.
+
+
+Table 23: Complete results of module ablation study averaged over three seeds.
+
+
+|Col1|TrojanTO w/o TF TrojanTO w/o AT TrojanTO w/o BP TrojanTO|
+|---|---|
+|Model<br>Env|ASR<br>BTP<br>CP<br>ASR<br>BTP<br>CP<br>ASR<br>BTP<br>CP<br>ASR<br>BTP<br>CP|
+|DT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.019<br>0.645<br>0.030<br>0.054<br>0.899<br>0.081<br>0.508<br>0.769<br>**0.374**<br>0.362<br>0.882<br>0.365<br>0.998<br>0.953<br>0.975<br>1.000<br>0.953<br>0.976<br>0.963<br>0.958<br>0.958<br>1.000<br>0.982<br>**0.991**<br>0.712<br>0.892<br>0.690<br>0.340<br>0.923<br>0.330<br>0.753<br>0.876<br>0.833<br>0.990<br>0.926<br>**0.957**<br>0.657<br>0.768<br>**0.588**<br>0.282<br>0.822<br>0.270<br>0.349<br>0.860<br>0.350<br>0.296<br>0.843<br>0.302<br>0.960<br>0.850<br>**0.898**<br>0.570<br>0.748<br>0.528<br>0.964<br>0.413<br>0.574<br>0.969<br>0.455<br>0.614<br>0.667<br>0.787<br>0.605<br>0.374<br>0.995<br>0.392<br>0.667<br>0.987<br>**0.667**<br>0.661<br>1.000<br>0.664|
+|GDT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.222<br>0.755<br>0.196<br>0.503<br>0.802<br>0.455<br>0.410<br>0.775<br>0.477<br>0.508<br>0.766<br>**0.503**<br>0.999<br>0.999<br>**0.999**<br>0.812<br>1.000<br>0.822<br>0.455<br>1.000<br>0.533<br>0.967<br>1.000<br>0.981<br>0.441<br>1.000<br>0.482<br>0.340<br>0.981<br>0.346<br>0.358<br>0.950<br>0.396<br>0.418<br>1.089<br>**0.486**<br>0.751<br>0.837<br>**0.662**<br>0.062<br>0.842<br>0.080<br>0.281<br>0.990<br>0.302<br>0.334<br>0.963<br>0.336<br>0.683<br>0.749<br>0.658<br>0.564<br>0.883<br>0.638<br>0.166<br>0.435<br>0.185<br>0.889<br>0.887<br>**0.881**<br>0.641<br>0.822<br>0.587<br>0.540<br>0.915<br>0.562<br>0.201<br>0.939<br>0.286<br>0.667<br>0.976<br>**0.653**|
+|DC<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.409<br>0.706<br>0.493<br>0.408<br>0.880<br>0.478<br>0.737<br>0.734<br>0.712<br>0.931<br>0.854<br>**0.889**<br>1.000<br>1.000<br>**1.000**<br>0.999<br>0.999<br>0.999<br>1.000<br>1.000<br>**1.000**<br>1.000<br>1.000<br>**1.000**<br>0.861<br>0.960<br>0.859<br>0.824<br>0.983<br>0.861<br>0.723<br>0.797<br>0.631<br>0.995<br>0.982<br>**0.988**<br>0.722<br>0.830<br>**0.654**<br>0.124<br>0.844<br>0.157<br>0.268<br>0.803<br>0.300<br>0.572<br>0.884<br>0.559<br>1.000<br>1.000<br>**1.000**<br>0.983<br>0.960<br>0.970<br>0.357<br>0.815<br>0.378<br>0.960<br>0.982<br>0.969<br>0.460<br>0.741<br>0.445<br>0.346<br>0.975<br>0.357<br>0.342<br>0.955<br>0.349<br>0.428<br>0.984<br>**0.477**|
+
+
+**Average** 0.678 0.850 0.657 0.507 0.911 0.517 0.528 0.836 0.517 **0.719** **0.914** **0.701**
+
+
+K.3 COMPLETE PERFORMANCE OF TROJANTO AND BASELINES
+
+
+To further scrutinize the robustness of TrojanTO, Table 24 details performance across three distinct
+target action types. TrojanTO consistently achieved the highest average CP across all three target
+action categories: 0.942 for target action ‘1’, 0.536 for ‘arithmetic’, and 0.624 for ‘fixed random’.
+These scores significantly surpass those of Baffle (0.745, 0.123, and 0.159, respectively) and IMC
+(0.759, 0.352, and 0.542, respectively). While the ‘arithmetic’ target action presented a greater
+challenge for all methods, as evidenced by generally lower CP values, TrojanTO maintained a substantial performance advantage over the baselines. This underscores TrojanTO’s superior capability
+in effectively executing diverse and potentially complex malicious objectives, while also preserving
+commendable BTP across these varied attack strategies (average BTPs of 0.929, 0.912, and 0.901 for
+the respective target actions).
+
+
+29
+
+
+Table 24: The performance of TrojanTO and baselines with the different target action (ASR↑/ BTP↑/
+CP↑). The results are averaged across three random seeds.
+
+
+|target action ‘1’|Baffle IMC TrojanTO|
+|---|---|
+|Model<br>Env|ASR<br>BTP<br>CP<br>ASR<br>BTP<br>CP<br>ASR<br>BTP<br>CP|
+|DT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.986<br>0.623<br>0.743<br>0.466<br>0.000<br>0.000<br>1.000<br>0.878<br>0.935<br>0.930<br>0.093<br>0.166<br>0.918<br>0.577<br>0.705<br>1.000<br>0.984<br>0.992<br>0.983<br>0.000<br>0.000<br>0.508<br>0.000<br>0.000<br>1.000<br>0.973<br>0.986<br>0.493<br>0.823<br>0.617<br>0.297<br>0.760<br>0.398<br>0.640<br>0.876<br>0.658<br>1.000<br>0.659<br>0.788<br>0.963<br>0.786<br>0.859<br>0.997<br>0.488<br>0.654<br>0.937<br>1.000<br>0.967<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000|
+|GDT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.987<br>0.771<br>0.861<br>0.990<br>0.832<br>0.904<br>1.000<br>0.831<br>0.908<br>0.600<br>0.939<br>0.727<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>0.660<br>0.949<br>0.765<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>0.920<br>0.998<br>0.955<br>0.503<br>0.882<br>0.565<br>1.000<br>1.000<br>1.000<br>0.950<br>0.862<br>0.889<br>1.000<br>1.000<br>1.000<br>0.990<br>0.931<br>0.958<br>0.996<br>1.000<br>0.998<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000|
+|DC<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.762<br>0.947<br>0.844<br>0.762<br>0.947<br>0.844<br>1.000<br>0.885<br>0.938<br>0.835<br>0.620<br>0.711<br>0.835<br>0.620<br>0.711<br>1.000<br>1.000<br>1.000<br>0.838<br>0.583<br>0.686<br>0.838<br>0.583<br>0.686<br>1.000<br>0.996<br>0.998<br>0.750<br>0.768<br>0.759<br>0.993<br>1.000<br>0.997<br>0.997<br>0.909<br>0.950<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>0.993<br>0.974<br>0.983<br>0.890<br>0.998<br>0.940<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000<br>1.000|
+|**Average**<br>0.862<br>0.757<br>0.745<br>0.837<br>0.777<br>0.759<br>**0.979**<br>**0.929**<br>**0.942**|**Average**<br>0.862<br>0.757<br>0.745<br>0.837<br>0.777<br>0.759<br>**0.979**<br>**0.929**<br>**0.942**|
+
+
+|target action ‘arithmetic’|Baffle IMC TrojanTO|
+|---|---|
+|DT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.100<br>0.711<br>0.175<br>0.010<br>0.821<br>0.020<br>0.020<br>0.956<br>0.039<br>0.020<br>0.920<br>0.039<br>1.000<br>0.942<br>0.970<br>1.000<br>0.981<br>0.990<br>0.000<br>0.858<br>0.000<br>0.940<br>0.961<br>0.950<br>1.000<br>0.908<br>0.951<br>0.003<br>0.680<br>0.007<br>0.000<br>0.911<br>0.000<br>0.247<br>0.829<br>0.249<br>0.953<br>0.635<br>0.746<br>0.843<br>0.452<br>0.588<br>0.987<br>0.418<br>0.586<br>0.000<br>0.991<br>0.000<br>0.000<br>0.911<br>0.000<br>0.000<br>1.000<br>0.000|
+|GDT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.060<br>0.703<br>0.111<br>0.000<br>1.000<br>0.000<br>0.130<br>0.693<br>0.219<br>0.000<br>1.000<br>0.000<br>0.010<br>1.000<br>0.020<br>0.907<br>1.000<br>0.946<br>0.000<br>1.000<br>0.000<br>0.000<br>1.000<br>0.000<br>0.145<br>1.069<br>0.255<br>0.000<br>0.633<br>0.000<br>0.000<br>1.000<br>0.000<br>0.003<br>0.908<br>0.007<br>0.033<br>0.443<br>0.045<br>0.520<br>0.454<br>0.396<br>0.877<br>0.925<br>0.895<br>0.000<br>0.841<br>0.000<br>0.000<br>1.000<br>0.000<br>0.000<br>1.000<br>0.000|
+|DC<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.600<br>0.790<br>0.675<br>0.403<br>0.766<br>0.512<br>0.927<br>0.861<br>0.893<br>0.000<br>0.924<br>0.000<br>0.370<br>0.940<br>0.464<br>1.000<br>1.000<br>1.000<br>0.037<br>0.883<br>0.070<br>0.863<br>1.000<br>0.922<br>1.000<br>0.997<br>0.999<br>0.010<br>0.884<br>0.020<br>0.467<br>0.860<br>0.518<br>0.667<br>0.903<br>0.637<br>0.207<br>0.779<br>0.323<br>0.960<br>1.000<br>0.979<br>0.997<br>0.976<br>0.986<br>0.000<br>0.897<br>0.000<br>0.000<br>0.978<br>0.000<br>0.000<br>1.000<br>0.000|
+|**Average**<br>0.112<br>0.809<br>0.123<br>0.355<br>0.889<br>0.352<br>**0.550**<br>**0.912**<br>**0.536**|**Average**<br>0.112<br>0.809<br>0.123<br>0.355<br>0.889<br>0.352<br>**0.550**<br>**0.912**<br>**0.536**|
+
+
+|target action ‘fixed random’|Baffle IMC TrojanTO|
+|---|---|
+|DT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.010<br>0.810<br>0.020<br>0.010<br>0.908<br>0.020<br>0.067<br>0.812<br>0.121<br>0.010<br>0.968<br>0.020<br>1.000<br>0.931<br>0.964<br>1.000<br>0.982<br>0.991<br>0.000<br>0.885<br>0.000<br>0.290<br>0.949<br>0.444<br>0.970<br>0.898<br>0.933<br>0.000<br>0.589<br>0.000<br>0.000<br>1.000<br>0.000<br>0.000<br>0.823<br>0.000<br>0.883<br>0.692<br>0.766<br>0.990<br>0.426<br>0.595<br>0.923<br>0.459<br>0.604<br>0.430<br>1.000<br>0.577<br>1.000<br>1.000<br>1.000<br>0.983<br>1.000<br>0.991|
+|GDT<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.060<br>0.614<br>0.109<br>0.020<br>0.803<br>0.039<br>0.395<br>0.774<br>0.382<br>0.000<br>1.000<br>0.000<br>0.850<br>1.000<br>0.919<br>0.993<br>1.000<br>0.997<br>0.000<br>1.000<br>0.000<br>0.000<br>1.000<br>0.000<br>0.110<br>1.199<br>0.202<br>0.000<br>0.554<br>0.000<br>0.000<br>1.000<br>0.000<br>0.000<br>0.980<br>0.000<br>0.040<br>0.471<br>0.054<br>0.703<br>0.891<br>0.767<br>0.800<br>0.805<br>0.791<br>0.022<br>0.852<br>0.042<br>0.795<br>0.747<br>0.769<br>1.000<br>0.927<br>0.959|
+|DC<br>Hopp<br>Half<br>Walk<br>Ant<br>Kit<br>Pen|0.137<br>0.753<br>0.214<br>0.647<br>0.661<br>0.649<br>0.867<br>0.815<br>0.835<br>0.000<br>1.000<br>0.000<br>0.427<br>1.000<br>0.579<br>1.000<br>1.000<br>1.000<br>0.000<br>1.000<br>0.000<br>0.263<br>1.000<br>0.351<br>0.985<br>0.953<br>0.969<br>0.010<br>0.689<br>0.020<br>0.693<br>0.811<br>0.742<br>0.053<br>0.842<br>0.091<br>0.237<br>0.751<br>0.347<br>0.907<br>1.000<br>0.951<br>0.890<br>0.998<br>0.937<br>0.549<br>0.928<br>0.687<br>0.970<br>0.959<br>0.964<br>0.283<br>0.951<br>0.431|
+|**Average**|0.133<br>0.809<br>0.159<br>0.531<br>0.894<br>0.542<br>**0.629**<br>**0.901**<br>**0.624**|
+
+
+30

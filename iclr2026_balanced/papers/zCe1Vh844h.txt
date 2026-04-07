@@ -1,0 +1,2011 @@
+# GENERALIZED FISHER-WEIGHTED SVD: SCALABLE KRONECKER-FACTORED FISHER APPROXIMATION FOR COMPRESSING LARGE LANGUAGE MODELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+The Fisher information is a fundamental concept for characterizing the sensitivity
+of parameters in neural networks. However, leveraging the full observed Fisher
+information is too expensive for large models, so most methods rely on simple
+diagonal approximations. While efficient, this approach ignores parameter correlations, often resulting in reduced performance on downstream tasks. In this
+work, we mitigate these limitations and propose Generalized Fisher-Weighted SVD
+(GFWSVD) — a fully deterministic post-training LLM compression technique that
+accounts for both diagonal and off-diagonal elements of the Fisher information
+matrix, providing a more accurate reflection of parameter importance. To make
+the method tractable, we introduce a scalable adaptation of the Kronecker-factored
+approximation algorithm for the observed Fisher information. We demonstrate the
+effectiveness of our method on LLM compression, showing improvements over
+existing compression baselines.
+
+
+1 INTRODUCTION
+
+
+The Fisher Information Matrix (FIM) (Fisher, 1992) is widely employed in neural networks to enhance
+the efficiency of models, particularly in the context of training and inference. However, computing
+and leveraging the full Fisher information is computationally prohibitive for deep networks. To make
+the problem tractable, existing methods adopt simplified approximations – most commonly, assuming
+that the Fisher matrix is diagonal (Wu et al., 2024; Frankle & Carbin, 2019; Soen & Sun, 2024).
+While efficient, this assumption discards valuable information about parameter correlations.
+
+
+One key application of FIM is low-rank compression of large language models (LLMs). However, the
+standard low-rank approach — Singular Value Decomposition (SVD) — often leads to suboptimal
+performance. To mitigate this, weighted SVD methods aim to align the optimization objective with
+the target task (Yuan et al., 2023; Hsu et al., 2022). Fisher-Weighted SVD (FWSVD) (Hsu et al.,
+2022) uses Fisher information to assign importance to parameters. However, FWSVD utilizes only
+the diagonal part of FIM and treats each row as independent, which can lead to poor retention of
+task-critical components.
+
+
+In contrast, we propose a more accurate weighted SVD method: **Generalized Fisher-Weighted**
+**SVD (GFWSVD)** . Our approach leverages a Kronecker factorization of the full FIM to derive two
+sensitivity matrices, which are integrated into a generalized SVD framework. To overcome the high
+computational cost of factorizing the full Fisher matrix, we introduce a scalable adaptation of the
+Kronecker decomposition algorithm. We compare our method with various low-rank compression
+approaches for large models — those using Fisher information (Fisher-Weighted SVD), and those
+leveraging activation statistics (ASVD (Yuan et al., 2023), SVD-LLM (Wang et al., 2025c)) — and
+observe consistent improvements in downstream task performance.
+
+
+To summarize, our main contributions are as follows:
+
+
+    - We introduce **Generalized Fisher-Weighted SVD (GFWSVD)**, a new weighted SVD-based
+fully deterministic method for compressing large language models, which leverages the
+Kronecker-decomposed Fisher information that encodes both row-wise and column-wise
+
+
+1
+
+
+parameter correlations. We prove that **GFWSVD** is a generalization of FWSVD (Hsu et al.,
+2022).
+
+
+    - We propose a computationally effective adaptation of the Kronecker decomposition algorithm for the Fisher information matrix (FIM) that captures its full structure without relying
+on diagonal or other simplifying approximations.
+
+
+    - We empirically show that our method preserves model performance under compression
+while maintaining efficiency, outperforming existing techniques within its class.
+
+
+2 RELATED WORK
+
+
+Fisher information is a fundamental tool for measuring parameter importance in neural networks. It
+has been used to prevent catastrophic forgetting in continual learning (Kirkpatrick et al., 2017), to
+guide local updates in federated learning (Jhunjhunwala et al., 2024), and more recently to merge finetuned models at the parameter level (Lee et al., 2025). As computing the full FIM is expensive, many
+methods rely on structural assumptions to make it tractable. A widely used strategy is Kroneckerproduct factorization, which breaks the FIM into manageable components. KFAC (Grosse & Martens,
+2016) introduced this idea for convolutional layers, showing that structured approximations can
+preserve key curvature information while cutting costs. Later work (Tang et al., 2021) improved
+efficiency with faster Kronecker-factored updates, while KPSVD (Koroko et al., 2023) applied
+singular-value constraints to enable memory-efficient FIM approximations in large models. We use a
+Kronecker-factored FIM approximation for model compression based on the structural approximation
+of every separate layer.
+
+
+Post-training compression based on structural approximation has shown promising results. Such
+methods typically rely on a weighted decomposition of a model layer’s weights, incorporating either
+loss-aware or activation-aware information. For instance, SparseGPT (Frantar & Alistarh, 2023)
+ranks weights using curvature estimates for pruning, FWSVD (Hsu et al., 2022) applies diagonal
+FIM approximations to guide task-aware SVD compression. As we later demonstrate, FWSVD
+emerges as _a special case of our more general framework_, underscoring the flexibility of our approach.
+AdaSVD (Li et al., 2025) distributes compression strength across layers via adaptive compensation,
+while ASVD (Yuan et al., 2023), NSVD (Lu et al., 2025), and SVD-LLM variants (Wang et al.,
+2025c;b) use activation statistics to refine truncation. Notably, many of these methods assume
+independent parameter contributions, which can limit task sensitivity. In contrast, our Kroneckerfactored _approximation of the full observed FIM captures both row- and column-wise dependencies_
+_within weight matrices_, yielding more accurate importance estimates. There are also approaches
+that account for dependencies between layers in the model, rather than just correlations between
+parameters within a single layer: (Wang et al., 2024) uses a shared set of basis vectors to represent
+the weight matrices of different layers, which effectively eliminates cross-layer redundancy.
+
+
+Other classes of compression methods, such as quantization, also leverage Fisher information in their
+setups. For instance, the YAQA (Tseng et al., 2025) quantization method extends QTIP (Tseng et al.,
+2024) by incorporating curvature information from the loss landscape.
+
+
+In more advanced structural approximation pipelines, compression settings are optimized through
+training, and structural approximations are combined with additional techniques to enable more
+aggressive compression. For example, BLAST (Lee et al., 2024) relies on a gradient-descent–based
+factorization algorithm, while Dobi-SVD (Wang et al., 2025a) learns optimal singular values and
+then applies quantization.
+
+
+3 BACKGROUND AND PROBLEM FORMULATION
+
+
+In this section, we establish the connection between Fisher information over matrix variables drawn
+from Matrix-Variate Normal (MVN) distribution and our approach to approximating the Fisher matrix
+via a Kronecker product decomposition. We then leverage this decomposition to develop an improved
+compression algorithm based on the generalized SVD formulation.
+
+
+2
+
+
+3.1 LAYER COMPRESSION AND HESSIAN APPROXIMATION
+
+
+Consider post-training weight compression as a perturbation of a model parameters _θ_ _∈_ R _[d]_ . The
+perturbation affects the deviation of the model’s loss function _L_ ( _θ_ ) in the proximity of an optimal
+point _θ_ _[⋆]_ . Sensitivity to such perturbation can be naturally captured by the second-order expansion of
+the loss determined by the quadratic term involving the Hessian _H_ = _H_ ( _θ_ _[⋆]_ ) of the problem:
+
+_∇L_ = _L_ ( _θ_ ) _−L_ ( _θ_ _[∗]_ ) _≈_ [1] 2 [(] _[θ][ −]_ _[θ][⋆]_ [)] _[⊤]_ _[H]_ [ (] _[θ][ −]_ _[θ][⋆]_ [)] (1)
+
+Compression optimization thus corresponds to minimizing the deviation _∇L_ with respect to a
+compression _θ_ = _C_ ( _θ_ _[⋆]_ ) while considering the structured curvature encoded in _H_ :
+
+min ( _θ_ _[⋆]_ _−C_ ( _θ_ _[⋆]_ )) _[⊤]_ _H_ ( _θ_ _[⋆]_ _−C_ ( _θ_ _[⋆]_ )) _,_ (2)
+_C_
+
+where the optimization task is considered over a functional family of compression methods _C_ .
+
+
+In real-world settings, working directly with _H_ is often intractable due to its size and complex
+structure. Hence, solving the task in Eq. 2 also requires finding good enough approximations of _H_
+that ideally capture the most important properties of the Hessian. As we show next, there is a certain
+class of approximations that align particularly well with our task.
+
+
+3.2 MATRIX-VARIATE NORMAL DISTRIBUTION AND FISHER INFORMATION
+
+
+The MVN distribution (Gupta & Nagar, 2018) extends the classical multivariate normal distribution
+to matrix-valued random variables, providing a structured approach to modeling dependencies within
+rows and columns. Formally, a matrix **X** _∈_ R _[n][×][m]_ follows an MVN distribution if its entries exhibit
+Gaussian properties with covariance structured across both dimensions. The distribution is defined as
+**X** _∼MN_ ( **M** _,_ **Σ** 1 _,_ **Σ** 2) _,_ (3)
+where **M** is the mean matrix, and the (non-degenerate) covariance is expressed as a Kronecker
+product **Σ** 2 _⊗_ **Σ** 1. Here, **Σ** 1 captures dependencies between rows, while **Σ** 2 encodes dependencies
+across columns. This structure ensures that each row and column follows a well-defined correlated
+Gaussian distribution.
+
+
+A crucial property of MVN is that its likelihood function inherently incorporates the inverse
+Kronecker-factored covariance, _leading to an efficient representation of second-order dependencies_ .
+The log-probability density function of **X** has the form:
+
+
+where **U** **V** = SVD _r_ ( **Σ** 1 2 **MΣ** 2 2 ). We note that the result also holds in the case when matrix
+
+square roots are replaced with the corresponding Cholesky factors, which are typically easier to find.
+
+
+Under regular conditions (e.g., smooth differentiability and proper statistical properties), Fisher
+Information _IF_ serves as an expectation of the local curvature (second derivative) of the likelihood
+function. Importantly, by taking derivatives of the MVN likelihood function with respect to **M**, it is
+easy to show that the corresponding _Hessian directly coincides with Fisher Information at the MLE_
+_solution_, e.i., _IF_ = _H_ ( **M** ) = **Σ** _[−]_ 2 [1] _⊗_ **Σ** _[−]_ 1 [1][.] [This formulation provides a natural bridge between]
+the selection of an optimal compression algorithm _C_ from Eq. 2 and Fisher Information, which we
+establish next.
+
+1Following the notation of Allen et al. (2014), we define **A** = **A** 12 **A** 12 .
+
+
+3
+
+
+log( _p_ ( **X** )) _∝−_ [1]
+
+2
+
+
+- vec ( **X** _−_ **M** ) _[⊤]_ ( **Σ** 2 _⊗_ **Σ** 1) _[−]_ [1] vec ( **X** _−_ **M** ) =
+
+
+            
+= _−_ [1] **Σ** _[−]_ 1 [1] ( **X** _−_ **M** ) **Σ** _[−]_ 2 [1] ( **X** _−_ **M** ) _[⊤]_ [�] (4)
+
+2 [tr]
+
+
+Maximization of log-likelihood leads to minimization of trace in Eq. 4, which yields the Generalized
+Least Squares Matrix Decomposition problem [1] (Allen et al., 2014):
+
+
+2
+
+_−_ [1] 2
+
+2 ���
+
+
+(5)
+F _[,]_
+
+
+min
+rank( **X** ) _≤r_
+
+
+��� **Σ** _−_ 1 [1] 2
+
+
+_−_ 1 [1] 2 ( **X** _−_ **M** ) **Σ** _−_ 2 [1] 2
+
+
+directly connected to the Generalized Singular Value Decomposition (GSVD) (Golub & Van Loan,
+2013). This problem can be straightforwardly solved by means of standard SVD (Abdi, 2006):
+
+
+1
+2
+1 **[ˆUˆS ˆV]** _[⊤]_ **[Σ]**
+
+
+**X** = **Σ**
+
+
+1
+22 (6)
+
+
+where **U** **[ˆ]** **S** **[ˆ]** **V** **[ˆ]** _[⊤]_ = SVD _r_ ( **Σ** _−_ 1 [1] 2
+
+
+_−_ 1 [1] 2 **MΣ** _−_ 2 [1] 2
+
+
+3.3 FISHER-WEIGHTED LINEAR LAYER COMPRESSION
+
+
+Building on the established connection between MVN distributions and Fisher Information, we are
+now ready to formulate the rank- _r_ linear layer compression theorem.
+**Theorem** **1.** _Let_ **W** _∈_ R _[n][×][m]_ _represent_ _some_ _parameter_ _weights_ _matrix_ _of_ _a_ _single-layer_ _linear_
+_neural network._ _Suppose that the following conditions hold._
+
+
+_1._ _The neural network is associated with a loss function corresponding to a Maximum Like-_
+_lihood Estimation (MLE) objective (e.g., cross-entropy loss)._ _This ensures the Hessian at_
+_convergence coincides with the Fisher Information Matrix (FIM)._
+
+
+_2._ _The empirical FIM is approximated by a Kronecker product IF_ _≈_ _A ⊗_ _B_
+
+
+_3._ _The weights_ **W** _are drawn from the MVN distribution MN_ ( **W** _[⋆]_ _,_ **B** _[−]_ [1] _,_ **A** _[−]_ [1] ) _, where_ **W** _[⋆]_ _is_
+_the optimal weights matrix._
+
+
+_Under these conditions, the best rank-r approximation that minimizes the expected increase in the_
+_loss after low-rank decomposition of_ **W** _[⋆]_ _is given by:_
+**W**       - _r_ = **L** _[−⊤]_ **B** **W**       - _r_ **L** _[−]_ **A** [1] _[,]_ (7)
+
+_where_ **A** = **LAL** _[⊤]_ **A** _[and]_ **[ B]** [ =] **[ L]** **B** **[L]** _[⊤]_ **B** _[are Cholesky factorizations,]_ **W** [�] = **L** _[⊤]_ **B** **[W]** _[⋆]_ **[L]** **A** _[is an auxiliary]_
+_matrix,_ **W** [�] _r_ _is the truncated SVD of_ **W** [�] _of rank r._
+
+
+It should be noted that Condition 2 does not generally hold exactly, as neural networks often exhibit
+complex, non-Kronecker Hessian structure. Therefore, we treat Condition 2 as an operative Hessian
+approximation that enables tractable computation.
+
+
+_Proof._ Under the assumption that the loss function originates from MLE, the Hessian coincides with
+Fisher Information at the optimal point, ensuring structured sensitivity encoding. Hence, one can
+replace Eq. 2 with a surrogate problem
+
+min ( _θ_ _[⋆]_ _−C_ ( _θ_ _[⋆]_ )) _[⊤]_ _IF_ ( _θ_ _[⋆]_ _−C_ ( _θ_ _[⋆]_ )) (8)
+_C_
+
+for vec( **W** _[⋆]_ ) = _θ_ _[⋆]_ and vec( **W** ) = _C_ ( _θ_ _[⋆]_ ).
+
+
+Substituting _IF_ with **A** _⊗_ **B** and applying Cholesky decomposition to factors **A** and **B** yields:
+
+vec( **W** _[⋆]_ _−_ **W** ) _[⊤]_ ( **LALA** _⊤_ _⊗_ **LBLB** _⊤_ )vec( **W** _⋆_ _−_ **W** )
+
+= vec( **W** _[⋆]_ _−_ **W** ) _[⊤]_ ( **LA** _⊗_ **LB** )( **LA** _⊤_ _⊗_ **LB** _⊤_ )vec( **W** _⋆_ _−_ **W** )
+
+= vec( **LB** _⊤_ ( **W** _⋆_ _−_ **W** ) **LA** ) _⊤_ vec( **LB** _⊤_ ( **W** _⋆_ _−_ **W** ) **LA** )
+
+
+2
+= **LB** _⊤_ ( **W** _⋆_ _−_ **W** ) **LA** (9)
+��� ���F
+
+
+In Section 3.2, we established that the optimal solution to this problem can be obtained via the
+standard SVD of the auxiliary matrix **W** . The final solution is found in two steps: 1) finding an
+
+[�]
+optimal rank- _r_ solution to the auxiliary problem **W** [�] _r_ = SVD _r_ ( **LB** _⊤_ **W** _⋆_ **LA** ), and 2) recovering the
+optimal solution to the original problem through the inverse transformation **W** [�] _r_ = **L** _[−⊤]_ **B** **W** - _r_ **L** _[−]_ **A** [1][,]
+which yields the best rank- _r_ minimizer for Eq. 9. Consequently, the decomposition **W** [�] _r_ presents an
+optimal compression _C_ for Eq. 8, which in turn yields the minimal error increase in Eq. 1 for the
+given task defined by Eq. 2. 
+
+Linear layer factorization in this case can be computed with the following expressions:
+
+
+where **S** **[ˆ]** _r_ is the diagonal matrix of the _r_ leading singular values of the auxiliary problem.
+
+
+We prove in Theorem 1 that the optimum of Problem 8 yields an SVD decomposition of the layer,
+weighted by the square roots of the empirical Fisher Information’s factor matrices. Consequently, the
+procedure for obtaining this analytical optimal decomposition hinges on the efficient computation of
+the Fisher Information factorization for the linear layer, as elaborated in Section 4.
+
+
+4
+
+
+_r_ 21 **ˆV** _r⊤_ **[L]** **A** _[−]_ [1] _[∈]_ [R] _[r][×][m][,]_ **[ W]** [2] [=] **[ L]** _[−⊤]_ **B** **ˆU** _r_ **ˆS**
+
+
+**W** 1 = **S** **[ˆ]**
+
+
+1
+_r_ 2 _∈_ R _n×r,_ (10)
+
+
+SVD
+
+
+FWSVD
+
+
+Generalized
+FWSVD (ours)
+
+
+Figure 1: Generalization of the Weighted SVD frameworks. For standard SVD, the transformation
+matrices are identity matrices. For FWSVD, the left matrix is diagonal but not identity, and the right
+matrix is identity. For GFWSVD, both matrices are non-diagonal.
+
+
+3.4 RELATIONSHIP TO PRIOR WORKS
+
+
+We show that FWSVD, presented in Hsu et al. (2022), is a special case of our generalized framework.
+The full justification is given in Appendix A. In FWSVD, the objective minimizes a weighted
+reconstruction error using a diagonal matrix **D** derived from a row-wise sum of the Fisher Information.
+We show that this setup corresponds to a diagonal Kronecker-factored approximation of the FIM,
+where **D** arises naturally from minimizing the Kronecker approximation error. The resulting solution
+for the low-rank factors **W** 2 _,_ **W** 1 matches that of FWSVD (up to a constant), which shows that their
+method is a special case of our more general framework.
+
+
+The connection between our generalized approach, the classical SVD and FWSVD is depicted in
+Figure 1. Weighted SVD approaches can be interpreted as transforming the decomposed object—here,
+the weight matrix—into a new space where the low-rank approximation better aligns with the target
+task. In this formulation, the sensitivity matrices serve as transformation matrices that reweight
+the importance of different directions. Under this view, vanilla SVD corresponds to using identity
+transformations; FWSVD applies a diagonal (but non-identity) transformation on one side while
+keeping the other side as identity. In contrast, our method employs full, non-diagonal transformations
+on both sides, capturing richer structure in the parameter space.
+
+
+4 KRONECKER FACTORIZATION ALGORITHM VIA RANK-1 SVD
+
+
+Theorem 1 and Eq. 10 state that, to obtain the provably optimal weighted SVD for a given layer, it
+suffices to decompose the Hessian into a Kronecker form. However, the Hessian of a linear layer
+scales quadratically with the layer dimension, thereby severely constraining its tractability on GPUs;
+this constraint is the primary motivation for existing methods to employ diagonal approximations or
+to use stochastic, moving-average updates for the factors. In contrast, we propose a computationally
+effective analytical adaptation of the Kronecker decomposition algorithm for the FIM that captures
+its full structure without the explicit construction of the full matrix.
+
+
+Suppose that we have a linear layer of a network with a weight matrix **W** and define **G** _i_ _∈_ R _[n][×][m]_ as
+a weight gradients _L_ ( _θ_ ) _|θ_ = **W** on the _i_ -th batch, and _gi_ = vec( **G** _i_ ) _∈_ R _[n][·][m]_ - its flattening version.
+Then, Fisher Information _IF_ ( _θ_ ) can be defined as an empirical mean over all batches in a dataset _D_ :
+
+
+Kronecker product approximation is obtained by solving minimization problem:
+
+
+min _∥IF_ _−_ **A** _⊗_ **B** _∥_ F (12)
+
+
+This minimization problem is equivalent to finding the best rank-1 approximation of a permuted
+Fisher matrix _I_ [˜] _F_ = _RIF_ _∈_ R _[m]_ [2] _[×][n]_ [2], as established by Van Loan & Pitsianis (1993). Specifically,
+
+
+5
+
+
+_IF_ ( _θ_ _[⋆]_ ) = E - _gg_ _[⊤]_ [�] = 1
+_|D|_
+
+
+_|D|_
+
+- _gigi_ _[⊤][.]_ (11)
+
+_i_ =1
+
+
+the singular vectors associated with the largest singular value of _I_ [˜] _F_ yield the optimal factors **A** and
+**B** . We summarize this efficient decomposition procedure in Algorithm 1.
+
+
+**Algorithm 1** Compute Kronecker Factors via Rank-1 SVD
+
+**Require:** List of gradients _{gi}_ _[|]_ _i_ _[D]_ =1 _[|]_ [,] _[ |][D][|]_ [ – number of batches]
+
+1: _IF_ _←_ _|D_ 1 _|_  - _|iD_ =1 _|_ _[g][i][g]_ _i_ _[T]_
+
+2: _I_ [˜] _F_ _←RIF_ _←_ _|D_ 1 _|_  - _|iD_ =1 _|_ **[G][i]** _[ ⊗]_ **[G][i]**
+3: ( _u, σ, v_ _[⊤]_ ) _←_ Leading singular triplet _▷_ Truncated SVD
+4: _b ←_ _u · σ_ _▷b_ = vec( **B** )
+5: _a ←_ _v_ _▷a_ = vec( **A** )
+6: **B** _←_ reshape( _b,_ ( _m, m_ ))
+7: **A** _←_ reshape( _a,_ ( _n, n_ ))
+8: **return** ( **B** _,_ **A** )
+
+
+4.1 EFFICIENT RANK-1 COMPUTATION
+
+
+The primary computational bottleneck of Algorithm 1 arises in performing SVD on the matrix _I_ [˜] _F_ .
+
+
+Standard SVD is computationally intractable for large matrices, so we employ truncated SVD using
+the Lanczos method (Lanczos, 1950), which avoids explicit matrix construction and requires only the
+ability to multiply the matrix with a vector from the left or right. Even in this setting, aggregating the
+full second-moment gradient information across all batch samples is computationally expensive.
+
+
+We can show (see Appendix B) that permuted _IF_ for _i_ -th batch can be defined as the Kronecker
+product of the corresponding gradient matrices:
+
+
+The derivation for right-side multiplication is analogous (see Appendix C).
+
+
+These operations allow us to efficiently approximate the Fisher matrix for LLM layers at practical
+batch sizes. As stated in Step 1 of Algorithm 1 and Eq. 13, neither the full Fisher matrix _IF_ nor its
+permuted form _I_ [˜] _F_ is ever constructed. Instead, we reduce all computations to operations scaled to
+the layer size.
+
+
+4.2 THEORETICAL TIME COMPLEXITY OF THE PROPOSED RANK-1 COMPUTATION
+
+
+The time complexity of computing the truncated SVD of the matrix _I_ [˜] _F_ _∈_ R _[m]_ [2] _[×][n]_ [2] consists of the
+matrix-vector multiplications and the orthogonalization and has a cost of _**O**_ - _m_ [2] _n_ [2][�] . However,
+using the structured formulation from Eq. 15, where left matrix-vector products are implemented via
+multiplications with matrices **G** _[⊤]_ _i_ _[∈]_ [R] _[m][×][n]_ [,] **[ Z]** _[ ∈]_ [R] _[n][×][n]_ [, and] **[ G]** _[i]_ _[∈]_ [R] _[n][×][m]_ [, the overall complexity is]
+reduced to _**O**_ - _mn_ [2] + _m_ [2] _n_ �. Applying analogous reasoning to the right matrix-vector products (see
+Eq. 30) one can yield the same complexity.
+
+
+6
+
+
+1
+_I_ ˜ _F_ = _|D|_
+
+
+_|D|_
+
+- **G** _i ⊗_ **G** _i._ (13)
+
+
+_i_ =1
+
+
+If we multiply this matrix _I_ [˜] _F_ by a vector _z_ from left, it will yield:
+
+
+1
+_z_ =
+_|D|_
+
+
+
+
+
+_|D|_
+
+
+**G** _i ⊗_ **G** _i_
+
+_i_ =1
+
+
+_I_ ˜ _F z_ = [1]
+
+_k_
+
+
+- _k_
+
+ - **G** _i ⊗_ **G** _i_
+
+
+_i_ =1
+
+
+
+
+ **Z** = _z,_ where _z_ = vec( **Z** ) _,_ **Z** _∈_ R _[n][×][n]_ _._
+
+
+(14)
+
+
+
+
+
+Using property of the Kronecker product ( **K** _⊗_ **L** ) vec - **C** ) = vec( **K** _[⊤]_ **CL** - we reduce the matrixvector multiplication to a sequence of matrix multiplications:
+
+
+1
+_I_ ˜ _F z_ =
+_|D|_
+
+
+_|D|_
+
+- vec( **G** _[⊤]_ _i_ **[ZG]** _[i]_ [)] (15)
+
+_i_ =1
+
+
+4.3 EMPIRICAL TIME COMPLEXITY AND APPLICATION TO LLMS
+
+
+In the context of LLM, accelerated Hessian decomposition Algorithm 1 is practical as long as a
+Hessian of a single layer can be decomposed quickly. This is a relevant bottleneck that comes from
+the fact that the Hessian size grows quadratically with the layer size and contains more than 10 [12]
+elements. In Table 1, we report the empirical Hessian decomposition times for single linear layer in
+different LLMs and prove that this accelerated algorithm is tractable on many transformer models.
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||Full Mo<br>|del|||
+|||||||SVD<br>~~ASVD~~||||
+|||||||FWSV||||
+|||||||GFWSV|D (Ours|)|)|
+
+
+|Col1|Full Model|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+||<br>ASVD<br>|||||
+||~~SVD-LLM~~<br>~~FWSVD~~|||||
+||GFWSVD (|Ours)||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+5.1 COMPRESSING THE TRANSFORMER ENCODER
+
+
+In our experiments, we follow the “fine-tune then compress” pipeline, similar to FWSVD (Hsu et al.,
+2022). We begin by fine-tuning a pre-trained checkpoint [2] of the BERT-base model on a specific
+downstream GLUE task. Optimal fine-tuning hyperparameters (e.g., learning rate, batch size) are
+selected for each task using the Optuna framework (Akiba et al., 2019). During this stage, we also
+collect gradients to construct the FIM _IF_ and compute its Kronecker decomposition as described in
+Section 4.
+
+
+Using the resulting Cholesky factors **LA** and **LB**, we uniformly compress the fully connected layers
+of BERT by factorizing them into two smaller layers, following the method detailed in Section 3.1.
+
+
+[2https://huggingface.co/google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)
+
+
+7
+
+
+For the entire LLM, layers are processed independently and factor computation can be parallelized, so the runtime scales as:
+
+Total time = [time per layer] _[ ×]_ [ number of layers] _._
+
+number of workers
+
+
+Table 1: Runtime for computing Kronecker factors
+of single linear layer on GPU.
+
+
+Model Params Params Decomp.
+in layer in Hessian time (s)
+
+
+BERT 2.3 _×_ 10 [6] 5.5 _×_ 10 [12] 43
+
+For example, Llama 2 7B model that has 224 lin- Llama 2 7B 45 _×_ 10 [6] 2.0 _×_ 10 [15] 183
+ear layers, can be compressed in approximately Llama 3.1 8B 58 _×_ 10 [6] 3.4 _×_ 10 [15] 249
+3.5 hours on 3 A100 GPUs. The VRAM con- Llama 2 13B 70.8 _×_ 10 [6] 4.9 _×_ 10 [15] 313
+straints are minimal: the peak footprint occurs
+only during gradient accumulation, which we
+manage by processing layers sequentially by freezing and unfreezing modules iteratively. That way
+we fit within standard VRAM limits.
+
+
+5 NUMERICAL EXPERIMENTS
+
+
+To validate our theoretical contributions, we conduct extensive numerical experiments on several
+transformer architectures: the encoder-only BERT model (Devlin et al., 2019) and the recent openweights decoder-only LLMs Llama 2 (Touvron et al., 2023) and Llama 3.1 (Team, 2024). Our goal is
+to demonstrate the practical benefits of GFWSVD in low-rank compression under fine-tuning and
+evaluation protocols.
+
+
+GLUE
+
+
+MMLU
+
+
+8020 1585 1090 5 95
+Compression Rate (%)
+
+
+0.75
+
+0.70
+
+0.65
+
+0.60
+
+0.55
+
+0.50
+
+0.45
+
+0.40
+
+0.35
+
+
+FCN Layer Rank
+
+
+0.45
+
+0.43
+
+0.40
+
+0.38
+
+0.35
+
+0.33
+
+0.30
+
+0.28
+
+0.25
+
+
+Figure 2: Macro-averaged GLUE performance of
+BERT model for different compression ranks.
+
+
+Figure 3: Average MMLU performance of Llama
+2 model for different compression rates.
+
+
+The chosen layer-wise ranks and the resulting overall compression rate of the model are summarized
+in Table 2. We reproduce the ASVD method using the original authors’ code. For FWSVD, we
+incorporate the newly constructed FIM into the compression process.
+
+
+|METHOD|WikiText↓ PTB↓|C. Ratio|ARC-C↑ ARC-E↑ HellaSwag↑ PIQA↑ WinoG.↑ OpenBook↑ AVG↑|
+|---|---|---|---|
+|Full model|**7.20**<br>**11.50**|100%|**0.52** _±_ 0.01 **0.81** _±_ 0.01 **0.59** _±_ 0.01 **0.79** _±_ 0.01 **0.73** _±_ 0.01 **0.35** _±_ 0.02<br>**0.63**|
+|FWSVD<br>ASVD<br>Basis Sharing<br>GFWSVD (Ours)|354<br>864<br>145<br>1672<br>1**8.54**<br>90.05<br>22.57<br>**42.40**|20%|0.21 _±_ 0.01 0.38 _±_ 0.01 0.20 _±_ 0.01 0.60 _±_ 0.01 0.52 _±_ 0.01 0.17 _±_ 0.02<br>0.35<br>0.21 _±_ 0.01 0.33 _±_ 0.01 0.27 _±_ 0.01 0.61 _±_ 0.01 0.54 _±_ 0.01 0.15 _±_ 0.02<br>0.35<br>0.34 _±_ 0.01 **0.68** _±_ 0.01 0.42 _±_ 0.01 0.70 _±_ 0.01 **0.65** _±_ 0.01 **0.35** _±_ 0.02<br>0.52<br>**0.35** _±_ 0.01 **0.68** _±_ 0.01 **0.45** _±_ 0.01 **0.75** _±_ 0.01 0.63 _±_ 0.01 0.33 _±_ 0.02<br>**0.53**|
+|FWSVD<br>ASVD<br>Basis Sharing<br>GFWSVD (Ours)|4372<br>6824<br>1456<br>4232<br>**32**<br>286<br>35<br>58|30%|0.21 _±_ 0.01 0.30 _±_ 0.01 0.26 _±_ 0.01 0.57 _±_ 0.01 0.51 _±_ 0.01 0.14 _±_ 0.02<br>0.33<br>0.22 _±_ 0.01 0.30 _±_ 0.01 0.25 _±_ 0.01 0.58 _±_ 0.01 0.52 _±_ 0.01 0.16 _±_ 0.02<br>0.34<br>0.29 _±_ 0.01 0.52 _±_ 0.01 **0.43** _±_ 0.01 0.63 _±_ 0.01 **0.60** _±_ 0.01 **0.31** _±_ 0.02<br>0.46<br>**0.33** _±_ 0.01 **0.61** _±_ 0.01 0.42 _±_ 0.01 **0.71** _±_ 0.01 0.58 _±_ 0.01 0.23 _±_ 0.02<br>**0.48**|
+|FWSVD<br>ASVD<br>Basis Sharing<br>GFWSVD (Ours)|11072<br>15376<br>2992<br>13193<br>78<br>1083<br>**69**<br>|40%|0.21 _±_ 0.01 0.27 _±_ 0.01 0.26 _±_ 0.01 0.54 _±_ 0.01 0.48 _±_ 0.01 0.16 _±_ 0.02<br>0.32<br>0.23 _±_ 0.01 0.27 _±_ 0.01 0.26 _±_ 0.01 0.55 _±_ 0.01 0.49 _±_ 0.01 0.15 _±_ 0.02<br>0.33<br>0.24 _±_ 0.01 0.39 _±_ 0.01 **0.33** _±_ 0.01 0.56 _±_ 0.01 **0.56** _±_ 0.01 **0.28** _±_ 0.02<br>**0.39**<br>**0.25** _±_ 0.01 **0.41**_±_ 0.01<br>0.32 _±_ 0.01 **0.61** _±_ 0.01 0.55 _±_ 0.01 0.22 _±_ 0.02<br>**0.39**|
+|FWSVD<br>ASVD<br>Basis Sharing<br>GFWSVD (Ours)|18992<br>23088<br>4039<br>46189<br>203<br>3506<br><br>|50%|0.20 _±_ 0.01 0.27 _±_ 0.01 0.26 _±_ 0.01 0.50 _±_ 0.01 0.51 _±_ 0.01 0.15 _±_ 0.02<br>0.31<br>0.22 _±_ 0.01 0.26 _±_ 0.01 0.26 _±_ 0.01 0.50 _±_ 0.01 0.48 _±_ 0.01 0.13 _±_ 0.02<br>0.31<br>0.23 _±_ 0.01 0.30 _±_ 0.01 **0.29** _±_ 0.01 0.52 _±_ 0.01 0.53 _±_ 0.01 **0.26** _±_ 0.02<br>0.35<br>**0.24** _±_ 0.01 **0.31** _±_ 0.01 0.28 _±_ 0.01 **0.55** _±_ 0.01 **0.54** _±_ 0.01 0.22 _±_ 0.02<br>**0.36**|
+
+
+[3https://huggingface.co/meta-llama/Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf)
+[4https://huggingface.co/meta-Llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-Llama/Llama-3.1-8B-Instruct)
+
+
+8
+
+
+We show average compression results
+in Table 2 and Figure 2, extended re- Table 2:
+sults are in Appendix F in Table 11. different compression ranks.
+On most of the GLUE tasks and **bold** . We denote compression ratio as
+considered compression ranks, our
+
+Method / Rank 600 500 250
+
+proposed GFWSVD approach consis
+Compression ratio 1% 8% 23%
+
+tently outperforms both FWSVD and
+SVD, with particularly strong gains SVD **0.77** 0.76 0.65
+at lower ranks. While ASVD exhibits ASVD 0.75 0.71 0.51
+relatively poor performance on sev- FWSVD 0.74 0.74 0.68
+
+GFWSVD (Ours) **0.77** **0.77** **0.75**
+
+eral tasks (QQP, QNLI), it occasionally surpasses GFWSVD — notably on SST2 under aggressive compression.
+
+
+Table 2: Macro-averaged GLUE performance of BERT for
+different compression ranks. Best results for each rank are in
+**bold** . We denote compression ratio as 1 _−_ [compressed Model] [.]
+
+
+original Model [.]
+
+
+Method / Rank 600 500 250 100 50 10 1
+Compression ratio 1% 8% 23% 33% 34% 39% 40%
+
+
+SVD **0.77** 0.76 0.65 0.47 0.41 0.42 0.37
+ASVD 0.75 0.71 0.51 0.46 0.45 0.36 0.36
+FWSVD 0.74 0.74 0.68 0.56 0.46 0.43 0.38
+GFWSVD (Ours) **0.77** **0.77** **0.75** **0.66** **0.59** **0.53** **0.51**
+
+
+5.2 COMPRESSING THE TRANSFORMER DECODER
+
+
+We evaluate our approach on the decoder-only models Llama 2 7B [3] and Llama 3.1 8B [4] . Since
+GFWSVD is purely analytical – containing no stochastic steps – we benchmark it against several
+competitive baselines of the same class of methods: diagonal FI-based low-rank approximation
+method FWSVD (Hsu et al., 2022), two activation-based methods - ASVD (Yuan et al., 2023)
+and SVD-LLM (Wang et al., 2025c), and per-layer relation-aware Basis Sharing (Wang et al.,
+2024). Notably, ASVD and SVD-LLM both rely on activation-based weighting to gauge parameter
+importance, while Basis Sharing relies on correlations across layers in the entire model. In contrast,
+FWSVD and our GFWSVD rely solely on gradient information, treating each layer as independent.
+
+
+We measure perplexity on WikiText 2 (Merity et al., 2017) and PTB (Marcus et al., 1993) datasets,
+5-shot reasoning performance on the MMLU benchmark (Hendrycks et al., 2021) and 0-shot performance on OpenBookQA (Banerjee & Baral, 2020), WinoGrande (Sakaguchi et al., 2021), HellaSwag (Zellers et al., 2019), PIQA (Bisk et al., 2020), ARC-E and ARC-C (Clark et al., 2018).
+Following prior works on low-rank approximation of LLMs (Wang et al., 2025c; Yuan et al., 2023),
+we test several compression setups, removing from 5% to 50% of original parameters.
+
+
+Table 3: Performance of the Llama 3.1 8B Instruct compressed by various methods under compression
+ratios from 20% to 50% on WikiText-2, PTB, and six common sense reasoning datasets. Lower
+is better for perplexity ( _↓_ ), higher is better for accuracy ( _↑_ ). We denote compression ratio as
+1 _−_ [compressed Model]
+
+original Model [.]
+
+
+Following standard practice in post-training LLM compression methods (Wang et al., 2025c; Yuan
+et al., 2023), we use a randomly sampled set of sentences as calibration data to generate gradients for
+further obtaining the factor matrices. For calibration data, we choose the FineWeb dataset (Penedo
+et al., 2024) due to its high quality and diversity, and collect gradients on a random subsample
+of size 1024. These gradients are then used to obtain **LA** and **LB**, as well as the data needed for
+FWSVD. As in LLMs, uniform layer compression can disproportionately degrade performance
+by over-compressing critical layers and under-utilizing redundancy in less sensitive ones, so it is
+essential for each method to use a compression configuration that accounts for layer sensitivity. For
+both ASVD and SVD-LLM, we used the corresponding code released by the authors and re-ran the
+necessary compression pipelines for our checkpoint with all hyperparameters set to default values.
+For our approach, we adopted the method of per-layer importance scores as described in the ASVD
+work.
+
+
+Table 4: Performance of the LLaMA 2 7B Chat compressed by various methods under compression
+ratios from 20% to 50% on WikiText-2 and six common sense reasoning datasets. Lower is better for
+perplexity ( _↓_ ), higher is better for accuracy ( _↑_ ).
+
+
+|METHOD|WikiText↓|C. Ratio|ARC-C↑ ARC-E↑ HellaSwag↑ PIQA↑ WinoG.↑ OpenBook↑|AVG↑|
+|---|---|---|---|---|
+|Full model|**6.94**|100%|**0.44** _±_ 0.01 **0.73** _±_ 0.01 **0.58** _±_ 0.01 **0.76** _±_ 0.01 **0.67** _±_ 0.01 **0.33** _±_ 0.02|**0.59**|
+|FWSVD<br>66.18<br>20%<br>0.24 _±_ 0.01 0.48 _±_ 0.01 0.38 _±_ 0.01 0.64 _±_ 0.01 0.58 _±_ 0.01 0.18 _±_ 0.02<br>0.42<br>ASVD<br>18.33<br>0.27 _±_ 0.01 0.51 _±_ 0.01 0.39 _±_ 0.01 0.68 _±_ 0.01 0.61 _±_ 0.01 0.22 _±_ 0.02<br>0.45<br>SVD-LLM<br>12.10<br>0.29 _±_ 0.01 **0.66** _±_ 0.01 0.40 _±_ 0.01 0.66 _±_ 0.01 **0.61** _±_ 0.01 0.23 _±_ 0.02<br>0.48<br>Basis Sharing<br>**11.1**<br>0.31 _±_ 0.01 0.65 _±_ 0.01 0.42 _±_ 0.01 0.68 _±_ 0.01 **0.61** _±_ 0.01 **0.27** _±_ 0.02<br>0.49<br>GFWSVD (Ours)<br>**11.1**<br>**0.33** _±_ 0.01 0.62 _±_ 0.01 **0.47** _±_ 0.01 **0.74** _±_ 0.01 **0.61** _±_ 0.01 0.25 _±_ 0.02<br>**0.50**|FWSVD<br>66.18<br>20%<br>0.24 _±_ 0.01 0.48 _±_ 0.01 0.38 _±_ 0.01 0.64 _±_ 0.01 0.58 _±_ 0.01 0.18 _±_ 0.02<br>0.42<br>ASVD<br>18.33<br>0.27 _±_ 0.01 0.51 _±_ 0.01 0.39 _±_ 0.01 0.68 _±_ 0.01 0.61 _±_ 0.01 0.22 _±_ 0.02<br>0.45<br>SVD-LLM<br>12.10<br>0.29 _±_ 0.01 **0.66** _±_ 0.01 0.40 _±_ 0.01 0.66 _±_ 0.01 **0.61** _±_ 0.01 0.23 _±_ 0.02<br>0.48<br>Basis Sharing<br>**11.1**<br>0.31 _±_ 0.01 0.65 _±_ 0.01 0.42 _±_ 0.01 0.68 _±_ 0.01 **0.61** _±_ 0.01 **0.27** _±_ 0.02<br>0.49<br>GFWSVD (Ours)<br>**11.1**<br>**0.33** _±_ 0.01 0.62 _±_ 0.01 **0.47** _±_ 0.01 **0.74** _±_ 0.01 **0.61** _±_ 0.01 0.25 _±_ 0.02<br>**0.50**|FWSVD<br>66.18<br>20%<br>0.24 _±_ 0.01 0.48 _±_ 0.01 0.38 _±_ 0.01 0.64 _±_ 0.01 0.58 _±_ 0.01 0.18 _±_ 0.02<br>0.42<br>ASVD<br>18.33<br>0.27 _±_ 0.01 0.51 _±_ 0.01 0.39 _±_ 0.01 0.68 _±_ 0.01 0.61 _±_ 0.01 0.22 _±_ 0.02<br>0.45<br>SVD-LLM<br>12.10<br>0.29 _±_ 0.01 **0.66** _±_ 0.01 0.40 _±_ 0.01 0.66 _±_ 0.01 **0.61** _±_ 0.01 0.23 _±_ 0.02<br>0.48<br>Basis Sharing<br>**11.1**<br>0.31 _±_ 0.01 0.65 _±_ 0.01 0.42 _±_ 0.01 0.68 _±_ 0.01 **0.61** _±_ 0.01 **0.27** _±_ 0.02<br>0.49<br>GFWSVD (Ours)<br>**11.1**<br>**0.33** _±_ 0.01 0.62 _±_ 0.01 **0.47** _±_ 0.01 **0.74** _±_ 0.01 **0.61** _±_ 0.01 0.25 _±_ 0.02<br>**0.50**|FWSVD<br>66.18<br>20%<br>0.24 _±_ 0.01 0.48 _±_ 0.01 0.38 _±_ 0.01 0.64 _±_ 0.01 0.58 _±_ 0.01 0.18 _±_ 0.02<br>0.42<br>ASVD<br>18.33<br>0.27 _±_ 0.01 0.51 _±_ 0.01 0.39 _±_ 0.01 0.68 _±_ 0.01 0.61 _±_ 0.01 0.22 _±_ 0.02<br>0.45<br>SVD-LLM<br>12.10<br>0.29 _±_ 0.01 **0.66** _±_ 0.01 0.40 _±_ 0.01 0.66 _±_ 0.01 **0.61** _±_ 0.01 0.23 _±_ 0.02<br>0.48<br>Basis Sharing<br>**11.1**<br>0.31 _±_ 0.01 0.65 _±_ 0.01 0.42 _±_ 0.01 0.68 _±_ 0.01 **0.61** _±_ 0.01 **0.27** _±_ 0.02<br>0.49<br>GFWSVD (Ours)<br>**11.1**<br>**0.33** _±_ 0.01 0.62 _±_ 0.01 **0.47** _±_ 0.01 **0.74** _±_ 0.01 **0.61** _±_ 0.01 0.25 _±_ 0.02<br>**0.50**|FWSVD<br>66.18<br>20%<br>0.24 _±_ 0.01 0.48 _±_ 0.01 0.38 _±_ 0.01 0.64 _±_ 0.01 0.58 _±_ 0.01 0.18 _±_ 0.02<br>0.42<br>ASVD<br>18.33<br>0.27 _±_ 0.01 0.51 _±_ 0.01 0.39 _±_ 0.01 0.68 _±_ 0.01 0.61 _±_ 0.01 0.22 _±_ 0.02<br>0.45<br>SVD-LLM<br>12.10<br>0.29 _±_ 0.01 **0.66** _±_ 0.01 0.40 _±_ 0.01 0.66 _±_ 0.01 **0.61** _±_ 0.01 0.23 _±_ 0.02<br>0.48<br>Basis Sharing<br>**11.1**<br>0.31 _±_ 0.01 0.65 _±_ 0.01 0.42 _±_ 0.01 0.68 _±_ 0.01 **0.61** _±_ 0.01 **0.27** _±_ 0.02<br>0.49<br>GFWSVD (Ours)<br>**11.1**<br>**0.33** _±_ 0.01 0.62 _±_ 0.01 **0.47** _±_ 0.01 **0.74** _±_ 0.01 **0.61** _±_ 0.01 0.25 _±_ 0.02<br>**0.50**|
+|FWSVD<br>2572<br>30%<br>0.24 _±_ 0.01 0.32 _±_ 0.01 0.27 _±_ 0.01 0.58 _±_ 0.01 0.51 _±_ 0.01 0.17 _±_ 0.02<br>0.35<br>ASVD<br>97.68<br>0.21 _±_ 0.01 0.31 _±_ 0.01 0.29 _±_ 0.01 0.63 _±_ 0.01 0.54 _±_ 0.01 0.15 _±_ 0.02<br>0.36<br>SVD-LLM<br>18.29<br>0.25 _±_ 0.01 0.52 _±_ 0.01 0.34 _±_ 0.01 0.62 _±_ 0.01 0.55 _±_ 0.01 0.22 _±_ 0.02<br>0.42<br>Basis Sharing<br>15.40<br>0.27 _±_ 0.01 **0.58** _±_ 0.01 0.38 _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 **0.26** _±_ 0.02<br>**0.45**<br>GFWSVD (Ours)<br>**13.92**<br>**0.28** _±_ 0.01 0.56 _±_ 0.01 **0.40** _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 0.20 _±_ 0.02<br>0.44|FWSVD<br>2572<br>30%<br>0.24 _±_ 0.01 0.32 _±_ 0.01 0.27 _±_ 0.01 0.58 _±_ 0.01 0.51 _±_ 0.01 0.17 _±_ 0.02<br>0.35<br>ASVD<br>97.68<br>0.21 _±_ 0.01 0.31 _±_ 0.01 0.29 _±_ 0.01 0.63 _±_ 0.01 0.54 _±_ 0.01 0.15 _±_ 0.02<br>0.36<br>SVD-LLM<br>18.29<br>0.25 _±_ 0.01 0.52 _±_ 0.01 0.34 _±_ 0.01 0.62 _±_ 0.01 0.55 _±_ 0.01 0.22 _±_ 0.02<br>0.42<br>Basis Sharing<br>15.40<br>0.27 _±_ 0.01 **0.58** _±_ 0.01 0.38 _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 **0.26** _±_ 0.02<br>**0.45**<br>GFWSVD (Ours)<br>**13.92**<br>**0.28** _±_ 0.01 0.56 _±_ 0.01 **0.40** _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 0.20 _±_ 0.02<br>0.44|FWSVD<br>2572<br>30%<br>0.24 _±_ 0.01 0.32 _±_ 0.01 0.27 _±_ 0.01 0.58 _±_ 0.01 0.51 _±_ 0.01 0.17 _±_ 0.02<br>0.35<br>ASVD<br>97.68<br>0.21 _±_ 0.01 0.31 _±_ 0.01 0.29 _±_ 0.01 0.63 _±_ 0.01 0.54 _±_ 0.01 0.15 _±_ 0.02<br>0.36<br>SVD-LLM<br>18.29<br>0.25 _±_ 0.01 0.52 _±_ 0.01 0.34 _±_ 0.01 0.62 _±_ 0.01 0.55 _±_ 0.01 0.22 _±_ 0.02<br>0.42<br>Basis Sharing<br>15.40<br>0.27 _±_ 0.01 **0.58** _±_ 0.01 0.38 _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 **0.26** _±_ 0.02<br>**0.45**<br>GFWSVD (Ours)<br>**13.92**<br>**0.28** _±_ 0.01 0.56 _±_ 0.01 **0.40** _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 0.20 _±_ 0.02<br>0.44|FWSVD<br>2572<br>30%<br>0.24 _±_ 0.01 0.32 _±_ 0.01 0.27 _±_ 0.01 0.58 _±_ 0.01 0.51 _±_ 0.01 0.17 _±_ 0.02<br>0.35<br>ASVD<br>97.68<br>0.21 _±_ 0.01 0.31 _±_ 0.01 0.29 _±_ 0.01 0.63 _±_ 0.01 0.54 _±_ 0.01 0.15 _±_ 0.02<br>0.36<br>SVD-LLM<br>18.29<br>0.25 _±_ 0.01 0.52 _±_ 0.01 0.34 _±_ 0.01 0.62 _±_ 0.01 0.55 _±_ 0.01 0.22 _±_ 0.02<br>0.42<br>Basis Sharing<br>15.40<br>0.27 _±_ 0.01 **0.58** _±_ 0.01 0.38 _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 **0.26** _±_ 0.02<br>**0.45**<br>GFWSVD (Ours)<br>**13.92**<br>**0.28** _±_ 0.01 0.56 _±_ 0.01 **0.40** _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 0.20 _±_ 0.02<br>0.44|FWSVD<br>2572<br>30%<br>0.24 _±_ 0.01 0.32 _±_ 0.01 0.27 _±_ 0.01 0.58 _±_ 0.01 0.51 _±_ 0.01 0.17 _±_ 0.02<br>0.35<br>ASVD<br>97.68<br>0.21 _±_ 0.01 0.31 _±_ 0.01 0.29 _±_ 0.01 0.63 _±_ 0.01 0.54 _±_ 0.01 0.15 _±_ 0.02<br>0.36<br>SVD-LLM<br>18.29<br>0.25 _±_ 0.01 0.52 _±_ 0.01 0.34 _±_ 0.01 0.62 _±_ 0.01 0.55 _±_ 0.01 0.22 _±_ 0.02<br>0.42<br>Basis Sharing<br>15.40<br>0.27 _±_ 0.01 **0.58** _±_ 0.01 0.38 _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 **0.26** _±_ 0.02<br>**0.45**<br>GFWSVD (Ours)<br>**13.92**<br>**0.28** _±_ 0.01 0.56 _±_ 0.01 **0.40** _±_ 0.01 **0.63** _±_ 0.01 **0.58** _±_ 0.01 0.20 _±_ 0.02<br>0.44|
+|FWSVD<br>9286<br>40%<br>0.23 _±_ 0.01 0.26 _±_ 0.01 0.25 _±_ 0.01 0.48 _±_ 0.01 0.45 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>ASVD<br>2992<br>0.22 _±_ 0.01 0.26 _±_ 0.01 0.26 _±_ 0.01 0.49 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>SVD-LLM<br>25.16<br>0.26 _±_ 0.01 0.45 _±_ 0.01 0.30 _±_ 0.01 0.55 _±_ 0.01 0.54 _±_ 0.01 0.19 _±_ 0.02<br>0.38<br>Basis Sharing<br>17.26<br>0.21 _±_ 0.01 0.46 _±_ 0.01 0.32 _±_ 0.01 0.58 _±_ 0.01 0.55 _±_ 0.01 **0.19** _±_ 0.02<br>0.39<br>GFWSVD (Ours)<br>**16.70**<br>**0.27** _±_ 0.01 **0.48** _±_ 0.01 **0.33** _±_ 0.01 **0.64** _±_ 0.01 **0.57** _±_ 0.01 0.17 _±_ 0.02<br>**0.41**|FWSVD<br>9286<br>40%<br>0.23 _±_ 0.01 0.26 _±_ 0.01 0.25 _±_ 0.01 0.48 _±_ 0.01 0.45 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>ASVD<br>2992<br>0.22 _±_ 0.01 0.26 _±_ 0.01 0.26 _±_ 0.01 0.49 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>SVD-LLM<br>25.16<br>0.26 _±_ 0.01 0.45 _±_ 0.01 0.30 _±_ 0.01 0.55 _±_ 0.01 0.54 _±_ 0.01 0.19 _±_ 0.02<br>0.38<br>Basis Sharing<br>17.26<br>0.21 _±_ 0.01 0.46 _±_ 0.01 0.32 _±_ 0.01 0.58 _±_ 0.01 0.55 _±_ 0.01 **0.19** _±_ 0.02<br>0.39<br>GFWSVD (Ours)<br>**16.70**<br>**0.27** _±_ 0.01 **0.48** _±_ 0.01 **0.33** _±_ 0.01 **0.64** _±_ 0.01 **0.57** _±_ 0.01 0.17 _±_ 0.02<br>**0.41**|FWSVD<br>9286<br>40%<br>0.23 _±_ 0.01 0.26 _±_ 0.01 0.25 _±_ 0.01 0.48 _±_ 0.01 0.45 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>ASVD<br>2992<br>0.22 _±_ 0.01 0.26 _±_ 0.01 0.26 _±_ 0.01 0.49 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>SVD-LLM<br>25.16<br>0.26 _±_ 0.01 0.45 _±_ 0.01 0.30 _±_ 0.01 0.55 _±_ 0.01 0.54 _±_ 0.01 0.19 _±_ 0.02<br>0.38<br>Basis Sharing<br>17.26<br>0.21 _±_ 0.01 0.46 _±_ 0.01 0.32 _±_ 0.01 0.58 _±_ 0.01 0.55 _±_ 0.01 **0.19** _±_ 0.02<br>0.39<br>GFWSVD (Ours)<br>**16.70**<br>**0.27** _±_ 0.01 **0.48** _±_ 0.01 **0.33** _±_ 0.01 **0.64** _±_ 0.01 **0.57** _±_ 0.01 0.17 _±_ 0.02<br>**0.41**|FWSVD<br>9286<br>40%<br>0.23 _±_ 0.01 0.26 _±_ 0.01 0.25 _±_ 0.01 0.48 _±_ 0.01 0.45 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>ASVD<br>2992<br>0.22 _±_ 0.01 0.26 _±_ 0.01 0.26 _±_ 0.01 0.49 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>SVD-LLM<br>25.16<br>0.26 _±_ 0.01 0.45 _±_ 0.01 0.30 _±_ 0.01 0.55 _±_ 0.01 0.54 _±_ 0.01 0.19 _±_ 0.02<br>0.38<br>Basis Sharing<br>17.26<br>0.21 _±_ 0.01 0.46 _±_ 0.01 0.32 _±_ 0.01 0.58 _±_ 0.01 0.55 _±_ 0.01 **0.19** _±_ 0.02<br>0.39<br>GFWSVD (Ours)<br>**16.70**<br>**0.27** _±_ 0.01 **0.48** _±_ 0.01 **0.33** _±_ 0.01 **0.64** _±_ 0.01 **0.57** _±_ 0.01 0.17 _±_ 0.02<br>**0.41**|FWSVD<br>9286<br>40%<br>0.23 _±_ 0.01 0.26 _±_ 0.01 0.25 _±_ 0.01 0.48 _±_ 0.01 0.45 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>ASVD<br>2992<br>0.22 _±_ 0.01 0.26 _±_ 0.01 0.26 _±_ 0.01 0.49 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.31<br>SVD-LLM<br>25.16<br>0.26 _±_ 0.01 0.45 _±_ 0.01 0.30 _±_ 0.01 0.55 _±_ 0.01 0.54 _±_ 0.01 0.19 _±_ 0.02<br>0.38<br>Basis Sharing<br>17.26<br>0.21 _±_ 0.01 0.46 _±_ 0.01 0.32 _±_ 0.01 0.58 _±_ 0.01 0.55 _±_ 0.01 **0.19** _±_ 0.02<br>0.39<br>GFWSVD (Ours)<br>**16.70**<br>**0.27** _±_ 0.01 **0.48** _±_ 0.01 **0.33** _±_ 0.01 **0.64** _±_ 0.01 **0.57** _±_ 0.01 0.17 _±_ 0.02<br>**0.41**|
+|FWSVD<br>36578<br>50%<br>0.22 _±_ 0.01 0.25 _±_ 0.01 0.25 _±_ 0.01 0.52 _±_ 0.01 0.50 _±_ 0.01 0.17 _±_ 0.02<br>0.32<br>ASVD<br>16896<br>0.21 _±_ 0.01 0.25 _±_ 0.01 0.26 _±_ 0.01 0.53 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.32<br>SVD-LLM<br>56.72<br>0.21 _±_ 0.01 0.33 _±_ 0.01 0.26 _±_ 0.01 0.54 _±_ 0.01 0.50 _±_ 0.01 0.12 _±_ 0.02<br>0.33<br>Basis Sharing<br>**35.12**<br>0.20 _±_ 0.01 **0.36** _±_ 0.01 **0.30** _±_ 0.01 **0.55** _±_ 0.01 0.50 _±_ 0.01 **0.15** _±_ 0.02<br>**0.34**<br>GFWSVD (Ours)<br>37.80<br>**0.22** _±_ 0.01 0.28 _±_ 0.01 0.26 _±_ 0.01 **0.55** _±_ 0.01 **0.51** _±_ 0.01 **0.15** _±_ 0.02<br>0.33|FWSVD<br>36578<br>50%<br>0.22 _±_ 0.01 0.25 _±_ 0.01 0.25 _±_ 0.01 0.52 _±_ 0.01 0.50 _±_ 0.01 0.17 _±_ 0.02<br>0.32<br>ASVD<br>16896<br>0.21 _±_ 0.01 0.25 _±_ 0.01 0.26 _±_ 0.01 0.53 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.32<br>SVD-LLM<br>56.72<br>0.21 _±_ 0.01 0.33 _±_ 0.01 0.26 _±_ 0.01 0.54 _±_ 0.01 0.50 _±_ 0.01 0.12 _±_ 0.02<br>0.33<br>Basis Sharing<br>**35.12**<br>0.20 _±_ 0.01 **0.36** _±_ 0.01 **0.30** _±_ 0.01 **0.55** _±_ 0.01 0.50 _±_ 0.01 **0.15** _±_ 0.02<br>**0.34**<br>GFWSVD (Ours)<br>37.80<br>**0.22** _±_ 0.01 0.28 _±_ 0.01 0.26 _±_ 0.01 **0.55** _±_ 0.01 **0.51** _±_ 0.01 **0.15** _±_ 0.02<br>0.33|FWSVD<br>36578<br>50%<br>0.22 _±_ 0.01 0.25 _±_ 0.01 0.25 _±_ 0.01 0.52 _±_ 0.01 0.50 _±_ 0.01 0.17 _±_ 0.02<br>0.32<br>ASVD<br>16896<br>0.21 _±_ 0.01 0.25 _±_ 0.01 0.26 _±_ 0.01 0.53 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.32<br>SVD-LLM<br>56.72<br>0.21 _±_ 0.01 0.33 _±_ 0.01 0.26 _±_ 0.01 0.54 _±_ 0.01 0.50 _±_ 0.01 0.12 _±_ 0.02<br>0.33<br>Basis Sharing<br>**35.12**<br>0.20 _±_ 0.01 **0.36** _±_ 0.01 **0.30** _±_ 0.01 **0.55** _±_ 0.01 0.50 _±_ 0.01 **0.15** _±_ 0.02<br>**0.34**<br>GFWSVD (Ours)<br>37.80<br>**0.22** _±_ 0.01 0.28 _±_ 0.01 0.26 _±_ 0.01 **0.55** _±_ 0.01 **0.51** _±_ 0.01 **0.15** _±_ 0.02<br>0.33|FWSVD<br>36578<br>50%<br>0.22 _±_ 0.01 0.25 _±_ 0.01 0.25 _±_ 0.01 0.52 _±_ 0.01 0.50 _±_ 0.01 0.17 _±_ 0.02<br>0.32<br>ASVD<br>16896<br>0.21 _±_ 0.01 0.25 _±_ 0.01 0.26 _±_ 0.01 0.53 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.32<br>SVD-LLM<br>56.72<br>0.21 _±_ 0.01 0.33 _±_ 0.01 0.26 _±_ 0.01 0.54 _±_ 0.01 0.50 _±_ 0.01 0.12 _±_ 0.02<br>0.33<br>Basis Sharing<br>**35.12**<br>0.20 _±_ 0.01 **0.36** _±_ 0.01 **0.30** _±_ 0.01 **0.55** _±_ 0.01 0.50 _±_ 0.01 **0.15** _±_ 0.02<br>**0.34**<br>GFWSVD (Ours)<br>37.80<br>**0.22** _±_ 0.01 0.28 _±_ 0.01 0.26 _±_ 0.01 **0.55** _±_ 0.01 **0.51** _±_ 0.01 **0.15** _±_ 0.02<br>0.33|FWSVD<br>36578<br>50%<br>0.22 _±_ 0.01 0.25 _±_ 0.01 0.25 _±_ 0.01 0.52 _±_ 0.01 0.50 _±_ 0.01 0.17 _±_ 0.02<br>0.32<br>ASVD<br>16896<br>0.21 _±_ 0.01 0.25 _±_ 0.01 0.26 _±_ 0.01 0.53 _±_ 0.01 0.49 _±_ 0.01 0.16 _±_ 0.02<br>0.32<br>SVD-LLM<br>56.72<br>0.21 _±_ 0.01 0.33 _±_ 0.01 0.26 _±_ 0.01 0.54 _±_ 0.01 0.50 _±_ 0.01 0.12 _±_ 0.02<br>0.33<br>Basis Sharing<br>**35.12**<br>0.20 _±_ 0.01 **0.36** _±_ 0.01 **0.30** _±_ 0.01 **0.55** _±_ 0.01 0.50 _±_ 0.01 **0.15** _±_ 0.02<br>**0.34**<br>GFWSVD (Ours)<br>37.80<br>**0.22** _±_ 0.01 0.28 _±_ 0.01 0.26 _±_ 0.01 **0.55** _±_ 0.01 **0.51** _±_ 0.01 **0.15** _±_ 0.02<br>0.33|
+
+
+Tables 5.2 and 4 show that on LLaMA-2 7B and LLaMA-3 8B, and for compression levels up
+to 50%, GFWSVD substantially outperforms methods that decompose layers independently, both
+diagonal FWSVD and activation-aware ASVD. If we compare GFWSVD, which relies on parameter
+correlations within a layer, with Basis Sharing, which captures correlations across layers, GFWSVD
+outperforms Basis Sharing on LLaMA-3 8B at all compression levels and surpasses it on LLaMA-2
+7B at 20% and 40% compression. This difference likely stems from stronger inter-layer correlations in
+the instruction-tuned LLaMA-3 8B model. We also observe that GFWSVD and Basis Sharing behave
+differently across tasks while maintaining consistent trends across compression ratios. For example,
+on PIQA, GFWSVD often surpasses Basis Sharing by nearly 10%, whereas on OpenBookQA the
+opposite pattern emerges. This suggests that different types of structural dependencies within the
+model—parameter-level versus inter-layer relationships—benefit different categories of tasks.
+
+
+More fine-grained compression results at 5–20% and MMLU evaluation are provided in Appendix D
+and Figure 3. There, we show that as the compression ratio decreases, the relative importance
+of diagonal Fisher information grows, and GFWSVD increasingly outperforms both FWSVD and
+ASVD.
+
+
+Throughput and FLOP results for compressed models are provided in Appendix E.
+
+
+9
+
+
+5.3 METHOD POSITIONING AND APPLICABILITY
+
+
+|zation method.|Col2|Col3|Col4|
+|---|---|---|---|
+|<br>METHOD|C. Ratio|Wiki-2_↓_PTB_↓_|ARC-E_↑_ARC-C_↑_PIQA_↑_HSwag_↑_|
+|Full model|0%|**6.94**<br>**25.75**|**0.73**<br>**0.44**<br>**0.78**<br>**0.57**|
+|Dobi-SVD<br>Dobi-GFWSVD (Ours)<br>YAQA_ (quant.)_|20%|7.75<br>26.11<br>**7.56**<br>**25.95**<br>_6.99_<br>–|0.71<br>0.40<br>0.76<br>0.55<br>**0.72**<br>**0.42**<br>**0.77**<br>**0.55**<br>_0.73_<br>_0.44_<br>_0.78_<br>_0.56_|
+|Dobi-SVD<br>Dobi-GFWSVD (Ours)<br>YAQA_ (quant.)_|40%|10.56<br>41.70<br>**10.29**<br>**38.56**<br>_8.14_<br>–|0.58<br>0.32<br>0.69<br>0.32<br>**0.60**<br>**0.33**<br>**0.69**<br>**0.32**<br>_0.66_<br>_0.41_<br>0.77<br>_0.53_|
+
+
+6 CONCLUSION AND FUTURE WORK
+
+
+We introduced **Generalized** **Fisher-Weighted** **SVD** **(GFWSVD)**, a low-rank second-order compression method that leverages the full Fisher Information Matrix through a scalable Kronecker
+decomposition. Unlike previous approaches, GFWSVD captures parameter correlations and yields
+a factorization _provably_ _optimal_ within its class (Theorem 1). Our results on both encoder-only
+(BERT on GLUE) and decoder-only (LLaMA family on reasoning datasets) show that GFWSVD
+consistently outperforms diagonal Fisher- and activation-based SVD approaches, particularly at
+higher compression rates. As for the Basis Sharing method, which employs cross-layer correlation
+information, our approach outperforms it on LLaMA-3 8B and partially outperforms it on LLaMA-2
+7B.
+
+
+Crucially, the method is entirely analytical and does _not_ require stochastic optimization or iterative
+retraining, making it lightweight and reproducible. The tractable algorithm for computing full
+Kronecker factors makes this work an important step toward practical, curvature-aware post-training
+compression of large language models.
+
+
+GFWSVD highlights the critical role of accurate FIM computation in compression. While our
+approach performs well empirically, its reliance on a rank-1 Kronecker approximation of the Fisher
+matrix may oversimplify important structure. Future work could explore higher-rank Kronecker series
+to capture richer information, and extend the method to model cross-layer dependencies, potentially
+improving performance by leveraging transitive correlations across the network.
+
+
+[5https://github.com/wangqinsi1/Dobi-SVD](https://github.com/wangqinsi1/Dobi-SVD)
+
+
+10
+
+
+GFWSVD is essentially a standard SVD reweighted on full second-order model loss information
+which made them (by Theorem 1) provably optimal for the given LLM. We compute the factors for
+optimal reweighting analytically via a single decomposition of the Hessian, which makes FWSVD
+training-free and keeps its computational path close to standard SVD. As noted in the Section 2,
+several SVD-based pipelines optimize decomposition parameters during training and thereby achieve
+stronger compression. By design, GFWSVD can be seamlessly integrated into any such pipeline as
+a drop-in replacement for standard SVD, since its factors are computed once before training. For
+example, post-training compression pipeline Dobi-SVD fine-tune singular values of decomposition.
+We replaced standard SVD with GFWSVD in the Dobi-SVD pipeline and trained the LLaMA 2 7B
+model for 20 epochs using the hyperparameters provided in the official Dobi-SVD implementation [5]
+with remapping enabled. We evaluated resulting models on ARC-C, ARC-E, PIQA and HellaSwag.
+The results are reported in Table 5. Dobi-GFWSVD method maintains competitive downstream
+performance at 20% compression and shows only a moderate degradation ( _∼_ 10% drop in HellaSwag
+accuracy) at a stronger 40% compression ratio, outperforming the original Dobi-SVD baseline in
+all cases. Dobi-GFWSVD exhibits only a 3% perplexity increase at 20% compression and remains
+competitive even at 40%.
+
+
+For comparison with non–structural- Table 5: Performance of the LLaMA-2 7B Chat model comapproximation approaches, we also pressed with the Dobi-SVD and Dobi-GFWSVD pipelines at
+include YAQA (Tseng et al., 2025) 20% and 40% compression. YAQA is a second-order quanti
+
+
+For comparison with non–structuralapproximation approaches, we also
+include YAQA (Tseng et al., 2025)
+in baselines. YAQA is a quantization method that, like our GFWSVD,
+leverages second-order loss information. As expected, quantization delivers stronger accuracy and less perpelxity at these compression ratios.
+
+
+trade-off between performance and
+training efficiency. GFWSVD is fully analytical and requires only 3.5 hours on 3 GPUs (including 45
+calibration steps and factorization), whereas Dobi-SVD and Dobi-GFWSVD fine-tuning take roughly
+20 hours on 8 GPUs.
+
+
+ETHICS STATEMENT
+
+
+This work focuses on methods for improving the efficiency and practicality of post-training lowrank compression of large language models using second-order information. Our research does not
+involve human subjects, personally identifiable information, or other sensitive data. All experiments
+are carried out on publicly available models (BERT, Llama) and widely used benchmarks (GLUE,
+MMLU), ensuring transparency and reproducibility. We do not release any new datasets containing
+private or proprietary information. The proposed methods are intended to reduce the computational
+cost and energy consumption of deploying large models, which we view as a positive contribution
+to sustainability. We are not aware of any direct negative societal impacts; however, as with any
+model compression technique, improved efficiency may lower the barrier to deploying large models
+in contexts where misuse is possible. We therefore encourage responsible use of these methods in
+accordance with the ICLR Code of Ethics.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We have made every effort to ensure reproducibility of our results. The full description of the
+proposed method, including theoretical assumptions and proofs, is provided in the main text and
+Appendix. We conduct all experiments on a 4 NVIDIA A100 GPU with latest CUDA drivers using
+Python 3.12. The reference implementation of the Algorithm 1 as well as all experimental pipelines
+are available in an anonymous repository [6] .
+
+
+[6https://anonymous.4open.science/r/FisherKronecker-B4F0](https://anonymous.4open.science/r/FisherKronecker-B4F0)
+
+
+11
+
+
+REFERENCES
+
+
+Hervé Abdi. Singular Value Decomposition (SVD) and Generalized Singular Value Decomposition
+(GSVD). _Encyclopedia of Measurement and Statistics._, 907(912):44, 2006.
+
+
+Takuya Akiba, Shotaro Sano, Takeru Yanase, Toshihiko Ohta, and Masanori Koyama. Optuna:
+A next-generation hyperparameter optimization framework. In _Proceedings_ _of_ _the_ _25th_ _ACM_
+_SIGKDD_ _International_ _Conference_ _on_ _Knowledge_ _Discovery_ _&_ _Data_ _Mining_, pp. 2623–2631.
+ACM, 2019.
+
+
+Genevera I Allen, Logan Grosenick, and Jonathan Taylor. A Generalized Least-Square Matrix
+Decomposition. _Journal of the American Statistical Association_, 109(505):145–159, 2014.
+
+
+Pratyay Banerjee and Chitta Baral. Careful selection of knowledge to solve open book questions. In
+_Proceedings of ACL_, 2020.
+
+
+Yonatan Bisk, Rowan Zellers, Jianfeng Gao, and Yejin Choi. Piqa: Reasoning about physical
+commonsense in natural language. In _Proceedings of AAAI_, 2020.
+
+
+Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and
+Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge.
+In _Proceedings of NAACL_, 2018.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: pre-training of
+deep bidirectional transformers for language understanding. In Jill Burstein, Christy Doran, and
+Thamar Solorio (eds.), _Proceedings of the 2019 Conference of the North American Chapter of_
+_the_ _Association_ _for_ _Computational_ _Linguistics:_ _Human_ _Language_ _Technologies,_ _NAACL-HLT_
+_2019,_ _Minneapolis,_ _MN,_ _USA,_ _June_ _2-7,_ _2019,_ _Volume_ _1_ _(Long_ _and_ _Short_ _Papers)_, pp. 4171–
+4186. Association for Computational Linguistics, 2019. doi: 10.18653/V1/N19-1423. URL
+[https://doi.org/10.18653/v1/n19-1423.](https://doi.org/10.18653/v1/n19-1423)
+
+
+R. A. Fisher. _On the Mathematical Foundations of Theoretical Statistics_, pp. 11–44. Springer New
+York, New York, NY, 1992. ISBN 978-1-4612-0919-5. doi: 10.1007/978-1-4612-0919-5_2. URL
+[https://doi.org/10.1007/978-1-4612-0919-5_2.](https://doi.org/10.1007/978-1-4612-0919-5_2)
+
+
+Jonathan Frankle and Michael Carbin. The lottery ticket hypothesis: Finding sparse, trainable
+neural networks. In _7th International Conference on Learning Representations, ICLR 2019, New_
+_Orleans,_ _LA,_ _USA,_ _May_ _6-9,_ _2019_ . OpenReview.net, 2019. URL [https://openreview.](https://openreview.net/forum?id=rJl-b3RcF7)
+[net/forum?id=rJl-b3RcF7.](https://openreview.net/forum?id=rJl-b3RcF7)
+
+
+Elias Frantar and Dan Alistarh. Sparsegpt: Massive language models can be accurately pruned
+in one-shot. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan
+Sabato, and Jonathan Scarlett (eds.), _International Conference on Machine Learning, ICML 2023,_
+_23-29_ _July_ _2023,_ _Honolulu,_ _Hawaii,_ _USA_, volume 202 of _Proceedings_ _of_ _Machine_ _Learning_
+_Research_, pp. 10323–10337. PMLR, 2023. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v202/frantar23a.html)
+[v202/frantar23a.html.](https://proceedings.mlr.press/v202/frantar23a.html)
+
+
+Gene H. Golub and Charles F. Van Loan. _Matrix_ _Computations_ . Johns Hopkins Studies in the
+Mathematical Sciences. Johns Hopkins University Press, Baltimore, Maryland, 4 edition, February
+2013.
+
+
+Roger B. Grosse and James Martens. A kronecker-factored approximate fisher matrix for convolution
+layers. In Maria-Florina Balcan and Kilian Q. Weinberger (eds.), _Proceedings_ _of_ _the_ _33nd_
+_International Conference on Machine Learning, ICML 2016, New York City, NY, USA, June 19-24,_
+_2016_, volume 48 of _JMLR Workshop and Conference Proceedings_, pp. 573–582. JMLR.org, 2016.
+[URL http://proceedings.mlr.press/v48/grosse16.html.](http://proceedings.mlr.press/v48/grosse16.html)
+
+
+Arjun K. Gupta and Daya K. Nagar. _Matrix Variate Distributions_ . Number 104 in Monographs and
+Surveys in Pure and Applied Mathematics. Chapman and Hall/CRC, Boca Raton, 1 edition, 2018.
+doi: 10.1201/9780203749289.
+
+
+12
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob
+Steinhardt. Measuring massive multitask language understanding. In _9th International Conference_
+_on Learning Representations, ICLR 2021, Virtual Event, Austria, May 3-7, 2021_ . OpenReview.net,
+2021. [URL https://openreview.net/forum?id=d7KBjmI3GmQ.](https://openreview.net/forum?id=d7KBjmI3GmQ)
+
+
+Yen-Chang Hsu, Ting Hua, Sungen Chang, Qian Lou, Yilin Shen, and Hongxia Jin. Language model
+compression with weighted low-rank factorization, 2022. [URL https://openreview.net/](https://openreview.net/forum?id=uPv9Y3gmAI5)
+[forum?id=uPv9Y3gmAI5.](https://openreview.net/forum?id=uPv9Y3gmAI5)
+
+
+Divyansh Jhunjhunwala, Shiqiang Wang, and Gauri Joshi. Fedfisher: Leveraging fisher information
+for one-shot federated learning. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li (eds.), _Inter-_
+_national Conference on Artificial Intelligence and Statistics, 2-4 May 2024, Palau de Congressos,_
+_Valencia, Spain_, volume 238 of _Proceedings of Machine Learning Research_, pp. 1612–1620. PMLR,
+2024. [URL https://proceedings.mlr.press/v238/jhunjhunwala24a.html.](https://proceedings.mlr.press/v238/jhunjhunwala24a.html)
+
+
+James Kirkpatrick, Razvan Pascanu, et al. Overcoming catastrophic forgetting in neural networks. In
+_Proceedings of the National Academy of Sciences_, volume 114, pp. 3521–3526, 2017.
+
+
+Abdoulaye Koroko, Ani Anciaux-Sedrakian, Ibtihel Ben Gharbia, Valérie Garès, Mounir Haddou,
+and Quang Huy Tran. Efficient approximations of the fisher matrix in neural networks using
+kronecker product singular value decomposition. _ESAIM: Proceedings and Surveys_, 73:218–237,
+2023.
+
+
+Cornelius Lanczos. An Iteration Method for the Solution of the Eigenvalue Problem of Linear
+Differential and Integral Operators. _Journal of Research of the National Bureau of Standards_, 45
+(4):255–282, October 1950. ISSN 0160-1741. doi: 10.6028/jres.045.026. Research Paper 2133.
+
+
+Changwoo Lee, Soo Min Kwon, Qing Qu, and Hun-Seok Kim. BLAST: Block-Level Adaptive
+Structured Matrices for Efficient Deep Neural Network Inference. In Amir Globersons, Lester
+Mackey, Danielle Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang
+(eds.), _Advances in Neural Information Processing Systems 38:_ _Annual Conference on Neural_
+_Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 -_
+_15, 2024_, 2024. [URL http://papers.nips.cc/paper_files/paper/2024/hash/](http://papers.nips.cc/paper_files/paper/2024/hash/1b2df10d5bc3ca563339c801fa2e14db-Abstract-Conference.html)
+[1b2df10d5bc3ca563339c801fa2e14db-Abstract-Conference.html.](http://papers.nips.cc/paper_files/paper/2024/hash/1b2df10d5bc3ca563339c801fa2e14db-Abstract-Conference.html)
+
+
+Sanwoo Lee, Jiahao Liu, Qifan Wang, Jingang Wang, Xunliang Cai, and Yunfang Wu. Dynamic
+fisher-weighted model merging via Bayesian optimization. In Luis Chiruzzo, Alan Ritter, and
+Lu Wang (eds.), _Proceedings_ _of_ _the_ _2025_ _Conference_ _of_ _the_ _Nations_ _of_ _the_ _Americas_ _Chapter_
+_of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _Human_ _Language_ _Technologies_ _(Volume_ _1:_
+_Long Papers)_, pp. 4923–4935, Albuquerque, New Mexico, April 2025. Association for Computational Linguistics. ISBN 979-8-89176-189-6. [URL https://aclanthology.org/2025.](https://aclanthology.org/2025.naacl-long.254/)
+[naacl-long.254/.](https://aclanthology.org/2025.naacl-long.254/)
+
+
+Zhiteng Li, Mingyuan Xia, Jingyuan Zhang, Zheng Hui, Linghe Kong, Yulun Zhang, and Xiaokang
+Yang. AdaSVD: Adaptive Singular Value Decomposition for Large Language Models. _CoRR_,
+abs/2502.01403, 2025. doi: 10.48550/ARXIV.2502.01403. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2502.01403)
+[48550/arXiv.2502.01403.](https://doi.org/10.48550/arXiv.2502.01403)
+
+
+Jun Lu, Tianyi Xu, Bill Ding, David Li, and Yu Kang. Large Language Model Compression via the
+Nested Activation-Aware Decomposition. _CoRR_, abs/2503.17101, 2025. doi: 10.48550/ARXIV.
+2503.17101. [URL https://doi.org/10.48550/arXiv.2503.17101.](https://doi.org/10.48550/arXiv.2503.17101)
+
+
+Mitchell P. Marcus, Beatrice Santorini, and Mary Ann Marcinkiewicz. Building a Large Annotated
+Corpus of English: The Penn Treebank. _Comput. Linguistics_, 19(2):313–330, 1993.
+
+
+Stephen Merity, Caiming Xiong, James Bradbury, and Richard Socher. Pointer Sentinel Mixture
+Models. In _5th_ _International_ _Conference_ _on_ _Learning_ _Representations,_ _ICLR_ _2017,_ _Toulon,_
+_France, April 24-26, 2017, Conference Track Proceedings_ . OpenReview.net, 2017. [URL https:](https://openreview.net/forum?id=Byj72udxe)
+[//openreview.net/forum?id=Byj72udxe.](https://openreview.net/forum?id=Byj72udxe)
+
+
+Guilherme Penedo, Hynek Kydlícek, Loubna Ben Allal, Anton Lozhkov, Margaret Mitchell,
+Colin A. Raffel, Leandro von Werra, and Thomas Wolf. The fineweb datasets: Decanting
+
+
+13
+
+
+the web for the finest text data at scale. In Amir Globersons, Lester Mackey, Danielle
+Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (eds.), _Advances_
+_in_ _Neural_ _Information_ _Processing_ _Systems_ _38:_ _Annual_ _Conference_ _on_ _Neural_ _Informa-_
+_tion_ _Processing_ _Systems_ _2024,_ _NeurIPS_ _2024,_ _Vancouver,_ _BC,_ _Canada,_ _December_ _10_ _-_
+_15,_ _2024_, 2024. URL [http://papers.nips.cc/paper_files/paper/2024/](http://papers.nips.cc/paper_files/paper/2024/hash/370df50ccfdf8bde18f8f9c2d9151bda-Abstract-Datasets_and_Benchmarks_Track.html)
+[hash/370df50ccfdf8bde18f8f9c2d9151bda-Abstract-Datasets_and_](http://papers.nips.cc/paper_files/paper/2024/hash/370df50ccfdf8bde18f8f9c2d9151bda-Abstract-Datasets_and_Benchmarks_Track.html)
+[Benchmarks_Track.html.](http://papers.nips.cc/paper_files/paper/2024/hash/370df50ccfdf8bde18f8f9c2d9151bda-Abstract-Datasets_and_Benchmarks_Track.html)
+
+
+Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An
+adversarial winograd schema challenge at scale. In _Proceedings of AAAI_, 2021.
+
+
+Alexander Soen and Ke Sun. Trade-offs of diagonal fisher information matrix estimators. In Amir
+Globersons, Lester Mackey, Danielle Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and
+Cheng Zhang (eds.), _Advances in Neural Information Processing Systems 38:_ _Annual Conference_
+_on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, Decem-_
+_ber 10 - 15, 2024_, 2024. [URL http://papers.nips.cc/paper_files/paper/2024/](http://papers.nips.cc/paper_files/paper/2024/hash/0b43289db08ed60edc6451cb2132e203-Abstract-Conference.html)
+[hash/0b43289db08ed60edc6451cb2132e203-Abstract-Conference.html.](http://papers.nips.cc/paper_files/paper/2024/hash/0b43289db08ed60edc6451cb2132e203-Abstract-Conference.html)
+
+
+Zedong Tang, Fenlong Jiang, Maoguo Gong, Hao Li, Yue Wu, Fan Yu, Zidong Wang, and Min
+Wang. SKFAC: Training Neural Networks With Faster Kronecker-Factored Approximate
+Curvature. In _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition,_ _CVPR_ _2021,_
+_virtual,_ _June_ _19-25,_ _2021_, pp. 13479–13487. Computer Vision Foundation / IEEE, 2021. doi:
+10.1109/CVPR46437.2021.01327. [URL https://openaccess.thecvf.com/content/](https://openaccess.thecvf.com/content/CVPR2021/html/Tang_SKFAC_Training_Neural_Networks_With_Faster_Kronecker-Factored_Approximate_Curvature_CVPR_2021_paper.html)
+[CVPR2021/html/Tang_SKFAC_Training_Neural_Networks_With_Faster_](https://openaccess.thecvf.com/content/CVPR2021/html/Tang_SKFAC_Training_Neural_Networks_With_Faster_Kronecker-Factored_Approximate_Curvature_CVPR_2021_paper.html)
+[Kronecker-Factored_Approximate_Curvature_CVPR_2021_paper.html.](https://openaccess.thecvf.com/content/CVPR2021/html/Tang_SKFAC_Training_Neural_Networks_With_Faster_Kronecker-Factored_Approximate_Curvature_CVPR_2021_paper.html)
+
+
+Llama Team. The llama 3 herd of models. _CoRR_, abs/2407.21783, 2024. doi: 10.48550/ARXIV.
+2407.21783. [URL https://doi.org/10.48550/arXiv.2407.21783.](https://doi.org/10.48550/arXiv.2407.21783)
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay
+Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher, Cristian
+Canton-Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy Fu, Wenyin
+Fu, Brian Fuller, Cynthia Gao, Vedanuj Goswami, Naman Goyal, Anthony Hartshorn, Saghar
+Hosseini, Rui Hou, Hakan Inan, Marcin Kardas, Viktor Kerkez, Madian Khabsa, Isabel Kloumann,
+Artem Korenev, Punit Singh Koura, Marie-Anne Lachaux, Thibaut Lavril, Jenya Lee, Diana
+Liskovich, Yinghai Lu, Yuning Mao, Xavier Martinet, Todor Mihaylov, Pushkar Mishra, Igor
+Molybog, Yixin Nie, Andrew Poulton, Jeremy Reizenstein, Rashi Rungta, Kalyan Saladi, Alan
+Schelten, Ruan Silva, Eric Michael Smith, Ranjan Subramanian, Xiaoqing Ellen Tan, Binh Tang,
+Ross Taylor, Adina Williams, Jian Xiang Kuan, Puxin Xu, Zheng Yan, Iliyan Zarov, Yuchen
+Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, Aurélien Rodriguez, Robert Stojnic,
+Sergey Edunov, and Thomas Scialom. Llama 2: Open foundation and fine-tuned chat models.
+_CoRR_, abs/2307.09288, 2023. doi: 10.48550/ARXIV.2307.09288. [URL https://doi.org/](https://doi.org/10.48550/arXiv.2307.09288)
+[10.48550/arXiv.2307.09288.](https://doi.org/10.48550/arXiv.2307.09288)
+
+
+Albert Tseng, Qingyao Sun, David Hou, and Christopher De Sa. QTIP: Quantization with
+Trellises and Incoherence Processing. In Amir Globersons, Lester Mackey, Danielle Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (eds.), _Advances_
+_in_ _Neural_ _Information_ _Processing_ _Systems_ _38:_ _Annual_ _Conference_ _on_ _Neural_ _Informa-_
+_tion_ _Processing_ _Systems_ _2024,_ _NeurIPS_ _2024,_ _Vancouver,_ _BC,_ _Canada,_ _December_ _10_ _-_ _15,_
+_2024_, 2024. URL [http://papers.nips.cc/paper_files/paper/2024/hash/](http://papers.nips.cc/paper_files/paper/2024/hash/6de2e84b8da47bb2eb5e2ac96c63d2b0-Abstract-Conference.html)
+[6de2e84b8da47bb2eb5e2ac96c63d2b0-Abstract-Conference.html.](http://papers.nips.cc/paper_files/paper/2024/hash/6de2e84b8da47bb2eb5e2ac96c63d2b0-Abstract-Conference.html)
+
+
+Albert Tseng, Zhaofeng Sun, and Christopher De Sa. Model-Preserving Adaptive Rounding. _CoRR_,
+abs/2505.22988, 2025. doi: 10.48550/ARXIV.2505.22988. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2505.22988)
+[48550/arXiv.2505.22988.](https://doi.org/10.48550/arXiv.2505.22988)
+
+
+Charles F. Van Loan and Nikos Pitsianis. Approximation with Kronecker Products. In Marc S.
+Moonen, Gene H. Golub, and Bart L.R. De Moor (eds.), _Linear_ _Algebra_ _for_ _Large_ _Scale_ _and_
+_Real-Time Applications_, volume 232 of _NATO ASI Series. Series E: Applied Sciences_, pp. 293–314.
+Kluwer Academic Publishers, 1993. Proceedings of the NATO Advanced Study Institute, held in
+Leuven, Belgium, August 3–14, 1992.
+
+
+14
+
+
+Jingcun Wang, Yu-Guang Chen, Ing-Chao Lin, Bing Li, and Grace Li Zhang. Basis sharing:
+Cross-layer parameter sharing for large language model compression, 2024. URL [https:](https://arxiv.org/abs/2410.03765)
+[//arxiv.org/abs/2410.03765.](https://arxiv.org/abs/2410.03765)
+
+
+Qinsi Wang, Jinghan Ke, Masayoshi Tomizuka, Kurt Keutzer, and Chenfeng Xu. Dobi-SVD:
+Differentiable SVD for LLM Compression and Some New Perspectives. In _The_ _Thirteenth_
+_International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025_ .
+OpenReview.net, 2025a. [URL https://openreview.net/forum?id=kws76i5XB8.](https://openreview.net/forum?id=kws76i5XB8)
+
+
+Xin Wang, Samiul Alam, Zhongwei Wan, Hui Shen, and Mi Zhang. SVD-LLM V2: Optimizing
+Singular Value Truncation for Large Language Model Compression. In Luis Chiruzzo, Alan Ritter,
+and Lu Wang (eds.), _Proceedings of the 2025 Conference of the Nations of the Americas Chapter_
+_of the Association for Computational Linguistics:_ _Human Language Technologies, NAACL 2025 -_
+_Volume 1:_ _Long Papers, Albuquerque, New Mexico, USA, April 29 - May 4, 2025_, pp. 4287–4296.
+Association for Computational Linguistics, 2025b. doi: 10.18653/V1/2025.NAACL-LONG.217.
+[URL https://doi.org/10.18653/v1/2025.naacl-long.217.](https://doi.org/10.18653/v1/2025.naacl-long.217)
+
+
+Xin Wang, Yu Zheng, Zhongwei Wan, and Mi Zhang. SVD-LLM: Truncation-aware singular
+value decomposition for large language model compression. In _International_ _Conference_ _on_
+_Learning Representations (ICLR)_, 2025c. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=LNYIUouhdt)
+[LNYIUouhdt.](https://openreview.net/forum?id=LNYIUouhdt)
+
+
+Xiaodong Wu, Wenyi Yu, Chao Zhang, and Philip C. Woodland. An improved empirical fisher
+approximation for natural gradient descent. In Amir Globersons, Lester Mackey, Danielle
+Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (eds.), _Ad-_
+_vances_ _in_ _Neural_ _Information_ _Processing_ _Systems_ _38:_ _Annual_ _Conference_ _on_ _Neural_ _Infor-_
+_mation_ _Processing_ _Systems_ _2024,_ _NeurIPS_ _2024,_ _Vancouver,_ _BC,_ _Canada,_ _December_ _10_ _-_
+_15, 2024_, 2024. [URL http://papers.nips.cc/paper_files/paper/2024/hash/](http://papers.nips.cc/paper_files/paper/2024/hash/f23098fa0cfcdef0e743b134d380eeb9-Abstract-Conference.html)
+[f23098fa0cfcdef0e743b134d380eeb9-Abstract-Conference.html.](http://papers.nips.cc/paper_files/paper/2024/hash/f23098fa0cfcdef0e743b134d380eeb9-Abstract-Conference.html)
+
+
+Zhihang Yuan, Yuzhang Shang, Yue Song, Qiang Wu, Yan Yan, and Guangyu Sun. ASVD:
+activation-aware singular value decomposition for compressing large language models. _CoRR_,
+abs/2312.05821, 2023. doi: 10.48550/ARXIV.2312.05821. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2312.05821)
+[48550/arXiv.2312.05821.](https://doi.org/10.48550/arXiv.2312.05821)
+
+
+Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine
+really finish your sentence? In _Proceedings of ACL_, 2019.
+
+
+A APPENDIX: SPECIAL CASE OF DIAGONAL FISHER INFORMATION MATRIX
+
+
+In this section, we show that FWSVD, presented in (Hsu et al., 2022), is a special case of our
+generalized approach.
+
+
+In the work of (Hsu et al., 2022), authors propose to minimize the following objective:
+
+
+min _F_ (16)
+**W1** _,_ **W2** _[∥]_ **[DW]** _[⋆]_ _[−]_ **[DW][2][W][1]** _[∥]_ [2]
+
+where **D** is the diagonal matrix �diag (E[ **GG** _[⊤]_ ]). Specifically, **D** _i,i_ = ~~�~~ - _mj_ =1 [E][(] **[G]** _[i,j]_ [)][2][.]
+
+
+Similarly to 12, we approximate the Fisher Information with a Kronecker product of identity matrix
+**I** _m_ and some diagonal matrix **D** **[˜]** . As described further in Section 4 and Appendix A, under the
+permutation _R_, the problem
+min **I** _F_ _−_ **I** _m ⊗_ **˜D** (17)
+**D** ��� ���F
+
+reduces to minimization of the expression
+
+
+where _⊙_ is a Khatri-Rao product (column-wise Kronecher product) and _·_ is a vector outer product; _d_
+is a vector diagonal of **D** **[˜]** ; E[ **G** _⊗_ **G** ] is a permuted Fisher Information matrix **[˜]** **IF**, defined in Eq 13.
+
+
+15
+
+
+min
+**d**
+
+
+��E[ **G** _⊗_ **G** ] _−_ ( **I** _n ⊙_ **I** _n_ ) _d ·_ vec( **I** _m_ ) _⊤_ ��F (18)
+
+
+For simplicity, we will use a shorter notation. Let **E** = E[ **G** _⊗_ **G** ], **Z** = **I** _n ⊙_ **I** _n_, _v_ = vec( **I** _m_ ). Then,
+the problem 18 is equivalent to
+min **d** �� **Z** _d · v⊤_ _−_ **E** ��F (19)
+
+
+Applying first-order optimality conditions yields:
+
+
+_⟨_ **Z** _δd · v_ _[⊤]_ _,_ **Z** _d · v_ _[⊤]_ _−_ **E** _⟩_ = 0
+
+_⟨δd · v_ _[⊤]_ _,_ **Z** _[⊤]_ **Z** _d · v_ _[⊤]_ _−_ **Z** _[⊤]_ **E** _⟩_ = 0
+
+_⟨δd,_ **Z** _[⊤]_ **Z** _d · v_ _[⊤]_ _v −_ **Z** _[⊤]_ **E** _v⟩_ = 0
+
+
+Since **Z** _[⊤]_ **Z** = **I** _n_, _v_ _[⊤]_ _v_ = _∥v∥_ [2] 2 [=] _[ ∥]_ [vec(] **[I]** _[m]_ [)] _[∥]_ 2 [2] [=] _[ m]_ [, we have:]
+
+
+Let _P_ _∈_ R [(] _[ab]_ [)][2] _[×]_ [(] _[ab]_ [)][2] be the unique permutation matrix such that for any matrices **A** _,_ **B** _∈_ R _[a][×][b]_ :
+
+
+_P_ _·_ vec( **A** _⊗_ **B** ) = (vec( **A** ) _⊗_ vec( **B** )) _._ (24)
+
+
+In our case _P_ can be defined through the commutation matrix **K** _mn_ and identity matrices **I** _n_ and **I** _m_ :
+
+
+**P** := **I** _n ⊗_ **K** _mn ⊗_ **I** _m,_ **K** _[⊤]_ _mn_ [=] **[ K]** _[nm]_ (25)
+
+
+16
+
+
+[1] [1]
+
+_m_ [(] **[I]** _[n][ ⊙]_ **[I]** _[n]_ [)] _[⊤]_ [E][[] **[G]** _[ ⊗]_ **[G]** []vec(] **[I]** _[m]_ [) =]
+
+
+[(20)]
+_m_ [diag(][E][[] _[GG][⊤]_ [])]
+
+
+_d_ = [1]
+
+
+[1] [1]
+
+_m_ [(] **[I]** _[n][ ⊙]_ **[I]** _[n]_ [)] _[⊤]_ [vec(][E][[] _[GG][⊤]_ []) =]
+
+
+Thus, diagonal matrix **D** **[˜]** from Kronecker product approximation problem 17 equals square of matrix
+**D** from the FWSVD formulation 16 up to the constant _m_ [1] [.]
+
+We apply Theorem 1 to find factors **W** 2, **W** 1 for the obtained approximation **I** _F_ = **I** _m ⊗_ **D** **[˜]** :
+
+
+~~�~~ _−_ 1 ~~�~~ ~~�~~      **W** 2 = **˜D** **ˆU** _r_ **ˆS** _r_ = **D** _[−]_ [1] **ˆU** _r_ **ˆS** _r,_ **W** 1 = **ˆS** _r_ **ˆV** _r_ _[⊤]_ (21)
+
+
+       - _⋆_
+where **U** **[ˆ]** _r_ **S** **[ˆ]** _r_ **V** **[ˆ]** _r_ _[⊤]_ [is r-rank SVD of] **˜DW** = **DW** _[⋆]_ . This is the same solution that minimizes the
+problem 16 from FWSVD paper (Hsu et al., 2022). Consequently, FWSVD approach is a special
+case of diagonal Kronecker product approximation of Fisher Information.
+
+
+B APPENDIX: ADDITIONAL EXPLANATIONS FOR KRONECKER
+
+DECOMPOSITION ADAPTATION
+
+
+Let’s show that the permuted _IF_ in the Kronecker decomposition algorithm can be expressed as the
+Kronecker product of the corresponding gradient matrices.
+
+We start with the empirical Fisher information matrix defined as _IF_ = _|D_ 1 _|_ - _|iD_ =1 _|_ _[g]_ _i_ _[g]_ _i_ _[⊤]_ [and] [its]
+reordered version:
+
+
+_I_ ˜ _F_ = _RIF_ (22)
+
+
+Using the identity
+vec( _**g**_ _i_ _**g**_ _i_ _[⊤]_ [) =] _**[ g]**_ _[i]_ _[⊗]_ _**[g]**_ _[i][,]_
+
+we obtain:
+
+
+_|D|_
+�( _**g**_ _i ⊗_ _**g**_ _i_ ) _._ (23)
+
+
+_i_ =1
+
+
+1
+vec( _IF_ ) =
+_|D|_
+
+
+_|D|_
+
+- vec( _**g**_ _i_ _**g**_ _i_ _[⊤]_ [) =] 1
+
+_|D|_
+_i_ =1
+
+
+Using this, we can write:
+
+
+_P_ _·_ vec( **G** _i ⊗_ **G** _i_ ) = vec( **G** _i_ ) _⊗_ vec( **G** _i_ ) _._ (26)
+
+
+Therefore, the vectorized Fisher information becomes:
+
+
+D APPENDIX: EXTENDED DECODER EVALUATION ON MMLU
+
+
+Table 6 and Figure 3 shows that for LLaMA 2 7B GFWSVD consistently outperforms both simple and
+strong baselines across all compression rates. In particular, at the most aggressive compression setups
+(15–20% of the original parameters), our method matches or exceeds the accuracy of activation-based
+methods and shows substantially lower perplexities on both WikiText-2 and PTB.
+
+
+We also compressed the Llama 3.1 8B model using ours GFWSVD and compared it to the activationaware SVD (ASVD) method. Due to its extensive training on 15 trillion tokens, Llama 3.1 has
+exceptionally high information density and low parameter redundancy, therefore, it is a significantly
+more challenging target for compression than Llama 2. In Table 7 we show that Llama 3.1 has a
+stronger degradation in quality upon compression than Llama 2. Nevertheless, our method GFWSVD
+demonstrated better results across all compression ratios.
+
+
+E APPENDIX: THROUGHPUT AND FLOPS FOR COMPRESSED MODELS
+
+
+GFWSVD, ASVD, SVD-LLM compresses weight **W** _∈_ R _[n][×][m]_ into a pair of low-rank matrices
+**W** 1 _∈_ R _[n][×][r]_ and **W** 2 _∈_ R _[r][×][m]_ . This reduces the number of FLOPs required during the forward pass
+through a linear layer from _O_ ( _nm_ ) to _O_ ( _nr_ + _rm_ ) = _O_ ( _r_ ( _n_ + _m_ )).
+
+
+We ran inference-time latency measurements on the Llama 2 7B model under different compressions.
+The results are shown below (averaged over 100 runs, batch size = 1, sequence length = 1024 tokens,
+GPU: A100 80GB).
+
+
+17
+
+
+( **G** _i ⊗_ **G** _i_ )
+
+_i_ =1
+
+
+
+
+ [1]
+
+_|D|_
+
+
+_|D|_
+
+
+
+
+
+ = _P_ vec(˜ _IF_ ) _._ (27)
+
+
+1
+vec( _IF_ ) =
+_|D|_
+
+
+_|D|_
+
+- _P_ _·_ vec( **G** _i ⊗_ **G** _i_ ) = _P_ _·_ vec
+
+
+_i_ =1
+
+
+So, _I_ [˜] _F_ can be defined as _|D_ 1 _|_ - _|iD_ =1 _|_ [(] **[G]** _[i][ ⊗]_ **[G]** _[i]_ [)][.] [This fact is used in the accelerated adaptation of the]
+Kronecker Factorization algorithm.
+
+
+Now, suppose a _IF_ and _I_ [˜] _F_ are connected with _R ∈_ R _[n][×][n]_ (see Eq. 22):
+
+
+vec( _I_ [�] _F_ ) = ( _I ⊗R_ ) _·_ vec( _IF_ ) _, P_ = _I_ _⊗R_ (28)
+
+
+C APPENDIX: RIGHT VECTOR-MATRIX MULTIPLICATION
+
+
+We can define right vector-matrix multiplication as follows:
+
+
+_|D|_
+
+
+- **G** _i ⊗_ **G** _i_ ) _[⊤]_ _z_ (29)
+
+
+_i_ =1
+
+
+_IF_ _[⊤][z]_ [= (]
+
+
+Using property of the Kronecker product ( **K** _⊗_ **L** ) vec( **C** ) = vec( **K** _[⊤]_ **CL** ):
+
+
+_IF_ _[⊤][z]_ [=]
+
+
+_|D|_
+
+- vec( **G** _i_ **ZG** _[⊤]_ _i_ [)][, where] _[ z]_ [= vec(] **[Z]** [)] _[,]_ **[ Z]** _[ ∈]_ [R] _[m][×][m]_ (30)
+
+_i_ =1
+
+
+Table 6: Performance of the Llama 2 7B Chat compressed by various methods under compression
+ratios from 5% to 20% on WikiText-2, PTB, and MMLU. Lower is better for perplexity ( _↓_ ), higher is
+
+
+|better for accuracy (↑). W|We denote compre|ession|ratio as 1 − original model .|
+|---|---|---|---|
+|METHOD|WikiText-2_↓_PTB_↓_|C. Ratio|MMLU Avg_↑_Humanities_↑_<br>Other_↑_<br>Social Sciences_↑_STEM_↑_|
+|Full model|**6.94**<br>**25.75**|0%|0.46 _±_ 0.003<br>0.43 _±_ 0.01 0.55 _±_ 0.01<br>0.53 _±_ 0.01<br>0.36 _±_ 0.01|
+|FWSVD (Hsu et al., 2022)<br>ASVD (Yuan et al., 2023)<br>SVD-LLM (Wang et al., 2025c)<br>GFWSVD (Ours)|7.52<br>45.25<br>7.60<br>**26.29**<br>8.80<br>51.28<br>**7.16**<br>28.55|5%|0.40 _±_ 0.003<br>0.36 _±_ 0.01 0.45 _±_ 0.01<br>0.45 _±_ 0.01<br>0.35 _±_ 0.01<br>**0.41** _±_ 0.004<br>0.37 _±_ 0.01 **0.48** _±_ 0.01<br>**0.46** _±_ 0.01<br>**0.35** _±_ 0.01<br>0.34 _±_ 0.004<br>0.31 _±_ 0.01 0.38 _±_ 0.01<br>0.35 _±_ 0.01<br>0.31 _±_ 0.01<br>0.40 _±_ 0.003<br>**0.38** _±_ 0.01 0.47 _±_ 0.01<br>0.44 _±_ 0.01<br>0.33 _±_ 0.01|
+|FWSVD (Hsu et al., 2022)<br>ASVD (Yuan et al., 2023)<br>SVD-LLM (Wang et al., 2025c)<br>GFWSVD (Ours)|11.53<br>96.62<br>8.97<br>40.12<br>9.69<br>60.82<br>**8.77**<br>**36.44**|10%|0.37 _±_ 0.004<br>0.34 _±_ 0.01 0.43 _±_ 0.01<br>0.42 _±_ 0.01<br>0.33 _±_ 0.01<br>0.37 _±_ 0.004<br>0.33 _±_ 0.01 0.42 _±_ 0.01<br>0.40 _±_ 0.01<br>0.33 _±_ 0.01<br>0.32 _±_ 0.004<br>0.30 _±_ 0.01 0.35 _±_ 0.01<br>0.32 _±_ 0.01<br>0.30 _±_ 0.01<br>**0.38** _±_ 0.002<br>**0.35** _±_ 0.01 **0.44** _±_ 0.01<br>**0.42** _±_ 0.01<br>**0.33** _±_ 0.01|
+|FWSVD (Hsu et al., 2022)<br>ASVD (Yuan et al., 2023)<br>SVD-LLM (Wang et al., 2025c)<br>GFWSVD (Ours)|22.06<br>411.50<br>10.91<br>83.49<br>10.36<br>72.58<br>**10.06**<br>**42.19**|15%|0.31 _±_ 0.009<br>0.29 _±_ 0.01 0.34 _±_ 0.01<br>0.33 _±_ 0.01<br>0.30 _±_ 0.01<br>0.32 _±_ 0.003<br>0.30 _±_ 0.01 0.33 _±_ 0.01<br>0.32 _±_ 0.01<br>0.30 _±_ 0.01<br>0.30 _±_ 0.004<br>0.29 _±_ 0.01 0.34 _±_ 0.01<br>0.31 _±_ 0.01<br>0.30 _±_ 0.01<br>**0.36** _±_ 0.004<br>**0.33** _±_ 0.01 **0.41** _±_ 0.01<br>**0.38** _±_ 0.01<br>**0.32** _±_ 0.01|
+|FWSVD (Hsu et al., 2022)<br>ASVD (Yuan et al., 2023)<br>SVD-LLM (Wang et al., 2025c)<br>GFWSVD (Ours)|66.37<br>1523.00<br>27.73<br>241.57<br>11.23<br>98.91<br>**11.13**<br>**50.50**|20%|0.27 _±_ 0.004<br>0.25 _±_ 0.01 0.30 _±_ 0.01<br>0.28 _±_ 0.01<br>0.28 _±_ 0.01<br>0.26 _±_ 0.004<br>0.25 _±_ 0.01 0.27 _±_ 0.01<br>0.24 _±_ 0.01<br>0.28 _±_ 0.01<br>0.29 _±_ 0.004<br>0.27 _±_ 0.01 0.32 _±_ 0.01<br>0.29 _±_ 0.01<br>0.29 _±_ 0.01<br>**0.32** _±_ 0.003<br>**0.30** _±_ 0.01 **0.35** _±_ 0.01<br>**0.34** _±_ 0.01<br>**0.30** _±_ 0.01|
+
+
+|is better for accuracy (|(↑).|Col3|Col4|
+|---|---|---|---|
+|METHOD|WikiText-2_↓_PTB_↓_|Compr.|MMLU Avg_↑_Humanities_↑_<br>Other_↑_<br>Social Sciences_↑_STEM_↑_|
+|Full model|**7.2**<br>**11.50**|0%|0.68 _±_ 0.006<br>0.64 _±_ 0.01 0.73 _±_ 0.01<br>0.78 _±_ 0.01<br>0.60 _±_ 0.01|
+|ASVD (Yuan et al., 2023)<br>GFWSVD (Ours)|10.91<br>**19.33**<br>**9.38**<br>19.81|10%|0.39 _±_ 0.004<br>0.39 _±_ 0.01 0.33 _±_ 0.01<br>0.35 _±_ 0.01<br>0.35 _±_ 0.01<br>**0.54** _±_ 0.002<br>**0.49** _±_ 0.01 **0.62**_±_ 0.01<br>**0.63**_±_ 0.01<br>**0.46** _±_ 0.01|
+|ASVD (Yuan et al., 2023)<br>GFWSVD (Ours)|38.02<br>76.1<br>**16.75**<br>**23.67**|15%|0.29 _±_ 0.004<br>0.31 _±_ 0.01 0.32 _±_ 0.01<br>0.31 _±_ 0.01<br>0.31 _±_ 0.01<br>**0.50** _±_ 0.001<br>**0.46** _±_ 0.01 **0.56** _±_ 0.01<br>**0.57** _±_ 0.01<br>**0.43** _±_ 0.01|
+|ASVD (Yuan et al., 2023)<br>GFWSVD (Ours)|145<br>1672<br>**22.57**<br>**32.4**|20%|0.24 _±_ 0.003<br>0.27 _±_ 0.01 0.28 _±_ 0.01<br>0.27 _±_ 0.01<br>0.27 _±_ 0.01<br>**0.43** _±_ 0.003<br>**0.39** _±_ 0.01 **0.49** _±_ 0.01<br>**0.48** _±_ 0.01<br>**0.38** _±_ 0.01|
+
+
+Table 9: Throughput (tokens/s) achieved by the uncompressed Llama 2 7B Chat and its FWSVDcompressed versions (batch size = 1, sequence length = 1024).
+
+
+**Compression Ratio** **Tokens/s** **Relative Speedup**
+
+
+0% (Uncompressed) 1186 1.00 _×_
+10% 1269 1.07 _×_
+15% 1294 1.09 _×_
+20% 1323 1.12 _×_
+40% 1510 1.27 _×_
+50% 1600 1.34 _×_
+
+
+18
+
+
+Table 7: Performance of Llama 3.1 8B Instruct compressed by various methods under compression
+ratios from 10% to 20% on WikiText-2, PTB, and MMLU. Lower is better for perplexity ( _↓_ ), higher
+
+
+Table 8: Comparison of theoretical FLOPs for Llama 2 7B Chat under different compression rates.
+All values are in trillions (T) of FLOPs.
+
+
+**Model** **Compression Ratio** **Full Model FLOPs** **Compressed FLOPs**
+
+
+Llama 2 7B
+
+
+10% 53.05T 42.43T
+15% 53.05T 39.24T
+20% 53.05T 37.18T
+40% 53.05T 31.83T
+50% 53.05T 29.37T
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+We ran inference-time latency measurements on the Llama 7B model using different compression
+ranks. The results are shown in Table 10(averaged over 100 runs, batch size = 1, sequence length =
+1024 tokens, GPU: A100 80GB).
+
+
+Table 10: Inference latency (in milliseconds) per token for compressed Llama 2 7B Chat model.
+Lower is better. Reported values represent forward pass time averaged over 100 runs.
+
+
+**Compression**
+**Method**
+
+0% (Uncompressed) 10% 15% 20% 40% 50%
+
+
+Throughput _↓_ (batch_size=64)
+
+
+GFWSVD (Ours) 4.7 4.5 4.2 4.0 3.3 2.95
+SVD-LLM 4.7 4.4 4.2 3.9   -   
+
+Throughput _↓_ (batch_size=16)
+
+
+GFWSVD (Ours) 3.2 3.0 2.8 2.6 2.3 2.15
+SVD-LLM 3.2 2.9 2.8 2.6   
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+F APPENDIX: EXTENDED GLUE RESULTS
+
+
+We report extended compression results on tasks of GLUE benchmark in Table 11.
+
+
+Table 11: Performance of BERT model compressed by various methods under compression rates
+from 60% to 99% on GLUE benchmark. Higher is better for all tasks ( _↑_ ).
+
+
+METHOD / DATASET MRPC _↑_ STSB _↑_ QQP _↑_ MNLI _↑_ QNLI _↑_ RTE _↑_ COLA _↓_ SST2 _↑_
+
+
+Full model **0.77** **0.87** **0.90** **0.83** **0.90** **0.56** **0.41** **0.91**
+
+
+Compression Ratio 1% ( _r_ = 600)
+
+
+SVD 0.67 0.84 0.90 0.67 0.90 0.56 0.58 0.91
+ASVD (Yuan et al., 2023) 0.72 0.73 0.89 0.83 0.90 0.56 0.41 0.91
+FWSVD (Hsu et al., 2022) 0.72 0.87 0.90 0.72 0.90 0.55 0.36 0.91
+GFWSVD (Ours) **0.73** **0.87** **0.90** **0.73** **0.90** **0.56** **0.55** **0.92**
+
+
+Compression Ratio 8% ( _r_ = 500)
+
+
+SVD 0.53 0.82 0.89 0.53 0.90 0.54 0.53 0.89
+ASVD (Yuan et al., 2023) 0.71 0.56 0.86 0.81 0.89 0.53 0.44 0.88
+FWSVD (Hsu et al., 2022) 0.71 0.87 0.90 0.71 0.89 0.56 0.34 0.91
+GFWSVD (Ours) **0.73** **0.87** **0.90** **0.73** **0.90** **0.56** **0.49** **0.92**
+
+
+Compression Ratio 23% ( _r_ = 250)
+
+
+SVD 0.49 0.68 0.81 0.49 0.85 0.50 0.17 0.57
+ASVD (Yuan et al., 2023) 0.69 0.08 0.76 0.50 0.58 0.47 0.11 0.75
+FWSVD (Hsu et al., 2022) 0.69 0.86 0.89 0.69 0.89 0.61 0.23 0.80
+GFWSVD (Ours) **0.71** **0.86** **0.89** **0.71** **0.89** **0.61** **0.38** **0.88**
+
+
+Compression Ratio 33% ( _r_ = 100)
+
+
+SVD 0.32 0.08 0.64 0.32 0.80 0.51 0.01 0.49
+ASVD (Yuan et al., 2023) 0.58 0.07 0.74 0.39 0.50 0.47 0.05 0.82
+FWSVD (Hsu et al., 2022) 0.69 0.58 0.87 0.71 0.86 0.55 0.21 0.72
+GFWSVD (Ours) **0.71** **0.70** **0.87** **0.71** **0.86** **0.55** **0.21** **0.72**
+
+
+Compression Ratio 36% ( _r_ = 50)
+
+
+SVD 0.32 0.19 0.57 0.32 0.78 0.48 0.02 0.49
+ASVD (Yuan et al., 2023) 0.68 0.03 0.73 0.49 0.76 0.51 0.03 0.80
+FWSVD (Hsu et al., 2022) 0.69 0.65 0.84 0.69 0.72 0.46 0.03 0.77
+GFWSVD (Ours) **0.69** **0.65** **0.84** **0.69** **0.72** **0.46** **0.05** **0.77**
+
+
+Compression Ratio 39% ( _r_ = 10)
+
+
+SVD 0.32 0.32 0.67 0.32 0.61 0.51 0.00 0.49
+ASVD (Yuan et al., 2023) 0.61 0.14 0.64 0.40 0.57 0.49 -0.04 0.76
+FWSVD (Hsu et al., 2022) 0.37 0.32 0.79 0.37 0.57 0.49 0.00 0.49
+GFWSVD (Ours) **0.53** **0.60** **0.79** **0.53** **0.62** **0.47** **0.05** **0.65**
+
+
+Compression Ratio 40% ( _r_ = 1)
+
+
+SVD 0.32 0.04 0.69 0.31 0.55 0.53 0.00 0.49
+ASVD (Yuan et al., 2023) 0.62 0.10 0.64 0.42 0.50 0.49 0.03 0.70
+FWSVD (Hsu et al., 2022) 0.32 0.18 0.72 0.32 0.51 0.50 0.00 0.49
+GFWSVD (Ours) **0.42** **0.70** **0.74** **0.42** **0.65** **0.52** **0.05** **0.49**
+
+
+G APPENDIX: IMPACT OF DIAGONAL AND NON-DIAGONAL ELEMENTS OF
+FACTORS
+
+
+To assess the significance of diagonal elements, we performed the following ablation study. In the
+resulting factor matrices we retained either (1) only the off-diagonal elements ( **Non-diag** ) or (2) only
+the diagonal elements ( **Diag** ), and measured perplexity relative to our method and FWSVD. The
+results are in Table 12: the **Diag** variant performs better than FWSVD but worse than GFWSVD.
+This is expected, since FWSVD captures importance only along rows (only the left factor matrix has
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+a non-identity diagonal, see Fig. 1), whereas Non-diag GFWSVD captures both row and column
+importance. The contribution of off-diagonal elements provides a noticeable improvement compared
+to FWSVD.
+
+
+Table 12: Perplexity ( _↓_ ) at 90% and 85% compression rates for GFWSVD with full, diagonal-only
+and non-diagonal factors for LLaMA 2 7B Chat compression.
+
+
+METHOD / DATASET WikiText 2 _↓_ PTB _↓_ WikiText 2 _↓_ PTB _↓_
+
+
+Compression 10% 10% 15% 15%
+
+
+FWSVD (Hsu et al., 2022) 11.53 96.62 22.00 411.00
+Diag GFWSVD 10.94 45.26 11.06 48.25
+Non-diag GFWSVD 8.85 37.25 10.22 43.75
+Full GFWSVD (Ours) **8.77** **36.44** **10.06** **42.19**
+
+
+H APPENDIX: LIMITATIONS
+
+
+Our method decomposes the observed Fisher information matrix _IF_ into a Kronecker product of two
+smaller matrices, **Y** and **X** (Eq. 12). While effective, this assumes exact factorization, which may
+not hold in practice and can limit approximation quality and task sensitivity. In LLM experiments,
+we also observed cases where the estimated Kronecker factors were singular, requiring regularization
+(e.g., **Y** _←_ **Y** + _α_ diag **Y** ) to ensure positive definiteness and numerical stability. Although this
+resolves instability, it introduces additional computational overhead.
+
+
+We observed that compression effectiveness varies significantly across layers, making preliminary
+layer selection necessary to achieve favorable trade-offs. A key limitation of our current approach
+is the lack of coordination across layers during compression. For effective multi - layer compression—especially in large-scale models like LLMs – it is important to account for cross-layer
+dependencies. Future work could focus on modeling these interactions to enable joint compression
+strategies.
+
+
+I APPENDIX: LLM USAGE STATEMENT
+
+
+We used large language models (LLMs) only as a general-purpose writing assistant for grammar
+checking and text polishing. The research ideas, implementation, analysis, and conclusions are
+entirely our own.
+
+
+21

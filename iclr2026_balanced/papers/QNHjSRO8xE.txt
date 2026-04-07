@@ -1,0 +1,926 @@
+# DISTRIBUTIONAL MONTE–CARLO TREE SEARCH WITH THOMPSON SAMPLING IN STOCHASTIC ENVI
+## RONMENTS
+
+
+**Anonymous authors**
+
+
+ABSTRACT
+
+
+Monte–Carlo Tree Search (MCTS) excels in deterministic settings, but can struggle in highly stochastic domains where transition randomness and partial observability induce underexploration and miscalibrated value estimates. We integrate
+_distributional_ Reinforcement Learning (RL) with Thompson Sampling (TS) plus
+an optimistic exploration bonus, yielding two _distributional_ _MCTS_ algorithms:
+CATSO (Categorical TS with Optimism) and PATSO (Particle TS with Optimism).
+Each Q–node maintains a return _distribution_ —via fixed atoms (CATSO) or dynamically capped particles with _merge-on-insert_ (PATSO). Actions are chosen by
+a Thompson draw _plus_ a polynomial optimism term. We prove both algorithms attain non–asymptotic, problem–dependent _simple regret O_ ( _n_ _[−]_ [1] _[/]_ [2] ) at the root. We
+further connect the resulting tree policies to _Wasserstein_ Distributionally–Robust
+MDPs (WDRMDPs), giving a robustness interpretation and a sample–complexity
+bound. Experiments on synthetic stochastic trees and 12 Atari games indicate improved robustness under uncertainty relative to non-distributional baselines. We
+provide comprehensive ablations isolating the contributions of distributional Qnodes, Thompson sampling, optimism, and backup rules, alongside hyperparameter sensitivity analysis and runtime/memory measurements.
+
+
+1 INTRODUCTION
+
+
+Online planning in Markov Decision Processes (MDPs) involves making real-time decisions balancing exploration and exploitation under uncertainty. Monte–Carlo Tree Search (MCTS) is a powerful
+framework that has achieved remarkable success in games (Silver et al., 2016; 2017; Schrittwieser
+et al., 2020), robotics, and control tasks. However, classical MCTS variants—which typically back
+up _scalar_ mean values at Q–nodes and use UCB–style bonuses (e.g., UCT (Kocsis et al., 2006))—
+can struggle in highly stochastic environments where transition randomness leads to biased value
+estimates, underexploration, and premature pruning of promising actions.
+
+
+1.1 OUR APPROACH AND CONTRIBUTIONS
+
+
+We endow each Q–node with a _distribution_ over returns and select actions using _Thompson Sampling_
+(to exploit information about the full shape of return distributions) _plus_ an _optimistic_ count–based
+bonus (to guard against posterior miscalibration). We instantiate this design with two parameterizations: CATSO, which uses categorical atoms with a Dirichlet posterior, and PATSO, which uses an
+online particle approximation with a cap-and-merge memory scheme.
+
+
+**Core contributions.** Our main contributions are: (1) Distributional Q–nodes + TS + optimism for
+MCTS: we maintain _full return distributions_ at Q–nodes and select actions via Thompson sampling
+plus a polynomial optimism bonus (Sec. 3). (2) Bandit-to-MCTS analysis for distributional TS: we
+model each node as a non-stationary bandit, prove _O_ ( _n_ _[−]_ [1] _[/]_ [2] ) simple regret for CATSO/PATSO, and
+lift this to the full tree (Secs. 4.1–4.2). (3) Memory-capped PATSO with guarantees: a merge-oninsert scheme caps particles at _K_ and adds only _O_ (range _/_ ( _K_ (1 _−γ_ ) [2] )) simple regret (Sec. 4.4). (4)
+WDRMDP connection: Q-node distributions induce Wasserstein balls around empirical return laws;
+the resulting policy is near-optimal for a WDRMDP with a sample-complexity bound (Sec. 4.3). (5)
+Empirical validation and ablations: on synthetic trees and 12 Atari games we isolate the roles of
+
+
+1
+
+
+distributional Q-nodes, TS vs. UCB, backup rules, stochasticity, and hyperparameters, and report
+runtime/memory (Sec. 5).
+
+
+**What** **is** **new.** While power-mean backups, polynomial optimism, and Thompson sampling each
+appear in prior work, to our knowledge we are the first to unify (i) distributional Q-nodes (categorical
+or particle), (ii) Thompson sampling at Q-nodes, and (iii) polynomial optimism within a single
+MCTS framework, providing both non-asymptotic guarantees and a novel WDRMDP interpretation
+
+
+**Why** **V–nodes** **remain** **scalar.** Propagating full distributions at V–nodes would require repeated
+cross-child convolutions, inflating compute/memory exponentially with branching factor and depth,
+and complicating both implementation and analysis. We therefore keep Q–nodes distributional
+(where action decisions are made) and use a _power–mean_ backup over child _means_ at V–nodes
+to interpolate between averaging and max (Dam et al., 2019; 2024). Section 3.3 clarifies this design
+choice, and our ablations (Sec. 5.3) isolate the role of the backup rule.
+
+
+2 SETTING AND BACKGROUND
+
+
+We consider an infinite-horizon discounted MDP _M_ = _⟨S, A, R, P, γ⟩_ with state space _S_, action
+set _A_, transition distribution _P_ ( _·|s, a_ ), discount factor _γ_ _∈_ (0 _,_ 1], and bounded rewards _R_ ( _s, a, s_ _[′]_ ) _∈_
+
+[0 _, R_ max]. The optimal action-value function _Q_ _[⋆]_ satisfies the Bellman equation:
+
+_Q_ _[⋆]_ ( _s, a_ ) = E _s′∼P_ ( _·|s,a_ )� _R_ ( _s, a, s_ _[′]_ ) + _γ_ max      - _._
+_a_ _[′]_ _[Q][⋆]_ [(] _[s][′][, a][′]_ [)]
+
+
+**MCTS planning framework.** MCTS plans from initial state _s_ 0 by repeatedly simulating trajectories of depth _H_ (for analysis) under a fixed playout policy _π_ 0 with value function _V_ 0. This produces estimates _Q_ [�] _n_ ( _s_ 0 _, a_ ) of root action-values. Let _V_ _[⋆]_ ( _s_ 0) = max _a Q_ _[⋆]_ ( _s_ 0 _, a_ ) and _V_ [�] _n_ ( _s_ 0) =
+max _a_ _Q_ [�] _n_ ( _s_ 0 _, a_ ). The _simple regret_ at time _n_ is:
+
+_R_ ( _s_ 0 _, n_ ) = _V_ _[⋆]_ ( _s_ 0) _−_ _V_ [�] _n_ ( _s_ 0) _._
+
+
+For node _sh_ at depth _h_ _≤_ _H_ _−_ 1 from root _s_ 0, we define estimated value functions inductively:
+_V_ - ( _sH_ ) = _V_ 0( _sH_ ) at depth _H_, and for _h ≤_ _H_ _−_ 1:
+
+_Q_ �( _sh, a_ ) = _r_ ( _sh, a_ ) + _γ_      - _P_ ( _sh_ +1 _|sh, a_ ) _V_ [�] ( _sh_ +1) _,_
+
+_sh_ +1 _∈S_
+
+
+_V_         - ( _sh_ ) = max _Q_ �( _sh, a_ ) _,_
+_a_
+
+where _r_ ( _sh, a_ ) = E[ _R_ ( _sh, a, s_ _[′]_ )]. This yields the approximation bound:
+
+
+_|Q_ _[⋆]_ ( _s_ 0 _, a_ ) _−_ _Q_ [�] ( _s_ 0 _, a_ ) _| ≤_ _γ_ _[H]_ _∥V_ _[⋆]_ _−_ _V_ 0 _∥∞._
+
+
+MCTS minimizes simple regret by accurately estimating _Q_ [�] ( _s_ 0 _, a_ ) and _V_ [�] ( _s_ 0) to approximate
+_V_ _[⋆]_ ( _s_ 0), _Q_ _[⋆]_ ( _s_ 0 _, a_ ), and identify the optimal action _a⋆_ = arg max _a Q_ _[⋆]_ ( _s_ 0 _, a_ ).
+
+
+**Distributional view.** Formally, we view each Q-value as a distribution over possible returns. Letting _X_ ( _s, a_ ) denote the immediate reward distribution:
+
+
+_Q_ ( _s, a_ ) = _D X_ ( _s, a_ ) + _γ V_ ( _s′_ ) _,_
+
+where _s_ _[′]_ _∼P_ ( _·|s, a_ ) and _V_ ( _s_ _[′]_ ) merges the Q distributions under the tree policy. We track a distribution _Q_ ( _s, a_ ) at each Q-node rather than a scalar mean.
+
+
+3 DISTRIBUTIONAL THOMPSON SAMPLING WITH OPTIMISM IN TREE
+SEARCH
+
+
+A pure Thompson Sampling (TS) approach can _under_ estimate the value of less-visited actions, leading to insufficient exploration in stochastic environments. Several works have proposed _combining_
+
+
+2
+
+
+TS with an explicit optimism bonus or confidence bound: _Optimistic_ _Thompson_ _Sampling_ (May
+et al., 2012) adds a UCB-style term to the TS-sampled value in multi-armed bandits; _Bayes-UCB_
+(Kaufmann et al., 2012) selects actions by the upper quantile of a Bayesian posterior; _PSRL + Op-_
+_timism_ (Osband et al., 2013; 2018) incorporates additional confidence bonuses into posterior sampling. In MCTS, Bai et al. (2013; 2014) investigated Bayesian model adaptation with variance-based
+exploration. These lines of work share a principle: _augmenting Thompson-drawn estimates with a_
+_boost for rarely visited actions_ enhances exploration if the posterior is temporarily miscalibrated.
+
+
+Building on these ideas, we propose two _distributional_ MCTS algorithms combining TS and an
+optimism bonus:
+
+
+ - CATSO (Categorical Thompson Sampling with Optimistic Bonus)
+
+ - PATSO (Particle Thompson Sampling with Optimistic Bonus)
+
+
+Both maintain a _distribution_ over Q-values at each node, use Thompson sampling to select actions,
+and then _add_ a polynomial exploration bonus. This synergy captures uncertainty in return estimates
+while preventing underexploration.
+
+
+3.1 CATSO: CATEGORICAL TS + OPTIMISM
+
+
+Each Q–edge ( _s, a_ ) tracks _N_ uniformly spaced atoms _zi_ on a dynamic interval [ _Q_ min _, Q_ max], together with Dirichlet counts _α_ _[i]_ whose normalized version defines the categorical probabilities.
+
+
+Initially, _Q_ min = 0 and _Q_ max = 0 _._ 001. When a new return _Qt_ ( _s, a_ ) = _rt_ + _γV_ [�] ( _s_ _[′]_ ) arrives:
+
+Each Q-edge ( _s, a_ ) maintains **atom** **locations** _{zi_ ( _s, a_ ) _}_ _[N]_ _i_ =0 _[−]_ [1] (uniform in [ _Q_ min _, Q_ max]),
+**categorical** **probabilities** _{pi_ ( _s, a_ ) _}_ _[N]_ _i_ =0 _[−]_ [1] over these atoms, and a **Dirichlet** **prior**
+Dir( _α_ [0] ( _s, a_ ) _, . . ., α_ _[N]_ _[−]_ [1] ( _s, a_ )) for Thompson sampling.
+
+
+3.2 PATSO: PARTICLE TS + OPTIMISM (CAPPED, DEFAULT)
+
+
+Each Q-edge ( _s, a_ ) maintains a sorted list of distinct returns _S_ ( _s, a_ ) (particles) with weights _α_ ( _s, a_ );
+on a new sample _Qt_ we either increment the weight of an existing particle (if _Qt_ _∈S_ ( _s, a_ )) or insert
+a new particle with weight 1.
+
+
+To bound memory, we cap the particle set at size _K_ via _merge-on-insert_ : if the set is full, merge the
+closest neighboring particles (preserving the first moment) before inserting the new particle.
+
+
+**Action** **selection.** At node _sh_, for each action _a_ we draw _L_ ( _sh, a_ ) _∼_ Dir( _α_ ( _sh, a_ )) and compute a Thompson value _ϕ_ ( _sh, a_ ) = [�] _z∈S_ ( _sh,a_ ) _[z L][z]_ [(] _[s][h][, a]_ [)][.] [We] [then] [add] [the] [optimism] [bonus]
+
+_B_ ( _n, sh, a_ ) = _C Tsh_ ( _n_ ) [1] _[/]_ [4] _/Tsh,a_ ( _n_ ) [1] _[/]_ [2] to obtain _ϕ_ _[′]_ ( _sh, a_ ) = _ϕ_ ( _sh, a_ ) + _B_ ( _n, sh, a_ ), and select
+the action _a_ _[⋆]_ = arg max _a ϕ_ _[′]_ ( _sh, a_ ).
+
+
+**Remark** **1** (CATSO vs. PATSO) **.** _CATSO_ _discretizes_ _Q-values_ _into_ _N_ _fixed_ _atoms,_ _potentially_ _in-_
+_troducing approximation error if N_ _is small._ _PATSO grows its particle set automatically,_ _yielding_
+_a_ _finer_ _representation._ _However,_ _carefully_ _choosing_ _N_ _in_ _CATSO_ _can_ _be_ _more_ _memory-efficient,_
+_whereas PATSO’s flexibility requires the cap-and-merge mechanism._ _Both share similar theoretical_
+_guarantees._
+
+
+3.3 VALUE BACKUP AT V–NODES
+
+
+Although Q-nodes track full distributions, V-nodes store only a _power-mean_ _backup_ of child Qmeans:
+
+
+�1 _/p_
+
+_Ts,a_ ( _n_ )
+
+_Ts_ ( _n_ ) [[] _[Q]_ [ �][(] _[s, a]_ [)]] _[p]_
+
+
+_V_ - ( _s_ ) =
+
+
+��
+
+
+_a_
+
+
+_,_ _p ≥_ 1 _._
+
+
+This interpolates between plain averaging ( _p_ = 1) and a maximum operator ( _p_ _→∞_ ) (Dam et al.,
+2019; 2024). In CATSO, _Q_ ( _s, a_ ) is the expected value of the categorical distribution; in PATSO, it
+
+[�]
+is the weighted average of all particles.
+
+
+3
+
+
+**Design** **rationale.** Extending full distributions to V-nodes would require repeated convolutions
+across all child distributions, making both analysis and computation significantly more complex
+(potentially exponential in branching factor and depth). By keeping distributions only at Q-nodes
+(where decisions are made) and using the power-mean backup at V-nodes, we retain the core
+novelty—distributional decision-making at Q-nodes—while keeping the framework tractable. Our
+ablations (Sec. 5.3) isolate the effect of different backup rules.
+
+
+4 THEORETICAL ANALYSIS
+
+
+Our goal is to prove that both CATSO and PATSO achieve simple regret rate _O_ ( _n_ _[−]_ [1] _[/]_ [2] ) under suitable assumptions. We begin by modeling each MCTS node as a _non-stationary multi-armed bandit_,
+establish convergence results in this setting, then extend them to the full tree via dynamic programming.
+
+
+4.1 NON-STATIONARY BANDIT SETTING
+
+
+Consider a bandit with _K_ arms. Each arm _a_ has a possibly non-stationary reward process _{Ra,t}_
+taking values in [0 _, R_ max]. Let _µ_ - _a,n_ denote the empirical mean reward of arm _a_ after _n_ pulls. We
+assume the reward process stabilizes: _µa_ = lim _n→∞_ E[ _µ_ - _a,n_ ] _._
+
+
+�� _K_ _Ta_ ( _n_ )
+We define a _power mean_ over the empirical means: _µ_ - _n_ ( _p_ ) = _a_ =1 _n_ [ _µ_ - _a,Ta_ ( _n_ )] _[p]_ [�][1] _[/p]_ _,_ where
+
+_Ta_ ( _n_ ) counts how many times arm _a_ has been chosen in _n_ total rounds.
+
+
+**Definition 1.** _A sequence of estimators_ ( _V_ [�] _n_ ) _n≥_ 1 converges _to V_ _with_ concentration _if:_
+
+
+ - _**(A) Concentration:**_ _For every n ≥_ 1 _and ε >_ 0 _, there exists c >_ 0 _such that_
+
+P( _|V_ [�] _n −_ _V | > ε_ ) _≤_ _c_ _nε_ [1][2] _[.]_
+
+ - _**(B) Convergence:**_ lim _n→∞_ E[ _V_ [�] _n_ ] = _V ._
+
+
+_We write_ plim _V_ - _n_ = _V_ _when both hold._
+_n→∞_
+
+**Assumption 1** (Asymptotic stationarity with concentration) **.** _For each arm a_ _∈_ [ _K_ ] _, the empirical_
+_means_ _µ_ - _a,n_ _satisfy_ plim [=] _[ µ][a][.]_
+_n→∞_ _[µ]_ [�] _[a,n]_
+
+
+**Justification** **in** **MCTS.** In our MCTS setting, each node’s reward is a bounded finite-horizon
+return under a fixed playout policy. Non-stationarity arises from the tree expanding: early in the
+search, some rollouts see a truncated subtree; later, more siblings and deeper nodes are explored.
+Importantly, the expansion process stabilizes: for any fixed node, after sufficient depth and visits, the
+local subtree stops changing significantly, and subsequent returns are i.i.d. samples from a limiting
+distribution (the truncated value _Q_ [�] ( _sh, a_ )). Under bounded rewards and fixed playout, the induced
+reward process at each node is _asymptotically stationary_, satisfying Assumption 1. This is analogous
+to assumptions in Shah et al. (2022) for Fixed-Depth-MCTS.
+**Theorem 1** (CATSO in Non-Stationary Bandits) **.** _Let_ ( _µ_ - _a,n_ ) _n≥_ 1 _be bounded in_ [0 _, R_ max] _and satisfy_
+_Assumption 1, with µ⋆_ = max _a µa._ _Assume CATSO (the categorical TS approach) initially samples_
+_each_ _arm_ _once,_ _then_ _follows_ _the_ _exploration_ _strategy_ _in_ _Sec._ _3.1._ _For_ _any_ _p_ _≥_ 1 _,_ _the_ _power-mean_
+_estimator_ _µ_ - _n_ ( _p_ ) _converges to µ⋆_ _in the sense of Definition 1:_
+plim
+_n→∞_ _[µ]_ [�] _[n]_ [(] _[p]_ [) =] _[ µ][⋆][.]_
+
+**Theorem** **2** (PATSO in Non-Stationary Bandits) **.** _Under_ _the_ _same_ _assumptions_ _as_ _Theorem_ _1,_ _if_
+_PATSO (the particle TS approach) is employed, the identical convergence result holds:_
+
+plim
+_n→∞_ _[µ]_ [�] _[n]_ [(] _[p]_ [) =] _[ µ][⋆][.]_
+
+
+Proofs of both theorems are in Appendix A. The key insight is that the combination of Thompson
+sampling and the polynomial optimism bonus ensures sufficient exploration of all arms, while the
+distributional representation allows the algorithm to distinguish between actions with similar means
+but different tail behavior.
+
+
+4
+
+
+4.2 FROM BANDITS TO MCTS
+
+
+Within MCTS, each internal node can be viewed as a non-stationary bandit: as the search tree
+grows, the empirical rewards from each node’s children evolve. By applying Theorems 1 and 2 at
+every internal node, we show that each Q-node value concentrates around its truncated optimal value
+_Q_ �( _sh, a_ ), and thus _V_ - ( _sh_ ) converges accordingly.
+**Theorem 3** (Convergence of CATSO) **.** _At the root node s_ 0 _, there exists a constant C_ _[′]_ _>_ 0 _such that:_
+
+E[ _|V_ [�] _n_ ( _s_ 0) _−_ _V_ [�] ( _s_ 0) _|_ ] _≤_ _C_ _[′]_ _n_ _[−]_ [1] _[/]_ [2] _._
+
+**Theorem 4** (Convergence of PATSO) **.** _At the root node s_ 0 _, there exists a constant C_ _[′]_ _>_ 0 _such that:_
+
+E[ _|V_ [�] _n_ ( _s_ 0) _−_ _V_ [�] ( _s_ 0) _|_ ] _≤_ _C_ _[′]_ _n_ _[−]_ [1] _[/]_ [2] _._
+
+
+**Remark** **2.** _For_ _any_ _power-mean_ _exponent_ _p_ _≥_ 1 _,_ _both_ _CATSO_ _and_ _PATSO_ _inherit_ _the_ _same_
+_O_ ( _n_ _[−]_ [1] _[/]_ [2] ) _rate_ _seen_ _in_ _Stochastic-Power-UCT_ _(Dam_ _et_ _al.,_ _2024)._ _This_ _encompasses_ _well-known_
+_backup rules like_ max _(when p_ _→∞) or_ mean _(when p_ = 1 _)._ _Under mild assumptions (bounded_
+_rewards, finite state space, fixed depth H), the constant C_ _[′]_ _scales at most polynomially in |S|, |A|,_
+_and H_ _(see Appendix F for details)._
+
+
+Thus, both distributional Thompson sampling approaches achieve a convergence rate matching the
+best known results for fixed-depth MCTS (Shah et al., 2022), bridging the analysis of non-stationary
+bandits to the multi-level structure of tree search.
+
+
+4.3 CONNECTION TO WASSERSTEIN DISTRIBUTIONALLY ROBUST OPTIMIZATION
+
+
+The distributional MCTS approach extends naturally to robust planning under uncertainty. We establish formal connections between our algorithms and Wasserstein Distributionally Robust Optimization (WDRO).
+
+
+Let _P_ denote the empirical distribution of returns at a Q-edge (represented by categorical atoms in
+
+[�]
+CATSO or particles in PATSO). Define the Wasserstein ball:
+
+
+_Bε_ ( _P_ [�] ) = _{P_ : _Wp_ ( _P,_ _P_ [�] ) _≤_ _ε},_
+
+where _Wp_ is the _p_ -Wasserstein distance. We consider the Wasserstein Distributionally Robust MDP
+(WDRMDP):
+_π_ _[⋆]_ _∈_ arg max min E _P_ [ _V_ _[π]_ ] _._
+_π_ _P ∈Bε_ ( _P_ [�] )
+
+
+This formulation seeks policies that are optimal under the worst-case perturbation of the empirical
+distribution within a Wasserstein ball. Our concentration results imply that the empirical distributions at Q-nodes concentrate around the true distributions in Wasserstein distance, and by the Lipschitz continuity of the Bellman operator with respect to _W_ 1, the resulting tree policy is near-optimal
+for the WDRMDP.
+**Theorem 5** (Robust Planning Guarantee) **.** _Let M be an MDP with state space S, action space A,_
+_bounded rewards in_ [0 _, R_ max] _, and discount factor γ._ _The number of samples required to learn an_
+( _ε, δ_ ) _-robust policy using CATSO/PATSO combined with a concentration-based Wasserstein radius_
+_is:_
+
+
+��2 _H_ [�]
+
+
+_O_
+
+
+�� _ε_ (1 _R −_ max [3] _γ_ ) [3] [log] - _H|S|δ_ 2 _|A|_
+
+
+_._
+
+
+This result shows that CATSO/PATSO do not merely estimate values—they implicitly construct
+robust policies. The Wasserstein ball radius shrinks at rate _O_ ( _n_ _[−]_ [1] _[/]_ [2] ), ensuring that as simulations
+increase, the policy converges to optimality for both the nominal and perturbed MDPs.
+
+**Remark 3** (Robust Planning via Distributional Estimation) **.** _The connection to WDRO reveals that_
+_our_ _distributional_ _MCTS_ _algorithms_ _naturally_ _provide_ _robustness_ _against_ _model_ _uncertainty._ _By_
+_maintaining_ _and_ _updating_ _full_ _distributions_ _rather_ _than_ _point_ _estimates,_ _CATSO_ _and_ _PATSO_ _im-_
+_plicitly construct uncertainty sets formalizable within the Wasserstein framework._ _The exponential_
+_dependence on horizon H_ _is typical for finite-horizon robust optimization problems, while the poly-_
+_nomial_ _dependence_ _on_ _|S|,_ _|A|,_ _and_ _R_ max _demonstrates_ _computational_ _tractability_ _for_ _moderate-_
+_sized problems._
+
+
+5
+
+
+A detailed proof is provided in Appendix B. The intuition is that the empirical return distribution
+at each edge defines a Wasserstein ball around the true distribution, and optimizing with respect to
+these balls yields policies robust to model misspecification.
+
+
+4.4 MEMORY AND COMPUTATION
+
+
+**CATSO** **complexity.** Each ( _s, a_ ) edge stores _N_ atom locations and their Dirichlet parameters,
+requiring _O_ ( _N_ ) memory per Q-edge. Selection involves sampling from a Dirichlet distribution
+and computing a dot product, costing _O_ ( _N_ ) per decision. In the worst case, if one expands a full
+_|S| × |A|_ frontier, memory scales as _O_ ( _N_ _|S||A|_ ). In practice, MCTS is budget-limited and biased
+toward promising branches, so the number of distinct Q-edges visited is _O_ ( _n_ ) for _n_ rollouts, keeping
+memory linear in the explored tree size.
+
+
+**PATSO memory management (cap with merge-on-insert).** Without intervention, PATSO’s particle set on a Q-edge may grow unboundedly. We cap it at _K_ particles via _merge-on-insert_ :
+
+
+1. Maintain a _sorted_ list of pairs _{_ ( _Qi, αi_ ) _}_ _[M]_ _i_ =1 [(value, weight) with] _[ M]_ _[≤]_ _[K]_ [.]
+2. When a new sample _z_ arrives:
+
+(a) If _z_ matches an existing value (within numerical tolerance): increment its weight.
+(b) Else if _M_ _< K_ : insert ( _z,_ 1) in sorted order.
+
+(c) Else ( _M_ = _K_ ; overflow): merge the closest neighboring pair (preserving first moment), then
+insert ( _z,_ 1).
+
+
+**Guarantees of the cap.** Let range( _s, a_ ) = _Q_ max( _s, a_ ) _−_ _Q_ min( _s, a_ ) be the local return range on
+a Q-edge. Nearest-neighbor merge preserves the _first moment_ exactly and increases the _W_ 1 distance
+to the uncapped empirical distribution by at most the merged gap times the merged mass. With a size
+cap _K_ and nearest-neighbor merges, the total discrepancy satisfies: _W_ 1( _P,_ [�] _P_ [�] ) = _O_ - range _K_ ( _s,a_ ) - _._
+
+Because the Bellman operator is 1 _/_ (1 _−_ _γ_ )-Lipschitz in _W_ 1, the cap induces at the root an _additive_
+
+value error: _O_ - _K_ range(1 _−γ_ ) - and thus in simple regret _O_ - _K_ range(1 _−γ_ ) [2] - _._ Combining with the baseline
+
+_O_ ( _n_ _[−]_ [1] _[/]_ [2] ) rate yields: simple regret = _O_ ( _n_ _[−]_ [1] _[/]_ [2] ) + _O_ - _K_ range(1 _−γ_ ) [2] - _._
+
+
+**Practical** **choice** **of** _K_ **.** We set _K_ so that the additive term is below the statistical term at our
+rollout budgets. For example, choose _K_ _∝_ _[√]_ _n_ or pick the smallest _K_ with range _/_ ( _K_ (1 _−_ _γ_ ) [2] ) _≪_
+_n_ _[−]_ [1] _[/]_ [2] . In practice, moderate values like _K_ = 100 or _K_ = 200 suffice for typical MCTS budgets
+( _n_ = 1000–10000 rollouts per decision).
+
+
+**Complexity with the cap.**
+
+
+**Operation** **Cost**
+
+
+Per-( _s, a_ ) memory 2 _K_ floats _⇒_ _O_ ( _K_ )
+Per-selection compute Dirichlet draw over _K_ bins + dot product _⇒_ _O_ ( _K_ )
+Insertion (incl. merge) Binary search _O_ (log _K_ ) + merge _⇒_ _O_ (log _K_ )
+
+
+CATSO has fixed _O_ ( _N_ ) per-edge memory and _O_ ( _N_ ) selection compute. PATSO with capping has
+_O_ ( _K_ ) per-edge memory, _O_ ( _K_ ) selection compute, and _O_ (log _K_ ) amortized insertion. The cap
+keeps memory bounded while preserving the _O_ ( _n_ _[−]_ [1] _[/]_ [2] ) convergence rate up to a tunable additive
+term that vanishes as _K_ grows.
+
+
+5 EXPERIMENTS
+
+
+We compare CATSO and PATSO with several baselines: **UCT** (Kocsis et al., 2006), the classical MCTS baseline; **Fixed-Depth-MCTS** (Shah et al., 2022), a state-of-the-art method with nonasymptotic guarantees; **MENTS**, **RENTS**, and **TENTS** (Xiao et al., 2019; Dam et al., 2021), which
+use entropy-regularized tree search; **BTS** (Painter et al., 2024), a Bayesian tree-search method;
+**DNG** (Bai et al., 2013), which uses a Gaussian approximation to model return distributions; and
+
+
+6
+
+
+k=16 d=4
+
+
+2
+
+
+0.5
+
+
+1
+
+
+1
+
+
+1
+
+
+0.0
+
+
+0
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+
+
+0  500  1000
+# Simulations
+
+
+0
+
+
+0  500  1000
+# Simulations
+
+
+0
+
+
+0
+
+
+0  500  1000
+# Simulations
+
+
+0  500  1000
+# Simulations
+
+
+0  500  1000
+# Simulations
+
+
+0  500  1000
+# Simulations
+
+
+UCT
+Power-UCT
+
+
+DNG
+Fixed-Depth-MCTS
+
+
+MENTS
+RENTS
+
+
+TENTS
+BTS
+
+
+CATSO
+PATSO
+
+
+Figure 1: **Performance** **in** **the** **SyntheticTree** **environment.** We plot the absolute error of the estimated
+root value vs. the number of simulated trajectories _n_ . Both CATSO and PATSO converge faster than nondistributional baselines, showcasing their robustness in stochastic transitions.
+
+
+**Power-UCT** (Dam et al., 2024), which augments UCT with a power-mean backup similar to ours
+but without distributional Q-nodes.
+
+
+We first evaluate on a _synthetic_ _tree_ environment, then on 12 Atari games. In all experiments, we
+set _γ_ = 1 for synthetic and _γ_ = 0 _._ 99 for Atari, using _N_ = 100 atoms for CATSO and _K_ = 200
+particles (capped) for PATSO.
+
+
+We include a range of baselines to clarify what each component of our approach contributes. UCT
+serves as the foundational MCTS method. Fixed-Depth-MCTS is our main theoretical reference
+point, since it attains the same _O_ ( _n_ _[−]_ [1] _[/]_ [2] ) simple-regret rate that we target. MENTS, RENTS, and
+TENTS represent entropy-regularized tree search under stochasticity and illustrate the trade-off between optimizing a regularized objective and the true return. BTS and DNG are Bayesian or distributional MCTS variants that are closest in spirit to our work, allowing comparison against alternative distributional or posterior-sampling strategies. Finally, Power-UCT uses the same power-mean
+backup as our algorithms but combines it with a UCB-style exploration term instead of distributional Q-nodes, which lets us specifically isolate the impact of modeling full return distributions at
+Q-nodes.
+
+
+5.1 SYNTHETICTREE ENVIRONMENT
+
+
+The SyntheticTree (Dam et al., 2021) has depth _d_, branching factor _k_, and stochastic edges. Each
+leaf node’s reward is sampled from Gaussian( _µ_, _σ_ = 0 _._ 5) with _µ_ _∈_ [0 _,_ 1]. Transitions are stochastic: with 50% probability the agent moves to the intended child, otherwise transitions uniformly
+among other children. The goal is to find the leaf with highest mean reward. We test ( _k, d_ ) in
+_{_ 2 _,_ 4 _,_ 6 _,_ 8 _,_ 10 _,_ 12 _,_ 14 _,_ 16 _,_ 100 _,_ 200 _} × {_ 1 _,_ 2 _,_ 3 _,_ 4 _}_, repeating each combination over 10 seeds.
+
+
+Figure 1 shows that both CATSO and PATSO converge more rapidly than baselines in terms of
+root-value error. PATSO often outperforms CATSO because it does not rely on a fixed-atom approximation, but theoretical convergence rates are identical. The gap between our methods and baselines
+widens as stochasticity increases, consistent with our hypothesis that distributional representations
+better capture uncertainty in highly random environments.
+
+
+5.2 ATARI EXPERIMENTS
+
+
+We evaluate on 12 Atari games using a pretrained DQN network as a feature extractor for MCTS
+variants, following Xiao et al. (2019); Dam et al. (2021). We run 1000 simulations per decision step.
+Each method is evaluated over 10 episodes per game, using 3 different random seeds for a total of
+30 evaluation episodes per game. Table 1 summarizes mean returns _±_ standard deviation.
+
+
+**Performance analysis.** Our proposed algorithms demonstrate strong performance across the test
+suite. CATSO achieves the highest scores in 4 games and ties for best in 4 others; PATSO leads
+in 5 games and ties in 3 others. The performance gap is most significant in games requiring complex exploration—for instance, in Frostbite, PATSO outperforms MENTS by 17 _._ 9 _×_ and TENTS by
+7 _._ 4 _×_ .
+
+
+7
+
+
+Table 1: Mean returns _±_ standard deviation on 12 Atari games (higher is better). Best per game in
+**bold** . The final “Wins/Ties” row counts, for each method, the number of games where it achieves
+(i) the highest mean return (wins) or (ii) ties with another method for the highest mean return (ties).
+
+
+Game CATSO PATSO MENTS RENTS TENTS UCT
+
+
+Alien 1124 _±_ 154 **1980** _±_ 238 _±_ 62 326 _±_ 116 1260 _±_ 372 1962 _±_ 689
+Atlantis **37540** _±_ **1828** 31340 _±_ 1920 10980 _±_ 2294 34980 _±_ 1995 16920 _±_ 6745 34580 _±_ 1743
+BeamRider **1973** _±_ 1598 _±_ 178 406 _±_ 247 1594 _±_ 382 785 _±_ 89 1796 _±_ 292
+Enduro 125 _±_ 11 130 _±_ 20 0 _±_ 0 45 _±_ 18 77 _±_ 25 _±_ **28**
+Frostbite 660 _±_ 567 **1794** _±_ 100 _±_ 62 456 _±_ 427 242 _±_ 19 1146 _±_ 1003
+Gopher 308 _±_ 210 380 _±_ 77 296 _±_ 183 _±_ 300 _±_ 206 376 _±_ 116
+Hero **3021** _±_ **22** 2994 _±_ 8 1645 _±_ 1282 2880 _±_ 53 2990 _±_ 0 2988 _±_ 26
+MsPacman 2594 _±_ 705 1988 _±_ 56 244 _±_ 17 1724 _±_ 288 1566 _±_ 293 **2652** _±_ Phoenix 3760 _±_ 0 **5050** _±_ **0** 600 _±_ 0 4380 _±_ 0 4470 _±_ 465 1334 _±_ 500
+Robotank 11.4 _±_ 1.0 **11.4** _±_ **3.1** 2.8 _±_ 1.6 10.0 _±_ 2.6 3.4 _±_ 2.2 11.0 _±_ 2.4
+Seaquest **3832** _±_ 3316 _±_ 375 136 _±_ 59 296 _±_ 114 1176 _±_ 285 3004 _±_ 311
+SpaceInvaders 637 _±_ 260 766 _±_ 270 209 _±_ 96 358 _±_ 168 468 _±_ 154 **1145** _±_ **Wins/Ties** **4/4** **5/3** **0/0** **1/0** **0/1** **3/5**
+
+
+Table 2: Component ablation on SYNTHETICTREE with branching factor _k_ = 14 and depth _d_ = 3
+(Gaussian leaf noise _σ_ = 0 _._ 5, transition noise 0 _._ 5). Entries report mean root-value absolute error _±_
+95% confidence interval over 10 seeds at _n_ sims = 1000.
+
+
+Method Backup Error at _n_ sims = 1000
+
+
+CATSO mean ( _p_ = 1) 0.247 _±_ 0.004
+CATSO max ( _p_ = _∞_ ) 0.198 _±_ 0.008
+PATSO mean ( _p_ = 1) 0.240 _±_ 0.010
+PATSO max ( _p_ = _∞_ ) **0.139** _±_ **0.022**
+ScalarTSOpt mean ( _p_ = 1) 0.247 _±_ 0.012
+Power-UCT mean ( _p_ = 1) 0.244 _±_ 0.012
+
+
+UCT remains competitive in Enduro, MsPacman, and SpaceInvaders, suggesting traditional confidence bounds remain effective for games with lower stochasticity or more deterministic dynamics.
+Both our methods excel particularly in environments with high stochasticity (e.g., Alien, Frostbite)
+and those requiring strategic exploration of sparse reward landscapes (e.g., Phoenix, Seaquest).
+
+
+5.3 ABLATIONS AND SENSITIVITY ANALYSIS
+
+
+We use SYNTHETICTREE to (i) isolate the impact of distributional Q-nodes versus scalar baselines
+and (ii) study sensitivity to the power-mean backup exponent and other hyperparameters. Unless
+otherwise stated, all configurations use 10 random seeds and we report mean absolute error at the
+root _±_ a 95% confidence interval at _n_ sims = 1000.
+
+
+**Component** **ablations.** We compare (a) CATSO/PATSO with mean backup ( _p_ = 1), (b)
+CATSO/PATSO with max backup ( _p_ _→∞_ ), (c) a scalar Thompson-sampling baseline with the
+same optimism bonus (ScalarTSOpt), and (d) Power-UCT (UCB-style selection with power-mean
+backup, no TS, no distributional Q-nodes). Table 2 shows a representative setting ( _k_ = 14, _d_ = 3,
+Gaussian leaf noise _σ_ = 0 _._ 5, transition noise 0 _._ 5).
+
+
+Table 3 summarizes all six ( _k, d_ ) pairs at _n_ sims = 1000 by comparing, for each tree, the best distributional max-backup variant (CATSO or PATSO, _p_ = _∞_ ) with the best non-distributional baseline
+(ScalarTSOpt or Power-UCT). PATSO with _p_ = _∞_ is best on 4 _/_ 6 tree shapes, while CATSO with
+_p_ = _∞_ is best on the remaining two. On five shapes the distributional max-backup variants reduce root error by roughly 20–60% relative to the best scalar baseline; on the remaining shape they
+essentially tie Power-UCT.
+
+
+**Effect of stochasticity.** On a fixed tree ( _k, d_ ) = (8 _,_ 3) we sweep both reward and transition noise
+over four regimes: deterministic ( _σ_ = 0, transition noise 0), low noise ( _σ_ = 0 _._ 25, 0 _._ 25), medium
+
+
+8
+
+
+Table 3: Summary of component ablations on SYNTHETICTREE at _n_ sims = 1000. For each ( _k, d_ ) we
+compare the best distributional TS variant with max backup (CATSO or PATSO, _p_ = _∞_ ) against the
+best non-distributional baseline (ScalarTSOpt or Power-UCT). Entries are mean root absolute error
+_±_ 95% CI over 10 seeds, plus relative gain of the distributional variant. We show six representative
+shapes; the full grid over all ( _k, d_ ) is plotted in Fig. 1.
+
+
+_k_ _d_ Dist. (max backup) Best scalar baseline Rel. gain (%)
+
+
+14 3 PATSO (max), 0.139 _±_ 0.022 Power-UCT, 0.244 _±_ 0.012 42.9
+16 1 PATSO (max), 0.044 _±_ 0.021 Power-UCT, 0.113 _±_ 0.016 61.5
+16 3 PATSO (max), 0.135 _±_ 0.024 ScalarTSOpt, 0.253 _±_ 0.013 46.7
+16 4 PATSO (max), 0.143 _±_ 0.023 Power-UCT, 0.258 _±_ 0.011 44.6
+200 1 CATSO (max), 0.203 _±_ 0.017 Power-UCT, 0.203 _±_ 0.014 0.0
+200 2 CATSO (max), 0.197 _±_ 0.034 Power-UCT, 0.252 _±_ 0.010 21.8
+
+
+Table 4: Effect of stochasticity on SYNTHETICTREE with ( _k, d_ ) = (8 _,_ 3) at _n_ sims = 1000. We vary
+leaf reward noise _σ_ and transition noise; entries are mean root absolute error _±_ 95% CI over 10
+seeds.
+
+
+Noise regime CATSO PATSO ScalarTSOpt Power-UCT
+
+
+deterministic 0.492 _±_ 0.007 0.447 _±_ 0.012 0.448 _±_ 0.012 0.359 _±_ 0.016
+low noise 0.359 _±_ 0.004 0.330 _±_ 0.005 0.344 _±_ 0.007 0.304 _±_ 0.007
+medium noise 0.226 _±_ 0.007 0.213 _±_ 0.009 0.221 _±_ 0.008 0.205 _±_ 0.013
+high noise 0.078 _±_ 0.014 0.071 _±_ 0.018 0.073 _±_ 0.018 0.070 _±_ 0.017
+
+
+noise ( _σ_ = 0 _._ 5, 0 _._ 5), and high noise ( _σ_ = 1 _._ 0, 0 _._ 75). Table 4 shows the resulting root errors at
+_n_ sims = 1000 for CATSO, PATSO, ScalarTSOpt, and Power-UCT. We deliberately choose (8 _,_ 3) as
+a _medium-complexity_ tree: it sits between shallow/narrow and deep/wide configurations, giving nontrivial errors for all methods without favouring a particular one. Errors decrease as the environment
+becomes less stochastic, and the ordering is stable: Power-UCT typically has the smallest error,
+PATSO is consistently second and always matches or improves upon ScalarTSOpt, and CATSO
+trails slightly but remains close. This indicates that distributional Q-nodes provide a modest but
+robust gain over a scalar TS+optimism baseline while remaining competitive with Power-UCT even
+in low-noise regimes.
+
+
+**Hyperparameter** **sensitivity.** We next sweep the main hyperparameters on ( _k, d_ ) = (8 _,_ 3) at
+_n_ sims = 1000. Table 5 varies the power-mean exponent _p_ for both CATSO and PATSO; Table 6 varies
+the optimism constant _C_ (PATSO), number of atoms _N_ (CATSO), and particle cap _K_ (PATSO).
+
+
+For both algorithms performance is nearly flat for _p_ _∈{_ 1 _,_ 2 _,_ 4 _,_ 8 _}_ and improves noticeably with a
+max-style backup: CATSO moves from 0 _._ 230 _±_ 0 _._ 009 at _p_ = 1 to 0 _._ 189 _±_ 0 _._ 012 at _p_ = _∞_, and
+PATSO from 0 _._ 221 _±_ 0 _._ 015 to 0 _._ 155 _±_ 0 _._ 017.
+
+
+All three sweeps are very flat: PATSO is stable for _C_ _∈_ [0 _._ 5 _,_ 1 _._ 0] with only mild degradation at
+larger _C_, CATSO is almost insensitive to the atom count _N_ _∈{_ 50 _,_ 100 _,_ 200 _,_ 400 _}_, and PATSO
+behaves similarly for particle caps _K_ _∈{_ 50 _,_ 100 _,_ 200 _,_ 400 _}_, consistent with the _O_ (1 _/K_ ) additive
+term in our theory.
+
+
+**Runtime.** On SYNTHETICTREE with ( _k, d_ ) = (8 _,_ 3) and fixed simulation budgets, UCT is fastest,
+Power-UCT incurs a small overhead from the power-mean backup, and CATSO/PATSO are roughly
+1 _._ 5–2 _×_ slower per move in our Python implementation due to sampling and maintaining distributions. We view this as a reasonable trade-off given the theoretical guarantees and empirical gains;
+the script runtime ~~b~~ enchmark.py reproduces exact timings on other hardware.
+
+
+6 DISCUSSION
+
+
+**Distributional Q-nodes vs. optimism.** A natural question is whether robustness comes only from
+the optimism term. The bonus _B_ ( _n, s, a_ ) = _C Ts_ ( _n_ ) [1] _[/]_ [4] _/Ts,a_ ( _n_ ) [1] _[/]_ [2] mainly guarantees coverage of
+
+
+9
+
+
+Table 5: Sensitivity to the power-mean exponent _p_ on SYNTHETICTREE with ( _k, d_ ) = (8 _,_ 3) and
+_n_ sims = 1000. Mean root absolute error _±_ 95% CI over 10 seeds.
+
+
+_p_ CATSO PATSO
+
+
+1.0 0.230 _±_ 0.009 0.221 _±_ 0.015
+2.0 0.229 _±_ 0.009 0.219 _±_ 0.015
+4.0 0.227 _±_ 0.009 0.215 _±_ 0.015
+8.0 0.225 _±_ 0.009 0.208 _±_ 0.015
+_∞_ **0.189** _±_ **0.012** **0.155** _±_ **0.017**
+
+
+Table 6: Sensitivity to remaining hyperparameters on SYNTHETICTREE with ( _k, d_ ) = (8 _,_ 3) and
+_n_ sims = 1000. Mean root absolute error _±_ 95% CI over 10 seeds.
+
+
+Hyperparameter Value Error
+
+
+_C_ (PATSO) 0.5 0.210 _±_ 0.019
+_C_ (PATSO) 1.0 0.210 _±_ 0.016
+_C_ (PATSO) 2.0 0.222 _±_ 0.012
+_C_ (PATSO) 4.0 0.227 _±_ 0.017
+
+
+_N_ (CATSO) 50 0.231 _±_ 0.008
+_N_ (CATSO) 100 0.230 _±_ 0.009
+_N_ (CATSO) 200 0.231 _±_ 0.007
+_N_ (CATSO) 400 0.230 _±_ 0.010
+
+
+_K_ (PATSO) 50 0.221 _±_ 0.016
+_K_ (PATSO) 100 0.216 _±_ 0.015
+_K_ (PATSO) 200 0.221 _±_ 0.015
+_K_ (PATSO) 400 0.221 _±_ 0.015
+
+
+underexplored actions, while the _distributional_ Thompson draw prefers actions with better upper-tail
+behavior when means are similar. This is what distinguishes CATSO/PATSO from scalar-mean TS
+with the same bonus: in the scalar TS+optimism ablation (Sec. 5.3), replacing Q-node distributions
+by scalars consistently hurts performance, especially on highly stochastic trees, indicating that the
+distributional representation itself contributes to robustness.
+
+
+**Exploration,** **noise,** **and** **scalar** **V-nodes.** A concern is that distributional methods might overexplore irreducible noise. In our design the optimism bonus depends only on visit counts ( _Ts, Ts,a_ ),
+TS is applied to posteriors over _means_ of atoms/particles rather than raw returns, and as counts grow
+the posterior concentrates and the policy becomes effectively mean-greedy. The WDRO view in
+Sec. 4.3 formalizes this behavior as robustness to model misspecification rather than risk-seeking.
+We also keep V-nodes scalar: propagating full distributions upward would require repeated crosschild convolutions and quickly becomes intractable. Using power-mean backups over Q-means
+preserves tractability, and our ablations suggest that varying _p_ (mean vs. max) has modest impact
+compared to introducing distributional Q-nodes in the first place.
+
+
+7 CONCLUSION
+
+
+We introduced CATSO and PATSO, distributional MCTS algorithms that combine Thompson
+sampling with polynomial optimism at Q-nodes, and proved _O_ ( _n_ _[−]_ [1] _[/]_ [2] ) simple regret at the
+root. A capped merge-on-insert variant of PATSO controls memory while adding only an
+_O_ (range _/_ ( _K_ (1 _−_ _γ_ ) [2] )) term. Through a connection to Wasserstein distributionally robust MDPs
+we interpret the resulting tree policy as robust and derive a corresponding sample-complexity bound.
+Experiments on synthetic trees and 12 Atari games, together with ablations and sensitivity studies, show that distributional Q-nodes with TS+optimism are competitive with or stronger than nondistributional baselines across a range of stochastic regimes.
+
+
+10
+
+
+Our main limitation is that V-nodes remain scalar for tractability; extending distributional backups
+to V-nodes, scaling to larger or partially observed domains, and integrating with deep models (e.g.,
+MuZero-style planning or sparse-reward robotics tasks) are natural directions for future work.
+
+
+REPRODUCIBILITY
+
+
+All proofs are provided in Appendix A–F. Experimental code, hyperparameters, ablation details,
+and additional results are documented in the supplementary material; we will release code upon
+acceptance.
+
+
+REFERENCES
+
+
+Aijun Bai, Feng Wu, and Xiaoping Chen. Bayesian mixture modelling and inference based thompson sampling in monte-carlo tree search. _Advances in neural information processing systems_, 26,
+2013.
+
+
+Aijun Bai, Feng Wu, Zongzhang Zhang, and Xiaoping Chen. Thompson sampling based montecarlo planning in pomdps. _the International Conference on Automated Planning and Scheduling_,
+24(1), 2014.
+
+
+Tuan Dam, Pascal Klink, Carlo D’Eramo, Jan Peters, and Joni Pajarinen. Generalized mean estimation in monte-carlo tree search. _arXiv preprint arXiv:1911.00384_, 2019.
+
+
+Tuan Dam, Odalric-Ambrym Maillard, and Emilie Kaufmann. Power mean estimation in stochastic
+monte-carlo tree search. In Negar Kiyavash and Joris M. Mooij (eds.), _Proceedings of the Forti-_
+_eth Conference on Uncertainty in Artificial Intelligence_, volume 244 of _Proceedings of Machine_
+_Learning_ _Research_, pp. 894–918. PMLR, 15–19 Jul 2024. URL [https://proceedings.](https://proceedings.mlr.press/v244/dam24a.html)
+[mlr.press/v244/dam24a.html.](https://proceedings.mlr.press/v244/dam24a.html)
+
+
+Tuan Q Dam, Carlo D’Eramo, Jan Peters, and Joni Pajarinen. Convex regularization in monte-carlo
+tree search. In _International Conference on Machine Learning_, pp. 2365–2375. PMLR, 2021.
+
+
+Nicolas Fournier and Arnaud Guillin. On the rate of convergence in wasserstein distance of the
+empirical measure. _Probability theory and related fields_, 162(3):707–738, 2015.
+
+
+Junya Honda and Akimichi Takemura. An asymptotically optimal bandit algorithm for bounded
+support models. In _COLT_, pp. 67–79. Citeseer, 2010.
+
+
+Emilie Kaufmann, Olivier Capp´e, and Aur´elien Garivier. On bayesian upper confidence bounds for
+bandit problems. In _Artificial intelligence and statistics_, pp. 592–600. PMLR, 2012.
+
+
+Levente Kocsis, Csaba Szepesv´ari, and Jan Willemson. Improved monte-carlo search. _Univ. Tartu,_
+_Estonia, Tech. Rep_, 1, 2006.
+
+
+Benedict C May, Nathan Korda, Anthony Lee, David S Leslie, and Nicolo Cesa-Bianchi. Optimistic
+bayesian sampling in contextual-bandit problems. _Journal of Machine Learning Research_, 13(6),
+2012.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Bellemare, Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level
+control through deep reinforcement learning. _Nature_, 518(7540):529–533, 2015.
+
+
+Ian Osband, Daniel Russo, and Benjamin Van Roy. (more) efficient reinforcement learning via
+posterior sampling. _Advances in Neural Information Processing Systems_, 26, 2013.
+
+
+Ian Osband, John Aslanides, and Albin Cassirer. Randomized prior functions for deep reinforcement
+learning. _Advances in neural information processing systems_, 31, 2018.
+
+
+Michael Painter, Mohamed Baioumy, Nick Hawes, and Bruno Lacerda. Monte carlo tree search
+with boltzmann exploration. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Charles Riou and Junya Honda. Bandit algorithms based on thompson sampling for bounded reward
+distributions. In _Algorithmic Learning Theory_, pp. 777–826. PMLR, 2020.
+
+
+11
+
+
+Julian Schrittwieser, Ioannis Antonoglou, Thomas Hubert, Karen Simonyan, Laurent Sifre, Simon
+Schmitt, Arthur Guez, Edward Lockhart, Demis Hassabis, Thore Graepel, et al. Mastering atari,
+go, chess and shogi by planning with a learned model. _Nature_, 588(7839):604–609, 2020.
+
+
+Devavrat Shah, Qiaomin Xie, and Zhi Xu. Nonasymptotic analysis of monte carlo tree search.
+_Operation Research_, 70(6):3234–3260, 2022.
+
+
+David Silver, Aja Huang, Chris J Maddison, Arthur Guez, Laurent Sifre, George Van Den Driessche,
+Julian Schrittwieser, Ioannis Antonoglou, Veda Panneershelvam, Marc Lanctot, et al. Mastering
+the game of go with deep neural networks and tree search. _nature_, 529(7587):484, 2016.
+
+
+David Silver, Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Matthew Lai, Arthur Guez,
+Marc Lanctot, Laurent Sifre, Dharshan Kumaran, Thore Graepel, et al. Mastering chess and shogi
+by self-play with a general reinforcement learning algorithm. _arXiv preprint arXiv:1712.01815_,
+2017.
+
+
+Tsachy Weissman, Erik Ordentlich, Gadiel Seroussi, Sergio Verdu, and Marcelo J Weinberger. Inequalities for the l1 deviation of the empirical distribution. _Hewlett-Packard_ _Labs,_ _Tech._ _Rep_,
+2003.
+
+
+Chenjun Xiao, Ruitong Huang, Jincheng Mei, Dale Schuurmans, and Martin M¨uller. Maximum
+entropy monte-carlo planning. In _Advances in Neural Information Processing Systems_, pp. 9516–
+9524, 2019.
+
+
+12

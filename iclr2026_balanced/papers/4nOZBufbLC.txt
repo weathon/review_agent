@@ -1,0 +1,3794 @@
+# COUNT BRIDGES ENABLE MODELING
+## AND DECONVOLVING TRANSCRIPTOMIC DATA
+
+
+**Nic Fishman** [1] _[,][∗]_ **, Gokul Gowri** [2] **, Tanush Kumar** [1] **, Jiaqi Lu** [1] **, Valentin de Bortoli** [3] **,**
+**Jonathan S. Gootenberg** [4] _[,]_ [6] & **Omar Abudayyeh** [5] _[,]_ [6]
+
+1Harvard University; 2MIT; 3CNRS;
+4Beth Israel Deaconess Medical Center; 5Brigham and Women’s Hospital; 6Harvard Medical School
+_∗_ Corresponding author: njwfish@gmail.com
+
+
+ABSTRACT
+
+
+Many modern biological assays, including RNA sequencing, yield integer-valued
+counts that reflect the number of molecules detected. These measurements are
+often not at the desired resolution: while the unit of interest is typically a single cell, many measurement technologies produce counts aggregated over sets of
+cells. Although recent generative frameworks such as diffusion and flow matching
+have been extended to non-Euclidean and discrete settings, it remains unclear how
+best to model integer-valued data or how to systematically deconvolve aggregated
+observations. We introduce Count Bridges, a stochastic bridge process on the
+integers that provides an exact, tractable analogue of diffusion-style models for
+count data, with closed-form conditionals for efficient training and sampling. We
+extend this framework to enable direct training from aggregated measurements
+via an Expectation-Maximization-style approach that treats unit-level counts as
+latent variables. We demonstrate state-of-the-art performance on integer distribution matching benchmarks, comparing against flow matching and discrete flow
+matching baselines across various metrics. We then apply Count Bridges to two
+large-scale problems in biology: modeling single-cell gene expression data at the
+nucleotide resolution, with applications to deconvolving bulk RNA-seq, and resolving multicellular spatial transcriptomic spots into single-cell count profiles. Our
+methods offer a principled foundation for generative modeling and deconvolution
+of biological count data across scales and modalities.
+
+
+1 INTRODUCTION
+
+
+Integer-valued counts are a fundamental product of scientific measurements because of the discrete
+nature of molecules. Modern biological assays yield massive streams of count data: RNA-seq read
+counts, fluorescence imaging molecule counts, and mass cytometry ion counts (Klein et al., 2015;
+Raj et al., 2008; Bendall et al., 2011). However, these measurements are often aggregated over
+multiple individual units, obscuring the fine-grained patterns underlying these natural phenomena.
+Transcriptomics technologies exemplify this challenge, with technologies such as Visium capturing
+10-50 cells per spot (Stahl et al., 2016) and bulk RNA-seq aggregating thousands to millions of cells˚
+per readout, yielding averages rather than high-resolution details. Deconvolving these aggregates into
+single-cell profiles is critical for the precise mapping of cellular heterogeneity, cell-cell interactions,
+and tissue architecture (Moses & Pachter, 2022; Armingol et al., 2021). The challenge is twofold:
+building generative models that respect the integer nature of counts and extending these models to
+infer unit-level profiles from aggregated observations.
+
+
+Recent developments in generative modelling only partially addresss the problem. Discrete diffusion
+models (Austin et al., 2021; Lou et al., 2023) treat counts as unordered categories through masking
+or uniform noise. Blackout Diffusion (Santos et al., 2023), the only count-specific approach, uses
+pure-death processes that cannot transport between arbitrary distributions. The biological deconvolution literature on the other hand focuses on deconvolving cell-type (cluster-level) proportions
+(Kleshchevnikov et al., 2022; Cable et al., 2022; Li et al., 2023), rather than unit-level count profiles.
+Thus, there is need for a framework that respects the integer and ordinal structure of counts, enables
+transport between arbitrary distributions, and can systematically deconvolve aggregated observations.
+
+
+1
+
+
+We introduce Count Bridges: a stochastic bridge process on Z _[d]_ using Poisson birth-death dynamics.
+This yields closed-form conditionals for exact sampling and extends naturally to deconvolution via an
+EM algorithm treating unit-level counts as latent. The birth-death mechanism allows transport between
+arbitrary integer-valued distributions while preserving the ordinal structure, as both increments and
+decrements respect the natural ordering of counts. We show that Count Bridges outperform existing
+methods on synthetic benchmark datasets and scale more favorably to high-dimensional settings. We
+then showcase Count Bridges on two real-world biological applications centered on deconvolution:
+nucleotide-resolution single-cell RNA-sequence modeling for bulk RNA-seq deconvolution and
+reference-free spatial transcriptomic deconvolution. [The codebase is available here.](https://github.com/njwfish/count_bridges)
+
+
+2 BACKGROUND ON DIFFUSION MODELS
+
+
+Diffusion models specify a time–indexed family of _bridge kernels_ connecting _X_ 0 _∼_ _p_ 0 to a simple
+source distribution _X_ 1 _∼_ _p_ 1 (often Gaussian). There are two layers of structure: (i) an _unconditional_
+_forward_ _process_ ( _Xt_ ) _t∈_ [0 _,_ 1] with kernels _Kt|_ 0( _xt_ _|_ _x_ 0) = Law( _Xt_ _|_ _X_ 0 = _x_ 0); (ii) for any
+0 _≤_ _s ≤_ _t ≤_ 1, a family of _bridge kernels Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) = Law( _Xs_ _| X_ 0 = _x_ 0 _, Xt_ = _xt_ ) _._
+
+
+Diffusion models require two consistency properties. First we require a bridge consistency identity.
+
+
+                     For any 0 _≤_ _s ≤_ _t ≤_ _u ≤_ 1 _,_ _Ks|u_ ( _xs_ _| xu_ ) = _Ks|t_ ( _xs_ _| xt_ ) _Kt|u_ ( _xt_ _| xu_ ) _dxt._ (1)
+
+
+Thus multi-step sampling along any grid _u_ _→_ _t_ _→_ _s_ matches the single-step _u_ _→_ _s_ bridge.
+
+
+Second, the kernel must have a projective posterior:
+
+
+              _Ks|t_ ( _xs_ _| xt_ ) = _q_ 0 _|t_ ( _x_ 0 _| xt_ ) _Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) _dx_ 0 _,_ (2)
+
+
+where _q_ 0 _|t_ ( _x_ 0 _|_ _xt_ ) = Law( _X_ 0 _|_ _Xt_ = _xt_ ). This identity expresses _Ks|t_ as a mixture over the
+posterior of the _p_ 0 data. It is essential for denoising: during sampling, each predicted _Xt_ changes the
+posterior _q_ 0 _|t_, so the reverse kernels must be projective under this posterior update.
+
+
+Together, equation 1 and equation 2 lets us define a general diffusion approach. First we train a
+denoiser _qθ_ that approximates the posterior, _X_ [˜] 0 _∼_ _qθ_ ( _·_ _| xt, t_ ) _≈_ Law( _X_ 0 _| Xt_ = _xt_ ) _,_ using tuples
+( _t, Xt, X_ 0) drawn from the “global” bridge: sample _x_ 0 _∼_ _p_ 0, _x_ 1 _∼_ _p_ 1, _t_ _∼_ Unif[0 _,_ 1] and then
+_Xt_ _∼_ _Kt|_ 0 _,_ 1( _· | x_ 0 _, x_ 1).
+
+
+For sampling, pick a grid 1 = _tK_ _> · · · > t_ 0 = 0, draw _X_ 1 _∼_ _p_ 1, set _XtK_ _←_ _X_ 1, sampling
+
+_X_ ˜0 [(] _[k]_ [+1)] _∼_ _qθ_ ( _·_ _| Xtk_ +1 _, tk_ +1) _,_ _Xtk_ _∼_ _Ktk|_ 0 _,tk_ +1( _·_ _|_ _X_ [˜] 0 [(] _[k]_ [+1)] _, Xtk_ +1) _._ (3)
+
+
+By our consistency properties, this multi–step procedure is equivalent to sampling directly from the
+(0 _,_ 1) bridge, so the model cannot drift out of the training distribution.
+
+
+2.1 DIFFUSION AS A BRIDGE BETWEEN NOISE AND DATA
+
+
+Let us consider the unconditional _Kt|_ 0 process ( _Xt_ ) _t∈_ [0 _,_ 1] of the following form
+
+
+_Xt_ = _α_ ( _t_ ) _X_ 0 + _Bt,_ (4)
+
+
+where ( _Bt_ ) _t∈_ [0 _,_ 1] is a _d_ -dimensional Gaussian process with non-decreasing standard deviation _σ_ ( _t_ ),
+and _α_ ( _t_ ) a non-increasing function. Note that _α_ (0)=1 and _σ_ (0)=0.
+
+
+We want to define a process that interpolates smoothly between _X_ 0 _∼_ _p_ 0 and _X_ 1 given by another
+distribution as in Peluchetti (2023); Albergo et al. (2023); Delbracio & Milanfar (2023); Liu et al.
+(2022; 2023). We have the following proposition defining the global and local bridge.
+**Proposition 2.1.** _Let_ ( _Xt_ ) _t∈_ [0 _,_ 1] _be given by equation 4._ _For_ 0 _<_ _s_ _<_ _t_ _≤_ 1 _, consider_ ( _Xs_ ) _s∈_ [0 _,t_ ]
+_conditioned on Xt_ = _xt and X_ 0 = _x_ 0 _._ _Then the conditional law Ks|_ 0 _,t_ ( _· | x_ 0 _, xt_ ) _is Gaussian and_
+_can be written_
+
+
+_d_
+_Xs_ = _α_ ( _s_ )(1 _−_ _r_ ( _s, t_ )) _X_ 0 + _[α]_ [(] _[s]_ [)] (5)
+
+_α_ ( _t_ ) _[r]_ [(] _[s, t]_ [)] _[X][t]_ [ +] _[ σ]_ [(] _[s]_ [)(1] _[ −]_ _[r]_ [(] _[s, t]_ [))][1] _[/]_ [2] _[Z,]_
+
+_where Z_ _∼N_ (0 _,_ Id) _is independent of_ ( _X_ 0 _, Xt_ ) _and r_ ( _s, t_ ) = _[α]_ _α_ [(] ( _[t]_ _s_ [)] ) [2][2] _[σ]_ _σ_ [(] ( _[s]_ _t_ [)] ) [2][2] _[.]_ _[In particular, the family]_
+
+_{Ks|_ 0 _,t}_ 0 _≤s≤t≤_ 1 _defined by equation 5 satisfies equations 1 and 2._
+
+
+2
+
+
+_d_
+Note that if _X_ 1 _∼N_ (0 _,_ Id), _α_ (1) = 0 and _σ_ (1) = 1 we have _Xt_ = _α_ ( _t_ ) _X_ 0 + _σ_ ( _t_ ) _Z._ Furthermore,
+our equation 5 recovers the interpolation described in Albergo et al. (2023) with the identification
+_α_ ( _t_ ) _→_ _α_ ( _t_ )(1 _−_ _r_ ( _t_ )), _α_ _[α]_ (1) [(] _[t]_ [)] _[r]_ [(] _[t]_ [)] _[ →]_ _[β]_ [(] _[t]_ [)][ and] _[ σ]_ [(] _[t]_ [)(1] _[ −]_ _[r]_ [(] _[t]_ [))][1] _[/]_ [2] _[→]_ _[γ][t]_ [.]
+
+
+2.2 SAMPLING THE POSTERIOR
+
+
+In this paradigm the bridge is only the first of two choices that define the model. We also have to
+choose how to model the posterior _X_ 0 _|Xt, t_ . There are two core options: we can use differential
+equations to model the posterior in the limit of small steps or we can focus more directly on modeling
+the posterior. In Euclidean space, the former lets us learn a simple conditional expectation, whereas
+the latter always requires a distribution model.
+
+
+**Infinitesimal.** Consider a small backward step of size _δ_ _>_ 0. The local bridge between times _t_ and
+_t −_ _δ_ is Gaussian, so conditioned on _Xt_ = _x_ we can write to first order in _δ_
+
+
+_√_
+_Xt−δ_ _| Xt_ = _x_ _≈_ _x −_ _δ b_ ( _x, t_ ) +
+
+
+_δ ξt,_ _ξt_ _∼N_ �0 _,_ Σ( _x, t_ )� _,_
+
+
+where _b_ is the reverse-time drift and Σ is the diffusion covariance of the bridge.
+
+
+The conditional law _Xt−δ_ _| Xt_ is Gaussian and can be computed in closed form:
+
+_b_ ( _x, t_ ) = _B_ 1( _t_ ) _x_ + _B_ 2( _t_ ) E[ _X_ 0 _| Xt_ = _x_ ] + _b_ 0( _t_ ) _,_ Σ( _x, t_ ) = Σ0( _t_ ) _._
+
+
+The diffusion covariance depends only on _t_ (from the Brownian increment), and the drift depends
+on the posterior Law( _X_ 0 _|_ _Xt_ ) only through its mean. This justifies learning the mean _qθ_ ( _x, t_ ) _≈_
+E[ _X_ 0 _| Xt_ = _x_ ] (equivalently, a score or velocity) as in standard diffusion models (Song et al., 2020).
+
+
+**Distributional.** Following De Bortoli et al. (2025) we can learn the conditional law _qθ_ ( _·_ _| xt, t_ ) _≈_
+Law( _X_ 0 _| Xt_ = _xt_ ) _,_ using any distribution learning approach. We can then sample and directly plug
+into the bridge
+
+_X_ ˜0 [(] _[k]_ [+1)] _∼_ _qθ_ ( _·_ _| Xtk_ +1 _, tk_ +1) _,_ _Xtk_ _∼_ _Ktk|_ 0 _,tk_ +1� _·_ _|_ _X_ [˜] 0 [(] _[k]_ [+1)] _, Xtk_ +1� _._
+
+
+to sample the posterior. The distributional perspective is particularly powerful when the infinitesimal
+perspective fails to admit a simplification to the conditional expectation, which motivates our use
+of the distributional approach for Count Bridges (see Sec. 3.2). In categorical discrete settings, all
+approaches are distributional since they are based on cross-entropy losses, see Campbell et al. (2022);
+Austin et al. (2021); Shi et al. (2024); Sahoo et al. (2024).
+
+
+3 COUNT BRIDGES
+
+
+3.1 AN INTEGER BRIDGE BETWEEN DISTRIBUTIONS
+
+
+Mirroring Sec. 2, we seek a bridge for integer-valued data. Instead of a Gaussian process, we use a pair
+of independent Poisson birth/death processes ( _Bt_ ) _t∈_ [0 _,_ 1] and ( _Dt_ ) _t∈_ [0 _,_ 1] that increment/decrement
+the counts. We define an increasing “jump-intensity” function _w_ : [0 _,_ 1] _→_ R _≥_ 0 with _w_ (0) = 0,
+_w_ (1) = 1, and then write the cumulative birth/death intensities as Λ _±_ ( _t_ ) = _λ± w_ ( _t_ ) for some _λ±_ _>_ 0
+so _Bt_ _∼_ Poi(Λ+( _t_ )) and _Dt_ _∼_ Poi(Λ _−_ ( _t_ )). From here we can define the unconditional kernel _Kt|_ 0:
+
+_Xt_ = _X_ 0 + _Bt −_ _Dt._ (6)
+
+Denoting the displacement _dt_ = _Xt −_ _X_ 0, the total number of jumps _Nt_ = _Bt_ + _Dt_, and the slack
+variable _Mt_ = min( _Bt, Dt_ ). Any two of these variables determine the third:
+
+_Nt_ = _|dt|_ + 2 _Mt,_ _Bt_ = [1] 2 [(] _[N][t]_ [ +] _[ d][t]_ [)] _[,]_ _Dt_ = _Nt −_ _Bt._ (7)
+
+
+From the ( _Nt, Bt_ ) perspective, Poisson superposition and thinning imply that, conditional on ( _Nt, Bt_ )
+at time _t_, the earlier counts ( _Ns, Bs_ ) for _s_ _<_ _t_ can be sampled by a Binomial draw for _Ns_ and a
+Hypergeometric draw for _Bs_ . Switching to ( _Mt, dt_ ), a Poisson change of variables yields the slack
+posterior _Mt_ _|_ _dt_, whose pmf has Bessel form (see Prop. A.6 in App. A). These two ingredients
+together give a count analogue of Proposition 2.1; the full derivation is in App. A.
+**Proposition 3.1.** _Let_ ( _Xt_ ) _t∈_ [0 _,_ 1] _be given by equation 6._ _Now, consider_ ( _Xs_ ) _s∈_ [0 _,t_ ] _conditioned by_
+_Xt_ = _xt and X_ 0 = _x_ 0 _._ _Then, we have the Poisson Birth-Death bridge Ks|_ 0 _,t:_
+
+
+_d_
+_Xs_ = _X_ 0 + _Bs −_ _Ds,_ (8)
+
+
+3
+
+
+Figure 1: _Left:_ Sample paths for several endpoint gaps _d_ 1 (top). Fixing the prefix [0 _, t_ ] resample
+( _t,_ 1] by the recursive kernel (bottom). _Middle:_ Bessel slack posteriors at initial and intermediate
+times. The slack _Mt_ concentrates near 0 as _|d|_ grows. _Right:_ ECDFs of _Xs_ from a one–step kernel
+(1 _→_ _s_ ) and a two–step kernel (1 _→_ _t_ _→_ _s_ ) are indistinguishable, confirming composition.
+
+
+_where we condition on_ _dt_ = _Xt_ _−_ _X_ 0 _and sample Mt_ _|_ _dt_ _∼_ _Bes_ ( _|dt|_ ; Λ+( _t_ ) _,_ Λ _−_ ( _t_ )) _,_ _changing_
+_variables to Nt and Bt to sample Bs, and Ds_ _which we can plug into equation 8:_
+
+
+    _Ns_ _| Nt_ _∼_ Bin _Nt,_ _[w]_ [(] _[s]_ [)]
+
+_w_ ( _t_ )
+
+
+_,_ _Bs_ _|_ ( _Nt, Ns, Bt_ ) _∼_ Hyp( _Nt, Bt, Ns_ ) _,_ _Ds_ = _Ns −_ _Bs._ (9)
+
+
+_The family {Ks|_ 0 _,t}_ 0 _≤s≤t≤_ 1 _defined by equation 8 satisfies equations 1 and 2._
+
+
+We visualize this process in Fig. 1 where we show the trajectories for the one- and two-step models
+along with the core composition property that drives bridge models. This setup enables training and
+sampling from a Count Bridge, see Algorithms 1 and 2. These results leverage our custom CUDA
+kernel implementing the fast Bessel sampler of Devroye (2002) to enable sampling at scale.
+
+
+In Fig. 1 we also see that as _dt_ grows the slack _Mt_ concentrates near zero, so there is no slack.
+This means that Count Bridges are an instance of the static Schroding¨ er bridge problem (Leonard,´
+2013): they solve an entropy-regularized optimal transport. Let _κ_ = - _λ_ + _λ−_ be the jump intensity
+and _p_ _[κ]_ ref [(] _[x]_ [0] _[, x]_ [1][) =] _[ p]_ [0][(] _[x]_ [0][)] _[K]_ 1 _[κ]_ _|_ 0 [(] _[x]_ [1] _[|][x]_ [0][)][ be the joint law of][ (] _[X]_ [0] _[, X]_ [1][)][ induced by the kernel.] [Over the]
+space of couplings _C_ ( _p_ 0 _, p_ 1) = _{C_ on _X_ _× X_ : _C_ ( _·, X_ ) = _p_ 0 _,_ _C_ ( _X_ _, ·_ ) = _p_ 1 _}_, Count Bridges solve
+
+_Cκ_ _∈_ arg min            - _C ∥_ _p_ _[κ]_ ref            - _._
+_C∈C_ ( _p_ 0 _,p_ 1) [KL]
+
+
+Letting _κ →∞_ yields the independent coupling _p_ 0 _⊗_ _p_ 1, but as _κ ↓_ 0 we obtain
+
+KL� _C ∥_ _p_ _[κ]_ ref         - _≈_ log� _κ_ 2         - E _C|X_ 1 _−X_ 0 _| −_ _H_ ( _C_ ) _,_
+
+
+so _κ →_ 0 recovers discrete OT with cost _|x_ 1 _−x_ 0 _|_ (see App. A.2).
+
+This echoes the Gaussian case (Sec. 2) where we define _σ_ = _σ_ (1) and _p_ _[σ]_ ref [, and as] _[ σ]_ _[↓]_ [0]
+
+
+             -              - 1
+KL _C ∥_ _p_ _[σ]_ ref _≈_ 2 _σ_ [2] [E] _[C][∥][X]_ [1] _[−][X]_ [0] _[∥]_ [2] _[ −]_ _[H]_ [(] _[C]_ [)] _[,]_
+
+
+so _σ_ _→_ 0 recovers quadratic OT, while _σ_ _→∞_ again gives _p_ 0 _⊗_ _p_ 1 (Shi et al., 2023). Thus the
+bridge parameters _κ_ (count) and _σ_ (Gaussian) play the same role as entropy–regularization strengths.
+
+
+3.2 DISTRIBUTIONAL SCORING LOSS FOR THE DENOISER
+
+
+Training requires a distributional loss due to the discrete nature of the space. As shown by Holderrieth
+et al. (2024), the ELBO for discrete generators (e.g., jump processes) is distributional and cannot
+be reduced to expectations over point estimates. This mirrors the need for cross-entropy in discrete
+diffusion and flow models. We can use cross-entropy with Count Bridges (we test this, see App.
+D.1), but it has two issues: first, it does not incorporate the lattice structure; second, cross-entropy
+cannot model the joint of _Xs_ _| Xt_ without exponential cost in dimension, so cross entropy is usually
+
+
+4
+
+
+**Require:** dataset ( **x** 0 _,_ **x** 1), _w_ ( _·_ ) _,_ Λ _±_ ( _·_ )
+
+1: **for** each minibatch **do**
+2: sample ( _x_ 0 _, x_ 1) _∼_ ( **x** 0 _,_ **x** 1)
+3: _t ∼_ Unif[0 _,_ 1]
+4: _d_ 1 _←_ _x_ 1 _−_ _x_ 0
+5: _M_ 1 _∼_ Bes( _|d_ 1 _|_ ; Λ+(1) _,_ Λ _−_ (1))
+6: _N_ 1 _←|d_ 1 _|_ + 2 _M_ 1
+7: _B_ 1 _←_ [1] 2 [(] _[N]_ [1][ +] _[ d]_ [1][)]
+
+8: _Nt_ _∼_ Bin� _N_ 1 _,_ _w_ ( _t_ )�
+
+9: _Bt_ _∼_ Hyp� _N_ 1 _,_ _B_ 1 _,_ _Nt_  
+10: _xt_ _←_ _x_ 1 _−_ 2( _B_ 1 _−Bt_ )+( _N_ 1 _−Nt_ )
+11: update _θ_ on _L_ ( _θ_ )
+12: **end for**
+
+
+Algorithm 1: Training Poisson–BD Bridge
+
+
+**Require:** _xtK_ = _x_ 1, model _qθ_, _w_ ( _·_ ) _,_ Λ _±_ ( _·_ )
+
+
+1: **for** _k_ = _K, K −_ 1 _, . . .,_ 1 **do**
+2: sample _x_ ˆ0 _∼_ _qθ_ ( _· | xtk_ _, tk_ )
+3: _dtk_ _←_ _xtk_ _−_ _x_ ˆ0
+4: _Mtk_ _∼_ Bes( _|dtk_ _|_ ; Λ+( _tk_ ) _,_ Λ _−_ ( _tk_ ))
+5: _Ntk_ _←|dtk_ _|_ + 2 _Mtk_
+6: _Btk_ _←_ 2 [1] [(] _[N][t][k]_ [+] _[ d][t][k]_ [)]
+
+
+6: _Btk_ _←_ 2 [(] _[N][t][k]_ [+] _[ d][t][k]_ [)]
+
+7: _r_ _←_ _w_ ( _tk−_ 1) _/w_ ( _tk_ )
+8: _Ntk−_ 1 _∼_ Bin� _Ntk_ _,_ _r_ 
+
+
+9: _Btk−_ 1 _∼_ Hyp� _Ntk_ _,_ _Btk_ _,_ _Ntk−_ 1�
+
+
+10: _xtk−_ 1 _←_ _xtk−_ 2( _Btk −Btk−_ 1)+( _Ntk −Ntk−_ 1)
+11: **end for**
+12: **return** _xt_ 0
+
+
+Algorithm 2: Sampling Poisson–BD Bridge
+
+
+factorized, modeling each coordinate of _Xs_ _| Xt_ independently or autoregressively. Specializing to
+count data we can go beyond cross-entropy by using a proper scoring rule that (i) incorporates the
+geometry and (ii) enables modeling of the joint.
+
+
+Formally, let ( _X_ 0 _, Xt_ ) denote a training pair from _Kt|_ 0 _,_ 1 at time _t ∈_ [0 _,_ 1], and let _qθ_ ( _· | xt, t_ ) be our
+denoiser. We train _qθ_ using a strictly proper distributional scoring rule (Gneiting & Raftery, 2007;
+De Bortoli et al., 2025). Fix a negative-type semimetric _ρ_ on Z _[D]_ (all our experiments focus on the
+_ρ_ ( _x, x_ _[′]_ ) = _∥x −_ _x_ _[′]_ _∥_ _[β]_ 2 [with] _[ β]_ [= 1][).] [For any distribution] _[ p]_ [ and outcome] _[ y]_ [, the energy score is]
+
+
+_Sρ_ ( _p, y_ ) = [1] 2 [E] _[X,X]_ _[′][∼][p]_ - _ρ_ ( _X, X_ _[′]_ )� _−_ E _X∼p_ - _ρ_ ( _X, y_ )� and _L_ ( _θ_ ) = E _X_ 0 _,Xt,t_ - _Sρ_ - _qθ_ ( _·_ _| Xt, t_ ) _,_ _X_ 0� [�]
+
+
+which is strictly proper when _ρ_ is characteristic. Taking _m_ i.i.d. samples _x_ ˆ [(] _[j]_ [)] _∼_ _qθ_ ( _· | xt, t_ ) we can
+use the plugin estimator: _S_ [�] _ρ_ = _m_ ( _m_ 1 _−_ 1) - _j_ = _j_ _[′]_ 2 [1] _[ρ]_ [(ˆ] _[x]_ [(] _[j]_ [)] _[,]_ [ ˆ] _[x]_ [(] _[j][′]_ [)][)] _[ −]_ _m_ [1] - _mj_ =1 _[ρ]_ - _x_ ˆ [(] _[j]_ [)] _, x_ 0� _._
+
+
+2 [1] _[ρ]_ [(ˆ] _[x]_ [(] _[j]_ [)] _[,]_ [ ˆ] _[x]_ [(] _[j][′]_ [)][)] _[ −]_ [1]
+
+
+_j_ = _j_ _[′]_ 2 [1]
+
+
+_m_ [1] - _mj_ =1 _[ρ]_ - _x_ ˆ [(] _[j]_ [)] _, x_ 0� _._
+
+
+4 DECONVOLUTION WITH COUNT BRIDGES
+
+
+We extend Count Bridges to handle unit–level generation when we only observe aggregates. Consider
+_G_ units in the one-dimensional case where the group-level state at time _t_ is a vector **X** _t_ _∈_ Z _[G]_
+with entries _Xgt_ for unit _g_ at time _t_ . Each entry evolves independently according to the bridge in
+Section 3. The key challenge: we observe the unit–level endpoint **x** 1 but only the aggregate at time 0,
+_a_ 0 = [�] _g_ _[G]_ =1 _[x][g]_ [0] _[∈]_ [Z] _[,]_ [ not the unit–level vector] **[ x]** [0][.] [Our goal is to learn a count bridge] _[ q][θ]_ [(] _[x]_ [0] _[|][ x][t][, t, z]_ [)]
+that generates unit–level endpoints given start data at time _t_ = 1 and side information _z_ .
+
+
+We formulate this as a generalized EM problem, similar to Rozet et al. (2024), where **X** 0 is latent
+and _a_ 0 = [�] _g_ **[X]** _[g]_ [0][ is observed.] [Let] _[ A]_ [ :][ Z] _[G][ →]_ [Z][ be a linear aggregate map (e.g., sums across units,]
+
+block sums). For ( _xt, t, z_ ), the denoiser _qθ_ ( _·_ _|_ _xt, t, z_ ) defines an i.i.d. product prior over **X** 0 =
+( _X_ 10 _, . . ., XG_ 0). Conditioning on the aggregate yields
+
+
+_G_
+_Qθ_ ( **X** 0 _| a_ 0 _, xt, t, z_ ) _∝_      -      - _qθ_ ( _Xg_ 0 _| xt, t, z_ )� **1** _{A_ ( **X** 0) = _a_ 0 _}._
+
+
+_g_ =1
+
+In the E-step we will generate “latent” _x_ _[≈]_ 0 [using the model and in the M-step we will use these] _[ x]_ 0 _[≈]_ [to]
+train the model at the aggregate level. We summarize the overall procedure in Algorithms 3 and 4.
+
+
+**E-Step** The ideal E–step would sample from the exact aggregate–conditional law
+
+**X** _[⋆]_ 0 _[∼]_ _[Q][θ]_ [(] _[· |][ a]_ [0] _[, x][t][, t, z]_ [)] _[ .]_
+
+We could then use the sampled **x** _[⋆]_ 0 [as] [latent] [variables] [to] [sample] _[x][t]_ [between] [(] **[x]** _[⋆]_ 0 _[,]_ **[ x]** [1][)] [using] [the]
+unit–level kernel _Kt|_ 0 _,_ 1 from Prop. 3.1. [1] Unfortunately, _Qθ_ is generally intractable to sample from,
+
+
+1The same method described here can be used with distributional diffusion on continuous space, but we focus
+on counts since most often when we observe aggregates we believe they are based on discrete underlying data.
+
+
+5
+
+
+**Require:** ( **x** 1 _, a_ 0 _, z_ ), _w_ ( _·_ ) _,_ Λ _±_ ( _·_ ), _qθ_, Π
+
+1: **for** _k_ = _K, K −_ 1 _, . . .,_ 2 **do**
+2: Sample **x** ˆ0 _,tk_ _∼_ _qθ_ ( _· |_ **x** _tk_ _, tk, z_ )
+3: **x** ˜0 _,tk_ _←_ Π(ˆ **x** 0 _,tk_ _, a_ 0 _, z_ )
+4: Update **x** _tk−_ 1 by running the reverse step
+5: using steps 4–10 of Alg. 2, with ˜ **x** 0 _,tk_
+6: **end for**
+7: **x** _[≈]_ 0 _[←]_ [sample and project] **[x]** [ˆ][0] _[,t]_ 1
+8: **return x** _[≈]_ 0
+
+
+Algorithm 3: Guided Sampling to for _x_ _[≈]_ 0
+
+
+**Require:** ( **x** 1 _, a_ 0 _, z_ ), _w_ ( _·_ ) _,_ Λ _±_ ( _·_ ), _qθ_, Π
+
+1: **for** each minibatch **do**
+2: **E-step:** Sample latent **x** _[≈]_ 0 [from]
+3: **x** 1 conditional on _a_ 0 via Alg. 3
+4: **M-step:** _t ∼_ Unif[0 _,_ 1]
+5: Sample **x** _t_ via the forward bridge on
+6: ( **x** _[≈]_ 0 _[,]_ **[ x]** [1][)][ using steps 4–10 of Alg. 1]
+7: Update _θ_ using the gradient of _−L_ agg( _θ_ )
+8: **end for**
+
+
+Algorithm 4: Training with Aggregate Supervision
+
+
+Figure 2: A scaled and rounded variant
+of the classic 8 gaussian to two moons
+task. Here we compare the trajectories of continuous flow matching, discrete flow matching, and count bridges.
+CB achieves the lowest _W_ 2, MMD, and
+EMD, see Table 6.
+
+
+given just a unit-level model, so we approximate it through the diffusion sampling process itself.
+Starting from **x** 1, we run the sampling process as in Algorithm 2, but at each timestep _tk_ we: (1)
+predict **x** ˆ0 _∼_ _qθ_ ( _· |_ **x** _tk_ _, tk, z_ ), (2) project **x** ˆ0 to satisfy the aggregate constraint (see Sec. 4), yielding
+**x** ˜0, and (3) perform the sampling step using **x** ˜0 as the predicted endpoint. This projection–guided
+diffusion ensures the aggregate constraint is incorporated throughout the denoising trajectory (see
+Alg. 3). This process produces latent _x_ _[≈]_ 0 [samples that are consistent with the aggregate constraints,]
+which we can then use in the M-step to train the model.
+
+
+**M-Step** With these unit-level samples in hand, the M–step runs the bridge process as in Section 3.
+But instead of computing the loss on the unit-level latents, we compute the loss with respect to the
+aggregates. Given the ground-truth aggregate _a_ 0, we lift the same strictly proper score to aggregates:
+
+_Sρ_ _[A]_ - _p, a_ - = [1] 2 [E] _[p]_ - _ρ_ ( _A_ ( **X** ) _, A_ ( **X** _[′]_ ))� _−_ E _p_ - _ρ_ ( _A_ ( **X** ) _, a_ )� and _L_ agg( _θ_ ) = E _A_ 0 _,_ **X** _t,t_ - _Sρ_ _[A]_ - _qθ_ ( _· |_ **X** _t, t, z_ ) _,_ _A_ 0� [�]
+
+with the plug-in obtained by sampling **X** [ˆ] [(] 0 _[j]_ [)] _[∼]_ _[q][θ]_ [(] _[· |]_ **[ X]** _[t][, t, z]_ [)][ and forming][ ˆ] _[a]_ [(] _[j]_ [)] [=] _[ A]_ [( ˆ] **[X]** [(] 0 _[j]_ [)][)][.]
+
+
+**Approximate Sampling from the conditional distribution** Given a predicted endpoint **x** ˆ0 from
+our diffusion model and target aggregate _a_ 0, we need to sample from the conditional distribution
+_Qθ_ ( _· | A_ ( **X** 0) = _a_ 0). While this is intractable, we can derive a principled approximation.
+**Proposition** **4.1** (First–order aggregate projection) **.** _Let_ _A_ ( **X** 0) _be_ _the_ _aggregate,_ _and_ _let_ _p_ 0 _be_
+_the prior law of_ **X** 0 _._ _Under the regularity conditions in App. B.1, the aggregate–conditional law_
+_Qθ_ ( _· | A_ 0 = _a_ 0) _admits a first–order exponential tilt._ _The corresponding generalized KL projection_
+Π( **x** 0) = arg min
+**y** 0: _A_ ( **y** 0)= _a_ 0 _[D]_ [KL][(] **[y]** [0] _[∥]_ **[x]** [0][)]
+
+_gives a kind of first–order approximation to Qθ_ ( _·_ _|_ _A_ 0 = _a_ 0) _._ _For an elementwise sum A_ ( **x** 0) =
+
+- [�]
+
+
+_g_ _[x][g]_ [0] _[ this projection is the simple scaling]_ [ Π(] _[x]_ [0][)] _[g]_ [=] _[ a]_ [0] _[x][g]_ [0] _[/]_ [(][�]
+
+
+_g_ _[′][ x][g][′]_ [0][)] _[.]_
+
+
+The proposition shows that the natural rescaling operation is not ad hoc, but can be justified as a
+kind of first-order approximation to the true conditional distribution in a large sample regime (see
+Appendix B.1). When unit-level training data exist, we can learn a projection Π _ψ_ (ˆ **x** 0 _, z, a_ 0) that
+actually enables sampling conditional on the mean. See Sec. 6 where we show how to learn such a
+projection.
+
+
+5 RELATED WORKS
+
+
+**Stochastic interpolants.** Our formulation allows us to transport any integer-valued distribution
+_p_ 1 to another integer-valued distribution _p_ 0. In the case of Euclidean state space early works such
+
+
+6
+
+
+as (De Bortoli et al., 2021; Vargas et al., 2021; Chen et al., 2021) have shown how to perform such
+an interpolation leveraging (Entropic) Optimal transport and the concept of Schrodinger Bridges.¨
+In more recent works, ignoring the Optimal Transport constraints, several works have proposed to
+bridge distributions in a more relaxed formulation leveraging the concept of Markov projection, see
+Peluchetti (2023); Albergo et al. (2023); Delbracio & Milanfar (2023); Liu et al. (2022; 2023) for
+instance. Those frameworks can be shown to be strictly equivalent to diffusion models in the case
+where one of the end distribution is a unit Gaussian, see Gao et al. (2025). However, those works are
+limited to the Euclidean setting, and extension to the integer-valued setting is required.
+
+
+**Discrete diffusion models.** Recently, with the advent of language diffusion models such as Ye
+et al. (2025); Song et al. (2025); Sahoo et al. (2024); Shi et al. (2024); Ou et al. (2024a); Arriola et al.
+(2025); Nie et al. (2024); Zheng et al. (2023), discrete diffusion models have gained considerable
+traction. Most works rely on discrete equivalents of the original formulation of diffusion models,
+explicitly or implicitly replacing the continuous Gaussian noising process by a Continuous-Time
+Markov Chain (CTMC) (Austin et al., 2021; Campbell et al., 2022; Lou et al., 2023; Campbell et al.,
+2024; Kitouni et al., 2024; Sun et al., 2023). Other approaches include relying on some Euclidean
+relaxation (Chen et al., 2022) or modelling the space of probability (Avdeyev et al., 2023; Stark et al.,
+2024). Similarly, flow matching techniques have been extended to cover this paradigm (Gat et al.,
+2024). Most of these works focus on _categorical_ data and therefore consider uninformed forward
+process such as uniform or masking process. In contrast, in this work, we focus on ordinal data. To
+the best of our knowledge, the only existing work that also deals with such a process is Blackout
+Diffusion (Santos et al., 2023), which considers a pure-death process where an image is taken to the
+all-zero limit, as opposed to an endpoint conditioned bridge. Our approach generalizes this setup in
+two ways: first, we allow births and deaths at every time, recovering their pure birth construction in
+the limit as _κ →_ 0; second, we generalize the process to a bridge which can transport _X_ 1 to _X_ 0.
+
+
+Finally, we highlight that diffusion models have been extended to the very general setting where
+only an _infinitesimal generator_ is available Benton et al. (2024); Holderrieth et al. (2024). While our
+work can be seen as an instanciation of this general framework, these general frameworks do not
+give any information regarding the design of the forward process for integer-valued data, the specific
+parameretization in terms of slack variables and the necessity of the distributional diffusion loss.
+
+
+**Distributional Diffusion Models.** In De Bortoli et al. (2025); Shen et al. (2025), the authors learn
+the conditional distribution _p_ 0 _|t_ ( _x_ 0 _|xt_ ) through the use of scoring rules, going beyond the classical
+training framework of diffusion, which approximates the conditional mean E[ _X_ 0 _|Xt_ = _xt_ ]. The
+importance of approximating the covariance was already noted by Nichol & Dhariwal (2021) and
+further analyzed in (Ho et al., 2020; Nichol & Dhariwal, 2021; Bao et al., 2022a;b; Ou et al., 2024b).
+In a similar flavor (Xiao et al., 2022) uses a GAN to approximate _p_ 0 _|t_ ( _x_ 0 _|xt_ ).
+
+
+**Sequence-to-expression models** An ambitious goal in biology is to predict gene expression from
+DNA sequence information. There have been several attempts to train deep learning models for
+sequence-to-expression prediction tasks (Barbadilla-Mart´ınez et al., 2025), including Enformer (Avsec
+et al., 2021), a state-of-the-art transformer-based DNA sequence model. While powerful, Enformer,
+like the vast majority of sequence-to-expression models, was trained on bulk gene expression data
+and is not able to predict single-cell expression profiles, missing the cellular heterogeneity and
+fine-grained regulatory patterns that shape tissue function.
+
+
+**Spatial transcriptomic deconvolution** Spatial transcriptomics encompasses a family of recently
+developed techniques which measure gene expression and spatial location in tissues. The majority of
+these techniques are not capable of resolving individual cells, instead providing aggregate information
+over small neighborhoods consisting of on the order of tens of cells (Moses & Pachter, 2022). To
+address this limitation, a number of deconvolution methods have been developed to infer singlecell level information (Li et al., 2023). The majority of these methods, including cell2location
+(Kleshchevnikov et al., 2022) and RCTD (Cable et al., 2022), require a paired non-spatially resolved
+scRNA-seq atlas, and output cluster-level mixture proportions rather than single cell counts. The
+ideal deconvolution would recover full single-cell count profiles directly from spatial data without
+requiring external reference atlases. DestVI (Lopez et al., 2022), which outputs count profiles but
+requires a reference, and STDeconvolve (Miller et al., 2022) which does not require a reference but
+outputs cluster-level predictions, both take steps toward this goal.
+
+
+7
+
+
+Figure 3: CFM, DFM, and CB on our low-rank mixture of Gaussians transport experiment across
+dimensions and NFE. See App. D.2 for full details.
+
+
+6 APPLICATIONS
+
+
+We evaluate with three distributional metrics: the Energy score, the Wasserstein-2 distance, and the
+MMD (RBF). For deconvolution, we evaluate cell-type proportion predictions using RMSE, the
+Jensen-Shannon Divergence (JSD), and Spearman correlation following Li et al. (2023). Synthetic
+tasks have std. errors over 3 training seeds; main applications have std. errors 3 over inference seeds.
+
+
+6.1 SYNTHETIC DISTRIBUTIONS
+
+
+Here, we benchmark count bridges (CB) against continuous flow matching (CFM) (Lipman et al.,
+2022) and discrete flow matching (DFM) (Gat et al., 2024) across a range of synthetic experiments.
+
+
+**Discrete 8-Gaussians to 2-Moons.** We adapt this classic task to the integers. We plot the learned
+trajectories in Fig 2. Qualitatively CB achieves the best performance. DFM is much more competitive
+in this experiment than CFM, but DFM trajectories are decoupled from the underlying geometry,
+whereas CB produces OT-like trajectories similar to CFM. These qualitative evaluations are confirmed
+quantitatively: CB achieves the best performance across _W_ 2, Energy, and MMD (see App. D.1).
+
+
+**Scaling in Low-Rank Gaussian Mixtures.** To test scalability to higher dimensions, we construct
+integer-valued datasets with fixed intrinsic dimensionality while ambient dimension _d_ increases in
+powers of two from 4 to 512. Each dataset is a 5-component Gaussian mixture with latent rank _r_ = 3,
+projected to Z _[d]_ . In Fig. 3 see that CB has the best scaling in dimensionality (see App. D.2 for more).
+
+
+**Deconvolution of Gaussian Mixtures.** We extend the lowrank mixture task to evaluate deconvolution capabilities. In this
+experiment, each observation is an aggregate constructed by
+summing a group of _G_ samples. For each group, the _G_ samples
+are drawn from a group-specific Gaussian mixture whose component weights are sampled from a Dirichlet distribution with
+concentration parameters ( _α_ 1 _, . . ., α_ 5). The labels of the _G_
+source components are provided as unit-level side information.
+We then vary the size of the group _G_ and the extent of variation
+
+Figure 4: Deconvolution of the low
+between groups by changing the concentration parameter _α_
+
+rank Gaussian mixture across dif
+(see Appendix D.3 for details). In Fig. 4 we see performance
+
+ferent group sizes and levels of
+
+degrades as groups become more uniform and larger. We ex
+between-group heterogeneity.
+
+plore the theoretical limits to deconvolution in Apps. B.2 and
+B.3, which confirm that deconvolution requires between-group heterogeneity to enable identification,
+which is inherently lost as groups become large. Despite these limits, we demonstrate practical
+deconvolution on moderately-sized groups in our spatial transcriptomics application (Section 6.3).
+
+
+6.2 MODELLING GENE EXPRESSION AT SINGLE-CELL AND SINGLE-NUCLEOTIDE RESOLUTION
+
+
+A central goal in biology is to understand the relationship between DNA sequence and gene expression.
+Many models relate sequence and expression, the most prominent of which, such as Enformer (Avsec
+
+
+8
+
+
+**Method** **Bulk MSE** **CT MSE**
+
+
+Fine-tuned Enformer 2.590 3.142
+Count Bridge **0.601** **1.410**
+_±_ 0 _._ 000 _±_ 0 _._ 002
+
+
+Table 1: Nucleotide-level MSE for bulk and
+bulked cell-type (CT) specific predictions.
+
+
+**Comparison** **MMD** **W2** **Energy**
+
+
+Bulk mean 0.515 0.208 56.800
+Count Bridge **0.446** **0.182** **28.583**
+_±_ 0 _._ 000 _±_ 0 _._ 001 _±_ 0 _._ 003
+
+
+Table 2: Gene expression count profile deconvolution error for bulk RNA sequencing data.
+
+
+et al., 2021), are Transformer-based models that predict expression from sequence. More recent
+work has explored fine-tuning Enformer on single-cell data (Hingerl et al., 2024). On the other hand,
+there is a mature literature on deconvolving bulk RNA-seq (Newman et al., 2019; Wang et al., 2019).
+These methods operate at the gene (rather than nucleotide) level, leveraging bulk cell-type profiles or
+single-cell references to deconvolve bulk profiles into cell-type proportions (not count profiles).
+
+
+We use CBs to jointly model sequence and **Method** **JSD** **RMSE** **Spearman**
+single-cell expression counts in scRNA-seq
+
+CIBERSORTx 0.194 0.109 0.079
+
+data, and to enable nucleotide-level decon
+MuSiC 0.313 0.140 0.186
+
+volution of bulk profiles. To validate CBs
+
+Count Bridge **0.113** **0.073** **0.267**
+
+in this setting, we demonstrate two key re- _±_ 0 _._ 001 _±_ 0 _._ 000 _±_ 0 _._ 005
+sults. First, we show that CBs trained on
+single-cell data produce meaningful count Table 3: Cell-type proportion deconvolution error for
+profiles and outperform a fine-tuned En- nucleotide level bulk RNA sequencing data.
+former model on sequence-to-expression prediction. Second, we show that conditioning CBs on
+bulk profiles enables deconvolution of bulk gene expression into inferred single-cell gene expression profiles. We validate these deconvolved profiles distributionally and show that they achieve
+state-of-the-art performance relative to cell-type proportion deconvolution models.
+
+
+**Modeling sequence and single-cell counts** We train CBs on PBMC scRNA-seq counts at nucleotide
+resolution using 10 [6] cells across 10 [3] donors (Yazar et al., 2022). Each training example corresponds
+to a nucleotide position in a single cell, and is represented by the noisy count _xt_ and diffusion
+time _t_ from the CB forward process, a cell-type embedding, a local genomic context _z_ obtained
+by encoding the surrounding DNA sequence with Enformer, and i.i.d. noise _ζ_ for the distributional
+loss. These features are concatenated and passed through residual multi–head attention blocks and a
+final softplus head that parameterizes the conditional count distribution _X_ 0 _|Xt, t, z_ . The model is
+trained directly on unit-level (single-cell) expression profiles rather than only on aggregated counts.
+During training we randomly mask cell-type labels so that the model supports both unconditional and
+cell-type-conditional sampling at test time.
+
+
+**Learned projection for deconvolution** Since we have unit-level data we can learn a better projection
+operator than the simple rescaling function in Prop. 4.1. We augment the CB with a small projection
+module Π _ψ_, an attention block operating on each nucleotide (represented by _z_ ) across cells in the
+batch. Given an initial CB prediction _x_ ˆ0, an observed aggregate _a_ 0, and the noisy state _xt_, the
+module outputs **x** ˜0 = Π _ψ_ (ˆ **x** 0 _, a_ 0 _,_ **x** _t, z_ ) _,_ we train this using the distributional loss to learn to sample
+_X_ 0 _|_ _A_ ( _X_ 0)= _a_ 0 _, Xt, t_ . To support both unconditional and aggregate-conditioned inference, we
+apply the projection module only on a random 10% of training examples where _a_ 0 is provided.
+
+
+**Bulk gene expression** We first evaluate the ability of our model to predict expression from sequence,
+both unconditionally and conditional on cell type. As a baseline, we use an Enformer model finetuned directly on the PBMC dataset. We find that Count Bridge predictions outperform fine-tuned
+Enformer (Table 1, for results by cell type and further details see App. E).
+
+
+**Deconvolved profiles** We can use this unit-level model for deconvolution tasks: we can condition
+on an aggregate (bulk profile) to sample single-cell profiles from the model while matching that
+aggregate. We next evaluate the ability of CBs to deconvolve mixtures of cell types from heldout individuals. We held out 10% of patients from our training set and synthetically bulked these
+patients. Since we have the ground truth data, we can then evaluate deconvolution quality. We
+first evaluate the distributional quality of these predictions against the bulk mean, further validating
+the CB count profiles (Table 2). As a more robust set of baselines, we compare to CIBERSORTx
+(Newman et al., 2019) and MuSiC (Wang et al., 2019). To facilitate comparison, we aggregate our
+nucleotide-level predictions into gene counts and assign each of our deconvolved cells to the closest
+
+
+9
+
+
+**Method** **JSD** **RMSE** **Spearman**
+
+
+CIBERSORTx 0.194 0.109 0.079
+MuSiC 0.313 0.140 0.186
+Count Bridge **0.113** **0.073** **0.267**
+_±_ 0 _._ 001 _±_ 0 _._ 000 _±_ 0 _._ 005
+
+
+Table 3: Cell-type proportion deconvolution error for
+nucleotide level bulk RNA sequencing data.
+
+
+cell type. CBs achieve better performance on JSD, RMSE, and Spearman correlation while providing
+nucleotide-level counts (Table 3). In App. E we plot the UMAP for qualitative comparison.
+
+
+6.3 DECONVOLVING SPATIAL TRANSCRIPTOMIC SPOTS INTO SINGLE-CELL COUNTS
+Next, we show how CBs can be used to infer single cell gene expression profiles from spot-level
+aggregates in spatial transcriptomic data. In spatial transcriptomic data generated by Visium (Stahl˚
+et al., 2016), it is common to have access to side information beyond the spot-level count aggregates.
+In particular, many datasets include images of the cells with a nuclear stain (Palla et al., 2022). CBs
+provide a natural way to leverage this cell-level side information to deconvolve aggregate count data.
+
+
+**Modeling spatial aggregates** We train CBs on a MERFISH mouse brain dataset (Vizgen, 2021),
+which is resolved at the single-cell level, and artificially aggregate neighborhoods of cells to simulate
+spot-level Visium data. This synthetic dataset gives us access to spot-level aggregates and their
+corresponding single-cell ground truth, as well as single-cell nuclear images. Following the notation
+in Sec. 4, the spot-level counts can be treated as aggregates _a_ 0, and single-cell images can be treated
+as unit-level side information _z_ . In this application, we never observe single-cell count profiles, only
+spot-level aggregates and the single-cell images. We leverage a UViT (Bao et al., 2023) extended to
+incorporate count and noise patches (see App. F). We use a simple source distribution _X_ 1 _∼_ Poi(10).
+
+
+**Cell** **type** **proportions** We benchmark CBs
+
+**Method** **JSD** **RMSE** **Spearman**
+
+against STDeconvolve (Miller et al., 2022), a
+widely used spatial transcriptomic deconvolu- STDeconvolve 0.288 0.177 0.255
+tion method which is state-of-the-art among Count Bridge **0.231** **0.110** **0.332**
+
+_±_ 0 _._ 002 _±_ 0 _._ 001 _±_ 0 _._ 001
+
+reference-free approaches Li et al. (2023) (see
+Appendix F for comparisons to reference-based Table 4: Cell-type proportion deconvolution error
+methods). STDeconvolve outputs cell type (clus- for spatial transcriptomics.
+ter identity) proportions for each spot rather than single cell counts. As such, we evalute the quality of
+deconvolution by comparing the predicted cell type proportions to the true cell type proportions per
+spot. For CBs, which provide single-cell count profile predictions rather than cell type proportions,
+we assign each predicted count profile its nearest neighbor cell type in order to compare against
+STDeconvolve. CBs outperforms STDeconvolve on both the JSD and the RMSE (Table 4).
+
+
+**Count profiles** We next evaluate the quality of the
+count profiles inferred by CBs. Here, because STDe- **Comparison** **MMD** **W2** **Energy**
+convolve does not provide these predictions, we Spot mean 0.409 0.030 41.717
+instead consider a simple baseline: predicting the Count Bridge **0.203** **0.017** **8.903**
+spot-level mean ( _a_ 0 _/G_ ) for each cell. This baseline, _±_ 0 _._ 000 _±_ 0 _._ 000 _±_ 0 _._ 014
+while seemingly naive, is actually biologically well
+Table 5: Gene expression count profile decon
+motivated. In spatial transcriptomics, cells within a
+
+volution error for spatial transcriptomics
+
+spot represent local tissue organization where neighboring cells coordinate their functions (Armingol et al., 2021). As such, we expect cells in spatial
+neighborhoods to have correlated gene expression profiles, making the spot mean a reasonable
+baseline. Nonetheless, CBs outperform the spot-level mean baseline (see Table 5), showing CBs can
+learn meaningful unit-level distributions from real-world aggregate data. In App. F we provide a
+more detailed biological evaluation of the cell types and pathways in our generated data, alongside
+the UMAP to facilitate qualitative comparison.
+
+
+**Method** **JSD** **RMSE** **Spearman**
+
+
+STDeconvolve 0.288 0.177 0.255
+Count Bridge **0.231** **0.110** **0.332**
+_±_ 0 _._ 002 _±_ 0 _._ 001 _±_ 0 _._ 001
+
+Table 4: Cell-type proportion deconvolution error
+for spatial transcriptomics.
+
+
+**Comparison** **MMD** **W2** **Energy**
+
+
+Spot mean 0.409 0.030 41.717
+Count Bridge **0.203** **0.017** **8.903**
+_±_ 0 _._ 000 _±_ 0 _._ 000 _±_ 0 _._ 014
+
+
+Table 5: Gene expression count profile deconvolution error for spatial transcriptomics
+
+
+7 CONCLUSION
+
+
+Count Bridges offer a tractable, discrete-native alternative to continuous diffusion models, unifying
+direct count generation with deconvolution from aggregates. We demonstrate the power of Count
+Bridges for nucleotide-level deconvolution of bulk RNA-seq and spatial transcriptomic deconvolution.
+
+
+**Limitations** (i) When counts are well-approximated as continuous, Euclidean models may match
+or exceed performance. (ii) Identifiability in pure deconvolution degrades as group sizes grow or
+between-group heterogeneity shrinks, so our EM procedure is most reliable at moderate aggregation.
+(iii) The projection step we use is a first-order surrogate and lacks serious theoretical support.
+
+
+Despite these caveats, Count Bridges lay the groundwork for rigorous discrete generative modeling and invite future work on a deeper understanding of the projection-guided sampler, sharper
+identifiability bounds, and generally stronger guarantees for projection-guided EM.
+
+
+10
+
+
+**Ethics** **Statement.** This study uses publicly released, de-identified single-cell and spatial transcriptomics datasets under their respective licenses; no new human subject data were collected, and
+institutional review board (IRB) approval was therefore not required. We do not foresee serious
+ethical implications to Count Bridges beyond the risks already posed by standard diffusion/flow
+matching models. Our deconvolution methods could possibly pose some additional privacy risks. We
+used LLMs to help draft portions of the code used in our experiments and to edit portions of this
+manuscript. All our models are intended for research use only, not clinical use. LLMs were not used
+in any way significantly outside the current norms of academic research.
+
+
+**Reproducibility Statement.** We have taken significant steps to ensure that all results presented
+in this work are reproducible. [An anonymous source code repository is provided here, containing](https://github.com/njwfish/count_bridges)
+complete implementations of the Count Bridge framework, including model architectures, training
+procedures, projection-based deconvolution, and evaluation pipelines. The appendix includes full
+mathematical derivations and proofs of all theoretical claims. We also provide descriptions of all data
+preprocessing steps for synthetic benchmarks, PBMC sequence-to-expression prediction, and spatial
+transcriptomic aggregation, as well as architectural and hyperparameter specifications. Together,
+these materials are intended to allow independent researchers to fully reproduce our theoretical and
+empirical findings.
+
+
+REFERENCES
+
+
+[Nist digital library of mathematical functions. https://dlmf.nist.gov/, 2025. See §10.41(ii).](https://dlmf.nist.gov/)
+Accessed 2025-09-24.
+
+
+Michael S Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying
+framework for flows and diffusions. _arXiv preprint arXiv:2303.08797_, 2023.
+
+
+Erick Armingol, Adam Officer, Olivier Harismendy, and Nathan E Lewis. Deciphering cell-cell
+interactions and communication from gene expression. _Nature reviews. Genetics_, 22(2):71–88,
+February 2021. ISSN 1471-0056,1471-0064. doi: 10.1038/s41576-020-00292-x.
+
+
+Marianne Arriola, Aaron Gokaslan, Justin T Chiu, Zhihan Yang, Zhixuan Qi, Jiaqi Han, Subham Sekhar Sahoo, and Volodymyr Kuleshov. Block diffusion: Interpolating between autoregressive and diffusion language models. _arXiv preprint arXiv:2503.09573_, 2025.
+
+
+Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured
+denoising diffusion models in discrete state-spaces. _Advances in neural information processing_
+_systems_, 34:17981–17993, 2021.
+
+
+Pavel Avdeyev, Chenlai Shi, Yuhao Tan, Kseniia Dudnyk, and Jian Zhou. Dirichlet diffusion score
+model for biological sequence generation. In _International Conference on Machine Learning_, pp.
+1276–1301. PMLR, 2023.
+
+
+Ziga Avsec, Vikram Agarwal, Daniel Visentin, Joseph R Ledsam, Agnieszka Grabska-Barwinska,ˇ
+Kyle R Taylor, Yannis Assael, John Jumper, Pushmeet Kohli, and David R Kelley. Effective gene
+expression prediction from sequence by integrating long-range interactions. _Nature methods_, 18
+(10):1196–1203, 4 October 2021. ISSN 1548-7091,1548-7105. doi: 10.1038/s41592-021-01252-x.
+
+
+Fan Bao, Chongxuan Li, Jiacheng Sun, Jun Zhu, and Bo Zhang. Estimating the optimal covariance
+with imperfect mean in diffusion probabilistic models. In _International Conference on Machine_
+_Learning_, 2022a.
+
+
+Fan Bao, Chongxuan Li, Jun Zhu, and Bo Zhang. Analytic-DPM: an analytic estimate of the optimal
+reverse variance in diffusion probabilistic models. In _International_ _Conference_ _on_ _Learning_
+_Representations_, 2022b.
+
+
+Fan Bao, Shen Nie, Kaiwen Xue, Yue Cao, Chongxuan Li, Hang Su, and Jun Zhu. All are worth
+words: A vit backbone for diffusion models. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_
+_computer vision and pattern recognition_, pp. 22669–22679, 2023.
+
+
+Luc´ıa Barbadilla-Mart´ınez, Noud Klaassen, Bas van Steensel, and Jeroen de Ridder. Predicting gene
+expression from DNA sequence using deep learning models. _Nature reviews. Genetics_, 26(10):
+666–680, 13 May 2025. ISSN 1471-0056,1471-0064. doi: 10.1038/s41576-025-00841-2.
+
+
+11
+
+
+Sean C Bendall, Erin F Simonds, Peng Qiu, El-Ad D Amir, Peter O Krutzik, Rachel Finck, Robert V
+Bruggner, Rachel Melamed, Angelica Trejo, Olga I Ornatsky, Robert S Balderas, Sylvia K Plevritis,
+Karen Sachs, Dana Pe’er, Scott D Tanner, and Garry P Nolan. Single-cell mass cytometry of
+differential immune and drug responses across a human hematopoietic continuum. _Science (New_
+_York, N.Y.)_, 332(6030):687–696, 6 May 2011. ISSN 0036-8075,1095-9203. doi: 10.1126/science.
+1198704.
+
+
+Joe Benton, Yuyang Shi, Valentin De Bortoli, George Deligiannidis, and Arnaud Doucet. From
+denoising diffusions to denoising markov models. _Journal of the Royal Statistical Society Series B:_
+_Statistical Methodology_, 86(2):286–301, 2024.
+
+
+Dylan M Cable, Evan Murray, Luli S Zou, Aleksandrina Goeva, Evan Z Macosko, Fei Chen,
+and Rafael A Irizarry. Robust decomposition of cell type mixtures in spatial transcriptomics.
+_Nature biotechnology_, 40(4):517–526, April 2022. ISSN 1087-0156,1546-1696. doi: 10.1038/
+s41587-021-00830-w.
+
+
+Andrew Campbell, Joe Benton, Valentin De Bortoli, Thomas Rainforth, George Deligiannidis, and
+Arnaud Doucet. A continuous time framework for discrete denoising models. _Advances in Neural_
+_Information Processing Systems_, 35:28266–28279, 2022.
+
+
+Andrew Campbell, Jason Yim, Regina Barzilay, Tom Rainforth, and Tommi Jaakkola. Generative
+flows on discrete state-spaces: Enabling multimodal flows with applications to protein co-design.
+_arXiv preprint arXiv:2402.04997_, 2024.
+
+
+Tianrong Chen, Guan-Horng Liu, and Evangelos A Theodorou. Likelihood training of schr _\_ ” odinger
+bridge using forward-backward sdes theory. _arXiv preprint arXiv:2110.11291_, 2021.
+
+
+Ting Chen, Ruixiang Zhang, and Geoffrey Hinton. Analog bits: Generating discrete data using
+diffusion models with self-conditioning. _arXiv preprint arXiv:2208.04202_, 2022.
+
+
+Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion schrodinger¨
+bridge with applications to score-based generative modeling. _Advances_ _in_ _neural_ _information_
+_processing systems_, 34:17695–17709, 2021.
+
+
+Valentin De Bortoli, Alexandre Galashov, J Swaroop Guntupalli, Guangyao Zhou, Kevin Murphy,
+Arthur Gretton, and Arnaud Doucet. Distributional diffusion models with scoring rules. _arXiv_
+_preprint arXiv:2502.02483_, 2025.
+
+
+Mauricio Delbracio and Peyman Milanfar. Inversion by direct iteration: An alternative to denoising
+diffusion for image restoration. _arXiv preprint arXiv:2303.11435_, 2023.
+
+
+Luc Devroye. Simulating bessel random variables. _Statistics & probability letters_, 57(3):249–257,
+2002.
+
+
+C Dom´ınguez Conde, C Xu, L B Jarvis, D B Rainbow, S B Wells, T Gomes, S K Howlett, O Suchanek,
+K Polanski, H W King, L Mamanova, N Huang, P A Szabo, L Richardson, L Bolt, E S Fasouli,
+K T Mahbubani, M Prete, L Tuck, N Richoz, Z K Tuong, L Campos, H S Mousa, E J Needham,
+S Pritchard, T Li, R Elmentaite, J Park, E Rahmani, D Chen, D K Menon, O A Bayraktar, L K
+James, K B Meyer, N Yosef, M R Clatworthy, P A Sims, D L Farber, K Saeb-Parsy, J L Jones,
+and S A Teichmann. Cross-tissue immune cell analysis reveals tissue-specific features in humans.
+_Science (New York, N.Y.)_, 376(6594):eabl5197, 13 May 2022. ISSN 0036-8075,1095-9203. doi:
+10.1126/science.abl5197.
+
+
+Ruiqi Gao, Emiel Hoogeboom, Jonathan Heek, Valentin De Bortoli, Kevin Patrick Murphy, and Tim
+Salimans. Diffusion models and gaussian flow matching: Two sides of the same coin. In _The_
+_Fourth Blogpost Track at ICLR 2025_, 2025.
+
+
+Itai Gat, Tal Remez, Neta Shaul, Felix Kreuk, Ricky TQ Chen, Gabriel Synnaeve, Yossi Adi, and
+Yaron Lipman. Discrete flow matching. _Advances in Neural Information Processing Systems_, 37:
+133345–133385, 2024.
+
+
+Tilmann Gneiting and Adrian E Raftery. Strictly proper scoring rules, prediction, and estimation.
+_Journal of the American statistical Association_, 102(477):359–378, 2007.
+
+
+12
+
+
+Johannes C Hingerl, Laura D Martens, Alexander Karollus, Trevor Manz, Jason D Buenrostro,
+Fabian J Theis, and Julien Gagneur. scooby: Modeling multi-modal genomic profiles from
+DNA sequence at single-cell resolution. _bioRxiv.org:_ _the_ _preprint_ _server_ _for_ _biology_, pp.
+2024.09.19.613754, 23 September 2024. doi: 10.1101/2024.09.19.613754.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _Advances in_
+_Neural Information Processing Systems_, 2020.
+
+
+Peter Holderrieth, Marton Havasi, Jason Yim, Neta Shaul, Itai Gat, Tommi Jaakkola, Brian Karrer,
+Ricky TQ Chen, and Yaron Lipman. Generator matching: Generative modeling with arbitrary
+markov processes. _arXiv preprint arXiv:2410.20587_, 2024.
+
+
+Ouail Kitouni, Niklas Nolte, James Hensman, and Bhaskar Mitra. Disk: A diffusion model for
+structured knowledge, 2024. [URL https://arxiv.org/abs/2312.05253.](https://arxiv.org/abs/2312.05253)
+
+
+Allon M Klein, Linas Mazutis, Ilke Akartuna, Naren Tallapragada, Adrian Veres, Victor Li, Leonid
+Peshkin, David A Weitz, and Marc W Kirschner. Droplet barcoding for single-cell transcriptomics
+applied to embryonic stem cells. _Cell_, 161(5):1187–1201, 21 May 2015. ISSN 0092-8674,10974172. doi: 10.1016/j.cell.2015.04.044.
+
+
+Vitalii Kleshchevnikov, Artem Shmatko, Emma Dann, Alexander Aivazidis, Hamish W King, Tong Li,
+Rasa Elmentaite, Artem Lomakin, Veronika Kedlian, Adam Gayoso, Mika Sarkin Jain, Jun Sung
+Park, Lauma Ramona, Elizabeth Tuck, Anna Arutyunyan, Roser Vento-Tormo, Moritz Gerstung,
+Louisa James, Oliver Stegle, and Omer Ali Bayraktar. Cell2location maps fine-grained cell
+types in spatial transcriptomics. _Nature_ _biotechnology_, 40(5):661–671, 13 May 2022. ISSN
+1087-0156,1546-1696. doi: 10.1038/s41587-021-01139-4.
+
+
+Christian Leonard.´ A survey of the schr _\_ ” odinger problem and some of its connections with optimal
+transport. _arXiv preprint arXiv:1308.0215_, 2013.
+
+
+Haoyang Li, Juexiao Zhou, Zhongxiao Li, Siyuan Chen, Xingyu Liao, Bin Zhang, Ruochi Zhang,
+Yu Wang, Shiwei Sun, and Xin Gao. A comprehensive benchmarking with practical guidelines for
+cellular deconvolution of spatial transcriptomics. _Nature communications_, 14(1):1548, 21 March
+2023. ISSN 2041-1723,2041-1723. doi: 10.1038/s41467-023-37168-7.
+
+
+Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching
+for generative modeling. _arXiv preprint arXiv:2210.02747_, 2022.
+
+
+Guan-Horng Liu, Arash Vahdat, De-An Huang, Evangelos A Theodorou, Weili Nie, and Anima
+Anandkumar. I 2 sb: Image-to-image schr _\_ ” odinger bridge. _arXiv preprint arXiv:2302.05872_,
+2023.
+
+
+Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and
+transfer data with rectified flow. _arXiv preprint arXiv:2209.03003_, 2022.
+
+
+Romain Lopez, Baoguo Li, Hadas Keren-Shaul, Pierre Boyeau, Merav Kedmi, David Pilzer, Adam
+Jelinski, Ido Yofe, Eyal David, Allon Wagner, Can Ergen, Yoseph Addadi, Ofra Golani, Franca
+Ronchese, Michael I Jordan, Ido Amit, and Nir Yosef. DestVI identifies continuums of cell types
+in spatial transcriptomics data. _Nature biotechnology_, 40(9):1360–1369, September 2022. ISSN
+1087-0156,1546-1696. doi: 10.1038/s41587-022-01272-8.
+
+
+Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion modeling by estimating the ratios
+of the data distribution. _arXiv preprint arXiv:2310.16834_, 2023.
+
+
+Brendan F Miller, Feiyang Huang, Lyla Atta, Arpan Sahoo, and Jean Fan. Reference-free
+cell type deconvolution of multi-cellular pixel-resolution spatially resolved transcriptomics
+data. _Nature_ _communications_, 13(1):2339, 29 April 2022. ISSN 2041-1723,2041-1723. doi:
+10.1038/s41467-022-30033-z.
+
+
+Lambda Moses and Lior Pachter. Museum of spatial transcriptomics. _Nature methods_, 19(5):534–546,
+10 May 2022. ISSN 1548-7091,1548-7105. doi: 10.1038/s41592-022-01409-2.
+
+
+13
+
+
+Aaron M Newman, Chloe B Steen, Chih Long Liu, Andrew J Gentles, Aadel A Chaudhuri, Florian´
+Scherer, Michael S Khodadoust, Mohammad S Esfahani, Bogdan A Luca, David Steiner, et al.
+Determining cell type abundance and expression from bulk tissues with digital cytometry. _Nature_
+_biotechnology_, 37(7):773–782, 2019.
+
+
+Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models.
+In _International Conference on Machine Learning_, 2021.
+
+
+Shen Nie, Fengqi Zhu, Chao Du, Tianyu Pang, Qian Liu, Guangtao Zeng, Min Lin, and Chongxuan
+Li. Scaling up masked diffusion models on text. _arXiv preprint arXiv:2410.18514_, 2024.
+
+
+Jingyang Ou, Shen Nie, Kaiwen Xue, Fengqi Zhu, Jiacheng Sun, Zhenguo Li, and Chongxuan Li.
+Your absorbing discrete diffusion secretly models the conditional distributions of clean data. _arXiv_
+_preprint arXiv:2406.03736_, 2024a.
+
+
+Zijing Ou, Mingtian Zhang, Andi Zhang, Tim Z Xiao, Yingzhen Li, and David Barber. Diffusion
+model with optimal covariance matching. _arXiv preprint arXiv:2406.10808_, 2024b.
+
+
+Giovanni Palla, Hannah Spitzer, Michal Klein, David Fischer, Anna Christina Schaar, Louis Benedikt
+Kuemmerle, Sergei Rybakov, Ignacio L Ibarra, Olle Holmberg, Isaac Virshup, Mohammad Lotfollahi, Sabrina Richter, and Fabian J Theis. Squidpy: a scalable framework for spatial omics
+analysis. _Nature methods_, 19(2):171–178, 28 February 2022. ISSN 1548-7091,1548-7105. doi:
+10.1038/s41592-021-01358-2.
+
+
+Stefano Peluchetti. Non-denoising forward-time diffusions. _arXiv preprint arXiv:2312.14589_, 2023.
+
+
+A Raj, P V D van den Bogaard, Scott A Rifkin, A van Oudenaarden, and Sanjay Tyagi. Imaging
+individual mRNA molecules using multiple singly labeled probes. _Nature methods_, 5(10):877–879,
+21 September 2008. ISSN 1548-7091,1548-7105. doi: 10.1038/nmeth.1253.
+
+
+Franc¸ois Rozet, Ger´ ome Andry, Franˆ c¸ois Lanusse, and Gilles Louppe. Learning diffusion priors from
+observations by expectation maximization. _Advances in Neural Information Processing Systems_,
+37:87647–87682, 2024.
+
+
+Subham Sahoo, Marianne Arriola, Yair Schiff, Aaron Gokaslan, Edgar Marroquin, Justin Chiu,
+Alexander Rush, and Volodymyr Kuleshov. Simple and effective masked diffusion language
+models. _Advances in Neural Information Processing Systems_, 37:130136–130184, 2024.
+
+
+Javier E Santos, Zachary R Fox, Nicholas Lubbers, and Yen Ting Lin. Blackout diffusion: generative
+diffusion models in discrete-state spaces. In _International Conference on Machine Learning_, pp.
+9034–9059. PMLR, 2023.
+
+
+Xinwei Shen, Nicolai Meinshausen, and Tong Zhang. Reverse markov learning: Multi-step generative
+models for complex distributions. _arXiv preprint arXiv:2502.13747_, 2025.
+
+
+Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis Titsias. Simplified and generalized
+masked diffusion for discrete data. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 37:
+103131–103167, 2024.
+
+
+Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion schrodinger¨
+bridge matching. _Advances in Neural Information Processing Systems_, 36:62183–62223, 2023.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020.
+
+
+Yuxuan Song, Zheng Zhang, Cheng Luo, Pengyang Gao, Fan Xia, Hao Luo, Zheng Li, Yuehang
+Yang, Hongli Yu, Xingwei Qu, Yuwei Fu, Jing Su, Ge Zhang, Wenhao Huang, Mingxuan Wang,
+Lin Yan, Xiaoying Jia, Jingjing Liu, Wei-Ying Ma, Ya-Qin Zhang, Yonghui Wu, and Hao Zhou.
+Seed diffusion: A large-scale diffusion language model with high-speed inference, 2025. URL
+[https://arxiv.org/abs/2508.02193.](https://arxiv.org/abs/2508.02193)
+
+
+14
+
+
+Patrik L Stahl,˚ Fredrik Salmen,´ Sanja Vickovic, Anna Lundmark, Jose´ Fernandez´ Navarro, Jens
+Magnusson, Stefania Giacomello, Michaela Asp, Jakub O Westholm, Mikael Huss, Annelie
+Mollbrink, Sten Linnarsson, Simone Codeluppi, Ake Borg, Fredrik Pont [˚] en, Paul Igor Costea, Pelin´
+Sahlen,´ Jan Mulder, Olaf Bergmann, Joakim Lundeberg, and Jonas Frisen.´ Visualization and
+analysis of gene expression in tissue sections by spatial transcriptomics. _Science (New York, N.Y.)_,
+353(6294):78–82, 1 July 2016. ISSN 0036-8075,1095-9203. doi: 10.1126/science.aaf2403.
+
+
+Hannes Stark, Bowen Jing, Chenyu Wang, Gabriele Corso, Bonnie Berger, Regina Barzilay, and
+Tommi Jaakkola. Dirichlet flow matching with applications to dna sequence design. _arXiv preprint_
+_arXiv:2402.05841_, 2024.
+
+
+Haoran Sun, Lijun Yu, Bo Dai, Dale Schuurmans, and Hanjun Dai. Score-based continuous-time
+discrete diffusion models, 2023. [URL https://arxiv.org/abs/2211.16750.](https://arxiv.org/abs/2211.16750)
+
+
+Francisco Vargas, Pierre Thodoroff, Austen Lamacraft, and Neil Lawrence. Solving schrodinger¨
+bridges via maximum likelihood. _Entropy_, 23(9):1134, 2021.
+
+
+Vizgen. Vizgen Data Release V1.0, May 2021. Title of the publication associated with this dataset:
+Mouse Brain Receptor Map.
+
+
+Xuran Wang, Jihwan Park, Katalin Susztak, Nancy R Zhang, and Mingyao Li. Bulk tissue cell type
+deconvolution with multi-subject single-cell expression reference. _Nature communications_, 10(1):
+380, 2019.
+
+
+Zhisheng Xiao, Karsten Kreis, and Arash Vahdat. Tackling the generative learning trilemma with
+denoising diffusion GANs. In _International Conference on Learning Representations_, 2022.
+
+
+Seyhan Yazar, Jose Alquicira-Hernandez, Kristof Wing, Anne Senabouth, M Grace Gordon, Stacey
+Andersen, Qinyi Lu, Antonia Rowson, Thomas R P Taylor, Linda Clarke, Katia Maccora, Christine
+Chen, Anthony L Cook, Chun Jimmie Ye, Kirsten A Fairfax, Alex W Hewitt, and Joseph E Powell.
+Single-cell eQTL mapping identifies cell type-specific genetic control of autoimmune disease.
+_Science (New York, N.Y.)_, 376(6589):eabf3041, 8 April 2022. ISSN 0036-8075,1095-9203. doi:
+10.1126/science.abf3041.
+
+
+Jiacheng Ye, Zhihui Xie, Lin Zheng, Jiahui Gao, Zirui Wu, Xin Jiang, Zhenguo Li, and Lingpeng
+Kong. Dream 7b: Diffusion large language models, 2025. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2508.15487)
+[2508.15487.](https://arxiv.org/abs/2508.15487)
+
+
+Lin Zheng, Jianbo Yuan, Lei Yu, and Lingpeng Kong. A reparameterized discrete diffusion model for
+text generation. _arXiv preprint arXiv:2302.05737_, 2023.
+
+
+A COUNT BRIDGES
+
+
+A.1 COUNT BRIDGES
+
+
+To review the setup, we have _X_ 0 _∼_ _p_ 0, _X_ 1 _∼_ _p_ 1, where _X_ 0 _, X_ 1 lie on a discrete lattice (Z [+] ). We
+derive an unconditional forward process kernel _Kt|_ 0 = _P_ ( _Xt|X_ 0) and a family of bridge kernels
+_Ks|_ 0 _,t_ = _P_ ( _Xs|Xt, X_ 0) _,_ 0 _≤_ _s_ _≤_ _t_ _≤_ 1 such that these kernels satisfy the consistency property
+described in 1.
+
+
+In this section, we define the model and the associated kernels formally, and show how the Binomial
+and Hypergeometric distributions emerge in our framework. We prove they satisfy the consistency
+property thus establishing their correctness as diffusion kernels for count data.
+
+
+A.1.1 SAMPLING PROCESS
+
+
+**Forward** **Kernel:** Let _w_ : [0 _,_ 1] _→_ R _≥_ 0 be an increasing “jump–intensity” shape function with
+_w_ (0) = 0 and _w_ (1) = 1. Intuitively, _w_ ( _t_ ) describes the proportion of “jumps” that have occurred
+by time _t_ for _t_ _∈_ [0 _,_ 1]. Further, let _λ_ + _, λ−_ _>_ 0 be intensities for the birth and death processes
+respectively. We then define the cumulative birth (+) / death (-) intensities
+
+
+Λ+( _t_ ) = _λ_ + _w_ ( _t_ ) _,_ Λ _−_ ( _t_ ) = _λ−_ _w_ ( _t_ ) _,_
+
+
+15
+
+
+We use these jump intensities to define the independent (non-homogeneous) Birth/Death Poisson
+processes, ( _Bt_ ) _t∈_ [0 _,_ 1] and ( _Dt_ ) _t∈_ [0 _,_ 1] respectively, such that:
+
+
+_Bt_ _∼_ Poi(Λ+( _t_ )) _, Dt_ _∼_ Poi(Λ _−_ ( _t_ ))
+
+
+These Random Variables define counts at _t_, _Xt_ = _X_ 0 + _Bt −_ _Dt_, giving us the unconditional forward
+kernel _Kt|_ 0.
+
+
+**Bridge Kernels:** To derive _Ks|_ 0 _,t_, we first define three more random variables that arise through the
+Poisson process.
+Let _dt_ denote the net displacement at time _t_, i.e:
+
+
+_dt_ = _Xt −_ _X_ 0 _t ∈_ [0 _,_ 1]
+
+
+Let _Nt_ denote the total number of jumps that have occurred until time _t_, i.e:
+
+
+_Nt_ = _Bt_ + _Dt_ _t ∈_ [0 _,_ 1]
+
+
+Finally, we define _Mt_, denoting the number of “slack” jumps that cancel each other out during the
+process. For example, a birth followed by a death results in no net displacement, but result in 1 “slack”
+jump. By definition:
+_Mt_ = _min_ ( _Bt, Dt_ ) _t ∈_ [0 _,_ 1]
+
+
+It follows from the definitions that any two of the variables define the third, as shown in equation 7.
+
+
+While _dt_ is observed, _Nt_ and _Mt_ are not. For the following lemmas, we first assume that _Mt_ = _m_ is
+known and fixed before deriving a tractable posterior distribution for _Mt_ in the next section. We now
+condition on the points _X_ 0 = _x_ 0, _Xt_ = _xt_ and _Mt_ = _m_ to obtain:
+
+_dt_ = _xt −_ _x_ 0 _,_ _Nt_ = _|dt|_ + 2 _m_ _Bt_ = [1] _Dt_ = _Nt −_ _Bt._
+
+2 [(] _[N][t]_ [ +] _[ d][t]_ [)] _[,]_
+
+
+We first characterize two properties of ( _Nt_ ) _t∈_ (0 _,_ 1):
+
+
+**Proposition** **A.1** (Total jumps process and time-rescaling invariance) **.** ( _Nt_ ) _t∈_ [0 _,_ 1] _is_ _a_ _(non-_
+_homogeneous)_ _Poisson_ _process_ _with_ _cumulative_ _intensity_ Λ( _t_ ) = ( _λ_ + + _λ−_ ) _w_ ( _t_ ) _._ _Moreover,_
+_conditional on N_ 1 = _n, the n unordered jump times are i.i.d. with cdf_
+
+
+P( _T_ _≤_ _t | N_ 1 _≥_ 1) = _w_ ( _t_ ) _,_ _t ∈_ [0 _,_ 1] _,_
+
+
+_hence w is precisely the time–rescaling that makes the jump times uniform on_ [0 _,_ 1] _._
+
+
+_Proof._ Note that _Nt_ = _Bt_ + _Dt_ is the sum of two independent Poisson processes, and by Poisson
+superposition principle, is a Poisson process itself with cumulative intensity equal to the sum of
+the cumulative intensities of the individual processes. The second statement is a direct result of the
+Probability Integral Transform.
+
+
+To compute _Ks|_ 0 _,t_ = _P_ ( _Xs_ = _X_ 0 + _Bs −_ _Ds|X_ 0 _, Xt_ ), we essentially have to compute ( _Ns, Bs_ ) or
+( _Bs, Ds_ ), both being equivalent to computing the state _Xs_, given the state _Xt_ and ( _Nt, Bt_ ). For now,
+we consider the (0 _,_ 1) bridge, i.e _Kt|_ 0 _,_ 1 _._
+
+
+This problem can be visualized in the one-dimensional case as follows: Given ( _N_ 1 _, B_ 1), view the
+total _N_ 1 jumps as a set of _N_ 1 points on [0 _,_ 1], each labeled +1 denoting birth or _−_ 1 denoting death,
+with the density governed by the function _w_ ( _·_ ). Note that these labels are exchangeable, for both
+processes have the same intensity function. Thus the goal is to find the number of points to the left of
+_t_ ( _Nt_ ), and the number of those that are +1s ( _Bt_ ).
+
+
+From this perspective, counting how many of the _N_ 1 points fall to the left of _t_ is analogous to
+sampling coloured balls from an urn with replacement (each jump independently lands before _t_ with
+probability _w_ ( _t_ )), giving a Binomial draw. Determining how many of those are births is equivalent to
+drawing a subset of size _Nt_ from the original population with _B_ 1 successes without replacement, i.e
+a Hypergeometric draw. We formalize this:
+
+
+**Lemma A.2** (Binomial–Hypergeometric structure of Count Bridges) **.** _Fix t ∈_ (0 _,_ 1] _and condition on_
+_N_ 1 = _n_ 1 _and B_ 1 = _b_ 1 _._ _Then:_
+
+
+16
+
+
+_1._ Binomial structure. _Each of the n_ 1 _jumps independently falls before time t with probability_
+_w_ ( _t_ ) _(Proposition A.1), hence_
+
+
+_Nt_ _| N_ 1 = _n_ 1 _∼_ Bin� _n_ 1 _,_ _w_ ( _t_ )� _._
+
+
+_2._ Hypergeometric structure. _Since the jump labels are exchangeable, the nt_ _jumps in_ (0 _, t_ ]
+_form a uniformly random subset of the n_ 1 _total jumps, hence_
+
+
+_Bt_ _|_ ( _N_ 1 _, B_ 1 _, Nt_ ) = ( _n_ 1 _, b_ 1 _, nt_ ) _∼_ Hyp� _n_ 1 _,_ _b_ 1 _,_ _nt_           - _._
+
+
+We can generalize this to arbitrary time points. For 0 _<_ _s_ _<_ _t_ _<_ 1 define _γ_ = _w_ ( _s_ ) _/w_ ( _t_ ).
+Conditional on ( _Nt, Bt_ ) = ( _nt, bt_ ), the _nt_ jumps in (0 _, t_ ] form a non-homogeneous Poisson process
+with cumulative intensity Λ( _·_ ) _/_ Λ( _t_ ), so the _Ns_ jumps in (0 _, s_ ] satisfy
+
+
+_Ns_ _| Nt_ = _nt_ _∼_ Bin� _nt,_ _γ_ ) _,_
+
+
+and, by the same exchangeability argument applied within (0 _, t_ ],
+
+
+_Bs_ _|_ ( _Nt, Bt, Ns_ ) = ( _nt, bt, ns_ ) _∼_ Hyp� _nt,_ _bt,_ _ns_     - _,_ _Ds_ = _Ns −_ _Bs._
+
+
+A.1.2 COMPOSITION CONDITIONAL ON THE SLACK
+
+
+In this section we prove two elementary lemmas showing that the Binomial and Hypergeometric
+distributions have a compositional property, and then use these results to show that the bridge satisfies
+the consistency equation under a fixed and known slack. In the next sections, we derive the posterior
+distribution of the slack and show that the result maintains for the general case when we “mix” the
+bridge over the slack posterior.
+
+
+Binomial composition arises from the observation that each of the _N_ _∈_ N objects in a binomial draw
+are treated completely independent of each other. It states that the following two-step process:
+
+
+1. Given _N_ balls in an urn, classify each ball as “success” or “failure” independently with
+probability _θ_ . Let _K_ balls be marked “success”.
+
+
+2. Of those _K_ balls, further classify each ball as “success” or “failure” independently again
+with probability _η_ . Let _L_ balls be marked “success”.
+
+
+is equivalent to the one-step process of classifying each of the original _N_ balls as “success” or
+“failure” with probability _θη_ . We prove this formally in the following lemma.
+
+
+**Lemma** **A.3** (Binomial composition) **.** _Let_ _N_ _∈_ N _and_ _θ, η_ _∈_ [0 _,_ 1] _._ _Let_ _K_ _∼_ Bin( _N, θ_ ) _and_
+_conditional on K, let L ∼_ Bin( _K, η_ ) _._ _Then L ∼_ Bin( _N, θη_ ) _._
+
+
+_Proof._ We begin by writing the joint distribution directly from the model:
+
+
+               - _N_
+P( _K_ = _k,_ _L_ = _ℓ_ ) = P( _K_ = _k_ ) P( _L_ = _ℓ_ _| K_ = _k_ ) =
+_k_
+
+
+- - _k_
+_θ_ _[k]_ (1 _−_ _θ_ ) _[N]_ _[−][k]_
+_ℓ_
+
+
+_η_ _[ℓ]_ (1 _−_ _η_ ) _[k][−][ℓ]_ _._
+
+
+Apply the standard combinatorial identity
+
+          - _N_ �� _k_
+
+_k_ _ℓ_
+
+
+to obtain the factorization
+
+
+- - _N_
+=
+_ℓ_
+
+
+�� _N_ _−_ _ℓ_ 
+_,_
+
+_k −_ _ℓ_
+
+
+      - _N_
+P( _K_ = _k,_ _L_ = _ℓ_ ) =
+_ℓ_
+
+
+- - _N_ _−_ _ℓ_
+( _θη_ ) _[ℓ]_ (1 _−_ _θη_ ) _[N]_ _[−][ℓ]_
+_k −_ _ℓ_
+
+
+�� _θ_ (1 _−η_ )
+
+
+1(1 _−−θηη_ ) - _k−ℓ_ - 11 _−−θηθ_ �( _N_ _−k_ ) _._
+
+
+To get the marginal law of _L_, sum the joint pmf over all _k_ _≥_ _ℓ_ .
+
+
+- - _N_ _−_ _ℓ_
+( _θη_ ) _[ℓ]_ (1 _−_ _θη_ ) _[N]_ _[−][ℓ]_
+_k −_ _ℓ_
+
+
+�� _θ_ (1 _−η_ )
+
+
+P( _L_ = _ℓ_ ) =
+
+
+_N_
+
+
+_k_ = _ℓ_
+
+
+- _N_
+
+_ℓ_
+
+
+1(1 _−−θηη_ ) - _k−ℓ_ - 11 _−−θηθ_ �( _N_ _−k_ ) _._
+
+
+17
+
+
+Let _m_ = _k −_ _ℓ_ ; then _m_ ranges from 0 to _N_ _−_ _ℓ_, and
+
+
+- - _N_ _−_ _ℓ_
+( _θη_ ) _[ℓ]_ (1 _−_ _θη_ ) _[N]_ _[−][ℓ]_
+_m_
+
+
+�� _θ_ (1 _−η_ )
+
+
+P( _L_ = _ℓ_ ) =
+
+
+_N_ _−ℓ_
+
+
+_m_ =0
+
+
+- _N_
+
+_ℓ_
+
+
+1(1 _−−θηη_ ) - _m_ - 11 _−−θηθ_ �( _N_ _−ℓ_ ) _−m._
+
+
+Let
+
+
+_a_ = _[θ]_ [(1] _[ −]_ _[η]_ [)]
+
+
+[(1] _[ −]_ _[η]_ [)]
+
+_b_ = [1] _[ −]_ _[θ]_
+1 _−_ _θη_ _[,]_ 1 _−_
+
+
+1 _−_ _θη_ _[.]_
+
+
+and factor out all terms not depending on _m_ :
+
+
+    - _N_
+P( _L_ = _ℓ_ ) =
+_ℓ_
+
+
+- _N_ _−ℓ_
+( _θη_ ) _[ℓ]_ (1 _−_ _θη_ ) _[N]_ _[−][ℓ]_  
+
+_m_ =0
+
+
+- _N_ _−_ _ℓ_ 
+_a_ _[m]_ _b_ [(] _[N]_ _[−][ℓ]_ [)] _[−][m]_ _,_
+
+_m_
+
+
+_a_ _[m]_ _b_ [(] _[N]_ _[−][ℓ]_ [)] _[−][m]_ _,_
+
+
+Since _a_ + _b_ = 1, the inner sum is exactly the Binomial theorem,
+
+
+_N_ _−ℓ_
+
+
+_m_ =0
+
+
+- _N_ _−_ _ℓ_ 
+_a_ _[m]_ _b_ [(] _[N]_ _[−][ℓ]_ [)] _[−][m]_ = ( _a_ + _b_ ) _[N]_ _[−][ℓ]_ = 1 _._
+
+_m_
+
+
+Thus
+
+
+    - _N_
+P( _L_ = _ℓ_ ) =
+_ℓ_
+
+
+( _θη_ ) _[ℓ]_ (1 _−_ _θη_ ) _[N]_ _[−][ℓ]_ _,_
+
+
+which is the pmf of Bin( _N, θη_ ).
+
+
+We now show hypergeometric composition:
+
+
+**Lemma A.4** (Hypergeometric composition) **.** _Let N_ _denote a population of N_ _∈_ N _balls in an urn,_
+_with M_ _≤_ _N_ _marked “success”._ _Suppose we perform a two-stage sampling without replacement:_
+
+
+_1._ _Draw_ _K_ _≤_ _N_ _balls_ _from_ _the_ _population_ _without_ _replacement_ _and_ _keep_ _them_ _aside._
+_Amongst_ _those_ _K_ _balls,_ _let_ _B_ _≤_ _K_ _be_ _the_ _number_ _of_ _balls_ _marked_ _“success”._ _I.e,_
+_B_ _∼_ Hyp( _N, M, K_ )
+
+
+_2._ _From those K_ _balls, draw another L < K_ _balls, and let A ≤_ _L be the number of successes_
+_observed._ _I.e, A ∼_ Hyp( _K, B, L_ )
+
+
+_Then the marginal distribution of A is:_
+
+
+_A|L ∼_ Hyp( _N, M, L_ )
+
+
+_Proof._ We prove this by computing the probability of observing a given _L_ -subset _A_ after the two-step
+procedure, and show that it equals the pmf of a Hypergeometric draw.
+
+
+To do so, we first show that all _L_ -subsets are equally likely. The problem then simply amounts to
+calculating the proportion of _L_ -subsets with _A_ successes and _L −_ _A_ failures.
+
+
+Let _K_ be the subset of _N_ of size _K_ selected after the first draw, and _L_ _⊂K_ be the set of size _L_
+selected after the second draw.
+
+
+Let _SL_ denote all possible sets of size _K_ that could have formed _L_ . Formally, _SL_ = _{U_ : _L ⊂_ _U_ _⊂_
+_N_ _, |U_ _|_ = _K}_ . Note that _SL_ cannot be empty for any given _L_ . Moreover, under sampling without
+replacement, each set in _SL_ is equally likely. Therefore, the probability of selecting any _L_ sized
+subset _L_ is:
+
+       - 1 1
+P( _L_ ) = _·_
+
+
+_U_ _∈SL_
+
+
+1 1
+
+_·_
+
+- _N_ - - _K_ _K_ _L_
+
+
+Note that the number of such sets in _SL_ is equal to the number of ways to select the remaining _K −_ _L_
+items (since _L_ is already determined by selecting _L_ ) from the remaining _N_ _−_ _L_ balls. Therefore:
+
+
+P( _L_ ) =
+
+
+ - _KN_ _−−LL_ - = 1
+
+- _N_ �� _K_ - - _N_ _K_ _L_ _L_
+
+
+18
+
+
+The right-hand side does not depend on _L_, so conditional on _L_ every _L_ –subset of _{_ 1 _, . . ., N_ _}_ is
+equally likely.
+
+
+There are - _NL_ - such subsets, among which exactly
+
+           - _M_ �� _N_ _−_ _M_
+_A_ _L −_ _A_
+
+
+subsets contain _A_ successes and _L −_ _A_ failures. Hence
+
+
+P( _A_ = _a | L_ = _ℓ_ ) =
+
+
+- _M_ �� _N_ _−M_ _a_ _ℓ−a_ _,_
+
+  - _N_   _ℓ_
+
+
+which is the pmf of the hypergeometric distribution Hyp( _N, M, L_ ).
+
+
+We can now state composition of the birth–death bridge for fixed slack using the above two lemmas.
+We show transitioning through the fixed-slack bridge kernel to timepoint _s_ from the starting timepoint
+1 yields the same state _Xs_ in distribution regardless of the choice of the number of steps taken to
+reach _s_ .
+
+
+**Theorem A.5** (Bridge composition conditional on slack) **.** _Fix_ 0 _< s < t <_ 1 _and endpoints X_ 0 = _x_ 0 _,_
+_X_ 1 = _x_ 1 _, and slack M_ 1 = _m (equivalently, fix_ ( _N_ 1 _, B_ 1) _via equation 7)._ _Let w_ : [0 _,_ 1] _→_ [0 _,_ 1] _be_
+_the time–rescaling function from the Poisson birth–death reference._
+
+
+_Define the fixed–slack bridge kernels_
+
+
+_Ka_ [(] _[m]_ _|_ 0 _,b_ [)] [(] _[x][a]_ _[|][ x]_ [0] _[, x][b]_ [)] [=] [P]  - _Xa_ = _xa_ �� _X_ 0 = _x_ 0 _, Xb_ = _xb, M_ 1 = _m_  - _,_ 0 _≤_ _a ≤_ _b ≤_ 1 _._
+
+
+_Then the two–stage transition_ (1 _→_ _t_ _→_ _s_ ) _yields the same law for_ ( _Ns, Bs_ ) _as the single–stage_
+_transition_ (1 _→_ _s_ ) _, and the fixed–slack kernels satisfy the bridge–consistency identity_
+
+
+_Ks_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][s]_ _[|][ x]_ [0] _[, x]_ [1][) =]      - _Ks_ [(] _|_ _[m]_ 0 _,t_ [)] [(] _[x][s]_ _[|][ x]_ [0] _[, x][t]_ [)] _[ K]_ _t_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)] _[.]_ (10)
+
+_xt_
+
+
+_Proof._ We show that the two-step transition (1 _→_ _t_ _→_ _s_ ) is equivalent to the one-step transition
+(1 _→_ _s_ ) for ( _Ns, Bs_ ), or equivalently, _Xs_ ( _Xs_ = _x_ 0 + 2 _Bs −_ _Ns_ ).
+Conditional on ( _N_ 1 _, B_ 1) (equivalently on ( _x_ 0 _, x_ 1 _, M_ 1 = _m_ )), we have _N_ 1 jumps with _B_ 1 “births”
+and _N_ 1 _−_ _B_ 1 “deaths”.
+The Binomial structure of Lemma A.2 yields
+
+
+_Nt_ _| N_ 1 _∼_ Bin� _N_ 1 _, w_ ( _t_ )� _,_ _Ns_ _| Nt_ _∼_ Bin� _Nt, w_ ( _s_ ) _/w_ ( _t_ )� _._
+
+
+Applying Lemma A.3 with _θ_ = _w_ ( _t_ ) and _η_ = _w_ ( _s_ ) _/w_ ( _t_ ) yields
+
+
+_Ns_ _| N_ 1 _∼_ Bin� _N_ 1 _, w_ ( _s_ )� _,_
+
+
+which is equivalent to the direct (1 _→_ _s_ ) transition.
+
+
+Now conditioning on the number of jumps at _t_, _Nt_, the Hypergeometric structure described in
+Lemma A.2 yields
+
+
+_Bt|Nt_ _∼_ Hyp( _N_ 1 _, B_ 1 _, Nt_ ) _Bs|_ ( _Nt, Bt, Ns_ ) _∼_ Hyp( _Nt, Bt, Ns_ )
+
+
+Further, drawing _Ns_ using the binomial draw and applying Lemma A.4 yields:
+
+
+_Bs|_ ( _N_ 1 _, B_ 1 _, Ns_ ) _∼_ _Hyp_ ( _N_ 1 _, B_ 1 _, Ns_ )
+
+
+which is equivalent to the direct (1 _→_ _s_ ) transition.
+
+
+Thus, at fixed ( _x_ 0 _, x_ 1 _, M_ 1 = _m_ ), the two–step transition (1 _→_ _t →_ _s_ ) and the one–step transition
+(1 _→_ _s_ ) agree in law for ( _Ns, Bs_ ), and hence for _Xs_ . Equivalently, the conditional distributions
+_Ks_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][s]_ _[|]_ _[x]_ [0] _[, x]_ [1][)] [=] [P][(] _[X][s]_ [=] _[x][s]_ _[|]_ _[X]_ [0] [=] _[x]_ [0] _[, X]_ [1] [=] _[x]_ [1] _[, M]_ [1] [=] _[m]_ [)] [obey] [the] [kernel] [identity]
+equation 10, which is exactly the bridge consistency with fixed slack.
+
+
+19
+
+
+A.1.3 SLACK POSTERIOR
+
+
+In the previous section, we established that, _conditional on a fixed slack value_, the bridge satisfies
+exact composition.
+
+
+Note that _Nt, Bt, Dt, Mt_ are not observed in the sampling process. To obtain an observable Markov
+bridge, we _resample the slack at each time_ from its posterior distribution, conditional only on the
+_observed dt_ :
+_πt_ ( _m | dt_ ) = P� _Mt_ = _m | dt_ = _xt −_ _x_ 0� _,_
+
+
+Once we sample _Mt_, we can compute ( _Nt, Bt_ ) and apply the conditional BH transition on ( _Nt, Bt_ )
+to obtain ( _Ns, Bs_ ), as described in Lemma A.2.
+
+
+This subsection derives the explicit form of _πt_ ( _m | dt_ ) and, crucially, proves its closure under the
+time-rescaling _w_ ( _t_ ) of the birth-death process.
+
+
+**Proposition** **A.6** (Bessel slack posterior) **.** _Under_ _the_ _Poisson_ _birth-death_ _reference_ _described_ _in_
+_section A.1.1, fix t ∈_ (0 _,_ 1] _and let dt_ = _Xt −_ _X_ 0 = _Bt −_ _Dt._ _Conditional on dt, the pair_ ( _Bt, Dt_ )
+_lies on the lattice_
+
+
+( _Bt, Dt_ ) =
+
+
+( _m_ + _dt,_ _m_ ) _,_ _dt_ _≥_ 0 _,_
+
+
+_m ∈_ N _,_
+( _m,_ _m_ + _|dt|_ ) _,_ _dt_ _<_ 0 _,_
+
+
+_and the induced posterior pmf of the slack Mt_ = min( _Bt, Dt_ ) _is_
+
+_πt_ ( _m | dt_ ) = P( _Mt_ = _m | dt_ ) _∝_ [(Λ][+][(] _[t]_ [)Λ] _[−]_ [(] _[t]_ [))] _[m]_ _m_ = 0 _,_ 1 _,_ 2 _, . . ._ (11)
+
+( _m_ + _|dt|_ )! _m_ ! _[,]_
+
+
+_with normalizer_
+_Zt_ ( _dt_ ) = �Λ+( _t_ )Λ _−_ ( _t_ )� _−|dt|/_ 2 _I|dt|_ �2 ~~�~~ Λ+( _t_ )Λ _−_ ( _t_ )� _,_
+
+
+_where Iν_ _is the modified Bessel function of the first kind._
+
+
+_Proof._ We treat _dt_ _≥_ 0, the other case being symmetric. If _dt_ = _Bt −_ _Dt_ _≥_ 0 then _Bt_ = _Dt_ + _dt_,
+_Mt_ = _min_ ( _Bt, Dt_ ) = _Dt_ and thus
+
+
+( _Bt, Dt_ ) = ( _m_ + _dt, m_ ) _⇐⇒_ _Mt_ = _m._
+
+
+By independence of the Poisson processes, the joint pmf at ( _m_ + _dt, m_ ) is
+
+
+P( _Bt_ = _m_ + _dt,_ _Dt_ = _m_ ) = _e_ _[−]_ [(Λ][+][(] _[t]_ [)+Λ] _[−]_ [(] _[t]_ [))][ Λ][+][(] _[t]_ [)] _[m]_ [+] _[d][t]_
+
+
+[+][(] _[t]_ [)] _[m]_ [+] _[d][t]_ Λ _−_ ( _t_ ) _[m]_
+
+( _m_ + _dt_ )! _m_ !
+
+
+_._
+_m_ !
+
+
+Applying Bayes’ rule and conditioning on _dt_ :
+
+
+[ +] _[ d][t][,]_ _[D][t]_ [=] _[ m]_ [)] Λ+( _t_ ) _[m]_ [+] _[d][t]_ Λ _−_ ( _t_ ) _[m]_ _/_ �( _m_ + _dt_ )! _m_ !�
+
+P( _dt_ ) = - _∞_ [Λ][+][(] _[t]_ [)] _[r]_ [+] _[d][t]_ [Λ] _[−]_ [(] _[t]_ [)] _[r][/]_ �( _r_ + _dt_ )! _r_
+
+
+_πt_ ( _m | dt_ ) = [P][(] _[B][t]_ [=] _[ m]_ [ +] _[ d][t][,]_ _[D][t]_ [=] _[ m]_ [)]
+
+
+- _∞r_ =0 [Λ][+][(] _[t]_ [)] _[r]_ [+] _[d][t]_ [Λ] _[−]_ [(] _[t]_ [)] _[r][/]_ �( _r_ + _dt_ )! _r_ !� _._
+
+
+Factor Λ+( _t_ ) _[d][t]_ from numerator and denominator to obtain
+
+
+_πt_ ( _m | dt_ ) = [(Λ][+][(] _[t]_ [)Λ] _[−]_ [(] _[t]_ [))] _[m]_
+
+( _m_ + _dt_ )! _m_ !
+
+
+_∞_
+
+
+ 
+
+_r_ =0
+
+
+(Λ+( _t_ )Λ _−_ ( _t_ )) _[r]_
+
+_,_
+( _r_ + _dt_ )! _r_ !
+
+
+which is exactly equation 11. The denominator is the standard Skellam normalizer, given by the
+stated Bessel expression.
+
+
+The slack variable _Mt_ represents the “hidden” jumps that cancel out (e.g., a birth followed by a
+death), and the Bessel posterior tells us their exact distribution. Notably, such “hidden” jumps are
+increasingly unlikely with increasing displacement _dt_ due to the factorial growth in the denominator,
+as observed in Figure 1
+
+
+We now show that the slack posterior is closed under time-rescaling. In the next section, we define
+the observable bridge as a “mixture” over the slack posterior, and show that it satisfies the bridge
+consistency equation 1 using the closure property.
+
+
+20
+
+
+**Corollary A.7** (Slack posterior is closed under time-rescaling) **.** _For any_ 0 _< s < t,_
+
+
+_πs_ ( _· | ds_ ) _has the same functional form as πt_ ( _· | dt_ ) _,_
+
+
+_with parameters obtained by replacing_ (Λ+( _t_ ) _,_ Λ _−_ ( _t_ )) _by_ (Λ+( _s_ ) _,_ Λ _−_ ( _s_ )) _._ _Since_ Λ _±_ ( _s_ ) = _λ±w_ ( _s_ ) _,_
+_this closure depends only on the rescaling of w_ ( _·_ ) _and not on any other properties of the process._
+
+
+_Proof._ For closure, note that for any _s < t_ we have independent thinning
+
+
+_Bs_ _∼_ Poi(Λ+( _s_ )) _,_ _Ds_ _∼_ Poi(Λ _−_ ( _s_ )) _,_ Λ _±_ ( _s_ ) = _λ±w_ ( _s_ ) _._
+
+
+Repeating the same conditioning argument with ( _Bs, Ds_ ) and _ds_ yields the same functional family
+as equation 11, with parameters (Λ+( _s_ ) _,_ Λ _−_ ( _s_ )) replacing (Λ+( _t_ ) _,_ Λ _−_ ( _t_ )).
+
+
+A.1.4 COMPOSITION OVER SLACK
+
+
+We now define the observable bridge as a mixture of the fixed-slack kernels over the slack posterior
+defined in the previous section.
+
+**Definition A.8** (Observable Bridge) **.** _Let Ka_ [(] _[m]_ _|_ 0 _,b_ [)] _[be the fixed-slack bridge kernel,]_
+
+_Ka_ [(] _[m]_ _|_ 0 _,b_ [)] [(] _[x][a]_ _[|][ x]_ [0] _[, x][b]_ [)] [=] [P]  - _Xa_ = _xa_ �� _X_ 0 = _x_ 0 _, Xb_ = _xb, M_ 1 = _m_  - _,_ 0 _≤_ _a ≤_ _b ≤_ 1 _._
+
+
+_and let πt_ ( _· | dt_ ) _be the Bessel slack posterior described in A.1.3._ _Then define the observable bridge_
+_in (0,1) at terminal time_ 1 _as_
+
+
+_Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1) =
+
+
+_∞_
+
+- _π_ 1( _m | d_ 1) _Kt_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)] _[,]_ _d_ 1 = _x_ 1 _−_ _x_ 0 _._
+
+_m_ =0
+
+
+_At an intermediate time_ 0 _< t <_ 1 _, define the observable bridge in (0,t) as:_
+
+
+_Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) =
+
+
+_∞_
+
+- _πt_ ( _m | dt_ ) _Ks_ [(] _|_ _[m]_ 0 _,t_ [)] [(] _[x][s]_ _[|][ x]_ [0] _[, x][t]_ [)] _[,]_ _dt_ = _xt −_ _x_ 0 _,_
+
+_m_ =0
+
+
+In other words, the observable bridge is the expectation of the fixed-slack bridges over the slack
+posterior. Using the fixed-slack bridge consistency shown in A.5 and properties of the slack posterior
+described in A.1.3:, we prove the general consistency of the observable bridge.
+
+**Theorem A.9** (Consistency of the observable count bridge) **.** _Under the Poisson birth–death reference_
+_described in section A.1.1, the observable bridge, defined as in A.8, satisfies the discrete form of_
+_equation 1:_ _for all_ 0 _< s < t <_ 1 _and endpoints x_ 0 _, x_ 1 _,_
+
+_Ks|_ 0 _,_ 1( _xs_ _| x_ 0 _, x_ 1) =        - _Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) _Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1) _._ (12)
+
+
+_xt_
+
+
+_Proof._ Fix _x_ 0 _, x_ 1 _, d_ 1 = _x_ 1 _−_ _x_ 0 _,_ and an arbitrary bounded test function _φ_ on the state space. We
+prove equation 12 in weak form by computing E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1] in two ways:
+
+
+First, we write the expectation as a mixture over the slack posterior:
+
+
+E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1] =
+
+
+_∞_
+
+
+_π_ 1( _m | d_ 1) E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1 _, M_ = _m_ ] _,_ (13)
+
+_m_ =0
+
+
+Note that each fixed-slack bridge satisfies bridge-consistency as described in Theorem A.5:
+
+
+_Ks_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][s]_ _[|][ x]_ [0] _[, x]_ [1][) =]      - _Ks_ [(] _|_ _[m]_ 0 _,t_ [)] [(] _[x][s]_ _[|][ x]_ [0] _[, x][t]_ [)] _[ K]_ _t_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)] _[.]_
+
+_xt_
+
+where _Ks_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][s]_ _[|]_ _[x]_ [0] _[, x]_ [1][)] [=] [P][(] _[X][s]_ [=] _[x][s]_ _[|]_ _[X]_ [0] [=] _[x]_ [0] _[, X]_ [1] [=] _[x]_ [1] _[, M]_ [=] _[m]_ [)][.] [By taking expectation]
+over the test function _φ_, we get:
+
+
+E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1 _, M_ = _m_ ]
+
+
+   = E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, Xt_ = _xt, M_ = _m_ ] _Kt_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)] _[.]_
+
+_xt_
+
+
+21
+
+
+Plug the above into equation 13 and interchange the sums over _xt_ and _m_ :
+
+
+E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1]
+
+
+= 
+
+_xt_
+
+
+_∞_
+
+- _π_ 1( _m | d_ 1) _Kt_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)][ E][[] _[φ]_ [(] _[X][s]_ [)] _[ |][ X]_ [0] [=] _[ x]_ [0] _[, X][t]_ [=] _[ x][t][, M]_ [=] _[ m]_ []] (14)
+
+_m_ =0
+
+
+Now consider the first two terms inside the sum over _m_ . Note that they form of the joint likelihood of
+( _M, Xt_ ) given ( _X_ 0 _, X_ 1):
+
+_π_ 1( _m | d_ 1) _Kt_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)] [=][ P][(] _[M]_ [=] _[ m, X][t]_ [=] _[ x][t]_ _[|][ X]_ [0] [=] _[ x]_ [0] _[, X]_ [1] [=] _[ x]_ [1][)]
+
+
+Using the definition of conditional probability, we can “flip” this joint density to condition on the
+intermediate state _Xt_ :
+
+
+P( _M, Xt_ _| X_ 0 _, X_ 1) = P( _M_ _| Xt, X_ 0 _, X_ 1) _,_ P( _Xt_ _| X_ 0 _, X_ 1) _._ (15)
+
+
+Once _Xt_ is fixed, the future terminal state _X_ 1 provides no additional information about the slack
+jumps that occurred before time _t_, thereby isolating _Mt_ on (0 _, t_ ). As a result P( _M_ _|Xt, X_ 0 _, X_ 1) is
+simply the posterior distribution of _Mt_, following the Bessel form described in Proposition A.6 as a
+result of the time-rescaling Corrolary A.7. To summarize:
+
+
+P( _M_ = _m | Xt_ = _xt, X_ 0 = _x_ 0 _, X_ 1 = _x_ 1) = P( _M_ = _m | Xt_ = _xt, X_ 0 = _x_ 0) = _πt_ ( _m | dt_ )
+
+
+Substituting this back into equation 15 gives the identity:
+
+_π_ 1( _m | d_ 1) _, Kt_ [(] _|_ _[m]_ 0 _,_ [)] 1 [(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][) =] _[ π][t]_ [(] _[m][ |][ d][t]_ [)] _[, K][t][|]_ [0] _[,]_ [1][(] _[x][t]_ _[|][ x]_ [0] _[, x]_ [1][)] _[.]_ (16)
+
+
+Plugging the above into equation 14:
+
+
+E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1]
+
+
+= 
+
+_xt_
+
+
+_∞_
+
+- (17)
+
+_πt_ ( _m | dt_ ) _Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1) E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, Xt_ = _xt, M_ = _m_ ]
+
+_m_ =0
+
+
+By the law of total expectation:
+
+
+_∞_
+
+ 
+_πt_ ( _m | dt_ ) E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, Xt_ = _xt, M_ = _m_ ] = E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, Xt_ = _xt_ ] _,_
+
+_m_ =0
+
+
+Plugging this into the above equation:
+
+
+      E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1] = _Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1) E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, Xt_ = _xt_ ]
+
+
+_xt_
+
+
+and the definition of _Ks|_ 0 _,t_ then gives
+
+
+       E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, Xt_ = _xt_ ] = _φ_ ( _xs_ ) _Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) _._
+
+
+_xs_
+
+
+Putting everything together,
+
+
+��
+
+
+     E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1] =
+
+
+          _φ_ ( _xs_ ) _Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) _Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1)
+
+_xs_
+
+
+_xt_
+
+
+��
+_φ_ ( _xs_ )
+
+_xs_ _xt_
+
+
+= 
+
+
+              _Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) _Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1) _._
+
+_xt_
+
+
+On the other hand, by the definition of _Ks|_ 0 _,_ 1,
+
+
+       E[ _φ_ ( _Xs_ ) _| X_ 0 = _x_ 0 _, X_ 1 = _x_ 1] = _φ_ ( _xs_ ) _Ks|_ 0 _,_ 1( _xs_ _| x_ 0 _, x_ 1) _._
+
+
+_xs_
+
+
+22
+
+
+Since _φ_ is arbitrary, the coefficients of _φ_ ( _xs_ ) must agree for all _xs_, that is:
+
+_Ks|_ 0 _,_ 1( _xs_ _| x_ 0 _, x_ 1) =        - _Ks|_ 0 _,t_ ( _xs_ _| x_ 0 _, xt_ ) _Kt|_ 0 _,_ 1( _xt_ _| x_ 0 _, x_ 1)
+
+
+_xt_
+
+
+which yields equation 12.
+
+
+We have now shown that the observable birth-death bridge satisfies the same bridge consistency
+property equation 1 as the Gaussian diffusion bridge, confirming the correctness of the bridge as a
+diffusion kernel.
+
+
+A.2 LINK WITH SCHR ¨ODINGER BRIDGES
+
+
+We now justify the Schrodinger-bridge¨ interpretation stated in Sec. 3. Recall the unconditional
+birth–death construction
+_Xt_ = _X_ 0 + _Bt −_ _Dt,_
+where ( _Bt_ ) _t∈_ [0 _,_ 1] and ( _Dt_ ) _t∈_ [0 _,_ 1] are independent Poisson processes with cumulative intensities
+Λ+( _t_ ) = _λ_ + _w_ ( _t_ ) _,_ Λ _−_ ( _t_ ) = _λ−w_ ( _t_ ) _,_ and _w_ (0) = 0 _, w_ (1) = 1. Let _κ_ = ~~�~~ _λ_ + _λ−_ denote the (scalar)
+jump intensity. Then for each _x_ 0 _∈X_, the forward kernel at time _t_ = 1 has Skellam pmf
+
+
+1 _[−][x]_ 0
+_K_ 1 _[κ]_ _|_ 0 [(] _[x]_ [1] _[|][ x]_ [0][) = exp]    - _−_ Λ+(1) _−_ Λ _−_ (1)� [�] ΛΛ _−_ +(1)(1)    - _[x]_ 2 _I|x_ 1 _−x_ 0 _|_ �2 _κ_    - _,_
+
+
+where _Iν_ is the modified Bessel function of the first kind.
+
+
+Let
+_p_ _[κ]_ ref [(] _[x]_ [0] _[, x]_ [1][)] [=] _[p]_ [0][(] _[x]_ [0][)] _[ K]_ 1 _[κ]_ _|_ 0 [(] _[x]_ [1] _[|][ x]_ [0][)]
+
+be the _reference joint law_ of ( _X_ 0 _, X_ 1) induced by the birth–death process and the data prior _p_ 0. Over
+the space of couplings
+
+_C_ ( _p_ 0 _, p_ 1) =        - _C_ on _X_ _× X_ : _C_ ( _·, X_ ) = _p_ 0 _,_ _C_ ( _X_ _, ·_ ) = _p_ 1� _,_
+
+
+we consider the entropic projection
+
+_Cκ_ _∈_ arg min            - _C ∥_ _p_ _[κ]_ ref            - _._
+_C∈C_ ( _p_ 0 _,p_ 1) [KL]
+
+
+Fix any _C_ _∈C_ ( _p_ 0 _, p_ 1) and write expectations with respect to _C_ as E _C_ [ _·_ ]. By definition,
+
+
+log _[dC]_
+
+
+KL� _C ∥_ _p_ _[κ]_ ref - = E _C_
+
+
+_[dC]_ ( _X_ 0 _, X_ 1)�
+
+_dp_ _[κ]_ ref
+
+
+= _−H_ ( _C_ ) _−_ E _C_         - log _K_ 1 _[κ]_ _|_ 0 [(] _[X]_ [1] _[|][ X]_ [0][)]         - + _Cκ_ ( _p_ 0 _, p_ 1) _,_
+
+
+where _H_ ( _C_ ) is the Shannon entropy of _C_ and _Cκ_ ( _p_ 0 _, p_ 1) collects all terms depending only on the
+marginals (including Λ _±_ (1) and E _C_ [ _X_ 1 _−X_ 0], which are fixed across all couplings with marginals
+_p_ 0 _, p_ 1).
+
+
+Using the explicit Skellam form, we can isolate the Bessel contribution:
+
+KL� _C ∥_ _p_ _[κ]_ ref       - = _Cκ_ ( _p_ 0 _, p_ 1) _−_ E _C_       - log _I|X_ 1 _−X_ 0 _|_ (2 _κ_ )� _−_ _H_ ( _C_ ) _._
+
+
+To study the limits _κ →∞_ and _κ →_ 0 [+], we use standard asymptotics for _Iν_ (NIS, 2025, §10.41(ii)):
+
+
+_e_ _[z]_
+_Iν_ ( _z_ ) = ~~_√_~~
+
+
+_e_ _[z]_
+
+as _z_ _→∞,_ _Iν_ ( _z_ ) = [(] _[z/]_ [2)] _[ν]_
+2 _πz_ [(1 +] _[ o]_ [(1))] Γ( _ν_
+
+
+as _z_ _→_ 0 [+] _._
+Γ( _ν_ +1) [(1 +] _[ o]_ [(1))]
+
+
+**High-noise limit** _κ →∞_ **.** For fixed _ν_, the large- _z_ expansion shows that log _Iν_ (2 _κ_ ) depends on _ν_
+only through _O_ (1 _/κ_ ) terms. Hence, as _κ →∞_,
+
+E _C_         - log _I|X_ 1 _−X_ 0 _|_ (2 _κ_ )� = _Cκ_ _[′]_ [(] _[p]_ [0] _[, p]_ [1][) +] _[ o][κ]_ [(1)] _[,]_
+
+where _Cκ_ _[′]_ [(] _[p]_ [0] _[, p]_ [1][)][ does not depend on the choice of coupling] _[ C]_ [.] [It follows that]
+
+KL� _C ∥_ _p_ _[κ]_ ref         - = _C −_ _H_ ( _C_ ) + _oκ_ (1) _,_ _κ →∞,_
+
+for some constant _C_ that is independent of _C_ . Maximizing _H_ ( _C_ ) over _C_ ( _p_ 0 _, p_ 1) yields the independent coupling _p_ 0 _⊗_ _p_ 1, so in the high-noise limit _Cκ_ _→_ _p_ 0 _⊗_ _p_ 1.
+
+
+23
+
+
+**Low-noise limit** _κ →_ 0 [+] **.** For small _z_, we have
+
+log _Iν_ (2 _κ_ ) = _ν_ log� _κ_ 2             - + _O_ (1) as _κ →_ 0 [+] _,_
+
+
+uniformly for integer _ν_ in any fixed finite range. Applying this with _ν_ = _|X_ 1 _−X_ 0 _|_ gives
+
+
+_−_ E _C_     - log _I|X_ 1 _−X_ 0 _|_ (2 _κ_ )� = log� _κ_ 2     - E _C|X_ 1 _−X_ 0 _|_ + _O_ (1) _,_ _κ →_ 0 [+] _._
+
+
+Substituting into the expression for the KL divergence, we obtain
+
+
+KL� _C ∥_ _p_ _[κ]_ ref     - = _C_ + log� _κ_ 2     - E _C|X_ 1 _−X_ 0 _| −_ _H_ ( _C_ ) + _oκ_ (1) _,_ _κ →_ 0 [+] _,_
+
+
+for some constant _C_ independent of _C_ .
+
+
+Thus, in the low-noise limit the dominant term in KL( _C ∥_ _p_ _[κ]_ ref [)] [is] [proportional] [to] [E] _[C][|][X]_ [1] _[−][X]_ [0] _[|]_ [;]
+minimizing the KL over _C_ ( _p_ 0 _, p_ 1) therefore recovers discrete optimal transport with cost _|x_ 1 _−x_ 0 _|_,
+while the entropy term _−H_ ( _C_ ) corresponds to the usual entropic regularization. This proves the
+characterization stated in Sec. 3.
+
+
+B LIFTING COUNT BRIDGES TO AGGREGATES
+
+
+We make two central assumptions that enable deconvolution.
+
+**Assumption B.1** (Realizability and recoverability) **.** _There exists θ_ _[⋆]_ _such that for all t ∈_ [0 _,_ 1] _:_
+
+
+_1._ _**Realizability:**_ _Qθ⋆_ ( _a_ 0 _|_ **x** _t, t, z_ ) = _p_ 0( _a_ 0 _|_ **x** _t, t, z_ ) _almost surely_
+
+
+_2._ _**Recoverability:**_ _The aggregate-to-unit map has local modulus κloc_ ( _t_ ) _:_ _for θ near θ_ _[⋆]_ _,_
+
+
+_DKL_ ( _p_ 0( **x** 0 _|_ **x** _t, t, z_ ) _∥_ _qθ_ ( _· |_ **x** _t, t, z_ )) _≤_ _κloc_ ( _t_ ) _· DKL_ ( _p_ 0( _a_ 0 _|_ **x** _t, t, z_ ) _∥_ _Qθ_ ( _· |_ **x** _t, t, z_ ))
+
+
+Recoverability means that the aggregate distribution uniquely determines the unit-level distribution—if we know the sum perfectly, we can deduce the summands. This is not always possible.
+Consider the simplest case: if _X_ 1 _, X_ 2 _∼_ Poisson( _λ_ 1) _,_ Poisson( _λ_ 2) are independent, their sum
+is Poisson( _λ_ 1 + _λ_ 2). Observing only the sum, we cannot distinguish ( _λ_ 1 = 3 _, λ_ 2 = 2) from
+( _λ_ 1 = 4 _, λ_ 2 = 1)—both yield Poisson(5). Now if we had side information that identified the
+“component” each Poisson was drawn from we could identify this, but it illustrates the difficulties we
+will face here.
+
+
+Recoverability holds when units have sufficient diversity. Formally, it requires that units are conditionally independent given ( **x** 1 _, z_ ) and have distinct factorial cumulant signatures—essentially, different
+statistical fingerprints that survive aggregation. For count data, this means units must have different
+parameters (e.g., different Poisson rates or negative binomial dispersions) that are distinguishable
+through the covariates _z_ .
+
+
+Appendix B.2 provides a detailed discussion. In practice, this means units should have heterogeneous
+characteristics captured by _z_ —for example, different images associated with the transciptomics is
+spatial single cell data.
+
+
+Recoverability faces fundamental limits as the number of units _G_ grows. By the central limit theorem,
+when _G →∞_, the standardized aggregate ( _A_ 0 _−_ _µG_ ) _/σG_ converges to a Gaussian regardless of the
+unit-level distributions. The higher-order cumulants that distinguish different unit configurations
+vanish at rate _O_ ( _G_ _[−]_ [(] _[k][−]_ [2)] _[/]_ [2] ) for order _k_ _>_ 2, leaving only the mean and variance (Appendix B.3).
+
+
+This CLT collapse means our method is most powerful for moderate _G_ (tens to hundreds of units)
+where unit heterogeneity is preserved in aggregates. For very large _G_, additional structure is
+needed—either parametric constraints (e.g., unit parameters follow a low-dimensional model), multiple aggregate observations under different conditions, or direct observation of some unit-level
+data.
+
+
+We illustrate these issues in Fig. 4 in the main text: as the dirichlet concentration increases the
+group-level mixture weights concentrate. When combined with large group sizes this forces all
+groups to become identical. This gives a clear empirical sense for the limits of deconvolution.
+
+
+24
+
+
+B.1 APPROXIMATELY SAMPLING CONDITIONAL ON THE SUM
+
+
+The most central part of our deconvolution approach is our projection operation. This appendix
+formalizes the rescaling operator used in Prop. 4.1 and explains precisely in what sense it approximates
+the aggregate–conditional distribution _Qθ_ ( _·_ _| A_ ( **X** 0) = _a_ 0).
+
+
+B.1.1 SETUP AND TWO ENSEMBLES
+
+
+Let **X** 0 _∈_ Z _[G]_ _≥_ _[×]_ 0 _[D]_ be a random count array with (unconstrained) law _Pθ_, and define the aggregate
+statistic
+_A_ 0 := _A_ ( **X** 0) _∈_ Z _[D]_ _≥_ 0 _[.]_
+
+
+In the main text, we are interested in the _microcanonical_ (hard-constraint) conditional law
+
+
+_Qθ_ ( _·_ _| A_ 0 = _a_ 0) := _Pθ_ ( _·_ _| A_ ( **X** 0) = _a_ 0) _,_ for feasible _a_ 0 with _Pθ_ ( _A_ 0 = _a_ 0) _>_ 0 _,_
+
+
+which is supported on the affine constraint set _{_ **x** 0 : _A_ ( **x** 0) = _a_ 0 _}_ .
+
+
+A key point is that _Qθ_ ( _·_ _|_ _A_ 0 = _a_ 0) is not, in general, an exponential tilt of _Pθ_ . Exponential tilts
+instead arise naturally from the canonical (moment-constrained) relaxation, which replaces the hard
+constraint _A_ 0 = _a_ 0 by E[ _A_ 0] = _a_ 0.
+
+Throughout this subsection, we work with count arrays **X** 0 _∈_ Z _[G]_ _≥_ _[×]_ 0 _[D]_, so the aggregate _A_ 0 =
+_A_ ( **X** 0) _∈_ Z _[D]_ _≥_ 0 [is lattice-valued. Hence for any] _[ feasible][ a]_ [0][ with] _[ P][θ]_ [(] _[A]_ [0] [=] _[ a]_ [0][)] _[ >]_ [ 0][, the microcanonical]
+conditional _Pθ_ ( _· | A_ 0 = _a_ 0) is an ordinary conditional distribution (no measure-zero issue). When
+defining the deterministic rescaling projection Π below, we relax the projection domain to R _[G]_ _≥_ _[×]_ 0 _[D]_ to
+obtain a closed form.
+
+
+B.1.2 CANONICAL EXPONENTIAL TILT AND FIRST-ORDER EXPANSION
+
+
+**Assumption B.2** (Cram´er regularity for the aggregate) **.** _The log-mgf_
+
+
+                      -                      Λ( _λ_ ) := log E _Pθ_ exp _{λ_ _[⊤]_ _A_ 0 _}_
+
+
+_is finite on an open neighborhood of λ_ = 0 _, twice continuously differentiable there, and has positive-_
+_definite covariance_
+Σ := _∇_ [2] Λ(0) = Cov _Pθ_ ( _A_ 0) _≻_ 0 _._
+
+_Moreover, ∇_ [2] Λ _is locally Lipschitz in a neighborhood of_ 0 _._
+
+
+**Definition B.3** (Canonical moment-constrained tilt) **.** _For λ in the regularity neighborhood, define the_
+_tilted law Pθ,λ on_ **X** 0 _by_
+
+_dPθ,λ_ ( **x** 0) = exp� _λ_ _[⊤]_ _A_ ( **x** 0) _−_ Λ( _λ_ )� _._
+
+_dPθ_
+
+
+_If a_ 0 _is sufficiently close to µ_ := E _Pθ_ [ _A_ 0] = _∇_ Λ(0) _, the canonical parameter_ _λ_ [ˆ] _is the unique solution_
+_of_
+_∇_ Λ( _λ_ [ˆ] ) = _a_ 0 _,_
+
+_and Pθ,λ_ ˆ _is the unique KL-minimizer of D_ KL( _· ∥Pθ_ ) _over distributions with_ E[ _A_ 0] = _a_ 0 _._
+
+
+**Lemma B.4** (First-order expansion of the canonical parameter) **.** _Under Assumption B.2, let δ_ :=
+_a_ 0 _−_ _µ._ _Then for ∥δ∥_ _sufficiently small,_
+
+
+_λ_ ˆ = Σ _[−]_ [1] _δ_ + _O_ ( _∥δ∥_ [2] ) _._
+
+
+_Proof._ Taylor expand _∇_ Λ( _λ_ ) at 0: _∇_ Λ( _λ_ ) = _µ_ + Σ _λ_ + _R_ ( _λ_ ) with _∥R_ ( _λ_ ) _∥≤_ _[L]_ 2 _[∥][λ][∥]_ [2][.] [Solving]
+
+_µ_ + Σ _λ_ [ˆ] + _R_ ( _λ_ [ˆ] ) = _µ_ + _δ_ yields _λ_ [ˆ] = Σ _[−]_ [1] ( _δ −_ _R_ ( _λ_ [ˆ] )) and the stated bound.
+
+
+B.1.3 HOW THE MICROCANONICAL CONDITIONAL RELATES TO THE CANONICAL TILT
+
+
+We record an identity and a standard approximation principle.
+
+
+25
+
+
+**Lemma B.5** (Tilting does not change the hard conditional) **.** _For any λ in the regularity neighborhood_
+_and any feasible a_ 0 _,_
+_Pθ_ ( _·_ _| A_ 0 = _a_ 0) = _Pθ,λ_ ( _·_ _| A_ 0 = _a_ 0) _._
+
+
+_Proof._ On the event _{A_ 0 = _a_ 0 _}_, the Radon–Nikodym factor exp _{λ_ _[⊤]_ _A_ 0 _−_ Λ( _λ_ ) _}_ is constant, hence
+cancels in the conditional density ratio.
+
+
+Lemma B.5 lets us choose the most convenient tilt for analysis of the conditional. The canonical
+choice _λ_ = _λ_ [ˆ] is particularly useful because under _Pθ,λ_ ˆ, the aggregate is centered at the constraint:
+E _Pθ,λ_ ˆ [ _A_ 0] = _a_ 0.
+
+
+To connect the hard conditional to the tilt, one needs an additional large-system regime (e.g. many
+summed contributions, or large aggregate counts) ensuring that conditioning on _A_ 0 = _a_ 0 only induces
+a small correction beyond matching the mean. A classical form is the Gibbs conditioning principle.
+
+
+Consider a sequence of problems indexed by _n_ with independent random arrays **X** [(] 0 _[n]_ [)] =
+( _X_ 10 [(] _[n]_ [)] _[, . . ., X]_ _n_ [(] _[n]_ 0 [)][)] [under] _[P]_ [ (] _θ_ _[n]_ [)] and aggregate _A_ [(] 0 _[n]_ [)] = [�] _g_ _[n]_ =1 _[X]_ _g_ [(] _[n]_ 0 [)] [(elementwise).] [Assume] [a] [uni-]
+
+form Cramer´ condition and a local limit theorem for _A_ [(] 0 _[n]_ [)] under the canonical tilt _Pθ,_ [(] _[n]_ _λ_ [ˆ][)] _n_ [(where]
+
+_λ_ ˆ _n_ solves _∇_ Λ _n_ (ˆ _λn_ ) = _a_ [(] 0 _[n]_ [)] and Λ _n_ ( _λ_ ) = log E[exp _{λ_ _[⊤]_ _A_ [(] 0 _[n]_ [)] _[}]_ []][).] [Then,] [for any fixed] _[m]_ [ and any]
+bounded measurable _f_ depending only on ( _X_ 10 [(] _[n]_ [)] _[, . . ., X]_ _m_ [(] _[n]_ 0 [)][)][,]
+
+E _Qθ_ ( _n_ )( _·|A_ [(] 0 _[n]_ [)] = _a_ [(] 0 _[n]_ [)] ) [[] _[f]_ []] _[−]_ [E] _Pθ,_ [(] _[n]_ _λn_ [ˆ][)] [ _f_ ] _−→_ 0 ( _n →∞_ ) _,_
+
+where _Q_ [(] _θ_ _[n]_ [)][(] _[· |][ A]_ [(] 0 _[n]_ [)] = _a_ [(] 0 _[n]_ [)][)][ denotes the microcanonical conditional.]
+
+
+Essentially, for local observables in a large-sum regime, the conditional behaves like the canonical
+tilt with parameter _λ_ [ˆ], and Lemma B.4 gives the first-order expansion _λ_ [ˆ] = Σ _[−]_ [1] _δ_ + _O_ ( _∥δ∥_ [2] ). This is
+the precise meaning of the phrase “admits a first-order exponential tilt” in Prop. 4.1. This first-order
+argument requires a large- _n_ justification, which conflicts with our identifiability perspective below,
+but we provide it as a useful perspective on the projection operation here since it may serve as a
+blueprint for thinking about reasonable projections in other settings.
+
+
+B.1.4 THE RESCALING MAP AS AN ENTROPIC PROJECTION
+
+
+The operator Π in Prop. 4.1 is a projection of a _point_ onto the hard constraint set. Since points are not
+distributions, we use the standard _generalized KL_ (a Bregman divergence on R _[G]_ _≥_ _[×]_ 0 _[D]_ ):
+
+
+_D_
+
+
+_d_ =1
+
+
+_D_ KL( **y** _∥_ **x** ) :=
+
+
+_G_
+
+
+_g_ =1
+
+
+- _g_ _yg_ [(] _[d]_ [)] log _[y]_ [(] _[d]_ [)] _−_ _yg_ [(] _[d]_ [)] + _x_ [(] _g_ _[d]_ [)] _,_
+_x_ [(] _g_ _[d]_ [)]
+
+
+with the conventions 0 log 0 = 0 and _y_ log( _y/_ 0) = + _∞_ for _y_ _>_ 0.
+
+**Lemma B.6** (Closed form of the projection for elementwise sums) **.** _Let A_ ( **x** 0) =
+
+[�]
+
+
+_g_ _[x][g]_ [0] _[ (element-]_
+
+
+_g_ _[x]_ _g_ [(] _[d]_ 0 [)] _[>]_ [ 0] _[ for each][ d][ with][ a]_ [(] 0 _[d]_ [)] _>_ 0 _._ _Then the minimizer_
+
+
+_wise) and assume_ [�]
+
+
+Π( **x** 0) = arg min
+**y** 0: _A_ ( **y** 0)= _a_ 0 _[D]_ [KL][(] **[y]** [0] _[∥]_ **[x]** [0][)]
+
+
+_exists, is unique, and is given by the coordinatewise scaling_
+
+Π( **x** 0) [(] _g_ _[d]_ [)] = _x_ [(] _g_ _[d]_ 0 [)] _[·]_ _a_ [(] 0 _[d]_ [)] _,_ _d_ = 1 _, . . ., D._
+
+         
+_g_ _[′][ x]_ [(] _g_ _[d][′]_ 0 [)]
+
+
+_Proof._ The objective is strictly convex in **y** 0 on _{_ **y** 0 _≥_ 0 _}_, and the constraints are affine, so the
+minimizer is unique. Form the Lagrangian with multipliers _ν_ [(] _[d]_ [)] for the _D_ constraints:
+
+
+     _yg_ [(] _[d]_ [)] _−_ _a_ [(] 0 _[d]_ [)] _._
+_g_
+
+
+_L_ ( **y** _, ν_ ) = 
+
+_g,d_
+
+
+- _yg_ [(] _[d]_ [)] log _[y]_ _g_ [(] _[d]_ [)] _−_ _yg_ [(] _[d]_ [)] + _x_ [(] _g_ _[d]_ [)] - + _x_ [(] _g_ _[d]_ [)]
+
+
+_ν_ [(] _[d]_ [)][��]
+
+_d_ _g_
+
+
+26
+
+
+Stationarity gives _∂L/∂yg_ [(] _[d]_ [)] = log( _yg_ [(] _[d]_ [)] _[/x]_ _g_ [(] _[d]_ [)][) +] _[ ν]_ [(] _[d]_ [)] [=] [0][,] [hence] _[y]_ _g_ [(] _[d]_ [)] = _x_ [(] _g_ _[d]_ [)] _[e][−][ν]_ [(] _[d]_ [)][.] [Imposing]
+
+- [(] _[d]_ [)] [(] _[d]_ [)] _[−][ν]_ [(] _[d]_ [)] [(] _[d]_ [)] [(] _[d]_ [)]
+
+
+_g_ _[y]_ _g_ [(] _[d]_ [)] = _a_ [(] 0 _[d]_ [)] yields _e_ _[−][ν]_ [(] _[d]_ [)] = _a_ [(] 0 _[d]_ [)] _[/]_ [ �]
+
+
+_g_ _[x]_ [(] _g_ _[d]_ [)][, proving the formula.]
+
+
+Since we are then operating on count matrices here we additionally introduce a randomized rounding
+algorithm which enables us to exactly sample from a count-valued point on this projected set.
+
+
+B.2 CONDITIONS FOR RECOVERABILITY
+
+
+We give conditions under which aggregate supervision can, in principle, identify (unit-level) count
+distributions from aggregate observations. Throughout we use the notation of Sec. 4: **X** 0 =
+( _X_ 10 _, . . ., XG_ 0) _∈_ Z _[G]_ _≥_ 0 [,] _[ A]_ [0] [:=] _[A]_ [(] **[X]** [0][)][, and in the sum case] _[ A]_ [(] **[x]** [0][)] [=] [�] _g_ _[G]_ =1 _[x][g]_ [0][.] [We fix][ (] **[x]** _[t][, t, z]_ [)]
+and suppress this conditioning in the notation when convenient.
+
+
+B.2.1 FACTORIAL CUMULANT FRAMEWORK
+
+
+For a nonnegative integer-valued random variable _X_, define its probability generating function (pgf)
+_GX_ ( _s_ ) = E[ _s_ _[X]_ ] for _s ∈_ [0 _,_ 1], and write the factorial moment generating function (FMGF) as
+
+
+_MX_ ( _t_ ) = E[(1 + _t_ ) _[X]_ ] = _GX_ (1 + _t_ ) _,_ _t ∈_ ( _−_ 1 _,_ 0] (and possibly for small _t >_ 0) _._
+
+
+Whenever _MX_ ( _t_ ) is finite on a neighborhood of _t_ = 0, define the factorial cumulant generating
+function (FCGF)
+
+
+_CX_ ( _t_ ) = log _MX_ ( _t_ ) = 
+
+_k≥_ 1
+
+
+_κk_ ( _X_ )
+
+_t_ _[k]_ _,_
+_k_ !
+
+
+where _κk_ ( _X_ ) = _CX_ [(] _[k]_ [)][(0)][ are the factorial cumulants.] [The pgf] _[ G][X]_ [(hence] _[ C][X]_ [) determines the law of]
+_X_ uniquely.
+
+
+**Lemma B.7** (Additivity under (conditional) independence) **.** _If X_ _and Y_ _are independent (or condi-_
+_tionally independent given a σ-field C), then_
+
+
+_CX_ + _Y_ ( _t_ ) = _CX_ ( _t_ ) + _CY_ ( _t_ )    - _or CX_ + _Y_ ( _t | C_ ) = _CX_ ( _t | C_ ) + _CY_ ( _t | C_ )� _,_
+
+
+_on any interval where the FCGFs are finite._
+
+
+B.2.2 ADDITIVE IDENTIFIABILITY OF FACTORIAL-CUMULANT SIGNATURES
+
+
+Recovering unit-level distributions from the law of a sum is _not automatic_ : distinct unit configurations
+can yield the same aggregate law (e.g., sums of independent Poissons depend only on the total rate).
+To state correct conditions, we separate a _structural identifiability_ property from regularity.
+
+**Definition** **B.8** ( _G_ -additive identifiability) **.** _Let_ _{F_ ( _·_ ; _ψ_ ) : _ψ_ _∈_ Ψ _}_ _be_ _a_ _family_ _of_ _real-analytic_
+_functions_ _on_ _a_ _neighborhood_ _of_ _t_ = 0 _._ _We_ _say_ _the_ _family_ _is_ _G_ -additively identifiable _if_ _for_ _any_
+_parameters ψ_ 1 _, . . ., ψG_ _and ψ_ 1 _[′]_ _[, . . ., ψ]_ _G_ _[′]_ _[,]_
+
+
+_G_
+
+- _F_ ( _t_ ; _ψg_ ) _≡_
+
+
+_g_ =1
+
+
+_G_
+
+
+_F_ ( _t_ ; _ψg_ _[′]_ [)] _(as analytic functions near_ 0 _)_
+_g_ =1
+
+
+= _⇒{ψ_ 1 _, . . ., ψG} and {ψ_ 1 _[′]_ _[, . . ., ψ]_ _G_ _[′]_ _[}][ coincide as multisets][.]_
+
+
+**Lemma B.9** (A simple sufficient condition) **.** _If the family {F_ ( _·_ ; _ψ_ ) : _ψ_ _∈_ Ψ _} is (finitely) linearly_
+_independent_ _as_ _analytic_ _functions,_ _i.e.,_ _any_ _finite_ _linear_ _combination_ [�] _j_ _[m]_ =1 _[c][j][F]_ [(] _[·]_ [;] _[ ψ][j]_ [)] _[≡]_ [0] _[with]_
+_distinct ψj_ _forces cj_ = 0 _, then it is G-additively identifiable for every G._
+
+
+_Proof._ If [�] _g_ _[G]_ =1 _[F]_ [(] _[·]_ [;] _[ ψ][g]_ [)] _[ ≡]_ [�] _g_ _[G]_ =1 _[F]_ [(] _[·]_ [;] _[ ψ]_ _g_ _[′]_ [)][, bring all terms to one side and group identical parame-]
+ters. This yields a finite linear combination [�] _j_ _[m]_ =1 _[c][j][F]_ [(] _[·]_ [;] _[ψ]_ [˜] _[j]_ [)] _[ ≡]_ [0][ with integer coefficients] _[ c][j]_ _[∈]_ [Z][.]
+Linear independence forces all _cj_ = 0, hence matching multiplicities, i.e., the multisets coincide.
+
+
+For _X_ _∼_ Poi( _λ_ ) one has _CX_ ( _t_ ) = _λt_, so the family is _not_ additively identifiable: _λ_ 1 _t_ + _λ_ 2 _t_ =
+( _λ_ 1 + _λ_ 2) _t_ shows only the total rate is recoverable from the sum. Thus recoverability requires families
+whose FCGFs contain richer (nonlinear) signatures than a single linear term.
+
+
+27
+
+
+B.2.3 RECOVERABILITY FROM AGGREGATE LAWS
+
+
+We now give a clean identifiability statement for the _sum_ aggregate under conditional independence.
+This captures the mathematical core of when deconvolution from aggregates is possible.
+
+**Theorem B.10** (Recoverability up to permutation from the sum) **.** _Fix_ ( **x** _t, t, z_ ) _and suppose that_
+_conditional on this information the units X_ 10 _, . . ., XG_ 0 _are independent and_
+
+
+_Xg_ 0 _|_ ( **x** _t, t, z_ ) _∼_ _Pψg_ _,_ _g_ = 1 _, . . ., G,_
+
+
+_where each Pψ_ _is a count distribution whose FCGF equals F_ ( _·_ ; _ψ_ ) _on a neighborhood of_ 0 _._ _Assume_
+_{F_ ( _·_ ; _ψ_ ) : _ψ_ _∈_ Ψ _} is G-additively identifiable (Def. B.8)._ _Then the conditional law of the sum_
+
+
+_A_ 0 =
+
+
+_G_
+
+- _Xg_ 0
+
+
+_g_ =1
+
+
+_uniquely_ _determines_ _the_ _multiset_ _{ψ_ 1 _, . . ., ψG}_ _(hence_ _the_ _multiset_ _of_ _unit_ _laws_ _{Pψg_ _}),_ _up_ _to_
+_permutation of units._
+
+
+_Proof._ By Lemma B.7,
+
+
+_G_
+
+- _F_ ( _t_ ; _ψg_ ) _._
+
+
+_g_ =1
+
+
+_CA_ 0( _t |_ **x** _t, t, z_ ) =
+
+
+_G_
+
+- _CXg_ 0( _t |_ **x** _t, t, z_ ) =
+
+
+_g_ =1
+
+
+Equality in distribution of _A_ 0 implies equality of its pgf (hence FCGF) on an interval, hence equality
+of the analytic function _CA_ 0( _·_ ). By _G_ -additive identifiability, the multiset of parameters is unique.
+
+
+**How covariates** _z_ **make learning possible.** Theorem B.10 is the strongest statement one can make
+from a single sum: because _A_ 0 is symmetric in the units, one can in general identify unit distributions
+only up to permutation. Side information _z_ enables _learnability_ once it imposes additional structure
+that breaks this symmetry across groups. Two sufficient structures are:
+
+
+1. **Finite** **labeled** **types** **(composition** **varies** **across** **groups).** Suppose each unit has an
+observed type label _zg_ _∈{_ 1 _, . . ., K}_ and _Xg_ 0 _| zg_ = _k_ _∼_ _Pψk_, so all units of a given type
+share parameters. Then for a group with type counts ( _n_ 1 _, . . ., nK_ ),
+
+
+_CA_ 0( _t | n_ 1 _, . . ., nK_ ) =
+
+
+_K_
+
+- _nk F_ ( _t_ ; _ψk_ ) _._
+
+
+_k_ =1
+
+
+Across multiple groups whose compositions ( _n_ 1 _, . . ., nK_ ) vary sufficiently (a full-rank
+design), the shared parameters ( _ψ_ 1 _, . . ., ψK_ ) become identifiable even though within any
+single group the sum is symmetric.
+
+2. **Low-dimensional parameterization by covariates.** More generally, assume _ψg_ = _ψη_ ( _zg_ )
+for a _shared_ low-dimensional parameter _η_ (e.g., a regression model, a neural net, or another identifiable function class). Then the aggregate FCGF [�] _g_ _[F]_ [(] _[·]_ [;] _[ ψ][η]_ [(] _[z][g]_ [))][ varies with]
+
+( _z_ 1 _, . . ., zG_ ); if the covariates span the function class and the induced map _η_ _�→_ Law( _A_ 0 _| z_ )
+is injective (locally, in our setting), then _η_ is learnable from aggregate supervision.
+
+
+B.3 LARGE- _G_ LIMITS: GAUSSIAN COLLAPSE OF AGGREGATE INFORMATION
+
+
+We explain why learning unit-level structure from aggregates becomes statistically ill-conditioned as
+the number of units _G_ grows.
+
+Fix ( **x** _t, t, z_ ). Let **X** 0 = ( _X_ 10 _, . . ., XG_ 0) _∈_ Z _[G]_ _≥_ 0 [be conditionally independent given][ (] **[x]** _[t][, t, z]_ [)][, with]
+
+
+_Xg_ 0 _|_ ( **x** _t, t, z_ ) _∼_ _Pg_ ( _· |_ **x** _t, t, z_ ) _,_ _g_ = 1 _, . . ., G,_
+
+
+(e.g., _Pg_ ( _· |_ **x** _t, t, z_ ) = _qθ_ ( _· |_ **x** _t, t, zg_ ) under our model). Let the aggregate random variable be
+
+
+_A_ 0 := _A_ ( **X** 0) _∈_ Z _,_ and in particular for the sum case _A_ ( **x** 0) =
+
+
+28
+
+
+_G_
+
+- _xg_ 0 _._
+
+
+_g_ =1
+
+
+Write
+
+
+_µG_ := E[ _A_ 0 _|_ **x** _t, t, z_ ] _,_ _σG_ [2] [:= Var(] _[A]_ [0] _[|]_ **[ x]** _[t][, t, z]_ [) =]
+
+
+_G_
+
+- Var( _Xg_ 0 _|_ **x** _t, t, z_ ) _._
+
+
+_g_ =1
+
+
+Assume _σG_ [2] _[→∞]_ [and a Lindeberg (or Lyapunov) condition holds conditional on][ (] **[x]** _[t][, t, z]_ [)][.] [Then]
+
+
+_A_ 0 _−_ _µG_
+
+_⇒N_ (0 _,_ 1) ( _G →∞_ ) _._
+_σG_
+
+
+Moreover, if [�] _g_ _[G]_ =1 [E][[] _[|][X][g]_ [0] _[ −]_ [E] _[X][g]_ [0] _[|]_ [3] _[|]_ **[ x]** _[t][, t, z]_ []] _[ <][ ∞]_ [, a Berry–Esseen bound yields]
+
+
+- _Gg_ =1 [E][[] _[|][X][g]_ [0] _[−]_ [E] _[X][g]_ [0] _[|]_ [3] _[|]_ **[ x]** _[t][, t, z]_ []]
+
+_,_
+_σG_ [3]
+
+
+sup
+_x∈_ R
+
+
+ - _A_ 0 _−_ _µG_  Pr _≤_ _x_ **x** _t, t, z_ _−_ Φ( _x_ ) _≤_ _C_
+���� _σG_ ���� ����
+
+
+for a universal constant _C_ .
+
+
+Let _κk_ ( _·_ ) denote cumulants (ordinary cumulants, or factorial cumulants for count data). Under
+conditional independence, cumulants add:
+
+
+_κk_ ( _A_ 0 _|_ **x** _t, t, z_ ) =
+
+
+_G_
+
+- _κk_ ( _Xg_ 0 _|_ **x** _t, t, z_ ) _._
+
+
+_g_ =1
+
+
+If sup _g |κk_ ( _Xg_ 0 _|_ **x** _t, t, z_ ) _| < ∞_ and _σG_ [2] [= Θ(] _[G]_ [)][, then for all] _[ k]_ _[≥]_ [3][,]
+
+
+_κk_ ( _A_ 0 _|_ **x** _t, t, z_ ) = _O_        - _G_ [1] _[−][k/]_ [2][�] = _O_        - _G_ _[−]_ [(] _[k][−]_ [2)] _[/]_ [2][�] _−−−−→_ 0 _._
+
+_σG_ _[k]_ _G→∞_
+
+
+Thus, after centering and scaling, the aggregate law is asymptotically Gaussian and is effectively
+determined by ( _µG, σG_ [2] [)][;] [information] [about] [unit] [heterogeneity] [enters] [only] [through] [standardized]
+cumulants of size _G_ _[−]_ [(] _[k][−]_ [2)] _[/]_ [2] .
+
+
+**Implication for deconvolution from aggregates.** Aggregation is a many-to-one map: there are
+typically many distinct collections of unit-level laws _{Pg}_ _[G]_ _g_ =1 [that induce the same (or nearly the]
+same) aggregate law of _A_ 0. The CLT strengthens this ambiguity for large _G_ : once _A_ 0 is close
+to Gaussian, distinguishing different unit-level configurations using aggregate observations alone
+requires resolving the small _G_ _[−]_ [(] _[k][−]_ [2)] _[/]_ [2] corrections beyond mean and variance. Equivalently, any
+local “recoverability modulus” that upper-bounds unit-level error by aggregate-level error must
+deteriorate with _G_ unless additional structure is imposed (e.g., multiple independent aggregates,
+parametric tying/low-dimensional structure across units, or partial unit-level supervision).
+
+
+C PROJECTION AND ROUNDING ALGORITHMS
+
+
+**Group rescaling.** Algorithm 5 rescales item-level nonnegative values _{xb}_ _[B]_ _b_ =1 [so that each group]
+_Gg_ attains a prescribed aggregate _Cg_ . The procedure is linear-time in the number of items and linear
+in memory in the number of groups:
+
+
+_T_ = _O_ ( _B_ ) _,_ _M_ extra = _O_ ( _G_ ) _,_
+
+
+and is applied in parallel to each feature dimension.
+
+
+29
+
+
+**Algorithm 5** Group Rescaling to Match Aggregates
+
+
+**Require:** item values _xb_ _≥_ 0 for _b_ = 1 _, . . ., B_ ; groups _G_ 1 _, . . ., GG_ ; targets _Cg_ _≥_ 0
+**Ensure:** _yb_ _≥_ 0 with [�] _b∈Gg_ _[y][b]_ [=] _[ C][g]_ [for all] _[ g]_
+
+
+**Ensure:** _yb_ _≥_ 0 with [�] _b∈Gg_ _[y][b]_ [=] _[ C][g]_ [for all] _[ g]_
+
+1: **for** _g_ = 1 _, . . ., G_ **do**
+2: _Sg_ _←_ [�] _b∈G_ _[x][b]_
+
+
+2: _Sg_ _←_ [�] _b∈Gg_ _[x][b]_
+
+3: **if** _Sg_ _>_ 0 **then**
+4: **for** _b ∈_ _Gg_ **do**
+5: _yb_ _←_ _xb Cg/Sg_ _▷_ proportional rescaling
+6: **end for**
+7: **else**
+8: **for** _b ∈_ _Gg_ **do**
+9: _yb_ _←_ _Cg/|Gg|_ _▷_ uniform split
+10: **end for**
+11: **end if**
+12: **end for**
+13: **return** _{yb}_
+
+
+**Randomized rounding.** Algorithm 6 independently rounds a real value to the nearest integers,
+preserving the value in expectation. It runs in constant time and memory per entry, so applying it
+over _B_ items has
+
+
+_T_ = _O_ ( _B_ ) _,_ _M_ extra = _O_ (1) _._
+
+
+**Algorithm 6** Randomized Rounding (scalar form)
+
+
+**Require:** real value _x ≥_ 0
+**Ensure:** integer _y_ _∈_ Z _≥_ 0
+
+1: _a ←⌊x⌋_
+2: _r_ _←_ _x −_ _a_
+3: sample _U_ _∼_ Unif[0 _,_ 1]
+4: **if** _U_ _< r_ **then**
+5: _y_ _←_ _a_ + 1
+6: **else**
+7: _y_ _←_ _a_
+8: **end if**
+9: **return** _y_
+
+
+**Groupwise exact rounding.** Algorithm 7 converts rescaled real values _{xb}_ to integers _{yb}_ while
+_exactly_ preserving each group sum: [�] _b∈Gg_ _[y][b]_ [=] _[ C][g]_ [.] [Each] _[ y][b]_ [differs from] _[ x][b]_ [by at most][ 1][.] [The only]
+expensive step is weighted sampling without replacement inside each group. With Gumbel–Top- _k_
+sampling the worst-case complexity is
+
+
+         - _G_         _T_ = _O_         - _|Gg|_ log _|Gg|_ _,_ _M_ extra = _O_ ( _B_ ) _,_
+
+
+_g_ =1
+
+
+and the algorithm is again applied independently over coordinates.
+
+
+30
+
+
+**Algorithm 7** Groupwise Randomized Rounding with Exact Aggregates (scalar form)
+
+
+**Require:** rescaled _xb_ _≥_ 0, groups _G_ 1 _, . . ., GG_, integer targets _Cg_
+**Ensure:** integers _yb_ _≥_ 0 with [�] _b∈Gg_ _[y][b]_ [=] _[ C][g]_ [and] _[ |][y][b][ −]_ _[x][b][| ≤]_ [1]
+1: **for** _g_ = 1 _, . . ., G_ **do** _▷_ work inside group _Gg_
+2: **for** _b ∈_ _Gg_ **do**
+3: _ab_ _←⌊xb⌋_
+4: _rb_ _←_ _xb −_ _ab_
+5: **end for**
+6: _Ag_ _←_ [�] _b∈Gg_ _[a][b]_
+
+7: _Sg_ _←_ _Cg −_ _Ag_ _▷_ # of increments required
+8: **if** _Sg_ = 0 **then**
+9: **for** _b ∈_ _Gg_ **do**
+10: _yb_ _←_ _ab_
+11: **end for**
+12: **else**
+13: sample a subset _S_ _⊆_ _Gg_ of size _Sg_
+14: **without replacement** with weights _∝_ _rb_
+15: **for** _b ∈_ _Gg_ **do**
+16: **if** _b ∈_ _S_ **then**
+17: _yb_ _←_ _ab_ + 1
+18: **else**
+19: _yb_ _←_ _ab_
+20: **end if**
+21: **end for**
+22: **end if**
+23: **end for**
+24: **return** _{yb}_
+
+
+D SYNTHETIC DISTRIBUTIONS
+
+
+All synthetic tasks use the same base architecture with a 4-layer MLP with 128 dimensional hidden
+layers. We scale the inputs and outputs in dimension, so for example the DFM and CE-CB have
+_d ×_ 256 dimensional outputs (since we clip all datasets to use a range of 256 to make for easy
+tokenization). The energy score models take inputs in _d_ + noise ~~d~~ im and we use noise ~~d~~ im = 100
+throughout. We ran all experiments with Adam using both _lr_ = 1 _e −_ 3 _,_ 2 _e −_ 4 and present results
+for the best performing learning rate for each method. We use a cosine warmup for the learning rate
+for 100 steps. For all experiments we use gradient norm clipping to size 1, batch size 256, and train
+for 500 epochs. For the energy score models, we use exponential model averaging, which is crucial
+to good performance. Full details are available in the codebase.
+
+
+For the flow matching we use _σ_ = 0 _._ 1 following best practices (we tested larger _σ_ but saw large
+degradations in performance). For the bessel sampler we use �Λ+Λ _−_ = 32.
+
+
+D.1 DISCRETE 8-GAUSSIANS TO 2-MOONS
+
+
+D.1.1 DATASET
+
+
+For qualitative evaluation, we adapt the classic continuous “8-Gaussians to 2-Moons” task into a
+fully discrete, integer-valued setting suitable for count-based flow matching. Each dataset consists of
+50 _,_ 000 paired samples ( _x_ 0 _, x_ 1) _∈_ Z [2], constructed as follows.
+
+
+**Source distribution (** _x_ 0 **).** We generate samples from the standard two-moons dataset in R [2] using
+make ~~m~~ oons with noise level noise = 0 _._ 1. The moons are shifted to be approximately centered
+at the origin by subtracting (0 _._ 5 _,_ 0 _._ 25).
+
+
+**Target distribution (** _x_ 1 **).** We construct an 8-component Gaussian mixture arranged evenly on a
+circle of radius 2 _._ 0 in R [2] . Each component has isotropic Gaussian noise with variance matching
+
+
+31
+
+
+noise = 0 _._ 1. A sample is generated by first selecting one of the 8 components uniformly at random,
+then drawing from the corresponding Gaussian.
+
+
+**Integerization.** Both source and target samples are mapped to the integer lattice by
+
+
+_x_ _�→_ round(clip( _x ·_ scale + offset _,_ min ~~v~~ alue _,_ value ~~r~~ ange _−_ 1)) _,_
+
+
+with parameters scale = 30 _._ 0, offset = 80 _._ 0, min ~~v~~ alue = 0, and value ~~r~~ ange = 196.
+This procedure ensures that all outputs fall in the discrete vocabulary _{_ 0 _,_ 1 _, . . .,_ 195 _}_ [2], but the scales
+are chosen so that essentially no values are actually clipped.
+
+
+D.1.2 RESULTS
+
+
+We present a visualization of the learned trajectories in Fig. 2 and the full details in Table 6. Count
+bridges achieve uniformly the best performance using the distributional losses, that is the cross
+entropy or energy scores with the energy score uniformly best.
+
+
+Table 6: Discrete Moons Results: Noise → Two Moons
+
+
+Method MMD _W_ 2 Energy
+
+
+CFM 0.065 ± 0.019 0.049 ± 0.008 0.874 ± 0.246
+DFM 0.010 ± 0.002 0.010 ± 0.002 0.035 ± 0.014
+Count Bridge (CE) 0.0065 ± 0.0023 0.0080 ± 0.0009 0.026 ± 0.004
+Count Bridge (ES) **0.0044 ± 0.0018** **0.0052 ± 0.0007** **0.0098 ± 0.0029**
+Count Bridge (MSE) 0.030 ± 0.000 0.033 ± 0.001 0.366 ± 0.015
+
+
+We also run the Count Bridge across different noise levels, here we actually find that our default of
+_λ_ + = _λ−_ = 32 is not optimized, so all results can be considered lower bounds on our performance.
+
+
+Table 7: Count Bridge (Energy Score) Results Across Different _λ_ + = _λ−_ Values
+
+
+_λ_ + = _λ−_ MMD _W_ 2 Energy
+
+
+0 **0.0038 ± 0.0012** 0.0046 ± 0.0002 **0.0075 ± 0.0011**
+8 0.0039 ± 0.0015 **0.0045 ± 0.0006** 0.0080 ± 0.0022
+16 0.0049 ± 0.0003 0.0049 ± 0.0003 0.0095 ± 0.0004
+32 0.0052 ± 0.0024 0.0055 ± 0.0015 0.011 ± 0.006
+256 0.0064 ± 0.0020 0.0063 ± 0.0009 0.015 ± 0.004
+
+
+D.1.3 NOISE TO 2-MOONS FOR DIFFUSION COMPARISONS
+
+
+Here we compare against a standard Gaussian DDIM model Song et al. (2020) and Discrete Diffusion
+as in Shi et al. (2024). Since these models go from noise to a target distribution, we cannot do the
+8-Gaussians to 2-Moons task, so we simply target the 2-Moons. This makes the task substantially
+easier. For Count Bridges we use the same results from the previous table (the more difficult task, but
+with comparable scores at the endpoint).
+
+
+Table 8: Discrete Moons Results: Eight Gaussians → Two Moons
+
+
+Method MMD _W_ 2 Energy
+
+
+Count Bridge (ES) **0.0044 ± 0.0018** **0.0052 ± 0.0007** **0.0098 ± 0.0029**
+Gaussian Diffusion 0.024 _±_ 0.009 0.017 _±_ 0.006 0.118 _±_ 0.064
+Discrete Diffusion 0.017 _±_ 0.010 0.013 _±_ 0.006 0.072 _±_ 0.055
+
+
+32
+
+
+D.2 LOW-RANK GAUSSIAN MIXTURE
+
+
+D.2.1 DATASET
+
+
+For synthetic evaluation, we use a pre-sampled integer-valued Gaussian mixture dataset that scales
+with the ambient dimension _d_ while fixing the latent rank at _r_ = 3. Each dataset consists of 50 _,_ 000
+paired samples ( _x_ 0 _, x_ 1) _∈_ Z _[d]_ generated according to the following procedure:
+
+
+**Mixture construction.** We define a _k_ = 5 component Gaussian mixture in latent space R _[r]_ with
+_r_ = 3 (we hold these parameters constant as we scale in _d_ ):
+
+    - **Means.** Component means are drawn from _N_ (0 _, σ_ [2] _I_ ) with scale _σ_ = mean ~~s~~ cale _/_ _[√]_ _r_,
+and shifted to lie near the center of the integer range. We set mean ~~s~~ cale = 20 _._ 0.
+
+
+    - **Covariances.** Each covariance is constructed by sampling eigenvalues from an exponential
+distribution with scale cov ~~s~~ cale = 10 _._ 0, clamped below min ~~e~~ igenvalue = 0 _._ 1,
+and conjugating by a random orthogonal matrix.
+
+
+    - **Mixture weights.** Weights are drawn from a Dirichlet(1 _, . . .,_ 1) prior, yielding a random
+simplex vector.
+
+
+**Projection** **to** R _[d]_ **.** Latent samples _z_ _∈_ R [3] are mapped to the ambient space via a
+random projection matrix _P_ _∈_ R _[d][×][r]_ with entries scaled by projection ~~s~~ cale _/_ _[√]_ _r_,
+where projection ~~s~~ cale = 1 _._ 0. To avoid degeneracy, isotropic Gaussian noise _ϵ_ _∼_
+_N_ (0 _,_ noise ~~s~~ cale [2] _Id_ ) with noise ~~s~~ cale = 1 _._ 0 is added after projection:
+
+
+_y_ = _Pz_ + _ϵ,_ _z_ _∼_ MoG _r,_ _ϵ ∼N_ (0 _, Id_ ) _._
+
+
+**Integerization.** Projected samples _y_ _∈_ R _[d]_ are rounded to the nearest integer and reflected into the
+bounded range [min ~~v~~ alue _,_ value ~~r~~ ange _−_ 1] = [0 _,_ 255] to ensure validity of DFM.
+
+
+**Scaling in** _d_ **.** The intrinsic latent structure is fixed at _r_ = 3, while the output dimension _d_ is varied
+across experiments (e.g. _d_ = 5 _,_ 16 _,_ 32 _,_ 128 _,_ 256 _,_ 512). This construction produces datasets with
+constant intrinsic complexity but increasing ambient dimension, providing a natural test of how
+models scale in _d_ .
+
+
+D.2.2 RESULTS
+
+
+The central scaling results are presented visually in Fig. 3. Here we also present the full experimental
+details in Table 9.
+
+
+D.3 DECONVOLUTION GAUSSIAN MIXTURE DATASET
+
+
+We extend the low-rank Gaussian mixture task (Appendix D.2) to evaluate deconvolution capabilities
+under controlled conditions. Each observation is formed by aggregating a group of _G_ unit-level
+samples into a single count vector.
+
+
+**Group construction.** For each group, component proportions are drawn from a Dirichlet distribution with concentration parameter _α_, yielding group-specific mixture weights. The _G_ unit-level
+samples are then drawn independently from the corresponding mixture components. Both the aggregated sum _X_ 0 _∈_ Z _[d]_ and the individual unit-level labels _z_ _∈{_ 0 _,_ 1 _}_ _[G][×][k]_ are retained, enabling
+evaluation of methods under both aggregate-only and aggregate+unit supervision.
+
+
+**Experimental variation.** We vary two factors that control the difficulty of deconvolution:
+
+
+    - **Group size:** _G ∈{_ 4 _,_ 8 _,_ 32 _,_ 128 _}_, which determines how many unit-level samples are aggregated. Larger groups yield more uniform averages and less information about component
+heterogeneity.
+
+
+    - **Dirichlet concentration:** _α ∈{_ 1 _,_ 10 _,_ 1000 _}_, which controls variability in group-specific
+mixture weights. Small _α_ values produce heterogeneous groups (informative for deconvolution), while large _α_ values yield nearly uniform group proportions (uninformative).
+
+
+33
+
+
+Table 9: Performance Comparison Across Dimensions and Methods
+
+
+Dim Method NFE MMD _W_ 2 EMD
+
+
+8 0.027 ± 0.014 0.019 ± 0.002 0.716 ± 0.420
+CFM 32 0.026 ± 0.017 0.015 ± 0.004 0.584 ± 0.460
+128 0.026 ± 0.018 0.015 ± 0.004 0.565 ± 0.469
+
+
+4
+
+
+8
+
+
+16
+
+
+32
+
+
+64
+
+
+128
+
+
+256
+
+
+512
+
+
+8 0.025 ± 0.004 0.011 ± 0.001 0.245 ± 0.053
+DFM 32 0.035 ± 0.003 0.014 ± 0.001 0.458 ± 0.078
+128 0.046 ± 0.005 0.018 ± 0.002 0.759 ± 0.144
+
+8 **0.0053 ± 0.0007** **0.0040 ± 0.0004** **0.020 ± 0.004**
+Count Bridge 32 **0.0054 ± 0.0010** **0.0042 ± 0.0002** **0.023 ± 0.005**
+128 **0.0098 ± 0.0008** **0.0058 ± 0.0003** **0.055 ± 0.008**
+
+8 0.041 ± 0.013 0.025 ± 0.004 1.05 ± 0.18
+CFM 32 0.039 ± 0.012 0.014 ± 0.004 0.456 ± 0.147
+128 0.040 ± 0.010 0.014 ± 0.003 0.421 ± 0.128
+
+8 0.026 ± 0.007 0.011 ± 0.001 0.204 ± 0.067
+DFM 32 0.034 ± 0.009 0.011 ± 0.003 0.317 ± 0.142
+128 0.042 ± 0.011 0.012 ± 0.003 0.497 ± 0.228
+
+8 **0.0036 ± 0.0007** **0.0023 ± 0.0001** **0.0068 ± 0.0024**
+Count Bridge 32 **0.0038 ± 0.0011** **0.0026 ± 0.0006** **0.0077 ± 0.0028**
+128 **0.0050 ± 0.0015** **0.0029 ± 0.0003** **0.012 ± 0.002**
+
+8 0.066 ± 0.011 0.028 ± 0.001 2.08 ± 0.54
+CFM 32 0.053 ± 0.011 0.017 ± 0.001 0.788 ± 0.211
+128 0.052 ± 0.011 0.015 ± 0.001 0.647 ± 0.163
+
+8 0.078 ± 0.001 0.017 ± 0.000 1.20 ± 0.06
+DFM 32 0.100 ± 0.005 0.022 ± 0.002 1.92 ± 0.28
+128 0.118 ± 0.017 0.025 ± 0.004 2.72 ± 0.86
+
+8 **0.0067 ± 0.0014** **0.0035 ± 0.0003** **0.025 ± 0.007**
+Count Bridge 32 **0.011 ± 0.001** **0.0045 ± 0.0004** **0.048 ± 0.007**
+128 **0.017 ± 0.001** **0.0057 ± 0.0004** **0.090 ± 0.013**
+
+8 0.145 ± 0.024 0.030 ± 0.001 4.63 ± 1.28
+CFM 32 0.131 ± 0.043 0.026 ± 0.005 3.14 ± 1.72
+128 0.131 ± 0.052 0.022 ± 0.006 3.09 ± 1.97
+
+8 0.079 ± 0.027 0.016 ± 0.008 1.23 ± 0.76
+DFM 32 0.089 ± 0.023 0.017 ± 0.006 1.55 ± 0.85
+128 0.100 ± 0.027 0.018 ± 0.007 1.99 ± 1.10
+
+8 **0.0083 ± 0.0008** **0.0024 ± 0.0003** **0.021 ± 0.002**
+Count Bridge 32 **0.010 ± 0.002** **0.0031 ± 0.0006** **0.029 ± 0.008**
+128 **0.010 ± 0.002** **0.0034 ± 0.0007** **0.034 ± 0.007**
+
+8 0.296 ± 0.077 0.042 ± 0.008 13.43 ± 6.74
+CFM 32 0.313 ± 0.099 0.046 ± 0.014 16.07 ± 9.93
+128 0.326 ± 0.107 0.049 ± 0.017 17.94 ± 11.55
+
+8 0.105 ± 0.033 0.022 ± 0.007 1.71 ± 1.07
+DFM 32 0.126 ± 0.039 0.020 ± 0.005 2.57 ± 1.58
+128 0.147 ± 0.048 0.022 ± 0.006 3.59 ± 2.20
+
+8 **0.020 ± 0.004** **0.0051 ± 0.0005** **0.072 ± 0.019**
+Count Bridge 32 **0.027 ± 0.002** **0.0061 ± 0.0002** **0.112 ± 0.014**
+128 **0.029 ± 0.001** **0.0065 ± 0.0005** **0.138 ± 0.018**
+
+8 0.335 ± 0.009 0.038 ± 0.003 12.89 ± 1.09
+CFM 32 0.276 ± 0.034 0.033 ± 0.008 10.59 ± 3.51
+128 0.260 ± 0.048 0.032 ± 0.008 10.55 ± 4.74
+
+8 0.205 ± 0.036 0.042 ± 0.005 6.66 ± 2.47
+DFM 32 0.236 ± 0.031 0.043 ± 0.005 9.06 ± 2.63
+128 0.259 ± 0.028 0.050 ± 0.011 10.90 ± 2.92
+
+8 **0.128 ± 0.066** **0.014 ± 0.006** **3.30 ± 2.34**
+Count Bridge 32 **0.140 ± 0.075** **0.014 ± 0.006** **3.89 ± 2.97**
+128 **0.151 ± 0.082** **0.016 ± 0.007** **4.55 ± 3.65**
+
+8 0.461 ± 0.007 0.049 ± 0.007 28.45 ± 4.63
+CFM 32 0.402 ± 0.049 0.047 ± 0.006 28.95 ± 10.71
+128 0.390 ± 0.069 0.045 ± 0.012 30.57 ± 13.24
+
+8 0.216 ± 0.049 0.029 ± 0.008 9.75 ± 5.07
+DFM 32 0.228 ± 0.045 0.033 ± 0.008 12.63 ± 4.81
+128 0.255 ± 0.044 0.039 ± 0.009 15.80 ± 4.96
+
+8 **0.087 ± 0.045** **0.0093 ± 0.0022** **1.58 ± 1.28**
+Count Bridge 32 **0.092 ± 0.044** **0.0099 ± 0.0021** **1.68 ± 1.30**
+128 **0.105 ± 0.039** **0.012 ± 0.001** **1.98 ± 1.26**
+
+8 0.569 ± 0.055 0.051 ± 0.006 49.32 ± 7.46
+CFM 32 0.471 ± 0.046 0.049 ± 0.005 50.69 ± 11.35
+128 0.438 ± 0.034 0.048 ± 0.005 53.70 ± 14.23
+
+8 0.261 ± 0.069 0.042 ± 0.015 30.49 ± 21.88
+DFM 32 0.288 ± 0.099 0.050 ± 0.019 44.53 ± 29.76
+128 0.319 ± 0.112 0.058 ± 0.022 55.03 ± 35.35
+
+8 **0.081 ± 0.028** **0.010 ± 0.002** **1.46 ± 0.73**
+Count Bridge 32 **0.085 ± 0.026** **0.010 ± 0.001** **1.79 ± 0.89**
+128 **0.113 ± 0.029** **0.016 ± 0.003** **3.53 ± 2.27**
+
+
+**Dataset parameters.** We fix the ambient dimension at _d_ = 4, latent rank at _r_ = 3, number of
+mixture components _k_ = 5, and use the same mixture parameterization as in the low-rank dataset
+(means scaled by 20 _._ 0, covariances scaled by 10 _._ 0 with minimum eigenvalue 0 _._ 1, projection scale
+1 _._ 0, isotropic noise 1 _._ 0, and integerization into [0 _,_ 255]). Each dataset contains 5 _,_ 000 groups, drawn
+from a base pool of 50 _,_ 000 pre-sampled mixture samples.
+
+
+34
+
+
+**Results.** As shown in Fig. 4, deconvolution performance degrades as groups become larger and
+more uniform. This matches the theoretical results in Appendices B.2 and B.3, which establish that
+deconvolution requires between-group heterogeneity for identification, a property that is inherently
+lost as _G_ grows. We present detailed results across metrics in Tables 10, 11, 12.
+
+
+Table 10: Deconvolution Performance: _W_ 2 vs Group Size and Dirichlet Concentration
+
+
+Group Size (n) _α_ = 1 _α_ = 10 _α_ = 1000
+
+
+4 0.0091 ± 0.0005 0.010 ± 0.000 0.011 ± 0.000
+8 0.011 ± 0.001 0.014 ± 0.001 0.016 ± 0.000
+32 0.020 ± 0.002 0.023 ± 0.002 0.025 ± 0.002
+128 0.050 ± 0.008 0.053 ± 0.006 0.057 ± 0.002
+
+
+Table 11: Deconvolution Performance: EMD vs Group Size and Dirichlet Concentration
+
+
+Group Size (n) _α_ = 1 _α_ = 10 _α_ = 1000
+
+
+4 0.130 ± 0.006 0.195 ± 0.025 0.207 ± 0.040
+8 0.286 ± 0.023 0.363 ± 0.037 0.483 ± 0.010
+32 0.530 ± 0.051 0.657 ± 0.095 0.921 ± 0.222
+128 2.24 ± 0.58 2.22 ± 0.54 2.63 ± 0.14
+
+
+Table 12: Deconvolution Performance: MMD vs Group Size and Dirichlet Concentration
+
+
+Group Size (n) _α_ = 1 _α_ = 10 _α_ = 1000
+
+
+4 0.011 ± 0.001 0.011 ± 0.002 0.012 ± 0.004
+8 0.016 ± 0.001 0.017 ± 0.002 0.021 ± 0.001
+32 0.014 ± 0.003 0.020 ± 0.003 0.025 ± 0.010
+128 0.037 ± 0.005 0.045 ± 0.007 0.044 ± 0.001
+
+
+To investigate the importance of different rounding approaches in our deconvolution implementation
+we run an ablation study where we substitute our preferred exact rounding approach for two alternatives: first a simple deterministic rounding, and second a randomized rounding (where we simply
+add zero or one with probability of the decimal value). Deterministic rounding can lead to arbitrarily
+incorrect results, randomized rounding preserves the expectation, and our exact approach will ensure
+we exactly match the target aggregate value. We find that although our exact approach is superior
+across three replicates of the _n_ = 128 _, α_ = 1 setting the results are very close particularly for the
+randomized rounding. We believe this could justify substituting the randomized approach since it is
+simpler, although in different regimes this may matter more or less.
+
+
+Table 13: Performance comparison of different rounding methods with standard errors.
+
+
+Method MMD _W_ 2 EMD
+
+
+exact **0** _._ _±_ **0** _._ **0** _._ _±_ **0** _._ **2** _._ **24** _±_ **0** _._ **58**
+randomized 0 _._ 038 _±_ 0 _._ 000 0 _._ 051 _±_ 0 _._ 007 2 _._ 33 _±_ 0 _._ 43
+round 0 _._ 038 _±_ 0 _._ 003 0 _._ 052 _±_ 0 _._ 007 2 _._ 32 _±_ 0 _._ 44
+
+
+E NUCLEOTIDE-LEVEL GENE EXPRESSION MODELLING
+
+
+E.1 DATASET
+
+
+**Nucleotide-level** **data** **preprocessing** We use the Onek1k peripheral blood mononuclear cells
+(PBMC) 10X 3’ scRNA-seq dataset, originally collected by Yazar et al. (2022). For our analysis, as
+we are interested in nucleotide-level counts rather than the gene-level counts provided with the initial
+publication, we use the preprocessed reads made available by Hingerl et al. (2024). The reads are
+
+
+35
+
+
+aligned to the hg38 human reference genome. The resulting BAM files are filtered to include only
+high quality, UMI-deduplicated reads. The cell type annotations were used as provided in the original
+dataset.
+
+
+**Gene-level data preprocessing** We construct the gene-level count matrices directly from our singlecell coverage matrices rather than following the typical single-cell gene expression preprocessing
+pipeline. In particular, for each annotated gene and each cell, we take the max count over the
+nucleotide-level coverage matrix as the count for the gene.
+
+
+E.2 ARCHITECTURE, TRAINING, AND INFERENCE
+
+
+E.2.1 INPUTS AND EMBEDDINGS
+
+
+We model nucleotide–level counts on a fixed window of length _L_ =896. For each example we form
+
+
+_xt_ _∈_ Z _[L]_ _≥_ 0 _[,]_ _t ∈_ (0 _,_ 1] _,_ _z_ _∼N_ (0 _, Idz_ ) _,_ _c ∈{_ 1 _, . . ., C},_ seq _∈{_ A _,_ C _,_ G _,_ T _,_ N _}_ _[L]_ _._
+
+
+Sequence context is embedded with a frozen Enformer encoder (EleutherAI checkpoint), yielding
+per–position embeddings
+_E_ (seq) _∈_ R _[L][×][d][E]_ _,_ _dE_ = 3072 _._
+
+
+We tile the scalars across positions and concatenate
+
+
+_H_ [(0)] =    - _E_ (seq) _∥_ _xt_ _∥_ _t ∥_ _z_ _∥_ emb( _c_ )    - _∈_ R _[L][×]_ [(] _[d][E]_ [+1+1+] _[d][z]_ [+] _[d][c]_ [)] _,_
+
+
+with _dz_ =100 and _dc_ =14. A two–layer SELU MLP projects to the model width _d_ :
+
+
+_X_ [(0)] = _ϕ_        - _W_ 2 _ϕ_ ( _W_ 1 _H_ [(0)] )� _∈_ R _[L][×][d]_ _._
+
+
+E.2.2 LOCAL ATTENTION BACKBONE
+
+
+We apply _N_ attn residual self–attention blocks (PyTorch MultiheadAttention, batch–first) with
+LayerNorm:
+
+_X_ ˜ [(] _[ℓ]_ [)] = MHA� _X_ [(] _[ℓ]_ [)] _, X_ [(] _[ℓ]_ [)] _, X_ [(] _[ℓ]_ [)][�] _,_ _X_ [(] _[ℓ]_ [+1)] = LN� _X_ ˜ ( _ℓ_ ) + _X_ (0)� _,_
+
+
+where the residual skip uses the pre–block _X_ [(0)] as in the implementation. [2] We use _N_ attn=2 layers, _d_ =hidden ~~d~~ im, and _h_ =4 heads. A linear projection followed by softplus produces a
+nonnegative per–position prediction
+
+
+_x_ ˆ0 = softplus� _W_ out _X_ [(] _[N]_ [attn][)][�] _∈_ R _[L]_ _≥_ 0 _[.]_
+
+
+This parameterizes the conditional law _qθ_ ( _·_ _|_ _xt, t, z, c,_ seq) used inside the count–bridge reverse
+kernel (Sec. 3).
+
+
+E.2.3 LEARNED PROJECTION MODULE Π _ψ_
+
+
+When an aggregate constraint _a_ 0= [�] _i_ _[L]_ =1 _[x]_ [0] _[,i]_ [ is observed, we refine] _[x]_ [ˆ][0][ with a lightweight attention]
+projector that operates across _positions_ . We form
+
+
+_Y_ [(0)] =         - _x_ ˆ0 _∥_ _xt_ _∥_ _a_ 0 _∥_ _X_ [(] _[N]_ [attn][)][ �] _∈_ R _[L][×]_ [(1+1+1+] _[d]_ [)] _._
+
+
+A two–layer SELU MLP lifts to width _d_, then _N_ proj=2 self–attention layers (sequence–first API)
+with residual+LayerNorm are applied:
+
+_Y_ ˜ [(] _[m]_ [)] = MHA( _Y_ [(] _[m]_ [)] _, Y_ [(] _[m]_ [)] _, Y_ [(] _[m]_ [)] ) _,_ _Y_ [(] _[m]_ [+1)] = LN� _Y_ ˜ ( _m_ ) + _Y_ (0)� _._
+
+
+A linear head produces an additive correction which we re–softplus for nonnegativity:
+
+
+_x_ ˜0 = softplus� _W_ proj _Y_ [(] _[N]_ [proj][)][�] + _x_ ˆ0 _._
+
+
+At inference, when _a_ 0 is present we use _x_ ˜0 as the endpoint in the reverse step; otherwise we use _x_ ˆ0.
+
+
+2Code uses a “global” residual _X_ _←_ _X_ + _X_ (0) within each block. We retained this because it stabilized
+training with _L_ =896.
+
+
+36
+
+
+E.2.4 TRAINING OBJECTIVES AND SCHEDULES
+
+
+**Distributional** **loss** **(energy** **score).** We train _qθ_ with the energy score _Sρ_ on the conditional
+_X_ 0 _| Xt_ = _xt_ (Sec. 3.2). For each example we draw _m_ i.i.d. samples _x_ ˆ [(] 0 _[j]_ [)] _∼_ _qθ_ ( _· | xt, t, z, c,_ seq) via
+ancestral decoding of the per–position parameterization and estimate the _U_ –statistic version of _Sρ_
+with _ρ_ ( _x, x_ _[′]_ )= _∥x−x_ _[′]_ _∥_ _[β]_ 2 [(] _[β][ ∈]_ [(0] _[,]_ [ 2)][).] [We used] _[ m]_ [=2][ in practice.]
+
+
+**Aggregate–aware training.** With probability _p_ agg=0 _._ 1 we attach an aggregate _a_ 0 and route the
+forward pass through Π _ψ_ to obtain _x_ ˜0, then compute the same energy score. This jointly trains Π _ψ_ to
+approximate sampling from the mean–conditional _X_ 0 _| A_ ( _X_ 0)= _a_ 0 _, Xt, t_ while preserving the exact
+reverse transition of the count bridge.
+
+
+**Cell–type masking.** To support both conditional and unconditional generation, we randomly mask
+the cell–type embedding with probability _p_ mask (set to zero vector). We used _p_ mask=0 _._ 1.
+
+
+E.2.5 OPTIMIZATION AND HYPERPARAMETERS
+
+
+We use Adam, learning rate _{_ 2 _×_ 10 _[−]_ [4], cosine warmup for 100 steps, EMA with 0 _._ 999, batch size
+128, gradient clipping at 1 _._ 0. See configs for exact architecture specification.
+
+
+E.2.6 SAMPLING
+
+
+At test time we follow Alg. 2: starting from _x_ 1 we iterate _tk_ _↓_ 0. At each step we sample _X_ [˜] 0 _∼_ _qθ_ ( _· |_
+_xtk_ _, tk, z, c,_ seq); if an aggregate is provided we replace with _x_ ˜0=Π _ψ_ (ˆ _x_ 0 _, a_ 0 _, xtk_ ). We then apply
+the exact binomial–hypergeometric reverse kernel (Prop. 3.1) to obtain _xtk−_ 1. This guarantees that
+trajectories remain within the discrete support while leveraging the learned distributional posterior.
+We use three function evaluations for all results in this application.
+
+
+E.3 ADDITIONAL RESULTS
+
+
+In Tab. E.3 we provide results for gene expression prediction performance, broken down by cell type.
+
+
+Cell type Baseline MSE CB MSE
+
+
+CD4 ET 3.596 **1.402**
+NK 0.415 **0.364**
+CD4 NC 3.382 **1.304**
+CD8 S100B 2.619 **1.002**
+CD8 ET 1.065 **0.540**
+B IN 2.556 **1.091**
+CD8 NC 3.381 **1.311**
+B Mem 6.742 **3.416**
+NK R 1.624 **0.781**
+Mono NC 1.485 **0.752**
+Mono C 1.253 **0.676**
+DC 9.302 **4.475**
+Plasma 10763.906 **10696.934**
+CD4 SOX4 3.428 **1.323**
+
+
+We also analyze the unit-level profiles of the deconvolved transciptomes. We aggregate the nucleotidelevel transcriptomes up to the gene level by computing the maximum count over the gene profile,
+enabling us to generate a (standard cell by gene) count matrix from our deconvolved profile. We then
+plot the UMAP of the held-out ground truth alongside the deconvolved transcriptomic profiles, and
+find that the cells are well-mixed (Fig. 5), suggesting that generated expression distributions match
+the true distributions.
+
+
+37
+
+
+Figure 5: UMAP of true single-cell and CB-deconvolved nucleotide-level expression, aggregated to
+the gene level and hued by cell type (as assigned by Yazar et al. (2022)).
+
+
+F SPATIAL TRANSCRIPTOMIC DECONVOLUTION
+
+
+F.1 DATASET
+
+
+**Preprocessing** We used the publicly available mouse brain MERFISH dataset from Vizgen (2021).
+We subset the data to a particular slice (slice 1, replicate 2). We used the transcript puncta and nuclear
+segmentation masks as provided with the dataset. For gene expression, we used the raw transcript
+counts without applying standard single-cell preprocessing pipelines. For each cell, we resized the
+DAPI image to 256x256 pixels by padding.
+
+
+**Aggregation** To simulate a Visium-style spatial transcriptomics dataset, we aggregated the singlecell MERFISH data. A grid of spots was defined with a center-to-center distance of 100 _µm_ and a
+spot radius of 55 _µm_ . The gene expression profile for each simulated spot was then generated by
+summing the transcript counts of all identified cells whose nuclei fell within the circular bounds of
+that spot.
+
+
+F.2 ARCHITECTURE, TRAINING, AND SAMPLING
+
+
+F.2.1 INPUTS AND TOKENIZATION
+
+
+We model spot-level _counts_ while conditioning on _image_ context and diffusion _noise/time_ tokens.
+Each training example provides
+
+_x_ [cnt] _t_ _∈_ Z _≥_ _[D]_ 0 _[c]_ _[,]_ _It_ _∈_ R _[C][×][H][×][W]_ _,_ _t ∈_ (0 _,_ 1] _,_ _ε ∈_ R _[d][ε]_ _,_ _y_ _∈{_ 1 _, . . ., Cy}_ (optional) _._
+
+
+Images are patchified by a ViT-style embedder (PatchEmbed) into
+
+_X_ [img] _∈_ R _[B][×][N]_ [img] _[×][d]_ _,_ _N_ img = ( _H/P_ ) ( _W/P_ ) _,_
+
+while counts are converted into a small set of _count_ _patches_ using a learned projector
+(CountPatchEmbedding):
+
+
+              -              _X_ [cnt] = reshape MLP( _x_ [cnt] _t_ [)] _[,]_ [[] _[B, N]_ [cnt] _[, d]_ []] + _E_ cnt _,_
+
+
+with _N_ cnt learned “pseudo-patches” and _E_ cnt learnable positional embeddings.
+
+
+We form auxiliary tokens for time, noise, and (optionally) class:
+
+_τ_ = TimeMLP�timestep ~~e~~ mb( _t_ )� _∈_ R _[B][×]_ [1] _[×][d]_ _,_ _η_ = NoiseMLP� _Wεε_   - _∈_ R _[B][×]_ [1] _[×][d]_ _,_
+����time ����noise
+
+and, if labels are used, _ℓ_ = Emb( _y_ ) _∈_ R _[B][×]_ [1] _[×][d]_ . Concatenating all tokens,
+
+_X_ [(0)] =     - _ℓ_ ; _η_ ; _τ_ ; _X_ [img] ; _X_ [cnt][ �] + _E_ pos _∈_ R _[B][×]_ [(] _[N]_ [img][+] _[N]_ [cnt][+][extras][)] _[×][d]_ _,_
+with a single learned positional table _E_ pos covering all tokens.
+
+
+F.2.2 U-VIT BACKBONE (FUSION AND DECODING)
+
+
+We process _X_ [(0)] with a U-Net–style ViT:
+
+
+_X_ [(1)] _, . . ., X_ [(] _[L/]_ [2)]
+
+- �� encoder (save skips)
+
+
+_−−−−−−→_ mid Block _X_ ˜ [(] _[L/]_ [2)] _, . . .,_ _X_ ˜ [(] _[L]_ [)] _,_
+
+     - ��      decoder (with skips)
+
+
+38
+
+
+where each Block is a standard MHA +MLP transformer block with LayerNorm, and decoder
+blocks attend over skip connections. A final LayerNorm yields _X_ [out] _∈_ R _[B][×]_ [(] _[N]_ [img][+] _[N]_ [cnt][+][extras][)] _[×][d]_ .
+
+
+We then drop the auxiliary tokens and split modalities:
+
+
+_X_ out [img] [=] _[ X]_ [out][[:] _[,]_ [img range] _[,]_ [ :]] _[,]_ _X_ out [cnt] [=] _[ X]_ [out][[:] _[,]_ [cnt range] _[,]_ [ :]] _[.]_
+
+
+**Count decoder.** Count patches are decoded back to a vector via a small MLP head with nonnegativity enforced by Softplus:
+
+
+_x_ ˆ0 = Softplus�MLP�flatten( _X_ out [cnt][)]         - [�] _∈_ R _[B][×][D][c]_ _._
+
+
+This parameterizes _qθ_ ( _·_ _| x_ [cnt] _t_ _[, I][t][, t, ε, y]_ [)][ for the distributional loss and the reverse count-bridge step.]
+
+
+F.2.3 TRAINING OBJECTIVE AND USAGE
+
+
+We train the model to predict the distribution of _X_ 0 (counts) given multimodal context under the
+bridge ( _Xt_ ):
+
+_L_ ( _θ_ ) = _−_ E _t,_ ( _X_ 0 _,Xt_ )� _Sρ_       - _qθ_ ( _· | Xt_ [cnt] _[, I][t][, t, ε, y]_ [)] _[,]_ _[X]_ 0 [cnt]       - [�] _,_
+
+
+using the energy score _Sρ_ with _ρ_ ( _x, x_ _[′]_ ) = _∥x−x_ _[′]_ _∥_ _[β]_ 2 [(] _[β]_ _[∈]_ [(0] _[,]_ [ 2)][) and the standard unbiased] _[ U]_ [-statistic]
+estimator with _m_ samples from _qθ_ . Time and noise tokens implement the distributional diffusion
+conditioning; label tokens (if present) enable class-conditional modeling. During reverse sampling
+we draw _X_ [˜] 0 _∼_ _qθ_ ( _·_ _|_ _x_ [cnt] _t_ _[, I][t][, t, ε, y]_ [)] [and] [update] _[x][t][−]_ [∆] [using] [the] [exact] [binomial–hypergeometric]
+count-bridge kernel (Prop. 3.1).
+
+
+F.2.4 IMPLEMENTATION SPECIFICS
+
+
+    - **Patchification.** PatchEmbed uses patch size _P_ on _It_ (channels _C_ ), producing _N_ img =
+( _H/P_ )( _W/P_ ) tokens of width _d_ . CountPatchEmbedding projects _Dc_ -dimensional
+counts to _N_ cnt tokens of width _d_ with learned positional embeddings.
+
+
+    - **Auxiliary** **tokens.** Time token: timestep ~~e~~ mbedding followed by a linear or MLP
+projector (time ~~d~~ im controls concatenated components); noise token: linear to _d_ then a
+2-layer SiLU MLP; label token: lookup embedding if used. All tokens share a single learned
+positional table.
+
+
+    - **Backbone.** Depth _L_ with _L/_ 2 encoder and _L/_ 2 decoder blocks; each block uses _d_     dimensional embeddings, _h_ heads, MLP ratio _r_, LayerNorm, and (optionally) gradient
+checkpointing. Decoder blocks accept the matching encoder skip.
+
+
+    - **Heads.** Count head: 2-layer GELU MLP over the concatenated count tokens, ending with
+Softplus. Image head exists but is ignored for the loss.
+
+
+    - **No weight decay.** We exclude token positional tables and count-positional embeddings
+from weight decay, following ViT practice.
+
+
+F.2.5 OPTIMIZATION AND HYPERPARAMETERS
+
+
+We use Adam, learning rate _{_ 2 _×_ 10 _[−]_ [4], cosine warmup for 100 steps, EMA with 0 _._ 999, batch size
+128, gradient clipping at 1 _._ 0. See configs for exact architecture specification.
+
+
+F.2.6 SAMPLING
+
+
+At test time we follow Alg. 3 using the aggregates to ensure our sampled _x_ ˆ0 exactly match the target
+sum at each intermediate time. We then apply the exact binomial–hypergeometric reverse kernel
+(Prop. 3.1) to obtain _xtk−_ 1.
+
+
+F.3 ADDITIONAL RESULTS
+
+
+**Comparison with reference-based methods** Count Bridges and STDeconvolve are both referencefree methods: that is, they require only aggregate level data, and do not need a reference dataset of
+unit-level measurements. Many deconvolution methods, including RCTD (Cable et al., 2022) require
+a single-cell (non-spatial) reference dataset. These methods benefit from unit-level observations, and
+
+
+39
+
+
+(a) (b) (c)
+
+
+Figure 6: Performance of RCTD, STDeconvolve and Count Bridge on MERFISH deconvolution
+across number of cell types using (a) Jensen Shannon Divergence (JSD), (B) RMSE and (C) Spearman
+Correlation
+
+
+Figure 7: UMAP of true vs deconvolved cell profiles using the Count Bridge.
+
+
+as such solve a more constrained problem – but require additional reference data which may not be
+available in all settings.
+
+
+Using the MERFISH benchmarking setup we also evaluate RCTD, and tabulate the results in Tab. 14.
+For evaluation, we use Jensen shannon Divergence (JSD) and RMSE metrics as described in Li et al.
+(2023). We find that Count Bridges perform similarly to RCTD (with a higher JSD but lower RMSE),
+despite the fact that Count Bridges do not have access to a reference dataset.
+
+
+Method JSD RMSE Spearman
+
+
+STDeconvolve 0.288 0.177 0.255
+RCTD 0.161 0.113 0.580
+Count Bridge 0.229 0.110 0.332
+
+
+Table 14: Cell-type deconvolution error for spatial transcriptomic data. Note that RCTD requires a
+single-cell reference dataset for deconvolution.
+
+
+In Fig. 6, we show the performance of spatial deconvolution methods across varying numbers of cell
+types. These results evaluate only the recovery of cell type proportions, and do not evaluate full count
+profiles. Note that RCTD has access to the single-cell level reference data, while STDeconvolve and
+Count Bridges are fit entirely using aggregate-level data and do not have access to single cell counts.
+
+
+**Inspection of unit-level data generated by Count Bridges** In the previous section, we have shown
+through quantitative metrics that Count Bridges outperform alternatives for reconstructing unit-level
+gene expression vectors from spot-level aggregates. We next aim to evaluate the extent to which
+reconstructed gene expression profiles are biologically meaningful. We do this by performing conventional single-cell transcriptomic analysis on the synthetic unit-level expression vectors generated
+by Count Bridges.
+
+
+First, we plot the UMAP of the raw expression profiles of the true and generated data in Fig. 7. In
+this UMAP, we see that the true and deconvolved synthetic data are largely mixed, suggesting that
+the generated counts are realistic and match the distribution of the true counts.
+
+
+40
+
+
+Figure 8: Abundance of putative cell types (automatically annotated by celltypist) in synthetic unitlevel data generated by Count Bridges through deconvolution, vs. abundance of putative cell types in
+true unit-level data.
+
+
+Next, we perform cell type annotation for the generated counts. We preprocess by normalizing
+counts to 10 [4] per cell (row-normalizing), followed by a log-transform, then annotate cell types using
+celltypist (Dom´ınguez Conde et al., 2022). From this process, we identify 268 putative cell types in the
+synthetic unit-level data. The same pipeline, when applied to the real single-cell level measurements,
+identifies 278 putative cell types. And as shown in Figure 8, the cell type abundances inferred by
+Count Bridges (without access to unit level data) closely align with the cell type abundances observed
+in the true unit level data.
+
+
+**Deconvolution of a 10X Visium dataset** We next evaluate the deconvolution of spots in a real
+world 10X Visium dataset profiling the mouse brain. As ground truth is unavailable in this setting, we
+validate model predictions by assessing the extent to which the synthetic deconvolved data reflects
+known biology.
+
+
+We use the 10X Visium fluorescence dataset distributed by Palla et al. (2022), which profiles a coronal
+section of a mouse brain. To demonstrate the generalization capabilities of Count Bridges, we apply
+the model trained on MERFISH data directly to this Visium dataset without retraining.
+
+
+In order to correct batch effects and align dimensionality between datasets, we employ a momentmatching procedure. For each gene in the MERFISH data, we compute the mean and variance of
+expression and identify the gene in the 10X Visium data that most closely matches these moments.
+We then map the 10X Visium count matrices to the MERFISH feature space by subsetting to these
+matched genes.
+
+
+We deconvolve the 10X Visium data using Count Bridges with a spot-level mean constraint. To
+evaluate prediction quality, we use a standard single-cell analysis pipeline (as described above) and
+determine putative cell type annotations using Celltypist (Dom´ınguez Conde et al., 2022). Celltypist
+identifies 146 putative cell types, suggesting that the synthetic unit-level data recapitulates a significant
+degree of cell-to-cell variation. Furthermore, the recovered cell types are biologically consistent:
+the most abundant identified cell type is the oligodendrocyte, which matches the most abundant
+annotation in the MERFISH mouse brain dataset described above.
+
+
+41

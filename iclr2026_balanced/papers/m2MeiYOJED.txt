@@ -1,0 +1,1534 @@
+## PRISM: PARTIAL-LABEL RELATIONAL INFERENCE WITH SPATIAL AND SPECTRAL CUES
+
+
+**Yiyang Gu** [1] _[∗]_ **, Wenrui Wu** [2] _[∗]_ **, Yifang Qin** [1] **, Taian Guo** [1] **, Tao Zhe** [3] **, Jiaru Tang** [4] **, Zhiping Xiao** [5] _[†]_ **,**
+**Weizhi Zhang** [6] **, Ziyue Qiao** [7] **, Wei Ju** [1] **, Dongjie Wang** [3] **, Xiao Luo** [8] _[†]_ **, Philip S. Yu** [6] **, Ming Zhang** [1] _[†]_
+
+1 State Key Laboratory for Multimedia Information Processing,
+School of Computer Science, PKU-Anker LLM Lab, Peking University
+2 School of Mathematical Sciences, Peking University
+3 Department of Electrical Engineering and Computer Science, University of Kansas
+4 School of Psychological and Cognitive Sciences, Peking University
+5 Paul G. Allen School of Computer Science and Engineering, University of Washington
+6 Department of Computer Science, University of Illinois Chicago
+7 School of Computing and Information Technology, Great Bay University
+8 Department of Statistics, University of Wisconsin–Madison
+yiyanggu@pku.edu.cn, wenruiwu@stu.pku.edu.cn, patxiao@uw.edu,
+xiaoluo@wisc.edu, mzhang ~~c~~ s@pku.edu.cn
+
+
+ABSTRACT
+
+
+In many real-world scenarios, acquiring precise labels for graph-structured data
+is expensive or even infeasible, as reliable annotation often requires substantial
+expert knowledge or computational resources. As a result, graph labels are often noisy and ambiguous. This challenge motivates partial-label graph learning,
+where each graph is weakly annotated with a candidate label set containing the
+true label. However, such ambiguous supervision makes it hard to extract reliable
+graph semantics and increases the risk of overfitting to noisy candidate labels. To
+address these challenges, we propose a unified framework named PRISM that performs relational inference with spatial and spectral cues to alleviate the impact of
+label ambiguity. On the one hand, PRISM captures discriminative spatial cues by
+aligning prototype-guided substructures across graphs. On the other hand, it decomposes graph signals into multiple frequency bands and extracts global spectral
+cues with an attention mechanism, which preserve frequency-specific semantics.
+We integrate these complementary views into a hybrid relational graph and perform an iterative label propagation under candidate constraints. Extensive experiments on a range of well-known datasets demonstrate that PRISM consistently
+outperforms strong baselines under various noise settings.
+
+
+1 INTRODUCTION
+
+
+Graph-structured data is pervasive across diverse domains such as drug discovery, molecular property prediction, social network analysis, and recommendation systems (Fang et al., 2022; Zhang
+et al., 2021b; Wang et al., 2021). To handle such complex structures, Graph Neural Networks
+(GNNs) (Welling & Kipf, 2016; Hamilton et al., 2017; Xu et al., 2018; Zhang et al., 2021a; Yang
+et al., 2025) have emerged as powerful tools for learning expressive graph representations. GNNs
+typically operate by recursively aggregating information from node neighborhoods and summarizing
+node embeddings via global pooling (Gao & Ji, 2019; Lee et al., 2021). They have achieved state-ofthe-art results in a wide range of applications, including biomedical classification (Wu et al., 2022;
+Li et al., 2022a), cross-modal retrieval (Chen et al., 2022), and event understanding (Liu et al., 2023).
+
+
+Despite these advances, existing graph classification frameworks are still highly data hungry: they
+require accurate labeled samples to learn a discriminative classifier (Li et al., 2022b; Rousseau et al.,
+
+
+_∗_ Equal contribution.
+
+_†_ Corresponding authors.
+
+
+1
+
+
+2015). However, in many practical scenarios, acquiring ground-truth labels is expensive or technically infeasible. For instance, identifying the properties of chemical compounds often depends
+on density functional theory (DFT) simulations (Becke, 2014), which can be expensive and timeconsuming. To alleviate this problem, some automated tools are often employed to assist with the
+annotation process. However, this approach can introduce label ambiguity, as different tools may
+lead to inconsistent annotations. These noisy labels can pose significant challenges to the training
+of graph classifiers. Although self-supervised graph learning methods such as GraphCL (You et al.,
+2020) have alleviated the reliance on labels by using contrastive objectives to learn graph representations during pre-training, they still depend on accurate labels to train a classifier during downstream
+classification stages. Their performance tends to degrade significantly under label ambiguity.
+
+
+In this paper, we focus on a practical yet underexplored setting: Partial-label Graph Learning
+(PLGL). Each graph is annotated with a candidate label set that contains the true class label, but
+the exact ground-truth is unknown. This situation commonly arises when labels are generated from
+automated tools or coarse taxonomy (Ge et al., 2022; Gu et al., 2024). While partial label learning
+has been explored in computer vision (Feng & An, 2019; Lyu et al., 2020), PLGL presents unique
+challenges due to the structural complexity and non-Euclidean nature of graphs. First, ambiguous
+supervision introduces semantic uncertainty, making it difficult to capture class-discriminative substructures. Second, GNNs tend to overfit noisy signals, particularly when candidate sets contain
+semantically similar labels. Third, graphs exhibit patterns at multiple structural resolutions, from
+local motifs to global topology, which cannot be effectively captured by global pooling. Recent
+works have explored weakly supervised graph classification using pseudo-labeling (Ju et al., 2023b;
+Gu et al., 2025b) or contrastive learning (Yue et al., 2022; Luo et al., 2023), but they face two limitations: (i) reliance on overconfident predictions, leading to error accumulation under label ambiguity;
+and (ii) lack of explicit use of structural and spectral diversity to distinguish candidate labels.
+
+
+To bridge this gap, we introduce a unified framework PRISM for Partial-label Relational Inference
+with Spatial and Spectral Modeling. PRISM alleviates the impact of label ambiguity through three
+mechanisms. First, it aligns prototype-guided substructures across graphs to extract _spatial_ _cues_,
+which can uncover class-discriminative local patterns against the label ambiguity. Second, it decomposes graph signals into multiple frequency bands to encode _spectral cues_ . We propose a multi-band
+attention mechanism that preserves frequency-specific semantics critical for global structural understanding. Third, a _hybrid relational graph_ is constructed to integrate both spatial and spectral cues.
+We then employ a label propagation mechanism to refine supervision signals iteratively. We further utilize a momentum-based update of a soft label confidence matrix under candidate constraints,
+which suppresses noise accumulation and facilitates robust optimization.
+
+
+The contributions of this paper can be summarized in three points: (1) **Understudied Problem.** We
+study an understudied problem of partial-label graph learning, which has extensive practical applications in various domains. (2) **Novel Framework.** We propose a novel relational inference framework named PRISM. It leverages relational propagation to integrate spatial and spectral cues for
+label disambiguation. (3) **Extensive experiments.** We validate PRISM across diverse benchmarks
+and demonstrate its superiority over existing weakly supervised and graph learning approaches.
+
+
+2 BACKGROUND
+
+
+**Problem Definition.** Let _G_ = _{Gi_ = ( _Vi, Ei,_ _**X**_ _i_ ) _}i_ _[N]_ =1 [denote a collection of] _[ N]_ [graphs, where each]
+graph _Gi_ consists of a node set _Vi_, edge set _Ei_, and node features _**X**_ _i_ _∈_ R _[|V][i][|×][d]_ . We denote by
+_**A**_ _i_ 0 _,_ 1 the adjacency matrix of _i_ . For each graph _Gi_, we are given a candidate label
+_∈{_ _}_ _[|V][i][|×|V][i][|]_ _E_
+set _i_, where = 1 _,_ 2 _, . . ., C_ is the complete label space. The candidate set _i_ includes
+_S_ _⊂Y_ _Y_ _{_ _}_ _S_
+the true label _yi_ _[∗]_ [but does not reveal which one is correct.] [Our objective is to learn a graph classifier]
+_f_ ( _Gi_ ; _θ_ ) that predicts the ground-truth label _yi_ _[∗]_ [for] [each] [graph] [in] [the] [test] [set,] [by] [training] [only] [on]
+ambiguous candidate sets without access to ground-truth supervision.
+
+
+**Graph Neural Networks.** Graph Neural Networks (GNNs) are widely used to encode graph structures by recursively aggregating information from node neighborhoods. At each layer _l_, the representation of node _v_ is updated by combining its own embedding with messages from its neighbors:
+
+
+��
+_**h**_ [(] _v_ _[l]_ [)] = _ϕ_ [(] _[l]_ [)][ �] _**h**_ [(] _v_ _[l][−]_ [1)] _, ψ_ [(] _[l]_ [)][ �] _{_ _**h**_ [(] _u_ _[l][−]_ [1)] _}u∈N_ ( _v_ ) _,_ (1)
+
+
+2
+
+
+Figure 1: Overview of PRISM. Our framework jointly models spatial substructures (A) and spectral
+frequency patterns (B) to disambiguate partial labels. Prototype-guided attention and multi-band
+spectral encoding form a relational graph for iterative label refinement under candidate constraints.
+
+
+where _ψ_ [(] _[l]_ [)] and _ϕ_ [(] _[l]_ [)] are the aggregation function and the combination function, respectively, and
+_N_ ( _v_ ) denotes the neighbor set of node _v_ . After _L_ layers, node embeddings _{_ _**h**_ [(] _v_ _[L]_ [)] _}v∈V_ are aggregated into a graph-level representation using a readout function:
+
+
+                 -                  _**g**_ = READOUT _{_ _**h**_ [(] _v_ _[L]_ [)] _}v∈V_ _,_ (2)
+
+where READOUT can be sum, mean, or pooling methods. These graph representations provide the
+basis for downstream tasks such as graph-level classification.
+
+
+3 METHODOLOGY
+
+
+This paper introduces a novel framework PRISM for partial-label graph learning that integrates local substructural cues and global spectral cues to resolve candidate label ambiguities. Each graph
+is encoded through two complementary pathways: a spatial encoder captures discriminative spatial
+cues by aligning prototype-guided substructures across graphs, while a spectral encoder decomposes graph signals into distinct frequency bands, capturing both smooth and non-smooth structural
+patterns. These dual pathways induce a relational graph with two types of edges: one encoding
+prototype-based substructure similarity, the other reflecting spectral affinity across graphs. We then
+perform an iterative propagation over this graph to fuse information from both relational types,
+which enables the model to distill consistent label cues from noisy candidates and refine the supervision signals. The overview of PRISM is illustrated in Figure 1.
+
+
+3.1 SPATIAL CUES VIA SUBSTRUCTURE MATCHING
+
+
+In partial-label graph learning, the true label of each instance is hidden within a noisy candidate
+set, where multiple labels may be semantically correlated. Relying solely on global graph representations may blur these distinctions, since graphs with overlapping candidate labels can exhibit a
+similar overall topology. In contrast, local substructures frequently encode the most discriminative
+evidence for class separation. Motivated by this observation, we design a structure-aware disambiguation module that aligns prototype-guided substructures across related instances, which helps
+uncover consistent label semantics under ambiguity.
+
+
+To incorporate class-level semantic priors, we maintain a momentum-updated _prototype bank_ _**p**_ _c_
+_{_ _∈_
+R _[F]_ _c_, where each prototype _**p**_ _c_ tracks the aggregated global representation of graphs associated
+_}_ _∈Y_
+with candidate label _c_ . At training step _j_, we update each prototype as:
+
+
+1
+_**p**_ [(] _c_ _[j]_ [)] _m_ _**p**_ [(] _c_ _[j][−]_ [1)] + (1 _m_ )
+_←_ _·_ _−_ _·_ _c_
+_|B_ _|_
+
+
+3
+
+
+- _**g**_ _i,_ (3)
+
+_i∈Bc_
+
+
+where _**g**_ _i_ denotes the global embedding of graph _Gi_, _m_ (0 _,_ 1) is the momentum coefficient, and
+_∈_
+_Bc_ is the set of current-batch graphs containing label _c_ in their candidate set. Based on the prototype
+bank, we apply a _prototype-guided attention mechanism_ to extract _C_ substructure embeddings per
+graph, where each embedding is aligned with a candidate class. Given the node embeddings from
+the final GNN layer _{_ _**h**_ [(] _v_ _[L]_ [)] _}v∈Vi_ and the full prototype set _{_ _**p**_ _c}c_ _[C]_ =1 [, attention weights are computed]
+to obtain class-aware latent components:
+
+
+- _αvc_ _**h**_ [(] _v_ _[L]_ [)] _,_ where _αvc_ = exp( _**h**_ [(] _v_ _[L]_ [)] _[⊤]_ _**p**_ _c_ )
+
+      _v_ _i_ _·_ _v_ _[′]_ [ exp(] _**[h]**_ _v_ [(] _[L][′]_ [)] _[⊤]_
+_∈V_
+
+
+_**r**_ _i_ [(] _[c]_ [)] = 
+
+
+_._ (4)
+_v_ _[′]_ [ exp(] _**[h]**_ _v_ [(] _[L][′]_ [)] _[⊤]_ _**p**_ _c_ )
+
+
+The resulting embeddingsstream comparison. We then _{_ _**r**_ _i_ [(] _[c]_ [)] construct _[}]_ _c_ _[C]_ =1 [serve as interpretable and class-specific substructures for down-] a relational graph over graph pairs that share at least one
+candidate label. Let = ( _Gi, Gj_ ) _i_ _j_ = _,_ _i_ = _j_ denote the set of such graph pairs. For
+each pair ( _Gi, Gj_ ) _P_, we define a prototype-aware substructure similarity: _{_ _|_ _S_ _∩S_ _∅_ _}_
+_∈P_
+
+
+       -       _s_ _[spa]_ _ij_ = _c_ max _i_ _j_ [cos] _**r**_ _i_ [(] _[c]_ [)] _[,]_ _**[ r]**_ _j_ [(] _[c]_ [)] _·_ cos
+_∈S_ _∩S_
+
+
+- _**r**_ _i_ [(] _[c]_ [)] + _**r**_ _j_ [(] _[c]_ [)]
+_,_ _**p**_ _c_
+2
+
+
+_._ (5)
+
+
+For each graph, we retain its top- _ka_ neighbors with the highest _s_ _[spa]_ _ij_ scores to form a sparse relational graph with a normalized adjacency matrix _**A**_ _[spa]_ that encodes substructure-level agreement
+under label semantics. This spatial reasoning module provides a fine-grained structural information,
+thereby enhancing label disambiguation by promoting relational consistency among structurally
+aligned graph instances.
+
+
+3.2 SPECTRAL CUES VIA MULTI-BAND FREQUENCY ATTENTION
+
+
+While the spatial disambiguation module focuses on extracting local spatial cues, graph spectra
+offer a complementary global perspective by capturing both low-frequency smoothness and highfrequency irregularities. However, many existing spectral methods combine spectral components
+through linear aggregation across eigenmodes (Yang et al., 2022; Bo et al., 2023). Such aggregation
+mixes signals from different frequencies into a single representation, which may blur structurally
+diverse signals and obscure frequency-specific patterns that are crucial for graph understanding. We
+thus propose a _Multi-Band Frequency Attention_ module, which not only synthesizes spectral information into a unified form but also retains frequency-specific characteristics by explicitly modeling
+bands. Specifically, our method: (1) preserves the resolution of each frequency band by constructing
+explicit band-wise representations, and (2) provides fine-grained cross-graph reasoning from bandlevel similarity comparison. This architecture allows for frequency-aware graph embeddings, which
+concentrate on informative spectral patterns while suppressing the noise of less crucial bands.
+
+
+Given a graph _G_ with normalized Laplacian eigenvalues _λ_ 1 _, λ_ 2 _, . . ., λN_ and corresponding eigen_{_ _}_
+vectors _**u**_ 1 _,_ _**u**_ 2 _, . . .,_ _**u**_ _N_, we first project scalar spectral values into a learnable signal space using
+_{_ _}_
+harmonic expansion:
+_ρ_ ( _λ_ ) = [sin( _kλ_ ) _,_ cos( _kλ_ )] _[K]_ _k_ =1 (6)
+
+_[·]_ _**[ W]**_ _[ρ][,]_
+
+where _**W**_ _ρ_ _∈_ R [2] _[K][×][d]_ is a shared learnable projection matrix, and _K_ is the number of periods. For
+efficiency, we only consider the _T_ smallest eigenvectors, therefore producing _T_ distinct frequency
+embeddings, where each embedding serves as a filtered spectral descriptor of the graph. To construct
+band-specific node representations, we modulate the _p_ -th eigenvector _**u**_ _p_ _∈_ R _[N]_ with its associated
+harmonic encoding _ρ_ ( _λp_ ) to form:
+
+
+_**X**_ [(] _[p]_ [)] = _**u**_ _p ⊗_ _ρ_ ( _λp_ ) _∈_ R _[N]_ _[×][d]_ _,_ (7)
+
+
+where _⊗_ denotes the outer product broadcast across all nodes. We then apply a multi-layer neural
+network _f_ shared, shared across all frequency bands, to each _**X**_ [(] _[p]_ [)] to extract spectral signals. For each
+band _p ∈{_ 1 _, . . ., T_ _}_, we compute the corresponding graph-level embedding as:
+
+
+       -       _**z**_ [(] _[p]_ [)] = READOUT _f_ shared( _**X**_ [(] _[p]_ [)] ) _,_ (8)
+
+
+where READOUT denotes a readout function that integrates node embeddings. This yields a set of
+band-level embeddings _{_ _**z**_ [(1)] _, . . .,_ _**z**_ [(] _[T]_ [ )] _}_ that capture spectrally filtered representations of the graph
+
+
+4
+
+
+across multiple frequency perspectives. To synthesize multi-scale spectral signals, we employ a soft
+attention mechanism across bands:
+
+
+- _Tq_ =1 [exp] - _**a**_ _[⊤]_ _σ_ ( _**W z**_ [(] _[q]_ [)] )� _._ (9)
+
+
+_**z**_ =
+
+
+_T_
+
+
+- _p_ =1 _T_ _α_ [(] _[p]_ [)] _**z**_ [(] _[p]_ [)] _,_ where _α_ [(] _[p]_ [)] = - _Tq_ exp=1 [exp] - _**a**_ _[⊤]_ - _σ_ _**a**_ ( _[⊤]_ _**W z**_ _σ_ ( _**W z**_ [(] _[p]_ [)] ) [(] 
+
+
+Here, _**W**_ and _**a**_ are learnable parameters, and _σ_ ( _·_ ) denotes a nonlinear activation function. For
+cross-graph spectral reasoning, we compute band-wise similarity between graphs. Let _Gi_ and _Gj_
+denote two graphs with band embeddingsis defined as: _{_ _**z**_ _i_ [(] _[p]_ [)] _}p_ _[T]_ =1 [and] _[ {]_ _**[z]**_ _j_ [(] _[p]_ [)] _[}]_ _p_ _[T]_ =1 [,] [respectively.] [Their similarity]
+
+                  -                   _s_ _[spe]_ _ij_ = max _**z**_ _i_ [(] _[p]_ [)] _,_ _**z**_ _j_ [(] _[p]_ [)] _._ (10)
+_p_ 1 _,...,T_ [cos]
+_∈{_ _}_
+
+
+To ensure label-aware alignment, we restrict edges to graph pairs with overlapping candidate sets,
+i.e., _i_ _j_ = . Each graph links to its top- _ke_ most similar neighbors, forming a relational
+_S_ _∩S_ _∅_
+graph with a normalized adjacency matrix _**A**_ _[spe]_ that supports label disambiguation from the spectral
+perspective.
+
+
+We theoretically establish that both _**A**_ _[spa]_ and _**A**_ _[spe]_ contribute to label disambiguation. Intuitively,
+the distribution of hidden node embeddings should be determined by the prototype of the true label
+to a certain degree. Building on this observation, we present the following theorem with proof
+provided in Appendix A:
+
+
+          -           **Theorem 1.** _Assume_ E _h_ [(] _v_ _[i]_ [)] _[|][y]_ _i_ _[∗]_ [=] _[ c]_ = _pc,_ _∀v_ _∈Vi, ηjk_ [(] _[i]_ [)] [=] [P][ (] _**[A]**_ _[i]_ [ (] _[j, k]_ [) = 1)] _[ is random variable]_
+
+( _i_ )
+_whose_ _distribution_ _can_ _be_ _determined_ _by_ _yi_ _[∗][,]_ _[and]_ [min][1] _[≤][i][≤][N,]_ [1] _[≤][p][≤][T]_ ��� _λp_ +1 _p_ ��� _δ_ _for_ _some_
+
+_[−]_ _[λ]_ [(] _[i]_ [)] _≥_
+
+
+_δ_ _>_ 0 _._ _Then, we have for any i, j_ _∈{_ 1 _,_ 2 _, ..., N_ _}:_
+
+
+P - _A_ _[spa]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ - _→_ 1 (11)
+
+
+_and_
+P            - _A_ _[spe]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_            - _→_ 1 (12)
+
+_as_ _i_ _,_ _j_ _._
+_|V_ _|_ _|V_ _| →∞_
+
+Theorem 1 suggests that if graph _i_ and _j_ shares the same true label, the probabilities of _A_ _[spa]_ _ij_ and
+_A_ _[spe]_ _ij_ being 1 will both converge to 1, which works on the subsequent label propagation with disambiguation from noisy candidate sets.
+
+
+3.3 LABEL DISAMBIGUATION VIA RELATIONAL INFERENCE
+
+
+Based on the relational graph constructed in previous modules, which encodes spatial proximity and
+spectral correlation as distinct relational types, we develop an iterative label propagation framework
+to enhance supervision under partially labeled settings where ground-truth labels are inaccessible.
+This framework integrates complementary structural and spectral signals to refine soft supervision
+progressively, while rigorously enforcing candidate label constraints throughout the entire refinement process to ensure both semantic validity and training stability.
+
+Specifically, we denote the initial label matrix by _**Y**_ [(0)] _∈_ R _[N]_ _[×][C]_ . At each iteration _e_, the label
+matrix is updated using two normalized adjacency matrices, i.e., _**A**_ _[spa]_ and _**A**_ _[spe]_ . The propagation
+rule is:
+_**Y**_ ˜ [(] _[e]_ [+1)] = _µ ·_ _**Y**_ [(] _[e]_ [)] + (1 _−_ _µ_ ) _· N_      - _**A**_ _[spa]_ _**Y**_ [(] _[e]_ [)] + _**A**_ _[spe]_ _**Y**_ [(] _[e]_ [)][�] _,_ (13)
+
+where _µ_ (0 _,_ 1) controls the update momentum, and ( ) denotes row-wise _ℓ_ 1 normalization.
+_∈_ _N_ _·_
+We further apply a binary mask _**M**_ _∈{_ 0 _,_ 1 _}_ _[N]_ _[×][C]_ to constrain label assignments to valid candidate
+classes, where _**M**_ _ic_ = 1 if and only if _c_ _Si_ and _**M**_ _ic_ = 0 otherwise:
+_∈_
+
+_**Y**_ [(] _[e]_ [+1)] = _N_           - _**Y**_ ˜ [(] _[e]_ [+1)] _⊙_ _**M**_           - _,_ (14)
+
+where _⊙_ denotes element-wise multiplication. After _E_ iterations, the refined label matrix _**Y**_ [(] _[E]_ [)] captures multi-relational consistency while remaining faithful to partial supervision, enabling effective
+disambiguation of noisy candidate labels.
+
+
+5
+
+
+We further maintain a soft label confidence matrix _**Q**_ _∈_ R _[N]_ _[×][C]_ to stabilize optimization, which
+is uniformly initialized on the candidate label set. We utilize the soft labels _**Y**_ [(] _[E]_ [)] inferred from
+relational propagation to update _**Q**_ gradually. The update follows an exponential moving average
+(EMA) scheme:
+_**Q**_ _i_        - _β_ _**Q**_ _i_ + (1 _β_ ) _**Y**_ _i_ [(] _[E]_ [)]        - _,_ (15)
+_←N_ _·_ _−_ _·_
+
+where _β_ _∈_ (0 _,_ 1) is the momentum coefficient. This mechanism promotes stable refinement of the
+supervision signals during training.
+
+
+3.4 UNIFIED TRAINING OBJECTIVE
+
+
+We adopt a unified objective that couples the soft confidence target with the candidate constraint to
+train our framework effectively. Specifically, we first apply an MLP-based classifier to the spatialview embeddings _**g**_ to obtain the final predictions _**P**_ _[spa]_ _∈_ R _[N]_ _[×][C]_ . In parallel, we employ a distinct
+classifier that projects the spectral-view embeddings _**z**_ to _**P**_ _[spe]_ _∈_ R _[N]_ _[×][C]_ . The training loss for the
+spatial (spectral) view is defined as the negative marginal log-likelihood over the candidate label set:
+
+
+- _**P**_ _ic_ [(] _[o]_ [)] _**[Q]**_ _[ic][,]_ _o ∈{spa, spe},_ (16)
+
+_c∈Si_
+
+
+_sup_ [=] _[ −]_ [1]
+_L_ [(] _[o]_ [)] _B_
+
+
+_B_
+
+
+- log 
+
+_i_ =1 _c_
+
+
+where _Si_ is the candidate label set for sample _i_, and _B_ is the batch size. This formulation encourages
+the model to align predictions with the soft label confidence within the candidate label set. We then
+optimize the spatial and spectral objectives jointly to capture complementary graph characteristics:
+
+_L_ = _Lsup_ _[spa]_ [+] _[ L]_ _sup_ _[spe]_ _[.]_ (17)
+
+
+This dual-view supervision facilitates robust label disambiguation. We further offer a theoretical
+analysis of the proposed method, particularly focusing on the convergence of the label confidence
+matrix and training loss under certain conditions.the matrix consisting of ground-truth one-hot label vector.To begin with, letDenote the classifier as _Y_ _[∗]_ = ( _Yi_ _[∗]_ [)] _i_ _[N]_ =1 _f_ _[∈{]_ _classifier_ [0] _[,]_ [ 1] _[}][N]_ _[×]_ which _[C]_ [be]
+produces the label prediction matrix _P_, the final predicted label confidence vector of graph _Gi_ is
+_Pi_ = _fclassifier_ ( _**g**_ _i_ ). If the classifier is well-trained, it should recover label _c_ from _**p**_ _c_ since _**p**_ _c_ is
+the prototype of label _c_ . Based on this, we have the following results with the proof in Appendix B:
+
+**Theorem** **2.** _Under_ _the_ _assumption_ _of_ _Theorem_ _1,_ _further_ _assume_ _fclassifier_ ( _**p**_ _c_ ) = I _c,_ _∀c_ _∈Y_
+_where_ I _c_ _∈{_ 0 _,_ 1 _}_ _[C]_ _denotes one-hot vector whose c-th component is 1 while the rest are 0, we have:_
+
+_a.s._
+_Qi_ _−−→_ _Yi_ _[∗]_ (18)
+
+_as_ _i_ _, E_ _._ _And_
+_|V_ _|_ _→∞_
+E [ _Lsup_ ] _→_ 0 (19)
+
+_as_ min1 _≤i≤N |Vi|, E_ _→∞._
+
+Theorem 2 indicates that if each graph has enough node information and we conduct enough iterations, the soft label confidence matrix updated by EMA will converge to the ground-truth and the
+training loss will tend to zero, which further implies our framework can resolve label ambiguity by
+aligning prototype-guided substructures across graphs. The condition _i_ can be replaced
+_|V_ _|_ _→∞_
+by _B, N_ _→∞_ to a certain degree, since graphs with the same label and candidate label set can be
+regarded as a whole, and the whole number of nodes tends to infinity when _B, N_ _→∞_ .
+
+
+3.5 COMPUTATIONAL EFFICIENCY ANALYSIS
+
+
+Let _|V|_ be the number of nodes, _|E|_ the number of edges, _d_ the feature dimension, _L_ the number
+of GNN layers, and _T_ the number of spectral bands. In preprocessing, we compute the _T_ smallest
+eigenvectors and their spectral encodings, which are reused throughout training. During training, the
+spatial view performs message passing with complexity _O_ ( _L|E|d_ ), while the spectral view operates
+on pre-computed features across _T_ bands and applies a shared MLP, resulting in a total cost of
+_O_ ( _T_ _|V|d_ ). Since _L_ and _T_ are small constants, the overall training complexity is _O_ ( _|E|d_ ), which is
+linear in the number of edges and consistent with standard GNN-based methods.
+
+
+6
+
+
+Table 1: The compared accuracy (mean% _±_ std%) on different graph classification datasets. The best
+results are highlighted in boldface and the second best results are underlined. _q_ = _P_ ~~(~~ ~~_y_~~ _∈_ _Y_ ~~_|y_~~ = _y_ )
+refecting the level of label ambiguity.
+
+
+GCN 48.44 _±_ 2.06 40.22 _±_ 2.93 44.00 _±_ 1.08 35.94 _±_ 1.82 50.43 _±_ 1.07 41.63 _±_ 1.74 43.68 _±_ 0.68 41.35 _±_ 0.65 74.87 _±_ 0.25 60.67 _±_ 1.64
+
+GAT 49.11 _±_ 2.93 34.67 _±_ 3.87 61.33 _±_ 3.48 53.04 _±_ 3.06 59.77 _±_ 1.97 46.63 _±_ 1.54 52.93 _±_ 1.22 48.54 _±_ 0.46 71.83 _±_ 0.22 62.56 _±_ 3.54
+
+GIN 47.11 _±_ 4.59 34.22 _±_ 1.78 50.43 _±_ 1.92 35.59 _±_ 3.75 46.23 _±_ 0.88 37.29 _±_ 1.04 43.91 _±_ 0.45 41.24 _±_ 0.52 48.17 _±_ 0.44 41.00 _±_ 2.75
+
+GraphSAGE 47.33 _±_ 3.03 39.33 _±_ 3.11 70.96 _±_ 1.48 60.35 _±_ 1.83 58.91 _±_ 1.92 49.23 _±_ 1.90 51.92 _±_ 0.26 47.44 _±_ 0.83 71.24 _±_ 3.00 56.63 _±_ 5.81
+
+TopKPool 44.22 _±_ 2.76 36.00 _±_ 4.80 55.25 _±_ 2.74 43.83 _±_ 5.21 44.83 _±_ 2.19 34.63 _±_ 2.08 48.97 _±_ 1.24 42.87 _±_ 1.31 56.69 _±_ 3.58 33.49 _±_ 1.74
+
+SAGPool 46.67 _±_ 2.53 37.11 _±_ 5.00 55.71 _±_ 4.71 39.30 _±_ 5.49 41.89 _±_ 4.28 30.17 _±_ 1.85 50.01 _±_ 0.68 45.16 _±_ 0.36 59.91 _±_ 4.14 24.62 _±_ 0.32
+
+EdgePool 51.11 _±_ 3.06 33.33 _±_ 1.99 64.17 _±_ 2.44 55.36 _±_ 2.16 56.74 _±_ 3.98 45.89 _±_ 1.30 50.17 _±_ 0.64 45.90 _±_ 0.44 76.96 _±_ 0.13 62.31 _±_ 1.23
+
+ASAP 44.44 _±_ 3.06 31.56 _±_ 3.34 65.04 _±_ 1.22 52.75 _±_ 4.41 46.20 _±_ 4.08 34.94 _±_ 3.02 50.10 _±_ 0.63 44.81 _±_ 1.57 70.11 _±_ 0.54 62.47 _±_ 0.98
+
+Graph Transplant 51.78 _±_ 2.39 43.78 _±_ 3.41 74.84 _±_ 1.44 66.78 _±_ 1.86 66.57 _±_ 1.60 57.11 _±_ 1.03 53.79 _±_ 1.11 48.95 _±_ 1.47 74.66 _±_ 1.30 62.72 _±_ 2.37
+
+PiCO 46.88 _±_ 2.76 35.78 _±_ 3.02 73.56 _±_ 1.71 64.63 _±_ 4.35 76.25 _±_ 1.66 63.69 _±_ 1.42 53.47 _±_ 1.14 46.04 _±_ 1.20 53.99 _±_ 0.92 34.74 _±_ 1.77
+
+TGNN 53.33 _±_ 3.51 42.22 _±_ 4.39 70.43 _±_ 0.97 59.83 _±_ 1.32 62.28 _±_ 1.05 50.20 _±_ 1.17 OOM OOM 75.84 _±_ 1.81 63.95 _±_ 2.18
+
+GraphCL 54.22 _±_ 5.14 39.78 _±_ 5.09 72.00 _±_ 2.01 62.49 _±_ 2.00 69.94 _±_ 2.31 60.17 _±_ 2.96 53.57 _±_ 0.87 48.10 _±_ 0.61 72.89 _±_ 1.24 61.55 _±_ 1.01
+
+GraphACL 54.44 _±_ 2.33 44.89 _±_ 4.75 69.80 _±_ 1.01 57.68 _±_ 2.85 71.40 _±_ 0.95 60.29 _±_ 3.04 53.25 _±_ 0.62 47.86 _±_ 0.65 73.84 _±_ 2.12 63.57 _±_ 1.39
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** To comprehensively assess the performance of PRISM, we conduct experiments on five
+established graph classification benchmarks spanning the bioinformatics and vision domains: ENZYMES (Schomburg et al., 2004), Letter-High (Riesen & Bunke, 2008), COIL-DEL (Riesen &
+Bunke, 2008), CIFAR10 (Dwivedi et al., 2020), and COLORS-3 (Knyazev et al., 2019). Following (Gu et al., 2024), we randomly inject false positive labels into the candidate set to generate partial-label data. Specifically, each incorrect label ~~_y_~~ = _y_ _[∗]_ is included with probability
+_q_ = _P_ ( ~~_y_~~ _∈S_ _|_ ~~_y_~~ = _y_ _[∗]_ ), controlling the level of label ambiguity. A higher _q_ indicates noisier candidate supervision. We vary _q_ _∈{_ 0 _._ 1 _,_ 0 _._ 3 _,_ 0 _._ 5 _}_ for the majority of datasets, and _q_ _∈{_ 0 _._ 02 _,_ 0 _._ 05 _,_ 0 _._ 1 _}_
+for COIL-DEL to account for its larger label space.
+
+
+**Baselines.** We compare the proposed PRISM with a comprehensive set of baselines across multiple paradigms: (a) _Graph neural networks_ : GCN (Welling & Kipf, 2016), GAT (Veliˇckovi´c et al.,
+2017), GIN (Xu et al., 2018), and GraphSAGE (Hamilton et al., 2017); (b) _Hierarchical graph pool-_
+_ing_ _methods_ : TopKPool (Gao & Ji, 2019), SAGPool (Lee et al., 2019), EdgePool (Diehl, 2019),
+and ASAP (Ranjan et al., 2020), all using GraphSAGE as the backbone; (c) _Graph_ _augmenta-_
+_tion_ _method_ : Graph Transplant (Park et al., 2022); (d) _Unsupervised_ _contrastive_ _graph_ _learning_ :
+GraphCL (You et al., 2020) and GraphACL (Luo et al., 2023); (e) _Semi-supervised graph learning_ :
+TGNN (Ju et al., 2023b); (f) _Partial_ _label_ _learning_ _in_ _vision_ : PiCO (Wang et al., 2022), adapted
+to the graph setting with a GraphSAGE encoder for fair comparison; (g) _Partial label learning for_
+_graphs_ : DEER (Gu et al., 2024). Further details on the baselines are provided in the Appendix E.
+
+
+**Implementation and Evaluation Protocol.** All experiments are implemented using PyTorch with
+the PyG backend. We use a two-layer GraphSAGE with 512 hidden units as the shared encoder
+across all methods. Training is performed using the Adam optimizer (Kingma & Ba, 2014) with
+an initial learning rate of 0.001 and a batch size of 128. All these results are averaged over five
+independent runs with individual seeds, each reporting mean accuracy and standard deviation. More
+details about the implementation are provided in the Appendix F.
+
+
+4.2 PERFORMANCE COMPARISON
+
+
+We report the quantitative results of our PRISM against competitive baselines under various ambiguity levels in Table 1. According to the results, we make the following observations: (1) Our
+PRISM consistently achieves superior performance across all datasets and various ambiguity settings. It surpasses all baselines by a considerable margin. For example, on ENZYMES, our method
+
+
+7
+
+
+Table 2: Ablation study on ENZYMES, Letter-High, and CIFAR10.
+
+PRISM w/o Sub 61.78 _±_ 2.06 49.56 _±_ 3.55 80.70 _±_ 1.20 76.11 _±_ 2.19 56.65 _±_ 1.01 53.30 _±_ 0.77
+PRISM w/o Spa 60.89 _±_ 2.26 48.00 _±_ 3.87 79.65 _±_ 1.21 74.72 _±_ 0.99 55.23 _±_ 1.19 51.72 _±_ 1.08
+PRISM w/o Spe 61.55 _±_ 1.94 48.89 _±_ 2.11 80.17 _±_ 0.43 76.46 _±_ 2.45 55.72 _±_ 0.93 52.65 _±_ 1.12
+
+
+60.0
+
+
+55.0
+
+
+50.0
+
+
+45.0
+
+
+40.0
+
+
+84
+
+
+83
+
+
+84.0
+
+
+76.0
+
+
+68.0
+
+
+60.0
+
+
+52.0
+
+
+65
+
+
+63
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+|ASAP<br>|GraphACL<br>|GraphACL<br>|
+|GT<br>~~PiCO~~<br>GraphCL|DEER<br>~~Ours~~||
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+|ASAP<br>|GraphACL<br>|GraphACL<br>|
+|GT<br>PiCO<br>GraphCL|DEER<br>Ours||
+
+
+0.2 0.5 0.8
+Flipping Probability
+
+
+(a) CIFAR10
+
+
+3 4 5
+Average Size of Candidate Sets
+
+
+(b) Letter-High
+
+
+(c) ENZYMES
+
+
+5
+
+
+5
+
+
+5
+
+
+5
+
+
+(d) Letter-High
+
+
+Figure 2: (a) Performance comparison in scenarios with hierarchical label noise. (b) Performance
+comparison in scenarios with competitive label noise. (c)(d) Performance _w.r.t._ top- _ka_ and top- _ke_
+on ENZYMES and Letter-High.
+
+
+outperforms the second-best by 8 _._ 3% under _q_ = 0 _._ 3, confirming its robustness and generalization
+under weak supervision. (2) On fine-grained datasets such as COIL-DEL, where class granularity
+and semantic ambiguity are pronounced, PRISM retains a strong advantage over baseline methods.
+On COIL-DEL with _q_ = 0 _._ 1, it attains 79 _._ 48% accuracy, exceeding the prior best (DEER, 68 _._ 03%)
+by 16 _._ 8%, showing effective candidate label disambiguation via complementary spatial and spectral
+cues. (3) Compared to the previous partial label learning methods, our framework consistently improves performance across all graph datasets. Although PiCO with GraphSAGE encoders is adapted
+to graphs, it still performs poorly, demonstrating the limits of directly transferring CV-based methods and the necessity of graph-specific modeling. (4) As label ambiguity _q_ increases, most baselines
+degrade sharply, whereas our PRISM exhibits a much slower decline. This robustness stems from
+integrating spectral and substructural reasoning, with an iterative label propagation mitigating noisy
+and misleading supervision. More results under _q_ = 0 _._ 1 are provided in Appendix D.
+
+
+**Semantically** **Correlated** **Label** **Noise.** In many real-world scenarios, labels are not independent
+but semantically correlated, leading to candidate sets that contain noisy labels with stronger affinity to the ground-truth than unrelated classes, thereby introducing additional challenges for robust
+learning. An important question is whether PRISM can reliably address such semantically entangled label ambiguity. To evaluate this, we design two experimental protocols: (1) _Hierarchical label_
+_noise._ We exploit the coarse-to-fine taxonomy of CIFAR10 (i.e., vehicles vs. animals) and introduce
+noise by flipping negative labels within the same super-class as the true label with probability _q_,
+thereby forming semantically plausible candidates. (2) _Competitive label noise._ Following (Yan &
+Guo, 2023), we pretrain a graph neural network (GNN) on clean data to capture inter-class semantic
+dependencies. We then randomly select noisy candidates from the Top- _K_ predictions of this GNN,
+with _K_ = 6 for Letter-High, and vary the candidate set size by adjusting sampling ratios. The results
+are presented in Figure 2 (a)(b). We can see that our PRISM consistently outperforms all baselines
+under both noise schemes across different ambiguity levels, thereby highlighting its robustness to
+semantically correlated label noise.
+
+
+4.3 ABLATION STUDY
+
+
+To assess the contribution of each core component in PRISM, we conduct ablation experiments on
+ENZYMES, Letter-High, and CIFAR10 under noise levels _q_ = 0 _._ 3 and _q_ = 0 _._ 5, with results in
+Table 2. Removing substructure alignment (PRISM w/o Sub) and replacing class-specific matching
+with holistic graph embeddings causes clear performance drops, especially under high ambiguity,
+showing that discriminative substructure cues outperform coarse comparisons. Excluding the spatial
+branch (PRISM w/o Spa) further reduces accuracy, as the absence of neighborhood-aware signals
+
+
+8
+
+
+Class 4
+
+
+Class 6
+
+
+Figure 3: Class-specific attention maps reveal consistent focus on discriminative substructures
+across graph instances within different categories.
+
+
+weakens the capture of fine-grained topology critical for resolving label ambiguity, particularly in
+CIFAR10. Discarding the spectral attention module (PRISM w/o Spe) also adversely impacts performance, since multi-band decomposition can capture global spectral characteristics, which complement local structure. Furthermore, removing the relational inference module (PRISM w/o Rel.
+Infer) yields the sharpest degradation, indicating that graph-of-graph modeling and label propagation are indispensable for alleviating the impact of label noise.
+
+
+4.4 SENSITIVITY ANALYSIS
+
+
+We analyze the effect of the number of neighbors retained in the spatial and spectral relational
+graphs, i.e., _ka_ and _ke_ . The results are shown in Figure 2 (c)(d). We can see that accuracy generally
+increases as _ka_ and _ke_ grow from 1 to moderate values, then saturates or slightly declines. Maybe the
+reason is that adding structurally or spectrally aligned instances improves cross-graph consistency
+by enhancing the density of reliable signals. However, overly dense connectivity introduces noisy or
+weakly correlated neighbors, potentially causing label propagation drift. Our model achieves stable
+performance under a broad range of _k_ values, reflecting its robustness to hyperparameter choices in
+relational graph construction.
+
+
+4.5 VISUALIZATION OF CLASS-SPECIFIC ATTENTION
+
+
+We visualize class-specific attention maps from the ENZYMES dataset in Figure 3. Each subgraph represents a different graph instance, and the color of each node indicates its attention weight
+relative to the corresponding class prototype. Warmer colors signify a higher contribution to the
+class-specific substructure reasoning. Although the graph structures vary, nodes with high attention
+consistently correspond to meaningful substructures such as motifs, central connectors, or functional
+cores, while irrelevant or peripheral nodes receive lower attention. This consistent focus within each
+class highlights the model’s ability to identify semantically aligned substructures across diverse
+graphs and yield human-interpretable views of functionally significant topological regions.
+
+
+5 CONCLUSION
+
+
+In this paper, we study the problem of partial-label graph learning, where every graph is associated
+with a noisy candidate label set. We propose a relational inference framework named PRISM to address the challenges of semantic uncertainty and structural complexity in this problem. PRISM first
+integrates spatial substructure alignment and spectral frequency modeling via a relational graph. We
+then leverage an iterative label propagation mechanism with candidate constraints to disambiguate
+supervision signals. Extensive experiments on a range of widely-used datasets validate the effectiveness and robustness of our PRISM under various ambiguity levels, highlighting its potential as a
+principled solution for learning from weakly supervised graph data.
+
+
+9
+
+
+ACKNOWLEDGEMENT
+
+
+Ming Zhang and Yiyang Gu are supported by grants from the National Key Research and Development Program of China with Grant No. 2023YFC3341203 and the National Natural Science
+Foundation of China (NSFC Grant Number 62276002).
+
+
+REFERENCES
+
+
+Axel D Becke. Perspective: Fifty years of density-functional theory in chemical physics. _The_
+_Journal of chemical physics_, 140(18):18A301, 2014.
+
+
+Deyu Bo, Yuan Fang, Yang Liu, and Chuan Shi. Graph contrastive learning with stable and scalable
+spectral encoding. _Advances in Neural Information Processing Systems_, 36:45516–45532, 2023.
+
+
+Dapeng Chen, Min Wang, Haobin Chen, Lin Wu, Jing Qin, and Wei Peng. Cross-modal retrieval
+with heterogeneous graph embedding. In _Proceedings of the 30th ACM International Conference_
+_on Multimedia_, pp. 3291–3300, 2022.
+
+
+Timothee Cour, Ben Sapp, and Ben Taskar. Learning from partial labels. _The Journal of Machine_
+_Learning Research_, 12:1501–1536, 2011.
+
+
+Frederik Diehl. Edge contraction pooling for graph neural networks. _arXiv_ _preprint_
+_arXiv:1905.10990_, 2019.
+
+
+Vijay Prakash Dwivedi, Chaitanya K Joshi, Thomas Laurent, Yoshua Bengio, and Xavier Bresson.
+Benchmarking graph neural networks. _arXiv preprint arXiv:2003.00982_, 2020.
+
+
+Xiaomin Fang, Lihang Liu, Jieqiong Lei, Donglong He, Shanzhuo Zhang, Jingbo Zhou, Fan Wang,
+Hua Wu, and Haifeng Wang. Geometry-enhanced molecular representation learning for property
+prediction. _Nature Machine Intelligence_, 4(2):127–134, 2022.
+
+
+Lei Feng and Bo An. Partial label learning by semantic difference maximization. In _IJCAI_, pp.
+2294–2300, 2019.
+
+
+Hang Gao, Jiaguo Yuan, Jiangmeng Li, Peng Qiao, Fengge Wu, Changwen Zheng, and Huaping Liu.
+Graph partial label learning with potential cause discovering. _arXiv preprint arXiv:2403.11449_,
+2024.
+
+
+Hongyang Gao and Shuiwang Ji. Graph u-nets. In _international conference on machine learning_,
+pp. 2083–2092. PMLR, 2019.
+
+
+Lingchi Ge, Min Fang, Haikun Li, and Bo Chen. Label correlation for partial label learning. _Journal_
+_of Systems Engineering and Electronics_, 33(5):1043–1051, 2022.
+
+
+Yiyang Gu, Zihao Chen, Yifang Qin, Zhengyang Mao, Zhiping Xiao, Wei Ju, Chong Chen, XianSheng Hua, Yifan Wang, Xiao Luo, et al. Deer: Distribution divergence-based graph contrast for
+partial label learning on graphs. _IEEE Transactions on Multimedia_, 2024.
+
+
+Yiyang Gu, Binqi Chen, Zihao Chen, Ziyue Qiao, Xiao Luo, Junyu Luo, Zhiping Xiao, Wei Ju,
+and Ming Zhang. Mate: Masked optimal transport with dynamic selection for partial label graph
+learning. _Artificial Intelligence_, pp. 104396, 2025a.
+
+
+Yiyang Gu, Taian Guo, Hang Zhou, Zihao Chen, Zhiping Xiao, Yifang Qin, Xiao Luo, Wei Ju, Yifan
+Wang, and Ming Zhang. Code: Towards partial label graph learning via coupled dual separation.
+In _Proceedings of the 33rd ACM International Conference on Multimedia_, pp. 8949–8958, 2025b.
+
+
+Will Hamilton, Zhitao Ying, and Jure Leskovec. Inductive representation learning on large graphs.
+_Advances in neural information processing systems_, 30, 2017.
+
+
+Eyke H¨ullermeier and J¨urgen Beringer. Learning from ambiguously labeled examples. In _Advances_
+_in_ _Intelligent_ _Data_ _Analysis_ _VI:_ _6th_ _International_ _Symposium_ _on_ _Intelligent_ _Data_ _Analysis,_ _IDA_
+_2005, Madrid, Spain, September 8-10, 2005. Proceedings 6_, pp. 168–179. Springer, 2005.
+
+
+10
+
+
+Wei Ju, Yiyang Gu, Xiao Luo, Yifan Wang, Haochen Yuan, Huasong Zhong, and Ming Zhang.
+Unsupervised graph-level representation learning with hierarchical contrasts. _Neural_ _Networks_,
+158:359–368, 2023a.
+
+
+Wei Ju, Xiao Luo, Meng Qu, Yifan Wang, Chong Chen, Minghua Deng, Xian-Sheng Hua, and Ming
+Zhang. Tgnn: A joint semi-supervised framework for graph-level classification. _arXiv preprint_
+_arXiv:2304.11688_, 2023b.
+
+
+Wei Ju, Zheng Fang, Yiyang Gu, Zequn Liu, Qingqing Long, Ziyue Qiao, Yifang Qin, Jianhao Shen,
+Fang Sun, Zhiping Xiao, et al. A comprehensive survey on deep graph representation learning.
+_Neural Networks_, 173:106207, 2024.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Boris Knyazev, Graham W Taylor, and Mohamed Amer. Understanding attention and generalization
+in graph neural networks. _Advances in neural information processing systems_, 32, 2019.
+
+
+Dongha Lee, Su Kim, Seonghyeon Lee, Chanyoung Park, and Hwanjo Yu. Learnable structural
+semantic readout for graph classification. In _2021 IEEE International Conference on Data Mining_
+_(ICDM)_, pp. 1180–1185. IEEE, 2021.
+
+
+Junhyun Lee, Inyeop Lee, and Jaewoo Kang. Self-attention graph pooling. In _International confer-_
+_ence on machine learning_, pp. 3734–3743. PMLR, 2019.
+
+
+Michelle M Li, Kexin Huang, and Marinka Zitnik. Graph representation learning in biomedicine
+and healthcare. _Nature biomedical engineering_, 6(12):1353–1369, 2022a.
+
+
+Sihang Li, Xiang Wang, An Zhang, Yingxin Wu, Xiangnan He, and Tat-Seng Chua. Let invariant
+rationale discovery inspire graph contrastive learning. In _International_ _conference_ _on_ _machine_
+_learning_, pp. 13052–13065. PMLR, 2022b.
+
+
+Meng Liu, Ke Liang, Dayu Hu, Hao Yu, Yue Liu, Lingyuan Meng, Wenxuan Tu, Sihang Zhou, and
+Xinwang Liu. Tmac: Temporal multi-modal graph learning for acoustic event classification. In
+_Proceedings of the 31st ACM International Conference on Multimedia_, pp. 3365–3374, 2023.
+
+
+Xiao Luo, Wei Ju, Meng Qu, Yiyang Gu, Chong Chen, Minghua Deng, Xian-Sheng Hua, and Ming
+Zhang. Clear: Cluster-enhanced contrast for self-supervised graph representation learning. _IEEE_
+_Transactions on Neural Networks and Learning Systems_, 35(1):899–912, 2022.
+
+
+Xiao Luo, Wei Ju, Yiyang Gu, Zhengyang Mao, Luchen Liu, Yuhui Yuan, and Ming Zhang. Selfsupervised graph-level representation learning with adversarial contrastive learning. _ACM Trans-_
+_actions on Knowledge Discovery from Data_, 18(2):1–23, 2023.
+
+
+Gengyu Lyu, Songhe Feng, Tao Wang, and Congyan Lang. A self-paced regularization framework
+for partial-label learning. _IEEE Transactions on Cybernetics_, 52(2):899–911, 2020.
+
+
+Mourad Oudghiri. Weyl’s theorem and perturbations. _Integral Equations and Operator Theory_, 53
+(4):535–545, 2005.
+
+
+Joonhyung Park, Hajin Shim, and Eunho Yang. Graph transplant: Node saliency-guided graph
+mixup with local structure preservation. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_
+_Intelligence_, volume 36, pp. 7966–7974, 2022.
+
+
+Ekagra Ranjan, Soumya Sanyal, and Partha Talukdar. Asap: Adaptive structure aware pooling for
+learning hierarchical graph representations. In _Proceedings of the AAAI Conference on Artificial_
+_Intelligence_, volume 34, pp. 5470–5477, 2020.
+
+
+Kaspar Riesen and Horst Bunke. Iam graph database repository for graph based pattern recognition
+and machine learning. In _Joint_ _IAPR_ _International_ _Workshops_ _on_ _Statistical_ _Techniques_ _in_ _Pat-_
+_tern_ _Recognition_ _(SPR)_ _and_ _Structural_ _and_ _Syntactic_ _Pattern_ _Recognition_ _(SSPR)_, pp. 287–297.
+Springer, 2008.
+
+
+11
+
+
+Franc¸ois Rousseau, Emmanouil Kiagias, and Michalis Vazirgiannis. Text categorization as a graph
+classification problem. In _Proceedings of the 53rd Annual Meeting of the Association for Compu-_
+_tational Linguistics and the 7th International Joint Conference on Natural Language Processing_
+_(Volume 1:_ _Long Papers)_, pp. 1702–1712, 2015.
+
+
+Ida Schomburg, Antje Chang, Christian Ebeling, Marion Gremse, Christian Heldt, Gregor Huhn,
+and Dietmar Schomburg. Brenda, the enzyme database: updates and major new developments.
+_Nucleic acids research_, 32(suppl ~~1~~ ):D431–D433, 2004.
+
+
+Nino Shervashidze, Pascal Schweitzer, Erik Jan Van Leeuwen, Kurt Mehlhorn, and Karsten M Borgwardt. Weisfeiler-lehman graph kernels. _Journal of Machine Learning Research_, 12(9), 2011.
+
+
+Vinesh Solanki, Patrick Rubin-Delanchy, and Ian Gallagher. Persistent homology of graph embeddings, 2021. [URL https://arxiv.org/abs/1912.10238.](https://arxiv.org/abs/1912.10238)
+
+
+Petar Veliˇckovi´c, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, and Yoshua
+Bengio. Graph attention networks. _arXiv preprint arXiv:1710.10903_, 2017.
+
+
+Haobo Wang, Ruixuan Xiao, Yixuan Li, Lei Feng, Gang Niu, Gang Chen, and Junbo Zhao. Pico:
+Contrastive label disambiguation for partial label learning. In _Proceedings_ _of_ _the_ _International_
+_Conference on Learning Representations_, 2022.
+
+
+Qifan Wang, Yinwei Wei, Jianhua Yin, Jianlong Wu, Xuemeng Song, and Liqiang Nie. Dualgnn:
+Dual graph neural network for multimedia recommendation. _IEEE Transactions on Multimedia_,
+25:1074–1084, 2021.
+
+
+Wei Wang and Min-Ling Zhang. Partial label learning with discrimination augmentation. In _Pro-_
+_ceedings of the International ACM SIGKDD Conference on Knowledge Discovery & Data Min-_
+_ing_, pp. 1920–1928, 2022.
+
+
+Max Welling and Thomas N Kipf. Semi-supervised classification with graph convolutional networks. In _J. International Conference on Learning Representations (ICLR 2017)_, 2016.
+
+
+Junran Wu, Xueyuan Chen, Ke Xu, and Shangzhe Li. Structural entropy guided graph hierarchical
+pooling. In _International conference on machine learning_, pp. 24017–24030. PMLR, 2022.
+
+
+Keyulu Xu, Weihua Hu, Jure Leskovec, and Stefanie Jegelka. How powerful are graph neural
+networks? In _International Conference on Learning Representations_, 2018.
+
+
+Yan Yan and Yuhong Guo. Mutual partial label learning with competitive label noise. In _The_
+_Eleventh International Conference on Learning Representations_, 2023.
+
+
+Junwei Yang, Yiyang Gu, Yifang Qin, Xiao Luo, Zhiping Xiao, Kangjie Zheng, Wei Ju, Xian-Sheng
+Hua, and Ming Zhang. Towerdna: Fast and accurate graph retrieval with dividing, contrasting
+and alignment. _IEEE Transactions on Knowledge and Data Engineering_, 2025.
+
+
+Mingqi Yang, Yanming Shen, Rui Li, Heng Qi, Qiang Zhang, and Baocai Yin. A new perspective
+on the effects of spectrum in graph neural networks. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 25261–25279. PMLR, 2022.
+
+
+Yuning You, Tianlong Chen, Yongduo Sui, Ting Chen, Zhangyang Wang, and Yang Shen. Graph
+contrastive learning with augmentations. In _Advances in Neural Information Processing Systems_,
+2020.
+
+
+Yi Yu, Tengyao Wang, and Richard J Samworth. A useful variant of the davis–kahan theorem for
+statisticians. _Biometrika_, 102(2):315–323, 2015.
+
+
+Han Yue, Chunhui Zhang, Chuxu Zhang, and Hongfu Liu. Label-invariant augmentation for semisupervised graph classification. _Advances in Neural Information Processing Systems_, 35:29350–
+29361, 2022.
+
+
+Tong Zhang, Yun Wang, Zhen Cui, Chuanwei Zhou, Baoliang Cui, Haikuan Huang, and Jian Yang.
+Deep wasserstein graph discriminant learning for graph classification. In _Proceedings of the AAAI_
+_Conference on Artificial Intelligence_, volume 35, pp. 10914–10922, 2021a.
+
+
+12
+
+
+Zaixi Zhang, Qi Liu, Hao Wang, Chengqiang Lu, and Chee-Kong Lee. Motif-based graph selfsupervised learning for molecular property prediction. _Advances in Neural Information Process-_
+_ing Systems_, 34:15870–15882, 2021b.
+
+
+13
+
+
+A PROOF OF THEOREM 1
+
+
+To begin with, we denote adjacent matrix of graph _i_ as _A_ [(] _[i]_ [)] for the sake of convenience, take
+READOUT function as the mean in (2) that _gi_ = 1 _i_ - _v_ _i_ _[h]_ _v_ [(] _[i]_ [)][.] [Since] _[p]_ _c_ [is] [the] [prototype] [of]
+_|V_ _|_ _∈V_
+
+label _c_, we assume the latent representations of nodes satisfy
+
+
+               -                E _h_ [(] _v_ _[i]_ [)] _[|][y]_ _i_ _[∗]_ [=] _[ c]_ = _pc,_ _∀v_ _∈Vi._ (20)
+
+where _yi_ _[∗]_ [is] [the] [ground-truth] [label] [of] [graph] _[i]_ [.] [Assume] [the] [latent] [representations] [of] [nodes] [in] [one]
+graph are identically distributed, it follows from (20) and the law of large number that for any graph
+_i_ with true label _yi_ _[∗]_ [=] _[ c]_
+
+
+1
+_gi_ =
+_i_
+_|V_ _|_
+
+
+_v_ - _∈Vi_ _h_ [(] _v_ _[i]_ [)] _−−→a.s_ E - _h_ [(] _v_ _[i]_ [)] _[|][y]_ _i_ _[∗]_ [=] _[ c]_ - = _pc_
+
+
+as _i_, which is account for (3) to a certain degree. As for the adjacent matrix, we refer to (Gu
+_|V_ _| →∞_
+et al., 2024) to consider the generalized random dot product graph, which can date back to (Solanki
+et al., 2021) that for graph _i_ :
+
+
+            -             P _A_ [(] _jk_ _[i]_ [)] [= 1] _[|]_ [Θ] = _αnξj_ _[T]_ _[I][r,][−][r][ξ][k]_
+
+where Θ = ( _ξ_ 1 _, ..., ξn_ ) _∼_ _F_ [(] _[i]_ [)] _, Ir,−r_ = diag ( _Ir, −Ir_ ). We assume the distribution _F_ [(] _[i]_ [)] is determined by the global graph feature _gi_ that there exist a continuous matrix function such that
+_M_
+
+
+_A_ [(] _[i]_ [)] = ( _gi_ ) _,_ _i_ 1 _,_ 2 _, ..., N_ _._ (21)
+_M_ _∀_ _∈{_ _}_
+
+
+Take coefficients _αvc_ [(] _[i]_ [)] [=] 1 _i_ [and denote] _[ λ]_ _p_ [(] _[i]_ [)] _[, u]_ _p_ [(] _[i]_ [)] [as the] _[ p]_ [-th eigenvalue, eigenvector for graph] _[ i]_ [ for]
+_|V_ _|_
+the sake of simplicity. First we consider if _yi_ _[∗]_ [=] _[ c, y]_ _j_ _[∗]_ [=] _[ c][′]_ [then by (][20][) and the continuity theorem]
+
+
+cos - _ri_ [(] _[c]_ [)] _[, r]_ _j_ [(] _[c][′]_ [)] - = - _αvc_ [(] _[i]_ [)] _[α]_ _v_ [(] _[j][′]_ [)] _c_ _[′]_ [ cos] - _h_ [(] _v_ _[i]_ [)] _[, h]_ _v_ [(] _[j][′]_ [)] 
+_v∈Vi,v_ _[′]_ _∈Vj_
+
+
+
+
+= cos  [�]
+
+_v∈Vi_
+
+
+1 1
+_v_ _[,]_
+_i_ _j_
+_|V_ _|_ _[h]_ [(] _[i]_ [)] _|V_ _|_
+
+
+- _h_ [(] _v_ _[j][′]_ [)]
+
+_v_ _[′]_ _∈Vj_
+
+
+
+
+ _[a.s.]_ cos ( _pc, pc′_ )
+_−−→_
+
+
+ 
+
+
+as _i_ _,_ _j_, and
+_|V_ _|_ _|V_ _| →∞_
+
+cos   - _ri_ [(] _[c]_ [)] _[, p][c]_   - =   - _αvc_ [(] _[i]_ [)] [cos]   - _h_ [(] _v_ _[i]_ [)] _[, p][c]_   - = cos
+
+_v∈Vi_
+
+
+1
+
+_i_
+_|V_ _|_
+
+
+- _h_ [(] _v_ _[i]_ [)] _[, p][c]_
+
+_v∈Vi_
+
+
+_a.s._
+cos ( _pc, pc_ ) = 1 _,_
+_−−→_
+
+
+as _i_, which further implies
+_|V_ _| →∞_
+
+
+P - _A_ _[spa]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ - =
+
+
+_C_
+
+
+- P - _A_ _[spa]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c]_ - P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ 
+_c_ =1
+
+
+_≥_
+
+
+_≥_
+
+
+_→_
+
+
+_C_
+
+- P - _s_ _[spa]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c]_ - P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ 
+_c_ =1
+
+
+_C_
+
+- P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ - = 1 _,_
+
+_c_ =1
+
+
+     
+= 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c]_
+
+
+_C_
+
+- P
+
+_c_ =1
+
+
+  -   cos _ri_ [(] _[c]_ [)] _[, r]_ _j_ [(] _[c]_ [)] = cos
+
+
+- _ri_ [(] _[c]_ [)] + _rj_ [(] _[c]_ [)] _, pc_ 2
+
+
+P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ 
+
+
+as _|Vi|, |Vj| →∞_, where the second and third line follow from the definitions of _A_ _[spa]_ and _s_ _[spa]_ _ij_ [.] [As]
+for (12), observe that (21) indicates the adjacent matrix of graph _i_ given _yi_ _[∗]_ [=] _[ c]_ [ satisfies]
+
+
+- _h_ [(] _v_ _[i]_ [)]
+
+_v∈Vi_
+
+
+14
+
+
+_A_ [(] _[i]_ [)] = _M_
+
+
+1
+
+_i_
+_|V_ _|_
+
+
+_a.s._
+( _pc_ )
+_−−→M_
+
+
+_a.s._
+as _|Vi|_ _→∞_, which implies _||A_ [(] _[i]_ [)] _−_ _A_ [(] _[j]_ [)] _||F_ _−−→_ 0 given _yi_ _[∗]_ [=] _[y]_ _j_ _[∗]_ [=] _[c]_ [.] [Further] [by] [Weyl’s]
+Perturbation Theorem in (Oudghiri, 2005) we have
+��� _λ_ ( _pi_ ) _p_ ��� _A_ ( _i_ ) _A_ ( _j_ ) _F_ _a.s._ 0 _,_
+
+_[−]_ _[λ]_ [(] _[j]_ [)] _≤||_ _−_ _||_ _−−→_
+
+while by a variant of Davis-Kahan Theorem, Theorem 2 in (Yu et al., 2015) and
+( _i_ )
+min1 _≤i≤N,_ 1 _≤p≤T_ ��� _λp_ +1 _[−]_ _[λ]_ _p_ [(] _[i]_ [)] ��� _≥_ _δ_ we have
+
+
+_||u_ [(] _p_ _[i]_ [)] _[−]_ _[u]_ _p_ [(] _[j]_ [)] _[|| ≤]_ [4] _δ_
+
+
+_a.s._
+0
+_δ_ _[||][A]_ [(] _[i]_ [)] _[ −]_ _[A]_ [(] _[j]_ [)] _[||][F]_ _−−→_
+
+
+for 1 _≤_ _p ≤_ _T_ . Therefore by (8) and the continuity theorem we have
+
+
+_a.s._
+_zi_ [(] _[p]_ [)] _zj_ [(] _[p]_ [)] 0
+_||_ _−_ _||_ _−−→_
+for 1 _≤_ _p ≤_ _T_, which leads to
+
+
+   -    - _zi_ [(] _[p]_ [)] + _zj_ [(] _[p]_ [)] _zi_ [(] _[p]_ [)] _zj_ [(] _[p]_ [)]
+1 cos _zi_ [(] _[p]_ [)] _, zj_ [(] _[p]_ [)] = _||_ _||_ [2] _||_ _||_ [2] _−||_ _−_ _||_ [2]
+_≥_ [(] _[p]_ [)] [(] _[p]_ [)]
+
+
+_a.s._ _zi_ [(] _[p]_ [)] + _zj_ [(] _[p]_ [)]
+_−−→_ _||_ 2 _zi_ [(] _||_ _[p]_ [2][)] _||zj_ [(] _[p]_ [)] _||_ [2] _≥_ 1 _._
+
+_||_ _|| · ||_ _||_
+
+
+2 _zi_ [(] _[p]_ [)] _zj_ [(] _[p]_ [)]
+_||_ _|| · ||_ _||_
+
+
+Then by the definitions of _A_ _[spe]_ and _s_ _[spe]_ _ij_ [we obtain]
+
+
+P - _A_ _[spe]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ - =
+
+
+_C_
+
+- P - _A_ _[spe]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c]_ - P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ 
+_c_ =1
+
+
+_≥_
+
+
+_≥_
+
+
+_→_
+
+
+_C_
+
+- P - _s_ _[spe]_ _ij_ = 1 _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c]_ - P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ 
+_c_ =1
+
+
+_C_
+
+- P �cos - _zi_ [(] _[p]_ [)] _, zj_ [(] _[p]_ [)] - = 1 _, p_ = 1 _, ..., T_ _|yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c]_ - P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ 
+_c_ =1
+
+
+_C_
+
+- P - _yi_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ [=] _[ c][|][y]_ _i_ _[∗]_ [=] _[ y]_ _j_ _[∗]_ - = 1 _,_
+
+_c_ =1
+
+
+as _i_ _,_ _j_, which completes the proof.
+_|V_ _|_ _|V_ _| →∞_
+
+
+B PROOF OF THEOREM 2
+
+
+Recall that we assume the classifier is well-trained such that
+_fclassifier_ ( _**p**_ _c_ ) = I _c,_ _∀c ∈Y,_ (22)
+
+where I _c_ _∈{_ 0 _,_ 1 _}_ _[C]_ denotes one-hot vector whose _c_ -th component is 1 and the rest are 0. By
+Theorem 1 and (13) we have
+_Yi_ [(] _a.s._ _[E]_ [)] _−−→a.s._ _Yi_ _[∗]_
+as _|Vi|, E_ _→∞_, which further implies _Qi_ _−−→_ _Yi_ _[∗]_ [according to (][15][).] [By the continuity theorem]
+and (22) we have
+
+
+_Pi_ = _fclassifier_ ( _**g**_ _i_ ) = _fclassifier_
+
+
+��
+
+
+_v∈Vi_
+
+
+1
+_v_
+_i_
+_|V_ _|_ _[h]_ [(] _[i]_ [)]
+
+
+_→_ _fclassifier_ - _**p**_ _yi_ _[∗]_ - = I _yi_ _[∗]_ [=] _[ Y]_ _i_ _[∗]_ (23)
+
+
+as _|Vi| →∞_ . Denote _|V|_ = min1 _≤i≤N |Vi|_, by dominated convergence theorem and (16) we obtain
+
+
+lim
+_|V|,E→∞_ [E][ [] _[L][sup]_ [] =] _[ −]_ _B_ [1]
+
+
+_B_
+
+
+log 
+
+
+Softmax ( _Pi_ ) _c_ _Qic_
+_c∈Si_ _·_
+
+
+
+
+
+_B_
+
+
+- lim
+
+_,E_
+_i_ =1 _|V|_ _→∞_ [E]
+
+
+
+
+
+ lim
+_|V|,E→∞_ [log]
+
+
+
+
+
+ [�] Softmax ( _Pi_ ) _c_ _Qic_ + ( _Pi_ ) _yi∗_ _i_
+
+_c_ = _yi_ _[∗]_ _·_ _[·][ Q][i,y][∗]_
+
+
+=
+_−_ _B_ [1]
+
+
+=
+_−_ _B_ [1]
+
+
+=
+_−_ _B_ [1]
+
+
+_B_
+
+- E
+
+_i_ =1
+
+
+ [�]
+
+
+
+
+
+=
+_−_ _B_ [1]
+
+
+_B_
+
+- E log [0 + 1] = 0
+
+_i_ =1
+
+
+where the last line follows from (18) and (23).
+
+
+15
+
+
+C RELATED WORK
+
+
+C.1 GRAPH CLASSIFICATION
+
+
+Graph classification has been widely applied in fields such as molecular property prediction, protein
+interaction analysis, and social network modeling (Fang et al., 2022; Wang et al., 2021; Ju et al.,
+2024). Traditional graph kernel methods (Shervashidze et al., 2011) measure structural similarity
+through subgraph comparisons, but scale poorly to large graphs. Recent advances in Graph Neural Networks (GNNs) (Welling & Kipf, 2016; Hamilton et al., 2017; Veliˇckovi´c et al., 2017; Xu
+et al., 2018) have shown superior performance by aggregating local neighborhood information and
+generating graph-level representations via pooling operators (Lee et al., 2019; Gao & Ji, 2019; Lee
+et al., 2021). Spectral approaches like EigenMLP (Bo et al., 2023) provide an alternative by encoding global graph structure through Fourier-like eigenvalue embeddings. Despite their success, these
+methods heavily rely on abundant clean labels, which are often unavailable in real-world scenarios
+due to annotation cost or inherent uncertainty. While self-supervised graph learning methods (You
+et al., 2020; Luo et al., 2022; Ju et al., 2023a) avoid labels during pre-training, they still require
+accurate annotations for downstream classification and tend to degrade significantly under label ambiguity. In this paper, we study the problem of partial label graph learning and utilize relational
+inference with spatial and spectral cues to address the challenge of label noise.
+
+
+C.2 PARTIAL LABEL LEARNING
+
+
+Partial label learning (PLL) considers a weak supervision setting where each training instance is
+annotated with a candidate label set containing only one correct label (H¨ullermeier & Beringer,
+2005; Cour et al., 2011; Wang et al., 2022; Yan & Guo, 2023). Early approaches treat all candidates equally by averaging losses, but such uniform assumptions often fail under high label ambiguity. Later works focus on label disambiguation, estimating true labels through confidence-based or
+similarity-driven refinement (Feng & An, 2019; Wang & Zhang, 2022). Recent advances introduce
+contrastive learning to PLL (Wang et al., 2022), where prototype-instance alignment helps separate
+correct labels from distractors. However, these methods are mostly designed for Euclidean data such
+as images or texts. On graph-structured data, PLL remains underexplored Gu et al. (2024); Gao et al.
+(2024); Gu et al. (2025a). DEER (Gu et al., 2024) is one of the few attempts. It measures semantic
+distribution divergence between graph views for contrastive learning and leverages posterior-guided
+soft label correction. Nonetheless, DEER relies on semantic distribution matching and lacks finegrained structural modeling. GPCD (Gao et al., 2024) introduces graph potential cause discovery
+to estimate causal subsets for supervision, but suffers from high training complexity and overlooks
+global spectral cues. In contrast, our proposed PRISM integrates spatial substructure information
+and spectral characteristics into a unified relational inference framework, enabling more reliable and
+stable label disambiguation under complex graph structures.
+
+
+D MORE EXPERIMENTAL RESULTS
+
+
+We provide more results under the low ambiguity level ( _q_ = 0 _._ 1, _q_ = 0 _._ 02) in Table 3. Our PRISM
+consistently achieves the best performance on all datasets, demonstrating its superiority under mild
+label noise. It may owe to both spatial and spectral cues captured by our PRISM, which play a pivotal
+role in resolving semantic ambiguities. These results complement the main findings in Section 4.2,
+and additionally explain the advantage of our framework for keeping strong generalization under
+different noise regimes.
+
+
+E DETAILS OF BASELINES
+
+
+We compare our proposed PRISM against a broad spectrum of baseline models categorized into
+seven distinct groups: (a) _Graph neural networks_ : GCN (Welling & Kipf, 2016), GAT (Veliˇckovi´c
+et al., 2017), GIN (Xu et al., 2018), and GraphSAGE (Hamilton et al., 2017); (b) _Hierarchical graph_
+_pooling_ : TopKPool (Gao & Ji, 2019), SAGPool (Lee et al., 2019), EdgePool (Diehl, 2019), and
+ASAP (Ranjan et al., 2020) (all using GraphSAGE as the encoder backbone); (c) _Graph_ _augmen-_
+_tation method_ : Graph Transplant (Park et al., 2022); (d) _Unsupervised contrastive graph learning_ :
+
+
+16
+
+
+Table 3: The compared accuracy (mean% _±_ std%) on different graph classification datasets. The best
+results are highlighted in boldface and the second best results are underlined. _q_ = _P_ ~~(~~ ~~_y_~~ _∈_ _Y_ ~~_|y_~~ = _y_ )
+reflecting the level of label ambiguity.
+
+
+GCN 61.33 _±_ 2.85 50.09 _±_ 0.70 60.77 _±_ 1.71 47.18 _±_ 1.09 90.34 _±_ 0.06
+GAT 58.22 _±_ 3.03 73.39 _±_ 1.41 69.11 _±_ 2.86 57.56 _±_ 0.65 89.33 _±_ 1.42
+GIN 59.78 _±_ 4.58 55.83 _±_ 4.28 55.94 _±_ 1.69 47.29 _±_ 0.61 63.01 _±_ 1.45
+GraphSAGE 60.89 _±_ 1.09 78.20 _±_ 1.17 71.40 _±_ 2.15 57.22 _±_ 0.67 91.70 _±_ 2.18
+TopKPool 53.11 _±_ 4.12 67.07 _±_ 1.60 55.80 _±_ 4.86 55.26 _±_ 0.85 82.35 _±_ 1.36
+SAGPool 56.89 _±_ 5.37 67.42 _±_ 1.91 52.94 _±_ 2.59 54.23 _±_ 0.53 76.99 _±_ 4.39
+EdgePool 58.67 _±_ 2.67 70.49 _±_ 3.29 68.74 _±_ 1.85 55.09 _±_ 0.61 87.47 _±_ 0.41
+ASAP 60.89 _±_ 2.67 71.25 _±_ 1.44 59.03 _±_ 3.09 54.56 _±_ 0.66 77.84 _±_ 1.26
+Graph Transplant 61.56 _±_ 2.86 80.75 _±_ 0.60 80.09 _±_ 0.75 56.87 _±_ 1.28 85.48 _±_ 0.89
+PiCO 61.08 _±_ 6.67 81.27 _±_ 1.60 84.88 _±_ 1.09 57.70 _±_ 0.82 65.68 _±_ 1.07
+TGNN 62.44 _±_ 3.01 78.55 _±_ 0.78 70.49 _±_ 0.87 OOM 93.16 _±_ 1.55
+GraphCL 61.78 _±_ 1.51 78.43 _±_ 0.85 78.83 _±_ 1.06 57.62 _±_ 0.56 92.71 _±_ 1.61
+GraphACL 58.22 _±_ 1.51 81.04 _±_ 1.01 80.66 _±_ 0.41 57.65 _±_ 0.21 92.05 _±_ 0.50
+
+
+GraphCL (You et al., 2020) and GraphACL (Luo et al., 2023); (e) _Semi-supervised graph learning_ :
+TGNN (Ju et al., 2023b); (f) _Partial label learning in vision_ : PiCO (Wang et al., 2022), adapted with
+a GraphSAGE encoder; (g) _Partial label learning for graphs_ : DEER (Gu et al., 2024). The details
+of baselines are presented below.
+
+
+- **GCN** (Welling & Kipf, 2016): A convolutional network that leverages renormalized adjacency
+matrices to aggregate neighborhood information in a computationally efficient manner.
+
+
+- **GAT** (Veliˇckovi´c et al., 2017): It introduces attention weights over neighbors, enabling each node
+to prioritize important neighbors during message passing.
+
+
+- **GIN** (Xu et al., 2018): It uses MLPs to approximate injective functions over sets of neighbors,
+achieving powerful discriminative capacity aligned with the Weisfeiler-Lehman test.
+
+
+- **GraphSAGE** (Hamilton et al., 2017): It aggregates information from randomly sampled neighbors, making it scalable to large graphs.
+
+
+- **TopKPool** (Gao & Ji, 2019): It selects top-ranked nodes according to an adaptive projection score
+to form a pooled graph with reduced size.
+
+
+- **SAGPool** (Lee et al., 2019): It utilizes self-attention scores computed from graph convolutions to
+guide node selection for pooling, capturing both feature and structural signals.
+
+
+- **EdgePool** (Diehl, 2019): It contracts edges iteratively to coarsen the graph while maintaining
+crucial topological structures.
+
+
+- **ASAP** (Ranjan et al., 2020): It combines node selection and clustering by learning soft assignments over local _h_ -hop neighborhoods, allowing for adaptive structure-aware pooling.
+
+
+- **Graph Transplant** (Park et al., 2022): A mixup-inspired data augmentation strategy that extracts
+meaningful subgraphs based on node saliency and generates hybrid samples through substructurelevel interpolation.
+
+
+- **GraphCL** (You et al., 2020): A contrastive learning framework that maximizes agreement between different augmented views of a graph, using stochastic transformations.
+
+
+- **GraphACL** (Luo et al., 2023): It improves contrastive representation learning by constructing
+adversarial hard negatives and regularizing the feature space with orthogonality and divergence
+constraints.
+
+
+- **TGNN** (Ju et al., 2023b): A dual-view semi-supervised framework that integrates message passing
+and kernel-based reasoning, encouraging consistency across views to exploit both labeled and
+unlabeled graphs.
+
+
+17
+
+
+- **PiCO** (Wang et al., 2022): It learns a set of class-wise prototypes and employs contrastive objectives to align instance embeddings with their correct prototypes. We adopt a GraphSAGE encoder
+to enable graph-level applications.
+
+
+- **DEER** (Gu et al., 2024): A partial-label graph learning method that selects reliable positive pairs
+by measuring distribution divergence across augmented views. It also performs soft label correction via posterior estimation. However, it does not explicitly model substructures or spectral
+signals, limiting its granularity in structural reasoning.
+
+
+**Training** **Protocol.** All baselines are trained under partial-label supervision using a cross-entropy
+loss over candidate label sets. TGNN additionally optimizes a consistency loss between dual views.
+For contrastive methods such as GraphCL, GraphACL, and PiCO, we apply their contrastive loss
+and the cross-entropy loss. Pooling-based methods are evaluated with a fixed pooling ratio of 0 _._ 6
+and use GraphSAGE as their encoder. All models are trained under identical random seeds for fair
+comparisons.
+
+
+F DETAILS OF IMPLEMENTATION
+
+
+We implement all models using PyTorch with the PyG backend. A two-layer GraphSAGE with
+512 hidden units is adopted as the backbone encoder. The EMA momentum for prototype and
+label updates is set to _m_ = _β_ = 0 _._ 99, and the propagation momentum is _µ_ = 0 _._ 9 with _E_ = 2
+steps. Eigen-decomposition is precomputed via sparse solvers to ensure efficiency. For ENZYMES,
+Letter-High, COIL-DEL, and COLORS-3, we partition the data into training, validation, and test
+sets with a ratio of 80%:5%:15%. For CIFAR10, we follow the popular split of 45 _,_ 000 training,
+5 _,_ 000 validation, and 10 _,_ 000 test samples, consistent with the protocol in (Dwivedi et al., 2020). All
+these results are averaged over five independent runs with individual seeds.
+
+
+18

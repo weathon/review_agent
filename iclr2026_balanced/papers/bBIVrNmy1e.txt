@@ -1,0 +1,1186 @@
+# DATA-FREE TRANSFORMER QUANTIZATION USING PARAMETER-SPACE SYMMETRY
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Transformer models are widely used in many learning tasks but incur large memory
+and compute costs, limiting their deployability. Post-Training Quantization (PTQ)
+is a promising solution but can lead to significant performance degradation. Many
+PTQ methods estimate weight and activation distributions with calibration data to
+account for outliers and maintain quantized performance. We propose a data-free
+approach to improve quantization by exploiting parameter space symmetries. We
+address outliers and high variability in weights by finding a transformation of
+the model weights that minimizes quantization error variance. Our approach is
+light-weight, data-free, and can be integrated as a pre-processing step within other
+PTQ methods. We evaluate our approach by testing quantized large language
+models on several benchmark tasks.
+
+
+1 INTRODUCTION
+
+
+Transformer models Vaswani et al. (2023) have found widespread success as generative models for
+language modeling and computer vision tasks. Transformers have become increasingly complex
+incurring large computational and memory storage costs far beyond other models, limiting their
+usability. The highest performing models have hundreds of billions of parameters Radford et al.
+(2019); Zhang et al. (2022) requiring immense training time and massive GPU memory. Even
+inference on pre-trained models can be prohibitively slow and exceed memory capacity of resource
+constrained systems. Effective model compression is essential for addressing these limitations.
+
+
+Many model compression methods such as model-pruning Zhu et al. (2024) and low-bit quantization Chen et al. (2024); Ma et al. (2024) require re-training which is infeasible for models with billions
+of parameters. Post-training quantization (PTQ) which compresses models without re-training is a
+promising solution but can result in significant performance degradation. Many PTQ methods utilize
+calibration data and specialized heuristics to preserve model performance Bondarenko et al. (2021);
+Nagel et al. (2020). This requires access to high-quality calibration sets and can incur additional
+overhead for inference of the quantized model. Data-free methods for improving quantization performance have been proposed for MLPs and CNNs Meller et al. (2019); Nagel et al. (2019) but to our
+knowledge there are no similar methods for transformers.
+
+
+In this paper, we develop a data-free method for improving post-training quantization of transformers
+by leveraging the symmetry of attention weights. Instead of designing a new quantization process,
+we provide a pre-quantization algorithm which finds equivalent weight configurations which are
+less sensitive to quantization. An equivalent weight configuration is a transformation of the weights
+which does not change the layer output. Our approach works by finding a linear transformation of
+the weights which minimizes the expected quantization error variance. This results in a new set
+of weights which when quantized results in lower quantization error during inference. There are
+several advantages to this strategy. First, we operate directly on the weights without any forward
+passes through the model. Second, our method is a pre-processing step which is compatible with any
+quantization algorithm allowing it to be stacked with existing techniques. This allows our method to
+be very lightweight, needing only enough memory for each layer’s weights individually, while also
+being highly flexible and fast.
+
+
+1
+
+
+Our contributions include:
+
+
+    - A closed-form approximation of quantization error variance in attention.
+
+
+    - An optimization algorithm for finding optimal weight transformations.
+
+
+    - Empirical evaluation of our method showing its impact on linear quantization.
+
+
+2 RELATED WORK
+
+
+**Quantization of large language models (LLMs)** Quantization reduces the numerical precision
+of neural network parameters to decrease model size and accelerate inference. This is essential for
+deploying LLMs efficiently across various hardware platforms. Common quantization techniques
+include quantization-aware training (QAT) and post-training quantization (PTQ) (Nagel et al., 2021;
+Zhu et al., 2024). QAT simulates quantization during training and adjusts model parameters to
+minimize quantization-induced error (Jacob et al., 2018; Esser et al., 2019). PTQ methods directly
+quantize pre-trained models. PTQ techniques include analytical methods that adjust weight distributions, such as range equalization and bias correction, enabling accurate quantization without
+access to training data (Nagel et al., 2019; Meller et al., 2019). Other PTQ approaches optimize
+quantization parameters on small calibration sets (Nagel et al., 2020; Hubara et al., 2021; Li et al.,
+2021). Recently, PTQ has become prominent for quantizing transformers and large language models
+(Frantar et al., 2022; Yao et al., 2022; Xiao et al., 2023; Dettmers et al., 2022). Our work follows the
+post-training quantization paradigm, aiming to further reduce quantization-induced accuracy loss
+through optimized parameter symmetry transformations.
+
+
+**Using symmetry in quantization** Neural networks often have parameter space symmetries, meaning certain transformations of their parameters leave the network’s loss unchanged. Examples include
+the scaling symmetry in networks with ReLU or linear activations (Badrinarayanan et al., 2015), and
+permutation symmetry among neurons within a hidden layer (Hecht-Nielsen, 1990). Several works
+have explicitly used such weight transformations to reduce quantization error. A common strategy
+is to exploit scale invariances to adjust the range of weights or activations before quantization. For
+example, Nagel et al. (2019) and Meller et al. (2019) propose equalizing weight ranges across layers
+in ReLU-based networks using the scaling symmetry. Xiao et al. (2023) improve speed and reduce
+memory during inference for linear operations, defined as computing the product of activations (output
+from previous computations) and weights, by applying a loss-invariant scaling on both parts before
+quantization. While this transformation is defined jointly on parameters and activations, it can be
+expressed as a parameter symmetry when the activation is the output of a linear operation. Similarly,
+Kim et al. (2024) scales activation and weights in CNN-transformer hybrid architectures to align
+parameter distributions with hardware-friendly quantization constraints, thereby improving inference
+efficiency. Our approach extends these ideas by considering the full general linear group, optimizing
+over a broader class of symmetry transformations to achieve superior quantization accuracy.
+
+
+**Optimization in transformer model level sets** Recent works have also explored optimization over
+the loss level sets in transformers for applications other than quantization. This optimization is often
+done on symmetry group orbits, leveraging the general linear group symmetry in self-attention layers.
+For example, Zhang et al. (2025) improves model fusion by minimizing the distance between two
+self-attentions without affecting their loss. Their method first finds an optimal rotation of key and
+query matrices, followed by an optimal scaling. Similarly, Wu et al. (2025) accelerates the training
+of transformers by searching in the loss level set for points better suited for optimization. We also
+optimize over the symmetry group orbits of transformer models, but with the specific goal of finding
+transformations that minimize accuracy loss in quantization.
+
+
+3 BACKGROUND
+
+
+3.1 TRANSFORMER ATTENTION
+
+
+A standard transformer layer consists of two main modules: a multi-head attention(MHA) module
+and a multi-layer perceptron(MLP). In this work we focus on improving the quantization of the
+
+
+2
+
+
+attention module. The attention module has four weight matrices _Wq, Wk, WV, WO_ . For a given
+transformer layer with input _x ∈_ R _[n][×][d]_ the attention scores are computed as:
+
+_A_ = _xWqWk_ _[T]_ _[x][T]_ (1)
+A softmax is applied after to normalize the scores and the final layer output is computed:
+
+
+**Neural Network Quantization** Neural network quantization consists of two parts. Weight quantization is quantization applied to the model weights. The simplest form of weight quantization is
+per-tensor where _R_ is computed for each individual weight tensor which are quantized independently.
+Activation quantization is quantization of the layer outputs and is similarly applied per-tensor.
+
+
+Weight quantization is straightforward since the weights are fixed and _R_ is easily computed directly
+from the weights. By contrast, activation quantization requires calibration by estimating _R_ over a
+calibration dataset of inputs. The layer outputs depend on layer inputs so the range of values are
+not known a priori. If the calibration set does not capture the true range of activations seen during
+inference the estimated range _R_ will be too small resulting in high quantization error. This sensitivity
+to calibration is especially impactful in settings where the training data is not accessible or when
+there is a limited amount of calibration data.
+
+
+4 DATA-FREE ESTIMATION OF QUANTIZATION NOISE
+
+
+To improve quantization without data, we compute an analytic expression for the quantization noise,
+which gives a data-free objective for minimizing the error under quantization. Intuitively quantization
+
+
+3
+
+
+      - _A_
+MHA( _x_ ) = softmax ~~_√_~~
+
+_d_
+
+
+      - _A_
+MHA( _x_ ) = softmax ~~_√_~~
+
+
+_xWV WO_ (2)
+
+
+We focus on quantizing _Wq, Wk_ although we believe our results may be generalized to include _Wv_
+and _WO_ .
+
+
+3.2 QUANTIZATION
+
+
+At a high-level, quantization works by mapping full-precision floating point values into a smaller set
+of low-bit numbers (e.g. 8-bit, 4-bit integers). The low-bit numbers are used during computation and
+then the resulting output is reconstructed by de-quantization which uses the inverse map to recover
+the approximate floating point value.
+
+
+**Uniform Quantization** A common mapping used in quantization is uniform quantization. Uniform
+quantization splits the range _R_ of a tensor _Y_ uniformly onto a set of _b_ -bit signed integers. The range
+_R_ can be defined for symmetric quantization or asymmetric quantization. For symmetric quantization
+_R_ is defined as the maximum absolute value max( _|Y |_ ) while asymmetric quantization sets _R_ as
+max( _Y_ ) _−_ min( _Y_ ). Quantization is defined as:
+
+
+      -      - _Y_ 2 _b−_ 1      -      Quant( _Y_ ) = Clamp Round _, −_ 2 _[b][−]_ [1] _,_ 2 _[b][−]_ [1] _−_ 1 (3)
+
+_R_
+
+
+Quantization error is computed between the original tensor _Y_ and the de-quantized reconstruction _Y_ [ˆ] .
+_Y_ ˆ is obtained by the inverse map DeQuant() = Quant _[−]_ [1] (). Since quantization is surjective, there can
+be errors in the reconstruction. We write this element-wise quantization error as ∆ _Y_ = _Y_ [ˆ] _−_ _Y_ . The
+full tensor quantization error is defined as the L2 norm of the per-element error _||_ ∆ _Y ||_ [2] 2 [=] _[ |]_ [∆] _[Y][ |]_ [2][.]
+
+
+Uniform quantization depends heavily on the range _R_ . When _R_ is lower than the actual range of
+values in the tensor, extremal values are clamped leading to large and inconsistent quantization error.
+Conversely a large range results in a lower resolution mapping leading to higher uncertainty in the
+reconstruction for all values. This means quantization error is driven primarily by the extremal
+values of _Y_, so outlier values can dramatically impact quantization. Under uniform quantization, the
+quantization error is approximately distributed uniformly Marco & Neuhoff (2005); Lin et al. (2016):
+
+
+∆ _Y_ _∼_ Uniform - _−_ 2 _R_ _[b]_ _[,]_ 2 _[R][b]_
+
+
+(4)
+
+
+noise is an estimate of the variance of quantization error seen during inference. We use this as a
+data-free objective for reducing the calibration sensitivity of activation quantization.
+
+
+This approach is inspired by Meller et al. (2019). Meller et. al. develop a greedy algorithm for
+re-scaling weights of CNNs to minimize quantization noise of activations. Our method uses a
+similar objective but differs in two ways. Our approach is data-free without requiring estimations for
+activation ranges and considers orthogonal transforms of the weights instead of rescaling.
+
+
+**Quantization** **Error** Let _Y_ = _WqWk_ _[T]_ [which] [when] [quantized] [and] [reconstructed] [gives] _[Y]_ [ˆ] [=]
+_W_ ˆ _qW_ [ˆ] _kT_ . Rewriting this in terms of the quantization error we get an expression for ∆ _Y_ :
+
+_Y_ + ∆ _Y_ =( _Wq_ + ∆ _Wq_ )( _Wk_ + ∆ _Wk_ ) _[T]_
+
+∆ _Y_ = _Wq_ ∆ _Wk_ _[T]_ [+ ∆] _[W][q][W][ T]_ _k_ [+ ∆] _[W][q]_ [∆] _[W][ T]_ _k_ (5)
+The element-wise quantization errors ∆ _Wq,_ ∆ _Wk_ are both random tensors approximately distributed
+as:
+
+
+     - _−Rq_
+∆ _Wq_ _∼_ Uniform _[R][q]_
+2 _[b]_ [+1] _[,]_ 2 _[b]_ [+1]
+
+     - _−Rk_
+∆ _Wk_ _∼_ Uniform _[R][k]_
+2 _[b]_ [+1] _[,]_ 2 _[b]_ [+1]
+
+
+(6)
+
+
+(7)
+
+
+where _Rq, Rk_ are the ranges of _Wq, Wk_ respectively and _b_ is the quantization bit-width. This means
+∆ _Y_ is also a random tensor which depends on ∆ _Wq,_ ∆ _Wk_ .
+
+
+**Quantization** **Noise** **Objective** We define the quantization noise as the average element-wise
+variance mean( **E** ( _|_ ∆ _Y |_ [2] )) which is the expected magnitude of the full tensor quantization error. Intuitively higher quantization noise corresponds to higher uncertainty in the de-quantized reconstruction
+_Y_ ˆ which is driven by outliers which pose significant challenges to effective quantization. This makes
+minimizing quantization noise a promising data-free objective that can lead to fewer outliers and
+better quantization.
+
+
+We now show how to compute the quantization noise, for a full proof see Appendix A. In what
+follows _⊙_ is element-wise multiplication. Expanding and simplifying **E** ( _|_ ∆ _Y |_ [2] ) yields a sum over
+over 6 term matrices. Equations for each of these terms is included in Appendix 1.
+
+**Lemma 4.1.**
+
+**E** ( _|_ ∆ _Y |_ [2] ) = **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ [2][ +] _[ |]_ [∆] _[W][q][W][ T]_ _k_ _[|]_ [2] (8)
+
++ _|_ ∆ _Wq_ ∆ _Wk_ _[T]_ _[|]_ [2]
+
++ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q][W][ T]_ _k_ _[|]_
+
++ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|]_
+
++ _|_ ∆ _WqWk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|]_ []]
+
+
+Since we only need the element-wise mean of this matrix expression, these terms can be further
+reduced giving the following proposition.
+**Proposition 4.2.** _Let Wq, Wk_ _∈_ R _[n][×][m]_ _with elements denoted qij, kij. Let_ ∆ _Wq,_ ∆ _Wk be their quan-_
+_tization error matrices respectively._ _If_ ∆ _Wq_ _∼_ _Uniform_ ( _−rq, rq_ ) _and_ ∆ _Wk_ _∼_ _Uniform_ ( _−rk, rk_ )
+_then the mean of the elements in the matrix expression in Equation 8 is:_
+
+
+_i,j,t_ _[q][ij][q][it]_
+
+4
+
+
+_i,j,t_ _[k][ij][k][it]_
+
+4
+
+
+��
+
+_i,j_ _[k]_ _ij_ [2]
++
+12
+
+
+_q_
++ _[r]_ [2]
+_n_
+
+
+_rk_ [2]
+_n_
+
+
+��
+
+_i,j_ _[q]_ _ij_ [2]
++
+12
+
+
+
+
+ [�] _kij_
+
+_i,j_
+
+
+
+
+
+
+
+
++ _[mr]_ _q_ [2] _[r]_ _k_ [2]
+16
+
+
+_m_ + [7]
+
+9
+
+
++ _[r][q][r][k]_
+
+2 _n_ [2]
+
+
+_m_ + [7]
+
+
+
+
+
+ [�] _qij_
+
+_i,j_
+
+
+
+
+
+
+
+
+- _kij_
+
+
+_i,j_
+
+
+_k_ [(3] _[m]_ [ + 1)]
++ _[r][q][r]_ [2]
+
+12 _n_
+
+
+- _qij_ + _[r]_ _q_ [2] _[r][k]_ [(3] _[m]_ [ + 1)]
+
+12 _n_
+
+_i,j_
+
+
+12 _n_
+
+
+_where the summands correspond to those in Equation 8._
+
+
+4
+
+
+5 METHOD
+
+
+In this section we introduce our algorithm for minimizing quantization noise. Our approach finds
+a transformation of _Wq, Wk_ which minimizes the quantization noise without changing the layer
+function through gradient descent using the equation in 4.2 as an objective. At a high-level, we
+parameterize an orthogonal matrix _g_ for each layer which can be optimized independently or batched
+to be feasible on wide variety of hardware. Our approach only modifies the weights of the attention
+layers in a transformer without impacting model behavior or specialized quantization heuristics. It is
+therefore compatible as a pre-processing step with any downstream quantization algorithm that uses
+uniform quantization.
+
+From Equation 1, the attention scores are computed as _A_ = _xWqWk_ _[T]_ _[x][T]_ [where] _[ W][q][, W][k]_ _[∈]_ [R] _[n][×][m]_ [.]
+An invertible matrix _g_ _∈_ R _[m][×][m]_ and its inverse can be inserted between _Wq_ and _Wk_ giving an equal
+attention score:
+
+_A_ = _xWqgg_ _[−]_ [1] _Wk_ _[T]_ _[x][T]_ (9)
+
+Replacing the original weights with _Wq_ _[′]_ [=] _[ W][q][g]_ [, and] _[ W][ ′]_ _k_ [=] _[ W][k]_ [(] _[g][−]_ [1][)] _[T]_ [gives a new set of weights]
+without changing the layer functionally.
+
+
+Our goal is to find such a transformation _g_ which minimizes the quantization noise for the new
+weights. Instead of searching over the group GL( _m_ ), all invertible _m × m_ matrices, we restrict _g_
+to be orthogonal. The group _O_ ( _m_ ) is compact, which assures the existence of a global minimum,
+making the optimization problem well posed. This approach compliments weight rescaling which is
+a common technique for improving quantization Nagel et al. (2019); Meller et al. (2019); Xiao et al.
+(2023) by exploring a different subspace of parameter symmetries. Due to orthogonality the new
+weights are _Wq_ _[′]_ [=] _[W][q][g]_ [and] _[ W][ ′]_ _k_ [=] _[W][k][g]_ [.] [Our objective more concretely is to solve the following]
+minimization:
+
+_g_ = argmin _g∈O_ ( _m_ )mean( **E** (∆ _Y_ _[′]_ [2] )) (10)
+
+
+This is solvable by gradient descent using the expression from Proposition 4.2 as a loss function. We
+parameterize _g_ by instantiating a square random matrix _M_ and setting _g_ as the orthogonal component
+of the QR decomposition QR( _M_ ). Since the QR decomposition is differentiable, this makes for a
+suitable parameterization. We perform this procedure for each layer of the transformer model and for
+each head in multi-headed attention layers which can be batched to improve efficiency.
+
+
+Our method ensures that the product of queries and keys is maintained resulting in identical attention
+scores but the individual weight matrices _Wq, Wk_ are changed to _Wq_ _[′][, W]_ _k_ _[ ′]_ [.] [The transformed weights]
+will have different ranges and therefore have different quantization error from weight quantization.
+Similarly the query _Q_ = _xWq_ and key _K_ = _xWk_ values will also be transformed to _Q_ _[′]_ _, K_ _[′]_ . The
+transformed values will in general have different quantization errors from activation quantization.
+Quantization of the intermediate _Q, K_ tensors is not always performed Yao et al. (2022) in which
+case the activation quantization will not be impacted by our transformation beyond the impact to
+activations due to weight quantization.
+
+
+**Analyzing Impact of Learned Transformations** We begin by comparing the product _QK_ _[T]_ for
+the original weights and the transformed weights. Figure 1a shows that our method indeed produces
+identical attention scores at full-precision. This ensures that the output for every layer in the model is
+identical and so the overall model behavior is maintained for any input.
+
+
+Weight quantization however is changed after transformation since the original weight matrix ranges
+_Rq, Rk_ are different from the transformed ranges _Rq_ _[′]_ _[, R]_ _k_ _[′]_ [.] [Since the quantization error of weight]
+quantization depends on these ranges, the transformed weights will have different quantization
+performance despite the functional equivalency of the full-precision model. We compare the ranges
+before and after transformation in figure 1b and find that the learned transformation reduces the
+weight ranges for both queries and keys which results in lower quantization error on average.
+
+
+The query activations _Q_ and key activations _K_ are also changed since our transformation only
+maintains functional equivalency of the product _QK_ _[T]_ . This means our transformation will also
+impact activation quantization error. We compare the activation ranges over a set of 100 inputs in
+figure 2. We find that our transformed weights generally reduced the ranges for query activations by
+15 _._ 3% and for key activations by 4 _._ 1% averaged over all layers. There are some layers where the
+
+
+5
+
+
+(b) Relative change in weight ranges for
+OPT1 _._ 3 _b_ . Ranges are reduced on average by
+44 _._ 4% for _Wq_ and 18 _._ 2% for _Wk_ . The reduction in weight ranges after transformation
+results in lower weight quantization error.
+
+
+(a) Average per-element difference of products _WqWk_ _[T]_ [and] _[ W]_ _q_ _[ ′][W]_ _k_ _[ ′][T]_ for OPT1 _._ 3 _b_ . The
+average per-element change over all layers is
+3 _._ 8 _×_ 10 _[−]_ [5] showing that the transformation
+_g_ does not change the attention scores.
+
+
+Figure 2: Percentage change in activation ranges for queries _Q_ and keys _K_ from transformed weights
+over 100 input sentences. Ranges are reduced on average by 15 _._ 3% for _Q_ and 4 _._ 1% for _K_ . This
+shows that the learned transformation reduces the activation ranges despite being optimized data-free.
+
+
+range is slightly increased however. This shows that the data-free quantization noise objective is a
+promising metric for outlier reduction even for data dependent activations.
+
+
+6 EXPERIMENTAL EVALUATION
+
+
+**Setups** As a proof of concept, we tested our approach by validating the relative performance impact
+of quantization with and without our transformation. We compare text classification accuracy for
+Bertbase Devlin et al. (2018) fine-tuned for two benchmark GLUE tasks, SST-2 and MNLI. In addition
+we compare text generation performance of OPT350 _m_ and OPT1 _._ 3 _b_ by measuring perplexity over
+the WikiText-2 dataset. For text generation we evaluate both the fine-tuned performance as well as
+zero-shot performance.
+
+
+**Implementation** We implement both symmetric per-tensor weight quantization and symmetric
+per-tensor activation quantization. In our experiments we test both 4-bit and 8-bit weight quantization.
+We also add 8-bit activation quantization for the text generation experiments. These are denoted
+W _x_ A _y_ where _x_ is the bits for weight quantization and _y_ is the bits for activation quantization. The
+full-precision models use 16-bit floating points so W16 and A16 refer to no quantization for weights
+or activations respectively.
+
+
+**Text Classification Results** We used Bertbase Devlin et al. (2018) fine-tuned for two benchmark
+GLUE tasks, SST-2 and MNLI. The model weights were quantized to 8-bit and 4-bit integers without
+
+
+6
+
+
+Model SST-2 - Acc. MNLI - Acc.
+Full-Prec. 92.2% 84.1%
+Baseline W8A16 91.9% 84.1%
+**Transformed W8A16** 91.9% 84.1%
+Stand. 4-bit 91.7% 84.0%
+**Transformed W4A16** 91.9% 84.1%
+
+
+Table 1: MNLI and SST-2 quantization performance results. Baseline W8A16 and W4A16 were
+quantized without weight transformation. Transformed W8A16 and W4A16 applied weight transformation before quantization.
+
+
+any activation quantization. The transformation optimization was run for 5,000 iterations for both
+tasks. The results are summarized in Table 1. W8A16 and W4A16 weight quantization did not
+degrade performance nearly at all for either task suggesting the prediction accuracy is not very
+sensitive to weight quantization. We see a marginal improvement in quantization performance using
+the transformed weights but the generally low impact of weight quantization suggests a more sensitive
+metric and task are needed to evaluate our approach.
+
+
+**Text Generation Results** We compared quantization performance of OPT350 _m_ and OPT1 _._ 3 _b_ over
+the WikiText-2 dataset. Perplexity is much more sensitive to quantization which is confirmed in the
+results of other quantization research Xiao et al. (2023). We use a calibration set of 10 randomly
+selected sentences from the training set for activation quantization.
+
+
+|Col1|Fine-tuned Perplexity|Zero-Shot Perplexity|
+|---|---|---|
+|Model|Full-Prec.<br>W8A8<br>W4A8|Full-Prec.<br>W8A8<br>W4A8|
+|OPT-350m<br>Transf. OPT-350m|17.9<br>355.3<br>3853.4<br>17.9<br>254.0<br>3235.7|23.6<br>472.8<br>5378.1<br>23.6<br>446.4<br>5217.9|
+|OPT-1.3b<br>Transf. OPT-1.3b|12.3<br>4284.8<br>9097.0<br>12.3<br>4193.2<br>8844.8|15.3<br>7804.9<br>10392.9<br>15.3<br>7116.6<br>10242.5|
+
+
+Table 2: Fine-tuned and zero-shot text generation perplexity results evaluated over WikiText-2.
+The transformed weights improve the performance for quantized models over the standard uniform
+symmetric quantization baseline. The performance is identical for full-precision models due to the
+functional equivalency of the transformed weights.
+
+
+Table 2 shows the fine-tuned performance of the models. We find that the transformed model
+substantially improves quantization performance for both models. This improvement is relatively
+stronger for W8A8 quantization than W4A8 quantization where the relative impact is reduced.
+
+
+Table 2 shows the zero-shot performance of the models which mirrors the previous fine-tuned
+performance. The baseline performance is lower than the fine-tuned models with much lower
+quantized performance. This suggests the zero-shot performance is more sensitive to quantization
+error. The transformation again improves quantization performance but with a lower impact than the
+fine-tuned models.
+
+
+These results show that our method can consistently reduce quantization error. The lower relative
+impact for high quantization error may be caused by the propagation of large quantization errors
+in early layers which reduce the impact of the weight transformations for later layers. The weight
+transformations for later layers are computed on the full-precision weights which does not account
+for the accumulation of quantization errors from earlier layers resulting in a larger difference between
+the inputs to full-precision and quantized layers.
+
+
+7 CONCLUSION AND FUTURE WORK
+
+
+In this paper we explored using parameter symmetries to improve quantization. We derived an
+estimate for quantization noise in query and key attention. Our approach for minimizing quantization
+noise is a highly efficient pre-processing step which is compatible with other downstream quantization
+approaches and consistently reduces weight ranges and on average reduces query and key activation
+
+
+7
+
+
+ranges. In quantization sensitive tasks such as text generation, the learned weight transformations
+improve quantization performance however the impact is limited for high quantization error where
+the quantized values differ significantly from the full-precision values we optimize over.
+
+
+In the future we plan to generalize our quantization noise estimation to per-group and per-channel
+quantization which may provide a more fine-grained estimate and more effective weight transformations. Removing the orthogonal transformation restriction is another future direction which contains
+both our current orthogonal parameter symmetry as well as the common weight rescaling symmetry.
+Exploring the parameter symmetries of the value and output weight matrices may also lead to more
+consistent and larger improvements to quantization.
+
+
+Finally, the quantization noise estimate may be a useful metric for quantization aware training (QAT).
+Our approach for minimizing quantization noise can be used to transform weights during training
+similarly to teleportation Wu et al. (2025).
+
+
+REFERENCES
+
+
+Vijay Badrinarayanan, Bamdev Mishra, and Roberto Cipolla. Symmetry-invariant optimization in
+deep networks. _arXiv preprint arXiv:1511.01754_, 2015.
+
+
+Yelysei Bondarenko, Markus Nagel, and Tijmen Blankevoort. Understanding and overcoming the
+challenges of efficient transformer quantization, 2021. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2109.12948)
+[2109.12948.](https://arxiv.org/abs/2109.12948)
+
+
+Mengzhao Chen, Wenqi Shao, Peng Xu, Jiahao Wang, Peng Gao, Kaipeng Zhang, and Ping Luo.
+Efficientqat: Efficient quantization-aware training for large language models, 2024. [URL https:](https://arxiv.org/abs/2407.11062)
+[//arxiv.org/abs/2407.11062.](https://arxiv.org/abs/2407.11062)
+
+
+Tim Dettmers, Mike Lewis, Younes Belkada, and Luke Zettlemoyer. Llm.int8(): 8-bit matrix
+multiplication for transformers at scale. _Advances in neural information processing systems_, 35:
+30318–30332, 2022.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: pre-training of deep
+bidirectional transformers for language understanding. _CoRR_, abs/1810.04805, 2018. URL
+[http://arxiv.org/abs/1810.04805.](http://arxiv.org/abs/1810.04805)
+
+
+Steven K Esser, Jeffrey L McKinstry, Deepika Bablani, Rathinakumar Appuswamy, and Dharmendra S Modha. Learned step size quantization. _arXiv preprint arXiv:1902.08153_, 2019.
+
+
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. Gptq: Accurate post-training
+quantization for generative pre-trained transformers. _arXiv preprint arXiv:2210.17323_, 2022.
+
+
+Robert Hecht-Nielsen. On the algebraic structure of feedforward network weight spaces. In _Advanced_
+_Neural Computers_, pp. 129–135. Elsevier, 1990.
+
+
+Itay Hubara, Yury Nahshan, Yair Hanani, Ron Banner, and Daniel Soudry. Accurate post training
+quantization with small calibration sets. In _International Conference on Machine Learning_, pp.
+4466–4475. PMLR, 2021.
+
+
+Benoit Jacob, Skirmantas Kligys, Bo Chen, Menglong Zhu, Matthew Tang, Andrew Howard, Hartwig
+Adam, and Dmitry Kalenichenko. Quantization and training of neural networks for efficient
+integer-arithmetic-only inference. In _Proceedings of the IEEE conference on computer vision and_
+_pattern recognition_, pp. 2704–2713, 2018.
+
+
+Nam Joon Kim, Jongho Lee, and Hyun Kim. Hyq: Hardware-friendly post-training quantization for
+cnn-transformer hybrid networks. In _IJCAI_, 2024.
+
+
+Yuhang Li, Ruihao Gong, Xu Tan, Yang Yang, Peng Hu, Qi Zhang, Fengwei Yu, Wei Wang, and Shi
+Gu. Brecq: Pushing the limit of post-training quantization by block reconstruction. _arXiv preprint_
+_arXiv:2102.05426_, 2021.
+
+
+Darryl D. Lin, Sachin S. Talathi, and V. Sreekanth Annapureddy. Fixed point quantization of deep
+convolutional networks, 2016. [URL https://arxiv.org/abs/1511.06393.](https://arxiv.org/abs/1511.06393)
+
+
+8
+
+
+Shuming Ma, Hongyu Wang, Lingxiao Ma, Lei Wang, Wenhui Wang, Shaohan Huang, Li Dong,
+Ruiping Wang, Jilong Xue, and Furu Wei. The era of 1-bit llms: All large language models are in
+1.58 bits, 2024. [URL https://arxiv.org/abs/2402.17764.](https://arxiv.org/abs/2402.17764)
+
+
+D. Marco and D.L. Neuhoff. The validity of the additive noise model for uniform scalar quantizers.
+_IEEE_ _Transactions_ _on_ _Information_ _Theory_, 51(5):1739–1755, 2005. doi: 10.1109/TIT.2005.
+846397.
+
+
+Eldad Meller, Alexander Finkelstein, Uri Almog, and Mark Grobman. Same, same but different:
+Recovering neural network quantization error through weight factorization. In _International_
+_Conference on Machine Learning_, pp. 4486–4495. PMLR, 2019.
+
+
+Markus Nagel, Mart van Baalen, Tijmen Blankevoort, and Max Welling. Data-free quantization
+through weight equalization and bias correction. In _Proceedings of the IEEE/CVF International_
+_Conference on Computer Vision_, pp. 1325–1334, 2019.
+
+
+Markus Nagel, Rana Ali Amjad, Mart Van Baalen, Christos Louizos, and Tijmen Blankevoort. Up or
+down? adaptive rounding for post-training quantization. In _International conference on machine_
+_learning_, pp. 7197–7206. PMLR, 2020.
+
+
+Markus Nagel, Marios Fournarakis, Rana Ali Amjad, Yelysei Bondarenko, Mart Van Baalen, and Tijmen Blankevoort. A white paper on neural network quantization. _arXiv preprint arXiv:2106.08295_,
+2021.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
+Kaiser, and Illia Polosukhin. Attention is all you need, 2023. [URL https://arxiv.org/](https://arxiv.org/abs/1706.03762)
+[abs/1706.03762.](https://arxiv.org/abs/1706.03762)
+
+
+Zihao Wu, Juncheng Dong, Ahmed Aloui, and Vahid Tarokh. Teleportation with null space gradient
+projection for optimization acceleration. _arXiv preprint arXiv:2502.11362_, 2025.
+
+
+Guangxuan Xiao, Ji Lin, Mickael Seznec, Hao Wu, Julien Demouth, and Song Han. Smoothquant:
+Accurate and efficient post-training quantization for large language models. In _International_
+_Conference on Machine Learning_, pp. 38087–38099. PMLR, 2023.
+
+
+Zhewei Yao, Reza Yazdani Aminabadi, Minjia Zhang, Xiaoxia Wu, Conglong Li, and Yuxiong
+He. Zeroquant: Efficient and affordable post-training quantization for large-scale transformers.
+_Advances in Neural Information Processing Systems_, 35:27168–27183, 2022.
+
+
+Binchi Zhang, Zaiyi Zheng, Zhengzhang Chen, and Jundong Li. Beyond the permutation symmetry
+of transformers: The role of rotation for model fusion. _arXiv preprint arXiv:2502.00264_, 2025.
+
+
+Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen, Christopher
+Dewan, Mona Diab, Xian Li, Xi Victoria Lin, Todor Mihaylov, Myle Ott, Sam Shleifer, Kurt
+Shuster, Daniel Simig, Punit Singh Koura, Anjali Sridhar, Tianlu Wang, and Luke Zettlemoyer.
+Opt: Open pre-trained transformer language models, 2022. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2205.01068)
+[2205.01068.](https://arxiv.org/abs/2205.01068)
+
+
+Xunyu Zhu, Jian Li, Yong Liu, Can Ma, and Weiping Wang. A survey on model compression for large
+language models. _Transactions of the Association for Computational Linguistics_, 12:1556–1577,
+2024.
+
+
+9
+
+
+A QUANTIZATION NOISE ESTIMATION PROOF
+
+
+In this section we provide a proof of the equations found in proposition 4.2. In the following
+proofs, _Q_ _[i]_ _, K_ _[i]_ denote the _m_ -dimensional _i_ -th row vectors of _Wq, Wk_ and _δQ_ _[i]_ _, δK_ _[i]_ are the rows of
+∆ _Wq,_ ∆ _Wk_ .
+
+
+**1st** **Term:** _|Wq_ ∆ _Wk_ _[T]_ _[|]_ [2] We begin by first considering the matrix **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ [2][]][.] [The] [value]
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] []][ at index] _[ i, j]_ [is computed as follows:]
+
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] [] =] **[ E]** [[] _[|][Q][i]_ [(] _[δK]_ _[j]_ [)] _[T][ |]_ [2][]]
+
+
+mean( **E** [ _|_ ∆ _WqWk_ _[T]_ _[|]_ [2][]) =] _[r]_ _q_ [2]
+_n_ [(]
+
+
+10
+
+
++
+12
+
+
+= **E** [ _|_ 
+
+
+- _Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[| · |]_ 
+_u_ _v_
+
+
+_Q_ _[i]_ _v_ _[δK]_ _v_ _[j][|]_ []]
+_v_
+
+
+Expanding this product, the expectation can be distributed through the sum. In this expanded product
+there are 2 cases, when _u_ = _v_ and _u ̸_ = _v_ .
+
+When _u_ = _v_, this gives **E** [ _|Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[|]_ [2][]] [=] [(] _[Q][i]_ _u_ [)][2] _[ r]_ 3 _k_ [2] [since] _[|][δK]_ _u_ _[j]_ _[|]_ _[∼]_ [Uniform][(0] _[, r][k]_ [)][.] [Since] _[u, v]_ [go]
+
+
+_k_
+from 1 to m, this will give us _[r]_ 3 [2]
+
+
+_m_
+
+
+- ( _Q_ _[i]_ _u_ [)][2][ in the sum.]
+
+_u_ =1
+
+
+When _u_ = _v_, the value is **E** [ _|Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[|]_ []] **[E]** [[] _[|][Q][i]_ _v_ _[δK]_ _v_ _[j][|]_ []] [since] _[δK]_ _u_ _[j]_ [and] _[δK]_ _v_ _[j]_ [are] [independent] [random]
+values so their expectations are multiplied. This gives _[r]_ 4 _k_ [2] - _Q_ _[i]_ _u_ _[Q][i]_ _v_ [.]
+
+_u_ = _v_
+
+
+Putting both cases together we get the final value for index _i, j_ of
+
+
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] [] =] _[r]_ _k_ [2]
+3
+
+
+= _[r]_ _k_ [2]
+3
+
+
+= _[r]_ _k_ [2]
+12
+
+
+_n_
+
+- _k_
+
+( _Q_ _[i]_ _u_ [)][2][ +] _[r]_ [2]
+4
+_u_ =1
+
+
+_n_
+
+- _k_
+
+( _Q_ _[i]_ _u_ [)][2][ +] _[r]_ [2]
+4
+_u_ =1
+
+
+�( _Q_ _[i]_ _u_ [)][2][ +] _[ r]_ _k_ [2] 
+_u_ =1 _u_
+
+
+- _Q_ _[i]_ _u_ _[Q]_ _v_ _[i]_
+
+
+_u_ = _v_
+
+- _Q_ _[i]_ _u_ _[Q]_ _v_ _[i]_ _[−]_ _[r]_ _k_ [2]
+
+4
+_u,v_
+
+
+_n_
+�( _Q_ _[i]_ _u_ [)][2]
+
+_u_ =1
+
+
+_n_
+
+
+_Q_ _[i]_ _u_ _u_ _v_
+
+
+_Q_ _[i]_ _v_
+_v_
+
+
+Note that this final value does not depend on _j_ meaning all of the values in row _i_ will have this value
+giving us a total of _n_ copies.
+
+We now take the average over the _n_ [2] values in **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] []][ which gives us the desired form:]
+
+
+_qijqit_ )
+_j,t_
+
+
+mean( **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ [2][]) =] _[r]_ _k_ [2]
+_n_ [(]
+
+
+- _qij_ [2]
+
+_i,j_
+
+
++
+12
+
+
+( [�]
+_i_ _j,t_
+
+
+)
+4
+
+
+**2nd** **Term:** _|_ ∆ _WqWk_ _[T]_ _[|]_ [2] Following the same reasoning as the previous term, the value
+**E** [(∆ _WqWk_ _[T]_ [)] _ij_ [2] []][ is:]
+
+**E** [ _|_ ∆ _WqWk_ _[T]_ _[|]_ _ij_ [2] [] =] **[ E]** [[] _[|][δQ][i]_ [(] _[K]_ _[j]_ [)] _[T][ |]_ [2][]]
+
+
+= **E** [ _|_ 
+
+
+_δQ_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[| · |]_  _u_ _v_
+
+
+_δQ_ _[i]_ _v_ _[K]_ _v_ _[j][|]_ []]
+_v_
+
+
+The exact same simplifications as before occur but since _δQ_ _[i]_ is the random vector, we instead will
+get a formula which does not depend on _i_ :
+
+
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] [] =] _[r]_ _q_ [2]
+12
+
+
+_n_
+�( _Ku_ _[j]_ [)][2][ +] _[r]_ _q_ [2]
+
+4
+_u_ =1
+
+
+- _Ku_ _[j]_ 
+_u_ _v_
+
+
+_Kv_ _[j]_
+_v_
+
+
+Taking the average over the _n_ [2] values gives the final form:
+
+
+_kijqit_ )
+_j,t_
+
+
+- _kij_ [2]
+
+_i,j_
+
+
+( [�]
+_i_ _j,t_
+
+
+)
+4
+
+
+**3rd Term:** _|_ ∆ _Wq_ ∆ _Wk_ _[T]_ _[|]_ [2] This case is much easier since the values of ∆ _Wq,_ ∆ _Wk_ _[T]_ [are i.i.d.] [and]
+so every value of the matrix **E** [ _|_ ∆ _Wq_ ∆ _Wk_ _[T]_ _[|]_ [2][]][ are equal.] [A single value of this matrix is computed:]
+
+
+_δQ_ _[i]_ _u_ _[K]_ _u_ _[j]_ _[| · |]_  _u_ _v_
+
+
+**E** [ _|_ ∆ _Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] [] =] _[ |]_ 
+
+
+_δQ_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[| · |]_  _u_ _v_
+
+
+_δQ_ _[i]_ _v_ _[δK]_ _v_ _[j][|]_
+_v_
+
+
+In the first case _u_ = _v_, the result is **E** [ _|δQ_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[|]_ [2][] =] _rq_ [2] 9 _[r]_ _k_ [2] [.] [This will happen] _[ m]_ [ times since] _[ u, v]_ [ go]
+from 1 to _m_ .
+
+The second case _u ̸_ = _v_ gives **E** [ _|δQ_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[| · |][δQ][i]_ _v_ _[δK]_ _v_ _[j][|]_ [] =] _rq_ [2] 16 _[r]_ _k_ [2] [.] [This happens for when] _[ u][ ̸]_ [=] _[ v]_ [ so we]
+will have this _m_ ( _m −_ 1) times in the sum.
+
+
+Putting these two together we get a simplified per element value of:
+
+**E** [ _|_ ∆ _Wq_ ∆ _Wk_ _[T]_ _[|]_ _ij_ [2] [] =] _[ mr]_ _q_ [2] _[r]_ _k_ [2] + ( _m_ [2] _−_ _m_ ) _[r]_ _q_ [2] _[r]_ _k_ [2]
+9 16
+
+= _[mr]_ _q_ [2] _[r]_ _k_ [2] ( _m_ + [7]
+16 9 [)]
+
+The average value is exactly equal to the per element value since every element is equivalent under
+expectation.
+
+
+**4th Term:** _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q][W][ T]_ _k_ _[|]_ Once again begin with the _i, j_ entry of the matrix:
+
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q][W][ T]_ _k_ _[|][ij]_ [] =] **[ E]** [[] _[|][Q][i]_ [(] _[δK]_ _[j]_ [)] _[T][ | · |][δQ][i]_ [(] _[K]_ _[j]_ [)] _[T][ |]_ []]
+
+
+- _Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[| · |]_ 
+_u_ _v_
+
+
+= **E** [ _|_ 
+
+
+_δQ_ _[i]_ _v_ _[K]_ _v_ _[j][|]_ []]
+_v_
+
+
+= ( _m_ _[r][k]_
+
+2
+
+
+_Q_ _[i]_ _u_ [)(] _[m]_ _[r][q]_
+
+2
+
+_u_
+
+
+2
+
+
+- _Kv_ _[j]_ [)]
+
+_v_
+
+
+Averaging over all _i, j_ elements gives the final form:
+
+
+mean( **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q][W][ T]_ _k_ _[|]_ []) =] _[r][q][r][k]_
+
+[2]
+
+
+- _qij_ )(�
+
+
+_i,j_ _i,j_
+
+
+2 _[q]_ _n_ [2] _[k]_ [(] 
+
+
+_kij_ )
+
+_i,j_
+
+
+**5th Term:** _|Wq_ ∆ _Wk ⊙_ ∆ _Wq_ ∆ _Wk|_
+
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|][ij]_ [] =] **[ E]** [[] _[|][Q][i]_ [(] _[δK]_ _[j]_ [)] _[T][ | · |][δQ][i]_ [(] _[δK]_ _[j]_ [)] _[T][ |]_ []]
+
+
+_Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ _[| · |]_ _u_ _v_
+
+
+= **E** [ _|_ 
+
+
+_δQ_ _[i]_ _v_ _[δK]_ _v_ _[j][|]_ []]
+_v_
+
+
+Once again there are 2 cases when _u_ = _v_ and when _u_ = _v_ . In the first case
+**E** [( _Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ [)(] _[δQ][i]_ _u_ _[δK]_ _u_ _[j]_ [)]] [=] _r_ 2 _q_ _r_ 3 _k_ [2] _[Q]_ _u_ _[i]_ [.] [In] [the] [second] [case] [the] [random] [values] [are] [all] [independent]
+
+
+2 _q_ _r_ 3 _k_ [2] _[Q]_ _u_ _[i]_ [.] [In] [the] [second] [case] [the] [random] [values] [are] [all] [independent]
+
+
+_[q]_ _rk_ [2]
+
+2 4 _[Q]_ _u_ _[i]_ [.]
+
+
+so the result is: **E** [( _Q_ _[i]_ _u_ _[δK]_ _u_ _[j]_ [)(] _[δQ][i]_ _u_ _[δK]_ _v_ _[j]_ [)] =] _[r]_ 2 _[q]_
+
+
+Adding this up and simplifying gives the value for element _i, j_ :
+
+
+**E** [ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|][ij]_ [] =] _[ m]_ _[r][q][r]_ _k_ [2]
+6
+
+
+Averaging over all _i, j_ elements gives:
+
+
+- _Q_ _[i]_ _u_ [+ (] _[m]_ [2] _[ −]_ _[m]_ [)] _[r][q][r]_ _k_ [2]
+
+8
+_u_
+
+
+- _Q_ _[i]_ _u_
+
+_u_
+
+
+_k_ [(3] _[m]_ [ + 1)]
+mean( **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|]_ [] =] _[r][q][r]_ [2]
+
+12 _n_
+
+
+_k_ [(3] _[m]_ [ + 1)]
+mean( **E** [ _|Wq_ ∆ _Wk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|]_ [] =] _[r][q][r]_ [2]
+
+
+- _qij_
+
+
+_i,j_
+
+
+**6th Term:** _|_ ∆ _WqWk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|]_ This term follows the same reasoning as above. Starting
+with entry _i, j_ :
+
+**E** [ _|_ ∆ _WqWk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|][ij]_ [] =] **[ E]** [[] _[|][δQ][i]_ [(] _[K]_ _[j]_ [)] _[T][ | · |][δQ][i]_ [(] _[δK]_ _[j]_ [)] _[T][ |]_ []]
+
+
+= **E** [ _|_ 
+
+
+_δQ_ _[i]_ _v_ _[δK]_ _v_ _[j][|]_ []]
+_v_
+
+
+11
+
+
+Averaging over all _i, j_ elements gives the final equation:
+
+
+_q_ _[r][k]_ [(3] _[m]_ [ + 1)]
+mean( **E** [ _|_ ∆ _WqWk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|]_ [] =] _[r]_ [2]
+
+12 _n_
+
+
+12
+
+
+In the case where _u_ = _v_ we get **E** [( _δQ_ _[i]_ _u_ _[K]_ _u_ _[j]_ [)(] _[δQ][i]_ _u_ _[δK]_ _u_ _[j]_ [)]] [=] _r_ 3 _q_ [2] _r_ 2 _k_
+
+
+**E** [( _δQ_ _[i]_ _u_ _[K]_ _u_ _[j]_ [)(] _[δQ][i]_ _u_ _[δK]_ _v_ _[j]_ [)] =] _r_ 4 _q_ [2] _r_ 2 _k_
+
+
+2 _k_ _[K]_ _u_ _[j]_ [.] [Similarly] [for] _[u]_ [=] _[v]_ [gives]
+
+
+_k_
+
+2 _[K]_ _u_ _[j]_ [.]
+
+
+Adding both cases up and simplifying gives:
+
+**E** [ _|_ ∆ _WqWk_ _[T]_ _[| ⊙|]_ [∆] _[W][q]_ [∆] _[W][ T]_ _k_ _[|][ij]_ [] =] _[ mr]_ _q_ [2] _[r][k]_
+
+6
+
+
+_q_ _[r][k]_
+_Ku_ _[j]_ [+ (] _[m]_ [2] _[ −]_ _[m]_ [)] _[r]_ [2]
+
+8
+
+_u_
+
+
+8
+
+
+- _Ku_ _[j]_
+
+_u_
+
+
+- _kij_
+
+
+_i,j_

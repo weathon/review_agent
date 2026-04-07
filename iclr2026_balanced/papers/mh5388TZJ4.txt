@@ -1,0 +1,1910 @@
+# ASO-LORA: ATTRIBUTION SCORES-BASED SOFT ORTHOGONALITY LOW-RANK ADAPTATION FOR LARGE LANGUAGE MODEL CONTINUAL LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Continual learning (CL) remains a critical challenge when applying large language
+models (LLMs) to real-world situations. On the one hand, billions of parameters
+for LLMs add a huge computing overhead to CL. Existing techniques, on the
+other hand, solely address catastrophic forgetting while ignoring the possibility
+of knowledge transfer between tasks. Facing these challenges, we propose Attribution Scores-based Soft Orthogonality Low-Rank Adaptation (ASO-LoRA), an
+effective and efficient framework that simultaneously facilitates knowledge transfer while mitigating catastrophic forgetting. Specifically, ASO-LoRA initially assigns task-specific parameter subspaces for new tasks utilizing multi-LoRA modules, enabling for efficient training and inference without relying on task labels.
+Then, ASO-LoRA leverages attribution scores to evaluate task similarity and suggests gradient steps in a soft orthogonal direction between task-specific subspaces,
+achieving a balance between knowledge transfer and preservation. Experiments
+are carried out on both the T5-large and the LLaMA2-7B, showing ASO-LoRA’s
+suitability as a plug-in CL solution for general Transformer-based LLMs. Experimental results on CL benchmarks demonstrate that ASO-LoRA outperforms other
+strong baselines.
+
+
+1 INTRODUCTION
+
+
+Continuous learning (CL) is essential for applying language models in real-world scenarios, as presenting training data sequentially from varied distributions of different tasks can result in catastrophic forgetting (Wang et al., 2024b). Despite the remarkable performance of recently published
+large language models (LLMs) such as GPT-4 (Achiam et al., 2023b), Llama (Touvron et al., 2023),
+and DeepSeek (Liu et al., 2024a) across various tasks, CL still remains a significant challenge, as
+LLMs are not suited for frequent retraining due to the notable training costs related to their large
+scale (Wu et al., 2024).
+
+
+In contrast to its employment in smaller models, efficient CL is of great importance for LLMs since
+implementing CL with billions of parameters incurs large computing costs. To realize efficient CL,
+recent research has made use of the parameter-efficient tuning frameworks for LLMs. Razdaibiedina et al. (2023) learns a new soft prompt for each task and concatenates it with previously learnt
+prompts, while freezing the base model. O-LoRA (Wang et al., 2023) proposes to incrementally
+learns new tasks in an orthogonal subspace while fixing the LoRA parameters learned from past
+tasks to minimize catastrophic forgetting. However, these methods tend to address only catastrophic
+forgetting, neglecting the possibility of transferring knowledge between tasks. SAPT (Zhao et al.,
+2024a) proposes to align the learning and selection of LoRA parameters via the shared attentive
+learning and selection module, addressing catastrophic forgetting and knowledge transfer simultaneously. Despite being PET-agnostic, SAPT introduces new modules to the architecture, increasing
+its complexity.
+
+
+This research presents a simple yet efficient methodology for continual learning (CL) in large language models (LLMs), addressing both catastrophic forgetting and knowledge transfer. For the
+efficient manner, our study is based on Low-Rank Adaptation (LoRA) (Hu et al., 2022a), an efficient PET method that demonstrates how fine-tuning a specific low-rank subspace for new tasks can
+
+
+1
+
+
+Figure 1: The key innovation lies in ASO-LoRA’s dual capability to mitigate catastrophic forgetting of historical tasks while simultaneously facilitating inter-task knowledge transfer. ASO-LoRA
+updates the parameters subspace of new task through a soft orthogonal direction (orange curved arrow) with the historical tasks, instead of updating through a hard orthogonal direction (red straight
+arrow), to constrain the gradient updates of the current task to be softly orthogonal to the gradient
+subspace of the past tasks.
+
+
+lead to competitive performance. Recent studies (Wang et al., 2023; Saha et al., 2021) suggest that
+optimizing along directions orthogonal to historical tasks’ gradient subspaces can meet the purpose
+of mitigating catastrophic forgetting, by minimizing interference with their loss functions.
+
+
+Inspired by these, we propose Attribution Scores-based Soft Orthogonality Low-Rank Adaptation
+(ASO-LoRA), an effective and efficient framework that facilitates transfer of knowledge while reducing catastrophic forgetting. We begin by assigning task-specific parameter subspaces for new
+tasks utilizing multi-LoRA modules, leaving the LLMs’ parameters frozen. Multi-LoRA also enables inference without relying on task labels, allowing for generalization to previously unknown
+tasks. Then we improve the original method, which only takes gradient steps in the orthogonal direction, by hypothesizing that different tasks may share similar knowledge that could be transferred
+to enhance their task capabilities. As shown in Figure 1, we use attribution scores (Dai et al., 2021)
+to evaluate task similarity and propose taking gradient steps in a soft orthogonal direction between
+task-specific subspaces, achieving a balance between knowledge transfer and preservation.
+
+
+We conduct experiments using the encoder-decoder-based T5-large and decoder-only-based
+LLaMA2-7B models, demonstrating ASO-LoRA as a plug-in CL solution for general Transformerbased LLMs. Experimental results on CL benchmarks show that ASO-LoRA outperforms other
+strong baselines.
+
+
+2 RELATED WORKS
+
+
+**Continual learning in LLMs** refers to the paradigm where LLMs sequentially acquire new knowledge from non-stationary data distributions while preserving learned capabilities (Wang et al.,
+2024b; Wu et al., 2024), and can be categorized into these types: Replay-based approach (Smith
+et al., 2024; Petit et al., 2023), Regularization-based approach (Zhao et al., 2024c), Optimizationbased approach (Wang et al., 2022a), and Architecture-based approach (Han et al., 2025).
+
+
+**Parameter-Efficient Tuning (PET)** adapts models by optimizing performance through updates to a
+minimal set of parameters (without direct modification of original parameters), employing Adapters
+(Wang et al., 2022b), soft prompts (Liu et al., 2024c), or low-rank adaptations (LoRA) (Liu et al.,
+2024b), to significantly reduce computational costs (Coleman et al., 2025).
+
+
+Inspired by the above works, our method incorporates the LoRA mechanism while introducing soft
+orthogonality regularization to the loss function, achieving an optimal balance between model performance and training efficiency for LLMs in continual learning scenarios. Due to space constraints,
+please refer to the Appendix B for more detailed related works.
+
+
+2
+
+
+Hard orthogonality: 𝐴 [𝑇] 𝐴= 0
+
+
+Soft orthogonality: 𝜓𝐴 [𝑇] 𝐴= 0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|Linear|Linear|Linear|Linear|
+
+
+|Col1|𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕|The weight of<br>Attribution scores<br>Soft Orthogonal<br>regularization|Col4|Col5|Col6|Orthogonal update Soft orthogonal<br>direction update direction<br>Gradient subspace<br>of task2 Gradient<br>subspace of task1<br>Topic<br>Classification<br>.....<br>New task data<br>Linear<br>Question Knowledge<br>Answering Neuron<br>FFN 𝑛𝑖<br>module<br>Activation<br>Linear<br>Sentiment Attribution scores<br>Analysis (b) Soft Orthogonality constraints|
+|---|---|---|---|---|---|---|
+||𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕<br>|<br> <br>**Soft Orthogonal**<br>**regularization**<br>**The weight of**<br>**Attribution scores**|<br> <br>**Soft Orthogonal**<br>**regularization**<br>**The weight of**<br>**Attribution scores**|<br> <br>**Soft Orthogonal**<br>**regularization**<br>**The weight of**<br>**Attribution scores**|||
+||𝑾𝑶+ ෍∆𝑾<br>∈ℝ𝑪𝒊𝒏×𝑪𝒐𝒖𝒕<br>|<br> <br>**Soft Orthogonal**<br>**regularization**<br>**The weight of**<br>**Attribution scores**|||||
+|**Pretrained weights**|**Timeline**<br>**.....**<br>𝑾𝑨<br>𝟏∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝟏∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block 1**<br>**task 1**<br>𝑾𝑨<br>𝟐∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝟐∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block 2**<br>**task 2**<br>**Historical task**|**Timeline**<br>**.....**<br>𝑾𝑨<br>𝟏∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝟏∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block 1**<br>**task 1**<br>𝑾𝑨<br>𝟐∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝟐∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block 2**<br>**task 2**<br>**Historical task**|**Timeline**<br>**.....**<br>𝑾𝑨<br>𝟏∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝟏∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block 1**<br>**task 1**<br>𝑾𝑨<br>𝟐∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝟐∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block 2**<br>**task 2**<br>**Historical task**|𝑾𝑨<br>𝓣∈ℝ𝑪𝒊𝒏×𝑪𝒓<br>𝑾𝑩<br>𝓣∈ℝ𝑪𝒓×𝑪𝒐𝒖𝒕<br>**LoRA Block**𝓣<br>**task**𝓣<br>**New task**|||
+
+
+_WmergeT_ = _Wbase_ +
+
+
+3
+
+
+Figure 2: The overall framework of ASO-LoRA, employing multi-LoRA composition with a soft
+orthogonality constraint. a) We progressively train a new LoRA block for each incoming new task
+while freezing all historical LoRA blocks, and sequentially stack it upon existing LoRA blocks for
+the inference stage. b) The parameter updates for the new task’s subspace adhere to a soft orthogonality constraint as a regularization term: we derive a soft orthogonality coefficient by quantifying
+the similarity between the attribution scores of the current and historical tasks, instead of enforcing
+the subspaces to be strictly orthogonal to mitigate catastrophic forgetting. This soft orthogonality
+allows for partial overlap in the tasks’ subspaces, facilitating the cross-task knowledge transfer.
+
+
+3 METHODOLOGY
+
+
+Figure 2 presents an overview of the whole framework. ASO-LoRA utilizes a multi-LoRA composition mechanism with soft orthogonality constraints to enable continual learning of incremental
+tasks. Next, we will present a comprehensive exposition of our proposed method.
+
+
+3.1 PRELIMINARY
+
+
+**Task** **Definition** : Continual learning (CL) refers to a learning paradigm in which a model _M_, parameterized by _θ_, sequentially acquires knowledge from a series of tasks’ data _{D_ 1 _, D_ 2 _, ..., DT }_
+over _T_ learning stages. Each task _t_ consists of a set of input and target output pairs _{_ ( _x_ _[t]_ _i_ _[, y]_ _i_ _[t]_ [)] _[}][n]_ _i_ =1 [.]
+The objective of CL is to optimize the model’s parameters _θ_ such that _M_ averagely performs well
+on all learned tasks:
+
+
+_maxθ_
+
+
+_T_
+
+
+ - _logpM_ ( _yi_ _[t][|][x]_ _i_ _[t]_ [)] (1)
+
+_{_ ( _x_ _[t]_ _i_ _[,y]_ _i_ _[t]_ [)] _[}]_ _i_ _[n]_ =1 _[∈][D][t]_
+
+
+_t_ =1
+
+
+**Continual learning using Multi-LoRA composition.** We adopt LoRA, an efficient PET method to
+fine-tune a specific low-rank subspace of trainable parameters for new tasks, while keeping the pretrained parameters of the LLMs frozen. LoRA does not rely on task IDs during inference, therefore
+keeping LLMs’ generalization ability on unseen tasks. Specifically, LoRA freezes the LLMs’ pretrained weight matrix _Wbase_ _∈_ R _[d][×][k]_ without receiving gradient updates to preserve the acquired
+knowledge. Trainable low-rank decomposition matrices _At_ _∈_ R _[d][×][r]_ and _Bt_ _∈_ R _[r][×][k]_ are introduced
+for each new task _t_ learning in parallel pathways, with _r_ _≪_ _min_ ( _d, k_ )).
+
+
+To enable continual task adaptation for pretrained LLMs, we employ the multi-LoRA mechanism,
+in which a separate LoRA block _LoRAt_ = _{At, Bt}_ is trained for each downstream task _t_ . The
+base LLM attached with _LoRAt_ is defined as _MLoRAt_ . The updated weight matrix _Wt_ of _MLoRAt_
+for specific task _t_ is as follows:
+_Wt_ = _Wbase_ + ∆ _Wt_ = _Wbase_ + _AtBt_ (2)
+
+
+As the number of continually learned tasks increases, we can integrate the updated LoRA parameters
+into the base LLM parameters during inference, as shown in Eq.(3).
+
+
+_T_
+
+- _AtBt_ (3)
+
+
+_t_ =1
+
+
+3.2 ENHANCING MULTI-LORA WITH ATTRIBUTION SCORES BASED SOFT ORTHOGONALITY
+
+
+The vanilla CL with multi-LoRA, as described in Eq.(3), fails to account for the interactions between
+LoRA blocks, leading to instability in the fusion process and catastrophic forgetting. To address the
+issues raised above, we propose to enhance LoRA with Attribution Scores based Soft Orthogonality
+(ASO-LoRA), taking into account both catastrophic forgetting and knowledge transfer between tasks
+while integrating LoRA blocks. In particular, ASO-LoRA uses orthogonal regularization among the
+subspaces of multi-LoRA blocks to prevent catastrophic forgetting following previous studies (Wang
+et al., 2023). It further introduces attribution scores to softly adjust the orthogonal regularization,
+thereby improving positive inter-task knowledge transfer.
+
+
+Formally, ASO-LoRA starts by learning new tasks in a direction orthogonal to the LoRA subspaces
+of historical tasks while freezing historical LoRA parameters. For each task _t_, _At_ = [ _a_ [1] _t_ _[, a]_ [2] _t_ _[, ..., a][r]_ _t_ []]
+of _LoRAt_ = _{At, Bt}_ is approximated as the core of the task-related subspace, where each vector
+in _Bt_ = [ _b_ [1] _t_ _[, b]_ [2] _t_ _[, ..., b][r]_ _t_ []] [represents] [the] [linear] [weighting] [coefficients] [of] [the] [column] [vectors] [in] _[A][t]_ [.]
+Achieving orthogonality between the subspaces of the new task _T_ and each historical task _t_ _∈_
+_{_ 1 _, ..., T_ _−_ 1 _}_ can be expressed as:
+_A_ _[T]_ _t_ _[A][T]_ [= 0] (4)
+
+
+The hard orthogonality defined in Eq (4) simply considers the difference between tasks while ignoring the sharing of knowledge, resulting in inefficiency. We hypothesize that the relationship
+between LoRA blocks is not strictly orthogonal and that interactions between LoRA blocks may
+yield knowledge transfer with beneficial effects. To capture the shared knowledge, we further introduce the concept of a dynamic soft orthogonality coefficient _ψt,_ _[soft]_ _T_ [.] _[ψ]_ _t,_ _[soft]_ _T_ decreases as more
+knowledge is shared between two LoRA blocks, indicating a stronger enhanced parametric correlation. In contrast, the coefficient increases as the LoRA blocks become more orthogonal, indicating
+a decrease in the relevance of the knowledge of tasks represented by the LoRA block. With the
+soft coefficient factor _ψt,_ _[soft]_ _T_ [,] [the] [hard] [orthogonality] [defined] [in] [Eq.(4)] [can] [be] [reformulated] [as] [the]
+attribution score-based soft orthogonality _ASOt,T_ :
+
+
+_ASOt,T_ = _ψt,_ _[soft]_ _T_ _[A]_ _t_ _[T]_ _[A][T]_ [= 0] (5)
+
+
+The soft coefficient factor _ψt,_ _[soft]_ _T_ is calculated by the weight of attribution scores _wt,_ _[attr]_ _T_ [between the]
+new task _T_ and historical task _t_ ( _t < T_ ) as below:
+
+
+_ψt,_ _[soft]_ _T_ = 1 _−_ _wt,_ _[attr]_ _T_ (6)
+
+
+Finally, the CL training objective for the new task _T_ is defined as:
+
+
+Where _ASOt,T_ is the attribution score-based soft orthogonality defined in Eq.(5). _ASOt,T_ [ _j, k_ ]
+denotes the element at the _j −_ _th_ row and _k −_ _th_ column of _ASOt,T_, and _λ_ is the weight of the soft
+orthogonality loss.
+
+Next, we present the details about how to derive the weight of attribution scores _wt,_ _[attr]_ _T_ [.]
+
+
+3.3 THE WEIGHT OF ATTRIBUTION SCORES
+
+
+Before introducing the weight _wt,_ _[attr]_ _T_ [of the attribution score, we first introduce the concept of Knowl-]
+edge Neuron.
+
+
+4
+
+
+_L_ = 
+
+
+_logpMLoRAT_ ( _y|x_ ) + _λ_
+( _x,y_ ) _∈DT_
+
+
+_T −_ 1
+
+
+_LASO_ ( _At, AT_ )
+
+_t_ =1
+
+
+(7)
+
+- _||ASOt,T_ [ _j, k_ ] _||_ [2]
+
+
+_j,k_
+
+
+_LASO_ ( _At, AT_ ) = 
+
+**Knowledge Neurons (KNs)** are neurons in the Transformer’s Feed-forward Network (FFN) memories that store factual knowledge, discovered by recent studies (Dai et al., 2021). FFN is responsible
+for applying a non-linear transformation to the hidden state _H_, given by the multi-head attention
+(MHA) module of Transformer:
+
+
+_FFN_ ( _H_ ) = _GELU_ ( _HW_ _[l]_ [1] ) _W_ _[l]_ [2] = _NeuronsW_ _[l]_ [2] (8)
+
+
+_W_ _[l]_ [1] and _W_ _[l]_ [2] are weight parameter matrices of the FFN layers. For simplicity, we omit the scaling
+factor in MHA and the bias terms in FFN.
+
+
+**Attribution scores** evaluate the contribution of each knowledge neuron in the LLM to the knowledge expression of data (Dai et al., 2021) based on the integrated gradients. We utilize attribution
+scores to assess how similar the model with the new-task LoRA is to models with historical-task
+LoRA blocks, allowing us to establish the proper level of orthogonal constraints between the LoRA
+blocks.
+
+Given an input data _xT_ of new task _T_, we first define the output _PM_ _[T]_ _LoRAt_ [(ˆ] _[n]_ _t_ _[i]_ [)][ as the probability of]
+the correct answer predicted by _MLoRAt_ (base model attached to a LoRA of each specific task _t_ ):
+
+_PM_ _[T]_ _LoRAt_ [(ˆ] _[n]_ _t_ _[i]_ [) =] _[ p][M]_ _LoRAt_ [(] _[y][∗][|][x][T]_ _[, n][i]_ _t_ [=] _[n]_ [ˆ] _[i]_ _t_ [)] (9)
+
+
+where _y_ _[∗]_ denotes the correct answer; _n_ _[i]_ _t_ [denotes the knowledge neuron of] _[ M][LoRA]_ _t_ [to be calculated,]
+and ˆ _n_ _[i]_ _t_ [is a given constant that] _[ n]_ _t_ _[i]_ [is assigned to.]
+
+To determine the attribution score _Attr_ ( _n_ _[i]_ _t_ [)][,] [we] [gradually] [alter] _[n][i]_ _t_ [from] [0] [to] [its] [original] [value] _[n]_ [¯] _[i]_ _t_
+calculated by the _MLoRAt_, while simultaneously integrating the gradients:
+
+
+When a knowledge neuron _n_ _[i]_ _t_ [significantly impacts the expression of knowledge, the resulting gra-]
+dient becomes prominent, leading to high integration values _Attr_ ( _n_ _[i]_ _t_ [)][.]
+
+
+For _MLoRAt_, we assemble the attribution scores corresponding to all knowledge neurons
+
+[ _n_ [1] _t_ _[, ..., n][N]_ _t_ []][, denoting them as a vector:]
+
+_Attr_ ~~_v_~~ _ecMLoRAt_ = [ _Attr_ ( _n_ [1] _t_ [)] _[, ..., Attr]_ [(] _[n][N]_ _t_ [)]] (12)
+
+
+Where _N_ represents the number of _MLoRAt_ ’s KNs.
+
+Using the aforementioned, we can calculate the weight of attribution scores _wt,_ _[attr]_ _T_ [as shown below.]
+We quantify the influence of each historical task _t_ ( _t_ _<_ _T_ ) on the current task _T_ by computing the
+similarity between their attribution vectors for the current task _T_ ’s data:
+
+
+_wt,_ _[attr]_ _T_ [=] _[ Sim]_ [(] _[Attr]_ ~~_[v]_~~ _[ec][M]_ _LoRAt_ _[, Attr]_ ~~_[v]_~~ _[ec][M]_ _LoRAT_ [)] (13)
+
+
+_wt,_ _[attr]_ _T_ [evaluates the transferability of knowledge from previous tasks] _[ {]_ [1] _[,]_ [ 2] _[, ...,][ T]_ _[−]_ [1] _[}]_ [ to new task] _[ T]_ [ .]
+A higher _wt,_ _[attr]_ _T_ [indicates greater knowledge sharing between tasks] _[ t]_ [ and] _[ T]_ [, suggesting that] _[ LoRA][t]_
+is more likely to positively influence _LoRAT_ block.
+
+
+5
+
+
+_δPM_ _[T]_ _LoRAt_ [(] _[σ][n]_ [¯] _t_ _[i]_ [)]
+
+_dσ_ (10)
+_δn_ _[i]_ _t_
+
+
+_Attr_ ( _n_ _[i]_ _t_ [) =] _[n]_ [¯] _[i]_ _t_
+
+
+- 1
+
+
+_σ_ =0
+
+
+_PM_ _[T]_ _LoRAt_ [(] _[σ][n]_ [¯] _t_ _[i]_ [)]
+
+
+_δn_ _[i]_ _t_ calculates the gradient of the model output with regard to _n_ _[i]_ _t_ [.] [As] _[ σ]_ [ varies from 0 to 1,]
+
+
+_Attr_ ( _n_ _[i]_ _t_ [)][ accumulates the cumulative impact of modifying] _[ n][i]_ _t_ [on the change of output probability.]
+
+
+Since it is difficult to directly calculate continuous integrals, the Riemann approximation (Roe, 1981)
+method is used to estimate the value of integrated gradients, and we set the number of approximation
+steps _m_ = 20:
+
+
+_δPM_ _[T]_ _LoRAt_ [(] _[k]_
+
+
+_m_ _[k]_ _[n]_ [¯] _t_ _[i]_ [)]
+
+
+_t_
+_Attr_ ( _n_ _[i]_ _t_ [) =] _[n]_ [¯] _[i]_
+_m_
+
+
+_m_
+
+
+_k_ =1
+
+
+_t_ (11)
+
+_δn_ _[i]_ _t_
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUPS
+
+
+4.1.1 DATASETS
+
+
+**CL benchmarks** : Following Wang et al. (2023)’s work, we conduct comprehensive evaluations of
+ASO-LoRA against state-of-the-art baselines on four standard continual learning benchmarks for
+language models: AG News, Amazon Reviews, DBpedia, and Yahoo Answers (Zhang et al., 2015).
+
+
+**Longer benchmarks** : To further validate our approach, we conduct extensive experiments on longer
+task sequences, incorporating 15 common tasks used for language models (Razdaibiedina et al.,
+2023), including the AG News, Amazon Reviews, DBpedia, Yahoo Answers, and Yelp reviews
+from standard CL benchmarks; MNLI, QQP, RTE, SST2 from GLUE benchmark (Wang et al.,
+2018); WiC, CB, COPA, MultiRC, BoolQ from SuperGLUE (Wang et al., 2019), and the IMDB
+movie reviews (Maas et al., 2011).
+
+
+We explore 6 different orders of the benchmarks to validate the methods’ efficacy across diverse
+continual learning scenarios.
+
+
+4.1.2 METRICS
+
+
+Following Wang et al. (2024a), we use the Average Accuracy (AA) to evaluate the performance of
+ASO-LoRA in the CL scenario, which is the average accuracy of all tasks after the model finishes
+training on the latest task _T_ :
+
+
+We also employ forgetting measure (FM) and forward transfer (FWT) as evaluation metrics to comprehensively evaluate our approach.
+
+
+4.1.3 BASELINES
+
+
+Based on Wang et al. (2023)’s work, we evaluate our method against strong competitive baselines:
+(1) **Non-CL** **baselines** : SeqFT(de Masson D’Autume et al., 2019) and PerTaskFT. PerTaskFT is
+considered as the upper bound. (2) **LoRA-based** : SeqLoRA, IncLoRA, MoELoRA(Luo et al.,
+2024), MoCL(Wang et al., 2024c) and O-LoRA(Wang et al., 2023). (3) **Traditional CL baselines** :
+Replay(Chaudhry et al., 2019), EWC(Kirkpatrick et al., 2017), LwF(Li & Hoiem, 2017), L2P(Wang
+et al., 2022c), and LFPT5(Qin & Joty, 2021). See Appendix C.2 for details of these baselines.
+
+
+4.1.4 IMPLEMENTATION DETAILS
+
+
+ASO-LoRA employs the generalization-friendly instruction tuning as the training paradigm, capturing the underlying commonalities of tasks. We implement ASO-LoRA on two representative
+Transformer architectures: the encoder-decoder model T5-large (710M) (Raffel et al., 2020) and the
+decoder-only model LLaMA2-7B (Touvron et al., 2023), highlighting ASO-LoRA’s applicability as
+a plug-in continual learning solution for general Transformer-based language models. The similarity
+in Eq.(13) employs Spearman’s rank correlation coefficient. We train the models with one epoch,
+using the AdamW (Loshchilov & Hutter, 2017) optimizer in a batch size of 64 with learning rate
+1 _×_ 10 _[−]_ [3] for each experiment. The weight decay is 0 while the dropout rate is set as 0.1. The weights
+of the soft orthogonality loss follow Wang et al. (2023)’s work. Results are reported as the average
+of 3 runs. Our setup consists of a four-core CPU and eight NVIDIA Tesla A100 GPUs.
+
+
+For more details on task orders, task details, metrics, and baselines, refer to the Appendix C.
+
+
+4.2 MAIN RESULTS AND ANALYSIS
+
+
+Table 1 displays a comprehensive performance comparison between ASO-LoRA and baselines on
+both CL benchmarks and extended longer benchmarks. We evaluate the effectiveness of ASO-LoRA
+for CL scenarios from three perspectives:
+
+
+6
+
+
+_AA_ = [1]
+
+_T_
+
+
+_T_
+
+- _aT,i_ (14)
+
+
+_i_ =1
+
+
+Table 1: The main averaged accuracy (AA) results on two series of benchmarks with the T5-large
+model (T5-710M), after training on the last task. The results of CL baselines are referred from Wang
+et al. (2023)’s work, while the results of MoCL and MoELoRA are from Du et al. (2024).
+
+|Col1|CL benchmarks Order-1 Order-2 Order-3 Avg.|Longer benchmarks Order-4 Order-5 Order-6 Avg.|
+|---|---|---|
+|SeqFT<br>PerTaskFT|18.9<br>24.9<br>41.7<br>28.5<br>72.5<br>72.5<br>72.5<br>72.5|7.4<br>7.4<br>7.5<br>7.4<br>78.0<br>78.0<br>78.0<br>78.0|
+|Replay<br>EWC<br>LwF<br>L2P<br>LFPT5|55.2<br>56.9<br>61.3<br>57.8<br>48.7<br>47.7<br>54.5<br>50.3<br>54.4<br>53.1<br>49.6<br>52.3<br>60.3<br>61.7<br>61.1<br>60.7<br>67.6<br>72.6<br>77.9<br>72.7|55.0<br>54.6<br>53.1<br>54.2<br>45.3<br>44.5<br>45.6<br>45.1<br>50.1<br>43.1<br>47.4<br>46.9<br>57.5<br>53.8<br>56.9<br>56.1<br>70.4<br>68.2<br>69.1<br>69.2|
+|SeqLoRA<br>IncLoRA<br>MoCL<br>MoELoRA<br>O-LoRA<br>**ASO-LoRA**|62.6<br>61.5<br>69.3<br>64.5<br>69.5<br>64.9<br>70.9<br>68.4<br>75.6<br>75.4<br>76.7<br>75.9<br>52.8<br>49.6<br>59.8<br>54.1<br>75.6<br>**78.1**<br>72.1<br>75.3<br>**76.2**<br>77.5<br>**77.3**<br>**77.0**|56.7<br>52.7<br>15.9<br>41.8<br>59.0<br>62.6<br>62.3<br>61.3<br>-<br>-<br>-<br>-<br>36.3<br>31.4<br>15.1<br>27.6<br>71.6<br>**69.3**<br>75.8<br>72.2<br>**73.7**<br>67.2<br>**77.4**<br>**72.8**|
+
+
+**Performance** **on** **CL** **benchmarks** : As evidenced by the results, ASO-LoRA consistently outperforms all baselines across different task orders. Notably, ASO-LoRA achieves significant improvements of 4.5% and 1.7% compared to PerTaskFT and O-LoRA, respectively. These demonstrate
+that ASO-LoRA effectively mitigates catastrophic forgetting in continual learning scenarios while
+successfully leveraging previously acquired knowledge. Notably, unlike conventional CL baselines,
+ASO-LoRA requires neither full-parameter training nor historical data storage, thereby achieving
+significant computational efficiency while preserving knowledge from the pertaining stage.
+
+
+**Performance** **on** **longer** **general** **benchmarks** : Following Wang et al. (2023), we assess ASOLoRA on a more challenging scenario, involving sequential training across 15 extended tasks. As
+illustrated in Table 1, ASO-LoRA achieves superior performance compared to almost all baselines
+in addressing longer continual learning problems, demonstrating ASO-LoRA’s robust adaptability
+to more complex scenarios. However, PerTaskFT maintains higher performance, indicating that
+sustained knowledge preservation in long task sequences remains an open challenge.
+
+
+**Results** **on** **other** **Transformer-**
+**based** **structures** : To further val- Table 2: The main AA results on CL benchmarks with the
+idate the generalizability of ASO- Llama-7B model, after training on the last task.
+LoRA across Transformer-based architectures, we extend our experi
+**CL benchmarks**
+
+ments on the decoder-only LLaMA- **Model**
+
+**Order-1** **Order-2** **Order-3** **Avg.**
+
+7B model using standard CL benchmarks. As evidenced in Table 2, SeqLoRA 77.2 76.6 78.0 77.2
+
+IncLoRA 32.7 49.1 35.5 39.1
+
+ASO-LoRA achieves a leading per
+O-LoRA 73.7 75.0 76.5 75.1
+
+formance, with an average improve
+**ASO-LoRA** **75.0** 74.8 **78.1** **76.0**
+
+ment of 0.9% over O-LoRA. These
+empirical evidences confirm ASOLoRA’s plug-and-play adaptability, suggesting its broad applicability across diverse Transformerbased models for complex continual learning scenarios. We include the results of the LLaMA architecture on longer benchmarks in the Appendix D.1.
+
+
+4.3 THE IMPACT OF SOFT ORTHOGONALITY
+
+
+To facilitate a more intuitive analysis of Soft Orthogonality’s effectiveness, we further display the
+comparative task-specific results after complete model training across three distinct task orderings
+(Order1-Order3) on both T5 and Llama structures, as listed in Table 3 and 8.
+
+
+7
+
+
+Table 2: The main AA results on CL benchmarks with the
+Llama-7B model, after training on the last task.
+
+
+**CL benchmarks**
+**Model**
+**Order-1** **Order-2** **Order-3** **Avg.**
+
+
+SeqLoRA 77.2 76.6 78.0 77.2
+IncLoRA 32.7 49.1 35.5 39.1
+O-LoRA 73.7 75.0 76.5 75.1
+**ASO-LoRA** **75.0** 74.8 **78.1** **76.0**
+
+
+Table 3: Results on individual tasks after completing training on the final task with T5-large across
+Order 1&2&3. The left-to-right ordering of benchmarks corresponds to the task training order.
+
+
+|Model CL benchmarks per-task results|Col2|Col3|
+|---|---|---|
+|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>PerTaskFT<br>97.6<br>34.7<br>70.0<br>87.5<br>IncLoRA<br>81.3<br>38.6<br>68.0<br>89.9<br>O-LoRA<br>89.6<br>56.4<br>67.5<br>88.8<br>**ASO-LoRA**<br>88.1<br>**57.9**<br>**71.1**<br>87.5|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>PerTaskFT<br>97.6<br>34.7<br>70.0<br>87.5<br>IncLoRA<br>81.3<br>38.6<br>68.0<br>89.9<br>O-LoRA<br>89.6<br>56.4<br>67.5<br>88.8<br>**ASO-LoRA**<br>88.1<br>**57.9**<br>**71.1**<br>87.5|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>PerTaskFT<br>97.6<br>34.7<br>70.0<br>87.5<br>IncLoRA<br>81.3<br>38.6<br>68.0<br>89.9<br>O-LoRA<br>89.6<br>56.4<br>67.5<br>88.8<br>**ASO-LoRA**<br>88.1<br>**57.9**<br>**71.1**<br>87.5|
+|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>PerTaskFT<br>97.6<br>34.7<br>70.0<br>87.5<br>IncLoRA<br>81.3<br>38.6<br>68.0<br>89.9<br>O-LoRA<br>89.6<br>56.4<br>67.5<br>88.8<br>**ASO-LoRA**<br>88.1<br>**57.9**<br>**71.1**<br>87.5|PerTaskFT<br>IncLoRA<br>O-LoRA<br>**ASO-LoRA**|97.6<br>34.7<br>70.0<br>87.5<br>81.3<br>38.6<br>68.0<br>89.9<br>89.6<br>56.4<br>67.5<br>88.8<br>88.1<br>**57.9**<br>**71.1**<br>87.5|
+
+
+|Col1|ASO-LoRA 88.1 57.9 71.1 87.5|Col3|
+|---|---|---|
+|Order2|Sequences<br>Dbpedia<br>Amazon<br>Ag<br>Yahoo|Sequences<br>Dbpedia<br>Amazon<br>Ag<br>Yahoo|
+|Order2|PerTaskFT<br>IncLoRA<br>O-LoRA<br>**ASO-LoRA**|97.6<br>34.7<br>87.5<br>70.0<br>72.0<br>44.2<br>70.1<br>73.5<br>96.8<br>56.4<br>87.7<br>71.8<br>91.3<br>**58.5**<br>**87.9**<br>**72.1**|
+
+
+Regardless of task ordering, ASO-LoRA demonstrates superior performance on most tasks compared to O-LoRA and the fine-tuning-only upper bound. Although ASO-LoRA exhibits a lower
+AA score than O-LoRA on Order2, it achieves greater performance improvements across more individual tasks. Preliminary analysis suggests that potential negative backward transfer from later
+tasks to the initial task may lead to performance degradation. For Order3, ASO-LoRA achieves a
+significant 21.8% improvement over O-LoRA on task Amazon. These evidences still prove that the
+proposed Soft Orthogonality mechanism extends the interaction subspaces between LoRA blocks
+within PET frameworks, relaxing hard orthogonal constraints while preserving low-rank adaptation
+benefits. Refer to Appendix D.2 for the results and analysis of Llama structure.
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+cb wic copa qqp boolqa rte imdb yelp amazon sst-2 dbpedia ag multirc yahoo
+Tasks
+
+
+Figure 3: Longer benchmarks’ Violin Plot of _w_ _[attr]_, displaying the distribution of similarity coefficient _w_ _[attr]_ across different tasks during the training stages. Central white dot represents the median
+or mean of the data, while a wider section indicates higher data density (more points near that value).
+
+
+4.4 THE RELATIONSHIPS AMONG TASKS ON LONGER BENCHMARKS
+
+
+We employ the violin plot to visualize the similarity coefficient _w_ _[attr]_ between the new task and
+historical tasks, as proposed in Eq.(13), analyzing their inter-task correlations and mutual influences.
+
+
+Figure 3 presents the cross-task correlation coefficients between new and historical tasks under Order4. Task Cb exhibits a strong correlation with the preceding task MNLI. Since both tasks belong
+to the Natural Language Inference (NLI) category within the GLUE benchmark, this finding aligns
+with our hypothesis. Likewise, the high similarity between the tasks of RTE and BoolQA can be
+attributed to their common source from Wikipedia.
+
+
+8
+
+
+Order3
+
+
+Sequences Yahoo Amazon Ag Dbpedia
+PerTaskFT 70.0 34.7 87.5 97.6
+IncLoRA 65.1 44.9 75.0 98.4
+O-LoRA 69.7 33.3 86.6 98.7
+**ASO-LoRA** **70.3** **55.1** 85.2 **98.9**
+
+
+4.5 THE EFFECT ON CATASTROPHIC FORGETTING AND KNOWLEDGE TRANSFER
+
+
+To comprehensively evaluate Soft Orthogonality’s efficacy in mitigating catastrophic forgetting and
+facilitating knowledge transfer, we introduce additional metrics: FM and FWT. These metrics enable systematic comparison with the mere orthogonal-constrained strong baseline O-LoRA. Figure
+4 reveals that ASO-LoRA obviously achieves superior knowledge transfer over O-LoRA by more
+effectively leveraging prior task knowledge on all structures. As the tasks increase, ASO-LoRA exhibits progressively reduced catastrophic forgetting, ultimately outperforming O-LoRA in long-term
+knowledge preservation on T5 structure. These substantiate our hypothesis that soft orthogonality
+offers a principled solution for balancing knowledge preservation and transfer in CL.
+
+
+|ASO<br>O-L<br>ASO|-LoRA<br>oRA<br>-LoRA|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+|5|Col2|Col3|Col4|Col5|Col6|Col7|A<br>O<br>A|SO-LoRA<br>-LoRA<br>SO-LoRA|
+|---|---|---|---|---|---|---|---|---|
+|5<br>0|||||||||
+|5<br>0|||||||||
+||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|ASO-LoR<br>O-LoRA<br>ASO-LoR|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|A<br>O<br>A|SO-LoRA<br>-LoRA<br>SO-LoRA|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+
+
+Figure 5: ASO-LoRA vs. O-LoRA on the final output distribution similarity across different tasks
+in the sequence of Order4 on T5-Large structure.
+
+
+5 CONCLUSION
+
+
+In this work, we present ASO-LoRA, an innovative continual learning framework that incorporates
+Attribution Score-based Soft Orthogonality for parameter-efficient adaptation. Experimental results
+demonstrate that ASO-LoRA outperforms strong baselines, effectively mitigating catastrophic forgetting while facilitating robust knowledge transfer across sequential tasks.
+
+
+9
+
+
+After T2 After T3 After T4
+Stages
+
+
+(c) FM ~~L~~ lama
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+After T2 After T3 After T4
+Stages
+
+
+(b) FWT ~~T~~ 5
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+After T2 After T3 After T4
+Stages
+
+
+(d) FWT ~~L~~ lama
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+After T2 After T3 After T4
+Stages
+
+
+(a) FM ~~T~~ 5
+
+
+Figure 4: ASO-LoRA vs. O-LoRA on standard CL benchmarks using metrics FM and FWT. Lower
+FM values indicate stronger resistance to catastrophic forgetting and better knowledge retention
+capabilities, while higher FWT values demonstrate more effective utilization of prior knowledge
+and superior knowledge transfer.
+
+
+4.6 THE OUTPUT SIMILARITY OF DIFFERENT TASKS ON LONGER BENCHMARKS
+
+
+To investigate how our method enhances model performance distinct from O-LoRA, we visualize the
+variation in product magnitudes between O-LoRA and ASO-LoRA augmented by soft orthogonal in
+Figure 5. We employ heatmaps to depict the similarity of final output distributions across different
+tasks. Compared to O-LoRA, ASO-LoRA achieves higher task similarity, thereby strengthening the
+inter-task connections. This difference, driven by the distinct interaction patterns between LoRA
+blocks, indicates that our method facilitates more effective knowledge transfer across tasks, which
+in turn contributes to improved performance in continual learning scenarios.
+
+
+mnli
+
+cb
+
+wic
+
+copa
+
+qqp
+
+boolqa
+
+rte
+
+imdb
+
+yelp
+
+amazon
+
+sst-2
+
+dbpedia
+
+ag
+
+multirc
+
+yahoo
+
+
+1.00
+
+
+0.98
+
+
+0.96
+
+
+0.94
+
+
+0.92
+
+
+0.90
+
+
+mnli
+
+cb
+
+wic
+
+copa
+
+qqp
+
+boolqa
+
+rte
+
+imdb
+
+yelp
+
+amazon
+
+sst-2
+
+dbpedia
+
+ag
+
+multirc
+
+yahoo
+
+
+1.00
+
+
+0.98
+
+
+0.96
+
+
+0.94
+
+
+0.92
+
+
+(a) O-LoRA
+
+
+(b) ASO-LoRA
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023a.
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023b.
+
+
+Arslan Chaudhry, Marcus Rohrbach, Mohamed Elhoseiny, Thalaiyasingam Ajanthan, Puneet K
+Dokania, Philip HS Torr, and Marc’Aurelio Ranzato. On tiny episodic memories in continual
+learning. _arXiv preprint arXiv:1902.10486_, 2019.
+
+
+Eric Nuertey Coleman, Luigi Quarantiello, Ziyue Liu, Qinwen Yang, Samrat Mukherjee, Julio
+Hurtado, and Vincenzo Lomonaco. Parameter-efficient continual fine-tuning: A survey. _arXiv_
+_preprint arXiv:2504.13822_, 2025.
+
+
+Damai Dai, Li Dong, Yaru Hao, Zhifang Sui, Baobao Chang, and Furu Wei. Knowledge neurons in
+pretrained transformers. _arXiv preprint arXiv:2104.08696_, 2021.
+
+
+Cyprien de Masson D’Autume, Sebastian Ruder, Lingpeng Kong, and Dani Yogatama. Episodic
+memory in lifelong language learning. _Advances in Neural Information Processing Systems_, 32,
+2019.
+
+
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. Qlora: Efficient finetuning
+of quantized llms. _Advances in neural information processing systems_, 36:10088–10115, 2023.
+
+
+Wenyu Du, Shuang Cheng, Tongxu Luo, Zihan Qiu, Zeyu Huang, Ka Chun Cheung, Reynold
+Cheng, and Jie Fu. Unlocking continual learning abilities in language models. _arXiv_ _preprint_
+_arXiv:2406.17245_, 2024.
+
+
+Xue Han, Yitong Wang, Junlan Feng, Qian Hu, Chao Deng, et al. Loire: Lifelong learning on incremental data via pre-trained language model growth efficiently. In _The Thirteenth International_
+_Conference on Learning Representations_, 2025.
+
+
+Shwai He, Run-Ze Fan, Liang Ding, Li Shen, Tianyi Zhou, and Dacheng Tao. Mera: Merging
+pretrained adapters for few-shot learning. _arXiv preprint arXiv:2308.15982_, 2023.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022a.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022b.
+
+
+James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A
+Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. _Proceedings of the national academy of sciences_,
+114(13):3521–3526, 2017.
+
+
+Brian Lester, Rami Al-Rfou, and Noah Constant. The power of scale for parameter-efficient prompt
+tuning. _arXiv preprint arXiv:2104.08691_, 2021.
+
+
+Zhizhong Li and Derek Hoiem. Learning without forgetting. _IEEE transactions on pattern analysis_
+_and machine intelligence_, 40(12):2935–2947, 2017.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024a.
+
+
+Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, KwangTing Cheng, and Min-Hung Chen. Dora: Weight-decomposed low-rank adaptation. In _Forty-first_
+_International Conference on Machine Learning_, 2024b.
+
+
+10
+
+
+Xiao Liu, Yanan Zheng, Zhengxiao Du, Ming Ding, Yujie Qian, Zhilin Yang, and Jie Tang. Gpt
+understands, too. _AI Open_, 5:208–215, 2024c.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. _arXiv_ _preprint_
+_arXiv:1711.05101_, 2017.
+
+
+Tongxu Luo, Jiahe Lei, Fangyu Lei, Weihao Liu, Shizhu He, Jun Zhao, and Kang Liu. Moelora:
+Contrastive learning guided mixture of experts on parameter-efficient fine-tuning for large language models. _arXiv preprint arXiv:2402.12851_, 2024.
+
+
+Andrew Maas, Raymond E Daly, Peter T Pham, Dan Huang, Andrew Y Ng, and Christopher Potts.
+Learning word vectors for sentiment analysis. In _Proceedings of the 49th annual meeting of the_
+_association for computational linguistics:_ _Human language technologies_, pp. 142–150, 2011.
+
+
+Gr´egoire Petit, Adrian Popescu, Hugo Schindler, David Picard, and Bertrand Delezoide. Fetril:
+Feature translation for exemplar-free class-incremental learning. In _Proceedings of the IEEE/CVF_
+_winter conference on applications of computer vision_, pp. 3911–3920, 2023.
+
+
+Chengwei Qin and Shafiq Joty. Lfpt5: A unified framework for lifelong few-shot language learning
+based on prompt tuning of t5. _arXiv preprint arXiv:2110.07298_, 2021.
+
+
+Yujia Qin, Jiajie Zhang, Yankai Lin, Zhiyuan Liu, Peng Li, Maosong Sun, and Jie Zhou. Elle:
+Efficient lifelong pre-training for emerging data. _arXiv preprint arXiv:2203.06311_, 2022.
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer. _Journal of machine learning research_, 21(140):1–67, 2020.
+
+
+Anastasia Razdaibiedina, Yuning Mao, Rui Hou, Madian Khabsa, Mike Lewis, and Amjad
+Almahairi. Progressive prompts: Continual learning for language models. _arXiv_ _preprint_
+_arXiv:2301.12314_, 2023.
+
+
+Philip L Roe. Approximate riemann solvers, parameter vectors, and difference schemes. _Journal of_
+_computational physics_, 43(2):357–372, 1981.
+
+
+Gobinda Saha, Isha Garg, and Kaushik Roy. Gradient projection memory for continual learning.
+_ICLR_, 2021.
+
+
+James Seale Smith, Lazar Valkov, Shaunak Halbe, Vyshnavi Gutta, Rogerio Feris, Zsolt Kira,
+and Leonid Karlinsky. Adaptive memory replay for continual learning. In _Proceedings_ _of_ _the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 3605–3615, 2024.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R Bowman.
+Glue: A multi-task benchmark and analysis platform for natural language understanding. _arXiv_
+_preprint arXiv:1804.07461_, 2018.
+
+
+Alex Wang, Yada Pruksachatkun, Nikita Nangia, Amanpreet Singh, Julian Michael, Felix Hill, Omer
+Levy, and Samuel Bowman. Superglue: A stickier benchmark for general-purpose language
+understanding systems. _Advances in neural information processing systems_, 32, 2019.
+
+
+Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A comprehensive survey of continual
+learning: Theory, method and application. _IEEE Transactions on Pattern Analysis and Machine_
+_Intelligence_, 2024a.
+
+
+Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A comprehensive survey of continual
+learning: Theory, method and application. _IEEE Transactions on Pattern Analysis and Machine_
+_Intelligence_, 2024b.
+
+
+Mingyang Wang, Heike Adel, Lukas Lange, Jannik Str¨otgen, and Hinrich Sch¨utze. Rehearsalfree modular and compositional continual learning for language models. _arXiv_ _preprint_
+_arXiv:2404.00790_, 2024c.
+
+
+11
+
+
+Runqi Wang, Yuxiang Bao, Baochang Zhang, Jianzhuang Liu, Wentao Zhu, and Guodong Guo.
+Anti-retroactive interference for lifelong learning. In _European Conference on Computer Vision_,
+pp. 163–178. Springer, 2022a.
+
+
+Xiao Wang, Tianze Chen, Qiming Ge, Han Xia, Rong Bao, Rui Zheng, Qi Zhang, Tao Gui, and
+Xuan-Jing Huang. Orthogonal subspace learning for language model continual learning. In
+_Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_ _2023_, pp. 10658–10671,
+2023.
+
+
+Yaqing Wang, Sahaj Agarwal, Subhabrata Mukherjee, Xiaodong Liu, Jing Gao, Ahmed Hassan
+Awadallah, and Jianfeng Gao. Adamix: Mixture-of-adaptations for parameter-efficient model
+tuning. _arXiv preprint arXiv:2205.12410_, 2022b.
+
+
+Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiaoqi Ren, Guolong Su, Vincent Perot, Jennifer Dy, and Tomas Pfister. Learning to prompt for continual learning. In _Pro-_
+_ceedings of the IEEE/CVF conference on computer vision and pattern recognition_, pp. 139–149,
+2022c.
+
+
+Tongtong Wu, Linhao Luo, Yuan-Fang Li, Shirui Pan, Thuy-Trang Vu, and Gholamreza Haffari.
+Continual learning for large language models: A survey. _arXiv preprint arXiv:2402.01364_, 2024.
+
+
+Yiqun Yao, Zheng Zhang, Jing Li, and Yequan Wang. Masked structural growth for 2x faster language model pre-training. _arXiv preprint arXiv:2305.02869_, 2023.
+
+
+Xiang Zhang, Junbo Zhao, and Yann LeCun. Character-level convolutional networks for text classification. _Advances in neural information processing systems_, 28, 2015.
+
+
+Weixiang Zhao, Shilong Wang, Yulin Hu, Yanyan Zhao, Bing Qin, Xuanyu Zhang, Qing Yang,
+Dongliang Xu, and Wanxiang Che. Sapt: A shared attention framework for parameter-efficient
+continual learning of large language models. _arXiv preprint arXiv:2401.08295_, 2024a.
+
+
+Weixiang Zhao, Shilong Wang, Yulin Hu, Yanyan Zhao, Bing Qin, Xuanyu Zhang, Qing Yang,
+Dongliang Xu, and Wanxiang Che. Dapt: A dual attention framework for parameter-efficient
+continual learning of large language models. _arXiv e-prints_, pp. arXiv–2401, 2024b.
+
+
+Xuyang Zhao, Huiyuan Wang, Weiran Huang, and Wei Lin. A statistical theory of regularizationbased continual learning. _arXiv preprint arXiv:2406.06213_, 2024c.
+
+
+Kai Zhu, Wei Zhai, Yang Cao, Jiebo Luo, and Zheng-Jun Zha. Self-sustaining representation expansion for non-exemplar class-incremental learning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_
+_on computer vision and pattern recognition_, pp. 9296–9305, 2022.
+
+
+A THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+We appreciate the assistance provided by GPT-4 (Achiam et al., 2023a) in writing aid and sentencelevel polishing.
+
+
+B RELATED WORKS
+
+
+B.1 CONTINUAL LEARNING IN LLMS
+
+
+Continual learning in LLMs refers to the paradigm where LLMs sequentially acquire new knowledge
+from non-stationary data distributions while preserving learned capabilities (Wang et al., 2024b; Wu
+et al., 2024), and can be categorized into these types: **Replay-based** **approach** approximates and
+recovers old knowledge by storing old training samples (Chaudhry et al., 2019; Smith et al., 2024),
+or extracting information from prior feature representations (Zhu et al., 2022; Petit et al., 2023).
+**Regularization-based** **approach** adds explicit regularization terms to balance the old and new
+tasks, usually requiring storing a frozen copy of the old model (Kirkpatrick et al., 2017; Zhao et al.,
+2024c). **Optimization-based** **approach** explicitly designs the optimization programs to achieve
+continual learning (Wang et al., 2022a). **Architecture-based approach** investigates dynamic model
+
+
+12
+
+
+expansion (Yao et al., 2023; Han et al., 2025; Qin et al., 2022), combined with parameter isolation mechanisms (Wang et al., 2023; Zhao et al., 2024b) to minimize task interference in sequential
+learning scenarios.
+
+
+B.2 PARAMETER-EFFICIENT TUNING (PET)
+
+
+PET has emerged as a resource-efficient approach for model adaptation (Coleman et al., 2025),
+aiming to optimize performance while updating only a small number of trainable parameters to
+reduce computational costs. Some works train adapters for the downstream task while keeping the
+pre-trained model parameters frozen (He et al., 2023; Wang et al., 2022b). Another line of research
+explores the integration of trainable tensors, called soft prompts, into model input representations
+(Lester et al., 2021; Liu et al., 2024c). Recently, reparameterization methods such as low-rank
+adaptations (LoRA) have garnered significant attention (Hu et al., 2022b; Dettmers et al., 2023;
+Liu et al., 2024b). These approaches avoid direct modification of original weight matrices, instead
+updating parameters through transformation functions operating on smaller parameter sets.
+
+
+C EXPERIEMTAL SETUPS
+
+
+C.1 METRCIS
+
+
+Forgetting measure(FM) is also applied to calculate the memory stability of models. The forgetting
+of a task is calculated by the difference between its maximum performance obtained in the past and
+its current performance:
+_fj,_ = max _[−]_ _[a][t,j]_ [)] _[,][ ∀][j]_ _[< t]_ (15)
+_i∈{_ 1 _,...,t−_ 1 _}_ [(] _[a][i,j]_
+
+
+FM at the t-th task is the average forgetting of all old tasks:
+
+
+where ˜ _aj_ is the accuracy of a base model trained with _Dj_ for the j-th task.
+
+
+C.2 BASELINES
+
+
+We conduct comprehensive comparisons between our method and 10 baseline models, whose introductions are detailed as follows:
+
+
+**SeqFT** (de Masson D’Autume et al., 2019): trains all model parameters sequentially across tasks
+without employing any regularization or replay techniques.
+
+
+**PerTaskFT** : trains a separate model for each task.
+
+
+**Replay** (Chaudhry et al., 2019): is fine-tuned on all parameters with a memory buffer mechanism,
+replaying stored prior samples to prevent knowledge forgetting.
+
+
+**EWC** (Kirkpatrick et al., 2017): performs full-model fine-tuning with regularization constraints
+designed to preserve parameters critical for previously learned tasks.
+
+
+**LwF** (Li & Hoiem, 2017): constrains the shared representation layer to be similar to its original
+state before learning new tasks.
+
+
+**L2P** (Wang et al., 2022c): dynamically selects and updates prompts from the pool in an instancewise manner based on input characteristics.
+
+
+13
+
+
+1
+_FMt_ =
+_t −_ 1
+
+
+_t−_ 1
+
+- _fj,t_ (16)
+
+
+_j_ =1
+
+
+FWT evaluates the average influence of all old tasks on the current t-th task:
+
+
+1
+_FWTt_ =
+_t −_ 1
+
+
+_t_
+�( _aj,j_ _−_ _a_ ˜ _j_ ) (17)
+
+
+_j_ =2
+
+
+**LFPT5** (Qin & Joty, 2021): implements continuous soft prompt training for direct task solution and
+training sample generation.
+
+
+**SeqLoRA** : trains the fixed-size LoRA parameters on a sequence of tasks without any regularization
+or replaying techniques.
+
+
+**IncLoRA** : sequentially acquires a series of new tasks through incremental LoRA parameter expansion, without any regularization or replaying techniques.
+
+
+**MOCL** (Wang et al., 2024c): continually adds new trainable PEFT parameters (LoRA) to language
+models and composes them with existing modules.
+
+
+**MoELoRA** (Luo et al., 2024): considers LoRA as a Mixture of Experts, harnessing the collective modeling capacity of multiple experts to handle different domains while retaining LoRA’s
+parameter-efficient characteristics.
+
+
+**O-LoRA** (Wang et al., 2023): learns new tasks in different vector subspaces (low-rank) that are kept
+orthogonal to each other to prevent catastrophic forgetting.
+
+
+C.3 TASK DETAILS
+
+
+We list the sequences of tasks used in our experiments in Table 4, while Table 5 provides representative task instruction templates.
+
+
+Table 4: Six different orders of task sequences used for continual learning experiments. These
+orders are following Wang et al. (2023) and Razdaibiedina et al. (2023)’s works.
+
+
+Order Task Sequence
+
+
+1 dbpedia _→_ amazon _→_ yahoo _→_ ag
+
+
+2 dbpedia _→_ amazon _→_ ag _→_ yahoo
+
+
+3 yahoo _→_ amazon _→_ ag _→_ dbpedia
+
+
+mnli _→_ cb _→_ wic _→_ copa _→_ qqp _→_
+4 boolqa _→_ rte _→_ imdb _→_ yelp _→_ amazon
+_→_ sst-2 _→_ dbpedia _→_ ag _→_ multirc _→_ yahoo
+
+
+multirc _→_ boolqa _→_ wic _→_ mnli _→_ cb _→_
+5 copa _→_ qqp _→_ rte _→_ imdb _→_ sst-2 _→_
+dbpedia _→_ ag _→_ yelp _→_ amazon _→_ yahoo
+
+
+yelp _→_ amazon _→_ mnli _→_ cb _→_ copa _→_
+6 qqp _→_ rte _→_ imdb _→_ sst-2 _→_ dbpedia
+_→_ ag _→_ yahoo _→_ multirc _→_ boolqa _→_ wic
+
+
+Table 5: Instructions for different tasks
+
+
+Task Prompt
+
+
+What is the logical relationship between the ”sentence 1” and the ”sentence 2”?
+NLI
+Choose one from the options.
+
+Whether the ”first sentence” and the ”second sentence” have the same meaning?
+QQP
+Choose one from the options.
+SC What is the sentiment of the following paragraph? Choose one from the options.
+TC What is the topic of the following paragraph? Choose one from the options.
+
+According to the following passage, is the question true or false?
+BoolQA
+Choose one from the options.
+MultiRC According to the following passage and question, is the candidate answer true or false? Choose one from the options.
+
+Given a word and two sentences, whether the word is used with the same sense in both sentences?
+WiC
+Choose one from the options.
+
+Given a prompt sentence, a question, and two possible answers, which option is more reasonable to answer the question.
+COPA
+Choose one from two options.
+
+
+14
+
+
+C.4 COMPARISON WITH CL METHODS
+
+
+In Table 6, we compare ASO-LoRA with common CL methods. Our approach shows four distinct
+advantages: rehearsal-free, parameter-efficient, task-id-available, and knowledge-transferable.
+
+
+Table 6: The comparison between ASO-LoRA and other continual learning methods. Specifically,
+RF indicates whether the method is rehearsal-free. PE indicates whether the method is parameter
+efficient. TIF indicates whether task identify is available during inference. KT indicates whether the
+method enables knowledge transfer.
+
+
+Method RF PE TIF KT
+
+|EWC (Kirkpatrick et al., 2017)<br>LwF (Li & Hoiem, 2017)<br>L2P (Wang et al., 2022c)<br>LFPT5 (Qin & Joty, 2021)<br>MoELoRA (Luo et al., 2024)<br>O-LoRA (Wang et al., 2023)|✓ ✓ ✓<br>✓ ✓<br>✓ ✓ ✓<br>✓ ✓ ✓<br>✓ ✓<br>✓ ✓ ✓|
+|---|---|
+|**ASO-LoRA**|✓<br>✓<br>✓<br>✓|
+
+
+D SUPPLEMENTARY EXPERIMENTS
+
+
+D.1 PERFORMANCE ON OTHER TRANSFORMER-BASED STRUCTURES
+
+
+To further validate the generalizability of ASO-LoRA across Transformer-based architectures, we
+extend our experiments on the decoder-only LLaMA-7B model using Longer CL benchmarks. As
+evidenced in Table 7, ASO-LoRA achieves significantly superior performance, with an average
+accuracy improvement of 5.4% compared to O-LoRA. These experimental results further confirm
+the plug-and-play adaptability of ASO-LoRA, demonstrating its broad applicability across various
+Transformer-based models in more complex continual learning scenarios.
+
+
+Table 7: The main AA results on Longer benchmarks with the Llama-7B model, after training on
+the last task.
+
+
+**Longer benchmarks**
+**Model**
+**Order-4** **Order-5** **Order-6** **Avg.**
+
+
+SeqLoRA 0 11.9 9.0 6.9
+IncLoRA 26.8 28.3 36.2 30.4
+O-LoRA 46.4 61.9 58.1 55.5
+**ASO-LoRA** **59.1** **64.5** **59.2** **60.9**
+
+
+D.2 THE IMPACT OF SOFT ORTHOGONALITY ON LLAMA STRUCTURE
+
+
+We further analyze the task-specific performance of the final model on the LLaMA architecture
+after completing all training tasks, as detailed in Table 8. ASO-LoRA outperforms other baselines
+on almost all individual tasks, proving that our soft orthogonality can generally leverage the intertask knowledge and potential knowledge transfer on broader structures.
+
+
+E VISUALIZATION
+
+
+E.1 THE RELATIONSHIPS AMONG TASKS ON LONGER BENCHMARKS
+
+
+We employ the violin plot to visualize the similarity coefficient _w_ _[attr]_ between the new task and
+historical tasks, as proposed in Eq.(13), analyzing their inter-task correlations and mutual influences.
+
+
+15
+
+
+Table 8: The results on individual tasks after completing training on the final task with Llama,
+across Order 1, Order 2, and Order 3. The left-to-right ordering of benchmarks corresponds to the
+task training order.
+
+
+|Model CL benchmarks per-task results|Col2|Col3|
+|---|---|---|
+|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>IncLoRA<br>8.7<br>0.0<br>31.4<br>90.7<br>O-LoRA<br>96.3<br>41.6<br>66.1<br>90.9<br>**ASO-LoRA**<br>**98.3**<br>**56.3**<br>65.7<br>80.0|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>IncLoRA<br>8.7<br>0.0<br>31.4<br>90.7<br>O-LoRA<br>96.3<br>41.6<br>66.1<br>90.9<br>**ASO-LoRA**<br>**98.3**<br>**56.3**<br>65.7<br>80.0|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>IncLoRA<br>8.7<br>0.0<br>31.4<br>90.7<br>O-LoRA<br>96.3<br>41.6<br>66.1<br>90.9<br>**ASO-LoRA**<br>**98.3**<br>**56.3**<br>65.7<br>80.0|
+|Order1<br>Sequences<br>Dbpedia<br>Amazon<br>Yahoo<br>Ag<br>IncLoRA<br>8.7<br>0.0<br>31.4<br>90.7<br>O-LoRA<br>96.3<br>41.6<br>66.1<br>90.9<br>**ASO-LoRA**<br>**98.3**<br>**56.3**<br>65.7<br>80.0|IncLoRA<br>O-LoRA<br>**ASO-LoRA**|8.7<br>0.0<br>31.4<br>90.7<br>96.3<br>41.6<br>66.1<br>90.9<br>**98.3**<br>**56.3**<br>65.7<br>80.0|
+
+
+|Order2|Sequences Dbpedia Amazon Ag Yahoo|Col3|
+|---|---|---|
+|Order2|IncLoRA<br>O-LoRA<br>**ASO-LoRA**|52.2<br>23.5<br>51.5<br>69.4<br>97.8<br>45.4<br>89.0<br>67.9<br>**97.9**<br>**51.3**<br>78.9<br>**70.6**|
+
+
+|Col1|ASO-LoRA 97.9 51.3 78.9 70.6|Col3|
+|---|---|---|
+|Order3|Sequences<br>Yahoo<br>Amazon<br>Ag<br>Dbpedia|Sequences<br>Yahoo<br>Amazon<br>Ag<br>Dbpedia|
+|Order3|IncLoRA<br>O-LoRA<br>**ASO-LoRA**|4.7<br>26.2<br>12.6<br>98.5<br>64.0<br>61.1<br>82.4<br>98.6<br>**69.4**<br>58.2<br>**86.0**<br>**98.9**|
+
+
+Figure 6: The Violin Plot of _w_ _[attr]_ on T5-large, displaying the distribution of similarity coefficient
+_w_ _[attr]_ across different tasks during the training stages. Central white dot represents the median or
+mean of the data, while a wider section indicates higher data density (more points near that value).
+
+
+As illustrated in Figure 6, the higher similarity coefficient between Task Ag News and historical
+tasks indicates a positive influence of Ag News on earlier tasks. As evidenced in Table 3, ASOLoRA obviously achieves a 21.8% performance improvement on Task Ag’s previous task Amazon
+compared to O-LoRA. These results demonstrate that Soft Orthogonality productively leverages
+previously acquired task knowledge and effectively facilitates knowledge transfer.
+
+
+E.2 THE TREND OF PERFORMANCE IN THE CONTINUAL LEARNING STAGES
+
+
+**Standard CL benchmarks** : As shown in Figure 7, we compare Average Accuracy trajectories of
+ASO-LoRA and O-LoRA during CL stages on standard CL benchmarks. Throughout the whole CL
+stages, ASO-LoRA exhibits consistent performance and generally outperforms O-LoRA in overall results. This further demonstrates that soft orthogonality between LoRA blocks corresponding
+to different tasks generally enhances the expression of related knowledge, while also achieving a
+favorable balance between mitigating catastrophic forgetting and facilitating knowledge transfer.
+
+
+**Longer** **benchmarks** : Figure 8 further dipicts the Average Accuracy trajectories of ASO-LoRA
+and O-LoRA during CL stages on longer benchmarks. ASO-LoRA demonstrates greater overall
+stability and outperforms O-LoRA during longer continual learning phases. On Order4, although
+ASO-LoRA initially lags behind O-LoRA, its ability to mitigate catastrophic forgetting becomes increasingly evident as the number of tasks grows, eventually surpassing O-LoRA. On Order5, while
+ASO-LoRA does not ultimately outperform O-LoRA, it exhibits a more balanced performance and
+avoids the sharp performance drop observed in O-LoRA at epoch 8. On Order6, the two curves fol
+
+16
+
+
+|ASO-LoRA<br>O-LoRA|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+|ASO-LoRA<br>O-LoRA|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+|ASO-LoRA<br>O-LoRA|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+Figure 9: ASO-LoRA vs. O-LoRA on training loss during the CL stage on CL longer benchmarks,
+as new tasks arrive continuously. Each arrival of a new task corresponds to one epoch of training.
+The blue line represents the trend of ASO-LoRA’s training loss, while the red line corresponds to
+that of O-LoRA.
+
+
+17
+
+
+Order1
+
+
+Order2
+
+
+Order3
+
+
+epoch 2 epoch 3 epoch 4
+Epoch
+
+
+(c) Order3
+
+
+epoch 2 epoch 3 epoch 4
+Epoch
+
+
+(b) Order2
+
+
+78.8
+
+
+77.8
+
+
+76.8
+
+
+75.8
+
+
+74.8
+
+
+73.8
+
+
+epoch 2 epoch 3 epoch 4
+Epoch
+
+
+(a) Order1
+
+
+82
+
+
+81
+
+
+80
+
+
+79
+
+
+78
+
+
+77
+
+
+76
+
+
+77.6
+76.6
+75.6
+74.6
+73.6
+72.6
+71.6
+70.6
+69.6
+68.6
+67.6
+66.6
+65.6
+64.6
+63.6
+62.6
+61.6
+
+
+Figure 7: ASO-LoRA vs. O-LoRA on Average Accuracy (AA) during the CL stage on CL standard
+benchmarks (T5 structure), as new tasks arrive continuously. Each arrival of a new task corresponds
+to one epoch of training. The blue line represents the trend of ASO-LoRA’AA as tasks increment,
+while the red line corresponds to that of O-LoRA.
+
+
+low a broadly aligned trajectory, yet one decreases as the other increases. ASO-LoRA consistently
+maintains an overall advantage.
+
+
+Order4
+
+
+Order5
+
+
+Order6
+
+
+86.9
+
+
+85.9
+
+
+84.9
+
+
+83.9
+
+
+82.9
+
+
+81.9
+
+
+80.9
+
+
+79.9
+
+
+78.9
+
+
+77.9
+
+
+76.9
+
+
+75.9
+
+
+74.9
+
+
+73.9
+
+
+72.9
+
+
+71.9
+
+
+70.9
+
+
+69.9
+
+
+68.9
+
+
+67.9
+
+
+66.9
+
+
+65.9
+
+
+64.9
+
+
+78.377.376.375.374.373.372.371.370.369.368.367.366.365.364.363.362.361.360.359.358.357.356.355.354.353.352.351.350.349.348.347.346.345.344.343.342.341.340.3
+
+
+78.9
+
+
+77.9
+
+
+76.9
+
+
+75.9
+
+
+74.9
+
+
+73.9
+
+
+72.9
+
+
+71.9
+
+
+70.9
+
+
+69.9
+
+
+68.9
+
+
+67.9
+
+
+66.9
+
+
+65.9
+
+
+64.9
+
+
+63.9
+
+
+62.9
+
+
+61.9
+
+
+epoch 1 epoch 2 epoch 3 epoch 4 epoch 5 epoch 6 epoch 7 Epochepoch 8 epoch 9 epoch 10 epoch 11 epoch 12 epoch 13 epoch 14 epoch 15
+
+
+(a) Order4
+
+
+epoch 1 epoch 2 epoch 3 epoch 4 epoch 5 epoch 6 epoch 7 Epochepoch 8 epoch 9 epoch 10 epoch 11 epoch 12 epoch 13 epoch 14 epoch 15
+
+
+(b) Order5
+
+
+epoch 1 epoch 2 epoch 3 epoch 4 epoch 5 epoch 6 epoch 7 Epochepoch 8 epoch 9 epoch 10 epoch 11 epoch 12 epoch 13 epoch 14 epoch 15
+
+
+(c) Order6
+
+
+Figure 8: ASO-LoRA vs. O-LoRA on Average Accuracy (AA) during the CL stage on CL longer
+benchmarks, as new tasks arrive continuously. Each arrival of a new task corresponds to one epoch
+of training. The blue line represents the trend of ASO-LoRA’AA as tasks increment, while the red
+line corresponds to that of O-LoRA
+
+
+We also investigate the training loss trajectories of ASO-LoRA and O-LoRA during CL stages on
+longer benchmarks, depicted in Figure 9. While following the same overall trend, ASO-LoRA
+exhibits lower and more stable training loss than O-LoRA, further reinforcing the suitability of
+ASO-LoRA for continual learning scenarios.
+
+
+Order4
+
+
+epoch 1 epoch 2 epoch 3 epoch 4 epoch 5 epoch 6 epoch 7 Epochepoch 8 epoch 9 epoch 10 epoch 11 epoch 12 epoch 13 epoch 14 epoch 15
+
+
+(a) Order4
+
+
+Order5
+
+
+epoch 1 epoch 2 epoch 3 epoch 4 epoch 5 epoch 6 epoch 7 Epochepoch 8 epoch 9 epoch 10 epoch 11 epoch 12 epoch 13 epoch 14 epoch 15
+
+
+(b) Order5
+
+
+Order6
+
+
+epoch 1 epoch 2 epoch 3 epoch 4 epoch 5 epoch 6 epoch 7 Epochepoch 8 epoch 9 epoch 10 epoch 11 epoch 12 epoch 13 epoch 14 epoch 15
+
+
+(c) Order6
+
+
+E.3 THE EFFECT ON CATASTROPHIC FORGETTING AND KNOWLEDGE TRANSFER
+
+
+To further comprehensively evaluate Soft Orthogonality’s efficacy in mitigating catastrophic forgetting and facilitating knowledge transfer, we demonstrate the FM and FWT results of ASO-LoRA
+and O-LoRA on longer benchmarks.
+
+
+Figure 10 reveals that ASO-LoRA more effectively leverages knowledge from previous tasks even
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|A|O-LoRA<br>SO-LoRA<br>O-LoRA|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||~~SO-LoRA~~|
+|||||||||||||||||||||||||||
+|||||||||||||||||||||||||||
+|||||||||||||||||||||||||||
+|||||||||||||||||||||||||||
+|||||||||||||||||||||||||||
+|||||||||||||||||||||||||||
+|||||||||||||||||||||||||||
+
+
+|ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>15 ASO-LoRA<br>10 rate<br>Forgetting<br>5<br>0<br>5|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|A<br>O<br>~~A~~|SO-LoRA<br>-LoRA<br>~~SO-LoRA~~|||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+|<br>ings indicate that striking an optimal balance between knowledge transfer and knowledge retenti<br>remains an issue worthy of further investigation.<br>5<br>0<br>5<br>10<br>15<br>Forgetting rate<br>O-LoRA<br>ASO-LoRA<br>O-LoRA<br>~~ASO-LoRA~~|||||||||||||||||||||||
+
+
+Figure 11: ASO-LoRA vs. O-LoRA on Order4 using metrics FM. Lower FM values indicate
+stronger resistance to catastrophic forgetting and better knowledge retention capabilities.
+
+
+F LIMITATIONS
+
+
+While ASO-LoRA has demonstrated strong capabilities in continual learning scenarios through empirical evaluation, several limitations warrant discussion: 1) The observed performance variation
+across different Transformer architectures, raising an open question regarding whether encoderdecoder frameworks inherently facilitate better knowledge storage. These phenomena suggest underlying mechanistic differences, requiring further investigation. 2) The potential negative impacts
+
+
+18
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+After T2 After T3 After T4 After T5 After T6 After T7 After T8 After T9 After T10 After T11 After T12 After T13 After T14 After T15
+Stages
+
+
+Figure 10: ASO-LoRA vs. O-LoRA on Order4 using metrics FWT. Higher FWT values demonstrate
+more effective utilization of prior knowledge and superior knowledge transfer.
+
+
+As illustrated in Figure 11, as the number of tasks increases, ASO-LoRA outperforms O-LoRA in
+mitigating knowledge forgetting while preserving acquired knowledge across most stages. However,
+
+
+After T2 After T3 After T4 After T5 After T6 After T7 After T8 After T9 After T10 After T11 After T12 After T13 After T14 After T15
+Stages
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+of task overlap need to be further explored. 3) The performance degradation observed in longer
+benchmarks remains a significant challenge for scaling to more complex real-world applications,
+such as hundreds of tasks.
+
+
+We aim to address these limitations in future work to further enhance our method’s performance in
+continual learning scenarios.
+
+
+19

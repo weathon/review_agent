@@ -1,0 +1,1886 @@
+# DIFFERENTIABLE MODEL PREDICTIVE CONTROL
+## ON THE GPU
+
+
+**Emre Adabag, Marcus Greiff, John Subosits, Thomas Lew**
+Toyota Research Institute
+
+
+ABSTRACT
+
+
+Differentiable model predictive control (MPC) offers a powerful framework for
+combining learning and control. However, its adoption has been limited by the inherently sequential nature of traditional optimization algorithms, which are challenging to parallelize on modern computing hardware like GPUs. In this work,
+we tackle this bottleneck by introducing a GPU-accelerated differentiable optimization tool for MPC. This solver leverages sequential quadratic programming
+and a custom preconditioned conjugate gradient (PCG) routine with tridiagonal
+preconditioning to exploit the problem’s structure and enable efficient parallelization. We demonstrate substantial speedups over CPU- and GPU-based baselines,
+significantly improving upon state-of-the-art training times on benchmark reinforcement learning and imitation learning tasks. Finally, we showcase the method
+on the challenging task of reinforcement learning for driving at the limits of handling, where it enables robust drifting of a Toyota Supra through water puddles.
+
+
+Code: [https://github.com/ToyotaResearchInstitute/diffmpc](https://github.com/ToyotaResearchInstitute/diffmpc)
+Video: [https://youtu.be/r42iJBw-L4E](https://youtu.be/r42iJBw-L4E)
+
+
+1 INTRODUCTION
+
+
+Differentiable optimization tools enable leveraging the structured and precise outputs of optimization algorithms as inductive biases in machine learning, reducing data requirements and enforcing
+constraints. These methods also enable data-driven tuning of optimization algorithms, reducing
+time-consuming manual expert-driven development using data. In particular, differentiable model
+predictive control has many applications, such as in motion planning (Bhardwaj et al., 2020), parameter estimation (Landry et al., 2019) and tuning (Cummins et al., 2025), reinforcement learning
+(Romero et al., 2024), imitation learning (Grandia et al., 2023; Wan et al., 2024), and end-to-end
+planning and control (Amos et al., 2018; Karkus et al., 2023).
+
+
+However, the adoption of differentiable optimization is hindered by the sequential nature of optimization tools: Efficient parallelization on graphics processing units (GPUs) remains difficult, both
+for solving the optimization problem (the forward pass) and for computing gradients (the backward
+pass). Recent methods for differentiable optimal control, such as (Bambade et al., 2024; Frey et al.,
+2025) only run on central processing units (CPUs) to leverage the time-induced sparsity of optimal
+control problems (OCPs) via sequential algorithms such as the iterative linear quadratic regulator
+(iLQR) (Amos et al., 2018). Overcoming this computational bottleneck could enable scaling up to
+large datasets and expressive architectures, fully utilizing the benefits of modern deep learning.
+
+
+**Contributions** : We propose **Diff** erentiable **M** odel **P** redictive **C** ontrol (DiffMPC): a new tool for
+_differentiable optimal control_ to solve and differentiate through optimal control problems of the form
+
+
+_T −_ 1
+
+- _c_ _[u,θ]_ _t_ ( _ut_ ) s.t. _ft_ _[θ]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [) = 0] _[,]_ _x_ 0 = _x_ _[θ]_ _s_ _[,]_
+
+_t_ =0
+
+
+**OCP** : arg min
+_z_ =( _x,u_ )
+
+
+_T_
+
+- _c_ _[x,θ]_ _t_ ( _xt_ ) +
+
+_t_ =0
+
+
+where the costs, equality constraints, and initial conditions are parametrized by parameters _θ_, which
+could represent the weights of a neural network (parameterizing the cost _c_ ( _·_ ) or constraints _f_ ( _·_ )),
+the outputs of an intermediate neural network layer, or the parameters of a physics-based model.
+DiffMPC is tailored for execution on the GPU by leveraging the structure of **OCP** : The core of the
+solver is a preconditioned conjugate gradient (PCG) routine introduced in (Adabag et al., 2024) to
+
+
+1
+
+
+solve the linear system arising from the optimality conditions of **OCP** . This routine leverages the
+sparse structure of **OCP** to expose parallelism over time _t_, and enables warm-starting across problem
+instances. DiffMPC is written in JAX to simplify deployment in machine learning applications.
+Numerical and experimental results using DiffMPC show the following:
+
+
+ - **Significant** **acceleration** **on** **the** **GPU** : Comprehensive benchmarking against the state-of-theart differentiable optimization libraries mpc.pytorch (Amos et al., 2018), trajax (Frostig
+et al., 2021), and Theseus (Pineda et al., 2022) show consistent speedups of more than 4 _×_
+when solving and differentiating **OCP** . These experiments include reinforcement learning (RL)
+and imitation learning (IL) examples, which are common applications of differentiable optimal
+control. These speedups primarily come from a PCG routine tailored for GPU execution and
+several related design choices in DiffMPC that exploit problem structure for parallelization.
+
+ - **Reliably** **drifting** **a** **Toyota** **Supra** **via** **domain** **randomization** **and** **reinforcement** **learning** :
+We use DiffMPC to automatically tune an MPC controller for driving at the limits of handling
+and ensure robustness to model mismatch, such as water puddles on the road. Specifically, we use
+domain randomization over the nonlinear dynamics to learn cost and vehicle parameters for the
+controller via reinforcement learning. In this application, due to the unstable nature of driving
+at the limits of handling where tire forces are saturated and the vehicle is prone to spinning
+out, large batches are conducive to robust training, motivating the use of the proposed GPUaccelerated differentiable optimization framework. Results demonstrate significantly improved
+performance on a Toyota Supra drifting through water puddles (Figure 7).
+
+
+2 BACKGROUND ON DIFFERENTIABLE OPTIMIZATION
+
+
+2.1 RELATED WORK
+
+
+Recent years have seen a surge of works on scalable optimization algorithms that run efficiently on
+the GPU (Schubiger et al., 2020; Chen et al., 2024; Kang et al., 2024; Feng et al., 2024; Bishop et al.,
+2024; Adabag et al., 2024; Chari et al., 2024; Jeon et al., 2024; Amatucci et al., 2025; Montoison
+& Caillau, 2025), enabling large-scale validation and parameter sweeps. However, as optimization algorithms are inherently sequential, GPU-accelerated solvers are often slower than CPU-based
+solvers when solving small- to medium-sized problems individually. Among these efforts, MPCGPU
+(Adabag et al., 2024) exploits the sparse-in-time structure of **OCP** using a tailored preconditioned
+conjugate gradient (PCG) routine. As a result, it achieves fast replanning times for MPC applications
+that match or outperform state-of-the-art CPU-based solvers, even for single problem instances. This
+work highlights the importance of taking advantage of problem structure to fully exploit GPU parallelism. Still, these solvers are not differentiable and thus do not provide sensitivities with respect
+to problem parameters.
+
+
+Differentiable optimization tools address this gap by enabling the computation of gradients of solutions to optimization problems with respect to parameters, supporting a wide range of applications
+(see Section 1). These tools fall into two main categories, general-purpose solvers (Ren et al., 2023;
+Arnold et al., 2020; Deleu et al., 2019; Pineda et al., 2022; DeepMind et al., 2020; Blondel et al.,
+2022) and structure-exploiting solvers for MPC (Amos et al., 2018; Agrawal et al., 2019; Frostig
+et al., 2021; Howell et al., 2022; Bambade et al., 2024; Frey et al., 2025).
+
+
+General-purpose differentiable solvers often support GPU execution and can be applied broadly.
+However, in MPC applications, they are typically slower than **OCP** -specific solvers, as they do not
+sufficiently leverage problem structure. For example, solving **OCP** using Theseus (Pineda et al.,
+2022) by rolling out control inputs through the dynamics as in (Wan et al., 2024) can be orders of
+magnitude slower than using DiffMPC (see Section 4).
+
+
+On the other hand, **OCP** -tailored solvers exploit problem structure for efficiency, but usually only
+support CPU execution (Amos & Kolter, 2017; Agrawal et al., 2019; Howell et al., 2022; Bambade
+et al., 2024; Frey et al., 2025), which can limit their scalability in large-batch or learning applications.
+The closest methods to DiffMPC are mpc.pytorch (Amos et al., 2018) and trajax (Frostig
+et al., 2021), which support GPU execution and exploit the time-induced sparse structure of **OCP** .
+However, both methods rely on Riccati recursions over time _t_ = 0 _, . . ., T_, requiring relatively
+large batch sizes to realize speedups on the GPU. As shown in Section 4, DiffMPC avoids these
+recursions using a tailored PCG routine, enabling significant speedups over existing methods.
+
+
+2
+
+
+2.2 A PRIMER ON DIFFERENTIABLE OPTIMIZATION
+
+Next, we provide background on differentiable optimization (DO)
+used in the design of DiffMPC. Consider the generic parametric,
+equality-constrained, optimization problem
+
+
+**P** : _z_ = arg min _f_ ( _z, θ_ ) subject to _g_ ( _z, θ_ ) = 0 _,_
+_z∈_ R _[n]_
+
+
+where _z_ _∈_ R _[n]_ are optimization variables, _θ_ _∈_ R _[p]_ are parameters,
+_f_ : R _[n]_ _×_ R _[p]_ _→_ R is a cost function, and _g_ : R _[n]_ _×_ R _[p]_ _→_ R _[q]_
+defines equality constraints. The solution _z_ = _z_ ( _θ_ ) and its associated Karush-Kuhn-Tucker (KKT) multipliers _λ_ = _λ_ ( _θ_ ) _∈_ R _[q]_ must
+satisfy the KKT conditions
+
+
+- = - _∇zf_ ( _z, θ_ ) + _λ_ _[⊤]_ _∇zg_ ( _z, θ_ )
+_g_ ( _z, θ_ )
+
+
+Figure 1: DO solves optimization problems in _z_ (the
+forward pass) and computes
+sensitivities with respect to
+parameters _θ_ (the backward
+pass), moving along the loss
+surface _ℓ_ defined by the optimization problem.
+
+
+_F_ ( _z, λ, θ_ ) := - _∇zL_ ( _z, λ, θ_ )
+_∇λL_ ( _z, λ, θ_ )
+
+
+= 0 _,_
+
+
+(1)
+where _L_ ( _z, λ, θ_ ) := _f_ ( _z, θ_ ) + _λ_ _[⊤]_ _g_ ( _z, θ_ ) is the Lagrangian of **P** .
+
+
+The **forward pass** consists of solving the optimization problem **P** .
+Many solvers leverage the structure of **P** and its KKT conditions, mization problem.
+such as its sparsity, to enable efficient numerical resolution. In the
+context of optimal control, for instance, the iLQR method leverages the sparse-in-time structure of
+**OCP** and uses Riccati recursions to break the optimization problem into smaller one-step problems
+that are solved recursively over time _t_ = 0 _, . . ., T_ (Amos et al., 2018). These operations are,
+however, iterative and do not fully leverage the parallelism of GPUs.
+
+
+The **backward pass** computes the sensitivities of the solution to **P** with respect to the parameters _θ_ .
+For efficiency, many methods use the implicit function theorem (IFT) for this sensitivity computation
+(Gould et al., 2016; Amos & Kolter, 2017): By defining the primal-dual pair _w_ =( _z, λ_ ) solving **P**,
+
+
+- _−_ 1 _∂F_ where _[∂F]_
+_∂θ_ _[,]_ _∂w_
+
+
+   - _∇zzL ∇zg_ _[⊤]_
+
+_[∂F]_
+
+_∂w_ [=] _∇zg_ 0
+
+
+d _F_
+
+
+_[∂F]_ _∂w_
+
+_∂w_ _∂θ_
+
+
+d _F_ _[∂F]_
+
+d _θ_ [=] _∂w_
+
+
+_∂w_ _[∂F]_
+
+_∂θ_ [+] _∂θ_
+
+
+_[∂w]_ - _∂F_
+
+_∂θ_ [=] _[ −]_ _∂w_
+
+
+_[∂F]_ [=] _[⇒]_ _[∂w]_
+
+_∂θ_ [= 0] _∂θ_
+
+
+_∇zg_ 0
+
+
+_,_ (2)
+
+
+where we used _F_ ( _z, λ, θ_ ) = 0 so that [d] _[F]_
+
+
+where we used _F_ ( _z, λ, θ_ ) = 0 so that d _θ_ [=] [0] [in] [the] [first] [equality.] [The] [invertibility] [of] [the] [KKT]
+
+matrix _[∂F]_ _∂w_ [follows from the IFT under suitable assumptions (Lee, 2012; Blondel & Roulet, 2024).]
+
+Thus, computing the sensitivity matrix _[∂w]_ _∂θ_ [requires solving] _[ p]_ [ linear systems] _[∂F]_ _∂w_ _∂θ∂wi_ [=] _[ −]_ _∂θ_ _[∂F]_ _i_ [, which]
+
+enables computing Jacobian-vector products (JVP) for downstream uses. In machine learning applications, one typically uses the gradient of a function _ℓ_ : R _[n]_ _→_ R of the solution _z_ to **P** . Such
+gradients can be more efficiently computed using the vector-Jacobian product (VJP)
+
+
+_[∂w]_ _[∂F]_
+
+_∂θ_ [requires solving] _[ p]_ [ linear systems] _∂w_
+
+
+_[∂F]_ _∂w_
+
+_∂w_ _∂θi_ [=] _[ −]_ _∂θ_ _[∂F]_
+
+
+_⊤_
+= _[∂w]_
+
+_∂θ_
+
+
+_⊤_ [�] _∂ℓ_
+
+_∂z_
+0
+
+
+= _−_ _[∂F]_
+
+_∂θ_
+
+
+- _−_ 1 � _∂ℓ_
+_∂z_
+0
+
+
+_⊤_ [��] _∂F_
+
+
+_∂w_
+
+
+��
+_._ (3)
+
+
+_∂ℓ_
+
+_∂θ_
+
+
+_⊤_
+= _[∂w]_
+
+_∂θ_
+
+
+_⊤_
+= _[∂w]_
+
+
+_⊤_ _∂ℓ_
+
+
+_∂w_
+
+
+Computing the VJP in (3) only requires solving one linear system _[∂F]_
+
+
+_[∂F]_ _∂w_ _[ξ]_ [= (] _∂z_ _[∂ℓ]_
+
+
+Computing the VJP in (3) only requires solving one linear system _∂w_ _[ξ]_ [= (] _∂z_ _[,]_ [ 0)][, and is thus more]
+
+efficient than using a JVP, see Appendix A.1 for further details.
+
+
+Efficient differentiable solvers leverage the structure of **P** to quickly compute solutions _z_, and exploit
+the sparsity structure of the KKT matrix _[∂F]_ _∂w_ [to solve the linear system] _[∂F]_ _∂w_ _[ξ]_ [=] [(] _∂z_ _[∂ℓ]_ _[,]_ [ 0)][ to evaluate]
+
+the VJPs in (3). In the next section, we describe such a solver for optimal control problems that is
+designed to leverage parallelism to run efficiently on the GPU.
+
+
+_[∂F]_ _[∂F]_
+
+_∂w_ [to solve the linear system] _∂w_
+
+
+_[∂F]_ _∂w_ _[ξ]_ [=] [(] _∂z_ _[∂ℓ]_
+
+
+3 DIFFERENTIABLE MODEL PREDICTIVE CONTROL ON THE GPU
+
+
+DiffMPC enables solving and differentiating through optimal control problems (OCPs) of the form
+
+
+_T −_ 1
+
+- _c_ _[u,θ]_ _t_ ( _ut_ ) s.t. _ft_ _[θ]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [) = 0] _[,]_ _x_ 0 = _x_ _[θ]_ _s_ _[,]_
+
+_t_ =0
+
+
+**OCP** : arg min
+_z_ =( _x,u_ )
+
+
+_T_
+
+- _c_ _[x,θ]_ _t_ ( _xt_ ) +
+
+_t_ =0
+
+
+_T_
+
+
+with separable costs _c_ _[x,θ]_ _t_ _, c_ _[u,θ]_ _t_, equality constraints _ft_ _[θ]_ [,] [and] [initial] [conditions] _[x][θ]_ _s_ [parametrized] [by]
+_θ_ . In the next sections, we describe its forward pass (solving **OCP** ), its backward pass (computing
+gradients with respect to _θ_ ), and discuss design choices for efficient deployment on the GPU.
+
+
+3
+
+
+3.1 FORWARD PASS: SOLVING **OCP** VIA SEQUENTIAL QUADRATIC PROGRAMMING (SQP)
+To solve **OCP**, which is in general non-convex, we use the sequential quadratic programming (SQP)
+scheme with a line search in Algorithm 1. At each iteration of the SQP scheme, given an initial guess
+for the solution _z_, we approximate the cost of **OCP** by a linear-quadratic function and linearize the
+dynamics constraints, to obtain the parametric quadratic program ( **QP** ):
+
+
+_T −_ 1
+
+- 12 _[u]_ _t_ _[⊤][R][t][u][t]_ [+] _[r]_ _t_ _[⊤][u][t]_ [s.t.] _[A]_ [+] _t_ _[x][t]_ [+1] [+] _[A][t][x][t]_ [+] _[B][t][u][t]_ [=] _[C][t][,]_ _[x]_ [0] [=] _[x][s][,]_
+
+_t_ =0
+
+
+**QP** : min
+_z_ =( _x,u_ )
+
+
+_T_
+
+
+_t_ =0
+
+
+1
+2 _[x]_ _t_ _[⊤][Q][t][x][t]_ [+] _[q]_ _t_ _[⊤][x][t]_ [+]
+
+
+where _z_ = ( _x_ 0 _, u_ 0 _, . . ., xT −_ 1 _, uT −_ 1 _, xT_ ), and ( _Q, q, R, r, A_ [+] _, A, B, C_ ) depend on the parameters
+_θ_, and are computed in parallel over **OCP** problem instances and time steps _t_ = 0 _, . . ., T_ :
+
+  - _Qt, qt_   - :=   - _∇_ [2] _c_ _[x,θ]_ _t_ ( _xt_ ) _, ∇c_ _[x,θ]_ _t_ ( _xt_ )� _,_   - _Rt, rt_   - :=   - _∇_ [2] _c_ _[u,θ]_ _t_ ( _ut_ ) _, ∇c_ _[u,θ]_ _t_ ( _ut_ )� _,_ (4a)
+
+  - _A_ [+] _t_ _[, A][t][, B][t]_   - :=   - _∇xt_ +1 _ft_ _[θ]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)] _[,][ ∇][x]_ _t_ _[f]_ _t_ _[ θ]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)] _[,][ ∇][u]_ _t_ _[f]_ _t_ _[ θ]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)]   - _,_ (4b)
+
+and _Ct_ := _A_ [+] _t_ _[x][t]_ [+1] [+] _[A][t][x][t]_ [+] _[B][t][u][t]_ _[−]_ _[f]_ _t_ _[ θ]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)][.] [To] [ensure] [that] [the] [matrices] [(] _[Q, R]_ [)] [are]
+positive definite, we project them onto the positive definite cone as in (Singh et al., 2022). Since the
+cost is linear-quadratic and the equality constraints are linear, the KKT matrix of **QP** is
+
+
+ _I_ 
+
+ _A_ 0 _B_ ...0 _A_ ... [+] 0 ...  _._ (5)
+_AT −_ 1 _BT −_ 1 _A_ [+] _T −_ 1
+
+
+_∂F_ - _G_ _H_ _[⊤]_
+_∂w_ [=] _H_ 0
+
+
+_,_ where _G_ =
+
+
+ _Q_ 0
+
+_R_ 0
+
+
+...
+_QT_
+
+
+
+
+
+ and _H_ =
+
+
+Solving **QP** consists of finding a pair ( _z, λ_ ) satisfying the KKT conditions in (1), and takes the form:
+
+              - _z_              -              - _G_ _H_ _[⊤]_              - _−_ 1 � _−b_              
+= _,_ (6)
+
+_λ_ _H_ 0 _d_
+
+
+- _−_ 1 � _−b_
+_d_
+
+
+- - _G_ _H_ _[⊤]_
+=
+_H_ 0
+
+
+_,_ (6)
+
+
+where _b_ = ( _q_ 0 _, r_ 0 _, q_ 1 _, r_ 1 _, . . ., qN_ ) and _d_ = ( _xs, C_ 0 _, . . ., CT −_ 1).
+
+
+3.2 BACKWARD PASS: COMPUTING SENSITIVITIES VIA THE IMPLICIT FUNCTION THEOREM
+Given a solution _z_ to **OCP** computed via SQP, DiffMPC computes the sensitivities with respect to
+_θ_ using (3) (see Algorithm 2). The most expensive step consists of solving the linear system
+�� _z_            - =            - _G_ _H_ _[⊤]_            - _−_ 1 � _∂z∂ℓ_ [(] _[z]_ [)]            - _._ (7)
+_λ_             - _H_ 0 0
+
+
+This linear system is the same as the linear system in (6) used for the forward pass, with ( _−b, d_ )
+replaced with ( _∂z_ _[∂ℓ]_ _[,]_ [ 0)][.] [Importantly, the KKT matrix is pre-computed in the forward pass.]
+
+
+- - _G_ _H_ _[⊤]_
+=
+_H_ 0
+
+
+- _−_ 1 � _∂ℓ_
+_∂z_ [(] _[z]_ [)]
+0
+
+
+_._ (7)
+
+
+This linear system is the same as the linear system in (6) used for the forward pass, with ( _−b, d_ )
+replaced with ( _[∂ℓ]_ _[,]_ [ 0)][.] [Importantly, the KKT matrix is pre-computed in the forward pass.]
+
+
+3.3 SOLVING THE LINEAR SYSTEMS WHILE LEVERAGING PARALLELISM
+The efficiency of DiffMPC relies on an efficient and GPU-friendly routine for solving the linear
+systems (6) and (7) that leverages the structure of the KKT matrix in (5). Specifically, DiffMPC
+uses the preconditioned conjugate gradient (PCG) method with tridiagonal preconditioning (Bu &
+Plancher, 2024) introduced in (Adabag et al., 2024). We briefly describe this method below.
+
+
+To solve the linear system (6), we first form the Schur complement of the KKT system
+
+
+_S_ := _−HG_ _[−]_ [1] _H_ _[⊤]_ _,_ _γ_ := _d_ + _HG_ _[−]_ [1] _b,_ (8)
+
+
+and solve for _λ_ and _z_ sequentially:
+
+
+_Sλ_ = _γ,_ _z_ = _−G_ _[−]_ [1] ( _b_ + _H_ _[⊤]_ _λ_ ) _._ (9)
+
+
+Solving (7) is done similarly, by replacing ( _−b, d_ ) with ( _∂z_ _[∂ℓ]_ _[,]_ [ 0)][.] [When solving the smaller system]
+
+in (9), we exploit the structure of _S_ and use a symmetric stair preconditioner (Bu & Plancher, 2024):
+
+
+
+
+
+
+
+
+_Q_ 0 _−Q_ 0 _ϕ_ _[⊤]_ 0 _[χ][−]_ 0 [1]
+_−χ_ _[−]_ 0 [1] _[ϕ]_ [0] _[Q]_ [0] _χ_ _[−]_ 0 [1] _−χ_ _[−]_ 0 [1] _[ϕ]_ 1 _[⊤][χ][−]_ 1 [1]
+_−χ_ _[−]_ 1 [1] _[ϕ]_ [1] _[χ]_ 0 _[−]_ [1] _χ_ _[−]_ 1 [1]
+...
+
+
+
+
+
+
+
+
+ _,_ Φ _[−]_ [1] :=
+
+
+4
+
+
+
+
+
+
+
+
+ _,_ (10)
+
+
+_S_ = _−_
+
+
+_Q_ _[−]_ 0 [1] _ϕ_ _[⊤]_ 0
+_ϕ_ 0 _χ_ 0 _ϕ_ _[⊤]_ 1
+
+_⊤_
+... _ϕN_ _−_ 2 _χN_ _−_ 2 _ϕT −_ 1
+_ϕT −_ 1 _χT −_ 1
+
+
+where _χt_ = _AtQ_ _[−]_ _t_ [1] _[A]_ _t_ _[⊤]_ [+] _[ B][t][R]_ _t_ _[−]_ [1] _[B]_ _t_ _[⊤]_ [+] _[ A]_ _t_ [+] _[Q]_ _t_ _[−]_ +1 [1] _[A]_ _t_ [+] _[⊤]_ and _ϕt_ = _AtQ_ _[−]_ _t_ [1] _[A]_ _t_ [+] _−_ _[⊤]_ 1 [with] _[ A]_ _−_ [+] 1 [=] _[I]_ [.] [The]
+solution to (9) is then computed using the PCG method, summarized in Appendix A.2 (see Algorithm 3). Similarly, for the second step in (9), using the structure present in ( _G, H_ ), the variables
+_zt_ = ( _xt, ut_ ) are computed in parallel over _t_ = 0 _, . . ., T_ to maximize efficiency on the GPU:
+
+_xt_ = _−Q_ _[−]_ _t_ [1]       - _qt_ + _A_ [+] _t−_ _[⊤]_ 1 _[λ][t]_ [ +] _[ A]_ _t_ _[⊤][λ][t]_ [+1]       - _,_ _ut_ = _−Rt_ _[−]_ [1]       - _rt_ + _Bt_ _[⊤][λ][t]_ [+1]       - _,_ (11)
+
+for all _t_ = 0 _, . . ., T_ _−_ 1, with _A_ [+] _−_ 1 [=] _[ I]_ [with the last state given by] _[ x][T]_ [=] _[ −][Q][−]_ _T_ [1] - _qT_ + _A_ [+] _T −_ _[⊤]_ 1 _[λ][T]_ �.
+
+
+While PCG is an iterative routine, we found that it is particularly suitable for differentiable optimization on the GPU as 1) the preconditioner Φ _[−]_ [1] reduces the condition number of _S_ while retaining
+the parallel-friendly block-tridiagonal structure of _S_, thus enabling parallelization, and 2) its warmstarting capabilities, which are useful when repeating calls to DiffMPC in an MPC setting.
+
+
+3.4 ADDITIONAL IMPLEMENTATION DETAILS AND PROPERTIES OF DI F FMPC
+Next, we describe details and design choices of DiffMPC that optimize for speed and parallelism.
+
+
+**Line search** : After solving **QP**, a standard line search (Nocedal & Wright, 2006, Algorithm 18.3)
+is used to select an appropriate step towards the solution of **OCP** . The merit function is defined as a
+weighted sum of the cost and constraints, and is evaluated in parallel over different predefined step
+sizes to further leverage GPU parallelism. Details about the line search are in Appendix A.3.
+
+
+**Warm-starting and reusing computations** : The forward and backward passes of DiffMPC can be
+warm-started with previously computed solutions to the SQP and PCG loops. Also, since the KKT
+matrix for the forward pass is the same for the backward pass, multiple matrices from the forward
+pass are passed to the backward pass instead of being recomputed. Figure 2 summarizes data flows.
+
+
+**Exact SQP vs iLQR** : To form **QP**, an exact SQP scheme would use cost matrices corresponding to
+the Hessian of the Lagrangian of **OCP** (Nocedal & Wright, 2006) ( _Q, R_ ) := _∇_ [2] _z_ _[L]_ [ =] _[ ∇]_ [2] _z_ _[c]_ [+] _[∇]_ [2] _z_ _[λ][⊤][f]_ [,]
+which requires using the KKT multipliers associated with the equality constraints and additional
+modifications (e.g., Gauss-Newton approximations) to ensure reliable descent on the problem and
+that ( _Q, R_ ) are positive definite. Similarly, the constraints curvature could be accounted for in the
+backward pass, leading to a different KKT matrix (see, e.g., Frey et al. (2025)). As in (Amos et al.,
+2018) (and as is standard practice in SQP (Jordana et al., 2025) and done in iLQR), we neglect the
+curvature of the dynamics to formulate the cost matrices of **QP** as ( _Q, R_ ) := _∇_ [2] _z_ _[c]_ [ and rely on a line]
+search for robustness. This scheme may result in degraded accuracy for the gradients (see e.g. (Frey
+et al., 2025, Figure 2)). However, it is easier to implement, works well in many applications, and
+does not require computing second-order derivatives of the constraints that can be computationally
+expensive to evaluate.
+
+
+**Parallelism,** **DiffMPC** **vs** **iLQR** : Classical algorithms for solving **OCP** such as iLQR use Riccati recursions, and thus operate sequentially over time _t_ = 0 _, . . ., T_ to solve **OCP** . In contrast,
+DiffMPC benefits from multiple sources of parallelism over time steps. First, all matrices are evaluated in parallel for each SQP iteration (e.g., ( _Qt, Rt, At, . . ._ ) and blocks of ( _S,_ Φ _[−]_ [1] )). Second,
+while the PCG routine (Algorithm 3) is iterative, it leverages parallelization over time _t_ for both the
+forward and backward passes. The warm-starting capabilities of PCG enable fast numerical resolution in MPC applications, whereas the Riccati recursions of iLQR do not leverage warm-starting
+over problem instances. Leveraging parallelism, warm-starting capabilities, and batching over problem instances makes DiffMPC well-suited for learning policies on the GPU.
+
+
+3.5 REINFORCEMENT LEARNING AND IMITATION LEARNING
+DiffMPC is a fully differentiable policy, making it compatible with standard learning paradigms
+such as **reinforcement learning** (RL) and **imitation learning** (IL):
+
+
+_,_ _xt_ +1 = SimEnv( _xt, π_ _[θ]_ ( _xt_ )) _,_ _x_ 0 _∼D_ initial states (12)
+
+
+**RL:** max E
+_θ_
+
+
+- _H_
+
+
+- _R_ ( _xt, π_ _[θ]_ ( _xt_ ))
+
+
+_t_ =1
+
+
+**IL:** min E  - _∥_ (ˆ _u_ 0 _, . . .,_ ˆ _uT_ ) _−_ _π_ 0: _[θ]_ _T_ [(] _[x]_ [0][)] _[∥]_ [2][�] _,_ ( _x_ 0 _,_ ˆ _u_ 0 _, . . .,_ ˆ _uT_ ) _∼D_ demonstrations (13)
+_θ_
+
+with an MPC policy _π_ _[θ]_ parametrized in _θ_ :
+
+**MPC Policy:** _π_ 0: _[θ]_ _T_ [(] _[x]_ [0][) := (] _[u]_ 0 _[θ][, . . ., u][θ]_ _T_ [)] _[,]_ where ( _x_ _[θ]_ 0 _[, u][θ]_ 0 _[, . . ., x][θ]_ _T_ [)][ solves OCP] _[.]_ (14)
+
+
+5
+
+
+Forward pass
+
+
+**Algorithm 1** Forward Pass (SQP).
+
+
+**Inputs** : Initial guess ( _x, u, λ_ ), Tolerance _ϵ_
+1: **while** not converged **do**
+2: Evaluate ( _Q, R, q, r, A, B, C_ ) Eq. 4
+3: Evaluate ( _S, γ,_ Φ _[−]_ [1] ) Eq. 8
+4: _λ ←_ **PCG** ( _S, γ,_ Φ _[−]_ [1] _, λ_ ) Alg. 3
+5: Evaluate **QP** solution ( _x_ [+] _, u_ [+] ) Eq. 11
+6: ( _x, u_ ) _←_ Linesearch( _x_ [+] _, u_ [+] _, x, u_ ) Sec. A.3
+
+7: **Return** : Solution ( _x, u, λ_ ), **QP** matrices
+( _Q, R, . . ._ ), Schur matrices ( _S,_ Φ _[−]_ [1] )
+
+
+**Algorithm 2** Backward Pass (sensitivities).
+
+
+PCG
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+( _z, S,_ Φ _[−]_ [1] )
+
+
+PCG
+
+
+**Inputs** : Forward pass solution _z_ = ( _x, u_ ) and
+matrices ( _S,_ Φ _[−]_ [1] ), Loss gradient _[∂ℓ]_ [,] [Initial]
+
+
+matrices ( _S,_ Φ ), Loss gradient _∂z_ [,] [Initial]
+
+guess _λ_ [˜]
+1: Evaluate ˜ _γ_ using ( _−b, d_ ) _←_ ( _∂z_ _[∂ℓ]_ _[,]_ [ 0)] Eq. 8
+
+2: _λ ←_ **PCG** ( _S,_ _γ,_ Φ _[−]_ [1] _,_ _λ_ ) Alg. 3
+
+[�]    - [�]
+3: Evaluate _z_ using _λ_ Eq. 11
+      - [�]
+
+
+_∂z_ _[,]_ [ 0)] Eq. 8
+
+
+( _[∂ℓ]_
+
+
+_∂ℓ_
+_∂z_
+
+
+0
+
+
+_∂z_ _[∂ℓ]_ _[,]_ [ ˜] _[λ]_ [)]
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+_⊤_ [�] _z_ ��
+
+_[∂F]_ _∂θ_ _λ_ - Eq. 3
+
+
+Backward pass
+
+Figure 2: DiffMPC architecture: forward and
+backward passes, data flows, and main steps.
+
+
+4: Evaluate _[∂ℓ]_
+
+
+5: **Return** : Gradient _∂θ_ _[∂ℓ]_ [, solution][ ˜] _[λ]_
+
+
+_[∂ℓ]_
+
+_∂θ_ _[←−]_ _[∂F]_ _∂θ_
+
+
+In (12), _R_ is a reward function, SimEnv is a simulator for the environment, and _D_ initial states is a
+distribution over initial states. In (13), _D_ demonstrations provides demonstration samples for imitation
+learning. In this work, we conduct RL using a differentiable simulation environment, though this is
+not required as DiffMPC could be used as a component of other differentiable policy architectures.
+Compared to black-box policies, DiffMPC can leverage physics-informed inductive biases through
+its dynamics model and through solving **OCP** . Its gradients can be computed as described in the
+previous section. Since the algorithm is tailored for GPUs, large batch sizes can be used for training.
+
+
+4 RESULTS: FASTER SOLVES AND LEARNING ON THE GPU
+
+
+We implement DiffMPC in JAX and evaluate it on reinforcement learning and imitation learning tasks. We compare it with three state-of-the-art differentiable solvers: the PyTorch-based
+nonlinear least-squares solver Theseus (Pineda et al., 2022), the PyTorch-based iLQR solver
+mpc.pytorch (Amos et al., 2018), and the JAX-based iLQR solver Trajax (Frostig et al., 2021).
+
+
+4.1 TIMING RESULTS FOR REINFORCEMENT LEARNING
+We consider randomly-generated MPC problems with quadratic costs and affine dynamics constraints. Details about problem randomization are in the appendix. Since the problems are convex,
+we disable the line search for all methods and restrict all solvers to a single iteration, which enables
+a fairer comparison. The RL task consists of maximizing the reward _R_ ( _x, u_ ) := _−_ ( _∥x∥_ [2] 2 [+] _[ ∥][u][∥]_ 2 [2][)]
+aggregated over 50 environment time steps for a batch size of 64 randomized environments, by learning the MPC’s quadratic cost parameters. Forward- and backward-pass computation times measure
+the time to compute the aggregate reward over batched rollouts and their gradients with respect to
+the cost parameters. Statistics for each problem are averaged over 10 seeds. Details are in Appendix
+B.1 along with additional results on other problems.
+
+
+**Comparison of computation times.** Figure 3 compares solve times of the different solvers. First,
+for this problem (and all tested, see Table 3 in the appendix), Theseus is the slowest, exceeding
+80 sec when run on the CPU. This slowdown is likely due to not sufficiently exploiting the timeinduced sparse structure of **OCP** . Second, mpc.pytorch and trajax are not significantly faster
+on the GPU than on the CPU, which can be attributed to their design based on sequential-in-time
+Riccati recursions. Third, on the CPU, DiffMPC lies in-between mpc.pytorch and trajax,
+so trajax should be preferred on the CPU as sequential Riccati recursions are better suited for
+CPU execution. However, on the GPU, DiffMPC is significantly faster than other solvers, with a
+
+
+6
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0
+
+
+|·1|04|Col3|Forward 6,193<br>Backward 4,394 4,460<br>3,373<br>2,702<br>1,446 1,900 1,326 1,909 1,828<br>930 954<br>219 322|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|_·_1|04||1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|||||||
+|_·_1|04||1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward||||||||
+|_·_1|04||1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|||||||||||||
+|_·_1|04||1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|||||||||||||
+|_·_1|04||1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward|||||||||||||
+|_·_1|04||1_,_326<br>219<br>1_,_446<br>1_,_909<br>4_,_394<br>930<br>954<br>2_,_702<br>322<br>3_,_373<br>4_,_460<br>6_,_193<br>1_,_900<br>1_,_828<br>Forward<br>Backward||||||||||||||
+||||||||||||||||||
+
+
+Theseus mpc.pt trajax DiffMPC Theseus mpc.pt
+(CPU) (CPU) (CPU) (CPU) (GPU) (GPU)
+
+
+mpc.pt trajax DiffMPC Theseus mpc.pt trajax DiffMPC
+(CPU) (CPU) (CPU) (GPU) (GPU) (GPU) (GPU)
+
+
+trajax DiffMPC Theseus
+(CPU) (CPU) (GPU)
+
+
+DiffMPC
+(CPU)
+
+
+trajax
+(GPU)
+
+
+Figure 3: RL computation times on one of the test problems. Error bars indicate 2 _σ_ confidence
+intervals. Each backward pass also includes one forward pass (to evaluate the inputs of Algorithm 2).
+
+
+4 times speedup over the fastest baseline for this problem. This speedup is likely due to DiffMPC
+better leveraging parallelism over time in **OCP** . In Appendix B.1, we provide additional results on
+other problems (including a nonlinear attitude stabilization task), where we also observe significant
+speedups ranging from 4-7 times over trajax (the fastest baseline) across all tested problems.
+
+
+**Warm-starting.** Using DiffMPC’s PCG routine for solving the KKT systems enables warmstarting both the forward and backward passes. Figure 10 in the appendix reports speedups
+from warm-starting, computed as the ratio [cold] cold _[−]_ [warm] comparing the RL computation times using
+
+DiffMPC and of DiffMPC with zero initial guesses provided to PCG. For the PCG exit tolerance
+_ϵ_ = 10 _[−]_ [12] that is used in this section’s results, warm-starting gives modest speedups of 4% for both
+the forward and backward passes. These speedups increase to 11% and 9% for the forward and backward passes, respectively, if the tolerance is set to _ϵ_ = 10 _[−]_ [4] . Thus, we expect additional speedups
+
+
+4.2 TIMING RESULTS FOR IMITATION LEARNING
+
+
+Next, we evaluate the method on an imitation learning
+task with nonlinear dynamics. Following the setup in
+(Amos et al., 2018), we use a cart-pole environment and
+cost parameters corresponding to expert imitation data
+collected by solving **OCP** . To this end, we minimize a
+standard mean-square-error imitation learning loss, as defined in (13). The goal of this experiment is to evaluate end-to-end training speed on an imitation learning task, with each training loop consisting of solving a
+batch of nonlinear optimization problems, computing the
+imitation loss, backpropagating gradients, and updating
+weights. Details are in Appendix B.2.
+
+
+2
+
+1 _._ 5
+1
+
+
+0 _._ 5
+0
+0 50 100 150
+
+2
+
+1 _._ 5
+1
+
+0 _._ 5
+0
+0 50 100 150
+
+
+Epochs
+
+Figure 4: Losses over 200 epochs for
+the pendulum cart-pole IL benchmark.
+
+
+On the GPU, we compare DiffMPC against trajax, as it is the fastest baseline from the previous
+section. Figure 4 reports the training loss and model loss _∥θ_ _−θ_ _[⋆]_ _∥_ 2, where _θ_ _[⋆]_ are the true parameters
+of the policy used to generate the data. DiffMPC trains approximately **2** _×_ **faster** in wall-clock time
+while maintaining convergence, highlighting its efficiency for imitation learning.
+
+
+5 APPLICATION TO DOMAIN RANDOMIZATION FOR DRIVING AT THE LIMITS
+
+
+Finally, we demonstrate the practical utility of DiffMPC in learning robust controllers for driving
+at the limits of handling under model mismatch. Existing methods for drifting remain sensitive to
+modeling errors, as unstable dynamics can cause small errors to quickly amplify and destabilize the
+vehicle. While prior works have developed learning-based and adaptive controllers (Davydov et al.,
+2025; Djeumou et al., 2024), online adaptation alone may fail to recover control of a vehicle driving
+through varying road conditions due to limited actuation. Developing controllers that are robust to
+
+
+7
+
+
+Figure 5: Proposed RL training pipeline to robustify an MPC policy _π_ _[θ]_ ( _x_ ) for drifting.
+
+
+_ωr_
+
+
+_δ_
+
+
+Timestep
+
+
+Timestep Pos. E (m) Pos. E (m)
+
+
+Figure 6: Vehicle states (left) and position trajectories (right) when drifting a figure 8 with puddles.
+
+
+disturbances such as sudden friction loss from water puddles, and simplifying their tuning process
+that can be slow and expensive, is crucial for enabling safety-critical applications.
+
+
+To this end, we use DiffMPC within a model-based RL framework for the task of robustly drifting
+trajectories using domain randomization. Here, we use DiffMPC with a differentiable simulator to
+optimize the MPC problem parameters through backpropagation. We vary the simulator model _E_ _[i]_
+by adding water puddles on the road at random locations that reduce available tire forces by modifying physical parameters such as tire friction coefficients, and starting the simulations from varying
+starting conditions _x_ _[i]_ 0 [.] [For] [each] [initial] [state-environment] [tuple] [(] _[x][i]_ 0 _[,][ E]_ _[i]_ [)][,] [we] [generate] [closed-loop]
+rollouts of 200 steps by repeatedly solving the MPC problem, applying the control _u_ _[θ]_ _t_ [, and simulat-]
+ing the evolution of the system given the sampled environments _E_ _[i]_ . These simulation environments
+use high-accuracy dynamics integrators and account for control delays, which would be difficult to
+do in the MPC controller without increasing the complexity of **OCP** . The total reward is aggregated
+over the batched rollouts, then backpropagated to learn the policy parameters _θ_, which consist of
+the cost weights and the tire friction parameters in **OCP** . We found that using a large episode length
+( _>_ 100 time steps) and batch size ( _≥_ 32) is necessary for robust training. We train the policy for
+1000 steps with a batch size of 32, taking 14 hours on an NVIDIA GeForce RTX 4090. Further
+details are in Appendix B.3.
+
+
+**Changes** **in** **parameters** **after** **training** : MPC parameters pre- and post-training are in Figure 12
+in the appendix. Baseline weights were manually tuned using domain knowledge and tests on a
+vehicle in nominal dry conditions. The learned policy has significantly decreased the rear tire friction
+coefficient in its prediction model (change of -13%) and decreased the cost term associated with
+sideslip angle errors in the objective function of **OCP** (change of -58%). These learned parameters
+are physically reasonable, but they would have been difficult to obtain by hand, given the surprisingly
+asymmetric reduction in rear tire friction coefficients. Using these parameters enables the policy to
+trade off higher sideslip tracking errors for increased robustness to water puddles, and selecting
+lower engine torques, resulting in more robust drifting as shown next.
+
+
+**Improved** **robustness** **in** **simulation** : Figure 6 shows twenty roll-outs over randomized environments for the baseline and learned policies, as described in Appendix B.3. The learned policy is
+significantly more robust, succeeding in 100% of the trials compared to the 70% success rate of the
+baseline policy. The learned policy selects smaller steering angles and motor torques than the baseline. These actions result in drifting with lower sideslip (the angle between the longitudinal axis and
+the velocity vector of the vehicle) and lower wheel speed, which gives additional buffers to avoid
+
+
+8
+
+
+Figure 7: Vehicle drifting through a water puddle: top view (left) and center view (right). The Supra
+robustly drifts despite variations in friction, which requires carefully selecting actions and sideslip.
+
+
+Figure 8: Drifting a donut with a water puddle with a Toyota Supra. Left: State trajectories of two
+runs with the baseline vs the learned policy. Right: top view trajectories of the runs.
+
+
+saturating actuation limits and spinning out after drifting through water puddles. These changes
+result in significant robustness gains despite model mismatch.
+
+
+**Results on a Toyota Supra** : The learned MPC policy is then deployed on a Toyota Supra drifting a
+donut trajectory through water puddles. Results are shown in Figures 7 and 8. Although RL training
+is only conducted on figure-8 trajectories, the learned policy transfers successfully to drifting a
+circle without additional tuning, thanks to the inductive biases of MPC. In contrast to the baseline
+that consistently spins out due to the water puddle, the learned policy applies lower engine torques
+to reduce wheel speeds and maintain lower controlled sideslip angles _β_ throughout the drifting
+manoeuver. Further results for drifting the figure 8 trajectory are in the appendix. Overall, these
+results show that training a differentiable MPC policy via RL and domain randomization can produce
+robust, transferable controllers for driving at the limits of handling.
+
+
+6 DISCUSSION AND LIMITATIONS
+
+
+While differentiable optimization tools often rely on iterative algorithms (such as gradient descent,
+SQP, and PCG), exploiting parallelism in the problem structure gives opportunities to leverage GPUs
+to efficiently solve such optimization problems. In this work, we exploit the time-induced sparsity
+of optimal control problems to yield an efficient differentiable optimization tool for model predictive
+control that outperforms existing tools when run on the GPU, even for modest batch sizes. This tool
+offers the strong inductive biases of model-based control in a package that better scales to the demands of data-driven methods, enabling integration of model-based and learning-based approaches.
+
+
+**Limitations and future work** : First, additional inequality constraints can be accounted for in **OCP**
+by penalizing them in the cost, and control bounds can be accounted for in the dynamics (e.g., control bounds are enforced in the simulator for RL in Section 5). Handling such inequality constraints
+via augmented Lagrangian or interior-point methods (Howell et al., 2022; Bambade et al., 2024;
+Frey et al., 2025; Zuliani et al., 2025) might lead to more reliable convergence and higher-quality
+solutions. However, reliably differentiating through such problems remains challenging, since gradients can be discontinuous at the boundary of the constraints. Second, since DiffMPC is tailored to
+the GPU and implemented in JAX, it runs slower on the CPU than on the GPU. Rewriting the solver
+in C / C++ would give speedups over our JAX implementation, albeit other approaches using Riccati
+recursions might outperform DiffMPC on the CPU. Fourth, DiffMPC does not explicitly support
+tuning solver hyperparameters such as the maximum number of iterations or the PCG tolerance,
+though its ability to run in parallel over problem instances on the GPU might help tune such hy
+
+9
+
+
+perparameters. Finally, poor initial guesses for the solutions and parameters of differentiable MPC
+tools can result in divergence of the solver and hinder the downstream training pipeline, motivating
+future work towards robust initializations for differentiable optimization pipelines.
+
+
+**Reproducibility statement.** Code to reproduce results in Section 4 is available at
+
+
+[https://github.com/ToyotaResearchInstitute/diffmpc](https://github.com/ToyotaResearchInstitute/diffmpc)
+
+
+REFERENCES
+
+
+E. Adabag, M. Atal, W. Gerard, and B. Plancher. MPCGPU: Real-time nonlinear model predictive
+control through preconditioned conjugate gradient on the GPU. In _Proc. IEEE Conf. on Robotics_
+_and Automation_, 2024.
+
+
+A. Agrawal, B. Amos, S. Barratt, S. Boyd, S. Diamond, and Z. Kolter. Differentiable convex optimization layers. In _Conf. on Neural Information Processing Systems_, 2019.
+
+
+L. Amatucci, J. Sousa-Pinto, G. Turrisi, D. Orban, V. Barasuol, and C. Semini. Primal-dual iLQR for
+GPU-accelerated learning and control in legged robots. [Available at https://arxiv.org/](https://arxiv.org/abs/2506.07823)
+[abs/2506.07823, 2025.](https://arxiv.org/abs/2506.07823)
+
+
+B. Amos and Z. Kolter. Optnet: Differentiable optimization as a layer in neural networks. In
+_International conference on machine learning_, pp. 136–145. PMLR, 2017.
+
+
+B. Amos, I. D. J. Rodriguez, J. Sacks, B. Boots, and Z. Kolter. Differentiable MPC for end-to-end
+planning and control. _Conf. on Neural Information Processing Systems_, 31, 2018.
+
+
+S. Arnold, P. Mahajan, D. Datta, I. Bunner, and K. S. Zarkias. learn2learn: A library for MetaLearning research. August 2020. [URL http://arxiv.org/abs/2008.12284.](http://arxiv.org/abs/2008.12284)
+
+
+A. Bambade, F. Schramm, A. Taylor, and J. Carpentier. Leveraging augmented-Lagrangian techniques for differentiating over infeasible quadratic programs in machine learning. In _Int. Conf. on_
+_Learning Representations_, 2024.
+
+
+M. Bhardwaj, B. Boots, and M. Mukadam. Differentiable Gaussian process motion planning. In
+_Proc. IEEE Conf. on Robotics and Automation_, 2020.
+
+
+A. L. Bishop, J. Z. Zhang, S. Gurumurthy, K. Tracy, and Z. Manchester. ReLU-QP: A GPUaccelerated quadratic programming solver for model-predictive control. In _Proc._ _IEEE_ _Conf._
+_on Robotics and Automation_, 2024.
+
+
+M. Blondel and V. Roulet. The elements of differentiable programming, 2024. URL [https:](https://arxiv.org/abs/2403.14606)
+[//arxiv.org/abs/2403.14606.](https://arxiv.org/abs/2403.14606)
+
+
+M. Blondel, Q. Berthet, M. Cuturi, R. Frostig, S. Hoyer, F. Llinares-L´opez, F. Pedregosa, and J.P. Vert. Efficient and modular implicit differentiation. _Conf._ _on_ _Neural_ _Information_ _Processing_
+_Systems_, 35:5230–5242, 2022.
+
+
+X. Bu and B. Plancher. Symmetric stair preconditioning of linear systems for parallel trajectory
+optimization. In _Proc. IEEE Conf. on Robotics and Automation_, 2024.
+
+
+G. M. Chari, A. G. Kamath, P. Elango, and b. Acikmese. Fast Monte Carlo analysis for 6-DoF
+powered-descent guidance via GPU-accelerated sequential convex programming. In _AIAA Scitech_
+_Forum_, 2024.
+
+
+Y. Chen, D. Tse, P. Nobel, P. Goulart, and S. Boyd. CuClarabel: GPU acceleration for a conic
+optimization solver. [Available at https://arxiv.org/abs/2412.19027, 2024.](https://arxiv.org/abs/2412.19027)
+
+
+M. Cummins, A. Padoan, K. Moffat, F. D¨orfler, and J. Lygeros. DeePC-Hunt: Data-enabled predictive control hyperparameter tuning via differentiable optimization. In _Learning for Dynamics &_
+_Control Conference_, 2025.
+
+
+A. Davydov, F. Djeumou, M. Greiff, M. Suminaka, M. Thompson, J. Subosits, and T. Lew. First,
+learn what you don’t know: Active information gathering for driving at the limits of handling.
+_IEEE Robotics and Automation Letters_, 2025.
+
+
+10
+
+
+DeepMind, I. Babuschkin, K. Baumli, A. Bell, S. Bhupatiraju, J. Bruce, P. Buchlovsky, D. Budden, T. Cai, A. Clark, I. Danihelka, A. Dedieu, C. Fantacci, J. Godwin, C. Jones, R. Hemsley,
+T. Hennigan, M. Hessel, S. Hou, S. Kapturowski, T. Keck, I. Kemaev, M. King, M. Kunesch,
+L. Martens, H. Merzic, V. Mikulik, T. Norman, G. Papamakarios, J. Quan, R. Ring, F. Ruiz,
+A. Sanchez, L. Sartran, R. Schneider, E. Sezener, S. Spencer, S. Srinivasan, M. Stanojevic,
+W. Stokowiec, L. Wang, G. Zhou, and F. Viola. The DeepMind JAX Ecosystem, 2020. URL
+[http://github.com/google-deepmind.](http://github.com/google-deepmind)
+
+
+T. Deleu, T. W¨urfl, M. Samiei, J. P. Cohen, and Y. Bengio. Torchmeta: A meta-learning library for
+pytorch, 2019. [URL https://arxiv.org/abs/1909.06576.](https://arxiv.org/abs/1909.06576)
+
+
+F. Djeumou, T. Lew, N. Ding, M. Thompson, M. Suminaka, M. Greiff, and J. Subosits. One model
+to drift them all: Physics-informed conditional diffusion model for driving at the limits. In _Annual_
+_Conference on Robot Learning_, 2024.
+
+
+M. Feng, Z. Frangella, and M. Pilanci. CRONOS: Enhancing deep learning with scalable GPU
+accelerated convex neural networks. In _Conf. on Neural Information Processing Systems_, 2024.
+
+
+J. Frey, K. Baumgartner, G. Frison, D. Reinhardt, J. Hoffmann, L. Fichtner, S. Gros, and M. Diehl.
+Differentiable nonlinear model predictive control. _[Available at https://arxiv.org/abs/](https://arxiv.org/abs/2505.01353)_
+_[2505.01353](https://arxiv.org/abs/2505.01353)_, 2025.
+
+
+R. Frostig, S. Sindhwani, and S. Tu. Trajax, 2021. URL [http://github.com/google/](http://github.com/google/trajax)
+[trajax.](http://github.com/google/trajax)
+
+
+J. Goh and C. Gerdes. Simultaneous stabilization and tracking of basic automobile drifting trajectories. In _IEEE Intelligent Vehicles Symposium_, 2016.
+
+
+S. Gould, B. Fernando, A. Cherian, P. Anderson, R. S. Cruz, and E. Guo. On differentiating parameterized argmin and argmax problems with application to bi-level optimization. Available at
+[https://arxiv.org/abs/1607.05447, 2016.](https://arxiv.org/abs/1607.05447)
+
+
+R. Grandia, F. Farshidian, E. Knoop, C. Schumacher, M. Hutter, and M. B¨acher. DOC: Differentiable
+optimal control for retargeting motions onto legged robots. _ACM Transactions on Graphics_, 42
+(4):1–14, July 2023.
+
+
+S. Gros, M. Zanon, R. Quirynen, A. Bemporad, and M. Diehl. From linear to nonlinear MPC:
+bridging the gap via the real-time iteration. _International Journal of Control_, 93(1):62–80, 2020.
+
+
+T. A. Howell, K. Tracy, S. Le Cleac’h, and Z. Manchester. Calipso: A differentiable solver for
+trajectory optimization with conic and complementarity constraints. In _Int._ _Symp._ _on_ _Robotics_
+_Research_, 2022.
+
+
+S. H. Jeon, S. Hong, H. J. Lee, C. Khazoom, and S. Kim. Cusadi: A GPU parallelization framework
+for symbolic expressions and optimal control. _IEEE Robotics and Automation Letters_, 2024.
+
+
+A. Jordana, S. Kleff, A. Meduri, J. Carpentier, N. Mansard, and L. Righetti. Structure-exploiting
+sequential quadratic programming for model-predictive control. _IEEE Transactions on Robotics_,
+41:4960–4974, 2025.
+
+
+X. Kang, s. Xu, J. Sarva, L. Liang, and H. Yang. Fast and certifiable trajectory optimization. In
+_Workshop on Algorithmic Foundations of Robotics_, 2024.
+
+
+P. Karkus, B. Ivanovic, S. Mannor, and M. Pavone. Diffstack: A differentiable and modular control
+stack for autonomous vehicles. In _Conf. on Robot Learning_, 2023.
+
+
+P. Kidger. _On Neural Differential Equations_ . PhD thesis, University of Oxford, 2021.
+
+
+B. Landry, Z. Manchester, and M. Pavone. A differentiable augmented lagrangian method for bilevel
+nonlinear optimization. _arXiv preprint arXiv:1902.03319_, 2019.
+
+
+J. M. Lee. _Introduction to Smooth Manifolds_ . Springer New York, second edition, 2012.
+
+
+11
+
+
+T. Lew, M. Greiff, F. Djeumou, M. Suminaka, M. Thompson, and J. Subosits. Risk-averse model
+predictive control for racing in adverse conditions. In _Proc. IEEE Conf. on Robotics and Automa-_
+_tion_, 2025.
+
+
+A. Montoison and J.-B. Caillau. Modeling and optimization of control problems on GPUs. Available
+[at https://arxiv.org/abs/2510.03932, 2025.](https://arxiv.org/abs/2510.03932)
+
+
+J. Nocedal and S. J. Wright. _Numerical Optimization_ . Springer New York, second edition, 2006.
+
+
+L. Pineda, T. Fan, M. Monge, S. Venkataraman, P. Sodhi, R. T. Q. Chen, J. Ortiz, D. DeTone,
+A. Wang, S. Anderson, et al. Theseus: A library for differentiable nonlinear optimization. _Conf._
+_on Neural Information Processing Systems_, 35:3801–3818, 2022.
+
+
+J. Ren, X. Feng, B. Liu, X. Pan, Y. Fu, L. Mai, and Y. Yang. TorchOpt: An efficient library for
+differentiable optimization. _Journal of Machine Learning Research_, 24(367):1–14, 2023.
+
+
+A. Romero, E. Aljalbout, Y. Song, and D. Scaramuzza. Actor-critic model predictive control: Differentiable optimization meets reinforcement learning. _arXiv preprint arXiv:2306.09852_, 2024.
+
+
+M. Schubiger, G. Banjac, and J. Lygeros. GPU acceleration of ADMM for large-scale quadratic
+programming. _Journal of Parallel and Distributed Computing_, 144:55–67, 2020.
+
+
+S. Singh, J.-J. Slotine, and V. Sindhwani. Optimizing trajectories with closed-loop dynamic SQP.
+In _Proc. IEEE Conf. on Robotics and Automation_, 2022.
+
+
+B. Stellato, G. Banjac, P. Goulart, A. Bemporad, and S. Boyd. OSQP: an operator splitting solver
+for quadratic programs. _Mathematical Programming Computation_, 12(4):637–672, 2020.
+
+
+J. Svendenius. _Tire Modeling and Friction Estimation_ . Doctoral thesis, Lund Institute of Technology,
+Lund University, 2007.
+
+
+W. Wan, Z. Wang, Y. Wang, Z. Erickson, and D. Held. Difftori: Differentiable trajectory optimization for deep reinforcement and imitation learning. _Conf. on Neural Information Processing_
+_Systems_, 2024.
+
+
+R. Zuliani, E. Balta, and J. Lygeros. Differentiable by design nonlinear optimization and its application to model predictive control. [Available at https://arxiv.org/abs/2509.12692,](https://arxiv.org/abs/2509.12692)
+2025.
+
+
+12
+
+
+APPENDIX
+
+
+A SOLVER: ADDITIONAL DETAILS
+
+
+A.1 VECTOR-JACOBIAN PRODUCTS (VJPS) VS JACOBIAN-VECTOR PRODUCTS (JVPS)
+
+
+From (3), vector-Jacobian products (VJP) for computing gradients of scalar-valued functions of
+solutions to optimization problems can be computed as
+
+
+_⊤_ [�] _z_
+
+  _λ_  
+
+
+- _,_ where �� _z_
+_λ_     
+
+
+_⊤_ [�] _∂F_
+
+
+_∂w_
+
+
+- _−_ 1
+_v_ = _−_ _[∂F]_
+
+_∂θ_
+
+
+- _∂F_
+solves
+_∂w_
+����
+( _n_ + _q_ ) _×_ ( _n_ + _q_ )
+
+
+�� _z_ _λ_ 
+
+����
+( _n_ + _q_ )
+
+
+= _v_ _,_
+����
+( _n_ + _q_ )
+
+
+_∂w_
+
+
+_∂θ_
+
+
+_⊤_
+_v_ = _−_ _[∂F]_
+
+_∂θ_
+
+
+where _[∂F]_ _∂w_ _[∈]_ [R][(] _[n]_ [+] _[q]_ [)] _[×]_ [(] _[n]_ [+] _[q]_ [)] [is] [symmetric,] [(] _[z,]_ [�] [ �] _[λ]_ [)] _[∈]_ [R] _[n]_ [+] _[q]_ [,] [and] _[v]_ _[∈]_ [R] _[n]_ [+] _[q]_ [.] [In] [contrast,] [computing]
+
+JVPs of the form _[∂w]_ _[v]_ [requires computing the full Jacobian] _[∂z]_ _[∈]_ [R] _[n][×][p]_ [, which is the solution to] _[ p]_
+
+
+where _[∂F]_
+
+
+JVPs of the form _[∂w]_ _∂θ_ _[v]_ [requires computing the full Jacobian] _[∂z]_ _∂θ_ _[∈]_ [R] _[n][×][p]_ [, which is the solution to] _[ p]_
+
+linear systems. Indeed, by (2), each sensitivity _[∂z]_ [is obtained by solving]
+
+
+_[∂w]_ _∂θ_ _[v]_ [requires computing the full Jacobian] _[∂z]_ _∂θ_
+
+
+_∂θi_ [is obtained by solving]
+
+
+= _−_ _[∂F]_ _._
+
+_∂θi_
+
+
+_∂F_
+
+_∂w_
+
+
+- _∂z_
+_∂θi_
+_∂λ_
+_∂θi_
+
+
+Thus, reverse mode differentiation via VJPs is preferred to forward mode differentiation via JVPs in
+many applications, such as reinforcement learning and imitation learning.
+
+
+A.2 PCG ALGORITHM
+
+
+The Projected Conjugate Gradient (PCG) algorithm introduced in (Adabag et al., 2024) is used to
+solve the linear KKT systems in DiffMPC (see Algorithm 3). Note that _γ_ in (9) takes the form
+
+_γ_ = _d_ + ( _Q_ _[−]_ 0 [1] _[q]_ [0] _[, ζ]_ [0] _[, ζ]_ [1] _[, . . ., ζ][T][ −]_ [1][)] _[,]_
+
+with _ζt_ = _AtQ_ _[−]_ _t_ [1] _[q][t]_ [+] _[ B][t][R]_ _t_ _[−]_ [1] _[r][t]_ [+] _[ A]_ [+] _k_ _[Q]_ _t_ _[−]_ +1 [1] _[q][t]_ [+1][ for all] _[ t]_ [.] [Also, lines 1, 2, 6, and 11 of Algorithm 3]
+are parallelized over time, reducing computation times when executed on the GPU.
+
+
+A.3 LINE SEARCH
+
+
+After solving each **QP**, we use a standard line search method (Nocedal & Wright, 2006, Algorithm
+18.3) described next. Below, we denote by _z_ [+] = ( _x_ [+] _, u_ [+] ) the solution to **QP**, which is evaluated
+at _z_ = ( _x, u_ ). The objective of the line search is to select an appropriate step size _α_ _∈_ (0 _,_ 1] so the
+new solution ( _x_ + _α_ ( _x_ [+] _−_ _x_ ) _, u_ + _α_ ( _u_ [+] _−_ _u_ )) is closer to an optimal solution to **OCP** .
+
+
+The line search uses a merit function _φ_ defined as the weighted sum of the cost and constraints
+
+_φ_ ( _x, u_ ) :=       - ( _c_ _[x]_ _t_ [(] _[x][t]_ [) +] _[ c]_ _t_ _[u]_ [(] _[u][t]_ [) +] _[ µ][ ∥][f]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)] _[∥]_ 1 [)] _[,]_ (15)
+
+_t_
+
+
+where the penalty parameter _µ_ is set as in (Nocedal & Wright, 2006, Equation 18.33 with _ρ_ = 0 _._ 5):
+
+
+_t_ _[∇][c]_ _t_ _[x]_ [(] _[x][t]_ [)] _[⊤]_ [(] _[x]_ _t_ [+] _[−]_ _[x][t]_ [) +] _[ ∇][c]_ _t_ _[u]_ [(] _[u][t]_ [)] _[⊤]_ [(] _[u]_ _t_ [+] _[−]_ _[u][t]_ [)]
+0 _._ 5 [�] _t_ _[∥][f]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)] _[∥]_ [1]
+
+
+ _µ_ =
+
+
+_._ (16)
+_t_ _[∥][f]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)] _[∥]_ [1]
+
+
+The decrease condition for accepting a step size _α_ is (Nocedal & Wright, 2006, Equation 18.28)
+
+
+∆ _φα_ := _φ_ ( _x_ + _α_ ∆ _x, u_ + _α_ ∆ _u_ ) _−_ _φ_ ( _x, u_ ) _−_ _ηαDµ._ (17)
+
+
+for some _η_ _∈_ (0 _,_ 1) (we use _η_ = 0 _._ 4), with descent direction defined as (Nocedal & Wright, 2006,
+Equation 18.29)
+
+_Dµ_ =    - _∇c_ _[x]_ _t_ [(] _[x][t]_ [)] _[⊤]_ [(] _[x]_ _t_ [+] _[−]_ _[x][t]_ [) +] _[ ∇][c]_ _t_ _[u]_ [(] _[u][t]_ [)] _[⊤]_ [(] _[u]_ _t_ [+] _[−]_ _[u][t]_ [)] _[ −]_ _[µ][∥][f]_ [(] _[x][t]_ [+1] _[, x][t][, u][t]_ [)] _[∥]_ [1] _[.]_ (18)
+
+_t_
+
+
+Merit function values _φ_ ( _x_ + _α_ ∆ _x, u_ + _α_ ∆ _u_ ) are evaluated in parallel over different pre-defined
+
+_↘_
+
+step sizes in decreasing order _α_ := _{_ 1 _._ 0 _,_ 0 _._ 7 _,_ 0 _._ 3 _,_ 0 _._ 1 _,_ 0 _._ 01 _}_ . The line search method is described in
+
+further details in Algorithm 4.
+
+
+13
+
+
+**Algorithm 3** PCG for solving _Sλ_ = _γ_ in (10)
+(Adabag et al., 2024).
+
+
+**Inputs** : _S, γ,_ Φ _[−]_ [1], initial guess _λ_, tolerance _ϵ_
+1: _r_ = _γ −_ _Sλ_ _▷rt_ = _γt −_ _Stλt−_ 1: _t_ +1
+2: _r_ ˜ = Φ _[−]_ [1] _r_ _▷_ _r_ ˜ _t_ = Φ _[−]_ _t_ [1] _[r][t][−]_ [1:] _[t]_ [+1]
+3: _p_ = _r_ ˜
+4: _η_ = _r_ _[⊤]_ _r_ ˜
+5: **while** _η_ _> ϵ_ **do**
+6: _y_ = _Sp_ _▷yt_ = _Stpt−_ 1: _t_ +1
+7: _v_ = _p_ _[⊤]_ _y_
+8: _α_ = _η/v_
+9: _λ_ = _λ_ + _αp_
+10: _r_ = _r −_ _αy_
+11: _r_ ˜ = Φ _[−]_ [1] _r_ _▷_ _r_ ˜ _t_ = Φ _[−]_ _t_ [1] _[r][t][−]_ [1:] _[t]_ [+1]
+12: _η_ _[′]_ = _r_ _[⊤]_ _r_ ˜
+13: _β_ = _η_ _[′]_ _/η_
+14: _p_ = _r_ ˜ + _βp_
+15: _η_ = _η_ _[′]_
+
+16: **return** : solution _λ_ to the system _Sλ_ = _γ_
+
+
+**Algorithm 4** Linesearch for SQP.
+
+
+**Inputs** : Previous solution _z_ = ( _x, u_ ) for formulating **QP**, solution _z_ [+] = ( _x_ [+] _, u_ [+] ) to **QP**,
+
+_↘_
+
+candidate step sizes _α_ = _{_ 1 _._ 0 _,_ 0 _._ 7 _, . . . }_
+
+
+1: Evaluate merit function _φ_ ( _x, u_ ) Eq. 15
+2: Evaluate penalty parameter _µ_ Eq. 16
+3: Evaluate descent direction _Dµ_ Eq. 18
+
+_↘_
+
+4: **for** _α ∈_ _α_ **do** in parallel
+
+5: Evaluate decrease condition ∆ _φα_ Eq. 17
+
+_↘_
+
+6: _α ←_ min( _α_ )
+
+
+4: **for** _α ∈_
+
+
+_↘_
+_α_ )
+
+
+_↘_
+
+7: **for** _α ∈_ _α_ **do** sequentially
+
+   
+8:9: **if** ∆ _α ←φα_  - _α<_ 0 **then** select largest step size
+
+     10: Break
+11: **Return** : New solution ( _x_ + _α_ ( _x_ [+] _−_ _x_ ) _, u_ +
+_α_ ( _u_ [+] _−_ _u_ ))
+
+
+B RESULTS: ADDITIONAL DETAILS AND EXPERIMENTS
+
+
+In this section, _y_ _∼N_ (¯ _y,_ Σ) denotes a Gaussian random variable with mean ¯ _y_ and covariance matrix
+Σ, and _y_ _∼U_ ([ _a, b_ ]) denotes a uniform random variable in the interval [ _a, b_ ].
+
+
+B.1 REINFORCEMENT LEARNING BENCHMARK
+
+
+For the RL benchmark, we start by describing the solvers used and how they were modified to produce a fair comparison of Theseus, mpc.pytorch, trajax, and DiffMPC. We then consider
+a linear problem to facilitate ablations on the problem size and study the impact of warm starting
+on the PCG algorithm. Finally, we consider a nonlinear spacecraft example where we compare the
+computation times for trajax and DiffMPC.
+
+
+**Setup.** For this RL benchmark, we use an evaluation scheme simi
+Table 1: Computation times
+
+lar to the RL pipeline in Fig. 5. All methods use compute gradients
+
+(s) with mpc.pytorch for
+
+via implicit differentiation and use float64 precision. Timing is con
+Problem 1 on the GPU.
+
+ducted on a workstation with a 64-Core AMD Threadripper 3990X
+CPU and a NVIDIA GeForce RTX 3090 GPU running Ubuntu Pass Original Modified
+22.04. For these evaluations on **QP** problems, mpc.pytorch is
+
+Fwd 67 _._ 9 **1** _._ **9**
+
+constrained to 1 iLQR iteration, the line search is disabled, and flags
+are set so that it exits after the first iteration without detaching gra- Bwd 136 _._ 4 **4** _._ **5**
+dients. The original code is slightly modified to eliminate a serial
+list comprehension that causes the library to scale poorly when inequality constraints are disabled.
+Table 1 compares our modified version of mpc.pytorch to the base version on the first seed from
+problem 1, and shows that our modifications reduce the solve times of the forward pass and gradient
+computations. Since Theseus only supports unconstrained non-linear least-square optimization
+problems, the dynamics are rolled out in the objective function as done in (Wan et al., 2024). The
+damped least squares method is used and constrained to 1 iteration of the dense Cholesky solver.
+Trajax uses the in-built iLQR **OCP** solver, and is constrained to 1 iLQR iteration and a minimum
+line search step of 0.99 (we found that a minimum of 1 prevents any solution from being accepted).
+The tvlqr method is used for the backward pass. DiffMPC is also limited to 1 **QP** solve and 1
+line search iteration, with _α↘_ = _{_ 1 _}_ . The underlying PCG solver uses an exit tolerance of 10 _−_ 12 for
+
+
+Table 1: Computation times
+(s) with mpc.pytorch for
+Problem 1 on the GPU.
+
+
+Pass Original Modified
+
+
+Fwd 67 _._ 9 **1** _._ **9**
+Bwd 136 _._ 4 **4** _._ **5**
+
+
+line search iteration, with _α↘_ = _{_ 1 _}_ . The underlying PCG solver uses an exit tolerance of 10 _−_ 12 for
+
+both the forwards and backwards passes.
+
+
+**QP** **problems.** We consider the six problems defined in Table 2. The dynamics of each problem are defined as _xt_ +1 = _Axt_ + _But_ + _b_ . The dynamics matrix _A_ is randomized according
+
+
+14
+
+
+Figure 10: RL with DiffMPC: Speedups from warm-starting [SolveTime] SolveTime [cold] _[−]_ [SolveTime] cold [warm] for different
+
+PCG exit tolerances _ϵ_, with _±_ 2 standard deviation intervals.
+
+
+to _A_ = _I_ + 0 _._ 1∆ _A_ with vec(∆ _A_ ) _∼N_ (0 _, I_ ), and its eigenvalues are clipped to lie within the
+unit circle so that _|λ_ ( _A_ ) _|_ _∈_ (0 _,_ 0 _._ 99]. Similarly, we let vec( _B_ ) _∼N_ (0 _, I_ ), _b_ _∼N_ (0 _,_ 0 _._ 10 _[−]_ [4] _I_ ),
+and sample initial conditions as _x_ 0 _∼N_ (0 _,_ 25 _I_ ). The cost functions in **OCP** are quadratic
+functions _c_ _[x,θ]_ _t_ ( _x_ ) = _x_ _[⊤]_ _Qx_ where _Q_ is a diagonal matrix and _c_ _[u,θ]_ _t_ ( _u_ ) = _∥u∥_ [2] 2 [for] [all] _[t]_ [.] [The]
+RL reward is defined as _R_ ( _x, u_ ) = _−_ ( _∥x∥_ [2] 2 [+] _[∥][u][∥]_ [2] 2 [)][.] [The] [parameters] _[θ]_ [that] [are] [optimized] [are]
+_θ_ = diag( _Q_ ). For each of these problems, we compute statistics over ten independent runs
+per method, as we observed little variation in computation times within each problem (apart
+from Theseus on the CPU). Timing results are in Table 3. The results of Problem 1 are illustrated in Figure 3, and are representative of performance across the tested problem instances.
+
+
+Table 2: Parameters in the RL benchmark: state
+dimension _nx_, control dimension _nu_, MPC horizon _T_, RL episodes length _H_, batch size _B_ .
+
+
+**Warm-starting.** We provide further results in
+Figure 10 to assess the benefits from warm- dimension _nx_, control dimension _nu_, MPC horistarting DiffMPC for different PCG exit tol- zon _T_, RL episodes length _H_, batch size _B_ .
+erances _ϵ_ _∈{_ 10 _[−]_ [4] _,_ 10 _[−]_ [8] _,_ 10 _[−]_ [12] _}_ on Problem Problem _nx_ _nu_ _T_ _H_ _B_
+1. Statistics are computed over 100 indepen
+1 8 4 40 50 64
+
+dent runs for each PCG exit tolerance. We ob
+2 8 4 30 50 16
+
+serve speedups for both the forward and back
+3 8 4 30 50 64
+
+ward passes. Speedups are more significant for
+
+4 8 4 30 50 256
+
+lower PCG exit tolerances _ϵ_ . We note that tol
+5 16 8 30 50 16
+
+erances in the order _ϵ_ = 10 _[−]_ [4] are reasonable
+
+6 16 8 30 50 64
+
+for many applications, see the results in (Adabag et al., 2024). To ensure fair comparisons
+against baselines, we used the lowest tolerance _ϵ_ = 10 _[−]_ [12] in all other results in the paper, and anticipate that additional speedups compared to these baselines could be observed by selecting a smaller
+exit tolerance _ϵ_ .
+
+
+Problem _nx_ _nu_ _T_ _H_ _B_
+
+
+1 8 4 40 50 64
+2 8 4 30 50 16
+3 8 4 30 50 64
+4 8 4 30 50 256
+5 16 8 30 50 16
+6 16 8 30 50 64
+
+
+**Accuracy** **of** **computed** **gradients.** We
+evaluate the accuracy of the gradients
+computed by DiffMPC against finitedifference approximations and report results in Figure 9. These statistics are computed over 100 problem instances for each
+PCG exit tolerance. For this problem, we
+observe a high degree of consistency between DiffMPC and finite differences up
+to a PCG exit tolerance of 10 _[−]_ [6] . We use
+an exit tolerance of 10 _[−]_ [12] for all other results.
+
+
+Figure 9: Cosine similarity between computed gradients and finite differencing across PCG exit tolerances.
+
+
+15
+
+
+Table 3: Timing results on CPU and GPU across 6 problem instances with mean time and 2 _σ_ (s).
+
+
+Method GPU Pass Problem 1 Problem 2 Problem 3 Problem 4 Problem 5 Problem 6
+
+
+Theseus ✗ Bwd 81.47 (34.50) 5.04 (0.46) 10.44 (3.28) 130.01 (2.94) 9.27 (3.70) 130.67 (5.73)
+Theseus ✗ Fwd 49.35 (70.65) 3.39 (0.18) 6.10 (2.18) 65.44 (63.67) 5.63 (2.45) 70.74 (85.68)
+
+
+mpc.pytorch ✗ Bwd 3.37 (0.07) 1.71 (0.03) 2.60 (0.07) 5.61 (0.08) 2.32 (0.04) 4.01 (0.07)
+mpc.pytorch ✗ Fwd 1.44 (0.03) 0.72 (0.01) 1.12 (0.03) 2.36 (0.03) 0.97 (0.01) 1.65 (0.02)
+
+
+trajax ✗ Bwd 1.90 (0.09) 0.34 (0.02) 1.42 (0.07) 5.95 (0.27) 0.94 (0.03) 3.89 (0.10)
+trajax ✗ Fwd 0.93 (0.05) 0.17 (0.01) 0.70 (0.03) 2.96 (0.15) 0.45 (0.01) 1.91 (0.05)
+
+
+DiffMPC ✗ Bwd 2.70 (1.07) 0.35 (0.10) 1.49 (0.44) 10.00 (3.71) 1.58 (0.30) 10.96 (2.97)
+DiffMPC ✗ Fwd 1.33 (0.53) 0.16 (0.09) 0.71 (0.23) 5.09 (1.72) 0.74 (0.18) 5.49 (1.38)
+
+
+Theseus ✓ Bwd 6.19 (0.11) 4.56 (0.14) 4.63 (0.14) 6.49 (0.03) 4.76 (0.10) 6.39 (0.04)
+Theseus ✓ Fwd 4.39 (0.14) 3.24 (0.17) 3.26 (0.05) 5.20 (0.02) 3.41 (0.12) 5.16 (0.04)
+
+
+mpc.pytorch ✓ Bwd 4.46 (0.05) 3.33 (0.10) 3.40 (0.05) 3.98 (0.04) 3.33 (0.04) 3.43 (0.06)
+mpc.pytorch ✓ Fwd 1.91 (0.03) 1.45 (0.05) 1.45 (0.01) 1.67 (0.02) 1.45 (0.05) 1.47 (0.03)
+
+
+trajax ✓ Bwd 1.83 (0.26) 1.32 (0.19) 1.36 (0.18) 3.81 (0.63) 2.03 (0.04) 2.20 (0.04)
+trajax ✓ Fwd 0.95 (0.13) 0.70 (0.09) 0.71 (0.91) 1.93 (0.33) 1.05 (0.02) 1.13 (0.02)
+
+
+DiffMPC ✓ Bwd **0.32** (0.10) **0.18** (0.06) **0.27** (0.08) **0.69** (0.16) **0.32** (0.08) **0.73** (0.16)
+DiffMPC ✓ Fwd **0.22** (0.05) **0.11** (0.03) **0.18** (0.03) **0.49** (0.08) **0.20** (0.04) **0.45** (0.08)
+
+
+**Nonlinear** **attitude** **stabilization.** We also consider a
+nonlinear attitude stabilization task, where we drive the
+attitude rates of a rigid-body _x_ = _ω_ _∈_ R [3] (rad/s) to zero
+by actuating the torques _u_ = _τ_ _∈_ R [3] . The nonlinear
+continuous-time system dynamics are
+
+
+_J_ ˙ _ω_ = _Jω × ω_ + _τ,_ (19)
+
+
+DiffMPC Fwd. 39.8 (8.0)
+DiffMPC Bwd. 69.3 (16.1)
+
+
+Table 4: Compute times on the nonlinear attitude stabilization problem.
+
+
+Method Pass Compute time (ms)
+
+
+trajax Fwd. 310.6 (24.1)
+trajax Bwd. 505.0 (27.4)
+
+
+where _J_ _≻_ 0 is a diagonal inertia matrix. We discretize
+the system using a forward Euler scheme with a time step
+of ∆ _t_ = 0 _._ 1 s. We consider an MPC policy with a prediction horizon _T_ = 25 and costs defined as
+in **QP** with nominal time-invariant cost matrices _Q_ = _R_ = _I_ . The learned parameters are defined
+as _θ_ = (diag( _Q_ ) _,_ diag( _R_ )), and we train these parameters via gradient descent on the RL reward
+_R_ ( _x, u_ ) = _−_ (0 _._ 1 _∥x∥_ [2] 2 [+] _[ ∥][u][∥]_ 2 [2][)][ using a batch size of] _[ B]_ [= 16][.] [In each batch, we draw random initial]
+conditions from _ω_ 0 _∼U_ ([ _−_ 1 _,_ 1] [3] ) and randomize the inertia matrix as diag( _J_ ) _∼U_ ([0 _._ 1 _,_ 10] [3] ).
+We compare the compute times on the backward and forward passes for this problem with trajax
+and DiffMPC. Results are reported in Table 4. We note a significant speedup (approximately 7 _._ 3 _×_
+for the backward pass) when solving this problem using DiffMPC compared to trajax.
+
+
+B.2 IMITATION LEARNING BENCHMARK
+
+
+For this task, we consider the cart-pole problem in (Amos et al., 2018), with states _x_ =
+( _x_ 1 _, x_ 2 _, x_ 3 _, x_ 4) _∈_ R [4] (m, m/s, rad, rad/s) and inputs _u_ _∈_ R (N). The model is parametrized with a
+length _L_, the cart mass _mc_, the pole mass _ml_, and the gravitational constant _g_ . Its dynamics are
+
+
+_x_ ˙ 1 = _x_ 2 _,_ (20a)
+
+4 [+] _[ m][p][g]_ [ sin(] _[x]_ [3][) cos(] _[x]_ [3][)]
+_x_ ˙ 2 = _[−][m][p][L]_ [ sin(] _[x]_ [3][)] _[x]_ [2] _,_ (20b)
+( _M_ + _mp_ (1 _−_ cos [2] ( _x_ 3)) _L_
+
+_x_ ˙ 3 = _x_ 4 _,_ (20c)
+
+_x_ ˙ 4 = _[−][m][p][L]_ [ sin(] _[x]_ [3][)] _[x]_ [4][ +] _[ m][p][g]_ [ sin(] _[x]_ [3][) cos(] _[x]_ [3][) +] _[ u]_ _,_ (20d)
+
+_M_ + _mp_ (1 _−_ cos [2] ( _x_ 3))
+
+
+and we let _mc_ = 1, _mp_ = 0 _._ 1, _l_ = 0 _._ 5, _g_ = 9 _._ 81, with _M_ = _mp_ + _mc_ = 1 _._ 1. To generate expert
+data, we use DiffMPC in the form of **OCP**, with the quadratic objective in **QP**
+
+
+_Qt_ = diag(1 _,_ 2 _,_ 1 _._ 5 _,_ 1) _,_ and _Rt_ = 0 _._ 05 _∀t_ = 0 _, ..., T._ (21)
+
+
+Based on this expert policy, 32 different initial conditions _x_ 0 = ( _x_ 10 _, x_ 20 _, x_ 30 _, x_ 40) are sampled according to the uniform distributions _x_ 10 _∼U_ ([ _−_ 0 _._ 5 _,_ 0 _._ 5]), _x_ 20 _∼U_ ([ _−_ 0 _._ 5 _,_ 0 _._ 5]), _x_ 30 _∼_
+
+
+16
+
+
+Table 5: Nominal vehicle model parameters and controller gains for the baseline MPC policy.
+
+
+_Q_ 11 _Q_ 22 _Q_ 33 _Q_ 44 _Q_ 55 _Q_ 66 _Q_ 77 _R_ 11 _R_ 22 _a_ _b_ _m_ _r_ w _µf_ _µr_ _Cf_ _Cr_ _I_ w
+Value 10 _[−]_ [4] 10 _[−]_ [1] 500 1 20 300 10 _[−]_ [6] 10 10 _[−]_ [4] 1 _._ 239 1 _._ 209 1476 0 _._ 323 0 _._ 99 0 _._ 90 54000 220000 11 _._ 28
+
+
+_U_ ([ _−π, π_ ]), and _x_ 40 _∼U_ ([ _−_ 1 _,_ 1]). From each initial condition, an expert trajectory is generated using DiffMPC with the costs in (21). For imitation learning, we learn the cost parameters
+_θ_ = ( _Q_ 11 _, Q_ 22 _, Q_ 33 _, Q_ 44) and draw the initial parameters of the learned policy from a uniform distribution _U_ ([0 _,_ 1]). Training is conducted using a batch size of 32, following Amos et al. (2018), by
+gradient descent using a learning rate of 10 _[−]_ [2] on the mean-square-error objective defined in (13).
+Both trajax and DiffMPC were limited to five SQP and iLQR iterations and are warm-started
+using the expert trajectory.
+
+
+B.3 DRIFTING EXPERIMENTS
+
+
+**Vehicle** **model.** For the drifting experiments, we consider a dynamic bicycle model (Lew et al.,
+2025) for both planning and simulation. We model tire forces using a coupled slip brush Fiala model
+(Svendenius, 2007). In this setting, the state of the system is defined by _x_ = ( _r, v, β, ωr,_ ∆ _ϕ, e, s_ ) _∈_
+R [7], where _r_ (rad/s) is a yaw rate, _v_ (m/s) is a longitudinal velocity, _β_ (rad) is a sideslip angle,
+_ωr_ (rad/s) is the average rear wheel speeds, ∆ _ϕ_ (rad) is a heading tracking error with respect to a
+reference, _e_ is a lateral tracking error to the same reference, and _s_ (m) is the path distance traveled
+along the reference trajectory. The car is driven by the control input _u_ = ( _δ, τ_ ), where _δ_ (rad) is the
+steering angle, and _τ_ (Nm) is the engine torque. The simulator discretizes the vehicle’s dynamics
+using a high-accuracy Dormand-Prince method implemented in Diffrax (Kidger, 2021), whereas
+the MPC model uses a simple trapezoidal scheme discretized at ∆ _t_ = 0 _._ 1 sec. Box constraints on the
+control inputs are enforced in the simulator but omitted in the MPC controller so that robustness to
+actuator saturation is learned implicitly through training, and so that simpler unconstrained problems
+can be solved both during training and at runtime.
+
+
+The vehicle dynamics are parameterized by the parameters ( _a, b, Iz, m, r_ w _, I_ w _, Cf_ _, Cr, µf_ _, µr_ ) _∈_
+R [10] _>_ 0 [,] [where][ (] _[a, b]_ [)][ define the location of the center of mass of the vehicle,] _[m]_ [ is its mass,] _[r]_ [w] [is the]
+wheel radius, _Iz_ is the moment of inertia about the yaw axis, _I_ w is the moment of inertia of a wheel,
+and _Ci_ and _µi_ denote the cornering stiffness and friction coefficients of the front and read wheels
+_i ∈{f, r}_, respectively. Nominal vehicle parameters are given in Table 5.
+
+
+**MPC.** The cost function of the MPC policy is defined with quadratic costs
+
+
+_c_ _[x,θ]_ _t_ ( _xt_ ) = [1] 2
+
+
+2 _[u]_ [˙] _[t][R]_ [ ˙] _[u][t][,]_ (22)
+
+
+[1] 2 [(] _[x][t][ −]_ _[x]_ [ref] _[,t]_ [)] _[⊤][Q]_ [(] _[x][t][ −]_ _[x]_ [ref] _[,t]_ [)] _[,]_ _c_ _[u,θ]_ _t_ ( ˙ _ut_ ) = [1] 2
+
+
+where _c_ _[u,θ]_ _t_ ( ˙ _ut_ ) penalizes control rates _u_ ˙ _t_ = ( _ut_ +1 _−_ _ut_ ) _/_ ∆ _t_ (this cost is implemented in the MPC
+by augmenting the state with the control input as ( _x_ _←_ ( _x, u_ )) and redefining the control input as
+the control rate ( _u_ _←_ _u_ ˙ )), and _x_ ref is a reference trajectory computed using the method in (Goh
+& Gerdes, 2016) with nominal vehicle parameters. Experiments involve drifting along the figure 8
+trajectory in Figure 6 and the donut trajectory in Figure 8.
+
+
+**Learnable parameters.** The learnable parameters _θ_ of the MPC policy are the cost weights for the
+states and control rates, the front and rear tire friction values, the front and rear cornering stiffness,
+and the rear wheels inertia:
+
+
+_θ_ = (diag( _Q_ ) _,_ diag( _R_ ) _, µf_ _, µr, Cf_ _, Cr, I_ w) _∈_ R [14] _>_ 0 _[.]_ (23)
+
+
+**RL training procedure.** To learn a robust drifting policy, we define the RL reward as
+
+
+              _R_ ( _x_ ) = _−_ ( _r −_ _r_ ref ) [2] + _λe_ _[−][γβ]_ [2][�] _,_ (24)
+
+
+where _λ_ = 0 _._ 3 and _γ_ = 50. This reward optimizes for non-zero side-slip angles (to ensure drifting
+behavior) and prioritizes the heading reference tracking. The RL batch size is set to _B_ = 32, and
+the episode length is set to _H_ = 200, with each step taking 20ms. We found that RL training
+without a term rewarding high sideslips _β_ yields policies that drive robustly on the reference path
+without drifting, highlighting the challenge of controlling a vehicle in an unstable drifting regime.
+To rescale the learned cost parameters that have different magnitudes, and ensure that they remain
+
+
+17
+
+
+Table 6: Parameters used for domain randomization. On water puddles, tire friction coefficients
+drop to _µ_ = 0 _._ 6.
+
+
+_µ_ f _µ_ r 10 _[−]_ [3] _C_ f 10 _[−]_ [3] _C_ r _I_ w _s_ 0 _ℓ_ puddle _s_ puddle
+
+range [0 _._ 94 _,_ 1 _._ 04] [0 _._ 85 _,_ 0 _._ 95] [52 _,_ 56] [200 _,_ 240] [8 _,_ 14] [185 _,_ 700] [0 _,_ 5] [ _−_ 1 _,_ 1]
+
+
+strictly positive, they are log-normalized for training. Training is conducted on the figure 8 trajectory
+only. The reward in (24) is maximized via gradient ascent with a constant learning rate of 0 _._ 1.
+
+
+_Randomization_ : The parameters for each of the _B_ = 32 environments are drawn from uniform
+distributions defined in Table 6 where _s_ 0 represents the initial state along the reference trajectory in
+meters, _ℓ_ puddle represents the length of the puddle, and _s_ puddle represents the relative distance between
+where the front and rear wheels enter the puddle. We note that puddles can be of irregular shapes
+and drifting involves controlling a vehicle sideways, so front wheels do not necessarily enter water
+puddles before the rear wheels.
+
+
+_MPC_ : During training, a single SQP iteration is used per time step to match the real-time iteration
+scheme that is used during deployment (Gros et al., 2020). The MPC uses a horizon of _T_ = 35
+timesteps. The rollout loop used for simulation accounts for control delays present in the real application by introducing a 20 ms delay to the incoming control signal, corresponding to a conservative
+estimate of the time needed to replan on the vehicle using MPC.
+
+
+_Low-level_ _interpolation_ : On the vehicle, a low-level interpolation scheme is used to select control
+inputs from the MPC plan to send to the actuators. This interpolation scheme is also accounted for in
+simulation for RL. The MPC stack deployed on the vehicle is identical to the stack used in training
+with DiffMPC, except that it uses OSQP (Stellato et al., 2020) as the QP solver instead of the PCG
+routine.
+
+
+**Training dynamics and memory requirements** . In Fig.
+11, we report the training loss across 3 seeds for the first
+100 steps of the drifting MPC controller RL training experiment. These results were collected on a workstation
+with a NVIDIA GeForce RTX 3090 GPU using a batch
+size of _B_ = 32, where it used 18GB of VRAM. These
+results show that despite noise in the training curves, the
+loss consistently stabilizes to a minimum after around 40
+minutes of training for these runs.
+
+
+Figure 11: Wall-clock training loss
+curves across 3 seeds.
+
+
+18
+
+
+Figure 13: On-vehicle test for drifting a figure 8 trajectory with a water puddle in the first turn.
+Closed-loop response task with the baseline (red) and the learned controller (blue).
+
+
+**Additional** **simulation** **results.** In addition to
+the simulation results reported in Section 5, we
+provide the result of training with puddles in the
+environment. In Figure 12, we show the relative
+change in the learned parameters with respect
+to the nominal parameters in Table 5. The more
+robust policy produced by the RL training uses
+lower tire friction values. Using these lower
+friction parameters has the effect of reducing
+the torques and wheel speeds as the planner assumes the tires have less grip than they actually do in nominal road conditions, resulting in
+a more shallow drift. The learned policy also
+exhibits a 58% reduction in sideslip cost _β_ . Reducing this cost term on sideslip enables the
+policy to drift with lower sideslip (which leads
+to worse tracking error) for increased robustness to potential spinouts.
+
+
+**Additional** **hardware** **results:** **drifting** **the**
+**figure** **8** . For completeness, in Figure 13, we Figure 12: Change in MPC policy parameters afreport additional on-vehicle results for drifting ter learning _θ_ by domain randomization that inthe figure 8 trajectory in the presence of a water cludes water puddles.
+puddle in the first turn. In these experiments,
+the baseline spins out in the first turn, whereas
+the controller using the parameters learned using DiffMPC completes the maneuver. However, we
+were unfortunately only able to run this experiment once for each method due to hardware limitations. For this reason, we refrain from drawing strong conclusions from these results.
+
+
+19

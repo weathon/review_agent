@@ -1,0 +1,2689 @@
+# PROBABILISTIC KERNEL FUNCTION FOR FAST ANGLE TESTING
+
+
+Kejing Lu [1], Chuan Xiao [2,3], and Yoshiharu Ishikawa [3]
+
+
+1Yamanashi University, k.riku@yamanashi.ac.jp
+2Osaka University, chuanx@ist.osaka-u.ac.jp
+3Nagoya University, ishikawa@i.nagoya-u.ac.jp
+
+
+ABSTRACT
+
+
+In this paper, we study the angle testing problem in the context of similarity search in
+high-dimensional Euclidean spaces and propose two projection-based probabilistic
+kernel functions, one designed for angle comparison and the other for angle thresholding. Unlike existing approaches that rely on random projection vectors drawn
+from Gaussian distributions, our approach leverages reference angles and adopts
+a deterministic structure for the projection vectors. Notably, our kernel functions
+do not require asymptotic assumptions, such as the number of projection vectors
+tending to infinity, and can be theoretically and experimentally shown to outperform
+Gaussian-distribution-based kernel functions. We apply the proposed kernel function to Approximate Nearest Neighbor Search (ANNS) and demonstrate that our
+approach achieves a 2.5 _×_ –3 _×_ higher query-per-second (QPS) throughput compared
+to the widely-used graph-based search algorithm HNSW. Our code and data are
+[available at https://github.com/KejingLu-810/KS.](https://github.com/KejingLu-810/KS)
+
+
+1 INTRODUCTION
+
+
+Vector-based similarity search is a core problem with broad applications in machine learning, data
+mining, and information retrieval. It involves retrieving data points in a high-dimensional space
+that are most similar to a given query vector based on a specific similarity measure. This task is
+central to many downstream applications, including nearest neighbor classification, recommendation
+systems, clustering, anomaly detection, and retrieval-augmented generation (RAG). However, the
+high dimensionality of modern datasets makes efficient similarity search particularly challenging,
+highlighting the need for fast and scalable vector computation techniques.
+
+
+Among the various similarity measures for high-dimensional vectors, the _ℓ_ 2 norm, cosine similarity,
+and inner product are the most commonly used in practice. As discussed in Yan et al. (2018); Dai et al.
+(2020); Lu et al. (2024), it is often possible to pre-compute and store the norms of vectors in advance,
+allowing these measures to be reduced to the computation of the cosine of the angle between two
+normalized vectors, thereby highlighting the central role of angle computation. On the other hand, in
+many real-world scenarios, we are not concerned with the exact values of the angles but rather with the
+outcome—which one is greater—of an angle comparison, which is referred to as angle testing: Given a
+query vector _**q**_ and data vectors _**v**_ **1**, _**v**_ **2**, _**v**_ on the sphere S _[d][−]_ [1], typical operations include comparing
+_⟨_ _**q**_ _,_ _**v**_ **1** _⟩_ and _⟨_ _**q**_ _,_ _**v**_ **2** _⟩_, or determining whether _⟨_ _**q**_ _,_ _**v**_ _⟩_ exceeds a certain threshold. These operations,
+however, require computing exact cosines of angles, which has a cost of _O_ ( _d_ ) per comparison and
+becomes expensive in high dimensions. To address this, we aim to design a computationally efficient
+probabilistic kernel function _K_ that can approximate these comparisons with reduced cost and high
+success probability. More precisely, we focus on the following two problems:
+**Problem 1.1.** _(_ _**Probabilistic kernel function for comparison**_ _) Design a probabilistic kernel function_
+_K:_ S _[d][−]_ [1] _×_ S _[d][−]_ [1] _→_ _RV_ _with computational cost o_ ( _d_ ) _, where RV_ _denotes the set of random variables,_
+_such that, for any data vectors_ _**v**_ **1** _,_ _**v**_ **2** _∈_ S _[d][−]_ [1] _and query_ _**q**_ _∈_ S _[d][−]_ [1] _satisfying ⟨_ _**q**_ _,_ _**v**_ **1** _⟩_ _>_ _⟨_ _**q**_ _,_ _**v**_ **2** _⟩, we_
+_have_ Pr[ _K_ ( _**q**_ _,_ _**v**_ **1** ) _> K_ ( _**q**_ _,_ _**v**_ **2** )] _>_ 1 _−_ _ϵ, where ϵ ≤_ 0 _._ 5 _._
+**Problem1.2.** _(_ _**Probabilistickernelfunctionforthresholding**_ _)Givenafixedanglethreshold_ _θ_ _∈_ (0 _, π_ ) _,_
+_design a probabilistic kernel function K:_ S _[d][−]_ [1] _×_ S _[d][−]_ [1] _→_ _RV_ _with computational cost o_ ( _d_ ) _such that_
+
+
+1
+
+
+_for any_ _**q**_ _,_ _**v**_ **1** _,_ _**v**_ **2** _∈_ S _[d][−]_ [1] _with angles ϕ_ 1 _<_ _θ between_ _**q**_ _and_ _**v**_ **1** _, and ϕ_ 2 _>_ _θ between_ _**q**_ _and_ _**v**_ **2** _, we_
+_have_ Pr[ _K_ ( _**q**_ _,_ _**v**_ **1** ) _>_ cos _θ_ ] _≥_ 1 _−_ _ϵ_ 1 _, and_ Pr[ _K_ ( _**q**_ _,_ _**v**_ **2** ) _>_ cos _θ_ ] _< ϵ_ 2 _, where ϵ_ 1 _, ϵ_ 2 _≤_ 0 _._ 5 _._
+
+
+One of the main goals of this paper is to design appropriate _K_ ’s to solve the above two problems.
+Before proceeding, we note that much work has focused on the estimation of _⟨_ _**q**_ _,_ _**v**_ _⟩_, such as JohnsonLindenstrauss (JL) bound (Johnson et al., 1984) and quantization-based techniques (Jégou et al., 2011;
+Ge et al., 2014; Martinez et al., 2018; Gao & Long, 2024; Guo et al., 2020). In contrast, the defined
+problems focus on comparing _⟨_ _**q**_ _,_ _**v**_ _⟩_ with another inner product or a threshold, necessitating a distinct
+theoretical analysis centered on probabilistic decision-making. Beyond the theoretical perspective,
+these two problems also give rise to a range of practical applications. The goal of Problem 1.1 aligns
+with that of the random-projection-based technique CEOs (Pham, 2021) under cosine similarity (we
+postpone the general case of inner product to Sec. 6), allowing the designed kernel function to be
+applied to tasks where CEOs is effective, such as Maximum Inner Product Search (MIPS) (Pham,
+2021), filtering of NN candidates (Pham & Liu, 2022), DBSCAN (Xu & Pham, 2024), and more.
+Notably, the goal of Problem 1.2 is similar to that of the graph-based ANNS approach PEOs (Lu et al.,
+2024), making the corresponding kernel function well suited for probabilistic routing tests in similarity
+graphs, which have demonstrated significant performance improvements over baseline graphs such as
+HNSW (Malkov & Yashunin, 2020). In Sec. 6, we will further elaborate on the applications of these
+two probabilistic kernel functions.
+
+
+Despite addressing different tasks, all the techniques (Pham, 2021; Pham & Liu, 2022; Xu & Pham,
+2024; Lu et al., 2024) mentioned above use Gaussian distribution to generate projection vectors and are
+built upon a common statistical result, as follows.
+**Lemma 1.3.** _(Theorem 1 in Pham (2021)) Given two vectors_ _**v**_ _,_ _**q**_ _on_ S _[d][−]_ [1] _, and m random vectors_
+_{_ _**u**_ _i}_ _[m]_ _i_ =1 _[∼N]_ [(0] _[, I]_ _[d]_ [)] _[, let]_ _**[ u]**_ [max] [= argmax] _**ui**_ _[|]_ _**[q]**_ _[⊤]_ _**[u][i]**_ _[|][. As][ m][ goes to infinity, we have:]_
+
+
+_√_
+_**v**_ _[⊤]_ _**u**_ max _∼N_ (sgn( _**q**_ _[⊤]_ _**u**_ max) _·_ _**q**_ _[⊤]_ _**v**_
+
+
+2 ln _m,_ 1 _−_ ( _**q**_ _[⊤]_ _**v**_ ) [2] ) _._ (1)
+
+
+Lemma 1.3 builds the relationship between angles and corresponding projection vectors. Actually,
+_**v**_ _[⊤]_ _**u**_ max can be viewed as an indicator of the cosine of the angle between _**q**_ and _**v**_ . More specifically,
+the larger _**v**_ _[⊤]_ _**u**_ max is, the more likely it is that _**q**_ _[⊤]_ _**v**_ is large. On the other hand, all _**v**_ _[⊤]_ _**ui**_ ’s can be
+computed beforehand during the indexing phase and _**v**_ _[⊤]_ _**u**_ **max** can be easily accessed during the query
+phase, making _K_ ( _**q**_ _,_ _**v**_ ) = _**v**_ _[⊤]_ _**u**_ max a suitable kernel function for various angle testing problems, e.g.,
+Problem 1.1.
+
+
+However, Lemma 1.3 has a significant theoretical limitation: Relationship (1) relies on the assumption
+that the number of projection vectors _m_ tends to infinity. Since the computational cost of evaluating
+projection vectors grows with _m_, _m_ cannot be very large in practice. Moreover, since Pham & Liu
+(2022); Xu & Pham (2024); Lu et al. (2024) all used Lemma 1.3 to derive their theoretical results, these
+results are also affected by this limitation, and the impact of _m_ becomes even harder to predict in these
+applications.
+
+
+The starting point of our research is to overcome this limitation, and we make the following two key
+observations. (1) The Gaussian distribution used in Lemma 1.3 is not essential. Instead, the only factor
+determining the estimation accuracy of _**q**_ _[⊤]_ _**v**_ is the reference angle, that is, the angle between _**q**_ and
+_**u**_ max. (2) By introducing a random rotation matrix, the reference angle becomes dependent on the
+structure of the projection vectors and is predictable.
+
+
+Based on these two observations, we design new probabilistic kernel functions to solve Problems 1.1
+and 1.2. The contributions of this paper are summarized as follows.
+
+(1) The proposed kernel functions _KS_ [1] [and] _[ K]_ _S_ [2] [(Eq.][ (2)][ and Eq.][ (3)][) rely on a reference-angle-based]
+probabilistic relationship between angles in high-dimensional spaces and projected values. Compared
+with Eq. (1), the new relationship (Relationship (4)) is deterministic without dependence on asymptotic
+condition. By theoretical analysis, we show that the proposed kernel functions are effective solvers for
+the Problems 1.1 and 1.2 (see Lemmas 4.2, 4.3 and 5.1).
+
+
+(2) By Lemmas 4.2, 4.3, we find that, the smaller the reference angle is, the more accurate the kernel
+functions are. To minimize the reference angle, we study the structure of the configuration of projection
+vectors (Sec. 5). We propose two structures (Alg. 1 and Alg. 2) that perform better than purely random
+projection (Alg. 3 in Appendix). We establish the relationship between the reference angle and the
+proposed structures (Lemma B.1 and Fig. 5 in Appendix).
+
+
+2
+
+
+(3) Based on _KS_ [1] [, we propose a random-projection technique KS1 which can be used for CEOs-based]
+tasks (Pham, 2021; Pham & Liu, 2022; Xu & Pham, 2024). Based on _KS_ [2] [, we introduce a new routing]
+test called the KS2 test which can be used to accelerate the graph-based Approximate Nearest Neighbor
+Search (ANNS) (Lu et al., 2024) (Sec. 6).
+
+
+(4) We experimentally show that KS1 provides a slight accuracy improvement (up to 0.8%) over CEOs.
+For ANNS, we show that HNSW+KS2 improves the query-per-second (QPS) by 2.5 _×_ - 3 _×_ over
+HNSW and by 10% – 30% over the state-of-the-art approach HNSW+PEOs (Lu et al., 2024), along
+with a 5% reduction in index size.
+
+
+2 RELATED WORK
+
+
+Due to space limitations, we focus on random projection techniques that are closely related to this
+work. An illustration comparing the proposed random projection technique with others can be found in
+Sec. C.2 and Fig. 4 in Appendix. Since the proposed kernel function is also used in similarity graphs
+for ANNS, a comprehensive discussion of ANNS solutions is provided in Appendix C.3.
+
+
+In high-dimensional Euclidean spaces, the estimation of angles via random-projection techniques,
+especially Locality Sensitive Hashing (LSH) (Indyk & Motwani, 1998; Andoni & Indyk, 2005; 2008),
+has a relatively long history. A classical LSH technique is SimHash (Charikar, 2002), whose basic
+idea is to generate multiple hyperplanes and partition the original space into many cells such that two
+vectors falling into the same cell are likely to have a small angle between them. Andoni et al. (2015)
+proposed a different LSH method called Falconn for angular distance, whose basic idea is to find the
+closest or furthest projection vector to the data vector and record this projection vector as a hash value,
+leading to better search performance than SimHash. Later, Pham (2021) employed Concomitants of
+Extreme Order Statistics (CEOs) to identify the projection with the largest or smallest inner product
+with the data vector, as shown in Lemma 1.3, and recorded the corresponding maximum or minimum
+projected value to obtain a more accurate estimation than using a hash value alone (Pham & Liu, 2022).
+
+
+Due to its ease of implementation, CEOs has been employed in several similarity search tasks (Pham,
+2021; Andoni et al., 2015; Xu & Pham, 2024), as mentioned in Sec. 1. Additionally, CEOs has been
+used to accelerate similarity graphs, which are among the leading structures for Approximate Nearest
+Neighbor Search (ANNS). By swapping the roles of query and data vectors in CEOs, Lu et al. (2024)
+introduced a space-partitioning technique and proposed the PEOs test, which can be used to compare the
+objective angle with a fixed threshold under probabilistic guarantees. This test was incorporated into the
+routing mechanisms of similarity graphs and achieved significant search performance improvements
+over original graph structures like HNSW (Malkov & Yashunin, 2020) and NSSG (Fu et al., 2022).
+
+
+3 TWO PROBABILISTIC KERNEL FUNCTIONS
+
+
+In Sec. 3, we aim to propose probabilistic kernel functions for Problems 1.1 and 1.2. First, we introduce
+some notation. Frequently used symbols in this paper are listed in Table 2 in Appendix. Let R _[d]_ be the
+ambient vector space. Define _H_ _∈_ _SO_ ( _d_ ) _⊂_ R _[d][×][d]_ as a random rotation matrix, where _SO_ ( _d_ ) denotes
+the special orthogonal group of _d × d_ rotation matrices [1] . Let _S_ = [ _**u**_ **1** _,_ _**u**_ **2** _, . . .,_ _**um**_ ] _∈_ R _[d][×][m]_ be an
+arbitrary fixed set of _m_ points on the unit sphere S _[d][−]_ [1] . For any vector _**v**_ _∈_ S _[d][−]_ [1], define the reference
+vector of _**v**_ with respect to _S_ as _ZS_ ( _**v**_ ) = argmax _**u**_ _∈S ⟨_ _**u**_ _,_ _**v**_ _⟩_ . Let _AS_ ( _**v**_ ) denote the inner product
+with the reference vector with respect to _**v**_, that is, _AS_ ( _**v**_ ) = _⟨_ _**v**_ _, ZS_ ( _**v**_ ) _⟩_ . Let _HS_ = _{Hu_ : _u ∈_ _S}_
+denote the rotated configuration of _S_ . Next, we introduce two probabilistic kernel functions _KS_ [1] [(] _[·][,][ ·]_ [)]
+and _KS_ [2] [(] _[·][,][ ·]_ [)] [as] [follows,] [where] _[K]_ _S_ [1] [(] _[·][,][ ·]_ [)] [corresponds] [to] [Problem] [1.1] [and] _[K]_ _S_ [2] [(] _[·][,][ ·]_ [)] [corresponds] [to]
+Problem 1.2.
+_KS_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ [) =] _[ ⟨]_ _**[v]**_ _[, Z][HS]_ [(] _**[q]**_ [)] _[⟩]_ _**v**_ _,_ _**q**_ _∈_ S _[d][−]_ [1] _._ (2)
+
+_KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [) =] _[ ⟨][H]_ _**[q]**_ _[, Z][S]_ [(] _[H]_ _**[v]**_ [)] _[⟩]_ _[/A][S]_ [(] _[H]_ _**[v]**_ [)] _**v**_ _,_ _**q**_ _∈_ S _[d][−]_ [1] _._ (3)
+
+
+Remarks. (1) **(Exploitation of reference angle)** In the design of existing projection techniques such
+as CEOs (Pham, 2021), Falconn (Andoni et al., 2015), Falconn++ (Pham & Liu, 2022), etc., only
+the reference vector _ZS_ ( _·_ ) is utilized. In contrast, our kernel functions defined in Eq. (2) and Eq. (3)
+
+
+1Note that the definition here differs from that in Andoni et al. (2015), where the so-called random rotation
+matrix is actually a matrix with i.i.d. Gaussian entries.
+
+
+3
+
+
+incorporate not only the reference vector _ZS_ ( _·_ ) but also the reference angle information _AS_ ( _·_ ) (although
+the reference angle is not explicitly shown in Eq. (2), its influence will become clear in Lemma 4.2). In
+fact, the reference angle plays a central role, as it is the key factor controlling the precision of angle
+estimation (see Lemma 4.2).
+
+
+(2) ( **Generalizations of existing works** ) These two kernel functions can also be regarded as generalizations of CEOs and PEOs respectively in a certain sense. Specifically, if _S_ is taken as a point
+set generated via a Gaussian distribution and _ZS_ ( _**v**_ ) is replaced by the reference vector having the
+maximum inner product with the query, then _KS_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ [)][ equals the indicator] _**[ v]**_ _[⊤]_ _**[u]**_ [max][ used in CEOs.]
+Similarly, if we remove the term _AS_ ( _H_ _**v**_ ) and take _S_ to be the same space-partitioned structure as that
+of PEOs, _KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)][ is similar to the indicator of PEOs.] [In addition, Eq.][ (3)][ reduces to the estimator]
+in Gao & Long (2024) when _S_ is taken to be the hypercube with scalar quantization.
+
+
+(3) ( **Configuration of projection vectors** ) Although we do not currently require any specific properties
+of the configuration of _S_, it is clear that the configuration of _S_ impacts both _KS_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ [)][ and] _[ K]_ _S_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)][.]
+We will discuss the structure of _S_ in detail in Sec. 5. Notably, we will see that neither the hypercube
+adopted in Gao & Long (2024) nor the Gaussian distribution adopted in Pham (2021); Lu et al. (2024)
+provides the optimal configuration for projection vectors.
+
+
+4 ANALYSIS OF PROBABILITY GUARANTEES
+
+
+In Sec. 4, we show that the proposed probabilistic kernel functions _KS_ [1] [and] _[ K]_ _S_ [2] [satisfy the probability]
+guarantees of Problem 1.1 and Problem 1.2, respectively. Before proceeding, we first provide a
+definition that will be used to establish a property of _KS_ [2] [.]
+
+**Definition 4.1.** _Let ϕ_ 1 _, ϕ_ 2 _∈_ (0 _, π_ ) _and let θ_ _∈_ (0 _, π_ ) _be an arbitrary angle threshold. A probabilistic_
+_kernel function K_ ( _**q**_ _,_ _**v**_ ) _is called_ _**angle-sensitive**_ _when it satisfies the following two conditions:_
+
+
+_(1) If_ cos _θ_ _≤_ cos _ϕ_ 1 = _⟨_ _**q**_ _,_ _**v**_ _⟩, then_ P[ _K_ ( _**q**_ _,_ _**v**_ ) _≥_ cos _θ_ ] _≥_ _p_ 1( _ϕ_ 1) _,_
+
+
+_(2) If ⟨_ _**q**_ _,_ _**v**_ _⟩_ = cos _ϕ_ 2 _<_ cos _θ, then_ P[ _K_ ( _**q**_ _,_ _**v**_ ) _≥_ cos _θ_ ] _< p_ 2( _ϕ_ 2) _,_
+
+
+_where p_ 2( _ϕ_ 2) _is a strictly decreasing function in ϕ_ 2 _and p_ 1( _ϕ_ 1) _> p_ 2( _ϕ_ 2) _when ϕ_ 1 _< ϕ_ 2 _._
+
+
+The definition of the angle-sensitive property is analogous to that of the locality-sensitive hashing
+property. The key difference is that the approximation ratio _c_ used in LSH is not introduced here, as the
+angle threshold _θ_ is explicitly defined, and only angles smaller than _θ_ are considered valid.
+
+We are now ready to present the following two lemmas for _KS_ [1] [and] _[ K]_ _S_ [2] [, which demonstrate that they]
+serve as effective solutions to Problems 1.1 and 1.2, respectively.
+
+
+**Lemma 4.2.** _(1) Let d ≥_ 3 _and_ ( _**q**_ _,_ _**v**_ ) _be an arbitrary pair of normalized vectors with angle ϕ ∈_ (0 _, π_ ) _._
+_The conditional CDF of KS_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ can be expressed as follows:]_
+
+
+_,_ (4)
+
+
+_FKS_ 1 [(] _**[q]**_ _[,]_ _**[v]**_ [)][(] _[x][ |][ A][S]_ [(] _**[q]**_ [) = cos] _[ ψ]_ [) =] _[ I][t]_
+
+
+- _d −_ 2 _,_ _[d][ −]_ [2]
+2 2
+
+
+[1] _[x][−]_ [cos] _[ ϕ]_ [ cos] _[ ψ]_
+
+2 [+] 2 sin _ϕ_ sin _ψ_
+
+
+_where ψ_ _∈_ (0 _, π_ ) _, t_ = [1]
+
+
+_where ψ_ _∈_ (0 _, π_ ) _, t_ = 2 [+] 2 sin _ϕ_ sin _ψ_ _[,][ I][t]_ _[denotes the regularized incomplete Beta function and]_
+
+_x ∈_ [cos( _ϕ_ + _ψ_ ) _,_ cos( _ϕ −_ _ψ_ )] _._
+
+
+_(2) Let_ _**q**_ _,_ _**v**_ **1** _and_ _**v**_ **2** _be three normalized vectors on_ S _[d][−]_ [1] _such that ⟨_ _**q**_ _,_ _**v**_ **1** _⟩_ _> ⟨_ _**q**_ _,_ _**v**_ **2** _⟩. The probability_
+P[ _KS_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ **[1]** [)] _[>]_ _[K]_ _S_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ **[2]** [)] _[|][A][S]_ [(] _**[q]**_ [)] [=] [cos] _[ ψ]_ []] _[ increases as][ ψ][ decreases in]_ [ (0] _[, π]_ [)] _[. In particular, when]_
+_ψ_ _∈_ (0 _, π/_ 2) _,_ P[ _KS_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ **[1]** [)] _[ > K]_ _S_ [1] [(] _**[q]**_ _[,]_ _**[ v]**_ **[2]** [)] _[|][A][S]_ [(] _**[q]**_ [) = cos] _[ ψ]_ []] _[ >]_ [ 0] _[.]_ [5] _[, that is,][ K]_ _S_ [1] _[satisfies the probability]_
+_guarantee in Problem 1.1._
+
+**Lemma 4.3.** _Let ψ_ _∈_ (0 _, π/_ 2) _, that is, AS_ ( _**v**_ ) = cos _ψ_ _∈_ (0 _,_ 1) _, and d_ _≥_ 3 _._ _Then KS_ [2] _[is an angle-]_
+_sensitive function. Precisely, KS_ [2] _[satisfies the probability guarantee in Problem 1.2, where][ ϵ]_ [1] [= 0] _[.]_ [5]
+_and ϵ_ 2 = _It_ _[′]_ ( _[d][−]_ [2] _[,]_ _[d][−]_ [2] [)] _[ <]_ [ 0] _[.]_ [5] _[, where][ t][′]_ [=] [1] _[−]_ [cos] _[ θ][−]_ [cos] _[ ϕ]_ _[.]_
+
+
+_[−]_ 2 [2] [)] _[ <]_ [ 0] _[.]_ [5] _[, where][ t][′]_ [=] 2 [1]
+
+
+_[−]_ [2] _[d][−]_ [2]
+
+2 _[,]_ 2
+
+
+[1]
+
+2 _[−]_ 2 sin [cos] _[ θ]_ _ϕ_ _[−]_ tan [cos] _[ ϕ]_ _ψ_
+
+
+2 sin _ϕ_ tan _ψ_ _[.]_
+
+
+Remarks. (1) **(Discussion on boundary values)** When _ϕ_ = 0 or _ϕ_ = _π_, _KS_ [1] [and] _[ K]_ _S_ [2] [take fixed values]
+rather than being random variables, and when _ψ_ = 0 or _ψ_ = _π_, the exact value of _⟨_ _**q**_ _,_ _**v**_ _⟩_ can be directly
+obtained. Therefore, probability analysis in these cases is meaningless. Additionally, in Lemma 4.3,
+we adopt the following convention: _p_ 2( _ϕ_ ) = 0 if _t_ _[′]_ _<_ 0.
+
+
+4
+
+
+**Algorithm 1** Confguration of _S_ via antipodal projections
+
+**Input:** _L_ is the level; _d_ = _Ld_ _[′]_ is the data dimension; _m_ is the number of vectors in each level
+**Output:** _S_ sym( _m, L_ ), which is represented by _mL_ sub-vectors with dimension _d_ _[′]_ .
+
+**1** **for** _l_ = 1 **to** _L_ **do**
+
+
+**2** Generate _m/_ 2 points i.i.d. on S _[d][′][−]_ [1], along with their antipodal counterparts
+
+
+~~_√_~~
+**3** Scale the norm of all _m_ points in this iteration to 1 _/_
+
+
+_L_, and collect the vectors after scaling
+
+
+(2) **(Deterministic relationship for angle testing)** Lemma 4.2 establishes a relationship between
+the objective angle _ϕ_ and the value of the function _KS_ [1] [.] [Notably, after computing] _[ Z][S]_ [(] _[·]_ [)][, the value]
+of reference angle _AS_ ( _·_ ) can be obtained automatically. Besides, as will be shown in Sec. 5, with a
+reasonable choice of _S_, the assumption _AS_ ( _·_ ) _>_ 0 can always be ensured. Hence, Eq. (4) essentially
+describes a deterministic relationship. In contrast to the asymptotic relationship of CEOs, Eq. (4)
+provides an exact relationship without additional assumptions.
+
+
+(3) **(Effectiveness of kernel functions)** The above two lemmas show that, with a reasonable construction of _S_ such that the reference angle is small with a high probability, _KS_ [1] [and] _[ K]_ _S_ [2] [can effectively]
+address the corresponding angle testing problems. The smaller the reference angle is, the more effective
+_KS_ [1] [and] _[ K]_ _S_ [2] [become.]
+
+
+(4) **(Gaussian distribution is suboptimal)** The fact that a smaller reference angle is favorable justifies
+the utilization of _ZS_ ( _·_ ) and also implies that the Gaussian distribution is not an optimal choice for
+configuring _S_, since in this case, the selected reference vector with the largest inner product with the
+query or data vector is not guaranteed to have the smallest reference angle.
+
+
+5 IMPLEMENTATION AND COMPLEXITY ANALYSIS
+
+
+We discuss how to configure _S_, and then analyze the complexity of _KS_ [1] [and] _[ K]_ _S_ [2] [. Based on the discussion]
+in Sec. 4, we observe that small reference angles are preferred. Thus, given _m_, our goal is to construct a
+set _S_ of _m_ points on S _[d][−]_ [1], denoted by _Sm_, such that _ASm_ ( _·_ ) is maximized. Due to the effect of the
+random rotation matrix _H_, the optimal configurations denoted by _S_ [¯] _m_ and _Sm_ _[∗]_ [, can be obtained either in]
+the sense of expectation or in the sense of the worst case, respectively:
+_S_ ¯ _m_ = argmax (5)
+_S_ = _{_ _**u**_ **1** _,...,_ _**um**_ _}⊂_ S _[d][−]_ [1] _[{]_ [E] _**[v]**_ _[∈][U]_ [(][S] _[d][−]_ [1][)][[] _[A][S]_ [(] _**[v]**_ [)]] _[}][,]_
+
+_Sm_ _[∗]_ [=] _S_ = _{_ _**u**_ **1** arg max _,...,_ _**um**_ _}⊂_ S _[d][−]_ [1] _**v**_ _∈_ minS _[d][−]_ [1] 1 [max] _≤i≤m_ _[⟨]_ _**[u][i]**_ _[,]_ _**[ v]**_ _[⟩][,]_ (6)
+
+where _U_ (S _[d][−]_ [1] ) denotes the uniform distribution on the sphere. By the definitions of _S_ [¯] _m_ and _Sm_ _[∗]_ [, they]
+correspond to the configurations that achieve the largest expected value and the largest worst-case
+value of _AS_ ( _**v**_ ), respectively. On the other hand, finding the exact solutions for _S_ [¯] _m_ and _Sm_ _[∗]_ [is closely]
+related to the best covering problem, which is highly challenging and remains open in the general
+case. To the best of the authors’ knowledge, the optimal configuration _Sm_ _[∗]_ [is] [only] [known] [when]
+_m ≤_ _d_ + 3 (Borodachov et al., 2019). In light of this, we provide two configurations of _S_ : one relies
+on random antipodal projections (Alg. 1), and the other is built using multiple cross-polytopes (Alg. 2).
+Each has its own advantages. Alg. 1 enables the estimation of reference angles, while Alg. 2 can
+empirically produce slightly smaller reference angles and is more efficient for projection computation.
+
+
+Before proceeding into the details of algorithms, we introduce a quantity _J_ ( _S_ ) as follows.
+
+
+_J_ ( _S_ ) = E _**v**_ _∈U_ (S _d−_ 1)[ _AS_ ( _**v**_ )] _._ (7)
+
+
+By definition, _J_ ( _S_ ) denotes the expected value of _AS_ ( _**v**_ ) w.r.t. _S_ (which equals the cosine of the
+reference angle when _**v**_ _∈_ S _[d][−]_ [1] ). This quantity is consistent with our theory, as a random rotation
+is applied to _**v**_ or _**q**_ in Eq. (2) and Eq. (3). Based on the previous discussion, for a fixed _m_, _J_ ( _S_ ) is
+maximized when _S_ = _S_ [¯] _m_, which is hard to compute. Thus, we take _N_ to be sufficiently large and
+let _v_ 1 _,N_ _, . . ., vN,N_ be vectors drawn independently and uniformly from _U_ (S _[d][−]_ [1] ). Let _J_ [˜] ( _S, N_ ) =
+
+[ [�] _[N]_ _i_ =1 _[A][S]_ [(] _**[v][i,N]**_ [)]] _[/N]_ [. By the law of large numbers, we can approximate] _[ J]_ [(] _[S]_ [)][ by] _[J]_ [˜][(] _[S, N]_ [)][ when] _[ N]_ [is]
+sufficiently large.
+
+
+Now, we are ready to explain Alg. 1 and Alg. 2 as follows.
+
+
+5
+
+
+**Algorithm 2** Confguration of _S_ via multiple cross-polytopes
+
+**Input:** _L_ is the level; _d_ = _Ld_ _[′]_ is the data dimension; _m_ = 2 _d_ _[′]_ _a_ + _b_ ; _R_ is the maximum number of iterations
+**Output:** _S_ pol( _m, L_ ), which is represented by _mL_ sub-vectors with dimension _d_ _[′]_
+
+**1** Generate _N_ points randomly and independently on S _[d][′][−]_ [1], where _N_ is a sufficiently large number
+
+**2** **for** _r_ = 1 **to** _R_ **do**
+
+
+**3** **for** _t_ = 1 **to** _a_ **do**
+
+
+**4** Generate a random rotation matrix _H_ _∈_ R _[d][′][×][d][′]_, and rotate 2 _d_ _[′]_ axes in R _[d][′]_ using _H_
+
+
+**5** Collect the 2 _d_ _[′]_ vectors of the cross-polytope after rotation
+
+
+**6** **if** _b >_ 0 **then**
+
+**7** Repeat the above iteration and select _b/_ 2 antipodal pairs from the rotated cross-polytope
+
+**8** For the generated _S_ _∈_ S _[d][′][−]_ [1], compute _J_ [˜] ( _S, N_ ) and keep the configuration with the largest value, denoted by
+_S_ max
+
+
+**9** **for** _l_ = 1 **to** _L_ **do**
+
+
+**10** Generate a random rotation matrix _H_ _∈_ R _[d][′][×][d][′]_ and rotate the configuration _S_ max using _H_
+
+
+~~_√_~~
+**11** Scale the norm of all _m_ points in this iteration to 1 _/_
+
+
+_L_ and collect the vectors after scaling
+
+
+(1) **(Utilization of antipodal pairs and cross-polytopes)** We use the antipodal pair or the crosspolytope as our building block for the following three reasons. (i) Since all the projection vectors are
+antipodal pairs, the evaluation time of projection vectors can be halved. (ii) Both two structures can
+ensure that the assumption _AS_ ( _**v**_ ) _>_ 0 holds, such that the condition in Lemma 4.3 is always satisfied.
+(iii) The result in Borodachov (2022) shows that, for _m_ = 2 _d_, under mild conditions, the 2 _d_ vertices
+of a cross-polytope can be proven to have the smallest covering radius, that is, the smallest reference
+angle in the worst case. Although the results in the case _m >_ 2 _d_ are unknown, we can rotate the fixed
+cross-polytope in random directions to generate multiple cross-polytopes until we obtain _m_ vectors,
+which explains the steps from 3 to 7 in Alg. 2.
+
+
+(2) **(Selection from random configurations)** We can generate such _m_ points in the above way many
+times, which forms multiple _S_ ’s. By the discussion above, we can use _J_ [˜] ( _S, N_ ) to approximately
+evaluate the performance of _J_ ( _S_ ), and thus, among the generated _S_ ’s, we select the configuration _S_ pol
+corresponding to the maximal _J_ [˜] ( _S, N_ ). This explains steps 2 and 8 in Alg. 2.
+
+
+(3) **(Accuracy boosting via multiple levels)** Increasing _m_ can lead to a smaller reference angle. The
+analysis in Lu et al. (2024) shows that, for certain angle-thresholding problems requiring high accuracy,
+an exponential increase in _m_, rather than a linear one, can be effective. Therefore, similar to Lu et al.
+(2024), we use a product-quantization-like technique (Jégou et al., 2011) to partition the original space
+into _L_ subspaces (levels), which is adopted in Algs. 1 and 2. By concatenating equal-length sub-vectors
+from these _L_ subspaces, we can virtually generate _m_ _[L]_ normalized projected vectors. As will be shown
+in Lemma B.1, the introduction of _L_ can significantly decrease the reference angle, and _L_ can also
+control the trade-off between query accuracy and efficiency.
+
+
+(4) **(Fast projection computation via multi-cross-polytopes)** In Eq. (2) and Eq. (3), we need to
+compute _HS_ _**v**_ in the indexing phase. If the projection time is a concern in practice, we can use the
+Fast Johnson–Lindenstrauss transformation to accelerate this process. Specifically, we use Alg. 2 with
+_R_ = 1. When _L_ = 1, the cost of computing _HS_ _**v**_ is _O_ (max( _d, m_ ) log _d_ ). When _L_ _>_ 1, the cost of
+computing _HS_ _**v**_ can be reduced to _O_ ( _d_ log _d_ + _mL_ log( _d/L_ )).
+
+
+By Alg. 1 and Alg. 2, we obtain structures _S_ sym( _m, L_ ) and _S_ pol( _m, L_ ) virtually containing _m_ _[L]_
+projection vectors. For _S_ sym( _m, L_ ), we can actually establish a deterministic relationship between _J_ ( _S_ sym( _m, L_ )) and ( _m, L_ ) (see Lemma B.1 in Appendix). On the other hand, in practice,
+_J_ ( _S_ pol( _m, L_ )) is often slightly larger than _J_ ( _S_ sym( _m, L_ )), as will be shown in Table 1.
+
+
+With _S_ sym( _m, L_ ) and _S_ pol( _m, L_ ), we are ready to present a complexity analysis of the two proposed
+functions, showing that they satisfy the complexity requirement in Problem 1.1 and Problem 1.2.
+
+**Lemma 5.1.** _In the indexing phase, for a fixed dataset D of size n, the complexities of KS_ [1] _[and][ K]_ _S_ [2]
+_are O_ ( _nmd_ ) _and O_ ( _nd_ log _d_ + _nmd_ ) _, respectively._ _In the query phase, KS_ [1] _[requires][ O]_ [(] _[md]_ [)] _[- time]_
+_for random projection, and for each v_ _∈D, it spends O_ (1) _-time for computing KS_ [1] [(] _[q, v]_ [)] _[, while][ K]_ _S_ [2]
+_spends O_ ( _d_ log _d_ + _md_ ) _-time for random projection and random rotation, and for each v_ _∈D, it_
+_spends O_ ( _L_ ) _-time for computing KS_ [2] [(] _[q, v]_ [)] _[, where][ L][ ≪]_ _[d][. Particularly, if][ S]_ [=] _[ S][pol]_ [(] _[m, L]_ [)] _[ with][ R]_ [ = 1] _[,]_
+
+
+6
+
+
+_the complexities of KS_ [1] _[and][ K]_ _S_ [2] _[in the indexing phase can be reduced to][ O]_ [(max(] _[d, m]_ [)] _[n]_ [ log] _[ d]_ [)] _[ and]_
+_O_ ( _nd_ log _d_ + _nmL_ log( _d/L_ )) _, respectively, where m is greater than d/L by user-specification._
+
+
+6 APPLICATIONS TO SIMILARITY SEARCH
+
+
+6.1 IMPROVEMENT ON CEOS-BASED TECHNIQUES
+
+
+As for _KS_ [1] [, we can use it to improve CEOs, which is used for MIPS and further applied to accelerate]
+LSH-based ANNS (Andoni et al., 2015) and DBSCAN (Xu & Pham, 2024). Since CEOs was originally
+designed for inner products, we generalize _KS_ [1] [to] _[ K]_ _S_ [1] _[′]_ [as follows to align with CEOs:]
+
+_KS_ [1] _[′]_ [(] _**[q]**_ _[,]_ _**[ v]**_ [) =] _[ ∥]_ _**[v]**_ _[∥· ⟨]_ _**[v]**_ _[, Z][HS]_ [(] _**[q]**_ [)] _[⟩]_ _**v**_ _∈_ R _[d]_ _,_ _**q**_ _∈_ S _[d][−]_ [1] _._ (8)
+
+It is easy to see that, with two minor modifications, that is, replacing _**v**_ _∈_ S _[d][−]_ [1] with _**v**_ _∈_ R _[d]_, and
+replacing _x_ with _∥_ _**v**_ _∥x_ in Eq. (4), Lemma 4.2 still holds. Therefore, _KS_ [1] _[′]_ [can be regarded as a reasonable]
+kernel function for inner products. Then, we can apply _KS_ [1] _[′]_ [to the algorithm in Pham (2021); Pham &]
+Liu (2022); Xu & Pham (2024). We only need to make the following modification. In these algorithms,
+the random Gaussian matrix, which denotes the set of projection vectors, can be replaced by _S_ sym or
+_S_ pol, with the other parts unchanged. This substitution does not change the complexity of the original
+algorithms. To distinguish this projection technique based on _KS_ [1] _[′]_ [from CEOs, we refer to it as] **[ KS1]**
+(see Alg. 5 for the projection structure of KS1). In the experiments, we will demonstrate that KS1
+yields a slight improvement in recall rates over CEOs, owing to a smaller reference angle.
+
+
+6.2 A NEW PROBABILISTIC TEST IN SIMILARITY GRAPH
+
+
+Lu et al. (2024) proposed probabilistic routing and used it in similarity graphs to accelerate ANNS. Let
+_dist_ ( _·, ·_ ) be the distance function for ANNS. Each node in the similarity graph represents a data vector.
+The definition of probabilistic routing is as follows.
+
+**Definition 6.1** (Probabilistic Routing (Lu et al., 2024)) **.** _Given a query vector_ _**q**_ _, a node v in the graph,_
+_an error bound ϵ, and a distance threshold δ, for an arbitrary neighbor w of v such that dist_ ( _**w**_ _,_ _**q**_ ) _< δ,_
+_if a routing algorithm returns true for w with a probability of at least_ 1 _−_ _ϵ, then the algorithm is_
+_deemed to be_ ( _δ,_ 1 _−_ _ϵ_ ) _-routing._
+
+
+Lu et al. (2024) proposed a ( _δ,_ 1 _−_ _ϵ_ )-routing test called PEOs test. Based on _KS_ [2] [, we propose a new]
+routing test for _ℓ_ 2 distance, called the **KS2 test**, as follows (see Sec. C.1 and Fig. 3 in Appendix for
+more details).
+_L_
+
+    - _**⊤**_ _**i**_ _[−]_ _**[v]**_ _[⊤]_ _**[q]**_
+
+_[∥]_ _**[w]**_ _[∥]_ [2] _[/]_ [2] _[ −]_ _[τ]_
+
+
+- _**qi⊤uie**_ **[** _**i**_ **]** _[≥]_ _[A][S]_ [(] _**[e]**_ [)] _[ ·]_ _[∥]_ _**[w]**_ _[∥]_ [2] _[/]_ [2] _[ −]_ _[τ]_ _[−]_ _**[v]**_ _[⊤]_ _**[q]**_
+
+_∥_ _**e**_ _∥_
+
+_i_ =1
+
+
+_._ (9)
+_∥_ _**e**_ _∥_
+
+
+_**q**_ _∈_ R _[d]_ is the query, _**v**_ is the visited graph node, _**w**_ is the neighbor of _**v**_, and _**e**_ = _**w**_ _−_ _**v**_ . _τ_ is the
+threshold determined by the result list of graph search. _**qi**_, _**ei**_ denote the _i_ -th sub-vectors of _**q**_ and _**e**_,
+respectively (1 _≤_ _i ≤_ _L_ ). _**u**_ _[i]_ _j_ [denotes the] _[ j]_ [-th sub-vector of the] _[ i]_ [-th subspace of] _**[ u]**_ [.] _**[ u]**_ _**e**_ _**[i]**_ **[** _**i**_ **]** [denotes the]
+reference vector of _**ei**_ among all _{_ _**u**_ _**[i]**_ _**j**_ _[}]_ [’s (][1] _[ ≤]_ _[j]_ _[≤]_ _[m]_ [). In our experiments,] _[ S]_ [ was set to] _[ S]_ [sym][(256] _[, L]_ [)][.]
+
+
+During the traversal of the similarity graph, we check the exact distance from graph node _w_ to _q_
+only when Ineq. (9) is satisfied; otherwise, we skip the computation of _w_ for efficiency. A complete
+graph-based algorithm equipped with the KS2 test can be found in Alg. 7. By Lemma 4.3 and the same
+analysis in Lu et al. (2024), we can easily obtain the following result.
+
+**Corollary 6.2.** _The graph-based search equipped with the KS2 test_ (9) _is a_ ( _δ,_ 0 _._ 5) _-routing test._
+
+
+**Comparison with PEOs.** Since PEOs also uses a Gaussian distribution to generate projection vectors
+in subspaces, as CEOs does, and does not make use of the reference-angle information, the estimation in
+Ineq. (9) is more accurate than that of the PEOs test. In addition, the proposed test has two advantages:
+(1) Ineq. (9) is much simpler than the testing inequality in the PEOs test, resulting in higher evaluation
+efficiency; (2) Ineq. (9) requires fewer constants to be stored, leading to a smaller index size compared
+to that of PEOs.
+
+
+**Complexity analysis.** For the time complexity, for every edge _**e**_, the computation of the LHS of
+Ineq. (9) requires _L_ lookups in the table and _L −_ 1 additions, while the computation of the RHS of
+
+
+7
+
+
+Table 1: Comparison of recall rates (%) for _k_ -MIPS, _k_ = 10. The number of projection vectors is
+2048. Top-5 projection vectors are probed. Probe@ _n_ means top- _n_ points were probed on each probed
+projection vector. Results are averaged over 10 runs to reduce the bias introduced by random projection.
+
+
+|Dataset & Method|Col2|Probe@10|Probe@100|Probe@1K|Probe@10K|
+|---|---|---|---|---|---|
+|Word|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|34.106<br>34.167<br>**34.395**|71.471<br>71.679<br>**72.078**|90.203<br>90.265<br>**90.678**|98.182<br>98.195<br>**98.404**|
+|GloVe1M|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|1.773<br>1.792<br>**1.808**|6.920<br>7.015<br>**7.071**|24.166<br>24.456<br>**24.556**|63.545<br>64.041<br>**64.355**|
+|GloVe2M|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|**2.070**<br>2.064<br>1.996|6.904<br>6.928<br>**6.979**|21.082<br>21.182<br>**21.262**|54.916<br>55.240<br>**55.394**|
+
+
+Ineq. (9) requires two additions and one multiplication. By using SIMD, we can perform the KS2
+test for 16 edges simultaneously. For the space complexity, for each edge, we need to store _L_ bytes
+to recover _**qi**_ _**[⊤]**_ _**u**_ _**[i]**_ _**e**_ **[** _**i**_ **]** [, along with two scalars, that is,] _[ A][S]_ [(] _**[e]**_ [)] _[∥]_ _**[w]**_ _[∥]_ [2] _[/]_ [(2] _[∥]_ _**[e]**_ _[∥]_ [)][ and] _[ A][S]_ [(] _**[e]**_ [)] _[/][∥]_ _**[e]**_ _[∥]_ [, which are]
+quantized using scalar quantization to enable fast computation of the RHS of Ineq. (9).
+
+
+7 EXPERIMENTS
+
+
+All experiments were conducted on a PC equipped with an Intel(R) Xeon(R) Gold 6258R CPU @
+2.70GHz. KS1 and KS2 were implemented in C++. The ANNS experiments used 64 threads for
+indexing and a single CPU thread for searching. We evaluated our methods on six high-dimensional
+real-world datasets: **Word**, **GloVe1M**, **GloVe2M**, **Tiny**, **GIST**, and **SIFT** . Detailed statistics for these
+datasets are provided in Appendix D.1. More experimental results can be found in Appendix D.
+
+
+7.1 COMPARISON WITH CEOS
+
+
+As demonstrated in Sec. 6.1, the results of CEOs are directly used to accelerate other similarity search
+processes (Pham & Liu, 2022; Xu & Pham, 2024). In this context, we focus solely on the improvement
+of CEOs itself. We show that KS1, equipped with the structures _S_ sym( _m,_ 1) and _S_ pol( _m,_ 1), can slightly
+outperform CEOs( _m_ ) on the original task of CEOs, that is, _k_ -MIPS, where _m_ denotes the number
+of projection vectors and was set to 2048, following the standard configuration of the original CEOs.
+Since the only difference among the compared approaches is the configuration of the projection vectors,
+we use a unified algorithm (see construction of projection structure Alg. 5 and MIPS query processing
+Alg. 6 in Appendix) with the configuration of projection vectors as an input to compare their recall
+rates. From the results in Table. 1, we observe that: (1) in most cases, KS1 with the two proposed
+structures achieves slightly better performance than CEOs, supporting our claim that a smaller reference
+angle yields a more accurate estimation, and (2) _S_ pol generally achieves a higher recall rate than _S_ sym,
+verifying that a configuration closer to the best covering yields better performance. Since the gain of
+KS1 over CEOs originates from only one difference, that is, the distribution of the generated projected
+vectors (Gaussian vs. a more diverse distribution on the unit sphere), this result supports our claim that
+the Gaussian distribution is suboptimal.
+
+
+7.2 ANNS PERFORMANCE
+
+
+We chose ScaNN (Guo et al., 2020), HNSW (Malkov & Yashunin, 2020), and HNSW+PEOs (Lu
+et al., 2024) as baselines, where ScaNN is a state-of-the-art quantization-based approach that performs
+better than IVFPQFS, and HNSW+PEOs (Lu et al., 2024) is a state-of-the-art graph-based approach
+that outperforms FINGER (Chen et al., 2023) and Glass (Zilliz, 2023). Like HNSW+PEOs, KS2
+is implemented on HNSW, dubbed HNSW+KS2. DiskANN (Subramanya et al., 2019) is excluded
+because it is orthogonal to KS2 and focuses on optimization for external storage. ADSampling (Gao &
+Long, 2023) is excluded because it is designed for a non-SIMD environment. The parameter settings of
+all compared approaches and additional experimental results can be found in Appendix D.
+
+
+8
+
+
+10000
+
+8000
+
+6000
+
+4000
+
+2000
+
+
+8000
+7000
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+14000
+12000
+10000
+8000
+6000
+4000
+2000
+
+
+10000
+
+8000
+
+6000
+
+4000
+
+2000
+
+
+Recall@10
+
+
+(a) SIFT- _ℓ_ 2
+
+
+6000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+
+0
+
+
+Recall@10
+
+
+Recall@10
+
+
+5000
+
+4000
+
+3000
+
+2000
+
+
+(c) Word- _ℓ_ 2
+
+
+(b) GloVe1M-angular
+
+
+0
+
+
+0
+
+
+Recall@10
+
+
+1000
+
+
+Recall@10
+
+
+(f) GIST- _ℓ_ 2
+
+
+Recall@10
+
+
+(d) GloVe2M-angular
+
+
+(e) Tiny- _ℓ_ 2
+
+
+Figure 1: Recall-QPS evaluation of ANNS. _k_ = 10.
+
+
+**(1) Index size and indexing time.** Regarding indexing time, after constructing the HNSW graph, we
+require an additional 42s, 164s, 165s, 188s, 366s, and 508s to align the edges and build the KS2 testing
+structure on **Word**, **GloVe1M**, **GIST**, **GloVe2M**, **SIFT**, and **Tiny**, respectively. This overhead is less
+than 25% of the graph construction time. In practice, users can reduce the parameter efc to shorten
+indexing time while still preserving the superior search performance of HNSW+KS2. As for the index
+size, it largely depends on the parameter _L_, which will be discussed later.
+
+
+**(2) Query performance.** From the results in Fig. 1, we make the following observations. (i) Except
+for **Word**, HNSW+KS2 achieves the best performance among all compared methods. In particular,
+HNSW+KS2 accelerates HNSW by a factor of 2.5 to 3, and is 1.1 to 1.3 times faster than HNSW+PEOs,
+demonstrating the superiority of KS2 over PEOs. (ii) Compared with ScaNN, the advantage of
+HNSW+KS2 is especially evident in the recall region below 85%, highlighting the effectiveness of the
+routing test. On the other hand, in the high-recall region for **Word**, ScaNN outperforms HNSW+KS2
+due to the connectivity issues of HNSW.
+
+
+**(3) Impact of** _L_ **.** The only tunable parameter in KS2 is _L_ . Generally speaking, the larger _L_ is, the
+larger the index size is. On the other hand, a larger _L_ can lead to a smaller reference angle and yield
+better search performance. Hence, _L_ can be used to achieve different trade-offs between index size
+and search performance. In Fig. 2, we show the impact of _L_ on index size and search performance.
+From the results, we have the following observations. (i) The index size of HNSW+KS2 is slightly
+smaller than that of HNSW+PEOs due to the storage of fewer scalars. (ii) When _d_ _[′]_ = _d/L_ is around
+16, HNSW+KS2 achieves the best search performance. This is because a larger _L_ also leads to longer
+testing time and _d_ _[′]_ = 16 is sufficient to obtain a small enough reference angle.
+
+
+8 CONCLUSIONS
+
+
+In this paper, we studied two angle-testing problems in high-dimensional Euclidean spaces: angle
+comparison and angle thresholding. To address these problems, we proposed two probabilistic kernel
+functions that are based on reference angles and are easy to implement. To minimize the reference
+angle, we further investigated the structure of the projection vectors and established a relationship
+between the expected value of the reference angle and the proposed projection vector structure. Based
+on these two functions, we introduced the KS1 projection and the KS2 test. In the experiments, we
+showed that KS1 achieves a slight accuracy improvement over CEOs, and that HNSW+KS2 delivers
+better search performance than the existing state-of-the-art ANNS approaches.
+
+
+9
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+||||||HN<br>|
+
+
+~~0~~ ~~4~~ ~~8~~ ~~12~~ ~~16~~ ~~20~~ ~~24~~ ~~28~~
+L
+
+
+(c) GIST- _ℓ_ 2
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||HNSW<br>|+PEO<br>|
+
+
+~~0~~ ~~4~~ ~~8~~ ~~12~~ ~~16~~ ~~20~~ ~~24~~ ~~28~~
+L
+
+
+(b) Word- _ℓ_ 2
+
+
+140
+
+120
+
+100
+
+80
+
+60
+
+40
+
+
+50
+
+40
+
+30
+
+20
+
+10
+
+0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+|||||||HNSW<br>|
+
+
+8000
+7000
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+30
+
+25
+
+20
+
+15
+
+10
+
+5
+
+
+16000
+14000
+12000
+10000
+8000
+6000
+4000
+2000
+
+
+~~2~~ ~~4~~ ~~6~~ ~~8~~ ~~10~~ ~~12~~ ~~14~~ ~~16~~
+L
+
+
+(a) SIFT- _ℓ_ 2
+
+
+5000
+
+4000
+
+3000
+
+
+Recall@10
+
+
+2000
+
+1000
+
+
+Recall@10
+
+
+(f) GIST- _ℓ_ 2
+
+
+Recall@10
+
+
+(d) SIFT- _ℓ_ 2
+
+
+(e) Word- _ℓ_ 2
+
+
+Figure 2: Impact of _L_ (See Appendix D.4 for other datasets). _k_ = 10. The y-axis of the upper figures
+denotes the additional index cost (%) of HNSW+PEOs compared to the original HNSW.
+ACKNOWLEDGEMENTS
+
+
+This work is supported by JSPS Kakenhi JP22H03594, JP23K17456, JP23K25157, JP23K28096,
+JP25H01117, JP25K21272, and JST CREST JPMJCR22M2.
+
+
+REFERENCES
+
+
+Alexandr Andoni and Daniel Beaglehole. Learning to hash robustly, guaranteed. In _ICML_, pp. 599–618,
+2022.
+
+
+Alexandr Andoni and Piotr Indyk. E2lsh manual. [http://web.mit.edu/andoni/www/LSH,](http://web.mit.edu/andoni/www/LSH)
+2005.
+
+
+Alexandr Andoni and Piotr Indyk. Near-optimal hashing algorithms for approximate nearest neighbor
+in high dimensions. _Commun. ACM_, 51(1):117–122, 2008.
+
+
+Alexandr Andoni, Piotr Indyk, Thijs Laarhoven, Ilya P. Razenshteyn, and Ludwig Schmidt. Practical
+and optimal LSH for angular distance. In _NeurIPS_, pp. 1225–1233, 2015.
+
+
+Artem Babenko and Victor S. Lempitsky. Efficient indexing of billion-scale datasets of deep descriptors.
+In _CVPR_, pp. 2055–2063, 2016.
+
+
+Dmitry Baranchuk, Dmitry Persiyanov, Anton Sinitsin, and Artem Babenko. Learning to route in
+similarity graphs. In _ICML_, pp. 475–484, 2019.
+
+
+Sergiy Borodachov. Optimal antipodal configuration of 2d points on a sphere in rd for coverings. In
+_arxiv_, 2022.
+
+
+Sergiy V. Borodachov, Douglas P. Hardin, and Edward B. Saff. _Discrete Energy on Rectifiable Sets_ .
+Springer Monographs in Mathematics. Springer, 2019.
+
+
+Moses Charikar. Similarity estimation techniques from rounding algorithms. In John H. Reif (ed.),
+_STOC_, pp. 380–388. ACM, 2002.
+
+
+Patrick H. Chen, Wei-Cheng Chang, Jyun-Yu Jiang, Hsiang-Fu Yu, Inderjit S. Dhillon, and Cho-Jui
+Hsieh. FINGER: fast inference for graph-based approximate nearest neighbor search. In _WWW_, pp.
+3225–3235. ACM, 2023.
+
+
+Ryan R. Curtin, Parikshit Ram, and Alexander G. Gray. Fast exact max-kernel search. _Statistical_
+_Analysis and Data Mining_, 7(1):1–9, February–December 2014.
+
+
+10
+
+
+Xinyan Dai, Xiao Yan, Kelvin Kai Wing Ng, Jiu Liu, and James Cheng. Norm-explicit quantization:
+Improving vector quantization for maximum inner product search. In _AAAI_, pp. 51–58, 2020.
+
+
+Cong Fu, Chao Xiang, Changxu Wang, and Deng Cai. Fast approximate nearest neighbor search with
+the navigating spreading-out graph. _PVLDB_, 12(5):461–474, 2019.
+
+
+Cong Fu, Changxu Wang, and Deng Cai. High dimensional similarity search with satellite system
+graph: Efficiency, scalability, and unindexed query compatibility. _IEEE Trans. Pattern Anal. Mach._
+_Intell._, 44(8):4139–4150, 2022.
+
+
+Jianyang Gao and Cheng Long. High-dimensional approximate nearest neighbor search: with reliable
+and efficient distance comparison operations. _Proc. ACM Manag. Data_, 1(2):137:1–137:27, 2023.
+
+
+Jianyang Gao and Cheng Long. Rabitq: Quantizing high-dimensional vectors with a theoretical error
+bound for approximate nearest neighbor search. _Proc. ACM Manag. Data_, 2(3):167, 2024.
+
+
+Tiezheng Ge, Kaiming He, Qifa Ke, and Jian Sun. Optimized product quantization. _IEEE Trans._
+_Pattern Anal. Mach. Intell_, 36(4):744–755, 2014.
+
+
+Yutong Gou, Jianyang Gao, Yuexuan Xu, and Cheng Long. Symphonyqg: Towards symphonious
+integration of quantization and graph for approximate nearest neighbor search. _Proc. ACM Manag._
+_Data_, 3(1):80:1–80:26, 2025.
+
+
+Ruiqi Guo, Philip Sun, Erik Lindgren, Quan Geng, David Simcha, Felix Chern, and Sanjiv Kumar.
+Accelerating large-scale inference with anisotropic vector quantization. In _ICML_, pp. 3887–3896,
+2020.
+
+
+Gaurav Gupta, Tharun Medini, Anshumali Shrivastava, and Alexander J. Smola. BLISS: A billion
+scale index using iterative re-partitioning. In _KDD_, pp. 486–495. ACM, 2022.
+
+
+Piotr Indyk and Rajeev Motwani. Approximate nearest neighbors: Towards removing the curse of
+dimensionality. In _STOC_, pp. 604–613, 1998.
+
+
+William B Johnson, Joram Lindenstrauss, et al. Extensions of lipschitz mappings into a hilbert space.
+_Contemporary mathematics_, 26(189-206):1, 1984.
+
+
+Hervé Jégou, Matthijs Douze, and Cordelia Schmid. Product quantization for nearest neighbor search.
+_IEEE Trans. Pattern Anal. Mach. Intell_, 33(1):117–128, 2011.
+
+
+Yifan Lei, Qiang Huang, Mohan Kankanhalli, and Anthony Tung. Sublinear time nearest neighbor
+search over generalized weighted space. In _ICML_, pp. 3773–3781, 2019.
+
+
+Wuchao Li, Chao Feng, Defu Lian, Yuxin Xie, Haifeng Liu, Yong Ge, and Enhong Chen. Learning
+balanced tree indexes for large-scale vector retrieval. In _KDD_, pp. 1353–1362. ACM, 2023.
+
+
+Kejing Lu, Chuan Xiao, and Yoshiharu Ishikawa. Probabilistic routing for graph-based approximate
+nearest neighbor search. In _ICML_, pp. 33177–33195, 2024.
+
+
+Yury A. Malkov and D. A. Yashunin. Efficient and robust approximate nearest neighbor search using
+hierarchical navigable small world graphs. _IEEE Trans. Pattern Anal. Mach. Intell_, 42(4):824–836,
+2020.
+
+
+Julieta Martinez, Shobhit Zakhmi, Holger H. Hoos, and James J. Little. Lsq++: Lower running time
+and higher recall in multi-codebook quantization. In _ECCV_, pp. 508–523, 2018.
+
+
+Javier Alvaro Vargas Muñoz, Marcos André Gonçalves, Zanoni Dias, and Ricardo da Silva Torres.
+Hierarchical clustering-based graphs for large scale approximate nearest neighbor search. _Pattern_
+_Recognit._, 96, 2019.
+
+
+Yun Peng, Byron Choi, Tsz Nam Chan, Jianye Yang, and Jianliang Xu. Efficient approximate nearest
+neighbor search in multi-dimensional databases. _Proc. ACM Manag. Data_, 1(1):54:1–54:27, 2023.
+
+
+Ninh Pham. Simple yet efficient algorithms for maximum inner product search via extreme order
+statistics. In _KDD_, pp. 1339–1347, 2021.
+
+
+11
+
+
+Ninh Pham and Tao Liu. Falconn++: A locality-sensitive filtering approach for approximate nearest
+neighbor search. In _NeurIPS_, pp. 31186–31198, 2022.
+
+
+Suhas Jayaram Subramanya, Fnu Devvrit, Harsha Vardhan Simhadri, Ravishankar Krishnaswamy, and
+Rohan Kadekodi. Rand-nsg: Fast accurate billion-point nearest neighbor search on a single node. In
+_NeurIPS_, pp. 13748–13758, 2019.
+
+
+Jiadong Xie, Jeffrey Xu Yu, and Yingfan Liu. Graph based k-nearest neighbor search revisited. _ACM_
+_Trans. Database Syst._, 50(4):14:1–14:30, 2025.
+
+
+Haochuan Xu and Ninh Pham. Scalable DBSCAN with random projections. In _NeurIPS_, 2024.
+
+
+Xiaoliang Xu, Mengzhao Wang, Yuxiang Wang, and Dingcheng Ma. Two-stage routing with optimized
+guided search and greedy algorithm on proximity graph. _Knowl. Based Syst._, 229:107305, 2021.
+
+
+Xiao Yan, Jinfeng Li, Xinyan Dai, Hongzhi Chen, and James Cheng. Norm-ranging LSH for maximum
+inner product search. In _NeurIPS_, pp. 2956–2965, 2018.
+
+
+Mingyu Yang, Wentao Li, Jiabao Jin, Xiaoyao Zhong, Xiangyu Wang, Zhitao Shen, Wei Jia, and Wei
+Wang. Effective and general distance computation for approximate nearest neighbor search. In
+_ICDE_, pp. 1098–1110, 2025.
+
+
+Zilliz. Graph library for approximate similarity search. [https://github.com/zilliztech/](https://github.com/zilliztech/pyglass)
+[pyglass, 2023.](https://github.com/zilliztech/pyglass)
+
+
+12
+
+
+A NOTATIONS
+
+
+Table 2 lists the main notations used in this paper.
+
+
+Table 2: Frequently used notations.
+
+
+Notation Explanation
+_D_ Dataset
+_n_ Size of Dataset
+_d_ Data dimension
+_**v**_ Data vector in _D_
+S _[d][−]_ [1] _d −_ 1 dimensional sphere
+_**q**_ Query
+_m_ The number of projection vectors
+_ϵ_ Error rate
+_S_ Fixed set of _m_ points on S _[d][−]_ [1]
+
+_H_ Random rotation matrix
+_ZS_ ( _**v**_ ) argmax _**u**_ _∈S ⟨_ _**u**_ _,_ _**v**_ _⟩_
+_AS_ ( _**v**_ ) _⟨_ _**v**_ _, ZS_ ( _**v**_ ) _⟩_
+_L_ The number of space partitions
+_**e**_ Edge in similarity graph
+_**w**_ Neighbor vector of _**v**_, connected by edge _**e**_
+_∥_ _**e**_ _∥_ Length of edge _**e**_
+_τ_ Threshold determined by the result list of graph search
+_**qi**_, _**ei**_ _i_ -th sub-vectors of _**q**_ (1 _≤_ _i ≤_ _L_ ), _**e**_, respectively
+_**u**_ _[i]_ _j_ _j_ -th sub-vector of the _i_ -th subspace of _**u**_, where 1 _≤_ _i ≤_ _L_ and 1 _≤_ _j_ _≤_ _m_
+_**u**_ _**[i]**_ _**e**_ **[** _**i**_ **]** Reference vector of _**ei**_ among all _{_ _**u**_ _**[i]**_ _**j**_ _[}]_ [’s (][1] _[ ≤]_ _[j]_ _[≤]_ _[m]_ [)]
+
+
+B PROOF OF LEMMAS
+
+
+B.1 PROOF OF LEMMA 4.2
+
+
+**Proof:** (1) For the first statement, due to the existence of random rotation matrix _H_ and symmetry, we
+only need to prove the following claim:
+
+
+**Claim:** Let _**q**_ and _**v**_ be two vectors on S _[d][−]_ [1] such that the angle between _**q**_ and _**v**_ is _ϕ_ . Let _C_ be a
+spherical cross-section defined as follows.
+
+
+_C_ = _{_ _**u**_ _∈_ S _[d][−]_ [1] : _⟨_ _**u**_ _,_ _**q**_ _⟩_ = cos _ψ}._ (10)
+
+
+_[−]_ [2] _[d][−]_ [2]
+
+2 _[,]_ 2
+
+
+[1] _[x][−]_ [cos] _[ ϕ]_ [ cos] _[ ψ]_
+
+2 [+] 2 sin _ϕ_ sin _ψ_
+
+
+If _**u**_ is a vector randomly drawn from _C_, the CDF of _⟨_ _**v**_ _,_ _**u**_ _⟩_ is _It_ ( _[d][−]_ [2]
+
+
+[2] [1]
+
+2 [)][, where] _[ t]_ [ =] 2
+
+
+2 sin _ϕ_ sin _ψ_ [.]
+
+
+**Proof of Claim:** Without loss of generality, we can rotate the coordinate system so that
+
+
+_**q**_ = (1 _,_ 0 _, · · ·_ _,_ 0) _∈_ R _[d]_ _._ (11)
+
+
+Then, by the definition of _**u**_, _**u**_ can be written as follows
+
+
+_**u**_ = (cos _ψ,_ sin _ψ ·_ _**ω**_ ) (12)
+
+
+where _**ω**_ _∈_ S _[d][−]_ [2] _∈_ R _[d][−]_ [1] is a unit vector in the subspace orthogonal to _**q**_ . Similarly, _**v**_ can be expressed
+as follows.
+_**v**_ = (cos _ϕ,_ sin _ϕ ·_ _**η**_ ) (13)
+where _**η**_ _∈_ S _[d][−]_ [2] is fixed and corresponds to the projection of _**v**_ onto the orthogonal subspace of _**q**_ .
+Then _⟨_ _**v**_ _,_ _**u**_ _⟩_ can be written as follows.
+
+
+_X_ := _⟨_ _**v**_ _,_ _**u**_ _⟩_ = cos _ϕ_ cos _ψ_ + sin _ϕ_ sin _ψ · W_ (14)
+
+
+where _W_ = _⟨_ _**ω**_ _,_ _**η**_ _⟩_ is a random variable. A well-known fact says that _W_ is related to the Beta
+distribution as follows.
+
+
+[+ 1] - _d −_ 2
+
+_∼_ Beta _,_ _[d][ −]_ [2]
+2 2 2
+
+
+_._ (15)
+
+
+[+ 1]
+_T_ = _[W]_
+
+
+2
+
+
+13
+
+
+Therefore, we have
+
+
+[1] _[x][ −]_ [cos] _[ ϕ]_ [ cos] _[ ψ]_
+
+2 [+] 2 sin _ϕ_ sin _ψ_
+
+
+_FX_ ( _x_ ) = P( _X_ _≤_ _x_ ) = P( _T_ _≤_ [1]
+
+
+) _._ (16)
+2 sin _ϕ_ sin _ψ_
+
+
+Thus, _FX_ ( _x_ ) = _It_ ( _[d][−]_ [2]
+
+
+_[−]_ [2] _[d][−]_ [2]
+
+2 _[,]_ 2
+
+
+[2] [1]
+
+2 [)][, where] _[ t]_ [ =] 2
+
+
+[1] _[x][−]_ [cos] _[ ϕ]_ [ cos] _[ ψ]_
+
+2 [+] 2 sin _ϕ_ sin _ψ_
+
+
+2 sin _ϕ_ sin _ψ_ [.]
+
+
+(2) For the second statement, due to the existence of random rotation matrix _H_ and symmetry, we only
+need to prove the following claim.
+
+
+**Claim:** Given three normalized vectors _**v**_ **1**, _**v**_ **2** and _**q**_, let _⟨_ _**q**_ _,_ _**v**_ **1** _⟩_ be larger than _⟨_ _**q**_ _,_ _**v**_ **2** _⟩_ . Let _C_ be the
+spherical cross-section defined in the proof of statement 1, and let _**u**_ be a normalized vector drawn
+randomly from _C_ . As _ψ_ decreases, P[ _⟨_ _**u**_ _,_ _**v**_ **1** _⟩_ _> ⟨_ _**u**_ _,_ _**v**_ **2** _⟩_ ] increases.
+
+**Proof of Claim:** For _**u**_ = cos _ψ ·_ _**q**_ + sin _ψ ·_ _**ω**_ _**[′]**_, where _**ω**_ _**[′]**_ is a random normalized vector, taking _**u**_ ’s
+inner products with _**v**_ **1** and _**v**_ **2**, we obtain:
+
+_⟨_ _**v**_ **1** _,_ _**u**_ _⟩_ = cos _ψ ⟨_ _**v**_ **1** _,_ _**q**_ _⟩_ + sin _ψ ⟨_ _**v**_ **1** _,_ _**ω**_ _**[′]**_ _⟩_ _._ (17)
+
+_⟨_ _**v**_ **2** _,_ _**u**_ _⟩_ = cos _ψ ⟨_ _**v**_ **2** _,_ _**q**_ _⟩_ + sin _ψ ⟨_ _**v**_ **2** _,_ _**ω**_ _**[′]**_ _⟩_ _._ (18)
+
+Then, we have
+P[ _⟨_ _**u**_ _,_ _**v**_ **1** _⟩_ _> ⟨_ _**u**_ _,_ _**v**_ **2** _⟩_ ] _⇔_ P[ _⟨_ _**v**_ **1** _,_ _**ω**_ _**[′]**_ _⟩−⟨_ _**v**_ **2** _,_ _**ω**_ _**[′]**_ _⟩_ _>_ ∆ _q_ cot _ψ_ ] (19)
+where ∆ _q_ = _⟨_ _**v**_ **2** _,_ _**q**_ _⟩−⟨_ _**v**_ **1** _,_ _**q**_ _⟩_ _<_ 0 and the threshold ∆ _q_ cot _ψ_ is naturally set to 0 when _ψ_ = _π/_ 2.
+As _ψ_ decreases, cot _ψ_ increases, making ∆ _q_ cot _ψ_ smaller. Since _⟨_ _**v**_ **1** _,_ _**ω**_ _**[′]**_ _⟩−⟨_ _**v**_ **2** _,_ _**ω**_ _**[′]**_ _⟩_ is a random
+variable due to the existence of _**ω**_ _**[′]**_, the probability that it exceeds a given threshold increases as the
+threshold decreases. Thus, as _ψ_ decreases, the probability that the above inequality holds increases.
+
+
+B.2 PROOF OF LEMMA 4.3
+
+
+We consider the following four cases based on the value of _⟨_ _**q**_ _,_ _**v**_ _⟩_ .
+
+
+**Case 1:** 0 _< ⟨_ _**q**_ _,_ _**v**_ _⟩_ _<_ 1.
+
+
+Let _**u**_ be a random vector drawn randomly from a spherical cross-section _C_ _[′]_ defined as follows.
+
+
+_C_ _[′]_ = _{_ _**u**_ _∈_ S _[d][−]_ [1] : _⟨_ _**u**_ _,_ _**v**_ _⟩_ = cos _ψ}._ (20)
+
+
+Next, we construct a simplex with vertices _O, A, B, C_ as follows. We use _[−→]_ _OA_ to denote vector _**v**_, where
+_O_ denotes the origin. Then we can build a unique hyperplane _H_ _[′]_ through point _A_ and perpendicular to
+_**v**_ . We extend _**q**_ and _**u**_ along their respective directions to _[−−→]_ _OB_ and _[−−→]_ _OC_ such that _B_ and _C_ are on _H_ _[′]_ .
+Then, we only need to prove the following claim.
+
+**Claim:** Let _O, A, B, C_ be four points in R _[d]_ . _[−→]_ _OA_ is perpendicular to _[−−→]_ _AB_, and _[−→]_ _OA_ is perpendicular to
+_−→_
+_AC_ . The angle between _[−→]_ _OA_ and _[−−→]_ _OC_ is _ψ_, and the angle between _[−→]_ _OA_ and _[−−→]_ _OB_ is _ϕ_ . If the angle between
+_−−→_
+_AB_ and _[−→]_ _AC_ is _α_, then cos _β_, where _β_ denotes the angle between _[−−→]_ _OB_ and _[−−→]_ _OC_, can be expressed as
+follows.
+cos _β_ = cos _ϕ_ cos _ψ_ + sin _ϕ_ sin _ψ_ cos _α._ (21)
+
+This claim can be easily proved by elementary transformations. Since _[−−→]_ _AB_ is fixed and _[−→]_ _AC_ follows the
+uniform distribution of a sphere in R _[d][−]_ [1], cos _α_ and cos _β_ are random variables. Therefore, we have the
+following equalities.
+
+
+P[ _KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ ≥]_ [cos] _[ θ]_ [] =][ P][[cos] _[ β]_ _[≥]_ [cos] _[ θ]_ [ cos] _[ ψ]_ []]
+
+= P[cos _α ≥_ [cos] _[ θ][ −]_ [cos] _[ ϕ]_ (22)
+
+sin _ϕ_ tan _ψ_ []] _[.]_
+
+
+We further consider the following two cases.
+
+
+**Case 1’:** cos _ϕ ≥_ cos _θ_ .
+
+
+P[ _KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ ≥]_ [cos] _[ θ]_ []] _[ ≥]_ [P][[cos] _[ α][ ≥]_ [0] = 1] _[/]_ [2] _[.]_ (23)
+
+
+**Case 2’:** cos _ϕ <_ cos _θ_ .
+
+
+14
+
+
+**Algorithm 3** Confguration of _S_ via random projection
+
+**Input:** _L_ is the level; _d_ = _Ld_ _[′]_ is the data dimension; _m_ is the number of vectors in each level
+**Output:** _S_ ran( _m, L_ ), which is physically represented by _mL_ sub-vectors with dimension _d_ _[′]_
+
+**1** **for** _l_ = 1 **to** _L_ **do**
+
+
+**2** Generate _m_ points randomly and independently on S _[d][′][−]_ [1]
+
+
+~~_√_~~
+**3** Scale the norm of all _m_ points in this iteration to 1 _/_
+
+
+_L_ and collect the vectors after scaling
+
+
+By the properties of Beta distribution discussed in the proof of Lemma 4.2 and the property of symmetry
+of incomplete regularized Beta function, we have
+
+
+        - _d −_ 2
+P[ _KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ ≥]_ [cos] _[ θ]_ [] =] _[ I][t][′]_ _,_ _[d][ −]_ [2]
+2 2
+
+
+(24)
+
+
+where _t_ _[′]_ = 12 _[−]_ 2 sin [cos] _[ θ]_ _ϕ_ _[−]_ tan [cos] _[ ϕ]_ _ψ_
+
+
+2 sin [cos] _[ θ]_ _ϕ_ _[−]_ tan [cos] _[ ϕ]_ _ψ_ [.] [Moreover,] [since][ tan] _[ ψ]_ [is strictly increasing in] _[ ψ]_ [when] _[ ψ]_ _[∈]_ [(0] _[,]_ _[π]_ 2
+
+
+where _t_ = 2 _[−]_ 2 sin _ϕ_ tan _ψ_ [.] [Moreover,] [since][ tan] _[ ψ]_ [is strictly increasing in] _[ ψ]_ [when] _[ ψ]_ _[∈]_ [(0] _[,]_ 2 [)][,]
+
+P[ _KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ ≥]_ [cos] _[ θ]_ []][ is increasing in] _[ ψ]_ [. On the other hand, it is easy to see that][ P][[] _[K]_ _S_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ ≥]_ [cos] _[ θ]_ []]
+is strictly decreasing in _ϕ_ when _ϕ ∈_ ( _θ, π_ ). Hence, Lemma 4.3 in Case 1 is proved.
+
+
+**Case 2:** _⟨_ _**q**_ _,_ _**v**_ _⟩_ = 0.
+
+
+In this case, without loss of generality, we can define _**q**_ _,_ _**v**_ _,_ _**u**_ as follows.
+
+
+_**q**_ = (0 _,_ 1 _, · · ·_ _,_ 0) _∈_ S _[d][−]_ [1] _._ (25)
+
+
+_**v**_ = (1 _,_ 0 _, · · ·_ _,_ 0) _∈_ S _[d][−]_ [1] _._ (26)
+
+_**u**_ = (cos _ψ,_ sin _ψ ·_ _**ω**_ ) _∈_ S _[d][−]_ [1] _**ω**_ _∼_ _U_ (S _[d][−]_ [2] ) _._ (27)
+
+Therefore, we have
+P[ _KS_ [2] [(] _**[q]**_ _[,]_ _**[ v]**_ [)] _[ ≥]_ [cos] _[ θ]_ [] =][ P][[cos] _[ α][ ≥]_ [cos] _[ θ/]_ [ tan] _[ ψ]_ []] (28)
+which is consistent with _ϕ_ = _π/_ 2 in Case 1. The following analysis is similar to that in Case 1.
+
+
+**Case 3:** _−_ 1 _< ⟨_ _**q**_ _,_ _**v**_ _⟩_ _<_ 0.
+
+
+Instead of _**v**_ and _**u**_, we consider _−_ _**v**_ and _−_ _**u**_, and construct the simplex based on _**q**_, _**−v**_ and _**−u**_ as in
+Case 1. Then, with the reverse of sign, we finally obtain an equation similar to Eq. (21), except with _α_
+replaced by _π −_ _α_ . The following analysis is similar to that of Case 1.
+
+
+**Case 4:** _⟨_ _**q**_ _,_ _**v**_ _⟩_ = 1 or _⟨_ _**q**_ _,_ _**v**_ _⟩_ = _−_ 1.
+
+
+In this case, _⟨_ _**q**_ _,_ _**u**_ _⟩_ = _±_ cos _ψ_, and the conclusion is trivial.
+
+
+B.3 ESTIMATION OF _J_ ( _S_ sym( _m, L_ ))
+
+
+As discussed in Sec 5, for _S_ sym( _m, L_ ), we can establish a relationship between _J_ ( _S_ sym( _m, L_ )) and
+( _m, L_ ) as follows.
+
+
+                                      - _d_ _[′]_
+Γ 2
+**Lemma B.1.** _Suppose that d is divisible by L, and d_ = _Ld_ _[′]_ _, where d_ _[′]_ _≥_ 3 _._ _Let cd′_ = ~~_√_~~ 
+
+
+_−_ 1 - _,_
+
+2
+
+
+_[′]_  
+2
+
+
+~~_√_~~ _π_ Γ� _d_ _[′]_ _−_ 1
+
+
+_f_ ( _y_ ) = _cd′_ (1 _−_ _y_ [2] ) _d_ _[′]_ 2 _−_ 3 _and F_ ( _y_ ) = - _−y_ 1 _[f]_ [(] _[t]_ [)] _[ dt][. We have]_
+
+
+_√_
+_J_ ( _S_ sym( _m, L_ )) _> m_
+
+
+Γ( _[d]_
+
+
+_[d]_ _[d]_ [+1]
+
+2 _L_ [)Γ(] 2
+
+
+_[d]_ [+] _[L]_
+_L_ [Γ(] 2 _L_
+
+
+[+] _[L]_ _[d]_
+
+2 _L_ [)Γ(] 2
+
+
+2 [)]
+
+
+2 [)]
+
+
+- 1
+
+_yF_ ( _y_ ) _[m][−]_ [1] _f_ ( _y_ ) d _y._ (29)
+
+_−_ 1
+
+
+The RHS of Ineq. (29) actually denotes _J_ ( _S_ ran), where _S_ ran is the configuration of purely random
+projections (see Alg. 3 for more detail). A numerical computation of the RHS of Ineq. (29) is shown in
+Fig. 5 in Appendix.
+
+
+**Proof:** First, we introduce an auxiliary algorithm Alg. 3, which relies on purely random projection.
+The structure _S_ produced in Alg. 3 is denoted by _S_ ran. We then present the following claim.
+
+
+**Claim:** _J_ ( _S_ sym( _m, L_ )) _> J_ ( _S_ ran( _m, L_ )).
+
+
+To prove this claim, we introduce the following definition.
+
+
+15
+
+
+**Definition B.2.** _(Stochastic order) Let X and Y_ _be two real-valued random variables._ _We say that_
+_X_ _<st_ _Y, if for all t ∈_ R _, the CDFs of X and Y_ _satisfy FX_ ( _t_ ) _> FY_ ( _t_ ) _._
+
+
+Let _L_ = 1 and fix _m_ . We use _X_ to denote the random variable _AS_ ran ( _**v**_ ), where _**v**_ is drawn randomly
+from S _[d][−]_ [1], and _Y_ to denote _AS_ sym( _**v**_ ). Clearly, _X_ _∈_ [ _−_ 1 _,_ 1] and _Y_ _∈_ [0 _,_ 1]. We have the following:
+
+
+P( _Y_ _> t_ ) _>_ P( _X_ _> t_ ) _t ∈_ (0 _,_ 1) _._ (30)
+
+
+This can be easily proved, since when the angular radius is less than _π/_ 2, the two spherical caps
+corresponding to the antipodal pair do not overlap. Therefore, we have _X_ _<st_ _Y_ and E[ _X_ ] _<_ E[ _Y_ ].
+This completes the proof of the claim.
+
+
+Then we only need to focus on _J_ ( _S_ ran( _m, L_ )) and prove that it is equal to the RHS of Ineq. (29). Let
+_**v**_ = [ _**v**_ **1** _,_ _**v**_ **2** _, · · ·_ _,_ _**vL**_ ] _∈_ R _[d]_ be a vector drawn randomly from S _[d][−]_ [1], where _d_ is assumed to be divisible
+by _L_ and _d_ = _Ld_ _[′]_ . Let _rL_ ( _**v**_ ) be the subspace-normalized vector w.r.t. _**v**_ . That is,
+
+
+_rL_ ( _**v**_ ) = [ ~~_√_~~ _**v**_ **1**
+
+
+_**v**_ **2** _, . . .,_ ~~_√_~~ _**vL**_
+
+_L∥_ _**v**_ **2** _∥_ _L∥_
+
+
+_**v**_ **1** _,_ ~~_√_~~ _**v**_ **2**
+
+_L∥_ _**v**_ **1** _∥_ _L∥_ _**v**_
+
+
+] _._ (31)
+_L∥_ _**vL**_ _∥_
+
+
+Let _T_ ( _d, L_ ) = _⟨_ _**v**_ _, rL_ ( _**v**_ ) _⟩_ . For every _i_, let _**ui**_ = _**vi**_ _/∥_ _**vi**_ _∥∈_ S _[d][′][−]_ [1] . Then we select _m_ vectors from
+S _[d][′][−]_ [1] randomly and independently. Suppose that, among _m_ generated vectors, _**w**_ is the vector having
+the smallest angle to _**ui**_, and we use _T_ _[′]_ ( _d_ _[′]_ _, m_ ) to denote _⟨_ _**w**_ _,_ _**ui**_ _⟩_ . Since the choice of _**w**_ for every _**ui**_ is
+independent of the value of _T_ ( _d, L_ ), we have the following result:
+
+E[ _AS_ ( _**v**_ )] = E[ _T_ ( _d, L_ )] _×_ E[ _T_ _[′]_ ( _d_ _[′]_ _, m_ )] _._ (32)
+
+
+For E[ _T_ ( _d, L_ )], since ( _∥_ _**v**_ **1** _∥_ [2] _, ∥_ _**v**_ **2** _∥_ [2] _, . . ., ∥_ _**vL**_ _∥_ [2] ) follows a Dirichlet distribution with parameters
+( 2 _[d]_ _L_ _[,]_ 2 _[d]_ _L_ _[, . . .,]_ 2 _[d]_ _L_ [)][, each] _[ ∥]_ _**[v][i]**_ _[∥]_ [2][ marginally follows a Beta distribution with parameters][ (] 2 _[d]_ _L_ _[,]_ _[d]_ [(] _[L]_ 2 _L_ _[−]_ [1)] ).
+
+Then by the properties of Beta distribution, we have
+
+
+_[d]_ _[d]_
+
+2 _L_ _[,]_ 2
+
+
+_[d]_ _[d]_
+
+2 _L_ _[, . . .,]_ 2
+
+
+_[d]_ _[d]_
+
+2 _L_ [)][, each] _[ ∥]_ _**[v][i]**_ _[∥]_ [2][ marginally follows a Beta distribution with parameters][ (] 2
+
+
+_[d]_ _[d]_ [(] _[L][−]_ [1)]
+
+2 _L_ _[,]_ 2 _L_
+
+
+_√_
+E[ _T_ ( _d, L_ )] =
+
+
+Γ( _[d]_
+
+
+_[d]_ _[d]_ [+1]
+
+2 _L_ [)Γ(] 2
+
+
+_[d]_ [+] _[L]_
+_L_ [Γ(] 2 _L_
+
+
+[+1] (33)
+
+2 [)] _[.]_
+
+
+[+] _[L]_ _[d]_
+
+2 _L_ [)Γ(] 2
+
+
+2 [)]
+
+
+Next, we consider E[ _T_ _[′]_ ( _d_ _[′]_ _, m_ )]. Because of the rotational symmetry of the sphere, the distribution of
+the inner product _Z_ = _⟨u, v⟩_ (for fixed _v_ and uniformly random _u_ ) depends only on the dimension _d_ _[′]_ .
+It has the following density on [ _−_ 1 _,_ 1]:
+
+
+_d_ _[′]_ _−_ 3
+_fZ_ ( _z_ ) = _cd′_ (1 _−_ _z_ [2] ) 2 _._ (34)
+
+
+Let _Z_ 1 _, . . ., Zm_ be i.i.d. copies of _Z_ = _⟨u, v⟩_ . Then:
+
+
+_Y_ = max( _Z_ 1 _, . . ., Zm_ ) _._ (35)
+
+
+The cumulative distribution function (CDF) of _Z_ is:
+
+
+                  - _z_
+_FZ_ ( _z_ ) = _fZ_ ( _t_ ) d _t._ (36)
+
+_−_ 1
+
+Thus, the CDF of _Y_ = _Y_ ( _d_ _[′]_ _, m_ ) is:
+
+_FY_ ( _y_ ) = P( _Y_ _≤_ _y_ ) = _FZ_ ( _y_ ) _[m]_ _,_ (37)
+
+
+and the corresponding density is:
+
+_fY_ ( _y_ ) = [d] [=] _[ mF][Z]_ [(] _[y]_ [)] _[m][−]_ [1] _[f][Z]_ [(] _[y]_ [)] _[.]_ (38)
+
+d _y_ _[F][Z]_ [(] _[y]_ [)] _[m]_
+
+
+Therefore, we have the following result.
+
+
+   - 1
+E[ _Y_ ] =
+
+
+1 - 1
+
+_yfY_ ( _y_ ) d _y_ = _m_
+
+_−_ 1 _−_ 1
+
+
+_yFZ_ ( _y_ ) _[m][−]_ [1] _fZ_ ( _y_ ) d _y._ (39)
+
+_−_ 1
+
+
+Combining the previous results, we get the following result.
+
+
+_√_
+_J_ ( _S_ ran( _m, L_ )) = _m_
+
+
+Γ( _[d]_
+
+
+_[d]_ _[d]_ [+1]
+
+2 _L_ [)Γ(] 2
+
+
+_[d]_ [+] _[L]_
+_L_ [Γ(] 2 _L_
+
+
+[+] _[L]_ _[d]_
+
+2 _L_ [)Γ(] 2
+
+
+2 [)]
+
+
+2 [)]
+
+
+- 1
+
+_yFZ_ ( _y_ ) _[m][−]_ [1] _fZ_ ( _y_ ) d _y._ (40)
+
+_−_ 1
+
+
+- 1
+
+
+16
+
+
+𝑞𝑞
+
+
+(size = 𝑒 𝑒𝑒)
+
+
+|𝑅𝑅[1]|𝑅𝑅[2]|Col3|𝑅𝑅[𝑒𝑒 𝑒𝑒]|
+|---|---|---|---|
+|𝑑𝑑(𝑞, 𝑅[𝑒𝑒]) =  𝛿|𝑑𝑑(𝑞, 𝑅[𝑒𝑒]) =  𝛿|𝑑𝑑(𝑞, 𝑅[𝑒𝑒]) =  𝛿|𝑑𝑑(𝑞, 𝑅[𝑒𝑒]) =  𝛿|
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+
+
+|𝑠𝑠 𝑠𝑠<br>1|Col2|𝐴𝐴 (𝑒𝑒1)<br>𝑠𝑠|
+|---|---|---|
+||||
+|𝑠𝑠𝑙|𝑠𝑠𝑙|𝐴𝑠(𝑒𝑙)|
+
+
+|𝑇𝑇(𝑒𝑒1)|Col2|
+|---|---|
+|𝑇(𝑒𝑙)|𝑇(𝑒𝑙)|
+|𝑇(𝑒𝑙)||
+|𝑇(𝑒𝑙)||
+
+
+and III = _[∥]_ _**[w]**_ _[∥]_ [2] _[/]_ [2] _[−][τ]_ _[−]_ _**[v]**_ _[⊤]_ _**[q]**_
+
+
+and III = _**[w]**_ _[/]_ [2] _∥_ _**e**_ _∥_ _[τ]_ _**[v]**_ _**[q]**_ . Here, I/II is exactly the kernel function _KS_ [2] [; the computation of][ I][ depends]
+
+on PQ (Jégou et al., 2011). III denotes the threshold for _KS_ [2] [and is explained in the original paper of]
+PEOs (see the routing test Eq. (9) in Lu et al. (2024)).
+
+
+C.2 ILLUSTRATION OF RANDOM PROJECTION TECHNIQUES FOR ANGLE ESTIMATION
+
+
+An illustration is shown in Fig. 4. In this figure, _**q**_ represents a query and _**v**_ is a data vector. For Falconn,
+if _**q**_ and _**v**_ are mapped to the same vector, they are considered close. For CEOs and KS1, the inner
+product _**v**_ _[⊤]_ _**u**_, where _**u**_ is the projection vector closest to _**q**_, is computed to obtain a more accurate
+estimate of _**q**_ _[⊤]_ _**v**_ . The key difference between CEOs and KS1 lies in the structure of the projection
+vectors. While CEOs uses projection vectors sampled from a Gaussian distribution, KS1 employs a
+more balanced structure in which all projection vectors lie on the surface of a sphere. By applying a
+random rotation matrix and constructing a spherical cross-section centered at _**q**_, we can establish the
+required statistical relationship between _**q**_ _[⊤]_ _**u**_ and _**q**_ _[⊤]_ _**v**_ .
+
+
+C.3 ANNS AND SIMILARITY GRAPHS
+
+
+As one of the most fundamental problems, approximate nearest neighbor search (ANNS) has seen a
+surge of interest in recent years, leading to the development of numerous approaches across different
+paradigms. These include tree-based methods (Curtin et al., 2014), hashing-based methods (Andoni &
+Indyk, 2008; Lei et al., 2019; Andoni & Beaglehole, 2022; Andoni et al., 2015; Pham & Liu, 2022),
+vector quantization (VQ)-based methods (Jégou et al., 2011; Ge et al., 2014; Babenko & Lempitsky,
+2016; Guo et al., 2020), learning-based methods (Gupta et al., 2022; Li et al., 2023), and graph-based
+methods (Malkov & Yashunin, 2020; Subramanya et al., 2019; Fu et al., 2019; 2022; Gao & Long,
+2023; Peng et al., 2023; Xie et al., 2025; Yang et al., 2025).
+
+
+17
+
+
+**Algorithm 4** Graph-based ANNS with routing
+
+**Input:** Query _**q**_, # results _K_, graph index _G_
+**Output:** _K_ -NN of _**q**_
+
+**4** _R ←∅_ // an ordered list of results, _|R| ≤_ _efs_
+
+**5** _P_ _←{_ entry node _v_ 0 _∈_ _G }_ // a priority queue
+
+**6** **while** _P_ = _∅_ **do**
+
+**7** _v_ _←_ _P.pop_ (); **foreach** unvisited neighbor _u_ of _v_ **do**
+
+**8** **if** _|R| < efs_ **then** _δ_ _←∞_ ;
+
+**9** **else** _p ←_ _R_ [ _efs_ ], _δ_ _←_ _dist_ ( _**p**_ _,_ _**q**_ );
+
+**10** **if** RoutingTest( _**u**_ _,_ _**v**_ _,_ _**q**_ _, δ_ ) = **true then**
+
+**11** **if** _dist_ ( _**u**_ _,_ _**q**_ ) _< δ_ **then**
+
+**12** _R.push_ ( _**u**_ ); _P.push_ ( _**u**_ );
+
+
+**13** **return** ( _{ R_ [1] _, . . ., R_ [ _K_ ] _}_ )
+
+
+Among these, graph-based methods are widely regarded as the state-of-the-art. Currently, three main
+types of optimizations are used to enhance their search performance: (1) improved edge-selection
+strategies, (2) more effective routing techniques, and (3) quantization of raw vectors. These approaches
+are generally orthogonal to one another. Since PEOs belongs to the second category, we briefly
+introduce several highly relevant works below. TOGG-KMC (Xu et al., 2021) and HCNNG (Muñoz
+et al., 2019) use KD-trees to determine the direction of the query and restrict the search to points in that
+direction. While this estimation is computationally efficient, it results in relatively low query accuracy,
+limiting their improvements over HNSW (Malkov & Yashunin, 2020). FINGER (Chen et al., 2023)
+examines all neighbors and estimates their distances to the query. For each node, FINGER locally
+generates promising projection vectors to define a subspace, then uses collision counting which is
+similar to SimHash to approximate distances within each visited subspace. Learn-to-Route (Baranchuk
+et al., 2019) learns a routing function using auxiliary representations that guide optimal navigation from
+the starting vertex to the nearest neighbor. Recently, Lu et al. (2024) proposed PEOs, which leverages
+space partitioning and random projection techniques to estimate a random variable representing the
+angle between each neighbor and the query vector. By aggregating projection information from
+multiple subspaces, PEOs substantially reduces the variance of this estimated distribution, significantly
+improving query accuracy.
+
+
+Recently, a related quantization method RaBitQ (Gao & Long, 2024) was proposed and used for the
+acceleration of similarity graphs (Gou et al., 2025). Notably, RaBitQ can be viewed as a special case of
+KS2: when _m_ = 2 and _L_ = _d_, RaBitQ has exactly the same projection structure as KS2. On the other
+hand, Lu et al. (2024) shows that when _L_ is very large, an additional error will increase significantly.
+Thus, if the tradeoff between index size and search performance is taken into account, choosing _L_ = _d_
+may not be ideal. Meanwhile, when RaBitQ is applied to similarity graphs, the additional overhead to
+accommodate the index is very large, consuming about 2–4 times the size of the dataset.
+
+
+C.4 ALGORITHMS RELATED TO KS1 AND KS2
+
+
+Alg. 5 and Alg. 6 are used to compare the probing accuracies of CEOs and KS1, while Alg. 7 presents
+the graph-based search equipped with the KS2 test. Because Alg. 6 resembles the probabilistic routing
+mechanism in Lu et al. (2024), we provide further clarification through Alg. 7.
+
+
+In Alg. 7, the list _R_ serves as an ordered container of at most _efs_ elements ( _efs ≥_ _K_ ). Using a graph
+index _G_ = ( _V, E_ ) constructed over the dataset, ANNS results are obtained by traversing this graph,
+as summarized in Alg. 7. The search starts from an entry node _v_ 0 _∈_ _G_ and maintains _R_, which holds
+the current best candidates, together with a priority queue _P_ that stores nodes yet to be explored. A
+neighbor of the current node is inserted into the priority queue whenever it is closer to _**q**_ than the farthest
+element in _R_, or whenever _R_ has not reached its capacity. Nodes are repeatedly popped from the
+priority queue to explore their neighbors, and the procedure terminates once the queue becomes empty.
+In practice, additional optimizations—such as early stopping or pruning strategies—are commonly
+adopted to further accelerate the process (Malkov & Yashunin, 2020).
+
+
+A straightforward implementation would compute the exact distance between _**q**_ and every encountered
+neighbor. However, a routing test can be used to decide whether an exact distance evaluation is needed.
+
+
+18
+
+
+**Algorithm 5** Construction of the Projection Structure of KS1
+
+**Input:** _D_ is the dataset with cardinality _n_, and _S_ is the configuration of _m_ projection vectors (CEOs: _m/_ 2 random
+Gaussian vectors along with their antipodal vectors; KS1: _S_ sym( _m,_ 1) or _S_ pol( _m,_ 1))
+**Output:** _m_ projection vectors, each of which is associated with a _n_ -sequence of data ID’s
+
+**1** For every _xi_ _∈D_ (1 _≤_ _i ≤_ _n_ ) and each _uj_ _∈_ _S_ (1 _≤_ _j_ _≤_ _m_ ), compute _⟨_ _**xi**_ _,_ _**uj**_ _⟩_
+
+**2** For each _uj_ _∈_ _S_, sort _xi_ in descending order of _⟨_ _**xi**_ _,_ _**uj**_ _⟩_ and obtain _x_ _[j]_ [1] _[, . . . x][j]_ [ _n_ ]
+
+
+**Algorithm 6** Query Phase for MIPS
+**Input:** _q_ is the query; _D_ is the dataset; _I_ is the index structure returned by Alg. 5; _k_ denotes the value of top- _k_ ; _s_ 0
+is the number of scanned top projection vectors; and #probe denotes the number of probed points for each
+projection vector
+**Output:** Top- _k_ MIP results of _q_
+
+**1** Among the _m_ projection vectors, find the top- _s_ 0 projection vectors closest to _q_
+
+**2** For each projection vector _ul_ in the top- _s_ 0 set (1 _≤_ _l_ _≤_ _s_ 0), scan the top-#probe points in the sequence associated
+with _ul_, and compute the exact inner products of these points with _q_
+
+**3** Maintain and return the top- _k_ points among all scanned candidates
+
+
+**Algorithm 7** Graph-based ANNS with the KS2 test
+
+**Input** **:** _**q**_ is the query, _k_ denotes the value of top- _k_, _G_ is the similarity graph
+**Output** **:** Top- _k_ ANNS results of _q_
+
+**1** _R ←∅_ ; /* an ordered list of results, _|R| ≤_ _efs_ */
+
+**2** _P_ _←{_ entry node _v_ 0 _∈_ _G }_ ; /* a priority queue */
+
+**3** **while** _P_ = _∅_ **do**
+
+**4** _v_ _←_ _P.pop_ ()
+
+**5** **foreach** unvisited neighbor _w_ of _v_ **do**
+
+**6** **if** _|R| < efs_ **then** _δ_ _←∞_ ;
+
+**7** **else** _v_ _[′]_ _←_ _R_ [ _efs_ ], _δ_ _←_ _dist_ ( _**v**_ _**[′]**_ _,_ _**q**_ );
+
+**8** **if** KS2_Test( _**w**_ _,_ _**v**_ _,_ _**q**_ _, δ_ ) = **true** (Ineq. (9)) **then**
+
+**9** **if** _dist_ ( _**w**_ _,_ _**q**_ ) _< δ_ **then**
+
+**10** _R.push_ ( _**w**_ ), _P.push_ ( _**w**_ )
+
+
+**11** **return** ( _{ R_ [1] _, . . ., R_ [ _k_ ] _}_ )
+
+
+The probabilistic routing technique (Lu et al., 2024) is one such example. Meanwhile, the proposed
+function _KS_ [2] [naturally leads to an alternative routing criterion, given by Ineq.][ (9)][, which can also be]
+used to determine whether a neighbor should undergo exact distance calculation.
+
+
+C.5 NUMERICAL COMPUTATION OF REFERENCE ANGLE
+
+
+Fig. 5 shows the numerical values of the lower bounds (the RHS of Ineq. (29)) under different pairs of
+( _m, L_ ). From the results, we observe that increasing _L_ significantly raises the cosine of the reference
+angle, whereas a linear increase in _m_ leads to only a slow growth in the cosine of the reference angle,
+which explains why we need to introduce parameter _L_ into our projection structure.
+
+
+D ADDITIONAL EXPERIMENTS
+
+
+D.1 DATASETS AND PARAMETER SETTINGS
+
+
+The statistic of six datasets used in this paper is shown in Tab. 3. The parameter settings of all compared
+methods are shown as follows.
+
+
+(1) **CEOs:** The number of projection vectors, _m_, was set to 2048, following the standard setting in
+Pham (2021).
+
+
+(2) **KS1:** For KS1, _L_ was fixed to 1, as multiple levels are not necessary for angle comparison. The
+number of projection vectors, _m_, was also set to 2048, consistent with CEOs. We evaluated both
+KS1( _S_ = _S_ sym(2048 _,_ 1)) and KS1( _S_ = _S_ pol(2048 _,_ 1)).
+
+
+19
+
+
+Table 3: Dataset statistics.
+
+
+Dataset Data Size Query Size Dimension Type Metric
+
+
+Word 1,000,000 1,000 300 Text _ℓ_ 2&inner product
+GloVe1M 1,183,514 10,000 200 Text angular&inner product
+GloVe2M 2,196,017 1,000 300 Text angular&inner product
+SIFT 10,000,000 1,000 128 Image _ℓ_ 2
+Tiny 5,000,000 1,000 384 Image _ℓ_ 2
+GIST 1,000,000 1,000 960 Image _ℓ_ 2
+
+
+(3) **HNSW:** _M_ was set to 32. The parameter efc was set to 1000 for **SIFT**, **Tiny**, and **GIST**, and to
+2000 for **Word**, **GloVe1M**, and **GloVe2M** .
+
+
+(4) **ScaNN:** The Dimensions_per_block was set to 4 for **Tiny** and **GIST**, and to 2 for the other datasets.
+num_leaves was set to 2000. The other user-specified parameters were tuned to achieve the best
+trade-off curves.
+
+
+(5) **HNSW+PEOs:** Following the suggestions in Lu et al. (2024), we set _L_ to 8, 10, 15, 15, 16, and
+20 for the six real datasets, sorted in ascending order of dimension. Additionally, _ϵ_ was set to 0.2, and
+_m_ = 256 to ensure that each vector ID could be encoded with a single byte.
+
+
+(6) **HNSW+KS2:** _S_ was fixed to _S_ sym( _m, L_ ). The only tunable parameter is _L_, as _m_ must be fixed at
+256 to ensure that each vector ID is encoded with a single byte. Since the parameter _L_ in KS2 plays a
+similar role to that in PEOs, we set _L_ to the same value in HNSW+PEOs to eliminate the influence of _L_
+in the comparison.
+
+
+D.2 KS1 VS. CEOS UNDER DIFFERENT SETTINGS
+
+
+In Tab. 1, we compared the performance of CEOs and KS1 using the top-5 probed projection vectors.
+Here, we varied the value of _s_ 0 in Alg. 6 from 5 to 2 and 10, and present the corresponding results in
+Tab. 4 and Tab. 5, respectively. We observe that KS1( _S_ pol) still achieves the highest probing accuracy in
+most cases.
+
+
+D.3 ANNS RESULTS UNDER DIFFERENT _k_ ’S
+
+
+Fig. 6 and Fig. 7 show the comparison results of ANNS solvers under different values of _k_ . When
+_k_ = 1, ScaNN performs very well on **Word**, **GloVe1M**, **GloVe2M**, and **Tiny**, which is partly due to
+the connectivity issue of HNSW on these datasets. In the other cases, HNSW+KS2 achieves the best
+performance.
+
+
+D.4 THE IMPACT OF _L_ ON THE OTHER DATASETS
+
+
+Fig. 8 shows the impact of _L_ on **GloVe1M**, **GloVe2M**, and **Tiny**, which is largely consistent with the
+results in Fig. 2.
+
+
+D.5 RESULTS OF NSSG+KS2
+
+
+We also implement KS2 on another state-of-the-art similarity graph, NSSG (Fu et al., 2022). The
+parameter settings for NSSG are the same as those in Lu et al. (2024). From the results in Fig. 9, we
+observe that NSSG+KS2 outperforms NSSG+PEOs on all datasets except for **GIST**, which indicates
+that the superiority of KS2 is independent of the underlying graph structure.
+
+
+STATEMENTS ON THE USE OF LARGE LANGUAGE MODELS
+
+
+We used LLMs to polish writing only. We are responsible for all the materials presented in this work.
+
+
+20
+
+
+Table 4: Comparison of recall rates (%) for _k_ -MIPS, _k_ = 10. Top-2 projection vectors are probed.
+
+
+|Dataset & Method|Col2|Probe@10|Probe@100|Probe@1K|Probe@10K|
+|---|---|---|---|---|---|
+|Word|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|17.255<br>17.334<br>**17.440**|46.348<br>46.740<br>**46.843**|68.893<br>69.232<br>**69.392**|84.366<br>84.548<br>**85.026**|
+|GloVe1M|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|0.839<br>0.849<br>**0.866**|3.404<br>3.464<br>**3.503**|12.694<br>12.890<br>**12.916**|38.607<br>39.109<br>**39.170**|
+|GloVe2M|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|0.934<br>**0.939**<br>0.917|3.407<br>**3.451**<br>3.401|11.621<br>**11.775**<br>11.748|34.917<br>**35.462**<br>35.159|
+
+
+Table 5: Comparison of recall rates (%) for _k_ -MIPS, _k_ = 10. Top-10 projection vectors are probed.
+
+
+|Dataset & Method|Col2|Probe@10|Probe@100|Probe@1K|Probe@10K|
+|---|---|---|---|---|---|
+|Word|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|50.772<br>50.698<br>**51.238**|84.545<br>84.470<br>**84.865**|96.620<br>96.643<br>**96.869**|99.882<br>99.869<br>**99.910**|
+|GloVe1M|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|3.012<br>3.047<br>**3.069**|11.301<br>11.401<br>**11.451**|36.293<br>36.604<br>**36.857**|80.995<br>81.307<br>**81.781**|
+|GloVe2M|CEOs(2048)<br>KS1(_S_sym(2048_,_ 1))<br>KS1(_S_pol(2048_,_ 1))|**3.574**<br>3.567<br>3.515|11.252<br>11.256<br>**11.368**|30.695<br>30.741<br>**30.940**|69.406<br>69.668<br>**70.016**|
+
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+L
+
+
+(b) Dim=200, _m_ = 256
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+L
+
+
+(e) Dim=960, _m_ = 256
+
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+L
+
+
+(c) Dim=300, _m_ = 256
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+
+
+m
+
+
+(f) Dim=128, _L_ = 1
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+
+L
+
+
+(a) Dim=128, _m_ = 256
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+L
+
+
+(d) Dim=384, _m_ = 256
+
+
+Figure 5: Numerical computation under different _m_ ’s and _d_ ’s. The y-axis denotes the cosine of
+reference angle.
+
+
+21
+
+
+4500
+4000
+3500
+3000
+2500
+2000
+1500
+1000
+500
+
+
+3000
+
+2500
+
+2000
+
+1500
+
+1000
+
+500
+
+
+Recall@100
+
+
+(a) SIFT- _ℓ_ 2
+
+
+3000
+
+2500
+
+2000
+
+1500
+
+
+2500
+
+2000
+
+1500
+
+1000
+
+500
+
+
+1000
+
+500
+
+
+Recall@100
+
+
+(b) GloVe1M-angular
+
+
+4000
+
+3000
+
+2000
+
+1000
+
+
+0
+
+Recall@100
+
+
+(c) Word- _ℓ_ 2
+
+
+Recall@100
+
+
+(f) GIST- _ℓ_ 2
+
+
+2000
+1750
+1500
+1250
+1000
+750
+500
+250
+
+
+Recall@100
+
+
+(e) Tiny- _ℓ_ 2
+
+
+0
+
+Recall@100
+
+
+(d) GloVe2M-angular
+
+
+Figure 6: Recall-QPS evaluation of ANNS. _k_ = 100.
+
+
+Recall@1
+
+
+(c) Word- _ℓ_ 2
+
+|Col1|Col2|Col3|H S H|
+|---|---|---|---|
+||||H|
+|||||
+
+
+Recall@1
+
+
+(f) GIST- _ℓ_ 2
+
+
+8000
+
+6000
+
+4000
+
+2000
+
+0
+
+
+8000
+7000
+6000
+5000
+4000
+3000
+2000
+1000
+
+
+7000
+
+6000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+0
+
+
+6000
+
+5000
+
+4000
+
+3000
+
+2000
+
+1000
+
+
+20000
+
+15000
+
+10000
+
+5000
+
+
+|Col1|Col2|Col3|HN<br>Sca<br>HN|
+|---|---|---|---|
+||||HN|
+
+
+Recall@1
+
+
+(a) SIFT- _ℓ_ 2
+
+
+|Col1|Col2|Col3|HNSW<br>ScaNN<br>HNSW+|
+|---|---|---|---|
+||||HNSW+|
+
+
+~~0.75~~ ~~0.80~~ ~~0.85~~ ~~0.90~~ ~~0.95~~
+Recall@1
+
+
+(b) GloVe1M-angular
+
+|Col1|Col2|Col3|HNSW ScaNN HNSW+P HNSW+K|
+|---|---|---|---|
+||||HNSW+|
+|||||
+|||||
+
+
+Recall@1
+
+
+(e) Tiny- _ℓ_ 2
+
+
+7000
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+|Col1|Col2|Col3|HNSW ScaNN HNSW+ HNSW+|
+|---|---|---|---|
+||||~~HNSW~~|
+|||||
+
+
+Recall@1
+
+
+(d) GloVe2M-angular
+
+
+Figure 7: Recall-QPS evaluation of ANNS. _k_ = 1.
+
+
+22
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+
+
+HNSW+KS2
+
+~~0~~ ~~4~~ ~~8~~ ~~12~~ ~~16~~ ~~20~~ ~~24~~ ~~28~~ ~~32~~
+L
+
+
+(c) Tiny- _ℓ_ 2
+
+
+120
+
+100
+
+80
+
+60
+
+40
+
+20
+
+
+7000
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+L
+
+
+(a) GloVe1M-angular
+
+
+Recall@10
+
+
+(d) GloVe1M-angular
+
+
+120
+
+100
+
+
+0
+
+
+90
+80
+70
+60
+50
+40
+30
+20
+10
+
+
+80
+
+60
+
+40
+
+
+L
+
+
+(b) GloVe2M-angular
+
+
+0
+
+Recall@10
+
+
+(e) GloVe2M-angular
+
+
+10000
+
+8000
+
+6000
+
+4000
+
+2000
+
+
+10000
+
+8000
+
+6000
+
+4000
+
+2000
+
+
+(f) Tiny- _ℓ_ 2
+
+
+Recall@10
+
+
+Figure 8: Impact of _L_ on index sizes and search performance. _k_ = 10.
+
+
+12000
+
+10000
+
+8000
+
+6000
+
+4000
+
+
+2000
+
+|Col1|Col2|NS<br>NS<br>NS|
+|---|---|---|
+||||
+||||
+
+
+0. ~~80~~ ~~0.85~~ ~~0.90~~ ~~0.95~~ ~~1.0~~ 0
+Recall@10
+
+
+(a) SIFT- _ℓ_ 2
+
+
+7000
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+|Col1|Col2|Col3|Col4|NSSG<br>NSSG+PEOs<br>NSSG+KS2|
+|---|---|---|---|---|
+||||||
+||||||
+
+
+Recall@10
+
+
+0. ~~70~~ ~~0.75~~ ~~0.80~~ ~~0.85~~ ~~0.90~~ ~~0.9~~ 5
+Recall@10
+
+
+3000
+
+2500
+
+2000
+
+1500
+
+1000
+
+500
+
+0
+
+
+NSSG
+NSSG+PEOs
+NSSG+KS2
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+
+
+Recall@10
+
+
+(d) GloVe2M-angular
+
+
+(b) GloVe1M-angular
+
+
+9000 NSSG
+
+6000
+5000
+4000
+3000
+2000
+1000
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+
+
+Recall@10
+
+
+(e) Tiny- _ℓ_ 2
+
+
+(c) Word- _ℓ_ 2
+
+|0|Col2|Col3|Col4|NSSG NSSG+PEOs NSSG+KS2|
+|---|---|---|---|---|
+|||||~~NSSG+KS2~~|
+||||||
+||||||
+
+
+Recall@10
+
+
+(f) GIST- _ℓ_ 2
+
+
+Figure 9: Recall-QPS evaluation of ANNS, with NSSG+KS2. _k_ = 10.
+
+
+23

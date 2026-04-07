@@ -1,0 +1,1073 @@
+# MANAR: MEMORY-AUGMENTED ATTENTION WITH NAVIGA## TIONAL ABSTRACT CONCEPTUAL REPRESENTATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Transformers - and their multi-head attention (MHA) core - power today’s leading models across a
+broad application spectrum. Yet MHA contextualizes each token through explicit, pair-wise interactions with every other token, yielding quadratic time/space cost and an unbounded, linearly-growing
+context. This _direct all-to-all_ modeling is both the source of attention’s expressiveness and a barrier
+to scaling. We address this bottleneck by augmenting attention with a trainable external memory
+that stores both conceptual and relational general representations learned during training. For every
+input, lightweight scalable retrieval produces a fixed-size set of memory retrieved concepts whose
+values are fused into a compact Abstract Conceptual Representation (ACR). Tokens then attend
+jointly to (i) the global, concept-level ACR and (ii) a short local context, completely sidestepping
+all-to-all token interactions. The result is a non-convex pathway that provides the model with an
+_out-of-the-box thinking_ contextualization - i.e., beyond the convex hull spanned by the input values while reducing complexity to linear time and memory. Integrated as a drop-in replacement for MHA,
+our layer (MANAR) preserves accuracy on ImageNet-1K (82.3% top-1 with a DeIT-B backbone)
+and LibriSpeech (2.9/6.8% WER on test-clean/other) yet cuts inference latency by up to 14.8x and
+peak GPU memory by up to 9.3x as sequence length grows to 4K. A simple weight-copy knowledgetransfer procedure trims training cost by _≈_ 99% versus training from scratch. Finally, Convex Hull
+Membership (CHM) tests show that _>_ 50% of MANAR’s outputs lie outside the convex span of the
+input values, quantitatively confirming its out-of-the-box contextualization.
+
+
+1 INTRODUCTION
+
+
+Since its introduction, the transformer architecture (Vaswani et al., 2017) has achieved remarkable success across a
+wide spectrum of domains, including natural language processing (Vaswani et al., 2017; Karpukhin et al., 2020; Touvron et al., 2023; Liu et al., 2024a; Warner et al., 2024), computer vision (Dosovitskiy et al., 2020; Arnab et al., 2021;
+Shehzadi et al., 2023), speech recognition (Schneider et al., 2019; Baevski et al., 2022; Liu et al., 2023), bioinformatics (Brandes et al., 2022; Acera Mateos et al., 2021; Jahshan & Yavits, 2024), and many other. At the heart of this
+success lies the attention mechanism, which enables every token to attend to all other tokens in a sequence, yielding
+highly expressive, sequence-wide contextualizations and facilitating efficient parallel training. However, the same allto-all contextualization that powers the expressive capability of MHA introduces significant scalability bottlenecks.
+The quadratic time and memory complexity with respect to sequence length—together with the need to store linearly
+growing, unbounded context in autoregressive generation—limits both the efficiency and the reach of contemporary
+attention-based models. This challenge has become increasingly pressing as workloads shift toward longer contexts
+and larger-scale models, motivating numerous strategies to address these limitations.
+
+
+The most widely adopted approaches, such as quantization and knowledge distillation, have succeeded in compressing
+the memory and compute footprint of transformer models. Quantization (Ashkboos et al., 2024; Liu et al., 2024c;d;
+Xiao et al., 2023) enables more efficient computations and reduced memory footprint by lowering precision, sometimes as low as 4-bit per element (Liu et al., 2024c). Distillation (Bing et al., 2025; Han et al., 2024; Mukherjee et al.,
+2021) transfers knowledge from large models to smaller ones. Despite their practical utility, these methods fall short
+of solving the core issue: the direct all-to-all token contextualization is preserved, so context size remains unbounded
+and computational complexity quadratic. Orthogonally, efforts to directly modify the attention mechanism have led to
+sub-quadratic architectures. Linformer (Wang et al., 2020) experimentally show that the attention matrix present a lowrank behavior, hence it projects the keys and values into lower-dimensional spaces, allowing attention computation to
+operate in linear time and space. Performer (Choromanski et al., 2020) employs kernel-based random feature projections to approximate softmax attention, similarly achieving linear scaling. ”Transformers are RNNs” (Katharopoulos
+et al., 2020) conceptualizes the transformer as a recurrent model, allowing for incremental, stepwise computation, and
+efficient reuse of memory across timesteps.
+
+
+1
+
+
+To solve the unbounded context problem, many works (Xiao et al., 2024; Fountas et al., 2025; Sun et al., 2024;
+Lee et al., 2024; Liu et al., 2024b; Mohtashami & Jaggi, 2023; Wu et al., 2022) offload the KV cache into lower
+memory tiers (e.g. CPU DRAM), and sparsely select KV pairs to attend to. These techniques proved very useful,
+partly because of the observation that when contextualizing one token, many tokens do not actually get involved in
+the process due to very low attention score. To take advantage of this behavior, some of the aforementioned works
+augment the multi-head attention with a memory unit, saving contextual blocks (i.e., KV blocks) to later retrieve them
+upon contextualization. For example, InfLLM (Xiao et al., 2024) contextualizes each token through its local context
+window as well as highly related selected KV blocks. Upon token contextualization, the memory unit is queried by the
+token to retrieve highly relevant KV blocks in a k-nearest-neighbor fashion. Both the retrieved blocks and the token
+local context window participate in the process of token contextualization.
+
+
+Many works seek to completely replace the standard attention mechanism with alternative architectures designed for
+enhanced scalability. For example, Titans (Behrouz et al., 2024) and ATLAS (Behrouz et al., 2025) augment standard
+attention (used as short-term memory) with explicit long-term neural memory modules, which are updated using test
+time training and optional persistent memory to retrieve and fuse past information alongside current context attention
+for scalable long-range modeling. State space models (Gu et al., 2021) formulate sequence modeling as linear dynamical systems, allowing fast, parallel computation, and effective modeling of long-range context. Mamba (Gu & Dao,
+2023) extends this paradigm by introducing selective long-range sequence modeling through dynamic state selection
+and gating, enabling efficient and expressive representations for extremely long inputs (Dao & Gu, 2024). Other
+notable advances, such as RetNet (Sun et al., 2023), propose recurrent architectures with retention mechanisms that
+further boost performance, demonstrating state-of-the-art results on long-context benchmarks. These approaches fundamentally rethink the model design for sequential data and show particular promise in ultra-long sequence regimes.
+
+
+We introduce _MANAR_, a brain-inspired, memory-centric attention architecture functioning as a contextualization layer
+to be plugged in a commodity transformer encoder models. The architecture draws inspiration from cognitive processes in the human brain, wherein perception and comprehension depend not only on inputs but also on internalized,
+generalized concepts built from prior experience. When presented with an external input, the brain builds a mental
+image depending on previous memorized concepts associated with the observed input, and the way it perceives their
+connection. This mental image, along with recently observed inputs, which are remembered, guides and navigates
+contextualization - the process in which meaning are given to each observed input occurrence. We also demonstrate
+that when comprehension is based on memorized abstract concepts, a behavior we term _out-of-the box thinking_ can be
+distinguished.
+
+
+Specifically, when presented with a sequence of tokens, MANAR (i) retrieves memory concepts that help constructing a full-context-wide, constant-sized abstract conceptual representation functioning as a mental image, aiming at
+representing the ’global abstract themes’ present in the sequence, and (ii) contextualize each input token navigated
+by this mental image as well as the local context window of each token, avoiding direct all-to-all contextualization.
+MANAR can be integrated as a drop-in replacement for standard MHA layers, making it practically deployable in
+existing transformer encoder stacks. Empirical evaluation in large-scale image classification and automatic speech
+recognition demonstrates that MANAR matches or exceeds the state-of-the-art: for example, it achieves 82.3% top-1
+accuracy on ImageNet-1K (Deng et al., 2009) and 2.9/6.8% WER on LibriSpeech’s test-clean/other sets (Panayotov
+et al., 2015) with significant inference speedups (up to 14.8x) and peak GPU memory reductions (up to 9.3x) as sequence length increases. A straightforward weight-copy knowledge transfer procedure enables rapid adaptation from
+pretrained transformers, reducing training time by 99% compared to training from scratch. Convex Hull Membership
+(CHM) tests show that over 50% of MANAR’s outputs lie outside the convex hull of input token values—a rigorous
+demonstration of its out-of-the-box contextualization capability. We make our code available as a part of supplementary material.
+
+
+2 PRELIMINARIES AND BACKGROUND
+
+
+First, we define the notion of a concept and the concept contextualization process as follows:
+
+
+**Definition 2.1** (Concept) **.** A concept _x_ is defined as a tuple _x_ = ( _q, k, v_ ). The concept query, _q_, the concept key, _k_,
+and the concept value, _v_ .
+
+
+**Definition** **2.2** (Contextualization) **.** Given a concept _x_ = ( _q, k, v_ ), and a set of concepts _C_ =
+_{_ ( _c_ _[q]_ 1 _[, c]_ 1 _[k][, c][v]_ 1 [)] _[, . . .,]_ [ (] _[c]_ _n_ _[q]_ _[, c][k]_ _n_ _[, c][v]_ _n_ [)] _[}]_ [ we define the contextualization process of] _[ X]_ [by C as:]
+
+
+_y_ =                   - _S_ ( _q, c_ _[k]_ ) _c_ _[v]_
+
+
+( _c_ _[q]_ _,c_ _[k]_ _,c_ _[v]_ ) _∈C_ [˜]
+
+
+2
+
+
+**A** **B**
+
+
+Figure 1: A: Black dots represent input token values. The gray space represents these points’ convex hull, which spans
+the image of the output. B: Black dots represent the input token values while the red dot represents a retrieved memory
+value. The area in red and black represents the image of the output when contextualization is coupled with a retrieved
+memory value.
+
+
+where _C_ [˜] = _C ∪{x}_ ; _S_ ( _·, ·_ ) _≥_ 0;       - _S_ ( _q, c_ _[k]_ ) = 1
+
+
+( _c_ _[q]_ _,c_ _[k]_ _,c_ _[v]_ ) _∈C_ [˜]
+
+
+For each concept, the query representation is used to decide how this concept is contextualized when it is linked to
+another set of concepts. The key representation is used to decide how this concept influences the contextualization
+process of other concepts. The value representation is a vector holding the meaning of the concept. The contextualization process influences the meaning of the contextualized concept, _x_, and shifts it towards a point located in the
+meaning space spanned by the convex hull of _{c_ _[v]_ : ( _c_ _[q]_ _, c_ _[k]_ _, c_ _[v]_ ) _∈_ _C_ [˜] _}_, a process depicted in Fig[1](a).
+
+
+The multi-head attention (MHA) block is a central component of the Transformer architecture, enabling each layer
+(encoder or decoder) to map an input sequence to a same-length sequence of contextualized outputs in which every
+position can integrate information from all input tokens. MHA conceptualizes every input token by projecting them
+into query, key, and value representations, and contextualize them by all other conceptualized input tokens. Formally,
+let the input be _X_ = _{x_ 1 _, ..., xn}_ _∈_ R _[n][×][d]_ and let _Wq, Wk, Wv_ _∈_ R _[d][×][d]_ be learnable projections; define _qi_ =
+_xiWq, ki_ = _xiWk, vi_ = _xiWv_, and compute
+
+
+where _Si,j_ denotes the attention weight induced by the softmax over query–key similarities. This contextualization is
+powerful partly because it avoids explicit spatial or temporal biases, allowing dependencies across arbitrary positions;
+information flows to the _i_ -th output proportionally to its similarity to the _i_ -th query (i.e., the magnitude of _qikj_ _[T]_ [).] [Nev-]
+ertheless, such contextualization makes the time and memory cost of full attention scale quadratically with sequence
+length, which limits scalability to long inputs. Moreover, to make this contextualization process possible, the entire
+_kv_ state must be persisted in autoregressive tasks.
+
+
+In this work we aim at developing a different contextualization process. When an external sequence of inputs is presented, internal memorized concepts highly associated with the input are retrieved (an idea inspired by human brain).
+Links and associations are then made between input tokens and retrieved memorized concepts. These links take the
+shape of some constructed global conceptual representation of the perceived input. This constructed perceived representation then guides and navigates the contextualization process of the presented external inputs. We can examine the
+human reading comprehension process as an example of this behavior. When presented with an input text, the text read
+stimulates the brain to retrieve some memorized concepts associated with it. Throughout the reading process, brain
+constructs a mental image - abstract conceptual representation - representing the perception of what is being read and
+its connections to memory. Then, every word in the text is contextualized and understood in light of this constructed
+perceived abstract representation (Kewenig et al., 2024; Keller et al., 2024).
+
+
+3 MANAR
+
+
+MANAR contextualizes input tokens by neighboring tokens as well as by retrieved memorized concepts not present in
+the input sequence. To make it possible, MANAR integrates a memory unit that retains memorized concepts. When
+an input sequence of tokens _X_ is presented, _m_ search patterns are generated and applied to retrieve _m_ memorized
+concepts from the memory unit in a fast and scalable manner. After retrieval, these internal memory concepts are
+linked and associated to the presented input forming the Abstract Conceptual Representation ( _ACR_ ) which functions
+as a mental image. Then, input tokens are contextualized by the _ACR_ as well as the local context window of the token
+to formulate the output of the layer.
+
+
+3
+
+
+_n_
+
+
+_j_ =1
+
+
+_e_ _[q][i][k]_ _j_ _[T]_
+
+- _n_ _l_ _[v][j]_ (1)
+_l_ =1 _[e][q][i][k][T]_
+
+
+_yi_ =
+
+
+_n_
+
+- _Si,jvj_ =
+
+
+_j_ =1
+
+
+3.1 NOTATIONS
+
+
+We start by discussing some notations that are used consistently throughout the paper. Let _X_ _∈_ R _[n][×][D]_ represent the
+input sequence of tokens, where _n_ is the sequence length and _D_ is the dimension of each observed input token. Let
+_Mi_ be the _i_ -th retrieved memory concept which is consistently represented as a qkv-tuple _Mi_ = ( _c_ _[q]_ _i_ _[, c]_ _i_ _[k][, c]_ _i_ _[v]_ [)][.] [Use] _[ m]_
+to refer to the number of retrieved memory concepts, and _M_ to refer to the total memory size (i.e., the total number
+of memory cells in the memory unit). The _ACR_ size is _m × d_ (where _d_ is the per-head dimension), a row for each
+retrieved memory concept. We refer to the _i_ -th row of the _ACR_ by _ACRi_ or _ri_ interchangeably. We refer to _d_ as the
+intra-layer dimension (i.e., per-head dimension), and we assume _D_ = _hd_ where _h_ is the number of heads. Lastly, the
+_i_ -th output (i.e, the contextualized _i_ -th token) is referred to as _yi_ . In this work we follow a row-major representation.
+
+
+3.2 ACR CONSTRUCTION AND TOKEN CONTEXTUALIZATION
+
+Throughout Sec. 3.2 we assume the existence of _m_ retrieved memory concepts - _Mi_ = ( _c_ _[q]_ _i_ _[, c]_ _i_ _[k][, c]_ _i_ _[v]_ [)] - _mi_ =1 [decoupling]
+the process of memory retrieval from the rest of the MANAR architecture. Memory retrieval is discussed separately
+in Sec. 3.3. Calculations are made considering a single-head architecture. Multi-head architecture generalization is
+made in section. 3.4.
+
+MANAR defines four learnable projection matrices _Wq, Wk_ _[M][, W][k][, W][v]_ _[∈]_ [R] _[D][×][d]_ [corresponding to the token’s query,]
+ACR key, contextualization key, and value, respectively. _Wk_ _[r]_ _[∈]_ [R] _[d][×][d]_ [represents the projection responsible for con-]
+verting _ACR_ ’s into ”token contextualization” key-space. Moreover, we define the Region of Interest of an index _i_
+with a neighborhood _l_ as:
+
+
+_ROI_ _[l]_ ( _i_ ) = _{j_ : _max_ (0 _, i −_ _l_ + 1) _< j_ _≤_ _min_ ( _n, i_ + _l_ ) _}_
+
+
+where _ROI_ _[l]_ ( _i_ )[ _j_ ] represents the _j_ -th smallest element in the set. The _ROI_ is used to represent the local context
+window in the process of token contextualization. We refer to local context window length as the maximal size of the
+_ROI_ _[l]_ which is 2 _l_ . Equipped with these learnable parameters and the _ROI_, the logic of the MANAR layer operating
+in two stages, the ACR construction and the token contextualization, is defined as follows:
+
+
+    - Conceptualization:
+
+_ki_ _[M]_ = _xiWk_ _[M]_ [;] _qi_ = _xiWq_ ; _ki_ = _xiWk_ ; _vi_ = _xiWv_ (2)
+
+
+    - Stage 1 (ACR Construction):
+
+
+and _L_ = _|ROI_ _[l]_ ( _i_ ) _|_
+
+
+_ri_ = _Si,_ 0 _c_ _[v]_ _i_ [+]
+
+
+_n_
+
+- _Si,jvj_ (3)
+
+
+_j_ =1
+
+
+_c_ _[q]_ _i_ _[·]_ [ (] _[c]_ _i_ _[k]_ [)] _[T]_
+~~_√_~~
+
+
+1 _[M]_ [)] _[T]_ _i_ _[·]_ [ (] _[k]_ _n_ _[M]_ [)] _[T]_
+
+_, . . .,_ _[c][q]_ ~~_√_~~
+_d_ _d_
+
+
+_d_
+
+
+where ( _Si,_ 0 _, Si,_ 1 _, Si,_ 2 _, . . ., Si,n_ ) = _softmax_
+
+
+_[k]_ _i_ [)] _[T]_ _i_ _[·]_ [ (] _[k]_ 1 _[M]_ [)] _[T]_
+
+_,_ _[c][q]_ ~~_√_~~
+_d_ _d_
+
+
+(4)
+
+
+The process of ACR construction can be seen as contextualizing each retrieved memory concept by the conceptualized
+input tokens. Concretely, the _i_ -th ACR vector, _ri_, represents the meaning of the memorized concept shifted according
+to how strongly that memory concept associates with each observed token. The strength of an association is measured
+by the inner product _c_ _[q]_ _i_ _[·]_ [ (] _[k]_ _j_ _[m]_ [)] _[T]_ [ .] [Intuitively,] [this] [mirrors] [human] [cognition:] [our] [mental] [image] [of] [a] [situation] [blends]
+internal memorized concepts with incoming evidence, weighted by the perceived relevance of each piece of evidence
+to those concepts.
+
+
+    - Stage 2 (Token Contextualization):
+
+
+_yi_ =
+
+
+_m_
+
+- _S_ ˆ _i,jrj_
+
+
+_j_ =1
+
+
+- �� global attention
+
+
++
+
+
+_L_
+
+- _S_ ˜ _i,jvROI_ _l_ ( _i_ )[ _j_ ]
+
+
+_j_ =1
+
+
+- �� local attention
+
+
+(5)
+
+
+where ( _S_ [ˆ] 1 _, . . .,_ _S_ [ˆ] _m,_ _S_ [˜] 1 _, . . .,_ _S_ [˜] _L_ ) = (6)
+
+
+_d_
+
+
+- _qi_ ( _r_ 1 _Wk_ _[r]_ [)] _[T]_
+~~_√_~~
+
+
+_[W][ r]_ _k_ [)] _[T]_ _qikROI_ _[T]_ _[l]_ ( _i_ )[1]
+
+_,_ ~~_√_~~
+_d_ _d_
+
+
+_[l]_ ( _i_ )[1] _, . . .,_ _qikROI_ _[T]_ ~~_√_~~ _[l]_ ( _i_ )[ _L_ ]
+
+_d_ _d_
+
+
+_softmax_
+
+
+_k_ _[r]_ [)] _[T]_ _k_ [)] _[T]_
+
+_, . . .,_ _[q][i]_ [(] _[r][m]_ ~~_√_~~ _[W][ r]_
+_d_ _d_
+
+
+4
+
+
+Navigated by the constructed _ACR_ serving as a mental image, MANAR contextualizes each input token in light of
+this mental image, as well as all the input information that could be perceived at once (i.e., the local context window),
+represented by the _ROI_ of the token. Hence, the meaning each contextualized token holds is influenced both by
+association with the mental image and with neighboring tokens.
+
+
+Since MANAR’s mental image is constructed around memorized concepts and the meaning they hold, and also since
+the process of token contextualization is navigated by this mental image, MANAR-contextualized tokens can obtain
+meanings not bounded to the meaning space spanned by the convex hull of inputs _{xWv_ : _x_ = _Xi,_ 1 _≤_ _i_ _≤_ _n}_ . We
+refer to this contextualization behavior as _out-of-the-box_ _thinking_ . The out-of-the-box thinking is expressed by the
+following derivation of _ri_ :
+
+
+2019), which factor the key space into two tables _ξ_ [(1)] _, ξ_ [(2)] _∈_ R _M_ _×_ 2 whose (implicit) Cartesian product spans M
+
+composite keys without materializing them. For lookup, split the search pattern as _σi_ = - _σi_ [(1)] ; _σi_ [(2)] - with _σi_ [(1)] _, σi_ [(2)] _∈_
+
+
+ - _nl_ =1 _[e][c]_ _li_ _[q]_ =1 [(] _[km]_ _l_ ) _[T]_ _vj_ (8)
+
+_e_ _[c]_ _i_ _[q]_ [(] _[ck]_ _i_ [)] _[T]_ + [�] _[n]_ _l_ =1 _[e][c]_ _i_ _[q]_ [(] _[km]_ _l_ ) _[T]_
+
+
+_ri_ = _Si,_ 0 _c_ _[v]_ _i_ [+ (1] _[ −]_ _[S][i,]_ [0][)]
+
+
+= _Si,_ 0 _c_ _[v]_ _i_ [+ (1] _[ −]_ _[S][i,]_ [0][)]
+
+
+_n_
+
+
+_j_ =1
+
+
+_n_
+
+
+_j_ =1
+
+
+_Si,j_
+_vj_ (7)
+1 _−_ _Si,_ 0
+
+
+- _nl_ =1 _[e][c]_ _i_ _[q]_ [(] _[km]_ _l_ ) _[T]_
+
+
+_ec_ _[q]_ _i_ [(] _[km]_ _j_ [)] _[T]_
+
+
+_e_ _[c]_ _i_ _[q]_ [(] _[ck]_ _i_ [)] _[T]_ + [�] _[n]_ _l_ =1 _[e][c]_ _i_ _[q]_ [(] _[km]_ _l_ ) _[T]_
+
+
+_e_ _[c]_ _i_ _[q]_ [(] _[k]_ _j_ _[m]_ [)] _[T]_
+
+- _n_ _i_ [(] _[k]_ _l_ _[m]_ [)] _[T]_ _[v][j]_
+_l_ =1 _[e][c][q]_
+
+
+= _Si,_ 0 _c_ _[v]_ _i_
+����
+B
+
+
++(1 _−_ _Si,_ 0)
+
+
+_n_
+
+
+_j_ =1
+
+
+(9)
+
+
+                          - ��                           A
+
+
+Eq. 9 demonstrates that every ACR is a weighted sum of two expressions: (A): Expression having the same form of the
+output expression produced by the MHA layer as appearing in Eq. 1; (B): Correction expression, potentially shifting
+the ACR out of the input tokens convex hull, as illustrated in Fig. 1(B).
+
+
+3.3 THE MEMORY UNIT
+
+
+perates by two stages, the ACR Construction, and the Response Construction. In this section, we discuss the memory
+unit, and the memory retrieval process of _m_ concepts, _Mi_ = ( _c_ _[q]_ _i_ _[, c]_ _i_ _[k][, c]_ _i_ _[v]_ [)][, completing the full picture of MANAR.]
+
+The memory unit contains _M_ memory cells. Each memory cell retains a concept, _**µ**_ _i_ = ( _µ_ _[q]_ _i_ _[, µ]_ _i_ _[k][, µ]_ _i_ _[v]_ [)][, where][ 0] _[<]_ _[i]_ _[≤]_
+_M_ . The memory retrieval process involves the creation of _m_ different search patterns as a function of input tokens. For
+each search pattern, top- _k_ memory cells are chosen on the basis of their similarity to the search pattern. The memory
+concept is calculated as a weighted sum of the contents of these matching top- _k_ memory cells. The logic of producing
+the search pattern is first formalized, then we detail how each search pattern drives retrieval.
+
+
+To perform _m_ memory lookups, the model first constructs _m_ search patterns from the input sequence _X_ _∈_ R _[n][×][d]_ .
+Concretely, the model introduces _m_ learnable ”mixer” vectors _mixeri_ _∈_ R _[d]_ that aggregate information from tokens
+via a cross-attention operation where the queries are the mixer vectors and the keys/values come from the tokens. Let
+_Wk_ _[SP]_ _, Wv_ _[SP]_ _∈_ R _[d][×][d]_ be learnable projections; the _i_ -th search pattern is then:
+
+
+_· XWv_ _[SP]_ (10)
+
+
+- _mixeri_ ~~_√_~~ _·_ - _XWk_ _[SP]_ )
+
+
+_T_ [�]
+
+
+_σi_ = _softmax_
+
+
+_d_
+
+
+Given a search pattern _σi_, the memory unit keys, a table of keys, one per each memory cell, _ξ_ _∈_ R _[M]_ _[×][d]_, and the
+memory cells _**µ**_ _∈_ R _[M]_ _[×]_ [3] _[d]_, retrieval computes a soft combination of cells weighted by their similarity to _σi_ . The
+retrieval step is:
+
+
+_I_ = _SelectTopkIndices_ ( _σi · ξ_ _[T]_ ); _s_ = _softmax_ ( _σi ·_ ( _ξI_ ) _[T]_ ); _Mi_ = _s ·_ _**µ**_ _I_ (11)
+
+
+where _I_ is a set of indices, _s ∈_ R _[k]_, _ξI_ _∈_ R _[k][×][d]_ _,_ _**µ**_ _I_ _∈_ R _[k][×]_ [(3] _[d]_ [)], and the output _Mi_ _∈_ R [3] _[d]_ .
+
+
+Scaling the memory size, _M_, makes naive nearest-neighbor scoring over all keys _O_ ( _M_ ) per search pattern prohibitive;
+fast approximate similarity search techniques could be used here (Johnson et al., 2019), but incorporating them is
+challenging when keys are continually trained and re-indexed. MANAR uses trainable product keys (Lample et al.,
+~~_√_~~
+2019), which factor the key space into two tables _ξ_ [(1)] _, ξ_ [(2)] _∈_ R _M_ _×_ _[d]_ 2 whose (implicit) Cartesian product spans M
+
+
+_M_ _×_ _[d]_
+
+
+5
+
+
+3.4 MULTI-HEAD ARCHITECTURE
+
+
+To form a _h_ -head MANAR layer we replicate the entire single-head conceptualization pipeline, including the searchpattern builder, one per head. Each head therefore learns its own token projections and search patterns, yet all heads
+reuse the same token-contextualization key projection _Wk_ _[r]_ [and access one shared external memory.] [After each head]
+completes retrieval, ACR construction and token contextualization, their outputs are concatenated and mapped back
+to _D_ dimensions through a single output projection, preserving the standard transformer interface. Fig. 2 depicts the
+entire multi-headed architecture. Moreover, a fully comutational analysis of the layer is provided in A.1.
+
+
+4 EVALUATION
+
+
+To evaluate MANAR accuracy, performance and memory usage, we apply it as a drop-in replacement to MHA in
+several transformer-based AI models. When comparing vanilla transformer encoder architecture to MANAR-enabled
+one, we leave all other layers unmodified. In this section, we refer to any MANAR-enabled transformer encoder
+architecture, having a memory of size _M_ and _ACR_ of size _m_ that aggregates top- _k_ memory cells to assemble a
+memory concept as ”MANAR- _M_ . _m_ . _k_ ”.
+
+
+4.1 IMAGE CLASSIFICATION
+
+
+We benchmark MANAR on the ImageNet-1K dataset (Deng et al., 2009), which contains 1.28M training images and
+50K validation images from 1000 categories. We use DeiT-B and DeiT-S (Touvron et al., 2021) as our baselines,
+hence, we refer to MANAR- _M_ . _m_ . _k_ -B(-S) as a DeiT-B(-S) transformer encoder where all MHA layers were replaced
+by MANAR layers. We trained a MANAR-256.32.8-B(-S) model with 12 encoder layers, each containing 12(6) heads.
+The dimensionality of each head was set to _d_ = 64. For each layer we held a local context window attention attending
+to the 96 neighboring tokens. The model is trained on the training set and the top-1 accuracy on the validation set is
+reported. For fair comparisons, we trained the model from scratch with training settings used in DeIT. Specifically,
+we apply random cropping, random horizontal flipping, label smoothing regularization, mixup, and random erasing as
+data augmentations. The training took place on images of size 224 [2] . We employ AdamW (Loshchilov et al., 2017)
+with a momentum of 0.9, a total batch size of 1024, and a weight decay of 5 _·_ 10 _[−]_ [2] to optimize the model. We train
+the MANAR based DeiT architecture for 450(300) epochs using the cosine scheduling with a learning rate initiated as
+
+
+6
+
+
+Figure 2: High level archWitecture of MANAR
+
+
+_d_
+R 2, retrieve top-k indices and scores ( _I_ 1 _, s_ 1) from _ξ_ [(1)] and ( _I_ 2 _, s_ 2) from _ξ_ [(2)], then combine candidates by maximizing
+summed scores over pairs:
+_argmaxj_ 1 _∈I_ 1 _,j_ 2 _∈I_ 2 _s_ 1[ _j_ 1] + _s_ 2[ _j_ 2]
+
+
+_√_
+which yields an efficient approximation to top- _k_ over the full _M_ composite keys while searching only the
+
+
+which yields an efficient approximation to top- _k_ over the full _M_ composite keys while searching only the _M_ -sized
+
+half-key tables.
+
+
+4 _·_ 10 _[−]_ [4] and EMA. During testing we apply a center crop on the validation set to crop out 224 [2] images. Experiments
+are performed on a single H100 GPU. Top-1 accuracy on validation set results are reported in Tab. 1. A comparison
+of our architecture was made against models that have similar parameter count. Our architecture was compared to
+transformer based Deit-B(-S), as well as Vision Mamba, Vim-B(-S) (Zhu et al., 2024) which is a linear complexity
+architecture, and vanilla Vision Transformer (Dosovitskiy et al., 2020). As can be seen in the table, MANAR slightly
+outperforms models of approximately the same size, demonstrating its ability to achieve state-of-the-art accuracy
+performance.
+
+
+Table 1: Comparison of different backbone architectures on ImageNet.
+
+|Method|Image Size|#Param.|ImageNet Top-1 Acc.|
+|---|---|---|---|
+|ViT-B/16 (Dosovitskiy et al., 2020)<br>ViT-L/16|3842<br>3842|86M<br>307M|77.9<br>76.5|
+|DeiT-S (Touvron et al., 2021)<br>DeiT-B|2242<br>2242|22M<br>86M|79.8<br>81.8|
+|Vim-S (Zhu et al., 2024)<br>Vim-B|2242<br>2242|26M<br>98M|80.3<br>81.9|
+|MANAR-256.32.8-S<br>MANAR-256.32.8-B|2242<br>2242|28M<br>108M|**80.7**<br>**82.3**|
+
+
+4.2 KNOWLEDGE TRANSFER
+
+
+The process of training a model from scratch might be prohibitive, especially as models reach hundreds of billions of
+parameters. When developing a new architecture, co-developing a method for transferring knowledge from existing
+trained models can lead to considerable reduction in training costs. Since transformer architecture serves as the
+backbone model for many applications, transferring knowledge from it is of great importance as it could drastically
+lower the barrier of new model’s adoption. We developed a straightforward method to transfer knowledge from existing
+trained transformer architectures. Since our architecture (as depicted in Fig. 2) feature _q, k, v_ and _out_ ~~_p_~~ _roj_ weight
+matrices, which have a similar semantic meaning as the weights found in MHA, transferring knowledge from a trained
+transformer architecture requires copying those weight matrices. When training the knowledge-transferred MANAR
+model, we fix the copied weights (rendering them untrainable) and train only the remaining new weights. To illustrate
+the effectiveness of this method we tested it on two different applications: Image classification and Automatic speech
+recognition.
+
+
+**Image classification** we loaded an existing DeIT model achieving 83.4% top-1 accuracy. We substitute every MHA
+layer with MANAR that has the same _q, k, v, out_ ~~_p_~~ _roj_ weight matrices. Each MANAR layer contains 256 memory
+cells, _ACR_ size of 32 and a context window length of 96. All the copied weight matrices (from the original DeIT) are
+fixed and do not train. We train the remaining weights for 20 epochs with exactly the same training setting as presented
+in Sec. 4.1. This setting achieves 83.1% top-1 accuracy. Both the reduction in the number of epochs, coupled with the
+fact that most of the model is no longer trainable, demonstrates a training time reduction of more than 99% compared
+to training MANAR from scratch.
+
+
+Table 2: Word Error Rate (WER) on LibriSpeech standard dev/test sets. All models have the same 12-layer transformer
+encoder structure. The model output is decoded with the official 4-gram language model (Heafield, 2011)
+
+|Model|dev-clean|dev-other|test-clean|test-other|
+|---|---|---|---|---|
+|wav2vec2.0 (Baevski et al., 2020)|2.7|7.9|3.4|8.0|
+|HuBERT (Hsu et al., 2021)|2.7|7.8|3.4|8.1|
+|data2vec (Baevski et al., 2022)|**2.2**|**6.4**|**2.8**|**6.8**|
+|MANAR-256.64.8|2.3|6.7|2.9|**6.8**|
+
+
+**Automatic Speech Recognition** We use data2vec-base (Baevski et al., 2022) as a baseline model to transfer knowledge
+from, towards training a MANAR-256.64.8 model. We employ a local context window length of 128, capturing
+approximately 2.5 seconds of audio. All copied weights are fixed for training and the remaining weights are trained
+on 100 hours from LibriSpeech (Panayotov et al., 2015) using the CTC loss (Graves et al., 2006). We measure the
+resulting Word Error Rate on the LibriSpeech standard dev/test sets, compare with state-of-the-art solutions, and report
+the results as in Tab. 2. MANAR achieves state-of-the-art WER, confirming the effectiveness of the knowledge transfer
+method.
+
+
+7
+
+
+|Col1|MANAR vs. MHA|Col3|Col4|MANAR.256.32.8-S vs. DeiT-S|Col6|
+|---|---|---|---|---|---|
+|**1**<br>**6**<br>**11**<br>**16**<br>**512 1024 2048 3072 4096**<br>𝒎𝒔<br>𝒓𝒆𝒒<br>𝑴𝑩<br>𝒓𝒆𝒒<br>**0**<br>**1k**<br>**2K**<br>**3K**<br>**4K**<br>**Sequence length**<br><br>**1K**<br>**1.5K**<br>**5**<br>**10**<br>**15**<br>**20**<br>**Sequence length**<br>**Sp**<br>**M**<br>**re**<br> <br>**M**<br>**M**|||**1**<br>**3**<br>**5**<br>**7**<br>**9**<br><br><br>**768 1024 1280**<br><br><br><br>**1024**<br>**1280**<br>**Resolution**<br>**4**<br>**16**<br>**36**<br>**64**<br>**2K**<br>**4K**<br>**6K**<br>**8K**<br>**10K**<br>**Resolution**<br>**eedup**<br>**emory**<br>**duction**<br> <br>**HA**<br>**ANAR**<br>𝒎𝒔<br>𝒓𝒆𝒒<br>𝑴𝑩<br>𝒓𝒆𝒒|||
+
+
+Figure 3: (left): Comparing the time and space complexity of MANAR against vanilla MHA; (right): Comparing the
+time and space complexity of MANAR-based DeiT-S (MANAR-256.32.8-S) against vanilla DeiT-S. Note the up right
+time measurements are made in quadratic scale to accommodate the quadratic effect of resolution on results.
+
+
+4.3 PERFORMANCE COMPARISON
+
+
+We profile MANAR against quadratic MHA under two conditions: single-layer latency and an end-to-end vision
+model. All measurements are performed on a single NVIDIA H100 GPU, with the batch size for each sequence length
+set to the maximum that could be accommodated in device HBM. Latencies report wall-clock averages over repeated
+runs, and memory refers to peak allocated GPU memory during inference. In the single-layer setting (left panels of
+Fig. 3), both layers use 12 heads of dimension 64, while MANAR employs 256 memory cells, an ACR of 32, and
+a local context window set to half the sequence length. At 256 tokens the two layers are essentially tied (41.5 _µ_ s vs.
+42.9 _µ_ s). At 2,048 tokens MANAR is already 7 _._ 6 _×_ faster (0.62 ms vs. 4.74 ms) while cutting peak memory 5 _._ 0 _×_, and
+at 4,096 tokens the gap widens to 14 _._ 8 _×_ in latency (1.35 ms vs. 20.0 ms) and 9 _._ 3 _×_ in memory. To verify robustness, we
+varied the ACR size between 16 and 512 and the memory size between 256 and 16K. Speedup and memory reduction
+figures remained essentially unchanged across the entire range, confirming that performance and memory gains are
+not sensitive to these hyperparameters.
+
+
+In the end-to-end setting (right panels), replacing all MHA layers in DeiT-S with MANAR (MANAR-256.32.8-S) and
+setting local context window to half the sequence length yields slightly higher latency on 256 _×_ 256 inputs (0.54 ms vs.
+0.44 ms), but achieves a 2 _._ 0 _×_ speed-up (7.15 ms vs. 14.6 ms) and 4 _._ 5 _×_ memory reduction at 896 _×_ 896, rising to 3 _._ 1 _×_
+faster (16.2 ms vs. 49.8 ms) and 8 _._ 2 _×_ leaner at 1 _,_ 280 _×_ 1 _,_ 280.
+
+
+These findings highlight that although MANAR (with local context window which is half the sequence length) still
+scales quadratically in theory, the constant factor is significantly smaller than that of full MHA. If however the context
+window length were fixed to a constant, MANAR would achieve strictly linear scaling in both time and memory. In
+practice, even under the conservative _cw_ ~~_l_~~ _en_ = _n/_ 2 setting, the reduction in constant factors consistently translates
+into large empirical gains in wall-clock time and memory footprint, enabling efficient execution at high sequence
+lengths and input resolutions.
+
+
+4.4 MEASURING ” _out-of-the-box thinking_ ”
+
+
+To assess MANAR’s ability to render representations that go beyond what can be obtained from a convex combination
+of input token values, we adopt the Convex Hull Membership (CHM) criterion: for a contextualized output vector
+_yi_ _∈_ R _[d]_ and a set of input value vectors _{v_ 1 _, . . ., vn}_, CHM asks whether there exist non-negative coefficients
+
+
+8
+
+
+**90.00%**
+
+
+**80.00%**
+
+
+**70.00%**
+
+
+**60.00%**
+
+
+**50.00%**
+
+
+**40.00%**
+
+
+**30.00%**
+
+
+**20.00%**
+
+
+**10.00%**
+
+
+**0.00%**
+
+**1** **2** **3** **4** **5** **6** **7** **8** **9** **10** **11** **12**
+
+
+**Layer number**
+
+
+Figure 4: For each layer we sampled 10,000 token outputs and tested whether they lie outside the convex hull of their
+attended input values (Convex-Hull Membership criterion). The plot reports the resulting fraction per layer, revealing
+that more than half of the representations in most layers—and up to 80% in layers 9–10—cannot be expressed as any
+convex combination of the input tokens, confirming MANAR’s capacity to synthesize novel, non-convex contextual
+information.
+
+
+_α_ 1 _, . . ., αn_ summing to 1 such that: _yi_ = [�] _j_ _[n]_ =1 _[α][j][v][j]_ [.] [If no such coefficients exist,] _[ y][i]_ [lies outside the convex hull of]
+the inputs, signaling that the layer has synthesized information that cannot be expressed as a weighted average of the
+original token values, hence not obtainable by MHA.
+
+
+Such ” _out-of-the-box thinking_ ” measurements are conducted on the MANAR-256.32.8 image classification knowledge
+transferred model. For each layer, we randomly select 10,000 output tokens _yi_ as appears in Eq. 9, drawn uniformly
+across all heads. For each sample we collect the corresponding set of all input values _{v_ 1 _, . . ., vn}_ . We then solve
+the CHM problem using linear programming as suggested by (Dantzig, 2016) .Fig. 4 plots, for each encoder layer, the
+fraction of outputs that fall outside the hull. Most layers exceed 50%, confirming that MANAR regularly synthesizes
+non-convex representations and thus contextualizes tokens in ways vanilla MHA cannot. The layer-wise pattern also
+reveals that reliance on memorized concepts is high at the very beginning, indicating that tokens lean on the Abstract
+Conceptual Representation (ACR) to inject global context that their narrow local windows cannot yet provide. As
+representations mature in mid-stack layers, local evidence becomes richer and the model needs the ACR less, so the
+out-of-hull fraction stabilizes near 55%. Late layers then show a sharp rise to 70–80%, reflecting a second surge of
+memory usage when the network synthesizes higher-level, task-specific abstractions, indicating reliance on memory
+concepts which serve as internalized ready-made perceptions representing memorized abstract features. Finally, the
+fraction drops in the topmost layers.
+
+
+5 CONCLUSION
+
+
+We introduced MANAR, a memory-augmented contextualization layer that complements local token interactions with
+a compact _Abstract Conceptual Representation_, functioning as a memory-centric mental image. Embedded as a dropin replacement for multi-head attention, the layer reduces the theoretical cost of contextualization from quadratic to
+linear, delivers up to 14.8× inference-time speedup and 9.3× peak memory saving at 4K tokens, and matches—or
+slightly exceeds—state-of-the-art accuracy on ImageNet-1K and LibriSpeech. Convex-hull membership analysis further shows that more than half of MANAR’s outputs transcend the span of the input values, providing quantitative
+evidence that the memory pathway synthesizes genuinely novel, high-level representations rather than merely reweighting visible tokens. Looking ahead, we regard MANAR as a first step toward _concept-driven_ sequence modeling. A natural next milestone is to explore its utility on language-centric benchmarks such as information-retrieval and
+open-domain question-answering, where the ability to inject global semantic concepts may prove even more valuable
+than in vision or speech. At the architectural level, we are adapting the layer for causal, autoregressive decoding by
+reformulating both memory retrieval and ACR construction to operate with strictly left-to-right visibility, thereby enabling deployment in long-context language generators. Finally, while the present work focuses on _read-only_ memory
+retrieval, the human analogy that inspired MANAR also highlights the importance of continually updating stored concepts; ongoing efforts therefore target differentiable write-back policies that can learn when to allocate, consolidate,
+or overwrite memories without disrupting stable retrieval.
+
+
+9
+
+
+REFERENCES
+
+
+Pablo Acera Mateos, Renzo F Balboa, Simon Easteal, Eduardo Eyras, and Hardip R Patel. Pacific: a lightweight
+deep-learning classifier of sars-cov-2 and co-infecting rna viruses. _Scientific reports_, 11(1):3209, 2021.
+
+
+Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Luˇci´c, and Cordelia Schmid. Vivit: A video
+vision transformer. In _Proceedings of the IEEE/CVF international conference on computer vision_, pp. 6836–6846,
+2021.
+
+
+Saleh Ashkboos, Amirkeivan Mohtashami, Maximilian L Croci, Bo Li, Pashmina Cameron, Martin Jaggi, Dan Alistarh, Torsten Hoefler, and James Hensman. Quarot: Outlier-free 4-bit inference in rotated llms. _Advances in Neural_
+_Information Processing Systems_, 37:100213–100240, 2024.
+
+
+Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, and Michael Auli. wav2vec 2.0: A framework for selfsupervised learning of speech representations. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 33:12449–
+12460, 2020.
+
+
+Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu, and Michael Auli. Data2vec: A general framework for self-supervised learning in speech, vision and language. In _International conference on machine learning_,
+pp. 1298–1312. PMLR, 2022.
+
+
+Ali Behrouz, Peilin Zhong, and Vahab Mirrokni. Titans: Learning to memorize at test time. _arXiv_ _preprint_
+_arXiv:2501.00663_, 2024.
+
+
+Ali Behrouz, Zeman Li, Praneeth Kacham, Majid Daliri, Yuan Deng, Peilin Zhong, Meisam Razaviyayn, and Vahab
+Mirrokni. Atlas: Learning to optimally memorize the context at test time. _arXiv preprint arXiv:2505.23735_, 2025.
+
+
+Zhaodong Bing, Linze Li, and Jiajun Liang. Optimizing knowledge distillation in transformers: Enabling multi-head
+attention without alignment barriers. _arXiv preprint arXiv:2502.07436_, 2025.
+
+
+Nadav Brandes, Dan Ofer, Yam Peleg, Nadav Rappoport, and Michal Linial. Proteinbert: a universal deep-learning
+model of protein sequence and function. _Bioinformatics_, 38(8):2102–2110, 2022.
+
+
+Krzysztof Choromanski, Valerii Likhosherstov, David Dohan, Xingyou Song, Andreea Gane, Tamas Sarlos, Peter
+Hawkins, Jared Davis, Afroz Mohiuddin, Lukasz Kaiser, et al. Rethinking attention with performers. _arXiv preprint_
+_arXiv:2009.14794_, 2020.
+
+
+George B Dantzig. Linear programming and extensions. 2016.
+
+
+Tri Dao and Albert Gu. Transformers are ssms: Generalized models and efficient algorithms through structured state
+space duality. _arXiv preprint arXiv:2405.21060_, 2024.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image
+database. In _2009 IEEE conference on computer vision and pattern recognition_, pp. 248–255. Ieee, 2009.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner,
+Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words:
+Transformers for image recognition at scale. _arXiv preprint arXiv:2010.11929_, 2020.
+
+
+Zafeirios Fountas, Martin Benfeghoul, Adnan Oomerjee, Fenia Christopoulou, Gerasimos Lampouras, Haitham Bou
+Ammar, and Jun Wang. Human-inspired episodic memory for infinite context llms. In _The Thirteenth International_
+_Conference on Learning Representations_, 2025.
+
+
+Alex Graves, Santiago Fern´andez, Faustino Gomez, and J¨urgen Schmidhuber. Connectionist temporal classification:
+labelling unsegmented sequence data with recurrent neural networks. In _Proceedings_ _of_ _the_ _23rd_ _international_
+_conference on Machine learning_, pp. 369–376, 2006.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_ _preprint_
+_arXiv:2312.00752_, 2023.
+
+
+Albert Gu, Karan Goel, and Christopher R´e. Efficiently modeling long sequences with structured state spaces. _arXiv_
+_preprint arXiv:2111.00396_, 2021.
+
+
+10
+
+
+Cheng Han, Qifan Wang, Sohail A Dianat, Majid Rabbani, Raghuveer M Rao, Yi Fang, Qiang Guan, Lifu Huang, and
+Dongfang Liu. Amd: Automatic multi-step distillation of large-scale vision models. In _European_ _Conference_ _on_
+_Computer Vision_, pp. 431–450. Springer, 2024.
+
+
+Kenneth Heafield. Kenlm: Faster and smaller language model queries. In _Proceedings_ _of_ _the_ _sixth_ _workshop_ _on_
+_statistical machine translation_, pp. 187–197, 2011.
+
+
+Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, and Abdelrahman Mohamed. Hubert: Self-supervised speech representation learning by masked prediction of hidden units.
+_IEEE/ACM transactions on audio, speech, and language processing_, 29:3451–3460, 2021.
+
+
+Zuher Jahshan and Leonid Yavits. Vital: vision transformer based low coverage sars-cov-2 lineage assignment. _Bioin-_
+_formatics_, 40(3):btae093, 2024.
+
+
+Jeff Johnson, Matthijs Douze, and Herv´e J´egou. Billion-scale similarity search with gpus. _IEEE Transactions on Big_
+_Data_, 7(3):535–547, 2019.
+
+
+Vladimir Karpukhin, Barlas Oguz, Sewon Min, Patrick SH Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and
+Wen-tau Yih. Dense passage retrieval for open-domain question answering. In _EMNLP (1)_, pp. 6769–6781, 2020.
+
+
+Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and Franc¸ois Fleuret. Transformers are rnns: Fast autoregressive transformers with linear attention. In _International conference on machine learning_, pp. 5156–5165. PMLR,
+2020.
+
+
+Timothy A Keller, Robert A Mason, Aliza E Legg, and Marcel Adam Just. The neural and cognitive basis of expository
+text comprehension. _npj Science of Learning_, 9(1):21, 2024.
+
+
+Viktor Nikolaus Kewenig, Gabriella Vigliocco, and Jeremy I Skipper. When abstract becomes concrete, naturalistic
+encoding of concepts in the brain. _Elife_, 13:RP91522, 2024.
+
+
+Guillaume Lample, Alexandre Sablayrolles, Marc’Aurelio Ranzato, Ludovic Denoyer, and Herv´e J´egou. Large memory layers with product keys. _Advances in Neural Information Processing Systems_, 32, 2019.
+
+
+Wonbeom Lee, Jungi Lee, Junghwan Seo, and Jaewoong Sim. _{_ InfiniGen _}_ : Efficient generative inference of large
+language models with dynamic _{_ KV _}_ cache management. In _18th_ _USENIX_ _Symposium_ _on_ _Operating_ _Systems_
+_Design and Implementation (OSDI 24)_, pp. 155–172, 2024.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao, Chengqi Deng, Chenyu
+Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint arXiv:2412.19437_, 2024a.
+
+
+Alexander H Liu, Heng-Jui Chang, Michael Auli, Wei-Ning Hsu, and Jim Glass. Dinosr: Self-distillation and online
+clustering for self-supervised speech representation learning. _Advances in Neural Information Processing Systems_,
+36:58346–58362, 2023.
+
+
+Weijie Liu, Zecheng Tang, Juntao Li, Kehai Chen, and Min Zhang. Memlong: Memory-augmented retrieval for long
+text modeling. _arXiv preprint arXiv:2408.16967_, 2024b.
+
+
+Zechun Liu, Changsheng Zhao, Igor Fedorov, Bilge Soran, Dhruv Choudhary, Raghuraman Krishnamoorthi, Vikas
+Chandra, Yuandong Tian, and Tijmen Blankevoort. Spinquant: Llm quantization with learned rotations. _arXiv_
+_preprint arXiv:2405.16406_, 2024c.
+
+
+Zirui Liu, Jiayi Yuan, Hongye Jin, Shaochen Zhong, Zhaozhuo Xu, Vladimir Braverman, Beidi Chen, and Xia Hu.
+Kivi: A tuning-free asymmetric 2bit quantization for kv cache. _arXiv preprint arXiv:2402.02750_, 2024d.
+
+
+Ilya Loshchilov, Frank Hutter, et al. Fixing weight decay regularization in adam. _arXiv preprint arXiv:1711.05101_, 5
+(5):5, 2017.
+
+
+Amirkeivan Mohtashami and Martin Jaggi. Landmark attention: Random-access infinite context length for transformers. _arXiv preprint arXiv:2305.16300_, 2023.
+
+
+Subhabrata Mukherjee, Ahmed Hassan Awadallah, and Jianfeng Gao. Xtremedistiltransformers: Task transfer for
+task-agnostic distillation. _arXiv preprint arXiv:2106.04563_, 2021.
+
+
+11
+
+
+Vassil Panayotov, Guoguo Chen, Daniel Povey, and Sanjeev Khudanpur. Librispeech: an asr corpus based on public
+domain audio books. In _2015 IEEE international conference on acoustics, speech and signal processing (ICASSP)_,
+pp. 5206–5210. IEEE, 2015.
+
+
+Steffen Schneider, Alexei Baevski, Ronan Collobert, and Michael Auli. wav2vec: Unsupervised pre-training for
+speech recognition. _arXiv preprint arXiv:1904.05862_, 2019.
+
+
+Tahira Shehzadi, Khurram Azeem Hashmi, Didier Stricker, and Muhammad Zeshan Afzal. Object detection with
+transformers: A review. _arXiv preprint arXiv:2306.04670_, 2023.
+
+
+Hanshi Sun, Li-Wen Chang, Wenlei Bao, Size Zheng, Ningxin Zheng, Xin Liu, Harry Dong, Yuejie Chi, and
+Beidi Chen. Shadowkv: Kv cache in shadows for high-throughput long-context llm inference. _arXiv_ _preprint_
+_arXiv:2410.21465_, 2024.
+
+
+Yutao Sun, Li Dong, Shaohan Huang, Shuming Ma, Yuqing Xia, Jilong Xue, Jianyong Wang, and Furu Wei. Retentive
+network: A successor to transformer for large language models. _arXiv preprint arXiv:2307.08621_, 2023.
+
+
+Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, and Herv´e J´egou. Training
+data-efficient image transformers & distillation through attention. In _International conference on machine learning_,
+pp. 10347–10357. PMLR, 2021.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee Lacroix, Baptiste
+Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and efficient foundation language models.
+_arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia
+Polosukhin. Attention is all you need. _Advances in neural information processing systems_, 30, 2017.
+
+
+Sinong Wang, Belinda Z Li, Madian Khabsa, Han Fang, and Hao Ma. Linformer: Self-attention with linear complexity.
+_arXiv preprint arXiv:2006.04768_, 2020.
+
+
+Benjamin Warner, Antoine Chaffin, Benjamin Clavi´e, Orion Weller, Oskar Hallstr¨om, Said Taghadouini, Alexis Gallagher, Raja Biswas, Faisal Ladhak, Tom Aarsen, et al. Smarter, better, faster, longer: A modern bidirectional
+encoder for fast, memory efficient, and long context finetuning and inference. _arXiv_ _preprint_ _arXiv:2412.13663_,
+2024.
+
+
+Yuhuai Wu, Markus N Rabe, DeLesley Hutchins, and Christian Szegedy. Memorizing transformers. _arXiv preprint_
+_arXiv:2203.08913_, 2022.
+
+
+Chaojun Xiao, Pengle Zhang, Xu Han, Guangxuan Xiao, Yankai Lin, Zhengyan Zhang, Zhiyuan Liu, and Maosong
+Sun. Inf m: Training-free long-context extrapolation for llms with an efficient context memory. _Advances in Neural_
+_Information Processing Systems_, 37:119638–119661, 2024.
+
+
+Guangxuan Xiao, Ji Lin, Mickael Seznec, Hao Wu, Julien Demouth, and Song Han. Smoothquant: Accurate and
+efficient post-training quantization for large language models. In _International conference on machine learning_, pp.
+38087–38099. PMLR, 2023.
+
+
+Lianghui Zhu, Bencheng Liao, Qian Zhang, Xinlong Wang, Wenyu Liu, and Xinggang Wang. Vision mamba: Efficient
+visual representation learning with bidirectional state space model. _arXiv preprint arXiv:2401.09417_, 2024.
+
+
+A APPENDIX
+
+
+We leveraged Large Language Models (LLMs) solely as writing assistants. Their role was confined to: (1) re-phrasing
+and clarifying sentences for improved readability; (2) catching minor grammatical or typographical errors.
+
+
+A.1 COMPLEXITY ANALYSIS
+
+
+We analyze the computational complexity of the MANAR layer compared to standard multi-head attention (MHA).
+Consider an input sequence _X_ _∈_ R _[n][×][D]_, where _n_ is the sequence length, _D_ = _hd_ is the hidden dimension, and _h_ is
+the number of heads with per-head dimension _d_ .
+
+
+12
+
+
+**Conceptualization.** Each token is projected into query, key, and value spaces using linear projections, plus an additional projection into the ACR key space. The cost per head is _O_ ( _ndD_ ) and across all heads _O_ ( _nD_ [2] ). This is identical
+to standard MHA and scales linearly in sequence length.
+
+
+**Search pattern building.** Constructing _m_ search patterns requires cross-attention between _m_ mixer vectors and the
+_n_ tokens. For each mixer, similarity scores against all _n_ tokens cost _O_ ( _nd_ ), followed by a weighted sum of token
+values costing another _O_ ( _nd_ ). The overall cost per head is _O_ ( _mnd_ ), independent of memory size _M_ . Overall, across
+all heads the cost is _O_ ( _mnD_ ).
+
+
+For fixed _m, L_, and moderate memory size _M_, this simplifies to _O_ ( _nD_ [2] ), i.e., linear in sequence length. In contrast,
+standard MHA has complexity _O_ ( _n_ [2] _D_ ). Thus MANAR achieves linear dependence on _n_, controlled by _m_ and _L_, and
+avoids quadratic growth.
+
+
+**Summary.** MANAR reduces complexity from quadratic in _n_ (MHA) to linear in _n_ with sublinear memory lookup
+costs in _M_ . The overall complexity is governed by (i) the number of memory lookups _m_, (ii) the retrieval granularity
+_k_, and (iii) the local context window length _L_ . Finally, to fully exploit the structure of MANAR operations, we
+implemented a custom Triton kernel that fuses computations, yielding substantial wall-clock speedups in practice.
+
+
+13
+
+
+**Memory** **retrieval.** Naively, computing similarity between each search pattern and all _M_ memory keys requires
+_O_ ( _mdM_ ). With top- _k_ selection, this yields _O_ ( _mdM_ + _mkd_ ), which is prohibitive for large _M_ . MANAR uses product_√_
+key factorization: each key is represented implicitly as the Cartesian product of two half-keys of size _M_ . This
+
+_√_
+reduces the lookup cost to _O_ ( _md_ _M_ ) for similarity computation, plus _O_ ( _mk_ [2] ) for combining candidate pairs. This
+
+
+reduces the lookup cost to _O_ ( _md_ _M_ ) for similarity computation, plus _O_ ( _mk_ [2] ) for combining candidate pairs. This
+
+is the main complexity reduction, yielding sublinear scaling in _M_ compared to naive lookup. The overall complexity
+_√_
+cost when taking into account all heads is _O_ - _mD_ _M_ �.
+
+
+_M_ �.
+
+
+**ACR construction.** Each of the _m_ retrieved memory concepts is contextualized by _n_ tokens through a softmax over
+token keys and values. This requires _O_ ( _mnd_ ) multiplications. Across all heads, the cost is _O_ ( _mnD_ ).
+
+
+**Token** **contextualization.** Each token attends to (i) the _m_ -sized ACR and (ii) its local window of length _L_ . The
+complexity across all heads is _O_ ( _nD_ ( _m_ + _L_ )). For fixed _L_ and _m_, this is linear in sequence length. For _L_ = _O_ ( _n_ )
+the scaling becomes quadratic, but with a constant factor that is substantially smaller than full MHA.
+
+
+**Overall complexity.** Summing all stages, the MANAR layer has complexity
+
+
+_√_
+_O_ ( _nD_ [2] ) + _O_ ( _mnD_ ) + _O_ ( _mD_
+
+
+_√_
+_M_ ) + _O_ ( _nD_ ( _m_ + _L_ )) = _O_ - _nD_ [2] + _mnD_ + _nLD_ + _mD_
+
+
+_M_ - _._

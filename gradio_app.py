@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import csv
 import re
 from functools import lru_cache
@@ -263,18 +262,16 @@ def run_review(
         None,
     )
 
-    review_output, saved_path = asyncio.run(
-        review_paper_text(
-            paper_text=paper_text,
-            source_name=source_name,
-            parallel=parallel,
-            skip_related_work=not use_related_work,
-            skip_spark=not use_spark,
-            venue=(venue or "").strip(),
-            calibration_path=calibration_path,
-            api_key=api_key,
-            output_dir="webui_runs",
-        )
+    review_output, saved_path = review_paper_text(
+        paper_text=paper_text,
+        source_name=source_name,
+        parallel=parallel,
+        skip_related_work=not use_related_work,
+        skip_spark=not use_spark,
+        venue=(venue or "").strip(),
+        calibration_path=calibration_path,
+        api_key=api_key,
+        output_dir="webui_runs",
     )
 
     summary = f"Done. Full output saved to `{saved_path}`."

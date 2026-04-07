@@ -1,0 +1,3916 @@
+# DISCRETE ADJOINT MATCHING
+
+
+**Oswin So** [1] _[,][†][,][∗]_ **Brian Karrer** [2] _[,][∗]_ **Chuchu Fan** [1] **Ricky T. Q. Chen** [2] _[,][∗]_ **Guan-Horng Liu** [2] _[,][∗]_
+
+1MIT 2FAIR at Meta _†_ Work done at FAIR, Meta
+
+
+ABSTRACT
+
+
+Computation methods for solving entropy-regularized reward optimization—a
+class of problems widely used for fine-tuning generative models—have advanced
+rapidly. Among those, Adjoint Matching (AM, Domingo-Enrich et al., 2025)
+has proven highly effective in continuous state spaces with differentiable rewards.
+Transferring these practical successes to _discrete_ generative modeling, however,
+remains particularly challenging and largely unexplored, mainly due to the drastic shift in generative model classes to discrete state spaces, which are nowhere
+differentiable. In this work, we propose **Discrete Adjoint Matching (DAM)** —a
+discrete variant of AM for fine-tuning discrete generative models characterized by
+Continuous-Time Markov Chains, such as diffusion-based large language models.
+The core of DAM is the introduction of _discrete adjoint_ —an estimator of the optimal solution to the original problem but formulated on discrete domains—from
+which standard matching frameworks can be applied. This is derived via a purely
+statistical standpoint, in contrast to the control-theoretic viewpoint in AM, thereby
+opening up new algorithmic opportunities for general adjoint-based estimators.
+We showcase DAM’s effectiveness on synthetic and mathematical reasoning tasks.
+
+
+1 INTRODUCTION
+
+
+We consider an entropy-regularized optimization in a state space _X_ over a finite horizon _t ∈_ [0 _,_ 1]:
+
+min _u_ [E][ [] _[g]_ [(] _[X]_ [1][)] +][ D][KL][(] _[p][u]_ [(] _**[X]**_ [)] _[||][p]_ [base][(] _**[X]**_ [))] (1)
+
+
+where the objective consists of a terminal loss _g_ ( _·_ ) incurred at _t_ = 1 and a Kullback–Leibler (KL)
+divergence DKL( _·||·_ ) that regularizes the model distribution _p_ _[u]_ over some stochastic processes _**X**_ =
+( _Xt_ ) _t∈_ [0 _,_ 1] parametrized by _u_, to the base distribution _p_ [base] _≡_ _p_ _[u]_ [base] parametrized by _u_ [base] .
+
+
+Optimization problems of the form (1) are ubiquitous at the intersection of reinforcement learning (Levine, 2018), stochastic control (Theodorou et al., 2010), and probabilistic inference (Blei
+et al., 2017). In the context of generative modeling, the primary motivation for studying (1) stems
+from the fact that —when the base distribution satisfies the _memoryless_ condition _p_ [base] ( _X_ 1 _|X_ 0) =
+_p_ [base] ( _X_ 1) [1] - the optimal solution to (1) is known analytically by
+
+_p_ _[⋆]_ ( _**X**_ ) _≡_ _p_ _[u][⋆]_ ( _**X**_ ) _∝_ _p_ [base] ( _**X**_ ) _e_ _[−][g]_ [(] _[X]_ [1][)] (2)
+
+
+Such an analytic expression is particularly useful for post-training generative models (Ziegler et al.,
+2019; Ouyang et al., 2022; Fan et al., 2023b), where we wish to _fine-tune_ pretrained models given
+some _reward_ function _r_ ( _x_ ). Specifically, by considering _p_ [base] as the pretrained model and setting the
+terminal loss as negative reward, _i.e.,_ _g_ ( _x_ ) := _−r_ ( _x_ ), the optimization problem in (1) can be best
+understood as _variational_ _inference_, seeking a posterior close to the prior, pretrained, distribution
+while being tilted exponentially toward high-reward regions, _i.e., p_ _[⋆]_ ( _X_ 1) _∝_ _p_ [base] ( _X_ 1) _e_ _[r]_ [(] _[X]_ [1][)] .
+
+
+Computational methods for solving (1) has advanced rapidly in recent years. Among those, methods
+based on Adjoint Matching (AM, Domingo-Enrich et al., 2025) have shown highly effective in
+_continuous_ state spaces with _differentiable_ terminal losses, _e.g.,_ _X_ = R _[d]_ and _∇g_ : R _[d]_ _→_ R _[d]_,
+achieving strong results in applications such as image fine-tuning (Domingo-Enrich et al., 2025),
+molecular generation (Havens et al., 2025), and Boltzmann distribution sampler (Liu et al., 2025a).
+
+
+_∗_ These authors are core contributors to the project. See Author Contributions for details.
+1The _memoryless_ condition readily holds for _all_ base models considered. See Appendix A.1 for details.
+
+
+1
+
+
+Concretely, when _p_ _[u]_ is the distribution induced by a class of stochastic differential equations (SDEs)
+parametrized by d _Xt_ = _σt_ [2] _[u][t]_ [(] _[X][t]_ [)][d] _[t]_ [+] _[σ][t]_ [d] _[W][t]_ [with some diffusion] _[ σ][t]_ [,][ Domingo-Enrich et al.][ (][2025][)]
+observed that any optimal solution must satisfy a fixed-point equation, presented compactly by
+
+
+    - 1
+_a_ ˜1( _**X**_ ) _−_
+
+
+_,_ _a_ ˜1( _**X**_ ) = _∇g_ ( _X_ 1) (3)
+
+
+_u_ _[⋆]_ _t_ [(] _[x]_ [) =] _[ u]_ _t_ [base] ( _x_ ) _−_ E _p⋆_ ( _**X**_ _|Xt_ = _x_ )
+
+
+_a_ ˜1( _**X**_ ) _−_ _∇u_ [base] _τ_ ( _Xτ_ ) _·_ ˜ _aτ_ ( _**X**_ )d _τ_
+
+_t_
+
+- �� =: _a_ ˜ _t_ ( _**X**_ )
+
+
+where _u_ [base] defines the base distribution _p_ [base] _≡_ _p_ _[u]_ [base] and _∇u_ [base] : R _[d]_ _→_ R _[d][×][d]_ denotes its Jacobian.
+The core of Adjoint Matching is the introduction of the _(lean) adjoint_ _a_ ˜ _t_ ( _**X**_ ) _∈_ R _[d]_ —an estimator
+of the optimal solution _u_ _[⋆]_ _t_ [(] _[x]_ [)][—that can be computed efficiently through backward integration from]
+the terminal condition ˜ _a_ 1( _**X**_ ) = _∇g_ ( _X_ 1), which is exactly the gradient of the terminal loss.
+
+
+In this work, we focus specifically on _discrete_ generative modeling, a heated research area that has
+gained significant attention across both industry and academia (Touvron et al., 2023; Achiam et al.,
+2023; Kasneci et al., 2023), fueled by the transformative success of large language models (LLMs)
+in language understanding (Wei et al., 2022; Bai et al., 2023), code generation (Chen et al., 2021;
+Team et al., 2023), and mathematical reasoning (Shao et al., 2024; Nie et al., 2025). In all cases, the
+state spaces are represented by the product of a discrete finite set, _X_ [discrete] = _{_ 1 _, · · ·_ _, M_ _}_ _[N]_ . That is,
+each sample _x_ = ( _x_ [1] _, · · ·_ _, x_ _[N]_ ) _∈X_ [discrete] corresponds to a sequence of _N_ discrete variables, where
+each variable _x_ _[i]_ is the index of an element—also called _token_ —from a _vocabulary_ list of size _M_ .
+
+
+Having to consider a discrete state space necessitates a family of discrete generative models. Notably, most of which can be formulated as the Continuous-Time Markov Chain (CTMC, Anderson,
+2012)—a stochastic jump process on a finite set, uniquely characterized by its _transition rate_, [2]
+
+
+_p_ ( _Xt_ +∆ _t_ = _y|Xt_ = _x_ ) _−_ _δx_ ( _y_ )
+_ut_ ( _y, x_ ) := lim (4)
+∆ _t→_ 0 ∆ _t_
+
+
+which quantifies the infinitesimal transition probability from _x_ to any _y_ = _x_ at time _t_ . We denote
+_δx_ ( _y_ ) as the indicator function, equaling one if _y_ = _x_ and zero if otherwise. CTMC was initially
+introduced by discrete diffusion models (Austin et al., 2021; Campbell et al., 2022) and later shown
+to generalize masked and auto-regressive models (Sahoo et al., 2024; Shi et al., 2024).
+
+
+Building on the practical success of AM in continuous domains, one question arises immediately:
+
+
+_Does a variant of Adjoint Matching exist for discrete generative modeling?_
+
+
+More concretely, we are interested in whether a fixed-point equation analogous to (3) exists when
+the optimization problem in (1) is formulated on the discrete state space _X_ = _X_ [discrete], where _p_ _[u]_
+and _p_ [base] corresponds respectively to the distributions of fine-tuned and pretrained CTMC models.
+Such a discrete extension, if any, remains particularly challenging and has therefore been largely
+unexplored—primarily due to the non-differentiability of discrete state spaces and the drastic change
+in the class of distributions considered. Both prevent a naive adaptation of (3) in discrete domains,
+as _g_ ( _x_ ) is no longer differentiable and _u_ [base] _τ_ now represents the rate of the base CTMC rather than
+the drift of an SDE. It is perhaps even questionable whether a discrete variant of AM exists at all.
+
+
+To this end, we propose **Discrete Adjoint Matching (DAM)**, a discrete analogy of Adjoint Matching that solves the same optimization problem in (1) but for CTMC models on discrete state spaces.
+Unlike original AM, which is based exclusively on a control-theoretic framework (Bellman, 1966;
+Fleming & Rishel, 2012), we derive our DAM through a purely statistical standpoint that is more
+straightforward to follow, while still providing full control-theoretic analysis for interested readers.
+This necessitates lifting AM to a more abstract design space and, from which, specializing to other
+model classes such as CTMC. We demonstrate how Dynkin’s formula (Piunovskiy & Zhang, 2020)
+enables such generalization by providing an estimator of a function value from _any_ stochastic process. Applying the formula to estimate the optimal CTMC rate _u_ _[⋆]_ _t_ [(] _[y, x]_ [)][, defined formally in the next]
+section, from CTMC processes yields a discrete counterpart of adjoint (3)—the _discrete adjoint_ .
+
+
+We validate **DAM** on fine-tuning diffusion-based LLMs, particularly LLaDA-8B-Instruct (Nie et al.,
+2025), on mathematical reasoning datasets, where fine-tuning methods have proven essential for
+improving performance (Shao et al., 2024; Zhao et al., 2025). To accommodate the extremely large
+
+
+2By construction, _u_ in (4) satisfies the _rate condition_ : _ut_ ( _y, x_ ) _≥_ 0 for all _y_ = _x_ and [�] _y∈X_ _[u][t]_ [(] _[y, x]_ [) = 0][.]
+
+
+2
+
+
+discrete state spaces that can hinder naive implementation of discrete adjoint, we exploit the masked
+structures embedded in all base distributions considered (Sahoo et al., 2024) and propose additional
+variance reduction techniques, which together enhance training stability and sampling efficiency.
+
+
+In summary, we present the following contributions:
+
+
+ - We propose **Discrete** **Adjoint** **Matching** **(DAM)**, a discrete counterpart of Adjoint Matching
+(Domingo-Enrich et al., 2025) that solves the same entropy-regularized optimization (1) but is
+specifically formulated for discrete state spaces with Continuous-Time Markov Chain (CTMC).
+
+
+ - We derive DAM through a purely statistical perspective—by interpreting discrete adjoint as an
+_estimator_ of the optimal solution—thereby avoiding the convoluted control-theoretic derivation
+adopted in original AM and providing a more general framework for adjoint-based estimators.
+
+
+ - We address practical challenges of implementing DAM in extremely large discrete state spaces—
+typical of modern discrete generative modeling—by applying importance-weighting techniques
+for training stability and by exploring further simplification via masked diffusion models.
+
+
+ - We validate the empirical performance of DAM in fine-tuning discrete generative models—such
+as diffusion-based LLMs—given prescribed reward functions on mathematical reasoning tasks.
+
+
+2 DISCRETE ADJOINT MATCHING
+
+
+We present **Discrete** **Adjoint** **Matching** **(DAM)**, a computational method for learning a CTMC
+model _p_ _[u]_ that solves (1). It does so by _matching_ the parametrized rate _u_ _[θ]_ _t_ [(] _[y, x]_ [)][ with an estimator of]
+the optimal rate _u_ _[⋆]_ _t_ [(] _[y, x]_ [)][, obtained via the] _[ discrete adjoint]_ [, analogous to its continuous counterpart]
+in (3). Such an interpretation facilitates a purely statistical approach—to estimating _u_ _[⋆]_ —and allows
+us to bypass the seemingly convoluted SOC-based derivation, which we nevertheless present in
+Section 3 for interested readers. Conceptually, we seek an objective of the following form:
+
+
+_L_ ( _θ_ ) = E _**X**_ �D( _u_ _[θ]_ ( _·_ ) _, u_ _[⋆]_ ( _·|_ _**X**_ ))� (5)
+
+
+where D( _·, ·_ ) is some matching function and _u_ _[⋆]_ ( _·|_ _**X**_ ) is an adjoint-based estimator of _u_ _[⋆]_ given the
+trajectory _**X**_ . For instance, AM (Domingo-Enrich et al., 2025) considers D( _a, b_ ) := _∥a −_ _b∥_ [2] and,
+as implied in (3), computes the adjoint-based estimator by _u_ _[⋆]_ _t_ [(] _[x][|]_ _**[X]**_ [) :=] _[ u]_ _t_ [base] ( _x_ ) _−_ _a_ ˜ _t_ ( _**X**_ ), whereas
+**DAM** instantiates the matching objective (5) for CTMC models. All proofs are left in Appendix B.
+
+
+2.1 DISCRETE ADJOINT AS ESTIMATOR OF THE OPTIMAL RATE
+
+
+We begin by specifying the mathematical object of interest—the optimal rate _u_ _[⋆]_ to the problem (1)—
+which the discrete adjoint is designed to estimate. Recall from (4) that the rate is uniquely determined by the CTMC distribution via its first-order derivative. In the case of _u_ _[⋆]_, since the optimal
+distribution _p_ _[⋆]_ has an analytic form (2), so does its optimal rate (Wang et al., 2025; Zhu et al., 2025):
+
+
+_∀y_ = _x,_ _u_ _[⋆]_ _t_ [(] _[y, x]_ [) =] _[ u]_ _t_ [base] ( _y, x_ ) _e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] _,_ where _Vt_ ( _x_ ) := _−_ log - _p_ [base] 1 _|t_ [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)] [(6)]
+
+_z_
+
+
+is the _value_ function that quantifies the optimal cost-to-go (Bellman, 1954), _u_ [base] _t_ ( _y, x_ ) is the base
+rate that defines the base CTMC distribution _p_ [base], and _p_ [base] 1 _|t_ [shorthands its conditional distribution.]
+Derivation of (6) is standard but somewhat convoluted; we refer to Appendix A for details.
+
+
+With the analytic expression in (6), estimating the optimal rate _u_ _[⋆]_ reduces to estimating the exponential value difference, _e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)], as _u_ [base] is known a prior. Following the interpretation in (5), we
+can design **the discrete adjoint as an estimator of the exponential of the value difference**, given
+a CTMC process _**X**_ . This approach—estimating a function value using a stochastic process—is
+precisely what is provided by Dynkin’s formula (Piunovskiy & Zhang, 2020, Theorem 2.4.1):
+
+**Lemma 2.1** (Dynkin’s formula) **.** _For a given function ft_ ( _x_ ) _and a CTMC model p_ _[u]_ _, it holds that_
+
+
+    - 1
+_f_ 1( _X_ 1) _−_
+
+_t_
+
+
+( _∂τ_ _fτ_ )( _Xτ_ ) + - _uτ_ ( _y, Xτ_ ) _fτ_ ( _y_ )
+
+
+_y_
+
+
+3
+
+
+_ft_ ( _x_ ) = E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+d _τ_
+
+
+_._ (7)
+
+
+Formally, Dynkin’s formula applies to any Feller process (Rogers & Williams, 2000), which generalizes both SDE and CTMC processes. On SDEs, it yields the celebrated Itˆo lemma (Itˆo, 1951), a
+fundamental tool in the development of advanced diffusion models (Liu et al., 2022; Skreta et al.,
+2024; Karczewski et al., 2024). In contrast, Lemma 2.1 specializes the result to CTMC, which, in
+its essence, enables estimation of _any_ discrete-space function given _any_ CTMC process.
+
+
+We are now ready to present our main result. By applying Lemma 2.1 with _ft_ ( _x_ ; _y_ ) := _e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)]
+for every _x_ = _y_ and _u_ := _u_ _[⋆]_ as the optimal rate, we obtain an estimator of the exponential value
+difference under the optimal distribution—in the same spirit of how the continuous adjoint in (3)
+estimates the optimal SDE drift under _p_ _[⋆]_ . This leads to the following result:
+**Theorem 2.2** (Discrete adjoint—adjoint system for CTMC) **.** _Let u_ _[⋆]_ _t_ [(] _[y, x]_ [)] _[ be the optimal rate to the]_
+_entropy-regularized problem in_ (1) _for CTMC models._ _Then, it holds for all y_ = _x that_
+
+
+_where the discrete adjoint_ ˜ _at_ ( _y_ ; _**X**_ ) _∈_ R _>_ 0 _is an unbiased estimator of e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] _under p_ _[⋆]_ _._
+
+
+Comparing (8) to (3), our proposed discrete adjoint shares a strikingly similar structure to its continuous counterpart, yet differs in several profound respects. Most notably, the terminal discrete
+adjoint ˜ _a_ 1 becomes the _exponential of the terminal loss difference_, as opposed to the gradient in (3).
+Next, to better examine the differences between their dynamics, we can rewrite (8) in vector form:
+
+
+        - 1
+_**a**_ ˜ _t_ ( _**X**_ ) = _**a**_ ˜1( _**X**_ ) + _Uτ_ [base] _·_ ˜ _**a**_ _τ_ ( _**X**_ )d _τ,_ where _**a**_ ˜ _τ_ ( _**X**_ ) _∈_ R _[|X|]_ and _Uτ_ [base] _∈_ R _[|X|×|X|]_ (9)
+
+_t_
+
+
+are respectively the discrete adjoint vector with ˜ _aτ_ ( _y_ ; _**X**_ ) as its _y_ -element and the base rate matrix
+with _u_ [base] _τ_ ( _z, y_ ) as its ( _z, y_ )-entry. That is, the Jacobian matrix _∇u_ [base] _τ_ _∈_ R _[d][×][d]_ in (3) is effectively
+replaced by _Uτ_ [base] _∈_ R _[|X|×|X|]_ . Finally, the discrete adjoint perturbs the base rate in a multiplicative
+manner, _u_ [base] E[˜ _a_ ], in contrast to the additive perturbation, _u_ [base] _−_ E[˜ _a_ ], from continuous adjoint in (3).
+
+
+Given Theorem 2.2, designing the matching function D( _·, ·_ ) is a straightforward application of the
+matching framework (Lipman et al., 2024; Holderrieth et al., 2024). For any Bregman divergence,
+D _ϕ_ ( _u, w_ ) := _ϕ_ ( _u_ ) _−_ _ϕ_ ( _w_ ) _−⟨u −_ _w,_ dd _w_ _[ϕ]_ [(] _[w]_ [)] _[⟩]_ [, defined by a convex function] _[ ϕ]_ [, it holds that]
+
+_u_ _[⋆]_ _t_ [(] _[y, x]_ [) = arg min] E _p⋆_ ( _**X**_ _|Xt_ = _x_ ) �D _ϕ_      - _ut_ ( _y, x_ ) _, u_ [base] _t_ ( _y, x_ )˜ _at_ ( _y_ ; _**X**_ )�� (10)
+_u_
+
+
+We highlight the significance of these theoretical results, which provide a statistically rigorous foundation for deriving adjoint-based estimators with _any_ stochastic processes, including CTMC models.
+
+
+2.2 IMPROVED TECHNIQUES IN PRACTICES
+
+
+In this subsection, we address practical challenges of naively matching the discrete adjoint in (8)
+with (10), and provide improved techniques that give rises to our final algorithm.
+
+
+**Improved discrete adjoint** Despite the significance of Theorem 2.2 in characterizing the adjoint
+system for CTMC, the discrete adjoint in (8) and (9) is prohibitively expansive to compute, due to
+the need to sum over the _entire_ state space _z_ _∈X_ at every time step. For any reasonable discrete
+generative problem—with, _e.g.,_ vocabulary size _M_ _≈_ 1000, context length _N_ _≈_ 100, and thus
+_|X|_ = _M_ _[N]_ _≈_ 10 [300] —such computation becomes simply unaffordable. This necessitates further
+simplification for tractability, and we present one of which below:
+
+**Proposition 2.3** (Analytic discrete adjoint) **.** _The discrete adjoint in_ (8) _admits an analytic solution:_
+
+_a_ ˜ _t_ ( _y_ ; _X_ 1) =            - _p_ [base] 1 _|t_ [(] _[z][|][y]_ [)] _[e][−][g]_ [(] _[z]_ [)+] _[g]_ [(] _[X]_ [1][)] (11)
+
+_z_
+
+
+The estimator _a_ ˜ _t_ ( _y_ ; _X_ 1) in (11) arises from the fact that the discrete adjoint dynamics follow a
+_linear_ ordinary differential equation (ODE)—as suggested in (9)—and hence admit analytic solutions. Although computing _a_ ˜ _t_ ( _y_ ; _X_ 1) still involves summing over _z_ _∈X_, it can be interpreted
+
+
+4
+
+
+**Algorithm 1** Discrete Adjoint Matching (DAM)
+
+
+**Require:** non-differentiable terminal loss _g_ ( _x_ ), parametrized rate _u_ _[θ]_ _t_ [(] _[y, x]_ [)][, and base rate] _[ u]_ _t_ [base] ( _y, x_ )
+1: **repeat**
+2: Sample from model _{_ ( _X_ 0 [(] _[i]_ [)] _[, X]_ 1 [(] _[i]_ [)][)] _[} ∼]_ _[p][u]_ [¯][, where] _[u]_ [¯][ =][ stopgrad][(] _[u][θ]_ [)]
+
+3: Update replay buffer _B_ _←B ∪{_ ( _X_ 0 [(] _[i]_ [)] _[, X]_ 1 [(] _[i]_ [)][)] _[}]_
+4: **for** _l_ **in** 1 _,_ 2 _, . . ., L_ **do**
+5: Sample time _t ∼U_ [0 _,_ 1] and state _Xt_ _∼_ _p_ [base] _t|_ 0 _,_ 1 [(] _[·|][X]_ [0] _[, X]_ [1][)][ where][ (] _[X]_ [0] _[, X]_ [1][)] _[ ∼B]_
+
+6: Sample _K_ model trajectories _{_ _**X**_ [(] _[k]_ [)] _} ∼_ _p_ _[u]_ [¯] ( _·|Xt_ )
+7: Set ( _Y, Z_ ) as the first and last jumps of one of the trajectory _**X**_ [(] _[k]_ [)]
+
+8: Compute discrete adjoint ˆ _at_ ( _Y, Xt_ ) _≡_ _a_ ˆ _t_ ( _Y_ ; _Z, {X_ 1( _k_ ) _[}]_ [)][ in (][13][)]
+9: Take a gradient step _∇L_ DAM( _θ_ ) on the weighted matching objective
+
+_L_ DAM( _θ_ ) := _p_ _[u]_ _t_ [¯] [(] _[Y]_ 1 _[ |][X][t]_ [)] _[·]_ [ D][gKL]        - _u_ _[θ]_ _t_ [(] _[Y, X][t]_ [)] _[,]_ [ (] _[u]_ _t_ [base] _a_ ˆ _t_ )( _Y, Xt_ )� (12)
+
+
+10: **end for**
+11: **until** converge
+
+
+probabilistically as an expectation over the conditional distribution _p_ [base] 1 _|t_ [(] _[·|][y]_ [)][ and estimated through]
+_Z_ _∼_ _p_ [base] 1 _|t_ [(] _[·|][y]_ [)][, which corresponds to samples generated the base CTMC from] _[ X][t]_ [=] _[y]_ [.] [Essentially,]
+_a_ ˜ _t_ ( _y_ ; _X_ 1) in (11) provides a tractable solution of the original discrete adjoint ˜ _at_ ( _y_ ; _**X**_ ) in (8).
+
+From Theorem 2.2, for ˜ _at_ ( _y_ ; _X_ 1) to serve as an unbiased estimator of the optimal rate _u_ _[⋆]_, we must
+sample _X_ 1 _∼_ _p_ _[⋆]_ from the optimal distribution—just as its continuous variant (3) requires _**X**_ _∼_ _p_ _[⋆]_ .
+While one may follow original AM recipe by computing _a_ ˜ _t_ ( _y_ ; _X_ 1) with model samples _X_ 1 _∼_ _p_ _[u]_
+and letting the bias reduce over training, we opt for an alternative better suited for discrete domains:
+approximating the expectation of _X_ 1 _∼_ _p_ _[⋆]_ using model samples _X_ 1 _∼_ _p_ _[u]_ with importance weight.
+This leads to the following estimator, which empirically exhibits much lower bias and variance.
+
+**Proposition 2.4** (Importance-weighted discrete adjoint) **.** _Consider the following estimator_
+
+
+_K_
+
+
+_k_ =1
+
+
+_−_ 1
+
+      
+_p_ [base] 1 _|t_ [(] _[X]_ 1 [(] _[k]_ [)] _|x_ ) 1 )
+
+_p_ _[u]_ 1 _|t_ [(] _[X]_ 1 [(] _[k]_ [)] _|x_ ) _[e][−][g]_ [(] _[X]_ [(] _[k]_ [)]
+
+
+_p_ [base] 1 _|t_ [(] _[Z][|][y]_ [)]
+_a_ ˆ _t_ ( _y_ ; _Z, {X_ 1 [(] _[k]_ [)] _[}]_ [) :=] _p_ _[u]_ 1 _|t_ [(] _[Z][|][y]_ [)] _[e][−][g]_ [(] _[Z]_ [)] _[ ·]_
+
+
+1
+
+_K_
+
+
+(13)
+
+
+_where {X_ 1 [(] _[k]_ [)] _[} ∼]_ _[p]_ 1 _[u]_ _|t_ [(] _[·|][x]_ [)] _[ and][ Z]_ _[∼]_ _[p][u]_ 1 _|t_ [(] _[·|][y]_ [)] _[ are generated model samples.]_ _[Then,]_ [ ˆ] _[a][t]_ _[is a consistent]_
+
+_estimator of the discrete adjoint, i.e.,_ lim _K→∞_ E[ˆ _at_ ( _y_ ; _Z, {X_ 1 [(] _[k]_ [)] _[}]_ [)] =][ E] _[p][⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][x]_ [)][ [˜] _[a][t]_ [(] _[y]_ [;] _[ X]_ [1][)]] _[.]_
+
+
+Comparing (13) to (11), the estimator _a_ ˆ _t_ effectively estimates _e_ _[−][g]_ [(] _[z]_ [)] with a single model sample
+generated from _Xt_ = _y_, and estimates _e_ _[g]_ [(] _[X]_ [1][)] with _K_ model samples from _Xt_ = _x_ using selfnormalizing importance sampling (Neal, 2001). As these importance weights—the probability ratio
+of _p_ [base] 1 _|t_ [over] _[p][u]_ 1 _|t_ [—can] [be] [easily] [estimated] [for] [CTMC] [(see] [Appendix] [A] [for] [details),] [we] [adopt] [the]
+estimator ˆ _at_ ( _y_ ; _Z, {X_ 1( _k_ ) _[}]_ [)][ in (][13][) as the practical implementation of the discrete adjoint][ ˜] _[a][t]_ [(] _[y]_ [;] _**[ X]**_ [)][.]
+
+
+**Matching** **with** **generalized** **KL** Next, we discuss choosing the matching function D _ϕ_ ( _·, ·_ ) from
+the family of Bregman divergence, following (10). While a naive _ℓ_ 2-norm may be used, it is known
+to neglect the necessary probabilistic structure in discrete domains, such as non-negativity (Lou
+et al., 2023). A more suitable alternative for discrete modeling is the generalized KL (gKL):
+
+
+- _u_ ( _y, x_ ) _−_ _w_ ( _y, x_ ) + _w_ ( _y, x_ ) log _[w]_ [(] _[y, x]_ [)]
+
+_u_ ( _y, x_ )
+
+_y_ = _x_
+
+
+  DgKL( _u, w_ ) :=
+
+
+(14)
+_u_ ( _y, x_ )
+
+
+which corresponds to setting _ϕ_ ( _a_ ) := [�] _i_ _[a]_ [(] _[i]_ [) log] _[ a]_ [(] _[i]_ [)][.]
+
+
+**Sampling model inputs** ( _y, x_ ) Having determined the matching function in (14) and established
+tractable adjoint estimator in (13), it remains to be discussed how to sample the model inputs ( _y, x_ ).
+Intuitively, for a given _t_, we wish to sample _x_ = _Xt_ from high-probability regions traversed by the
+optimal CTMC. This is commonly implemented by a reciprocal projection _Xt_ _∼_ _p_ [base] _t|_ 0 _,_ 1 [(] _[·|][X]_ [0] _[, X]_ [1][)]
+
+
+5
+
+
+with ( _X_ 0 _, X_ 1) _∼B_ sampled from a replay buffer (Shi et al., 2023). Meanwhile, instead of sampling
+_y_ uniformly as suggested in (14), we sample _y_ from the model _y_ _∼_ _p_ _[u]_ _t_ [(] _[·|][x]_ [)][ and debias the objective]
+accordingly with _p_ _[u]_ _t_ [(] _[y][|][x]_ [)] _[−]_ [1][.] [This leads to the final matching objective presented in (][12][).]
+
+
+**Adaptation** **to** **masked** **diffusion** **models** While our DAM is designed for learning a CTMC _p_ _[u]_
+that solves the entropy-regularized optimization (1) given _arbitrary_ base CTMC _p_ [base], in practice,
+most base processes are instantiated by masked diffusion models (Sahoo et al., 2024). These models
+employ a simplified CTMC beginning from a fully _masked_ state _X_ 0 = (m _, · · ·_ _,_ m) with a base rate:
+
+
+_∀y_ = _x,_ _u_ [base] _t_ ( _y, x_ ) := _λ_ [base] _t_ ( _x_ ) _Q_ [base] ( _y|x_ ) _,_ _Q_ [base] _∈_ Q [mask] (15)
+
+
+where _λ_ [base] _t_ ( _x_ ) _≥_ 0 denotes the jump rate with _λ_ [base] 0 ( _x_ ) = 0 and _λ_ [base] 1 ( _x_ ) _→∞_, and Q [mask] represents
+the class of the probabilities where _Q_ ( _y|x_ ) _≥_ 0 if and only if _y_ unmasks exactly one token of _x_,
+_e.g., y_ = ( _· · ·_ _, x_ _[n][−]_ [1] _, y_ _[n]_ _, x_ _[n]_ [+1] _, · · ·_ ) with _y_ _[n]_ = _x_ _[n]_ = m; otherwise, _Q_ ( _y|x_ ) = 0.
+
+
+Simplification of the base rate _u_ [base] in (15) leads to several practical advantages. Most notably,
+it substantially reduces the modeling complexity [3] of _Q_ ( _·|x_ )—from _O_ ( _M_ _[N]_ ) to _O_ ( _MN_ )—and enable modern parametrization from LLMs (Vaswani et al., 2017). Further, that _Q_ [base] ( _y|x_ ) is timeindependent implies a much more efficient sampling procedure via any-order unmasking (Shi et al.,
+2024). Below, we show that all these preferable features can be transferred to the optimal rate _u_ _[⋆]_ :
+
+
+**Proposition 2.5** (Masked optimal rate) **.** _Given the base rate u_ [base] _in_ (15) _, the optimal rate u_ _[⋆]_ _satisfies_
+
+
+_∀y_ = _x,_ _u_ _[⋆]_ _t_ [(] _[y, x]_ [) =] _[ λ]_ _t_ [base] ( _x_ ) _Q_ _[⋆]_ ( _y|x_ ) _,_ _Q_ _[⋆]_ _∈_ Q _[mask]_ (16)
+
+
+Practically, Proposition 2.5 suggests that we can parametrize _Q_ _[θ]_ ( _y|x_ ) within the same model class
+of Q [mask], match _Q_ _[θ]_ ( _y|x_ ) with _Q_ [base] ( _y|x_ )ˆ _a_ ( _y, x_ ), then sample in the same any-order manner.
+
+
+We highlight these discussions that lead to practical implementation of DAM in Algorithm 1.
+
+
+3 THEORETICAL ANALYSIS
+
+
+We highlight additional theoretical insights by re-deriving the discrete adjoint _a_ ˜ _t_ ( _y_ ; _**X**_ ) from a
+stochastic control perspective (Bellman, 1966; Fleming & Rishel, 2012), which more closely follows
+the original derivation in AM (Domingo-Enrich et al., 2025). All proofs are left in Appendix B.
+
+
+3.1 FIXED-POINT EQUATION OF OPTIMAL RATE
+
+
+We begin by introducing a new mathematical object _Jt_ ( _x_ ; _u_ )—the expected accumulated cost under
+some CTMC distribution _p_ _[u]_ ( _**X**_ ), incurred from time _t_ until the terminal, starting from the state _x_ :
+
+
+_y_ = _Xτ_
+
+
+
+
+
+_u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _u_ _[u]_ [base] _τ_ _[τ]_
+
+
+( _y, Xτ_ )d _τ_ + _g_ 1( _X_ 1)
+
+
+_Jt_ ( _x_ ; _u_ ) := E _∼pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+
+
+ - 1
+
+
+
+_t_
+
+
+ (17)
+
+
+Since the integration in (17) corresponds to the KL divergence between the CTMC _p_ _[u]_ and _p_ [base] over
+the interval [ _t,_ 1] (see Appendix A for details), the cost-to-go _Jt_ ( _x_ ; _u_ ) quantifies the objective in (1)
+that matters for optimizing _ut_ . Consequently, the optimal rate satisfies _u_ _[⋆]_ _t_ [= arg min] _u_ _[J][t]_ [(] _[x]_ [;] _[ u]_ [)][, and]
+the value function—as the _optimal_ cost-to-go functional—can be expressed by _Vt_ ( _x_ ) = _Jt_ ( _x_ ; _u_ _[⋆]_ ).
+Below, we reveal this intertwined connection between _u_ and _Jt_ ( _x_ ; _u_ ) with a fixed-point equation.
+
+**Lemma** **3.1** (Fixed-point equation of _u_ _[⋆]_ ) **.** _Let F_ _be a mapping between the spaces of all possible_
+_CTMC rates that satisfy the rate condition, i.e., Footnote 2._ _Specifically, for all y_ = _x, we have that_
+
+
+_F_ : _ut_ ( _y, x_ ) _�→_ _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)] (18)
+
+
+_Then, the unique fixed point of the mapping F_ _is the optimal rate u_ _[⋆]_ _t_ [(] _[y, x]_ [)] _[, i.e.,][ u][⋆]_ [=] _[ F]_ [(] _[u][⋆]_ [)] _[.]_
+
+
+3Recall that _M_ and _N_ are respectively the vocabulary size and context length of the discrete state space _X_ .
+
+
+6
+
+
+3.2 DISCRETE BASIC ADJOINT
+
+
+The core of Lemma 3.1 is the observation that the optimal rate _u_ _[⋆]_ is the unique fixed-point of the
+relation _ut_ ( _y, x_ ) = _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)] . As such, one can directly optimize for a CTMC
+rate to fit this relation. This is precisely the motivation underlying the Basic Adjoint Matching
+(Domingo-Enrich et al., 2025), for which we provide a discrete analogue for CTMC models:
+**Theorem 3.2** (Discrete basic adjoint matching) **.** _For any Bregman divergence Dϕ, the unique criti-_
+_cal point of the following matching objective is the optimal rate:_
+_u_ _[⋆]_ _t_ [(] _[y, x]_ [) = arg min] E _pu_ ¯ ( _**X**_ _|Xt_ = _x_ )      - _Dϕ_ ( _ut_ ( _y, x_ ) _, u_ [base] _t_ ( _y, x_ ) _at_ ( _y_ ; _**X**_ _,_ ¯ _u_ )� (19)
+_u_
+
+
+_where_ _u_ ¯ = stopgrad( _u_ ) _and at_ ( _y_ ; _**X**_ _, u_ ) _is the_ discrete basic adjoint _obeying a backward ODE_
+
+
+- _ut_
+1 _−_
+_F_ ( _ut_ )
+
+
+- _ut_ + _ut_ log _F_ ( _ut_ ) ( _z, Xt_ )
+
+
+_−_ [d]
+
+d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [) =] _[ a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [)]
+
+
+
+
+ [�]
+
+_z_ = _Xt_
+
+
+_u_ [base] _t_
+
+
+( _z, y_ )
+
+
+
+
+
+_−_ 
+
+_z_ = _y_
+
+
+- _ut_
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _F_ ( _ut_ )
+
+
+ (20)
+
+
+_with the terminal condition a_ 1( _y_ ; _**X**_ _, u_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] _._
+
+
+Intuitively, the discrete basic adjoint _at_ ( _y_ ; _**X**_ _, u_ ) provides an unbiased estimator of _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)]
+under the distribution _p_ _[u]_, which, upon choosing a proper matching function _Dϕ_, instantiates the
+mapping _F_ ( _u_ ) = E _pu_ [ _u_ [base] _t_ ( _y, x_ ) _at_ ( _y_ ; _**X**_ _, u_ ) _|Xt_ = _x_ ]. In other words, the optimization in (19) can
+be understood as the variational form of the fixed-point equation, _u_ _[⋆]_ = _F_ ( _u_ _[⋆]_ ), in Lemma 3.1.
+
+
+In practice, though, _at_ ( _y_ ; _**X**_ _, u_ ) is computationally _intractable_, as the dynamics in (20) involve evaluation of the mapping _F_ ( _u_ )—and hence _Jt_ ( _·_ ; _u_ ) due to (18)—which is what we wish to estimate.
+This contrasts with the basic adjoint in continuous domains (Domingo-Enrich et al., 2025, Equation
+30), which, despite computationally expansive, still remains tractable. Nevertheless, observing that
+all _intractable terms_ in (20) vanish at _u_ := _u_ _[⋆]_, the discrete basic adjoint on the optimal distribution
+_at_ ( _y_ ; _**X**_ _, u_ _[⋆]_ ) becomes tractable and, as shown below, recovers the discrete adjoint ˜ _at_ ( _y_ ; _**X**_ ).
+**Corollary 3.3** (Discrete adjoint) **.** _At u_ := _u_ _[⋆]_ _, the dynamics of discrete basic adjoint simplify to_
+
+
+_−_ [d]
+
+
+_u_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ ) _,_ _a_ 1( _y_ ; _**X**_ _, u_ _[⋆]_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] (21)
+_z_
+
+
+   d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [) =]
+
+
+_which_ _coincide_ _with_ _the_ _dynamics_ _of_ _discrete_ _adjoint_ _in_ (8) _._ _That_ _is,_ _by_ _the_ _uniqueness_ _of_ _ODE_
+_solutions, we have that at_ ( _y_ ; _**X**_ _, u_ _[⋆]_ ) = ˜ _at_ ( _y_ ; _**X**_ ) _._
+
+
+Finally, the objective in (10) can be readily recovered from (19) by setting _u_ ¯ := _u_ _[⋆]_ .
+
+
+4 RELATED WORKS
+
+
+**Entropy-regularized** **reward** **optimization.** DDPO (Black et al., 2023) and DPoK (Fan et al.,
+2023a) consider inference in discrete-time diffusion models as a Markov Decision Process, and
+apply policy gradient approaches to (1). DRaFT (Clark et al., 2023) and AlignProp (Prabhudesai
+et al., 2024) utilize reparameterization to do direct backpropagation in discrete-time. Adjoint Matching (AM, Domingo-Enrich et al., 2025) and ELEGANT (Uehara et al., 2024b) consider entropyregularized optimization of continuous-time diffusion models, with path-wise KL regularization.
+Unlike AM, ELEGANT learns both an altered drift as well as altered initial noise distribution.
+
+
+**Fine-tuning discrete models.** Fine-tuning for discrete diffusion models is reviewed, albeit in discrete time, in (Uehara et al., 2024a). Several methods—including D1 (Zhao et al., 2025), DiffuCoder (Gong et al., 2025), DRAKES (Wang et al., 2025), and SEPO (Zekri & Boull´e, 2025)—adapt
+policy gradient methods (Shao et al., 2024; Liu et al., 2025b) but many require approximations
+due to intractable likelihoods or non-differentiable rewards. In contrast, SVDD (Li et al., 2024), a
+value-based approach, estimates the value function via reward regression on model rollouts, while
+_Q♯_ (Zhou et al., 2025) learns a parameterized reward distribution on rollouts. Rather than estimating
+the value function directly, our DAM utilizes an estimator for the exponential value difference.
+
+
+7
+
+
+Figure 1: **Synthetic Examples.** We compare the empirical distributions of _X_ 1 generated by the base
+model _p_ [base] 1, the ground-truth optimal model _p_ _[⋆]_ 1 [,] [and] [four] [methods,] [including] [an] [ablation] [of] [DAM]
+trained with the discrete adjoint in (11) instead of (13). DAM visually aligns most closely with _p_ _[⋆]_ 1 [.]
+
+
+10 [0]
+
+
+10 [−1]
+
+
+10 [−2]
+
+
+10 [−3]
+
+
+First Jump
+
+
+0 5000 10000
+Iterations
+
+
+10 [−1]
+
+
+10 [−2]
+
+
+DAM (ablate w/ Eq 11)
+D1
+SVDD
+
+|Col1|̃at −|[ ̃at]|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+
+
+0 5000 10000
+Iterations
+
+
+Second Jump
+
+
+0 5000 10000
+Iterations
+
+
+0.2
+
+
+0.0
+
+
+−0.2
+
+
+Figure 2: **Convergence to Optimal** _p_ _[⋆]_ **on Pinwheel.** Convergence of DKL( _p_ _[⋆]_ _t_ _[||][p]_ _t_ _[u]_ [)][ at each jump de-]
+scribed in (22), where DAM exhibits stable convergence compared to other methods ( _left & middle_ ).
+Our improved discrete adjoint in (13) exhibits lower bias and variance compared to (11) ( _right_ ).
+
+
+5 EXPERIMENTS
+
+
+We validate the performance of **DAM** on two benchmarks: 2D synthetic examples with analytically
+available optimal rates _u_ _[⋆]_, and fine-tuning higher-dimensional reasoning datasets for diffusion-based
+LLMs. In all cases, we consider masked-based CTMC models. Further details are in Appendix C.
+
+
+5.1 SYNTHETIC EXAMPLES
+
+
+**Setup** We consider two synthetic examples on a discrete state space _X_ [discrete] = _{_ m _,_ 1 _, · · ·_ _,_ 91 _}_ [2],
+where each sample _x_ _∈X_ represents a 2-dimensional index on a 91-by-91 grid, and hence the
+marginal distribution _p_ ( _Xt_ ) can be visualized as a 2D histogram. For masked-based CTMC models,
+the generative processes simplify to two distinct jumps from the mask state _X_ 0 = (m _,_ m),
+
+
+first jump second jump
+(m _,_ m) _−→_ ( _xi,_ m) or (m _, xj_ ) _−→_ ( _xi, xj_ ) _,_ _xi, xj_ _∈{_ 1 _, · · ·_ _,_ 91 _}_ (22)
+
+
+To mimic the fine-tuning setup, we design a terminal loss _g_ ( _x_ ) such that the optimal distribution
+_p_ _[⋆]_ 1 [(] _[X]_ [1][)] _[∝]_ _[p]_ [base] 1 ( _X_ 1) _e_ _[−][g]_ [(] _[X]_ [1][)] upweights or downweights certain regions, as shown in Figure 1. Notably, the relatively low dimensionality of the problems enables exact computation of the optimal
+rate _u_ _[⋆]_ and its induced optimal distribution _p_ _[⋆]_, allowing us to compare convergence between our
+DAM and other baselines, specifically D1 (Zhao et al., 2025) and SVDD (Li et al., 2024).
+
+
+**Results** Figure 1 presents the results on synthetic examples, where we compare the 2D histograms
+of samples _X_ 1 _∼_ _p_ ( _X_ 1) generated by our DAM, its ablation, and other baselines. On both examples, namely _Checkerboard_ and _Pinwheel_, DAM remains visually closest to the optimal distribution,
+demonstrating its effectiveness in solving the entropy-regularized optimization in (1). This is further
+confirmed quantitatively by Figure 2, where DAM converges stably to the optimal distribution for
+both jumps characterized in (22). In contrast, other fine-tuning methods such as D1 and SVDD tend
+to plateau without converging to _p_ _[⋆]_, likely due to the heavy approximation imposed during training.
+Notably, while both (11) and (13) provide theoretically sound estimators of the discrete adjoint, the
+latter exhibits significantly lower bias and variance. As such, we adopt (13) for all remaining tasks.
+
+
+8
+
+
+Table 1: **Performance** **on** **Mathematical** **Reasoning** **Tasks.** We fine-tune the pretrained
+LLaDA-8B-Instruct model with generative sequence lengths of 128 and 256 using different methods. DAM consistently achieves higher test-time accuracy (Accu, %) and sub-rewards _r_ . in (23)
+than D1 on almost all setups. Best results are highlighted.
+
+
+GSM8K MATH500 Countdown Sudoku
+
+
+Method Accu. _r_ correct _r_ format Accu. _r_ correct _r_ format Accu. _r_ correct _r_ format Accu. _r_
+
+
+Sequence Length 128
+
+
+LLaDA-8B-Instruct 68.6 1.37 1.46 28.8 0.58 0.72 34.8 0.31 0.10 11.5 0.11
+
+
+Sequence Length 256
+
+
+LLaDA-8B-Instruct 76.8 1.54 1.22 30.8 0.62 0.66 19.5 0.30 0.10 6.4 0.07
+
+
+Table 2: **Test-time Generalization for Mathematical Reasoning Tasks.** For each fine-tuned model
+in Table 1, we report the test-time accuracy (%) at sequence lengths of 128, 256, and 512. DAM
+achieves on-par or higher accuracy than D1.
+
+
+GSM8K MATH500 Countdown Sudoku
+
+
+Method/Eval Seq Len 128 256 512 128 256 512 128 256 512 128 256 512
+
+
+LLaDA-8B-Instruct 68.6 76.8 79.7 28.8 30.8 36.4 34.8 19.5 20.3 11.5 6.4 6.0
+
+
+5.2 MATHEMATICAL REASONING TASKS
+
+
+**Setup** We consider four standard mathematical reasoning tasks: GSM8K (Cobbe et al., 2021), a
+dataset consisting of 8.5K grade-school math problems, MATH500 (Lightman et al., 2023), which
+contains 500 high-school competition math problems, Countdown, a combinatorial arithmetic game
+on a given set of three numbers, and 4x4 Sudoku puzzles, which require filling a grid with numbers
+to satisfy constraints. Since D1 (Zhao et al., 2025) represents the current state-of-the-art method
+for fine-tuning masked CTMC models on these reasoning tasks, we adopt their experimental setups.
+Specifically, we employ LLaDA-8B-Instruct (Nie et al., 2025), without supervised finetuning, as the
+base CTMC model and consider the terminal loss _g_ ( _·_ ):
+
+
+_g_ ( _x_ ) := _−r_ ( _x_ ) where _r_ ( _x_ ) = _r_ correct( _x_ ) + _r_ format( _x_ ) (23)
+
+
+comprises two sub-reward functions, _r_ correct and _r_ format, that reward the correctness and formatting of
+the generated samples. Following D1, we evaluate the final checkpoint with zero-shot prompting and
+adopt the same decoding scheme from Nie et al. (2025). For each method, we fine-tune a separate
+CTMC model on each task with generation lengths of 128 and 256, and evaluate each resulting
+model at generation lengths of 128, 256, and 512. Further details are in Appendix C.2.
+
+
+**Results** Tables 1 and 2 summarizes the results on the reasoning tasks. Across almost all setups,
+except on MATH500 with 256 sequence length, DAM achieves on-par or higher test-time accuracy
+as well as higher scores on each sub-reward compared to D1, showcasing its potential for fine-tuning
+moderate-sized diffusion-based LLMs. While DAM clearly outperforms D1 on Countdown and
+Sudoku, the performance gaps narrows on GSM8K and MATH500, suggesting that the assumptions
+made by D1 may be reasonably effective for these tasks. Adapting such approximations for DAM—
+which is designed for more general problems—remains a promising future direction. Finally, Table 3
+compares samples generated by different models conditioned on the same unseen prompt, where
+the DAM-fine-tuned model ( _middle column_ ) successfully reasons and generates the correct answer.
+
+
+_†_ Values taken from (Zhao et al., 2025).
+
+
+9
+
+
+Table 3: **Generated Samples on GSM8K (** _**upper**_ **) and Countdown (** _**bottom**_ **)** from the base model
+and two fine-tuned models given the same unseen prompt. **Correct** and **wrong** answers are colored.
+More samples are in Appendix C.3.
+
+
+**Prompt:** Kenny is selling his Pokemon cards to buy a ticket to an amusement park, which costs $100. He
+has a collection of cards and plans to sell them for $1.5 each. He keeps 1/3 of them and gets to go to the
+amusement park with $50 in spending cash. How many cards did he start with?
+**Answer:** 150
+
+
+**Prompt:** Using only the numbers [67, 39, 70], create an arithmetic expression that evaluates to exactly
+98. You must use all numbers from the list, and each number must be used exactly once. You may use the
+operations +, -, *, and / as needed.
+**Answer:** 70 - 39 + 67
+
+
+Overall, these results highlight the effectiveness of DAM in solving entropy-regularized reward
+optimization yet potentially for a broader class of CTMC models, which may be beneficial for
+advanced CTMC models (Havasi et al., 2025).
+
+
+6 CONCLUSION AND LIMITATIONS
+
+
+We introduced **Discrete** **Adjoint** **Matching** **(DAM)**, an adjoint-based fine-tuning method for discrete generative models formulated by CTMC. DAM is derived through a rigorous statistical framework that can be easily applied to other model classes. We demonstrate effectiveness of DAM
+in solving various entropy-regularized optimization problems. Applying DAM to non-masked
+CTMC’s presents an interesting future work.
+
+
+10
+
+
+AUTHOR CONTRIBUTIONS & ACKNOWLEDGMENTS
+
+
+The project was initiated and led by Guan. Guan was the primary author of the main paper, with
+assistance from Oswin on Section 5. Guan and Oswin co-developed the theory, co-designed the
+algorithm (with contributions from Ricky and Brian), and co-authored the Appendix. All experiments were conducted by Oswin. Chuchu provided valuable discussions during the early stages of
+project exploration. The authors would like to thank Jaemoo Choi for the helpful discussions and
+comments.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+William J Anderson. _Continuous-time Markov chains: An applications-oriented approach_ . Springer
+Science & Business Media, 2012.
+
+
+Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured
+denoising diffusion models in discrete state-spaces. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 34:17981–17993, 2021.
+
+
+Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge,
+Yu Han, Fei Huang, et al. Qwen technical report. _arXiv preprint arXiv:2309.16609_, 2023.
+
+
+Richard Bellman. The theory of dynamic programming. Technical report, Rand corp santa monica
+ca, 1954.
+
+
+Richard Bellman. Dynamic programming. _science_, 153(3731):34–37, 1966.
+
+
+Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion
+models with reinforcement learning. _arXiv preprint arXiv:2305.13301_, 2023.
+
+
+David M Blei, Alp Kucukelbir, and Jon D McAuliffe. Variational inference: A review for statisticians. _Journal of the American statistical Association_, 112(518):859–877, 2017.
+
+
+Andrew Campbell, Joe Benton, Valentin De Bortoli, Thomas Rainforth, George Deligiannidis, and
+Arnaud Doucet. A continuous time framework for discrete denoising models. _Advances in Neural_
+_Information Processing Systems_, 35:28266–28279, 2022.
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large
+language models trained on code. _arXiv preprint arXiv:2107.03374_, 2021.
+
+
+Kevin Clark, Paul Vicol, Kevin Swersky, and David J Fleet. Directly fine-tuning diffusion models
+on differentiable rewards. _arXiv preprint arXiv:2309.17400_, 2023.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Carles Domingo-Enrich, Michal Drozdzal, Brian Karrer, and Ricky T. Q. Chen. Adjoint Matching:
+Fine-tuning flow and diffusion generative models with memoryless stochastic optimal control. In
+_International Conference on Learning Representations (ICLR)_, 2025.
+
+
+Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, Pieter Abbeel,
+Mohammad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Dpok: Reinforcement learning for
+fine-tuning text-to-image diffusion models. _Advances in Neural Information Processing Systems_,
+36:79858–79885, 2023a.
+
+
+Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, Pieter Abbeel,
+Mohammad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Reinforcement learning for finetuning text-to-image diffusion models. In _Thirty-seventh Conference on Neural Information Pro-_
+_cessing Systems (NeurIPS) 2023_ . Neural Information Processing Systems Foundation, 2023b.
+
+
+11
+
+
+Wendell H Fleming and Raymond W Rishel. _Deterministic_ _and_ _stochastic_ _optimal_ _control_, volume 1. Springer Science & Business Media, 2012.
+
+
+Shansan Gong, Ruixiang Zhang, Huangjie Zheng, Jiatao Gu, Navdeep Jaitly, Lingpeng Kong, and
+Yizhe Zhang. Diffucoder: Understanding and improving masked diffusion models for code generation. _arXiv preprint arXiv:2506.20639_, 2025.
+
+
+Marton Havasi, Brian Karrer, Itai Gat, and Ricky TQ Chen. Edit flows: Flow matching with edit
+operations. _arXiv preprint arXiv:2506.09018_, 2025.
+
+
+Aaron Havens, Benjamin Kurt Miller, Bing Yan, Carles Domingo-Enrich, Anuroop Sriram, Brandon
+Wood, Daniel Levine, Bin Hu, Brandon Amos, Brian Karrer, Xiang Fu, Guan-Horng Liu, and
+Ricky T. Q. Chen. Adjoint Sampling: Highly scalable diffusion samplers via Adjoint Matching.
+In _International Conference on Machine Learning (ICML)_, 2025.
+
+
+Peter Holderrieth, Marton Havasi, Jason Yim, Neta Shaul, Itai Gat, Tommi Jaakkola, Brian Karrer,
+Ricky TQ Chen, and Yaron Lipman. Generator matching: Generative modeling with arbitrary
+markov processes. _arXiv preprint arXiv:2410.20587_, 2024.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022.
+
+
+Kiyosi Itˆo. _On stochastic differential equations_, volume 4. American Mathematical Soc., 1951.
+
+
+Rafał Karczewski, Markus Heinonen, and Vikas Garg. Diffusion models as cartoonists: The curious
+case of high density regions. _arXiv preprint arXiv:2411.01293_, 2024.
+
+
+Enkelejda Kasneci, Kathrin Seßler, Stefan K¨uchemann, Maria Bannert, Daryna Dementieva, Frank
+Fischer, Urs Gasser, Georg Groh, Stephan G¨unnemann, Eyke H¨ullermeier, et al. Chatgpt for
+good? on opportunities and challenges of large language models for education. _Learning_ _and_
+_individual differences_, 103:102274, 2023.
+
+
+Jun Hyeong Kim, Seonghwan Kim, Seokhyun Moon, Hyeongwoo Kim, Jeheon Woo, and Woo Youn
+Kim. Discrete Diffusion Schr _\_ ”odinger Bridge Matching for Graph Transformation, October
+2024. [URL http://arxiv.org/abs/2410.01500.](http://arxiv.org/abs/2410.01500) arXiv:2410.01500 [cs].
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In _International_
+_Conference on Learning Representations (ICLR)_, 2015.
+
+
+Sergey Levine. Reinforcement learning and control as probabilistic inference: Tutorial and review.
+_arXiv preprint arXiv:1805.00909_, 2018.
+
+
+Xiner Li, Yulai Zhao, Chenyu Wang, Gabriele Scalia, Gokcen Eraslan, Surag Nair, Tommaso Biancalani, Shuiwang Ji, Aviv Regev, Sergey Levine, and Masatoshi Uehara. Derivative-Free Guidance in Continuous and Discrete Diffusion Models with Soft Value-Based Decoding, October
+2024. [URL http://arxiv.org/abs/2408.08252.](http://arxiv.org/abs/2408.08252) arXiv:2408.08252 [cs].
+
+
+Hunter Lightman, Vineet Kosaraju, Yuri Burda, Harrison Edwards, Bowen Baker, Teddy Lee, Jan
+Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. Let’s verify step by step. In _The Twelfth_
+_International Conference on Learning Representations_, 2023.
+
+
+Yaron Lipman, Marton Havasi, Peter Holderrieth, Neta Shaul, Matt Le, Brian Karrer, Ricky TQ
+Chen, David Lopez-Paz, Heli Ben-Hamu, and Itai Gat. Flow matching guide and code. _arXiv_
+_preprint arXiv:2412.06264_, 2024.
+
+
+Guan-Horng Liu, Tianrong Chen, Oswin So, and Evangelos A Theodorou. Deep generalized
+Schr¨odinger bridge. In _Advances in Neural Information Processing Systems (NeurIPS)_, 2022.
+
+
+Guan-Horng Liu, Jaemoo Choi, Yongxin Chen, Benjamin Kurt Miller, and Ricky TQ Chen. Adjoint
+Schr¨odinger Bridge Sampler. In _Advances in Neural Information Processing Systems (NeurIPS)_,
+2025a.
+
+
+Zichen Liu, Changyu Chen, Wenjun Li, Penghui Qi, Tianyu Pang, Chao Du, Wee Sun Lee, and
+Min Lin. Understanding r1-zero-like training: A critical perspective, 2025b. URL [https:](https://arxiv.org/abs/2503.20783)
+[//arxiv.org/abs/2503.20783.](https://arxiv.org/abs/2503.20783)
+
+
+12
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In _International Confer-_
+_ence on Learning Representations (ICLR)_, 2019.
+
+
+Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion modeling by estimating the ratios
+of the data distribution. _arXiv preprint arXiv:2310.16834_, 2023.
+
+
+Radford M Neal. Annealed importance sampling. _Statistics and computing_, 11:125–139, 2001.
+
+
+Shen Nie, Fengqi Zhu, Zebin You, Xiaolu Zhang, Jingyang Ou, Jun Hu, Jun Zhou, Yankai
+Lin, Ji-Rong Wen, and Chongxuan Li. Large language diffusion models. _arXiv_ _preprint_
+_arXiv:2502.09992_, 2025.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. _Advances in neural information processing systems_, 35:
+27730–27744, 2022.
+
+
+Jiayi Pan, Junjie Zhang, Xingyao Wang, Lifan Yuan, Hao Peng, and Alane Suhr. Tinyzero.
+https://github.com/Jiayi-Pan/TinyZero, 2025. Accessed: 2025-01-24.
+
+
+Le-Tuyet-Nhi Pham, Dario Shariatian, Antonio Ocello, Giovanni Conforti, and Alain Oliviero Durmus. Discrete Markov probabilistic models: An improved discrete score-based framework with
+sharp convergence bounds under minimal assumptions. In Aarti Singh, Maryam Fazel, Daniel
+Hsu, Simon Lacoste-Julien, Felix Berkenkamp, Tegan Maharaj, Kiri Wagstaff, and Jerry Zhu
+(eds.), _Proceedings_ _of_ _the_ _42nd_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume 267 of
+_Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 49195–49258. PMLR, 13–19 Jul 2025. URL
+[https://proceedings.mlr.press/v267/pham25a.html.](https://proceedings.mlr.press/v267/pham25a.html)
+
+
+Alexey Piunovskiy and Yi Zhang. Continuous-time markov decision processes. _Probability Theory_
+_and Stochastic Modelling_, 2020.
+
+
+Mihir Prabhudesai, Anirudh Goyal, Deepak Pathak, and Katerina Fragkiadaki. Aligning text-toimage diffusion models with reward backpropagation, 2024. URL [https://arxiv.org/](https://arxiv.org/abs/2310.03739)
+[abs/2310.03739.](https://arxiv.org/abs/2310.03739)
+
+
+L Chris G Rogers and David Williams. _Diffusions,_ _Markov processes and martingales:_ _Volume 2,_
+_Itˆo calculus_, volume 2. Cambridge university press, 2000.
+
+
+Subham Sahoo, Marianne Arriola, Yair Schiff, Aaron Gokaslan, Edgar Marroquin, Justin Chiu,
+Alexander Rush, and Volodymyr Kuleshov. Simple and effective masked diffusion language
+models. _Advances in Neural Information Processing Systems_, 37:130136–130184, 2024.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+Neta Shaul, Itai Gat, Marton Havasi, Daniel Severo, Anuroop Sriram, Peter Holderrieth, Brian Karrer, Yaron Lipman, and Ricky T. Q. Chen. Flow Matching with General Discrete Paths: A KineticOptimal Perspective, December 2024. URL [http://arxiv.org/abs/2412.03487.](http://arxiv.org/abs/2412.03487)
+arXiv:2412.03487 [cs].
+
+
+Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis Titsias. Simplified and generalized masked diffusion for discrete data. _Advances in neural information processing systems_, 37:
+103131–103167, 2024.
+
+
+Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion Schr¨odinger
+bridge matching. In _Advances in Neural Information Processing Systems (NeurIPS)_, 2023.
+
+
+Marta Skreta, Lazar Atanackovic, Avishek Joey Bose, Alexander Tong, and Kirill Neklyudov.
+The superposition of diffusion models using the it _\_ ˆ  - density estimator. _arXiv_ _preprint_
+_arXiv:2412.17762_, 2024.
+
+
+13
+
+
+Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut,
+Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al. Gemini: a family of highly
+capable multimodal models. _arXiv preprint arXiv:2312.11805_, 2023.
+
+
+Evangelos Theodorou, Jonas Buchli, and Stefan Schaal. A generalized path integral control approach to reinforcement learning. _Journal_ _of_ _Machine_ _Learning_ _Research_ _(JMLR)_, 11(Nov):
+3137–3181, 2010.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models. _arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Masatoshi Uehara, Yulai Zhao, Tommaso Biancalani, and Sergey Levine. Understanding reinforcement learning-based fine-tuning of diffusion models: A tutorial and review. _arXiv preprint_
+_arXiv:2407.13734_, 2024a.
+
+
+Masatoshi Uehara, Yulai Zhao, Kevin Black, Ehsan Hajiramezanali, Gabriele Scalia, Nathaniel Lee
+Diamant, Alex M Tseng, Tommaso Biancalani, and Sergey Levine. Fine-tuning of continuoustime diffusion models as entropy-regularized control. _arXiv preprint arXiv:2402.15194_, 2024b.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In _Advances in neural information_
+_processing systems_, pp. 5998–6008, 2017.
+
+
+Leandro von Werra, Younes Belkada, Lewis Tunstall, Edward Beeching, Tristan Thrush, Nathan
+Lambert, Shengyi Huang, Kashif Rasul, and Quentin Gallou´edec. Trl: Transformer reinforcement
+learning. [https://github.com/huggingface/trl, 2020.](https://github.com/huggingface/trl)
+
+
+Chenyu Wang, Masatoshi Uehara, Yichun He, Amy Wang, Avantika Lal, Tommi Jaakkola, Sergey
+Levine, Aviv Regev, Tommaso Biancalani, et al. Fine-tuning discrete diffusion models via reward
+optimization with applications to dna and protein design. In _International Conference on Learning_
+_Representations (ICLR)_, 2025.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_
+_neural information processing systems_, 35:24824–24837, 2022.
+
+
+Oussama Zekri and Nicolas Boull´e. Fine-tuning discrete diffusion models with policy gradient
+methods, 2025. [URL https://arxiv.org/abs/2502.01384.](https://arxiv.org/abs/2502.01384)
+
+
+Siyan Zhao, Devaansh Gupta, Qinqing Zheng, and Aditya Grover. d1: Scaling reasoning in diffusion
+large language models via reinforcement learning. _arXiv preprint arXiv:2504.12216_, 2025.
+
+
+Jin Peng Zhou, Kaiwen Wang, Jonathan Chang, Zhaolin Gao, Nathan Kallus, Kilian Q. Weinberger,
+Kiant´e Brantley, and Wen Sun. _q♯_ : Provably optimal distributional rl for llm post-training, 2025.
+[URL https://arxiv.org/abs/2502.20548.](https://arxiv.org/abs/2502.20548)
+
+
+Yuchen Zhu, Wei Guo, Jaemoo Choi, Guan-Horng Liu, Yongxin Chen, and Molei Tao. Mdns:
+Masked diffusion neural sampler via stochastic optimal control. _arXiv preprint arXiv:2508.10684_,
+2025.
+
+
+Daniel M Ziegler, Nisan Stiennon, Jeffrey Wu, Tom B Brown, Alec Radford, Dario Amodei, Paul
+Christiano, and Geoffrey Irving. Fine-tuning language models from human preferences. _arXiv_
+_preprint arXiv:1909.08593_, 2019.
+
+
+14
+
+
+A ADDITIONAL DISCUSSION & DERIVATION
+
+
+A.1 ENTROPY-REGULARIZED OPTIMIZATION
+
+
+We provide additional clarification on how the _memoryless_ condition in (24) leads to the analytic
+expression of the optimal solution in (2).
+
+
+memoryless
+_p_ [base] ( _X_ 1 _|X_ 0) := _p_ [base] ( _X_ 1) (24)
+
+
+First, notice that the entropy-regularized objective in (1) can be reformulated as:
+
+
+DKL( _p_ _[u]_ ( _**X**_ ) _||p_ [base] ( _**X**_ )) + E _p_ ( _**X**_ ) [ _g_ ( _X_ 1)]
+
+= DKL  - _p_ ( _X_ 0) _||p_ [base] ( _X_ 0)� + E _p_ ( _X_ 0)�DKL� _p_ ( _**X**_ _|X_ 0) _||p_ [base] ( _**X**_ _|X_ 0)� + E _p_ ( _**X**_ _|X_ 0) [ _g_ ( _X_ 1)]�
+
+= DKL  - _p_ ( _X_ 0) _||p_ [base] ( _X_ 0)� + E _p_ ( _X_ 0)�DKL� _p_ ( _**X**_ _|X_ 0) _||p_ [base] ( _**X**_ _|X_ 0) _e_ _[−][g]_ [(] _[X]_ [1][)][��] (25)
+
+
+Minimizing (25) w.r.t. _p_ yields
+
+
+1
+_p_ _[⋆]_ ( _**X**_ _|X_ 0) = _p_ _[⋆]_ ( _X_ 0) = _p_ [base] ( _X_ 0) (26)
+_Z_ ( _X_ 0) _[p]_ [base][(] _**[X]**_ _[|][X]_ [0][)] _[e][−][g]_ [(] _[X]_ [1][)] _[,]_
+
+
+where _Z_ ( _X_ 0) is the normalization term defined by
+
+
+         -          _Z_ ( _X_ 0) := _p_ [base] ( _**X**_ _|X_ 0) _e_ _[−][g]_ [(] _[X]_ [1][)] d _**X**_ = _p_ [base] ( _X_ 1 _|X_ 0) _e_ _[−][g]_ [(] _[X]_ [1][)] d _X_ 1 (27)
+
+
+That is, the optimal solution, _p_ _[⋆]_ ( _**X**_ ) = _p_ _[⋆]_ ( _**X**_ _|X_ 0) _p_ _[⋆]_ ( _X_ 0), follows the form
+
+
+_p_ _[⋆]_ ( _**X**_ ) = _p_ [base] ( _**X**_ ) _e_ _[−][g]_ [(] _[X]_ [1][)] _[−]_ [log] _[ Z]_ [(] _[X]_ [0][)] (28)
+
+
+With the memoryless condition in (24), the normalization term becomes a constant, _Z_ ( _X_ 0) = _Z_,
+and thus (28) reduces to the analytic optimal solution presented in (2).
+
+
+A.2 CONTINUOUS-TIME MARKOV CHAIN (CTMC)
+
+
+**Interpreting** **the** **transition** **rate** Recall from (4) that a CTMC process is fully characterized by
+its transition rate:
+
+
+_p_ ( _Xt_ +∆ _t_ = _y|Xt_ = _x_ ) _−_ _δx_ ( _y_ )
+_ut_ ( _y, x_ ) := lim
+∆ _t→_ 0 ∆ _t_
+
+
+(29)
+∆ _t_
+
+
+which by construction satisfies the _rate conditions_ :
+
+
+_ut_ ( _y, x_ ) _≥_ 0 for all _y_ = _x_, and _ut_ ( _x, x_ ) = _−_          - _ut_ ( _y, x_ ) (30)
+
+
+_y_ = _x_
+
+
+It is convenience to further define two mathematical objects from the transition rate _ut_ ( _y, x_ ), namely
+the _jump rate λt_ ( _x_ ) and the _jump target probability Qt_ ( _y|x_ ):
+
+
+- _ut_ ( _y, x_ ) = _−ut_ ( _x, x_ ) _,_ _Qt_ ( _y|x_ ) := _[u][t]_ [(] _[y, x]_ [)]
+
+_λt_ ( _x_ )
+
+_y_ = _x_
+
+
+_λt_ ( _x_ ) := 
+
+
+_∀y_ = _x_ (31)
+_λt_ ( _x_ )
+
+
+Intuitively, _λt_ ( _x_ ) = lim∆ _t→_ 0 Pr[jump occurs at _t_ +∆ _t|Xt_ = _x_ ]
+
+
+Intuitively, _λt_ ( _x_ ) = lim∆ _t→_ 0 ∆ _t_ _t_ quantifies the rate at which the jump occurs,
+
+whereas _Qt_ ( _y|x_ ) is the probability to jump from _x_ to _y_ = _x_ . Note that [�] _y_ = _x_ _[Q][t]_ [(] _[y][|][x]_ [)] [=] [1] [is] [by]
+
+
+whereas _Qt_ ( _y|x_ ) is the probability to jump from _x_ to _y_ = _x_ . Note that [�] _y_ = _x_ _[Q][t]_ [(] _[y][|][x]_ [)] [=] [1] [is] [by]
+
+construction normalized. This leads to the following interpretation:
+
+
+15
+
+
+The rate conditions (30) yield a useful result that will become helpful in later derivation:
+
+**Lemma A.1.** _Given a valid transition rate ut_ ( _y, x_ ) _satisfying_ (30) _, it holds for all f_ ( _x_ ) _that_
+
+    -    
+
+
+_ut_ ( _y, x_ ) _f_ ( _y_ ) =  
+_y_ _y_ = _x_
+
+
+_ut_ ( _y, x_ ) ( _f_ ( _y_ ) _−_ _f_ ( _x_ )) (33)
+
+_y_ = _x_
+
+
+_Proof._
+
+
+_ut_ ( _y, x_ ) _f_ ( _y_ ) =  
+_y_ _y_ = _x_
+
+
+- _ut_ ( _y, x_ ) _f_ ( _y_ ) + _ut_ ( _x, x_ ) _f_ ( _x_ ) = 
+
+_y_ = _x_ _y_ = _x_
+
+
+- _ut_ ( _y, x_ ) _f_ ( _y_ ) _−_ 
+
+_y_ = _x_ _y_ = _x_
+
+
+_ut_ ( _y, x_ ) _f_ ( _x_ )
+
+_y_ = _x_
+
+
+**Kolmogorov equations for CTMC** The two most important equations that characterize the probability evolution of CTMC processes are, respectively, the _Kolmogorov_ _Forward_ _Equation_ _(KFE)_,
+which describes the forward dynamics of the conditional distribution for any _t > s_,
+
+
+_∂tpt|s_ ( _y|x_ ) =                 - _ut_ ( _y, z_ ) _pt|s_ ( _z|x_ ) (34)
+
+
+_z∈X_
+
+
+and the _Kolmogorov Backward Equation (KBE)_, which describes the backward dynamics:
+
+
+_−∂spt|s_ ( _y|x_ ) =              - _pt|s_ ( _y|z_ ) _us_ ( _z, x_ ) (35)
+
+
+_z∈X_
+
+
+Note that one can recover Continuity Equation—the dynamics of marginal distribution—by taking
+expectation over _ps_ ( _x_ ) in KFE (34):
+
+
+_ut_ ( _y, z_ ) _pt_ ( _z_ )
+
+_z_
+
+
+_∂tpt_ ( _y_ ) = _∂t_
+
+
+�� _pt|s_ ( _y|x_ ) _ps_ ( _x_ )d _x_ =   
+
+
+��    _ut_ ( _y, z_ ) _pt|s_ ( _z|x_ ) _ps_ ( _x_ )d _x_ =  
+_z_ _z_
+
+
+**KL divergence between CTMC** Given two CTMC processes _p_ _[u]_ ( _**X**_ ) and _p_ [base] ( _**X**_ ) with the same
+initial distribution, their KL divergence can be expressed with their transition rates (Kim et al., 2024;
+Shaul et al., 2024):
+
+
+          - 1
+DKL( _p_ _[u]_ ( _**X**_ ) _||p_ [base] ( _**X**_ )) = E _p_ _[u]_ _t_ [(] _[X][t]_ [)]
+
+0
+
+
+
+
+ [�]
+
+_y_ = _Xt_
+
+
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _u_ _[u]_ [base] _t_ _[t]_
+
+
+
+
+
+( _y, Xt_ )
+
+
+ d _t_ (36)
+
+
+which, despite compactly expressed, remains difficult to interpret. The following lemma provides an
+alternative perspective by decomposing (36) into two components, similar to (32): one corresponding to the decision of how often to jump, and the other to the choice of where to jump.
+**Lemma A.2** (Interpretation of CTMC’s KL divergence) **.** _Let p_ _[u]_ _and p_ [base] _be two CTMC distributions_
+_characterized respectively by their transition rates ut_ ( _y, x_ ) _and u_ [base] _t_ ( _y, x_ ) _:_
+
+_∀y_ = _x,_ _ut_ ( _y, x_ ) = _λ_ _[u]_ _t_ [(] _[x]_ [)] _[Q]_ _t_ _[u]_ [(] _[y][|][x]_ [)] _[,]_ _u_ [base] _t_ ( _y, x_ ) = _λ_ [base] _t_ ( _x_ ) _Q_ [base] _t_ ( _y|x_ )
+
+
+_where λt_ ( _x_ ) _and Qt_ ( _y|x_ ) _are their jump rates and jump target probabilities, c.f._ (31) _._ _Then, the KL_
+_divergence in_ (36) _can be decomposed into_
+
+
+            - 1
+DKL( _p_ _[u]_ ( _**X**_ ) _||p_ [base] ( _**X**_ )) = E _p_ _[u]_ _t_ [(] _[X][t]_ [)]   - _λ_ _[u]_ _t_ �DKL( _λ_ _[u]_ _t_ _[||][λ]_ _t_ [base] ) + DKL( _Q_ _[u]_ _t_ _[||][Q]_ _t_ [base] )�� d _t_ (37)
+
+0
+
+
+_where_ DKL( _λ_ _[u]_ _t_ _[||][λ]_ _t_ [base] ) _and_ DKL( _Q_ _[u]_ _t_ _[||][Q]_ _t_ [base] ) _are, respectively, standard KL divergences for exponen-_
+_tial and discrete distributions:_
+
+DKL         - _λ_ _[u]_ _t_ [(] _[x]_ [)] _[||][λ]_ _t_ [base] ( _x_ )� = log _[λ]_ _t_ _[u]_ [(] _[x]_ [)] _[λ]_ _t_ [base] ( _x_ )
+_λ_ [base] _t_ ( _x_ ) [+] _λ_ _[u]_ _t_ [(] _[x]_ [)] _[−]_ [1] _[,]_
+
+DKL       - _Q_ _[u]_ _t_ [(] _[·|][x]_ [)] _[||][Q]_ _t_ [base] ( _·|x_ )� =       - _Q_ _[u]_ _t_ [(] _[y][|][x]_ [) log] _[Q]_ _t_ _[u]_ [(] _[y][|][x]_ [)]
+
+_y_ = _x_ _Q_ [base] _t_ ( _y|x_ ) _[.]_
+
+
+16
+
+
+_Proof._ We first make the last term in (36) more explicit as
+
+ -  
+_[u][t]_ [(] _[y, x]_ [)] _[u]_ _[u]_
+
+
+- _ut_ ( _y, x_ ) log _[u][t]_ [(] _[y, x]_ [)]
+
+_y_ = _x_ _u_ [base] _t_ ( _y, x_
+
+
+- _λ_ _[u]_ _t_ [(] _[x]_ [)] _[Q]_ _t_ _[u]_ [(] _[y][|][x]_ [)]
+
+_λ_ _[u]_ _t_ [(] _[x]_ [)] _[Q]_ _t_ _[u]_ [(] _[y][|][x]_ [) log]
+_y_ = _x_ _λ_ [base] _t_ ( _x_ ) _Q_ [base] _t_ ( _y|x_ )
+
+
+_[t]_      
+_u_ [base] _t_ ( _y, x_ ) [=]
+
+
+_t_ [(] _[x]_ [)]           - _t_ [(] _[y][|][x]_ [)]
+= _λ_ _[u]_ _t_ [(] _[x]_ [) log] _[λ][u]_ _t_ [(] _[x]_ [)] _Q_ _[u]_ _t_ [(] _[y][|][x]_ [) log] _[Q][u]_
+_λ_ [base] _t_ ( _x_ ) [+] _[ λ][u]_ _y_ = _x_ _Q_ [base] _t_ ( _y|x_ )
+
+
+_t_ [(] _[x]_ [)]
+= _λ_ _[u]_ _t_ [(] _[x]_ [) log] _[λ][u]_ _t_ [(] _[x]_ [)][D][KL][(] _[Q]_ _t_ _[u]_ [(] _[·|][x]_ [)] _[||][Q]_ _t_ [base] ( _·|x_ )) (38)
+_λ_ [base] _t_ ( _x_ ) [+] _[ λ][u]_
+
+
+Combing the first two terms in (38) with the leftover term in (36),
+
+  - _t_ [(] _[x]_ [)]
+
+_u_ [base] _t_ ( _y, x_ ) _−_ _ut_ ( _y, x_ ) + _λ_ _[u]_ _t_ [(] _[x]_ [) log] _[λ][u]_ _t_ [(] _[x]_ [)][D][KL][(] _[λ]_ _t_ _[u]_ [(] _[x]_ [)] _[||][λ]_ _t_ [base] ( _x_ )) (39)
+_y_ = _x_ _λ_ [base] _t_ ( _x_ ) [=] _[ λ][u]_
+
+
+yields the desired result.
+
+
+**Remark** (Interpretation of cost-to-go _Jt_ in (17)) **.** _From_ (36) _,_ _the_ _integration_ _of_ _Jt_ ( _x_ ; _u_ ) _in_ (17) _is_
+_exactly the KL divergence between the CTMC’s p_ _[u]_ _and p_ [base] _over the interval_ [ _t,_ 1] _,_
+
+
+_Jt_ ( _x_ ; _u_ ) = DKL( _p_ _[u]_ ( _**X**_ [ _t,_ 1] _|Xt_ = _x_ ) _||p_ [base] ( _**X**_ [ _t,_ 1] _|Xt_ = _x_ )) + E _pu_ ( _X_ 1 _|Xt_ = _x_ ) [ _g_ ( _X_ 1)]
+
+
+**Estimating** **the** **probability** **ratio** **between** **CTMC’s** To estimate the probability ratio between
+CTMC’s, we invoke their corresponding Radon-Nikod´ym derivative from, _e.g.,_ (Zhu et al., 2025):
+
+
+_[p][u]_ [(] _**[X]**_ [)]  - 1
+
+_p_ [base] ( _**X**_ ) [=]
+
+
+_y_ = _Xt_
+
+
+log _[p][u]_ [(] _**[X]**_ [)]
+
+
+(40)
+_u_ [base] _t_ ( _Xt, Xt−_ )
+
+
+- _ut_ ( _y, Xt_ ) _−_ _u_ [base] _t_ ( _y, Xt_ )� d _t_ + 
+
+
+ - log _[u][t]_ [(] _[X][t][, X][t][−]_ [)]
+
+_t_ : _Xt−_ = _Xt_ _u_ [base] _t_ ( _Xt, Xt−_
+
+
+0
+
+
+which remains tractable given a trajectory _**X**_ _∼_ _p_ _[u]_ . Note that when _p_ _[u]_ and _p_ [base] are specialized to
+masked diffusion models with the following transition rates,
+
+
+_∀y_ = _x,_ _ut_ ( _y, x_ ) = _λ_ [base] _t_ ( _x_ ) _Q_ _[u]_ ( _y|x_ ) _,_ _u_ [base] _t_ ( _y, x_ ) = _λ_ [base] _t_ ( _x_ ) _Q_ [base] ( _y|x_ )
+
+
+the integration in (40) vanishes and the Radon-Nikod´ym derivative simplifies to the log-probability
+ratio of between two discrete-time Markov processes:
+
+
+log _[p][u]_ [(] _**[X]**_ [)]
+
+
+ - log _[Q][u]_ [(] _[X][t][|][X][t][−]_ [)]
+
+_Q_ [base] ( _Xt|Xt−_
+
+_t_ : _Xt−_ = _Xt_
+
+
+  _p_ [base] ( _**X**_ ) [=]
+
+
+(41)
+_Q_ [base] ( _Xt|Xt−_ )
+
+
+A.3 ENTROPY-REGULARIZED OPTIMIZATION FOR CTMC
+
+
+**Dynamics** **of** **value** **function** Value function—as the optimal cost-to-go functional—plays a key
+role throughout the derivation of the discrete adjoint in Theorem 2.2. To ease later derivation, we
+provide their dynamics in the following lemma.
+
+
+**Lemma** **A.3** (Dynamics of value function) **.** _Consider_ _the_ _entropy-regularized_ _optimization_ _in_ (1) _._
+_Define the value function as_
+
+
+_Vt_ ( _x_ ) := _−_ log          - _p_ [base] 1 _|t_ [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)] _[,]_ _V_ 1( _x_ ) = _g_ ( _x_ ) (42)
+
+_z∈X_
+
+
+_The dynamics of value function follow:_
+
+
+_u_ [base] _t_ ( _z, x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] = _⇒_ _∂te_ _[−][V][t]_ [(] _[x]_ [)] = _−_  _z_ _z_
+
+
+_∂tVt_ ( _x_ ) = 
+
+
+_u_ [base] _t_ ( _z, x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)] (43)
+_z_
+
+
+_Proof._ Straightforward calculation yields
+
+
+_∂tVt_ ( _x_ ) = _−_
+
+
+_z_ _[∂][t][p]_ 1 [base] _|t_ [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)]
+
+- [base] _[−][g]_ [(] _[z]_ [)]
+
+
+_z_ _[p]_ 1 [base] _|t_ [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)]
+
+
+17
+
+
+= _e_ _[V][t]_ [(] _[x]_ [)][�]
+
+
+_z_
+
+
+- _u_ [base] _t_ ( _y, x_ ) _p_ [base] 1 _|t_ [(] _[z][|][y]_ [)] _[e][−][g]_ [(] _[z]_ [)] by (35)
+
+_y_
+
+
+= _e_ _[V][t]_ [(] _[x]_ [)][ �] _u_ [base] _t_ ( _y, x_ ) _e_ _[−][V][t]_ [(] _[y]_ [)]
+
+_y_
+
+
+= _⇒_ _∂te_ _[−][V][t]_ [(] _[x]_ [)] = _−e_ _[−][V][t]_ [(] _[x]_ [)] _∂tVt_ ( _x_ ) = _−_ - _u_ [base] _t_ ( _y, x_ ) _e_ _[−][V][t]_ [(] _[y]_ [)]
+
+_y_
+
+
+It is convenience to further rewrite the dynamics _∂tVt_ ( _x_ ) in terms of the jump rate. Using the fact
+that _u_ _[⋆]_ _t_ [(] _[z, x]_ [) =] _[ u]_ _t_ [base] ( _z, x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] for all _z_ = _x_, we can rewrite (43) by
+
+
+_u_ [base] _t_ ( _z, x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] =  _z_ _z_ = _x_
+
+
+_∂tVt_ ( _x_ ) = 
+
+
+- _u_ _[⋆]_ _t_ [(] _[z, x]_ [) +] _[ u]_ _t_ [base] ( _x, x_ )
+
+_z_ = _x_
+
+
+That is, the dynamics of value function can be compactly presented as jump rate differences:
+
+
+_∂tVt_ ( _x_ ) = _λ_ _[⋆]_ _t_ [(] _[x]_ [)] _[ −]_ _[λ]_ _t_ [base] ( _x_ ) (44)
+
+
+Furthermore, the following results show that the dynamics of the value function (43) can be rewritten
+to recover the same form as the Hamilton-Jacobi-Bellman from Pham et al. (2025, Equation 85).
+
+
+**Corollary A.4.** _The dynamics of the value function Vt_ ( _x_ ) _can be written as_
+
+
+��        _∂tVt_ ( _x_ ) = _λ_ [base] ( _x_ ) _Q_ [base] _t_ ( _z|x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] _−_ 1 _._ (45)
+
+
+_z_ = _x_
+
+
+_Proof._ Starting from (43):
+
+
+_∂tVt_ ( _x_ ) =         - _u_ [base] _t_ ( _z, x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] _,_
+
+_z_
+
+= _u_ [base] _t_ ( _x, x_ ) +       - _u_ [base] _t_ ( _z, x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] _,_
+
+
+_z_ = _x_
+
+= _u_ [base] _t_ ( _x, x_ ) + _u_ [base] _t_ ( _x, x_ )       - _Q_ [base] _t_ ( _z|x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] _,_
+
+
+_z_ = _x_
+
+= _u_ [base] _t_ ( _x, x_ ) + _u_ [base] _t_ ( _x, x_ )       - _Q_ [base] _t_ ( _z|x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] _,_
+
+
+_z_ = _x_
+
+
+��       = _λ_ [base] _t_ ( _x_ ) _Q_ [base] _t_ ( _z|x_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)] _−_ 1 _._
+
+
+_z_ = _x_
+
+
+**Optimal transition rate** We provide the derivation of the optimal transition rate _u_ _[⋆]_ _t_ [(] _[y, x]_ [)][ in (][6][).]
+The following lemma generalizes the initial-point conditional distribution _p_ 1 _|_ 0 in (26) to arbitrary
+time steps _pt|s_, _s < t_, from which the optimal transition rate can be easily obtained.
+
+
+**Lemma A.5** (Optimal conditional distribution) **.** _For any distinct time steps_ ( _s, t_ ) _such that_ 0 _≤_ _s <_
+_t ≤_ 1 _, the optimal conditional distribution to the entropy-regularized optimization in_ (1) _satisfies_
+
+
+_p_ _[⋆]_ _t|s_ [(] _[y][|][x]_ [) =] _[ p]_ [base] _t|s_ [(] _[y][|][x]_ [)] _[e][−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] (46)
+
+
+_Proof._ We first compute the optimal joint distribution _p_ _[⋆]_ ( _Xt_ = _y, Xs_ = _x_ ):
+
+
+_p_ _[⋆]_ ( _Xt_ = _y, Xs_ = _x_ )
+
+=  - _p_ _[⋆]_ ( _**X**_ _, Xt_ = _y, Xs_ = _x_ )
+
+
+_**X**_
+
+
+18
+
+
+=  - _p_ [base] ( _**X**_ _, Xt_ = _y, Xs_ = _x_ ) _e_ _[−][g]_ [(] _[X]_ [1][)] _[−]_ [log] _[ Z]_ [(] _[X]_ [0][)] by (28)
+
+
+_**X**_
+
+
+= 
+
+_X_ 0 _,X_ 1
+
+
+_p_ [base] 1 _|t_ [(] _[X]_ [1] _[|][y]_ [)] _[p]_ _t_ [base] _|s_ [(] _[y][|][x]_ [)] _[p]_ _s,_ [base] 0 [(] _[x, X]_ [0][)] _[e][−][g]_ [(] _[X]_ [1][)] _[e][−]_ [log] _[ Z]_ [(] _[X]_ [0][)] by Markoviana of _p_ [base]
+
+
+= _e_ _[−][V][t]_ [(] _[y]_ [)] _p_ [base] _t|s_ [(] _[y][|][x]_ [)]
+
+
+- _p_ [base] _s,_ 0 [(] _[x, X]_ [0][)] (47)
+
+_X_ 0
+
+
+Likewise, the optimal marginal distribution _p_ _[⋆]_ _s_ [(] _[x]_ [)][ can be obtained by]
+
+_p_ _[⋆]_ _s_ [(] _[x]_ [) =]    - _p_ _[⋆]_ ( _**X**_ _, Xs_ = _x_ )
+
+
+_**X**_
+
+=    - _p_ [base] ( _**X**_ _, Xs_ = _x_ ) _e_ _[−][g]_ [(] _[X]_ [1][)] _[−]_ [log] _[ Z]_ [(] _[X]_ [0][)] by (28)
+
+
+_**X**_
+
+
+= 
+
+_X_ 0 _,X_ 1
+
+
+_p_ [base] 1 _|s_ [(] _[X]_ [1] _[|][x]_ [)] _[p]_ _s,_ [base] 0 [(] _[x, X]_ [0][)] _[e][−][g]_ [(] _[X]_ [1][)] _[e][−]_ [log] _[ Z]_ [(] _[X]_ [0][)] by Markoviana of _p_ [base]
+
+
+= _e_ _[−][V][s]_ [(] _[x]_ [)][ �] _p_ [base] _s,_ 0 [(] _[x, X]_ [0][)] (48)
+
+_X_ 0
+
+
+Combining Equations (47) and (48) yields the desired result.
+
+
+Given Lemma A.5, we can derive the optimal transition rate _u_ _[⋆]_ by applying (29):
+
+
+     -      _u_ _[⋆]_ _s_ [(] _[y, x]_ [) :=] _∂tp_ _[⋆]_ _t|s_ [(] _[y][|][x]_ [)]
+
+
+_t_ = _s_
+
+
+ -  = _∂t_ _p_ [base] _t|s_ [(] _[y][|][x]_ [)] _[e][−][V][t]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)][��]
+
+
+ -  -  = _∂t_ _p_ [base] _t|s_ [(] _[y][|][x]_ [)] _e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)][�]
+
+
+by (46)
+_t_ = _s_
+
+
+   -    _p_ [base] _t|s_ [(] _[y][|][x]_ [)] _[e][−][V][t]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)] _[∂][t]_ [ (] _[−][V][t]_ [(] _[y]_ [))]
+_t_ = _s_ [+]
+
+
+_t_ = _s_ _t_ = _s_
+
+= _u_ [base] _s_ ( _y, x_ ) _e_ _[−][V][s]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)] _−_ _δx_ ( _y_ ) _· e_ _[−][V][s]_ [(] _[x]_ [)+] _[V][s]_ [(] _[x]_ [)] _∂tVs_ ( _x_ ) by (34)
+
+= _u_ [base] _s_ ( _y, x_ ) _e_ _[−][V][s]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)] _−_ _δx_ ( _y_ ) _·_ - _u_ [base] _s_ ( _y, x_ ) _e_ _[−][V][s]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)] by (43)
+
+_y_
+
+
+= _u_ [base] _s_ ( _y, x_ ) _e_ _[−][V][s]_ [(] _[y]_ [)+] _[V][s]_ [(] _[x]_ [)] _−_ _δx_ ( _y_ ) _·_ 
+
+
+which recovers the same expression in (6), _i.e.,_
+
+
+_∀y_ = _x,_ _u_ _[⋆]_ _t_ [(] _[y, x]_ [) =] _[ u]_ _t_ [base] ( _y, x_ ) _e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] (49)
+
+Note that, as expected, the optimal transition rate _u_ _[⋆]_ _s_ [(] _[y, x]_ [)][ satisfies the rate conditions (][30][)]
+
+_u_ _[⋆]_ _t_ [(] _[y, x]_ [)] _[ ≥]_ [0][ for all] _[ y]_ [=] _[ x]_ [, and]          - _u_ _[⋆]_ _t_ [(] _[y, x]_ [) = 0] (50)
+
+_y_
+
+
+**Dynamics** **of** **value** **function** **w.r.t.** **optimal** **transition** **rate** While it is well-known that the dynamics of value function depend on the base transition rate _u_ [base], as shown in Lemma A.3, for
+CTMC processes, these dynamics can alternatively be reformulated in terms of the optimal rate _u_ _[⋆]_ .
+This is readily hinted in (44), where _∂tVt_ ( _x_ ) = _λ_ _[⋆]_ _t_ [(] _[x]_ [)] _[ −]_ _[λ]_ _t_ [base] ( _x_ ) is simply the difference between
+the optimal and base jump rates. The following lemma formalizes this observation.
+**Lemma A.6** (Dynamics of value function w.r.t. _u_ _[⋆]_ ) **.** _Let Vt_ ( _x_ ) _be the same value function in_ (42) _._
+_The dynamics of Vt_ ( _x_ ) _given the optimal transition rate u_ _[⋆]_ _in_ (49) _follow:_
+
+
+_u_ _[⋆]_ _t_ [(] _[z, x]_ [)] _[e][V][t]_ [(] _[z]_ [)] _[−][V][t]_ [(] _[x]_ [)] [=] _[⇒]_ _[∂][t][e][V][t]_ [(] _[x]_ [)] [=] _[ −]_  _z_ _z_
+
+
+_∂tVt_ ( _x_ ) = _−_ 
+
+
+_u_ _[⋆]_ _t_ [(] _[z, x]_ [)] _[e][V][t]_ [(] _[z]_ [)] (51)
+_z_
+
+
+_Proof._
+
+
+_∂tVt_ ( _x_ ) = _λ_ _[⋆]_ _t_ [(] _[x]_ [)] _[ −]_ _[λ]_ _t_ [base] ( _x_ )
+
+= _−u_ _[⋆]_ _t_ [(] _[x, x]_ [)] _[ −]_   - _u_ [base] _t_ ( _z, x_ )
+
+_z_ = _x_
+
+
+19
+
+
+= _−u_ _[⋆]_ _t_ [(] _[x, x]_ [)] _[ −]_         - _u_ _[⋆]_ _t_ [(] _[z, x]_ [)] _[e][V][t]_ [(] _[z]_ [)] _[−][V][t]_ [(] _[x]_ [)]
+
+_z_ = _x_
+
+= _−_         - _u_ _[⋆]_ _t_ [(] _[z, x]_ [)] _[e][V][t]_ [(] _[z]_ [)] _[−][V][t]_ [(] _[x]_ [)]
+
+_z_
+
+which implies that
+
+
+_∂te_ _[V][t]_ [(] _[x]_ [)] = _e_ _[V][t]_ [(] _[x]_ [)] _∂tVt_ ( _x_ ) = _−e_ _[V][t]_ [(] _[x]_ [)][ �]
+
+
+_u_ _[⋆]_ _t_ [(] _[z, x]_ [)] _[e][V][t]_ [(] _[z]_ [)]
+_z_
+
+
+_u_ _[⋆]_ _t_ [(] _[z, x]_ [)] _[e][V][t]_ [(] _[z]_ [)] _[−][V][t]_ [(] _[x]_ [)] [=] _[ −]_  _z_ _z_
+
+
+**Lemma A.7.** _The denominator of the discrete-adjoint is an estimator for e_ _[V][t]_ [(] _[x]_ [)] _, i.e.,_
+
+_e_ _[V][t]_ [(] _[x]_ [)] = E _p_ _[⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][x]_ [)][[] _[e][g]_ [(] _[X]_ [1][)][]] _[.]_ (52)
+
+
+_Proof._ Invoking Dynkin’s formula Lemma 2.1 with _ft_ ( _x_ ) = _e_ _[V][t]_ [(] _[x]_ [)] and _u_ := _u_ _[⋆]_, the integrand
+simplifies to
+
+
+_u_ _[⋆]_ _t_ [(] _[z, X][t]_ [)] _[f][t]_ [(] _[z]_ [) =] _[ ∂][t][e][−][V][t]_ [(] _[y]_ [)][ +]  _z_ _z_
+
+
+( _∂tft_ )( _Xt_ ) + 
+
+
+_u_ _[⋆]_ _t_ [(] _[z, X][t]_ [)] _[e][V][t]_ [(] _[z]_ [)]
+_z_
+
+
+= 0 _._ by (51)
+
+Since _V_ 1( _x_ ) = _g_ ( _x_ ) and hence _f_ 1( _x_ ) = _e_ _[g]_ [(] _[x]_ [)], we have deduced that
+
+
+                        _e_ _[V][t]_ [(] _[x]_ [)] = E _p⋆_ ( _X_ 1 _|Xt_ = _x_ ) _e_ _[g]_ [(] _[X]_ [1][)][�] _._ (53)
+
+
+A.4 BIAS AND VARIANCE COMPARISON BETWEEN (11) AND (13) ON A TOY EXAMPLE
+
+
+We now quantify the difference in bias and variance between the original discrete adjoint and (11)
+and the improved discrete adjoint using importance weighting (13).
+
+
+We consider a sequence length of _N_ = 1 and a vocabulary size of _M_ = 3 with _X_ =
+_{_ m _, z_ correct _, z_ wrong _}_ . We consider an indicator function loss that penalizes wrong answers, i.e.,
+_g_ ( _z_ ) = _−_ 50⊮ _{z_ = _z_ correct _}._ (54)
+Let the base distribution _p_ [base] 1 _|t_ [be]
+
+            - _θ,_ _z_ = _z_ correct _,_
+_p_ [base] 1 _|t_ [(] _[z]_ [) =] (55)
+1 _−_ _θ,_ _z_ = _z_ wrong
+
+Then, the optimal distribution _p_ _[⋆]_ 1 _|t_ [is]
+
+_p_ [base] 1 _|t_ [(] _[z][|]_ [m][)] _[e][−][g]_ [(] _[z]_ [)]
+_p_ _[⋆]_ 1 _|t_ [(] _[z][|]_ [m][) =]           - (56)
+
+_z_ _[′][ p]_ [base] 1 _|t_ [(] _[z][′][|]_ [m][)] _[e][−][g]_ [(] _[z][′]_ [)]
+
+
+(57)
+1 _−_ _θ_
+_z_ = _z_ wrong _._
+_θe_ [50] + (1 _−_ _θ_ ) _[,]_
+
+
+_θe_ [50]
+
+
+=
+
+
+
+
+
+
+
+
+
+_z_ = _z_ correct _,_
+_θe_ [50] + (1 _−_ _θ_ ) _[,]_
+
+
+If _θ_ is not too small, then _p_ _[⋆]_ 1 _|t_ [(] _[z]_ [correct] _[|]_ [m][)] _[ ≈]_ [1][.]
+
+
+We consider just the “denominator” part of (11) and (13), as the “numerator” is the same in both
+cases. In our setting, the true value of the denominator is
+
+E _p_ _[⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)][[] _[e][g]_ [(] _[X]_ [1][)][] =] _[ p]_ 1 _[⋆]_ _|t_ [(] _[z]_ [correct] _[|]_ [m][)] _[e][−][g]_ [(] _[z]_ [correct][)][ +] _[ p][⋆]_ 1 _|t_ [(] _[z]_ [wrong] _[|]_ [m][)] _[e][−][g]_ [(] _[z]_ [wrong][)] _[,]_ (58)
+
+1
+= (59)
+_θe_ [50] + (1 _−_ _θ_ ) _[.]_
+
+Let the current model distribution _p_ _[u]_ 1 _|t_ [(] _[z][|]_ [m][)][ be]
+
+            - _ϕ,_ _z_ = _z_ correct _,_
+_p_ _[u]_ 1 _|t_ [(] _[z][|]_ [m][) =] (60)
+1 _−_ _ϕ,_ _z_ = _z_ wrong
+
+
+20
+
+
+**Bias and Variance of Original Discrete Adjoint** Let _X_ 1 [(1)] _[, . . ., X]_ 1 [(] _[N]_ [)] _∼_ _p_ _[⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)][ be] _[ N]_
+i.i.d. samples from the model distribution _p_ _[u]_ 1 _|t_ [.] [We follow the original AM recipe and compute (][11][)]
+using these model samples. This gives us the following _N_ -sample Monte-Carlo estimator for the
+denominator of (11):
+
+E _p_ _[⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)][[] _[e][g]_ [(] _[X]_ [1][)][]] _[ ≈]_ [E] _[p][u]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)][[] _[e][g]_ [(] _[X]_ [1][)][]] (61)
+
+
+_≈_ [1]
+
+_N_
+
+
+_N_
+
+- _e_ _[g]_ [(] _[X]_ 1 [(] _[i]_ [)] ) _._ (62)
+
+
+_i_ =1
+
+
+We first compute the mean
+
+
+and variance
+
+
+_N_ 
+- _e_ _[g]_ [(] _[X]_ 1 [(] _[i]_ [)] ) = E _p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[e][g]_ [(] _[X]_ [1][)][]]
+
+_i_ =1
+
+= _ϕe_ _[−]_ [50] + (1 _−_ _ϕ_ )
+
+
+E
+
+
+1
+
+_N_
+
+
+_N_ 
+- _e_ _[g]_ [(] _[X]_ 1 [(] _[i]_ [)] )
+
+
+_i_ =1
+
+
+= [1]
+
+1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[e][g]_ [(] _[X]_ [1][)][]]
+_N_ [Var] _[p][u]_
+
+
+Var
+
+
+The bias is then
+
+
+1
+
+_N_
+
+
+= [1]
+
+_N_
+
+
+= [1]
+
+_N_
+
+= [1]
+
+_N_
+
+
+= [1]
+
+
+E _p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[e]_ [2] _[g]_ [(] _[X]_ [1][)][]] _[ −]_ [E] _[p][u]_ 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[e][g]_ [(] _[X]_ [1][)][]][2][�]
+
+
+_ϕe_ _[−]_ [100] + (1 _−_ _ϕ_ ) _−_ ( _ϕe_ _[−]_ [50] + (1 _−_ _ϕ_ )) [2][�] _,_
+
+
+= [1]
+
+_N_ _[ϕ]_ [(1] _[ −]_ _[ϕ]_ [)(] _[e][−]_ [50] _[ −]_ [1)][2] _[.]_
+
+
+      1
+
+Bias of (11) = E
+
+_N_
+
+
+_N_ 
+- _e_ _[g]_ [(] _[X]_ 1 [(] _[i]_ [)] )
+
+
+_i_ =1
+
+
+_−_ E _p_ _[⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)][[] _[e][g]_ [(] _[X]_ [1][)][]] _[,]_
+
+
+=         - _ϕe_ _[−]_ [50] + (1 _−_ _ϕ_ )� _−_ 1
+_θe_ [50] + (1 _−_ _θ_ ) _[,]_
+
+1
+_≈_ (1 _−_ _ϕ_ ) _−_ _θe_ [50] _[,]_
+
+_≈_ 1 _−_ _ϕ._ (63)
+
+
+and the variance can be approximated as
+
+
+_N_ 
+- _e_ _[g]_ [(] _[X]_ 1 [(] _[i]_ [)] )
+
+
+_i_ =1
+
+
+= [1]
+
+_N_ _[ϕ]_ [(1] _[ −]_ _[ϕ]_ [)(] _[e][−]_ [50] _[ −]_ [1)][2] _[,]_
+
+
+Var
+
+
+1
+
+_N_
+
+
+_≈_ [1] (64)
+
+_N_ _[ϕ]_ [(1] _[ −]_ _[ϕ]_ [)(] _[e][−]_ [50][)][2] _[.]_
+
+
+where we have used the approximations that _ϕe_ _[−]_ [50] + (1 _−_ _ϕ_ ) _≈_ 1 _−_ _ϕ_ and _θe_ [50] +(11 _−θ_ ) _[≈]_ _θe_ 1 [50] [,]
+which hold when _ϕ_ is not too big and _θ_ is not too small.
+
+
+**Bias** **and** **Variance** **of** **Importance-weighted** **Discrete** **Adjoint** The denominator part of (13)
+takes the form
+
+  -  - [base] �� _−_ 1
+
+
+ -  - _−_ 1
+= E _p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)][ [] _[w]_ [(] _[X]_ [1][)]]
+
+
+E _p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)]
+
+
+- _p_ [base] 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)]
+
+
+[base] 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)] �� _−_ 1
+
+_p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)] _[e][−][g]_ [(] _[X]_ [1][)]
+
+
+ - 1
+_≈_
+_N_
+
+
+_N_
+
+- _w_ ( _X_ 1 [(] _[i]_ [)][)]
+
+_i_ =1
+
+
+- _−_ 1
+_._
+
+
+- �� := _SN_
+
+
+21
+
+
+where we have defined for convenience
+
+_p_ [base] 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)]
+_w_ ( _X_ 1) := (65)
+
+_p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)] _[e][−][g]_ [(] _[X]_ [1][)] _[.]_
+
+Evaluating the mean and variance of _SN_ first,
+E[ _SN_ ] = E _p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[w]_ [(] _[X]_ [1][)]]
+
+= E _p_ base1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[e][−][g]_ [(] _[X]_ [1][)][]]
+
+= _θe_ [50] + (1 _−_ _θ_ ) _._
+
+and
+
+Var[ _SN_ ] = [1] 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[w]_ [(] _[X]_ [1][)]]
+
+_N_ [Var] _[p][u]_
+
+
+= [1]
+
+_N_
+
+= [1]
+
+_N_
+
+= [1]
+
+_N_
+
+= [1]
+
+_N_
+
+
+- 1
+_θ_ [2] _e_ [100] ( [1] _._
+
+_ϕ_ _[−]_ [1) + (1] _[ −]_ _[θ]_ [)][2][(] 1 _−_ _ϕ_ _[−]_ [1)] _[ −]_ [2] _[θ]_ [(1] _[ −]_ _[θ]_ [)] _[e]_ [50][�]
+
+
+E _p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[w]_ [(] _[X]_ [1][)][2][]] _[ −]_ [E] _[p][u]_ 1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[w]_ [(] _[X]_ [1][)]][2][�]
+
+
+E _p_ base1 _|t_ [(] _[X]_ [1] _[|]_ [m][)]
+
+
+- _p_ [base] 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)] 
+_p_ _[u]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][ m][)] _[e][−]_ [2] _[g]_ [(] _[X]_ [1][)]
+
+
+_−_ E _p_ base1 _|t_ [(] _[X]_ [1] _[|]_ [m][)][[] _[e][−][g]_ [(] _[X]_ [1][)][]][2][�]
+
+
+_[θ]_ [1] _[ −]_ _[θ]_
+
+_ϕ_ _[e]_ [100][ + (1] _[ −]_ _[θ]_ [)] 1 _−_ _ϕ_
+
+
+_θ_ _[θ]_
+
+
+_,_
+1 _−_ _ϕ_ _[−]_ [(] _[θe]_ [50][ + (1] _[ −]_ _[θ]_ [))][2][�]
+
+
+Then, using the Delta method, we can approximate the mean and variance of _SN_ _[−]_ [1] [as]
+
+E[ _SN_ _[−]_ [1][]] _[ ≈]_ [E][[] _[S][N]_ []] _[−]_ [1][ +] [Var[] E[ _SN_ _[S][N]_ ] [3][]] _[,]_
+
+
+_._
+( _θe_ [50] + (1 _−_ _θ_ )) [3]
+
+
+= 1 [1]
+_θe_ [50] + (1 _−_ _θ_ ) [+] _N_
+
+
+_θ_ [2] _e_ [100] ( [1]
+
+
+[1] 1
+
+_ϕ_ _[−]_ [1) + (1] _[ −]_ _[θ]_ [)][2][(] 1 _−ϕ_ _[−]_ [1)] _[ −]_ [2] _[θ]_ [(1] _[ −]_ _[θ]_ [)] _[e]_ [50]
+
+
+and
+
+
+Var[ _SN_ _[−]_ [1][]] _[ ≈]_ [Var[] E[ _SN_ _[S][N]_ ] [4][]] _[,]_
+
+
+_._
+( _θe_ [50] + (1 _−_ _θ_ )) [4]
+
+
+= [1]
+
+_N_
+
+
+_θ_ [2] _e_ [100] ( [1]
+
+
+[1] 1
+
+_ϕ_ _[−]_ [1) + (1] _[ −]_ _[θ]_ [)][2][(] 1 _−ϕ_ _[−]_ [1)] _[ −]_ [2] _[θ]_ [(1] _[ −]_ _[θ]_ [)] _[e]_ [50]
+
+
+The bias is then
+Bias of (13) = E[ _SN_ _[−]_ [1][]] _[ −]_ [E] _[p][⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][X][t]_ [=][m][)][[] _[e][g]_ [(] _[X]_ [1][)][]] _[,]_
+
+
+_,_
+( _θe_ [50] + (1 _−_ _θ_ )) [3]
+
+
+= [1]
+
+_N_
+
+
+_θ_ [2] _e_ [100] ( [1]
+
+
+[1] 1
+
+_ϕ_ _[−]_ [1) + (1] _[ −]_ _[θ]_ [)][2][(] 1 _−ϕ_ _[−]_ [1)] _[ −]_ [2] _[θ]_ [(1] _[ −]_ _[θ]_ [)] _[e]_ [50]
+
+
+_≈_ [1]
+
+_N_
+
+
+_θ_ [2] _e_ [100] ( [1]
+
+
+_,_
+_θ_ [3] ( _e_ [50] ) [3]
+
+
+_ϕ_ _[−]_ [1)]
+
+
+[1] 1 _−_ _ϕ_
+
+_N_ _ϕθ_
+
+
+= [1]
+
+
+(66)
+_ϕθ_ _[e][−]_ [50] _[.]_
+
+
+while we can approximate the variance as
+
+
+_,_
+( _θe_ [50] + (1 _−_ _θ_ )) [4]
+
+
+Var[ _SN_ ] _≈_ [1]
+
+_N_
+
+
+_θ_ [2] _e_ [100] ( [1]
+
+
+[1] 1
+
+_ϕ_ _[−]_ [1) + (1] _[ −]_ _[θ]_ [)][2][(] 1 _−ϕ_ _[−]_ [1)] _[ −]_ [2] _[θ]_ [(1] _[ −]_ _[θ]_ [)] _[e]_ [50]
+
+
+_≈_ [1]
+
+_N_
+
+
+_θ_ [2] _e_ [100] ( [1]
+
+
+_,_
+_θ_ [4] ( _e_ [50] ) [4]
+
+
+_ϕ_ _[−]_ [1)]
+
+
+[1] 1 _−_ _ϕ_
+
+_N_ _ϕθ_ [2]
+
+
+= [1]
+
+
+_ϕθ_ [2] [(] _[e][−]_ [50][)][2] _[.]_ (67)
+
+
+Comparing the bias (63) and (66), we see that the bias of importance-weighted discrete adjoint is
+much smaller than that of the orignal discrete adjoint since the bias from (66) is scaled by _e_ _[−]_ [50] . For
+the variances, both variances (64) and (67) are similar. This aligns with empirical results in Figure 2.
+
+
+22
+
+
+B PROOFS
+
+
+**Lemma 2.1** (Dynkin’s formula) **.** _For a given function ft_ ( _x_ ) _and a CTMC model p_ _[u]_ _, it holds that_
+
+
+( _∂τ_ _fτ_ )( _Xτ_ ) + - _uτ_ ( _y, Xτ_ ) _fτ_ ( _y_ )
+
+
+_y_
+
+
+_ft_ ( _x_ ) = E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+    - 1
+_f_ 1( _X_ 1) _−_
+
+_t_
+
+
+d _τ_
+
+
+_._ (7)
+
+
+_Proof._ Dynkin’s Formula (Piunovskiy & Zhang, 2020, Theorem 2.4.1) states that given a function
+_f_ ( _t, x_ ) _≡_ _ft_ ( _x_ ), it holds that
+
+
+E _**X**_ [ _f_ 1( _X_ 1)] = _f_ 0( _X_ 0) + E _**X**_
+
+
+�� 1 
+( _Af_ )( _t, Xt_ )d _t_ (68)
+0
+
+
+where _A_ is the _infinitesimal generator_ of the Feller process _**X**_ = ( _Xt_ ) _t∈_ [0 _,_ 1] defined as
+
+
+E _**X**_ [ _ft_ ( _Xt_ ) _|Xs_ = _x_ ] _−_ _fs_ ( _x_ )
+( _Af_ )( _s, x_ ) = lim (69)
+_t↓s_ _t −_ _s_
+
+
+For a CTMC _**X**_ _∼_ _p_ _[u]_ with the rate _ut_ ( _y, x_ ), we have that
+
+
+( _Af_ )( _s, x_ )
+
+
+E _**X**_ [ _ft_ ( _Xt_ ) _|Xs_ = _x_ ] _−_ _fs_ ( _x_ )
+= lim
+_t↓s_ _t −_ _s_
+
+
+= lim
+_t↓s_
+
+
+= lim
+_t↓s_
+
+
+= lim
+_t↓s_
+
+
+_y_ _[p][t][|][s]_ [(] _[y][|][x]_ [) (] _[f][t]_ [(] _[y]_ [)] _[ −]_ _[f][s]_ [(] _[x]_ [))]
+
+_t −_ _s_
+
+
+d _t_
+
+
+_y_ _[p][t][|][s]_ [(] _[y][|][x]_ [) (] _[f][t]_ [(] _[y]_ [)] _[ −]_ _[f][s]_ [(] _[y]_ [))]
+
+
+_y_ _[p][t][|][s]_ [(] _[y][|][x]_ [) (] _[f][s]_ [(] _[y]_ [)] _[ −]_ _[f][s]_ [(] _[x]_ [))]
+
+
++ lim
+_t −_ _s_ _t↓s_
+
+
+_t −_ _s_
+
+
+[) (] _[f][t]_ [(] _[y]_ [)] _[f][s]_ [(] _[y]_ [))]
+
++ [d]
+_t −_ _s_ d _t_
+
+
+_y_ _[p][t][|][s]_ [(] _[y][|][x]_ [) (] _[f][t]_ [(] _[y]_ [)] _[ −]_ _[f][s]_ [(] _[y]_ [))]
+
+
+_pt|s_ ( _y|x_ ) _fs_ ( _y_ ) _−_ d [d] _t_
+_y_
+
+
+d _t_
+
+
+- _pt|s_ ( _y|x_ ) _fs_ ( _x_ ) (70)
+
+
+_y_
+
+
+The first term simplifies as
+
+
+=      _t −_ _s_
+
+
+_δx_ ( _y_ ) _∂tfs_ ( _y_ ) = _∂tfs_ ( _x_ )
+
+_y_
+
+
+lim
+_t↓s_
+
+
+_y_ _[p][t][|][s]_ [(] _[y][|][x]_ [) (] _[f][t]_ [(] _[y]_ [)] _[ −]_ _[f][s]_ [(] _[y]_ [))]
+
+
+The second term simplifies as
+
+
+d
+d _t_
+
+
+The third term simplifies as
+
+
+_pt|s_ ( _y|x_ ) _fs_ ( _y_ ) =  
+_y_ _y_
+
+
+_us_ ( _y, x_ ) _fs_ ( _y_ )
+
+_y_
+
+
+d
+d _t_
+
+
+_pt|s_ ( _y|x_ ) _fs_ ( _x_ ) = _fs_ ( _x_ )  
+_y_ _y_
+
+
+_us_ ( _y, x_ ) = 0
+
+_y_
+
+
+Combined, (70) simplifies as
+
+
+( _Af_ )( _s, x_ ) = _∂tfs_ ( _x_ ) +               - _us_ ( _y, x_ ) _fs_ ( _y_ ) (71)
+
+
+_y_
+
+
+Rearranging (68) with the above result (71) leads to the desired result:
+
+
+ 
+d _t_
+
+
+_∂tft_ ( _Xt_ ) + - _ut_ ( _y, Xt_ ) _ft_ ( _y_ )
+
+
+_y_
+
+
+_f_ 0( _X_ 0) = E _pu_ ( _**X**_ _|X_ 0)
+
+
+    - 1
+_f_ 1( _X_ 1) _−_
+
+0
+
+
+23
+
+
+**Theorem 2.2** (Discrete adjoint—adjoint system for CTMC) **.** _Let u_ _[⋆]_ _t_ [(] _[y, x]_ [)] _[ be the optimal rate to the]_
+_entropy-regularized problem in_ (1) _for CTMC models._ _Then, it holds for all y_ = _x that_
+
+
+_where the discrete adjoint_ ˜ _at_ ( _y_ ; _**X**_ ) _∈_ R _>_ 0 _is an unbiased estimator of e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] _under p_ _[⋆]_ _._
+
+
+_Proof._ Invoking Lemma 2.1 with _ft_ ( _x_ ; _y_ ) := _e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] and _u_ := _u_ _[⋆]_, the integrand simplifies to
+
+
+( _∂tft_ )( _Xt_ ) +           - _u_ _[⋆]_ _t_ [(] _[z, X][t]_ [)] _[f][t]_ [(] _[z]_ [;] _[ y]_ [)]
+
+_z_
+
+
+        = _e_ _[V][t]_ [(] _[X][t]_ [)] _∂te_ _[−][V][t]_ [(] _[y]_ [)] + _e_ _[−][V][t]_ [(] _[y]_ [)]
+
+
+     _u_ _[⋆]_ _t_ [(] _[z, X][t]_ [)] _[e][V][t]_ [(] _[z]_ [)]
+_z_
+
+
+_∂te_ _[V][t]_ [(] _[X][t]_ [)] + 
+
+
+= _e_ _[V][t]_ [(] _[X][t]_ [)] _∂te_ _[−][V][t]_ [(] _[y]_ [)] by (51)
+
+= _−_     - _u_ [base] _t_ ( _z, y_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[X][t]_ [)] by (43)
+
+_z_
+
+
+Since _V_ 1( _x_ ) = _g_ ( _x_ ) and hence _f_ 1( _x_ ; _y_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[x]_ [)], we have deduced that
+
+
+�� 
+_u_ [base] _τ_ ( _z, y_ ) _e_ _[−][V][τ]_ [ (] _[z]_ [)+] _[V][τ]_ [ (] _[X][τ]_ [ )]
+_z_
+
+
+_e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] = E _p⋆_ ( _**X**_ _|Xt_ = _x_ )
+
+
+      - 1
+_e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] +
+
+_t_
+
+
+d _τ_
+
+
+(72)
+
+
+Given an optimal trajectory _**X**_ _∼_ _p_ _[⋆]_ ( _·|Xt_ = _x_ ) starting from _x_ at time _t_, one can estimate the
+expectation by solving the following backward ODE:
+
+dd _t_ _[a]_ [˜] _[t]_ [(] _[y]_ [;] _**[ X]**_ [) =] _[ −]_       - _u_ [base] _t_ ( _z, y_ ) _e_ _[−][V][t]_ [(] _[z]_ [)+] _[V][t]_ [(] _[X][t]_ [)] _,_ _a_ ˜1( _y_ ; _**X**_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] (73)
+
+_z_
+
+
+This implies that
+
+
+_e_ _[−][V][t]_ [(] _[y]_ [)+] _[V][t]_ [(] _[x]_ [)] = E _p⋆_ ( _**X**_ _|Xt_ = _x_ ) [˜ _at_ ( _y_ ; _**X**_ )] by (72)
+
+
+      
+= E _p⋆_ ( _**X**_ _|Xt_ = _x_ )
+
+
+      
+= E _p⋆_ ( _**X**_ _|Xt_ = _x_ )
+
+
+      
+= E _p⋆_ ( _**X**_ _|Xt_ = _x_ )
+
+
+     - 1
+_a_ ˜1( _y_ ; _**X**_ ) +
+
+_t_
+
+
+     - 1
+_a_ ˜1( _y_ ; _**X**_ ) +
+
+_t_
+
+
+     - 1
+_a_ ˜1( _y_ ; _**X**_ ) +
+
+_t_
+
+
+- _u_ [base] _τ_ ( _z, y_ )˜ _aτ_ ( _y_ ; _**X**_ )d _τ_
+
+_z_
+
+
+- _u_ [base] _τ_ ( _z, y_ ) _e_ _[−][V][τ]_ [ (] _[z]_ [)+] _[V][τ]_ [ (] _[X][τ]_ [ )] d _τ_
+
+_z_
+
+
+              
+- _u_ [base] _τ_ ( _z, y_ )E _p⋆_ ( _**X**_ ¯ _|Xτ_ ) - _a_ ˜ _τ_ ( _y_ ; _**X**_ [¯] )� d _τ_
+
+_z_
+
+
+by (72)
+
+
+(74)
+
+
+which implies that the following ODE is equivalent to the one in (73) in expectation:
+
+dd _t_ _[a]_ [˜] _[t]_ [(] _[y]_ [;] _**[ X]**_ [) =] _[ −]_         - _u_ [base] _t_ ( _z, y_ )˜ _at_ ( _z_ ; _**X**_ ) _,_ _a_ ˜1( _y_ ; _**X**_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] (75)
+
+_z_
+
+
+Finally, substituting (74) to (49) yield the desired result.
+
+
+**Proposition 2.3** (Analytic discrete adjoint) **.** _The discrete adjoint in_ (8) _admits an analytic solution:_
+
+
+_a_ ˜ _t_ ( _y_ ; _X_ 1) =            - _p_ [base] 1 _|t_ [(] _[z][|][y]_ [)] _[e][−][g]_ [(] _[z]_ [)+] _[g]_ [(] _[X]_ [1][)] (11)
+
+_z_
+
+
+24
+
+
+_Proof._ Rewrite Kolmogorov Backward Equation (35) in matrix form:
+
+
+d �� 1
+1 _|t_ [=] _[ −][U]_ _t_ [ base] _P_ 1 [base] _|t_ = _⇒_ _P_ 1 [base] _|t_ [= exp]
+d _t_ _[P]_ [ base]
+
+
+1  - �� 1
+
+_Uτ_ [base] d _τ_ _P_ 1 [base] _|_ 1 [= exp]
+_t_ _t_
+
+
+   _Uτ_ [base] d _τ_ (76)
+_t_
+
+
+where _Ut_ [base] _, P_ 1 [base] _|t_ _[∈]_ [R] _[|X|×|X|]_ [ are the matrices with] _[ u]_ _t_ [base] ( _z, y_ ) and _p_ [base] 1 _|t_ [(] _[z, y]_ [)][ as their][ (] _[z, y]_ [)][-entries,]
+respectively. Likewise, rewrite the dynamics of discrete adjoint (75) in vector form:
+
+
+d
+d _t_ _**[a]**_ [˜] _[t]_ [(] _**[X]**_ [) =] _[ −][U]_ _t_ [ base] _·_ ˜ _**a**_ _t_ ( _**X**_ ) (77)
+
+where _**a**_ ˜ _τ_ ( _**X**_ ) _∈_ R _[|X|]_ is the discrete adjoint vector with ˜ _aτ_ ( _y_ ; _**X**_ ) as its _y_ -element. Since (77) is a
+linear ODE, it admits an analytic solution:
+
+
+�� 1            _**a**_ ˜ _t_ ( _**X**_ ) = exp _Uτ_ [base] d _τ_ _**a**_ ˜1( _**X**_ ) = _P_ 1 [base] _|t_ _[·]_ [ ˜] _**[a]**_ [1][(] _**[X]**_ [)] (78)
+
+_t_
+
+
+where the last equality is due to (76). Expanding (78) for each element _y_ yields the desired result.
+
+
+**Proposition 2.4** (Importance-weighted discrete adjoint) **.** _Consider the following estimator_
+
+
+_K_
+
+
+_k_ =1
+
+
+_−_ 1
+
+      
+_p_ [base] 1 _|t_ [(] _[X]_ 1 [(] _[k]_ [)] _|x_ ) 1 )
+
+_p_ _[u]_ 1 _|t_ [(] _[X]_ 1 [(] _[k]_ [)] _|x_ ) _[e][−][g]_ [(] _[X]_ [(] _[k]_ [)]
+
+
+_p_ [base] 1 _|t_ [(] _[Z][|][y]_ [)]
+_a_ ˆ _t_ ( _y_ ; _Z, {X_ 1 [(] _[k]_ [)] _[}]_ [) :=] _p_ _[u]_ 1 _|t_ [(] _[Z][|][y]_ [)] _[e][−][g]_ [(] _[Z]_ [)] _[ ·]_
+
+
+1
+
+_K_
+
+
+(13)
+
+
+_where {X_ 1 [(] _[k]_ [)] _[} ∼]_ _[p]_ 1 _[u]_ _|t_ [(] _[·|][x]_ [)] _[ and][ Z]_ _[∼]_ _[p][u]_ 1 _|t_ [(] _[·|][y]_ [)] _[ are generated model samples.]_ _[Then,]_ [ ˆ] _[a][t]_ _[is a consistent]_
+
+_estimator of the discrete adjoint, i.e.,_ lim _K→∞_ E[ˆ _at_ ( _y_ ; _Z, {X_ 1 [(] _[k]_ [)] _[}]_ [)] =][ E] _[p][⋆]_ 1 _|t_ [(] _[X]_ [1] _[|][x]_ [)][ [˜] _[a][t]_ [(] _[y]_ [;] _[ X]_ [1][)]] _[.]_
+
+
+_Proof._ Given the analytic discrete adjoint in (11), we can decompose the expectation of the discrete
+adjoint into two separate expectations:
+
+
+E _p⋆_ ( _X_ 1 _|Xt_ = _x_ ) [˜ _at_ ( _y_ ; _X_ 1)] = E _p⋆_ ( _X_ 1 _|Xt_ = _x_ )
+
+
+�� 
+_p_ [base] 1 _|t_ [(] _[z][|][y]_ [)] _[e][−][g]_ [(] _[z]_ [)+] _[g]_ [(] _[X]_ [1][)]
+_z_
+
+
+by (11)
+
+
+                     -                     = E _p_ base1 _|t_ [(] _[Z][|][y]_ [)] _e_ _[−][g]_ [(] _[Z]_ [)][�] E _p⋆_ ( _X_ 1 _|Xt_ = _x_ ) _e_ _[g]_ [(] _[X]_ [1][)][�]
+
+
+Both expectations can be estimated using model samples _**X**_ _∼_ _p_ _[u]_ . Specifically, applying importance
+sampling to the first expectation yields
+
+
+     E _p_ base1 _|t_ [(] _[Z][|][y]_ [)] _e_ _[−][g]_ [(] _[Z]_ [)][�] = E _p_ _[u]_ 1 _|t_ [(] _[Z][|][y]_ [)]
+
+
+- _p_ [base] 1 _|t_ [(] _[Z][|][y]_ [)] _p_ _[u]_ 1 _|t_ [(] _[Z][|][y]_ [)] _[e][−][g]_ [(] _[Z]_ [)] (79)
+
+
+As for the second expectation, we apply self-normalized importance sampling
+
+
+        
+_w_ ( _X_ 1 [(] _[k]_ [)] _[, x]_ [)] _e_ _[g]_ [(] _[X]_ 1 [(] _[k]_ [)] ) _,_ (80)
+
+
+_j_ _[w]_ [(] _[X]_ 1 [(] _[j]_ [)] _[, x]_ [)]
+
+
+     E _p_ base1 _|t_ [(] _[Z][|][y]_ [)] _e_ _[g]_ [(] _[X]_ [1][)][�] = _K_ lim _→∞_ [E] _[p]_ 1 _[u]_ _|t_ [(] _[{][X]_ 1 [(] _[k]_ [)] _}|x_ )
+
+
+- _K_
+
+
+_k_ =1
+
+
+_p_ _[⋆]_ 1 _|t_ [(] _[z][|][x]_ [)] _p_ [base] 1 _|t_ [(] _[z][|][x]_ [)]
+with the unnormalized importance weight _w_ ( _z, x_ ) := _p_ _[u]_ 1 _|t_ [(] _[z][|][x]_ [)] [=] _p_ _[u]_ 1 _|t_ [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)+] _[V][t]_ [(] _[x]_ [)][.] [This sim-]
+
+plifies the estimator in (80) to
+
+
+- _K_ _p_ [base] ( _X_ 1 [(] _[j]_ [)] _|x_ )
+_j_ =1 _p_ _[u]_ ( _X_ 1 [(] _[j]_ [)] _|x_ )
+
+- _K_ _p_ [base] ( _X_ 1 [(] _[k]_ [)] _|x_ )
+_k_ =1 _[u]_ [(] _[k]_ [)]
+
+
+_p_ [base] ( _X_ 1 [(] _[k]_ [)] _|x_ )
+
+
+_p_ ( _X_ 1 _|x_ ) 1 )
+
+_p_ _[u]_ ( _X_ 1 [(] _[k]_ [)] _|x_ ) _[e][−][g]_ [(] _[X]_ [(] _[k]_ [)]
+
+
+1 _|x_ ) _e_ _[g]_ [(] _[X]_ 1 [(] _[k]_ [)] )
+
+[base] ( _X_ 1 [(] _[j]_ [)] _|x_ ) 1 )
+
+_p_ _[u]_ ( _X_ 1 [(] _[j]_ [)] _|x_ ) _[e][−][g]_ [(] _[X]_ [(] _[j]_ [)]
+
+
+_K_
+
+
+_k_ =1
+
+
+_w_ ( _X_ 1 [(] _[k]_ [)] _[, x]_ [)] _e_ _[g]_ [(] _[X]_ 1 [(] _[k]_ [)] ) =
+
+_j_ _[w]_ [(] _[X]_ 1 [(] _[j]_ [)] _[, x]_ [)]
+
+
+=
+
+
+_K_
+
+
+_k_ =1
+
+
+_k_ =1 _p_ _[u]_ ( _X_ 1 [(] _[k]_ [)] _|x_ )
+
+- _K_ _p_ [base] ( _X_ 1 [(] _[j]_ [)] _|x_ )
+_j_ =1 _[u]_ [(] _[j]_ [)] _[e][−][g]_ [(]
+
+
+[base] ( _X_ 1 _|x_ ) 1 )
+
+_p_ _[u]_ ( _X_ 1 [(] _[j]_ [)] _|x_ ) _[e][−][g]_ [(] _[X]_ [(] _[j]_ [)]
+
+
+25
+
+
+1
+_≈_
+
+
+(81)
+
+[base] ( _X_ 1 [(] _[j]_ [)] _|x_ ) 1 )
+
+_p_ _[u]_ ( _X_ 1 [(] _[j]_ [)] _|x_ ) _[e][−][g]_ [(] _[X]_ [(] _[j]_ [)]
+
+
+1 - _K_ _p_ [base] ( _X_ 1 [(] _[j]_ [)] _|x_ )
+_K_ _j_ =1 _[u]_ [(] _[j]_ [)]
+
+
+where we use the fact that the numerator has expectation 1, _i.e.,_
+
+
+= 1
+
+
+E _pu_ 1 _|t_ [(] _[{][X]_ 1 [(] _[k]_ [)] _}|x_ )
+
+
+_p_ [base] ( _X_ 1 [(] _[k]_ [)] _|x_ )
+
+_p_ _[u]_ ( _X_ 1 [(] _[k]_ [)] _|x_ )
+
+
+Combining (79) and (81) yields the desired result.
+
+
+**Proposition 2.5** (Masked optimal rate) **.** _Given the base rate u_ [base] _in_ (15) _, the optimal rate u_ _[⋆]_ _satisfies_
+
+_∀y_ = _x,_ _u_ _[⋆]_ _t_ [(] _[y, x]_ [) =] _[ λ]_ _t_ [base] ( _x_ ) _Q_ _[⋆]_ ( _y|x_ ) _,_ _Q_ _[⋆]_ _∈_ Q _[mask]_ (16)
+
+
+_Proof._ This proof follows from the fact that the base rate _u_ [base] defined by (15) reduces its corresponding CTMC to a discrete-time Markov process in which exactly _N_ jumps occur over the time
+interval from 0 to 1, with each jump unmasking one of the mask tokens in _X_ 0 = (m _, · · ·_ _,_ m). This
+interpretation suggests that it suffices to define _N_ marginal distributions ( _qn_ ) _[N]_ _n_ =1 [, where each] _[ q][n]_ [(] _[·]_ [)]
+corresponds to distribution of samples in which exactly _n_ tokens are unmasked, and the conditional
+distribution becomes time-invariant; that is,
+_p_ [base] _t|s_ [(] _[y][|][x]_ [) =] _[ q]_ _φ_ [base] ( _y_ ) _|φ_ ( _x_ ) [(] _[y][|][x]_ [)] (82)
+
+where we introduce the function _φ_ : _X_ _→_ Z _≥_ 0 that counts the number of unmasked tokens in _x_ .
+With _φ_ ( _·_ ), we can rewrite the base jump target probability _Q_ [base] as
+
+_Q_ [base] ( _y|x_ ) = _qφ_ [base] ( _x_ )+1 _|φ_ ( _x_ ) [(] _[y][|][x]_ [)] (83)
+
+With the aforementioned reasoning, the value function defined in (42) becomes time-invariant:
+
+_Vt_ ( _x_ ) = _−_ log             - _p_ [base] 1 _|t_ [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)]
+
+_z_
+
+= _−_ log         - _qN_ [base] _|φ_ ( _x_ ) [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)] [=] _[ V]_ [ (] _[x]_ [)] (84)
+
+_z_
+
+and its negative exponential transform, _e_ _[−][V]_ [ (] _[x]_ [)], exhibits a dynamic programming structure:
+
+_e_ _[−][V]_ [ (] _[x]_ [)] =          - _qN_ [base] _|φ_ ( _x_ ) [(] _[z][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)] by (84)
+
+_z_
+
+
+= 
+
+_z_
+
+= 
+
+_y_
+
+
+- _qN_ [base] _|φ_ ( _x_ )+1 [(] _[z][|][y]_ [)] _[q]_ _φ_ [base] ( _x_ )+1 _|φ_ ( _x_ ) [(] _[y][|][x]_ [)] _[e][−][g]_ [(] _[z]_ [)]
+
+_y_
+
+
+- _qN_ [base] _|φ_ ( _x_ )+1 [(] _[z][|][y]_ [)] _[e][−][g]_ [(] _[z]_ [)] by (83)
+
+_z_
+
+
+_Q_ [base] ( _y|x_ )
+
+
+=        - _Q_ [base] ( _y|x_ ) _e_ _[−][V]_ [ (] _[y]_ [)] (85)
+
+
+_y_
+
+This implies that the optimal rate preserves the same jump rate _λ_ [base] _t_ ( _x_ ) as the base rate and that the
+the optimal jump target probability is also time-invariant, _i.e.,_
+
+_∀y_ = _x,_ _u_ _[⋆]_ _t_ [(] _[y, x]_ [) =] _[ u]_ _t_ [base] ( _y, x_ ) _e_ _[−][V]_ [ (] _[y]_ [)+] _[V]_ [ (] _[x]_ [)] = _λ_ [base] _t_ ( _x_ ) _Q_ [base] ( _y|x_ ) _e_ _[−][V]_ [ (] _[y]_ [)+] _[V]_ [ (] _[x]_ [)]
+
+                              - ��                              =: _Q_ _[⋆]_ ( _y|x_ )
+Since the optimal jump target probability _Q_ _[⋆]_ ( _y|x_ ) is a reweighted of the base jump target probability
+_Q_ [base] _∈_ Q [mask], _Q_ _[⋆]_ ( _y|x_ ) _≥_ 0 if and only if _y_ unmasks exactly one token of _x_ . Furthermore, _Q_ _[⋆]_ ( _y|x_ )
+is normalized by construction,
+
+    - _[⋆]_     - [base] _[−][V]_ [ (] _[y]_ [)+] _[V]_ [ (] _[x]_ [)]
+
+
+_Q_ _[⋆]_ ( _y|x_ ) = 
+_y_ _y_
+
+
+_Q_ [base] ( _y|x_ ) _e_ _[−][V]_ [ (] _[y]_ [)+] _[V]_ [ (] _[x]_ [)]
+
+_y_
+
+
+=
+
+
+_y_ _[Q]_ [base][(] _[y][|][x]_ [)] _[e][−][V]_ [ (] _[y]_ [)]
+
+
+_e_ _[−][V]_ [ (] _[x]_ [)]
+= 1 by (85)
+
+
+That is, _Q_ _[⋆]_ _∈_ Q [mask] and we conclude the proof.
+
+
+26
+
+
+**Lemma** **3.1** (Fixed-point equation of _u_ _[⋆]_ ) **.** _Let F_ _be a mapping between the spaces of all possible_
+_CTMC rates that satisfy the rate condition, i.e., Footnote 2._ _Specifically, for all y_ = _x, we have that_
+
+
+_F_ : _ut_ ( _y, x_ ) _�→_ _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)] (18)
+
+_Then, the unique fixed point of the mapping F_ _is the optimal rate u_ _[⋆]_ _t_ [(] _[y, x]_ [)] _[, i.e.,][ u][⋆]_ [=] _[ F]_ [(] _[u][⋆]_ [)] _[.]_
+
+
+_Proof._ Recall the cost-to-go functional _Jt_ ( _x_ ; _u_ ) defined w.r.t. a CTMC with its rate _ut_ ( _y, x_ ):
+
+
+
+
+ - 1
+
+
+
+
+
+
+
+_y_ = _Xτ_
+
+
+( _y, Xτ_ )d _τ_ + _g_ 1( _X_ 1)
+
+
+
+
+
+ (86)
+
+
+_u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _u_ _[u]_ [base] _τ_ _[τ]_
+
+
+_u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _[u][τ]_
+
+
+_Jt_ ( _x_ ; _u_ ) := E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+_t_
+
+
+We can rewrite _Jt_ in dynamic programming form:
+
+
+_y_ = _Xτ_
+
+
+( _y, Xτ_ )d _τ_ _Xt_ = _x_
+���
+
+
+
+
+
+
+
+
+_u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _u_ _[u]_ [base] _τ_ _[τ]_
+
+
+_u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _[u][τ]_
+
+
+_Jt_ ( _x_ ; _u_ ) = E
+
+
+
+
+ - _t_ +∆ _t_
+
+
+
+_t_
+
+
++ E[ _Jt_ +∆ _t_ ( _Xt_ +∆ _t_ ; _u_ ) _| Xt_ = _x_ ]
+
+
+= _⇒_ 0 = E �� _tt_ +∆ _t_ - _y_ = _Xτ_
+
+
+- _u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _u_ _[u]_ [base] _τ_ _[τ]_
+
+
+- _u_ [base] _τ_ _−_ _uτ_ + _uτ_ log _u_ _[u]_ [base] _[τ]_
+
+
+∆ _t_
+
+
+- ( _y, Xτ_ )d _τ_ �� _Xt_ = _x_ 
+        
+
+
++ [E][[] _[J][t]_ [+∆] _[t]_ [(] _[X][t]_ [+∆] _[t]_ [;] _[ u]_ [)] _[ |][ X][t]_ [=] _[ x]_ []] _[ −]_ _[J][t]_ [(] _[x]_ [;] _[ u]_ [)]
+
+∆ _t_
+Taking ∆ _t →_ 0 yields
+
+
+0 = ( _AJ_ )( _t, x_ ) + 
+
+_y_ = _x_
+
+
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _u_ _[u]_ [base] _t_ _[t]_
+
+
+( _y, x_ ) by (69)
+
+
+( _y, x_ ) by (71)
+
+
+_−∂tJt_ ( _x_ ; _u_ ) =
+
+
+_−∂tJt_ ( _x_ ; _u_ ) =
+
+
+- _ut_ ( _y, x_ ) ( _Jt_ ( _y_ ; _u_ ) _−_ _Jt_ ( _x_ ; _u_ )) + 
+
+_y_ = _x_ _y_ = _x_
+
+
+_ut_ ( _y, x_ ) _Jt_ ( _y_ ; _u_ ) +  
+_y_ _y_ = _x_
+
+
+_y_ = _x_
+
+
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _u_ _[u]_ [base] _t_ _[t]_
+
+
+( _y, x_ )
+
+
+by (33)
+
+
+_y_ = _x_
+
+
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _u_ _[u]_ [base] _t_ _[t]_
+
+
+( _y, x_ ) (87)
+
+
+_−∂tJt_ ( _x_ ; _u_ ) = 
+
+_y_ = _x_
+
+
+- _u_ [base] _t_ _−_ _ut_ + _ut_ log _Fu_ ( _ut_ _t_ )
+
+
+Now, consider a CTMC rate _u_ ¯ _t_ ( _y, x_ ) satisfying the self-consistency relation
+
+_∀y_ = _x,_ _u_ ¯ _t_ ( _y, x_ ) = _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;¯] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;¯] _[u]_ [)] = _⇒_ _u_ ¯ _t_ = _F_ (¯ _ut_ ) (88)
+
+
+One can check that when _u_ := _u_ ¯, the dynamics of cost-to-go _Jt_ ( _x_ ; _u_ ) in (87) reduces to the ones of
+the value function in (43),
+
+
+- _u_ ¯ _t_
+_u_ [base] _t_ _−_ _u_ ¯ _t_ + ¯ _ut_ log _F_ (¯ _ut_ )
+
+
+( _y, x_ )
+
+
+_−∂tJt_ ( _x_ ; ¯ _u_ ) = 
+
+_y_ = _x_
+
+=    
+
+_y_ = _x_
+
+
+- _u_ [base] _t_ ( _y, x_ ) _−_ _u_ ¯ _t_ ( _y, x_ )� by (88)
+
+
+= _−u_ [base] _t_ ( _x, x_ ) _−_ - _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;¯] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;¯] _[u]_ [)] by (30) and (88)
+
+
+_y_ = _x_
+
+
+= _−_ - _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;¯] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;¯] _[u]_ [)]
+
+_y_
+
+
+That is, we have shown that any policy _u_ ¯ satisfying the self-consistency relation in (88) has its costto-go _Jt_ ( _x_ ; ¯ _u_ ) corresponding to the value function _Vt_ ( _x_ ). This implies that _u_ ¯ = _u_ _[⋆]_ is the optimal
+rate, and, by uniqueness, is the unique fixed point of (88).
+
+
+27
+
+
+**Theorem 3.2** (Discrete basic adjoint matching) **.** _For any Bregman divergence Dϕ, the unique criti-_
+_cal point of the following matching objective is the optimal rate:_
+
+_u_ _[⋆]_ _t_ [(] _[y, x]_ [) = arg min] E _pu_ ¯ ( _**X**_ _|Xt_ = _x_ )      - _Dϕ_ ( _ut_ ( _y, x_ ) _, u_ [base] _t_ ( _y, x_ ) _at_ ( _y_ ; _**X**_ _,_ ¯ _u_ )� (19)
+_u_
+
+
+_where_ _u_ ¯ = stopgrad( _u_ ) _and at_ ( _y_ ; _**X**_ _, u_ ) _is the_ discrete basic adjoint _obeying a backward ODE_
+
+
+- _ut_
+1 _−_
+_F_ ( _ut_ )
+
+
+- _ut_
++ _ut_ log _F_ ( _ut_ )
+
+
+( _z, Xt_ )
+
+
+_−_ [d]
+
+d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [) =] _[ a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [)]
+
+
+_−_ [d]
+
+
+
+
+ [�]
+
+_z_ = _Xt_
+
+
+_u_ [base] _t_
+
+
+
+
+
+_−_ 
+
+_z_ = _y_
+
+
+- _ut_
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _F_ ( _ut_ )
+
+
+( _z, y_ )
+
+
+ (20)
+
+
+_with the terminal condition a_ 1( _y_ ; _**X**_ _, u_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] _._
+
+
+_Proof._ Invoking Lemma 2.1 with _ft_ ( _x_ ; _y, u_ ) := _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)]
+
+
+- - 1
+_e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] _−_
+
+_t_
+
+
+_e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)] = E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+_∂te_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)]
+
+
+ 
+d _τ_
+
+
+(89)
+
+
++
+
+
+_ut_ ( _z, Xt_ ) _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[z]_ [;] _[u]_ [)]
+
+_z_
+
+
+Expanding the first term of the integrand in (89) yields
+
+_∂te_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)]
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)] ( _−∂tJt_ ( _y_ ; _u_ ) + _∂tJt_ ( _Xt_ ; _u_ ))
+
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)]
+
+
+
+
+ [�]
+
+
+_z_ = _y_
+
+
+- _u_ [base] _t_ _−_ _ut_ + _ut_ log _Fu_ ( _ut_ _t_ )
+
+
+( _z, y_ )
+
+
+( _z, Xt_ )
+
+
+
+
+
+_−_ 
+
+_z_ = _Xt_
+
+
+- _u_ [base] _t_ _−_ _ut_ + _ut_ log _Fu_ ( _ut_ _t_ )
+
+
+ by (87)
+
+
+Likewise, expanding the second term of the integrand in (89) leads to
+
+
+ - _ut_ ( _z, Xt_ ) _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[z]_ [;] _[u]_ [)]
+
+
+_z_
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)][ �] _ut_ ( _z, Xt_ ) _e_ _[−][J][t]_ [(] _[X][t]_ [;] _[u]_ [)+] _[J][t]_ [(] _[z]_ [;] _[u]_ [)]
+
+
+_z_
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)] [�] _ut_ ( _z, Xt_ )  - _e_ _[−][J][t]_ [(] _[X][t]_ [;] _[u]_ [)+] _[J][t]_ [(] _[z]_ [;] _[u]_ [)] _−_ _e_ _[−][J][t]_ [(] _[X][t]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)][�]
+
+
+_z_ = _Xt_
+
+
+by (33)
+
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)] [�]
+
+
+_z_ = _Xt_
+
+
+- _ut_ _Fu_ ( [base] _tut_ ) _[−]_ _[u][t]_
+
+
+( _z, Xt_ ) by (18)
+
+
+Combined, the integrand in (89) can be obtained by
+
+
+_∂te_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)] +
+
+
+
+
+
+- _ut_
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _F_ ( _ut_ )
+
+
+- _ut_ ( _z, Xt_ ) _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[z]_ [;] _[u]_ [)]
+
+
+_z_
+
+
+( _z, y_ )
+
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)]
+
+
+ [�]
+
+
+_z_ = _y_
+
+
+- _ut_
+1 _−_
+_F_ ( _ut_ )
+
+
+28
+
+
+- _ut_
++ _ut_ log _F_ ( _ut_ )
+
+
+( _z, Xt_ )
+
+
+
+
+
+
+
+
+_−_ 
+
+_z_ = _Xt_
+
+
+_u_ [base] _t_
+
+
+= _e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)] _Gt_ ( _y, Xt_ ; _u_ )
+
+
+where we shorthand
+
+
+_Gt_ ( _y, Xt_ ; _u_ ) := 
+
+_z_ = _y_
+
+
+- _ut_
+_u_ [base] _t_ _−_ _ut_ + _ut_ log _F_ ( _ut_ )
+
+
+( _z, y_ )
+
+
+- _ut_
+1 _−_
+_F_ ( _ut_ )
+
+
+- _ut_
++ _ut_ log _F_ ( _ut_ )
+
+
+( _z, Xt_ ) (90)
+
+
+_−_         
+
+_z_ = _Xt_
+
+
+That is, we can reformulate (89) by
+
+
+_u_ [base] _t_
+
+
+_e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)] = E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+- - 1 _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] _−_ _e_ _[−][J][τ]_ [ (] _[y]_ [;] _[u]_ [)+] _[J][τ]_ [ (] _[X][τ]_ [ ;] _[u]_ [)] _Gτ_ ( _y, Xτ_ ; _u_ )d _τ_
+
+_t_
+
+
+Consequently, given a model trajectory _**X**_ _∼_ _p_ _[u]_ ( _·|Xt_ = _x_ ) starting from _x_ at time _t_, one can
+estimate the expectation by solving the following backward ODE:
+
+
+d
+_a_ 1( _y_ ; _**X**_ _, u_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] (91)
+d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [) =] _[ e][−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[X][t]_ [;] _[u]_ [)] _[G]_ [(] _[y, X][t]_ [;] _[ u]_ [)]
+
+
+This implies that
+
+
+_e_ _[−][J][t]_ [(] _[y]_ [;] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u]_ [)] = E _pu_ ( _**X**_ _|Xt_ = _x_ ) [ _at_ ( _y_ ; _**X**_ _, u_ )] (92)
+
+
+= E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+= E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+= E _pu_ ( _**X**_ _|Xt_ = _x_ )
+
+
+- - 1 _a_ 1( _y_ ; _**X**_ _, u_ ) _−_ _e_ _[−][J][τ]_ [ (] _[y]_ [;] _[u]_ [)+] _[J][τ]_ [ (] _[X][τ]_ [ ;] _[u]_ [)] _Gτ_ ( _y, Xτ_ ; _u_ )d _τ_
+
+_t_
+
+- - 1 _a_ 1( _y_ ; _**X**_ _, u_ ) _−_ E _pu_ ( _**X**_ ¯ _|Xτ_ ) - _aτ_ ( _y_ ; _**X**_ [¯] _, u_ )� _Gτ_ ( _y, Xτ_ ; _u_ )d _τ_
+
+_t_
+
+- - 1 _a_ 1( _y_ ; _**X**_ _, u_ ) _−_ _aτ_ ( _y_ ; _**X**_ _, u_ ) _Gτ_ ( _y, Xτ_ ; _u_ )d _τ_
+
+_t_
+
+
+That is, the following ODE is equivalent to the one in (91) in expectation:
+
+
+d
+_a_ 1( _y_ ; _**X**_ _, u_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] (93)
+d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [) =] _[ a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u]_ [)] _[G]_ [(] _[y, X][t]_ [;] _[ u]_ [)]
+
+
+which readily recovers the dynamics in (20).
+
+
+Finally, let _u_ ¯ _t_ ( _y, x_ ) be the solution to the matching objective (19) for all _y_ = _x_,
+
+
+_u_ ¯ _t_ ( _y, x_ ) = arg min E _pu_ ( _**X**_ _|Xt_ = _x_ )      - _Dϕ_ ( _ut_ ( _y, x_ ) _, u_ [base] _t_ ( _y, x_ ) _at_ ( _y_ ; _**X**_ _, u_ )�
+_u_
+
+
+Straightforward application of the matching framework (Lipman et al., 2024) suggests that
+
+
+_u_ ¯ _t_ ( _y, x_ ) = E _pu_ ¯ ( _**X**_ _|Xt_ = _x_ )         - _u_ [base] _t_ ( _y, x_ ) _at_ ( _y_ ; _**X**_ _,_ ¯ _u_ )�
+
+= _u_ [base] _t_ ( _y, x_ ) _e_ _[−][J][t]_ [(] _[y]_ [;¯] _[u]_ [)+] _[J][t]_ [(] _[x]_ [;¯] _[u]_ [)] by (92)
+
+Invoking Lemma 3.1, we deduce that _u_ ¯ = _u_ _[⋆]_ is the optimal rate.
+
+
+**Corollary 3.3** (Discrete adjoint) **.** _At u_ := _u_ _[⋆]_ _, the dynamics of discrete basic adjoint simplify to_
+
+
+_−_ [d]
+
+
+_u_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ ) _,_ _a_ 1( _y_ ; _**X**_ _, u_ _[⋆]_ ) = _e_ _[−][g]_ [(] _[y]_ [)+] _[g]_ [(] _[X]_ [1][)] (21)
+_z_
+
+
+   d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [) =]
+
+
+_which_ _coincide_ _with_ _the_ _dynamics_ _of_ _discrete_ _adjoint_ _in_ (8) _._ _That_ _is,_ _by_ _the_ _uniqueness_ _of_ _ODE_
+_solutions, we have that at_ ( _y_ ; _**X**_ _, u_ _[⋆]_ ) = ˜ _at_ ( _y_ ; _**X**_ ) _._
+
+
+_Proof._ Notice that _Gt_ ( _y, x_ ; _u_ ) defined in (90) greatly simplifies when _u_ := _u_ _[⋆]_,
+
+
+_Gt_ ( _y, x_ ; _u_ _[⋆]_ ) = 
+
+_z_ = _y_
+
+
+- _u_ [base] _t_ ( _z, y_ ) _−_ _u_ _[⋆]_ _t_ [(] _[z, y]_ [)] 
+
+29
+
+
+Hence, the dynamics of discrete basic adjoint (93) reduce to
+
+
+d
+d _t_ _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [) =] _[ a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [)] _[G][t]_ [(] _[y, x]_ [;] _[ u][⋆]_ [)]
+
+
+= _at_ ( _y_ ; _**X**_ _, u_ _[⋆]_ )
+
+
+_z_ = _y_
+
+
+- _u_ [base] _t_ ( _z, y_ ) _−_ _u_ _[⋆]_ _t_ [(] _[z, y]_ [)] 
+
+
+= _−at_ ( _y_ ; _**X**_ _, u_ _[⋆]_ ) _u_ [base] _t_ ( _y, y_ ) _−_ 
+
+_z_ = _y_
+
+
+_u_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ )
+
+
+= _−_        - _u_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ )
+
+_z_
+
+
+where the third equality is due to the fact that for all _z_ = _y_,
+
+E _p⋆_ ( _**X**_ _|Xt_ = _x_ ) [ _u_ _[⋆]_ _t_ [(] _[z, y]_ [)] _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [)]]
+
+= _u_ _[⋆]_ _t_ [(] _[z, y]_ [)] _[e][−][J][t]_ [(] _[y]_ [;] _[u][⋆]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u][⋆]_ [)] by (92)
+
+= _u_ [base] _t_ ( _z, y_ ) _e_ _[−][J][t]_ [(] _[z]_ [;] _[u][⋆]_ [)+] _[J][t]_ [(] _[y]_ [;] _[u][⋆]_ [)] _[−][J][t]_ [(] _[y]_ [;] _[u][⋆]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u][⋆]_ [)] by (49)
+
+= _u_ [base] _t_ ( _z, y_ ) _e_ _[−][J][t]_ [(] _[z]_ [;] _[u][⋆]_ [)+] _[J][t]_ [(] _[x]_ [;] _[u][⋆]_ [)]
+
+= E _p⋆_ ( _**X**_ _|Xt_ = _x_ )         - _u_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ )� by (92)
+
+That is, there exists a detailed balance between _u_ _[⋆]_ _t_ [(] _[z, y]_ [)] _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [)] [and] _[u]_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ )
+w.r.t. optimal distribution, _i.e.,_
+
+E _p⋆_ ( _**X**_ _|Xt_ = _x_ ) [ _u_ _[⋆]_ _t_ [(] _[z, y]_ [)] _[a][t]_ [(] _[y]_ [;] _**[ X]**_ _[, u][⋆]_ [)] =][ E] _p_ _[⋆]_ ( _**X**_ _|Xt_ = _x_ )    - _u_ [base] _t_ ( _z, y_ ) _at_ ( _z_ ; _**X**_ _, u_ _[⋆]_ )� (94)
+
+
+C EXPERIMENT DETAILS
+
+
+C.1 SYNTHETIC EXAMPLES
+
+
+**Implementation** For both DAM and D1, we parametrize _u_ _[θ]_ _t_ [(] _[y, x]_ [)][ as the logits of a tensor of size]
+92 _×_ 92 _×_ 91 _×_ 2. The first two dimensions correspond to all possible _x ∈_ _X_ [discrete] = _{_ m _,_ 1 _, . . .,_ 91 _}_ [2],
+the third dimension corresponds to all possible _y_ _∈X_ [discrete] conditioned on a given _x_, and the last
+dimension corresponds to the two distinct jumps characterized in (22). For DAM, we use _K_ = 16
+samples to estimate the discrete adjoint _a_ ˆ _t_ in (13) for Checkerboard, and _K_ = 64 samples for
+Pinwheel. Since these problems are low-dimensional, we always use on-policy samples to compute
+_a_ ˆ _t_ ; that is, we do not maintain a replay buffer _B_ for synthetic examples. Since D1’s and SVDD’s
+codebases are specialized respectively to reasoning and molecular applications, we implement their
+methods ourselves for the synthetic examples. All methods are trained on CPU using Adam (Kingma
+& Ba, 2015) with the learning rate 1 _×_ 10 _[−]_ [2] .
+
+
+**Reward Functions** For Checkerboard, we consider the reward function that upweights the diagonal blocks by 4 _._ 6, superdiagonal and subdiagonal blocks by 4 _._ 0, and other off-diagonal blocks by
+3 _._ 4. For Pinwheel, we reweight the three circles respectively by 0 _._ 5, _−_ 1, and _−_ 20.
+
+
+C.2 MATHEMATICAL REASONING TASKS
+
+
+**Inference** We use the same decoding strategy as in Zhao et al. (2025). To decode a sequence of
+_N_ tokens, we use _N/_ 2 denoising steps and unmask 2 tokens in each step. They decode from left to
+right in blocks using the semi-autoregressive decoding strategy (Nie et al., 2025), which they found
+to yield slightly better performance. Specifically, the sequence is divided into blocks of length 32.
+In each step, the 2 tokens with the highest confidence within the current block are unmasked. Once
+all the tokens in the current block are unmasked, we move to the next block of 32 tokens.
+
+
+**Implementation** For D1, we use their official implementation, [4] which uses the TRL library (von
+Werra et al., 2020). We build our DAM implementation on top of the same codebases. Both finetuning methods use Low-Rank Adaptation (LoRA) (Hu et al., 2022) with a rank of _r_ = 128 and
+
+
+[4https://github.com/dllm-reasoning/d1](https://github.com/dllm-reasoning/d1)
+
+
+30
+
+
+scaling factor _α_ = 64. For all four tasks, DAM uses _K_ = 12 samples to estimate the discrete
+adjoint ˆ _at_ in (13).
+
+
+**Training** All methods are trained on 8 Nvidia H100 GPUs with a sequence length of 128 tokens, batch size of 12 per GPU, and 2 gradient accumulation steps. We use the AdamW optimizer
+(Loshchilov & Hutter, 2019) with parameters _β_ 1 = 0 _._ 9, _β_ 2 = 0 _._ 99, weight decay of 0 _._ 1, learning
+rate of 3 _×_ 10 _[−]_ [6], and gradient clipping at 0 _._ 2. For both methods, we fine-tune for 3000, 3500, and
+4000 steps (number of gradient updates) on GSM8K and MATH500, respectively.
+
+
+**Reward Functions** We use the same reward functions as in Zhao et al. (2025), which we describe
+below for completeness.
+
+
+    - **GSM8K** We conduct RL on the training split of the GSM8K dataset [5] and evaluate on the
+test split. We employ a composite reward function consisting of five components following
+the unsloth implementation of reward functions: [6]
+
+
+**–** **XML** **Structure** **Reward** : Rewards proper formatting with reasoning and answer
+tags. +0 _._ 125 for each correctly placed opening and closing tag. A small penalty
+of _−_ 0 _._ 001 for each extraneous token after the closing tag.
+
+**–** **Soft Format Reward** : Reward of 0.5 for responses matching the pattern:
+<reasoning>...(content)...</reasoning>
+
+<answer>...(content)...</answer>
+
+**–** **Strict** **Format** **Reward** : Reward of 0.5 for adhering to the exact prescribed format
+with appropriate line breaks.
+
+**–** **Integer Answer Reward** : Reward of 0.5 if the extracted answer is a valid integer.
+
+**–** **Correctness** **Reward** : Reward of 2.0 if the extracted answer exactly matches the
+ground truth.
+
+
+In Table 2, the formatting reward _r_ format( _x_ ) corresponds to the sum of the first three aforementioned rewards.
+
+
+    - **MATH500** We train on the train split of the MATH dataset. [7] Like GSM8K, we employ a
+composite reward function comprising
+
+
+**–** **Format** **Reward** : We reward the presence of <answer></answer> tags and
+_\_ boxed, as follows: 1 _._ 00 if answer tags are present with _\_ boxed inside, 0 _._ 75 if
+answer tags are present without _\_ boxed in them, 0 _._ 50 if answer tags are not present,
+but _\_ boxed is present, and 0 _._ 25 if neither answer tags, nor _\_ boxed is present
+
+**–** **Correctness Reward** : We reward 2 _._ 0 if the correct answer is in _\_ boxed
+
+
+    - **Countdown** We train on the training split of the dataset [8] from the TinyZero project (Pan
+et al., 2025), restricting to instances that use only three numbers. And we evaluate on
+256 synthetically generated countdown questions with 3 numbers. We implement a reward
+function that checks if an arithmetic expression constructed from given numbers reaches a
+target value:
+
+
+**–** **Formatting Reward** : 0.1 points when the equation uses the right numbers but doesn’t
+reach the target
+
+**–** **Correctness Reward** : 1.0 point when the equation equals the target and uses exactly
+the available numbers
+
+
+    - **Sudoku** We use the same generated dataset of 4x4 Sudoku examples as (Zhao et al., 2025),
+keeping the last 500 examples for evaluation and training on the rest. We employ a reward
+function that rewards filling in cells correctly.
+
+
+**–** **Correctness** **Reward** : The reward is computed as the average number of correctly
+filled in cells.
+
+
+[5https://huggingface.co/datasets/openai/gsm8k](https://huggingface.co/datasets/openai/gsm8k)
+[6https://unsloth.ai/blog/r1-reasoning](https://unsloth.ai/blog/r1-reasoning)
+[7https://huggingface.co/datasets/ankner/math-500](https://huggingface.co/datasets/ankner/math-500)
+[8https://huggingface.co/datasets/Jiayi-Pan/Countdown-Tasks-3to4](https://huggingface.co/datasets/Jiayi-Pan/Countdown-Tasks-3to4)
+
+
+31
+
+
+C.3 ADDITIONAL EXPERIMENTS
+
+
+Checkerboard
+
+
+10 [−1]
+
+
+10 [−2]
+
+
+10 [−3]
+
+
+0 5000 10000 15000 20000
+
+
+10 [−1]
+
+
+10 [−2]
+
+
+10 [−3]
+
+
+K=4
+K=8
+K=16
+K=32
+K=64
+K=128
+
+
+0 5000 10000 15000 20000
+
+
+Figure 3: **Varying** _K_ **on** **Synthetic** **Examples.** We investigate the effect of varying the number of
+samples _K_ on the synthetic examples. Larger values of _K_ result in faster convergence from the
+lower bias and variance of the importance-weighted discrete adjoint in (13).
+
+
+D1
+DAM
+
+
+3.5
+
+
+3.0
+
+
+Method
+
+
+Training Steps
+
+
+(a) GSM8k
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+Method
+D1 DAM
+
+
+0 1000 2000 3000 4000
+Training Steps
+
+
+(b) Countdown
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+Figure 4: **Rewards** **Curves** **on** **GSM8K** **and** **Count-**
+**down.** DAM is more effective than D1 in maximizing
+reward _r_ in (23).
+
+
+32
+
+
+0 5 10 15 20
+Time (hours)
+
+
+Figure 5: **Accuracy** **vs** **Wall** **Clock**
+**Time** **on** **Sudoku.** We compare D1
+and DAM but plot the wall clock time
+in hours on the x-axis.
+
+
+Table 4: **Generated** **Samples** **on** **GSM8K** from the base model and two fine-tuned models, all
+conditioned on the same unseen prompts. **Correct** and **wrong** answers are colored.
+
+
+**Prompt:** Jaime is a computer programmer for a company that currently has employed 100 people. Senior
+programmers are paid $400 more than junior programmers. If the number of Junior programmers is 2/5
+of the total number of employees, and they are each paid $2000 per month, calculate the total amount of
+money the company pays to all the programmers per month.
+**Answer:** 224000
+
+
+**Prompt:** John hires a driving service to get him to work each day. His work is 30 miles away and he has
+to go there and back each day. He goes to work 5 days a week for 50 weeks a year. He gets charged $2
+per mile driven and he also gives his driver a $150 bonus per month. How much does he pay a year for
+driving?
+**Answer:** 31800
+
+
+**Prompt:** Bob is in charge of doing laundry for a large hotel. Each room has two sheets, one comforter,
+twice as many pillow cases as sheets and twice as many towels as pillow cases. How many pieces of laundry are there in 80 rooms?
+**Answer:** 1200
+
+
+33
+
+
+Table 5: **Generated** **Samples** **on** **MATH500** from the base model and two fine-tuned models, all
+conditioned on the same unseen prompts. **Correct** and **wrong** answers are colored.
+
+
+**Prompt:** In 1992, a scoop of gelato could be purchased in Italy for 1200 lire. The same gelato would
+have cost $1 _._ 50 in the U.S. At the equivalent exchange rate between the lire and the dollar, how many
+dollars would be equivalent to 1,000,000 lire?
+**Answer:** 1250
+
+
+**Prompt:** Find the sum of the real roots of _x_ [4] _−_ 80 _x −_ 36 = 0 _._
+**Answer:** 4
+
+
+34
+
+
+Table 6: **Generated Samples on Countdown** from the base model and two fine-tuned models, all
+conditioned on the same unseen prompts. **Correct** and **wrong** answers are colored.
+
+
+**Prompt:** Using only the numbers [15, 78, 62], create an arithmetic expression that evaluates to exactly
+1. You must use all numbers from the list, and each number must be used exactly once. You may use the
+operations +, -, *, and / as needed.
+**Answer:** 78 - 62 - 15
+
+
+**Prompt:** Using only the numbers [19, 3, 5], create an arithmetic expression that evaluates to exactly 52.
+You must use all numbers from the list, and each number must be used exactly once. You may use the
+operations +, -, *, and / as needed.
+**Answer:** 19 * 3 - 5
+
+
+35

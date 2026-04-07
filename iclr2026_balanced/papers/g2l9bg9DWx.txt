@@ -1,0 +1,1402 @@
+# ACHIEVING LOW-BIT MUON THROUGH SUBSPACE
+
+## PRESERVATION AND GRID QUANTIZATION
+
+
+**Huaijin Wu** [1] _[†]_ **, Bingrui Li** [2] _[†]_ **, Yebin Yang** [1] **, Yi Tu** [1] **, Zhanpeng Zhou** [1] **,**
+**Jianfei Chen,** [2] **Junchi Yan** [1] _[∗]_
+
+1School of Computer Science & School of Artificial Intelligence, Shanghai Jiao Tong University
+2Tsinghua university
+_{_ whj1201, R0.0O ~~y~~ yb, zzp1012, yanjunchi _}_ @sjtu.edu.cn
+tuyi.sjtu2023@gmail.com _{_ lbr22, jianfeic _}_ @tsinghua.edu.cn
+
+
+ABSTRACT
+
+
+Training Large Language Models (LLMs) faces severe memory constraints due
+to the increasing size of model parameters and optimizer states. The Muon optimizer, which is based on matrix orthogonalization, has recently demonstrated
+significant potential and offers considerable memory advantages over AdamW
+by utilizing only the first moment. However, how to apply memory-reduction
+techniques to further compress the optimizer states of Muon remains underexplored. Directly applying existing methods may encounter significant difficulties
+due to the orthogonalization process. In this work, we investigate the low-bit
+compression of Muon and systematically analyze the quantization error exacerbated by orthogonalization. We identify that the error primarily originates from
+the top singular subspace and the outlier patterns of moment matrix appearing
+across both dimensions. To address this, we propose 4-bit-Muon-GRASP (GRid
+And Subspace Preserving), which compresses the Muon optimizer states to 4 bits
+using grid quantization, while preserving the top singular subspace with minimal overhead. We evaluate 4-bit-Muon-GRASP through pre-training on LLaMA130M, 350M, and 1.1B architectures and fine-tuning on 7B models for various
+reasoning tasks. Extensive experiment results show that our 4-bit-Muon-GRASP
+achieves accuracy comparable to full-precision counterparts while reducing training memory consumption by up to 28%. The source code is publicly available at
+[https://github.com/wuhuaijin/lowbit-Muon.](https://github.com/wuhuaijin/lowbit-Muon)
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) have shown impressive performance across multiple domains (Yang et al., 2026), including language translation and math reasoning. The growing size
+of deep learning models has led to significant challenges in terms of memory consumption and computational efficiency (Yuan et al., 2025; Wu et al., 2025), particularly during training (Chowdhery
+et al., 2023; Rajbhandari et al., 2021). For instance, pre-training a 5B model from scratch using
+AdamW with only one sequence of length 1024 exceeds the memory capacity of an NVIDIA A100,
+with the full-precision (fp32) optimizer state alone surpassing 40GB, due to the need for a buffer of
+2x the model size to track both the first and second moments.
+
+
+Existing efforts including GPU sharding (Rajbhandari et al., 2020; Zhao et al., 2023) and CPU
+offloading (Ren et al., 2021) have focused on reducing the memory consumption of optimizer states
+at the hardware level. On the other hand, there are two main approaches in the algorithmic domain:
+factorization uses low-rank approximation to optimize states (Shazeer & Stern, 2018; Zhao et al.,
+2024), while quantizing the optimizer to lower precision is particularly attractive due to its simplicity
+and broad applicability. Existing works have successfully compressed the optimizer state to low-bit
+(8-bit,4-bit), primarily focusing on AdamW and SGD (Wang et al., 2024; Dettmers et al., 2021; Li
+
+
+_∗_ Correspondence author. _†_ equal contribution. This work was partly supported by Scientific Research Innovation Capability Support Project for Young Faculty (U40) of the Ministry of Education of China (SRICSPYFZY2025019).
+
+
+1
+
+
+et al., 2023). As a result, optimizing the memory usage of the optimizer allows the saved memory
+to be reallocated for a larger model or an increased batch size.
+
+
+Recently, Jordan et al. (2024) introduced the Muon optimizer, which incorporates orthonormalized
+update rules and has demonstrated substantial advantages. Large-scale studies (Liu et al., 2025) report that Muon nearly doubles the efficiency of AdamW, and Muon has been successfully deployed
+in foundational models such as Kimi-K2 (Team et al., 2025). From the perspective of memoryefficient training, Muon can reduce optimizer state memory usage by approximately 50% compared
+to the widely-used AdamW in LLM training, as it only requires storage of the first moment. Therefore, further compressing the Muon optimizer state holds significant potential.
+
+
+However, the application of memory-reduction techniques to Muon remains an open question. Directly applying low-bit compression techniques, such as those used in AdamW (Dettmers et al.,
+2021; Li et al., 2023), may encounter great challenges due to the orthonormalization process. In
+this paper, we explore the low-bit compression of Muon optimizer, a problem that, to the best of our
+knowledge, has not been attempted before. **Our contributions are as follows** :
+
+
+1) We conduct a systematic analysis of the 4-bit compression error in Muon and find that the NewtonSchulz iteration exacerbates the quantization error, primarily due to the top singular subspace. In
+light of this, we divide the moment matrix into two parts: the top singular subspace and the residual
+singular subspace, and compress them separately.
+
+
+2) We propose 4-bit-Muon-GRASP (GRid And Subspace Preserving) with two key techniques: subspace preservation and grid quantization. Specifically, we suggest using a relatively mild compression (8-bit) to preserve the top singular subspace, with the memory overhead being negligible, while
+compressing the residual singular subspace to 4-bit. Moreover, given that the outlier pattern of
+moments appears across both dimensions, we introduce grid quantization to provide more accurate
+bounds via normalizing both row and column directions.
+
+
+3) We evaluate our 4-bit-Muon-GRASP through both pre-training and fine-tuning. Specifically,
+we pre-train on LLaMA-130M, 350M, and 1B architectures with up to 31.5B tokens and fine-tune
+on 7B models for either general or specific reasoning tasks. The performance of our compressed
+optimizers is assessed through training curves and downstream tasks. Across all tasks, our 4-bit
+optimizers achieve accuracy comparable to their full-precision counterparts, while reducing total
+training memory consumption by up to 28%. To the best of our knowledge, it is the most memoryefficient optimizer among all low-bit optimization methods.
+
+
+2 PRELIMINARIES
+
+
+2.1 MUON OPTIMIZER
+
+
+The Muon optimizer (Jordan et al., 2024) is a recently proposed novel optimization method, specifically designed for neural network weights representable as matrices. Unlike traditional optimizers,
+Muon introduces a key innovation by integrating orthogonalization into the moment update process.
+At iteration _t_, given the current weight **W** _t−_ 1 _∈_ R _[n][×][m]_, learning rate _ηt_, momentum _µ_, and objective
+_Lt_, the update rule for the Muon optimizer can be formulated as follows:
+
+
+**M** _t_ = _µ_ **M** _t−_ 1 + _∇Lt_ ( **W** _t−_ 1) _,_ (1)
+**O** _t_ = Newton-Schulz _p_ ( **M** _t, T_ ) _,_ (2)
+**W** _t_ = **W** _t−_ 1 _−_ _ηt_ **O** _t,_ (3)
+
+
+where **M** _t_ represents the moment buffer at step _t_, initialized as a zero matrix, _p_ is the degree of
+the Newton-Schulz (NS) iteration polynomial, and _T_ is the number of iteration steps. The NS
+iteration aims to approximately orthogonalize the update matrix, which is equivalent to replacing
+the update with **UV** _[⊤]_, where **UΣV** _[⊤]_ = **M** _t_ is the singular value decomposition (SVD) of **Mt** .
+The NS iteration approximation avoids the high computational cost of SVD while still achieving the
+orthogonalization of the moment matrix, leading to an isomorphic parameter update.
+
+For the NS iteration, we set **X** 0 = _∥_ **MM** _t_ **t** _∥F_ [.] [Following][ Jordan et al.][ (][2024][);][ Team et al.][ (][2025][), where]
+both _p_ and _T_ are set to 5, we denoted this setting as _official choice_ . then the update **X** _k_ from **X** _k−_ 1
+
+
+2
+
+
+at each step _k_ is as follows:
+
+**X** _k_ = _a_ **X** _k−_ 1 + _b_     - **X** _k−_ 1 **X** _[⊤]_ _k−_ 1� **X** _k−_ 1 + _c_     - **X** _k−_ 1 **X** _[⊤]_ _k−_ 1�2 **X** _k−_ 1 (4)
+
+
+where _a_, _b_, and _c_ are the coefficients. To ensure proper convergence, we tune the coefficients so that
+the polynomial _f_ ( _x_ ) = _ax_ + _bx_ [3] + _cx_ [5] has a fixed point near 1. In this paper, we follow the official
+design, using _a_ = 3 _._ 4445, _b_ = _−_ 4 _._ 7750, and _c_ = 2 _._ 0315 for LLM training.
+
+
+**Remark.** A recent work (Liu et al., 2025) has extended Muon from classic models to LLM-scale
+training by incorporating weight decay and carefully adjusting the per-parameter update scale. As
+our goal is also for LLM, we adopt these techniques and follow their setting in the training of LLMs.
+
+
+2.2 QUANTIZATION AND DEQUANTIZATION
+
+
+Quantizing the optimizer states to lower precision is an effective method to compress optimizer
+states for memory savings. Specifically, the optimizer states **M** _t_ are compressed to **M** _[q]_ _t_ [using] [a]
+quantizer at step _t_ and then decompressed with a dequantizer for use at step _t_ + 1.
+
+
+**Quantization.** Quantization is the process of converting full-precision tensors into low-precision
+formats. Let _X_ _∈_ R _[p]_ represent a full-precision tensor, and let QUANT _b_ be a _b_ -bit quantizer that
+reduces _X_ to a discrete value chosen from a set of 2 _[b]_ possible values. The quantization process
+involves two operations: normalization _N_ ( _·_ ) and mapping _M_ ( _·_ ), which are applied sequentially
+and element-wise. Specifically, for each element _xi_ _∈_ _X_, the quantized value is given by
+
+
+_qi_ := QUANT _b_ ( _xi_ ) = _M ◦N_ ( _xi_ ) _._ (5)
+
+
+Taking signed values as an example, the normalization operator transforms elements of _X_ into the
+range [ _−_ 1 _,_ 1] according to the following formula:
+
+_N_ ( _xi_ ) = _xi_ (6)
+max1 _≤j≤p |xj|_ _[,]_
+
+
+The scaling factors involved in normalization are referred to as _quantization_ _scales_, and they are
+stored along with the quantized tensor for dequantization. The normalization range determines the
+granularity of quantization, with common granularities including per-tensor, per-token, per-channel,
+group-wise, and block-wise.
+
+
+The mapping operator _M_ for _x ∈_ R in a _b_ -bit quantizer is defined as follows:
+
+
+_M_ ( _x_ ) = arg min (7)
+_j∈_ T _b_ _[|][x][ −R]_ [(] _[j]_ [)] _[|]_
+
+
+where _R_ is the quantization mapping function. The set T _b_ = _{_ 0 _,_ 1 _, . . .,_ 2 _[b][−]_ [1] _}_ represents the discrete
+set of possible values, and the mapping _R_ is an element-wise function that maps each element of T _b_
+into the normalized range [ _−_ 1 _,_ 1]. Different quantization mappings can be employed, such as linear
+mapping and dynamic exponent mapping.
+
+
+**Dequantization.** The dequantizer, denoted as DEQUANT, performs the inverse operation of the
+quantizer, recovering the approximate original value. This process is defined as follows:
+
+
+_x_ ˆ = DEQUANT( _qi_ ) = _N_ _[−]_ [1] _◦R_ ( _qi_ ) (8)
+
+
+3 METHODOLOGY
+
+
+In this section, we first present the challenge of quantizing the Muon optimizer states to 4 bits and
+analyze the associated quantization error. We then describe the design of our proposed 4-bit-MuonGRASP, highlighting two key techniques: top singular subspace preservation and grid quantization.
+
+
+3.1 CHALLENGES
+
+
+A straightforward way to implement 4-bit Muon is to directly apply group quantization to the moment matrix **M** _t_, as in Dettmers et al. (2021); Li et al. (2023). In this paper, we refer to this naive
+method as 4-bit-Muon-base.
+
+
+3
+
+
+(a) (b) (c) (d)
+
+
+Figure 1: Visualization of momentum in _transformer.layers.7.attn.o_ ~~_p_~~ _roj_ in a LLaMA model.
+(a) The distribution of matrix (real) and their 4-bit compressions (quant). (b) Distribution of the
+matrix after NS iteration (NS(real)) and its 4-bit compressions after NS iterations (NS(quant)). (c)
+and (d): Distribution of singular values of the matrices in (a) and (b), displayed on a log10 scale.
+
+
+To assess the quantization errors of matrices, we first define the relative error between matrix **A** and
+matrix **B** as follows:
+
+
+RE( **A** _,_ **B** ) = _[∥]_ **[A]** _[ −]_ **[B]** _[∥][F]_
+
+
+_._ (9)
+_∥_ **B** _∥F_
+
+
+**NS** **iterations** **amplify** **quantization** **error.** Unlike optimizers such as SGDM (Qian, 1999),
+Adam (Kingma & Ba, 2014), and AdamW (Loshchilov & Hutter, 2017), which compute updates in
+an element-wise fashion, the moment matrix in Muon undergoes an orthogonalization step, achieved
+through Newton-Schulz (NS) iterations. This process may introduce significant quantization errors.
+To assess whether this process amplifies the quantization error, we visualize the real matrices and
+their 4-bit compressions. Fig. 1(a) and (b) demonstrate that the distributions of _Mt_ and its 4-bit
+compressions are nearly identical (RE=0.07), while a significant difference emerges between their
+distributions after NS iterations (RE=1.78). In other words, the disturbances and errors introduced
+by quantization become much more pronounced after matrix orthogonalization.
+
+
+**Error** **Not** **Caused** **by** **Insufficient** **Iterations.** To
+study how NS iterations amplify quantization error,
+we investigate how quantization errors change with
+the arguments in NS iterations, including the degree
+of the polynomial and the number of steps. Fig. 2
+shows that as the number iterations and/or the degree
+of the polynomial increases, although the accuracy
+of the NS iteration improves, the quantization error
+even becomes higher. On the other hand, we analyze the singular values of the moment matrix. From
+Fig. 1(c) and (d), it is evident that the quantization
+operation consistently increases the singular values
+before and after NS iterations. Instead, this suggests
+that the quantized matrix requires fewer NS iterations to converge. Together, the evidences indicate
+
+|Quantization Error RE(real,quant)|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|Quantization Error RE(real,quant)|||||
+|Quantization Error RE(real,quant)|||||
+|Quantization Error RE(real,quant)|||||
+|Quantization Error RE(real,quant)|||||
+|Quantization Error RE(real,quant)|||||
+|Quantization Error RE(real,quant)|||||
+
+that quantization errors are not due to insufficient iterations.
+
+
+**Top** **singular** **subspace** **suffers** **large** **quantization** **error.**
+To further investigate the source of error amplification in the
+NS iteration, we analyze the moment matrix by dividing it
+into the top singular space and the residual singular space.
+Formally, suppose **UΣV** _[⊤]_ = **M** is the SVD of the moment
+matrix **M** _∈_ R _[m][×][n]_ . Then, we define:
+
+**M** top := **M** _k_ = **U** _k_ **Σ** _k_ **V** _k_ _[⊤][,]_ **M** res = **M** _−_ **M** top _,_ (10)
+
+
+where **U** _k_ _∈_ R _[m][×][k]_, **V** _k_ _∈_ R _[m][×][k]_ are top- _k_ singular vectors
+and **Σ** _k_ _∈_ R _[k][×][k]_ contains top- _k_ singular values. We choose
+different ranks _k_ to construct **M** top and **M** res, and compress
+them to 4-bit, resulting in **M** [ˆ] top and **M** [ˆ] res, and compute the
+quantization error before and after NS iterations.
+
+
+4
+
+
+Figure 2: Comparison of quantization error
+with different arguments in NS iteration.
+
+
+Table 1: Quantization error before
+and after NS iterations. The results
+represent the average values obtained
+across all parameters during the first
+100 training iterations of the 1.1B
+LLaMA model.
+
+
+_k_ RE ( **M** top) RE ( **M** res)
+
+
+64 0.08 _→_ 3.31 0.09 _→_ 0.47
+128 0.08 _→_ 2.42 0.09 _→_ 0.63
+256 0.08 _→_ 1.76 0.09 _→_ 0.35
+512 0.08 _→_ 1.26 0.09 _→_ 0.42
+
+
+i
+
+
+j
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|||𝑥)*|||||
+||||𝐗[: 𝐬, : 𝐬]|𝐗[: 𝐬, : 𝐬]|𝑠𝑐𝑎𝑙𝑒!"#|𝑠𝑐𝑎𝑙𝑒!"#|
+||||𝑠𝑐𝑎𝑙𝑒$"%&'(|𝑠𝑐𝑎𝑙𝑒$"%&'(|𝑠𝑐𝑎𝑙𝑒$"%&'(|𝑠𝑐𝑎𝑙𝑒$"%&'(|
+
+
+Figure 3: Left: Outlier patterns of moment tensor. Right: Illustration of grid quantization.
+
+
+As shown in Tab. 1, we find that the quantization errors of the top singular spaces and residual
+singular spaces are comparable before NS iteration. However, after NS iteration, the difference
+between the two becomes significant. Specifically, when setting _k_ = 64 for all parameter tensors in
+the model, NS iteration amplifies the quantization error of **M** top by 40 _×_, while increasing it only 5 _×_
+for the residual matrix **M** res. This indicates that NS iteration primarily amplifies quantization errors
+in the top singular subspaces, suggesting that quantization methods can be designed separately for
+different subspaces.
+
+
+3.2 SUBSPACE PRESERVING
+
+
+Given that the top singular subspace incurs significant quantization error in Muon, we propose using
+relatively mild compression to better preserve the information contained in the top singular subspace.
+Additionally, the NS iteration amplifies all singular values, leading to the magnification of even
+originally small values to an extent that cannot be overlooked. As a result, relying solely on the top
+singular subspace fails to capture all the information in the moment matrix, leading to accuracy loss.
+To address this, we retain the residual subspace of the matrix and apply 4-bit quantization to it.
+
+
+Regarding how to obtain the top singular space of the moment matrix, using Eq. 10 via SVD is
+computationally expensive. In this work, we employ a numerical iterative approximation method
+known as _Power_ _Iteration_ to get the top singular vectors, which has also been utilized in Vogels
+et al. (2019); Ahn et al. (2025). Following them, we warm-start the power iteration using the results
+from the previous optimizer, so that a single iteration is sufficient to accurately capture the top
+singular subspace of **Mt** . Specifically, at each step, we first compute the moment **M** _t_ = _µ_ **M** _t−_ 1 +
+_∇Lt_ ( _Wt−_ 1), and then use _Power Iteration_ to compute the top singular vectors **P** _t,_ **R** _t_ with rank _k_ :
+
+
+**P** _t_ **R** _[⊤]_ _t_ _[≈]_ **[M]** [top] _[,]_ where **P** _t_ _∈_ R _[m][×][k]_ _,_ **R** _t_ _∈_ R _[n][×][k]_ _._ (11)
+
+
+It should be noticed that we perform column normalization on **R** _t−_ 1 to obtain **Q** _t_, and use **Q** _t_ to
+perform a single step of power iteration. Since **M** _t_ and **M** _t−_ 1 exhibit a certain degree of similarity,
+we can benefit from reusing **R** _t−_ 1 as the starting point.
+
+
+We then get the residual singular subspace of _M_ as described in Eq. 10 and apply 4-bit quantization
+to it. To preserve more information of the top singular subspace, we utilize a relatively mild compression (8-bit) to **P** _t_, **R** _t_ . We store 8-bit **P** _t_, **R** _t_, and the 4-bit **M** res in the optimizer buffer. Since
+the rank _k ∗_ _n_ + _k ∗_ _m ≪_ _m ∗_ _n_, the memory overhead of storing **P** _t_, **R** _t_ is relatively small.
+
+
+3.3 GRID QUANTIZATION
+
+
+Fig. 3 (a) shows moment tensors in Muon, and we observe that the outlier pattern appears across
+both dimensions. As a result, neither per-channel group nor per-token group quantization can fully
+capture such outliers. To achieve higher precision, we propose grid quantization, which performs
+normalization in both row and column directions to obtain a more precise bound for each entry.
+
+
+Specifically, for matrix **X**, we divide it into several blocks of size _s × s_ ( _s_ is the group size), and
+the element within the block are denoted as _{xi,j|r_ 1 _≤_ _i_ _≤_ _r_ 2 _, c_ 1 _≤_ _j_ _≤_ _c_ 2 _}_ . Then, the row and
+column quantization scales of this block are formulated as follows:
+
+
+scale _ri_ = _r_ 1max _≤j≤r_ 2 _[x][i,j][,]_ scale _cj_ = _c_ 1max _≤i≤c_ 2 _[x][i,j][.]_ (12)
+
+
+5
+
+
+**Algorithm 1** 4bit-Muon-GRASP
+
+
+**Require:** Weight **W**, objective _L_, learning rate _η_, momentum _µ_, weight decay _λ_, rank _k_, quantizer
+QUANT and dequantizer DEQUANT.
+1: **repeat**
+2: **if** _t_ is 0 **then**
+3: Randomly initialize right factor **Q** 0 _∈_ R _[m][×][n]_, **M** 0 _←_ 0 _∈_ R _[m][×][n]_
+
+4: **else**
+5: **M** res,t-1 _←_ DEQUANT( **M** _[q]_ res,t-1 [)] _[ ∈]_ [R] _[m][×][n]_
+
+6: **P** _t−_ 1 _←_ DEQUANT( **P** _[q]_ _t−_ 1 [)] _[ ∈]_ [R] _[m][×][k]_ [,] **[ R]** _[t][−]_ [1] _[←]_ [DEQUANT][(] **[R]** _[q]_ _t−_ 1 [)] _[ ∈]_ [R] _[n][×][k]_
+
+7: **M** _t−_ 1 _←_ **M** res,t-1 + **P** _t−_ 1 **R** _[⊤]_ _t−_ 1 _[∈]_ [R] _[m][×][n]_
+
+8: **Q** _t_ _←_ ColumnNormalize( **R** _t_ ) _∈_ R _[n][×][k]_
+
+9: **end if**
+10: **M** _t_ _←_ _µ_ **M** _t−_ 1 + _∇Lt_ ( **W** _t−_ 1) _∈_ R _[m][×][n]_
+
+11: **P** _t,_ **R** _t_ _←_ PowerIter( **M** _t,_ **Q** _t_ ) _∈_ R _[m][×][k]_ _,_ R _[n][×][k]_ _▷_ get top singular vectors
+12: **M** res,t _←_ **M** _t −_ **P** _t_ **R** _[⊤]_ _t_ _[∈]_ [R] _[m][×][n]_ _▷_ get residual subspace of **M**
+13: **M** _[q]_ res,t _[←]_ [QUANT] 4 [(] **[M]** [res,t][)] _[ ∈]_ [R] _[m][×][n]_ _▷_ 4-bit quantization
+14: **P** _[q]_ _t_ _[←]_ [QUANT] 8 [(] **[P]** _[t][−]_ [1][)] _[ ∈]_ [R] _[m][×][k]_ [,] **[ R]** _[q]_ _t_ _[←]_ [QUANT] 8 [(] **[R]** _[t]_ [)] _[ ∈]_ [R] _[n][×][k]_ _▷_ 8-bit quantization
+15: **O** _t_ _←_ Orthogonalize( **M** _t_ ) _∈_ R _[m][×][n]_ _▷_ using newton-schulz iterations
+16: **W** _t_ _←_ **W** _t−_ 1 _−_ _ηt_ ( **O** _t_ + _λ_ **W** _t−_ 1) _∈_ R _[m][×][n]_
+
+17: **until** convergence criteria met
+
+1: **function** POWERITER( **B** _,_ **Q** ) _∈_ R _[m][×][n]_ _,_ R _[n][×][k]_ _▷_ single power iteration (from _Q_ )
+2: **P** _←_ **BQ** _∈_ R _[m][×][k]_
+
+3: **P** _←_ Orthogonalize( **P** ) _∈_ R _[m][×][k]_ _▷_ using QR decomposition
+4: **R** _←_ **B** _[⊤]_ **P** _∈_ R _[n][×][k]_
+
+5: **return P** _,_ **R** _▷_ _P_ is orthonormal
+6: **end function**
+
+
+Then the normalization of grid quantization _xi,j_ can be formulated as:
+
+_N_ grid( _xi,j_ ) = _xi,j_ (13)
+min(scale _ri,_ scale _cj_ )
+
+
+Grid quantization utilizes information in a more fine-grained manner and provides element-wise
+unique quantization scales, effectively addressing the outliers that appear across both dimensions.
+Although grid quantization requires storing twice the number of quantization scales compared to
+group-wise quantization, the resulting memory overhead is negligible.
+
+
+3.4 OVERALL ALGORITHM
+
+
+By employing the techniques of top
+subspace preserving and grid quantization, we achieve a lower quantization error for the Muon optimizer (NE=1.78 _→_ NE=0.14). The
+comparison between NS(real) and
+NS(quant) is presented in Fig. 4,
+where the rank of the top subspace is
+set to 1/16 of the original matrix rank.
+Algo. 1 outlines the overall procedure
+of 4-bit-Muon-GRASP, including the
+detailed steps of Power Iteration.
+
+
+4 EXPERIMENTS
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||NE=|0.14|
+
+
+(a) (b)
+
+
+Figure 4: The comparision of NS(real) and NS(quant).
+
+
+We evaluate 4-bit-muon-base and 4-bit-muon-GRASP on both pre-training and fine-tuning of LLMs.
+We compare our 4-bit muon optimizers with their full-precision counterparts, namely fp32-muon.
+
+
+6
+
+
+Figure 5: Validation loss comparison of pretraining with different optimizers on Slimpajama.
+
+
+Table 2: Evaluation of models pre-trained with three optimizers, across downstream tasks for different model sizes. The results are the average of multiple random seeds.
+
+
+**Model** **Optimizer** **HellaSwag** **ARC-c** **ARC-e** **boolQ** **OBQA** **PIQA** **SciQ** **Avg**
+
+
+**130M**
+
+
+**350M**
+
+
+**1.1B**
+
+
+fp32-Muon 28.4 21.8 34.3 62.1 25.8 58.3 62.2 41.8
+8bit-Muon 28.4 21.6 34.1 62.2 26.9 58.5 61.7 41.6
+4bit-Muon-base 28.2 20.8 34.0 62.2 27.8 58.8 59.6 41.9
+4bit-Muon-GRASP 28.7 21.6 34.2 62.1 28.0 58.1 60.4 41.9
+
+
+fp32-Muon 32.4 23.5 38.3 59.4 28.8 62.0 68.0 44.6
+8bit-Muon 32.5 22.3 38.1 61.3 28.4 61.8 66.5 44.5
+4bit-Muon-base 31.6 22.4 37.7 61.9 26.2 61.8 64.4 43.7
+4bit-Muon-GRASP 32.4 23.0 38.5 61.2 28.2 61.4 66.6 44.5
+
+
+fp32-Muon 40.6 25.4 42.8 60.4 30.2 66.5 69.5 48.0
+8bit-Muon 40.5 25.2 42.5 60.4 30.2 66.8 71.4 48.2
+4bit-Muon-base 39.8 24.2 41.5 61.0 30.4 66.6 69.7 47.6
+4bit-Muon-GRASP 40.4 24.8 42.3 60.5 30.6 67.4 71.3 48.2
+
+
+Here we further include 8-bit-Muon as a baseline, which is implemented through group quantization.
+All experiments run on NVIDIA A100 GPUs.
+
+
+Following Liu et al. (2025), we employ the Muon optimizer for updating matrix parameters, while
+RMSNorm, the LM head, and embedding parameters remain optimized using AdamW. Except for
+the ablation study, the rank of the top singular subspace is set to 1/16 of the original, and we use the
+widely adopted INT4 and INT8 format for simplicity and efficiency. We implement the quantizationrelated code using OpenAI Triton kernel to enhance efficiency and achieve real memory reduction.
+Both the group size and grid size of quantization are set to 128.
+
+
+4.1 PRETRAINING
+
+
+**Datasets, architecture and hyperparameters.** Following Zhang et al. (2024b), we utilize Slimpajama (Soboleva et al., 2023) as the pre-training dataset and adopt a LLaMA-based architecture with
+RMSNorm (Zhang & Sennrich, 2019) and SwiGLU activations (Shazeer, 2020). We evaluate three
+model sizes: 130M, 350M, and 1.1B, and all experiments are conducted with BF16 mixed-precision
+training to enhance training efficiency. For each model size, we first tune the learning rate for the
+fp32-Muon from the set _{_ 2 _e −_ 3 _,_ 1 _e −_ 3 _,_ 6 _e −_ 4 _,_ 3 _e −_ 4 _}_, selecting the best learning rate based on
+the validation perplexity, respectively. We then apply the same learning rate to the 4-bit-Muon-base
+and 4-bit-Muon-GRASP models to ensure a fair comparison. See Appendix A for more detailed
+hyperparameter settings.
+
+
+**Training** **Curve.** Fig. 5 illustrates the training curves of different optimizers across three model
+sizes. The results show that even the 4-bit-Muon-base optimizer does not significantly affect training
+convergence, with an accuracy loss of 1%. Our proposed 4-bit-Muon-GRASP reduces the training
+gap with fp32-Muon to less than 0.2%, and on the 1.1B model, 4-bit-Muon-GRASP even achieves
+no loss in training accuracy.
+
+
+**Accuracy** **of** **4-bit** **Optimizers.** In line with Xiong et al. (2025), to assess whether our memory
+efficient 4-bit optimizers could maintain accuracy on downstream tasks, we evaluate zero-shot performance using the lm-evaluation-harness (Gao et al., 2021) codebase on standard benchmarks,
+including HellaSwag (Zellers et al., 2019), ARC (Yadav et al., 2019), BoolQ (Clark et al., 2019),
+
+
+7
+
+
+Table 3: Statistics of different optimizers: the step time (s), total memory usage (GB), and validation
+perplexity ( _↓_ ) after training for 10K steps.
+
+
+**130M** **350M** **1.1B**
+
+
+time mem PPL time mem PPL time mem PPL
+
+
+**fp32-Muon** 31.8 1.76 19.21 45.8 4.04 15.57 61.3 13.22 12.48
+**8-bit-Muon** 31.9 1.47 19.29 45.7 3.35 15.65 61.5 13.22 12.46
+**4-bit-Muon-base** 31.9 1.42 19.73 45.8 3.23 15.96 61.5 10.54 12.76
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|AdamW|Col6|Col7|Col8|Memory|Col10|Col11|Col12|y Usage of Different O|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Optimizers|Col22|Col23|Col24|Col25|OOM|Col27|Col28|Col29|Col30|Col31|Col32|Col33|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||~~damW~~<br>~~uon~~|~~damW~~<br>~~uon~~|~~damW~~<br>~~uon~~|~~damW~~<br>~~uon~~||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+|8bit-M<br>|8bit-M<br>|8bit-M<br>|8bit-M<br>|uon<br>|uon<br>|uon<br>|uon<br>|||||||||||||||||||~~57.99~~|~~57.99~~||||||
+|~~4bit-A~~<br>~~4bit-M~~|~~4bit-A~~<br>~~4bit-M~~|~~4bit-A~~<br>~~4bit-M~~|~~4bit-A~~<br>~~4bit-M~~|~~amW~~<br>~~uon-base~~|~~amW~~<br>~~uon-base~~|~~amW~~<br>~~uon-base~~|~~amW~~<br>~~uon-base~~||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||
+|4bit-M|4bit-M|4bit-M|4bit-M|uon-GRASP|uon-GRASP|uon-GRASP|uon-GRASP|||||45.33|45.33|45.33|45.33|45.33|45.33|45.33|45.33||||||||45.|08<br>44.97<br>41.42<br>41.81|08<br>44.97<br>41.42<br>41.81|08<br>44.97<br>41.42<br>41.81|08<br>44.97<br>41.42<br>41.81|08<br>44.97<br>41.42<br>41.81|
+|||||||||||||||||||34.53<br>|34.53<br>||||||||||||||
+||||||||||||||||||||||||||||||||||
+||||||||||||||||||||26|78<br>26.72<br>24.56<br>24.79|78<br>26.72<br>24.56<br>24.79|78<br>26.72<br>24.56<br>24.79|78<br>26.72<br>24.56<br>24.79|78<br>26.72<br>24.56<br>24.79|||||||||
+||||||||||||||||||||||||||||||||||
+|||||16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|74<br>10.71<br>10.04<br>10.14|74<br>10.71<br>10.04<br>10.14|74<br>10.71<br>10.04<br>10.14|74<br>10.71<br>10.04<br>10.14|74<br>10.71<br>10.04<br>10.14|||||||||||||||||
+|||||16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|||||||||||||||||||||||||
+|||||16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|16.91<br>13.22<br>10.|||||||||||||||||||||||||
+|4.98<br>4.04<br>3.|4.98<br>4.04<br>3.|4.98<br>4.04<br>3.|4.98<br>4.04<br>3.|36<br>3.35<br>3.23<br>3.26|36<br>3.35<br>3.23<br>3.26|36<br>3.35<br>3.23<br>3.26|36<br>3.35<br>3.23<br>3.26|36<br>3.35<br>3.23<br>3.26|||||||||||||||||||||||||
+|4.98<br>4.04<br>3.|||||||||||||||||||||||||||||||||
+
+
+350M 1.1B 3B 5B
+Model Size
+
+
+Figure 6: **Total training memory usage** across different optimizers and model sizes, evaluated with
+one sequence of length 1024 on a single device.
+
+
+OpenbookQA (Mihaylov et al., 2018), SciQ (Johannes Welbl, 2017), PIQA (Bisk et al., 2020),
+Winogrande (Sakaguchi et al., 2021). The corresponding results are shown in Tab. 2. For the
+350MB model, 4-bit-Muon-base and 4-bit-Muon-GRASP achieve an average accuracy of 44.6 and
+44.5, respectively, while the baseline performs at 43.7. A similar trend is observed with the 130M
+and 1.1B models. These results show that 8-bit-Muon and our 4-bit-Muon-GRASP could match
+or exceed fp32-Muon performance across all tasks, while 4-bit-Muon-base shows a slight accuracy
+loss.
+
+
+**Memory** **and** **Computing** **Efficiency.** The training statistics are presented in Tab. 3, where the
+4-bit-Muon-base shows degradation in training accuracy, whereas our 4-bit-Muon-GRASP demonstrates negligible accuracy loss, particularly with the 1.1B model size. Moreover, we find that the
+training time overhead introduced by quantization is minimal and a detailed breakdown of the cost
+of power iteration and other optimzier logics are shown in Appendix B.2. Fig. 6 provides a further
+total memory usage comparison with the full-precision AdamW, 4-bit AdamW, and 8-bit Muon optimizers, with model sizes scaled up to 3B and 5B. We observe that the 4-bit Muon optimizer is the
+most memory-efficient among all, achieving memory reductions of up to 48% and 28% compared to
+fp32-AdamW and fp32-Muon, respectively. However, for smaller model sizes, the memory reduction is not substantial, and the memory savings plateau as the bitwidth decreases. This is because we
+report total memory consumption, encompassing data, activations, weight gradients, and memory
+fragments, rather than isolating the optimizer’s memory consumption alone. We also compare our
+low-bit compression optimizer with cpu-offloading optimizer, see Appendix B.1 for details.
+
+
+4.2 FINE-TUNING
+
+
+**Experimental** **Setup.** We select two pretrained models: the general model Qwen2.5-7B (Yang
+et al., 2025a) and the domain-specific model Qwen2.5-7B-math (Yang et al., 2024a), to evaluate the
+effects of different optimizers on both general capabilities and advanced mathematical reasoning.
+
+
+Our implementation builds upon the verl framework (Sheng et al., 2025). Since Muon requires the
+full gradient matrix to calculate the updates, and PyTorch Fully Sharded Data Parallel is not directly
+applicable to Muon, we refer to the public implementation of distributed Muon (hor, 2025; Ahn
+et al., 2025). We further implement the distributed 4-bit-Muon-base and distributed 4-bit-Muon
+
+8
+
+
+Table 4: Comparison of three optimizers applied to the SFT of the Qwen2.5-7B and Qwen2.5-7BMath pretrained models.
+
+
+**Benchmark (Metric)** # **Shots** **Origin** **SFT(fp32)** **SFT(4bit-base)** **SFT(4bit-GRASP)**
+
+
+Pretrained model: Qwen2.5-7B
+
+
+**MMLU(EM)** 0-shot(CoT) 71.9 72.0 72.1 72.0
+**HumanEval (Pass@1)** 0-shot 56.1 76.2 76.6 76.7
+**MBPP (Pass@1)** 0-shot 64.4 71.4 70.3 70.9
+**GSM8K (EM)** 5-shot 80.3 85.4 84.8 85.2
+
+
+Pretrained model: Qwen2.5-7B-Math
+
+
+**MATH (Pass@1)** 0-shot 65.4 70.5 69.8 70.8
+**Minerva Math (Pass@1)** 0-shot 12.1 26.8 27.9 29.0
+**Olympiad Bench (Pass@1)** 0-shot 27.3 36.0 35.9 35.4
+
+
+**Average**    - 53.9 62.6 62.5 62.8
+
+
+(a) (b) (c)
+
+
+Figure 7: Ablation studies on pretraining: (a) Selection of different top singular space ranks, (b)
+Comparison of group and grid quantization, (c) Preservation of only the top singular space.
+
+
+GRASP, where the quantization and dequantization are performed in a partitioned shape, and the
+subspace preservation of momentum is carried out globally. See Appendix A for training details.
+
+
+**Performance on Downstream Tasks.** For general model, we use lm-eval-harness (Gao et al., 2021)
+to evaluate on benchmarks including MMLU (Hendrycks et al., 2020), HumanEval (Chen et al.,
+2021), MBPP (Austin et al., 2021) and GSM8K (Cobbe et al., 2021). For high-level mathematical
+reasoning model, we evaluate on established benchmarks including Math (Hendrycks et al., 2021),
+Minerva Math (Lewkowycz et al., 2022), and Olympiad Bench (olympiad problems 2024, 2024).
+The evaluation metric and results are shown in Tab. 4, where we compare the performance of finetuned models with different optimizers. The results demonstrate that our 4-bit-Muon optimizers will
+not destroy the capabilities of pretrained models, and the 4-bit-Muon-GRASP achieves performance
+comparable to that of the 32-bit Muon across all tasks.
+
+
+4.3 ABLATION STUDIES
+
+
+**How does the rank of the top** **singular space affect convergence,** **memory,** **and computing ef-**
+**ficiency?** We preserve the top singular space with different ranks, ranging from 1/64 to 1/2, and
+perform pre-training on LLaMA-350M. Fig. 7 (a) illustrates that the gap of the training curve between our method and fp32 baseline widens as the rank decreases. Notably, when the rank of the top
+singular space is set to half of the rank of the matrix _M_, the training loss shows no difference from
+the baseline. The impact of different ranks on memory usage and time is discussed in Appendix B.4.
+
+
+**What happens if we preserve only the top singular space while discarding the residual singular**
+**space?** Fig. 7 (c) shows the results when only the full-precision top singular space is preserved,
+with the rank ranging from 1/2 to 1/16. The results demonstrate that discarding the residual singular
+space leads to a significant degradation in training accuracy. Even with a 1/2 rank approximation, the
+training accuracy loss exceeds 2%. This underscores the importance of the residual singular space
+and suggests that the orthogonalization of Muon prevents a straightforward low-rank approximation.
+
+
+**Comparison between grid quantization and group quantization.** We compare the effects of grid
+quantization and group quantization on training performance. To provide a clearer comparison, we
+
+
+9
+
+
+directly compress the moment matrix without preserving the top singular space. As shown in Fig. 7
+(b), grid quantization reduces the accuracy loss of group quantization by half. See Appendix B.4 for
+more ablation studies.
+
+
+**Comparison** **of** **different** **number** **of** _**Power**_ _**Itera-**_
+_**tion**_ **steps.** To evaluate the approximation accuracy
+of _Power_ _Iteration_ with different step, Fig. 8 report
+
+0.10
+
+the relative error during training, with 1-step, 2-step,
+and 3-step power iterations, respectively. The rel- 0.08
+ative error here defined as _RE_ ( **U** _k_ **Σ** _k_ **V** _k_ _[⊤][,]_ **[ PR]** _[⊤]_ [)][,] 0.06
+where **U** _k_ **Σ** _k_ **V** _k_ _[⊤]_ [represents the accurate top singu-] 0.04
+lar space, and **PR** _[⊤]_ is the approximation obtained
+through power iteration. The results demonstrate 0.02
+that the error gap between the 1-step and multi-step 0.00
+
+|Col1|1 step PowerIter|
+|---|---|
+||<br>2 step PowerIter<br>~~3 step PowerIter~~|
+
+
+0.0
+
+iterations is minimal. In fact, the approximation error of the 1-step power method already reaches as Figure 8:
+low as 0.01, indicating that a single iteration is suffi- ing.
+cient for the algorithm to accurately identify the top singular vector.
+
+
+0.10
+
+
+0.08
+
+
+0.06
+
+
+0.04
+
+
+0.02
+
+
+0.00
+
+
+0.0 2.5 5.0 7.5 10.0 12.5 15.0
+Training Steps (10^2)
+
+
+Figure 8: Approximation error during training.
+
+
+5 RELATED WORKS
+
+
+**Quantization-based** **memory** **efficient** **optimizers.** Dettmers et al. (2021) propose block-wise
+dynamic quantization, allowing first-order optimizers to operate with 8-bit states, while Li et al.
+(2023) further compresses the Adam/AdamW optimizer states to 4 bits by applying finer-grained
+quantization and removing zero points from the second moment. Moreover, Wang et al. (2024)
+introduces 4-bit second-order optimizers and exemplifies by 4-bit Shampoo.
+
+
+**Other memory efficient techniques.** Several works have explored approximating gradient statistics
+with sublinear memory cost relative to the number of parameters. For instance, Adafactor (Shazeer
+& Stern, 2018) uses the outer product of two vectors to approximate Adam’s second moment.
+SM3 (Anil et al., 2019) approximates the second moment in Adam using the statistics of its covers.
+LoRA (Hu et al., 2022) freezes the pretrained weights and tunes only the newly initialized low-rank
+parameters. Additionally, some approaches focus on reducing the memory consumption of activations, such as activation-compressed training and gradient checkpointing, which can be integrated
+with our optimizer to achieve further memory savings.
+
+
+6 CONCLUSION AND OUTLOOK
+
+
+In this paper, we introduce 4-bit-Muon-GRASP, a method for compressing the Muon optimizer
+to improve memory efficiency. By dividing the moment matrix into two parts and applying grid
+quantization, we are able to reduce memory usage by up to 28% while maintaining performance
+comparable to full-precision optimizers.
+
+
+**Limitations and Future Works.** The optimal quantization settings are likely dependent on the task,
+datasets, and training details, but the exploration in this paper is relatively limited to common LLM
+training scenarios. Due to resource limitations, our evaluation is currently limited to pretraining on
+1.1B models. We identify several open problems for 4-bit-Muon-GRASP, which include: 1) providing strategies or guidelines for automatic rank selection; 2) further enhancing memory efficiency
+by employing activation reduction methods; and 3) optimizing the efficiency and communication of
+low-bit optimizer algorithms in distributed scenarios.
+
+
+10
+
+
+DECLARATION OF AI USE
+
+
+We used Gemini/ChatGPT to assist in writing:
+1) Correcting grammar, improving clarity, and refining the flow of sentences.
+
+
+The LLMs do not contribute to research ideation, methodology, experimental design, data analysis,
+interpretation of results, or the creation of substantive academic content or references. We carefully
+review and approve all suggestions from the models, and we take full responsibility for the final
+manuscript.
+
+
+11
+
+
+REFERENCES
+
+
+Various approaches to parallelizing muon, 2025. [URL https://main-horse.github.io/](https://main-horse.github.io/posts/parallelizing-muon/)
+[posts/parallelizing-muon/.](https://main-horse.github.io/posts/parallelizing-muon/)
+
+
+Kwangjun Ahn, Byron Xu, Natalie Abreu, and John Langford. Dion: Distributed orthonormalized
+updates. _arXiv preprint arXiv:2504.05295_, 2025.
+
+
+Rohan Anil, Vineet Gupta, Tomer Koren, and Yoram Singer. Memory efficient adaptive optimization. _Advances in Neural Information Processing Systems_, 32, 2019.
+
+
+Jacob Austin, Augustus Odena, Maxwell Nye, Maarten Bosma, Henryk Michalewski, David Dohan,
+Ellen Jiang, Carrie Cai, Michael Terry, Quoc Le, et al. Program synthesis with large language
+models. _arXiv preprint arXiv:2108.07732_, 2021.
+
+
+Yatao Bian, Huaijin Wu, and Junchi Yan. Deep learning for affinity prediction and interface prediction in molecular interactions. _Deep Learning in Drug Design_, pp. 283–296, 2026.
+
+
+Yonatan Bisk, Rowan Zellers, Jianfeng Gao, Yejin Choi, et al. Piqa: Reasoning about physical
+commonsense in natural language. In _AAAI_, volume 34, pp. 7432–7439, 2020.
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large
+language models trained on code. _arXiv preprint arXiv:2107.03374_, 2021.
+
+
+Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam
+Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, et al. Palm:
+Scaling language modeling with pathways. _Journal_ _of_ _Machine_ _Learning_ _Research_, 24(240):
+1–113, 2023.
+
+
+Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina
+Toutanova. Boolq: Exploring the surprising difficulty of natural yes/no questions. _arXiv preprint_
+_arXiv:1905.10044_, 2019.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Tim Dettmers, Mike Lewis, Sam Shleifer, and Luke Zettlemoyer. 8-bit optimizers via block-wise
+quantization. _arXiv preprint arXiv:2110.02861_, 2021.
+
+
+Leo Gao, Jonathan Tow, Stella Biderman, Shawn Black, Anthony DiPofi, Charles Foster, Laurence
+Golding, Jasmine Hsu, Kyle McDonell, Niklas Muennighoff, et al. A framework for few-shot
+language model evaluation. _Version v0. 0.1. Sept_, 10:8–9, 2021.
+
+
+Ziao Guo, Yang Li, Chang Liu, Wenli Ouyang, and Junchi Yan. Acm-milp: Adaptive constraint
+modification via grouping and selection for hardness-preserving milp instance generation. In
+_Forty-first International Conference on Machine Learning_, 2024.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and
+Jacob Steinhardt. Measuring massive multitask language understanding. _arXiv_ _preprint_
+_arXiv:2009.03300_, 2020.
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. _arXiv_
+_preprint arXiv:2103.03874_, 2021.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022.
+
+
+Matt Gardner Johannes Welbl, Nelson F. Liu. Crowdsourcing multiple choice science questions.
+_arXiv:1707.06209v1_, 2017.
+
+
+12
+
+
+Keller Jordan, Yuchen Jin, Vlado Boza, You Jiacheng, Franz Cecista, Laker Newhouse, and
+Jeremy Bernstein. Muon: An optimizer for hidden layers in neural networks, 2024. _URL_
+_https://kellerjordan. github. io/posts/muon_, 6, 2024.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Nathan Lambert, Jacob Morrison, Valentina Pyatkin, Shengyi Huang, Hamish Ivison, Faeze Brahman, Lester James V Miranda, Alisa Liu, Nouha Dziri, Shane Lyu, et al. Tulu 3: Pushing frontiers
+in open language model post-training. _arXiv preprint arXiv:2411.15124_, 2024.
+
+
+Aitor Lewkowycz, Anders Andreassen, David Dohan, Ethan Dyer, Henryk Michalewski, Vinay Ramasesh, Ambrose Slone, Cem Anil, Imanol Schlag, Theo Gutman-Solo, et al. Solving quantitative
+reasoning problems with language models. _Advances in neural information processing systems_,
+35:3843–3857, 2022.
+
+
+Bingrui Li, Jianfei Chen, and Jun Zhu. Memory efficient optimizers with 4-bit states. _Advances in_
+_Neural Information Processing Systems_, 36:15136–15171, 2023.
+
+
+Jia Li, Edward Beeching, Lewis Tunstall, Ben Lipkin, Roman Soletskyi, Shengyi Huang, Kashif
+Rasul, Longhui Yu, Albert Q Jiang, Ziju Shen, et al. Numinamath: The largest public dataset in
+ai4maths with 860k pairs of competition math problems and solutions. _Hugging Face repository_,
+13(9):9, 2024.
+
+
+Yang Li, Lvda Chen, Haonan Wang, Runzhong Wang, and Junchi Yan. Generation as search operator
+for test-time scaling of diffusion-based combinatorial optimization. In _The_ _Thirty-ninth_ _Annual_
+_Conference on Neural Information Processing Systems_, 2025a.
+
+
+Yang Li, Jiale Ma, Yebin Yang, Qitian Wu, Hongyuan Zha, and Junchi Yan. Generative modeling
+reinvents supervised learning: Label repurposing with predictive consistency learning. In _Forty-_
+_second International Conference on Machine Learning_, 2025b.
+
+
+Jingyuan Liu, Jianlin Su, Xingcheng Yao, Zhejun Jiang, Guokun Lai, Yulun Du, Yidao Qin,
+Weixin Xu, Enzhe Lu, Junjie Yan, et al. Muon is scalable for llm training. _arXiv_ _preprint_
+_arXiv:2502.16982_, 2025.
+
+
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. _arXiv_ _preprint_
+_arXiv:1711.05101_, 2017.
+
+
+Xudong Lu, Qi Liu, Yuhui Xu, Aojun Zhou, Siyuan Huang, Bo Zhang, Junchi Yan, and Hongsheng Li. Not all experts are equal: Efficient expert pruning and skipping for mixture-of-experts
+large language models. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar (eds.), _Proceedings_
+_of_ _the_ _62nd_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_ _(Volume_ _1:_ _Long_
+_Papers)_, pp. 6159–6172, Bangkok, Thailand, August 2024. Association for Computational Lin[guistics. doi: 10.18653/v1/2024.acl-long.334. URL https://aclanthology.org/2024.](https://aclanthology.org/2024.acl-long.334/)
+[acl-long.334/.](https://aclanthology.org/2024.acl-long.334/)
+
+
+Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct
+electricity? a new dataset for open book question answering. In _EMNLP_, 2018.
+
+
+[Mathematical olympiad problems 2024. International mathematical olympiad, 2024. URL https:](https://www.imo-official.org)
+[//www.imo-official.org.](https://www.imo-official.org)
+
+
+Ning Qian. On the momentum term in gradient descent learning algorithms. _Neural networks_, 12
+(1):145–151, 1999.
+
+
+Chongli Qin and Jost Tobias Springenberg. Supervised fine tuning on curated data is reinforcement
+learning (and can be improved). _arXiv preprint arXiv:2507.12856_, 2025.
+
+
+Xiaohan Qin, Xiaoxing Wang, Ning Liao, Cancheng Zhang, Xiangdong Zhang, Mingquan Feng,
+Jingzhi Wang, and Junchi Yan. sstoken: Self-modulated and semantic-aware token selection for
+llm fine-tuning. _arXiv preprint arXiv:2510.18250_, 2025.
+
+
+13
+
+
+Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and Yuxiong He. Zero: Memory optimizations
+toward training trillion parameter models. In _SC20:_ _International_ _Conference_ _for_ _High_ _Perfor-_
+_mance Computing, Networking, Storage and Analysis_, pp. 1–16. IEEE, 2020.
+
+
+Samyam Rajbhandari, Olatunji Ruwase, Jeff Rasley, Shaden Smith, and Yuxiong He. Zero-infinity:
+Breaking the gpu memory wall for extreme scale deep learning. In _Proceedings_ _of_ _the_ _interna-_
+_tional conference for high performance computing,_ _networking,_ _storage and analysis_, pp. 1–14,
+2021.
+
+
+Jie Ren, Samyam Rajbhandari, Reza Yazdani Aminabadi, Olatunji Ruwase, Shuangyan Yang, Minjia Zhang, Dong Li, and Yuxiong He. _{_ Zero-offload _}_ : Democratizing _{_ billion-scale _}_ model
+training. In _2021 USENIX Annual Technical Conference (USENIX ATC 21)_, pp. 551–564, 2021.
+
+
+Bita Darvish Rouhani, Ritchie Zhao, Ankit More, Mathew Hall, Alireza Khodamoradi, Summer
+Deng, Dhruv Choudhary, Marius Cornea, Eric Dellinger, Kristof Denolf, et al. Microscaling data
+formats for deep learning. _arXiv preprint arXiv:2310.10537_, 2023.
+
+
+Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An adversarial winograd schema challenge at scale. _Communications of the ACM_, 64(9):99–106, 2021.
+
+
+Noam Shazeer. Glu variants improve transformer. _arXiv preprint arXiv:2002.05202_, 2020.
+
+
+Noam Shazeer and Mitchell Stern. Adafactor: Adaptive learning rates with sublinear memory cost.
+In _International Conference on Machine Learning_, pp. 4596–4604. PMLR, 2018.
+
+
+Guangming Sheng, Chi Zhang, Zilingfeng Ye, Xibin Wu, Wang Zhang, Ru Zhang, Yanghua Peng,
+Haibin Lin, and Chuan Wu. Hybridflow: A flexible and efficient rlhf framework. In _Proceedings_
+_of the Twentieth European Conference on Computer Systems_, pp. 1279–1297, 2025.
+
+
+Daria Soboleva, Faisal Al-Khateeb, Robert Myers, Jacob R Steeves, Joel Hestness, and Nolan Dey. SlimPajama: A 627B token cleaned and deduplicated version of RedPajama. [https://www.cerebras.net/blog/](https://www.cerebras.net/blog/slimpajama-a-627b-token-cleaned-and-deduplicated-version-of-redpajama)
+[slimpajama-a-627b-token-cleaned-and-deduplicated-version-of-redpajama,](https://www.cerebras.net/blog/slimpajama-a-627b-token-cleaned-and-deduplicated-version-of-redpajama)
+2023. [URL https://huggingface.co/datasets/cerebras/SlimPajama-627B.](https://huggingface.co/datasets/cerebras/SlimPajama-627B)
+
+
+Kimi Team, Yifan Bai, Yiping Bao, Guanduo Chen, Jiahao Chen, Ningxin Chen, Ruijue Chen,
+Yanru Chen, Yuankun Chen, Yutian Chen, et al. Kimi k2: Open agentic intelligence. _arXiv_
+_preprint arXiv:2507.20534_, 2025.
+
+
+Thijs Vogels, Sai Praneeth Karimireddy, and Martin Jaggi. Powersgd: Practical low-rank gradient
+compression for distributed optimization. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+32, 2019.
+
+
+Ruizhe Wang, Yeyun Gong, Xiao Liu, Guoshuai Zhao, Ziyue Yang, Baining Guo, Zhengjun Zha,
+and Peng Cheng. Optimizing large language model training using fp4 quantization. _arXiv preprint_
+_arXiv:2501.17116_, 2025.
+
+
+Runzhong Wang, Ziao Guo, Shaofei Jiang, Xiaokang Yang, and Junchi Yan. Deep learning of partial
+graph matching via differentiable top-k. In _Proceedings of the IEEE/CVF conference on computer_
+_vision and pattern recognition_, pp. 6272–6281, 2023.
+
+
+Sike Wang, Pan Zhou, Jia Li, and Hua Huang. 4-bit shampoo for memory-efficient network training.
+_Advances in Neural Information Processing Systems_, 37:126997–127029, 2024.
+
+
+Kaiyue Wen, Zhiyuan Li, Jason Wang, David Hall, Percy Liang, and Tengyu Ma. Understanding
+warmup-stable-decay learning rates: A river valley loss landscape perspective. _arXiv_ _preprint_
+_arXiv:2410.05192_, 2024.
+
+
+Huaijin Wu, Wei Liu, Yatao Bian, Jiaxiang Wu, Nianzu Yang, and Junchi Yan. Ebmdock: Neural
+probabilistic protein-protein docking via a differentiable energy model. In _The Twelfth Interna-_
+_tional Conference on Learning Representations_, 2024a.
+
+
+14
+
+
+Huaijin Wu, Lianqiang Li, Hantao Huang, Tu Yi, Jihang Zhang, Minghui Yu, and Junchi Yan.
+Hshare: Fast llm decoding by hierarchical key-value sharing. In _The_ _Thirteenth_ _International_
+_Conference on Learning Representations_, 2025.
+
+
+Huanjin Wu, Xinyu Ye, and Junchi Yan. Qvae-mole: The quantum vae with spherical latent variable
+learning for 3-d molecule generation. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 37:
+22745–22771, 2024b.
+
+
+Hao Xiong, Yebin Yang, Huaijin Wu, Xiaoqiu Zhong, Yehui Tang, Zhuo Xia, Xiaoxing Wang, and
+Junchi Yan. Reinvent the operation not the architecture: Quantum-inspired high-order product for
+compatible and improved llms training. In _Proceedings of the 31st ACM SIGKDD Conference on_
+_Knowledge Discovery and Data Mining V. 2_, pp. 3356–3365, 2025.
+
+
+Vikas Yadav, Steven Bethard, and Mihai Surdeanu. Quick and (not so) dirty: Unsupervised selection
+of justification sentences for multi-hop question answering. _arXiv_ _preprint_ _arXiv:1911.07176_,
+2019.
+
+
+An Yang, Beichen Zhang, Binyuan Hui, Bofei Gao, Bowen Yu, Chengpeng Li, Dayiheng Liu, Jianhong Tu, Jingren Zhou, Junyang Lin, et al. Qwen2. 5-math technical report: Toward mathematical
+expert model via self-improvement. _arXiv preprint arXiv:2409.12122_, 2024a.
+
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu,
+Chang Gao, Chengen Huang, Chenxu Lv, et al. Qwen2.5 technical report. _arXiv_ _preprint_
+_arXiv:2505.09388_, 2025a.
+
+
+Nianzu Yang, Huaijin Wu, Kaipeng Zeng, Yang Li, Siyuan Bao, and Junchi Yan. Molecule generation for drug design: a graph learning perspective. _Fundamental Research_, 2024b.
+
+
+Nianzu Yang, Songlin Jiang, Jian Ma, Huaijin Wu, Shuangjia Zheng, Wengong Jin, and Junchi
+Yan. Repurposing alphafold3-like protein folding models for antibody sequence and structure
+co-design. In _The_ _Thirty-ninth_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_,
+2025b.
+
+
+Yebin Yang, Huaijin Wu, Fu Guo, Lin Yao, Xiaohan Qin, Jingzhi Wang, Debing Zhang, and Junchi
+Yan. Jtok: On token embedding as another axis of scaling law via joint token self-modulation.
+_arXiv preprint arXiv:2602.00800_, 2026.
+
+
+Jingyang Yuan, Huazuo Gao, Damai Dai, Junyu Luo, Liang Zhao, Zhengyan Zhang, Zhenda Xie,
+Yuxing Wei, Lean Wang, Zhiping Xiao, et al. Native sparse attention: Hardware-aligned and
+natively trainable sparse attention. In _Proceedings of the 63rd Annual Meeting of the Association_
+_for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 23078–23097, 2025.
+
+
+Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine really finish your sentence? _arXiv preprint arXiv:1905.07830_, 2019.
+
+
+Biao Zhang and Rico Sennrich. Root mean square layer normalization. _Advances in neural infor-_
+_mation processing systems_, 32, 2019.
+
+
+Changwen Zhang, Wenli Ouyang, Hao Yuan, Liming Gong, Yong Sun, Ziao Guo, Zhichen Dong,
+and Junchi Yan. Towards imitation learning to branch for mip: A hybrid reinforcement learning based sample augmentation approach. In _The_ _twelfth_ _international_ _conference_ _on_ _learning_
+_representations_, 2024a.
+
+
+Peiyuan Zhang, Guangtao Zeng, Tianduo Wang, and Wei Lu. Tinyllama: An open-source small
+language model. _arXiv preprint arXiv:2401.02385_, 2024b.
+
+
+Jiawei Zhao, Zhenyu Zhang, Beidi Chen, Zhangyang Wang, Anima Anandkumar, and Yuandong
+Tian. Galore: Memory-efficient llm training by gradient low-rank projection. _arXiv_ _preprint_
+_arXiv:2403.03507_, 2024.
+
+
+Yanli Zhao, Andrew Gu, Rohan Varma, Liang Luo, Chien-Chin Huang, Min Xu, Less Wright,
+Hamid Shojanazeri, Myle Ott, Sam Shleifer, et al. Pytorch fsdp: experiences on scaling fully
+sharded data parallel. _arXiv preprint arXiv:2304.11277_, 2023.
+
+
+15
+
+
+Xinhao Zheng, Yang Li, Cunxin Fan, Huaijin Wu, Xinhao Song, and Junchi Yan. Learning plaintextciphertext cryptographic problems via anf-based sat instance representation. _Advances in Neural_
+_Information Processing Systems_, 37:41649–41669, 2024.
+
+
+16
+
+
+A DETAILS OF PRE-TRAINING SETTING
+
+
+Table 5: Hyperparameters for LLaMA model pretraining.
+
+
+**Parameters** **130M** **350M** **1.1B**
+
+
+Training
+
+
+Model
+
+
+Data
+
+
+lr-schedule WSD (Wen et al., 2024) WSD WSD
+max, min lr (1e-3, 1e-4) (6e-4, 6e-5) (6e-4, 6e-5)
+warmup-ratio 0.1 0.1 0.1
+decay-ratio 0.99 0.99 0.99
+AdamW- _β_ (0.95, 0.9) (0.95, 0.9) (0.95, 0.9)
+weight-decay 0.1 0.1 0.1
+grad ~~c~~ lip 1.0 1.0 1.0
+
+
+hidden dim. 768 1024 2048
+#layers 12 22 22
+#q heads 12 16 32
+#kv heads 4 4 4
+context-length 1024 1024 1024
+FFN size 1024 2560 5632
+
+
+tokenzier LLaMA-2 LLaMA-2 LLaMA-2
+#steps(B) 10K 20K 30K
+#Tokens(B) 10.5 21.0 31.4
+Batch size 1024 1024 1024
+
+
+**Pre-training.** We provide details of the LLaMA architecture and the hyperparameters used for pretraining. Tab. 5 presents the key hyperparameters for LLaMA models across different sizes. In all
+experiments, we use a WSD (warmup-stable-decay) learning rate schedule. The learning rate is
+warmed up for the first 10% of the training steps and then decays to 10% of the initial value during
+the final 1% of the training steps.
+
+
+**Fine-tuning.** For Qwen2.5-7B, we fine-tune the model using the open-source tulu-3-sft-mixture
+dataset (Lambert et al., 2024). Following Liu et al. (2025), the dataset is packed with a sequence
+length of 8k tokens, and the learning rate follows a cosine decay schedule, starting from 5 _×_ 10 _[−]_ [5] and
+gradually decaying to 2 _×_ 10 _[−]_ [6] . For Qwen2.5-7B-Math, we adopt the NuminaMath CoT dataset (Li
+et al., 2024) for fine-tuning, which consists of approximately 860,000 mathematical problems paired
+with their corresponding solutions. In accordance with Qin & Springenberg (2025), we randomly
+sample 100K instances from the dataset for training, and the dataset is packed with a sequence length
+of 2k tokens.
+
+
+B MORE EXPERIMENT RESULTS
+
+
+B.1 COMPARISON WITH CPU-OFFLOADING OPTIMIZERS
+
+
+Table 6: The optimizer updating time(s) of different methods.
+
+
+Model Size 130M 350M 1.1B 3B 5B
+
+
+fp32-Muon 0.18 0.25 0.39 0.55 0.75
+fp32-Muon-CPU 0.73 0.99 3.89 11.32 17.93
+4-bit-Muon-GRASP (rank 1/4) 0.55 0.91 1.82 2.85 4.21
+4-bit-Muon-GRASP (rank 1/16) 0.41 0.61 0.96 1.21 1.93
+4-bit-Muon-GRASP (rank 1/64) 0.39 0.54 0.76 0.88 1.43
+
+
+Tab. 6 and Tab. 7 shows the optimizer updating times (s) and optimizer memory usage (GB) of different methods, which demonstrate that the optimizer step time for CPU-offloaded Muon increases
+significantly, especially as the model size grows. For a 5B model, the optimizer time becomes
+20 times longer, introducing a substantial overhead. In contrast, our proposed 4-bit compression
+method, with a rank selection of 1/16, only doubles the time, while simultaneously reducing memory usage to approximately 1/7 of the original. This highlights that, compared to CPU-offloading
+methods, low-bit compression offers a more favorable balance between memory usage and time
+consumption.
+
+
+17
+
+
+Table 7: The optimizer memory usage (GB) of different methods.
+
+
+Model Size 130M 350M 1.1B 3B 5B
+
+
+fp32-Muon 0.41 0.94 3.88 11.81 19.97
+fp32-Muon-CPU 0 0 0 0 0
+4-bit-Muon-GRASP (rank 1/4) 0.11 0.25 1.06 3.03 5.42
+4-bit-Muon-GRASP (rank 1/16) 0.06 0.19 0.81 2.07 3.79
+4-bit-Muon-GRASP (rank 1/64) 0.05 0.16 0.74 1.92 2.86
+
+
+B.2 DETAILED BREAKDOWN OF OPTIMIZER TIME USAGE
+
+
+Table 8: Time (ms) of different optimizer logic.
+
+
+Model size (rank) 130M(1/4) 130M(1/16) 130M(1/64) 350M(1/4) 350M(1/16) 350M(1/64) 1.1B(1/4) 1.1B(1/16) 1.1B(1/64)
+
+
+Power iteration 134 46 32 410 129 58 1010 242 94
+NS iteration 98 98 98 224 224 224 378 378 378
+param update 12 12 12 22 22 22 35 35 35
+
+
+Here, we provide a detailed breakdown of the cost of power iteration versus the rest of the optimizer
+logic and the results are shown in Tab 8. We find that when the rank is selected as 1/16, the time
+required for Power Iteration is less than that of the NS iteration. However, when the rank is larger
+(1/4), the QR decomposition in Power Iteration becomes relatively time-consuming and exceeds the
+time required for the NS iteration. This pattern holds across different model sizes. In the overall
+training steps, the forward and backward processes account for the majority of the time, with the
+increase in optimizer time (0.2-0.6 seconds) considered a minimal overhead.
+
+
+B.3 MORE ABLATION RESULTS OF DIFFERENT RANKS.
+
+
+Table 9: The optimizer memory usage (GB) of different ranks.
+
+
+Model Size 130M 350M 1.1B 3B 5B
+
+
+4-bit-Muon-GRASP (rank 1/4) 0.11 0.25 1.06 3.03 5.42
+4-bit-Muon-GRASP (rank 1/8) 0.08 0.23 0.92 2.57 4.62
+4-bit-Muon-GRASP (rank 1/16) 0.06 0.19 0.81 2.07 3.79
+4-bit-Muon-GRASP (rank 1/32) 0.05 0.17 0.78 1.99 3.32
+4-bit-Muon-GRASP (rank 1/64) 0.05 0.16 0.74 1.92 2.86
+
+
+Here, we also provide the memory usage and time of different rank chosen, and the results are shown
+in Tab. 9 and Tab. 10. To highlight the contrast more clearly, here we focus only on the optimizer
+itself. These results reveal a trade-off: as the rank increases, model performance improves, but this
+comes at the cost of increased time consumption and memory usage. Consequently, in practical
+training, we propose selecting the highest possible rank that remains within the acceptable limits of
+memory and time usage to achieve a good performance. Furthermore, we have included additional
+visualizations of the singular value distributions in Appendix B.5, which reveal that the distributions
+exhibit similar patterns across different model sizes. Therefore, the rank selected for smaller models
+can also be transferred to larger models.
+
+
+B.4 DATA FORMATS AND LEARNING RATES
+
+
+Here, we compare the impact of FP4 and INT4 data formats on quantization. The implementation
+of INT4 is straightforward: after dividing by the normalization scale, we apply the _round()_ function.
+For FP4 representation, we adopt the E2M1 format as defined in prior studies (Rouhani et al., 2023),
+which includes the following values:
+
+
+_{−_ 6 _, −_ 4 _, −_ 3 _, −_ 2 _, −_ 1 _._ 5 _, −_ 1 _, −_ 0 _._ 5 _,_ 0 _,_ 0 _._ 5 _,_ 1 _,_ 1 _._ 5 _,_ 2 _,_ 3 _,_ 4 _,_ 6 _}_ (14)
+
+
+18
+
+
+Table 10: The optimizer updating time(s) of different ranks.
+
+
+Model Size 130M 350M 1.1B 3B 5B
+
+
+4-bit-Muon-GRASP (rank 1/4) 0.55 0.91 1.82 2.85 4.21
+4-bit-Muon-GRASP (rank 1/8) 0.46 0.72 1.30 1.94 2.72
+4-bit-Muon-GRASP (rank 1/16) 0.41 0.61 0.96 1.21 1.93
+4-bit-Muon-GRASP (rank 1/32) 0.40 0.56 0.83 1.04 1.60
+4-bit-Muon-GRASP (rank 1/64) 0.39 0.54 0.76 0.88 1.43
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+||||
+||||
+||||
+||||
+
+
+Figure 9: Left: Comparision of INT4 and FP4 data format. Right: Different learning rate.
+
+
+(a) 130M (b) 350M (c) 1.1B
+
+
+Figure 10: Visualization of momentum in _transformer.layers.7.attn.o_ ~~_p_~~ _roj_ in different size of
+LLaMA model.
+
+
+Following Wang et al. (2025), we implement a look-up table for FP4 quantization within a Triton
+kernel. Quantization functions typically involve element-wise operations on large datasets, which
+can be parallelized to leverage the highly parallel computing power of GPUs. Fig. 9 (left) shows
+that the training curves for both data formats are nearly identical, but the look-up process in FP4
+introduces a slight efficiency overhead.
+
+
+We also compare the effect of different learning rates on the convergence of training with 4-bitMuon-GRASP optimizer. We select learning rates from the set _{_ 3e-4, 6e-4, 1e-3, 3e-3 _}_ . Figure 9
+(right) shows that 4-bit-Muon-GRASP converges to similar levels across different learning rates.
+
+
+19
+
+
+B.5 SINGULAR VALUE DISTRIBUTION OF THE MOMENT MATRICES FOR MODELS OF
+DIFFERENT SIZES.
+
+
+Here we present a single representative visualization illustrating the singular value distribution of
+the moment matrices across different model scales, see Fig 10.
+
+
+C BROADER DISCUSSION OF LOW-BIT-MUON BEYOND LLMS
+
+
+Beyond LLM pretraining, low-bit optimizers can benefit a wide range of memory-constrained learning settings (Qin et al., 2025; Lu et al., 2024). In particular, Muon has already demonstrated strong
+empirical performance beyond language modeling, including in computer vision and other largescale training regimes, highlighting the generality of optimizer-level improvements. In combinatorial optimization, where neural solvers often operate on large graphs and long trajectories (Wang
+et al., 2023; Guo et al., 2024; Zhang et al., 2024a; Li et al., 2025a; Zheng et al., 2024), reducing
+optimizer-state precision directly lowers the training memory footprint and enables scaling to larger
+problem instances. Similar benefits arise in bioinformatics (Wu et al., 2024a; Bian et al., 2026),
+where high-dimensional biological data and limited hardware budgets make memory efficiency a
+practical bottleneck.
+
+
+Similarly, in generative modeling—including diffusion models, autoregressive transformers (Li
+et al., 2025b;b), and graph-based molecule generators—training (Yang et al., 2024b; Wu et al.,
+2024b; Yang et al., 2025b) is frequently dominated not only by model parameters but also by optimizer states. Low-bit optimizers can therefore substantially reduce the training memory footprint,
+facilitating scaling to higher resolutions, longer generation horizons, or larger latent spaces. This is
+particularly beneficial for scientific generative tasks such as molecular and materials design, where
+models must process complex graph or 3D structural representations. More broadly, low-bit optimizers provide an orthogonal direction to existing efficiency techniques such as parameter-efficient
+training and model quantization, targeting the often-overlooked memory cost of optimizer states and
+enabling scalable learning across a wide range of domains beyond LLMs.
+
+
+20

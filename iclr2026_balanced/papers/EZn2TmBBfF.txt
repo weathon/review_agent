@@ -1,0 +1,2676 @@
+# FROM CURIOSITY TO CAUTION: MITIGATING REWARD HACKING FOR BEST-OF- N WITH PESSIMISM
+
+
+**Zhuohao Yu** **[1]** **,** **Zhiwei Steven Wu** **[1]** **,** **Adam Block** **[2]**
+
+1Carnegie Mellon University 2Columbia University
+```
+   yu.zhuohao@icloud.com, zstevenwu@cmu.edu, adam.block@columbia.edu
+
+```
+
+ABSTRACT
+
+
+Inference-time compute scaling has emerged as a powerful paradigm for improving language model performance on a wide range of tasks, but the question of
+how best to use the additional compute remains open. A popular approach is
+_Best-of-N_ (BoN) sampling, where _N_ candidate responses are generated, scored
+according to a reward model, and the highest-scoring response is selected. While
+this approach can improve performance, it is vulnerable to _reward hacking_, where
+performance degrades as _N_ increases due to the selection of responses that exploit imperfections in the reward model instead of genuinely improving generation
+quality. Prior attempts to mitigate reward hacking—via stronger reward models
+or heavy-handed distributional regularization—either fail to fully address overoptimization or are too conservative to exploit additional compute. In this work,
+we explore the principle of _pessimism_ in reinforcement learning (RL), which uses
+lower confidence bounds on value estimates to avoid out-of-distribution (OOD)
+actions with uncertain reward estimates. Our approach, termed as _caution_, can
+be seen as the reverse of _curiosity_ : where curiosity (e.g., via Random Network
+Distillation, RND) rewards prediction error as a signal of novelty, caution penalizes prediction error as a signal of distributional uncertainty. Practically, caution
+trains an error model on typical responses and uses its prediction error to lower reward estimates for atypical ones. Our extensive empirical evaluation demonstrates
+that caution is a simple, computationally efficient approach that substantially mitigates reward hacking in BoN sampling. We also provide a theoretical analysis in
+a simplified linear setting, which shows that caution provably improves over the
+standard BoN approach. Together, our results not only establish caution as a practical solution to reward hacking, but also provide evidence that curiosity-based
+approaches can be a general OOD detection technique in LLM settings.
+
+
+1 INTRODUCTION
+
+
+Inference-time scaling has emerged as a transformative paradigm for enhancing language model
+performance, enabling significant improvements across a wide range of reasoning tasks without increasing model size (Brown et al., 2024; Guo et al., 2025; Jaech et al., 2024). This success motivates
+the question of how best to leverage additional inference-time compute to maximize performance.
+A particularly popular and effective approach is _Best-of-N_ (BoN) sampling (Stiennon et al., 2020;
+Nakano et al., 2021; Wang et al., 2022; Li et al., 2022; Huang et al., 2025a), where multiple candidate responses are generated for a given prompt, scored according to a reward model _r_ ˆ, and the
+highest-scoring response is selected. This approach capitalizes on the intuition that generating more
+candidates should increase the probability of finding higher-quality solutions, allowing the model to
+effectively ‘explore’ a larger portion of the response space than it could with only a single response.
+
+
+While BoN is a simple and competitive baseline that is capable of astonishing gains in many settings
+(Brown et al., 2024), its success is fundamentally limited by the quality of the reward model _r_ ˆ
+used to score and select responses. Indeed, a common phenomenon often occurs with BoN, where
+performance initially improves as _N_ increases, but then hits an inflection point after which larger
+_N_ lead to increasingly worse outcomes (Gao et al., 2023; Huang et al., 2025b; Khalaf et al., 2025);
+an example of this phenomenon can be seen in Figure 1, where we plot the performance of BoN on
+the mathematical reasoning task GSM8K for different _N_ scored by several different reward models.
+
+
+1
+
+
+85.0
+
+
+82.5
+
+
+80.0
+
+
+77.5
+
+
+75.0
+
+
+72.5
+
+
+70.0
+
+
+67.5
+
+
+65.0
+
+
+N samples per problem
+
+
+Figure 1: **Average** **Accuracy** **with** **different** **sampling** **budgets** **for** **Best-of-** _N_ on the GSM8k
+dataset. We see that standard Best-of- _N_ sampling (blue, red, and gold) suffers from reward hacking,
+exhibiting the characteristic rise-and-fall pattern as _N_ increases. In contrast, caution (our approach,
+green) consistently improves with larger _N_, effectively mitigating reward hacking.
+
+
+This counterintuitive phenomenon, whereby increasing _N_ leads to worse performance, occurs due
+to _reward_ _hacking_, the process by which BoN selects responses that exploit _r_ ˆ as opposed to the
+ground truth reward _r_ _[⋆]_ we actually care about; while ˆ _r_ may be a reasonable approximation to _r_ _[⋆]_ on
+‘typical’ generations, as _N_ increases, BoN selects more atypical responses lying outside the training
+distribution of ˆ _r_ that achieve high ˆ _r_ scores through spurious correlations rather than genuine quality
+improvements. In other words, reward hacking is a manifestation of Goodhart’s Law: whenever a
+metric (in this case _r_ ˆ) becomes an optimization target, it ceases to be a reliable measure of quality
+(Goodhart, 1984; Weng, 2024); for example, reward models are known to favor certain formatting
+preferences and surface-level patterns learned during training that do not necessarily correspond to
+improved reasoning or correctness (Liu et al., 2024b; Yu et al., 2025; Bukharin et al., 2025).
+
+
+With the intuition that reward hacking is caused by out-of-distribution (OOD) generations from
+the perspective of the reward model, several works have proposed mitigation attempts by either
+improving the reward model (Liu et al., 2025; Yu et al., 2025) or by regularizing the selection process to favor in-distribution responses (Huang et al., 2025b). Unfortunately, the former approach is
+fundamentally limited by the asymmetric difficulty of the problem: while it is relatively straightforward to obtain representative examples of high-quality responses through careful curation and
+human annotation, exhaustively characterizing all possible reward hacking strategies is intractable.
+Representative of the latter work is Huang et al. (2025b), who propose to regularize the selection
+process to ensure that the distribution of selected responses does not drift too far from the distribution of responses seen during reward model training in a strong information theoretic sense. The
+authors provide strong theoretical guarantees on the efficacy, monotonicity, and optimality of their
+approach, and demonstrate that it can be efficiently implemented in practice through a simple rejection sampling scheme (Block & Polyanskiy, 2023). However, this approach is overly conservative in
+practice, preventing the selection of genuinely better responses that are slightly out-of-distribution,
+and thus fails to fully leverage the benefits of inference-time scaling. The problem arises because
+the regularization is _distributional_ and thus simultaneously ensures all possible OOD responses are
+penalized equally, regardless of whether or not they are likely to arise from imperfections in _r_ ˆ. The
+starting point for this paper is thus to ask: _**Can**_ _**we**_ _**design**_ _**a**_ _**BoN**_ _**sampling**_ _**scheme**_ _**that**_ _**is**_ _**both**_
+_**robust to reward hacking and still able to leverage the full benefits of inference-time scaling?**_
+
+
+**Contributions.** We answer this question in the affirmative by introducing _caution_, an inference-time
+instantiation of the _pessimism_ principle from Reinforcement Learning (RL) (Jin et al., 2021; Guo
+et al., 2022). Pessimism relies on lower confidence bounds to avoid selecting OOD actions with
+uncertain rewards. While Huang et al. (2025b) implements pessimism at the _distribution_ level by
+constraining the sampling distribution to remain close to the base policy, we instead apply it at the
+
+
+2
+
+
+Figure 2: **Overview.** Predictor is trained to match RM features on typical responses; at inference,
+we select the candidate with the highest pessimistic reward, down-weighting OOD ones.
+
+
+_reward_ level: we penalize OOD responses by subtracting per-response uncertainty estimates from
+the scores assigned by ˆ _r_, and then select the response with the highest pessimistic score.
+
+
+Conceptually, caution is the dual of _curiosity_, a principle used to drive optimistic exploration in deep
+RL (Pathak et al., 2017; Burda et al., 2018). As in curiosity, we measure uncertainty by fixing a simple learning target (e.g., a frozen feature embedding), training a student model to predict this target
+on in-distribution data, and using the prediction error as an uncertainty signal. Unlike curiosity, however, our setting is fully _offline_, so no continual student training is required—making the method significantly simpler and more practical. Through extensive empirical evaluation, we show that caution
+is computationally efficient and effectively mitigates reward hacking in BoN sampling. We further
+provide a theoretical analysis in a simplified linear setting, proving that caution strictly improves
+over standard BoN. Taken together, these results demonstrate that caution is both a powerful practical solution to reward hacking and compelling evidence for the broader efficacy of curiosity-style
+uncertainty signals in OOD detection and pessimistic policy learning for language models.
+
+
+2 METHODOLOGY
+
+
+2.1 PROBLEM FORMULATION
+
+
+Consider a trained language model (LM) _π_, where _π_ : _X_ _→_ ∆( _Y_ ) is a map from prompts _x_ _∈_
+_X_ to distributions over responses _y_ _∈Y_ . While the LM is typically an autoregressive model,
+generating one token at a time before feeding the generated tokens back in as context, we abstract
+this process away and instead consider prompts and responses as single entities, possibly consisting
+of the concatenation of many individual tokens. Suppose we have access to a learned reward model
+_r_ ˆ : _X ×Y_ _→_ R that assigns a score to a prompt-response pair ( _x, y_ ) intended to reflect the quality of
+the response _y_ to the prompt _x_ . While the learner has access to ˆ _r_, the true goal is to output a response
+that approximately maximizes some ground-truth reward _r_ _[⋆]_ : _X_ _× Y_ _→_ R, which is unknown to
+the learner. We focus on _reward-hacking_ behavior that seeks to maximize ˆ _r_ at the expense of _r_ _[⋆]_ .
+
+
+Given a prompt _x_, the learner samples _N_ candidate responses _y_ 1 _, . . ., yN_ _∼_ _π_ ( _·|x_ ) independently
+from the LM and then selects one of these responses _y_ ˆ _i_ with [ˆ] _i ∈_ [ _N_ ] to output. Perhaps the simplest
+strategy is the _Best-of-N_ (BoN) strategy, which simply selects the response with the highest reward
+model score: [ˆ] _i_ = [ˆ] _iN_ = argmax _i∈_ [ _N_ ] ˆ _r_ ( _x, yi_ ). Unfortunately, this strategy is vulnerable to reward
+hacking when we only have _r_ ˆ _≈_ _r_ _[⋆]_ on typical samples from _π_ . As _N_ grows large, the distribution
+of [ˆ] _iN_ can differ substantially from that of typical samples from _π_, leading to poor performance with
+respect to _r_ _[⋆]_ as shown in (Huang et al., 2025b). While that work proposes to address this issue by
+constraining the BoN sampling distribution _π_ to be close to _π_, we instead propose to directly apply
+                     regularization to the reward estimates themselves. Thus, we will design an uncertainty estimate
+_α_ : _X_ _× Y_ _→_ R _≥_ 0 that quantifies how uncertain we are about the reward model’s estimate _r_ ˆ( _x, y_ )
+for a given prompt-response pair ( _x, y_ ) and then define _r_ ˆLCB( _x, y_ ) = _r_ ˆ( _x, y_ ) _−_ _λα_ ( _x, y_ ) for some
+
+
+3
+
+
+GSM8K (Trained)
+
+
+MATH-500
+
+
+BigBench-Hard
+
+
+82.5
+
+
+80.0
+
+
+77.5
+
+
+75.0
+
+
+72.5
+
+
+14
+
+
+12
+
+
+10
+
+
+8
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+70.0
+
+
+N samples per problem
+
+
+0
+
+
+Reward Model Pessimism Reward Model + Pessimism
+
+
+Figure 3: **Scaling** **over** _N_ **across** **distributions** **and** **domains.** Best-of- _N_ sampling on GSM8K,
+MATH-500, and BigBench-Hard. Curves compare selection by Reward Model, Pessimism, and
+Reward Model + Pessimism. Note that the _pessimism_ _function_ _is_ _trained_ _only_ _on_ _GSM8K_ ; thus,
+MATH-500 represents an out-of-distribution setting, while BigBench-Hard represents a fully outof-domain setting.
+
+
+_λ_ _>_ 0 to be a pessimistic variant of the reward model that penalizes uncertain responses (Jin et al.,
+2021). As long as _α_ ( _x, y_ ) is small for typical samples from _π_ ( _·|x_ ) and large for ‘atypical’ samples,
+this approach will successfully penalize reward-hacking responses by ensuring that _r_ ˆLCB _≤_ _r_ _[⋆]_ and
+this inequality is approximately tight for actually good quality responses. The final algorithm will
+thus be to return [ˆ] _i_ = argmax _i∈_ [ _N_ ] ˆ _r_ LCB( _x, yi_ ) and the question becomes _what choice of uncertainty_
+_estimate α appropriately captures OOD responses in a reward-aware manner?_
+
+
+2.2 CURIOSITY TO CAUTION: INSTANTIATING PESSIMISM
+
+
+Our approach introduces the principle of _caution_, a phenomenon dual to the well-known technique
+of _curiosity_ used in online RL to incentivize exploration (Pathak et al., 2017; Burda et al., 2018).
+While in online RL, OOD states are desirable (as they represent good exploration targets), in our
+offline setting, OOD responses are to be avoided, as we have no reliable way to estimate their
+true reward given that ˆ _r_ _≈_ _r_ _[⋆]_ only on typical responses from _π_ . We draw inspiration from curiosity
+(Pathak et al., 2017) and Random Network Distillation (RND) (Burda et al., 2018) in order to ensure
+that selected responses remain close to the distribution _π_ on which ˆ _r_ is reliable.
+
+
+In curiosity and RND, the core idea is to continually train a predictor network to match the outputs
+of a fixed target that is easily evaluated by the learner; the supervised learning error then becomes
+a proxy for OOD detection, with the intuition being that the predictor will be accurate on states
+similar to those seen during training and inaccurate otherwise. While empirically successful as an
+‘intrinsic reward’ for optimistic exploration, this method can be challenging to implement due to the
+continued training of the predictor during online RL, which can lead to nontrivial memory and time
+overheads in practical RL pipelines. Our method uses the same core idea of using the supervised
+learning error as a proxy for OOD detection, but is _trained_ _fully_ _offline_, which greatly increases
+practicality and ease of implementation.
+
+
+**Implementing “Caution”** We employ two neural networks operating on the internal representations of the reward model _R_ ( _x, y_ ): (1) a fixed _target_ _network_ _T_ ( _x, y_ ) = _h_ _[R]_ _L_ [(] _[x, y]_ [)][,] [defined] [as] [the]
+hidden state extracted from layer _L_ of the frozen reward model, and (2) a trainable _predictor network_
+_Pθ_ ( _x, y_ ) that learns to predict this hidden state. The first _L_ layers of the reward model serve as our
+target feature extractor, with their output _h_ _[R]_ _L_ [(] _[x, y]_ [)] [as] [the] [prediction] [target.] [The] [predictor] [network]
+_Pθ_ ( _x, y_ ) is a separate trainable network with parameters _θ_ that can use various architectural choices
+(shared embeddings, simplified encoders, projection layers) but is designed to be lightweight to
+ensure efficient training and inference.
+
+
+**Training** **Process.** We train our predictor _Pθ_ on a dataset _D_ train of prompt-response pairs
+constructed directly from the benchmark train split using mean squared error loss: _L_ ( _θ_ ) =
+E( _x,y_ ) _∼D_ train - _∥Pθ_ ( _x, y_ ) _−_ _T_ ( _x, y_ ) _∥_ [2][�], where the norm is Euclidean. We construct responses _y_ _∼_
+_π_ ( _·|x_ ) by sampling from _π_ as an efficient empirical proxy for the training distribution of the reward model. By training on this supervision-free distribution, the predictor achieves low error on
+
+
+4
+
+
+Table 1: **Scaling** **Performance** **Across** **Datasets** **with** **Reward** **Hacking** **Mitigation.** **Peak** **Acc** :
+highest accuracy achieved across all _N_ values. **Final** **Acc** : accuracy at _N_ = 512 where reward
+hacking is most severe. **Degradation** : performance drop from peak to final (lower is better). Results
+show mean with 95% confidence intervals as subscripts across 3 bootstrap runs. Best results are in
+**bold** and second-best are underlined.
+
+
+**GSM8K** (2021) **MATH-500** (2023) **BBH-Hard** (2022)
+**Method**
+
+Peak Final Degr. Peak Final Degr. Peak Final Degr.
+
+
+Reward Model 79.3 _±_ 1 _._ 2 71.5 _±_ 0 _._ 3 7.7 11.5 _±_ 0 _._ 3 8.5 _±_ 1 _._ 0 3.0 17.3 _±_ 1 _._ 0 1.7 _±_ 0 _._ 1 15.6
+Pessimism Only 81.3 _±_ 0 _._ 5 80.3 _±_ 0 _._ 3 **1.0** **13.6** _±_ 0 _._ 7 **11.9** _±_ 1 _._ 0 **1.7** **22.9** _±_ 0 _._ 7 **22.1** _±_ 0 _._ 4 **0.9**
+RM + Pessimism **82.6** _±_ 0 _._ 6 **81.1** _±_ 0 _._ 1 1.5 12.3 _±_ 1 _._ 0 10.1 _±_ 0 _._ 6 2.3 18.5 _±_ 1 _._ 0 11.0 _±_ 0 _._ 3 7.5
+
+
+in-distribution patterns while preserving high error on distributional outliers. We emphasize that the
+data requirements for this step are restricted to _prompts_, which are often much cheaper to collect
+than the high-quality _labelled_ data used to train reward models; a gold standard would be to reuse
+the same prompts used to train the reward model itself, but in practice we find that our method’s
+OOD detection is relatively robust across different prompt distributions (cf. Section 3.1).
+
+
+**Pessimistic Reward Estimation at Inference Time.** Once we have trained our predictor _Pθ_, we
+can use it to define our uncertainty estimate _α_ ( _x, y_ ) = _∥Pθ_ ( _x, y_ ) _−_ _T_ ( _x, y_ ) _∥_ [2], the prediction error
+of the predictor on the target network’s features. We then plug this into our pessimistic reward
+estimate _r_ ˆLCB( _x, y_ ) = _r_ ˆ( _x, y_ ) _−_ _λα_ ( _x, y_ ) = _r_ ˆ( _x, y_ ) _−_ _λ · ∥Pθ_ ( _x, y_ ) _−_ _T_ ( _x, y_ ) _∥_ [2] . Note that this
+score is very easy to compute at inference time, requiring only two forward passes (one through
+_Pθ_ and one through _T_ ) in addition to the forward pass through the reward model to compute _r_ ˆ;
+note that all of these passes can be fully parallelized and the cost of evaluating _α_ ( _x, y_ ) is on the
+same order as that of evaluating _r_ ˆ due to the reuse of features from _r_ ˆ. The parameter _λ_ controls the
+strength of the pessimism penalty, with _λ_ = 0 recovering standard BoN sampling. The final selection
+becomes [ˆ] _i_ = argmax _i∈_ [ _N_ ] ˆ _r_ LCB( _x, yi_ ), i.e., choosing the response with the highest pessimistic
+reward estimate. This procedure is summarized in Figure 2.
+
+
+2.3 THEORETICAL INTERPRETATION
+
+
+In order to provide further motivation for our approach, we analyze in Section C a simple theoretical setting in which our approach provably improves upon BoN. While we defer the details to the
+appendix, we summarize the main theorem here:
+**Theorem 1** (Informal version of Theorem 3) **.** _Let y_ 1 _, . . ., yN_ _∈_ R _[d]_ _be i.i.d._ _samples from a model_
+_π_ _and let r_ _[⋆]_ ( _y_ ) _be a linear reward function._ _Let i_ _[⋆]_ = argmax _i∈_ [ _N_ ] _r_ _[⋆]_ ( _yi_ ) _be the optimal response_
+_and let_ [ˆ] _i_ = argmax _i∈_ [ _N_ ] ˆ _r_ ( _yi_ ) _be the response selected by BoN using a learned reward model_ _r_ ˆ _._ _If_
+_i_ pess = argmax _i∈_ [ _N_ ] ˆ _r_ LCB( _yi_ ) _, where_ ˆ _r_ LCB _is our caution-regularized reward estimate, then under_
+_suitable conditions on the target network, r_ _[⋆]_ _,_ ˆ _r, π, and the predictor network, it holds that_
+
+E   - _r_ _[⋆]_ ( _yi_ pess) _−_ _r_ _[⋆]_ ( _y_ ˆ _i_ )� ≳ �log( _N_ ) _,_ _and_ _N_ lim _↑∞_ E   - _r_ _[⋆]_ ( _y_ E _i_ [ _⋆r_ ) _−_ _[⋆]_ ( _yri⋆_ _[⋆]_ )]( _yi_ pess)� = 0 _._
+
+
+While the assumptions and conditions of Theorem 1 are necessarily somewhat strong in order to
+facilitate the analysis, the theorem provides a proof-of-concept that our approach can provably outperform BoN in a stylized setting as well as, to the best of our knowledge, the first theoretical
+guarantee on the success of curiosity- and RND-style methods for OOD detection.
+
+
+3 EXPERIMENTS
+
+
+We now empirically evaluate our proposed approach, with a focus on answering the following three
+questions: (1) How well does caution mitigate reward hacking as the number of candidates _N_ increases? (2) What design decisions (e.g. architecture and training hyperparameters) contribute most
+to the overall success of our method? (3) In which scenarios does our method outperform standard
+
+
+5
+
+
+Table 2: **Weight** **Ablation** **and** **Design** **Comparison** **on** **GSM8K.** We compare different mixing
+weights between uncertainty score and _r_ ˆ score, contrasting our approach (distilling reward model
+features) against traditional RND (distilling random network features). **Peak** **Acc** : best accuracy
+across all _N_ . **Final** **Acc** : accuracy at _N_ = 512. Results demonstrate that distilling reward model
+representations substantially outperforms random network distillation across weight combinations.
+
+
+**Caution (Ours)** **Traditional RND**
+**Pessimism strength** ( _λ_ )
+
+Peak Acc Final Acc Peak Acc Final Acc
+
+
+0.0 (RM Only) 78.9 71.2 78.9 71.2
+0.2 79.5 72.5 78.7 71.3
+0.4 80.3 76.0 78.5 72.1
+0.6 81.5 80.2 78.4 73.1
+0.8 **82.1** **81.0** 78.1 74.9
+1.0 (Caution Only) 81.3 79.8 77.0 72.9
+
+
+BoN sampling, and what factors drive its success? We now briefly describe our empirical setup
+(with full details deferred to Section D) before addressing each of these questions in turn.
+
+
+**Experimental** **Setup.** We use `Llama-3.2-3B-Instruct` (Dubey et al., 2024) as our language
+model _π_ due to its strong reasoning capabilities and open-source availability. [1] We consider
+three prompt distributions coming from reasoning datasets of varying difficulty: `GSM8K` (Cobbe
+et al., 2021), `MATH-500` (Hendrycks et al., 2021), and `BigBench-Hard` (Suzgun et al., 2022).
+Our ground truth reward _r_ _[⋆]_ is binary, with reward given if and only if a response provides the
+correct answer to the given prompt. While we consider several reward models _r_ ˆ, we focus
+primarily on `OASST` (Köpf et al., 2023), which Figure 1 demonstrates provides better performance than comparably sized reward models like `Skywork-Reward-V2-Qwen3-0.6B` and
+`Skywork-Reward-V2-Llama-3.2-1B` (Liu et al., 2025), making it a strong baseline for demonstrating reward hacking phenomena. For each prompt and _N_, we use vLLM (Kwon et al., 2023)
+to generate _N_ independent responses from the base model _π_ (and boostrap this process 3 times to
+generate confidence intervals), before scoring each response with ˆ _r_ and measuring the performance
+of the selected response according to _r_ _[⋆]_ . To train our predictor network _Pθ_, we use an independent
+dataset of responses generated by the base model _π_ itself on the training split of `GSM8K`, and
+evaluate the performance of the uncertainty estimates both in-distribution (prompts from the test
+set of `GSM8K` ) and out-of-distribution (prompts from other reasoning datasets). In order to maintain
+consistency, we normalize all rewards _r_ ˆ to be centred with unit variance using an independent set
+of responses and we do the same for the uncertainty estimates from _Pθ_ .
+
+
+3.1 CAUTION MITIGATES REWARD HACKING
+
+
+Our main results demonstrate that our proposed mechanism of caution **mitigates reward-hacking**
+**and** **leads** **to** **improved** **performance** **of** **BoN** **sampling** **as** _N_ **increases** **both** **for** **in-** **and** **out-**
+**of-distribution prompts.** In Figure 1, we exhibit the performance of BoN sampling on `GSM8K` for
+several choices of reward models and observe that they all exhibit reward hacking, with performance
+degrading for large _N_ . We also see that using our pessimistic approach, this reward-hacking is
+substantially mitigated, with performance improving monotonically with _N_ for all considered _N_ .
+Moreover, we get a substantial performance boost of 4 _._ 2% over peak accuracy for the reward model
+alone and an astonishing 15 _._ 5% boost over the final accuracy of the reward model alone. This trend
+compares favorably with that of Huang et al. (2025b), who observe monotonicity of performance in
+_N_, but struggle to outperform BoN sampling for optimally tuned _N_ for most choices of _π_ and ˆ _r_ .
+
+
+The above results involve evaluating caution on the same distribution of prompts used to train the
+predictor network _Pθ_, which is likely beneficial to its performance. In reality, we expect to use
+caution in scenarios where the prompts are potentially OOD and hope that the uncertainty estimates
+remain valid. To evaluate the extent to which this holds, we used the same uncertainty estimates to
+
+
+1Some other open-weight models are thought to be contaminated with benchmark datasets (Wu et al., 2025),
+which could skew our results, further motivating our choice in model.
+
+
+6
+
+
+Table 3: Ablation study of predictor architecture. **Training Loss** measures how well the predictor
+fits reward model representations. **Peak Acc** shows best performance across all _N_ . **Final Acc** shows
+performance at largest _N_, where reward hacking is most severe.
+
+
+**Predictor Configuration** **Reconstruction Loss** **Peak Acc (%)** **Final Acc (%)**
+
+
+_Simplified Architecture Variants_
+Lightweight + Trainable Emb. 0.242 82.2 82.2
+Lightweight + Frozen Emb. 0.246 81.5 81.3
+Lightweight + Separate Emb. 0.255 82.7 81.8
+Lightweight w/o Projection 0.281 81.8 81.3
+
+
+_Full Architecture Variants_
+Full + Trainable Emb. 0.127 80.3 80.2
+Full + Frozen Emb. 0.127 80.4 78.4
+
+
+produce pessimistic BoN sampling on two significantly harder reasoning datasets: `MATH-500` and
+`BigBench-Hard` . These datasets comprise prompts that are significantly different from those in
+`GSM8K`, with the latter even coming from a different, non-mathematical domain.
+
+
+We report the results of these OOD prompt experiments in Figure 3 and Table 1, comparing the
+performance of the in-distribution prompts (left) with the two other tasks (centre and right). As in
+Figure 1, we sweep over a logarithmic grid in _N_ from 1 to 512 and compare three approaches: BoN
+using only _r_ ˆ, BoN using only the uncertainty estimates from _Pθ_, and BoN using caution. As in
+Figure 1, we see that caution successfully mitigates reward hacking while preserving the benefits of
+reward-guided selection. The results on `MATH-500` reveal a different pattern: pessimism-only outperforms the combined approach, achieving 13.6% peak accuracy with only 1.7 points degradation
+compared to 2.3 points for the combined method. This counterintuitive finding reflects the increased
+problem difficulty—while `MATH-500` shares the mathematical reasoning domain with `GSM8K`, the
+problems are significantly more complex and multi-step, making the task of ˆ _r_ more difficult. In this
+regime, ˆ _r_ becomes less reliable at distinguishing genuine quality improvements, making its contribution less beneficial. However, caution still effectively prevents the severe degradation seen with BoN
+(3.0 points). The most challenging task we consider is `BigBench-Hard`, where the reward model
+_r_ ˆ fails catastrophically. Indeed, we observe the counterintuitive phenomenon that using the uncertainty penalty alone is the most performant of all three methods, doing even better than combining
+uncertainty with ˆ _r_ . This surprising result is due to the fact that when reward models encounter problems substantially harder than their training distribution, their learned spurious correlations dominate
+their judgments, leading to systematic selection of responses that superficially mimic quality patterns
+without genuine correctness. Caution, while also operating outside its training distribution, avoids
+being misled by these hacking features and maintains stable performance by preferring responses
+that match familiar distributional patterns rather than chasing unreliable reward signals.
+
+
+3.2 ABLATION STUDIES
+
+
+In this section, we dissect the design and implementation of our proposed caution mechanism to
+understand which components contribute most to its success. Further ablation studies, including detailed inspections of uncertainty scores for individual responses and the effect they have on ˆ _r_ and _r_ _[⋆]_
+scores can be found in Section F, while additional details on the ablations can be found in Section D.
+
+
+We evaluate three critical design decisions: (1) the precise architectural choice of the predictor
+network; (2) the use of pre-trained embeddings in the target network; (3) the use of a projector layer
+between the predictor and target networks. We also conduct two additional ablations to validate our
+core design choices: (a) the choice of mixing weights between _r_ ˆ and the uncertainty estimates; (b)
+the choice of distilling reward model features versus random network features.
+
+
+**Architectural** **Ablations.** We first examine the extent to which the complexity of _Pθ_ and its relationship to the target network _T_ affects performance, in particular whether _Pθ_ needs to share an
+architecture with the teacher _T_ . The results are shown in Table 3: while greater flexibility in _Pθ_ leads
+to a better reconstruction loss, this does not transfer to better performance when used to instantiate
+caution. This occurs because improving the reconstruction loss can actually hurt the ability of _Pθ_
+
+
+7
+
+
+**System Prompt: Solve the following problem step by step. Give your final numerical answer at the end with: #### {NUM}**
+
+
+**Question:** If Raymond does half as much laundry as Sarah, and Sarah does 4 times as much
+laundry as David, calculate the difference in the amount of laundry Raymond and David do if
+Sarah does 400 pounds of laundry.
+
+**Response:** Let's break down the information given: 1. Sarah does 4 times as much laundry as David.
+If we represent David's laundry as x, then Sarah's laundry is 4x. 2. Sarah does 400 pounds of laundry.
+We can set up the equation 4x = 400 and solve for x.  4x = 400  x = 400 / 4  x = 100  So, David does
+100 pounds of laundry. 3. Raymond does half as much laundry as Sarah.  If we represent Raymond's
+laundry as y, then y = (1/2)x.  y = (1/2) * 100  y = 50  So, Raymond does 50 pounds of laundry. 4.
+The difference in the amount of laundry Raymond and David do is:  Difference = Raymond's laundry
+
+- David's laundry = 50 – 100 = -50 Since we're looking for the difference, we take the absolute value of
+the result. The difference in the amount of laundry Raymond and David do is **50 pounds.**
+
+**Answer: 100**
+**Reward: 0.15 (#1 / 1000); Reward + Pessimism: -0.62 (#996 / 1000)**
+
+
+**Question:** A pet shop had 6 cages of rodents. 3 of the
+cages have 10 hamsters and the other 3 have 5 guinea
+pigs. How many rodents did the pet shop have in total?
+
+**Response:** To find the total number of rodents, we need to
+find the total number of hamsters and the total number of
+guinea pigs. The total number of hamsters is 3 * 10 = 30. The
+total number of guinea pigs is 3 * 5 = 15. Now, we add the
+number of hamsters and guinea pigs to find the total number
+of rodents: Total rodents = 30 + 15 Total rodents = 45
+**#### 45**
+
+
+**Answer: 45**
+**Reward: 0.31 (#976/1000); Reward + Pessimism: 1.72 (# 1 / 1000)**
+
+
+Figure 4: **Contrasting Selection Behaviors: Reward Hacking vs.** **Format Compliance.** Two representative examples showing how reward models favor verbose responses regardless of correctness,
+while our curiosity-driven pessimism prioritizes format compliance and distributional familiarity.
+RM assigns high scores to detailed responses regardless of correctness, while pessimism detects
+distributional deviation from training patterns and prefers correctly formatted solutions.
+
+
+to detect distributional novelty, as it becomes too good at reconstructing even out-of-distribution
+features. We observe a similar trend when considering whether or not to tune the embeddings or
+share them between _Pθ_ and _T_ : while sharing embeddings leads to better reconstruction, it can hurt
+the final performance, which suggests that forcing predictors to learn representations from scratch
+creates more sensitive distributional boundaries than inheriting potentially overly simplified features
+from pre-trained models. Finally, we see that adding a projection layer between the predictor and
+target networks provides consistent but modest benefits, indicating that information bottlenecks can
+help prevent pure memorization while preserving signal quality. Together, these findings establish
+a key empirical finding for instantiating caution: **effective** **detection** **requires** **a** **careful** **balance**
+**between reconstruction accuracy and novelty sensitivity.**
+
+
+**Strength of regularization with Caution.** To validate our core design choices, we systematically
+vary the mixing weights between the uncertainty score and that of _r_ ˆ to identify the optimal balance
+for reward hacking mitigation and understand the robustness of our results to this choice. Note
+that due to the normalization of _r_ ˆ and uncertainty estimates described above, the strength _λ_ can
+be viewed as a direct measurement of the influence of the pessimism relative to _r_ ˆ. We report our
+findings in Table 2 and Appendix F. We observe that our approach is relatively robust to the choice
+of _λ_, with moderate to high weights (0.6-0.8) achieving optimal performance. While the precise
+optimal weight will vary by task and choice of _r_ ˆ, with larger _λ_ being required in situations where _r_ ˆ
+is less reliable, the results suggest that our approach does not require delicate tuning to be effective.
+
+
+**Comparing Caution to RND.** Finally, we compare our approach of distilling reward model features (motivated by curiosity in Pathak et al. (2017)) against the RND (Burda et al., 2018), which
+takes the teacher _T_ to be a randomly initialized network (possibly on top of pre-trained embeddings),
+testing whether our hypothesis about distributional familiarity requires semantic grounding in the reward model’s representations. We again consider a range of mixing weights _λ_ and report the results
+in Table 2. The results reveal a stark contrast between caution and RND, with the latter exhibiting
+dramatically inferior performance across all choices of _λ_ . This observation provides evidence for
+the hypothesis that effective distributional regularization requires semantic grounding: randomly
+initialized features cannot provide meaningful distributional boundaries, while reward model features capture task-relevant patterns that enable robust novelty detection. The results establish that
+curiosity-driven pessimism succeeds not merely because of prediction error signals, but specifically
+because these signals are computed relative to the reward model’s learned task representations.
+
+
+3.3 WHY IT WORKS: A CASE STUDY
+
+
+We now turn to a case study to illustrate the mechanism by which caution mitigates reward hacking and improves performance. In Figure 4, we present two representative examples of questionsresponse pairs. On the left, we see an instance that _r_ ˆ scores highly (99.8th percentile of all scored
+responses) despite being incorrect; this response is verbose and contains multiple mathematical reasoning steps, but ultimately fails to provide the correct answer and does not follow the required
+
+
+8
+
+
+formatting, instead demonstrating exactly the type of reward hacking our method targets: superficial mimicry of quality patterns (detailed explanations, step-by-step structure) without genuine
+correctness or adherence to specified requirements. Note that the caution score for this response
+appropriately identifies it as OOD, likely due to its failure to follow the formatting requirements that
+are common in high-quality responses in the training data.
+
+
+By contrast, on the right of Figure 4, we see a concise, accurate response following the formatting
+requirements. While ˆ _r_ does not rank this response as well as the first, the pessimism recognizes it as
+familiar, matching the patterns of high-quality responses in the training data that consistently follow
+formatting specifications and provide direct, correct solutions. This juxtaposition reveals that reward
+models can conflate verbosity with quality, particularly at larger _N_ where more elaborate responses
+become available. Our method effectively distinguishes between responses that _appear_ sophisticated
+(verbose explanations) and those that _are_ actually correct and compliant with task specifications.
+
+
+4 DISCUSSION
+
+
+In this work, we investigated instantiating pessimistic reward estimation with the principle of _cau-_
+_tion_, an approach adapted from curiosity-driven exploration in RL that uses a supervised learning
+error as a measure of distributional uncertainty and penalizes the estimated reward of uncertain,
+out-of-distribution (OOD) inputs. While our focus was on mitigating reward hacking in Best-of- _N_
+sampling, a particular inference-time scaling technique, our results demonstrate that, when properly
+applied on top of pre-trained features, caution can effectively detect OOD samples and instantiate
+pessimistic policies in general. While we defer a more complete survey of related work to Section B,
+we now provide a brief summary thereof as well as discuss future directions.
+
+
+**Related Work.** Best-of- _N_ sampling was introduced in Stiennon et al. (2020) and has been empirically investigated in many reasoning settings (Cobbe et al., 2021; Lightman et al., 2023; Li et al.,
+2022; Brown et al., 2024). While often effective, when the scoring rule is learned (as opposed to
+oracular), the approach has long been shown to be vulnerable to reward-hacking (Amodei et al.,
+2016; Skalse et al., 2022; Gao et al., 2023). While many attempted mitigations of reward-hacking
+have been explored for RL _finetuning_, relatively few works have focused on the _inference-time set-_
+_ting_ . Of particular note is Huang et al. (2025b), which proposes a distributional regularization
+approach that samples according to a _χ_ [2] -regularized BoN procedure. While theoretically wellmotivated and empirically effective at ensuring monotonicity in _N_, the approach is overly conservative in practice. Another approach is that of Jinnai et al. (2024), who apply distributional regularization with respect to a Wasserstein distance on some embedding space; while potentially effective,
+the computation required grows quadratically in _N_, making it impractical for even moderate values
+of _N_ . In contradistinction to these works, our approach applies pessimism directly to the estimated
+rewards in a way that naturally leverages the beyond-worst-case errors present in estimated reward
+models in a way that is impossible for these distributional regularization approaches.
+
+
+Our key technique of _caution_ is built on top of the foundational curiosity (Pathak et al., 2017) and
+Random Network Distillation (RND) (Burda et al., 2018) from classical deep RL. While the such
+techniques have been very popular in aiding exploration, the extent to which they can be used for
+OOD detection and pessimistic learning has been a matter of some debate, with Rezaeifar et al.
+(2022) claiming negative results and Ciosek et al. (2019); Nikulin et al. (2023) demonstrating some
+positive results. While these works are (i) in classical RL or supervised learning settings and (ii) do
+not use pre-trained features, our results morally align with the latter camp, demonstrating that such
+approaches can be effective for OOD detection and pessimistic learning in language models.
+
+
+**Future Directions.** Our work provides strong evidence that caution, when correctly applied on top
+of pre-trained features, can be an effective detector of OOD text. While we instantiate this approach
+for pessimistic reward estimation, it is natural to wonder if curiosity can be used as an explicit reward
+signal to encourage exploration of novel behaviors either purely during inference or during RL posttraining of reasoning models. While some preliminary work like Gao et al. (2025) has explored this
+idea, we believe that their mixed results stem from the fact that the curiosity module was trained
+from scratch rather than on top of pre-trained features, which we find to be so effective for OOD
+detection. Another interesting direction is to explore the extent to which our proposed approach
+can help ensure continued AI alignment in the face of adversarial prompting or distributional shift
+
+
+9
+
+
+due to inference-time scaling. While the tasks we consider in this work are related to reasoning,
+we expect that our results would carry over to safety and alignment tasks _mutatis mutandis_, which
+would represent a promising new approach to ensuring robust alignment of language models.
+
+
+ACKNOWLEDGMENT
+
+
+Both AB and ZSW were supported in part by a research grant from Schmidt Sciences.
+
+
+ETHICS STATEMENT
+
+
+We affirm adherence to the ICLR Code of Ethics. This work only involve publicly available benchmark datasets under their respective licenses; we do not collect new human-subject data and process
+no personally identifiable information.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+To ensure reproducibility and transparency of the results within this paper, we document relevant
+hyperparameters and implementation details in the appendix. We will open-source our codebase
+along with detailed instructions and scripts.
+
+
+REFERENCES
+
+
+Marah Abdin, Jyoti Aneja, Harkirat Behl, Sébastien Bubeck, Ronen Eldan, Suriya Gunasekar,
+Michael Harrison, Russell J Hewett, Mojan Javaheripi, Piero Kauffmann, et al. Phi-4 technical report. _arXiv preprint arXiv:2412.08905_, 2024.
+
+
+Afra Amini, Tim Vieira, Elliott Ash, and Ryan Cotterell. Variational best-of-n alignment. _arXiv_
+_preprint arXiv:2407.06057_, 2024.
+
+
+Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mané. Concrete problems in ai safety. _arXiv preprint arXiv:1606.06565_, 2016.
+
+
+Yoshua Bengio and Yann LeCun. Scaling learning algorithms towards AI. In _Large_ _Scale_ _Kernel_
+_Machines_ . MIT Press, 2007.
+
+
+Adam Block and Yury Polyanskiy. The sample complexity of approximate rejection sampling with
+applications to smoothed online learning. In _The_ _Thirty_ _Sixth_ _Annual_ _Conference_ _on_ _Learning_
+_Theory_, pp. 228–273. PMLR, 2023.
+
+
+Bradley Brown, Jordan Juravsky, Ryan Ehrlich, Ronald Clark, Quoc V Le, Christopher Ré, and
+Azalia Mirhoseini. Large language monkeys: Scaling inference compute with repeated sampling.
+_arXiv preprint arXiv:2407.21787_, 2024.
+
+
+Alexander Bukharin, Haifeng Qian, Shengyang Sun, Adithya Renduchintala, Soumye Singhal,
+Zhilin Wang, Oleksii Kuchaiev, Olivier Delalleau, and Tuo Zhao. Adversarial training of reward
+models. _arXiv preprint arXiv:2504.06141_, 2025.
+
+
+Yuri Burda, Harrison Edwards, Amos Storkey, and Oleg Klimov. Exploration by random network
+distillation. _arXiv preprint arXiv:1810.12894_, 2018.
+
+
+Stephen Casper, Xander Davies, Claudia Shi, Thomas Krendl Gilbert, Jérémy Scheurer, Javier
+Rando, Rachel Freedman, Tomasz Korbak, David Lindner, Pedro Freire, et al. Open problems
+and fundamental limitations of reinforcement learning from human feedback. _arXiv_ _preprint_
+_arXiv:2307.15217_, 2023.
+
+
+Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep
+reinforcement learning from human preferences. _Advances in neural information processing sys-_
+_tems_, 30, 2017.
+
+
+10
+
+
+Kamil Ciosek, Vincent Fortuin, Ryota Tomioka, Katja Hofmann, and Richard Turner. Conservative uncertainty estimation by fitting prior networks. In _International_ _Conference_ _on_ _Learning_
+_Representations_, 2019.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Thomas Coste, Usman Anwar, Robert Kirk, and David Krueger. Reward model ensembles help
+mitigate overoptimization. _arXiv preprint arXiv:2310.02743_, 2023.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv e-prints_, pp. arXiv–2407, 2024.
+
+
+Jacob Eisenstein, Chirag Nagpal, Alekh Agarwal, Ahmad Beirami, Alex D’Amour, DJ Dvijotham,
+Adam Fisch, Katherine Heller, Stephen Pfohl, Deepak Ramachandran, et al. Helping or herding? reward model ensembles mitigate but do not eliminate reward hacking. _arXiv_ _preprint_
+_arXiv:2312.09244_, 2023.
+
+
+Jingtong Gao, Ling Pan, Yejing Wang, Rui Zhong, Chi Lu, Qingpeng Cai, Peng Jiang, and Xiangyu Zhao. Navigate the unknown: Enhancing llm reasoning with intrinsic motivation guided
+exploration. _arXiv preprint arXiv:2505.17621_, 2025.
+
+
+Leo Gao, John Schulman, and Jacob Hilton. Scaling laws for reward model overoptimization. In
+_International Conference on Machine Learning_, pp. 10835–10866. PMLR, 2023.
+
+
+Ian Goodfellow, Yoshua Bengio, Aaron Courville, and Yoshua Bengio. _Deep_ _learning_, volume 1.
+MIT Press, 2016.
+
+
+Charles Goodhart. Monetary theory and practice: the uk experience. 1984.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+via reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025.
+
+
+Kaiyang Guo, Shao Yunfeng, and Yanhui Geng. Model-based offline reinforcement learning with
+pessimism-modulated dynamics belief. _Advances in Neural Information Processing Systems_, 35:
+449–461, 2022.
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. _arXiv_
+_preprint arXiv:2103.03874_, 2021.
+
+
+Geoffrey E. Hinton, Simon Osindero, and Yee Whye Teh. A fast learning algorithm for deep belief
+nets. _Neural Computation_, 18:1527–1554, 2006.
+
+
+Sam Houliston, Alizée Pace, Alexander Immer, and Gunnar Rätsch. Uncertainty-penalized direct
+preference optimization. _arXiv preprint arXiv:2410.20187_, 2024.
+
+
+Rein Houthooft, Xi Chen, Yan Duan, John Schulman, Filip De Turck, and Pieter Abbeel. Vime:
+Variational information maximizing exploration. _Advances in neural information processing sys-_
+_tems_, 29, 2016.
+
+
+Audrey Huang, Adam Block, Dylan J Foster, Dhruv Rohatgi, Cyril Zhang, Max Simchowitz, Jordan T Ash, and Akshay Krishnamurthy. Self-improvement in language models: The sharpening
+mechanism. In _The Thirteenth International Conference on Learning Representations_, 2025a.
+
+
+Audrey Huang, Adam Block, Qinghua Liu, Nan Jiang, Akshay Krishnamurthy, and Dylan J Foster.
+Is best-of-n the best of them? coverage, scaling, and optimality in inference-time alignment. _arXiv_
+_preprint arXiv:2503.21878_, 2025b.
+
+
+Binyuan Hui, Jian Yang, Zeyu Cui, Jiaxi Yang, Dayiheng Liu, Lei Zhang, Tianyu Liu, Jiajun Zhang,
+Bowen Yu, Keming Lu, et al. Qwen2. 5-coder technical report. _arXiv preprint arXiv:2409.12186_,
+2024.
+
+
+11
+
+
+Yuki Ichihara, Yuu Jinnai, Tetsuro Morimura, Kaito Ariu, Kenshi Abe, Mitsuki Sakamoto, and Eiji
+Uchibe. Evaluation of best-of-n sampling strategies for language model alignment. _arXiv preprint_
+_arXiv:2502.12668_, 2025.
+
+
+Arthur Jacot, Franck Gabriel, and Clément Hongler. Neural tangent kernel: Convergence and generalization in neural networks. _Advances in neural information processing systems_, 31, 2018.
+
+
+Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec
+Helyar, Aleksander Madry, Alex Beutel, Alex Carney, et al. Openai o1 system card. _arXiv_
+_preprint arXiv:2412.16720_, 2024.
+
+
+Ying Jin, Zhuoran Yang, and Zhaoran Wang. Is pessimism provably efficient for offline rl? In
+_International conference on machine learning_, pp. 5084–5096. PMLR, 2021.
+
+
+Yuu Jinnai, Tetsuro Morimura, Kaito Ariu, and Kenshi Abe. Regularized best-of-n sampling with
+minimum bayes risk objective for language model alignment. _arXiv preprint arXiv:2404.01054_,
+2024.
+
+
+Timo Kaufmann, Paul Weng, Viktor Bengs, and Eyke Hüllermeier. A survey of reinforcement
+learning from human feedback. 2024.
+
+
+Hadi Khalaf, Claudio Mayrink Verdun, Alex Oesterling, Himabindu Lakkaraju, and Flavio
+du Pin Calmon. Inference-time reward hacking in large language models. _arXiv_ _preprint_
+_arXiv:2506.19248_, 2025.
+
+
+Andreas Köpf, Yannic Kilcher, Dimitri Von Rütte, Sotiris Anagnostidis, Zhi Rui Tam, Keith
+Stevens, Abdullah Barhoum, Duc Nguyen, Oliver Stanley, Richárd Nagyfi, et al. Openassistant
+conversations-democratizing large language model alignment. _Advances_ _in_ _neural_ _information_
+_processing systems_, 36:47669–47681, 2023.
+
+
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E.
+Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model
+serving with pagedattention. In _Proceedings of the ACM SIGOPS 29th Symposium on Operating_
+_Systems Principles_, 2023.
+
+
+Cassidy Laidlaw, Shivam Singhal, and Anca Dragan. Correlated proxies: A new definition and
+improved mitigation for reward hacking. _arXiv preprint arXiv:2403.03185_, 2024.
+
+
+Nathan Lambert, Valentina Pyatkin, Jacob Morrison, LJ Miranda, Bill Yuchen Lin, Khyathi Chandu,
+Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, et al. Rewardbench: Evaluating reward
+models for language modeling. _arXiv preprint arXiv:2403.13787_, 2024.
+
+
+Jiong Li and Pratik Gajane. Curiosity-driven exploration in sparse-reward multi-agent reinforcement
+learning. _arXiv preprint arXiv:2302.10825_, 2023.
+
+
+Yujia Li, David Choi, Junyoung Chung, Nate Kushman, Julian Schrittwieser, Rémi Leblond, Tom
+Eccles, James Keeling, Felix Gimeno, Agustin Dal Lago, et al. Competition-level code generation
+with alphacode. _Science_, 378(6624):1092–1097, 2022.
+
+
+Hunter Lightman, Vineet Kosaraju, Yuri Burda, Harrison Edwards, Bowen Baker, Teddy Lee, Jan
+Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. Let’s verify step by step. In _The Twelfth_
+_International Conference on Learning Representations_, 2023.
+
+
+Chris Yuhao Liu, Liang Zeng, Jiacai Liu, Rui Yan, Jujie He, Chaojie Wang, Shuicheng Yan, Yang
+Liu, and Yahui Zhou. Skywork-reward: Bag of tricks for reward modeling in llms. _arXiv preprint_
+_arXiv:2410.18451_, 2024a.
+
+
+Chris Yuhao Liu, Liang Zeng, Yuzhen Xiao, Jujie He, Jiacai Liu, Chaojie Wang, Rui Yan, Wei Shen,
+Fuxiang Zhang, Jiacheng Xu, et al. Skywork-reward-v2: Scaling preference data curation via
+human-ai synergy. _arXiv preprint arXiv:2507.01352_, 2025.
+
+
+Yantao Liu, Zijun Yao, Rui Min, Yixin Cao, Lei Hou, and Juanzi Li. Rm-bench: Benchmarking
+reward models of language models with subtlety and style. _arXiv_ _preprint_ _arXiv:2410.16184_,
+2024b.
+
+
+12
+
+
+Odelia Melamed, Gilad Yehudai, and Gal Vardi. Adversarial examples exist in two-layer relu networks for low dimensional linear subspaces. _Advances in Neural Information Processing Systems_,
+36:5028–5049, 2023.
+
+
+Antonio Valerio Miceli-Barone, Alexandra Birch, and Rico Sennrich. Distributionally robust recurrent decoders with random network distillation. _arXiv preprint arXiv:2110.13229_, 2021.
+
+
+Reiichiro Nakano, Jacob Hilton, Suchir Balaji, Jeff Wu, Long Ouyang, Christina Kim, Christopher Hesse, Shantanu Jain, Vineet Kosaraju, William Saunders, et al. Webgpt: Browser-assisted
+question-answering with human feedback. _arXiv preprint arXiv:2112.09332_, 2021.
+
+
+Alexander Nikulin, Vladislav Kurenkov, Denis Tarasov, and Sergey Kolesnikov. Anti-exploration
+by random network distillation. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 26228–
+26244. PMLR, 2023.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. _Advances in neural information processing systems_, 35:
+27730–27744, 2022.
+
+
+Alexander Pan, Kush Bhatia, and Jacob Steinhardt. The effects of reward misspecification: Mapping
+and mitigating misaligned models. _arXiv preprint arXiv:2201.03544_, 2022.
+
+
+Deepak Pathak, Pulkit Agrawal, Alexei A Efros, and Trevor Darrell. Curiosity-driven exploration
+by self-supervised prediction. In _International conference on machine learning_, pp. 2778–2787.
+PMLR, 2017.
+
+
+Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea
+Finn. Direct preference optimization: Your language model is secretly a reward model. _Advances_
+_in Neural Information Processing Systems_, 36:53728–53741, 2023.
+
+
+Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines. _Advances_ _in_
+_neural information processing systems_, 20, 2007.
+
+
+Alexandre Ramé, Nino Vieillard, Léonard Hussenot, Robert Dadashi, Geoffrey Cideron, Olivier
+Bachem, and Johan Ferret. Warm: On the benefits of weight averaged reward models. _arXiv_
+_preprint arXiv:2401.12187_, 2024.
+
+
+Patrik Reizinger and Márton Szemenyei. Attention-based curiosity-driven exploration in deep reinforcement learning. In _ICASSP 2020-2020 IEEE International Conference on Acoustics, Speech_
+_and Signal Processing (ICASSP)_, pp. 3542–3546. IEEE, 2020.
+
+
+Shideh Rezaeifar, Robert Dadashi, Nino Vieillard, Léonard Hussenot, Olivier Bachem, Olivier
+Pietquin, and Matthieu Geist. Offline reinforcement learning as anti-exploration. In _Proceed-_
+_ings of the AAAI Conference on Artificial Intelligence_, volume 36, pp. 8106–8114, 2022.
+
+
+Wenlei Shi and Xing Jin. Heimdall: test-time scaling on the generative verification. _arXiv preprint_
+_arXiv:2504.10337_, 2025.
+
+
+Joar Skalse, Nikolaus Howe, Dmitrii Krasheninnikov, and David Krueger. Defining and characterizing reward gaming. _Advances in Neural Information Processing Systems_, 35:9460–9471, 2022.
+
+
+Mei Song, Andrea Montanari, and P Nguyen. A mean field view of the landscape of two-layers
+neural networks. _Proceedings of the National Academy of Sciences_, 115(33):E7665–E7671, 2018.
+
+
+Nisan Stiennon, Long Ouyang, Jeffrey Wu, Daniel Ziegler, Ryan Lowe, Chelsea Voss, Alec Radford,
+Dario Amodei, and Paul F Christiano. Learning to summarize with human feedback. _Advances_
+_in neural information processing systems_, 33:3008–3021, 2020.
+
+
+Haoran Sun, Yekun Chai, Shuohuan Wang, Yu Sun, Hua Wu, and Haifeng Wang. Curiosity-driven
+reinforcement learning from human feedback. _arXiv preprint arXiv:2501.11463_, 2025.
+
+
+13
+
+
+Mirac Suzgun, Nathan Scales, Nathanael Schärli, Sebastian Gehrmann, Yi Tay, Hyung Won Chung,
+Aakanksha Chowdhery, Quoc V Le, Ed H Chi, Denny Zhou,, and Jason Wei. Challenging bigbench tasks and whether chain-of-thought can solve them. _arXiv_ _preprint_ _arXiv:2210.09261_,
+2022.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Roman Vershynin. _High-dimensional probability: An introduction with applications in data science_,
+volume 47. Cambridge university press, 2018.
+
+
+Martin J Wainwright. _High-dimensional statistics:_ _A non-asymptotic viewpoint_, volume 48. Cambridge university press, 2019.
+
+
+Haoxiang Wang, Yong Lin, Wei Xiong, Rui Yang, Shizhe Diao, Shuang Qiu, Han Zhao, and Tong
+Zhang. Arithmetic control of llms for diverse user preferences: Directional preference alignment
+with multi-objective rewards. In _ACL_, 2024a.
+
+
+Haoxiang Wang, Wei Xiong, Tengyang Xie, Han Zhao, and Tong Zhang. Interpretable preferences
+via multi-objective reward modeling and mixture-of-experts. In _EMNLP_, 2024b.
+
+
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reasoning in language models.
+_arXiv preprint arXiv:2203.11171_, 2022.
+
+
+Yidong Wang, Zhuohao Yu, Zhengran Zeng, Linyi Yang, Cunxiang Wang, Hao Chen, Chaoya Jiang,
+Rui Xie, Jindong Wang, Xing Xie, et al. Pandalm: An automatic evaluation benchmark for llm
+instruction tuning optimization. _arXiv preprint arXiv:2306.05087_, 2023.
+
+
+Lilian Weng. Reward hacking in language models. _lil’log_, 2024. URL `[https://lilianweng.](https://lilianweng.github.io/posts/2024-06-19-reward-hacking)`
+`[github.io/posts/2024-06-19-reward-hacking](https://lilianweng.github.io/posts/2024-06-19-reward-hacking)` .
+
+
+Yixuan Weng, Minjun Zhu, Fei Xia, Bin Li, Shizhu He, Shengping Liu, Bin Sun, Kang Liu, and
+Jun Zhao. Large language models are better reasoners with self-verification. _arXiv_ _preprint_
+_arXiv:2212.09561_, 2022.
+
+
+Mingqi Wu, Zhihao Zhang, Qiaole Dong, Zhiheng Xi, Jun Zhao, Senjie Jin, Xiaoran Fan, Yuhao
+Zhou, Huijie Lv, Ming Zhang, et al. Reasoning or memorization? unreliable results of reinforcement learning due to data contamination. _arXiv preprint arXiv:2507.10532_, 2025.
+
+
+Yuzi Yan, Xingzhou Lou, Jialian Li, Yiping Zhang, Jian Xie, Chao Yu, Yu Wang, Dong Yan, and
+Yuan Shen. Reward-robust rlhf in llms. _arXiv preprint arXiv:2409.15360_, 2024.
+
+
+Gilad Yehudai and Ohad Shamir. On the power and limitations of random features for understanding
+neural networks. _Advances in neural information processing systems_, 32, 2019.
+
+
+Zhuohao Yu, Chang Gao, Wenjin Yao, Yidong Wang, Zhengran Zeng, Wei Ye, Jindong Wang,
+Yue Zhang, and Shikun Zhang. Freeeval: A modular framework for trustworthy and efficient
+evaluation of large language models. _arXiv preprint arXiv:2404.06003_, 2024a.
+
+
+Zhuohao Yu, Weizheng Gu, Yidong Wang, Xingru Jiang, Zhengran Zeng, Jindong Wang, Wei Ye,
+and Shikun Zhang. Reasoning through execution: Unifying process and outcome rewards for
+code generation. _arXiv preprint arXiv:2412.15118_, 2024b.
+
+
+Zhuohao Yu, Jiali Zeng, Weizheng Gu, Yidong Wang, Jindong Wang, Fandong Meng, Jie Zhou, Yue
+Zhang, Shikun Zhang, and Wei Ye. Rewardanything: Generalizable principle-following reward
+models. _arXiv preprint arXiv:2506.03637_, 2025.
+
+
+Yuanzhao Zhai, Han Zhang, Yu Lei, Yue Yu, Kele Xu, Dawei Feng, Bo Ding, and Huaimin Wang.
+Uncertainty-penalized reinforcement learning from human feedback with diverse reward lora ensembles. _arXiv preprint arXiv:2401.00243_, 2023.
+
+
+14
+
+
+Jianfei Zhang, Jun Bai, Bei Li, Yanmeng Wang, Rumei Li, Chenghua Lin, and Wenge Rong. Disentangling preference representation and text generation for efficient individual preference alignment. _arXiv preprint arXiv:2412.20834_, 2024a.
+
+
+Xiaoying Zhang, Jean-Francois Ton, Wei Shen, Hongning Wang, and Yang Liu. Overcoming reward overoptimization via adversarial policy optimization with lightweight uncertainty estimation. _arXiv preprint arXiv:2403.05171_, 2024b.
+
+
+Daniel M Ziegler, Nisan Stiennon, Jeffrey Wu, Tom B Brown, Alec Radford, Dario Amodei, Paul
+Christiano, and Geoffrey Irving. Fine-tuning language models from human preferences. _arXiv_
+_preprint arXiv:1909.08593_, 2019.
+
+
+A THE USE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+LLMs were used assist refining the writing of this paper, including grammar correction, wording
+refinement, and formatting adjustments. We also use LLM agents to help with finding relevant work
+and implementing parts of our code. The use of AI tools does not affect the originality of the work
+or the authors’ responsibility for the content.
+
+
+B ADDITIONAL RELATED WORK
+
+
+We now give a more detailed discussion of how the present paper relates to prior work. Our approach
+is situated at the intersection of three key areas of research: Best-of- _N_ sampling with reward models,
+reward hacking and its mitigation attempts, and curiosity-driven exploration techniques.
+
+
+**Best-of-N** **Sampling** **and** **Reward** **Models.** Best-of-N (BoN) sampling generates _N_ candidate responses and selects the highest-scoring according to a reward model: _y_ _[∗]_ =
+arg max _y∈YN_ _r_ ( _x, y_ ) (Stiennon et al., 2020). This technique has proven effective for mathematical reasoning (Cobbe et al., 2021; Lightman et al., 2023) and competitive programming (Li et al.,
+2022) and the version of BoN with oracular rewards (called ‘pass@k’) is a standard evaluation
+metric for reasoning models (Dubey et al., 2024; Ouyang et al., 2022; Abdin et al., 2024; Hui
+et al., 2024; Lambert et al., 2024). Reward models are typically trained on tuples of preference
+data ( _x, y_ chosen _, y_ rejected) consisting of a prompt _x_ as well as preferred and dispreferred responses
+_y_ chosen and _y_ rejected using ranking losses. While a powerful paradigm, this training procedure introduces vulnerabilities: models must infer complex reasons for preferences, often leading them to
+rely on spurious correlations like response length, formatting patterns, or stylistic preferences (Liu
+et al., 2024b). High-quality reward models are also computationally expensive to train, requiring resources similar to base language models. This cost makes _ensemble approaches_, a common strategy
+for reducing vulnerabilities in ML systems, impractical, as organizations typically train only a single
+reward model per domain (Gao et al., 2023; Jinnai et al., 2024). Our work focuses on mitigating
+reward hacking in BoN sampling with a single reward model, without retraining or modifying the
+reward model itself.
+
+
+**Reward** **Hacking** **and** **Mitigation** **Attempts.** Reward hacking occurs when optimizing against
+imperfect proxy rewards leads to high-scoring but low-quality outcomes—a manifestation of Goodhart’s Law (Amodei et al., 2016; Skalse et al., 2022). Gao et al. (2023) observed a common trend in
+BoN sampling, where as _N_ increases, performance first rises then falls. As demonstrated theoretically in Huang et al. (2025b), these two phases correspond to an initial phase (when _N_ is small) and
+the learned reward _r_ ˆ is an effective proxy for the true reward _r_ _[⋆]_, leading to BoN succeeding, and a
+second phase where _N_ grows so large so as to produce atypical responses on which _r_ ˆ is no longer
+effective due to spurious correlations and poor coverage during training (Eisenstein et al., 2023; Liu
+et al., 2024b; Yu et al., 2025). Broadly, there have been two main approaches to mitigating this
+reward-hacking problem: _training-time_ and _inference-time_ approaches.
+
+
+_Training-time_ _ensemble_ _methods_ attempt to mitigate this by combining multiple reward models (Coste et al., 2023; Zhai et al., 2023; Ramé et al., 2024; Yan et al., 2024). However, Eisenstein
+
+
+15
+
+
+et al. (2023) demonstrate that ensembles reduce but do not eliminate reward hacking. More critically, ensemble methods require multiple expensive reward sources, creating prohibitive costs for
+practical applications.
+
+
+_Inference-time approaches_ work with existing reward models and intervene in the sampling procedure itself. Of note, Jinnai et al. (2024) proposed an approach that involves regularizing the BoN
+selection with respect to a Wasserstein distance in some embedding space and demonstrated empirical improvement over BoN as N grows. Unfortunately, this approach requires computation to
+scale quadratically in _N_, making it somewhat impractical for larger _N_ . Of greatest relevance to the
+present work is that of Huang et al. (2025b), who propose instead to use an information-theoretic
+divergence, the _χ_ [2] -divergence, to regularize the BoN selection. They demonstrate that this approach
+is statistically and computationally optimal under the assumption that the learned reward model is
+close to the true reward in expected squared error loss for responses sampled from the base model.
+While theoretically well-motivated and empirically effective at ensuring monotonicity in _N_, the approach is overly conservative in practice, leading to suboptimal performance when _N_ is moderate.
+Another inference-time approach is that of Khalaf et al. (2025), who consider a KL-regularized BoN
+procedure as well as a computationally efficient approximation using the Poisson distribution. Unfortunately, their method exhibits limited improvement over standard BoN, likely due to the fact
+that BoN is already effectively KL-regularized unless _N_ is growing exponentially. Unlike these
+works, our approach does not seek to provide _distributional_ regularization but instead instantiates
+pessimism through the _reward estimates_ themselves. Thus, our approach is able to leverage the fact
+that reward models may be imperfect in ways that are not information-theoretically ‘worst-case’ and
+adapt accordingly.
+
+
+**Curiosity-Driven Exploration and Random Network Distillation.** Curiosity-driven exploration
+in reinforcement learning uses prediction error to quantify novelty of given states (Pathak et al.,
+2017; Sun et al., 2025; Li & Gajane, 2023). The Intrinsic Curiosity Module (ICM) (Pathak et al.,
+2017) uses prediction error _∥ϕ_ [ˆ] ( _st_ +1) _−_ _ϕ_ ( _st_ +1) _∥_ [2] 2 [as] [a] [curiosity] [signal,] [while] [Random] [Network]
+Distillation (RND) (Burda et al., 2018) employs a simpler approach with two networks: a fixed
+target network _T_ ( _s_ ) and a trainable predictor _P_ ( _s_ ) that minimizes _∥P_ ( _s_ ) _−_ _T_ ( _s_ ) _∥_ [2] 2 [.] [In both cases,]
+the supervised learning error serves as a proxy for OOD detection, with high error indicating states
+that are far outside the distribution (and thus worth exploring from the perspective of online RL).
+While these methods were originally developed for exploration, they can instead be instantiated
+to prevent a policy from moving to far out of the distribution of observed states. While there has
+been some debate as to the efficacy of these approaches for OOD detection and pessimistic learning
+(Rezaeifar et al., 2022; Ciosek et al., 2019; Nikulin et al., 2023), our results suggest that when
+properly implemented, such an approach can be effective in language modeling.
+
+
+C THEORY
+
+
+In this section, we give formal statements for and prove our theoretical results. We begin in Section C.1 for formalizing the setting we consider in which pessimism can help mitigate reward hacking in Best-of- _N_ sampling. We emphasize that this setting is a simplified abstraction intended to
+cleanly showcase the benefits of pessimism and help develop intuition for our approach and is not
+intended to represent a realistic model of language or reward modeling. We then continue in Section C.2 to prove general results on the performance of BoN and pessimistic selection in our setting.
+We proceed in Section C.3 to introduce a simplified model of our proposed caution approach, motivated by Random Network Distillation (RND) (Burda et al., 2018). We prove in simplified linear and
+two-layer ReLU settings that this approach can be used to instantiate pessimism under an idealized
+optimization model. Finally, we combine these results in Section C.4 to prove our main theorem
+that our proposed approach improves over BoN sampling in the model we consider.
+
+
+C.1 FORMAL SETTING
+
+
+In order to formalize the setting we consider, we suppose that a learner is given access to a language
+model _π_ that maps a prompt _x_ to a distribution over responses _y_ . We will further identify these
+prompt-response pairs with their _embeddings_ in some linear feature space R _[d]_ and, for the sake of
+simplicity, consider results on a per-prompt basis. Thus we will assume a fixed prompt _x_ and write
+
+
+16
+
+
+_π_ for _π_ ( _x_ ). We will further suppose that there exists a _ground truth reward function_ that is linear in
+the embedded features, i.e.,
+
+
+_r_ _[⋆]_ ( _y_ ) = _⟨θ_ _[⋆]_ _, y⟩_ _._
+
+
+Such an abstraction is partially justified by the fact that many modern reward models are linear
+layers on top of pre-trained Language Models (Lambert et al., 2024; Liu et al., 2024a; Wang et al.,
+2024a;b) and we thus simply directly associate the concatenation of prompt and response with its
+embedding in the final layer of the LM.
+
+
+The goal of the learning problem is similar to that in Huang et al. (2025b): given access to
+_y_ 1 _, . . ., yn_ _∼_ _π_ sampled independently, as well as some imperfect proxy reward function _r_ ˆ : R _[d]_ _→_
+R (e.g., a learned reward model), we wish to select a response _y_ ˆ _i_ with [ˆ] _i_ _∈_ [ _n_ ] such that _r_ _[⋆]_ ( _y_ ˆ _i_ ) is
+as large as possible. Note that if _r_ ˆ were in fact a perfect reward model, so that _r_ ˆ = _r_ _[⋆]_, then the
+optimal strategy would be to simply select _y_ ˆ _i_ with [ˆ] _i_ = argmax _i∈_ [ _n_ ] ˆ _r_ ( _yi_ ), which is the popular
+_Best-of-N_ (BoN) strategy. However, as discussed in the main text, this strategy can fail when _r_ ˆ is a
+poor approximation to _r_ _[⋆]_ due to reward-hacking.
+
+
+Unlike Huang et al. (2025b), wherein the authors suppose that ˆ _r_ and _r_ _[⋆]_ are close in expected squared
+error under _π_, we will instead suppose that _r_ ˆ and _r_ _[⋆]_ agree on a low dimensional subspace of R _[d]_
+but may be arbitrarily different on the orthogonal complement. More precisely, suppose that there
+exists a linear subspace _V_ _⊂_ R _[d]_ such that dim( _V_ ) = _k_ _≪_ _d_ and _r_ _[⋆]_ ( _y_ ) = _r_ ˆ( _y_ ) for all _y_ _∈_ _V_ .
+
+We will further make the assumption that _r_ _[⋆]_ and _r_ ˆ are linear functions, i.e., _r_ ˆ( _y_ ) = - _θ, y_ ˆ - and
+
+_r_ _[⋆]_ ( _y_ ) = _⟨θ_ _[⋆]_ _, y⟩_ for some _θ, θ_ [ˆ] _[⋆]_ _∈_ R _[d]_ . To aid our analysis, we will make the simplifying assumption
+that _θ_ _[⋆]_ _∈_ _V_, i.e. proj _V_ _⊥_ _θ_ _[⋆]_ = 0, representing the fact that the true reward is a function only of certain
+linear features; the error between the learned reward _r_ ˆ and the groundtruth _r_ _[⋆]_ is thus restricted to
+OOD effects, conceptualized as the orthogonal complement _V_ _[⊥]_ of _V_ .
+
+
+Finally, in order to make the analysis tractable, we will assume that _π_ is a centred Gaussian distribution with covariance Σ _∈_ R _[d][×][d]_, i.e., _π_ = _N_ (0 _,_ Σ). Note that Σ may have full rank _d_ and thus _π_
+may have full support on R _[d]_, which ensures that ˆ _r_ = _r_ _[⋆]_ on _V_ _[⊥]_, the orthogonal complement of _V_ .
+
+
+C.2 PESSIMISTIC SELECTION AND BEST-OF- _N_ SAMPLING
+
+
+In this section we provide two key bounds on the performance of Best-of- _N_ sampling and pessimistic selection, which will demonstrate the benefits of pessimism in our setting. Before doing so,
+we state and prove a simple bound on the best possible performance that can be achieved by any
+selection strategy.
+
+
+**Proposition 1.** _Let y_ 1 _, . . ., yN_ _∼_ _π be independent samples from π._ _Then it holds that_
+
+
+            -             E max = Σ1 _/_ 2 _θ⋆_ [�] _· MN_ _,_
+_i∈_ [ _N_ ] _[r][⋆]_ [(] _[y][i]_ [)] _[|][θ][⋆]_ ��� ��
+
+
+_where MN_ = E �max _i∈_ [ _N_ ] _Zi_ - _and Z_ 1 _, . . ., ZN_ _are i.i.d._ _N_ (0 _,_ 1) _random variables._ _Moreover, it_
+_holds that_
+
+~~�~~ 2 log( _N_ ) _−_ _o_ (1) _≤_ _MN_ _≤_ �2 log( _N_ ) _._
+
+
+_Proof._ The second claim is a classical fact about the maximum of Gaussians (Wainwright, 2019;
+Vershynin, 2018), thus it suffices to prove the first statement. Note that
+
+
+2
+1 _/_ 2 _⋆_ [�]
+_r_ _[⋆]_ ( _y_ ) = _⟨θ_ _[⋆]_ _, y⟩∼N_ (0 _,_ Σ _θ_ ) _._
+��� ��
+
+
+Thus _r_ _[⋆]_ ( _y_ ) = _d_ ��Σ1 _/_ 2 _θ⋆_ [�] - _Z_ for _Z_ _∼N_ (0 _,_ 1). The result then follows by positive homogeneity of the
+maximum and expectation.
+
+
+We now provide a lower bound on the performance of BoN in the setting we consider
+
+
+17
+
+
+**Proposition 2.** _Let y_ 1 _, . . ., yN_ _∼_ _π be independent samples from π and let_ [ˆ] _i_ = argmax _i∈_ [ _N_ ] ˆ _r_ ( _yi_ )
+
+_for_ ˆ _r_ ( _y_ ) = - _θ, y_ ˆ - _._ _Let i_ _[⋆]_ = argmax _i∈_ [ _N_ ] _r_ _[⋆]_ ( _yi_ ) _for r_ _[⋆]_ ( _y_ ) = _⟨θ_ _[⋆]_ _, y⟩._ _Then it holds that_
+
+
+
+
+
+ E _r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ _[⋆]_ ( _y_ ˆ _i_ ) _|θ, θ_ [ˆ] _[⋆]_ [�] = E [ _r_ _[⋆]_ ( _yi⋆_ )]
+
+
+
+
+
+1 _−_ ~~�~~ 1
+
+
+
+_[∥]_ [Σ][1] _[/]_ [2]
+
+
+2
+
+
+
+
+
+
+
+
+
+
+
+
+2
+
+_[⊥]_ _[θ]_ [ˆ] _[∥]_
+1 + _[∥]_ [Σ][1] _[/]_ [2][proj] _[V]_
+
+[1]
+
+
+_∥_ [Σ][1] _[/]_ [2] _[θ][⋆]_ _∥_
+
+
+=
+
+
+1 _−_ ~~�~~ 1
+
+
+
+_[∥]_ [Σ][1] _[/]_ [2]
+
+
+2
+
+
+
+
+
+
+ _·_ ���Σ1 _/_ 2 _θ⋆_ [�] �� _· MN_ _._
+
+
+
+2
+
+_[⊥]_ _[θ]_ [ˆ] _[∥]_
+1 + _[∥]_ [Σ][1] _[/]_ [2][proj] _[V]_
+
+[1]
+
+
+_∥_ [Σ][1] _[/]_ [2] _[θ][⋆]_ _∥_
+
+
+_Proof._ As we have already computed the expectation of _r_ _[⋆]_ ( _yi⋆_ ) in Proposition 1, it suffices to
+compute the conditional expectation of _r_ _[⋆]_ ( _y_ ˆ _i_ ). Note that because, conditioned on _θ_ [ˆ] and _θ_ _[⋆]_, ˆ _r_ ( _y_ ) and
+_r_ _[⋆]_ ( _y_ ) are jointly Gaussian, it holds that
+
+E [ _r_ _[⋆]_ ( _y_ ) _|r_ ˆ( _y_ )] = [Cov(ˆ] _[r]_ [(] _[y]_ [)] _[, r][⋆]_ [(] _[y]_ [))] _·_ ˆ _r_ ( _y_ )
+
+Var(ˆ _r_ ( _y_ ))
+
+
+            -             _θ_ _[⋆]_ _,_ Σ _θ_ [ˆ]
+
+
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+���Σ1 _/_ 2 _θ_ ˆ���2 _[·]_ [ ˆ] _[r]_ [(] _[y]_ [)]
+
+��Σ1 _/_ 2 _θ⋆_ [�] - [2]
+���Σ1 _/_ 2 _θ_ ˆ���2 _[·]_ [ ˆ] _[r]_ [(] _[y]_ [)]
+
+��Σ1 _/_ 2 _θ⋆_ [�]       - [2]
+���Σ1 _/_ 2proj _V_ _θ_ ˆ���2 + ���Σ1 _/_ 2proj _V_ _⊥_ _θ_ ˆ���2 _[·]_ [ ˆ] _[r]_ [(] _[y]_ [)]
+
+��Σ1 _/_ 2 _θ⋆_ [�]      - [2]
+
+��Σ1 _/_ 2 _θ⋆_ [�] - [2] + ���Σ1 _/_ 2proj _V_ _⊥_ _θ_ ˆ���2 _[·]_ [ ˆ] _[r]_ [(] _[y]_ [)] _[.]_
+
+
+By the same computation as in Proposition 1, it holds that
+
+
+E - _r_ ˆ( _y_ ˆ _i_ ) _|θ_ _[⋆]_ _,_ _θ_ [ˆ] - = ���Σ1 _/_ 2 _θ_ ˆ��� _· MN_ =
+
+
+���Σ1 _/_ 2 _θ⋆_ [�] - [2] + ���Σ1 _/_ 2proj _V_ _⊥_ _θ_ ˆ���2 _· MN_ _._
+
+
+The result follows by plugging in and rearranging.
+
+
+We now show that with pessimism instantiated correctly, we can strictly improve on the performance
+of BoN.
+**Proposition** **3.** _Let_ _y_ 1 _, . . ., yN_ _∼_ _π_ _be_ _independent_ _samples_ _from_ _π_ _and_ _let_ _α_ : R _[d]_ _→_ R+ _be_ _a_
+_function satisfying_
+
+
+(1 _−_ _c_ ) _∥_ proj _V_ _⊥_ _y∥−_ _ε ≤_ _α_ ( _y_ ) _≤∥_ proj _V_ _⊥_ _y∥_ + _ε_
+
+
+_for some c ∈_ (0 _,_ 1) _and ε >_ 0 _._ _Let_
+
+
+_i_ pess = argmax _r_ ˆ( _yi_ ) _−_ _λ · α_ ( _yi_ ) _,_ _λ ≥_
+_i∈_ [ _N_ ]
+
+
+���proj _V_ _⊥_ _θ_ ˆ���
+
+_._
+1 _−_ _c_
+
+
+_Then it holds that_
+
+
+��
+
+E - _r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ _[⋆]_ ( _yi_ pess)� _≤_ _λ_ _π_ 2 _[·]_ [ Tr (Σproj] _[V]_ _[⊥]_ [) + 2] _[ε]_
+
+
+18
+
+
+_._
+
+
+_Proof._ Let
+
+
+_r_ ˆLCB( _y_ ) = _r_ ˆ( _y_ ) _−_ _λ · α_ ( _y_ ) _._
+
+
+We claim that with the assumption on _λ_ and _α_, it holds that ˆ _r_ LCB( _y_ ) _≤_ _r_ _[⋆]_ ( _y_ ) + _λ · ε_ for all _y_ _∈_ R _[d]_ .
+Indeed, note that
+
+
+          -           _r_ _[⋆]_ ( _y_ ) _−_ _r_ ˆLCB( _y_ ) = _θ_ _[⋆]_ _−_ _θ, y_ [ˆ] + _λ · α_ ( _y_ )
+
+
+          -           = proj _V_ _⊥_ _θ, y_ [ˆ] + _λ · α_ ( _y_ )
+
+_≥−_ ���proj _V_ _⊥_ _θ_ ˆ��� _· ∥_ proj _V_ _⊥_ _y∥_ + _λ ·_ ((1 _−_ _c_ ) _∥_ proj _V_ _⊥_ _y∥−_ _ε_ )
+
+_≥−λε,_
+
+
+where the first inequality is by Cauchy-Schwarz.
+
+
+Now observe that
+
+
+_r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ _[⋆]_ ( _yi_ pess) = [ _r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ ˆLCB( _yi⋆_ )] + - _r_ ˆLCB( _yi⋆_ ) _−_ _r_ ˆLCB( _yi_ pess)� + - _r_ ˆLCB( _yi_ pess) _−_ _r_ _[⋆]_ ( _yi_ pess)�
+
+_≤_ _r_ _[⋆]_ ( _yi_ _[⋆]_ ) _−_ _r_ ˆLCB( _yi_ _[⋆]_ ) + _λε,_
+
+
+where the second group of terms is non-positive by definition of _i_ pess and the last group of terms is
+non-positive by the claim above. To conclude, we observe that
+
+
+_r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ ˆLCB( _yi⋆_ ) = _r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ ˆ( _yi⋆_ ) + _λ · α_ ( _yi⋆_ )
+
+
+             -              = proj _V_ _⊥_ _θ, y_ [ˆ] _i⋆_ + _λ ·_ ( _∥_ proj _V_ _⊥_ _yi⋆_ _∥_ + _ε_ ) _._
+
+
+We now observe that as random variables, _i_ _[⋆]_ is independent of the set _{_ proj _V_ _⊥_ _yi|i ∈_ [ _N_ ] _}_ by Gaussian orthogonality and the fact that proj _V_ _⊥_ _θ_ _[⋆]_ = 0. Thus it holds first that
+
+
+��  E proj _V_ _⊥_ _θ, y_ [ˆ] _i⋆_ _|θ, θ_ [ˆ] _[⋆]_ [�] =
+
+
+=
+
+
+_N_
+
+- �� - 
+E proj _V_ _⊥_ _θ, y_ [ˆ] _i_ _|θ, θ_ [ˆ] _[⋆]_ _, {i_ _[⋆]_ = _i}_ _·_ Pr[ _i_ _[⋆]_ = _i|θ, θ_ [ˆ] _[⋆]_ ]
+
+_i_ =1
+
+
+_N_
+
+- �� 
+E proj _V_ _⊥_ _θ, y_ [ˆ] _i_ _|θ, θ_ [ˆ] _[⋆]_ [�] _·_ Pr[ _i_ _[⋆]_ = _i|θ, θ_ [ˆ] _[⋆]_ ]
+
+_i_ =1
+
+
+= 0 _,_
+
+
+where the last equality follows from the fact that _yi_ is centred. For the second term, observe similarly
+that
+
+
+ E _∥_ proj _V_ _⊥_ _yi⋆_ _∥|θ, θ_ [ˆ] _[⋆]_ [�] =
+
+
+=
+
+
+_N_
+
+- - 
+E _∥_ proj _V_ _⊥_ _yi∥|θ, θ_ [ˆ] _[⋆]_ _, {i_ _[⋆]_ = _i}_ _·_ Pr[ _i_ _[⋆]_ = _i|θ, θ_ [ˆ] _[⋆]_ ]
+
+_i_ =1
+
+
+_N_
+
+- 
+E _∥_ proj _V_ _⊥_ _yi∥|θ, θ_ [ˆ] _[⋆]_ [�] _·_ Pr[ _i_ _[⋆]_ = _i|θ, θ_ [ˆ] _[⋆]_ ]
+
+_i_ =1
+
+
+                = E _∥_ proj _V_ _⊥_ _y_ 1 _∥|θ, θ_ [ˆ] _[⋆]_ [�] =
+
+
+The result follows by combining the above.
+
+
+- 2 1 _/_ 2
+_π_ _[·]_ ���Σ proj _V_ _⊥_ ���F _[.]_
+
+
+Critically, the bound in Proposition 3 does not depend on _N_ and so, as long as _r_ _[⋆]_ ( _yi_ _[⋆]_ ) grows with
+_N_, the pessimistic algorithm will eventually outperform BoN. We now show that guarantees on _α_
+can be obtained through Random Network Distillation.
+
+
+C.3 ACHIEVING OOD DETECTION WITH CAUTION
+
+
+Above we isolated the key role that _∥_ proj _V_ _⊥_ _y∥_ plays in the failure of the greedy algorithm. While in
+the linear setting, projection to _V_ results in the optimal algorithm, it is impractical in general settings,
+where _V_ is unknown. Here we demonstrate that two simplified models of caution, both inspired by
+
+
+19
+
+
+Random Network Distillation (RND) (Burda et al., 2018) can be used to approximate projection
+to _V_ and thus yield a pessimistic algorithm that avoids the failure modes of the greedy algorithm.
+Recall that RND involves training a student network _fw_ ˆ [:] [R] _[d]_ _[→]_ [R] _[m]_ [to predict a teacher network]
+_fw⋆_ : R _[d]_ _→_ R _[m]_ on samples from the the explored distribution, which in this case is supported on
+_V_ . The error _∥fw_ ˆ [(] _[y]_ [)] _[ −]_ _[f]_ _w_ _[⋆]_ [(] _[y]_ [)] _[∥]_ [2] [is then used as a measure of how far out of distribution] _[ y]_ [is.] [We]
+will consider two simplified models of RND. The first is a linear model, where _fW_ ( _y_ ) = _Wy_ for
+_w_ _∈_ R _[m][×][d]_ . The second is a two-layer ReLU network of the form
+
+
+_f_ ( _y_ ) = [1]
+
+_T_
+
+
+_T_
+
+- _fWℓ_ ( _y_ ) _,_
+
+
+_ℓ_ =1
+
+
+where
+
+
+_fW_ ( _y_ ) = [1] ReLU( _u_ ) = max _{u,_ 0 _},_ (1)
+
+_m_ _[·][ U]_ [ReLU(] _[Wy]_ [)] _[,]_
+
+
+and _W_ = ( _w_ 1 _, . . ., wm_ ) _∈_ R _[m][×][d]_, _U_ _∈_ R _[m][×][m]_, and ReLU is applied coordinate wise. In both
+cases, we will suppose that the teacher network is fixed with a randomly initialized parameter and
+the student network is trained to minimize squared error on samples from _V_ . We abstract the minimization in the following definition.
+
+**Definition** **1.** Given a distribution _D_ on R _[d]_ and an initial parameter _W_ [0], we say that _W_ is
+
+[�]
+trained with _gradient_ _based_ _methods_ with samples from _D_ if _W_ _−_ _W_ [0] is in the linear span of
+
+[�]
+_{∇W fW_ ( _y_ ) _}y∈_ supp( _D_ ).
+
+
+This definition abstracts the precise optimization method used to train the student network, but
+captures the key property that the final parameter is obtained by following gradients of the squared
+error loss on samples from _D_ . Note that this includes gradient descent and its variants as well as
+more sophisticated approaches involving preconditioning, momentum, and continuous time limits.
+
+
+We begin with the simpler linear case.
+**Proposition** **4.** _Suppose_ _that_ _W_ _[⋆]_ _, W_ 0 _∈_ R _[m][×][d]_ _are_ _Gaussian_ _random_ _matrices_ _with_ _independent_
+_N_ (0 _,_ [1] _/m_ ) _entries._ _Let_ _W_ _denote_ _the_ _minimizer_ _of_ _the_ _expected_ _squared_ _error_ _on_ _samples_ _from_ _a_
+
+[�]
+_distribution with support V_ _attained through gradient based methods from samples y_ _supported in_
+_V_ _initialized at W_ 0 _in the sense of Definition 1._ _Then with probability at least_ 1 _−_ _δ over the choice_
+_of W_ _[⋆]_ _and W_ 0 _, it holds that for all y_ _∈_ R _[d]_ _,_
+
+- - �2 - - �2
+
+
+2
+_∥_ proj _V_ _⊥_ _y∥_ [2] _≤_ �� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _≤_
+
+
+_∥_ proj _V_ _⊥_ _y∥_ [2] _._
+
+
+�2
+
+
+1 + _C_
+
+
+�2
+
+
+1 _−_ _C_
+
+
+_k_ + log( [1] _/δ_ )
+
+
+_m_
+
+
+_k_ + log( [1] _/δ_ )
+
+
+_m_
+
+
+2
+_In_ _particular,_ _if_ _as_ _long_ _as_ _m_ _≫_ _k,_ _then_ �� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _is_ _a_ _good_ _approximation_ _to_
+_∥_ proj _V_ _⊥_ _y∥_ [2] _._
+
+
+_Proof._ We first observe that _W_ [�] proj _V_ _⊥_ = _W_ 0proj _V_ _⊥_ since the training data is supported on _V_ .
+Indeed, the gradient of the squared error loss on a sample _y_ _∈_ _V_ is given by
+
+_∇W_ _∥Wy −_ _W_ _[⋆]_ _y∥_ [2] = 2( _Wy −_ _W_ _[⋆]_ _y_ ) _y_ _[⊤]_ = 2( _W_ _−_ _W_ _[⋆]_ )(proj _V y_ ) _y_ _[⊤]_ proj _[⊤]_ _V_ _[,]_
+
+where we used the fact that _y_ = proj _V y_ for all _y_ _∈_ _V_ . Thus _∇W_ _∥Wy −_ _W_ _[⋆]_ _y∥_ [2] proj _V_ _⊥_ = 0 for
+all _y_ _∈_ _V_ and the claim follows. Moreover, it is immediate that _W_ [�] proj _V_ = _W_ _[⋆]_ proj _V_ since the loss
+is minimized at _W_ by strong convexity of the loss function. Thus it holds that
+
+[�]
+�� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] ��2 = ���( _W_ - _−_ _W_ _[⋆]_ ) _y_ ���2 = ���( _W_ - _−_ _W_ _[⋆]_ )proj _V_ _⊥_ _y_ ���2 = _∥_ ( _W_ 0 _−_ _W_ _[⋆]_ )proj _V_ _⊥_ _y∥_ [2] _._
+
+Letting _Z_ = _W_ 0 _−_ _W_ _[⋆]_, we see that _Z_ is a Gaussian random matrix with independent _N_ (0 _,_ [2] _/m_ )
+entries. We may now apply standard results on the singular values of Gaussian random matrices
+(cf. e.g. Vershynin (2018, Theorem 4.6.1)) to observe that there is some constant _C_ such that with
+probability at least 1 _−_ _δ_,
+
+
+_k_ + log( [1] _/δ_ )
+
+_._
+_m_
+
+
+1 _−_ _C_
+
+
+_k_ + log( [1] _/δ_ )
+
+_≤_ _λ_ min( _Z_ ) _≤_ _λ_ max( _Z_ ) _≤_ 1 + _C_
+_m_
+
+
+This suffices to prove the first statement. The second statement follows immediately.
+
+
+20
+
+
+Note that the above result shows that the RND error is a good approximation to _∥_ proj _V_ _⊥_ _y∥_ [2] uniformly over all _y_ _∈_ R _[d]_ with high probability as long as the embedding dimension is sufficiently
+large relative to the intrinsic dimension of the explored distribution. While this is a nice first step,
+the lack of flexibility of linear functions is a significant limitation. We now proceed to the hidden
+layer ReLU network case.
+
+
+Instead of assuming that _fW_ ( _y_ ) is a linear function, we now suppose that _fW_ ( _y_ ) is a two-layer ReLU
+network of the form given in (1). For the sake of simplicity, we assume that only the weights _W_
+are trained and that the second layer weights _ui_ _∼N_ (0 _,_ [1] _/m_ ) are fixed. Note that, while practically
+unrealistic, the assumption that only a single layer is trained is common in the study of deep learning
+(cf. e.g. (Jacot et al., 2018; Yehudai & Shamir, 2019; Song et al., 2018) and the references therein)
+and is motivated by the utility of random features (Rahimi & Recht, 2007). Our analysis is inspired
+by that of Melamed et al. (2023), who consider a similar model of neural networks, but for the very
+different aim of investigating adversarial robustness. We show that as long as the number of hidden
+features _m_ is sufficiently large relative to _∥y∥_, then the RND error is again a good approximation to
+_∥_ proj _V_ _⊥_ _y∥_ [2] uniformly over all _y_ _∈_ R _[d]_ with bounded norm with high probability.
+
+**Theorem 2.** _Let W_ _[⋆]_ _, W_ [0] _∈_ R _[m][×][d]_ _be Gaussian random matrices with independent N_ (0 _,_ 1) _entries_
+_with rows wi_ _[⋆]_ _[and][ w]_ _i_ [0] _[respectively.]_ _[Let][ u][⋆]_ _i_ _[, u]_ [0] _[∼N]_ [(0] _[,]_ [ 1)] _[ and let][ f][W][ ⋆]_ _[and][ f][W]_ [ 0] _[be the corresponding]_
+_ReLU_ _networks_ _as_ _in_ (1) _._ _Suppose_ _(i)_ _that_ _W_ _is_ _obtained_ _through_ _a_ _gradient-based_ _method_ _from_
+
+[�]
+_for alla_ _distribution y_ _∈_ _V .withThen it holds with probability at leastsupport_ _V_ _initialized_ _at_ _W_ [0] _as_ _in_ 1 _Definition −_ _δ_ _over the choice of1_ _and_ _(ii)_ _that Wf_ _[⋆]_ _W_ - _, W_ [(] _[y]_ [)][0] _, u_ [=] _i, u_ _[f][W]_ 0 _[ ⋆]_ _that_ [(] _[y]_ [)]
+_simultaneously for all y_ _∈_ R _[d]_ _,_
+
+
+~~�~~
+_d_ log( _[dm]_ _/δ_ )
+_c ∥_ proj _V_ _⊥_ _y∥_ [2] _−_ _C ∥y∥_ [2]
+
+
+_[δ]_ 2
+
+_Tm_ _≤_ �� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] ��
+
+
+_[dm]_ _/δ_ ) _[d]_ [ log(] _[dm][/][δ]_ [)]
+
+_−_ _C ∥y∥_ [2]
+_Tm_ _Tm_
+
+
+_and_
+
+
+          2 2 2 _d_ log( _[dm]_ _/δ_ )
+�� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _≤∥_ proj _V_ _⊥_ _y∥_ + _C ∥y∥_
+
+
+_,_
+_Tm_
+
+
+_[dm]_ _/δ_ ) _[d]_ [ log(] _[dm][/][δ]_ [)]
+
++ _C ∥y∥_ [2]
+_Tm_ _Tm_
+
+
+2 2
+_In particular, forprobability._ _Tm ≫∥y∥_ [4] _and up to constants,_ �� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _≍∥_ proj _V_ _⊥_ _y∥_ _with high_
+
+
+_Proof._ We first prove the result for _T_ = 1. This step rests four lemmata. We first show in Lemma 1
+the key property that, due to the training data being supported on _V_ and the fact that we are only
+training the first layer weights, it holds that _W_ [�] proj _V_ _⊥_ = _W_ [0] proj _V_ _⊥_, i.e., weights in the orthogonal
+complement of _V_ are never changed during training. By the assumption that we have trained to
+convergence, then, it holds that _W_ _[⋆]_ proj _V_ = _W_ [�] proj _V_ . We then use prove in Lemma 2 a decomposition of the RND error that rests on the precise funcitonal form of the ReLU network. Using this
+decomposition, we are able to provide bounds on the mean and concentration of the RND error in
+Lemma 3 and Lemma 4 in the special case that _∥y∥_ = 1. The result then follows by combining
+these lemmata with the positive homogeneity property of ReLU networks: for any _r_ _>_ 0, it holds
+that _fW_ ( _ry_ ) = _rfW_ ( _y_ ) for all _y_ _∈_ R _[d]_ and all _W_ _∈_ R _[m][×][d]_ .
+
+
+Now that the result is proved for _T_ = 1, the general case follows by tensorization across the independent _Wℓ_ .
+
+
+**Lemma 1.** _Let fW ⋆_ _, fW_ 0 _, and fW_ - _[be as in Theorem][ 2][.]_ _[Then it holds that][ W]_ [ 0][proj] _[V]_ _[⊥]_ [=] _W_ [�] proj _V_ _⊥_ _._
+
+
+_Proof._ By Definition 1 suffices to show that for any _y_ _∈_ _V_, ( _∇W fW_ ( _y_ )) proj _V_ _⊥_ = 0. To see this,
+observe that
+
+
+_∇W fW_ ( _y_ ) _i_ = [1]
+
+_m_
+
+
+_m_
+
+
+_uij_ I [ _⟨wj, y⟩_ _>_ 0] _y._
+
+_j_ =1
+
+
+Because _y_ proj _V_ _⊥_ = 0 for all _y_ _∈_ _V_, it follows that _∇W fW_ ( _y_ )proj _V_ _⊥_ = 0. The result follows.
+
+
+21
+
+
+**Lemma 2.** _Let fW ⋆_ _, fW_ 0 _, and fW_ - _[be as in Theorem][ 2][.]_ _[Then with probability at least]_ [ 1] _[ −]_ _[δ][ over the]_
+_choice of W_ _[⋆]_ _, W_ [0] _, ui, u_ 0 _, it holds that for all y_ _∈_ R _[d]_ _,_
+
+
+( _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [))] _[j]_ [=] _m_ [1]
+
+
+- _m_
+
+ 
+
+_i_ =1
+
+
+- - [�] [1]
+_u_ [0] _ji_ _[w]_ _i_ [0] _[,]_ [ proj] _V_ _[⊥]_ _[y]_
+
+
+I ��proj _V wi_ _[⋆]_ [+ proj] _V_ _[⊥]_ _[w]_ _i_ [0] _[,]_ [ proj] _V_ _[y]_ [ +] _[ t]_ [proj] _V_ _[⊥]_ _[y]_  - _>_ 0� _dt_
+0
+
+
+_−_ [1]
+
+_m_
+
+
+- _m_
+
+ 
+
+_i_ =1
+
+
+- - [�] [1]
+_u_ _[⋆]_ _ji_ _[w]_ _i_ _[⋆][,]_ [ proj] _V_ _[⊥]_ _[y]_
+
+
+I [ _⟨wi_ _[⋆][,]_ [ proj] _V_ _[y]_ [ +] _[ t]_ [proj] _V_ _[⊥]_ _[y][⟩]_ _[>]_ [ 0]] _[ dt]_
+0
+
+
+_._
+
+
+_Proof._ By the fundamental theorem of calculus, we have that
+
+
+            - 1
+_m_ ( _fW_ - [(] _[y]_ [)] _[ −]_ _[f]_ _W_ [�][(proj] _[V][ y]_ [))] _[j]_ [=] 0 - _∇yfW_ - [(proj] _[V][ y]_ [ +] _[ t]_ [(proj] _[V]_ _[⊥]_ _[y][ −]_ [proj] _[V][ y]_ [))] _[j][, y][ −]_ [proj] _[V][ y]_ - _dt_
+
+            - 1
+= 0         - _∇yfW_         - [(proj] _[V][ y]_ [ +] _[ t]_ [proj] _[V]_ _[⊥]_ _[y]_ [)] _[j][,]_ [ proj] _[V]_ _[⊥]_ _[y]_         - _dt._
+
+
+For any _W_, it holds that
+
+
+_m∇yfW_ ( _y_ ) _j_ =
+
+
+_m_
+
+
+_ujiwi_ I [ _⟨wi, y⟩_ _>_ 0] _._
+
+_i_ =1
+
+
+Thus by the linearity of the integral and Lemma 1, it holds that
+
+
+I [ _⟨w_ ˆ _i,_ proj _V y_ + _t_ proj _V_ _⊥_ _y⟩_ _>_ 0] _dt_
+0
+
+
+_m_ ( _fW_ - [(] _[y]_ [)] _[ −]_ _[f]_ _W_ [�][(proj] _[V][ y]_ [))] _[j]_ [=]
+
+
+=
+
+
+_m_
+
+
+        - 1
+
+
+_⟨uji_ ˆ _wi,_ proj _V_ _⊥_ _y⟩_
+_i_ =1 0
+
+
+_m_
+
+
+_i_ =1
+
+
+- _ujiwi_ [0] _[,]_ [ proj] _V_ _[⊥]_ _[y]_ - [�] [1] I ��proj _V wi_ _[⋆]_ [+ proj] _V_ _[⊥]_ _[w]_ _i_ [0] _[,]_ [ proj] _V_ _[y]_ [ +] _[ t]_ [proj] _V_ _[⊥]_ _[y]_ - _>_ 0� _dt,_
+
+0
+
+
+where we used the fact that _W_ [�] = _W_ _[⋆]_ proj _V_ + _W_ [0] proj _V_ _⊥_ by Lemma 1. A similar, but simpler,
+argument applies to _fW ⋆_ . We now use the fact that _W_ [�] proj _V_ = _W_ _[⋆]_ proj _V_ to observe that
+
+_fW_     - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [) =] _[ f]_ _W_ [�][(] _[y]_ [)] _[ −]_ _[f]_ _W_ [�][(proj] _[V][ y]_ [)] _[ −]_ [(] _[f][W][ ⋆]_ [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(proj] _[V][ y]_ [))]
+
+
+and the result follows.
+
+
+**Lemma 3.** _Let fW ⋆_ _, fW_ 0 _, and fW_ - _[be as in Theorem][ 2][.]_ _[Then it holds that]_
+
+_∥_ proj4 _V_ _⊥_ _y∥_ [2] _≤_ E ��� _fW_         - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] ��2 [�] _≤∥_ proj _V_ _⊥_ _y∥_ [2] _._
+
+
+_Proof._ Let
+
+
+and let
+
+
+         - 1
+_g_ ( _w, y_ ) = _⟨w,_ proj _V_ _⊥_ _y⟩_ I [ _⟨w,_ proj _V y_ + _t_ proj _V_ _⊥_ _y⟩_ _>_ 0] _dt_ (2)
+
+0
+
+
+           - 1
+_g_ _[′]_ ( _w, w_ _[′]_ _, y_ ) = _⟨w_ _[′]_ _,_ proj _V_ _⊥_ _y⟩_ I [ _⟨_ proj _V w_ + proj _V_ _⊥_ _w_ _[′]_ _,_ proj _V y_ + _t_ proj _V_ _⊥_ _y⟩_ _>_ 0] _dt._ (3)
+
+0
+
+
+By Lemma 2 it holds that
+
+
+E �� _fW_    - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �2 _j_    - = _m_ 1 [2] [E]
+
+
+
+
+
+- _m_
+
+ 
+
+
+�2 []
+
+
+
+
+
+
+
+
+- _u_ [0] _ji_ _[g][′]_ [(] _[w]_ _i_ _[⋆][, w]_ _i_ [0] _[, y]_ [)] _[ −]_ _[u]_ _ji_ _[⋆]_ _[g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)]
+
+_i_ =1
+
+
+= [2] - _g_ ( _w_ 1 _[⋆][, y]_ [)][2][�] _,_
+
+_m_ [E]
+
+
+22
+
+
+because the _u_ [0] _ji_ [and] _[u][⋆]_ _ji_ [are] [independent] [and] [have] [variance] [1] [and] _[g][′]_ [(] _[w]_ _i_ _[⋆][, w]_ _i_ [0] _[, y]_ [)] [and] _[g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)] [are]
+independent of _u_ [0] _ji_ [and] _[ u]_ _ji_ _[⋆]_ [and identically distributed.] [Note now that]
+
+_g_ ( _wi_ _[⋆][, y]_ [)][2] _[≤⟨]_ [proj] _V_ _[⊥]_ _[y,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ [2]
+
+and thus has expectation at most _∥_ proj _V_ _⊥_ _y∥_ [2] . For the lower bound, observe that
+
+
+     - 1
+_g_ ( _wi_ _[⋆][, y]_ [)][2] [=]
+
+0
+
+     - 1
+_≥_
+
+0
+
+
+- 1
+
+_⟨wi_ _[⋆][,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ [2][ I][ [] _[⟨][w]_ _i_ _[⋆][,]_ [ proj] _V_ _[y]_ [ +] _[ t]_ [proj] _V_ _[⊥]_ _[y][⟩]_ _[>]_ [ 0]][ I][ [] _[⟨][w]_ _i_ _[⋆][,]_ [ proj] _V_ _[y]_ [ +] _[ s]_ [proj] _V_ _[⊥]_ _[y][⟩]_ _[>]_ [ 0]] _[ dsdt]_
+0
+
+
+- 1
+
+_⟨wi_ _[⋆][,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ [2][ I][ [] _[⟨][w]_ _i_ _[⋆][,]_ [ proj] _V_ _[y][⟩]_ _[>]_ [ 0]][ I][ [] _[⟨][w]_ _i_ _[⋆][,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ _[>]_ [ 0]] _[ dsdt]_
+0
+
+
+_i_ _[,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ [2]
+_≥_ _[⟨][w][⋆]_ _._
+
+4
+
+
+Thus
+
+
+_._
+_m_
+
+
+_∥_ proj _V_ _⊥_ _y∥_ [2]
+
+
+_V_ _⊥_ _y∥_ [2] _i_ _[,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ [2]
+
+= _[⟨][w][⋆]_
+4 _m_ 4 _m_
+
+
+                   4 _mV_ _[⊥]_ _[y][⟩]_ [2] _≤_ E �( _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [))] _j_ [2] - _≤_ E _⟨wi_ _[⋆][,]_ [ proj] _m_ _V_ _[⊥]_ _[y][⟩]_ [2][�]
+
+
+_V_ _[⊥]_ _[y][⟩]_ _[⊥]_ _[y][∥]_ [2]
+
+= _[∥]_ [proj] _[V]_
+_m_ _m_
+
+
+Summing over _j_ gives the result.
+
+
+**Lemma 4.** _choice of WLet_ _[⋆]_ _, W fW_ - [0] _, u_ _[,][ f]_ _i_ _[W]_ _, u_ [ 0] 0 _[, and]_ _, it holds that uniformly in_ _[ f][W][ ⋆]_ _[be as in Theorem]_ _y_ _[ 2]_ _for_ _[.]_ _[Then with probability at least]_ _∥y∥_ = 1 _,_ [ 1] _[ −]_ _[δ][ over the]_
+
+
+��              
+2 2 [��] _d_ log( _[dm]_ _/δ_ )
+����� _fW_   - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _−_ E ��� _fW_   - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� �� _≤_ _C_ + _[d]_ [ log(] _[dm][/][δ]_ [)] _._
+
+
+��
+_d_ log( _[dm]_ _/δ_ )
+
+
+_[dm]_ _/δ_ )
+
++ _[d]_ [ log(] _[dm][/][δ]_ [)]
+_m_ _m_
+
+
+_m_
+
+
+_._
+
+
+_Proof._ Begin by noting that by positive homogeneity, it suffices to set _∥y∥_ = 1. Continuing with
+the notation introduced in (2) and (3) we see that, conditional on _wi_ _[⋆][, w]_ _i_ [0][,] [it] [holds] [that] [(] _[f]_ _W_ [�][(] _[y]_ [)] _[ −]_
+_fW ⋆_ ( _y_ )) _j_ are independent centred Gaussians with variancse given by
+
+
+1
+Var(( _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [))] _[j][|][w]_ _i_ _[⋆][, w]_ _i_ [0][) =] _m_ [2]
+
+
+_m_
+
+- _g_ _[′]_ ( _wi_ _[⋆][, w]_ _i_ [0] _[, y]_ [)][2][ +] _[ g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)][2] _[.]_
+
+_i_ =1
+
+
+Thus by standard bounds on the concentration of norm of Gaussian vectors, it holds that with probability at least 1 _−_ _δ_,
+
+
+_m_
+
+2 1                     �� _fW_               - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _−_ _m_ _g_ _[′]_ ( _wi_ _[⋆][, w]_ _i_ [0] _[, y]_ [)][2][ +] _[ g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)][2] ����
+
+����� _i_ =1                                                           
+
+
+�� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] ��2 _−_ _m_ 1
+
+
+_m_
+
+- _g_ _[′]_ ( _wi_ _[⋆][, w]_ _i_ [0] _[, y]_ [)][2][ +] _[ g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)][2] ����
+
+_i_ =1 
+
+
+_m_
+
+
+~~�~~
+
+ 
+ 
+_≤_ _C_ - _m ·_
+
+
+1
+_m_ [2]
+
+
+log( [1] _/δ_ )
+
+
+_m_ �2
+
+- _g_ _[′]_ ( _wi_ _[⋆][, w]_ _i_ [0] _[, y]_ [)][2][ +] _[ g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)][2]
+
+_i_ =1
+
+
+_m_ 
+- _g_ _[′]_ ( _wi_ _[⋆][, w]_ _i_ [0] _[, y]_ [)][2][ +] _[ g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)][2]
+
+_i_ =1
+
+
++ _C_
+
+
+1
+_m_ [2]
+
+
+log( [1] _/δ_ ) _._
+
+
+Letting
+
+
+_G_ ( _w_ _[⋆]_ _, w_ [0] _, y_ ) = [1]
+
+_m_
+
+
+_m_
+
+- _g_ _[′]_ ( _wi_ _[⋆][, w]_ _i_ [0] _[, y]_ [)][2][ +] _[ g]_ [(] _[w]_ _i_ _[⋆][, y]_ [)][2] _[,]_
+
+_i_ =1
+
+
+we see that
+����� _fW_     - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] ��2 _−_ _G_ ( _w⋆, w_ 0 _, y_ )��� _≤_ _C · G_ ( _w⋆, w_ 0 _, y_ )
+
+
+[1] _/δ_ )
+
++ [log(][1] _[/][δ]_ [)]
+_m_ _m_
+
+
+_m_
+
+
+- ~~�~~
+log( [1] _/δ_ )
+
+
+_._ (4)
+
+
+We now demonstrate that _G_ ( _w_ _[⋆]_ _, w_ [0] _, y_ ) concentrates around its mean for fixed _y_ . To do this, we
+will first observe that _g_ ( _w, y_ ) and _g_ _[′]_ ( _w, w_ _[′]_ _, y_ ) are identically distributed and thus it suffices to show
+concentration for _g_ ( _w, y_ ) and apply a union bound. Indeed, we have that
+
+_g_ ( _wi_ _[⋆][, y]_ [)][2] _[≤⟨][w]_ _i_ _[⋆][,]_ [ proj] _V_ _[⊥]_ _[y][⟩]_ [2]
+
+
+23
+
+
+and thus has Orlicz _ψ_ 1 norm at most _C ∥_ proj _V_ _⊥_ _y∥_ [2] for some constant _C_ . Thus by standard concentration results for sums of independent subexponential random variables (cf. e.g. Vershynin (2018);
+Wainwright (2019)), it holds that with probability at least 1 _−_ _δ_,
+
+
+_m_ ��     
+1     -     - 2 log( [1] _/δ_ )
+
+_g_ ( _wi_ _[⋆][, y]_ [)][2] _[ −]_ [E] _g_ ( _wi_ _[⋆][, y]_ [)][2][�] _≤_ _C ∥_ proj _V_ _⊥_ _y∥_ + [log(][1] _[/][δ]_ [)] _._
+
+_m_ _m_ _m_
+����� _i_ =1 �����
+
+
+Combining this argument with the triangle inequality and (4) along with the fact that _∥y∥_ = 1 and
+Lemma 3 gives that with probability at least 1 _−_ _δ_,
+
+
+_m_ ��
+
+- - 2 log( [1] _/δ_ )
+
+_g_ ( _wi_ _[⋆][, y]_ [)][2] _[ −]_ [E] _g_ ( _wi_ _[⋆][, y]_ [)][2][�] _≤_ _C ∥_ proj _V_ _⊥_ _y∥_
+
+_m_
+
+_i_ =1 �����
+
+
+_m_
+
+
+[1] _/δ_ )
+
++ [log(][1] _[/][δ]_ [)]
+_m_ _m_
+
+
+_m_
+
+
+_._
+
+
+2 2 [��]
+����� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _−_ E ��� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� �� _≤_ _C_
+
+
+- ~~�~~
+log( [1] _/δ_ )
+
+
+[1] _/δ_ )
+
++ [log(][1] _[/][δ]_ [)]
+_m_ _m_
+
+
+_m_
+
+
+_._
+
+
+We now observe that by standard high probability bounds on the operator norms of Gaussian random
+matrices (cf. e.g. Vershynin (2018, Theorem 4.6.1)), it holds that with probability at least 1 _−_ _δ_,
+thatargument on the unit sphere and a union bound, the result follows. _fW_ - [and] _[ f][W][ ⋆]_ [are] _[ C]_ [-Lipschitz as is][ E] - _g_ ( _wi_ _[⋆][, y]_ [)][2][�] in _y_ for _∥y∥_ = 1. Thus by a standard covering
+
+
+C.4 MAIN RESULT
+
+
+We now state our main result, which combines the analysis of pessimism in Section C.2 with the
+analysis of caution in Section C.3.
+**Theorem 3.** _Let V_ _be a k-dimensional subspace of_ R _[d]_ _and let_ Σ _be a positive semidefinite matrix_
+_such that_ Tr(Σproj _V_ _⊥_ ) _>_ 0 _._ _Let {yi}_ _[N]_ _i_ =1 _[be i.i.d.]_ _[samples from][ N]_ [(0] _[,]_ [ Σ)] _[ and let][ r][⋆]_ [(] _[y]_ [)] [=] _[⟨][θ][⋆][, y][⟩]_
+
+_for_ _some_ _θ_ _[⋆]_ _∈_ _V ._ _Suppose_ _that_ _θ_ [ˆ] _∈_ R _[d]_ _such_ _that_ proj _V_ _θ_ [ˆ] = _θ_ _[⋆]_ _and_ _let_ _r_ ˆ( _y_ ) = - _θ, y_ ˆ - _._ _Let_
+
+_model considered inr_ ˆLCB( _y_ ) = _r_ ˆ( _y_ ) _−_ _Proposition 4λ · α_ ( _y_ ) _,_ _for_ _α or the one hidden layer ReLU network considered in_ ( _y_ ) = �� _fW_ - [(] _[y]_ [)] _[ −]_ _[f][W][ ⋆]_ [(] _[y]_ [)] �� _with_ _fW_ ( _y_ ) _being_ _either Theorem 2the_ _linear._
+_Let_ [ˆ] _i_ = argmax _i∈_ [ _N_ ] ˆ _r_ LCB( _yi_ ) _and i_ _[⋆]_ = argmax _i∈_ [ _N_ ] _r_ _[⋆]_ ( _yi_ ) _._ _In the case that fW_ _is linear, as long_
+
+_as m_ ≳ _k_ ( _d−k_ )log( _∥_ proj _N_ ) _V_ _⊥_ _θ_ [ˆ] _∥_ 2 _and λ_ = Θ(���proj _V_ _⊥_ _θ_ ˆ���) _, it holds that_
+
+
+E          - _r_ _[⋆]_ ( _yi_ pess) _−_ _r_ _[⋆]_ ( _y_ ˆ _i_ )� ≳ �log( _N_ ) _._
+
+_In the case that fW_ _is a one hidden layer ReLU network, as long as Tm_ ≳ _d_ ( _d−k_ )log( _∥_ proj _N_ ) _V_ _⊥_ _θ_ [ˆ] _∥_ 2 _, the_
+
+_same holds with λ_ = Θ(���proj _V_ _⊥_ _θ_ ˆ���) _._ _Moreover, in both of these cases it holds that_
+
+
+lim E - _r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ _[⋆]_ ( _yi_ pess)�
+_N_ _↑∞_ E [ _r_ _[⋆]_ ( _y_ _[⋆]_ )]
+
+
+_._
+E [ _r_ _[⋆]_ ( _yi_ _[⋆]_ )]
+
+
+_yi⋆_ ) _−_ _r_ _[⋆]_ ( _yi_ pess)� = 0 _<_ lim E [ _r_ _[⋆]_ ( _yi⋆_ ) _−_ _r_ _[⋆]_ ( _y_ ˆ _i_ )]
+
+E [ _r_ _[⋆]_ ( _yi_ _[⋆]_ )] _N_ _↑∞_ E [ _r_ _[⋆]_ ( _yi_ _[⋆]_ )]
+
+
+_Proof._ The result follows immediately by combining Proposition 3 with Proposition 4 and Theorem 2 and observing that _∥_ proj _V_ _⊥_ _y∥_ ≲ �( _d −_ _k_ ) log( [1] _/δ_ ) with probability at least 1 _−δ_ by standard
+concentration results for chi-squared random variables (cf. e.g. Wainwright (2019)).
+
+
+D EXPERIMENTAL DETAILS
+
+
+**Hyperparameter Configuration.** Table 4 provides a comprehensive overview of all hyperparameters used throughout our experimental evaluation. The configuration represents a careful balance
+between computational efficiency and model expressiveness, with key design choices motivated by
+our theoretical analysis and empirical ablations.
+
+
+The RND architecture employs 10 layers for both target and predictor networks, significantly deeper
+than the default 4 layers, which we found provides better representation quality for uncertainty estimation. The RND weight _λ_ = 0 _._ 2 represents a moderate pessimism strength that effectively
+mitigates reward hacking while preserving the benefits of reward-guided selection. Training hyperparameters including the reduced learning rate (1 _×_ 10 _[−]_ [5] ) and extended training duration (5 epochs)
+ensure stable convergence of the predictor network on the GSM8K training distribution.
+
+
+24
+
+
+**Architectural** **Ablations.** For the architectural ablation study, we design different levels of network complexity and check their impact on the training objective, the reconstruction loss and also
+the final accuracies. Table 5 contains a comprehensive introduction of settings involved in our ablation studies.
+
+
+**Implementation Framework.** Our experimental setup utilizes PyTorch 2.3.1 as the primary deep
+learning framework, with model inference accelerated through vLLM 0.10.0 and Transformers
+4.55.1 for efficient large-scale language model deployment. For RND training, we extract representations from the first 10 layers of both predictor and target networks, employing a learning rate
+of 1 _×_ 10 _[−]_ [5] with 50 warmup steps across 5 training epochs. The RND models are trained on outputs generated by the backbone model using the GSM8K training set, and subsequently evaluated
+against the validation set of GSM8K as well as Math-500 and BigBench-Hard benchmarks to assess
+generalization capabilities.
+
+
+**Inference** **Configuration.** All inference experiments maintain consistent hyperparameters with
+temperature set to 1.0 and maximum token limits of 500 for GSM8K and 1024 for Math-500 and
+BigBench-Hard evaluations. The increased token limit for harder datasets is necessary because these
+benchmarks require significantly more reasoning tokens to avoid truncation before reaching a conclusion. Response generation uses vLLM for efficient parallel sampling across multiple candidates
+in Best-of-N evaluation.
+
+
+E ADDITIONAL CASE STUDY
+
+
+To gain deeper insights into the mechanisms underlying reward hacking and our caution-based mitigation, we analyze the correlation patterns between reward model scores and pessimism scores
+through detailed scatter plot visualizations. Each plot displays z-normalized scores for all responses
+to individual GSM8K problems, with green points representing correct responses and red points
+representing incorrect responses.
+
+
+The scatter plots in Figure 5 reveal two critical failure modes of reward models that our approach
+successfully identifies. In the **high** **reward,** **low** **pessimism** **region** (upper-left quadrant), we observe responses that exemplify systematic reward hacking. These responses achieve high reward
+scores not through genuine correctness or adherence to task requirements, but by exploiting spurious correlations that the reward model learned during training. Crucially, these responses often
+**ignore fundamental formatting requirements** of the mathematical reasoning task, such as providing the final answer in the required format, yet still receive high rewards because the reward model
+prioritizes superficial indicators like verbosity, step-by-step presentation, or mathematical terminology over actual task compliance. This reveals that reward models can be systematically misled by
+responses that mimic the surface patterns of high-quality reasoning without delivering the essential
+components of a correct solution.
+
+
+Conversely, the **low reward, high pessimism region** (lower-right quadrant) contains responses that
+follow proper formatting conventions and adhere closely to the expected task structure, yet receive
+low reward scores. This pattern illuminates a fundamental limitation of reward models: they function primarily as **distributional** **fitness** **measures** rather than objective quality assessors. These
+well-formatted responses are penalized not because they lack correctness or clarity, but because
+they deviate from the specific stylistic preferences and response patterns that dominated the reward model’s training distribution. The reward model essentially measures how closely a response
+matches its learned notion of “preferred” responses rather than evaluating genuine task performance
+or adherence to explicit instructions.
+
+
+This analysis demonstrates that our caution mechanism successfully identifies both forms of reward
+model failure: it flags spurious high-reward responses that exploit correlational biases while recognizing genuinely task-compliant responses that happen to fall outside the reward model’s narrow
+preference distribution. The results underscore that effective reward hacking mitigation requires
+moving beyond simple score-based selection toward distributional awareness that can distinguish
+between genuine quality and superficial pattern matching.
+
+
+25
+
+
+**Question:** Mandy owes Benedict $100. They agreed to have monthly interest of 2%. If
+Mandy was able to pay it after 3 months, how much should she give to Benedict?
+
+
+**Answer:** The monthly interest is $100 x 2/100 = $<<100*2/100=2>>2. After 3
+months, the total interest amount to $2 x 3 = $<<2*3=6>>6. Therefore, Mandy
+should give Benedict a total of $100 + $6 = $<<100+6=106>>106. #### 106
+
+
+**Response 1:** To solve this problem, we need to calculate the interest for 3 months. The
+formula for simple interest is: Interest = Principal * Rate * Time Here, Principal = $100,
+Rate = 2% or 0.02 (in decimal), and Time = 3 months. First, let's convert the time from
+months to years, since the interest rate is annual. 3 months = 3/12 years = 0.25 years.
+Now, we can calculate the interest: Interest = $100 * 0.02 * 0.25 Interest = $5 So,
+Mandy owes Benedict an additional $5 as interest. In total, Mandy should pay $100
+(original amount) + $5 (interest) = $105 to Benedict. **[High Reward, Low Pess.]**
+
+
+**Response 2:** To find out how much Mandy should give to Benedict, we need to
+calculate the total interest for 3 months 1. Calculate the monthly interest: 2% of $100 is
+(2/100) * $100 = $2 per month. 2. Calculate the total interest for 3 months: $2 * 3 =
+$6. 3. Add the total interest to the original amount: $100 + $6 = $106. So, Mandy
+should give Benedict $106. #### {106} **[High Pess., Low Reward]**
+
+
+**Question:** Mack wants to count things and decided to count how many birds there are
+in the sky over the next week. On days one and two, Mack saw a total of 50 birds. On
+day three he saw none. On days four and five, he saw 120 birds. On day six he saw 20
+and on day seven he saw 90. On average, how many birds did Mack see in a day?
+
+
+**Answer:** On days one to three, Mack saw 50+0=<<50+0=50>>50 birds. On days four
+to seven, he saw 120+20+90=<<120+20+90=230>>230 birds. For the whole week he
+saw 230+50=<<230+50=280>>280 birds. On average Mack saw
+280/7=<<280/7=40>>40 birds a day. #### 40
+
+**Response 1:** To find the average number of birds Mack saw per day, we need to calculate
+the total number of birds he saw and divide it by the number of days. Let's add up the
+number of birds Mack saw on each day: Day 1: 50 birds Day 2: 50 birds Day 3: 0 birds
+Day 4: 120 birds Day 5: 120 birds Day 6: 20 birds Day 7: 90 birds Total number of birds
+= 50 + 50 + 0 + 120 + 120 + 20 + 90 Total number of birds = 450 Since Mack counted
+birds over 7 days, we divide the total number of birds by the number of days: Average
+number of birds per day = Total number of birds / Number of days Average number of
+birds per day = 450 / 7 Average number of birds per day = 64.29 So, Mack saw
+approximately 64.29 birds per day on average. **[High Reward, Low Pess.]**
+
+
+**Response 2:** To find the average number of birds Mack saw in a day, we need to calculate
+the total number of birds he saw and divide it by the total number of days. Let's calculate
+the total number of birds Mack saw:- Days 1 and 2: 50 birds- Day 3: 0 birds- Days 4 and 5:
+120 birds- Day 6: 20 birds- Day 7: 90 birds Total number of birds = 50 + 0 + 120 + 20 +
+90 = 280 Now, we need to find the total number of days. Mack counted birds over 7 days.
+Total number of days = 7 To find the average, we divide the total number of birds by the
+total number of days: Average number of birds per day = Total number of birds / Total
+number of days\n= 280 / 7 = 40 #### 40 **[High Pess., Low Reward]**
+
+
+Figure 5: **Pessimism–Reward visualization on GSM8K.** Each row shows one problem: a scatter
+plot of z-normalized pessimism (x-axis) and z-normalized reward (y-axis), with green points for
+correct responses and red for incorrect. Upper-left points (high reward, low pessimism) illustrate reward hacking—responses that score well despite low distributional support. Lower-right points (low
+reward, high pessimism) are well-formed, instruction-following responses that the reward model undervalues; our caution mechanism up-weights these relative to reward-only selection.
+
+
+F DETAILED RESULTS FOR ABLATION STUDIES
+
+
+This section complements Table 2 with full scaling curves. We sweep pessimism
+strength _λ_ _∈_ _{_ 0 _._ 0 _,_ 0 _._ 2 _,_ 0 _._ 4 _,_ 0 _._ 6 _,_ 0 _._ 8 _,_ 1 _._ 0 _}_ and vary the Best-of- _N_ budget over _N_ _∈_
+_{_ 1 _,_ 2 _,_ 4 _,_ 8 _,_ 16 _,_ 32 _,_ 64 _,_ 128 _,_ 256 _,_ 512 _}_ . Figure 6 shows our caution variant that uses reward-model
+features; Figure 7 shows traditional RND with random targets.
+
+
+**Caution (RM features).** Moderate–high _λ_ (about 0 _._ 6–0 _._ 8) maintains or improves accuracy as _N_
+grows, preventing the reward-hacking drop seen at _λ_ = 0 (RM-only). _λ_ = 1 _._ 0 (pessimism-only) is
+competitive but slightly conservative at small _N_, this is because for easier problems, most responses
+contain the correct answer but not all of them strictly follows the specified answering format, and
+applying pessimism only would at least filter out the incorrectly formatted responses. Overall, _λ_ _∈_
+
+[0 _._ 6 _,_ 0 _._ 8] delivers the best trade-off across most _N_ .
+
+
+**Traditional** **RND** **(random** **targets).** Accuracy remains flat or declines with _N_ for all _λ_, and
+rarely exceeds the RM-only baseline. Sweeping _λ_ offers little benefit, indicating that random targets
+lack the semantic grounding needed for useful uncertainty estimates.
+
+
+26
+
+
+84
+
+
+82
+
+
+80
+
+
+78
+
+
+76
+
+
+74
+
+
+72
+
+
+70
+
+
+N samples per problem
+
+
+Figure 6: **Caution (RND-on-RM-features) scaling with** _λ_ **.** Best-of- _N_ accuracy on GSM8K versus
+samples per problem (x-axis) for Pessimism strengths _λ ∈{_ 0 _._ 0 _,_ 0 _._ 2 _,_ 0 _._ 4 _,_ 0 _._ 6 _,_ 0 _._ 8 _,_ 1 _._ 0 _}_ . The predictor is trained against a frozen target network built from reward-model features. Larger _λ_ increases
+pessimism strength; _λ_ = 0 reduces to Reward-Model-only selection, and _λ_ = 1 to pessimism-only.
+Moderate–high weights (roughly 0 _._ 6–0 _._ 8) preserve scaling while curbing reward hacking, outperforming both the RM-only and RND-only extremes across most _N_ .
+
+Table 6: Layer depth ablation for target
+network and predictor network.
+
+
+**Number** **of** **Layers** **(** _L_ **).** In Table 6, we study how the
+selection of _L_ would impact performance, on a smaller
+subset of GSM8K with 100 problems and 100 responses
+for each problem. Generally we observe higher peak accuracies and less degradation when given more layers, although at the cost of compute budget.
+
+
+G ADDITIONAL BASELINE COMPARISONS
+
+
+_L_ Peak Acc. Final Acc.
+
+
+2 79 77
+4 81 77
+6 83 78
+8 84 81
+10 84 84
+
+
+To further validate the effectiveness of our pessimism approach against reward hacking, we conduct comprehensive comparisons with additional baseline methods from the literature. Specifically,
+we compare ours against _χ_ [2] regularized sampling Huang et al. (2025b), softmax best-of-n (which
+applies temperature-based softening to the selection distribution), and Best-of-Poisson sampling
+(which draws a Poisson-distributed number of samples before selection). We also evaluate combinations of pessimism with these alternative sampling strategies to assess whether our approach
+provides complementary benefits. All methods are evaluated on the same experimental setup using
+GSM8K.
+
+
+Figure 8 presents the scaling curves for all methods. The results demonstrate that our pessimism
+approach exhibits superior robustness against reward hacking degradation. While the standard Bestof-N baseline shows severe performance degradation. Notably, combinations of pessimism with
+other sampling strategies (e.g., Pessimism + _χ_ [2], Pessimism + Poisson, Pessimism + Softmax) show
+comparable stability to pessimism alone.
+
+
+27
+
+
+80
+
+
+78
+
+
+76
+
+
+74
+
+
+72
+
+
+N samples per problem
+
+
+Figure 7: **Traditional** **RND** **(random** **targets)** **baseline.** Best-of- _N_ GSM8K accuracy when using classical RND with a _randomly initialized_ target network (no reward-model features), sweeping
+_λ_ _∈{_ 0 _._ 0 _,_ 0 _._ 2 _,_ 0 _._ 4 _,_ 0 _._ 6 _,_ 0 _._ 8 _,_ 1 _._ 0 _}_ . Unlike our caution variant, this baseline shows little to no scaling benefit and generally does not surpass the Reward-Model-only curve, indicating that semantic
+grounding from reward-model features is crucial for effective distributional regularization.
+
+
+82
+
+
+80
+
+
+78
+
+
+76
+
+
+74
+
+
+72
+
+
+|Col1|Col2|Col3|line)|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||Best­of­N (Base<br>|ine)|ine)|ine)|ine)|ine)|ine)|ine)|ine)|ine)|ine)|
+|||~~Pessimism~~<br>² Reg.<br>Softmax BoN<br>Poisson<br>Pessimism + ²<br>|||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+|||Pessimism + Po<br>Pessimism + So|isson<br>ftmax|isson<br>ftmax|||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+
+
+Number of Candidates (N)
+
+
+Figure 8: Comparison of pessimism-based sampling with alternative baseline methods.
+
+
+28
+
+
+Table 4: **Comprehensive** **Hyperparameter** **Configuration.** All hyperparameters used in training
+and evaluation of the Random Network Distillation (RND) approach for mitigating reward hacking.
+The table is organized by component: RND architecture, training process, inference settings, and
+evaluation confgurations.
+
+
+**Component** **Parameter** **Value** **Description**
+
+
+**RND**
+**Architecture**
+
+
+**Training**
+**Process**
+
+
+**Inference**
+**Settings**
+
+
+**Evaluation**
+**Configuration**
+
+
+**Ablation**
+**Study**
+
+
+Target layers 10 Number of layers extracted from reward model for target network
+Predictor layers 10 Number of layers in predictor network architecture
+RND weight ( _λ_ ) 0.8 Strength of pessimism penalty in combined scoring
+Exact architecture False Whether predictor copies exact reward model architecture
+Embedding strategy shared_trainable How embeddings are handled: shared_trainable, shared_frozen,
+or separate
+Use projection True Whether to add projection layer between predictor and target
+
+
+Batch size 8 Training batch size for RND predictor
+Learning rate 1e-5 Learning rate for predictor network
+Number of epochs 5 Training epochs for predictor network
+Warmup steps 50 Learning rate scheduler warmup steps
+Max examples 5000 Maximum training examples from GSM8K train split
+VRAM usage 24GB Minimum VRAM requirement for GPU
+
+
+Temperature 1.0 Sampling temperature for response generation
+Max tokens (GSM8K) 500 Maximum tokens for GSM8K responses
+Max tokens (MATH/BBH) 1024 Maximum tokens for harder reasoning tasks
+Number of samples ( _N_ ) 1-512 Range of Best-of-N sampling candidates
+
+
+Backbone model Llama-3.2-3B-Instruct Base language model for response generation
+Reward model OASST DeBERTa Primary reward model for scoring responses
+Training dataset GSM8K train Dataset for training RND predictor
+Test datasets GSM8K, MATH-500, BBH Evaluation benchmarks (in-domain and OOD)
+Bootstrap runs 3 Number of bootstrap runs for confidence intervals
+Score normalization Z-score Normalization method for reward and RND scores
+Selection strategy highest_reward Method for selecting best response from candidates
+
+
+RND weight range 0.0-1.0 Range of _λ_ values tested in weight ablation
+Architecture variants 4 types Full, simplified, embedding strategies, projection ablations
+Comparison baselines BoN, RND-only Standard Best-of-N and pessimism-only baselines
+
+
+Table 5: **Summary of ablations.** Each row defnes one setting and what it means in practice.
+
+
+**Ablation Setting** **What it means / Rationale**
+
+
+_Predictor architecture_
+Same as Target Predictor uses the _same_ _overall_ _structure_ as the target network (e.g., same
+block type and connectivity), matching width and depth. Isolates training
+dynamics from architectural mismatch.
+Simplified Predictor keeps the _same_ _hidden_ _size_ _and_ _number_ _of_ _layers_ as the target but replaces specialized target blocks with _vanilla_ _Transformer_ _encoder_
+_blocks_ . This deliberately reduces architectural complexity while preserving
+depth/width, aiming for better generalization and lower overfitting risk.
+
+
+_Embedding strategy_
+Shared, trainable Predictor _shares the target’s token embeddings_ and _updates them during train-_
+_ing_ . Pros: reuse target’s pretrained semantic representations and potentially
+quicker convergence. Cons: tighter coupling may leak target-specific biases
+into the predictor.
+Shared, frozen Predictor _reuses_ _the_ _target’s_ _token_ _embeddings_ but _keeps_ _them_ _frozen_ . Pros:
+stable token mapping and clean isolation of predictor encoder learning. Cons:
+less flexibility to adapt embeddings to the predictor’s simplified blocks.
+Separate, randomly initialized Predictor creates _its own embedding layer_ with random initialization (initialized via the model’s standard weight init). Pros: full decoupling from the
+target, potentially better regularization. Cons: longer warm-up and higher optimization burden to reach alignment.
+
+
+_Projection head_
+No projection head The predictor’s final hidden states are _directly mapped_ to the output space used
+for matching the target’s features. Minimal additional parameters; simplest
+path that reduces opportunities for overfitting.
+Linear projection head Adds a _single_ _linear_ _layer_ after the predictor’s hidden states and _before_ the
+output. Acts as a light adapter/bottleneck to better match target feature geometry; can improve fit at small cost in extra parameters, but may introduce
+overfitting.
+
+
+29

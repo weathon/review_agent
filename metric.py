@@ -217,7 +217,10 @@ def analyze_and_plot(path):
     if one_vs_rest is not None and one_vs_rest.get("rest_means") and one_vs_rest.get("heldout_scores"):
         left = np.array(one_vs_rest["rest_means"])
         right = np.array(one_vs_rest["heldout_scores"])
-        ax2.scatter(left, right, color="#f39c12", s=70, edgecolors="white", linewidth=0.8, alpha=0.9)
+        jitter_rng = np.random.default_rng(42)
+        left_jit = left + jitter_rng.uniform(-0.35, 0.35, size=len(left))
+        right_jit = right + jitter_rng.uniform(-0.35, 0.35, size=len(right))
+        ax2.scatter(left_jit, right_jit, color="#f39c12", s=70, edgecolors="white", linewidth=0.8, alpha=0.9)
         mn2, mx2 = min(left.min(), right.min()) - 0.5, max(left.max(), right.max()) + 0.5
         ax2.plot([mn2, mx2], [mn2, mx2], "k--", alpha=0.3)
         if len(left) >= 2:

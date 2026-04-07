@@ -1,0 +1,5424 @@
+# RINGLEADER ASGD: THE FIRST ASYNCHRONOUS SGD WITH OPTIMAL TIME COMPLEXITY UNDER DATA HETEROGENEITY
+
+
+**Artavazd Maranjyan, Peter Richt´arik**
+King Abdullah University of Science and Technology (KAUST)
+_{_ arto.maranjyan,richtarik _}_ @gmail.com
+
+
+ABSTRACT
+
+
+Asynchronous stochastic gradient methods are central to scalable distributed optimization, particularly when devices differ in computational capabilities. Such
+settings arise naturally in federated learning, where training takes place on smartphones and other heterogeneous edge devices. In addition to varying computation
+speeds, these devices often hold data from different distributions. However, existing asynchronous SGD methods struggle in such heterogeneous settings and
+face two key limitations. First, many rely on unrealistic assumptions of similarity
+across workers’ data distributions. Second, methods that relax this assumption
+still fail to achieve theoretically optimal performance under heterogeneous computation times. We introduce Ringleader ASGD, the first asynchronous SGD algorithm that attains the theoretical lower bounds for parallel first-order stochastic
+methods in the smooth nonconvex regime, thereby achieving optimal time complexity under data heterogeneity and without restrictive similarity assumptions.
+Our analysis further establishes that Ringleader ASGD remains optimal under arbitrary and even time-varying worker computation speeds, closing a fundamental
+gap in the theory of asynchronous optimization.
+
+
+1 INTRODUCTION
+
+
+Modern machine learning increasingly depends on large-scale distributed training across clusters
+with hundreds or even thousands of GPUs (Shoeybi et al., 2019; Brown et al., 2020; Narayanan
+et al., 2021). However, classical synchronous training methods struggle to scale, as device failures,
+network instabilities, and synchronization overheads introduce inefficiencies (Chen et al., 2016;
+Grattafiori et al., 2024). These issues become even more pronounced in environments with heterogeneous computational power, such as Federated Learning (FL), where devices range from high-end
+datacenter GPUs to resource-constrained edge hardware (Koneˇcn´y et al., 2016; McMahan et al.,
+2016; Li et al., 2020; Kairouz et al., 2021). Because synchronous methods are bottlenecked by
+the slowest participants, faster devices remain idle, leading to underutilization of resources when
+stragglers—nodes slowed by computation or communication—lag significantly behind.
+
+
+One way to reduce synchronization bottlenecks is to equip data centers with homogeneous GPUs.
+However, this approach is expensive and difficult to scale: upgrading to faster GPUs requires replacing all devices simultaneously, since heterogeneous hardware cannot be combined efficiently.
+Even then, homogeneity does not eliminate synchronization issues, as hardware failures and device dropouts still cause stragglers and idle time. Moreover, this solution applies only to controlled
+datacenter environments and is infeasible in FL, where edge devices are outside the server’s control.
+
+
+A more promising approach is to shift from hardware to algorithmic solutions using asynchronous
+optimization methods. These methods remove the need for synchronization, allowing fast workers
+to contribute without waiting for slower ones (Tsitsiklis et al., 1986; Recht et al., 2011; Agarwal &
+Duchi, 2011; Dean et al., 2012; Li et al., 2014). Despite their appeal, asynchronous methods are
+harder to analyze. In particular, a meaningful analysis would require studying _time to convergence_,
+rather than iteration complexity only. Iteration count alone does not reflect training speed in parallel
+settings: a method with more iterations may still finish faster if those steps avoid waiting for slow
+
+
+1
+
+
+Table 1: Comparison of time complexities for parallel first-order methods under the fixed computation time model, where worker _i_ needs _τi_ seconds to compute a stochastic gradient, with the times
+ordered so that _τn_ is the largest (2). We denote by _τ_ avg := _n_ [1] - _ni_ =1 _[τ][i]_ [ the average computation time.]
+
+Problem parameters include the initial function suboptimality ∆:= _f_ ( _x_ [0] ) _−_ _f_ _[∗]_ (Assumption 3), the
+target stationarity _ε_, the variance bound of the stochastic gradients _σ_ [2] (Assumption 1), and smoothness constants. Specifically, _Lf_ is the smoothness constant of _f_ (3); _L_ max := max _i∈_ [ _n_ ] _Lfi_ with
+_Lfi_ the smoothness constant of _fi_ ; and _L_ is a constant associated with our new smoothness-type
+assumption (Assumption 2). They satisfy _Lf_ _≤_ _L ≤_ _L_ max (Lemma E.1). All stated time complexities hide universal constant factors. Each column indicates whether a method satisfies the following
+desirable properties: **Optimal:** achieves the theoretical lower bound derived by Tyurin & Richt´arik
+(2024) for parallel first-order stochastic methods in heterogeneous data setting. **No sync.:** does not
+require synchronization and is therefore _asynchronous_ . **No idle workers:** all workers remain busy
+without waiting, so computational resources are fully utilized. **No discarded work:** no computation
+is wasted, and no worker is stopped mid-computation.
+
+
+**Method** **Time Complexity** **Optimal** **No sync.** **No idle workers** **No discarded work**
+
+
+Naive Minibatch SGD _Lf_ ∆
+(Section 3) _ε_
+
+
+_fε_ ∆ - _τn_ + _τn_ _[σ]_ _nε_ [2]
+
+
+ 
+_[σ]_ _nε_ [2] ✘ ✘ ✘ ✔
+
+
+IA [2] SGD
+(Wang et al., 2025)
+(Appendix H)
+
+
+_ε_ ∆ - _τn_ + _τn_ _[σ]_ _nε_ [2]
+
+
+_L_ max∆
+
+
+_[σ]_ _nε_ [2] - (†) ✘ ✔ ✔ ✔
+
+
+Malenia SGD _Lf_ ∆
+(Tyurin & Richt´arik, 2024) _ε_
+
+
+Ringleader ASGD **(new)** _L_ ∆
+(Algorithm 1; Theorem 5.3) _ε_
+
+
+Lower Bound _Lf_ ∆
+(Tyurin & Richt´arik, 2024) _ε_
+
+
+_fε_ ∆ - _τn_ + _τ_ avg _[σ]_ _nε_ [2]
+
+
+_ε_ ∆ - _τn_ + _τ_ avg _[σ]_ _nε_ [2]
+
+
+ 
+_[σ]_ _nε_ [2] ✔ ✘ ✔ ✘
+
+
+ 
+_[σ]_ _nε_ [2] ✔ [(‡)] ✔ ✔ ✔
+
+
+_fε_ ∆ - _τn_ + _τ_ avg _[σ]_ _nε_ [2]
+
+
+ 
+_[σ]_ _nε_ [2] **—** **—** **—** **—**
+
+
+(†) The analysis of Wang et al. (2025) assumes that all _fi_ share the same smoothness constant, i.e., each _fi_ is _Lfi_ –smooth and the bound _L_ max
+is used for all. This assumption is unnecessary: under our Assumption 2, the constant improves to _L_ while the analysis remains unchanged.
+(‡) The time complexities of Ringleader ASGD and Malenia SGD differ in the smoothness constant only. Since Malenia SGD is optimal,
+Ringleader ASGD is also optimal whenever _L_ exceeds _Lf_ by at most a universal constant factor, that is, _L_ = _O_ ( _Lf_ ).
+
+
+workers. This raises a fundamental question: _among all parallel methods, which ones are provably_
+_fastest in theory?_ To make this precise, we restrict our attention to smooth nonconvex problems and
+to stochastic first-order methods, encompassing algorithms with or without synchronization.
+
+
+Recently, Tyurin & Richt´arik (2024) studied this regime, where they derived lower bounds. They
+then proposed two algorithms: Rennala SGD, designed for the _homogeneous data setting_, where all
+workers draw samples from the same distribution, and Malenia SGD, for the _heterogeneous data set-_
+_ting_, where data distributions differ across workers. They showed that both methods are optimal—
+achieving the lower bounds—and, perhaps surprisingly, both are synchronous (they periodically
+synchronize workers). The key idea in both is to fully utilize the available computational resources
+by keeping workers continuously busy: each worker computes independently, and synchronization
+occurs only after a sufficient number of gradient computations have been accumulated.
+
+
+At first, the result of Tyurin & Richt´arik (2024) suggested a rather pessimistic outlook for asynchronous methods: despite their practical appeal, they showed that existing asynchronous methods
+are not optimal and that the method achieving the lower bound is _synchronous_ . This created the view
+that optimality is inherently tied to synchronization. However, this view was overturned by Maranjyan et al. (2025d), who, in the _homogeneous data setting_, introduced Ringmaster ASGD—the first
+asynchronous SGD method to achieve optimal time complexity as the synchronous Rennala SGD.
+Although both methods share the same theoretical guarantees, Ringmaster ASGD can be faster than
+Rennala SGD in practice, since it avoids synchronization and benefits from more frequent updates.
+
+
+Nevertheless, the work of Maranjyan et al. (2025d) established optimality in the _homogeneous data_
+_setting_ only. The question of whether some variant of a parallel method that does not rely on synchronization (i.e., is asynchronous) can also be optimal in the more general _heterogeneous_ _data_
+_setting_ remained open. In this work, we close this gap and answer the question affirmatively.
+
+
+The relevance of the heterogeneous data setting is clear in FL, where participants naturally hold
+distinct datasets (Zhao et al., 2018; Li et al., 2020; Tan et al., 2022). This setting is more chal
+
+2
+
+
+lenging than the homogeneous one, since the usual asynchronous SGD philosophy—updating after
+every gradient—can bias training toward fast workers’ local data. Most existing methods address
+this by assuming similarity across client distributions (Mishchenko et al., 2022; Koloskova et al.,
+2022; Nguyen et al., 2022; Islamov et al., 2024), an assumption that simplifies analysis but is often
+unrealistic in practice (e.g., hospitals with distinct demographics, mobile users in different regions).
+
+
+Recent work by Wang et al. (2025) took a step toward removing these restrictive assumptions by
+proposing Incremental Aggregated Asynchronous SGD (IA [2] SGD), a method that provably converges
+without similarity assumptions. However, their method achieves the same time complexity as standard Naive Minibatch SGD (see the first two rows of Table 1)—the simplest synchronous SGD baseline, which waits to collect one gradient from each worker before every update—thus failing to
+provide the computational advantages that motivate asynchronous approaches in the first place.
+
+
+To the best of our knowledge, the only method proven to be optimal in the _heterogeneous data setting_
+is the synchronous algorithm Malenia SGD of Tyurin & Richt´arik (2024), which, notably, does not
+rely on similarity assumptions. However, synchronization is a major bottleneck in practice: although
+synchronous and asynchronous methods can share the same theoretical complexity, asynchronous
+methods are often faster in practice because they avoid costly synchronization and benefit from more
+frequent updates, as demonstrated in the homogeneous case by Maranjyan et al. (2025d).
+
+
+This raises a fundamental question: _Is_ _it_ _possible_ _to_ _design_ _an_ _asynchronous_ _method_ _that_ _requires_
+_no_ _similarity_ _assumptions_ _while_ _still_ _achieving_ _optimal_ _time_ _complexity?_ In this paper, we answer
+this question affirmatively by introducing Ringleader ASGD, the first asynchronous SGD method
+that achieves optimal time complexity [1] in the _heterogeneous data setting_ . Importantly, Ringleader
+ASGD attains this without relying on restrictive similarity assumptions.
+
+
+1.1 CONTRIBUTIONS
+
+
+Our main contributions are the following:
+
+
+**Optimal asynchronous SGD under data heterogeneity.** We prove that Ringleader ASGD (Algorithm 1) is, to the best of our knowledge, the first asynchronous method in the heterogeneous setting
+under the fixed computation model (2) matching the lower bounds for parallel methods of Tyurin &
+Richt´arik (2024), when the smoothness-type constant _L_ in Assumption 2 is within a constant factor
+of the smoothness _Lf_ used to obtain the lower bounds (Table 1). Importantly, Ringleader ASGD
+attains this without any similarity assumptions across clients’ data.
+
+
+**Additional** **useful** **properties.** Beyond optimal time complexity, Ringleader ASGD satisfies two
+additional properties: (i) all workers remain continuously active ( _no_ _idle_ _workers_ ), and (ii) every
+computed gradient is used in the update ( _no discarded work_ ). These properties are crucial in practice,
+ensuring full resource utilization: all workers contribute at all times, and no computation is wasted.
+Table 1 compares Ringleader ASGD with benchmark algorithms on these properties.
+
+
+**Parameter-free design.** Unlike the optimal synchronous method Malenia SGD (Tyurin & Richt´arik,
+2024), which requires prior knowledge of the gradient variance bound and target accuracy, our
+method operates in the fixed computation time model without such parameters (except for the stepsize, needed only to match the optimal rate). This makes it more practical for real-world deployments, where these quantities are usually unknown or hard to estimate. The same parameter-free
+improvement can also be applied to Malenia SGD, as we discuss in Appendix I.
+
+
+**Universal** **computation** **model.** In Appendix D, we extend our analysis beyond the fixed computation time model to the setting of arbitrarily varying times, accommodating virtually any computational behavior, including stochastic or adversarial patterns, while retaining optimal time complexity.
+
+
+**Empirical validation.** In Appendix A, we evaluate Ringleader ASGD on toy problems, confirming
+the theory and showing clear practical gains over baselines.
+
+
+1Throughout the paper, we refer to our method as optimal. Formally, this holds whenever the constant _L_  associated with our new smoothness-type assumption (Assumption 2)—is at most a constant factor larger than
+the smoothness constant _Lf_ in the derived lower bounds (Tyurin & Richt´arik, 2024). See Table 1 for details.
+
+
+3
+
+
+2 PROBLEM SETUP
+
+
+We consider a distributed learning setting with _n_ workers, where each worker _i_ possesses its own
+local data distribution _Di_ . Our goal is to solve the following distributed optimization problem:
+
+
+_n_
+
+
+minimize
+_x∈_ R _[d]_
+
+
+_f_ ( _x_ ) := [1]
+
+
+_n_
+
+
+_,_ where _fi_ ( _x_ ) := E _ξi∼Di_ [ _fi_ ( _x_ ; _ξi_ )] _._ (1)
+
+
+_fi_ ( _x_ )
+
+_i_ =1
+
+
+Here _fi_ : R _[d]_ _→_ R denotes the local objective of worker _i_, defined as the expectation of the sample
+loss _fi_ ( _x_ ; _ξi_ ) over data points _ξi_ drawn from its local distribution _Di_ .
+
+
+We first focus on the case where workers have constant computation speeds, as this setting is more
+intuitive and serves as a foundational model for understanding the dynamics of asynchronous distributed optimization. The extension to arbitrary computation times is presented in Appendix D.
+
+
+Following the _fixed computation model_ (Mishchenko et al., 2022), we formalize:
+
+Each worker _i_ requires _τi_ seconds [2] to compute one stochastic gradient _∇fi_ ( _x, ξi_ ) _._
+(2)
+Without loss of generality, assume 0 _< τ_ 1 _≤_ _τ_ 2 _≤· · · ≤_ _τn_ _._
+
+
+We assume communication is infinitely fast (taking 0 seconds), both from workers to the server
+and from the server to workers [3] . This is a modeling choice—arguably the simplest—and has been
+standard in prior work (Mishchenko et al., 2022; Koloskova et al., 2022; Tyurin & Richt´arik, 2024;
+Maranjyan et al., 2025d), even if not always stated explicitly. We further discuss the motivation and
+limitations of this abstraction in Appendix C. A related study by Tyurin et al. (2024b) considers the
+case where communication is non-negligible and proposes techniques to address it.
+
+Finally, we denote by _τ_ avg := _n_ [1] - _ni_ =1 _[τ][i]_ [the average computation time across all workers.]
+
+
+2.1 NOTATIONS
+
+
+We denote the standard inner product in R _[d]_ by
+
+
+_⟨x, y⟩_ =
+
+
+_d_
+
+- _xiyi_ _,_
+
+
+_i_ =1
+
+
+and the corresponding Euclidean norm by _∥x∥_ := - _⟨x, x⟩_ . We use [ _n_ ] := _{_ 1 _,_ 2 _, . . ., n}_ to denote
+the index set, and E [ _·_ ] for mathematical expectation. For functions _ϕ, ψ_ : _Z_ _→_ R, we write
+_ϕ_ = _O_ ( _ψ_ ) if there exists a constant _C_ _>_ 0 such that _ϕ_ ( _z_ ) _≤_ _Cψ_ ( _z_ ) for all _z_ _∈Z_ .
+
+
+2.2 ASSUMPTIONS
+
+
+We consider the following standard assumptions for the nonconvex setting.
+**Assumption 1.** _For each i_ _∈_ [ _n_ ] _and every ξ, the function fi_ ( _x_ ; _ξ_ ) _is differentiable with respect to_
+_its_ _first_ _argument_ _x._ _Moreover,_ _the_ _stochastic_ _gradients_ _are_ _unbiased_ _and_ _have_ _bounded_ _variance_
+_σ_ [2] _≥_ 0 _, that is,_
+
+E _ξi∼Di_ [ _∇fi_ ( _x_ ; _ξi_ )] = _∇fi_ ( _x_ ) _,_ _∀x ∈_ R _[d]_ _,_ _∀i ∈_ [ _n_ ] _,_
+
+           E _ξi∼Di_ _∥∇fi_ ( _x_ ; _ξi_ ) _−∇fi_ ( _x_ ) _∥_ [2][�] _≤_ _σ_ [2] _,_ _∀x ∈_ R _[d]_ _,_ _∀i ∈_ [ _n_ ] _._
+
+
+**Assumption 2.** _Each function fi_ _is differentiable._ _There exists a constant L_ _>_ 0 _such that, for all_
+_x ∈_ R _[d]_ _and y_ 1 _, . . ., yn_ _∈_ R _[d]_ _,_
+
+_n_ 2 _n_
+
+_∇f_ ( _x_ ) _−_ 1        - _∇fi_ ( _yi_ ) _≤_ _[L]_ [2]        - _∥x −_ _yi∥_ [2] _._
+���� _n_ _n_
+
+         - _i_ =1 ����� _i_ =1
+
+2One could alternatively assume that each worker requires _at most_ _τi_ seconds. Under this formulation, all
+of our upper bounds would still hold; however, the lower bound would no longer be valid. For this reason, we
+adopt the assumption that each worker requires exactly _τi_ seconds.
+3Alternatively, one could define _τi_ as the time required for a worker to both compute a gradient and communicate it to the server, while keeping server-to-worker communication infinitely fast. Our upper bounds would
+still hold under this formulation, but the lower bounds would no longer apply, so we use the simpler model.
+
+
+4
+
+
+_≤_ _[L]_ [2]
+
+
+_n_
+
+
+�����
+
+
+2
+
+
+_n_
+
+
+- _∥x −_ _yi∥_ [2] _._
+
+
+_i_ =1
+
+
+_∇fi_ ( _yi_ )
+
+_i_ =1
+
+
+_n_
+
+
+Recall that a differentiable function _ϕ_ : R _[d]_ _→_ R is called _Lϕ_ –smooth if
+
+
+_∥∇ϕ_ ( _x_ ) _−∇ϕ_ ( _y_ ) _∥≤_ _Lϕ ∥x −_ _y∥_ _,_ _∀x, y_ _∈_ R _[d]_ _._ (3)
+
+
+By convention, _Lϕ_ denotes the smallest such constant.
+
+
+Note that Assumption 2 is stronger than requiring _f_ itself to be _Lf_ –smooth, yet weaker than all _fi_
+being _Lfi_ –smooth. The constants satisfy the following relation (Lemma E.1)
+
+
+_n_
+
+- _L_ [2] _fi_ _[≤]_ [max] _i∈_ [ _n_ ] _[L][f][i]_ [=:] _[ L]_ [max] _[ .]_
+
+_i_ =1
+
+
+_Lf_ _≤_ _L_ _≤_
+
+
+~~�~~
+
+
+- [1]
+_n_
+
+
+To the best of our knowledge, prior work on asynchronous SGD under data heterogeneity has always
+assumed smoothness of each _fi_ (Koloskova et al., 2022; Nguyen et al., 2022; Wang et al., 2025).
+**Assumption** **3.** _There_ _exists_ _f_ _[∗]_ _>_ _−∞_ _such_ _that_ _f_ ( _x_ ) _≥_ _f_ _[∗]_ _for_ _all_ _x_ _∈_ R _[d]_ _._ _We_ _define_ ∆:=
+_f_ ( _x_ [0] ) _−_ _f_ _[∗]_ _, where x_ [0] _is the starting point of the optimization methods._
+
+
+We seek an _ε_ –stationary point—a (possibly random) vector _x_ satisfying E� _∥∇f_ ( _x_ ) _∥_ [2][�] _≤_ _ε_ .
+
+
+3 BACKGROUND AND MOTIVATION
+
+
+In this section, we review relevant existing methods in distributed optimization and discuss their
+limitations to motivate our algorithmic design.
+
+
+**Naive Minibatch SGD.** This algorithm is the most straightforward way to solve (1) in a distributed
+setting. At each iteration _k_, the server waits for one gradient from every worker and updates
+
+
+_x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γ_ [1]
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k]_ ; _ξi_ _[k]_ - _._
+
+
+_i_ =1
+
+
+This guarantees an unbiased minibatch gradient but synchrony makes it inefficient: the iteration time
+is set by the slowest worker, _τn_ = max _i τi_ (2), so fast workers idle while waiting for stragglers.
+
+
+**Malenia SGD.** The algorithm (Tyurin & Richt´arik, 2024) addresses straggler problem by keeping
+all workers active: each computes gradients at _x_ _[k]_ while the server accumulates them until
+
+         - 1         - _n_ 1         - _−_ 1 _≥_ max �1 _,_ _[σ]_ [2]         - (4)
+_n_ _b_ _[k]_ _nε_
+
+
+  _≥_ max 1 _,_ _[σ]_ [2]
+
+
+(4)
+
+
+_n_
+
+
+- _−_ 1
+
+
+_i_ =1
+
+
+1
+_b_ _[k]_ _i_
+
+
+_nε_
+
+
+where _b_ _[k]_ _i_ [is the number of gradients received from worker] _[ i]_ [.] [Once this holds, the update]
+
+
+_x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γg_ ¯ _[k]_ _,_ _g_ ¯ _[k]_ := [1]
+
+_n_
+
+
+_n_
+
+
+- _g_ ¯ _i_ _[k][,]_ _[g]_ [¯] _i_ _[k]_ [:=] [1]
+
+_i_ =1 _b_ _[k]_ _i_
+
+
+_b_ _[k]_ _i_
+
+
+_b_ _[k]_ _i_
+
+- _∇fi_ - _x_ _[k]_ ; _ξi_ _[k,j]_ 
+_j_ =1
+
+
+is performed and broadcast synchronously. This achieves the optimal time complexity, but requires
+knowledge of _σ_ and _ε_ and discards ongoing computations during synchronization.
+
+
+**Toward Asynchronous Methods.** A naive way to make optimization asynchronous is to update
+immediately upon receiving a gradient:
+
+
+                 -                  _x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γ∇fik_ _x_ _[k][−][δ][k]_ ; _ξi_ _[k][k][−][δ][k]_ _,_
+
+
+where _i_ _[k]_ denotes the worker that sent the gradient at iteration _k_, and _δ_ _[k]_ _≥_ 0 is its delay, i.e.,
+the number of server updates that occurred while the gradient was being computed. Delays arise
+naturally: fast workers return gradients quickly, while slow ones compute on stale iterates.
+
+
+This scheme is biased under heterogeneous data. Fast workers dominate updates, pulling the model
+toward their local minima, while slow workers contribute too rarely, so iterates may oscillate or
+
+
+5
+
+
+stagnate. Such bias also blocks classical SGD-style proofs, which rely on one-step progress toward
+minimizing the global function, but here each update reflects a different local objective. Without
+data similarity assumptions (Mishchenko et al., 2022; Koloskova et al., 2022; Nguyen et al., 2022;
+Islamov et al., 2024), it is harder to extend the analysis to the global function—yet such assumptions
+are rarely realistic when data can be arbitrarily heterogeneous across machines or organizations.
+
+
+The root issue is that each update uses only one worker’s gradient. A better approach is to aggregate
+information from all workers, even if some gradients are stale, as in Incremental Aggregated Gradient (IAG) (Blatt et al., 2007; Gurbuzbalaban et al., 2017; Vanli et al., 2018) or Stochastic Averaged
+Gradient (SAG) (Roux et al., 2012; Schmidt et al., 2017).
+
+
+**IA** **[2]** **SGD.** This method (Wang et al., 2025) constructs updates using information from all workers
+by maintaining a gradient table on the server, similar to SAG or IAG but with asynchronous table
+updates. The table is initialized with one stochastic gradient from each worker at _x_ [0], after which the
+server updates
+
+
+_x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γg,_ ¯ _g_ ¯ = [1]
+
+_n_
+
+
+_n_
+
+- _gi_ _,_
+
+
+_i_ =1
+
+
+where _gi_ is the most recent stochastic gradient in the table from worker _i_ (possibly evaluated at a
+stale iterate _x_ _[k][−][δ]_ _i_ _[k]_ ). Each arrival replaces the corresponding entry and triggers an update, so every
+step uses the latest information from all workers while avoiding global synchronization.
+
+
+The iteration complexity of the algorithm was established by Wang et al. (2025); converting it to the
+fixed computation time model (see Appendix H) yields the same time complexity as Naive Minibatch
+SGD (Table 1). Thus, asynchronous execution alone does not yield speedups.
+
+
+**Motivation.** The main limitation of asynchronous algorithms is gradient delay, which can severely
+harm convergence by pushing steps along suboptimal trajectories. This issue arises even in homogeneous settings ( _fi_ _≡_ _f_ ). The state-of-the-art solution, Ringmaster ASGD (Maranjyan et al., 2025d),
+achieves optimal time by discarding overly delayed gradients.
+
+
+In heterogeneous settings, however, this strategy fails. Slow workers inevitably suffer large delays;
+if their gradients are discarded, their table entries remain outdated and may never refresh, creating a
+persistent information bottleneck that harms convergence. One option is to drop some updates from
+fast workers to balance delays, but this contradicts the core principle of asynchronous methods,
+where all workers compute continuously.
+
+
+Instead, our approach _buffers_ gradients from fast workers rather than applying them immediately.
+By updating only once enough gradients are collected, we control delays while keeping all workers
+active. Buffering also offers a second benefit: aggregating multiple gradients from the same iterate
+reduces variance, further improving convergence.
+
+
+4 RINGLEADER ASGD
+
+
+Ringleader ASGD (Algorithm 1) builds on three key insights from prior work. First, inspired by
+IA [2] SGD, we maintain a gradient table to ensure information from all workers is incorporated into
+every update, eliminating the need for data similarity assumptions between workers. Second, following Ringmaster ASGD, we control gradient delays for efficient asynchronous optimization. Third,
+drawing from Malenia SGD, we buffer rather than discard delayed ones to control delays while
+preserving valuable computations, enabling continuous utilization of all resources.
+
+
+An important property of the algorithm is that all workers remain continuously active. Each worker
+sends a gradient to the server immediately after computing it, with communication assumed instantaneous (Section 2). On receipt, the server either buffers the gradient—in which case the worker
+simply continues computing and sending new ones—or applies it to update the model. If an update
+occurs, the new model is instantly returned to the worker, which resumes at the new point. Thus,
+workers are never idle.
+
+
+The algorithm proceeds in rounds of exactly _n_ model updates—one per worker. When a worker
+sends a stochastic gradient, the server may apply an update and return the updated model to that
+
+
+6
+
+
+**Algorithm 1** Ringleader ASGD (server algorithm)
+
+
+1: **Input:** Stepsize _γ_ _>_ 0, initial point _x_ [0] _∈_ R _[d]_
+
+2: **Initialization:** Broadcast _x_ [0] to all workers, which then start running Algorithm 2 in parallel
+3: Set _k_ = 0, _S_ = _∅_ ; initialize _Gi_ = 0, _bi_ = 0 for all _i ∈_ [ _n_ ]
+4: **while** True **do**
+5: **— Phase 1:** **await stochastic gradients from all workers —**
+6: **while** _S_ = [ _n_ ] **do**
+
+
+7: Receive stochastic gradient _gj_ _[k]_ [(computed at] _[ x][k][−][δ]_ _j_ _[k]_ ) from some worker _j_ _∈_ [ _n_ ]
+8: _Gj_ = _Gj_ + _gj_ _[k]_ [;] _[b][j]_ [=] _[ b][j]_ [+ 1][;] _[S]_ [=] _[ S][ ∪{][j][}]_
+9: **end while**
+10: **— Phase 2:** **perform exactly one update for every worker —**
+11: _x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γ_ [1] - _n_ _[G][i][/][b][i]_ _⋄_
+
+
+11: _x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γ_ _n_ [1] - _ni_ =1 _[G][i][/][b][i]_ _⋄_ Update using averaged gradients from all workers
+
+12: Broadcast _x_ _[k]_ [+1] to worker _j_ _⋄_ Last worker to complete Phase 1
+13: _k_ = _k_ + 1; _S_ = _S \ {j}_
+14: _gi_ [+] [= 0][,] _[ b]_ _i_ [+] [= 0][ for all] _[ i][ ∈]_ [[] _[n]_ []][;] _[S]_ [+] [=] _[ ∅]_ _⋄_ Initialize temporary buffer for the next round
+15: **while** _S_ = _∅_ **do**
+16: Receive stochastic gradient _gj_ _[k]_ �computed at _x_ _[k][−][δ]_ _j_ _[k]_ [�] from some worker _j_ _∈_ [ _n_ ]
+17: **if** _j_ _∈_ _S_ **then**
+18: _Gj_ = _Gj_ + _gj_ _[k]_ [;] _[b][j]_ [=] _[ b][j]_ [+ 1]
+19: _x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γ_ [1] - _n_ _[G][i][/][b][i]_
+
+
+19: _x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γ_ _n_ [1] - _ni_ =1 _[G][i][/][b][i]_
+
+20: Broadcast _x_ _[k]_ [+1] to worker _j_
+21: _k_ = _k_ + 1; _S_ = _S \ {j}_
+22: **else**
+23: _G_ [+] _j_ [=] _[ G]_ _j_ [+] [+] _[ g]_ _j_ _[k]_ [;] _[b]_ [+] _j_ [=] _[ b]_ _j_ [+] [+ 1][;] _[S]_ [+] [=] _[ S]_ [+] _[ ∪{][j][}]_ _⋄_ Buffer for next round
+24: **end if**
+25: **end while**
+26: _Gi_ = _G_ [+] _i_ [;] _[b][i]_ [=] _[ b]_ [+] _i_ [for all] _[ i][ ∈]_ [[] _[n]_ []][;] _[S]_ [=] _[ S]_ [+] _⋄_ Transfer buffered gradients to main table
+27: **end while**
+
+
+**Algorithm 2** Worker _i_ ’s subroutine
+
+
+1: **Input:** Model _x_
+2: **while** True **do**
+3: Compute _gi_ = _∇fi_ ( _x_ ; _ξi_ ) using a freshly sampled data point _ξi_ _∼Di_
+4: Send _gi_ to the server
+5: **end while**
+
+
+worker, but it ensures that each worker receives an updated model at most once per round. Repeating
+this _n_ times guarantees every worker obtains exactly one new model per round, which keeps delays
+bounded. To avoid discarding computations from fast workers, their extra gradients are buffered and
+applied later at the appropriate time, ensuring each round still consists of exactly _n_ updates.
+
+
+Each round has two _phases_ : first, stochastic gradients are buffered until at least one from every
+worker is available; then exactly _n_ updates are performed (one per worker), after which the old
+gradients are discarded and the next round begins.
+
+
+4.1 DETAILED DESCRIPTION
+
+
+**Initialization.** The server broadcasts _x_ [0] _∈_ R _[d]_ to all workers, which then start the worker subroutine (Algorithm 2). Each worker continuously computes stochastic gradients and sends them to the
+server; if not updated, it simply continues, so workers are never idle.
+
+
+The server maintains a gradient table _{_ ( _Gi, bi_ ) _}_ _[n]_ _i_ =1 [,] [initialized with] _[ G][i]_ [=] [0][ and] _[ b][i]_ [=] [0][.] [Here] _[ G][i]_
+stores accumulated gradients and _bi_ counts how many have been received from worker _i_ . We also
+initialize _S_ = _∅_ to track which entries have at least one gradient.
+
+
+7
+
+
+**Phase 1 — Gradient Collection.** In this phase, the server receives stochastic gradients from workers and stores them in the table _{_ ( _Gi, bi_ ) _}_ _[n]_ _i_ =1 [.] [Let] _[ g]_ _j_ _[k]_ [be the gradient sent by worker] _[ j]_ [at iteration]
+
+_k_, computed at _x_ _[k][−][δ]_ _j_ _[k]_ with _ξj_ _∼_ _Dj_ . The delays _δj_ _[k]_ [are not needed to run the algorithm—they will]
+only appear later in the analysis and can be inferred as the gap between the current iterate and the
+one used to compute _gj_ _[k]_ [.]
+
+Upon receiving _gj_ _[k]_ [from worker] _[ j]_ [(Line][ 7][), the server updates the corresponding table entry and the]
+stochastic gradient counter as follows (Line 8)
+
+
+_Gj_ = _Gj_ + _gj_ _[k]_ _[,]_ _bj_ = _bj_ + 1 _,_ _S_ = _S ∪{j} ._
+
+
+This process continues until _S_ = [ _n_ ], i.e., the server has collected at least one gradient from every
+worker. No model updates are performed during this phase, and workers do not receive new points;
+hence, all stochastic gradients from a given worker are computed at the same point.
+
+
+**Phase 2 — Sequential Updates.** In this phase, the server performs exactly one model update for
+each worker _i_, for a total of _n_ updates. Phase 2 starts with the last worker that completed Phase 1,
+i.e., the worker whose gradient made the table complete. The server first computes an update by
+averaging the accumulated stochastic gradients in the table _{_ ( _Gi, bi_ ) _}_ _[n]_ _i_ =1 [and taking a descent step]
+with this estimate (Line 11). The updated model is then sent to this worker (Line 12), the worker is
+removed from the set _S_, and the iteration counter is incremented (Line 13).
+
+
+Next, the server must update the remaining _n−_ 1 workers. These updates are performed sequentially
+as soon as each worker finishes its current computation. During this waiting period, new gradients
+may arrive from workers not in _S_ —e.g. for example, the last updated worker may send another
+stochastic gradient before the other workers complete their computation. Since discarding these
+gradients would waste information, they are instead buffered for the next round.
+
+
+**Temporary** **Table** **Management.** To achieve this, the server maintains a temporary table
+_{_ ( _G_ [+] _i_ _[, b]_ _i_ [+][)] _[}]_ _i_ _[n]_ =1 [,] [initialized] [to] [zero] [(Line] [14][),] [together] [with] [a] [set] _[S]_ [+] [that] [records] [which] [workers]
+have contributed to the table. Whenever a gradient arrives from a worker not in _S_, it is stored in the
+temporary table (Line 23).
+
+If instead the gradient comes from _j_ _∈_ _S_, the server updates the main table _{_ ( _Gi, bi_ ) _}_ _[n]_ _i_ =1 [(Line][ 18][),]
+performs a model update using its averages (Line 19), broadcasts the new model to worker _j_
+(Line 20), increments the iteration counter, and removes _j_ from _S_ (Line 21).
+
+
+**Preparing** **for** **the** **Next** **Round.** Once all workers in _S_ have been updated and Phase 2 ends
+( _S_ = _∅_ ), the server copies the temporary table _{_ ( _G_ [+] _i_ _[, b]_ _i_ [+][)] _[}]_ _i_ _[n]_ =1 [into] [the] [main] [table] _[{]_ [(] _[G][i][, b][i]_ [)] _[}][n]_ _i_ =1
+(Line 26) and resets _S_ = _S_ [+], since these workers already contributed gradients at their updated
+models. Entries for workers not in _S_ [+] remain zero, as the temporary table was initialized with
+zeros at the start of Phase 2 (Line 14). The server then returns to Phase 1 to begin the next gradient
+collection round.
+
+
+The two-phase structure of Ringleader ASGD prevents the unbounded delays of standard asynchronous methods. The precise bound on delays is given in the following lemma
+
+
+**Lemma** **4.1** (Bounded Delay; Proof in Appendix E.2) **.** _In_ Ringleader ASGD _(Algorithm_ _1),_ _the_
+_delays δi_ _[k]_ _[satisfy][ δ]_ _i_ _[k]_ _[≤]_ [2] _[n][ −]_ [2] _[,][ for any worker][ i][ ∈]_ [[] _[n]_ []] _[ and any iteration][ k]_ _[≥]_ [0] _[.]_
+
+
+4.2 COMPARISON TO IA [2] SGD AND MALENIA SGD
+
+
+**IA** **[2]** **SGD.** Our method is a delay-controlled version of IA [2] SGD. We can recover IA [2] SGD by removing Phase 1 and Phase 2, and thus perform updates naively—immediately upon gradient arrival. In
+contrast, our algorithm operates in structured rounds, performing exactly one update per worker in
+each round, which provides the crucial delay control that IA [2] SGD lacks.
+
+
+In IA [2] SGD, delays for slow workers can grow unboundedly because the server continuously updates
+the model using gradients from fast workers, causing slow workers to fall increasingly behind. Our
+method prevents this issue by buffering gradients from fast workers rather than immediately applying
+these gradients, ensuring that all workers receive updated models within _n_ subsequent iterations.
+
+
+8
+
+
+**Malenia** **SGD.** Malenia SGD also operates in two phases. In Phase 1, it collects gradients much
+like our approach, but with a termination condition (4) that requires knowing the noise parameter
+_σ_ and target stationarity _ε_, making it impractical. In Phase 2, it performs a _synchronous_ update by
+averaging all collected gradients and broadcasting the new model to _all_ workers, discarding ongoing
+computations in the process. In contrast, our method performs Phase 2 _asynchronously_, updating
+workers sequentially as they finish so that no work is wasted.
+
+
+Regarding Malenia SGD’s termination condition (4), in Appendix I we demonstrate that this condition can be replaced with our simpler requirement of obtaining at least one gradient from every
+worker. With this modification, Malenia SGD remains optimal in the fixed-time regime (2) while
+becoming parameter-free, which eliminates the need for prior knowledge of _σ_ and _ε_ . Under this
+parameter-free variant, the only difference between Malenia SGD and Ringleader ASGD lies in
+Phase 2: we perform updates asynchronously without discarding gradients, while Malenia SGD
+operates synchronously.
+
+
+5 THEORETICAL RESULTS
+
+
+Before presenting the theoretical results, we first write the algorithm in a compact form. The gradients for each worker in the table are all computed at the same point; for worker _i_ at iteration _k_, the
+point is _x_ _[k][−][δ]_ _i_ _[k]_ . The update rule can be written compactly as
+
+_x_ _[k]_ [+1] = _x_ _[k]_ _−_ _γg_ ¯ _[k]_ _,_
+where the gradient estimator ¯ _g_ _[k]_ is defined by
+
+
+_g_ ¯ _[k]_ := [1]
+
+_n_
+
+
+_n_
+
+
+_g_ ¯ _i_ _[k]_ [:=] [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_b_ _[k]_ _i_
+
+- _gi_ _[k,j]_ _._
+
+_j_ =1
+
+
+_n_
+
+
+_i_ =1
+
+
+1
+_b_ _[k]_ _i_
+
+
+Since multiple gradients may be received from the same worker, we denote by _gi_ _[k,j]_ the _j_ -th gradient
+from worker _i_ at iteration _k_ . Here the index _j_ corresponds to the i.i.d. sampled data point, and more
+concretely
+
+_gi_ _[k,j]_ := _∇fi_                  - _x_ _[k][−][δ]_ _i_ _[k]_ ; _ξi_ _[k][−][δ]_ _i_ _[k][,j]_                  - _._
+
+The quantity _b_ _[k]_ _i_ [denotes the number of gradients from worker] _[ i]_ [ stored in the table at iteration] _[ k]_ [, i.e.,]
+the value of _bi_ in Lines 11 and 19. Thus, ( _b_ _[k]_ _i_ _[, δ]_ _i_ _[k]_ [)][ fully determine the method’s behavior.]
+
+Note that the sequence _{b_ _[k]_ _i_ _[}]_ [ depends only on the computation times] _[ {][τ][i][}]_ [ and the algorithm design]
+(i.e., the stopping rule for collecting gradients). Once these are fixed, all _b_ _[k]_ _i_ [for every] _[ i][ ∈]_ [[] _[n]_ []][ and it-]
+eration _k_ are determined. Crucially, the values of _b_ _[k]_ _i_ [do not depend on the method’s hyperparameters]
+_γ_, _x_ [0], or on the variance parameter _σ_ or the stationarity level _ε_ .
+
+
+**Iteration** **Complexity.** We begin by establishing notation for the harmonic means of the batch
+sizes across rounds
+
+
+_n_
+
+
+_i_ =1
+
+
+1
+_b_ _[k]_ _i_
+
+
+- _−_ 1
+
+
+_B_ _[k]_ =
+
+
+1
+
+_n_
+
+
+_,_ and _B_ = inf
+_k≥_ 0 _[B][k][.]_
+
+
+Note that _B_ _≥_ 1, since by the algorithm’s design each _b_ _[k]_ _i_ _[≥]_ [1][.] [A] [sharper] [bound] [on] _[B]_ [will] [be]
+established later in Lemma 5.2. We obtain the iteration complexity from this theorem.
+**Theorem 5.1** (Iteration Complexity; Proof in Appendix F) **.** _Under Assumptions 1, 2, and 3, let the_
+_stepsize in_ Ringleader ASGD _(Algorithm 1) be_
+
+
+   - 1 _εB_
+_γ_ = min
+8 _nL_ _[,]_ 10 _Lσ_ [2]
+
+
+_._
+
+
+_Then,_
+
+1
+
+_K_
+
+
+_for_
+
+
+_K−_ 1
+
+- E ��� _∇f_ ( _xk_ )��2 [�] _≤_ _ε,_
+
+
+_k_ =0
+
+
+_[nL]_ [∆]
+
++ [40] _[L]_ [∆] _[σ]_ [2]
+_ε_ _Bε_ [2]
+
+
+1 + _[σ]_ [2]
+
+_Bnε_
+
+
+��
+_._
+
+
+_K_ _≥_ [32] _[nL]_ [∆]
+
+
+_[L]_ [∆] _[σ]_ [2] - _nL_ ∆
+
+= _O_
+_Bε_ [2] _ε_
+
+
+9
+
+
+For parallel and asynchronous methods, iteration complexity is less important than time complexity.
+What truly matters is how quickly we can finish training. We are willing to perform more iterations
+and extra computation if it means completing the process faster. Having established the iteration
+complexity, we now turn to the time complexity.
+
+
+**Time Complexity.** Since the algorithm operates in rounds with _n_ steps per round, and its iteration
+complexity is already known, it remains to determine the duration of each round. We have the
+following lemma
+
+**Lemma 5.2** (Proof in Appendix G.1) **.** _Each block of n consecutive iterations (each round) of Algo-_
+_rithm 1 takes at most_ 2 _τn_ _seconds._ _Moreover, we have_
+
+
+_τn_
+= _._
+2 _τ_ avg
+
+
+_n_
+
+- _τi_
+
+
+_i_ =1
+
+
+- _−_ 1
+
+
+_B_ _≥_ _[τ][n]_
+
+2
+
+
+1
+
+_n_
+
+
+Based on this lemma, we derive the time complexity guarantee of our algorithm
+
+**Theorem 5.3** (Proof in Appendix G) **.** _Let the assumptions and parameter choices of Theorem 5.1_
+_hold._ _Then,_ _under_ _the_ fixed computation model (2) _,_ Ringleader ASGD _achieves_ _the_ _optimal_ _time_
+_complexity_
+
+
+ - _L_ ∆
+_O_
+_ε_
+
+
+- _σ_ [2]
+_τn_ + _τ_ avg
+
+_nε_
+
+
+��
+_._
+
+
+The obtained time complexity consists of two key terms that illuminate the algorithm’s behavior.
+The first term depends on the slowest device, which is fundamental since all devices must contribute
+to solving the problem. The second term, however, involves _τ_ avg rather than _τn_ as in Naive Minibatch
+SGD (see Table 1)—this substitution captures the core benefit of asynchronous execution. Specifically, this advantage becomes pronounced when _σ_ is relatively large. Intuitively, in high-noise
+regimes, collecting many gradients from workers is essential for convergence, and asynchronous
+methods can leverage faster workers more effectively. Conversely, in low-noise settings, fewer gradient evaluations suffice for good performance, making Naive Minibatch SGD already quite effective
+and rendering the additional complexity of asynchrony unnecessary.
+
+**Remark** **5.4.** _The_ _optimality_ _claim_ _for_ _Theorem_ _5.3_ _holds_ _when_ _the_ _smoothness-type_ _constant_ _L_
+_in_ _Assumption_ _2_ _is_ _within_ _a_ _constant_ _factor_ _of_ _the_ _smoothness_ _Lf_ _used_ _to_ _derive_ _the_ _lower_ _bound_
+_(Tyurin & Richt´arik, 2024) (Table 1)._
+
+
+Under this condition, the resulting time complexity matches the lower bound of Tyurin & Richt´arik
+(2024), making Ringleader ASGD the first asynchronous algorithm to achieve optimality under heterogeneous data.
+
+
+6 CONCLUSION
+
+
+We have introduced Ringleader ASGD, the first asynchronous stochastic gradient method to achieve
+optimal time complexity under arbitrary data heterogeneity and arbitrarily heterogeneous computation times in distributed learning, without requiring similarity assumptions between workers’
+datasets.
+
+
+Its core innovation is a two-phase structure within each round: the model is updated once per worker
+(for a total of _n_ updates), while a buffering mechanism manages gradient delays and preserves the
+efficiency of asynchronous execution. By maintaining a gradient table and alternating between gradient collection and sequential updates, Ringleader ASGD prevents the unbounded delays common
+in naive asynchronous methods. Every gradient received by the server is either used in the current
+round or stored for future use, ensuring no computation is wasted.
+
+
+Our analysis shows that Ringleader ASGD matches the optimal time complexity bounds established
+by Tyurin & Richt´arik (2024). In contrast to the optimal but synchronous Malenia SGD method,
+Ringleader ASGD is asynchronous and requires no prior knowledge of problem parameters in the
+algorithm design, making it practical for real-world deployments.
+
+
+Finally, with a minor modification, Ringleader ASGD also achieves optimality in the more general
+setting of arbitrarily varying computation times (Appendix D).
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+The research reported in this publication was supported by funding from King Abdullah University
+of Science and Technology (KAUST): i) KAUST Baseline Research Scheme, ii) CRG Grant ORFSCRG12-2024-6460, and iii) Center of Excellence for Generative AI, under award number 5940.
+
+
+REFERENCES
+
+
+Alekh Agarwal and John C Duchi. Distributed delayed stochastic optimization. _Advances in Neural_
+_Information Processing Systems_, 24, 2011.
+
+
+Abdelkrim Alahyane, C´eline Comte, Matthieu Jonckheere, and Eric [´] Moulines. Optimizing asynchronous federated learning: A delicate trade-off between model-parameter staleness and update
+frequency. _arXiv preprint arXiv:2502.08206_, 2025.
+
+
+Yossi Arjevani, Ohad Shamir, and Nathan Srebro. A tight convergence analysis for stochastic gradient descent with delayed updates. In _Algorithmic Learning Theory_, pp. 111–132. PMLR, 2020.
+
+
+Mahmoud Assran, Arda Aytekin, Hamid Reza Feyzmahdavian, Mikael Johansson, and Michael G
+Rabbat. Advances in asynchronous parallel and distributed optimization. _Proceedings_ _of_ _the_
+_IEEE_, 108(11):2013–2031, 2020.
+
+
+Doron Blatt, Alfred O Hero, and Hillel Gauchman. A convergent incremental gradient method with
+a constant step size. _SIAM Journal on Optimization_, 18(1):29–51, 2007.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh,
+Daniel Ziegler, Jeffrey Wu, Clemens Winter, Chris Hesse, Mark Chen, Eric Sigler, Mateusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot
+learners. In H. Larochelle, M. Ranzato, R. Hadsell, M. F. Balcan, and H. Lin (eds.), _Ad-_
+_vances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 33, pp. 1877–1901. Curran Associates, Inc., 2020. URL [https://proceedings.neurips.cc/paper/2020/file/](https://proceedings.neurips.cc/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf)
+[1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf.](https://proceedings.neurips.cc/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf)
+
+
+Jianmin Chen, Xinghao Pan, Rajat Monga, Samy Bengio, and Rafal Jozefowicz. Revisiting distributed synchronous SGD. _arXiv preprint arXiv:1604.00981_, 2016.
+
+
+Alon Cohen, Amit Daniely, Yoel Drori, Tomer Koren, and Mariano Schain. Asynchronous stochastic
+optimization robust to arbitrary delays. _Advances in Neural Information Processing Systems_, 34:
+9024–9035, 2021.
+
+
+Jeffrey Dean, Greg Corrado, Rajat Monga, Kai Chen, Matthieu Devin, Mark Mao, Marc' aurelio Ranzato, Andrew Senior, Paul Tucker, Ke Yang, Quoc Le, and Andrew Ng. Large
+scale distributed deep networks. In F. Pereira, C.J. Burges, L. Bottou, and K.Q. Weinberger
+(eds.), _Advances in Neural Information Processing Systems_, volume 25. Curran Associates, Inc.,
+2012. URL [https://proceedings.neurips.cc/paper_files/paper/2012/](https://proceedings.neurips.cc/paper_files/paper/2012/file/6aca97005c68f1206823815f66102863-Paper.pdf)
+[file/6aca97005c68f1206823815f66102863-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2012/file/6aca97005c68f1206823815f66102863-Paper.pdf)
+
+
+Sanghamitra Dutta, Gauri Joshi, Soumyadip Ghosh, Parijat Dube, and Priya Nagpurkar. Slow and
+stale gradients can win the race: Error-runtime trade-offs in distributed SGD. In _International_
+_Conference on Artificial Intelligence and Statistics_, pp. 803–812. PMLR, 2018.
+
+
+Hamid Reza Feyzmahdavian and Mikael Johansson. Asynchronous iterations in optimization: New
+sequence results and sharper algorithmic guarantees. _Journal of Machine Learning Research_, 24
+(158):1–75, 2023.
+
+
+Hamid Reza Feyzmahdavian, Arda Aytekin, and Mikael Johansson. An asynchronous mini-batch
+algorithm for regularized stochastic optimization. _IEEE Transactions on Automatic Control_, 61
+(12):3740–3754, 2016.
+
+
+11
+
+
+Yann Fraboni, Richard Vidal, Laetitia Kameni, and Marco Lorenzi. A general theory for federated
+optimization with asynchronous and heterogeneous clients updates. _Journal of Machine Learning_
+_Research_, 24(110):1–43, 2023.
+
+
+Margalit R Glasgow and Mary Wootters. Asynchronous distributed optimization with stochastic delays. In _International Conference on Artificial Intelligence and Statistics_, pp. 9247–9279. PMLR,
+2022.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd
+of models. _arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Mert Gurbuzbalaban, Asuman Ozdaglar, and Pablo A Parrilo. On the convergence rate of incremental aggregated gradient algorithms. _SIAM Journal on Optimization_, 27(2):1035–1048, 2017.
+
+
+Rustem Islamov, Mher Safaryan, and Dan Alistarh. AsGrad: A sharp unified analysis of
+asynchronous-SGD algorithms. In _International Conference on Artificial Intelligence and Statis-_
+_tics_, pp. 649–657. PMLR, 2024.
+
+
+Sashank J Reddi, Ahmed Hefny, Suvrit Sra, Barnabas Poczos, and Alexander J Smola. On variance reduction in stochastic gradient descent and its asynchronous variants. _Advances in Neural_
+_Information Processing Systems_, 28, 2015.
+
+
+Peter Kairouz, H Brendan McMahan, Brendan Avent, Aur´elien Bellet, Mehdi Bennis, Arjun Nitin
+Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, et al. Advances and open problems in federated learning. _Foundations and Trends® in Machine Learning_,
+14(1–2):1–210, 2021.
+
+
+Anastasiia Koloskova, Sebastian U Stich, and Martin Jaggi. Sharper convergence guarantees for
+asynchronous SGD for distributed and federated learning. _Advances in Neural Information Pro-_
+_cessing Systems_, 35:17202–17215, 2022.
+
+
+Jakub Koneˇcn´y, H. Brendan McMahan, Felix X. Yu, Peter Richt´arik, Ananda Theertha Suresh, and
+Dave Bacon. Federated learning: Strategies for improving communication efficiency. In _NIPS_
+_Workshop on Private Multi-Party Machine Learning_, 2016.
+
+
+Remi Leblond, Fabian Pedregosa, and Simon Lacoste-Julien. Improved asynchronous parallel optimization analysis for stochastic incremental methods. _Journal of Machine Learning Research_,
+19(81):1–68, 2018. [URL http://jmlr.org/papers/v19/17-650.html.](http://jmlr.org/papers/v19/17-650.html)
+
+
+Yann LeCun, Corinna Cortes, and CJ Burges. Mnist handwritten digit database. _ATT Labs [Online]._
+_Available:_ _http://yann.lecun.com/exdb/mnist_, 2, 2010.
+
+
+Mu Li, David G Andersen, Alexander Smola, and Kai Yu. Communication efficient distributed
+machine learning with the parameter server. _Advances in Neural Information Processing Systems_,
+27, 2014.
+
+
+Tian Li, Anit Kumar Sahu, Manzil Zaheer, Maziar Sanjabi, Ameet Talwalkar, and Virginia Smith.
+Federated optimization in heterogeneous networks. _Proceedings_ _of_ _Machine_ _Learning_ _and_ _Sys-_
+_tems_, 2:429–450, 2020.
+
+
+Xiangru Lian, Yijun Huang, Yuncheng Li, and Ji Liu. Asynchronous parallel stochastic gradient for
+nonconvex optimization. _Advances in Neural Information Processing Systems_, 28, 2015.
+
+
+Horia Mania, Xinghao Pan, Dimitris Papailiopoulos, Benjamin Recht, Kannan Ramchandran, and
+Michael I Jordan. Perturbed iterate analysis for asynchronous stochastic optimization. _SIAM_
+_Journal on Optimization_, 27(4):2202–2229, 2017.
+
+
+Artavazd Maranjyan, Omar Shaikh Omar, and Peter Richt´arik. Mindflayer SGD: Efficient parallel
+SGD in the presence of heterogeneous and random worker compute times. In _The 41st Conference_
+_on Uncertainty in Artificial Intelligence_ [, 2025a. URL https://openreview.net/forum?](https://openreview.net/forum?id=RNpvu3MSvm)
+[id=RNpvu3MSvm.](https://openreview.net/forum?id=RNpvu3MSvm)
+
+
+12
+
+
+Artavazd Maranjyan, El Mehdi Saad, Peter Richt´arik, and Francesco Orabona. ATA: Adaptive task
+allocation for efficient resource management in distributed machine learning. In _International_
+_Conference on Machine Learning_, 2025b.
+
+
+Artavazd Maranjyan, Mher Safaryan, and Peter Richt´arik. GradSkip: Communication-accelerated
+local gradient methods with better computational complexity. _Transactions_ _on_ _Machine_ _Learn-_
+_ing_ _Research_, 2025c. ISSN 2835-8856. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=6R3fRqFfhn)
+[6R3fRqFfhn.](https://openreview.net/forum?id=6R3fRqFfhn)
+
+
+Artavazd Maranjyan, Alexander Tyurin, and Peter Richt´arik. Ringmaster ASGD: The first Asynchronous SGD with optimal time complexity. In _International Conference on Machine Learning_,
+2025d.
+
+
+Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas.
+Communication-efficient learning of deep networks from decentralized data. In _Artificial Intelli-_
+_gence and Statistics_, pp. 1273–1282. PMLR, 2017.
+
+
+H Brendan McMahan, Eider Moore, Daniel Ramage, and Blaise Ag¨uera y Arcas. Federated learning
+of deep networks using model averaging. _arXiv preprint arXiv:1602.05629_, 2:2, 2016.
+
+
+Konstantin Mishchenko, Francis Bach, Mathieu Even, and Blake E Woodworth. Asynchronous
+SGD beats minibatch SGD under arbitrary delays. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 35:420–433, 2022.
+
+
+Deepak Narayanan, Mohammad Shoeybi, Jared Casper, Patrick LeGresley, Mostofa Patwary, Vijay Korthikanti, Dmitri Vainbrand, Prethvi Kashinkunti, Julie Bernauer, Bryan Catanzaro, et al.
+Efficient large-scale language model training on GPU clusters using Megatron-LM. In _Proceed-_
+_ings of the International Conference for High Performance Computing, Networking, Storage and_
+_Analysis_, pp. 1–15, 2021.
+
+
+Yurii Nesterov. _Lectures on Convex Optimization_, volume 137. Springer, 2018.
+
+
+John Nguyen, Kshitiz Malik, Hongyuan Zhan, Ashkan Yousefpour, Mike Rabbat, Mani Malek, and
+Dzmitry Huba. Federated learning with buffered asynchronous aggregation. In _International_
+_Conference on Artificial Intelligence and Statistics_, pp. 3581–3607. PMLR, 2022.
+
+
+Lam Nguyen, Phuong Ha Nguyen, Marten Dijk, Peter Richt´arik, Katya Scheinberg, and Martin
+Tak´ac. SGD and Hogwild! convergence without the bounded gradients assumption. In _Interna-_
+_tional Conference on Machine Learning_, pp. 3750–3758. PMLR, 2018.
+
+
+Benjamin Recht, Christopher Re, Stephen Wright, and Feng Niu. HOGWILD!: A lock-free approach to parallelizing stochastic gradient descent. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 24, 2011.
+
+
+Nicolas Roux, Mark Schmidt, and Francis Bach. A stochastic gradient method with an exponential
+convergence rate for finite training sets. _Advances in Neural Information Processing Systems_, 25,
+2012.
+
+
+Mark Schmidt, Nicolas Le Roux, and Francis Bach. Minimizing finite sums with the stochastic
+average gradient. _Mathematical Programming_, 162:83–112, 2017.
+
+
+Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley, Jared Casper, and Bryan
+Catanzaro. Megatron-LM: Training multi-billion parameter language models using model parallelism. _arXiv preprint arXiv:1909.08053_, 2019.
+
+
+Alysa Ziying Tan, Han Yu, Lizhen Cui, and Qiang Yang. Towards personalized federated learning.
+_IEEE Transactions on Neural Networks and Learning Systems_, 34(12):9587–9603, 2022.
+
+
+John Tsitsiklis, Dimitri Bertsekas, and Michael Athans. Distributed asynchronous deterministic and
+stochastic gradient optimization algorithms. _IEEE_ _Transactions_ _on_ _Automatic_ _Control_, 31(9):
+803–812, 1986.
+
+
+Alexander Tyurin. Tight time complexities in parallel stochastic optimization with arbitrary computation dynamics. _arXiv preprint arXiv:2408.04929_, 2024.
+
+
+13
+
+
+Alexander Tyurin and Peter Richt´arik. Optimal time complexities of parallel stochastic optimization
+methods under a fixed computation model. _Advances in Neural Information Processing Systems_,
+36, 2024.
+
+
+Alexander Tyurin and Peter Richt´arik. On the optimal time complexities in decentralized stochastic
+asynchronous optimization. _Advances in Neural Information Processing Systems_, 37, 2024.
+
+
+Alexander Tyurin, Kaja Gruntkowska, and Peter Richt´arik. Freya PAGE: First optimal time complexity for large-scale nonconvex finite-sum optimization with heterogeneous asynchronous computations. _Advances in Neural Information Processing Systems_, 37, 2024a.
+
+
+Alexander Tyurin, Marta Pozzi, Ivan Ilin, and Peter Richt´arik. Shadowheart SGD: Distributed asynchronous SGD with optimal time complexity under arbitrary computation and communication
+heterogeneity. _Advances in Neural Information Processing Systems_, 37, 2024b.
+
+
+N Denizcan Vanli, Mert Gurbuzbalaban, and Asuman Ozdaglar. Global convergence rate of proximal incremental aggregated gradient methods. _SIAM Journal on Optimization_, 28(2):1282–1300,
+2018.
+
+
+Qiyuan Wang, Qianqian Yang, Shibo He, Zhiguo Shi, and Jiming Chen. AsyncFedED: Asynchronous federated learning with euclidean distance based adaptive weight aggregation. _arXiv_
+_preprint arXiv:2205.13797_, 2022a.
+
+
+Xiaolu Wang, Zijian Li, Shi Jin, and Jun Zhang. Achieving linear speedup in asynchronous federated
+learning with heterogeneous clients. _IEEE Transactions on Mobile Computing_, 2024.
+
+
+Xiaolu Wang, Yuchang Sun, Hoi To Wai, and Jun Zhang. Incremental aggregated asynchronous
+SGD for arbitrarily heterogeneous data, 2025. [URL https://openreview.net/forum?](https://openreview.net/forum?id=m3x4kDbYAK)
+[id=m3x4kDbYAK.](https://openreview.net/forum?id=m3x4kDbYAK)
+
+
+Zhongyu Wang, Zhaoyang Zhang, Yuqing Tian, Qianqian Yang, Hangguan Shan, Wei Wang, and
+Tony QS Quek. Asynchronous federated learning over wireless communication networks. _IEEE_
+_Transactions on Wireless Communications_, 21(9):6961–6978, 2022b.
+
+
+Han Xiao, Kashif Rasul, and Roland Vollgraf. Fashion-MNIST: a novel image dataset for benchmarking machine learning algorithms. _arXiv preprint arXiv:1708.07747_, 2017.
+
+
+Cong Xie, Sanmi Koyejo, and Indranil Gupta. Asynchronous federated optimization. _arXiv preprint_
+_arXiv:1903.03934_, 2019.
+
+
+Mikhail Yurochkin, Mayank Agarwal, Soumya Ghosh, Kristjan Greenewald, Nghia Hoang, and
+Yasaman Khazaeni. Bayesian nonparametric federated learning of neural networks. In Kamalika Chaudhuri and Ruslan Salakhutdinov (eds.), _Proceedings_ _of_ _the_ _36th_ _International_ _Con-_
+_ference_ _on_ _Machine_ _Learning_, volume 97 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp.
+7252–7261. PMLR, 09–15 Jun 2019. URL [https://proceedings.mlr.press/v97/](https://proceedings.mlr.press/v97/yurochkin19a.html)
+[yurochkin19a.html.](https://proceedings.mlr.press/v97/yurochkin19a.html)
+
+
+Feilong Zhang, Xianming Liu, Shiyi Lin, Gang Wu, Xiong Zhou, Junjun Jiang, and Xiangyang Ji.
+No one idles: Efficient heterogeneous federated learning with parallel edge and server computation. In _International Conference on Machine Learning_, pp. 41399–41413. PMLR, 2023.
+
+
+Shen-Yi Zhao and Wu-Jun Li. Fast asynchronous parallel stochastic gradient descent: A lockfree approach with convergence guarantee. In _Proceedings of the AAAI Conference on Artificial_
+_Intelligence_, volume 30, 2016.
+
+
+Yue Zhao, Meng Li, Liangzhen Lai, Naveen Suda, Damon Civin, and Vikas Chandra. Federated
+learning with non-iid data. _arXiv preprint arXiv:1806.00582_, 2018.
+
+
+Shuxin Zheng, Qi Meng, Taifeng Wang, Wei Chen, Nenghai Yu, Zhi-Ming Ma, and Tie-Yan Liu.
+Asynchronous stochastic gradient descent with delay compensation. In _International Conference_
+_on Machine Learning_, pp. 4120–4129. PMLR, 2017.
+
+
+Kaiwen Zhou, Fanhua Shang, and James Cheng. A simple stochastic variance reduced algorithm
+with fast convergence rates. In _International Conference on Machine Learning_, pp. 5980–5989.
+PMLR, 2018.
+
+
+14
+
+
+A EXPERIMENTS
+
+
+To validate our theoretical results we perform a toy simulation.
+
+
+We consider image classification on MNIST (LeCun et al., 2010) and on Fashion-MNIST (Xiao
+et al., 2017) with standard normalization for both datasets. To enable equal client sizes, we first trim
+the dataset so that the total number of examples is divisible by the number of clients _n_ = 100. To
+obtain heterogeneous datasets across clients, we then partition the trimmed set using an _equal-size_
+_Dirichlet_ procedure with concentration parameter _α_ = 0 _._ 1 (Yurochkin et al., 2019). For each client
+_j_ _∈_ [ _n_ ], we draw proportions _pj_ _∼_ Dirichlet( _α, . . ., α_ ) over the classes and compute a rounded
+class-allocation vector whose entries sum exactly to _[N]_ _/n_, where _N_ is the trimmed dataset size. This
+creates non-IID data where each client has a skewed distribution over classes (with _α_ = 0 _._ 1, clients
+typically observe only 1-2 classes frequently).
+
+
+When assigning samples, we take the requested number from each class pool for client _j_ . If a class
+pool does not have enough remaining examples to meet the requested amount, the client receives
+whatever is left from that class and the shortfall is _topped up_ using samples from other classes that
+still have available examples.
+
+
+Our model is a two-layer MLP Linear( _d,_ 128) _→_ ReLU _→_ Linear(128 _,_ 10) trained with mean crossentropy. Stochastic gradients at the clients use a minibatch of size 4, while reported gradient norms
+are computed on the _full_ dataset.
+
+
+We emulate heterogeneous compute by assigning each client _i_ a base delay and a random jitter:
+
+
+_τi_ = _i_ + _|ηi|,_ _ηi_ _∼N_ (0 _, i_ ) _,_ for all _i ∈_ [ _n_ ] _._
+
+
+For each method we tune the stepsize _γ_ within a fixed wall-clock budget. We sweep
+
+
+_γ_ _∈{_ 0 _._ 001 _,_ 0 _._ 005 _,_ 0 _._ 01 _,_ 0 _._ 02 _,_ 0 _._ 05 _,_ 0 _._ 1 _,_ 0 _._ 2 _,_ 0 _._ 5 _,_ 1 _._ 0 _,_ 2 _._ 0 _},_
+
+
+and then fix the best _γ_ per method for evaluation.
+
+
+We report the full-batch gradient-norm squared _∥∇f_ ( _x_ _[k]_ ) _∥_ [2], versus wall-clock time. Each method
+is run 30 times over different seeds. We report the _median_ with _interquartile range (IQR)_ . To reduce
+high-frequency noise, we apply a centered moving-average smoothing to the aggregated curves
+(post-aggregation), while keeping the initial point unchanged.
+
+
+Figure 1 shows the results. We observe that Ringleader ASGD converges faster compared to Malenia
+SGD and IA [2] SGD. Although theory suggests that Ringleader ASGD and Malenia SGD have the same
+time complexity, in practice Ringleader ASGD benefits from the _n_ updates performed in Phase 2
+instead of one synchronous update. This design enables more optimization steps within the same
+wall-clock budget, which is especially advantageous when updates are sparse.
+
+
+B RELATED WORK
+
+
+Research on asynchronous stochastic gradient methods dates back to the seminal work of Tsitsiklis
+et al. (1986), and gained renewed momentum with the introduction of the HOGWILD! algorithm
+(Recht et al., 2011). HOGWILD! is fundamentally an asynchronous coordinate descent method: updates are performed lock-free with inconsistent reads and writes, and its convergence guarantees rely
+on sparsity assumptions that are rarely realistic in modern large-scale machine learning. Subsequent
+refinements of this paradigm include works by J Reddi et al. (2015); Zhao & Li (2016); Mania et al.
+(2017); Leblond et al. (2018); Nguyen et al. (2018); Zhou et al. (2018), but these works remain tied
+to the coordinate descent setting with inconsistent memory accesses, and thus differ substantially
+from our focus.
+
+
+Closer to our setting are works where updates are based on gradients that are applied consistently.
+Early contributions, typically under the homogeneous-data assumption (all workers sample from
+the same distribution), include the work of Agarwal & Duchi (2011), who studied convex objectives, as well as later extensions to the non-convex case such as the work of Lian et al. (2015) and
+Dutta et al. (2018), the latter analyzing exponentially distributed computation times. Other relevant results in this line include those of Feyzmahdavian et al. (2016); Zheng et al. (2017); Arjevani
+et al. (2020); Feyzmahdavian & Johansson (2023), all of which assume fixed delays. More recently,
+
+
+15
+
+
+10 [5]
+
+
+10 [3]
+
+
+10 [1]
+
+
+10 [−1]
+
+
+10 [−3]
+
+
+10 [3]
+
+
+10 [1]
+
+
+10 [−1]
+
+
+10 [−3]
+
+
+0 25000 50000 75000 100000 125000 150000 175000 200000
+Runtime
+
+
+(a) MNIST
+
+
+0 50000 100000 150000 200000 250000 300000 350000
+Runtime
+
+
+(b) Fashion-MNIST
+
+
+Figure 1: Convergence comparison showing median gradient norm squared _∥∇f_ ( _x_ _[k]_ ) _∥_ [2] (solid lines)
+with interquartile ranges (shaded regions) versus wall-clock time, averaged over 30 random seeds.
+**Setup:** Two-layer MLP with architecture Linear( _d,_ 128) _→_ ReLU _→_ Linear(128 _,_ 10) trained
+on (a) MNIST and (b) Fashion-MNIST datasets. **Client** **delays:** Heterogeneous delays simulated
+as _τi_ = _i_ + _|ηi|_ where _ηi_ _∼N_ (0 _, i_ ) for client _i_ _∈_ [ _n_ ], where we choose _n_ = 100. **Results:**
+With optimally tuned stepsizes, Ringleader ASGD achieves faster convergence than both Malenia
+SGD and IA [2] SGD, despite Ringleader ASGD and Malenia SGD having equivalent time complexity
+guarantees.
+
+
+delay-adaptive methods have been proposed, aiming to improve performance by down-weighting
+very stale gradients (Cohen et al., 2021; Koloskova et al., 2022; Mishchenko et al., 2022).
+
+
+Particularly relevant to our work are asynchronous variants of SAGA. Leblond et al. (2018) developed a shared-parameter version in the spirit of HOGWILD!, while Glasgow & Wootters (2022)
+studied a distributed setting that employs full gradients, in contrast to our stochastic-gradient perspective.
+
+
+A large body of recent work investigates asynchronous methods in federated learning (FL), where
+clients hold data from heterogeneous distributions. Notable contributions include works by Xie
+et al. (2019); Mishchenko et al. (2022); Koloskova et al. (2022); Wang et al. (2022a;b); Glasgow
+& Wootters (2022); Fraboni et al. (2023); Zhang et al. (2023); Wang et al. (2024); Islamov et al.
+(2024); Alahyane et al. (2025).
+
+
+More broadly, Assran et al. (2020) provide a comprehensive survey of asynchronous optimization
+methods.
+
+
+There is another line of work that began with Tyurin & Richt´arik (2024), who established lower
+bounds for parallel methods and proposed optimal synchronous algorithms together with an asynchronous counterpart. Several follow-up papers extended this semi-asynchronous framework to
+other settings (Tyurin et al., 2024a;b; Tyurin & Richt´arik, 2024; Maranjyan et al., 2025a).
+
+
+Finally, beyond asynchronous approaches, several synchronous methods address system heterogeneity by adapting local training to worker speeds. The canonical method, FedAvg (McMahan et al.,
+2017), performs multiple local steps on each worker. Variants have adapted the number of local
+steps to match workers’ computation speeds (Li et al., 2020; Maranjyan et al., 2025c), effectively
+balancing task assignments across heterogeneous systems. More recently, Maranjyan et al. (2025b)
+proposed adapting the number of local steps dynamically, without requiring prior knowledge of
+worker speeds.
+
+
+C THE COMPUTATION-ONLY MODEL AND THE ROLE OF ASYNCHRONY
+
+
+This section clarifies the scope of our modeling assumptions and the specific phenomenon our results
+target. Asynchrony is designed to eliminate _waiting_ _time_ : the idle time that arises when workers
+have heterogeneous computation speeds or experience straggling behavior due to hardware stalls,
+load imbalance, or even network delays. A key point is that the goal of asynchrony is _not_ to reduce
+
+
+16
+
+
+communication cost, but to ensure that slow or delayed workers do not force faster workers to remain
+idle.
+
+
+Critically, even in the _simplest_ setting—homogeneous data and _no_ communication cost—it was
+unknown until very recently whether an asynchronous SGD method could match the optimal synchronous rate. In fact, existing asynchronous methods were shown to be _worse_ than the optimal synchronous algorithm in this basic regime (Tyurin & Richt´arik, 2024). The recent work of Maranjyan
+et al. (2025d) resolved this foundational case for the first time by showing that, under homogeneous
+data, an asynchronous method can achieve the same optimal time complexity as the synchronous
+method Rennala SGD (Tyurin & Richt´arik, 2024). Our work extends this understanding to the significantly more challenging heterogeneous-data setting and shows that asynchrony _can_ solve the
+problem it is designed for—and that it can do so _optimally_ .
+
+
+**Asynchrony** **and** **stragglers.** Stragglers may be caused by slow computation, device variability,
+or even _communication delays_ . From the server’s perspective, a worker whose gradient arrives late
+because it is still communicating appears identical to one that is slow at computing. Asynchrony
+ensures that such delays—regardless of source—do not block progress: fast workers continue contributing updates while slow or delayed workers catch up. This ability to eliminate idle time is
+precisely the purpose of asynchronous methods.
+
+
+**Asynchrony does** _**not**_ **reduce communication cost.** Although asynchrony prevents waiting during communication-induced delays, it does _not_ reduce the communication overhead itself. Reducing
+communication cost requires _orthogonal_ _techniques_ such as gradient compression, sparsification,
+quantization, or local-update schemes (e.g., FedAvg (McMahan et al., 2016)). For example, Tyurin
+et al. (2024b) explicitly study communication-aware training and use compression-based methods
+to reduce communication time—demonstrating that communication efficiency is a _separate_ _algo-_
+_rithmic_ _axis_ that must be combined with, rather than replaced by, asynchrony. Thus, asynchrony
+resolves the _waiting problem_ caused by delays, but not the _communication-cost problem_ ; addressing
+the latter requires additional mechanisms.
+
+
+**Why** **communication** **is** **not** **modeled** **explicitly** **here.** For these reasons, we adopt the standard computation-only model used in essentially all theoretical works on asynchronous SGD
+(Mishchenko et al., 2022; Koloskova et al., 2022; Tyurin & Richt´arik, 2024; Tyurin & Richt´arik,
+2024; Maranjyan et al., 2025d), which is also the model under which the lower bounds of Tyurin &
+Richt´arik (2024) are derived. Our claims of _optimal_ _time_ _complexity_ therefore refer to this shared
+and well-established model. Studying asynchrony under explicit communication cost—where it
+must interact with compression, local updates, or buffering—requires new lower bounds and a different theoretical framework, and is beyond the scope of this work.
+
+
+D ARBITRARILY CHANGING COMPUTATION TIMES
+
+
+In practice, the _fixed_ _computation_ _model_ (2) is often not satisfied. The compute power of devices
+can vary over time due to temporary disconnections, hardware or network delays, fluctuations in
+processing capacity, or other transient effects (Maranjyan et al., 2025a).
+
+
+In this section we extend our theory to the more general setting of arbitrarily varying computation
+times.
+
+
+D.1 UNIVERSAL COMPUTATION MODEL
+
+
+To formalize this setting, we adopt the _universal computation model_ introduced by Tyurin (2024).
+
+
+For each worker _i ∈_ [ _n_ ], we define a _compute power_ function
+_pi_ : R+ _→_ R+ _,_
+assumed nonnegative and continuous almost everywhere (countably many jumps allowed). For any
+_T_ 2 _≥_ _T_ 1 _≥_ 0, the number of stochastic gradients _completed_ by worker _i_ on [ _T_ 1 _, T_ 2] is
+
+
+�� _T_ 2
+
+
+#gradients in [ _T_ 1 _, T_ 2] =
+
+
+17
+
+
+_pi_ ( _t_ ) _dt_
+_T_ 1
+
+
+_._
+
+
+Here, _pi_ ( _t_ ) models the worker’s time-varying computational ability: smaller values over an interval
+yield fewer completed gradients, and larger values yield more.
+
+
+For instance, if worker _i_ remains idle for the first _T_ seconds and then becomes active, this corresponds to _pi_ ( _t_ ) = 0 for _t_ _≤_ _T_ and _pi_ ( _t_ ) _>_ 0 for _t_ _>_ _T_ . More generally, _pi_ ( _t_ ) may follow periodic
+or irregular patterns, leading to bursts of activity, pauses, or chaotic changes in compute power. The
+process _pi_ ( _t_ ) may even be random, and all results hold conditional on the realized sample paths of
+_{pi}_ .
+
+
+The _universal computation model_ reduces to the _fixed computation model_ (2) when _pi_ ( _t_ ) = [1] _/τi_ for
+all _t ≥_ 0 and _i ∈_ [ _n_ ]. In this case,
+
+
+         - _T_ 2 _−_ _T_ 1
+#gradients in [ _T_ 1 _, T_ 2] =
+_τi_
+
+
+_,_
+
+
+meaning that worker _i_ computes one stochastic gradient after _T_ 1 + _τi_ seconds, two gradients after
+_T_ 1 + 2 _τi_ seconds, and so on.
+
+
+D.2 TOWARD AN OPTIMAL METHOD
+
+
+In the general setting of arbitrarily varying computation times, Algorithm 1 is not optimal. To see
+why, consider the following adversarial timing pattern.
+
+
+Suppose there are two workers. During one gradient computation by the slower worker, the faster
+worker computes _s_ gradients. Immediately afterwards, they switch roles: the previously fast worker
+slows down by a factor of _s_, while the previously slow one speeds up by the same factor. This pattern
+repeats each time the slower worker finishes a gradient computation.
+
+
+In this setting, if we run Algorithm 1, the server waits in each Phase 1 for a single gradient from
+every worker. Thus, the slower worker always contributes only one gradient, and the harmonic mean
+of the batch sizes satisfies
+1 _≤_ _B_ _[k]_ _≤_ 2 _._
+
+
+From Theorem 5.1, the iteration complexity is
+
+
+ - _nL_ ∆
+_O_
+_ε_
+
+
+1 + _[σ]_ [2]
+
+_Bnε_
+
+
+��
+_._
+
+
+When _[σ]_ [2] _/nε_ is much larger than _B_, this dependence can be highly suboptimal.
+
+
+Instead, suppose the server waits until one full round of the above process completes, collecting
+_s_ + 1 gradients from each worker. Then the harmonic mean satisfies _B_ _[k]_ _≥_ _s_ + 1, which can be
+arbitrarily larger than 2. Since in practice both _s_ and _[σ]_ [2] _/nε_ can be very large, the naive strategy of
+waiting for only one gradient per worker (as in Algorithm 1) cannot be optimal in the arbitrary-time
+setting.
+
+
+D.3 AN OPTIMAL METHOD
+
+
+The solution is simple and follows directly from the iteration complexity bound. From
+
+
+ - _nL_ ∆
+_O_
+_ε_
+
+
+1 + _[σ]_ [2]
+
+_Bnε_
+
+
+��
+_,_
+
+
+we see that to balance the terms it suffices to ensure
+
+_B_ _≥_ _[σ]_ [2]
+
+_nε_ _[.]_
+
+
+Accordingly, we modify the stopping condition in Phase 1 of Algorithm 1. Instead of requiring the
+server to receive at least one gradient from each worker, we require the stronger condition used in
+Malenia SGD, namely
+
+        - 1         - _n_ 1         - _−_ 1 _≥_ max �1 _,_ _[σ]_ [2]         - _,_ (4)
+_n_ _bi_ _nε_
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+
+_n_
+
+
+- _−_ 1
+
+
+_,_ (4)
+
+
+_i_ =1
+
+
+1
+_bi_
+
+
+_nε_
+
+
+18
+
+
+where _bi_ is the number of gradients received from worker _i_ .
+
+In the low-noise regime, where _[σ]_ [2] _/nε ≤_ 1, the condition reduces to requiring _bi_ _≥_ 1 for all _i_, so the
+algorithm coincides with the original Algorithm 1. In the high-noise regime, the algorithm collects
+more gradients in Phase 1, ensuring that _B_ is sufficiently large for optimal convergence.
+
+
+With this change, Phase 1 of our algorithm matches that of Malenia SGD. The difference lies in
+Phase 2: our algorithm continues to use the ongoing gradient computations from all workers to
+perform _n_ updates, while Malenia SGD discards any unfinished gradients, performs a single update,
+and then proceeds to the next round.
+
+
+The following theorem establishes the time complexity of our algorithm under the universal computation model.
+
+**Theorem D.1.** _Under Assumptions 1, 2, and 3, let the stepsize in_ Ringleader ASGD _be_
+
+
+1
+_γ_ =
+10 _nL_ _[.]_
+
+
+_Then, under the_ universal computation model _,_ Ringleader ASGD _finds an ε–stationary point within_
+_at most T_ _[K]_ _seconds, where_
+
+
+   - 160 _L_ ∆    _K_ := _,_
+_ε_
+
+
+_and T_ _[K]_ _denotes the K-th element of the recursively defined sequence_
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+_nε_
+
+
+_n_
+
+
+_i_ =1
+
+
+_pi_ ( _t_ ) _dt_
+_Tk−_ 1
+
+
+- _−_ 1 [] _−_ 1
+
+
+�� _T_
+
+
+
+�
+
+_,_
+
+
+
+_T_ _[k]_ = min
+
+
+
+
+
+_T_ _≥_ 0 :
+
+
+
+
+
+ [1]
+
+_n_
+
+
+
+
+
+_for all k_ _≥_ 1 _, with initialization T_ [0] = 0 _._
+
+
+This result matches the lower bound derived by Tyurin (2024), and therefore the proposed method
+is optimal.
+
+
+_Proof._ Under the condition in (4), each gradient-type step of the algorithm satisfies
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+_nε_
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+
+_._
+
+
+_n_
+
+
+_i_ =1
+
+
+1
+_b_ _[k]_ _i_
+
+
+- _−_ 1
+
+
+_B_ _[k]_ =
+
+
+1
+
+_n_
+
+
+In Theorem 5.1, instead of using _B_ we can substitute any valid lower bound. Here we choose
+
+
+             -              _B_ = max 1 _,_ _[σ]_ [2] _._
+
+_nε_
+
+
+With this substitution, the iteration complexity becomes
+
+_K_ = [80] _[ nL]_ [∆] _._
+
+_ε_
+
+
+To derive the time complexity, consider the time required to perform _n_ iterations. Each block of
+_n_ updates occurs in Phase 2 following the Phase 1 gradient collection. Starting from time _T_ = 0,
+Phase 1 ends once the accumulated number of gradients satisfies condition (4), which occurs at time
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+_nε_
+
+
+_n_
+
+
+_i_ =1
+
+
+_pi_ ( _t_ ) _dt_
+0
+
+
+- _−_ 1 [] _−_ 1
+
+
+
+�
+
+_._
+
+
+
+_T_ + [1] [= min]
+
+
+
+
+
+_T_ _≥_ 0 :
+
+
+
+
+
+ [1]
+
+_n_
+
+
+�� _T_
+
+
+
+
+
+After Phase 1, to complete _n_ updates in Phase 2 we must wait for the ongoing computations to finish.
+This requires at most
+
+
+
+
+
+
+
+
+
+- _−_ 1 [] _−_ 1
+
+
+�� _T_
+
+
+_n_
+
+
+_i_ =1
+
+
+_pi_ ( _t_ ) _dt_
+_T_ + [1]
+
+
+_T_ [1] = min
+
+
+
+
+
+_T_ _≥_ 0 :
+
+
+
+ [1]
+
+_n_
+
+
+
+
+
+_≥_ 1
+
+
+_._
+
+
+
+19
+
+
+Thus, the total time to complete all _K_ iterations is bounded by
+
+
+_T_ _[⌈]_ [2] _[K][/][n][⌉]_ _,_
+
+
+where the sequence _{T_ _[k]_ _}k≥_ 0 is defined recursively as
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+_nε_
+
+
+   _≥_ max 1 _,_ _[σ]_ [2]
+
+
+
+� _,_ _T_ [0] = 0 _._
+
+
+
+
+
+�
+
+
+_n_
+
+
+_i_ =1
+
+
+_pi_ ( _t_ ) _dt_
+_Tk−_ 1
+
+
+- _−_ 1 [] _−_ 1
+
+
+�� _T_
+
+
+_T_ _[k]_ = min
+
+
+
+
+
+_T_ _≥_ 0 :
+
+
+
+
+
+ [1]
+
+_n_
+
+
+
+
+
+E AUXILIARY LEMMAS
+
+
+Here we provide proofs of lemmas omitted from the main text, along with auxiliary results that will
+be used later.
+
+
+E.1 RELATIONS BETWEEN SMOOTHNESS CONSTANTS
+
+
+We begin with a lemma relating the different smoothness constants.
+
+
+**Lemma E.1** (Smoothness Bounds) **.** _Suppose Assumption 2 holds with constant L_ _>_ 0 _._ _Then f_ _is_
+_Lf_ _–smooth with Lf_ _≤_ _L._ _Moreover, if each fi_ _is Lfi–smooth, then Assumption 2 is satisfied, and_
+_we have_
+
+
+_n_
+
+- _L_ [2] _fi_ _[≤]_ [max] _i∈_ [ _n_ ] _[L][f][i]_ [=:] _[ L]_ [max] _[ .]_
+
+_i_ =1
+
+
+_Lf_ _≤_ _L_ _≤_
+
+
+~~�~~
+
+
+- [1]
+_n_
+
+
+_Finally, if all fi_ _are identical, i.e., fi_ = _f_ _for all i ∈_ [ _n_ ] _, then L_ = _Lf_ _._
+
+
+Recall from Assumption 2 that we assumed the following generalized smoothness condition: for
+some constant _L >_ 0 and for all _x ∈_ R _[d]_ and _y_ 1 _, . . ., yn_ _∈_ R _[d]_,
+
+
+_n_ 2 _n_
+
+_∇f_ ( _x_ ) _−_ 1        - _∇fi_ ( _yi_ ) _≤_ _[L]_ [2]        - _∥x −_ _yi∥_ [2] _._ (5)
+_n_ _n_
+����� _i_ =1 ����� _i_ =1
+
+
+_≤_ _[L]_ [2]
+
+
+_n_
+
+
+�����
+
+
+2
+
+
+_n_
+
+
+_∇fi_ ( _yi_ )
+
+_i_ =1
+
+
+_n_
+
+
+- _∥x −_ _yi∥_ [2] _._ (5)
+
+
+_i_ =1
+
+
+Recall that a function _ϕ_ is called _Lϕ_ –smooth if
+
+
+_∥∇ϕ_ ( _x_ ) _−∇ϕ_ ( _y_ ) _∥≤_ _Lϕ ∥x −_ _y∥_ _,_ _∀x, y_ _∈_ R _[d]_ _._
+
+
+Here _Lϕ_ denotes the minimal such constant. We are ready to prove the lemma.
+
+
+_Proof._ For the first inequality, take _y_ 1 = _· · ·_ = _yn_ = _y_ . Then (5) reduces to
+
+
+_∥∇f_ ( _x_ ) _−∇f_ ( _y_ ) _∥_ [2] _≤_ _L_ [2] _∥x −_ _y∥_ [2] _,_
+
+
+so _f_ is _L_ –smooth. By definition of _Lf_ as the minimal smoothness constant, this implies _Lf_ _≤_ _L_ .
+
+
+For the second inequality, by the triangle inequality, then by the smoothness of each _fi_, and finally
+by Cauchy–Schwarz,
+
+
+_n_ _n_ _n_
+
+_∇f_ ( _x_ ) _−_ 1    - _∇fi_ ( _yi_ ) _≤_ 1    - _∥∇fi_ ( _x_ ) _−∇fi_ ( _yi_ ) _∥≤_ [1]    - _Lfi ∥x −_ _yi∥_
+_n_ _n_ _n_
+����� _i_ =1 ����� _i_ =1 _i_ =1
+
+
+- _∥∇fi_ ( _x_ ) _−∇fi_ ( _yi_ ) _∥≤_ [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+1
+_≤_
+_n_
+�����
+
+
+_n_
+
+
+_∇fi_ ( _yi_ )
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+
+_Lfi ∥x −_ _yi∥_
+_i_ =1
+
+
+_n_
+
+- _L_ [2] _fi_
+
+_i_ =1
+
+
+_n_
+
+- _∥x −_ _yi∥_ [2] _._
+
+
+_i_ =1
+
+
+~~�~~
+
+
+- [1]
+_n_
+
+
+_≤_
+
+
+~~�~~
+
+
+- [1]
+_n_
+
+
+Squaring both sides shows that (5) holds with _L_ = ~~�~~ _n_ 1 - _ni_ =1 _[L]_ _f_ [2] _i_ [.]
+
+
+20
+
+
+Finally, suppose all _fi_ are identical: _fi_ _≡_ _f_ for all _i_ . Then
+
+
+_n_ _n_
+
+_∇f_ ( _x_ ) _−_ 1     - _∇f_ ( _yi_ ) _≤_ 1     - _∥∇f_ ( _x_ )
+_n_ _n_
+����� _i_ =1 ����� _i_ =1
+
+
+- _∥∇f_ ( _x_ ) _−∇f_ ( _yi_ ) _∥≤_ _[L][f]_
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+1
+_≤_
+_n_
+�����
+
+
+_∇f_ ( _yi_ )
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+
+_n_
+
+- _∥x −_ _yi∥_
+
+
+_i_ =1
+
+
+~~�~~
+
+ 
+_≤_ _Lf_ �� [1]
+
+_n_
+
+
+_n_
+
+- _∥x −_ _yi∥_ [2] _,_
+
+
+_i_ =1
+
+
+where the last step uses Cauchy–Schwarz. Squaring both sides yields
+_∇f_ ( _x_ ) _−_ 1         - _n_ _∇f_ ( _yi_ ) 2 _≤_ _L_ [2] _f_         - _n_ _∥x −_
+_n_ _n_
+����� _i_ =1 ����� _i_ =1
+
+
+_≤_ _L_ [2] _f_
+_n_
+
+
+_n_
+
+
+�����
+
+
+2
+
+
+_n_
+
+
+- _∥x −_ _yi∥_ [2] _,_
+
+
+_i_ =1
+
+
+_∇f_ ( _yi_ )
+
+_i_ =1
+
+
+i.e., (5) holds with _L ≤_ _Lf_ . Combined with _Lf_ _≤_ _L_, we conclude _L_ = _Lf_ .
+
+
+E.2 PROOF OF LEMMA 4.1
+
+
+The following lemma gives a bound on the delays of Ringleader ASGD.
+
+**Lemma 4.1** (Bounded Delay) **.** In Ringleader ASGD (Algorithm 1), the delays _δi_ _[k]_ [satisfy]
+
+_δi_ _[k]_ _[≤]_ [2] _[n][ −]_ [2] _[,]_
+
+
+for any worker _i ∈_ [ _n_ ] and any iteration _k_ _≥_ 0.
+
+
+_Proof._ We prove this by analyzing the structure of Ringleader ASGD. The algorithm operates in
+rounds, where each round consists of Phase 1 (gradient collection) followed by Phase 2 (sequential
+updates). In each Phase 2, the server performs exactly _n_ updates, one for each worker. Phase 2
+begins at iterations 0 _, n,_ 2 _n,_ 3 _n, . . ._, i.e., at multiples of _n_ .
+
+
+**First round (iterations** 0 **to** _n −_ 1 **):** Initially, all workers compute gradients at point _x_ [0], so during
+iterations 0 _,_ 1 _, . . ., n −_ 1, the server receives gradients computed at _x_ [0] . For any iteration _k_ in this
+range, the server processes gradients _∇fi_ ( _x_ _[k][−][δ]_ _i_ _[k]_ ), so _δi_ _[k]_ [=] _[k]_ _[≤]_ _[n]_ _[−]_ [1][.] [Thus,] [delays] [simply]
+increment during Phase 2.
+
+
+At the end of this round, each worker _i_ has received a new model _x_ _[j]_ for some _j_ _∈{_ 1 _,_ 2 _, . . ., n}_,
+and these update iterations are distinct across workers.
+
+
+**Second** **round** **(iterations** _n_ **to** 2 _n −_ 1 **):** At the start of the second Phase 2 (at iteration _n_ ), the
+gradient table contains gradients _∇fi_ ( _x_ _[n][−][δ]_ _i_ _[n]_ ) where _δi_ _[n]_ _[∈{]_ [0] _[,]_ [ 1] _[, . . ., n][ −]_ [1] _[}]_ [.] [These delay values are]
+distinct across workers since each worker received its update at a different iteration in the previous
+round.
+
+
+During iterations _n_ to 2 _n −_ 1, these delays increase by 1 at each iteration for the same reason as in
+the first Phase 2, giving _δi_ [2] _[n][−]_ [1] _∈{n −_ 1 _, n, . . .,_ 2 _n −_ 2 _}_ at the end of this round. At the same time,
+all workers receive new points to compute gradients from, so during the next Phase 2, the delays
+will again be distinct for all workers and in _{_ 0 _,_ 1 _, . . ., n −_ 1 _}_ .
+
+
+**General pattern:** By induction, at the beginning of each round starting at iteration _cn_ (for integer
+_c_ _≥_ 1), the delays _δi_ _[cn]_ take distinct values in _{_ 0 _,_ 1 _, . . ., n −_ 1 _}_ . During each Phase 2, these delays
+increase by at most _n −_ 1, giving the bound:
+
+
+_δi_ _[k]_ _[≤]_ [(] _[n][ −]_ [1) + (] _[n][ −]_ [1) = 2] _[n][ −]_ [2] _[.]_
+
+
+E.3 VARIANCE TERM
+
+
+The following lemma bounds the variance of the gradient estimator in Ringleader ASGD.
+
+
+21
+
+
+**Lemma E.2** (Variance Bound) **.** _Under Assumption 1, the following variance-type inequality holds_
+_for the gradient estimator used in Algorithm 1:_
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+_σ_ [2]
+ _≤_
+
+
+_B_ _[k]_ _n_ _[.]_
+
+
+E
+
+
+
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+_Proof._ Recall that the gradient estimator is defined as
+
+
+_n_
+
+
+_i_ =1
+
+
+_b_ _[k]_ _i_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ ; _ξi_ _[k][−][δ]_ _i_ _[k][,j]_ - _._
+
+_j_ =1
+
+
+_b_ _[k]_ _i_
+
+
+_g_ ¯ _[k]_ = [1]
+
+_n_
+
+
+_n_
+
+
+- _g_ ¯ _i_ _[k]_ [=] [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_b_ _[k]_ _i_
+
+
+- _gi_ _[k,j]_ = _n_ [1]
+
+_j_ =1
+
+
+_n_
+
+
+_i_ =1
+
+
+1
+_b_ _[k]_ _i_
+
+
+_n_
+
+
+1
+_b_ _[k]_ _i_
+
+
+Let _F_ _[k]_ denote the sigma-field containing all randomness up to the start of the current round, i.e., up
+to iteration _k −_ ( _k_ mod _n_ ). Conditioning on _F_ _[k]_, the evaluation points _x_ _[k][−][δ]_ _i_ _[k]_ are deterministic, and
+the stochastic gradients _gi_ _[k,j]_ are independent across both workers _i_ and samples _j_ .
+
+
+Using the law of total expectation and the independence of stochastic gradients, we have
+
+
+
+
+
+E
+
+
+
+
+ _g_ ¯ _k −_ _n_ 1
+
+�����
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+
+
+
+_n_
+
+
+ = E
+
+
+= E
+
+
+
+
+
+
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+2 [�]
+_F_ _[k]_
+�����
+
+
+_n_
+
+
+_._
+
+
+E
+
+
+
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+
+
+
+
+
+
+1
+_n_ [2]
+
+
+- _n_ E ���� _g_ ¯ _ik_ _[−∇][f][i]_ - _x_ _[k][−][δ]_ _i_ _[k]_ ����2 [�] ��� _F_ _k_ - [�]
+
+_i_ =1
+
+
+For each worker _i_, the conditional variance of the minibatch gradient estimator is
+
+
+
+
+E ���� _g_ ¯ _ik_ _[−∇][f][i]_ - _x_ _[k][−][δ]_ _i_ _[k]_ ����2 [�] ��� _F_ _k_ - = E 
+
+
+������
+
+
+1
+_b_ _[k]_ _i_
+
+
+
+
+
+
+
+
+2 [�]
+_F_ _[k]_
+������
+
+
+_b_ _[k]_ _i_
+
+- _gi_ _[k,j]_ _−∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ 
+_j_ =1 ������
+
+
+_b_ _[k]_ _i_
+
+
+_b_ [1] _[k]_ _i_ E ���� _gik,_ 1 _−∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ ����2 [�] ��� _F_ _k_ - _≤_ _[σ]_ _b_ _[k]_ _i_ [2]
+
+
+= [1]
+
+
+_,_
+_b_ _[k]_ _i_
+
+
+where the last inequality follows from Assumption 1.
+
+
+Combining these results, we get
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+ _≤_ [1]
+
+
+1
+
+_n_ _n_
+
+
+_σ_ [2]
+
+
+_n_
+
+
+_i_ =1
+
+
+1 _σ_ [2]
+=
+_b_ _[k]_ _i_ _B_ _[k]_ _n_ _[,]_
+
+
+E
+
+
+
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+_n_ [2]
+
+
+_n_
+
+
+_i_ =1
+
+
+_σ_ [2]
+
+= _[σ]_ [2]
+_b_ _[k]_ _i_ _n_
+
+
+where the last equality uses the definition of the harmonic mean _B_ _[k]_ = - _n_ 1 - _ni_ =1 _b_ 1 _[k]_ _i_
+
+
+F PROOF OF THEOREM 5.1
+
+
+- _−_ 1
+.
+
+
+Our convergence analysis follows the structured approach employed by Maranjyan et al. (2025d),
+which decomposes the proof into two key components: a descent lemma that tracks the progress of
+the objective function and a residual estimation lemma that controls the accumulated delays in the
+system.
+
+
+The first lemma quantifies how much the objective function decreases at each iteration, accounting for both the standard gradient descent progress and the additional complexities introduced by
+asynchronous updates.
+
+
+22
+
+
+**Lemma F.1** (Descent Lemma; Proof in Appendix F.1) **.** _Under Assumptions 1 and 2, if the stepsize_
+_in Algorithm 1 satisfies γ_ _≤_ [1] _/_ 4 _L, then the following inequality holds_
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+E - _f_ - _x_ _[k]_ [+1][��] _≤_ E - _f_ - _x_ _[k]_ [��] _−_ _[γ]_
+
+
+4 [E]
+
+
+
+
+
+     
+_[γ]_ ��� _∇f_ _x_ _[k]_ [���][2][�] _−_ _[γ]_
+
+2 [E] 4
+
+
+1
+
+_n_
+�����
+
+
+
+
+
++ _[γL]_ [2]
+
+2 _n_
+
+
+_n_
+
+
+- E ���� _xk −_ _xk−δik_ ���2 [�] + [3] _[γ]_ 2 [2] _B_ _[Lσ]_ [2]
+
+_i_ =1
+
+
+2 _B_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[ℓ][−][δ]_ _i_ _[ℓ]_ - [�]
+
+_i_ =1 ����
+
+
+_k−_ 1
+
+ 
+E
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+ _._
+
+
++ _γ_ [2] _L_
+
+
+_k−_ 1
+
+
+
+
+
+This descent lemma shares a similar structure with its counterpart in the homogeneous setting analyzed by Maranjyan et al. (2025d), but with a crucial additional term. The final summation term in
+the upper bound captures the effect of using stale gradients from the gradient table—a phenomenon
+we refer to as “table delay”. This term is absent in the homogeneous case because no gradient table
+is maintained. Indeed, when _n_ = 1, our setting reduces to the homogeneous case, the gradient table becomes unnecessary, and this additional term vanishes, recovering the original descent lemma
+established by Maranjyan et al. (2025d).
+
+
+Next, similar to (Maranjyan et al., 2025d), we derive a lemma to bound the term involving the
+difference between current and old points.
+
+**Lemma** **F.2** (Residual Estimation; Proof in Appendix F.2) **.** _Under_ _Assumption_ _1,_ _the_ _iterates_ _of_
+Ringleader ASGD _(Algorithm 1) with stepsize γ_ _≤_ [1] _/_ 4 _nL satisfy the following bound_
+
+
+
+
+
+
+
+
+������
+
+
+_K−_ 1
+
+
+2 []
+
+
++ [2] _[γσ]_ [2]
+ _LB_ _[.]_
+
+
+_n_
+
+- _∇fj_ - _x_ _[k][−][δ]_ _j_ _[k]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+_n_
+
+
+- E _xk −_ _xk−δik_ 2 [�] _≤_ [2] _[γn]_
+
+���� ��� _LK_
+_i_ =1
+
+
+_LK_
+
+
+1
+
+_K_
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+1
+
+_n_
+
+
+1
+
+_n_
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+Finally, we get the iteration complexity combining these two lemmas.
+
+**Theorem 5.1** (Iteration Complexity) **.** Under Assumptions 1, 2, and 3, let the stepsize in Ringleader
+ASGD (Algorithm 1) be
+
+
+   - 1 _εB_
+_γ_ = min
+8 _nL_ _[,]_ 10 _Lσ_ [2]
+
+
+_._
+
+
+Then,
+
+1
+
+_K_
+
+
+_K−_ 1
+
+- E ��� _∇f_ - _x_ _[k]_ [���][2][�] _≤_ _ε,_
+
+
+_k_ =0
+
+
+for
+
+
+[∆]
+
++ [40] _[L]_ [∆] _[σ]_ [2]
+_ε_ _Bε_ [2]
+
+
+��
+_._
+
+
+1 + _[σ]_ [2]
+
+_Bnε_
+
+
+1 + _[σ]_ [2]
+
+
+_K_ _≥_ [32] _[nL]_ [∆]
+
+
+_[L]_ [∆] _[σ]_ [2]  - _nL_ ∆
+
+= _O_
+_Bε_ [2] _ε_
+
+
+_Proof._ We start by averaging the inequality from Lemma F.1 over _K_ iterations and dividing both
+sides by _[γ]_ _/_ 2
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+1
+
+_K_
+
+
+_K−_ 1
+
+- E ��� _∇f_ - _x_ _[k]_ [���][2][�] + 1
+
+2 _K_
+_k_ =0
+
+
+
+
+
+
+
+
+[2∆] [3] _[γLσ]_ [2]
+
+_γK_ [+] _B_
+
+
+_≤_ [2∆]
+
+
+_B_
+
+
+1
+
++ _[L]_ [2]
+
+_n_ _K_
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+_n_
+
+- E _xk −_ _xk−δik_ 2 [�]
+
+���� ���
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[ℓ][−][δ]_ _i_ _[ℓ]_ - [�]
+
+_i_ =1 ����
+
+
+_k−_ 1
+
+ 
+E
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+23
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+ _._
+
+
++ 2 _γL_ [1]
+
+_K_
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+
+
+
+We now bound the third term on the right using Lemma F.2
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+_K−_ 1
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+1
+
+_K_
+
+
+_K−_ 1
+
+- E ��� _∇f_ - _x_ _[k]_ [���][2][�] + 1
+
+2 _K_
+_k_ =0
+
+
+_K−_ 1
+
+
+
+
+
+
+
+
+[2∆] [3] _[γLσ]_ [2]
+
+_γK_ [+] _B_
+
+
+_B_
+
+
+_≤_ [2∆]
+
+
+[2]
+
++ [2] _[γLσ]_ [2]
+_B_ _B_
+
+
+
+
+
+������
+
+
+2 []
+
+
+
+
+
++ 2 _γLn_ [1]
+
+_K_
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+_n_
+
+- _∇fj_ - _x_ _[k][−][δ]_ _j_ _[k]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+
+
+
+1
+
+_n_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[ℓ][−][δ]_ _i_ _[ℓ]_ - [�]
+
+_i_ =1 ����
+
+
+_k−_ 1
+
+ 
+E
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
++ 2 _γL_ [1]
+
+_K_
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+
+
+
+
+
+
+[2∆] [5] _[γLσ]_ [2]
+
+_γK_ [+] _B_
+
+
+_≤_ [2∆]
+
+
+_B_
+
+
+
+
+
+������
+
+
+2 []
+
+
+
+
+
++ 2 _γLn_ [1]
+
+_K_
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+_n_
+
+- _∇fj_ - _x_ _[k][−][δ]_ _j_ _[k]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+
+
+
+1
+
+_n_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+ _._
+
+
++ 2 _γLn_ [1]
+
+_K_
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+
+
+
+Now, using the bound _γ_ _≤_ [1] _/_ 8 _nL_, we obtain
+
+
+[2∆] [5] _[γLσ]_ [2]
+
+_γK_ [+] _B_
+
+
+_._
+_B_
+
+
+1
+
+_K_
+
+
+_K−_ 1
+
+
+- E ��� _∇f_ - _x_ _[k]_ [���][2][�] _≤_ [2∆]
+
+_γK_
+
+_k_ =0
+
+
+Finally, plugging in the stepsize and the expression for _K_ ensures the right-hand side is bounded by
+_ε_ .
+
+
+F.1 PROOF OF LEMMA F.1
+
+
+We now prove the descent lemma.
+
+
+**Lemma F.1** (Descent Lemma) **.** Under Assumptions 1 and 2, if the stepsize in Algorithm 1 satisfies
+_γ_ _≤_ [1] _/_ 4 _L_, then the following inequality holds
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+E - _f_ - _x_ _[k]_ [+1][��] _≤_ E - _f_ - _x_ _[k]_ [��] _−_ _[γ]_
+
+
+_[γ]_ ��� _∇f_ - _x_ _[k]_ [���][2][�] _−_ _[γ]_
+
+2 [E] 4
+
+
+4 [E]
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+
+
+
++ _[γL]_ [2]
+
+2 _n_
+
+
+_n_
+
+
+- E _xk −_ _xk−δik_ 2 [�] + [3] _[γ]_ [2] _[Lσ]_ [2]
+
+���� ��� 2 _B_
+_i_ =1
+
+
+2 _B_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[ℓ][−][δ]_ _i_ _[ℓ]_ - [�]
+
+_i_ =1 ����
+
+
+_k−_ 1
+
+ 
+E
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+ _._
+
+
++ _γ_ [2] _L_
+
+
+_k−_ 1
+
+
+
+
+
+_Proof._ Some proof techniques are adapted from the works of Maranjyan et al. (2025d) and Wang
+et al. (2025).
+
+
+From Assumption 2 and Lemma E.1, we know that _f_ is _L_ –smooth. Therefore, the following standard inequality holds (Nesterov, 2018)
+
+
+       E - _f_ ( _x_ _[k]_ [+1] )� _≤_ E _f_ ( _x_ _[k]_ ) _−_ _γ_ - _∇f_ ( _x_ _[k]_ ) _,_ ¯ _g_ _[k]_ [�] + _[Lγ]_ [2]
+
+2
+
+
+24
+
+
+�� _g_ ¯ _k_ ��2 [�] _._ (6)
+
+
+Recall that the gradient estimator is defined as
+
+
+_b_ _[k]_ _i_
+
+- _gi_ _[k,j]_ _._
+
+_j_ =1
+
+
+_g_ ¯ _[k]_ = [1]
+
+_n_
+
+
+_n_
+
+
+- _g_ ¯ _i_ _[k]_ [=] [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+- 1
+
+_i_ =1 _b_ _[k]_ _i_
+
+
+Let _F_ _[k]_ denote the sigma-field containing all randomness up to the start of the current Phase 2,
+i.e., up to iteration _k_ _−_ ( _k_ mod _n_ ). A key observation is that all gradients in the current gradient
+table were computed and received during the current round. Since these gradients were computed
+at points from previous iterations within the current round, we have _k −_ _δi_ _[k]_ _[≤]_ _[k][ −]_ [(] _[k]_ [mod] _[ n]_ [)][ for]
+all _i ∈_ [ _n_ ]. Conditioning on _F_ _[k]_, the points _x_ _[k][−][δ]_ _i_ _[k]_ are deterministic. Therefore, we can compute the
+conditional expectation of the gradient estimator:
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - _._
+
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+
+_i_ =1
+
+
+_b_ _[k]_ _i_
+
+
+- E - _gi_ _[k,j]_ ��� _F_ _k_ - = _n_ [1]
+
+_j_ =1
+
+
+E - _g_ ¯ _[k]_ [��] _F_ _[k]_ [�] = [1]
+
+_n_
+
+
+E - _g_ ¯ _[k]_ [��] _F_ _[k]_ [�] = [1]
+
+
+1
+_b_ _[k]_ _i_
+
+
+_n_
+
+
+The last equality follows from the unbiasedness of the stochastic gradient estimator (Assumption 1).
+
+
+Using this conditional expectation and the law of total expectation, we can now simplify the inner
+product term in (6):
+
+
+��
+
+
+E �� _∇f_ - _x_ _[k]_ [�] _,_ ¯ _g_ _[k]_ [��] = E
+
+
++ E
+
+
+_∇f_ - _x_ _[k]_ [�] _,_ [1]
+
+
+_∇f_ - _x_ _[k]_ [�] _,_ ¯ _g_ _[k]_ _−_ [1]
+
+
+_n_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+��
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+��
+
+
+= E
+
+
++ E
+
+
+_∇f_ - _x_ _[k]_ [�] _,_ [1]
+
+
+_∇f_ - _x_ _[k]_ [�] _−∇f_ - _x_ _[k][−]_ [(] _[k]_ [mod] _[n]_ [)][�] _,_ ¯ _g_ _[k]_ _−_ [1]
+
+
+_n_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+��
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+��
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
++ E
+
+
+  - [mod] _[n]_ [)][�]
+_∇f_ _x_ _[k][−]_ [(] _[k]_ _,_ ¯ _g_ _[k]_ _−_ [1]
+
+
+_n_
+
+
+��
+
+
+= E
+
+
+_∇f_ - _x_ _[k]_ [�] _,_ [1]
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+- �� _T_ 1
+
+
+��
+
+
++ E
+
+
+_∇f_ - _x_ _[k]_ [�] _−∇f_ - _x_ _[k][−]_ [(] _[k]_ [mod] _[n]_ [)][�] _,_ ¯ _g_ _[k]_ _−_ [1]
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��] _._
+
+
+_i_ =1
+
+
+            - ��             _T_ 2
+
+
+Next, using Assumption 2, we have
+
+
+1
+
+_n_
+�����
+
+
+2 _T_ 1 = E
+
+
+= E
+
+
+2
+
+
+
+
+
+� [�] _∇f_ - _x_ _[k]_ [���][2] +
+
+
+_∇f_ - _x_ _[k]_ [�] _,_ [1]
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+ _−_ E
+
+
+2 []
+
+
+_n_
+
+
+
+
+
+_∇f_ - _x_ _[k]_ [�] _−_ [1]
+
+_n_
+
+�����
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+ _−_ _[L]_ [2]
+
+
+_≥_ E ��� _∇f_ - _x_ _[k]_ [���][2][�] + E
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+_n_
+
+
+_n_
+
+- E _xk −_ _xk−δik_ 2 [�] _._
+
+���� ���
+_i_ =1
+
+
+25
+
+
+Next, we analyze _T_ 2
+
+
+��
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [��]
+
+
+_i_ =1
+
+
+_T_ 2 = E
+
+
+_≥−_ E
+
+
+_∇f_  - _x_ _[k]_ [�] _−∇f_  - _x_ _[k][−]_ [(] _[k]_ [mod] _[n]_ [)][���] _g_ ¯ _k −_ 1
+���� - _n_
+
+�����
+
+
+_∇f_ - _x_ _[k]_ [�] _−∇f_ - _x_ _[k][−]_ [(] _[k]_ [mod] _[n]_ [)][�] _,_ ¯ _g_ _[k]_ _−_ [1]
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_xk −_ _xk−_ ( _k_ mod _n_ )
+���� ���
+
+
+_≥−L_ E
+
+
+= _−L_ E
+
+
+_≥−Lγ_
+
+
+_≥−Lγ_
+
+
+1
+
+2
+
+
+E ��� _g_ ¯ _ℓ_ ��2� + E
+
+
+_n_
+
+
+
+
+
+_γ_
+������
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+
+
+
+_k−_ 1
+
+
+_n_
+
+
+������
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+
+
+
+
+
+
+_k−_ 1
+
+ - _g_ ¯ _[ℓ]_
+
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+
+
+
+_k−_ 1
+
+ 
+E
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+_k−_ 1
+
+
+�� _g_ ¯ _ℓ_ ��
+
+
+
+
+
+_n_
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+
+
+
+_k−_ 1
+
+ 
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+
+
+
+2 []
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+
+
+
+ - E ��� _g_ ¯ _ℓ_ ��2� _−_ ( _k_ mod _n_ ) _[Lγσ]_ [2]
+
+2 _B_ _[k]_ _n_
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+_≥−_ _[Lγ]_
+
+2
+
+
+_k−_ 1
+
+
+2 _B_ _[k]_ _n_
+
+
+2 _B_ _[k]_ _[.]_
+
+
+ - E ��� _g_ ¯ _ℓ_ ��2� _−_ _[Lγσ]_ [2]
+
+2 _B_ _[k]_
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+_≥−_ _[Lγ]_
+
+2
+
+
+_k−_ 1
+
+
+The inequalities follow from the Cauchy-Schwarz inequality, _L_ –smoothness of _f_, the triangle inequality, Young’s inequality, Lemma E.2, and finally ( _k_ mod _n_ ) _≤_ _n −_ 1 _< n_ .
+
+It remains to bound the term E ��� _g_ ¯ _k_ ��2�. Using Young’s inequality, we have
+
+
+
+
+
+_n_
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+ + 2E
+
+
+2 []
+
+
+E ��� _g_ ¯ _k_ ��2� _≤_ 2E
+
+
+_≤_ 2E
+
+
+1
+
+_n_
+�����
+
+
+1
+
+_n_
+�����
+
+
+
+
+
+_g_ ¯ _k −_ 1
+_n_
+�����
+
+
+
+
+
+
+
+
+
+
+
+_n_
+
+
+2 []
+
+
+ + [2] _[σ]_ [2]
+
+
+_B_ _[k]_ _n_ _[,]_
+
+
+
+
+
+where in the last step we used Lemma E.2.
+
+
+26
+
+
+Now, by combining all terms in (6), we obtain
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+E - _f_ - _x_ _[k]_ [+1][��] _≤_ E - _f_ - _x_ _[k]_ [��] _−_ _[γ]_
+
+
+2 [E]
+
+
+
+
+
+     
+_[γ]_ ��� _∇f_ _x_ _[k]_ [���][2][�] _−_ _[γ]_
+
+2 [E] 2
+
+
+1
+
+_n_
+�����
+
+
+
+
+
++ _[γL]_ [2]
+
+2 _n_
+
+
+_n_
+
+- E _xk −_ _xk−δik_ 2 [�]
+
+���� ���
+_i_ =1
+
+
+[2] _[Lσ]_ [2]
+
++ _[γ]_ [2] _[L]_
+2 _B_ _[k]_ 2
+
+
+��� _g_ ¯ _k_ ��2�
+2 [E]
+
+
++ _[γ]_ [2] _[L]_
+
+2
+
+
+ - E ��� _g_ ¯ _ℓ_ ��2� + _[γ]_ [2] _[Lσ]_ [2]
+
+2 _B_ _[k]_
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+_k−_ 1
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
+_[γ]_ ��� _∇f_ - _x_ _[k]_ [���][2][�] _−_ _[γ]_
+
+2 [E] 2
+
+
+_≤_ E - _f_ - _x_ _[k]_ [��] _−_ _[γ]_
+
+
+2 [E]
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+
+
+
++ _[γL]_ [2]
+
+2 _n_
+
+
++ _γ_ [2] _L_
+
+
+_n_
+
+- E _xk −_ _xk−δik_ 2 [�]
+
+���� ���
+_i_ =1
+
+
+_k−_ 1
+
+ 
+E
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[ℓ][−][δ]_ _i_ _[ℓ]_ - [�]
+
+_i_ =1 ����
+
+
+
+
+
+1
+
+_n_
+�����
+
+
+2 []
+
+
+
+
+
+
+
+
+_n_
+
+
+_n_
+
+- _∇fi_ - _x_ _[k][−][δ]_ _i_ _[k]_ - [�]
+
+_i_ =1 ����
+
+
+2 []
+
+
++ _γ_ [2] _L_ E
+
+
++ _γ_ [2] _L_
+
+
+1
+
+_n_
+�����
+
+
+
+
+
+
+
+
+_k−_ 1
+
+
+_σ_ [2]
+
+
+[2] _[Lσ]_ [2]
+
++ _[γ]_ [2] _[Lσ]_ [2]
+2 _B_ _[k]_ _B_ _[k]_ _n_
+
+
+_B_ _[k]_ _n_ _[.]_
+
+
+_ℓ_ = _k−_ ( _k_ mod _n_ )
+
+
+_σ_ [2] _[γ]_ [2] _[Lσ]_ [2]
+
+_B_ _[ℓ]_ _n_ [+] 2 _B_ _[k]_
+
+
+This completes the proof under the stepsize condition _γ_ _≤_ [1] _/_ 4 _L_ and _B_ := inf _k≥_ 0 _B_ _[k]_ .
+
+
+F.2 PROOF OF LEMMA F.2
+
+
+The following lemma provides an upper bound on the residual error due to delays.
+
+
+**Lemma** **F.2** (Residual Estimation) **.** Under Assumption 1, the iterates of Ringleader ASGD (Algorithm 1) with stepsize _γ_ _≤_ [1] _/_ 4 _nL_ satisfy the following bound
+
+
+
+
+
+
+
+
+������
+
+
+_K−_ 1
+
+
+2 []
+
+
++ [2] _[γσ]_ [2]
+ _LB_ _[.]_
+
+
+1
+
+_K_
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+1
+
+_n_
+
+
+_n_
+
+
+- E ���� _xk −_ _xk−δik_ ���2 [�] _≤_ [2] _LK_ _[γn]_
+
+_i_ =1
+
+
+_LK_
+
+
+_n_
+
+- _∇fj_ - _x_ _[k][−][δ]_ _j_ _[k]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+1
+
+_n_
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+27
+
+
+_Proof._ By Young’s inequality, we have
+
+
+
+
+
+_k−_ 1
+
+
+_ℓ_ = _k−δi_ _[k]_
+
+
+������
+
+
+2 []
+
+
+E _xk −_ _xk−δik_ 2 [�] = E
+���� ���
+
+
+
+
+
+_γ_
+������
+
+
+
+
+
+_g_ ¯ _[ℓ]_
+
+
+
+
+
+1
+
+_n_
+
+
+2 []
+
+
+
+
+
+_≤_ 2 _γ_ [2] E
+
+
+
+
+
+������
+
+
+_k−_ 1
+
+
+_n_
+
+
+_ℓ_ = _k−δi_ _[k]_
+
+
+_n_
+
+- _∇fj_ - _x_ _[ℓ][−][δ]_ _j_ _[ℓ]_ 
+_j_ =1 ������
+
+
+
+
+
+2 []
+
+
+
+
+
+ _g_ ¯ _[ℓ]_ _−_ _n_ [1]
+
+
+������
+
+
+_n_ 
+
+- _∇fj_ - _x_ _[ℓ][−][δ]_ _j_ _[ℓ]_ �
+
+_j_ =1
+
+
+_n_
+
+
++ 2 _γ_ [2] E
+
+
+_≤_ 2 _γ_ [2] _δi_ _[k]_
+
+
+������
+
+
+
+
+
+_k−_ 1
+
+
+
+
+
+
+
+
+_ℓ_ = _k−δi_ _[k]_
+
+
+_n_
+
+- _∇fj_ - _x_ _[ℓ][−][δ]_ _j_ _[ℓ]_ 
+_j_ =1 ������
+
+
+_k−_ 1
+
+
+E
+
+
+
+
+
+
+
+
+2 []
+
+
+
+
+
+_[σ]_ [2]
++2 _γ_ [2] ( _δi_ _[k]_ [)][2]
+
+_Bn_ _[.]_
+
+
+1
+
+_n_
+
+
+_n_
+
+
+������
+
+
+_ℓ_ = _k−δi_ _[k]_
+
+
+                - ��                _Tik_
+
+
+In the last inequality, we used Jensen’s inequality and Lemma E.2.
+
+
+Next, we estimate the sum of _Tik_
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+
+
+
+_K−_ 1
+
+
+_k_ =0
+
+
+_n_
+
+- _δi_ _[k]_
+
+
+_i_ =1
+
+
+_n_
+
+
+
+
+
+2 []
+
+
+
+
+
+_n_
+
+- _∇fj_ - _x_ _[ℓ][−][δ]_ _j_ _[ℓ]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+_n_
+
+- _∇fj_ - _x_ _[ℓ][−][δ]_ _j_ _[ℓ]_ 
+_j_ =1 ������
+
+
+1
+
+_n_
+
+
+_n_
+
+- _Tik_ =
+
+
+_i_ =1
+
+
+1
+
+_n_
+
+
+������
+
+������
+
+
+_k−_ 1
+
+
+_ℓ_ = _k−δi_ _[k]_
+
+
+_k−_ 1
+
+
+_ℓ_ = _k−δi_ _[k]_
+
+
+E
+
+
+E
+
+
+
+
+
+
+
+
+_K−_ 1
+
+- _δi_ _[k]_
+
+
+_k_ =0
+
+
+_K−_ 1
+
+
+2 []
+
+
+
+
+
+= [1]
+
+_n_
+
+
+_n_
+
+
+_i_ =1
+
+
+1
+
+_n_
+
+
+1
+
+_n_
+
+
+_n_
+
+
+
+
+
+_n_
+
+
+_i_ =1
+
+
+_K−_ 1 _k−_ 1
+
+- 
+
+_k_ =0 _ℓ_ = _k−δi_ _[k]_
+
+
+2 []
+
+
+
+
+
+_n_
+
+- _∇fj_ - _x_ _[ℓ][−][δ]_ _j_ _[ℓ]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+_≤_ 2
+
+
+_≤_ 2
+
+
+_K−_ 1
+
+
+E
+
+_k_ =0
+
+
+
+
+
+
+
+
+1
+
+_n_
+
+
+E
+
+
+������
+
+
+
+
+
+������
+
+
+2 []
+
+
+
+
+
+_n_
+
+- _δi_ [max]
+
+
+_i_ =1
+
+
+_n_
+
+- _∇fj_ - _x_ _[k][−][δ]_ _j_ _[k]_ 
+_j_ =1 ������
+
+
+_n_
+
+
+1
+
+_n_
+
+
+_n_
+
+- _∇fj_ - _x_ _[k][−][δ]_ _j_ _[k]_ 
+_j_ =1 ������
+
+
+_K−_ 1
+
+ _≤_ 4 _n_ [2] E
+
+
+_k_ =0
+
+
+_K−_ 1
+_≤_ 4 _n_ [2] 
+
+
+
+
+
+
+
+
+������
+
+
+2 []
+
+
+ _._
+
+
+1
+
+_n_
+
+
+_n_
+
+
+In the first and last inequality, we used the bound _δi_ [max] _≤_ 2 _n_ from Lemma 4.1. Finally, applying
+the stepsize condition _γ_ _≤_ [1] _/_ 4 _nL_ yields the result.
+
+
+G PROOF OF THEOREM 5.3
+
+
+Before proving the theorem, we first prove the following lemma.
+
+
+G.1 PROOF OF LEMMA 5.2
+
+
+This lemma establishes a time bound for one round of iterations and, more importantly, a lower
+bound on _B_ .
+
+
+28
+
+
+**Lemma 5.2.** Each block of _n_ consecutive iterations (each round) of Algorithm 1 takes at most 2 _τn_
+seconds. Moreover, we have
+
+
+_τn_
+= _._
+2 _τ_ avg
+
+
+_n_
+
+- _τi_
+
+
+_i_ =1
+
+
+- _−_ 1
+
+
+_B_ _≥_ _[τ][n]_
+
+2
+
+
+1
+
+_n_
+
+
+_n_
+
+
+_Proof._ The upper bound of 2 _τn_ follows from the structure of the algorithm, which consists of two
+phases. In the first phase, the server waits until all workers complete at least one gradient computation, which takes at most _τn_ seconds. In the second phase, the server applies the received gradients
+and waits for all ongoing computations to finish—which again takes at most _τn_ seconds. Thus, the
+total time for _n_ iterations is bounded by 2 _τn_ .
+
+
+We now prove the second part of the lemma. Recall that
+
+
+_n_
+
+
+_i_ =1
+
+
+1
+_bi_
+
+
+     1
+
+_B_ = inf [=] [inf]
+_k≥_ 0 _[B][k]_ _k≥_ 0 _n_
+
+
+_n_
+
+
+_i_ =1
+
+
+ - _−_ 1
+
+1
+_b_ _[k]_ _i_
+
+
+- _−_ 1
+
+
+_≥_
+
+
+1
+
+_n_
+
+
+_,_
+
+
+where we define
+_bi_ = inf _i_ _[.]_
+_k≥_ 0 _[b][k]_
+
+We are interested in the number of gradients stored in the table at iteration _k_ . This count includes
+gradients computed during Phase 1 plus one additional gradient from Phase 2 (except for the worker
+that finished Phase 1 last).
+
+
+Since every worker needs to compute at least one gradient during Phase 1, the slowest worker will
+take _τn_ seconds to complete single gradient computation. During this _τn_ -second interval, faster
+workers _i_ _<_ _n_ may still be finishing gradients from the previous round’s Phase 2 before starting
+their Phase 1 computations for the current round.
+
+
+After completing any remaining Phase 2 work (which takes at most _τi_ seconds), worker _i_ has at
+least _τn −_ _τi_ seconds remaining to compute additional gradients for the current round’s Phase 1. The
+number of gradients that worker _i_ can compute satisfies
+
+
+   -   - _τn −_ _τi_
+_bi_ _≥_ max 1 _,_
+_τi_
+
+
+�� - _≥_ max 1 _,_ _[τ][n]_ _−_ 1 _._
+
+_τi_
+
+
+For workers _i_ where _τn_ _≥_ 2 _τi_, we have
+_τn_
+
+
+_,_
+2 _τi_
+
+
+_n_ _−_ 1 _≥_ _[τ][n]_
+
+_τi_ 2 _τi_
+
+
+and hence
+_bi_ _≥_ _[τ][n]_ _._
+
+2 _τi_
+
+Plugging this bound into the expression for _B_ gives the claimed result.
+
+
+We are now ready to prove Theorem 5.3.
+
+**Theorem 5.3.** Let Assumptions 2, 3, and 1 hold. Let the stepsize in Ringleader ASGD (Algorithm 1)
+be _γ_ = min _{_ [1] _/_ 8 _nL,_ _[εB]_ _/_ 10 _Lσ_ [2] _}_ . Then, under the _fixed_ _computation_ _model_ (2), Ringleader ASGD
+achieves the optimal time complexity
+
+
+ - _L_ ∆
+_O_
+_ε_
+
+
+- _σ_ [2]
+_τn_ + _τ_ avg
+
+_nε_
+
+
+��
+_._
+
+
+_Proof._ We start with the iteration complexity from Theorem 5.1
+
+
+[∆]
+
++ [40] _[L]_ [∆] _[σ]_ [2]
+_ε_ _Bε_ [2]
+
+
+1 + _[σ]_ [2]
+
+_Bnε_
+
+
+��
+_._
+
+
+_K_ _≥_ [32] _[nL]_ [∆]
+
+
+_[L]_ [∆] _[σ]_ [2] - _nL_ ∆
+
+= _O_
+_Bε_ [2] _ε_
+
+
+The time to do _n_ steps is at most 2 _τn_ form Lemma 5.2. Then the time complexity is
+
+
+_[K]_ - _τn_ _L_ ∆
+
+_n_ [=] _[ O]_ _ε_
+
+
+1 + _[σ]_ [2]
+
+_Bnε_
+
+
+��
+_._
+
+
+2 _τn ×_ _[K]_
+
+
+_ε_
+
+
+It remains to put _B_ _≥_ _[τ][n]_ _/_ 2 _τ_ avg from Lemma 5.2.
+
+
+29
+
+
+H TIME COMPLEXITY OF IA [2] SGD
+
+
+The iteration complexity of IA [2] SGD (Wang et al., 2025) is
+
+
+  - _δ_ max _L_ ∆
+_K_ = _O_
+_ε_
+
+
+1 + _[σ]_ [2]
+
+_nε_
+
+
+��
+_._
+
+
+We now analyze the corresponding wall-clock time under the _fixed_ _computation_ _model_ (2). Since
+the algorithm performs an update whenever a single worker finishes a computation, we seek the
+minimal time _T_ such that
+
+      - _n_      - _T_      
+
+
+_≥_ _K_ _._
+
+
+_i_ =1
+
+
+- _T_
+_τi_
+
+
+Observe that
+_n_
+
+      
+
+_i_ =1
+
+
+_T_
+_≥_
+_τi_
+
+
+_n_
+
+
+_i_ =1
+
+
+- _T_ 
+_._
+
+_τi_
+
+
+Hence, if we define _T_ _[′]_ by
+_n_
+
+      
+
+_i_ =1
+
+
+then
+
+
+_T_ _[′]_
+
+= _K_ _,_
+_τi_
+
+
+- _−_ 1
+
+
+_T_ _[′]_ =
+
+
+- _n_
+
+ 
+
+_i_ =1
+
+
+1
+_τi_
+
+
+_K_ _._
+
+
+It follows that the minimal time _T_ is necessarily larger than _T_ _[′]_ .
+
+
+It remains to bound _δ_ [max] . At initialization, all workers start computing their first gradients simultaneously. By the time the slowest worker completes its first gradient (at time _τn_ ), the other workers
+may each have completed multiple gradients. In particular,
+
+
+_δ_ [max] _≥_
+
+
+_n_
+
+
+_i_ =1
+
+
+- _τn_
+_τi_
+
+
+_._
+
+
+Combining this with the iteration complexity bound, we obtain that the total runtime satisfies
+
+
+_T_ _≥_ _c ×_ _[τ][n][L]_ [∆]
+
+_ε_
+
+
+1 + _[σ]_ [2]
+
+_nε_
+
+
+_,_
+
+
+for some universal constant _c >_ 0.
+
+
+Note that the expression above should not be viewed as an exact upper bound on the runtime. It is
+better understood as a simplified estimate of _T_, which is sufficient for our purposes and provides a
+cleaner basis for comparison.
+
+
+I IMPROVED MALENIA SGD
+
+
+Malenia SGD has the following iteration complexity (Tyurin & Richt´arik, 2024)
+
+
+_[L][f]_
+
++ [12∆] _[L][f]_ _[σ]_ [2]
+_ε_ _ε_ [2] _nS_
+
+
+_K_ _≥_ [12∆] _[L][f]_
+
+
+_,_
+_ε_ [2] _nS_
+
+
+where _S_ is a lower bound on the harmonic mean of the batch sizes, i.e.,
+
+          - _n_          - _−_ 1
+1                 - 1 _≥_ _S_ _,_
+_n_ _b_ _[k]_
+
+
+_n_
+
+
+_≥_ _S_ _,_
+
+
+- _−_ 1
+
+
+_i_ =1
+
+
+1
+_b_ _[k]_ _i_
+
+
+for all iterations _k_ . In the original Malenia SGD analysis (Tyurin & Richt´arik, 2024), this bound
+follows from the condition in (4), which fixes the same value of _S_ across all iterations.
+
+
+30
+
+
+In the fixed-time regime (2), however, this condition is no longer necessary. By adopting the same
+strategy as Ringleader ASGD (Algorithm 1)—namely, waiting for at least one gradient from each
+worker—we effectively replace _S_ with _B_ in the rate. This yields the following time complexity
+
+
+_τnK_ = [12] _[τ][n]_ [∆] _[L][f]_
+
+_ε_
+
+
+1 + _[σ]_ [2]
+
+_εnB_
+
+
+_._
+
+
+Substituting the expression for _B_ from Lemma 5.2 and proceeding as in the proof of Theorem 5.3,
+we obtain the same overall time complexity as before—this time _without_ requiring condition (4),
+which depends on knowing _σ_ and fixing _ε_ in advance.
+
+
+Finally, note that this improvement is only valid in the fixed-time regime. In the setting with arbitrarily varying computation times, the same optimization cannot be applied, for the same reasons
+discussed for Ringleader ASGD in Appendix D.
+
+
+NOTE ON LLM USAGE
+
+
+Large Language Models were used to help polish the writing of the manuscript. LLM usage did not
+affect the scientific content of the paper.
+
+
+31

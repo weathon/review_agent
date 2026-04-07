@@ -1,0 +1,1790 @@
+# EVOLVING GRAPH STRUCTURED PROGRAMS FOR CIR## CUIT GENERATION WITH LARGE LANGUAGE MODELS
+
+
+**Yinqi Bai** **[1]** **,** **Jie Wang** **[1]** _[†]_ **,** **Lei Chen** **[2]** **,** **Zhihai Wang** **[1]** **,** **Yumeng Li** **[1]** **,** **Mingxuan Yuan** **[2]** **,**
+**Jianye Hao** [3], **Defu Lian** [1], **Enhong Chen** [1],
+1MoE Key Laboratory of Brain-inspired Intelligent Perception and Cognition,
+University of Science and Technology of China
+2Huawei Technologies Co., Ltd.
+3College of Intelligence and Computing, Tianjin University
+byq000324@mail.ustc.edu.cn,
+
+
+ABSTRACT
+
+
+Logic synthesis (LS), which aims to generate a _compact_ logic circuit graph with
+minimized size while _accurately_ satisfying a given functionality, plays an important role in chip design. However, existing LS methods struggle to balance
+circuit structure compactness and functional accuracy, often leading to suboptimal generation. To address this problem, we propose a novel _Circuit_ _Program_
+_Evolution_ framework, namely CircuitEvo, which iteratively leverages the large language models (LLMs) to evolve circuit programs towards improved compactness
+while preserving functional accuracy. Specifically, CircuitEvo models the circuit
+graph as a structured program and leverages the strong generative capabilities of
+LLMs—guided by the domain-specific evolutionary prompt strategies—to generate
+promising circuit candidates in each iteration. Moreover, a structure-aware circuit
+optimization module is introduced to correct functional discrepancies by appending
+necessary substructures to the generated circuits. To the best of our knowledge,
+CircuitEvo is _the first_ LLM-based LS approach that can iteratively improve the
+circuit’s compactness while ensuring functional accuracy. Experiments on several
+widely used benchmarks demonstrate that our CircuitEvo can efficiently generate
+accurate circuits with up to 16 input number and 69 output number. Moreover,
+our method significantly outperforms state-of-the-art methods in terms of the circuit size, achieving an average improvement of 6.74%. The code is available at
+[https://github.com/MIRALab-USTC/CircuitEvo.](https://github.com/MIRALab-USTC/CircuitEvo)
+
+
+1 INTRODUCTION
+
+
+Complex integrated circuits (ICs) can contain billions of transistors, making manual design impractical
+(Huang et al., 2021). Consequently, the IC industry depends on electronic design automation (EDA)
+tools (Wang et al., 2009), which systematically transform high-level hardware descriptions into
+layouts ready for IC fabrication. A crucial step in this process is logic synthesis (LS) (Devadas et al.,
+1994; Rudell, 1989), which aims to transform a behavioral-level description, i.e., truth table, into
+an optimized gate-level circuit to minimize its delay and area. Since LS is the first step in the EDA
+process that leads to the final IC layout, the quality of its output has a significant impact on the area,
+power, and performance of the resulting IC (De Abreu et al., 2021; Berndt et al., 2022).
+
+
+LS is a challenging _NP_ -hard combinatorial optimization problem (Micheli, 1994; Farrahi & Sarrafzadeh, 1994). To address this task, existing LS approaches typically follow a generate-thenoptimize framework: they first generate a circuit from the truth table, then apply various operators
+for circuit optimization (Wang et al., 2024b; Li et al., 2025; Cheng et al., 2024). Since the quality
+of the initial generated circuit heavily influences the final result after optimization (Rai et al., 2021;
+Alanminko, 2024), the central problem in LS lies in generating a compact circuit graph that exactly
+satisfies the functionality constraints defined by the truth table. Both commercial and academic LS
+tools use sophisticated human-designed heuristics (Nabulsi et al., 2017; Lai et al., 1993) to solve
+
+
+_†_ Corresponding author. Email: jiewangx@ustc.edu.cn.
+
+
+1
+
+
+this task, often resulting in suboptimal solutions. Recently, learning-based approaches (Wang et al.,
+2024b; d’Ascoli et al., 2023; Rai et al., 2021; Li et al., 2025) have emerged as a promising alternative
+for circuit generation. These methods aim to explore the circuit design space to identify graph
+structures that meet strict function constraints. However, they struggle to balance circuit structure
+compactness and functional accuracy, often resulting in limited circuit quality.
+
+
+To address this challenge, we propose a novel _Circuit_ _Program_ _Evolution_ framework, namely
+CircuitEvo, which iteratively leverages large language models (LLMs) to evolve circuit programs
+toward improved compactness while preserving functional accuracy. Specifically, CircuitEvo first
+introduces an innovative graph-structured circuit program formulation (see Figure 1) to model the
+circuit graph as an LLM-friendly textual format. The key advantage of the circuit program over
+traditional sequence-based textual representation (d’Ascoli et al., 2023; Li et al., 2025) lies in its
+graph-structured design, which effectively encodes hierarchical structural information to facilitate
+LLM’s graph comprehension and generation. To effectively explore the complex program space
+for accurate and compact circuits, CircuitEvo integrates an evolutionary program generator and a
+structure-aware function optimizer into an iterative framework. In each iteration, CircuitEvo utilizes
+an LLM-based generator to generate diverse and promising circuit programs. The key innovation of
+this generator is a domain-specific evolutionary prompting strategy that combines domain knowledge
+with the explorative power of evolutionary methods to enhance the LLM’s generative capabilities.
+
+
+However, due to the stochastic nature of evolutionary generation and the inherent limitations of LLMs
+in exactly understanding graph functionality (Dai et al., 2024), the generated circuits cannot always
+guarantee functional correctness. To address this problem, we introduce a structure-aware function
+optimizer. Specifically, the optimizer utilizes existing LS tools to efficiently generate two essential
+substructures, which are then appended to the incomplete circuit to correct functional discrepancies
+based on the circuit functionality completion theory. Moreover, to ensure the compactness of the
+optimized circuits, we introduce a local program search method to identify key structures of the
+generated circuits before functional optimization. By integrating the structure generator with the
+function optimizer, CircuitEvo effectively explores the space of circuit programs, enabling the
+generation of both functionally accurate and compact circuits.
+
+
+We evaluate CircuitEvo using two open-source models—–Deepseek-V3 and Qwen2.5-7B-Instruct,
+and a proprietary model—–GPT-3.5-turbo as the backbone large language model. Experiments on
+several widely used benchmarks demonstrate that CircuitEvo can efficiently generate accurate circuits
+with up to 16 input number and 69 output number, and significantly achieves an average improvement
+of 6.74% in terms of the circuit size over state-of-the-art methods. Additionally, through a thorough
+analysis of CircuitEvo, we observed two key factors contributing to circuit compactness, which can
+offer valuable insights for the development of future circuit generation approaches.
+
+
+We summarize our contributions as follows. (1) To the best of our knowledge, CircuitEvo is _the_
+_first_ LS method that integrates LLM into an evolutionary framework to iteratively improve the
+circuit’s compactness while ensuring functional accuracy. (2) We propose a novel graph-structured
+circuit program formulation that enables large language models to effectively understand and evolve
+circuit graphs. (3) Experiments on several widely used benchmarks demonstrate that CircuitEvo can
+efficiently generate accurate circuits and significantly outperforms the state-of-the-art methods in
+terms of the circuit size. (4) The thorough analysis of our CircuitEvo provides valuable insights into
+the key factors that contribute to achieving compact circuits.
+
+
+2 BACKGROUND
+
+
+**Logic Synthesis (LS) from IO examples** Logic synthesis aims to convert a behavioral-level description, i.e., truth table, into an optimized gate-level circuit as shown in Figure 5 in Appendix B. A truth
+table is a tabular data in which each row corresponds to an input-output pair ( **x** _i,_ **y** _i_ ). Given a truth
+table _T_ with _n_ inputs and _m_ outputs, the set of input-output pairs _D_ = ( **X** _,_ **Y** ) = _{_ ( **x** _i,_ **y** _i_ ) _}_ [2] _i_ =1 _[n]_
+defines a Boolean function _f_ : B _[n]_ _→_ B _[m]_, where B = _{_ 0 _,_ 1 _}_ . Thus, the goal of LS is to find a circuit
+with minimized size while accurately satisfying the given Boolean function _f_ . However, directly
+generating the optimal circuit is challenging due to its _NP_ -hard nature (Farrahi & Sarrafzadeh,
+1994). Consequently, LS is divided into two stages—Circuit Generation and Circuit Optimization.
+The Circuit Generation stage focuses on generating an initial circuit that accurately implements
+the given truth table. Since the quality of the initial circuit has a significant impact on the quality
+of the optimized circuits, this stage aims to generate circuits that are both functionally correct and
+
+
+2
+
+
+structurally compact. Following this, the Circuit Optimization stage applies subsequent optimization
+operators (Mishchenko et al., 2011; Brayton, 2006) to further improve circuit quality.
+
+
+3 RELATED WORK
+
+
+**Machine Learning for Logic Synthesis (LS)** Traditional LS methods synthesize a circuit from a
+given truth table via manually designed heuristics, such as sum-of-products (SOP) (Nabulsi et al.,
+2017) and binary decision diagrams (BDD) (Lai et al., 1993). Recently, many researchers have
+investigated machine learning for LS (Rai et al., 2021; Belcak & Wattenhofer, 2022a; Schmitt et al.,
+2021; 2023; Wang et al., 2024a; Bai et al., 2025b; 2026), which offers promising approaches to
+generating compact circuits with smaller sizes. Existing learning-based approaches can be broadly
+classified into two categories based on their underlying circuit representations. (1) In the early
+stages of the International Workshop on Logic & Synthesis (IWLS) competition (Rai et al., 2021),
+researchers represent the circuit as sequence-based or tree-based Boolean expressions and formulate
+LS as a symbolic regression problem, i.e., learning accurate and compact Boolean functions given the
+input-output pairs. Within this formulation, a variety of symbolic regression techniques (Rai et al.,
+2021; d’Ascoli et al., 2023) have been explored for Boolean function discovery. (2) In recent IWLS
+competitions (Alanminko, 2024), researchers represent the circuit as a logic gate network, such as
+And-Inverter Graphs (AIGs), and have proposed using deep machine learning methods (Wang et al.,
+2024b; Li et al., 2025) to generate circuits.
+
+
+**Large Language Models for Algorithm Design** In recent years, the capabilities of large language
+models (LLMs) have advanced substantially (Liang et al., 2025; 2026; Ni et al., 2026; **?** ). A growing
+body of research has explored the use of LLMs as automated algorithm designers, capable of
+generating novel algorithms through in-context learning. Given that circuit generation can be framed
+as an algorithm design task, where each circuit represents a functionally constrained graph-based
+algorithm, we propose to leverage LLMs for the discovery of circuit algorithms. Recent studies have
+adopted a program-centric approach, representing algorithms as programs and employing LLMs to
+iteratively optimize them (Romera-Paredes et al., 2024; Liu et al., 2024b). This iterative program
+generation and refinement process presents a promising direction for discovering new and effective
+algorithms.
+
+
+4 THE CIRCUITEVO FRAMEWORK
+
+
+In this section, we provide a comprehensive description of the proposed Circuit Program Evolution
+framework (CircuitEvo), as illustrated in Figure 2. The structure of the section is as follows: in
+Section 4.1, we introduce the novel graph-structured circuit program representation and problem
+formulation. Then, we introduce the two main components of CircuitEvo: Evolutionary Program
+Generation in Section 4.2, and Structure-aware Function Optimization in Section 4.3.
+
+
+4.1 THE CIRCUIT PROGRAM REPRESENTATION AND PROBLEM FORMULATION
+
+
+**Graph Structured Circuit Program** Existing
+works usually employ expression trees (d’Ascoli
+et al., 2023; Bai et al., 2025a; Sun et al., 2022)
+and And-Inverter Graphs (Li et al., 2025; Wang
+et al., 2024b) to model the circuit. However,
+these non-textual representations present significant challenges for LLM-based understanding
+and generation. To address this problem, we
+propose an innovative graph-structured circuit
+program, which encodes both the circuit’s topological structure and functional information into
+a textual representation as shown in Figure 1.
+Specifically, the program consists of three parts:
+
+
+|3 𝒀 𝟏 𝒀 𝟐<br>And2 Node<br>5 2<br>Inverter<br>3 2<br>1 4<br>𝑿 𝟏 𝑿 𝟐 1 𝑿 𝟏 𝑿 𝟑|Col2|Col3|Col4|Col5|Col6|Input = 𝐗 𝐗 𝐗<br>𝟏 𝟐 𝟑 1<br>Output = 𝒀 𝒀<br>𝟏 𝟐<br>node1 = 𝑿 ∗𝑿<br>𝟏 𝟐|Col8|
+|---|---|---|---|---|---|---|---|
+|𝑿𝟏<br>𝑿𝟐<br>𝑿𝟑<br>𝑿𝟏<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>𝒀𝟏<br>𝒀𝟐<br>**And2 Node**<br>**Inverter**<br>3<br>2<br>1|𝑿𝟏<br>𝑿𝟐<br>𝑿𝟑<br>𝑿𝟏<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>𝒀𝟏<br>𝒀𝟐<br>**And2 Node**<br>**Inverter**<br>3<br>2<br>1|𝑿𝟏<br>𝑿𝟐<br>𝑿𝟑<br>𝑿𝟏<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>𝒀𝟏<br>𝒀𝟐<br>**And2 Node**<br>**Inverter**<br>3<br>2<br>1|𝑿𝟏<br>𝑿𝟐<br>𝑿𝟑<br>𝑿𝟏<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>𝒀𝟏<br>𝒀𝟐<br>**And2 Node**<br>**Inverter**<br>3<br>2<br>1|𝑿𝟏<br>𝑿𝟐<br>𝑿𝟑<br>𝑿𝟏<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>𝒀𝟏<br>𝒀𝟐<br>**And2 Node**<br>**Inverter**<br>3<br>2<br>1|𝑿𝟏<br>𝑿𝟐<br>𝑿𝟑<br>𝑿𝟏<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>𝒀𝟏<br>𝒀𝟐<br>**And2 Node**<br>**Inverter**<br>3<br>2<br>1|<br>**Output =**𝒀𝟏𝒀𝟐<br>1|<br>**Output =**𝒀𝟏𝒀𝟐<br>1|
+|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|<br>**node1 =**𝑿𝟏∗𝑿𝟐<br>||
+|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|<br> <br>2||
+|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**node2 =**𝑿𝟏∗𝑿𝟑<br> <br>|**node2 =**𝑿𝟏∗𝑿𝟑<br> <br>|
+|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>**And2 Node**<br>**Inverter**<br>2|<br>**node3 = ¬node1 * ¬node2**<br>**node4 = ¬node1 * node2**<br>**node5 = ¬node3 * ¬node4**|<br>**node3 = ¬node1 * ¬node2**<br>**node4 = ¬node1 * node2**<br>**node5 = ¬node3 * ¬node4**|
+||𝑿𝟏|𝑿𝟐|1|𝑿𝟏|𝑿𝟑|𝒀𝟏=** ¬node5**<br>𝒀𝟐= **node4**<br>3|𝒀𝟏=** ¬node5**<br>𝒀𝟐= **node4**<br>3|
+
+
+**And Inverter Graph (AIG)**
+
+
+**Graph Structured Program**
+
+
+Figure 1: An Illustration of our novel graphstructured circuit program formulation.
+
+
+1. **IO Definition:** Specify the name and number of input and output variables for the circuit.
+
+
+3
+
+
+2. **Structure Description:** The topological structure of a circuit is inherently defined by its
+nodes and the directed edges that connect them. In our program representation, we employ
+a hierarchical, bottom-up modeling approach, where each line specifies a circuit node along
+with its input dependencies. This formulation explicitly encodes the connectivity among
+nodes in a textual format, facilitating LLM’s comprehension of the circuit’s structure.
+
+
+3. **Function Definition:** Since our program explicitly defines the connectivity between nodes,
+the Boolean function of each node can be systematically constructed. Therefore, we define
+the functionality of our circuit program as the Boolean functions of the primary output
+nodes, which are required to satisfy the specified truth table.
+
+
+Overall, our graph-structured circuit program formulation bridges the gap between circuit graph
+representations and language-based reasoning, thereby unlocking the significant potential of LLMs
+for addressing LS tasks through their powerful generative capabilities.
+
+
+**Problem Formulation** Building on the circuit program representation, the LS problem is defined
+as: _Given a truth table T, CircuitEvo aims to generate a circuit program P_ _that exactly satisfies_
+_the given functionality while minimizing the number of structure lines (circuit nodes)._ To achieve
+this goal, CircuitEvo incorporates an evolutionary program generator and a structure-aware function
+optimizer into an iterative framework. Specifically, it maintains a population of _N_ functionally correct
+programs, denoted by _P_ = _{P_ 1 _, . . ., PN_ _}_ . In each iteration, the structure generator generates a
+diverse set of candidate programs, which are subsequently optimized to ensure functional correctness.
+The top-performing optimized programs are then added to the population for the next iteration. The
+overall procedure of CircuitEvo is outlined in Algorithm 1, and the core components of the circuit
+generator and optimizer are discussed in detail in the following sections.
+
+
+4.2 EVOLUTIONARY PROGRAM GENERATION
+
+
+Recently, the generative capabilities of
+large language models (LLMs) have advanced significantly, enabling their application in various complex tasks. Therefore, CircuitEvo utilizes LLMs as the program generator to explore the space of circuit programs. However, we observe that
+standalone LLMs with zero-shot prompting often struggle to generate high-quality
+programs. To address this challenge, CircuitEvo integrates LLMs within an evolutionary framework, leveraging domainspecific evolutionary prompting strategies
+and high-quality circuit examples to effectively guide the exploration of LLMs. The
+evolutionary generation process is as follows:
+
+
+parents _←_ Sample( _P_ )
+_Pg_ _←_ LLMGenerator(parents _, m_ )
+_Pk_ _←_ LocalSearch( _Pg_ )
+_Popt_ _←_ FunctionOptimizer( _Pk, T_ )
+_sopt_ _←_ Fitness( _Popt_ )
+_P_ _←P_ _∪{_ ( _Popt, sopt_ ) _}_
+**end**
+**end**
+_P_ _←_ GetBest( _P, N_ )
+**end**
+**return** GetBest( _P,_ 1)
+
+
+**Algorithm 1:** Pseudo Code for CircuitEvo
+**Input** **:** LLM _πθ_, Truth table _T_, Population size
+_N_, _I_ iterations, _M_ strategies
+**Output :** A compact and accurate circuit program
+_P_ _←_ InitPop( _N_ )
+**for** _i ←_ 1 **to** _I_ **do**
+
+**for** _m ←_ 1 **to** _M_ **do**
+
+**for** _j_ _←_ 1 **to** _N_ **do**
+
+
+**Initialization** To guide the LLM in effec- **end**
+tively exploring the circuit search space, **return** GetBest( _P,_ 1)
+we first construct an initial population of
+circuit programs that are diverse and accurate. To this end, CircuitEvo adopts a circuit decomposition strategy inspired by the Shannon
+decomposition theorem (Gdanskiy et al., 2020). Specifically, given the original truth table _T_ with _n_
+input variables, we select a decomposition variable _Xi_ and partition _T_ into two sub-tables, _T_ 1 and _T_ 2,
+corresponding to _Xi_ = 1 and _Xi_ = 0, respectively:
+
+_T_ ( _X_ 1 _, X_ 2 _, . . ., Xn_ ) = _Xi · T_ 1( _Xi_ = 1) + _Xi_ _[′]_ _[· T]_ [2][(] _[X][i]_ [= 0)] _[.]_ (1)
+
+
+We then use heuristic methods in existing LS tools to synthesize two sub-programs _P_ 1 and _P_ 2 from _T_ 1
+and _T_ 2, and combine them into a functionally correct program _P_ based on Equation 1. By varying the
+choice of decomposition variable _Xi_, this approach yields a diverse set of accurate initial solutions.
+More implementation details of our initialization process are provided in Appendix E.1.
+
+
+4
+
+
+**Evolutionary Program Generation**
+
+
+Figure 2: Overview of the CircuitEvo framework. The CircuitEvo comprises an evolutionary program
+generator and a structure-aware function optimizer for function completion.
+
+
+**Generation of Programs** At each generation step, we sample a batch of _N_ programs _{Pi}_ _[N]_ _i_ =1 [from]
+the LLM _πθ_ based on a carefully designed prompt _τi_, i.e., _Pi_ _∼_ _πθ_ ( _τi_ ). To fully leverage the LLM’s
+generative capabilities for creative circuit programs generation, we construct the domain-specific
+evolutionary prompt as follows (see Figure 11): **Problem Specification** A detailed description of
+the circuit generation problem, including the program format and compactness objective. **Few-shot**
+**Learning** To stimulate the generative potential of LLMs, we adopt a few-shot learning strategy by
+sampling several representative circuit programs from the current population as in-context examples.
+To balance quality and diversity, programs are sampled with probability prob( _Pi_ ) = rank( _Pi_ 1)+1+ _N_ [,]
+where rank( _Pi_ ) indicates the fitness-based rank of _Pi_ within the population. These examples offer
+structural and functional priors that guide the LLM toward generating comprehensive and diverse
+candidate programs. **Evolutionary Prompt Strategies** To effectively leverage the sampled programs,
+we design four evolutionary prompt strategies to guide the LLM’s generation process. These strategies
+are grouped into two categories: Exploration (E1, E2) and Refinement (R1, R2). The exploration
+strategies aim to broaden the structural search space by performing crossover-inspired transformations
+between pairs of parent programs. In contrast, the refinement strategies focus on improving individual
+programs by altering Boolean operators and variable configurations. **Domain-Specific Function**
+**Constraints** Since the circuit search space grows exponentially with the number of inputs, it is
+challenging to generate accurate circuit programs. To mitigate this, we incorporate domain-specific
+knowledge to improve generation accuracy. Specifically, we observe that the outputs of multioutput circuits often exhibit simple yet meaningful logical relationships, typically expressed as
+**Y** _m_ = _fm_ ( **Y** 1 _, . . .,_ **Y** _m−_ 1). For instance, in a two-output circuit, the outputs **Y** 1 and **Y** 2 may
+satisfy a relation such as **Y** 2 = _¬_ **Y** 1, where _¬_ denotes the logical NOT operator. By pre-identifying
+inter-output dependencies and embedding them as function constraints in the prompt, the generator
+significantly reduces the search space. Detailed prompts are provided in Appendix E.1.
+
+
+**Fitness** **and** **Population** **Management** In each generation, we apply all four prompt strategies
+_N_ times, resulting in a total of 4 _N_ newly generated circuit programs. These candidates are then
+optimized (see Section 4.3), and the feasible ones are incorporated into the current population. From
+this updated population, the top _N_ individuals—–ranked according to their fitness scores—–are
+selected to form the population for the next generation. Since all circuit programs in the population
+are functionally correct, we adopt circuit compactness (i.e., size) as the fitness metric.
+
+
+5
+
+
+4.3 STRUCTURE-AWARE FUNCTION OPTIMIZATION
+
+
+Although CircuitEvo can continuously generate new circuit programs, the stochastic nature of
+evolutionary generation and the limited graph-level reasoning capabilities of large language models
+(LLMs) make it difficult to ensure their functional correctness. To address this problem, we present
+the following remark, which provides a theoretical foundation for augmenting generated programs
+with auxiliary substructures to ensure functional accuracy:
+**Remark 1** (Circuit Functionality Completion) **.** _Let F_ = _{F_ _[i]_ _}_ _[m]_ _i_ =1 _[denote the set of target Boolean]_
+_functions defined by a truth table T_ _with m output bits._ _Let Fg_ = _{Fg_ _[i][}][m]_ _i_ =1 _[represent the functionality]_
+_of the generated circuit programs Pg._ _Then, for each i ∈{_ 1 _, . . ., m}, there exist Boolean functions_
+_Fg_ _[i]_ _a_ _[and][ F]_ _g_ _[i]_ _b_ _[such that:]_
+_F_ _[i]_ = ( _Fg_ _[i]_ [+] _[ F]_ _g_ _[i]_ _a_ [)] _[ ∗F]_ _g_ _[i]_ _b_ _[,]_ (2)
+_where_ + _and ∗_ _denote the logical OR and AND operations, respectively._
+
+
+The detailed proofs are in Appendix A. Based on Remark 1, we can easily get and translate the
+auxiliary Boolean functions _Fga_ = _{Fg_ _[i]_ _a_ _[}]_ _i_ _[m]_ =1 [and] _[ F][g]_ _b_ [=] _[{F]_ _g_ _[i]_ _b_ _[}]_ _i_ _[m]_ =1 [into their corresponding truth]
+tables _Ta_ and _Tb_ . Subsequently, traditional heuristics are applied to generate accurate circuit programs
+_Pa_ and _Pb_ from these truth tables. These programs are then integrated into the initially generated
+program _Pg_ to complete its functionality. The program fusion process involves both structural and
+functional aspects. Structurally, the programs are merged with common subgraphs eliminated through
+structural hashing. Functionally, the completed circuit’s functionality is defined by Equation 2.
+
+
+**Local Program Search** Although the completion process guarantees functional correctness, it may
+introduce redundant logic that compromises circuit compactness. To mitigate this, we propose a
+local program searcher that identifies a key substructure _Pk_ within the initial program _Pg_ to guide the
+completion process. This approach is motivated by the observation that initial programs with higher
+functional accuracy and smaller sizes tend to yield more compact results after function completion, as
+illustrated in Figure 7. Specifically, given a circuit program comprising _np_ nodes, the Local Program
+Searcher generates _np_ candidate subprograms, where the _i_ -th candidate consists of the first _i_ nodes of
+the original program. Each candidate represents a local subgraph that is structurally more compact
+than the full program. To identify the most promising candidate, a greedy selection strategy is applied
+to choose the subprogram with the highest accuracy. This localized refinement effectively eliminates
+redundant components, yielding a more compact and functionally accurate initial program for the
+function optimization. Finally, after identifying the key substructure _Pk_, traditional heuristics are
+employed to generate the corresponding circuit programs _Pka_ and _Pkb_ for the final functionally
+optimized program _Popt_ . Due to limited space, we provide more implementation details about the
+program search and function completion process in Appendix E.2.
+
+
+5 EXPERIMENTS
+
+
+In this section, we conduct extensive experiments to evaluate CircuitEvo, which have four main parts:
+**Experiment 1.** To demonstrate the superior performance of our CircuitEvo in generating accurate and
+compact circuits. **Experiment 2.** To demonstrate that our method explores the circuit design space
+more efficiently than other learning-based approaches. **Experiment 3.** Perform carefully designed
+ablation studies to provide further insights into CircuitEvo. **Experiment 4.** Perform visualization and
+analysis of the inherent compact structures discovered by our method compared to the baselines.
+
+
+**Benchmarks** We evaluate our method on four widely used benchmarks: Arithmetic (Alanminko,
+2024), Random (Alanminko, 2024), LogicNets (He et al., 2021), and Espresso (Boucher & King,
+2010). Specifically, we select 16 diverse benchmark circuits for evaluation, including very challenging
+cases with up to 16 inputs and 69 outputs, which corresponds to a search space of 2 [69] _[×]_ [2][16] possible
+solutions. Moreover, the size of the selected circuits, depending on the number of nodes synthesized
+by the traditional heuristic method SOP, ranges widely from 39 to 3302. Due to limited space, please
+refer to Appendix C.1 for more details about the benchmarks.
+
+
+**Experimental** **Setup** Throughout all experiments, we use two open-source models—DeepseekV3 (Liu et al., 2024a) and Qwen2.5-7B-Instruct, and a proprietary model—GPT-3.5-turbo as the
+backbone large language models. Although more powerful proprietary models such as GPT-4o could
+be used as the base model, we adopt GPT-3.5-turbo to balance generation performance with resource
+efficiency (see Table 6 in the Appendix). Moreover, we employ ABC (Brayton et al., 2010) as the
+
+
+6
+
+
+backend LS tool. ABC is a state-of-the-art open-source LS tool and is widely used in research of
+machine learning for LS (Pasandi et al., 2023; Wang et al., 2024b). All experiments are conducted on
+a single machine that contains 32 Intel XeonR E5-2667 v4 CPUs and 8 NVIDIA GeForce RTX 3090
+GPUs. Additional implementation details can be found in Appendix C.
+
+
+Table 1: The results demonstrate that CircuitEvo can generate accurate circuits for all benchmarks.
+
+|Benchmark Boolformer SPL DSR ICSR DNAS CircuitEvo (Ours)|Col2|Col3|
+|---|---|---|
+|Circuit|Acc(%)_ ↑_<br>Acc(%)_ ↑_<br>Acc(%)_ ↑_<br>Acc(%)_ ↑_<br>Acc(%)_ ↑_|Qwen2.5-7B<br>Deepseek-V3<br>GPT-3.5-turbo|
+|Arithmetic<br>LogicNets<br>Espresso<br>Random|89.2<br>92.0<br>89.1<br>73.9<br>100.0<br>97.9<br>97.9<br>96.8<br>88.1<br>99.9<br>92.7<br>90.3<br>87.4<br>87.2<br>99.9<br>87.7<br>89.0<br>87.4<br>83.7<br>100.0|100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0|
+|**Average**|91.1<br>91.5<br>89.5<br>83.5<br>99.9|**100.0**<br>**100.0**<br>**100.0**|
+
+
+Table 2: The results demonstrate that CircuitEvo significantly outperforms all competitive baselines
+in terms of the initial size, with an average improvement of 6.74% over state-of-the-art methods.
+
+|Benchmark|Boolformer SPL DSR ICSR SOP BDD DNAS|CircuitEvo (Ours)|
+|---|---|---|
+|Circuit<br>PI<br>PO|Init Node_ ↓_<br>Init Node_ ↓_<br>Init Node_ ↓_<br>Init Node_ ↓_<br>Init Node_ ↓_<br>Init Node_ ↓_<br>Init Node_ ↓_|Qwen2.5-7B<br>Deepseek-V3<br>GPT-3.5-turbo<br>Impr.(%)_ ↑_|
+|Arithmetic1<br>10<br>5<br>Arithmetic2<br>16<br>6<br>Arithmetic3<br>16<br>7<br>LogicNets1<br>13<br>6<br>LogicNets2<br>13<br>6<br>LogicNets3<br>15<br>7<br>Espresso1<br>11<br>3<br>Espresso2<br>11<br>9<br>Espresso3<br>12<br>17<br>Espresso4<br>16<br>69<br>Random1<br>7<br>2<br>Random2<br>7<br>2<br>Random3<br>10<br>3<br>Random4<br>10<br>3<br>Random5<br>12<br>3<br>Random6<br>15<br>4|185<br>163<br>87<br>222<br>77<br>77<br>81<br>372<br>280<br>153<br>369<br>105<br>112<br>137<br>1608<br>1389<br>1288<br>1512<br>1424<br>1490<br>1390<br>198<br>159<br>149<br>339<br>148<br><br>183<br>95<br>99<br>95<br>127<br>102<br>115<br>114<br>273<br>268<br><br>324<br>214<br>242<br>334<br>168<br>140<br>142<br>77<br>85<br>85<br>85<br>287<br>309<br>244<br>396<br>175<br>173<br>140<br>3874<br>3875<br>3429<br>3968<br>3302<br>3371<br>3220<br>911<br>2068<br>2166<br>2222<br>920<br>944<br>1157<br>53<br>47<br>52<br>64<br>42<br>42<br>**41**<br>41<br>51<br>44<br>59<br>39<br>37<br>44<br>112<br>94<br>125<br>149<br>124<br>110<br>75<br>153<br>173<br>153<br>169<br>154<br>156<br>152<br>257<br>335<br>209<br>262<br>190<br>130<br>117<br>1987<br>1808<br>1622<br>1529<br>1529<br>1514<br>1256|77<br>78<br>**74**<br>**3.90**<br>105<br>109<br><br>**2.86**<br>1229<br>**1194**<br>1206<br>**7.30**<br>149<br>137<br>139<br>**-1.48**<br>**74**<br>**74**<br>**74**<br>**22.11**<br>212<br>211<br>211<br>**-6.03**<br>**71**<br>**71**<br>**71**<br>**7.79**<br>133<br><br><br>**8.57**<br>3205<br>**3184**<br>**3184**<br>**1.12**<br>863<br><br><br>**6.92**<br>42<br>42<br>**41**<br>**0.00**<br>**36**<br>36<br>**36**<br>**2.70**<br>68<br>**60**<br>**60**<br>**20.00**<br>140<br>147<br><br>**9.21**<br><br><br><br>**10.26**<br>1163<br>**1098**<br>1110<br>**12.58**|
+|**Average**|660.88<br>703.63<br>634.81<br>736.75<br>539.38<br>545.81<br>532.88|**479.50**<br>**470.13**<br>**470.44**<br>**6.74**|
+
+
+**Evaluation Metrics** In our experiments, we use the pre-mapping performance ( **accuracy** and **size** )
+and post-mapping performance ( **area** and **delay** ) as the evaluation metrics to assess the accuracy
+and compactness of the generated circuits, respectively. (1) Accuracy is defined as the proportion
+of correctly predicted output bits to the total number of output bits. Specifically, it is computed as
+2 _[n]_ 1 _·m_ �2 _i_ =1 _[n]_ - _mj_ =1 **[1]** [[ˆ] _[y][i,j]_ [=] _[y][i,j]_ []][, where] _[ n]_ [ is the input number,] _[ m]_ [ is the output number,] _[y]_ [ˆ] _[i,j]_ [is the]
+
+predicted output bit, _yi,j_ is the ground truth, and **1** [ _·_ ] denotes the indicator function. An accuracy of
+100% indicates that the generated circuit fully satisfies the truth table; otherwise, the circuit does not
+match the truth table exactly. (2) Size is defined as the node numbers of the generated circuits. During
+the LS stage, reducing circuit size significantly improves the final design’s PPA (Power, Performance,
+and Area) (Rai et al., 2021; Alanminko, 2024; Li et al., 2025). Therefore, we use the circuit size
+to evaluate the quality of the generated circuits. (3) Area is defined as the total physical silicon
+area occupied by the mapped circuit, typically measured in square micrometers, which reflects the
+hardware resource consumption. Delay is defined as the longest signal propagation time from any
+primary input to any primary output in the mapped circuit, which reflects the circuit’s maximum
+operating speed. Smaller area and shorter delay generally indicate better hardware efficiency, so these
+metrics are used to assess the practical performance of the generated circuits on a target technology.
+
+
+**Baselines** Our baselines fall into two categories: traditional methods and learning-based methods.
+For traditional methods, we employ two widely used heuristics: **SOP** (Nabulsi et al., 2017) and
+**BDD** (Lai et al., 1993). For learning-based methods, we utilize the state-of-the-art (SOTA) machine
+learning technique **DNAS** (Wang et al., 2024b; Chu et al.). Moreover, we employ four Boolean
+function learning methods, including a pre-trained method, two search-based techniques, and an
+LLM-based method. Specifically: (1) **Boolformer** (d’Ascoli et al., 2023) is a pre-trained model
+designed for Boolean function learning in circuit generation; (2) **SPL** (Sun et al., 2022) is a SOTA
+Monte Carlo Tree Search-based function learning method; (3) **DSR** (Petersen et al., 2019) is a
+search-based function learning method with reinforcement learning; (4) **ICSR** (Merler et al., 2024)
+is an LLM-based function learning approach. More details about the baselines are presented in
+Appendix D.
+
+
+**Experiment 1.** **Generation performance analysis** In this subsection, we compare CircuitEvo with
+seven competitive baselines in terms of pre-mapping metrics (accuracy and size), and post-mapping
+metrics (area and delay). The evaluation is conducted on four widely used circuit benchmarks.
+Results in Table 1 show that our CircuitEvo outperforms all learning-based methods in terms of
+
+
+7
+
+
+Table 3: The results demonstrate that CircuitEvo significantly outperforms baselines in terms of the
+
+|circuit area and delay after technology mapping on four benchmarks.|Col2|Col3|
+|---|---|---|
+|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>SOP<br>BDD<br>DNAS<br>CircuitEvo|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>SOP<br>BDD<br>DNAS<br>CircuitEvo|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>SOP<br>BDD<br>DNAS<br>CircuitEvo|
+||Area_ ↓_<br>Area_ ↓_<br>Area_ ↓_<br>Area_ ↓_<br>Area_ ↓_<br>Area_ ↓_<br>Area_ ↓_|Area_ ↓_|
+|Arithmetic<br>Espresso<br>LogicNets<br>Random|1232.67<br>1037.67<br>878.67<br>1131.67<br>915.33<br>940.00<br>928.00<br>2266.00<br>2410.00<br>2553.50<br>2504.50<br>1894.25<br>1912.75<br>2035.50<br>323.00<br>303.67<br>259.67<br>364.33<br>274.00<br>287.33<br>403.67<br>749.67<br>717.67<br>642.50<br>623.17<br>590.17<br>572.33<br>511.67|**789.67**<br>**1818.25**<br>**251.33**<br>**431.33**|
+||Delay_ ↓_<br>Delay_ ↓_<br>Delay_ ↓_<br>Delay_ ↓_<br>Delay_ ↓_<br>Delay_ ↓_<br>Delay_ ↓_|Delay_ ↓_|
+|Arithmetic<br>Espresso<br>LogicNets<br>Random|17.73<br>16.57<br>15.23<br>15.30<br>15.60<br>15.90<br>14.07<br>14.55<br>15.18<br>15.98<br>16.25<br>15.45<br>15.48<br>14.58<br>12.27<br>12.70<br>12.43<br>12.43<br>12.30<br>12.37<br>13.10<br>13.22<br>13.27<br>12.63<br>12.62<br>13.17<br>12.93<br>11.67|**13.67**<br>**14.15**<br>**12.23**<br>**10.80**|
+
+
+Table 4: The ablation results show that each component plays an important role in our CircuitEvo.
+
+|Benchmark|CircuitEvo (Ours)|w/o LLM|w/o Program|w/o Evolution|w/o Local|w/o Completion|
+|---|---|---|---|---|---|---|
+|Circuit|Acc(%)_ ↑_<br>Init Node_ ↓_|Acc(%)_ ↑_<br>Init Node_ ↓_|Acc(%)_ ↑_<br>Init Node_ ↓_|Acc(%)_ ↑_<br>Init Node_ ↓_|Acc(%)_ ↑_<br>Init Node_ ↓_|Acc(%)_ ↑_<br>Init Node_ ↓_|
+|Arithmetic1<br>Arithmetic3<br>Espresso3<br>Espresso4<br>LogicNets1<br>LogicNets2<br>Random4<br>Random5|100.0<br>**74**<br>100.0<br>1206<br>100.0<br>**3184**<br>100.0<br><br>100.0<br><br>100.0<br>**74**<br>100.0<br><br>100.0<br>|100.0<br>78<br>100.0<br>1229<br>100.0<br>3220<br>100.0<br>940<br>100.0<br>140<br>100.0<br>90<br>100.0<br>147<br>100.0<br>110|100.0<br>81<br>100.0<br>1229<br>100.0<br>3377<br>100.0<br>940<br>100.0<br>148<br>100.0<br>74<br>100.0<br>146<br>100.0<br>106|100.0<br>78<br>100.0<br>1233<br>100.0<br>3184<br>100.0<br>911<br>100.0<br>150<br>100.0<br>75<br>100.0<br>151<br>100.0<br>106|100.0<br>79<br>100.0<br>**1178**<br>100.0<br>3337<br>100.0<br>911<br>100.0<br>140<br>100.0<br>75<br>100.0<br>144<br>100.0<br>105|100.0<br>74<br>67.8<br>27<br>82.6<br>200<br>86.4<br>9<br>70.1<br>2<br>60.6<br>3<br>84.5<br>20<br>83.3<br>49|
+
+
+accuracy. Specifically, CircuitEvo achieves an average improvement of 16.5% compared to the LLMbased baseline, ICSR. Additionally, all circuits generated by CircuitEvo achieve 100% accuracy,
+demonstrating the effectiveness of our structure-aware function optimizer. To fairly compare circuit
+sizes, we first apply the rule-based legalization method from (Wang et al., 2024b) to ensure that
+circuits generated by baseline methods are functionally correct, i.e., 100% accuracy. Building upon
+that, the results in Table 2 show that our CircuitEvo significantly outperforms all baselines in terms
+of the generated circuit size. Specifically, CircuitEvo achieves an average reduction of 6.74% in
+size compared to the SOTA baselines. Furthermore, to demonstrate that the circuits produced by
+our method provide better initial solutions for optimization, we apply three optimization heuristics—
+_resyn2_, _dc2_, and _compress2_ —to the generated circuits. Results in Table 8 show that our method
+achieves an average reduction of 11.09% in the optimized circuit size compared to the SOTA baselines
+under the _resyn2_, indicating the superiority of our method.
+
+
+Moreover, to assess the practical efficiency of the generated circuits after technology mapping, we
+evaluate their post-mapping performance in terms of area and delay. Specifically, we use ABC’s
+map operator to map each circuit onto mcnc.genlib, a widely used standard cell library with 23
+different gates in logic synthesis, and measure the resulting area and delay. As shown in Table 3,
+CircuitEvo consistently achieves smaller area and shorter delay than all baselines across the four
+benchmarks, indicating that our method not only generates functionally correct and compact circuits
+but also produces designs that translate into more efficient hardware implementations. Overall, these
+comparative results demonstrate that CircuitEvo surpasses existing methods in generating accurate
+and compact circuits. More comparative results are provided in Appendix F.1.
+
+
+**Experiment** **2.** **Efficiency** **analysis** In this sub- Table 5: The effciency comparative results.
+section, we compare the search efficiency of our
+
+Benchmark CircuitEvo DSR SPL DNAS
+
+method with three competitive search-based baselines across circuits from four benchmarks. For Circuit Time(h) _↓_ Time(h) _↓_ Time(h) _↓_ Time(h) _↓_
+a fair comparison, we adopt convergence time as Arithmetic1 **1.21** 2.02 3.88 7.69
+the metric for evaluating efficiency. The results in LogicNets1 **1.34** 3.73 3.99 32.16
+Table 5 demonstrate that CircuitEvo consistently Espresso1 **2.04** 4.01 3.54 18.03
+
+Random5 **1.32** 2.38 4.25 9.75
+
+outperforms all baselines in terms of search efficiency, demonstrating its ability to effectively nav- **Average** **1.48** 3.91 3.03 16.91
+igate the search space by leveraging the powerful
+search capability of LLMs. Overall, the results demonstrate the superior efficacy of our CircuitEvo.
+
+
+**Experiment 3.** **Ablation Study** In this subsection, we conduct an ablation study on eight circuits using GPT-3.5-turbo as the LLM backbone to understand the individual contribution of each component
+
+
+8
+
+
+Table 5: The effciency comparative results.
+
+
+Benchmark CircuitEvo DSR SPL DNAS
+
+
+Circuit Time(h) _↓_ Time(h) _↓_ Time(h) _↓_ Time(h) _↓_
+
+
+Arithmetic1 **1.21** 2.02 3.88 7.69
+LogicNets1 **1.34** 3.73 3.99 32.16
+Espresso1 **2.04** 4.01 3.54 18.03
+Random5 **1.32** 2.38 4.25 9.75
+
+
+**Average** **1.48** 3.91 3.03 16.91
+
+
+of our CircuitEvo (see Table 4). The _’w/o LLM’_ variant, which removes the use of LLM and instead
+employs a rule-based genetic algorithm—linear genetic program (Oltean & Grosan, 2003)—to evolve
+the circuits, led to a considerable size expansion. This highlights the importance of incorporating
+the strong generation ability and prior knowledge of LLM in our CircuitEvo. The _’w/o Program’_
+variant, which formulates the circuit as a Boolean function rather than a circuit program, led to a
+substantial increase in size. This highlights that our proposed graph-structured program captures more
+structural and functional information than other textual representations. The _’w/o Evolution’_ variant,
+which doesn’t use the exploration and refinement evolutionary strategies for circuit generation, also
+exhibits a negative impact on size. This demonstrates the effectiveness of incorporating LLM in an
+evolutionary framework. The _’w/o Local’_ variant, which completes the originally generated circuits
+without applying local program search, results in a significant increase in size. This demonstrates the
+necessity of local search in eliminating redundant structures. The _’w/o Completion’_ variant, which
+removes the function completion approach and directly uses the size of the LLM’s generated circuits
+as the fitness metric, results in a substantial drop in accuracy. This underscores the critical role of our
+proposed function optimizer in ensuring the functional correctness of the final generated circuits.
+
+
+**Experiment 4.** **Visualization of compact structures** In this subsection, we aim to provide insights
+into the compact structural patterns captured by our method. By visualizing the generated circuit
+structures, we observe that the compactness achieved by our approach primarily manifests in two
+aspects: _increased logic sharing_ and the emergence of _triangular circuit structures_ . Due to limited
+space, we provide more visualization results in Appendix F.3.
+
+
+**Logic sharing** is defined as the logic nodes or subexpressions that are shared by multiple logical components. For example, _X_ 2 _X_ 3 is a logic sharing that
+appears twice in the expression _X_ 1 _X_ 2 _X_ 3 _∗_ ( _X_ 2 _X_ 3 +
+_X_ 4) and can be shared as a node in the final circuit.
+By analyzing the generated circuits, we found that _in-_
+_creased logic sharing always leads to reduced circuit_
+_size_ . Specifically, the results in Figure 3 show that
+our method, which generates more compact circuits,
+achieves a significantly larger number of logic sharing than all Boolean function learning baselines on
+four benchmarks. This observation underscores the
+importance of logic sharing in reducing circuit size
+and suggests that future methods should explicitly
+promote its exploitation in circuit generation.
+
+
+**Triangle structure** refers to a circuit where the number of lower-level nodes consistently exceeds that of
+higher-level nodes. The current logic network learning methods necessitate the definition of an initial
+circuit structure to guide the search (Belcak & Wattenhofer, 2022b; Wang et al., 2024b). Nevertheless, a
+principled methodology for designing these initial
+structures remains lacking. Through the analysis
+of generated circuits, we have observed that _com-_
+_pact circuits consistently exhibit a triangle structure_ .
+Specifically, Figure 4 shows that the number of nodes
+decreases as the circuit level increases on five benchmark circuits, confirming the presence of a triangular
+structure. Therefore, it is suggested that triangular
+networks should be prioritized in the initial network
+design, which can lead to better circuit generation.
+
+
+6 CONCLUSION
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|CircuitEvo (Ours)<br>Boolformer<br>SPL|Col18|Col19|Col20|Col21|Col22|Col23|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||
+||||||||~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|
+||||||||~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR||||||||||||
+||||||||~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR|~~DSR~~<br>ICSR||||||||||||
+||||||||||||||||||||||||
+||||||||||||||||||||||||
+||||||||||||||||||||||||
+||||||||||||||||||||||||
+
+
+Benchmarks
+
+
+Figure 3: Logic Sharing significantly matters
+with the circuit compactness.
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Espresso1<br>Arithmetic<br>LogicNets1|1|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||LogicNets3<br>Random4||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+Lev Number
+
+
+Figure 4: Triangle Structures play a significant role in circuit compactness.
+
+
+Logic synthesis aims to generate a compact and accurate logic circuit, which plays an important role
+in chip design. However, existing LS methods struggle to balance circuit structure compactness and
+functional accuracy, often leading to suboptimal generation. To address this problem, we propose a
+
+
+9
+
+
+novel Circuit Program Evolution framework, namely CircuitEvo. This framework models the circuit
+graph as a structured program and integrates an LLM-based program generator and structure-aware
+function optimizer to explore the circuit program space. An appealing feature of this framework
+lies in its ability to enable iterative improvement of circuit compactness while preserving functional
+accuracy. Experiments on several benchmarks demonstrate that CircuitEvo can efficiently generate
+accurate circuits and significantly outperforms the state-of-the-art methods in terms of the circuit size.
+
+
+ETHICS STATEMENT
+
+
+This research does not involve any personally identifiable information. All datasets used are publicly
+available and widely adopted in the community, and we have verified that their licenses permit
+research use. In accordance with the ICLR Code of Ethics [(https://iclr.cc/public/](https://iclr.cc/public/CodeOfEthics)
+[CodeOfEthics),](https://iclr.cc/public/CodeOfEthics) we ensure that our work adheres to principles of fairness, transparency, and
+responsible AI research. We also disclose that LLMs were used for text polishing, while all conceptual
+contributions and validation remain the responsibility of the authors in Appendix G.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We will provide open access to all source code, configuration files, and preprocessing scripts,
+together with detailed instructions to reproduce the main experimental results. All datasets employed
+are publicly available, and we specify the exact versions and preprocessing steps. We report all
+hyperparameters, model versions, and API parameters in full, and we describe the computational
+environment (hardware type, GPU model, and software dependencies) in the supplemental material.
+We also include ablation studies and negative results to ensure transparency. Collectively, these
+resources and specifications enable reliable and faithful reproduction of our results.
+
+
+ACKNOWLEDGMENTS
+
+
+This work was supported in part by National Key R&D Program of China under contract
+2022ZD0119801, National Nature Science Foundations of China grants U23A20388 and 62021001.
+This work was supported in part by Huawei as well. We would like to thank all the anonymous
+reviewers for their insightful comments.
+
+
+REFERENCES
+
+
+Akers. Binary decision diagrams. _IEEE Transactions on computers_, 100(6):509–516, 1978.
+
+
+Alanminko. International workshop on logic & synthesis contest. [https://www.iwls.org/](https://www.iwls.org/contest/)
+[contest/, 2024.](https://www.iwls.org/contest/)
+
+
+Yinqi Bai, Jie Wang, Lei Chen, Zhihai Wang, Yufei Kuang, Mingxuan Yuan, Jianye HAO, and
+Feng Wu. A graph enhanced symbolic discovery framework for efficient logic optimization. In
+_The_ _Thirteenth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2025a. URL [https:](https://openreview.net/forum?id=EG9nDN3eGB)
+[//openreview.net/forum?id=EG9nDN3eGB.](https://openreview.net/forum?id=EG9nDN3eGB)
+
+
+Yinqi Bai, Jie Wang, Lei Chen, Zhihai Wang, Yufei Kuang, Mingxuan Yuan, Jianye HAO, and
+Feng Wu. A graph enhanced symbolic discovery framework for efficient circuit synthesis. In
+_The_ _Thirteenth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2025b. URL [https:](https://openreview.net/forum?id=EG9nDN3eGB)
+[//openreview.net/forum?id=EG9nDN3eGB.](https://openreview.net/forum?id=EG9nDN3eGB)
+
+
+Yinqi Bai, Jie Wang, Tong Xialiang, Longdi Pan, Jilai Pan, Mingxuan Yuan, and Jianye HAO. A hierarchical circuit symbolic discovery framework for efficient logic optimization. In _The Fourteenth_
+_International Conference on Learning Representations_, 2026. [URL https://openreview.](https://openreview.net/forum?id=YaXSEbRrHP)
+[net/forum?id=YaXSEbRrHP.](https://openreview.net/forum?id=YaXSEbRrHP)
+
+
+Peter Belcak and Roger Wattenhofer. Neural combinatorial logic circuit synthesis from input-output
+examples. In _2nd Workshop on Math-AI (MATH-AI@ NeurIPS)_ . arXiv, 2022a.
+
+
+10
+
+
+Peter Belcak and Roger Wattenhofer. Neural combinatorial logic circuit synthesis from input-output
+examples. _arXiv preprint arXiv:2210.16606_, 2022b.
+
+
+Augusto André Souza Berndt, Mateus Fogaça, and Cristina Meinhardt. A review of machine learning
+in logic synthesis. _Journal of Integrated Circuits and Systems_, 17(3):1–12, 2022.
+
+
+Christina Boucher and James King. Fast motif recognition via application of statistical thresholds.
+_BMC bioinformatics_, 11:1–8, 2010.
+
+
+Alan Mishchenko Robert Brayton. Scalable logic synthesis using a simple circuit structure. 6:15–22,
+2006.
+
+
+Robert Brayton et al. Abc: An academic industrial-strength verification tool. In _Computer Aided Veri-_
+_fication: 22nd International Conference, CAV 2010, Edinburgh, UK, July 15-19, 2010. Proceedings_
+_22_, pp. 24–40. Springer, 2010.
+
+
+Randal E Bryant. Symbolic boolean manipulation with ordered binary-decision diagrams. _ACM_
+_Computing Surveys (CSUR)_, 24(3):293–318, 1992.
+
+
+Shuyao Cheng, Pengwei Jin, Qi Guo, Zidong Du, Rui Zhang, Xing Hu, Yongwei Zhao, Yifan Hao,
+Xiangtao Guan, Husheng Han, et al. Automated cpu design by learning from input-output examples.
+In _Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence_, pp.
+3843–3853, 2024.
+
+
+Xiangxiang Chu, Xiaoxing Wang, Bo Zhang, Shun Lu, Xiaolin Wei, and Junchi Yan. Darts-: Robustly
+stepping out of performance collapse without indicators. In _International Conference on Learning_
+_Representations_ .
+
+
+Xinnan Dai, Qihao Wen, Yifei Shen, Hongzhi Wen, Dongsheng Li, Jiliang Tang, and Caihua Shan.
+Revisiting the graph reasoning ability of large language models: Case studies in translation,
+connectivity and shortest path. _arXiv preprint arXiv:2408.09529_, 2024.
+
+
+Stéphane d’Ascoli, Samy Bengio, Josh Susskind, and Emmanuel Abbé. Boolformer: Symbolic
+regression of logic functions with transformers. _arXiv preprint arXiv:2309.12207_, 2023.
+
+
+Brunno A De Abreu, Augusto Berndt, Isac S Campos, Cristina Meinhardt, Jonata T Carvalho,
+Mateus Grellert, and Sergio Bampi. Fast logic optimization using decision trees. In _2021 IEEE_
+_International Symposium on Circuits and Systems (ISCAS)_, pp. 1–5. IEEE, 2021.
+
+
+Srinivas Devadas, Abhijit Ghosh, and Kurt William Keutzer. Logic synthesis. 1994.
+
+
+Rolf Drechsler and Bernd Becker. _Binary decision diagrams:_ _theory and implementation_ . Springer
+Science & Business Media, 2013.
+
+
+Amir H Farrahi and Majid Sarrafzadeh. Complexity of the lookup-table minimization problem for
+fpga technology mapping. _IEEE Transactions on Computer-Aided Design of Integrated Circuits_
+_and Systems_, 13(11):1319–1332, 1994.
+
+
+NI Gdanskiy, AA Denisov, and ML Rysin. Methods of decomposition of boolean functions. In _IOP_
+_Conference Series:_ _Materials Science and Engineering_, volume 862, pp. 042026. IOP Publishing,
+2020.
+
+
+Mitsuo Gen and Lin Lin. Genetic algorithms and their applications. In _Springer_ _handbook_ _of_
+_engineering statistics_, pp. 635–674. Springer, 2023.
+
+
+Ying He, Zhen Shen, Qinhu Zhang, Siguo Wang, and De-Shuang Huang. A survey on deep learning
+in dna/rna motif mining. _Briefings in Bioinformatics_, 22(4):bbaa229, 2021.
+
+
+Erik Hemberg, Stephen Moskal, and Una-May O’Reilly. Evolving code with a large language model.
+_Genetic Programming and Evolvable Machines_, 25(2):21, 2024.
+
+
+Guyue Huang, Jingbo Hu, Yifan He, Jialong Liu, Mingyuan Ma, Zhaoyang Shen, Juejian Wu,
+Yuanfan Xu, Hengrui Zhang, Kai Zhong, et al. Machine learning for electronic design automation:
+A survey. _ACM Transactions on Design Automation of Electronic Systems (TODAES)_, 26(5):1–46,
+2021.
+
+
+11
+
+
+Sourabh Katoch, Sumit Singh Chauhan, and Vijay Kumar. A review on genetic algorithm: past,
+present, and future. _Multimedia tools and applications_, 80:8091–8126, 2021.
+
+
+Yung-Te Lai, Massoud Pedram, and Sarma BK Vrudhula. Bdd based decomposition of logic functions
+with application to fpga synthesis. In _Proceedings of the 30th international Design Automation_
+_Conference_, pp. 642–647, 1993.
+
+
+Xihan Li, Xing Li, Lei Chen, Xing Zhang, Mingxuan Yuan, and Jun Wang. Circuit transformer:
+A transformer that preserves logical equivalence. In _The_ _Thirteenth_ _International_ _Confer-_
+_ence on Learning Representations_, 2025. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=kpnW12Lm9p)
+[kpnW12Lm9p.](https://openreview.net/forum?id=kpnW12Lm9p)
+
+
+Xize Liang, Lin Yang, Jie Wang, Yiyang Lu, Runyu Wu, Hanzhu Chen, and Jianye Hao. Boosting
+multi-domain fine-tuning of large language models through evolving interactions between samples.
+In _International Conference on Machine Learning_, pp. 37427–37441. PMLR, 2025.
+
+
+Xize Liang, Lin Yang, Jie Wang, Rui Liu, Yang Lu, Jinliang Zeng, Hanzhu Chen, Dong Li, and
+Jianye Hao. Boosting multi-domain reasoning of llms via curvature-guided policy optimization. In
+_The Fourteenth International Conference on Learning Representations_, 2026.
+
+
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. _arXiv preprint_
+_arXiv:2412.19437_, 2024a.
+
+
+Fei Liu, Tong Xialiang, Mingxuan Yuan, Xi Lin, Fu Luo, Zhenkun Wang, Zhichao Lu, and Qingfu
+Zhang. Evolution of heuristics: Towards efficient automatic algorithm design using large language
+model. In _Forty-first International Conference on Machine Learning_, 2024b.
+
+
+Matteo Merler, Katsiaryna Haitsiukevich, Nicola Dainese, and Pekka Marttinen. In-context symbolic
+regression: Leveraging large language models for function discovery. In _Proceedings of the 62nd_
+_Annual Meeting of the Association for Computational Linguistics (Volume 4:_ _Student Research_
+_Workshop)_, pp. 589–606, 2024.
+
+
+Giovanni De Micheli. _Synthesis and optimization of digital circuits_ . McGraw-Hill Higher Education,
+1994.
+
+
+Alan Mishchenko, Robert Brayton, Jie-Hong R Jiang, and Stephen Jang. Scalable don’t-care-based
+logic optimization and resynthesis. _ACM Transactions on Reconfigurable Technology and Systems_
+_(TRETS)_, 4(4):1–23, 2011.
+
+
+Clint Morris, Michael Jurado, and Jason Zutty. Llm guided evolution-the automation of models
+advancing models. In _Proceedings of the Genetic and Evolutionary Computation Conference_, pp.
+377–384, 2024.
+
+
+Maher A Nabulsi, AA Alkatib, and Fatima M Quiam. A new method for boolean function simplification. _International Journal of Control and Automation_, 10(12):139–146, 2017.
+
+
+Xiaoqi Ni, Jie Wang, Lin Yang, Yiyang Lu, Hanzhu Chen, Rui Liu, and Jianye HAO. Following
+the navigation: Enhancing small language models contextual reasoning with LLM guidance. In
+_The_ _Fourteenth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2026. URL [https:](https://openreview.net/forum?id=R8A12kykPG)
+[//openreview.net/forum?id=R8A12kykPG.](https://openreview.net/forum?id=R8A12kykPG)
+
+
+Mihai Oltean and Crina Grosan. A comparison of several linear genetic programming techniques.
+_Complex Systems_, 14(4):285–314, 2003.
+
+
+Ghasem Pasandi, Sreedhar Pratty, and James Forsyth. Aisyn: Ai-driven reinforcement learning-based
+logic synthesis framework. _arXiv preprint arXiv:2302.06415_, 2023.
+
+
+Brenden K Petersen, Mikel Landajuela, T Nathan Mundhenk, Claudio P Santiago, Soo K Kim, and
+Joanne T Kim. Deep symbolic regression: Recovering mathematical expressions from data via
+risk-seeking policy gradients. _arXiv preprint arXiv:1912.04871_, 2019.
+
+
+Felix Petersen, Christian Borgelt, Hilde Kuehne, and Oliver Deussen. Deep differentiable logic gate
+networks. _Advances in Neural Information Processing Systems_, 35:2006–2018, 2022.
+
+
+12
+
+
+Shubham Rai, Walter Lau Neto, Yukio Miyasaka, Xinpei Zhang, Mingfei Yu, Qingyang Yi, Masahiro
+Fujita, Guilherme B Manske, Matheus F Pontes, Leomar S da Rosa, et al. Logic synthesis meets
+machine learning: Trading exactness for generalization. In _2021 Design, Automation & Test in_
+_Europe Conference & Exhibition (DATE)_, pp. 1026–1031. IEEE, 2021.
+
+
+Bernardino Romera-Paredes, Mohammadamin Barekatain, Alexander Novikov, Matej Balog,
+M Pawan Kumar, Emilien Dupont, Francisco JR Ruiz, Jordan S Ellenberg, Pengming Wang,
+Omar Fawzi, et al. Mathematical discoveries from program search with large language models.
+_Nature_, 625(7995):468–475, 2024.
+
+
+Richard L Rudell. _Logic synthesis for VLSI design_ . University of California, Berkeley, 1989.
+
+
+Frederik Schmitt, Christopher Hahn, Markus N Rabe, and Bernd Finkbeiner. Neural circuit synthesis
+from specification patterns. In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman
+Vaughan (eds.), _Advances in Neural Information Processing Systems_, volume 34, pp. 15408–15420.
+Curran Associates, Inc., 2021. URL [https://proceedings.neurips.cc/paper_](https://proceedings.neurips.cc/paper_files/paper/2021/file/8230bea7d54bcdf99cdfe85cb07313d5-Paper.pdf)
+[files/paper/2021/file/8230bea7d54bcdf99cdfe85cb07313d5-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2021/file/8230bea7d54bcdf99cdfe85cb07313d5-Paper.pdf)
+
+
+Frederik Schmitt, Matthias Cosler, and Bernd Finkbeiner. Neural circuit synthesis with pre-trained
+language models. In _First International Workshop on Deep Learning-aided Verification_, 2023.
+[URL https://openreview.net/forum?id=Q2171WADNTT.](https://openreview.net/forum?id=Q2171WADNTT)
+
+
+Fangzheng Sun, Yang Liu, Jian-Xun Wang, and Hao Sun. Symbolic physics learner: Discovering
+governing equations via monte carlo tree search. _arXiv preprint arXiv:2205.13134_, 2022.
+
+
+Laung-Terng Wang, Yao-Wen Chang, and Kwang-Ting Tim Cheng. _Electronic design automation:_
+_synthesis, verification, and test_ . Morgan Kaufmann, 2009.
+
+
+Zhihai Wang, Lei Chen, Jie Wang, Yinqi Bai, Xing Li, Xijun Li, Mingxuan Yuan, Jianye HAO,
+Yongdong Zhang, and Feng Wu. A circuit domain generalization framework for efficient logic
+synthesis in chip design. In _Forty-first International Conference on Machine Learning_, 2024a.
+
+
+Zhihai Wang, Jie Wang, Qingyue Yang, Yinqi Bai, Xing Li, Lei Chen, Jianye HAO, Mingxuan Yuan,
+Bin Li, Yongdong Zhang, and Feng Wu. Towards next-generation logic synthesis: A scalable neural
+circuit generation framework. In _The Thirty-eighth Annual Conference on Neural Information_
+_Processing Systems_, 2024b. [URL https://openreview.net/forum?id=ZYNYhh3ocW.](https://openreview.net/forum?id=ZYNYhh3ocW)
+
+
+Shunyu Yao, Fei Liu, Xi Lin, Zhichao Lu, Zhenkun Wang, and Qingfu Zhang. Multi-objective
+evolution of heuristic using large language model. _CoRR_, 2024.
+
+
+13
+
+
+A PROOF OF CIRCUIT FUNCTIONALITY COMPLETION (REMARK 1)
+
+
+Before proceeding with the proof, we briefly recall the key symbols and definitions involved. Throughout this section, we use +, _∗_, and _¬_ to denote the logical OR, AND, and NOT operations, respectively.
+_F_ = _{F_ _[i]_ _}_ _[m]_ _i_ =1 [denotes the set of target Boolean functions defined by the truth table] _[ T]_ [with] _[ m]_ [ output]
+bits. _Fg_ = _{Fg_ _[i][}][m]_ _i_ =1 [represent the functionality of the generated circuit programs] _[ P][g]_ [.] [Our goal is to]
+prove that for each _i ∈{_ 1 _, . . ., m}_, there exist Boolean functions _Fg_ _[i]_ _a_ [and] _[ F]_ _g_ _[i]_ _b_ [such that:]
+
+_F_ _[i]_ = ( _Fg_ _[i]_ [+] _[ F]_ _g_ _[i]_ _a_ [)] _[ ∗F]_ _g_ _[i]_ _b_ _[.]_
+
+
+From Boolean algebra, we know that Boolean functions have the following properties. Let _F_, _G_ and
+_H_ be Boolean functions, we have:
+
+
+    - Associativity of AND: _F_ _∗_ ( _G ∗_ _H_ ) = ( _F_ _∗_ _G_ ) _∗_ _H_
+
+
+    - Associativity of OR: _F_ + ( _G_ + _H_ ) = ( _F_ + _G_ ) + _H_
+
+
+    - Commutativity of AND: _F_ _∗_ _G_ = _G ∗_ _F_
+
+
+    - Commutativity of OR: _F_ + _G_ = _G_ + _F_
+
+
+    - Distributivity of AND over OR: _F_ _∗_ ( _G_ + _H_ ) = ( _F_ _∗_ _G_ ) + ( _F_ _∗_ _H_ )
+
+
+    - Identity for AND: _F_ _∗_ 1 = _F_
+
+
+    - Identity for OR: _F_ + 0 = _F_
+
+
+    - Annihilator for AND: _F_ _∗_ 0 = 0
+
+
+    - Annihilator for OR: _F_ + 1 = 1
+
+
+    - Idempotence of AND: _F_ _∗_ _F_ = _F_
+
+
+    - Idempotence of OR: _F_ + _F_ = _F_
+
+
+    - Complementation of AND: _F_ _∗_ ( _¬F_ ) = 0
+
+
+    - Complementation of OR: _F_ + ( _¬F_ ) = 1
+
+
+_Proof._ For each _i ∈{_ 1 _, . . ., m}_, we define _Fg_ _[i]_ _a_ [and] _[ F]_ _g_ _[i]_ _b_ [as]
+
+_Fg_ _[i]_ _a_ [=] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)] and _Fg_ _[i]_ _b_ [=] _[ F]_ _[i]_ [ + (] _[¬F]_ _g_ _[i]_ [)] (3)
+
+
+respectively. Thus, according to the distributivity of AND over OR, the expression can be rewritten as
+
+
+( _Fg_ _[i]_ [+] _[ F]_ _g_ _[i]_ _a_ [)] _[ ∗F]_ _g_ _[i]_ _b_ [= (] _[F]_ _g_ _[i]_ [+ (] _[F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)))] _[ ∗]_ [(] _[F]_ _[i]_ [ + (] _[¬F]_ _g_ _[i]_ [))]
+
+= _Fg_ _[i]_ _[∗F]_ _[i]_ [ +] _[ F]_ _g_ _[i]_ _[∗]_ [(] _[¬F]_ _g_ _[i]_ [) + (] _[F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [))] _[ ∗F]_ _[i]_ [ + (] _[F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [))] _[ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)] _[.]_
+
+
+According to the above properties, we can simplify _Fg_ _[i]_ _[∗]_ [(] _[¬F]_ _g_ _[i]_ [)][ to][ 0][,][ (] _[F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [))] _[∗F]_ _[i]_ [ to] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)]
+and ( _F_ _[i]_ _∗_ ( _¬Fg_ _[i]_ [))] _[ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)][ to] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)][.] [Substituting this result back into the original expression,]
+we have
+
+
+( _Fg_ _[i]_ [+] _[ F]_ _g_ _[i]_ _a_ [)] _[ ∗F]_ _g_ _[i]_ _b_ [=] _[ F]_ _g_ _[i]_ _[∗F]_ _[i]_ [ + 0 +] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [) +] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)]
+
+= _Fg_ _[i]_ _[∗F]_ _[i]_ [ +] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [) +] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)]
+
+= _Fg_ _[i]_ _[∗F]_ _[i]_ [ +] _[ F]_ _[i][ ∗]_ [(] _[¬F]_ _g_ _[i]_ [)]
+
+= _F_ _[i]_ _∗_ ( _Fg_ _[i]_ [+ (] _[¬F]_ _g_ _[i]_ [))]
+
+= _F_ _[i]_ _∗_ 1
+
+= _F_ _[i]_ _,_
+
+
+which completes our proof.
+
+
+14
+
+
+Truth Table
+
+
+And Inverter Graph (AIG)
+
+
+Optimized AIG
+
+
+**Circuit**
+**Generation**
+
+
+|Input|Col2|Col3|Output|Col5|
+|---|---|---|---|---|
+|𝑋1|𝑋2|𝑋3|𝑌1|𝑌2|
+|0|0|0|1|0|
+|0|0|1|0|1|
+|……|……|……|…|…|
+|1|1|0|1|0|
+|1|1|1|1|1|
+
+
+|PIs|Col2|Col3|𝒀𝟏|Col5|𝒀𝟐|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|Node<br>**1**<br>**2**<br>**3**<br>**4**<br>**5**<br>Inverter<br>Edge|
+|POs|𝑿𝟏<br>|𝑿𝟐|𝑿𝟐||𝑿𝟏|𝑿𝟑||
+
+
+Figure 5: The illustration of two stages in LS: Circuit Generation and Circuit Optimization.
+
+
+B MORE DETAILS FOR BACKGROUND AND RELATED WORK
+
+
+**Circuit Graph Representation** In the LS stage, circuits are typically represented using And-Inverter
+Graphs (AIGs) (Berndt et al., 2022). An AIG is a directed acyclic graph where each node represents a
+Boolean function and each edge corresponds to a wire connecting these functions. AIGs include four
+types of nodes: constants, primary inputs (PIs), primary outputs (POs), and two-input AND gates
+(And2 nodes). The graph edge is either inverted or not, with a complemented edge indicating that
+the signal is inverted. Given a truth table with _n_ inputs and _m_ outputs, the AIG contains _n_ PIs and
+_m_ POs. The size of a circuit denotes the number of And2 nodes in the AIG, while the depth/level
+signifies the longest path from a PI to a PO.
+
+
+**Symbolic** **Regression** **(SR)** **for** **Learning** **Boolean** **Functions** Symbolic Regression (SR) aims
+to discover a mathematical expression _f_ that best fits a given dataset _D_ . To achieve this, many
+existing SR approaches represent mathematical expressions as algebraic expression trees, where
+internal nodes are operators (e.g., + _, ×,_ sin) and terminal nodes are input variables or constants.
+We denote by _τ_ = [ _τ_ 1 _, . . ., τn_ ] the pre-order traversal of such an expression tree. Notably, there
+exists a one-to-one correspondence between an expression tree and its pre-order traversal. Each
+_τi_ is an operator, input variable, or constant selected from a predefined library of tokens, such
+as [+ _, −, ×, ÷,_ sin _,_ cos _,_ exp _,_ log _, x_ ]. In Logic Synthesis (LS), Boolean functions can be learned
+from truth tables using SR methods. To adapt existing SR techniques for Boolean function
+learning, we redefine the operator set as and _,_ or _,_ not, and the token library at each step becomes
+
+[and _,_ or _,_ not _, x_ 1 _, . . ., xn_ ]. Once these functions are learned, they can be directly mapped into logic
+circuits for further synthesis or optimization.
+
+
+**LLM with Evolutionary methods** Evolutionary Computation (EC), inspired by the fundamental
+mechanisms of natural selection and biological evolution, has emerged as a powerful and flexible
+optimization paradigm (Katoch et al., 2021; Gen & Lin, 2023). Recent advancements demonstrate
+the significant potential of incorporating EC into the prompt engineering of large language models
+(LLMs), leading to notable performance improvements across diverse tasks, including code generation,
+natural language understanding, and the automated design of heuristics (Hemberg et al., 2024; RomeraParedes et al., 2024; Liu et al., 2024b; Yao et al., 2024; Morris et al., 2024). By synergizing EC with
+prompt engineering, it becomes possible to effectively navigate and exploit the vast and complex
+search space inherent to LLM-driven tasks. This integration not only facilitates more efficient
+exploration and exploitation strategies but also enhances the model’s ability to uncover higher-quality
+solutions that may be difficult to identify through conventional optimization approaches.
+
+
+C IMPLEMENTATION DETAILS OF EXPERIMENTAL SETUP
+
+
+C.1 DETAILS ON THE BENCHMARKS
+
+
+We provide the detailed information of the circuits used in our paper as follows.
+
+
+    - **Arithmetic 1, 2, 3** : Arithmetic functions with permuted inputs / dropped outputs.
+
+    - **Espresso 1, 2, 3, 4** : Selected Espresso benchmarks with permuted inputs.
+
+    - **LogicNets 1, 2, 3** : Three-output neurons from the LogicNets (He et al., 2021) project.
+
+    - **Random 1, 2, 5, 6** : Random and modified random functions.
+
+
+15
+
+
+- **Random 3, 4** : Known random-looking functions.
+
+
+C.2 HYPERPARAMETERS
+
+
+In our experiments, we implemented the CircuitEvo framework using GPT-3.5-TURBO and
+DEEPSEEK-V3 as the base LLM generators ( _πθ_ ), with a population size of _N_ = 10 and _I_ = 10
+iterations to balance exploration and computational efficiency. The evolutionary process employed
+_M_ = 4 distinct strategies: two crossover-based exploration methods (E1, E2) for generating novel
+circuit designs by combining parent solutions, and two mutation-based refinement techniques (R1,
+R2) for fine-tuning individual circuits through local modifications. Moreover, for the learning-based
+baseline methods, we use the same default hyperparameters as reported in the corresponding paper.
+
+
+C.3 USE OF LS TOOLS
+
+
+In our paper, we leverage the Logic Synthesis (LS) tool ABC Brayton et al. (2010) in two key
+aspects. First, we adopt ABC’s traditional heuristic methods—Sum-of-Products (SOP) and Binary
+Decision Diagrams (BDD)—as baselines and functional optimizers. These heuristics are applied to
+the Random1 circuit using the following operator sequences:
+
+
+    - **SOP** : _read_truth -xf Random1.truth; collapse; sop; strash_
+
+
+    - **BDD** : _read_truth -xf Random1.truth; bdd; strash_
+
+
+Second, during the circuit optimization stage, we employ three widely used ABC operators—resyn2, dc2, and compress2—to refine the initial synthesized circuits. The specific
+optimization sequences are:
+
+
+    - **resyn2** : read Random1.aig; strash; resyn2
+
+
+    - **dc2** : read Random1.aig; strash; dc2;
+
+
+    - **compress2** : read Random1.aig; strash; compress2;
+
+
+Here, .aig denotes the file format of the generated And-Inverter Graph (AIG) circuits.
+
+
+D IMPLEMENTATION DETAILS OF THE BASELINES
+
+
+Below, we provide short descriptions of the five learning-based methods and two manually designed
+heuristics.
+
+
+    - **DNAS** : DNAS (Wang et al., 2024b) is a differentiable neural architecture search method
+designed to synthesize circuits from input-output examples. It begins by constructing a logic
+network architecture and then employs gradient descent to train the network. After training,
+DNAS prunes unnecessary nodes and outputs the remaining structure as the circuit network.
+However, the search quality heavily depends on the initial network. An inappropriate initial
+network always hinders the learning-based methods from discovering compact structures. In
+logic synthesis, traditional neural architecture search methods (Wang et al., 2024b; Petersen
+et al., 2022) often use square structures, which introduce significant structural bias compared
+to the inherent circuit structure, leading to inefficient search processes.
+
+
+    - **Boolformer** : Boolformer (d’Ascoli et al., 2023) is a pioneering method that introduces
+the Transformer framework to learn compact Boolean functions for logic synthesis. This
+innovative approach significantly advances the field by combining the strengths of a pretrained model and symbolic reasoning.
+
+
+    - **DSR** : DSR Petersen et al. (2019) is a search-based method that combines reinforcement
+learning with a recurrent neural network to generate highly expressive mathematical expressions. By leveraging the strengths of reinforcement learning, DSR efficiently explores
+the space of possible expressions, while the recurrent neural network enables the model to
+capture complex patterns and dependencies within the data.
+
+
+16
+
+
+- **SPL** : SPL Sun et al. (2022) is a state-of-the-art search-based method that utilizes a Monte
+Carlo Tree Search (MCTS) agent to systematically explore and identify optimal expression
+trees from measurement data. By leveraging the strategic exploration capabilities of MCTS,
+SPL efficiently navigates the vast search space of potential expressions, ensuring a balance
+between exploration and exploitation.
+
+
+    - **ICSR** : ICSR Merler et al. (2024) is an LLM-based symbolic regression method that utilizes
+large language models to search for optimal expressions. A key strength of ICSR lies in
+its ability to iteratively refine generated expressions using off-the-shelf optimizers. This
+approach effectively combines the exploratory power of LLMs with the domain-specific
+expertise of external tools.
+
+
+    - **SOP** : SOP (Nabulsi et al., 2017) is a heuristic method integrated into the widely used logic
+synthesis framework ABC. This method achieves precise logic synthesis by representing
+truth tables as sums of products.
+
+
+    - **BDD** : BDD (Lai et al., 1993) is another heuristic method included in the ABC logic synthesis
+framework. It achieves precise logic synthesis by applying the Shannon decomposition
+theorem and representing the truth table as a binary decision diagram (Bryant, 1992; Akers,
+1978; Drechsler & Becker, 2013).
+
+
+E IMPLEMENTATION DETAILS OF OUR CIRCUITEVO
+
+
+E.1 MORE DETAILS OF THE EVOLUTIONARY PROGRAM GENERATION FRAMEWORK
+
+
+**Initialization process** In the initialization phase, we adopt a circuit decomposition strategy to generate
+a diverse and accurate initial population. Specifically, the original truth table _T_ is decomposed into
+two sub-truth tables, _T_ 1 and _T_ 2, according to Equation 1. Each sub-truth table is then converted into a
+circuit graph using the traditional heuristic SOP Nabulsi et al. (2017), and subsequently converted
+into programs _P_ 1 and _P_ 2. These two programs are then fused into an accurate program _P_ (see Section
+E.2 for the fusion method). To ensure diversity in the initial population, we vary the decomposition
+variable and repeat the process _N_ times, resulting in _N_ candidate programs. Each sample corresponds
+to a different decomposition variable, enabling the generation of a diverse set of circuit programs.
+
+
+**The domain-specific evolutionary prompts** We present the detailed prompts in Figure 11. Specifically, the prompts are structured into four main components: Problem Specification, which defines
+the task and objectives; Circuit Program Example, which offers a concrete example to guide the
+generation process; Evolutionary Generation Strategies, which describe the methods for generating
+and evolving candidate solutions; and Domain-Specific Function Constraints, which incorporate
+domain knowledge to effectively reduce the search space.
+
+
+|Input = X1 X2 X3|Col2|Col3|Col4|
+|---|---|---|---|
+|<br>|<br>|<br>|<br>|
+|Output =𝑌1|Output =𝑌1|||
+|node1 =𝑋1 ∗𝑋2<br>|Sharing part|Sharing part|Sharing part|
+|node2 =𝑋1 ∗𝑋3<br>node3 = ¬node1 * ¬node2<br>|node2 =𝑋1 ∗𝑋3<br>node3 = ¬node1 * ¬node2<br>|node2 =𝑋1 ∗𝑋3<br>node3 = ¬node1 * ¬node2<br>||
+|node2 =𝑋1 ∗𝑋3<br>node3 = ¬node1 * ¬node2<br>|node2 =𝑋1 ∗𝑋3<br>node3 = ¬node1 * ¬node2<br>|node2 =𝑋1 ∗𝑋3<br>node3 = ¬node1 * ¬node2<br>||
+|<br>node1 =𝑋 ∗𝑋|<br>node1 =𝑋 ∗𝑋|<br>node1 =𝑋 ∗𝑋|<br>node1 =𝑋 ∗𝑋|
+|1 2<br>|1 2<br>|1 2<br>|1 2<br>|
+
+
+|Input = X1 X2 X3|Col2|Col3|
+|---|---|---|
+|1 2 3<br>|1 2 3<br>|1 2 3<br>|
+|Output =𝑌1|||
+|node1 =𝑋1 ∗𝑋2<br>**structure**|node1 =𝑋1 ∗𝑋2<br>**structure**|node1 =𝑋1 ∗𝑋2<br>**structure**|
+|<br>node2 =𝑋1 ∗𝑋3<br> <br> <br>**strashed**|<br>node2 =𝑋1 ∗𝑋3<br> <br> <br>**strashed**||
+|node3 = ¬node1 * ¬node2<br>node4 = node1 * node2|node3 = ¬node1 * ¬node2<br>node4 = node1 * node2|node3 = ¬node1 * ¬node2<br>node4 = node1 * node2|
+|𝑌1 = ¬node3 *node4 <br>**function**<br>**fusion**|𝑌1 = ¬node3 *node4 <br>**function**<br>**fusion**|𝑌1 = ¬node3 *node4 <br>**function**<br>**fusion**|
+
+
+|Input = X1 X2 X3|Col2|Input = X1 X2 X3 Input = X1 X2 X3<br>Output = 𝑌1 Output = 𝑌1<br>node1 = 𝑋1 ∗𝑋2 Sharing part Strash node1 = 𝑋1 ∗𝑋2 structure<br>Functionality rule: node2 = 𝑋1 ∗𝑋3 node2 = 𝑋1 ∗𝑋3 strashed<br>𝐹 = 𝐹 ∗𝐹 node3 = ¬node1 * ¬node2 node3 = ¬node1 * ¬node2<br>c 𝑎 b node1 = 𝑋1 ∗𝑋2 Sharing part node4 = node1 * node2<br>node2 = 𝑋1 ∗𝑋3<br>node3 = node1 * node2<br>𝑌1 = ¬node3 * node3 fu fun sc it oio nn 𝑌1 = ¬node3 * node4 fu fun sc it oio nn<br>Output Program c Strashed Program c|
+|---|---|---|
+|<br> <br>1|<br> <br>1|<br> <br>1|
+|<br>Output =𝑌1<br>|<br>Output =𝑌1<br>|<br>Output =𝑌1<br>|
+|node1 =𝑋1 ∗𝑋2<br>|||
+|<br> <br>2|<br> <br>2|<br> <br>2|
+|𝑌1 = ¬node3<br> <br>3|𝑌1 = ¬node3<br> <br>3|𝑌1 = ¬node3<br> <br>3|
+|Input Program a|Input Program a|Input Program a|
+|Input =X1 X2 X3<br>|Input =X1 X2 X3<br>|Input =X1 X2 X3<br>|
+|<br> <br>1|<br> <br>1|<br> <br>1|
+|Output =𝑌1<br>|Output =𝑌1<br>|Output =𝑌1<br>|
+|node1 =𝑋1 ∗𝑋2<br>|node1 =𝑋1 ∗𝑋2<br>||
+|<br> <br>2|<br> <br>2||
+|node2 =𝑋1 ∗𝑋3<br>|node2 =𝑋1 ∗𝑋3<br>||
+|node3 = node1 * node2|node3 = node1 * node2|node3 = node1 * node2|
+|𝑌1 = node3<br>3|𝑌1 = node3<br>3|𝑌1 = node3<br>3|
+
+
+Input Program b
+
+
+Figure 6: An illustration of the program fusion process. Two input programs are fused to get a new
+program based on a given functionality rule and structure hashed.
+
+
+17
+
+
+E.2 MORE DETAILS OF THE STRUCTURE-AWARE FUNCTION OPTIMIZATION FRAMEWORK
+
+
+**Program Fusion** The circuit program fusion process, as illustrated in Figure 6, can be clearly divided
+into two complementary dimensions: structural fusion and functional fusion. **Structurally**, the fusion
+begins by directly stacking the logic structures from both input programs. At this stage, all nodes
+from both programs are combined into a single unified representation without any simplification.
+This forms an intermediate circuit that contains potentially duplicated logic patterns across the two
+input structures. To optimize this intermediate structure, we employ the _strash_ operator from existing
+LS tools, which performs structural hashing. This operation identifies and merges _shared subgraphs_ logic nodes that compute the same Boolean functions—thereby removing redundancy and yielding
+a more compact and efficient circuit. In the figure, such redundant substructures (e.g., _X_ 1 _∗_ _X_ 2,
+_X_ 1 _∗_ _X_ 3) are merged to form the structure of the final program. **Functionally**, the fusion proceeds
+by combining the output functionalities of the input programs according to a predefined rule. In the
+given example, the functional rule is _Fc_ = _Fa ∗_ _Fb_, indicating that the final circuit should output the
+logical conjunction of the functionalities of two input programs. This combination is implemented by
+constructing a new output expression based on the original outputs ( _¬node_ 3 from Program a and
+_node_ 3 from Program b). The fused functional output is thus defined as _Y_ 1 = _¬node_ 3 _∗_ _node_ 4. In
+summary, the fusion process simultaneously operates on the structural and functional levels: the
+structure is stacked and then optimized through strash, while the function is fused directly based on a
+given rule. This two-step design ensures both correctness and compactness in the resulting program.
+
+
+**Motivations for Local Program Search** Although the circuit functionality completion theory ensures
+the accuracy of the circuit programs, it often leads to an increase in circuit size. Therefore, a key
+challenge is to identify an initial circuit program that minimizes this size overhead after function
+optimization. To address this issue, we propose a local program search method that explores the
+neighborhood of the initially generated program to discover candidates with higher accuracy and
+smaller size. This approach is motivated by our empirical observation, illustrated in Figure 7, that
+initial circuits with higher functional accuracy and more compact structure result in better circuits.
+
+
+Motivations for Local Program Search
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||~~Accu~~<br>Accu<br>Accu|~~acy~~<br>~~0.95~~<br>racy<br>0.90<br>acy<br>0.80|||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+Normalized Size
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+||||||~~Size~~<br>Size<br>Size|~~1000~~<br>1500<br>2000||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+Accuracy
+
+
+Figure 7: Motivations for Local Program Search. Experimental results show that, with fixed accuracy,
+larger pre-completion circuits lead to larger final circuits, while with fixed pre-completion size, higher
+accuracy results in smaller final circuits. These insights motivate us to generate smaller and more
+accurate pre-completion circuits.
+
+
+F ADDITIONAL RESULTS
+
+
+F.1 MORE RESULTS FOR COMPARATIVE EVALUATION
+
+
+In this subsection, we provide more comparative results. Specifically, we evaluate our method on
+sixteen circuits from four widely used benchmarks. In terms of the accuracy of the generated circuit,
+Table 7 demonstrates that all circuits generated by CircuitEvo achieve 100% accuracy. In terms of
+the initial size, Table 2 shows that our CircuitEvo significantly outperforms all competitive baselines
+in terms of the initial size, with an average improvement of 6.74% over state-of-the-art methods.
+In terms of the optimized size, the results in Table 8, Table 9, and Table 10 demonstrate that our
+
+
+18
+
+
+CircuitEvo achieves an average improvement of 11.09%, 9.91%, and 10.79% in optimized circuit
+size compared to the state-of-the-art methods when using _resyn2_, _dc2_ and _compress2_ optimization
+operator, respectively. Overall, the comparative results demonstrate that CircuitEvo can effectively
+generate more accurate and compact circuits than the baseline methods.
+
+
+F.2 THE EVOLUTION TRAJECTORY RESULTS OF OUR CIRCUITEVO
+
+
+In this subsection, we present the evolution trajectory results of our method on two circuits. As
+shown in Figure 8, CircuitEvo can iteratively improve both the average and best performance of the
+population over iterations, indicating the effectiveness of our method.
+
+
+Evolution of Circuit Random4
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|popula<br>popula|tion (A<br>tion (B|verage<br>est)|)|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+Number of Iterations
+
+
+100
+
+
+95
+
+
+90
+
+
+85
+
+
+80
+
+
+75
+
+
+Evolution of Circuit LogicNets2
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|popula<br>popula|tion (A<br>tion (B|verage<br>est)|)|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+Number of Iterations
+
+
+160
+
+
+155
+
+
+150
+
+
+145
+
+
+140
+
+
+Figure 8: From left to right: (a) The evolutionary trajectory of Circuit LogicTNets2. (b) The
+evolutionary trajectory of Circuit Random4. The blue line indicates the average performance of the
+population at each iteration, while the red line represents the performance of the best individual.
+
+
+F.3 MORE VISUALIZATION RESULTS OF OUR CIRCUITEVO
+
+
+In this subsection, we visualize the generated circuit programs and present additional analysis on two
+key factors that contribute to circuit compactness: logic sharing and triangular structures.
+
+
+**Logic** **Sharing** As shown in Figure 9, logic
+
+components. The detailed results in Table 11
+demonstrate that our method, which generates
+more compact circuits, captures a significantly
+larger number of logic sharing than all func
+clude that increased logic sharing corresponds
+to reduced circuit size. To further illustrate this, **No logical sharing** **logical sharing**
+we visualize the Random3 circuit program and Figure 9: Illustration of logic sharing.
+graph generated by CircuitEvo in Figure 10. The
+visualization reveals that approximately one-third of the nodes are shared across different parts of the
+circuit, providing evidence of the compactness enabled by logic sharing.
+
+
+**Triangular Structures** In this subsection, we provide additional results to support the presence of
+triangular structures in our generated circuits. Specifically, the detailed results in Table 12 and Table
+13 consistently demonstrate this structural pattern across all test circuits. Furthermore, visualization
+results shown in Figure 10 offer intuitive evidence for the existence of the triangular structure.
+
+
+G THE USE OF LARGE LANGUAGE MODEL
+
+
+In accordance with ICLR 2026 policy, we disclose the use of Large Language Models (LLMs) as an
+assistive tool in the preparation of this manuscript. The primary application of LLMs was to aid in
+improving the clarity and quality of the writing.
+
+
+19
+
+
+**No logical sharing**
+
+
+**logical sharing**
+
+
+Figure 9: Illustration of logic sharing.
+
+
+Our process involved using an LLM to perform the following specific tasks:
+
+
+    - **Grammar Correction:** Identifying and correcting grammatical errors and spelling mistakes.
+
+
+    - **Clarity and Readability Enhancement:** Rephrasing sentences and suggesting alternative
+phrasings to improve the overall readability and flow of the text.
+
+
+    - **Conciseness:** Assisting in shortening sentences and paragraphs to make the writing more
+direct and concise.
+
+
+The core scientific contributions, analyses, and claims presented in this paper are the work of the
+human authors. We have ensured that the use of LLMs in the writing process was conducted
+responsibly and in line with academic and ethical standards.
+
+
+20
+
+
+Figure 10: Visualization of the generated circuit program and its corresponding AIG graph for the
+Random3 circuit. The logic sharing and triangular structure are visualized.
+
+
+Figure 11: The prompts of CircutiEov. Specifically, the prompts consist of four main parts: Problem
+Specification, Circuit Program Examples, Evolutionary strategies (including exploration and refinement), and Domain-specific function constraints.
+
+
+21
+
+
+Table 6: We compare the circuit size and inference cost between our GPT-3.5-turbo and GPT-4o
+based approaches on the Random circuit benchmark. The results show that although GPT-3.5-turbo
+incurs a slight increase in size compared to GPT-4o, its cost is fve times lower.
+
+|Benchmark SOTA Baseline Ours (GPT-3.5-turbo) Ours (GPT-3.5-turbo) Ours (GPT-4o) Ours (GPT-4o)|Col2|
+|---|---|
+|Circuit|Init Node_ ↓_<br>Init Node_ ↓_<br>Cost ($)_ ↓_<br>Init Node_ ↓_<br>Cost ($)_ ↓_|
+|Random1<br>Random2<br>Random3<br>Random4<br>Random5<br>Random6|41<br>41<br>**0.14**<br>**38**<br>0.38<br>37<br>36<br>**0.11**<br>**33**<br>0.41<br>75<br>**60**<br>**0.08**<br>**60**<br>0.69<br>152<br><br>**0.18**<br>140<br>0.52<br>117<br><br>**0.21**<br><br>0.86<br>1256<br>1110<br>**0.11**<br>**1072**<br>1.63|
+|Average|**279.67**<br>**248.33**<br>**0.15**<br>**241.33**<br>**0.75**|
+
+
+Table 7: The results demonstrate that CircuitEvo can generate accurate circuits for all of the selected
+
+|circuits from four widely used benchmarks.|Col2|Col3|
+|---|---|---|
+|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>DNAS<br>CircuitEvo (Ours)|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>DNAS<br>CircuitEvo (Ours)|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>DNAS<br>CircuitEvo (Ours)|
+|Circuit<br>PI<br>PO|Acc(%)_ ↑_<br>Acc(%)_ ↑_<br>Acc(%)_ ↑_<br>Acc(%)_ ↑_<br>Acc(%)_ ↑_|Qwen2.5-7B<br>Deepseek-V3<br>GPT-3.5-turbo|
+|Arithmetic1<br>10<br>5<br>Arithmetic2<br>16<br>6<br>Arithmetic3<br>16<br>7<br>LogicNets1<br>13<br>6<br>LogicNets2<br>13<br>6<br>LogicNets3<br>15<br>7<br>Espresso1<br>11<br>3<br>Espresso2<br>11<br>9<br>Espresso3<br>12<br>17<br>Espresso4<br>16<br>69<br>Random1<br>7<br>2<br>Random2<br>7<br>2<br>Random3<br>10<br>3<br>Random4<br>10<br>3<br>Random5<br>12<br>3<br>Random6<br>15<br>4|94.8<br>94.8<br>92.7<br>88.9<br>100.0<br>75.3<br>83.5<br>77.4<br>55.7<br>100.0<br>97.5<br>97.6<br>97.2<br>77.0<br>100.0<br>96.5<br>96.5<br>94.2<br>87.4<br>99.9<br>99.2<br>99.2<br>99.2<br>85.0<br>100.0<br>98.0<br>98.0<br>97.1<br>91.8<br>100.0<br>94.0<br>94.9<br>94.5<br>94.0<br>100.0<br>89.5<br>91.4<br>84.5<br>85.4<br>100.0<br>88.4<br>88.5<br>88.5<br>87.9<br>99.9<br>98.8<br>86.4<br>82.0<br>81.3<br>99.9<br>87.5<br>87.5<br>87.5<br>82.8<br>100.0<br>89.1<br>90.0<br>87.5<br>85.9<br>100.0<br>87.5<br>90.0<br>86.5<br>86.7<br>100.0<br>87.9<br>89.2<br>87.9<br>85.0<br>100.0<br>86.2<br>88.4<br>86.8<br>86.3<br>100.0<br>87.7<br>88.6<br>88.1<br>75.5<br>100.0|100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0<br>100.0|
+|**Average**|91.1<br>91.5<br>89.5<br>83.5<br>100.0|**100.0**<br>**100.0**<br>**100.0**|
+
+
+Table 8: The optimization results (using _resyn2_ operator for optimization) show that CircuitEvo
+achieves an average improvement of 11.09% in optimized circuit size over state-of-the-art baselines.
+
+|Benchmark Boolformer SPL DSR ICSR SOP BDD DNAS CircuitEvo (Ours)|Col2|Col3|
+|---|---|---|
+|Circuit<br>PI<br>PO|Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_|Opt Node_ ↓_<br>Impr.(%)_ ↑_|
+|Arithmetic1<br>10<br>5<br>Arithmetic2<br>16<br>6<br>Arithmetic3<br>16<br>7<br>LogicNets1<br>13<br>6<br>LogicNets2<br>13<br>6<br>LogicNets3<br>15<br>7<br>Espresso1<br>11<br>3<br>Espresso2<br>11<br>9<br>Espresso3<br>12<br>17<br>Espresso4<br>16<br>69<br>Random1<br>7<br>2<br>Random2<br>7<br>2<br>Random3<br>10<br>3<br>Random4<br>10<br>3<br>Random5<br>12<br>3<br>Random6<br>15<br>4|150<br>122<br>67<br>117<br>**65**<br>**65**<br>72<br>244<br>157<br>70<br>230<br>51<br>55<br>105<br>1360<br>1171<br>1108<br>1254<br>1178<br>1234<br>1161<br>141<br>115<br>109<br>214<br>127<br>117<br>160<br>75<br>75<br>75<br>78<br>83<br>95<br>92<br>196<br>207<br><br>190<br>184<br>199<br>227<br>114<br>95<br>100<br>57<br>**54**<br>**54**<br>55<br>203<br>220<br>179<br>187<br>140<br>131<br>121<br>3199<br>2534<br>2865<br>2678<br>2572<br>2578<br>2565<br>623<br>1443<br>1456<br>1469<br>611<br>619<br>820<br>42<br>38<br>39<br>41<br>38<br>39<br>37<br>36<br>34<br>39<br>**31**<br>35<br>34<br>39<br>81<br>68<br>99<br>88<br>100<br>91<br>64<br>135<br>145<br>135<br>140<br>135<br>136<br>138<br>218<br>283<br>171<br>168<br>156<br>106<br>105<br>1695<br>1571<br>1405<br>1338<br>1290<br>1287<br>897|**65**<br>**0.00**<br>**44**<br>**13.73**<br><br>**12.18**<br><br>**3.67**<br>**48**<br>**36.00**<br>186<br>**-20.78**<br>**54**<br>**0.00**<br>**85**<br>**29.75**<br>**2483**<br>**2.01**<br><br>**6.38**<br>**35**<br>**5.41**<br>34<br>**-9.68**<br>**30**<br>**53.13**<br><br>**14.81**<br>**76**<br>**27.62**<br><br>**3.23**|
+|**Average**|532.00<br>517.38<br>504.44<br>517.50<br>426.19<br>427.50<br>416.13|**360.81**<br>**11.09**|
+
+
+22
+
+
+|Table 9: The optimization results (using dc2 operator for optimization) show that CircuitEvo achieves an average improvement of 9.91% in optimized circuit size over state-of-the-art baselines.|Col2|Col3|
+|---|---|---|
+|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>SOP<br>BDD<br>DNAS<br>CircuitEvo (Ours)|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>SOP<br>BDD<br>DNAS<br>CircuitEvo (Ours)|Benchmark<br>Boolformer<br>SPL<br>DSR<br>ICSR<br>SOP<br>BDD<br>DNAS<br>CircuitEvo (Ours)|
+|Circuit<br>PI<br>PO|Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_|Opt Node_ ↓_<br>Impr.(%)_ ↑_|
+|Arithmetic1<br>10<br>5<br>Arithmetic2<br>16<br>6<br>Arithmetic3<br>16<br>7<br>LogicNets1<br>13<br>6<br>LogicNets2<br>13<br>6<br>LogicNets3<br>15<br>7<br>Espresso1<br>11<br>3<br>Espresso2<br>11<br>9<br>Espresso3<br>12<br>17<br>Espresso4<br>16<br>69<br>Random1<br>7<br>2<br>Random2<br>7<br>2<br>Random3<br>10<br>3<br>Random4<br>10<br>3<br>Random5<br>12<br>3<br>Random6<br>15<br>4|137<br>113<br>**62**<br>112<br>63<br>64<br>73<br>242<br>176<br>74<br>204<br>48<br>48<br>101<br>1308<br>1145<br>1081<br>1217<br>1140<br>1194<br>1132<br>136<br>115<br>113<br>218<br>118<br>114<br>160<br>61<br>62<br>61<br>64<br>79<br>96<br>91<br>195<br>199<br><br>183<br>178<br>202<br>218<br>108<br>86<br>89<br>54<br>**53**<br>**53**<br>54<br>201<br>219<br>162<br>174<br>135<br>138<br>121<br>3115<br>2478<br>2793<br>2611<br>2512<br>2515<br>2517<br>585<br>1376<br>1408<br>1388<br>589<br>577<br>820<br>41<br>38<br>41<br>40<br>**35**<br>38<br>37<br>34<br>33<br>**29**<br>33<br>35<br>31<br>30<br>82<br>69<br>97<br>85<br>91<br>87<br>61<br>128<br>143<br>126<br>139<br>129<br>134<br>142<br>199<br>271<br>165<br>163<br>145<br>99<br>103<br>1641<br>1536<br>1348<br>1289<br>1238<br>1256<br>|63<br>**-1.61**<br>**43**<br>**10.42**<br><br>**11.66**<br><br>**10.62**<br>**46**<br>**24.59**<br>176<br>**-13.55**<br>55<br>**-3.77**<br>**81**<br>**33.06**<br>**2418**<br>**2.42**<br><br>**3.99**<br>**35**<br>**0.00**<br>32<br>**-10.34**<br>**29**<br>**52.46**<br><br>**7.94**<br>**67**<br>**32.32**<br>868<br>**-1.64**|
+|**Average**|513.31<br>503.69<br>487.75<br>498.38<br>411.75<br>415.38<br>407.13|**352.44**<br>**9.91**|
+
+
+Table 10: The optimization results (using _compress2_ operator for optimization) show that CircuitEvo
+achieves an average improvement of 10.79% in optimized circuit size over state-of-the-art baselines.
+
+|Benchmark Boolformer SPL DSR ICSR SOP BDD DNAS CircuitEvo (Ours)|Col2|Col3|
+|---|---|---|
+|Circuit<br>PI<br>PO|Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_<br>Opt Node_ ↓_|Opt Node_ ↓_<br>Impr.(%)_ ↑_|
+|Arithmetic1<br>10<br>5<br>Arithmetic2<br>16<br>6<br>Arithmetic3<br>16<br>7<br>LogicNets1<br>13<br>6<br>LogicNets2<br>13<br>6<br>LogicNets3<br>15<br>7<br>Espresso1<br>11<br>3<br>Espresso2<br>11<br>9<br>Espresso3<br>12<br>17<br>Espresso4<br>16<br>69<br>Random1<br>7<br>2<br>Random2<br>7<br>2<br>Random3<br>10<br>3<br>Random4<br>10<br>3<br>Random5<br>12<br>3<br>Random6<br>15<br>4|150<br>120<br>67<br>117<br>**65**<br>**65**<br>72<br>233<br>151<br>50<br>222<br>**43**<br>**43**<br>105<br>1360<br>1169<br>1105<br>1249<br>1177<br>1228<br>1162<br>146<br>113<br>110<br>211<br>120<br>117<br>160<br>75<br>75<br>75<br>78<br>83<br>94<br>93<br>199<br>206<br><br>190<br>183<br>197<br>227<br>111<br>94<br>102<br>**53**<br>**53**<br>**53**<br>55<br>198<br>220<br>174<br>187<br>137<br>130<br>121<br>3195<br>2523<br>2860<br>2677<br>2570<br>2576<br>2564<br>631<br>1432<br>1444<br>1468<br>611<br>613<br>816<br>42<br>38<br>39<br>41<br>36<br>39<br>37<br>37<br>34<br>37<br>**33**<br>34<br>**33**<br>39<br>81<br>68<br>98<br>90<br>102<br>91<br>64<br>133<br>146<br>133<br>141<br>133<br>131<br>138<br>215<br>284<br>171<br>165<br>152<br>105<br>104<br>1700<br>1570<br>1403<br>1336<br>1287<br>1289<br>894|66<br>**-1.54**<br>**43**<br>**0.00**<br><br>**11.76**<br><br>**6.36**<br>**48**<br>**36.00**<br>185<br>**-20.13**<br>**53**<br>**0.00**<br>**84**<br>**30.58**<br>**2484**<br>**1.55**<br><br>**6.22**<br>**35**<br>**2.78**<br>**33**<br>**0.00**<br>**30**<br>**53.13**<br><br>**12.21**<br>**72**<br>**30.77**<br><br>**2.91**|
+|**Average**|531.63<br>515.19<br>501.38<br>516.13<br>424.13<br>425.25<br>415.69|**360.44**<br>**10.79**|
+
+
+Table 11: The logic sharing results demonstrate that our CircuitEvo significantly outperforms all
+Boolean function learning baselines in terms of the number of shared logic components.
+
+
+Benchmark Boolformer SPL DSR ICSR CircuitEvo (Ours)
+
+
+Circuit PI PO Sharing Sharing Sharing Sharing Sharing
+
+
+Arithmetic1 10 5 7 22 8 6 39
+Arithmetic2 16 6 13 13 13 14 42
+Arithmetic3 16 7 52 66 51 35 75
+LogicNets1 13 6 126 125 118 92 62
+LogicNets2 13 6 2 8 2 6 31
+LogicNets3 15 7 89 59 70 57 282
+Espresso1 11 3 58 79 67 69 109
+Espresso2 11 9 4 5 19 40 70
+Espresso3 12 17 2221 0 1556 1663 2384
+Espresso4 16 69 265 439 449 423 3998
+Random1 7 2 0 7 0 0 2
+Random2 7 2 0 1 1 0 2
+Random3 10 3 0 5 0 1 20
+Random4 10 3 9 14 5 7 9
+Random5 12 3 98 75 59 79 275
+Random6 15 4 28 33 23 29 15
+
+
+**Average** 185.75 59.44 152.56 157.56 **463.44**
+
+
+23
+
+
+Table 12: The results show that the number of nodes in five circuits decreases as the circuit level
+increases, illustrating the triangular structure of the circuits generated by our method.
+
+
+Circuits Arithmetic1 LogicNets1 LogicNets3 Espresso1 Random4
+
+
+Lev Node Rate Node Rate Node Rate Node Rate Node Rate
+
+
+1 14 0.19 31 0.22 44 0.21 8 0.11 29 0.21
+2 13 0.18 25 0.18 41 0.19 10 0.14 30 0.22
+3 10 0.14 17 0.12 30 0.14 10 0.14 19 0.14
+4 9 0.12 13 0.09 24 0.11 5 0.07 18 0.13
+5 7 0.09 10 0.07 18 0.09 4 0.06 13 0.09
+6 6 0.08 9 0.06 13 0.06 4 0.06 10 0.07
+7 4 0.05 7 0.05 10 0.05 4 0.06 5 0.04
+8 4 0.05 6 0.04 9 0.04 4 0.06 4 0.03
+9 1 0.01 5 0.04 7 0.03 4 0.06 3 0.02
+10 1 0.01 4 0.03 4 0.02 4 0.06 3 0.02
+11 1 0.01 3 0.02 4 0.02 4 0.06 1 0.01
+12 1 0.01 3 0.02 3 0.01 4 0.06 1 0.01
+13 2 0.03 2 0.01 2 0.01 3 0.04 1 0.01
+14 1 0.01 3 0.02 1 0.00 1 0.01 1 0.01
+15 0 0.00 1 0.01 1 0.00 1 0.01 0 0.00
+16 0 0.00 1 0.01 0 0.00 1 0.01 0 0.00
+
+
+Table 13: This table provides further evidence of the triangular structure in our generated circuits.
+Specifically, the level rate, defined as half the ratio of the number of nodes at the bottom level to
+those at the top level, exceeds 1 in all cases, indicating a greater concentration of nodes at the bottom.
+
+
+Benchmark CircuitEvo (Ours) Benchmark CircuitEvo (Ours)
+
+
+Circuit PI PO Lev Lev rate Circuit PI PO Lev Lev rate
+
+
+Arithmetic1 10 5 14 5.73 Espresso3 12 17 21 9.66
+Arithmetic2 16 6 12 4.37 Espresso4 16 69 21 11.75
+Arithmetic3 16 7 24 18.45 Random1 7 2 9 3.00
+LogicNets1 13 6 16 5.36 Random2 7 2 9 3.00
+LogicNets2 13 6 17 2.57 Random3 10 3 9 5.00
+LogicNets3 15 7 15 5.81 Random4 10 3 14 8.86
+Espresso1 11 3 16 2.23 Random5 12 3 11 5.18
+Espresso2 11 9 10 2.28 Random6 15 4 23 15.32
+
+
+Table 14: The Computation cost per circuit when using the GPT-3.5-turbo API as the backbone.
+
+
+Benchmark CircuitEvo (Ours) Benchmark CircuitEvo (Ours)
+
+
+Circuit PI PO Cost ($) Circuit PI PO Cost ($)
+
+
+Arithmetic1 10 5 0.09 Espresso3 12 17 0.45
+Arithmetic2 16 6 0.16 Espresso4 16 69 0.43
+Arithmetic3 16 7 0.27 Random1 7 2 0.08
+LogicNets1 13 6 0.12 Random2 7 2 0.11
+LogicNets2 13 6 0.20 Random3 10 3 0.14
+LogicNets3 15 7 0.14 Random4 10 3 0.11
+Espresso1 11 3 0.11 Random5 12 3 0.18
+Espresso2 11 9 0.12 Random6 15 4 0.21
+
+
+24

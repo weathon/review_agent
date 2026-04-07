@@ -1,0 +1,5508 @@
+## EXPLORATORY CAUSAL INFERENCE IN SAENCE
+
+
+**Tommaso Mencattini** _[†][,]_ [1] _[,]_ [2] **, Riccardo Cadei** _[†][,]_ [1] **, Francesco Locatello** [1]
+
+
+1Institute of Science and Technology, Austria (ISTA)
+2 ´Ecole Polytechnique F´ed´erale de Lausanne (EPFL)
+_†Equal contribution_ .
+
+
+ABSTRACT
+
+
+Randomized Controlled Trials are one of the pillars of science; nevertheless, they
+rely on hand-crafted hypotheses and expensive analysis. Such constraints prevent
+causal effect estimation at scale, potentially anchoring on popular yet incomplete
+hypotheses. We propose to discover the unknown effects of a treatment directly
+from data. For this, we turn unstructured data from a trial into meaningful
+representations via pretrained foundation models and interpret them via a sparse
+autoencoder. However, discovering significant causal effects at the neural level
+is not trivial due to multiple-testing issues and effects entanglement. To address
+these challenges, we introduce _Neural Effect Search_, a novel recursive procedure
+solving both issues by progressive stratification. After assessing the robustness
+of our algorithm on semi-synthetic experiments, we showcase, in the context of
+experimental ecology, the first successful unsupervised causal effect identification
+on a real-world scientific trial.
+
+
+Figure 1: Pipeline for Exploratory Causal Inference: (i) collect experimental data, (ii) extract interpretable representations via a _Foundation Model_ and _Sparse Autoencoder_, (iii) identify treatment
+effects, e.g., via _Neural Effect Search_, and (iv) interpret the causal findings, i.e., affected neurons.
+
+
+1 INTRODUCTION
+
+
+In science, data has been historically collected to answer specific questions (Popper, 2005). In
+this _rationalist_ view, scientists formulate a hypothesis, often as a causal query, and collect data to
+falsify it. For example, experimental ecologists studying social immunity in ants (Cremer et al.,
+2007) may suspect that exposure to a specific micro-particle may affect specific social behaviors, or
+more formally, “a _treatment_ _T_ has a causal effect on an _outcome_ behavior _Y_ ”. They then perform
+a controlled experiment, administering the treatment or a placebo to a sample of individuals and
+check whether there is a significant difference in the correlation between the treatment assignment
+and the outcome. While this paradigm has dominated science for centuries, modern science
+has started embracing the creation of _atlases_ : vast, comprehensive maps of natural phenomena,
+collected for general purposes. Today, we have planetary-scale maps of life genomes (Chikhi et al.,
+2024), sequencing of 33 different types of cancer (Weinstein et al., 2013), and imaging of cells
+under thousands of perturbations (Sypetkowski et al., 2023) to name a few. Different than the
+classical paradigm, these datasets call for an _empiricist_ view, starting with exploratory data-driven
+investigations. The new challenge is that the immense size of these datasets prohibits scientists
+from simply “looking at the data and finding out what is interesting”. Even beyond atlases, in
+
+
+1
+
+
+our motivating example from experimental ecology, fine-grained social interactions between many
+individuals are complex yet critical for understanding the spread of a disease (Finn et al., 2019).
+Hopefully, data processing can be dramatically accelerated with modern machine learning, e.g.,
+relying on pre-trained foundational models and leveraging artificial predictions within causal
+inference pipelines (Cadei et al., 2025). Still, scientists need to decide what to “look at” a-priori
+before to validly annotate the data and infer causal relationships, potentially biasing the analyses
+towards recurrently studied behaviors, phenomena known as the “Matthew effect” (Merton, 1968)
+or informally as “rich-get-richer”: scientists are biased by prior successful investigations.
+
+
+In this paper, we characterize differences and synergies between the classical _rationalist_ view and
+the emerging _empiricist_ one and propose a method to identify statistically significant effects in exploratory experiments, formally grounding it with the language of statistical causality, see Figure 1.
+We formulate the problem on experimental data, where a treatment is administered randomly and
+the possible effects are measured indirectly, e.g., via imaging or other raw observations. Instead of
+requiring scientists to formulate treatment effect hypotheses, label some data, and train a model to
+extend labels to the whole dataset (i.e., the rationalist view (Cadei et al., 2024; 2025)), we propose
+to train a sparse autoencoder (SAE) on the representation of a foundation model and generate
+data-driven effect hypotheses interpreting the significant effects on the neural representations (i.e.,
+empiricist approach). In this new paradigm, the main challenge is that, if the SAE is not _perfectly_
+disentangled (Elhage et al., 2022), any neuron minimally entangled with the true effect may appear
+significantly treatment-responsive, challenging the results interpretation. To address it, we propose
+a novel recursive stratification technique to iteratively correct the effect on entangled neurons.
+
+
+Looking at the data before committing to any hypothesis, we overcome the Matthew effect, enriching the rationalist view in a data-driven way. We propose to work with pretrained foundation models,
+training SAEs directly on the target experimental data. This is important because pretrained foundation models can be biased as well, which is problematic for drawing scientific conclusions (Cadei
+et al., 2024). Instead of directly testing a single hypothesis, our approach enables to preliminary
+explore thousands of potential effects in a semantically expressive latent space, still allowing the
+domain experts to interpret, judge and eventually test them a posteriori. This is in stark contrast with
+preliminary empiricist approaches in causality like “causal feature learning” (Chalupka et al., 2017),
+which only commits to a single hypothesis by discrete clustering. Our contributions are:
+
+
+- Within the statistical causality framework, we formally **differentiate rationalist and empiricist**
+**approaches** to causal inference, highlighting their complementary strengths and limitations.
+
+
+- We propose a **novel empiricist methodology** building on foundation models and sparse autoencoders. We characterize the statistical challenges in multiple hypothesis testing to discover treatment effects over neural representations in the _paradox_ _of_ _exploratory_ _causal_ _inference_ (ours).
+Then, we introduce _Neural_ _Effect_ _Search_, a novel iterative hypothesis testing procedure to overcome such challenges.
+
+
+- We showcase in both semi-synthetic (real images with controlled causal relations) and a real-world
+trial in experimental ecology that our approach is capable of identifying the treatment effects in
+a exploratory experiment. To the best of our knowledge, this is the **first** **successful** **application**
+of sparse autoencoders to causal inference, tailored to the analysis of scientific experiments.
+
+
+2
+
+
+2 TREATMENT EFFECT ESTIMATION IN RANDOMIZED CONTROLLED TRIALS
+
+
+**Notation.** _In_ _the_ _paper,_ _we_ _refer_ _to_ _random_ _variables_ _as_ _capital_ _letters_ _and_ _their_ _realizations_ _as_
+_lowercase letters._ _Matrices are referred to as upper-case, boldface letters._
+
+
+Figure 2: Exemplary graphical models for randomized controlled trials to infer the treatment effect
+(in light gray the observed variables). In classic **Causal Inference (left)**, both the treatment _T_ and
+outcome of interest _Y_ are observed and unconfounded. In **Prediction-Powered Causal Inference**
+**(center)**, _Y_ is only measured indirectly via a complex high-dimensional measurements _X_, partially
+labeled. The missing _Y_ are retrieved from _X_, training a predictive model on the annotated data. In
+**Exploratory Causal Inference (right)**, the affected outcome _Y_ is unknown, still measured within
+_X_, from which a model aims to identify it.
+
+**Causal** **Inference.** Causal Inference aims to quantify the effects of an intervention on a certain
+variable _treatment_ on some _outcome_ variables of interest, see Figure 2 (left). For simplicity, we
+consider a binary treatment _T_ = _{_ 0 _,_ 1 _}_ (e.g., taking a placebo or a drug) and outcome variables
+_Y_ _∈{_ 0 _,_ 1 _}_ _[r]_ (e.g., binary indicators for symptoms, biomarkers, or clinical events). While continuous extensions would be interesting, we focus on discrete outcomes since continuous concepts in
+SAEs are not well understood yet (Quirke et al., 2025). At population level we aim to estimate the
+_Average Treatment Effect_ (ATE):
+
+_τ_ = E[ _Y_ ( _T_ = 1) _−_ _Y_ ( _T_ = 0)] _,_ (1)
+
+where _Y_ ( _T_ = 1) and _Y_ ( _T_ = 0), or _Y_ (1) and _Y_ (1) for short, denote the potential outcomes under
+treatment and control (Rubin, 1974) (equivalently _Y |do_ ( _T_ ) = 1 and _Y |do_ ( _T_ ) = 0 according to
+Pearl (2009)). Estimating _τ_ is challenging because, for each individual, only one potential outcome
+is factually observed—the one under the received treatment—so the counterfactual is missing
+(fundamental problem of causal inference (Holland, 1986)). This problem is mitigated in the
+sciences by performing, whenever possible, a _Randomized_ _Controlled_ _Trial_ (RCT). By randomly
+assigning the treatment (i.e., _T_ has no causes), we prevent spurious correlations between the
+treatment and any other cause _W_ _∈_ R _[q]_ of the outcome (no confounders), allowing to (statistically)
+identify the ATE with the associational difference, i.e.,
+
+_τ_ = E[ _Y_ _| T_ = 1] _−_ E[ _Y_ _| T_ = 0] _,_ (2)
+
+under standard causal assumptions (Rubin, 1986) of consistency (observing _T_ = _t_, then _Y_ = _Y_ ( _t_ )),
+and no interference across individuals (i.e., all individuals are independent samples from the population, and the treatment assignment to the individual _i_ does not affect individual _j_ ). It follows that the
+difference between the treated and control groups’ sample means is already an unbiased estimator
+of the ATE. Nonetheless, more sophisticated estimators such as Augmented Inverse Propensity
+Weighting (AIPW (Robins et al., 1994)) can achieve lower variance and thus greater efficiency.
+
+
+**Prediction-Powered** **Causal** **Inference** **and** **the** _**rationalist**_ _**approach**_ **.** Assume that _Y_ is latent
+and not observed directly. Instead, we observe it indirectly within high-dimensional measurements
+other (latent) outcome causes _X_ _∈X_ _⊆_ R _[p]_, capturing all the affected outcome information, i.e., _W_ _∈_ R _[q]_ . In our motivating example, let _H Y_ ( _Y_ representing a well-defined _|X_ ) = 0, mixed with the
+behavior of interest and _X_ its video recording, for which we don’t have a perfect behavior classifier
+yet. Prior work by Cadei et al. (2024; 2025) showed how to train a model on partially labeled data
+or similar experiments to predict factual outcomes _Y_ [ˆ] _≈_ _Y_ from _X_ and then use them for causal
+inference. For simplicity, we assume that _T_ is not directly observable in _X_, a common practice in
+double-blind randomized trials (e.g., neither the patient nor the doctor analyzing the results knows
+which treatment was assigned). The set-up is illustrated in Figure 2 (center). Both Causal Inference
+and Prediction-Powered Causal Inference represent _rationalist_ approaches in scientific discovery,
+ignoring the hypothesis generation preliminary, i.e., data-driven _Y_ definition.
+
+
+3
+
+
+**Exploratory Causal Inference and the** _**empiricist approach**_ **.** The rationalist approaches suffer the
+Matthew effect (Merton, 1968), narrowing the effect hypotheses on the outcome of prior successful
+trials. In this paper, we consider the setting where experiments are _exploratory_, which we informally
+model as the scientists having no or partial _a_ _priori_ knowledge of what the latent effect may be.
+This is shown in Figure 2 (right), with _Y_ representing the unobserved and unknown latent factors
+affected by the treatment T and measure in _X_ . In principle, one may consider the pixels themselves
+as influenced by the treatment. We instead consider the ground truth _Y_ to be the _coarsest_ possible
+abstraction of the treatment effect in _X_ (Rubenstein et al., 2017; Chalupka et al., 2017). In other
+words, [ _Y, W_ ] is the minimal and sufficient representation for _X_ (Achille and Soatto, 2018; Fumero
+et al., 2023) that renders the treatment independent from the observations, i.e., _T_ _⊥⊥_ _X|_ [ _W, Y_ ],
+where only _Y_ is causally affected by a controlled intervention on _T_ . With a slight abuse of notation,
+we do not need to assume that such _Y_ exists, so _r_ can be zero if the treatment has no effect at all.
+Our goal is to propose candidate effects _Y_ to the scientists in a purely data-driven way, discovering
+significant statistics that differentiate the treated and control populations. It is important to remark
+that we do not interpret these statistics as necessarily scientifically relevant. The reason is that,
+when working with high-dimensional data, there can be irrelevant effects, i.e., visible treatment and
+(finite sample) experiment design biases. Our approach is to identify _all_ significant statistics and
+leave the interpretation to the domain experts. The empiricist view should not replace the rationalist
+one, but enrich it with additional data-driven hypotheses.
+
+
+3 EXPLORATORY CAUSAL INFERENCE VIA NEURAL REPRESENTATIONS
+
+
+To detect treatment effects when only high–dimensional indirect outcome measurements _X_ are
+available, we turn these raw observations into analyzable measurements. We first pass samples _x_
+through a pretrained foundation model (FM) (Bommasani et al., 2022), obtaining representations
+_h_ = _ϕ_ ( _x_ ) _∈_ R _[d]_ whose geometry captures semantically meaningful regularities (Amir et al., 2022;
+Valeriani et al., 2023). Throughout, we assume the FM is _sufficient_ _for_ _the_ _outcome_ _information_
+(Achille and Soatto, 2018), i.e., _I_ ( _X, Y_ ) = _I_ - _ϕ_ ( _X_ ) _, Y_ �, so working in _h_ preserves exactly
+the information about the (unknown) outcome factors _Y_ that is present in the raw data. Under
+sufficiency, any arm difference that exists in _X_ is detectable in representation space, making _h_ a
+principled surrogate for measurement.
+
+
+**From FM features to a measurement dictionary.** While FM features are semantically structured,
+individual coordinates in _h_ generally not align with human–readable concepts (Bricken et al., 2023).
+We therefore _reparameterize_ the representation into a sparse, interpretable measurement dictionary
+using a sparse autoencoder (SAE) (Bricken et al., 2023; Huben et al., 2024). Intuitively, the SAE expresses each _h_ as a sparse linear combination of atoms that behave like measurable channels; sparsity
+biases solutions toward localized, approximately monosemantic features that scientists can inspect
+a posteriori. _sparse_ code _z_ Given foundation model’s features _∈_ R _[d]_ and reconstructs _h_ linearly: _h ∈_ R _[d]_, the SAE computes a high–dimensional but
+
+_z_ = _f_ ( _h_ ) = _g_           - **E** _[⊤]_ _h_ + _be_           - _,_ _h_ ˆ = **D** _z_ + _bd,_ (3)
+
+
+where **E** _,_ **D** R _[d][×][m]_ are respectively the encoder, and decoder linear maps, _be, bd_ R _[m]_ are the
+learnable biases, _∈_ and _g_ : R _[m]_ _→_ R _[m]_ is the encoder nonlinearity (Bricken et al., 2023). _∈_ Training
+minimizes a reconstruction loss with a sparsity penalty _S_ weighted _λ ≥_ 0, i.e.,
+
+_D,z_ min _≥_ 0 [E]               - _∥h −_ **D** _z −_ _bd∥_ 2 [2]               - + _λ S_ ( _z_ ) _._ (4)
+
+Thereafter, each input can be summarized as _h_ _≈_ _bd_ + [�] _j_ _[z][j][d][j]_ [,] [where] _[∥][z][∥]_ [0] _≪_ _d_ and
+
+**D** = [ _d_ 1 _, . . ., dm_ ]. This turns the FM representation into a large dictionary of interpretable
+channels: each coordinate _zj_ serves as a putative detector of a simple attribute, with still some
+inevitable leakage (Huben et al., 2024).
+
+
+**Monosemanticity,** **leakage,** **and** **entanglement.** In exploratory experiments, we would like each
+SAE code coordinate to behave like a single, human–readable measurement channel for a simple
+outcome factor. When this happens, a scientist can read off “what changed” from the few activated
+codes. In practice, however, codes often _leak_ across factors: one neuron can respond weakly to
+several distinct attributes, i.e., weak _polysemanticity_ and corresponding _entanglement_ (Locatello
+et al., 2019). We need a minimal language to talk about (i) the direction in code space associated
+
+
+4
+
+
+with a factor and (ii) how widely those directions spill across neurons. Let _Z_ _∈_ R _[m]_ be SAE codes
+and _Y_ = ( _Y_ 1 _, . . ., Yr_ ) the (unknown) binary outcome factors with _m_ _r_ . To define the leakage
+_≫_
+set and index, we first define the concept _Yk_ neural representation as:
+
+
+_vk_ := E[ _Z_ _do_ ( _Yk_ = 1) ] E[ _Z_ _do_ ( _Yk_ = 0) ] R _[m]_ _k_ 1 _, ..., r_ _._ (5)
+_|_ _−_ _|_ _∈_ _∀_ _∈{_ _}_
+
+and we say that the neuron _Zj_ with _j_ 1 _, ..., m_ is _activated_ by the factor _Yk_ if ( _vk_ ) _j_ _ε_ _>_ 0.
+_∈{_ _}_ _|_ _|_ _≥_
+When the neural effect representations _{vk}k_ _[r]_ =1 [are] _[ sparse]_ [ and largely] _[ disjoint]_ [across coordinates,]
+each effect factor “lights up” only a few neurons, and different factors rely on different neurons.
+
+
+**Definition 3.1** (Leakage set and index) **.** _Fix a threshold ε >_ 0 _._ _In a ECI problem with effect neural_
+_representations {vk}k_ _[r]_ =1 _[, we define the]_ [ leakage set] _[ and]_ [ leakage index] _[, respectively, as]_
+
+
+(6)
+_m_ _[.]_
+
+
+_ε_ =
+_A_
+
+
+_r_
+
+
+- _j_ : ( _vk_ ) _j_ _ε_ _,_ _ρε_ :=
+
+_{_ _|_ _| ≥_ _}_ _[|A]_ _m_ _[ε][|]_
+_k_ =1
+
+
+If _ε_ _r_, i.e., _ρε_ 0, it indicates that many neurons respond to multiple factors, i.e., polyse_|A_ _|_ _≫_ _≫_
+manticity, whereas monosemanticity with respect to _Y_ implies _ε_ = _r_, i.e., _ρε_ 0.
+_|A_ _|_ _≈_
+
+**Codes** **as** **statistical** **measurement** **channels.** Under FM sufficiency and an (approximately)
+monosemantic SAE, it becomes natural to pose causal questions at the level of individual codes.
+If the true affected outcomes _Y_ are perfectly localized in disjoint subsets of coordinates of _Z_, then
+one can test each coordinate for a treatment–control mean shift using a two–sample _t_ –test, applying
+Bonferroni adjustment (Bonferroni, 1936) to control the family–wise error rate at _α_ regardless of
+the number of tests _m_ . This provides an idealized measurement interface: we can scan _Z_ for treatment–responsive channels and later interpret significant coordinates via the dictionary atoms _dj_ .
+
+
+**Challenge:** **entangled** **effect** **representations.** The above picture breaks down when leakage occurs, as any neuron entangled with the true affected outcome will eventually be identified as significantly activated, while _ε_ = _O_ ( _m_ ) _r_, challenging any interpretation. Intuitively, entangled
+_|A_ _|_ _≫_
+neurons that are primarily assigned to other concepts still activate differently depending on _Y_, so
+with more powerful tests (larger sample sizes or stronger causal effects), they would be deemed significantly affected. Thereafter, classical multiplicity correction does not rescue interpretability here,
+leading to the paradox of Exploratory Causal Inference:
+
+
+We formalize these two phenomena below. Let _τj_ denote the treatment effect on code _j_ .
+
+
+**Theorem** **3.1** (Significance level collapse with sample size) **.** _Suppose_ _at_ _least_ _ρεm_ _neurons_
+_have nonzero effect_ _τj_ _ε >_ 0 _. Via multiple testing, regardless of the Bonferroni adjustment,_
+_|_ _| ≥_
+
+            -            Pr _{all j_ _∈Aε are rejected}_ _→_ 1 _as n →∞,_
+
+_and the number of rejections converges to ρεm in probability._
+
+
+_Proof sketch._ For each _j_, the _t_ –statistic is asymptotically normal with noncentrality _λj_ = _n τj/σ_ .
+
+_[√]_
+The Bonferroni cutoff, which determines the signifcance of _τj_, grows like 2 log _m_ ; this cutoff
+
+_[√]_
+is dominated by the growth in expectation of _τj_ ( _[√]_ _n_ as _n_ ). Hence, any _j_ with _τj_ = 0 is
+_→∞_
+eventually rejected. Without Bonferroni correction, the significance cutoff is constant. See full
+proof in Appendix A.
+
+
+**Theorem 3.2** (Significance collapse with effect magnitude) **.** _Fix n_ _<_ _and let τj_ ( _s_ ) = _s γj_
+_∞_
+_with s >_ 0 _._ _Via multiple testing, regardless of the Bonferroni adjustment,_
+
+
+            -            Pr _{all j_ _∈Aε are rejected}_ _→_ 1 _as s →∞,_
+
+
+5
+
+
+_and the number of rejections converges to ρεm in probability._
+
+
+_Proof sketch._ The noncentrality _λj_ ( _s_ ) = _n sγj/σ_ grows linearly in _s_, while the cutoff, even
+
+_[√]_
+with Bonferroni correction, is fixed for fixed _m, n_ ; every _γj_ = 0 is eventually rejected. Details
+in Appendix A.
+
+
+_Z_ **Numerical** = [ _ZA, Z_ **illustration.** _B_ ] R _[m]_ whereLet _T_ _Z∼A_ Bernoulli(0= _Y_ (the _._ effect5), _Y_ principal _|_ _T_ = _t_ channel) _∼N_ ( _τt,_ and 1) (single _ZB_ _Y_ effect),= _y_ and
+�0 _._ 01 _y_ **1** _m−_ 1 _,_ _I∈m−_ 1� (entangled channels). As shown in Figure 3 for 10 seeds, _|_ increasing ei- _∼_
+_N_
+ther _n_ or _τ_ leads all the multiple testing to flag all the weakly entangled _ZB_ coordinates as significant, despite their negligible semantic relevance. This motivates the disentangling, stratified testing
+procedure introduced next (Section 4).
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+10 [2] 10 [3] 10 [4] 10 [5] 10 [6]
+
+Number of samples ( _n_ )
+
+
+0 2 4 6 8 10
+Effect size ( _k_ )
+
+
+Bonferroni FDR t-test Ground truth
+
+
+Figure 3: **The** **Paradox** **of** **Exploratory** **Causal** **Inference** : Increasing the power of the test, the
+effect on any outcome-entangled code becomes significant, regardless of its main interpretation.
+
+
+4 NEURAL EFFECT SEARCH
+
+
+To mitigate the multi-test significance collapse with entangled representation, i.e., Paradox of Exploratory Causal Inference, we propose NEURALEFFECTSEARCH (NES), a novel causally principled algorithm to disentangle the leaked effects by recursive stratification:
+
+
+**Algorithm 1** Neural Effect Search (NES)
+
+
+1: **function** NEURALEFFECTSEARCH( _T, Z, α,_ S = ∅)
+3:4:2: **for** _m ←_ each neuron(ˆ _τj_ # _, p{j j_ ) _←_ : _j_ _∈_ N _/ j_ EURALS _∈/ }_ S **do** EFFECTTEST( _T, Z, j,_ S) _▷_ number of hypotheses to test _▷pj_ tests _H_ 0 : _τj_ = 0
+5: **end for**
+6: R _j_ _/_ S : _pj_ _< α/m_, ordered by _τ_ ˆ _j_ (desc) _▷_ filter significant neurons
+7: **if** _←{_ R = ∅ _∈_ **then** _}_ _|_ _|_
+8: **return** S
+9: **else**
+10: **return** NEURALEFFECTSEARCH( _T, Z, α,_ S R1)
+_∪_
+11: **end if**
+12: **end function**
+
+
+where NEURALEFFECTTEST (Algorithm 2) is the procedure for multi-hypothesis testing on all
+the neurons _j_, by stratification (and potentially arm-wise residualization) over the already retrieved
+effects S. See Figure 4 for a simplified illustration of NES procedure, Appendix B for NEURALEFFECTTEST description and Appendix C for a minimal Python implementation snippet. The key idea
+is that if we test all neurons simultaneously, vanilla multiple testing cannot distinguish whether a
+neuron carries its own causal effect or merely leaks information about another concept. By contrast,
+NES first recovers the most prominent effect by its most representative neuron, then it _controls_ its
+effect in subsequent tests, preventing the ECI paradox, continuing iteratively. Since this is a multiple
+testing setting, in Line 6 we still perform Bonferroni correction by dividing the significance level _α_
+by _m_, preventing I type error, i.e., false neural effects discoveries. In practice, if the sample size is
+
+
+6
+
+
+very small, one can make the test less conservative by relaxing the correction (which would return
+more, possibly false positives for the scientist to review).
+
+
+(a) Estimate independently all the
+neural effects ( _τZ_ 1, _τZ_ 2, _τZ_ 3 ); select
+the strongest ( _τZ_ 1 ).
+
+
+(b) Re-estimate the remaining neural effects controlling for the previous discovery ( _Z_ 1); select the
+strongest ( _τZ_ 3 ).
+
+
+(c) Iterate until no significant neural effects are measured, and return all the selected neurons ( S =
+_{Z_ 1 _, Z_ 3 _}_ ).
+
+
+Figure 4: **Illustrative** **example** **of** **the** **Neural** **Effect** **Search** (NES) recursive procedure with two
+latent variables _Y_ 1, _Y_ 2 affected by the treatment and three measurement channels _Z_ 1, _Z_ 2, _Z_ 3, e.g.,
+SAE codes, with _Z_ 1 principally aligned with _Y_ 1 and _Z_ 3 with _Y_ 2 (see principal alignment formal
+definition in Assumption A.2). At each iteration stratifying over the already selected neurons, e.g.,
+_Z_ 1 after the first iteration, acts as a proxy controlling for the mediated effects by the corresponding
+(true) latent effects already identified, i.e., _Y_ 1.
+
+
+**Theorem** **4.1** (Consistency of Neural Effect Search) **.** _Suppose_ _the_ _outcome_ _neural_ _represen-_
+_tation, i.e., SAE codes, captures and almost disentangles the r treatment effects (still allowing_
+_for broad effect leakage)._ _Then, as n →∞, the NES’ output Sfinal satisfies_
+
+            -             Pr _Sfinal_ = _j_ 1 _, . . ., jr_ 1 _,_
+_{_ _}_ _−→_
+
+_where each jk_ _is a neuron coordinate principally aligned with a distinct affected outcome Yk._
+
+
+_Proof Sketch._ At the first round, entanglement makes several coordinates look affected; nevertheless, the coordinate most aligned with some true direction _vk_ maximizes the treatment effect and,
+under Bonferroni control, is selected with probability _→_ 1 as _n_ _→∞_ . Next, (pooled) stratification
+removes the contribution of the discovered direction from every coordinate: (i) its leakage into other
+neurons averages out in expectation, and (ii) the post-treatment conditioning transmitting collider
+bias get bounded. Consequently, all remaining adjusted test statistics are mean-zero (up to vanishing error). By repeating this argument, each iteration peels off one undiscovered principal direction
+until all _r_ are recovered; thereafter no coordinate exhibits a nonzero mean effect and the procedure
+halts. Hence Pr�Sfinal = _j_ 1 _, . . ., jr_ - 1 and E[ Sfinal ] _r_ . Further efficiency results, without
+_{_ _}_ _→_ _|_ _|_ _→_
+loosing consistency, can be obtained with arm-wise effect residualization by the already selected
+neurons. See Appendix A for the complete formulation, proof and hypotheses discussion.
+
+
+**Discussion.** NES recovers the _r_ effect concepts in probability and terminates, in sharp contrast
+with the paradox described earlier. While standard multi-hypothesis tests collapse with increasing
+power, i.e., _n_ and _τ_, proposing _all_ entangled neurons with _Y_ as significant effects, NES avoids
+this pitfall by recursively stratifying. Each iteration removes the spurious signal caused by leakage
+from already identified effects, and bounding the collider bias, only the unidentified effect factor
+remains detectable. In this sense, NES does not merely test for effects: it _disentangles_ the effects
+(under Assumptions A.1-A.3), identifying and adjusting the estimation of one true treatment effect
+factor at a time until the entire effect subspace is recovered. Thus, NES can be interpreted both as a
+multiple-testing correction method robust to entanglement and as a principled effect disentanglement
+algorithm.
+
+
+7
+
+
+5 RELATED WORKS
+
+
+**Interpretable Heterogeneous Treatment Effect Estimation.** A closely related line of work is the
+_empirical_ discovery of treatment effect heterogeneity across covariates _W_ . Methods such as causal
+trees, forests, and decision rules ensembles (Athey and Imbens, 2016; Athey et al., 2019; BargagliStoffi et al., 2020) identify subpopulations with different responses, recognizing that pointwise estimation of the Conditional Average Treatment Effect (CATE) is almost impossible to test, and still
+difficult and risky to interpret. Since _W_ is lower-dimensional, interpretability of these partitions or
+rules is crucial, and the field has developed around making this empirical exploration scientifically
+meaningful. Our work is analogous in spirit: instead of asking _who_ is affected (heterogeneity over
+_W_ ), we ask _what_ is affected (discovering affected outcomes _Y_ ) when the outcome space itself is
+high-dimensional and initially unknown.
+
+
+**Causal abstractions and representations.** In the line of work of causal abstractions, Visual Causal
+Feature Learning (VCFL, Chalupka et al., 2014) was introduced to discover interventions in data
+rather than outcomes. In scientific trials, however, treatments are fixed by design, and the challenge
+is to recover their effects from complex outcome measurements. Causal Feature Learning (CFL,
+Chalupka et al., 2017) extends this to outcome clustering by grouping micro- to macro-variables
+using equivalence classes of _P_ ( _X_ _|_ _do_ ( _T_ )). This requires density estimation in high-dimensional
+spaces, which is generally infeasible. While clustering other metrics may be possible, CFL commits
+to a single grouping rule, while we find all statistically significant ones. Another line of work tackles
+the discovery of causal variables from high-dimensional observations (Sch¨olkopf et al., 2021). Closest in spirit to our setting are interventional approaches (Varici et al., 2023; 2024; Zhang et al., 2023;
+Yao et al., 2025), which, even with all the necessary extra assumptions, would only offer identification results for the experimental settings _W_ and not the outcome (i.e., the component invariant to the
+intervention (Yao et al., 2025)). Therefore, they can not be applied to exploratory causal inference
+because they cannot discover outcome variables.
+
+
+**Scientific discovery via SAEs.** A related line of work uses SAEs to decompose _polysemantic_ hidden
+representations in foundation models into more _monosemantic_ units that align with single concepts
+(Bricken et al., 2023; Templeton et al., 2024; Huben et al., 2024; Papadimitriou et al., 2025). Although SAEs were initially proposed as an interpretability tool (Bricken et al., 2023), a growing
+body of negative results, including spurious interpretability on random networks (Heap et al., 2025),
+failures to isolated atomic concepts (Leask et al., 2025; Chanin et al., 2025), and limited downstream
+benefits (Wu et al., 2025), casts doubt on whether SAE features faithfully reflect underlying mechanisms rather than post-hoc artifacts. Despite these interpretability concerns, recent work shows
+that SAEs can still be useful for generating scientific hypotheses from high-dimensional data (Peng
+et al., 2025). For example, _HypotheSAEs_ (Movva et al., 2025) leverage SAEs to surface humanunderstandable patterns correlated with target outcomes (e.g., engagement levels), which researchers
+can then treat as hypotheses for follow-up study. Our setting is related but distinct: whereas these
+approaches focus on correlations and do not provide statistical procedures to test the significance of
+the unsupervised discoveries, we target _causal_ effects and develop inference to assess which highdimensional outcomes _Y_ are affected, offering principled support for exploratory causal claims.
+
+
+6 EXPERIMENTS
+
+
+We validate our analyses (significance collapse paradox, and NES consistency) in two complementary settings: a semi-synthetic benchmark where ground-truth causal effects are known, and a realworld randomized trial from experimental ecology.
+
+
+6.1 SEMI-SYNTHETIC BENCHMARK
+
+
+We simulated a family of RCTs _{Ti, Wi, Yi}i_ _[n]_ =1 [,] [relating] [both] [the] [individual] [covariates] [and]
+outcomes one-to-one with specific attributes in the CelebA (Liu et al., 2018) dataset, e.g.,
+wearing ~~h~~ at and eyeglasses, and then assigned a random image _Xi_ from the dataset perfectly matching such attributes. Given the corresponding random sample _{Ti, Xi}i_ _[n]_ =1 [we (i) trained]
+a SAE over the image representations encoded by SigLIP (Zhai et al., 2023), and (ii) tested NES
+for effect discovery against vanilla statistical tests ( _t_ -test, FDR (Schweder and Spjøtvoll, 1982),
+Bonferroni) and top- _k_ effects selection. For quantitative evaluation, we first assessed SAE monose
+
+8
+
+
+manticity with respect to the considered CelebA attributes (see Figure 8), and extracted the ground
+truth neurons referring to _Y_ . Then, for each effect discovery, we computed Recall, Precision, and
+Intersection over Union (IoU) with respect to them. Full details about the data generating procedure,
+training, and evaluation are reported in Appendix D, and the main results ( _r_ = 2) are summarized in
+Figure 5. Additional experiments testing (i) the required assumptions, (ii) method consistency with
+extensive ablations, and (iii) additional baselines are reported in Appendix E.
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+30 250 500 5000
+N
+
+
+30 250 500 5000
+N
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|~~0~~.~~1~~|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|
+
+
+_τ_
+
+
+30 250 500 5000
+N
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+|~~0~~.~~1~~|0.2<br>0.5<br>0.8|0.2<br>0.5<br>0.8|
+
+
+_τ_
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+|0.1|0.2<br>0.5<br>0.8<br>_τ_|0.2<br>0.5<br>0.8<br>_τ_|
+
+
+NES Bonferroni FDR _t_ -test top- _k_ when _r_ -known
+
+
+Figure 5: **Semi-synthetic** **benchmark.** Precision, Recall, and IoU of different testing procedures
+across sample size _N_ (top) and effect size _τ_ (bottom). NES consistently achieves the best trade-off,
+avoiding the significance collapse of standard corrections.
+**Results.** Increasing the power of the tests (increasing the sample size _n_ or effect magnitude _τ_ ), all
+the methods eventually retrieve the true significant effects, i.e., Recall _→_ 1. However, while all
+the baselines drop the Precision and corresponding IoU (Paradox of Exploratory Causal Inference),
+NES is the only method that mitigates such entanglement biases. As expected, the Paradox doesn’t
+emerge with very small sample ( _n_ = 30) and effect regime ( _τ_ = 0 _._ 1), and more explorative approaches, as vanilla _t_ -test or top- _k_ selection, could be preferred, at the price of potentially more
+false significant hypotheses, i.e., Precision _≪_ 1. With a yellow dot, we report the performance of
+each method assuming the number of affected outcomes _r_ is known. NES still manages to find
+both effects most of the time. Instead, all the baseline methods fail to reach Precision and Recall
+above 0 _._ 5: they succeed in retrieving the most significant effect (equivalent to the first step in NES),
+but then get confounded by the entanglement and miss the second one. While this is clearly a toy
+experiment, this is undesirable. For example, if in real trials there are multiple effects with different
+magnitudes (e.g., the positive effect of a drug on the health metric of interest and rare side effects)
+the leakage of strong effects may prevail over the weaker ones, which would then be missed.
+
+
+6.2 REAL-WORLD RANDOMIZED TRIAL FROM EXPERIMENTAL ECOLOGY
+
+
+ISTANT (Cadei et al., 2024) is an ecological experiment where ants from the same colony are
+randomly exposed to a treatment or a control substance and continuously filmed in triplets in a closed
+environment to study the concept of Social Immunity. The biologists are interested in identifying
+which latent behaviors are significantly affected by treatment. According to previous analysis, we
+first encoded each frame in the trial with DINOv2 (Oquab et al., 2023), and then we trained a SAE
+directly on the trial data. NES is then applied without Bonferroni adjustment due to the small sample
+size ( _n_ = 44 videos) to discover treatment-sensitive codes, and only two neurons are returned.
+
+
+**Results.** Figure 6 shows a qualitative interpretation of such neurons, by filtering the most and least
+activated clips in the dataset. In agreement with the previous analysis on the dataset (Cadei et al.,
+2024; 2025), the first neuron retrieved (code 394) seems to separate _grooming_ events, already
+measured as significantly affected by the treatment in any previous rationalist approach to the experiment, i.e., actually manually annotating and testing for it. Quantitatively, such a neuron is exactly
+the most predictive neuron for grooming event (F1- _score_ = 0 _._ 398) out of all the 4 608 SAE’s codes,
+
+
+9
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|Biologist Judgement: grooming ✓|Biologist Judgement: grooming ✓|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|Biologist Judgement: grooming ✓|Biologist Judgement: grooming ✓|
+
+
+|tion for Neuron 394|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|Biologist Judgement: grooming|Biologist Judgement: grooming|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|Biologist Judgement: grooming|Biologist Judgement: grooming|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|iologist Judgement: background ✓|iologist Judgement: background ✓|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|iologist Judgement: background ✓|iologist Judgement: background ✓|
+
+
+|tion for Neuron 550|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|iologist Judgement: background|iologist Judgement: background|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|iologist Judgement: background|iologist Judgement: background|
+
+
+Figure 6: **Exploratory** **Causal** **Inference** **for** **Experimental** **Ecology.** Without any knowledge of
+the behaviors of interest, our procedure retrieves two significant treatment effects, interpreted as (i)
+grooming behavior and (ii) finite sample experimental design error, in full agreement with previous
+literature.
+
+
+confirming the consistent results of our pipeline. The imperfect F1- _score_ _<_ 1 suggests the possibility of other entangled effects or broader representation, prohibiting linking the treatment effect
+on the interpreted outcome with the effect on such a neuron without further labeling. The second
+neuron activated (code 550) represents a black position marking in the background, i.e., a specific
+black color marking for dish palette positioning on the background (top right outline). Indeed, all
+the videos recorded with such visible position marking (top left dish palette in the first 4 batches of
+recordings) are always assigned to the same treatment by chance due to the small experiment size,
+as discussed in the annotation bias by Cadei et al. (2024). Quantitatively, it is exactly the most predictive neuron for such a characteristic (F1- _score_ = 0 _._ 568). The fact that the model also identifies
+the effect of the treatment assignment on the background due to the small sample size is a strength
+of the method: it is still a statistically significant signal and should not be ignored, even if not
+interesting directly as a biological effect. It is indeed the domain experts’ duty to select which signal
+is scientifically relevant or just useful to eventually (not necessarily) improve the experiment design.
+
+
+7 CONCLUSION
+
+
+In this paper, we have discussed how foundation models and SAEs can address the challenges of
+exploratory causal inference, serving as learned measurement devices. A key challenge is that SAE
+neurons may not map one-to-one onto high-level concepts, and even weak or mixed associations
+propagate the dependency on the treatment. This means that many neurons can be activated, making
+the interpretation difficult as they do not encode a single concept, and they activate more with
+larger sample sizes or stronger effects. We address this issue with Neural Effect Search, a statistical
+hypothesis testing procedure that iteratively controls for the biased dependency between neurons
+after they have been selected. Our experiments on semi-synthetic and real-world randomized
+trials are encouraging: our method uncovers both scientifically relevant effects and, when present,
+interpretable finite sample associations, e.g., background marking, that experts can readily dismiss.
+Overall, we view this work as a first step toward AI-driven efficiency gains in exploratory data
+science, where foundation models can “look at massive amounts of data first” and then domain
+experts can identify which patterns have scientific value.
+
+
+**Our** **approach** **has** **several** **limitations** . First, we strongly assume that the observed variables _X_
+adequately capture information about the unknown _Y_, i.e., data sufficiency. For example, shrinkage
+in a tumor is detectable via X-ray imaging, but, depending on the tumor type, a treatment may
+also reduce its metabolic activity, which is measured with PET scans. More complex measurement
+processes for _X_, e.g., multi-modal are a natural extension of our work. Furthermore, we assume
+
+
+10
+
+
+foundation models encode concepts linearly and that SAEs can approximately recover the effects.
+We believe the linear representation hypothesis (Park et al., 2023) is mild: even if current foundation
+models are imperfect, future iterations are likely to improve. The good “ _identifiability_ ” assumption
+is our strongest. Promising early work already exists (Cui et al., 2025; Hindupur et al., 2025), but
+the identifiability theory of SAEs is not currently as well understood as that of causal representations (Yao et al., 2025), e.g., still unclear how to deal with continuous concepts. In our paper, we
+took a more empirical and future-looking stance on improvements in SAEs, focusing on inevitable
+finite samples entanglement while leveraging pretrained foundation models. Lacking identifiability
+means that domain experts can today only use our method “as a rescue system for hypotheses
+they may have missed”, before properly annotating the data and following the rationalist approach.
+We hope that our work will serve as a practical motivation for future work on identifiability in
+foundation model representations and SAE.
+
+
+ACKNOWLEDGMENTS
+
+
+We thank the Causal Learning and Artificial Intelligence group at ISTA for the continuous feedback
+on the project and valuable discussions. We further acknowledge the Fourth Bellairs Workshop on
+Causal Representation Learning held at the Bellairs Research Institute, February 14 _/_ 21, 2025, and
+particularly the discussions with Chandler Squires, Dhanya Sridhar, Jason Hartford, and Frederick
+Eberhardt and further feedback from Judea Pearl. Riccardo Cadei is supported by a Google Research
+Scholar Award and a Google Google-initiated gift to Francesco Locatello. Tommaso Mencattini was
+supported by the ISTernship program. This research was funded in part by the Austrian Science
+Fund (FWF) 10.55776/COE12). It was further partially supported by the ISTA Interdisciplinary
+Project Committee for the collaborative project “ALED” between Francesco Locatello and Sylvia
+Cremer. For open access purposes, the author has applied a CC BY public copyright license to any
+author-accepted manuscript version arising from this submission.
+
+
+ETHICS STATEMENT
+
+
+All datasets used in this work are publicly available. In particular, the ISTAnt dataset (Cadei et al.,
+2024) was annotated and pre-processed by domain experts. Despite our method guarantees identification under untestable representation learning assumption (without supervision), any conclusion
+should not be interpreted as scientifically relevant without a domain expert’s interpretation. Additionally, since we cannot guarantee identifiability, it should only be used as a rescue system for
+hypotheses that may have been missed before committing to the rationalist approach, which is anyway necessary for inference, i.e., treatment effect estimation and uncertainty quantification.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+All the datasets we use are publicly available and experiment details are thoroughly detailed in Appendix D-E. A snipped Python implementation for the main algorithm is also presented in Appendix
+C.
+
+
+11
+
+
+REFERENCES
+
+
+Alessandro Achille and Stefano Soatto. Emergence of invariance and disentanglement in deep representations. _Journal of Machine Learning Research_, 19(50):1–34, 2018.
+
+
+Shir Amir, Yossi Gandelsman, Shai Bagon, and Tali Dekel. Deep vit features as dense visual descriptors, 2022. [URL https://arxiv.org/abs/2112.05814.](https://arxiv.org/abs/2112.05814)
+
+
+Susan Athey and Guido Imbens. Recursive partitioning for heterogeneous causal effects. _Proceed-_
+_ings of the National Academy of Sciences_, 113(27):7353–7360, 2016.
+
+
+Susan Athey, Julie Tibshirani, and Stefan Wager. Generalized random forests. _The Annals of Statis-_
+_tics_, 2019.
+
+
+Falco J Bargagli-Stoffi, Riccardo Cadei, Kwonsang Lee, and Francesca Dominici. Causal rule ensemble: Interpretable discovery and inference of heterogeneous treatment effects. _arXiv preprint_
+_arXiv:2009.09036_, 2020.
+
+
+Rishi Bommasani, Drew A. Hudson, Ehsan Adeli, Russ Altman, Simran Arora, Sydney von
+Arx, Michael S. Bernstein, Jeannette Bohg, Antoine Bosselut, Emma Brunskill, Erik Brynjolfsson, Shyamal Buch, Dallas Card, Rodrigo Castellon, Niladri Chatterji, Annie Chen, Kathleen
+Creel, Jared Quincy Davis, Dora Demszky, Chris Donahue, Moussa Doumbouya, Esin Durmus, Stefano Ermon, John Etchemendy, Kawin Ethayarajh, Li Fei-Fei, Chelsea Finn, Trevor
+Gale, Lauren Gillespie, Karan Goel, Noah Goodman, Shelby Grossman, Neel Guha, Tatsunori
+Hashimoto, Peter Henderson, John Hewitt, Daniel E. Ho, Jenny Hong, Kyle Hsu, Jing Huang,
+Thomas Icard, Saahil Jain, Dan Jurafsky, Pratyusha Kalluri, Siddharth Karamcheti, Geoff Keeling, Fereshte Khani, Omar Khattab, Pang Wei Koh, Mark Krass, Ranjay Krishna, Rohith Kuditipudi, Ananya Kumar, Faisal Ladhak, Mina Lee, Tony Lee, Jure Leskovec, Isabelle Levent,
+Xiang Lisa Li, Xuechen Li, Tengyu Ma, Ali Malik, Christopher D. Manning, Suvir Mirchandani,
+Eric Mitchell, Zanele Munyikwa, Suraj Nair, Avanika Narayan, Deepak Narayanan, Ben Newman, Allen Nie, Juan Carlos Niebles, Hamed Nilforoshan, Julian Nyarko, Giray Ogut, Laurel
+Orr, Isabel Papadimitriou, Joon Sung Park, Chris Piech, Eva Portelance, Christopher Potts, Aditi
+Raghunathan, Rob Reich, Hongyu Ren, Frieda Rong, Yusuf Roohani, Camilo Ruiz, Jack Ryan,
+Christopher R´e, Dorsa Sadigh, Shiori Sagawa, Keshav Santhanam, Andy Shih, Krishnan Srinivasan, Alex Tamkin, Rohan Taori, Armin W. Thomas, Florian Tram`er, Rose E. Wang, William
+Wang, Bohan Wu, Jiajun Wu, Yuhuai Wu, Sang Michael Xie, Michihiro Yasunaga, Jiaxuan You,
+Matei Zaharia, Michael Zhang, Tianyi Zhang, Xikun Zhang, Yuhui Zhang, Lucia Zheng, Kaitlyn Zhou, and Percy Liang. On the opportunities and risks of foundation models, 2022. URL
+[https://arxiv.org/abs/2108.07258.](https://arxiv.org/abs/2108.07258)
+
+
+Carlo Bonferroni. Teoria statistica delle classi e calcolo delle probabilita. _Pubblicazioni del R istituto_
+_superiore di scienze economiche e commericiali di firenze_, 8:3–62, 1936.
+
+
+Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, Tom Conerly, Nick
+Turner, Cem Anil, Carson Denison, Amanda Askell, Robert Lasenby, Yifan Wu, Shauna Kravec,
+Nicholas Schiefer, Tim Maxwell, Nicholas Joseph, Zac Hatfield-Dodds, Alex Tamkin, Karina
+Nguyen, Brayden McLean, Josiah E Burke, Tristan Hume, Shan Carter, Tom Henighan, and
+Christopher Olah. Towards monosemanticity: Decomposing language models with dictionary
+learning. _Transformer_ _Circuits_ _Thread_, 2023. [URL https://transformer-circuits.](https://transformer-circuits.pub/2023/monosemantic-features/index.html)
+[pub/2023/monosemantic-features/index.html.](https://transformer-circuits.pub/2023/monosemantic-features/index.html)
+
+
+Riccardo Cadei, Lukas Lindorfer, Sylvia Cremer, Cordelia Schmid, and Francesco Locatello. Smoke
+and mirrors in causal downstream tasks. _arXiv preprint arXiv:2405.17151_, 2024.
+
+
+Riccardo Cadei, Ilker Demirel, Piersilvio De Bartolomeis, Lukas Lindorfer, Sylvia Cremer, Cordelia
+Schmid, and Francesco Locatello. Prediction-powered causal inferences. _arXiv_ _preprint_
+_arXiv:2502.06343_, 2025.
+
+
+Krzysztof Chalupka, Pietro Perona, and Frederick Eberhardt. Visual causal feature learning. _arXiv_
+_preprint arXiv:1412.2309_, 2014.
+
+
+Krzysztof Chalupka, Frederick Eberhardt, and Pietro Perona. Causal feature learning: an overview.
+_Behaviormetrika_, 44(1):137–164, 2017.
+
+
+12
+
+
+David Chanin, James Wilken-Smith, Tom´aˇs Dulka, Hardik Bhatnagar, and Joseph Isaac Bloom. A
+is for absorption: Studying feature splitting and absorption in sparse autoencoders, 2025. URL
+[https://openreview.net/forum?id=LC2KxRwC3n.](https://openreview.net/forum?id=LC2KxRwC3n)
+
+
+Rayan Chikhi, T´eo Lemane, Rapha¨el Loll-Krippleber, Merc`e Montoliu-Nerin, Brice Raffestin, Antonio Pedro Camargo, Carson J Miller, Mateus Bernabe Fiamenghi, Daniel Paiva Agustinho, Sina
+Majidian, et al. Logan: planetary-scale genome assembly surveys life’s diversity. _bioRxiv_, pages
+2024–07, 2024.
+
+
+Sylvia Cremer, Sophie AO Armitage, and Paul Schmid-Hempel. Social immunity. _Current biology_,
+17(16):R693–R702, 2007.
+
+
+Jingyi Cui, Qi Zhang, Yifei Wang, and Yisen Wang. On the theoretical understanding of identifiable
+sparse autoencoders and beyond. _arXiv preprint arXiv:2506.15963_, 2025.
+
+
+Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec,
+Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, Roger Grosse, Sam McCandlish,
+Jared Kaplan, Dario Amodei, Martin Wattenberg, and Christopher Olah. Toy models of superposition. _Transformer_ _Circuits_ _Thread_, 2022. URL [https://transformer-circuits.](https://transformer-circuits.pub/2022/toy_model/index.html)
+[pub/2022/toy_model/index.html.](https://transformer-circuits.pub/2022/toy_model/index.html)
+
+
+Kelly R Finn, Matthew J Silk, Mason A Porter, and Noa Pinter-Wollman. The use of multilayer
+network analysis in animal behaviour. _Animal behaviour_, 149:7–22, 2019.
+
+
+Marco Fumero, Florian Wenzel, Luca Zancato, Alessandro Achille, Emanuele Rodol`a, Stefano
+Soatto, Bernhard Sch¨olkopf, and Francesco Locatello. Leveraging sparse and shared feature
+activations for disentangled representation learning. _Advances in Neural Information Processing_
+_Systems_, 36:27682–27698, 2023.
+
+
+Thomas Heap, Tim Lawson, Lucy Farnik, and Laurence Aitchison. Sparse autoencoders can interpret randomly initialized transformers, 2025. URL [https://arxiv.org/abs/2501.](https://arxiv.org/abs/2501.17727)
+[17727.](https://arxiv.org/abs/2501.17727)
+
+
+Sai Sumedh R Hindupur, Ekdeep Singh Lubana, Thomas Fel, and Demba Ba. Projecting assumptions: The duality between sparse autoencoders and concept geometry. _arXiv_ _preprint_
+_arXiv:2503.01822_, 2025.
+
+
+Paul W Holland. Statistics and causal inference. _Journal of the American statistical Association_, 81
+(396):945–960, 1986.
+
+
+Robert Huben, Hoagy Cunningham, Logan Riggs Smith, Aidan Ewart, and Lee Sharkey. Sparse
+autoencoders find highly interpretable features in language models. In _The Twelfth International_
+_Conference on Learning Representations_ [, 2024. URL https://openreview.net/forum?](https://openreview.net/forum?id=F76bwRSLeK)
+[id=F76bwRSLeK.](https://openreview.net/forum?id=F76bwRSLeK)
+
+
+Patrick Leask, Bart Bussmann, Michael T Pearce, Joseph Isaac Bloom, Curt Tigges, Noura Al
+Moubayed, Lee Sharkey, and Neel Nanda. Sparse autoencoders do not find canonical units of
+analysis. In _The Thirteenth International Conference on Learning Representations_, 2025. URL
+[https://openreview.net/forum?id=9ca9eHNrdH.](https://openreview.net/forum?id=9ca9eHNrdH)
+
+
+Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Large-scale celebfaces attributes (celeba)
+dataset. _Retrieved August_, 15(2018):11, 2018.
+
+
+Francesco Locatello, Stefan Bauer, Mario Lucic, Gunnar R¨atsch, Sylvain Gelly, Bernhard
+Sch¨olkopf, and Olivier Bachem. Challenging common assumptions in the unsupervised learning of disentangled representations, 2019. [URL https://arxiv.org/abs/1811.12359.](https://arxiv.org/abs/1811.12359)
+
+
+Wes McKinney et al. pandas: a foundational python library for data analysis and statistics. _Python_
+_for high performance and scientific computing_, 14(9):1–9, 2011.
+
+
+Robert K Merton. The matthew effect in science: The reward and communication systems of science
+are considered. _Science_, 159(3810):56–63, 1968.
+
+
+13
+
+
+Rajiv Movva, Kenny Peng, Nikhil Garg, Jon Kleinberg, and Emma Pierson. Sparse autoencoders
+for hypothesis generation. In _Forty-second International Conference on Machine Learning_, 2025.
+[URL https://openreview.net/forum?id=4R0pugRyN5.](https://openreview.net/forum?id=4R0pugRyN5)
+
+
+Maxime Oquab, Timoth´ee Darcet, Th´eo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,
+Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning
+robust visual features without supervision. _arXiv preprint arXiv:2304.07193_, 2023.
+
+
+Isabel Papadimitriou, Huangyuan Su, Thomas Fel, Sham Kakade, and Stephanie Gil. Interpreting
+[the linear structure of vision-language model embedding spaces, 2025. URL https://arxiv.](https://arxiv.org/abs/2504.11695)
+[org/abs/2504.11695.](https://arxiv.org/abs/2504.11695)
+
+
+Kiho Park, Yo Joong Choe, and Victor Veitch. The linear representation hypothesis and the geometry
+of large language models. _arXiv preprint arXiv:2311.03658_, 2023.
+
+
+Judea Pearl. _Causality_ . Cambridge university press, 2009.
+
+
+Kenny Peng, Rajiv Movva, Jon Kleinberg, Emma Pierson, and Nikhil Garg. Use sparse autoencoders
+to discover unknown concepts, not to act on known concepts, 2025. URL [https://arxiv.](https://arxiv.org/abs/2506.23845)
+[org/abs/2506.23845.](https://arxiv.org/abs/2506.23845)
+
+
+Karl Popper. _The logic of scientific discovery_ . Routledge, 2005.
+
+
+Lucia Quirke, Stepan Shabalin, and Nora Belrose. Binary sparse coding for interpretability, 2025.
+[URL https://arxiv.org/abs/2509.25596.](https://arxiv.org/abs/2509.25596)
+
+
+James M Robins, Andrea Rotnitzky, and Lue Ping Zhao. Estimation of regression coefficients when
+some regressors are not always observed. _Journal_ _of_ _the_ _American_ _statistical_ _Association_, 89
+(427):846–866, 1994.
+
+
+P Rubenstein, S Weichwald, S Bongers, J Mooij, D Janzing, M Grosse-Wentrup, and B Sch¨olkopf.
+Causal consistency of structural equation models. In _33rd Conference on Uncertainty in Artificial_
+_Intelligence (UAI 2017)_, pages 808–817, 2017.
+
+
+Donald B Rubin. Estimating causal effects of treatments in randomized and nonrandomized studies.
+_Journal of educational Psychology_, 66(5):688, 1974.
+
+
+Donald B Rubin. Comment: Which ifs have causal answers. _Journal_ _of_ _the_ _American_ _statistical_
+_association_, 81(396):961–962, 1986.
+
+
+Bernhard Sch¨olkopf, Francesco Locatello, Stefan Bauer, Nan Rosemary Ke, Nal Kalchbrenner,
+Anirudh Goyal, and Yoshua Bengio. Toward causal representation learning. _Proceedings_ _of_
+_the IEEE_, 109(5):612–634, 2021.
+
+
+Tore Schweder and Eil Spjøtvoll. Plots of p-values to evaluate many tests simultaneously.
+_Biometrika_, 69(3):493–502, 1982.
+
+
+Maciej Sypetkowski, Morteza Rezanejad, Saber Saberian, Oren Kraus, John Urbanik, James Taylor, Ben Mabey, Mason Victors, Jason Yosinski, Alborz Rezazadeh Sereshkeh, et al. Rxrx1: A
+dataset for evaluating experimental batch correction methods. In _Proceedings of the IEEE/CVF_
+_conference on computer vision and pattern recognition_, pages 4285–4294, 2023.
+
+
+Adly Templeton, Tom Conerly, Jonathan Marcus, Jack Lindsey, Trenton Bricken, Brian Chen,
+Adam Pearce, Craig Citro, Emmanuel Ameisen, Andy Jones, Hoagy Cunningham, Nicholas L
+Turner, Callum McDougall, Monte MacDiarmid, C. Daniel Freeman, Theodore R. Sumers,
+Edward Rees, Joshua Batson, Adam Jermyn, Shan Carter, Chris Olah, and Tom Henighan.
+Scaling monosemanticity: Extracting interpretable features from claude 3 sonnet. _Trans-_
+_former_ _Circuits_ _Thread_, 2024. URL [https://transformer-circuits.pub/2024/](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)
+[scaling-monosemanticity/index.html.](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)
+
+
+Lucrezia Valeriani, Diego Doimo, Francesca Cuturello, Alessandro Laio, Alessio Ansuini, and Alberto Cazzaniga. The geometry of hidden representations of large transformer models, 2023.
+[URL https://arxiv.org/abs/2302.00294.](https://arxiv.org/abs/2302.00294)
+
+
+14
+
+
+Burak Varici, Emre Acarturk, Karthikeyan Shanmugam, Abhishek Kumar, and Ali Tajer. Scorebased causal representation learning with interventions. _arXiv preprint arXiv:2301.08230_, 2023.
+
+
+Burak Varici, Emre Acart¨urk, Karthikeyan Shanmugam, and Ali Tajer. General identifiability and
+achievability for causal representation learning. In _International Conference on Artificial Intelli-_
+_gence and Statistics_, pages 2314–2322. PMLR, 2024.
+
+
+Pauli Virtanen, Ralf Gommers, Travis E Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau,
+Evgeni Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, et al. Scipy 1.0: fundamental algorithms for scientific computing in python. _Nature methods_, 17(3):261–272, 2020.
+
+
+John N Weinstein, Eric A Collisson, Gordon B Mills, Kenna R Shaw, Brad A Ozenberger, Kyle
+Ellrott, Ilya Shmulevich, Chris Sander, and Joshua M Stuart. The cancer genome atlas pan-cancer
+analysis project. _Nature genetics_, 45(10):1113–1120, 2013.
+
+
+Zhengxuan Wu, Aryaman Arora, Atticus Geiger, Zheng Wang, Jing Huang, Dan Jurafsky, Christopher D Manning, and Christopher Potts. Axbench: Steering LLMs? even simple baselines outperform sparse autoencoders. In _Forty-second_ _International_ _Conference_ _on_ _Machine_ _Learning_,
+2025. [URL https://openreview.net/forum?id=K2CckZjNy0.](https://openreview.net/forum?id=K2CckZjNy0)
+
+
+Dingling Yao, Dario Rancati, Riccardo Cadei, Marco Fumero, and Francesco Locatello. Unifying causal representation learning with the invariance principle. In _International Conference on_
+_Learning Representations_, 2025.
+
+
+Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language
+image pre-training. In _Proceedings of the IEEE/CVF international conference on computer vision_,
+pages 11975–11986, 2023.
+
+
+Jiaqi Zhang, Kristjan Greenewald, Chandler Squires, Akash Srivastava, Karthikeyan Shanmugam,
+and Caroline Uhler. Identifiability guarantees for causal disentanglement from soft interventions.
+_Advances in Neural Information Processing Systems_, 36:50254–50292, 2023.
+
+
+15
+
+
+# **Appendix**
+
+
+SUMMARY
+
+
+**A** **Proofs** **17**
+
+
+A.1 Significance level collapse with sample size (Theorem 3.1) . . . . . . . . . . . . . 17
+
+
+A.2 Significance collapse with effect magnitude (Corollary 3.2) . . . . . . . . . . . . . 17
+
+
+A.3 Consistency of Neural Effect Search (Theorem 4.1) . . . . . . . . . . . . . . . . . 18
+
+
+**B** **Neural Effect Test** **23**
+
+
+**C** **Minimal Python Implementation Snippet** **24**
+
+
+**D** **Experiments Details** **26**
+
+
+D.1 CelebA semi-synthetic RCTs . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+
+D.2 ISTAnt . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+
+
+**E** **Additional Experiments** **28**
+
+
+E.1 Assumptions Validation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+
+
+E.2 Method Consistency . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+
+
+E.3 Additional Baselines . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 47
+
+
+16
+
+
+A PROOFS
+
+
+A.1 SIGNIFICANCE LEVEL COLLAPSE WITH SAMPLE SIZE (THEOREM 3.1)
+
+**Theorem A.1** (Significance level collapse with sample size) **.** _Let Z_ _∈_ R _[m]_ _be SAE codes and_
+_τj_ _the treatment effect on neuron j._ _By definition_
+
+
+_ε_ := _j_ : _τj_ _ε_ _,_ _ε_ = _ρεm._ (7)
+_A_ _{_ _|_ _| ≥_ _}_ _|A_ _|_
+
+_In multiple testing at level α, regardless of Bonferroni correction_
+
+
+          -          Pr _all j_ _∈Aε are rejected_ _→_ 1 _as n →∞,_ (8)
+
+_and the number of rejections Rn_ _satisfies_
+
+
+_Rn_ _ρεm_ _in probability._ (9)
+_→_
+
+_In_ _words:_ _as_ _the_ _sample_ _size_ _grows,_ _all_ _entangled_ _neurons_ _with_ _the_ _(true)_ _affected_ _outcomes_
+_are declared significantly affected by the treatment, regardless of being principally related to_
+_other concepts._
+
+
+_Proof._ For each neuron _j_, let _τ_ ˆ _j_ be the estimated treatment effect and _tj_ its _t_ -statistic. Under standard randomization, we have the asymptotic distribution
+
+
+~~_√_~~
+_tj_ _d_ ( _λj,_ 1) _,_ _λj_ = _σn_
+_→_ _N_
+
+
+_σ_ _[τ][j][,]_ (10)
+
+
+where _σ_ [2] is the asymptotic variance of _τ_ ˆ _j_ .
+
+
+Multiple testing with Bonferroni adjustment rejects _H_ 0 _j_ : _τj_ = 0 if _tj_ _>_ _zα/_ (2 _m_ ), where _zα/_ (2 _m_ )
+_|_ _|_
+is the (1 _−_ _α/_ (2 _m_ )) quantile of _N_ (0 _,_ 1). As _m →_ _∞_, the threshold satisfies
+
+
+_zα/_ (2 _m_ ) �2 log _m._ (11)
+_≍_
+
+
+For any _j_ _ε_, we have _τj_ = 0, hence _λj_ diverges at rate _n_ as _n_ . Since _n_ grows faster
+_∈A_ _[√]_ _→∞_ _[√]_
+than log _m_, it follows that
+
+_[√]_    -    Pr _tj_ _> zα/_ (2 _m_ ) 1 _._ (12)
+_|_ _|_ _→_
+
+Therefore, for all _j_ _ε_, the null is rejected with probability tending to one, and analogously
+_∈A_
+Pr� _tj_ _> zα/_ 2� 1 _._ (13)
+_|_ _|_ _→_
+without Bonferroni adjustment. By the union bound,
+
+
+            -            Pr all _j_ _∈Aε_ are rejected _→_ 1 _._ (14)
+
+Hence, the number of rejections converges in probability to _ε_ = _ρεm_, proving the claim.
+_|A_ _|_
+
+
+A.2 SIGNIFICANCE COLLAPSE WITH EFFECT MAGNITUDE (COROLLARY 3.2)
+
+
+**Corollary A.1** (Significance collapse with effect magnitude) **.** _Fix a finite sample size n._ _Sup-_
+_pose the treatment effects scale as_
+
+
+_τj_ ( _s_ ) = _s γj,_ _j_ = 1 _, . . ., m,_ (15)
+
+
+_where s >_ 0 _is a scaling parameter and γj_ _are fixed coefficients._ _By definition_
+
+
+_ε_ := _j_ : _γj_ _>_ _[ε]_
+_A_ _{_ _|_ _|_ _s_
+
+
+_ε_ = _ρεm._ (16)
+_s_ _[}][,]_ _|A_ _|_
+
+
+_In multiple testing at level α regardless of the Bonferroni correction,_
+
+
+         -         Pr _all j_ _∈Aε are rejected_ _→_ 1 _as s →∞,_ (17)
+
+_and the number of rejections Rs_ _satisfies_
+
+
+_Rs_ _ρεm._ _in probability._ (18)
+_→_
+
+
+17
+
+
+_In words:_ _even at a fixed sample size,_ _amplifying the effect magnitude all the entangled neu-_
+_rons_ _with_ _the_ _(true)_ _affected_ _outcomes_ _are_ _declared_ _significantly_ _affected_ _by_ _the_ _treatment,_
+_regardless of being principally related to other concepts._
+
+
+_Proof._ For neuron _j_, the noncentrality parameter of the _t_ -statistic under effect scaling _s_ is
+
+
+~~_√_~~
+_λj_ ( _s_ ) = _n_
+
+
+_σ_ _[sγ][j][.]_ (19)
+
+
+~~_√_~~
+
+_n_ _n_
+
+_σ_ _[τ][j]_ [(] _[s]_ [) =] _σ_
+
+
+If _γj_ = 0, then _λj_ ( _s_ ) = 0 for all _s_ and the rejection probability remains bounded by _α/m_ .
+
+
+If _γj_ = 0, then _λj_ ( _s_ ) linearly in _s_, while the Bonferroni threshold _zα/_ (2 _m_ ) is fixed (since
+_→∞_
+_n, m_ are fixed). Therefore,
+
+Pr� _tj_ _> zα/_ (2 _m_ )� 1 as _s_ _._ (20)
+_|_ _|_ _→_ _→∞_
+
+Analogously, without Bonferroni _m_ 1 [significance] [correction.] [Thus,] [for] [every] _[j]_ _[∈A][ε]_ [,] [the] [null] [is]
+eventually rejected with probability tending to one. By independence of limits,
+
+
+            -            Pr all _j_ _∈Aε_ are rejected _→_ 1 _,_ (21)
+
+and _Rs_ _ρεm_ in probability, completing the proof.
+_→_
+
+
+A.3 CONSISTENCY OF NEURAL EFFECT SEARCH (THEOREM 4.1)
+
+outcomeGiven a Randomized Controlled Trial, with randomized treatmentindividual/observation extracted from the indirect outcome measurements _Y_ _∈_ R _[r]_, i.e., with non-null effect, and the SAE codes _T_ _∈{Z_ 0 _∈, X_ 1R _}_, (unobserved) affected _[m]_ _∈X_ characterizing _⊆_ R _[p]_ [1] By designeach
+(RCT), we furtherly assume SUTVA and finite second moments with standard Lindeberg regularity
+within strata. Let the average treatment effect on the (ground truth) outcome be:
+
+_τ_ _[Y]_ := E[ _Y_ _| do_ ( _T_ =1)] _−_ E[ _Y_ _| do_ ( _T_ =0)] _∈_ R _[r]_ _,_ (22)
+
+and the average treatment effect on the SAE codes:
+
+_τ_ _[Z]_ := E[ _Z_ _| do_ ( _T_ =1)] _−_ E[ _Z_ _| do_ ( _T_ =0)] _∈_ R _[m]_ _,_ (23)
+
+
+then,
+
+
+_τ_ _[Z]_ =
+
+
+_r_
+
+- _τk_ _[Y]_ _[v][k]_ [=] _[V]_ _[τ][ Y][,]_ (24)
+
+_k_ =1
+
+
+where the matrix _V_ = [ _v_ 1 _vr_ ] R _[m][×][r]_ aggregates in columns the _r_ affected outcome neural
+
+_· · ·_ _∈_
+representations (see Definition in Section 3).
+
+**Assumption A.1** (Sufficiency) **.** _The matrix of code-level effect directions V_ _has full column rank,_
+_i.e.,_ rank( _V_ ) = _r._
+
+
+_Discussion._ By the neural treatment effect decomposition, i.e., Equation 24, every code-level contrast lies in span _v_ 1 _, . . ., vr_ . Assumption A.1 guarantees this span is truly _r_ -dimensional (nondegenerate) and that the linear map _{_ _}_ _τ_ _[Y]_ _�→_ _τ_ _[Z]_ is injective—distinct effect vectors _τ_ _[Y]_ produce distinct
+code-level contrasts. Informally, at the _mean-effect_ level, this behaves like “no loss of information”
+about _τ_ _[Y]_ when passing through _V_ (akin to a sufficient statistic for _τ_ _[Y]_ in a parametric family).
+**Assumption A.2** (Alignment) **.** _There exist_ distinct _indices j_ 1 _, . . ., jr_ [ _m_ ] _such that_
+_∈_
+
+
+_|vk,jk_ _|_ _>_ max _ℓ_ = _k_ _[|][v][ℓ,j][k]_ _[|]_ _∀k_ _∈_ [ _r_ ] _,_ (25)
+
+
+_each_ _effect_ _direction_ _vk_ _has_ _a_ _distinct_ _principal_ _neuron_ _jk_ _that_ _strictly_ _dominates_ _the_ _other_ _effect_
+_directions by_ max _._ _In addition, the following_ global Principal–Max _property holds for the realized_
+_effect vector τ_ _[Y]_ _:_
+
+
+_r_
+
+- _τℓ_ _[Y]_ _[v][ℓj]_ ��� = max _k∈_ [ _r_ ]
+
+_ℓ_ =1
+
+
+���
+
+
+_r_
+
+- _τℓ_ _[Y]_ _[v][ℓ, j]_ _k_ ��� _._ (26)
+
+_ℓ_ =1
+
+
+max
+_j∈_ [ _m_ ]
+
+
+���
+
+
+1As a special case, the following arguments also hold for binary affected outcomes and neuronal representations in SAE.
+
+
+18
+
+
+_Discussion._ Equation 25 supplies a distinct principal neuron (geometric dominance by max) per affected outcome factor. The global Principal–Max condition 26 states that, in population, the overall
+argmax of the code-level contrast _τ_ _[Z]_ = _V τ_ _[Y]_ is attained at _some_ principal neuron. Because each
+NES round removes discovered effects from the sum, replacing [�] _ℓ_ _[r]_ =1 [in Equation 26 by a subsum]
+over the remaining (undiscovered) indices only reduces nonprincipal candidates; hence the argmax
+remains principal at every round.
+
+
+**Assumption** **A.3** (Arm-wise Effect Decomposition with _ε_ -Leakage) **.** _For_ _any_ _NES_ _round_ _ℓ_ _with_
+_discovered set Sℓ−_ 1:= _S and any j_ _/_ _S,_
+_∈_
+
+E[ _Zj_ _ZS,_ _do_ ( _T_ = _t_ )] = _hj,t_ ( _ZS_ ) + _ρj,t,_ _t_ 0 _,_ 1 _,_ (27)
+_|_ _∈{_ _}_
+
+_where hj,t is measurable w.r.t. σ_ ( _ZS_ ) _(σ-algebra), and_
+
+_ρj,_ 1 _−_ _ρj,_ 0 = _k/∈_                    - _K_ ( _S_ ) _τk_ _[Y]_ _[v][k,j][,]_ (28)
+
+
+_with K_ ( _S_ ) _the affected outcome components already identified by S._ _Moreover, let G_ := _g_ ( _ZS_ ) _be_
+_the pooled (treatment-agnostic) stratification._ _Define the arm/stratum discrepancy_
+
+
+∆ _j,t_ ( _g_ ) := E[ _Zj_ _G_ = _g,_ _T_ = _t_ ] E[ _Zj_ _G_ = _g,_ _do_ ( _T_ = _t_ )] _._
+_|_ _−_ _|_
+
+_with_ _vanishing_ _transport_ _error,_ _after_ _all_ _affected_ _outcome_ _components_ _are_ _identified_ _(i.e.,_ _when_
+_K_ ( _S_ ) = _{_ 1 _, . . ., r}):_
+∆ _j,t_ ( _g_ ) = 0 _for all j_ _/_ _S,_ _g_ _,_ _t_ 0 _,_ 1 (29)
+_∈_ _∈G_ _∈{_ _}_
+
+
+_There exists a constant ε_ 0 _such that, for the weights wg_ _used by the estimator,_
+_≥_
+
+    -    -    - [�]
+
+_wg_ ∆ _j,_ 1( _g_ ) ∆ _j,_ 0( _g_ ) _ε_ _for all j_ _/_ _S._
+
+����� _g_ _−_ ���� _≤_ _∈_
+
+
+  -   - [�]
+_wg_ ∆ _j,_ 1( _g_ ) ∆ _j,_ 0( _g_ ) _ε_ _for all j_ _/_ _S._ (30)
+_g_ _−_ ���� _≤_ _∈_
+
+
+_Finally, to ensure that principal coordinates remain identifiable in the presence of leakage, assume_
+_the (population) principal margin_
+
+
+���
+
+
+_r_
+
+- _τℓ_ _[Y]_ _[v][ℓj]_ ��� (31)
+
+_ℓ_ =1
+
+
+Γ := max
+_k∈_ [ _r_ ]
+
+
+��� _τ Yk_ _[v][k,j]_ _k_ ��� _−_ _j /∈{_ max _j_ 1 _,...,jr}_
+
+
+_satisfies_ Γ _>_ 2 _ε._
+
+
+_Discussion._ Assumption A.3 is a _mean-level_ conditional requirement: conditioning within arms on
+the already-selected codes _Z_ S explains their contribution in expectation, leaving only undiscovered
+effects in the adjusted contrast. In addition, Equation 30 is a mild _pooled-strata_ _transport_ bound:
+even though _G_ is post-treatment and may induce a collider opening, the _weighted_ difference between
+observed and interventional arm means within strata is uniformly bounded by _ε_ and vanishes. In the
+linear (or locally linear) regime, the Jacobian of the mappinggenerally _∂_ E[ _Z_ _Y, do_ ( _T_ )] _/∂Y_ = _V_ ), so the columns _vk_ are Jacobian columns; Assumption A.2 _Y_ _�→_ _Z_ satisfies _∂Z/∂Y_ = _V_ (or more
+_|_
+requires principal dominance, while Assumption A.3 ensures additive mean structure and bounded
+transport error so that stratification cancels already-discovered parts up to a uniform _ε_ bias.
+
+
+**Theorem.** _Under_ _randomization,_ _SUTVA,_ _finite_ _second_ _moments_ _with_ _Lindeberg_ _regularity,_
+_and Assumptions A.1–A.3, NES with pooled stratification on ZS and Bonferroni control selects_
+_one new direction per round and halts after r rounds with probability →_ 1 _, identifying all the_
+_principal components, i.e.,_
+
+
+Pr� _S_ final = _j_ 1 _, . . ., jr_          - 1 _,_ E[ _S_ final ] _r._
+_{_ _}_ _→_ _|_ _|_ _→_
+
+
+_Note._ Since the Theorem establishes Pr�Sfinal = _j_ 1 _, . . ., jr_ - 1, it follows directly that also the
+_{_ _}_ _→_
+overall family-wise error rate (FWER) and false discovery rate (FDR) of the entire recursive NES
+procedure converge to 0.
+
+
+We proceed by proving NES consistency, decomposing it in the following four steps:
+
+
+19
+
+
+1. average neural treatment effect identification by randomization and SUTVA, i.e., RCT,
+
+2. neural effect estimation by _pooled_ stratification is unbiased up to a uniform _ε_ and, by Assumption A.3, cancels the contribution of already-discovered directions up to _ε_, leaving
+only the undiscovered part,
+
+3. at each round the largest adjusted coordinate identifies, i.e., principal neuron, a new affected
+outcome by Assumption A.2 and is detected under standard CLT scaling,
+
+4. by Assumption A.1, after _r_ rounds no adjusted mean contrast remains beyond _ε_ and NES
+halts.
+
+
+**Step 1:** Average neural treatment effect identification by randomization.
+
+
+**Proposition A.1** (Average Neural Treatment Effect Identification) **.** _For each coordinate j,_
+
+
+_τj_ _[Z]_ [=][ E][[] _[Z][j]_ (32)
+
+_[|][ do]_ [(] _[T]_ [=1)]] _[ −]_ [E][[] _[Z][j]_ _[|][ do]_ [(] _[T]_ [=0)] =][ E][[] _[Z][j]_ _[|][ T]_ [=1]] _[ −]_ [E][[] _[Z][j]_ _[|][ T]_ [=0]] _[.]_
+
+
+_Proof._ Randomization implies _P_ ( _Z_ _|_ _do_ ( _T_ = _t_ )) = _P_ ( _Z_ _|_ _T_ = _t_ ). Taking expectations and using
+SUTVA yields Equation 32.
+
+
+**Step 2:** Neural Effect estimation by pooled stratification: bounded bias and disentanglement.
+
+
+At round _ℓ_ = 1, S = ∅, there is no stratification, and the corresponding associational difference
+identifies the average treatment effect by standard RCT results (shown in Proposition A.1). At round
+_ℓ>_ 1, build strata by deterministically binning _Z_ S (pooled quantile cutpoints, ignoring _T_ ). For
+_G_
+each stratum _g_ and arm _t_ 0 _,_ 1, let _Z_ _j,tg_ denote the sample mean of _Zj_ among units with
+_∈G_ _∈{_ _}_
+( _T_ = _t,_ _G_ = _g_ ), and _ntg_ their count.
+
+
+For each _j_ _∈/_ S, define the post-stratified estimator
+
+
+_τ_ - _j_ [strat] = 
+
+
+_g∈G_ _wg_ - _Z_ _j,_ 1 _g −_ _Z_ _j,_ 0 _g_ - _,_ _wg_ _∝_ _n_ 1 _g_ + _n_ 0 _g,_ (33)
+
+
+see _τ_ - _j_ [strat] Algorithm rejection.2 for weight definition. Across _j_ _∈/_ S, use Bonferroni level _α/m_ and add the top_|_ _|_
+
+
+**Lemma A.1** (Neural Effect estimation by pooled stratification: bounded bias and disentanglement) **.** _Let_  - _τj_ [strat] _be defined by Equation 33._ _Then_
+
+E� _τ_  - _j_ [strat]  - =  - Pr( _G_ = _g_ )(E[ _Zj_ _G_ = _g, do_ ( _T_ =1)] E[ _Zj_ _G_ = _g, do_ ( _T_ =0)]) + _Bj,_ (34)
+
+_|_ _−_ _|_
+_g∈G_
+
+
+_where the leakage bias_
+_Bj_ :=            - _wg_ �∆ _j,_ 1( _g_ ) ∆ _j,_ 0( _g_ )�
+
+_−_
+_g∈G_
+
+
+_satisfies_ _Bj_ _ε_ _by_ _Equation_ _30._ _Under_ _Assumption_ _A.3,_ _the_ _contribution_ _explained_ _by_ _ZS_
+_|_ _|_ _≤_
+_averages out within arm in the interventional means, giving_
+
+E� _τ_            - _j_ [strat]            -            - _τk_ _[Y]_ _[v][k,j]_ _ε._ (35)
+����� _−_ _∈_ _S_ ����� _≤_
+
+
+- _τk_ _[Y]_ _[v][k,j]_
+
+_k/∈K_ ( _S_ )
+
+
+����� _≤_ _ε._ (35)
+
+
+_Moreover,_ _under_ _finite_ _second_ _moments_ _and_ _Lindeberg_ _regularity,_ _the_ _t-statistic_ _of_ _τ_  - _j_ [strat] _is_
+_asymptotically normal with variance consistently estimated by the usual post-stratified Neyman_
+_formula._
+
+
+_Proof._ Add and subtract E[ _Zj_ _G_ = _g, do_ ( _T_ = _t_ )] inside each arm/stratum mean to obtain Equation
+_|_
+34 and identify _Bj_ . Assumption A.3 yields Equation 27 and Equation 28, so averaging over _G_
+cancels the _hj,t_ ( _Z_ S) part and preserves the stratum-invariant _ρj,t_, whose contrast equals Equation
+28; combining with _Bj_ _ε_ gives Equation 35. The CLT follows from standard post-stratified
+_|_ _|_ _≤_
+difference-in-means theory with finite second moments and nonvanishing stratum proportions.
+
+
+20
+
+
+**Step 3:** NES one-step correctness.
+
+
+**Proposition** **A.2** (One-step correctness) **.** _Suppose_ _the_ _discovered_ _set_ _S_ _retrieves_ _exactly_ _the_
+_principal_ _neurons_ _for_ _the_ _K_ ( _S_ ) _affected_ _outcome_ _factors_ _already_ _identified._ _Then_ _for_ _any_
+_j_ _∈/_ _S,_  ��� E[ _τ_                                                            - strat _j_ ] _τk_ _[Y]_ _[v][k,j]_ ��� _ε._
+_−_ _≤_
+
+_k/∈K_ ( _S_ )
+
+
+_By Assumption A.2 and the margin condition_ Γ _>_ 2 _ε in Assumption A.3, the largest adjusted_
+_coordinate_ _identifies,_ _i.e.,_ _principal_ _neuron,_ _a_ _new_ _affected_ _outcome_ _and_ _is_ _rejected,_ _i.e.,_ _se-_
+_lected as significantly affected by the treatment, with probability →_ 1 _as n →∞._
+
+
+_Proof._ By Lemma A.1, the adjusted mean at _j_ equals the sum over undiscovered directions up to
+_ε_ . Fix an undiscovered _k_ _[⋆]_ and its principal coordinate _jk⋆_ given by Assumption A.2. The principal
+_±_ margin Γ _>_ 2 _ε_ ensures that the principal signal at _jk⋆_ dominates the maximal nonprincipal signal
+_√_ by m _n_, so the maximizer overore than 2 _ε_, hence remains strictly largest after a _j_ _∈/_ S is a true undiscovered coordinate with probability _±ε_ perturbation. Its _t_ -statistic diverges at ra _→_ 1. te
+
+
+**Step 4:** NES consistency by induction.
+
+
+**Theorem** (NES Consistency) **.** _Under randomization, SUTVA, finite second moments with Lin-_
+_deberg_ _regularity,_ _and_ _Assumptions_ _A.1–A.3,_ _NES_ _with_ _pooled_ _stratification_ _on_ _ZS_ _and_ _Bon-_
+_ferroni_ _control_ _selects_ _one_ _new_ _direction_ _per_ _round_ _and_ _halts_ _after_ _r_ _rounds_ _with_ _probability_
+_→_ 1 _, identifying all the principal neurons, i.e.,_
+
+Pr� _S_ final = _j_ 1 _, . . ., jr_          - 1 _,_ E[ _S_ final ] _r._
+_{_ _}_ _→_ _|_ _|_ _→_
+
+
+_Proof._ We distinguish between no affected outcomes, i.e., _r_ = 0 and at least one, i.e., _r_ _≥_ 1.
+
+
+    - If _r_ = 0 (trivial), then _τ_ _[Y]_ = 0 and by Equation 24 also _τ_ _[Z]_ = 0. Hence all adjusted
+expectations are 0, no coordinate is selected at any round, and Sfinal = ∅ with probability
+_→_ 1 as _n →∞_ .
+
+
+- If _r_ 1 with _τk_ _[Y]_
+_≥_ [= 0][ for each] _[ k]_ _[∈{]_ [1] _[, . . ., r][}]_ [:]
+
+
+_Base step._ This is the special case of Proposition A.2 with S = ∅: the largest neural effect
+identifies a principal direction and is rejected with probability _→_ 1 as _n →∞_ .
+
+_Induction_ identifies exactly the _step._ Suppose _ℓ_ _−_ 1at distinct principal neurons identifyingthe beginning of round _ℓ_ (1 _<_ _ℓ_ _≤ Kr_ ()Sthe). By Lemma A.1,discovered set S
+��� E� _τ_                              - _j_ [strat]                              -                              - _τk_ _[Y]_ _[v][k,j]_ ��� _ε_ for every _j_ _/_ S _,_
+
+_−_ _≤_ _∈_
+
+
+- _τk_ _[Y]_ _[v][k,j]_ ��� _ε_ for every _j_ _/_ S _,_
+
+_≤_ _∈_
+_k/∈K_ (S)
+
+
+i.e., the adjusted mean at any candidate coordinate depends only on undiscovered directions
+up to a uniform _ε_ bias. Pick any undiscovered _k_ _[⋆]_ _/_ _K_ (S) and its principal coordinate _jk⋆_
+_∈_
+(Assumption A.2 still applies to the remaining columns). By the margin condition Γ _>_ 2 _ε_,
+the associated _t_ -statistic diverges and the maximizer over _j_ _∈/_ S is tied to an undiscovered
+direction with probability _→_ 1.
+
+_Termination._ Each round adds one previously undiscovered direction with probability _→_
+1. By Assumption A.1 (rank( _V_ ) = _r_ ), there are exactly _r_ linearly independent effect
+directions; after _r_ rounds they are all represented, and Lemma A.1 together with the finalstage exactness equation 29 yields
+
+E� _τ_          - _j_ [strat]          - = 0 for every remaining _j._
+
+
+Hence, the corresponding _t_ -statistics are _Op_ (1) and, under Bonferroni control, no hypothesis is rejected with probability 1. Thus, no further selections occur, and Pr �Sfinal =
+_j_ 1 _, . . ., jr_ - 1 and E[ Sfinal _→_ ] _r._
+_{_ _}_ _→_ _|_ _|_ _→_
+
+
+21
+
+
+_Comment._ If a pre-treatment effect modifier _W_ influences the codes used to stratify (i.e.,
+_W_ _ZS_ ), pooled conditioning can create transport discrepancies; in that case, if some
+_→_
+additional SAE code outside _S_ captures (part of) this modifier, the same margin argument
+ensures it will be selected, enlarge _S_, and—by Equation 29—the discrepancy collapses
+thereafter. Conversely, if no such modifier projects into the stratification variables (i.e.,
+_W_ _ZS_ ), then ∆ _j,t_ ( _g_ ) 0 already and no leakage arises.
+_̸→_ _≡_
+
+
+**Convergence** **Rate** The proof of Theorem 4.1 shows that, at each round and for each remaining
+principal neuron _jk_, the corresponding _t_ -statistic has a noncentrality parameter of order _n_ . In par
+_[√]_
+ticular, the smallest principal margin that NES can detect with nontrivial power scales as _O_ ( _n_ _[−]_ [1] _[/]_ [2] ),
+as in standard CLT-based tests.
+
+
+**Residualization (** _**optional**_ **).** The theory above uses pooled stratification on _Z_ S with the _ε_ -leakage
+bound Equation 30. In practice, one may _arm-wise residualize_ the tested coordinate _Zj_ on _Z_ S (e.g.,
+by OLS within each arm) and then apply the same stratified contrast, or use a plain arm difference.
+This targets the same estimand and can improve finite-sample power, but it is not strictly required.
+
+
+_Why it helps (variance reduction)._ Fix an arm _t_ and consider the _L_ [2] ( _P_ ( _T_ = _t_ )) projection _Rj,t_ :=
+
+_· |_
+_Zj_ _βt_ _[⊤][Z]_ [S] [with] _[ β][t]_ [= arg min] _[β]_ [E][[(] _[Z][j]_ [Then]
+
+_−_ _[−]_ _[β][⊤][Z]_ [S][)][2] _[|][ T]_ [=] _[t]_ []][.]
+
+Var( _Rj,t_ _T_ = _t_ ) = min
+_|_ _β_ [Var(] _[Z][j]_ _[−]_ _[β][⊤][Z]_ [S] _[|][ T]_ [=] _[t]_ [)] _[≤]_ [Var(] _[Z][j]_ _[|][ T]_ [=] _[t]_ [)] _[.]_
+
+
+Thus, for any stratification weights, the usual Neyman variance for the difference in means built on
+_Rj,t_ is weakly smaller asymptotically than that built on _Zj_ (componentwise, within strata). Intuitively, residualization orthogonalizes _Zj_ against already-discovered codes within the arm, removing
+predictable variation and shrinking the standard error.
+
+_Why it can hurt (finite-sample and misspecification effects)._ If _βt_ is estimated (say _β_ [ˆ] _t_ ) on the same
+samples used to test _j_, two issues arise: (i) **Estimation** **noise** can inflate variance when S is large
+or collinear, partially offsetting the variance reduction above. (ii) **Signal leakage** in finite samples:
+although the _population_ projection preserves the undiscovered mean contrast under Assumption
+A.3, an overfitted _β_ [ˆ] _t_ can inadvertently subtract some of the undiscovered mean component at _j_
+(attenuating the signal and reducing power). Both effects vanish asymptotically if _β_ [ˆ] _t_ _βt_ .
+_→_
+
+_Validity_ _and_ _a_ _safe_ _recipe._ If residualization is performed _within arm_ and _βt_ is estimated on _inde-_
+_pendent folds_ (sample-splitting/cross-fitting), then
+
+
+E[ _Rj,tg_ ] = E[ _Rj,t_ _G_ = _g, do_ ( _T_ = _t_ )] + _o_ (1) _,_
+_|_
+
+and the Step 2 bounded-bias/cancellation proof applies with _Rj_ in place of _Zj_ . Hence, residualization is asymptotically valid and (typically) more efficient. In small samples without splitting, we
+still target the same estimand in expectation up to _op_ (1) under standard regularity, but power can be
+non-monotone due to estimation noise.
+
+
+_Recommendation._ We suggest using arm-wise residualization as a complementary efficiency device,
+with cross-fitting (or estimating _βt_ on previously discovered rounds) to avoid overfitting. It cannot
+worsen asymptotic validity, often improves power by reducing variance, and—implemented with
+splitting—helps reduce the practical impact of the bounded leakage _ε_ in Equation 30.
+
+
+22
+
+
+B NEURAL EFFECT TEST
+
+
+**Algorithm 2** Neural Effect Test (NET) with stratifcation on arm-wise residuals
+
+
+1: **function** NEURALEFFECTTEST( _T,_ _Z,_ _j,_ S)
+2: **// A) Arm-wise residualize only the tested neuron** _j_ **(** _**optional**_ **)**
+3: **if** S = ∅ **then**
+4: set _rj_ _Z·j_ _(first round:_ _no residualization)_
+_←_
+5: **else**
+6: **for** _t ∈{_ 0 _,_ 1 _}_ **do**
+7: regress _Z·j_ on _Z·,_ S using only samples with _T_ = _t_
+
+8: for each _i_ with _Ti_ = _t_ : _rj,i_ _Zij_ _βt_ [(] _[j]_ [)] _⊤Zi,_ S
+_←_ _−_ [ˆ]
+9: **end for**
+10: **end if**
+
+
+11: **// B) Stratification from raw** _Z_ **S**
+12: **if** S = ∅ **then**
+13: put all units in a single stratum: _G_ = _{_ all _}_ _(first round:_ _no stratification)_
+14: **else**
+15: compute pooled (ignore _T_ ) medians/quantiles of each _Z·s_, _s_ S
+_∈_
+16: assign each unit _i_ to a cell _g_ ( _i_ ) by binning _Zi,_ S via those cutpoints
+17: drop any stratum _g_ with _n_ 1 _g_ = 0 or _n_ 0 _g_ = 0
+18: **end if**
+
+
+19: **for** each stratum _g_ _∈G_ **do**
+20: _n_ 1 _g, n_ 0 _g_ treated/control counts in _g_
+_←_
+21: _µ_ 1 _g, µ_ 0 _g_ treated/control means of _rj_ in _g_
+_←_
+22: _σ_ 1 [2] _g_ _[, σ]_ 0 [2] _g_ [in] _[ g]_
+
+_[←]_ _n_ [treated/control variances of] _n_ _[ r][j]_
+
+
+_n_ 1 _g_ + _n_ 0 _g_
+23: _wg_ _←_ _h_ [(] _[n]_ [1] _[h]_ [ +] _[ n]_ [0] _[h]_ [)]
+24: **end for**
+25: _τ_ ˆ _j_ _←_ [�] _g_ _[w][g]_ [ (] - _[µ]_ [1] _[g][ −]_ _[µ]_ [0] _[g]_ [)]
+
+
+_g_ _[w][g]_ [ (] _[µ]_ [1] _[g][ −]_ _[µ]_ [0] _[g]_ [)]
+
+ 
+
+
+26: _V_ _←_ [�] _g_ _[w]_ _g_ [2]
+
+
+- _σ_ 1 [2] _g_ 0 _g_
++ _[σ]_ [2]
+_n_ 1 _g_ _n_ 0 _g_
+
+
+_j_ _V_ [2]
+
+_V_ ; _ν_ _←_ �� _w_ [2] _[σ]_ [2] _[/n]_ �2
+
+
+_τ_ ˆ _j_
+27: _t ←_ ~~_√_~~
+
+
+_g∈G_
+
+
+_▷_ Satterthwaite df
+
+
+�� _wg_ [2] _[σ]_ 1 [2] _g_ _[/n]_ [1] _[g]_ �2
+
+
+max( _n_ 1 _g_ 1 _,_ 1) [+]
+_−_
+
+
+max( _n_ 0 _g_ 1 _,_ 1)
+_−_
+
+
+- _wg_ [2] _[σ]_ 0 [2] _g_ _[/n]_ [0] _[g]_ �2
+
+
+28: _p ←_ 2 _·_ Pr( _|Tν| ≥|t|_ ) _▷_ tests _H_ 0 : _τj_ _[R]_ [= 0]
+29: **return** (ˆ _τj,_ _p_ )
+30: **end function**
+
+
+The algorithm tests whether neuron _j_ still carries a _residual_ causal contrast after accounting for
+already–discovered effects S. We first compute an _arm-wise_ residual _rj_ := _Zj_ _βT_ [(] _[j]_ [)] _⊤Z_ S, where
+
+_−_ [ˆ]
+_β_ ˆ _t_ [(] _[j]_ [)] is fit using only units with _T_ = _t_ . Arm-wise fitting avoids pooled “bad control” on posttreatment codes and cancels leakage from previously found directions as they manifest within each
+arm.
+
+
+We then form treatment-agnostic strata by coarsening the raw _Z_ S (e.g., medians/quantiles com_G_
+puted _pooled_ over _T_ ) and drop cells lacking both arms. Within each _g_ _∈G_ we take the
+treated–control mean difference of _rj_ and aggregate with weights _wg_ _n_ 1 _g_ + _n_ 0 _g_ . This is stan_∝_
+dardization (g-computation):
+
+
+_wg_  - _rj,_ 1 _g_ _rj,_ 0 _g_  - E  _g_ _−_ _−−→_ _g_
+
+
+_τ_ - _j_ = 
+
+
+Pr( _G_ = _g_ )(E[ _rj_ _| G, g, do_ (1)] _−_ E[ _rj_ _| G, g, do_ (0)]) = _τj_ _[R][,]_
+_g_
+
+
+23
+
+
+so the estimator is unbiased under randomization/SUTVA. The reported variance and Satterthwaite
+df are the usual stratified formulas.
+
+
+C MINIMAL PYTHON IMPLEMENTATION SNIPPET
+
+
+We provide a minimal Python snippet for our algorithm relying on pandas library (McKinney
+et al., 2011) for tabular operations and SciPy library for statistical testing (Virtanen et al., 2020) .
+
+
+**Neural Effect Search** Recursive discovery.
+
+
+**def** NES(T, Z, S=[], alpha=0.05):
+
+m = Z.shape[1]
+tests = NET(T, Z, S)
+R = tests.loc[(tests["p_value"] <= alpha/m)]
+**if** R.empty:
+
+**return** S
+j = R["ATE"]. **abs** ().idxmax()
+**return** NES(T, Z, S=S.append(j), alpha=alpha)
+
+
+**Neural effect Test** By stratification with median binning. For simplicity, we ignore here arm-wise
+residualization (see full code for detailed implementation).
+
+
+**import** pandas as pd
+**import** scipy
+
+
+**def** NET(T, Z, S=[]):
+
+
+_#_ _columns_ _to_ _test_
+cols = [c **for** c **in** Z.columns **if** c **not** **in** **set** (S)]
+**if** **not** cols:
+
+**return** pd.DataFrame(columns=["neuron","ATE","p_value"])
+
+
+_#_ _build_ _strata_ _id_
+df = Z.copy()
+df["_T"] = T.astype( **int** )
+**if** S:
+
+_#_ _two_ _groups_ _per_ _stratifier_ _(median_ _split);_ _pooled_ _(ignore_ _T)_
+_#_ _could_ _use_ _also_ _df[s]>0_ _as_ _alternative_
+gid_bits = [(df[s]     - df[s].median()).astype( **int** ) **for** s **in** S]
+df["_gid"] = pd.concat(gid_bits, axis=1). **apply** ( **tuple**, axis=1)
+**else** :
+
+df["_gid"] = 0
+
+
+N = **len** (df)
+out = []
+
+
+_#_ _stratify_ _and_ _test_ _each_ _neuron_
+**for** j **in** cols:
+
+ATE = 0.0
+Vsum = 0.0
+denom = 0.0
+
+
+**for** g, dg **in** df.groupby("_gid"):
+
+n_g = **len** (dg)
+**if** n_g < 3:
+
+**continue**
+x1 = dg.loc[dg["_T"] == 1, j]
+x0 = dg.loc[dg["_T"] == 0, j]
+n1, n0 = **len** (x1), **len** (x0)
+**if** n1 < 2 **or** n0 < 2:
+
+**continue**
+
+
+24
+
+
+_#_ _per-stratum_ _summaries_
+mu1, mu0 = x1.mean(), x0.mean()
+s1, s0 = x1.var(ddof=1), x0.var(ddof=1)
+w = n_g / N
+
+
+_#_ _LOTP_ _aggregation_
+ATE += w       - (mu1       - mu0)
+V_g = (s1 / n1) + (s0 / n0)
+Vsum += (w**2)       - V_g
+denom += (w**4)       - ((s1 / n1)**2 / **max** (n1       - 1, 1) + (s0 / n0)
+
+** [2] [/] **[max]** [(n0] [-] [1,] [1))]
+
+
+se = Vsum**0.5
+tstat = ATE / se
+df_ws = (Vsum**2) / denom
+pval = 2.0     - scipy.stats.t.sf( **abs** (tstat), df=df_ws)
+out.append((j, **float** (ATE), **float** (pval)))
+
+
+**return** pd.DataFrame(out, columns=["neuron","ATE","p_value"])
+
+
+25
+
+
+D EXPERIMENTS DETAILS
+
+
+D.1 CELEBA SEMI-SYNTHETIC RCTS
+
+
+**Dataset.** We use CelebA (Liu et al., 2018), a face attributes dataset with _>_ 200k images and
+40 binary attributes per image [2] . Furthermore, for implementation details, labels have been doubled
+(we pass from Beard to Has ~~B~~ eard and Has ~~n~~ otBeard). We follow the authors’ official _train/-_
+_val/test_ split, and we employ the validation data for training SAEs and the test data to interpret them.
+Attributes are treated as ground-truth binary labels. From this source, we simulate several RCTs following the data-generating process (DGP) described below, varying the sample size ( _n_ _≪_ 200 _k_ )
+and treatment effect ( _τ_ ), reflecting realistic randomized controlled trial characteristics.
+
+
+**Data Generating Processes** To evaluate discovery accuracy with known ground truth, we simulate
+RCTs by reusing real images but stochastically sampling treatment and outcomes from CelebA
+attributes:
+
+
+- _Treatment:_ _T_ _∼_ Bernoulli(0 _._ 5).
+
+- _Outcome_ _factors:_ we designate two binary effects _Y_ =( _Y_ 1 _, Y_ 2) using CelebA attributes:
+_Y_ 1=Eyeglasses, _Y_ 2=Wearing ~~H~~ at.
+
+- _Exogenous Cause:_ _W_ =Smiling.
+
+
+We implement a “co-effect” model in which an intervention on _T_ shifts both _Y_ 1 and _Y_ 2 by the same
+ATE with arm-specific probabilities and _W_ modifies only _Y_ 1, i.e.,:
+
+
+Pr( _Y_ 2=1 _T_ =1) = _p_ [(] 1 _[Y]_ [2][)] _,_ Pr( _Y_ 2=1 _T_ =0) = _p_ [(] 0 _[Y]_ [2][)] _,_
+_|_ _|_
+
+
+Pr( _Y_ 1=1 _T_ = _t, W_ = _w_ ) =
+_|_
+
+
+
+
+
+
+
+
+
+_p_ [(] 11 _[Y]_ [1][)] ( _t_ =1 _, w_ =1)
+_p_ [(] 10 _[Y]_ [1][)] ( _t_ =1 _, w_ =0)
+_p_ [(] 01 _[Y]_ [1][)] ( _t_ =0 _, w_ =1)
+_p_ [(] 00 _[Y]_ [1][)] ( _t_ =0 _, w_ =0)
+
+
+with _W_ _∼_ Bernoulli(0 _._ 5). We vary effect magnitude via an ATE grid ATE _∈{_ 0 _,_ 0 _._ 1 _, . . .,_ 0 _._ 8 _}_ (9
+values). Concretely, starting from a base rate 0 _._ 5, we set:
+
+
+_p_ [(] 1 _[Y]_ [2][)] = 0 _._ 5 + [ATE] 2
+
+
+2 _[,]_
+
+
+and analogously for _Y_ 1 in the _W_ =1 arm:
+
+
+2 _[,]_ _p_ [(] 0 _[Y]_ [2][)] = 0 _._ 5 _−_ [ATE] 2
+
+
+2 _[,]_ _p_ [(] 01 _[Y]_ [1][)] = 0 _._ 5 _−_ [ATE] 2
+
+
+_p_ [(] 11 _[Y]_ [1][)] = 0 _._ 5 + [ATE] 2
+
+
+2 _[,]_ _p_ [(] 10 _[Y]_ [1][)] = 0 _._ 2 + ATE _,_ _p_ [(] 00 _[Y]_ [1][)] = 0 _._ 2 _._
+
+
+For each simulated unit, we draw ( _T, W, Y_ 1 _, Y_ 2), then assign an _actual_ _image_ whose CelebA attributes match the realized ( _Y_ 1 _, Y_ 2 _, W_ ).
+
+
+**FM** **features.** Each image _x_ is encoded with SigLIP (Zhai et al., 2023) into a patch-level representation; we use the final-layer token features (dim _d_ =768, 196 patches/token positions averaged).
+Unless noted otherwise, we do not use any task-specific fine-tuning.
+
+**SAE Details.** We train a SAE on SigLIP features to obtain interpretable codes _Z ∈_ R _[m]_ that serve
+as hypotheses for treatment effect estimation. Thereafter, the details for the SAE in Table 1. Lastly,
+to turn hidden representation into hypotheses, aggregate patchwise by _mean_ _pooling_ to a single
+_Z_ _∈_ R [9216] per image. These per-image codes are the units we test in NES and baseline procedures.
+
+
+**Evaluation.** We evaluate discoveries against concept–aligned SAE codes extracted from CelebA.
+Let _m_ =9 216 be the number of codes and _Zj_ ( _X_ ) R the activation of code _j_ [ _m_ ] on image _X_ ;
+_∈_ _∈_
+a code is _active_ when _Zj_ ( _X_ ) _>_ 0. For true effect _Yk_ 0 _,_ 1 (here _k_ 1 _,_ 2 ) and each code _j_,
+_∈{_ _}_ _∈{_ _}_
+ground-truth labelswe induce predictions _{yiky_ ˆ _}ik_ [(] _[j]_ _i_ _[n]_ [)] =1 [:=][; the][I] _[{][ best][Z][j]_ [(] _[X]_ [ neuron for the concept is then] _[i]_ [)] _[>]_ [0] _[}]_ [ and compute the F1-score of] _[ {][y]_ [ˆ] _ik_ [(] _[j]_ [)] _[}]_ _i_ _[n]_ =1 [against the]
+
+                -                 _gk_ := arg max _y_ ˆ _ik_ [(] _[j]_ [)] _i_ =1 _[,]_ _i_ =1 _._
+_j∈_ [ _m_ ] [F1] _{_ _[}][n]_ _[{][y][ik][}][n]_
+
+
+[2It can be downloaded from flwrlabs/celeba.](https://huggingface.co/datasets/flwrlabs/celeba)
+
+
+26
+
+
+**Component** **Setting**
+
+
+Encoder nonlinearity Top- _k_ with _k_ =5 active codes
+Input dimension 768
+Code / decoder dimension ( _m_ ) 9216
+Optimizer / LR / batch Adam / 5 _×_ 10 _[−]_ [4] / 20
+Epochs / grad clipping 20 / 1 _._ 0
+
+
+Table 1: Training details for the SAE employed in semi-synthetic experiments.
+
+
+The resulting ground-truth set of affected codes is := _g_ 1 _, g_ 2 (in general = _r_ ). Each method
+_G_ _{_ _}_ _|G|_
+(NES or a baseline) returns a set of discovered codes _S_ _⊆_ [ _m_ ], which we compare to _G_ via set
+metrics. Defining TP := _|S ∩G|_, FP := _|S \ G|_, and FN := _|G \ S|_, we report
+
+TP TP
+Precision = Recall = F1 = [2 Precision] _[ ·]_ [ Recall]
+TP + FP _[,]_ TP + FN _[,]_ Precision + Recall _[,]_
+
+
+and the set Intersection-over-Union (IoU)
+
+
+TP
+
+IoU = _[|S ∩G|]_ [=] TP + FP + FN _[.]_
+
+_|S ∪G|_
+
+For each trained representation, including the additional experiments in Appendix E, we repeat
+the evaluation resampling the experiment 10 times and reporting the average _±_ standard deviation.
+Further ablations additionally retraining the encoder, i.e., SAE, are presented in Appendix E.
+
+
+D.2 ISTANT
+
+
+**Data and RCT.** We considered the randomized controlled trial introduced by Cadei et al. (2024).
+Videos of ant triplets were collected under randomized treatment/control assignment. Throughout
+our unsupervised pipeline, _domain annotations from biologists were used only a posteriori for inter-_
+_pretation/evaluation of discovered codes, never for training_, as discussed in the main text.
+
+
+**FM features.** Each frame _X_ is encoded with DINOv2 (Oquab et al., 2023) into a patch-level representation; we use the final-layer token features (dim _d_ =384, 256 patches/token positions averaged).
+Unless noted otherwise, we do not use any task-specific fine-tuning.
+
+**SAE** **Details.** We train a SAE on the DINOv2 features to obtain interpretable codes _Z ∈_ R _[m]_ that
+serve as hypotheses for treatment effect estimation. Thereafter, the details for the SAE are in Table 2.
+Lastly, to turn hidden representation into hypotheses, we aggregate patchwise by _mean_ _pooling_ to
+a single _Z_ _∈_ R [4608] per frame. These per-frame codes are the units we test in NES and baseline
+procedures.
+
+
+**Component** **Setting (ISTAnt)**
+
+
+Encoder nonlinearity top- _k_ with _k_ =20 active codes
+Input dimension 384
+Code / decoder dimension ( _m_ ) 4608
+Optimizer / LR / batch Adam / 5 _×_ 10 _[−]_ [4] / 128
+Epochs / grad clipping 10 / 1 _._ 0
+
+
+Table 2: Training details for the SAE employed on ISTAnt.
+
+
+**Evaluation.** Evaluation follows exactly the CELEBA protocol: we score discovered codes against
+ground-truth concepts via code–induced predictions and compute Precision/Recall/F1 and IoU for
+the set of returned codes (with domain annotations used only for interpreting and quantifying performance, not for training).
+
+
+27
+
+
+E ADDITIONAL EXPERIMENTS
+
+
+In this Section, we provide extensive empirical validation of our method, in addition to the selected
+main semi-synthetic experiments reported in Section 6. Particularly,
+
+
+    - we explicitly **test** for the required encoder representation **assumptions**, theoretically justifying the successful identification results;
+
+
+    - we extensively validate the **method consistency** by (i) repeating the experiments with different encoders and trainings, (ii) comparing different method hyper-parameters, and (iii)
+additionally testing on more varied data-generating processes;
+
+
+    - we additionally include two **novel** heuristic **baselines**, inspired by Causal Feature Learning
+principles (Chalupka et al., 2017).
+
+
+Overall, the experiments consistently validate our identification result and further provide practical
+guidelines on how to set the different hyperparameters.
+
+
+E.1 ASSUMPTIONS VALIDATION
+
+
+We assess how well SAE codes behave as measurement channels on CELEBA by testing the alignment between individual neurons and the ground–truth attributes described in the previous section.
+We consider the main SAE trained for the main experiments reported in Section 6 with training
+details described in Appendix D, and we then compare it with the same encoder replacing SigLIP
+(foundational model) with DINOv2, and again SAE top- _k_ non linearity with JumpRELU. According
+to Theorem 4.1, we test if (i) such attributes information is still encoded in the SAE representation,
+i.e., Assumption A.1 and (ii) per each attribute there exists a dedicated neuron strongly aligned
+and all the other neurons are just marginally aligned with it, i.e., Assumption A.2. We first test
+the foundational model sufficiency and then for the SAE. Particularly, for each code _j_ in the SAE
+representation, we treat the event _Zj_ _>_ 0 as a binary predictor and compute its F1–score against
+each attribute label (assumed given). We then interpret the most predictive neurons by visualizing
+their corresponding most activated samples; and visualize such attributes’ entanglement in the representation by filtering all their most predictive codes and comparing their probing performances.
+We remark that in practice, without the affected outcome supervision, these assumptions are not
+testable, and we can do it here just because controlling the data-generating process and having access to attribute annotations. More indirect and unsupervised assessments for a SAE representation,
+testing a priori validity for NES, should be explored in future works, or just ignored, at the price of
+having no guarantees on the interpretability of NES results.
+
+
+**SigLIP with SAE top-** _k_ **non linearity** (main encoder). As expected, SigLIP embeddings are sufficient for the task, enabling us to accurately classify both the affected outcomes directly via (vanilla)
+logistic regression, respectively with Precision= 0 _._ 9639 and Recall= 0 _._ 9947 for Wearing ~~H~~ at,
+and with Precision= 0 _._ 9712 and Recall= 0 _._ 9747 for Eyeglasses. Furthermore, in the SAE representation, trained with top- _k_ non-linearity ( _k_ = 20), the two most predictive neurons for the two
+6051affected forfactors Eyeglassesare: (i) neuron with F138 _−_ forscore = 0Wearing _._ 748. We can further appreciate qualitatively the high ~~H~~ at with F1 _−_ score = 0 _._ 841, and (ii) neuron
+separations by visualizing the most activated images per neuron in Figure 7. Also, the SAE representation is then sufficient, and for each affected outcome, there is a principal neuron strongly aligned.
+In Figure 8 we visualize the F1-score spectra of the most predictive neurons for each attribute. The
+long tail, dominated by a principal component, represents exactly what is already required by Assumptions A.1-A.2 to enforce NES validity. Such low–amplitude but widespread correlations are
+precisely what triggers instead the _Paradox of Exploratory Causal Inference_ with vanilla multipletesting, i.e., with enough power all such entangled neurons are returned as significantly affected
+due to their (marginal) true affected outcome information. Our NES counters this issue by retrieving the leading effect first and then recursively stratifying on previously discovered codes, so that
+subsequent tests target the _residual_ causal signal rather than previous causes’ information leakages.
+
+
+28
+
+
+Most activated images for Neuron 38 Most activated images for Neuron 6051
+
+
+Figure 7: **Qualitative** **neurons’** **interpretations** (SigLIP + SAE top- _k_ ). Each panel shows the
+12 most–activated test images for the most predictive neuron of each affected outcome concept
+(activation = highest code value). Both concepts are perfectly separated.
+
+
+Wearing Hat neuron importance
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+Eyeglasses neuron importance
+
+
+Figure 8: **Assessing** **principal** **alignment** **with** **broad** **entanglement** (SigLIP + SAE top- _k_ ). For
+each attribute, we rank SAE codes by F1-score against the affected attributes and visualize the most
+predictive in order. Both concepts are principally explained by a single neuron, and still weakly,
+while broadly entangled with many others.
+
+
+**DINOv2** **with** **SAE** **top-** _k_ **non-linearity** As expected, also DINOv2 embeddings are sufficient
+for the task, enabling to accurately classify both the affected outcomes directly via (vanilla) logistic regression, respectively with Precision= 0 _._ 9534 and Recall= 0 _._ 9787 for Wearing ~~H~~ at, and
+with Precision= 0 _._ 9636 and Recall= 0 _._ 9567 for Eyeglasses. Furthermore, in the SAE representation, trained with top- _k_ non-linearity ( _k_ = 20), the two most predictive neurons for the two
+affectedron 253 forfactors Eyeglassesare: (i) neuron with1937 F1 _−_ forscoreWearing= 0 _._ 594 ~~H~~ .atWe can further appreciate qualitatively thewith F1 _−_ score = 0 _._ 431, and (ii) neuseparations by visualizing the most activated images per neuron in Figure 9. Also, the SAE representation is then sufficient, while the principal alignment is high for Eyeglasses but less evident
+for Wearing ~~H~~ at, where the concepts could be possibly captured by all the top three most predictive neurons. Indeed, also in the qualitative interpretation, among the most activated samples,
+some concepts, e.g., wearing sunglasses and a hat, are over-represented. In Figure 10, we visualize
+the F1-score spectra of the most predictive neurons for each attribute. The long tail, dominated by a
+principal component, represents exactly what is already required by Assumptions A.1-A.2 to enforce
+NES validity, even if the principal alignment is weakly satisfied by Wearing ~~H~~ at concept (potentially violating Equation 26). Such low–amplitude but widespread correlations are precisely what
+trigger the _Paradox of Exploratory Causal Inference_ with vanilla multiple-testing, i.e., with enough
+power, all such entangled neurons are returned as significantly affected due to their (marginal) true
+
+
+29
+
+
+affected outcome information. Our NES counters this issue by retrieving the leading effect first
+and then recursively stratifying on previously discovered codes, so that subsequent tests target the
+_residual_ causal signal rather than previous causes’ information leakages.
+
+
+Figure 9: **Qualitative** **neurons’** **interpretations** (DINOv2 + SAE top- _k_ ). Each panel shows the
+12 most–activated test images for the most predictive neuron of each affected outcome concept
+(activation = highest code value). Both concepts are perfectly separated, despite Wearing ~~H~~ at
+seeming to over-represent specific subgroups.
+
+
+Figure 10: **Assessing principal alignment with broad entanglement** (DINOv2 + SAE top- _k_ ). For
+each attribute, we rank SAE codes by F1-score against the affected attributes and visualize the most
+predictive in order. Eyeglasses is principally explained by a single neuron, Wearing ~~H~~ at by
+three main neurons, and both concepts are still weakly but broadly entangled with many others.
+
+
+**SigLIP** **with** **SAE** **JumpReLU** **non-linearity** We already discussed SigLIP embedding sufficiency in the main encoder hypotheses assessment. However, training on top a SAE with jumpReLU non-linearity breaks the desiderata hypotheses satisfied with top- _k_ non-linearity. Particularly,
+the two most predictive neurons for the two affected factors are: (i) neuron 3485 for Wearing ~~H~~ at
+performances are limited, particularly forwith F1 _−_ score = 0 _._ 273, and (ii) neuron 2865 Wearing for Eyeglasses ~~H~~ at classification. with F1We can further appreciate _−_ score = 0 _._ 425. Both
+qualitatively the weak separability by visualizing the most activated images per neuron in Figure 11,
+e.g., Neuron 3485 is not capturing precisely the concept Wearing ~~H~~ at but probably something
+broader like “ _having_ _something_ _on_ _top_ _of_ _the_ _head_ ”, e.g., some text from the background. In Figure 10, we visualize the F1-score spectra of the most predictive neurons for each attribute. For
+Eyeglasses, there exists a principal neuron, despite the other entangled neurons still being sufficiently predictive. Instead, for Wearing ~~H~~ at classification, there is no clear principal component,
+violating NES assumption, and also ill-defining any evaluation attempts (requiring setting the princi
+
+30
+
+
+pal neurons identifying the effects). On such a representation, NES has no guarantees, and the long
+and heavy tails also trigger once again the _Paradox_ _of_ _Exploratory_ _Causal_ _Inference_ with vanilla
+multiple-testing.
+
+
+Figure 11: **Qualitative neurons’ interpretations** (SigLIP + SAE jump-ReLU). Each panel shows
+the 12 most–activated test images for the most predictive neuron of each affected outcome concept (activation = highest code value). Eyeglasses is separated while it is not the case for
+Wearing ~~H~~ at concept.
+
+
+Figure 12: **Assessing principal alignment with broad entanglement** (SigLIP + SAE jump-ReLU).
+For each attribute, we rank SAE codes by F1-score against the affected attributes and visualize the
+most predictive in order. Eyeglasses concept is principally explained by a single neuron, and
+still strongly and broadly entangled with many others. Wearing ~~H~~ at concept has no principal
+components and the tails are very heavy, i.e., the information is shared among different neurons.
+
+
+E.2 METHOD CONSISTENCY
+
+
+In this Section, we extensively validate the method consistency beyond the experiments selected for
+the main results discussion in Section 6. Particularly, (i) we repeat the experiments with different
+encoders and trainings, (ii) we compare different method hyper-parameters, and (iii) we additionally
+test on more varied data-generating processes.
+
+
+E.2.1 VARYING ENCODER
+
+
+Considering the same data-generating processes and evaluations described in Appendix D, we repeat
+the experiments relying on different measurement channels, i.e., input encoders and corresponding
+embedding.
+
+
+31
+
+
+**Foundational** **model** First, we replicate the main experiment replacing SigLIP with DINOv2
+(Oquab et al., 2023) as foundational model. From the experiment in the previous paragraph, we
+know that the main hypotheses for NES to work hold, still triggering the Paradox of Causal Inference if relying otherwise on vanilla multiple hypothesis testing. The results are reported in Figure
+13. As expected, DINOv2 perfectly replicates the results discussed in Section 6.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 13: **Ablation** **Foundationa** **Model** (DINOv2). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), relying on DINOv2 embeddings.
+NES consistently replicates the main results using SigLIP embeddings, still overcoming the paradox
+of Exploratory Causal Inference.
+
+
+**Sparse autoencoder dimension** Then, we consider different sparse autoencoders varying the latent dimension _m_, and retrying with the same setting described in Appendix D. Particularly, we
+varied _m_ by a factor _{_ 4 _,_ 6 _,_ 8 _,_ 10 _,_ 14 _,_ 16 _}_ of the foundational model dimension _d_ = 768 (in the main
+experiment, we considered _m_ = 12 _·d_ ). In all the settings and retraining, we replicate the results discussed in Section 6, i.e., NES consistently overcomes the Paradox of Exploratory Causal Inference,
+while it consistently invalidates all the other baselines, making both our method and the baselines
+invariant with respect to the latent representation dimension, in the order of a few thousand neurons.
+See results summaries in Figures 14-19.
+
+
+32
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 14: **Ablation SAE dimension** ( _m_ = 3 072). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE dimension _m_ = 3 072, 4x
+DINOv2 dimension _n_ = 768. NES consistently replicates the main results, varying the representation dimension _m_, still overcoming the paradox of Exploratory Causal Inference.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 15: **Ablation SAE dimension** ( _m_ = 4 608). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE dimension _m_ = 4 608, 6x
+DINOv2 dimension _n_ = 768. NES consistently replicates the main results, varying the representation dimension _m_, still overcoming the paradox of Exploratory Causal Inference.
+
+
+33
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 16: **Ablation SAE dimension** ( _m_ = 6 144). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE dimension _m_ = 6 144, 8x
+DINOv2 dimension _n_ = 768. NES consistently replicates the main results, varying the representation dimension _m_, still overcoming the paradox of Exploratory Causal Inference.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 17: **Ablation SAE dimension** ( _m_ = 7 680). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE dimension _m_ = 7 680, 10x
+DINOv2 dimension _n_ = 768. NES consistently replicates the main results, varying the representation dimension _m_, still overcoming the paradox of Exploratory Causal Inference.
+
+
+34
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 18: **Ablation SAE dimension** ( _m_ = 10 752). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE dimension _m_ = 10 752, 14x
+DINOv2 dimension _n_ = 768. NES consistently replicates the main results, varying the representation dimension _m_, still overcoming the paradox of Exploratory Causal Inference.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 19: **Ablation SAE dimension** ( _m_ = 12 288). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE dimension _m_ = 12 288, 16x
+DINOv2 dimension _n_ = 768. NES consistently replicates the main results, varying the representation dimension _m_, still overcoming the paradox of Exploratory Causal Inference.
+
+
+**Sparse autoencoder non-linearity** Additionally, we consider different sparse auto-encoder nonlinearities and repeat all the experiments as before. In Figures 20-23 we report all the results using
+top- _k_ activation with _k_ _∈{_ 5 _,_ 10 _,_ 50 _,_ 100 _}_ (by default _k_ = 20 in the main experiments). Again,
+
+
+35
+
+
+all the results discussed in Section 6 are replicated, i.e., NES consistently overcomes the Paradox
+of Exploratory Causal Inference, suggesting the top- _k_ selection is not influential for our method,
+i.e., the required assumptions are consistently satisfied, despite the obtained representation may
+significantly change. On the other hand, the other baselines consistently fail due to the Paradox
+of Exploratory Causal Inference, and the higher the enforced entanglement, i.e., _k_, the higher the
+broad entanglement with the affected outcomes, and accordingly smaller the precision. Finally,
+any analysis using jump-ReLU for non-linearity is invalid due to the principal alignment discussed
+above, required both for NES validity and more generally for valid evaluation. For completeness,
+we report anyway in Figure 24 the replicated experiments results using jump-ReLU non-linearity.
+At least one, if not both, ground truths are ill-defined, and the consistent null precision, even for
+NES, should be taken with a pinch of salt.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 20: **Ablation SAE non-linearity** (top-5). Precision, Recall, and IoU in effect identification
+varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE non-linearity by top- _k_ with _k_ = 5.
+NES consistently replicates the main results using top- _k_ with _k_ = 20, still overcoming the paradox
+of Exploratory Causal Inference.
+
+
+36
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 21: **Ablation SAE non-linearity** (top-10). Precision, Recall, and IoU in effect identification
+varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE non-linearity by top- _k_ with _k_ =
+10. NES consistently replicates the main results using top- _k_ with _k_ = 20, still overcoming the
+paradox of Exploratory Causal Inference.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 22: **Ablation SAE non-linearity** (top-50). Precision, Recall, and IoU in effect identification
+varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE non-linearity by top- _k_ with _k_ =
+50. NES consistently replicates the main results using top- _k_ with _k_ = 20, still overcoming the
+paradox of Exploratory Causal Inference.
+
+
+37
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 23: **Ablation SAE non-linearity** (top-100). Precision, Recall, and IoU in effect identification
+varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE non-linearity by top- _k_ with _k_ =
+100. NES consistently replicates the main results using top- _k_ with _k_ = 20, still overcoming the
+paradox of Exploratory Causal Inference.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 24: **Ablation SAE non-linearity** (jump-ReLU). Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), with SAE non-linearity by jumpReLU. The principal alignment is violated, invalidating both NES and any evaluation (ill-defined
+ground truth).
+
+
+**Seed** Finally, we replicate two more times exactly the same main experiments presented in Section
+6), retraining the SAE with a different random seed. Once again, we replicate the results discussed
+
+
+38
+
+
+in Section 6, i.e., NES consistently overcomes the Paradox of Exploratory Causal Inference, while
+it invalidates all the other baselines. See results in Figures 25-26.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 25: **Replica-1 main results.** Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), retraining the SAE with a different random seed (replica
+1). NES consistently replicates the main results, still overcoming the paradox of Exploratory Causal
+Inference.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+30 250 500 5000
+N
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+0.0
+0.1 0.2 0.5 0.8
+
+
+Figure 26: **Replica-2 main results.** Precision, Recall, and IoU in effect identification varying sample size _N_ (top) and effect size _τ_ (bottom), retraining the SAE with a different random seed (replica
+2). NES consistently replicates the main results, still overcoming the paradox of Exploratory Causal
+Inference.
+
+
+39
+
+
+E.2.2 VARYING METHOD HYPER-PARAMETERS
+
+
+We now repeat the main experiments and compare different variants of our methods, varying the
+multiple-hypothesis testing, using residualization and varying the ATE estimator.
+
+
+**Hypothesis Testing** We compare three per-round gates inside NES: Bonferroni, FDR, and _t_ -test.
+Same setup as described in Appendix D with extended sample size _N_ and effect size _τ_ grids, as
+considered in the additional experiments described in Appendix E.2.3; only the multiplicity rule
+changes while recursion and residual stratification are unchanged. The results are reported in Figure
+27. Bonferroni adjustment and FDR deliver the best recoveries, full recall, keeping Precision≳ 0
+with sufficient experiment power. _NES-t_ is comparable overall, with similar performances with
+higher power, potentially more exploratory for very small power, i.e., _N_ = 30, and less precise
+in mid-power regimes, i.e., _N_ _∈{_ 50 _, ...,_ 500 _}_, _τ_ _∈{_ 0 _._ 2 _, ...,_ 0 _._ 6 _}_ (weak Paradox of Exploratory
+Causal Inference). The results suggest generally preferring a multi-hypothesis testing correction,
+i.e., Bonferroni and FDR, when the power of the experiment is sufficiently high, while considering
+the _t_ -test for a more explorative approach in a very low power regime.
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+30 50 100 250 500 1000 2500 5000
+N
+
+
+_τ_
+
+
+30 50 100 250 500 1000 2500 5000
+N
+
+
+Bonferroni FDR _t_ -test
+
+
+30 50 100 250 500 1000 2500 5000
+N
+
+
+_τ_
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+Figure 27: **Ablation multi-hypotheses testing** (within NES). Bonferroni and FDR: best recoveries,
+full recall, keeping Precision ≳ 0 with sufficient experiment power; _t_ -test: comparable overall, with
+similar performances with higher power, potentially more exploratory for very small power, and less
+precise in mid-power regimes.
+
+
+**Residualization** We then evaluate the benefits in combining the recursive stratification procedure
+characterizing NES, with or without arm-wise residualization within NeuralEffectTest (lines
+2-10) for each multi-hypotheses testing method. Same experiment set-up as described in Appendix
+D. Results are reported in Figure 28. In lower power experiments, i.e., smaller _n_ or _τ_, arm-wise
+residualization seems to consistently improve the precision without compromising the recall, for
+each multi-hypotheses testing variant. In higher power experiments, i.e., greater _n_ or _τ_, such difference gets negligible as discussed in Theorem 4.1 discussion in Appendix A.
+
+
+40
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+N
+
+|.0<br>.8<br>.6<br>.4<br>.2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|1.0<br>0.8<br>0.6 Recall<br>0.4<br>0.2|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|Col28|Col29|Col30|Col31|Col32|Col33|Col34|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0||||||||||||||||||||||||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0||||||||||||||||||||||||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0||||||||||||||||||||||||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0||||||||||||||||||||||||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0||||||||||||||||||||||||||||||||||
+
+
+0.1 0.2 0.5 0.8
+_τ_
+
+
+30 250 500 5000
+N
+
+
+0.1 0.2 0.5 0.8
+_τ_
+
+
+N
+
+|1.0<br>0.8<br>0.6<br>0.4<br>0.2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|0_._2<br>0_._4<br>0_._6<br>0_._8<br>1_._0|||||||||||||||
+|0_._2<br>0_._4<br>0_._6<br>0_._8<br>1_._0|||||||||||||||
+|0_._2<br>0_._4<br>0_._6<br>0_._8<br>1_._0|||||||||||||||
+|0_._2<br>0_._4<br>0_._6<br>0_._8<br>1_._0|||||||||||||||
+|0_._2<br>0_._4<br>0_._6<br>0_._8<br>1_._0|||||||||||||||
+
+
+0.1 0.2 0.5 0.8
+_τ_
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+|Bonferroni NES FDR NES t-test NES when r-known<br>Bonferroni NES (No-Res) FDR NES (No-Res) t-test NES (No-Res)|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|Bonferroni NES<br>Bonferroni NES (No-Res)<br>FDR NES<br>FDR NES (No-Res)<br>t-test NES<br>t-test NES (No-Res)<br>when _r_-known|Bonferroni NES<br>Bonferroni NES (No-Res)||FDR NES<br>FDR NES (No-Res)||t-test NES<br>t-test NES (No-Res)<br>when _r_-known|
+|Bonferroni NES<br>Bonferroni NES (No-Res)<br>FDR NES<br>FDR NES (No-Res)<br>t-test NES<br>t-test NES (No-Res)<br>when _r_-known|Bonferroni NES<br>Bonferroni NES (No-Res)|||||
+
+
+Figure 28: **Ablation arm-wise residualization** (within NET). Additional arm-wise residualization
+significantly improve the method performances in lower power regime, i.e., smaller sample or reduced effect.
+
+
+**Average Treatment Effect estimator** Throughout the paper, our per-neuron hypothesis test uses
+the _associational_ _difference_ (AD), i.e., a two-sample _t_ -test on the treated–control difference in
+means. In randomized trials, AD is unbiased for the ATE, but it is not semi-parametrically efficient. A standard variance–reduction alternative is _Augmented Inverse Propensity Weighting_ (AIPW;
+Robins et al., 1994), which orthogonalizes the estimator against misspecification of either the
+propensity score or the outcome regression. For each code _j_, let _Zij_ be its activation for unit _i_,
+_Ti_ 0 _,_ 1 the treatment, and _Wi_ observed exogenous causes. We compute the AIPW pseudo_∈{_ _}_
+outcome
+
+
+_Z_ ˜ _ij_ = _µ_ ˆ1 _j_ ( _Wi_ ) _µ_ ˆ0 _j_ ( _Wi_ ) + _Ti_ - _Zij_ _µ_ ˆ1 _j_ ( _Wi_ )� 1 _−_ _Ti_ - _Zij_ _µ_ ˆ0 _j_ ( _Wi_ )� _,_ (36)
+_−_ _π_ ( _Wi_ ) _−_ _−_ 1 _π_ ( _Wi_ ) _−_
+_−_
+
+where _µ_ ˆ _tj_ ( _W_ ) _π_ ( _W_ )E[ _Z_ = _j_ Pr( _TT_ == _t, W_ 1 ] _|_ is _W_ a )nuisance, known regression.and constantThe _π_ AIPW= 0 _._ 5estimatein balancedof theRCTs,code-leveland
+ATE is _τ_ ˆ _j≈_ [AIPW] = _n_ 1 _|_ - _i_ _[Z]_ [˜] _[ij]_ [;] [we] [test] _[H]_ [0] [:] _[τ][j]_ [=] [0] [via] [a] [one-sample] _[t]_ [-test] [on] _[{][Z]_ [ ˜] _[ij][}][i]_ [with] [robust]
+
+variance. Figure 29 reports the standalone multiple testing methods performances comparing AD
+vs. AIPW as neural treatment effect estimator, fixing the effect magnitude _τ_ = 0 _._ 6 and across sample sizes _n ∈{_ 30 _,_ 500 _,_ 5 000 _}_ . In our setting, with balanced and randomized treatment assignment
+( _π_ = 0 _._ 5) and a _single_ binary effect-modifier _W_, AIPW yields only marginal efficiency gains: Precision/Recall/IoU curves are essentially overlapping, with small stability improvements for AIPW
+at the smallest _n_ . Crucially, orthogonalization affects variance but _does_ _not_ resolve entanglement:
+the significance–collapse phenomenon for standard multi-testing (Section 3) persists under AIPW,
+and NES retains its advantage because its benefit comes from recursive stratification (disentangling
+residual effects), not from how the first-step mean contrast is estimated. Takeaways:
+
+
+    - in pure RCTs with weak, low-dimensional _W_, AD is competitive and simpler,
+
+
+    - AIPW can be preferred when richer exogenous information is available (higherdimensional _W_, imbalance, or mild protocol deviations), where its variance reduction can
+translate into earlier detection of the leading effect,
+
+
+    - regardless of AD or AIPW, NES’s stratified recursion is the key to avoiding over-discovery
+under entanglement.
+
+
+41
+
+
+|top-k|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+Precision Recall
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+|Bonferroni|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|FDR|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|t-test|Col26|Col27|Col28|Col29|Col30|Col31|Col32|Col33|Col34|Col35|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||
+||||||||||||||||||||||||||||||||||||
+
+~~P~~ recision Recall
+
+|.0<br>.8<br>.6<br>.4<br>.2|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0|||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0|||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0|||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0|||||||||||||
+|_._2<br>_._4<br>_._6<br>_._8<br>_._0|||||||||||||
+
+
+Precision Recall
+
+
+~~P~~ recision ~~R~~ ecall
+
+
+Precision Recall
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+|Precision<br>Recall|Precision<br>Recall|Precision<br>Recall|Precision<br>Recall|Precision<br>Recall|Precision<br>Recall|Precision<br>Recall|
+
+
+|.0<br>.8<br>.6<br>.4<br>.2<br>.0<br>Precision Recall Precision Recall Precision Recall<br>AD AIPW|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|Precision<br>Recall<br>_._0<br>_._2<br>_._4<br>_._6<br>_._8<br>_._0<br>Precision<br>Recall<br>Precision<br>Recall<br>AD<br>AIPW|||||
+|Precision<br>Recall<br>_._0<br>_._2<br>_._4<br>_._6<br>_._8<br>_._0<br>Precision<br>Recall<br>Precision<br>Recall<br>AD<br>AIPW|||||
+|Precision<br>Recall<br>_._0<br>_._2<br>_._4<br>_._6<br>_._8<br>_._0<br>Precision<br>Recall<br>Precision<br>Recall<br>AD<br>AIPW|||||
+|Precision<br>Recall<br>_._0<br>_._2<br>_._4<br>_._6<br>_._8<br>_._0<br>Precision<br>Recall<br>Precision<br>Recall<br>AD<br>AIPW|||||
+|Precision<br>Recall<br>_._0<br>_._2<br>_._4<br>_._6<br>_._8<br>_._0<br>Precision<br>Recall<br>Precision<br>Recall<br>AD<br>AIPW|||||
+
+
+Figure 29: **Ablation Treatment Effect Estimator.** Precision, Recall, and IoU when replacing the
+per-neuron causal estimator AD (associational difference) with AIPW for vanilla multiple testing
+criteria (baseline).
+
+
+E.2.3 VARYING STRUCTURAL CAUSAL MODEL
+
+
+**Additional main results** This paragraph expands the quantitative results illustrated in Figure 5 by
+reporting all the considered sample sizes and effect magnitudes in the data-generating processes, for
+two evaluation regimes:
+
+
+1. _Unknown_ _number_ _of_ _effects_ ( _r_ ). Each method returns its _own_ set of significant codes. We then
+report Precision, Recall, and IoU against the ground–truth affected codes.
+
+
+2. _Known number of effects_ ( _r_ ). We assume to know the true number of effects, and we just look at
+the _r_ highest effects for each method. We again compute Precision, Recall, and IoU (namely, we
+apply top-2 selection on top of other methods).
+
+
+As detailed in Appendix D.1, we vary ( _i_ ) the sample size _n_ _∈{_ 30 _,_ 50 _,_ 100 _,_ 250 _,_ 500 _,_ 1000 _}_ and
+( _ii_ ) the ATE magnitude _τ_ _∈{_ 0 _._ 1 _,_ 0 _._ 2 _, . . .,_ 0 _._ 8 _}_, holding the semi–synthetic DGP and SAE training
+protocol fixed. Across both regimes and over the entire grid, NES maintains high Precision and
+IoU while matching the best Recall of baselines. When the experiment power increases (larger
+_n_ or _τ_ ), vanilla _t_ –tests and classical multiplicity corrections (FDR/Bonferroni) exhibit the _sig-_
+_nificance–collapse_ behavior: Recall saturates but Precision drops sharply as leakage neurons become significant, driving IoU toward zero. Enforcing the correct cardinality ( _r_ known) mitigates
+over–selection but does _not_ resolve entanglement: baselines still replace a true effect with a leakage surrogate in later picks, keeping Precision _<_ 0 _._ 5 in the high–power regime. In contrast, NES’s
+residual stratification peels one principal effect component per round and then _stops_, preserving
+interpretability.
+
+
+42
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+NESBonferroniFDR _t_ -test top- _k_
+Methods (bars shaded by N)
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+NESBonferroniFDR _t_ -test top- _k_
+Methods (bars shaded by N)
+
+
+Methods (bars shaded by _τ_ )
+
+
+NESBonferroniFDR _t_ -test top- _k_
+Methods (bars shaded by N)
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+Methods (bars shaded by _τ_ )
+
+
+Figure 30: **Full** **results** **with** _**r**_ **unknown.** Precision, Recall, and IoU for all methods when each
+returns its own set of significant codes at level _α_ = 0 _._ 05.
+
+
+43
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+NESBonferroniFDR _t_ -test top- _k_
+Methods (bars shaded by N)
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+NESBonferroniFDR _t_ -test top- _k_
+Methods (bars shaded by N)
+
+
+Methods (bars shaded by _τ_ )
+
+
+NESBonferroniFDR _t_ -test top- _k_
+Methods (bars shaded by N)
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+||||||
+|NES|~~o~~nferron~~i~~F|R<br>_t_-test<br>top-_k_|R<br>_t_-test<br>top-_k_|R<br>_t_-test<br>top-_k_|
+
+
+Methods (bars shaded by _τ_ )
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|N|N|ESBonf<br>Met~~h~~|erroniF<br>ds (b~~a~~r|DR<br>_t_-test<br>top<br>s shaded by _τ_)|DR<br>_t_-test<br>top<br>s shaded by _τ_)|
+
+
+Figure 31: **Full** **results** **with** _**r**_ **known** **(top–** _**r**_ **selection).** Precision, Recall, and IoU when every
+method is forced to return the _r_ codes (true number of effects) with the highest absolute treatment
+effect.
+
+
+**No effect** We repeat the experiments described in Appendix D, removing both the effects, namely
+imposing _τ_ = 0. In this setting, a valid discovery procedure should return _no_ significant neurons.
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+|NES t-test|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+|||||||Bonferro<br>FDR|Bonferro<br>FDR|ni<br>Top-K|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+30 100 500 1000 2500 5000
+N
+
+
+Figure 32: **Zero-effect** **ablation.** Number of significant neurons retrieved by method when no
+effects present, i.e., optimal if not retrieving anything.
+
+
+We keep the data-generating process, foundation model, SAE training, and testing grid over sample
+sizes _n_ as described in Appendix D, changing only the interventional contrast to ATE = 0. For each
+method, we record the number of discoveries per run. Across all sample sizes, NES consistently
+returns an empty set: in the first iteration, no neuron survives Bonferroni at level _α/m_, and the
+recursion halts. Furthermore, both Bonferroni and FDR also yield essentially zero discoveries. In
+contrast, the uncorrected _t_ -test produces spurious positives (false discoveries), and top- _k_ necessarily
+reports _k_ indices by design, labeling pure noise as significant. This behavior matches our theoretical
+intuition: with _τ_ = 0 there is no effect vector to leak into entangled coordinates, so the paradox
+discussed in Section 3 does not arise; still procedures that control multiplicity (NES via its first-step
+
+
+44
+
+
+Bonferroni gate, Bonferroni, and FDR) appropriately abstain, whereas selection rules that ignore
+multiplicity (top- _k_, vanilla _t_ -tests) over-discover, collapsing the method precision.
+
+
+**Opposite effects** To stress–test effect identification under more complex causal structure, we extend the main RCT simulation by allowing the two outcome components _Y_ 1 and _Y_ 2 to have _differ-_
+_ent_ treatment effects (even complementary). As before, each synthetic unit corresponds to a real
+CelebA image whose attributes match the realized ( _Y_ 1 _, Y_ 2 _, W_ ) triple. We fix _T_ Bernoulli(0 _._ 5)
+_∼_
+and _W ∼_ Bernoulli(0 _._ 5), and we retain the co–effect model described in Appendix D, but now vary
+the two ATEs over a grid of ordered pairs ( _τ_ 1 _, τ_ 2) (0 _._ 2 _,_ 0 _._ 8) _,_ (0 _._ 3 _,_ 0 _._ 7) _, . . .,_ (0 _._ 8 _,_ 0 _._ 2), thus
+_∈{_ _}_
+controlling the _gap_ between the two causal effects. For each pair, we set the treatment–induced shift
+for _Y_ 2 as
+
+
+_p_ [(] 1 _[Y]_ [2][)] = 0 _._ 5 + _[τ]_ 2 [2]
+
+
+2 [2] _[,]_ (37)
+
+
+2 [2] _[,]_ _p_ [(] 0 _[Y]_ [2][)] = 0 _._ 5 _−_ _[τ]_ 2 [2]
+
+
+while _Y_ 1 additionally depends on _W_ :
+
+
+Pr( _Y_ 1=1 _T_ = _t, W_ = _w_ ) =
+_|_
+
+
+_p_ [(] 01 _[Y]_ [1][)] = 0 _._ 5 2
+_−_ _[τ]_ [1]
+
+
+_p_ [(] 11 _[Y]_ [1][)] = 0 _._ 5 + _[τ]_ 2 [1]
+
+
+
+
+
+
+2 [1] _[,]_ ( _t_ =1 _, w_ =1) _,_
+
+
+_p_ [(] 10 _[Y]_ [1][)] = 0 _._ 2 + _τ_ 1 _,_ ( _t_ =1 _, w_ =0) _,_
+
+
+(38)
+
+
+
+
+
+2 [1] _[,]_ ( _t_ =0 _, w_ =1) _,_
+
+
+_p_ [(] 00 _[Y]_ [1][)] = 0 _._ 2 _,_ ( _t_ =0 _, w_ =0) _._
+
+
+This yields a controlled spectrum of settings in which _Y_ 1 and _Y_ 2 express treatment effects of varying
+and potentially opposite magnitudes. For each ( _τ_ 1 _, τ_ 2) and sample size _N_ 500 _,_ 5000, we draw
+_∈{_ _}_
+( _T, W, Y_ 1 _, Y_ 2), attach the matching real image, and apply NES and baselines to evaluate precision,
+recall, and IoU across the full two–effect grid. The results are reported in Figure 33-34, and consistently replicate the evidence discussed in the main experiments, i.e., NES overcoming the Paradox
+of Exploratory Causal Inference, as opposed to any other baselines. As expected, with enough experiment power, e.g., _N_ = 5 000, all the methods consistently return the same results for any effects
+couple, while with lower power, e.g., _N_ = 500, both NES and some vanilla baseline can struggle
+in retrieving all the the effects (perfect recall) if one or both the signals are very limited (as for the
+main experiments).
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+-0.6 -0.4 -0.2 0.0 0.2 0.4 0.6
+_τ_ 1 _−_ _τ_ 2
+
+
+-0.6 -0.4 -0.2 0.0 0.2 0.4 0.6
+_τ_ 1 _−_ _τ_ 2
+
+
+NES Bonferroni FDR _t_ -test top- _k_
+
+
+-0.6 -0.4 -0.2 0.0 0.2 0.4 0.6
+_τ_ 1 _−_ _τ_ 2
+
+
+Figure 33: **Ablation opposite effects (** _N_ = 500 **).** Precision, Recall, and IoU in effect identification
+varying the two effects difference in the main structural causal model (fixing _N_ = 500). NES consistently replicates the main results, still overcoming the paradox of Exploratory Causal Inference.
+
+
+45
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+-0.6 -0.4 -0.2 0.0 0.2 0.4 0.6
+_τ_ 1 _−_ _τ_ 2
+
+
+-0.6 -0.4 -0.2 0.0 0.2 0.4 0.6
+_τ_ 1 _−_ _τ_ 2
+
+
+NES Bonferroni FDR _t_ -test top- _k_
+
+
+-0.6 -0.4 -0.2 0.0 0.2 0.4 0.6
+_τ_ 1 _−_ _τ_ 2
+
+
+Figure 34: **Ablation** **opposite** **effects** **(** _N_ = 5 000 **).** Precision, Recall, and IoU in effect identification varying the two effects difference in the main structural causal model (fixing _N_ = 5 000).
+NES consistently replicates the main results, still overcoming the paradox of Exploratory Causal
+Inference.
+
+
+**Varying** **propensity** **score** Finally, we repeat the main experiments (fixing treatment effect _τ_ =
+0 _._ 6 and sample size _N_ _∈{_ 500 _,_ 5 000 _}_ ) varying the treatment assignment probability P( _T_ = 1) _∈_
+_{_ 0 _._ 2 _,_ 0 _._ 4 _,_ 0 _._ 6 _,_ 0 _._ 8 _}_, i.e., propensity score with no dependence on the covariates being a Randomized
+Controlled Trial. We report the results in Figures 35-35. Once again, both NES and the other
+baselines replicate the findings described for the main experiments in Section 6. Particularly, NES
+consistently overcomes the Paradox of Exploratory Causal Inference, which is not the case for the
+other baselines. The results are consistent and almost invariant with respect to P( _T_ = 1), even if,
+as expected, edge values of the propensity score, e.g., 0.2 and 0.8, can slightly affect the method’s
+efficiency.
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0.2 0.4 0.6 0.8
+_p_ ( _T_ )
+
+
+0.2 0.4 0.6 0.8
+_p_ ( _T_ )
+
+
+NES Bonferroni FDR _t_ -test top- _k_
+
+
+0.2 0.4 0.6 0.8
+_p_ ( _T_ )
+
+
+Figure 35: **Ablation** **unbalanced treatment assignment** ( _N_ = 500, _τ_ = 0 _._ 6). Precision, Recall,
+and IoU in effect identification varying the treatment assignment probability with sample size _N_ =
+500. NES consistently replicates the main results in all the regimes, still overcoming the paradox of
+Exploratory Causal Inference.
+
+
+46
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0.2 0.4 0.6 0.8
+_p_ ( _T_ )
+
+
+0.2 0.4 0.6 0.8
+_p_ ( _T_ )
+
+
+NES Bonferroni FDR _t_ -test top- _k_
+
+
+0.2 0.4 0.6 0.8
+_p_ ( _T_ )
+
+
+Figure 36: **Ablation unbalanced treatment assignment** ( _N_ = 5 000, _τ_ = 0 _._ 6). Precision, Recall,
+and IoU in effect identification varying the treatment assignment probability with sample size _N_ =
+5 000. NES consistently replicates the main results in all the regimes, still overcoming the paradox
+of Exploratory Causal Inference.
+
+
+E.3 ADDITIONAL BASELINES
+
+
+Finally, we further include here two additional non-trivial, still heuristic baselines to compare our
+method with. Particularly inspired by Causal Feature Learning (Chalupka et al., 2017), which attempts to abstract effects by clustering with respect to P( _T_ _|_ _X_ = _x_ ), we propose to consider an
+additional _neural effect selector_ obtained by regressing the treatment _T_ on the SAE representation
+of _X_, and filtering only the relevant codes. The idea is that the (by design) non-visible treatment
+information is indirectly retrievable from the effect measurement, and that such information flows
+through the anti-causal path _Y_ _←_ _T_ .
+
+
+**LASSO.** We consider a sparsified logistic regression model (recall that _T_ is binary) with an _ℓ_ 1
+penalty to enforce sparsity on the SAE coefficients. Given SAE codes _Z_ _∈_ R _[N]_ _[×][m]_ and treatment
+labels _T_ _∈{_ 0 _,_ 1 _}_ _[N]_, logistic regression models
+
+
+_p_ ( _Ti_ = 1 _Zi, β_ ) = _σ_ - _β_ 0 + _Zi_ _[⊤][β]_ - = - 1
+_|_
+
+
+_,_ (39)
+
+   -   1 + exp _β_ 0 _j_ =1 _[Z][ij][β][j]_
+
+_−_ _−_ [�] _[m]_
+
+
+and fits parameters by minimizing the penalized negative log-likelihood
+
+
+_,_ (40)
+
+
+_β_ ˆ = arg min
+_β∈_ R _[m]_
+
+
+_−_
+
+
+_N_
+
+
+_i_ =1
+
+
+- _Ti_ log _pi_ + (1 _−_ _Ti_ ) log(1 _−_ _pi_ ) + _λ∥β∥_ 1
+
+
+where _λ >_ 0 controls sparsity. The resulting selected neurons are
+
+Slasso = _j_ : _β_ [ˆ] _j_ = 0 _._ (41)
+_{_ _}_
+
+
+**Stability-Selected LASSO.** To mitigate instability due to correlated SAE codes, we additionally
+consider _stability selection_ . Given a fixed regularization strength _λ_ (e.g., tuned via cross-validation),
+we repeatedly refit the LASSO model on bootstrapped subsamples of the data. For each bootstrap
+iteration _b_ = 1 _, . . ., B_, let _β_ [ˆ][(] _[b]_ [)] be the fitted coefficients. We then define a stability score
+
+
+Π _j_ = [1]
+
+_B_
+
+
+_B_
+
+- I� _β_ ˆ _j_ [(] _[b]_ [)] = 0� _,_ (42)
+
+_b_ =1
+
+
+and select those neurons consistently appearing across many subsamples:
+
+
+_S_ stable = _j_ : Π _j_ _s_ _,_ (43)
+_{_ _≥_ _}_
+
+where _s ∈_ (0 _,_ 1) is a high-confidence threshold. In practice, we consider _s_ = 0 _._ 6.
+
+We replicate once again the main experimental setup described in Section D, additionally including
+the two novel baselines, and report the results in Figure 37. Interestingly, the new baselines reach
+
+
+47
+
+
+comparable performance to vanilla multiple-testing methods, despite explicitly exploiting the anticausal path and never measuring the neural effect directly. With sufficient experimental power, they
+also reach full-effect recall, but—similarly to vanilla multi-testing—still suffer from the Paradox of
+Exploratory Causal Inference. Indeed, we are not aware of any theoretical result guaranteeing that
+these heuristics should recover the standalone ground-truth affected outcomes among all candidate
+neurons. Stability selection appears to boost vanilla LASSO performance, and with sufficient power,
+these approaches slightly outperform vanilla multi-testing (although precision remains unsatisfactory, i.e., _≪_ 1).
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+30 250 500 5000
+N
+
+
+0.1 0.2 0.5 0.8
+_τ_
+
+
+30 250 500 5000
+N
+
+
+0.1 0.2 0.5 0.8
+_τ_
+
+
+30 250 500 5000
+N
+
+
+0.1 0.2 0.5 0.8
+_τ_
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+NES Bonferroni FDR _t_ -test top- _k_ CFL (Lasso) CFL (Lasso+) when _r_ -known
+
+
+Figure 37: **Additional Baselines from Causal Feature Learning.** Precision, Recall, and IoU in effect identification, including two baselines inspired by effect abstraction in Causal Feature Learning
+using LASSO with or without stability selection. NES consistently replicates the main results in all
+the regimes, still overcoming the paradox of Exploratory Causal Inference.
+
+
+48

@@ -1,0 +1,2294 @@
+# SAMPLE BY STEP, OPTIMIZE BY CHUNK: CHUNK- LEVEL GRPO FOR TEXT-TO-IMAGE GENERATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+Figure 1: Chunk-GRPO significantly improves image quality, particularly in structure, lighting, and
+fine-grained details, demonstrating the superiority of chunk-level optimization.
+
+
+ABSTRACT
+
+
+Group Relative Policy Optimization (GRPO) has shown strong potential for flowmatching-based text-to-image (T2I) generation, but it faces two key limitations:
+inaccurate advantage attribution, and the neglect of temporal dynamics of generation. In this work, we argue that shifting the optimization paradigm from the step
+level to the chunk level can effectively alleviate these issues. Building on this idea,
+we propose Chunk-GRPO, the first chunk-level GRPO-based approach for T2I
+generation. The insight is to group consecutive steps into coherent ‘chunk’s that
+capture the intrinsic temporal dynamics of flow matching, and to optimize policies at the chunk level. In addition, we introduce an optional weighted sampling
+strategy to further enhance performance. Extensive experiments show that ChunkGRPO achieves superior results in both preference alignment and image quality,
+highlighting the promise of chunk-level optimization for GRPO-based methods.
+
+
+1
+
+
+1 INTRODUCTION
+
+
+Reinforcement learning (RL)(Sutton et al., 1998; Schulman et al., 2017) has recently found success
+beyond traditional domains, particularly in the reasoning of Large Language Models (LLMs)(Jaech
+et al., 2024; Guo et al., 2025). Inspired by these advances, recent works(Xue et al., 2025; Liu et al.,
+2025b; Wang & Yu, 2025) have explored applying RL to text-to-image (T2I) generation for aligning
+specific preferences. In this context, Group Relative Policy Optimization (GRPO)(Shao et al., 2024;
+Guo et al., 2025) has emerged as a promising approach for flow-matching-based T2I generation
+(Lipman et al., 2022; Liu et al., 2023; Esser et al., 2024). GRPO-based methods typically sample a
+group of images from the same prompt, evaluate them using reward models, convert the rewards into
+group relative advantages, and assign these advantages equally across all timesteps for optimization.
+
+
+To address this, we draw inspiration from action chunking (Zhao et al., 2023; Li et al., that in _Trajectory_ 2. However, GRPO assigns the
+2025b) in robotics, which predicts sequences final advantages equally across all timesteps.
+of consecutive actions jointly rather than treating each step independently. In a similar spirit, we propose to group consecutive timesteps into
+‘chunk’s, and optimize at the chunk level rather than the step level. This alleviates the issue of inaccurate advantage attribution, as we analyze in detail in Section 4.1. Related ideas have been explored
+in LLMs as Group Sequence Policy Optimization (GSPO) (Zheng et al., 2025), where an entire token sequence is treated as a single unit (analogous to viewing the whole trajectory as one chunk).
+However, our preliminary studies reveal that different chunk settings (e.g. how many consecutive
+timesteps for a chunk) have a substantial impact on performance.
+
+
+We argue that this is due to the overlooking of temporal dynamics of flow matching generation,
+which we proposed before. Different from LLMs, flow matching exhibits distinct temporal dynamics: each timestep operates under different noise conditions and contributes differently to the final
+image. Specifically, following (Wimbauer et al., 2024; Liu et al., 2025a), we analyze the relative
+_L_ 1 distance of intermediate latents. As shown in Figure 3, the results reveal clear, prompt-invariant
+dynamic patterns that naturally segment the trajectory into meaningful chunks. These observations
+suggest that chunks should not be arbitrary but guided by the inherent temporal dynamics, with
+timesteps that are dynamically correlated optimized together.
+
+
+Based on these, we propose Chunk-GRPO, a novel chunk-level RL approach for flow-matchingbased T2I generation. As demonstrated in Figure 4, our key innovation is grouping timesteps into
+chunks that reflect temporal dynamics, and optimizing them as units with a principled chunk-level
+importance ratio. Furthermore, motivated by the varying contributions of different chunks, we design an optional weighted sampling strategy to further boost Chunk-GRPO’s performance.
+
+
+Our contributions can be summarized as follows:
+
+
+2
+
+
+While effective, this uniform assignment introduces two key limitations: (1) inaccurate advantage attribution, and (2) disregard for the
+temporal dynamics of generation. We first illustrate the former in Figure 2, and discuss temporal dynamics later. Consider two generation
+trajectories from the same prompt in Figure 2,
+each consisting of three timesteps. Although
+the final advantage correctly favors the better
+trajectory ( _Trajectory_ 1), assigning this same
+advantage uniformly across all timesteps incorrectly assumes that every step in _Trajectory_ 1
+is superior to its counterpart in _Trajectory_ 2.
+However, at timestep _t_ = 1 _Trajectory_ 2
+is clearly better than _Trajectory_ 1, despite
+_Trajectory_ 1 achieving the higher overall reward.
+
+
+Figure 2: While _Trajectory_ 1 has greater final reward (advantage), its _t_ = 1 timestep is worse than
+that in _Trajectory_ 2. However, GRPO assigns the
+final advantages equally across all timesteps.
+
+
+Figure 3: The prompt-invariant temporal dynamics of flow matching.
+
+
+    - We are the first to introduce the chunk-level RL optimization for T2I generation. We pinpoint that chunk-level optimization alleviates the inaccurate advantage attribution and mitigates the neglect of temporal dynamics from GRPO-based approaches.
+
+
+    - We propose Chunk-GRPO, a novel chunk-level approach for flow-matching-based T2I generation, which integrates chunk-level optimization with temporal-dynamic-guided chunking. An optional weighted sampling strategy is introduced to push Chunk-GRPO further.
+
+
+    - Extensive experiments demonstrate that Chunk-GRPO achieves superior performance on
+preference alignment and standard T2I benchmarks, highlighting the effectiveness of
+chunk-level optimization.
+
+
+2 RELATED WORK
+
+
+We provide a brief introduction to action chunking in this section, while the remaining related work
+is discussed in Section B.
+
+
+2.1 ACTION CHUNK
+
+
+Action chunking (Zhao et al., 2023; Lai et al., 2022) has been widely applied to robotics Chi et al.
+(2023). This approach mitigates compounding error and non-Markovian noise in human demonstrations by jointly predicting a sequence of future actions rather than a single step. By shortening the
+effective control horizon, action chunking enables smoother and more stable rollouts. Recently, it
+has also proven effective in vision-language-action (VLA) models (Black et al., 2024a; Intelligence
+et al.) and in RL (Li et al., 2025b). These successes suggest that chunking stabilizes long-horizon
+prediction, accelerates value propagation, and more effectively leverages non-Markovian behavior.
+
+
+3 PRELIMINARY
+
+
+3.1 FLOW MATCHING
+
+
+Suppose that _x_ 0 _∼_ X0 is a data sample from the true distribution, and _x_ 1 _∼_ X1 is a noise sample.
+Following (Liu et al., 2023), the intermediate noised samples _xt_ can be expressed as:
+
+
+_xt_ = (1 _−_ _t_ ) _x_ 0 + _tx_ 1 _,_ (1)
+
+
+where _t_ _∈_ [0 _,_ 1] denotes the noise level. Then, flow matching aims to directly regress the estimated
+velocity field ˆ _vθ_ ( _xt, t_ ) by minimizing the objective function (Lipman et al., 2022):
+
+
+_L_ FM( _θ_ ) = E _t,x_ 0 _∼_ X0 _,x_ 1 _∼_ X1[ _∥v −_ _v_ ˆ _θ_ ( _xt, t_ ) _∥_ [2] 2 []] _[,]_ (2)
+
+
+where _v_ = _x_ 1 _−_ _x_ 0 represents the target velocity field. Furthermore, a deterministic Ordinary
+Differential Equation (ODE) is utilized to model the forward process of flow matching:
+
+
+_dxt_ = _v_ ˆ _θ_ ( _xt, t_ ) _dt._ (3)
+
+
+3
+
+
+3.2 GRPO ON FLOW MATCHING
+
+
+As an RL algorithm, GRPO (Guo et al., 2025; Shao et al., 2024) effectively eliminates the need for
+an additional critic model by estimating the baseline through group-wise relative rewards. In line
+with the settings of DDPO (Black et al., 2024b), GRPO is also applied in flow matching. Given a
+group of _G_ images _{x_ _[i]_ 0 _[}][G]_ _i_ =1 [generated from the same prompt] _[ c]_ [, the advantage corresponding to the]
+_i_ -th sample is formulated as:
+
+0 _[, c]_ [)] _[ −]_ [mean][(] _[{][r]_ [(] _[x][j]_ 0 _[, c]_ [)] _[}]_ _j_ _[G]_ =1 [)]
+_A_ _[i]_ _t_ [=] _[r]_ [(] _[x][i]_ _._ (4)
+
+std( _{r_ ( _x_ _[j]_ 0 _[, c]_ [)] _[}][G]_ _j_ =1 [)]
+
+Notice that _A_ _[i]_ _t_ [always] [keeps] [the] [same] [for] [any] [timestep] _[t]_ [.] [For] [simplicity,] [we] [neglect] [the] [subscript]
+and denote it as _A_ _[i]_ . The policy is updated by maximizing the following GRPO objective:
+
+
+_J_ ( _θ_ ) = _Ec,{xi}Gi_ =1
+
+  - _G_ _T_
+1 1    _G_ _T_
+
+
+_G_
+
+
+_T_
+
+
+                        
+- _min_ - _rt_ _[i]_ [(] _[θ]_ [)] _[ A][i][, clip]_ - _rt_ _[i]_ [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ - _A_ _[i]_ [�] _−_ _βDKL_ ( _πθ||πref_ )�
+
+
+(5)
+_,_
+
+
+_i_ =1
+
+
+_t_ =1
+
+
+Where _rt_ _[i]_ [denotes the importance ratio:]
+
+_rt_ _[i]_ [(] _[θ]_ [) =] _[p][θ]_ [(] _[x]_ _t_ _[i]_ _−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] (6)
+_p_ old( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] _[.]_
+
+
+Furthermore, to meet the exploration requirement of RL, Flow-GRPO (Liu et al., 2025b) and DanceGRPO (Xue et al., 2025) introduce stochasticity into flow matching by transforming the deterministic ODE into an equivalent Stochastic Differential Equation (SDE):
+
+_dxt_ =         - _vθ_ ( _xt, t_ ) + _[σ]_ _t_ [2]         - _dt_ + _σtdwt,_ (7)
+2 _t_ [(] _[x][t]_ [ + (1] _[ −]_ _[t]_ [)] _[v][θ]_ [(] _[x][t][, t]_ [))]
+
+where _dwt_ represents the increments of the Wiener process and _σt_ controls the stochasticity.
+
+
+4 METHOD
+
+
+In this section, we begin by introducing chunk-level optimization for GRPO and show why it improves upon standard step-level GRPO in Section 4.1. Next, we describe how to set chunks using
+the inherent temporal dynamics of flow matching in Section 4.2. Finally, we present our proposed
+Chunk-GRPO along with an optional weighted sampling strategy in Section 4.3.
+
+
+4.1 CHUNK-LEVEL OPTIMIZATION FOR GRPO
+
+
+Recall the example in Figure 2. With standard step-level GRPO loss in Equation (5), the optimization object for timesteps _t_ = 1 and _t_ = 2 in the two trajectories is:
+
+
+2
+
+
+_t_ =1
+
+
+1
+
+_J_ ( _θ_ ) = [1]
+
+_G_ _T_
+
+
+2
+
+
+_i_ =1
+
+
+- _min_ - _rt_ _[i]_ [(] _[θ]_ [)] _[ A][i][, clip]_ - _rt_ _[i]_ [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ - _A_ _[i]_ [�] _−_ _βDKL_ ( _πθ||πref_ )� _._ (8)
+
+
+As discussed in Section 1, this uniform stepwise assignment introduces inaccurate advantage attribution. To alleviate this, the first principle of chunk-level optimization is to group consecutive
+timesteps into chunks and optimize each chunk as a unit. In the example case, the optimization then
+becomes:
+
+
+_J_ ( _θ_ ) = [1]
+
+_G_
+
+
+2
+
+
+_i_ =1
+
+
+- _min_ - _r_ _[i]_ ( _θ_ ) _A_ _[i]_ _, clip_ - _r_ _[i]_ ( _θ_ ) _,_ 1 _−_ _ϵ,_ 1 + _ϵ_ - _A_ _[i]_ [�] _−_ _βDKL_ ( _πθ||πref_ )� _,_ (9)
+
+
+where the importance ratio is redefined over the chunk likelihood:
+
+
+_pθ_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+_p_ old - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+4
+
+
+- 2 [1]
+_._ (10)
+
+
+_r_ _[i]_ ( _θ_ ) =
+
+
+- 2
+
+ 
+
+_t_ =1
+
+
+The key underlying proposition is as follows:
+
+
+Figure 4: The overall framework of Chunk-GRPO. Chunk-GRPO integrates chunk-level optimization with temporal-dynamic-guided chunking, based on the grounded defined chunk-level importance ratio _r_ . It also introduces an optional weighted sampling strategy, assigning sampling weight
+_w_ for each chunk.
+
+
+**Proposition 1.** _When advantage attribution is inaccurate at individual timesteps,_ _optimizing them_
+_jointly_ _within_ _chunk_ _yields_ _better_ _performance_ _than_ _optimizing_ _them_ _independently_ _as_ _steps,_ _espe-_
+_cially when the chunk size is small(e.g._ _a chunk size of 5)._
+
+
+A mathematical analysis is provided in Section A. With this insight, we formally define chunk-level
+optimization for GRPO as follows: Given an image generation trajectory:
+
+
+( _xT, xT −_ 1 _, · · ·_ _, x_ 2 _, x_ 1 _, x_ 0) _[i]_ _,_ (11)
+
+
+we split it into _K_ different chunks [1] :
+
+
+_{ch_ 1 _, ch_ 2 _, · · ·_ _, chK}_ _[i]_ = _{_ ( _xT, · · ·_ _, xT −cs_ 1+1) _,_ ( _xT −cs_ 1 _, · · ·_ _, xT −cs_ 1 _−cs_ 2+1) _, · · ·_ _,_ ( _· · ·_ _, x_ 1) _}_ _[i]_ _,_
+
+
+_k_
+
+   - _cs_ _[i]_ _j_ [=] _[ T,]_
+
+_j_ =1
+
+(12)
+where _csj_ denotes the chunk size of the _j_ -th chunk _chj_ . The chunk-level optimization objective is
+then:
+
+
+Thus, optimization shifts from step-level to chunk-level, alleviating the issue of inaccurate advantage
+attribution. Notably, setting _K_ = 1 will group the whole trajectory into a single chunk, and the
+optimization further shifts to sequence-level similar to GSPO (Zheng et al., 2025). Conversely,
+setting _K_ = _T_ will force _csj_ = 1, and the optimization reverts to standard step-level GRPO.
+
+
+Using Equation (13) and Equation (14), we have shifted the optimization from step-level to chunklevel. However, the central question then becomes: given the many possible chunk configurations
+( _chj_ and _csj_ ), how should chunks be determined?
+
+
+1we neglect _xi_ 0 [because there is no more transition into] _[ x]_ _−_ _[i]_ 1
+
+
+5
+
+
+_J_ ( _θ_ ) = _Ec,{xi}Gi_ =1
+
+
+
+_K_
+
+
+
+
+- _min_ - _rj_ _[i]_ [(] _[θ]_ [)] _[ A][i][, clip]_ - _rj_ _[i]_ [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ - _A_ _[i]_ [�] _−_ _βDKL_ ( _πθ||πref_ )� _,_
+
+
+1
+
+ [1]
+
+_G_ _K_
+
+
+_G_
+
+
+_i_ =1
+
+
+_j_ =1
+
+
+(13)
+where we redefine the importance ratio _rj_ _[i]_ [(] _[θ]_ [)][ based on chunk likelihood:]
+
+
+1
+_csj_
+
+_._ (14)
+
+
+
+
+
+
+
+
+_rj_ _[i]_ [(] _[θ]_ [) =]
+
+
+
+
+ [�]
+
+_t∈chj_
+
+
+_pθ_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+_p_ old - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+4.2 CHUNK WITH TEMPORAL DYNAMICS
+
+
+Before diving into the deeper analysis, we first
+designed a toy experiment, where all chunks are
+fixed with an equal chunk size _cs_ 1 = _cs_ 2 _· · ·_ =
+_csk_ . As shown in Figure 5, performance varies
+with chunk size, indicating that chunk design is
+non-trivial.
+
+
+From Figure 3, this strategy biases the sampling process toward high-noise regions, and the motivation primarily stems from our ablation studies on training specific chunks. However, although
+this strategy improves certain aspects of Chunk-GRPO, its overall effects on image quality remain
+nuanced, as discussed in Section 5.3.
+
+
+6
+
+
+We attribute this to the inherent temporal dynamics of flow matching. Unlike LLMs, flow
+matching consists of time-dependent dynamics in the generation process, where different timesteps contribute unequally to image
+quality. To better understand this, following
+(Wimbauer et al., 2024; Liu et al., 2025a), we
+illustrate the relative _L_ 1 distance _L_ 1rel( _x, t_ )
+throughout the generation process:
+
+
+Figure 5: Performance varies with different chunk
+sizes. The ‘TD’ refers to temporal dynamics.
+
+
+_L_ 1rel( _x, t_ ) = _[∥][x][t][ −]_ _∥x_ _[x]_ _t∥_ _[t]_ 1 _[−]_ [1] _[∥]_ [1] _._ (15)
+
+
+As shown in Figure 3, _L_ 1rel( _x, t_ ) exhibits prompt-invariant yet timestep-dependent patterns. A large
+_L_ 1rel( _x, t_ ) indicates rapid latent changes, while a small value indicates that adjacent latents are
+similar to each other. From this observation, we argue that: Timesteps with similar dynamics should
+be grouped into the same chunk, while timesteps with different dynamics should be separated into
+different chunks.
+
+
+Fortunately, the prompt-invariant dynamic patterns of _L_ 1rel( _x, t_ ) naturally segment the trajectory
+into meaningful chunks, yielding temporal-dynamic-guided chunks. Thus, we can set chunks based
+on the relative _L_ 1 distance, aligning the optimization process with the intrinsic temporal structure
+of flow matching.
+
+
+4.3 CHUNK-GRPO
+
+
+We now present Chunk-GRPO, which integrates chunk-level optimization with temporal-dynamicguided chunking.
+
+
+Specifically, given an image generation trajectory, we first compute the relative _L_ 1 distance and set
+chunks like Equation (12) according to the dynamic profile. This yields the chunk numbers _K_ and
+chunk sizes _csj_ . The optimization then follows the chunk-level object in Equation (13). The whole
+framework is shown in Figure 4.
+
+
+In practice, we observe that the choice of _K_ and _csj_ is closely tied to the total number of sampling
+steps _T_ . A practical strategy, which we adopt in our experiment, is to precompute chunk boundaries
+based on observed dynamics and keep them fixed throughout training. A detailed discussion is
+provided in Section 5.1 and Section C.1.
+
+
+Furthermore, we propose an optional weighted sampling strategy to further enhance Chunk-GRPO.
+Following Dance-GRPO (Xue et al., 2025), we select only a fraction of chunks (e.g. with fraction
+0.5) per update; but instead of uniform sampling, we assign sampling weight _w_ for each chunk:
+
+
+_w_ ( _chj_ ) =
+
+
+1 _csj_
+
+
+1 - _T_ _._ (16)
+_T_ _t_ =1 _[L]_ [1][rel][ (] _[x, t]_ [)]
+
+
+_t∈chj_ _[L]_ [1][rel][ (] _[x, t]_ [)]
+
+
+5 EXPERIMENTS
+
+
+5.1 EXPERIMENT SETUP
+
+
+**Training Settings.** We adopt Dance-GRPO (Xue et al., 2025) as the baseline and conduct experiments with FLUX.1 Dev (Labs, 2024) as our base model. HPDv2.1 (Wu et al., 2023) serves as the
+dataset, while HPSv3 (Ma et al., 2025) is used as the primary reward model. In ablation studies
+Section 5.3, we additionally validate our approach with Pick Score (Kirstain et al., 2023) and CLIP
+(Radford et al., 2021) as the reward model. For the chunk setting, we use _{csj}_ [4] _j_ =1 [=] [[2] _[,]_ [ 3] _[,]_ [ 4] _[,]_ [ 7]]
+with total sampling steps _T_ = 17 [2], fixed throughout training. Further explanation of chunk configuration, an adaptive chunking strategy, and additional training details are provided in Section C.
+
+
+**Evaluation** **Details.** We evaluate both preference alignment and standard T2I benchmarks. For
+preference alignment, we use HPSv3 (Ma et al., 2025) and ImageReward (Xu et al., 2023) as indomain and out-of-domain evaluation metrics, respectively, on the HPDv2.1 (Wu et al., 2023) test
+set. For the standard T2I benchmark, we report results on WISE (Niu et al., 2025), using its rewritten
+version due to its improved generalization. We also report results on GenEval (Ghosh et al., 2023)
+in ablation studies Section 5.3. All evaluations adopt hybrid inference from (Li et al., 2025a), which
+has proven effective in mitigating reward hacking. More details are provided in Section C.3.
+
+
+5.2 MAIN RESULTS
+
+
+For preference alignment, our approach achieves significant additional gains of up to 23% over the
+baseline across both in-domain and out-of-domain evaluations. On WISE, our approach achieves
+the strongest overall performance. We attribute the moderate improvement on WISE to a misalignment between the evaluation task and the reward model. Specifically, WISE focuses on reasoning
+capabilities in T2I generation, whereas HPSv3 is a reward model optimized primarily for aesthetic
+alignment. To further validate the effectiveness of Chunk-GRPO, we conducted experiments on the
+standard GenEval benchmark in Section 5.3, where we observed significantly larger improvements.
+
+
+Notably, the weighted sampling strategy enhances preference alignment but has mixed effects on
+WISE, a phenomenon we further analyze in Section 5.3.
+
+
+Table 2: Results on WISE
+
+
+**Model** **Cultural** **Time** **Space** **Biology** **Physics** **Chemistry** **Overall**
+
+
+Flux 0.75 0.70 0.76 0.69 0.71 0.68 0.73
+
+
+Dance-GRPO 0.82 0.75 0.78 0.66 0.69 0.64 0.75
+
+
+Chunk-GRPO w/o ws 0.82 0.76 0.77 0.68 0.69 0.68 0.76
+Chunk-GRPO w/ ws 0.80 0.73 0.76 0.64 0.65 0.62 0.73
+
+
+1 The ‘ws’ refers to the weighted sampling strategy.
+2 We use the rewritten version of WISE.
+
+
+2We neglect the last timestep following Dance-GRPO, as the last step does not introduce stochasticity.
+
+
+7
+
+
+Table 1 presents results on preference
+
+Table 1: Results on Preference Alignment
+
+alignment, and Table 2 shows WISE
+benchmark results. Chunk-GRPO
+
+**Model** **HPSv3**
+
+consistently outperforms both the
+base model and Dance-GRPO, con- Flux 13.804
+firming the effectiveness of chunk
+Dance-GRPO 15.080
+
+level optimization. Qualitative comparisons in Figure 1 and Section E Chunk-GRPO w/o ws 15.236
+
+GRPO generates outputs that align
+more closely with human aesthetic
+preferences, exhibiting stronger lighting contrast, more vivid colors, and finer details.
+
+
+Table 1: Results on Preference Alignment
+
+
+**Model** **HPSv3** **ImageReward**
+
+
+Flux 13.804 1.086
+
+
+Dance-GRPO 15.080 1.141
+
+
+Chunk-GRPO w/o ws 15.236 1.147
+
+
+1 The ‘ws’ refers to the weighted sampling strategy.
+
+
+Table 3: Ablation Results of Chunk Setting
+
+
+**Model** **Sampling Timesteps** **Chunk Setting** **HPSv3**
+
+
+Flux       -       - 13.804
+
+
+DanceGRPO 17    - 15.080
+25                  - 15.015
+
+
+Chunk-GRPO w/o td 17 [2, 2, _· · ·_, 2] 15.115
+17 [4, 4, 4, 4] 15.078
+17 [8, 8] 15.173
+17 [16] 15.142
+25 [2, 2, _· · ·_, 2] 15.057
+25 [4, 4, _· · ·_, 4] 15.136
+25 [12, 12] 15.111
+25 [24] 15.100
+
+
+Chunk-GRPO w/ td 17 [2, 3, 4, 7] 15.236
+
+
+1 The ‘td’ refers to the temporal dynamics.
+
+
+5.3 ABLATION STUDY
+
+
+**Chunk** **Setting.** We first vary chunk settings under different total sampling steps, excluding the weighted sampling strategy to isolate chunk setting effects. Results in Table 3 show that chunk-level optimization consistently outperforms standard step-level GRPO.
+
+
+Moreover, temporal-dynamics-guided chunking outperforms fixed chunk size, underscoring the importance of aligning the optimization
+process with the intrinsic temporal structure of
+flow matching.
+
+
+**Weighted Sampling Strategy.** As shown in Table 1 and Table 2, the optional weighted sampling
+strategy improves preference alignment but slightly reduces WISE performance. Careful qualitative
+analysis reveals a trade-off: while the strategy accelerates preference optimization, it can destabilize image structure in high-noise regions, occasionally leading to semantic collapse. A failure
+example is shown in Figure 7. Although all methods struggle with this challenging prompt (e.g.
+Dance-GRPO misses the attribute ‘sleeveless’), the weighted sampling strategy further alters the
+overall image structure, producing the worst case by omitting the entire item ‘black loafers’ and
+only partially showing ‘capris’). This demonstrates the complex effects of the strategy.
+
+
+**Reward Models.** Finally, we test Chunk-GRPO’s robustness under different reward models. We
+first replace Hpsv3 with Pick Score (Shukor et al., 2025) as our reward model. Results in Table 4
+confirm that Chunk-GRPO consistently outperforms standard step-level GRPO regardless of the
+reward model, validating its generality.
+
+
+Since both HPSv3 and PickScore are reward models primarily designed for preference alignment, we further validate our approach using CLIP (Radford et al., 2021), which, while not a
+preference alignment model, is well recognized for its ability to capture high-level semantics.
+
+
+8
+
+
+**Training on Specific Chunks.** We next train
+Chunk-GRPO on individual chunks only. Note
+that we also remove the weighted sampling
+strategy here. Results in Figure 6 show that
+high-noise chunks (e.g., _ch_ 1) yield larger improvements than low-noise chunks (e.g., _ch_ 4),
+but they suffer from training instability (e.g., after 60 steps). This motivated our weighted sampling strategy in Equation (16), which adaptively emphasizes high-noise chunks.
+
+
+Figure 6: The results of training specific chunks.
+
+
+Figure 7: A failure case of the weighted sampling strategy. The strategy wrongly changes the image
+structure in the high-noise region, leading to the worst variant.
+
+
+Table 5: Results on GenEval
+
+
+**Model** **Single Obj.** **Two Obj.** **Counting** **Colors** **Position** **Color Attr.** **Overall**
+
+
+Flux 0.99 0.83 0.71 0.75 0.24 0.44 0.66
+
+
+Dance-GRPO 1.00 0.86 0.71 0.78 0.22 0.46 0.67
+
+
+1 The ‘ws’ refers to the weighted sampling strategy.
+
+
+6 CONCLUSION
+
+
+In this paper, we propose Chunk-GRPO, the first chunk-level GRPO-based approach for flowmatching-based T2I generation. By leveraging the temporal dynamics of flow matching, ChunkGRPO groups consecutive timesteps into chunks and optimizes at the chunk level, achieving consistent improvements over standard step-level GRPO. We further introduce an optional weighted
+sampling strategy to push Chunk-GRPO further.
+
+
+Despite its strong performance, several limitations remain. First, exploring how to combine heterogeneous rewards across different chunks (e.g., employing different reward models for high- vs.
+low-noise regions) could unlock further improvements. Second, our chunk segmentation remains
+fixed throughout training. Developing self-adaptive or dynamic chunking strategies that adjust to
+training signals would be an important next step.
+
+
+LLM USAGE
+
+
+We employed LLMs solely for polishing the language of the manuscript. All scientific contributions,
+ideas, and analyzes are entirely the authors’ own.
+
+
+9
+
+
+We evaluate it on Table 4: Ablation on Different Reward Models
+GenEval(Ghosh et al.,
+2023), a benchmark that
+
+**Model** **Pick Score** **HPSv3** **Image Reward**
+
+mainly tests instructionfollowing capabilities of Flux 22.643 13.804 1.086
+T2I generation. Results
+
+DanceGRPO 23.427 14.612 1.208
+
+in Table 5 demonstrate
+that Chunk-GRPO also Chunk-GRPO w/o ws 23.442 14.810 1.222
+significantly outperforms Chunk-GRPO w/ ws 23.476 14.913 1.233
+standard step-level GRPO, 1 The ‘ws’ refers to the weighted sampling strategy.
+demonstrating its broader
+generalization and robustness beyond preference alignment tasks. Specifically, Chunk-GRPO
+achieves a performance gain of 0.03, which is 3 times larger than the gain achieved by DanceGRPO. It is worth noting that the weighted sampling strategy results in a decline in GenEval’s
+semantic performance, which further corroborates our previous analysis.
+
+
+Table 4: Ablation on Different Reward Models
+
+
+**Model** **Pick Score** **HPSv3** **Image Reward**
+
+
+Flux 22.643 13.804 1.086
+
+
+DanceGRPO 23.427 14.612 1.208
+
+
+Chunk-GRPO w/o ws 23.442 14.810 1.222
+Chunk-GRPO w/ ws 23.476 14.913 1.233
+
+
+1 The ‘ws’ refers to the weighted sampling strategy.
+
+
+REFERENCES
+
+
+Kevin Black, Noah Brown, Danny Driess, Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo
+Fusai, Lachy Groom, Karol Hausman, Brian Ichter, et al. _pi_ ~~0~~ : A vision-language-action flow
+model for general robot control. _arXiv preprint arXiv:2410.24164_, 2024a.
+
+
+Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion
+models with reinforcement learning. In _The Twelfth International Conference on Learning Rep-_
+_resentations_, 2024b.
+
+
+Cheng Chi, Zhenjia Xu, Siyuan Feng, Eric Cousineau, Yilun Du, Benjamin Burchfiel, Russ Tedrake,
+and Shuran Song. Diffusion policy: Visuomotor policy learning via action diffusion. _The Inter-_
+_national Journal of Robotics Research_, pp. 02783649241273668, 2023.
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas M¨uller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers
+for high-resolution image synthesis. In _Forty-first international conference on machine learning_,
+2024.
+
+
+Ying Fan, Olivia Watkins, Yuqing Du, Hao Liu, Moonkyung Ryu, Craig Boutilier, Pieter Abbeel,
+Mohammad Ghavamzadeh, Kangwook Lee, and Kimin Lee. Dpok: Reinforcement learning for
+fine-tuning text-to-image diffusion models. _Advances in Neural Information Processing Systems_,
+36:79858–79885, 2023.
+
+
+Dhruba Ghosh, Hannaneh Hajishirzi, and Ludwig Schmidt. Geneval: An object-focused framework
+for evaluating text-to-image alignment. _Advances in Neural Information Processing Systems_, 36:
+52132–52152, 2023.
+
+
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+via reinforcement learning. _arXiv preprint arXiv:2501.12948_, 2025.
+
+
+Xiaoxuan He, Siming Fu, Yuke Zhao, Wanli Li, Jian Yang, Dacheng Yin, Fengyun Rao, and
+Bo Zhang. Tempflow-grpo: When timing matters for grpo in flow models. _arXiv_ _preprint_
+_arXiv:2508.04324_, 2025.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Physical Intelligence, Kevin Black, Noah Brown, James Darpinian, Karan Dhabalia, Danny Driess,
+Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo Fusai, et al. _π_ 0. 5: a vision-language-action
+model with open-world generalization, 2025. _URL https://arxiv. org/abs/2504.16054_, 1(2):3.
+
+
+Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec
+Helyar, Aleksander Madry, Alex Beutel, Alex Carney, et al. Openai o1 system card. _arXiv_
+_preprint arXiv:2412.16720_, 2024.
+
+
+Yuval Kirstain, Adam Polyak, Uriel Singer, Shahbuland Matiana, Joe Penna, and Omer Levy. Picka-pic: An open dataset of user preferences for text-to-image generation. _Advances_ _in_ _neural_
+_information processing systems_, 36:36652–36663, 2023.
+
+
+Black Forest Labs. Flux. [https://github.com/black-forest-labs/flux, 2024.](https://github.com/black-forest-labs/flux)
+
+
+Black Forest Labs, Stephen Batifol, Andreas Blattmann, Frederic Boesel, Saksham Consul, Cyril
+Diagne, Tim Dockhorn, Jack English, Zion English, Patrick Esser, Sumith Kulal, Kyle Lacey,
+Yam Levi, Cheng Li, Dominik Lorenz, Jonas M¨uller, Dustin Podell, Robin Rombach, Harry Saini,
+Axel Sauer, and Luke Smith. Flux.1 kontext: Flow matching for in-context image generation and
+editing in latent space, 2025. [URL https://arxiv.org/abs/2506.15742.](https://arxiv.org/abs/2506.15742)
+
+
+Lucy Lai, Ann ZX Huang, and Samuel J Gershman. Action chunking as conditional policy compression. 2022.
+
+
+Junzhe Li, Yutao Cui, Tao Huang, Yinping Ma, Chun Fan, Miles Yang, and Zhao Zhong. Mixgrpo:
+Unlocking flow-based grpo efficiency with mixed ode-sde. _arXiv_ _preprint_ _arXiv:2507.21802_,
+2025a.
+
+
+10
+
+
+Qiyang Li, Zhiyuan Zhou, and Sergey Levine. Reinforcement learning with action chunking. _arXiv_
+_preprint arXiv:2507.07969_, 2025b.
+
+
+Yuming Li, Yikai Wang, Yuying Zhu, Zhongyu Zhao, Ming Lu, Qi She, and Shanghang Zhang.
+Branchgrpo: Stable and efficient grpo with structured branching in diffusion models. _arXiv_
+_preprint arXiv:2509.06040_, 2025c.
+
+
+Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching
+for generative modeling. _arXiv preprint arXiv:2210.02747_, 2022.
+
+
+Feng Liu, Shiwei Zhang, Xiaofeng Wang, Yujie Wei, Haonan Qiu, Yuzhong Zhao, Yingya Zhang,
+Qixiang Ye, and Fang Wan. Timestep embedding tells: It’s time to cache for video diffusion
+model. In _Proceedings_ _of_ _the_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_ _Conference_, pp. 7353–
+7363, 2025a.
+
+
+Jie Liu, Gongye Liu, Jiajun Liang, Yangguang Li, Jiaheng Liu, Xintao Wang, Pengfei Wan,
+Di Zhang, and Wanli Ouyang. Flow-grpo: Training flow matching models via online rl. _arXiv_
+_preprint arXiv:2505.05470_, 2025b.
+
+
+Xingchao Liu, Chengyue Gong, et al. Flow straight and fast: Learning to generate and transfer data
+with rectified flow. In _The Eleventh International Conference on Learning Representations_, 2023.
+
+
+Yuhang Ma, Xiaoshi Wu, Keqiang Sun, and Hongsheng Li. Hpsv3: Towards wide-spectrum human
+preference score. _arXiv preprint arXiv:2508.03789_, 2025.
+
+
+Yuwei Niu, Munan Ning, Mengren Zheng, Weiyang Jin, Bin Lin, Peng Jin, Jiaqi Liao, Chaoran
+Feng, Kunpeng Ning, Bin Zhu, et al. Wise: A world knowledge-informed semantic evaluation
+for text-to-image generation. _arXiv preprint arXiv:2503.07265_, 2025.
+
+
+Dustin Podell, Zion English, Kyle Lacey, Andreas Blattmann, Tim Dockhorn, Jonas M¨uller, Joe
+Penna, and Robin Rombach. Sdxl: Improving latent diffusion models for high-resolution image
+synthesis. In _The Twelfth International Conference on Learning Representations_, 2023.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PmLR, 2021.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+John Schulman, Sergey Levine, Pieter Abbeel, Michael Jordan, and Philipp Moritz. Trust region
+policy optimization. In _International_ _conference_ _on_ _machine_ _learning_, pp. 1889–1897. PMLR,
+2015.
+
+
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+optimization algorithms. _arXiv preprint arXiv:1707.06347_, 2017.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, et al. Deepseekmath: Pushing the limits of mathematical reasoning in
+open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+Mustafa Shukor, Dana Aubakirova, Francesco Capuano, Pepijn Kooijmans, Steven Palma,
+Adil Zouitine, Michel Aractingi, Caroline Pascal, Martino Russi, Andres Marafioti, et al.
+Smolvla: A vision-language-action model for affordable and efficient robotics. _arXiv_ _preprint_
+_arXiv:2506.01844_, 2025.
+
+
+Haoyuan Sun, Bin Liang, Bo Xia, Jiaqi Wu, Yifei Zhao, Kai Qin, Yongzhe Chang, and Xueqian
+Wang. Diffusion-rainbowpa: Improvements integrated preference alignment for diffusion-based
+text-to-image generation. _Transactions on Machine Learning Research_, 2025a.
+
+
+11
+
+
+Haoyuan Sun, Jiaqi Wu, Bo Xia, Yifu Luo, Yifei Zhao, Kai Qin, Xufei Lv, Tiantian Zhang, Yongzhe
+Chang, and Xueqian Wang. Reinforcement fine-tuning powers reasoning capability of multimodal
+large language models. _arXiv preprint arXiv:2505.18536_, 2025b.
+
+
+Haoyuan Sun, Bo Xia, Yongzhe Chang, and Xueqian Wang. Generalizing alignment paradigm of
+text-to-image generation with preferences through f-divergence minimization. In _Proceedings of_
+_the AAAI Conference on Artificial Intelligence_, volume 39, pp. 27644–27652, 2025c.
+
+
+Haoyuan Sun, Bo Xia, Yifei Zhao, Yongzhe Chang, and Xueqian Wang. Identical human preference alignment paradigm for text-to-image models. In _ICASSP_ _2025-2025_ _IEEE_ _International_
+_Conference on Acoustics, Speech and Signal Processing (ICASSP)_ . IEEE, 2025d.
+
+
+Haoyuan Sun, Bo Xia, Yifei Zhao, Yongzhe Chang, and Xueqian Wang. Positive enhanced preference alignment for text-to-image models. In _ICASSP 2025-2025 IEEE International Conference_
+_on Acoustics, Speech and Signal Processing (ICASSP)_ . IEEE, 2025e.
+
+
+Richard S Sutton, Andrew G Barto, et al. _Reinforcement learning:_ _An introduction_, volume 1. MIT
+press Cambridge, 1998.
+
+
+Bram Wallace, Meihua Dang, Rafael Rafailov, Linqi Zhou, Aaron Lou, Senthil Purushwalkam,
+Stefano Ermon, Caiming Xiong, Shafiq Joty, and Nikhil Naik. Diffusion model alignment using
+direct preference optimization. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 8228–8238, 2024.
+
+
+Feng Wang and Zihao Yu. Coefficients-preserving sampling for reinforcement learning with flow
+matching. _arXiv preprint arXiv:2509.05952_, 2025.
+
+
+Yibin Wang, Zhimin Li, Yuhang Zang, Yujie Zhou, Jiazi Bu, Chunyu Wang, Qinglin Lu, Cheng
+Jin, and Jiaqi Wang. Pref-grpo: Pairwise preference reward-based grpo for stable text-to-image
+reinforcement learning. _arXiv preprint arXiv:2508.20751_, 2025.
+
+
+Felix Wimbauer, Bichen Wu, Edgar Schoenfeld, Xiaoliang Dai, Ji Hou, Zijian He, Artsiom
+Sanakoyeu, Peizhao Zhang, Sam Tsai, Jonas Kohler, et al. Cache me if you can: Accelerating diffusion models through block caching. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_
+_Computer Vision and Pattern Recognition_, pp. 6211–6220, 2024.
+
+
+Chenfei Wu, Jiahao Li, Jingren Zhou, Junyang Lin, Kaiyuan Gao, Kun Yan, Sheng-ming Yin, Shuai
+Bai, Xiao Xu, Yilei Chen, et al. Qwen-image technical report. _arXiv preprint arXiv:2508.02324_,
+2025.
+
+
+Xiaoshi Wu, Yiming Hao, Keqiang Sun, Yixiong Chen, Feng Zhu, Rui Zhao, and Hongsheng Li.
+Human preference score v2: A solid benchmark for evaluating human preferences of text-toimage synthesis. _arXiv preprint arXiv:2306.09341_, 2023.
+
+
+Jiazheng Xu, Xiao Liu, Yuchen Wu, Yuxuan Tong, Qinkai Li, Ming Ding, Jie Tang, and Yuxiao
+Dong. Imagereward: Learning and evaluating human preferences for text-to-image generation.
+_Advances in Neural Information Processing Systems_, 36:15903–15935, 2023.
+
+
+Zeyue Xue, Jie Wu, Yu Gao, Fangyuan Kong, Lingting Zhu, Mengzhao Chen, Zhiheng Liu, Wei
+Liu, Qiushan Guo, Weilin Huang, et al. Dancegrpo: Unleashing grpo on visual generation. _arXiv_
+_preprint arXiv:2505.07818_, 2025.
+
+
+Tony Z Zhao, Vikash Kumar, Sergey Levine, and Chelsea Finn. Learning fine-grained bimanual
+manipulation with low-cost hardware. _arXiv preprint arXiv:2304.13705_, 2023.
+
+
+Chujie Zheng, Shixuan Liu, Mingze Li, Xiong-Hui Chen, Bowen Yu, Chang Gao, Kai Dang,
+Yuqiong Liu, Rui Men, An Yang, et al. Group sequence policy optimization. _arXiv_ _preprint_
+_arXiv:2507.18071_, 2025.
+
+
+12
+
+
+A MATHEMATICAL ANALYSIS
+
+
+Here we Here we provide a mathematical analysis for Proposition 1. For simplicity, we assume that
+there are _m_ timesteps with inaccurate advantage attribution between two trajectory segments:
+
+
+( _xT, xT −_ 1 _, · · ·_ _, x_ 2 _, x_ 1 _, x_ 0) [1] _,_
+
+(17)
+( _xT, xT −_ 1 _, · · ·_ _, x_ 2 _, x_ 1 _, x_ 0) [2] _,_
+
+
+where 1 _≤_ _m_ _≤_ _T_ . We denote _Ta_ and _Tia_ as the sets of timesteps with accurate and inaccurate
+advantage attribution, respectively, and: [3]
+
+
+_Ta ∩_ _Tia_ = _∅,_ _Ta ∩_ _Tia_ = _{_ 1 _,_ 2 _, · · ·_ _, T_ _}._ (18)
+
+
+Let _A_ _[i]_ and _A_ _[j]_ as the advantage of the two trajectories. Without loss of generality, we assume:
+
+
+_A_ [1] = 1 _,_ _A_ [2] = _−_ 1 _._ (19)
+
+
+We denote _A_ [ˆ] _[i]_ _t_ [as the ground-truth advantage.] [Then for each timestep] _[ t]_ [:]
+
+
+ˆ ˆ
+_A_ [1] _t_ [=] _[ A]_ _t_ [1] [= 1] _[,]_ _A_ [2] _t_ [=] _[ A]_ _t_ [2] [=] _[ −]_ [1] _[,]_ _t ∈_ _Ta,_
+(20)
+ˆ ˆ
+_A_ [1] _t_ [=] _[ −][A]_ _t_ [1] [=] _[ −]_ [1] _[,]_ _A_ [2] _t_ [=] _[ −][A]_ _t_ [2] [= 1] _[,]_ _t ∈_ _Tia._
+
+
+The expected ground-truth loss object can thus be expressed as:
+
+
+Similarly, the step-level GRPO loss has gradient approximated to the gradient of following:
+
+
+3we neglect _x_ 0 because there is no more transition into _x−_ 1
+
+
+13
+
+
+_T_
+
+- - - - ˆ _i_ 
+_min_ _rt_ _[i]_ [(] _[θ]_ [)] _[A]_ [ˆ] _[i][, clip]_ _rt_ _[i]_ [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ _A_ _._ (21)
+_t_ =1
+
+
+ˆ
+_J_ ( _θ_ ) =
+
+
+2
+
+
+_i_ =1
+
+
+Here we omit constant factors such as [1]
+
+
+[1] [1]
+
+2 [,] _T_
+
+
+Here we omit constant factors such as 2 [,] _T_ [, and KL KL regularization.] [The step-level importance]
+
+ratio _rt_ _[i]_ [is defined in Equation (6), reproduced here for clarity::]
+
+
+_rt_ _[i]_ [(] _[θ]_ [) =] _[p][θ]_ [(] _[x]_ _t_ _[i]_ _−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] (22)
+_pold_ ( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] _[.]_
+
+
+Substituting Equation (20) into eq. (21), we obtain:
+
+
+ˆ _J_ ( _θ_ ) =
+
+
+_t∈Ta_
+
+
+- _min_ - _rt_ [1] [(] _[θ]_ [)] _[, clip]_ - _rt_ [1] [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ �� + _min_ - _−rt_ [2] [(] _[θ]_ [)] _[,][ −][clip]_ - _rt_ [2] [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ ���
+
+
++ 
+
+_t∈Tia_
+
+
+- _min_ - _rt_ [2] [(] _[θ]_ [)] _[, clip]_ - _rt_ [2] [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ �� + _min_ - _−rt_ [1] [(] _[θ]_ [)] _[,][ −][clip]_ - _rt_ [1] [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ ��� _._
+
+
+(23)
+
+
+Since the clipping operation only affects timesteps where the importance ratio lies outside the trust
+region (Schulman et al., 2015), and such cases are rare under small policy updates, we approximate
+the gradient of Equation (23) by the gradient of following expression:
+
+
+ˆ _J_ ( _θ_ ) =
+
+
+_t∈Ta_
+
+
+- _rt_ [1] [(] _[θ]_ [)] _[ −]_ _[r]_ _t_ [2] [(] _[θ]_ [)] - + 
+_t∈Tia_
+
+
+- _rt_ [2] [(] _[θ]_ [)] _[ −]_ _[r]_ _t_ [1] [(] _[θ]_ [)] - _._ (24)
+
+
+=
+
+
+_J_ ( _θ_ ) _GRP O_ = 
+
+_t∈Ta_
+
+
+- _rt_ [1] [(] _[θ]_ [)] _[ −]_ _[r]_ _t_ [2] [(] _[θ]_ [)] - + - - _rt_ [1] [(] _[θ]_ [)] _[ −]_ _[r]_ _t_ [2] [(] _[θ]_ [)] - _._ (25)
+
+_t∈Tia_
+
+
+We now analyze chunk-level optimization. For simplicity, we treat each trajectory in Equation (17)
+as a single chunk. Following Equation (12), we have:
+
+
+_{ch_ 1 _}_ _[i]_ = _{_ ( _xT, · · ·_ _, x_ 1) _}_ _[i]_ _,_ _i_ = 1 _,_ 2 _,_
+
+(26)
+_cs_ [1] 1 [=] _[ cs]_ 1 [2] [=] _[ T,]_
+
+
+The reason is that if trajectories are split into smaller chunks, each chunk can be viewed as a complete trajectory as in Equation (17). For convenience, we rewrite the chunk-level importance ratio
+from Equation (14) as:
+
+
+1
+_csj_
+
+_._ (27)
+
+
+_s_ _[i]_ _j_ [(] _[θ]_ [) =]
+
+
+
+
+ [�]
+
+_t∈chj_
+
+
+_pθ_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+_pθold_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+
+
+
+
+
+
+
+The chunk-level objective then becomes:
+
+
+_J_ ( _θ_ ) _chunk_ =
+
+
+2
+
+- _min_ - _s_ _[i]_ 1 [(] _[θ]_ [)] _[ A][i][, clip]_ - _s_ _[i]_ 1 [(] _[θ]_ [)] _[,]_ [ 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ - _A_ _[i]_ [�] _._ (28)
+
+_i_ =1
+
+
+Similarly, the gradient of _J_ ( _θ_ ) _chunk_ can be approximated by the gradient of following expression::
+
+
+_J_ ( _θ_ ) _chunk_ = _s_ [1] 1 _[−]_ _[s]_ 1 [2] _[,]_ (29)
+
+
+where
+
+
+1
+
+_pθ_  - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_  -  - _cs_ 1
+
+_pθold_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+
+_s_ _[i]_ 1 [(] _[θ]_ [) =]
+
+
+=
+
+
+=
+
+
+��
+
+
+_t∈ch_ 1
+
+
+- _T_
+
+ 
+
+
+- _rt_ _[i]_ [(] _[θ]_ [)]
+
+_t_ =1
+
+
+_pθ_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+
+- _T_ [1]
+
+
+(30)
+
+
+_t_ =1
+
+
+_pθold_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+
+- _T_
+
+ 
+
+
+- _T_ [1]
+_,_ _i_ = 1 _,_ 2 _._
+
+
+In Proximal Policy Optimization (PPO) (Schulman et al., 2017) and GRPO-based methods, the
+importance ratio _rt_ _[i]_ [(] _[θ]_ [)] [remains] [close] [to] [1] [due] [to] [trust-region] [constraints] [Schulman] [et] [al.] [(2015;]
+2017). We therefore set:
+
+
+_rt_ _[i]_ [(] _[θ]_ [) = 1 +] _[ ϵ]_ _t_ _[i][,]_ (31)
+
+where _ϵ_ _[i]_ _t_ [is a minimal term.] [Substituting into Equation (24) and Equation (25):]
+
+
+ˆ  _J_ ( _θ_ ) =
+
+
+_t∈Ta_
+
+
+- _ϵ_ [1] _t_ _[−]_ _[ϵ]_ _t_ [2] - + 
+_t∈Tia_
+
+
+- _ϵ_ [2] _t_ _[−]_ _[ϵ]_ _t_ [1] - (32)
+
+
+_J_ ( _θ_ ) _GRP O_ = - - _ϵ_ [1] _t_ _[−]_ _[ϵ]_ _t_ [2] - + 
+_t∈Ta_ _t∈Tia_
+
+
+- _ϵ_ [1] _t_ _[−]_ _[ϵ]_ _t_ [2] 
+
+
+(33)
+
+- _ϵ_ [1] _t_ _[−]_ _[ϵ]_ _t_ [2] - _._
+
+
+14
+
+
+_T_
+
+
+_t_ =1
+
+
+For the chunk-level ratio in Equation (30), applying the logarithm and Taylor expansion gives:
+
+
+_⇔T_ [2] _−_ (2 _m_ + 4) _T_ + (4 _m_ + 1) _≤_ 0
+
+_⇔m −_ - _m_ [2] + 3 + 2 _≤_ _T_ _≤_ _m_ + ~~�~~ _m_ [2] + 3 + 2
+
+
+15
+
+
+- _T_
+
+ 
+
+
+- _T_ [1]
+
+
+_s_ _[i]_ 1 [(] _[θ]_ [) =]
+
+
+=
+
+
+- _rt_ _[i]_ [(] _[θ]_ [)]
+
+_t_ =1
+
+
+- _T_
+
+ 
+
+_t_ =1
+
+
+  - _T_ [1]
+�1 + _ϵ_ _[i]_ _t_ 
+
+
+= 1 + [1]
+
+_T_
+
+
+_T_
+
+- _ϵ_ _[i]_ _t_ _[.]_
+
+1
+
+
+Thus the chunk-level objective reduces to:
+
+
+_J_ ( _θ_ ) _chunk_ = _s_ [1] 1 _[−]_ _[s]_ 1 [2]
+
+
+(34)
+
+
+(35)
+
+
+1 + [1]
+
+
+_T_
+
+
+=
+
+
+1 + [1]
+
+
+_T_
+
+
+_T_
+
+- _ϵ_ [1] _t_
+
+1
+
+
+_−_
+
+
+_T_
+
+- _ϵ_ [2] _t_
+
+1
+
+
+= [1]
+
+_T_
+
+
+_T_
+
+- - _ϵ_ [1] _t_ _[−]_ _[ϵ]_ _t_ [2] 
+_t_ =1
+
+
+= [1]
+
+_T_ _[J]_ [(] _[θ]_ [)] _[GRP O][.]_
+
+
+This shows that chunk-level optimization yields a smoothed version of the step-level GRPO obˆ
+jective. More formally, by comparing the squared distances between coefficient vector of _J_ ( _θ_ ),
+_J_ ( _θ_ ) _GRP O_, and _J_ ( _θ_ ) _chunk_, we find:
+
+
+_∥J_ ( [ˆ] _θ_ ) _−_ _J_ ( _θ_ ) _GRP O∥_ [2] 2 [= 2] _[m][ ×]_ [ (1] _[ −]_ [(] _[−]_ [1))][2]
+
+(36)
+= 8 _m._
+
+
+_∥J_ ( [ˆ] _θ_ ) _−_ _J_ ( _θ_ ) _chunk∥_ [2] 2 [=] _[ ∥]_ _J_ ( [ˆ] _θ_ ) _−_ [1] 2
+
+_T_ _[J]_ [(] _[θ]_ [)] _[GRP O][∥]_ [2]
+
+
+= _∥J_ ( [ˆ] _θ_ ) _∥_ [2] + [1]
+
+
+ˆ
+_J_ ( _θ_ ) _· J_ ( _θ_ ) _GRP O_
+_T_
+
+
+[1]
+
+_T_ [2] _[∥][J]_ [(] _[θ]_ [)] _[GRP O][∥]_ [2] _[ −]_ _T_ [2]
+
+
+(37)
+
+
+= 2 _T_ + [2] _[T]_
+
+
+[2] _[T]_
+
+_T_ [2] _[−]_ _T_ [2]
+
+
+_[−]_ [2] _[m]_ [)]
+_T_ _[·]_ [ 2 (] _[T]_
+
+
+= 2 _T_ _−_ 4 + [8] _[m]_ [ + 2] _,_
+
+_T_
+
+
+Where _m_ denotes the number of inaccurately attributed timesteps, which we mentioned in the beginning of this section. We want Equation (37) to be smaller than Equation (36), i.e.,
+
+
+_∥J_ ( [ˆ] _θ_ ) _−_ _J_ ( _θ_ ) _GRP O∥_ [2] 2 _[−∥]_ _J_ ( [ˆ] _θ_ ) _−_ _J_ ( _θ_ ) _chunk∥_ [2] 2 _[≥]_ [0] (38)
+
+
+Solving yields:
+
+
+_∥J_ ( [ˆ] _θ_ ) _−_ _J_ ( _θ_ ) _GRP O∥_ [2] 2 _[−∥]_ _J_ ( [ˆ] _θ_ ) _−_ _J_ ( _θ_ ) _chunk∥_ [2] 2 _[≥]_ [0]
+
+
+_⇔_ 8 _m −_ 2 _T_ + 4 _−_ [8] _[m]_ [ + 2]
+
+
+_≥_ 0
+_T_
+
+
+(39)
+
+
+_⇔_ 2 _T_ [2] _−_ (4 _m_ + 8) _T_ + (8 _m_ + 2) _≤_ 0
+
+
+Since 1 _≤_ _m_ _≤_ _T_, the first inequality always holds. As both _T_ and _m_ are positive integers, we
+obtain:
+
+          - _≤_ 5 _,_ if _m_ = 1
+_T_ (40)
+_≤_ 2 _m_ + 2 _,_ if _m ≥_ 2 _._
+
+
+Note that here _cs_ 1 = _T_, and the whole trajectory is treated as a single chunk. When the chunk size
+_cs_ _≤_ 5, Equation (38) always holds, meaning that the chunk-level objective _J_ ( _θ_ ) _chunk_ is closer
+ˆ
+to the ground-truth object _J_ ( _θ_ ) than _J_ ( _θ_ ) _GRP O_ . For larger chunks, Equation (38) still holds when
+_m ≤_ _[T][ −]_ 2 [2] [.]
+
+
+The insights of this solution are:
+
+
+    - For small chunks (e.g. _csj_ = 5), chunk-level optimization always outperforms step-level
+GRPO.
+
+    - For large chunk sizes, it also holds when roughly half of the timesteps suffer from inaccurate advantage attribution.
+
+    - From Equation (35), chunk-level optimization consistently provides smoother gradients
+than step-level GRPO..
+
+
+Moreover, here we present another perspective demonstrating Chunk-GRPO’s superiority based on
+the gradient weights, which shows why Chunk-GRPO is more stable.
+
+
+To begin with, the gradient of the GRPO’s objective in Equation (5) can be derived as follows
+(clipping and KL are omitted for brevity):
+
+
+1 1
+
+_G_ _T_
+
+
+_G_
+
+
+_i_ =1
+
+
+_T_ 
+- _rt_ _[i]_ [(] _[θ]_ [)] _[ A][i]_
+
+_t_ =1
+
+
+_∇θJGRP O_ ( _θ_ ) = _∇θEc,x_
+
+
+= _∇θEc,x_
+
+
+Given Equation (6), this simplifies to:
+
+
+1
+
+_G_
+
+
+- _A_ _[i]_ [ 1]
+
+_T_
+
+_i_ =1
+
+
+_T_
+
+
+_G_
+
+
+_T_ 
+- _rt_ _[i]_ [(] _[θ]_ [)] _[ · ∇][θ]_ [log] - _rt_ _[i]_ [(] _[θ]_ [)] 
+_t_ =1
+
+
+_._
+
+
+(41)
+
+
+_._ (42)
+
+
+- _A_ _[i]_ [ 1]
+
+_T_
+
+_i_ =1
+
+
+_T_
+
+
+               _pθ_ ( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] - _pθ_ ( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] _p_ old( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ [)] _[· ∇][θ]_ [log]
+
+
+_∇θJGRP O_ ( _θ_ ) = _∇θEc,x_
+
+
+1
+
+_G_
+
+
+_G_
+
+
+_T_
+
+
+_t_ =1
+
+
+In comparison, the gradient of our Chunk-GRPO’s objective in Equation (13) is derived below. For
+convenience, we denote the chunk-level importance ratio from Equation (14) as:
+
+
+1
+
+ _csj_
+
+
+ _,_ (43)
+
+
+_s_ _[i]_ _j_ [(] _[θ]_ [) =]
+
+
+Then the gradient becomes to:
+
+
+
+
+
+
+
+ [�]
+
+_t∈chj_
+
+
+_pθ_  - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_  
+_pθold_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+
+_K_
+
+- _s_ _[i]_ _j_ [(] _[θ]_ [)] _[ A][i]_
+
+_j_ =1
+
+
+_K_
+
+
+
+
+_[i]_ 
+
+
+_G_
+
+
+_i_ =1
+
+
+_∇θJChunk−GRP O_ ( _θ_ ) = _∇θEc,x_
+
+
+= _∇θEc,x_
+
+
+1
+
+ [1]
+
+_G_ _K_
+
+
+
+
+ [1]
+
+_G_
+
+
+- [1]
+
+_A_ _[i]_
+
+_K_
+
+_i_ =1
+
+
+_K_
+
+
+_G_
+
+
+_K_
+
+
+_K_ 
+
+- _s_ _[i]_ _j_ [(] _[θ]_ [)] _[ · ∇][θ]_ [log] - _s_ _[i]_ _j_ [(] _[θ]_ [)] �
+
+_j_ =1
+
+
+
+
+
+1
+= _∇θEc,x_
+_G_
+
+
+_G_
+
+- _A_ _[i]_
+
+
+_i_ =1
+
+
+- _∇θ_ log - _pθ_ ( _x_ _[i]_ _t−_ 1 _[|][x][i]_ _t_ _[, c]_ [)] 
+_t∈chj_
+
+
+
+
+ _K_ [1]
+
+
+_K_
+
+
+_j_ =1
+
+
+_pθ_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+_pθold_ - _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][, c]_ 
+
+16
+
+
+1
+_csj_
+
+_·_ [1]
+_csj_
+
+
+
+
+ [�]
+
+_t∈chj_
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(44)
+
+
+Therefore, the fundamental distinction between ours and GRPO lies in how they weight the gradients
+of the log likelihoods of tokens. In standard GRPO, tokens are weighted individually according to
+
+_pθ_ ( _x_ _[i]_ _t−_ 1 _[|][x][i]_ _t_ _[,c]_ [)]
+their respective importance weight [However, these unequal weights, which can vary]
+_p_ old( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][,c]_ [)] [.]
+
+among (0 _,_ 1 + _ϵ_ ] for _A_ _≥_ 0 or [1 _−_ _ϵ, ∞_ ) for _A_ _≤_ 0, are not negligible, and their impact can
+accumulate and lead to unstable consequences. In contrast, our approach applies a unified weight
+
+1
+
+�� _pθ_ ( _x_ _[i]_ _t−_ 1 _[|][x][i]_ _t_ _[,c]_ [)] - _csj_
+_t∈chj_ _pθold_ ( _x_ _[i]_ _t−_ 1 _[|][x]_ _t_ _[i][,c]_ [)] to all tokens within a chunk, effectively smoothing these fluctuations
+
+and eliminating this instability.
+
+
+B RELATED WORK
+
+
+B.1 REINFORCEMENT LEARNING FOR DIFFUSION-BASED IMAGE GENERATION
+
+
+Diffusion models (Ho et al., 2020; Rombach et al., 2022; Podell et al., 2023; Labs et al., 2025;
+Wu et al., 2025) have become one of the dominant paradigms for T2I generation. Early works (Xu
+et al., 2023; Black et al., 2024b; Fan et al., 2023) introduced RL into diffusion models through policy
+gradient optimization. Preference-based methods (Wallace et al., 2024; Sun et al., 2025a;c;d;e) were
+later developed, achieving competitive alignment without explicit reward modeling.
+
+
+More recently, GRPO (Shao et al., 2024; Sun et al., 2025b) has attracted attention as an efficient
+alternative. Dance-GRPO (Xue et al., 2025) and Flow-GRPO (Liu et al., 2025b) pioneered the use
+of GRPO for T2I generation, unifying diffusion and flow matching through an SDE-based reformulation. MixGRPO (Li et al., 2025a) further improved efficiency via a mixed ODE–SDE paradigm.
+TempFlow-GRPO (He et al., 2025) introduced temporal-aware weighting across denoising steps.
+Pref-GRPO (Wang et al., 2025) identified the issue of illusory advantage and reformulated the optimization objective as pairwise preference fitting. BranchGRPO (Li et al., 2025c) restructured the
+rollout process into a branching tree, amortizing computation across shared prefixes.
+
+
+In contrast to these works, our approach explicitly addresses two key issues in GRPO-based T2I generation: (1) inaccurate advantage attribution, and (2) neglect of temporal dynamics. By introducing
+chunk-level optimization guided by the inherent temporal structure of flow matching, we enhance
+GRPO from the perspective of optimization granularity.
+
+
+C EXPERIMENT DETAILS
+
+
+C.1 CHUNK CONFIGURATION
+
+
+In practice, the default Chunk-GRPO segments the image generation trajectory into _K_ = 4 chunks
+with _csj_ [4] _j_ =1 [= 2] _[,]_ [ 3] _[,]_ [ 4] _[,]_ [ 7][ under] _[ T]_ [= 17] [4] [timesteps.] [The rationale is as follows:]
+
+
+    - Following Figure 3, We set the first chunk as _cs_ 1 = 2.
+
+
+    - For the last chunk, we first conduct a pre-observation: we compute the relative _L_ 1 distance
+in Equation (15) again, but with a Dance-GRPO-trained model instead of the base model.
+As shown in Figure 8, RL alters the relative _L_ 1 distance primarily in the latter half of
+timesteps. Based on this, we set _ch_ 4 = 7.
+
+
+    - For _ch_ 2 = 3 and _ch_ 3 = 4, we base the segmentation on the second derivative of the _L_ 1
+curve.
+
+
+    - This configuration also satisfies the requirement in Proposition 1, which recommends keeping chunk size small (e.g. 5).
+
+
+We emphasize that this segmentation is not guaranteed to be the only optimal choice. Exploring
+adaptive chunk configurations under different _T_ is an interesting direction for future work.
+
+
+4We neglect the last timestep following Dance-GRPO, as the last step does not introduce stochasticity.
+
+
+17
+
+
+C.2 TRAINING DETAILS
+
+
+All experiments were conducted on 8 Nvidia
+H800 GPUs. The hyperparameters are summarized in Table 6.
+
+
+C.3 EVALUATION DETAILS
+
+
+we conducted an additional comparison with Pref-GRPO(Wang et al.,
+2025) on the preference alignment
+tasks. As shown in Table 7,
+our approach consistently outperforms baselines like Dance-GRPO
+and Pref-GRPO, confirming the effectiveness of our chunk-level optimization.
+
+
+C.5 ADAPTIVE CHUNKING
+
+
+While our initial implementation
+used fixed chunks based on the _L_ 1
+dynamics shown in Figure 3 has
+demonstrated significant results in
+experiments, it is sensitive to the
+sampling steps and lacks adaptivity.
+To address this issue, we have developed an adaptive chunking strategy as
+follows.
+
+
+Given a total sampling step _T_ and a
+prompt _c_, we can obtain the relative
+
+
+We set _T_ = 50 during evaluation. Following
+(Li et al., 2025a), the first 30 steps are sampled with the trained model, while the remaining 20 steps are sampled with the base model.
+This hybrid inference strategy and corresponding settings, also used in (Li et al., 2025a), have
+proven effective in mitigating reward hacking.
+
+
+Figure 8: The relative _L_ 1 distance comparison,
+before and after the training of Dance-GRPO.
+
+
+Table 6: Hyperparameter Settings
+
+
+**Parameter** **Value** **Parameter** **Value**
+
+
+Learning rate 1 _×_ 10 _[−]_ [5] Weight decay 1 _×_ 10 _[−]_ [4]
+
+Train batch size 2 SP size 1
+SP batch size 2 Max grad norm 0.01
+Resolution 720 _×_ 720 Sampling steps 17
+Eta 0.7 Num. generations 12
+Grad. accum. steps 12 Shift (branch offset) 3
+Clip range 5 _×_ 10 _[−]_ [5] Training steps 150
+Timestep fraction 0 _._ 5
+
+
+C.4 ADDITION BASELINE COMPARISONS
+
+
+Table 7: Results on Preference Alignment
+
+
+**Model** **HPSv3** **ImageReward**
+
+
+Flux 13.804 1.086
+
+
+Pref-GRPO 14.868 1.139
+
+
+Chunk-GRPO w/o ws 15.236 1.147
+
+
+1 The ‘ws’ refers to the weighted sampling strategy.
+
+
+Table 8: Results of Adaptive Chunking
+
+
+**Model** **HPSv3** **ImageReward**
+
+
+Flux 13.804 1.086
+
+
+Dance-GRPO 15.080 1.141
+
+
+1 The ‘ac’ refers to the adaptive chunking.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+_L_ 1 curve of the generation trajectory. First, we compute its first-order derivatives for each timestep,
+and group consecutive steps with the same sign into chunks. If the derivative signs are uniform
+across the entire trajectory, we split the sequence at the midpoint. Then, we recursively apply the
+above to each resulting chunk, but using second-order derivatives, third-order derivatives, and so on.
+When a chunk is sufficiently small ( _csj_ _≤_ 5), then it gets stopped from recursion. When all chunks
+get stopped, then the chunking is finished.
+
+
+Table 8 presents the results of this adaptive chunking. Without any hyperparameters fine-tuning,
+the adaptive chunking achieves remarkable results, which reveals the potential of adaptive chunking
+robust to prompts and sampling timesteps, further highlighting the superiority of our chunk-level
+optimization.
+
+
+C.6 USER STUDIES
+
+
+A user study is the most robust validation for alignment methods. Since our task focuses heavily on
+preference alignment, we conducted a user study to assess human preferences.
+
+
+During the test phase, ten reviewers possessing good aesthetic sensibilities were recruited and administered a qualifying assessment, in which nine participants successfully passed. We extracted 40
+prompts from our evaluation dataset - HPDv2.1 test set(Wu et al., 2023). Reviewers were tasked
+with identifying the optimal image based on the aesthetics from a set of 3 alternatives generated
+by: Dance-GRPO, Chunk-GRPO without weighted sampling (ws), and Chunk-GRPO with ws.
+
+
+E ADDITIONAL VISUALIZATION
+
+
+Figure 9 and 10 present qualitative comparisons among FLUX, Dance-GRPO, Chunk-GRPO without temporal dynamics, Chunk-GRPO with temporal dynamics and Chunk-GRPO with weighted
+sampling. Overall, Chunk-GRPO generates outputs that align more closely with human aesthetic
+preferences, exhibiting stronger lighting contrast, more vivid colors, and finer details.
+
+
+19
+
+
+The results in Table 9 show that the combined ChunkGRPO variants were preferred by human reviewers
+72 _._ 5% of the time, which further demonstrates the significant superiority of our approach in human preference
+alignment, validating its effectiveness.
+
+
+D REPRODUCIBILITY STATEMENT
+
+
+Table 9: Results of User Studies
+
+
+**Method** **Win Rate**
+
+
+Dance-GRPO 0.275
+
+
+Chunk-GRPO w/o ws 0.350
+
+
+1 The ‘ws’ refers to the weighted
+sampling strategy.
+
+
+We have made every effort to ensure the reproducibility
+of our results. The source code is provided in the ‘Supplementary Material’, and training details are described in Section 5.1 and Section C.
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Figure 9: Additional visualization comparison between the FLUX, DanceGRPO, Chunk-GRPO w/o
+temporal dynamics, Chunk-GRPO w/ temporal dynamics and Chunk-GRPO w/ weighted sampling.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Figure 10: Additional visualization comparison between the FLUX, DanceGRPO, Chunk-GRPO
+w/o temporal dynamics, Chunk-GRPO w/ temporal dynamics and Chunk-GRPO w/ weighted sampling.
+
+
+21

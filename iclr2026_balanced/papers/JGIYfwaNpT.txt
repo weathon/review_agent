@@ -1,0 +1,2991 @@
+# CONCEPTS’ INFORMATION BOTTLENECK MODELS
+
+
+**Karim Galliamov** [1] **Syed M Ahsan Kazmi** [2] **Adil Khan** [3] **Ad´ın Ram´ırez Rivera** [4]
+
+
+1University of Amsterdam 2University of West of England 3University of Hull 4University of Oslo
+
+1karim.galliamov@student.uva.nl 2ahsan.kazmi@uwe.ac.uk 3a.m.khan@hull.ac.uk 4adinr@uio.no
+
+
+ABSTRACT
+
+
+Concept Bottleneck Models (CBMs) aim to deliver interpretable predictions by
+routing decisions through a human-understandable concept layer, yet they often
+suffer reduced accuracy and concept leakage that undermines faithfulness. We
+introduce an explicit Information Bottleneck regularizer on the concept layer that
+penalizes _I_ ( _X_ ; _C_ ) while preserving task-relevant information in _I_ ( _C_ ; _Y_ ), encouraging minimal-sufficient concept representations. We derive two practical variants
+(a variational objective and an entropy-based surrogate) and integrate them into
+standard CBM training without architectural changes or additional supervision.
+Evaluated across six CBM families and three benchmarks, the IB-regularized models consistently outperform their vanilla counterparts. Information-plane analyses
+further corroborate the intended behavior. These results indicate that enforcing a
+minimal-sufficient concept bottleneck improves both predictive performance and
+the reliability of concept-level interventions. The proposed regularizer offers a
+theoretic-grounded, architecture-agnostic path to more faithful and intervenable
+CBMs, resolving prior evaluation inconsistencies by aligning training protocols
+and demonstrating robust gains across model families and datasets.
+
+
+1 INTRODUCTION
+
+
+In many real-world settings, models must not only be accurate but also provide explanations that
+humans can scrutinize and act upon. Among explainability approaches, self-explainable models are
+particularly compelling because they produce structured, intrinsic rationales and facilitate targeted
+debugging. Concept bottleneck models (CBMs) (Koh et al., 2020) embody this paradigm by predicting
+through human-interpretable concepts and enabling test-time interventions on those concepts.
+
+
+Despite their appeal, CBMs often underperform black-box models and suffer from concept leakage
+(the encoding of extraneous input information into concept activations) which undermines interpretability and weakens intervention reliability (Mahinpei et al., 2021; Margeloiu et al., 2021). Prior
+efforts to alleviate these issues typically modify architectures or enrich concept embeddings (Havasi
+et al., 2022; Kim et al., 2023), which introduces design complexity, can reduce intervenability, and
+may not generalize across CBM variants.
+
+
+We propose a simple, architecture-agnostic solution grounded in information theory: impose an
+Information Bottleneck (IB) regularizer directly on the concept layer (Alemi et al., 2017; Tishby
+et al., 2000). Our objective enforces minimal-sufficient concepts by compressing _I_ ( _X_ ; _C_ ) while
+preserving _I_ ( _C_ ; _Y_ ), thereby discouraging spurious signal flow into concepts without sacrificing
+task-relevant information—as shown in Fig. 1. We derive two practical training objectives, including
+an entropy-based surrogate that replaces the explicit _I_ ( _X_ ; _C_ ) term with an equivalent formulation
+in terms of entropies. We empirically justify its simplifying assumption on the concept entropy and
+show it performs on par with a variational bound. The regularizer is plug-and-play: it requires no
+architectural changes, side channels, or additional supervision, and applies broadly across CBM
+families.
+
+
+For our evaluation, first, we follow an intra-method protocol: for each baseline, we compare it against
+its proposed regularized variant under identical backbones, data, and training recipes. Second, we substantiate interpretability improvements beyond accuracy: IB-regularized CBMs exhibit substantially
+lower leakage, stronger and more predictable test-time interventions, and clearer information-plane
+dynamics consistent with the minimal-sufficiency goal. Third, we show stable performance across
+
+
+1
+
+
+_↑_ _I_ ( _Z_ ; _C_ ) _↑_ _I_ ( _C_ ; _Y_ )
+
+
+_x_ _↓_ _I_ ( _X_ ; _C_ )
+
+
+**Figure 1:** Our proposed CIBMs pipeline. The image is encoded through
+_p_ ( _z_ _| x_ ), which in turn encodes the concepts with _q_ ( _c | z_ ), and the labels
+are predicted through _q_ ( _y | c_ ). These modules are implemented as neural
+networks. We introduced the IB regularization as mutual information optimizations over the variables as shown in dashed lines.
+
+
+**Figure 2:** Our generative model
+_p_ ( _y |_ _x_ ) _p_ ( _c_ _|_ _x_ ) _p_ ( _z |_ _x_ ) _p_ ( _x_ ) (solid
+lines), and its variational approximation _q_ ( _y |_ _c_ ) _q_ ( _c_ _|_ _z_ ) _q_ ( _z |_ _x_ ) _q_ ( _x_ )
+(dashed lines).
+
+
+a range of IB strengths. These experiments indicate that IB at the concept layer improves both
+predictive performance and the reliability of concept-level reasoning.
+
+
+Our contributions are: (i) We establish, to our knowledge, the first direct integration of the Information
+Bottleneck principle at the concept layer in CBMs, reframing interpretability from a heuristic addon into a structurally enforced, theoretically grounded property of the model. We provide two
+concrete, tractable training objectives with empirical support for their assumptions. (ii) We present
+a comprehensive, reproducible assessment across diverse CBM variants and datasets showing that
+IB-regularized CBMs consistently improve target accuracy, reduce concept leakage, and enhance
+intervention effectiveness.
+
+
+Rather than redesigning CBM architectures or accumulating concept embeddings (Havasi
+et al., 2022; Kim et al., 2023), our information-theoretic regularization offers a simple, general
+mechanism to obtain concepts that are both maximally predictive of the target and minimally contaminated by the input—yielding more faithful, intervenable, and performant concept-based models.
+
+
+2 RELATED WORK
+
+
+2.1 CONCEPT BOTTLENECK MODELS
+
+
+**CBMs.** A CBM (Koh et al., 2020) predicts via _y_ ˆ = _f_ ( _g_ ( _x_ )), where _x ∈_ R _[D]_, _g_ : R _[D]_ _→_ R _[K]_ maps
+inputs to _K_ human-interpretable concepts, and _f_ : R _[K]_ _→_ R maps concepts to the target. Training uses
+triplets _{_ ( _xi, ci, yi_ ) _}_ _[N]_ _i_ =1 [with ground-truth concepts] _[ c][i]_ [, and can proceed independently, sequentially,]
+or jointly (Koh et al., 2020). While CBMs enable reasoning and interventions through concepts, they
+often trail black-box models in accuracy. Concept Embedding Models (CEM) (Espinosa Zarlenga
+et al., 2022) improve accuracy by learning “active” and “inactive” embeddings per concept, but
+require extra regularization for effective test-time interventions and exhibit increasing _I_ ( _X_ ; _C_ )
+without compression. In contrast, we retain the native concept space and explicitly regularize it with
+a concept information bottleneck, incorporating a mutual-information constraint into the loss; this
+plug-in regularizer is architecture-agnostic and applicable across CBM variants.
+
+
+**Probabilistic CBMs.** ProbCBMs (Kim et al., 2023) and energy-based CBMs (Xu et al., 2024) model
+concept uncertainty by predicting distributions over concepts and often rely on anchor points for class
+mapping. Other works extract concepts without annotations by introducing inductive biases, e.g., via
+language or label-free supervision (Oikarinen et al., 2023; Yang et al., 2023). We avoid anchor points
+(since they increase inference cost and introduce additional tuning hyperparameters) and instead learn
+concepts using a variational approximation to our concept-level information bottleneck.
+
+
+**Post-hoc CBMs.** Another line of work converts pre-trained models into CBMs. Side-channel and
+recurrent CBMs (Havasi et al., 2022) introduce, respectively, a parallel concept bottleneck and
+sequential concept prediction; the former lowers intervenability, while the latter compromises concept
+disentanglement. Post-hoc CBMs (Yuksekgonul et al., 2023) train concept and class predictors on
+frozen penultimate-layer embeddings and typically require residual connections for competitive
+accuracy, leaving residual information paths that concept supervision cannot shape—undermining
+both interpretability and intervention reliability.
+
+
+**Concept** **Leakage.** CBMs are prone to concept leakage (i.e., encoding input information in
+concept activations beyond intended semantics) across both soft and hard concepts (Mahinpei
+et al., 2021; Margeloiu et al., 2021). Margeloiu et al. (2021) report that CBM desiderata are best met
+
+
+2
+
+
+under independent training, while joint and sequential training tend to encode extra input information;
+saliency analyses further suggest that, under all three regimes, concepts are often not grounded in
+meaningful input features. To quantify leakage, Oracle and Niche Impurity Scores were proposed by
+Espinosa Zarlenga et al. (2023a). Motivated by these findings, we posit that compressing _I_ ( _X_ ; _C_ )
+while preserving _I_ ( _C_ ; _Y_ ) yields more faithful concepts and representations; our experiments across
+diverse tasks support this hypothesis.
+
+
+2.2 INFORMATION BOTTLENECK
+
+
+Tishby et al. (2000) introduced the information bottleneck (IB) as the minimization of the functional
+_L_ IB = _I_ ( _X_ ; _Z_ ) _−_ _βI_ ( _Z_ ; _Y_ ), where _I_ ( _·_ ; _·_ ) is the mutual information, _β_ is the Lagrange multiplier,
+_X_, _Y_ and _Z_ are random variables that represents the data, labels, and latent representations, respectively. This functional seeks a representation _Z_ that is maximally predictive of _Y_ while discarding
+irrelevant information about _X_ . This “minimal-sufficient” principle connects to generalization via
+the memorization-compression dynamics, wherein _I_ ( _Z_ ; _Y_ ) grows throughout training while _I_ ( _X_ ; _Z_ )
+first increases (memorization) and later decreases (compression).
+
+
+Alemi et al. (2017) extended the IB framework to deep neural networks by doing a variational
+approximation of latent representation. And, Kawaguchi et al. (2023) analyzed the role of IB in
+estimation of generalization gaps for classification task. Their result implies that by incorporating
+the IB into learning objective one may get more generalized and robust network. Unlike prior work
+that applies IB to generic latent features, we target the concept layer in CBMs. To our knowledge,
+we are the first to formalize and integrate IB at the concept level in CBMs: we introduce the
+concept variable _C_ and explicitly regularize _I_ ( _X_ ; _C_ ) while preserving _I_ ( _C_ ; _Y_ ), yielding concept
+representations that are both compact and task-relevant. We derive a tractable upper bound that
+links predicted concepts and ground-truth signals into a training regularizer that enforces the desired
+memorization-compression behavior at the concept layer. Practically, this yields objectives realizable
+via a variational approximation and, alternatively, a mutual-information estimator, enabling seamless
+integration across common CBM formulations without architectural changes.
+
+
+3 CONCEPTS’ INFORMATION BOTTLENECK
+
+
+Concept Bottleneck Models (CBMs) aim for high interpretability by introducing humanunderstandable concepts, _C_, as an intermediary between latent representations, _Z_, and the labels
+_Y_, so that the overall pipeline is _X_ _→_ _Z_ _→_ _C_ _→_ _Y_ —cf. Fig. 2. To keep the concepts truly
+interpretable we must prevent them from encoding irrelevant details of the raw input _X_ . This is
+captured by minimizing the mutual information between the inputs and the concepts, _I_ ( _X_ ; _C_ ), which
+directly limits the amount of data that can “leak” into _C_ . At the same time we want the concepts
+to be predictive of the label and to be well-supported by the latent representation. Accordingly, we
+maximize _I_ ( _C_ ; _Y_ ) and _I_ ( _Z_ ; _C_ ). Our initial objective is max _I_ ( _Z_ ; _C_ ) + _I_ ( _C_ ; _Y_ ) _,_ s.t. _I_ ( _X_ ; _Z_ ) _≤_ _IC_,
+where _IC_ is an information constraint constant, that equivalently is the maximization of the functional
+of the concepts’ information bottleneck (CIB)
+
+
+_L_ CIB = _I_ ( _Z_ ; _C_ ) + _I_ ( _C_ ; _Y_ ) _−_ _βI_ ( _X_ ; _Z_ ) _,_ (1)
+
+
+where _β_ is a Lagrangian multiplier. This formulation ensures a strong connection between latents, _Z_,
+and the concepts, _C_ . This means that one wants _Z_ to be maximally useful in shaping the concepts _C_,
+while also ensuring that the concepts are informative about the target.
+
+
+While the data processing inequality, _I_ ( _X_ ; _C_ ) _≤_ _I_ ( _X_ ; _Z_ ), suggests that compressing the latent
+space _Z_ implicitly limits the information in _C_, we propose enforcing this constraint directly on the
+concept space. We treat this not merely as a bound, but as a design choice. By explicitly minimizing
+_I_ ( _X_ ; _C_ ), we strictly control the amount of source information retained in the concepts, regardless of
+the capacity of _Z_ . This prioritizes the cleanliness of the interpretable layer, leading to the objective
+
+
+_L_ CIBM = _I_ ( _Z_ ; _C_ ) + _I_ ( _C_ ; _Y_ ) _−_ _βI_ ( _X_ ; _C_ ) _._ [1] (2)
+
+
+1Note that one can obtain the same loss if the optimization problem is constrained over the concepts instead,
+i.e., max _I_ ( _Z_ ; _C_ ) + _I_ ( _C_ ; _Y_ ) s.t. _I_ ( _X_ ; _C_ ) _≤_ _IC_ . Nevertheless, we present the relation with the traditional
+compression for completeness.
+
+
+3
+
+
+We posit that by compressing the information between the data, _X_, and the concepts, _C_, instead of the
+latent representations, _Z_, we can control the redundant information of the data within the concepts.
+By limiting _I_ ( _X_ ; _C_ ), we explicitly control the amount of _redundant or spurious_ information that
+can enter the concepts. In contrast, compressing _X_ _→_ _Z_ first and then deriving _C_ from _Z_ may
+leave a pathway for such leakage to survive the _Z_ _→_ _C_ mapping. Moreover, the bound _L_ CIBM (2)
+can be interpreted as compressing the information between _X_ and _C_ directly. This provides a
+stronger interpretability constraint than limiting _I_ ( _X_ ; _Z_ ), yielding a more robust compression and,
+consequently, more faithful concepts.
+
+
+By shifting the compression from the latent space to the concept space we obtain (i) concepts that
+are _intrinsically_ concise and, thus, easier for a human to interpret, and (ii) a principled safeguard
+against data leakage that would otherwise contaminate the bottleneck. The CIBM formulation (2)
+provides a clean information-theoretic framework for building such interpretable CBMs. We propose
+two implementations of our framework by exploring different ways of solving the mutual information
+based on a variational approximation of the data distribution.
+
+
+Our CIBMs provide a tighter generalization bound than traditional CBMs, established through a
+PAC-Bayes framework (McAllester, 1999; 2003). The derived generalization gap (∆) reveals the
+theoretical advantage of the CIBM over the traditional CBM. The result (Theorem 2) demonstrates
+that the guaranteed True Risk of the CIBM is strictly lower than that of the CBM, provided the
+regularization strength _β_ is sufficiently small to ensure the gap is positive (∆ _>_ 0). This occurs
+because the CIBM’s complexity reduction significantly outweighs the resulting slight increase in
+empirical training error (i.e., the _β_ penalty), leading to a tighter generalization bound. We detail the
+derivation and analysis of the conditions for this gap in Appendix B.
+
+
+3.1 BOUNDED CIB
+
+
+We consider the bound to the concept bottleneck loss (2) in terms of the entropy-based definitions of
+the mutual information. By using a variational approximation of the data distribution, we bound it as
+
+
+_L_ CIBM _≥_ (1 _−_ _β_ ) E (3)
+_p_ ( _z_ ) [[] _[H]_ [(] _[p]_ [(] _[c][ |][ z]_ [))] _[ −]_ _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [)] _[, q]_ [(] _[c][ |][ z]_ [))]] _[ −]_ _p_ [E] ( _c_ ) _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [))] _[,]_
+
+= _−L_ S-CIBM _._ (4)
+
+
+We detail this derivation in Appendix A. We can maximize the concepts’ information bottleneck by
+minimizing the cross entropies of the predictive variables, _y_ and _c_, and their corresponding ground
+truths and by adjusting the entropy of the concepts—cf. Fig. 2. We denote the models that were
+trained using this loss _L_ S-CIBM (4) by IB _B_ . To implement it, we need to estimate the entropy of the
+concepts distribution _p_ ( _c_ ). We give details of this estimator in Appendix D.4.
+
+
+3.2 ESTIMATOR-BASED CIB
+
+
+Another way to obtain a bound over the concept information bottleneck (2) is to only expand the
+conditional entropies that are not marginalized (A.1) to avoid widening the gap in the bound, i.e.,
+
+
+_L_ CIBM _≥H_ ( _Y_ ) + _H_ ( _C_ ) _−_ E (5)
+_p_ ( _c_ ) _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [))] _[ −]_ _p_ [E] ( _z_ ) _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [)] _[, q]_ [(] _[c][ |][ z]_ [))] _[ −]_ _[βI]_ [(] _[X]_ [;] _[ C]_ [)] _[.]_
+
+
+If we treat the entropies of the concepts and the labels as constants, we obtain
+
+
+_L_ E-CIB = E (6)
+_p_ ( _c_ ) _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [)) +] _p_ [ E] ( _z_ ) _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [)] _[, q]_ [(] _[c][ |][ z]_ [))] _[ −]_ _[β]_ [ (] _[ρ][ −]_ _[I]_ [(] _[X]_ [;] _[ C]_ [))] _[,]_
+
+
+where _ρ_ is a constant. Moreover, we found empirical evidence that also supports our assumption
+which we discuss in Appendix C. We denote the models that use this loss as IB _E_ since it relies on
+the estimator of the mutual information. We detail the estimator we used in our implementation in
+Appendix D.4.
+
+
+It is interesting to highlight that other optimization approaches emerge out of our bound. For instance,
+Kawaguchi et al. (2023) proposed _L_ K = E _p_ ( _z_ ) _H_ ( _p_ ( _y | z_ ) _, q_ ( _y | z_ )) + _β_ ( _ρ −_ _I_ ( _Z_ ; _X_ )) _._ Our mutual
+information estimated loss (6) resembles that proposal with the corresponding conditioning changes
+in the labels and the concepts. In contrast, our proposal is a generalized framework that encompass a
+wide range of possible implementations.
+
+
+4
+
+
+**Comparison between our estimators.** Unlike _L_ S-CIBM
+(4), which simplifies the mutual information terms into
+cross-entropy losses, _L_ E-CIB retains an explicit control over
+_I_ ( _X_ ; _C_ ). This allows for more granular control over the
+information flow from inputs to concepts, leading to a
+tighter constraint on concept leakage. As we show in the
+results (Table 1), this additional control translates to improved performance in both concept and class prediction
+accuracy, cf. Section 4.
+
+
+4 EXPERIMENTS
+
+
+We extend several CBM variants with our IB-regularizers,
+yielding CIBMs. The CIBMs are slight variations of the
+original models as they require a variational approximation
+in order to study and apply the proposed IB-regularizers.
+We train each model from scratch and compare CIBMs to
+their vanilla counterparts of equal capacity, measuring both
+class-prediction accuracy and concept leakage. Our goal is
+to close the accuracy gap to black-box models without sacrificing interpretability or test-time intervenability. Finally,
+we analyze information flows via mutual-information estimates and benchmark intervention performance.
+
+
+We benchmark our approach on three datasets: CUB (Wah
+et al., 2011), AwA2 (Xian et al., 2019), and aPY (Farhadi
+et al., 2009). We present all implementation details in
+Appendix D. For our regularizers, we evaluate their setups
+and select the best hyperparameters (cf. Section 4.6). In the
+following experiments, we use the same hyperparameters
+and setup for our regularizers for fair comparisons.
+
+
+4.1 PERFORMANCE ACROSS ALL DATASETS
+
+
+We present the evaluation results on three datasets in Table 1. Our “black-box model” serves as a gold-standard: it
+represents the highest possible class accuracy that can be
+achieved by a CBM when it is trained only to predict class
+labels (i.e., without providing any explanations). Because
+these models are seminal, we compare against hard (H)
+and soft (S) CBMs trained jointly (J) or independently (I)
+(Havasi et al., 2022). We discuss their reproducibility and
+training stability in Appendices D.2 and D.3, respectively.
+We also compare against more recent CBM variants such
+as ProbCBMs (Kim et al., 2023), intervention-aware CEM
+(IntCEM) (Espinosa Zarlenga et al., 2023b), and AR-CBM
+(Havasi et al., 2022).
+
+
+Our main objective is to show that the proposed regularizers (IB _B_ and IB _E_ ) _maintain or improve_ target-prediction
+accuracy relative to their original counterparts, while simultaneously enhancing concept-prediction accuracy and
+reducing concept leakage. The latter is crucial for guaranteeing the explainability of the results.
+
+
+On the _CUB_ dataset, both IB _B_ and IB _E_ improve classprediction accuracy over all baselines and always yield
+better class performance. These gains are accompanied
+by higher (or, in the worst case, comparable) concept
+
+
+5
+
+
+**Table 1:** We report accuracy results (over 5
+runs) of our proposed regularizers, IB _B_ and
+IB _E_, applied to different CBMs. Black-box
+is a gold standard for class prediction that
+offers no explainability over the concepts.
+
+
+Method Concept Class
+
+Black-box  - 0.919 _±_ 0.002
+CBM (HJ) 0.956 _±_ 0.001 0.650 _±_ 0.002
+CBM (HJ) + IB _B_ 0.951 _±_ 0.005 0.654 _±_ 0.000
+CBM (HJ) + IB _E_ 0.951 _±_ 0.000 0.655 _±_ 0.000
+CBM (HI) 0.956 _±_ 0.001 0.644 _±_ 0.001
+CBM (HI) + IB _B_ 0.954 _±_ 0.000 0.689 _±_ 0.000
+CBM (HI) + IB _E_ 0.952 _±_ 0.000 0.691 _±_ 0.000
+CBM (SJ) 0.956 _±_ 0.001 0.708 _±_ 0.006
+CBM (SJ) + IB _B_ 0.961 _±_ 0.005 0.727 _±_ 0.000
+CBM (SJ) + IB _E_ 0.958 _±_ 0.005 0.726 _±_ 0.000
+CBM (SI) 0.956 _±_ 0.001 0.639 _±_ 0.001
+CBM (SI) + IB _B_ 0.950 _±_ 0.002 0.643 _±_ 0.000
+CBM (SI) + IB _E_ 0.958 _±_ 0.000 0.646 _±_ 0.000
+ProbCBM 0.956 _±_ 0.001 0.718 _±_ 0.005
+ProbCBM + IB _B_ 0.960 _±_ 0.000 0.741 _±_ 0.006
+ProbCBM + IB _E_ 0.962 _±_ 0.000 0.734 _±_ 0.002
+IntCEM 0.954 _±_ 0.001 0.759 _±_ 0.002
+IntCEM + IB _B_ 0.957 _±_ 0.000 0.778 _±_ 0.000
+IntCEM + IB _E_ 0.959 _±_ 0.000 0.773 _±_ 0.000
+AR-CBM 0.956 _±_ 0.002 0.761 _±_ 0.010
+AR-CBM + IB _B_ 0.961 _±_ 0.000 0.777 _±_ 0.008
+AR-CBM + IB _E_ 0.950 _±_ 0.000 0.774 _±_ 0.006
+
+Black-box  - 0.893 _±_ 0.000
+CBM (HJ) 0.979 _±_ 0.000 0.853 _±_ 0.002
+CBM (HJ) + IB _B_ 0.968 _±_ 0.000 0.845 _±_ 0.000
+CBM (HJ) + IB _E_ 0.970 _±_ 0.000 0.856 _±_ 0.001
+CBM (HI) 0.979 _±_ 0.000 0.836 _±_ 0.001
+CBM (HI) + IB _B_ 0.966 _±_ 0.000 0.823 _±_ 0.000
+CBM (HI) + IB _E_ 0.976 _±_ 0.000 0.834 _±_ 0.000
+CBM (SJ) 0.979 _±_ 0.001 0.876 _±_ 0.001
+CBM (SJ) + IB _B_ 0.978 _±_ 0.003 0.878 _±_ 0.000
+CBM (SJ) + IB _E_ 0.980 _±_ 0.000 0.874 _±_ 0.002
+CBM (SI) 0.979 _±_ 0.000 0.852 _±_ 0.004
+CBM (SI) + IB _B_ 0.967 _±_ 0.000 0.847 _±_ 0.005
+CBM (SI) + IB _E_ 0.969 _±_ 0.000 0.853 _±_ 0.003
+ProbCBM 0.979 _±_ 0.000 0.880 _±_ 0.003
+ProbCBM + IB _B_ 0.971 _±_ 0.001 0.883 _±_ 0.000
+ProbCBM + IB _E_ 0.973 _±_ 0.000 0.883 _±_ 0.000
+IntCEM 0.979 _±_ 0.000 0.884 _±_ 0.002
+IntCEM + IB _B_ 0.977 _±_ 0.000 0.884 _±_ 0.000
+IntCEM + IB _E_ 0.982 _±_ 0.000 0.886 _±_ 0.003
+AR-CBM 0.979 _±_ 0.001 0.884 _±_ 0.006
+AR-CBM + IB _B_ 0.977 _±_ 0.004 0.876 _±_ 0.006
+AR-CBM + IB _E_ 0.978 _±_ 0.004 0.879 _±_ 0.000
+
+Black-box  - 0.866 _±_ 0.003
+CBM (SJ) 0.967 _±_ 0.000 0.797 _±_ 0.007
+CBM (SJ) + IB _B_ 0.966 _±_ 0.000 0.850 _±_ 0.000
+CBM (SJ) + IB _E_ 0.968 _±_ 0.000 0.860 _±_ 0.006
+CBM (SI) 0.967 _±_ 0.000 0.792 _±_ 0.007
+CBM (SI) + IB _B_ 0.966 _±_ 0.000 0.845 _±_ 0.012
+CBM (SI) + IB _E_ 0.957 _±_ 0.000 0.848 _±_ 0.000
+ProbCBM 0.967 _±_ 0.000 0.863 _±_ 0.007
+ProbCBM + IB _B_ 0.960 _±_ 0.000 0.873 _±_ 0.005
+ProbCBM + IB _E_ 0.958 _±_ 0.002 0.868 _±_ 0.000
+IntCEM 0.967 _±_ 0.000 0.869 _±_ 0.004
+IntCEM + IB _B_ 0.966 _±_ 0.000 0.868 _±_ 0.000
+IntCEM + IB _E_ 0.971 _±_ 0.000 0.877 _±_ 0.002
+AR-CBM 0.967 _±_ 0.000 0.873 _±_ 0.004
+AR-CBM + IB _B_ 0.963 _±_ 0.003 0.871 _±_ 0.006
+AR-CBM + IB _E_ 0.968 _±_ 0.000 0.879 _±_ 0.007
+
+
+accuracy, thereby, achieving the fundamental goal of our approach: to boost performance _and_
+interpretability at the same time. The CBM families (Havasi et al., 2022) were trained for 100
+epochs, in line with current training protocols (Espinosa Zarlenga et al., 2022; Kim et al., 2023);
+reproducibility details are provided in Appendix D.2.
+
+
+For the _AwA2_ dataset, the increase in class accuracy is modest but still comparable to that of the
+original methods, and concept prediction remains on par with the unregularized models. We attribute
+this to the relative simplicity of the dataset, which leaves little room for substantial improvement.
+
+
+In the more diverse, real-world _aPY_ dataset, our regularizers significantly outperform the baseline
+CBMs in class accuracy. Remarkably, they even surpass the black-box model while delivering
+interpretability comparable to the original CBMs—an essential property for real-world applications
+where explanations are required.
+
+
+The overall rise in both class and concept accuracy relative to existing methods highlights the benefits
+of our mutual-information regularization. By curbing concept leakage, the regularizers ensure
+that concepts are both informative and tightly coupled to the final prediction (see Section 4.2 for
+details). This empirical finding aligns with our theoretical framework, which argues that controlling
+the information flow between inputs and concepts via the Information Bottleneck produces more
+interpretable and meaningfully useful concepts without sacrificing performance (see Section 4.5 for a
+deeper discussion).
+
+
+4.2 CONCEPT LEAKAGE
+
+
+Concept leakage occurs when spurious or task-irrelevant information contaminates concept activations, thereby eroding both interpretability and the effectiveness of test-time interventions (Mahinpei
+et al., 2021; Margeloiu et al., 2021). Espinosa Zarlenga et al. (2023a) introduced two complementary
+metrics for quantifying this phenomenon: the Oracle Impurity Score (OIS), which measures impurity
+localized within individual concepts, and the Niche Impurity Score (NIS), which captures impurity
+distributed across the whole set of learned concepts.
+
+
+We evaluate OIS and NIS under three different settings: (i) _Complete concept set_ : all concepts are
+retained. (ii) _Selective dropout_ : we remove the _most predictive_ half of the concepts (i.e., the half
+with the highest class-prediction importance). This scenario has a unique configuration, so we do not
+report a standard deviation. (iii) _Random dropout_ : we randomly discard half of the concepts, serving
+as a control condition.
+
+
+We chose dropout experiments because omitting relevant concepts can dramatically increase concept
+leakage (Havasi et al., 2022). Tables 2, G.1, and G.2 present the results. In every scenario our
+IB-regularizers (IB _B_ and IB _E_ ) reduce leakage substantially, achieving the lowest OIS and NIS
+scores even when a large fraction of concepts is removed. These findings confirm that imposing an
+information bottleneck on the concepts effectively curtails spurious encoding and mitigates concept
+leakage.
+
+
+4.3 INTERVENTIONS
+
+
+A key advantage of Concept Bottleneck Models (CBMs) is the possibility of _test-time interventions_ :
+a user can overwrite predicted concepts with their ground-truth values and, thereby, improve the final
+decision. To evaluate this capability we simulate interventions by replacing the model’s predicted
+concepts with the corresponding ground-truth concepts at test time.
+
+
+Following prior work (Kim et al., 2023; Koh et al., 2020), we intervene on groups of concepts
+rather than on individual concepts. Grouping lets us measure how cumulative corrections affect
+class-prediction performance and mirrors the practical scenario where a user corrects several related
+concepts at once. To intervene, concept groups are sampled uniformly at random; the procedure is
+repeated five times and the results are averaged to reduce variance. For each number of intervened
+groups we compute the classification accuracy and plot it against the number of groups. The curve
+visualizes how quickly performance improves as more concept groups are corrected.
+
+
+Figure 3 shows that CBMs regularized with our information-bottleneck penalties (IB _B_ and IB _E_ )
+exhibit a _monotonic rise_ in accuracy as each additional concept group is intervened. This smooth
+ascent demonstrates that the models truly leverage accurate concept information and suffer minimal
+
+
+6
+
+
+**Table 2:** Concept leakage evaluation (lower is better) on CUB.
+
+
+**Complete CS** **Selective Drop-out CS** **Random Drop-out CS**
+
+**Model** **OIS** **NIS** **OIS** **NIS** **OIS** **NIS**
+CBM (HJ) 4 _._ 31 _±_ 0 _._ 57 65 _._ 03 _±_ 1 _._ 84 15 _._ 71 77 _._ 02 13 _._ 10 _±_ 1 _._ 20 73 _._ 09 _±_ 2 _._ 12
+CBM (HJ) +IB _B_ 2 _._ 59 _±_ 0 _._ 65 60 _._ 02 _±_ 1 _._ 28 12 _._ 67 70 _._ 86 10 _._ 32 _±_ 0 _._ 57 70 _._ 38 _±_ 2 _._ 12
+CBM (HJ) +IB _E_ 2 _._ 56 _±_ 0 _._ 47 59 _._ 52 _±_ 1 _._ 91 12 _._ 47 71 _._ 09 10 _._ 36 _±_ 0 _._ 80 69 _._ 95 _±_ 1 _._ 35
+CBM (HI) 3 _._ 77 _±_ 0 _._ 58 65 _._ 15 _±_ 2 _._ 03 14 _._ 27 74 _._ 16 12 _._ 31 _±_ 1 _._ 04 71 _._ 78 _±_ 1 _._ 86
+CBM (HI) +IB _B_ 3 _._ 58 _±_ 0 _._ 76 64 _._ 95 _±_ 1 _._ 59 14 _._ 01 73 _._ 16 12 _._ 63 _±_ 1 _._ 31 70 _._ 89 _±_ 2 _._ 04
+CBM (HI) +IB _E_ 3 _._ 69 _±_ 0 _._ 71 64 _._ 89 _±_ 1 _._ 51 14 _._ 00 73 _._ 13 12 _._ 60 _±_ 1 _._ 29 70 _._ 93 _±_ 2 _._ 09
+CBM (SJ) 4 _._ 69 _±_ 0 _._ 43 66 _._ 25 _±_ 2 _._ 31 16 _._ 29 78 _._ 39 12 _._ 97 _±_ 0 _._ 78 74 _._ 19 _±_ 1 _._ 04
+CBM (SJ) +IB _B_ 2 _._ 01 _±_ 0 _._ 07 62 _._ 32 _±_ 1 _._ 95 13 _._ 26 72 _._ 80 10 _._ 95 _±_ 1 _._ 49 71 _._ 94 _±_ 0 _._ 98
+CBM (SJ) +IB _E_ 2 _._ 00 _±_ 0 _._ 09 62 _._ 31 _±_ 2 _._ 08 13 _._ 23 72 _._ 85 11 _._ 03 _±_ 1 _._ 38 72 _._ 03 _±_ 1 _._ 07
+IntCEM 8 _._ 74 _±_ 0 _._ 30 75 _._ 41 _±_ 3 _._ 83 20 _._ 85 80 _._ 19 18 _._ 31 _±_ 0 _._ 09 76 _._ 56 _±_ 2 _._ 00
+IntCEM +IB _B_ 6 _._ 15 _±_ 0 _._ 20 69 _._ 96 _±_ 2 _._ 22 17 _._ 22 76 _._ 67 14 _._ 07 _±_ 0 _._ 43 72 _._ 60 _±_ 2 _._ 40
+IntCEM +IB _E_ 6 _._ 07 _±_ 0 _._ 23 71 _._ 28 _±_ 1 _._ 87 18 _._ 04 75 _._ 75 13 _._ 98 _±_ 0 _._ 29 73 _._ 89 _±_ 1 _._ 99
+AR-CBM 3 _._ 90 _±_ 0 _._ 27 62 _._ 30 _±_ 1 _._ 52 14 _._ 16 63 _._ 40 12 _._ 58 _±_ 0 _._ 86 60 _._ 86 _±_ 1 _._ 32
+AR-CBM + IB _B_ 2 _._ 84 _±_ 0 _._ 26 59 _._ 84 _±_ 1 _._ 48 10 _._ 96 59 _._ 66 10 _._ 17 _±_ 0 _._ 48 56 _._ 31 _±_ 1 _._ 33
+AR-CBM + IB _E_ 2 _._ 72 _±_ 0 _._ 16 59 _._ 96 _±_ 0 _._ 98 11 _._ 09 60 _._ 77 11 _._ 01 _±_ 1 _._ 05 57 _._ 23 _±_ 0 _._ 79
+ProbCBM 4 _._ 30 _±_ 0 _._ 10 64 _._ 22 _±_ 1 _._ 04 16 _._ 01 76 _._ 92 13 _._ 81 _±_ 0 _._ 21 75 _._ 01 _±_ 0 _._ 86
+ProbCBM + IB _B_ 2 _._ 43 _±_ 0 _._ 38 60 _._ 29 _±_ 2 _._ 02 13 _._ 04 72 _._ 76 10 _._ 29 _±_ 0 _._ 50 70 _._ 86 _±_ 1 _._ 87
+ProbCBM + IB _E_ 2 _._ 57 _±_ 0 _._ 52 59 _._ 81 _±_ 1 _._ 74 13 _._ 05 73 _._ 08 11 _._ 15 _±_ 0 _._ 62 71 _._ 13 _±_ 2 _._ 09
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+NR IB _B_ IB _E_
+CBM (HJ)
+CBM (HI)
+CBM (SJ)
+IntCEM
+AR-CBM
+
+
+0 _._ 6
+0 4 8 12 16 20 24
+
+
+Number of intervened groups
+
+
+0 _._ 6
+0 2 4 6 8 10 12 14
+
+
+Number of intervened groups
+
+
+**Figure** **3:** Change in target prediction accuracy after intervening on concept groups following the random
+strategy as described in Section 4.3. (TTI stands for Test-Time Interventions, and NR for non-regularized.) We
+show expanded plots, with less clutter, in Fig. F.1.
+
+
+leakage: every intervention yields a consistent performance boost. In contrast, soft-joint CBMs
+display pronounced dips in the middle of the sequence, which we attribute to their more leaky
+representations that become unstable under random group corrections. Hard CBMs, which use binary
+concept slots, eventually reach high accuracy when a large fraction of concepts is intervened (their
+low leakage helps), but they start far below the CIBMs and improve much more slowly when only a
+few concepts are correctedespecially on coarser datasets such as AwA2.
+
+
+Overall, our IB-regularised models combine low-leakage encodings with adaptive flexibility, producing steady gains and outperforming every CBM variant both in the intervention curves and in
+the overall accuracy reported in Table 1. Full experimental details are provided in Appendix I.
+Interestingly, the recent methods IntCEM and AR-CBM benefit the most from our regularization,
+showing a marked improvement on both datasets.
+
+
+4.4 CONCEPT SET GOODNESS MEASURE
+
+
+In CBMs, the quality of the concept set is crucial for accurate downstream task predictions. However,
+there is a lack of effective metrics to reliably assess concept set goodness. Existing metrics, such as
+the Concept Alignment Score, proposed by Espinosa Zarlenga et al. (2022), evaluate whether the
+model has captured meaningful concept representations but do not explicitly measure how well these
+concepts improve downstream task performance during interventions. Moreover, this metric is tuned
+for CEM and do not extend beyond it.
+
+
+7
+
+
+**Table 3:** Change in interventions performance with concept set corruption for CBM (SJ) and its regularized
+versions with our proposed methods. We show the disaggregated plots in Fig. F.2.
+
+
+_CUB_ AUC NAUC
+
+
+Corrupt CBM +IB _B_ +IB _E_ CBM +IB _B_ +IB _E_
+
+
+0 54.374 65.5886 64.6338 0.001260 0.0691 0.0035
+4 53.135 64.4933 63.4168 0.001198 0.0967 0.0269
+8 51.291 53.1240 60.1120 0.001166 0.0758 0.0608
+16 50.694 60.2241 59.4141 0.001068 0.0399 0.0451
+32 46.101 52.8855 51.1966 0.000863 0.0045 0.0432
+64 32.069 30.5203 29.2557 0.000339 0.0985 0.0513
+
+
+_AwA2_ AUC NAUC
+
+
+Corrupt CBM +IB _B_ +IB _E_ CBM +IB _B_ +IB _E_
+
+
+No 84.753 91.5144 92.1625 0.002808 0.0030 0.0115
+Yes 83.985 90.5738 90.8121 0.004484 0.0023 0.0218
+
+
+Similar to previous methods that rely on area under the curve for the interventions (Espinosa Zarlenga
+et al., 2023b; Singhi et al., 2024), we measure and compare the concept quality in CIBMs using the
+following metrics: area under interventions curve, and the area under curve of relative improvements.
+Denote by _I_ ( _x_ ) the model’s performance for _x_ concept groups used in the intervention. Then the
+Test-Time Interventions (TTI) accuracy is
+
+
+AUCTTI = [1]
+
+_n_
+
+
+_n_
+
+- _I_ ( _i_ ) _,_ (7)
+
+
+_i_ =1
+
+
+and the normalized version of the TTI accuracy is
+
+
+NAUCTTI = [1]
+
+_n_
+
+
+_n_
+
+- ( _I_ ( _i_ ) _−I_ ( _i −_ 1)) _._ (8)
+
+
+_i_ =1
+
+
+The idea behind these measures is simple: if a concept set is of high quality, the task accuracy will
+steadily approach 100% as more concept groups are intervened upon, resulting in a large area under
+the curve. Conversely, if the concept set is incomplete or noisy, performance gains will be limited,
+even with multiple interventions, which can indicate concept leakage.
+
+
+The latter expression (8) could be simplified to just scaled difference between a model with full
+concept set used for interventions and performance of a model with no interventions, however, the
+meaning it has is how much does the performance change per one group added to the interventions
+pool. To test this, we generate corrupted concept sets by replacing selected concepts with noisy ones.
+Importantly, we maintain the original groupings of concepts.
+
+
+Table 3 shows the results of our metrics. We also show the commonly reported disaggregated plots in
+Fig. F.2. The number in the “corrupt” column denotes the number of concepts replaced with random
+ones for CUB, and for AwA2 “No” denotes a clear concept set and “Yes” denotes a concept set with
+one concept changed to corrupt. As expected, performance drops with corrupt concepts, since they
+contain no useful information for the target task. One consequence of our training is that if one has
+two concept annotations for some dataset, then it is possible to use CIBMs performance to determine
+which concept set is better.
+
+
+Our results demonstrate that regularizing with IB _E_ is more sensitive to concept quality compared to
+vanilla CBM, making it a better indicator of concept set reliability. Negative values in normalized
+intervention AUC indicate possible concept leakage.
+
+
+4.5 INFORMATION PLANE DYNAMICS IN CBMS AND CIBMS
+
+
+To further evaluate the proposed regularizers, we examined the information plane dynamics of CBM,
+IntCEM, and AR-CBM, as shown in Fig. H.1. In general, we expected to observe higher mutual
+information between the concepts and the labels, _I_ ( _C_ ; _Y_ ), and between the latents and the concepts,
+_I_ ( _Z_ ; _C_ ), while expecting lower mutual information between the data and the concepts, _I_ ( _X_ ; _C_ ),
+
+
+8
+
+
+and between the data and the latents, _I_ ( _X_ ; _Z_ ). We clearly observed this behavior when applying
+our IB _E_ to IntCEM, and to a lesser degree with IB _B_ . This pattern was also evident in AR-CBMs,
+although with more noise. However, in certain cases, this pattern deviated. More specifically, we
+found that CBMs exhibit greater compression with respect to the data compared to their regularized
+counterparts. Nevertheless, our CIBMs demonstrate greater expressiveness due to their higher mutual
+information with respect to the labels, _Y_ .
+
+
+We think that vanilla CBMs “over-compress” their internal representations—shrinking _I_ ( _X_ ; _C_ )
+and _I_ ( _X_ ; _Z_ ) so aggressively that they discard useful, task-relevant features. This indiscriminate
+bottleneck explains their lower end-to-end accuracy (Table 1) and higher concept leakage (Table 2).
+By contrast, our CIBMs apply a _structured_ Information Bottleneck: they retain all the signal that
+drives _Y_ —higher _I_ ( _C_ ; _Y_ )—while shedding only the noise—lower _I_ ( _X_ ; _C_ )—, which both boosts
+predictive performance and cuts leakage. In other words, achieving **expressiveness** **first** (then
+**selective compression** ) yields representations that are both robust and interpretable. Appendix H
+presents detailed information-plane trajectories, and our findings echo recent theory on IB in deep
+nets, which warns against blind compression in favor of task-guided pruning (Kawaguchi et al., 2023).
+
+
+Overall, we have found that pursuing compression alone is not the solution for obtaining more robust
+representations. Instead, we see that achieving more expressive representations (i.e., higher mutual
+information with respect to the labels) followed by compression (i.e., lower mutual information with
+respect to the data) helps reduce the gaps in predictive tasks (see Table 1) as well as in leakage
+(see Table 2). However, due to the requirements for expressiveness, the CIBMs do not compress as
+much, since they must retain some useful information. Our findings align with recent theoretical
+insights on the Information Bottleneck principle in deep learning (Kawaguchi et al., 2023), which
+emphasize that indiscriminately minimizing the mutual information between the data and the latent
+representations, _I_ ( _X_ ; _Z_ ), does not guarantee expressive or generalizable representations. Effective
+models must selectively compress task-irrelevant information while retaining essential features for
+decision-making.
+
+
+4.6 EVALUATION OF OUR REGULARIZERS’ HYPERPARAMETERS
+
+
+We evaluated the hyperparameters of our proposed regularizers on a CBM (SJ) to select the values
+that we used for all other experiments. We evaluated our regularizers in a single model to find
+the best setup due to computational constraints. We compare the performance of IB _B_ and IB _E_ on
+concept and class prediction accuracy for the CUB dataset (using _β_ = 0 _._ 5) and report the results in
+Table D.3. As shown, IB _E_, which retains an explicit mutual information term _I_ ( _X_ ; _C_ ), outperforms
+IB _B_ when trained in a fair setup (vanilla) in both metrics. We found that the lack of performance
+of the vanilla IB _B_ regularizer comes from instabilities during training in the latent representations
+encoder _p_ ( _z | x_ ). We hypothesize that the gradient from the _H_ ( _C_ ) in the loss (4) damages the feature
+encoder _p_ ( _z_ _| x_ ) since the entropy is computed w.r.t. the generative concepts _p_ ( _c_ ) instead of the
+variational approximated ones _q_ ( _c_ ). To alleviate this problem, we experimented gradient clipping
+as well as stopping the gradient from _H_ ( _C_ ) into the encoder. We found that the latter performs on
+par with IB _E_ . In the experiments, we use IB _B_ with stop gradient on it. Overall, IB _E_ ’s more granular
+control over information flow limits concept leakage, results in better accuracies for concepts and
+labels in comparison to the baselines (cf. Table 1) without changes to its training framework. We also
+evaluate six different values for the _β_ constant that controls the mutual information between the data
+and the concepts. We show these results in Table D.4. Since we obtained inconclusive results, we
+selected _β_ = 0 _._ 5 for our experiments.
+
+
+These results supports our earlier discussion that the direct estimation of _I_ ( _X_ ; _C_ ) leads to more effective use of concepts in downstream tasks without further changes to the training regime. Nevertheless,
+with a correctly regularized feature encoder _p_ ( _z | x_ ), a simple estimation in IB _B_ can achieve similar
+levels of information gain and accuracy.
+
+
+5 CONCLUSION
+
+
+We present _Concepts’ Information Bottleneck Models_ (CIBMs), a first-principled fusion of Information Bottleneck theory and Concept Bottleneck Models that both explains CBMs’ failure modes
+and prescribes their cure. By penalizing _I_ ( _X_ ; _C_ ) while preserving _I_ ( _C_ ; _Y_ ), Concept Information
+
+
+9
+
+
+Bottleneck reveals why vanilla CBMs over-compress and leak spurious signals—and how a surgical,
+task-guided compression can retain exactly what matters. We validate CIBMs across six CBM families (hard/soft, joint/independent, ProbCBM, IntCEM, and AR-CBM) on three benchmarks (CUB,
+AwA2, and aPY), employing concept accuracy, class accuracy, Oracle and Niche Impurity (OIS and
+NIS), and intervention metrics (AUCTTI, NAUCTTI). The result is uniformly higher class accuracy,
+dramatically reduced concept leakage, and equal or better concept-prediction performance—closing
+much of the CBM-black-box gap. Crucially, our findings show that: (a) **simple, selective compres-**
+**sion** can unlock robust, interpretable concept representations; and (b) that leakage undermines the
+_use_ of concepts far more than their _detection_, explaining why near-perfect concept predictors can still
+yield subpar end-to-end performance.
+
+
+ACKNOWLEDGMENTS
+
+
+This work was funded, in part, by RCN (the Research Council of Norway) through Visual Intelligence,
+Centre for Research-based Innovation (grant no. 309439), and FRIPRO (grant no. 359216). The
+computations were performed, in part, on resources provided by Sigma2—the National Infrastructure
+for High-Performance Computing and Data Storage in Norway (Project NN8104K).
+
+
+REFERENCES
+
+
+Alessandro Achille and Stefano Soatto. Emergence of invariance and disentanglement in deep
+representations. _J. Mach. Learn. Res._, 19(50):1–34, 2018. [URL http://jmlr.org/paper](http://jmlr.org/papers/v19/17-646.html)
+[s/v19/17-646.html.](http://jmlr.org/papers/v19/17-646.html)
+
+
+Alexander A. Alemi, Ian Fischer, Joshua V. Dillon, and Kevin Murphy. Deep variational information
+bottleneck. In _Inter. Conf. Learn. Represent. (ICLR)_, 2017. [URL https://openreview.n](https://openreview.net/forum?id=HyxQzBceg)
+[et/forum?id=HyxQzBceg.](https://openreview.net/forum?id=HyxQzBceg)
+
+
+Mateo Espinosa Zarlenga, Pietro Barbiero, Gabriele Ciravegna, Giuseppe Marra, Francesco Giannini,
+Michelangelo Diligenti, Zohreh Shams, Frederic Precioso, Stefano Melacci, Adrian Weller, Pietro
+Lio, and Mateja Jamnik. Concept embedding models. In Alice H. Oh, Alekh Agarwal, Danielle
+Belgrave, and Kyunghyun Cho (eds.), _Adv._ _Neural_ _Inf._ _Process._ _Sys._ _(NeurIPS)_, 2022. URL
+[https://openreview.net/forum?id=HXCPA2GXf_.](https://openreview.net/forum?id=HXCPA2GXf_)
+
+
+Mateo Espinosa Zarlenga, Pietro Barbiero, Zohreh Shams, Dmitry Kazhdan, Umang Bhatt, Adrian
+Weller, and Mateja Jamnik. Towards robust metrics for concept representation evaluation. In _AAAI_
+_Conf. Artif. Intell. (AAAI)_, pp. 11791–11799, June 2023a. doi: 10.1609/aaai.v37i10.26392. URL
+[https://ojs.aaai.org/index.php/AAAI/article/view/26392.](https://ojs.aaai.org/index.php/AAAI/article/view/26392)
+
+
+Mateo Espinosa Zarlenga, Katherine M. Collins, Krishnamurthy Dj Dvijotham, Adrian Weller, Zohreh
+Shams, and Mateja Jamnik. Learning to receive help: Intervention-aware concept embedding
+models. In _Adv. Neural Inf. Process. Sys. (NeurIPS)_, 2023b. [URL https://openreview.n](https://openreview.net/forum?id=4ImZxqmT1K)
+[et/forum?id=4ImZxqmT1K.](https://openreview.net/forum?id=4ImZxqmT1K)
+
+
+Ali Farhadi, Ian Endres, Derek Hoiem, and David Forsyth. Describing objects by their attributes.
+In _IEEE/CVF_ _Inter._ _Conf._ _Comput._ _Vis._ _Pattern_ _Recog._ _(CVPR)_, pp. 1778–1785, 2009. doi:
+10.1109/CVPR.2009.5206772.
+
+
+Marton Havasi, Sonali Parbhoo, and Finale Doshi-Velez. Addressing leakage in concept bottleneck
+models. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (eds.), _Adv._
+_Neural Inf. Process. Sys. (NeurIPS)_, volume 35, pp. 23386–23397. Curran Associates, Inc., 2022.
+[URL https://proceedings.neurips.cc/paper_files/paper/2022/file/9](https://proceedings.neurips.cc/paper_files/paper/2022/file/944ecf65a46feb578a43abfd5cddd960-Paper-Conference.pdf)
+[44ecf65a46feb578a43abfd5cddd960-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2022/file/944ecf65a46feb578a43abfd5cddd960-Paper-Conference.pdf)
+
+
+Kenji Kawaguchi, Zhun Deng, Xu Ji, and Jiaoyang Huang. How does information bottleneck help
+deep learning? In _Inter. Conf. Mach. Learn. (ICML)_, pp. 16049–16096. PMLR, 2023.
+
+
+Eunji Kim, Dahuin Jung, Sangha Park, Siwon Kim, and Sungroh Yoon. Probabilistic concept
+bottleneck models. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara Engelhardt,
+Sivan Sabato, and Jonathan Scarlett (eds.), _Inter._ _Conf._ _Mach._ _Learn._ _(ICML)_, volume 202 of
+
+
+10
+
+
+_Proceedings of Machine Learning Research_, pp. 16521–16540. PMLR, 23–29 Jul 2023. URL
+[https://proceedings.mlr.press/v202/kim23g.html.](https://proceedings.mlr.press/v202/kim23g.html)
+
+
+Diederik Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In _Inter. Conf. Learn._
+_Represent. (ICLR)_, San Diego, CA, USA, 2015.
+
+
+Pang Wei Koh, Thao Nguyen, Yew Siang Tang, Stephen Mussmann, Emma Pierson, Been Kim, and
+Percy Liang. Concept bottleneck models. In Hal Daume III and Aarti Singh (eds.),´ _Inter. Conf._
+_Mach. Learn. (ICML)_, volume 119 of _Proceedings of Machine Learning Research_, pp. 5338–5348.
+PMLR, 13–18 Jul 2020. [URL https://proceedings.mlr.press/v119/koh20a.ht](https://proceedings.mlr.press/v119/koh20a.html)
+[ml.](https://proceedings.mlr.press/v119/koh20a.html)
+
+
+A. Mahinpei, J. Clark, I. Lage, F. Doshi-Velez, and P. WeiWei. Promises and pitfalls of black-box
+concept learning models. In _Inter._ _Conf._ _Mach._ _Learn._ _Wksps._ _(ICMLW)_, volume 1, pp. 1–13.
+PMLR, 2021.
+
+
+Andrei Margeloiu, Matthew Ashman, Umang Bhatt, Yanzhi Chen, Mateja Jamnik, and Adrian Weller.
+Do concept bottleneck models learn as intended? In _Inter. Conf. Learn. Represent. Wksps. (ICLRW)_,
+2021.
+
+
+David A McAllester. Some PAC-Bayesian theorems. _Mach. Learn._, 37:355–363, 1999.
+
+
+David A McAllester. PAC-Bayesian stochastic model selection. _Mach. Learn._, 51(1):5–21, 2003.
+
+
+Tuomas Oikarinen, Subhro Das, Lam M. Nguyen, and Tsui-Wei Weng. Label-free concept bottleneck
+models. In _Inter. Conf. Learn. Represent. (ICLR)_, 2023. [URL https://openreview.net/f](https://openreview.net/forum?id=FlCg47MNvBA)
+[orum?id=FlCg47MNvBA.](https://openreview.net/forum?id=FlCg47MNvBA)
+
+
+Nishad Singhi, Jae Myung Kim, Karsten Roth, and Zeynep Akata. Improving intervention efficacy
+via concept realignment in concept bottleneck models. In _European Conf. Comput. Vis. (ECCV)_,
+2024.
+
+
+Naftali Tishby, Fernando C Pereira, and William Bialek. The information bottleneck method. _arXiv_
+_preprint physics/0004057_, 2000.
+
+
+C. Wah, S. Branson, P. Welinder, P. Perona, and S. Belongie. CUB-200-2011. Technical Report
+CNS-TR-2011-001, California Institute of Technology, 2011.
+
+
+Yongqin Xian, Christoph H. Lampert, Bernt Schiele, and Zeynep Akata. Zero-shot learning—a
+comprehensive evaluation of the good, the bad and the ugly. _IEEE Trans. Pattern Anal. Mach._
+_Intell._, 41(9):2251–2265, 2019. doi: 10.1109/TPAMI.2018.2857768.
+
+
+Xinyue Xu, Yi Qin, Lu Mi, Hao Wang, and Xiaomeng Li. Energy-based concept bottleneck models.
+In _Inter. Conf. Learn. Represent. (ICLR)_, 2024. [URL https://openreview.net/forum](https://openreview.net/forum?id=I1quoTXZzc)
+[?id=I1quoTXZzc.](https://openreview.net/forum?id=I1quoTXZzc)
+
+
+Yue Yang, Artemis Panagopoulou, Shenghao Zhou, Daniel Jin, Chris Callison-Burch, and Mark
+Yatskar. Language in a bottle: Language model guided concept bottlenecks for interpretable image
+classification. In _IEEE/CVF Inter. Conf. Comput. Vis. Pattern Recog. (CVPR)_, pp. 19187–19197,
+2023.
+
+
+Mert Yuksekgonul, Maggie Wang, and James Zou. Post-hoc concept bottleneck models. In _Inter._
+_Conf. Learn. Represent. (ICLR)_, 2023. [URL https://openreview.net/forum?id=nA](https://openreview.net/forum?id=nA5AZ8CEyow)
+[5AZ8CEyow.](https://openreview.net/forum?id=nA5AZ8CEyow)
+
+
+A DETAILED DERIVATION OF CIB
+
+
+In this section we present the detailed derivations to obtained the results described in Section 3.1.
+
+
+We re-write the lower bound of the concepts’ information bottleneck as
+
+
+_L_ CIBM = _H_ ( _Y_ ) + (1 _−_ _β_ ) _H_ ( _C_ ) _−_ _H_ ( _Y_ _| C_ ) _−_ _H_ ( _C | Z_ ) + _βH_ ( _C | X_ ) (A.1)
+
+
+11
+
+
+to work with the entropies instead. We consider an approximation of the predictors for the labels and
+the concepts, _q_ ( _y | c_ ) and _q_ ( _c | z_ ), based on two variational distributions that will be implemented
+through neural networks—cf. Fig. 2. A conditional entropy, _H_ ( _A | B_ ), can be expressed in terms of
+a variational family _q_ ( _a | b_ ), as
+
+
+_H_ ( _A | B_ ) = _−_ E (A.2a)
+_p_ ( _a,b_ ) [[log] _[ p]_ [(] _[a][ |][ b]_ [)]] _[,]_
+
+
+= _−_ E
+_p_ ( _a | b_ )
+_p_ ( _b_ )
+
+
+- log _[p]_ [(] _[a][ |][ b]_ [)] _,_ (A.2b)
+
+_q_ ( _a | b_ ) [+ log] _[ q]_ [(] _[a][ |][ b]_ [)]
+
+
+= E
+_p_ ( _b_ )
+
+
+- _−_ KL� _p_ ( _a | b_ ) �� _q_ ( _a | b_ )� + _H_ ( _p_ ( _a | b_ ) _, q_ ( _a | b_ ))� _,_ (A.2c)
+
+
+_≤_ E (A.2d)
+_p_ ( _b_ ) [[] _[H]_ [ (] _[p]_ [(] _[a][ |][ b]_ [)] _[, q]_ [(] _[a][ |][ b]_ [))]] _[,]_
+
+
+given that the KL� _p_ ( _a_ _|_ _b_ ) �� _q_ ( _a_ _|_ _b_ )� _≥_ 0. Consequently, we can re-write our conditional entropies as
+
+
+_H_ ( _Y_ _| C_ ) _≤_ E (A.3)
+_p_ ( _c_ ) [[] _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [))]] _[,]_
+
+
+_H_ ( _C | Z_ ) _≤_ E (A.4)
+_p_ ( _z_ ) [[] _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [)] _[, q]_ [(] _[c][ |][ z]_ [))]] _[ .]_
+
+
+The conditional entropy of the concepts w.r.t. the data is bounded by
+
+
+_H_ ( _C | X_ ) = _H_ ( _C | X, Z_ ) + _I_ ( _C_ ; _Z | X_ ) _,_ (A.5a)
+_≥_ _H_ ( _C | Z_ ) _,_ (A.5b)
+
+
+since _I_ ( _C_ ; _Z | X_ ) _≥_ 0.
+
+
+Thus, the concept bottleneck loss (2) is lower bounded, given that we remove the KLs constraints,
+due to their positivity, from the conditional entropies (A.3), (A.4) and (A.5), and the labels entropy,
+by
+
+
+_L_ CIBM _≥_ (1 _−_ _β_ ) _H_ ( _C_ ) _−_ E (A.6)
+_p_ ( _c_ ) _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [))] _[ −]_ [(1] _[ −]_ _[β]_ [)] _p_ [ E] ( _z_ ) _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [)] _[, q]_ [(] _[c][ |][ z]_ [))] _[ .]_
+
+
+Moreover, we can re-write the entropy of the concepts as
+
+
+_H_ ( _C_ ) = _H_ ( _C | Z_ ) + _I_ ( _Z_ ; _C_ ) _,_ (A.7a)
+_≥_ _H_ ( _C | Z_ ) _._ (A.7b)
+
+
+Thus, the CIBM loss is then lower bounded by
+
+
+_L_ CIBM _≥_ (1 _−_ _β_ ) E (A.8)
+_p_ ( _z_ ) [[] _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [))] _[ −]_ _[H]_ [ (] _[p]_ [(] _[c][ |][ z]_ [)] _[, q]_ [(] _[c][ |][ z]_ [))]] _[ −]_ _p_ [E] ( _c_ ) _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [))] _[,]_
+
+
+= _−_ (1 _−_ _β_ ) E (A.9)
+_p_ ( _z_ ) [KL][(] _[p]_ [(] _[c][ |][ z]_ [)] _[ ∥]_ _[q]_ [(] _[c][ |][ z]_ [))] _[ −]_ _p_ [E] ( _c_ ) _[H]_ [ (] _[p]_ [(] _[y][ |][ c]_ [)] _[, q]_ [(] _[y][ |][ c]_ [))] _[,]_
+
+= _−L_ S-CIBM _._ (A.10)
+
+
+We can then maximize this lower bound, _L_ S-CIBM, to get closer to the concept bottleneck loss. In other
+words, we can maximize the concepts’ information bottleneck by minimizing the cross entropies
+of the predictive variables, _y_ and _c_, and their corresponding ground truths and by maximizing the
+entropy of the concepts.
+
+
+B GENERALIZATION BOUND DETAILS
+
+
+To analyze the generalization of our concepts’ information bottleneck models, we use the PAC-Bayes
+framework (McAllester, 1999; 2003).
+
+Let _D_ = _{_ ( _xi, yi, ci_ ) _}_ _[N]_ _i_ =1 [be] [a] [dataset] [of] _[N]_ [i.i.d.] [samples] [drawn] [from] [an] [unknown] [population]
+distribution _P_, such that _D_ _∼P_ . Let _θ_ be the parameters of the neural networks that approximate the
+encoders _qθ_ ( _·_ ).
+
+
+12
+
+
+**Proposition 1** (PAC-Bayes CBM) **.** _For any prior P_ ( _θ_ ) _, fixed before training, and a posterior Q_ ( _θ_ )
+_learned by the optimization, with probability at least_ 1 _−_ _δ over the drawn data D_ _∼P, we have that_
+_for all θ_
+
+
+1
+_RCBM_ ( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] _CBM_ ( _Q_ ( _θ_ )) + ~~_√_~~
+
+2 _N_
+
+
+1
+_RCBM_ ( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] _CBM_ ( _Q_ ( _θ_ )) + ~~_√_~~
+
+
+~~�~~
+
+
+- _KL_ ( _Q_ ( _θ_ ) _∥_ _P_ ( _θ_ )) + log
+
+
+- _√_
+2 _N_
+
+
+_δ_
+
+
+_._ (B.1)
+
+
+_Proof._ For a tuple of data _d_ = ( _x, y, c_ ), we define the traditional CBM’s loss as
+
+
+_ℓ_ CBM( _θ, d_ ) = _H_ ( _p_ ( _y | c_ ) _, qθ_ ( _y | c_ )) + _λH_ ( _p_ ( _c | z_ ) _, qθ_ ( _c | z_ )) _,_ (B.2)
+
+
+where _λ_ models different variants of CBMs. The true risk is then
+
+
+_R_ CBM( _Q_ ( _θ_ )) = _θ∼_ E _Q_ _d∼P_ [E] [[] _[ℓ]_ [CBM][(] _[θ, d]_ [)];] (B.3)
+
+
+while the empirical risk is computed over the sampled data
+
+
+1
+_R_ ˆCBM( _Q_ ( _θ_ )) = E
+_θ∼Q_ _N_
+
+
+_N_
+
+- _ℓ_ CBM( _θ, di_ ) _,_ (B.4)
+
+
+_i_ =1
+
+
+where _di_ = ( _xi, yi, ci_ ) _∈D_ .
+
+Since _D_ = _{_ ( _xi, yi, ci_ ) _}_ _[N]_ _i_ =1 [are i.i.d., the terms] _[ ℓ]_ [CBM][(] _[θ, d]_ [)][ are independent for a fixed] _[ θ]_ [.] [Thus, by]
+applying the standard PAC-Bayes theorem (McAllester, 1999; 2003), we obtain
+
+
+1
+_R_ CBM( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] CBM( _Q_ ( _θ_ )) + ~~_√_~~
+
+2 _N_
+
+
+1
+_R_ CBM( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] CBM( _Q_ ( _θ_ )) + ~~_√_~~
+
+
+~~�~~
+
+��KL( _Q_ ( _θ_ ) _∥_ _P_ ( _θ_ )) + log
+
+
+- _√_
+2 _N_
+
+
+_δ_
+
+
+_._ (B.5)
+
+
+**Theorem 1** (PAC-Bayes CIBM) **.** _Any prior P_ ( _θ_ ) _, fixed before training, and a posterior Q_ ( _θ_ ) _learned_
+_by the optimization, with probability at least_ 1 _−_ _δ over the drawn data D_ _∼P, we have that for all θ_
+
+
+1
+_RCIBM_ ( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] _CIBM_ ( _Q_ ( _θ_ )) + ~~_√_~~
+
+2 _N_
+
+
+1
+_RCIBM_ ( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] _CIBM_ ( _Q_ ( _θ_ )) + ~~_√_~~
+
+
+~~�~~
+
+
+- _KL_ ( _Q_ ( _θ_ ) _∥_ _P_ ( _θ_ )) + log
+
+
+- _√_
+2 _N_
+
+
+_δ_
+
+
+_._ (B.6)
+
+
+_Proof._ For a tuple of data _d_ = ( _x, y, c_ ), we define the CIBM’s loss by expanding our concepts’
+information bottleneck (2) as
+
+
+_ℓ_ CIBM( _θ, d_ ) = _H_ ( _p_ ( _y | c_ ) _, qθ_ ( _y | c_ )) + _H_ ( _p_ ( _c | z_ ) _, qθ_ ( _c | z_ )) + _βI_ ( _X_ ; _C_ )
+
+_−_ KL( _p_ ( _y | c_ ) _∥_ _qθ_ ( _y | c_ )) _−_ KL( _p_ ( _c | z_ ) _∥_ _qθ_ ( _c | z_ )) _−_ _H_ ( _Y_ ) _−_ _H_ ( _C_ ) _,_ (B.7a)
+= _H_ ( _p_ ( _y | c_ ) _, qθ_ ( _y | c_ )) + _H_ ( _p_ ( _c | z_ ) _, qθ_ ( _c | z_ )) + _βI_ ( _X_ ; _C_ ) + _C._ (B.7b)
+
+
+For the purpose of the generalization bound, we consider the cross-entropies as the risk and the
+mutual information, while ignoring the reminder terms _C_, such that we can compare it with the
+standard CBM in the following steps, since
+
+
+_ℓ_ CIBM( _θ, d_ ) _≤_ _ℓ_ CBM( _θ, d_ ) + _βI_ ( _X_ ; _C_ ) _,_ (B.8)
+
+
+since _C_ is negative. Thus, the true risk is
+
+
+_R_ CIBM( _Q_ ( _θ_ )) = _θ∼_ E _Q_ _d∼P_ [E] [[] _[ℓ]_ [CIBM][(] _[θ, d]_ [)];] (B.9)
+
+
+while the empirical risk is computed over the sampled data
+
+
+_N_
+
+- _ℓ_ CIBM( _θ, di_ ) _,_ (B.10)
+
+
+_i_ =1
+
+
+where _di_ = ( _xi, yi, ci_ ) _∈D_ .
+
+
+1
+_R_ ˆCIBM( _Q_ ( _θ_ )) = E
+_θ∼Q_ _N_
+
+
+13
+
+
+Similarly to Proposition 1, by applying the standard PAC-Bayes theorem (McAllester, 1999; 2003),
+we obtain
+
+
+- _√_
+2 _N_
+
+
+_δ_
+
+
+1
+_R_ CIBM( _Q_ ( _θ_ )) _≤_ _R_ [ˆ] CIBM( _Q_ ( _θ_ )) + ~~_√_~~
+
+2 _N_
+
+
+~~�~~
+
+��KL( _Q_ ( _θ_ ) _∥_ _P_ ( _θ_ )) + log
+
+
+_._ (B.11)
+
+
+**Theorem 2** (Generalization Advantage of CIBM) **.** _Let the encoders q_ ( _·_ ) _be parameterized by θ_ _∈_ Θ _._
+_Provided that β_ _is sufficiently small, the True Risk of the CIBM satisfies the inequality_
+
+
+_R_ ( _QCIBM_ ) _≤_ _BCBM −_ ∆ _,_ (B.12)
+
+
+_where_ _BCBM_ _is_ _the_ _generalization_ _bound_ _of_ _the_ _traditional_ _CBM,_ _and_ _the_ _improvement_ _gap_ ∆ _is_
+_defined as_
+
+
+_,_ (B.13)
+
+
+∆= ∆ _KL_
+
+
+1
+
+
+_−_ _β_
+2�2 _N_ _KL_ ( _QCBM_ _∥_ _P_ ) + _K_
+
+
+_√_
+_where_ ∆ _KL_ = _KL_ ( _QCBM_ _∥_ _P_ ) _−_ _KL_ ( _QCIBM_ _∥_ _P_ ) _, and K_ = log(2
+
+
+_N/δ_ ) _._
+
+
+_Proof._ First, let’s find the optimal distributions that minimize the empirical risk of each model. For
+the CBM, the optimal posterior is
+
+
+_Q_ CBM = arg min _R_ ˆCBM( _Q_ ) _,_ (B.14)
+_Q_
+
+
+while for CIBM
+
+
+_Q_ CIBM = arg min _R_ ˆCIBM( _Q_ ) _,_ (B.15a)
+_Q_
+
+
+= arg min
+_Q_
+
+
+- _R_ ˆCBM( _Q_ ) + _βI_ ( _X_ ; _C_ )� _,_ (B.15b)
+
+
+where the relation between the empirical risks (B.15b) is given by the relation between the CIBM
+and CBM losses (B.8). Achille & Soatto (2018) showed that the information of the representations is
+bounded by the information of the weights, that is,
+
+
+_I_ ( _X_ ; _C_ ) _≤_ _I_ ( _D_ ; _θ_ ) = E (B.16)
+_D_ [KL][(] _[Q]_ [(] _[θ][ | D]_ [)] _[ ∥]_ _[P]_ [(] _[θ]_ [))] _[.]_
+
+
+Thus, our minimizer for the CIBM empirical risk is actually solving
+
+
+_Q_ CIBM = arg min
+_Q_
+
+
+- _R_ ˆCBM( _Q_ ) + _β_ E - _._ (B.17)
+_D_ [KL][(] _[Q]_ [(] _[θ][ | D]_ [)] _[ ∥]_ _[P]_ [(] _[θ]_ [))]
+
+
+In other words, the posterior _Q_ CIBM that minimizes the empirical risk for the CIBM is already
+minimizing the posterior of the generalization bound, which is fundamentally different from the
+posterior minimizer of the CBM, _Q_ CBM, which only minimizes the risk.
+
+
+Per the PAC-Bayes theorem, the True Risk _R_ ( _Q_ ) for any posterior is bounded by its Empirical
+_√_
+Risk _R_ [ˆ] ( _Q_ ) plus a complexity term _C_ ( _Q_ ) = ~~�~~ (KL( _Q ∥_ _P_ ) + _K_ ) _/_ 2 _N_, where _K_ = log(2 _N/δ_ ).
+
+Therefore, for the CIBM, we start with the inequality
+
+
+1
+_R_ CIBM( _Q_ CIBM) _≤_ _R_ [ˆ] CIBM( _Q_ CIBM) + ~~_√_~~
+
+2 _N_
+
+
+�KL( _Q_ CIBM _∥_ _P_ ) + _K._ (B.18)
+
+
+Our goal is to substitute the terms on the right-hand side with those of the CBM to reveal the gap.
+
+
+**Substituting the Empirical Risk.** Since _Q_ CIBM is the global minimizer of the regularized objective (B.17), its objective value must be lower than or equal to that of any other distribution, including
+_Q_ CBM, such that
+
+
+_R_ ˆCIBM( _Q_ CIBM) + _β_ KL( _Q_ CIBM _∥_ _P_ ) _≤_ _R_ ˆCBM( _Q_ CBM) + _β_ KL( _Q_ CBM _∥_ _P_ ) _._ (B.19)
+
+
+14
+
+
+Let ∆KL = KL( _Q_ CBM _∥_ _P_ ) _−_ KL( _Q_ CIBM _∥_ _P_ ), such that ∆KL _>_ 0 due to the explicit penalization
+in CIBM. Rearranging the inequality provides a bound on the increase in empirical risk as
+
+
+_R_ ˆCIBM( _Q_ CIBM) _≤_ _R_ ˆCBM( _Q_ CBM) + _β_ ∆KL _._ (B.20)
+
+
+We substitute this into the true risk bound (B.18)
+
+
+1
+_R_ ( _Q_ CIBM) _≤R_ [ˆ] ( _Q_ CBM) + _β_ ∆KL + ~~_√_~~
+
+2 _N_
+
+
+�KL( _Q_ CIBM _∥_ _P_ ) + _K._ (B.21)
+
+
+**Substituting the Complexity Term.** Since ∆KL _>_ 0 due to the information penalty, we can rewrite
+the complexity term of CIBM in terms of the CBM’s complexity as
+
+
+1
+~~_√_~~
+
+2 _N_
+
+
+�KL( _Q_ CIBM _∥_ _P_ ) + _K_ = ~~_√_~~ 1
+
+2 _N_
+
+
+�KL( _Q_ CBM _∥_ _P_ ) _−_ ∆KL + _K._ (B.22)
+
+
+Let _A_ = KL( _Q_ CBM _∥_ _P_ ) + _K_ . Using the first-order Taylor approximation concavity bound of the
+_y_
+square root function, _[√]_ _x −_ _y_ _≤_ _[√]_ _x −_
+2 ~~_[√]_~~ _x_ [, we obtain]
+
+
+1
+~~_√_~~
+
+2 _N_
+
+
+- _A −_ ∆KL _≤_ ~~_√_~~ 1
+
+2 _N_
+
+
+- _√_
+_A −_ [∆] ~~_√_~~ [KL]
+
+
+~~_√_~~
+2
+
+
+_A_
+
+
+_,_ (B.23a)
+
+
+= _C_ ( _Q_ CBM) _−_ ~~_√_~~ ∆KL _._ (B.23b)
+2 2 _NA_
+
+
+**Deriving the Final Gap.** Now we substitute this upper bound for the complexity back into the true
+risk bound (B.21)
+
+_R_ ( _Q_ CIBM) _≤_ _R_ [ˆ] ( _Q_ CBM) + _C_ ( _Q_ CBM) + _β_ ∆KL _−_ ~~_√_~~ ∆KL (B.24)
+2 2 _NA_
+
+
+_R_ ( _Q_ CIBM) _≤_ _B_ CBM _−_ ∆KL
+
+
+We define the gap term as
+
+
+- 1 ~~_√_~~ _−_ _β_ _._ (B.25)
+2 2 _NA_
+
+
+∆= ∆KL
+
+
+1
+
+_−_ _β_
+2 ~~�~~ 2 _N_ (KL( _Q_ CBM _∥_ _P_ ) + _K_ )
+
+
+_._ (B.26)
+
+
+Provided that _β_ is sufficiently small such that _β_ _<_ ~~_√_~~ 1 [Thus, we conclude]
+2 2 _NA_ [, then][ ∆] _[>]_ [ 0][.]
+
+
+_R_ ( _Q_ CIBM) _≤_ _B_ CBM _−_ ∆ _._ (B.27)
+
+
+C STUDY OF EMPIRICAL ENTROPY _H_ ( _C_ )
+
+
+In deriving the E-CIB bound (6), we simplified the formulation by treating the entropy of the concepts
+as approximately constant. On one hand, we assume that the concepts entropy was constant since
+it depends on the prior distribution of the concepts. On the other hand, this simplification is also
+empirically supported by our results (see Fig. C.1), which confirm that concept entropy indeed rapidly
+stabilizes early in training, exhibiting minimal fluctuation thereafter.
+
+
+D IMPLEMENTATION DETAILS
+
+
+D.1 DETAILS ON THE MODELS
+
+
+In the following we describe the experimental setup for each model’s encoder _p_ ( _z_ _| x_ ). The IBregularized variants use exactly the same configuration as their unregularized counterparts, except for
+the addition of the IB-regularizer (see the paragraph below for implementation details). The original
+_CBM family_ (Havasi et al., 2022) employed an Inception backbone, and we followed this choice.
+
+
+15
+
+
+14
+12
+10
+8
+6
+4
+2
+
+0 10 20 30 40 50 60 70 80 90 100
+
+
+Epochs
+
+
+**Figure C.1:** Calculation of the empirical entropy of the concepts, _H_ ( _C_ ), during training for CBM (SJ) on CUB.
+
+
+Our code is based on the ProbCBM implementation (Kim et al., 2023). We trained the models for
+100 epochs while the authors of CBM (Havasi et al., 2022) used 1000 epochs, but we adopt the
+shorter schedule that is standard in more recent works—see the sensitivity analysis in Appendix D.3).
+_ProbCBM_ (Kim et al., 2023) uses a ResNet-18 backbone. We adopted the exact configuration
+and code from the original repository and trained for 100 epochs. _IntCEM_ (Espinosa Zarlenga
+et al., 2023b) is implemented with a ResNet-34 backbone. We reused the IntCEM code and trained
+the model for 300 epochs. _AR-CBM_ (Havasi et al., 2022) also relies on an Inception backbone.
+We followed the AR-CBM repository and trained for 200 epochs. All remaining hyper-parameters
+(learning rate, optimizer, batch size, etc.) are kept identical to the original implementations. A
+detailed comparison of different backbone choices and their impact on performance is provided in
+Appendix D.2.
+
+
+To endow any existing concept-bottleneck model with our information-bottleneck regularizer we
+modify the layer that produces the latent representation _Z_ . Specifically, we attach two lightweight
+heads to the model’s embedding layer (the bottleneck): one head predicts a mean vector _µ_ ( _z_ ) and
+the other predicts a standard-deviation vector _σ_ ( _z_ ). In a nutshell for these heads, we add on top
+of the model’s embedding layer (the bottleneck of the model) two 1-layer MLP (i.e., our heads),
+for mean and standard deviation using the reparametrization trick in the variational approximation
+_q_ ( _c | z_ ), each of dimensionality 112—the number of concepts left after filtration identical to one
+done in Koh et al.’s (2020) work. For IntCEMs, we introduce variational approximation for every
+concept embedding projection. We obtain concept logits as _C_ = pred _µ_ ( _x_ ) + pred _σ_ ( _x_ ) _· ϵ_, where _ϵ_ is
+a random standard Gaussian noise. On top of concepts logits, we stack label predictor _q_ ( _y | c_ ) (also
+1-layer MLP). All activations between the layers are ReLU.
+
+
+D.2 DISCUSSION ON REPRODUCIBILITY OF PREVIOUS WORK
+
+
+We emphasize that in our implementation of each baseline and their IB-regularized versions utilized
+the same setups (backbones and hyperparameters) as discussed in Appendix D.1. Additionally,
+we validated the execution of the base model and found that our results were within one standard
+deviation of the reported baselines in the original papers, confirming the accuracy of our baselines.
+Despite these sanity check values, we reported the original values, as is standard practice.
+
+
+CBMs’ results (Havasi et al., 2022) use two backbones: Inception and ResNet18. We retrained the
+CBM (SJ) and our regularizers for 100 epochs while varying the backbone and observed similar
+results, albeit slightly lower with ResNet18, as shown in Table D.1. For example, in the CUB dataset
+trained for 100 epochs, we observed a class accuracy of 0 _._ 708 with the Inception backbone compared
+to 0 _._ 683 with ResNet18. Considering our experiments with up to 1000 epochs (cf. Appendix D.3),
+we predict these results will scale similarly. Notably, the concept accuracies are comparable at
+0 _._ 95, suggesting that the results reported by Kim et al. (2023) align more closely with the Inception
+backbone than with ResNet18.
+
+
+Regarding ProbCBM (Kim et al., 2023), our results follow those using a ResNet18, aligning with
+the original results. In the case of IntCEM and CBM results, despite the claims in ProbCBM, we
+believe there are inconsistencies between the original reported results (Kim et al., 2023) and the
+claims regarding the backbones, as explained below.
+
+
+For IntCEM, the results are remarkably similar between the ResNet18 and ResNet34 backbones, as
+noted by Espinosa Zarlenga et al. (2022) in Appendix A.4 (Fig. A.7) of their paper. This similarity
+
+
+16
+
+
+**Table D.1:** Effect of the backbone on the CBM (SJ) and our regularizers.
+
+
+**Method** **Backbone** **Concept** **Class**
+CBM Inception 0.956 0.708
+CBM + IB _B_ Inception 0.957 0.726
+CBM + IB _E_ Inception 0.957 0.727
+CBM Resnet18 0.951 0.683
+CBM + IB _B_ Resnet18 0.954 0.701
+CBM + IB _E_ Resnet18 0.954 0.703
+
+
+**Table D.2:** Comparison of concept and class prediction accuracies when changing the number of epochs in
+CUB.
+
+
+**Method** **Epochs** **Concept** **Class**
+
+
+CBM 100 0.956 0.708
+CBM + IB _B_ 100 0.957 0.726
+CBM + IB _E_ 100 0.957 0.727
+CBM 1000 0.957 0.795
+CBM + IB _B_ 1000 0.958 0.806
+CBM + IB _E_ 1000 0.958 0.810
+
+
+ProbCBM 50 0.954 0.702
+ProbCBM + IB _E_ 50 0.954 0.710
+ProbCBM + IB _B_ 50 0.954 0.708
+ProbCBM 100 0.956 0.718
+ProbCBM + IB _E_ 100 0.957 0.734
+ProbCBM + IB _B_ 100 0.957 0.732
+
+
+might explain the scores reported in the ProbCBM (Kim et al., 2023). Additionally, there is no
+evidence that Kim et al. (2023) implemented and ran IntCEMs; we rely on their assertion regarding
+ResNet18, but there is no code-based justification. We executed IntCEM with 300 epochs, as
+described in the original paper, using different backbones and found accuracies of 0 _._ 757, 0 _._ 762,
+and 0 _._ 770 for ResNet18, ResNet34, and Inception, respectively. These results support the original
+IntCEM paper’s claim that there is no significant difference with respect to the backbone. Moreover,
+the results for the ResNet models fall within the standard deviation of the values reported in the
+ProbCBM paper. However, establishing significant results would require more runs and a proper
+hypothesis test, which are beyond the scope of our work.
+
+
+D.3 CBMS SENSITIVITY TO TRAINING EPOCHS
+
+
+In the main experiments, we trained the CBMs for 100 epochs following a protocol similar to
+ProbCBMs (Kim et al., 2023). However, the original CBMs (Havasi et al., 2022) were trained for
+1000 epochs. In Table D.2, we reproduced results from Havasi et al.’s (2022) work using their exact
+setups, including the number of training epochs. As observed, our proposed IB-regularized models
+obtain better concept and class predicitons overall. Interestingly, the concept predictions saturate
+when training for 1000 epochs, while the class predictions improve. This may be due to overfitting for
+class prediction. These results validate that our main experiments are valid and comparable despite
+using fewer epochs for the CBMs. We highlight that the other methods follow the original setup that
+trained for hundreds of epochs as well.
+
+
+D.4 ESTIMATORS DETAILS
+
+
+**Mutual Information Estimator.** Before each gradient update, we compute cross-entropies over the
+current batch _Bc_, and then randomly sample batch _Bc_ _[′]_ [from the training dataset to estimate] _[ I]_ [(] _[X]_ [;] _[ C]_ [)]
+on this batch.
+
+
+Our mutual information estimator follows Kawaguchi et al.’s (2023) work. We rely on the fact that
+concepts logits have Gaussian distribution for estimation of log _p_ ( _c | x_ ). And then, we use the random
+samples _Bc_ _[′]_ [to approximate the marginal of the concepts][ log] _[ p]_ [(] _[c]_ [)][.] [The mutual information] _[ I]_ [(] _[C]_ [;] _[ X]_ [)]
+is then a Monte-Carlo estimate of log _p_ ( _c | x_ ) _−_ log _p_ ( _c_ ).
+
+
+17
+
+
+**Table D.3:** Accuracies of CBM (SJ) with our proposed regularizers, IB _B_ and IB _E_, on CUB dataset (avg. 3 runs).
+
+
+Method Concept Class
+
+
+IB _B_ (vanilla) 0.934 0.608
+(clip ~~n~~ orm = 1 _._ 0) 0.948 0.663
+(clip ~~n~~ orm = 0 _._ 1) 0.948 0.650
+(stop grad. from _H_ ( _C_ ) into _p_ ( _z | x_ )) 0.958 0.726
+IB _E_ 0.958 0.727
+
+
+**Table D.4:** Evaluation of CBM (SJ) with the proposed regularizers on three datasets with two different values of
+_β_ .
+
+
+**CUB** **AwA2** **aPY**
+
+_**β**_ **Method** **Concept** **Class** **Concept** **Class** **Concept** **Class**
+0.10 IB _B_ 0.957 0.726 0.978 0.879 0.967 0.851
+IB _E_ 0.958 0.728 0.979 0.881 0.967 0.854
+0.20 IB _B_ 0.957 0.726 0.980 0.880 0.967 0.853
+IB _E_ 0.958 0.727 0.978 0.880 0.967 0.852
+0.25 IB _B_ 0.958 0.725 0.980 0.886 0.967 0.850
+IB _E_ 0.958 0.727 0.980 0.885 0.967 0.858
+0.50 IB _B_ 0.958 0.725 0.979 0.885 0.967 0.856
+IB _E_ 0.959 0.729 0.979 0.883 0.967 0.856
+0.75 IB _B_ 0.958 0.724 0.979 0.882 0.967 0.853
+IB _E_ 0.958 0.724 0.980 0.884 0.966 0.854
+0.90 IB _B_ 0.957 0.722 0.980 0.884 0.967 0.856
+IB _E_ 0.958 0.726 0.979 0.883 0.967 0.855
+
+
+**Entropy Estimator.** Since concepts _C_ are distributed normally, we use _H_ ( _C_ ) = _[D]_
+
+
+**Entropy Estimator.** Since concepts _C_ are distributed normally, we use _H_ ( _C_ ) = 2 [(1 + log(2] _[π]_ [)) +]
+
+12 [log] _[ |]_ [Σ] _[|]_ [.] [For simplicity (since the number of concepts] _[ D]_ [ is constant throughout the training and]
+inference) we use _H_ [ˆ] ( _C_ ) = [1] [log] _[ |]_ [Σ] _[|]_ [ =] [log(] _[σ][i]_ [)][ since][ Σ][ is a diagonal matrix in our setup.]
+
+
+[1]
+
+2 [log] _[ |]_ [Σ] _[|]_ [ =][ �] [log(] _[σ][i]_ [)][ since][ Σ][ is a diagonal matrix in our setup.]
+
+
+D.5 TRAINING PARAMETERS
+
+
+We explained the hyperparameter selection in Section 4.6. We experimented with different setups
+to find the best configuration. We show these results in Tables D.3 and D.4. The other training
+parameters for the models are as follows. We set batch size to 128 and number of samples for MI
+estimation to 64. For all experiments we used Adam (Kingma & Ba, 2015) optimizer with _lr_ = 0 _._ 003
+and _wd_ = 0 _._ 001. We experimented with gradient clipping, but it led to either slow or divergent
+training, so we are not clipping the gradients in any of the experiments.
+
+
+D.6 DATASETS
+
+
+We benchmark our approach on 3 datasets: CUB (Wah et al., 2011), AwA2 (Xian et al., 2019),
+and aPY (Farhadi et al., 2009). While CUB is a recognized dataset for comparing concept-based
+approaches (Espinosa Zarlenga et al., 2022; Kim et al., 2023; Koh et al., 2020), we add the other two
+datasets for additional evaluations and analysis.
+
+
+**CUB.** Caltech-UCSD Birds dataset (Wah et al., 2011) is a dataset of birds images totaling in 11788
+samples for 200 species. Following Koh et al.’s (2020) work, for reproducibility, we reduce instancelevel concept annotations to class-level ones with majority voting. We then keep only the concept
+that are annotated as present in 10 classes at least after the described voting, resulting in 112 concepts
+instead of 312. We also employ train/val/test splits provided by Koh et al. (2020), operating with
+4796 train images, 1198 val images and 5794 test images. To diversify training data, we augment
+the images with color jittering and horizontal flip, and resize the images to 299 _×_ 299 pixels for the
+InceptionV3 backbone. Concept groups are obtained by common prefix clustering.
+
+
+**AwA2.** Animals with attributes dataset (Xian et al., 2019) is a dataset of 37322 images of 50 animal
+species. For the concepts set, we follow Kim et al.’s (2023) work and keep only the 45 concepts
+
+
+18
+
+
+CBM (SJ) CBM (SJ)+IB _B_ CBM (SJ)+IB _E_
+
+
+Concept losses
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+0 10 20 30 40
+
+
+Epochs
+
+
+0 _._ 0
+0 10 20 30 40
+
+
+Epochs
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+Label losses
+
+
+**Figure D.1:** Losses on the validation set of CUB for CBM (SJ) and its variants regularized with our proposed
+methods.
+
+
+which could be observed on the image. We use ResNet18 embeddings provided by the dataset authors
+and train FCN on top of them. No additional augmentations are applied to those embeddings.
+
+
+**aPY.** This is a dataset (Farhadi et al., 2009) of 32 diverse real-world classes we used for proof of
+concept. We split the dataset into 7362 train, 3068 validation and 4909 test samples stratified on
+target labels. We train FCN on top of ResNet18 embeddings of input images provided by the dataset
+authors (Xian et al., 2019). No additional augmentations are applied to those embeddings.
+
+
+D.7 DETAILS ON EXPERIMENTS
+
+
+The image embedder backbone is only trained for CUB dataset (Wah et al., 2011), and for AwA2
+(Xian et al., 2019) and aPY (Farhadi et al., 2009) we use pre-computed image embeddings. The
+ground truth concept labels are binary across all dataset, but concepts predictions passed to label
+classifier are non-binary: we are training only (and comparing only against) models using soft
+concepts for class prediction.
+
+
+When training models with IB _B_, we used the _L_ S-CIBM (4) for better performance. We backpropagate
+the gradients from the cross-entropies over concepts and labels through the entire network—both
+backbone _q_ ( _c | z_ ) and MLPs on top of the encoder _q_ ( _y | c_ ). For _H_ ( _C_ ), however, the situation is
+different: gradients from this part of the loss function are propagated only through the MLPs, _q_ ( _c | z_ )
+and _q_ ( _y | c_ ), but not the image embedder backbone _p_ ( _z | x_ ). We found that such (partial) “freezing”
+of the encoder with respect to _H_ ( _C_ ) constraint dramatically improves the quality of both concepts
+and labels prediction. While we do not have access to the ground truth probability distribution for the
+concepts _p_ ( _c | z_ ), we have access to the ground truth concept labels. Our implementation uses the a
+supervised cross-entropy using the ground truth labels. The concepts’ predictor can be seens as a
+multi-label task classifier. In practice, we compute _C_ logits, then, we compute binary cross-entropy
+(BCE) for each of these logits with binary labels. Finally, we backpropagate them through the means
+of BCEs.
+
+
+We show the normalized loss function values on the validation set of CUB in Fig. D.1 to show the
+convergence of CIBMs in comparison to CBM (SJ). Note that visually the concept losses on between
+CBM (SJ) and its variant regularized with IB _E_ and the label losses between CIBMs are similar, but
+they differ slightly.
+
+
+E EXTENDED RESULTS ON PREDICTION
+
+
+We trained the CBMs on CUB using the soft sequential (SS) versions of our proposed method
+to complement the different versions of vanilla CBMs. We present the results in Table E.1. As
+demonstrated, our regularizers perform as expected and continue to outperform the corresponding
+baselines. While we report these additional results for completeness, we highlight that, most CBMbased works report the soft joint version of CBM, with only the original paper presenting the soft
+sequential versions.
+
+
+19
+
+
+**Table E.1:** Extended results for Table 1 on CUB. Accuracy results include mean and std. over 5 runs. We report
+results of our proposed regularizer methods, IB _B_ and IB _E_, applied to different CBMs. Black-box is a gold
+standard for class prediction that offers no explainability over the concepts.
+
+
+Method Concept Class
+Black-box              - 0.919 _±_ 0.002
+CBM (HJ) 0.956 _±_ 0.001 0.650 _±_ 0.002
+CBM (HJ) + IB _B_ 0.946 _±_ 0.000 0.653 _±_ 0.004
+CBM (HJ) + IB _E_ 0.960 _±_ 0.000 0.647 _±_ 0.000
+CBM (HI) 0.956 _±_ 0.001 0.644 _±_ 0.001
+CBM (HI) + IB _B_ 0.955 _±_ 0.000 0.683 _±_ 0.000
+CBM (HI) + IB _E_ 0.948 _±_ 0.002 0.679 _±_ 0.000
+CBM (SI) 0.956 _±_ 0.001 0.639 _±_ 0.001
+CBM (SI) + IB _B_ 0.955 _±_ 0.000 0.642 _±_ 0.000
+CBM (SI) + IB _E_ 0.958 _±_ 0.004 0.642 _±_ 0.009
+CBM (SS) 0.956 _±_ 0.001 0.640 _±_ 0.001
+CBM (SS) + IB _B_ 0.954 _±_ 0.000 0.673 _±_ 0.008
+CBM (SS) + IB _E_ 0.955 _±_ 0.000 0.664 _±_ 0.000
+CBM (SJ) 0.956 _±_ 0.001 0.708 _±_ 0.006
+CBM (SJ) + IB _B_ 0.951 _±_ 0.000 0.724 _±_ 0.002
+CBM (SJ) + IB _E_ 0.957 _±_ 0.000 0.731 _±_ 0.000
+
+
+F EXTENDED RESULTS ON INTERVENTIONS
+
+
+In Fig. F.1, we show the plots of Fig. 3 separated and grouped by the type of method and dataset
+in order to better visualize the trends. We highlight that the fewer points in the results for IntCEM
+follows the results from Espinosa Zarlenga et al. (2022).
+
+
+In Fig. F.2, we show additional results about the aggregated interventions that we dicussed in
+Section 4.4 and that we showed in Table 3. We plot the interventions in the traditional way by
+showing the intervened groups and the TTI performance for six different corruption settings.
+
+
+G EXTENDED RESULTS ON CONCEPT LEAKAGE
+
+
+G.1 OIS AND NIS METRICS
+
+
+The Oracle Impurity Score (OIS) (Espinosa Zarlenga et al., 2023a) quantifies impurities localized
+within individual concept representations. Given a concept encoder _g_ : _X_ _→_ _C_ [ˆ] _⊆_ R _[d][×][k]_, test samples
+Γ _X_, and their concept annotations Γ, OIS is defined as:
+
+OIS( _g,_ Γ _X_ _,_ Γ) = [2] _[∥][π]_ [(] _[g]_ [(Γ] _[X]_ [)] _[,]_ [ Γ)] _[ −]_ _[π]_ [(Γ] _[,]_ [ Γ)] _[∥][F]_ (G.1)
+
+_k_
+
+
+where _π_ (Γ [ˆ] _,_ Γ) is a purity matrix whose entries _π_ (Γ [ˆ] _,_ Γ)( _i,j_ ) contain the AUC-ROC score when
+predicting the ground truth value of concept _j_ given the _i_ -th concept representation. The normalization
+ensures OIS ranges in [0 _,_ 1], with 0 indicating perfect alignment between the predictive capacity of
+learned and ground truth concepts.
+
+
+The Niche Impurity Score (NIS) (Espinosa Zarlenga et al., 2023a) captures impurities distributed
+across multiple concept representations. Let _f_ : R _[D]_ _→_ _C_ be a classifier, and _D_ = _{r_ [(] _[l]_ [)] _, c_ [(] _[l]_ [)] _}_ _[n]_ _l_ =1 [be]
+a dataset of labeled concept representations. For each concept _i_, a concept niche _Ni_ ( _ν, β_ ) is defined
+as the set of concept indices whose representations are highly entangled with concept _i_ according to a
+concept niche function _ν_ and threshold _β_ . Let the impurity set, I _i_ = _{_ 1 _, . . ., d} \ Ni_ ( _ν, β_ ), as the set
+of all indices excluded from the niche.
+
+
+The Niche Impurity (NI) for concept _i_ measures how predictable this concept is from representations
+outside its niche:
+�� ��
+NI _i_ ( _f, ν, β_ ) = AUC-ROC _f_ I _i_ (ˆ _c_ [(] I _i_ _[l]_ [)][)] _[, c]_ _i_ [(] _[l]_ [)] _,_ (G.2)
+
+
+20
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+CUB
+
+
+0 _._ 6
+0 4 8 12 16 20 24
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 4 8 12 16 20 24
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 4 8 12 16 20 24
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 4 8 12 16 20 24
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 4 8 12 16 20 24
+
+
+Number of intervened groups
+
+
+AwA2
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 2 4 6 8 10 12 14
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 2 4 6 8 10 12 14
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 2 4 6 8 10 12 14
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 2 4 6 8 10 12 14
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+0 2 4 6 8 10 12 14
+
+
+Number of intervened groups
+
+
+**Figure F.1:** Expanded results from Fig. 3. Change in target prediction accuracy after intervening on concept
+groups following the random strategy as described in Section 4.3. (TTI stands for Test-Time Interventions and
+NR for non-regularized.)
+
+
+where _f_ I _i_ denotes the classifier restricted to operate only on the dimensions in I _i_, and ˆ _c_ [(] I _i_ _[l]_ [)] [denotes the]
+sub-vector formed by selecting only the indices found in I _i_ (the irrelevant features). The overall NIS
+is then calculated by integrating NIs across all concepts and threshold values:
+
+
+     - 1
+NIS( _f, ν_ ) =
+
+0
+
+
+- _k_
+
+ 
+
+_i_ =1
+
+
+NI _i_ ( _f, ν, β_ )
+
+_k_
+
+
+_dβ._ (G.3)
+
+
+A NIS of 0 _._ 5 indicates random performance (no impurity), while a NIS of 1 suggests that concept
+information is dispersed across multiple representations. Together, these metrics effectively evaluate
+concept quality without making unrealistic assumptions about concept independence or representation
+dimensionality.
+
+
+G.2 CONCEPT SETS REDUCTION
+
+
+We employed two different algorithms to cut the concepts set to half the size: selective (informationbased) and random dropout. In the former, we computed E[ _I_ ( _Y_ ; _Ci_ )] for all concept groups on a
+
+
+21
+
+
+CBM (SJ) CBM (SJ)+IB _B_ CBM (SJ)+IB _E_
+
+
+0 corrupted
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+0 4 8 12 16 20 24
+
+
+8 corrupted
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+0 4 8 12 16 20 24
+
+
+32 corrupted
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+0 4 8 12 16 20 24
+
+
+Number of intervened groups
+
+
+4 corrupted
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+0 4 8 12 16 20 24
+
+
+16 corrupted
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+0 4 8 12 16 20 24
+
+
+64 corrupted
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+0 4 8 12 16 20 24
+
+
+Number of intervened groups
+
+
+**Figure F.2:** Change in target prediction accuracy for different number of corrupted concepts. These are the
+expanded results of Table 3. (TTI stands for Test-Time Interventions.)
+
+
+subsample of the training set. Then we dropped out the concepts groups with the highest mutual
+information—that is, we made the “fair” (leakage-free) learning as unprofitable and hard as possible.
+On the other hand, the random dropout selects half of the concepts at random and drops the rest.
+
+
+G.3 ADDITIONAL RESULTS
+
+
+To complement the results of Table 2, we also performed the concept leakage evaluation on AwA2
+(Table G.1 and aPY (Table G.2). These results demonstrate that our regularizers are highly effective
+at mitigating concept leakage, as evidenced by the consistent reduction in OIS and NIS across
+all three datasets (CUB, AwA2, and aPY). This improvement is robust across every tested model
+architecture (including various CBMs, IntCEM, and ProbCBM) and intervention strategy, indicating
+that these regularizers successfully force models to learn better concepts by preventing the encoding
+of extraneous information. Furthermore, the performance of our regularizers is similar, suggesting
+that both are equally reliable solutions for enforcing concept integrity without a significant difference
+in efficacy between them.
+
+
+22
+
+
+**Table G.1:** Concept leakage evaluation (lower is better) on AwA2.
+
+
+**Complete CS** **Selective Drop-out CS** **Random Drop-out CS**
+
+
+**Model** **OIS** **NIS** **OIS** **NIS** **OIS** **NIS**
+CBM (HJ) 2 _._ 61 _±_ 0 _._ 27 57 _._ 98 _±_ 1 _._ 15 10 _._ 09 67 _._ 58 9 _._ 49 _±_ 1 _._ 36 70 _._ 74 _±_ 1 _._ 89
+CBM (HJ) + IB _B_ 2 _._ 29 _±_ 0 _._ 23 56 _._ 89 _±_ 1 _._ 91 9 _._ 71 64 _._ 37 9 _._ 28 _±_ 0 _._ 88 69 _._ 79 _±_ 1 _._ 37
+CBM (HI) 2 _._ 01 _±_ 0 _._ 43 63 _._ 03 _±_ 1 _._ 97 9 _._ 27 64 _._ 18 8 _._ 71 _±_ 1 _._ 03 69 _._ 14 _±_ 0 _._ 34
+CBM (HI) + IB _B_ 1 _._ 78 _±_ 0 _._ 34 60 _._ 05 _±_ 0 _._ 91 8 _._ 40 67 _._ 23 8 _._ 31 _±_ 1 _._ 94 67 _._ 25 _±_ 1 _._ 52
+CBM (SJ) 3 _._ 01 _±_ 0 _._ 29 64 _._ 44 _±_ 1 _._ 92 11 _._ 24 70 _._ 41 10 _._ 69 _±_ 1 _._ 00 70 _._ 68 _±_ 0 _._ 57
+CBM (SJ) + IB _B_ 2 _._ 62 _±_ 0 _._ 24 61 _._ 63 _±_ 0 _._ 49 9 _._ 52 68 _._ 12 8 _._ 94 _±_ 1 _._ 52 68 _._ 57 _±_ 1 _._ 26
+IntCEM 6 _._ 34 _±_ 0 _._ 70 72 _._ 46 _±_ 2 _._ 86 14 _._ 74 74 _._ 19 12 _._ 16 _±_ 0 _._ 24 72 _._ 24 _±_ 1 _._ 58
+IntCEM+ IB _B_ 5 _._ 79 _±_ 1 _._ 03 68 _._ 57 _±_ 2 _._ 06 9 _._ 95 68 _._ 02 10 _._ 93 _±_ 0 _._ 45 68 _._ 94 _±_ 2 _._ 04
+AR-CBM 3 _._ 90 _±_ 0 _._ 27 62 _._ 30 _±_ 1 _._ 52 14 _._ 16 63 _._ 40 12 _._ 58 _±_ 0 _._ 86 60 _._ 86 _±_ 1 _._ 32
+AR-CBM+ IB _B_ 2 _._ 70 _±_ 0 _._ 19 60 _._ 04 _±_ 0 _._ 98 11 _._ 05 60 _._ 85 11 _._ 03 _±_ 1 _._ 02 57 _._ 21 _±_ 0 _._ 85
+ProbCBM 4 _._ 30 _±_ 0 _._ 10 64 _._ 22 _±_ 1 _._ 04 16 _._ 01 76 _._ 92 13 _._ 81 _±_ 0 _._ 21 75 _._ 01 _±_ 0 _._ 86
+ProbCBM+ IB _B_ 2 _._ 61 _±_ 0 _._ 53 59 _._ 86 _±_ 1 _._ 83 13 _._ 07 73 _._ 06 11 _._ 20 _±_ 0 _._ 68 71 _._ 20 _±_ 2 _._ 07
+
+
+**Table G.2:** Concept leakage evaluation (lower is better) on aPY.
+
+
+**Complete CS** **Selective Drop-out CS** **Random Drop-out CS**
+
+
+**Model** **OIS** **NIS** **OIS** **NIS** **OIS** **NIS**
+CBM (HJ) 2 _._ 66 _±_ 0 _._ 19 57 _._ 97 _±_ 1 _._ 20 10 _._ 17 67 _._ 54 9 _._ 44 _±_ 1 _._ 45 70 _._ 78 _±_ 1 _._ 84
+CBM (HJ) +IB _B_ 2 _._ 35 _±_ 0 _._ 16 56 _._ 91 _±_ 1 _._ 91 9 _._ 78 64 _._ 38 9 _._ 35 _±_ 0 _._ 81 69 _._ 70 _±_ 1 _._ 34
+CBM (HI) 1 _._ 94 _±_ 0 _._ 41 62 _._ 97 _±_ 1 _._ 91 9 _._ 19 64 _._ 26 8 _._ 78 _±_ 0 _._ 95 69 _._ 06 _±_ 0 _._ 24
+CBM (HI) +IB _B_ 1 _._ 80 _±_ 0 _._ 43 60 _._ 03 _±_ 0 _._ 86 8 _._ 31 67 _._ 18 8 _._ 25 _±_ 2 _._ 02 67 _._ 30 _±_ 1 _._ 59
+CBM (SJ) 2 _._ 97 _±_ 0 _._ 37 64 _._ 39 _±_ 1 _._ 96 11 _._ 23 70 _._ 40 10 _._ 72 _±_ 1 _._ 01 70 _._ 73 _±_ 0 _._ 58
+CBM (SJ) +IB _B_ 2 _._ 60 _±_ 0 _._ 30 61 _._ 55 _±_ 0 _._ 55 9 _._ 56 68 _._ 03 9 _._ 01 _±_ 1 _._ 43 68 _._ 59 _±_ 1 _._ 21
+IntCEM 6 _._ 36 _±_ 0 _._ 64 72 _._ 48 _±_ 2 _._ 89 14 _._ 74 74 _._ 24 12 _._ 24 _±_ 0 _._ 16 72 _._ 31 _±_ 1 _._ 53
+IntCEM+IB _B_ 5 _._ 78 _±_ 1 _._ 06 68 _._ 66 _±_ 2 _._ 09 9 _._ 86 68 _._ 04 10 _._ 99 _±_ 0 _._ 39 68 _._ 91 _±_ 1 _._ 98
+AR-CBM 3 _._ 89 _±_ 0 _._ 18 62 _._ 25 _±_ 1 _._ 55 14 _._ 17 63 _._ 42 12 _._ 62 _±_ 0 _._ 87 60 _._ 85 _±_ 1 _._ 40
+AR-CBM+ IB _B_ 2 _._ 72 _±_ 0 _._ 20 60 _._ 00 _±_ 1 _._ 00 11 _._ 04 60 _._ 92 11 _._ 00 _±_ 1 _._ 08 57 _._ 19 _±_ 0 _._ 86
+ProbCBM 4 _._ 35 _±_ 0 _._ 06 64 _._ 19 _±_ 1 _._ 13 16 _._ 06 76 _._ 98 13 _._ 78 _±_ 0 _._ 22 74 _._ 94 _±_ 0 _._ 87
+ProbCBM+ IB _B_ 2 _._ 59 _±_ 0 _._ 46 59 _._ 86 _±_ 1 _._ 84 13 _._ 02 73 _._ 15 11 _._ 17 _±_ 0 _._ 77 71 _._ 23 _±_ 2 _._ 00
+
+
+H INFORMATION PLANE DYNAMICS
+
+
+We analyze the flow of information between inputs, _X_, latents, _Z_, concepts, _C_, and labels, _Y_, and
+present them in Fig. H.1. The objective of the information plane is to show the mutual information
+on the model variables after training. In particular, we expect to see a model with high _I_ ( _Z_ ; _C_ ) and
+_I_ ( _C_ ; _Y_ ) such that the corresponding variables are dependent on each other (maximally expressive),
+and simultaneously, low _I_ ( _X_ ; _C_ ) and _I_ ( _X_ ; _Z_ ) to show that the corresponding variables are maximally
+compressive. However, the compression of the variables alone, minimal _I_ ( _X_ ; _C_ ) or _I_ ( _X_ ; _Z_ ), does
+not guarantee that the important parts of the variables are being compressed and retained. Thus, we
+show the other experiments to complement this analysis.
+
+
+IntCEM has a lower mutual information between the inputs and the latent and concept representations,
+_I_ ( _X_ ; _Z_ ) and _I_ ( _X_ ; _C_ ), than CBM (SJ). Interestingly, our regularizers reduce these mutual information
+while maintaining the mutual information w.r.t. the target, _I_ ( _C_ ; _Y_ ) and _I_ ( _Z_ ; _C_ ). However, for CBM
+(SJ), our methods increase the mutual information w.r.t. the data. This behavior may reflect the fact
+that CIBMs are optimized to retain task-relevant information while removing irrelevant or redundant
+information but not necessarily compressing as much—reflected in the higher _I_ ( _X_ ; _C_ ) and _I_ ( _X_ ; _Z_ ).
+Nevertheless, lower mutual information _I_ ( _X_ ; _C_ ) and _I_ ( _X_ ; _Z_ ) in CBMs does not necessarily indicate
+better compression given its lower predictive accuracy. Instead, it may reflect a failure to capture
+meaningful input features, resulting in noisier or less predictive concepts. Moreover, we note that the
+plots in Fig. H.1(f) for IB _B_ and IB _E_ look similar but they differ in hundredths.
+
+
+For AR-CBM, the information flow is more noisy. Despite the noise, we can observe that CIBMs
+obtain higher mutual information w.r.t. the labels than their vanilla counterpart. While the compression
+w.r.t. the data is not as evident, the final mutual information w.r.t. the data is closer between the
+original method and its regularized versions. Nevertheless, we still observed better predictive
+
+
+23
+
+
+performance (cf. Table 1). Thus, we hypothesize that the regularizer is increasing the expressiveness
+of the representations with a trade-off of the compression as observed with the CBMs but not as
+apparent. On the other hand, the CIBMs obtain better compression-expression patterns for the latent
+representations, see Table H.1(d).
+
+
+To demonstrate the effects of the compression patterns, we evaluate the alignment between representations and the target _I_ ( _C_ ; _Y_ ) and show that CIBMs consistently outperform CBMs, and, while noisy,
+they show improvements over IntCEM, indicating that the retained information is both relevant and
+predictive—cf. Section 4.1. Additionally, CIBMs achieve better interpretability and concept quality,
+reinforcing that the higher mutual information is a reflection of meaningful expressiveness rather
+than leakage—cf. Section 4.3. This is further supported by the proposed intervention-based metrics
+(AUCTTI and NAUCTTI) which highlight the importance of retaining task-relevant information in the
+concepts _C_ . While CBMs exhibit lower mutual information between inputs and representations in
+contrast to the regularized versions, _I_ ( _X_ ; _C_ ) and _I_ ( _X_ ; _Z_ ), their poorer performance on these metrics,
+particularly under concept corruption, suggests that this lower information content stems from a failure to capture sufficient relevant features. By contrast, the higher _I_ ( _X_ ; _C_ ) and _I_ ( _X_ ; _Z_ ) in our CIBMs
+reflect the retention of meaningful pieces that contribute to better concept quality and downstream
+task performance. These findings demonstrate that reducing concept leakage requires selectively
+preserving relevant information rather than minimizing mutual information indiscriminately.
+
+
+Our findings align with recent theoretical insights on the Information Bottleneck principle in deep
+learning (Kawaguchi et al., 2023), which emphasize that indiscriminately minimizing the mutual
+information between the data and the latent representations, _I_ ( _X_ ; _Z_ ), does not guarantee expressive
+or generalizable representations. Instead, effective models must selectively compress task-irrelevant
+information while retaining essential features for decision-making. Our results (cf. Table 1 and
+Fig. H.1) support this trade-off by demonstrating that CBMs, despite lower _I_ ( _X_ ; _C_ ) and _I_ ( _X_ ; _Z_ ), do
+not necessarily achieve superior concept representations or intervention efficacy in comparison to their
+IB regularized counterparts. In contrast, our IB-based CBMs, which balance information retention
+and compression, lead to improved alignment between concepts and final predictions, reinforcing
+the importance of controlled, task-relevant compression rather than absolute mutual information
+minimization.
+
+
+I DISCUSSION ABOUT CBMS SETUPS
+
+
+Hard CBMs use hard concept representations, meaning that instead of producing a probabilistic
+output (as in soft concepts in soft CBM), each concept prediction is treated as a discrete binary or
+categorical value. These hard predictions are used as inputs to the downstream task (class prediction),
+making the pipeline interpretable and less expressive, thus less prone to information leakage.
+
+
+When compared with soft CBMs and Soft CIBMs:
+
+
+- Representation:
+
+**–** Hard CBMs: Use discrete hard values for concepts (e.g., 0 or 1 for binary concepts).
+
+**–** Soft CBMs: Use continuous values (e.g., logits or probabilities).
+
+**–** Soft CIBMs: Similar to soft CBMs but use IB to minimize irrelevant information, reducing
+concept leakage.
+
+- Information Flow:
+
+**–** Hard CBMs: Compress information into discrete concept values, which prevents information
+leakage but risks losing useful details for downstream tasks.
+
+**–** Soft CBMs: Retain richer information but are more prone to concept leakage.
+
+**–** Soft CIBMs: Balance retaining relevant information while mitigating leakage through the IB
+framework.
+
+- Interventions:
+
+**–** Hard CBMs: Explicitly rely on discrete corrections during interventions, which can have a
+significant impact.
+
+**–** Soft CBMs and CIBMs: Treat interventions as updates to probabilities or logits, which is
+more expressive, but could induce noise in concepts.
+
+
+24
+
+
+CUB AwA2
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+
+_I_ ( _X_ ; _Z_ )
+
+
+5
+4
+3
+2
+1
+0
+
+
+5
+4
+3
+2
+1
+0
+
+
+5
+4
+3
+2
+1
+0
+4 _._ 0 4 _._ 5 5 _._ 0 5 _._ 5
+
+
+_I_ ( _X_ ; _Z_ )
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+4 5 6 7
+
+
+_I_ ( _X_ ; _Z_ )
+
+
+CUB AwA2
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+
+_I_ ( _X_ ; _C_ )
+
+
+5
+4
+3
+2
+1
+0
+
+
+5
+4
+3
+2
+1
+0
+
+
+5
+4
+3
+2
+1
+0
+4 _._ 0 4 _._ 5 5 _._ 0 5 _._ 5
+
+
+_I_ ( _X_ ; _C_ )
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+4 5 6 7
+
+
+_I_ ( _X_ ; _C_ )
+
+
+4 5 6 7
+
+
+_I_ ( _X_ ; _C_ )
+
+
+4 5 6 7
+
+
+_I_ ( _X_ ; _Z_ )
+
+
+2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+
+_I_ ( _X_ ; _C_ )
+
+**(a)**
+
+
+4 _._ 0 4 _._ 5 5 _._ 0 5 _._ 5
+
+
+_I_ ( _X_ ; _C_ )
+
+**(c)**
+
+
+2 _._ 5 3 _._ 0 3 _._ 5 4 _._ 0
+
+
+_I_ ( _X_ ; _Z_ )
+
+**(b)**
+
+
+4 _._ 0 4 _._ 5 5 _._ 0 5 _._ 5
+
+
+_I_ ( _X_ ; _Z_ )
+
+**(d)**
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+0 _._ 9
+
+
+0 _._ 8
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0 _._ 0
+
+
+**(e)** **(f)**
+
+**Figure H.1:** Information plane dynamics (in nats) for (a,b) IntCEM, (c,d) AR-CBM, (e, f) CBM (SJ) and our
+proposed methods, IB _B_ and IB _E_ . Warmer colors denote later steps in training. We show the information plane
+of (a, c, e) the variables _X_, _C_, and _Y_ ; and (b, d, f) the variables _X_, _Z_, and _C_ .
+
+
+25
+
+
+Due to their rigidity, without enough interventions, hard CBMs cannot recover from errors or noise in
+the predicted concepts because the discrete pipeline does not allow for soft adjustments.
+
+
+But, as more concepts are corrected, the discrete nature of hard CBMs becomes an advantage together
+with its independent training: ground truth, hard values fully override noisy predictions, ensuring
+perfect input for the downstream classifier, which was previously trained also on ground truth concepts
+from train set.
+
+
+Soft CBMs and CIBMs, while retaining more information, still rely on probabilistic updates during
+interventions, which may not fully override noisy concept predictions.
+
+
+Overall, CIBMs are superior because they combine the advantages of soft representations (expressiveness, better performance) with mechanisms to mitigate concept leakage (robustness, interpretability).
+Hard CBMs, while conceptually cleaner in avoiding leakage, fail to achieve the same level of
+downstream performance and adaptability, particularly in more realistic or challenging scenarios.
+
+
+26

@@ -1,0 +1,2283 @@
+# SAFETY-GUIDED FLOW: A UNIFIED FRAMEWORK FOR NEGATIVE GUIDANCE IN SAFE GENERATION
+
+
+**Mingyu Kim** _[∗]_
+Kookmin University
+mgyukim@kookmin.ac.kr
+
+
+**Mijung Park**
+University of British Columbia
+mijung.park@ubc.ca
+
+
+**Young-Heon Kim**
+University of British Columbia
+yhkim@ubc.ca
+
+
+ABSTRACT
+
+
+Safety mechanisms for diffusion and flow models have recently been developed
+along two distinct paths. In robot planning, control barrier functions are employed
+to guide generative trajectories away from obstacles at every denoising step by
+explicitly imposing geometric constraints. In parallel, recent data-driven, negative
+guidance approaches have been shown to suppress harmful content and promote
+diversity in generated samples. However, they rely on heuristics without clearly
+stating when safety guidance is actually necessary. In this paper, we first introduce
+a unified probabilistic framework using a Maximum Mean Discrepancy (MMD)
+potential for image generation tasks that recasts both Shielded Diffusion (Kirchhof
+et al., 2025) and Safe Denoiser (Kim et al., 2025b) as instances of our energybased negative guidance against unsafe data samples. Furthermore, we leverage
+control-barrier functions analysis to justify the existence of a critical time window
+in which negative guidance must be strong; outside of this window, the guidance
+should decay to zero to ensure safe and high-quality generation. We evaluate our
+unified framework on several realistic safe generation scenarios, confirming that
+negative guidance should be applied in the early stages of the denoising process
+for successful safe generation.
+
+
+Warning: This paper contains disturbing content, including censored images of nudity and sexually
+explicit text prompts, presented for research purposes only.
+
+
+1 INTRODUCTION
+
+
+Diffusion and flow models are no longer just research tools - they are now entering high-stakes
+domains, such as autonomy, medicine, and the creative industries. As generative models transition
+from experimental settings to real-world deployment, ensuring safety has become an urgent objective. In robot planning, unsafe generations can cause physical harm, while in image generation,
+unsafe outputs can propagate misinformation, bias, or privacy violations. Developing principled
+methods for safe generation in diffusion and flow models is therefore critical for their trustworthy
+adoption across domains.
+
+
+Early safety-aware robot planning uses Control Barrier Functions (CBFs), and formulates either the
+gradient of CBFs or a Quadratic Program (QP) at each step to project the generative step onto the
+safe space. These methods, while effective in 2D/3D planning, are not derived from a probabilistic
+view of generation and thus do not account for the generation trajectories in diffusion and flow
+matching, in which safety is a semantic property of distributions. Recently, to resolve these issues,
+Xiao et al. (2025) embedded finite-time diffusion invariance, i.e., a form of specification consisting
+of safety constraints, into the denoising diffusion procedure. However, they enforce guidance at all
+denoising (or flow) time steps, without analyzing when guidance is truly necessary.
+
+
+_∗_ This work was done during his employment at UBC.
+
+
+1
+
+
+(a) Adversarial nudity prompts
+
+
+(b) Memorization
+
+
+Figure 1: (a) By incorporating SAFREE (Yoon et al., 2024) and SLD (Schramowski et al., 2023), our
+method avoids generating inappropriate images. (b) On artificially memorized SDv2.1 (Somepalli
+et al., 2023), it mitigates memorization, with early-stopped negative guidance preserving quality,
+enhancing diversity, and revealing a critical time window. All images are sampled at the top 5%
+most similar to the Imagenette training set.
+
+
+Recent training-free image generation approaches propose directly applying negative guidance to
+the generative dynamics. For instance, Shielded Diffusion (SPELL) (Kirchhof et al., 2025) augments the reverse stochastic differential equations (SDEs) or ordinary differential equations (ODEs)
+with sparse and radial repulsive forces that activate when the expected clean sample approaches a
+protected set. As another example, Safe Denoiser (Kim et al., 2025b) derives a principled denoiser
+decomposition into safe and unsafe components, resulting in a weighted, kernel-based repulsive field
+that repels unsafe datasets. This paper empirically demonstrates that negative guidance is initially
+strong and gradually fades over time. However, neither line provides a principled characterization
+of the _critical window_, in which negative guidance should be strong, and outside of the window, the
+guidance should be weak or absent. In this paper, we propose an energy-based negative guidance
+framework, where we describe a negative guidance in terms of the gradient of a potential that penalizes proximity to an unsafe distribution (or set) using the Maximum Mean Discrepancy (MMD)
+potential, given in equation 5. Interestingly, the gradient of the MMD potential yields a repulsive
+vector field, which allows us to derive both the Safe Denoiser (characterized by weighted kernel repulsion) and Shielded Diffusion (characterized by radial repulsion after radius-bandwidth matching),
+providing a unified framework for negative guidance. Furthermore, we apply the control-barrier theorem to our unified framework to justify why negative guidance should be strong at the beginning
+of the denoising process and fade out after a certain point in time, which we refer to as the _critical_
+_window_ . Our method is called **Safety-Guided** **Flow** **(SGF)** and provides the main contributions
+summarized below:
+
+
+    - An energy-based formulation of negative guidance using the Maximum Mean Discrepancy
+(MMD) potential.
+
+
+    - Propositions showing the equivalence between the gradient of the kernel MMD potential
+and the repulsive fields of Shielded Diffusion and Safe Denoiser (radius–bandwidth matching for Shielded Diffusion; and weighted-kernel form for Safe Denoiser) under mild conditions.
+
+
+    - Application of the control-barrier function theorem to justify the time-varying strength of
+negative guidance relative to the _critical window_ in diffusion/flow time, during which guidance must be strong, and thereafter a decaying schedule is necessary.
+
+
+2
+
+
+2 RELATED WORKS
+
+
+**Safety** **constrained** **robot** **planning.** Many papers guarantee safety to diffusion/flow-matching
+planners by embedding constraints via CBFs or related invariance tools (Nguyen & Sreenath, 2016;
+Glotfelter et al., 2017). SAFEDIFFUSER enforces finite-time invariance constraints with respect to
+generated policies to keep trajectories within a safe set, providing theoretical guarantees for planning
+tasks (Xiao et al., 2025). SAFE FLOW MATCHING introduces flow-matching barrier functions,
+inspired by CBFs, enabling training-free, real-time safety enforcement for trajectories generated by
+flow matching (Dai et al., 2025). UNICONFLOW unifies equality and inequality constraints through
+a prescribed-time zeroing function and QP-based guidance during inference (Yang et al., 2025).
+These methods work well for low-dimensional robot states with engineered unsafe regions, but they
+lack a probabilistic view of the data and enforce guidance without considering its time-criticality.
+
+
+**Training-free** **negative** **guidance** **in** **image** **diffusion.** SHIELDED DIFFUSION (SPELL) adds
+_sparse repellency_ to the reverse dynamics: when the predicted clean sample enters a radius- _r_ neighbourhood of a protected (unsafe) set, a ReLU-weighted radial push is added to the score, and otherwise no correction is applied (Kirchhof et al., 2025). In terms of quality–diversity trade-offs, SPELL
+shows favourable Pareto fronts when _r_ is tuned and guidance is interval-limited, yet strong _always-_
+_on_ potentials (“particle guidance”) can substantially degrade precision/density and worsen FID. The
+choice of radius, overcompensation, and—crucially—the _time window_ over which repellency should
+act remain heuristic. SAFE DENOISER explicitly subtracts an “unsafe” component from the data denoiser, yielding a weighted-kernel repellency away from an unsafe set and a theoretically motivated
+penalty weight _β_ _[∗]_ ( _xt_ ) (Kim et al., 2025b). The penalty weight is only activated in early denoising
+steps, _t ∈_ [0 _._ 78 _,_ 1 _._ 0], motivated by the observation that early denoising sets the coarse structure, and
+later steps refine the details. Their goal is to prevent globally harmful content rather than sharpen
+details. While both SPELL and Safe Denoiser are training-free and practical, _when_ negative guidance should be strongest is left to empirical schedules, without a formal reach–avoid analysis in the
+denoising process like in our work.
+
+
+3 BACKGROUND
+
+
+3.1 DIFFUSION MODELS AND FLOW MATCHING
+
+
+Diffusion models and flow matching represent two related approaches to generative modelling,
+both mapping a simple noise distribution into a complex data distribution. A diffusion model defines a forward noising process: _qt_ ( _**x**_ _t|_ _**x**_ 0) = _N_ ( _**x**_ _t_ ; _αt_ _**x**_ 0 _, σt_ [2] _[I]_ [)][,] [where] _**[x]**_ [0] _[∼]_ _[p]_ [data][(] _**[x]**_ [0][)][.] [Vari-]
+ants differ in the choice of coefficients ( _αt, σt_ ) and the training target such as noise-prediction
+_ϵθ_ ( _**x**_ _t, t_ ) in (Ho et al., 2020), score-prediction _∇_ **x** _t_ log _pt_ ( _**x**_ _t_ ) (Song et al., 2021), and data-prediction
+E[ _**x**_ 0 _|_ _**x**_ _t_ ] (Karras et al., 2022). Sampling is performed via the ordinary differential equation (ODE):
+_ddt_ _**x**_ [=] _[f]_ [(] _**[x]**_ _[, t]_ [)] _[ −]_ _[g]_ [2][(] _[t]_ [)] _[∇]_ _**[x]**_ [ log] _[ p][t]_ [(] _**[x]**_ [)][, where each model determines drift] _[ f]_ [(] _**[x]**_ _[, t]_ [)][ and diffusion scale]
+
+_g_ [2] ( _t_ ). Flow matching generalizes this by directly learning a velocity field _vθ_ ( _**x**_ _t, t_ ) that defines the
+transport from noise to data in a single, deterministic trajectory, avoiding long sampling chains:
+
+
+_**x**_ ˙ _t_ = _fθ_ ( _**x**_ _t, t_ ) _,_ _**x**_ 1 _∼N_ (0 _, I_ ) _._ (1)
+
+
+Since directly minimizing _vθ_ ( _xt, t_ ) is intractable, training uses a conditional flow loss under an
+optimal-transport, linear, or Gaussian path (Lipman et al., 2022). A common choice is the Gaussian
+flow matching: _**x**_ _t_ = (1 _−_ _t_ ) _**x**_ 0 + _t_ _**ϵ**_, where the noise is Gaussian, reducing to diffusion with
+_αt_ = 1 _−_ _t_ and _σt_ = _t_ .
+
+
+For sampling, both approaches discretize the ODE using Euler steps. For diffusion models, the
+sampling follows (Gao et al., 2024):
+
+_**x**_ _s_ = _αs_ E[ _**x**_ 0 _|_ _**x**_ _t_ ] + _[σ][s]_ ( _**x**_ _t −_ _αt_ E[ _**x**_ 0 _|_ _**x**_ _t_ ]) _,_ (2)
+
+_σt_
+
+
+for a time step _s < t_ . The sampling in Gaussian flow matching follows (Gao et al., 2024) for _s < t_ :
+_**x**_ _s_ = _**x**_ _t_ + ( _s −_ _t_ ) _vθ_ ( _**x**_ _t, t_ ). What follows describes two recent negative guidance methods, which
+modify the data-prediction term given in Equation 2 during sampling.
+
+
+3
+
+
+**Notation.** We denote the model’s predicted clean sample by _**z**_ _t_ _≡_ E[ _**x**_ 0 _|_ _**x**_ _t_ ]. We denote an
+unsafe dataset that contains _N_ number of samples that are in the same space as _**x**_ (raw or feature space as appropriate) by _D_ _[−]_ = _{_ _**y**_ _i}_ _[N]_ _i_ =1 [,] [and] [the] [radial] [basis] [function] [(RBF)] [kernel] [by]
+_kσ_ ( _**x**_ _,_ _**y**_ ) = exp( _−∥_ _**x**_ _−_ _**y**_ _∥_ [2] _/_ (2 _σ_ [2] )), where the bandwidth is _σ_ _>_ 0. From an algorithmic implementation standpoint, we adopt a unified diffusion-style time index with source at _t_ = 1 and
+target at _t_ = 0 for both diffusion and flow-matching models. For the analytic control-barrier argument in Subsection 4.4, however, we introduce a separate forward time variable _s_ _∈_ [0 _,_ 1] that is
+used only for theoretical clarity.
+
+
+3.2 SHIELDED DIFFUSION (SPELL): SPARSE RADIAL REPELLENCY
+
+
+Shielded Diffusion (Kirchhof et al., 2025) augments the sampling process when the expected dataprediction E[ _**x**_ 0 _|_ _**x**_ _t_ ] falls within a shield, where shielded areas contain negative datapoints _**y**_ _j_ ’s (to
+avoid) in _D_ _[−]_ . In particular, Shielded Diffusion employs a radial, _thresholded_ repulsive force away
+from protected (negative) samples using:
+
+
+_F_ rad( _**x**_ _t_ ; _**y**_ _j_ ) = _α_ - _r −∥_ _**z**_ _t −_ _**y**_ _j∥_ 
+
+
+_**z**_ _t −_ _**y**_ _j_
+(3)
++ _∥_ _**z**_ _t −_ _**y**_ _j∥_ _[,]_
+
+
+where _**z**_ _t_ = E[ _**x**_ 0 _|_ _**x**_ _t_ ], _r_ is a shield radius, and _α_ a strength parameter. The total guidance sums
+Equation 3 over _j_ and is _sparse_ —it activates only when _∥_ _**z**_ _t_ _−_ _**y**_ _j∥_ _<_ _r_ . Empirically, SPELL’s
+interventions are strongest early in reverse time and tend to “finish” before the end of generation,
+hinting at the existence of a critical time window.
+
+
+3.3 SAFE DENOISER: DECOMPOSING THE DENOISER INTO SAFE AND UNSAFE PARTS
+
+
+Safe Denoiser partitions the data distribution into safe/unsafe components, defining the corresponding conditional expectations (denoisers). Let Edata[ _**x**_ _|_ _**x**_ _t_ ] denote the model’s data denoiser. Using
+indicator functions, 1safe( _**x**_ ), taking the value of 1 if _**x**_ is safe and 0 if not: similarly, 1unsafe( _**x**_ ) taking
+the value of 1 if _**x**_ is unsafe and 0 if not. These indicator functions are the partition of the unity,
+resulting in 1 = 1safe( _**x**_ ) + 1unsafe( _**x**_ ) for all _**x**_ _∈_ supp( _p_ data). Then, the following relation holds:
+
+
+**Theorem** **1** (Theorem 3.2 in (Kim et al., 2025b). Safe vs. data/unsafe denoisers) **.** _There_ _exists_ _a_
+_nonnegative weight β_ _[∗]_ ( _**x**_ _t_ ) _—monotone in the posterior likelihood that_ _**x**_ _t originates from the unsafe_
+_set—such that_
+
+
+Esafe[ _**x**_ _|_ _**x**_ _t_ ] = Edata[ _**x**_ _|_ _**x**_ _t_ ] + _β_ _[∗]_ ( _xt_ ) �Edata[ _**x**_ _|_ _**x**_ _t_ ] _−_ Eunsafe[ _**x**_ _|_ _**x**_ _t_ ]� _._ (4)
+
+
+Intuitively, equation 4 subtracts an “unsafe” component from the data denoiser, with _β_ _[∗]_ adapting
+to how unsafe the current state appears. In practice, Safe Denoiser uses an empirical estimator to
+approximate Eunsafe[ _**x**_ _|_ _**x**_ _t_ ] _≈_ [�] _**y**_ _i∈D_ _[−]_ _[q][t]_ [(] _**[x]**_ _[t][|]_ _**[y]**_ _[i]_ [)] _**[y]**_ _[i]_ [, where the forward corruption density] _[ q][t]_ [(] _**[x]**_ _[t][|]_ _**[y]**_ _[i]_ [)]
+
+is Gaussian. In image generation, however, Safe Denoiser _heuristically_ applies the negative guidance
+only on a _early_ segment of the DDPM index (e.g., indices 780:1000 out of 1000), equivalently, the
+reverse-time interval _t_ _∈_ [0 _._ 78 _,_ 1], to target global semantics. A time-varying threshold _βt_ can be
+used to deactivate guidance once the state is deemed sufficiently far from _D_ _[−]_ .
+
+
+4 METHOD
+
+
+The methods above (Shielded Diffusion and Safe Denoiser) modify the sampling trajectory based
+on the expected data prediction Edata[ _**x**_ _|_ _**x**_ _t_ ]. We aim to modify the vector field in flow matching in
+a similar manner to achieve the same effect, moving our generated samples away from the negative
+data samples. What quantity makes sense to use to alter the vector field accurately?
+
+
+4.1 OUR METHOD: SAFETY-GUIDED FLOW (SGF)
+
+
+A popular family of distance measures in machine learning is _integral probability metrics (IPMs)_,
+defined by _D_ ( _P, Q_ ) = sup _f_ _∈F_ ��� _M_ _[fdP]_ _[−]_ - _M_ _[fdQ]_ ��, where _F_ is a class of real-valued bounded
+
+
+defined by _D_ ( _P, Q_ ) = sup _f_ _∈F_ ��� _M_ _[fdP]_ _[−]_ - _M_ _[fdQ]_ ��, where _F_ is a class of real-valued bounded
+
+measurable functions on _M_ . If _F_ = _{f_ : _∥f_ _∥H_ _≤_ 1 _}_ (a unit ball in the reproducing kernel Hilbert
+space _H_ with a positive-definite kernel _k_ ), _D_ ( _P, Q_ ) yields the _maximum mean discrepancy_ (MMD):
+
+
+_M_ _[fdP]_ _[−]_ 
+
+
+4
+
+
+(a)
+
+
+(b) (c) (d)
+
+
+Figure 2: Motivation: 2D flow-matching toy example. (a) A pretrained flow with “negative” data
+points highlighted in orange. (b) Learned velocity field _fθ_ ( _x_ ) together with the negative-guidance
+direction _∇xE_ ( _x_ ). This panel depicts samples at _t_ = 0 _._ 8 (c) Samples generated with full negative guidance; squared Wasserstein distance to the target distribution (excluding negative regions)
+_W_ [2] = 1 _._ 009. (d) Samples generated with early-stop negative guidance; squared Wasserstein distance _W_ [2] = 0 _._ 937. Applying full negative guidance either leaves mass near the unsafe set or distorts
+nearby modes. In contrast, early stopping of the guidance reduces the probability of placing particles
+near the unsafe region and produces samples that better match the target distribution.
+
+
+MMD( _P, Q_ ) = sup _f_ _∈F_ ���
+
+
+MMD( _P, Q_ ) = sup _f_ _∈F_ ��� _M_ _[fdP]_ _[−]_ - _M_ _[fdQ]_ ��. In this case, finding a supremum is analytically
+
+tractable, and the solution is the difference in the kernel mean embeddings of each probability measure: MMD( _P, Q_ ) = _∥_ E _**x**_ _∼P_ [ _k_ ( _**x**_ _, ·_ )] _−_ E _**y**_ _∼Q_ [ _k_ ( _**y**_ _, ·_ )] _∥H_ . For a characteristic kernel like the RBF
+kernel, the squared MMD forms a metric: MMD [2] = 0, if and only if _P_ = _Q_ (Sriperumbudur et al.,
+2011). Several MMD estimators exist in closed form with fast convergence, which can be computed
+by pairwise evaluations of _k_ using points drawn from _P_ and _Q_ (Gretton et al., 2012).
+
+
+In this work, we use MMD as a potential function to determine the amount of force required to
+move away from the negative samples, depending on the proximity between the current sample’s
+distribution (represented as a Dirac delta function centred at the current sample) and the distribution
+of negative samples. First, we define the potential function as the (biased) squared MMD estimator
+between a sample at time _t_ denoted by _{_ _**x**_ _t}_ and the negation set denoted by _D_ _[−]_ with an RBF kernel
+with a length parameter _σ_ by:
+
+
+2
+_E_ ( _**x**_ _t_ ) _≡_ MMD [�] _kσ_          - _{_ _**x**_ _t}, D_ _[−]_ [�] _,_ (5)
+
+
+_M_ _[fdP]_ _[−]_ 
+
+
+2
+where MMD [�] _kσ_ [(] _**[x]**_ _[t][,][ D][−]_ [)] [=] _[k]_ [(] _**[x]**_ _[t][,]_ _**[ x]**_ _[t]_ [) +] _N_ 1 [2] 
+
+
+2         _i,j_ _[k]_ [(] _**[y]**_ _[i][,]_ _**[ y]**_ _[j]_ [)] _[ −]_ _N_
+
+
+where MMD [�] _kσ_ [(] _**[x]**_ _[t][,][ D]_ [)] [=] _[k]_ [(] _**[x]**_ _[t][,]_ _**[ x]**_ _[t]_ [) +] _N_ [2] - _i,j_ _[k]_ [(] _**[y]**_ _[i][,]_ _**[ y]**_ _[j]_ [)] _[ −]_ _N_ - _i_ _[k]_ [(] _**[x]**_ _[t][,]_ _**[ y]**_ _[i]_ [)] _[.]_ [Then,] [we] [modify]
+
+equation 1 as
+_**x**_ ˙ _t_ = _fθ_ ( _**x**_ _t, t_ ) + _λ_ ( _t_ ) _∇_ _**x**_ _E_ ( _**x**_ _t_ ) _,_ (6)
+
+where _λ_ ( _t_ ) _≥_ 0 is a guidance schedule. Since _E_ increases as _**x**_ _t_ moves away from _D_ _[−]_ in kernel
+feature space, the term + _λ_ ( _t_ ) _∇E_ ( _**x**_ _t_ ) enforces a _repulsion_ from unsafe data samples, with gradients:
+
+
+_∇_ _**x**_ _t_ MMD [�] 2 _kσ_ [(] _**[x]**_ _[t][,][ D][−]_ [) =] _σ_ 2 [2] _[Z]_ [(] _**[x]**_ _[t]_ [)] - _**x**_ _t −_
+
+
+_N_
+
+- _wi_ ( _**x**_ _t_ ) _**y**_ _i_ - _,_ (7)
+
+
+_i_ =1
+
+
+where _Z_ ( _**x**_ _t_ ) = _N_ 1 - _Ni_ =1 _[k]_ [(] _**[x]**_ _[t][,]_ _**[ y]**_ _[i]_ [)] [and] _[w][i]_ [(] _**[x]**_ _[t]_ [)] [=] _kN_ ( _**x**_ _Zt_ ( _,_ _**xy**_ _ti_ )) _[.]_ [To] [understand] [how] [equation] [7] [plays]
+a role as a _repulsive_ _force_, notice that each weighting term _wi_ ( _**x**_ _t_ ) is proportional to _k_ ( _**x**_ _t,_ _**y**_ _i_ ),
+where an RBF kernel _k_ ( _**x**_ _t,_ _**y**_ _i_ ) is large if the two input arguments are similar and small if they are
+different, which drives _**x**_ _t_ away from its neighbours _**y**_ _i_ that have large _k_ ( _**x**_ _t,_ _**y**_ _i_ ). See Figure 2 that
+illustrates how the repulsive force induced by the gradient of MMD successfully avoids generating
+negative samples. Similar repulsive forces based on the kernel-based distance were used in _Stein_
+_variational_ _gradient_ _descent_ (Liu & Wang, 2016; Liu, 2017), in which case the kernel distance
+helps avoid the posterior samples from collapsing into modes of the posterior distribution. Our
+algorithm is provided in Appendix. In the following, we describe how our choice of MMD as the
+potential function added to the flow matching framework recasts both Safe Denoiser and Shielded
+Diffusion as instances of potential-based negative guidance, thus establishing our proposal as a
+unifying probabilistic framework for negative guidance.
+
+
+5
+
+
+4.2 RECOVERING SAFE DENOISER
+
+
+**Proposition** **1** (Safe Denoiser as MMD-gradient guidance) **.** _For_ _an_ _RBF_ _kernel_ _kσ,_ _the_ _control_
+_field_ _ut_ ( _x_ ) = _λ_ ( _t_ ) _∇x_ MMD [2] _k_ [(] _[x,][ D][−]_ [)] _[equals,]_ _[up]_ _[to]_ _[a]_ _[positive]_ _[scalar]_ _[multiplication,]_ _[the]_ _[weighted]_
+_repellency field implemented by Safe Denoiser with x replaced by zt and a static bandwidth._
+
+
+_Sketch._ The dataset self-terms are constants; the remaining term yields Equation 7, a convex combination of differences _x −_ _yi_ with kernel weights. Evaluating the kernel at _zt_ (predicted _x_ 0) with a
+fixed _σ_ KDE recovers the implemented Safe Denoiser repellency up to a scale. The detailed proof is
+illustrated in Subsection B.1.
+
+
+4.3 RECOVERING SHIELDED DIFFUSION
+
+
+Shielded Diffusion (SPELL) uses the radial force equation 3, whereas our field uses the Gaussian
+contribution of a single _y_ to + _∇xE_ :
+
+
+_[∥][d][∥]_ 
+exp _−_ _[∥][d][∥]_ [2]
+_σ_ [2] 2 _σ_ [2]
+
+
+_FG_ ( _d_ ; _σ_ ) = _λ_ [2] _[∥][d][∥]_
+
+
+2 _σ_ [2]
+
+
+- _d_
+_d_ = _x −_ _y._
+_∥d∥_ _[,]_
+
+
+The next result aligns their magnitudes at a prescribed distance, showing SPELL as a radiusthresholded instance of MMD-gradient guidance.
+**Proposition 2** (Radius–bandwidth matching) **.** _Fix α, λ, r_ _>_ 0 _and let d_ = _x−y. For any d_ 0 _∈_ (0 _, r_ )
+_there exists σ_ _>_ 0 _such that ∥F_ rad( _d_ ) _∥_ = _∥FG_ ( _d_ ; _σ_ ) _∥_ _at ∥d∥_ = _d_ 0 _; explicitly,_
+
+
+2
+( _r −_ _d_ 0) _σ_ [2] exp - _d_ 0
+2 _σ_ [2]
+
+
+_[λ]_ [1]
+
+_α_ _[·]_ _d_
+
+
+= [2] _[λ]_
+
+
+_._
+_d_ 0
+
+
+_d_ 0
+_For α_ = _λ_ = 1 _, this yields σ_ = 2 _W_ 0� ( _r−d_ 40) _d_ 0 - _, where W_ 0 _is the principal branch of the Lambert_
+
+_W_ _function._
+
+
+The detailed proof is provided in Subsection C.1.
+
+
+4.4 CRITICAL WINDOWS VIA CONTROL-BARRIER FUNCTIONS ANALYSIS
+
+
+We now turn our attention to providing mathematical evidence for why it makes sense to impose negative guidance in the initial denoising stage, based on control-barrier functions (Nguyen & Sreenath,
+2016; Glotfelter et al., 2017; Xiao et al., 2025). For simplicity, we assume that the integration of
+velocity functions follow the forward time convention. We denote _f_ [˜] and _β_ ( _s_ ) for mathematical
+evidence, apart from the notions _fθ, λ_ ( _s_ ) in earlier subsections.
+
+
+**Forward-time dynamics** In this subsection, we work in forward time _s ∈_ [0 _,_ 1]:
+
+
+_dx_
+
+_[f]_ [˜][(] _[s, x]_ [)] [+] _[β]_ [(] _[s]_ [)] _[ ∇][x][E]_ [(] _[x]_ [)] _[,]_ _x_ 0 _∼N_ (0 _, I_ ) _._ (8)
+_ds_ [=]
+
+
+We assume that there is a _C_ [1] control-barrier function _h_ : R _[d]_ _→_ R giving the safe set _S_ = _{h ≥_ 0 _}_
+and the unsafe set _U_ = _{h_ _<_ 0 _}_ . Additionally, we assume below that near the boundary between
+the safe and unsafe set, called the boundary layer, the guidance of _∇E_ is sufficiently strong, pulling
+things away from the unsafe set, while at the same time the base drift _f_ [˜] has a sufficiently small
+effect; combined, the resulting flow in Equation 8 effectively moves away from the unsafe set.
+
+**Assumption** **1** (Boundary layer and alignment (forward time)) **.** _There_ _exist_ _δ_ _>_ 0 _,_ _measurable_
+_L_ : [0 _,_ 1] _→_ R+ _and constants µ >_ 0 _∈_ (0 _,_ 1] _such that for all x with |h_ ( _x_ ) _| ≤_ _δ and all s ∈_ [0 _,_ 1] _:_
+
+
+_a._ _(Alignment) ∇h_ ( _x_ ) _· ∇E_ ( _x_ ) _≥_ _µ._
+
+
+_b._ _(Bounds on base drift) |∇h_ ( _x_ ) _·f_ [˜] ( _s, x_ ) _|_ _≤_ _L_ ( _s_ ) _|h_ ( _x_ ) _|._
+
+
+In our method, _E_ was defined in such a way that _∇E_ forces away from the unsafe region, thus the
+alignment assumption in the boudnary layer is natural. Also, the second assumption says the base
+
+
+6
+
+
+drift _f_ [˜] in the boundary layer has small effect on moving into or away from the unsafe region. This is
+a strong assumption, but, it is still reasonable in the generative model: As the data is generated from
+a complete noise (e.g. Gaussian), the fact that the denoising flow of _f_ [˜] reached the unsafe region
+would mean that the data at that stage is much less noisy, meaning it is at a near final time. Near the
+final time, it is reasonable to expect the strengh of denoiser _f_ [˜] is small.
+
+
+**Weighted control in a forward window** For a function _L_ _≥_ 0 and a deadline _sc_ _∈_ (0 _,_ 1], define
+the decreasing weight
+
+
+              - [�] _sc_              _w_ ¯ _L_ ( _u_ ) := exp _L_ ( _τ_ ) _dτ_ _,_ _u ∈_ [0 _, sc_ ] _,_
+
+_u_
+
+
+and the weighted mass of guidance on the _critical window_ [0 _, sc_ ],
+
+
+                 - _sc_
+_I_ ¯ _L_ ( _sc_ ) := _w_ ¯ _L_ ( _u_ ) _β_ ( _u_ ) _du._ (9)
+
+0
+
+
+**Theorem 2** (Forward-time critical window) **.** _Under Assumption 1, if_
+
+_e_ �0 _sc_ _L_ ( _τ_ ) _dτ h_ ( _x_ 0) + _µ_ ¯ _IL_ ( _sc_ ) _≥_ _δ,_ (10)
+
+
+_then h_ ( _xsc_ ) _≥_ _δ (reach a δ-margin by time sc)._
+
+
+With this, we can provide a sufficient condition for the effectiveness of a time window [0 _, sc_ ] for the
+guided flow, whose proof is given in Appendix A.
+
+
+**Interpretation.** Suppose that we are only interested in insuring a sufficiently safe result such as
+can _h_ ( _xsc_ view) _>_ - _δ_ 0 _s_ above. _c_ _[β]_ [as] [the] Note that only [cost] [(budget)] _{β_ [we] ( _u_ ) [can] : _u_ [put] _∈_ [0 [for] _, sc_ [the] ] _}_ can influence [time] [window] _h_ [[0] ( _x_ _[, s]_ _sc_ _[c]_ ) []][.] (causality). [Inside] [this] Also, we [window,]
+_w_ ¯ _L_ ( _u_ ) is _decreasing_ in _u_ when _L_ _≥_ 0. Therefore, when the budget �0 _sc_ _[β]_ [is] [fixed,] [shifting] [the]
+guidance strength _β_ from a later time _u_ 2 to an earlier _u_ 1 _<_ _u_ 2 will strictly _increase_ the sufficient
+bound in Equation 10. In short: _earlier is better_ for safety guidance.
+
+
+**Turning guidance off after the deadline.** Suppose further that for _s_ _∈_ [ _sc,_ 1], _{h_ _≥_ 0 _}_ is forward
+invariant for the unguided flow _dx/ds_ = _f_ [˜] ( _s, x_ ). This is not an unreasonable assumption in generative models, as near the final time the denoising effect of _f_ [˜] would be a fine-grained direction, and
+if the flow of _f_ [˜] was already in the safe region, then it would keep being in the safe region near the
+final time. Hence setting _β_ _≡_ 0 on [ _sc,_ 1] preserves safety while improving fidelity.
+
+
+5 EXPERIMENTS
+
+
+In this section, we validate our method across various applications, including safe generation against
+nudity prompts, diverse images, and mitigation of memorization. All cases involve text-to-image
+generation, as we adhere to baselines and demonstrate the real efficacy of our method. First, we show
+that our method achieves better safety performance compared to baselines. Safety-related metrics are
+presented in detailed individual subsections. In addition to safety-related metrics, we also showcase
+our method achieve high image quality to calculate Fréchet Inception Distance (FID) (Heusel et al.,
+2017) and prompt alignment by evaluating CLIP (Radford et al., 2021).
+
+
+5.1 SAFE GENERATION AGAINST NUDITY PROMPTS
+
+
+In this experiment, we strictly follow the experimental protocol established in previous studies (Yoon
+et al., 2024; Kim et al., 2025b). In this policy, all baselines generate images for nudity prompts and
+assess safety by leveraging the off-the-shelf model, NudeNet [1] . For metrics, the Attack Success
+Rate (ASR) is denoted as it predicts a nude class probability exceeding 0.6 and Toxic Rate (TR) is
+computed by the average of nude class probability. We also use same unsafe prompts generated by
+Ring-A-Bell (Tsai et al., 2024), UnlearnDiff (Zhang et al., 2024), and MMA-Diffusion (Yang et al.,
+2024). These prompts are adversarially generated to extract harmful contents from _Stable Diffusion_
+
+
+[1https://github.com/notAI-tech/NudeNet](https://github.com/notAI-tech/NudeNet)
+
+
+7
+
+
+Table 1: Performance comparison on various datasets in safe generation against nudity prompts.
+
+
+Fine Negative Negative Ring-A-Bell UnlearnDiff MMA-Diffusion COCO
+Method
+Tuning Prompt Guidance ASR _↓_ TR _↓_ ASR _↓_ TR _↓_ ASR _↓_ TR _↓_ FID _↓_ CLIP _↑_
+
+
+SD-v1.4 - - - 0.797 0.809 0.809 0.845 0.962 0.956 25.04 **31.38**
+
+
+ESD ✓ ✗ ✗ 0.456 0.506 0.422 0.426 0.628 0.640 27.38 30.59
+RECE ✓ ✗ ✗ 0.177 0.212 0.284 0.292 0.651 0.664 33.94 30.29
+
+
+SLD ✗ ✓ ✗ 0.481 0.573 0.629 0.586 0.881 0.882 36.47 29.28
+SLD + SafeDenoiser ✗ ✓ ✓ 0.354 0.429 0.526 0.485 0.481 0.549 36.59 29.10
+SLD + Ours ✗ ✓ ✓ 0.228 0.294 0.353 0.431 **0.297** **0.357** 36.83 28.13
+
+
+SAFREE ✗ ✓ ✗ 0.278 0.311 0.353 0.363 0.601 0.618 25.29 30.98
+SAFREE + SafeDenoiser ✗ ✓ ✓ 0.127 0.169 0.207 0.241 0.469 0.501 **22.55** 30.66
+SAFREE + Ours ✗ ✓ ✓ **0.051** **0.133** **0.164** **0.232** 0.423 0.461 23.73 30.36
+
+
+Table 2: Performance comparison of _’class-of-image’_ task for diversity using ImageNet dataset.
+✓indicates negative guidance with early stop = [1 _._ 0 _,_ 0 _._ 78], meanwhile ✗ points out full negative
+guidance = [1 _._ 0 _,_ 0 _._ 0]
+
+|Model Early Stop|FID ↓ CLIP ↑ AES ↑|Vendi ↑ Recall ↑ Precision ↑|
+|---|---|---|
+|SDv3<br>-|29.77<br>31.50<br>5.554|2.878<br>0.139<br>0.883|
+
+
+( _λ_ = 1 _._ 0)
+SPELL ✗ 51.76 28.14 5.190 5.560 0.300 0.530
+✓ 48.50 28.17 5.051 5.872 0.353 0.521
+Ours ✗ 36.81 30.47 5.727 3.126 0.119 0.811
+✓ 31.81 30.78 5.560 3.076 0.135 0.836
+( _λ_ = 0 _._ 03)
+SPELL ✗ 38.23 30.30 5.733 3.152 0.115 0.794
+✓ 32.77 30.68 5.576 3.105 0.138 0.826
+Ours ✗ 37.26 30.39 5.733 3.140 0.126 0.808
+✓ 31.95 30.75 5.564 3.082 0.140 0.833
+
+
+(SD)-v1.4 [2] (Rombach et al., 2022). As negative datapoints, we also use the same negative datapoints
+established in Safe Denoiser (Kim et al., 2025b). Specifically, we select 515 unsafe images from
+I2P that exceed a nude probability of 0.6. For fair comparison, we use the same negative points for
+Safe Denoiser and our model.
+
+
+Table 1 presents our experimental results. As baselines, we consider training-based methods, specifically ESD (Gandikota et al., 2023) and RECE (Gong et al., 2024), which erase velocity vectors corresponding to specific harmful keywords. We also include training-free methods SLD (Schramowski
+et al., 2023) and SAFREE (Yoon et al., 2024), which utilize negative prompts. Additionally, we incorporate our method and Safe Denoiser (Kim et al., 2025b) with SLD and SAFREE. The objective
+is to minimize Attack Success Rate (ASR) and Toxic Rate (TR) on adversarial nudity prompts
+while preserving image quality on benign prompts. We observe training-free pipelines better satisfy
+this goal as SAFREE comparably keeps FID, whereas ESD and RECE respectively increase FID
+than SD-1.4. In terms of plug-and-play negative guidances, replacing Safe Denoiser with our guidance yields consistent safety gains with little impact on image quality. On SAFREE, ASR drops
+by 59 _._ 8%, 20 _._ 8%, and 9 _._ 8% on the three sets, meanwhile COCO-30K exhibits minimal changes
+such as 1 _._ 2 FID and 0 _._ 3 CLIP compared to Safe Denoiser. This pattern also appears on SLD although image quality metrics, FID and CLIP, overall lag behind SAFREE. These results indicate
+that our training-free guidance achieves substantial safety improvements while essentially preserving benign-prompt image quality.
+
+
+5.2 DIVERSITY
+
+
+This experiment examines how negative guidance affects the diversity of generated images. We
+follow the " _class-to-image_ " protocol based on the ImageNet dataset (Russakovsky et al., 2015) using
+the prompt “ _a photo of {class}_ .” Negative datapoints are sampled from training images as proposed
+in Kirchhof et al. (2025), but we evaluate the first 500 classes for tractability. We report FID, CLIP,
+
+
+[2https://huggingface.co/CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4)
+
+
+8
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8
+Similarity
+
+
+(a) Memorized SDv2.1
+
+
+0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8
+Similarity
+
+
+(b) Memorized SDv2.1 + Ours
+
+
+Table 3: Memorization and quality metrics on ImageNette-memorized
+SD-v2.1. @Sim 95% denotes the
+95th percentile of Gen–Train similarity. Lower number is better.
+
+
+Method @Sim 95% _↓_ FID _↓_ CLIP _↑_
+
+
+Mem’SDv2.1 0.437 41.19 31.78
+
+
+Mem’SDv2.1 + Ours
+Full 0.317 43.07 31.35
+Early Stop 0.328 32.44 30.93
+
+
+Figure 3: Memorization under ImageNette fine-tuning.
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+|MMA<br>Ring-|a-bell|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|~~Unlea~~|~~rnDiff~~|~~rnDiff~~||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+[1.0, 0.8] [0.8, 0.6] [0.6, 0.4] [0.4, 0.2] [0.2, 0.05]
+Time windows
+
+(c) Shift Time Window
+
+
+|M<br>R|MA<br>ing-a-bell|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+||~~nlearnDiff~~|~~nlearnDiff~~||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+[1.0, 0.8] [1.0, 0.6] [1.0, 0.4] [1.0, 0.2] [1.0, 0.05]
+Time windows
+
+(a) Equal _λ_ ( _t_ )
+
+
+|MMA<br>Ring-<br>Unlea|a-bell<br>rnDiff|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+[1.0, 0.8] [1.0, 0.6] [1.0, 0.4] [1.0, 0.2] [1.0, 0.05]
+Time windows
+
+(b) Equal   - _λ_ ( _t_ ) _dt_
+
+
+Figure 4: Ablation on time windows of negative guidance
+
+
+and LAION-aesthetic V2 (AES) [3] for image quality and Vendi score (Friedman & Dieng, 2023) and
+Recall for diversity and Precision (Kynkäänniemi et al., 2019) for fidelity. We validate two values
+of _λ_ = _{_ 1 _._ 0 _,_ 0 _._ 03 _}_ with and without early stop. We summarize numerical comparison in Table 2.
+
+
+Overall, our method records a better quality and diversity trade-off than SPELL. At _λ_ = 1 _._ 0, SPELL
+achieves very high diversity but severely degrades quality in FID 48 _._ 50 and CLIP 28 _._ 17. In contrast,
+ours with early stop keeps quality much closer to SDv3 as FID and CLIP score 31 _._ 81 and 30 _._ 78
+while still improving diversity over the SDv3 baseline by Vendi score 3 _._ 076 compared to 2 _._ 878.
+At _λ_ = 0 _._ 03, ours + early stop matches SPELL’s diversity as Vendi scores records 3 _._ 082 while
+maintaining comparable quality and fidelity with FID of 31 _._ 95, CLIP of 30 _._ 75 and Precision of
+0 _._ 833 to SDv3. Hence, we observe that our method with early stop maintains diversity without
+minimal degradation in general performance.
+
+
+5.3 MEMORIZATION
+
+
+We evaluate whether negative guidance mitigates memorization in diffusion models by following
+the protocol of Somepalli et al. (2023). Concretely, SD-v2.1 is fine-tuned on ImageNette [4], yielding
+a memorized model(’Mem SDv2.1’). As reported in Figure 3a, this model exhibits a similarity
+distribution between generated and training images (Gen-Train) that closely matches the distribution
+between training images themselves (Train–Train), indicating memorization.
+
+
+We apply our method in a training-free manner by using the training images as the negative set
+during inference. This shifts the Gen–Train similarity distribution toward lower values, its mass
+concentrated around 0 _._ 2 and reduces the high-similarity tail. Quantitatively, as shown in Table 3,
+the 95th-percentile Gen–Train similarity (@Sim 95%) decreases from 0 _._ 437 (Mem’ SDv2.1) to
+0 _._ 328 (Mem’ SDv2.1 + Ours) and a 24 _._ 7% relative reduction exhibits. Importantly, we observe
+that image quality is preserved. FID improves from 41.19 to 32.44, which indicates relative 21 _._ 2%
+improvement, while CLIP changes only marginally 31.78 to 30.93. We observe that our training-free
+negative guidance substantially reduces memorization without sacrificing image quality.
+
+
+9
+
+
+5.4 ABLATION STUDIES
+
+
+We analyze how the timing and duration of negative guidance affect safety. For analysis, we utilize
+SAFREE + ours in Table 1. As _t_ decrease from 1 _→_ 0 along the denoising trajectory and let [ _ts, te_ ]
+denote the active window of negative guidance ( _ts_ _>_ _te_ ). We consider three scheduling strategies
+for the coefficient _λ_ ( _t_ ): First, equal per-step strength: _λ_ ( _t_ ) is constance within [1 _._ 0 _, te_ ]. Second,
+we call the equal budget. Specifically, we adjust _λ_ so that - _ttes_ _[λ]_ [(] _[t]_ [)] _[ dt]_ [is] [constant] [across] [different]
+window lengths. The last is shifted fixed-length window. A constant _λ_ window of fixed width is
+moved to later windows. We evaluate five windows respectively and report ASR on three nudity
+prompt sets, keeping all other settings fixed. The experimental result is shown in Figure 4.
+
+
+Across all datasets and scheduling strategies, the lowest ASR is obtained when guidance is involved
+to the earliest steps, specifically for [1 _._ 0 _,_ 0 _._ 8] or [1 _._ 0 _,_ 0 _._ 6]. In contrast, ASR increases as the window
+extends or shifted into later times with respect to denoising time. This trend holds even under the
+equal budget constraint (� _λ_ ( _t_ ) _dt_ ), indicating that the time negative guidance involves becomes
+crucial more than the case of equal per-step strength. We identify that applying negative guidance
+briefly at the beginning and stopping early is optimal for safe generation.
+
+
+5.5 COMPUTATION OVERHEAD
+
+
+Table 4: Wall-clock time.
+
+
+Our measurements confirm that the additional Table 4: Wall-clock time.
+cost of SGF is modest and dominated by the
+base sampler. In Table 4, moving from SD-v1.4 Time
+
+Models
+
+to SAFREE increases the wall clock from 3.18s (s/img)
+to 4.22s per image, where the increase of 1.04
+
+SD-v1.4 3.18
+
+seconds outweighs the guidance overhead. On
+
++ SafeDenoiser ( _N_ = 515) 3.20
+
+top of SAFREE, Safe Denoiser adds 0.02s with
+
++ Ours ( _N_ = 515) 3.22
+
+_N_ = 515 and 0.07s with _N_ = 3 _,_ 200. SGF adds
+0.10s with _N_ = 515 and 0.48s with _N_ = 3 _,_ 200. SAFREE 4.22
+The growth from 0.10 seconds to 0.48 seconds + SafeDenoiser ( _N_ = 515) 4.24
+as the negative pool increases by our adaptive + Ours ( _N_ = 515) 4.32
+bandwidth procedure outlined in Appendix D.1.
+
++ SafeDenoiser ( _N_ = 3 _,_ 200) 4.29
+
+Specifically, this procedure requires sorting pair
++ Ours ( _N_ = 3 _,_ 200) 4.70
+
+wise distances when SGF is called, which explains the gap to Safe Denoiser at very large _N_ .
+Despite this extra computation, the observed wall-clock time remains sublinear in practice due to
+GPU parallelism, and the absolute overhead remains small compared with the increase of 1.04 seconds observed when switching from SD-v1.4 to SAFREE.
+
+
+Time
+Models
+(s/img)
+
+
+SD-v1.4 3.18
++ SafeDenoiser ( _N_ = 515) 3.20
++ Ours ( _N_ = 515) 3.22
+
+
+SAFREE 4.22
++ SafeDenoiser ( _N_ = 515) 4.24
++ Ours ( _N_ = 515) 4.32
+
+
++ SafeDenoiser ( _N_ = 3 _,_ 200) 4.29
++ Ours ( _N_ = 3 _,_ 200) 4.70
+
+
+6 CONCLUSION
+
+
+We introduced a unified probabilistic framework for safe generation in diffusion and flow models,
+showing that both existing heuristic methods and control-theoretic approaches can be understood
+through the lens of potential-based negative guidance. By connecting Maximum Mean Discrepancy
+potentials with control barrier analysis, we demonstrated that safety guidance is most critical during
+a well-defined time window early in the denoising process, and that excessive guidance beyond this
+window can harm sample quality. Our experiments across realistic safe generation tasks confirm that
+adaptive, time-critical guidance achieves both safety and fidelity. This work provides a principled
+foundation for future safety mechanisms in generative modelling, moving beyond ad hoc heuristics
+toward systematically grounded approaches.
+
+
+A limitation is that our proofs assume the gradient of the MMD guidance aligns with the ideal
+control barrier field near the boundary. As future work, we will investigate ways to relax this assumption by quantifying guidance mismatch, as previous studies have done in (Ben-Hamu et al.,
+2024; Blasingame & Liu, 2025).
+
+
+[3https://github.com/christophschuhmann/improved-aesthetic-predictor](https://github.com/christophschuhmann/improved-aesthetic-predictor)
+[4https://github.com/fastai/imagenette](https://github.com/fastai/imagenette)
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+We thank our anonymous reviewers for their constructive feedback, which has helped significantly
+improve our paper. We thank the Digital Research Alliance of Canada (Compute Canada) for its
+computational resources and services. M. Kim was supported by the Canada CIFAR AI Safety
+Catalyst grant and the postdoc matching funding at the Data Science Institute (DSI) at UBC. Additionally, he was supported by the Institute of Information & Communications Technology Planning
+& Evaluation(IITP) grant funded by the Korea government(MSIT) (No.RS-2025-02219317, AI Star
+Fellowship (Kookmin University)). YH. Kim was partially supported by the the Natural Sciences
+and Engineering Research Council of Canada (NSERC), with Discovery Grant RGPIN-2019-03926
+and RGPIN-2025-06747. YH. Kim is a member of the Kantorovich Initiative (KI), which is supported by the PIMS Research Network (PRN) program of the Pacific Institute for the Mathematical
+Sciences (PIMS). M. Park was supported in part by the Natural Sciences and Engineering Research
+Council of Canada (NSERC) and the Canada CIFAR AI Chairs program.
+
+
+ETHICS STATEMENT
+
+
+This paper presents a work aimed at developing a reliable and trustworthy Generative AI. Our research addresses several potential societal consequences, particularly the ethical risks associated
+with generative models. We focus on preventing the generation of NSFW content, including nudity,
+and mitigating the risk of models memorizing and reproducing private information, such as human
+faces from training datasets. We believe our work contributes to responsible AI use by reinforcing
+ethical safeguards and promoting AI systems aligned with societal values and human rights.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+This paper provides comprehensive information to reproduce the main experimental results. To
+enhance reproducibility, we have included our code in the supplementary material. Additionally,
+we present all our hyperparameter settings and model details in Appendix. Our code is available at
+[https://github.com/MingyuKim87/SGF](https://github.com/MingyuKim87/SGF)
+
+
+REFERENCES
+
+
+Heli Ben-Hamu, Omri Puny, Itai Gat, Brian Karrer, Uriel Singer, and Yaron Lipman. D-flow:
+Differentiating through flows for controlled generation. In Ruslan Salakhutdinov, Zico Kolter,
+Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp (eds.),
+_Proceedings of the 41st International Conference on Machine Learning_, volume 235 of _Proceed-_
+_ings_ _of_ _Machine_ _Learning_ _Research_, pp. 3462–3483. PMLR, 21–27 Jul 2024. URL [https:](https://proceedings.mlr.press/v235/ben-hamu24a.html)
+[//proceedings.mlr.press/v235/ben-hamu24a.html.](https://proceedings.mlr.press/v235/ben-hamu24a.html)
+
+
+Heli Ben-Hamu, Itai Gat, Daniel Severo, Niklas Nolte, and Brian Karrer. Accelerated sampling from
+masked diffusion models via entropy bounded unmasking. _arXiv_ _preprint_ _arXiv:2505.24857_,
+2025.
+
+
+Zander W. Blasingame and Chen Liu. Greed is good: A unifying perspective on guided generation.
+In _The Thirty-ninth Annual Conference on Neural Information Processing Systems_, 2025. URL
+[https://openreview.net/forum?id=s14pdQgoLb.](https://openreview.net/forum?id=s14pdQgoLb)
+
+
+Ricky T. Q. Chen. torchdiffeq, 2018. URL [https://github.com/rtqichen/](https://github.com/rtqichen/torchdiffeq)
+[torchdiffeq.](https://github.com/rtqichen/torchdiffeq)
+
+
+Hyungjin Chung, Jeongsol Kim, Michael T Mccann, Marc L Klasky, and Jong Chul Ye. Diffusion
+posterior sampling for general noisy inverse problems. _arXiv preprint arXiv:2209.14687_, 2022.
+
+
+Xiaobing Dai, Zewen Yang, Dian Yu, Shanshan Zhang, Hamid Sadeghian, Sami Haddadin, and
+Sandra Hirche. Safe flow matching: Robot motion planning with control barrier functions, 2025.
+[URL https://arxiv.org/abs/2504.08661.](https://arxiv.org/abs/2504.08661)
+
+
+11
+
+
+Bradley Efron. Tweedie’s formula and selection bias. _Journal of the American Statistical Associa-_
+_tion_, 106(496):1602–1614, 2011.
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers
+for high-resolution image synthesis. In _Forty-first international conference on machine learning_,
+2024.
+
+
+Dan Friedman and Adji Bousso Dieng. The vendi score: A diversity evaluation metric for machine
+learning. _Transactions on Machine Learning Research_, 2023. ISSN 2835-8856. [URL https:](https://openreview.net/forum?id=g97OHbQyk1)
+[//openreview.net/forum?id=g97OHbQyk1.](https://openreview.net/forum?id=g97OHbQyk1)
+
+
+Rohit Gandikota, Joanna Materzynska, Jaden Fiotto-Kaufman, and David Bau. Erasing concepts
+from diffusion models. In _Proceedings of the 2023 IEEE International Conference on Computer_
+_Vision_, 2023.
+
+
+Ruiqi Gao, Emiel Hoogeboom, Jonathan Heek, Valentin De Bortoli, Kevin P. Murphy, and Tim
+Salimans. Diffusion meets flow matching: Two sides of the same coin. 2024. URL [https:](https://diffusionflow.github.io/)
+[//diffusionflow.github.io/.](https://diffusionflow.github.io/)
+
+
+Paul Glotfelter, Jorge Cortés, and Magnus Egerstedt. Nonsmooth barrier functions with applications
+to multi-robot systems. _IEEE control systems letters_, 1(2):310–315, 2017.
+
+
+Chao Gong, Kai Chen, Zhipeng Wei, Jingjing Chen, and Yu-Gang Jiang. Reliable and efficient
+concept erasure of text-to-image diffusion models. In _European Conference on Computer Vision_,
+pp. 73–88. Springer, 2024.
+
+
+Arthur Gretton, Karsten M Borgwardt, Malte J Rasch, Bernhard Schölkopf, and Alexander Smola.
+A kernel two-sample test. _Journal of Machine Learning Research_, 13(Mar):723–773, 2012.
+
+
+Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter.
+Gans trained by a two time-scale update rule converge to a local nash equilibrium. _Advances in_
+_Neural Information Processing Systems_, 30, 2017.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _Advances_
+_in Neural Information Processing Systems_, volume 33, pp. 6840–6851, 2020.
+
+
+Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusionbased generative models. In _Advances in Neural Information Processing Systems_, volume 35, pp.
+26565–26577, 2022.
+
+
+Jeongsol Kim, Bryan Sangwoo Kim, and Jong Chul Ye. Flowdps: Flow-driven posterior sampling
+for inverse problems. _arXiv preprint arXiv:2503.08136_, 2025a.
+
+
+Mingyu Kim, Dongjun Kim, Amman Yusuf, Stefano Ermon, and Mijung Park. Training-free safe
+denoisers for safe use of diffusion models. In _The_ _Thirty-ninth_ _Annual_ _Conference_ _on_ _Neural_
+_Information_ _Processing_ _Systems_, 2025b. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=QQS7TudonJ)
+[QQS7TudonJ.](https://openreview.net/forum?id=QQS7TudonJ)
+
+
+Seo Hyun Kim, Sunwoo Hong, Hojung Jung, Youngrok Park, and Se-Young Yun. Klass: Kl-guided
+fast inference in masked diffusion models. _arXiv preprint arXiv:2511.05664_, 2025c.
+
+
+Michael Kirchhof, James Thornton, Louis Béthune, Pierre Ablin, Eugene Ndiaye, and Marco Cuturi.
+Shielded diffusion: Generating novel and diverse images using sparse repellency. In _Forty-second_
+_International_ _Conference_ _on_ _Machine_ _Learning_, 2025. URL [https://openreview.net/](https://openreview.net/forum?id=XAckVo0iNj)
+[forum?id=XAckVo0iNj.](https://openreview.net/forum?id=XAckVo0iNj)
+
+
+Tuomas Kynkäänniemi, Tero Karras, Samuli Laine, Jaakko Lehtinen, and Timo Aila. Improved
+precision and recall metric for assessing generative models. _Advances_ _in_ _neural_ _information_
+_processing systems_, 32, 2019.
+
+
+Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching
+for generative modeling. _ArXiv preprint arXiv:2210.02747_, 2022.
+
+
+12
+
+
+Yaron Lipman, Marton Havasi, Peter Holderrieth, Neta Shaul, Matt Le, Brian Karrer, Ricky TQ
+Chen, David Lopez-Paz, Heli Ben-Hamu, and Itai Gat. Flow matching guide and code. _arXiv_
+_preprint arXiv:2412.06264_, 2024.
+
+
+Qiang Liu. Stein variational gradient descent as gradient flow. In I. Guyon, U. Von
+Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (eds.), _Ad-_
+_vances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 30. Curran Associates, Inc.,
+2017. URL [https://proceedings.neurips.cc/paper_files/paper/2017/](https://proceedings.neurips.cc/paper_files/paper/2017/file/17ed8abedc255908be746d245e50263a-Paper.pdf)
+[file/17ed8abedc255908be746d245e50263a-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2017/file/17ed8abedc255908be746d245e50263a-Paper.pdf)
+
+
+Qiang Liu and Dilin Wang. Stein variational gradient descent: A general purpose bayesian inference algorithm. In D. Lee, M. Sugiyama, U. Luxburg, I. Guyon, and R. Garnett (eds.),
+_Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 29. Curran Associates, Inc.,
+2016. URL [https://proceedings.neurips.cc/paper_files/paper/2016/](https://proceedings.neurips.cc/paper_files/paper/2016/file/b3ba8f1bee1238a2f37603d90b58898d-Paper.pdf)
+[file/b3ba8f1bee1238a2f37603d90b58898d-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2016/file/b3ba8f1bee1238a2f37603d90b58898d-Paper.pdf)
+
+
+Omer Luxembourg, Haim Permuter, and Eliya Nachmani. Plan for speed–dilated scheduling for
+masked diffusion language models. _arXiv preprint arXiv:2506.19037_, 2025.
+
+
+Quan Nguyen and Koushil Sreenath. Exponential control barrier functions for enforcing high
+relative-degree safety-critical constraints. In _2016 American Control Conference (ACC)_, pp. 322–
+328. IEEE, 2016.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, highperformance deep learning library. _Advances in neural information processing systems_, 32, 2019.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International_ _Conference_ _on_ _Machine_ _Learning_,
+pp. 8748–8763. PMLR, 2021.
+
+
+R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer. High-resolution image synthesis
+with latent diffusion models. In _IEEE/CVF Conference on Computer Vision and Pattern Recog-_
+_nition (CVPR)_, pp. 10674–10685, 2022.
+
+
+Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng
+Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, et al. Imagenet large scale visual
+recognition challenge. _International Journal of Computer Vision_, 115:211–252, 2015.
+
+
+Patrick Schramowski, Manuel Brack, Björn Deiseroth, and Kristian Kersting. Safe latent diffusion: mitigating inappropriate degeneration in diffusion models. _arXiv preprint arxiv:2211.05105_,
+2023.
+
+
+Gowthami Somepalli, Vasu Singla, Micah Goldblum, Jonas Geiping, and Tom Goldstein. Understanding and mitigating copying in diffusion models. _Advances in Neural Information Processing_
+_Systems_, 36:47783–47803, 2023.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _Interna-_
+_tional_ _Conference_ _on_ _Learning_ _Representations_, 2021. URL [https://openreview.net/](https://openreview.net/forum?id=PxTIG12RRHS)
+[forum?id=PxTIG12RRHS.](https://openreview.net/forum?id=PxTIG12RRHS)
+
+
+B. Sriperumbudur, K. Fukumizu, and G. Lanckriet. Universality, characteristic kernels and RKHS
+embedding of measures. 12:2389–2410, 2011.
+
+
+Yu-Lin Tsai, Chia-Yi Hsu, Chulin Xie, Chih-Hsun Lin, Jia You Chen, Bo Li, Pin-Yu Chen, Chia-Mu
+Yu, and Chun-Ying Huang. Ring-a-bell! how reliable are concept removal methods for diffusion
+models? In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL
+[https://openreview.net/forum?id=lm7MRcsFiS.](https://openreview.net/forum?id=lm7MRcsFiS)
+
+
+13
+
+
+Wei Xiao, Tsun-Hsuan Wang, Chuang Gan, Ramin Hasani, Mathias Lechner, and Daniela Rus.
+Safediffuser: Safe planning with diffusion probabilistic models. In _The Thirteenth International_
+_Conference on Learning Representations_ [, 2025. URL https://openreview.net/forum?](https://openreview.net/forum?id=ig2wk7kK9J)
+[id=ig2wk7kK9J.](https://openreview.net/forum?id=ig2wk7kK9J)
+
+
+Yijun Yang, Ruiyuan Gao, Xiaosen Wang, Tsung-Yi Ho, Nan Xu, and Qiang Xu. Mma-diffusion:
+Multimodal attack on diffusion models. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Com-_
+_puter Vision and Pattern Recognition_, pp. 7737–7746, 2024.
+
+
+Zewen Yang, Xiaobing Dai, Dian Yu, Qianru Li, Yu Li, and Valentin Le Mesle. Uniconflow: A
+unified constrained generalization framework for certified motion planning with flow matching
+models, 2025. [URL https://arxiv.org/abs/2506.02955.](https://arxiv.org/abs/2506.02955)
+
+
+Jaehong Yoon, Shoubin Yu, Vaidehi Patil, Huaxiu Yao, and Mohit Bansal. Safree: Training-free and
+adaptive guard for safe text-to-image and video generation. _arXiv_ _preprint_ _arXiv:2410.12761_,
+2024.
+
+
+Yimeng Zhang, Jinghan Jia, Xin Chen, Aochuan Chen, Yihua Zhang, Jiancheng Liu, Ke Ding, and
+Sijia Liu. To generate or not? safety-driven unlearned diffusion models are still easy to generate
+unsafe images... for now. In _European Conference on Computer Vision_, pp. 385–403. Springer,
+2024.
+
+
+14
+
+
+A PROOF OF THEOREM 2
+
+
+In this section we provide the proof of Theorem 2. The proof follows from analyzing the ODE
+system (8) in terms of the barrier function _h_ . We first recall a basic ODE lemma:
+
+**Lemma** **1** (Integrating factor (forward)) **.** _Let_ _y_ _[′]_ ( _s_ ) = _a_ ( _s_ ) _y_ ( _s_ ) + _b_ ( _s_ ) _with_ _a_ _≥_ 0 _._ _Then_ _for_ _any_
+_sc_ _∈_ (0 _,_ 1] _,_
+
+
+_y_ ( _sc_ ) = _e_ �0 _sc_ _a y_ (0) + - _sc_
+
+
+_e_  - _usc_ _a b_ ( _u_ ) _du._
+0
+
+
+The above result gives a comparison principle as follows:
+
+**Lemma 2** (Comparison (forward)) **.** _Let a_ _[±]_ _≥_ 0 _and b be measurable._ _If y_ _[′]_ _≥_ _a_ _[−]_ _y_ + _b, then_
+
+_y_ ( _sc_ ) _≥_ _e_ �0 _sc_ _a_ _[−]_ _y_ (0) +           - _sc_ _e_           - _usc_ _a_ _[−]_ _b_ ( _u_ ) _du._
+
+0
+
+
+_If y_ _[′]_ _≤_ _a_ [+] _y_ + _b, then_
+
+_y_ ( _sc_ ) _≤_ _e_ �0 _sc_ _a_ [+] _y_ (0) +           - _sc_ _e_           - _usc_ _a_ [+] _b_ ( _u_ ) _du._
+
+0
+
+
+_Proof._ Solve the equalities _z_ _[′]_ = _a_ _[±]_ _z_ + _b_ with _z_ (0) = _y_ (0) by Lemma 1. By the standard comparison
+lemma, _y_ _≥_ _z_ for the “ _≥_ ” case and _y_ _≤_ _z_ for the “ _≤_ ” case, yielding the bounds at _sc_ .
+
+
+We can use this comparison principle to prove Theorem 2
+
+
+_Proof of the_ sufficient _certificate._ By chain rule and Assumption 1 (a).,
+
+
+_d_
+
+[+] _[β]_ [(] _[s]_ [)] _[ ∇][h][·∇][E]_ [(] _[x][s]_ [)] _[≥]_ _[L][−]_ [(] _[s]_ [)] _[ y]_ [(] _[s]_ [)] [+] _[µ β]_ [(] _[s]_ [)] _[.]_
+_ds_ _[h]_ [(] _[x][s]_ [) =] _[ ∇][h][·]_ [ ˜] _[f]_ [(] _[s, x][s]_ [)]
+
+Apply Lemma 2 with _a_ _[−]_ = _L_ _[−]_ and _b_ ( _u_ ) = _µ β_ ( _u_ ):
+
+_h_ ( _xsc_ ) _≥_ _e_ �0 _sc_ _L_ _[−]_ _y_ (0) + _µ_   - _sc_ _e_   - _usc_ _L_ _[−]_ _β_ ( _u_ ) _du_ = _e_ �0 _sc_ _L_ _[−]_ _h_ ( _x_ 0) + _µ_ ¯ _IL−_ ( _sc_ ) _._
+
+0
+
+
+If the RHS _≥_ _δ_, then _h_ ( _xsc_ ) _≥_ _δ_ .
+
+
+_Proof of the_ necessary _certificate._ Similarly,
+
+
+_d_
+
+[=] _[∇][h][·]_ [ ˜] _[f]_ [(] _[s, x][s]_ [)] [+] _[β]_ [(] _[s]_ [)] _[ ∇][h][·∇][E]_ [(] _[x][s]_ [)] _[≤]_ _[L]_ [+][(] _[s]_ [)] _[ y]_ [(] _[s]_ [)] [+] _[µ β]_ [(] _[s]_ [)] _[,]_
+_ds_ _[h]_ [(] _[x][s]_ [)]
+
+
+by Assumption 1 (a) and (b). Apply Lemma 2 with _a_ [+] = _L_ [+] :
+
+_h_ ( _xsc_ ) _≤_ _e_ �0 _sc_ _L_ [+] _h_ ( _x_ 0) + _µ_   - _sc_ _e_   - _usc_ _L_ [+] _β_ ( _u_ ) _du_ = _e_ �0 _sc_ _L_ [+] _h_ ( _x_ 0) + _µ_ ¯ _IL_ +( _sc_ ) _,_
+
+0
+
+
+If this upper bound _< δ_, then no trajectory can satisfy _h_ ( _xsc_ ) _≥_ _δ_ .
+
+
+15
+
+
+B SAFE DENOISER: DECOMPOSING INTO SAFE AND UNSAFE DENOISERS
+
+
+Safe Denoiser partitions the data distribution into safe/unsafe components and defines the corresponding denoisers. Let _E_ data[ _**x**_ _|_ _**x**_ _t_ ] denote the model’s data denoiser (Kim et al., 2025b). The
+unsafe denoiser and its safe counterpart are written as follows:
+
+
+Eunsafe[ _**x**_ _|_ _**x**_ _t_ ] = - _**x**_ _[p]_ [unsafe][(] _**[x]**_ [)] _[q][t]_ [(] _**[x]**_ _[t][|]_ _**[x]**_ [)]
+
+
+_p_ unsafe [(] _**[x]**_ [)] _,t_ _[q][t]_ ( [(] _**x**_ _**[x]**_ _t_ _[t]_ ) _[|]_ _**[x]**_ [)] _d_ _**x**_ _,_ Esafe[ _**x**_ _|_ _**x**_ _t_ ] = - _**x**_ _[p]_ [safe] _p_ safe [(] _**[x]**_ [)] _,t_ _[q][t]_ ( [(] _**x**_ _**[x]**_ _t_ _[t]_ ) _[|]_ _**[x]**_ [)]
+
+
+_[t]_ _[t]_ _d_ _**x**_ (B.1)
+
+_p_ safe _,t_ ( _**x**_ _t_ )
+
+
+where _qt_ is the forward diffusion kernel and _p_ safe _,t, p_ unsafe _,t_ are the induced marginals at time _t_ . By
+employing this setup, Kim et al. (2025b) derives Theorem 1 along with the corresponding coefficient
+_β_ _[∗]_ ( _x_ ) and partition function _Z_ safe as follows:
+
+_β_ _[∗]_ ( _**x**_ _t_ ) = _[Z]_ [unsafe] _Z_ safe _[p]_ _p_ [unsafe] safe _,t_ ( _[,t]_ _**x**_ [(] _t_ _**[x]**_ ) _[t]_ [)] _,_ _Z_ safe = - **1** safe( _**x**_ ) _p_ data( _**x**_ ) _d_ _**x**_ _,_ _Z_ unsafe = - **1** unsafe( _**x**_ ) _p_ data( _**x**_ ) _d_ _**x**_ (B.2)
+
+As _**x**_ _t_ becomes more likely unsafe, _p_ unsafe _,t_ ( _**x**_ _t_ ) grows and _β_ _[∗]_ ( _**x**_ _t_ ) increases, yielding stronger
+negative guidance; conversely, _β_ _[∗]_ ( _**x**_ _t_ ) decreases when _**x**_ _t_ is likely safe.
+
+
+**KDE for the unsafe denoiser and a practical weight** Given unsafe data points _D_ _[−]_ = _{_ _**y**_ _i}_ _[N]_ _i_ =1 [,]
+Safe Denoiser practically estimates the unsafe denoiser as a mixture over the unsafe set with weights
+proportional to the diffusion kernel:
+
+
+E�unsafe[ _**x**_ _|_ _**x**_ _t_ ] =
+
+
+_N_
+
+- _i_ =1 _wn_ ( _t,_ _**x**_ _t_ ) _**y**_ ( _i_ ) _,_ _wn_ ( _t,_ _**x**_ _t_ ) = - _Nmq_ =1 _t_ ( _**x**_ _[q]_ _t_ _[t]_ [(] _|_ _**[x]**_ _**y**_ _[t]_ _i_ ) _[|]_ _**[ y]**_ _[i]_ [)] (B.3)
+
+
+and approximates the weight in Equation B.2 by
+
+
+              _β_ _[∗]_ ( _**x**_ _t_ ) _≈_ _η · β_ ( _**x**_ _t_ ) _,_ _β_ ( _**x**_ _t_ ) = _p_ unsafe( _**x**_ ) _qt_ ( _**x**_ _t_ _|_ _**y**_ ) _d_ _**x**_ _≈_ [1]
+
+_N_
+
+
+_N_
+
+- _qt_ ( _**x**_ _t_ _|_ _**y**_ _i_ ) (B.4)
+
+
+_i_ =1
+
+
+with a scalar _η_ _>_ 0 controlling guidance strength. Equation B.3 makes explicit that the unsafe
+denoiser is a normalized kernel smoother over the unsafe dataset.
+
+
+**Algorithmic practice in image generation tasks** In the image generation tasks, Safe Denoiser operates as follows. We first compute the model’s prediction on clean data manifold _zt_ = Edata[ _**x**_ _|_ _**x**_ _t_ ]
+by Tweedie’s formula (Efron, 2011; Chung et al., 2022; Kim et al., 2025a). Next, we consider to
+replace the time-dependent Gaussian diffusion kernel _qt_ ( _·_ _|_ _·_ ) by a static-bandwidth RBF kernel
+_kσ_ KDE ( _**a**_ _,_ _**b**_ ) = exp( _−∥_ _**a**_ _−_ _**b**_ _∥_ [2] _/_ 2 _σ_ KDE [2] [)][ both for constructing the unsafe denoiser and for the numer-]
+ator of _β_ . In practice, they consider a fixed _σ_ KDE chosen per variant of base models. (e.g., _σ_ KDE=1 _._ 0
+for SLD, 3 _._ 15 for SAFREE). We then evaluate the KDE in the clean space using _zt_ as the query to
+stabilize distances:
+
+E�unsafe[ _**x**_ _|_ _**x**_ _t_ ] _≈_ [�] _[N]_ _i_ =1 _[w]_ [˜] _[n]_ [(] _[z][t]_ [)] _**[ y]**_ _[i][,]_ _w_ ˜ _n_ ( _zt_ ) _∝_ _kσ_ KDE( _zt,_ _**y**_ _i_ ) _,_ _β_ �( _**x**_ _t_ ) _≈_ _N_ _[η]_  - _Nn_ =1 _[k][σ]_ KDE [(] _[z][t][,]_ _**[ y]**_ _[i]_ [)] _[.]_ [(B.5)]
+
+
+This mirrors equation B.3–equation B.4 with _qt_ replaced by _kσ_ KDE and the model’s _zt_ estimate
+as the query. Finally, we gate guidance to a early time window of DDPM indices, e.g., _C_ =
+_{_ 780 _, . . .,_ 1000 _}_ for 1000-step schedules, and optionally threshold by _β_ [�] ( _**x**_ _t_ ) to turn guidance off
+when queries seem safe.
+
+
+B.1 PROOF OF PROPOSITION 1
+
+
+We show that Safe Denoiser is recovered by the MMD-gradient field used in our Safety-Guided
+Flow. Let _kσ_ be the RBF kernel used in equation B.5. Let’s start with the squared MMD estimator
+defined in Equation 5 between the variable _**z**_ _t_ and _D_ _[−]_ :
+
+
+2
+_E_ ( _**z**_ _t_ ) _≡_ MMD [�] _kσ_ - _**z**_ _t, D_ _[−]_ [�] = _kσ_ ( _**z**_ _t,_ _**z**_ _t_ ) + _N_ [1][2]
+
+
+_N_
+
+
+- _kσ_ ( _**y**_ _i,_ _**y**_ _j_ ) _−_ [2]
+
+_N_
+
+_i,j_ =1
+
+
+_N_
+
+
+_N_
+
+- _kσ_ ( _**z**_ _t,_ _**y**_ _i_ ) _._
+
+
+_i_ =1
+
+
+and its gradient is (shown in Equation 7)
+
+
+_∇_ _**z**_ _tE_ ( _**z**_ _t_ ) = _σ_ 2 [2] _[Z]_ [(] _**[z]**_ _[t]_ [)] - _**z**_ _t −_ [�] _[N]_ _i_ =1 _[w][i]_ [(] _**[z]**_ _[t]_ [)] _**[ y]**_ _[i]_ - _,_ _Z_ ( _**z**_ _t_ ) = _N_ [1]
+
+
+_N_ _[σ]_ _·Z_ _[t]_ ( _**z**_ _t_ _[i]_ ) (B.6)
+
+
+_N_ [1] - _Ni_ =1 _[k][σ]_ [(] _**[z]**_ _[t][,]_ _**[ y]**_ _[i]_ [)] _wi_ ( _**z**_ _t_ ) = _[k]_ _N_ _[σ]_ [(] _·Z_ _**[z]**_ _[t]_ ( _[,]_ _**z**_ _**[y]**_ _t_ _[i]_ ) [)]
+
+
+16
+
+
+On the other hand, the practical Safe Denoiser repellency direction ( _**g**_ SD( _t_ )) is
+
+
+_**g**_ SD( _t_ ) := Edata[ _**x**_ _|_ _**x**_ _t_ ] _−_ E [�] unsafe[ _**x**_ _|_ _**x**_ _t_ ] _≈_ _zt −_
+
+
+_N_
+
+- _w_ ˜ _i_ ( _zt_ ) _**y**_ _i,_ (B.7)
+
+
+_i_ =1
+
+
+with _w_ ˜ _i_ ( _zt_ ) _∝_ _kσ_ KDE ( _**z**_ _t,_ _**y**_ _i_ ) (normalized as in Equation B.5). Matching kernels ( _σ_ KDE= _σ_ ) gives
+_w_ ˜ _i_ ( _zt_ ) = _wi_ ( _zt_ ) and hence, by Equation B.6,
+
+
+_σ_ [2]
+_**g**_ SD( _t_ ) = (B.8)
+
+2 _Z_ ( _zt_ ) _[∇][z][t][E]_ [(] _[z][t]_ [)] _[.]_
+
+
+Therefore the Safe Denoiser update
+
+
+∆ _**z**_ _t_ _∝_ _η_ _β_ [�] ( _**x**_ _t_ ) _**g**_ SD( _t_ )
+
+is exactly an MMD-gradient step with an window-wise time schedule
+
+
+_σ_ [2]
+_λ_ ( _t,_ _**x**_ _t_ ) _∝_ _η_ _β_ [�] ( _**x**_ _t_ ) 2 _Z_ ( _**z**_ _t_ ) ( _Z_ ( _**z**_ _t_ ) _>_ 0 ) _,_ (B.9)
+
+
+applied in the clean space and transferred to _**z**_ _t_ . It implies that the usual _x_ 0-space steering commonly
+used in diffusion guidance. In other words, Safe Denoiser’s practical direction equals the gradient
+of the MMD potential _E_ evaluated at _**z**_ _t_, and its magnitude is controlled by implicitly considering
+_β_ �( _**x**_ _t_ ) and the kernel normalization _Z_ ( _**z**_ _t_ ).
+
+
+C SHIELDED DIFFUSION (SPELL)
+
+
+We summarize the sparse-repellency mechanism of Shielded Diffusion (SPELL) (Kirchhof et al.,
+2025) and provide a proof that its force field is recovered as a radius–thresholded instance of our
+MMD-gradient guidance.
+
+
+**Setup** **and** **notation.** Let _**x**_ _t_ _∈_ R _[d]_ be the variable via a pretrained reverse-time sampler at _t_ _∈_
+
+[0 _,_ 1], and let _**z**_ _t_ = E[ _X_ 0 _|_ _Xt_ = _**x**_ _t_ ] be the predicted clean (standard _x_ 0 estimate). A unsafe set _S_
+is the union of closed balls of a common radius _r_ _>_ 0 centered at reference latents _{_ _**y**_ _i}_ _[N]_ _i_ =1 [:]
+
+
+_S_ =
+
+
+SPELL intervenes only when _zt_ _∈_ _S_ .
+
+
+_N_
+
+- _{_ _**z**_ : _∥_ _**z**_ _t −_ _**y**_ _i∥_ 2 _≤_ _r }._
+
+
+_i_ =1
+
+
+**Radial and thresholded repellency mechanism** Denote _**d**_ = _**z**_ _−_ _**y**_ for a reference center _**y**_ (we
+use _**z**_ = _zt_ in practice). The SPELL force is radial and thresholded by the shield radius:
+
+
+_**d**_
+_F_ rad( _**d**_ ) = _α_ ( _r −∥_ _**d**_ _∥_ )+ _∥_ _**d**_ _∥_ _s.t_ ( _u_ )+ = max _{u,_ 0 _},_ _α >_ 0 (C.10)
+
+
+SPELL
+and is applied to the predicted clean through the corrected target _**z**_ [�] _t_ _[′]_ = _**z**_ _t_ + � _j_ _[F]_ [rad][(] _**[z]**_ _[t]_ [;] _**[ y]**_ _[j]_ [)]
+with an optional over-compensation _α ≥_ 0.
+
+
+**Weighted repellency form of the MMD gradient** Our MMD potential _E_ ( _**x**_ ) defined in Section 4
+implies a Gaussian radial contribution _FG_ ( _**d**_ ; _σ_ ) from a single negative _**y**_ :
+
+
+_[∥]_ _**[d]**_ _[∥]_ 
+exp _−_ _[∥]_ _**[d]**_ _[∥]_ [2]
+_σ_ [2] 2 _σ_ [2]
+
+
+_FG_ ( _**d**_ ; _σ_ ) = _λ_ [2] _[∥]_ _**[d]**_ _[∥]_
+
+
+2 _σ_ [2]
+
+
+- _**d**_
+_**d**_ = _**z**_ _−_ _**y**_ _,_ _λ >_ 0 _,_ (C.11)
+_∥_ _**d**_ _∥_ _[,]_
+
+
+which is precisely the gradient of the one to one MMD energy _E_ ( _**z**_ ) = _kσ_ ( _**z**_ _,_ _**z**_ ) + _kσ_ ( _**y**_ _,_ _**y**_ ) _−_
+2 _kσ_ ( _**z**_ _,_ _**y**_ ) with the RBF _kσ_ . For a radial RBF kernel _kσ_ and a finite negative set _D_ _[−]_ =
+_{_ _**y**_ _i}_ _[N]_ _i_ =1 [,] [we can define weighted-repellency form of the MMD gradient as shown in Equation B.6]
+
+
+_∇_ _**z**_ MMD [�] 2 _kσ_ [(] _**[z]**_ _[,][ D][−]_ [)] [=] _σ_ 2 [2] _[Z]_ [(] _**[z]**_ [)] - _**z**_ _−_ [�]
+
+
+_i_ _[k][σ]_ [(] _**[z]**_ _[,]_ _**[ y]**_ _[i]_ [)] [and] _[w][i]_ [(] _**[z]**_ [)] [=]
+
+
+_i_ _[w][i]_ [(] _**[z]**_ [)] _**[y]**_ _[i]_ - with _Z_ ( _**z**_ ) = _N_ 1 
+
+
+_kσ_ ( _**z**_ _,_ _**y**_ _i_ ) _/_ ( _N_ _· Z_ ( _**z**_ )). For _N_ =1 this reduces to equation C.11 up to a positive scale.
+
+
+17
+
+
+C.1 PROOF OF PROPOSITION 2
+
+
+We establish two hypotheses: _(i)_ _inside_ _a_ _predefined_ _radius,_ _the_ _magnitude_ _of_ _the_ _SPELL_ _force_
+_equation_ _3_ _can_ _be_ _matched_ _by_ _the_ _Gaussian_ _MMD_ _force_ _equation_ _C.11_ _at_ _any_ _chosen_ _distance_
+_d_ 0 _∈_ (0 _, r_ ) _by an appropriate bandwidth σ; (ii) with this matching and radius, SPELL is recovered_
+_as a radius-thresholded instance of MMD-gradient guidance_ .
+
+
+**Proposition** **2.** _Fix_ _α, λ, r_ _>_ 0 _and_ _let_ _d_ 0 _∈_ (0 _, r_ ) _._ _There_ _exists_ _σ_ _>_ 0 _such_ _that_ _∥F_ rad( _**d**_ ) _∥_ =
+_∥FG_ ( _**d**_ ; _σ_ ) _∥_ _at ∥_ _**d**_ _∥_ = _d_ 0 _; equivalently,_
+
+
+_α_ ( _r −_ _d_ 0) = _λ_ [2] _[d]_ [0] - _−_ _[d]_ 0 [2]
+
+_σ_ [2] [exp] 2 _σ_ [2]
+
+
+_._ (C.12)
+
+
+_Solving Equation C.12 in closed form via the Lambert W_ _-function yields_
+
+
+_σ_ [2] = _−_ _d_ [2] 0
+
+
+  2 _W_ 0 _−_ _[α]_ [ (] _[r][ −]_ _[d]_ [0][)] _[ d]_ [0]
+
+
+_d_ 0
+_and hence_ _σ_ = (C.13)
+
+- _[,]_ ~~�~~ - - _[,]_
+
+_−_ 2 _W_ 0 _−_ _[α]_ [(] _[r][−]_ 4 _[d]_ _λ_ [0][)] _[d]_ [0]
+
+
+4 _λ_
+
+
+_where W_ 0 _is the principal branch._ _A real solution exists whenever the argument lies in_ [ _−e_ _[−]_ [1] _,_ 0) _,_
+_i.e.,_ _[α]_ [(] _[r][−]_ 4 _[d]_ _λ_ [0][)] _[d]_ [0] _≤_ _e_ _[−]_ [1] _._
+
+
+_σ_ _[d]_ [2][0] [exp(] _[−]_ 2 _[d]_ _σ_ 0 [2][2] [)] [and] [set] _[s]_ [:=] 2 _dσ_ [2] 0 [2] [.] [This] [gives] _[e]_ _s_ _[s]_
+
+
+_Proof._ At _∥_ _**d**_ _∥_ = _d_ 0, suppose _α_ ( _r −_ _d_ 0) = _λ_ [2] _[d]_ [2][0]
+
+
+_α_ ( _r−_ 4 _dλ_ 0) _d_ 0 [,] [and] [we] [rearrange] _[s e][−][s]_ [=] _[α]_ [(] _[r][−]_ 4 _[d]_ _λ_ [0][)] _[d]_ [0]
+
+
+4 _[d]_ _λ_ [0][)] _[d]_ [0] . Using _−s e_ _[−][s]_ = _−_ _[α]_ [(] _[r][−]_ 4 _[d]_ _λ_ [0][)] _[d]_ [0]
+
+
+_s_ [=]
+
+
+4 _λ_ [0] [0] and _−s_ = _W_ 0( _·_ )
+
+
+yields _s_ = _−W_ 0� _−_ _[α]_ [(] _[r][−]_ 4 _[d]_ _λ_ [0][)] _[d]_ [0] �, and Equation C.13 follows from _σ_ [2] = _d_ [2] 0 _[/]_ [2] _[s]_ [.] [The] [existen][ce]
+
+condition is the standard domain restriction for _W_ 0.
+
+
+yields _s_ = _−W_ 0� _−_ _[α]_ [(] _[r][−][d]_ [0][)] _[d]_ [0]
+
+
+**Remark 1** (Equivalent forms) **.** _For α_ = _λ_ = 1 _, one may report equation C.13 in various but equiv-_
+_alent forms depending on branch/argument conventions from W_ 0 _Lambert function._ _The principal-_
+_branch expression equation C.13 is the most transparent for analysis._
+
+
+2
+**Proposition 3** (SPELL as radius–thresholded MMD guidance) **.** _Let E_ ( _**x**_ ) = MMD [�] _kσ_ [(] _[{]_ _**[x]**_ _[}][,][ D][−]_ [)] _[ be]_
+_the MMD potential from Sec. 4 with an RBF kσ._ _Consider the_ thresholded _guidance field_ _F_ [˜] ( _**d**_ ) =
+**1** _{∥_ _**x**_ _−_ _**y**_ _∥_ _< r} · ∇_ _**x**_ _E_ ( _**x**_ ) _for each reference_ _**y**_ _in the shield._ _Then:_
+
+
+_1._ _Directional_ _alignment:_ _F_ ˜( _**d**_ ) _is_ _radial_ _and_ _points_ _along_ ( _**x**_ _−_ _**y**_ ) _._ _This_ _follows_ _from_
+_the_ _weighted-repellency_ _form_ _of_ _∇E_ _for_ _a_ _radial_ _kernel_ _by_ _weighted-repellency_ _form:_
+
+2
+_∇_ _**x**_ MMD [�] _kσ_ [(] _[{]_ _**[x]**_ _[}][,][ D][−]_ [)] [=] _σ_ 2 [2] _[Z]_ [(] _**[x]**_ [)]   - _**x**_ _−_ [�] _i_ _[w][i]_ [(] _**[x]**_ [)] _**[y]**_ _[i]_   - _,_ _which_ _for_ _a_ _single_ _**y**_ _reduces_ _to_
+
+_a radial vector proportional to_ ( _**x**_ _−_ _**y**_ ) _._
+
+
+_2._ _Magnitude_ _matching_ _at_ _a_ _predefined_ _d_ 0 _∈_ (0 _, r_ ) _:_ _choosing_ _σ_ _by_ _Equation_ _C.13_ _ensures_
+_∥F_ [˜] ( _**d**_ ) _∥_ = _∥F_ rad( _**x**_ _−_ _**y**_ ) _∥_ _at_ _∥_ _**x**_ _−_ _**y**_ _∥_ = _d_ 0 _by_ _radius–bandwidth_ _matching_ _shown_ _in_
+_Proposition C.1._
+
+
+Hence, with radius and a bandwidth _σ_ matched at a representative _d_ 0, the SPELL field in Equation 3
+is recovered as a radius–thresholded instance of our MMD-gradient guidance, up to scaling by _λ, σ_
+in Equation C.13.
+
+
+**Practical mapping to** _zt_ **.** As in the main text, we apply the force in the clean space by evaluating
+_zt_ and steering the sampler through the corrected target _x_ �0, i.e., _**x**_ _←_ _zt_ in Equation C.11. The
+sparsity of SPELL is thus obtained by hard gating, while our MMD view clarifies how the strength
+can be matched at a chosen distance via _σ_ .
+
+
+18
+
+
+D IMPLEMENTATION DETAILS
+
+
+D.1 IMPLEMENTATION ON SAFETY-GUIDED FLOW
+
+
+We describe a simple and efficient PyTorch (Paszke et al., 2019) implementation of negative guidance on Safety-Guided Flow. In all experimental cases, the kernel bandwidth parameter _σ_ is adaptively set according to _σ_ = _γ_ = 1 _/N_ _·k_ [�] _i_ _[N]_ =1 _−_ �log( _kj_ =1 _ε_ _[∥]_ ) _[x][i][−][y][i,]_ [(] _[j]_ [)] _[∥]_ [2] _[,]_ _[k]_ [=] [3][.] [The] [detailed procedure is]
+
+decribed in the function named estimate_rbf_gamma as below.
+
+
+def grad_mmd(x: torch.Tensor, refs: torch.Tensor, gamma: float = -1.0, k: int = 3, eps: float
+
+= 0.05, batch_size: int = 1024) -> Tuple[torch.Tensor, float]:
+"""
+Compute grad_x sum_j k(x_i, y_j) with the RBF kernel
+
+k(x, y) = exp(-gamma     - x     - y^2).
+Returns the batch of gradients (same shape as x) and a scalar summary.
+
+
+x : [N, ...] current samples
+refs : [M, ...] reference (negative) set
+"""
+orig_shape = x.shape
+X = x.reshape(x.size(0), -1) # [N, D]
+Y = refs.reshape(refs.size(0), -1) # [M, D]
+
+
+# bandwidth selection (top-k heuristic) if gamma is not provided
+if gamma <= 0:
+
+gamma = estimate_rbf_gamma(X, Y, k=k, eps=eps)
+
+
+# For K_ij = exp(-gamma   - x_i   - y_j^2),
+# d/dx_i sum_j K_ij = sum_j -2   - gamma   - K_ij   - (x_i   - y_j)
+dK_dX = rbf_kernel_grad(X, Y, gamma, batch_size=batch_size) # [N, D]
+return dK_dX.view(orig_shape), dK_dX.mean().item()
+
+
+def rbf_kernel_grad(X: torch.Tensor, Y: torch.Tensor, gamma: float, batch_size: int = 1024) ->
+
+torch.Tensor:
+"""
+Batched computation of:
+
+G_i = sum_j -2     - gamma     - exp(-gamma *x_i     - y_^2)     - (x_i     - y_j)
+"""
+N, D = X.shape
+out = torch.zeros_like(X)
+
+
+for i in range(0, N, batch_size):
+
+Xi = X[i:i+batch_size] # [b, D]
+d2 = torch.cdist(Xi, Y, p=2)**2 # [b, M]
+K = torch.exp(-gamma     - d2) # [b, M]
+diff = Xi.unsqueeze(1)     - Y.unsqueeze(0) # [b, M, D]
+grad = (-2.0     - gamma)     - (K.unsqueeze(-1)     - diff).sum(dim=1) # [b, D]
+out[i:i+batch_size] = grad
+
+
+# optional: free memory on GPU
+del Xi, d2, K, diff, grad
+if out.device.type == "cuda":
+
+torch.cuda.empty_cache()
+return out
+
+
+def estimate_rbf_gamma(X: torch.Tensor, Y: torch.Tensor, k: int = 3, eps: float = 0.05,) ->
+
+torch.Tensor:
+"""
+Top-k neighbor distance heuristic:
+
+gamma = -log(eps) / mean_{i, j in N_k(i)} x_i     - y_j^2
+Skips the potential self-distance by starting from index 1.
+"""
+d2 = torch.cdist(X, Y, p=2)**2 # [N, M]
+d2_sorted, _ = torch.sort(d2, dim=1)
+k_eff = min(max(k, 1), d2_sorted.shape[1]   - 1)
+r2 = d2_sorted[:, 1:k_eff+1].mean().clamp_min(1e-12)
+return -torch.log(torch.tensor(eps, device=X.device)) / r2
+
+
+Negative guidance in Safety-Guided Flow is applied in the _x_ 0 space. In diffusion-based frameworks, the scheduler typically provides a function that predicts _x_ 0. For flow matching, we adopt the
+formulation using _s_ = 0.
+
+
+We also provide pseudo-code for our negative guidance, as illustrated in Algorithm 1. In image
+generation tasks, we set _N_ = 1. Since the estimation does not rely on sequential dependencies,
+
+
+19
+
+
+**Algorithm 1** Safety-Guided Flow (SGF)
+
+
+**Input:** A pre-trained diffusion model _**ϵθ**_ or a pre-trained flow-matching model _**vθ**_ ; Unsafe data
+_D_ _[−]_ = _{_ **y** _i}_ _[N]_ _i_ =1 [; Coefficient for negative guidance] _[ λ]_ [(] _[t]_ [)][; Time index for denoising steps] _[ t][ ∈]_ [[] _[T,]_ [ 0]][;]
+Time windows for negative guidance _C_ = [ _T, sc_ ].
+**for** _t_ = _T_ **to** 0 **do**
+
+
+**x** ˆ0 _|t_ = E[ **x** 0 _|_ **x** _t_ ] _←_ _α_ 1 _t_ - **x** _t −_ _σt_ _**ϵθ**_ ( **x** _t, t_ )� for SD-v1.4 and SD-v2.1
+**x** ˆ0 _|t_ _←_ **x** _t_ + (0 _−_ _t_ ) _·_ _**v**_ _θ_ ( **x** _t, t_ ) for SD-v3
+If _t ∈_ _C_ :
+
+
+**x** _[′]_ 0 _|t_ _←_ **x** ˆ0 _|t_ + _λ_ ( _t_ ) _· ∇x_ ˆ0 _|tE_ (ˆ **x** 0 _|t, D_ _[−]_ )
+Else:
+
+
+**x** _[′]_ 0 _|t_ _←_ **x** ˆ0 _|t_
+**x** _t−_ 1 = Solver( **x** _t, t,_ **x** _[′]_ 0 _|t_ )
+**end for**
+
+
+it naturally benefits from GPU-based parallelism, resulting in efficient computation. Consequently,
+
+2
+evaluating _∇_ MMD [�] _kσ_ [becomes] [straightforward.] [The] [overall] [computational] [cost] [is] [comparable] [to]
+Safe Denoiser (Kim et al., 2025b) and SPELL (Kirchhof et al., 2025).
+
+
+D.2 2D MOTIVATION EXAMPLE
+
+
+This subsection provides implementation details for the 2D motivation example. For pre-training
+flow functions, we utilize the code base of Lipman et al. (2024) [5] . This implementation includes a
+function that learns the velocity function using MLP networks using total four of 512 dimensional
+hidden layers and Swish activation and generates samples via an Euler-based ODE integrator provided by Chen (2018). In this experiment, we employ a second-order integrator, called Midpoint,
+for accurate samples, with negative guidance applied only at each computation of the midpoint. The
+heuristic approach was found to enhance the stability of the results. We generate samples through
+50 integration steps. In this experiment, we use _λ_ = 0 _._ 002, and the time windows for “Full” are
+
+[1 _._ 0 _,_ 0 _._ 0] and “Early stop” are [1 _._ 0 _,_ 0 _._ 5]. During velocity function training, we use a batch size of
+4 _,_ 096, 20 _,_ 001 training steps, and a learning rate of 0 _._ 0001. Additionally, we provide the code snippet to generate training and negative datasets. When our safety-guided flow involves, we randomly
+sample 2,048 datapoints for negative guidance. To obtain quantitative results, we use the Python
+Optimal Transport library (POT) [6] to calculate the Wasserstein distance with the ‘exact’ option.
+
+
+D.3 SAFE GENERATION AGAINST NUDITY PROMPTS
+
+
+We strictly follow the experimental setup of Yoon et al. (2024); Kim et al. (2025b). In particular, the construction of negative datapoints and the evaluation scripts are identical to their setup
+(Kim et al., 2025b). For rigorous validation, we obtained the authors’ codebase and checkpoints
+for training-based baselines (ESD and RECE) to ensure comparability. Here, we briefly summarize implementation details. For comprehensive implementation details, please refer to Kim et al.
+(2025b).
+
+
+**Nudity prompt datasets** We evaluate on three widely used red-teaming benchmarks focused on
+nudity. Ring-A-Bell generates adversarial prompts via white-box nudity attacks (Tsai et al., 2024).
+During the dataset generation process, the white-box adversarial attack method did not directly
+access the model parameters. Consequently, nudity images were produced across various models,
+although the level of nudity was relatively low compared to black-box attack datasets we discuss
+later. We adopt the curated subset of 79 prompts (from the original 285) used by previous baselines.
+The curated split is available from the official repository of Gong et al. (2024) [7] and Yoon et al.
+(2024) [8] .
+
+
+[5https://github.com/facebookresearch/flow_matching](https://github.com/facebookresearch/flow_matching)
+[6https://pythonot.github.io](https://pythonot.github.io)
+[7https://github.com/CharlesGong12/RECE](https://github.com/CharlesGong12/RECE)
+[8https://github.com/jaehong31/SAFREE](https://github.com/jaehong31/SAFREE)
+
+
+20
+
+
+def train_get(batch_size: int = 2000, device: str = ’cpu’, num_clusters: int = 8, r: float =
+
+4.0, std: float = 0.4,
+):
+
+"""
+Sample a 2D ring of Gaussian clusters.
+Returns a tensor of shape [batch_size, 2] on the given device.
+"""
+cluster_ids = torch.randint(0, num_clusters, (batch_size,), device=device)
+angles = 2   - np.pi   - cluster_ids / num_clusters
+cx = r   - torch.cos(torch.tensor(angles, device=device))
+cy = r   - torch.sin(torch.tensor(angles, device=device))
+x = cx + std   - torch.randn(batch_size, device=device)
+y = cy + std   - torch.randn(batch_size, device=device)
+data = torch.stack([x, y], dim=1)
+return data.float()
+
+
+def neg_get(batch_size: int = 200, region: int = 0, device: str = ’cpu’, num_clusters: int =
+
+8, r: float = 4.0, std: float = 0.4):
+"""
+Generate a negative dataset by sampling only from cluster index
+’region’ (0 <= region < num_clusters). Returns [batch_size, 2].
+"""
+# sample only from the specified region cluster
+cluster_ids = torch.full((batch_size,), region, dtype=torch.long, device=device)
+angles = 2   - np.pi   - cluster_ids / num_clusters
+cx = r   - torch.cos(torch.tensor(angles, device=device))
+cy = r   - torch.sin(torch.tensor(angles, device=device))
+x = cx + std   - torch.randn(batch_size, device=device)
+y = cy + std   - torch.randn(batch_size, device=device)
+data = torch.cat([x.unsqueeze(1), y.unsqueeze(1)], dim=1)
+return data.float()
+
+
+UnlearnDiff is a collection of text prompts designed to create harmful content from SD-v1.4 Zhang
+et al. (2024). The dataset covers multiple not sale for work (NSFW) categories, including selfharm, shocking content, and sexual content. In this work, we focus exclusively on the nudity subset,
+consisting of 116 prompts obtained by removing 27 entries that overlapped with other NSFW categories (e.g., self-harm, shocking content), following the curation used in prior baselines. This
+split ensures a fair comparison by isolating nudity-related prompts from unrelated harmful fac[tors. The dataset is publicly available at https://github.com/CharlesGong12/RECE and](https://github.com/CharlesGong12/RECE)
+[https://github.com/jaehong31/SAFREE.](https://github.com/jaehong31/SAFREE)
+
+
+MMA-Diffusion is considered as the most challenging benchmark among the three datasets, as it
+is explicitly constructed to create sexual content through adversarial prompting (Yang et al., 2024).
+Unlike natural human-written queries, many of its prompts are synthetic and semantically incoherent, but they are highly effective in generating sexual outputs in SD-v1.4. Because the dataset
+relies on black-box adversarial attacks tailored to the parameters of SD-v1.4, its prompts do not
+instantly transfer to other generative models. Despite their unnatural textual prompts, the resulting generations often contain highly unsafe imagery, making MMA-Diffusion an intensive test for
+safety mechanisms. In other words, this benchmark probes a regime in which the base drift _f_ [˜]
+can dominate from the perspective of Equation 8. In our experiments, we adopt the curated set
+of 1 _,_ 000 adversarial prompts distributed with the baseline repositories. This dataset is also available at the dataset is publicly available at [https://github.com/CharlesGong12/RECE](https://github.com/CharlesGong12/RECE)
+[and https://github.com/jaehong31/SAFREE.](https://github.com/jaehong31/SAFREE)
+
+
+**Reference** **negative** **images** For nudity-safe generation, we employ 515 reference images from
+I2P Schramowski et al. (2023), all generated by SD-v1.4. Each image satisfies a NudeNet score
+
+_>_ 0 _._ 6 (nude class probability), following the criterion used in the manuscript. To provide readers
+with a better understanding of the task, we have included visual representative samples shown in
+Figure D.1 from Kim et al. (2025b). To ensure comparability, the 515 nudity references are attached
+in the supplementary materials.
+
+
+**Hyper-parameters** We follow the same generation pipeline as proposed in Kim et al. (2025b).
+Specifically, we use SD-v1.4 [9], as all adversarial prompts are constructed for this model by attack
+
+
+[9https://huggingface.co/CompVis/stable-diffusion-v1-4](https://huggingface.co/CompVis/stable-diffusion-v1-4)
+
+
+21
+
+
+Figure D.1: Reference images for safe generation against nudity prompts
+
+
+methods, ensuring consistency between the attack and the safety mechanism evaluation. This setup
+utilizes the DDPM Sampler (Ho et al., 2020) with 50 denoising steps. For the bandwidth parameter
+_σ_ of the radial basis kernel function, we employ an empirical estimate during all negative guidance
+computations, as discussed in Subsection D.1.
+
+
+For the coefficient of negative guidance, we employ _λ_ ( _t_ ) = 0 _._ 0015 within the time window [1 _._ 0 _,_ 0 _._ 6]
+for Table 1. For an ablation study, we consider the setup _λ_ ( _t_ ) = 0 _._ 03 with the time window [1 _._ 0 _,_ 0 _._ 8]
+as a starting point. In Figure 4a and Figure 4c, we use _λ_ ( _t_ ) = 0 _._ 03 for all experiments, whereas we
+use _λ ×_ ∆ _t_ = 0 _._ 006 for all cases in Figure 4b. For instance, the case with time window [1 _._ 0 _,_ 0 _._ 4]
+utilizes _λ_ ( _t_ ) = 0 _._ 01.
+
+
+D.4 DIVERSITY
+
+
+We follow the protocol of Kirchhof et al. (2025). Because the authors’ codebase is not publicly
+accessible, we re-implement their evaluation and apply our method under the same conditions. As
+the underlying generative model, we use Stable Diffusion 3, a state-of-the-art flow-matching model
+(Esser et al., 2024) [10] . Based on Table 1 of Kirchhof et al. (2025), where SPELL underperforms in
+the flow-matching regime, we re-implement SPELL, and we observe that both ours and SPELL are
+compatible on SD-v3 under identical settings. We adopt ImageNet-1k to obtain class-conditioned
+text prompts and to measure the diversity of generated samples against the validation split. For
+computational efficiency, we evaluate on the first half of the ImageNet classes (500 out of 1 _,_ 000).
+Prompts are the canonical ImageNet class names with a template _"a photo of a {class name}"_ .
+
+
+**Reference negative images** For each class _c_ used to form prompts, we construct a class-specific
+reference set of negative datapoints from the ImageNet training split. To prevent leakage, this set is
+strictly disjoint from the validation images used by the diversity metrics. We sample a fixed number
+50 images per class and reuse the same negative points across all generations for class _c_ to ensure
+reproducibility.
+
+
+**Hyper-parameters** We follow the same generation pipeline of Kirchhof et al. (2025). Specifically, we use SD-v3-medium with Euler Integration and 50 denoising steps. We employ CFG value
+as 3 _._ 5 for fidelity and coverages. For the bandwidth parameter _σ_ of the radial basis kernel function, we employ an empirical estimate during all negative guidance computations, as discussed in
+Subsection D.1. As summarized in Table 2, we report results with _λ_ ( _s_ ) = 1 _._ 0 following Kirchhof
+et al. (2025), and additionally a small-budget setting with _λ_ ( _s_ ) = 0 _._ 03. For SPELL, we follow same
+hyper-parameter _r_ = 200 described in Kirchhof et al. (2025).
+
+
+D.5 MEMORIZATION
+
+
+This experiment evaluates whether our negative guidance mitigates training-data memorization with
+minimal impact on generation quality. We adopt the memorization-inducing training recipe of
+
+
+[10https://huggingface.co/stabilityai/stable-diffusion-3-medium](https://huggingface.co/stabilityai/stable-diffusion-3-medium)
+
+
+22
+
+
+Somepalli et al. (2023), using the official repository [11] to overfit a diffusion model on ImageNette [12] .
+We then apply our negative guidance at inference time. Following a worst-case assumption, we
+treat the training split as a proxy for potentially memorized images and guide generation away from
+them. We use ImageNette, a 10-class subset of ImageNet, with simple class-conditional prompts.
+We use the template _“An image of a {class name}”_, which mirrors the class-name prompts used in
+our diversity experiments.
+
+
+**Reference negative images** Likewise the experiment of diversity, for each class _c_, we construct a
+class-specific reference set of negative datapoints from the ImageNette training split.
+
+
+**Hyper-parameters.** For overfitting, we start from SD-v2.1 [13] . When generating samples with the
+memorized models, we follow the official configuration with the class level option and set CFG
+to 7 _._ 5. Other sampler and denoising steps are maintained consistent with the official codebase for
+comparability. For our MMD-based negative guidance, we use the empirical estimation in Subsection D.1 to determine all kernel bandwidth choices _σ_ . We set _λ_ ( _t_ ) = 0 _._ 03 for both full and early
+stop time windows. The early stop time window is defined as [1 _._ 0 _,_ 0 _._ 8].
+
+
+E ADDITIONAL DISCUSSION
+
+
+E.1 GENERATIVE MODELS OUTSIDE OUR THEORETICAL REGIME
+
+
+The decreasing weight conclusion is a mathematical consequence of our forward-time dynamics
+model as shown in Theorem 2. From the dynamics it follows that the guidance schedule is more
+influential at an earlier time. Also, requiring less at a later time relies on Assumption 1, especially
+(b); this assumption is natural for the situations where the drift diminishes near the end of the flow.
+This holds in image based diffusion models that are commonly used for frontier image generation.
+Specifically, the magnitude of the denoising updates typically becomes smaller as the process approaches the data manifold. Our theoretical result about earlier guidance being more effective is
+derived under exactly this type of schedule.
+
+
+However, there are diffusion language models where these conditions do not hold. Recent works on
+masked diffusion LLMs (Ben-Hamu et al., 2025; Luxembourg et al., 2025; Kim et al., 2025c) aim
+to reduce inference cost while preserving final performance by changing the unmasking pattern over
+time. In many of these acceleration methods, the model starts with very conservative unmasking in
+the early steps and then increases the number of unmasked tokens later, so the effective update size
+can grow in the later part of the trajectory. This is the opposite trend from the standard image and
+video schedules that we consider. In such cases, the assumptions used in our theorem are violated,
+and one would need a more general analysis tailored to these acceleration schedules in order to
+obtain a rigorous justification.
+
+
+In contrast, for image and video generation, both our experiments and the reviewer’s understanding
+rely on the usual schedulers whose step sizes and effective drift magnitudes decrease over time. In
+this regime, the theoretical analysis in our paper is well aligned with the practical sampling behavior,
+and the conclusion that earlier safety guidance is preferable is consistent with both the assumptions
+and the empirical ablations.
+
+
+E.2 SENSITIVITY TO THE SIZE AND QUALITY OF _D_ _[−]_
+
+
+Sensitivity to the size and quality of the negative set has already been carefully studied in the ablation
+experiments of Safe Denoiser (Kim et al., 2025b), in particular in Figure 5(a). Since our method
+recovers the Safe Denoiser, we expect the same qualitative trend to hold here as well. In that study,
+when the number of negative samples is reduced, the attack success rate increases, which indicates
+that it is important for the negative set to be large and diverse enough to cover the unsafe distribution
+in a meaningful way.
+
+
+[11https://github.com/somepago/DCR](https://github.com/somepago/DCR)
+[12https://github.com/fastai/imagenette](https://github.com/fastai/imagenette)
+[13https://huggingface.co/stabilityai/stable-diffusion-2-1](https://huggingface.co/stabilityai/stable-diffusion-2-1)
+
+
+23
+
+
+This dependence on the data is not unique to SGF. Most defence methods that rely on data driven
+signals, including learned pre-filter and post-filter approaches, require sufficient and representative
+datapoints in order to learn or apply effective safety functions. In this sense, the need for a reasonably
+rich negative set is a general limitation shared by defence methods and safe generation systems,
+rather than a specific drawback of our framework.
+
+
+F ADDITIONAL EXPERIMENTS
+
+
+F.1 SAFE GENERATION AGAINST NUDITY PROMPTS
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+|MMA<br>Ring-|a-bell|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|~~Unlea~~|~~rnDiff~~|~~rnDiff~~||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+[1.0, 0.8] [0.8, 0.6] [0.6, 0.4] [0.4, 0.2] [0.2, 0.05]
+Time windows
+
+(c) Shift Time Window
+
+
+0.0
+
+|MMA<br>Ring-|a-bell|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|~~Unlea~~|~~rnDiff~~|~~rnDiff~~||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+[1.0, 0.8] [1.0, 0.6] [1.0, 0.4] [1.0, 0.2] [1.0, 0.05]
+Time windows
+
+(a) Equal _λ_ ( _t_ )
+
+
+0.0
+
+|MMA<br>Ring-<br>Unlea|a-bell<br>rnDiff|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+[1.0, 0.8] [1.0, 0.6] [1.0, 0.4] [1.0, 0.2] [1.0, 0.05]
+Time windows
+
+(b) Equal   - _λ_ ( _t_ ) _dt_
+
+
+Figure F.2: Ablation on time windows of negative guidance for Safe Denoiser
+
+
+We conducted an ablation study using the same ablation study as depicted in Figure 4 to evaluate
+SAFEE and Safe Denoiser. As shown in Figure F.2, we observe that the same patterns emerge across
+all cases for budget, except for the case of “Ring-A-Bell” for the time window [1 _._ 0 _,_ 0 _._ 05] in the equal
+_λ_ ( _t_ ) situation.
+
+
+F.2 DIVERSITY
+
+|CFG Model Budget Time Windows|FID ↓ CLIP ↑ AES ↑|Recall ↑ Vendi ↑ Converage ↑ Precision ↑ Density ↑|
+|---|---|---|
+|3.5<br>SDv3<br>-<br>-<br>SPELL<br>0.03<br>[1.0, 0.78]<br>[1.0, 0.00]<br>1<br>[1.0, 0.78]<br>[1.0, 0.00]<br>Ours<br>0.03<br>[1.0, 0.78]<br>[1.0, 0.00]<br>1<br>[1.0, 0.78]<br>[1.0, 0.00]|29.77<br>31.50<br>5.554<br>32.77<br>30.68<br>5.576<br>38.23<br>30.30<br>5.733<br>48.50<br>28.17<br>5.051<br>51.76<br>28.14<br>5.190<br>31.95<br>30.75<br>5.564<br>37.26<br>30.39<br>5.733<br>31.81<br>30.78<br>5.560<br>36.81<br>30.47<br>5.727|0.139<br>2.878<br>0.578<br>0.883<br>1.187<br>0.138<br>3.105<br>0.501<br>0.826<br>0.991<br>0.115<br>3.152<br>0.435<br>0.794<br>0.828<br>0.353<br>5.872<br>0.423<br>0.521<br>0.538<br>0.300<br>5.560<br>0.370<br>0.530<br>0.490<br>0.140<br>3.082<br>0.520<br>0.833<br>1.031<br>0.126<br>3.140<br>0.451<br>0.808<br>0.860<br>0.135<br>3.076<br>0.518<br>0.836<br>1.041<br>0.119<br>3.126<br>0.457<br>0.811<br>0.886|
+|5.5<br>SDv3<br>-<br>-<br>SPELL<br>0.03<br>[1.0, 0.78]<br>[1.0, 0.00]<br>1<br>[1.0, 0.78]<br>[1.0, 0.00]<br>Ours<br>0.03<br>[1.0, 0.78]<br>[1.0, 0.00]<br>1<br>[1.0, 0.78]<br>[1.0, 0.00]|34.58<br>31.41<br>5.651<br>36.27<br>31.18<br>5.660<br>40.81<br>30.69<br>5.771<br>34.58<br>30.86<br>5.596<br>40.20<br>30.44<br>5.709<br>36.00<br>31.21<br>5.660<br>40.31<br>30.75<br>5.774<br>35.87<br>31.22<br>5.656<br>39.91<br>30.78<br>5.774|0.082<br>2.692<br>0.511<br>0.855<br>1.086<br>0.086<br>2.686<br>0.488<br>0.836<br>1.020<br>0.074<br>2.803<br>0.425<br>0.804<br>0.866<br>0.125<br>3.060<br>0.474<br>0.793<br>0.926<br>0.110<br>3.090<br>0.415<br>0.767<br>0.790<br>0.076<br>2.680<br>0.489<br>0.840<br>1.044<br>0.087<br>2.804<br>0.436<br>0.808<br>0.876<br>0.081<br>2.677<br>0.493<br>0.841<br>1.035<br>0.080<br>2.794<br>0.440<br>0.816<br>0.900|
+
+
+Table F.1: Extended performance comparison of _’class-of-image’_ task for diversity using ImageNet
+dataset including CFG= 5 _._ 0.
+
+
+Table F.1 dives into the diversity and fidelity performance of both SPELL and our model, including
+a CFG value of 5.5. Consistently, we observe that the early stop strategy doesn’t negatively impact
+generation performance in FID and CLIP, but it actually enhances diversity metrics, particularly the
+Vendi score. When comparing our model to SPELL, it overall achieves better performance, with a
+notable improvement emerging at a CFG value of 3.5. Interestingly, high CFG values, such as 5.5,
+have been reported to reduce the diversity of generated images by excessive dominance, resulting
+in the overlooking of other aspects. This finding is also evident in the experiment conducted with a
+CFG value of 5.5.
+
+
+24
+
+
+F.3 MEMORIZATION
+
+
+Numerical analysis is described in Table F.2 by varying a time window. In this experiment, we maintained the same _λ_ ( _t_ ) = 0 _._ 03 and measured FID and CLIP to assess image fidelity and alignment
+with text and images. Additionally, we evaluated @Sim 95% to indicate how closely the generated
+images resemble the training data points. We observed that the early stop strategy also improved
+the FID scores, suggesting that negative guidance plays a crucial role in maintaining image quality.
+Notably, unlike previous examples, we found that negative guidance positively impacts the mitigation of memorization when reviewing @Sim 95%, although its effect is not as significant as the
+improvement in FID scores. Overall, we observed that the early stop strategy positively influences
+generation performance without compromising on minimal performance sacrifices.
+
+
+Model Time Windows Budget CLIP _↑_ FID _↓_ @Sim 95% _↓_
+
+
+Memorized SDv2.1
+
+
+[1.0, 0.05] 0.03 31.35 43.07 0.317
+
+[1.0, 0.2] 0.03 31.32 40.35 0.324
+
+[1.0, 0.4] 0.03 31.15 36.97 0.334
+
+[1.0, 0.6] 0.03 30.93 35.66 0.328
+
+[1.0, 0.8] 0.03 30.93 32.44 0.338
+
+
+Table F.2: Performance of similarity and image qulaity by varying a time window in memorization
+experiments.
+
+
+G GRAPHICAL EXAMPLES
+
+
+G.1 SAFE GENERATION AGAINST NUDITY PROMPTS
+
+
+Figure G.3: Generated images from baselines and our method on nudity prompts. We deliberately
+chose challenging cases that remain difficult for recent models rather than trivial examples.
+
+
+25
+
+
+(a) Case 1: Generated images varying time windows with same _λ_ ( _t_ ) = 0 _._ 03
+
+
+(b) Case 2: Generated images varying time windows with same _λ_ ( _t_ ) = 0 _._ 03
+
+
+Figure G.4: Generated images on challenging nudity prompts under varying negative-guidance windows demonstrate the existence of a critical window. All images are generated by SAFREE + Ours.
+As the window length increases, nudity attributes unexpectedly reappear. This phenomenon is similar to the third case in Figure 2c, where prolonged negative guidance amplifies instability, hindering
+the denoising process and leaving samples concentrated in unsafe regions. This observation extends
+to real nudity prompts.
+
+
+(a) Case 3: Generated images varying time windows with same _λ_ ( _t_ ) = 0 _._ 03
+
+
+(b) Case 4: Generated images varying time windows with same _λ_ ( _t_ ) = 0 _._ 03
+
+
+Figure G.5: Generated images on challenging nudity prompts where previous methods fail. All
+images are generated by SAFREE + Ours. While varying negative-guidance windows shows limited
+effect for baselines, our method removes nudity while preserving the contextual semantics of the
+prompts. However, we also observe that larger time windows reduce image fidelity, indicating the
+importance of a critical window for guidance.
+
+
+26
+
+
+G.2 SAFE GENERATION FOR INTELLECTURAL PROPERTY
+
+
+We revisit intellectual property control in diffusion models under prompts that can reveal copyrighted styles even when the artwork is never named. Safe Denoiser suggest three types of IP sensitive prompts such as one that explicitly name the work or artist, another that provide only a textual
+description, and the third that mention neither but still cause the model to reproduce the protected
+style, which is the hardest case because text based defenses have no negative cue (Kim et al., 2025b).
+Safe Denoiser pays attention to the third case with Munch’s _The Scream_ . As shown in Figure G.6,
+the prompt _”If Barbie were the face of the world’s most famous paintings”_ makes SD v1.4 produce
+Barbie in a scene that closely matches the composition and style of the original painting despite the
+absence of any reference to Munch or to _The Scream._
+
+
+We adopt the same setup where the four versions of _The Scream_ are regarded as unsafe references
+while keeping the Barbie prompt fixed. With an early guidance window [1 _._ 0 _,_ 0 _._ 8], our method produces sharp Barbie portraits whose backgrounds preserve texture yet avoid Munch’s style, whereas
+extending the window to [1 _._ 0 _,_ 0 _._ 6] _,_ [1 _._ 0 _,_ 0 _._ 4] _,_ [1 _._ 0 _,_ 0 _._ 2] _,_ and [1 _._ 0 _,_ 0 _._ 05] progressively distorts geometry and background. This trend aligns with our two-dimensional flow matching analysis presented
+in Figure 2, which demonstrates that prolonged negative guidance distorts the distribution near the
+unsafe region.
+
+
+(a) Negative datapoints
+
+
+(b) Generated images from the baselines and our method. Our method uses a variant of time windows.
+
+
+Figure G.6: Style-level intellectual property control for The Scream. our method across different
+time windows that remove the Munch style while preserving the Barbie concept. Out of time windows, early window maintains image fidelity and effectively avoiding Munch’s style.
+
+
+27
+
+
+G.3 UNCRATED IMAGES IN MEMORIZATION
+
+
+Figure G.7: Generated images on artificially memorized SDv2.1 (Somepalli et al., 2023). All samples are drawn from the top 2% most similar to the Imagenette training set. In each block, the
+leftmost column shows the generated image, while the subsequent ten columns correspond to the
+top-1 through top-10 most similar images retrieved from the training split. Baseline models exhibit
+strong memorization, often reproducing near-duplicates of training images.
+
+
+Figure G.8: Generated images from our method on artificially memorized SDv2.1 (Somepalli et al.,
+2023). As in Figure G.7, all samples are taken from the top 2% most similar to the Imagenette training set, with the leftmost column showing the generated image and the next ten columns presenting
+the top-1 to top-10 most similar training images. Unlike baselines, our method mitigates memorization, yielding more diverse generations while still preserving image quality, thanks to early-stopped
+negative guidance that reveals a critical time window.
+
+
+28

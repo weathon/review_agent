@@ -1,0 +1,1135 @@
+# CHIFLOW: TORSIONAL ASYMMETRY FLOW MATCH- ING FOR CHIRALITY-AWARE PROTEIN BACKBONE GENERATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Protein backbone generation is critical for de novo protein design, yet existing
+methods suffer from two key limitations: over-reliance on SE(3) modeling, which
+introduces unnecessary complexity for cyclic dihedral angles, and lack of explicit
+chirality control, leading to nonfunctional D-chiral outputs. We present **ChiFlow**,
+a chirality-aware backbone generator based on flow matching on **toroidal** **Rie-**
+**mannian** **manifolds** . ChiFlow models backbone dihedrals _ϕ, ψ, ω_ as points on
+T [3], extending PPFlow to backbone variables and using periodicity to avoid boundary artifacts. Unlike the previous SE(3)-based flows such as Frameflow and Foldflow2, ChiFlow operates directly on the hypertorus, simplifying computations for
+angles. We also introduce a Riemannian mirroring operator and impose asymmetry on the learned vector field to enforce L-chirality. And we extended the methods in Foldingdiff by reconstructing the 3D atomic coordinates using fixed bond
+lengths and trigonometric calculations. To increase the diversity that was lowered by the chirality constraint, we added Stochastic Flow Matching to ChiFlow,
+resulting in an increase in diversity of the generated backbone. With extensive
+experiments on real-world protein datasets, ChiFlow approaches the leading flow
+models in the benchmark while maintaining absolute chirality purity. Our imple[ment detail is at https://anonymous.4open.science/r/anonym1.](https://anonymous.4open.science/r/anonym1)
+
+
+1 INTRODUCTION
+
+
+Proteins play a pivotal role in sustaining life, as their structural diversity underlies a wide spectrum
+of biological functions. The ability to design proteins with predetermined architectures and activities
+represents a major advance in biotechnology, providing systematic approaches that extend beyond
+natural evolutionary processes. Progresses made by methods like AlphaFold3 (Abramson et al.,
+2024) and ESM3 (Hayes et al., 2024) carries profound significance for medicine and public health,
+offering the potential to generate novel therapeutic strategies and address long-standing challenges
+in disease prevention and treatment. At the core of protein design lies the generation of accurate
+backbone structures (Tang et al., 2024a), since the backbone determines the overall fold and strongly
+constrains the positioning of side chains. Figure 1 shows the comparasion between the whole protein
+and the protein backbone.
+
+
+**Limitations of Existing Approaches** : Current SE(3)-based frameworks (Fuchs et al., 2020) represent protein backbones as sequences of SE(3) rigid frames (Yim et al., 2023a;b; 2024; Bose et al.,
+2024; Huguet et al., 2024), which are effective for capturing global structure but impose unnecessary
+complexity when modeling cyclic dihedral angles _ϕ, ψ, ω_ —the primary determinants of backbone
+conformation—by embedding them into SE(3)’s rotation component, thereby creating periodicity
+mismatches and boundary artifacts (Zhang et al., 2024). Moreover, natural proteins are exclusively
+L-chiral, yet existing approaches (Yim et al., 2023a;b; 2024; Bose et al., 2024; Fu et al., 2023; Song
+et al., 2023) lack explicit chirality enforcement, and they mostly base on SE(3) which can not model
+chirality (Dumitrescu et al., 2025b; Childs et al., 2025), which risks generating non-physical righthanded backbones (Childs et al., 2025). While torus geometry has been shown to effectively capture
+periodicity for sidechain torsion angles (Huguet et al., 2024), it has not been extended to backbone
+dihedrals or coupled with chirality constraints. Therefore, there remains a critical gap for a backbone
+generation framework that jointly leverages torus geometry and chirality-aware modeling.
+
+
+1
+
+
+(a) 7A0C (b) 2HHB (c) 5T4B (d) 1JZ8
+
+
+(e) 7A0C Backbone (f) 2HHB Backbone (g) 5T4B Backbone (h) 1JZ8 Backbone
+
+
+Figure 1: The comparasion between the original protein and the protein backbone
+
+
+**Proposed** **Method** : To address these limitations, we introduce **ChiFlow**, a chirality-aware flowmatching framework that operates directly on toroidal Riemannian manifolds (Chen & Lipman,
+2024) rather than SE(3) flow (Bose et al., 2024). Unlike SE(3) FrameFlow (Yim et al., 2023a),
+ChiFlow removes the burden of embedding periodic angles into rigid-body rotations; and unlike
+sidechain-focused torus approache (Lin et al., 2024a), it directly targets the backbone, the core
+structural determinant of protein folds. Through this integration, we achieve both competitive designability and sampling efficiency, while uniquely delivering **one** **hundred** **percent** **chirality** **pu-**
+**rity**, bridging a fundamental gap in backbone generation.
+
+
+**Contributions** : ChiFlow introduces three key advances in protein backbone generation:
+(1) **Toroidal** **Riemannian** **Manifold** framework that models backbone dihedrals natively on T [3] _[N]_,
+eliminating periodicity artifacts inherent in SE(3)-based methods; (2) **Chirality-Aware** **Flow**
+**Matching** approach via a Riemannian mirroring operator and asymmetric vector field constraint,
+guaranteeing absolute L-chirality without sacrificing designability; and (3) **Stochastic Flow Match-**
+**ing** on the torus that enhances conformational diversity while preserving geometric constraints.
+
+
+2 BACKGROUND & PRELIMINARIES
+
+
+2.1 PROTEIN BACKBONE DIHEDRALS & CHIRALITY
+
+
+A protein backbone consists of _N_ residues linked by peptide bonds
+(Abdin & Kim, 2023), with each residue’s conformation defined
+by three dihedral angles : _ϕ_ around the N-C _α_ bond, _ψ_ around the
+C _α_ -C bond, and _ω_ around the C-N peptide bond, which is nearly
+fixed at 0 in the trans state or _π_ in the cis state but remains cyclic.
+These angles determine secondary structures such as _α_ -helices,
+with _ϕ ≈−_ 57 _[◦]_ and _ψ_ _≈−_ 47 _[◦]_, and _β_ -sheets, with _ϕ ≈−_ 130 _[◦]_ and
+_ψ_ _≈_ 120 _[◦]_ (Ramachandran et al., 1963). And the dihedral angles
+will determine the chiral of the protein backbone, note that natural Figure 2: Chirality
+proteins are all inherently L-chiral (Cintas, 2002). A protein backbone is L-chiral if its dihedral angles, when mapped to 3D C _α_ coordinates, cannot be superimposed
+on their mirror image, that is, the D-chiral configuration, via translations alone. To model this attribute, let _X_ = _{x_ 1 _, . . ., xN_ _}_ _∈_ R [3] _[N]_ be C _α_ coordinates derived from dihedrals _χ_ _∈_ T [3] _[N]_, and
+
+
+2
+
+
+_M_ : R [3] _→_ R [3] be a mirroring operator, for example _M_ ( _x_ ) = ( _−x_ 1 _, x_ 2 _, x_ 3). _X_ is L-chiral if
+∄ _b ∈_ R [3] such that _M_ ( _X_ ) + _b_ = _X_ .
+
+
+2.2 TOROIDAL RIEMANNIAN MANIFOLDS
+
+
+This ensures that the interpolation path follows the geodesic of the manifold, respecting its intrinsic
+geometry (Bose et al., 2024; Chen & Lipman, 2024).
+
+
+3
+
+
+The 1-dimensional torus T can be defined as the quotient space T = R _/_ 2 _π_ Z (Lipman et al., 2023),
+where two real numbers _a_ and _b_ are equivalent if _a_ _−_ _b_ = 2 _πk_ for some _k_ _∈_ Z, making it a
+natural model for cyclic variables (Lin et al., 2024b) like dihedral angles. For protein backbone
+dihedrals, we work on the hypertorus T [3] = T _×_ T _×_ T, where each point _χ_ = ( _χϕ, χψ, χω_ ) _∈_ T [3]
+
+represents the three dihedral angles of a residue. At a point _χ_, the tangent space _Tχ_ T [3] is endowed
+with a conformal product metric _g_ T3 _|χ_ ( _u, v_ ) = [�] _k∈{ϕ,ψ,ω}_ _[w][k]_ [(] _[χ][k]_ [)] _[u][k][v][k]_ [,] [where] [the] [smooth,] [2] _[π]_ [-]
+
+periodic weights are given by _wk_ ( _χk_ ) = 1+sin [2] 1( _χk/_ 2) [.] [Extending this to] _[ N]_ [residues that make up]
+
+the whole protein backbone yields the product metric _g_ = [�] _n_ _[N]_ =1 _[g]_ [T][3][, w][hich induces the pointwise]
+norm _∥u∥_ [2] _g_ [=] _[g]_ [(] _[u, u]_ [)] [and] [the] [volume] [element] _[d]_ [vol] _[g]_ [=] �det _g_ ( _χ_ ) _dχ_ . Under this metric, the
+Riemannian gradient, d _√_ ivergence, and Laplace–Beltrami operators are respectively _∇gf_ = _g_ _[−]_ [1] _·∂f_,
+div _gX_ = ~~_√_~~ det1 _g_ _∂i_ - det _g X_ _i_ �, and ∆ _gf_ = div _g_ ( _∇gf_ ), all computed componentwise due to
+the product structure. For interpolation, we follow (Zhang et al., 2024) and define the geodesic
+_χt_ : [0 _,_ 1] _→_ T [3] between _χ_ 0 and _χ_ 1 as _χt_ = exp _χ_ 0� _t_ log _χ_ 0( _χ_ 1)�Mathieu & Nickel (2020), which
+in the flat product metric reduces to shortest-path interpolation on each circle, meaning that each
+angular coordinate evolves linearly along the minimal arc between its start and end values, with
+wrapping modulo 2 _π_ to preserve periodicity.
+
+
+2.3 FLOW MATCHING ON RIEMANNIAN MANIFOLDS
+
+
+Riemannian Flow Matching (RFM) provides a simulation-free
+framework for learning continuous normalizing flows on general
+Riemannian manifolds. Given a complete, connected smooth Riemannian manifold _M_ with metric _g_, the goal is to learn a timedependent vector field _vt_ ( _x_ ) that transports an initial distribution
+_p_ 0 to a target distribution _p_ 1 by satisfying the continuity equation
+_∂tpt_ + div _g_ ( _ptvt_ ) = 0 with boundary conditions _pt_ =0 = _p_ 0 and
+_pt_ =1 = _p_ 1 Chen & Lipman (2024).
+
+
+The key idea is to construct conditional probability paths _pt_ ( _x|x_ 1)
+that interpolate between _p_ 0 and Dirac distributions _δx_ 1 centered at
+data points _x_ 1 _∼_ _p_ 1. The marginal probability path is then defined
+as:
+
+
+Figure 3: Torus Manifold
+(Chen & Lipman, 2024)
+
+
+               _pt_ ( _x_ ) = _pt_ ( _x|x_ 1) _p_ 1( _x_ 1) _d_ vol _x_ 1 _._ (1)
+
+_M_
+
+
+and the target vector field is obtained by marginalizing conditional vector fields:
+
+
+_ut_ ( _x|x_ 1) _[p][t]_ [(] _[x][|][x]_ [1][)] _[p]_ [1][(] _[x]_ [1][)]
+_M_ _pt_ ( _x_ )
+
+
+   _ut_ ( _x_ ) =
+
+
+_pt_ ( _x_ ) _d_ vol _x_ 1 _._ (2)
+
+
+where _ut_ ( _x|x_ 1) generates _pt_ ( _x|x_ 1) from _p_ 0.
+
+
+For simple geometries where closed-form geodesics are available, the conditional flow can be defined using the geodesic distance _dg_ as a premetric. With the linear scheduler _κ_ ( _t_ ) = 1 _−_ _t_, the
+conditional flow is:
+_xt_ = _ψt_ ( _x_ 0 _|x_ 1) = exp _x_ 0( _t_ log _x_ 0( _x_ 1)) _._ (3)
+
+
+which yields the conditional vector field:
+
+
+_[d]_ [=] [log] _[x][t]_ [(] _[x]_ [1][)]
+
+_dt_ _[x][t]_ 1 _−_ _t_
+
+
+_ut_ ( _xt|x_ 1) = _[d]_
+
+
+_[t]_ _._ (4)
+
+1 _−_ _t_
+
+
+The parametric vector field _vθ_ is learned by minimizing the Riemannian Conditional Flow Matching
+(RCFM) objective:
+
+
+                       -                       _L_ RCFM( _θ_ ) = E _t∼ρ_ ( _t_ ) _,x_ 1 _∼p_ 1 _,x_ 0 _∼p_ 0 _∥vθ_ ( _t, xt_ ) _−_ _ut_ ( _xt|x_ 1) _∥_ [2] _g_ _._ (5)
+
+
+where _ρ_ ( _t_ ) is a time weighting distribution, often chosen as _ρ_ ( _t_ ) _∝_ (1 _−_ _t_ ) _[α]_ for _α_ _≥_ 0, and
+expectations are taken over the conditional coupling induced by the geodesic interpolation (Chen &
+Lipman, 2024). This objective is equivalent to the marginal Riemannian Flow Matching objective
+up to an additive constant, ensuring that the learned vector field generates flows that satisfy the
+continuity equation in expectation.
+
+
+RFM is simulation-free on simple geometries and does not require divergence computation during
+training, and provides exact target vector fields without approximation errors (Chen & Lipman,
+2024). For general manifolds, spectral distances can be used as premetrics to maintain tractability,
+ensuring broad applicability across diverse geometries.
+
+
+2.4 MIRRORING OPERATOR FOR CHIRALITY
+
+
+To enforce strict L-chirality in generated backbones, we introduce a Riemannian mirroring operator
+_M_ : T [3] _[N]_ _→_ T [3] _[N]_ that acts residue-wise on the dihedral angles. For each residue, the operator is
+defined as:
+_M_ ( _ϕn, ψn, ωn_ ) = (2 _π −_ _ϕn_ mod 2 _π,_ 2 _π −_ _ψn_ mod 2 _π,_ _ωn_ ) _._ (6)
+
+This transformation corresponds to the molecular mirroring operation that converts an L-chiral backbone to its D-chiral enantiomer while preserving the cyclic nature of the dihedral angles. Crucially,
+_M_ is an isometric diffeomorphism on T [3] _[N]_ equipped with the product metric _g_ . The pushforward
+_M∗_ : _Tχ_ T [3] _[N]_ _→_ _TM_ ( _χ_ )T [3] _[N]_ has a constant Jacobian _JM_ = diag( _−_ 1 _, −_ 1 _,_ 1) per residue, satisfying
+_M∗_ [2] [=] _[I]_ [.] [The] [conformal] [weights] _[w][k]_ [(] _[χ][k]_ [)] [=] 1+sin [2] 1( _χk/_ 2) [satisfy] _[w][k]_ [(] _[χ][k]_ [)] [=] _[w][k]_ [(2] _[π]_ _[−]_ _[χ][k]_ [)] [for]
+_k_ _∈{ϕ, ψ}_, and _wω_ ( _χω_ ) = _wω_ ( _χω_ ), ensuring that _M_ preserves the metric:
+
+
+_g|M_ ( _χ_ )( _M∗u, M∗v_ ) = _g|χ_ ( _u, v_ ) _._ (7)
+
+
+Through this, we explicitly encodes chirality awareness into the generative process, ensuring that all
+sampled backbones maintain correct L-chirality while preserving the natural periodicity of dihedral
+angles.
+
+
+3 METHODOLOGY: CHIFLOW
+
+
+Figure 4: ChiFlow represents protein backbone dihedrals ( _ϕ, ψ, ω_ ) on a toroidal manifold _T_ [3] to inherently preserve angular periodicity. And employs Riemannian flow matching to learn a vector field
+that transports noise distributions to data distributions on this manifold. To ensure strict L-chirality,
+a mirroring operator M is introduced, constraining the vector field to be asymmetric under M (i.e.,
+_v_ ˆ( _Mχ, t_ ) = _−M∗v_ ˆ( _χ, t_ )). Finally, 3D atomic coordinates are reconstructed deterministically from
+dihedrals using fixed bond lengths and trigonometric operations via the SN-NeRF algorithm.
+
+
+**ChiFlow** is a generative model based on flow-maching model for protein backbone generation, addressing critical flaws of SE(3)-based methods by grounding dihedral angle ( _ϕ, ψ, ω_ ) modeling in
+a toroidal manifold T [3] _[N]_ (one T [3] per residue). Geodesic interpolation on T [3] _[N]_ enables continuous,
+
+
+4
+
+
+shortest-path transitions between conformations, and Riemannian operators ( _∇g,_ div _g,_ ∆ _g_ ) ensure
+consistent calculus on the manifold. ChiFlow first uses deterministic Riemannian flow matching
+to learn a vector field _v_ ˆ( _χ, t_ ) that transports a prior distribution _p_ 0 to a native-like target _p_ 1, minimizing a _L_ [2] loss _L_ T3. To enhance conformational diversity and model robustness, we extended
+it to Stochastic Flow Matching(SFM): a torus Brownian motion (with generator _σ_ ( _t_ ) [2] _/_ 2∆ _g_, where
+_σ_ ( _t_ ) is a decreasing noise schedule) defines a reference stochastic process, with noise projected
+onto the manifold’s tangent spaces to preserve geometric validity. Framed as a Schr¨odinger bridge
+(Tang et al., 2024b), SFM learns the optimal vector field _vθ_ via a flow matching loss _L_ SFM, avoiding
+the computational cost of simulating the entire stochastic process. Critically, to guarantee biologically essential L-chirality, a **chiral asymmetry loss** _L_ chiral enforces _vθ_ ( _M_ ( _χt_ ) _, t_ ) = _−M∗vθ_ ( _χt, t_ ),
+where _M_ is a chirality-flipping mirroring operator. To reconstruct the protein backbone using the
+dihedral angles generated by the flow model, we employed the SN-NeRF algorithm (Parsons et al.,
+2005), paired with forward kinematics using standard protein backbone bond lengths (C _α_ –N = 1.45
+˚A, C _α_ –C = 1.54 ˚A) for efficiency and stability.
+
+
+3.1 BACKBONE MODELING AND TOROIDAL FLOW MATCHING
+
+
+Proteins fold into specific three-dimensional structures to perform their biological functions (Pollock, 2007). The backbone dihedral angles—phi ( _ϕ_ ), psi ( _ψ_ ), and omega ( _ω_ )—are crucial degrees
+of freedom that define the protein’s conformational space. Unlike linear Euclidean spaces, these
+angles are cyclic by nature, with values wrapping around every 2 _π_ radians (Atavin & Vilkov, 2003).
+This periodicity must be respected in any meaningful mathematical model of protein structure and
+dynamics. To address this, we turn to the concept of the Torus (Wiemeler, 2015). We represent the
+full protein backbone as a point on a hypertorus, _χ_ = _{χ_ 1 _, . . ., χN_ _}_ _∈_ T [3] _[N]_, where each residue _n_
+has its own set of dihedral angles _χn_ = ( _ϕn, ψn, ωn_ ). The 1-dimensional torus T is defined as the
+quotient space T = R _/_ 2 _π_ Z, which identifies points _a_ and _b_ whenever _a −_ _b_ = 2 _πk_ for any integer
+_k_ . This identification effectively gather together the ends of the interval [0 _,_ 2 _π_ ), forming a circle and
+eliminating artificial boundaries at 0 and 2 _π_ . The 3-dimensional product torus T [3] = T _×_ T _×_ T thus
+naturally encodes the three dihedral angles of a single residue without introducing discontinuities.
+The space T [3] _[N]_ is not just a set of points, it is a Riemannian manifold. At a point _χ ∈_ T [3], the tangent
+space _Tχ_ T [3] is a vector space containing all possible directions of change for the dihedral angles. We
+equip this space with a conformal product metric:
+
+
+    - 1
+_g_ T3 _|χ_ ( _u, v_ ) = _wk_ ( _χk_ ) _ukvk,_ where _wk_ ( _χk_ ) = (8)
+
+1 + sin [2] ( _χk/_ 2) _[.]_
+_k∈{ϕ,ψ,ω}_
+
+
+This metric is smooth and 2 _π_ -periodic in each coordinate, meaning it respects the circular nature of
+the angles. The weight function _wk_ ( _χk_ ) is chosen to reflect known physical constraints; for instance,
+it assigns higher cost to changes in angles when they are near regions of steric clash (Ramachandran
+et al., 2011). Extending this metric to _N_ residues yields the product metric _g_ = [�] _n_ _[N]_ =1 _[g]_ [T][3] [for the]
+entire backbone. This metric induces a norm _∥u∥_ [2] _g_ [=] _[g]_ [(] _[u, u]_ [)] [on] [tangent] [vectors] [and] [a] [volume]
+element _d_ vol _g_ = �det _g_ ( _χ_ ) _dχ_ for integration on the manifold. On a Riemannian manifold, the
+familiar calculus operations from Euclidean space generalize. The Riemannian gradient, divergence,
+and Laplace–Beltrami (Zhou & L¨ahner, 2025) operators become:
+
+_∇gf_ = _g_ _[−]_ [1] _· ∂f,_ div _gX_ = ~~_√_~~ 1 _∂i_    - ~~�~~ det _g X_ _[i]_ [�] _,_ ∆ _gf_ = div _g_ ( _∇gf_ ) _._ (9)
+det _g_
+
+
+Due to the product structure of our torus, these operators can be computed componentwise, which
+significantly simplifies calculations. A key geometric concept is the _geodesic_ —the shortest path
+between two points on the manifold. For interpolation between two backbone configurations _χ_ 0 and
+_χ_ 1 on T [3] _[N]_, we follow the shortest-path geodesic (Wu et al., 2025) on each individual angular circle:
+
+_χt_ = exp _χ_ 0� _t_ log _χ_ 0( _χ_ 1)� _._ (10)
+
+
+This operation reduces to linear interpolation along the minimal arc in each angular coordinate, with
+values wrapped modulo 2 _π_ . This provides a natural and continuous path between the desired protein
+backbone and the origin protein backbone. _Flow_ _matching_ is a powerful framework for learning
+probability paths between distributions on manifolds. On T [3] _[N]_, we seek a time-dependent vector
+field ˆ _v_ ( _χ, t_ ) that transports an initial probability distribution _p_ 0 (e.g., a simple prior distribution over
+
+
+5
+
+
+structures) to a target distribution _p_ 1 (e.g., a distribution of native-like structures) by satisfying the
+continuity equation:
+_∂tpt_ + div _g_ ( _pt_ ˆ _v_ ( _·, t_ )) = 0 _._ (11)
+with boundary conditions _pt_ =0 = _p_ 0 and _pt_ =1 = _p_ 1. Using the geodesic interpolation ( _χt_ ) _t∈_ [0 _,_ 1]
+defined between samples _χ_ 0 _∼_ _p_ 0 and _χ_ 1 _∼_ _p_ 1, the exact conditional vector field that transports _χ_ 0
+to _χ_ 1 along the geodesic is known in closed form: _u_ ( _χt, t | χ_ 1) = log1 _χt−_ ( _tχ_ 1) . We estimate the vector
+
+field ˆ _v_ by minimizing a time-weighted Riemannian _L_ [2] mismatch loss:
+
+_L_ T3 = E _t∼ρ_ E _p_ ( _χ_ 0) _,p_ ( _χ_ 1)� _∥u_ ( _χt, t | χ_ 1) _−_ _v_ ˆ( _χt, t_ ) _∥_ [2] _g_       - _._ (12)
+
+
+where _ρ_ ( _t_ ) _∝_ (1 _−t_ ) _[α]_ is a weighting function that often puts more emphasis on later times (e.g., _α_ =
+2), and the inner expectation is over the conditional coupling induced by the geodesic interpolation.
+This geometric formulation provides a rigorous foundation for modeling protein dynamics, folding
+pathways (Englander & Mayne, 2014), and for generating novel structures, as it inherently avoids the
+coordinate singularities and artifacts that plague methods treating dihedral angles as linear Euclidean
+variables.
+
+
+3.2 STOCHASTIC FLOW MATCHING AND CHIRALITY CONTROL
+
+
+To address the limitations of deterministic flow and significantly improve the sample diversity and
+robustness of the ChiFlow model, we extend its framework by incorporating a **Stochastic** **Flow**
+**Matching (SFM)** (Albergo et al., 2023) formulation on the toroidal manifold T [3] _[N]_ . This extension
+transforms the deterministic flow into a stochastic bridge, leveraging controlled noise and optimal
+transport theory.
+
+
+3.2.1 STOCHASTIC DYNAMICS AND THE SCHR ¨ODINGER BRIDGE
+
+
+The core of the SFM involves defining a reference stochastic process on T [3] _[N]_ . Let ∆ _g_ be the
+Laplace–Beltrami operator under the product metric. We consider a torus Brownian motion with
+generator _[σ]_ [(] 2 _[t]_ [)][2] ∆ _g_ as the reference process, where _σ_ ( _t_ ) is a carefully chosen decreasing noise sched
+ule. The dynamics of the system are then governed by the following Stratonovich stochastic differential equation (SDE) (Anderson, 1982):
+
+
+_dχt_ = _vθ_ ( _χt, t_ ) _dt_ + _σ_ ( _t_ ) Π _Tχt_ _◦_ _dWt._ (13)
+
+Here, Π _Tχt_ projects the standard Wiener noise _dWt_ onto the tangent space of the manifold at _χt_,
+ensuring that the added noise respects the geometric constraints of T [3] _[N]_ . The vector field _vθ_, parameterized by a neural network, learns to guide this stochastic process. We seek the _most efficient_
+stochastic path connecting the initial and target distributions relative to this reference Brownian motion. This is formulated as the Schr¨odinger bridge problem, an entropy-regularized optimal transport
+problem on the path space:
+
+
+The solution to this problem yields the control _ut_ that minimizes the expected energy required to
+drive the system from _p_ 0 to _p_ 1 amidst the stochastic noise.
+
+
+3.2.2 CHIRALITY PRESERVATION
+
+
+Directly solving the Schr¨odinger bridge can be computationally challenging (Jing et al., 2025). Instead, we adopt a **flow** **matching** objective to efficiently learn the optimal vector field _vθ_ that approximates the solution. We define a conditional probability path (Mathieu & Nickel, 2020) between
+samples. The flow matching loss is constructed to regress the learned vector field _vθ_ towards a target
+vector field _uσ_ that defines the desired flow:
+
+
+                   -                    _L_ SFM = E _χ_ 1 _∼p_ 1 _, t∼U_ (0 _,_ 1) _∥, uσ_ ( _χt, t | χ_ 1) _−_ _vθ_ ( _χt, t_ ) _∥_ [2] _g_ T3 _._ (15)
+
+
+This objective allows us to train the model without simulating the entire stochastic process, greatly
+enhancing computational efficiency. A critical concern when introducing stochasticity is the potential violation of fundamental physical symmetries. To enforce the conservation of chirality—a
+
+
+6
+
+
+   - 1
+min E
+_ut_ 0
+
+
+_∥ut_ ( _χt_ ) _∥_ [2] _g_
+_dt_ subject to _∂tpt_ = _−_ div _g_ ( _ptut_ ) + _[σ]_ [(] _[t]_ [)][2] ∆ _gpt._ (14)
+2 _σ_ ( _t_ ) [2] 2
+
+
+crucial property of biomolecules—we introduce the chirality penalty term into the loss function
+(Ciampiconi et al., 2024). Let _M_ denote the operator that flips the chirality of a structure. We
+require the learned vector field to exhibit asymmetry under this transformation: _vθ_ ( _M_ ( _χt_ ) _, t_ ) =
+_−M∗_ ( _vθ_ ( _χt, t_ )). This is enforced via the chiral asymmetry loss:
+
+_L_ chiral = E _χt,t_ [[ _∥vθ_ ( _M_ ( _χt_ ) _, t_ ) + _M∗_ ( _vθ_ ( _χt, t_ )) _∥_ [2] _g_ T3 []] _[.]_ (16)
+
+
+3.2.3 TOTAL OBJECTIVE AND SUMMARY OF IMPROVEMENTS
+
+
+The overall training objective for the Stochastic Flow Matching part of ChiFlow combines the flow
+matching loss and the chiral symmetry loss:
+
+_L_ [SFM] total [=] _[ L]_ [SFM] [+] _[ λ][ L]_ [chiral] _[.]_ (17)
+
+The hyperparameter _λ_ balances the trade-off between sample diversity (achieved through SFM) and
+strict geometric consistency (enforced by the chiral loss) and is defined in the config file during training between 0.1 and 2. The controlled stochastic noise enables the generation of a wider variety of
+structurally plausible protein backbone. The SFM extension transforms ChiFlow into a more powerful and versatile tool for generating diverse, robust, and physically accurate molecular structures
+on the toroidal manifold.
+
+
+3.3 C _α_ COORDINATE RECONSTRUCTION
+
+
+We employ forward kinematics with standard protein backbone parameters (e.g., C _α_ –N =
+1.45 ˚A, C _α_ –C = 1.54 ˚A) to reconstruct C _α_ coordinates from _χ_ 1 torsional angles. To
+maximize computational efficiency and numerical stability, we adopt the Self-Normalizing
+Natural Extension Reference Frame (SN-NeRF) algorithm Parsons et al. (2005). This
+method reduces the Cartesian coordinate conversion to 66 floating-point operations per
+atom, which is fewer than classical rigid-based reconstruction methods (Yim et al., 2023b).
+
+Angle-dependent placement: Compute initial atom position in a local
+frame using bond lengths and angles.
+_⃗D_ 2 = ( _R_ cos _θ,_ _R_ cos _ϕ_ sin _θ,_ _R_ sin _ϕ_ sin _θ_ ) (18)
+
+
+where _R_ = bond _CD_, _θ_ = angle _BCD_, _ϕ_ = torsion _BC_ .
+
+
+Reference frame alignment: Transform to global coordinates via an orthonormal basis derived from prior atoms:
+_⃗D_ = _M_ ˆ _D_ _[⃗]_ 2 + _C_ _[⃗]_ (19)
+
+_M_ ˆ _≡_      - _bc,_ ˆ _n_ ˆ _×_ _bc,_ ˆ _n_ ˆ� (20)
+
+with _bc_ [ˆ] = _[−−→]_ _BC/|_ _[−−→]_ _BC|_ and _n_ ˆ as the ABC plane normal.
+
+
+We train **ChiFlow** on a filtered PDB (Burley et al., 2022) dataset. The raw data was downloaded
+from the RCSB (Burley et al., 2022) in mmCIF format and we followed method proposed in
+FrameDiff (Yim et al., 2023b) to preprocess the dataset to pdb format for visualization and generated metadata.csv and clusters-by-entity-30.txt to help process the dataset more efficiently. During
+training, we use different length of protein backbone such as [60,256] and [100,512], as shown in
+Figure 7.Also, pair geometry is encoded via the features of protein backbone heavy atoms. What’s
+more, during the preprocess process of the datasets, full in-memory caching is disabled by default
+to keep preprocessing lightweight.
+
+
+4.2 METRIC
+
+
+Designability, defined as the fraction of designs with scRMSD _<_ 2.0 A; [˚] Novelty, evaluated by
+the maximum TM-score to known PDB structures and the fraction of designs with an averaged
+
+
+7
+
+
+4 EXPERIMENTS SETUP
+
+
+4.1 DATASET
+
+
+Figure 5: SN-Nerf
+
+
+maximum TM-score _<_ 0.3 and scRMSD _<_ 2.0 A, and Diversity, assessed by the average pairwise [˚]
+TM-score and the MaxCluster fraction. Standard errors are included for both Designability and
+Novelty metrics (Bose et al., 2024). And the Chirality was calculated through the Cahn-IngoldPrelog (CIP) rule algorithm from RDKit (Parsons et al., 2005).
+
+
+4.3 BASELINE
+
+
+We compare our results to RFDiffusion (Watson et al., 2022), FrameDiff (Yim et al., 2023b), FrameFlow (Yim et al., 2023a) and FoldFlow (Bose et al., 2024) for protein backbone generation. Unlike
+RFDiffusion which leverages a pre-trained folding network, both Genie and FrameDiff are diffusion models that generate protein backbones without such dependency. For the flow-based models,
+FrameFlow and FoldFlow, we utilize their official implementations and pre-trained weights, these
+baselines are selected to illustrate the inherent trade-offs between computational speed and design
+quality in state-of-the-art protein structure generation. We can tell from Table 1 that while there
+still remains a gap between the golden standard(RFDiffusion) and ChiFlow, ChiFlow approaches
+previous methods like FrameFlow, FrameDiff and FoldFlow in benchmark and shows no big difference. Note that the SFM greatly improved the Diversity of the protein backbone designed by
+ChiFlow, even outperform the golden standard. And Figure 7 shows some of the backbone generated by ChiFlow. The ablation study 2 shows that the Riemannian mirroring operator is crucial to
+the control of the Chirality of the protein backbone. And the Riemannian HyperTorus ensures that
+the Flow Matching process on dihedral angles is fluent and smooth. Overperform SE(3)-only Flow
+Matching method. **Note:** Best results are in bold. Standard errors represent variability across multiple runs. Chirality purity measures the percentage of generated backbones with correct L-chirality
+configuration.
+
+
+Table 1: Comprehensive experiments of Baseline over the PDB Datasets Under Various Metrics
+
+
+**Model** **Designability** **Novelty** **Diversity** **Chirality**
+
+
+Fraction _↑_ scRMSD _↓_ Fraction _↑_ avg.max TM _↓_ pairwise TM _↓_ MaxCluster _↑_ Score _↑_
+
+
+RFDiffusion **0.969** _±_ 0.034 **0.650** _±_ 0.136 **0.708** _±_ 0.060 0.449 _±_ 0.012 0.256 _±_ 0.010 0.172 _±_ 0.015 0.94 _±_ 0.143
+FrameDiff 0.414 _±_ 0.064 3.970 _±_ 0.436 0.181 _±_ 0.128 0.556 _±_ 0.047 0.244 _±_ 0.011 **0.320** _±_ 0.021 0.88 _±_ 0.094
+FrameFlow 0.798 _±_ 0.044  -  - 0.698 _±_ 0.033  - 0.292 _±_ 0.020 0.93 _±_ 0.039
+FoldFlow 0.671 _±_ 0.044 3.090 _±_ 0.285 0.449 _±_ 0.078 0.469 _±_ 0.025 0.274 _±_ 0.014  - 0.95 _±_ 0.047
+**ChiFlow** 0.674 _±_ 0.042 2.309 _±_ 0.271 0.383 _±_ 0.074 0.502 _±_ 0.024 0.267 _±_ 0.013 0.295 _±_ 0.019 **1.00**
+**ChiFlowpro** 0.743 _±_ 0.040 2.192 _±_ 0.249 0.497 _±_ 0.068 **0.409** _±_ 0.020 **0.197** _±_ 0.010 0.302 _±_ 0.020 **1.00**
+
+
+Table 2: Comprehensive ablation study of ChiFlow components. The table evaluates the contribution
+of explicit chirality constraints and Stochastic Flow Matching (SFM) to the overall performance.
+
+
+**Designability** **Novelty** **Performance**
+Method
+
+Fraction _↑_ scRMSD ( A) [˚] _↓_ Fraction _↑_ Avg. TM _↓_ Diversity _↓_ Chirality (%) _↑_
+
+
+**ChiFlow-pro (Full)** **0** _._ _±_ 0 _._ 040 **2** _._ _±_ 0 _._ 249 0 _._ 497 _±_ 0 _._ 068 **0** _._ _±_ 0 _._ 020 **0** _._ _±_ 0 _._ 010 **1** _._ **00**
+
+
+SE(3) 0.671 _±_ 0.044 3.090 _±_ 0.285 0.449 _±_ 0.078 0.469 _±_ 0.025 0.274 _±_ 0.014 0.95 _±_ 0.047
+ChiFlow(w/o Chirality) 0 _._ 735 _±_ 0 _._ 039 2 _._ 205 _±_ 0 _._ 251 0 _._ 505 _±_ 0 _._ 069 0 _._ 425 _±_ 0 _._ 021 0 _._ 275 _±_ 0 _._ 010 0 _._ 623 _±_ 0 _._ 057
+
+
+**Configuration:** The model learns a continuous vector field over the backbone torsion angles
+( _ϕ, ψ, ω_ ) in the 3-torus space ( _−π, π_ ] [3], and reconstructs Cartesian coordinates ( _N, Cα, C_ ) via a
+deterministic NeRF decoder. The system was trained for 500 epochs using Adam (lr = 1 _×_ 10 _[−]_ [4],
+_β_ default, batch size 512) with gradient norm clipping at 1.0. Distributed Data Parallel (DDP) (Li
+et al., 2020) on two A6000 GPUs was used for training, synchronizing gradients via an All-Reduce
+algorithm. Sampling integrates the learned field using 100 steps of explicit Euler reverse diffusion
+with torus wrapping, augmented by stochastic paths (SFM) to promote diversity. All runs were configured and versioned via Hydra. And inference is executed on a single RTX 4090 GPU (24 GB
+GDDR6X, 330 TFLOPS FP16).
+
+
+8
+
+
+5 RELATED WORKS
+
+
+**Flow-based models.** Flow models learn a time-dependent vector field and generate structures via
+ODE or controlled SDE integration. SE(3)-equivariant frame flows introduced by FrameFlow target
+backbone generation with fast sampling and strong designability (Yim et al., 2023a), followed by improvements in conditional motif-scaffolding (Yim et al., 2024) and added stochasticity for diversity
+(Bose et al., 2024). FoldFlow-base/OT/SFM refines flow-matching objectives and training, reporting
+improved designability and throughput across variants (Bose et al., 2024). In parallel, FoldFlow2
+advances training stability and sampling efficiency through refined flow objectives and architectural
+updates, achieving further gains in both accuracy and designability (Huguet et al., 2024). More
+recently, PROTEINA extends flow-based generation with hierarchical representations and geometryaware conditioning, enabling scalable modeling of complex protein families (Geffner et al., 2025).
+In general, flows sample deterministically, support direct conditioning in the vector field, and offer
+faster sampling than diffusion in comparable setups.
+
+
+**Diffusion-based** **models.** Diffusion models construct a stochastic forward noising process and
+learn a reverse denoising dynamics to sample structures. RFDiffusion popularized diffusion in protein backbone design, enabling flexible conditional generation and motif scaffolding (Watson et al.,
+2022). Subsequent motif-conditioned diffusion systems extended conditioning mechanisms for joint
+sequence–structure tasks (Song et al., 2023). Latent diffusion accelerates sampling by operating
+in an autoencoded Euclidean latent space (Fu et al., 2023), trading some designability for speed.
+Large-scale scaffold diffusion emphasizes dataset scale and diversity, improving novelty and coverage while retaining conditional control (Lin et al., 2024b). Diffusion models are versatile and robust
+but typically require more sampling steps and, when operating in SE(3) or Euclidean latents, do not
+align natively with the periodic geometry of dihedral angles.
+
+
+**Chirality** **Constraints.** Chirality, the property of a molecule being non-superimposable on its
+mirror image, is a critical factor in chemistry and pharmacology. Enantiomers, or pairs of chiral
+molecules, can exhibit vastly different biological activities; for instance, one enantiomer of a drug
+can be therapeutic while the other is toxic (Dumitrescu et al., 2025a; Gai´nski et al., 2023). Consequently, the ability of computational models to accurately represent and predict chirality is of
+paramount importance, particularly in drug discovery (Gai´nski et al., 2023). Historically viewed as
+a binary property, recent work has also focused on developing mathematical methods to quantify
+chirality as a continuous variable, with primary approaches based on either geometric overlap, such
+as the Continuous Chirality Measure (Grieder et al., 2025), or scalar triple products, like the Chirality Characteristic ( _χ_ ) (Abramson et al., 2024). Despite its importance, modeling chirality presents
+a significant challenge for many previous models such as SE(3)-based models (Dumitrescu et al.,
+2025a; Childs et al., 2025).
+
+
+6 CONCLUSION
+
+
+We present **ChiFlow**, a novel generative model for protein backbones that directly addresses the
+critical challenge of protein backbone chirality preservation—a fundamental constraint overlooked
+by existing SE(3)-based methods. By reformulating structure generation on a toroidal riemannian
+manifold and incorporating an asymmetry constraint, ChiFlow guarantees perfect chiral consistency
+without compromising performance. Furthermore, by operating natively on the space of torsion
+angles, ChiFlow avoids the computational overparameterization associated with SE(3) models and
+well models the dihedral angles of the protein backbone, resulting in a simpler architecture and faster
+sampling. Also, by utilizing the SFM, we improve the diversity of the protein backbone generated by
+ChiFlow. Despite these advantages, the torsional representation is inherently sensitive to local angular deviations, which can accumulate over very long proteins. Future work could focus on improving
+the stability of the generative process for extended chains, as well as exploring conditional generation for functional motifs and multimeric assemblies. ChiFlow establishes the toroidal manifold as
+an efficient way for protein backbone generation, offering a promising path toward chirality-aware
+design in computational structural biology.
+
+
+9
+
+
+REFERENCES
+
+
+Osama Abdin and Philip M. Kim. Pepflow: Direct conformational sampling from peptide energy
+landscapes through hypernetwork-conditioned diffusion, June 2023.
+
+
+Josh Abramson, Jonas Adler, Jack Dunger, Richard Evans, Tim Green, Alexander Pritzel, Olaf
+Ronneberger, Lindsay Willmore, Andrew J. Ballard, Joshua Bambrick, Sebastian W. Bodenstein,
+David A. Evans, Chia-Chun Hung, Michael O’Neill, David Reiman, Kathryn Tunyasuvunakool,
+Zachary Wu, Akvil˙e Zemgulyt˙e, [ˇ] Eirini Arvaniti, Charles Beattie, Ottavia Bertolli, Alex Bridgland, Alexey Cherepanov, Miles Congreve, Alexander I. Cowen-Rivers, Andrew Cowie, Michael
+Figurnov, Fabian B. Fuchs, Hannah Gladman, Rishub Jain, Yousuf A. Khan, Caroline M. R. Low,
+Kuba Perlin, Anna Potapenko, Pascal Savy, Sukhdeep Singh, Adrian Stecula, Ashok Thillaisundaram, Catherine Tong, Sergei Yakneen, Ellen D. Zhong, Michal Zielinski, Augustin Z´ıdek, Vic- [ˇ]
+tor Bapst, Pushmeet Kohli, Max Jaderberg, Demis Hassabis, and John M. Jumper. Accurate
+structure prediction of biomolecular interactions with alphafold 3. _Nature_, 630(8016):493–500,
+June 2024. ISSN 1476-4687.
+
+
+Michael S. Albergo, Nicholas M. Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying framework for flows and diffusions, November 2023.
+
+
+Brian D. O. Anderson. Reverse-time diffusion equation models. _Stochastic_ _Processes_ _and_ _their_
+_Applications_, 12(3):313–326, May 1982. ISSN 0304-4149.
+
+
+E. G. Atavin and L. V. Vilkov. Dihedral angles in cyclic molecules. _Journal of Structural Chemistry_,
+44(5):846–851, September 2003. ISSN 1573-8779.
+
+
+Avishek Joey Bose, Tara Akhound-Sadegh, Guillaume Huguet, Kilian Fatras, Jarrid Rector-Brooks,
+Cheng-Hao Liu, Andrei Cristian Nica, Maksym Korablyov, Michael Bronstein, and Alexander
+Tong. Se(3)-stochastic flow matching for protein backbone generation, April 2024.
+
+
+Stephen K. Burley, Helen M. Berman, Jose M. Duarte, Zukang Feng, Justin W. Flatt, Brian P.
+Hudson, Robert Lowe, Ezra Peisach, Dennis W. Piehl, Yana Rose, Andrej Sali, Monica Sekharan,
+Chenghua Shao, Brinda Vallat, Maria Voigt, John D. Westbrook, Jasmine Y. Young, and Christine
+Zardecki. Protein data bank: A comprehensive review of 3d structure holdings and worldwide
+utilization by researchers, educators, and students. _Biomolecules_, 12(10):1425, October 2022.
+ISSN 2218-273X.
+
+
+Ricky T. Q. Chen and Yaron Lipman. Flow matching on general geometries, February 2024.
+
+
+Henry Childs, Pei Zhou, and Bruce R. Donald. Has alphafold 3 solved the protein folding problem
+for d-peptides?, March 2025.
+
+
+Lorenzo Ciampiconi, Adam Elwood, Marco Leonardi, Ashraf Mohamed, and Alessandro Rozza. A
+survey and taxonomy of loss functions in machine learning, November 2024.
+
+
+Pedro Cintas. Chirality of living systems: A helping hand from crystals and oligopeptides. _Ange-_
+_wandte Chemie (International Ed. in English)_, 41(7):1139–1145, April 2002. ISSN 1433-7851.
+
+
+Alexandru Dumitrescu, Dani Korpela, Markus Heinonen, Yogesh Verma, Valerii Iakovlev, Vikas
+Garg, and Harri L¨ahdesm¨aki. E(3)-equivariant models cannot learn chirality: Field-based molecular generation, April 2025a.
+
+
+Alexandru Dumitrescu, Dani Korpela, Markus Heinonen, Yogesh Verma, Valerii Iakovlev, Vikas
+Garg, and Harri L¨ahdesm¨aki. E(3)-equivariant models cannot learn chirality: Field-based molecular generation, April 2025b.
+
+
+Stephan Eckstein and Aziz Lakhal. Exponential convergence of general iterative proportional fitting
+procedures, April 2025.
+
+
+S. Walter Englander and Leland Mayne. The nature of protein folding pathways. _Proceedings_ _of_
+_the National Academy of Sciences_, 111(45):15873–15880, 2014. doi: 10.1073/pnas.1411798111.
+[URL https://www.pnas.org/doi/abs/10.1073/pnas.1411798111.](https://www.pnas.org/doi/abs/10.1073/pnas.1411798111)
+
+
+10
+
+
+Cong Fu, Keqiang Yan, Limei Wang, Wing Yee Au, Michael McThrow, Tao Komikado, Koji
+Maruhashi, Kanji Uchino, Xiaoning Qian, and Shuiwang Ji. A latent diffusion model for protein structure generation, December 2023.
+
+
+Fabian B. Fuchs, Daniel E. Worrall, Volker Fischer, and Max Welling. Se(3)-transformers: 3d rototranslation equivariant attention networks, November 2020.
+
+
+Piotr Gai´nski, Michał Koziarski, Jacek Tabor, and Marek Smieja. [´] Chienn: Embracing molecular
+chirality with graph neural networks, July 2023.
+
+
+Tomas Geffner, Kieran Didi, Zuobai Zhang, Danny Reidenbach, Zhonglin Cao, Jason Yim, Mario
+Geiger, Christian Dallago, Emine Kucukbenli, Arash Vahdat, and Karsten Kreis. Proteina: Scaling flow-based protein structure generative models, March 2025.
+
+
+Andrew Grieder, Shihao Tu, and Yuan Ping. Relation of continuous chirality measure to spin and
+orbital polarization, and chiroptical properties in solids, September 2025.
+
+
+Thomas Hayes, Roshan Rao, Halil Akin, Nicholas J. Sofroniew, Deniz Oktay, Zeming Lin, Robert
+Verkuil, Vincent Q. Tran, Jonathan Deaton, Marius Wiggert, Rohil Badkundri, Irhum Shafkat,
+Jun Gong, Alexander Derry, Raul S. Molina, Neil Thomas, Yousuf A. Khan, Chetan Mishra, Carolyn Kim, Liam J. Bartie, Matthew Nemeth, Patrick D. Hsu, Tom Sercu, Salvatore Candido, and
+Alexander Rives. Simulating 500 million years of evolution with a language model, December
+2024.
+
+
+Guillaume Huguet, James Vuckovic, Kilian Fatras, Eric Thibodeau-Laufer, Pablo Lemos, Riashat
+Islam, Cheng-Hao Liu, Jarrid Rector-Brooks, Tara Akhound-Sadegh, Michael Bronstein, Alexander Tong, and Avishek Joey Bose. Sequence-augmented se(3)-flow matching for conditional
+protein backbone generation, December 2024.
+
+
+Yang Jing, Lei Li, and Jingtong Zhang. Solving schr¨odinger bridge problem via continuous normalizing flow, March 2025.
+
+
+Gen Li, Yanxi Chen, Yu Huang, Yuejie Chi, H. Vincent Poor, and Yuxin Chen. Fast computation of
+optimal transport via entropy-regularized extragradient methods, June 2024.
+
+
+Shen Li, Yanli Zhao, Rohan Varma, Omkar Salpekar, Pieter Noordhuis, Teng Li, Adam Paszke, Jeff
+Smith, Brian Vaughan, Pritam Damania, and Soumith Chintala. Pytorch distributed: Experiences
+on accelerating data parallel training, June 2020.
+
+
+Haitao Lin, Odin Zhang, Huifeng Zhao, Dejun Jiang, Lirong Wu, Zicheng Liu, Yufei Huang, and
+Stan Z. Li. Ppflow: Target-aware peptide design with torsional flow matching, December 2024a.
+
+
+Yeqing Lin, Minji Lee, Zhao Zhang, and Mohammed AlQuraishi. Out of many, one: Designing and
+scaffolding proteins at the scale of the structural universe with genie 2, May 2024b.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching
+for generative modeling, February 2023.
+
+
+Emile Mathieu and Maximilian Nickel. Riemannian continuous normalizing flows, December 2020.
+
+
+Jerod Parsons, J. Bradley Holmes, J. Maurice Rojas, Jerry Tsai, and Charlie E. M. Strauss. Practical conversion from torsion space to cartesian space for in silico protein synthesis. _Journal_ _of_
+_Computational Chemistry_, 26(10):1063–1068, 2005. ISSN 1096-987X.
+
+
+Veronica Pollock. Proteins. In S. J. Enna and David B. Bylund (eds.), _xPharm:_ _The Comprehensive_
+_Pharmacology Reference_, pp. 1–11. Elsevier, New York, January 2007. ISBN 978-0-08-0552323.
+
+
+G.N. Ramachandran, C. Ramakrishnan, and V. Sasisekharan. Stereochemistry of polypeptide chain
+configurations. _Journal of Molecular Biology_, 7(1):95–99, July 1963. ISSN 00222836.
+
+
+Srinivas Ramachandran, Pradeep Kota, Feng Ding, and Nikolay V. Dokholyan. Automated minimization of steric clashes in protein structures. _Proteins_, 79(1):261–270, January 2011. ISSN
+0887-3585.
+
+
+11
+
+
+Mauro Rosestolato. A note on stochastic fubini’s theorem and stochastic convolution, June 2018.
+
+
+Yujie Shi, Alex Jie Yang, and Sanhong Deng. Entropy in science of science, March 2025.
+
+
+Zhenqiao Song, Yunlong Zhao, Yufei Song, Wenxian Shi, Yang Yang, and Lei Li. Joint design of
+protein sequence and structure based on motifs, October 2023.
+
+
+Xiangru Tang, Howard Dai, Elizabeth Knight, Fang Wu, Yunyang Li, Tianxiao Li, and Mark Gerstein. A survey of generative ai for _de novo_ drug design: New frontiers in molecule and protein
+generation. _Briefings_ _in_ _Bioinformatics_, 25(4):bbae338, May 2024a. ISSN 1467-5463, 14774054.
+
+
+Zhicong Tang, Tiankai Hang, Shuyang Gu, Dong Chen, and Baining Guo. Simplified diffusion
+schr¨odinger bridge, October 2024b.
+
+
+Alexis M. H. Teter, Wenqing Wang, and Abhishek Halder. Schr¨odinger bridge with quadratic state
+cost is exactly solvable, October 2024.
+
+
+Joseph L. Watson, David Juergens, Nathaniel R. Bennett, Brian L. Trippe, Jason Yim, Helen E.
+Eisenach, Woody Ahern, Andrew J. Borst, Robert J. Ragotte, Lukas F. Milles, Basile I. M.
+Wicky, Nikita Hanikel, Samuel J. Pellock, Alexis Courbet, William Sheffler, Jue Wang, Preetham
+Venkatesh, Isaac Sappington, Susana V´azquez Torres, Anna Lauko, Valentin De Bortoli, Emile
+Mathieu, Regina Barzilay, Tommi S. Jaakkola, Frank DiMaio, Minkyung Baek, and David Baker.
+Broadly applicable and accurate protein design by integrating structure prediction networks and
+diffusion generative models. December 2022.
+
+
+Michael Wiemeler. Torus manifolds and non-negative curvature. _Journal of the London Mathemat-_
+_ical Society_, 91(3):667–692, June 2015. ISSN 00246107.
+
+
+Jiawen Wu, Bingguang Chen, Yuyi Zhou, Qi Meng, Rongchan Zhu, and Zhi-Ming Ma. Riemannian
+neural geodesic interpolant, April 2025.
+
+
+Jason Yim, Andrew Campbell, Andrew Y. K. Foong, Michael Gastegger, Jos´e Jim´enez-Luna, Sarah
+Lewis, Victor Garcia Satorras, Bastiaan S. Veeling, Regina Barzilay, Tommi Jaakkola, and Frank
+No´e. Fast protein backbone generation with se(3) flow matching, October 2023a.
+
+
+Jason Yim, Brian L. Trippe, Valentin De Bortoli, Emile Mathieu, Arnaud Doucet, Regina Barzilay,
+and Tommi Jaakkola. Se(3) diffusion model with application to protein backbone generation,
+May 2023b.
+
+
+Jason Yim, Andrew Campbell, Emile Mathieu, Andrew Y. K. Foong, Michael Gastegger, Jos´e
+Jim´enez-Luna, Sarah Lewis, Victor Garcia Satorras, Bastiaan S. Veeling, Frank No´e, Regina
+Barzilay, and Tommi S. Jaakkola. Improved motif-scaffolding with se(3) flow matching, July
+2024.
+
+
+Yang Zhang, Zhewei Wei, Ye Yuan, Chongxuan Li, and Wenbing Huang. Equipocket: An e(3)equivariant geometric graph neural network for ligand binding site prediction, July 2024.
+
+
+Hongyu Zhou and Zorah L¨ahner. Laplace-beltrami operator for gaussian splatting, February 2025.
+
+
+12
+
+
+A SUPPLEMENTARY PROOFS AND TECHNICAL DETAILS
+
+
+A.1 SCHR ¨ODINGER BRIDGE THEORY
+
+
+The Schr¨odinger bridge problem (SBP) finds the most likely stochastic evolution between two probability distributions given a prior stochastic evolution. It is the dynamical version of the entropyregularized optimal transport (OT) problem (Li et al., 2024), where the mean square distance is
+replaced by the relative entropy (Shi et al., 2025). Specifically, given a prior diffusion process _Q_ _[γ]_
+(e.g., a Wiener measure with volatility _γ_ ) and two endpoint marginals _π_ 0 and _π_ 1, the dynamic SBP
+is defined as:
+inf (21)
+_Q∈D_ ( _π_ 0 _,π_ 1) _[D]_ [KL][(] _[Q][∥][Q][γ]_ [)] _[,]_
+
+
+where _D_ ( _π_ 0 _, π_ 1) denotes the set of measures on path space with marginals _π_ 0 at time 0 and _π_ 1 at
+time 1. The minimizing _Q_ _[∗]_ is called the _Schr¨odinger_ _bridge_, and its optimal value is the _entropic_
+_transportation cost_ .
+
+
+The SBP admits a dual formulation through the _Schr¨odinger_ _system_, a pair of coupled PDEs (or
+integral eqvolatility _[√]_ uat _γ_,ions in discrete settings) for potentials the optimal drifts of the forward and backward Schr¨odinger bridges are given by: _φ_ and _φ_ ˆ. For a diffusion prior with drift _b_ 0 and
+
+
+_b_ [+] ( _t_ ) = _γ∇xφ_ ( _x_ [+] ( _t_ ) _, t_ ) _,_ _b_ _[−]_ ( _t_ ) = _γ∇x_ ˆ _φ_ ( _x_ _[−]_ ( _t_ ) _, t_ ) _,_ (22)
+
+
+where _x_ [+] and _x_ _[−]_ are the forward and backward processes, respectively. The potentials satisfy the
+boundary conditions:
+
+
+with _Q_ _[γ]_ 0 [and] _[ Q]_ 1 _[γ]_ [being the marginals of the prior at] _[ t]_ [ = 0][ and] _[ t]_ [ = 1][.]
+
+
+A key numerical approach for solving the SBP is the _iterative proportional fitting procedure_ (IPFP)
+(Eckstein & Lakhal, 2025), also known as the Sinkhorn algorithm in the static OT setting. For
+dynamic SBP, IPFP alternates between solving forward and half-bridge problems:
+
+
+_Pi_ = arg inf (24)
+_P ∈D_ ( _·,π_ 1) _[D]_ [KL][(] _[P]_ _[∥][Q][i][−]_ [1][)] _[,]_
+
+
+_Qi_ = arg inf (25)
+_Q∈D_ ( _π_ 0 _,·_ ) _[D]_ [KL][(] _[Q][∥][P][i]_ [)] _[,]_
+
+
+which converges to the Schr¨odinger bridge _Q_ _[∗]_ . This procedure is equivalent to an iterative scaling
+algorithm in the discrete case.
+
+
+Recently, (Teter et al., 2024) proposed a _regularized_ SBP variant with a quadratic state cost-to-go,
+which incentivizes paths to stay close to a nominal level. Unlike the conventional SBP, this regularization induces a state-dependent rate of killing and creation of probability mass. Remarkably,
+they showed that this regularized SBP is _exactly solvable_ even for non-Gaussian endpoints, by deriving the Markov kernel of the associated reaction-diffusion PDE in closed form. Their solution
+recovers the heat kernel (and hence the conventional Schr¨odinger bridge) as a special case when the
+regularization vanishes.
+
+
+The SBP also extends to quantum channels, where the goal is to scale a completely positive operator
+_Q_ to a quantum channel _R_ such that _R_ ( _α_ ) = _β_ for given density matrices _α_ and _β_ . This is the
+quantum analog of the classical SBP and can be solved using fixed-point methods.
+
+
+A.2 SE(3)-INVARIANT FEATURE DISTRIBUTIONS CANNOT ENCODE CHIRALITY
+
+
+We formalize why standard E(3) / SE(3)-invariant (or equivariant) architectures based purely on Euclidean distances and inner products cannot distinguish mirror-image molecular or protein backbone
+configurations. This limitation motivates our explicit asymmetry constraint on dihedral torus flows.
+
+
+**Proposition** **A.1** (Inability of E(3)-invariant point-cloud distributions to distinguish enantiomers) **.**
+_Let_ _pϕ_ _be_ _a_ _distribution_ _over_ _point_ _clouds_ _M_ = ( _m_ 1 _, . . ., mN_ ) _∈_ (R [3] ) _[N]_ _parameterized_ _only_
+_through_ _features_ _that_ _are_ _invariant_ _under_ _the_ _action_ _of_ _the_ _Euclidean_ _group_ _E(3)_ _(translations_ _+_
+
+
+13
+
+
+_φ_ ( _x,_ 0) _∝_ [d] _[π]_ [0]
+
+
+( _x_ ) _,_ (23)
+d _Q_ _[γ]_ 1
+
+
+[d] _[π]_ [0] ( _x_ ) _,_ _φ_ ˆ( _x,_ 1) _∝_ [d] _[π]_ [1]
+
+d _Q_ _[γ]_ 0 d _Q_ 1
+
+
+_rotations) and depend exclusively on pairwise distances ∥mi −_ _mj∥_ _and/or inner products of cen-_
+_tered_ _coordinates._ _Then_ _for_ _any_ _enantiomeric_ _pair_ ( _M, M_ _[′]_ ) _related_ _by_ _an_ _improper_ _orthogonal_
+_transformation (a reflection), we have_
+
+_pϕ_ ( _M_ ) = _pϕ_ ( _M_ _[′]_ ) _._ (26)
+
+
+_Consequently, pϕ cannot enforce or prefer a single molecular chirality._
+
+
+**Sketch** **of** **proof.** Any collection of features constructed from (i) pairwise Euclidean distances
+_dij_ = _∥mi_ _−_ _mj∥_, (ii) dot products of centered vectors _⟨mi_ _−_ _m, m_ ¯ _j_ _−_ _m_ ¯ _⟩_, or (iii) higher-order
+tensor contractions thereof is invariant under the full orthogonal group O(3), because both distances
+and inner products are preserved by any orthogonal matrix _Q_ with _Q_ _[T]_ _Q_ = _I_, including reflections
+(det _Q_ = _−_ 1). A reflection that maps _M_ to its mirror image _M_ _[′]_ lies in O(3) _\_ SO(3). Thus all such
+features take identical values on _M_ and _M_ _[′]_ (Dumitrescu et al., 2025b). strengthen this by showing
+that for functions of at most _n_ input vectors, SE( _n_ )-invariance already implies reflection invariance
+via centering arguments and Householder reflections; hence SE(3)- invariant parameterizations cannot break mirror symmetry. Therefore any likelihood or density model _pϕ_ expressed purely in those
+invariants assigns equal probability to both enantiomers.
+
+
+**Implication** **for** **ChiFlow.** To obtain chirality selectivity, one must either (a) augment invariant
+features with orientation-sensitive pseudoscalars (e.g., triple products) or (b) impose explicit asymmetric constraints under a mirroring isometry, as we do via the torsional mirroring operator _M_ and
+the chiral penalty (Section 2.4).
+
+
+A.3 PROOF OF PROPOSITION 3.1 (CONDITIONAL DRIFT UNDER TORUS INTERPOLATION)
+
+
+We give a concise proof for the closed form of the conditional target drift on the torus under the
+time-dependent affine interpolation used in ChiFlow. Let _τ_ _∈_ T _[d]_ denote a generic angle vector
+(componentwise on the circle), and consider an interpolation of the form
+
+
+_τt_ = ( _µt_ ( _τ_ 1) + _σt_ ( _τ_ 1) _ε_ ) mod 2 _π,_ _t ∈_ [0 _,_ 1] _,_ (27)
+
+
+where _µt_ and _σt_ _>_ 0 are smooth in _t_ (and may depend on the endpoint _τ_ 1), and _ε_ is time-invariant
+along the conditional path. Differentiating _τt_ w.r.t. _t_ in the tangent yields
+
+
+d
+_ut_ ( _τ_ _| τ_ 1) = [=] _[σ]_ [˙] _[t][ ε]_ [ +] _[µ]_ [˙] _[t][.]_ (28)
+d _t_ _[τ][t]_
+
+
+By rearranging the interpolation, we have the (componentwise, principal-branch) identity on the
+circle
+
+
+ -  -  -  - ��
+_∇θ_ E _τ_ 0 _,τ_ 1 _,τ_ _∼pt_ ( _·|τ_ 0 _,τ_ 1) _∥vt_ ( _τ_ ) _−_ _ut_ ( _τ_ _| τ_ 0 _, τ_ 1) _∥_ [2] _g_ _−_ E _τ_ _∼pt_ _∥vt_ ( _τ_ ) _−_ _ut_ ( _τ_ ) _∥_ [2] _g_ _,_ (32)
+
+
+14
+
+
+_ε_ = [wrap(] _[τ][t][ −]_ _[µ][t]_ [)]
+
+
+_,_ (29)
+_σt_
+
+
+so substituting eliminates _ε_ and expresses the drift as a function of ( _τ, t_ ):
+
+
+wrap( _τt −_ _µt_ ) _σ_ ˙ _t_ ( _τ_ 1)
+_ut_ ( _τ_ _| τ_ 1) = _σ_ ˙ _t_ + _µ_ ˙ _t_ = _[−]_ _[µ][t]_ [(] _[τ]_ [1][))] [+] _[µ]_ [˙] _[t]_ [(] _[τ]_ [1][)] _[,]_ (30)
+
+_σt_ _σt_ ( _τ_ 1) [wrap(] _[τ]_
+
+
+where all operations are taken componentwise on T _[d]_ using the shortest-arc difference wrap( _·_ ) _∈_
+( _−π, π_ ]. This is the claimed expression.
+
+
+A.4 PROOF OF PROPOSITION 3.2 (UNBIASEDNESS VIA DISINTEGRATION ON T _[d]_ )
+
+
+We show the equivalence between the conditional objective and its marginal counterpart by disintegration of measures on the product torus and Fubini’s theorem (Rosestolato, 2018). Let
+T _[d]_ = _S_ [1] _× · · · × S_ [1] and assume the endpoint distributions _p_ 0 _, p_ 1 _∈P_ (T _[d]_ ) factorize across angles
+(orthogonality/independence of torsions), hence the interpolant _pt_ admits the same disintegration.
+Define
+
+
+_ut_ ( _τ_ ) = E _τ_ 0 _∼p_ 0 _, τ_ 1 _∼p_ 1
+
+
+and consider the objective difference
+
+
+- _pt_ ( _τ_ _| τ_ 0 _, τ_ 1) _ut_ ( _τ_ _| τ_ 0 _, τ_ 1) _,_ (31)
+_pt_ ( _τ_ )
+
+
+where _⟨·, ·⟩g_ and _∥·∥g_ denote the Riemannian inner product and norm induced by the product metric
+_g_ on T _[d]_ . Expanding squares and canceling like terms reduces this to
+
+
+      -       
+_−_ 2 _∇θ_ E _τ_ 0 _,τ_ 1 _,τ_ _∼pt_ ( _·|τ_ 0 _,τ_ 1) _⟨vt_ ( _τ_ ) _, ut_ ( _τ_ _| τ_ 0 _, τ_ 1) _⟩g −_ E _τ_ _∼pt⟨vt_ ( _τ_ ) _, ut_ ( _τ_ ) _⟩g_ _._ (33)
+
+
+Using the definition of _ut_ ( _τ_ ) and changing the order of integration,
+
+
+          E _τ_ _∼pt⟨vt_ ( _τ_ ) _, ut_ ( _τ_ ) _⟩g_ = _⟨vt_ ( _τ_ ) _, ut_ ( _τ_ ) _⟩g pt_ ( _τ_ ) d _τ_ (34)
+
+
+= E _τ_ 0 _∼p_ 0 _, τ_ 1 _∼p_ 1 _, τ_ _∼pt_ ( _·|τ_ 0 _,τ_ 1) _⟨vt_ ( _τ_ ) _, ut_ ( _τ_ _| τ_ 0 _, τ_ 1) _⟩g._ (37)
+
+
+Hence the two expectations are equal, and the gradient of their difference is zero. This establishes
+that optimizing the conditional objective is an unbiased surrogate for the marginal objective on T _[d]_
+under the stated disintegration assumptions.
+
+
+A.5 PROOF THAT THE MIRRORING OPERATOR _M_ IS AN ISOMETRIC DIFFEOMORPHISM ON T [3]
+
+
+We show that the mirroring map _M_ : T [3] _→_ T [3] defined componentwise by
+
+
+_M_ ( _ϕ, ψ, ω_ ) = (2 _π −_ _ϕ_ mod 2 _π,_ 2 _π −_ _ψ_ mod 2 _π,_ _ω_ ) (38)
+
+
+is an isometric diffeomorphism under the conformal product metric introduced in Section 2 (the
+extension to T [3] _[N]_ follows by the product structure, since _M_ acts residuewise).
+
+
+**1)** _M_ **is a diffeomorphism.** Smoothness: Each component of _M_ is the composition of a smooth
+linear map on the circle (e.g., _ϕ �→_ 2 _π −_ _ϕ_ ) with the canonical identification modulo 2 _π_ that defines
+the smooth structure of the torus. Hence _M_ is smooth. Invertibility: _M_ is an involution, i.e.,
+_M_ _◦_ _M_ = id, so _M_ _[−]_ [1] = _M_ . Since _M_ is smooth, so is _M_ _[−]_ [1] . Therefore _M_ is a diffeomorphism on
+T [3] ; by independence across residues, the product map on T [3] _[N]_ is also a diffeomorphism.
+
+
+**2)** _M_ **is an isometry for the metric** _g_ T3 **.** Recall the metric
+
+
+     - 1
+_g_ T3�� _χ_ [(] _[u, v]_ [)] [=] _wk_ ( _χk_ ) _uk vk,_ _wk_ ( _χk_ ) = (39)
+
+1 + sin [2] ( _χk/_ 2) _[.]_
+_k∈{ϕ,ψ,ω}_
+
+
+Let _χ_ _[′]_ = _M_ ( _χ_ ) and let _M∗_ : _Tχ_ T [3] _→_ _Tχ′_ T [3] be the pushforward of _M_ . By differentiation of
+the component maps, the Jacobian of _M_ is _JM_ = diag( _−_ 1 _, −_ 1 _,_ 1), hence for any _u_ _∈_ _Tχ_ T [3] we
+have _M∗u_ = _JM_ _u_ with components ( _M∗u_ ) _ϕ_ = _−uϕ_, ( _M∗u_ ) _ψ_ = _−uψ_, ( _M∗u_ ) _ω_ = _uω_ . Using the
+trigonometric identity sin( _π −_ _θ_ ) = sin _θ_, we obtain for _k_ _∈{ϕ, ψ}_
+
+
+1 1
+_wk_ ( _χ_ _[′]_ _k_ [)] [=] 1 + sin [2][�] (2 _π −_ _χk_ ) _/_ 2� = 1 + sin [2] ( _χk/_ 2) [=] _[w][k]_ [(] _[χ][k]_ [)] _[,]_ and _wω_ ( _χ_ _[′]_ _ω_ [) =] _[ w][ω]_ [(] _[χ][ω]_ [)] _[.]_
+
+(40)
+Therefore, for any _u, v_ _∈_ _Tχ_ T [3],
+
+
+    _g_ T3�� _χ_ _[′]_ [(] _[M][∗][u, M][∗][v]_ [) =] _wk_ ( _χ_ _[′]_ _k_ [) (] _[M][∗][u]_ [)] _[k]_ [(] _[M][∗][v]_ [)] _[k]_ (41)
+
+_k∈{ϕ,ψ,ω}_
+
+= _wϕ_ ( _χ_ _[′]_ _ϕ_ [)(] _[−][u][ϕ]_ [)(] _[−][v][ϕ]_ [) +] _[ w][ψ]_ [(] _[χ][′]_ _ψ_ [)(] _[−][u][ψ]_ [)(] _[−][v][ψ]_ [) +] _[ w][ω]_ [(] _[χ][′]_ _ω_ [)] _[u][ω][v][ω]_ (42)
+
+= _wϕ_ ( _χϕ_ ) _uϕvϕ_ + _wψ_ ( _χψ_ ) _uψvψ_ + _wω_ ( _χω_ ) _uωvω_ (43)
+
+= _g_ T3�� _χ_ [(] _[u, v]_ [)] _[.]_ (44)
+
+
+which proves that _M_ preserves the metric, hence is an isometry. The product argument yields the
+same conclusion on T [3] _[N]_ .
+
+
+15
+
+
+= �� _vt_ ( _τ_ ) _,_ E _τ_ 0 _,τ_ 1� _pt_ ( _pτt|_ ( _ττ_ 0 _,τ_ ) 1) _ut_ ( _τ_ _| τ_ 0 _, τ_ 1)��
+
+
+(35)
+_g_ _[p][t]_ [(] _[τ]_ [) d] _[τ]_
+
+
+��� = _vt_ ( _τ_ ) _, ut_ ( _τ_ _| τ_ 0 _, τ_ 1)
+
+
+_[|][ τ]_ [0] _[, τ]_ [1][)] _[ p]_ [0][(] _[τ]_ [0][)] _[ p]_ [1][(] _[τ]_ [1][) d] _[τ]_ [ d] _[τ]_ [0][ d] _[τ]_ [1] [(36)]
+_g_ _[p][t]_ [(] _[τ]_
+
+
+(a) length70 Chirality (b) length300 chirality (c) length200 chirality (d) length300 chirality
+
+
+Figure 6: Ramachandran distribution image of the generated backbone of different length.
+
+
+Figure 7: Different length of Protein Backbone Designed by ChiFlow. Varing from 60 to 256.
+
+
+**Consequence.** Since _M_ is an isometric diffeomorphism and an involution, the asymmetry constraint ˆ _v_ ( _Mχ, t_ ) = _−M∗v_ ˆ( _χ, t_ ) is metric-consistent and well-defined everywhere on T [3] _[N]_ .
+
+
+16
+
+
+A.6 THE USE OF LARGE LANGUAGE MODELS
+
+
+In this paper, we used Deepseek to polish our writing and made use of copilot to help debug our
+code.
+
+
+17

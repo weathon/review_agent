@@ -1,0 +1,1757 @@
+# IN-CONTEXT WATERMARKS FOR LARGE LANGUAGE MODELS
+
+
+**Yepeng Liu** _[†]_ [ 1] **,** **Xuandong Zhao** [2] **,** **Christopher Kruegel** [1] **,** **Dawn Song** [2] **,** **Yuheng Bu** [1]
+
+1UC Santa Barbara 2UC Berkeley
+
+
+ABSTRACT
+
+
+The growing use of large language models (LLMs) for sensitive applications has
+highlighted the need for effective watermarking techniques to ensure the provenance and accountability of AI-generated text. However, most existing watermarking methods require access to the decoding process, limiting their applicability in real-world settings. One illustrative example is the use of LLMs by dishonest reviewers in the context of academic peer review, where conference organizers
+have no access to the model used but still need to detect AI-generated reviews.
+Motivated by this gap, we introduce In-Context Watermarking (ICW), which embeds watermarks into generated text solely through prompt engineering, leveraging LLMs’ in-context learning and instruction-following abilities. We investigate
+four ICW strategies at different levels of granularity, each paired with a tailored
+detection method. We further examine the Indirect Prompt Injection (IPI) setting
+as a specific case study, in which watermarking is covertly triggered by modifying
+input documents such as academic manuscripts. Our experiments validate the feasibility of ICW as a model-agnostic, practical watermarking approach. Moreover,
+our findings suggest that as LLMs become more capable, ICW offers a promising
+direction for scalable and accessible content attribution. Our code is available at
+[https://github.com/yepengliu/In-Context-Watermarks.](https://github.com/yepengliu/In-Context-Watermarks)
+
+
+1 INTRODUCTION
+
+
+The rapid adoption of large language models (LLMs) (Grattafiori et al., 2024; Yang et al., 2024)
+across diverse applications has raised growing concerns about the provenance of AI-generated text.
+As LLMs produce increasingly human-like content, reliably distinguishing such content from human
+writing has become critical, fueling demand for watermarking techniques (Zhao et al., 2024; Liu
+et al., 2024b; Pan et al., 2024) that embed imperceptible signals for traceability.
+
+
+Most existing LLM watermarking methods place control over embedding and detection in the hands
+of model owners (Zhao et al., 2024). They typically modify the next-token prediction distribution (Kirchenbauer et al., 2023; Zhao et al., 2023a; Liu & Bu, 2024; Liu et al., 2024a) or use
+pseudo-random sampling (Aaronson, 2023; Christ et al., 2023; Kuditipudi et al., 2023; Hu et al.,
+2023; He et al., 2024), achieving a balance of detectability, robustness, and text quality. However,
+these approaches typically require access to the decoding process of the LLMs, which significantly
+limits their applicability across broader use cases and scenarios.
+
+
+Specifically, consider the challenge faced by academic conferences in identifying LLM-generated
+reviews submitted by dishonest (or lazy) reviewers. With no visibility into the reviewer’s workflow,
+editors need a reliable way to detect AI involvement. Post-hoc detection tools, such as DetectGPT (Mitchell et al., 2023) and GPTZero (Tian & Cui, 2023), offer a way to detect AI-generated
+text but often suffer from low accuracy and high false positive rates, underscoring the need for a
+more proactive approach. On the other hand, existing watermarking methods fall short, as editors
+lack access to the LLM used by the reviewer. Moreover, to our knowledge, major LLM providers
+do not publicly use watermarks.
+
+
+One viable opportunity for conference organizers may involve modifying the manuscript itself, given
+that many reviewers are likely to input the document directly into an LLM for convenience. By em
+
+_†_ Correspondence to: yepengliu@ucsb.edu
+
+
+1
+
+
+input. This instruction can be provided either by the user or by a third-party application that interacts
+with the LLM exclusively through its API to obtain generated text. Once the watermarking instruction is set, users can interact with the LLM as usual, submitting queries and receiving responses,
+while the generated text automatically contains the embedded invisible watermark.
+
+
+bedding imperceptible signals into the manuscript through carefully crafted watermarking instructions, the LLM’s output can carry a hidden watermark that enables later detection and attribution.
+
+
+More broadly, such a motivating example points to a growing research direction: _as LLMs become_
+_increasingly capable, can we embed watermarks through prompt engineering alone, without requir-_
+_ing privileged access to the model?_ To this end, this paper explores the **In-Context Watermarking**
+**(ICW)** for LLMs (Figure 1), which embeds watermarks into generated text leveraging the powerful in-context learning (Dong et al., 2022; Brown et al., 2020) and instruction-following capabilities (Zhou et al., 2023; Mu et al., 2023) of LLMs. With carefully crafted watermarking instructions,
+LLMs can produce outputs that carry detectable watermarks, enabling reliable detection.
+
+
+We begin by exploring the general **Direct** **Text** **Stamp** **(DTS)** **setting**, where we design different
+watermarking schemes delivered as a system prompt, ensuring that subsequent LLM outputs are
+watermarked throughout the conversation. Next, we investigate the application of the proposed
+ICW approach for AI misuse detection in the paper review scenario, as a case study, framed within
+the **Indirect** **Prompt** **Injection** **(IPI)** **setting** (Zou et al., 2023; Greshake et al., 2023). In the IPI
+setting, we assess whether ICWs can serve as an invisible mechanism for reliably detecting the
+misuse of AI-generated reviews for papers submitted to academic conferences (Liang et al., 2024b;a;
+Thakkar et al., 2025), by covertly injecting specially designed watermarking instructions into the
+peer-reviewed papers. In summary, our paper makes the following contributions:
+
+
+- We explore the feasibility of ICW by proposing four distinct ICW strategies and applying them
+to both the DTS and IPI settings, thereby expanding the applicability of LLM watermarking to a
+wider range of scenarios.
+
+
+- We design distinct watermarking and detection schemes for each ICW strategy, and analyze their
+trade-offs among LLM requirements, detectability, robustness, and text quality.
+
+
+- The experiments demonstrate the effectiveness of ICW on powerful LLMs across both the DTS
+and IPI settings, showing promising performance in detection accuracy, robustness, and text quality. We find that the effectiveness of ICW is highly dependent on the capability of the underlying
+LLMs, e.g., in-context learning and instruction-following abilities. This suggests that as LLMs
+continue to advance, ICWs will become correspondingly more powerful.
+
+
+- Furthermore, we discuss the limitations of current ICW methods under a potential attack and
+highlight promising directions for future work (details in Section 6).
+
+
+2
+
+
+2 RELATED WORK
+
+
+Generative AI watermarking has shown promise across several applications, including distinguishing AI- from human-generated content (Chakraborty et al., 2023; Yang et al., 2023b; Liu et al.,
+2025b; 2024d; Wu et al., 2025b), protecting intellectual property (Panaitescu-Liess et al., 2025; Gu
+et al., 2023; Liu et al., 2023c; 2025a; Zhang et al., 2025a), and tracing content provenance (Qu et al.,
+2024; Yoo et al., 2023; He et al., 2025; Zhao et al., 2023b; Cui et al., 2026). Existing approaches
+fall into two categories: post-hoc and in-process. While effective in some settings, they are limited
+in cases requiring AI (mis)use tracing without direct model access or control.
+
+
+**Post-hoc LLM Watermarking.** Post-hoc watermarking methods embed watermarks into existing
+texts by transforming unwatermarked content into a watermarked version. These methods typically
+operate through controlled modifications of the original text, such as format transformations (Brassil
+et al., 1995; Por et al., 2012; Sato et al., 2023; Rizzo et al., 2016), lexical substitutions (Yang et al.,
+2023a; 2022), syntactic alterations (Meral et al., 2009; Topkara et al., 2006), and language model
+regeneration (An et al., 2025b;a; Chang et al., 2024; Zhang et al., 2024; Qiang et al., 2023). Specifically, Sato et al. (2023) embeds various Unicode characters into unwatermarked text; Yang et al.
+(2023a) introduces watermarks via context-based synonym replacement; and Chang et al. (2024)
+paraphrases the unwatermarked text using LLMs to integrate a set of selected words.
+
+
+**In-process LLM Watermarking.** In-process LLM watermarks embed the information into the output during the generation process (He et al., 2025; Li et al., 2024; 2025; Liu et al., 2023a; Zhang
+et al., 2025b; Zhu et al., 2024; Chen et al., 2025; 2026; 2024; Bahri et al., 2024; Zhao et al., 2025;
+Fu et al., 2024; Xu et al., 2024; Huo et al., 2024; Hou et al., 2023; Ren et al., 2023; Dathathri et al.,
+2024; Giboulot & Furon, 2024; Fernandez et al., 2023; Lee et al., 2023; Wu et al., 2025c;a). Most
+in-process watermarking methods embed watermarks by controlling the decoding process of LLMs,
+typically through techniques such as logits perturbation and pseudo-random sampling. Kirchenbauer et al. (2023) partitions the LLM vocabulary into green and red token lists and softly biases
+the sampling process to increase the likelihood of generating green tokens. Aaronson (2023) employs the Gumbel-Max trick as a pseudo-random sampling strategy during the generation process.
+Moreover, Bahri et al. (2024) proposes a black-box in-process watermarking method that repeatedly
+samples multiple _n_ -grams (texts) at each generation step and selects the one with the highest score
+based on a hash function.
+
+
+**Prompt Injection Attack.** Prompt injection attacks exploit LLMs’ tendency to treat user input as
+instructions, allowing attackers to manipulate prompts and induce unintended behavior. They fall
+into two types: direct prompt injection (Liu et al., 2024e; 2023b; 2024c; Zou et al., 2023), where the
+attacker directly modifies the prompt passed to the LLMs, and indirect prompt injection (Greshake
+et al., 2023), where malicious instructions are embedded into the content that is fetched or referenced
+by the LLMs (e.g., links, documents, or user data). Our IPI setting belongs to the indirect category,
+but with a reversed threat model: benign entities embed watermarking instructions into documents,
+while the potentially malicious user submits these documents to an LLM (e.g., for paper reviewing).
+
+
+3 IN-CONTEXT WATERMARKS
+
+
+3.1 PROBLEM FORMULATION
+
+
+We first formulate the ICW problem in the general Direct Text Stamp (DTS) setting, where users
+obtain watermarked responses by directly providing watermarking instructions in the system prompt.
+
+
+**Watermark Embedding.** Given an LLM _M_, users interact with it exclusively by providing prompts
+and receiving text responses. We categorize the user input into two types: watermarking instruction
+Instruction( **k** _, τ_ ) and normal query _Q_, where **k** is the secret key and _τ_ is the watermark scheme.
+Both **k** and _τ_ are shared with the watermark detector. Therefore, given the watermarking instruction
+and normal query, the ICW-generated response is given by:
+
+
+_**y**_ _←M_ (Instruction( **k** _, τ_ ) _⊕_ _Q_ ) _,_
+
+
+where _**y**_ = _{y_ [(1)] _, ..., y_ [(] _[T]_ [ )] _}_ is the LLM response, and _⊕_ represents the concatenation operation. We
+need to design the Instruction( **k** _, τ_ ) to get the watermarked LLM response for any _Q_ .
+
+
+3
+
+
+Figure 2: Case study of the IPI setting: conference organizers embed a predefined watermarking
+instruction (invisible to the reviewer, e.g., ‘white text’) into the submitted papers. Reviewers who
+input the full PDF into an LLM to generate an AI review, typically a prohibited action, can then be
+identified by detecting the watermark in the submitted review.
+
+
+**Watermark Detection.** The detection process is agnostic to the LLM _M_ . The watermark detector,
+_D_ ( _·|_ **k** _, τ_ ) : _Y_ _[∗]_ _�→_ R, operates using the knowledge of **k** and _τ_ to analyze the suspect text _**y**_ . The
+detection of the watermark can be formulated as a hypothesis testing problem as follows:
+
+
+H0 : The text is generated without the knowledge of **k** and _τ._
+H1 : The text is generated with the knowledge of **k** and _τ._
+
+
+Specifically, we identify suspect _**y**_ as watermarked (i.e., H1) if the detector satisfies _D_ ( _**y**_ _|_ **k** _, τ_ ) _≥_ _η_,
+where _η_ is the predefined threshold to control the true positive rate and false positive rate.
+
+
+3.2 INDIRECT PROMPT INJECTION (IPI) SETTING
+
+
+The IPI setting highlights the broader applicability of ICW, enabling the tracing of AI misuse through
+the indirect injection of watermarking instructions. A motivating example is the growing concern
+over the misuse of LLMs in the peer review for academic conferences. As the need for reliable
+methods to help organizers detect AI-generated reviews becomes increasingly urgent, we explore a
+case study showing how ICW can serve as a covert signal to achieve this goal.
+
+
+In the IPI setting, the threat model (Figure 2) involves three entities: paper authors, reviewers,
+and conference organizers. Authors submit their work for peer review. Reviewers are tasked with
+evaluating submitted papers. Conference organizers aim to maintain the integrity of the review process by identifying dishonest reviewers who upload papers to LLMs and ask for reviews, violating
+conference policies. The conference organizers can covertly embed the watermarking instruction
+Instruction( **k** _, τ_ ) into submitted papers, for example, by using ‘white text’ (text colored the same as
+the background) within the PDF file [1] . Consequently, if a reviewer inputs the entire confidential PDF
+manuscript (containing the hidden instruction) into an LLM to generate a review, the LLM’s output
+will ideally contain the detectable watermark (as illustrated in Figure 2, Right).
+
+
+The high-level idea is to leverage the LLM’s ability to follow natural-language instructions by
+covertly embedding the watermarking instruction within a long text (e.g., a paper). This allows
+the identification of content produced by LLMs that have processed text containing the hidden watermarking instruction. Given a long text _**t**_ and a watermarking instruction Instruction( **k** _, τ_ ), the
+stamped text _**t**_ [˜] is given by concatenating the two: _**t**_ [˜] = _**t**_ _⊕_ Instruction( **k** _, τ_ ). Then, any user who
+inputs this stamped text to LLMs with a query _Q_ will get a watermarked response, i.e.,
+
+
+_**y**_ _←M_ ( _**t**_ _⊕_ Instruction( **k** _, τ_ ) _⊕_ _Q_ ) _._
+
+
+In the IPI setting, the instruction Instruction( **k** _, τ_ ) can be covertly concatenated with the context
+using various obfuscation methods, such as zero-font-size text or transparent text, which have been
+extensively explored in many prompt injection attacks. The adversary (in this case, the reviewer)
+
+
+1While some authors might embed invisible prompts in their papers to identify LLM-generated reviews, we
+contend that a more reliable and impartial solution should be implemented by conference organizers. Authors
+may have a conflict of interest, potentially being motivated to falsely label unfavorable reviews as AI-generated.
+
+
+4
+
+
+may also employ defensive strategies, such as detecting and removing the embedded instruction.
+In this paper, we primarily explore the potential application of ICW in the IPI setting. As such, a
+detailed investigation of attack and defense methods is left for future work.
+
+
+4 EXPLORATION OF DIFFERENT ICW METHODS
+
+
+4.1 PREVIEW OF DIFFERENT ICW METHODS
+
+
+Following the linguistic structure of natural language, we present four different ICW strategies at
+different levels of granularity: Unicode, Initials, Lexical, and Acrostics ICWs. In what follows,
+we present the concrete algorithms and abbreviated watermarking instructions for each strategy,
+deferring the full watermarking instructions to Appendix A.
+
+
+Table 1: Summary of the different ICW methods evaluated across key criteria. Darker circles indicate higher values, offering an intuitive illustration of the trade-offs among the various ICW methods.
+
+
+**ICW Methods** **LLM requirements** _↓_ **Detectability** _↑_ **Robustness** _↑_ **Text Quality** _↑_
+
+
+Unicode ICW
+Initials ICW
+Lexical ICW
+Acrostics ICW
+
+
+We design and evaluate the ICW methods based on four key criteria: LLM requirements, detectability, text quality, and robustness (see Table 1). Specifically, **LLM** **requirements** refer to the complexity of the watermarking instruction and the LLM’s ability to follow it reliably. More complex
+instructions typically require stronger instruction-following abilities, making them harder for less
+capable LLMs to execute. In the main text, we focus on ICW methods that achieve reasonable
+performance with current state-of-the-art LLMs, while additional methods that remain challenging
+under current model abilities are discussed in Appendix D.3. Robustness and detectability assess the
+watermark detection performance with and without modification, ensuring the reliability of ICW.
+
+
+4.2 ICW METHODS
+
+
+4.2.1 UNICODE ICW
+
+
+**Watermark** **Generation.** Unicode character insertion/replacement is the simplest approach explored in the paper, which leverages the fact that LLM vocabularies typically include a wide range
+of Unicode characters, such as invisible zero-width spaces (e.g., _\_ u200B, _\_ u200D ), Cyrillic letters that visually resemble Latin letters (e.g., _\_ u0410), and punctuation marks (e.g., _\_ u2024).
+Here, we instruct the LLM to insert a zero-width space character ( _\_ u200B) after each word in
+its responses during the conversation as the watermarking, i.e., _{y_ [(1)], _\_ u200B _, ...,_ _y_ [(] _[n]_ [)], _\_ u200B
+_}_ _←M_ (Instruction( **ku** _, τ_ **u** ) _⊕_ _Q_ ), where **ku** represents the Unicode we use, and _τ_ **u** denotes the
+Unicode ICW scheme. We show the abbreviated Instruction( **ku** _, τ_ **u** ) below:
+
+
+**Watermark Detection.** During the detection process, we set the detector as _D_ ( _**y**_ _|_ **ku** _, τ_ **u** ) := _[|]_ _**[y]**_ _N_ _[|]_ **[ku]** [,]
+
+where _|_ _**y**_ _|_ **ku** represents the number of inserted invisible Unicode in the suspect text.
+
+
+**Discussion.** Unicode-based ICW places minimal requirements on the LLM’s capabilities and has a
+negligible effect on text quality, as it is imperceptible to human readers. However, it applies only to
+digital text and does not persist in scanned or printed formats. Moreover, it is highly fragile to transformations like LLM paraphrasing, which may limit its application in broader scenarios. Note that
+this approach can be extended, like Cyrillic letter substitution or multi-bit encoding schemes (Sato
+et al., 2023).
+
+
+5
+
+
+4.2.2 INITIALS ICW
+
+
+**Watermark Generation.** Initials ICW encourages the use of words whose initial letters belong to
+a predefined set in the watermarked text. It works by first randomly selecting a set of green letters
+_AG_ from the alphabet of all English letters _A_ and then instructing the LLMs to use more words that
+begin with the green letters during generation. Therefore, we can obtain the watermarked response:
+_**y**_ _←M_ (Instruction( **kc** _, τ_ **c** ) _⊕_ _Q_ ), where **kc** represents the secret key to obtain _AG_, and _τ_ **c** denotes
+the Initials ICW scheme. We show the abbreviated watermarking instruction below:
+
+
+**Watermark** **Detection.** The Initials ICW improves the probability of green initial letters in the
+generated text. We detect the watermark by computing the z-statistic of the suspect _**y**_, i.e.,
+_D_ ( _**y**_ _|_ **kc** _, τ_ **c** ) := ( _|_ _**y**_ _|G −_ _γ|_ _**y**_ _|_ ) _/_ - _γ_ (1 _−_ _γ_ ) _|_ _**y**_ _|_, where _|_ _**y**_ _|G_ = [�] _i_ _[|]_ _**[y]**_ =1 _[|]_ [1] _[{][y]_ [(] _[i]_ [)][[0]] _[ ∈A][G][}]_ [,] _[ y]_ [(] _[i]_ [)][[0]][ repre-]
+sents the initial letter of _y_ [(] _[i]_ [)], and _|_ _**y**_ _|_ denotes the number of words in _**y**_ . Specifically, _γ_ denotes the
+fraction of words in human-written text that begin with a letter in the selected set _AG_ . We estimate
+the probability distribution _PA_ ( _·_ ) of initial letters based on the Canterbury Corpus (of Otago), and
+_γ_ can be computed as _γ_ = [�] _i_ _[|A|]_ =1 _[P][A]_ [(] _[a]_ [(] _[i]_ [)] _[∈A][G]_ [)][.]
+
+**Discussion.** The Initials ICW places substantial requirements on LLM’s instruction-following ability to achieve reliable detection performance. However, with sufficiently capable LLMs, the watermarked text exhibits high detectability and robustness. Although the Initials ICW is invisible to
+humans, it introduces a bias toward words beginning with the designated green letters. As a result,
+if an adversary becomes aware of the watermarking scheme, the green letter set _AG_ can be easily
+inferred, making the method vulnerable to spoofing attacks (Sadasivan et al., 2023).
+
+
+4.2.3 LEXICAL ICW
+
+
+**Watermark Generation.** Inspired by the green/red list watermarking (Kirchenbauer et al., 2023),
+we explore the possibility of providing a set of words to the LLM and instructing it to increase
+the likelihood of using these words in its responses. Given a secret key **kL** and a vocabulary _V_,
+we partition _V_ into a green word list _VG_ _⊂V_ of size _γ|V|_ and the remaining red word list _VR_ .
+Our Lexical ICW employs a vocabulary composed of complete words instead of tokens. To reduce the vocabulary size while preserving stylistic richness, we restrict _V_ to adjectives, adverbs,
+and verbs—word classes known to contribute more to the stylistic characteristics of text, independent of its topic (Liang et al., 2024a; Lin et al., 2023). The watermarked LLM response is
+_**y**_ _←M_ (Instruction( **kL** _, τ_ **L** ) _⊕_ _Q_ ), where _τ_ **L** denotes the Lexical ICW scheme. The abbreviated
+watermarking instruction is shown:
+
+
+**Watermark** **Detection.** The detection of Lexical ICW is similar to the Initials ICW (in Section 4.2.2), while _|_ _**y**_ _|G_ = [�] _i_ _[|]_ _**[y]**_ =1 _[|]_ [1] _[{][y]_ [(] _[i]_ [)] _[∈V][G][}]_ [ and] _[ γ]_ [=] _[ |V][G][|][/][|V|]_ [.]
+
+**Discussion.** Lexical ICW places high demands on an LLM’s ability to retrieve specific information
+from long contexts (Kamradt, 2023). As context length grows, retrieval accuracy typically drops.
+When provided with a long _VG_, LLMs must learn and internalize each word, select appropriate
+instances during generation, and increase the frequency of those words in the response, which may
+pose a significant challenge for current models.
+
+
+For Initials and Lexical ICWs, we provide a theoretical guarantee on controlling the false alarm rate,
+with full details given in Appendix B.
+
+
+4.2.4 ACROSTICS ICW
+
+
+**Watermark** **Generation.** For the sentence-level strategy, we explore the use of acrostics in ICW.
+The high-level idea is to embed a secret message by controlling the initial letters of sentences during
+text generation. Specifically, we randomly sample a watermark key sequence _**ζ**_ = _{ζ_ [(1)] _, ..., ζ_ [(] _[m]_ [)] _}_
+
+
+6
+
+
+with a secret key **ks**, where _ζ_ [(] _[i]_ [)] _∈A_ . Let the generated sentence initial letters be _**ℓ**_ = _{ℓ_ [(1)] _, ..., ℓ_ [(] _[k]_ [)] _}_ .
+Our goal is to ensure that, _ℓ_ [(] _[i]_ [)] = _ζ_ [(] _[i]_ [)] for each generated sentence. We can obtain the watermarked
+response: _**y**_ _←M_ (Instruction( **ks** _, τ_ **s** ) _⊕_ _Q_ ), where _τ_ **s** is the Acrostics ICW scheme. We show the
+abbreviated watermarking instruction below:
+
+
+**Watermark** **Detection.** If the watermark is embedded into the LLM response, the sequence of
+sentence initial letters _**ℓ**_ should closely match the secret key sequence _**ζ**_ . To detect the existence
+of a watermark, we use the Levenshtein distance _d_ ( _**ℓ**_ _,_ _**ζ**_ ) to measure the closeness between _**ℓ**_ and
+_**ζ**_ . Specifically, we compute the z-statistic, i.e., _D_ ( _**y**_ _|_ **ks** _, τ_ **s** ) := ( _µ −_ _d_ ( _**ℓ**_ _,_ _**ζ**_ )) _/σ_ . To estimate the
+unknown mean _µ_ and standard deviation _σ_, we randomly resample _N_ sequences of sentence initial
+letters ( _**ℓ**_ **[˜]** 1 _, . . .,_ _**ℓ**_ **[˜]** _N_ ) from the suspect text. The mean and standard deviation are then estimated as
+
+_µ_ = _N_ [1] - _Nj_ =1 _[d]_ [(] _**[ℓ]**_ **[˜]** _[j][,]_ _**[ ζ]**_ [)][, and] _[ σ]_ [=] - _N_ 1 _−_ 1 - _Nj_ =1 [(] _[d]_ [(] _**[ℓ]**_ **[˜]** _[j][,]_ _**[ ζ]**_ [)] _[ −]_ _[µ]_ [)][2][.]
+
+
+**Discussion.** Acrostics ICW requires a strong instruction-following ability of LLM to ensure the sentence initial letter will follow the sequence specified by _**ζ**_ . Using a fixed key across all generations,
+however, can result in a conspicuous watermark pattern. To mitigate this, a more stealthy strategy is
+to sample a very long _**ζ**_ and use a different short subsequence for each generation. Since Acrostics
+ICW constrains only the sentence initial letters and not the rest of the content, it remains robust to
+editing and paraphrasing, as long as most of the sentence initial letter sequence is preserved.
+
+
+5 EXPERIMENTS
+
+
+5.1 EXPERIMENT SETTINGS
+
+
+**Implementation** **Details.** We evaluate our ICW methods in two different settings using two advanced proprietary LLMs, gpt-4o-mini (OpenAI, 2024) and gpt-o3-mini (OpenAI, 2025),
+where gpt-o3-mini possesses stronger in-context learning, instruction-following, and longcontext information retrieval capabilities. The concrete implementation details for different ICW
+strategies can be found in Appendix C.
+
+
+**Datasets.** For the DTS setting, we use the long-form question answering dataset ELI5 (Fan et al.,
+2019), which contains diverse questions requiring multi-sentence explanations. The answers in the
+original dataset serve as the human-generated text. For the IPI setting, we use a curated dataset of
+ICLR papers from 2020 to 2023 (Weng et al., 2025). In our experiments, each complete paper is
+provided as input for review.
+
+
+**Baselines.** Since our ICW methods operate in a fully black-box setting, i.e., without access to
+model weights, logits, or the sampling process, we compare them against two open-source blackbox baselines (PostMark (Chang et al., 2024) and YCZ+23 (Yang et al., 2023a)) and one posthoc baseline (GPTZero Tian & Cui (2023)) in the DTS setting. Both methods are post-processing
+approaches that embed watermarks into already generated text. These baselines are not applicable
+in the IPI setting, as the dishonest reviewer has no incentive to add a watermark by themselves.
+
+
+**Evaluation** **Metrics.** We evaluate the watermark detection and robustness performance using the
+ROC-AUC, which measures the detector’s ability to distinguish between classes by assessing the
+trade-off between the true positive rate (T) and the false positive rate (F) across varying thresholds. In
+addition, we report detection performance at specific low false positive rate levels, such as T@1%F
+and T@10%F. The robustness of ICWs is evaluated by randomly deleting and replacing 30% of the
+words in the watermarked text, as well as by paraphrasing it using an LLM. For the word replacement
+attack, we selectively replace nouns, verbs, adjectives, and adverbs in the watermarked text with their
+synonyms. We evaluate the quality of the watermarked text using both perplexity and the LLM-asa-Judge approach (Gu et al., 2024). Perplexity is computed using LLaMA-3.1-70B (Grattafiori
+et al., 2024). For the LLM-as-a-Judge, we employ gemini-2.0-flash (Google Cloud, 2025)
+to assess the watermarked text across three dimensions: relevance, clarity, and quality, each scored
+
+
+7
+
+
+from 1 to 5. The prompt used to evaluate text quality is provided in Appendix E. For each evaluation,
+we use 500 watermarked texts and 500 human-generated texts, each consisting of 300 words.
+
+
+5.2 MAIN RESULTS
+
+
+Table 2: Detection performance under the direct text stamp and indirect prompt injection settings.
+ICW effectiveness highly depends on the capabilities of the underlying LLMs and is expected to
+improve as models advance (e.g., from GPT-4o-mini to GPT-o3-mini).
+
+
+DTS setting IPI Setting
+Language Models Methods
+
+ROC-AUC _↑_ T@1%F _↑_ T@10%F _↑_ ROC-AUC _↑_ T@1%F _↑_ T@10%F _↑_
+
+
+_−_ YCZ+23 (Yang et al., 2023a) 0 _._ 998 0 _._ 992 0 _._ 998 _−_ _−_ _−_
+
+
+GPT-4o-mini
+
+
+GPT-o3-mini
+
+
+PostMark (Chang et al., 2024) 0 _._ 963 0 _._ 638 0 _._ 914 _−_ _−_ _−_
+Unicode ICW 1 _._ 000 1 _._ 000 1 _._ 000 0 _._ 857 0 _._ 714 0 _._ 735
+Initials ICW 0 _._ 572 0 _._ 006 0 _._ 140 0 _._ 620 0 _._ 006 0 _._ 076
+Lexical ICW 0 _._ 910 0 _._ 320 0 _._ 692 0 _._ 889 0 _._ 054 0 _._ 564
+Acrostics ICW 0 _._ 590 0 _._ 036 0 _._ 168 0 _._ 592 0 _._ 002 0 _._ 448
+
+
+PostMark (Chang et al., 2024) 0 _._ 977 0 _._ 802 0 _._ 946 _−_ _−_ _−_
+Unicode ICW 1 _._ 000 1 _._ 000 1 _._ 000 1 _._ 000 1 _._ 000 1 _._ 000
+Initials ICW 0 _._ 999 0 _._ 990 0 _._ 998 0 _._ 997 0 _._ 910 0 _._ 998
+Lexical ICW 0 _._ 995 0 _._ 930 0 _._ 994 0 _._ 997 0 _._ 974 0 _._ 989
+Acrostics ICW 1 _._ 000 1 _._ 000 1 _._ 000 0 _._ 997 0 _._ 982 0 _._ 998
+
+
+5.2.1 DETECTION PERFORMANCE
+
+
+We evaluate the detection performance of ICW methods across different LLMs with varying capabilities and under different settings (detailed settings in Section 5.1), as shown in Table 2. The
+comparison with the post-hoc method is presented in Appendix D.1.
+
+
+**Among different ICWs** : Unicode ICW demonstrates strong detection performance across models
+of differing capabilities, indicating that it places the lowest requirement on the LLM’s instructionfollowing ability. In contrast, the Initials and Acrostics ICWs require substantially higher model
+capabilities. As shown in the table, these methods exhibit very low detection performance when used
+with GPT-4o-mini, suggesting that the corresponding watermarking instructions were largely
+ignored or not followed. However, their performance improves significantly with GPT-o3-mini,
+highlighting the effectiveness of ICWs when used with sufficiently capable models.
+
+
+**Comparison with baselines** : When used with high-capability LLMs, ICW methods achieve detection performance comparable to that of the two baselines under the DTS setting. Importantly, unlike
+PostMark and YCZ+23, which rely on post-processing and cannot be used in the IPI setting, ICW
+methods are well-suited for IPI, enabling effective detection of AI misuse in broader scenarios.
+
+
+**DTS and IPI** : With high-capability LLMs, ICW methods demonstrate strong detection performance
+in both the DTS and IPI settings. Notably, in the IPI setting, results show that the LLM can reliably
+follow watermarking instructions even in long-context scenarios.
+
+
+5.2.2 ROBUSTNESS PERFORMANCE
+
+
+The robustness of ICW is evaluated through random deletion, word replacement, and paraphrasing
+(detailed settings in Section 5.1). The results for the DTS setting are shown in Figure 3. The results
+for the IPI setting are presented in Table 6 in the Appendix.
+
+
+**Among different ICWs** : Unicode ICW robustness result is omitted from the figure due to its strong
+dependence on the specific operations applied to the watermarked text. Thanks to zero-width space
+insertion after each word, Unicode ICW is nearly perfectly robust to copy-paste and basic edits
+like word replacement or deletion. However, it is highly fragile to transformations such as LLMbased paraphrasing or cross-platform transmission, which may automatically remove all the inserted
+Unicode characters. In contrast, the other three ICW methods demonstrate greater robustness, especially with more capable LLMs. The robustness of the Initials and Lexical ICWs stems from the
+high proportion of green letters and green words embedded in the watermarked text. As a result,
+these methods can withstand a certain degree of text editing, including paraphrasing. The Acrostics
+
+
+8
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||<br> <br>|YCZ+23<br>PostMar<br>|AU<br>k  AU<br>|C=0.980<br>  C=0.908<br>|
+||<br> <br>|~~nitial~~<br>Lexical<br>Acrosti|~~s  AU~~<br>  AU<br>cs AU|~~  =0.999~~<br>  C=0.857<br> C=0.881|
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+False Positive Rate
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||Y<br>P<br>|CZ+23<br>ostMar<br>|AU<br>k  AU<br>|C=0.982<br>  C=0.956<br>|
+|||<br>L<br>A|~~nitial~~<br>exical<br>crosti|~~  AU~~<br>  AU<br>cs AU|~~  =0.999~~<br>  C=0.758<br> C=1.000|
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+False Positive Rate
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||Y<br>P<br>|CZ+23<br>ostMa<br>|AU<br>rk  AU<br>|C=0.557<br>  C=0.841<br>|
+|||~~I~~<br>L<br>A|~~itia~~<br>exica<br>crost|~~s  AU~~<br>l  AU<br>ics AU|~~  =0.887~~<br>  C=0.924<br> C=0.922|
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+False Positive Rate
+
+
+Figure 3: Robustness performance of ICWs against editing and paraphrasing attacks under DTS setting, using gpt-o3-mini. More detailed results on robustness can be found in Appendix D.1. The
+Initials, Lexical, and Acrostics ICWs maintain high detectability even under paraphrasing. Unicode
+ICW is not included in the figures; detailed discussion can be found in Section 5.2.2.
+
+
+ICW relies only on the alignment between sentence-initial letters and the pre-defined secret string.
+As a result, it exhibits high redundancy and robustness against various text edits, as long as the
+sentence-initial letters remain unchanged.
+
+
+**Comparison with baselines** : ICW methods demonstrate consistently strong robustness under paraphrasing attacks. However, Lexical ICW shows lower robustness under the replacement attack compared to the baselines, likely because it relies on green words, mainly nouns, verbs, adjectives, and
+adverbs, which are targeted by the replacement procedure. Initials ICW consistently achieves high
+detection performance under both editing and paraphrasing attacks, outperforming the baselines.
+
+
+Table 3: Text quality across different watermarking methods using gpt-o3-mini, evaluated with
+the LLM-as-a-Judge. ICW methods exhibit text quality comparable to human and unwatermarked
+text on relevance, quality, and clarity. Full results are provided in Table 4 of Appendix D.1.
+
+
+**Language Models** **Methods** **Relevance** _↑_ **Quality** _↑_ **Clarity** _↑_ **Overall** _↑_
+
+
+Human 4 _._ 318 4 _._ 440 3 _._ 946 4 _._ 235
+
+_−_
+YCZ+23 (Yang et al., 2023a) 4 _._ 196 3 _._ 746 3 _._ 652 3 _._ 865
+
+
+GPT-o3-mini
+
+
+Unwatermarked 4 _._ 982 5 _._ 000 4 _._ 994 4 _._ 992
+PostMark (Chang et al., 2024) 2 _._ 648 3 _._ 848 2 _._ 494 2 _._ 997
+Unicode ICW 4 _._ 960 4 _._ 940 4 _._ 530 4 _._ 810
+Initials ICW 4 _._ 532 4 _._ 608 3 _._ 706 4 _._ 282
+Lexical ICW 4 _._ 918 4 _._ 990 4 _._ 516 4 _._ 808
+Acrostics ICW 4 _._ 950 4 _._ 978 4 _._ 510 4 _._ 813
+
+
+5.2.3 TEXT QUALITY
+
+
+The quality of the watermarked text is evaluated using both the LLM-as-a-Judge and perplexity (details in Section 5.1), as presented in Table 3 and Figure 4 (Appendix D.1). As gpt-4o-mini
+fails to consistently follow the watermarking instructions, we only focus on the results for
+gpt-o3-mini.
+
+
+For response relevance, clarity, and quality, as evaluated by the LLM-as-a-Judge, the ICW responses
+maintain high scores for relevance and quality, with a relatively lower score in clarity. This suggests
+that ICW has minimal impact on content accuracy, as LLMs are consistently instructed to prioritize
+relevance and correctness. The models tend to embed watermarks implicitly by leveraging the inherent redundancy of natural language. Compared to Unicode and Initials ICWs, the Lexical and
+Acrostics ICWs achieve a more favorable trade-off between robustness and text quality. Specifically,
+for Lexical ICW, one potential reason is that the division of the vocabulary is more semantically
+meaningful compared to the division based on individual letters. Acrostics ICW only constrains
+sentence-initial words, leaving the rest of the generation process unrestricted, which helps preserve
+quality. Overall, ICWs outperform baselines in both perplexity and LLM-as-a-Judge evaluations.
+
+
+9
+
+
+**Additional** **Main** **Results.** In Appendix D.1, we present two extra main results: (1) We conduct
+an ablation study to examine how context and output length affect detection performance. (2) We
+investigate two potential attacks: one assesses the ease of identifying and removing ICWs, and
+the other evaluates detection performance when an adversary prepends the instruction “ignore prior
+prompts” before the review prompt in the IPI setting.
+
+
+6 CONCLUDING REMARKS
+
+
+This paper provides an initial exploration of ICW, which demonstrates its effectiveness in terms
+of detectability, robustness, and text quality, extending the existing LLM watermarking approaches
+to broader application scenarios, i.e, DTS setting and IPI setting. Unlike existing in-process LLM
+watermarking methods, where control over the watermark resides with LLM providers who may _lack_
+_sufficient motivation_ to implement watermarking due to concerns over user retention, ICW offers an
+alternative solution. It empowers third parties who are _motivated_ to watermark LLM-generated text
+by leveraging the capabilities of powerful LLMs.
+
+
+However, current ICW approaches also have certain limitations, which warrant consideration in
+future research on ICW. **Improving** **watermarking** **instructions:** Existing watermarking instructions are relatively simple, and there is clear potential for improvement. Future work can explore
+advanced prompt engineering, such as few-shot examples or chain-of-thought prompting, to better
+balance detectability, robustness, and text quality. **Treating ICW as a new alignment task:** As explored in Appendix D.3, current LLMs still struggle with Lexical ICW, particularly when handling
+large vocabularies where appropriate usage of each word in the provided vocabulary is required.
+Moreover, simulating the sampling process by providing a list of tokens in the context, as done
+in (Kirchenbauer et al., 2023), remains infeasible in practice due to limitations of in-context learning and instruction-following reliability. However, this concern is likely to diminish over time, as
+advancements in LLM capabilities will continue to enhance the effectiveness of ICW. Moreover, a
+more feasible approach may involve designing an ICW instruction-following dataset and incorporating it into the LLM’s alignment process.
+
+
+ETHICS STATEMENT
+
+
+This work focuses on watermarking methods for LLMs to support provenance, accountability, and
+responsible use of AI-generated text. Our research does not involve human subjects, sensitive personal data, or identifiable private information. The datasets used are widely adopted in prior research
+and were employed in accordance with their intended academic use. No personally identifiable information or confidential reviewer content was used. While watermarking techniques could, in
+principle, be misapplied (e.g., to track users without consent), our design explicitly targets scenarios of legitimate concern such as mitigating dishonest AI usage in peer review. We emphasize that
+ICWs are intended as a transparency and accountability tool to protect the integrity of academic and
+other sensitive processes. We do not advocate or enable surveillance, censorship, or discriminatory
+applications.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We have taken several steps to ensure the reproducibility of our results. Detailed descriptions of
+the proposed ICW methods, including watermarking instructions, are provided in Section 4 and
+Appendix A. Formal guarantees for false-alarm control are presented in Appendix B with complete
+proofs. Experimental settings, datasets, and implementation details are described in Section 5 and
+Appendix C, while additional ablation studies and robustness analyses are included in Appendix D.
+We use publicly available datasets, and preprocessing steps are fully documented.
+
+
+10
+
+
+REFERENCES
+
+
+Scott Aaronson. Watermarking of large language models. [https://simons.berkeley.](https://simons.berkeley.edu/talks/scott-aaronson-ut-austin-openai-2023-08-17)
+[edu/talks/scott-aaronson-ut-austin-openai-2023-08-17, 2023.](https://simons.berkeley.edu/talks/scott-aaronson-ut-austin-openai-2023-08-17) Accessed:
+2023-08.
+
+
+Li An, Yujian Liu, Yepeng Liu, Yuheng Bu, Yang Zhang, and Shiyu Chang. A reinforcement
+learning framework for robust and secure llm watermarking. _arXiv_ _preprint_ _arXiv:2510.21053_,
+2025a.
+
+
+Li An, Yujian Liu, Yepeng Liu, Yang Zhang, Yuheng Bu, and Shiyu Chang. Defending LLM
+watermarking against spoofing attacks with contrastive representation learning. _arXiv_ _preprint_
+_arXiv:2504.06575_, 2025b.
+
+
+Dara Bahri, John Wieting, Dana Alon, and Donald Metzler. A watermark for black-box language
+models. _arXiv preprint arXiv:2410.02099_, 2024.
+
+
+Jack T Brassil, Steven Low, Nicholas F Maxemchuk, and Lawrence O’Gorman. Electronic marking
+and identification techniques to discourage document copying. _IEEE Journal on Selected Areas_
+_in Communications_, 13(8):1495–1504, 1995.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Souradip Chakraborty, Amrit Singh Bedi, Sicheng Zhu, Bang An, Dinesh Manocha, and Furong
+Huang. On the possibilities of ai-generated text detection. _arXiv_ _preprint_ _arXiv:2304.04736_,
+2023.
+
+
+Yapei Chang, Kalpesh Krishna, Amir Houmansadr, John Wieting, and Mohit Iyyer. Postmark: A
+robust blackbox watermark for large language models. _arXiv preprint arXiv:2406.14517_, 2024.
+
+
+Ruibo Chen, Yihan Wu, Yanshuo Chen, Chenxi Liu, Junfeng Guo, and Heng Huang. A watermark
+for order-agnostic language models. _arXiv preprint arXiv:2410.13805_, 2024.
+
+
+Ruibo Chen, Yihan Wu, Junfeng Guo, and Heng Huang. Improved unbiased watermark for large
+language models. _arXiv preprint arXiv:2502.11268_, 2025.
+
+
+Ruibo Chen, Yihan Wu, Xuehao Cui, Jingqi Zhang, and Heng Huang. More haste, less speed:
+Weaker single-layer watermark improves distortion-free watermark ensembles. _arXiv_ _preprint_
+_arXiv:2602.11793_, 2026.
+
+
+Miranda Christ, Sam Gunn, and Or Zamir. Undetectable watermarks for language models. _arXiv_
+_preprint arXiv:2306.09194_, 2023.
+
+
+Xuehao Cui, Ruibo Chen, Yihan Wu, and Heng Huang. Mc 2 mark: Distortion-free multi-bit
+watermarking for long messages. _arXiv preprint arXiv:2602.14030_, 2026.
+
+
+Sumanth Dathathri, Abigail See, Sumedh Ghaisas, Po-Sen Huang, Rob McAdam, Johannes Welbl,
+Vandana Bachani, Alex Kaskasoli, Robert Stanforth, Tatiana Matejovicova, et al. Scalable watermarking for identifying large language model outputs. _Nature_, 634(8035):818–823, 2024.
+
+
+Qingxiu Dong, Lei Li, Damai Dai, Ce Zheng, Jingyuan Ma, Rui Li, Heming Xia, Jingjing Xu,
+Zhiyong Wu, Tianyu Liu, et al. A survey on in-context learning. _arXiv preprint arXiv:2301.00234_,
+2022.
+
+
+Angela Fan, Yacine Jernite, Ethan Perez, David Grangier, Jason Weston, and Michael Auli. Eli5:
+Long form question answering. _arXiv preprint arXiv:1907.09190_, 2019.
+
+
+Pierre Fernandez, Antoine Chaffin, Karim Tit, Vivien Chappelier, and Teddy Furon. Three bricks
+to consolidate watermarks for large language models. In _2023 IEEE International Workshop on_
+_Information Forensics and Security (WIFS)_, pp. 1–6. IEEE, 2023.
+
+
+11
+
+
+Jiayi Fu, Xuandong Zhao, Ruihan Yang, Yuansen Zhang, Jiangjie Chen, and Yanghua Xiao. Gumbelsoft: Diversified language model watermarking via the gumbelmax-trick. _arXiv_ _preprint_
+_arXiv:2402.12948_, 2024.
+
+
+Eva Giboulot and Teddy Furon. Watermax: breaking the llm watermark detectability-robustnessquality trade-off. _arXiv preprint arXiv:2403.04808_, 2024.
+
+
+Google Cloud. Gemini 2.0 Flash – model card (Vertex AI). Google Cloud Vertex AI Documentation, May 2025. [URL https://cloud.google.com/vertex-ai/generative-ai/](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-0-flash)
+[docs/models/gemini/2-0-flash.](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-0-flash) Page last updated 14 May 2025.
+
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, et al. The llama 3 herd
+of models. _arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario Fritz.
+Not what you’ve signed up for: Compromising real-world LLM-integrated applications with indirect prompt injection. In _Proceedings of the 16th ACM Workshop on Artificial Intelligence and_
+_Security_, pp. 79–90, 2023.
+
+
+Chenchen Gu, Xiang Lisa Li, Percy Liang, and Tatsunori Hashimoto. On the learnability of watermarks for language models. _arXiv preprint arXiv:2312.04469_, 2023.
+
+
+Jiawei Gu, Xuhui Jiang, Zhichao Shi, Hexiang Tan, Xuehao Zhai, Chengjin Xu, Wei Li, Yinghan Shen, Shengjie Ma, Honghao Liu, et al. A survey on LLM-as-a-judge. _arXiv_ _preprint_
+_arXiv:2411.15594_, 2024.
+
+
+Haiyun He, Yepeng Liu, Ziqiao Wang, Yongyi Mao, and Yuheng Bu. Universally optimal watermarking schemes for llms: from theory to practice. _arXiv preprint arXiv:2410.02890_, 2024.
+
+
+Haiyun He, Yepeng Liu, Ziqiao Wang, Yongyi Mao, and Yuheng Bu. Distributional information
+embedding: A framework for multi-bit watermarking. _arXiv preprint arXiv:2501.16558_, 2025.
+
+
+Abe Bohan Hou, Jingyu Zhang, Tianxing He, Yichen Wang, Yung-Sung Chuang, Hongwei
+Wang, Lingfeng Shen, Benjamin Van Durme, Daniel Khashabi, and Yulia Tsvetkov. Semstamp: A semantic watermark with paraphrastic robustness for text generation. _arXiv_ _preprint_
+_arXiv:2310.03991_, 2023.
+
+
+Zhengmian Hu, Lichang Chen, Xidong Wu, Yihan Wu, Hongyang Zhang, and Heng Huang. Unbiased watermark for large language models. _arXiv preprint arXiv:2310.10669_, 2023.
+
+
+Mingjia Huo, Sai Ashish Somayajula, Youwei Liang, Ruisi Zhang, Farinaz Koushanfar, and Pengtao
+Xie. Token-specific watermarking with enhanced detectability and semantic coherence for large
+language models. _arXiv preprint arXiv:2402.18059_, 2024.
+
+
+Greg Kamradt. Needle In A Haystack - pressure testing LLMs. GitHub repository, 2023. URL
+
+[https://github.com/gkamradt/LLMTest_NeedleInAHaystack.](https://github.com/gkamradt/LLMTest_NeedleInAHaystack) Original “Needle in a Haystack” benchmark (repository).
+
+
+John Kirchenbauer, Jonas Geiping, Yuxin Wen, Jonathan Katz, Ian Miers, and Tom Goldstein. A
+watermark for large language models. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+17061–17084. PMLR, 2023.
+
+
+Rohith Kuditipudi, John Thickstun, Tatsunori Hashimoto, and Percy Liang. Robust distortion-free
+watermarks for language models. _arXiv preprint arXiv:2307.15593_, 2023.
+
+
+Taehyun Lee, Seokhee Hong, Jaewoo Ahn, Ilgee Hong, Hwaran Lee, Sangdoo Yun, Jamin Shin,
+and Gunhee Kim. Who wrote this code? watermarking for code generation. _arXiv_ _preprint_
+_arXiv:2305.15060_, 2023.
+
+
+Xiang Li, Feng Ruan, Huiyuan Wang, Qi Long, and Weijie J Su. Robust detection of watermarks
+for large language models under human edits. _arXiv preprint arXiv:2411.13868_, 2024.
+
+
+12
+
+
+Xiang Li, Feng Ruan, Huiyuan Wang, Qi Long, and Weijie J Su. A statistical framework of watermarks for large language models: Pivot, detection efficiency and optimal rules. _The Annals of_
+_Statistics_, 53(1):322–351, 2025.
+
+
+Weixin Liang, Zachary Izzo, Yaohui Zhang, Haley Lepp, Hancheng Cao, Xuandong Zhao, Lingjiao
+Chen, Haotian Ye, Sheng Liu, Zhi Huang, et al. Monitoring ai-modified content at scale: A case
+study on the impact of chatgpt on ai conference peer reviews. _arXiv preprint arXiv:2403.07183_,
+2024a.
+
+
+Weixin Liang, Yaohui Zhang, Zhengxuan Wu, Haley Lepp, Wenlong Ji, Xuandong Zhao, Hancheng
+Cao, Sheng Liu, Siyu He, Zhi Huang, et al. Mapping the increasing use of llms in scientific
+papers. _arXiv preprint arXiv:2404.01268_, 2024b.
+
+
+Bill Yuchen Lin, Abhilasha Ravichander, Ximing Lu, Nouha Dziri, Melanie Sclar, Khyathi Chandu,
+Chandra Bhagavatula, and Yejin Choi. The unlocking spell on base LLMs: Rethinking alignment
+via in-context learning. _arXiv preprint arXiv:2312.01552_, 2023.
+
+
+Aiwei Liu, Leyi Pan, Xuming Hu, Shu’ang Li, Lijie Wen, Irwin King, and Philip S Yu. An unforgeable publicly verifiable watermark for large language models. _arXiv preprint arXiv:2307.16230_,
+2023a.
+
+
+Aiwei Liu, Leyi Pan, Xuming Hu, Shiao Meng, and Lijie Wen. A semantic invariant robust watermark for large language models. In _The Twelfth International Conference on Learning Represen-_
+_tations_, 2024a. [URL https://openreview.net/forum?id=6p8lpe4MNf.](https://openreview.net/forum?id=6p8lpe4MNf)
+
+
+Aiwei Liu, Leyi Pan, Yijian Lu, Jingjing Li, Xuming Hu, Xi Zhang, Lijie Wen, Irwin King, Hui
+Xiong, and Philip Yu. A survey of text watermarking in the era of large language models. _ACM_
+_Computing Surveys_, 57(2):1–36, 2024b.
+
+
+Xiaogeng Liu, Zhiyuan Yu, Yizhe Zhang, Ning Zhang, and Chaowei Xiao. Automatic and universal
+prompt injection attacks against large language models. _arXiv preprint arXiv:2403.04957_, 2024c.
+
+
+Yepeng Liu and Yuheng Bu. Adaptive text watermark for large language models. _arXiv_ _preprint_
+_arXiv:2401.13927_, 2024.
+
+
+Yepeng Liu, Yiren Song, Hai Ci, Yu Zhang, Haofan Wang, Mike Zheng Shou, and Yuheng Bu.
+Image watermarks are removable using controllable regeneration from clean noise. _arXiv preprint_
+_arXiv:2410.05470_, 2024d.
+
+
+Yepeng Liu, Xuandong Zhao, Dawn Song, and Yuheng Bu. Dataset protection via watermarked
+canaries in retrieval-augmented llms. _arXiv preprint arXiv:2502.10673_, 2025a.
+
+
+Yepeng Liu, Xuandong Zhao, Dawn Song, Gregory W Wornell, and Yuheng Bu. Position:
+Llm watermarking should align stakeholders’ incentives for practical adoption. _arXiv_ _preprint_
+_arXiv:2510.18333_, 2025b.
+
+
+Yi Liu, Gelei Deng, Yuekang Li, Kailong Wang, Zihao Wang, Xiaofeng Wang, Tianwei Zhang,
+Yepang Liu, Haoyu Wang, Yan Zheng, et al. Prompt injection attack against llm-integrated applications. _arXiv preprint arXiv:2306.05499_, 2023b.
+
+
+Yixin Liu, Hongsheng Hu, Xuyun Zhang, and Lichao Sun. Watermarking text data on large language
+models for dataset copyright protection. _arXiv preprint arXiv:2305.13257_, 2023c.
+
+
+Yupei Liu, Yuqi Jia, Runpeng Geng, Jinyuan Jia, and Neil Zhenqiang Gong. Formalizing and benchmarking prompt injection attacks and defenses. In _33rd USENIX Security Symposium (USENIX_
+_Security 24)_, pp. 1831–1847, 2024e.
+
+
+Hasan Mesut Meral, B¨ulent Sankur, A Sumru Ozsoy, [¨] Tunga G¨ung¨or, and Emre Sevinc¸. Natural
+language watermarking via morphosyntactic alterations. _Computer_ _Speech_ _&_ _Language_, 23(1):
+107–125, 2009.
+
+
+Eric Mitchell, Yoonho Lee, Alexander Khazatsky, Christopher D Manning, and Chelsea Finn. Detectgpt: Zero-shot machine-generated text detection using probability curvature. In _International_
+_Conference on Machine Learning_, pp. 24950–24962. PMLR, 2023.
+
+
+13
+
+
+Norman Mu, Sarah Chen, Zifan Wang, Sizhe Chen, David Karamardian, Lulwa Aljeraisy, Basel
+Alomair, Dan Hendrycks, and David Wagner. Can llms follow simple rules? _arXiv_ _preprint_
+_arXiv:2311.04235_, 2023.
+
+
+University of Otago. The canterbury corpus. _http://www.corpora.org_ .
+
+
+OpenAI. GPT-4o mini: advancing cost-efficient intelligence. OpenAI Blog, July 2024. URL [https://openai.com/index/](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/)
+[gpt-4o-mini-advancing-cost-efficient-intelligence/.](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/) Blog post, 18
+July 2024.
+
+
+[OpenAI. OpenAI o3-mini. OpenAI Blog, January 2025. URL https://openai.com/index/](https://openai.com/index/openai-o3-mini/)
+[openai-o3-mini/.](https://openai.com/index/openai-o3-mini/) Blog post, 31 January 2025.
+
+
+Leyi Pan, Aiwei Liu, Zhiwei He, Zitian Gao, Xuandong Zhao, Yijian Lu, Binglin Zhou, Shuliang
+Liu, Xuming Hu, Lijie Wen, et al. MarkLLM: An open-source toolkit for LLM watermarking.
+_arXiv preprint arXiv:2405.10051_, 2024.
+
+
+Michael-Andrei Panaitescu-Liess, Zora Che, Bang An, Yuancheng Xu, Pankayaraj Pathmanathan,
+Souradip Chakraborty, Sicheng Zhu, Tom Goldstein, and Furong Huang. Can watermarking large
+language models prevent copyrighted text generation and hide training data? In _Proceedings of_
+_the AAAI Conference on Artificial Intelligence_, volume 39, pp. 25002–25009, 2025.
+
+
+Lip Yee Por, KokSheik Wong, and Kok Onn Chee. Unispach: A text-based data hiding method
+using unicode space characters. _Journal of Systems and Software_, 85(5):1075–1082, 2012.
+
+
+Jipeng Qiang, Shiyu Zhu, Yun Li, Yi Zhu, Yunhao Yuan, and Xindong Wu. Natural language watermarking via paraphraser-based lexical substitution. _Artificial Intelligence_, 317:103859, 2023.
+
+
+Wenjie Qu, Dong Yin, Zixin He, Wei Zou, Tianyang Tao, Jinyuan Jia, and Jiaheng Zhang. Provably
+robust multi-bit watermarking for ai-generated text via error correction code. _arXiv e-prints_, pp.
+arXiv–2401, 2024.
+
+
+Jie Ren, Han Xu, Yiding Liu, Yingqian Cui, Shuaiqiang Wang, Dawei Yin, and Jiliang Tang. A
+robust semantics-based watermark for large language model against paraphrasing. _arXiv preprint_
+_arXiv:2311.08721_, 2023.
+
+
+Stefano Giovanni Rizzo, Flavio Bertini, and Danilo Montesi. Content-preserving text watermarking
+through unicode homoglyph substitution. In _Proceedings_ _of_ _the_ _20th_ _International_ _Database_
+_Engineering & Applications Symposium_, pp. 97–104, 2016.
+
+
+Vinu Sankar Sadasivan, Aounon Kumar, Sriram Balasubramanian, Wenxiao Wang, and Soheil Feizi.
+Can ai-generated text be reliably detected? _arXiv preprint arXiv:2303.11156_, 2023.
+
+
+Ryoma Sato, Yuki Takezawa, Han Bao, Kenta Niwa, and Makoto Yamada. Embarrassingly simple
+text watermarks. _arXiv preprint arXiv:2310.08920_, 2023.
+
+
+Nitya Thakkar, Mert Yuksekgonul, Jake Silberg, Animesh Garg, Nanyun Peng, Fei Sha, Rose Yu,
+Carl Vondrick, and James Zou. Can llm feedback enhance review quality? a randomized study of
+20k reviews at iclr 2025. _arXiv preprint arXiv:2504.09737_, 2025.
+
+
+Edward Tian and Alexander Cui. Gptzero: Towards detection of ai-generated text using zero-shot
+and supervised methods”, 2023. [URL https://gptzero.me.](https://gptzero.me)
+
+
+Mercan Topkara, Umut Topkara, and Mikhail J Atallah. Words are not enough: sentence level natural language watermarking. In _Proceedings of the 4th ACM international workshop on Contents_
+_protection and security_, pp. 37–46, 2006.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+14
+
+
+Yixuan Weng, Minjun Zhu, Guangsheng Bao, Hongbo Zhang, Jindong Wang, Yue Zhang, and Linyi
+Yang. Cycleresearcher: Improving automated research via automated review. In _The Thirteenth_
+_International Conference on Learning Representations_, 2025. [URL https://openreview.](https://openreview.net/forum?id=bjcsVLoHYs)
+[net/forum?id=bjcsVLoHYs.](https://openreview.net/forum?id=bjcsVLoHYs)
+
+
+Yihan Wu, Xuehao Cui, Ruibo Chen, and Heng Huang. Analyzing and evaluating unbiased language
+model watermark. _arXiv preprint arXiv:2509.24048_, 2025a.
+
+
+Yihan Wu, Xuehao Cui, Ruibo Chen, Georgios Milis, and Heng Huang. A watermark for autoregressive image generation models. _arXiv preprint arXiv:2506.11371_, 2025b.
+
+
+Yihan Wu, Georgios Milis, Ruibo Chen, and Heng Huang. Robust distortion-free watermark for
+autoregressive audio generation models. _arXiv preprint arXiv:2510.21115_, 2025c.
+
+
+Xiaojun Xu, Yuanshun Yao, and Yang Liu. Learning to watermark LLM-generated text via reinforcement learning. _arXiv preprint arXiv:2403.10553_, 2024.
+
+
+An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li,
+Dayiheng Liu, Fei Huang, Haoran Wei, et al. Qwen2. 5 technical report. _arXiv_ _preprint_
+_arXiv:2412.15115_, 2024.
+
+
+Xi Yang, Jie Zhang, Kejiang Chen, Weiming Zhang, Zehua Ma, Feng Wang, and Nenghai Yu. Tracing text provenance via context-aware lexical substitution. In _Proceedings of the AAAI Conference_
+_on Artificial Intelligence_, volume 36, pp. 11613–11621, 2022.
+
+
+Xi Yang, Kejiang Chen, Weiming Zhang, Chang Liu, Yuang Qi, Jie Zhang, Han Fang, and
+Nenghai Yu. Watermarking text generated by black-box language models. _arXiv_ _preprint_
+_arXiv:2305.08883_, 2023a.
+
+
+Xianjun Yang, Liangming Pan, Xuandong Zhao, Haifeng Chen, Linda Petzold, William Yang
+Wang, and Wei Cheng. A survey on detection of LLMs-generated content. _arXiv_ _preprint_
+_arXiv:2310.15654_, 2023b.
+
+
+KiYoon Yoo, Wonhyuk Ahn, Jiho Jang, and Nojun Kwak. Robust multi-bit natural language watermarking through invariant features. _arXiv preprint arXiv:2305.01904_, 2023.
+
+
+Jingqi Zhang, Ruibo Chen, Yingqing Yang, Peihua Mai, Heng Huang, and Yan Pang. Leave no trace:
+Black-box detection of copyrighted dataset usage in large language models via watermarking.
+_arXiv preprint arXiv:2510.02962_, 2025a.
+
+
+Junyan Zhang, Shuliang Liu, Aiwei Liu, Yubo Gao, Jungang Li, Xiaojie Gu, and Xuming
+Hu. Cohemark: A novel sentence-level watermark for enhanced text quality. _arXiv_ _preprint_
+_arXiv:2504.17309_, 2025b.
+
+
+Ruisi Zhang, Shehzeen Samarah Hussain, Paarth Neekhara, and Farinaz Koushanfar. _{_ REMARKLLM _}_ : A robust and efficient watermarking framework for generative large language models. In
+_33rd USENIX Security Symposium (USENIX Security 24)_, pp. 1813–1830, 2024.
+
+
+Xuandong Zhao, Prabhanjan Ananth, Lei Li, and Yu-Xiang Wang. Provable robust watermarking
+for ai-generated text. _arXiv preprint arXiv:2306.17439_, 2023a.
+
+
+Xuandong Zhao, Yu-Xiang Wang, and Lei Li. Protecting language generation models via invisible
+watermarking. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 42187–42199. PMLR,
+2023b.
+
+
+Xuandong Zhao, Sam Gunn, Miranda Christ, Jaiden Fairoze, Andres Fabrega, Nicholas Carlini,
+Sanjam Garg, Sanghyun Hong, Milad Nasr, Florian Tramer, et al. Sok: Watermarking for aigenerated content. _arXiv preprint arXiv:2411.18479_, 2024.
+
+
+Xuandong Zhao, Lei Li, and Yu-Xiang Wang. Permute-and-flip: An optimally stable and watermarkable decoder for llms. In _The Thirteenth International Conference on Learning Representa-_
+_tions_, 2025.
+
+
+15
+
+
+Jeffrey Zhou, Tianjian Lu, Swaroop Mishra, Siddhartha Brahma, Sujoy Basu, Yi Luan, Denny
+Zhou, and Le Hou. Instruction-following evaluation for large language models. _arXiv_ _preprint_
+_arXiv:2311.07911_, 2023.
+
+
+Chaoyi Zhu, Jeroen Galjaard, Pin-Yu Chen, and Lydia Y Chen. Duwak: Dual watermarks in large
+language models. _arXiv preprint arXiv:2403.13000_, 2024.
+
+
+Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson.
+Universal and transferable adversarial attacks on aligned language models. _arXiv_ _preprint_
+_arXiv:2307.15043_, 2023.
+
+
+16
+
+
+THE USE OF LLMS
+
+
+LLMs were used solely as an assistive tool for polishing the writing and improving clarity of presentation. They were not involved in research ideation, experimental design, analysis, or the generation
+of technical content. The authors take full responsibility for all claims, results, and conclusions
+presented in this work.
+
+
+A WATERMARKING INSTRUCTIONS
+
+
+A.1 DTS SETTING
+
+
+17
+
+
+A.2 IPI SETTING
+
+
+For the IPI setting, we employ a shortened version of the watermarking instruction used in the DTS
+setting, as shown below. Specifically, for Lexical ICW in the IPI setting, the process is divided into
+two steps. First, we select a subset of candidate words from the green word list that are relevant to the
+provided paper; this is done prior to injecting the watermarking instruction into the document. Next,
+the selected words and the watermarking instruction are inserted into the target document, instructing
+the inclusion of these words in subsequent responses. This two-step approach is necessary because
+the original green word list is too long to be directly embedded into the document, which would
+significantly reduce stealthiness in the IPI setting.
+
+
+These watermarking instructions can be embedded into target documents using various techniques,
+such as extremely small font size, transparent text, or text rendered in the same color as the background, to make them less noticeable to the human eye.
+
+
+18
+
+
+19
+
+
+B THEORETICAL FALSE-ALARM GUARANTEE
+
+
+As controlling the false alarm (Type I error) probability is crucial in high-stakes applications, we
+leverage existing results for green/red list watermarking (Zhao et al., 2023a) and establish a similar
+analysis for Lexical and Initials ICWs.
+
+**Theorem B.1** (False-alarm Guarantee for Lexical ICW) **.** _[(Zhao et al., 2023a, Theorem C.4)] Con-_
+_sider_ _**y**_ _as any fixed suspect text._ _Let N_ := _|V| and VG_ _⊂V_ _satisfying |VG|_ = _γN_ _, where γ_ _∈_ [0 _,_ 1] _._
+_VG is selected through the method described in Section 4.2.3, using a uniform random choice with a_
+_fixed key. Let |_ _**y**_ _|G denote the number of words from VG in_ _**y**_ _and z_ _**y**_ = ( _|_ _**y**_ _|G_ _−γ|_ _**y**_ _|_ ) _/_ - _γ_ (1 _−_ _γ_ ) _|_ _**y**_ _|_
+_as described in Section 4.2.3._ _Then the following statements hold true:_
+
+
+_1._ _Assume |_ _**y**_ _| ≥_ 1 _, then_
+E[ _|_ _**y**_ _|G_ _|_ _**y**_ ] = _γ|_ _**y**_ _|_ _and_ E[ _z_ _**y**_ _|_ _**y**_ ] = 0 _._
+
+
+       - _|_ _**y**_ _|_ 1       - _N_ �� _|_ _**y**_ _|_
+_2._ _Define_ _C_ max( _**y**_ ) := max _i∈_ [ _N_ ] _j_ =1 **[1]** [(] _**[y]**_ _[j]_ [=] _[i]_ [)] _and_ _V_ ( _**y**_ ) := _|_ _**y**_ _|_ _i_ =1 _j_ =1 **[1]** [(] _**[y]**_ _[j]_ [=]
+
+�2
+_i_ ) _, then with probability_ 1 _−_ _α (over only the randomness of VG),_
+
+
+        -        -        P _|_ _**y**_ _|G_ _≥_ _γ|_ _**y**_ _|_ + 64 _γ|_ _**y**_ _|V_ log(9 _/α_ ) + 16 _C_ max log(9 _/α_ ) _**y**_ _≤_ _α,_
+���
+
+
+_or equivalently (when |_ _**y**_ _| ≥_ 1 _),_
+
+
+_**y**_
+�����
+
+
+64 _V_ log(9 _/α_ )
+
++ [16] _[C]_ [max][ log(9] _[/α]_ [)]
+1 _−_ _γ_ ~~�~~ _γ_ (1 _−_ _γ_ ) _|_ _**y**_ _|_
+
+
+_≤_ _α._
+
+
+P
+
+
+_z_ _**y**_ _≥_
+
+
+Under the null hypothesis, where the text is not watermarked, the expected number of green
+words is _γ|_ _**y**_ _|_ . With this theorem from Zhao et al. (2023a), we can choose a test threshold
+
+
+_η_ _>_ - 64 _V_ log(9 _/α_ )
+
+
+for Lexical ICW, then the false-alarm rate will be upper
+_γ_ (1 _−γ_ ) _|_ _**y**_ _|_
+
+
+1log(9 _−γ_ _/α_ ) + [16] ~~_√_~~ _[C]_ [max][ log(9] _[/α]_ [)]
+
+
+bounded by _α_ . Note that both _V_ and _C_ max can be computed from **y**, allowing us to choose an
+input-dependent threshold to ensure a small enough False-alarm probability.
+
+
+Similar results hold for Initials ICWs, which operate over letters instead of words. In this case, we
+replace _γ_ = [�] _i_ _[|A|]_ =1 _[P][A]_ [(] _[a]_ [(] _[i]_ [)] _[∈A][G]_ [)][ and set] _[ N]_ [=] _[ |A|]_ [ in the computation of] _[ V]_ [and] _[ C]_ [max][.]
+_Remark_ 1 _._ Ideally, we would like an analysis that characterizes both false alarms (Type I error) and
+miss detections (Type II error). However, characterizing the latter is particularly challenging for
+ICWs. The main difficulty lies in modeling the instruction-following ability of the LLM: even when
+watermarking instructions are provided, the model’s output may fail to follow the rule, and there is
+no widely accepted probabilistic model for this behavior that would enable a rigorous analysis. We
+leave this as future work and primarily report empirical detection performance in the paper.
+
+
+We do not provide a false-alarm analysis for Unicode ICWs, since ordinary human text will never
+naturally contain such Unicode characters. However, while this makes false alarms essentially impossible, the detection performance can be easily degraded if an adversary simply removes the
+special Unicode symbols.
+
+
+For Acrostics ICWs, conducting a rigorous false-alarm analysis is challenging because, to the best of
+our knowledge, the distribution of the Levenshtein distance between two independent sequences is
+not well characterized and lacks tractable concentration bounds. We believe that analysis from Kuditipudi et al. (2023) offers a promising starting point for addressing this gap, and we leave a detailed
+analysis to future work.
+
+
+C EXPERIMENT SETTINGS
+
+
+The concrete implementation details for different ICW strategies are presented below.
+
+
+- **Initials ICW** : We divide the English letter alphabet into two equal parts, and prompt the LLMs to
+maximize the use of green letters and reduce the use of remaining letters.
+
+
+20
+
+
+- **Lexical** **ICW** : We begin with a curated English vocabulary [2] containing 173 _,_ 000 valid English
+words along with their corresponding frequencies. A larger vocabulary makes it harder for LLMs
+to follow watermarking instructions. To reduce vocabulary size, we extract verbs, adverbs, and
+adjectives, then remove low- and high-frequency words, yielding a final set of 10,857 words. We
+set _γ_ = 20%, resulting in a selection of 2 _,_ 171 green words, which are exclusively included in our
+watermarking instruction.
+
+
+- **Acrostics ICW** : To minimize unnaturalness in the watermarked text, we exclude low-frequency
+initial letters and retain only high-frequency ones to construct the letter list. Watermark key sequences are then generated by randomly sampling from this list. In our experiments, we do not
+enforce strict acrostic alignment, allowing LLMs to occasionally skip letters in the sequence to
+better preserve the quality of the generated text. The detailed rules are provided in Appendix A.
+
+
+For the IPI setting, we directly append the ICW watermarking instructions to the end of each paper
+for the Unicode, Initials, and Acrostics ICWs, as their watermarking instructions are relatively short.
+For Lexical ICW, we use an LLM to extract paper review-relevant green words and append them,
+along with the watermarking instruction, to each paper.
+
+
+D EXTRA EXPERIMENTS
+
+
+D.1 EXTRA MAIN RESULTS
+
+
+Table 4: Watermarked text quality across different watermarking methods, evaluated using the LLMas-a-Judge. The ICW methods exhibit text quality comparable to human and unwatermarked text in
+terms of relevance, quality, clarity, and overall.
+
+
+**Language Models** **Methods** **Relevance** _↑_ **Quality** _↑_ **Clarity** _↑_ **Overall** _↑_
+
+
+Human 4 _._ 318 4 _._ 440 3 _._ 946 4 _._ 235
+
+_−_
+YCZ+23 (Yang et al., 2023a) 4 _._ 196 3 _._ 746 3 _._ 652 3 _._ 865
+
+
+GPT-4o-mini
+
+
+GPT-o3-mini
+
+
+Unwatermarked 4 _._ 942 5 _._ 000 4 _._ 984 4 _._ 975
+PostMark (Chang et al., 2024) 4 _._ 080 4 _._ 674 3 _._ 960 4 _._ 238
+Unicode ICW 4 _._ 970 4 _._ 970 4 _._ 760 4 _._ 900
+Initials ICW 4 _._ 952 5 _._ 000 4 _._ 988 4 _._ 980
+Lexical ICW 4 _._ 906 4 _._ 998 4 _._ 926 4 _._ 943
+Acrostics ICW 4 _._ 924 4 _._ 998 4 _._ 960 4 _._ 961
+
+
+Unwatermarked 4 _._ 982 5 _._ 000 4 _._ 994 4 _._ 992
+PostMark (Chang et al., 2024) 2 _._ 648 3 _._ 848 2 _._ 494 2 _._ 997
+Unicode ICW 4 _._ 960 4 _._ 940 4 _._ 530 4 _._ 810
+Initials ICW 4 _._ 532 4 _._ 608 3 _._ 706 4 _._ 282
+Lexical ICW 4 _._ 918 4 _._ 990 4 _._ 516 4 _._ 808
+Acrostics ICW 4 _._ 950 4 _._ 978 4 _._ 510 4 _._ 813
+
+
+**Text** **quality.** Among different ICWs, Unicode ICW has the lowest impact on text quality, as it
+only inserts invisible Unicode characters into the response during the generation process. Initials
+ICW exhibits higher perplexity compared to human text. This is likely because the model favors
+words that begin with specific green initials, which can lead to the use of less common vocabulary
+or atypical syntax, potentially introducing redundant text into the watermarked text.
+
+
+**Robustness Performance.** Table 5 presents the detailed robustness performance of different methods across various models and attack types, under the DTS setting.
+
+
+[2https://huggingface.co/datasets/Maximax67/English-Valid-Words](https://huggingface.co/datasets/Maximax67/English-Valid-Words)
+
+
+21
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+|<br>Postmark<br> <br>Acrostics ICW|<br>Postmark<br> <br>Acrostics ICW||||
+|<br>Postmark<br> <br>Acrostics ICW|<br>Postmark<br> <br>Acrostics ICW||||
+||||||
+||||||
+||||||
+||||||
+|<br> <br> <br>|<br> <br> <br>|<br> <br> <br>|<br> <br> <br>|<br> <br> <br>|
+
+
+Model Type
+
+
+Figure 4: Text perplexity of different watermarking methods across various models.
+
+
+Table 5: Robustness performance under the DTS setting. The results indicate that Unicode ICW
+is highly fragile to various text transformations. The Letter, Lexical, and Acrostics ICWs exhibit a
+degree of robustness, maintaining high detectability even under paraphrasing.
+
+
+Language Replacement - 30% Deletion - 30% Paraphrase - ChatGPT
+Methods
+Models
+
+ROC-AUC T@1%F T@10%F ROC-AUC T@1%F T@10%F ROC-AUC T@1%F T@10%F
+
+
+_−_ YCZ+23 (Yang et al., 2023a) 0 _._ 982 0 _._ 780 0 _._ 958 0 _._ 980 0 _._ 762 0 _._ 958 0 _._ 557 0 _._ 016 0 _._ 140
+
+
+GPT-4o-mini
+
+
+GPT-o3-mini
+
+
+PostMark (Chang et al., 2024) 0 _._ 948 0 _._ 510 0 _._ 878 0 _._ 877 0 _._ 244 0 _._ 702 0 _._ 791 0 _._ 120 0 _._ 518
+Unicode ICW _−_ _−_ _−_ _−_ _−_ _−_ 0 _._ 500 0 _._ 010 0 _._ 100
+Letter ICW 0 _._ 563 0 _._ 002 0 _._ 104 0 _._ 566 0 _._ 004 0 _._ 116 0 _._ 533 0 _._ 000 0 _._ 108
+Lexical ICW 0 _._ 732 0 _._ 076 0 _._ 300 0 _._ 849 0 _._ 146 0 _._ 502 0 _._ 849 0 _._ 188 0 _._ 528
+Acrostics ICW 0 _._ 552 0 _._ 026 0 _._ 148 0 _._ 534 0 _._ 032 0 _._ 132 0 _._ 497 0 _._ 016 0 _._ 090
+
+
+PostMark (Chang et al., 2024) 0 _._ 956 0 _._ 722 0 _._ 890 0 _._ 908 0 _._ 558 0 _._ 788 0 _._ 841 0 _._ 356 0 _._ 680
+Unicode ICW _−_ _−_ _−_ _−_ _−_ _−_ 0 _._ 500 0 _._ 010 0 _._ 100
+Letter ICW 0 _._ 999 0 _._ 974 0 _._ 999 0 _._ 998 0 _._ 974 0 _._ 994 0 _._ 887 0 _._ 218 0 _._ 678
+Lexical ICW 0 _._ 758 0 _._ 092 0 _._ 342 0 _._ 857 0 _._ 198 0 _._ 556 0 _._ 924 0 _._ 434 0 _._ 746
+Acrostics ICW 1 _._ 000 1 _._ 000 1 _._ 000 0 _._ 881 0 _._ 414 0 _._ 648 0 _._ 922 0 _._ 534 0 _._ 788
+
+
+Table 6: Robustness performance under the IPI setting. The results indicate that Unicode ICW is
+highly fragile to various text transformations. The Letter, Lexical, and Acrostics ICWs exhibit a
+degree of robustness, maintaining high detectability even under paraphrasing.
+
+
+Replacement – 30% Deletion – 30% Paraphrase – ChatGPT
+Language Models Methods
+
+ROC-AUC T@1%F T@10%F ROC-AUC T@1%F T@10%F ROC-AUC T@1%F T@10%F
+
+
+GPT-4o-mini
+
+
+GPT-o3-mini
+
+
+Unicode ICW _−_ _−_ _−_ _−_ _−_ _−_ 0 _._ 500 0 _._ 010 0 _._ 100
+Initials ICW 0 _._ 588 0 _._ 00 0 _._ 052 0 _._ 618 0 _._ 000 0 _._ 076 0 _._ 616 0 _._ 000 0 _._ 070
+Lexical ICW 0 _._ 846 0 _._ 014 0 _._ 382 0 _._ 855 0 _._ 028 0 _._ 550 0 _._ 887 0 _._ 048 0 _._ 556
+Acrostics ICW 0 _._ 589 0.000 0 _._ 422 0 _._ 477 0 _._ 000 0 _._ 358 0 _._ 591 0 _._ 000 0 _._ 378
+
+
+Unicode ICW _−_ _−_ _−_ _−_ _−_ _−_ 0 _._ 500 0 _._ 010 0 _._ 100
+Initials ICW 0 _._ 992 0 _._ 806 0 _._ 988 0 _._ 993 0 _._ 834 0 _._ 992 0 _._ 893 0 _._ 106 0 _._ 628
+Lexical ICW 0 _._ 857 0 _._ 020 0 _._ 433 0 _._ 803 0 _._ 090 0 _._ 513 0 _._ 940 0 _._ 558 0 _._ 872
+Acrostics ICW 0 _._ 995 0 _._ 950 0 _._ 998 0 _._ 866 0 _._ 408 0 _._ 664 0 _._ 874 0 _._ 448 0 _._ 724
+
+
+**The effect of the context and output length on the detection performance.** To further investigate
+the effects of context and output length on ICW detection performance, we conducted two ablation
+studies. First, we performed a long, multi-turn conversation (10 turns) after setting the system
+prompt to evaluate whether the watermarking instruction continues to be followed with an extended
+context in the DTS setting. Second, we increased the output length from 300 to 1000 words to
+assess the impact of output length on watermarking effectiveness. All experiments were performed
+
+
+22
+
+
+on gpt-o3-mini. The results, presented in the Table 7 and 8, demonstrate that our ICW methods
+maintain strong detection performance even with longer contexts and outputs.
+
+
+Table 7: Detection performance of different ICW methods for different context lengths.
+
+
+Methods ROC-AUC TPR@1%FPR TPR@10%FPR
+
+
+Unicode ICW 1 _._ 000 1 _._ 000 1 _._ 000
+Initials ICW 0 _._ 999 0 _._ 988 1 _._ 000
+Lexical ICW 0 _._ 995 0 _._ 926 0 _._ 995
+Acrostics ICW 1 _._ 000 1 _._ 000 1 _._ 000
+
+
+Table 8: Detection performance of different ICW methods for different output lengths.
+
+
+Methods ROC-AUC TPR@1%FPR TPR@10%FPR
+
+
+Unicode ICW 1 _._ 000 1 _._ 000 1 _._ 000
+Initials ICW 0 _._ 998 0 _._ 985 0 _._ 999
+Lexical ICW 0 _._ 996 0 _._ 935 0 _._ 995
+Acrostics ICW 1 _._ 000 1 _._ 000 1 _._ 000
+
+
+**Comparison between ICWs and post-hoc method.** Different from a text watermark, which embeds hidden information into text, a post-hoc method like GPTZero (Tian & Cui, 2023) analyzes
+existing text to detect patterns and artifacts that suggest it was machine-generated, without requiring
+any prior information about the generation process. We conducted experiments using GPTZero and
+compared its performance with our proposed methods. The results, presented in the Table 9, show
+that GPTZero achieves a 4% FPR with a corresponding TPR of 0.890. In comparison, our methods
+consistently achieve better detection performance at the same FPR.
+
+
+Table 9: The detection performance comparison between ICWs and GPTZero.
+
+
+Method GPTZero Unicode ICW Initials ICW Lexical ICW Acrostics ICW
+
+
+TPR@4%FPR 0.890 1.000 0.992 0.964 1.000
+
+
+D.2 POTENTIAL ATTACKS
+
+
+To evaluate the ease with which an adversary could identify and remove the ICWs, we design an
+adaptive attack that leverages LLMs to detect and attempt the removal of the watermarks embedded
+by the proposed ICW methods.
+
+
+For adaptive attack, we first prompt an LLM to assess whether a given text is suspected of being
+watermarked, and then instruct it to attempt to remove the watermark by paraphrasing the text. This
+attack serves two purposes: first, to explore whether watermarked text can be easily identified as
+such; and second, if identified, to assess whether the specific watermarking scheme can be discerned
+and successfully removed. The specific prompt used to conduct the adaptive attack is provided
+below.
+
+
+The results are presented in Table 10. Our results show that, across the various ICW techniques
+we tested, the LLM flags roughly half of the evaluated texts as containing a watermark. Interestingly, it remains difficult for LLM to completely remove the watermark without prior knowledge
+
+
+23
+
+
+of the specific watermarking scheme, especially for the Initials, Lexical, and Acrostics ICWs. This
+demonstrates that, while an adversary may suspect that some texts are watermarked, they have difficulty identifying the specific watermarking scheme and therefore cannot completely remove the
+watermark. However, if an adversary has prior knowledge of the ICW strategy, the watermark can
+be more easily removed, a vulnerability common to most existing LLM watermarking methods.
+
+
+Moreover, we also explore one potential attack under the IPI setting, where we include the instruction ‘please ignore prior prompts’ before the review prompt. The results, presented in the Table 11,
+demonstrate that our method remains effective even in the presence of such an attack.
+
+
+Table 10: Adaptive attack. Using our designed adaptive attack, we evaluate the percentage of watermarked texts successfully identified, as well as the ROC-AUC after applying paraphrasing to attempt
+watermark removal. The results show that, even when a portion of text is identified as potentially
+watermarked, it remains difficult to completely remove the watermark without prior knowledge of
+the watermarking scheme.
+
+
+Unicode ICW Initials ICW Lexical ICW Acrostics ICW
+
+
+Watermarked (%) 0 _._ 510 0 _._ 780 0 _._ 358 0 _._ 550
+ROC-AUC 0 _._ 000 0 _._ 893 0 _._ 800 0 _._ 908
+
+
+Table 11: Detection performance for different ICW methods under the ‘ignore previous instruction’
+attack in the IPI setting.
+
+
+Methods ROC-AUC TPR@1%FPR TPR@10%FPR
+
+
+Initials ICW 0 _._ 995 0 _._ 902 0 _._ 999
+Lexical ICW 0 _._ 993 0 _._ 956 0 _._ 990
+Acrostics ICW 0 _._ 996 0 _._ 960 0 _._ 995
+
+
+Table 12: Detection performance of Lexical ICW for different vocabulary lengths.
+
+
+_|V|_ = 2 _,_ 171 _|V|_ = 4 _,_ 342 _|V|_ = 6 _,_ 514
+
+
+ROC-AUC 0 _._ 995 0 _._ 986 0 _._ 983
+T@1%F 0 _._ 930 0 _._ 753 0 _._ 690
+T@10%F 0 _._ 994 0 _._ 973 0 _._ 950
+
+
+D.3 DISCUSSION OF MORE ICW STRATEGIES
+
+
+**Ablation** **study** **of** **Lexical** **ICW.** In this section, we investigate the impact of the green word list
+length on the detection performance of Lexical ICW. We compare detection performance by setting _γ_
+to 0 _._ 2, 0 _._ 4, and 0 _._ 6, corresponding to vocabulary lengths of 2 _,_ 171, 4 _,_ 342, and 6 _,_ 514, respectively.
+As shown in Table 12, detection performance decreases as the vocabulary size increases, since it
+becomes more challenging for the LLM to follow such a length instruction. Therefore, selecting an
+appropriate vocabulary size is crucial for Lexical ICW, taking into account the LLM’s context length
+and in-context learning capabilities.
+
+
+**Some challenging strategies.** In addition to the four previously proposed ICW strategies, we investigate some additional strategies that remain challenging for current advanced LLMs.
+
+
+Token-wise Lexical ICW. The idea is to use the LLM’s vocabulary, primarily composed of tokens,
+which are often word fragments, as the vocabulary for the Lexical ICW, instead of full words. This
+approach enables finer-grained watermarking and detection, and a smaller set of tokens can be combined to form a larger variety of words. Ultimately, the goal is to achieve the watermarking effects of
+methods like Kirchenbauer et al. (2023) through in-context learning, without requiring direct control
+over the decoding process. We conduct a preliminary experiment by extracting English tokens from
+Llama-2’s vocabulary (Touvron et al., 2023) and prompting the LLM to increase the usage of 20%
+of these tokens. The results show that the detection performance achieves the ROC-AUC of only
+0 _._ 596, which is significantly lower than that of Lexical ICW using complete words as the vocabulary. LLMs appear to have greater difficulty recognizing and utilizing tokens compared to complete
+words. We intend to further explore this approach and its potential in future work.
+
+
+24
+
+
+Overall Letter-wise ICW. In addition to the Initials ICW, which considers the first letter of each
+word in the text, we also explore a variant strategy that considers the overall distribution of letters
+throughout the entire text. The idea here is to increase the green letter frequency over every letter
+in the text. Given that many current LLMs still struggle with tasks such as counting the number
+of occurrences of a specific letter in a word (e.g., the number of ‘r’s in ‘strawberry’), this strategy
+remains challenging even for advanced models.
+
+
+**More strategy.** Additionally, other sentence-level strategies could be explored in future work. For
+example, sentence structure constraints can be leveraged for watermarking by requiring the generated text to use features such as active voice, the inclusion of relative clauses, or complex sentence
+constructions. Such strategies are often imperceptible and robust to certain editing attacks, such
+as word replacement. However, they also entail high detection complexity; detecting subtle syntactic changes requires accurate syntactic parsers or deep learning classifiers trained to identify the
+watermarking patterns, which is left as a future direction to explore.
+
+
+E OTHER PROMPTS
+
+
+F EXAMPLES OF ICW
+
+
+Table 13: An example of Unicode ICW.
+
+
+Question what’s the difference between a forest and a wood?
+
+
+25
+
+
+Watermarked Response
+
+
+Forest and wood are terms relating to areas covered with trees, but they differ primarily in scale, usage, and
+connotations. A forest typically refers to a vast expanse of land dominated by trees and characterized by a
+complex, multilayered ecosystem, while a wood usually denotes a smaller, more intimate cluster of trees that
+might be located closer to human settlements. In many contexts, the difference between a forest and a wood
+is one of size, structure, and function. Forests often cover hundreds or thousands of acres, serving as critical
+habitats for a diverse range of flora and fauna, including mammals, birds, insects, and understory plants. Their
+extensive canopies, layered vegetation, and intricate network of ecological interactions contribute to essential
+environmental processes, such as carbon sequestration, water cycle regulation, and soil conservation.
+In contrast, woods generally refer to smaller tracts of wooded land that do not encompass the same vastness
+or ecological complexity. They can be considered as local woodlands that provide nearby communities with
+accessible natural spaces for recreational activities like hiking, birdwatching, or leisurely strolls. Although woods
+may have less stratified vegetation compared to forests, they still support significant biodiversity, offering shelter
+and resources for various species that thrive in more contained environments.
+Moreover, cultural and historical perceptions have influenced how these terms are used. Forests are often imbued
+with a sense of mystery, adventure, and grandeur, frequently featured in myths, legends, and literature as symbols
+of untamed nature. Woods, on the other hand, tend to evoke feelings of intimacy, calm, and local familiarity.
+In many regions, the management practices associated with forests involve large-scale conservation efforts, sustainable logging, and regulation to maintain ecological balance, whereas management of woods is often more
+community-focused, integrating conservation with recreational use. Ultimately, the distinction between a forest
+and a wood is not always clear-cut, varying with context, tradition, and the specific characteristics of the area in
+question.
+
+
+Table 14: An example of Initials ICW.
+
+
+Question Following the passing of the Thirteenth Amendment, were there any cases of slave-owners attempting to continue
+the practice illegally?
+
+
+Watermarked Response
+
+
+After the Thirteenth Amendment’s approval, American owners attempted alternate avenues to prolong forced
+labor. Historically, ex-owners employed legal loopholes and explicit labor arrangements that, in essence, paralleled past practices. Although official law abolished possession of human life, many agricultural authorities and
+plantation proprietors maneuvered methods that undermined genuine freedom.
+Historian accounts and archival proofs illustrate how some former proprietors used penal leasing, formal apprenticeship agreements, and peonage contracts. In instances involving penal leasing, officials incarcerated individuals for minor offenses and then allowed owners to profit from their labor. Apprenticeship systems, organized as
+training programs, often forced freed persons into prolonged labor contracts without fair compensation. Legitimate legal frameworks or local loopholes offered these owners a platform to mimic older dominance practices
+and maintain influence over African American labor.
+In addition, incidents of manipulated legal proceedings arose as local magistrates and proactive managers enforced labor policies that, on paper, complied with the law. However, these practices operated under ambiguous
+interpretations and allowed laborers to remain under de facto servitude. Historical proofs, published analyses,
+and legal probes emphasize that numerous cases emerged where ex-owners devised plans to convert liberty into
+predictable exploitation.
+Moreover, policy makers and humanist groups later pursued amendments, aiming to limit such illicit practices.
+Community advocates and impartial legal panels played a part in pinpointing and prohibiting any arrangement
+that, by simulation, operated as slavery. Ultimately, while the Amendment formalized freedom, many instances
+of alternative forced labor survived via ingenious, loophole-driven practices that imposed hardships on millions.
+In essence, although the Thirteenth Amendment legally ended chattel ownership, various documented cases confirm that some ex-owners maneuvered with alternate methods to secure forced labor. Honest historical research
+continues to unmask these practices, urging modern institutions to pursue robust reforms for upholding and protecting freedom.
+
+
+Table 15: An example of Lexical ICW.
+
+
+Question What was the Roman Empire’s opinion of the crusades, and how did they feel about the outcomes?
+
+
+26
+
+
+Watermarked Response
+
+
+It is important to note that the original Roman Empire as a unified state no longer existed by the time of the Crusades. Rather, the Byzantine Empire—often regarded as the Eastern Roman legacy—was the principal political
+entity affected by these events. Many Byzantine leaders and their subjects initially viewed the crusading project
+with cautious optimism. In theory, the arrival of crusaders was expected to provide additional military aid and
+financial support, which could help alleviate the mounting pressure from aggressive forces in the east. There was
+a clear sense that this intervention might transfer not only weapons and manpower but also an exchange of ideas
+that would benefit the empire’s military and cultural condition.
+However, as events unfolded, the anticipated benefits soon turned into a heavy burden. Byzantine officials
+observed that the crusaders’ actions did not always follow a coordinated or reasonable approach; instead, their
+behavior often seemed ad hoc, reducing what could have been a strong, well-planned alliance to a troubling
+series of violent incidents and internal disputes. Many in the Byzantine court—even those who once trusted in
+the promise of a united Christian effort—felt that the outcomes were neither balanced nor conducive to longterm stability. The project intended to restore and secure sacred territories gradually revealed itself to be a
+complex mixture of political ambition, financial strain, and even waste in terms of human and material resources,
+undermining any clear or positive legacy.
+In retrospect, while there was initial hope that the Crusades could act as a kind of strategic, collaborative undertaking, the Byzantine (and thus Roman) perspective ultimately remained skeptical. They noted that the massive
+transfer of power and wealth, rather than producing a successful and constructive outcome, instead left a legacy
+of disillusionment and discord—a regret that the dream of a unified Christian response turned into a counterproductive enterprise.
+
+
+Table 16: An example of Acrostics ICW.
+
+
+Question why is the greek language used in science so much?
+
+
+Watermarked Response
+
+
+”Because Greek language words have historically shaped scientific vocabulary, its influence remains significant.
+Beyond being an ancient language, Greek offers precise and descriptive terms that cut through modern ambiguity.
+In many scientific fields, Greek roots provide clarity in defining complex concepts and ideas. Classical education
+often emphasized Greek philosophy and literature, embedding its influence deep into scientific thought. With
+contributions from early scholars, physicians, and mathematicians, Greek terms have become standardized over
+centuries. Ancient Greek’s structure allows for the creation of compound words that elegantly express intricate
+phenomena. Many scientific disciplines, including biology, chemistry, and mathematics, rely on Greek prefixes
+to clearly indicate form, size, or function. Greek terminology transcends cultural barriers, enabling researchers
+worldwide to communicate complex ideas with precision. Understanding Greek roots can illuminate the meaning
+behind unfamiliar technical terms encountered in advanced study. Decades of scholarly tradition have reinforced
+Greek’s role, ensuring that its lexical legacy endures in various scientific realms. Generally, the language’s
+concise and consistent nature has aided the evolution of a universally adopted scientific lexicon. Gradations in
+meaning are often encapsulated in Greek etymology, further refining and standardizing scientific nomenclature.
+Etymological insights from Greek continue to enhance our comprehension of new scientific discoveries and theories. A classical language with a profound cultural heritage, Greek provides a universal framework that bridges
+modern research with ancient wisdom. Interestingly, the continuity of Greek usage reflects both a respect for
+history and a commitment to precision in scientific inquiry. Bridging the past with present innovation, Greek
+terms serve as a linguistic connection that enhances clarity and consistency. Notably, many technical terms employ Greek letters to denote variables, constants, and even complex processes. Beyond terminological functions,
+Greek also honors its historic role in laying the groundwork for modern scientific inquiry. Generating consistency
+in language, Greek roots help standardize international scientific communication across diverse disciplines. In
+summary, the enduring presence of Greek vocabulary in science results from its clarity, longstanding tradition,
+and universal applicability.”
+
+
+27

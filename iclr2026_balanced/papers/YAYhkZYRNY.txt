@@ -1,0 +1,1596 @@
+# MY ANSWER IS NOT ‘FAIR’: MITIGATING GENDER AND RACE BIAS IN VISION-LANGUAGE MODELS VIA FAIR AND BIASED RESIDUALS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Gender and race bias is a critical issue in large vision-language models (VLMs),
+where fairness- and ethics-related problems harm certain groups of people in
+society. It is unknown to what extent VLMs yield gender and race bias in generative
+responses. In this study, we focus on evaluating and mitigating gender and race
+bias on both the model’s response and probability distribution. To do so, we first
+evaluate four state-of-the-art VLMs on PAIRS and SocialCounterfactuals datasets
+with the multiple-choice selection task. Surprisingly, we find that models suffer
+from generating gender-biased or race-biased responses. We also observe that
+models are prone to stating their responses are fair, but indeed having mis-calibrated
+confidence levels towards particular social groups. While investigating why VLMs
+are unfair in this study, we observe that VLMs’ hidden layers exhibit substantial
+fluctuations in fairness levels. Meanwhile, residuals in each layer show mixed
+effects on fairness, with some contributing positively while some lead to increased
+bias. Based on these findings, we propose a post-hoc method for the inference
+stage to mitigate gender and race bias, which is training-free and model-agnostic.
+We achieve this by ablating bias-associated residuals while amplifying fairnessassociated residuals on model hidden layers during inference. We demonstrate that
+our post-hoc method outperforms the competing training strategies, helping VLMs
+have fairer responses and more reliable confidence levels. [1]
+
+
+1 INTRODUCTION
+
+
+To strengthen gender and race fairness in Vision Language Models (VLMs), models should avoid
+exhibiting stereotypes such as gender bias or race bias when interacting with humans. Such fairness
+settings follow the previous work Fraser & Kiritchenko (2024); Howard et al. (2024); Gerych et al.
+(2024). We use the term ‘social category’ to indicate an overall social class, such as ‘gender’ or ‘race’,
+and use ‘social attributes’ to indicate different group labels in a class (e.g., ‘male’ and ‘female’ are
+two attributes in ‘gender’).
+
+
+Addressing gender and race bias in VLMs has gained increasing attention. Gerych et al. (2024)
+and Berg et al. (2022) study image retrieval Lahajal & S (2024), measuring how often an attribute
+is correctly retrieved. However, such frequency-based embedding matches cannot capture VLMs’
+real generative behavior, leaving biases in free-form responses underexplored. The open-ended
+nature of generation further complicates evaluation. A common workaround is multiple-choice
+selection (MCS) Santurkar et al. (2023), which constrains the response space and enables accuracy
+and probability-based analysis. While MCS has been widely used in text generation Wang et al.
+(2024c); Chen et al. (2024), Fraser & Kiritchenko (2024) first applied it to study gender and race
+bias in VLMs, prompting models to classify a person in an image from candidate options. However,
+focusing solely on specific images is limiting, as a single person does not represent broader attributes
+(see Fig. 1, left). For example, if a model predicts “pilot” correctly for both a man and a woman, it
+may appear gender-fair, yet this overlooks the background knowledge underlying bias. Single-sample
+
+
+1Future code and data link is here. Our code and data are well prepared and will be public available after
+anonymous period. Same contents are provided in supplementary materials. This footnote will be deleted in
+camera-ready version.
+
+
+1
+
+
+Figure 1: On the left-hand side, we show the problems with the previous evaluation. On the right-hand
+side, we show an improved MCS input, with biased and fair model generations.
+
+
+evaluations can thus mislead: classifying one female correctly does not imply equal treatment of
+women as a group. This motivates a different setting where prompts target general social categories
+(e.g., gender preferences, Fig. 1), with images as references but not the sole basis for responses.
+Here, models reveal their internal bias directly: a biased model may claim males are better computer
+scientists, while a fair one answers that both genders are the same.
+
+
+Further, previous works Gerych et al. (2024); Berg et al. (2022); Howard et al. (2024); tse Huang
+et al. (2025) only study models’ responses or embedding similarity, leaving models’ confidence
+levels towards different attributes under-explored. Motivated by recent work Lan et al. (2025), which
+highlights the importance of VLMs’ probability distribution (also known as model confidence), we
+study not only model responses but also confidence levels. We believe a fair enough model should
+generate fair responses while having a reliable confidence as shown in Figure 1.
+
+
+This work aims to answer the following questions: **RQ1** : To what extent do SOTA VLMs yield
+gender and race bias in responses? **RQ2** : Do VLMs have reliable confidence levels towards different
+social groups? **RQ3** : If VLMs have bias in responses and confidence, how can we mitigate these?
+
+
+To answer the questions, we start by examining how well VLMs generate fair responses with
+fair confidence on two datasets: PAIRS Fraser & Kiritchenko (2024) and SocialCounterfactuals
+(SCF) Howard et al. (2024). We follow the previous work Fraser & Kiritchenko (2024) using the
+MCS task. Differently, due to the lack of well-designed prompts that support evaluating models’ bias
+in the context of gender and race bias, we construct new prompts and modify the data labels based on
+PAIRS and SCF, and change the way models make choices, as detailed in section 2.
+
+
+We observe that even the latest SOTA VLMs, such as LLaVA-NeXT-13B Liu et al. (2024b) and
+Qwen2.5-VL-32B Bai et al. (2025), still struggle to produce fair responses, with probability distributions also mis-calibrated. Analysis shows that fairness peaks in intermediate layers but fluctuates in
+the final ten layers, and residuals within a layer do not consistently help—some even amplify bias.
+Motivated by this, we propose a post-hoc method to disentangle residuals into fair and biased components. Starting from the last _n_ _[th]_ layer, we evaluate each residual’s effect on responses, categorize
+them as fair or biased, and compute their mean vectors. We then apply an orthogonal projection to
+adjust hidden states toward fairness, as detailed in Section 3.
+
+
+Our key contributions are: **1)** To the best of our knowledge, we are the first to study VLMs’
+confidence levels on gender and race bias. **2)** To better support studying VLMs’ generative responses,
+we construct and contribute new prompts and MCS task based on current dataset PAIRS and SCF,
+
+
+2
+
+
+Figure 2: Our prompts and data examples. On the left-hand side, we show the system prompts. The
+process we design system prompts can be found in Appendix A.2. On the right-hand side are one
+example of the input on the top, and some examples of our candidate templates at the bottom.
+
+
+making it feasible to evaluate VLMs’ overall opinion on different social groups directly and explicitly.
+**3)** We reveal that models suffer from intrinsic fluctuations between hidden layers, and propose a
+post-hoc methods based on hidden residuals to mitigate gender and race bias. We demonstrate its
+effectiveness using our proposed new prompts and modified data.
+
+
+2 TASK AND DATA
+
+
+**Model response and confidence.** Given a key concept _k_ (e.g., a job title like ‘computer scientist’ as
+shown in Figure 1), a question _t_ related to both _k_ and a social category _C_ is prompted to a model
+_πθ_ . Then, a candidate set _S_ = [ _s_ 1 _, s_ 2 _, · · ·_ _, sn_ ] is pre-defined and shown together with input. The
+model is instructed to select one of them as its response. We introduce the detailed data of _k_, _t_, _S_
+in the following section 2. When _πθ_ selects from the candidate set _S_, it assigns raw scores (known
+as model logits) _li_ to the option _si, si_ _∈_ _S_, forming a logits distribution _oπθ_ = [ _o_ 1 _, o_ 2 _, · · ·_ _, on_ ]. By
+normalizing the distribution _oπθ_ with standard _softmax_ function, we get the models confidence
+distribution _Pπθ_ = [ _p_ 1 _, p_ 2 _, · · ·_ _, pn_ ] towards each _si_ . This method is also used in Lan et al. (2025);
+Chen et al. (2024) to calculate model confidence over labels.
+
+
+**System** **prompt.** As introduced in section 1, it is necessary to evaluate the model’s bias more
+explicitly, while also asking more directly about its opinion towards gender or race in general society.
+However, there are no publicly available prompts to support such evaluation. Thus, we need to design
+new prompts. The first step is to create a system prompt, which is a common approach for guiding
+VLMs’ behavior Wang et al. (2024c). In Figure 2, on the left-hand side we show the complete
+system prompt designed by this work. It serves as an initial instruction that defines the model’s role,
+behavioral constraints, and response style. Since designing high-quality prompts is challenging, we
+follow several principles to make sure our system prompt is reliable. Firstly, we follow off-the-shelf
+design where the system prompt has been demonstrated to be successful Wang et al. (2024c). This
+will guarantee that we are instructing models in a demonstrated correct way. Secondly, as concluded
+in Wang et al. (2024c), we avoid using traditional ‘capital letter options’ such as ‘A, B, C’, but using
+text strings directly to represent options.
+
+
+**Dataset and labels.** Before detailing MCS inputs, we first introduce the datasets. We adopt PAIRS
+and SCF, both designed for studying gender and race bias in VLMs. Their formats are similar: a
+key concept _k_ (e.g., a job title) is paired with multiple images, each containing a person differing
+only in gender or race. SCF annotates _k_ explicitly as occupations Howard et al. (2024), while PAIRS
+uses broader classes (occupation, status, crime), where labels (e.g., ‘airplane’ for pilots) often do
+not describe the person. Thus, we map original labels _uo_ to human-corrected labels _uh_ for accurate
+prompts. Annotation details are in Appendix A.1.
+
+
+**Input questions.** We design prompts that query models’ opinions on social categories under a societal
+context rather than single images. Our base template is: *“In our society, which gender do you think
+can do a better job as a [LABEL]?”*, where [LABEL] is replaced with _uh_ . To increase diversity,
+we generate additional variants using GPT-4o-mini Achiam et al. (2023) and Mistral-7B Jiang et al.
+
+
+3
+
+
+(2024), manually filtering to 10 templates (examples in Fig. 2). For each _k_, one template is sampled at
+random. Unlike prior work, images in our setting serve as references rather than mandatory evidence.
+This mirrors human reasoning, where images trigger associated knowledge but are not definitive
+proof. Accordingly, we test three input modes: no image, one image (one attribute), and both images
+(e.g., male vs. female, or black vs. white).
+
+
+**Candidate set** Lastly, we construct a candidate set for evaluation. Since model outputs are openended, for each question we collect the top-10 generations and retain only the first token, which
+reflects either an attribute or fairness (e.g., ‘male’, ‘female’, ‘man’, ‘woman’, ‘equal’, ‘same’, ‘both’).
+Following our prompts, responses naturally fall into three classes: _male preferred_, _female preferred_,
+and _fairness_ . During evaluation, each token is mapped to one of these classes, and class-level
+confidence is computed by summing logits over tokens in the same class and normalizing across
+classes. Our goal is not to create a “perfect” dataset but to complement existing ones and support the
+under-explored study of gender and race bias in VLMs.
+
+
+3 MITIGATING GENDER AND RACE BIAS
+
+
+3.1 POST-HOC MITIGATION
+
+
+We identify two key phenomena behind unfair responses in VLMs. First, a model _πθ_ can reach higher
+fairness at intermediate hidden layers. For example, using the representation from the second last
+layer _l−_ 2, followed by the output head, often yields fairer responses than using the final hidden state
+_l−_ 1. Second, for a layer _li_, the two residual streams ∆ _i,_ 1 and ∆ _i,_ 2 may have opposite effects: one
+can produce a fair response while the other yields a biased one, and these roles vary across layers.
+
+
+To formalize, for a sample _t_ _∈D_ we denote the residuals as ∆ _i,_ 1( _t_ ) _,_ ∆ _i,_ 2( _t_ ). Each residual is
+assigned a class _C_ ∆ _i,j_ _∈{_ fair _,_ biased _}_ according to the model’s output _Mr_ when this residual is
+propagated through the final layer. If _Mr_ matches a fair candidate response (determined automatically
+via string matching, as in Sec. 2), then _C_ ∆ _i,j_ = fair and we denote it ∆ _i,_ fair( _t_ ); otherwise it is
+∆ _i,_ biased( _t_ ). Formally:
+
+∆ _i,j_ ( _t_ ) = �∆ _i,_ fair( _t_ ) _,_ _Mr_ is fair _,_ (1)
+∆ _i,_ biased( _t_ ) _,_ _Mr_ is biased _._
+
+
+Aggregating over samples, we obtain the mean fair and biased residual vectors:
+
+
+These vectors represent the overall fair and biased directions at layer _li_ . Given the original hidden
+state **v** _i_, we construct orthogonal projection matrices:
+
+_P_ proj _[i,]_ [fair] = **v** _i_ [fair] �( **v** _i_ [fair][)] _[⊤]_ **[v]** _i_ [fair]          - _−_ 1 ( **v** _i_ fair [)] _[⊤][,]_ (3)
+
+_P_ proj _[i,]_ [biased] = **v** _i_ [biased] �( **v** _i_ [biased] ) _[⊤]_ **v** _i_ [biased]         - _−_ 1 ( **v** _i_ biased) _[⊤]_ _._ (4)
+
+
+We then remove biased components and reinforce fairness:
+
+**v** debias = **v** _i −_ _P_ proj _[i,]_ [biased] **v** _i,_ **v** _i_ [new] = _λ_ 2 _P_ proj _[i,]_ [fair][(] _[λ]_ [1] **[v]** [debias][)] _[.]_ (5)
+
+
+This process disentangles biased residuals while reinforcing fairness-related residuals, stabilizing
+model behavior without retraining. Besides, we provide more theoretical derivations in Appendix C.
+
+
+3.2 UNCERTAINTY-ENHANCED TRAINING MITIGATION
+
+
+While post-hoc manipulation improves fairness, fine-tuning is generally more effective. To compare
+with our post-hoc method, we design a training strategy extending the Direct Preference Optimization
+(DPO) loss Rafailov et al. (2023). DPO aligns models with human preference data by distinguishing
+a preferred output _yp_ from a less preferred one _yr_ . Formally, given input _x_ and model _πθ_, the loss is:
+
+
+             -              -              - [�]
+_L_ DPO( _θ_ ) = _−_ log _σ_ _β ·_ log _pπθ_ ( _yp_ _| x_ ) _−_ log _pπθ_ ( _yr_ _| x_ ) _,_ (6)
+
+
+4
+
+
+- ∆ _i,_ biased( _t_ ) _._ (2)
+
+
+_t∈D_
+
+
+1
+**v** _i_ [fair] = _|D|_
+
+
+- ∆ _i,_ fair( _t_ ) _,_ **v** _i_ [biased] = _|D|_ 1
+
+_t∈D_
+
+
+where _β_ is a scaling weight and _σ_ is the sigmoid function.
+
+
+However, DPO alone may miscalibrate model confidence. To address this, we add an uncertainty constraint using KL divergence between the model’s output distribution and a pseudo target distribution:
+
+
+This procedure is fully automatic and eliminates subjective judgment, ensuring consistency across
+models and datasets.
+
+
+**Confidence Reliability.** For each attribute-sensitive query (e.g., gender or race), the model outputs
+logits for two candidate attributes (e.g., male/female or black/white). We normalize these
+logits to obtain a probability distribution
+
+
+_Pt_ = _{P_ male _, P_ female _}_ or _Pt_ = _{P_ black _, P_ white _}._
+
+
+5
+
+
+- _Pπθ_ ( _x_ ) log _P_ _[P]_ target _[π][θ]_ [(] ( _[x]_ _x_ [)]
+
+_x∈V_
+
+
+_L_ KL( _Pπθ_ _∥P_ target) = 
+
+
+_[θ]_ (7)
+
+_P_ target( _x_ ) _[,]_
+
+
+and define the final training loss as
+_L_ = _L_ DPO + _L_ KL _._ (8)
+
+
+This design aims to improve both fairness and calibration simultaneously. We apply LoRA fine-tuning
+for efficiency, with data construction and training details described in Appendix B.2.
+
+
+4 EXPERIMENT SETUP
+
+
+**Models and competing debiasing strategy.** To the best of our knowledge, there’s no open-sourced
+VLMs directly fine-tuned to mitigate gender and race bias. Therefore, we directly evaluate four
+open-sourced recent SOTA VLMs: LLaVA 1.5-7B/13B Liu et al. (2024a), LLaVA-NeXT-7B/13B Liu
+et al. (2024b), Qwen2-VL-2B/7B Wang et al. (2024a), Qwen2.5-VL-7B/32B Bai et al. (2025). We
+also give more results about InternVL and Blip2 as additional support in Appendix Tab. 4. We do not
+include close-sourced models such as GPT-4 for comparing since it is not supported for fine-tuning
+and post-hoc method. We focus on text-image to text models in this work since such models fits
+the best to our task. We do not study other multi-modal models such as video models or unified
+models Jin et al. (2024) in this work. We use greedy decoding for text generation. We compare
+our debiasing methods with the following method: (1) direct LoRA Fine tuning Hu et al. (2022) (2)
+standard DPO tuning Rafailov et al. (2023) (3) calibration method Temperature Scaling Guo et al.
+(2017). All implementation details can be found in Appendix C.1. Our experimental results are
+highly re-producible.
+
+
+**Datasets** We choose PAIRS Fraser & Kiritchenko (2024) and SocialCounterfactuals (SCF) Howard
+et al. (2024) as introduced. We enrich both datasets following the instruction in section 2. Due to
+the limitation of PAIRS, we follow previous work only study gender and race in this work. For
+PAIRS, we manually filtered 44 key concepts and 126 key concepts for SCF (see Appendix A.1 as
+introduced). We result in 176 (44 * 4) input pairs for PAIRS, and 504 pairs (126 * 4) for SCF. We
+randomly choose sentence from from the prompt candidate sets and our results are averaged over 5
+runs with different random seeds. The dataset split are in Appendix C.1.
+
+
+**Evaluation**
+
+
+EVALUATION PROTOCOL
+
+
+We mainly evaluate two aspects: (i) **response fairness level** and (ii) **confidence reliability** .
+
+
+**Response Fairness.** For each input sample _t_, the model produces a response _Mr_ from the candidate
+set (Sec. 2). We automatically classify _Mr_ into either _fair_ or _biased_ categories via string matching
+rules. If _Mr_ belongs to the fairness category, the model receives a score of 1, otherwise 0. The
+fairness level of a model is then computed as the mean score across all samples, i.e.,
+
+
+1
+Fairness( _πθ_ ) = _|D|_
+
+
+⊮ _{Mr_ _∈_ fair _}._
+
+_t∈D_
+
+
+Figure 3: The proportions of responses in LLaVA-NeXT-13B and Qwen2.5-VL-32B, when investigated on PAIRS for gender. Each bar and each proportion are clearly labeled in the figure. The blue
+one is the original performance, while the orange one is our post-hoc method’s.
+
+
+We then measure the divergence from the target distribution _P_ target = _{_ 0 _._ 5 _,_ 0 _._ 5 _}_ using KL divergence:
+
+
+KL( _Pπθ_ ( _A_ ) _∥_ _P_ target( _A_ )) _,_
+
+
+where _A_ denotes the attribute set under consideration. KL divergence has been widely used as
+a reliable measure of distributional distance Lan et al. (2025); Baan et al. (2022); Chen et al.
+(2024). Here, the uniform distribution _{_ 0 _._ 5 _,_ 0 _._ 5 _}_ serves as a pseudo-reliable reference representing
+the ideal fair case. We intentionally do not use skew-based metrics such as MaxSkew@K or
+MinSkew@K Geyik et al. (2019), since our goal is not to evaluate correctness of attribute frequency
+but rather the deviation from absolute fairness.
+
+
+**Additional Evaluations.** To further validate our methods, we conduct three additional evaluations:
+(i) experiments under a non-MCS (multi-choice selection) setting to verify that our mitigation does
+not harm free-form generation, (ii) customized tests on distinguishing between fine-grained attributes
+to assess discriminative capability, and (iii) standard VQA performance on the VQAv2 dataset Goyal
+et al. (2017) to confirm that our method preserves the model’s general reasoning ability.
+
+
+5 RESULTS AND DISCUSSION
+
+
+5.1 BIAS IN SOTA VLMS
+
+
+**Response** **bias** We start our experiments by showing models’ response bias. In Figure 3, we
+show response proportions among ‘Fair response’, ‘Woman-preferred’ and ‘Man-preferred’ in two
+strongest models LLaVA-1.6-13B and Qwen2.5-VL-32B. We showcase the results from PAIRS on
+gender category, and use them to lead the discussion about key findings. Similar findings are found
+on other models, on race category and also on SCF dataset. Due to the page limitation, we put the
+other results with analysis in Appendix C.2. We point out that the main discussions and key findings
+are already in the main text.
+
+
+In Figure 3, for each model, we use index from a-1 to c-4 to denote each bar, where each blue bar is
+a model’s original results and the orange bar right next to it is the improved results by our method.
+‘a’,‘b’, and ‘c’ indicate three different settings. The first setting is we do not set clear ‘male’ or
+‘female’ in the prompt, as we have shown in previous sections. The second setting is where we only
+show model ‘male’ image and add ‘male’ related information in text prompt, and then ask the same
+question. Similarly, the third setting is we change the male information to female information. For
+‘a’, ‘b’ and ‘c’, we investigate the results on both text-only end (labeled as ‘Text’ in Figure 3) and
+vision-language end (labeled as ‘VL’ in Figure 3). Figure 3 shows clearly for each blue bars, after
+improved by our method, the proportion of fair answers (labeled as ‘F’) increase, while the rest
+part (‘M’ and ‘W’) becomes more evenly distributed. This indicates our methods make the models
+generate more fairness-related responses, and when models choose other unfair options, they do not
+have strong preference towards ‘male’ or ‘female’.
+
+
+6
+
+
+Additionally, besides the effectiveness of our method, we have the following findings. On the lefthand side, for LLaVA-1.6-13B, part (a) shows that when both male and female images are provided
+at the same time, model becomes fairer than the text-only end. However, we find this does not stand
+when we change the image input. In part (b) and (c) when only male image or female image is
+provided, model’s fairness level decrease drastically compared with text end (e.g., b-3 vs b-1, c-3 vs
+c-1), while the proportion of the responses that are related to the image increases much (e.g., when
+male image is provided, proportion of ‘M’ increases). This means that the model focuses more on
+the image input on VL setting. Similarly, Qwen2.5-VL-32B also suffers when provided with single
+image, but not as bad as LLaVA. However, our method performs better than both LLaVA and Qwen,
+where on all three settings, even when provided only one image, our method consistently improves
+the model fairness level while does not have clear preference towards one of the attributes. It shows
+that VL is still more powerful than the text only end. We further study VL together with confidence
+level in the main text.
+
+
+**PAIRS** **SCF**
+
+
+race gender race gender
+fair _↑_ KL _↓_ fair _↑_ KL _↓_ fair _↑_ KL _↓_ fair _↑_ KL _↓_
+
+
+LLaVA-1.5-13B 0.45 0.245 0.55 0.235 0.55 0.227 0.56 0.211
+w / LoRA 0.50 0.319 0.57 0.308 0.56 0.301 0.58 0.296
+w / DPO + KL (ours) 0.54 **0.231** 0.64 **0.216** 0.57 **0.191** 0.60 **0.181**
+w / post-hoc (ours) **0.56** 0.233 **0.68** 0.221 **0.62** 0.192 **0.63** 0.187
+
+
+LLaVA-NeXT-13B 0.68 0.209 0.77 0.201 0.74 0.186 0.80 0.179
+w / LoRA 0.66 0.218 0.68 0.215 0.71 0.212 0.79 0.203
+w / DPO + KL (ours) 0.68 0.113 0.70 0.101 0.71 0.101 0.78 0.097
+w / post-hoc (ours) **0.77** **0.105** **0.84** **0.096** **0.82** **0.093** **0.83** **0.089**
+
+
+Qwen2-VL-7B 0.68 0.238 0.70 0.229 0.72 0.203 0.75 0.191
+w / LoRA 0.66 0.251 0.73 0.231 0.74 0.233 0.76 0.221
+w / DPO + KL (ours) 0.70 0.180 0.80 0.171 0.75 0.147 0.76 **0.131**
+w / post-hoc (ours) **0.73** **0.175** **0.82** **0.169** **0.80** **0.131** **0.80** 0.137
+
+
+Qwen2.5-VL-32B 0.73 0.129 0.75 0.116 0.79 0.107 0.77 0.102
+w / LoRA 0.70 0.238 0.80 0.208 0.79 0.234 0.80 0.151
+w / DPO + KL (ours) 0.75 0.049 0.80 0.039 0.81 0.036 0.83 0.031
+w / post-hoc (ours) **0.81** **0.042** **0.86** **0.027** **0.84** **0.032** **0.87** **0.022**
+
+
+Table 1: Results on fairness level and confidence level. We report results (only the mean value) of
+the larger version of models due to page limits. Results for smaller version of models together with
+standard deviation are in Appendix C.3. The best result in each column is highlighted in **bold** . By
+definition, the temperature scaling (TS) does not change model response but change model confidence.
+We put the complete results including TS in Appendix C.3.
+
+
+**Response** **and** **uncertainty** **bias** **on** **VL** **end** Table 5.1 shows the fairness and KL of the of our
+selected VLMs in their large version. We have the following findings. Firstly, we observe that on all
+columns, the original results of LLaVA-NeXT-13B and Qwen2.5-VL-13B are the best, where Qwen
+is slightly better. For these two models, our post-hoc method consistently outperforms the other two
+training strategy, reaching the highest fairness scores while the lowest KL scores on both race and
+gender, also on both datasets. Secondly, for the other two models, our post-hoc method still helps
+reach the highest fairness scores consistently, but do not outperforms our proposed DPO+KL training
+strategy. We believe a potential reason is that on the strongest models like LLaVA-NeXT-13B and
+Qwen2.5-VL-13B, by controlling the model generation direction towards fair generation, it truly
+learns to adjust its confidence scores towards attributes. However, weaker models can not teach itself
+such things. Therefore, a stronger control in loss function is more effective than the post hoc method.
+Thirdly, we find that on both datasets, models performances on race is slightly poorer than gender,
+with or without bias mitigating. This indicates that the off-the-shelf knowledge learned during VLMs
+pre-training can have inherent bias, where it learns to distinguish gender better than race.
+
+
+7
+
+
+Figure 4: Fairness levels across layers. We use ‘-10’ to ‘-1’ to indicate the _n_ _[th]_ last layer, where ‘-10’
+is the tenth last layer and ‘-1’ is the last layer. (a) and (c) are original results, while (b) and (d) are the
+corresponding results when using our post hoc method.
+
+
+5.2 FAIRNESS LEVELS BETWEEN MODEL LAYERS
+
+
+Figure 4 shows the fairness levels of the models across different layers. We report the results on
+gender in PAIRS dataset due to page limitation. The rest of the figures are in Appendix C.4. The
+findings from results on race and on SCF stay the same. From (a) and (c), it is clear that the original
+models all reach the highest fairness levels on both text-only and VL end before the last layer, and
+all suffer a sudden drop in the last layer. Also, they all exhibit drastic fluctuations between last _n_ _[th]_
+layers, where the fairness levels do not increase with layers depth. In (b) and (d) we show the fairness
+levels when using our post-hoc method. It shows that model fairness levels increase continuously.
+Even though there are still slight fluctuations, we believe slight fluctuations are reasonable in hidden
+states, where a smooth increase without any drop is very rare. Moreover, from the last 4 _[th]_ layer, the
+fairness level either increase or stay stable. Models do not suffer sudden drop anymore. This verifies
+that our method helps model reach fairer performance.
+
+
+5.3 CASE STUDY AND FURTHER VALIDATION
+
+
+We use case study to show the different effectiveness of our projection matrix and how weights _λ_ 1 _, λ_ 2
+influence the response (this also serves as ablation study). However, due to the page limitation, we
+put this part into Appendix C.5, and put further evaluating on models’ free-form generation and
+performance on VQA can be found in Appendix C.6. Our finding is that our method do not do harm
+to models’ free-form generation, and can maintain a similar performance compared to the original
+one on VQA. Since these are not key findings but serve as a supplementary validation of our method,
+we believe putting them in the Appendix does not harm the presentation of the paper.
+
+
+6 RELATED WORK
+
+
+**gender and race bias in large models.** gender and race bias has been widely discussed due to its
+harmfulness to the human society, where they are first studied in Large Language Models Mei et al.
+(2023); Smith et al. (2022); Navigli et al. (2023). These studies focus on text-only tasks such as
+sentiment classification but do not consider vision-language scenarios. Recently, gender and race
+bias is revealed in VLMs such as age bias Agarwal et al. (2021), racial bias Hamidieh et al. (2024);
+Mandal et al. (2023)and gender bias Ghosh & Caliskan (2023). However, we find in these work, the
+task of evaluating gender and race bias is still limited to studying the image retrieval task, where they
+mainly focus on Fairface dataset Karkkainen & Joo (2021) and CLIP-based models Radford et al.
+(2021), which is no longer the SOTA. Moreover, none of these studies have addressed the issue of
+model confidence. In comparison, our work expands to a more comprehensive comparison of latest
+SOTA VLMs’, focusing on both model’s response end and confidence end.
+
+
+**Mitigating gender and race bias in VLMs.** To mitigate gender and race bias in VLMs, several
+debiasing methods have been proposed. Orthogonal projection is used in Gerych et al. (2024) to
+debias text or image embeddings for retrieval. Chuang et al. (2023) and Berg et al. (2022) manipulate
+prompts or tokens to reduce spurious correlations, mainly on binary classification and retrieval.
+Jung et al. (2024) propose selective feature imputation for classification, retrieval, captioning, and
+generation. Zhang & Ré (2022) train an adapter on frozen representations, while Wang et al. (2022)
+introduce FairCLIP for debiasing CLIP-based retrieval. tse Huang et al. (2025) focus on explicitly
+
+
+8
+
+
+measuring bias, which aligns with our motivation, but without proposing a debiasing method. Among
+existing work, only tse Huang et al. (2025) and Seth et al. (2023) share partial similarity to our MCS
+and residual approach, but key differences remain. Our MCS design prompts models to treat images
+as references rather than strict evidence, and we analyze both multimodal and text-only inputs. Seth
+et al. (2023) propose an additive residual learner requiring extra training data, whereas our post-hoc
+method uses no additional training and targets different residuals beyond CLIP-based models.
+
+
+7 CONCLUSION, LIMITATION, AND FUTURE WORK
+
+
+In this work, we study social bias in four SOTA VLMs on two datasets PAIRS and SocialCounterfactuals. We find that on multiple-choice selection task, even the latest SOTA VLMs fail to consistently
+generate fair responses or exhibit reliable confidence. We propose a post-hoc method by partially
+ablating biased residuals across different model layers and verify its effectiveness by showing models
+can reach higher fairness levels in response and lower KL Divergence scores in confidence. Due to
+the limits of current datasets, social bias study on VLMs, including this study, are still limited to
+several commonly used classes such as gender and race. This study do not expand gender and race to
+a wider range (e.g., homosexual, or other race like Asian) mainly because of the dataset PAIRS does
+not provide such labels. The findings in this study highlights current pre-trained VLMs do not reach
+gender and race equality, and debiasing social bias is an important future target for related studies.
+
+
+**Ethics statement** We anticipate no ethical concerns with this work. We utilized open-sourced datasets
+and models, which have been cited.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman,
+Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report.
+_arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Sandhini Agarwal, Gretchen Krueger, Jack Clark, Alec Radford, Jong Wook Kim, and Miles
+Brundage. Evaluating clip: towards characterization of broader capabilities and downstream
+implications. _arXiv preprint arXiv:2108.02818_, 2021.
+
+
+Joris Baan, Wilker Aziz, Barbara Plank, and Raquel Fernandez. Stop measuring calibration when
+humans disagree. In _Proceedings_ _of_ _the_ _2022_ _Conference_ _on_ _Empirical_ _Methods_ _in_ _Natural_
+_Language_ _Processing_, pp. 1892–1915, Abu Dhabi, United Arab Emirates, December 2022.
+Association for Computational Linguistics. doi: 10.18653/v1/2022.emnlp-main.124. URL
+[https://aclanthology.org/2022.emnlp-main.124.](https://aclanthology.org/2022.emnlp-main.124)
+
+
+Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang,
+Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li, Jianqiang Wan,
+Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, Jiabo Ye, Xi Zhang, Tianbao Xie, Zesen Cheng,
+Hang Zhang, Zhibo Yang, Haiyang Xu, and Junyang Lin. Qwen2.5-vl technical report, 2025. URL
+[https://arxiv.org/abs/2502.13923.](https://arxiv.org/abs/2502.13923)
+
+
+Hugo Berg, Siobhan Hall, Yash Bhalgat, Hannah Kirk, Aleksandar Shtedritski, and Max Bain. A
+prompt array keeps the bias away: Debiasing vision-language models with adversarial learning.
+In Yulan He, Heng Ji, Sujian Li, Yang Liu, and Chua-Hui Chang (eds.), _Proceedings of the 2nd_
+_Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics and the_
+_12th International Joint Conference on Natural Language Processing (Volume 1:_ _Long Papers)_, pp.
+806–822, Online only, November 2022. Association for Computational Linguistics. doi: 10.18653/
+v1/2022.aacl-main.61. [URL https://aclanthology.org/2022.aacl-main.61/.](https://aclanthology.org/2022.aacl-main.61/)
+
+
+Beiduo Chen, Xinpeng Wang, Siyao Peng, Robert Litschko, Anna Korhonen, and Barbara Plank.
+“seeing the big through the small”: Can LLMs approximate human judgment distributions on
+NLI from a few explanations? In Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen
+(eds.), _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_ _2024_, pp. 14396–
+14419, Miami, Florida, USA, November 2024. Association for Computational Linguistics.
+doi: 10.18653/v1/2024.findings-emnlp.842. URL [https://aclanthology.org/2024.](https://aclanthology.org/2024.findings-emnlp.842/)
+[findings-emnlp.842/.](https://aclanthology.org/2024.findings-emnlp.842/)
+
+
+9
+
+
+Ching-Yao Chuang, Varun Jampani, Yuanzhen Li, Antonio Torralba, and Stefanie Jegelka. Debiasing
+vision-language models via biased prompts, 2023. [URL https://arxiv.org/abs/2302.](https://arxiv.org/abs/2302.00070)
+[00070.](https://arxiv.org/abs/2302.00070)
+
+
+Kathleen Fraser and Svetlana Kiritchenko. Examining gender and racial bias in large vision–language
+models using a novel dataset of parallel images. In Yvette Graham and Matthew Purver (eds.),
+_Proceedings of the 18th Conference of the European Chapter of the Association for Computational_
+_Linguistics (Volume 1:_ _Long Papers)_, pp. 690–713, St. Julian’s, Malta, March 2024. Association
+for Computational Linguistics. [URL https://aclanthology.org/2024.eacl-long.](https://aclanthology.org/2024.eacl-long.41/)
+[41/.](https://aclanthology.org/2024.eacl-long.41/)
+
+
+Walter Gerych, Haoran Zhang, Kimia Hamidieh, Eileen Pan, Maanas Sharma, Thomas Hartvigsen,
+and Marzyeh Ghassemi. BendVLM: Test-time debiasing of vision-language embeddings. In
+_The_ _Thirty-eighth_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_, 2024. URL
+[https://openreview.net/forum?id=utMOhsgXzB.](https://openreview.net/forum?id=utMOhsgXzB)
+
+
+Sahin Cem Geyik, Stuart Ambler, and Krishnaram Kenthapadi. Fairness-aware ranking in search &
+recommendation systems with application to linkedin talent search. In _Proceedings of the 25th_
+_ACM_ _SIGKDD_ _International_ _Conference_ _on_ _Knowledge_ _Discovery_ _&_ _Data_ _Mining_, KDD ’19,
+pp. 2221–2231, New York, NY, USA, 2019. Association for Computing Machinery. ISBN
+9781450362016. doi: 10.1145/3292500.3330691. URL [https://doi.org/10.1145/](https://doi.org/10.1145/3292500.3330691)
+[3292500.3330691.](https://doi.org/10.1145/3292500.3330691)
+
+
+Sourojit Ghosh and Aylin Caliskan. ‘person’ == light-skinned, western man, and sexualization of women of color: Stereotypes in stable diffusion. In Houda Bouamor, Juan Pino,
+and Kalika Bali (eds.), _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_
+_2023_, pp. 6971–6985, Singapore, December 2023. Association for Computational Linguistics.
+doi: 10.18653/v1/2023.findings-emnlp.465. URL [https://aclanthology.org/2023.](https://aclanthology.org/2023.findings-emnlp.465/)
+[findings-emnlp.465/.](https://aclanthology.org/2023.findings-emnlp.465/)
+
+
+Yash Goyal, Tejas Khot, Douglas Summers-Stay, Dhruv Batra, and Devi Parikh. Making the v in vqa
+matter: Elevating the role of image understanding in visual question answering. In _Proceedings of_
+_the IEEE conference on computer vision and pattern recognition_, pp. 6904–6913, 2017.
+
+
+Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On calibration of modern neural
+networks. In Doina Precup and Yee Whye Teh (eds.), _Proceedings_ _of_ _the_ _34th_ _International_
+_Conference on Machine Learning_, volume 70 of _Proceedings of Machine Learning Research_, pp.
+1321–1330. PMLR, 06–11 Aug 2017. URL [https://proceedings.mlr.press/v70/](https://proceedings.mlr.press/v70/guo17a.html)
+[guo17a.html.](https://proceedings.mlr.press/v70/guo17a.html)
+
+
+Kimia Hamidieh, Haoran Zhang, Walter Gerych, Thomas Hartvigsen, and Marzyeh Ghassemi.
+Identifying implicit social biases in vision-language models. In _Proceedings of the AAAI/ACM_
+_Conference on AI, Ethics, and Society_, volume 7, pp. 547–561, 2024.
+
+
+Phillip Howard, Avinash Madasu, Tiep Le, Gustavo Lujan Moreno, Anahita Bhiwandiwalla, and
+Vasudev Lal. Socialcounterfactuals: Probing and mitigating intersectional social biases in visionlanguage models with counterfactual examples. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 11975–11985, June 2024.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. _ICLR_, 1(2):3, 2022.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Antoine Roux, Arthur Mensch, Blanche Savary, Chris
+Bamford, Devendra Singh Chaplot, Diego de las Casas, Emma Bou Hanna, Florian Bressand, et al.
+Mixtral of experts. _arXiv preprint arXiv:2401.04088_, 2024.
+
+
+Yang Jin, Zhicheng Sun, Kun Xu, Kun Xu, Liwei Chen, Hao Jiang, Quzhe Huang, Chengru Song,
+Yuliang Liu, Di ZHANG, Yang Song, Kun Gai, and Yadong MU. Video-laVIT: Unified videolanguage pre-training with decoupled visual-motional tokenization. In _Forty-first International_
+_Conference on Machine Learning_, 2024. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=S9lk6dk4LL)
+[S9lk6dk4LL.](https://openreview.net/forum?id=S9lk6dk4LL)
+
+
+10
+
+
+Hoin Jung, Taeuk Jang, and Xiaoqian Wang. A unified debiasing approach for vision-language
+models across modalities and tasks. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 37:
+21034–21058, 2024.
+
+
+Kimmo Karkkainen and Jungseock Joo. Fairface: Face attribute dataset for balanced race, gender,
+and age for bias measurement and mitigation. In _Proceedings of the IEEE/CVF Winter Conference_
+_on Applications of Computer Vision (WACV)_, pp. 1548–1558, January 2021.
+
+
+Naresh Kumar Lahajal and Harini S. Enhancing image retrieval : A comprehensive study on photo
+search using the clip mode, 2024. [URL https://arxiv.org/abs/2401.13613.](https://arxiv.org/abs/2401.13613)
+
+
+Jian Lan, Runfeng Shi, Ye Cao, and Jiancheng Lv. Knowledge graph-based conversational recommender system in travel. In _2022 International Joint Conference on Neural Networks (IJCNN)_, pp.
+1–8, 2022. doi: 10.1109/IJCNN55064.2022.9892176.
+
+
+Jian Lan, Diego Frassinelli, and Barbara Plank. Mind the uncertainty in human disagreement:
+Evaluating discrepancies between model predictions and human responses in vqa. _Proceedings_
+_of the AAAI Conference on Artificial Intelligence_, 39(4):4446–4454, Apr. 2025. doi: 10.1609/
+[aaai.v39i4.32468. URL https://ojs.aaai.org/index.php/AAAI/article/view/](https://ojs.aaai.org/index.php/AAAI/article/view/32468)
+[32468.](https://ojs.aaai.org/index.php/AAAI/article/view/32468)
+
+
+Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image
+pre-training with frozen image encoders and large language models. In _International conference_
+_on machine learning_, pp. 19730–19742. PMLR, 2023.
+
+
+Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction
+tuning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_
+_(CVPR)_, pp. 26296–26306, June 2024a.
+
+
+Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee.
+Llava-next: Improved reasoning, ocr, and world knowledge, January 2024b. URL [https:](https://llava-vl.github.io/blog/2024-01-30-llava-next/)
+[//llava-vl.github.io/blog/2024-01-30-llava-next/.](https://llava-vl.github.io/blog/2024-01-30-llava-next/)
+
+
+Abhishek Mandal, Suzanne Little, and Susan Leavy. Multimodal bias: Assessing gender bias in
+computer vision models with nlp techniques. In _Proceedings of the 25th International Conference_
+_on Multimodal Interaction_, pp. 416–424, 2023.
+
+
+Katelyn Mei, Sonia Fereidooni, and Aylin Caliskan. Bias against 93 stigmatized groups in masked
+language models and downstream sentiment classification tasks. In _Proceedings of the 2023 ACM_
+_Conference on Fairness, Accountability, and Transparency_, pp. 1699–1710, 2023.
+
+
+Roberto Navigli, Simone Conia, and Björn Ross. Biases in large language models: origins, inventory,
+and discussion. _ACM Journal of Data and Information Quality_, 15(2):1–21, 2023.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever.
+Learning transferable visual models from natural language supervision. In Marina Meila and Tong
+Zhang (eds.), _Proceedings of the 38th International Conference on Machine Learning_, volume
+139 of _Proceedings of Machine Learning Research_, pp. 8748–8763. PMLR, 18–24 Jul 2021. URL
+[https://proceedings.mlr.press/v139/radford21a.html.](https://proceedings.mlr.press/v139/radford21a.html)
+
+
+Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and
+Chelsea Finn. Direct preference optimization: Your language model is secretly a reward
+model. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine (eds.),
+_Advances in Neural Information Processing Systems_, volume 36, pp. 53728–53741. Curran Associates, Inc., 2023. [URL https://proceedings.neurips.cc/paper_files/paper/](https://proceedings.neurips.cc/paper_files/paper/2023/file/a85b405ed65c6477a4fe8302b5e06ce7-Paper-Conference.pdf)
+[2023/file/a85b405ed65c6477a4fe8302b5e06ce7-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2023/file/a85b405ed65c6477a4fe8302b5e06ce7-Paper-Conference.pdf)
+
+
+Shibani Santurkar, Esin Durmus, Faisal Ladhak, Cinoo Lee, Percy Liang, and Tatsunori Hashimoto.
+Whose opinions do language models reflect? In _Proceedings of the 40th International Conference_
+_on Machine Learning_, ICML’23. JMLR.org, 2023.
+
+
+11
+
+
+Ashish Seth, Mayur Hemani, and Chirag Agarwal. Dear: Debiasing vision-language models with
+additive residuals. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition (CVPR)_, pp. 6820–6829, June 2023.
+
+
+Eric Michael Smith, Melissa Hall, Melanie Kambadur, Eleonora Presani, and Adina Williams. " i’m
+sorry to hear that": Finding new biases in language models with a holistic descriptor dataset. _arXiv_
+_preprint arXiv:2205.09209_, 2022.
+
+
+Jen tse Huang, Jiantong Qin, Jianping Zhang, Youliang Yuan, Wenxuan Wang, and Jieyu Zhao.
+Visbias: Measuring explicit and implicit social biases in vision language models, 2025. URL
+[https://arxiv.org/abs/2503.07575.](https://arxiv.org/abs/2503.07575)
+
+
+Junyang Wang, Yi Zhang, and Jitao Sang. Fairclip: Social bias elimination based on attribute
+prototype learning and representation neutralization. _arXiv preprint arXiv:2210.14562_, 2022.
+
+
+Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu,
+Jialin Wang, Wenbin Ge, Yang Fan, Kai Dang, Mengfei Du, Xuancheng Ren, Rui Men, Dayiheng
+Liu, Chang Zhou, Jingren Zhou, and Junyang Lin. Qwen2-vl: Enhancing vision-language model’s
+perception of the world at any resolution, 2024a. [URL https://arxiv.org/abs/2409.](https://arxiv.org/abs/2409.12191)
+[12191.](https://arxiv.org/abs/2409.12191)
+
+
+Weiyun Wang, Zhe Chen, Wenhai Wang, Yue Cao, Yangzhou Liu, Zhangwei Gao, Jinguo Zhu,
+Xizhou Zhu, Lewei Lu, Yu Qiao, et al. Enhancing the reasoning ability of multimodal large
+language models via mixed preference optimization. _arXiv preprint arXiv:2411.10442_, 2024b.
+
+
+Xinpeng Wang, Bolei Ma, Chengzhi Hu, Leon Weber-Genzel, Paul Röttger, Frauke Kreuter, Dirk
+Hovy, and Barbara Plank. “my answer is C”: First-token probabilities do not match text answers
+in instruction-tuned language models. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar (eds.),
+_Findings of the Association for Computational Linguistics:_ _ACL 2024_, pp. 7407–7416, Bangkok,
+Thailand, August 2024c. Association for Computational Linguistics. doi: 10.18653/v1/2024.
+findings-acl.441. [URL https://aclanthology.org/2024.findings-acl.441/.](https://aclanthology.org/2024.findings-acl.441/)
+
+
+Xinpeng Wang, Chengzhi Hu, Paul Röttger, and Barbara Plank. Surgical, cheap, and flexible: Mitigating false refusal in language models via single vector ablation. In _The Thirteenth International_
+_Conference on Learning Representations_, 2025. [URL https://openreview.net/forum?](https://openreview.net/forum?id=SCBn8MCLwc)
+[id=SCBn8MCLwc.](https://openreview.net/forum?id=SCBn8MCLwc)
+
+
+Michael Zhang and Christopher Ré. Contrastive adapters for foundation model group robustness.
+_Advances in Neural Information Processing Systems_, 35:21682–21697, 2022.
+
+
+12
+
+
+Figure 5: Original labels and our modified mapping results in PAIRS.
+
+
+**Technical Appendices and Supplementary Material**
+
+
+A DATA MAPPING AND PROMPT
+
+
+A.1 LABELS AND MAPPING
+
+
+In Figure 5 we use the dictionary format to show the labels in PAIRS dataset. In PAIRS, there are
+three original classes, as shown in bold: ‘occupation’, ‘status’, and ‘potential-crime’. In each class,
+we use key-value pairs to show the original labels and our mapping labels. For each label, there are
+four images: black male, black female, white male, white female. The gender and the race is the only
+difference between images within the same label. We point out that we only study ‘black’ and ‘white’
+for race, following the original setting in PAIRS. We admit this is expandable in future work but we
+also show that as a very first study, this work already reveal enough findings even though the data
+does not support more race labels.
+
+
+For the mapping annotation, taking the original label ‘airplane’ as an example, the label ‘airplane’
+can not be used to accurately indicate the person in images, where images show pilots. Therefore,
+we map the ‘airplane’ to ‘pilot’. The annotation guide is very straightforward and easy to follow:
+since the images are indeed very clear without much ambiguity, we only instruct three humans who
+are also co-authors of this work. The whole annotation is finished in two hours. Similar annotation
+process is also used in previous work Lan et al. (2022). Firstly, one human is instructed to go through
+images and propose a new label to align better with the image. Secondly, another human serves as
+a quality inspector, going through the new labels and point out label _xi_ that may not be accurate
+enough and propose another label _xi_ _[′]_ as a potential replacement. Thirdly, the final inspector compare
+_xi_ and _xi_ _[′]_ and decide which is the final version. We point out our aim is not to design perfect
+labels, but to provide a better version to better support our study. This work does not rely or focus
+on super-high quality labels. Moreover, our results in the main text have demonstrated we reach
+meaningful findings.
+
+
+A.2 PROMPTS
+
+
+After getting the labels, the next step is to construct prompts. We first introduce how we construct
+system prompts. Following the principle introduced in Section 2, we first observe that the system
+prompt used by Wang et al. (2024c) already works well for most of the samples. However, there are
+still cases where the model do not follow the instruction, generating responses starting by ‘My answer
+is...’ or ‘Option...’. Therefore, we add more constraints like ‘Do not use other prefix word’ and ‘Do
+not include [Your Answer]’, etc. These constraints are empirically added based on our observation.
+By using the final system prompt designed in Figure 2, we find it guarantees that the generations
+follow the ideal format.
+
+
+13
+
+
+Figure 6: Layer residuals and the schematic diagram of our method in the latent space.
+
+
+B LAYER RESIDUALS AND TRAINING DATA
+
+
+B.1 LAYER RESIDUALS
+
+
+In figure 6, the left-hand side shows a layer module, where there are two residuals in each layer. The
+output of layer _li_ is denoted as:
+
+
+_output_ ( _li_ ) = _output_ (feed forward layer) + _residual_ ∆2 (9)
+
+
+_residual_ ∆2 = _residual_ ∆1 + _output_ (self-att & norm) (10)
+∆1 and ∆2 are the two residuals in each layer, and we find they work differently towards fairness as
+introduced in the main text Section 3.1. On the right-hand side, we show a schematic diagram of
+how our method works in latent space: given a biased residual vector and a fair residual vector, our
+method makes the biased generation _v_ far away from the biased one, while getting closer to the fair
+one.
+
+
+B.2 TRAINING DATA
+
+
+To fine-tune models with the DPO loss function, for each input, we assign a ‘preferred label’ and
+a ‘rejected label’ to the sample as introduced in Section3.2. In this study, the preferred label is
+fairness-associated labels and the rejected label is specified gender- or race- attributes (e.g., female,
+male, black, white). For every input, we randomly sample among our pre-defined candidate set
+introduced in Section 2 to get the preferred label and rejected label for DPO training. For KL loss,
+we use the same calculation method introduced in the evaluation in Section 4. The training strategy
+and details are in next section D.
+
+
+C THEORETICAL DERIVATIONS
+
+
+APPENDIX C. THEORETICAL MOTIVATION
+
+
+**Assumptions.** We assume that residual representations in each transformer layer _li_ can be decomposed into two dominant directions: one aligned with fair outputs and the other with biased outputs.
+Formally, given a hidden state **v** _i_, there exist subspaces _Si_ [fair] and _Si_ [biased] such that
+
+**v** _i_ = **v** _i,_ fair + **v** _i,_ biased + **v** _i,⊥,_
+
+where **v** _i,_ fair _∈Si_ [fair], **v** _i,_ biased _∈Si_ [biased], and **v** _i,⊥_ lies in the orthogonal complement.
+
+
+**Preconditions.** To estimate _Si_ [fair] and _Si_ [biased], we require: (i) a candidate set of outputs with unambiguous fairness labels (Sec. 2); (ii) a classification rule _C_ ∆ _i,j_ that maps each residual ∆ _i,j_ ( _t_ ) to
+either _fair_ or _biased_, based on the generated output _Mr_ . These conditions ensure that aggregated
+residuals **v** _i_ [fair] and **v** _i_ [biased] provide unbiased empirical estimators of the corresponding subspaces.
+
+
+14
+
+
+**Objective.** Our goal is to construct a representation **v** _i_ [new] that (i) removes the biased component
+while (ii) reinforcing the fair component. We achieve this by orthogonal projection:
+
+
+**v** debias = **v** _i −_ _P_ proj _[i,]_ [biased] **v** _i,_ **v** _i_ [new] = _λ_ 2 _P_ proj _[i,]_ [fair][(] _[λ]_ [1] **[v]** [debias][)] _[.]_
+
+
+By construction, **v** debias _⊥_ **v** _i_ [biased], ensuring no biased contribution, while **v** _i_ [new] is explicitly aligned
+with the fair subspace.
+
+
+**Theoretical Justification.** Under the above assumptions, our procedure is equivalent to projecting
+**v** _i_ onto the direct sum of the fair subspace and the orthogonal complement of the biased subspace:
+
+
+**v** _i_ [new] _∈Si_ [fair] _⊕_ ( _Si_ [biased] ) _[⊥]_ _._
+
+
+This guarantees that the resulting representation maximizes retention of fairness-relevant components
+while eliminating biased influence. Thus, fairness enhancement is a natural consequence of the
+linear subspace decomposition and projection framework, providing a principled foundation for our
+post-hoc mitigation method.
+
+
+D EXPERIMENTS
+
+
+D.1 REPRODUCTION & IMPLEMENTATION DETAILS.
+
+
+**Data** **and** **Split** For PAIRS, we filter out 6 labels where we do not find reasonable mapping to
+connect the label and the image contents, left with 44 different classes in total (as shown in Figure 5).
+For SCF, we filter out labels where same social category information in PAIRS are contained, left
+with 126 different classes. Since the labels in SCF are already occupation names, we do not annotate
+mapping but use their original labels directly. Then, for both datasets, for each class, for each social
+category (taking gender category as an example), we construct four different inputs: text-only input,
+text + 1 male image, text + 1 female image, text + both male and female images. Therefore, we have
+44 * 4 * 2 = 352 inputs from PAIRS, and 126 * 4 * 2 = 1008 inputs from SCF. Note that the number
+‘176’ and ‘504’ used in the main text section 4 is the number for one social category.
+
+
+For all our methods, we verify evaluate their performances in a cross-dataset evaluation setting, where
+we extract fair and biased vectors from SCF and use them to mitigate bias on PAIRS, and vice versa.
+The reason we do not use train-test split inside each dataset is that we want to evaluate our methods
+plug-and-play manner. Also, we do not want to reduce the size of testing set, since the number of
+samples are not very large. However, we want to emphasize that the number of samples used are
+enough to support our study, and the results reported in later section D.3 shows that even though our
+study do not have large amount of supporting data, the methods are effective. Such limited amount of
+data setting is also used in previous work Wang et al. (2025).
+
+
+**Implementation details.** For each model, we extract residual vectors from the last tenth layer to the
+last layer. For each model, we implement the models using the open-sourced standard huggingface
+code bases: LLaVA-1.5 [2], LLaVA-NeXT [3], Qwen2-VL [4], Qwen2.5-VL [5] . The datasets are from the
+open-soured PAIRS page [6] and SCF page [7] . The licenses are also stated in their original pages.
+Therefore, the data and models are directly available for any future study and also easy to re-produce
+the original results. Then, for the training details, all the experiments are implemented on 2 NvidiaA100-80G GPUs. The key training arguments and deepspeed arguments are shown clearly in Figure 7.
+For equation 5, we empirically set _λ_ 1and _λ_ 1 to be 0.2. For equation 8, we also set a weight for KL
+loss to control the importance confidence, denoted as:
+
+
+_L_ = _L_ DPO + _λklL_ KL (11)
+
+
+where we empirically set _λkl_ to be 0.5.
+
+
+15
+
+
+|W<br>W|WW<br>B|Col3|WMW<br>W<br>B|
+|---|---|---|---|
+|W<br>W|**F**<br>|F<br>F<br>|F<br>F|
+
+
+|B<br>F|FF|B|F<br>F|
+|---|---|---|---|
+|F<br>B|F<br>F|F|F|
+
+
+|W|WW<br>BB|W<br>W|
+|---|---|---|
+|B<br>F<br>B<br>F|F<br>B<br>F<br>|F<br>B<br>F<br>|
+|B<br>F<br>B<br>F|F<br>B<br>F<br>|F|
+
+
+|W W<br>BB|WW|WWMW<br>B|
+|---|---|---|
+|B<br>F<br>F<br>B<br>|F<br>B|F<br>F|
+
+
+|W<br>WB|W<br>B<br>B|
+|---|---|
+|B<br>F<br>|F<br>F|
+
+
+Figure 8: Proportions between fairness-associated responses and race-biased responses. Results are
+reported on the poorest small models on race category from SCF.
+
+
+D.2 PROPORTIONS RESULTS
+
+
+In Figure 8 and Figure 9, we find similar and consistent findings with those from Figure 3 in the main
+text. We find that our post-hoc method (orange parts) consistently outperforms the original models
+(blue bars on the left). We also observe that the smaller models indeed have poorer performances
+than the larger and the latest models. We do not include all other cases (e.g., all gender results on
+SCF, all race results on PAIRS) since we believe it is not necessary to use another 5 more similar
+figures to demonstrate similar findings. [8]
+
+
+16
+
+
+Figure 7: Our training arguments for re-production.
+
+
+**Qwen2-VL-2B**
+
+
+**LLaVA-1.5-7B**
+
+
+(ours) (ours) (ours) (ours) (ours) (ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+a-1 a-2 a-3 a-4 b-1 b-2 b-3 b-4 c-1 c-2 c-3 c-4 a-1 a-2 a-3 a-4 b-1 b-2 b-3 b-4 c-1 c-2 c-3 c-4
+
+
+|W|W|
+|---|---|
+|W|B|
+|B|**F**|
+|F|F|
+
+
+|B W<br>B<br>F FF<br>B<br>F|Col2|Col3|B|
+|---|---|---|---|
+|B<br><br>F<br><br>F<br>W<br>F<br>B<br>B<br>F|F<br>F|F<br>F|F<br>F|
+|B|B|B|B|
+|F<br>|F<br>|F<br>|F<br>|
+|F<br>|F<br>|B|B|
+|F<br>|F<br>|F<br>|F<br>|
+
+
+|W|MW<br>WB|
+|---|---|
+|F<br>B|F<br><br>F|
+
+
+Figure 9: Proportions between fairness-associated responses and race-biased responses. Results are
+reported on the strongest large models on race category from SCF.
+
+
+**PAIRS** **SCF**
+
+
+race gender race gender
+fair _↑_ fair _↑_ fair _↑_ fair _↑_
+
+
+LLaVA-1.5-7B 0.39±0.13 0.41±0.09 0.41±0.08 0.45±0.14
+w / LoRA 0.41±0.14 0.46±0.11 0.45±0.19 0.49±0.13
+w / DPO + KL (ours) 0.43±0.12 0.51±0.12 0.50±0.16 0.53±0.09
+w / post-hoc (ours) **0.46±0.11** **0.55±0.12** **0.54±0.10** **0.60±0.09**
+
+
+LLaVA-NeXT-7B 0.48±0.08 0.51±0.09 0.52±0.08 0.55±0.09
+w / LoRA 0.46±0.09 0.53±0.11 0.56±0.07 0.59±0.11
+w / DPO + KL (ours) 0.49±0.05 0.50±0.08 0.51±0.07 0.58±0.09
+w / post-hoc (ours) **0.57** ±0.05 **0.64** ±0.06 **0.62** ±0.08 **0.63** ±0.07
+
+
+Qwen2-VL-2B 0.48±0.06 0.50±0.05 0.53±0.05 0.55±0.04
+w / LoRA 0.52±0.05 0.54±0.04 0.54±0.05 0.56±0.04
+w / DPO + KL (ours) 0.54±0.06 0.59±0.07 0.61±0.03 0.63±0.03
+w / post-hoc (ours) **0.59** ±0.02 **0.62** ±0.02 **0.63** ±0.04 **0.66** ±0.03
+
+
+Qwen2.5-VL-7B 0.63±0.03 0.65±0.04 0.69±0.06 0.68±0.03
+w / LoRA 0.70±0.03 0.69±0.02 0.69±0.03 0.70±0.01
+w / DPO + KL (ours) 0.72±0.02 0.74±0.04 0.72±0.04 0.73±0.04
+w / post-hoc (ours) **0.72** ± 0.03 **0.76** ±0.02 **0.75** ±0.04 **0.79** ±0.04
+
+
+Table 2: More Results extended to Table 5.1. Fairness level on VL side on smaller version of models.
+
+
+D.3 RESPONSE AND CONFIDENCE RESULTS
+
+
+In Table D.3, we find similar findings compared with the larger model in Table 5.1 in the main text.
+We observe that our post-hoc method consistently improves the original model fairness levels, and it
+is better than the DPO training strategy. Between different models, Qwen2.5-VL is still the strongest
+model and LLaVA-NeXT is the second best one. We also observe that the stronger the model is,
+the smaller the standard deviation is. This means that with the increasing fair levels, the model are
+more stable in responses and less likely to suffer from change in prompts. In Table D.3, we add
+the Temperature Scaling to indicate the performances from the traditional calibration method. We
+empirically set temperature _t_ from 0.1 to 2.0 and report the best performances in the table. However,
+the TS method does not change model responses, but change the output probability distribution.
+We report the performances to indicate our method’s effectiveness on changing model’s confidence
+
+
+2https://huggingface.co/collections/llava-hf/llava-15-65f762d5b6941db5c2ba07e0
+3https://huggingface.co/collections/llava-hf/llava-next-65f75c4afac77fd37dbbe6cf
+4https://huggingface.co/collections/Qwen/qwen2-vl-66cee7455501d7126940800d
+5https://huggingface.co/collections/Qwen/qwen25-vl-6795ffac22b334a837c0f9a5
+6https://github.com/katiefraser/PAIRS
+7https://huggingface.co/datasets/Intel/SocialCounterfactuals
+8However, the remaining results can be provided if asked.
+
+
+17
+
+
+**Qwen2.5-VL-32B**
+
+
+**LLaVA-NeXT-13B**
+
+
+(ours) (ours) (ours) (ours) (ours) (ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+(ours)
+
+
+a-1 a-2 a-3 a-4 b-1 b-2 b-3 b-4 c-1 c-2 c-3 c-4 a-1 a-2 a-3 a-4 b-1 b-2 b-3 b-4 c-1 c-2 c-3 c-4
+
+
+**PAIRS** **SCF**
+
+
+race gender race gender
+KL _↓_ KL _↓_ KL _↓_ KL _↓_
+
+
+LLaVA-1.5-13B 0.245 0.235 0.227 0.211
+w / LoRA 0.319 0.308 0.301 0.296
+w / DPO + KL (ours) **0.231** **0.216** **0.191** **0.181**
+w / post-hoc (ours) 0.233 0.221 0.192 0.187
+TS (t=0.8) 0.235 0.231 0.202 0.191
+
+
+LLaVA-NeXT-13B 0.209 0.201 0.186 0.179
+w / LoRA 0.218 0.215 0.212 0.203
+w / DPO + KL (ours) 0.113 0.101 0.101 0.097
+w / post-hoc (ours) **0.105** **0.096** **0.093** **0.089**
+TS (t=0.6) 0.107 0.101 0.099 0.101
+
+
+Qwen2-VL-7B 0.238 0.229 0.203 0.191
+w / LoRA 0.251 0.231 0.233 0.221
+w / DPO + KL (ours) 0.180 0.171 0.147 **0.131**
+w / post-hoc (ours) **0.175** **0.169** **0.131** 0.137
+TS (t=1.1) 0.191 0.179 0.142 0.143
+
+
+Qwen2.5-VL-32B 0.129 0.116 0.107 0.102
+w / LoRA 0.238 0.208 0.234 0.151
+w / DPO + KL (ours) 0.049 0.039 0.036 0.031
+w / post-hoc (ours) **0.042** **0.027** **0.032** **0.022**
+TS (t=1.2) 0.052 0.031 0.033 0.026
+
+
+Table 3: Results on KL divergence (confidence level) on larger models.
+
+
+**PAIRS** **SCF**
+
+
+Model race fair _↑_ gender fair _↑_ race fair _↑_ gender fair _↑_
+
+
+InternVL-2.5 2B 0.67 0.70 0.71 0.75
+w / LoRA 0.65 0.72 0.74 0.76
+w / DPO + KL (ours) 0.69 0.78 0.76 0.77
+w / post-hoc (ours) **0.72** **0.81** **0.80** **0.80**
+
+
+InternVL-2.5 7B 0.71 0.74 0.76 0.78
+w / LoRA 0.69 0.76 0.77 0.79
+w / DPO + KL (ours) 0.74 0.80 0.80 0.85
+w / post-hoc (ours) **0.78** **0.85** **0.83** **0.83**
+
+
+Blip2-opt-6.7B 0.45 0.55 0.55 0.56
+w / LoRA 0.48 0.57 0.56 0.58
+w / DPO + KL (ours) 0.52 **0.65** 0.58 0.60
+w / post-hoc (ours) **0.55** 0.62 **0.63** **0.64**
+
+
+Table 4: Fairness results on PAIRS and SCF benchmarks. We report race and gender fairness levels
+across different models and training strategies.
+
+
+level. As shown in the table, the TS does not yield better confidence level compared with our
+post-hoc method. This demonstrates that our method indeed calibrate models towards a more reliable
+confidence level compared to previous commonly used method.
+
+
+In Table 4, we report fairness levels on both PAIRS and SCF benchmarks. Several observations
+can be made. First, our post-hoc method consistently achieves the best fairness performance across
+all models and datasets, further confirming its robustness compared to both the vanilla model and
+DPO+KL training. Second, although DPO+KL improves fairness over LoRA and the base models, its
+effectiveness is still inferior to post-hoc debiasing, highlighting the advantage of decoupling debiasing
+
+
+18
+
+
+**Original Results (VL)** **Results on our post-hoc method (VL)**
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+**Original Results (text-only)** **Results on our post-hoc method (text-only)**
+
+
+Figure 10: Fairness levels across layers, on race, and SCF.
+
+
+Figure 11: The effect of different weight control in our post-hoc method.
+
+
+from model training. Third, when comparing across model scales, larger models (InternVL-2.5 7B)
+generally exhibit higher fairness than their smaller counterparts (InternVL-2.5 2B (Wang et al., 2024b)
+and Blip2-opt-6.7B (Li et al., 2023)), suggesting that stronger vision–language representations are
+inherently more robust to spurious correlations. Finally, even weaker baselines such as Blip2 show
+noticeable gains under our post-hoc method, indicating that the approach is model-agnostic and can
+benefit a wide range of architectures.
+
+
+D.4 LAYERS
+
+
+In Figure 10 we report the fairness levels across layers on race category from SCF dataset. We
+observe similar phenomenons to the Figure 4 in the main text.
+
+
+D.5 CASE STUDY, ABLATION STUDY
+
+
+We showcase some samples in Figure 11 to explore the effects of _λ_ 1 and _λ_ 2 designed in equation 5.
+For the ease of display, we simply show the question and model responses directly (images and
+prompts are used but not for display here). In both cases, when we set _λ_ 1 or _λ_ 2 to a small value such
+as 0.05 or 0.0 as an ablation, we observe that the models can still focus on the fairness-associated
+concept. However, when _λ_ 1 is small, the models only focus on fair concept and generate non-fluent
+responses. Similarly, when _λ_ 2 is small or ablated, the model loses the fluency in responses but only
+focus on the concept represented by the corresponding projection matrix.
+
+
+D.6 FURTHER VALIDATION
+
+
+It has been shown in Figure 11 that when trying to reach fairness, our models general generation
+ability can be ruined. It is not ideal to have a model which only knows ‘fairness’ but lose the
+knowledge gained during pre-training. Therefore, we first validate models performances on the
+
+
+19
+
+
+**(a)** **(b)** **(c)**
+
+
+**(d)**
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**VQA Acc**
+
+
+original performances w / post-hoc (ours)
+
+
+LLaVA1.5-13B 77.92 77.63
+LLaVANeXT-13B 79.85 79.79
+Qwen2VL-7B 78.63 78.45
+Qwen2.5VL-32B 80.12 80.01
+
+
+Table 5: VQA accuracy comparison before and after post-hoc processing.
+
+
+**Successful samples on gender**
+
+
+original performances w / post-hoc (ours)
+
+
+LLaVA1.5-13B 13 14
+LLaVANeXT-13B 16 16
+Qwen2VL-7B 12 11
+Qwen2.5VL-32B 18 19
+
+
+Table 6: Model performances to tell social difference on gender.
+
+
+traditional vision question answering task, using VQA 2.0 dataset and VQA-accuracy metric Goyal
+et al. (2017).
+
+
+From Table D.6, we find that after using our method, the model performances on overall VQA is very
+close to the original ones, with only slight drop. We believe this is reasonable, since we do not try to
+improve the overall VQA accuracy. It is not expected to see higher VQA accuracy, while a very close
+value indicate model overall performances are maintained well.
+
+
+Moreover, we explicitly evaluate again about models’ ability to distinguish social category differences.
+We prompt GPT-4o-mini to summarize the intrinsic difference between different social attributes
+(e.g., on average, which gender have more muscle mass?). The aim is to verify that the model can tell
+the difference correctly rather than simply repeating ‘fairness’. However, such questions are easily to
+collect, since we do not observe many natural difference between different social attributes. In the
+end, we collect 20 questions for gender and 30 questions for race.
+
+
+**Successful samples on race**
+
+
+original performances w / post-hoc (ours)
+
+
+LLaVA1.5-13B 22 21
+LLaVANeXT-13B 24 24
+Qwen2VL-7B 21 22
+Qwen2.5VL-32B 26 26
+
+
+Table 7: Model performances to tell social difference on race.
+
+
+From Table D.6 and Table D.6, we find that the models do not have clear difference before and
+after our method. This is reasonable because our method does not aim to teach models how to tell
+difference on these small customized data. However, these results indeed tell us the models maintain
+the ability to distinguish difference.
+
+
+20

@@ -1,0 +1,3574 @@
+# PROTEIN STRUCTURE TOKENIZATION VIA GEOMETRIC BYTE PAIR ENCODING
+
+
+**Michael Sun** [1] _[,]_ [2] **, Weize Yuan** [3] **, Gang Liu** [4] **, Wojciech Matusik** [1] **, Marinka Zitnik** [2]
+
+1MIT CSAIL 2Harvard Medical School 3Apple 4Notre Dame
+_{_ msun415,wojciech _}_ @csail.mit.edu, marinka@hms.harvard.edu
+
+
+ABSTRACT
+
+
+Protein structure is central to biological function, and enabling multimodal protein models requires joint reasoning over sequence, structure, and function. A
+key barrier is the lack of principled protein structure tokenizers (PSTs): existing
+approaches fix token size or rely on continuous vector codebooks, limiting interpretability, multi-scale control, and transfer across architectures. We introduce
+GEOBPE, a geometry-grounded PST that transforms continuous, noisy, multiscale backbone conformations into discrete “sentences” of geometry while enforcing global constraints. Analogous to byte-pair encoding, GEOBPE generates a hierarchical vocabulary of geometric primitives by iteratively (i) clustering
+Geo-Pair occurrences with k-medoids to yield a resolution-controllable vocabulary; (ii) quantizing each Geo-Pair to its closest medoid prototype; and (iii)
+reducing drift through differentiable inverse kinematics that optimizes boundary glue angles under an SE(3) end-frame loss. GEOBPE offers compression
+( _>_ 10× reduction in bits-per-residue at similar distortion rate), data efficiency
+( _>_ 10× less training data), and generalization (maintains test/train distortion ratio
+of 1 _._ 0 _−_ 1 _._ 1). It is architecture-agnostic: (a) its hierarchical vocabulary provides
+a strong inductive bias for coarsening residue-level embeddings from large PLMs
+into motif- and protein-level representations, consistently outperforming leading
+PSTs across 12 tasks and 24 test splits; (b) paired with a transformer, GEOBPE
+supports unconditional backbone generation via language modeling; and (c) tokens align with CATH functional families and support expert-interpretable case
+studies, offering functional meaning absent in prior PSTs. Code is available at
+[https://github.com/shiningsunnyday/PT-BPE.](https://github.com/shiningsunnyday/PT-BPE)
+
+
+1 INTRODUCTION
+
+
+Protein language models (PLMs) trained on large sequence databases capture evolutionary constraints (Rives et al., 2021) and support de novo sequence design (Lin et al., 2023b), but they do not
+explicitly model fold geometry and may underperform on tasks where function depends on structural interactions (Abramson et al., 2024; Gelman et al., 2025). In natural language processing,
+byte-pair encoding (BPE) constructs a vocabulary by iteratively merging the most frequent symbol pairs, producing a hierarchical representation of text (Larsson & Moffat, 2002). Despite BPE’s
+success on sequential data, there is no geometric analog that can encode and decode protein backbone conformations. The central difficulty is discretizing continuous, noisy structural variability
+while preserving global consistency. Because protein folds are organized into modular substructures
+(Petsko & Ringe, 2004), a protein structure tokenizer should (a) build a hierarchical vocabulary of
+structural motifs and (b) segment folds into hierarchical decompositions, producing symbolic and
+interpretable representations of backbone geometry.
+
+
+Recently, vector-quantized variational autoencoders (VQ-VAEs) have become the most popular class
+of protein structure tokenizers (PSTs), as adopted by ESM3 (Hayes et al., 2025) and others. VQVAEs learn an autoencoder that compresses and reconstructs a protein structure with _N_ residues
+to and from _N_ quantized latent codes, which are discrete “words” drawn from a vocabulary of
+learnable embeddings (Van Den Oord et al., 2017). While powerful, VQ-VAEs lack the efficiency,
+interpretability and modularity of BPE tokenizers: (1) using a fixed codebook can create performance bottlenecks and imbalance token usage frequency, handicapping downstream performance
+(Yuan et al., 2025); (2) using vectors as tokens over real data hinders interpretability, as rows of a
+
+
+1
+
+
+2D matrix do not capture the hierarchical relationships between sub-words like in BPE; (3) lastly,
+fixing all tokens to have the same size prevents multi-scale resolution, which is key to tasks that
+identify naturally occurring higher-level functional activity which span variable residue lengths.
+
+**Present work.** We develop Geometric Byte-Pair Encoding (GEOBPE), a tokenizer that discretizes
+continuous protein backbones into symbolic “sentences” of structural motifs while learning a hierarchical vocabulary. The design is motivated by two requirements: (i) protein folds contain modular
+substructures that should be captured as reusable tokens, and (ii) discrete approximations must preserve global geometric consistency. To meet these requirements, GEOBPE alternates between local
+updates and global corrections. At each step, frequent motif pairs are clustered with k-medoids and
+replaced by representative prototypes, recursively building higher-order motifs. This local quantization inevitably introduces geometric drift, which GEOBPE corrects by optimizing boundary glue
+angles through differentiable inverse kinematics under an SE(3) end-frame loss. The output after
+each iteration is a segmentation of the backbone into quantized motifs and glue parameters; the
+sequence of iterations yields a hierarchical decomposition of the fold, represented as a merge tree
+of structural motifs (Fig. 1). Our contributions are as follows: _⃝_ 1 GEOBPE is the first geometrygrounded BPE analog for protein backbones, which builds a hierarchical vocabulary of motifs and
+tokenizes structures through an alternating global-local decomposition with glue-aware reconstruction. _⃝_ 2 On benchmark datasets, GEOBPE traces a smooth Pareto front of compression-distortion
+tradeoffs, achieving up to 0.27-0.36× the bits-per-residue of ProToken and strong out-of-distribution
+generalization (test/train RMSD ratio 1.16-1.28 vs. 6.4× for VQ-VAE). It also matches downstream
+accuracy when trained on as little as 1% of the pretraining data. _⃝_ 3 Hierarchical vocabularies from
+GEOBPE improve representation quality on tasks such as binding site prediction and fold classification, and a transformer trained on its tokens enables unconditional backbone generation. _⃝_ 4 Tokens
+align with CATH domain annotations and are supported by expert case studies, providing functional
+protein insights and multi-resolution interpretability.
+
+
+**Figure 1:** GEOBPE tokenizes a protein into discrete motifs linked by boundary glue angles and learns a hierarchical vocabulary of frequent structural primitives via k-medoids and recursively merging Geo-Pairs; at each
+step glue angles are optimized with differentiable inverse kinematics to preserve the global fold. Tokenization
+yields a merge tree that provides multi-resolution and interpretable representations of protein structure.
+
+
+|Token|Geo Pair|
+|---|---|
+|<br> <br> <br> <br>**...**|<br> <br> <br>|
+
+
+2 RELATED WORK
+
+
+**Protein** **Structural** **Alphabets.** Structural alphabets approximate protein folds as successions of
+geometric motifs (Branden & Tooze, 2012). de Brevern et al. (2000) introduced 16 five–residue protein blocks from Protein Data Bank (PDB) structures, assigning fragments by RMSD. Later work
+showed that over 90% of residues can be covered by such alphabets (de Brevern et al., 2002) and
+analyzed their quality and specificity (de Brevern, 2005). Alphabet strings provide 1D encodings
+of 3D geometry, enabling the use of sequence alignment for fold analysis and prediction (Mahajan
+et al., 2015; Vetrivel et al., 2017). Camproux et al. (1999) proposed 12 building blocks via Hidden Markov Models (HMMs) and extended it to capture whole-protein conformational variability
+(Camproux et al., 2004). HMMs use inter-alpha-carbon distances within four residues as observed
+variables. Broader tertiary descriptors, such as inter-residue distances or moment invariants (Durairaj et al., 2020), capture non-contiguous context; Mackenzie (2016) found _∼_ 600 motifs describe
+more than half of structural space (39 _·_ 10 [6] conformations), indicating variability collapses into
+limited modes. Such descriptors extend to protein-level retrieval and classification (Durairaj et al.,
+2020; Van Kempen et al., 2024; Barrio-Hernandez et al., 2023). GEOBPE builds on these insights
+by treating structural motifs as extensible primitives and dynamically adjusting alphabet size and
+token resolution, unlike fixed structural alphabets.
+
+**Protein Structure Tokenizers.** Modern PSTs, most notably VQ-VAEs, construct structural alphabets by training deep autoencoders with vectorized codebooks that map continuous structure to dis
+
+2
+
+
+crete codes (Van Den Oord et al., 2017). Building on this idea, FoldSeek (Van Kempen et al., 2024)
+introduced 3Di alphabets (20 discrete codes learned with VQ-VAE) that compress local structural
+features for efficient search and homology detection. Subsequent works integrate 3Di alphabets with
+PLMs: Heinzinger et al. (2024) translate between 3Di and amino acid sequences; Su et al. (2023)
+define “3Di-residue” tokens and show pretraining with this vocabulary improves prediction; and Li
+et al. (2024) use disentangled attention to jointly model 3Di and residue tokens with a structure
+quantization module. End-to-end VQ-VAEs avoid predefined descriptors by training equivariant
+encoders and decoders to tokenize structure directly, achieving near-perfect reconstruction but at
+high computational cost. Large-scale efforts such as ESM3 (Hayes et al., 2025), trained on 236 million structures, highlight the central role of tokenizers in scaling multimodal PLMs. Recent work
+benchmarks tokenizer performance itself: AIDO.St and ProTokens show that stronger compression
+improves retrieval (Van Kempen et al., 2024; Zhang et al., 2024c) but reduces reconstruction quality,
+and both Zhang et al. (2024c) and Lin et al. (2023a) integrate tokenizers tightly with transformers.
+GEOBPE differs by using its hierarchical vocabulary as an inductive bias for representation learning
+and by supporting geometry-grounded language modeling without latent space vector quantization.
+
+**Byte-Pair** **Encoding** **for** **Biological** **Data.** BPE underlies modern language models and has been
+applied to biological sequences with mixed outcomes. On genomes, BPE achieves superior compression and improves over k-mers in language models (Dotan et al., 2024; Zhou et al., 2023),
+though Nguyen et al. (2023) find the opposite using Hyena. For functional tasks, BPE often performs best (Dotan et al., 2024), while on nucleotide-resolution tasks it can underperform (Lindsey
+et al., 2025). These results indicate tokenizer utility depends on task scale and architecture, motivating GEOBPE’s architecture-agnostic design and multi-scale resolution. Linguistic differences
+between text and biological sequences further complicate direct transfer: BPE tokens do not align
+with domain boundaries (Suyunu et al., 2024) or regulatory motifs (Lindsey et al., 2025). Other
+studies emphasize the importance of vocabulary design, reduced amino acid alphabets impair structure prediction (Ieremie et al., 2024), while BPE vocabularies of 50–200 tokens are often optimal
+for sequence tasks (Tan et al., 2024). Overall, existing tokenizers, including BPE, lack _versatility for_
+_protein structures._ GEOBPE extends BPE by grounding tokenization in geometry, exposing parameters for quantization, vocabulary, and efficiency, while uniquely providing fine-grained resolution
+control and a hierarchical motif vocabulary.
+
+
+3 METHODS
+
+
+We first establish backbone geometry notations in Sec. 3.1. Sec. 3.2 presents the GEOBPE algorithm, detailing its components for motif clustering, adaptive quantization, and glue-aware refinement. Finally, Sec. 3.3 formalizes the principles that an ideal protein structure tokenizer should
+satisfy and evaluates how GEOBPE meets them.
+
+
+3.1 NOTATION & PRELIMINARIES
+
+
+**Global** **Backbone** **Formulation.** Let a protein backbone _t_ [(] _[τ]_ [)] with _N_ [(] _[τ]_ [)] residues be represented
+by the Cartesian coordinates _{_ ( _Ni,_ CA _i,_ _Ci_ ) _∈_ R [3] _[×]_ [3] _}_ _[N]_ _i_ =1 [(] _[τ]_ [)] of backbone atoms (oxygen and C _β_
+omitted). Define bond lengths, bond angles, and dihedrals:
+
+_ℓ_ _[N]_ _i_ _[−][CA]_ = _∥Ni −_ CA _i∥,_ _ℓ_ _[CA]_ _i_ _[−][C]_ = _∥_ CA _i −_ _Ci∥_ ; _ℓ_ _[C]_ _i_ _[−][N]_ = _∥Ci −_ _Ni_ +1 _∥._
+
+_θi_ _[NCAC]_ = ∠( _Ni,_ CA _i, Ci_ ) _,_ _θi_ _[CACN]_ = ∠(CA _i, Ci, Ni_ +1) _θi_ _[CNCA]_ = ∠( _Ci, Ni_ +1 _,_ CA _i_ +1) _._
+_ψi_ = ∠( _Ni,_ CA _i, Ci, Ni_ +1) _,_ _ωi_ = ∠(CA _i, Ci, Ni_ +1 _,_ CA _i_ +1) _,_ _ϕi_ = ∠( _Ci, Ni_ +1 _,_ CA _i_ +1 _, Ci_ +1) _._
+
+
+We annotate these definitions in a toy ( _N_ [(] _[τ]_ [)] = 2)
+example in Fig. 2 (top). The full internal representation thus contains 3 _N_ [(] _[τ]_ [)] _−_ 1 bond lengths, 3 _N_ [(] _[τ]_ [)] _−_ 2
+bond angles, and 3 _N_ [(] _[τ]_ [)] _−_ 3 dihedrals and is invariant
+to any ( _R, t_ ) _∈_ SE(3).
+
+**Local** **Formulation** **(Bond–Residue).** For residue
+_i_ we define the _bond–residue_ as the ordered triple
+( _Ni −_ CA _i_ ) _,_ (CA _i_ _−Ci_ ) _,_ ( _Ci_ _−Ni_ +1) together with
+its internal angles. For _i_ _<_ _N_ [(] _[τ]_ [)] this includes
+the lengths _ℓ_ _[N]_ _i_ _[−][CA]_ _,_ _ℓ_ _[CA]_ _i_ _[−][C]_ _,_ _ℓ_ _[C]_ _i_ _[−][N]_, the bond angles
+
+
+3
+
+
+|z<br>y x<br>CA|Col2|CA<br>y x<br>z|
+|---|---|---|
+|CA<br>y<br>x<br>z|||
+
+
+**Figure** **2:** Toy backbone, with internal angles,
+glues _T_ 1, motif _M_ 1:2 and per-link transform _G_ 1.
+
+
+_θi_ _[NCAC]_ _,_ _θi_ _[CACN]_, and the peptide dihedral _ψi_ about _CAi_ _−Ci_ . For _i_ = _N_ [(] _[τ]_ [)], it includes only bond
+lengths _ℓ_ _[N]_ _N_ _[−]_ [(] _[τ][CA]_ [)] [,] _[ℓ][CA]_ _N_ [(] _[τ][−]_ [)] _[C][,]_ [and] [angle] _[θ]_ _N_ _[NCAC]_ [(] _[τ]_ [)] (the ( _C −_ _N_ ) bond, _θN_ _[CACN]_ [(] _[τ]_ [)] [,] _[θ]_ _N_ _[CNCA]_ [(] _[τ]_ [)], and _{ψ, ω, ϕ}N_ ( _τ_ )
+dihedrals are absent).
+
+**Glue** **Parameters** **Between** **Neighboring** **Bond–Residue.** Neighboring bond–residues _i_ and _i_ +1
+are connected by a set of _glue_ angles that place the bonds of residue _i_ +1 relative to residue _i_ .
+
+      -       These are Γ _i_ = _θi_ _[CNCA]_ _,_ _ϕi,_ _ωi_, i.e., one bond angle _θi_ _[CNCA]_ (to place _Ni_ +1–CA _i_ +1) and
+
+two dihedrals _ϕi_ and _ωi_ (to orient CA _i_ +1 _−Ci_ +1 and the peptide plane). We adopt ( _ω, ϕ_ ) here to
+emphasize the two independent dihedral DOFs spanning the peptide and CA torsions.
+**Motif** **Formulation.** A _bond–residue_ _motif_ _Mp_ : _q_ is a contiguous block of bond–residues _i_ =
+_p, . . ., q_ (1 _≤_ _p_ _≤_ _q_ _≤_ _N_ [(] _[τ]_ [)] ). Its internal parameter set is the union over the internal bond lengths
+and angles of bond-residues _p, . . ., q_ together with the internal glue angles _{_ Γ _i}_ _[q]_ _i_ = _[−]_ _p_ [1] [that] [connect]
+consecutive bond–residues inside the motif. Given _q_ _≤_ _r_ _≤_ _N_ [(] _[τ]_ [)], we obtain a _Geo-Pair occurrence_
+( _Mp_ : _q,_ Γ _q, Mq_ : _r_ ) from the internal parameters of _Mp_ : _q_ and _Mq_ +1: _r_, plus the _external_ glue angles
+Γ _q_ connecting the last and first bond-residues of _Mp_ : _q_ and _Mq_ +1: _r_ .
+**Entry/Exit** **Frames.** For residue _i_, define _Fi_ = ( _Ri, ti_ ) _∈_ SE(3) with origin _ti_ = CA _i_ and axes
+chosen so that the x-axis points from CA _i_ toward the C _i_, the _y_ -axis is the normalized component of
+the CA _i −_ N _i_ direction orthogonal to _x_, and the _z_ -axis completes a right-handed triad.
+**Per-Link** **Transform.** Define the transform between consecutive residue frames _Gi_ :=
+_Fi_ +1 _Fi_ _[−]_ [1] _∈_ SE(3) _._ By construction, _Gi_ is a deterministic function of the internal coordinates local
+to the link _i_ _→_ _i_ +1, namely _Gi_ = _g_ - _ℓ_ _[CA]_ _i_ _[−][C]_ _,_ _ℓ_ _[C]_ _i_ _[−][N]_ _,_ _ℓ_ _[N]_ _i_ +1 _[−][CA]_ _,_ _θi_ _[NCAC]_ _,_ _θi_ _[CACN]_ _,_ _θi_ _[CNCA]_ _,_ _ψi,_ _ωi,_ _ϕi_ �,
+and, in particular, depends on the _glue set_ Γ _i_ = _{θi_ _[CNCA]_ _,_ _ϕi,_ _ωi}_, illustrated in Fig. 2 (bottom).
+**Entry/Exit** **Transforms.** For a motif _Mp_ : _q_, define _Fp_ [entry] : _q_ := _Fp, Fp_ [exit] : _q_ := _Fq._ The _internal_
+entry _→_ exit transform is _Tp_ [int] : _q_ = _Fp_ [exit] : _q_ [(] _[F]_ _p_ [ entry] : _q_ ) _[−]_ [1] = ( _Gq−_ 1) _· · ·_ ( _Gp_ ) _,_ which depends only
+on the internal coordinates of _Mp_ : _q_ . The _external glue_ transform between consecutive motifs _Mp_ : _q_
+and _Mq_ +1: _r_ is precisely the boundary link _Tq_ [glue] _→q_ +1 [=] _[F][q]_ [+1] _[ F][ −]_ _q_ [1] = _Gq,_ and is parameterized by
+the glue set Γ _q_ (and the adjacent three bond lengths).
+
+
+**Figure** **3:** (Top) GeoBPE tracks a Geo-Pair Encoding, a dictionary mapping Geo-Pair keys to occurrences
+at all times. Each step pops the most frequent Geo-Pair key, gathers the occurrences (,,,,,...) and fixes
+_K_ prototypes (,, ) to add to _V_ . All occurrences are quantized to the closest prototype (e.g. _→_ ). Glue
+angles (, ) are optimized to correct for the drift introduced. (Bottom) Toy example with two backbones;
+
+
+4
+
+
+_N_ [(] _[τ]_ [)] residues. A _segmentation_ of _t_ [(] _[τ]_ [)] into bond–residue motifs is the ordered tuple _P_ [(] _[τ]_ [)] =
+
+- _Mp_ [(] _[t]_ 1 _[τ]_ : [ )] _q_ 1 _[, . . .,][ M]_ _p_ [(] _[t]_ _Mτ_ _[τ]_ [ )] : _qMτ_ �, with 1 = _p_ 1 _≤_ _q_ 1 _<_ _p_ 2 _≤· · ·_ _≤_ _qMτ_ = _N_ [(] _[τ]_ [)] . The corresponding
+_merge_ _hierarchy_ _F_ [(] _[τ]_ [)] is a binary forest whose frontier leaves, in order, equal _P_ [(] _[τ]_ [)] ; each internal
+node represents a merged motif and stores its span [ _p_ : _q_ ].
+
+
+**Geo-pair keys and occurrences.** Given two adjacent motifs ( _Mp_ : _q, Mq_ +1: _r_ ) and their boundary
+glue Γ _q_, we define a canonical, hashable _geo-pair_ _key_ _κ_ = COMPUTEGEOKEY( _Mp_ : _q, Mq_ +1: _r_ )
+(Alg. 22). For each key _κ_ we collect its _occurrence set_ _O_ ( _κ_ ) consisting of all such adjacent motif
+pairs across the dataset.
+
+
+**Prototypes and vocabulary.** For a geo-pair key _κ_, GEOBPE clusters its occurrences and stores a
+small set of representative prototypes _Aκ_ = _{_ Π [(] _j_ _[κ]_ [)] _}Kj_ =1 _|κ|_ [, where each][ Π] _j_ [(] _[κ]_ [)] is the internal-parameter
+tuple of a medoid occurrence and _K_ : Z [+] _\ {_ 1 _}_ _�→_ Z [+] controls how many prototypes by motif
+(bond) length. The _vocabulary_ is the map _V_ : _κ �→Aκ_, initially containing residue-level codebooks
+_A_ 3 _, A_ 2 and growing as new geo-pair keys are introduced.
+
+
+**Geo-pair** **dictionary** **and** **priorities.** At any time GEOBPE maintains a _priority-ordered_ dictionary _D_ that maps each key _κ_ to its occurrence set _O_ ( _κ_ ). Keys are ordered by tuples
+
+
+_π_ ( _κ_ ) =        - _ρ_ ( _κ_ ) _, −|O_ ( _κ_ ) _|, κ_        - _,_ _ρ_ ( _κ_ ) = **1** [ _κ_ _∈/_ dom( _V_ )] _,_
+
+
+so that compressible keys with existing prototypes ( _ρ_ = 0) are popped first, followed by a new key
+with the largest count _|O_ ( _κ_ ) _|_ per iteration.
+
+
+3.2 GEOBPE ALGORITHM
+
+
+GEOBPE (Algo. 1, Fig. 3) is organized around four components: (1) clustering motif (individual bond-residues once at the start, Geo-Pairs every step thereafter) occurrences into representative
+structural prototypes, (2) maintaining an ordered map to track frequent Geo-Pairs, (3) adaptively
+hard-quantizing noisy Geo-Pairs to their assigned prototypes, and (4) applying rigid-body refinement to enforce global geometric consistency.
+
+
+Components (1)-(4) are designed to answer three new key questions when re-interpreting BPE to
+work with continuous backbone geometry rather than discrete bytes: (a) how do we _ground_ continuous backbone states to discrete keys for Geo-Pair _counting_, (b) how do we _update_ the backbone
+states once we have popped the most frequent Geo-Pair, (c) how do we synchronize the Geo-Pair
+dictionary with how we updated the backbone states. Component (1) answers to (a), (3) & (4) to
+(b), and (2) to (c). The guiding question encompassing (a)-(c) is: **what** **is** **the** **exact** **relationship**
+**between the Geo-Pair dictionary** (needed for discrete BPE operations) **and the continuous back-**
+**bone** **states** (which should both reflect new keys and preserve original fidelity)? GEOBPE implements a two-way connection through four stages: grounding, in which continuous motif states define
+discrete prototype keys; quantization, in which internal parameters are overwritten with those of the
+assigned prototypes; rigid-body refinement, in which backbone internal states self-correct to minimize global distortion; and synchronization, in which the Geo-Pair dictionary is re-synchronized to
+reflect the high-fidelity backbone states after quantization and refinement.
+
+**(1) Extracting Dominant Modes from a Set of Motif Occurrences.** The core subroutine invoked
+by GEOBPE is Algo. 6, which clusters a set of length _L_ raw backbone fragments into _K_ representative prototypes. This induces a hard quantization of the fragment space, since every possible
+occurrence is assigned to exactly one prototype. Because RMSD defines a metric over fragments,
+the clustering yields a Voronoi partition of this space. Importantly, the medoids are themselves observed fragments, so each quantized symbol retains a concrete structural interpretation: it represents
+the closest empirically observed conformation, providing a denoised approximation of local variability. Each time we quantize, we substitute every non-medoid occurrence by its assigned medoid,
+replacing all internal parameters with the medoid’s internal parameters, making it an exact copy of
+that medoid (same length and per-position angles).
+
+**(2) Constructing a Structural Motif Alphabet.** GEOBPE begins by quantizing all bond-residues
+and glue angles (Algo. 18) and building an _ordered_ map _D_ of discrete geo-pair grounding keys _κ_ to
+occurrences _O_ ( _κ_ ) (Algo. 21, see Core GeoBPE notation). In each iteration (Algo. 9), GEOBPE pops
+
+
+5
+
+
+**Algorithm 1** GEOBPE: Protein structure tokenizer with geometric byte-pair encoding
+
+
+**Require:** Backbones _{t_ [(1)] _, . . ., t_ [(] _[T]_ [ )] _}_ with lengths _N_ [(] _[τ]_ [)] ; optional backbones _{t_ [(] _[ξ]_ [)] _}_ to tokenize;
+residue codebook sizes ( _K_ 3 _, K_ 2); glue-IK weights ( _wR, wt_ ); maximum merge iterations _S_ max.
+**Ensure:** Final vocabulary _V_ (motif prototypes), final segmentations _{P_ [(] _[τ]_ [)] _}_, final merge hierarchies
+_{F_ [(] _[τ]_ [)] _}_, and the priority-ordered geo-pair map _D_ .
+1: **Empirical** **quantizer** **estimation** **(once).** Collect samples over all backbones for the 9 types
+_{ℓ_ _[N][−][CA]_ _, ℓ_ _[CA][−][C]_ _, ℓ_ _[C][−][N]_ _}_, _{θ_ _[NCAC]_ _, θ_ _[CACN]_ _, θ_ _[CNCA]_ _}_, _{ϕ, ψ, ω}_ . Wrap angles to [0 _,_ 2 _π_ ) and build
+circular histograms with edges 0 = _β_ 0 _<_ _· · ·_ _<_ _βB_ = 2 _π_ that tile the circle; define _Q_ by
+snapping to bin centers. For lengths, build linear histograms and snap to centers.
+2: **Per-residue** **initialization** (Algo. 18). Cluster interior and terminal bond–residues via
+RMSD PARTITION to obtain codebooks _A_ 3 _, A_ 2; overwrite each residue’s internals by its assigned prototype. Set the initial segmentation for each backbone:
+
+
+_P_ [(] _[τ]_ [)] = ( _M_ [(] 1:1 _[t][τ]_ [ )] _[, . . .,][ M]_ [(] _N_ _[t][τ]_ [(][ )] _[τ]_ [)] : _N_ [(] _[τ]_ [)][)] _[.]_
+
+
+**Initialize hierarchies:** for each _τ_, create a binary forest _F_ [(] _[τ]_ [)] whose leaves are the bond–residue
+motifs _M_ [(] _i_ : _[t]_ _i_ _[τ]_ [ )][, in order; its frontier equals] _[ P]_ [(] _[τ]_ [)][.] [Initialize the vocabulary with base prototypes:]
+
+
+_V_ _←{_ residue-level keys _�→A_ 3 _, A_ 2 _}._
+
+
+3: **Global glue refinement** (Algo. 12). Optimize all boundary glues Γ _i_ = _{θi_ _[CNCA]_ _, ωi, ϕi_ +1 _}_ via
+differentiable FK with ( _wR, wt_ ); snap each to the nearest bin center using _QθCNCA_ _, Qω, Qϕ_ .
+4: **Build** **the priority-ordered** **geo-pair map** (Algo. 21). Using the frontier leaves of each _F_ [(] _[τ]_ [)]
+
+(equivalently, _P_ [(] _[τ]_ [)] ), construct the occurrence sets _O_ ( _κ_ ) and insert:
+
+
+_D_ �( _ρ_ ( _κ_ ) _, −|O_ ( _κ_ ) _|, κ_ )� _←O_ ( _κ_ ) _,_ _ρ_ ( _κ_ ) = **1** [ _κ_ _∈/_ dom( _V_ )] _._
+
+
+5: **BPE loop – calls (Algo. 9) each step.**
+6: **for** _s_ = 1 **to** _S_ max **do**
+
+                  -                   7: ( _{P_ [(] _[τ]_ [)] _},_ _{F_ [(] _[τ]_ [)] _},_ _D,_ _V_ ) _←_ STEP _{P_ [(] _[τ]_ [)] _},_ _{F_ [(] _[τ]_ [)] _},_ _D,_ _V,_ _{QθCNCA_ _, Qω, Qϕ},_ ( _wR, wt_ )
+
+8: **end for**
+9: **Tokenize new/unseen backbones (Algo. 10)** for each _ξ_,
+
+
+                     -                     ( _P_ [(] _[ξ]_ [)] _, F_ [(] _[ξ]_ [)] ) _←_ TOKENIZE _t_ [(] _[ξ]_ [)] _, A_ 3 _, A_ 2 _, V, {QθCNCA_ _, Qω, Qϕ}_
+
+
+10: **return** _V_, _{P_ [(] _[τ]_ [)] _}_, _{F_ [(] _[τ]_ [)] _}_, _D_ and (if given) _{P_ [(] _[ξ]_ [)] _}_, _{F_ [(] _[ξ]_ [)] _}_
+
+
+the most frequent Geo-Pair key, runs Algo. 6 on mapped occurrences, quantizes the occurrences,
+runs rigid-body refinement, and updates _D_ to account for the new quantized backbone states.
+
+**(3) Multi-Resolution & Adaptive (Re-)Quantization.** One-time quantization is a lossy procedure
+and is only needed to index Geo-Pairs occurrences in the current step. Thus, each GEOBPE iteration
+can re-quantize occurrences by referencing the original, even if prior iterations have quantized the
+same regions already. This allows resolution to adapt based on the size of the motif (e.g., coarsegrained for smaller motifs, fine-grained for larger ones), providing precise control over compressionreconstruction tradeoffs (see App. A).
+**(4)** **Minimizing** **Distortion** **via** **Rigid-Body** **Refinement.** Let _Ti_ [int] : _j_ [denote] [the] [entry] _[→]_ [exit] [SE(3)]
+map of a motif _Mi_ : _j_ determined by its internal coordinates. For an occurrence _u_ with original motif
+_M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [, the rounding step replaces it by its assigned medoid segment:]
+
+_M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ _[−→M]_ ( _itmc_      - _mc_      - (( _uu_ )) [:][)] _[k]_ _mc_      - ( _u_ ) _[,]_
+
+where _m_ - _c_ ( _u_ ) is the medoid index returned by RMSD PARTITION (an index into _S_ ). Let _Tu_ [occ] :=
+_Ti_ [int] _u_ : _ku_ [and] _[T]_ [ med] _u_ := _T_ _i_ [int] _mc_ - ( _u_ ) [:] _[k]_ _mc_ - ( _u_ ) [.] [Rounding] [thus] [replaces] _[T]_ [ occ] _u_ by _Tu_ [med], and the induced
+
+discrepancy ∆ _Tu_ := _Tu_ [occ] - _Tu_ [med] - _−_ 1 is the _drift_ introduced by quantization. If left uncompensated,
+products of such ∆ _Tu_ across a chain accumulate and move exit frames off their original targets. Each
+boundary provides 3 _gluing_ degrees of freedom (Γ _i_ ) that can absorb this drift. To exactly recover the
+
+
+6
+
+
+original exit (in the idealized case), the boundary transform at the link _iu_ _−_ 1 _→_ _iu_ should satisfy:
+
+
+opt vars
+
+���      _G_ [new] _iu−_ 1 _[T]_ [ med] _u_ _≈_ _G_ [orig] _iu−_ 1 _[T]_ [ occ] _u_ = _⇒_ _G_ [new] _iu−_ 1 _[≈]_ _[G]_ _i_ [orig] _u−_ 1 [∆] _[T][u][,]_
+
+where the quantization drift is ∆ _Tu_ := _Tu_ [occ] - _Tu_ [med] - _−_ 1 _._ Since _Giu−_ 1 is controlled by only three
+gluing DOFs, we solve for _G_ [new] _iu−_ 1 [in least squares via the end-frame fitting objective:]
+
+_Lu_ (Γ _iu−_ 1) = _wR_ �� log�( _R_ [�] _ku_ ) _[⊤]_ _Rk_ _[⋆]_ _u_ ���22 [+] _[w][t]_ ��� _tku_ _−_ _t⋆ku_ ��22 _[,]_
+
+with forward kinematics _F_ [�] _ku_ = _Fi_ _[⋆]_ _u−_ 1 _[G]_ _i_ [new] _u−_ 1 _[T]_ [ med] _u_ _,_ _Fk_ _[⋆]_ _u_ = _Fi_ _[⋆]_ _u−_ 1 _[G]_ _i_ [orig] _u−_ 1 _[T]_ [ occ] _u_ _._ When
+quantizing many motifs on the same backbone, performing this optimization each time can become
+computationally prohibitive. Instead, we adopt a global (batch) alternative which treats all gluing
+DOFs as parameters, with a global end-frame fitting loss. This provides maximum flexibility in drift
+compensation. The algorithmic details are in Algo. 19 and 12.
+
+**Transferring Hierarchical Inductive Biases.** GEOBPE adapts the receptive field of a base residuelevel feature extractor Θ to that of the whole structure, connecting multiple scales through recursive
+aggregation. Algo. 1 emits merge hierarchies _F_ as a forest: leaf nodes represent residues and parent
+nodes represent motifs. The key insight is to use _F_ as a recursive computation tree. Leaf nodes are
+initialized with pretrained features, then embeddings propagate up along the parent-child relations
+of _F_ until the forest roots (aligned with _P_ ); a final step aggregates the forest roots into a proteinlevel contextual embedding; then they are propagated down until the leaf nodes. The final leaf
+nodes output residue-level embeddings induced by the hierarchical _V_ and informed by multi-scale
+GEOBPE tokenization. These features support supervised learning on fine-grained residue-level
+tasks (e.g., active site prediction) and coarse-grained global predictions (e.g., fold classification).
+See Algo. 15 for details.
+
+
+3.3 PRINCIPLES OF PROTEIN STRUCTURE TOKENIZATION
+
+
+Let _X_ = (R [3] _[×]_ [3] ) _[∗]_ be the space of backbone coordinate tensors and let _V_ be a finite codebook. A
+tokenizer is a tuple T = ( _V,_ Enc _,_ Dec): Enc : _X_ _→V_ _[∗]_ mapping a structure **x** to a finite token
+sequence **q** = Enc( **x** ), Dec : Im(Enc) _→X_ mapping **x** ˜ = Dec(Enc( **x** )). For dataset _D_ _⊂X_ and
+distortion _d_ : _X_ _× X_ _→_ [0 _, ∞_ ) (e.g., Kabsch-aligned RMSD per residue), define:
+
+
+1
+∆(T; _D_ ) =
+_|D|_
+
+
+- [�] **x** _∈D_ [L(Enc(] **[x]** [))]
+
+_d_ ( **x** _,_ Dec(Enc( **x** ))) _,_ BPR(T; _D_ ) = [L(][T][) +]
+
+          **x** _∈D_ **x** _∈D_ _[N]_ [(] **[x]** [)]
+
+
+bits/res
+**x** _∈D_ _[N]_ [(] **[x]** [)]
+
+
+where L(T) _≥_ 0 is the description length of ( _V,_ Enc _,_ Dec) and _N_ ( **x** ) is the residue count; under a
+uniform per-token code, L(Enc( **x** )) = _|_ Enc( **x** ) _|_ log2 _|V|_ . We setup the following principles for an
+ideal tokenizer T and empirically explore the degree GEOBPE satisfies them.
+
+[�]
+
+**Principle** **1:** **Pareto-optimal** **on** _D_ **.** T is Pareto-optimal on _D_ iff no T _[′]_ satisfies BPR(T _[′]_ ; _D_ ) _≤_
+
+[�]
+BPR(T [�] ; _D_ ) and ∆(T _[′]_ ; _D_ ) _≤_ ∆(T [�] ; _D_ ), with at least one strict. We empirically explore this principle
+by evaluating Pareto-efficiency among leading PSTs and codebook configurations in Fig. 4.
+
+
+**Priciple 2:** **Out-of-distribution (OOD) generalization.** T generalizes OOD if, on unseen test set
+
+[�]
+_D_ test _⊂X_ _,_ ∆(T; _D_ test) _≈_ ∆(T; _D_ ). We depict generalization gaps of leading PSTs in Fig. 4.
+**Principle 3:** **Downstream transfer via codebook/vocabulary.** Let _V_ be the vocabulary of T and
+let _N_ ( **x** ) be the residue count. Let Θ parameterize a pretrained feature extractor. The codebook/vocabulary _V_ _induces_ per-residue features _rV_ ( **x** ) = Ψ _V_ ( _F_ Θ( **x** )) _∈_ (R _[d]_ ) _[N]_ [(] **[x]** [)] . An ideal tokenizer
+of protein _structures_ should go beyond pure compression; it should learn useful signals related to
+function. We loosely define the ability of a PST to transfer useful signals by test performance on
+a battery of downstream tasks when parameterizing samples **x** by the vocabulary _V_ together with
+a feature extractor Θ. We benchmark downstream transfer of GEOBPE against others in Table 1
+(GEOBPE-TRANSFER).
+
+
+4 EXPERIMENTS
+
+
+We answer ten research questions (Q1-Q10) to benchmark the performance, efficiency, and application integration potential of GEOBPE against other popular tokenizers.
+
+
+7
+
+
+- **Tokenization Performance** : (Q1) How many bits are needed to store the tokenizer and tokenized
+inputs? (Q2) How faithful is the reconstruction? (Q3) How does performance generalize to unseen
+data? (Q4) How many samples are needed to train the tokenizer?
+
+- **Token Efficiency** : (Q5) How frequent and balanced is vocabulary utilization? (Q6) Does smallscale language modeling generate better structures with GEOBPE or VQ-VAE tokens?
+
+- **Downstream Transfer** : (Q7) How much transferrable signal does the tokenizer capture about the
+data? (Q8) How much does the vocabulary help on representation learning tasks?
+
+- **Interpretability** : (Q9) How well do GEOBPE tokens agree with “ground-truth” domain annotations? (Q10) Can experts _understand_ GEOBPE through real-world case studies?
+
+**Datasets.** We follow the same dataset splits as in Yuan et al. (2025). Pretraining uses structures
+from the Protein Data Bank following OpenFold2’s protocol and retained a non-redundant subset of
+_≈_ 48K protein chains, which were split into training/validation sets, with CAMEO and CASP14 reserved as held-out test sets for evaluating OOD generalization and token efficiency. For downstream
+evaluation, we use 8 datasets, spanning residue-level classification (ligand binding, catalytic, conserved, repeat, and epitope), residue-level regression (structural flexibility prediction), and proteinlevel classification. Together these datasets probe functional relevance, structural variability, token
+distinctiveness, and efficiency across a wide range of proteins. For citations and details, see App. B.
+
+**Baselines.** We compare with VQ-VAEs, the leading family of discrete PSTs (Hayes et al., 2025;
+Van Kempen et al., 2024; Lin et al., 2023a; Yuan et al., 2025). They consist of (1) a structure encoder maps structure _**x**_ into a continuous representation _z_ _∈_ R _[N]_ _[×][D]_ ; (2) a vector quantization layer
+discretizes each _zi_ by selecting _ki_ = arg min _j d_ ( _zi, qj_ ) from a learnable codebook _Q_ _∈_ R _[K][×][D]_ ;
+and (3) a structure decoder reconstructs _**x**_ ˜ _≈_ **x** from the discrete codes _**q**_ _k_ = _{_ _**q**_ _kj_ _}_ _[L]_ _j_ =1 [.] [We] [also]
+compare with Inverse Folding (IF) _continuous_ PSTs, which skips the quantization step **z** _→_ _**q**_ _k_ and
+trained to recover the amino acid sequence from _**z**_ (Dauparas et al., 2022; Yang et al., 2023).
+
+**Downstream** **Transfer.** For VQ-VAEs, Θ and _V_ are _jointly_ learned, so we set _rV_ [VQ-VAE] ( **x** ) :=
+_r_ [VQ-VAE] ( **x** ) _←_ Enc( **x** ). For GEOBPE-TRANSFER, we use Θ _←_ ESM3 to demonstrate how _V_ [G][EO][BPE]
+can transfer useful signals from _F_ Θ( **x** ) to _rV_ ( _F_ Θ( **x** )).
+**Performance Metrics.** _Compression_ measures Bits-Per-Residue (BPR), as defined in Sec. 3.3. _Dis-_
+_tortion_ (∆) use standard RMSD and LDDT. _Token_ _Efficiency_ uses Codebook Utility Rate (UR),
+Perplexity (details in App. D) and _Small Structure Language Model Evaluation (SSLM-Eval)_ (details
+in App. E). SSLM-Eval compares tokenizers (GEOBPE vs VQ-VAEs) via integration with a small
+_∼_ 7.3M Transformer architecture after respectively tokenizing the pretraining data splits (Algo. 2).
+Under the same data, model, training and compute resources, the respective models generate new
+sentences, detokenizes them into structures, and we compare _relative_ generation metrics (Algo. 3,
+4, 5). _Downstream_ _Transfer_ covers 12 tasks (24 test splits) using AUROC (%) for functional site
+prediction, Spearman’s _ρ_ (%) for flexibility prediction, and Macro F1 (%) for fold classification.
+_Expert Agreement_ measures Domain & Segment Recall/Precision/F1/IOU (details in App. G).
+
+**Computational Complexity / Implementation Details.** We analyze the theoretical complexity of
+GEOBPE in App. J and justify the steps we took towards efficient implementation and use.
+
+
+5 RESULTS
+
+
+**Tokenizer** **Performance.** We find GEOBPE and ProToken form the Pareto front under both
+∆ _∈{_ RMSD _,_ LDDT _}_ . GEOBPE achieves 0 _._ 271 _−_ 0 _._ 358x and 0 _._ 016 _−_ 0 _._ 021x the BPR of ProToken
+and ESM3, dropping LDDT by only 18 _−_ 22% and 22 _−_ 25%, which are impressive feats considering
+GEOBPE’s training data was only _≈_ 7% and 0 _._ 02% the size. We also observe GEOBPE’s strong
+OOD generalization, with test/train RMSD peaking at 1 _._ 16 (CAMEO) and 1 _._ 28 (CASP), showing negligible degradation reconstructing unseen data; VQ-VAE/AminoASeed, using identical data
+splits, show degradation as high as 6 _._ 4x test RMSD. Crucially, as the GEOBPE codebook grows,
+the variants trace a near-linear path along the Pareto front toward ProToken, elastically trading off
+BPR for lower distortion, a feature other tokenizers do not have (as codebook dimensions are fixed).
+
+**Token** **Efficiency.** We report UR & Perplexity averaged over held-out test sets to gauge codebook/vocabulary usage on unseen data, the setting where the tokenizer is deployed. In Table 10,
+we see all methods except VQ-VAE and ESM3 achieve an average UR of _>_ 40%; all except VQVAE achieve 0 _._ 2 average Perplexity. An ideal tokenizer avoids codebook collapse, but exactly
+uniform token usage may not be desirable. We introduce SSLM-Eval to stress test whether codebook efficiency actually leads to generative efficiency. SSLM-Eval is a holistic way to compare
+
+
+8
+
+
+RMSD vs BPR
+
+
+LDDT vs BPR
+
+
+|Col1|Col2|C<br>C|AME<br>ASP|RM<br>O (<br>14 (|SD<br>test)<br>test)|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+|||<br>**Tr**<br>**P**<br>**P**|<br>**ain**<br>**aret**<br>**aret**|<br>**o Fr**<br>**o Fr**|<br>** ont (CAMEO**<br>** ont (CASP1**|** ,**<br>**)**<br>**  4,**<br>**)**|||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||**C**<br>|**AME**<br>|~~**LD**~~<br>**O (te**<br>|~~**DT**~~<br>** st)**<br>|||||||
+|||<br>**C**<br>~~**Tr**~~<br>**P**<br>**P**|<br>**ASP1**<br>~~**ain**~~<br>**areto**<br>**areto**|<br>**4 (t**<br>** Fro**<br>** Fro**|<br>** st)**<br>** nt (CAMEO**<br>** nt (CASP14**|** ,**<br>**)**<br>** ,**<br>**)**||||||
+|||||||||||||
+
+
+10 [2] 10 [3]
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+10 [2] 10 [3]
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+BPR
+
+
+Note: method labels show training dataset size in parentheses (e.g., 40K = 40,000).
+
+
+BPR
+
+
+**Figure** **4:** Plots of (BPR(T; _D_ ) _,_ ∆(T; _D_ test)) across tokenizers for ∆ _∈{_ RMSD _,_ LDDT _}_ . We vary
+_|V|_ _∈{_ 128 _,_ 256 _,_ 512 _,_ 1024 _}_ for VQ-VAE/AminoASeed and _|V|_ _∈{_ 600 _,_ 2500 _,_ 6000 _,_ 21000 _}_ for GEOBPE
+to sample multiple points; we observe GEOBPE sweeps a smooth tradeoff curve. Hyperparameters in App. K.
+
+
+tokenizers using both encoder token efficiency _and_ decoder’s generative efficiency. In Table 11, we
+find GEOBPE-TRANSFER is capable of generating 99% unique and designable backbones, achieving up to 49% higher scTM and maintaining higher diversity than both VQ-VAE methods using
+the same data splits. We visualize some realistic, novel backbones GEOBPE-TRANSFER generated
+in App. E.4. Interestingly, the “less-efficient” VQ-VAE generated 58% more diverse backbones,
+demonstrating uniform token usage can be counterproductive to language modeling.
+
+**Downstream Task Transfer.** In Table 1, we see GEOBPE-induced features rank first, on average,
+across both function and structure property prediction tasks. The relative performance gaps 15 _._ 44%
+and 43 _._ 28% quantify the add-on benefits of GEOBPE-induced features. GEOBPE-induced features
+reverse the trend that discrete PSTs produce less informative representations for downstream tasks
+(due to quantization-related issues (Yuan et al., 2025)), highlighting that _hierarchical structure_ from
+discrete vocabularies raises the ceiling on downstream transfer.
+
+**Further Ablations.** We include a comprehensive series of ablation studies in App. A demonstrating
+GEOBPE’s _data-efficiency_, GEOBPE-TRANSFER’s _task-agnosticism_, GEOBPE tokenizer’s _scala-_
+_bility_, GEOBPE tokens’ _adaptive_ _resolution_ over iterations, and _performance_ _vs_ _runtime_ _tradeoffs_
+in components (1), (3) & (4). Key findings include: (i) GEOBPE shows _better_ OOD generalization when fitted on 1% training data; (ii) GEOBPE-TRANSFER predictions are no worse when
+GEOBPE was fitted with (a) 1% of the pretraining PDBs, (b) the downstream task-specific PDBs;
+(iii) GEOBPE performance gains diminish beyond _M_ max = 5000 randomly sampled motif occurrences used to extract prototypes, taming a complexity term that depends on _M_ max.
+
+
+6 DISCUSSION
+
+
+**Case Study:** **Agreement with PFAM Annotations.** We ran CATH Functional Families (FunFams)
+(Das et al., 2015b) to obtain domain boundaries and compared them against GEOBPE-derived motifs. Because sequence conservation is linked to structural preservation, we expect overlap between
+predicted motifs and functional domains. In Table 2, GEOBPE achieves 99.97% domain recall
+with mean F1 = 0.996 and IOU = 0.992, showing near-perfect agreement across 10 datasets. _The_
+_agreement_ _is_ _not_ _only_ _geometric_ _but_ _also_ _functional:_ GEOBPE tokens frequently coincide with
+boundaries of ligand-binding grooves, transmembrane cavities, and scaffolding helices, capturing
+motifs that underlie molecular recognition and catalysis. This suggests GEOBPE does more than
+segment folds consistently: it surfaces interpretable structural primitives that map onto biochemical
+roles, offering a functional vocabulary absent in prior PSTs. Details are in App. G
+
+**Case Study:** **Human Expert Analysis of Interpretability.** We conducted three expert evaluations
+of GEOBPE-derived hierarchies (App. H). Across proteins, the discovered motifs align with functionally meaningful substructures, including regions mediating ligand binding, molecular recognition, and structural gating. In the SLC25A20 transporter (Fig. 9), GEOBPE isolates a transmembrane binding cavity formed by helices and polar residues. In the 14-3-3:Tau complex (Fig. 10),
+it identifies a canonical phospho-binding groove stabilized by charged side chains. Recurrent local
+
+
+9
+
+
+**Table 1:** Downstream transfer performance benchmark. We underline and **bold** the best continuous and discrete
+PSTs, respectively; indicates the best method across both. The relative performance v.s. ESM3 for GEOBPETRANSFER is included. Omitted rows in Table 6; GEOBPE hyperparameters are in App. K.
+
+|Task|Split|Continuous PST|Discrete PST|Col5|
+|---|---|---|---|---|
+|||ProteinMPNN<br>MIF|FoldSeek<br>ProTokens<br>ESM3<br>VanillaVQ<br>AminoAseed|GEOBPE-TRANSFER (v.s. ESM3)|
+
+
+**Functional Site Prediction (AUROC%)**
+
+
+_...2 tasks omitted (Rep, Ept)..._
+
+
+**Average AUROC%** 75.92 79.82 51.90 65.37 69.24 68.30 72.43 **80.20 (+18.13%)**
+
+
+**Physicochemical Property Prediction (Spearman’s** _ρ_ **%)**
+
+
+FlexRMSF Fold 62.37 59.60 15.35 13.81 44.53 44.22 **44.63** 40.89 (-8.17%)
+SupFam 59.24 56.80 11.99 7.62 39.08 38.98 40.99 **47.17 (20.70%)**
+_...2 tasks omitted (FlexBFactor, FlexNEQ)..._
+
+
+**Average** _ρ_ **%** 54.41 52.73 7.80 9.84 37.35 33.49 38.08 **45.26 (+21.18%)**
+
+
+**Structure Property Prediction (Macro F1%)**
+
+|Homo|Fold<br>SupFam<br>Fam|25.66 22.56<br>30.83 33.86<br>63.33 74.22|11.57 5.84 30.02 18.17 29.87<br>4.67 6.17 24.89 22.10 38.38<br>15.34 18.33 54.42 47.18 69.78|23.60 (-21.39%)<br>47.28 (+89.96%)<br>85.75 (+57.47%)|
+|---|---|---|---|---|
+|**Average Macro F1%**||39.94<br>43.55|10.51<br>10.11<br>36.44<br>29.15<br>46.01|**52.21 (+43.28%)**|
+
+
+**Table 2:** We annotate 100 PDBs from each dataset and report % of 1,000 random equal-length segmentations
+that GEOBPE matches or outscores. Omitted columns are in Table 7. Secondary structure analysis in Table 15.
+
+
+|BindInt BindBio BindShake CatInt CatBio Con|Col2|Average|
+|---|---|---|
+|Domain<br>Segment|Mean Recall<br>99.95 (98.35)<br>100 (100.0)<br>100 (100.0)<br>100 (100.0)<br>99.99 (93.55)<br>99.95 (98.0)<br>...<br>_4 columns omitted_<br>...<br>Mean Precision<br>98.9 (53.87)<br>99.62 (71.92)<br>99.76 (68.24)<br>99.28 (50.49)<br>99.33 (42.78)<br>99.19 (63.89)<br>Mean F1<br>99.42 (86.48)<br>99.81 (83.63)<br>99.88 (76.49)<br>99.64 (62.56)<br>99.66 (61.04)<br>99.57 (87.03)<br>Mean IOU<br>98.86 (86.32)<br>99.62 (83.63)<br>99.76 (76.54)<br>99.28 (62.44)<br>99.32 (60.94)<br>99.14 (86.97)<br>Mean Recall<br>100 (100.0)<br>100 (100.0)<br>100 (100.0)<br>100 (100.0)<br>100 (100.0)<br>100 (100.0)<br>Mean Precision<br>97.16 (72.04)<br>81.84 (61.82)<br>97.64 (68.33)<br>90.4 (63.09)<br>98.87 (74.76)<br>98.92 (92.0)<br>Mean F1<br>98.54 (72.04)<br>89.05 (61.82)<br>98.8 (68.33)<br>94.04 (63.09)<br>99.43 (74.76)<br>99.45 (92.0)|99.97 (97.97)<br>99.25 (54.59)<br>99.61 (76.82)<br>99.22 (76.75)<br>100.00 (100.00)<br>95.11 (65.62)<br>97.23 (65.62)|
+
+
+motifs (aromatic cages, polar bridges, helix-helix clamps) are combined into higher-order scaffolds
+that mirror established biochemical organization. _These hierarchies capture geometric regularities_
+_and also modular design principles conserved across folds and families._ Even in compact domains,
+such as nucleotide-recognition modules, GEOBPE motifs reveal the coupling between geometric
+curvature and chemical specificity, meaning that GEOBPE surfaces reusable motifs that are both
+interpretable and evolutionarily grounded.
+
+**Limitations.** GEOBPE currently does not incorporate sequence or side chains, but _can_ via direct
+extensions, e.g. taking the Cartesian product of the current vocabulary with amino acid types and
+augmenting the backbone formulation with type-dependent _χ_ -angle spans. The present integration
+with small-scale Transformers is set up to compare tokenizers’ compability with language modeling
+on structure tokens; only _relative_ backbone design metrics are relevant. Generative performance depends on model capacity and data scale, which are _orthogonal_ to the tokenizer. In the separate SSLM
+scalability study, we see _steep gains in generative performance_ when both LM parameter count and
+pretraining data increase ten-fold, conforming with scaling law expectations. The improved numbers are preliminary evidence of GEOBPE’s promise as a tokenizer for lage-scale PLMs, but are not
+competitive with state-of-the-art backbone design models.
+
+
+7 CONCLUSION
+
+
+We present GEOBPE, a principled geometry-grounded analog of BPE for protein folds. GEOBPE
+(a) captures natural conformational variability in protein backbones, (b) constructs a hierarchical
+vocabulary of structural motifs, and (c) produces hierarchical views of folds for downstream representation learning. Its hierarchies reveal conserved modular design principles that connect structure
+to function. Empirically, GEOBPE advances the state of the art in tokenizer performance, out-ofdistribution generalization, token and generative efficiency, downstream transfer, and interpretability. These results establish GEOBPE as a foundation for structure-native protein language models.
+
+
+10
+
+
+REPRODUCIBILITY STATEMENT
+
+
+[Code for GEOBPE and steps to reproduce all experiments in the paper are available at https://github.](https://github.com/shiningsunnyday/PT-BPE/)
+[com/shiningsunnyday/PT-BPE/.](https://github.com/shiningsunnyday/PT-BPE/) We include detailed descriptions for understanding our method in
+the main text, with mathematical descriptions and pseudocodes in the Appendix. In App. K, we
+list the key hyperparameters, their effects on algorithm behavior, the default values used in our
+experiments, and any deviations from the default values used to obtain the results reported in the
+main text. In App. J, we analyze the computational complexity of our method and describe practical
+implementation choices used to make the method efficient in practice.
+
+
+ACKNOWLEDGMENTS
+
+
+M.S. and M.Z. gratefully acknowledge partial support by NSF CAREER Award 2339524, ARPA-H Biomedical Data Fabric (BDF) Toolbox Program, Amazon Faculty Research, Google Research Scholar Program, AstraZeneca Research, GlaxoSmithKline Award, Roche Alliance with Distinguished Scientists (ROADS) Program, Sanofi iDEA-iTECH Award, Boehringer Ingelheim Award, Merck Award, Optum AI Research Collaboration Award, Pfizer Research, Gates Foundation (INV-079038), Chan Zuckerberg Initiative, Collaborative
+Center for XDP at Massachusetts General Hospital, John and Virginia Kaneb Fellowship at Harvard Medical
+School, Biswas Computational Biology Initiative in partnership with the Milken Institute, Harvard Medical
+School Dean’s Innovation Fund for the Use of Artificial Intelligence, and the Kempner Institute for the Study
+of Natural and Artificial Intelligence at Harvard University. Any findings, conclusions or recommendations
+expressed in this material are those of the authors and do not necessarily reflect the views of the funders.
+
+
+REFERENCES
+
+
+Josh Abramson, Jonas Adler, Jack Dunger, Richard Evans, Tim Green, Alexander Pritzel, Olaf
+Ronneberger, Lindsay Willmore, Andrew J Ballard, Joshua Bambrick, et al. Accurate structure
+prediction of biomolecular interactions with alphafold 3. _Nature_, 630(8016):493–500, 2024.
+
+
+Gustaf Ahdritz, Nazim Bouatta, Christina Floristean, Sachin Kadyan, Qinghui Xia, William
+Gerecke, Timothy J O’Donnell, Daniel Berenberg, Ian Fisk, Niccol`o Zanichelli, et al. Openfold: Retraining alphafold2 yields new insights into its learning mechanisms and capacity for
+generalization. _Nature methods_, 21(8):1514–1524, 2024.
+
+
+Inigo Barrio-Hernandez, Jingi Yeo, J¨urgen J¨anes, Milot Mirdita, Cameron LM Gilchrist, Tanita
+Wein, Mihaly Varadi, Sameer Velankar, Pedro Beltrao, and Martin Steinegger. Clustering predicted structures at the scale of the known protein universe. _Nature_, 622(7983):637–645, 2023.
+
+
+Matthias Blum, Antonina Andreeva, Laise Cavalcanti Florentino, Sara Rocio Chuguransky, Tiago
+Grego, Emma Hobbs, Beatriz Lazaro Pinto, Ailsa Orr, Typhaine Paysan-Lafosse, Irina Ponamareva, et al. Interpro: the protein sequence classification resource in 2025¡? mode longmeta?¿.
+_Nucleic acids research_, 53(D1):D444–D456, 2025.
+
+
+Carl Ivar Branden and John Tooze. _Introduction to protein structure_ . Garland Science, 2012.
+
+
+AC Camproux, P Tuffery, JP Chevrolat, JF Boisvieux, and S Hazout. Hidden markov model approach for identifying the modular framework of the protein backbone. _Protein engineering_, 12
+(12):1063–1073, 1999.
+
+
+Anne-Cloude Camproux, Romain Gautier, and Pierre Tuffery. A hidden markov model derived
+structural alphabet for proteins. _Journal of molecular biology_, 339(3):591–605, 2004.
+
+
+Henriette Capel, Robin Weiler, Maurits Dijkstra, Reinier Vleugels, Peter Bloem, and K Anton Feenstra. Proteinglue multi-task benchmark suite for self-supervised protein modeling. _Scientific_
+_Reports_, 12(1):16047, 2022.
+
+
+The UniProt Consortium. Uniprot: the universal protein knowledgebase in 2025. _Nucleic_ _Acids_
+_Research_, 53(D1):D609–D617, 11 2024. ISSN 1362-4962. doi: 10.1093/nar/gkae1010. URL
+[https://doi.org/10.1093/nar/gkae1010.](https://doi.org/10.1093/nar/gkae1010)
+
+
+11
+
+
+Sayoni Das, David Lee, Ian Sillitoe, Natalie L Dawson, Jonathan G Lees, and Christine A Orengo.
+Functional classification of cath superfamilies: a domain-based approach for protein function
+annotation. _Bioinformatics_, 31(21):3460–3467, 2015a.
+
+
+Sayoni Das, Ian Sillitoe, David Lee, Jonathan G Lees, Natalie L Dawson, John Ward, and Christine A Orengo. Cath funfhmmer web server: protein functional annotations using functional
+family assignments. _Nucleic acids research_, 43(W1):W148–W153, 2015b.
+
+
+Justas Dauparas, Ivan Anishchenko, Nathaniel Bennett, Hua Bai, Robert J Ragotte, Lukas F Milles,
+Basile IM Wicky, Alexis Courbet, Rob J de Haas, Neville Bethel, et al. Robust deep learning–
+based protein sequence design using proteinmpnn. _Science_, 378(6615):49–56, 2022.
+
+
+Alexandre G de Brevern. New assessment of a structural alphabet. _In silico biology_, 5(3):283–289,
+2005.
+
+
+Alexandre G de Brevern, Catherine Etchebest, and Serge Hazout. Bayesian probabilistic approach
+for predicting backbone structures in terms of protein blocks. _Proteins:_ _Structure, Function, and_
+_Bioinformatics_, 41(3):271–287, 2000.
+
+
+Alexandre G de Brevern, H´el`ene Valadi´e, Serge Hazout, and Catherine Etchebest. Extension of a
+local backbone description using a structural alphabet: a new approach to the sequence-structure
+relationship. _Protein Science_, 11(12):2871–2886, 2002.
+
+
+Edo Dotan, Gal Jaschek, Tal Pupko, and Yonatan Belinkov. Effect of tokenization on transformers
+for biological sequences. _Bioinformatics_, 40(4):btae196, 2024.
+
+
+Janani Durairaj, Mehmet Akdel, Dick de Ridder, and Aalt DJ van Dijk. Geometricus represents protein structures as shape-mers derived from moment invariants. _Bioinformatics_, 36(Supplement ~~2~~ ):
+i718–i725, 2020.
+
+
+Sam Gelman, Bryce Johnson, Chase R Freschlin, Arnav Sharma, Sameer D’Costa, John Peters,
+Anthony Gitter, and Philip A Romero. Biophysics-based protein language models for protein
+engineering. _Nature Methods_, pp. 1–12, 2025.
+
+
+Thomas Hayes, Roshan Rao, Halil Akin, Nicholas J Sofroniew, Deniz Oktay, Zeming Lin, Robert
+Verkuil, Vincent Q Tran, Jonathan Deaton, Marius Wiggert, et al. Simulating 500 million years
+of evolution with a language model. _Science_, 387(6736):850–858, 2025.
+
+
+Michael Heinzinger, Konstantin Weissenow, Joaquin Gomez Sanchez, Adrian Henkel, Milot
+Mirdita, Martin Steinegger, and Burkhard Rost. Bilingual language model for protein sequence
+and structure. _NAR Genomics and Bioinformatics_, 6(4):lqae150, 2024.
+
+
+Ioan Ieremie, Rob M Ewing, and Mahesan Niranjan. Protein language models meet reduced amino
+acid alphabets. _Bioinformatics_, 40(2):btae061, 2024.
+
+
+Andriy Kryshtafovych, Torsten Schwede, Maya Topf, Krzysztof Fidelis, and John Moult. Critical
+assessment of methods of protein structure prediction (casp)—round xiv. _Proteins:_ _Structure,_
+_Function, and Bioinformatics_, 89(12):1607–1617, 2021.
+
+
+Tim Kucera, Carlos Oliver, Dexiong Chen, and Karsten Borgwardt. Proteinshake: Building datasets
+and benchmarks for deep learning on protein structures. _Advances_ _in_ _Neural_ _Information_ _Pro-_
+_cessing Systems_, 36:58277–58289, 2023.
+
+
+N Jesper Larsson and Alistair Moffat. Off-line dictionary-based compression. _Proceedings_ _of_ _the_
+_IEEE_, 88(11):1722–1732, 2002.
+
+
+Mingchen Li, Yang Tan, Xinzhu Ma, Bozitao Zhong, Huiqun Yu, Ziyi Zhou, Wanli Ouyang, Bingxin
+Zhou, Pan Tan, and Liang Hong. Prosst: Protein language modeling with quantized structure and
+disentangled attention. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 37:35700–35726,
+2024.
+
+
+Xiaohan Lin, Zhenyu Chen, Yanheng Li, Zicheng Ma, Chuanliu Fan, Ziqiang Cao, Shihao Feng,
+Yi Qin Gao, and Jun Zhang. Tokenizing foldable protein structures with machine-learned artificial
+amino-acid vocabulary. _bioRxiv_, pp. 2023–11, 2023a.
+
+
+12
+
+
+Zeming Lin, Halil Akin, Roshan Rao, Brian Hie, Zhongkai Zhu, Wenting Lu, Nikita Smetanin,
+Robert Verkuil, Ori Kabeli, Yaniv Shmueli, et al. Evolutionary-scale prediction of atomic-level
+protein structure with a language model. _Science_, 379(6637):1123–1130, 2023b.
+
+
+LeAnn M Lindsey, Nicole L Pershing, Anisa Habib, Keith Dufault-Thompson, W Zac Stephens,
+Anne J Blaschke, Xiaofang Jiang, and Hari Sundar. The impact of tokenizer selection in genomic
+language models. _Bioinformatics_, pp. btaf456, 2025.
+
+
+Craig O Mackenzie. A tertiary alphabet for the observable protein structural universe captures
+sequence-structure relationships. _Protein Sci_, 25:75, 2016.
+
+
+Swapnil Mahajan, Alexandre G de Brevern, Yves-Henri Sanejouand, Narayanaswamy Srinivasan,
+and Bernard Offmann. Use of a structural alphabet to find compatible folds for amino acid sequences. _Protein Science_, 24(1):145–153, 2015.
+
+
+Eric Nguyen, Michael Poli, Marjan Faizi, Armin Thomas, Michael Wornow, Callum Birch-Sykes,
+Stefano Massaroli, Aman Patel, Clayton Rabideau, Yoshua Bengio, et al. Hyenadna: Long-range
+genomic sequence modeling at single nucleotide resolution. _Advances_ _in_ _neural_ _information_
+_processing systems_, 36:43177–43201, 2023.
+
+
+Gregory A Petsko and Dagmar Ringe. _Protein structure and function_ . New Science Press, 2004.
+
+
+Roshan Rao, Nicholas Bhattacharya, Neil Thomas, Yan Duan, Peter Chen, John Canny, Pieter
+Abbeel, and Yun Song. Evaluating protein transfer learning with tape. _Advances in neural infor-_
+_mation processing systems_, 32, 2019.
+
+
+Alexander Rives, Joshua Meier, Tom Sercu, Siddharth Goyal, Zeming Lin, Jason Liu, Demi Guo,
+Myle Ott, C Lawrence Zitnick, Jerry Ma, et al. Biological structure and function emerge from
+scaling unsupervised learning to 250 million protein sequences. _Proceedings_ _of_ _the_ _National_
+_Academy of Sciences_, 118(15):e2016239118, 2021.
+
+
+Xavier Robin, Juergen Haas, Rafal Gumienny, Anna Smolinski, Gerardo Tauriello, and Torsten
+Schwede. Continuous automated model evaluation (cameo)—perspectives on the future of fully
+automated evaluation of structure prediction methods. _Proteins:_ _Structure, Function, and Bioin-_
+_formatics_, 89(12):1977–1986, 2021.
+
+
+Jin Su, Chenchen Han, Yuyang Zhou, Junjie Shan, Xibin Zhou, and Fajie Yuan. Saprot: Protein
+language modeling with structure-aware vocabulary. _BioRxiv_, pp. 2023–10, 2023.
+
+
+Burak Suyunu, Enes Taylan, and Arzucan Ozg¨ur. [¨] Linguistic laws meet protein sequences: A comparative analysis of subword tokenization methods. In _2024_ _IEEE_ _International_ _Conference_ _on_
+_Bioinformatics and Biomedicine (BIBM)_, pp. 4489–4496. IEEE, 2024.
+
+
+Yang Tan, Mingchen Li, Ziyi Zhou, Pan Tan, Huiqun Yu, Guisheng Fan, and Liang Hong. Peta:
+evaluating the impact of protein transfer learning with sub-word tokenization on downstream
+applications. _Journal of Cheminformatics_, 16(1):92, 2024.
+
+
+Brian L Trippe, Jason Yim, Doug Tischer, David Baker, Tamara Broderick, Regina Barzilay, and
+Tommi Jaakkola. Diffusion probabilistic modeling of protein backbones in 3d for the motifscaffolding problem. _arXiv preprint arXiv:2206.04119_, 2022.
+
+
+Aaron Van Den Oord, Oriol Vinyals, et al. Neural discrete representation learning. _Advances_ _in_
+_neural information processing systems_, 30, 2017.
+
+
+Michel Van Kempen, Stephanie S Kim, Charlotte Tumescheit, Milot Mirdita, Jeongjae Lee,
+Cameron LM Gilchrist, Johannes S¨oding, and Martin Steinegger. Fast and accurate protein structure search with foldseek. _Nature biotechnology_, 42(2):243–246, 2024.
+
+
+Yann Vander Meersche, Gabriel Cretin, Aria Gheeraert, Jean-Christophe Gelly, and Tatiana Galochkina. Atlas: protein flexibility description from atomistic molecular dynamics simulations.
+_Nucleic acids research_, 52(D1):D384–D392, 2024.
+
+
+13
+
+
+Mihaly Varadi, Stephen Anyango, Mandar Deshpande, Sreenath Nair, Cindy Natassia, Galabina
+Yordanova, David Yuan, Oana Stroe, Gemma Wood, Agata Laydon, et al. Alphafold protein
+structure database: massively expanding the structural coverage of protein-sequence space with
+high-accuracy models. _Nucleic acids research_, 50(D1):D439–D444, 2022.
+
+
+Iyanar Vetrivel, Swapnil Mahajan, Manoj Tyagi, Lionel Hoffmann, Yves-Henri Sanejouand,
+Narayanaswamy Srinivasan, Alexandre G De Brevern, Fr´ed´eric Cadet, and Bernard Offmann.
+Knowledge-based prediction of protein backbone conformation using a structural alphabet. _PloS_
+_one_, 12(11):e0186215, 2017.
+
+
+Kevin E Wu, Kevin K Yang, Rianne van den Berg, Sarah Alamdari, James Y Zou, Alex X Lu, and
+Ava P Amini. Protein structure generation via folding diffusion. _Nature communications_, 15(1):
+1059, 2024.
+
+
+Ruidong Wu, Fan Ding, Rui Wang, Rui Shen, Xiwen Zhang, Shitong Luo, Chenpeng Su, Zuofan
+Wu, Qi Xie, Bonnie Berger, et al. High-resolution de novo structure prediction from primary
+sequence. _BioRxiv_, pp. 2022–07, 2022.
+
+
+Kevin K Yang, Niccol`o Zanichelli, and Hugh Yeh. Masked inverse folding with sequence transfer for
+protein representation learning. _Protein Engineering, Design and Selection_, 36:gzad015, 2023.
+
+
+Xinyu Yuan, Zichen Wang, Marcus Collins, and Huzefa Rangwala. Protein structure tokenization:
+Benchmarking and new recipe. _arXiv preprint arXiv:2503.00089_, 2025.
+
+
+Baoquan Zhang, Huaibin Wang, Chuyao Luo, Xutao Li, Guotao Liang, Yunming Ye, Xiaochen
+Qi, and Yao He. Codebook transfer with part-of-speech for vector-quantized image modeling.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+7757–7766, 2024a.
+
+
+Chengxin Zhang, Xi Zhang, Lydia Freddolino, and Yang Zhang. Biolip2: an updated structure
+database for biologically relevant ligand–protein interactions. _Nucleic_ _Acids_ _Research_, 52(D1):
+D404–D412, 2024b.
+
+
+Jiayou Zhang, Barthelemy Meynard-Piganeau, James Gong, Xingyi Cheng, Yingtao Luo, Hugo Ly,
+Le Song, and Eric Xing. Balancing locality and reconstruction in protein structure tokenizer.
+_bioRxiv_, pp. 2024–12, 2024c.
+
+
+Zhihan Zhou, Yanrong Ji, Weijian Li, Pratik Dutta, Ramana Davuluri, and Han Liu. Dnabert2: Efficient foundation model and benchmark for multi-species genome. _arXiv_ _preprint_
+_arXiv:2306.15006_, 2023.
+
+
+14
+
+
+A ABLATION STUDIES
+
+
+**GEOBPE** **is task-agnostic, and using task-specific data does not increase downstream perfor-**
+**mance** **of** **GEOBPE-TRANSFER.** For each task _i_, let T [task] _i_ be a tokenizer fitted using only _Di_ [train]
+(with its own vocabulary _Vi_ but the same feature extractor _F_ Θ), and define _rVi_ ( **x** ) = Ψ _Vi_ ( _F_ Θ( **x** )).
+We follow the same downstream transfer evaluation. We find an interesting result in Table 3, where
+directly training on the task-specific dataset does not meaningful change downstream prediction results. A closer look reveals the underlying reason is because the individual tokens do not differ significantly; motifs added to _V_, in order, are similar across both GEOBPE-TRANSFER and GEOBPETRANSFER (task-specific). We can interpret this both positively and negatively. GEOBPE is insensitive to task-specific data and learns the “language” of protein folds consistently. This may be
+desirable for reusability of a tokenizer, as one does not need to retrain it for different data distributions, as all protein folds obey the same universal principles (Petsko & Ringe, 2004). At the same
+time, this upper bound tests whether the tokenizer can tailor its vocabulary to individual datasets for
+potentially higher scores, indicating GEOBPE by itself may lack the parameter capacity to overfit
+to individual tasks.
+
+
+**Table** **3:** GEOBPE-TRANSFER (1%) runs Algo. 1 with 1% of the pretrain training set, then uses the output
+vocabulary to induce features; GEOBPE-TRANSFER (task-specific) does not use pretraining data; instead it
+runs Algo. 1 with downstream data to learn a vocabulary. All use default value parameters in App. K.
+
+
+**Functional Site Prediction (AUROC%)**
+
+
+**Model** BindInt (Fold) BindInt (SupFam) BindBio (Fold) BindBio (SupFam) BindShake (Org) CatInt (Fold) CatInt (SupFam) CatBio (Fold) CatBio (SupFam) Con (Fold) Con (SupFam) Rep (Fold) Rep (SupFam) Ept (Fold) Ept (SupFam) Avg
+
+
+GEOBPE-TRANSFER (1%) 59.98 90.17 95.00 95.89 87.73 66.28 88.87 94.95 95.95 71.75 84.56 56.37 72.87 63.83 77.55 80.12
+GEOBPE-TRANSFER 59.19 91.31 94.94 95.94 87.73 66.21 88.65 95.01 95.90 71.96 84.84 56.44 72.98 64.78 77.06 80.20
+GEOBPE-TRANSFER (task-specific) 60.16 89.93 95.05 95.92 87.73 66.28 88.82 94.98 95.90 71.85 85.92 56.33 72.72 64.78 77.04 80.23
+
+
+**Physicochemical Property Prediction (Spearman’s** _ρ_ **%)** **Structure Property Prediction (Macro F1%)**
+
+
+**Model** FlexRMSF (Fold) FlexRMSF (SupFam) FlexBFactor (Fold) FlexBFactor (SupFam) FlexNEQ (Fold) FlexNEQ (SupFam) Avg Homo (Fold) Homo (SupFam) Homo (Fam) Avg
+
+
+GEOBPE-TRANSFER (1%) 40.42 47.55 34.74 32.21 56.78 55.32 44.50 21.65 50.25 84.87 52.26
+GEOBPE-TRANSFER 40.89 47.17 37.28 35.61 56.65 53.98 45.26 23.60 47.28 85.75 52.21
+GEOBPE-TRANSFER (task-specific) 39.39 44.00 37.94 38.36 56.22 54.22 45.02 24.22 46.58 84.57 51.79
+
+
+**GEOBPE-TRANSFER** **maintains** **comparable** **downstream** **transfer** **performance** **even** **when**
+**GEOBPE** **was** **fitted** **on** **1%** **of** **pretraining** **data.** In Table 3, we see GEOBPE fitted on just
+1% of the pretraining data is enough to transfer, on average, the same amount of performance
+downstream as GEOBPEfitted on the full dataset. There are no meaningful differences between
+GEOBPE-TRANSFER and GEOBPE-TRANSFER (1%), with GEOBPE-TRANSFER doing 1.7% better on physicochemical property prediction and GEOBPE-TRANSFER (1%) doing better 0.2% better
+on functionals ite prediction. These findings can be interpreted both positively and negatively for
+GEOBPElearned vocabularies: (1) they are _extremely_ informative, learning useful signals to transfer downstream with as few as 300 PDB structures; (2) they _underfit_ the data, with no noticeable
+improvements from using more data to learn the tokenizer. Taken together, these findings imply
+GEOBPE is a lightweight add-on on top of any pretrained features Θ, but feeding more data to
+GEOBPE yields diminishing downstream returns quickly.
+
+**GEOBPE-TRANSFER** **does** **not** **underfit** **the** **data** **for** **structure-related** **downstream** **tasks.** In
+Table 4, we see for physicochemical (residue-level regression) and fold-level tasks, the model indicates a clear propensity for more training data, with step-wise gains for every 20% of training
+data. 20% _→_ 100% training data sees performance lift significantly (+18 _._ 89% average _ρ_ % and
++45 _._ 35%, respectively). For residue-level classification tasks, the lift is only marginal (+1 _._ 28%).
+We hypothesize the cause is not limited capacity, but rather that the tasks are localized label predictions; a residue-level receptive field is sufficient when features are informative. This shows
+GeoBPE’s data-efficiency at learning a vocabulary does not limit its capacity on downstream tasks
+that require multi-scale resolution (e.g. structural flexibility or fold-level classification), which existing fixed-size tokenizers cannot at both residue and structure-level. Thus, the data-efficiency
+strengths of GeoBPE _training_ is orthogonal to downstream modeling. The structure-related tasks
+in Table 4 see large gains in performance with more training data, implying GEOBPE-TRANSFER
+scales to complex, hierarchical structural patterns that can only be learned from more data.
+
+**GEOBPE** **is** **data-efficient** **OOD,** **but** **more** **training** **data** **can** **lower** **training** **distortion.** In
+Table 5, we see GEOBPE (1%) consistently achieves lower distortion ( _↓_ 7 _._ 7% RMSD averaged,
+_↑_ 0 _._ 06 LDDT summed across all four runs and both test splits) than GEOBPE. This suggests a
+small, well-chosen set of structures is enough for GEOBPE to achieve superior reconstruction on
+_OOD_ structures, and more training data can introduce noise and hinder generalization. However,
+GEOBPE (1%) obtains _↑_ 5 _._ 1% averaged, _↓_ 0 _._ 02 LDDT summed across all four runs on the respective training splits. A lower RMSD suggests GEOBPE better captures global structural fidelity;
+
+
+15
+
+
+**Table 4:** We use GEOBPE-TRANSFER from Table 1 (reported as 100%), then vary only the percent of downstream task training data available, fixing the same valid and test sets.
+
+
+**Task** **Split** GEOBPE-TRANSFER
+
+
+20% 40% 60% 80% 100%
+
+
+**Functional Site Prediction (AUROC%)**
+
+
+BindInt Fold 58.78 61.18 59.79 59.45 59.19
+SupFam 89.55 89.88 90.42 90.71 91.31
+BindBio Fold 94.86 94.82 94.96 94.97 94.94
+SupFam 95.69 95.79 95.88 95.97 95.94
+BindShake Org 87.40 87.59 87.65 87.64 87.73
+CatInt Fold 64.66 65.55 66.94 66.29 66.21
+SupFam 87.96 88.27 88.78 88.73 88.65
+CatBio Fold 94.95 94.92 94.94 94.96 95.01
+SupFam 95.67 95.81 95.96 95.97 95.90
+Con Fold 71.42 71.37 71.72 71.74 71.96
+SupFam 83.77 84.02 84.76 84.76 84.84
+Rep Fold 55.04 54.25 56.02 56.41 56.44
+SupFam 73.24 75.18 75.89 71.58 72.98
+Ept Fold 63.63 53.28 61.72 61.66 64.78
+SupFam 71.21 49.39 73.59 76.01 77.06
+
+
+**Average AUROC%** 79.19 77.42 79.93 79.79 **80.20**
+
+
+**Physicochemical Property Prediction (Spearman’s** _ρ_ **%)**
+
+
+FlexRMSF Fold 41.49 43.33 38.48 39.02 40.89
+SupFam 34.74 45.41 44.61 47.06 47.17
+FlexBFactor Fold 23.90 27.86 33.83 34.82 37.28
+SupFam 23.80 25.46 37.70 36.49 35.61
+FlexNEQ Fold 54.40 56.07 55.98 57.53 56.65
+SupFam 51.12 53.77 52.52 54.96 53.98
+
+
+**Average** _ρ_ **%** 38.24 41.98 43.85 44.98 **45.26**
+
+
+**Structure Property Prediction (Macro F1%)**
+
+
+Homo Fold 14.35 20.55 23.74 24.25 23.60
+SupFam 27.63 35.11 43.09 43.98 47.28
+Fam 65.79 73.66 80.77 82.04 85.75
+
+
+**Average Macro F1%** 35.92 43.11 49.20 50.09 **52.21**
+
+
+**Table** **5:** We rerun the GEOBPE experiments used to trace out the Pareto Front in Fig. 4 by using 1% of
+pretraining data. We include raw numbers of Fig. 4 (bottom rows) for comparison. All other hyperparameter
+settings are kept the same (App. K).
+
+
+Train Valid CAMEO CASP14
+
+
+RMSD LDDT RMSD LDDT RMSD LDDT RMSD LDDT
+
+
+GeoBPE (1%) ( _|V |_ = 600) 1.72 0.74 1.63 0.73 1.66 0.73 1.53 0.72
+GeoBPE ( _|V |_ = 600) 1.66 0.73 1.71 0.72 1.77 0.72 1.53 0.72
+
+
+GeoBPE (1%) ( _|V |_ = 2278) 1.57 0.75 1.51 0.71 1.51 0.74 1.43 0.73
+GeoBPE ( _|V |_ = 2500) 1.41 0.75 1.50 0.74 1.57 0.74 1.51 0.73
+
+
+GeoBPE (1%) ( _|V |_ = 5278) 1.36 0.77 1.34 0.76 1.35 0.75 1.30 0.74
+GeoBPE ( _|V |_ = 6000) 1.37 0.76 1.46 0.75 1.52 0.74 1.54 0.72
+
+
+GeoBPE (1%) ( _|V |_ = 20278) 1.29 0.77 1.28 0.76 1.28 0.76 1.37 0.73
+GeoBPE ( _|V |_ = 21000) 1.21 0.77 1.28 0.76 1.40 0.75 1.55 0.72
+
+
+by constructing the vocabulary from the full pretraining dataset, it can choose more representative
+prototypes; hence, its vocabulary better preserves global fold. Meanwhile, a slightly lower LDDT
+indicates GEOBPE (1%) can capture a few local details in the 1% subset of structures better than
+
+
+16
+
+
+GEOBPE. This suggests GEOBPE (1%) is more sensitive to the individual local interactions of
+the small set of structures it fitted with; GEOBPE considers vastly more structures. In summary,
+GEOBPE is preferred for fold-preserving _compression_ of whole datasets, but GEOBPE (1%) can be
+feasible if not superior when GEOBPE is primarily used to tokenize unseen data.
+
+
+**Figure 5:** We plot the BPR (purple), length (orange), backbone distortion (RMSD, LDDT) as _|V|_ across BPE
+steps. Ref. backbone RMSD/LDDT (dotted lines) uses random angle values for all internal angles, sampled
+from the empirical angle distribution.
+
+
+**GEOBPE** **is** **multi-resolution,** **revealing** **finer** **details** **as** **more** **tokens** **are** **introduced.** In Fig.
+5, we run a coarse-grained version of GEOBPE (small initial _|V|_ ) to observe an interesting feature
+of GEOBPE’s design. As newly introduced tokens _re_ -quantize the occurrences from the original
+data (span gathering step in Alg. 9, tokenization can adaptively _increase_ the resolution if the new
+prototypes better capture the modes of variability for those occurrences than their previous quantization. We expose this via hyperparameters bins & num ~~p~~ (see App. K), which tradeoff the
+super-resolution effect against coarse-graining effect at different token sizes, offering fine-grained
+control.
+
+
+**(a)** Quantized backbone (GEOBPE) **(b)** Original backbone **(c)** Quantized backbone (GEOBPE- Glue
+Opt)
+
+
+**Figure** **6:** We ran an ablation for GEOBPE version with _|V|_ = 600, keeping all parameters the same but
+toggling whether glue opt is skipped in Alg. 18. We visualize the original (center), GEOBPE (left) and
+GEOBPE without glue opt (right) backbone states.
+
+
+**Rigid** **body** **refinment** **as** **an** **essential** **step** **for** **preserving** **fold** **integrity.** If we omit the glue
+optimization from Algs 18 and 9 altogether, we see the effects in Fig. 6. For that experiment, we
+find avg. RMSD increase 1 _._ 66 _→_ 4 _._ 39, and avg. LDDT drop 0 _._ 73 _→_ 0 _._ 69 when glue opt is turned
+off. Rigid body refinement preserves the overall fold and modular architecture; turning it off causes
+individual domains to distort – the parallel strands drift apart – as well as the overall configuration
+to lose its integrity. Over the course of many time steps, global drift accumulate as local rounding
+occurs. Rigid body refinement is an indispensable subroutine for ensuring the overall quantization
+faithfully reproduces the fold integrity.
+
+**Increasing** _M_ **max** **beyond a certain threshold does not yield additional distortion benefits.** We
+did a study comparing GEOBPE ( _V_ = 6000, _M_ max _←_ 5000, full settings in App. K) with “higherresolution” settings bins _←{_ 1 : 5000 _}_, _M_ max _←_ 20000. Interestingly, we found overall RMSD/LDDT did _not_ improve (1 _._ 40 vs 1 _._ 39, 0 _._ 76 vs 0 _._ 75, both in favor of the incumbent) despite
+
+
+17
+
+
+increased computational expenditure spent on Alg. 8. The most likely explanation is there is no
+marginal utility increasing _M_ max beyond 5000, and differences in distortion rates are likely due to
+the numerical stability of Alg. 12 more so than the hyperparameters.
+
+
+B DATASET DETAILS
+
+
+**Training.** For training GEOBPE, we started with the pretraining data splits released by Yuan et al.
+(2025), which follows the same criteria used to train the OpenFold2 model Ahdritz et al. (2024).
+For VanillaVQ and AminoASeed baselines, we use the same splits as Yuan et al. (2025) directly.
+For GEOBPE, we further filtered the data down to only ones with complete backbone information
+(e.g. backbone dihedrals are not NaN, each residue contains N, CA and C), resulting in 34818
+structures. We further excluded structures shorter than 40 or longer than 512 residues, resulting in
+33992 structures for training GeoBPE and 3810 for validation (only used for E).
+
+**Held-out testing.** We use CAMEO and CASP14 test sets for evaluating the generalization of tokenizers (Robin et al., 2021; Kryshtafovych et al., 2021). For CASP14, we follow Yuan et al. (2025)
+and select only proteins released after the pretraining data cutoff date.
+
+**Downstream** **Tasks.** Our 8 downstream tasks cover a breadth of structure and function-related
+predictions. They are divided into 3 categories and are assembled from 6 sources: InterPro (BindInt,
+Con, Rep) (Blum et al., 2025), BioLIP2 (BindBio, CatBio) (Zhang et al., 2024b), ProteinShake
+(BindShake) (Kucera et al., 2023), ProteinGLUE (Ept) (Capel et al., 2022), TAPE (Homo) (Rao
+et al., 2019) and ATLAS (FlexRMSF, FlexBFactor, FlexNEQ) (Vander Meersche et al., 2024).
+
+
+1. **Functional site prediction** : Binding site prediction (BindInt), catalytic site (CatInt), conserved
+site prediction (Con), repeat motif prediction (Rep), epitope region prediction (Ept)
+
+
+2. **Physicochemical property prediction** : Structural flexibility prediction, measured using metric
+RMSF (FlexRMSF), B-factor (FlexBFactor) and Neq (FlexNEQ)
+
+
+3. **Structure classification** (protein-level): Remote homology detection (Homo)
+
+
+**Functional site prediction** tasks predict whether each residue is in a site of functional importance
+(binding, catalytic activity or antibody recognition) or part of an evolutionary motif (conserved site
+or part of a repeated motif). PSTs which learn semantically meaningful signals like motif boundaries
+are expected to perform well on these tasks.
+
+
+**Physicochemical property prediction** tasks predict the flexibility of each residue as a continuous
+value. Higher flexibility can be a clue that the residue may be more amenable to functional activity.
+PSTs that capture a fine-grained view of the localized protein dynamics are expected to predict
+residue-level flexibility well.
+
+
+**Remote homology detection** is a multi-class fold classification problem. Proteins which belong to
+the same fold class can be distantly related or share similar functions on the whole. Therefore, PSTs
+that capture the overall fold-level geometry are expected to do well on this task.
+
+
+For more dataset statistics and preparation details, see Yuan et al. (2025).
+
+
+C ADDITIONAL RESULTS
+
+
+**Table 6:** Additional downstream transfer performance tasks. Setup follows Table 1.
+
+|Task|Split|Continuous PST|Discrete PST|Col5|
+|---|---|---|---|---|
+|||ProteinMPNN<br>MIF|FoldSeek<br>ProTokens<br>ESM3<br>VanillaVQ<br>AminoAseed|GEOBPE-TRANSFER (v.s. ESM3)|
+
+
+**Functional Site Prediction (AUROC%)**
+
+
+**Physicochemical Property Prediction (Spearman’s** _ρ_ **%)**
+
+
+18
+
+
+**Table 7:** Additional expert agreement results. Setup follows Table 2.
+
+
+Rep Ept Atlas Homo
+
+
+Domain Mean Recall 99.93 (99.34) 100 (100.0) 99.93 (90.47) 99.98 (100.0)
+Mean Precision 99.2 (43.59) 99.75 (77.89) 98.44 (31.29) 99 (41.92)
+Mean F1 99.56 (81.86) 99.87 (82.68) 99.17 (67.37) 99.48 (79.07)
+Mean IOU 99.12 (82.18) 99.75 (82.68) 98.37 (67.07) 98.98 (78.78)
+Segment Mean Recall 100 (100.0) 100 (100.0) 100 (100.0) 100 (100.0)
+Mean Precision 98.76 (61.93) 95.52 (60.8) 96.09 (47.29) 95.91 (54.13)
+Mean F1 99.38 (61.93) 97.68 (60.8) 98 (47.29) 97.91 (54.13)
+
+
+**Main Text Tables.** Table 6 contains additional tasks Rep, Ept, FlexRMSF, and FlexBFactor. Table
+7 contains additional task data Repeat, Ept, Atlas, Homo. Task abbrevations are defined in App. B.
+
+
+**Table 8:** Secondary structure element (SSE) agreement results. Setup is the same as in Sec. G, but stratified
+over 8 basic secondary structure building blocks. Annotations are obtained from DSSP.
+
+
+Metric / SSE BindInt BindBio BindShake CatInt CatBio Con Repeat Ept Atlas Homo
+
+
+Mean recall H 29.11 (98.22) 33.13 (97.42) 30.76 (96.39) 33.97 (98.1) 32.93 (96.48) 29.11 (98.22) 33.13 (97.42) 30.76 (96.39) 33.97 (98.1) 32.93 (96.48)
+Mean recall G 19.15 (99.4) 31.13 (98.61) 30.87 (98.55) 34.66 (98.75) 32.29 (98.71) 19.15 (99.4) 31.13 (98.61) 30.87 (98.55) 34.66 (98.75) 32.29 (98.71)
+Mean recall I 10.42 (100.0) 30.75 (100.0) 17.59 (100.0) 10.85 (99.26) 30.85 (99.68) 10.42 (100.0) 30.75 (100.0) 17.59 (100.0) 10.85 (99.26) 30.85 (99.68)
+Mean recall E 41.24 (99.56) 34.75 (98.46) 36.17 (97.49) 30.82 (97.51) 34.93 (97.99) 41.24 (99.56) 34.75 (98.46) 36.17 (97.49) 30.82 (97.51) 34.93 (97.99)
+Mean recall B 38.13 (100.0) 32.24 (100.0) 38.72 (100.0) 40.22 (100.0) 31.67 (100.0) 38.13 (100.0) 32.24 (100.0) 38.72 (100.0) 40.22 (100.0) 31.67 (100.0)
+Mean recall T 32.78 (98.74) 33.08 (97.4) 32.26 (96.41) 33.75 (96.67) 32.91 (97.08) 32.78 (98.74) 33.08 (97.4) 32.26 (96.41) 33.75 (96.67) 32.91 (97.08)
+Mean recall S 33.92 (99.32) 33.29 (98.0) 32.91 (97.72) 36.01 (97.4) 33.12 (97.96) 33.92 (99.32) 33.29 (98.0) 32.91 (97.72) 36.01 (97.4) 33.12 (97.96)
+Mean recall - 32.7 (97.81) 32.76 (97.17) 33.02 (96.16) 34.71 (96.86) 32.65 (96.03) 32.7 (97.81) 32.76 (97.17) 33.02 (96.16) 34.71 (96.86) 32.65 (96.03)
+Mean precision H 31.34 (54.95) 34.06 (48.88) 31.33 (51.22) 35.54 (48.86) 33.32 (46.04) 31.34 (54.95) 34.06 (48.88) 31.33 (51.22) 35.54 (48.86) 33.32 (46.04)
+Mean precision G 17.93 (79.42) 29.28 (65.93) 28.95 (62.87) 32.3 (65.07) 30.32 (64.77) 17.93 (79.42) 29.28 (65.93) 28.95 (62.87) 32.3 (65.07) 30.32 (64.77)
+Mean precision I 10.09 (94.67) 29.93 (87.7) 16.55 (87.53) 10.37 (93.27) 30.16 (88.4) 10.09 (94.67) 29.93 (87.7) 16.55 (87.53) 10.37 (93.27) 30.16 (88.4)
+Mean precision E 39.54 (47.86) 33.59 (46.21) 34.84 (45.6) 29.58 (53.03) 33.53 (45.56) 39.54 (47.86) 33.59 (46.21) 34.84 (45.6) 29.58 (53.03) 33.53 (45.56)
+Mean precision B 26.8 (74.03) 21.86 (71.01) 26.66 (68.64) 26.21 (61.46) 21.2 (69.63) 26.8 (74.03) 21.86 (71.01) 26.66 (68.64) 26.21 (61.46) 21.2 (69.63)
+Mean precision T 28.59 (53.66) 28.55 (50.1) 27.98 (50.94) 29.18 (52.52) 28.13 (48.36) 28.59 (53.66) 28.55 (50.1) 27.98 (50.94) 29.18 (52.52) 28.13 (48.36)
+Mean precision S 26.78 (56.59) 25.28 (50.82) 24.66 (49.22) 26.52 (45.95) 25.0 (50.96) 26.78 (56.59) 25.28 (50.82) 24.66 (49.22) 26.52 (45.95) 25.0 (50.96)
+Mean precision - 27.07 (54.17) 26.5 (48.75) 26.32 (48.44) 28.07 (51.65) 25.99 (48.15) 27.07 (54.17) 26.5 (48.75) 26.32 (48.44) 28.07 (51.65) 25.99 (48.15)
+Mean f1 H 29.42 (61.9) 33.12 (60.16) 30.7 (62.58) 34.0 (59.45) 32.79 (58.18) 29.42 (61.9) 33.12 (60.16) 30.7 (62.58) 34.0 (59.45) 32.79 (58.18)
+Mean f1 G 18.44 (83.1) 30.03 (72.52) 29.75 (70.88) 33.34 (72.73) 31.15 (72.15) 18.44 (83.1) 30.03 (72.52) 29.75 (70.88) 33.34 (72.73) 31.15 (72.15)
+Mean f1 I 10.25 (95.59) 30.24 (89.98) 17.04 (89.31) 10.59 (94.02) 30.38 (90.53) 10.25 (95.59) 30.24 (89.98) 17.04 (89.31) 10.59 (94.02) 30.38 (90.53)
+Mean f1 E 40.21 (59.65) 33.88 (60.28) 35.25 (59.17) 29.98 (63.68) 33.99 (60.01) 40.21 (59.65) 33.88 (60.28) 35.25 (59.17) 29.98 (63.68) 33.99 (60.01)
+Mean f1 B 30.57 (75.28) 25.3 (73.05) 30.65 (71.04) 30.86 (64.57) 24.67 (71.8) 30.57 (75.28) 25.3 (73.05) 30.65 (71.04) 30.86 (64.57) 24.67 (71.8)
+Mean f1 T 30.22 (62.79) 30.27 (61.7) 29.61 (63.41) 30.93 (64.04) 29.95 (61.29) 30.22 (62.79) 30.27 (61.7) 29.61 (63.41) 30.93 (64.04) 29.95 (61.29)
+Mean f1 S 29.24 (61.77) 28.04 (58.79) 27.46 (57.52) 29.76 (54.36) 27.79 (59.56) 29.24 (61.77) 28.04 (58.79) 27.46 (57.52) 29.76 (54.36) 27.79 (59.56)
+Mean f1 - 28.82 (61.51) 28.59 (60.08) 28.57 (59.89) 30.35 (63.16) 28.25 (60.75) 28.82 (61.51) 28.59 (60.08) 28.57 (59.89) 30.35 (63.16) 28.25 (60.75)
+Mean iou H 28.4 (61.54) 32.22 (59.93) 29.94 (62.38) 32.95 (59.09) 31.96 (57.96) 28.4 (61.54) 32.22 (59.93) 29.94 (62.38) 32.95 (59.09) 31.96 (57.96)
+Mean iou G 17.75 (83.07) 28.87 (72.45) 28.59 (70.78) 31.99 (72.63) 29.98 (72.11) 17.75 (83.07) 28.87 (72.45) 28.59 (70.78) 31.99 (72.63) 29.98 (72.11)
+Mean iou I 10.09 (95.59) 29.58 (89.98) 16.52 (89.31) 10.31 (94.02) 29.67 (90.51) 10.09 (95.59) 29.58 (89.98) 16.52 (89.31) 10.31 (94.02) 29.67 (90.51)
+Mean iou E 39.1 (59.46) 32.76 (59.84) 34.14 (58.81) 29.02 (63.37) 32.9 (59.53) 39.1 (59.46) 32.76 (59.84) 34.14 (58.81) 29.02 (63.37) 32.9 (59.53)
+Mean iou B 26.79 (74.03) 21.86 (71.14) 26.66 (68.8) 26.21 (61.53) 21.2 (69.74) 26.79 (74.03) 21.86 (71.14) 26.66 (68.8) 26.21 (61.53) 21.2 (69.74)
+Mean iou T 28.36 (61.64) 28.26 (59.8) 27.69 (61.71) 28.9 (62.33) 27.92 (59.16) 28.36 (61.64) 28.26 (59.8) 27.69 (61.71) 28.9 (62.33) 27.92 (59.16)
+Mean iou S 26.63 (59.27) 25.15 (53.97) 24.47 (52.46) 26.41 (48.85) 24.9 (54.31) 26.63 (59.27) 25.15 (53.97) 24.47 (52.46) 26.41 (48.85) 24.9 (54.31)
+Mean iou - 26.17 (57.07) 25.93 (54.13) 25.83 (53.73) 27.63 (57.52) 25.56 (53.91) 26.17 (57.07) 25.93 (54.13) 25.83 (53.73) 27.63 (57.52) 25.56 (53.91)
+Segment recall H 29.35 (99.64) 33.14 (99.88) 30.94 (99.93) 33.77 (99.65) 33.07 (99.91) 29.35 (99.64) 33.14 (99.88) 30.94 (99.93) 33.77 (99.65) 33.07 (99.91)
+Segment recall G 19.18 (100.0) 31.2 (100.0) 30.93 (100.0) 34.89 (100.0) 32.37 (99.85) 19.18 (100.0) 31.2 (100.0) 30.93 (100.0) 34.89 (100.0) 32.37 (99.85)
+Segment recall I 10.42 (100.0) 30.79 (100.0) 17.63 (100.0) 10.91 (100.0) 30.94 (100.0) 10.42 (100.0) 30.79 (100.0) 17.63 (100.0) 10.91 (100.0) 30.94 (100.0)
+Segment recall E 41.28 (100.0) 34.8 (99.36) 36.21 (99.8) 30.84 (100.0) 35.0 (99.68) 41.28 (100.0) 34.8 (99.36) 36.21 (99.8) 30.84 (100.0) 35.0 (99.68)
+Segment recall B 38.01 (99.69) 31.7 (98.92) 38.05 (98.75) 39.75 (99.02) 31.2 (98.87) 38.01 (99.69) 31.7 (98.92) 38.05 (98.75) 39.75 (99.02) 31.2 (98.87)
+Segment recall T 32.81 (99.4) 33.09 (99.07) 32.25 (98.3) 33.74 (98.46) 32.86 (98.61) 32.81 (99.4) 33.09 (99.07) 32.25 (98.3) 33.74 (98.46) 32.86 (98.61)
+Segment recall S 33.73 (99.03) 33.02 (98.7) 32.5 (98.17) 35.39 (97.75) 32.77 (98.16) 33.73 (99.03) 33.02 (98.7) 32.5 (98.17) 35.39 (97.75) 32.77 (98.16)
+Segment recall - 33.29 (98.57) 32.94 (98.35) 33.07 (98.3) 34.87 (98.83) 32.72 (98.52) 33.29 (98.57) 32.94 (98.35) 33.07 (98.3) 34.87 (98.83) 32.72 (98.52)
+Segment precision H 39.24 (63.48) 34.23 (61.03) 34.32 (61.08) 29.43 (59.98) 33.02 (59.47) 39.24 (63.48) 34.23 (61.03) 34.32 (61.08) 29.43 (59.98) 33.02 (59.47)
+Segment precision G 2.64 (82.35) 4.22 (72.63) 4.4 (71.91) 4.56 (75.06) 4.16 (70.14) 2.64 (82.35) 4.22 (72.63) 4.4 (71.91) 4.56 (75.06) 4.16 (70.14)
+Segment precision I 1.96 (93.94) 2.25 (83.44) 1.2 (90.89) 0.68 (93.18) 1.68 (82.77) 1.96 (93.94) 2.25 (83.44) 1.2 (90.89) 0.68 (93.18) 1.68 (82.77)
+Segment precision E 34.7 (62.4) 23.29 (64.43) 23.79 (64.45) 17.3 (65.59) 20.66 (63.88) 34.7 (62.4) 23.29 (64.43) 23.79 (64.45) 17.3 (65.59) 20.66 (63.88)
+Segment precision B 1.28 (99.67) 1.08 (98.39) 1.18 (98.47) 1.2 (98.86) 0.96 (98.46) 1.28 (99.67) 1.08 (98.39) 1.18 (98.47) 1.2 (98.86) 0.96 (98.46)
+Segment precision T 9.58 (70.95) 9.36 (72.49) 9.05 (71.02) 9.59 (71.11) 9.21 (72.8) 9.58 (70.95) 9.36 (72.49) 9.05 (71.02) 9.59 (71.11) 9.21 (72.8)
+Segment precision S 8.12 (78.71) 6.83 (83.39) 6.37 (82.98) 7.36 (83.94) 6.53 (83.21) 8.12 (78.71) 6.83 (83.39) 6.37 (82.98) 7.36 (83.94) 6.53 (83.21)
+Segment precision - 15.47 (81.35) 16.31 (81.4) 15.15 (80.22) 16.62 (79.37) 15.71 (83.16) 15.47 (81.35) 16.31 (81.4) 15.15 (80.22) 16.62 (79.37) 15.71 (83.16)
+Segment f1 H 30.95 (63.48) 32.18 (61.08) 31.04 (61.09) 30.71 (60.02) 32.09 (59.54) 30.95 (63.48) 32.18 (61.08) 31.04 (61.09) 30.71 (60.02) 32.09 (59.54)
+Segment f1 G 4.54 (82.35) 7.27 (72.63) 7.56 (71.91) 7.96 (75.06) 7.24 (70.1) 4.54 (82.35) 7.27 (72.63) 7.56 (71.91) 7.96 (75.06) 7.24 (70.1)
+Segment f1 I 3.17 (93.94) 4.06 (83.44) 2.2 (90.89) 1.28 (93.18) 3.15 (82.77) 3.17 (93.94) 4.06 (83.44) 2.2 (90.89) 1.28 (93.18) 3.15 (82.77)
+Segment f1 E 35.43 (62.51) 26.32 (64.46) 27.09 (64.47) 21.22 (65.66) 24.68 (63.9) 35.43 (62.51) 26.32 (64.46) 27.09 (64.47) 21.22 (65.66) 24.68 (63.9)
+Segment f1 B 2.46 (99.67) 2.06 (98.38) 2.25 (98.44) 2.31 (98.86) 1.85 (98.46) 2.46 (99.67) 2.06 (98.38) 2.25 (98.44) 2.31 (98.86) 1.85 (98.46)
+Segment f1 T 14.37 (71.22) 14.33 (73.02) 13.94 (71.35) 14.72 (71.68) 14.18 (73.37) 14.37 (71.22) 14.33 (73.02) 13.94 (71.35) 14.72 (71.68) 14.18 (73.37)
+Segment f1 S 12.6 (79.62) 10.96 (83.99) 10.36 (83.6) 11.91 (84.44) 10.68 (83.93) 12.6 (79.62) 10.96 (83.99) 10.36 (83.6) 11.91 (84.44) 10.68 (83.93)
+Segment f1 - 20.45 (84.94) 21.18 (86.73) 20.3 (86.08) 22.14 (85.95) 20.82 (88.68) 20.45 (84.94) 21.18 (86.73) 20.3 (86.08) 22.14 (85.95) 20.82 (88.68)
+
+
+**Table 9:** Table 8 with averages over 10 datasets. We also report global averages over all 8 SSEs.
+
+
+Metric H G I E B T S - Avg (HGIEBTS-)
+
+
+Mean recall 31.98 (97.32) 29.62 (98.80) 20.09 (99.79) 35.58 (98.20) 36.20 (100.00) 32.96 (97.26) 33.85 (98.08) 33.17 (96.81) 31.68 (98.28)
+Mean precision 33.12 (49.99) 27.76 (67.61) 19.42 (90.31) 34.22 (47.65) 24.55 (68.95) 28.49 (51.12) 25.65 (50.71) 26.79 (50.23) 27.50 (59.57)
+Mean f1 32.01 (60.45) 28.54 (74.28) 19.70 (91.89) 34.66 (60.56) 28.41 (71.15) 30.20 (62.65) 28.46 (58.40) 28.92 (61.08) 28.86 (67.56)
+Mean iou 31.09 (60.18) 27.44 (74.21) 19.23 (91.88) 33.58 (60.20) 24.54 (69.05) 28.23 (60.93) 25.51 (53.77) 26.22 (55.27) 26.98 (65.69)
+Segment recall 32.05 (99.80) 29.71 (99.97) 20.14 (100.00) 35.63 (99.77) 35.74 (99.05) 32.95 (98.77) 33.48 (98.36) 33.38 (98.51) 31.64 (99.28)
+Segment precision 34.05 (61.01) 4.00 (74.42) 1.55 (88.84) 23.95 (64.15) 1.14 (98.77) 9.36 (71.67) 7.04 (82.45) 15.85 (81.10) 12.12 (77.80)
+Segment f1 31.39 (61.04) 6.91 (74.41) 2.77 (88.84) 26.95 (64.20) 2.19 (98.76) 14.31 (72.13) 11.30 (83.12) 20.98 (86.48) 14.60 (78.62)
+
+
+19
+
+
+**Secondary** **Structure** **Element** **(SSE)** **Agreement** **Results.** We ran a new expert agreement evaluation against the 8 basic SSEs (from DSSP). The summary is in 15. We do see above-random
+enrichment of SSEs in our tokens across all-metrics. The recall of existing SSEs is exceptional:
+98 _._ 28% block-level, 99 _._ 28% segment-level, averaged over datasets and SSEs. This indicates the
+ability to recapitulate the 8 known elements, while the milder precision (59 _._ 57 block, 77 _._ 80 segment) hints that GeoBPE goes beyond SSEs. As prior agreement results and case studies show,
+GeoBPE can find biologically meaningful regions (e.g. conserved homology, functional sites) and
+is not constrained to SSE boundaries, with the data dictating the exact high-level clusters.
+
+
+D TOKEN EFFICIENCY METRICS
+
+
+Let _v_ = _{_ 1 _, . . ., K}_ denote the codebook (size _K_ ). Given a corpus tokenized into a flat list of
+code indices, let _cj_ be the count of code _j_ and _N_ = [�] _j_ _[K]_ =1 _[c][j]_ [the total token count.] [We define the]
+empirical unigram distribution
+_p_ ( _j_ ) = _[c][j]_ for _j_ _∈_ _v._
+
+_N_
+
+
+**Utilization rate (UR).** UR measures how many distinct codes are actually used:
+
+
+1
+UR =
+_K_
+
+
+�� _{ j_ _∈_ _v_ : _cj_ _>_ 0 _}_ �� _∈_ [0 _,_ 1] _._
+
+
+We report UR in percent. UR is important for diagnosing codebook collapse, a well-known phenomenon in VQ-VAEs where only a small number of codes are actively used Zhang et al. (2024a).
+This creates a quantization bottleneck, handicapping the tokenizer’s performance and efficiency
+Yuan et al. (2025).
+
+**Unigram entropy and perplexity.** Using the Shannon entropy (natural logarithm),
+
+
+_H_ = _−_       - _p_ ( _j_ ) log _p_ ( _j_ ) _,_ PPL = exp� _H_       - _._
+
+
+_j∈v_
+
+
+This _codebook perplexity_ reflects how uniformly codes are used (model-free, ignores sequence context).
+
+**Max-normalized perplexity.** Because the maximum entropy at uniform is log _K_ (hence PPLmax =
+_K_ ), we also report the scale-free ratio
+
+
+            - _H_            - 1            -            
+PPL� = [PPL] _K_ = exp log _K_ _[·]_ [ log] _[ K]_ _K_ [=] [exp] _H_ _−_ log _K_ _∈_ (0 _,_ 1] _._
+
+
+**Table 10:** We evaluate token efficiency of GEOBPE across varying _|V|_ _∈{_ 600 _,_ 2500 _,_ 6000 _}_, as reported in
+Figure 4, with Hyperparameter Settings 1.
+
+
+UR (%) Perplexity
+
+
+Method Codebook Size CAMEO CASP14 CAMEO CASP14
+
+
+VQ-VAE 512 5.55 5.60 0.034 0.0337
+AminoASeed 512 64.45 68.87 0.495 0.5119
+ESM3 4096 27.60 32.10 0.249 0.2841
+FoldSeek 20 99.00 100.00 0.755 0.7435
+ProToken 512 69.88 75.56 0.537 0.5697
+
+
+GEOBPE
+
+
+600 59.81 39.48 0.397 0.403
+2500 58.24 38.22 0.274 0.264
+6000 53.73 31.30 0.242 0.222
+
+
+E SMALL STRUCTURE LANGUAGE MODEL EVALUATION
+
+
+**Goals & Aims.** This section specifies a protocol used to compare the language modeling efficiency
+of GEOBPE vs VQ-VAE tokens. The goal of SSLM was to create a small, isolated environment for
+language model integration. Modeling is **intentionally minimalistic** –we train a small decoder-only
+
+
+20
+
+
+**Table 11:** We adopt the Small Structure Language Model evaluation protocol described in App. E. We sample
+100 PDB structures. Best scTM and Designability scores are **bolded** . _Underlined_ methods follow the evaluat
+-ion protocol in App. F.
+
+
+Small Structure Language Model Evaluation
+
+
+|Method|Codebook Size|scTM Designability (scTM > 0.5) Diversity (1 - mean TM) Uniqueness (TM=0.5)|
+|---|---|---|
+|VQ-VAE<br>AminoASeed|512<br>512|0.205<br>1%<br>0.752<br>98%<br>0.186<br>1%<br>0.476<br>16%|
+|GEOBPE|600<br>2500<br>6000|0.268<br>3%<br>0.768<br>99%<br>0.267<br>3%<br>0.766<br>99%<br>0.277<br>4%<br>0.763<br>98%|
+|GEOBPE (x10 data)|600|0.376<br>12%<br>0.743<br>83%|
+|GEOBPE (x10 data, x10 params)|600|**0.405**<br>**21%**<br>0.731<br>76%|
+
+
+Transformer (7.3M) parameters over the same PDB splits used in Sec. 4 (48k structures). Fixing
+the same data splits, training, model architecture and hyperparameters (App. E.6), the aim of this
+experiment is to compare tokenizer options for a structure token language model. We emphasize the
+generation quality of the resulting models should be compared _relatively_ ; all models trained would
+be insufficient for real-world backbone design tasks. To bridge the gap with large-scale models, we
+provide an orthogonal study on _scalability_ in App. F, where we reran SSLM with 10x more data
+and model parameters.
+
+**Setup.** For GEOBPE, we use the joint geometric vocabulary learned by GEOBPE; for VQ-VAE,
+we use their codebook. GEOBPE +SSLM incorporates the mask constraints used at generation time
+(Alg. 4) during training to ensure consistency between training and sampling. The same procedure is
+used for evaluating VQ-VAEs. For training and sampling, the only difference is dropping the mask
+constraints. For inference, the samples are passed through the VQ-VAE decoder to construct backbone coordinates instead of assembling the backbone directly via Alg. 5. This required considerably
+more resources, and we discuss how we implemented this in App. E.6.
+
+
+**Algorithm 2** GEOLM-PRETRAIN — decoder-only next-token prediction on geometric tokens
+
+
+**Require:** Corpus of proteins _{tτ_ _}_ _[T]_ _τ_ =1 [with final segmentations] _[ {P]_ [(] _[τ]_ [)] _[}]_ [ and assigned medoids; joint vocabulary]
+Σ and tokenizers from Alg. 16, 17; a decoder-only Transformer Tr _θ_ : Σ _[∗]_ _→_ ∆ _[|]_ [Σ] _[|]_ with causal mask; special
+BOS/EOS (optional); training steps _S_, optimizer _O_ .
+**Ensure:** Trained parameters _θ_ .
+
+1: **Dataset** **construction.** For each _τ_, build _x_ [(] _[τ]_ [)] = BACKBONETOSEQUENCE( _tτ_ ) (Alg. 17). Let _Lτ_ =
+_|x_ [(] _[τ]_ [)] _|_ .
+2: **Objective.** For any sequence _x_ = ( _x_ 1 _, . . ., xL_ ), define
+
+
+_L_ NTP( _θ_ ; _x_ ) = _−_
+
+
+_L−_ 1
+
+- log _pθ_ - _xt_ +1 �� _x≤t_ - _,_ _pθ_ ( _·|x≤t_ ) = softmax�Tr _θ_ ( _x≤t_ )� _._
+
+
+_t_ =1
+
+
+3: **Training loop.**
+4: **for** _s_ = 1 **to** _S_ **do**
+5: Sample a minibatch _B_ _⊂{_ 1 _, . . ., T_ _}_ .
+
+
+6: _L ←_ [1]
+
+_|B|_
+
+
+- _L_ NTP( _θ_ ; _x_ [(] _[τ]_ [)] ).
+
+
+_τ_ _∈B_
+
+
+7: Update _θ_ _←O_ - _θ,_ _∇θL_ �.
+8: **end for**
+9: **return** _θ_ .
+
+
+E.1 DATA PREPARATION AND SPLITS
+
+
+**Tokenization.** We construct the joint vocabulary Σ (Alg. 16) and convert each protein _tτ_ into a
+token sequence _x_ [(] _[τ]_ [)] = ( _x_ [(] 1 _[τ]_ [)] _[, . . ., x]_ _L_ [(] _[τ]_ _τ_ [)][)][ via B][ACKBONE][T][O][S][EQUENCE][ (Alg. 17).]
+
+We tokenize the validation/test sets (unseen during GEOBPE training) via Algo. 10, a procedure
+analagous to BPE encoding. Sequences alternate strictly motif _→_ _θ_ _→_ _ω_ _→_ _ϕ_ _→_ motif _→_
+
+_· · ·_ and end with a _terminating_ motif token (length-2 bond–residue class), hence _Lτ_ _≡_ 1 (mod 4).
+
+
+21
+
+
+**Algorithm 3** BUILDEMPIRICALPRIORS — length prior and frst-token prior
+
+**Require:** Training corpus of tokenized backbones _{x_ [(] _[τ]_ [)] = ( _x_ [(] 1 _[τ]_ [)] _[, . . ., x]_ _L_ [(] _[τ]_ _τ_ [)][)] _[}]_ _τ_ _[T]_ =1 [constructed by Alg. 17 (mo-]
+tif, then _θ, ω, ϕ_, repeating); valid sequence lengths satisfy _Lτ_ _≡_ 1 (mod 4) and end in a _terminating_ motif
+token.
+**Ensure:** Discrete priors Π _L_ on lengths _K_ and Πstart on the first token.
+
+1: **Length prior:** for every _K_ with _K_ _≡_ 1 (mod 4), set
+
+
+             -              - [�]              Π _L_ ( _K_ ) _∝_ _τ_ : _Lτ_ = _K_ and normalize Π _L_ ( _K_ ) = 1 _._
+��� ��
+
+_K_
+
+
+2: **First-token prior:** over motif tokens only, set
+
+
+             -             - [�]             Πstart( _i_ ) _∝_ ��� _τ_ : _x_ [(] 1 _[τ]_ [)] = _i_ �� _,_ _i ∈_ Σmed; Πstart( _i_ ) = 1 _._
+
+_i∈_ Σmed
+
+
+3: **return** Π _L,_ Πstart.
+
+
+**Algorithm 4** UNCONDITIONALGEOLMGENERATE — motif/glue token generation
+
+
+**Require:** Trained decoder-only Transformer Tr _θ_ with vocabulary Σ from Alg. 16; id blocks
+
+
+Σmed = _{_ 1 _, . . ., M_ _}_ (1)
+Σ _θ_ = _{M_ +1 _, . . ., M_ + _Bθ}_ (2)
+Σ _ω_ = _{M_ + _Bθ_ +1 _, . . ., M_ + _Bθ_ + _Bω}_ (3)
+Σ _ϕ_ = _{M_ + _Bθ_ + _Bω_ +1 _, . . ., M_ + _Bθ_ + _Bω_ + _Bϕ}_ ; (4)
+
+
+terminating-motif set Σterm _⊆_ Σmed (motifs in the length-2 bond-residue class); priors Π _L,_ Πstart
+(Alg. 3); temperature _τ_ _>_ 0; maximum length _K_ max; number of samples _S_ .
+**Ensure:** _S_ unconstrained token sequences _{x_ [(] _[s]_ [)] _}_ alternating motif and glue tokens and ending in a terminating
+motif.
+1: Define the **type mask by position** ( _t_ starts at 1):
+
+
+_t ≡_ 1 (mod 4) _⇒_ motif (Σmed) _,_ _t ≡_ 2 _⇒_ _θ_ (Σ _θ_ ) _,_ _t ≡_ 3 _⇒_ _ω_ (Σ _ω_ ) _,_ _t ≡_ 0 _⇒_ _ϕ_ (Σ _ϕ_ ) _._
+
+
+2: **for** _s_ = 1 **to** _S_ **do**
+3: Sample a target cap _K_ [cap] _∼_ Π _L_ and set _K_ [cap] _←_ min( _K_ [cap] _, K_ max).
+4: Sample the first token _x_ [(] 1 _[s]_ [)] _∼_ Πstart (so _x_ [(] 1 _[s]_ [)] _∈_ Σmed).
+5: **for** _t_ = 2 _,_ 3 _, . . ., K_ [cap] **do**
+6: Compute last-position logits _zt_ = Tr _θ_ - _x_ [(] 1: _[s]_ _t_ [)] _−_ 1� with causal masking; let _v_ = _|_ Σ _|_ .
+7: Build a **hard mask** _m ∈_ R _[v]_ initialized to _−∞_ and set:
+ _mmi_ _←←_ 00 ifif _t t ≡ ≡_ 1 (4)2 (4) and and _i i ∈ ∈_ ΣΣmed _,_ _,_
+
+
+_mi_ _←_ 0 if _t ≡_ 1 (4) and _i ∈_ Σmed _,_
+_mi_ _←_ 0 if _t ≡_ 2 (4) and _i ∈_ Σ _θ,_
+_mi_ _←_ 0 if _t ≡_ 3 (4) and _i ∈_ Σ _ω,_
+_mi_ _←_ 0 if _t ≡_ 0 (4) and _i ∈_ Σ _ϕ._
+
+
+
+
+
+8: **Termination constraint at motif positions:**
+
+   - If _t ≡_ 1 (4) and _t < K_ [cap], then _disallow_ early stop: set _mi_ _←−∞_ for all _i ∈_ Σterm.
+
+   - If _t ≡_ 1 (4) and _t_ = _K_ [cap], then _force_ stop: set _mi_ _←−∞_ for all _i ∈_ Σmed _\_ Σterm.
+9: Form masked logits _z_ ˜ _t_ = _zt_ + _m_ and sample
+
+
+_x_ [(] _t_ _[s]_ [)] _∼_ Categorical(softmax(˜ _zt/τ_ )) _._
+
+
+10: **(Optional early stop)** If _t ≡_ 1 (4) and _x_ [(] _t_ _[s]_ [)] _∈_ Σterm, then **break** .
+11: **end for**
+12: **end for**
+13: **return** _{x_ [(] _[s]_ [)] _}_ _[S]_ _s_ =1 [.]
+
+
+**Splits.** We partition proteins at the _protein level_ into train/validation/test (e.g., 80/10/10) to prevent
+leakage across chains.
+
+
+22
+
+
+**Algorithm 5** DEQUANTIZEANDASSEMBLE — from tokens to a full backbone
+
+
+**Require:** One generated sequence _x_ = ( _x_ 1 _, . . ., xL_ ) from Alg. 4; medoid dictionary �idmed( _κ, j_ ) _�→_
+Π [(] _j_ _[κ]_ [)]  - where each prototype Π [(] _j_ _[κ]_ [)] is a tuple of internal coordinates for a motif _M_ ; glue bin edges
+
+_{βb_ _[θ][}][B]_ _b_ =0 _[θ]_ [,] _[{][β]_ _b_ _[ω][}][B]_ _b_ =0 _[ω]_ [,] _[{][β]_ _b_ _[ϕ][}]_ _Bb_ =0 _ϕ_ [(circular] [edges] [for] [angles,] [linear] [for] [lengths] [if] [used);] [canonical] [seed] [triad]
+( _N⋆,_ CA _⋆, C⋆_ ) and SEEDTRIAD.
+
+**Ensure:** A complete backbone �( _Ni,_ CA _i, Ci_ ) _∈_ R [3][�] _Ni_ [�] =1 [assembled from the decoded motifs and glues.]
+1: **Parse** **tokens** **into** **motifs** **and** **glues** **(fixed** **4-cycle).** Let the motif indices be _t_ _∈{_ 1 _,_ 5 _,_ 9 _, . . .}_ ; write
+_xt_ = idmed( _κ_ [(] _[m]_ [)] _, j_ [(] _[m]_ [)] ) for _m_ = 1 _, . . ., M_ where _M_ = _[L]_ [+3] 4 [.] [For each boundary] _[ m]_ [=] [1] _[, . . ., M]_ _[−]_ [1][,]
+
+decode the three bins:
+
+
+_bθ_ = _x_ 4 _m−_ 2 _−_ _M,_ _bω_ = _x_ 4 _m−_ 1 _−_ ( _M_ + _Bθ_ ) _,_ _bϕ_ = _x_ 4 _m −_         - _M_ + _Bθ_ + _Bω_         - _,_
+
+
+and **dequantize** to the bin midpoints
+
+
+_θ_ ¯ _m_ = [1]
+
+
+[1] 2 [(] _[β]_ _b_ _[ω]_ _ω_ _−_ 1 [+] _[β]_ _b_ _[ω]_ _ω_ [)] _[,]_ _ϕ_ ¯ _m_ = 2 [1]
+
+
+[1] 2 [(] _[β]_ _b_ _[θ]_ _θ_ _−_ 1 [+] _[β]_ _b_ _[θ]_ _θ_ [)] _[,]_ _ω_ ¯ _m_ = [1] 2
+
+
+2 [1] [(] _[β]_ _b_ _[ϕ]_ _ϕ−_ 1 [+] _[β]_ _b_ _[ϕ]_ _ϕ_ [)] _[.]_
+
+
+2: **Recover** **internal** **coordinates.** For each motif _m_, let Π [(] _[κ]_ [(] _[m]_ [)][)] provide the internal bond lengths _ℓ_, bond
+_j_ [(] _[m]_ [)]
+
+angles _θ_, and dihedrals ( _ψ, ω, ϕ_ ) _across its span M_ [(] _[m]_ [)] . Construct its internal entry _→_ exit transform _T_ ( [int] _m_ )
+(product of link transforms _Gi_ inside the motif; see Preliminaries).
+3: **Forward kinematics assembly.**
+4: Initialize the entry frame by seeding the very first residue: ( _N_ 1 _,_ CA1 _, C_ 1) _←_ SEEDTRIAD(1) and form
+_F_ 1 = ( _R_ 1 _, t_ 1) as in the Entry/Exit frame definition.
+5: **Motif 1:** Traverse the links inside _M_ [(1)] using its internal coordinates to compute frames _F_ 2 _, . . ., Fq_ 1 (and
+atom positions) by repeated _Gi_ multiplications; set the current exit frame _F_ (1) [exit] [=] _[ F][q]_ 1 [.]
+6: **for** _m_ = 1 **to** _M_ _−_ 1 **do**
+7: **Boundary glue:** form the boundary transform
+
+
+_T_ ( [glue] _m_ ) = _Gqm_            - _θ_ _[CNCA]_ = _θ_ [¯] _m,_ _ω_ = _ω_ ¯ _m,_ _ϕ_ = _ϕ_ [¯] _m_            - _,_
+
+
+i.e., the SE(3) map from the exit frame of _M_ [(] _[m]_ [)] to the entry frame of _M_ [(] _[m]_ [+1)] determined by the three
+dequantized glue angles (and adjacent bond lengths).
+8: Set the entry frame of _M_ [(] _[m]_ [+1)] to
+_F_ ( [entry] _m_ +1) _[←]_ _[T]_ ( [ glue] _m_ ) _[F]_ [ exit] ( _m_ ) _[.]_
+
+
+9: **Motif** ( _m_ +1) **:** traverse its internal links to produce all residue frames and atom positions; update
+_F_ ( [exit] _m_ +1) [.]
+10: **end for**
+11: **Concatenate** **atoms.** Collect the atoms from all traversals in order, yielding the backbone
+�( _Ni,_ CA _i, Ci_ )� _Ni_ �=1 [,] [where] _N_ [�] is the total number of residues implied by the concatenated motif spans
+(the final motif is guaranteed terminating).
+12: **return** the complete backbone coordinates.
+
+
+E.2 TRAINING OBJECTIVE WITH STRUCTURAL MASKS
+
+
+We train a causal Transformer Tr _θ_ with teacher forcing. To enforce legality at each position _t_, we
+apply the same _type mask by position modulo 4_ used in generation (Alg. 4):
+_t ≡_ 1 (mod 4) _⇒_ Σmed _,_ _t ≡_ 2 _⇒_ Σ _θ,_ _t ≡_ 3 _⇒_ Σ _ω,_ _t ≡_ 0 _⇒_ Σ _ϕ,_
+setting logits for all other token types to _−∞_ before the softmax.
+**Termination constraint at motif slots.** At motif positions ( _t_ _≡_ 1 (mod 4)), we impose the same
+termination rule as in Alg. 4: (i) if _t < Lτ_, mask out terminating motifs Σterm; (ii) if _t_ = _Lτ_, mask
+out non-terminating motifs.
+
+**Loss.** With masks applied, the negative log-likelihood is
+
+
+_L_ NTP( _θ_ ; _x_ [(] _[τ]_ [)] ) = _−_
+
+
+_Lτ −_ 1
+
+- log _pθ_ - _x_ [(] _t_ +1 _[τ]_ [)] _[|][ x]_ _≤_ [(] _[τ]_ _t_ [)] - _,_ _pθ_ ( _· | x≤t_ ) = softmax� _z_ ˜ _t_ - _,_
+
+_t_ =1
+
+
+where _z_ ˜ _t_ are masked logits. We optimize _θ_ by minimizing the average NLL over the training set.
+**Early stopping.** We select checkpoints by validation loss with a patience of 5 epochs.
+
+
+23
+
+
+E.3 UNCONDITIONAL SAMPLING FOR QUALITATIVE EVALUATION
+
+
+**Empirical priors.** We form the _length prior_ Π _L_ and _first-token prior_ Πstart from the training corpus
+using BUILDEMPIRICALPRIORS (Alg. 3). Π _L_ is supported on legal lengths _K_ _≡_ 1 (mod 4); Πstart
+is over Σmed.
+**Constrained** **generation.** We sample with UNCONDITIONALGEOLMGENERATE (Alg. 4): draw
+_K_ [cap] _∼_ Π _L_ (clipped by a maximum), sample the first motif _x_ 1 _∼_ Πstart, then autoregress under the
+same positional type mask and termination constraint as training. Temperature and nucleus sampling
+are optional ablations.
+
+**GEOBPE** **Dequantization** **and** **assembly.** Generated token sequences are mapped to full backbones via DEQUANTIZEANDASSEMBLE (Alg. 5): medoid tokens decode to internal coordinates
+over their motif spans; glue-bin tokens decode to bin-midpoint angles; forward kinematics with the
+seeded entry frame yields atom coordinates _{_ ( _Ni,_ CA _i, Ci_ ) _}Ni_ [�] =1 [.]
+
+
+E.4 GENERATIVE QUALITY ASSESSMENT
+
+
+We evaluate unconditional samples produced by UNCONDITIONALGEOLMGENERATE (Alg. 4)
+and assembled by DEQUANTIZEANDASSEMBLE (Alg. 5) using four structure-centric metrics based
+on TM-score. [1]
+
+**Setup.** From each model we draw a fixed number of backbones _{B_ [�] _n}_ _[N]_ _n_ =1 [(legal lengths,] [terminal]
+motif constraint). Unless noted, metrics are computed on these _backbone geometries_ without further
+post-processing.
+
+
+**(1) scTM (self-consistency TM-score).** For each generated backbone _B_, we (i) design a sequence
+
+[�]
+_s_ with a standard inverse-folding model, (ii) predict a structure _B_ from _s_ using a single-structure
+
+- [�] predictor (e.g., ESMFold), and (iii) compute
+
+
+scTM( _B_ [�] ) = TM-score�� _B,_ _B_ �� _._
+
+
+We report the mean scTM over the _N_ samples.
+
+**(2) Designability (% with scTM** _>_ 0 _._ 5 **).** A backbone is deemed _designable_ if its self-consistency
+exceeds the canonical threshold 0 _._ 5:
+
+
+1
+Designability =
+_N_
+
+
+_N_
+
+- **1** �scTM( _B_ [�] _n_ ) _>_ 0 _._ 5� _×_ 100% _._
+
+_n_ =1
+
+
+This is the fraction of samples for which a designed sequence refolds back to the generated backbone
+at the fold level. We adopt the same workflow from Trippe et al. (2022); Wu et al. (2024), where
+ProteinMPNN Dauparas et al. (2022) proposes 8 sequences per structure and OmegaFold Wu et al.
+(2022) is used to compute scTM.
+
+**(3) Diversity (mean pairwise TM).** To quantify sample-to-sample diversity, we compute the mean
+pairwise TM-score across the set (lower is more diverse):
+
+
+2
+Diversity =
+_N_ ( _N_ _−_ 1)
+
+
+ - TM-score�� _Bi,_ _B_ - _j_ - _._
+
+1 _≤i<j≤N_
+
+
+(When _N_ is large, we estimate this by uniform sub-sampling of pairs.)
+
+**(4)** **Uniqueness** **(%** **non-duplicates** **at** **TM** _<_ 0 _._ 5 **).** We mark a sample as _unique_ if its nearest
+neighbor among the other generated backbones has TM-score _<_ 0 _._ 5:
+
+
+1
+Uniqueness =
+_N_
+
+
+_N_ - 
+- **1** max �� _Bn,_ _B_ - _m_ - _<_ 0 _._ 5 _×_ 100% _._
+
+_m_ = _n_ [TM][-][score]
+_n_ =1
+
+
+This measures the proportion of samples that are not near-duplicates under a fold-level threshold.
+
+**Reporting.** For each model we report the four metrics above on the same set size _N_ (and the
+same sampling priors and temperature). Codebook size and token perplexity are _not_ used in these
+downstream comparisons.
+
+
+24
+
+
+**(a)** Generated backbone with scTM score 0.50 **(b)** Generated backbone with scTM score 0.56
+
+
+**Figure 7:** We visualize two backbones generated by GEOBPE SSLM-Eval (with default settings in App. K).
+
+
+E.5 GENERATED BACKBONES
+
+
+In Fig. 7a, we see a long, well-structured and assembled _α_ -helix, which is one of the most common
+and stable secondary structures in proteins. The curved helical cap at the top resembles a common
+N-terminal capping motif, which often stabilizes helices through hydrogen bonding networks or
+electrostatic interactions. Such elongated _α_ -helices are commonly found in transmembrane helices
+or coiled-coil domains which are involved in dimerization and DNA-binding. The overall curvature
+and spatial continuity also suggest potential compatibility with membrane proteins or structural
+scaffolds, especially behave as substance binding receptors as well as ion channels.
+
+
+In Fig. 7b, we see a structure that resembles DNA-binding motifs or cytokine folds, which are quite
+well-known for cellular signaling or regulation. The geometric density of this structure also suggests
+a pre-organized hydrophobic core, which is critical for proper folding and stability in the cytoplasmic environment. This structure exhibits a compact bundle of helices with apparent crossing angles
+which are similar to some small globular domains in common protein structures. The folding appears non-linear but in a quite controlled, manner which suggests potential tertiary structure forming
+interactions such as hydrophobic-hydrophobic interaction.
+
+
+E.6 IMPLEMENTATION DETAILS
+
+
+**SSLM-Eval** **GEOBPE** **implementation** **and** **hardware** **details.** We train a small autoregressive
+Transformer on discretized geometry tokens. We use a hidden size _d_ model = 256, _L_ = 8 Transformer
+layers with GELU activations, _H_ = 8 attention heads, and feed-forward width _d_ ff = 1024. Token
+and positional embeddings are summed, a LayerNorm is applied before the classifier, and the output
+projection is weight–tied to the token embedding. A causal attention mask enforces left-to-right
+prediction. Sequences are padded to a dataset-dependent maximum length (the 95th percentile of
+training lengths by default). We optimize cross-entropy loss with Adam (learning rate 1 _×_ 10 _[−]_ [4] ),
+batch size 32, for up to 100 epochs with early stopping on validation perplexity. For unconditional
+generation, we sample 100 sequences at temperature 1 _._ 0, drawing target lengths from the empirical
+length prior (restricted to valid lengths by construction) and the first token from the empirical starttoken prior; decoding proceeds token-by-token under the causal mask. On a single GPU, one epoch
+takes just under 10 mins and converges in _≈_ 60 epochs (can vary across tokenizer settings). The data
+splits are the same as those for pretraining (see App. B) – 33992 _,_ 3810 training/validation structures
+for GEOBPE.
+
+**SSLM-Eval** **VQ-VAE** **implementation** **and** **hardware** **details.** We extend the distributed Lightning setup of Yuan et al. (2025) with a self-contained evaluation step at the end of each validation
+epoch. Using 4 ranks, each GPU accumulates the epoch’s quantized token sequences from training
+and validation; these are gathered and passed to a lightweight auxiliary trainer that uses the same
+SSLM-Eval script as GEOBPE and hyperparameters. After convergence, we sample 100 new token
+
+
+1TM-score is obtained with a standard implementation (e.g., TM-align); higher is better.
+
+
+25
+
+
+sequences, decode them with the VQ-VAE decoder into backbone coordinates, and write PDBs to
+a directory named by the current epoch. We compute all non-SCTM metrics locally, then distribute
+a heavier SCTM evaluation across ranks on sharded PDB subsets. Each rank produces its shard’s
+results, and rank-0 merges them into a single summary that is logged to the trainer.
+
+
+F SCALING GEOBPE TO LARGER DATASETS AND MODELS
+
+
+**Goals** **&** **Aims.** The relatively minimalistic design of GEOBPE SSLM in App. E still begs the
+question whether GEOBPE reliably scales to large datasets (e.g. ESM3 scale) as both a _tokenizer_
+(GEOBPE only) and the foundational component of a language model (GEOBPE + SSLM). Thus,
+we attempt to bridge this gap by (i) tokenizing a 10x larger dataset and benchmarking wall times,
+and (ii) training a 10x larger SSLM model on the 10x larger tokenized corpus.
+
+
+F.1 TOKENIZING A 10X LARGER DATASET OF PREDICTED STRUCTURES
+
+
+**Setup.** We downloaded the 550K Swiss-Prot structure predictions from AlphaFold DB Consortium
+(2024); Varadi et al. (2022), a _>_ 10x increase from our PDB pretraining dataset. We adopt the
+pretrained _|V |_ = 600 tokenizer used in the paper (Fig. 4, Tables 10 & 11) as a baseline (i.e.
+tokenizers with larger _|V |_ will achieve lower distortion at the tradeoff of slower throughput).
+
+**Evaluation.** We log both wall-time and thoroughput taken to tokenize all 550k structures. We also
+report the distortion against AlphaFold DB predictions. We split into five 110K increments, and
+requested 5 jobs with 20 cores each. Each job writes each tokenized structure to a file, which allows
+us to log the running throughput from start to finish.
+
+
+**Table 12:** We report throughput and distortion tokenizing 550k Swiss-Prot predicted structures with 5 jobs of
+20 cores each.
+
+
+Split (110K increments)
+1 2 3 4 5 Total (5 splits).
+
+
+Avg. Throughput (files/min) 35.54 45.40 35.45 36.64 38.29 191.32
+RMSD 1.52 1.54 1.54 1.53 1.53 1.53
+LDDT 0.79 0.79 0.79 0.79 0.79 0.79
+
+
+**Results.** The results are shown in Table. 12. With pooled avg. throughput of 191.32, all 550k
+structures were tokenized in _∼_ 2 days. Discrepancies in throughput between jobs likely explained
+by node traffic. We see all 5 splits achieve the same LDDT (0 _._ 79) and within 0 _._ 01 RMSD of
+the average RMSD over all 5 splits (1 _._ 53). These are comparable to the tokenizer’s OOD test set
+distortions in Fig. 4 (1 _._ 53 RMSD, 0 _._ 72 on CASP).
+
+**Conclusion.** Since GEOBPE has shown strong OOD generalization from our findings in Sec. 4,
+it is expected to not degrade in performance. Thus, the right approach is tokenization (Alg. 10)
+rather than retraining GEOBPE from scratch. In contrast with GEOBPE learning, tokenization is an
+_embarrassingly parallel_ procedure that easily scales with the number of cores. With 100 cores, the
+entire process finished in _∼_ 2 days, or 200 CPU days. Further scaling by another 10x would only
+take _∼_ 20 days with 100 CPUs, making GEOBPE a scalable solution for tokenizing large databases
+of predicted structures.
+
+
+F.2 STRUCTURE LANGAUGE MODELING AT A 10X LARGER SCALE
+
+
+Once we have the tokenized dataset of 550k Swiss-Prot structures, we train a larger model and probe
+whether generation quality of GEOBPE SSLM follows the expected improvements from scaling.
+**Setup.** We increased our Transformer to _∼_ 10x parameters (7 _._ 3 _M_ _→_ 65 _._ 9 _M_ ). We do so by
+widening the Transformer layer and deepening the model: _d_ model _←_ 2 _d_ model = 512, _L ←_ 2 _._ 5 _L_ = 20
+layers. _H_ _←_ 2 _∗_ _H_ = 16 attention heads, _d_ ff _←_ 2 _· d_ ff = 2048. The rest of SSLM remains the same
+(App. E).
+
+**Evaluation.** We used the same evaluation protocol (50-128 AAs, 10 each) of works such as ProtDiff
+Trippe et al. (2022) and FoldingDiff Wu et al. (2024). Note that App. E did not follow this protocol;
+
+
+26
+
+
+we sampled from the size prior of our pretraining dataset (Alg. 3); the average generated protein
+was _∼_ 214 AAs.
+
+**Results.** GeoBPE+SSLM with 10x more data and 10x more parameters **achieves an average scTM**
+**of** 0 _._ 4051 **,** **with** **20.8%** **being** **Designable** **(scTM** _>_ 0 _._ 5 **)** . This is notably higher than ProtDiff
+(11 _._ 8%) and FoldingDiff (14 _._ 2%). Scaling only by 10x more data also delivers a respectable scTM
+of 0 _._ 376, highlighting both scaling dimensions are throttles for generative performance. Uniqueness/diversity also remain high (76 _._ 4% and 0 _._ 73).
+
+**Conclusion.** This result confirms that GEOBPE behaves according to scaling law expectations of
+language modeling. The significant increase in designable backbones (4% _→_ 21%) from simply
+using more data and parameters justifies further scaling of data and training resources. We hope
+future works can adopt GEOBPE as a foundational component in future large-scale models and
+explore the full potential of large-scale protein structure language model development.
+
+
+G EXPERT AGREEMENT METRICS
+
+
+Our method segments a protein sequence into _M_ contiguous residue spans _Pj_ = [ _pj, qj_ ] with _qj_ +
+1 = _pj_ +1 for _j_ = 1 _, . . ., M_ _−_ 1. We compare these segments against _N_ ground-truth domain
+annotations _Di_ = [ _si, ei_ ]. All sets below are sets of integer residue indices and _|·|_ denotes cardinality
+(length in residues). We report (i) _domain-level_ alignment quality for each true domain using the best
+consecutive block of predicted segments, and (ii) _segment-level_ detection statistics at an Intersectionover-Union (IoU) threshold _τ_ . This combination captures both _how well_ each domain is covered and
+_how economically_ the predicted segments explain the annotations, while remaining robust to small
+boundary jitter.
+
+**Annotation source.** Ground-truth domains come from **CATH FunFams** Das et al. (2015b). They
+are functional families defined by _profile_ _HMM_ hits trained on primary-sequence data Das et al.
+(2015a;b). Our evaluation thus measures how well the predicted segmentation aligns with functionally coherent families derived from sequence-based HMM models.
+
+
+In our setting, individual predicted segments tend to be substantially shorter than the curated domain
+annotations. A naive one-to-one comparison would systematically penalize predictions that must be
+_combined_ to cover a domain. To ensure a fair comparison, for each _Di_ we first select the single
+best _consecutive_ block of predicted segments _Si_ that maximizes IoU with _Di_ (below), then compute
+per-domain scores and _macro-average_ them so that each domain contributes equally, independent of
+its length.
+
+**Notation and best block per domain.** For domains _Di_ = [ _si, ei_ ] ( _i_ = 1: _N_ ) and predicted segments
+_Pj_ = [ _pj, qj_ ] ( _j_ = 1: _M_, with _qj_ +1 = _pj_ +1), define
+
+
+_bi_
+
+ - _Pk._
+
+
+_k_ = _ai_
+
+
+( _ai, bi_ ) _∈_ arg max
+1 _≤m≤n≤M_
+
+
+�� _Di_ _∩_ - _nk_ = _m_ _[P][k]_ ��
+�� _Di ∪_ - _nk_ = _m_ _[P][k]_ �� _,_ _Si_ :=
+
+
+(Ties may prefer the shortest _Si_ or fewest segments.)
+
+**Domain-level scores (macro).** Let ov _i_ = _|Di ∩_ _Si|_, _|Di|_ = _ei −_ _si_ +1, _|Si|_ = [�] _k_ _[b][i]_ = _ai_ [(] _[q][k][ −]_ _[p][k]_ [ +1)][.]
+Then
+
+
+Recall _i_ = [ov] _[i]_
+
+
+_|_ [ov] _Si_ _[i]_ _|_ _[,]_ _F_ 1 _,i_ = Recall [2 Recall] _i_ + Precision _[i]_ [ Precision] _[i]_ _i_
+
+
+_|_ [ov] _Di_ _[i]_ _|_ _[,]_ Precision _i_ = _|_ [ov] _Si_ _[i]_
+
+
+ov _i_
+
+[2 Recall] _[i]_ [ Precision] _[i]_ _,_ IoU _i_ = _._
+
+Recall _i_ + Precision _i_ _|Di|_ + _|Si| −_ ov _i_
+
+
+Macro-averages:
+
+
+[1] 
+_N_
+
+
+[1] 
+_N_
+
+
+[1] 
+_N_
+
+
+[1] 
+_N_
+
+
+Recall = [1]
+
+
+Recall _i,_ Precision = _N_ [1]
+_i_
+
+
+Precision _i,_ _F_ 1 = _N_ [1]
+_i_
+
+
+_F_ 1 _,i,_ IoU = _N_ [1]
+_i_
+
+
+IoU _i._
+
+_i_
+
+
+_Interpretation:_ recall rewards coverage; precision rewards compactness of _Si_ ; _F_ 1 balances both;
+IoU is thresholdable and scale-invariant.
+**Segment-level detection at IoU threshold** _τ_ **.** Let _U_ = [�] _i_ : IoU _i≥τ_ _[{][a][i][, . . ., b][i][}]_ [.] [Define]
+
+
+SegPrec = _[|U|]_
+
+
+_[|U|]_ SegRec = _[|{][ i]_ [ : IoU] _[i]_ _[≥]_ _[τ][ }|]_
+
+_M_ _[,]_ _N_
+
+
+_[i]_ _[≥]_ _[τ][ }|]_
+
+_,_ SegF1 = [2 SegPrec SegRec]
+_N_ SegPrec + SegRec
+
+
+SegPrec + SegRec _[.]_
+
+
+27
+
+
+_Interpretation:_ SegPrec penalizes unused segments; SegRec penalizes missed/poorly aligned domains. Sweeping _τ_ yields a PR curve.
+
+**Randomization baseline and reporting.** Using 1000 uniform random partitions into _M_ contiguous
+spans of the same sequence, recompute all metrics under the same best-block protocol and average
+over runs. We report using the format:
+
+
+ours (random-avg) _,_
+
+
+e.g., IoU = 0 _._ 47 (0 _._ 18).
+**Notes.** In degenerate cases (e.g., _|Si|_ = 0 or a zero denominator), we adopt the standard convention
+of returning 0 for the affected ratio or _F_ 1 term.
+
+
+Together, the domain-level (overlap-quality) metrics and the segment-level (parsimony and coverage) metrics directly test the two desiderata of protein-domain segmentation: (i) accurate coverage
+of each domain with minimal spillover, and (ii) a parsimonious set of segments that explain as many
+domains as possible. Macro-averaging after selecting the best block per domain ensures fairness
+when predicted segments are shorter than annotated domains, and the permutation baseline quantifies how far performance rises above chance given the same _M_ .
+
+
+H EXPERT CASE STUDIES
+
+
+**Individual** **Tokens** **Correspond** **to** **Secondary** **Structures.** Figure 8 is an example of a single token GEOBPE discovers. It features an alpha helix that includes aromatic cage (formed
+by Tryptophan / Tyrosine) and hydrogen bonding residue. It can be a common structure in
+Nucleotide-recognition domains, especially the hydrogen bond donors/acceptors can serve for
+specific molecular recognition (e.g., methylated lysines, nucleotide bases or acetyl groups) as
+well as Neurotransmitter receptors. From interpretation, this motif is functionally specific.
+
+It can serve as ligand binding pocket, which is tightly packed and
+evolutionarily conserved. This could behave significantly in substance recognition. The tightly packed helical scaffold in this separated motif is likely stabilizing the motif’s geometry and ensuring
+specificity. Motif-scaffold synergy can also help to define a structure’s rigidity and flexibility.
+
+**Merge** **Hierarchy** **of** **GEOBPE** **Reflects** **Combination** **of** **Sec-**
+**ondary Structures for Driving Function.**
+
+
+**Figure** **9.** 4xk4 is the human mitochondrial carrier protein
+SLC25A20 (carnitine/acylcarnitine translocase). It’s a transmem
+**Figure** **8:** An exemplary
+
+brane transport protein within the mitochondrial inner membrane, GEOBPE token spans backresponsible for shuttling carnitine and acylcarnitine molecules bone atoms of an alpha helix
+across the membrane. This a process critical to fatty acid oxidation (colored).
+and energy metabolism. The core motif that the algorithm separated
+out contain three similar domains, each with two transmembrane
+helices and a loop. It appears to lie deep within the transmembrane domain, forming part of the
+central binding cavity. From this know-how information, the 48-4 motif is really significant in the
+following three aspects:
+
+
+1. It will serve for substrate recognition where the internal polar residues bind to the acylcarnitine
+or carnitine head group via ionic and hydrogen bonds. It will also alter the transition state of the
+during the transport cycles. For example, this motif can play a role in shift conformation between
+open-to-cytoplasm and open-to-matrix states.
+2. We also observe similar motifs are found in other SLC25 family members (e.g., ADP/ATP carriers), indicating a shared mechanism of transport.
+3. While the broader transmembrane region is dominated by repetitive helices, this localized motif
+exhibits a unique composition of diverse side chains, polar residues, and tightly packed interactions, reinforcing its functional specificity.
+
+
+**Figure** **10.** 6FI4 is the crystal structure of a hybrid peptide composed of a C-terminally modified Tau protein segment bound to the human 14-3-3 _σ_ protein, solved at 2.0 A [˚] resolution via
+X-ray crystallography. 14-3-3 proteins are a family of conserved regulatory molecules that bind
+
+
+28
+
+
+|PDB ID: 4xk4, Chain ID: D, Token: [48, 52)|Col2|Col3|
+|---|---|---|
+|**Motif**|**Structural Role**|**Functional Implication**|
+|`▬`|Polar bridge +<br>loop anchoring|Help to boost nucleation at<br>the binding site and<br>structural interface|
+|`▬` : `▬▬`|Forms a deep<br>polar groove|Major linker formation and<br>build the scaffold to connect<br>ligands|
+|`▬` : `▬▬`|Stabilize the core<br>of the pockets|Form functional speciﬁc<br>pockets for binding and<br>membrane catalysis|
+|`▬` : `▬▬`|Fully assembled<br>tertiary motif|One of the core motifs of the<br>protein|
+
+
+disease. From this know-how information, the 29-4 motif is significant in the following two aspects:
+
+
+1. Phosphopeptide recognition and improve the binding Stability: This motif orchestrates recognition of the Tau-derived phosphoserine motif via a precise network of hydrogen bonds and electrostatic complementarity. The Lys/Arg residues (seen in blue) form salt bridges with phosphate
+groups, stabilizing the interaction.
+2. The structure shared recognition fold across the 14-3-3 protein family: This motif, with its basic
+side chain tunnel and surrounding helices, represents a canonical recognition site. Similar structural motifs are observed in all 14-3-3 isozymes when binding phosphoproteins and will serve
+for post-translational modification signaling.
+
+
+I PERFORMANCE ACROSS PROTEIN FOLD TYPES
+
+
+**Setup.** We evaluate robustness of GEOBPE by computing distortion as defined in Sec. 3.3 across
+fold types, unusualness, and size with per-chain metrics. Structural ”unusualness” is computed from
+Foldseek’s TM-align mode as 100 _×_ (1 _−_ TM) using the best hit against PDB. We also attach coarse
+labels: _categories_ by best-hit TM-score ( **Near-identical** _≥_ 0 _._ 90, **Same** **fold** 0 _._ 50–0 _._ 89, **Distant**
+
+
+29
+
+
+|PDB ID: 6FI4, Chain ID: A, Token: [29, 33)|Col2|Col3|
+|---|---|---|
+|**Motif**|**Structural Role**|**Functional Implication**|
+|`▬`|Arg–Ser/Thr<br>interaction initiator|Signiﬁcant charged side chains<br>to anchor the tail of Tau|
+|`▬` : `▬▬`|Forms the curvature of<br>the peptide pocket|Build the helix turn needed for<br>phosphoserine embedding|
+|`▬` : `▬▬`|Constructs side<br>entrance to phosphate-<br>binding zone|Stabilizes entry path of Tau<br>peptide backbone and allows<br>precise side chain orientation|
+|`▬` : `▬▬`|Fully assembled core<br>motif|Becomes the critical part of<br>core docking unit|
+
+
+0 _._ 30–0 _._ 49) and _flags_ indicating **very** ~~**s**~~ **mall** (chains with _<_ 70 residues) or **weak** ~~**c**~~ **overage** (low
+query coverage).
+
+**Fold type labels.** For fold analyses, each chain is annotated with a CATH fold label (topology-level
+code) and rendered as a human-readable _Class →_ _Architecture_ title (multi-line axis label). We report
+per-fold distributions and means for RMSD and LDDT.
+
+**Plots and statistics reported.** We use four concise views: (i) **Dual-axis scatter vs. unusualness** :
+RMSD (left, blue) and LDDT (right, orange), with per-bin mean _±_ std and a fitted least-squares
+trend line. (ii) **Group boxplots (shared** _x_ **-axis)** : side-by-side, dual- _y_ box-and-whisker plots compare distributions across _{_ very ~~s~~ mall, weak ~~c~~ overage, Near-identical, Same fold,
+Distant _}_ ; RMSD boxes map to the left axis (blue), LDDT boxes to the right axis (orange). (iii)
+**Dual-axis scatter vs. length** : RMSD (left) and LDDT (right) versus protein length, again with perbin mean _±_ std and a fitted trend line. (iv) **Fold** **boxplots** : side-by-side, dual- _y_ box-and-whisker
+plots per frequent CATH (Class, Architecture) (top- _N_ by support). Together, these views test how
+specific conditions (very small chains, weak alignment coverage, and decreasing fold similarity)
+
+
+30
+
+
+**(a)** Dual-axis scatter vs. unusualness. RMSD (left, blue) and LDDT **(b)** Group boxplots across very ~~s~~ mall, weak coverage,
+(right, orange), with bin means _±_ std and trend lines. Near-identical, Same fold, Distant. Dual- _y_ boxes:
+
+RMSD (left, blue), LDDT (right, orange).
+
+
+**(c)** Dual-axis scatter vs. length (residues). RMSD (left, blue) and **(d)** Fold boxplots (CATH). X-labels show Class
+LDDT (right, orange), with bin means _±_ std and trend lines. Architecture. Dual- _y_ boxes: RMSD (left, blue), LDDT (right, or
+ange).
+
+
+**Figure 11:** Plots for GEOBPE robustness evaluation. (A) vs. unusualness, (B) group distributions across flags
+and categories, (C) vs. length, (D) per-fold distributions. Numerical summaries (Pearson’s _r_ with 95% CIs;
+group/fold means and medians) are in the accompanying CSVs.
+
+
+modulate accuracy distributions, and whether protein size systematically correlates with errors.
+We report the following numbers and observations.
+
+
+- **No degradation on unusual structures** In Fig. 11a, we see _no_ correlation (Pearson’s _r_ of 0 _._ 0091
+for RMSD and _−_ 0 _._ 0096 for LDDT, 95% intervals of ( _−_ 0 _._ 0346 _,_ 0 _._ 00365) and ( _−_ 0 _._ 0451 _,_ 0 _._ 0260))
+between Distortion and Unusualness. Consistent with our OOD results in Fig. 4, we see GEOBPE
+is robust to distributional shifts. As a geometry-grounded tokenizer, GEOBPE captures energetically favorable motifs patterns, which are universal recurrences across all protein families and
+fold classifications.
+
+- **No** **degradation** **on** **less** **common** **folds** In Fig. 11b, we see distortion remain stable on near
+identical or same fold to those in FoldSeek-DB. In Fig. 11d, there is no visual trend of degradation
+for less common fold types (left-to-right in Fig. 11d) of the ones shown. Inter-fold discrepancy is
+also low: among folds with _n_ _≥_ 100, the least faithfully preserved fold type suffers from 30 _._ 2%
+higher RMSD than the most faithful.
+
+- **More** **faithful** **to** **larger** **folds** **than** **smaller** **folds** In Fig. 11c, we see _weak_ correlation (Pearson _r_ of _−_ 0 _._ 2141 for RMSD and 0 _._ 5627 for LDDT, 95% intervals of ( _−_ 0 _._ 2477 _, −_ 0 _._ 1799) and
+(0 _._ 5379 _,_ 0 _._ 5865)) between Distortion and Length. In Fig. 11b, we see distortion slightly elevates
+for very small folds. Among fold types with at least _n_ = 100 samples, GEOBPE achieves lowest
+distortion (1 _._ 130 RMSD) on Alpha-Beta Barrels (cylindrically packed, stable folds) and highest
+distortion (30% higher RMSD) on Mainly Alpha Up-down Bundles (smaller folds primarily of
+alternating alpha helices). This suggests GEOBPE has a high propensity for packed but stable
+folds (sandwiches, barrels).
+
+
+31
+
+
+J COMPUTATIONAL COMPLEXITY
+
+
+**Notation.** Let _{t_ [(] _[τ]_ [)] _}_ _[T]_ _τ_ =1 [be] _[ T]_ [backbones with lengths] _[ N]_ [ (] _[τ]_ [)][, and let] _[ N]_ [ :=][ �] _[T]_ _τ_ =1 _[N]_ [ (] _[τ]_ [)] [be the total]
+residues. In each STEP iteration, the most frequent geo-pair key has _Mt_ occurrences. We use _K_ for
+the number of medoids produced when clustering a key’s occurrences (a small constant in practice).
+For k-medoids we either: (i) cluster all _Mt_ items, or (ii) cap with _M_ max items. Let _P_ be the _period_
+at which GLUEOPTALL is invoked (see Alg. 9), and let _C_ IK denote the cost of one global IK pass
+(see below). The ordered map _D_ stores key _→_ occurrence-set with a priority ( _ρ, −|O|, κ_ ); each
+insert/erase in _D_ costs _O_ (log _|D|_ ) = _O_ (log _N_ ).
+
+**Component building blocks.**
+
+
+- **k-medoids on** _m_ **items:** _O_ ( _m_ [2] ) to build the pairwise RMSD matrix (constant fragment length),
+plus a small constant number of assignment/update steps
+
+- **Priority map updates:** each merge touches _O_ (1) neighbor pairs; across the _entire_ run there are
+_O_ ( _N_ ) merges _⇒_ _O_ ( _N_ log _N_ ) total map operations Every merge eliminates one boundary and
+touches at most its two neighbors, so the total number of insert/erase operations in _D_ across the
+full run is _O_ ( _N_ ); with _O_ (log _N_ ) per op, the total is _O_ ( _N_ log _N_ ).
+
+- **Global** **IK** **(GLUEOPTALL)** **one** **pass:** forward kinematics is linear in links, so one pass costs
+_C_ IK = _O_ ( _N_ _·_ _S_ FK), where _S_ FK is the (small) number of optimizer steps _×_ the constant forward/backward cost per link Periodic GLUEOPTALL adds _P_ _[T]_ _[O]_ [(] _[N]_ [ log] _[ N]_ [)] [due] [to] [re-keying] [af-]
+
+fected boundaries.
+
+**Worst-case complexity (no subsampling cap).**
+
+
+- **ResInitTokens:** _O_ ( _N_ [2] ) + _O_ ( _N_ log _N_ ).
+
+��        
+- **Step loop over all iterations:** _O_ _t_ _[M]_ [ 2] _t_ + _O_ ( _N_ log _N_ ).
+
+
+- **Periodic global glue opt:** _[T]_
+_P_
+
+
+  _t_ _[M]_ [ 2] _t_ + _O_ ( _N_ log _N_ ) + _[T]_
+
+
+- _C_ IK + _O_ ( _N_ log _N_ ) .
+
+
+- **Total (worst case):** _O_ ( _N_ [2] ) + _O_ ��
+
+
+_P_
+
+
+- **Total (with cap):** _O_ ( _M_ max [2] [) +] _[ O]_ [(] _[T]_ _[M]_ max [ 2] [) +] _[ O]_ [(] _[N]_ [ log] _[ N]_ [) +] _[T]_
+
+
+_P_
+
+
+- _C_ IK + _O_ ( _N_ log _N_ ) .
+
+
+- _C_ IK + _O_ ( _N_ log _N_ ) .
+
+
+In the worst case _Mt_ = Θ( _N_ ) for many steps, [�] _t_ _[M]_ [ 2] _t_ [can] [reach] [Θ(] _[N]_ [ 2][)][.] [Here] _[M]_ [max] [controls]
+
+runtime. Putting it together, we can make the following statements about GEOBPE’s computational
+complexity:
+
+
+- **(Alg.** **1) Training (discovering the vocabulary):** dominated by k-medoids calls and periodic IK:
+
+
+_O_ - _T_ _M_ max [2] - + _O_ ( _N_ log _N_ ) + _P_ _[T]_ - _C_ IK + _O_ ( _N_ log _N_ )� _._
+
+
+- **(Alg.** **10)** **Tokenization** **(apply** **a** **learned** **vocabulary):** similar to training but without any kmedoids calls and in terms of _N_ [(] _[τ]_ [)] :
+
+
+_O_ ( _N_ [(] _[τ]_ [)] log _N_ [(] _[τ]_ [)] ) + _P_ _[T]_       - _C_ IK + _O_ ( _N_ [(] _[τ]_ [)] log _N_ [(] _[τ]_ [)] )� _._
+
+
+- **(Alg.** **5)** **Detokenization** **(geometry** **reconstruction):** forward kinematics per link is _O_ (1); reconstructing all atoms is _O_ ( _N_ ).
+
+
+**Insights** **for** **efficient** **practice.** (i) Most structural variability concentrates in a small number of
+modes; a modest _M_ max suffices. (ii) Dictionary updates are _incremental_ ; our implementation uses
+an ordered map. (iii) In practice, we choose _P_ = 10; GlueOptAll calls are infrequent enough it does
+not become an issue. If this becomes the practical bottleneck, we recommend GLUEOPT for local
+IK updates instead, which drops the _O_ ( _N_ log _N_ ) term.
+
+**Distortion** **is** **insensitive** **to** _M_ max **.** In App. A, we observe that increasing _M_ max yields no real
+gains beyond 5000; any marginal gains are lost to the subsequent GlueOptAll call. This is because
+medoids stabilize quickly on representative modes, capping clustering with _M_ max preserves reconstruction quality while bounding the dominant _O_ ( _M_ max [2] [)][ term. This is backed by observations made]
+by de Brevern et al. (2002); Mackenzie (2016) and others that the structural universe of possible elements are captured by a exponentially smaller number of modes.
+
+**Increasing** **GLUE** **OPT** **EVERY does not significantly hurt performance.** In Figs. 13b & 13a, we
+see GEOBPE behavior remains comparable between a run where the expensive glue optimization
+
+
+32
+
+
+(all) is done every iteration, vs a run following our default recommendation of every ten iterations.
+The _P_ _[T]_ _[O]_ [(] _[N]_ [ log] _[ N]_ [)][ term is often the key walltime bottleneck, as Table 13 shows. Therefore, increas-]
+
+ing _P_ would help amortize the expensive rigid body refinement routine across iterations.
+
+**Wall times from our experiments.** In Table 13, we report empirical wall times from a sample run
+of GEOBPE following default settings. The runtime can be accelerated with more CPUs.
+
+
+**Table** **13:** Using 20 CPUs, we report our job’s wall-clock time. Underlined steps perform periodic glue optimization (period _P_ = 10). They are followed by _P_ _−_ 1 GEOBPE steps. We report wall times for steps 0 _,_ 10,
+20 _,_ 200; omitted steps interpolate predictably.
+
+
+Function Paper Reference (Algo, Line) Time (HH:MM:SS)
+
+
+~~i~~ nit ~~t~~ hresholds Algo 1 L1(Empirical Quantizer Estimation) 00:01:33
+~~i~~ nit ~~r~~ es ~~t~~ okens Algo 1 L2 (Per-residue Initialization) 02:16:02
+glue ~~o~~ pt ~~a~~ ll Algo 1 L3 (Global glue refinement) 03:21:50
+Step 0 Algo 1 L7 (Step) w/ Algo 9 L13 (glue opt all) 02:36:21
+Steps 1-9 Algo 1 L7 (Step) 01:32:50
+Step 10 Algo 1 L7 (Step) w/ Algo 9 L13 (glue opt all) 01:40:58
+Steps 11-19 Algo 1 L7 (Step) 01:37:39
+Step 20 Algo 1 L7 (Step) w/ Algo 9 L13 (glue opt all) 01:27:39
+Steps 21-29 Algo 1 L7 (Step) 01:36:41
+...
+Step 200 Algo 1 L7 (Step) w/ Algo 9 L13 (glue opt all) 00:56:56
+Steps 201-209 Algo 1 L7 (Step) 00:50:06
+...
+
+
+K HYPERPARAMETER DOCUMENTATION AND GUIDELINES
+
+
+K.1 MAIN HYPERPARAMETERS AND REPRODUCIBLE SETTINGS
+
+
+We describe the key parameters that govern GEOBPE’s behaviors in Table 14. For each, we report
+the default setting used by GeoBPE across most key results of the paper: Fig. 4, Tables 10 & 11 and
+App. A. We report any instances overriding the default settings here:
+
+
+1. Token efficiency / SSLM-Eval (Tables 10, 11) set num ~~p~~ _←{_ 2:500,3:2000 _},_ bins _←_
+_{_ 1:1000 _}_ for codebook size _|V|_ = 2500 and num ~~p~~ _←{_ 2:1000,3:5000 _}_, bins _←_
+_{_ 1:2000 _}_ for _|V|_ = 6000.
+2. Pareto-efficiency evaluation (Fig 4) further add the setting for _|V|_ = 21000 where num ~~p~~ _←_
+_{_ 2:1000,3:20000 _}_, bins _←{_ 1:2000 _}_ . We vary num ~~p~~ elastically moves along the
+Pareto-efficiency plot, trading off BPR for distortion. All runs use _wt_ = 1 _._ 0, which we discover
+from ablation studies (see Tables 17 & 18) has better performance than _wt_ = 0 _._ 1.
+3. Downstream transfer experiments (Tables 1, 7) set num ~~p~~ _←{_ 2:2,3:5,5:1,6:2,8:1 _}_,
+free ~~b~~ onds _←_ False and bins _←{_ 1 : 50 _}_, and bin ~~s~~ trategy _←_ histogram-cover
+to adaptively coarsen the resolution. GEOBPE prioritizes learning fine-to-coarse hierarchical
+signals over low distortion for effective transfer.
+
+
+**Table 14:** We report the main hyperparameters that affect GEOBPE behavior.
+
+
+**Parameter** **Value** **Meaning** **Default Behavior**
+
+
+bin ~~s~~ trategy histogram Controls the strategy for empirical quantizer estimation (Alg. 1) numpy.histogram with bins
+bins _{_ 1:500 _}_ Controls the number of bins used by bin ~~s~~ trategy Uses 500 quantiles
+free ~~b~~ onds True Whether to quantize bond lengths Don’t standardize
+Setting to False standardizes all bond lengths to precomputed values Quantize with linear histograms
+glue ~~o~~ pt True Whether to do Glue Opt in Algs 18, 9 Do Glue Opt
+glue ~~o~~ pt ~~e~~ very 10 How often to run global glue opt (final line of Alg. 9) Do every 10 iters
+glue ~~o~~ pt ~~m~~ ethod all Whether to do batch glue opt (Alg. 12) or single-boundary glue opt (Alg. 19) Do batch glue opt
+glue ~~o~~ pt ~~p~~ rior 1.0 Prior weight encouraging optimized glues to match empirical distribution 1.0
+w ~~R~~, w ~~t~~ 1.0, 0.1 Rotation, translation loss term weights to IK loss (Alg. 19) Weigh rotation error 10x translation error
+max ~~n~~ um ~~s~~ trucs 5000 Max number of occurrences for clustering ( _M_ max in Alg. 6) 5000
+num ~~p~~ _{_ 2:100,3:500, _K_ determined by span length _L_ in Alg. 6, _L_ not in num ~~p~~ round down to nearest key Use _K_ = 100 when _L_ = 2
+5:20,6:100 _}_ Use _K_ = 500 when _L ≥_ 3
+rmsd ~~s~~ uper ~~r~~ es True Whether to use occurrences from _original_ backbone _tτ_ or current backbone in Alg. 9 Use original states
+
+
+33
+
+
+K.2 HYPERPARAMETER SELECTION GUIDELINES
+
+
+**Which ones to prioritize.** Only a few parameters in Table 14 dictate overall behavior, performance
+and runtime. Essential knobs are:
+
+
+- **Vocabulary Growth**
+
+**–** num ~~p~~ (number of medoids)
+
+**–** bins (quantizer strength)
+
+**–** max ~~i~~ ter(or # iterations to run)
+
+- **Compression/Runtime Tradeoff**
+
+**–** glue ~~o~~ pt/glue ~~o~~ pt ~~m~~ ethod/glue ~~o~~ pt ~~e~~ very (glue optimization)
+
+
+Aside from these, we suggest leaving the rest to default values.
+
+**Choosing num** ~~**p**~~ **(medoids per step) and bins (angle/length quantization strength).**
+
+
+We define num ~~p~~ via a step-wise schedule over motif sizes. For example,
+
+
+_{_ 2 : 2 _,_ 3 : 5 _,_ 5 : 10 _}_
+
+
+(passed as **--num-p** **2-2:3-5:5-10** ) means:
+
+
+    - introduce 2 tokens for geometric keys with 2 bonds (C-terminal residue orientations),
+
+    - 5 tokens for keys with 3 bonds (all non-terminal residues),
+
+    - 10 tokens for all merged geometric keys with 5 or more bonds (every GeoBPE step after
+residue initialization).
+
+
+The bins parameter uses the same syntax as num ~~p~~ . For example,
+
+
+_{_ 1 : 100 _,_ 3 : 10 _}_
+
+
+(passed as **--bins** **1-100:3-10** ) introduces 100 bins to discretize the angular histogram at initialization, with 10 bins for keys of size _≥_ 3. For brevity, BINS = _n_ is shorthand for BINS = _{_ 1 : _n}_ .
+
+
+The binning strategy is controlled by bin-strategy. If glue optimization produces angles outside the supported range, we snap them to the closest bin. In practice, we recommend increasing or
+decreasing bins in tandem with num ~~p~~ .
+
+
+Below we give practical recommendations by downstream use case.
+
+**GeoBPE for compression / reconstruction.**
+
+
+_Intuition._ Larger num ~~p~~ values _→_ more medoids per step, which improves reconstruction quality
+(RMSD/LDDT) at the cost of a larger vocabulary and noisier merges. Empirically, we observe
+diminishing returns in reconstruction beyond settings such as
+
+
+num ~~p~~ = _{_ 2 : 200 _,_ 3 : 1000 _},_
+
+
+consistent with there being only a limited number of modes in the conformational variability of
+energetically favored backbone regions (Ramachandran landscape).
+
+
+_Recommendation._ Use relatively large num ~~p~~ to maximize reconstruction fidelity, but pair it with a
+high (yet not extreme) bins[size] to avoid a combinatorial explosion in the space of geometric
+keys. A good default for reconstruction-oriented use is
+
+
+bins = _{_ 1 : 500 _},_
+
+
+combined with moderately large num ~~p~~ .
+
+**GeoBPE for representation learning.**
+
+
+_Intuition._ GeoBPE emits both a sequence of tokens and a merge hierarchy, with the hierarchy
+providing the main inductive bias for downstream representation learning from residue to protein
+level. A useful hierarchy should:
+
+
+    - capture higher-level patterns (from basic secondary structure elements to functional sites),
+
+    - avoid overfitting to high-frequency local vibrations.
+
+
+34
+
+
+Here the goal shifts from pure compression to _coarsening_ : we want motifs that aggregate meaningful
+local structure without being overly fine-grained.
+
+
+_Recommendation._ Use relatively small num ~~p~~ values and correspondingly small bins. For example, the configuration used in our paper for representation learning was
+
+
+num ~~p~~ = _{_ 2 : 2 _,_ 3 : 5 _,_ 5 : 1 _,_ 6 : 2 _,_ 8 : 1 _},_
+
+
+paired with
+bins = _{_ 1 : 50 _}_
+
+
+and the histogram-cover strategy. This yields coarser motifs and hierarchies that are better
+suited to downstream predictive tasks.
+
+**Choosing the number of merge iterations.**
+
+
+At iteration _t_, GeoBPE increases the vocabulary size by looking up num ~~p~~ :
+
+
+_|V_ final _|_ _≈|V_ init _|_ +
+
+
+_T_
+
+
+num ~~p~~ [ _|_ key [(] _[t]_ [)] _|_ ] _,_
+
+_t_ =1
+
+
+where _T_ is the number of merge iterations. More iterations yield a larger and more varied vocabulary,
+but each “word” (motif) is then used less frequently.
+
+
+The optimal stopping point depends on the downstream application.
+
+**GeoBPE for representation learning.**
+
+
+For representation learning, the merge hierarchy serves as an inductive bias: merged token pairs
+tend to correspond to secondary structure segments and align with domain or homology hits. Here
+GeoBPE should _coarsen_ high-resolution details into higher-level motifs instead of growing an extremely large vocabulary.
+
+
+_Recommendation._ Use a moderate number of iterations, stopping once downstream validation metrics (e.g., AUROC, Spearman _ρ_, Macro-F1) plateau. In practice, this typically occurs well before
+exhausting all possible merges; beyond that point, additional iterations mainly create very specific,
+low-usage motifs that add complexity without improving downstream performance.
+
+**GeoBPE for compression / reconstruction.**
+
+
+GeoBPE is closest to its BPE origins when used as a compression algorithm: the goal is to reduce sequence length (increase compression), preserving geometry (minimize distortion), while monitoring
+the amortized bits to store the growing vocabulary in the background.
+
+
+_Recommendation._ Allow fewer iterations and monitor the trade-off between bit-rate (i.e., BPR)
+and reconstruction error (RMSD/LDDT). A general rule-of-thumb is to continue merging as long
+as additional iterations lowers _either_ BPR or distortion. Later, one can choose the right iteration
+checkpoint to navigate the tradeoff. Thus, it is wise to stop immediately when both metrics begin
+degrading simultaneously. On very high resolutions and a moderate dataset (e.g. our pretraining
+dataset), this happens early on. The amortized bits used to grow the vocabulary generally outpace
+the bits saved from decreasing the number of tokens per structure; this relationship reverses on lower
+resolutions and larger datasets.
+
+**GeoBPE for language modeling.**
+
+
+When using GeoBPE as a tokenizer for protein language models, a common heuristic adapted from
+NLP is to set the final vocabulary size such that
+
+
+_|V|_ _N_
+
+_L_ _[≈]_ 1000 _[,]_
+
+
+where _L_ is the average number of motifs per structure and _N_ is the number of structures. Equivalently, the total number of tokens
+_T_ _≈_ _L × N_
+
+
+suggests a target vocabulary size _|V| ≈_ _T/_ 1000.
+
+
+Table 15 shows concrete numbers for different LM scales.
+
+
+35
+
+
+**Table 15:** Heuristic vocabulary sizes _|V|_ for GeoBPE when used as a tokenizer for protein language models at
+different data and model scales.
+
+
+LM scale # structures _N_ _L_ (motifs / structure) _|V| ≈_ ( _L × N_ ) _/_ 1000 Model params
+
+
+Toy / demo 10 [3] 100 _∼_ 10 [2] _∼_ 10 [6]
+
+Small / usable 10 [4] 100 _∼_ 10 [3] 10–50M
+Base “GPT-small” 10 [5] 100 _∼_ 10 [4] _∼_ 10 [8]
+
+Mid-scale 10 [6] 100 _∼_ 10 [5] ≳ 10 [9]
+
+
+**Figure** **12:** Illustration of the heuristic for choosing the number of merge iterations based on the target
+vocabulary size _|V|_ for language modeling. The marked point indicates the recommended stopping iteration
+for a dataset with _N_ structures.
+
+
+We implement a stopping criterion based on this heuristic: during training we track _|V|_ as merges
+accumulate ( _T_ decreases) and mark the iteration where the target _|V|_ meets _T/_ 1000. In Fig. 12, this
+iteration is highlighted (e.g., with a star) and concretely in the run ~~_{_~~ iter _}_ .png plots produced
+in each run directory by our code.
+
+**Practical** **tip.** In practice, you can set a relatively large max ~~i~~ ter and let GeoBPE proceed for
+many iterations while logging checkpoints. After training, select the checkpoint whose vocabulary
+size and downstream metrics best match your target (compression, representation quality, or LM
+tokenizer size), rather than trying to tune the exact stopping iteration a priori.
+
+
+K.3 SENSITIVITY STUDIES
+
+
+We show how sensitive GEOBPE behavior is to key hyperparameters by running ablation experiments for selected hyperparameters, one at a time.
+_|V |_ **(NUM** **P, # iterations) varies.**
+
+
+In Table 16 is an ablation study varying NUM P across runs and # iterations per run; _|V |_ depends on
+both. We also combine both into the throttle _|V |_ . We make the following observations:
+
+
+1. As NUM P values become high, the unique GeoPair keys increase exponentially. Since each
+iteration only looks at one key, the number of merges done falls off. Empirically, the top rows
+show only marginal changes to distortion as iteration increases. We omitted them for brevity.
+2. As NUM P values drop too low, GEOBPE becomes more of a coarsening algorithm (lots of
+merges, repetitive patterns are preserved but higher frequencies are lost). When merges happen more often, more drift is introduced, so error quickly accumulates. We can see distortion
+monotonically increase for the last run.
+3. There exists a tension between NUM P and merge frequency, but glue opt is still potent enough
+to manage drift accumulation. We see error decrease before increasing again, when eventually
+merges overwhelm.
+
+**BINS** _∈{_ 50 _,_ 100 _,_ 300 _}_ **.** BINS controls the quantization of bond lengths, bond angles and torison
+angles connecting motifs; it trades off structural fidelity for better coarsening. Geo-Pair keys are
+
+
+36
+
+
+**Table** **16:** Cluster of runs that vary NUM P; each row is a run; lower resolution runs include periodic checkpoints to see how RMSD/LDDT/BPR changes over iterations.
+
+
+NUM P _|V |_ RMSD LDDT BPR
+
+
+_{_ 2: 100, 3: 500, 5: 20, 6: 100, ... _}_ 600 1.66 0.73 36.02
+
+
+_{_ 2: 500, 3: 2000, 5: 100, 6: 500, ... _}_ 2500 1.41 0.75 41.11
+
+
+_{_ 2: 1000, 3: 5000, 5: 200, 6: 1000, ... _}_ 6000 1.37 0.76 45.44
+
+
+_{_ 2: 1000, 3: 20000 _}_ 21000 1.21 0.76 47.62
+
+
+_{_ 2: 50, 5: 20, 6: 100, ... _}_ 5200 2.11 0.68 37.24
+
+
+_{_ 2: 10, 3: 50, 5: 1, 6: 5, 8: 1 _}_
+
+
+_{_ 2: 2, 3: 5, 5: 1, 6: 2, 8: 1 _}_
+
+
+65 1.78 0.71 30.81
+237 1.77 0.70 34.00
+388 1.72 0.70 35.88
+521 1.71 0.70 37.33
+631 1.69 0.70 38.47
+739 1.71 0.70 39.54
+845 1.73 0.69 40.57
+
+
+109 3.96 0.53 27.26
+309 4.07 0.53 30.81
+508 4.23 0.53 33.46
+707 4.50 0.53 35.93
+
+
+of the form ( _Mp_ : _q,_ Γ _q, Mq_ : _r_ ), and the space of _γq_ has size _∼_ (BINS) [3] (since there are 3 glue
+angles). Importantly, it is orthogonal to NUM P, which control the id’s of _Mp_ : _q_ and _Mq_ : _r_, so it
+can be tuned independently. Fixing Hyperparameter Setting 3, we _increase_ the number of bins
+used to discretize _θ_ _[CNCA]_ _, ω, ϕ_ angles angles by 2x, 6x. Fig. 13e uses the default value BINS =
+50; Figs. 13a & 13d use BINS = 100 _,_ 300. Increasing BINS decreases frequency of merges by
+around the same factor, so we observe _L_ vs _K_ is flatter for higher BINS settings _L_ decreases slower.
+Since BINS is an important control of resolution, decreasing it increases distortion (e.g. 3 _._ 12 _→_
+4 _._ 19 _→_ 5 _._ 76 RMSD). Distortion is not a priority consideration for transfer experiments. Since
+the goal is to compress local noise into meaningful global hierarchies, introducing distortion is
+_necessary_ to cluster common motifs. Setting BINS too low can _misrepresent_ the overall structure, so
+we recommend BINS = 50 as a good starting value.
+
+**GLUE** **OPT** **EVERY** _∈{_ 1 _,_ 10 _}_ **.** Fig. 13b (GLUE OPT EVERY = 1) only shows a 6 _._ 2% decrease
+in RMSD and comparable LDDT vs Fig. 13a (GLUE OPT EVERY = 10). As the wall times in 13
+shows, decreasing the frequency of glue ~~o~~ pt significantly accelerates GEOBPE, regardless of how
+many cores are available. App. J reveals glue ~~o~~ pt period _P_ to directly dictate a rate-limiting term
+in GEOBPE’s complexity. Thus, we adopt GLUE OPT EVERY = 10 as the default setting. We also
+suggest GEOBPE users to try setting GLUE OPT EVERY _>_ 10 to balance the tradeoffs.
+
+
+**Table 17:** We performed the following sweep over ( _wR, wt_ ) (order of magnitude changes to _wT /wR_ ); remaining settings match defaults (App. K).
+
+
+( _wR, wt_ ) Train CAMEO CASP14
+
+
+GeoBPE (1%) RMSD LDDT RMSD LDDT RMSD LDDT
+
+
+(10 _,_ 0 _._ 1) 2.846 0.615 2.767 0.601 2.608 0.587
+(1 _,_ 0 _._ 1)-default 1.718 0.739 1.656 0.734 1.526 0.721
+(1 _._ 0 _,_ 1 _._ 0) 1.552 0.764 1.546 0.755 1.412 0.743
+(0 _._ 1 _,_ 1 _._ 0) 1.537 0.767 1.532 0.758 1.396 0.745
+(0 _._ 1 _,_ 10) 1.533 0.768 1.533 0.758 1.407 0.745
+
+
+**W** **R** _/_ **W** **T** _∈{_ 10 _[−]_ [2] _, . . .,_ 10 [2] _}_ **.** Table 17 shows _wt_ is relatively more important than _wR_ for reconstruction. The interpretation is correct positions are more critical than correct orientations. We
+observe diminishing returns once _wt_ _≥_ _wR_ ( _|_ ∆ _LDDT | ≈_ 10 _[−]_ [3] _, |_ ∆ _RMSD| ≈_ 10 _[−]_ [2] ).
+
+
+37
+
+
+**Table 18:** We compare the default ( _wR, wt_ ) setting with (1 _._ 0 _,_ 1 _._ 0), which in Table 17 resulted in lower distortion for GEOBPE (1%).
+
+
+GeoBPE Train Valid CAMEO CASP14
+
+
+_|V |_ ( _wR, wt_ ) RMSD LDDT RMSD LDDT RMSD LDDT RMSD LDDT
+
+
+600 (1 _,_ 0 _._ 1)-default 1.66 0.73 1.71 0.72 1.77 0.72 1.53 0.72
+(1 _._ 0 _,_ 1 _._ 0) 1.55 0.75 1.58 0.74 1.65 0.74 1.39 0.74
+2500 (1 _,_ 0 _._ 1)-default 1.41 0.75 1.50 0.74 1.57 0.74 1.51 0.73
+(1 _._ 0 _,_ 1 _._ 0) 1.29 0.78 1.36 0.77 1.41 0.77 1.33 0.76
+6000 (1 _,_ 0 _._ 1)-default 1.37 0.76 1.46 0.75 1.52 0.74 1.54 0.72
+(1 _._ 0 _,_ 1 _._ 0) 1.23 0.78 1.30 0.78 1.37 0.77 1.35 0.75
+21000 (1 _,_ 0 _._ 1)-default 1.21 0.77 1.28 0.76 1.40 0.75 1.55 0.72
+(1 _._ 0 _,_ 1 _._ 0) 1.05 0.80 1.12 0.79 1.25 0.78 1.35 0.76
+
+
+**FREE** **BONDS** _∈{_ **False** _,_ **True** _}_ **.** FREE BONDS decides whether bond lengths are free variables, or
+standardized to fixed values. Generally, the backbone bond lengths are very close to fixed and most
+workflows (e.g. X-ray diffraction, NMR, Cryo-EM) that solve structures make such assumptions.
+GEOBPE is designed to be fully general, allowing variable bond lengths. In lieu of the known fact
+that they have relatively narrow ranges, we ran a sanity check to see if GEOBPE is sensitive to
+FREE BONDS. Comparing Figs. 13c & 13e, we see the run with free bonds achieves only 1 _._ 69%
+lower RMSD, which is negligible.
+
+
+L LARGE LANGUAGE MODEL USAGE
+
+
+We used LLMs mainly for polishing the writing, including prompts to check for grammar mistakes,
+improving clarity of mathematical notation, and formatting the text to save space.
+
+
+M ALGORITHMIC DETAILS
+
+
+**Additional notation for algorithms.**
+
+
+We reuse all geometric and GeoBPE notation from Secs. 3.1–3.2. For convenience we collect the
+additional symbols that appear only inside the algorithmic pseudocode.
+
+
+_S, A_ Set of motif (or motif–pair) occurrences and its sampled subset used by RMSD PARTITION
+(Alg. 6); each _u ∈S_ indexes a motif _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [.]
+
+_S_ 3 _, S_ 2 Collections of interior and terminal bond–residue occurrences used to build residue-level
+codebooks _A_ 3 _, A_ 2 (Algo. 18).
+
+
+_M_ - **,** _c_ ( _·_ ) Medoid set and assignment map returned by RMSD PARTITION, used as inputs to glueoptimization routines (Algos. 19,12).
+
+
+_D_ [(] _[⋆]_ [)] _,_ _O_ [(] _[⋆]_ [)] ( _κ_ ) Single-backbone geo-pair map and occurrence sets for a new backbone _t_ _[⋆]_ during
+tokenization (Algo. 10).
+
+
+Σ _,_ Σmed Token dictionary used for geometric language modeling (Algos. 16, 17); Σmed contains
+only motif tokens; Σ also includes glue angle tokens.
+
+
+idmed _,_ idbin Integer maps assigning token IDs to motif medoids ( _κ, j_ ) and to glue-angle bins
+(type _, b_ ), respectively.
+
+
+_x_ [(] _[τ]_ [)] Token sequence encoding backbone _tτ_ obtained by alternating motif and glue-bin tokens
+(Algo. 17).
+
+_h_ _[↑]_ _i_ _[, c]_ _i_ _[↑][,]_ [ ¯] _[h][i][,]_ [ ¯] _[c][i]_ [Upward] [and] [downward] [TreeLSTM] [states] [at] [node] _[i]_ [in] [the] [up–down] [encoder] [(Al-]
+gos. 13–15).
+
+_zτ,i_ [res] _[,]_ _[z]_ _τ_ [prot] Final residue-level and protein-level embeddings produced by the up–down encoder on
+the merge hierarchy _F_ [(] _[τ]_ [)] (Algo. 15).
+
+
+38
+
+
+**Algorithm 6** RMSD PARTITION on motif–pair occurrences
+
+**Require:** Motif–pair occurrences _S_ = _{u_ = 1 _, . . ., M_ _}_ with _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [,] [common] [span] [length] _[L]_ [=]
+_ku −_ _iu_ + 1, and either _∀u,_ _ku_ = _N_ [(] _[t][u]_ [)] or _∀u,_ _ku_ _< N_ [(] _[t][u]_ [)] ; target _K_ _≥_ 1; optional _M_ max _, T, ε_ .
+**Ensure:** Medoids _M_ [�] = _{_ - _m_ 1 _, . . .,_ _m_ - _K} ⊆S_ and assignments _c_ : _{_ 1 _, . . ., M_ _} →{_ 1 _, . . ., K}_ .
+1: For each _u ∈S_, compute **X** _u_ _∈_ R [3] _[L][×]_ [3] via COMPUTE COORDS( _iu_ : _ku_ ).
+2: Let _A ⊆S_ be a uniform sample without replacement of size min( _M, M_ max) (or _A_ = _S_ ).
+3: Build _D_ _∈_ R _[|A|×|A|]_ with _Duv_ = KABSCH RMSD( **X** _u,_ **X** _v_ ) for _u, v_ _∈A_ .
+4: Initialize _M ←{m_ 1 _, . . ., mK}_ as _K_ distinct uniform indices from _{_ 1 _, . . ., |A|}_ .
+5: **for** _t_ = 1 **to** _T_ **do**
+6: Assign: _c_ ( _u_ ) _←_ arg min _j∈{_ 1 _,...,K} Du,mj_ for all _u ∈A_ .
+7: Update each _j_ : _Cj_ = _{u ∈A_ : _c_ ( _u_ ) = _j}_ . If _Cj_ = _∅_, reseed _mj_ uniformly from _A_ ; else
+
+
+_m_ _[′]_ _j_ _[←]_ [arg min]
+_u∈Cj_
+
+
+- _Duv._
+
+
+_v∈Cj_
+
+
+8: If [�] _j_ _[K]_ =1 _[D][m]_ _j_ _[,m][′]_ _j_ _[< ε]_ **[ break]** [; else set] _[ m][j]_ _[←]_ _[m][′]_ _j_ [for all] _[ j]_ [.]
+9: **end for**
+10: Map _M_ = _{m_ 1 _, . . ., mK}_ (indices in _A_ ) to _M_ [�] = _{m_ - 1 _, . . .,_ _m_ - _K}_ (indices in _S_ ).
+11: For each _u ∈S_, set _c_ ( _u_ ) _←_ arg min _j∈{_ 1 _,...,K}_ KABSCH RMSD( **X** _u,_ **X** - _mj_ [)][.]
+
+12: **return** _M_ and _c_ ( _·_ ).
+
+[�]
+
+
+**Algorithm 7** KABSCH RMSD( **P** _,_ **Q** )
+
+
+**Require:** **P** _,_ **Q** _∈_ R _[n][×]_ [3] with _n_ = 3 _L_ .
+
+
+1: **p** ¯ = [1]
+
+
+_i_ **[P]** _[i]_ [,] **[q]** [¯][ =] _n_ [1]
+
+
+[1] 
+_n_
+
+
+[1] 
+_n_
+
+
+1: **p** ¯ = _n_ - _i_ **[P]** _[i]_ [,] **[q]** [¯][ =] _n_ - _i_ **[Q]** _[i]_
+
+2: **P** [˜] = **P** _−_ **p** ¯, **Q** ˜ = **Q** _−_ **q** ¯
+3: **H** = **P** [˜] _[⊤]_ **Q** [˜], **UΣV** _[⊤]_ = SVD( **H** )
+4: **R** = **UV** _[⊤]_ ; if det( **R** ) _<_ 0, set **V** : _,_ 3 _←−_ **V** : _,_ 3 and recompute **R** = **UV** _[⊤]_
+
+
+5: **Q** aligned = ( **Q** _−_ **q** ¯) **R** _[⊤]_ + ¯ **p**
+
+
+6: **return** - _n_ 1 - _ni_ =1 _[∥]_ **[P]** _[i][ −]_ **[Q]** [aligned] _[,i][∥]_ [2]
+
+
+**Algorithm 8** K MEDOIDS on a precomputed distance matrix
+
+
+**Require:** Symmetric _D_ _∈_ R _[N]_ _[×][N]_, number of clusters _K_, iterations _T_, tolerance _ε_ .
+**Ensure:** Medoid set _{m_ 1 _, . . ., mK}_ and assignments _c_ ( _·_ ) on _{_ 1 _, . . ., N_ _}_ .
+
+1: Initialize medoids _{mj}_ as _K_ distinct random indices.
+2: **for** _t_ = 1 **to** _T_ **do**
+3: _c_ ( _u_ ) _←_ arg min _j Du,mj_ for all _u_
+4: **for** _j_ = 1 **to** _K_ **do**
+5: _Cj_ = _{u_ : _c_ ( _u_ ) = _j}_ ; if _Cj_ = _∅_, re-seed _mj_ at random
+6: _m_ _[′]_ _j_ _[←]_ [arg min] _[u][∈C]_ _j_ - _v∈Cj_ _[D][uv]_
+7: **end for**
+8: If [�] _j_ _[K]_ =1 _[D][m]_ _j_ _[,m][′]_ _j_ _[< ε]_ [,] **[ break]** [; else] _[ m][j]_ _[←]_ _[m][′]_ _j_ [for all] _[ j]_
+9: **end for**
+10: **return** _{mj}_ and _c_ ( _·_ )
+
+
+39
+
+
+**(a)** BINS = 100 _,_ FREE BONDS = True **(b)** BINS = 100 _,_ FREE BONDS = True _,_ GLUE OPT EVERY = 1
+
+
+**(c)** Baseline for Sensitivity Ablations (default settings)
+
+
+**(d)** BINS = 300 _,_ FREE BONDS = True
+
+
+**(e)** FREE BONDS = True
+
+
+**Figure 13:** Sensitivity analysis on BINS _←{_ 50 (default) _,_ 100 _,_ 300 _}_ ), GLUE OPT EVERY _←{_ 1 _,_ 10 (default) _}_
+and FREE BONDS _←{_ True _,_ False (default) _}_ . Rest of hyperparameters match defaults (Settings 3). We show
+GEOBPE (1%) progress plots at ITER = 300 for all ablation settings. _L_ is # avg. tokens per structure; _K_ is
+_|V |_ ; see K.2 for details.
+
+
+40
+
+
+**Algorithm 9** STEP — one GEOBPE merge iteration
+
+
+**Require:** Current segmentations _{P_ [(] _[τ]_ [)] _}_ _[T]_ _τ_ =1 [and] [merge] [hierarchies] _[{F]_ [(] _[τ]_ [)] _[}][T]_ _τ_ =1 [(frontier] [leaves]
+of _F_ [(] _[τ]_ [)] equal _P_ [(] _[τ]_ [)] ); priority-ordered map _D_ with keys _π_ ( _κ_ ) = ( _ρ_ ( _κ_ ) _, −|O_ ( _κ_ ) _|, κ_ ) and
+values _O_ ( _κ_ ); current vocabulary _V_ (map: key _→_ prototype set); boundary-glue quantizers
+_QθCNCA_ _, Qω, Qϕ_ ; optional glue mode _∈{none, each, all}_ and, if _all_, a period.
+**Ensure:** Updated ( _{P_ [(] _[τ]_ [)] _}, {F_ [(] _[τ]_ [)] _}, D, V_ ).
+
+1: **Select the merge key.**
+
+              -               ( _ρ_ _[⋆]_ _, −c_ _[⋆]_ _, κ_ _[⋆]_ ) _,_ _O_ ( _κ_ _[⋆]_ ) _←_ FRONT( _D_ ) _._
+
+Write each occurrence as ( _L, R_ ) _∈O_ ( _κ_ _[⋆]_ ) with _L_ = _M_ [(] _p_ _[t]_ : _[τ]_ _q_ [ )] [and] _[ R]_ [ =] _[ M]_ [(] _q_ _[t]_ +1: _[τ]_ [ )] _r_ [.]
+2: **Prototype assignment (create-or-assign).**
+3: **if** _ρ_ _[⋆]_ = 1 ( _no prototypes yet_ ) **then**
+
+4: Gather concatenated spans _{M_ [(] _p_ _[t]_ : _[τ]_ _r_ [ )] _[}]_ [from] _[original]_ _[t]_ _τ_ [for] [all] [(] _[L][,][ R]_ [)] _[∈O]_ [(] _[κ][⋆]_ [)] [(identical]
+length).
+5: Run RMSD PARTITION (Alg. 6) to obtain medoids and _c_ : _O_ ( _κ_ _[⋆]_ ) _→{_ 1 _, . . ., K|κ⋆|}_ .
+
+_K|κ⋆_ _|_
+6: Define _Aκ⋆_ = _{_ Π _j_ [(] _[κ][⋆]_ [)] _}j_ =1 (medoid spans’ internal-parameter tuples).
+7: Update vocabulary: _V_ [ _κ_ _[⋆]_ ] _←Aκ⋆_ and set _ρ_ _[⋆]_ _←_ 0.
+8: **else**
+9: For each occurrence, set _c_ ( _L, R_ ) = arg min _j_ RMSD� _M_ [(] _p_ _[t]_ : _[τ]_ _r_ [ )] _[,]_ [ Π][(] _j_ _[κ][⋆]_ [)] - using _V_ [ _κ_ _[⋆]_ ].
+10: **end if**
+11: **Greedy,** **non-overlapping** **merges** **(and** **hierarchy** **updates).** For each backbone _tτ_, sort occurrences by _p_ and choose a maximal disjoint subset _S_ [(] _[τ]_ [)] left-to-right. For every ( _L, R_ ) _∈_ _S_ [(] _[τ]_ [)]
+with label _j_ = _c_ ( _L, R_ ):
+1. **Form merged motif** _M_ [�] = _M_ [(] _p_ _[t]_ : _[τ]_ _r_ [ )] [and] _[ overwrite]_ [ its internals by the prototype:]
+
+                -                - [�]
+_ℓ, θ, ψ, ω, ϕ, {_ Γ _i}_ �� _M_                      - _[←]_ [Π][(] _j_ _[κ][⋆]_ [)] _._
+
+
+2. **Update segmentation** _P_ [(] _[τ]_ [)] : replace ( _L, R_ ) by _M_ .
+
+[�]
+3. **Update hierarchy** _F_ [(] _[τ]_ [)] : add a _parent_ node for span [ _p_ : _r_ ] with left child the node of _L_ and
+right child the node of _R_ ; update the _frontier_ (replace the two leaves by their parent so the
+frontier again equals _P_ [(] _[τ]_ [)] ).
+4. **(Optional)** **single-boundary** **glue** **opt** at link _p−_ 1 _→_ _p_ if mode= _each_ ; re-snap the three
+boundary angles.
+12: **Update counts and priorities in** _D_ **.** For each merged ( _L, R_ ):
+
+1. **Merged** **pair** **decrement:** remove this occurrence from _O_ ( _κ_ _[⋆]_ ); let the new count be _c_ new.
+Erase _π_ old = (0 _, −c_ _[⋆]_ _, κ_ _[⋆]_ ) and, if _c_ new _>_ 0, insert (0 _, −c_ new _, κ_ _[⋆]_ ) _�→O_ ( _κ_ _[⋆]_ ).
+2. **Neighbor** **decrements:** with neighbors _L_ _[−]_ and _R_ [+] (when defined), compute _kL_ =
+COMPUTEGEOKEY( _L_ _[−]_ _, L_ ) and _kR_ = COMPUTEGEOKEY( _R, R_ [+] ). For each _k_ _∈_
+_{kL, kR}_ whose count decreases to _c_ new, erase ( _ρ_ ( _k_ ) _, −c_ old _, k_ ) and, if _c_ new _>_ 0, insert
+( _ρ_ ( _k_ ) _, −c_ new _, k_ ).
+3. **Neighbor** **increments:** compute _kL_ _[′]_ = COMPUTEGEOKEY( _L_ _[−]_ _,_ _M_ [�] ) and _kR_ _[′]_ =
+COMPUTEGEOKEY( _M, R_ [+] ) (when defined); increment their counts and (re)insert with pri
+[�]
+orities ( _ρ_ ( _k_ ) _, −c_ new _, k_ ), where _ρ_ ( _k_ ) = **1** [ _k_ _∈/_ dom( _V_ )].
+13: **(Optional periodic global glue opt).** If mode= _all_ and the schedule triggers, apply GLUEOPTALL (Alg. 12) to all modified backbones; recompute keys for their adjacent pairs, and for every
+affected key _k_, perform the same erase/insert priority update with _ρ_ ( _k_ ) = **1** [ _k_ _∈/_ dom( _V_ )]. If
+FRONT( _D_ ) then exposes a recurring key ( _ρ_ = 0) promoted by glue refinement, immediately
+re-invoke STEP (no new clustering).
+14: **return** _{P_ [(] _[τ]_ [)] _}_, _{F_ [(] _[τ]_ [)] _}_, _D_, and _V_ .
+
+
+41
+
+
+**Algorithm 10** TOKENIZE — use learned GEOBPE vocabulary to tokenize new backbone
+
+**Require:** New backbone _t_ _[⋆]_ (length _N_ ); learned residue codebooks _A_ 3 _, A_ 2; learned vocabulary
+_V_ whose _pair-keys_ are ordered by training insertion, written
+
+
+Order( _V_ ) =              - _κ_ 1 _, κ_ 2 _, . . ., κ|V|_              - _,_
+
+
+with each _κℓ_ mapped to its fixed prototype set _Aκℓ_ = _{_ Π _j_ [(] _[κ][ℓ]_ [)] _}Kj_ =1 _|κℓ_ _|_ [;] [quantizers]
+_QθCNCA_ _, Qω, Qϕ_ ; optional glue mode _∈{none, each, all}_ and (if _all_ ) a period _P_ .
+**Ensure:** Tokenized segmentation _P_ [(] _[⋆]_ [)] and merge hierarchy _F_ [(] _[⋆]_ [)] for _t_ _[⋆]_ .
+
+1: **Per-residue** **init** **(no** **new** **clustering).** Set _P_ [(] _[⋆]_ [)] _←_ ( _M_ [(] 1:1 _[t][⋆]_ [)] _[, . . .,][ M]_ _N_ [(] _[t][⋆]_ : _N_ [)] [)][.] [Assign] [each]
+residue motif to the nearest element of _A_ 3 (interior) or _A_ 2 (terminal) by Kabsch-aligned
+RMSD, and overwrite its internal parameters accordingly.
+
+2: **Initialize hierarchy.** Let _F_ [(] _[⋆]_ [)] be a binary forest whose leaves (in order) are _{M_ [(] _i_ : _[t]_ _i_ _[⋆]_ [)] _[}]_ _i_ _[N]_ =1 [;]
+its frontier equals _P_ [(] _[⋆]_ [)] .
+3: **Optional** **one-time** **global** **glue.** If mode= _all_, run GLUEOPTALL (Alg. 12) on _t_ _[⋆]_ once;
+snap ( _θ_ _[CNCA]_ _, ω, ϕ_ ) to _Q_ .
+
+                                    -                                     4: **Build** **single-structure** **geo-pair** **map.** Compute _D_ [(] _[⋆]_ [)] _←_ BINHELPER _t_ _[⋆]_ _, P_ [(] _[⋆]_ [)] _, Q_
+
+(Alg. 11), which maps any geo-pair key _κ_ to its occurrence set _O_ [(] _[⋆]_ [)] ( _κ_ ) on _t_ _[⋆]_ . (Uses
+COMPUTEGEOKEY with raw medoid internals and quantized boundary glue.)
+5: **Apply learned merges in training order (no new keys).**
+6: **for** _s_ = 1 **to** _|V|_ **do**
+7: _κ ←_ _κs_ (the _s_ -th key in Order( _V_ )).
+8: **if** _κ_ _∈D/_ [(] _[⋆]_ [)] **then**
+9: **continue**
+10: **end if**
+11: **Assign prototypes (no clustering).** For each ( _L, R_ ) _∈O_ [(] _[⋆]_ [)] ( _κ_ ) with _L_ = _M_ [(] _p_ _[t]_ : _[⋆]_ _q_ [)][,] _[ R]_ [=]
+_M_ [(] _q_ _[t]_ +1: _[⋆]_ [)] _r_ [, set]
+
+_c_ ( _L, R_ ) = arg min            - _M_ [(] _p_ _[t]_ : _[⋆]_ _r_ [)] _[,]_ [Π][(] _j_ _[κ]_ [)]            - _._
+_j∈{_ 1 _,...,K|κ|}_ [RMSD]
+
+
+12: **Greedy** **disjoint** **merges** **&** **hierarchy** **updates** **(left** _→_ **right).** Order _O_ [(] _[⋆]_ [)] ( _κ_ ) by increasing _p_ ; select the maximal disjoint subset _S_ [(] _[⋆]_ [)] . For each ( _L, R_ ) _∈_ _S_ [(] _[⋆]_ [)] with label
+_j_ = _c_ ( _L, R_ ):
+
+1. Form _M_ [�] = _M_ [(] _p_ _[t]_ : _[⋆]_ _r_ [)] [and overwrite its internals by][ Π][(] _j_ _[κ]_ [)] .
+
+2. Update segmentation _P_ [(] _[⋆]_ [)] : replace ( _L, R_ ) by _M_ .
+
+[�]
+3. _Update hierarchy F_ [(] _[⋆]_ [)] : add a parent for span [ _p_ : _r_ ] with left child the node of _L_
+and right child the node of _R_ ; update the frontier so it equals the new _P_ [(] _[⋆]_ [)] .
+4. If mode= _each_ and the boundary _p−_ 1 _→_ _p_ exists, apply GLUEOPT (Alg. 19);
+snap its three angles to _Q_ .
+13: **Maintain** **the** **single-structure** **map.** For each merged ( _L, R_ ) _∈_ _S_ [(] _[⋆]_ [)], update _D_ [(] _[⋆]_ [)] locally: remove the occurrence of _κ_ ; decrement keys of neighbors ( _L_ _[−]_ _, L_ ) and ( _R, R_ [+] )
+(when defined); insert the new neighbor keys ( _L_ _[−]_ _,_ _M_ ) and ( _M, R_ [+] ) using COMPUTE
+[�] [�]
+GEOKEY.
+14: **Optional** **periodic** **global** **glue.** If mode= _all_ and _s_ mod _P_ = 0, run GLUEOPTALL
+on _t_ _[⋆]_ ; then recompute keys adjacent to changed boundaries via COMPUTEGEOKEY and
+refresh their occurrences in _D_ [(] _[⋆]_ [)] .
+15: **end for**
+16: **return** _P_ [(] _[⋆]_ [)] and _F_ [(] _[⋆]_ [)] .
+
+
+42
+
+
+**Algorithm 11** BINHELPER — build geo-pair map for one backbone
+
+
+**Require:** Backbone _t_ _[⋆]_ with current segmentation _P_ [(] _[⋆]_ [)] ; quantizers _QθCNCA_ _, Qω, Qϕ_ .
+**Ensure:** _D_ [(] _[⋆]_ [)] : _κ �→O_ [(] _[⋆]_ [)] ( _κ_ ).
+
+1: Initialize _D_ [(] _[⋆]_ [)] _←∅_ .
+2: **for** each adjacent pair ( _L, R_ ) in _P_ [(] _[⋆]_ [)] **do**
+3: _κ ←_ COMPUTEGEOKEY( _L, R_ ) using:
+
+       - _Raw_ medoid internals for _L_ and _R_ (as assigned in initialization or prior merges);
+
+       - boundary glue ( _θ_ _[CNCA]_ _, ω, ϕ_ ) snapped by _Q_ .
+4: Insert the occurrence ( _L, R_ ) into _O_ [(] _[⋆]_ [)] ( _κ_ ).
+5: **end for**
+6: **return** _D_ [(] _[⋆]_ [)] .
+
+
+**Algorithm 12** GLUEOPTALL — global differentiable inverse kinematics over glue angles
+
+
+**Require:** Medoids _M_ and assignments _c_ ( _·_ ) from RMSD PARTITION; occurrences _S_ = _{u}_ with
+
+[�]
+spans _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [;] [target frames] _[ F]_ _i_ _[ ⋆,]_ [(] _[t]_ [)] = ( _Ri_ _[⋆,]_ [(] _[t]_ [)] _, t_ _[⋆,]_ _i_ [(] _[t]_ [)] ) (with _F_ 1 _[⋆,]_ [(] _[t]_ [)] from SEEDTRIAD); weights
+( _wR, wt_ ); optimizer steps _T_ and step size _η_
+**Ensure:** Updated glues _{_ Γ [(] _i_ _[t]_ [)] _[}]_ [ and frames] _[ {][F]_ [ �][ (] _i_ _[t]_ [)] _}_
+
+
+1: **Snap internals:** for _u ∈S_, set internals of _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ _[←]_ [those of its medoid] _[ m]_ [(] _[u]_ [) =] _[m]_ [�] _[c]_ [(] _[u]_ [)]
+
+
+2: **Init** **glues:** copy original Γ [(] _i_ _[t]_ [)] for all backbones _t_ and links _i_ = 1: _N_ [(] _[t]_ [)] _−_ 1 (these are the optimization variables)
+3: **Loss:**
+
+
+_L_ (Γ) = 
+
+_t_
+
+
+_N_ [(] _[t]_ [)]
+
+
+_i_ =2
+
+
+- ( _t_ ) 2 ( _t_ ) 2
+_wR_ �� log(( _R_ - _i_ [)] _[⊤][R]_ _i_ _[⋆,]_ [(] _[t]_ [)] )��2 [+] _[ w][t]_ ��� _ti_ _−_ _t_ _[⋆,]_ _i_ [(] _[t]_ [)] ��2
+
+
+4: **Forward kinematics (FK):** with _F_ [�] 1 [(] _[t]_ [)] = _F_ 1 _[⋆,]_ [(] _[t]_ [)],
+
+_F_  - _i_ [(] +1 _[t]_ [)] [=] _[F]_ [�][ (] _i_ _[t]_ [)] _G_  - [(] _i_ _[t]_ [)] �Γ [(] _i_ _[t]_ [)][;] [current internals]  - _,_ _G_  - [(] _i_ _[t]_ [)] from internals and Γ [(] _i_ _[t]_ [)] = _{θi_ _[CNCA]_ _, ψi, ϕi_ +1 _}_ [2]
+
+
+5: **Optimize glues (autodiff):** for _s_ = 1: _T_ :
+6: run FK, evaluate _L_ ; backprop _∇_ Γ _L_ ; update all Γ [(] _i_ _[t]_ [)]
+7: wrap _ψ, ϕ_ _∈_ ( _−π, π_ ]; project _θ_ _[CNCA]_ _∈_ (0 _, π_ )
+
+8: **return** _{_ Γ [(] _i_ _[t]_ [)] _[}]_ [,] _[ {]_ [ �] _[F]_ [ (] _i_ _[t]_ [)] _}_
+
+
+**Algorithm 13** BINARY TREE–LSTM CELL (Tai et al., 2015)
+
+
+**Require:** Left ( _hℓ, cℓ_ ) _∈_ R _[d]_ _×_ R _[d]_, right ( _hr, cr_ ); _W_ _∈_ R [5] _[d][×]_ [2] _[d]_, _b ∈_ R [5] _[d]_
+**Ensure:** ( _hp, cp_ ) _∈_ R _[d]_ _×_ R _[d]_
+
+
+
+
+
+
+
+
+_←_ _Wu_ + _b_
+
+
+
+1: _u_ _←_ - _hℓ_
+_hr_
+
+
+;
+
+
+
+
+
+_i_
+_fℓ_
+_fr_
+
+_o_
+_g_
+
+
+2: _i, fℓ, fr, o_ _←_ _σ_ ( _·_ ); _g_ _←_ tanh( _g_ )
+3: _cp ←_ _fℓ_ _⊙_ _cℓ_ + _fr ⊙_ _cr_ + _i ⊙_ _g_
+4: _hp ←_ _o ⊙_ tanh( _cp_ )
+5: **return** ( _hp, cp_ )
+
+
+43
+
+
+**Algorithm 14** DOWNWARD BINARY TREE–LSTM CELL
+
+
+**Require:** Parent downward ( _h_ [¯] _p,_ ¯ _cp_ ) _∈_ R _[d]_ _×_ R _[d]_, sibling upward ( _hs, cs_ ); _W_ [�] _∈_ R [5] _[d][×]_ [2] _[d]_, [�] _b ∈_ R [5] _[d]_
+
+
+**Ensure:** ( _h_ [¯] _c,_ ¯ _cc_ ) _∈_ R _[d]_ _×_ R _[d]_
+
+
+
+
+
+1: _u_ _←_ - _h_ ¯ _p_
+_hs_
+
+
+;
+
+
+
+
+
+¯ _i_
+_f_ ¯ _p_
+_f_ ¯ _s_
+
+_o_ ¯
+_g_ ¯
+
+
+
+
+
+_←_ _Wu_ - + [�] _b_
+
+
+
+2: [¯] _i,_ _f_ [¯] _p,_ _f_ [¯] _s,_ ¯ _o_ _←_ _σ_ ( _·_ ); _g_ ¯ _←_ tanh(¯ _g_ )
+3: _c_ ¯ _c ←_ _f_ [¯] _p ⊙_ _c_ ¯ _p_ + _f_ [¯] _s ⊙_ _cs_ + [¯] _i ⊙_ _g_ ¯
+4: _h_ [¯] _c ←_ _o_ ¯ _⊙_ tanh(¯ _cc_ )
+5: **return** ( _h_ [¯] _c,_ ¯ _cc_ )
+
+
+**Algorithm 15** UP–DOWN TREE ENCODER ON A FOREST (one protein)
+
+
+**Require:** Protein _tτ_ with _N_ [(] _[τ]_ [)] residues; binary forest _F_ [(] _[τ]_ [)] = ( _V_ [(] _[τ]_ [)] _, E_ [(] _[τ]_ [)] ) whose frontier (in
+order) is _P_ [(] _[τ]_ [)] ; leaf embeddings _{e_ [(] _i_ _[τ]_ [)] _∈_ R _[d]_ _}_ _[N]_ _i_ =1 [ (] _[τ]_ [)] (e.g., ESM3) [3] ; internal-edge topological
+order _E_ [(] _[τ]_ [)] = _{_ ( _p, ℓ, r_ ) _}_ ; roots _R_ [(] _[τ]_ [)] _⊂_ _V_ [(] _[τ]_ [)] ; parameters Θ = _{W, b,_ _W,_ [�] _b}_ ; combiner _⊕∈_
+
+[�]
+_{_ concat _,_ sum _}_ .
+**Ensure:** _zτ_ [prot] _∈_ R _[d][z]_ ; _{zτ,i_ [res] _[}]_ _i_ _[N]_ =1 [(] _[τ]_ [)][.]
+
+1: **Upward.** For leaves _i ≤_ _N_ [(] _[τ]_ [)] : _h_ _[↑]_ _i_ _[←]_ _[e]_ _i_ [(] _[τ]_ [)], _c_ _[↑]_ _i_ _[←]_ [0][.] [For][ (] _[p, ℓ, r]_ [)] _[ ∈]_ _[E]_ [(] _[τ]_ [)] [in order:]
+
+( _h_ _[↑]_ _p_ _[, c]_ _p_ _[↑]_ [)] _[ ←]_ [T][REE][LSTMC][ELL][(] _[h][↑]_ _ℓ_ _[, c][↑]_ _ℓ_ _[,]_ _[h][↑]_ _r_ _[, c]_ _r_ _[↑]_ [;] _[W, b]_ [)][ (Alg. 13)] _[.]_
+
+2: **Super-root.** _h_ _[↑]_ SR _[←|][R]_ [(] _[τ]_ [)] _[|][−]_ [1][�] _r∈R_ [(] _[τ]_ [)] _[h]_ _r_ _[↑]_ [; set node][ SR][ with][ (] _[h][↑]_ SR _[, c][↑]_ SR [=0)][.]
+
+3: **Downward.** ( _h_ [¯] SR _,_ ¯ _c_ SR) _←_ (0 _,_ 0). For each tree rooted at _r_ _∈_ _R_ [(] _[τ]_ [)], recurse: for internal _p_ with
+children ( _ℓ, r_ ) and given ( _h_ [¯] _p,_ ¯ _cp_ ),
+
+
+                      -                      ( _h_ [¯] _ℓ,_ ¯ _cℓ_ ) _←_ DOWNTREELSTM ( _h_ [¯] _p,_ ¯ _cp_ ) _,_ ( _h_ _[↑]_ _r_ _[, c][↑]_ _r_ [);] _W,_ [�] [�] _b_ _,_
+
+                      -                      ( _h_ [¯] _r,_ ¯ _cr_ ) _←_ DOWNTREELSTM ( _h_ [¯] _p,_ ¯ _cp_ ) _,_ ( _h_ _[↑]_ _ℓ_ _[, c][↑]_ _ℓ_ [);] _W,_ [�] [�] _b_ (Alg. 14) _._
+
+
+4: **Representations.** For any node _v_ : _u_ _[↓]_ _v_ _[←]_ _[h]_ [¯] _[v]_ [.]
+5: **if** _⊕_ = concat **then**
+6: _zτ,i_ [res] _[←]_ [[] _[ h]_ _i_ _[↑]_ [;] _[u][↓]_ _i_ []] _[ ∈]_ [R][2] _[d]_ [ (] _[i]_ [=1:] _[N]_ [ (] _[τ]_ [)][)][;] _zτ_ [prot] _←_ [ _h_ _[↑]_ SR [;] _[u][↓]_ SR []] _[ ∈]_ [R][2] _[d]_
+
+
+7: **else**
+8: _zτ,i_ [res] _[←]_ _[h]_ _i_ _[↑]_ [+] _[ u]_ _i_ _[↓]_ _[∈]_ [R] _[d]_ [ (] _[i]_ [=1:] _[N]_ [ (] _[τ]_ [)][)][;] _zτ_ [prot] _←_ _h_ _[↑]_ SR [+] _[ u]_ SR _[↓]_ _[∈]_ [R] _[d]_
+
+
+9: **end if**
+10: **return** _zτ_ [prot], _{zτ,i_ [res] _[}]_ _i_ _[N]_ =1 [(] _[τ]_ [)][.]
+
+
+44
+
+
+**Algorithm 16** BUILDJOINTVOCAB — medoids then glue–angle bins
+
+
+**Require:** GEOBPE vocab _V_ = _{κ_ _�→Aκ}_ with key introduction order ( _κ_ [(1)] _, . . ., κ_ [(] _[S]_ [)] ); medoids
+_Aκ_ = _{_ Π [(] _j_ _[κ]_ [)] _}Kj_ =1 _|κ|_ [;] [glue] [quantizers] _[Q][θ][CNCA]_ _[, Q][ω][, Q][ϕ]_ [with] [bin] [centers] _[{][µ][θ]_ _b_ _[}][B]_ _b_ =1 _[θ]_ [,] _[{][µ][ω]_ _b_ _[}]_ _b_ _[B]_ =1 _[ω]_ [,]
+
+_{µ_ _[ϕ]_ _b_ _[}]_ _b_ _[B]_ =1 _[ϕ]_
+**Ensure:** Dictionary Σ; maps idmed : ( _κ, j_ ) _�→{_ 1 _, . . ., |_ Σmed _|}_ and idbin : (type _∈{θ, ω, ϕ}, b_ ) _�→_
+_{|_ Σmed _|_ +1 _, . . ., |_ Σ _|}_
+1: **Medoids (in introduction order):** Σmed _←_ [ ].
+2: **for** _s_ = 1 **to** _S_ **do**
+3: **for** _j_ = 1 **to** _K|κ_ ( _s_ ) _|_ **do**
+
+4: Append _⟨κ_ [(] _[s]_ [)] _, j⟩_ to Σmed; set idmed( _κ_ [(] _[s]_ [)] _, j_ ) to its index.
+5: **end for**
+6: **end for**
+7: **Glue bins (appended after medoids):** let _M_ = _|_ Σmed _|_ .
+8: idbin( _θ, b_ ) = _M_ + _b_ ; idbin( _ω, b_ ) = _M_ + _Bθ_ + _b_ ; idbin( _ϕ, b_ ) = _M_ + _Bθ_ + _Bω_ + _b_ .
+9: Σ _←_ Σmed _∪{_ all glue-bin tokens _}_ ( _optional_ : add BOS/EOS)
+10: **return** Σ, idmed, idbin
+
+
+**Algorithm 17** BACKBONETOSEQUENCE — tokenize a segmented backbone
+
+**Require:** Protein _tτ_ with segmentation _P_ [(] _[τ]_ [)] = ( _M_ [(] _p_ _[t]_ 1 _[τ]_ : [ )] _q_ 1 _[, . . .,][ M]_ _p_ [(] _[t]_ _M_ _[τ]_ [ )] : _qM_ [)][;] [for] [each] _[M]_ [(] _p_ _[t]_ _m_ _[τ]_ [ )] : _qm_ [its]
+key _κm_ and medoid _jm_ (prototype Π _j_ [(] _[κ]_ _m_ _[m]_ [)] ); boundary glue Γ _qm_ = _{θq_ _[CNCA]_ _m_ _, ωqm_ _, ϕqm_ +1 _}_ for
+_m_ = 1: _M_ _−_ 1; quantizers _Qθ, Qω, Qϕ_ ; token id maps from Alg. 16.
+**Ensure:** Token sequence _x_ [(] _[τ]_ [)] = ( _x_ 1 _, . . ., xL_ ) _∈_ Σ _[L]_ .
+
+1: _x_ [(] _[τ]_ [)] _←_ [ ] (optionally prepend BOS/append EOS)
+2: **for** _m_ = 1 **to** _M_ **do**
+3: **Motif:** _x_ [(] _[τ]_ [)] _._ append�idmed( _κm, jm_ )�
+
+4: **if** _m < M_ **then**
+5: **Glue quantize:** _bθ ←_ _Qθ_ ( _θq_ _[CNCA]_ _m_ ) _,_ _bω ←_ _Qω_ ( _ωqm_ ) _,_ _bϕ ←_ _Qϕ_ ( _ϕqm_ +1)
+
+6: **Emit** **(fixed** **order):** _x_ [(] _[τ]_ [)] _._ append�idbin( _θ, bθ_ )�; _x_ [(] _[τ]_ [)] _._ append�idbin( _ω, bω_ )�;
+_x_ [(] _[τ]_ [)] _._ append�idbin( _ϕ, bϕ_ )�
+
+7: **end if**
+8: **end for**
+9: **return** _x_ [(] _[τ]_ [)]
+
+
+45
+
+
+**Algorithm 18** RESINITTOKENS — initialize bond–residue codebook and quantize all residues
+
+
+**Require:** Backbones _{t_ [(1)] _, . . ., t_ [(] _[T]_ [ )] _}_ with lengths _N_ [(] _[τ]_ [)] ; targets _K_ 3 (interior bond–residues), _K_ 2
+(terminal bond–residues)
+**Ensure:** Codebooks _A_ 3 = _{_ Π [(3)] _j_ _[}]_ _j_ _[K]_ =1 [3] [,] _[A]_ [2] [=] _[{]_ [Π][(2)] _j_ _[}]_ _j_ _[K]_ =1 [2] [;] [labels] _[c]_ [(3)] _[, c]_ [(2)][;] [backbones] [with] [per-]
+residue internals set to their prototypes
+1: **Collect occurrences:**
+
+_S_ 3 = _{u_ _≡_ ( _τ, i_ ) : 1 _≤_ _i<N_ [(] _[τ]_ [)] _,_ _M_ [(] _i_ : _[t]_ _i_ _[τ]_ [ )] interior _},_ _S_ 2 = _{u_ _≡_ ( _τ, i_ ) : _i_ = _N_ [(] _[τ]_ [)] _,_ _M_ [(] _i_ : _[t]_ _i_ _[τ]_ [ )] terminal _}._
+
+2: **Cluster interiors:** RMSD PARTITION( _S_ 3 _, K_ 3) _→_ medoids _M_ [�] 3 = _{m_ - [(3)] _j_ _[}]_ _j_ _[K]_ =1 [3] [and labels] _[ c]_ [(3)] [:]
+_S_ 3 _→{_ 1 _, . . ., K_ 3 _}_
+
+3: **Define interior prototypes:** for _j_ = 1: _K_ 3, let _u_ _[⋆]_ = _m_ - [(3)] _j_ and
+
+Π [(3)] _j_ =     - _ℓ_ _[N]_ _iu⋆_ _[−][CA]_ _,_ _ℓ_ _[CA]_ _iu⋆_ _[−][C]_ _,_ _ℓ_ _[C]_ _iu⋆_ _[−][N]_ _[,]_ _[θ]_ _i_ _[NCAC]_ _u⋆_ _,_ _θi_ _[CACN]_ _u⋆_ _,_ _ψiu⋆_ _,_ _ωiu⋆_ _,_ _ϕiu⋆_     
+
+( _omit undefined terms for a single residue if using a minimal parameterization_ ).
+4: **Quantize interiors:** for _u_ = ( _τ, i_ ) _∈S_ 3 with _j_ = _c_ [(3)] ( _u_ ),
+
+( _ℓ, θ, ψ, ω, ϕ_ )�� _M_ [(] _i_ : _[tτ]_ _i_ [ )] _←_ Π [(3)] _j_ _[.]_
+
+5: **Cluster** **terminals:** RMSD PARTITION( _S_ 2 _, K_ 2) _→_ medoids _M_ [�] 2 = _{_ - _m_ [(2)] _j_ _[}]_ _j_ _[K]_ =1 [2] [and] [labels]
+_c_ [(2)] : _S_ 2 _→{_ 1 _, . . ., K_ 2 _}_
+
+6: **Define terminal prototypes & quantize:** for _j_ = 1: _K_ 2, let _u_ _[⋆]_ = _m_ - [(2)] _j_ and set the appropriate
+
+terminal tuple (e.g., _ℓ_ _[N]_ _i_ _[−][CA]_ _,_ _ℓ_ _[CA]_ _i_ _[−][C]_ _,_ _θi_ _[NCAC]_ ) as Π [(2)] _j_ [; for] _[ u]_ [ = (] _[τ, N]_ [ (] _[τ]_ [)][)][ with] _[ j]_ [=] _[ c]_ [(2)][(] _[u]_ [)][,]
+
+
+( _ℓ, θ_ )�� _M_ [(] _[tτ]_ [ )] _j_ _[.]_
+
+_N_ [(] _[τ]_ [)] : _N_ [(] _[τ]_ [)] _[←]_ [Π][(2)]
+
+
+7: **return** _A_ 3 _, A_ 2 _,_ _c_ [(3)] _, c_ [(2)], and updated backbones
+
+
+**Algorithm 19** GLUEOPT — single-boundary IK to absorb one rounding drift
+
+
+**Require:** Occurrence _u_ with motif _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [and] [medoid] _[m]_ [�] _[c]_ [(] _[u]_ [)] [from] [RMSD] [P][ARTITION][;] [frames]
+
+
+_{Fi_ _[⋆,]_ [(] _[t][u]_ [)] _}_ with _F_ 1 _[⋆,]_ [(] _[t][u]_ [)] from SEEDTRIAD; weights ( _wR, wt_ ); steps _T_, step size _η_
+**Ensure:** Γ [(] _iu_ _[t][u]_ _−_ [)] 1 [,] _[F]_ [�][ (] _ku_ _[t][u]_ [)]
+
+
+1: **Snap internals:** replace _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [by its medoid] _[ M]_ ( _imctmc_ - ( _u_ ) [:] _[k]_ [)]
+
+
+1: **Snap internals:** replace _Miu_ _[u]_ : _ku_ [by its medoid] _[ M]_ _imc_ ��( _u_ ( _u_ ) ) [:] _[k]_ _mc_ - ( _u_ ) [; set] _[ T]_ [ med] _u_ _←_ _Ti_ [int] _mc_ - ( _u_ ) [:] _[k]_ _mc_ - ( _u_ )
+
+2: **Drift:** _Tu_ [occ] _[←]_ _[T]_ [ int] _iu_ : _ku_ [;][ ∆] _[T][u][ ←]_ _[T]_ [ occ] _u_ [(] _[T]_ [ med] _u_ ) _[−]_ [1]
+
+
+3: **Vars:** Γ _i_ [(] _u_ _[t][u]_ _−_ [)] 1 [=] _[ {][θ]_ _i_ _[CNCA]_ _u−_ 1 _[, ω][i]_ _u_ _[−]_ [1] _[, φ][i]_ _u_ _[}]_ [ are the] _[ only]_ [ optimization variables][4][; init to originals]
+
+4: **FK:** keep _Fi_ _[⋆,]_ _u−_ [(] _[t]_ 1 _[u]_ [)] [fixed; for any][ Γ] _i_ [(] _u_ _[t][u]_ _−_ [)] 1 [,]
+
+_F_           - _k_ [(] _u_ _[t][u]_ [)] = _Fi_ _[⋆,]_ _u−_ [(] _[t]_ 1 _[u]_ [)] _G_           - [(] _iu_ _[t][u]_ _−_ [)] 1�Γ [(] _iu_ _[t][u]_ _−_ [)] 1� _Tu_ [med]
+
+
+5: **Loss:**
+_Lu_ (Γ [(] _iu_ _[t][u]_ _−_ [)] 1 [) =] _[ w][R]_ �� log(( _R_       - _k_ ( _tuu_ ) [)] _[⊤][R]_ _k_ _[⋆,]_ _u_ [(] _[t][u]_ [)] )��22 [+] _[ w][t]_ ��� _t_ ( _ktuu_ ) _−_ _t_ _[⋆,]_ _ku_ [(] _[t][u]_ [)] ��22
+
+
+6: **Optimize (autodiff):** for _s_ = 1: _T_ : run FK & evaluate _Lu_ ; compute _∇_ Γ( _iutu−_ )1 _[L][u]_ [; update][ Γ][(] _iu_ _[t][u]_ _−_ [)] 1
+(e.g., Adam, lr _η_ ); wrap _ψ, φ_ _∈_ ( _−π, π_ ], project _θ_ _[CNCA]_ _∈_ (0 _, π_ )
+
+7: **return** Γ [(] _iu_ _[t][u]_ _−_ [)] 1 [,] _[F]_ [�][ (] _ku_ _[t][u]_ [)]
+
+
+46
+
+
+**Algorithm** **20** GLUEOPTALL (WRAPPER) - apply rounding, then call the core global IK over
+glues
+
+
+**Require:** Medoids _M_ and assignments _c_ ( _·_ ) from RMSD PARTITION; a set of occurrences _S_ =
+
+[�]
+_{u}_ to round, each _M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ [; cached original exit frames for each backbone] _[ t]_ [ (seeded by S][EED][-]
+TRIAD); histogram bin centers & thresholds for ( _ω, θ_ _[CNCA]_ _, φ_ ); prior weights; loss weights
+( _wR, wt_ ).
+**Ensure:** Updated glue angles (snapped to bins) for all boundaries in all affected backbones; recomputed frames _{F_ [�] _i_ [(] _[t]_ [)] _}_ .
+1: **(Quantize internals)** For each _u ∈S_, replace
+
+_M_ [(] _iu_ _[t][u]_ : _k_ [)] _u_ _[←−M]_ ( _itmc_       - _mc_       - (( _uu_ )) [:][)] _[k]_ _mc_       - ( _u_ )
+
+
+by copying the medoid’s internal coordinates (hard assignment).
+2: **(Ensure** **targets** **are** **cached)** For each backbone _t_, ensure original exit frames
+_{_ ( _R_ occ _[⋆,]_ [(] _[t]_ [)][[] _[j]_ []] _[, t]_ occ _[⋆,]_ [(] _[t]_ [)][[] _[j]_ [])] _[}][N]_ _j_ =1 [(] _[t]_ [)] _[−]_ [1] are available (compute once if missing).
+3: **(Global glue optimization)** _Call the core routine_ GLUEOPTALL on all backbones:
+
+
+           -            GLUEOPTALL _{t},_ BinCenters _,_ Thresholds _,_ GluePrior _,_ _wR,_ _wt_ _,_
+
+
+which jointly optimizes every boundary’s glue triplet Γ _i_ = _{θi_ _[CNCA]_ _,_ _ωi,_ _φi_ +1 _}_ via differentiable FK and snaps each angle to the nearest histogram bin.
+
+4: **return** updated glues and frames _{F_ [�] _i_ [(] _[t]_ [)] _}_ .
+
+
+**Algorithm 21** BINGEOPAIRS — build the dictionary of geo-pair occurrences (with hierarchy)
+
+**Require:** For each backbone _t_ [(] _[τ]_ [)] : its current segmentation _P_ [(] _[τ]_ [)] = ( _M_ [(] _p_ _[t]_ 1 _[τ]_ : [ )] _q_ 1 _[, . . .,][ M]_ _p_ [(] _[t]_ _Mτ_ _[τ]_ [ )] : _qMτ_ [)] _[ and]_
+its merge hierarchy _F_ [(] _[τ]_ [)] whose frontier leaves, in order, equal _P_ [(] _[τ]_ [)] ; precomputed boundaryglue quantizers _QθCNCA_ _, Qω, Qϕ_ (used only at pair boundaries).
+**Ensure:** A _priority-ordered_ map _D_ from keys to occurrence sets, with ordered keys _π_ ( _κ_ ) =
+( _ρ_ ( _κ_ ) _, −|O_ ( _κ_ ) _|, κ_ ) where _ρ_ ( _κ_ ) = **1** [ _κ_ _∈/_ dom( _V_ )] indicates if the key already has prototypes.
+1: Initialize an empty ordered map _D_ .
+2: **for** _τ_ = 1 **to** _T_ **do**
+3: Let ( _M_ [(] _p_ _[t]_ 1 _[τ]_ : [ )] _q_ 1 _[, . . .,][ M]_ _p_ [(] _[t]_ _Mτ_ _[τ]_ [ )] : _qMτ_ [)][ be the frontier leaves of] _[ F]_ [(] _[τ]_ [)] [(these equal] _[ P]_ [(] _[τ]_ [)][).]
+4: **for** _j_ = 1 **to** _Mτ_ _−_ 1 **do**
+5: ( _L, R_ ) _←_ - _M_ [(] _p_ _[t]_ _j_ _[τ]_ : [ )] _qj_ _[,]_ _[M]_ [(] _p_ _[t]_ _j_ _[τ]_ +1 [ )] : _qj_ +1�
+
+6: _κ ←_ COMPUTEGEOKEY( _L, R_ ) (raw medoid internals inside _L, R_ ; boundary glue
+quantized by _Q_ )
+7: Insert the occurrence ( _L, R_ ) into _O_ ( _κ_ ).
+8: **end for**
+9: **end for**
+10: **for** each key _κ_ with nonempty _O_ ( _κ_ ) **do**
+11: Set _ρ_ ( _κ_ ) _←_ **1** [ _κ_ _∈/_ dom( _V_ )].
+12: Insert �( _ρ_ ( _κ_ ) _, −|O_ ( _κ_ ) _|, κ_ ) _�→O_ ( _κ_ )� into _D_ .
+13: **end for**
+14: **return** _D_ .
+
+
+47
+
+
+**Algorithm 22** COMPUTEGEOKEY — discrete key for an adjacent motif pair
+
+**Require:** Adjacent motifs _L_ = _M_ [(] _p_ _[t]_ : [)] _q_ [,] _[ R]_ [ =] _[ M]_ [(] _q_ _[t]_ +1: [)] _r_ [on backbone] _[ t]_
+**Ensure:** Canonical, hashable key _κ_ for the geo-pair
+
+1: **Interiors (as stored post-quantization):**
+
+
+      - _q_      -      - _r_      Int( _L_ ) = _{ℓ, θ, ψ, ω, ϕ}_ �� _i_ = _p_ _[,]_ _[{]_ [Γ] _[i][}][q]_ _i_ = _[−]_ _p_ [1] _,_ Int( _R_ ) = _{ℓ, θ, ψ, ω, ϕ}_ �� _i_ = _q_ +1 _[,]_ _[{]_ [Γ] _[i][}][r]_ _i_ = _[−]_ _q_ [1] +1
+
+
+(kept unchanged in the key).
+2: **Boundary glue (quantized):**
+
+
+Γ _q_ = ( _θq_ _[CNCA]_ _, ωq, ϕq_ +1) _,_ Γ� _q_ =      - _Qθ_ ( _θq_ _[CNCA]_ ) _,_ _Qω_ ( _ωq_ ) _,_ _Qϕ_ ( _ϕq_ +1)�
+
+
+( _Q•_ wrap to a fixed 2 _π_ interval before snapping).
+3: **Canonical record & hash:**
+
+
+              -               rec = Int( _L_ ) _,_ Γ [�] _q,_ Int( _R_ ) _,_ _κ ←_ HASH(rec)
+
+
+4: **return** _κ_
+
+
+**Algorithm 23** COMPUTE COORDS — Internal _→_ Cartesian for a bond–residue motif _i_ : _j_
+
+
+**Require:** Internal geometry for _r_ = _i, . . ., j_ (bond lengths/angles/dihedrals).
+**Ensure:** **X** _∈_ R [3(] _[j][−][i]_ [+1)] _[×]_ [3] for ( _Ni,_ CA _i, Ci, . . ., Nj,_ CA _j, Cj_ )
+
+1: **Seed residue** _i_ **:** ( _Ni,_ CA _i, Ci_ ) _←_ SEEDTRIAD( _i_ )
+2: _C_ _←_ [ _Ni,_ CA _i, Ci_ ]
+3: **for** _r_ = _i_ + 1 **to** _j_ **do**
+
+              -               4: _Nr_ _←_ PLACEDIHEDRAL _C_ [ _−_ 3] _, C_ [ _−_ 2] _, C_ [ _−_ 1]; _ℓ_ _[C]_ _r−_ _[−][N]_ 1 _[,]_ _[θ]_ _r_ _[CACN]_ _−_ 1 _,_ _ψr−_ 1 ; _C._ append( _Nr_ );
+
+               -                5: CA _r_ _←_ PLACEDIHEDRAL _C_ [ _−_ 3] _, C_ [ _−_ 2] _, C_ [ _−_ 1]; _ℓ_ _[N]_ _r_ _[−][CA]_ _,_ _θr_ _[CNCA]_ _−_ 1 _,_ _ωr−_ 1 ; _C._ append(CA _r_ )
+
+              -               6: _Cr_ _←_ PLACEDIHEDRAL _C_ [ _−_ 3] _, C_ [ _−_ 2] _, C_ [ _−_ 1]; _ℓ_ _[CA]_ _r_ _[−][C]_ _,_ _θr_ _[NCAC]_ _,_ _φr_ ; _C._ append( _Cr_ )
+7: **end for**
+8: **X** _←_ [ _Ni,_ CA _i,_ _Ci,_ _. . .,_ _Nj,_ CA _j,_ _Cj_ ]
+9: **return** **X**
+
+
+**Algorithm 24** PLACEDIHEDRAL( _a, b, c_ ; _L,_ _β,_ _τ_ )
+
+
+1: Right-handed local frame at _c_ :
+
+
+_c −_ _b_ ( _b −_ _a_ ) _×_ **b** [ˆ]
+**b** ˆ = **n** = _,_ **n** ˜ = **n** _×_ **b** [ˆ] _._
+_∥c −_ _b∥_ _[,]_ _∥_ ( _b −_ _a_ ) _×_ **b** [ˆ] _∥_
+
+
+2: Local offset:
+**d** =        - _−L_ cos _β_        - **b** ˆ +        - _L_ cos _τ_ sin _β_        - **n** ˜ +        - _L_ sin _τ_ sin _β_        - **n** _._
+
+
+3: Return _d_ = _c_ + **d** .
+
+
+**Algorithm 25** SEEDTRIAD( _r_ ) — seed triad for residue _r_
+
+**Require:** Canonical seed ( _N⋆,_ CA _⋆, C⋆_ ); target _LCA−C_ = _ℓ_ _[CA]_ _r_ _[−][C]_, _LN−CA_ = _ℓ_ _[N]_ _r_ _[−][CA]_, and
+_θNCAC_ = _θr_ _[NCAC]_ .
+1: Place CA [�] _r_ on the ray from _C⋆_ toward CA _⋆_ at distance _LCA−C_ .
+2: Let **u** = _N⋆_ _−_ CA [�] _r_ and **v** = _C⋆_ _−_ CA [�] _r_ . Rotate **u** about axis **u** _×_ **v** to achieve angle _θNCAC_,
+then rescale to length _LN−CA_ ; translate by CA [�] _r_ to get _Nr_ .
+3: Set _Cr_ _←_ _C⋆_ and return ( _Nr,_ CA [�] _r, Cr_ ).
+
+
+48

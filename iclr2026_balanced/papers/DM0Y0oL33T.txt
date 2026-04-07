@@ -1,0 +1,1934 @@
+# GENERATIVE UNIVERSAL VERIFIER AS MULTIMODAL META-REASONER
+
+
+**Xinchen Zhang** [1] _[,]_ [2] **Xiaoying Zhang** [2] **Youbin Wu** [2] _[†]_ **Yanbin Cao** [2] **Renrui Zhang** [2]
+
+**Ruihang Chu** [1] **Ling Yang** [3] **Yujiu Yang** [1] _[†]_ **Guang Shi** [2]
+
+1Tsinghua University 2ByteDance Seed 3Princeton University
+zhangxc24@mails.tsinghua.edu.cn
+youbinwu@bytedance.com, yang.yujiu@sz.tsinghua.edu.cn
+[https://omniverifier.github.io/](https://omniverifier.github.io/)
+
+
+ABSTRACT
+
+
+We introduce _Generative Universal Verifier_, a novel concept and plugin designed
+for next-generation multimodal reasoning in vision-language models and unified
+multimodal models, providing the fundamental capability of reflection and refinement on visual outcomes during the reasoning and generation process. This
+work makes three main contributions: (1) We build **ViVerBench**, a comprehensive benchmark spanning 16 categories of critical tasks for evaluating visual outcomes in multimodal reasoning. Results show that existing VLMs consistently
+underperform across these tasks, underscoring a substantial gap from human-level
+capability in reliable visual verification. (2) We design two automated pipelines
+to construct large-scale visual verification data and train **OmniVerifier-7B**, the
+first omni-capable generative verifier trained for universal visual verification and
+achieves notable gains on ViVerBench(+8 _._ 3). Through training, we identify three
+atomic capabilities in visual verification and demonstrate how they generalize and
+interact synergistically. (3) We propose **OmniVerifier-TTS**, a sequential test-time
+scaling paradigm that leverages the universal verifier to bridge image generation
+and editing within unified models, enhancing the upper bound of generative ability
+through iterative fine-grained optimization. Beyond generation, we extend universal verifier to broader world-modeling interleaved reasoning scenarios. Empirically, OmniVerifier-TTS achieves improvements on T2I-ReasonBench(+3 _._ 7), and
+GenEval++(+4 _._ 3), outperforming existing parallel test-time scaling methods, such
+as Best-of-N. By endowing multimodal reasoning with reliable visual verification,
+OmniVerifier advances both reliable reflection during generation and scalable testtime refinement, marking a step toward more trustworthy and controllable nextgeneration reasoning systems.
+
+
+1 INTRODUCTION
+
+
+The field of multimodal large language models (MLLMs) is undergoing a remarkable revolution
+in its application scenarios, evolving from simple image understanding (Liu et al., 2023a; Li et al.,
+2023; Zhu et al., 2023; Lu et al., 2024; Zhang et al., 2024a) to complex visual reasoning tasks (Guo
+et al., 2025; Comanici et al., 2025; OpenAI, 2025; Zheng et al., 2025; Li et al., 2024). Visionlanguage models (VLMs) (Guo et al., 2025; Team et al., 2025a; Bai et al., 2025; Team et al., 2025b;
+Seed; 2025) and unified multimodal models (UMMs) (Deng et al., 2025; Xie et al., 2025b; Liao
+et al., 2025; Wu et al., 2025b; Yang et al., 2025a) integrate vision and language, enabling more
+comprehensive cross-modal interactions and paving the way toward a more intelligent reasoning
+and generation system.
+
+
+Toward next-generation multimodal reasoning, we argue that self- and externally-critique will be
+key drivers of model advancement. In interleaved scenarios, effective progress requires verifying
+not only textual answers but also visual outcomes, which refer to any model-generated visual artifact, such as images in text-to-image generation or intermediate visual states produced during
+
+
+†Corresponding authors.
+
+
+1
+
+
+stepwise tool-call reasoning. Unlike textual outputs, these visual outcomes are high-dimensional
+and ambiguous, making their reliable assessment difficult without explicit verification. We therefore contend that visual-outcome verification is fundamental to scaling multimodal reasoning and
+generation, enabling MLLMs not only to generate outcomes but also to iteratively understand, verify
+(Xiong et al., 2025; Wang et al., 2025b), and refine (Madaan et al., 2023; Kumar et al., 2024) their
+reasoning trajectories and intermediate images during both inference and training. Motivated by this
+perspective, in this paper we investigate three central questions:
+
+
+**Q1:** **What is the current performance of MLLMs on visual-outcome verification?**
+
+
+To take a systematic assessment of MLLMs’ current capabilities in verifying visual outcomes, we
+construct **ViVerBench**, a challenging and comprehensive benchmark that spans 16 subtasks across
+6 categories of visual verification. The benchmark is meticulously constructed through manual
+annotation by 12 domain experts, resulting in 3,594 diverse and challenging verification questions.
+For each question, models are instructed to generate a binary true/false judgment accompanied by
+a detailed explanation, thereby enabling a fine-grained evaluation of both decision accuracy and
+reasoning correctness. We conduct experiments on 9 state-of-the-art VLMs and uncover 3 general
+limitations: (1) weakness in fine-grained and challenging image-prompt alignment, (2) mismatched
+representation of world knowledge, and (3) underdeveloped critics for visual reasoning tasks. These
+findings highlight a substantial gap between current VLMs and human-level visual verification, and
+indicate that there remains a long way to go before training VLM to become a powerful and truly
+multimodal universal verifier.
+
+
+**Q2:** **How to develop a strong generative universal verifier?**
+
+
+We investigate the potential of training a generative universal verifier by designing two automated
+data construction pipelines for visual verification, motivated by the idea of emulating human strategies for constructing challenging data. These pipelines focus on the alignment of fine-grained and
+challenging features in image-prompt alignment tasks, enabling the scalable creation of high-quality,
+diverse, and challenging training data. Leveraging this dataset, we directly applied reinforcement
+learning (RL) (Shao et al., 2024; Yu et al., 2025) to training Qwen2.5-VL-7B (Bai et al., 2025) under a rule-based verifier framework, resulting in **OmniVerifier-7B** . In ViVerBench, OmniVerifier7B achieved an 8 _._ 3-point improvement and beat GPT-4o (Hurst et al., 2024). Furthermore, through
+ablation training on verification data across different tasks, we identify three fundamental atomic
+capabilities underlying visual-outcome verification: _explicit_ _alignment_, _relational_ _verification_, and
+_integrative_ _reasoning_, and uncover how they mutually generalize and facilitate each other. These
+findings suggest a minimalist recipe for generative universal verifier training: _Instead_ _of_ _training_
+_for_ _many_ _tasks_ _separately,_ _constructing_ _training_ _data_ _for_ _fundamental_ _atomic_ _skills_ _is_ _sufficient_ _to_
+_enable wide-ranging task generalization._
+
+
+**Q3:** **How can visual verification be leveraged to enhance reasoning or generation?**
+
+
+Generative universal verifier admits a broad range of applications. We propose **OmniVerifier-TTS**,
+a sequential test-time scaling paradigm designed for enhancing the generation of unified multimodal
+models (Deng et al., 2025; Wu et al., 2025a) with OmniVerifier-7B. Starting from a generated image,
+it progressively refines images through multiple rounds of verification and editing, which bridging
+image generation and editing within a unified TTS framework. Validation across 2 advanced unified
+multimodal models demonstrates OmniVerifier-TTS achieves notable gains in general generative
+quality, including reasoning-based image generation (Sun et al., 2025), and complex compositionalbased generation (Ye et al., 2025; Zhang et al., 2024c;b). We further demonstrate sequential TTS
+exhibits better performance compared to parallel TTS. Beyond TTS, we also extend the universal
+verifier to broader world-modeling scenarios, pushing the reasoning capabilities of MLLMs.
+
+
+Our contributions can be summarized as:
+
+
+    - **Comprehensive and Challenging Benchmark for Visual-outcome Verification:** We introduce **ViVerBench**, a manually curated benchmark designed to evaluate visual-outcome
+verification in both multimodal reasoning and generation. Our evaluation reveals three
+general shortcomings of MLLMs.
+
+
+    - **Data** **Construction** **and** **Training** **Strategy** **for** **the** **Generative** **Universal** **Verifier:** We
+propose two automated data curation pipelines to scale visual verification training data, and
+train **OmniVerifier-7B**, achieving substantial improvements on ViVerBench and surpassing
+
+
+2
+
+
+GPT-4o. Our training identifies three atomic capabilities in visual-outcome verification and
+provides a minimalist recipe for training a generative universal verifier.
+
+
+    - **Sequential** **Test-time** **Scaling** **Paradigm** **of** **UMM:** We propose **OmniVerifier-TTS**, a
+flexible and general sequential test-time scaling paradigm for the generation of UMMs,
+suparssing other parallel TTS method such as Best-of-N while achieving a substantial reduction in inference time.
+
+
+2 RELATED WORK
+
+
+Recent breakthrough in multimodal large language models lie in in the continuously evolving reasoning paradigms (Peng et al., 2025; Shen et al., 2025; Zhang et al., 2025; Tong* et al., 2025)
+and more unified foundation models (Xie et al., 2025b; Chen et al., 2025a; Yang et al., 2025b;
+Guo* et al., 2025). Starting from simple image understanding, the long-chain-of-thought (longCoT)
+paradigm trained with reinforcement learning substantially strengthened multimodal reasoning, as
+seen in Seed-1.5VL (Guo et al., 2025), Kimi-VL(Team et al., 2025a). Scaling test-time reasoning
+over textual outcomes has become the mainstream strategy for improving reasoning ability. However, this text-centric approach treats vision as merely static context, leaving a semantic gap between
+perception and symbolic thought. Openai-o3 (OpenAI, 2025) brings visual outcomes into LongCoT,
+pioneering a new ‘thinking with images’ paradigm of interleaved multimodal reasoning. DeepEyes
+(Zheng et al., 2025) and MINT-CoT Chen* et al. (2025) demonstrate powerful tool-assisted and
+regsion-selected reasoning through end-to-end reinforcement learning. Meanwhile, architectures
+are converging toward unified designs that integrate text and image inputs/outputs (Chen et al.,
+2025c; Xie et al., 2025a), making interleaved reasoning within a single framework a compelling
+direction. Mogao (Liao et al., 2025) highlights the potential of interleaved generation under unified architectures, while T2I-R1 (Jiang et al., 2025) and Bagel (Deng et al., 2025) explore ‘thinking
+before generating’ for interleaved text–image synthesis. Looking ahead, we argue that self-critique
+will drive the next generation of multimodal reasoning by enabling autonomous learning through
+verification on both textual and visual outcomes, without reliance on external outcome labels.
+
+
+3 VIVERBENCH: ASSESSMENT OF MLLMS ON VISUAL VERIFICATION
+
+
+3.1 BENCHMARK OVERVIEW
+
+
+**ViVerBench** is designed as a comprehensive and challenging benchmark to evaluate MLLMs’ ability to verify visual outcomes during reasoning and generation. It comprises 16 tasks across 6
+main categories: _Concept Existence_, _Object Relationship_, _World Dynamics_, _Image Annotation_, _State_
+_Value Evaluation_, and _STEM_, with representative examples shown in Fig. 1.
+
+
+To ensure sufficient difficulty and unambiguous correctness, we construct the benchmark through
+a systematic pipeline that combines manual annotation, programmatic generation, and augmented
+open-source data. For evaluation, we further introduce two complementary metrics: rule-based and
+model-based, that assess not only answer accuracy but also explanation validity. Full task definitions,
+dataset construction details, and evaluation methodologies are provided in the Appendix A.
+
+
+3.2 EVALUATION OF ADVANCED MLLMS
+
+
+We evaluate a range of stat-of-the-art VLMs on **ViVerBench**, including closed-source models:
+Gemini-2.5-Pro (Comanici et al., 2025), GPT-5, GPT-4o (Hurst et al., 2024), OpenAI-o1/3/4mini
+(Jaech et al., 2024), Seed 1.5-VL (Guo et al., 2025), and two open-source models: Qwen2.5-VL
+72B (Bai et al., 2025) and InternVL3.5 A28B (Wang et al., 2025a). We evaluate these models using rule-based verification, which directly determines the correctness of true/false labels without
+assessing the accompanying explanations using another judge model.
+
+
+As shown in Table 1, Gemini-2.5-Pro achieves a state-of-the-art score of 0 _._ 745 on **ViVerBench** ;
+however, the score remains far from that of a reliable general visual verifier. In addition, we identify
+three reasons for the substantial gap between these advanced models and human evaluation:
+
+
+3
+
+
+Figure 1: ViVerBench Overview. ViVerBench has a 1:1 ratio of true to false answers; here, we show
+only the false ones to better highlight data difficulty.
+
+
+**Weakness in Fine-Grained and Challenging Image-Prompt Alignment** State-of-the-art VLMs
+exhibit a performance gap of about 0 _._ 2 compared to human performance on the three _Concept Exis-_
+_tence_ tasks. This shortfall stems from the difficulty models face in achieving precise, point-to-point
+alignment between complex compositional prompts and images, especially in cases of overlapping
+attributes across objects, small-scale elements, or occluded and blurred attributes. Human cognition employs deliberate and iterative verification strategies (i.e., ‘double checking’) to resolve such
+ambiguities, yielding far superior accuracy in visual verification.
+
+
+**Mismatched Representation of World Knowledge** Despite advanced VLMs equipped with extensive world knowledge, including general physical laws within their language components, our
+experiments reveal a significant paradox: this knowledge is not effectively activated in visual verification tasks. The notable performance gap between VLMs and humans in both _Static_ and _Dynamic_
+_Physics_ tasks reveals a fundamental Knowledge-Modality Gap.
+
+
+4
+
+
+Table 1: Rule-based evaluation of advanced VLMs on **ViVerBench** .
+
+|Model / Metric|Concept Existence Object Relation World Dynamics Image Annotation State Value Evaluation STEM Overall<br>Obj. Attr. Abs.P. Spat. N-Spat. S-Phy D-Phy BBox Point Count Maze F.Lake Robot. GUI Chart LaTeX|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|**Model / Metric**|Obj.<br>Attr.<br>Abs.P.|Spat.<br>N-Spat.|S-Phy<br>D-Phy|BBox<br>Point<br>Count|Maze<br>F.Lake<br>Robot.<br>GUI|Chart<br>LaTeX|Chart<br>LaTeX|
+|**Qwen 2.5-VL 72B**<br>**InternVL3.5 A28B**<br>**GPT 4o**<br>**OpenAI o1**<br>**OpenAI o4-mini**<br>**Seed 1.5-VL**<br>**OpenAI o3**<br>**GPT-5**<br>**Gemini 2.5 Pro**|0.696<br>0.642<br>0.678<br>0.688<br>0.737<br>0.637<br>0.540<br>0.608<br>0.671<br>0.647<br>0.754<br>0.760<br>0.745<br>0.746<br>0.781<br>0.737<br>**0.763**<br>0.651<br>0.723<br>0.728<br>0.801<br>0.696<br>0.737<br>0.849<br>**0.763**<br>0.750<br>**0.856**|0.550<br>0.813<br>0.742<br>0.799<br>0.538<br>0.731<br>0.704<br>0.769<br>0.763<br>0.754<br>0.779<br>**0.851**<br>0.713<br>0.754<br>0.725<br>0.746<br>**0.875**<br>0.761|0.600<br>0.507<br>0.592<br>0.500<br>0.713<br>0.500<br>0.675<br>0.671<br>0.646<br>0.654<br>0.588<br>0.575<br>0.729<br>**0.682**<br>**0.775**<br>0.668<br>0.746<br>0.532|0.839<br>0.744<br>0.615<br>0.847<br>0.796<br>0.527<br>0.649<br>0.744<br>0.632<br>0.758<br>0.826<br>0.626<br>0.843<br>0.819<br>0.604<br>**0.903**<br>0.870<br>0.610<br>0.802<br>**0.885**<br>0.643<br>0.831<br>**0.885**<br>0.659<br>0.875<br>0.863<br>**0.698**|0.517<br>0.507<br>0.513<br>0.796<br>0.503<br>0.539<br>0.519<br>0.796<br>0.570<br>0.643<br>0.563<br>0.796<br>0.587<br>0.646<br>0.601<br>0.764<br>0.560<br>0.650<br>0.658<br>0.833<br>0.527<br>0.718<br>**0.671**<br>0.833<br>0.517<br>0.671<br>0.627<br>0.875<br>0.507<br>0.743<br>0.589<br>0.856<br>**0.580**<br>**0.804**<br>0.563<br>**0.912**|0.628<br>**0.922**<br>0.640<br>0.881<br>0.656<br>0.758<br>0.728<br>0.902<br>0.700<br>0.876<br>0.720<br>0.907<br>0.732<br>0.887<br>**0.760**<br>0.876<br>0.540<br>0.799|0.661<br>0.671<br>0.645<br>0.715<br>0.727<br>0.731<br>0.735<br>0.744<br>**0.745**|
+|**Random**<br>**Human**|0.500<br>0.500<br>0.500<br>0.938<br>0.940<br>0.932|0.500<br>0.500<br>0.988<br>0.955|0.500<br>0.500<br>0.929<br>0.818|0.500<br>0.500<br>0.500<br>0.961<br>0.966<br>0.918|0.500<br>0.500<br>0.500<br>0.500<br>0.997<br>1.000<br>1.000<br>0.935|0.500<br>0.500<br>0.928<br>0.706|0.500<br>**0.932**|
+|**Qwen 2.5-VL 7B**<br>**OmniVerifer 7B (Ours)**|0.531<br>0.591<br>0.500<br>0.728<br>0.711<br>0.514|0.504<br>0.694<br>0.742<br>0.679|0.529<br>0.471<br>0.517<br>0.618|0.673<br>0.633<br>0.467<br>0.802<br>0.670<br>0.566|0.527<br>0.404<br>0.671<br>0.625<br>0.563<br>0.482<br>0.728<br>0.662|0.556<br>0.742<br>0.548<br>0.912|0.570<br>0.653|
+
+
+**Underdeveloped Critics for Visual Reasoning Tasks** The most significant performance gap between VLMs and human performance arises in tasks requiring reflective reasoning. In tasks like
+_Maze_, _FrozenLake_, and _Robotics_, humans achieve near-perfect performance, demonstrating robust
+reflective abilities. In contrast, most VLMs perform near chance level; for example, the bestperforming model, Gemini 2.5 Pro, achieves only a score of 0 _._ 580 on the _Maze_ task. These results expose the inability of current models to reliably leverage learned rules for verification under
+complex visual reasoning scenarios.
+
+
+4 OMNIVERIFIER: BUILDING AND FINDINGS OF UNIVERSAL VERIFIER
+
+
+The limited performance of current advanced MLLMs on visual verification motivates us to investigate methods that can progressively strengthen their capabilities. In Section 4.1, we introduce
+methods for scaling challenging visual verification data. Section 4.2 presents comprehensive ablation studies across diverse tasks to probe the core atomic capability of visual verifier, and Section
+4.3 describes the performance of OmniVerifier-7B.
+
+
+4.1 AUTOMATED CONSTRUCTION OF VISUAL VERIFIER DATA
+
+
+We aim to scale both the quantity and quality of data through automated construction rather than
+heavy manual effort. The core challenge is **avoiding** **overly** **nitpicking** **judgments** . Current generative models still fall short of fully aligning with complex prompts, leaving room for subjective
+criticism. Specifically, they often fail to maintain precise object attributes and consistent spatial
+relationships in complex scenes. Prompts also often involve subjective or abstract notions (e.g., atmosphere, style, fine-grained details), which lack uniquely correct answers and thus make images
+seem ‘not fully aligned.’ This also explains why advanced MLLMs struggle with fine-grained and
+challenging image–prompt alignment, therefore, the key lies in the construction of high-quality,
+challenging, and rigorously accurate visual verification data.
+
+
+We begin with complex images and construct true and false examples in a reversed manner. For
+synthetic images, prompts are drawn from ShareGPT-4o-Image (Chen et al., 2025b) and further
+enriched by GPT-5, with a focus on introducing multiple objects, diverse attributes, and both spatial
+and non-spatial relationships. These complex prompts are then used with Seedream 3.0 (Gao et al.,
+2025) to generate complex images. For natural images, 20k samples are taken from LVIS (Gupta
+et al., 2019), and GPT-5 is applied to filter out simpler ones, retaining only complex cases. This
+process yields a repository of complex images, which serves as the foundation for subsequent visual
+verifier data construction. To achieve optimal generalization and data augmentation effects, we
+design two automated pipelines shown in Fig. 2 for paired true and false data construction:
+
+
+**Method1:** **Image-Fixed,** **Prompt-Modified** We construct true and false data by modifying
+prompts. For each complex image, we first use GPT-5 to generate a strictly constrained prompt that
+
+
+5
+
+
+Figure 2: Automated pipeline for visual verifier data construction.
+
+
+describes only clearly identifiable elements (objects, attributes, spatial relationships, and scenes),
+while avoiding speculation, subjective judgments, or unnecessary embellishment. This yields highly
+faithful prompts that align closely with the complex image, which we treat as true data. We then further modify these prompts with GPT-5 by altering details, for example, adding or removing objects,
+changing attributes, or modifying spatial relations and provide corresponding explanations.
+
+
+**Method2:** **Prompt-Fixed, Image-Inpainting** We construct true and false data by inpainting images. We first apply SAM 2.1 (Ravi et al., 2024) to segment all objects in the complex image,
+obtaining the corresponding masks and bounding boxes. The mask area serves as a measure of data
+difficulty, based on which we dynamically select masks and use FLUX.1-dev (Labs, 2024) for inpainting to generate false images. Meanwhile, GPT-5 is employed to generate strictly constrained
+prompts, where the bounding box of selected object is highlighted to ensure explicit descriptions of
+its attributes and spatial position. This design prevents incomplete prompts in high-difficulty cases.
+Finally, we obtain both the prompts and their accompanying explanations.
+
+
+Following the construction of visual verifier data via Method 1 and Method 2, we apply Seed1.5-VL
+(Guo et al., 2025) to clean and retain only samples with a Best-of-10 accuracy of at least 0 _._ 6.
+
+
+4.2 GENERALIZATION OF ATOMIC CAPABILITIES IN THE VISUAL VERIFIER
+
+
+With these high-quality, scalable data, we can more effectively investigate the essence of visual
+verifiers. Although ViVerBench covers a wide range of tasks, it remains unclear whether these tasks
+are intrinsically connected. To investigate these potential connections and to explore how to train a
+more comprehensive visual verifier, we focus on four fundamentally distinct tasks. Specifically, we
+construct object and attribute datasets following the approach in Section 4.1, and additionally include
+in-domain spatial and maze datasets. We select these tasks because each evaluates a complementary
+aspect of visual verification: object and attribute tasks probe the foundational ability of explicit
+image-text alignment, the spatial task captures more complex relational reasoning beyond basic
+alignment, and the maze task serves as a reasoning challenge, assessing visual verification in the
+reasoning dimension. Verifier training is conducted independently on each dataset, resulting in four
+distinct experimental settings.
+
+
+We apply DAPO (Yu et al., 2025) to perform RL training directly on Qwen2.5-VL-7B (Bai et al.,
+2025), using a system prompt that encourages the model to reason before answering. The training
+objective combines a rule-based reward, which evaluates the correctness of true/false predictions,
+with a format reward at a 9:1 ratio. All four models are trained for 100 steps on 64 NVIDIA A10080G GPUs, and the results are shown in Fig 3.
+
+
+Training only on object verification data yields significant improvements across most tasks. For
+tasks require explicit prompt-image alignment, such as _Attribute_, _Charts_, and _LaTeX_, traing on object verification data provides notable gains. It also generalizes well to tasks that involve verifying
+relationships between objects in the prompt, including _Spatial_, _Static Physics_, _Bounding Box_, _Point-_
+_ing_, and _GUI_ . However, for visual reasoning tasks like _Maze_ and _Robotics_, performance remains
+instability and does not yield noticeable gains. Notably, the generalization trend of attribute verification data shows a similar trend to object verification data.
+
+
+Training only on spatial verification data also shows a strong generalization to explicit alignment
+tasks such as _Object_, _Attribute_, _Charts_, and _LaTeX_ . Moreover, it delivers even larger improvements
+
+
+6
+
+
+Concept Existence: Abstract Patterns
+
+
+Object Relationship: Spatial Relationshi
+
+
+0.70
+
+
+0.65
+
+
+0.60
+
+
+0.55
+
+
+0.50
+
+
+Concept Existence: Object
+
+|Col1|Attrib<br>Spati|ute<br>al D|Data<br>ata|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||Maze|Dat|a||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+
+0.700
+
+0.675
+
+0.650
+
+0.625
+
+0.600
+
+0.575
+
+0.550
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Attr<br>Spa|ibute<br>tial D|Data<br>ata|
+|---|---|---|---|---|---|---|---|---|---|
+||||||||Ma|e Da|ta|
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+World Dynamics: Dynamic Physics
+
+
+|Col1|Attrib<br>Spati|ute<br>al Da|Data<br>ta|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||~~Maze~~|~~ Dat~~|||||||||
+||||||||||||
+||||||||||||
+||||||||||||
+
+
+|Col1|Attrib<br>Spati|ute<br>al Da|Data<br>ta|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||Maze|Dat||||||||
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+Image Annotation: Bounding Box
+
+~~Object Data~~
+Attribute Data
+
+|Col1|Maze|Dat|a|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+|||||||||||
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+State Value Evaluation: FrozenLake
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||||||||Obj|ect D|ata|
+
+
+Attribute Data
+Spatial Data
+Maze Data
+
+0 10 20 30 40 50 60 70 80 90 100
+
+
+0 10 20 30 40 50 60 70 80 90 100
+Training steps
+
+
+Object-Relationship: Non-Spatial Relationship
+
+0.58
+
+
+0.75
+
+
+0.70
+
+
+0.65
+
+
+0.60
+
+
+0.70
+
+
+0.68
+
+
+0.66
+
+
+0.64
+
+
+0.62
+
+
+0.70
+
+
+0.65
+
+
+0.60
+
+
+0.55
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+|||||~~Obje~~<br>Attri<br>Spat<br>~~Maz~~|~~ct D~~<br>bute<br>ial D<br>~~e Dat~~|~~ ta~~<br> Data<br> ata<br>~~ a~~|||||
+||||||||||||
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+Image Annotation: Pointing
+
+|Col1|Obje<br>Attrib<br>Spati|ct D<br>ute<br>al D|ata<br>Data<br>ata|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||Maze|Dat|a||||||||
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+
+0 10 20 30 40 50 60 70 80 90 100
+Training steps
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+|<br> <br>|~~Obje~~<br>Attrib<br>|~~ct Da~~<br>ute<br>|~~ ta~~<br> Data<br>||||||||
+|<br> <br>|<br>~~Spati~~<br>Maze|<br>~~al Da~~<br> Dat|<br>~~ ta~~<br> a||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||||||||~~Obj~~<br>Attr<br>|~~ect D~~<br>ibute<br>|~~ ata~~<br> Data<br>|
+||||||||<br>~~Spa~~<br>Maz|<br>~~tial D~~<br>e Da|<br>~~ ata~~<br> ta|
+
+
+|Col1|Obje<br>Attrib<br>Spati|ct Da<br>ute<br>al Da|ta<br>Data<br>ta|Col5|Col6|Col7|Col8|Col9|Col10|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||Maze|Dat|||||||||
+
+
+|Col1|Obje<br>Attrib<br>Spati|ct Da<br>ute<br>al Da|ta<br>Data<br>ta|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||Maze|Dat||||||||
+
+
+0.62
+
+0.60
+
+0.58
+
+0.56
+
+0.54
+
+0.52
+
+0.50
+
+
+Concept Existence: Attribute
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+World Dynamics: Static Physics
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+Image Annotation: Counting
+
+
+0 10 20 30 40 50 60 70 80 90 100
+
+
+0 10 20 30 40 50 60 70 80 90 100
+Training steps
+
+
+0.54
+
+
+0.52
+
+
+0.50
+
+
+0.48
+
+
+0.600
+
+0.575
+
+0.550
+
+0.525
+
+0.500
+
+0.475
+
+0.450
+
+
+0.56
+
+
+0.54
+
+
+0.52
+
+
+0.50
+
+
+0.48
+
+
+0.58
+
+0.56
+
+0.54
+
+0.52
+
+0.50
+
+0.48
+
+0.46
+
+
+0.68
+
+
+0.66
+
+
+0.64
+
+
+0.62
+
+
+0.60
+
+
+0.58
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.825
+
+
+0.800
+
+
+0.775
+
+
+0.750
+
+
+0.725
+
+
+0.700
+
+
+0.675
+
+
+0.525
+
+0.500
+
+0.475
+
+0.450
+
+0.425
+
+0.400
+
+0.375
+
+
+0.90
+
+
+0.85
+
+
+0.80
+
+
+0.75
+
+
+0.425
+0 10 20 30 40 50 60 70 80 90 100
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+State Value Evaluation: Maze
+
+
+0.4
+0 10 20 30 40 50 60 70 80 90 100
+
+
+0 10 20 30 40 50 60 70 80 90 100
+Training steps
+
+
+Figure 3: Training progress of four visual verification tasks on ViVerBench.
+
+
+on relational tasks, including _Non-Spatial_, _Bounding Box_, and _Counting_ . Nevertheless, for complex
+visual reasoning tasks like _Maze_ and _Robotics_, the benefits remain limited.
+
+
+By contrast, training only on maze verification data exhibits minimal generalization. We attribute
+this to the sparse and discrete nature of maze images, where paths are rendered as blank space and
+walls as simple black lines. Such simplistic, synthetic patterns contrast sharply with the rich textures
+and semantics of natural images, creating a significant distribution gap. As a result, maze data offers
+limited transferable signal, and we observe no meaningful gains on broader tasks.
+
+
+Figure 4: Atomic capabilities in visual verifier.
+
+
+We categorize the tasks associated with the three atomic capabilities of visual verification, as illustrated in Fig 4. Tasks shown in parentheses indicate cases where the underlying atomic capability may shift with prompt complexity, rather than being fixed to a single type. Our experiments
+also demonstrate that reinforcement learning facilitates the generalization across atomic capabilities (Yuan et al., 2025): we observe strong mutual improvment both within and between _Explicit_
+
+
+7
+
+
+**buildings like Bird's**
+**Nest.**
+
+
+**to “Beijing 2008”.**
+
+
+Figure 5: OmniVerifier-TTS: sequential test-time scaling pipeline of unified multimodal models.
+
+
+_Alignment_ and _Relational Verification_ . This yields an important training insight for building a universal verifier: **it is unnecessary to construct task-specific datasets. Instead, a single dataset that**
+**captures the underlying visual patterns of these two atomic capabilities is sufficient to enable**
+**broad cross-task generalization.**
+
+
+In contrast, _Integrative Reasoning_ poses a fundamentally different challenge. Tasks in this category
+often span highly diverse domains, where visual inputs, reasoning patterns, and solution strategies
+differ substantially. These pronounced domain gaps make it difficult to establish shared representations, and training on one task task yields minimal transfer to others. Accordingly, we recommend
+building task-specific datasets tailored to each domain to effectively improve integrative reasoning.
+
+
+4.3 OMNI-CAPABLE GENERATIVE UNIVERSAL VERIFIER
+
+
+The findings on atomic capabilities and their generalization motivate training a comprehensive generative universal verifier. Following Methods 1 and 2 in Section 4.1, we construct 28k high-quality
+visual verification datasets, filtered with Seed1.5-VL and covering both _Explicit Alignment_ and _Re-_
+_lational Verification_ . Using the training procedure in Section 4.2 with Qwen2.5-VL-7B as the backbone, we obtain **OmniVerifier-7B** . Its performance on ViVerBench is reported in Table 1.
+
+
+With high-quality atomic-level data, reinforcement learning training has endowed the base model
+with exceptionally potent visual verification abilities. OmniVerifier-7B demonstrates a significant
+8.3% overall performance enhancement, surpassing GPT-4o and achieving capabilities comparable
+to Qwen2.5-VL-72B. Notably, OmniVerifier-7B exhibits pronounced improvements in tasks related
+to _Explicit_ _Alignment_ and _Relational_ _Verification_, such as _Object_, _Attribute_, _Spatial_ and _Bound-_
+_ing_ _Box_ . Our findings suggest that targeted reinforcement learning on atomic capabilities offers a
+promising direction for building stronger and more generalizable visul verifiers.
+
+
+5 OMNIVERIFIER-TTS: MULTIMODAL SEQUENTIAL TEST-TIME SCALING
+
+
+In this section, we aim to explore how to apply the universal verifier to multimodal generation
+and reasoning. Specifically, we present **OmniVerifier-TTS**, which integrates image generation and
+editing within unified multimodal models through sequential test-time scaling, enabling a flexible
+paradigm of interleaved generation. Section 5.1 describes the detailed structure of the framework;
+Section 5.2 presents experiments and visualizations of OmniVerifier-TTS; and Section 5.3 compares
+parallel and sequential test-time scaling in UMMs.
+
+
+5.1 ARCHITECTURE
+
+
+Achieving precise image generation from complex compositional or reasoning-based prompts is
+often difficult in a single attempt. However, in many cases, only a small region or small parts of
+the image is misaligned with input prompt, making it unnecessary to regenerate the entire image or
+
+
+8
+
+
+**The city hosting**
+**the Summer**
+**Olympics in 2008**
+
+
+**Universal indicator**
+**solution added to**
+**hydrochloric acid**
+**solution**
+
+
+**A red helium**
+**balloon and a green**
+**water balloon in a**
+**living room**
+
+
+**Orange cat is reaching for**
+**strawberries in a bowl. On**
+**the table, two scattered**
+**strawberries, a jar labeled**
+**“FLOUR” and a rolling pin.**
+**In the background, water is**
+**boiling, and the clock on**
+**the wall points to 12 o’clock.**
+
+
+**Change the city in the**
+**background to Beijing,**
+**including some classic**
+**buildings such as the**
+**Bird's Nest.**
+
+**Edit Prompt 1**
+
+**Change the color of the**
+**solution in the beaker**
+**to red to indicate the**
+**acidic reaction of**
+**universal indicator with**
+**hydrochloric acid.**
+
+
+**Change the “208” on**
+**the sign to “2008”.**
+
+
+**Replace the label on the**
+**brown bottle so that it**
+**reads 'UNIVERSAL**
+**INDICATOR' instead**
+**of 'INDICATOR**
+**SUIIIO'.**
+
+
+**Edit Prompt 1**
+
+**Change the flowers**
+**of the cherry blossom**
+**tree on the right to**
+**light green.**
+
+
+**Edit Prompt 3**
+
+**Make both the hour and**
+**minute hands of the**
+**wall clock point to 12.**
+
+
+**Edit Prompt 1**
+
+**Change the word**
+**"FLOOR" on the jar**
+**to "FLOUR".**
+
+
+Figure 6: Qualitative visualization of OmniVerifier-TTS.
+
+
+introduce large changes. A more optimal solution is to perform targeted, regional edits to correct
+these minor errors and obtain a highly-aligned result.
+
+
+Motivated by this, we propose a self-refinement pipeline that leverages visual verification to identify inconsistencies. As illustrated in Fig. 5, we employ OmniVerifier as a ‘misalignment-finder’
+due to its strong capability in explicit alignment and relational verification. The process begins
+with UMM generating an image from a given prompt. OmniVerifier then analyzes this image and
+outputs a binary judgment (true/false) along with an explanation, following the same procedure as
+in its RL training. If the judgment is false, indicating misalignment between the prompt and the
+image, OmniVerifier additionally outputs an edit prompt, a rephrased form of the explanation that
+offers instructive guidance on how the image should be modified. The UMM subsequently performs
+fine-grained edits on the initial image based on this edit prompt to obtain a refined result. This iterative refinement loop continues OmniVerifier returns a true judgment or the maximum number of
+refinement steps is reached.
+
+
+5.2 EXPERIMENT
+
+
+We conduct experiments using two powerful open- and closed-source models, Qwen-Image (Wu
+et al., 2025a) and GPT-Image-1, with OmniVerifier-7B serving as the judge model. The maximum
+number of refinement steps is set to 10. All experiments are conducted on a single NVIDIA-A10080G GPU. We evaluate on a reasoning-based benchmarks, T2I-ReasonBench (Sun et al., 2025), as
+well as one complex compositional-based benchmark, GenEval++ (Ye et al., 2025). The results are
+presented in Table 2.
+
+
+Table 2: Evaluation of **OmniVerifer-TTS** on reasoning and compositional generation benchmarks.
+
+
+|Model / Metric|Reason-based Generation|Col3|Compositional-based Generation|Col5|
+|---|---|---|---|---|
+|**Model / Metric**|**T2I-ReasonBench**|**T2I-ReasonBench**|**GenEval++**|**GenEval++**|
+|**Model / Metric**|Idiom<br>Textual<br>Entity<br>Scientifc|Overall|Color<br>Count<br>Color/Count<br>Color/Pos<br>Pos/Count<br>Pos/Size<br>Multi-Count|Overall|
+|**SD-3-Medium** (Esser et al., 2024)<br>**FLUX.1-dev** (Labs, 2024)|35.9<br>60.9<br>42.4<br>50.9<br>39.1<br>56.9<br>45.1<br>46.7|47.5<br>47.0|0.550<br>0.500<br>0.125<br>0.350<br>0.175<br>0.150<br>0.225<br>0.350<br>0.625<br>0.150<br>0.275<br>0.200<br>0.375<br>0.225|0.296<br>0.314|
+|**Janus-Pro** (Chen et al., 2025c)<br>**Bagel** (Deng et al., 2025)|25.5<br>37.2<br>38.5<br>44.9<br>44.6<br>44.0<br>52.4<br>57.7|36.5<br>49.7|0.450<br>0.300<br>0.125<br>0.300<br>0.075<br>0.350<br>0.125<br>0.325<br>0.600<br>0.250<br>0.325<br>0.250<br>0.475<br>0.375|0.246<br>0.371|
+|**Qwen-Image** (Wu et al., 2025a)<br>**QwenVL-TTS(Qwen-Image)**<br>**OmniVerifer-TTS(Qwen-Image)**|46.5<br>66.3<br>53.4<br>55.8<br>50.1<br>67.1<br>55.9<br>56.5<br>51.1<br>68.4<br>58.5<br>58.7|55.5<br>57.4<br>59.2|0.700<br>0.900<br>0.800<br>0.525<br>0.500<br>0.700<br>0.600<br>0.750<br>0.850<br>0.825<br>0.550<br>0.500<br>0.675<br>0.625<br>0.800<br>0.925<br>0.825<br>0.600<br>0.525<br>0.700<br>0.650|0.675<br>0.682<br>0.718|
+|**GPT-Image-1**<br>**QwenVL-TTS(GPT-Image-1)**<br>**OmniVerifer-TTS(GPT-Image-1)**|75.4<br>84.6<br>75.7<br>71.6<br>76.0<br>86.6<br>76.4<br>72.5<br>78.1<br>87.4<br>77.8<br>73.7|76.8<br>77.8<br>79.3|0.650<br>0.800<br>0.750<br>0.575<br>0.550<br>0.725<br>0.775<br>0.675<br>0.800<br>0.700<br>0.575<br>0.550<br>0.750<br>0.800<br>0.725<br>0.825<br>0.750<br>0.600<br>0.575<br>0.750<br>0.825|0.689<br>0.693<br>0.721|
+
+
+OmniVerifier-TTS brings multifaceted improvements to T2I generation. In reason-based generation, it achieves substantial gains on T2I-ReasonBench, boosting Qwen-Image by 3 _._ 7 points and
+GPT-Image-1 by 2 _._ 5 points through sequential TTS refinement. In complex composition-based generation, OmniVerifier-TTS demonstrates clear advantages in aspects such as Color and Pos/Count.
+These benefits stem from OmniVerifier-TTS’s architecture, which continuously refines generated
+images within small-scale adjustments and leverages a generative verifier to combine generation
+and editing capabilities. Additionally, using Qwen2.5-VL-7B as the verifier, QwenVL-TTS lags
+
+
+9
+
+
+behind OmniVerifier-TTS on both benchmarks, underscoring OmniVerifier’s superior and accurate
+visual verification ability in the general T2I domain.
+
+
+OmniVerifier-TTS unlocks potential for interleaved image-text generation and reasoning. As shown
+in Fig. 6, for complex T2I tasks, OmniVerifier progressively generates semantically consistent and
+high-quality images through iterative self-refinement. It can precisely identify and correct unrealistic or flawed elements in images, particularly those related to physics or authenticity. This reasoning
+paradigm enables automated scaling of interleaved image-text data generation. We firmly believe
+that OmniVerifier-TTS not only enhances image generation but also provides a robust data infrastructure and performance guarantee for the forthcoming era of interleaved image-text systems.
+
+
+5.3 COMPARISION BETWEEN PARALLEL AND SEQUENTIAL TEST-TIME SCALING
+
+
+To further validate the advantages of sequential OmniVerifier-TTS, we also explore alternative parallel test-time scaling strategies,
+such as Best-of-N shown in Fig 7. Specifically, OmniVerifier-7B is employed to compare _N_ images generated from the same prompt
+through progressive pairwise selection, where
+the final winner is chosen as the best image. We compare the sequential and parallel
+OmniVerifier-TTS on Qwen-Image and GPTImage-1 with _N_ = 10, and the results are reported in Table 3.
+
+
+**(a) Parallel-TTS**
+
+
+**Image 1**
+**Image 2**
+**…**
+**Image N**
+
+
+**Image**
+
+
+**Image Best**
+
+
+**Edit**
+**Prompt**
+
+
+Figure 7: Comparision between Parallel and Sequential Test-Time Scaling.
+
+
+Table 3: Evaluation of Parallel and Sequential Test-Time Scaling in UMMs.
+
+
+|Model / Metric|Reason-based Generation|Col3|Compositional-based Generation|Col5|
+|---|---|---|---|---|
+|**Model / Metric**|**T2I-ReasonBench**|**T2I-ReasonBench**|**GenEval++**|**GenEval++**|
+|**Model / Metric**|Idiom<br>Textual<br>Entity<br>Scientifc|Overall|Color<br>Count<br>Color/Count<br>Color/Pos<br>Pos/Count<br>Pos/Size<br>Multi-Count|Overall|
+|**Qwen-Image** (Wu et al., 2025a)<br>**OmniVerifer-TTS(Parallel)**<br>**OmniVerifer-TTS(Sequential)**|46.5<br>66.3<br>53.4<br>55.8<br>49.3<br>68.8<br>56.2<br>58.2<br>51.1<br>68.4<br>58.5<br>58.7|55.5<br>58.1<br>59.2|0.700<br>0.900<br>0.800<br>0.525<br>0.500<br>0.700<br>0.600<br>0.750<br>0.900<br>0.775<br>0.575<br>0.500<br>0.700<br>0.650<br>0.800<br>0.925<br>0.825<br>0.600<br>0.525<br>0.700<br>0.650|0.675<br>0.693<br>0.718|
+|**GPT-Image-1**<br>**OmniVerifer-TTS(Parallel)**<br>**OmniVerifer-TTS(Sequential)**|75.4<br>84.6<br>75.7<br>71.6<br>77.0<br>85.4<br>77.4<br>72.4<br>78.1<br>87.4<br>77.8<br>73.7|76.8<br>78.1<br>79.3|0.650<br>0.800<br>0.750<br>0.575<br>0.550<br>0.725<br>0.775<br>0.700<br>0.825<br>0.750<br>0.575<br>0.550<br>0.725<br>0.775<br>0.725<br>0.825<br>0.750<br>0.600<br>0.575<br>0.750<br>0.825|0.689<br>0.700<br>0.721|
+
+
+Sequential TTS offers a higher performance ceiling than Parallel TTS. As shown in Table 3, it consistently outperforms Parallel TTS across all three benchmarks. Moreover, it requires fewer generation steps per prompt: while Parallel TTS generates 10 images per prompt, Sequential TTS achieves
+superior results in approximately 47% of the time. This efficiency and advanced performance arises
+from its ability to fully exploit the generative critiques provided by OmniVerifier, enabling multiround, fine-grined optimization through UMM.
+
+
+6 CONCLUSION
+
+
+This paper focuses on _Generative_ _Universal_ _Verifier_ and makes three key contributions. First, we
+introduce **ViVerBench**, which to the best of our knowledge, is the first comprehensive benchmark
+for evaluating MLLMs’ verification of visual outcomes. Second, we develop two automated data
+construction pipelines and explore effective training strategies for universal verifiers, culminating
+in the powerful **OmniVerifier-7B** . Third, we investigate practical applications of universal verifiers,
+proposing **OmniVerifier-TTS**, a sequential test-time scaling method that enhances image generation, and further exploring broader world modeling reasoning scenarios. In future work, we aim to
+scale up the universal verifier and examine its potential for improving multimodal post-training.
+
+
+10
+
+
+ACKNOWLEDGEMENT
+
+
+This work was partly supported by the National Natural Science Foundation of China (Grant No.
+62576191) and the Shenzhen Science and Technology Program (ZDCY20250901103533010) .
+
+
+ETHICS STATEMENT
+
+
+This paper advances the field of multimodal large language models, while emphasizing the importance of responsible use to avoid potential negative societal impacts, such as the creation of
+misleading or harmful content.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+Our code is included in the supplementary material, and the implementation details are described in
+Section 4.2.
+
+
+REFERENCES
+
+
+Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang,
+Shijie Wang, Jun Tang, et al. Qwen2. 5-vl technical report. _arXiv_ _preprint_ _arXiv:2502.13923_,
+2025.
+
+
+Florian Bordes, Quentin Garrido, Justine T Kao, Adina Williams, Michael Rabbat, and Emmanuel
+Dupoux. Intphys 2: Benchmarking intuitive physics understanding in complex synthetic environments. _arXiv preprint arXiv:2506.09849_, 2025.
+
+
+Jiuhai Chen, Zhiyang Xu, Xichen Pan, Yushi Hu, Can Qin, Tom Goldstein, Lifu Huang, Tianyi
+Zhou, Saining Xie, Silvio Savarese, et al. Blip3-o: A family of fully open unified multimodal
+models-architecture, training and dataset. _arXiv preprint arXiv:2505.09568_, 2025a.
+
+
+Junying Chen, Zhenyang Cai, Pengcheng Chen, Shunian Chen, Ke Ji, Xidong Wang, Yunjin Yang,
+and Benyou Wang. Sharegpt-4o-image: Aligning multimodal models with gpt-4o-level image
+generation. _arXiv preprint arXiv:2506.18095_, 2025b.
+
+
+Lin Chen, Jinsong Li, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Zehui Chen, Haodong Duan, Jiaqi
+Wang, Yu Qiao, Dahua Lin, et al. Are we on the right way for evaluating large vision-language
+models? _Advances in Neural Information Processing Systems_, 37:27056–27087, 2024.
+
+
+Xiaokang Chen, Zhiyu Wu, Xingchao Liu, Zizheng Pan, Wen Liu, Zhenda Xie, Xingkai Yu, and
+Chong Ruan. Janus-pro: Unified multimodal understanding and generation with data and model
+scaling. _arXiv preprint arXiv:2501.17811_, 2025c.
+
+
+Xinyan Chen*, Renrui Zhang*, Dongzhi Jiang, Aojun Zhou, Shilin Yan, Weifeng Lin, and Hongsheng Li. Mint-cot: Enabling interleaved visual tokens in mathematical chain-of-thought reasoning. _arXiv preprint arXiv:2506.05331_, 2025.
+
+
+Long Cheng, Jiafei Duan, Yi Ru Wang, Haoquan Fang, Boyang Li, Yushan Huang, Elvis Wang,
+Ainaz Eftekhar, Jason Lee, Wentao Yuan, et al. Pointarena: Probing multimodal grounding
+through language-guided pointing. _arXiv preprint arXiv:2505.09990_, 2025.
+
+
+Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit
+Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the
+frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. _arXiv preprint arXiv:2507.06261_, 2025.
+
+
+Chaorui Deng, Deyao Zhu, Kunchang Li, Chenhui Gou, Feng Li, Zeyu Wang, Shu Zhong, Weihao
+Yu, Xiaonan Nie, Ziang Song, et al. Emerging properties in unified multimodal pretraining. _arXiv_
+_preprint arXiv:2505.14683_, 2025.
+
+
+11
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas M¨uller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers
+for high-resolution image synthesis. In _Forty-first international conference on machine learning_,
+2024.
+
+
+Yichen Feng, Zhangchen Xu, Fengqing Jiang, Yuetai Li, Bhaskar Ramasubramanian, Luyao Niu,
+Bill Yuchen Lin, and Radha Poovendran. Visualsphinx: Large-scale synthetic vision logic puzzles
+for rl. _arXiv preprint arXiv:2505.23977_, 2025.
+
+
+Yu Gao, Lixue Gong, Qiushan Guo, Xiaoxia Hou, Zhichao Lai, Fanshi Li, Liang Li, Xiaochen Lian,
+Chao Liao, Liyang Liu, et al. Seedream 3.0 technical report. _arXiv preprint arXiv:2504.11346_,
+2025.
+
+
+Dong Guo, Faming Wu, Feida Zhu, Fuxing Leng, Guang Shi, Haobin Chen, Haoqi Fan, Jian Wang,
+Jianyu Jiang, Jiawei Wang, et al. Seed1. 5-vl technical report. _arXiv preprint arXiv:2505.07062_,
+2025.
+
+
+Ziyu Guo*, Renrui Zhang*, Chengzhuo Tong*, Zhizheng Zhao*, Peng Gao, Hongsheng Li, and
+Pheng-Ann Heng. Can we generate images with cot? let’s verify and reinforce image generation
+step by step. _CVPR 2025_, 2025.
+
+
+Agrim Gupta, Piotr Dollar, and Ross Girshick. Lvis: A dataset for large vocabulary instance segmentation. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recognition_,
+pp. 5356–5364, 2019.
+
+
+Yunzhuo Hao, Jiawei Gu, Huichen Will Wang, Linjie Li, Zhengyuan Yang, Lijuan Wang, and
+Yu Cheng. Can mllms reason in multimodality? emma: An enhanced multimodal reasoning
+benchmark. _arXiv preprint arXiv:2501.05444_, 2025.
+
+
+Kaiyi Huang, Kaiyue Sun, Enze Xie, Zhenguo Li, and Xihui Liu. T2i-compbench: A comprehensive benchmark for open-world compositional text-to-image generation. _Advances in Neural_
+_Information Processing Systems_, 36:78723–78747, 2023.
+
+
+Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. _arXiv_ _preprint_
+_arXiv:2410.21276_, 2024.
+
+
+Aaron Jaech, Adam Kalai, Adam Lerer, Adam Richardson, Ahmed El-Kishky, Aiden Low, Alec
+Helyar, Aleksander Madry, Alex Beutel, Alex Carney, et al. Openai o1 system card. _arXiv_
+_preprint arXiv:2412.16720_, 2024.
+
+
+Dongzhi Jiang, Ziyu Guo, Renrui Zhang, Zhuofan Zong, Hao Li, Le Zhuo, Shilin Yan, Pheng-Ann
+Heng, and Hongsheng Li. T2i-r1: Reinforcing image generation with collaborative semantic-level
+and token-level cot. _arXiv preprint arXiv:2505.00703_, 2025.
+
+
+Aviral Kumar, Vincent Zhuang, Rishabh Agarwal, Yi Su, John D Co-Reyes, Avi Singh, Kate Baumli,
+Shariq Iqbal, Colton Bishop, Rebecca Roelofs, et al. Training language models to self-correct via
+reinforcement learning. _arXiv preprint arXiv:2409.12917_, 2024.
+
+
+Black Forest Labs. Flux. [https://github.com/black-forest-labs/flux, 2024.](https://github.com/black-forest-labs/flux)
+
+
+Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li,
+Ziwei Liu, and Chunyuan Li. Llava-onevision: Easy visual task transfer. _TMLR 2025_, 2024.
+
+
+Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image
+pre-training with frozen image encoders and large language models. In _International conference_
+_on machine learning_, pp. 19730–19742. PMLR, 2023.
+
+
+Lei Li, Yuancheng Wei, Zhihui Xie, Xuqing Yang, Yifan Song, Peiyi Wang, Chenxin An, Tianyu
+Liu, Sujian Li, Bill Yuchen Lin, et al. Vl-rewardbench: A challenging benchmark for visionlanguage generative reward models. In _Proceedings of the Computer Vision and Pattern Recog-_
+_nition Conference_, pp. 24657–24668, 2025.
+
+
+12
+
+
+Chao Liao, Liyang Liu, Xun Wang, Zhengxiong Luo, Xinyu Zhang, Wenliang Zhao, Jie Wu, Liang
+Li, Zhi Tian, and Weilin Huang. Mogao: An omni foundation model for interleaved multi-modal
+generation. _arXiv preprint arXiv:2505.05472_, 2025.
+
+
+Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. _Advances_
+_in neural information processing systems_, 36:34892–34916, 2023a.
+
+
+Yuliang Liu, Zhang Li, Hongliang Li, Wenwen Yu, Mingxin Huang, Dezhi Peng, Mingyu Liu,
+Mingrui Chen, Chunyuan Li, Lianwen Jin, et al. On the hidden mystery of ocr in large multimodal
+models. _arXiv preprint arXiv:2305.07895_, 2(5):6, 2023b.
+
+
+Haoyu Lu, Wen Liu, Bo Zhang, Bingxuan Wang, Kai Dong, Bo Liu, Jingxiang Sun, Tongzheng Ren,
+Zhuoshu Li, Hao Yang, et al. Deepseek-vl: towards real-world vision-language understanding.
+_arXiv preprint arXiv:2403.05525_, 2024.
+
+
+Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri
+Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et al. Self-refine: Iterative refinement
+with self-feedback. _Advances in Neural Information Processing Systems_, 36:46534–46594, 2023.
+
+
+OpenAI. Thinking with images. [https://openai.com/index/](https://openai.com/index/thinking-with-images/)
+[thinking-with-images/, 2025.](https://openai.com/index/thinking-with-images/)
+
+
+Yingzhe Peng, Gongrui Zhang, Miaosen Zhang, Zhiyuan You, Jie Liu, Qipeng Zhu, Kai Yang,
+Xingzhong Xu, Xin Geng, and Xu Yang. Lmm-r1: Empowering 3b lmms with strong reasoning
+abilities through two-stage rule-based rl. _arXiv preprint arXiv:2503.07536_, 2025.
+
+
+Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham
+Khedr, Roman R¨adle, Chloe Rolland, Laura Gustafson, et al. Sam 2: Segment anything in images
+and videos. _arXiv preprint arXiv:2408.00714_, 2024.
+
+
+Jonathan Roberts, Mohammad Reza Taesiri, Ansh Sharma, Akash Gupta, Samuel Roberts, Ioana
+Croitoru, Simion-Vlad Bogolin, Jialu Tang, Florian Langer, Vyas Raina, et al. Zerobench:
+An impossible visual benchmark for contemporary large multimodal models. _arXiv_ _preprint_
+_arXiv:2502.09696_, 2025.
+
+
+Bytedance Seed. Seed1. 8 model card: Towards generalized real-world agency. Technical report,
+2025a. Technical Report.
+
+
+ByteDance Seed. Seed1. 6 tech introduction. _Accessed on September_, 28:2025, 2025.
+
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. _arXiv preprint arXiv:2402.03300_, 2024.
+
+
+Haozhan Shen, Peng Liu, Jingcheng Li, Chunxin Fang, Yibo Ma, Jiajia Liao, Qiaoli Shen, Zilun
+Zhang, Kangjia Zhao, Qianqian Zhang, et al. Vlm-r1: A stable and generalizable r1-style large
+vision-language model. _arXiv preprint arXiv:2504.07615_, 2025.
+
+
+Kaiyue Sun, Rongyao Fang, Chengqi Duan, Xian Liu, and Xihui Liu. T2i-reasonbench: Benchmarking reasoning-informed text-to-image generation. _arXiv preprint arXiv:2508.17472_, 2025.
+
+
+Kimi Team, Angang Du, Bohong Yin, Bowei Xing, Bowen Qu, Bowen Wang, Cheng Chen,
+Chenlin Zhang, Chenzhuang Du, Chu Wei, et al. Kimi-vl technical report. _arXiv_ _preprint_
+_arXiv:2504.07491_, 2025a.
+
+
+Kwai Keye Team, Biao Yang, Bin Wen, Changyi Liu, Chenglong Chu, Chengru Song, Chongling
+Rao, Chuan Yi, Da Li, Dunju Zang, et al. Kwai keye-vl technical report. _arXiv_ _preprint_
+_arXiv:2507.01949_, 2025b.
+
+
+Chengzhuo Tong*, Ziyu Guo*, Renrui Zhang*, Wenyu Shan*, Xinyu Wei, Zhenghao Xing, Hongsheng Li, and Pheng-Ann Heng. Delving into rl for image generation with cot: A study on dpo
+vs. grpo. _arXiv preprint arXiv:2505.17017_, 2025.
+
+
+13
+
+
+Shengbang Tong, Zhuang Liu, Yuexiang Zhai, Yi Ma, Yann LeCun, and Saining Xie. Eyes wide
+shut? exploring the visual shortcomings of multimodal llms. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 9568–9578, 2024.
+
+
+Ke Wang, Junting Pan, Weikang Shi, Zimu Lu, Houxing Ren, Aojun Zhou, Mingjie Zhan, and Hongsheng Li. Measuring multimodal mathematical reasoning with math-vision dataset. _Advances in_
+_Neural Information Processing Systems_, 37:95095–95169, 2024.
+
+
+Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang Liu,
+Linglin Jing, Shenglong Ye, Jie Shao, et al. Internvl3. 5: Advancing open-source multimodal
+models in versatility, reasoning, and efficiency. _arXiv preprint arXiv:2508.18265_, 2025a.
+
+
+Xiyao Wang, Chunyuan Li, Jianwei Yang, Kai Zhang, Bo Liu, Tianyi Xiong, and Furong
+Huang. Llava-critic-r1: Your critic model is secretly a strong policy model. _arXiv_ _preprint_
+_arXiv:2509.00676_, 2025b.
+
+
+Chenfei Wu, Jiahao Li, Jingren Zhou, Junyang Lin, Kaiyuan Gao, Kun Yan, Sheng-ming Yin, Shuai
+Bai, Xiao Xu, Yilei Chen, et al. Qwen-image technical report. _arXiv preprint arXiv:2508.02324_,
+2025a.
+
+
+Chenyuan Wu, Pengfei Zheng, Ruiran Yan, Shitao Xiao, Xin Luo, Yueze Wang, Wanli Li, Xiyan
+Jiang, Yexin Liu, Junjie Zhou, et al. Omnigen2: Exploration to advanced multimodal generation.
+_arXiv preprint arXiv:2506.18871_, 2025b.
+
+
+Zhiyong Wu, Zhenyu Wu, Fangzhi Xu, Yian Wang, Qiushi Sun, Chengyou Jia, Kanzhi Cheng,
+Zichen Ding, Liheng Chen, Paul Pu Liang, et al. Os-atlas: A foundation action model for generalist gui agents. _arXiv preprint arXiv:2410.23218_, 2024.
+
+
+Ji Xie, Trevor Darrell, Luke Zettlemoyer, and XuDong Wang. Reconstruction alignment improves
+unified multimodal models. _arXiv preprint arXiv:2509.07295_, 2025a.
+
+
+Jinheng Xie, Zhenheng Yang, and Mike Zheng Shou. Show-o2: Improved native unified multimodal
+models. _arXiv preprint arXiv:2506.15564_, 2025b.
+
+
+Tianyi Xiong, Xiyao Wang, Dong Guo, Qinghao Ye, Haoqi Fan, Quanquan Gu, Heng Huang, and
+Chunyuan Li. Llava-critic: Learning to evaluate multimodal models. In _Proceedings_ _of_ _the_
+_Computer Vision and Pattern Recognition Conference_, pp. 13618–13628, 2025.
+
+
+Weiye Xu, Jiahao Wang, Weiyun Wang, Zhe Chen, Wengang Zhou, Aijun Yang, Lewei Lu,
+Houqiang Li, Xiaohua Wang, Xizhou Zhu, et al. Visulogic: A benchmark for evaluating visual
+reasoning in multi-modal large language models. _arXiv preprint arXiv:2504.15279_, 2025.
+
+
+Ling Yang, Ye Tian, Bowen Li, Xinchen Zhang, Ke Shen, Yunhai Tong, and Mengdi Wang. Mmada:
+Multimodal large diffusion language models. _arXiv preprint arXiv:2505.15809_, 2025a.
+
+
+Ling Yang, Xinchen Zhang, Ye Tian, Chenming Shang, Minghao Xu, Wentao Zhang, and Bin Cui.
+Hermesflow: Seamlessly closing the gap in multimodal understanding and generation. _arXiv_
+_preprint arXiv:2502.12148_, 2025b.
+
+
+Junyan Ye, Dongzhi Jiang, Zihao Wang, Leqi Zhu, Zhenghao Hu, Zilong Huang, Jun He, Zhiyuan
+Yan, Jinghua Yu, Hongsheng Li, et al. Echo-4o: Harnessing the power of gpt-4o synthetic images
+for improved image generation. _arXiv preprint arXiv:2508.09987_, 2025.
+
+
+Qiying Yu, Zheng Zhang, Ruofei Zhu, Yufeng Yuan, Xiaochen Zuo, Yu Yue, Weinan Dai, Tiantian
+Fan, Gaohong Liu, Lingjun Liu, et al. Dapo: An open-source llm reinforcement learning system
+at scale. _arXiv preprint arXiv:2503.14476_, 2025.
+
+
+Lifan Yuan, Weize Chen, Yuchen Zhang, Ganqu Cui, Hanbin Wang, Ziming You, Ning Ding,
+Zhiyuan Liu, Maosong Sun, and Hao Peng. From _f_ ( _x_ ) and _g_ ( _x_ ) to _f_ ( _g_ ( _x_ )): LLMs learn new
+skills in RL by composing old ones, 2025. Notion blog post, available online.
+
+
+Renrui Zhang, Jiaming Han, Chris Liu, Aojun Zhou, Pan Lu, Yu Qiao, Hongsheng Li, and Peng Gao.
+Llama-adapter: Efficient fine-tuning of large language models with zero-initialized attention. In
+_ICLR 2024_, 2024a.
+
+
+14
+
+
+Xinchen Zhang, Ling Yang, Yaqi Cai, Zhaochen Yu, Jiake Xie, Ye Tian, Minkai Xu, Yong Tang, Yujiu Yang, and Bin Cui. Realcompo: Dynamic equilibrium between realism and compositionality
+improves text-to-image diffusion models. _CoRR_, 2024b.
+
+
+Xinchen Zhang, Ling Yang, Guohao Li, Yaqi Cai, Jiake Xie, Yong Tang, Yujiu Yang, Mengdi Wang,
+and Bin Cui. Itercomp: Iterative composition-aware feedback learning from model gallery for
+text-to-image generation. _arXiv preprint arXiv:2410.07171_, 2024c.
+
+
+Yizhen Zhang, Yang Ding, Shuoshuo Zhang, Xinchen Zhang, Haoling Li, Zhong-zhi Li, Peijie
+Wang, Jie Wu, Lei Ji, Yelong Shen, et al. Perl: Permutation-enhanced reinforcement learning for
+interleaved vision-language reasoning. _arXiv preprint arXiv:2506.14907_, 2025.
+
+
+Ziwei Zheng, Michael Yang, Jack Hong, Chenxiao Zhao, Guohai Xu, Le Yang, Chao Shen, and
+Xing Yu. Deepeyes: Incentivizing” thinking with images” via reinforcement learning. _arXiv_
+_preprint arXiv:2505.14362_, 2025.
+
+
+Deyao Zhu, Jun Chen, Xiaoqian Shen, Xiang Li, and Mohamed Elhoseiny. Minigpt-4: Enhancing vision-language understanding with advanced large language models. _arXiv_ _preprint_
+_arXiv:2304.10592_, 2023.
+
+
+15
+
+
+A DETAILS OF VIVERBENCH
+
+
+A.1 TASK DEFINITION
+
+
+**Concept** **Existence** evaluates whether all elements described in the prompt are accurately represented in the image, particularly in complex text-image alignment tasks such as compositional
+text-to-image generation. This evaluation consists of the following components:
+
+
+  - **Object:** Assesses whether all objects mentioned in the prompt are present in the image. Challenges arise in complex scenarios, such as detecting small objects, distinguishing between objects sharining overlapping attributes or easily confusable objects, and identifying occluded
+objects.
+
+
+  - **Attribute:** Evaluates whether all attributes such as color, quantity, and expression specified in
+the prompt are correctly depicted. The difficulty increases when multiple attributes must be
+satisfied simultaneously, and when ensuring accurate binding of attributes to the correct objects
+in complex scenes.
+
+
+16
+
+
+- **Abstract** **Patterns:** Focuses on high-level verification tasks involving visual logic puzzles
+with abstract, challenging patterns and plausible distractors. It tests the model’s ability to critic
+about compositional relationships among multiple objects and attributes from varied perspectives within abstract scenarios.
+
+
+17
+
+
+**Object Relationship** evaluates the model’s ability to verify the spatial relationship and interaction
+between objects in complex sceniors. This evaluation consists of the following components:
+
+
+  - **Spatial:** Evaluates the model’s capability to detect spatial misalignments between objects in
+images and the corresponding prompts, especially under varying viewpoints and in complex
+scenes that combine positional relationships with multiple object attributes.
+
+
+  - **Non-Spatial:** Focuses on interactions between objects that cannot be easily characterized by
+spatial positioning alone (Huang et al., 2023), with particular attention to challenging cases
+involving complex interactions between a single object and several others.
+
+
+18
+
+
+**World** **Dynamics** evaluates whether a single image or a sequence of images conforms to realworld physical laws, examining the model’s world knowledge and its ability to judge physical plausibility in visual domain. This evaluation consists of the following components:
+
+
+  - **Static** **Physics:** Assesses whether a single generated image strictly obeys physical laws such
+as gravity, buoyancy, and lighting effects (e.g., shadows and reflections). To increase difficulty,
+the constructed data contain subtle yet clearly identifiable violations.
+
+
+  - **Dynamic** **Physics:** Evaluates whether a sequence of images follows consistent physical laws
+over time, assessing the model’s ability to judge temporal dynamics and physical plausibility
+in dynamic scenarios.
+
+
+19
+
+
+**Image** **Annotation** evaluates whether image annotation outputs accurately satisfy the requirements specified in the prompt. This evaluation consists of the following components:
+
+
+  - **Bounding Box:** Assesses a model’s ability to judge whether a provided bounding box correctly
+corresponds to the specific object indicated in the prompt, with particular emphasis on objects
+that have ambiguous attributes or complex spatial configurations.
+
+
+  - **Pointing:** Similar to Bounding Box, this evaluates a model’s ability to judge the correctness of
+provided points for specific objects in the image.
+
+
+20
+
+
+- **Counting:** Measures whether all objects specified in the prompt are correctly represented by
+points in the image. Each point must correspond to the correct object, and no specified objects
+should be missed, making this task more challenging than standard pointing tasks.
+
+
+**State Value Evaluation** assesses whether a task has been successfully completed by analyzing the
+state of a game, robotics environment, or GUI as captured in an image. This evaluation includes:
+
+
+  - **Maze:** Evaluate model’s ability to determinw whether the provided path in a maze constitutes
+a valid solution, without errors such as passing through walls.
+
+
+21
+
+
+- **FrozenLake:** Assesses both step-level and outcome-level correctness, determining whether the
+sequence of actions is reasonable and whether the target game state has been reached.
+
+
+- **Robotics:** Focuses on scenarios where a robot stacks blocks, requiring complex reasoning, and
+evaluates whether the model can accurately judge if the current block arrangement represents a
+valid sequence.
+
+
+22
+
+
+- **GUI:** Covers mobile, PC, and web interfaces, evaluating whether the model can correctly determine if the bounding boxes in an image correspond to the buttons specified in the prompt.
+
+
+**STEM** evaluates coding-related judgement tasks in STEM scenarios, assessing whether numerical
+values, variables, and other information in the image are consistent with the code. This evaluation
+includes:
+
+
+  - **Chart:** Evaluate whether, in coding tasks involving statistical visualizations (e.g., bar charts
+or histograms), the model can accurately determine if the rendered image fully matches the
+underlying code, including subtle details such as numerical values, colors, and legends.
+
+
+23
+
+
+- **LaTeX:** Assess whether, given LaTeX code and its corresponding image, the model can precisely verify a complete correspondence, capturing fine-grained elements such as values, variables, and operators.
+
+
+24
+
+
+A.2 BENCHMARK CURATION PIPELINE
+
+
+ViVerBench is constructed through a systematic pipeline following two important criteria: **(1)** **en-**
+**suring sufficient difficulty** and **(2) guaranteeing answer correctness with no room for dispute** .
+The data construction process consists of four stages:
+
+
+**Initial Dataset Construction** We employ three strategies to construct data for the 16 tasks:
+
+
+  - **Manual** **Annotation** For tasks in _{_ Object, Attribute, Non-spatial, Static Physics, Counting _}_,
+the lack of high-quality verification datasets and the difficulty of constructing error-free, unambiguous data necessitate expert involvement. We invited 12 domain experts to curate challenging datasets. Starting from perfectly matched image–prompt pairs, we applied fine-grained
+editing, inpainting, and prompt modification to create false examples, each accompanied by
+detailed error explanations. Considerable effort was devoted to ensure both diversity and difficulty throughout data construction and selection.
+
+  - **Programmatic Data Generation** For tasks in _{_ Spatial, Maze, Frozenlake, Robotics _}_, we developed tailored scripts to systematically generate true/false examples, along with their corresponding explanations.
+
+  - **Augmented Open-source Data** For tasks in _{_ Abstract Patterns, Dynamic Physics, Bounding
+Box, Pointing, GUI, Charts, LaTeX _}_, we collected high-quality samples from open-source
+datasets (Feng et al., 2025; Bordes et al., 2025; Cheng et al., 2025; Wu et al., 2024; Hao
+et al., 2025) and further created challenging true and false examples with detailed explanations,
+specifically designed for visual verification tasks.
+
+
+**Expert Review and Difficulty Enhancement** The initially constructed data were reviewed with
+a thorough review by five new experts, who verified whether the true examples were strictly correct
+and free of ambiguities and whether the explanations of the false example were reasonable and
+correct. They also assessed task difficulty, providing higher-difficulty annotations for tasks such as
+Object, Abstract Patterns, and Bounding Box.
+
+
+**Human Evaluation** To further validate the dataset, we recruited ten experts for human evaluation.
+Since many true/false examples are paired from the same prompt or image, the data were evenly split
+into two groups to prevent prior bias, ensuring that paired samples were placed in different groups.
+Each group was independently evaluated by five experts.
+
+
+**Dataset Refinement and Final Selection** Based on human evaluation results, we identified questions that were frequently answered incorrectly and subjected them to an additional correctness
+check by five new experts. Incorrect items were removed, and questions with potential ambiguities
+were refined. This process yielded **ViVerBench**, a comprehensive and challenging visual verification benchmark with 3,594 data samples.
+
+
+A.3 EVALUATION METHODS
+
+
+We evaluate model performance using two complementary metrics: rule-based evaluation and
+model-based evaluation. Let _N_ be the total number of one task in **ViVerBench** . For each sample _i_, we denote the ground-truth answer as _yi_ _∈{_ true _,_ false _}_ and the model-predicted answer as
+_y_ ˆ _i_ _∈{_ true _,_ false _}_ . When _yi_ = false, the benchmark provides a ground-truth explanation _ei_, and
+when _y_ ˆ _i_ = false, the model is required to generate an explanation ˆ _ei_ . To assess explanation quality,
+we use a judge model (such as GPT-4.1), denoted as _F_ ( _ei,_ ˆ _ei_ ), which returns true if _ei_ and _e_ ˆ _i_ are
+considered consistent. We further denote by **1** ( _·_ ) the indicator function that outputs 1 if the condition
+holds and 0 otherwise.
+
+
+**Rule-based Evaluation** Rule-based evaluation measures only the correctness of the predicted answer. The accuracy is computed as:
+
+
+Accrule-based = [1]
+
+_N_
+
+
+_N_
+
+- **1** (ˆ _yi_ = _yi_ ) _._ (1)
+
+
+_i_ =1
+
+
+This metric ignores explanations and focuses solely on answer correctness.
+
+
+25
+
+
+**Model-based Evaluation** Model-based evaluation extends the rule-based setting by additionally
+requiring explanation consistency when both the ground truth and the prediction are false. The
+accuracy is defined as:
+
+
+
+
+
+
+
+
+Accmodel-based = [1]
+
+_N_
+
+
+[�] **1** (ˆ _yi_ = _yi_ ) +  
+_i_ : _yi_ =true _i_ : _yi_ =
+
+
+ [�]
+
+
+**1** (ˆ _yi_ = _yi_ ) _·_ **1** ( _F_ ( _ei,_ ˆ _ei_ ))
+
+_i_ : _yi_ =false
+
+
+ _._ (2)
+
+
+When _yi_ is true, a prediction is correct only if _y_ ˆ _i_ matches _yi_ . When _yi_ is false, correctness requires
+not only _y_ ˆ _i_ = _yi_ but also judge model verifies consistency between _e_ ˆ _i_ and _ei_ . This stricter metric
+prevents spurious correctness from random guessing by enforcing explanation validity in false cases.
+
+
+B EVALUATION ON GENERAL BENCHMARKS
+
+
+**GenRM** **Evaluation** For the evaluation of Vision-Language Generative Reward Models, we use
+VL-RewardBench (Li et al., 2025), focusing on the text-outcome verification capability of GenRM.
+As shown in Table 4, we observe that OmniVerifier-7B achieves substantial and comprehensive improvements over the baseline, particularly in reducing hallucination. This shows that visual outcome
+verification can effectively generalize to text-outcome verification, which we attribute to the shared
+atomic capabilities underlying cross-modal verification.
+
+|Model|General Hallucination Reasoning|Overall Accuracy Macro Avg Accuracy|
+|---|---|---|
+|**Qwen 2.5-VL 7B**<br>**OmniVerifer 7B**|37.16<br>45.79<br>54.40<br>41.53 (**+4.37)**<br>70.09 (**+24.3)**<br>57.86 (**+3.46)**|46.72<br>45.79<br>62.80 (**+16.08)**<br>56.49 (**+10.7)**|
+
+
+**Evaluation on Mainstream Benchmarks** To examine more general and more complex tasks, we
+additionally evaluate the models on eight mainstream perception and image-reasoning benchmarks
+(Chen et al., 2024; Tong et al., 2024; Wang et al., 2024; Hao et al., 2025; Xu et al., 2025; Roberts
+et al., 2025; Liu et al., 2023b).
+
+
+Table 5: Evaluation Results on Mainstream Perception and Image-reasoning Benchmarks.
+
+|Model|MMStar MMVP RealWorldQA MathVision EMMA VisuLogic ZeroBench OCRBench|
+|---|---|
+|**Qwen 2.5-VL 7B**<br>**OmniVerifer 7B**|61.7<br>72.9<br>68.8<br>22.1<br>24.8<br>26.9<br>13.7<br>85.1<br>63.9 (+2.2)<br>77.7 (+4.8)<br>68.1 (-0.7)<br>25.2 (+3.1)<br>29.4 (+4.6)<br>25.4 (-1.5)<br>14.4 (+0.7)<br>87.1 (+2.0)|
+
+
+As shown in Table 5, OmniVerifier demonstrates clear improvements on most benchmarks. This
+suggests that a critic model trained with RL on pointwise samples can generalize into a strong policy
+model, leading to broad gains across diverse downstream generation tasks. This finding aligns with
+observations from LLaVA-Critic-R1 (Wang et al., 2025b), and we further validate it in the visualoutcome setting. We argue that this observation, namely critics enhance generation, highlights a
+highly promising direction for future large-scale model development: a strong policy model can
+be trained into a strong verifier or critic model, and the two can mutually reinforce one another,
+enabling a multimodal system capable of self-evaluation and ultimately self-improvement. This
+also highlights the importance of a universal verifier.
+
+
+C ANALYSIS OF TEST-TIME SCALING EFFICIENCY
+
+
+We report the average number of iterative refinement rounds when using Qwen-Image and GPTImage-1 on T2I-ReasonBench and GenEval++ benchmarks:
+
+
+From the Table 6, we can observe the following:
+
+
+  - **Sequential TTS outperforms Parallel TTS in both speed and performance.** On GenEval++,
+Sequential TTS requires fewer than two refinement rounds on average to achieve higher-quality
+results. In contrast, Parallel TTS generates 10 images per prompt without demonstrating significant performance gains.
+
+
+26
+
+
+|Table 6: Performance and Refinement Efficiency Across Backbones, Verifiers, and TTS Strategies.|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|**Backbone**<br>**Verifer**<br>**Test-Time Scaling**<br>**T2I-ReasonBench**<br>**GenEval++**<br>**Overall**<br>**Mean Round**<br>**Overall**<br>**Mean Round**|**Backbone**<br>**Verifer**<br>**Test-Time Scaling**<br>**T2I-ReasonBench**<br>**GenEval++**<br>**Overall**<br>**Mean Round**<br>**Overall**<br>**Mean Round**|**Backbone**<br>**Verifer**<br>**Test-Time Scaling**<br>**T2I-ReasonBench**<br>**GenEval++**<br>**Overall**<br>**Mean Round**<br>**Overall**<br>**Mean Round**|**Backbone**<br>**Verifer**<br>**Test-Time Scaling**<br>**T2I-ReasonBench**<br>**GenEval++**<br>**Overall**<br>**Mean Round**<br>**Overall**<br>**Mean Round**|**Backbone**<br>**Verifer**<br>**Test-Time Scaling**<br>**T2I-ReasonBench**<br>**GenEval++**<br>**Overall**<br>**Mean Round**<br>**Overall**<br>**Mean Round**|
+|**Qwen-Image**<br>**GPT-Image-1**|-<br>-|-<br>-|55.5<br>1<br>76.8<br>1|0.675<br>1<br>0.689<br>1|
+|**Qwen-Image**<br>**GPT-Image-1**|OmniVerifer-7B<br>OmniVerifer-7B|Parallel<br>Parallel|58.1<br>10<br>78.1<br>10|0.693<br>10<br>0.700<br>10|
+|**Qwen-Image**<br>**Qwen-Image**<br>**GPT-Image-1**<br>**GPT-Image-1**|Qwen 2.5-VL 7B<br>OmniVerifer-7B<br>Qwen 2.5-VL 7B<br>OmniVerifer-7B|Sequential<br>Sequential<br>Sequential<br>Sequential|57.4<br>4.67<br>59.2<br>3.86<br>77.8<br>2.01<br>79.3<br>1.59|0.682<br>1.95<br>0.718<br>1.86<br>0.693<br>1.33<br>0.721<br>1.27|
+
+
+  - **OmniVerifier** **substantially** **reduces** **hallucinations** **and** **improves** **judgment** **accuracy.**
+Across all backbones, employing OmniVerifier consistently requires fewer refinement rounds
+than using Qwen 2.5-VL. RL training equips OmniVerifier with stronger visual-outcome verification capabilities, which mitigates hallucinations and produces accurate explanations and edit
+prompts. Consequently, higher-quality results are attained with fewer refinement rounds.
+
+  - **Stronger** **backbones** **reduce** **verification** **rounds,** **shortening** **inference** **time.** GPT-Image1 demonstrates clear advantages over Qwen-Image in reasoning and world knowledge. On
+T2I-ReasonBench, this translates to nearly threefold faster inference. Stronger backbones also
+follow instructions more accurately, enabling precise edits and refinements. We therefore anticipate that, as more powerful unified models emerge, OmniVerifier-TTS will consistently deliver
+faster inference and higher-quality results.
+
+
+D RAISING THE PERFORMANCE CEILING WITH STRONG VERIFIERS
+
+
+We have added the results of using Gemini 2.5 Pro as the visual verifier on T2I-ReasonBench and
+GenEval++, as shown in Table 7:
+
+
+Table 7: Results of Sequential TTS with Gemini 2.5 Pro on T2I-ReasonBench and GenEval++.
+
+|Backbone|Verifei r|Test-Time Scaling|T2I-ReasonBench Overall|GenEval++ Overall|
+|---|---|---|---|---|
+|**Qwen-Image**<br>**Qwen-Image**<br>**Qwen-Image**<br>**GPT-Image-1**<br>**GPT-Image-1**<br>**GPT-Image-1**|-<br>Omniverifer-7B<br>Gemini 2.5 Pro<br>-<br>Omniverifer-7B<br>Gemini 2.5 Pro|-<br>Sequential<br>Sequential<br>-<br>Sequential<br>Sequential|55.5<br>59.2<br>62.7<br>76.8<br>79.3<br>81.6|0.675<br>0.718<br>0.736<br>0.689<br>0.721<br>0.746|
+
+
+Due to Gemini-2.5-Pro’s strong world knowledge and visual-judgment abilities, it achieves significantly better results on both benchmarks. We also find that incorporating TTS with a strong verifier
+pushes the baseline into a substantially higher performance tier, markedly extending its achievable
+upper bound. Looking ahead, we plan to further improve the model by scaling up both its size and
+the amount of high-quality training data.
+
+
+E ADDITIONAL VISUALIZATION RESULTS FOR OMNIVERIFIER-TTS
+
+
+In this section, we provide a detailed analysis of the strengths and weaknesses of Sequential TTS
+versus Parallel TTS.
+
+
+Sequential TTS significantly raises the generation performance ceiling of unified model. Through
+multiple rounds of self-refinement, OmniVerifier continuously leverages its world knowledge, reasoning ability, and critic capability to guide visual generation through fine-grained editing. This
+allows it to handle highly complex compositional prompts, including domains unseen in the training
+data, as shown in Fig. 8. In contrast, for such highly challenging prompts, Parallel TTS struggles
+to generate accurate outputs regardless of the number of samples. This is because it does not perform targeted reflection and correction for the global prompt condition; its trial-and-error approach
+without self-reflection makes it difficult to achieve breakthroughs in complex scenarios.
+
+
+27
+
+
+**On a lab table, there are plaster**
+**models of a cylinder, sphere,**
+**cone, cube, and rectangular**
+**prism, with the cylinder being**
+**the tallest and the sphere the**
+**shortest.**
+
+
+Figure 8: More results of OmniVerifier-TTS.
+
+
+However, Sequential TTS is constrained by the backbone’s editing capability and is subject to error
+accumulation, which affects the final image quality. In Fig. 9, we present some failure cases of
+Sequential TTS using GPT-Image-1. While the final image aligns with the prompt, GPT-Image-1
+exhibits limited robustness to its own generated image distribution, causing a gradual yellowing
+of images over successive edits. Although OmniVerifier generally provides correct edit prompts,
+a weak backbone editing capability prevents accurate application of these changes. Consequently,
+errors accumulate across multiple rounds of self-refinement, ultimately degrading the final image
+quality. This highlights that mitigating error accumulation is a critical challenge for future unified
+models tasked with multi-round generation.
+
+
+**Edit Prompt 1** **Edit Prompt 2** **Edit Prompt 3**
+
+**Add a glass cup between the two glasses on the bar counter, with only a drop of red wine** **Replace the middle empty stemmed glass with a regular glass and add only a drop of red wine inside it.** **Change the liquid in the middle tall glass on the bar counter to contain only a single drop of red wine, removing most of the transparent liquid and most of the red wine.**
+
+
+**A modern rustic-style living room, with a cat lying on the armrest of the sofa. On the bar counter beside the other side, there are three glass cups, with only a drop of red wine in the middle glass.** **Add a glass cup between the two glasses on the bar counter, with only a drop of red wine** **Edit Prompt 1** **Replace the middle empty stemmed glass with a regular glass and add only a drop** **Edit Prompt 2**
+
+
+**Replace the glass vase in**
+**the middle of the bar**
+**counter with a glass cup,**
+**and add a drop of red**
+**wine inside the replaced**
+**middle glass cup.**
+
+
+**Replace the middle**
+**empty stemmed glass**
+**with a regular glass**
+**and add only a drop**
+**of red wine inside it.**
+
+
+**Edit Prompt 4** **Edit Prompt 5**
+
+
+**Edit Prompt 6** **Edit Prompt 7**
+
+
+**Remove most of the red wine**
+**from the short glass on the left,**
+**leaving only a single drop at**
+**the bottom of the glass.**
+
+
+**Add a glass cup**
+**between the two**
+**glasses on the bar**
+**counter, with only a**
+**drop of red wine**
+**inside.**
+
+**Edit Prompt 5**
+
+**Remove the red wine**
+**from the tall stemmed**
+**glass on the far right,**
+**and add a drop of red**
+**wine to the middle**
+**straight-sided glass.**
+
+
+**Replace the red wine in**
+**the middle glass on the**
+**bar counter with just a**
+**single drop of red wine.**
+
+
+**Edit Prompt 1** **Edit Prompt 2** **Edit Prompt 3**
+
+
+**A cute chubby cat photographer stands, wears tiny beret, holds a vintage mini camera, taking photo. In front of the lens, a small rabbit and a little tiger stand on a small wooden stool, happily posing for the picture. On a nearby wooden** **Move the little tiger standing on the wooden table onto the small stool with the rabbit, so they stand side by side,** **Edit Prompt 1** **Move the little tiger (orange one with black stool where the little** **Edit Prompt 2**
+**table lies a photo that has already been taken.** **keeping the tiger’s pose unchanged.** **rabbit is standing.**
+
+
+**Move the little tiger**
+**standing on the wooden**
+**table onto the small stool**
+**with the rabbit, so they**
+**stand side by side,**
+**keeping the tiger’s pose**
+**unchanged.**
+
+
+**Move the little tiger**
+**(orange one with black**
+**stripes) from the wooden**
+**table to the small wooden**
+**stool where the little**
+**rabbit is standing.**
+
+
+**Edit Prompt 6**
+
+**Replace the yellow tabby**
+**cat on the wooden stool**
+**(next to the white rabbit)**
+**with a little tiger, keeping**
+**the same pose and style.**
+
+
+**Move the little tiger from**
+**the wooden table onto**
+**the small wooden stool**
+**with the rabbit, so that**
+**the tiger and rabbit stand**
+**together on the stool.**
+
+
+**Edit Prompt 4** **Edit Prompt 5**
+**Move the yellow small tiger** **Replace the small tiger**
+**from the wooden table to the** **on the wooden stool**
+**small wooden stool, so that it** **with the striped orange**
+**and the white rabbit stand on** **cat that is currently in**
+**the small wooden stool together.** **that position.**
+
+
+Figure 9: Failure cases in image quality caused by the backbone’s limited editing capability.
+
+
+F LONGCOT PATTERN ANALYSIS OF OMNIVERIFIER
+
+
+We train OmniVerifier with end-to-end reinforcement learning, without requiring any cold start. The
+training objectives include a format reward to regulate reasoning behavior and a rule-based reward
+to assess answer correctness. After training, we observe that the model autonomously learns a
+high-quality and well-structured chain-of-thought (CoT) pattern. This humanlike CoT reasoning is
+precisely what visual verifiers need in complex scenarios, as illustrated below:
+
+
+28
+
+
+29
+
+
+We find that by decomposing a complex problem into a series of specific and simpler subproblems,
+this structured and organized reasoning style can greatly improve the model’s verification accuracy.
+Moreover, as discussed in Section 5, we observe that training with rule-based rewards without direct
+supervision on textual outputs does not significantly affect text modeling. The model is still capable
+of generating coherent LongCoT reasoning, explanations, and edit prompts for TTS self-refinement.
+
+
+30
+
+
+G BROADER WORLD-MODELING INTERLEAVED REASONING
+
+
+We further employ task-specific data to train verifiers for maze navigation and robotics, in order to
+explore whether OmniVerifier can provide meaningful critiques in broader world modeling reasoning scenarios. As shown in Fig. 10, we use Qwen2.5-VL-72B (Bai et al., 2025) as the policy model.
+In the maze scenario, where each action corresponds to moving up, down, left, or right, the policy
+model often makes mistakes such as walking through walls. With the strong visual-outcome reflection capability of OmniVerifier, these errors can be promptly corrected. Similarly, in the robotics
+scenario, where the placement of blocks follows a logical order, OmniVerifier provides powerful
+error correction for the policy model, substantially improving accuracy in such reasoning tasks.
+
+
+**Initial**
+
+
+**Down** **Down** **Up** **Right** **Down** **Down** **Down** **Up** **Right** **Down** **Left**
+
+
+**Pick up brown** **Put down brown**
+
+
+**……**
+
+
+**OmniVerifier** **: The order is incorrect: the pink block and the green**
+**block are at the bottom, and these two should be placed first**
+
+
+**OmniVerifier** **: The order is incorrect: the green block are at the**
+**bottom of the brown block, and the green should be placed first**
+
+
+Figure 10: Extend OmniVerifier to world-modeling interleaved reasoning tasks: Maze and Robotics.
+
+
+H PROMPTS USED IN THE TWO AUTOMATED PIPELINES FOR VISUAL
+VERIFIER DATA CONSTRUCTION
+
+
+31
+
+
+32
+
+
+I LIMITATIONS AND FUTURE WORKS
+
+
+Although OmniVerifier and OmniVerifier-TTS demonstrate promising performance, we identify two
+key limitations that suggest directions for future work:
+
+
+One limitation is that certain tasks may generalize less effectively. For tasks such as maze involve a
+large domain gap, and optimizing for them requires task-specific data. We posit that a truly universal
+verifier should perform robustly across diverse tasks. Future work will explore strategies in training and data construction to enhance OmniVerifier’s generalization, moving closer to a genuinely
+universal verifier.
+
+
+OmniVerifier-TTS is influenced by the backbone. Currently, due to issues with training data and
+strategies, unified multimoda model is sensitive to the distribution of the images it generates or
+edits. Some models exhibit unusual behaviors under multi-step self-refinement; for instance, GPTImage-1 tends to produce increasingly yellowish images after iterative edits. Importantly, these
+artifacts affect only style and do not compromise verification performance. We view this as a subtle
+limitation of the backbone rather than of OmniVerifier-TTS itself, and we encourage further efforts
+to enhance style consistency under multi-step self-refinement.
+
+
+J USE OF LARGE LANGUAGE MODELS
+
+
+We used a large language model solely to assist in polishing English writing and improving clarity.
+All research ideas, experiments, results, and interpretations are entirely our own.
+
+
+33

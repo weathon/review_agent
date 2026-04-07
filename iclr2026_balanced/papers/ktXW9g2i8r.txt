@@ -1,0 +1,1120 @@
+# DIRECTIONAL ENSEMBLE AGGREGATION FOR ACTOR- CRITICS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Reliable _Q_ -value estimation is central to off-policy reinforcement learning in
+continuous control. Standard actor-critic methods often address overestimation
+bias by aggregating ensembles of _Q_ -values conservatively, for example by taking
+their minimum. While effective at reducing bias, these static rules discard useful
+information, cannot adapt to training dynamics, and generalize poorly across
+learning regimes. We propose Directional Ensemble Aggregation (DEA), a fully
+learnable aggregation method that replaces static aggregation with a dynamic
+mechanism capable of interpolating between conservative and explorative strategies
+as training progresses. DEA introduces two learnable directional parameters, one
+regulating critic conservatism and the other guiding actor exploration. Both are
+learned using disagreement-weighted Bellman errors, where updates depend only
+on the sign of each sample’s error. This decoupled design allows DEA to adjust
+automatically to task-specific uncertainty, ensemble size, and update frequency in a
+data-driven manner. Empirically, DEA generalizes across MuJoCo and DeepMind
+Control Suite benchmarks in both interactive and sample-efficient learning regimes.
+
+
+1 INTRODUCTION
+
+
+Off-policy Reinforcement Learning (RL) has become a powerful framework for solving continuous
+control tasks, with actor-critics forming a central class (Mnih et al., 2013; 2015). These methods
+decompose training into two components: a _critic_ ( _Q_ -function), which estimates the expected returns,
+and an _actor_, which uses these _Q_ -value estimates to optimize its policy (Haarnoja et al., 2018a).
+
+
+A central challenge in actor-critics is _overestimation bias_ in _Q_ -value estimation (Thrun & Schwartz,
+1993), where value estimates drift upward because positive noise is repeatedly amplified through
+bootstrapping and the maximization operator (Fujimoto et al., 2018). Such bias can destabilize training
+and lead to suboptimal policies (Van Hasselt, 2010; Van Hasselt et al., 2016), especially in continuous
+control, where even small biases in _Q_ -values may be exploited by the actor. Another challenge
+is _sample_ _efficiency_ . A common remedy is to increase the number of updates per environment
+interaction, known as the Update-To-Data (UTD) ratio (Chen et al., 2021). However, higher UTD
+ratios place greater demands on the accuracy of _Q_ -values, as repeated updates per environment step
+can amplify estimation errors and further destabilize training (Nikishin et al., 2022).
+
+
+To mitigate overestimation, many algorithms employ an ensemble of critics and aggregate their _Q_ value estimates conservatively, typically by taking the minimum across the ensemble (Fujimoto et al.,
+2018; Haarnoja et al., 2018a; Ciosek et al., 2019; Chen et al., 2021). While effective in reducing bias,
+these static aggregation rules have several drawbacks. First, they impose unnecessary restrictions that
+prevent smooth interpolation between conservative and explorative strategies, hindering fine-grained
+control over the exploration-exploitation trade-off. Second, they collapse ensemble diversity into a
+single value, discarding useful information. Third, they remain fixed throughout training, unable to
+adapt to task-specific demands or the evolving reliability of _Q_ -value estimates. This rigidity also
+extends to policy optimization, where the actor is constrained to the same static aggregation rule
+regardless of the environment’s exploration demands or the stage of training.
+
+
+Furthermore, most existing algorithms are designed with a specific _learning_ _regime_, defined by
+particular combinations of UTD ratios and ensemble sizes. For example, _interactive learning_ typically
+employs low UTD ratios and small ensembles with frequent environment interactions (Fujimoto et al.,
+2018; Haarnoja et al., 2018a; Ciosek et al., 2019; Moskovitz et al., 2021). Conversely, _sample-efficient_
+
+
+1
+
+
+_learning_ relies on higher UTD ratios and larger ensembles to minimize the number of interactions
+required to learn a task (Chen et al., 2021; Wu et al., 2022; Cetin & Celiktutan, 2023). Algorithms
+optimized for one learning regime often fail in the other: increasing the UTD ratio in methods
+designed for interactive learning can introduce instability and degrade performance (Nikishin et al.,
+2022), whereas methods optimized for sample-efficient learning tend to underperform in low-UTD
+scenarios due to insufficient utilization of available updates (Liang et al., 2022; Chen et al., 2021).
+
+
+**Our approach.** We propose Directional Ensemble Aggregation (DEA), a fully learnable aggregation method for actor-critic algorithms that adapts dynamically to task demands and uncertainty
+levels. DEA overcomes the rigidity of existing methods that are tailored to specific learning regimes,
+enabling generalization across settings where static rules often fail. At its core, DEA replaces static
+rules with a data-driven mechanism that interpolates between conservative and explorative strategies
+as training progresses.
+
+
+A key feature of DEA is its decoupled aggregation, introducing two learnable parameters: _κ_ ¯, used
+to construct what guides critic learning, and _κ_, to construct what guides actor learning. Separate
+parameters are essential because, especially under high uncertainty, critics often benefit from more
+conservative estimates to reduce overestimation bias, while actors can exploit more optimistic
+estimates when uncertainty is low to encourage exploration.
+
+
+These parameters are learned directly from data through some weighted Bellman objectives, with
+updates depending only on the _sign_ of each sample’s error. The sign reliably indicates whether an
+estimate overshoots or undershoots its target, while ignoring noisy magnitudes that could otherwise
+cause disproportionate updates. By relying on this directional signal, DEA avoids drastic parameter
+swings and achieves stable, data-driven adaptation of aggregation. This reliance on error direction
+motivates the name _directional_ ensemble aggregation.
+
+
+Across a broad set of continuous control benchmarks in MuJoCo and the DeepMind Control Suite,
+DEA consistently demonstrates strong generalization by maintaining reliable learning dynamics and
+outperforming static ensemble aggregation methods in both interactive and sample-efficient settings.
+
+
+2 PRELIMINARY
+
+
+We denote by _P_ (Ω) the set of all probability distributions over a space Ω, and by _B_ (Ω) the set of
+bounded real-valued functions on Ω. For _N_ _∈_ N, we write [ _N_ ] for _{_ 1 _, . . ., N_ _}_ .
+
+
+**Markov Decision Processes (MDPs).** We consider an infinite-horizon MDP defined by the tuple
+_M_ = _⟨S, A, p, p_ 0 _, r, γ⟩_ (Puterman, 2014), where _S_ and _A_ are continuous state and action spaces.
+The transition dynamics are governed by an unknown probability density _p_ ( _s_ _[′]_ _|s, a_ ) over next states
+_s_ _[′]_ _∈S_ given a current state-action pair ( _s, a_ ) _∈S × A_ . The initial state is drawn from a distribution
+_p_ 0 _∈P_ ( _S_ ), and rewards are given by a bounded function _r_ : _S_ _× A →_ [0 _, Br_ ], with _Br_ _>_ 0. The
+discount factor _γ_ _∈_ (0 _,_ 1] controls the importance of future rewards.
+
+
+**Policies.** Let Π = _{π_ : _S_ _→P_ ( _A_ ) _}_ denote the set of stochastic policies. Under a policy _π_ _∈_ Π,
+the agent interacts with the MDP iteratively: at each time step _t_ _∈_ N, the agent observes a state
+_st_ _∈S_, samples an action _at_ _∼_ _π_ ( _·|st_ ), receives a reward _r_ ( _st, at_ ), and transitions to a next state
+_st_ +1 _∼_ _p_ ( _·|st, at_ ). For convenience, we define the one-step policy-induced transition distribution as
+_p_ _[π]_ ( _s_ _[′]_ _, a_ _[′]_ _|s, a_ ) = _p_ ( _s_ _[′]_ _|s, a_ ) _π_ ( _a_ _[′]_ _|s_ _[′]_ ).
+
+
+**Maximum** **entropy** **RL.** The objective is to find a policy _π_ that maximizes the expected discounted return, _J_ ( _π_ ) = E _π_ [ [�] _[∞]_ _t_ =0 _[γ][t][r]_ [(] _[s][t][, a][t]_ [)]] [with] _[s]_ [0] _[∼]_ _[p]_ [0] [(Sutton] [&] [Barto,] [2018;] [Bert-]
+sekas & Tsitsiklis, 1996). To encourage exploration, we consider the maximum entropy RL
+framework (Ziebart, 2010; Haarnoja et al., 2017; 2018a), where the agent aims to maximize
+both the expected return and the entropy of the policy. This is formalized by the objective:
+_Jα_ ( _π_ ) = E _π_ [ [�] _[∞]_ _t_ =0 _[γ][t]_ [ (] _[r]_ [(] _[s][t][, a][t]_ [) +] _[ α][H]_ [(] _[π]_ [(] _[·|][s][t]_ [)))]][,] [where] _[α]_ _[>]_ [0] [controls] [the] [trade-off] [between]
+reward and entropy, and the entropy term is defined as _H_ ( _π_ ( _·|s_ )) = _−_ E _a∼π_ ( _·|s_ )[log _π_ ( _a|s_ )].
+Haarnoja et al. (2018b) proposed automatic entropy tuning by adjusting _α_ to minimize the objective _J_ ( _α_ ) = E _a∼π_ ( _·|s_ ) [log( _α_ ) _·_ ( _−_ log _π_ ( _a|s_ ) _−H_ target)] during each policy update. This objective increases _α_ when the current policy entropy is below the target _H_ target, and to decrease
+
+
+2
+
+
+when it is above. In practice, the target entropy _H_ target is typically set heuristically, proportional
+to _−_ dim( _A_ ) or _−_ dim( _A_ ) _/_ 2 (Haarnoja et al., 2018b; Chen et al., 2021). The state-action value
+function _Q_ _[π]_ : _S_ _× A_ _→_ R under policy _π_ satisfies _Q_ _[π]_ ( _s, a_ ) = _Jα_ ( _π_ ) starting from _s_ 0 = _s_ and
+_a_ 0 = _a_ (Watkins & Dayan, 1992; Haarnoja et al., 2017).
+
+
+3 SOFT ACTOR-CRITIC METHODS
+
+
+A widely used framework for maximum entropy RL is the class of soft actor-critic methods, where
+the agent jointly learns a _Q_ -value function (the critic) and a policy (the actor). The active _critic_
+_Q_ estimates the state-action value function _Q_ _[π]_ (following policy _π_ ) by minimizing the Bellman
+error (Silver et al., 2014; Bertsekas & Tsitsiklis, 1996; Haarnoja et al., 2018a):
+
+
+arg min E( _s,a,r,s′_ ) _∼D_ [( _Q_ ( _s, a_ ) _−_ _y_ ( _s, a, r, s_ _[′]_ )) [2] ] _,_ (1)
+_Q_
+
+
+where the samples ( _s, a, r, s_ _[′]_ ) are drawn from a replay buffer _D_, and the critic’s _target_ _value_
+_y_ ( _s, a, r, s_ _[′]_ ) is defined as:
+
+
+_y_ ( _s, a, r, s_ _[′]_ ) = _r_ ( _s, a_ ) + _γ_ [ _Q_ [¯] ( _s_ _[′]_ _, a_ _[′]_ ) _−_ _α_ log _π_ ( _a_ _[′]_ _|s_ _[′]_ )] _,_ _a_ _[′]_ _∼_ _π_ ( _·|s_ _[′]_ ) _,_ (2)
+
+
+with _Q_ [¯] denoting the _target critic_ that may differ from the active critic _Q_ (Mnih et al., 2015). The
+_actor_ is trained to find a policy _π_ _∈_ Π that maximizes the expected entropy-regularized value:
+
+
+arg max E _a∼π_ ( _·|s_ )[ _Q_ [˜] ( _s, a_ ) _−_ _α_ log _π_ ( _a|s_ )] _,_ (3)
+_π∈_ Π
+
+
+where _Q_ [˜] is a separate _actor-update critic_ used solely for training the actor, and may differ from both
+the active critic _Q_ and the target critic _Q_ [¯] .
+
+
+Note that _Q_ [¯] and _Q_ [˜] are _references_ : _Q_ [¯] guides critic learning (in (2)), while _Q_ [˜] guides actor learning
+(in (3)). Although they are not the critic or actor themselves, their construction strongly affects
+stability, bias, and training success. Thus, when we later describe the critic or actor as _conservative_ or
+_optimistic/explorative_, we refer to how these references are constructed. In the idealized setting with
+exact Bellman policy evaluation, all three value estimators, _Q_, _Q_ [¯], and _Q_ [˜], would match the true value
+function _Q_ _[π]_ (Sutton & Barto, 2018). However, different actor-critic methods, such as SAC (Haarnoja
+et al., 2018a) and REDQ (Chen et al., 2021), differ primarily in how they construct _Q_ [¯] and _Q_ [˜] .
+
+
+In Section 4, we review how existing soft actor-critic methods instantiate these components and
+highlight their limitations. Next, in Section 5, we introduce our proposed DEA approach, which
+generalizes these constructions through a fully learnable and adaptive ensemble aggregation strategy.
+
+
+4 ENSEMBLE AGGREGATION IN SOFT ACTOR-CRITIC METHODS
+
+
+Ensembles of _Q_ -functions have become standard in modern actor-critic algorithms for improving
+stability and mitigating overestimation bias. Most methods aggregate the outputs of these critics
+using conservative rules (e.g. by taking the minimum across the ensemble) and pair this with delayed
+copies as target networks to stabilize updates (Lillicrap et al., 2016; Mnih et al., 2015; Fujimoto et al.,
+2018). Formally, for each _i ∈_ [ _N_ ], let _Qi_ : _S × A →_ R be the (active) critic and _Q_ [¯] _i_ : _S × A →_ R
+its corresponding (delayed) target critic.
+
+
+The minimum strategy, introduced by Fujimoto et al. (2018) and adopted by SAC (Haarnoja et al.,
+2018a), aggregates the ensemble by selecting the lowest _Q_ -value estimate. SAC employs this rule for
+both the critic target, _Q_ [¯], used in (2), and the actor-update value, _Q_ [˜], used in (3);
+
+
+SAC: _Q_ ¯( _s, a_ ) = min _Q_ ¯ _i_ ( _s, a_ ) and _Q_ ˜( _s, a_ ) = min
+_i∈_ [ _N_ ] _i∈_ [ _N_ ] _[Q][i]_ [(] _[s, a]_ [)] _[.]_
+
+
+SAC works well for small ensembles (e.g., _N_ = 2), but becomes overly conservative as _N_ grows,
+often leading to underestimation and overly cautious policies (Lan et al., 2020; Kuznetsov et al.,
+2020). Instead, Chen et al. (2021) proposed REDQ, which maintains a larger ensemble of _N_ = 10
+critics and applies different aggregation strategies for critic and actor. At each critic update, REDQ
+
+
+3
+
+
+samples a random subset _S_ _⊂_ [ _N_ ] of size _|S|_ = 2 and uses the minimum over this subset as the target
+critic, and for actor policy updates it uses the average over the full _N_ -ensemble;
+
+
+**Ensemble disagreement.** To quantify uncertainty within the ensemble, DEA uses a measure of
+ensemble disagreement defined by the average pairwise deviation of _Q_ -value estimates. Specifically,
+for a state-action pair ( _s, a_ ):
+
+_δ_ ( _{Qi_ ( _s, a_ ) _}_ _[N]_ _i_ =1 [) =]        - _N_ 1        -        - _|Qi_ ( _s, a_ ) _−_ _Qj_ ( _s, a_ ) _|,_ for _i, j_ _∈_ [ _N_ ] _._
+2 _i>j_
+
+
+4
+
+
+REDQ: _Q_ ¯( _s, a_ ) = min _Q_ ¯ _i_ ( _s, a_ ) and _Q_ ˜( _s, a_ ) = [1]
+_i∈S_ _N_
+
+
+_N_
+
+- _Qi_ ( _s, a_ ) _._
+
+
+_i_ =1
+
+
+This decoupled aggregation balances critic conservatism (via a minimum of a random subset) with
+actor expressiveness (via a full ensemble average), providing improved training stability and greater
+sample efficiency compared to SAC, particularly in high UTD ratio regimes.
+
+
+**Limitations.** SAC and REDQ share structural limitations. Both rely on static aggregation rules for _Q_ [¯]
+and _Q_ [˜], which do not generalize well across learning regimes. SAC’s use of a fixed minimum becomes
+increasingly conservative with larger ensembles, often leading to persistent underestimation (Nikishin
+et al., 2022), while REDQ’s actor-side averaging can become unstable when the ensemble is small.
+
+
+5 DIRECTIONAL ENSEMBLE AGGREGATION IN SOFT ACTOR-CRITIC METHODS
+
+
+Directional Ensemble Aggregation (DEA) Table 1: Aggregation strategies for
+introduces a fully learnable framework for
+
+target critic ( _Q_ [¯] ) and the actor-update critic ( _Q_ [˜]
+
+ensemble-based value estimation in actor
+denote ensemble disagreement among _{Q_ [¯] _i}_
+
+critic methods. It generalizes static aggre
+respectively. _κ_ ¯ and _κ_
+
+gation strategie, such as those used in SAC
+
+that determine how conservative or optimistic
+
+and REDQ, by learning reference values in _Q_ ˜ should be.
+a data-driven manner that adapts to uncertainty and training dynamics. The adapta- Method Target critic _Q_ [¯]
+tion is controlled by two scalar parameters: SAC min _i∈_ [ _N_ ] _Q_ [¯] _i_ min _i∈_ [ _N_
+_κ_ ¯, which controls critic learning stability, REDQ min _i∈S_ _Q_ [¯] _i_ _N_ 1 - _Ni_
+and _κ_, which modulates actor exploration. DEA _N_ 1 - _Ni_ =1 _[Q]_ [¯] _[i]_ [ + ¯] _[κ][ ·]_ [ ¯] _[δ]_ _N_ 1 - _Ni_ =1 _[Q]_
+Both are learned online based on the ensemble’s internal disagreement. Table 1 summarizes how DEA compares to existing methods.
+
+
+Table 1: Aggregation strategies for constructing the
+target critic ( _Q_ [¯] ) and the actor-update critic ( _Q_ [˜] ). _δ_ [¯] and _δ_
+denote ensemble disagreement among _{Q_ [¯] _i}_ and _{Qi}_,
+respectively. _κ_ ¯ and _κ_ are DEA’s learnable parameters
+that determine how conservative or optimistic _Q_ [¯] and
+_Q_ ˜ should be.
+
+
+Method Target critic _Q_ [¯] Actor-update critic _Q_ [˜]
+
+SAC min _i∈_ [ _N_ ] _Q_ [¯] _i_ min _i∈_ [ _N_ ] _Qi_
+REDQ min _i∈S_ _Q_ [¯] _i_ _N_ 1 - _Ni_ =1 _[Q][i]_
+DEA _N_ 1 - _Ni_ =1 _[Q]_ [¯] _[i]_ [ + ¯] _[κ][ ·]_ [ ¯] _[δ]_ _N_ 1 - _Ni_ =1 _[Q][i]_ [ +] _[ κ][ ·][ δ]_
+
+
+DEA integrates seamlessly into the soft actor-critic framework (Section 3); its full update cycle is
+outlined in Algorithm 1, with the design rationale discussed below.
+
+
+**Algorithm 1** Directional Ensemble Aggregation (DEA)
+
+
+1: **Initialize:** replay buffer _D_ = _∅_ ; critic networks _Qθ_ 1 _, . . ., QθN_ and actor network _πϕ_ with random
+parameters _{θi}_ _[N]_ _i_ =1 [and] _[ ϕ]_ [; target critic networks] _[Q]_ [¯] _θ_ [¯] 1 _[, . . .,]_ _[Q]_ [¯] _θ_ [¯] _N_ [with] _[θ]_ [¯] _[i]_ _[←]_ _[θ][i]_ [for] _[ i]_ [ = 1] _[, . . ., N]_
+2: **for** each environment interaction **do**
+3: take action _at_ _∼_ _πϕ_ ( _·|st_ ), observe reward _rt_ ≜ _r_ ( _st, at_ ), transition to new state _st_ +1 _∼_
+_p_ ( _·|st, at_ ), and add ( _st, at, rt, st_ +1) to replay buffer _D_
+4: **for** each update-to-data ratio **do**
+5: sample mini-batch _B_ = _{_ ( _s, a, r, s_ _[′]_ _, a_ _[′]_ ) : ( _s, a, r, s_ _[′]_ ) _∼D, a_ _[′]_ _∼_ _πϕ_ ( _·|s_ _[′]_ ) _}_
+6: _θi_ _←_ _θi −_ _ηθ∇θ{_ _|B_ [1] _|_ - _B_ [(] _[Q][θ]_ _i_ [(] _[s, a]_ [)] _[ −]_ _[y][κ]_ [¯][(] _[s, a, r, s][′]_ [))][2] _[}]_ [,] _[∀][i][ ∈]_ [[] _[N]_ []] _▷_ _critic_
+
+7: _θ_ ¯ _i_ _←_ _τθi_ + (1 _−_ _τ_ )¯ _θi_, _∀i ∈_ [ _N_ ] _▷_ _target critic_
+8: _κ_ ¯ _←_ _κ_ ¯ _−_ _ηκ_ ¯ _∇κ_ ¯ _{_ [1] - _[|][Q]_ [ ˜] _[κ]_ [(] _[s, a]_ [)] _[ −]_ _[y][κ]_ [¯][(] _[s, a, r, s][′]_ [)] _[|][/][δ]_ [¯][(] _[s][′][, a][′]_ [)] _[}]_ _▷_ _DEA: target critic_
+
+
+_B_ [(] _[Q][θ]_ _i_ [(] _[s, a]_ [)] _[ −]_ _[y][κ]_ [¯][(] _[s, a, r, s][′]_ [))][2] _[}]_ [,] _[∀][i][ ∈]_ [[] _[N]_ []] _▷_ _critic_
+
+
+[1]  
+_|B|_
+
+
+[1]  
+_|B|_
+
+[1]  
+_|B|_
+
+[1]  
+_|B|_
+
+[1]   
+_|B|_
+
+
+9: _κ ←_ _κ −_ _ηκ∇κ{_ [1]
+
+
+_B_ _[|][Q]_ [ ˜] _[κ]_ [(] _[s, a]_ [)] _[ −]_ _[y][κ]_ [¯][(] _[s, a, r, s][′]_ [)] _[|][/][δ]_ [¯][(] _[s][′][, a][′]_ [)] _[}]_ _▷_ _DEA: target critic_
+
+_B_ _[|][Q]_ [ ˜] _[κ]_ [(] _[s, a]_ [)] _[ −]_ _[y][κ]_ [¯][(] _[s, a, r, s][′]_ [)] _[|][/δ]_ [(] _[s, a]_ [)] _[}]_ _▷_ _DEA: actor_
+
+_B_ [( ˜] _[Q][κ]_ [(] _[s, a][ϕ]_ [(] _[s]_ [))] _[ −]_ _[α]_ [ log] _[ π][ϕ]_ [(] _[a][ϕ]_ [(] _[s]_ [)] _[|][s]_ [))] _[}]_ [,] _[a][ϕ]_ [(] _[s]_ [)] _[ ∼]_ _[π][ϕ]_ [(] _[·|][s]_ [)] _[▷]_ _[policy]_
+
+_B_ [(log(] _[α]_ [)(] _[−]_ [log] _[ π][ϕ]_ [(] _[a][|][s]_ [)] _[ −H]_ [target][))] _[}]_ _▷_ _entropy_
+
+
+10: _ϕ ←_ _ϕ_ + _ηϕ∇ϕ{_ _|B_ [1]
+
+11: _α ←_ _α_ + _ηα∇α{_ [1]
+
+
+This metric is non-parametric, easy to compute, and does not rely on distributional critics (Bellemare
+et al., 2023). Related notions of ensemble diversity are discussed in more detail in Section 8. For
+notational clarity, we distinguish disagreement among target critics and active critics:
+
+
+_δ_ ¯( _s, a_ ) ≜ _δ_ ( _{Q_ ¯ _i_ ( _s, a_ ) _}_ _[N]_ _i_ =1 [)] and _δ_ ( _s, a_ ) ≜ _δ_ ( _{Qi_ ( _s, a_ ) _}_ _[N]_ _i_ =1 [)] _[.]_
+
+
+**Soft** **actor-critic** **learning** **with** **DEA.** DEA is built on the general soft actor-critic framework
+(Section 3), but can be easily generalized to other algorithmic families. We chose SAC as a use
+case, as it is the only commonly adopted algorithm with established variants tailored to the learning
+regimes considered in this work. It replaces fixed aggregation with learnable, uncertainty-aware
+versions of the target critic _Q_ [¯] and the actor-update critic _Q_ [˜] :
+
+
+Instead of (2), the critic is trained using the modified _target value_ using _Q_ [¯] _κ_ ¯:
+
+_yκ_ ¯( _s, a, r, s_ _[′]_ ) = _r_ ( _s, a_ ) + _γ_ [ _Q_ [¯] _κ_ ¯( _s_ _[′]_ _, a_ _[′]_ ) _−_ _α_ log _π_ ( _a_ _[′]_ _|s_ _[′]_ )] _,_ _a_ _[′]_ _∼_ _π_ ( _·|s_ _[′]_ ) _._ (4)
+
+
+As in previous work (see e.g., Section 3), DEA ensures stability through delayed target critics to
+prevent rapid shift. Also, all critics share the same ensemble-based target value (4), promoting
+consistency across the ensemble and avoiding instability caused by divergent critic objectives.
+
+
+For policy optimization, the actor trained using the modified _actor-update critic_ _Q_ [˜] _κ_ estimate:
+
+arg max E _a∼π_ ( _·|s_ )[ _Q_ [˜] _κ_ ( _s, a_ ) _−_ _α_ log _π_ ( _a|s_ )] _._ (5)
+_π∈_ Π
+
+
+**Learning the directional aggregation parameters.** DEA update _κ_ ¯ and _κ_ through a two-stage
+learning scheme that aligns critic and actor references while adapting to uncertainty. The critic-side
+parameter ¯ _κ_ is optimized to stabilize target values by minimizing the ensemble disagreement-weighted
+Bellman error:
+
+arg min E( _s,a,r,s′_ ) _∼D,a′∼π_ ( _·|s′_ )[ _|Q_ [˜] _κ_ ( _s, a_ ) _−_ _yκ_ ¯( _s, a, r, s_ _[′]_ ) _|/δ_ [¯] ( _s_ _[′]_ _, a_ _[′]_ )] _._ (6)
+_κ_ ¯
+
+
+Subsequently, the actor-side parameter _κ_ is updated to track the learned critic target while being
+regularized by active-critic disagreement:
+
+
+arg min E( _s,a,r,s′_ ) _∼D,a′∼π_ ( _·|s′_ )[ _|Q_ [˜] _κ_ ( _s, a_ ) _−_ _yκ_ ¯( _s, a, r, s_ _[′]_ ) _|/δ_ ( _s, a_ )] _._ (7)
+_κ_
+
+
+These objectives use disagreement-weighted absolute errors, producing _sign_ -based gradients. Specifically, the gradient of (6) with respect to ¯ _κ_ is _−γ_ E[sign( _Q_ [˜] _κ_ ( _s, a_ ) _−_ _yκ_ ¯( _s, a, r, s_ _[′]_ ))], and the gradient
+of (7) with respect to _κ_ is E[sign( _Q_ [˜] _κ_ ( _s, a_ ) _−_ _yκ_ ¯( _s, a, r, s_ _[′]_ )).
+
+
+The key idea is that while error magnitudes are noisy, their _sign_ reliably indicates whether estimates
+overshoot or undershoot targets. By using only this directional signal, DEA avoids domination by
+high-variance samples and ensures each transition contributes similarly. As a result, ¯ _κ_ and _κ_ change
+gradually rather than erratically, improving stability. This reliance on error _direction_ but no magnitude
+motivates the name: _directional_ ensemble aggregation.
+
+
+**Ensemble disagreement and its effect on conservatism and exploration.** Early in training, limited
+data and unrefined critics lead to high disagreement across the ensemble. As learning progresses and
+the critics become more aligned, disagreement decreases; especially relative to the growing scale of
+the _Q_ -values (e.g., see Figures 10 to 13 in Appendix C). This evolving disagreement regulates the
+balance between conservatism and exploration in DEA and helps mitigate primacy bias (Nikishin
+et al., 2022) by reducing the influence of noisy early estimates.
+
+When updating the critic parameters _θ_, disagreement enters through the reference target _yκ_ ¯: if _δ_ [¯] ( _s_ _[′]_ _, a_ _[′]_ )
+is large, a positive ¯ _κ_ inflates _yκ_ ¯ and risks overestimation, so smaller (often negative) values yield more
+stable targets. When updating the actor parameters _ϕ_, disagreement enters via the actor reference _Q_ [˜] _κ_ :
+when _δ_ ( _s, a_ ) is large, large _κ_ would over-emphasize noisy estimates; only as disagreement falls does
+a larger _κ_ become reasonable, supporting more optimistic updates.
+
+
+5
+
+
+DEA: _Q_ ¯ _κ_ ¯( _s, a_ ) = [1]
+
+_N_
+
+
+_N_
+
+
+- _Q_ ¯ _i_ ( _s, a_ ) + ¯ _κ ·_ ¯ _δ_ ( _s, a_ ) and _Q_ ˜ _κ_ ( _s, a_ ) = [1]
+
+_N_
+
+_i_ =1
+
+
+_N_
+
+
+_N_
+
+- _Qi_ ( _s, a_ ) + _κ · δ_ ( _s, a_ ) _._
+
+
+_i_ =1
+
+
+When updating the _κ_ parameters themselves, since the entropy term _−α_ log _π_ ( _a_ _[′]_ _|s_ _[′]_ ) is positive, _yκ_ ¯
+often exceeds _Q_ [˜] _κ_, making _Q_ [˜] _κ −_ _yκ_ ¯ negative on average. This drives ¯ _κ_ downward (more conservative
+critic targets) while pushing _κ_ upward (more optimistic actor updates). Together, these dynamics
+ensure DEA transitions from cautious critic guidance under high uncertainty to more exploratory
+actor updates as training progresses.
+
+
+The joint evolution of _κ_ ¯ and _κ_ is analyzed in the next section and illustrated in Figure 1, with
+additional results across regimes and environments in Figures 6 to 9 in Appendix C.
+
+
+6 EXPERIMENTS
+
+
+**Evaluation** **metrics.** We evaluate performance using three metrics: Final return measures the
+average return at the end of training across evaluation repetitions; InterQuartile Mean (IQM) of the
+final evaluation-time return provides a robust average across seeds by excluding outliers (Agarwal
+et al., 2021); Area Under the Learning Curve (AULC) captures the cumulative reward over the course
+of training, reflecting both speed and stability of learning. For each metric and environment, we
+assign a rank to each method, where a lower rank indicates better performance (i.e., rank 1 is best,
+rank 2 is second-best, and so on). The average rank is then computed for each metric.
+
+
+**Experimental setup.** We evaluate DEA on continuous control tasks from the MuJoCo physics
+simulator (Todorov et al., 2012; Brockman et al., 2016; Towers et al., 2024, version v5) and the
+DeepMind Control Suite (DMC) (Tassa et al., 2018), under the learning regimes defined in Table 2.
+These benchmarks were chosen because the limitations of static aggregation and the advantages of
+adaptive strategies are already well pronounced in such settings, and qualitatively different behavior is
+not expected in other continuous control domains. Each experiment is repeated across ten seeds. All
+methods use automatic entropy temperature tuning of _α_, following Haarnoja et al. (2018b). Further
+details on network architecture, training settings, and hyperparameters are provided in Appendix B.
+Code will be released publicly upon publication to ensure reproducibility.
+
+
+**Learning trajectories of directional parameters** ¯ _κ_ **and** _κ_ **.** To better understand how DEA modulates aggregation during training, Figure 1 visualizes the trajectories of _κ_ ¯ and _κ_ under the two
+learning regimes (Table 2). We initialize the aggregation parameters as ¯ _κ_ = _−_ 0 _._ 8 and _κ_ = 0 _._ 0; an
+ablation of initialization sensitivity is provided in Section 7. To ensure stable optimization in an
+unconstrained parameter space, we apply a tangent transformation to map both parameters into the
+open interval from minus one to one. The first row of the figure corresponds to the interactive regime,
+and the second row to the sample-efficient regime. The trends align with the behavior anticipated
+from our analysis in Section 5. In particular, as training progresses, _κ_ ¯ typically remains negative,
+anchoring conservative critic estimates, while _κ_ tends to be positive and further increases when
+learning proceeds, to support explorative actor behavior. This dynamic interplay reflects DEA’s ability
+to adaptively balance exploration and conservatism based on the ensemble disagreement and training
+context. Trajectories across all tasks, seeds, and learning regimes can be found in Appendix C.
+
+
+**Generalization across learning regimes.** Average performance across both learning regimes is
+summarized in Table 3; detailed results for each individual regime are provided in Appendix C.
+Overall, DEA outperforms the best-performing baseline across tasks and metrics. Notably, it achieves
+
+
+6
+
+
+**Learning regimes.** The goal of our exper
+Table 2: Learning regimes.
+
+iments is to evaluate DEA across learning
+settings. These regimes are defined by the Learning Ensemble Environment UTD
+UTD ratio, which specifies how many gradi- regime size interactions ratio
+ent updates are performed per environment Interactive 2 1 _._ 000 _._ 000 1
+interaction. We consider two regimes, inter- Sample-efficient 10 300 _._ 000 20
+active and sample-efficient, ranging from low
+to high update intensity. To align with each setting, we scale the ensemble size proportionally to
+the UTD ratio; smaller ensembles minimize compute in interactive settings, while larger ensembles
+promote stability when updates are frequent. Table 2 summarizes the learning regimes. SAC is
+typically used for the interactive, while REDQ is designed for sample-efficient one. DEA is evaluated
+in both to assess its ability to generalize.
+
+
+Table 2: Learning regimes.
+Learning Ensemble Environment UTD
+regime size interactions ratio
+
+
+Interactive 2 1 _._ 000 _._ 000 1
+Sample-efficient 10 300 _._ 000 20
+
+
+Figure 1: Trajectories of the directional aggregation parameters ¯ _κ_ (critic) and _κ_ (actor) on MuJoCo.
+The top row shows results for the interactive regime, and the bottom row for the sample-efficient
+regime (Table 2). Trajectories of all tasks, seeds, and learning regimes can be found in Appendix C.
+
+
+Table 3: Performance on MuJoCo and DMC environments. Metrics are average final return, InterQuantile Mean (IQM) of the final return, and Area Under the Learning Curve (AULC), averaged
+over learning regimes, evaluation repetitions, and ten seeds. Average rank is computed per metric
+across environments. _↑_ : higher is better, _↓_ : lower is better. Best algorithm per metric is **bold** .
+
+
+Final Return ( _↑_ ) IQM ( _↑_ ) AULC ( _↑_ )
+
+
+Environment DEA REDQ SAC DEA REDQ SAC DEA REDQ SAC
+
+
+Ant-v5 **4920** 4278 2199 **5226** 4712 2583 **2829** 2249 1556
+HalfCheetah-v5 **10158** 10065 8267 **10334** 10039 8250 **7745** 7682 6600
+Hopper-v5 **3376** 2756 2526 **3543** 2835 2760 **2780** 2432 1891
+Humanoid-v5 **5073** 4682 4832 5331 **5338** 5311 **3315** 2864 2857
+Walker2d-v5 4425 **4440** 2989 **4663** 4564 2716 **3111** 3037 1963
+
+
+MuJoCo Avg. Rank ( _↓_ ) **1.2** 2.0 2.8 **1.2** 1.8 3.0 **1.0** 2.0 3.0
+
+
+Cheetah-run 813 690 812 707 619 525
+Hopper-hop 174 58 148 40 105 32
+Hopper-stand 620 379 525 448 490 216
+Humanoid-run 149 80 154 80 **92** 83 39
+Humanoid-stand 634 348 654 313 327 170
+Humanoid-walk 487 283 506 283 267 149
+Quadruped-run 803 531 844 454 597 413
+Quadruped-walk 917 566 939 527 701 472
+Walker-run 705 503 715 499 568 395
+
+
+DMC Avg. Rank ( _↓_ ) **1.11** 1.89 3.00 **1.33** 1.67 3.00 **1.11** 1.89 3.00
+
+
+Avg. Rank ( _↓_ ) **1.14** 1.93 2.93 **1.29** 1.71 3.00 **1.07** 1.93 3.00
+
+
+the highest average rank in all three metrics: final return, IQM, and AULC, with a particularly strong
+lead in AULC, indicating more reliable and efficient learning over time. Unlike existing methods,
+which are typically optimized for a fixed learning regime, DEA adapts its aggregation strategy during
+training, based on ensemble disagreement and training context, enabling it to generalize across
+learning regimes.
+
+
+In particular, SAC is designed for low-UTD settings with small ensembles and often becomes overly
+conservative under higher UTD ratios. REDQ, by contrast, performs well in sample-efficient settings
+where its high UTD ratio and large ensemble size support rapid learning. Yet, REDQ tends to be
+unstable or less effective in low-update regimes, where its fixed update strategy becomes less reliable.
+DEA avoids these limitations by dynamically adjusting its behavior to the demands of the training
+context, rather than relying on static aggregation rules.
+
+
+7
+
+
+HalfCheetah-v5
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Env. Interactions 1e6
+
+
+HalfCheetah-v5
+
+
+0 50000 100000 150000 200000 250000 300000
+Env. Interactions
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.4
+
+
+0.6
+
+
+0.8
+
+
+1.0
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.4
+
+
+0.6
+
+
+0.8
+
+
+1.0
+
+
+Humanoid-v5
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Env. Interactions 1e6
+
+
+Humanoid-v5
+
+
+0 50000 100000 150000 200000 250000 300000
+Env. Interactions
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.4
+
+
+0.6
+
+
+0.8
+
+
+1.0
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.4
+
+
+0.6
+
+
+0.8
+
+
+1.0
+
+
+Ant-v5
+
+
+0.0 0.2 0.4 0.6 0.8 1.0
+Env. Interactions 1e6
+
+
+Ant-v5
+
+
+0 50000 100000 150000 200000 250000 300000
+Env. Interactions
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.4
+
+
+0.6
+
+
+0.8
+
+
+1.0
+
+
+0.2
+
+
+0.0
+
+
+0.2
+
+
+0.4
+
+
+0.6
+
+
+0.8
+
+
+1.0
+
+
+Learning curves and trajectories of the directional aggregation parameters ( _κ_ ¯ and _κ_ ) across all tasks
+and learning regimes are provided in Appendix C.
+
+
+7 ABLATIONS
+
+
+Our experiments already spans two distinct learning regimes (interactive and sample-efficient) which
+naturally serve as ablations over ensemble size and UTD ratio. As shown in Section 6, DEA remains
+effective across these varying configurations.
+
+
+**Fixed aggregation and degenerate cases.** A natural ablation is to fix ¯ _κ_ and _κ_ to constants. Doing
+so effectively recovers existing baselines: for example, setting both to enforce a static minimum
+corresponds to the conservative update used in SAC, while using a fixed mean aligns with REDQ.
+These variants remove DEA’s adaptivity and result in behavior already covered by prior methods.
+Fixing either _κ_ ¯ or _κ_ individually also degrades performance. As described in Section 5, these
+parameters act as directional anchors: _κ_ ¯ controls critic-side conservatism, while _κ_ guides actor-side
+aggregation. Learning both jointly is crucial to allow DEA to interpolate between exploration and
+caution based on ensemble disagreement. Without this flexibility, the critic and actor can become
+misaligned, undermining the value of directional ensemble learning. In such cases, DEA loses its
+ability to adapt to uncertainty and learning dynamics, and its performance suffers accordingly.
+
+
+**Sensitivity to initializations.** We study the sensitivity of DEA to different initializations of the
+critic-side aggregation parameter ¯ _κ_, while keeping the actor-side initialization of _κ_ fixed at zero. This
+isolates the effect of ¯ _κ_ and avoids interactions between the two directional parameters. Initializing _κ_
+at zero provides a neutral initialization that does not bias the actor toward conservatism or optimism
+at the start of training. Results are shown in Figures 14 and 15 (Appendix D) for the five MuJoCo
+environments. As expected, the impact of initialization varies across tasks and learning regimes.
+While these results highlight the importance of choosing a good initialization, especially in higher
+UTD settings, DEA remains stable across all tested configurations, thanks to its robustness to the
+unforeseen effects of numerical perturbations. This robustness stems from its directional update rule,
+which only preserves the essential sign-information. None of the initializations lead to divergence or
+collapse, and many configurations outperform both SAC and REDQ.
+
+
+8 RELATED WORK
+
+
+Ensemble methods in off-policy RL have been widely studied for their ability to stabilize training,
+estimate uncertainty, and facilitate exploration. Below, we review prior work through three lenses
+most relevant to our work: (i) reducing overestimation bias, (ii) enabling efficient exploration, and
+(iii) improving sample efficiency across varying UTD regimes. These objectives often overlap, and
+many methods address multiple goals simultaneously. Below, we highlight representative approaches
+within each category. A more detailed discussion is provided in Appendix A.
+
+
+**Reducing overestimation bias with ensembles.** Overestimation bias in _Q_ -value estimates can
+destabilize training and degrade policy performance. To address this issue, various methods have
+been proposed for both discrete and continuous control. In discrete-action settings, overestimation
+is mitigated by aggregating multiple _Q_ -value estimates in various different manners (Van Hasselt,
+2010; Van Hasselt et al., 2016; Anschel et al., 2017; Lan et al., 2020). However, these techniques
+do not extend naturally to continuous control. In continuous settings, TD3 (Fujimoto et al., 2018)
+proposed taking the minimum over two _Q_ -networks to reduce bias, a strategy adopted and extended
+by SAC (Haarnoja et al., 2018a) and others (Chen et al., 2021; Ciosek et al., 2019). These methods
+stabilize training by conservatively anchoring the target through fixed ensemble aggregation rules.
+DEA, on the other hand, avoids such hard-coded ensemble rules and allows adjusting ensembles
+dynamics based on training dynamics.
+
+
+Recently, regularized value estimation methods have sought to adaptively reduce bias. GPL (Cetin &
+Celiktutan, 2023), for example, uses a distributional critic and dual TD-learning with regularization.
+However, GPL does not straightforwardly generalize outside its narrow learning regime, struggling in
+interactive (low-UTD) settings and requiring large ensembles and high UTD ratios for stability (Cetin
+
+
+8
+
+
+& Celiktutan, 2023, Figures 13 and 15). Its sample efficiency depends on pre-tuned, task-specific
+hyperparameters, particularly heuristic entropy targets, and a fixed optimism schedule (Cetin &
+Celiktutan, 2023, Tables 2 and 3). In contrast, DEA avoids such rigidity by using scalar _Q_ -values and
+learning aggregation weights directly from data, adapting flexibly across learning regimes without
+distributional modeling or handcrafted schedules.
+
+
+**Efficient exploration.** While conservative value estimates provide stability, they can suppress exploration and slow learning. Prior approaches for discrete control encourage exploration by leveraging
+ensemble disagreement (Osband et al., 2016; Chen et al., 2017). In continuous control, OAC (Ciosek
+et al., 2019) leverages upper confidence bounds to guide exploration, while TOP (Moskovitz et al.,
+2021) frames the trade-off between conservatism and exploration as a multi-armed bandit problem,
+switching between predefined aggregation strategies. DAC (Nauman & Cygan, 2025) takes a different
+approach by maintaining two actors; a pessimistic one for conservative updates and an optimistic
+one for exploration. DEA differs from these methods by guiding a single actor through a fully
+learnable aggregation scheme. Rather than relying on handcrafted decision rules, confidence bounds,
+or architectural complexity, DEA integrates ensemble disagreement directly into the actor update and
+adjusts exploration adaptively during training.
+
+
+**Sample efficiency.** Improving sample efficiency is a central goal in off-policy RL. REDQ (Chen
+et al., 2021) addresses this by using large ensembles and high UTD ratios. However, REDQ relies
+on a fixed aggregation strategy and does not adapt to evolving uncertainty or training dynamics.
+AQE (Wu et al., 2022) and TQC (Kuznetsov et al., 2020) enhance learning by either averaging over
+subsets of multi-head critics (AQE) or truncating the highest _Q_ -value estimates (TQC). However,
+both approaches require manually chosen thresholds or hyperparameters that must be tuned separately
+for each task or training regime. In contrast, DEA dynamically adapts its aggregation behavior based
+on ensemble disagreement, automatically adjusting conservatism and exploration without relying on
+fixed schedules or per-task tuning.
+
+
+Other methods like SUNRISE (Lee et al., 2021) and MeanQ (Liang et al., 2022) also promote
+sample-efficient learning but are tailored to fixed schedules and architectures. DEA instead modulates
+ensemble aggregation dynamically, allowing a single actor-critic algorithm to perform robustly across
+both interactive (low-UTD) and sample-efficient (high-UTD) regimes without manual tuning.
+
+
+DEA aims to learn a general-purpose aggregation mechanism that operates effectively across learning
+regimes, from interactive (low-UTD) to sample-efficient (high-UTD) settings, by leveraging ensemble
+disagreement in a principled, learnable manner. In this landscape, SAC (Haarnoja et al., 2018a) and
+REDQ (Chen et al., 2021) represent the most adopted baselines for each learning regime.
+
+
+9 DISCUSSION
+
+
+DEA is an adaptive ensemble-based method for actor-critics that works across learning regimes.
+Its key strength is adaptability: DEA learns directional aggregation weights that evolve with the
+data, allowing it to adjust autonomously to varying tasks, uncertainty levels, and training dynamics.
+This flexibility allows DEA to perform reliably across both interactive and sample-efficient settings,
+something that prior methods typically address only in isolation.
+
+
+**Limitations.** Despite strong empirical performance, DEA has limitations. Learnable aggregation
+parameters increase training complexity. Although DEA was stable across tasks and seeds in our
+experiments, its effectiveness may decline with very small ensembles that provide weak disagreement
+signals. Our study focused on dense-reward environments where random exploration often suffices
+and estimation bias can be partly offset by heuristics. The fact that DEA still yields clear gains
+highlights its strength, and we expect these benefits to be even greater in sparse-reward settings where
+exploration is harder. While results indicate that directional aggregation mitigates overestimation
+bias and improves learning, this remains unsupported by theory.
+
+
+**Future work.** Our work focuses exclusively on online RL; extending these ideas to the offline
+setting is an exciting direction, especially building on the promising findings demonstrated in the
+online setting. Additionally, pairing DEA with more advanced frameworks, such as BRO (Nauman
+et al., 2024b) or Simba (Lee et al., 2025), could further improve learning.
+
+
+9
+
+
+REFERENCES
+
+
+Zaheer Abbas, Rosie Zhao, Joseph Modayil, Adam White, and Marlos C Machado. Loss of plasticity
+in continual deep reinforcement learning. In _Conference on Lifelong Learning Agents (CoLLAs)_,
+2023.
+
+
+Rishabh Agarwal, Max Schwarzer, Pablo Samuel Castro, Aaron C Courville, and Marc Bellemare.
+Deep reinforcement learning at the edge of the statistical precipice. _Advances in Neural Information_
+_Processing Systems (NeurIPS)_, 2021.
+
+
+Gaon An, Seungyong Moon, Jang-Hyun Kim, and Hyun Oh Song. Uncertainty-based offline
+reinforcement learning with diversified q-ensemble. _Advances in Neural Information Processing_
+_Systems (NeurIPS)_, 2021.
+
+
+Oron Anschel, Nir Baram, and Nahum Shimkin. Averaged-dqn: Variance reduction and stabilization
+for deep reinforcement learning. In _Proceedings_ _of_ _the_ _International_ _Conference_ _on_ _Machine_
+_Learning (ICML)_, 2017.
+
+
+Marc G Bellemare, Will Dabney, and Mark Rowland. _Distributional reinforcement learning_ . MIT
+Press, 2023.
+
+
+Dimitri Bertsekas and John N Tsitsiklis. _Neuro-dynamic programming_ . Athena Scientific, 1996.
+
+
+G. Brockman, V. Cheung, L. Pettersson, J. Schneider, J. Schulman, J. Tang, and W. Zaremba. OpenAI
+Gym. _arXiv preprint arXiv:1606.01540_, 2016.
+
+
+Edoardo Cetin and Oya Celiktutan. Learning pessimism for reinforcement learning. In _Proceedings_
+_of the AAAI Conference on Artificial Intelligence_, 2023.
+
+
+Richard Y Chen, Szymon Sidor, Pieter Abbeel, and John Schulman. Ucb exploration via q-ensembles.
+_arXiv preprint arXiv:1706.01502_, 2017.
+
+
+Xinyue Chen, Che Wang, Zijian Zhou, and Keith W Ross. Randomized ensembled double q-learning:
+Learning fast without a model. In _International Conference on Learning Representations (ICLR)_,
+2021.
+
+
+Kamil Ciosek, Quan Vuong, Robert Loftin, and Katja Hofmann. Better exploration with optimistic
+actor critic. _Advances in Neural Information Processing Systems (NeurIPS)_, 2019.
+
+
+Scott Fujimoto, Herke Hoof, and David Meger. Addressing function approximation error in actorcritic methods. In _Proceedings of the International Conference on Machine Learning (ICML)_,
+2018.
+
+
+Tuomas Haarnoja, Haoran Tang, Pieter Abbeel, and Sergey Levine. Reinforcement learning with
+deep energy-based policies. In _Proceedings of the International Conference on Machine Learning_
+_(ICML)_, 2017.
+
+
+Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy
+maximum entropy deep reinforcement learning with a stochastic actor. In _Proceedings_ _of_ _the_
+_International Conference on Machine Learning (ICML)_, 2018a.
+
+
+Tuomas Haarnoja, Aurick Zhou, Kristian Hartikainen, George Tucker, Sehoon Ha, Jie Tan, Vikash
+Kumar, Henry Zhu, Abhishek Gupta, Pieter Abbeel, et al. Soft actor-critic algorithms and
+applications. _arXiv preprint arXiv:1812.05905_, 2018b.
+
+
+D.P. Kingma and J. Ba. Adam: A method for stochastic optimization. In _International Conference_
+_on Learning Representations (ICLR)_, 2015.
+
+
+Arsenii Kuznetsov, Pavel Shvechikov, Alexander Grishin, and Dmitry Vetrov. Controlling overestimation bias with truncated mixture of continuous distributional quantile critics. In _Proceedings of_
+_the International Conference on Machine Learning (ICML)_, 2020.
+
+
+Qingfeng Lan, Yangchen Pan, Alona Fyshe, and Martha White. Maxmin q-learning: Controlling the
+estimation bias of q-learning. In _International Conference on Learning Representations (ICLR)_,
+2020.
+
+
+10
+
+
+Hojoon Lee, Dongyoon Hwang, Donghu Kim, Hyunseung Kim, Jun Jet Tai, Kaushik Subramanian,
+Peter R Wurman, Jaegul Choo, Peter Stone, and Takuma Seno. Simba: Simplicity bias for
+scaling up parameters in deep reinforcement learning. In _International Conference on Learning_
+_Representations (ICLR)_, 2025.
+
+
+Kimin Lee, Michael Laskin, Aravind Srinivas, and Pieter Abbeel. Sunrise: A simple unified framework for ensemble learning in deep reinforcement learning. In _Proceedings of the International_
+_Conference on Machine Learning (ICML)_, 2021.
+
+
+Litian Liang, Yaosheng Xu, Stephen McAleer, Dailin Hu, Alexander Ihler, Pieter Abbeel, and Roy
+Fox. Reducing variance in temporal-difference value estimation via ensemble of deep networks.
+In _Proceedings of the International Conference on Machine Learning (ICML)_, 2022.
+
+
+T.P. Lillicrap, J.J. Hunt, A. Pritzel, N. Heess, T. Erez, Y. Tassa, D. Silver, and D. Wierstra. Continuous
+control with deep reinforcement learning. In _International Conference on Learning Representations_
+_(ICLR)_, 2016.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan
+Wierstra, and Martin Riedmiller. Playing atari with deep reinforcement learning. _arXiv preprint_
+_arXiv:1312.5602_, 2013.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Bellemare,
+Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level control
+through deep reinforcement learning. _Nature_, 2015.
+
+
+Ted Moskovitz, Jack Parker-Holder, Aldo Pacchiano, Michael Arbel, and Michael Jordan. Tactical
+optimism and pessimism for deep reinforcement learning. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems (NeurIPS)_, 2021.
+
+
+Michal Nauman and Marek Cygan. Decoupled policy actor-critic: Bridging pessimism and risk awareness in reinforcement learning. In _Proceedings of the AAAI Conference on Artificial Intelligence_,
+2025.
+
+
+Michal Nauman, Michał Bortkiewicz, Piotr Miło´s, Tomasz Trzcinski, Mateusz Ostaszewski, and
+Marek Cygan. Overestimation, overfitting, and plasticity in actor-critic: the bitter lesson of
+reinforcement learning. In _Proceedings of the International Conference on Machine Learning_
+_(ICML)_, 2024a.
+
+
+Michal Nauman, Mateusz Ostaszewski, Krzysztof Jankowski, Piotr Miło´s, and Marek Cygan. Bigger,
+regularized, optimistic: scaling for compute and sample efficient continuous control. _Advances in_
+_Neural Information Processing Systems (NeurIPS)_, 2024b.
+
+
+Evgenii Nikishin, Max Schwarzer, Pierluca D’Oro, Pierre-Luc Bacon, and Aaron Courville. The
+primacy bias in deep reinforcement learning. In _Proceedings of the International Conference on_
+_Machine Learning (ICML)_, 2022.
+
+
+Ian Osband, Charles Blundell, Alexander Pritzel, and Benjamin Van Roy. Deep exploration via
+bootstrapped dqn. _Advances in Neural Information Processing Systems (NeurIPS)_, 2016.
+
+
+A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T..evor Killeen, Z. Lin,
+N. Gimelshein, L. Antiga, A. Desmaison, A. Kopf, E. Yang, Z. DeVito, M. Raison, A. Tejani, S. Chilamkurthy, B. Steiner, L. Fang, J. Bai, and S. Chintala. PyTorch: An Imperative Style,
+High-Performance Deep Learning Library. _Advances in Neural Information Processing Systems_
+_(NeurIPS)_, 2019.
+
+
+Martin L Puterman. _Markov decision processes:_ _discrete stochastic dynamic programming_ . John
+Wiley & Sons, 2014.
+
+
+Wenling Shang, Kihyuk Sohn, Diogo Almeida, and Honglak Lee. Understanding and improving
+convolutional neural networks via concatenated rectified linear units. In _Proceedings_ _of_ _the_
+_International Conference on Machine Learning (ICML)_, 2016.
+
+
+Hassam Sheikh, Mariano Phielipp, and Ladislau Boloni. Maximizing ensemble diversity in deep
+reinforcement learning. In _International Conference on Learning Representations (ICLR)_, 2022.
+
+
+11
+
+
+David Silver, Guy Lever, Nicolas Heess, Thomas Degris, Daan Wierstra, and Martin Riedmiller.
+Deterministic policy gradient algorithms. In _Proceedings_ _of_ _the_ _International_ _Conference_ _on_
+_Machine Learning (ICML)_, 2014.
+
+
+Richard S Sutton and Andrew G Barto. _Reinforcement learning:_ _An introduction_ . MIT Press, 2018.
+
+
+Y. Tassa, Y. Doron, A. Muldal, T. Erez, Y. Li, D. de Las Casas, D. Budden, A. Abdolmaleki, J. Merel,
+A. Lefrancq, et al. Deepmind control suite. _arXiv preprint arXiv:1801.00690_, 2018.
+
+
+Sebastian Thrun and Anton Schwartz. Issues in using function approximation for reinforcement
+learning. In _Proceedings of the Fourth Connectionist Models Summer School_, 1993.
+
+
+Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control.
+In _IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)_, 2012.
+
+
+Mark Towers, Ariel Kwiatkowski, Jordan Terry, John U Balis, Gianluca De Cola, Tristan Deleu,
+Manuel Goulao, Andreas Kallinteris, Markus Krimmel, Arjun KG, et al. Gymnasium: A standard
+interface for reinforcement learning environments. _arXiv preprint arXiv:2407.17032_, 2024.
+
+
+Hado Van Hasselt. Double q-learning. _Advances in Neural Information Processing Systems (NeurIPS)_,
+2010.
+
+
+Hado Van Hasselt, Arthur Guez, and David Silver. Deep reinforcement learning with double qlearning. In _Proceedings of the AAAI Conference on Artificial Intelligence_, 2016.
+
+
+Christopher JCH Watkins and Peter Dayan. Q-learning. _Machine Learning_, 1992.
+
+
+Yanqiu Wu, Xinyue Chen, Che Wang, Yiming Zhang, and Keith W Ross. Aggressive q-learning with
+ensembles: Achieving both high sample efficiency and high asymptotic performance. _Advances in_
+_Neural Information Processing Systems (NeurIPS)_, 2022. Deep Reinforcement Learning Workshop.
+
+
+Brian D Ziebart. _Modeling_ _purposeful_ _adaptive_ _behavior_ _with_ _the_ _principle_ _of_ _maximum_ _causal_
+_entropy_ . Carnegie Mellon University, 2010.
+
+
+12

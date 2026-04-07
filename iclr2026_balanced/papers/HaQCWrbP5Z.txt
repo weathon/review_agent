@@ -1,0 +1,2115 @@
+# LEAVE ONE EXPERT OUT: ROBUST UNCERTAINTY QUANTIFICATION VIA INTRINSIC CROSS-VALIDATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Estimating epistemic uncertainty remains an important challenge in modern Deep
+Learning (DL). We propose a novel architecture, called Leave one Expert Out
+(LEO), which is a form of a mixture-of-experts model with latent-space-distanceaware router and a null expert, representing prior belief, to which output of the
+model collapses if testing datapoint is too different from any of datapoints experts
+were trained on. This architecture allows to temporarily drop experts from the
+model, and we utilise this property to train the router to leverage the predictions
+of remaining experts to make predictions for the datapoints normally assigned to
+the expert currently removed from the model. We coin this mechanism _intrinsic_
+_cross-validation_ and show, such a trained router excels at estimating epistemic
+uncertainty for both in and out of distribution inputs. We demonstrate state-of-art
+performance on uncertainty quantification in regression benchmarks, such as UCI
+problems or age prediction on UTK-Face, and CIFAR-10 classification benchmark. We also show the proposed method can achieve superior performance in
+surrogate-based black-box optimization.
+
+
+1 INTRODUCTION
+
+
+Deep Learning (DL) (Rumelhart et al., 1986; Goodfellow et al., 2016) has achieved spectacular success when it comes to the predictive power of models. Beginning with early successes in computer
+vision (Krizhevsky et al., 2012), where the models were trained to predict the class of an object in
+an image, the field has since advanced rapidly. Today, modern DL models, such as Large Language
+Models, can even engage in meaningful conversations with the user by predicting the most likely
+next word (token) given a sequence of preceding words. However, while DL models excel at making
+a prediction, assessing the certainty of that prediction remains a notoriously difficult problem.
+
+
+This uncertainty might stem from different sources. Aleatoric uncertainty reflects inherent noise
+in the data or labels. For example, the same house might sell for slightly different prices due to
+random factors not captured by its features. In general, basic DL models can typically handle this
+type of uncertainty if their outputs can be interpreted as probability distributions. For instance, in
+classification with softmax outputs, if two identical images exist in the training set, but the first is
+labelled as a dog and second as a cat, then training with standard cross-entropy loss will encourage
+the model to put roughly half of probability mass on each of the labels. While more sophisticated
+techniques exist for modelling aleatoric uncertainty, even simple models provide a basic way to
+capture this type of observation noise.
+
+
+The second source of uncertainty is typically much harder to deal with. It is referred to as epistemic
+and arises when the model has not seen enough data during training to make a confident prediction
+for a given test data point. We cannot simply train the model to output its estimated epistemic
+uncertainty, because all training points are in-distribution (ID) and this uncertainty during training
+is essentially zero (or very small and only due to observation noise). As a result, naively trained
+models tend to be overconfident and behave unpredictably on inputs far from the training data.
+Since epistemic uncertainty reflects a model’s lack of knowledge about new inputs, a proper model
+of epistemic uncertainty must, by definition, account for out-of-distribution (OoD) inputs.
+
+
+At first glance, this problem may seem prohibitively difficult. How can we make sure our epistemic uncertainty model performs well on inputs it has never seen? But if we take a step back, and
+
+
+1
+
+
+consider the classical, non-deep machine learning methods, we will realize that this exact problem
+has already been addressed countless times. One of the classical models celebrated for uncertainty
+quantification is the Gaussian Process (GP) (Rasmussen & Williams, 2006). GPs have the rather
+desirable property that, as the inputs move further away from training data, the model predictions
+collapse to the user-specified prior, with the rate of collapse controlled by the length scale hyperparameter. This hyperparameter can be tuned using cross-validation (Bachoc, 2013), where the model
+is repeatedly trained on subsets of the data and evaluated on held-out points. While feasible for
+classical models with short training times, repeated retraining is completely impractical for large
+deep learning models, requiring plenty of time and compute to retrain.
+
+
+In recent years, numerous uncertainty quantification methods have been developed for epistemic
+uncertainty quantification, including Bayesian neural networks (Mackay, 1992; Neal, 2012), meanfield variational inference (Blundell et al., 2015), Monte Carlo Dropout (Gal & Ghahramani, 2016),
+ensembles Lakshminarayanan et al. (2017); Wen et al. (2020); Dusenberry et al. (2020) and singlemodel approaches (Tagasovska & Lopez-Paz, 2019; Van Amersfoort et al., 2020; Liu et al., 2020;
+Van Amersfoort et al., 2021). However, in these approaches, the training process typically does
+not explicitly encourage the model to outputs high uncertainty in OoD cases. Instead, they rely
+on the assumption that the model will naturally behave differently on OoD inputs, which does not
+necessarily need to hold in practice.
+
+
+In this work, we propose a novel approach for epistemic uncertainty quantification called Leaveone-Expert-Out (LEO). LEO introduces supervised OoD signals during training by simulating OoD
+scenarios using only partitioned training data, without requiring actual held-out OoD examples. The
+intuition is that this enables the model to transfer its OoD detection capability to test time. LEO
+is a variant of a mixture-of-experts neural network, where each expert is trained on a subset of the
+training data, and OoD scenarios are simulated by randomly dropping some experts during training.
+
+
+Unlike some methods that set a fixed threshold to reject model outputs for OoD inputs, we treat
+all unseen inputs as “partially” OoD. To handle this, we include a “null” (prior) expert, outputting
+a vague distribution suitable for OoD cases. Predictions from this expert and the other experts are
+then weighted by a distance-aware router, which computes weights based on the distance between
+the test input and the training data in the latent space. To train this router, we introduce a novel
+mechanism called “intrinsic cross-validation”, which involves learning to make accurate predictions
+for data assigned to a given expert, _with that expert removed from the model_ . This forces the router
+to learn how much to rely on the remaining experts’ predictions and when to defer to the null expert,
+mimicking the desirable property of a GP.
+
+
+In our architecture, experts can share the feature extractor and differ only in the final layer, resulting
+in a negligible increase in model size. Through extensive experiments, we show that LEO obtains
+superb performance on both regression and classifications tasks requiring uncertainty quantification,
+for both in- and out-of-distribution data, as well as sequential decision making, ~~often~~ ~~completely~~
+~~outperforming existing methods~~ and consistently matches or outperforms state of art performance.
+
+
+2 METHODOLOGY
+
+
+This section presents the core mechanism of LEO. The training and inference procedures are summarised in Algorithms 1, 2 and 3. We consider a supervised learning problem where, given a point
+_x_ _∈X_, the goal is to predict the target _y_ _∈Y_ . We assume that we are given a training dataset
+_D_ = _{_ ( _xi, yi,_ ) _[n]_ _i_ =1 _[}]_ [, where] _[ x][i]_ _[∈X]_ [are inputs and] _[ y][i]_ _[∈Y]_ [are labels.] [The set] _[ Y]_ [could, for instance,]
+be R for regression or [ _C_ ] for _C_ -class classification. We aim to devise an architecture that
+
+
+(i) produces epistemic uncertainty estimates that grow as the input moves further away from
+the training distribution;
+
+
+(ii) enables efficient cross-validation of the uncertainty estimates.
+
+
+To fulfill these requirements, we propose to use a mixture-of-experts style architecture, described
+below. Before training, we assign every data point in the training set a type _t_ _∈T_, with each type
+handled by a specific expert. We discuss how to partition the training set into different types in
+Subsection B.1. Let _E_ _⊂T_ be the set of all data point types in the training data. We propose to
+use a shared feature extractor _f_ : _X_ _→Z_ _⊂_ R _[d][z]_ parameterised by _ψ_ and implement each expert
+
+
+2
+
+
+for _t ∈E_ as a linear head [1] operating on the latent representation _z_ = _f_ ( _x_ ; _ψ_ ). As such, each expert
+is a single-layer network _ht_ : _Z_ _→_ R _[d][y]_, where _dy_ = 1 for regression and _dy_ = _C_ for _C_ -class
+classification. Each expert is trained only on data points of its own type and the feature extractor is
+trained on all the data. That is, we learn _{θt}t∈E_ _, ψ_ by minimizing the following loss function:
+
+
+We now proceed to describe the mechanism behind the operation of the router.
+
+
+2.1 DISTANCE-AWARE ROUTER
+
+
+The router, which models the type probabilities _pϕ_ ( _t|x_ ; _E_ ) and _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ), operates on the latent
+embeddings given by the feature extractor _f_ ( _x_ ; _ψ_ ) and is parametrised by _ϕ_ = �� _t∈E_ _[ϕ][t]_ - _∪_ _ϕ_ 0,
+
+where _ϕt_ is a set of parameters specified below for each _t_, and _ϕ_ 0 _∈_ R is a learnable constant. To
+fulfill the requirement (i) outlined in the beginning of the section, we want the router to be distanceaware in the latent space, i.e., to guarantee that a data point with latent embeddings _z_ vastly different
+than ones seen during training will make the router output a high OoD probability _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ )
+and make the predictive distribution collapse to the prior _p_ 0. To achieve this property, we propose
+that the router should learn a projection matrix _Mt_ for each expert for _t_ _∈E_ and assign a score
+inversely proportional to the L2 distance between the projected embeddings _z_ _[T]_ _Mt_ and the centroid
+
+
+1In principle, each expert head could be much deeper than a single layer. However, we found empirically
+that a single layer was sufficient, so we chose it for simplicity and to reduce memory and computational costs.
+
+
+3
+
+
+_J_ [experts] ( _D_ ; _{θt}t∈E_ ; _ψ_ ) = [1]
+
+_n_
+
+
+_t∈E_
+
+
+ - _L_ ( _ht_ ( _f_ ( _xi_ ; _ψ_ ); _θt_ ) _, yi_ ) _,_
+
+
+_{i_ : _ti_ = _t}_
+
+
+where _L_ ( _·, ·_ ) : R _[d][y]_ _× Y_ _→_ R is a task-specific loss function. We use Mean Squared Error for
+regression and Cross-Entropy for classification. Note that, although the feature extractor technically
+sees all the data points, the predictions made by each expert can vary significantly if each expert
+only sees data from a particular subregion of _X_ . We expand on this in Subsection B.1.
+
+
+When given a new data point unseen during training, we do not know a priori which expert will
+handle it best. Hence, during inference, which expert to invoke is decided by a router _pϕ_ ( _t|x_ ; _E_ )
+parameterised by _ϕ_ . We thus make the prediction for a new point by marginalizing the type variable:
+
+
+_pϕ_ ( _y|x_ ; _E_ ) = _p_ 0( _y_ ) _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ) +         - _p_ ( _y|x, t_ ) _pϕ_ ( _t|x_ ; _E_ ) _,_ (1)
+
+
+_t∈E_
+
+
+where _p_ 0 is a prior distribution associated with an additional out-of-distribution (OoD) type. The
+notation _t_ _∈E/_ is thus shorthand for this OoD type, i.e., the case where none of the experts associated
+with the types _E_ is expected to provide an accurate prediction. The resulting prediction can be
+interpreted as a weighted mixture of the experts’ in-distribution predictions and the prior distribution
+_p_ 0, where the weight assigned to _p_ 0 reflects the model’s estimated probability of the input being
+OoD. This prior can be specified by the user if they have domain knowledge about the distribution
+of _y_ . In our experiments, we simply resort to a uniform distribution over all classes in the case of
+classification and a zero-mean, unit-variance gaussian in the case of regression (and we assume that
+the training data is standardized). For the predictive distribution _p_ ( _y|x, t_ ) in Equation 1, we use the
+predictive softmax _p_ ( _y|x, t_ ) = softmax( _ht_ ( _z_ ; _θt_ )) in classification and the delta function centered
+on the expert’s prediction _p_ ( _y|x, t_ ) = _δ_ ( _y_ = _ht_ ( _z_ ; _θt_ )) in regression. As such, the uncertainty in
+this model mainly arises when _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ) is high, in which case the vague prior dominates.
+
+
+In the case of classification, the final predictive distribution _pϕ_ ( _y|x_ ; _E_ ) is just a mixture of categorical
+distributions, which is a categorical distribution itself that can be easily computed. In regression,
+given the prior _p_ 0( _y|x_ ) = _N_ ( _y_ ; _µ_ 0( _x_ ) _, σ_ 0 [2][(] _[x]_ [))][, then] _[ p][ϕ]_ [(] _[y][|][x]_ [;] _[ E]_ [)][ is a mixture of a Gaussian and delta]
+functions, which we approximate with a single Gaussian by moment-matching, i.e., _pϕ_ ( _y|x_ ; _E_ ) _≈_
+_N_ ( _y_ ; _µϕ_ ( _x_ ; _E_ ) _, σϕ_ [2][(] _[x]_ [;] _[ E]_ [))][, where]
+
+
+_µϕ_ ( _x_ ; _E_ ) = _µ_ 0( _x_ ) _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ) + - _ht_ ( _f_ ( _x_ ; _ψ_ ); _θt_ ) _pϕ_ ( _t|x_ ; _E_ ) _,_
+
+
+_t∈E_
+
+_σϕ_ [2][(] _[x]_ [;] _[ E]_ [) =] - _σ_ 0 [2][(] _[x]_ [) + (] _[µ]_ [0][(] _[x]_ [)] _[ −]_ _[µ][ϕ]_ [(] _[x]_ [;] _[ E]_ [))][2][�] _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ) + 
+_t∈E_
+
+
+- _ht_ ( _f_ ( _x_ ; _ψ_ ); _θt_ ) _−_ _µϕ_ ( _x_ ; _E_ )�2 _pϕ_ ( _t|x_ ; _E_ ) _._
+
+
+_et_ of the data points of type _t_ in the latent space:
+
+_τt_
+_st_ ( _z_ ; _ϕt_ ) = _d_ 1 _z_ _[∥][z][T]_ _[M][t][ −]_ _[e][t][∥]_ [2] 2 _,_
+
+where _τt_ is a temperature parameter and _ϕt_ = _{Mt, τt}_ . Since the function _∥z_ _[T]_ _Mt_ _−_ _et∥_ [2] 2 [is]
+quadratic and always positive, it has a unique minimiser and for any direction _e_ ˆ _∈_ R _[d][z]_, we must
+have _st_ ( _αe_ ˆ; _ϕt_ ) _→_ 0 as _α_ _→∞_ . The use of such distances was previously introduced in a method
+called DUQ (Van Amersfoort et al., 2020), which uses the exponent of the negative distance rather
+than the inverse distance. In our experiments, we found the inverse distance to be a much more
+stable choice for the router. The scores are then normalised as below to give the type probabilities:
+
+
+Figure 1: (a) Before training, the dataset is partitioned into different types. (b) Training Phase 1:
+Each data point is passed through the feature extractor and the type-specific expert to optimise perexpert MSE losses. Both the feature extractor and experts are updated. (c) Training Phase 2: The
+feature extractor and experts are frozen, and only the router is updated. In the top panel, each data
+point is passed through all experts, with outputs weighted by the router to compute the likelihood
+under the full model. In the bottom panel, the expert corresponding to the data point’s type and a
+random subset of other experts are dropped, and the remaining experts’ weighted outputs are used
+to compute the intrinsic cross-validation likelihood. Both likelihoods are obtained from a single
+forward pass by using different subsets of experts.
+
+
+4
+
+
+_st_ ( _f_ ( _x_ ; _ψ_ ); _ϕt_ )
+_ϕ_ 0+ [�] _t_ _[′]_ _∈E_ _[s]_ _t_ _[′]_ [(] _[f]_ [(] _[x]_ [;] _[ψ]_ [);] _[ϕ]_ _t_ _[′]_ [)] [for] _[ t][ ∈E]_
+
+(2)
+
+_ϕ_ 0+ [�] _t_ _[′]_ _∈E_ _[s]_ _ϕt_ _[′]_ 0 [(] _[f]_ [(] _[x]_ [;] _[ψ]_ [);] _[ϕ]_ _t_ _[′]_ [)] [for] _[ t]_ _[∈E][/]_ _[.]_
+
+
+_pϕ_ ( _t|x_ ; _E_ ) =
+
+
+
+
+
+
+
+
+
+When the latent embedding _z_ for a given point becomes too distant from the embeddings seen during
+training, we have _st_ ( _αe_ ˆ; _ϕt_ ) _→_ 0 for all _t ∈E_, as explained above. In this case, the constant _ϕ_ 0 must
+necessarily start to dominate and _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ) _→_ 1. This fulfills the requirement (i) outlined at the
+beginning of this section, but requirement (ii) is still not addressed. Indeed, to make the uncertainty
+estimate meaningful, it is necessary to determine how fast _pϕ_ ( _t_ _∈E|/_ _x_ ; _E_ ) collapses to 1, to make
+sure that in-distribution data for which we can still make valid predictions are assigned relatively
+small uncertainty and out-of-distribution data for which we cannot hope to make good predictions
+are given high uncertainty. In the next subsection, we expand on how to achieve this by leaving an
+expert out, a powerful mechanism that the proposed architecture allows us to exploit.
+
+
+(a) Before Training (b) Training Phase 1
+
+
+_x_ 1
+
+
+Feature Extractor
+
+
+_L_ ( _h_ ( _f_ ( _x_ 1; _ψ_ ); _θ_ ), _y_ 1)
+
+
+(c) Training Phase 2
+
+
+_x_ 2
+
+
+Feature Extractor
+
+
+_x_ 3
+
+
+Feature Extractor
+
+
+_L_ ( _h_ ( _f_ ( _x_ 2; _ψ_ ); _θ_ ), _y_ 2) _L_ ( _h_ ( _f_ ( _x_ 3; _ψ_ ); _θ_ ), _y_ 3)
+
+
+Data Partitioning
+
+
+_x_ 1 _x_ 2 _x_ 3
+
+
+Feature Extractor Feature Extractor Feature Extractor
+
+
+_pφ_ ( _y_ 1| _x_ 1; { , , ,  }) _pφ_ ( _y_ 2| _x_ 2; { , , ,  }) _pφ_ ( _y_ 3| _x_ 3; { , , ,  })
+
+
+_x_ 1 _x_ 2 _x_ 3
+
+
+Feature Extractor Feature Extractor Feature Extractor
+
+
+_pφ_ ( _y_ 1| _x_ 1; { ,  }) _pφ_ ( _y_ 2| _x_ 2; { , ,  }) _pφ_ ( _y_ 3| _x_ 3; { ,  })
+
+
+2.2 LEAVE-ONE-EXPERT-OUT: INTRINSIC CROSS-VALIDATION
+
+
+We are now going to discuss a crucial mechanism of the Leave-one-Expert-Out (LEO) architecture.
+Note that in Equation 1, we used the notation _pϕ_ ( _y|x_ ; _E_ ), which means that the final output distribution of the full model depends on the all the known data types _E_ . Let us consider what will happen
+if we evaluate this equation with some type _t_ _[⋆]_ removed from _E_ :
+
+
+_pϕ_ ( _y|x_ ; _E_ _\ t_ _[⋆]_ ) = _p_ 0( _y_ ) _pϕ_ ( _t_ _∈E/_ _\ t_ _[⋆]_ _|x_ ; _E_ _\ t_ _[⋆]_ ) +    - _p_ ( _y|x, t_ ) _pϕ_ ( _t|x_ ; _E_ _\ t_ _[⋆]_ ) _._
+
+
+_t∈E\t_ _[⋆]_
+
+
+First of all, the term corresponding to _t_ _[⋆]_ is now omitted entirely and the output _ht⋆_ ( _y|x_ ) of the
+corresponding expert does not contribute to the final model output. Secondly, the prior _p_ 0( _y_ ) is now
+multiplied by the probability of the data point being of type _t_ _∈E/_ _\ t_ _[⋆]_, as opposed to _t_ _∈E/_ . As
+such, the model behaves as if none of the data points of type _t_ _[⋆]_ had been seen during training. In
+other words, when the type _t_ _[⋆]_ is dropped, the set of known data types becomes _E_ _\ t_ _[⋆]_, and all other
+types are treated as OoD. In this case, _pϕ_ ( _·|x_ ; _E_ _\ t_ _[⋆]_ ) is defined in a similar way to Equation 2, but
+with the score function _st_ _[⋆]_ ( _z_ ; _ϕt_ _[⋆]_ ) replaced by _ϕ_ 0. We train the router by minimising the loss:
+
+_J_ [router] ( _D_ ; _ϕ_ ) = _−_        - log _pϕ_ ( _D_ ) + log _pϕ_ ( _D_ ICV)� _,_
+
+
+where ICV stands for _intrinsic_ _cross-validation_, which we define below. The parameters _θ_ of the
+experts and the parameters _ψ_ of the feature extractor are kept frozen (detached), so only the parameters of the router _ϕ_ are updated when _J_ [router] is optimised. We updated centroids _et_ in the same
+way as done in DUQ; see Appendix B.3 for details. In the first term, _pϕ_ ( _D_ ) denotes the likelihood
+of the data under the full model defined in Equation 1 without dropping any of the experts. For
+completeness, we provide the expression below:
+
+
+where _r_ ( _E_ ) is a randomly selected subset of _E_ . See Figure 1. We describe how exactly this random
+subset is selected in Subsection B.2. Note that if an expert that is not dropped from the model
+can extrapolate well to data point types that it did not see during training, the router can achieve a
+good intrinsic cross-validation likelihood _pϕ_ ( _D_ ICV) by putting a high probability mass on it, e.g.,
+by setting its temperature _τt_ high. Conversely, if each of the remaining experts makes a wrong
+prediction, collapsing to the vague prior _p_ 0 will be the optimal solution. As such, the router needs
+to learn its parameters to find the optimal rate at which the model stops trusting the known experts
+and collapses to the prior, effectively learning how to estimate its epistemic uncertainty.
+
+
+3 RELATED WORK
+
+
+**Epistemic** **uncertainty** **and** **out-of-distribution** **detection** Ensemble methods (Lakshminarayanan et al., 2017; Wen et al., 2020; Dusenberry et al., 2020; Zaidi et al., 2021) are a standard
+approach for estimating epistemic uncertainty, combining predictions from multiple independently
+trained models. Monte Carlo Dropout (Gal & Ghahramani, 2016) offers a lightweight alternative by
+applying dropout at test time and averaging multiple forward passes. While ensembles remain stateof-the-art, they are computationally expensive as both training and inference scale with the number
+of models. Moreover, theoretical work has questioned whether ensembles truly capture epistemic
+uncertainty or primarily reflect randomness in initialization and optimisation (He et al., 2020).
+
+
+5
+
+
+_pϕ_ ( _D_ ) =
+
+
+_n_
+
+- _pϕ_ ( _yi|xi_ ; _E_ ) _._
+
+
+_i_ =1
+
+
+The role of this term in the loss function is to make sure that the predictions of all experts are
+meaningfully combined by the router and lead to a sensible data fit. However, this term on its
+own does not guarantee sensible uncertainty quantification. In fact, if each expert can model its
+data points perfectly, the optimal solution is just to always collapse the probability on that expert,
+resulting in no uncertainty quantification. This is remedied by _pϕ_ ( _D_ ICV) in the second term, which
+we call the _intrinsic cross-validation_ likelihood. It involves making a prediction for each data point
+_i_, with the expert for type _ti_ and some random subsets of other experts dropped from the model, i.e.,
+
+
+_pϕ_ ( _D_ ICV) =
+
+
+_n_
+
+- _pϕ_ ( _yi|xi_ ; _E_ _\_ ( _ti ∪_ _r_ ( _E_ ))) _,_
+
+
+_i_ =1
+
+
+Single-model methods require only a single forward pass at test time. Distance-based approaches
+such as deterministic uncertainty quantification (DUQ) (Van Amersfoort et al., 2020), spectralnormalized neural Gaussian processes (SNGP) (Liu et al., 2020), and deterministic uncertainty estimation (DUE) (Van Amersfoort et al., 2021) use distance-aware output layers (e.g., RBFs, GPs)
+to improve OoD sensitivity together with spectrally normalised (Miyato et al., 2018) or gradient
+penalised (Van Amersfoort et al., 2020) feature extractor. Distributional approaches, including evidential deep learning (EDL) (Sensoy et al., 2018; Amini et al., 2020) and Density Regression (DR)
+(Bui & Liu, 2024), model predictive distributions directly without requiring sampling. Bayesian
+Neural Networks (BNNs) are a broad family of approaches for assesing uncertainty in NNs and
+involve methods such as Bayes-by-Backprop (Blundell et al., 2015), Laplace Approximation and
+Variational Inference (Wen et al., 2018). However, these approaches typically rely on extensive
+sampling and suffer from instabilities. Variational Bayes last layer (VBLL) (Harrison et al., 2024)
+is a recent, state-of-the-art BNN approach that applies Bayesian inference only to the final layer,
+avoids sampling all-together and enjoying much more stable performance. Although single-model
+approaches may not always match ensembles in performance, they provide efficient alternatives suitable for large-scale deployment. Epistemic neural networks (“epinets”) (Osband et al., 2023) represent a related direction by conditioning predictions on an auxiliary epistemic index. In comparison,
+LEO modifies the final layer with a mixture-of-experts structure and addresses OoD detection via
+training-time OoD simulations.
+
+
+Although this work focuses on supervised learning, OoD detection has also been studied in generative modeling. Prior work has shown that deep generative models can assign high likelihoods to
+OoD data (Nalisnick et al., 2018; Choi et al., 2018; Kirichenko et al., 2020), raising concerns about
+using density estimates from generative models for OoD detection. Alternative strategies include
+hypothesis testing frameworks (Nalisnick et al., 2019) and training with auxiliary OoD datasets
+(Hendrycks et al., 2018). In contrast, LEO does not require a separate OoD dataset and can simulate
+OoD situations using training set only via the mechanism of intrinsic cross-validation.
+
+
+**Mixture-of-Experts models** Mixture-of-Experts (MoE) models (Jacobs et al., 1991; Jordan & Jacobs, 1994) divide a prediction task among multiple specialized sub-networks, or experts, with a
+gating function that determines how to combine their outputs. Experts can share feature representations, allowing increased model capacity with minimal additional parameters. LEO builds on this
+framework by leveraging the experts to capture epistemic uncertainty and including a “null” expert
+to represent lack of confidence.
+
+
+4 EXPERIMENTS
+
+
+We evaluate our algorithm LEO together with baselines on uncertainty quantification in regression
+and classification tasks, as well as on Bayesian Optimisation (BO) tasks, where the goal is to sequentially query an unknown black-box function to find points with the highest objective values. In all
+tasks, except for BO, we reserve 10% of the training data as a validation set and apply early stopping
+based on the validation log-likelihood. We now describe the baselines used in our experiments. We
+share our code via an anonymysed link [2] .
+
+
+**Baselines** For comparison, we selected the strongest existing uncertainty quantification baselines.
+These include MC Dropout (Gal & Ghahramani, 2016), Ensemble (Lakshminarayanan et al., 2017),
+EDL (Sensoy et al., 2018; Amini et al., 2020), DUE (Van Amersfoort et al., 2021) and VBLL
+(Harrison et al., 2024). Additionally, in all regression and BO tasks we compare against Density Regression (Bui & Liu, 2024) and in all classification tasks we compare against DUQ (Van Amersfoort
+et al., 2020). We try to make the setup and architectures as similar across baselines as possible; see
+Appendix C for details.
+
+
+[2https://anonymous.4open.science/r/leave-one-expert-out-DF01/](https://anonymous.4open.science/r/leave-one-expert-out-DF01/)
+
+
+6
+
+
+Table 1: Results for four UCI benchmarks. Reported values are means over 20 seeds and the values
+after _±_ denote 95% CIs of the mean estimator. The best methods and all methods that do not
+statistically differ w.r.t. two-sided z-test are shown in bold. The second best methods are underlined.
+
+|Dataset<br>Metric|kin8nm<br>NLL (↓) R2 (↑)|naval<br>NLL (↓) R2 (↑)|power-plant<br>NLL (↓) R2 (↑)|yacht<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.18_ ±_ 0.03<br>0.92_ ±_ 0.00<br>1.19_ ±_ 0.12<br>0.92_ ±_ 0.00<br>1.95_ ±_ 0.12<br>0.80_ ±_ 0.01<br>0.18_ ±_ 0.03<br>0.91_ ±_ 0.01<br>1.32_ ±_ 0.19<br>**0.93**_ ±_** 0.00**<br>2.75_ ±_ 1.99<br>0.89_ ±_ 0.00|-2.24_ ±_ 0.05<br>1.00_ ±_ 0.00<br>-1.12_ ±_ 0.02<br>0.99_ ±_ 0.00<br>-0.36_ ±_ 0.30<br>1.00_ ±_ 0.00<br>-1.84_ ±_ 0.03<br>1.00_ ±_ 0.00<br>-2.26_ ±_ 0.04<br>**1.00**_ ±_** 0.00**<br>-0.53_ ±_ 0.25<br>0.99_ ±_ 0.00|**-0.09**_ ±_** 0.02**<br>0.95_ ±_ 0.00<br>3.13_ ±_ 0.34<br>**0.96**_ ±_** 0.00**<br>1.20_ ±_ 0.09<br>0.89_ ±_ 0.00<br>**-0.09**_ ±_** 0.04**<br>0.95_ ±_ 0.00<br>1.72_ ±_ 0.25<br>**0.96**_ ±_** 0.00**<br>-0.04_ ±_ 0.04<br>0.95_ ±_ 0.00|1.27_ ±_ 1.20<br>0.99_ ±_ 0.00<br>-1.23_ ±_ 0.27<br>0.98_ ±_ 0.00<br>-1.49_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>**-2.07**_ ±_** 0.34**<br>0.99_ ±_ 0.00<br>**-2.51**_ ±_** 0.33**<br>**1.00**_ ±_** 0.00**<br>0.03_ ±_ 0.93<br>0.99_ ±_ 0.00|
+|LEO (ours)<br>**0.12**_ ±_** 0.01**<br>**0.92**_ ±_** 0.00**<br>**-2.62**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.04**_ ±_** 0.05**<br>0.95_ ±_ 0.00<br>**-2.16**_ ±_** 0.23**<br>0.99_ ±_ 0.00|LEO (ours)<br>**0.12**_ ±_** 0.01**<br>**0.92**_ ±_** 0.00**<br>**-2.62**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.04**_ ±_** 0.05**<br>0.95_ ±_ 0.00<br>**-2.16**_ ±_** 0.23**<br>0.99_ ±_ 0.00|LEO (ours)<br>**0.12**_ ±_** 0.01**<br>**0.92**_ ±_** 0.00**<br>**-2.62**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.04**_ ±_** 0.05**<br>0.95_ ±_ 0.00<br>**-2.16**_ ±_** 0.23**<br>0.99_ ±_ 0.00|LEO (ours)<br>**0.12**_ ±_** 0.01**<br>**0.92**_ ±_** 0.00**<br>**-2.62**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.04**_ ±_** 0.05**<br>0.95_ ±_ 0.00<br>**-2.16**_ ±_** 0.23**<br>0.99_ ±_ 0.00|LEO (ours)<br>**0.12**_ ±_** 0.01**<br>**0.92**_ ±_** 0.00**<br>**-2.62**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.04**_ ±_** 0.05**<br>0.95_ ±_ 0.00<br>**-2.16**_ ±_** 0.23**<br>0.99_ ±_ 0.00|
+
+
+Table 2: Results for UCI protein and UTK-Face benchmarks. Reported values are means over 20
+seeds in protein and 5 seeds in UTK, with the values following _±_ denoting 95% CIs of the mean
+estimator. The best-performing methods and those tied via a z-test are shown in bold, while the
+second-best methods are underlined. In cells marked with (*), predictive variance was so small that
+likelihood computations caused a numerical issue on all seeds.
+
+|Dataset<br>Metric|protein<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|UTK<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|
+|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|**1.01**_ ±_** 0.24**<br>0.59_ ±_ 0.01<br>11.52_ ±_ 2.50<br>0.39_ ±_ 0.05<br>4.17_ ±_ 0.35<br>**0.69**_ ±_** 0.00**<br>4.86_ ±_ 0.41<br>**0.53**_ ±_** 0.01**<br>5.11_ ±_ 0.21<br>0.08_ ±_ 0.01<br>2.99_ ±_ 0.12<br>0.14_ ±_ 0.01<br>1.07_ ±_ 0.02<br>0.41_ ±_ 0.01<br>**1.15**_ ±_** 0.08**<br>0.44_ ±_ 0.03<br>2.27_ ±_ 0.11<br>0.68_ ±_ 0.00<br>1.90_ ±_ 0.21<br>0.28_ ±_ 0.05<br>1.00_ ±_ 0.03<br>0.59_ ±_ 0.01<br>2.31_ ±_ 0.36<br>-0.18_ ±_ 0.14|1.23_ ±_ 0.11<br>0.65_ ±_ 0.01<br>**0.49**_ ±_** 0.07**<br>0.53_ ±_ 0.04<br>N/A(*)<br>0.75_ ±_ 0.02<br>N/A(*)<br>**0.55**_ ±_** 0.09**<br>1.73_ ±_ 0.22<br>0.00_ ±_ 0.00<br>1.24_ ±_ 0.08<br>-0.70_ ±_ 0.01<br>2.36_ ±_ 0.24<br>0.62_ ±_ 0.06<br>2.27_ ±_ 0.27<br>0.14_ ±_ 0.38<br>1.10_ ±_ 0.13<br>0.79_ ±_ 0.01<br>0.68_ ±_ 0.16<br>**0.60**_ ±_** 0.05**<br>**0.85**_ ±_** 0.27**<br>**0.82**_ ±_** 0.01**<br>**0.79**_ ±_** 0.32**<br>**0.59**_ ±_** 0.07**|
+|LEO (ours)<br>**0.89**_ ±_** 0.04**<br>0.60_ ±_ 0.01<br>**1.19**_ ±_** 0.05**<br>0.42_ ±_ 0.02<br>**0.78**_ ±_** 0.03**<br>0.74_ ±_ 0.02<br>**0.49**_ ±_** 0.09**<br>**0.58**_ ±_** 0.06**|LEO (ours)<br>**0.89**_ ±_** 0.04**<br>0.60_ ±_ 0.01<br>**1.19**_ ±_** 0.05**<br>0.42_ ±_ 0.02<br>**0.78**_ ±_** 0.03**<br>0.74_ ±_ 0.02<br>**0.49**_ ±_** 0.09**<br>**0.58**_ ±_** 0.06**|LEO (ours)<br>**0.89**_ ±_** 0.04**<br>0.60_ ±_ 0.01<br>**1.19**_ ±_** 0.05**<br>0.42_ ±_ 0.02<br>**0.78**_ ±_** 0.03**<br>0.74_ ±_ 0.02<br>**0.49**_ ±_** 0.09**<br>**0.58**_ ±_** 0.06**|
+
+
+4.1 REGRESSION PROBLEMS
+
+
+To evaluate performance on regression tasks, we consider ten UCI benchmarks and the UTK-Face
+dataset, where the goal is to predict age from raw pixels of facial images. For each dataset, we report
+the negative log-likelihood (NLL, lower is better), and coeff. of determination ( _R_ [2], higher is better)
+or mean absolute error (MAE, lower is better) as a measure of predictive performance, depending
+on the task. We detail how OOD evaluation sets were obtained in Appendix D.
+
+
+**Results** We present results on five UCI datasets and UTK-Face in Tables **??** and 2, and defer the
+rest of UCI datasets to Appendix F due to space limitations. Overall, we can see that LEO excels
+in terms of NLL, achieving the best (or tying for the best) performance across all of the evaluated
+regression benchmarks. Among the remaining baselines, methods such as EDL, Dropout or VBLL
+achieve good NLL values on some datasets but underperform on others. In contrast, LEO achieves
+good NLL values consistently. Regarding predictive performance, LEO may underperform slightly
+in some cases, but consistently ranks second, whereas the method achieving the highest predictive
+performance varies across datasets.
+
+
+Table 3: Results for tabular classification tasks. Reported values are means over 100 seeds and the
+values after _±_ are 95%-confidence intervals of the mean estimator. The best methods and z-test ties
+are shown in bold, and the second best methods are underlined.
+
+|Dataset<br>Metric|german-credit<br>Acc. (↑) NLL (×10−4) (↓) ECE (×10−2) (↓)|bank-marketing<br>Acc. (↑) NLL (×10−4) (↓) ECE (×10−2) (↓)|
+|---|---|---|
+|Dropout<br>DUE<br>DUQ<br>EDL<br>Ensemble<br>VBLL|**73.77**_ ±_** 0.84**<br>**52.98**_ ±_** 1.47**<br>10.14_ ±_ 0.63<br>69.72_ ±_ 0.81<br>58.15_ ±_ 0.67<br>**9.70**_ ±_** 0.65**<br>**74.08**_ ±_** 0.89**<br>**51.31**_ ±_** 1.15**<br>9.73_ ±_ 0.57<br>**73.79**_ ±_** 0.83**<br>**52.63**_ ±_** 1.20**<br>9.90_ ±_ 0.64<br>**74.43**_ ±_** 0.90**<br>**51.19**_ ±_** 1.37**<br>**9.54**_ ±_** 0.57**<br>72.64_ ±_ 1.02<br>**52.75**_ ±_** 1.22**<br>9.91_ ±_ 0.56|90.33_ ±_ 0.11<br>0.46_ ±_ 0.00<br>1.32_ ±_ 0.08<br>88.35_ ±_ 0.10<br>0.74_ ±_ 0.01<br>11.32_ ±_ 0.21<br>90.14_ ±_ 0.07<br>0.51_ ±_ 0.00<br>2.21_ ±_ 0.07<br>90.39_ ±_ 0.08<br>0.50_ ±_ 0.00<br>3.34_ ±_ 0.10<br>**90.65**_ ±_** 0.09**<br>**0.45**_ ±_** 0.00**<br>**0.93**_ ±_** 0.04**<br>**90.59**_ ±_** 0.08**<br>0.46_ ±_ 0.00<br>1.05_ ±_ 0.07|
+|LEO (ours)<br>**73.99**_ ±_** 0.86**<br>**51.53**_ ±_** 0.88**<br>**8.95**_ ±_** 0.52**<br>**90.53**_ ±_** 0.09**<br>0.46_ ±_ 0.00<br>1.07_ ±_ 0.05|LEO (ours)<br>**73.99**_ ±_** 0.86**<br>**51.53**_ ±_** 0.88**<br>**8.95**_ ±_** 0.52**<br>**90.53**_ ±_** 0.09**<br>0.46_ ±_ 0.00<br>1.07_ ±_ 0.05|LEO (ours)<br>**73.99**_ ±_** 0.86**<br>**51.53**_ ±_** 0.88**<br>**8.95**_ ±_** 0.52**<br>**90.53**_ ±_** 0.09**<br>0.46_ ±_ 0.00<br>1.07_ ±_ 0.05|
+
+
+7
+
+
+|Col1|Col2|NLLLoss|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||~~Dr~~|~~opout~~||||||||
+|||||||||||
+|~~Ense~~|~~ble~~<br>VB|LL||||||||
+|||~~DUE~~||||||||
+|||||||||||
+|||~~LE~~O (ours)||||||||
+||||||~~EDL~~|||||
+||||||||||~~D~~U|
+
+
+|Col1|MultiClassECE|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||~~DUE~~||||||||
+||||||||||
+|~~Ens~~|~~emble~~<br>~~VBLL~~||||||||
+||~~Dropout~~<br>||||||||
+||LEO (ours)||~~EDL~~||||||
+||||||||||
+||||||||||
+|||||||||~~DUQ~~|
+||||||||||
+|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|000<br>0.025<br>0.050<br>0.075<br>0.100<br>0.125<br>0.150<br>0.1<br>ID MultiClassECE|75|
+
+
+Figure 2: ID vs OoD performance on CIFAR-10 for different methods as measured by NLLLoss
+(left) and ECE (right). Points are means over 3 seeds and error bars correspond to 95% CIs of the
+mean estimator. The closer to bottom, left corner, a method is, the better.
+
+
+4.2 CLASSIFICATION
+
+
+To evaluate performance on classification tasks, we consider six tabular benchmarks (adult-censusincome, bank-marketing, titanic, german-credit, breast-cancer, heart-disease) and CIFAR-10. For
+each benchmark, we report the negative log-likelihood (NLL, lower is better), the Expected Calibration Error (ECE, lower is better) and accuracy. On tabular benchmarks, we simply use a fullyconnected architecture, whereas on CIFAR-10, we use WideResNet 28-10 as the feature extractor.
+To create an OoD evaluation set for CIFAR-10, we randomly corrupt the evalset images.
+
+
+**Results** We present some of the results in Table 3 and Figure 2 and defer the rest to Appendices G
+and H. We see that LEO is able to obtain the best performance on most datasets and across most
+metrics, losing only in four cases (out of 18 dataset/metric combinations), in which on two of them
+(bank-marketing NLL and ECE) loses to Ensemble only and wins among all single-model methods.
+On CIFAR-10 problems, we see that most methods either excel in- or out-of-distribution, whereas
+LEO is able to obtain good performance in both simultaneously. This is illustrated in Figure 2,
+where we plot OoD performance vs ID performance according to NLL and ECE metrics (closer
+to the bottom-left corner indicates better performance). Ensemble excels in ID performance, but
+underperforms in OoD, whereas DUQ and EDL exhibit the opposite tendency. LEO, Dropout, DUE
+and VBLL achieve similar ID performance, but out of these four, LEO achieves the best average
+OoD performance, placing itself at a desirable point on the Pareto frontier.
+
+
+In Table 4, we present comparison of inference times, training times and the total size of each of
+the models. We see LEO is one of the fastest method, having less than 1% memory higher memory
+footprint compared to smallest model. This is in stark contrast to Dropout, which significantly
+increases inference time or to Ensemble, which also significantly increases memory footprint. As
+such, LEO positions itself as a relatively lightweight alternative with a fast inference speed.
+
+
+Table 4: Avg. inference time (with 95% CIs) and total model memory footprint for each method on
+CIFAR-10. Best values in bold, second best underlined.
+
+|Metric|Baseline Dropout DUE DUQ EDL Ensemble VBLL|LEO (ours)|
+|---|---|---|
+|Infer. time (ms) (_↓_)<br>Model size (MB) (_↓_)<br>Train. time (min) (_↓_)|**0.06**_ ±_** 0.00**<br>0.20_ ±_ 0.00<br>0.33_ ±_ 0.00<br>**0.06**_ ±_** 0.00**<br>**0.06**_ ±_** 0.00**<br>0.19_ ±_ 0.00<br>0.07_ ±_ 0.00<br>**139.23**<br>**139.23**<br>156.72<br>172.34<br>**139.23**<br>696.13<br>154.88<br>**60.80**_ ±_** 7.03**<br>146.48_ ±_ 27.77<br>79.49_ ±_ 0.33<br>99.02_ ±_ 34.90<br>126.28_ ±_ 13.89<br>238.22_ ±_ 0.97<br>76.52_ ±_ 9.64|**0.06**_ ±_** 0.00**<br>140.89<br>**66.83**_ ±_** 7.27**|
+
+
+4.3 BAYESIAN OPTIMISATION
+
+
+Finally, we also evaluate all models used for regression experiments as surrogates for Bayesian Optimization (BO). In BO, the objective is to efficiently optimize an unknown black-box function by
+sequentially selecting query points. This is typically achieved by fitting a surrogate model to the observed data and then optimizing an acquisition function that balances exploration and exploitation.
+Crucially, the surrogate must provide reliable uncertainty estimates to enable this trade-off. Standard
+neural networks, which often extrapolate linearly outside the training data, tend to assign unrealis
+
+8
+
+
+0.021
+
+
+0.020
+
+
+0.019
+
+
+0.018
+
+
+0.017
+
+
+0.016
+
+
+0.015
+
+
+0.014
+
+0.00100 0.00125 0.00150 0.00175 0.00200 0.00225 0.00250 0.00275 0.00300
+ID NLLLoss
+
+
+0.36
+
+
+0.34
+
+
+0.32
+
+
+0.30
+
+
+0.28
+
+
+0.26
+
+
+0.24
+
+
+0.22
+
+
+tically high values near the boundaries, leading the optimizer to waste queries there. By contrast,
+LEO defaults to a standard normal predictive distribution in extrapolation, preventing boundary regions from appearing artificially attractive. This property makes LEO particularly well-suited as a
+surrogate in BO.
+
+
+LEO (ours) GP VBLL Density R. Dropout DUE EDL Ensemble
+
+
+Figure 3: The best function achieved by a given optimisation step on Bayesian Optimisation tasks.
+Solid lines correspond to mean values over 8 seeds and shaded areas are 95% CI of the mean estimator. The objective is maximisation, thus higher values are better.
+
+
+As a benchmark optimisation function, we use the popular Ackley function. We consider two problem settings with 2 and 10 dimensions, initialising the optimisation with 20 and 5000 latin hypercube
+samples, respectively. We use the UCB acquisition criterion with an exploration bonus of _β_ = 3. For
+the 2-dimensional function, we also compare against GP, but not for the 10-dimensional cases, as
+fitting GP to 5000 points is infeasible. For GP, we use an RBF kernel with hyperparameters selected
+by optimising marginal likelihood. Optimisation curves over 50 steps are shown in Figure 3. On the
+2-dimensional problem, we can see that an optimiser equipped with LEO quickly catches up with
+GP and even slightly outperforms it toward the end. On the 10-dimensional problem, after the first
+10 steps, the optimiser using LEO clearly distinguishes itself, achieving much higher values than the
+other methods and maintaining the lead until the very end. These results highlight the potential of
+LEO for applications in sequential decision-making.
+
+
+5 CONCLUSION
+
+
+We introduced LEO, a mixture-of-experts framework that uses a distance-aware router to provide
+reliable epistemic uncertainty estimates. By simulating out-of-distribution scenarios during training, LEO effectively captures model uncertainty without relying on held-out OoD data. Empirical
+results across regression, classification, and Bayesian optimisation tasks show that LEO consistently
+outperforms or matches strong baselines, achieving robust performance for both in-distribution and
+out-of-distribution inputs. LEO can be applied to standard architectures by replacing only the last
+layer with a mixture of single-layer networks, introducing a negligible increase in model size and latency. These results demonstrate that LEO is a practical and scalable approach for uncertainty-aware
+deep learning, with promising applications in decision-making and risk-sensitive settings.
+
+
+REFERENCES
+
+
+Alexander Amini, Wilko Schwarting, Ava Soleimany, and Daniela Rus. Deep evidential regression.
+_Advances in neural information processing systems_, 33:14927–14937, 2020.
+
+
+Franc¸ois Bachoc. Cross validation and maximum likelihood estimations of hyper-parameters of
+gaussian processes with model misspecification. _Computational Statistics & Data Analysis_, 66:
+55–69, 2013.
+
+
+9
+
+
+0 10 20 30 40 50
+BO Step
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+20
+
+
+0 10 20 30 40 50
+BO Step
+
+
+Maximilian Balandat, Brian Karrer, Daniel Jiang, Samuel Daulton, Ben Letham, Andrew G Wilson, and Eytan Bakshy. Botorch: A framework for efficient monte-carlo bayesian optimization.
+_Advances in neural information processing systems_, 33:21524–21538, 2020.
+
+
+Charles Blundell, Julien Cornebise, Koray Kavukcuoglu, and Daan Wierstra. Weight uncertainty in
+neural network. In _International conference on machine learning_, pp. 1613–1622. PMLR, 2015.
+
+
+Ha Manh Bui and Anqi Liu. Density-regression: Efficient and distance-aware deep regressor for
+uncertainty estimation under distribution shifts. In _International Conference on Artificial Intelli-_
+_gence and Statistics_, pp. 2998–3006. PMLR, 2024.
+
+
+Hyunsun Choi, Eric Jang, and Alexander A Alemi. Waic, but why? generative ensembles for robust
+anomaly detection. _arXiv preprint arXiv:1810.01392_, 2018.
+
+
+Michael Dusenberry, Ghassen Jerfel, Yeming Wen, Yian Ma, Jasper Snoek, Katherine Heller, Balaji
+Lakshminarayanan, and Dustin Tran. Efficient and scalable bayesian neural nets with rank-1
+factors. In _International conference on machine learning_, pp. 2782–2792. PMLR, 2020.
+
+
+Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian approximation: Representing model
+uncertainty in deep learning. In _international_ _conference_ _on_ _machine_ _learning_, pp. 1050–1059.
+PMLR, 2016.
+
+
+Ian Goodfellow, Yoshua Bengio, Aaron Courville, and Yoshua Bengio. _Deep_ _learning_, volume 1.
+MIT Press, 2016.
+
+
+James Harrison, John Willes, and Jasper Snoek. Variational bayesian last layers. _arXiv_ _preprint_
+_arXiv:2404.11599_, 2024.
+
+
+Bobby He, Balaji Lakshminarayanan, and Yee Whye Teh. Bayesian deep ensembles via the neural
+tangent kernel. _Advances in neural information processing systems_, 33:1010–1022, 2020.
+
+
+Dan Hendrycks, Mantas Mazeika, and Thomas Dietterich. Deep anomaly detection with outlier
+exposure. _arXiv preprint arXiv:1812.04606_, 2018.
+
+
+Robert A Jacobs, Michael I Jordan, Steven J Nowlan, and Geoffrey E Hinton. Adaptive mixtures of
+local experts. _Neural computation_, 3(1):79–87, 1991.
+
+
+Michael I Jordan and Robert A Jacobs. Hierarchical mixtures of experts and the em algorithm.
+_Neural computation_, 6(2):181–214, 1994.
+
+
+Polina Kirichenko, Pavel Izmailov, and Andrew G Wilson. Why normalizing flows fail to detect
+out-of-distribution data. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 33:20578–20589,
+2020.
+
+
+Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolutional neural networks. _Advances in neural information processing systems_, 25, 2012.
+
+
+Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive
+uncertainty estimation using deep ensembles. _Advances in neural information processing systems_,
+30, 2017.
+
+
+Jeremiah Liu, Zi Lin, Shreyas Padhy, Dustin Tran, Tania Bedrax Weiss, and Balaji Lakshminarayanan. Simple and principled uncertainty estimation with deterministic deep learning via
+distance awareness. _Advances in neural information processing systems_, 33:7498–7512, 2020.
+
+
+David John Cameron Mackay. _Bayesian methods for adaptive models_ . California Institute of Technology, 1992.
+
+
+Takeru Miyato, Toshiki Kataoka, Masanori Koyama, and Yuichi Yoshida. Spectral normalization
+for generative adversarial networks. _arXiv preprint arXiv:1802.05957_, 2018.
+
+
+Eric Nalisnick, Akihiro Matsukawa, Yee Whye Teh, Dilan Gorur, and Balaji Lakshminarayanan. Do
+deep generative models know what they don’t know? _arXiv preprint arXiv:1810.09136_, 2018.
+
+
+10
+
+
+Eric Nalisnick, Akihiro Matsukawa, Yee Whye Teh, and Balaji Lakshminarayanan. Detecting out-of-distribution inputs to deep generative models using typicality. _arXiv_ _preprint_
+_arXiv:1906.02994_, 2019.
+
+
+Radford M Neal. _Bayesian learning for neural networks_, volume 118. Springer Science & Business
+Media, 2012.
+
+
+Ian Osband, Zheng Wen, Seyed Mohammad Asghari, Vikranth Dwaracherla, Morteza Ibrahimi,
+Xiuyuan Lu, and Benjamin Van Roy. Epistemic neural networks. _Advances in Neural Information_
+_Processing Systems_, 36:2795–2823, 2023.
+
+
+Carl Edward Rasmussen and Christopher K. I. Williams. _Gaussian Processes for Machine Learning_ .
+MIT Press, Cambridge, MA, USA, 2006.
+
+
+David E Rumelhart, Geoffrey E Hinton, and Ronald J Williams. Learning representations by backpropagating errors. _nature_, 323(6088):533–536, 1986.
+
+
+Murat Sensoy, Lance Kaplan, and Melih Kandemir. Evidential deep learning to quantify classification uncertainty. _Advances in neural information processing systems_, 31, 2018.
+
+
+Natasa Tagasovska and David Lopez-Paz. Single-model uncertainties for deep learning. _Advances_
+_in neural information processing systems_, 32, 2019.
+
+
+Joost Van Amersfoort, Lewis Smith, Yee Whye Teh, and Yarin Gal. Uncertainty estimation using a
+single deep deterministic neural network. In _International conference on machine learning_, pp.
+9690–9700. PMLR, 2020.
+
+
+Joost Van Amersfoort, Lewis Smith, Andrew Jesson, Oscar Key, and Yarin Gal. On feature collapse
+and deep kernel learning for single forward pass uncertainty. _arXiv preprint arXiv:2102.11409_,
+2021.
+
+
+Yeming Wen, Paul Vicol, Jimmy Ba, Dustin Tran, and Roger Grosse. Flipout: Efficient pseudoindependent weight perturbations on mini-batches. _arXiv preprint arXiv:1803.04386_, 2018.
+
+
+Yeming Wen, Dustin Tran, and Jimmy Ba. Batchensemble: an alternative approach to efficient
+ensemble and lifelong learning. _arXiv preprint arXiv:2002.06715_, 2020.
+
+
+Sergey Zagoruyko and Nikos Komodakis. Wide residual networks. _arXiv_ _preprint_
+_arXiv:1605.07146_, 2016.
+
+
+Sheheryar Zaidi, Arber Zela, Thomas Elsken, Chris C Holmes, Frank Hutter, and Yee Teh. Neural
+ensemble search for uncertainty estimation and dataset shift. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 34:7898–7911, 2021.
+
+
+Juliusz Ziomek, George Whittle, and Michael A Osborne. Just one layer norm guarantees stable
+extrapolation. _arXiv preprint arXiv:2505.14512_, 2025.
+
+
+11
+
+
+A FULL ALGORITHM PSEUDOCODE
+
+
+**Algorithm 1** LEO Training
+
+
+5: **return** _p_ ( _c|x_ )
+
+
+1: **Input:** Training data _D_ = _{_ ( _xi, yi_ ) _}_ _[n]_ _i_ =1 [,] [types] _[{][t][i][}][n]_ _i_ =1 [,] [parameters] _[ψ]_ [,] _[{][θ][t][}][t][∈E]_ [,] _[ϕ]_ [=]
+( [�] _[ϕ][t]_ [)] _[ ∪]_ _[ϕ]_ [0][ with] _[ ϕ][t]_ [=] _[ {][M][t][, τ][t][}]_ [, learning rates] _[ η][ψ][, η][θ][, η][ϕ]_ [, epochs] _[ E]_ [1] _[, E]_ [2]
+
+
+( [�] _t∈E_ _[ϕ][t]_ [)] _[ ∪]_ _[ϕ]_ [0][ with] _[ ϕ][t]_ [=] _[ {][M][t][, τ][t][}]_ [, learning rates] _[ η][ψ][, η][θ][, η][ϕ]_ [, epochs] _[ E]_ [1] _[, E]_ [2]
+
+2: **Output:** Trained parameters _ψ_ _[∗]_ _, {θt_ _[∗][}][t][∈E]_ _[, ϕ][∗]_
+
+
+3: Initialise _ψ, {θt}t∈E_ _, ϕ_
+4: **Phase 1:** **Expert Training**
+5: **for** epoch = 1 to _E_ 1 **do**
+6: **for** each mini-batch _B_ _⊂D_ **do**
+7: Compute batch loss: _J_ [experts] ( _B_ ; _{θt}t∈E_ ; _ψ_ ) = _|B|_ 1 
+
+
+( _xi,yi_ ) _∈B_ _[L]_ [(] _[h][t]_ _i_ [(] _[f]_ [(] _[x][i]_ [;] _[ ψ]_ [);] _[ θ][t]_ _i_ [)] _[, y][i]_ [)]
+
+
+8: Update feature extractor parameters: _ψ_ _←_ _ψ −_ _ηψ∇ψJ_ [experts]
+
+9: Update expert parameters: _θti_ _←_ _θti_ _−_ _ηθ∇θti_ _J_ [experts]
+
+
+10: **end for**
+11: **end for**
+12: Freeze _ψ_ and _{θt}t∈E_
+13: **Phase 2:** **Router Training**
+14: **for** epoch = 1 to _E_ 2 **do**
+15: **for** each mini-batch _B_ _⊂D_ **do**
+16: Sample a subset _r_ ( _E_ ) of _E_
+17: Compute router loss:
+
+
+_J_ [router] ( _B_ ; _ϕ_ ) = _−_ [1]
+
+_|B|_
+
+
+ 
+
+( _xi,yi_ ) _∈B_
+
+
+- log _pϕ_ ( _yi|xi_ ; _E_ ) + log _pϕ_ ( _yi|xi_ ; _E_ _\_ ( _ti ∪_ _r_ ( _E_ )))
+
+
+18: Update router parameters: _ϕ ←_ _ϕ −_ _ηϕ∇ϕJ_ [router]
+
+19: **end for**
+20: **end for**
+21: **return** _ψ_ _[∗]_ _, {θt_ _[∗][}][t][∈E]_ _[, ϕ][∗]_
+
+
+**Algorithm 2** LEO Inference (Regression)
+
+1: **Input:** New input _x_, learned parameters _ψ_ _[∗]_, _{θt_ _[∗][}][t][∈E]_ [,] _[ ϕ][∗]_ [, prior mean] _[ µ]_ [0][(] _[·]_ [)][, prior variance] _[ σ]_ 0 [2][(] _[·]_ [)]
+2: **Output:** Predictive mean _y_ ˆ, predictive variance _σ_ ˆ [2]
+
+3: Compute predictive mean:
+
+
+       _y_ ˆ = _µ_ 0( _x_ ) _pϕ∗_ ( _t_ _∈E|/_ _x_ ; _E_ ) + _ht_ ( _f_ ( _x_ ; _ψ_ _[∗]_ ); _θt_ _[∗]_ [)] _[p][ϕ][∗]_ [(] _[t][|][x]_ [;] _[ E]_ [)]
+
+_t∈E_
+
+
+4: Compute predictive variance:
+
+
+_σ_ ˆ [2] = ( _σ_ 0 [2][(] _[x]_ [) + (] _[µ]_ [0][(] _[x]_ [)] _[ −]_ _[y]_ [ˆ][)][2][)] _[p][ϕ][∗]_ [(] _[t]_ _[∈E|][/]_ _[x]_ [;] _[ E]_ [) +] �( _ht_ ( _f_ ( _x_ ; _ψ_ _[∗]_ ); _θt_ _[∗]_ [)] _[ −]_ _[y]_ [ˆ][)][2] _[p][ϕ][∗]_ [(] _[t][|][x]_ [;] _[ E]_ [)]
+
+_t∈E_
+
+
+5: **return** _y,_ ˆ ˆ _σ_ [2]
+
+
+**Algorithm 3** LEO Inference (Classifcation)
+
+1: **Input:** New input _x_, learned parameters _ψ_ _[∗]_, _{θt_ _[∗][}][t][∈E]_ [,] _[ ϕ][∗]_ [, prior distribution over classes] _[ p]_ [0][(] _[c]_ [)]
+2: **Output:** Predictive categorical distribution _p_ ( _c|x_ )
+3: Compute prediction of each expert _t ∈E_ as _p_ ( _·|x_ ; _t_ ) = softmax( _ht_ ( _f_ ( _x_ ; _ψ_ _[∗]_ )))
+4: Compute predictive probabilities for each class _c ∈_ [ _C_ ]:
+
+
+     _p_ ( _c|x_ ) = _p_ 0( _c_ ) _pϕ∗_ ( _t_ _∈E|/_ _x_ ; _E_ ) + _p_ ( _c|x_ ; _t_ ) _pϕ∗_ ( _t|x_ ; _E_ )
+
+
+_t∈E_
+
+
+12
+
+
+B DETAILS ON LEO
+
+
+B.1 PARTITIONING DATA INTO TYPES
+
+
+Our training mechanism requires partitioning the training data into types before training, such that
+each expert sees a distinct distribution of training inputs. At the same time, we also want to create
+situations where one expert can make accurate predictions for at least some of the points of other
+types. This ensures that the router learns how much it can trust a given expert when extrapolating,
+which will then translate into robust uncertainty estimates for the entire model when going beyond
+its training domain.
+
+
+To satisfy these properties, we propose to use the freshly initialised, untrained feature extractor
+to obtain embeddings for each point _i_, i.e., _zi_ [0] [=] _[f]_ [(] _[x][i]_ [;] _[ ψ]_ [0][)][,] [and] [then] [use] [a] [random] [projection]
+vector _v_ _∼N_ (0 _, Id_ ) to obtain a _type_ _indicator_ _gi_ = _zi_ [0] _[·]_ _[v]_ [for] [each] [data] [point.] [We] [then] [sort]
+type indicators (which are just scalars) and split the sorted list into _|E|_ consecutive chunks of equal
+length and give each chunk a different type in _E_, which is assigned to a dedicated expert. This
+assignment creates mismatch across experts’ training distributions, since even in a freshly initialised
+network, the embeddings for two data points are correlated and depend on input features in complex
+and random ways. At the same time, because nearby points in the sorted 1D projection are not
+guaranteed to be assigned to the same expert, some neighbouring points in the embedding space
+may be split across experts, allowing partial extrapolation and forcing the router to learn expert
+reliability.
+
+
+B.2 RANDOM SUBSET SELECTION
+
+
+To obtain the random subset of experts to drop for a given data point _i_, we first sample _ui_ _∼_ _U_ (0 _,_ 1)
+and then for each expert associated with _t_ _∈E_, we sample _mt,i_ _∼_ _U_ (0 _,_ 1). We drop the _t_ th expert
+for the _i_ th data point if _mt,i_ _<_ _ui_ . In this way, we drop experts with uniform probability, but also
+the average number of experts we drop is uniformly distributed. We do this with the objective of
+making the model more robust by simulating more diverse OoD scenarios.
+
+
+B.3 UPDATING CENTROIDS
+
+
+We utilise the same moving-average-style update rule for the centroids _et_ as the one employed in
+DUQ (Van Amersfoort et al., 2020), i.e., after each mini-batch _{_ ( _xi, ti, yi_ ) _}_ _[|B|]_ _i_ =1 [of size] _[ |B|]_ [ we update]
+
+_Nt_ := _γ Nt_ + (1 _−_ _γ_ ) _nt,_ (3)
+
+
+_et_ := _[m][t]_ _._ (5)
+
+_Nt_
+
+
+where _nt_ = _|{i_ : _ti_ = _t}|_ . We initialise _Nt_ = 13 for all types and initalise _mt_ with small Gaussian
+noise _N_ (0 _,_ 0 _._ 05 [2] ). We set _γ_ = 0 _._ 99.
+
+
+C DETAILED EXPERIMENTAL SETUP
+
+
+For our experiments, we used machines with NVIDIA A40 GPUs with 48 GB of memory.
+
+
+C.1 GENERAL
+
+
+We try to keep the experimental setup as similar as possible across methods. For this reason, across
+all experiments, we use 5 models for Ensemble, 5 dropout samples for Dropout, and 5 experts
+for LEO. We use a dropout rate of 0 _._ 3 for the Dropout method. Across all methods, we keep the
+architecture fixed except for the last layer, which changes depending on the exact method used (e.g.
+Variational GP in DUE or expert heads and router in LEO). In VBLL, we use the same optimiser
+setting as the original authors, namely we use a weight decay of 0 _._ 01 and clip max gradient to 1 _._ 0
+
+
+13
+
+
+_mt_ := _γ mt_ + (1 _−_ _γ_ ) [1]
+
+_nt_
+
+
+- _f_ ( _xi_ ; _ψ_ ) _[T]_ _Mt,_ (4)
+
+
+_{i_ : _ti_ = _t}_
+
+
+across all experiments, and thus use AdamW, while other baselines use Adam. For DUE, we use the
+RBF kernel and set the number of inducing points equal to the number of classes in classification and
+use 20 inducing points in regression. For baselines requiring a distance-preserving feature extractor
+(DUE, DUQ), we apply spectral normalization to the feature extractor and add residual connections
+if they are not present by default (e.g. when the feature extractor is just a fully-connected network).
+For EDL, performance is highly sensitive to the hyperparmeter _λ_ . We tune the _λ_ hyperparameter by
+first running 20% of the total training iterations with different values of _λ_ and choosing the one that
+produces the best validation likelihood at the end of training. For LEO, we use the same number
+of epochs as other methods to train the experts and then the same number of epochs to train the
+router (which is much faster, as experts and feature extractor are fixed). In all experiments across all
+baselines we use a “patience” mechanism, i.e., if the last epoch achieved the best validation loss, we
+extend training until the validation loss stops improving.
+
+
+C.2 REGRESSION - UCI
+
+
+For each problem and baseline, we use a fully-connected network with three hidden layers of size
+256 with relu nonlinearities. We train for a total of 10000 epochs with Adam with the learning rate
+set to 0 _._ 001. We use full-batch gradient descent. We measure the NLL on the validation set every
+100 epochs and select the checkpoint with the lowest value.
+
+
+C.3 REGRESSION - UTK
+
+
+We use freshly initalised ResNet-18, followed by one fully-connected layer. We train for a total of
+50 epochs with a batch size of 128 using Adam with a learning rate equal to 0 _._ 00001. We measure
+the NLL on the validation set after every epoch and select the checkpoint with the lowest value.
+
+
+C.4 CLASSIFICATION - TABULAR
+
+
+For each problem and baseline, we use a full-connected network with two hidden layers of size 256
+with relu nonlinearities. We use Adam with a learning rate of 0 _._ 01 and full batch gradient descent.
+We measure the NLL on the validation set after every epoch and select the checkpoint with the
+lowest value.
+
+
+C.5 CLASSIFICATION - CIFAR-10
+
+
+We use freshly initialised WideResNet 28-10 with a dropout rate of 0 _._ 3, followed by one fullyconnected layer, outputting logits for each of the ten classes. We use the same data augmentation as
+in Zagoruyko & Komodakis (2016). We train for 50 epochs using SGD with momentum equal to
+0.9 and weight decay set to 5 _×_ 10 _[−]_ [4] . We start with a learning rate of 0.1 and divide it by 5 after 20,
+30 and 40 epochs. We use a batch size of 128.
+
+
+C.6 BAYESIAN OPTIMISATION
+
+
+We use the same architecture and training setup as in Regression - UCI. However, since in BO we
+need to be extremely sample efficient, we use all the availalbe data points for training and do not
+reserve a validation set. Instead, we use weight decay of 0 _._ 01 and therefore the AdamW optimiser.
+Given the model predicts a mean _µ_ ( _x_ ) and variance _σ_ [2] ( _x_ ) at a given point _x_, we select the next
+point to query by maximising the UCB acqusition function _α_ ( _x_ ) = _µ_ ( _x_ ) + _βσ_ ( _x_ ) and set _β_ = 3.
+We use BoTorch (Balandat et al., 2020) to optimise the acquisition function. We completely retrain
+each model after acquiring a new point.
+
+
+D OBTAINING OOD EVALUATION SETS IN REGRESSION TASKS
+
+
+On the UCI benchmarks, eight datasets have only in-distribution evaluation sets, whereas two of
+them (protein and wine) have both in- and out-of-distribution evaluation sets. For the wine dataset,
+we follow Bui & Liu (2024), using red wines for training and ID evaluation and white wines for
+OoD evaluation. For the protein dataset, we follow Ziomek et al. (2025), using smaller proteins
+
+
+14
+
+
+for training and ID evaluation and larger proteins for OoD evaluation. In each case, we simply
+use fully-connected architectures. On UTK-Face, to create ID and OoD evaluation sets, we follow
+Ziomek et al. (2025), using all images with ethnicity label ”Others” as the OoD evaluation set and
+all remaining ethnicities as training and ID evaluation sets. We use freshly initialised ResNet-18 as
+the backbone model.
+
+
+E OBTAINING OOD EVALUATION SETS IN CIFAR-10
+
+
+To evaluate OoD robustness, we construct a corrupted variant of CIFAR by applying common image
+corruptions. For each image, one corruption type is chosen at random. The set of corruption types
+includes:
+
+
+    - **Gaussian noise:** additive pixel-wise Gaussian noise
+
+
+    - **Salt-and-pepper noise:** randomly setting pixels to black or white
+
+
+    - **Gaussian blur:** convolution with a Gaussian kernel
+
+
+    - **Motion blur:** convolution with a horizontal motion
+
+
+    - **Brightness shift:** multiplicative rescaling of pixel intensities by a random factor
+
+
+    - **Contrast reduction:** pixel intensities are shifted toward the per-image mean
+
+
+    - **Pixelation:** downsampling the image followed by nearest-neighbor upsampling.
+
+
+All corrupted images are clipped to the valid pixel range [0 _,_ 255].
+
+
+F DETAILED UCI RESULTS
+
+
+Table 5: Results for UCI benchmarks. Reported values are means over 20 seeds and the values after
+_±_ denote 95% CIs of the mean estimator. The best methods and all methods that do not statistically
+differ w.r.t. two-sided z-test are shown in bold. The second best methods are underlined.
+
+|Dataset<br>Metric|boston<br>NLL (↓) R2 (↑)|california<br>NLL (↓) R2 (↑)|concrete<br>NLL (↓) R2 (↑)|energy-efficiency<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.98_ ±_ 0.56<br>0.81_ ±_ 0.05<br>3.71_ ±_ 0.72<br>**0.87**_ ±_** 0.02**<br>2.30_ ±_ 0.40<br>0.54_ ±_ 0.10<br>**0.47**_ ±_** 0.18**<br>**0.86**_ ±_** 0.02**<br>8.26_ ±_ 3.18<br>**0.87**_ ±_** 0.02**<br>**3.23**_ ±_** 5.21**<br>**0.86**_ ±_** 0.02**|0.55_ ±_ 0.05<br>0.76_ ±_ 0.04<br>3.91_ ±_ 0.26<br>**0.82**_ ±_** 0.01**<br>2.64_ ±_ 0.14<br>0.31_ ±_ 0.07<br>**0.49**_ ±_** 0.05**<br>**0.48**_ ±_** 0.57**<br>2.33_ ±_ 0.14<br>0.77_ ±_ 0.01<br>1.33_ ±_ 0.41<br>0.71_ ±_ 0.02|0.64_ ±_ 0.17<br>0.89_ ±_ 0.01<br>3.06_ ±_ 0.96<br>**0.91**_ ±_** 0.01**<br>2.08_ ±_ 0.15<br>0.55_ ±_ 0.09<br>**0.36**_ ±_** 0.15**<br>**0.90**_ ±_** 0.01**<br>4.75_ ±_ 1.32<br>**0.92**_ ±_** 0.01**<br>4.51_ ±_ 3.83<br>**0.90**_ ±_** 0.02**|1.46_ ±_ 0.86<br>0.98_ ±_ 0.00<br>**-0.74**_ ±_** 0.20**<br>**0.99**_ ±_** 0.00**<br>**-0.79**_ ±_** 0.17**<br>**0.99**_ ±_** 0.00**<br>**-0.91**_ ±_** 0.10**<br>0.98_ ±_ 0.01<br>0.37_ ±_ 0.46<br>0.99_ ±_ 0.00<br>1.74_ ±_ 1.90<br>0.98_ ±_ 0.00|
+|LEO (ours)<br>**0.35**_ ±_** 0.14**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.29**_ ±_** 0.12**<br>0.89_ ±_ 0.01<br>**-0.87**_ ±_** 0.08**<br>0.98_ ±_ 0.00|LEO (ours)<br>**0.35**_ ±_** 0.14**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.29**_ ±_** 0.12**<br>0.89_ ±_ 0.01<br>**-0.87**_ ±_** 0.08**<br>0.98_ ±_ 0.00|LEO (ours)<br>**0.35**_ ±_** 0.14**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.29**_ ±_** 0.12**<br>0.89_ ±_ 0.01<br>**-0.87**_ ±_** 0.08**<br>0.98_ ±_ 0.00|LEO (ours)<br>**0.35**_ ±_** 0.14**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.29**_ ±_** 0.12**<br>0.89_ ±_ 0.01<br>**-0.87**_ ±_** 0.08**<br>0.98_ ±_ 0.00|LEO (ours)<br>**0.35**_ ±_** 0.14**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.29**_ ±_** 0.12**<br>0.89_ ±_ 0.01<br>**-0.87**_ ±_** 0.08**<br>0.98_ ±_ 0.00|
+
+
+15
+
+
+Table 6: Results for the wine UCI benchmark. The training set and the ID evaluation set correspond
+to red wine. Reported values are means over 20 seeds and the values after _±_ denote 95% CIs of
+the mean estimator. The best methods and all methods that do not statistically differ w.r.t. twosided z-test are shown in bold. The second best methods are underlined. In cells marked with (*),
+OOD evaluation for Density Regression caused numerical instabilities on 2 out of 20 seeds, omitting
+those cases average value reached were 3 _._ 23 for OOD NLL and _−_ 8 _._ 36 _×_ 10 [23] for OOD _R_ [2] . In cell
+marked with ( _†_ ), OOD NLL evaluation for EDL caused numerical instabilities on 7 out of 20 seeds,
+remaining seeds reached an average OOD NLL equal to 9051 _._ 13.
+
+
+Dataset wine
+Metric NLL ( _↓_ ) R2 ( _↑_ ) OOD NLL ( _↓_ ) OOD R2 ( _↑_ )
+
+
+Density R. 1.54 _±_ 0.06 **-4.00** _±_ **5.51** (*) (*)
+Dropout 10.51 _±_ 3.19 **0.40** _±_ **0.02** 12.04 _±_ 2.12 **0.07** _±_ **0.04**
+DUE 4.38 _±_ 0.25 0.11 _±_ 0.01 6.12 _±_ 0.26 -0.01 _±_ 0.01
+EDL **2.76** _±_ **1.59** 0.36 _±_ 0.02 ( _†_ ) -0.04 _±_ 0.06
+Ensemble 5.70 _±_ 0.79 0.32 _±_ 0.03 4.95 _±_ 0.46 -0.27 _±_ 0.08
+VBLL 112.55 _±_ 105.56 0.29 _±_ 0.04 136.16 _±_ 82.00 -0.39 _±_ 0.10
+
+
+LEO (ours) **1.23** _±_ **0.03** 0.37 _±_ 0.02 **1.55** _±_ **0.03** -0.02 _±_ 0.05
+
+
+G DETAILED TABULAR CLASSIFICATION RESULTS
+
+
+Table 7: Results for tabular classification tasks. Reported values are means over 100 seeds and the
+values after _±_ are 95%-confidence intervals of the mean estimator. The best methods and z-test ties
+are shown in bold, and the second best methods are underlined.
+
+|Dataset<br>Metric|adult<br>Acc. (↑) NLL (×10−4) (↓) ECE (×10−2) (↓)|breast-cancer<br>Acc. (↑) NLL (×10−4) (↓) ECE (×10−2) (↓)|
+|---|---|---|
+|Dropout<br>DUE<br>DUQ<br>EDL<br>Ensemble<br>VBLL|**85.74**_ ±_** 0.09**<br>**0.63**_ ±_** 0.00**<br>**1.08**_ ±_** 0.06**<br>76.22_ ±_ 0.11<br>0.99_ ±_ 0.01<br>13.46_ ±_ 0.29<br>84.81_ ±_ 0.10<br>0.67_ ±_ 0.00<br>1.82_ ±_ 0.08<br>85.50_ ±_ 0.26<br>0.65_ ±_ 0.00<br>2.74_ ±_ 0.23<br>**85.78**_ ±_** 0.09**<br>**0.63**_ ±_** 0.00**<br>**1.04**_ ±_** 0.05**<br>85.61_ ±_ 0.10<br>0.64_ ±_ 0.00<br>**1.12**_ ±_** 0.06**|**96.67**_ ±_** 0.46**<br>18.49_ ±_ 3.07<br>**3.54**_ ±_** 0.34**<br>69.75_ ±_ 1.66<br>80.04_ ±_ 2.42<br>18.94_ ±_ 1.51<br>96.06_ ±_ 0.49<br>18.34_ ±_ 2.21<br>4.21_ ±_ 0.32<br>**96.70**_ ±_** 0.42**<br>**17.06**_ ±_** 1.90**<br>**3.56**_ ±_** 0.35**<br>**96.71**_ ±_** 0.40**<br>18.08_ ±_ 2.74<br>**3.45**_ ±_** 0.28**<br>**96.39**_ ±_** 0.51**<br>**14.82**_ ±_** 1.67**<br>4.18_ ±_ 0.39|
+|LEO (ours)<br>**85.77**_ ±_** 0.09**<br>**0.63**_ ±_** 0.00**<br>1.25_ ±_ 0.07<br>**96.71**_ ±_** 0.40**<br>**16.66**_ ±_** 1.34**<br>4.69_ ±_ 0.30|LEO (ours)<br>**85.77**_ ±_** 0.09**<br>**0.63**_ ±_** 0.00**<br>1.25_ ±_ 0.07<br>**96.71**_ ±_** 0.40**<br>**16.66**_ ±_** 1.34**<br>4.69_ ±_ 0.30|LEO (ours)<br>**85.77**_ ±_** 0.09**<br>**0.63**_ ±_** 0.00**<br>1.25_ ±_ 0.07<br>**96.71**_ ±_** 0.40**<br>**16.66**_ ±_** 1.34**<br>4.69_ ±_ 0.30|
+
+
+Table 8: Results for tabular classification tasks. Reported values are means over 100 seeds and the
+values after _±_ are 95%-confidence intervals of the mean estimator. The best methods and z-test ties
+are shown in bold, and the second best methods are underlined.
+
+|Dataset<br>Metric|heart-disease<br>Acc. (↑) NLL (×10−4) (↓) ECE (×10−2) (↓)|titanic<br>Acc. (↑) NLL (×10−4) (↓) ECE (×10−2) (↓)|
+|---|---|---|
+|Dropout<br>DUE<br>DUQ<br>EDL<br>Ensemble<br>VBLL|**82.07**_ ±_** 1.42**<br>209.74_ ±_ 35.29<br>**15.78**_ ±_** 1.04**<br>74.85_ ±_ 1.96<br>219.75_ ±_ 3.45<br>20.44_ ±_ 1.29<br>**83.48**_ ±_** 1.40**<br>**145.89**_ ±_** 8.27**<br>**14.87**_ ±_** 0.80**<br>**82.93**_ ±_** 1.45**<br>165.60_ ±_ 13.39<br>**15.22**_ ±_** 0.99**<br>81.37_ ±_ 1.52<br>187.97_ ±_ 33.33<br>**15.15**_ ±_** 1.00**<br>80.56_ ±_ 1.71<br>167.01_ ±_ 10.62<br>**15.99**_ ±_** 1.08**|**79.75**_ ±_** 0.65**<br>**35.48**_ ±_** 0.83**<br>**7.83**_ ±_** 0.42**<br>62.12_ ±_ 1.34<br>50.63_ ±_ 0.71<br>8.33_ ±_ 0.61<br>78.95_ ±_ 0.71<br>**35.40**_ ±_** 0.73**<br>**7.83**_ ±_** 0.41**<br>**79.54**_ ±_** 0.68**<br>**36.31**_ ±_** 0.91**<br>**8.08**_ ±_** 0.47**<br>**79.98**_ ±_** 0.69**<br>**35.53**_ ±_** 0.93**<br>**7.64**_ ±_** 0.43**<br>**79.45**_ ±_** 0.94**<br>**35.96**_ ±_** 1.01**<br>**8.07**_ ±_** 0.45**|
+|LEO (ours)<br>**82.81**_ ±_** 1.45**<br>**153.60**_ ±_** 6.56**<br>**15.75**_ ±_** 0.76**<br>**79.43**_ ±_** 0.73**<br>**35.71**_ ±_** 0.76**<br>**7.60**_ ±_** 0.39**|LEO (ours)<br>**82.81**_ ±_** 1.45**<br>**153.60**_ ±_** 6.56**<br>**15.75**_ ±_** 0.76**<br>**79.43**_ ±_** 0.73**<br>**35.71**_ ±_** 0.76**<br>**7.60**_ ±_** 0.39**|LEO (ours)<br>**82.81**_ ±_** 1.45**<br>**153.60**_ ±_** 6.56**<br>**15.75**_ ±_** 0.76**<br>**79.43**_ ±_** 0.73**<br>**35.71**_ ±_** 0.76**<br>**7.60**_ ±_** 0.39**|
+
+
+16
+
+
+H FULL CIFAR-10 RESULTS
+
+
+Table 9: Results for CIFAR-10 benchmarks. Reported values are means over 3 seeds and the values
+after _±_ denote 95% CIs of the mean estimator. The best methods and all methods that do not
+statistically differ w.r.t. two-sided z-test are shown in bold. The second best methods are underlined.
+
+
+Dataset ID OOD
+Metric Acc ( _↑_ ) NLLLoss ( _×_ 10 _[−]_ [3] ) ( _↓_ ) ECE ( _×_ 10 _[−]_ [3] ) ( _↓_ ) Acc ( _↑_ ) NLLLoss ( _×_ 10 _[−]_ [3] ) ( _↓_ ) ECE ( _×_ 10 _[−]_ [3] ) ( _↓_ )
+
+
+Dropout 94.44 _±_ 0.47 1.43 _±_ 0.02 17.27 _±_ 6.17 **44.79** _±_ **1.17** 21.46 _±_ 4.74 297.47 _±_ 62.55
+DUE 94.54 _±_ 0.16 1.54 _±_ 0.03 16.33 _±_ 2.23 **44.52** _±_ **1.43** 18.65 _±_ 1.21 360.31 _±_ 43.37
+DUQ 93.75 _±_ 0.39 3.04 _±_ 0.02 176.79 _±_ 11.24 44.14 _±_ 1.23 **14.28** _±_ **0.27** **216.90** _±_ **40.33**
+EDL 93.99 _±_ 0.40 2.15 _±_ 0.06 57.54 _±_ 0.83 42.72 _±_ 1.38 15.83 _±_ 0.60 276.30 _±_ 21.73
+Ensemble **95.44** _±_ **0.08** **1.09** _±_ **0.01** **6.42** _±_ **2.35** **45.58** _±_ **0.35** 19.76 _±_ 0.34 318.27 _±_ 16.13
+VBLL 94.72 _±_ 0.54 1.42 _±_ 0.07 20.73 _±_ 2.29 **44.23** _±_ **1.50** 19.34 _±_ 0.81 335.49 _±_ 24.44
+
+
+LEO (ours) 94.17 _±_ 0.50 1.48 _±_ 0.04 16.88 _±_ 2.43 44.18 _±_ 0.12 16.95 _±_ 1.76 294.20 _±_ 40.77
+
+
+17
+
+
+I ABLATIONS ON NUMBER OF EXPERTS
+
+
+Table 10: Ablations results for UCI benchmarks. We compare a version of LEO with 5 experts that
+we used throughout experiments to versions of LEO with 2,3 and 10 experts. Reported values are
+means over 20 seeds and the values after _±_ denote 95% CIs of the mean estimator. The best methods
+and all methods that do not statistically differ w.r.t. two-sided z-test are shown in bold. The second
+best methods are underlined. See Table 6 for explanation of ( _⋆_ ) and ( _†_ ) symbols.
+
+|boston<br>NLL (↓) R2 (↑)|california<br>NLL (↓) R2 (↑)|concrete<br>NLL (↓) R2 (↑)|
+|---|---|---|
+|0.99_ ±_ 0.53<br>0.81_ ±_ 0.04<br>3.75_ ±_ 0.69<br>**0.87**_ ±_** 0.02**<br>2.28_ ±_ 0.38<br>0.55_ ±_ 0.10<br>0.46_ ±_ 0.17<br>**0.86**_ ±_** 0.02**<br>8.02_ ±_ 3.06<br>**0.87**_ ±_** 0.02**<br>3.09_ ±_ 4.97<br>**0.87**_ ±_** 0.02**|0.55_ ±_ 0.05<br>0.76_ ±_ 0.04<br>3.90_ ±_ 0.25<br>**0.82**_ ±_** 0.01**<br>2.65_ ±_ 0.13<br>0.31_ ±_ 0.07<br>0.49_ ±_ 0.05<br>0.51_ ±_ 0.53<br>2.33_ ±_ 0.13<br>0.77_ ±_ 0.01<br>1.31_ ±_ 0.39<br>0.71_ ±_ 0.02|0.62_ ±_ 0.16<br>0.89_ ±_ 0.01<br>2.95_ ±_ 0.93<br>**0.91**_ ±_** 0.01**<br>2.07_ ±_ 0.15<br>0.55_ ±_ 0.09<br>0.36_ ±_ 0.14<br>0.90_ ±_ 0.01<br>4.66_ ±_ 1.26<br>**0.92**_ ±_** 0.01**<br>4.31_ ±_ 3.67<br>0.90_ ±_ 0.02|
+
+
+LEO (ours) (2 experts) **0.29** _±_ **0.06** 0.83 _±_ 0.02 0.47 _±_ 0.02 0.79 _±_ 0.01 **0.28** _±_ **0.12** 0.90 _±_ 0.01 **-0.84** _±_ **0.08** 0.98 _±_ 0.00
+LEO (ours) (3 experts) **0.30** _±_ **0.07** 0.84 _±_ 0.02 0.47 _±_ 0.02 0.79 _±_ 0.01 0.31 _±_ 0.14 0.90 _±_ 0.01 -0.78 _±_ 0.13 0.98 _±_ 0.00
+LEO (ours) (5 experts) 0.37 _±_ 0.16 0.84 _±_ 0.02 0.46 _±_ 0.03 0.79 _±_ 0.01 **0.23** _±_ **0.08** 0.89 _±_ 0.01 **-0.86** _±_ **0.08** 0.98 _±_ 0.00
+LEO (ours) (10 experts) **0.28** _±_ **0.06** 0.83 _±_ 0.02 **0.43** _±_ **0.02** 0.79 _±_ 0.01 **0.25** _±_ **0.09** 0.89 _±_ 0.01 -0.63 _±_ 0.10 0.97 _±_ 0.00
+
+|Dataset<br>Metric|kin8nm<br>NLL (↓) R2 (↑)|naval<br>NLL (↓) R2 (↑)|power-plant<br>NLL (↓) R2 (↑)|yacht<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.19_ ±_ 0.03<br>0.92_ ±_ 0.00<br>1.18_ ±_ 0.12<br>0.92_ ±_ 0.00<br>1.96_ ±_ 0.12<br>0.79_ ±_ 0.02<br>0.18_ ±_ 0.03<br>0.91_ ±_ 0.01<br>1.29_ ±_ 0.19<br>**0.93**_ ±_** 0.00**<br>2.64_ ±_ 1.91<br>0.89_ ±_ 0.00|-2.24_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-1.12_ ±_ 0.02<br>0.99_ ±_ 0.00<br>-0.42_ ±_ 0.31<br>**1.00**_ ±_** 0.00**<br>-1.84_ ±_ 0.02<br>**1.00**_ ±_** 0.00**<br>-2.27_ ±_ 0.04<br>**1.00**_ ±_** 0.00**<br>-0.54_ ±_ 0.24<br>0.99_ ±_ 0.00|**-0.09**_ ±_** 0.02**<br>0.95_ ±_ 0.00<br>3.10_ ±_ 0.33<br>0.95_ ±_ 0.00<br>1.19_ ±_ 0.09<br>0.89_ ±_ 0.00<br>**-0.09**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>1.68_ ±_ 0.24<br>**0.96**_ ±_** 0.00**<br>-0.04_ ±_ 0.03<br>0.95_ ±_ 0.00|1.17_ ±_ 1.15<br>0.99_ ±_ 0.00<br>-1.20_ ±_ 0.26<br>0.98_ ±_ 0.01<br>-1.49_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-2.08_ ±_ 0.33<br>0.99_ ±_ 0.00<br>**-2.52**_ ±_** 0.31**<br>**1.00**_ ±_** 0.00**<br>0.06_ ±_ 0.89<br>0.99_ ±_ 0.00|
+|LEO (ours) (2 experts)<br>0.16_ ±_ 0.02<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.00_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-2.15_ ±_ 0.28<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (3 experts)<br>0.16_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-2.46_ ±_ 0.07<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.03<br>0.95_ ±_ 0.00<br>-1.89_ ±_ 0.59<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (5 experts)<br>0.14_ ±_ 0.01<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (ours) (10 experts)<br>**0.11**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.64**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.05<br>0.95_ ±_ 0.00<br>-1.66_ ±_ 0.28<br>0.99_ ±_ 0.00|LEO (ours) (2 experts)<br>0.16_ ±_ 0.02<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.00_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-2.15_ ±_ 0.28<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (3 experts)<br>0.16_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-2.46_ ±_ 0.07<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.03<br>0.95_ ±_ 0.00<br>-1.89_ ±_ 0.59<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (5 experts)<br>0.14_ ±_ 0.01<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (ours) (10 experts)<br>**0.11**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.64**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.05<br>0.95_ ±_ 0.00<br>-1.66_ ±_ 0.28<br>0.99_ ±_ 0.00|LEO (ours) (2 experts)<br>0.16_ ±_ 0.02<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.00_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-2.15_ ±_ 0.28<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (3 experts)<br>0.16_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-2.46_ ±_ 0.07<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.03<br>0.95_ ±_ 0.00<br>-1.89_ ±_ 0.59<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (5 experts)<br>0.14_ ±_ 0.01<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (ours) (10 experts)<br>**0.11**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.64**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.05<br>0.95_ ±_ 0.00<br>-1.66_ ±_ 0.28<br>0.99_ ±_ 0.00|LEO (ours) (2 experts)<br>0.16_ ±_ 0.02<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.00_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-2.15_ ±_ 0.28<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (3 experts)<br>0.16_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-2.46_ ±_ 0.07<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.03<br>0.95_ ±_ 0.00<br>-1.89_ ±_ 0.59<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (5 experts)<br>0.14_ ±_ 0.01<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (ours) (10 experts)<br>**0.11**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.64**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.05<br>0.95_ ±_ 0.00<br>-1.66_ ±_ 0.28<br>0.99_ ±_ 0.00|LEO (ours) (2 experts)<br>0.16_ ±_ 0.02<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.00_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-2.15_ ±_ 0.28<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (3 experts)<br>0.16_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-2.46_ ±_ 0.07<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.03<br>0.95_ ±_ 0.00<br>-1.89_ ±_ 0.59<br>**1.00**_ ±_** 0.00**<br>LEO (ours) (5 experts)<br>0.14_ ±_ 0.01<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (ours) (10 experts)<br>**0.11**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.64**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>-0.05_ ±_ 0.05<br>0.95_ ±_ 0.00<br>-1.66_ ±_ 0.28<br>0.99_ ±_ 0.00|
+
+
+|Dataset<br>Metric|protein<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col3|wine<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col5|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|1.00_ ±_ 0.23<br>(*)<br>4.38_ ±_ 0.53<br>**0.69**_ ±_** 0.00**<br>5.12_ ±_ 0.20<br>0.08_ ±_ 0.01<br>1.07_ ±_ 0.02<br>0.41_ ±_ 0.01<br>2.27_ ±_ 0.11<br>0.68_ ±_ 0.00<br>1.02_ ±_ 0.04<br>0.59_ ±_ 0.01|11.64_ ±_ 2.38<br>0.39_ ±_ 0.05<br>4.82_ ±_ 0.39<br>**0.54**_ ±_** 0.01**<br>2.99_ ±_ 0.11<br>0.14_ ±_ 0.01<br>**1.16**_ ±_** 0.07**<br>0.44_ ±_ 0.03<br>1.89_ ±_ 0.20<br>0.27_ ±_ 0.04<br>2.46_ ±_ 0.45<br>-0.20_ ±_ 0.14|1.54_ ±_ 0.06<br>-3.83_ ±_ 5.25<br>10.52_ ±_ 3.03<br>**0.40**_ ±_** 0.02**<br>4.35_ ±_ 0.25<br>0.11_ ±_ 0.01<br>2.70_ ±_ 1.51<br>0.36_ ±_ 0.02<br>5.66_ ±_ 0.76<br>0.32_ ±_ 0.03<br>107.26_ ±_ 100.94<br>0.29_ ±_ 0.04|3.27_ ±_ 0.46<br>(*)<br>12.15_ ±_ 2.03<br>**0.07**_ ±_** 0.04**<br>6.10_ ±_ 0.25<br>-0.01_ ±_ 0.01<br>(_†_)<br>-0.04_ ±_ 0.06<br>4.90_ ±_ 0.46<br>-0.28_ ±_ 0.08<br>129.77_ ±_ 78.99<br>-0.39_ ±_ 0.10|
+|LEO (ours) (2 experts)<br>LEO (ours) (3 experts)<br>LEO (ours) (5 experts)<br>LEO (ours) (10 experts)|0.95_ ±_ 0.04<br>0.61_ ±_ 0.00<br>0.91_ ±_ 0.04<br>0.61_ ±_ 0.01<br>**0.89**_ ±_** 0.03**<br>0.60_ ±_ 0.00<br>**0.86**_ ±_** 0.05**<br>0.59_ ±_ 0.01|**1.17**_ ±_** 0.04**<br>0.44_ ±_ 0.02<br>**1.16**_ ±_** 0.04**<br>0.43_ ±_ 0.02<br>**1.16**_ ±_** 0.05**<br>0.44_ ±_ 0.02<br>**1.16**_ ±_** 0.04**<br>0.39_ ±_ 0.03|1.26_ ±_ 0.02<br>0.33_ ±_ 0.01<br>1.24_ ±_ 0.03<br>0.35_ ±_ 0.02<br>**1.23**_ ±_** 0.03**<br>0.37_ ±_ 0.02<br>**1.20**_ ±_** 0.03**<br>**0.40**_ ±_** 0.02**|**1.54**_ ±_** 0.02**<br>0.02_ ±_ 0.04<br>**1.53**_ ±_** 0.03**<br>0.03_ ±_ 0.04<br>1.56_ ±_ 0.03<br>-0.03_ ±_ 0.04<br>**1.55**_ ±_** 0.02**<br>-0.03_ ±_ 0.04|
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+J ABLATION ON TYPE ASSIGNMENT
+
+
+Table 11: Ablations results for UCI benchmarks. We compare different ways of assigning expert types. ”Original” refers to the method we use throughout other experiments described in B.1.
+”KMeans” refers to a variation of that method, where instead of constructing histogram we conduct
+Kmeans clustering and ”Random” is just a purely random type assignment. Reported values are
+means over 20 seeds and the values after _±_ denote 95% CIs of the mean estimator. The best methods and all methods that do not statistically differ w.r.t. two-sided z-test are shown in bold. The
+second best methods are underlined. See Table 6 for explanation of ( _⋆_ ) and ( _†_ ) symbols.
+
+|Dataset<br>Metric|boston<br>NLL (↓) R2 (↑)|california<br>NLL (↓) R2 (↑)|concrete<br>NLL (↓) R2 (↑)|energy-efficiency<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.99_ ±_ 0.53<br>0.81_ ±_ 0.04<br>3.75_ ±_ 0.69<br>**0.87**_ ±_** 0.02**<br>2.28_ ±_ 0.38<br>0.55_ ±_ 0.10<br>0.46_ ±_ 0.17<br>**0.86**_ ±_** 0.02**<br>8.02_ ±_ 3.06<br>**0.87**_ ±_** 0.02**<br>3.09_ ±_ 4.97<br>**0.87**_ ±_** 0.02**|0.55_ ±_ 0.05<br>0.76_ ±_ 0.04<br>3.90_ ±_ 0.25<br>**0.82**_ ±_** 0.01**<br>2.65_ ±_ 0.13<br>0.31_ ±_ 0.07<br>0.49_ ±_ 0.05<br>0.51_ ±_ 0.53<br>2.33_ ±_ 0.13<br>0.77_ ±_ 0.01<br>1.31_ ±_ 0.39<br>0.71_ ±_ 0.02|0.62_ ±_ 0.16<br>0.89_ ±_ 0.01<br>2.95_ ±_ 0.93<br>**0.91**_ ±_** 0.01**<br>2.07_ ±_ 0.15<br>0.55_ ±_ 0.09<br>0.36_ ±_ 0.14<br>0.90_ ±_ 0.01<br>4.66_ ±_ 1.26<br>**0.92**_ ±_** 0.01**<br>4.31_ ±_ 3.67<br>0.90_ ±_ 0.02|1.96_ ±_ 1.28<br>0.98_ ±_ 0.00<br>-0.75_ ±_ 0.19<br>**0.99**_ ±_** 0.00**<br>-0.80_ ±_ 0.17<br>**0.99**_ ±_** 0.00**<br>**-0.91**_ ±_** 0.09**<br>0.98_ ±_ 0.01<br>0.34_ ±_ 0.44<br>**0.99**_ ±_** 0.00**<br>1.75_ ±_ 1.81<br>0.98_ ±_ 0.00|
+|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (KMeans)<br>**0.27**_ ±_** 0.08**<br>0.83_ ±_ 0.02<br>**0.47**_ ±_** 0.02**<br>0.78_ ±_ 0.01<br>**0.26**_ ±_** 0.10**<br>0.89_ ±_ 0.01<br>-0.69_ ±_ 0.13<br>0.97_ ±_ 0.01<br>LEO (Random)<br>**0.24**_ ±_** 0.05**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.22**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>-0.81_ ±_ 0.08<br>0.98_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (KMeans)<br>**0.27**_ ±_** 0.08**<br>0.83_ ±_ 0.02<br>**0.47**_ ±_** 0.02**<br>0.78_ ±_ 0.01<br>**0.26**_ ±_** 0.10**<br>0.89_ ±_ 0.01<br>-0.69_ ±_ 0.13<br>0.97_ ±_ 0.01<br>LEO (Random)<br>**0.24**_ ±_** 0.05**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.22**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>-0.81_ ±_ 0.08<br>0.98_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (KMeans)<br>**0.27**_ ±_** 0.08**<br>0.83_ ±_ 0.02<br>**0.47**_ ±_** 0.02**<br>0.78_ ±_ 0.01<br>**0.26**_ ±_** 0.10**<br>0.89_ ±_ 0.01<br>-0.69_ ±_ 0.13<br>0.97_ ±_ 0.01<br>LEO (Random)<br>**0.24**_ ±_** 0.05**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.22**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>-0.81_ ±_ 0.08<br>0.98_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (KMeans)<br>**0.27**_ ±_** 0.08**<br>0.83_ ±_ 0.02<br>**0.47**_ ±_** 0.02**<br>0.78_ ±_ 0.01<br>**0.26**_ ±_** 0.10**<br>0.89_ ±_ 0.01<br>-0.69_ ±_ 0.13<br>0.97_ ±_ 0.01<br>LEO (Random)<br>**0.24**_ ±_** 0.05**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.22**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>-0.81_ ±_ 0.08<br>0.98_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (KMeans)<br>**0.27**_ ±_** 0.08**<br>0.83_ ±_ 0.02<br>**0.47**_ ±_** 0.02**<br>0.78_ ±_ 0.01<br>**0.26**_ ±_** 0.10**<br>0.89_ ±_ 0.01<br>-0.69_ ±_ 0.13<br>0.97_ ±_ 0.01<br>LEO (Random)<br>**0.24**_ ±_** 0.05**<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.22**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>-0.81_ ±_ 0.08<br>0.98_ ±_ 0.00|
+
+
+|Dataset<br>Metric|kin8nm<br>NLL (↓) R2 (↑)|naval<br>NLL (↓) R2 (↑)|power-plant<br>NLL (↓) R2 (↑)|yacht<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.19_ ±_ 0.03<br>0.92_ ±_ 0.00<br>1.18_ ±_ 0.12<br>0.92_ ±_ 0.00<br>1.96_ ±_ 0.12<br>0.79_ ±_ 0.02<br>0.18_ ±_ 0.03<br>0.91_ ±_ 0.01<br>1.29_ ±_ 0.19<br>**0.93**_ ±_** 0.00**<br>2.64_ ±_ 1.91<br>0.89_ ±_ 0.00|-2.24_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-1.12_ ±_ 0.02<br>0.99_ ±_ 0.00<br>-0.42_ ±_ 0.31<br>**1.00**_ ±_** 0.00**<br>-1.84_ ±_ 0.02<br>**1.00**_ ±_** 0.00**<br>-2.27_ ±_ 0.04<br>**1.00**_ ±_** 0.00**<br>-0.54_ ±_ 0.24<br>0.99_ ±_ 0.00|**-0.09**_ ±_** 0.02**<br>0.95_ ±_ 0.00<br>3.10_ ±_ 0.33<br>0.95_ ±_ 0.00<br>1.19_ ±_ 0.09<br>0.89_ ±_ 0.00<br>**-0.09**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>1.68_ ±_ 0.24<br>**0.96**_ ±_** 0.00**<br>-0.04_ ±_ 0.03<br>0.95_ ±_ 0.00|1.17_ ±_ 1.15<br>0.99_ ±_ 0.00<br>-1.20_ ±_ 0.26<br>0.98_ ±_ 0.01<br>-1.49_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-2.08_ ±_ 0.33<br>0.99_ ±_ 0.00<br>**-2.52**_ ±_** 0.31**<br>**1.00**_ ±_** 0.00**<br>0.06_ ±_ 0.89<br>0.99_ ±_ 0.00|
+|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (KMeans)<br>**0.12**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>-0.93_ ±_ 0.40<br>0.88_ ±_ 0.07<br>-0.04_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-1.99_ ±_ 0.20<br>0.99_ ±_ 0.00<br>LEO (Random)<br>**0.12**_ ±_** 0.02**<br>**0.93**_ ±_** 0.00**<br>**-2.55**_ ±_** 0.06**<br>**1.00**_ ±_** 0.00**<br>**-0.07**_ ±_** 0.04**<br>0.95_ ±_ 0.00<br>-1.37_ ±_ 1.25<br>0.99_ ±_ 0.00|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (KMeans)<br>**0.12**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>-0.93_ ±_ 0.40<br>0.88_ ±_ 0.07<br>-0.04_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-1.99_ ±_ 0.20<br>0.99_ ±_ 0.00<br>LEO (Random)<br>**0.12**_ ±_** 0.02**<br>**0.93**_ ±_** 0.00**<br>**-2.55**_ ±_** 0.06**<br>**1.00**_ ±_** 0.00**<br>**-0.07**_ ±_** 0.04**<br>0.95_ ±_ 0.00<br>-1.37_ ±_ 1.25<br>0.99_ ±_ 0.00|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (KMeans)<br>**0.12**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>-0.93_ ±_ 0.40<br>0.88_ ±_ 0.07<br>-0.04_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-1.99_ ±_ 0.20<br>0.99_ ±_ 0.00<br>LEO (Random)<br>**0.12**_ ±_** 0.02**<br>**0.93**_ ±_** 0.00**<br>**-2.55**_ ±_** 0.06**<br>**1.00**_ ±_** 0.00**<br>**-0.07**_ ±_** 0.04**<br>0.95_ ±_ 0.00<br>-1.37_ ±_ 1.25<br>0.99_ ±_ 0.00|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (KMeans)<br>**0.12**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>-0.93_ ±_ 0.40<br>0.88_ ±_ 0.07<br>-0.04_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-1.99_ ±_ 0.20<br>0.99_ ±_ 0.00<br>LEO (Random)<br>**0.12**_ ±_** 0.02**<br>**0.93**_ ±_** 0.00**<br>**-2.55**_ ±_** 0.06**<br>**1.00**_ ±_** 0.00**<br>**-0.07**_ ±_** 0.04**<br>0.95_ ±_ 0.00<br>-1.37_ ±_ 1.25<br>0.99_ ±_ 0.00|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (KMeans)<br>**0.12**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>-0.93_ ±_ 0.40<br>0.88_ ±_ 0.07<br>-0.04_ ±_ 0.04<br>0.95_ ±_ 0.00<br>-1.99_ ±_ 0.20<br>0.99_ ±_ 0.00<br>LEO (Random)<br>**0.12**_ ±_** 0.02**<br>**0.93**_ ±_** 0.00**<br>**-2.55**_ ±_** 0.06**<br>**1.00**_ ±_** 0.00**<br>**-0.07**_ ±_** 0.04**<br>0.95_ ±_ 0.00<br>-1.37_ ±_ 1.25<br>0.99_ ±_ 0.00|
+
+
+|Dataset<br>Metric|protein<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col3|wine<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col5|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|1.00_ ±_ 0.23<br>(*)<br>4.38_ ±_ 0.53<br>**0.69**_ ±_** 0.00**<br>5.12_ ±_ 0.20<br>0.08_ ±_ 0.01<br>1.07_ ±_ 0.02<br>0.41_ ±_ 0.01<br>2.27_ ±_ 0.11<br>0.68_ ±_ 0.00<br>1.02_ ±_ 0.04<br>0.59_ ±_ 0.01|11.64_ ±_ 2.38<br>0.39_ ±_ 0.05<br>4.82_ ±_ 0.39<br>**0.54**_ ±_** 0.01**<br>2.99_ ±_ 0.11<br>0.14_ ±_ 0.01<br>1.16_ ±_ 0.07<br>0.44_ ±_ 0.03<br>1.89_ ±_ 0.20<br>0.27_ ±_ 0.04<br>2.46_ ±_ 0.45<br>-0.20_ ±_ 0.14|1.54_ ±_ 0.06<br>-3.83_ ±_ 5.25<br>10.52_ ±_ 3.03<br>**0.40**_ ±_** 0.02**<br>4.35_ ±_ 0.25<br>0.11_ ±_ 0.01<br>2.70_ ±_ 1.51<br>0.36_ ±_ 0.02<br>5.66_ ±_ 0.76<br>0.32_ ±_ 0.03<br>107.26_ ±_ 100.94<br>0.29_ ±_ 0.04|3.27_ ±_ 0.46<br>(*)<br>12.15_ ±_ 2.03<br>**0.07**_ ±_** 0.04**<br>6.10_ ±_ 0.25<br>-0.01_ ±_ 0.01<br>(_†_)<br>-0.04_ ±_ 0.06<br>4.90_ ±_ 0.46<br>-0.28_ ±_ 0.08<br>129.77_ ±_ 78.99<br>-0.39_ ±_ 0.10|
+|LEO (Original)<br>LEO (KMeans)<br>LEO (Random)|**0.89**_ ±_** 0.03**<br>0.60_ ±_ 0.00<br>1.00_ ±_ 0.05<br>0.52_ ±_ 0.02<br>**0.89**_ ±_** 0.03**<br>0.61_ ±_ 0.01|**1.16**_ ±_** 0.05**<br>0.44_ ±_ 0.02<br>**1.16**_ ±_** 0.08**<br>0.42_ ±_ 0.02<br>**1.09**_ ±_** 0.04**<br>0.47_ ±_ 0.02|**1.23**_ ±_** 0.03**<br>0.37_ ±_ 0.02<br>**1.23**_ ±_** 0.02**<br>0.36_ ±_ 0.02<br>**1.23**_ ±_** 0.03**<br>0.37_ ±_ 0.02|**1.56**_ ±_** 0.03**<br>-0.03_ ±_ 0.04<br>**1.54**_ ±_** 0.03**<br>0.01_ ±_ 0.05<br>**1.56**_ ±_** 0.02**<br>-0.01_ ±_ 0.03|
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+K ILLUSTRATION OF THE EFFECT OF DATA PARTITIONING ON LEO
+
+
+Figure 4: Illustration of the effect of data partitioning on the resulting data fit on a toy problem.
+Dots indicate training points, and the color indicates which expert they were assigned to. On this
+toy problem we use two experts and assign datapoints to them using the strategy described in B.1 in
+the left column and using purely random assignment in the right column. First two rows show the
+learned model prediction with one expert expert dropped from the model, and the last row shows
+the resulting full model prediction. As one can easily see, the purely random strategy does not
+introduce any mismatch between experts’ distributions and thus their model fits are nearly identical,
+which results in poor calibration and is reflected in lack of uncertainty in the middle region [0 _,_ 0 _._ 6].
+
+
+20
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+LEO Predictions - Standard Partitioning - Expert 1
+
+
+2.0 1.5 1.0 0.5 0.0 0.5 1.0 1.5 2.0
+x
+
+
+LEO Predictions - Standard Partitioning - Expert 2
+
+
+2.0 1.5 1.0 0.5 0.0 0.5 1.0 1.5 2.0
+x
+
+
+LEO Predictions - Standard Partitioning
+
+
+2.0 1.5 1.0 0.5 0.0 0.5 1.0 1.5 2.0
+x
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+LEO Predictions - Random Partitioning - Expert 1
+
+
+2.0 1.5 1.0 0.5 0.0 0.5 1.0 1.5 2.0
+x
+
+
+LEO Predictions - Random Partitioning - Expert 2
+
+
+2.0 1.5 1.0 0.5 0.0 0.5 1.0 1.5 2.0
+x
+
+
+LEO Predictions - Random Partitioning
+
+
+2.0 1.5 1.0 0.5 0.0 0.5 1.0 1.5 2.0
+x
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+L ABLATION ON LEO COMPONENTS
+
+
+Table 12: Ablations results for UCI benchmarks. We compare standard LEO to different versions
+of LEO with some of its components altered/removed. ”Original” refers to standard LEO. ”Joint
+Training” refers to the version where we train experts and router jointly and the gradient from router
+flows to feature extractor and affects its weights. ”no ICV” refers to LEO with router trained without
+_p_ ( _DICV_ ) loss term. ”no null expert” refers to version of LEO without the null expert. ”RBF distance” refers to version of LEO, where the inverse of L2 distance in the router Equation 2 is replaced
+with RBF distance (exponent of negative L2 distance). Reported values are means over 20 seeds and
+the values after _±_ denote 95% CIs of the mean estimator. The best methods and all methods that
+do not statistically differ w.r.t. two-sided z-test are shown in bold. The second best methods are
+underlined. See Table 6 for explanation of ( _⋆_ ) and ( _†_ ) symbols.
+
+|Dataset<br>Metric|boston<br>NLL (↓) R2 (↑)|california<br>NLL (↓) R2 (↑)|concrete<br>NLL (↓) R2 (↑)|energy-efficiency<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.99_ ±_ 0.53<br>0.81_ ±_ 0.04<br>3.75_ ±_ 0.69<br>**0.87**_ ±_** 0.02**<br>2.28_ ±_ 0.38<br>0.55_ ±_ 0.10<br>0.46_ ±_ 0.17<br>**0.86**_ ±_** 0.02**<br>8.02_ ±_ 3.06<br>**0.87**_ ±_** 0.02**<br>3.09_ ±_ 4.97<br>**0.87**_ ±_** 0.02**|0.55_ ±_ 0.05<br>0.76_ ±_ 0.04<br>3.90_ ±_ 0.25<br>**0.82**_ ±_** 0.01**<br>2.65_ ±_ 0.13<br>0.31_ ±_ 0.07<br>0.49_ ±_ 0.05<br>0.51_ ±_ 0.53<br>2.33_ ±_ 0.13<br>0.77_ ±_ 0.01<br>1.31_ ±_ 0.39<br>0.71_ ±_ 0.02|0.62_ ±_ 0.16<br>0.89_ ±_ 0.01<br>2.95_ ±_ 0.93<br>**0.91**_ ±_** 0.01**<br>2.07_ ±_ 0.15<br>0.55_ ±_ 0.09<br>0.36_ ±_ 0.14<br>0.90_ ±_ 0.01<br>4.66_ ±_ 1.26<br>**0.92**_ ±_** 0.01**<br>4.31_ ±_ 3.67<br>0.90_ ±_ 0.02|1.96_ ±_ 1.28<br>0.98_ ±_ 0.00<br>-0.75_ ±_ 0.19<br>**0.99**_ ±_** 0.00**<br>-0.80_ ±_ 0.17<br>**0.99**_ ±_** 0.00**<br>**-0.91**_ ±_** 0.09**<br>0.98_ ±_ 0.01<br>0.34_ ±_ 0.44<br>**0.99**_ ±_** 0.00**<br>1.75_ ±_ 1.81<br>0.98_ ±_ 0.00|
+|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (Joint Training)<br>1.84_ ±_ 0.44<br>0.81_ ±_ 0.03<br>0.51_ ±_ 0.03<br>0.78_ ±_ 0.01<br>0.85_ ±_ 0.25<br>0.88_ ±_ 0.02<br>-0.53_ ±_ 0.09<br>0.98_ ±_ 0.00<br>LEO (no ICV)<br>0.45_ ±_ 0.24<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.26**_ ±_** 0.11**<br>0.89_ ±_ 0.01<br>**-0.82**_ ±_** 0.07**<br>0.98_ ±_ 0.00<br>LEO (no null expert)<br>1.16_ ±_ 0.33<br>0.84_ ±_ 0.03<br>9.43_ ±_ 2.82<br>0.68_ ±_ 0.19<br>0.75_ ±_ 0.31<br>0.89_ ±_ 0.01<br>-0.62_ ±_ 0.16<br>0.97_ ±_ 0.00<br>LEO (RBF distance)<br>**0.34**_ ±_** 0.04**<br>0.85_ ±_ 0.02<br>0.56_ ±_ 0.01<br>0.78_ ±_ 0.01<br>0.34_ ±_ 0.02<br>0.89_ ±_ 0.01<br>-0.05_ ±_ 0.03<br>0.97_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (Joint Training)<br>1.84_ ±_ 0.44<br>0.81_ ±_ 0.03<br>0.51_ ±_ 0.03<br>0.78_ ±_ 0.01<br>0.85_ ±_ 0.25<br>0.88_ ±_ 0.02<br>-0.53_ ±_ 0.09<br>0.98_ ±_ 0.00<br>LEO (no ICV)<br>0.45_ ±_ 0.24<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.26**_ ±_** 0.11**<br>0.89_ ±_ 0.01<br>**-0.82**_ ±_** 0.07**<br>0.98_ ±_ 0.00<br>LEO (no null expert)<br>1.16_ ±_ 0.33<br>0.84_ ±_ 0.03<br>9.43_ ±_ 2.82<br>0.68_ ±_ 0.19<br>0.75_ ±_ 0.31<br>0.89_ ±_ 0.01<br>-0.62_ ±_ 0.16<br>0.97_ ±_ 0.00<br>LEO (RBF distance)<br>**0.34**_ ±_** 0.04**<br>0.85_ ±_ 0.02<br>0.56_ ±_ 0.01<br>0.78_ ±_ 0.01<br>0.34_ ±_ 0.02<br>0.89_ ±_ 0.01<br>-0.05_ ±_ 0.03<br>0.97_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (Joint Training)<br>1.84_ ±_ 0.44<br>0.81_ ±_ 0.03<br>0.51_ ±_ 0.03<br>0.78_ ±_ 0.01<br>0.85_ ±_ 0.25<br>0.88_ ±_ 0.02<br>-0.53_ ±_ 0.09<br>0.98_ ±_ 0.00<br>LEO (no ICV)<br>0.45_ ±_ 0.24<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.26**_ ±_** 0.11**<br>0.89_ ±_ 0.01<br>**-0.82**_ ±_** 0.07**<br>0.98_ ±_ 0.00<br>LEO (no null expert)<br>1.16_ ±_ 0.33<br>0.84_ ±_ 0.03<br>9.43_ ±_ 2.82<br>0.68_ ±_ 0.19<br>0.75_ ±_ 0.31<br>0.89_ ±_ 0.01<br>-0.62_ ±_ 0.16<br>0.97_ ±_ 0.00<br>LEO (RBF distance)<br>**0.34**_ ±_** 0.04**<br>0.85_ ±_ 0.02<br>0.56_ ±_ 0.01<br>0.78_ ±_ 0.01<br>0.34_ ±_ 0.02<br>0.89_ ±_ 0.01<br>-0.05_ ±_ 0.03<br>0.97_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (Joint Training)<br>1.84_ ±_ 0.44<br>0.81_ ±_ 0.03<br>0.51_ ±_ 0.03<br>0.78_ ±_ 0.01<br>0.85_ ±_ 0.25<br>0.88_ ±_ 0.02<br>-0.53_ ±_ 0.09<br>0.98_ ±_ 0.00<br>LEO (no ICV)<br>0.45_ ±_ 0.24<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.26**_ ±_** 0.11**<br>0.89_ ±_ 0.01<br>**-0.82**_ ±_** 0.07**<br>0.98_ ±_ 0.00<br>LEO (no null expert)<br>1.16_ ±_ 0.33<br>0.84_ ±_ 0.03<br>9.43_ ±_ 2.82<br>0.68_ ±_ 0.19<br>0.75_ ±_ 0.31<br>0.89_ ±_ 0.01<br>-0.62_ ±_ 0.16<br>0.97_ ±_ 0.00<br>LEO (RBF distance)<br>**0.34**_ ±_** 0.04**<br>0.85_ ±_ 0.02<br>0.56_ ±_ 0.01<br>0.78_ ±_ 0.01<br>0.34_ ±_ 0.02<br>0.89_ ±_ 0.01<br>-0.05_ ±_ 0.03<br>0.97_ ±_ 0.00|LEO (Original)<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (Joint Training)<br>1.84_ ±_ 0.44<br>0.81_ ±_ 0.03<br>0.51_ ±_ 0.03<br>0.78_ ±_ 0.01<br>0.85_ ±_ 0.25<br>0.88_ ±_ 0.02<br>-0.53_ ±_ 0.09<br>0.98_ ±_ 0.00<br>LEO (no ICV)<br>0.45_ ±_ 0.24<br>0.84_ ±_ 0.02<br>**0.45**_ ±_** 0.02**<br>0.79_ ±_ 0.01<br>**0.26**_ ±_** 0.11**<br>0.89_ ±_ 0.01<br>**-0.82**_ ±_** 0.07**<br>0.98_ ±_ 0.00<br>LEO (no null expert)<br>1.16_ ±_ 0.33<br>0.84_ ±_ 0.03<br>9.43_ ±_ 2.82<br>0.68_ ±_ 0.19<br>0.75_ ±_ 0.31<br>0.89_ ±_ 0.01<br>-0.62_ ±_ 0.16<br>0.97_ ±_ 0.00<br>LEO (RBF distance)<br>**0.34**_ ±_** 0.04**<br>0.85_ ±_ 0.02<br>0.56_ ±_ 0.01<br>0.78_ ±_ 0.01<br>0.34_ ±_ 0.02<br>0.89_ ±_ 0.01<br>-0.05_ ±_ 0.03<br>0.97_ ±_ 0.00|
+
+
+|Dataset<br>Metric|kin8nm<br>NLL (↓) R2 (↑)|naval<br>NLL (↓) R2 (↑)|power-plant<br>NLL (↓) R2 (↑)|yacht<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.19_ ±_ 0.03<br>0.92_ ±_ 0.00<br>1.18_ ±_ 0.12<br>0.92_ ±_ 0.00<br>1.96_ ±_ 0.12<br>0.79_ ±_ 0.02<br>0.18_ ±_ 0.03<br>0.91_ ±_ 0.01<br>1.29_ ±_ 0.19<br>**0.93**_ ±_** 0.00**<br>2.64_ ±_ 1.91<br>0.89_ ±_ 0.00|-2.24_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-1.12_ ±_ 0.02<br>0.99_ ±_ 0.00<br>-0.42_ ±_ 0.31<br>**1.00**_ ±_** 0.00**<br>-1.84_ ±_ 0.02<br>**1.00**_ ±_** 0.00**<br>-2.27_ ±_ 0.04<br>**1.00**_ ±_** 0.00**<br>-0.54_ ±_ 0.24<br>0.99_ ±_ 0.00|**-0.09**_ ±_** 0.02**<br>0.95_ ±_ 0.00<br>3.10_ ±_ 0.33<br>0.95_ ±_ 0.00<br>1.19_ ±_ 0.09<br>0.89_ ±_ 0.00<br>**-0.09**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>1.68_ ±_ 0.24<br>**0.96**_ ±_** 0.00**<br>-0.04_ ±_ 0.03<br>0.95_ ±_ 0.00|1.17_ ±_ 1.15<br>0.99_ ±_ 0.00<br>-1.20_ ±_ 0.26<br>0.98_ ±_ 0.01<br>-1.49_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-2.08_ ±_ 0.33<br>0.99_ ±_ 0.00<br>**-2.52**_ ±_** 0.31**<br>**1.00**_ ±_** 0.00**<br>0.06_ ±_ 0.89<br>0.99_ ±_ 0.00|
+|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (Joint Training)<br>0.31_ ±_ 0.02<br>0.90_ ±_ 0.00<br>-0.90_ ±_ 0.05<br>0.98_ ±_ 0.00<br>-0.01_ ±_ 0.04<br>0.94_ ±_ 0.00<br>-1.66_ ±_ 0.21<br>0.99_ ±_ 0.00<br>LEO (no ICV)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.51**_ ±_** 0.11**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>-1.78_ ±_ 0.58<br>0.99_ ±_ 0.00<br>LEO (no null expert)<br>3.69_ ±_ 0.48<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.09**<br>**1.00**_ ±_** 0.00**<br>1.16_ ±_ 0.58<br>0.95_ ±_ 0.00<br>-1.83_ ±_ 0.34<br>0.99_ ±_ 0.00<br>LEO (RBF distance)<br>0.23_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-0.89_ ±_ 0.48<br>0.97_ ±_ 0.03<br>0.19_ ±_ 0.02<br>0.94_ ±_ 0.00<br>-0.27_ ±_ 0.04<br>0.97_ ±_ 0.01|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (Joint Training)<br>0.31_ ±_ 0.02<br>0.90_ ±_ 0.00<br>-0.90_ ±_ 0.05<br>0.98_ ±_ 0.00<br>-0.01_ ±_ 0.04<br>0.94_ ±_ 0.00<br>-1.66_ ±_ 0.21<br>0.99_ ±_ 0.00<br>LEO (no ICV)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.51**_ ±_** 0.11**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>-1.78_ ±_ 0.58<br>0.99_ ±_ 0.00<br>LEO (no null expert)<br>3.69_ ±_ 0.48<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.09**<br>**1.00**_ ±_** 0.00**<br>1.16_ ±_ 0.58<br>0.95_ ±_ 0.00<br>-1.83_ ±_ 0.34<br>0.99_ ±_ 0.00<br>LEO (RBF distance)<br>0.23_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-0.89_ ±_ 0.48<br>0.97_ ±_ 0.03<br>0.19_ ±_ 0.02<br>0.94_ ±_ 0.00<br>-0.27_ ±_ 0.04<br>0.97_ ±_ 0.01|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (Joint Training)<br>0.31_ ±_ 0.02<br>0.90_ ±_ 0.00<br>-0.90_ ±_ 0.05<br>0.98_ ±_ 0.00<br>-0.01_ ±_ 0.04<br>0.94_ ±_ 0.00<br>-1.66_ ±_ 0.21<br>0.99_ ±_ 0.00<br>LEO (no ICV)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.51**_ ±_** 0.11**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>-1.78_ ±_ 0.58<br>0.99_ ±_ 0.00<br>LEO (no null expert)<br>3.69_ ±_ 0.48<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.09**<br>**1.00**_ ±_** 0.00**<br>1.16_ ±_ 0.58<br>0.95_ ±_ 0.00<br>-1.83_ ±_ 0.34<br>0.99_ ±_ 0.00<br>LEO (RBF distance)<br>0.23_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-0.89_ ±_ 0.48<br>0.97_ ±_ 0.03<br>0.19_ ±_ 0.02<br>0.94_ ±_ 0.00<br>-0.27_ ±_ 0.04<br>0.97_ ±_ 0.01|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (Joint Training)<br>0.31_ ±_ 0.02<br>0.90_ ±_ 0.00<br>-0.90_ ±_ 0.05<br>0.98_ ±_ 0.00<br>-0.01_ ±_ 0.04<br>0.94_ ±_ 0.00<br>-1.66_ ±_ 0.21<br>0.99_ ±_ 0.00<br>LEO (no ICV)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.51**_ ±_** 0.11**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>-1.78_ ±_ 0.58<br>0.99_ ±_ 0.00<br>LEO (no null expert)<br>3.69_ ±_ 0.48<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.09**<br>**1.00**_ ±_** 0.00**<br>1.16_ ±_ 0.58<br>0.95_ ±_ 0.00<br>-1.83_ ±_ 0.34<br>0.99_ ±_ 0.00<br>LEO (RBF distance)<br>0.23_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-0.89_ ±_ 0.48<br>0.97_ ±_ 0.03<br>0.19_ ±_ 0.02<br>0.94_ ±_ 0.00<br>-0.27_ ±_ 0.04<br>0.97_ ±_ 0.01|LEO (Original)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (Joint Training)<br>0.31_ ±_ 0.02<br>0.90_ ±_ 0.00<br>-0.90_ ±_ 0.05<br>0.98_ ±_ 0.00<br>-0.01_ ±_ 0.04<br>0.94_ ±_ 0.00<br>-1.66_ ±_ 0.21<br>0.99_ ±_ 0.00<br>LEO (no ICV)<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.51**_ ±_** 0.11**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>-1.78_ ±_ 0.58<br>0.99_ ±_ 0.00<br>LEO (no null expert)<br>3.69_ ±_ 0.48<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.09**<br>**1.00**_ ±_** 0.00**<br>1.16_ ±_ 0.58<br>0.95_ ±_ 0.00<br>-1.83_ ±_ 0.34<br>0.99_ ±_ 0.00<br>LEO (RBF distance)<br>0.23_ ±_ 0.01<br>0.92_ ±_ 0.00<br>-0.89_ ±_ 0.48<br>0.97_ ±_ 0.03<br>0.19_ ±_ 0.02<br>0.94_ ±_ 0.00<br>-0.27_ ±_ 0.04<br>0.97_ ±_ 0.01|
+
+
+|Dataset<br>Metric|protein<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col3|wine<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col5|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|1.00_ ±_ 0.23<br>(_∗_)<br>4.38_ ±_ 0.53<br>**0.69**_ ±_** 0.00**<br>5.12_ ±_ 0.20<br>0.08_ ±_ 0.01<br>1.07_ ±_ 0.02<br>0.41_ ±_ 0.01<br>2.27_ ±_ 0.11<br>0.68_ ±_ 0.00<br>1.02_ ±_ 0.04<br>0.59_ ±_ 0.01|11.64_ ±_ 2.38<br>0.39_ ±_ 0.05<br>4.82_ ±_ 0.39<br>**0.54**_ ±_** 0.01**<br>2.99_ ±_ 0.11<br>0.14_ ±_ 0.01<br>**1.16**_ ±_** 0.07**<br>0.44_ ±_ 0.03<br>1.89_ ±_ 0.20<br>0.27_ ±_ 0.04<br>2.46_ ±_ 0.45<br>-0.20_ ±_ 0.14|1.54_ ±_ 0.06<br>-3.83_ ±_ 5.25<br>10.52_ ±_ 3.03<br>**0.40**_ ±_** 0.02**<br>4.35_ ±_ 0.25<br>0.11_ ±_ 0.01<br>2.70_ ±_ 1.51<br>0.36_ ±_ 0.02<br>5.66_ ±_ 0.76<br>0.32_ ±_ 0.03<br>107.26_ ±_ 100.94<br>0.29_ ±_ 0.04|3.27_ ±_ 0.46<br>(_∗_)<br>12.15_ ±_ 2.03<br>**0.07**_ ±_** 0.04**<br>6.10_ ±_ 0.25<br>-0.01_ ±_ 0.01<br>(_†_)<br>-0.04_ ±_ 0.06<br>4.90_ ±_ 0.46<br>-0.28_ ±_ 0.08<br>129.77_ ±_ 78.99<br>-0.39_ ±_ 0.10|
+|LEO (Original)<br>LEO (Joint Training)<br>LEO (ours) (no ICV)<br>LEO (no null expert)<br>LEO (RBF distance)|**0.89**_ ±_** 0.03**<br>0.60_ ±_ 0.00<br>0.98_ ±_ 0.05<br>0.57_ ±_ 0.01<br>**0.88**_ ±_** 0.03**<br>0.60_ ±_ 0.00<br>2.57_ ±_ 0.24<br>0.58_ ±_ 0.01<br>0.90_ ±_ 0.01<br>0.60_ ±_ 0.00|**1.16**_ ±_** 0.05**<br>0.44_ ±_ 0.02<br>1.23_ ±_ 0.10<br>0.43_ ±_ 0.03<br>**1.19**_ ±_** 0.04**<br>0.43_ ±_ 0.02<br>1.69_ ±_ 0.29<br>0.31_ ±_ 0.07<br>1.22_ ±_ 0.02<br>0.35_ ±_ 0.02|1.23_ ±_ 0.03<br>0.37_ ±_ 0.02<br>1.33_ ±_ 0.03<br>0.22_ ±_ 0.04<br>1.23_ ±_ 0.03<br>0.37_ ±_ 0.02<br>2.38_ ±_ 0.29<br>0.37_ ±_ 0.02<br>**1.16**_ ±_** 0.02**<br>**0.40**_ ±_** 0.01**|1.56_ ±_ 0.03<br>-0.03_ ±_ 0.04<br>1.66_ ±_ 0.13<br>-0.03_ ±_ 0.03<br>1.55_ ±_ 0.02<br>-0.02_ ±_ 0.04<br>2.17_ ±_ 0.15<br>-0.36_ ±_ 0.17<br>**1.53**_ ±_** 0.01**<br>0.02_ ±_ 0.02|
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+M COMPARING LEO TO SHALLOW ENSEMBLES
+
+
+Table 13: Ablations results for UCI benchmarks. We compare standard LEO to equivalent Ensemble
+models. ”LEO (average experts)” refers to version of LEO where the router is completely omitted
+and the experts are treated as ensemble members and their output is averaged and the variance of
+their prediction becomes the predictive variance. ”Shallow Ensemble” refers to an ensemble, where
+feature extractor is shared and only heads differ between ensemble members. Reported values are
+means over 20 seeds and the values after _±_ denote 95% CIs of the mean estimator. The best methods
+and all methods that do not statistically differ w.r.t. two-sided z-test are shown in bold. The second
+best methods are underlined. See Table 6 for explanation of ( _⋆_ ) and ( _†_ ) symbols.
+
+|Dataset<br>Metric|boston<br>NLL (↓) R2 (↑)|california<br>NLL (↓) R2 (↑)|concrete<br>NLL (↓) R2 (↑)|energy-effciiency<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.99_ ±_ 0.53<br>0.81_ ±_ 0.04<br>3.75_ ±_ 0.69<br>**0.87**_ ±_** 0.02**<br>2.28_ ±_ 0.38<br>0.55_ ±_ 0.10<br>**0.46**_ ±_** 0.17**<br>**0.86**_ ±_** 0.02**<br>8.02_ ±_ 3.06<br>**0.87**_ ±_** 0.02**<br>3.09_ ±_ 4.97<br>**0.87**_ ±_** 0.02**|0.55_ ±_ 0.05<br>0.76_ ±_ 0.04<br>3.90_ ±_ 0.25<br>**0.82**_ ±_** 0.01**<br>2.65_ ±_ 0.13<br>0.31_ ±_ 0.07<br>0.49_ ±_ 0.05<br>0.51_ ±_ 0.53<br>2.33_ ±_ 0.13<br>0.77_ ±_ 0.01<br>1.31_ ±_ 0.39<br>0.71_ ±_ 0.02|0.62_ ±_ 0.16<br>0.89_ ±_ 0.01<br>2.95_ ±_ 0.93<br>**0.91**_ ±_** 0.01**<br>2.07_ ±_ 0.15<br>0.55_ ±_ 0.09<br>0.36_ ±_ 0.14<br>0.90_ ±_ 0.01<br>4.66_ ±_ 1.26<br>**0.92**_ ±_** 0.01**<br>4.31_ ±_ 3.67<br>0.90_ ±_ 0.02|1.96_ ±_ 1.28<br>0.98_ ±_ 0.00<br>-0.75_ ±_ 0.19<br>**0.99**_ ±_** 0.00**<br>-0.80_ ±_ 0.17<br>**0.99**_ ±_** 0.00**<br>**-0.91**_ ±_** 0.09**<br>0.98_ ±_ 0.01<br>0.34_ ±_ 0.44<br>**0.99**_ ±_** 0.00**<br>1.75_ ±_ 1.81<br>0.98_ ±_ 0.00|
+|LEO<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (average experts)<br>0.79_ ±_ 0.26<br>0.79_ ±_ 0.03<br>1.05_ ±_ 0.05<br>0.41_ ±_ 0.26<br>0.72_ ±_ 0.37<br>0.85_ ±_ 0.02<br>-0.23_ ±_ 0.11<br>0.92_ ±_ 0.04<br>Shallow Ensemble<br>678.08_ ±_ 113.27<br>**0.87**_ ±_** 0.02**<br>2379.47_ ±_ 200.84<br>0.77_ ±_ 0.01<br>691.77_ ±_ 254.03<br>0.90_ ±_ 0.01<br>170.36_ ±_ 30.13<br>0.98_ ±_ 0.00|LEO<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (average experts)<br>0.79_ ±_ 0.26<br>0.79_ ±_ 0.03<br>1.05_ ±_ 0.05<br>0.41_ ±_ 0.26<br>0.72_ ±_ 0.37<br>0.85_ ±_ 0.02<br>-0.23_ ±_ 0.11<br>0.92_ ±_ 0.04<br>Shallow Ensemble<br>678.08_ ±_ 113.27<br>**0.87**_ ±_** 0.02**<br>2379.47_ ±_ 200.84<br>0.77_ ±_ 0.01<br>691.77_ ±_ 254.03<br>0.90_ ±_ 0.01<br>170.36_ ±_ 30.13<br>0.98_ ±_ 0.00|LEO<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (average experts)<br>0.79_ ±_ 0.26<br>0.79_ ±_ 0.03<br>1.05_ ±_ 0.05<br>0.41_ ±_ 0.26<br>0.72_ ±_ 0.37<br>0.85_ ±_ 0.02<br>-0.23_ ±_ 0.11<br>0.92_ ±_ 0.04<br>Shallow Ensemble<br>678.08_ ±_ 113.27<br>**0.87**_ ±_** 0.02**<br>2379.47_ ±_ 200.84<br>0.77_ ±_ 0.01<br>691.77_ ±_ 254.03<br>0.90_ ±_ 0.01<br>170.36_ ±_ 30.13<br>0.98_ ±_ 0.00|LEO<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (average experts)<br>0.79_ ±_ 0.26<br>0.79_ ±_ 0.03<br>1.05_ ±_ 0.05<br>0.41_ ±_ 0.26<br>0.72_ ±_ 0.37<br>0.85_ ±_ 0.02<br>-0.23_ ±_ 0.11<br>0.92_ ±_ 0.04<br>Shallow Ensemble<br>678.08_ ±_ 113.27<br>**0.87**_ ±_** 0.02**<br>2379.47_ ±_ 200.84<br>0.77_ ±_ 0.01<br>691.77_ ±_ 254.03<br>0.90_ ±_ 0.01<br>170.36_ ±_ 30.13<br>0.98_ ±_ 0.00|LEO<br>**0.37**_ ±_** 0.16**<br>0.84_ ±_ 0.02<br>**0.46**_ ±_** 0.03**<br>0.79_ ±_ 0.01<br>**0.23**_ ±_** 0.08**<br>0.89_ ±_ 0.01<br>**-0.86**_ ±_** 0.08**<br>0.98_ ±_ 0.00<br>LEO (average experts)<br>0.79_ ±_ 0.26<br>0.79_ ±_ 0.03<br>1.05_ ±_ 0.05<br>0.41_ ±_ 0.26<br>0.72_ ±_ 0.37<br>0.85_ ±_ 0.02<br>-0.23_ ±_ 0.11<br>0.92_ ±_ 0.04<br>Shallow Ensemble<br>678.08_ ±_ 113.27<br>**0.87**_ ±_** 0.02**<br>2379.47_ ±_ 200.84<br>0.77_ ±_ 0.01<br>691.77_ ±_ 254.03<br>0.90_ ±_ 0.01<br>170.36_ ±_ 30.13<br>0.98_ ±_ 0.00|
+
+
+|Dataset<br>Metric|kin8nm<br>NLL (↓) R2 (↑)|naval<br>NLL (↓) R2 (↑)|power-plant<br>NLL (↓) R2 (↑)|yacht<br>NLL (↓) R2 (↑)|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|0.19_ ±_ 0.03<br>0.92_ ±_ 0.00<br>1.18_ ±_ 0.12<br>0.92_ ±_ 0.00<br>1.96_ ±_ 0.12<br>0.79_ ±_ 0.02<br>0.18_ ±_ 0.03<br>0.91_ ±_ 0.01<br>1.29_ ±_ 0.19<br>**0.93**_ ±_** 0.00**<br>2.64_ ±_ 1.91<br>0.89_ ±_ 0.00|-2.24_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-1.12_ ±_ 0.02<br>0.99_ ±_ 0.00<br>-0.42_ ±_ 0.31<br>**1.00**_ ±_** 0.00**<br>-1.84_ ±_ 0.02<br>**1.00**_ ±_** 0.00**<br>-2.27_ ±_ 0.04<br>**1.00**_ ±_** 0.00**<br>-0.54_ ±_ 0.24<br>0.99_ ±_ 0.00|**-0.09**_ ±_** 0.02**<br>0.95_ ±_ 0.00<br>3.10_ ±_ 0.33<br>0.95_ ±_ 0.00<br>1.19_ ±_ 0.09<br>0.89_ ±_ 0.00<br>**-0.09**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>1.68_ ±_ 0.24<br>**0.96**_ ±_** 0.00**<br>-0.04_ ±_ 0.03<br>0.95_ ±_ 0.00|1.17_ ±_ 1.15<br>0.99_ ±_ 0.00<br>-1.20_ ±_ 0.26<br>0.98_ ±_ 0.01<br>-1.49_ ±_ 0.05<br>**1.00**_ ±_** 0.00**<br>-2.08_ ±_ 0.33<br>0.99_ ±_ 0.00<br>**-2.52**_ ±_** 0.31**<br>**1.00**_ ±_** 0.00**<br>0.06_ ±_ 0.89<br>0.99_ ±_ 0.00|
+|LEO<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (average experts)<br>0.92_ ±_ 0.07<br>0.90_ ±_ 0.00<br>0.75_ ±_ 0.23<br>0.26_ ±_ 0.32<br>0.40_ ±_ 0.07<br>0.91_ ±_ 0.01<br>-1.17_ ±_ 0.12<br>0.96_ ±_ 0.01<br>Shallow Ensemble<br>341.13_ ±_ 32.74<br>0.90_ ±_ 0.01<br>149.92_ ±_ 19.65<br>**1.00**_ ±_** 0.00**<br>1410.81_ ±_ 174.55<br>0.94_ ±_ 0.00<br>27.52_ ±_ 16.24<br>**1.00**_ ±_** 0.00**|LEO<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (average experts)<br>0.92_ ±_ 0.07<br>0.90_ ±_ 0.00<br>0.75_ ±_ 0.23<br>0.26_ ±_ 0.32<br>0.40_ ±_ 0.07<br>0.91_ ±_ 0.01<br>-1.17_ ±_ 0.12<br>0.96_ ±_ 0.01<br>Shallow Ensemble<br>341.13_ ±_ 32.74<br>0.90_ ±_ 0.01<br>149.92_ ±_ 19.65<br>**1.00**_ ±_** 0.00**<br>1410.81_ ±_ 174.55<br>0.94_ ±_ 0.00<br>27.52_ ±_ 16.24<br>**1.00**_ ±_** 0.00**|LEO<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (average experts)<br>0.92_ ±_ 0.07<br>0.90_ ±_ 0.00<br>0.75_ ±_ 0.23<br>0.26_ ±_ 0.32<br>0.40_ ±_ 0.07<br>0.91_ ±_ 0.01<br>-1.17_ ±_ 0.12<br>0.96_ ±_ 0.01<br>Shallow Ensemble<br>341.13_ ±_ 32.74<br>0.90_ ±_ 0.01<br>149.92_ ±_ 19.65<br>**1.00**_ ±_** 0.00**<br>1410.81_ ±_ 174.55<br>0.94_ ±_ 0.00<br>27.52_ ±_ 16.24<br>**1.00**_ ±_** 0.00**|LEO<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (average experts)<br>0.92_ ±_ 0.07<br>0.90_ ±_ 0.00<br>0.75_ ±_ 0.23<br>0.26_ ±_ 0.32<br>0.40_ ±_ 0.07<br>0.91_ ±_ 0.01<br>-1.17_ ±_ 0.12<br>0.96_ ±_ 0.01<br>Shallow Ensemble<br>341.13_ ±_ 32.74<br>0.90_ ±_ 0.01<br>149.92_ ±_ 19.65<br>**1.00**_ ±_** 0.00**<br>1410.81_ ±_ 174.55<br>0.94_ ±_ 0.00<br>27.52_ ±_ 16.24<br>**1.00**_ ±_** 0.00**|LEO<br>**0.14**_ ±_** 0.01**<br>0.92_ ±_ 0.00<br>**-2.58**_ ±_** 0.08**<br>**1.00**_ ±_** 0.00**<br>**-0.06**_ ±_** 0.03**<br>0.95_ ±_ 0.00<br>**-2.22**_ ±_** 0.17**<br>0.99_ ±_ 0.00<br>LEO (average experts)<br>0.92_ ±_ 0.07<br>0.90_ ±_ 0.00<br>0.75_ ±_ 0.23<br>0.26_ ±_ 0.32<br>0.40_ ±_ 0.07<br>0.91_ ±_ 0.01<br>-1.17_ ±_ 0.12<br>0.96_ ±_ 0.01<br>Shallow Ensemble<br>341.13_ ±_ 32.74<br>0.90_ ±_ 0.01<br>149.92_ ±_ 19.65<br>**1.00**_ ±_** 0.00**<br>1410.81_ ±_ 174.55<br>0.94_ ±_ 0.00<br>27.52_ ±_ 16.24<br>**1.00**_ ±_** 0.00**|
+
+
+|Dataset<br>Metric|protein-w-ood<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col3|wine<br>NLL (↓) R2 (↑) OOD NLL (↓) OOD R2 (↑)|Col5|
+|---|---|---|---|---|
+|Density R.<br>Dropout<br>DUE<br>EDL<br>Ensemble<br>VBLL|1.00_ ±_ 0.23<br>(_⋆_)<br>4.38_ ±_ 0.53<br>**0.69**_ ±_** 0.00**<br>5.12_ ±_ 0.20<br>0.08_ ±_ 0.01<br>1.07_ ±_ 0.02<br>0.41_ ±_ 0.01<br>2.27_ ±_ 0.11<br>0.68_ ±_ 0.00<br>1.02_ ±_ 0.04<br>0.59_ ±_ 0.01|11.64_ ±_ 2.38<br>0.39_ ±_ 0.05<br>4.82_ ±_ 0.39<br>**0.54**_ ±_** 0.01**<br>2.99_ ±_ 0.11<br>0.14_ ±_ 0.01<br>**1.16**_ ±_** 0.07**<br>0.44_ ±_ 0.03<br>1.89_ ±_ 0.20<br>0.27_ ±_ 0.04<br>2.46_ ±_ 0.45<br>-0.20_ ±_ 0.14|1.54_ ±_ 0.06<br>-3.83_ ±_ 5.25<br>10.52_ ±_ 3.03<br>**0.40**_ ±_** 0.02**<br>4.35_ ±_ 0.25<br>0.11_ ±_ 0.01<br>2.70_ ±_ 1.51<br>0.36_ ±_ 0.02<br>5.66_ ±_ 0.76<br>0.32_ ±_ 0.03<br>107.26_ ±_ 100.94<br>0.29_ ±_ 0.04|3.27_ ±_ 0.46<br>(_⋆_)<br>12.15_ ±_ 2.03<br>**0.07**_ ±_** 0.04**<br>6.10_ ±_ 0.25<br>-0.01_ ±_ 0.01<br>(_†_)<br>-0.04_ ±_ 0.06<br>4.90_ ±_ 0.46<br>-0.28_ ±_ 0.08<br>129.77_ ±_ 78.99<br>-0.39_ ±_ 0.10|
+|LEO<br>LEO (average experts)<br>Shallow Ensemble|**0.89**_ ±_** 0.03**<br>0.60_ ±_ 0.00<br>1.61_ ±_ 0.10<br>0.28_ ±_ 0.08<br>5732.27_ ±_ 295.16<br>0.56_ ±_ 0.02|**1.16**_ ±_** 0.05**<br>0.44_ ±_ 0.02<br>1.86_ ±_ 0.12<br>-1.28_ ±_ 0.91<br>1269.39_ ±_ 188.26<br>0.46_ ±_ 0.03|**1.23**_ ±_** 0.03**<br>0.37_ ±_ 0.02<br>1.73_ ±_ 0.15<br>0.29_ ±_ 0.03<br>2836.20_ ±_ 487.40<br>0.33_ ±_ 0.03|**1.56**_ ±_** 0.03**<br>-0.03_ ±_ 0.04<br>1.97_ ±_ 0.10<br>-0.62_ ±_ 0.25<br>1421.99_ ±_ 249.10<br>-0.39_ ±_ 0.13|
+
+
+N PROBABILITY OF NULL EXPERTS ASSIGNED BY LEO FOR ID AND OOD
+
+EVALUATION SETS
+
+
+Table 14: Average probabilities of null expert type assigned by LEO model on different indistribution and out-of-distribution evaluation sets.
+
+
+Dataset Average _p_ ( _t_ _∈E/_ ) assigned by LEO on eval set
+
+
+protein (ID evalset) 0.18
+protein (OOD evalset) 0.45
+
+
+wine (ID evalset) 0.30
+wine (OOD evalset) 0.60
+
+
+CIFAR-10 (ID evalset) 0.0075
+CIFAR-10 (OOD evalset) 0.04
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+O LLM USAGE STATEMENT
+
+
+In preparing this work, we used GPT-5 in three ways: (1) to assist in discovering related literature
+by suggesting potentially relevant papers, (2) to provide implementation suggestions during development of the experimental code, and (3) to improve clarity of writing. All suggested references
+were manually checked for correctness and relevance, and all code was reviewed, and verified by
+the authors.
+
+
+23

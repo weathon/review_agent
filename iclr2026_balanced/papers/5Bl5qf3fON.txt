@@ -1,0 +1,3159 @@
+# BURES-WASSERSTEIN FLOW MATCHING FOR GRAPH GENERATION
+
+
+**Keyue Jiang** [1] _[,]_ [2] **Jiahao Cui** [1] _[,]_ [3] **Xiaowen Dong** [4] **Laura Toni** [1] _[,]_ [2]
+
+1 AI Centre, University College London
+2 Department of Electronic and Electrical Engineering, University College London
+3 Department of Computer Science, University College London
+4 Department of Engineering Science, University of Oxford
+keyue.jiang.18@ucl.ac.uk
+
+
+ABSTRACT
+
+
+Graph generation has emerged as a critical task in fields ranging from drug discovery to circuit design. Contemporary approaches, notably diffusion and flow-based
+models, have achieved solid graph generative performance through constructing a
+probability path that interpolates between reference and data distributions. However, these methods typically model the evolution of individual nodes and edges
+independently and use linear interpolations in the disjoint space of nodes/edges to
+build the path. This disentangled interpolation breaks the interconnected patterns of
+graphs, making the constructed probability path irregular and non-smooth, which
+causes poor training dynamics and faulty sampling convergence. To address the
+limitation, this paper first presents a theoretically grounded framework for probability path construction in graph generative models. Specifically, we model the
+joint evolution of the nodes and edges by representing graphs as connected systems
+parameterized by Markov random fields (MRF). We then leverage the optimal
+transport displacement between MRF objects to design a smooth probability path
+that ensures the co-evolution of graph components. Based on this, we introduce
+BWFlow, a flow-matching framework for graph generation that utilizes the derived
+optimal probability path to benefit the training and sampling algorithm design.
+Experimental evaluations in plain graph generation and molecule generation validate the effectiveness of BWFlow with competitive performance, better training
+convergence, and efficient sampling.
+
+
+1 INTRODUCTION
+
+
+Thanks to the capability of graphs in representing complex relationships, graph generation (Zhu et al.,
+2022; Liu et al., 2023a) has become an essential task in various fields such as protein design (Ingraham
+et al., 2019), drug discovery (Bilodeau et al., 2022), and social network analysis (Li et al., 2023).
+Among contemporary generative models, diffusion and flow models have emerged as two compelling
+approaches for their ability to achieve state-of-the-art performance in graph generation (Niu et al.,
+2020; Vignac et al., 2023a; Eijkelboom et al., 2024; Qin et al., 2024; Hou et al., 2024). In particular,
+these generative models can be unified under the framework of stochastic interpolation (Albergo
+& Vanden-Eijnden, 2023), which consists of four procedures (Lipman et al., 2024): 1) Drawing
+samples from the reference (source) distribution _p_ 0(⋅) and/or the data (target) distribution _p_ 1(⋅) for
+training set assembly; 2) Constructing a time-continuous probability path _pt_ (⋅) _,_ 0 ≤ _t_ ≤ 1 interpolating
+between _p_ 0 and _p_ 1; 3) Training a model to reconstruct the probability path by either approximating
+the score function or velocity fields (ratio matrix in the discrete case); and 4) sampling from _p_ 0 and
+transforming it through the learned probability path to get samples that approximately follow _p_ 1.
+
+
+A core challenge in this framework is constructing the probability path _pt_ . Existing text and image
+generative models, operating either in the continuous (Ho et al., 2020; Song et al., 2021; Lipman et al.,
+2023; Liu et al., 2023b) or discrete (Campbell et al., 2022; Sun et al., 2023; Campbell et al., 2024;
+Gat et al., 2024; Minello et al., 2025) space, typically rely on linear interpolation between source and
+target distributions to construct the path. Graph generation models, including diffusion (Niu et al.,
+
+
+1
+
+
+(a) Training path comparison (b) Training path manipulation
+
+
+(c) Sampling path comparision
+
+
+Figure 1: Probability path visualization. Since the probability is intractable, the average maximum
+mean discrepancy ratio (y-axis) of graph statistics between interpolants and the data points is used as
+a proxy for the probability. Lower means closer to the data distribution (details in Section I.6).
+
+
+2020; Vignac et al., 2023a; Haefeli et al., 2022; Xu et al., 2024; Siraudin et al., 2024) and flow-based
+models (Eijkelboom et al., 2024; Qin et al., 2024; Hou et al., 2024), inherit this design by modeling
+every single node and edge independently and linearly build paths in the disjoint space. However,
+we argue this approach to be inefficient because it neglects the strong interactions and relational
+structure inherent in graphs, i.e., the significance of a node heavily depends on the configuration of
+its neighbors. We first show the negative impact of linear path through a motivating example.
+
+
+**The** **limitation** **of** **linear** **interpolation.** In flow models [1], intuitively, the velocity is trained by
+approximating the tangent of the probability path in the training set, while generation follows the
+learned velocity to reconstruct the path toward the data distribution. The blue line in Fig. 1a illustrates
+the training path obtained by linear interpolation: it remains flat until a transition point at _t_ ≈ 0 _._ 8 [2],
+after which it drops sharply. This non-smooth path leads to poor velocity estimation (red arrow) as:
+1) the critical transition region 0 _._ 8 < _t_ < 1 is less explored, causing potential underfitting, and 2)
+the velocities trained in the flat region _t_ < 0 _._ 8 fail to guide the model toward the target distribution.
+Consequently, sampling struggles to converge to the data distribution as shown in Fig. 1c. Ideally, we
+need a smooth probability path like the green line in Fig. 1a to ensure that at every time _t_, the model
+takes stable, meaningful steps toward the target distribution. More evidence in App. I.5.
+
+
+We attribute this issue to the linear path construction that fails to capture global co-evolution (Haasler
+& Frossard, 2024) of the graph components, and cannot guarantee an optimal transport displacement
+between non-Euclidean graph distributions (Formal explanations in Section 2.2). Thus, the constructed path is suboptimal with a sharp transition from reference to data distribution or even deviates
+from the valid graph domain (Kapusniak et al., 2024). Though not explicitly mentioned, Qin et al.
+(2024) mitigates this issue through heuristic strategies to smooth the path, which we conceptually
+visualize in Fig. 1b and discussed in App. F.1. This shows a potential benefit in manipulating the path
+and we aim at building a theoretically grounded framework for probability path construction.
+
+
+**Proposed solution.** To this end, we draw on statistical relational learning and model graphs using
+Markov Random Fields (MRFs) (Taskar et al., 2007; Qu et al., 2019). MRFs organize the nodes/edges
+as an interconnected system and interpolating between two MRFs captures the joint evolution of the
+graph system. Extending Haasler & Frossard (2024), we derive a closed-form Wasserstein distance
+between graph distributions and leverage it to construct Bures-Wasserstein (BW) interpolation
+that ensures the OT displacement between graph objects. We then integrate these insights into a
+flow-matching framework called BWFlow. Specifically, BWFlow operates on smooth, globally
+coherent velocity fields, exclusively constructed by BW interpolation, to generate graphs (see Fig. 1c).
+Crucially, BWFlow admits simulation-free computation of densities and velocities along the entire
+path, which translates into efficient, stable training and sampling.
+
+
+**Contributions. First**, observing that the linear interpolation used in existing models is suboptimal, we
+propose a theoretically grounded framework for probability path construction and velocity estimation
+in graph generation. **Second**, through parameterizing graphs as MRFs, we introduce BWFlow, a
+flow-matching model for graph generation that constructs probability paths respecting the graph
+geometry and develops smooth velocities without heuristic path manipulations. **Third**, BWFlow was
+
+
+1This work focus on flow models and left the generalization to diffusions in App. F.2.
+2The specific value is an empirical observation and does not have a theoretical significance. Fig. 6 illustrates
+that it differs across datasets.
+
+
+2
+
+
+tested on plain graph and molecule generation, exhibiting better performance and dynamics, such as
+fast and stable training convergence and efficient sampling.
+
+
+2 PRELIMINARIES
+
+
+2.1 FLOW MATCHING FOR GRAPH GENERATION
+
+
+**Flow matching (FM).** Generative modeling considers fitting a mapping from state space S →S
+that transforms the samples from source distribution, _X_ 0 _p_ 0, to samples from target data distribution,
+∼
+_X_ 1 ∼ _p_ 1 [3] . Continuous normalizing flow (Chen et al., 2018) parameterizes the transformation through
+a push-forward equation that interpolates between _p_ 0 and _p_ 1 and constructs a probability path
+_pt_ (X) = [ _ψtp_ 0](X) through a time-dependent function _ψt_ (a.k.a flow). A vector field _ut_, defined
+as _dt_ _[d]_ _[ψ][t]_ [ (X) =] _[ u][t]_ [ (] _[ψ][t]_ [ (X))][ with] _[ ψ]_ [0][ (X) = X] [, is said to generate] _[ p][t]_ [if] _[ ψ][t]_ [satisfies] _[ X][t]_ [∶=] _[ ψ][t]_ [ (] _[X]_ [0][) ∼]
+
+_pt_ for _X_ 0 ∼ _p_ 0. The FM (Lipman et al., 2023) is designed to match the real velocity field through:
+
+LFM( _θ_ ) = E _t,Xt_ ∼ _pt_ (⋅) ∥ _vθ_ ( _Xt_ ) − _ut_ ( _Xt_ )∥ [2] _._ (1)
+
+where _vθ_ (⋅) ∶S →S is the parameterized velocity field and _t_ ∼U[0 _,_ 1].
+
+
+**Conditional** **flow** **matching** **(CFM).** Given that the actual velocity field and the path are not
+tractable (Tong et al., 2024), one can construct the per-sample conditional flow. We condition the
+probability paths on variable _Z_ ∼ _π_ (⋅) (for instance, a pair of source and target points _Z_ = ( _X_ 0 _,X_ 1))
+and re-write _pt_ (X) = E _π_ (⋅) _pt_ (X ∣ _Z_ ) and _ut_ (X) = E _π_ (⋅) _ut_ (X ∣ _Z_ ) where the conditional path and
+the velocity field are tractable. The CFM aims at regressing a velocity _vθ_ (⋅) to _ut_ (X ∣ _Z_ ) by the loss,
+
+LCFM( _θ_ ) ∶= E _t,Z_ ∼ _π_ (⋅) _,pt_ (⋅∣ _Z_ ) ∥ _vθ_ ( _Xt_ ) − _ut_ ( _Xt_ ∣ _Z_ )∥ [2] _,_ (2)
+
+where it is shown that the CFM optimization has the same optimum as the FM (Tong et al., 2024).
+
+
+**Graphs as statistical objects.** When considering graph generation with CFM, the very first step
+is to model graphs as statistical objects. For notation, we let G = {V _,_ E _,_ X} denote an undirected
+graph random variable with edges E = { _euv_ }, nodes V = { _v_ }, and node features X = { _xv_ }. A graph
+realization is denoted as _G_ = { _V,E,X_ } ∼ _p_ (G). We consider a group of latent variables that controls
+the graph distribution, specifically the node feature mean _**X**_ = [ _**x**_ 1 _,_ _**x**_ 2 _,...,_ _**x**_ ∣V∣]⊺ ∈ R∣V∣× _K_, the
+weighted adjacency matrix _**W**_ ∈ R [∣V∣×∣V∣], and the Laplacian matrix _**L**_ = _**D**_ - _**W**_ ∈ R [∣V∣×∣V∣], with
+_**D**_ = diag( _**W**_ **1** ) being the degree matrix (and **1** the all-one vector). In a nutshell, graphs are sampled
+from _G_ ∼ _p_ (G; _**G**_ ) = _p_ (X _,_ E; _**X**_ _,_ _**W**_ ).
+
+
+**Generation with CFM.** The new graphs are sampled through iteratively building _Gt_ + _dt_ = _Gt_ +
+_vt_ _[θ]_ [(] _[G][t]_ [)⋅] _[dt]_ [ with initial] _[ G]_ [0] [∼] _[p]_ [0] [and a trained velocity field] _[ v]_ _t_ _[θ]_ [(] _[G][t]_ [)][, so that the medium points follows]
+_Gt_ ∼ _pt_ (G) and terminates at _p_ 1. The velocity can be trained either via numerical approximation (i.e.,
+_vt_ _[θ]_ [(] _[G][t]_ [) ≈(] _[G][t]_ [+] _[dt]_ [−] _[G][t]_ [)/] _[dt]_ [) or through] _[ x]_ [-prediction (Gat et al., 2024) which parameterize] _[ v]_ _t_ _[θ]_ [(] _[G][t]_ [)][ as,]
+
+_vt_ _[θ]_ [(] _[G][t]_ [) =][ E] _G_ 0∼ _p_ 0(G) _,G_ 1∼ _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G][t]_ [)][ [] _[v][t]_ [ (] _[G][t]_ [ ∣] _[G]_ [0] _[,G]_ [1][)]] (3)
+
+
+As such, training the velocity fields is replaced by a denoiser _p_ _[θ]_ 1∣ _t_
+
+[(⋅∣] _[G][t]_ [)][ to predict the clean datapoint,]
+which is equivalent to maximizing the log-likelihood (Qin et al., 2024; Campbell et al., 2024),
+
+LCFM = E _G_ 1∼ _p_ 1(⋅) _,G_ 0∼ _p_ 0(⋅) _,t_ ∼U[0 _,_ 1](⋅) _,Gt_ ∼ _pt_ ∣0 _,_ 1(⋅∣ _G_ 1 _,G_ 0) [log _p_ _[θ]_ 1∣ _t_ [(] _[G]_ [1][ ∣] _[G][t]_ [)]] (4)
+
+where _t_ is sampled from a uniform distribution U[0 _,_ 1] and _Gt_ ∼ _pt_ ∣0 _,_ 1 can be obtained in a simulationfree manner. This framework avoids the evaluation of the conditional vector field at training time,
+which both increases the model robustness and training efficiency.
+
+To proceed, a closed form of _pt_ (⋅∣ _G_ 0 _,G_ 1) is required to construct both the probability path
+and the velocity field _vt_ ( _Gt_ ∣ _G_ 0 _,G_ 1). A common selection to decompose the probability density
+assumes independency for each node and edge (Hou et al., 2024; Qin et al., 2024; Eijkelboom et al.,
+
+
+3
+For clarity, we denote the calligraphic style X being the random variable, the plain _X_ the relevant realizations
+and the bold symbol _**X**_ the latent variables (parameters) that controls the distributons, i.e. _X_ ∼ _p_ (X ; _**X**_ ).
+
+
+3
+
+
+2024) giving _p_ (G) = _p_ (X) _p_ (E) = ∏ _v_ ∈V _p_ ( _xv_ )∏ _euv_ ∈E _p_ ( _euv_ ). Choosing _π_ (⋅) = _p_ 0 (G) _p_ 1 (G), the
+boundary conditions follow _pi_ (G) = _δ_ (X _i_ = _**X**_ _i_ ) ⋅ _δ_ (E _i_ = _**W**_ _i_ ) _,_ ∀ _i_ = {0 _,_ 1} with _δ_ the dirac function.
+This decomposition is further combined with linear interpolation to build the path, as introduced
+in (Tong et al., 2024), where,
+
+_pt_ ( _xv_ ∣ _G_ 0 _,G_ 1) = _αt_ [ _X_ 1] _v_ + _σt_ [ _X_ 0] _v,_ and _ut_ ( _xv_ ∣ _X_ 0 _,X_ 1) = [ _X_ 1] _v_ −[ _X_ 0] _v,_
+(5)
+_pt_ ( _euv_ ∣ _G_ 0 _,G_ 1) = _αt_ [ _E_ 1] _uv_ + _σt_ [ _E_ 0] _uv_ and _ut_ ( _euv_ ∣ _G_ 0 _,G_ 1) = [ _E_ 1] _uv_ −[ _E_ 0] _uv._
+
+
+where _αt_ and _σt_ are two parameters to make the boundary condition satisfied, the selection is
+discussed in App. F.2. Similarly, discrete flow matching frameworks for graph generation (Qin et al.,
+2024; Siraudin et al., 2024; Xu et al., 2024) is also based on linear interpolation, where the interpolant
+is sampled from a categorical distribution whose probabilities are simply linear interpolation between
+the boundary conditions.
+
+
+2.2 WHY WE NEED MORE THAN LINEAR INTERPOLATIONS FOR GRAPH GENERATION?
+
+
+**When we can use linear interpolation?** Existing literature (Liu et al., 2023b; Albergo & VandenEijnden, 2023) argues that the probability path _pt_ (X ∣ _Z_ ) should be chosen to recover the optimal
+transport (OT) displacement interpolant (McCann, 1997). The (Kantorovich) optimal transport
+problem is to find the transport plan between two probability measures, _η_ 0 and _η_ 1, with the smallest
+associated transportation cost defined as follows.
+
+
+**Definition 1** (Wasserstein Distance) **.** Denote the possible coupling as _π_ ∈ Π( _η_ 0 _,η_ 1), which is a
+joint measure on S × S whose marginals are _η_ 0 and _η_ 1 respectively. With _c_ ( _X,Y_ ) being the
+cost of transporting the mass between _X_ and _Y_, the Wasserstein distance is defined as,
+
+
+W _c_ ( _η_ 0 _,η_ 1) = inf (6)
+_π_ ∈Π( _η_ 0 _,η_ 1) [∫] S×S _[c]_ [(] _[X,Y]_ [ )] _[dπ]_ [(] _[X,Y]_ [ )] _[.]_
+
+
+_When the data follow Euclidean geometry and both boundary distributions p_ 0 _,p_ 1 _follow isotropic_
+_Gaussians_, the path shown in Eq. (5) with _σt_ 0 becomes a solution to Eq. (6) (Tong et al., 2024).
+→
+
+However, given that graphs are non-Euclidean and interconnected objects violating the aformentioned
+conditions, linearly interpolating nodes/edges with Eq. (5) cannot guarantee the OT displacement in
+graph generation. Blindly using the approach will result in suboptimal probability path and lead to a
+problematic velocity estimation (Chen & Lipman, 2024; Kapusniak et al., 2024). To illustrate, recall
+that the velocity is trained via either approximating a) ( _Gt_ + _dt_ - _Gt_ )/ _dt_ or b) ( _G_ 1 − _Gt_ )/(1 − _t_ ). For
+both strategies, approximating the path similar to Fig. 1a exposes two issues: 1) Most of the training
+points ( _Gt_ ) center around areas with high ratio, while the critical part for sampling is the region with
+intermediate ratio, i.e. the points corresponding to 0 _._ 8 < _t_ < 1. The velocity model has the risk of
+underfitting in those regions, posing a risk when deployed for sampling. 2) Especially for strategy a,
+when _t_ is small, the velocity through numerical approximation ( _Gt_ + _dt_ - _Gt_ )/ _dt_ may not even point
+correctly to the data distribution. Thus, when sampling, the model is difficult to determine the correct
+direction in the early stage, which will lead to convergence failure.
+
+
+To establish a good velocity estimation that yields better training and generation dynamics, an ideal
+training probability path should: 1) adequately explore the landscape of _Gt_ so that the velocity at
+intermediate points is well-trained. 2) correctly estimate the velocity pointing to the data distribution.
+It is worth noting that the superior performance achieved by previous work (Siraudin et al., 2024; Qin
+et al., 2024) is partially attributed to their implicit manipulation of the path to satisfy these conditions.
+The techniques used, including target guidance, time distortion, and stochasticity injection, are
+conceptually visualized in Fig. 1b with discussions in App. F.1.
+
+
+3 METHODOLOGY
+
+
+In this paper, we aim to build a theoretically grounded framework for probability path construction
+in graph generative models without the reliance on heuristic path manipulations. To this end, we
+introduce Bures–Wasserstein Flow Matching (BWFlow), a novel graph generation framework that
+is built upon the OT displacement when modeling graphs with Markov Random Fields (MRFs).
+We begin by casting graphs in an MRF formulation in Section 3.1. We then derive the BWFlow
+
+
+4
+
+
+framework in Section 3.2 by formulating and solving the OT displacement problem on the MRF,
+thereby yielding the fundamental components, interpolations and velocity fields, for FM-based
+graph generation. Finally, in Section 3.3, we extend BWFlow to discrete FM regimes, enabling its
+application across a broad spectrum of graph-generation tasks. A schematic overview of the entire
+BWFlow is illustrated in Fig. 2.
+
+
+3.1 GRAPH MARKOV RANDOM FIELDS
+
+
+We borrow the idea from MRF as a remedy to modeling the complex system organized by graphs,
+which intrinsically captures the underlying mechanism that jointly generates the nodes and edges.
+Mathematically, we assume the joint probability density distribution (PDF) of node features and graph
+structure as _p_ (G; _**G**_ ) = _p_ (X _,_ E; _**X**_ _,_ _**W**_ ) = _p_ (X ; _**X**_ _,_ _**W**_ ) _p_ (E; _**W**_ ) where the node features and graph
+structure are interconnected through latent variables _**X**_ and _**W**_ . For node features X, we follow
+the MRF assumption in Zhu et al. (2003) and decompose the density into the node-wise potential
+_φ_ 1( _v_ ) _,_ ∀ _v_ ∈V and pair-wise potential _φ_ 2( _u,v_ ), ∀ _euv_ ∈E:
+
+
+_p_ (X ; _**X**_ _,_ _**W**_ ) ∝∏ exp {−( _ν_ + _dv_ )∥ _**V**_ _xv_ - _**µ**_ _v_ ∥ [2] }
+_v_          - **����������������������������������������������**          - **����������������������������������������������**
+_φ_ 1( _v_ )
+
+
+∏ exp { _wuv_ [( _**V**_ _xu_ - _**µ**_ _u_ ) [⊺] ( _**V**_ _xv_ - _**µ**_ _v_ )]} _,_
+_u,v_ - **��������������������������������������������������������������** �� **��������������������������������������������������������������** ��
+_φ_ 2( _u,v_ )
+
+
+(7)
+with ∥⋅∥ the _L_ 2 norm, (⋅) [†] the pseudo-inverse, _**V**_ the transformation matrix modulating the graph
+feature emission, and _**µ**_ _v_ the node-specific latent variable mean. Eq. (7) can be expressed as a colored
+Gaussian distribution in Eq. (8) given that _**V**_ _xv_ ∼N( _**µ**_ _v,_ ( _ν_ _**I**_ + _**L**_ ) [−][1] ). We further assume that edges
+are emitted via a Dirac delta, E ∼ _δ_ ( _**W**_ ), yielding our definition of Graph Markov Random Fields
+(GraphMRF). The derivation can be found in App. A.2.
+
+
+**Definition 2** (Graph Markov Random Fields) **.** GraphMRF statistically describes graphs as,
+
+_p_ (G; _**G**_ ) = _p_ (X _,_ E; _**X**_ _,_ _**W**_ ) = _p_ (X ; _**X**_ _,_ _**W**_ ) ⋅ _p_ (E; _**W**_ ) where E ∼ _δ_ ( _**W**_ ) and
+
+(8)
+vec(X) ∼N ( _**X**_ _,_ **Λ** [†] ) _,_ with _**X**_ = vec( _**V**_ [†] _**µ**_ ) _,_ **Λ** = ( _ν_ _**I**_ + _**L**_ ) ⊗ _**V**_ [⊺] _**V**_ _._
+
+The ⊗ is the Kronecker product, vec(⋅) is the vectorization operator and _**I**_ is the identity matrix.
+
+
+3.2 BURES-WASSERSTEIN FLOW MATCHING FOR GRAPH GENERATION
+
+
+**The optimal transport displacement between graph distributions.** Given that the joint probability of graphs decomposed as _p_ (G) = _p_ (X ; _**X**_ _,_ _**W**_ ) _p_ (E; _**W**_ ) and the measure factorized to
+_η_ G _j_ = _η_ X _j_ ⋅ _η_ E _j_ with _j_ ∈{0 _,_ 1}, the graph Wasserstein distance between _η_ G0 and _η_ G1 is written as,
+
+
+(Graph Wasserstein Distance) _d_ BW(G0 _,_ G1) ∶= W _c_ ( _η_ G0 _,η_ G1) = W _c_ ( _η_ X0 _,η_ X1) + W _c_ ( _η_ E0 _,η_ E1) _._
+
+
+We extend Haasler & Frossard (2024) and analytically derive the graph Wasserstein distance using
+the OT formula between Gaussians Dowson & Landau (1982); Olkin & Pukelsheim (1982); Takatsu
+(2010) (see Lemma 2 proved in App. B.1) as follows.
+
+
+5
+
+
+|Col1|𝑡= 0|Col3|f. Generation: sample with velocity: 𝐺𝑡+𝑑𝑡= 𝐺𝑡+ 𝑣𝜃 𝐺𝑡 𝑑𝑡|Col5|𝑡= 1|Col7|
+|---|---|---|---|---|---|---|
+|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|𝐺0<br>𝐺𝑡<br>𝐺𝑡+𝑑𝑡<br>𝐺1<br>**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡<br>**a. Sample**<br>𝐺0**, **𝐺1|
+
+
+|e. Train the<br>velocity 𝑣𝜃 𝐺𝑡|Col2|
+|---|---|
+|**e. Train the**<br>**velocity**𝑣𝜃𝐺𝑡|𝐺𝑡+𝑑𝑡|
+
+
+**d. Convert back to Graph domain**
+
+
+Figure 2: Schematic overview of BWFlow, which consists of: a) Sample the marginal graph condition
+_G_ 0 and _G_ 1; b) Convert graphs to MRFs; c) Interpolate to get intermediate points; d) Convert back to
+get _Gt_ ; e) Train velocity based on _Gt_ ; and f) Generate new points with the trained velocity.
+
+
+**Proposition 1** (Bures-Wasserstein Distance) **.** _Consider two same-sized graphs_ G0 ∼ _p_ (X0 _,_ E0)
+_and_ G1 ∼ _p_ (X1 _,_ E1) _with_ _**V**_ _shared for two graphs, described by the distribution in Definition 2._
+_When_ _the_ _graphs_ _are_ _equipped_ _with_ _graph_ _Laplacian_ _matrices_ _**L**_ 0 _and_ _**L**_ 1 _satisfying_ _1)_ _is_
+_Positive_ _Semi-Definite_ _(PSD)_ _and_ _2)_ _has_ _only_ _one_ _zero_ _eigenvalue._ _The_ _Bures-Wasserstein_
+_distance between these two random graph distributions is given by_
+
+
+1/2
+_dBW_ (G0 _,_ G1) = ∥ _**X**_ 0 − _**X**_ 1∥ _F_ [2] [+] _[ β]_ [ trace] [(] _**[L]**_ 0 _[†]_ [+] _**[ L]**_ 1 _[†]_ [−] [2] [(] _**[L]**_ 0 _[†]_ [/][2] _**[L]**_ 1 _[†]_ _**[L]**_ _[†]_ 0 [/][2][)] ) _,_ (9)
+
+_as ν_ → 0 _and β_ _is a constant related to the norm of_ _**V**_ _[†]_ _._ _The proof can be found in Section B.2._
+
+
+Based on the Bures-Wasserstein (BW) distance, we then derive the OT interpolant for two graphs,
+which is the solution of the displacement minimization problem described as,
+
+
+G _t_ = arg min (1 − _t_ ) _d_ BW(G0 _,_ G) + [˜] _td_ BW(G [˜] _,_ G1) _._ (10)
+G˜
+
+
+**The probability path.** The interpolation is obtained through solving Eq. (10) with the BW distance
+defined in Proposition 1, we prove the minimizer of the above problem has the form in Proposition 2.
+The proof can be found in App. C.1.
+
+
+**Proposition** **2** (Bures-Wasserstein interpolation) **.** _The_ _graph_ _minimizer_ _of_ _Eq._ (10) _,_ G _t_ =
+{V _,_ E _t,_ X _t_ } _, have its node features following a colored Gaussian distribution,_ X _t_ ∼N( _**X**_ _t,_ **Λ** _[†]_ _t_ [)]
+_with_ **Λ** _t_ = ( _ν_ _**I**_ + _**L**_ _t_ ) ⊗ _**V**_ [⊺] _**V**_ _and edges following_ E _t_ ∼ _δ_ ( _**W**_ _t_ ) _, specifically,_
+
+1/2 2
+_**L**_ _[†]_ _t_ [=] _**[ L]**_ 0 [1][/][2] ((1 − _t_ ) _**L**_ _[†]_ 0 [+] _[ t]_ [(] _**[L]**_ 0 _[†]_ [/][2] _**[L]**_ 1 _[†]_ _**[L]**_ _[†]_ 0 [/][2][)] ) _**L**_ [1] 0 [/][2] _[,]_ _**X**_ _t_ = (1 − _t_ ) _**X**_ 0 + _t_ _**X**_ 1 (11)
+
+
+The interpolant provides a closed form for the induced probability path _p_ (G _t_ ∣ _G_ 0 _,G_ 1) and the
+velocity _v_ ( _Gt_ ∣ _G_ 0 _,G_ 1) that is easy to access without any simulation.
+
+
+**The velocity.** We consider the reparameterization as in Eq. (3) and derive the conditional velocity
+_vt_ ( _Gt_ ∣ _G_ 1 _,G_ 0) as in Proposition 3.
+
+
+6
+
+
+With Proposition 2 and Proposition 3, we are now able to formally construct the algorithms for
+Bures-Wasserstein flow matching. Taking continuous flow matching as an example, Algorithm 1
+and 2 respectively introduce the training and sampling pipelines for our BWFlow.
+
+
+3.3 DISCRETE BURES-WASSERSTEIN FLOW MATCHING FOR GRAPH GENERATION
+
+
+Up to now we are working on the scenario when _p_ (X ∣ _**X**_ _,_ _**W**_ ) is a Gaussian and _p_ (E ∣ _**W**_ ) is a
+Dirac distribution. However, previous studies have observed a significant improvement of the discrete
+counterpart of the continuous graph generation models Vignac et al. (2023a); Xu et al. (2024); Qin
+et al. (2024). To benefit our model from such a nature, we derive the discrete Bures-Wasserstein flow
+matching for graph generation.
+
+
+**The discrete probability path.** We design the probability path as discrete distributions,
+
+
+_pt_ ( _xv_ ∣ _G_ 0 _,G_ 1) = Categorical([ _**X**_ _t_ ] _v_ ) _,_ _pt_ ( _euv_ ∣ _G_ 0 _,G_ 1) = Bernoulli([ _**W**_ _t_ ] _uv_ )
+(13)
+s.t. _p_ 0(G) = _δ_ ( _G_ 0 _,_ ⋅) _,p_ 1(G) = _δ_ ( _G_ 1 _,_ ⋅)
+
+where _**W**_ _t_ = _**D**_ _t_ - _**L**_ _t_ with _**X**_ _t_ and _**L**_ _t_ defined the same in Eq. (11). We consider the fact that the
+Dirac distribution is a special case when the Categorical/Bernoulli distribution has probability 1 or
+0, so the boundary condition _p_ 0(G) = _δ_ ( _G_ 0 _,_ ⋅) _,p_ 1(G) = _δ_ ( _G_ 1 _,_ ⋅) holds. Even though we are not
+sampling from Gaussian distributions anymore, it is possible to approximate the Wasserstein distance
+between two multivariate discrete distributions with the Gaussian counterpart so the conclusions,
+such as optimal transport displacements, still hold. We left the discussion in App. D.2.
+
+
+**The** **discrete** **velocity** **fields.** The path of node features X _t_ can be re-written as _pt_ (X) = (1 −
+_t_ ) _δ_ (⋅ _,_ _**X**_ 0) + _tδ_ (⋅ _,_ _**X**_ 1) so the conditional velocity can be accessed through _vt_ ( _Xt_ ∣ _G_ 0 _,G_ 1) =
+
+[ _δ_ (⋅ _,_ _**X**_ 1)− _δ_ (⋅ _,_ _**X**_ _t_ )]/(1 - _t_ ). However, the probability path of edges E _t_, shown in Eqs. (11) and (13),
+cannot be written as a mixture of two boundary conditions given the non-linear interpolation. To this
+end, we derive in App. D.3 that the discrete velocity follows,
+
+
+_**W**_ ˙ _t_
+_vt_ ( _Et_ ∣ _G_ 1 _,G_ 0) = (1 − 2 _Et_ ) _**W**_ _t_ ○(1 − _**W**_ _t_ ) _[,]_ (14)
+
+where _**W**_ _t_ = _**D**_ _t_ - _**L**_ _t_, _**W**_ ˙ _t_ = diag( _**L**_ [˙] _t_ ) − _**L**_ [˙] _t_ with _**L**_ _t_, _**L**_ [˙] _t_ defined in Eqs. (11) and (12) respectively.
+With the interpolation and velocity defined, the discrete flow matching is built in Algorithms 3 and 4.
+
+
+4 EXPERIMENTS
+
+
+We evaluate BWFlow through both the plain graph generation and real-world molecule generation
+tasks. We first outline the experimental setup in Section 4.1, followed by a general model comparison
+in Section 4.2. Next, we conduct behavior analysis in Section 4.3 to understand the superior
+training/sampling dynamics BWFlow can bring.
+
+
+7
+
+
+**Algorithm 1:** BWFlow Training
+
+**Input:** Ref. dist _p_ 0 and dataset D ∼ _p_ 1.
+**Output:** Trained model _fθ_ ( _Gt, t_ ).
+
+**1** Initialize model _fθ_ ( _Gt, t_ );
+
+**2** **while** _fθ_ _not converged_ **do**
+
+**3** Sample batched { _G_ 0} ∼ _p_ 0, { _G_ 1} ∼D;
+/* Construct Prob.path   - [/]
+
+**4** Sample _t_ ∼U(0 _,_ 1);
+
+**5** Calculate the BW interpolation
+_p_ ( _Gt_ ∣ _G_ 0 _, G_ 1) via Eq. (11);
+/* _x_ -prediction   - [/]
+
+**6** _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G][t]_ [) ←] _[f][θ]_ [(] _[G][t][, t]_ [)][;]
+
+**7** Loss calculation via Eq. (4);
+
+**8** optimizer.step();
+
+
+4.1 EXPERIMENT SETTINGS
+
+
+**Algorithm 2:** BWFlow Sampling
+
+**Input:** Reference distribution _p_ 0, Trained Model
+_fθ_ ( _Gt, t_ ), Small time step dt,
+**Output:** Generated Graphs { _G_ [ˆ] 1}.
+
+**1** Initialize samples { _G_ [ˆ] 0} ∼ _p_ 0;
+
+**2** Initialize the model _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G][t]_ [) ←] _[f][θ]_ [(] _[G][t][, t]_ [)] **[ for]**
+_t_ ← 0 **to** 1 − _dt_ _**by**_ _dt_ **do**
+
+/* x-prediction   - [/]
+
+**3** Predict _G_ [˜] 1 ← _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G]_ [ˆ] _[t]_ [)][;]
+/* Velocity calculation   - [/]
+
+**4** Calculate _vθ_ ( _G_ [ˆ] _t_ ∣ _G_ [ˆ] 0 _,_ _G_ [˜] 1) via Eq. (12);
+/* Numerical Sampling   - [/]
+
+**5** Sample _G_ [ˆ] _t_ + _dt_ ∼ _G_ [ˆ] _t_ + _vθ_ ( _G_ [ˆ] _t_ ) _dt_
+
+
+**Dataset.** We evaluate the models’ ability of plain graph generation on three benchmark datasets
+following Martinkus et al. (2022); Vignac et al. (2023a); Bergmeister et al. (2024), specifically, **planar**,
+**tree**, and **SBM** (stochastic blocking models) graphs. Two datasets, namely MOSES (Polykovskiy
+et al., 2018) and GUACAMOL (Brown et al., 2019), are benchmarked to test the model performance
+on 2D molecule generation. For 3D molecule generation with coordinate data, we test the model on
+QM9 (Ramakrishnan et al., 2014) and GEOM-DRUGS (Axelrod & Gómez-Bombarelli, 2020).
+
+
+**Metrics** . In plain graph generation, the evaluation metrics include the percentage of Valid, Unique,
+and Novel ( **V.U.N.** ) graphs, and the average maximum mean discrepancy ratio ( **A.Ratio** ) of graph
+statistics between the set of generated graphs and the test set are reported (details in Section I.6). For
+molecule generation, we test two scenarios with and without bond type information, where the latter
+validates the capacity of our methods in generating the graph structures. To this end, we develop a
+new relaxed metric to measure the stability and validity of atoms and molecules when bond types are
+not available. Specifically, the atom-wise stability is relaxed as:
+
+
+Stability of Atom _i_ : _si_ = I[∃{ _bij_ } _j_ ∈N _i_ ∈∏ _Bij_ ∶∑ _bij_ = EV _i_ ] _,_ with the identity function I _._
+_j_ ∈N _i_ _j_ ∈N _i_
+
+
+This means atom _i_ is “relaxed-stable” if there is at least one way to pick allowed bond types ( _Bij_ )
+to its neighbors N _i_ so that their total exactly matches the expected valences EV _i_ . Such a relaxed
+stability of atoms ( **Atom.Stab.** ) inherently defines molecule stability ( **Mol.Stab.** ) and the **validity** of
+a molecule. In addition to these metrics, distribution metrics including charge distributions and total
+variation for atom and angles are also used. Details in App. I.6.
+
+
+**Setup.** To isolate the impact from model architecture, we follow Qin et al. (2024) to fix the backbone
+model as the same graph transformers. To fairly compare the impact of probability path construction,
+we disabled the path manipulation strategies such as time distortion and target guidance from Qin et al.
+(2024) and predictor-corrector in Siraudin et al. (2024) (the general comparison with all strategies
+enabled is left in App. I.2). More experimental details can be found in App. I.1.
+
+
+4.2 MAIN RESULTS FOR GRAPH GENERATION
+
+
+**Plain** **graph** **generation.** Given that the training dynamics on these benchmarks are extremely
+unstable and performance continues to fluctuate significantly even after convergence (the transparent
+jagged curve in Fig. 3c gives a visualization), we calculate the average results over the last 5
+checkpoints (CAVG) to reflect the model behaviour after convergence. The exponentially moving
+average (EMA) with decay 0.999 is applied to the model. As illustrated in Table 1, BWFlow
+consistently outperforms other benchmarks in terms of A.Ratio and exceeds most competitors on
+Planar and SBM in V.U.N. The lone exception is the tree graphs, where our model falls short. We
+attribute this gap to the fundamentally different spectral pattern for tree graphs, which we provide a
+discussion in App. A.3.
+
+
+8
+
+
+Table 1: Plain graph generation performance. The path manipulation methods, e.g. target guidance
+in Qin et al. (2024) and predictor-corrector in Siraudin et al. (2024), are disabled to purely evaluate the
+impact of path construction. This table unifies the path distortion designs as in Table 10 and presents
+the CAVG results. We reproduce the state-of-the-art diffusion/flow model for comparison, while
+other models evaluated on best-checkpoint results are in the Table 11. The full statistics in Table 13.
+
+
+Planar Tree SBM
+
+Model Class V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓
+
+
+Train set  - 100 1.0 100 1.0 85.9 1.0
+
+
+DiGress (CAVG) (Vignac et al., 2023a) Diffusion 61.5±10.1 9.9 ±3.3 56.0 ±11.0 8.9±3.2 56.0±8.5 3.5±0.5
+DisCo (CAVG) (Xu et al., 2024) Diffusion 57.5± 2.5 9.0± 1.4 / / 55.0± 5.9 11.6± 2.9
+HSpectre (Bergmeister et al., 2024) Diffusion 67.5 3.0 82.5 2.1 75.0 10.5
+GruM (CAVG) (Jo et al., 2024) Diffusion 74.4±5.15 3.2±0.4 52.5±3.2 2.4±0.7 73.5±6.7 2.6±0.6
+Cometh (CAVG) (Siraudin et al., 2024) Diffusion 80.5± 5.79 3.0± 0.6 **84.5** ± 7.8 2.0± 0.4 77.5± 5.7 4.7± 0.6
+DeFoG (CAVG) (Qin et al., 2024) Flow 77.5±8.37 3.5±1.7 83.5±10.8 1.9±0.4 **85.0** ±7.1 3.4±0.4
+BWFlow (CAVG) Flow **84.8** ±6.44 **2.4** ±0.9 81.5±4.9 **1.3** ±0.2 84.5±8.0 **2.3** ±0.5
+
+
+**Dataset** **Interpolation** **Metrics**
+
+_µ_ V.U.N(%) Mol.Stab. Atom.Stab. Connected(%) Charge(10 [−][2] ) Atom(10 [−][2] ) Angles( [○] )
+
+QM9 MiDi 1.01 93.13 93.98 99.60 99.21 0.2 3.7 2.21
+FlowMol 1.01 87.53 88.45 99.13 99.09 0.4 4.2 2.72
+(with h) BWFlow 1.01 **96.45** **97.84** **99.84** **99.24** **0.1** **2.3** **1.96**
+
+GEOM Midi 1.34 78.23 32.42 89.61 **79.15** 0.6 11.2 9.6
+(with h) FlowMol 1.34 82.20 36.90 94.60 59.98 0.4 8.8 6.5
+BWFlow **1.20** **87.75** **46.80** **95.08** 73.53 **0.1** **6.5** **3.96**
+
+
+Table 2: Quantitative experimental results on 3D Molecule Generation with explicit hydrogen.
+
+
+**Molecule generation.** Table 2 gives the results on the 3D molecule generation task with explicit
+hydrogen, where we ignore the bond type but just view the adjacency matrix as a binary one for
+validating the power of generating graph structures. Interestingly, the empirical results show that even
+without edge type, the models already can capture the molecule data distribution. And our BWFlow
+significantly outperforms the SOTA models, including MiDi Vignac et al. (2023b) and FlowMol Dunn
+& Koes (2024). We believe a promising future direction is to incorporate the processing of multiple
+bond types into our framework, which would potentially raise the performance by a margin.
+
+
+4.3 BEHAVIOR ANALYSIS
+
+
+**BWFlow provides smooth velocity in probability**
+**paths** . To illustrate how BWFlow models the smooth Table 3: Model performance in small samevolution of graphs, we compute the A.Ratio on SBM pling steps. DeFoG-1 and DeFoG 2 are withdatasets (the figures for the others are in Fig. 6) be- out and with path manipulation respectively.
+tween generated graph interpolants and test data for
+_t_ ∈[0 _,_ 1], as shown in Fig. 3a. In contrast to the linear Planar SBM
+(arithmetic) interpolation, BW interpolation initially Model V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓
+exposes the model to more out-of-distribution sam- Cometh 17.0± 4.5 7.5± 2.7 43.0± 7.5 3.3± 0.9
+ples with increased A.Ratio. After this early explo- DeFoG-1 24.5±6.5 6.6±0.9 32.5±8.8 7.9±0.7
+
+a smooth interpolation between the reference graphs
+and the data points. This behavior enhances both
+the model robustness and velocity estimation, which helps in covering the convergence gap in the
+generation stage as in Fig. 1c. In comparison, harmonic and geometric interpolations step outside the
+valid graph domain, making the learning ill-posed.
+
+
+**The impact of interpolation methods on the model performance.** Fig. 3b illustrated a bar plot
+that compares interpolation methods on the ability of generating valid plain graphs measured by
+V.U.N., which shows the superiority of BW interpolation in capturing graph distributions (full results
+in Table 7). Fig. 3c illustrated an example (in planar graph generation) of the convergence curve
+at the training stage, which suggests that BWFlow can bring a faster convergence speed compared
+to FM methods constructed with linear (arithmetic) interpolations. Additionally, we test when the
+sampling step size is only 3% of the original one (30 vs 1k), and report the results in Table 3. The
+results show that BWFlow significantly succeeds in generating high-quality graphs when sampling
+steps are small.
+
+
+9
+
+
+Table 3: Model performance in small sampling steps. DeFoG-1 and DeFoG 2 are without and with path manipulation respectively.
+
+
+Planar SBM
+
+
+Model V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓
+
+
+Cometh 17.0± 4.5 7.5± 2.7 43.0± 7.5 3.3± 0.9
+DeFoG-1 24.5±6.5 6.6±0.9 32.5±8.8 7.9±0.7
+DeFoG-2 72.0±7.4 6.3±1.9 47.5±2.0 3.1±0.9
+
+
+80
+
+
+70
+
+
+60
+
+
+50
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Interpolation Method<br>Harmonic|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||Geometric<br>Linear<br>|Geometric<br>Linear<br>|Geometric<br>Linear<br>|Geometric<br>Linear<br>|
+|||||~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|~~Bures-Wasserstein~~|
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+||||||||||||||
+
+
+Planar DatasetsTree SBM
+
+
+(a) The evolution of graph statistics ratio along the probability path.
+
+
+(b) The impact of interpolation
+methods on the performance.
+
+
+(c) Convergence analysis of BW-Flow
+and flows with linear interpolations.
+
+
+Figure 3: Ablation studies for Bures-Wasserstein Flow Matching.
+
+
+5 DISCUSSION AND FUTURE WORK
+
+
+In this paper, we introduce BWFlow, a flow matching model that intergrates the non-Euclidean
+and interconnected properties of graphs for graph generation. While we show BWFlow exhibits
+outstanding performance in various graph generation tasks, there still remains a few solid future
+work.
+
+
+_Extension to multiple relation types._ As our framework is built upon the interpolation parameterized
+by the Graph Laplacian, it is not easily generalizable to the graph generation with multiple edge types.
+We made preliminary attempts in App. F.5 but a comprehensive design is still required.
+
+_Efficient Probability Path Construction._ Our BW interpolation induces an extra _O_ ( _N_ [3] ) linear algebra
+operations (noted not reflecting the model complexity) in path construction. When scaled up to large
+but sparse graphs, the complexity can be reduced to _O_ ( _TN_ [2] ) (with _T_ the iteration steps) through
+iterative solving such as least-squares with QR factorization. We conduct a preliminary experiment
+for this in App. F.4 and leave further development as future work.
+
+
+_The generality of GMRF_ . As discussed in App. A.3, GMRF enhances algorithm’s ability in modelling
+graphs with narrow spectral spread while does not improve on graphs with wide spectral spread.
+Thus, adapting GMRF to graphs with more complex spectral patterns remains a promising direction.
+
+
+ACKNOWLEDGEMENTS
+
+
+K.J. was supported by the UKRI Engineering and Physical Sciences Research Council (EPSRC)
+
+[grant number EP/R513143/1]. The authors thank Jinmei Zhang, Yiming Qin, Isabel Haasler, and
+Pascal Frossard for the valuable inspirations and discussions at the early stage of this project, as well
+as the anonymous reviewers for their helpful comments and insights.
+
+
+10
+
+
+REFERENCES
+
+
+Michael S. Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic interpolants.
+In _ICLR_ . OpenReview.net, 2023.
+
+
+Simon Axelrod and Rafael Gómez-Bombarelli. GEOM: energy-annotated molecular conformations
+for property prediction and molecular generation. _CoRR_, abs/2006.05531, 2020.
+
+
+Eric Bach, Simon Rogers, John Williamson, and Juho Rousu. Probabilistic framework for integration
+of mass spectrum and retention time information in small molecule identification. _Bioinformatics_,
+37(12):1724–1731, 11 2020. ISSN 1367-4803. doi: 10.1093/bioinformatics/btaa998. URL
+[https://doi.org/10.1093/bioinformatics/btaa998.](https://doi.org/10.1093/bioinformatics/btaa998)
+
+
+Andreas Bergmeister, Karolis Martinkus, Nathanaël Perraudin, and Roger Wattenhofer. Efficient and
+scalable graph generation through iterative local expansion. In _ICLR_ . OpenReview.net, 2024.
+
+
+Rajendra Bhatia, Tanvi Jain, and Yongdo Lim. On the bures–wasserstein distance between positive
+definite matrices. _Expositiones_ _Mathematicae_, 37(2):165–191, 2019. ISSN 0723-0869. doi:
+https://doi.org/10.1016/j.exmath.2018.01.002. [URL https://www.sciencedirect.com/](https://www.sciencedirect.com/science/article/pii/S0723086918300021)
+[science/article/pii/S0723086918300021.](https://www.sciencedirect.com/science/article/pii/S0723086918300021)
+
+
+Camille Bilodeau, Wengong Jin, Tommi Jaakkola, Regina Barzilay, and Klavs F Jensen. Generative
+models for molecular discovery: Recent advances and challenges. _Wiley Interdisciplinary Reviews:_
+_Computational Molecular Science_, 12(5):e1608, 2022.
+
+
+Nathan Brown, Marco Fiscato, Marwin H. S. Segler, and Alain C. Vaucher. Guacamol: Benchmarking
+models for de novo molecular design. _J. Chem. Inf. Model._, 59(3):1096–1108, 2019.
+
+
+Andrew Campbell, Joe Benton, Valentin De Bortoli, Thomas Rainforth, George Deligiannidis, and
+Arnaud Doucet. A continuous time framework for discrete denoising models. In _NeurIPS_, 2022.
+
+
+Andrew Campbell, Jason Yim, Regina Barzilay, Tom Rainforth, and Tommi S. Jaakkola. Generative
+flows on discrete state-spaces: Enabling multimodal flows with applications to protein co-design.
+In _ICML_ . OpenReview.net, 2024.
+
+
+Nicola De Cao and Thomas Kipf. Molgan: An implicit generative model for small molecular graphs.
+_CoRR_, abs/1805.11973, 2018.
+
+
+Ricky T. Q. Chen and Yaron Lipman. Flow matching on general geometries. In _ICLR_ . OpenReview.net,
+2024.
+
+
+Tian Qi Chen, Yulia Rubanova, Jesse Bettencourt, and David Duvenaud. Neural ordinary differential
+equations. In _NeurIPS_, pp. 6572–6583, 2018.
+
+
+Xiaohui Chen, Jiaxing He, Xu Han, and Liping Liu. Efficient and degree-guided graph generation via
+discrete diffusion modeling. In _ICML_, volume 202 of _Proceedings of Machine Learning Research_,
+pp. 4585–4610. PMLR, 2023.
+
+
+Hanjun Dai, Azade Nazi, Yujia Li, Bo Dai, and Dale Schuurmans. Scalable deep generative modeling
+for sparse graphs. In _ICML_, volume 119 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp.
+2302–2312. PMLR, 2020.
+
+
+Nathaniel Lee Diamant, Alex M. Tseng, Kangway V. Chuang, Tommaso Biancalani, and Gabriele
+Scalia. Improving graph generation by restricting graph bandwidth. In _ICML_, volume 202 of
+_Proceedings of Machine Learning Research_, pp. 7939–7959. PMLR, 2023.
+
+
+D.C Dowson and B.V Landau. The fréchet distance between multivariate normal distributions.
+_Journal of Multivariate Analysis_, 12(3):450–455, 1982. ISSN 0047-259X. doi: https://doi.org/
+10.1016/0047-259X(82)90077-X. [URL https://www.sciencedirect.com/science/](https://www.sciencedirect.com/science/article/pii/0047259X8290077X)
+[article/pii/0047259X8290077X.](https://www.sciencedirect.com/science/article/pii/0047259X8290077X)
+
+
+Ian Dunn and David Ryan Koes. Mixed continuous and categorical flow matching for 3d de novo
+molecule generation. _ArXiv_, pp. arXiv–2404, 2024.
+
+
+11
+
+
+Floor Eijkelboom, Grigory Bartosh, Christian Andersson Naesseth, Max Welling, and Jan-Willem
+van de Meent. Variational flow matching for graph generation. In _NeurIPS_, 2024.
+
+
+Itai Gat, Tal Remez, Neta Shaul, Felix Kreuk, Ricky T. Q. Chen, Gabriel Synnaeve, Yossi Adi, and
+Yaron Lipman. Discrete flow matching. In _NeurIPS_, 2024.
+
+
+Nikhil Goyal, Harsh Vardhan Jain, and Sayan Ranu. Graphgen: A scalable approach to domainagnostic labeled graph generation. In _WWW_, pp. 1253–1263. ACM / IW3C2, 2020.
+
+
+Aditya Grover and Jure Leskovec. node2vec: Scalable feature learning for networks. In _KDD_, pp.
+855–864. ACM, 2016.
+
+
+Isabel Haasler and Pascal Frossard. Bures-wasserstein means of graphs. In _AISTATS_, volume 238 of
+_Proceedings of Machine Learning Research_, pp. 1873–1881. PMLR, 2024.
+
+
+Kilian Konstantin Haefeli, Karolis Martinkus, Nathanaël Perraudin, and Roger Wattenhofer. Diffusion
+models for graphs benefit from discrete state spaces. In _The First Learning on Graphs Conference_,
+2022. [URL https://openreview.net/forum?id=CtsKBwhTMKg.](https://openreview.net/forum?id=CtsKBwhTMKg)
+
+
+Doron Haviv, Aram-Alexandre Pooladian, Dana Pe’er, and Brandon Amos. Wasserstein flow
+matching: Generative modeling over families of distributions. _CoRR_, abs/2411.00698, 2024.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _NeurIPS_,
+2020.
+
+
+Xiaoyang Hou, Tian Zhu, Milong Ren, Dongbo Bu, Xin Gao, Chunming Zhang, and Shiwei
+Sun. Improving molecular graph generation with flow matching and optimal transport. _CoRR_,
+abs/2411.05676, 2024.
+
+
+John Ingraham, Vikas K. Garg, Regina Barzilay, and Tommi S. Jaakkola. Generative models for
+graph-based protein design. In _NeurIPS_, pp. 15794–15805, 2019.
+
+
+Keyue Jiang, Bohan Tang, Xiaowen Dong, and Laura Toni. Heterogeneous graph structure learning through the lens of data-generating processes. In _The_ _28th_ _International_ _Conference_ _on_
+_Artificial Intelligence and Statistics_, 2025. [URL https://openreview.net/forum?id=](https://openreview.net/forum?id=JHK0QBKdYY)
+[JHK0QBKdYY.](https://openreview.net/forum?id=JHK0QBKdYY)
+
+
+Jaehyeong Jo, Dongki Kim, and Sung Ju Hwang. Graph generation with diffusion mixture. In _ICML_ .
+OpenReview.net, 2024.
+
+
+Kacper Kapusniak, Peter Potaptchik, Teodora Reu, Leo Zhang, Alexander Tong, Michael M. Bronstein, Avishek Joey Bose, and Francesco Di Giovanni. Metric flow matching for smooth interpolations on the data manifold. In _NeurIPS_, 2024.
+
+
+Thomas N. Kipf and Max Welling. Variational graph auto-encoders. _CoRR_, abs/1611.07308, 2016.
+
+
+Mufei Li, Eleonora Kreacic, Vamsi K. Potluru, and Pan Li. Graphmaker: Can diffusion models
+generate large attributed graphs? _CoRR_, abs/2310.13833, 2023.
+
+
+Renjie Liao, Yujia Li, Yang Song, Shenlong Wang, William L. Hamilton, David Duvenaud, Raquel
+Urtasun, and Richard S. Zemel. Efficient graph generation with graph recurrent attention networks.
+In _NeurIPS_, pp. 4257–4267, 2019.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In _The Eleventh International Conference on Learning Repre-_
+_sentations_, 2023. [URL https://openreview.net/forum?id=PqvMRDCJT9t.](https://openreview.net/forum?id=PqvMRDCJT9t)
+
+
+Yaron Lipman, Marton Havasi, Peter Holderrieth, Neta Shaul, Matt Le, Brian Karrer, Ricky T. Q.
+Chen, David Lopez-Paz, Heli Ben-Hamu, and Itai Gat. Flow matching guide and code. _CoRR_,
+abs/2412.06264, 2024.
+
+
+Chengyi Liu, Wenqi Fan, Yunqing Liu, Jiatong Li, Hang Li, Hui Liu, Jiliang Tang, and Qing Li.
+Generative diffusion models on graphs: Methods and applications. In _IJCAI_, pp. 6702–6711.
+ijcai.org, 2023a.
+
+
+12
+
+
+Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and
+transfer data with rectified flow. In _ICLR_ . OpenReview.net, 2023b.
+
+
+Karolis Martinkus, Andreas Loukas, Nathanaël Perraudin, and Roger Wattenhofer. SPECTRE:
+spectral conditioning helps to overcome the expressivity limits of one-shot graph generators. In
+_ICML_, volume 162 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 15159–15179. PMLR,
+2022.
+
+
+Robert J. McCann. A convexity principle for interacting gases. _Advances in Mathematics_, 128(1):
+153–179, 1997. ISSN 0001-8708. doi: https://doi.org/10.1006/aima.1997.1634. [URL https:](https://www.sciencedirect.com/science/article/pii/S0001870897916340)
+[//www.sciencedirect.com/science/article/pii/S0001870897916340.](https://www.sciencedirect.com/science/article/pii/S0001870897916340)
+
+
+Giorgia Minello, Alessandro Bicciato, Luca Rossi, Andrea Torsello, and Luca Cosmo. Generating graphs via spectral diffusion. In _The_ _Thirteenth_ _International_ _Conference_ _on_ _Learning_
+_Representations_, 2025. [URL https://openreview.net/forum?id=AAXBfJNHDt.](https://openreview.net/forum?id=AAXBfJNHDt)
+
+
+Chenhao Niu, Yang Song, Jiaming Song, Shengjia Zhao, Aditya Grover, and Stefano Ermon. Permutation invariant graph generation via score-based generative modeling. In _AISTATS_, volume 108 of
+_Proceedings of Machine Learning Research_, pp. 4474–4484. PMLR, 2020.
+
+
+I. Olkin and F. Pukelsheim. The distance between two random vectors with given dispersion matrices.
+_Linear Algebra and its Applications_, 48:257–263, 1982. ISSN 0024-3795. doi: https://doi.org/
+10.1016/0024-3795(82)90112-4. [URL https://www.sciencedirect.com/science/](https://www.sciencedirect.com/science/article/pii/0024379582901124)
+[article/pii/0024379582901124.](https://www.sciencedirect.com/science/article/pii/0024379582901124)
+
+
+Nagham Osman, Keyue Jiang, Davide Buffelli, Xiaowen Dong, and Laura Toni. LGDC: Latent graph
+diffusion via spectrum-preserving coarsening. In _New Perspectives in Graph Machine Learning_,
+2025. [URL https://openreview.net/forum?id=JYbj76Soau.](https://openreview.net/forum?id=JYbj76Soau)
+
+
+Yong-Hyun Park, Mingi Kwon, Jaewoong Choi, Junghyo Jo, and Youngjung Uh. Understanding the
+latent space of diffusion models through the lens of riemannian geometry. In _NeurIPS_, 2023.
+
+
+Daniil Polykovskiy, Alexander Zhebrak, Benjamín Sánchez-Lengeling, Sergey Golovanov, Oktai
+Tatanov, Stanislav Belyaev, Rauf Kurbanov, Aleksey Artamonov, Vladimir Aladinskiy, Mark
+Veselov, Artur Kadurin, Sergey I. Nikolenko, Alán Aspuru-Guzik, and Alex Zhavoronkov.
+Molecular sets (MOSES): A benchmarking platform for molecular generation models. _CoRR_,
+abs/1811.12823, 2018.
+
+
+Aram-Alexandre Pooladian, Heli Ben-Hamu, Carles Domingo-Enrich, Brandon Amos, Yaron Lipman,
+and Ricky T. Q. Chen. Multisample flow matching: Straightening flows with minibatch couplings.
+In _ICML_, volume 202 of _Proceedings of Machine Learning Research_, pp. 28100–28127. PMLR,
+2023.
+
+
+Yiming Qin, Manuel Madeira, Dorina Thanou, and Pascal Frossard. Defog: Discrete flow matching
+for graph generation. _CoRR_, abs/2410.04263, 2024.
+
+
+Meng Qu, Yoshua Bengio, and Jian Tang. GMNN: graph markov neural networks. In _ICML_,
+volume 97 of _Proceedings of Machine Learning Research_, pp. 5241–5250. PMLR, 2019.
+
+
+Raghunathan Ramakrishnan, Pavlo O Dral, Matthias Rupp, and O Anatole Von Lilienfeld. Quantum
+chemistry structures and properties of 134 kilo molecules. _Scientific data_, 1(1):1–7, 2014.
+
+
+Antoine Siraudin and Christopher Morris. Principled latent diffusion for graphs via laplacian
+autoencoders, 2026. [URL https://arxiv.org/abs/2601.13780.](https://arxiv.org/abs/2601.13780)
+
+
+Antoine Siraudin, Fragkiskos D. Malliaros, and Christopher Morris. Cometh: A continuous-time
+discrete-state graph diffusion model, 2024. [URL https://arxiv.org/abs/2406.06449.](https://arxiv.org/abs/2406.06449)
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P. Kingma, Abhishek Kumar, Stefano Ermon, and
+Ben Poole. Score-based generative modeling through stochastic differential equations. In _ICLR_ .
+OpenReview.net, 2021.
+
+
+13
+
+
+Hannes Stärk, Bowen Jing, Chenyu Wang, Gabriele Corso, Bonnie Berger, Regina Barzilay, and
+Tommi S. Jaakkola. Dirichlet flow matching with applications to DNA sequence design. In _ICML_ .
+OpenReview.net, 2024.
+
+
+Haoran Sun, Lijun Yu, Bo Dai, Dale Schuurmans, and Hanjun Dai. Score-based continuous-time
+discrete diffusion models. In _ICLR_ . OpenReview.net, 2023.
+
+
+Asuka Takatsu. On wasserstein geometry of gaussian measures. _Probabilistic approach to geometry_,
+57:463–472, 2010.
+
+
+Ben Taskar, Pieter Abbeel, Ming-Fai Wong, and Daphne Koller. Relational markov networks.
+_Introduction to statistical relational learning_, 175:200, 2007.
+
+
+Alexander Tong, Kilian Fatras, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid RectorBrooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models
+with minibatch optimal transport. _Trans. Mach. Learn. Res._, 2024, 2024.
+
+
+Clément Vignac, Igor Krawczuk, Antoine Siraudin, Bohan Wang, Volkan Cevher, and Pascal Frossard.
+Digress: Discrete denoising diffusion for graph generation. In _ICLR_ . OpenReview.net, 2023a.
+
+
+Clément Vignac, Nagham Osman, Laura Toni, and Pascal Frossard. Midi: Mixed graph and 3d
+denoising diffusion for molecule generation. In _ECML/PKDD (2)_, volume 14170 of _Lecture Notes_
+_in Computer Science_, pp. 560–576. Springer, 2023b.
+
+
+C. Villani and American Mathematical Society. _Topics_ _in_ _Optimal_ _Transportation_ . Graduate
+studies in mathematics. American Mathematical Society, 2003. ISBN 9781470418045. URL
+[https://books.google.co.uk/books?id=MyPjjgEACAAJ.](https://books.google.co.uk/books?id=MyPjjgEACAAJ)
+
+
+Fu-Yun Wang, Ling Yang, Zhaoyang Huang, Mengdi Wang, and Hongsheng Li. Rectified diffusion:
+Straightness is not your need in rectified flow. _CoRR_, abs/2410.07303, 2024.
+
+
+Martin Weigt, Robert A. White, Hendrik Szurmant, James A. Hoch, and Terence Hwa. Identification
+of direct residue contacts in protein–protein interaction by message passing. _Proceedings_ _of_
+_the National Academy of Sciences_, 106(1):67–72, 2009. doi: 10.1073/pnas.0805923106. URL
+[https://www.pnas.org/doi/abs/10.1073/pnas.0805923106.](https://www.pnas.org/doi/abs/10.1073/pnas.0805923106)
+
+
+Zhe Xu, Ruizhong Qiu, Yuzhong Chen, Huiyuan Chen, Xiran Fan, Menghai Pan, Zhichen Zeng, Mahashweta Das, and Hanghang Tong. Discrete-state continuous-time diffusion for graph generation.
+_arXiv preprint arXiv:2405.11416_, 2024.
+
+
+Menglin Yang, Min Zhou, Zhihao Li, Jiahong Liu, Lujia Pan, Hui Xiong, and Irwin King. Hyperbolic
+graph neural networks: A review of methods and applications. _CoRR_, abs/2202.13852, 2022.
+
+
+Jiaxuan You, Rex Ying, Xiang Ren, William L. Hamilton, and Jure Leskovec. Graphrnn: Generating
+realistic graphs with deep auto-regressive models. In _ICML_, volume 80 of _Proceedings of Machine_
+_Learning Research_, pp. 5694–5703. PMLR, 2018.
+
+
+Meng Yu and Kun Zhan. Bias mitigation in graph diffusion models. In _The Thirteenth International_
+_Conference on Learning Representations_, 2025. [URL https://openreview.net/forum?](https://openreview.net/forum?id=CSj72Rr2PB)
+[id=CSj72Rr2PB.](https://openreview.net/forum?id=CSj72Rr2PB)
+
+
+Xiaojin Zhu, John Lafferty, and Zoubin Ghahramani. _Semi-supervised learning:_ _From Gaussian_
+_fields to Gaussian processes_ . School of Computer Science, Carnegie Mellon University, 2003.
+
+
+Yanqiao Zhu, Yuanqi Du, Yinkai Wang, Yichen Xu, Jieyu Zhang, Qiang Liu, and Shu Wu. A survey
+on deep graph generation: Methods and applications. In _LoG_, volume 198 of _Proceedings_ _of_
+_Machine Learning Research_, pp. 47. PMLR, 2022.
+
+
+14
+
+
+A GRAPH MARKOV RANDOM FIELDS: BACKGROUND AND THEORY
+
+
+A.1 BACKGROUND OF MARKOV RANDOM FIELDS
+
+
+Markov random fields (MRFs) were originally developed to describe the dynamics of interconnected
+physical systems such as molecules and proteins (Weigt et al., 2009; Bach et al., 2020). MRFs are
+energy-based models that have the following probability density:
+
+
+_p_ (X) = [1]
+
+
+(15)
+_Z_ _[e]_ [−] _[U]_ [(X)/] _[kT][,]_
+
+
+_Z_ [1] [∏] _c_ _ϕc_ ( _xc_ ) = _Z_ [1]
+
+
+where the energy _U_ (X) is used to describe the whole connected system. For instance, in the molecule
+system that consists of atoms and bonds, the overall energy is decomposed into the atom-wise
+potential _φ_ 1( _v_ ) _,_ ∀ _v_ ∈V and bond-wise potential _φ_ 2( _u,v_ ), ∀ _euv_ ∈E. MRFs serve as a natural and
+elegant way to describe general graph systems.
+
+
+The energy-based models have an intrinsic relationship with generative models. As an example, Song
+et al. (2021) derived the relationship between diffusion models and the Langevin dynamics, which
+is used to describe the evolution of an energy-based model. It is shown that the diffusion models
+are trying to approximate the score function ∇X log _p_ (X). In the energy-based models, the score
+function is just the gradient of energy, ∇X log _p_ (X) = −∇X _U_ (X), and the Langevin dynamics
+becomes transiting between states with different energies.
+
+
+The idea of our paper originated from the two facts: MRFs are energy-based model describing connected systems, and the energy-based models have their intrinsic relationship with the diffusion/flow
+models. Thus, if a model is required to describe the evolution of the whole graph system, we believe
+it is natural to consider constructing a probability path for two graph distributions with MRFs as the
+backbone.
+
+
+A.2 DERIVATION OF GRAPH MARKOV RANDOM FIELDS
+
+
+The hierarchical graphical model for GraphMRF is visualized in Fig. 4. With such a modelling, the
+following decomposition holds:
+_p_ (G ∣ _**G**_ ) = _p_ (X _,_ E ∣ _**X**_ _,_ _**W**_ )
+= _p_ (X ∣E _,_ _**X**_ _,_ _**W**_ ) _p_ (E ∣ _**X**_ _,_ _**W**_ )
+= _p_ (X ∣ _**X**_ _,_ _**W**_ ) _p_ (E ∣ _**W**_ )
+where the node features and graph structure are interconnected through latent variables _**X**_ and
+_**W**_ .The first step follows the chain rule, and the second steps utilize the properties of the Markov
+Random Fields, i.e 1) the graph structure serves as a prior and is generated first, and 2) the node
+features are emitted based on that structure. This makes _**W**_ alone governs the structural prior, i.e.
+_p_ (E ∣ _**W**_ _,_ _**X**_ ) = _p_ (E ∣ _**W**_ ). For notation clarity, we distinguish the dependency along same hierarchy
+in the graphical model by using _p_ (⋅∣⋅) with the difference hierarchies as _p_ (⋅; ⋅) (‘∣’ v.s. ‘;’).
+
+
+We then show the derivation of Definition 2, which is restated here:
+
+
+**Definition 3** (Graph Markov Random Fields) **.** GraphMRF statistically describes graphs as,
+
+_p_ (G; _**G**_ ) = _p_ (X _,_ E; _**X**_ _,_ _**W**_ ) = _p_ (X ; _**X**_ _,_ _**W**_ ) ⋅ _p_ (E; _**W**_ ) where E ∼ _δ_ ( _**W**_ ) and
+
+(16)
+vec(X) ∼N ( _**X**_ _,_ **Λ** [†] ) _,_ with _**X**_ = vec( _**V**_ [†] _**µ**_ ) _,_ **Λ** = ( _ν_ _**I**_ + _**L**_ ) ⊗ _**V**_ [⊺] _**V**_ _._
+
+The ⊗ is the Kronecker product, vec(⋅) is the vectorization operator and _**I**_ is the identity matrix.
+
+
+_Derivation:_
+
+
+We start from
+_p_ (X ; _**X**_ _,_ _**W**_ ) ∝∏ exp {−( _ν_ + _dv_ )∥ _**V**_ _xv_  - _**µ**_ _v_ ∥ [2] }∏ exp { _wuv_ [( _**V**_ _xu_  - _**µ**_ _u_ ) [⊺] ( _**V**_ _xv_  - _**µ**_ _v_ )]} _._
+_v_ _u,v_
+
+(17)
+We assume that the linear transformation matrix has dimension _**V**_ ∈ R _[K]_ [′][×] _[K]_ given that _xv_ ∈ R _[K]_ and
+define a transformed variable
+_hv_ ≡ _**V**_ _xv_           - _**µ**_ _v_ ∈ R _[K]_ [′] _,_ stacking as H ∈ R [∣V∣×] _[K]_ [′] _._ (18)
+
+
+15
+
+
+Figure 4: The graphical model for GraphMRF.
+
+
+The probability becomes
+
+_P_ (H; _**X**_ _,_ _**W**_ ) ∝∏ exp{−( _ν_ + _dv_ )∥ _hv_ ∥ [2] }∏ exp{ _wuv h_ [⊺] _u_ _[h][v]_ [}] _[.]_ (19)
+_v_ _u,v_
+
+Then, the terms inside the exponent in Eq. (19) become
+−∑( _ν_ + _dv_ )∥ _hv_ ∥ [2] + ∑ _wuv h_ [⊺] _u_ _[h][v]_ [= −∑] ( _ν_ + _dv_ ) _h_ [⊺] _v_ _[h][v]_ [+ ∑] _wuv h_ [⊺] _u_ _[h][v]_
+_v_ _u,v_ _v_ _u,v_
+
+
+= −∑ _h_ [⊺] _u_ [[(] _[ν]_ [ +] _[ d][u]_ [)] _[δ][uv]_ [−] _[w][uv]_ []] _[h][v][,]_
+_u,v_
+
+where the Kronecker delta _δuv_ = 1 if _u_ = _v_ and 0 else. We define a squared matrix Λ [′] to arrange the
+inner term, which can be written as,
+**Λ** [′] = _ν_ _**I**_ + _**L**_ with **Λ** [′] _uv_ [= (] _[ν]_ [ +] _[ d][u]_ [)] _[δ][uv]_ [−] _[w][uv][.]_ (20)
+_**I**_ is the identity matrix. Thus, the exponent in compact matrix form gives
+
+
+⎛
+
+[1] 2 [Tr][(H][⊺] **[Λ]** [′][H)] _[,]_ [where][ H =] ⎜⎜
+
+⎝
+
+
+⎞
+_._ (21)
+⎟⎟
+⎠
+
+
+- [1]
+
+
+_h_ 1
+_h_ 2
+⋮
+_h_ ∣V∣
+
+
+It is possible to rearrange the exponent as
+Tr(H [⊺] **Λ** [′] H) = vec(H) [⊺] ( **Λ** ⊗ _**I**_ ) vec(H) _,_ (22)
+where ⊗ denotes the Kronecker product. This is exactly in the form of a multivariate colored Gaussian.
+Thus, the joint distribution of vec(H) (of dimension ∣V∣ _K_ [′] ) is given by
+
+vec(H) ∼N(0 _,_ ( _ν_ _**I**_ + _**L**_ )) [−][1] ⊗ _**I**_ _K_ ′) _,_ (23)
+
+
+Recall that _hv_ = _**V**_ _xv_ - _**µ**_ _v_, we obtain
+vec(H) = ( _**I**_ ⊗ _**V**_ ) vec(X) − vec( _**µ**_ ) _._ (24)
+Since the transformation is linear, the distribution over X remains Gaussian. By the properties of
+linear transformations of Gaussians, if
+vec(H) ∼N(vec( _**µ**_ ) _,_ **Σ** _h_ ) _,_ vec(X) = ( _**I**_ ⊗ _**V**_ [†] ) vec(H) _,_ (25)
+then
+vec(X) ∼N(( _**I**_ ⊗ _**V**_ [†] ) vec( _**µ**_ ) _,_ ( _**I**_ _n_ ⊗ _**V**_ [†] ) **Σ** H ( _**I**_ _n_ ⊗ _**V**_ [†] ) [⊺] ) _._ (26)
+
+Thus, using the mixed-product property of the Kronecker product,
+( _**I**_ ⊗ _**V**_ [†] )(( _ν_ _**I**_ + _**L**_ ) [−][1] ⊗ _**I**_ )( _**I**_ _n_ ⊗ _**V**_ [†] ) [⊺] = ( _**L**_ + _ν_ _**I**_ ) [−][1] ⊗( _**V**_ [†] _**V**_ [†][⊺] ) (27)
+Finally, the joint distribution over X is
+vec(X) ∼N( _**X**_ _,_ Σ) _,_
+
+
+with _**X**_ = ( _**I**_ ⊗ _**V**_ [†] ) vec( _**µ**_ ) = vec( _**V**_ [†] _**µ**_ )
+
+and Σ = ( _ν_ _**I**_ + _**L**_ ) [−][1] ⊗( _**V**_ [†] _**V**_ [†][⊺] ) _,_
+
+
+(28)
+
+
+We use the following lemma:
+**Lemma 1.** _Given two invertible matrices_ _**A**_ _and_ _**B**_ _, their Kronecker product satisfies_ ( _**A**_ ⊗ _**B**_ ) [−][1] =
+_**A**_ [−][1] ⊗ _**B**_ [−][1] _._
+
+
+So that we get
+vec(X) ∼N ( _**X**_ _,_ Λ [†] ) _,_ with _**X**_ = vec( _**V**_ [†] _**µ**_ ) _,_ Λ = ( _ν_ _**I**_ + _**L**_ ) ⊗ _**V**_ [⊺] _**V**_ _._ (29)
+which ends the derivation.
+
+
+16
+
+
+A.3 THE APPLICABILITY OF GRAPH MARKOV RANDOM FIELDS
+
+
+In the experiments, we realize that our BWFlow does not achieve satisfactory results in tree dataset.
+This evokes us to investigate why this happened, and what properties tree graphs preserve that Graph
+Markov random fields fail to capture. In what follows, we will provide a comprehensive analysis on
+the GMRF and show why GMRF achieves a slightly worse performance in trees. We summarize the
+finding as,
+
+
+**Take-home Message:** Modelling Graphs with GMRF enhance algorithm’s ability in capturing
+the global properties encoded in the low-frequency components of the spectra, while retaining
+a similar capacity in capturing the high frequency components that encodes the fine-grained
+structures. With such a behavior, graphs with narrow spectral spread are more suitable to
+be modelled by GraphMRF. In datasets requiring less global modeling ability, BWFlow still
+preserves comparable capacity to the SOTA models.
+
+
+We now formally analyze GMRF. Given that our GMRF have an explicit form to constrain the graph
+distribution, it inherits certain inductive biases and we have to properly understand their generality,
+i.e., when we could use GraphMRF to model the distribution.
+
+
+**Plain graph Markov random fields.** To understand the scenarios which we can utilize MRF to
+model graphs, we first consider the simplest case when _**V**_ is rectangular orthogonal (semi-orthogonal)
+matrix such that _**V**_ [⊺] _**V**_ = _**I**_ and the mean _**µ**_ = 0, the probability density becomes,
+
+_P_ ( _**X**_ _,_ _**L**_ ) ∝ exp(− _**X**_ [⊺] ( _**L**_ + _ν_ _**I**_ ) _**X**_ ) = exp(− ∑ _**W**_ _uv_ ( _**x**_ _u_    - _**x**_ _v_ ) [2]    - _ν_ ∑ _**x**_ [2] _u_ [)] (30)
+{ _u,v_ }∈E _u_
+
+As _ν_ → 0, the exponent term inside becomes
+
+S( _**X**_ _,_ _**L**_ ) = − ∑ _**W**_ _uv_ ( _**x**_ _u_        - _**x**_ _v_ ) [2] = trace( _**X**_ [⊺] _**LX**_ ) _,_ (31)
+{ _u,v_ }∈E
+
+where we name S( _**X**_ _,_ _**L**_ ) as the smoothness of the graph features. The smoothness measures how
+similar the neighbors connected are. For instance, if there exists an edge between node _u_ and _v_
+weighted as _**W**_ _uv_, the likelihood will be higher if _**x**_ _u_ and _**x**_ _v_ be similar, so that ∥ _**x**_ _u_ - _**x**_ _v_ ∥ [2] are small.
+This suggests that the probability will be higher if the S( _**X**_ _,_ _**L**_ ) is small.
+
+
+With this pattern, it can be already shown that GMRF can capture the graphs with high smoothness.
+In the literature of spectral graph theory, the smooth graphs are commonly preserve highly dense
+low-frequencey components, which are mainly responsible for representing the global properties.
+Such a pattern can model the homophily, smoothness, planarity, and clustering of graphs, which
+suggest why BWFlow excels in modeling distributions such as SBM and planar graphs.
+
+
+**Graph Markov random fields with embeddings.** Now we move one step further to consider the
+graphs with linear transformer matrix _**V**_ . we can consider alinear transformer from _xv_ to _hv_, i.e.,
+giving _hv_ = _**V**_ _xv_ - _**µ**_ which gives the probability density as,
+
+_P_ (H _,_ _**L**_ ) ∝ exp(− trace(H [⊺] ( _**L**_ + _ν_ _**I**_ )H)) = exp(− _**w**_ _uv_ ∥ _hu_   - _hv_ ∥ [2]   - _ν_ ∑ ∥ _hu_ ∥F [2][)] (32)
+_u_
+
+where, H = [ _h_ 1 _,...hv,...hN_ ] [⊺] .
+
+
+Linear transformation provides a map from the feature space to the latent space, which can be
+considered as an embedding method to empower the models with better expressiveness. As a simple
+example, when the _**V**_ provides a negative projection, the mapping can capture the heterophily
+relationships, which means the nodes connected are dissimilar.
+
+
+Coincidently, this aligns well with the famous embedding method Node2Vec as in Grover & Leskovec
+(2016), where the edge weights are proportional to the negative distance, or the inner product of the
+embeddings. i.e.,
+_**W**_ _uv_ ∝ exp(−∥ _**V x**_ _u_       - _**V x**_ _v_ ∥F [2][)] (33)
+In Jiang et al. (2025) it is derived that learning the parameters of MRFs is intrinsically equivalent
+to learning embeddings similar to Node2Vec. As such, the expressiveness of MRFs are as good as
+Node2Vec, which grants its usage to molecule graphs, protein interaction networks, social networks,
+
+
+17
+
+
+and knowledge graphs. In our paper we make the assumption is that the linear mapping from
+_**X**_ the observation is shared. This requirement translates to that the two graphs should have the
+same embedding space and feature space, which is practical if the reference distribution and data
+distributions share the same space.
+
+
+**Graphs without features.** We wish to emphasize that even though the GraphMRF is constructed
+under the assumption that graph features exist, it is capable of modeling the non-attributed graphs,
+such as planar and SBM graphs. To do so, we consider the optimization over the Rayleigh function:
+It is shown that, if _v_ 1 _,...,vk_ −1 are orthonormal eigenvectors for _λ_ 1 _,...,λk_ −1, then the eigenvalues
+satisfy,
+
+
+_λk_ = min _**x**_ ≠0 _R_ ( _**x**_ ) _,_ with _R_ ( _**x**_ ) = _**[x]**_ _**x**_ _[T][T]_ _**[ Lx]**_ _**x**_ (34)
+_**x**_ ⊥ _**v**_ 1 _,...,_ _**v**_ _k_ −1
+
+
+In such a scenario, the graphs are no longer related to the actual node features, but instead, the
+eigenvectors _**v**_ _k_ serve as an intrinsic graph feature. It is noted that _R_ ( _**x**_ ) is the normalized form
+of the smoothness as in Eq. (30). This means that if the graphs are smooth (the spectrum of the
+graph Laplacian focuses on the low-frequency components), the MRF model would give a higher
+probability compared to the graphs with wider spectral spread. This pattern emphasizes the lowfrequency components when building the graph interpolations, which makes the whole algorithm
+succeed in modelling the graph distributions of most plain graph datasets, such as Planar, SBM,
+TLS, COMM20 datasets. There is no surprise that our algorithm gives better training and sampling
+dynamics in those datasets.
+
+
+It is also worth pointing out that there exists exceptions that GraphMRF is less capable of modelling.
+Tree graphs are an example of graphs with wider spectral spread. They are acyclic and minimally
+connected, lacking local clustering and cycles that would result in a highly concentrated spectrum.
+For this type of graphs, BWFlow will not have a significant benefit in modelling capacity. However,
+graphs with wider spectral concentration are relatively rare and most are artificial, such as scale-free
+and expander graphs. In contrast, real-world graphs, such as social networks, citation graphs, traffic
+networks, and molecular graphs, often contain cycles and densely connected subgraphs. They exhibit
+strong community structure, local regularity and high redundancy. These characteristics contribute to
+a highly concentrated Laplacian spectrum, with most eigenvalues clustered together, which aligns
+well with the GraphMRF prior. Thus, we believe using GMRF and BWFlow to solve graph generation
+is in general a valuable method.
+
+
+**Connection** **to** **Latent** **Generative** **Models.** Although BWFlow is not directly formulated as a
+latent diffusion/flow model, it shares a strong conceptual connection with this family of generative
+approaches, especially for graphs (Siraudin & Morris, 2026; Osman et al., 2025). Latent diffusion
+typically aims to 1) improve computational efficiency and 2) map data into a smoother space where
+modeling becomes easier. BWFlow does not perform dimensionality reduction, but it is motivated by
+a similar principle: transforming graphs into a smoother domain can stabilize training and improve
+sampling efficiency. In BWFlow, this domain is the MRF space, which is manually constructed
+rather than learned, but exhibits properties desirable in latent diffusion. As discussed previously,
+transforming a graph into the MRF representation amplifies low-frequency (global) components,
+paralleling observations in latent diffusion where early latent representations retain a larger proportion
+of low-frequency information—an effect known to benefit generative modeling Park et al. (2023).
+This perspective provides an alternative interpretation of why BWFlow yields robust and efficient
+generation dynamics.
+
+
+Furthermore, this viewpoint suggests a promising direction for simplifying our current design. In
+the present implementation, the MRF representation is mapped back to the graph domain before
+learning the velocity field via a graph transformer. From a latent-diffusion standpoint, an alternative
+would be to directly parameterize the velocity in the MRF space and train via KL divergence between
+colored Gaussian distributions, potentially improving efficiency. We leave this direction for future
+exploration.
+
+
+18
+
+
+B PROOFS
+
+
+B.1 WASSERSTEIN DISTANCE BETWEEN TWO COLORED GAUSSIAN DISTRIBUTIONS
+
+
+We first prove the lemma that captures the Wasserstein distance between two colored Gaussians,
+which will be used in deriving our Bures-Wasserstein distances in graph generations.
+
+
+**Lemma** **2.** _Consider_ _two_ _measures_ _η_ 0 ∼N ( _**µ**_ 0 _,_ Σ0) _and_ _η_ 1 ∼N ( _**µ**_ 1 _,_ Σ1) _,_ _describing_ _two_
+_colored Gaussian distributions with mean_ _**µ**_ 0 _,_ _**µ**_ 1 _and covariance matrices_ Σ0 _,_ Σ1 _._ _Then the_
+_Wasserstein distance between these probability distributions is given by_
+
+
+1/2
+(W2 ( _η_ 0 _,η_ 1)) [2] = ∥ _**µ**_ 0 − _**µ**_ 1∥ [2] + Tr (Σ0 + Σ1 − 2 (Σ [1] 0 [/][2][Σ][1][Σ] 0 [1][/][2][)] ) _._
+
+
+_Proof._ We first state the following proposition.
+
+**Proposition** **4.** _(Translation_ _Invariance_ _of_ _the_ _2-Wasserstein_ _Distance_ _for_ _Gaussian_ _Measures)_
+_Consider_ _two_ _measures_ _η_ 0 ∼N ( _**µ**_ 0 _,_ Σ0) _and_ _η_ 1 ∼N ( _**µ**_ 1 _,_ Σ1) _and_ _their_ _centered_ _measure_ _as_
+_η_ ˜0 = N (0 _,_ Σ0) _and_ _η_ ˜1 = N (0 _,_ Σ1) _, the squared Wasserstein distance decomposes as_
+
+W2 [2] [(] _[η]_ [0] _[,η]_ [1][) = ∥] _**[µ]**_ [0] [−] _**[µ]**_ [1][∥] 2 [2] [+ W] 2 [2] [(] _[η]_ [˜][0] _[,]_ [ ˜] _[η]_ [1][)]
+
+
+_Proof_ :
+
+Consider two random vectors X _,_ Y distributed as _η_ 0 _,η_ 1,
+
+X = _**µ**_ 0 + X [˜] _,_ Y = _µ_ 1 + Y [˜] _,_ with X [˜] ∼ _η_ ˜0 _,_ Y [˜] ∼ _η_ ˜1 _._
+
+For any coupling (X _,_ Y), we consider the expected squared Euclidean distance,
+
+
+2
+EX _,_ Y ∥X −Y∥ [2] = EX _,_ Y ∥ _**µ**_ 0 − _**µ**_ 1 + (X [˜]      - Y)∥ [˜] _._
+
+(35)
+= ∥ _**µ**_ 0 − _**µ**_ 1∥ [2] + 2 ⟨ _**µ**_ 0 − _µ_ 1 _,_ X [˜]                - Y⟩+ [˜] EX˜ _,_ Y [˜][∥] X [˜]                - Y∥ [˜] [2]
+
+Since X [˜] and Y [˜] both have zero mean, we have E[X [˜] - Y] = [˜] 0 so the cross-term vanishes. Thus,
+
+E∥X −Y∥ [2] = ∥ _**µ**_ 0 − _**µ**_ 1∥ [2] + E∥X [˜]           - Y∥ [˜] [2] (36)
+
+Take the definition of 2-Wasserstein distance, the infimum over all couplings directly yields
+
+(W2( _η_ 0 _,η_ 1)) [2] = inf [−Y∥][2] _[ dπ]_ [(X] _[,]_ [Y)] _[.]_
+_π_ ∈Π( _η_ 0 _,η_ 1) [∫∥X] (37)
+
+= ∥ _**µ**_ 0 − _**µ**_ 1∥ [2] + W2 [2] [(] _[η]_ [˜][0] _[,]_ [ ˜] _[η]_ [1][)]
+
+This completes the proof of Proposition 4.
+
+
+Now we prove the flowing proposition, which will give us our lemma.
+**Proposition 5.** _Given two centered measures as_ _η_ ˜0 = N (0 _,_ Σ0) _and_ _η_ ˜1 = N (0 _,_ Σ1)
+
+
+1/2
+W2 [2] [(] _[η]_ [˜][0] _[,]_ [ ˜] _[η]_ [1][) =][ Tr] [(][Σ][0] [+][ Σ][1] [−] [2] [(][Σ] 1 [1][/][2][Σ][0][Σ] 1 [1][/][2][)] ) _._ (38)
+
+
+_proof._ The coupling _π_ of _η_ ˜0 and _η_ ˜1 is a joint Gaussian measure with zero mean and covariance matrix
+
+
+_**C**_
+Σ _c_ [Σ][0] (39)
+= ( _**C**_ _[T]_ Σ1 [) ⪰] [0] _[,]_
+
+where _**C**_ is the cross-covariance and ⪰ means the matrix is positive semi-definitive (PSD). The
+expected squared distance between the two random vectors (X _,_ Y) drawn from _π_ is then described
+as,
+E∥X −Y∥ [2] = Tr(E[(X −Y)(X −Y) [⊺] ])
+(40)
+= Tr(Σ0) + Tr(Σ1) − 2 Tr( _**C**_ ) _._
+
+The definition of Wasserstein distance gives,
+
+W _c_ ( _η_ 0 _,η_ 1) = inf [−Y∥][2] (41)
+_π_ ∈Π( _η_ 0 _,η_ 1) [E][∥X]
+
+
+19
+
+
+Thus, minimizing the Wasserstein distance is equivalent to maximizing Tr( _**C**_ ) over all _**C**_ subject
+to the joint covariance is positive semi-definite (PSD). It turns out (see Dowson & Landau (1982);
+Olkin & Pukelsheim (1982); Takatsu (2010) ) that the condition in Eq. (39) is equivalent to,
+
+
+Σ1 − _**C**_ [⊺] Σ [−] 0 [1] _**[C]**_ [⪰] [0][ ↔] [Σ] 0 [−][1][/][2] _**C**_ Σ [−] 1 [1][/][2] has operator norm ≤ 1 (42)
+
+So we denote _**K**_ ∶= Σ [−] 0 [1][/][2] _**C**_ Σ [−] 1 [1][/][2] with ∥ _**K**_ ∥op ≤ 1. Then
+
+Tr( _**C**_ ) = Tr (Σ [1] 0 [/][2] _**[K]**_ [Σ] 1 [1][/][2][) =][ Tr] [(] _**[K]**_ [Σ] 1 [1][/][2][Σ] 0 [1][/][2][)] _[.]_
+
+
+Using von Neumann trace inequality, its trace inner-product with _**K**_ is maximized by choosing
+_**K**_ = _**I**_ on the support.
+
+
+~~√~~
+max _**M**_ =
+∥ _**K**_ ∥ _op_ ≤1 [Tr][(] _**[KA]**_ [) =][ Tr] [(] _**[M]**_ [ 1][/][2][)] _[,]_
+
+
+_**AA**_ [⊺] = Σ [1] 1 [/][2][Σ][0][Σ] 1 [1][/][2]
+
+
+Hence the optimal value of Tr( _**C**_ ) is
+
+
+1/2
+Tr( _**C**_ [∗] ) = Tr [(Σ [1] 1 [/][2][Σ][0][ Σ] 1 [1][/][2][)] ]
+
+
+Substituting this optimal value into the expression of Wasserstein distance, we obtain
+
+
+1/2
+W2 [2] [(] _[η]_ [˜][0] _[,]_ [ ˜] _[η]_ [1][) =][ Tr][(][Σ][0][) +][ Tr][(][Σ][1][) −] [2 Tr] [[(][Σ] 1 [1][/][2][Σ][0][ Σ] 1 [1][/][2][)] ] _._ (43)
+
+
+This completes the proof of proposition 5. Taking Proposition 4 and Proposition 5 together, we
+proved Lemma 2.
+
+
+B.2 DERIVATION OF THE GRAPH WASSERSTEIN DISTANCE UNDER MRF
+
+
+We then prove the Bures-Wasserstein distance for two graph distributions. We restate Proposition 1,
+
+
+**Proposition 6** (Bures-Wasserstein Distance) **.** _Consider two same-sized graphs_ G0 ∼ _p_ (X0 _,_ E0)
+_and_ G1 ∼ _p_ (X1 _,_ E1) _with_ _**V**_ _shared for two graphs, described by the distribution in Definition 2._
+_When_ _the_ _graphs_ _are_ _equipped_ _with_ _graph_ _Laplacian_ _matrices_ _**L**_ 0 _and_ _**L**_ 1 _satisfying_ _1)_ _is_
+_Positive_ _Semi-Definite_ _(PSD)_ _and_ _2)_ _has_ _only_ _one_ _zero_ _eigenvalue._ _The_ _Bures-Wasserstein_
+_distance between these two random graph distributions is given by_
+
+
+1/2
+_dBW_ (G0 _,_ G1) = ∥ _**X**_ 0 − _**X**_ 1∥ _F_ [2] [+] _[ β]_ [ Tr] [(] _**[L]**_ 0 _[†]_ [+] _**[ L]**_ 1 _[†]_ [−] [2] [(] _**[L]**_ 0 _[†]_ [/][2] _**[L]**_ 1 _[†]_ _**[L]**_ _[†]_ 0 [/][2][)] ) _,_ (44)
+
+_as ν_ → 0 _and β_ _is a constant related to the norm of_ _**V**_ _._
+
+
+Specifically, Definition 2 uses graph Markov random fields to describe a graph as
+
+_p_ (G; _**G**_ ) = _p_ (X _,_ E; _**X**_ _,_ _**W**_ ) = _p_ (X ; _**X**_ _,_ _**W**_ ) ⋅ _p_ (E; _**W**_ ) where E ∼ _δ_ ( _**W**_ ) and
+
+(45)
+vec(X) ∼N ( _**X**_ _,_ **Λ** [†] ) _,_ with _**X**_ = vec( _**V**_ [†] _**µ**_ ) _,_ **Λ** = ( _ν_ _**I**_ + _**L**_ ) ⊗ _**V**_ [⊺] _**V**_ _._
+
+
+With the graph Wasserstein distance defined as,
+
+(Graph Wasserstein Distance) _d_ BW(G0 _,_ G1) ∶= W _c_ ( _η_ G0 _,η_ G1) = W _c_ ( _η_ X0 _,η_ X1) + W _c_ ( _η_ E0 _,η_ E1) _._
+
+
+We first consider calculating W _c_ ( _η_ X0 _,η_ X1). Specifically, this is the distance between two colored
+Gaussian measures where
+
+_ηi_ ∼N( _**µ**_ [′] _i_ _[,]_ [Σ] _[i]_ [)] _[,]_ _i_ = 0 _,_ 1 _,_
+
+(46)
+where _**µ**_ [′] _i_ [=] _**[ V]**_ _[i]_ [⊗] _**[µ]**_ _[i]_ [and][ Σ][−] _i_ [1] = Λ _i_ = ( _ν_ _**I**_ + _**L**_ _i_ ) ⊗( _**V**_ _i_ [⊺] _**[V]**_ _[i]_ [)] _[.]_
+
+where we first assume that these two Gaussians are emitted from different linear transformation
+matrices _**V**_ 0 and _**V**_ 1. This will bring us the most general and flexible form that could be universally
+applicable, and potentially can bring more insights to future work. Next, we will inject a few
+assumptions to arrive at a more practical form for building the flow matching models.
+
+
+20
+
+
+An important property of Kronecker product: Given two invertible matrices _**A**_ and _**B**_, their Kronecker
+product satisfies ( _**A**_ ⊗ _**B**_ ) [−][1] = _**A**_ [−][1] ⊗ _**B**_ [−][1] . Using such a property, in the limit as _ν_ → 0, we have
+
+Λ _i_ → _**L**_ _i_ ⊗( _**V**_ _i_ [⊺] _**[V]**_ _[i]_ [)] �⇒ Σ _i_ = _**L**_ [−] _i_ [1] ⊗( _**V**_ _i_ [⊺] _**[V]**_ _[i]_ [)][−][1] _[.]_ (47)
+
+
+According to Lemma 2, the squared 2-Wasserstein distance between two Gaussian measures is given
+by
+
+
+W2 [2][(] _[η]_ [0] _[,η]_ [1][) = ∥] _**[µ]**_ [′] 0 [−] _**[µ]**_ 1 [′] [∥][2]
+
+      - **�����������** �� **������������**
+Mean term
+
+
+1/2
++ Tr(Σ0 + Σ1 − 2(Σ [1] 0 [/][2][Σ][1][ Σ] 0 [1][/][2][)] )
+
+ - **������������������������������������������������������** - **������������������������������������������������������** Covariance Term
+
+
+_._ (48)
+
+
+**Mean Term.** Since _**µ**_ [′] _i_ [=] _**[ V]**_ [⊗] _**[µ]**_ _[i]_ [, the mean difference becomes]
+
+∥ _**µ**_ [′] 0 [−] _**[µ]**_ 1 [′] [∥][2][ = ∥] _**[V]**_ [0] _**[µ]**_ [0] [−] _**[V]**_ [1] _**[µ]**_ [1][∥] _F_ [2] [= ∥] _**[X]**_ [0] [−] _**[X]**_ [1][∥] F [2] (49)
+
+
+**Covariance term.** Using the property of the Kronecker product, the square root of Eq. (47) factors
+in as
+Σ [1] _i_ [/][2] = _**L**_ [−] _i_ [1][/][2] ⊗( _**V**_ _i_ [⊺] _**[V]**_ _[i]_ [)][−][1][/][2] _[.]_ (50)
+and
+Σ [1] 0 [/][2][Σ][1][ Σ] 0 [1][/][2] = ( _**L**_ [−] 0 [1][/][2] _**L**_ [−] 1 [1] _**[L]**_ 0 [−][1][/][2] ) ⊗(( _**V**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][(] _**[V]**_ 1 [⊺] _**[V]**_ [1][)][−][1][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][)] (51)
+
+
+We first look into the term related to _**V**_ 0 and _**V**_ 1, which is,
+
+Tr(( _**V**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][(] _**[V]**_ 1 [⊺] _**[V]**_ [1][)][−][1][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][) =][ Tr][((] _**[V]**_ 1 [⊺] _**[V]**_ [1][)][−][1][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][)]
+
+(52)
+= Tr(( _**V**_ 1 [⊺] _**[V]**_ [1][)][−][1][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][)]
+
+As Tr( _**A**_ + _**B**_ ) = Tr( _**A**_ ) + Tr( _**B**_ ) the covariance term becomes
+
+
+Covariance Term
+
+
+1/2
+= Tr(Σ0 + Σ1 − 2(Σ [1] 0 [/][2][Σ][1][ Σ] 0 [1][/][2][)] )
+
+= Tr(Σ0) + Tr(Σ1) − 2Tr ((Σ [1] 0 [/][2][Σ][1][ Σ] 0 [1][/][2][)][1][/][2][)]
+
+1/2
+= Tr( _**L**_ [−] 0 [1] [⊗(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][ +] _**[ L]**_ 1 [−][1] [⊗(] _**[V]**_ 1 [⊺] _**[V]**_ [1][)][−][1][ −] [2] [(] _**[L]**_ 0 [−][1][/][2] _**L**_ [−] 1 [1] _**[L]**_ 0 [−][1][/][2] ) ⊗( _**V**_ 1 [⊺] _**[V]**_ [1][)][−][1][/][2][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][)]
+(53)
+Given that Tr( _**A**_ ⊗ _**B**_ ) = Tr( _**A**_ ) Tr( _**B**_ ) and Tr( _**V**_ [⊺] _**V**_ ) = ∥ _**V**_ ∥F [2] [for any real-valued matrix] _**[ V]**_ [, we]
+can further derive,
+
+Covariance Term = Tr[( _**V**_ 0 [⊺] _**[V]**_ [0][)][−][1][]] [Tr][(] _**[L]**_ 0 [†][) +][ Tr][[(] _**[V]**_ 1 [⊺] _**[V]**_ [1][)][−][1][]] [Tr][(] _**[L]**_ 1 [†][)]
+
+1/2 (54)
+
+          - 2Tr( _**L**_ [†] 0 [/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] ⋅ Tr[( _**V**_ 1 [⊺] _**[V]**_ [1][)][−][1][/][2][(] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][/][2][]] _[.]_
+
+Unfortunately, to simplify this equation, we have to make the two gram matrix, ( _**V**_ 0 [⊺] _**[V]**_ [0][)][−][1] [and]
+( _**V**_ 1 [⊺] _**[V]**_ [1][)][−][1] [agree, i.e.,][ (] _**[V]**_ 1 [⊺] _**[V]**_ [1][)][−][1] [= (] _**[V]**_ 0 [⊺] _**[V]**_ [0][)][−][1][.] [This will be satisfied if and only if there exists an]
+orthogonal matrix _**Q**_ such that
+_**V**_ 1 [†] [=] _**[ V]**_ 0 [†] _**[Q]**_ _[.]_
+Thus, to further process, we simply consider the case when _**V**_ 1 and _**V**_ 0 are exactly the same, i.e.,
+_**V**_ 1 _**V**_ 0 _**V**_ (we have already discussed how realistic this assumption is in Section A.3). So that we
+= =
+work under the assumptions that ∥ _**V**_ 0 [†][∥] _F_ [2] [= ∥] _**[V]**_ 1 [†][∥] _F_ [2] [=] _[ β]_ [, which simplify the trace as]
+
+1/2
+Covariance Term = _β_ ⋅ Tr( _**L**_ [†] 0 [+] _**[ L]**_ 1 [†] [−] [2] [(] _**[L]**_ 0 [†][/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] ) _._ (55)
+
+
+Combining the mean term and the covariance term, we obtain the Wasserstein distance of
+W _c_ ( _η_ X0 _,η_ X1)
+
+For calculating W _c_ ( _η_ E0 _,η_ E1), we have the freedom to choose the cost function when obtaining the
+Wasserstein distance. Note that _**W**_ serves as the prior for the Gaussian covariance matrix Σ, where
+
+
+21
+
+
+the covariance has to be positive-semi definite. Thus, according to Bhatia et al. (2019), a proper
+distance between two positive semi-definite matrices is measured by
+
+
+2
+W( _η_ E0 _,η_ E1) = ∥Σ [1] 0 [/][2]          - Σ [1] 1 [/][2][∥] _F_ _[.]_ (56)
+
+
+Coincidently, this is another usage case when the Bures-Wasserstein metric is utilized. Putting
+everything together, the Wasserstein distance in the limit _ν_ → 0 is
+
+
+1/2
+_d_ BW(G0 _,_ G1) = ∥ _**V**_ 0 _**µ**_ 0 − _**V**_ 1 _**µ**_ 1∥ _F_ [2] [+ (] _[β]_ [ +][ 1][) ⋅] [Tr][(] _**[L]**_ 0 [†] [+] _**[ L]**_ 1 [†] [−] [2] [(] _**[L]**_ 0 [†][/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] ) _._
+
+
+= ∥ _**X**_ 0 − _**X**_ 1∥ _F_ [2]
+
+ - **���������������**  - **���������������**
+_d_ _**X**_ ( _**X**_ 0 _,_ _**X**_ 1)
+
+
+1/2
++( _β_ + 1)⋅ Tr( _**L**_ [†] 0 [+] _**[ L]**_ 1 [†] [−] [2] [(] _**[L]**_ 0 [†][/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] )
+
+    - **��������������������������������������������������������**     - **��������������������������������������������������������**     
+_d_ _**L**_ ( _**L**_ 0 _,_ _**L**_ 1)
+
+
+(57)
+_._
+
+
+This expression separates the contribution of the mean difference (transformed by _**V**_ ) and the
+discrepancy between the covariance structures (encoded in _**L**_ 0 and _**L**_ 1). This could be further used to
+derive BW interpolation, which we will show in Section C.1. In the main body, constant _β_ actually
+corresponds to _β_ + 1 here. This complete our derivation in Proposition 1.
+
+
+C DERIVATION OF BURES-WASSERSTEIN FLOW MATCHING
+
+
+In order to build the flow matching framework, we need to derive the optimal interpolation and
+the corresponding velocities for the probability path _p_ ( _Gt_ ∣ _G_ 0 _,G_ 1). This is achieved via the OT
+displacement between two graph distributions.
+
+
+C.1 THE BURES-WASSERSTEIN GRAPH INTERPOLATION
+
+
+We aim to recover the proposition stated as follows.
+
+
+**Proposition** **7** (Bures-Wasserstein interpolation) **.** _The_ _graph_ _minimizer_ _of_ _Eq._ (10) _,_ G _t_ =
+{V _,_ E _t,_ X _t_ } _, have its node features following a colored Gaussian distribution,_ X _t_ ∼N( _**X**_ _t,_ **Λ** _[†]_ _t_ [)]
+_with_ **Λ** _t_ = ( _ν_ _**I**_ + _**L**_ _t_ ) ⊗ _**V**_ [⊺] _**V**_ _and edges following_ E _t_ ∼ _δ_ ( _**W**_ _t_ ) _, specifically,_
+
+1/2 2
+_**L**_ _[†]_ _t_ [=] _**[ L]**_ 0 [1][/][2] ((1 − _t_ ) _**L**_ _[†]_ 0 [+] _[ t]_ [(] _**[L]**_ 0 _[†]_ [/][2] _**[L]**_ 1 _[†]_ _**[L]**_ _[†]_ 0 [/][2][)] ) _**L**_ [1] 0 [/][2] _[,]_ _**X**_ _t_ = (1 − _t_ ) _**X**_ 0 + _t_ _**X**_ 1 (58)
+
+
+The interpolation is an extension of the concept of mean, where in the optimal transport world, the
+Wasserstein barycenter (mean) of measures _η_ 0 _,...ηm_ −1 under weights _λ_ 0 _,...λm_ −1 can be derived
+over the following optimization problem:
+
+
+_η_ ¯ = arg min
+_η_
+
+
+_m_ −1
+∑ _λj_ (W2 ( _η,ηj_ )) [2] (59)
+_j_ =0
+
+
+When _m_ = 2, based on the Bures-Wasserstein (BW) distance, we can define the OT displacement
+minimization problem on graphs described as,
+
+G _t_ = arg min (1 − _t_ ) _d_ BW(G0 _,_ G) + [˜] _td_ BW(G [˜] _,_ G1) _._ (60)
+G˜
+
+where _d_ BW(G0 _,_ G1) is described in Proposition 1. The optimal graph interpolation is the solution to
+the problem.
+
+
+In the setting of graph, this becomes a two-variable optimization problem, where
+
+X _t,_ E _t_ = arg min (1 − _t_ ) _d_ BW(G0 _,_ G) + [˜] _td_ BW(G [˜] _,_ G1) _._ (61)
+X˜ _,_ E [˜]
+
+Fortunately, recall in Eq. (57) that our distance measurement _d_ BW(G0 _,_ G1) is decomposed into
+_d_ _**X**_ ( _**X**_ 0 _,_ _**X**_ 1) and _d_ _**L**_ ( _**L**_ 0 _,_ _**L**_ 1), then the optimization over node and edges are disentangleable into
+
+
+22
+
+
+solving the two sub optimization problem,
+
+Sub-question 1: _**X**_ ¯ _t_ = arg min _**X**_ ˜ (1 − _t_ )∥ _**X**_ 0 − _**X**_ [˜] ∥ _F_ [2] [+] _[ t]_ [∥] _**X**_ [˜]        - _**X**_ 1∥ _F_ [2]
+
+(62)
+Sub-question 2: _**L**_ ¯ _t_ = arg min (1 − _t_ ) _d_ _**L**_ ( _**L**_ 0 _,_ _**L**_ [˜] ) + _td_ _**L**_ ( _**L**_ 1 _,_ _**L**_ [˜] )
+_**L**_ ˜
+
+This two problems are completely disentangled thus we can solve them separately.
+
+
+**Sub-question 1** For the first problem, we simply set the derivate to 0 and get,
+
+(1 − _t_ )( _**X**_ [˜]         - _**X**_ 0) + _t_ ( _**X**_ [˜]         - _**X**_ 1) = 0 → _**X**_ _t_ = (1 − _t_ ) _**X**_ 0 + _t_ ( _**X**_ 1) (63)
+
+
+**Subquestion** **2** The second subproblem is equivalent in deriving the covariance of BuresWasserstein interpolation between two Gaussian measures, _η_ 0 ∼N (0 _,_ _**L**_ [†] 0 [)] [and] _[η]_ [1] [∼N (][0] _[,]_ _**[L]**_ 1 [†][)][.]
+This problem has been properly addressed in Haasler & Frossard (2024) and here we just verbose
+their results. For more details we refer the reader to Haasler & Frossard (2024) for a further
+discussion.
+
+The optimal transport geodesic between _η_ 0 ∼N (0 _,_ _**L**_ [†] 0 [)] [and] _[η]_ [1] [∼N (][0] _[,]_ _**[L]**_ 1 [†][)] [is] [defined] [by] _[η][t]_ [=]
+((1 − _t_ ) _I_ + _t_ _**T**_ )# _η_ 0, where the symbol “#” denotes the push-forward of a measure by a mapping, _**T**_
+is a linear map that satisfies _**T L**_ [†] 0 _**[T]**_ [=] _**[ L]**_ 1 [†][.]
+
+
+We define a new matrix _**M**_ and do normalization, which leads to,
+
+_**T**_ = _**L**_ [1] 0 [/][2] _**[ML]**_ 0 [1][/][2] (64)
+Plug in gives,
+
+⊺
+_**T L**_ [†] 0 _**[T]**_ [ ⊺] [=] _**[ L]**_ [1] 0 [/][2] _**[ML]**_ 0 [1][/][2] _**[L]**_ 0 [†] [(] _**[L]**_ 0 [1][/][2] _**[ML]**_ 0 [1][/][2][)] (65)
+
+= _**L**_ [1] 0 [/][2] _**[MM]**_ [ ⊺] _**[L]**_ 0 [1][/][2] _[.]_
+
+So that we obtain
+_**L**_ [†] 1 [=] _**[ L]**_ 0 [1][/][2] _**[MM]**_ [ ⊺] _**[L]**_ 0 [1][/][2] → _**M**_ = ( _**L**_ [†] 0 [/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)][1][/][2] (66)
+Replace _**T**_ and we get,
+
+1/2
+_**T**_ = _**L**_ [1] 0 [/][2] ( _**L**_ [†] 0 [/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] _**L**_ [1] 0 [/][2] (67)
+
+Given that the geodesic _ηt_ = ((1 − _t_ ) _**I**_ + _t_ _**T**_ )# _η_ 0 which also has a Gaussian form _ηt_ ∼N (0 _,_ Σ _t_ ), We
+can then write the covariance matrix and obtain
+_**L**_ [†] _t_ [=][ Σ] _[t]_ [ = ((][1][ −] _[t]_ [)] _[I]_ [ +] _[ t]_ _**[T]**_ [ )] _**[L]**_ 0 [†][((][1][ −] _[t]_ [)] _[I]_ [ +] _[ t]_ _**[T]**_ [ )]
+
+1/2 1/2
+= _**L**_ [1] 0 [/][2] ((1 − _t_ ) _**L**_ [†] 0 [+] _[ t]_ [(] _**[L]**_ 0 [†][/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] ) _**L**_ [1] 0 [/][2] _**[L]**_ 0 [†] _**[L]**_ [1] 0 [/][2] ((1 − _t_ ) _**L**_ [†] 0 [+] _[ t]_ [(] _**[L]**_ 0 [†][/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] ) _**L**_ [1] 0 [/][2]
+
+1/2 2
+= _**L**_ [1] 0 [/][2] ((1 − _t_ ) _**L**_ [†] 0 [+] _[ t]_ [(] _**[L]**_ 0 [†][/][2] _**[L]**_ 1 [†] _**[L]**_ [†] 0 [/][2][)] ) _**L**_ [1] 0 [/][2]
+
+(68)
+Which ends the derivation.
+
+
+C.2 DERIVING THE VELOCITY OF BW INTERPOLATION
+
+
+We first show the general form of the velocity term for the Gaussian and Dirac measures.
+
+
+**Gaussian measure.** For a time-parametrized Gaussian density _pt_ ( _x_ ) = N ( _x_ ; _**µ**_ _t,_ Σ _t_ ), the velocity
+field _vt_ ( _x_ ) satisfies the continuity equation
+_∂tpt_ + ∇⋅( _ptvt_ ) = 0 _,_
+is an affine function of _x_ . And the instantaneous velocity field follows,
+
+_vt_ (X) = _**µ**_ ˙ _t_ + [1] 2 ˙Σ _t_ Σ [−] _t_ [1] [(X] [−] _**[µ]**_ _[t]_ [)] _[.]_
+
+
+23
+
+
+**Dirac measure.** When the measure is a Dirac function,
+
+_pt_ ( _x_ ) = _δ_ (⋅ _,_ _**µ**_ _t_ ) _._
+
+
+We can just consider it as the limited case of the Gaussian measure, when Σ _t_ 0. So that the velocity
+→
+at simply takes
+_vt_ ( _x_ ) = _**µ**_ ˙ _t._
+
+
+We then move to prove the following proposition for Bures-wasserstein velocity.
+
+
+_Proof:_
+
+
+**The graph structure velocity.** As we assume the edges, _Et_ ∼ _δ_ (⋅ _,_ _**W**_ _t_ ) _,_ following a dirac distribution, the velocity is defined as
+_vt_ ( _Et_ ) = _**W**_ [˙] _t._
+
+Given that, _**W**_ [˙] _t_ = diag( _**L**_ [˙] _t_ ) − _**L**_ [˙] _t_, we transit fo deriving the derivative of the Laplacian matrix, _**L**_ [˙] _t_ .
+Using the fact that,
+_d_ _[d]_ _**[A]**_
+_dt_ [(] _**[A]**_ [−][1][) = −] _**[A]**_ [−][1] _dt_ _**[A]**_ [−][1]
+
+we obtain the derivate of Laplacian matrix,
+
+
+_**L**_ ˙ _t_ = _[d]_ [(] _dt_ [Σ] _t_ [†][)] = Σ [†] _t_ _ddt_ Σ _t_
+
+
+(70)
+_dt_ _**[L]**_ _[t]_
+
+
+Σ _t_ _d_ Σ _t_
+
+_t_
+_dt_ [Σ][†] [=] _**[ L]**_ _[t]_ _dt_
+
+
+According to Eq. (68) and Eq. (67), the covariance matrix is defined through the interpolation,
+
+
+Σ _t_ = ((1 − _t_ ) _**I**_ + _t_ _**T**_ ) _**L**_ [†] 0 [((][1][ −] _[t]_ [)] _**[I]**_ [ +] _[ t]_ _**[T]**_ [ ) ∶=] _**[ R]**_ _[t]_ _**[L]**_ [†] 0 _**[R]**_ _[t]_ (71)
+
+where _**R**_ _t_ = (1 − _t_ ) _**I**_ + _t_ _**T**_ . Taking the derivative, we get,
+
+˙Σ _t_ = _dt_ _[d]_ [(] _**[R]**_ _[t]_ [Σ][0] _**[R]**_ _[t]_ [) =] _**[ R]**_ _t_ [′] [Σ][0] _**[R]**_ _[t]_ [+] _**[ R]**_ _[t]_ [Σ][0] _**[R]**_ _t_ [′] [= (] _**[T]**_ [−] _**[I]**_ [)][Σ][0] _**[R]**_ _[t]_ [+] _**[ R]**_ _[t]_ [Σ][0][(] _**[T]**_ [−] _**[I]**_ [)] (72)
+
+Using the fact that Σ0 _**R**_ _t_ _**R**_ _t_ Σ0 Σ _t_, we obtain the covariance gradient
+= =
+
+˙Σ _t_ = ( _**T**_                    - _**I**_ )Σ _t_ + Σ _t_ ( _**T**_                    - _**I**_ ) (73)
+
+
+So that,
+
+
+_t_ [)] _d_ Σ _t_
+
+- _**L**_ [˙] _t_ = _[d]_ [(] _dt_ [Σ][†] = Σ [†] _t_ _dt_
+
+
+_dt_ _**[L]**_ _[t]_
+
+
+_d_ Σ _t_ _d_ Σ _t_
+
+_t_
+_dt_ [Σ][†] [=] _**[ L]**_ _[t]_ _dt_
+
+
+= _**L**_ _t_ (( _**T**_ - _**I**_ ) _**L**_ [†] _t_ [+] _**[ L]**_ _t_ [†][(] _**[T]**_ [−] _**[I]**_ [))] _**[L]**_ _[t]_
+= _**L**_ _t_ ( _**T**_ - _**I**_ ) + ( _**T**_ - _**I**_ ) _**L**_ _t_
+= _**L**_ _t_ _**T**_ + _**T L**_ _t_ - 2 _**L**_ _t_
+
+
+(74)
+
+
+Thus, _**L**_ [˙] _t_ = 2 _**L**_ _t_ - _**L**_ _t_ _**T**_ - _**T L**_ _t_ .
+
+Given that _**L**_ _t_ = _**D**_ _t_ - _**W**_ _t_ so that _**W**_ _t_ = diag( _**L**_ _t_ )− _**L**_ _t_, taking the derivative gives _**W**_ [˙] _t_ = diag( _**L**_ [˙] _t_ )− _**L**_ [˙] _t_ .
+As we assume the edges, _Et_ ∼ _δ_ (⋅ _,_ _**W**_ _t_ ), the derivate directly yields the velocity,
+
+_vt_ ( _Et_ ∣ _G_ 0 _,G_ 1) = _**W**_ ˙ _t_ = diag( _**L**_ [˙] _t_ ) − _**L**_ [˙] _t._
+
+
+24
+
+
+**The node feature velocity.** The instantaneous velocity field follows,
+
+_vt_ (X ∣ _G_ 0 _,G_ 1) = _**µ**_ ˙ _t_ + [1] 2 ˙Σ _t_ Σ [−] _t_ [1] [(X] [−] _**[µ]**_ _[t]_ [)] _[.]_
+
+The mean gradient interpolating _η_ 0 and _η_ 1 can be written as _**µ**_ ˙ _t_ = _**X**_ 1 - _**X**_ 0 and _**X**_ _t_ = (1− _t_ ) _**X**_ 0 + _t_ _**X**_ 1.
+So that the velocity leads to,
+
+
+˙†
+
+_vt_ (X ∣ _G_ 0 _,G_ 1) = _**X**_ 1 − _**X**_ 0 + [1] 2 _**L**_ _t_ _**[L]**_ _[t]_ [ (X] [−] _**[X]**_ _[t]_ [)] _[.]_
+
+However, in practice, we do not need such a complicated velocity term. We wish to avoid the
+estimation of complex gradient-inverse term so that we can escape from the complicated computation.
+Under the assumption that the amplitude of covariance is much smaller than the mean difference,
+we can omit the second term and just keep the mean difference. Hence the instantaneous velocity is
+simply described as
+
+
+1
+_vt_ ( _Xt_ ∣ _G_ 0 _,G_ 1) = _**X**_ 1 − _**X**_ 0 = _X_ 1 − _X_ 0 = 1 − _t_ [(] _**[X]**_ [1][ −] _**[X]**_ _[t]_ [)] (75)
+
+
+D DISCRETE BURES-WASSERSTEIN FLOW MATCHING FOR GRAPH
+
+GENERATION
+
+
+D.1 PROBABILITY PATH CONSTRUCTION FOR DISCRETE BURES-WASSERSTEIN FLOW
+MATCHING
+
+
+**The discrete probability path.** We design the probability path as discrete distributions,
+
+_pt_ ( _xv_ ∣ _G_ 0 _,G_ 1) = Categorical([ _**X**_ _t_ ] _v_ ) _,_ _pt_ ( _euv_ ∣ _G_ 0 _,G_ 1) = Bernoulli([ _**W**_ _t_ ] _uv_ )
+(76)
+s.t. _p_ 0(G) = _δ_ ( _G_ 0 _,_ ⋅) _,p_ 1(G) = _δ_ ( _G_ 1 _,_ ⋅)
+
+where _**W**_ _t_ = _**D**_ _t_ - _**L**_ _t_ with _**X**_ _t_ and _**L**_ _t_ defined the same in Eq. (11). We consider the fact that
+the Dirac distribution is a special case when the Categorical/Bernoulli distribution has probability
+1 or 0, so the boundary condition _p_ 0(G) = _δ_ ( _G_ 0 _,_ ⋅) _,p_ 1(G) = _δ_ ( _G_ 1 _,_ ⋅) holds. As such, _**X**_ _t_ =
+(1 − _t_ ) _**X**_ 0 + _t_ _**X**_ 1 ∈[0 _,_ 1] [∣V∣×] _[K]_ . Since the boundary condition for each entry, [ _**X**_ 0] _v_ and [ _**X**_ 1] _v_ are
+two one-hot embeddings, [ _**X**_ _t_ ] _v_ = _t_ [ _**X**_ 0] _v_ + (1 − _t_ )[ _**X**_ 1] _v_ would sum to one, which works as a valid
+probability vector. Thus, Categorical([ _**X**_ _t_ ] _v_ ) is a K-class categorical distribution.
+
+For the edge distribution, we just consider _euv_ is conditionally independent of the other given [ _**W**_ _t_ ] _uv_ .
+One thing to emphasize is that, given the nature of Bures-Wasserstein interpolation, the yielded _**W**_ _t_
+is not always bounded by [0 _,_ 1] thus we have to hard-clip the boundary.
+
+
+D.2 APPROXIMATING WASSERSTEIN DISTANCE IN BERNOULLI DISTRIBUTIONS
+
+
+To make sure that the individual nodes are structured and developed jointly while doing flow matching,
+we assume that the vec(X) still maintains a covariance matrix similar to Eq. (8), which gives
+**Λ** = ( _ν_ _**I**_ + _**L**_ )⊗ _**V**_ [⊺] _**V**_ given that X is emitted from a latent variable H through an affine transformation
+and the latent variable has a covariance matrix ( _ν_ _**I**_ + _**L**_ ) [−][1] . Different from the Gaussian case, the
+latent variable would still be a discrete distribution, so that the affine transformation carries the
+covariance matrix out.
+
+
+Unfortunately, the Wasserstein distance between two discrete graph distributions that follow Eq. (13)
+does not have a closed-form solution given the complex interwined nature. However, it is possible
+to use the central limit theorem applied to X so that we can approximate the Wasserstein distance
+of two Bernoulli distributions with the Gaussian counterpart. This approximation works when we
+are in high-dimensional case (high dimension means ∣V∣ _d_ is moderately large.), and the OT-distance
+between two such Bernoulli distributions is well-captured by the corresponding Gaussian formula,
+which we already introduced in Eq. (57).
+
+
+With such nature, even though we are not sampling from Gaussian distributions anymore, it is possible
+to approximate the Wasserstein distance between two multivariate discrete distributions with the
+Gaussian counterpart, so the conclusions, such as optimal transport displacements, still hold. And we
+can similarly derive the Bures-Wasserstein velocity as in the next section.
+
+
+25
+
+
+D.3 VELOCITY FOR DISCRETE BURES-WASSERSTEIN FLOW MATCHING
+
+
+**Node** **velocity.** For node-wise, the path of node features X _t_ can be re-written as _pt_ (X) = (1 −
+_t_ ) _δ_ (⋅ _,_ _**X**_ 0) + _tδ_ (⋅ _,_ _**X**_ 1) so the conditional velocity can be accessed through _vt_ ( _Xt_ ∣ _G_ 0 _,G_ 1) =
+
+[ _δ_ (⋅ _,_ _**X**_ 1) − _δ_ (⋅ _,_ _**X**_ _t_ )]/(1 − _t_ ) similar as the derivation in Gat et al. (2024).
+
+
+**Edge velocity.** For edge-wise, we look into each entry of the adjacency matrix _**W**_, and consider a
+time-dependent Bernoulli distribution, the probability density function is:
+
+_pt_ ( _euv_ ) = [ _**W**_ _t_ ] _uv_ _[e][uv]_ [(][1][ −[] _**[W]**_ _[t]_ []] _[uv]_ [)][1][−] _[e][uv]_ _[,]_ _euv_ ∈{0 _,_ 1} _._ (77)
+
+To properly define a velocity _v_ ( _x,t_ ), it should follow the continuity equation
+
+
+_∂_
+
+[=] [0] _[.]_ (78)
+_∂t_ _[p][t]_ [(] _[e][uv]_ [) + ∇⋅(] _[pv]_ [)] _[t]_ [(] _[e][uv]_ [)]
+
+We use _x_ and _y_ to denote two states of _euv_ ( _p_ ( _euv_ = _x_ ) ∶= _p_ ( _x_ ) _,p_ ( _euv_ = _y_ ) ∶= _p_ ( _y_ )), then the
+divergence term is
+
+∇⋅( _pv_ )( _euv_ = _x_ ) = ∑ [ _pt_ ( _y_ ) _vt_ ( _y_ → _x_ ) − _pt_ ( _x_ ) _vt_ ( _x_ → _y_ )] _._ (79)
+_y_ ≠ _x_
+
+
+As we are working on a Bernoulli distribution, then the forward equations become
+
+{ _[∂][t][p]_ [(][0][) =] _[ p]_ [(][1][)] _[v][t]_ [(][1][ →] [0][) −] _[p]_ [(][0][)] _[v][t]_ [(][0][ →] [1][)] _[,]_ (80)
+_∂tp_ (1) = _p_ (0) _vt_ (0 → 1) − _p_ (1) _vt_ (1 → 0) _._
+
+Since _pt_ (1) = [ _**W**_ _t_ ] _uv,_, we have _∂tp_ (1) = [ _**W**_ [˙] _t_ ] _uv_ and _∂tp_ (0) = −[ _**W**_ [˙] _t_ ] _uv_ . Hence
+
+_p_ (0) _vt_ (0 → 1)            - _p_ (1) _vt_ (1 → 0) = [ _**W**_ [˙] _t_ ] _uv._
+
+
+There are many solutions to the above equation. We chose a symmetric solution so that the transition
+of _euv_ → 1 − _euv_ with
+
+[ _**W**_ [˙] _t_ ] _uv_ _**W**_ [˙] _t_ ] _uv_
+_vt_ (0 → 1) = _,_ _vt_ (1 → 0) = − [[] _._
+1 −[ _**W**_ _t_ ] _uv_ [ _**W**_ _t_ ] _uv_
+
+Finally for concise, we can write write it as a velocity field on states _euv_ ∈{0 _,_ 1}, note 1 − 2 _euv_ is +1
+at _euv_ = 0 and −1 at _euv_ = 1. Thus, we have
+
+[ _**W**_ [˙] _t_ ] _uv_
+_v_ ( _euv,t_ ) = (1 − 2 _euv_ ) [ _**W**_ _t_ ] _uv_ (1 − _**W**_ _t_ ] _uv_ ) _[,e][uv]_ [∈{][0] _[,]_ [1][}] _[,]_
+
+which in matrix form gives
+
+
+_**W**_ ˙ _t_
+_vt_ ( _Et_ ∣ _G_ 1 _,G_ 0) = (1 − 2 _Et_ ) _**W**_ _t_ ○(1 − _**W**_ _t_ ) _[.]_ (81)
+
+
+Combine the node velocity and the edge velocity, we can now introduce the Discrete BuresWasserstein Flow matching algorithm, with the training and inference part respectively introduced
+in Algorithm 3 and Algorithm 4.
+
+
+E DESIGN SPACE FOR BURES WASSERSTEIN INTERPOLATION AND VELOCITY
+
+
+In the introduction part, we have already compared different probability paths and how they are
+impacting the inference time sampling. While the Bures-Wasserstein flow path is shown to produce a
+better probability path for the model to learn, as we illustrated in Fig. 1a, we have to point out that
+linear interpolation and the corresponding probability path can still converge to the data distribution
+with sufficiently large flow steps. As if we conduct sampling with infinite flow steps during the
+later stage of flow, the samples are still able to arrive at the target distributions. A similar pattern
+exists in diffusion models when they are considered as a Monte-Carlo Markov Chain, and they need
+sufficiently large steps to converge. We emphasize that the convergence gap in Fig. 1c would be
+slowly recovered as the number of flow steps increases.
+
+
+26
+
+
+**Algorithm 3:** Discrete BWFlow Training
+**Input:** Ref. dist _p_ 0 and dataset D ∼ _p_ 1.
+**Output:** Trained model _fθ_ ( _Gt,t_ ).
+
+**1** Initialize model _fθ_ ( _Gt,t_ );
+
+**2** **while** _fθ_ _not converged_ **do**
+
+
+**1** Initialize samples { _G_ [ˆ] 0} ∼ _p_ 0;
+
+
+**Algorithm 4:** Discrete BWFlow Sampling
+**Input:** Reference distribution _p_ 0, Trained
+Model _fθ_ ( _Gt,t_ ), Small time step dt,
+**Output:** Generated Graphs { _G_ [ˆ] 1}.
+
+
+/* Sample Boundary Graphs
+
+  - [/]
+
+
+**3** Sample batched { _G_ 0} ∼ _p_ 0, { _G_ 1} ∼D;
+/* Prob.path Construction
+
+    - [/]
+
+
+**4** Sample _t_ ∼U(0 _,_ 1);
+
+
+**5** Calculate the BW interpolation to obtain
+_**X**_ _t,_ _**W**_ _t_ via Eq. (11);
+
+**6** Sample _Gt_ ∼ _p_ (G _t_ ∣ _G_ 0 _,G_ 1) according
+to Eq. (13);
+/* Denoising -_x_ -prediction    - [/]
+
+
+**2** Initialize the model _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G][t]_ [) ←] _[f][θ]_ [(] _[G][t][,t]_ [)]
+**for** _t_ ← 0 **to** 1 − _dt_ _**by**_ _dt_ **do**
+
+/* Denoising   x-prediction    - [/]
+
+**3** Predict _G_ [˜] 1 ← _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G][t]_ [)][;]
+/* Velocity calculation   - [/]
+
+**4** Calculate _vθ_ ( _G_ [ˆ] _t_ ∣ _G_ [ˆ] 0 _,_ _G_ [˜] 1) via Eq. (14);
+/* Numerical Sampling   - [/]
+
+**5** Sample _G_ [ˆ] _t_ + _dt_ ∼ _G_ [ˆ] _t_ + _vθ_ ( _G_ [ˆ] _t_ ) _dt_
+
+
+**7** _p_ _[θ]_ 1∣ _t_ [(⋅∣] _[G][t]_ [) ←] _[f][θ]_ [(] _[G][t][,t]_ [)][;]
+
+
+**8** Loss calculation via Eq. (4);
+
+**9** optimizer.step();
+
+
+Given that different sampling algorithms can all bring the samples to the data distributions under
+certain conditions, we wish to understand the huge design space of Bures Wasserstein interpolation.
+We list the advantages and disadvantages in different techniques and discuss further when each
+techniques should be used.
+
+
+In general, we consider two important steps to construct the flow matching for graph generation,
+specifically, _training_ and _sampling_ . In training, the main challenge is to obtain a valid real velocity
+_u_ ( _Gt_ ) to be regressed to, so we listed a few strategies that can help us with that. In sampling, the
+challenge becomes how to reconstruct the probability path through the velocity estimated.
+
+
+E.1 THE TRAINING DESIGN
+
+
+In general, the learning objective in flow matching depends on regressing the velocity term. There
+are several way to obtain the velocity.
+
+
+1. **Exact velocity estimation.** Use Eq. (3) as the parameterization and learn _pθ_ (G1 ∣ _Gt_ )
+
+2. **Numerical approximation.** In the implementation of Stärk et al. (2024), the derivative
+is calculated through numerical approximation. To achieve better efficiency in calculating
+velocity, we simply consider a numerical estimation as in Stärk et al. (2024), where the
+velocity term is obtained as, _**L**_ [˙] _t_ = ( _**L**_ _t_ +∆ _t_       - _**L**_ _t_ )/∆ _t_ . Regressing on the numerical difference
+can provide an estimation for the velocity.
+
+
+3. **AutoDiff.** In Chen & Lipman (2024), the derivative of the probability path is evaluated
+through Pytorch AutoDiff. However, in practice we find this method unstable.
+
+
+We summarized the training stage model parameterization in Table 4
+
+
+Continuous Flow Matching Discrete Flow Matching
+
+_x_ -prediction _vt_ _[θ]_ [(] _[G][t]_ [) =] 11− _t_ [[] _[G]_ [ ˜] _t_ _[θ]_ [(] _[G][t]_ [) −] _[G][t]_ []] _vt_ _[θ]_ [(] _[G][t]_ [) =] 11− _t_ [[] _[p]_ 1 _[θ]_ ∣ _t_ [(G][1][ ∣] _[G][t]_ [) −] _[δ]_ [ (⋅] _[,G][t]_ [)]]
+Numerical Approximation _vt_ _[θ]_ [(] _[G][t]_ [) ≈] _[G][t]_ [+] _[dt]_ [−] _[G][t]_ _vt_ _[θ]_ [(] _[G][t]_ [) ≈] _[p]_ [(] _[G][t]_ [+] _[dt]_ [∣] _[G]_ [0] _[,G]_ [1][) −] _[p]_ [(] _[G][t]_ [∣] _[G]_ [0] _[,G]_ [1][)]
+AutoDiff _vt_ _[θ]_ [(] _[G][t]_ [) ≈] _[G]_ [˙] _[t]_ Discrete velocity introduced in Eq. (14)
+
+
+Table 4: The model parameterization for flow matching in training stage
+
+
+27
+
+
+E.2 THE SAMPLING DESIGN
+
+
+As we described in the Eq. (3), in our training framework, we actually train a denoised _pθ_ (G1 ∣G _t_ ).
+With such a parameterization and taking discrete flow matching as an example, the sampling can be
+done through one of the following design choices:
+
+
+1. **Velocity sampling with x-prediction.** The velocity is designed as,
+
+
+1
+_vθ_ ( _Gt_ ) =
+1 − _t_ [(] _[p][θ]_ [(G][1][ ∣] _[G][t]_ [) −] _[δ]_ [(] _[G][t][,]_ [⋅))] _[.]_
+
+This design directly moves the current point _Gt_ towards the direction pointing to the
+predicted _G_ 1. The target-guided velocity is guaranteed to converge to the data distribution,
+but the interpolant might lie outside the valid graph domain.
+
+2. **BW** **velocity** **sampling.** We use Eq. (14) to directly estimate the velocity and flow the
+Bures-Wasserstein probability path to generate new data points. This path is smooth in the
+sense of graph domain. However, this path requires more computational cost.
+
+3. **Probability path reconstruction.** The third option is directly reconstructing the probability
+path, i.e., we first obtain an estimated point,
+
+_G_ ˜1 ∼ _pθ_ (G1 ∣ _Gt_ )
+
+and then construct the data point at _t_ + _dt_, which gives
+
+_Gt_ + _dt_ ∼ _p_ (G _t_ ∣ _G_ [˜] 1 _,G_ 0)
+
+through Eq. (12). This is the most computationally costly method, which is obtained through
+the diffusion models. But this method also provide accurate probability path reconstruction.
+
+
+In Section 4, we show BW velocity follows a path that minimizes the Wasserstein distance thus
+provides better performance, but sampling following linear velocity also provides convergence with
+much lower computational cost. So it is a trade-off to be considered in the real-world application.
+
+
+Continuous Flow Matching Discrete Flow Matching
+
+
+BW Velocity Eq. (12) Eq. (14)
+Target-guided Velocity _vθ_ ( _Gt_ ) = 11− _t_ [(] _G_ [˜] 1 − _Gt_ ) _vθ_ ( _Gt_ ) = 11− _t_ [(] _[p][θ]_ [(G][1][ ∣] _[G][t]_ [) −] _[δ]_ [(] _[G][t][,]_ [⋅))]
+Path Reconstruction _Gt_ + _dt_ = _δ_ ( _Gt_ + _dt_ ∣ _G_ [˜] 1 _,G_ 0) _Gt_ + _dt_ ∼ _p_ ( _Gt_ + _dt_ ∣ _G_ [˜] 1 _,G_ 0)
+
+
+Table 5: Reconstructing probability path choices in flow matching during inference
+
+
+F DISCUSSION AND LIMITATIONS
+
+
+F.1 THE IMPLICIT MANIPULATION OF PROBABILITY PATH
+
+
+Though not explicitly mentioned, Qin et al. (2024) makes huge efforts to manipulate the probability
+path for better velocity estimation by extensively searching the design space, and their finding aligns
+well with the statement that the velocity should be smooth and consistently directing to the data points:
+1) **Time distortion:** (The oragne line in Fig. 5b) the polynomial distortion of training and sampling
+focus on the later stage of the probability trajectory, providing better velocity estimation in this area.
+This uneven sampling strategy is equivalent to pushing the probability path left to make it smooth.
+2) **Target guidance:** (The green line in Fig. 5b) the target guidance directly estimate the direction
+from a point along the path towards the termination graph, so that the manipulated probability could
+smoothly pointing to the data distribution. and 3) **Stochasticity injection:** Stochasticity explores the
+points aside from the path, which avoid the path to be stuck in the platform area.
+
+
+F.2 POTENTIAL EXTENSION TO DIFFUSION MODELS
+
+
+The probability path construction can be denoted as
+
+_Gt_ ∼ _p_ (⋅∣ _G_ 0 _,G_ 1) = _αtG_ 1 + _σtG_ 0 (82)
+
+
+28
+
+
+(a) Linear training path (b) Training path with manipulation
+
+
+Figure 5: Techniques for manipulating probability path.
+
+
+At the scenario of flow matching, _αt_ = _κt_ and _σt_ = 1 − _κt_ . The optimal transport flow matching
+simply use _αt_ = _t_ and _σt_ = 1 − _t_
+
+on the other hand, variance-preserving diffusion models constructed the noisy input through a
+scheduled process, which can be described as,
+
+~~√~~
+_Gt_ = ~~[√]~~ _α_ ¯ _tG_ 1 + 1 − _α_ ¯ _tG_ 0 (83)
+
+
+However, existing diffusion models are still based on the local interpolation, i.e. an element-wise
+interpolation. This will not compensate the “late convergence” scenario thus we still suffer from the
+same problem.
+
+
+Under such an understanding that diffusion is also based on stochastic interpolation, we can easily
+extend our method to diffusion models by interpolating on the whole graph systems instead of doing
+so locally. In order to extend the flow matching algorithms with diffusion models, one important
+thing is to convert the pair-conditioned probability path and velocity to single boundary conditions.
+For instance, the probability path in flow matching has the form _p_ ( _Gt_ ∣ _G_ 1 _,G_ 0) and the velocity
+follows _v_ ( _Gt_ ∣ _G_ 1 _,G_ 0). As suggested in Siraudin et al. (2024); Campbell et al. (2022); Xu et al.
+(2024), the discrete graph diffusion models require a velocity (which is equivalent to a ratio matrix)
+to perturb the data distribution conditioned on the data points, which we denote as _v_ ( _Gt_ ∣ _G_ 1). As
+long as the unilateral conditional velocity has a tractable form, one can first sample a _G_ 1 and get _Gt_
+through iteratively doing to:
+
+_Gt_              - _dt_ = _Gt_              - _v_ ( _Gt_ ∣ _G_ 1) _dt_
+
+starting from _G_ 1. So that one can easily construct the probability path _p_ ( _Gt_ ∣ _G_ 1) to fit into the
+diffusion model framework. In practice, given that we know the explicit form of _v_ ( _Gt_ ∣ _G_ 1 _,Gt_ ′)
+(just replace _G_ 0 in the expression), the unilateral conditional velocity can be obtained through taking
+the limitation,
+
+_v_ ( _Gt_ ∣ _G_ 1) = _v_ ( _Gt_ ∣ _G_ 1 _,Gt_ ) = lim _t_ [′] → _t_ _[v]_ [(] _[G][t]_ [ ∣] _[G]_ [1] _[,G][t]_ [′][)] _[.]_
+
+
+Both linear interpolation and our Bures-Wasserstein interpolation can achieve this easily. We just
+provide a discussion here and will leave this as future work as this paper does not focus on diffusion
+models but on flow matching models.
+
+
+F.3 PERMUTATION INVARIANCE
+
+
+The Bures-Wasserstein distance between two graph distributions is not permutation invariant, and the
+minimal value is obtained through the graph alignment. So ideally, to achieve optimal transport, graph
+alignment and mini-batch matching could provide a better probability path. However, permutation
+invariance is not always a desired property since we only want to find a path that better transforms
+from the reference distribution to the data distributions. As an illustration, the widely used linear
+interpolation to construct graph flow (Qin et al., 2024) does not guarantee permutation invariance
+as well. And it is proved that, if the measurement is based on Wasserstein distance between two
+
+
+29
+
+
+Gaussian distributions.
+_d_ BW( _η_ G0 _,η_ G1) ≤ _d_ Arithmetic( _η_ G0 _,η_ G1)
+
+
+1/2
+with _d_ BW( _η_ G0 _,η_ G1) = ∥ _**X**_ 0 − _**X**_ 1∥ _F_ [2] [+] _[ β]_ [ trace] [(] _**[L]**_ 0 [†] [+] _**[ L]**_ 1 [†] [−] [2] [(] _**[L]**_ 0 [†][/][2][(] _**[P]**_ [ ⊺] _**[L]**_ [1] _**[P]**_ [ )][†] _**[L]**_ 0 [†][/][2][)] ) _,_
+
+and _d_ Arithmetic( _η_ G0 _,η_ G1) = ∥ _**X**_ 0 − _**X**_ 1∥ _F_ [2] [+] _[ β]_ [∥] _**[L]**_ [0][ −] _**[P]**_ [ ⊺] _**[L]**_ [1] _**[P]**_ [ ∥][2] _[,]_ [∀] _**[P]**_ [∈] [potential permutation set]
+(84)
+
+
+F.4 MITIGATING THE COMPUTATION COMPLEXITY
+
+
+When constructing the path, our BW interpolation induces an extra _O_ ( _N_ [3] ) linear algebra operations
+in calculating the matrix inverse of graph Laplacian. We wish to emphasize that this is the basic
+linear algebra operations in matrix multiplication and does not reflect the model complexity, i.e., the
+forward/backward propagation and gradient calculation.
+
+
+Though this computation does not always improve the training clock-time, as we illustrated in Table 9,
+we feel it valuable to further reduce the computational complexity as the matrix inverse is not properly
+supported by current GPU design. When the graph size scales up, it also becomes problematic. In
+order to improve the efficiency, we propose two promising direction:
+
+
+1. Disentangle the probability path construction from the training and move it to pre-training
+stage.
+
+2. Approximate the matrix inverse calculation through iterative solving methods.
+
+
+We provided a preliminary experiment for the second point via solving the inverse by least-squares
+with QR factorization (LSQR).
+
+
+**LSQR algorithm,** When given a large, sparse matrix _**L**_, directly computing _**L**_ [−][1] yields _O_ ( _N_ [3] )
+linear algebra operations. As a remedy, we do not compute the matrix _**L**_ [−][1] itself, but rather solve it
+via the linear system:
+_**Lx**_ = _**b**_
+The solution to this system, _**x**_ = _**L**_ [−][1] _**b**_, provides the desired result without forming the inverse matrix.
+In order to solve the problem, we formalize the objective as
+
+
+min
+_**x**_
+
+[∥] _**[Lx]**_ [ −] _**[b]**_ [∥][2]
+
+and conduct least squared minimization for the above problem. The minimization of the above
+objective can replace the original inverse matrix calculation. THis method is especially useful when
+_**L**_ is large, sparse, and potentially ill-conditioned.
+
+
+LSQR’s effectiveness stemas from the factor that the algorithm does not require access to the
+individual elements of _**L**_ . Instead, it only requires computing the matrix-vector products _**Lx**_ . For a
+sparse matrix with E non-zero elements (exactly the edge number), these products are typically in
+_O_ ( _E_ ) time, as opposed to _O_ ( _N_ [2] ) for a dense matrix.
+
+We can use LSQR to find the _j_ -th column, _**c**_ _j_, of _**L**_ [−][1], we solve the linear system:
+
+_**Lc**_ _j_ = _**e**_ _j_
+
+
+where _**e**_ _j_ is the _j_ -th standard basis vector (a vector of all zeros with a 1 in the _j_ -th position).
+
+_**e**_ _j_ = [0 _,...,_ 0 _,_ 1 _,_ 0 _,...,_ 0] _[T]_
+
+The resulting solution vector will be the _j_ -th column of _**L**_ [−][1] . To construct the full inverse, we repeat
+_N_ times.
+
+When scaled up to large but sparse graphs, the complexity can be reduced to _O_ ( _TNE_ ) (the previous
+methods are _O_ ( _N_ [2] )) through iterative solving such as LSQR.
+
+
+**Newton-Schulz Iteration.** It is also possible to utilize Newton-Schulz Iteration to solve the problem,
+where the complexity if _O_ ( _TN_ [2] ).
+
+
+30
+
+
+**Preliminary** **experiment** **with** **LSQR** .To show
+that LSQR does not negatively impact the performance, we conduct preliminary experiments with
+LSQR instead of the exact pseudo-inverse calculation
+of the Laplacian matrix. Results clearly show that we
+could achieve a lower complexity without impacting
+the quality of the generative model.
+
+
+F.5 EXTENSION TO MULTI-RELATIONAL
+GRAPHS
+
+
+Table 6: Model performance using LSQR to
+approximate the graph Laplacian inverse
+
+
+Planar Tree
+
+Model V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓
+
+
+BWFlow-LSQR 85.0± 5.0 2.7± 1.4 80.1 ± 9.0 1.32± 0.3
+BWFlow 84.8± 6.44 2.4± 0.9 81.5 ± 4.9 1.3± 0.2
+
+
+A limitation of our method is that it cannot easily capture the generation of graphs with multiple
+relation types, which we name heterogeneous graphs. Even though we utilize an intuitive solution in
+the experiment to produce Table 14: we first sample the pure graph structure without edge types to
+produce the graph backbone, and then sample the edge types via liner interpolated probability on top
+of the backbone. The solution provides preliminary results for the graph generation in multi-relational
+graphs, but still requires improvements. Fortunately, there exists a few ways to extend the GraphMRF
+to heterogeneous graphs (Jiang et al., 2025). An interesting future work can be generalizing our
+model to heterogeneous graphs by considering GraphMRF variants, such as the H2MN proposed
+in Jiang et al. (2025).
+
+
+G RELATED WORKS
+
+
+G.1 DIFFUSION AND FLOW MODELS
+
+
+Among contemporary generative models, diffusion (Ho et al., 2020) and flow models (Lipman et al.,
+2023) have emerged as two compelling approaches for their superior performance in generating text
+and images. In particular, these generative models can be unified under the framework of stochastic
+interpolation (Albergo & Vanden-Eijnden, 2023), which consists of four procedures (Lipman et al.,
+2024) as we introduced in Section 1. These contemporary generative models rely on constructing
+a probability path between data points of an easy-to-sample reference distribution and of the data
+distribution, and training a machine learning model to simulate the process (Lipman et al., 2024).
+So that one can sample from the reference (a.k.a source) distribution and iteratively transform it to
+approximate data samples from the target distribution. Diffusion models construct the probability
+path with a unilateral path conditioned on the data distribution, where one start sampling from a
+data point _X_ 1 and construct the path _p_ (X _t_ ∣ _X_ 1). While flow models can condition on either two
+boundary conditions, { _X_ 1 _,X_ 0} or just one-side boundary condition _X_ 1.
+
+
+Depending on the space that the algorithm operates on, both models can be categorized into continuous
+or discrete models. The continuous generative models assume the data distributions are themself
+lying in continuous space (such as Gaussian) and build models, with examples in diffusion (Ho et al.,
+2020; Song et al., 2021; Wang et al., 2024) and flow (Lipman et al., 2023; Liu et al., 2023b). The
+discrete generateive models assume the data follows a discrete distribution, for instance categorical or
+Bernoulli distributions. Examples include discrete diffusion (Campbell et al., 2022; Sun et al., 2023)
+and discrete flow models (Campbell et al., 2024; Gat et al., 2024; Minello et al., 2025).
+
+
+Under the stochastic interpolation framework, the interpolation methods are commonly selected
+through optimal transport (OT) displacement interpolant (Liu et al., 2023b; Albergo & VandenEijnden, 2023; McCann, 1997). Optimal transport is a classical topic in mathematics that was
+originally used in economics and operations research (Villani & Society, 2003), and has now become
+a popular tool in generative models. OT aims for finding the best transport plan between two probability measures with the smallest associated transportation cost. It has been shown that generative
+models can be combined with technologies such as iterative matching (Tong et al., 2024) and mini
+batching (Pooladian et al., 2023) to approximate the OT cost, and get a significant boost in their
+performance in generative modeling.
+
+
+Another relevant work is Haviv et al. (2024), where the authors explore the flow matching technologies between two Gaussian measures, there they try to interpolate between two Gaussian measures.
+Our work focuses on a different task of graph generation.
+
+
+31
+
+
+G.2 GRAPH GENERATION MODELS
+
+
+Thanks to the capability of graphs in representing complex relationships, graph generation (Zhu et al.,
+2022; Liu et al., 2023a) has become an essential task in various fields such as protein design (Ingraham et al., 2019), drug discovery (Bilodeau et al., 2022), and social network analysis (Li et al.,
+2023). The initial attempt at graph generation is formalized through autoregression. For instance,
+GraphRNN (You et al., 2018) organizes the node interactions into a series of connection events
+and conducts autoregressive prediction for generation. Later, one shot generation methods such as
+Variational Graph Auto-Encoder were proposed (Kipf & Welling, 2016; Cao & Kipf, 2018).
+
+
+Among various generative models, diffusion models and flow-based models have emerged as two
+compelling approaches for their ability to achieve state-of-the-art performance in graph generation
+tasks (Niu et al., 2020; Vignac et al., 2023a; Eijkelboom et al., 2024; Qin et al., 2024; Hou et al.,
+2024). In the early stage, continuous diffusion models were first extended to the task of graph
+generation (Niu et al., 2020), where they just view the adjacency matrix as a special signal living
+on the R [∣V∣×∣V∣] domain. However, these methods fail to capture the natural discreteness of graphs,
+and Vignac et al. (2023a) first brings discrete diffusion into graph generation. After that, more
+work (Siraudin et al., 2024; Xu et al., 2024) starts to focus on designing better discrete diffusion
+models for graph generation.
+
+
+On the other hands, with the development of flow matching techniques, a few works have been
+developed to utilize flow models for graph generation and they have achieved huge success. Eijkelboom et al. (2024) utilizes variational flow matching to process categorical data and Qin et al. (2024)
+developed discrete flow matching for graph generation tasks.
+
+
+In parallel, there are a number of work that have managed to respect the intrinsic nature of graphs,
+such as global patterns. For instance, Jo et al. (2024) brings a mixture of graph technique to enhance
+the performance by explicitly learning final graph structures; Yu & Zhan (2025) mitigates exposure
+bias and reverse-start bias in graph generation; Hou et al. (2024) improves graph generation through
+optimal transport flow matching techniques but they still assume the independence between nodes
+and edges and use hamming distance to measure the transport cost; and Li et al. (2023) gives the
+large-scale attributed graph generation framework through batching edges.
+
+
+However, there remain a core challenge: constructing the probability path _pt_ . Existing text and image
+generative models, operating either in the continuous (Ho et al., 2020; Song et al., 2021; Lipman et al.,
+2023; Liu et al., 2023b) or discrete (Campbell et al., 2022; Sun et al., 2023; Campbell et al., 2024;
+Gat et al., 2024; Minello et al., 2025) space, typically rely on linear interpolation between source and
+target distributions to construct the path. Graph generation models, including diffusion (Niu et al.,
+2020; Vignac et al., 2023a; Haefeli et al., 2022; Xu et al., 2024; Siraudin et al., 2024) and flow-based
+models (Eijkelboom et al., 2024; Qin et al., 2024; Hou et al., 2024), inherit this design by modeling
+every single node and edge independently and linearly build paths in the disjoint space. However,
+this approach is inefficient because it neglects the strong interactions and relational structure inherent
+in graphs, i.e., the significance of a node heavily depends on the configuration of its neighbors.
+While empirical success have been achieved via fine-grained searching on the training and sampling
+design (Qin et al., 2024) such as target guidance and time distortion, we argue that there remains a
+fundamental issue of the linear probability path construction, and these strategies only mitigate the
+problem by manipulating the probability path.
+
+
+H COMPARISON WITH OTHER INTERPOLATION METHODS
+
+
+In the experimental part, we compare our methods with arithmetic (linear) interpolation, geometric
+interpolation and harmonic interpolation. We state the equation of them respectively as follows.
+
+We consider the boundary graph _G_ 0 and _G_ 1 with _**X**_ 0 _,_ _**X**_ 1 ∈ R [∣V∣×] _[d]_ and _**W**_ 0 _,_ _**W**_ 1 ∈ R [∣V∣×∣V∣] . Let
+_t_ ∈[0 _,_ 1], we fixed the feature interpolation as,
+
+_**X**_ _t_ = (1 − _t_ ) _**X**_ 0 + _t_ _**X**_ 1 _,_
+
+the graph structure interpolation can be expressed as,
+
+
+**Linear interpolation:**
+_**W**_ _t_ = (1 − _t_ ) _**W**_ 0 + _t_ _**W**_ 1 _._
+
+
+32
+
+
+**V.U.N metrics** **Spectral Metrics**
+**Dataset** **FM type** **Interpolation**
+
+Novelty Uniqueness Validity Orbit Spec Clustering Degree Wavelet Avg. Ratio
+
+
+Planar Discrete
+
+
+Tree Discrete
+
+
+SBM Discrete
+
+
+DeFog 100 100 78.25 8.98 1.45 2.09 2.65 2.38 3.51
+Linear 100 100 73.25 10.83 1.33 1.74 2.24 2.39 3.70
+harmonic 100 100 0.00 4519.63 2.57 17.01 25.10 42.41 921.35
+Geometric 100 100 23.25 655.66 1.61 10.17 13.25 6.68 137.47
+BW 100 100 84.75 5.14 1.27 1.69 1.78 2.02 2.38
+
+
+Defog 100 100 61.53 / 1.17 / 1.27 1.51 1.32
+Linear 100 100 56.91 / 1.16 / 1.04 1.45 1.22
+harmonic 100 100 0.53 / 2.32 / 1.93 3.31 2.52
+Geometric 100 100 48.38 / 1.62 / 2.13 2.10 1.94
+BW 100 100 51.45 / 1.58 / 2.56 2.13 2.09
+
+
+Linear 100 100 44.63 2.57 1.40 1.46 15.55 7.88 5.77
+harmonic 100 100 9.73 3.10 10.23 1.59 172.10 103.04 58.10
+Geometric 100 100 0.0 3.11 4.45 1.80 150.41 60.60 54.65
+BW 100 100 58.70 2.03 1.50 1.50 9.04 8.41 4.51
+
+
+Table 7: Ablation study on interpolation methods when probability path manipulation techniques
+are all disabled. The clustering and orbit ratios in tree graphs are omitted, given that in the training
+set, the corresponding statistics are 0. The results go over exponential moving average (decay 0.999)
+for the last 5 checkpoints. The table is produced with Marginal boundary distributions, without time
+distortion.
+
+
+Table 8: Comparison of interpolation methods on 3D Molecule generation with explicit hydrogen in
+QM9 dataset.
+
+
+**Metrics**
+**Flow Type** **Interpolation**
+
+_µ_ V.U.N(%) Mol Stable Atom Stable Connected(%) Charge(10 [−][2] ) Atom(10 [−][2] ) Angles( [○] )
+
+
+Discrete
+
+
+Continuous
+
+
+MiDi 1.01 93.13 93.98 99.60 99.21 0.2 3.7 2.21
+Linear 1.01 87.53 88.45 99.13 99.09 0.4 4.2 2.72
+harmonic 1.01 94.91 94.54 99.65 99.03 0.6 6.4 2.21
+Geometric 1.01 91.26 91.29 99.42 98.42 0.1 4.4 3.63
+BW 1.01 **96.45** **97.84** **99.84** 99.24 **0.1** **2.3** **1.96**
+
+
+Linear 2.15 25.45 10.23 76.85 28.82 0.7 **5.6** 14.47
+harmonic 1.01 11.38 11.64 73.48 99.65 1.2 17.2 15.04
+Geometric **1.00** 42.07 46.08 91.13 **99.87** 1.0 12.7 8.03
+BW 1.02 **62.02** **61.76** **95.99** 97.72 **0.6** 8.7 **7.80**
+
+
+∗ Clearly, continuous flow matching models are not as comparative as discrete flow matching models.
+
+
+**Geometric interpolation:**
+
+_**W**_ _t_ = _**W**_ 0 [1][/][2] ( _**W**_ 0 [−][1][/][2] _**W**_ 1 _**W**_ 0 [−][1][/][2] ) _t_ _**W**_ 10 /2 _,_
+
+
+**Harmonic interpolation:**
+
+−1
+_**W**_ _t_ = ((1 − _t_ ) _**W**_ 0 [−][1] + _t_ _**W**_ 1 [−][1][)] _._
+
+Each interpolation methods actually handle each special manifold assumption, which should be
+designed under a comprehensive understanding of the task. In our experimental part, we conduct
+intensive analysis on the impact of interpolation methods to the graph generation quality.
+
+
+H.1 EMPIRICAL COMPARISON
+
+
+In Table 7, we illustrate the numerical results for comparing the interpolation methods in plain graph
+generation without node features. It is clear that BWFlow outperforms other methods in planar and
+SBM graphs. But the performance was not good in tree graph generations. In Table 8 we compare
+the interpolation methods in molecule generation.
+
+
+I ADDITIONAL EXPERIMENT RESULTS
+
+
+I.1 EXPERIMENT SETUPS AND COMPUTATIONAL COST
+
+
+The training and sampling computation time are provided in Table 9. The experiments were run on a
+single NVIDIA A100-SXM4-80GB GPU. The hyperparameter configuration in producing Tables 1,
+2 and 14 is reported in Table 10.
+
+
+33
+
+
+Table 9: Training and sampling time on each dataset. TG means using target-guided velocity; BW
+means using BW velocity.
+
+
+Dataset Min Nodes Max Nodes Training Time (h) Graphs Sampled Sampling Time (h)
+
+
+Planar 64 64 45 (1.55x) 40 0.07(TG); 0.13 (BW)
+Tree 64 64 10 (1.25x) 40 0.07(TG);0.14(BW)
+SBM 44 187 74 (0.98x) 40 0.07(TG) 0.14(BW)
+
+
+Moses 8 27 35 (0.76x) 25000 5(TG); 6(BW)
+Guacamol 2 88 251 (1.8x ) 10000 7(TG); 21(BW)
+
+
+QM9 3 29 15 25000 5(TG) 6(BW)
+GEOM / 181 141 10000 7(TG) 14(BW)
+
+
+Table 10: Best Configuration for Training and Sampling when producing Tables 1, 2 and 14.
+
+
+Training Sampling
+
+
+Dataset Initial Distribution Train Distortion Sample Distortion Sampling steps Stochasticity
+
+
+Planar Marginal Identity Identity 1000 50
+Tree Marginal Polydec Polydec 1000 0
+SBM Absorbing Identity Identity 1000 0
+
+
+MOSES Marginal Identity Identity 500 200
+GUACAMOL Marginal Identity Identity 500 300
+
+
+QM9 Marginal Identity Identity 500 0
+GEOM Marginal Identity Identity 500 0
+
+
+I.2 BEST CHECKPOINT RESULTS IN PLAIN GRAPH GENERATION
+
+
+We present the best checkpoint results in plain graph generation in Table 11.
+
+
+I.3 FULL EXPERIMENT RESULTS FOR PLAIN GRAPH GENERATION
+
+
+We provide the full experiment results in Table 12, with exisitng graph generation models’ performance reported. Most of the results are taken from Qin et al. (2024). We reported the detailed ratios
+for each model that we reproduced in Table 13.
+
+
+I.4 ADDITIONAL RESULTS FOR 2D MOLECULE GENERATION
+
+
+We wish to note that the 2D molecule generation task is relatively simple and are near saturated with
+most state-of-the-art models.
+
+
+**Setup.** In 2D molecular generation, two scenarios with and without bond types information are
+considered to better evaluate the ability of generating graph structures.
+
+
+**Metrics:** In addition to the novelty and uniqueness of moecules, we also utilize the relaxed stability
+of atoms ( _Atom.Stab._ ), the relaxed molecule stability ( _Mol.Stab._ ) and the _validity_ of a molecule,
+are used for 2D molecule generation. In addition to these metrics, distribution metrics are also
+used for 2D molecules, which includes 1) _Fréchet ChemNet Distance (FCD):_ whichMeasures the
+distance between the statistical distributions of generated and real molecules, and _Similarity_ _to_
+_Nearest Neighbor (SNN)_, which measures the average similarity (e.g., Tanimoto) of each generated
+molecule to its closest neighbor in a reference dataset. Also, practicality & diversity metrics,
+including _Filters_ Percentage of molecules passing medicinal chemistry filters (e.g., drug-likeness,
+synthetic accessibility), and _Scaffold Diversity (Scaf)_ that measures the diversity of the core molecular
+frameworks (scaffolds), indicating structural variety.
+
+
+**Model peformance.** The model performance is illustrated in Table 14. In both datasets, BWFlow
+can achieve competitive results near the state-of-the-art (SOTA) flow matching models (Qin et al.,
+2024), and outperforms the diffusion models. Given that MOSES and GUACAMOL benchmarks are
+approaching saturation, the fact that BWFlow achieves results on par with the SOTA models serves
+as strong evidence of its effectiveness.
+
+
+34
+
+
+Table 11: The best-checkpoint plain graph generation Performance. Results are obtained through
+tuning the probability path manipulation techniques. The remaining values are obtained from Qin
+et al. (2024).
+
+
+Planar Dataset
+
+
+Model Ratio ↓ Valid ↑ Unique ↑ Novel ↑ V.U.N. ↑
+
+
+Train set 1.0 100 100 0.0 0.0
+
+
+GRAN (Liao et al., 2019) 2.0 97.5 85.0 2.5 0.0
+SPECTRE (Martinkus et al., 2022) 3.0 25.0 100 100 25.0
+DiGress (Vignac et al., 2023a) 5.1 77.5 100 100 77.5
+EDGE (Chen et al., 2023) 431.4 0.0 100 100 0.0
+BwR Diamant et al. (2023) 251.9 0.0 100 100 0.0
+BiGG (Dai et al., 2020) 16.0 62.5 85.0 42.5 5.0
+GraphGen Goyal et al. (2020) 210.3 7.5 100 100 7.5
+HSpectre (one-shot) (Bergmeister et al., 2024) 1.7 67.5 100 100 67.5
+HSpectre Bergmeister et al. (2024) 2.1 95.0 100 100 95.0
+GruM (Jo et al., 2024) 1.8        -        -        - 90.0
+CatFlow (Eijkelboom et al., 2024)        -        -        -        - 80.0
+DisCo (Xu et al., 2024)        - 83.6 ±2.1 100.0 ±0.0 100.0 ±0.0 83.6 ±2.1
+Cometh - PC (Siraudin et al., 2024)        - 99.5 ±0.9 100.0 ±0.0 100.0 ±0.0 **99.5** ±0.9
+DeFoG 1.6 ±0.4 99.5 ±1.0 100.0 ±0.0 100.0 ±0.0 **99.5** ±1.0
+
+
+BWFlow **1.3** ±0.4 97.5 ±2.5 100.0 ±0.0 100.0 ±0.0 97.5±2.5
+
+
+Tree Dataset
+
+
+Train set 1.0 100 100 0.0 0.0
+
+
+GRAN (Liao et al., 2019) 607.0 0.0 100 100 0.0
+DiGress (Vignac et al., 2023a) **1.6** 90.0 100 100 90.0
+EDGE (Chen et al., 2023) 850.7 0.0 7.5 100 0.0
+BwR (Diamant et al., 2023) 11.4 0.0 100 100 0.0
+BiGG (Dai et al., 2020) 5.2 100 87.5 50.0 75.0
+GraphGen (Goyal et al., 2020) 33.2 95.0 100 100 95.0
+HSpectre (one-shot) (Bergmeister et al., 2024) 2.1 82.5 100 100 82.5
+HSpectre (Bergmeister et al., 2024) 4.0 100 100 100 Cometh (Siraudin et al., 2024)        - 75.0 ±3.7 100.0 ±0.0 100.0 ±0.0 75.0 ±3.7
+DeFoG 1.6 ±0.4 96.5 ±2.6 100.0 ±0.0 100.0 ±0.0 96.5 ±2.6
+
+
+BWFlow **1.4** ±0.3 95.5 ±2.4 100.0±0 100.0±0 95.5±2.4
+
+
+Stochastic Block Model ( _n_ max = 187, _n_ avg = 104)
+
+
+Model Ratio ↓ Valid ↑ Unique ↑ Novel ↑ V.U.N. ↑
+
+
+Training set 1.0 85.9 100 0.0 0.0
+
+
+GraphRNN (You et al., 2018) 14.7 5.0 100 100 5.0
+GRAN (Liao et al., 2019) 9.7 25.0 100 100 25.0
+SPECTRE (Martinkus et al., 2022) 2.2 52.5 100 100 52.5
+DiGress (Vignac et al., 2023a) 1.7 60.0 100 100 60.0
+EDGE (Chen et al., 2023) 51.4 0.0 100 100 0.0
+BwR (Diamant et al., 2023) 38.6 7.5 100 100 7.5
+BiGG (Dai et al., 2020) 11.9 10.0 100 100 10.0
+GraphGen (Goyal et al., 2020) 48.8 5.0 100 100 5.0
+HSpectre (one-shot) (Bergmeister et al., 2024) 10.5 75.0 100 100 75.0
+HSpectre (Bergmeister et al., 2024) 10.2 45.0 100 100 45.0
+GruM (Jo et al., 2024) **1.1**        -        -        - 85.0
+CatFlow (Eijkelboom et al., 2024)        -        -        -        - 85.0
+DisCo (Xu et al., 2024)        - 66.2 ±1.4 100.0 ±0.0 100.0 ±0.0 66.2 ±1.4
+Cometh (Siraudin et al., 2024)        - 75.0 ±3.7 100.0 ±0.0 100.0 ±0.0 75.0 ±3.7
+DeFoG 4.9 ±1.3 90.0 ±5.1 100.0 ±0.0 100.0 ±0.0 90.0 ±5.1
+
+
+BWFlow 3.8±0.9 **92.5** ±4.0 100.0 ±0.0 100.0 ±0.0 **92.5** ±4.0
+
+
+I.5 ADDITIONAL RESULTS FOR THE TRAINING PATHS
+
+
+We elaborate on the detailed experimental setting for training path comparison. Fig. 1a and 3a are
+generated using a representative plain graph dataset, SBM. At each time step _t_, we compute the
+average maximum mean discrepancy ratio (A.Ratio) between the interpolants and the real data graphs
+over multiple graph statistics, including orbit, clustering, spectral, wavelet, and degree ratios. The
+“ideal velocity” (green curve) in Fig. 1a is a synthetic reference path used purely for conceptual
+illustration.
+
+
+Fig. 6 gives the training probability path construction for planar graphs and tree graphs. While planar
+graphs have a similar pattern as the SBM datasets as in Fig. 3a, the probability path constructed for
+
+
+35
+
+
+Table 12: Plain Graph generation performance. Given that the synthetic datasets are usually unstable
+in evaluation, we applied an exponential moving average to stabilize the results and sampled 5 times
+(each run generates 40 graphs) to calculate the mean and standard deviation. The experiment settings
+are in Table 10. The full version with explicit ratio numbers can be found in Table 11
+
+
+Planar Tree SBM
+
+Model Class V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓ V.U.N. ↑ A.Ratio ↓
+
+
+Train set  - 100 1.0 100 1.0 85.9 1.0
+
+
+DiGress (EMA) (Vignac et al., 2023a) Diffusion 61.5±10.1 9.9 ±3.3 56.0 ±11.0 8.9±3.2 56.0±8.5 3.5±0.5
+DisCo (CAVG) (Xu et al., 2024) Diffusion 57.5± 2.5 9.0± 1.41 / / 55.0± 5.9 11.6± 2.9
+HSpectre (Bergmeister et al., 2024) Diffusion 67.5 3.0 82.5 2.1 75.0 10.5
+GruM (EMA) (Jo et al., 2024) Diffusion 74.4±5.15 3.2±0.4 52.5±3.2 2.4±0.7 73.5±6.7 2.6±0.6
+Cometh (EMA) (Siraudin et al., 2024) Diffusion 80.5± 5.79 3.0± 0.6 **84.5** ± 7.8 2.0± 0.4 77.5± 5.7 4.7± 0.6
+DeFoG (EMA) (Qin et al., 2024) Flow 77.5±8.37 3.5±1.7 83.5±10.8 1.9±0.4 **85.0** ±7.1 3.4±0.4
+BWFlow (EMA) Flow **84.8** ±6.44 **2.4** ±0.9 81.5±4.9 **1.3** ±0.2 84.5±8.0 **2.3** ±0.5
+
+
+**Validity Metrics** **Spectral Metrics**
+**Dataset** **Model** **Avg.** **Ratio**
+V.U.N Orbit Spec Clustering Degree Wavelet
+
+
+Training set 100 0.0005 0.0038 0.0310 0.0002 0.0012 1
+
+
+Planar
+
+
+Tree
+
+
+SBM
+
+
+Digress 61.50 0.0126 (25.20) 0.0100 (2.63) 0.1204 (3.88) 0.0031 (15.50) 0.0031 (2.55) 9.95
+Hspectra (One-shot) 67.5 / / / / / 3.0
+GruM 74.39 0.00445 (8.90) 0.00755 (1.99) 0.00428 (0.14) 0.00075 (3.75) 0.00258 (2.15) 3.20
+Cometh 80.50 0.0038 (7.60) 0.0080 (2.09) 0.0334 (1.08) 0.000224 (1.12) 0.0036 (2.97) 3.00
+DeFog 77.50 0.0045 (8.98) 0.0055 (1.45) 0.0648 (2.09) 0.0005 (2.65) 0.0029 (2.38) 3.51
+BWFlow 84.75 0.0026 (5.14) 0.0048 (1.27) 0.0524 (1.69) 0.0004 (1.78) 0.0024 (2.02) 2.38
+
+
+Training set 100 0.0000 0.0075 0.00000 0.0001 0.0030 1
+
+
+Digress 56.00 0.0002 (/) 0.0126 (1.68) 0.0025 (/) 0.0018 (17.80) 0.0088 (7.30) 8.90
+Hspectra (One-shot) 82.50 / / / / / 2.10
+GruM 52.50 0.0001(0.00) 0.0045 (1.18) 0.0000(/) 0.0004 (2.15) 0.0047(3.91) 2.41
+Cometh 86.50 0.0000 (/) 0.0102(1.36) 0.0000 (/) 0.0003 (3.20) 0.0044(1.46) 2.00
+DeFog 83.50 0.0001 (/) 0.0126 (1.68) 0.0000 (/) 0.0002 (1.87) 0.0066 (2.21) 1.92
+BWFlow 81.50 0.0000 (0.00) 0.0094 (1.17) 0.0000 (0.00) 0.0001 (1.27) 0.0046(1.51) 1.31
+
+
+Training set 85.90 0.0255 0.0027 0.0332 0.0008 0.0007 1
+
+
+Digress 56.00 0.0748 (2.93) 0.0061 (2.26) 0.0584 (1.76) 0.0018 (2.25) 0.0048 (6.86) 3.51
+Hspectra (One-shot) 75.00 / / / / / 10.50
+GruM 73.50 0.0412 (1.62) 0.0068 (2.52) 0.0495 (1.49) 0.0028 (3.50) 0.0017 (2.43) 2.60
+Cometh 77.50 0.076 (2.98) 0.0114 (4.22) 0.052 (1.56) 0.0063 (7.88) 0.0048 (6.86) 4.70
+DeFog 85.00 0.0426 (1.67) 0.0045 (1.65) 0.0501 (1.51) 0.0062 (7.71) 0.0030 (4.33) 3.39
+BWFlow 84.50 0.0515 (2.02) 0.0030 (1.10) 0.0478 (1.44) 0.0028 (3.50) 0.0025 (3.52) 2.32
+
+
+Table 13: We reported the detailed ratios in three plain graph generation datasets. We omit the orbit
+and clustering ratio calculation in tree datasets as the training set values are close to 0 which makes
+the calculation unreliable.
+
+
+tree graphs does not follow a similar pattern. We attribute this to the different geometry of tree graphs
+that reside in hyperbolic space (Yang et al., 2022), and different statistics evolution pattern as we
+discussed in Section A.3.
+
+
+I.6 MORE EXPERIMENTS ON PLAIN GRAPH GENERATIONS
+
+
+**Additional results for sampling paths.** We then give the sampling path construction in Fig. 7. To
+better illustrate the advantage of BWFlow, we fix the sampling steps to be as small as 50. It is clear
+that in planar and SBM dataset, the BW velocity can still provide a smooth probability and stable
+convergence towards the data distribution. While the linear velocity does not give a good probability
+path and fails to converge to the optimal value, especially when the sampling size is small.
+
+
+The maximum mean discrepancy (MMD) of four graph statistics between the set of generated graphs
+and the test set is measured, including degree (Deg.), clustering coefficient (Clus.), count of orbits
+with 4 nodes (Orbit), the eigenvalues of the graph Laplacian (Spec.), wavelet ratio (Wavelet.). To
+verify that the model learns to generate graphs with valid topology, we gives the percentage of valid,
+unique, and novel (V.U.N.) graphs for where a valid graph satisfies the corresponding property of
+each dataset (Planar, Tree, SBM, etc.).
+
+
+**Full** **results** **for** **plain** **graph** **generation.** Table 11 gives the full results with other generative
+models aside from the diffusion and flow models. Table 16 gives the results on smaller datasets, i.e.,
+comm20
+
+
+36
+
+
+Table 14: Large molecule generation results. Only diffusion and flow models are reported. Table 15
+gives further experiments with binary edge types.
+
+
+Guacamol MOSES
+
+Model Val. ↑ V.U. ↑ V.U.N.↑ FCD ↑ Val. ↑ Unique. ↑ Novelty ↑ Filters ↑ FCD ↓ SNN ↑ Scaf ↑
+
+
+Training set 100.0 100.0 0.0 92.8 100.0 100.0 0.0 100.0 0.01 0.64 99.1
+
+
+DiGress (Vignac et al., 2023a) 85.2 85.2 85.1 68.0 85.7 **100.0** 95.0 97.1 **1.19** 0.52 14.8
+DisCo (Xu et al., 2024) 86.6 86.6 86.5 59.7 88.3 **100.0** **97.7** 95.6 1.44 0.50 15.1
+Cometh (Siraudin et al., 2024) 98.9 98.9 97.6 72.7 90.5 99.9 92.6 **99.1** 1.27 0.54 **16.0**
+DeFoG Qin et al. (2024) **99.0** **99.0** **97.9** **73.8** **92.8** 99.9 92.1 98.9 1.95 0.55 14.4
+BWFlow (Ours) 98.8 98.9 97.4 69.2 92.0 **100.0** 94.5 98.4 1.32 **0.56** 15.3
+
+
+Table 15: Large molecule generation results. Only comparing the representative diffusion and flow
+models. B.E. is the scenario that only considers binary edge types. The results are almost saturated,
+thus not very informative.
+
+
+Guacamol MOSES
+
+Model Val. ↑ V.U. ↑ V.U.N.↑ Val. ↑ Unique. ↑ Novelty ↑
+
+
+Digress (B.E.) 96.0 98.9 97.4 96.1 100 100
+Defog (B.E.) 98.4 98.4 97.9 99.3 100 100
+BWFlow (B.E.) 98.0 98.0 97.7 99.6 100 100
+
+
+(a) Training-time Probability Path for Planar Graphs (b) Training-time Tree Graph Probability Path
+
+
+(c) Training-time QM9 Molecule Probability Path. We
+use negative validity for clear comparison.
+
+
+Figure 6: Training-time probability path comparisons for planar, tree and QM9.
+
+
+I.7 3D MOLECULE GENERATION: QM9 WITHOUT EXPLICIT HYDROGEN
+
+
+In Table 17 we report the results of QM9 without explicit hydrogen. This task is relatively easy
+compared to the generation task with explicit hydrogen, and both Midi and our BWFlow have
+achieved near-saturated performance with validity near to 100%.
+
+
+37
+
+
+(a) Sampling path comparision on Planar dataset (b) Sampling path comparision on SBM dataset
+
+
+Figure 7: The probability path reconstruction in the sampling stage on a) Planar graphs and b) SBM
+graphs.
+
+
+(a) QM9 with explicit hydrogen (b) Planar
+
+
+Figure 8: Training curves on QM9 and planar datasets with explicit hydrogen.
+
+
+I.8 CONVERGENCE ANALYSIS
+
+
+Fig. 8 are the training convergence analysis on Planar and QM9 dataset, showing that BWFlow
+provides a fast convergence speed than others.
+
+
+J USAGE OF LARGE LANGUAGE MODELS (LLMS)
+
+
+We used a large language model to assist with writing and editing this manuscript, primarily for
+grammar, style, and clarity. The authors are fully responsible for the content and scientific integrity
+of the work.
+
+
+**comm-20**
+**FM type** **Interpolation**
+
+Deg. Clus. Orbit.
+
+
+Discrete
+
+
+Linear 0.071 0.115 0.037
+Harmonic 0.011 0.036 0.027
+Geometric 0.047 0.083 0.02
+BW 0.009 0.013 0.017
+
+
+Table 16: Quantitative experimental results on COMM20
+(smaller dataset).
+
+
+38
+
+
+**Metrics**
+**Dataset** **Interpolation**
+
+_µ_ V.U.N(%) Connected(%) Charges(10 [−][2] ) Atom(10 [−][2] ) Angles( [○] )
+
+
+QM9
+(w/o h)
+
+
+MiDi 1.00 98.0 100.0 0.4 5.1 1.49
+Linear Flow 1.60 79.33 52.3 0.7 14.0 8.77
+BWFlow 1.02 99.8 100.0 0.4 4.8 1.53
+
+
+Table 17: Quantitative experimental results on QM9 datasets without explicit hydrogen in 3D
+molecule generation.
+
+
+**Symbol** **Meaning**
+
+
+**General flow matching**
+
+S State space of variables (e.g., X ∈S)
+X / _X_ / _**X**_ (with _X_ ∼ _p_ (X ; _**X**_ )) Random variable / realization / latent parameters
+_p_ 0 _, p_ 1 Source and target distributions over X
+_pt_ (X) = [ _ψtp_ 0](X) Time–continuous probability path between _p_ 0 and _p_ 1
+_ψt_ Time–dependent flow map (CNF flow)
+_ut_ True velocity field generating _pt_
+_vt_ _[θ]_ Parameterized velocity field
+_η_ 0 _,η_ 1 Probability measures on S in OT formulation
+Π( _η_ 0 _,η_ 1) Set of couplings between _η_ 0 and _η_ 1
+_π_ ∈ Π( _η_ 0 _,η_ 1) Transport plan (joint measure on S × S)
+_c_ ( _X,Y_ ) Transport cost between _X_ and _Y_
+W _c_ ( _η_ 0 _,η_ 1) Wasserstein distance associated with cost _c_
+
+
+**Graphs and Graph Markov Random Fields**
+
+G = {V _,_ E _,_ X} Random graph (nodes, edges, node features)
+_G_ = { _V,E,X_ } Realization of G, with nodes, edges and node features
+V = { _v_ } _,_ E = { _euv_ } _,_ X = { _xv_ } Random node set, edge set, and feature set
+_**W**_ ∈ R [∣V∣×∣V∣] Weighted adjacency matrix of the graph distribution
+_**X**_ = [ _**x**_ 1 _,...,_ _**x**_ ∣V∣] [⊺] Node feature matrix of the graph distribution
+_**D**_ = diag( _**W**_ **1** ) Degree matrix ( **1** : all-one vector) of the graph distribution
+_**L**_ = _**D**_ - _**W**_ Graph Laplacian matrix of the graph distribution
+_φ_ 1( _v_ ) _,φ_ 2( _u,v_ ) Node-wise and pair-wise MRF potentials
+_**µ**_ _v_ Node-specific latent mean for _**V**_ _xv_
+**Λ** Covariance Matrix
+
+
+**Bures-Wasserstein Flow Matching**
+
+
+_η_ G _j_ _,η_ X _j_ _,η_ E _j_ Measure over graphs (factorized as node and edge measure)
+_d_ BW(G0 _,_ G1) Bures–Wasserstein distance between two graph distributions
+G _t_ = {V _,_ E _t,_ X _t_ } Intermediate random graph along BW interpolation
+_p_ (G _t_ ∣ _G_ 0 _,G_ 1) Conditional probability path induced by BW interpolation
+_vt_ ( _Gt_ ∣ _G_ 0 _,G_ 1) Conditional velocity at graph state _Gt_
+_vt_ ( _Et_ ∣ _G_ 0 _,G_ 1) Conditional edge velocity
+_vt_ ( _Xt_ ∣ _G_ 0 _,G_ 1) Conditional node-feature velocity
+_vt_ _[θ]_ Parameterized velocity used in training / sampling
+
+[(] _[G][t]_ [)]
+Categorical([ _**X**_ _t_ ] _v_ ) Categorical distribution over node feature states at node _v_
+Bernoulli([ _**W**_ _t_ ] _uv_ ) Bernoulli edge distribution between nodes _u_ and _v_
+_δ_ ( _Gi,_ ⋅) Dirac distribution concentrated at graph _Gi_ ( _i_ = 0 _,_ 1)
+
+
+Table 18: Notation Table.
+
+
+39
