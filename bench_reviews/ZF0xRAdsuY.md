@@ -1,0 +1,1 @@
+ERROR: Error code: 400 - {'error': {'message': 'zai/glm-5 is not a valid model ID', 'code': 400}, 'user_id': 'user_32IhT2MfrwUmKddLDbQSpLcYscC'}

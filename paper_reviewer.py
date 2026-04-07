@@ -33,18 +33,19 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
-# Per-stage model assignments — all via OpenRouter
+#base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
-MODEL_HARSH = f"claude:claude-sonnet-4-6"
+MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
 MODEL_NEUTRAL = f"{base_model}"
 MODEL_SPARK = f"qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
-MODEL_MERGER = f"zai:glm-5.1"
+# MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
+MODEL_MERGER = f"z-ai/glm-5" #rate limit is very tight on zai coding plan, switch back to openrouter if needed
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 5
-RETRY_DELAY = 10
+RETRY_DELAY = 10 
 REQUEST_TIMEOUT = 120
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
 
@@ -280,10 +281,10 @@ async def _call_openai(
 
 print("Testing ZAI client with a simple call ...")
 
-ans = asyncio.run(_call_openai(zai_client, "test", "You are a helpful assistant.", "What is the capital of France?", "glm-5.1"))
-if not "paris" in ans[0].lower():
-    print(ans[0])
-    print("🔥ZAI client test failed: unexpected answer")
+# ans = asyncio.run(_call_openai(zai_client, "test", "You are a helpful assistant.", "What is the capital of France?", "glm-5.1"))
+# if not "paris" in ans[0].lower():
+#     print(ans[0])
+#     print("🔥ZAI client test failed: unexpected answer")
 
 # ── Agent runners ─────────────────────────────────────────────────────
 
