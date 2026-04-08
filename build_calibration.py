@@ -11,7 +11,6 @@ Usage:
 """
 
 import asyncio
-import csv
 import json
 import random
 import re
@@ -21,19 +20,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from paper_reviewer import (
-    HARSH_CRITIC_PROMPT,
-    MODEL_HARSH,
-    MODEL_MERGER,
-    MODEL_NEUTRAL,
-    MODEL_RELATED_WORK,
-    MODEL_SPARK,
-    MERGER_PROMPT,
-    NEUTRAL_REVIEWER_PROMPT,
-    SPARK_FINDER_PROMPT,
     _get_client,
-    run_merge,
-    run_related_work_search,
-    run_reviewer,
+    run_pipeline,
     sanitize_text,
 )
 
@@ -80,66 +68,26 @@ async def run_sub_agents_and_merger(
     paper_content = sanitize_text(paper_content)
 
     client = _get_client()
-    pp = str(paper_path)
 
-    # Phase 1: All reviewers (parallel or sequential) — all via OpenAI
-    if parallel:
-        tasks = [
-            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
-        ]
-        if not skip_neutral:
-            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"))
-        if not skip_spark:
-            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
-        if not skip_related_work:
-            tasks.append(run_related_work_search(client, paper_content))
-
-        results_list = await asyncio.gather(*tasks)
-        idx = 0
-        harsh_review, _ = results_list[idx]; idx += 1
-        if not skip_neutral:
-            neutral_review, _ = results_list[idx]; idx += 1
-        else:
-            neutral_review = ""
-        if not skip_spark:
-            spark_review, _ = results_list[idx]; idx += 1
-        else:
-            spark_review = ""
-        if not skip_related_work:
-            related_work, _ = results_list[idx]
-        else:
-            related_work = ""
-    else:
-        harsh_review, _ = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        if not skip_neutral:
-            neutral_review, _ = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
-        else:
-            neutral_review = ""
-        if not skip_spark:
-            spark_review, _ = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
-        else:
-            spark_review = ""
-        if not skip_related_work:
-            related_work, _ = await run_related_work_search(client, paper_content)
-        else:
-            related_work = ""
-
-    # Phase 2: Merger only (no scoring — calibration reviews must not be scored)
-    print("  Running merger ...")
-    merged_review, _ = await run_merge(
-        client, harsh_review, neutral_review,
-        spark_review, related_work, paper_content,
-        skip_neutral=skip_neutral,
-        skip_spark=skip_spark,
+    result = await run_pipeline(
+        paper_path=str(paper_path),
+        paper_content=paper_content,
+        client=client,
+        parallel=parallel,
         skip_related_work=skip_related_work,
+        skip_spark=skip_spark,
+        skip_neutral=skip_neutral,
+        skip_score=True,
+        skip_human_finder=True,
+        venue="ICLR",
     )
 
     return {
-        "harsh_review": harsh_review,
-        "neutral_review": neutral_review,
-        "spark_review": spark_review,
-        "related_work": related_work,
-        "merged_review": merged_review,
+        "harsh_review": result["harsh_review"],
+        "neutral_review": result["neutral_review"],
+        "spark_review": result["spark_review"],
+        "related_work": result["related_work"],
+        "merged_review": result["merged_review"],
     }
 
 

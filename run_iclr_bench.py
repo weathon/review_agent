@@ -41,24 +41,14 @@ sys.stderr = _Tee(sys.stderr, _log_file)
 
 
 from paper_reviewer import (
-    HARSH_CRITIC_PROMPT,
     MODEL_HARSH,
-    MODEL_MERGER,
     MODEL_NEUTRAL,
     MODEL_RELATED_WORK,
-    MODEL_SPARK,
-    NEUTRAL_REVIEWER_PROMPT,
-    SPARK_FINDER_PROMPT,
-    decision_match,
     _get_client,
-    get_sdk_savings,
+    decision_match,
     match_label,
-    reset_sdk_savings,
-    run_merger,
-    run_related_work_search,
-    run_reviewer,
+    run_pipeline,
     sanitize_text,
-    score_to_decision,
 )
 
 # ── Paths (defaults to AI-Scientist, overridable with --data-dir) ─────
@@ -144,98 +134,33 @@ async def review_single_paper(
     print(f"  Paper length: {len(paper_content):,} chars")
 
     client = _get_client()
-    pp = str(paper_path)
 
-    sep = "~" * 60
-
-    savings_before = get_sdk_savings()
-
-    # Phase 1: All reviewers (parallel or sequential)
-    total_cost = 0.0
-    if parallel:
-        tasks = [
-            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR"),
-        ]
-        if not skip_neutral:
-            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR"))
-        if not skip_spark:
-            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR"))
-        if not skip_related_work:
-            tasks.append(run_related_work_search(client, paper_content))
-
-        print("  Phase 1: All reviewers in parallel ...")
-        results_list = await asyncio.gather(*tasks)
-
-        idx = 0
-        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
-        if not skip_neutral:
-            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            spark_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = results_list[idx]; total_cost += c
-        else:
-            related_work = "Related work search was skipped."
-    else:
-        print("  Phase 1: Reviewers sequentially ...")
-        harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue="ICLR")
-        total_cost += c
-        if not skip_neutral:
-            neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue="ICLR")
-            total_cost += c
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue="ICLR")
-            total_cost += c
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = await run_related_work_search(client, paper_content)
-            total_cost += c
-        else:
-            related_work = "Related work search was skipped."
-
-    for label, text in [("harsh_critic", harsh_review), ("neutral", neutral_review)]:
-        # print(f"\n  {sep}\n  [{label} output] ({len(text)} chars)\n  {sep}\n{text}\n")
-        if not text.strip():
-            print(f"  *** WARNING: {label} returned empty output ***")
-    # if not skip_spark:
-    #     print(f"\n  {sep}\n  [spark_finder output] ({len(spark_review)} chars)\n  {sep}\n{spark_review}\n")
-    # if not skip_related_work:
-    #     print(f"\n  {sep}\n  [related_work output] ({len(related_work)} chars)\n  {sep}\n{related_work}\n")
-
-    # Phase 2: Merger + Score (same conversation)
-    print("  Phase 2: Merger ...")
-    final_review, score, merger_cost = await run_merger(
-        client, harsh_review, neutral_review,
-        spark_review, related_work, paper_content,
+    result = await run_pipeline(
+        paper_path=str(paper_path),
+        paper_content=paper_content,
+        client=client,
+        parallel=parallel,
+        skip_related_work=skip_related_work,
+        skip_spark=skip_spark,
+        skip_neutral=skip_neutral,
+        skip_score=False,
+        skip_human_finder=True,
+        venue="ICLR",
         calibration_context=calibration_context,
         cal_dir=cal_dir,
-        skip_neutral=skip_neutral,
-        skip_spark=skip_spark,
-        skip_related_work=skip_related_work,
-        gt_score=gt_score
+        gt_score=gt_score,
     )
-    total_cost += merger_cost
-    sdk_savings = get_sdk_savings() - savings_before
-    score = round(float(score), 1)
-    decision = score_to_decision(score)
-    # print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
-    print(f"  [merger_score] structured score: {score}")
-    print(f"  Total cost: ${total_cost:.4f}")
-    print(f"  SDK savings: ${sdk_savings:.4f}")
+
+    print(f"  [merger_score] structured score: {result['score']}")
+    print(f"  Total cost: ${result['cost']:.4f}")
+    print(f"  SDK savings: ${result['sdk_savings']:.4f}")
 
     return {
-        "final_review": final_review,
-        "predicted_score": score,
-        "predicted_decision": decision,
-        "cost": total_cost,
-        "sdk_savings": sdk_savings,
+        "final_review": result["merged_review"],
+        "predicted_score": result["score"],
+        "predicted_decision": result["decision"],
+        "cost": result["cost"],
+        "sdk_savings": result["sdk_savings"],
     }
 
 

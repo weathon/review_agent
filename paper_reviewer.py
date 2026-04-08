@@ -714,7 +714,128 @@ async def run_human_finder(pp, human_review_dir):
                 sdk_savings += message.total_cost_usd
     _add_sdk_savings(sdk_savings)
     print(f"  [Human Finder] done (Claude Agent SDK) — saved ${sdk_savings:.4f}")
+    with open(Path(__file__).parent / "human_finder_debug.log", "a", encoding="utf-8") as f:
+        f.write(f"\n{'=' * 72}\n")
+        f.write(f"Paper path: {pp}\n")
+        f.write(f"Human review dir: {human_review_dir}\n")
+        f.write(f"{'-' * 72}\n")
+        f.write(result_text)
+        f.write(f"\n{'=' * 72}\n\n")
+        
     return result_text, 0.0
+
+async def run_pipeline(
+    paper_path: str,
+    paper_content: str,
+    client: AsyncOpenAI,
+    parallel: bool = True,
+    skip_related_work: bool = True,
+    skip_spark: bool = False,
+    skip_neutral: bool = False,
+    skip_score: bool = False,
+    skip_human_finder: bool = False,
+    venue: str = "ICLR",
+    calibration_context: str = "",
+    cal_dir: str = "",
+    gt_score: float | None = None,
+) -> dict:
+    """
+    Core review pipeline: Phase 1 (reviewers) + Phase 2 (merger + optional scorer).
+
+    Returns a dict with keys:
+      harsh_review, neutral_review, spark_review, related_work,
+      merged_review, cost, sdk_savings,
+      score (float or None if skip_score), decision (str or None if skip_score).
+    """
+    pp = paper_path
+
+    savings_before = get_sdk_savings()
+
+    # ── Phase 1: All reviewers (parallel or sequential) ───────────
+    total_cost = 0.0
+    if parallel:
+        tasks = [
+            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
+        ]
+        if not skip_neutral:
+            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
+        if not skip_spark:
+            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
+        if not skip_related_work:
+            tasks.append(run_related_work_search(client, paper_content))
+        if not skip_human_finder:
+            tasks.append(run_human_finder(pp, human_review_dir))
+
+        print("  Phase 1: All reviewers in parallel ...")
+        results_list = await asyncio.gather(*tasks)
+
+        idx = 0
+        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
+        if not skip_neutral:
+            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            spark_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            related_work = "Related work search was skipped."
+        if not skip_human_finder:
+            human_match_review, c = results_list[idx]; total_cost += c
+            harsh_review = (
+                f"{harsh_review.rstrip()}\n\n"
+                f"Additional transferable weaknesses from matched human reviews:\n"
+                f"{human_match_review.lstrip()}"
+            )
+    else:
+        raise NotImplementedError("Sequential mode is not implemented in this version.")
+
+    # ── Phase 2: Merger (+ optional scorer) ───────────────────────
+    if skip_score:
+        print("  Phase 2: Merger (no scoring) ...")
+        merged_review, merger_cost = await run_merge(
+            client, harsh_review, neutral_review,
+            spark_review, related_work, paper_content,
+            skip_neutral=skip_neutral,
+            skip_spark=skip_spark,
+            skip_related_work=skip_related_work,
+        )
+        total_cost += merger_cost
+        score = None
+        decision = None
+    else:
+        print("  Phase 2: Merger + Scorer ...")
+        merged_review, score, merger_cost = await run_merger(
+            client, harsh_review, neutral_review,
+            spark_review, related_work, paper_content,
+            calibration_context=calibration_context,
+            cal_dir=cal_dir,
+            skip_neutral=skip_neutral,
+            skip_spark=skip_spark,
+            skip_related_work=skip_related_work,
+            gt_score=gt_score,
+        )
+        total_cost += merger_cost
+        score = round(float(score), 1)
+        decision = score_to_decision(score)
+
+    sdk_savings = get_sdk_savings() - savings_before
+
+    return {
+        "harsh_review": harsh_review,
+        "neutral_review": neutral_review,
+        "spark_review": spark_review,
+        "related_work": related_work,
+        "merged_review": merged_review,
+        "score": score,
+        "decision": decision,
+        "cost": total_cost,
+        "sdk_savings": sdk_savings,
+    }
+
 
 async def review_paper(
     paper_path: str,
@@ -750,6 +871,7 @@ async def review_paper(
         cal_dir=cal_dir,
         calibration_path=calibration_path,
     )
+    pp = str(path)
     print(f"Loaded paper: {path.name} ({len(paper_content):,} chars)")
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Related work: {'disabled' if skip_related_work else 'enabled'}")
@@ -769,83 +891,30 @@ async def review_paper(
     print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
 
     client = _get_client(api_key=api_key)
-    
-    
 
-    # ── Phase 1: All reviewers (parallel or sequential) ───────────
-    total_cost = 0.0
-    if parallel:
-        tasks = [
-            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
-        ]
-        if not skip_neutral:
-            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
-        if not skip_spark:
-            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
-        if not skip_related_work:
-            tasks.append(run_related_work_search(client, paper_content))
-
-        tasks.append(run_human_finder(pp, human_review_dir))
-        print("Phase 1: All reviewers in parallel ...")
-        results_list = await asyncio.gather(*tasks)
-
-        idx = 0
-        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
-        if not skip_neutral:
-            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            spark_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            related_work = "Related work search was skipped."
-        human_match_review, c = results_list[idx]; total_cost += c
-        harsh_review = (
-            f"{harsh_review.rstrip()}\n\n"
-            f"Additional transferable weaknesses from matched human reviews:\n"
-            f"{human_match_review.lstrip()}"
-        )
-
-    else: 
-        # print("Phase 1: Reviewers sequentially ...")
-        # harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
-        # total_cost += c
-        # if not skip_neutral:
-        #     neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
-        #     total_cost += c
-        # else:
-        #     neutral_review = "Neutral reviewer was skipped."
-        # if not skip_spark:
-        #     spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
-        #     total_cost += c
-        # else:
-        #     spark_review = "Spark finder was skipped."
-        # if not skip_related_work:
-        #     related_work, c = await run_related_work_search(client, paper_content)
-        #     total_cost += c
-        # else:
-        #     related_work = "Related work search was skipped."
-        raise NotImplementedError("Sequential mode is not implemented in this version.")
-
-    # ── Phase 2: Merger + Score (same conversation) ───────────────
-    print("\nPhase 2: Merger ...")
-    final_review, final_score, merger_cost = await run_merger(
-        client, harsh_review, neutral_review,
-        spark_review, related_work, paper_content,
+    result = await run_pipeline(
+        paper_path=pp,
+        paper_content=paper_content,
+        client=client,
+        parallel=parallel,
+        skip_related_work=skip_related_work,
+        skip_spark=skip_spark,
+        skip_neutral=skip_neutral,
+        venue=venue,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
-        skip_neutral=skip_neutral,
-        skip_spark=skip_spark,
-        skip_related_work=skip_related_work,
     )
-    total_cost += merger_cost
-    final_score = round(float(final_score), 1)
+
+    total_cost = result["cost"]
+    final_review = result["merged_review"]
+    final_score = result["score"]
+    final_decision = result["decision"]
+    harsh_review = result["harsh_review"]
+    neutral_review = result["neutral_review"]
+    spark_review = result["spark_review"]
+    related_work = result["related_work"]
+
     print(f"Total cost for this paper: ${total_cost:.4f}")
-    final_decision = score_to_decision(final_score)
 
     # ── Output ────────────────────────────────────────────────────
     separator = "=" * 72
