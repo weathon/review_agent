@@ -19,6 +19,7 @@ from pathlib import Path
 # Tee stdout+stderr to a log file so all intermediate output is saved
 _log_path = Path(__file__).parent / "bench_run.log"
 _log_file = open(_log_path, "w")
+CONCURRENCY = 3
 
 class _Tee:
     """Write to both the original stream and a log file."""
@@ -279,7 +280,6 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                          "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     # Run papers concurrently (up to CONCURRENCY at a time)
-    CONCURRENCY = 3
     semaphore = asyncio.Semaphore(CONCURRENCY)
     file_lock = asyncio.Lock()
     completed = [0]  # mutable counter

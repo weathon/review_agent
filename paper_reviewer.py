@@ -37,13 +37,14 @@ ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 base_model = "qwen/qwen3.5-flash-02-23" 
 MODEL_HARSH = f"qwen/qwen3.5-plus-02-15" #用claude subscription白嫖
 MODEL_NEUTRAL = f"{base_model}"
-MODEL_SPARK = f"qwen/qwen3.5-plus-02-15"
+MODEL_SPARK = f"qwen/qwen3.5-plus-02-15" 
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 MODEL_MERGER = f"z-ai/glm-5.1" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-6" 
+MODEL_FIND_HUMAN = f"claude:claude-haiku-4-5" 
+MODEL_SCORER = f"claude:claude-haiku-4-5" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 
 MAX_RETRIES = 5
@@ -544,7 +545,7 @@ async def run_scorer(
     gt_score: float | None = None,
 ) -> tuple[float, float]:
     """
-    Scorer — uses Claude Agent SDK (claude-sonnet-4-6) to search calibration
+    Scorer — uses Claude Agent SDK (claude-haiku-4-5) to search calibration
     examples via Grep/Read, then scores the paper. Returns (score, cost).
     """
     import tempfile
@@ -568,11 +569,11 @@ async def run_scorer(
         cal_dir_abs=cal_dir_abs,
     )
 
-    print(f"  [scorer-agent] starting RAG scorer (claude-sonnet-4-6, cal={cal_dir_abs}) ...")
+    print(f"  [scorer-agent] starting RAG scorer (claude-haiku-4-5, cal={cal_dir_abs}) ...")
 
     result_text = ""
     options = ClaudeAgentOptions(
-        model="claude-sonnet-4-6",
+        model=MODEL_SCORER.split(":", 1)[1],
         cwd=cal_dir_abs or None,
         allowed_tools=["Grep", "Read", "Glob", "Agent"],
         permission_mode="bypassPermissions",
@@ -588,7 +589,7 @@ async def run_scorer(
                     if isinstance(block, TextBlock):
                         result_text += block.text
             if isinstance(message, ResultMessage):
-                cost += message.total_cost_usd
+                total_cost += message.total_cost_usd
 
     print(f"  [scorer-agent] Claude Agent SDK savings: ${total_cost:.4f}")
     _add_sdk_savings(total_cost)
@@ -704,7 +705,7 @@ async def run_human_finder(pp, human_review_dir):
     options = ClaudeAgentOptions(
         model=MODEL_FIND_HUMAN.split(":", 1)[1],
         cwd=str(Path(human_review_dir).resolve()),
-        allowed_tools=["Read", "Glob", "Grep"],
+        allowed_tools=["Read", "Glob", "Grep", "Agent"],
         permission_mode="bypassPermissions",
         max_turns=30,
     )
@@ -903,7 +904,7 @@ async def review_paper(
     if not skip_related_work:
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
     print(f"  Merger:         {MODEL_MERGER}")
-    print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
+    print(f"  Scorer:         claude-haiku-4-5 (Agent SDK)\n")
 
     client = _get_client(api_key=api_key)
 
@@ -1039,7 +1040,7 @@ if __name__ == "__main__":
         print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
-        print(f"  Scorer:                         claude-sonnet-4-6 (Agent SDK)")
+        print(f"  Scorer:                         claude-haiku-4-5 (Agent SDK)")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--sequential" not in sys.argv
