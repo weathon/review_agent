@@ -33,16 +33,18 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
-#base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
-base_model = "qwen/qwen3.5-flash-02-23"
-MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
+# base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
+base_model = "qwen/qwen3.5-flash-02-23" 
+MODEL_HARSH = f"qwen/qwen3.5-plus-02-15" #用claude subscription白嫖
 MODEL_NEUTRAL = f"{base_model}"
 MODEL_SPARK = f"qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 MODEL_MERGER = f"z-ai/glm-5" #rate limit is very tight on zai coding plan, switch back to openrouter if needed
-MODEL_PARSER = "openai/gpt-5.4-nano"
+MODEL_PARSER = "openai/gpt-5.4-nano" 
+MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-6" 
+human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 
 MAX_RETRIES = 5
 RETRY_DELAY = 10 
@@ -66,6 +68,18 @@ LEAKAGE_WARNING_PATTERNS = [
     r"\bcalibration copy\b",
 ]
 
+_total_sdk_savings: float = 0.0
+
+def _add_sdk_savings(amount: float) -> None:
+    global _total_sdk_savings
+    _total_sdk_savings += amount
+
+def get_sdk_savings() -> float:
+    return _total_sdk_savings
+
+def reset_sdk_savings() -> None:
+    global _total_sdk_savings
+    _total_sdk_savings = 0.0
 
 
 class ScoreSchema(BaseModel):
@@ -113,6 +127,7 @@ SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt")
 RELATED_WORK_PROMPT = _load_prompt("related_work.txt")
 RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt")
 _MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt")
+HUMAN_FINDER_PROMPT = _load_prompt("find_human_match.txt")
 
 
 def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, skip_related_work: bool = False) -> str:
@@ -287,6 +302,8 @@ print("Testing ZAI client with a simple call ...")
 #     print("🔥ZAI client test failed: unexpected answer")
 
 # ── Agent runners ─────────────────────────────────────────────────────
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+
 
 async def _run_reviewer_claude_sdk(
     name: str,
@@ -297,7 +314,6 @@ async def _run_reviewer_claude_sdk(
 ) -> tuple[str, float]:
     """Run a reviewer via Claude Agent SDK. The agent reads the paper file itself.
     Returns (review, cost=0.0) — SDK does not expose cost."""
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 
     paper_abs = str(Path(paper_path).resolve())
     venue_line = (
@@ -327,9 +343,11 @@ async def _run_reviewer_claude_sdk(
         model=model_id,
         cwd="./tmp",
         allowed_tools=["Read", "Glob", "Grep"],
+        disallowed_tools=["Bash"],
         permission_mode="bypassPermissions",
         max_turns=30,
     )
+    cost = 0
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(prompt)
         async for message in sdk_client.receive_response():
@@ -337,8 +355,10 @@ async def _run_reviewer_claude_sdk(
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
+                cost += message.total_cost_usd
 
-    print(f"  [{name}] done — {model_id} (Claude Agent SDK)")
+    print(f"  [{name}] done — {model_id} (Claude Agent SDK) — saved ${cost:.4f}")
+    _add_sdk_savings(cost)
     return result_text, 0.0
 
 
@@ -555,6 +575,7 @@ async def run_scorer(
         effort="medium",
         max_turns=30,
     )
+    total_cost = 0
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(prompt)
         async for message in sdk_client.receive_response():
@@ -562,6 +583,9 @@ async def run_scorer(
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
+                total_cost += message.total_cost_usd
+    print(f"  [scorer-agent] Claude Agent SDK savings: ${total_cost:.4f}")
+    _add_sdk_savings(total_cost)
 
     # Clean up temp files
     review_path.unlink(missing_ok=True)
@@ -662,6 +686,36 @@ def _resolve_calibration_inputs(
         return resolved_path.read_text(encoding="utf-8", errors="replace"), ""
     return calibration_context, cal_dir
 
+
+
+async def run_human_finder(pp, human_review_dir):
+    query = (
+        f"{HUMAN_FINDER_PROMPT}\n\n"
+        f"Paper file path: {pp}\n"
+        f"Human reviews directory: {human_review_dir}\n"
+    )
+    result_text = ""
+    options = ClaudeAgentOptions(
+        model=MODEL_FIND_HUMAN.split(":", 1)[1],
+        cwd=str(Path(human_review_dir).resolve()),
+        allowed_tools=["Read", "Glob", "Grep"],
+        permission_mode="bypassPermissions",
+        max_turns=30,
+    )
+
+    sdk_savings = 0.0
+    async with ClaudeSDKClient(options=options) as sdk_client:
+        await sdk_client.query(query)
+        async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        result_text += block.text
+                sdk_savings += message.total_cost_usd
+    _add_sdk_savings(sdk_savings)
+    print(f"  [Human Finder] done (Claude Agent SDK) — saved ${sdk_savings:.4f}")
+    return result_text, 0.0
+
 async def review_paper(
     paper_path: str,
     parallel: bool = True,
@@ -715,7 +769,8 @@ async def review_paper(
     print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
 
     client = _get_client(api_key=api_key)
-    pp = str(path)
+    
+    
 
     # ── Phase 1: All reviewers (parallel or sequential) ───────────
     total_cost = 0.0
@@ -730,6 +785,7 @@ async def review_paper(
         if not skip_related_work:
             tasks.append(run_related_work_search(client, paper_content))
 
+        tasks.append(run_human_finder(pp, human_review_dir))
         print("Phase 1: All reviewers in parallel ...")
         results_list = await asyncio.gather(*tasks)
 
@@ -744,28 +800,36 @@ async def review_paper(
         else:
             spark_review = "Spark finder was skipped."
         if not skip_related_work:
-            related_work, c = results_list[idx]; total_cost += c
+            related_work, c = results_list[idx]; total_cost += c; idx += 1
         else:
             related_work = "Related work search was skipped."
-    else:
-        print("Phase 1: Reviewers sequentially ...")
-        harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
-        total_cost += c
-        if not skip_neutral:
-            neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
-            total_cost += c
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
-            total_cost += c
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = await run_related_work_search(client, paper_content)
-            total_cost += c
-        else:
-            related_work = "Related work search was skipped."
+        human_match_review, c = results_list[idx]; total_cost += c
+        harsh_review = (
+            f"{harsh_review.rstrip()}\n\n"
+            f"Additional transferable weaknesses from matched human reviews:\n"
+            f"{human_match_review.lstrip()}"
+        )
+
+    else: 
+        # print("Phase 1: Reviewers sequentially ...")
+        # harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
+        # total_cost += c
+        # if not skip_neutral:
+        #     neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+        #     total_cost += c
+        # else:
+        #     neutral_review = "Neutral reviewer was skipped."
+        # if not skip_spark:
+        #     spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
+        #     total_cost += c
+        # else:
+        #     spark_review = "Spark finder was skipped."
+        # if not skip_related_work:
+        #     related_work, c = await run_related_work_search(client, paper_content)
+        #     total_cost += c
+        # else:
+        #     related_work = "Related work search was skipped."
+        raise NotImplementedError("Sequential mode is not implemented in this version.")
 
     # ── Phase 2: Merger + Score (same conversation) ───────────────
     print("\nPhase 2: Merger ...")

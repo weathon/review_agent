@@ -51,7 +51,9 @@ from paper_reviewer import (
     SPARK_FINDER_PROMPT,
     decision_match,
     _get_client,
+    get_sdk_savings,
     match_label,
+    reset_sdk_savings,
     run_merger,
     run_related_work_search,
     run_reviewer,
@@ -146,6 +148,8 @@ async def review_single_paper(
 
     sep = "~" * 60
 
+    savings_before = get_sdk_savings()
+
     # Phase 1: All reviewers (parallel or sequential)
     total_cost = 0.0
     if parallel:
@@ -218,17 +222,20 @@ async def review_single_paper(
         gt_score=gt_score
     )
     total_cost += merger_cost
+    sdk_savings = get_sdk_savings() - savings_before
     score = round(float(score), 1)
     decision = score_to_decision(score)
     # print(f"\n  {sep}\n  [merger output] ({len(final_review)} chars)\n  {sep}\n{final_review}\n")
     print(f"  [merger_score] structured score: {score}")
     print(f"  Total cost: ${total_cost:.4f}")
+    print(f"  SDK savings: ${sdk_savings:.4f}")
 
     return {
         "final_review": final_review,
         "predicted_score": score,
         "predicted_decision": decision,
         "cost": total_cost,
+        "sdk_savings": sdk_savings,
     }
 
 
@@ -344,7 +351,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             f.write(f"Related Work: {MODEL_RELATED_WORK} (OpenRouter)\n\n")
         with open(csv_path, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost",
+            w.writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost", "sdk_savings",
                          "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     # Run papers concurrently (up to CONCURRENCY at a time)
@@ -395,6 +402,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                         "predicted_decision": pred_dec,
                         "match": match,
                         "cost": review_result.get("cost", 0.0),
+                        "sdk_savings": review_result.get("sdk_savings", 0.0),
                         "time_s": elapsed,
                         "final_review": review_result["final_review"],
                     }
@@ -420,6 +428,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                             "predicted_decision": "N/A",
                             "match": None,
                             "cost": 0.0,
+                            "sdk_savings": 0.0,
                             "time_s": elapsed,
                             "final_review": f"ERROR: {e}",
                         }
@@ -452,6 +461,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
                         r["gt_binary"],
                         match_str,
                         f"{r['cost']:.4f}",
+                        f"{r['sdk_savings']:.4f}",
                         *gt_scores_padded,
                     ])
 
@@ -500,10 +510,13 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         print("Correct:          N/A")
         print("Accuracy:         N/A (decision labels disabled)")
     total_cost = sum(r.get("cost", 0.0) for r in results)
+    total_sdk_savings = sum(r.get("sdk_savings", 0.0) for r in results)
     print(f"Total time:       {total_elapsed:.1f}s")
     print(f"Avg time/paper:   {total_elapsed / len(results):.1f}s")
     print(f"Total cost:       ${total_cost:.4f}")
     print(f"Avg cost/paper:   ${total_cost / max(len(results), 1):.4f}")
+    print(f"SDK savings:      ${total_sdk_savings:.4f}")
+    print(f"Net cost:         ${total_cost - total_sdk_savings:.4f}")
 
     print(f"\n{'Paper ID':<20} {'GT':>10} {'Predicted':>10} {'GT Score':>10} {'Pred Score':>11} {'Match':>7}")
     print("─" * 72)
