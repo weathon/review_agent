@@ -19,7 +19,7 @@ import traceback
 from pathlib import Path
 
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv 
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel
 
@@ -29,7 +29,7 @@ load_dotenv()  # loads .env from cwd or parent dirs
 PROVIDER = "zai" 
 
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
@@ -43,11 +43,11 @@ MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 MODEL_MERGER = f"z-ai/glm-5.1" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-5"  #用claude subscription白嫖
+MODEL_FIND_HUMAN = f"claude:claude-haiku-4-5"
 MODEL_SCORER = f"claude:claude-sonnet-4-5" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 
-MAX_RETRIES = 5
+MAX_RETRIES = 10
 RETRY_DELAY = 10 
 REQUEST_TIMEOUT = 120
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
@@ -163,7 +163,6 @@ def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, s
 MERGER_PROMPT = _build_merger_prompt()
 
 
-SCORE_PROMPT = _load_prompt("scorer.txt")
 # ── Core logic ────────────────────────────────────────────────────────
 
 def sanitize_text(text: str) -> str:
@@ -193,7 +192,7 @@ def _get_zai_client(api_key: str | None = None) -> AsyncOpenAI:
         )
     return AsyncOpenAI(api_key=resolved_api_key, base_url=ZAI_BASE_URL)
 
-zai_client = _get_zai_client(os.environ.get("ZAI_API_KEY", ""))
+zai_client = _get_zai_client(os.environ["ZAI_API_KEY"])
 
 
 
@@ -225,13 +224,13 @@ def _extract_cost(response) -> float:
     """Extract cost from OpenRouter response usage object."""
     usage = getattr(response, "usage", None)
     if usage is None:
-        return 0.0
+        raise ValueError("Response has no usage object — cannot extract cost")
     cost = getattr(usage, "cost", None)
     if cost is not None:
         return float(cost)
-    if isinstance(usage, dict):
-        return float(usage.get("cost", 0.0))
-    return 0.0
+    if isinstance(usage, dict) and "cost" in usage:
+        return float(usage["cost"])
+    raise ValueError(f"Usage object has no cost field: {usage}")
 
 
 async def _call_openai(
@@ -257,7 +256,7 @@ async def _call_openai(
             if extra:
                 kwargs["extra_body"] = extra
             response = await client.chat.completions.create(**kwargs)
-            result = response.choices[0].message.content or ""
+            result = response.choices[0].message.content
             cost = _extract_cost(response)
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
@@ -272,8 +271,7 @@ async def _call_openai(
                     print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
-                _error_logger.error(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
-                print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
+                raise RuntimeError(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
             print(f"  [{name}] done — {model} (OpenRouter) — {tokens} tokens — ${cost:.4f}")
             return result, cost
         except APITimeoutError as e:
@@ -296,7 +294,7 @@ async def _call_openai(
                 await asyncio.sleep(wait)
             else:
                 raise
-    return "", 0.0
+    raise RuntimeError(f"[{name}] failed after {MAX_RETRIES} attempts, model={model}")
 
 print("Testing ZAI client with a simple call ...")
 
@@ -563,10 +561,9 @@ async def run_scorer(
 
     scorer_agent_template = _load_prompt("scorer_agent.txt")
     prompt = scorer_agent_template.format(
-        score_prompt=SCORE_PROMPT,
         review_path=review_path,
         paper_path=paper_path,
-        cal_dir_abs=cal_dir_abs,
+        cal_dir_abs=cal_dir_abs, 
     )
 
     print(f"  [scorer-agent] starting RAG scorer (claude-haiku-4-5, cal={cal_dir_abs}) ...")
@@ -683,14 +680,17 @@ def _resolve_calibration_inputs(
         resolved_path = DEFAULT_CALIBRATION_PATH.resolve()
 
     if resolved_path is None:
-        return calibration_context, cal_dir
+        raise FileNotFoundError(
+            "No calibration source found: no cal_dir, no calibration_context, "
+            "no calibration_path provided, and default calibration.md does not exist."
+        )
 
     cal_dir_candidate = resolved_path.parent / "cal"
     if cal_dir_candidate.is_dir():
         return "", str(cal_dir_candidate)
     if resolved_path.exists():
         return resolved_path.read_text(encoding="utf-8", errors="replace"), ""
-    return calibration_context, cal_dir
+    raise FileNotFoundError(f"Calibration path does not exist: {resolved_path}")
 
 
 

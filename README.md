@@ -162,6 +162,9 @@ python run_iclr_bench.py 50 3112 --parallel \
 
 # 4. Compute metrics
 python metric.py bench_scores.csv
+
+# 5. Watch the benchmark CSV and log refreshed plots to W&B
+python watch_bench_scores.py --project review-agent-bench
 ```
 
 ## Baselines
