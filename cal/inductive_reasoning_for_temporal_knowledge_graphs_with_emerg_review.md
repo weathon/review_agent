@@ -1,7 +1,7 @@
-=== CALIBRATION EXAMPLE 66 ===
+=== CALIBRATION EXAMPLE 35 ===
 
 # Harsh Critic Review
-Now I have enough to write a thorough review. Let me produce it.
+Now I have sufficient material for a thorough review. Let me produce it.
 
 ---
 
@@ -9,218 +9,217 @@ Now I have enough to write a thorough review. Let me produce it.
 
 ### Title & Abstract
 
-The title accurately reflects the contribution. The abstract's headline claim—28.6% average MRR improvement—is specific and matched in Table 1. The "roughly 25% of entities are emerging" statistic, however, depends critically on the non-standard 5:2:3 chronological split (instead of the widely used 8:1:1). Under the standard split the proportion would be meaningfully smaller, so presenting this number without qualification slightly overstates the ubiquity of the phenomenon. The code link is included, which is positive for reproducibility.
+The title is accurate and clearly signals the scope. The abstract's headline claim—"average improvement of 28.6% in MRR"—is computed as the arithmetic mean of four per-dataset relative improvements ({24.6%, 24.3%, 15.0%, 50.5%}), which is dominated by a single outlier result on GDELT. Averaging relative improvements across datasets with very different absolute magnitudes obscures more than it reveals. The abstract does not mention the non-standard chronological split (5:2:3 instead of the conventional 8:1:1) that was specifically constructed to enlarge the emerging-entity fraction; this split choice should be disclosed upfront as it governs what the numbers actually mean.
 
 ---
 
 ### Introduction & Motivation
 
-The problem is well-framed and genuinely important. The motivating example (Barack Obama's first state visit) is intuitive. Contributions are enumerated clearly, including both the technical components and the empirical study.
-
-One framing concern: the paper characterizes prior inductive methods as failing because "new entities already have known interactions" in static KGs but not in TKGs. This is a valid distinction, but the contrast with methods like GenTKG and ICL (which use LLMs and therefore need no historical interactions at all) is never directly addressed here. The introduction could be clearer about why text-based LLM approaches are insufficient.
+The problem is genuinely well-motivated. The observation that ~25% of entities are unseen during training is important, but this statistic is obtained under the authors' custom 5:2:3 split—an 8:1:1 split would expose far fewer unseen entities. The introduction should qualify this. The "representation collapse" framing is conceptually sharp and the three-question empirical decomposition (Data / Representation / Feasibility) is a clear organizing structure. The opening example (Obama's first state visit) is illustrative, though the analogy to molecular networks (Hadipour et al., 2025) is peripheral and can be cut.
 
 ---
 
-### Preliminaries & Problem Formalization (Section 2)
+### Preliminaries and Problem Formalization (Section 2)
 
-The formal definition of emerging entities and the evaluation protocol (queries restricted to `tq = te(e)`, i.e., the strict zero-history condition) are clearly stated. This is the most challenging version of the task and a legitimate focus.
-
-**Concern:** The "Unknown" setting (introduced only in Appendix F.3) allows the entity to have some test-time history before `tq`. The paper treats this as supplementary, but it is arguably the more practically relevant scenario in many real systems (where a newly observed entity quickly accumulates a few interactions). Burying this setting in the appendix under-represents a setting where TRANSFIR's relative advantage may also be important to understand.
+The formal definition of emerging entities as those satisfying $e \in E_{1:t} \setminus E_{1:t-1}$ is clean and unambiguous. The constraint $t_q = t_e(e)$ (strict zero-history) is a strong but principled choice and clearly distinguishes this task from the more relaxed "Unknown" setting of Appendix F.3. One gap: the paper never specifies how entity titles are defined across datasets. For GDELT, entity names are abbreviations (e.g., "EGYPT (EGY@ OPP REF LEG SPY...)"), which directly affects the BERT-based classification step. The formalism implicitly assumes entity titles exist and are meaningful, which should be flagged as an assumption.
 
 ---
 
 ### Empirical Investigation (Section 3)
 
-The three-angle investigation (Data, Representation, Feasibility) is a genuine strength of the paper. The "Collapse Ratio" metric is carefully defined in Appendix C.2 and grounded in generalized variance theory. The t-SNE visuals combined with the quantitative collapse ratio (1.02 → 0.0055 in LogCL) provide convincing evidence of Observation 2.
+**Q1 (Prevalence):** Figures 2(a)/(b) convincingly show entity emergence and performance degradation across four datasets. However, re-emphasizing that the 25% figure is split-dependent is important. A brief sensitivity analysis ("how does the fraction change at 8:1:1?") would strengthen this finding.
 
-**Concern on Observation 3:** The feasibility claim—that semantically similar entities share transferable temporal patterns—is illustrated by a single example (president → government visit patterns). This is the most important empirical claim motivating the entire method, yet it receives only anecdotal support. No quantitative analysis is provided of how frequently such pattern matches occur across entity types, or what fraction of test queries for emerging entities are actually covered by a cluster with meaningful IC history. Without this, it is unclear how often the key assumption holds in practice.
+**Q2 (Representation Collapse):** The "Collapse Ratio" (CR) is a novel metric defined as the ratio of generalized variances of emerging vs. known entity embeddings (Appendix C.2). The metric is rotation-invariant and well-grounded in Anderson (1958) and Zbontar et al. (2021). However, CR = 0.0055 vs. 1.0201 after training in LogCL is presented without error bars or statistical significance across seeds, and the reference set used to normalize (known-entity embeddings) can itself shift during training. If the known entities also collapse (which is plausible under contrastive loss), the ratio can be inflated. The paper should verify this by also reporting GS(X_ref) before and after training.
 
-**Concern on the 25% statistic:** This figure is measured under the paper's non-standard 5:2:3 split. Under the standard 8:1:1 split (used by most prior TKG papers), the proportion of emerging entities would be substantially lower. The paper does not report what this number would be under the standard split, making it hard to assess whether the problem is as widespread as claimed in general settings.
+**Q3 (Transferability):** Observation 3 is qualitative—a cherry-picked example of president entities sharing visit–negotiation patterns. This is motivational but not statistical evidence. The claim that "semantically similar entities exhibit comparable interaction histories" is the core bet of the entire framework, yet it is never quantified (e.g., as intra-cluster interaction entropy or pattern overlap). This is a meaningful hole given how central this assumption is.
 
 ---
 
 ### Methodology (Section 4)
 
-**Codebook Mapping (Section 4.1):** The VQ codebook design is technically sound and leverages a well-understood mechanism (VQ-VAE). However, there is a notable inconsistency in the commitment loss (Equation 3):
+**Codebook Mapping (Section 4.1):** The VQ codebook with stop-gradient is standard (VQ-VAE). However, there is a technical inconsistency: the commitment loss is
 
-> `L_commit = ||h_e − sg[c_{π(e)}]||²`
+$$\mathcal{L}_{\text{commit}} = \|\mathbf{h}_e - \text{sg}[\mathbf{c}_{\pi(e)}]\|_2^2$$
 
-The stop-gradient is applied to the codeword, which means gradients would flow through `h_e`. But the paper explicitly states "entity embeddings remain **fixed** during training." If `h_e` is frozen, this loss has zero gradient with respect to any learnable parameter and is a no-op. This is not explained or justified. In the original VQ-VAE, the commitment loss encourages the encoder (whose weights are trainable) to commit to its assigned codeword. Here, the "encoder" is a fixed BERT model, making this loss vacuous. The authors should clarify whether `h_e` is truly frozen during training or whether there is a trainable projection layer receiving the commitment gradient.
+whose gradient w.r.t. $\mathbf{h}_e$ would normally push entity embeddings toward their prototype—but $\mathbf{h}_e$ is declared *frozen* throughout (they are fixed BERT outputs). This means $\mathcal{L}_{\text{commit}}$ is zero-gradient with respect to any learnable parameter and contributes nothing to training. The commitment loss is designed to be used when the encoder is learnable; applying it to frozen embeddings is a design error (or at minimum a dead loss term). The paper needs to clarify what $\mathcal{L}_{\text{commit}}$ actually optimizes in this specific setup.
 
-**Interaction Chain Encoding (Section 4.2):** The construction (Equation 5–6) is clear. The query-relation-guided TopK filtering is a sensible design for reducing irrelevant context.
+**Interaction Chain Encoding (Section 4.2):** The TopK filtering by cosine similarity between query and interaction relation embeddings (Eq. 6) is a reasonable design choice but raises a subtle concern: at inference time for an emerging entity, there are no prior interactions, so $\mathcal{C}_q = \emptyset$ and $\mathbf{h}_{\text{eq}}^{\text{IC}}$ is undefined or a zero vector. The paper never addresses this case explicitly. The IC embedding for emerging entities must come entirely from the Pattern Transfer module, but this dependency is not stated clearly—readers cannot tell whether there is a fallback path or whether the model silently produces a zero/null IC embedding for emerging entities.
 
-**Critical gap:** By definition, an emerging entity at `tq = te(e)` has **no historical interactions**—so its IC `C_q` is empty. The paper never explicitly addresses this case. The benefit presumably flows entirely through the cluster-level dynamic prototype `c_k^{dyn}` in the Pattern Transfer step. This should be stated explicitly, and an ablation or analysis of how often the query entity's IC is empty vs. non-empty would clarify the relative contributions of Sections 4.2 and 4.3.
+**Chain Pattern Transfer (Section 4.3):** Equation (11): $\tilde{\mathbf{h}}_e = \mathbf{h}_e + \omega_e \cdot \mathbf{c}_{\pi(e)}^{\text{dyn}}$. Here $\omega_e = \Psi(z_e)$ where $z_e = [\mathbf{h}_e \| \mathbf{c}_{\pi(e)}^{\text{dyn}}]$. The dimensionality of $\omega_e$ is never specified. If $\omega_e \in \mathbb{R}^d$, the "·" is element-wise multiplication; if $\omega_e \in \mathbb{R}$, it is a scalar gate. These are architecturally very different choices. Appendix D does not clarify this. Related: if a semantic cluster $k$ has no query entities at timestamp $t$ (i.e., $Q_k = \emptyset$), the dynamic prototype $\mathbf{c}_k^{\text{dyn}}$ is the average of an empty set, which is undefined. The paper does not specify a fallback (e.g., using the static codeword $\mathbf{c}_k$). This edge case is non-trivial because sparse datasets will frequently have clusters with no active queries.
 
-**Chain Pattern Transfer (Section 4.3):** The cluster pooling (Equation 9) aggregates IC representations from known entities in the same cluster, then the pattern transfer (Equation 11) modulates each entity's static embedding using the cluster prototype. This is a clean design. One potential weakness: the cluster prototype is a simple arithmetic mean of IC embeddings, which may fail when a cluster is semantically heterogeneous or when the active entities at a given timestamp are not representative of the cluster as a whole.
-
----
-
-### Experiments & Results (Section 5)
-
-**Non-standard train/test split:** The paper uses a 5:2:3 chronological split rather than the widely adopted 8:1:1 split. The justification given is that this "reveals more emerging entities." However, this means:
-1. All baseline numbers in Table 1 are not directly comparable to any published result in the TKG literature, making it impossible for readers to verify baseline implementations against reported numbers.
-2. Baselines trained on only 50% of the data are likely severely disadvantaged, which inflates TRANSFIR's apparent improvement margins. For instance, REGCN achieves MRR 0.1175 on ICEWS14 in this evaluation, far below its published performance with the standard split. It is not clear whether any hyperparameter tuning was performed for baselines under this new split.
-
-This is the most significant methodological concern in the paper. The authors should either (a) also run experiments under the standard split (even with fewer emerging entities), or (b) provide a very thorough justification, with evidence that the baselines are fairly tuned under the new split.
-
-**Baseline modification for static inductive methods:** For CompGCN, MorsE, and InGram, the paper "merge[s] a small window of timestamps (e.g., 7) into a subgraph to run." This is a significant non-trivial adaptation. Since these methods were not designed for the TKG setting at all, their poor performance may reflect this mismatch rather than an intrinsic inability to handle emerging entities. The comparison is not entirely fair, and the paper should acknowledge this limitation more prominently.
-
-**Missing Hits@1:** The paper reports MRR, Hits@3, and Hits@10. Hits@1 is a more stringent metric and is standard in KG link prediction. Its omission is unexplained and potentially selective.
-
-**No variance in main table:** Table 1 reports single values without standard deviations. Appendix F.2 includes error bars for ablations, so the infrastructure exists. For the main comparison, variance over 3 seeds should be shown, especially given that improvements over the best baseline can be relatively small on individual datasets (e.g., +15% MRR on ICEWS05-15).
-
-**Textual encoder comparison (Table 2):** BERT (2019) outperforms Qwen3-Embedding (2025) across all three reported datasets, with a notable gap on ICEWS14 (0.3246 vs. 0.2567). Qwen3-Embedding is a state-of-the-art dense retrieval model specifically designed for embedding tasks. This counterintuitive result is neither explained nor ablated. Possible explanations (e.g., BERT's tokenization aligning better with short entity names, codebook training being tuned to BERT's embedding geometry) should be investigated and discussed. As it stands, this result raises questions about whether the codebook was effectively over-fit to BERT representations.
-
-**GPU efficiency claim (Figure 7):** The paper claims "significantly lower peak GPU memory usage." However, Figure 7 is difficult to read and the precise values for LogCL and HisRes are not clearly stated in the text. A clearer table or more explicit comparison would strengthen this claim.
+The overall pipeline flow (Classification → Representation → Generalization) is logical, but the paper's description of what happens for an emerging entity at query time in a single coherent walkthrough is missing. The reader must reconstruct this from scattered equations.
 
 ---
 
-### Ablation Study (Section 5.4)
+### Experiments (Section 5)
 
-The four ablation variants are well-chosen and the conclusions are consistent across metrics (confirmed in Appendix F.2). The observation that removing the textual encoder can *improve* performance on GDELT is an important honest acknowledgment; the explanation (GDELT entity names contain abbreviations and symbolic elements) is plausible but insufficiently analyzed. It would be useful to know whether the VQ clustering degrades specifically on GDELT, and whether a simpler fallback (e.g., random BERT embeddings or entity frequency features) helps.
+**Dataset Split:** The authors explicitly depart from the standard 8:1:1 chronological split and use 5:2:3, justifying this as exposing more emerging entities. This creates a fundamental comparability problem: all reported numbers are incomparable to every prior published result on ICEWS14, ICEWS18, ICEWS05-15, and GDELT. The paper presents no results under the standard split, so it is impossible to know whether TRANSFIR's baseline performance is competitive with published numbers, or whether baselines are simply weakened by having less training data. This is a serious issue for reproducibility and fair benchmarking within the ICLR community.
 
-**Concern:** The ablation variant "-Codebook: removing the codebook mapping and using static clustering features only" is described ambiguously. What exactly are "static clustering features"? How are entities clustered without the codebook? This variant's design needs to be spelled out more clearly, since it is directly testing the paper's core contribution.
+**Baseline Evaluation Fairness:** Several baseline adaptations are non-trivial:
+- Static inductive methods (InGram, CompGCN, MorsE) "merge a small window of timestamps (e.g., 7) into a subgraph." This is a coarse approximation that may poorly represent these methods' strengths—they are inherently designed for static graphs and are being evaluated in a setting they were never designed for.
+- TILP's rule length is reduced (from 5 to 3/2) for computational reasons. This fundamentally changes the expressiveness of the model and should be reported as a caveat.
+- The paper reports MRR as unavailable for GenTKG "due to it's reliance on multiple generations for each query." However, an MRR estimate could be obtained from a single greedy generation. Omitting this metric for one specific baseline makes the comparison in Table 1 uneven.
+
+**Missing Hits@1:** All prior TKG reasoning papers report Hits@1, Hits@3, and Hits@10. This paper only reports Hits@3 and Hits@10. For link prediction, Hits@1 is arguably the most informative metric (exact top-1 accuracy). Its absence is conspicuous and weakens the comparison to any method in the literature.
+
+**GDELT Outlier:** TRANSFIR's Hits@10 improvement on GDELT is reported as 101.4%—a doubling of the best baseline. Given that the best baseline on GDELT achieves only 0.0932 Hits@10 (very low absolute performance), a doubling may reflect a baseline failure mode in the new split rather than a genuine algorithmic advantage. The paper does not investigate this critically.
+
+**Table 2 Metric Ambiguity:** Table 2 (Textual Encoder comparison) reports a value of 0.3246 for BERT on ICEWS14, which matches the Hits@10 value from Table 1, not MRR (0.1687). The table header does not specify which metric is being reported. This needs to be clarified.
+
+**Statistical Reporting:** Only TRANSFIR's results are averaged over three random seeds. Baselines are reported without variance estimates. The paper should at minimum report standard deviations for TRANSFIR and acknowledge that baseline variance is unknown.
+
+**Ablation descriptions are vague:** The "-Codebook" variant uses "static clustering features only" and "-Pattern Transfer" uses "static representations." These descriptions are insufficient to understand what the ablated model actually does. How are entities assigned to clusters without the learned codebook? What "static representation" replaces the transfer? Clearer operational definitions would make the ablations interpretable.
+
+---
+
+### Representation Analysis (Section 5.3 / Figure 4)
+
+The t-SNE visualization improvement is visually compelling. The CR improvement from 0.0055 to 0.8677 is dramatic. However, one should note that t-SNE visualizations are sensitive to perplexity and iteration count, and the selection of which datasets/seeds to display in the main text is not explicitly described. The Collapse Ratio alone as a proxy for "informative embeddings" needs additional validation: a uniformly random embedding space would have high CR but be useless for prediction. The paper would benefit from showing that high CR correlates with downstream prediction accuracy, not just that TRANSFIR has high CR.
+
+---
+
+### Writing & Clarity
+
+Section 5.5 (Extended Experiments) has a broken paragraph that reads "ciency in GPU memory and computational time" and "sults and experimental details are available in Appendix F.3" mid-section, suggesting text was truncated or misplaced during compilation. Equation (8) spans multiple lines but the aggregation is not rendered clearly in the parsed text. The case study in Section 5.3(c) is useful but the notation mixing graph arrows and prose is hard to parse. The algorithmic description in Appendix D.2 is the clearest part of the paper.
 
 ---
 
 ### Limitations & Broader Impact
 
-The failure case (Section F.1 / Appendix) on entity "Bala Ngilari" is a useful concrete illustration. The limitation that sparse/noisy entity names impair the text-based clustering is acknowledged.
+The authors honestly acknowledge GDELT's noisy entity titles and the failure case in Appendix F.1. They also note future work on emerging *relations*. However, several limitations are unaddressed:
 
-**Unacknowledged limitations:**
-1. The method implicitly assumes that a single cluster assignment adequately captures an entity's type. Many real-world entities are cross-domain (e.g., a president who is also an economist), and a hard VQ assignment may fail in such cases.
-2. The approach depends on the quality of cluster membership: if a cluster contains too few known entities (or known entities with sparse ICs), the cluster prototype will be uninformative. No analysis of cluster sizes or their effect on prediction quality is provided.
-3. The assumption that semantic name similarity (BERT embedding proximity) implies temporal pattern similarity is the method's core bet—and while Observation 3 provides anecdotal support, it could break down in domains where entity names are less informative (as already observed with GDELT).
-4. The method requires a frozen pre-trained text encoder at inference time for any new entity. This may raise latency or dependency concerns in streaming/online deployment, which is the primary use case for emerging-entity reasoning.
+1. **Scalability at inference time:** The cluster-pooling step (Eq. 9) computes dynamic prototypes per timestamp based on all query entities. For large graphs with many queries per timestamp, this adds an extra forward pass cost not fully accounted for in the complexity analysis.
+
+2. **The entity-title availability assumption** is strong. In many real-world TKG settings, entities may have numerical IDs, non-English names, or no associated text at all. The approach degrades gracefully only when BERT produces meaningful embeddings.
+
+3. **The "25% emerging entities" framing** as a general property of TKGs is stated without enough qualification. This fraction depends heavily on the time split, which the authors control. A practitioner applying the standard split would see very different fractions.
+
+4. **Transductive performance not reported:** The paper never shows how TRANSFIR performs on the *standard* Vanilla setting (all test triples). TRANSFIR could hypothetically sacrifice transductive performance to gain inductive performance. Table 1 only shows the Emerging subset.
 
 ---
 
 ### Overall Assessment
 
-TRANSFIR addresses a real and underappreciated problem—reasoning over entities that emerge without any prior interaction history in temporal knowledge graphs—and makes a technically coherent contribution via VQ-codebook-driven semantic clustering and cluster-level pattern transfer. The empirical study in Section 3 is a genuine strength, providing principled motivation. Experimental results in Table 1 are impressive in magnitude. However, the paper has several issues that need to be resolved before acceptance at ICLR. Most critically: the non-standard 5:2:3 split makes all comparisons to published baselines impossible and likely inflates improvements; the commitment loss (Eq. 3) is technically inconsistent with frozen entity embeddings; the central assumption of transferable patterns lacks quantitative grounding beyond a single anecdote; and the surprising underperformance of Qwen3-Embedding vs. BERT goes unexplained. Taken together, these issues do not invalidate the core contribution, but they do undermine confidence in the reported performance margins and in the correctness of some design choices. Addressing the split concern alone would significantly strengthen the paper's credibility.
+TRANSFIR addresses a genuine and under-studied problem—reasoning for entities that appear without any historical interactions in TKGs—and the three-stage Classification–Representation–Generalization pipeline is a clean, well-motivated design. The empirical investigation (Section 3) is a genuine contribution that frames the problem quantitatively. The codebook-based approach is creative and the VQ mechanism is an appropriate fit. However, the paper has several concerns that collectively prevent confident acceptance. The most critical are: (1) the non-standard 5:2:3 data split renders every number incomparable to prior work and potentially inflates reported improvements by weakening baselines through reduced training data; (2) the commitment loss is applied to frozen embeddings and thus contributes nothing, which is either a technical error or a mismatch between the method's description and its implementation; (3) the core transferability assumption is only qualitatively validated; (4) edge cases in the pipeline—no IC for emerging entities, empty clusters—are never addressed; and (5) Hits@1 is absent. ICLR expects both methodological soundness and experimental rigor; addressed, the contribution could stand, but in its current form the paper requires substantial revision before it meets that bar.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper proposes TRANSFIR, a novel inductive framework for reasoning on Temporal Knowledge Graphs (TKGs) that specifically targets emerging entities without historical interactions. The method leverages a codebook-based classifier to cluster entities semantically and propagates interaction patterns from similar known entities to those without history. Experimental results across four datasets demonstrate a significant performance improvement over existing baselines in this challenging zero-history inductive setting, effectively mitigating representation collapse.
+This paper addresses a critical gap in Temporal Knowledge Graph (TKG) reasoning: inductive forecasting for emerging entities that appear with zero historical interactions. The authors propose TRANSFIR, a Classification–Representation–Generalization framework that maps entities into latent semantic clusters via a frozen-text VQ codebook, encodes relation-conditioned Interaction Chains to capture temporal patterns, and propagates learned chain prototypes across clusters to generate informative embeddings for unseen nodes. Extensive experiments across four benchmarks demonstrate that TRANSFIR consistently outperforms strong graph-based, path-based, and inductive baselines while mitigating the representation collapse typically observed for zero-history entities.
 
 ### Strengths
-1.  **Clear Problem Formulation and Empirical Evidence:** The authors rigorously define the problem of "emerging entities" in TKGs, providing compelling empirical evidence (Section 3) that ~25% of entities appear in the test set and cause "representation collapse" in standard models. The introduction of a "Collapse Ratio" metric (Appendix C) to quantify this degradation adds scientific rigor to the motivation.
-2.  **Novel Integration of Text and Structure:** The approach creatively combines frozen textual embeddings (for semantic clustering of unseen entities) with temporal structural patterns (Interaction Chains). The "Classification–Representation–Generalization" pipeline offers a structured solution to the cold-start problem that avoids the reliance on entity-specific training embeddings.
-3.  **Robust Empirical Validation:** The evaluation is extensive, covering four diverse datasets (ICEWS14, 18, 05-15, GDELT). The model demonstrates consistent superiority across MRR and Hits@k metrics, with an average MRR improvement of 28.6% over the strongest baseline (LogCL). Ablation studies (Fig. 5) clearly validate the contribution of each component (Codebook, IC, Pattern Transfer).
+1. **Well-Motivated & Empirically Grounded Problem Definition.** The paper rigorously justifies the need for emerging entity reasoning, quantifying that ~25% of entities in standard TKGs are unseen during training (Sec. 3, Obs. 1) and introducing a geometric Collapse Ratio metric to substantiate the degradation in embedding quality (Sec. 3, Obs. 2). This empirical investigation directly supports ICLR's expectation for clear, evidence-driven motivation.
+2. **Cohesive Methodological Pipeline.** The Classification–Representation–Generalization design directly tackles the zero-history constraint. The use of an interaction-aware VQ codebook to assign categorical priors without updating entity embeddings (Sec. 4.1) is a principled choice that stabilizes training, while the cluster-level prototype pooling (Eq. 9) and transfer mapping (Eq. 11) offer a clear mechanism for knowledge propagation.
+3. **Comprehensive & Rigorous Evaluation.** The evaluation spans four established TKG datasets with a custom chronological 5:2:3 split designed to stress-test inductive generalization (Sec. 5.1). Results show consistent gains (avg. +28.6% MRR), supported by thorough ablations (Sec. 5.4), hyperparameter sensitivity (Sec. 5.5), multiple PLM backbones (Table 2), efficiency analysis (Fig. 7), and extended robustness tests under varying temporal splits and the "Unknown" setting (Sec. 5.5).
+4. **Reproducibility & Open Science.** The paper provides a clear reproducibility statement, pseudocode (App. D.2), complexity analysis (App. D.3), and commits to public code release, aligning well with ICLR's standards for transparency.
 
 ### Weaknesses
-1.  **Heavy Reliance on Entity Textual Metadata:** The method critically depends on high-quality entity titles for text embedding (BERT). In true inductive settings where entities might lack distinct semantic labels or have noisily formatted titles (as noted in the ablation discussion for GDELT), the semantic clustering fails. This limits the method's applicability compared to purely structure-based inductive approaches like InGram or ULTRA.
-2.  **Baseline Comparison Nuances:** While the paper compares against strong baselines, many (e.g., LogCL, REGCN) are primarily transductive models adapted for this inductive task. While this shows robustness, a deeper comparison with existing *inductive* TKG methods (e.g., ALRE-IR, though limited) would better contextualize the novelty within the specific inductive TKG subfield.
-3.  **Computational Complexity vs. Real-World Scaling:** While the efficiency analysis (Appendix D.3) claims linear complexity, the use of a Transformer encoder for Interaction Chains and the VQ codebook search for *all* entities per timestamp adds overhead. The paper claims lower GPU memory usage but does not fully isolate the cost of the VQ clustering step compared to standard embedding lookups in large graphs.
-4.  **Minor Issues with Citations:** Some references cite future conference years (e.g., "Zhang et al., 2025a", "Hadipour et al., 2025"). While this likely refers to arXiv versions or accepted pre-prints, it creates potential confusion regarding the timeline of prior art and needs clarification for reproducibility.
+1. **Ambiguity in Handling Strictly Zero-History Entities in the IC Module.** Sec. 4.2 defines the Interaction Chain $C_q$ by collecting *past interactions of the query entity* within window $T$. For an emerging entity queried exactly at its emergence time ($t_q = t_e(e)$), this set is vacuous. The paper does not explicitly describe how $h^{IC}_{e_q}$ is computed in this zero-history case, nor how an empty chain flows through the Transformer and relation-guided attention (Eq. 8). This creates a critical gap between the problem formulation and the architectural pipeline.
+2. **Over-Reliance on Pretrained Textual Embeddings for Clustering.** The VQ codebook depends entirely on frozen PLM title embeddings. The authors acknowledge in Sec. 5.4 that GDELT entity titles are highly noisy/abbreviated, causing textual encoding to sometimes hurt performance. While multiple PLMs are tested, the framework lacks a robust fallback (e.g., structural fallback, random-walk priors, or learnable text augmentation) for entities with poor or missing textual metadata, limiting real-world applicability.
+3. **Insufficient Detail on Baseline Adaptation for the Inductive Setting.** While 13 baselines are evaluated, the paper only briefly mentions implementation adjustments (App. E.2). Inductive baselines like InGram and static methods like CompGCN require non-trivial adaptations to respect the strict chronological split and the "no historical interaction" constraint for emerging entities. Without explicit adaptation protocols, it is difficult to verify whether performance gaps stem from architectural limitations or suboptimal baseline tuning under the novel evaluation protocol.
+4. **Non-Standard Representation Collapse Metric.** The proposed Collapse Ratio (App. C.2) uses log-determinant covariance to measure geometric spread. While mathematically sound, it is sensitive to dimensionality and sample size ($n < d$), and the paper does not compare it against established metrics in self-supervised/contrastive literature (e.g., effective rank, alignment/uniformity, or singular value decay). This makes cross-paper comparisons and quantitative claims slightly less robust.
 
 ### Novelty & Significance
-*   **Novelty (High):** There is limited work on inductive reasoning in TKGs specifically for entities with **zero historical interactions**. Existing inductive KG work (InGram, ULTRA) assumes some structural context. TRANSFIR's specific focus on bridging the semantic gap via VQ codebooks in a temporal context is a meaningful contribution to the ICLR scope.
-*   **Significance (High):** The problem of emerging entities is prevalent in dynamic systems (social media, event forecasting). Solving "representation collapse" for new entities is a fundamental step toward open-world temporal reasoning.
-*   **Clarity (Good):** The methodology is described with clear equations and pipeline diagrams (Fig. 3). The distinction between "Emerging" (zero history) and "Unknown" (some history) is carefully made in Appendix F.
-*   **Reproducibility (Good):** Code and configuration are made available (Section 8), and datasets are standard. However, the reliance on external BERT models requires the authors to ensure version consistency in the public code.
+The paper addresses a highly significant and under-explored problem in dynamic graph learning: open-world forecasting for entities with zero interaction history. Methodologically, TRANSFIR introduces a novel synthesis of vector-quantized semantic clustering and temporal interaction chain transfer, which effectively sidesteps representation collapse without relying on entity-specific gradient updates. While individual components (VQ clustering, sequence Transformers, prototype pooling) are established, their integration into a unified pipeline explicitly designed for zero-history temporal induction represents solid novelty. The work meets ICLR's acceptance bar in terms of empirical rigor, problem relevance, and architectural soundness, provided the methodological ambiguities are clarified.
 
 ### Suggestions for Improvement
-1.  **Analyze Structure-Only Fallback:** To strengthen the claim of inductive reasoning, conduct an experiment where entity text is removed or replaced with random IDs to evaluate how much the model relies on text vs. structural patterns. This would clarify the "textual dependency" weakness.
-2.  **Refine Baseline Selection:** Ensure the comparison includes more recent "Inductive TKG" specific models if available. If the goal is to highlight the "Cold Start" aspect, explicitly compare with a baseline that uses standard embedding initialization (e.g., Random Initialization per entity) to show the specific gain of the *transfer* strategy.
-3.  **Clarify Citation Dates:** Replace future-dated citations with the arXiv version number or the specific conference where they are accepted (e.g., "NeurIPS 2024 (under review)" or "arXiv:2501.xxxxx") to maintain academic rigor.
-4.  **Detailed Complexity Breakdown:** Provide a more concrete breakdown of inference time per entity vs. per cluster in practical deployments (e.g., on a single GPU), rather than just memory usage, to address scalability concerns more transparently.
+1. **Explicitly Formulate Zero-History Handling.** Add a clear subsection or pseudocode branch detailing how the framework processes queries where $|C_q| = 0$. For example, specify whether a learned null token, cluster prototype alone, or neighbor chain substitution is used, and update Eq. 8 to handle empty sequences gracefully.
+2. **Provide Detailed Baseline Adaptation Protocols.** Include a table or appendix section outlining precisely how each baseline (especially InGram, ULTRA, and temporal GNNs) was modified to comply with the chronological split and the strict no-past-interaction constraint. This ensures fair comparison and strengthens reproducibility.
+3. **Augment or Diversify the Clustering Prior.** To mitigate sensitivity to noisy/missing PLM text, consider incorporating lightweight structural priors (e.g., relation-type distributions or degree profiles) into the VQ input, or experiment with a text dropout/augmentation strategy during training to improve robustness on datasets like GDELT.
+4. **Complement Collapse Ratio with Standard Metrics.** Report effective rank or alignment/uniformity metrics alongside the Collapse Ratio. This will ground the representation quality claims in widely accepted standards and facilitate direct comparison with recent contrastive/self-supervised KG literature.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Text-Free Variant:** Replace BERT embeddings with random initialization to prove the graph reasoning mechanism works independently of external semantic knowledge. Without this, the performance gains may simply reflect superior entity initialization via BERT rather than the proposed Interaction Chain framework.
-2. **Semantic-Only Baseline:** Evaluate a model using only frozen BERT embeddings with a simple scorer (no Codebook or Interaction Chains). This isolates whether the complex reasoning pipeline adds value over strong pre-trained semantic priors alone.
-3. **Split Sensitivity:** Evaluate performance under standard 8:1:1 chronological splits to ensure results are not artifacts of the 5:2:3 split designed to maximize emerging entities. Claims of widespread emergence must hold under conventional evaluation protocols.
-4. **True Inductive Baselines:** Compare against dedicated inductive TKG methods rather than transductive models forced into an inductive setting. Current baselines may be unfairly penalized by lack of adaptation, inflating TRANSFIR's relative improvement.
+1. **Fair Input Comparison:** Baselines likely use random/init embeddings while TRANSFIR uses BERT; add experiments where baselines receive identical textual embeddings or TRANSFIR is tested without them to isolate the architectural contribution from the input advantage.
+2. **Text Robustness Stress Test:** Systematically inject noise or mask entity titles to quantify performance degradation, as the method admits failure on GDELT when text is ambiguous (Sec 5.4).
+3. **Strict Zero-History Isolation:** Disaggregate results for entities with *absolute* zero history versus those with test-window interactions (Appendix F.3), as the core claim specifically addresses the former "no historical interactions" scenario.
+4. **Baseline Text Augmentation:** Re-run top baselines (e.g., LogCL, REGCN) with equivalent textual features to ensure the performance gain is not solely due to auxiliary semantic information.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Codebook Necessity:** Analyze why VQ clustering outperforms direct cosine similarity on text embeddings. If the gain is marginal, the VQ complexity is unjustified overhead compared to simpler semantic matching.
-2. **Collapse Metric Validation:** Demonstrate a strong correlation between the proposed "Collapse Ratio" and downstream MRR. Without this, the metric is merely a visualization aid rather than evidence of the mechanism's success.
-3. **Cluster Semantic Validity:** Provide quantitative metrics (e.g., silhouette score or ontology alignment) confirming clusters align with semantic types. Claiming clusters represent 'Countries' requires statistical validation beyond cherry-picked t-SNE examples.
-4. **Error Analysis:** Systematically categorize failure cases where cluster assignment was incorrect due to ambiguous text. This reveals the upper bound of performance imposed by the textual encoder quality.
+1. **Cluster-Pattern Correlation:** Quantify the correlation between codebook cluster membership and actual interaction pattern similarity, proving clusters capture temporal dynamics rather than just textual similarity.
+2. **Codebook Stability Analysis:** Measure cluster assignment volatility over training epochs to ensure the transfer targets are stable and not shifting arbitrarily during optimization.
+3. **Systematic Failure Taxonomy:** Expand the single failure case (Sec F.1) into a categorized analysis of when transfer fails (e.g., ambiguous text, unique roles, sparse clusters) to define method boundaries.
+4. **Semantic Drift Measurement:** Evaluate performance decay as the time gap between entity emergence and query increases to test the limits of static textual embeddings over long horizons.
 
 ### Visualizations & Case Studies
-1. **Attention Weights:** Visualize attention weights over the Interaction Chain for emerging entities to verify the model focuses on transferable patterns. Uniform attention would contradict the claim of selective pattern transfer.
-2. **Embedding Trajectories:** Show how emerging entity embeddings evolve during training compared to known entities using dynamic plots. Static t-SNE is insufficient to prove collapse is prevented throughout the optimization process.
-3. **Pattern Transfer Flow:** Diagram specific examples of patterns transferred from known to emerging entities within a cluster. This validates whether the 'Generalization' step actually propagates useful temporal dynamics.
-4. **Cluster Boundary Cases:** Visualize entities near cluster boundaries that were misclassified. This exposes the robustness of the VQ codebook to semantic ambiguity.
+1. **Concrete Transfer Trace:** Visualize a specific instance where a known entity's interaction chain directly influences an emerging entity's prediction score to demystify the "Pattern Transfer" mechanism.
+2. **Attention Heatmaps:** Display relation-guided attention weights over the Interaction Chain to verify the model focuses on temporally relevant events rather than noise.
+3. **Cluster Evolution Plot:** Show t-SNE of entity embeddings and codebook prototypes across training epochs to demonstrate convergence and separation of emerging entities into clusters.
 
 ### Obvious Next Steps
-1. **Decouple Text and Graph:** Redesign the framework to function without pre-trained language models to ensure applicability in text-sparse domains. Reliance on BERT limits the method to datasets with high-quality entity descriptions.
-2. **Standardize Inductive Protocol:** Adopt a community-agreed inductive TKG benchmark protocol to ensure fair comparison across future works. Current adaptations of transductive baselines introduce variability in evaluation rigor.
-3. **Handle Emerging Relations:** Extend the Codebook mechanism to cluster and transfer patterns for unseen relations. Real-world graph evolution involves both new entities and new relation types.
-4. **Reduce Computational Overhead:** Optimize the VQ search and Transformer encoding to match the efficiency of simpler graph baselines. Current efficiency claims rely on specific hardware settings that may not scale.
+1. **Text-Independent Variant:** Develop and evaluate a version using only structural information to ensure applicability to text-sparse knowledge graphs, which are common in real-world scenarios.
+2. **Cross-Dataset Generalization:** Train on one dataset (e.g., ICEWS) and test on another (e.g., GDELT) to verify true inductive capability beyond chronological splits within the same domain.
+3. **Dynamic Codebook Mechanism:** Implement time-evolving prototypes to handle entity semantic drift rather than relying on static textual embeddings that cannot adapt to role changes.
 
 # Final Consolidated Review
 ## Summary
 
-This paper proposes TRANSFIR, an inductive reasoning framework for temporal knowledge graphs (TKGs) that addresses reasoning on "emerging entities"—entities that appear during inference without any historical interactions. The method uses a VQ codebook to cluster entities by semantic similarity (via frozen BERT embeddings), encodes Interaction Chains to capture temporal patterns, and transfers cluster-level patterns to emerging entities. The paper demonstrates that emerging entities constitute approximately 25% of entities under the chosen split, cause representation collapse in existing models, and that TRANSFIR achieves significant MRR improvements (28.6% average) across four benchmarks.
+The paper addresses inductive reasoning for emerging entities in Temporal Knowledge Graphs (TKGs)—entities that appear at inference time without any historical interactions. The authors propose TRANSFIR, a framework that maps entities to latent semantic clusters via a VQ codebook (using frozen BERT embeddings), encodes Interaction Chains to capture temporal patterns, and propagates cluster-level prototypes to provide informative representations for zero-history entities. Experiments across four TKG benchmarks show consistent improvements over graph-based, path-based, and static inductive baselines.
 
 ## Strengths
 
-- **Well-motivated problem with rigorous empirical grounding.** The paper identifies a real gap: existing TKG methods fail on entities with zero interaction history. Section 3 provides a three-perspective empirical study (data, representation, feasibility) with the Collapse Ratio metric (Appendix C.2) quantifying representation degradation. The finding that emerging entities comprise ~25% of test entities motivates the work concretely.
+- **Rigorous problem formulation with empirical grounding.** The paper formally defines emerging entities (first appearance at $t_e(e)$ with zero history) and provides quantitative evidence that ~25% of entities are unseen during training, with existing methods showing significant performance degradation. The Collapse Ratio metric (log-det covariance ratio between emerging and known entity embeddings) provides a principled measure of representation quality degradation.
 
-- **Principled technical design for the zero-history setting.** The Classification–Representation–Generalization pipeline is coherent: frozen text embeddings provide type-level priors for emerging entities (bypassing the need for entity-specific training), while cluster-level prototypes aggregate Interaction Chains from similar known entities. The VQ codebook is a reasonable mechanism for enabling pattern transfer without requiring per-entity optimization.
+- **Well-motivated three-stage pipeline.** The Classification–Representation–Generalization design directly addresses the zero-history constraint: the VQ codebook provides category priors without requiring interaction history, Interaction Chains capture sequential patterns, and Pattern Transfer propagates learned dynamics to emerging entities. The ablation study (Fig. 5) confirms each component contributes meaningfully.
 
-- **Strong empirical performance with consistent gains.** Table 1 shows TRANSFIR outperforming all baselines across four datasets, with MRR improvements of 24.6%, 24.3%, 15.0%, and 50.5% respectively. The ablation study (Figure 5) clearly validates the contribution of each component (Codebook, IC, Pattern Transfer, Textual Encoding).
-
-- **Clear formalization of the task.** The definition of emerging entities (first appearance time `te(e)` and queries restricted to `tq = te(e)`) precisely specifies the zero-history condition, distinguishing it from the "Unknown" setting where entities gain some test-time history.
+- **Comprehensive empirical evaluation.** The paper evaluates across four datasets (ICEWS14, ICEWS18, ICEWS05-15, GDELT) with multiple baselines (13 methods), ablations, hyperparameter sensitivity, multiple PLM backbones (Table 2), efficiency analysis (Fig. 7), and robustness tests under varying temporal splits (Fig. F.4) and the "Unknown" setting with test-time history (Fig. 10).
 
 ## Weaknesses
 
-- **Non-standard train/test split complicates reproducibility and comparison.** The paper uses a 5:2:3 chronological split rather than the widely adopted 8:1:1. While the paper justifies this as revealing more emerging entities, it means baseline numbers cannot be verified against published results, and baselines trained on only 50% of data may be disadvantaged. The paper does not clarify whether baselines received hyperparameter tuning under the new split. This does not invalidate the results but limits direct comparison to prior literature.
+- **Non-standard chronological split (5:2:3) limits comparability.** The paper explicitly departs from the conventional 8:1:1 split to increase the proportion of emerging entities. While this serves the paper's research question, it renders all reported numbers incomparable to prior published results. The paper does not provide baseline results under the standard split, making it difficult to assess whether baselines are weakened by reduced training data. The "25% emerging entities" statistic is split-dependent and should be qualified accordingly.
 
-- **Commitment loss formulation appears inconsistent with frozen embeddings.** Equation 3 defines `L_commit = ||h_e − sg[c_{π(e)}]||²`, with stop-gradient on the codeword. The paper states "entity embeddings remain **fixed** during training." If `h_e` is truly frozen, this loss has zero gradient with respect to any learnable parameter and is vacuous. This should be clarified—either `h_e` is projected through a trainable layer, or the commitment loss serves a different purpose than stated.
+- **Technical inconsistency: commitment loss on frozen embeddings.** Equation (3) defines $\mathcal{L}_{\text{commit}} = \|\mathbf{h}_e - \text{sg}[\mathbf{c}_{\pi(e)}]\|_2^2$, which would normally push entity embeddings toward their prototypes. However, $\mathbf{h}_e$ is explicitly frozen (Sec. 4.1: "These embeddings remain fixed during training"). With stop-gradient on $\mathbf{c}_{\pi(e)}$, this loss term has no gradient path to any learnable parameter—it is a dead loss. The paper should clarify whether this is intentional or a design error.
 
-- **Key assumption of transferable patterns lacks quantitative support.** Observation 3 (Section 3) claims that semantically similar entities share transferable temporal patterns, motivating the entire method. However, this is supported only by a single anecdotal example (president → government visit patterns). No quantitative analysis is provided of how frequently pattern matches occur across entity types, or what fraction of emerging-entity queries fall into clusters with informative IC histories.
+- **Missing explicit handling for zero-history entities in the IC module.** For an emerging entity queried at its emergence time, the Interaction Chain $\mathcal{C}_q$ is empty (no past interactions). Equation (8) aggregates over the chain, but the paper does not specify what happens when $|\mathcal{C}_q| = 0$. Is $\mathbf{h}^{\text{IC}}_{e_q}$ a zero vector? A learned null embedding? This edge case is central to the proposed task and requires explicit treatment.
 
-- **Surprising underperformance of Qwen3-Embedding vs. BERT is unexplained.** Table 2 shows BERT (2019) outperforming Qwen3-Embedding (2025) across all three datasets, with a substantial gap on ICEWS14 (0.3246 vs. 0.2567). This is unexpected for a state-of-the-art embedding model. The paper does not investigate whether the codebook was tuned to BERT's geometry or whether this reflects a genuine advantage of BERT for short entity names.
+- **Empty cluster edge case undefined.** Equation (9) defines the dynamic prototype $\mathbf{c}^{\text{dyn}}_k$ as an average over query entities in cluster $k$ at timestamp $t$. If $Q_k = \emptyset$ (no query entities in that cluster), the prototype is undefined. Sparse datasets or small codebooks may frequently encounter this situation. The paper does not specify a fallback mechanism.
 
-- **Ablation variant descriptions are ambiguous.** The "-Codebook" variant is described as "removing the codebook mapping and using static clustering features only" (Section 5.4). What "static clustering features" means is unclear—how are entities clustered without the codebook? This should be specified since this variant directly tests the core contribution.
+- **Heavy reliance on textual entity embeddings.** The VQ codebook depends entirely on frozen BERT embeddings. Section 5.4 acknowledges that GDELT's noisy entity titles (abbreviations like "EGYPT (EGY@ OPP REF LEG SPY...)") cause textual encoding to sometimes hurt performance. The framework lacks a robust fallback for entities with poor or missing textual metadata—a realistic scenario in many TKG applications.
 
-- **Main results table lacks variance estimates.** While Appendix F.2 includes error bars for ablations, Table 1 reports single values without standard deviations across the three seeds mentioned in Appendix E.3. This is needed for assessing the reliability of improvement margins, particularly where gains over the second-best baseline are modest (e.g., +6.7% Hits@3 on ICEWS05-15).
+- **Missing Hits@1 and Table 2 metric ambiguity.** Standard TKG reasoning papers report Hits@1, Hits@3, and Hits@10. This paper omits Hits@1, which is the most informative metric for link prediction (exact top-1 accuracy). Table 2 (Textual Encoder comparison) reports a value of 0.3246 for BERT on ICEWS14, which matches Hits@10 from Table 1, but the table header does not specify which metric is being reported, creating confusion.
+
+- **Transferability assumption not quantitatively validated.** Observation 3 claims "semantically similar entities exhibit comparable interaction histories" based on a single qualitative example (Fig. 2d). This assumption underpins the entire framework—entities are clustered by textual similarity and expected to share temporal patterns—yet no quantitative validation (e.g., intra-cluster pattern entropy, cross-cluster pattern divergence) is provided.
 
 ## Nice-to-Haves
 
-- **Correlation between Collapse Ratio and MRR.** While the paper shows improved Collapse Ratio (0.0055 → 0.8677), demonstrating a quantitative correlation between this metric and downstream MRR would strengthen the claim that preventing collapse causes better predictions.
+- Detailed baseline adaptation protocols in the appendix, specifying exactly how each transductive baseline was modified to respect the chronological split and zero-history constraint. This would strengthen reproducibility.
 
-- **Cluster semantic validation.** The case study in Figure 4(b) shows clusters appear semantically coherent (Country, Civic & Parties, Citizen), but quantitative metrics (e.g., silhouette score or alignment with known entity types if available) would validate the VQ codebook's clustering quality more rigorously.
+- An experiment isolating the contribution of textual embeddings: running TRANSFIR with randomly initialized (rather than BERT) entity embeddings, and/or providing baselines with equivalent textual features to ensure the performance gain is architectural rather than data-related.
 
-- **Hits@1 reporting.** This is a more stringent metric than Hits@3 or Hits@10 and is standard in link prediction. Including it would strengthen the evaluation.
-
-- **Analysis of codebook size vs. cluster informativeness.** When a cluster contains few known entities or entities with sparse ICs, the dynamic prototype may be uninformative. An analysis of how cluster size affects prediction quality would clarify failure modes.
+- Hits@1 results to complete the standard evaluation suite.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution:*
+These points are flagged to be removed, treat them with caution:
 
-- **Citations with future years (e.g., "Zhang et al., 2025a").** This is a common formatting issue for papers under review and reflects arXiv preprints or accepted works. Not a substantive criticism of the paper's content.
+- **Critic's claim that the 28.6% improvement is "misleading" or "dominated by GDELT."** The arithmetic mean of relative improvements is a standard reporting practice, and all four datasets show substantial gains (15–50%). The GDELT result is not an outlier invalidating the overall claim.
 
-- **Text-free variant as missing experiment.** This IS addressed in the ablation study (Figure 5, "-Textual encoding" variant), which shows performance drops when BERT embeddings are replaced with random initialization.
+- **Critic's speculation that GDELT's 101.4% improvement "may reflect baseline failure mode."** Without evidence that baselines are broken rather than simply weak on emerging entities, this is conjecture. The paper discusses GDELT's challenging entity titles, which affects both TRANSFIR and baselines.
 
-- **GPU efficiency figures hard to read.** Figure 7 presents the data clearly; this is a minor presentation preference, not a missing evaluation.
+- **Critic's demand for standard-split results to assess "baseline weakening."** The paper's research question is specifically about emerging entities; the 5:2:3 split is a deliberate design choice to stress-test this setting. While comparability concerns are valid, demanding standard-split results is outside the paper's stated scope.
 
-- **Heavy reliance on entity textual metadata.** This is acknowledged in the paper (Section 5.4 and F.1 discuss GDELT's noisy entity names) and addressed via the ablation showing textual encoding's contribution. The dependency is explicit, not hidden.
+- **Critic's complaint about "cherry-picked" Observation 3.** The observation is motivational, not claimed as statistical proof. The ablation study validates that pattern transfer helps empirically.
+
+- **Neutral reviewer's concern about "Collapse Ratio sensitivity to dimensionality."** The metric is mathematically well-grounded (rotation-invariant, based on established statistics) and the paper provides both quantitative CR values and t-SNE visualizations as complementary evidence.
 
 ## Novel Insights
 
-The paper makes a genuine contribution by formally defining and empirically validating the "emerging entity" problem in TKGs. The observation that representation collapse occurs specifically for emerging entities—and that it can be mitigated via semantic clustering and pattern transfer—is the key insight. The Collapse Ratio metric provides a useful diagnostic for future work on inductive TKG reasoning. The finding that frozen text embeddings can serve as type-level priors for zero-shot entity handling is not entirely new (similar ideas exist in static KG work), but the combination with temporal pattern transfer via cluster-level prototypes is novel.
+The Collapse Ratio metric provides a novel quantitative lens on representation collapse in temporal graph learning—a phenomenon where entities without training supervision drift toward degenerate embeddings. The ratio of generalized variances (log-det covariance) between emerging and known entity embeddings offers a rotation-invariant measure that could be adopted by future work on open-world graph learning. Additionally, the Observation that entities of similar semantic type share temporal interaction patterns (e.g., presidents follow visit–negotiation sequences across countries) suggests an inductive bias direction for temporal reasoning that goes beyond the paper's specific architectural contributions.
 
 ## Suggestions
 
-1. **Clarify the commitment loss:** Either state that `h_e` is projected through a trainable layer before codebook assignment, or explain what role the commitment loss plays if embeddings are frozen.
+- Add explicit handling for empty Interaction Chains: define a null token or fallback to static cluster prototypes when $|\mathcal{C}_q| = 0$, and document this in the method section and pseudocode.
 
-2. **Provide standard split results:** Even if 5:2:3 better reveals emerging entities, including results under 8:1:1 (or reporting the proportion of emerging entities under both splits) would allow readers to calibrate the problem's scale against prior work.
+- Clarify the purpose of the commitment loss (or remove it if it is non-functional), and verify in the code whether it contributes to training.
 
-3. **Quantify Observation 3:** Provide statistics on how often semantically similar entities share temporal patterns—for example, what fraction of test queries have at least one known entity in their cluster with a non-empty Interaction Chain.
+- For empty clusters at timestamp $t$, use the static codeword $\mathbf{c}_k$ as a fallback for $\mathbf{c}^{\text{dyn}}_k$, and state this clearly.
 
-4. **Add variance to Table 1:** Include standard deviations across seeds to establish the reliability of improvements.
+- Report Hits@1 for completeness and clarify which metric Table 2 reports.
 
-5. **Explain the BERT vs. Qwen3 result:** Investigate whether this reflects BERT's tokenization being better suited for short entity names, or whether hyperparameter tuning favored BERT. This helps users choose encoders for new domains.
+- Add quantitative validation of the transferability assumption: compute intra-cluster pattern similarity or train a classifier to predict cluster membership from interaction sequences, providing evidence that textual clusters correlate with temporal dynamics.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 6.0, 6.0]

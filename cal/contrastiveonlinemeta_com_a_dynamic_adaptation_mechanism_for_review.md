@@ -1,4 +1,4 @@
-=== CALIBRATION EXAMPLE 11 ===
+=== CALIBRATION EXAMPLE 2 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
@@ -7,228 +7,211 @@
 
 ### Title & Abstract
 
-The title is descriptive but slightly over-promises. More critically, the abstract contains specific quantitative claims—"3-5× fewer updates than conventional meta-learning approaches" and "12-18% outperforming instruction-tuned baselines on unseen programming languages"—that are unsupported by any results in the paper (see Experiments below). The abstract also contains a garbled sentence ("a framework for instruction-tuned CodeLLMs that *coefficients to the issues* of catastrophic forgetting") that is symptomatic of a broader writing problem throughout.
+The title is reasonable for what is being described, but the abstract raises immediate concerns. Multiple sentences are syntactically broken and semantically opaque: *"coefficients to the issues of catastrophic forgetting"*, *"unionizing dissimilar ones"*, *"behavior-effective thing"*, and *"simply retains coherence with recent interactions by deriving pairs stored in the buffer for the sake of contrastive match."* These are not minor infelicities—they impede understanding of the claimed contributions. The paper itself discloses at the end: *"We use LLM polish writing based on our original paper."* The polish clearly was not reviewed after generation.
 
-The final line of the paper's "LLM use" section (Section 8) states: *"We use LLM polish writing based on our original paper."* The quality of the prose suggests this polishing was applied unevenly and without careful human review. Multiple paragraphs contain clearly corrupted or hallucinated text (detailed below), which raises serious questions about the care taken in preparing this submission.
-
----
-
-### Introduction & Motivation
-
-The problem motivation is reasonable—catastrophic forgetting and noisy feedback during deployment of CodeLLMs is a genuine and important challenge. However, several issues arise:
-
-1. **Logical framing**: The paper presents continual learning and meta-learning as complementary but the introductory framing doesn't make clear *why* they must be combined (as opposed to, say, meta-learning alone). This argument is never rigorously developed.
-
-2. **Claimed contribution specificity**: The third claimed contribution is: *"COM achieves significantly higher robustness than standard fine-tuning when tested on mixed-domain programming tasks, while requiring 3-5× fewer updates than conventional meta-learning approaches (Nichols et al., 2024)."* The cited paper (Nichols et al., 2024) is actually about performance-aligned LLMs for generating fast code—it is neither a meta-learning approach nor a relevant baseline for update-count comparisons. This citation appears to be misattributed.
-
-3. **"No current solution boosts these strengths"**: The claim that *no* prior work combines contrastive learning with online meta-learning for code models is stated without sufficient engagement with the broader literature (e.g., online contrastive meta-learning in NLP beyond code).
+More substantively, the abstract promises that experiments show "better capacity for adaptation efficiency and task generalization than static and incremental tuning baselines." As detailed below, no experimental results are actually reported anywhere in the paper.
 
 ---
 
-### Related Work
+### Introduction & Motivation (Section 1)
 
-The related work section is adequate in breadth but thin in depth. References [1]–[9] in the final paragraph of Section 2.3 are cited as numbered placeholders rather than the author-year format used throughout the rest of the paper, suggesting this paragraph was not carefully integrated. More substantively:
+The motivation—that CodeLLMs face catastrophic forgetting and noisy feedback at deployment—is legitimate and worth studying. However, several specific quantitative claims are made with no support:
 
-- The paper claims to differ from Qin et al. (2023) because their approach uses "static item embeddings" whereas COM handles "dynamic instruction-to-code relationships." This distinction is asserted rather than technically demonstrated.
-- The treatment of EWC (Kirkpatrick et al., 2017) and other regularization-based continual learning methods is superficial. The paper dismisses architectural constraints as "computationally expensive and inflexible" without engaging seriously with methods like PackNet, PNN, or more recent parameter-efficient continual learning approaches.
-- Ahmad et al. (2025) is cited for "large-scale datasets specifically designed for code instruction tuning" as well as for "meta-learning frameworks enabling efficient few-shot adaptation"—these appear to be two very different things attributed to the same paper, suggesting a citation error.
+- *"requiring 3-5× fewer updates than conventional meta-learning approaches (Nichols et al., 2024)"* — the cited paper (about performance-aligned LLMs for fast code generation) is not a meta-learning paper and has no relevance to update efficiency comparisons.
+- *"outperforming instruction-tuned baselines by 12-18% on unseen programming languages"* — no table or figure ever provides these numbers.
 
----
-
-### Method (Section 4) — Most Critical Section
-
-The framework description has several fundamental technical problems:
-
-**1. The meta-learner architecture is underspecified and likely insufficient.** The meta-learner $g_\phi$ is described as a "2-layer MLP" (Section 5.4) that operates on 768-dimensional instruction embeddings. The frozen base model $h_\psi$ is CodeGen-16B. The composition $p(y|x) = h_\psi(g_\phi(f_\theta(x)))$ (Eq. 8) implies that the MLP modifies embeddings that are then passed to the frozen 16B model. This raises a critical question: **how does a 2-layer MLP transforming a 768-dim embedding vector provide meaningful task-specific adaptation to a frozen 16B-parameter autoregressive model?** CodeGen-16B generates code token-by-token conditioned on the full input context. Simply transforming the instruction embedding at the input stage is unlikely to yield the nuanced behavioral changes claimed (e.g., adapting to new APIs, different programming languages). The paper never justifies this architectural choice or provides ablations to verify that this bottleneck does not severely limit expressiveness.
-
-**2. The online adaptation mechanism conflicts with inference efficiency claims.** Equation (5) requires computing $\nabla_\phi \mathcal{L}$ at each inference step. For a streaming deployment scenario, this means backpropagation through the instruction encoder and meta-learner at every user interaction. The paper claims this requires "<5% of the base model's parameters to be trainable," which is technically true, but does not address the wall-clock cost of per-step gradient computation during deployment. No latency figures are provided.
-
-**3. The contrastive loss (Eq. 4) is non-standard in a potentially problematic way.** The denominator of Eq. (4) sums only over explicitly designated *negative* samples $x_k^-$, whereas the standard InfoNCE formulation (Oord et al., 2018) includes *all* samples (positives and negatives) in the partition function. This design choice is not discussed or justified. If negative samples are separately curated rather than drawn from the same batch (including positives), the loss has a different gradient structure and the temperature $\tau = 0.1$ may need different calibration.
-
-**4. Equation (1) is missing.** Section 3.1 reads: *"The standard continual learning objective minimizes the cumulative loss of all the tasks:"* followed by a blank, with Eq. (1) appearing only later (after Eq. 2) as a rendering artifact. More substantively, the paper never returns to explain how this objective is modified or replaced in COM—it is presented as background but never connected to the COM training procedure.
-
-**5. No explanation of positive/negative pair construction.** The quality of contrastive learning depends critically on how positive and negative pairs are defined. The paper states that "positive pairs might include different implementations of the same algorithm" but never specifies how these pairs are constructed for the CodeAlpaca-20k dataset or StreamCode benchmark in practice. This is a reproducibility failure.
-
-**6. The projection loss (Eq. 10) penalizes $\|z_t - z_{t-1}\|^2$ at every step.** This discourages *any* representation change over time—which is in direct tension with the goal of online adaptation. The paper does not discuss how this regularization is balanced against adaptation, nor does it provide ablations on $\lambda$ to show the system is not simply being prevented from adapting at all.
+These figures appear to have been fabricated or hallucinated, as they are never substantiated in the experimental section. This is a serious credibility problem for the entire paper.
 
 ---
 
-### Experiments & Results — Fatal Flaw
+### Related Work (Section 2)
 
-**There are no experimental results in this paper.** Section 5 describes the experimental setup (datasets, baselines, metrics, implementation details) in reasonable detail, and then the paper jumps directly to Section 6 (Discussion). No tables, no figures with quantitative results, no statistical comparisons against baselines are presented anywhere in the paper.
+Section 2.3 contains placeholder citations: *"static instruction tuning [1,2]," "continual learning [4,5]," "code models [3,6]," "meta-learning systems [7,9]."* These numbered references do not appear in the reference list at all. The paper was apparently submitted with unfilled citation slots. This alone should disqualify the submission.
 
-This is a fatal deficiency. The abstract and introduction make multiple specific quantitative claims:
-- "3-5× fewer updates than conventional meta-learning approaches"
-- "12-18% on unseen programming languages"
-- "significantly higher robustness than standard fine-tuning"
+The positioning of COM against prior work is also superficial. The authors claim no prior work combines contrastive objectives with online meta-learning for CodeLLMs, but they do not engage with the substantial body of work on contrastive continual learning (e.g., SupCon-based replay, dark experience replay, etc.) that addresses exactly this combination in general settings.
 
-None of these claims are substantiated with any data. The paper is, in effect, a framework proposal with no empirical validation.
+---
 
-Additional experimental design concerns (assuming results were eventually added):
+### Background (Section 3)
 
-- **StreamCode** is described as a self-constructed benchmark, but no details of its construction, annotation methodology, or quality control are provided. There is no way to reproduce it.
-- **Forgetting Rate (FR)** is defined as $1 - \frac{acc_{after}}{acc_{before}}$, which is undefined when $acc_{before} = 0$ and gives negative values when the model improves on old tasks. The standard backward transfer metric is more robust.
-- **Adaptation Accuracy (AA)** is described only as "success rate on newly introduced tasks immediately after adaptation." For code generation, success rate typically means pass@k on unit tests—the paper does not specify k, the test suite source, or whether execution-based evaluation is used.
-- The four baselines are reasonable but **no LoRA-based or prefix-tuning continual learning baselines** are included, which would be more natural comparators for parameter-efficient adaptation than full fine-tuning (SFT).
-- **No ablations** of any kind are presented or even promised (e.g., removing the memory buffer, removing the contrastive pre-training, or using a learned rather than FIFO buffer policy).
+Section 3.1 references Equation 1 (the cumulative loss), but the equation is mangled by the parser — however, this background content is entirely standard and contributes nothing novel. More concerning is that Section 3.2 presents the standard MAML update rule (Eq. 2) without clarifying what is actually "meta" about COM's adaptation. In MAML, meta-learning involves an outer loop over task distributions to learn a good initialization. COM's "meta-update" (Eq. 5) is simply an online gradient step with an L2 regularizer on parameter drift — this is closer to EWC (Kirkpatrick et al., 2017) or online fine-tuning than to genuine meta-learning. The authors never reconcile this gap.
+
+---
+
+### Method (Section 4)
+
+**Architecture.** The frozen base CodeLLM (CodeGen-16B) receives modified instruction embeddings from the meta-learner: *p(y|x) = hψ(gϕ(fθ(x)))* (Eq. 8). Critically, since hψ is entirely frozen and the meta-learner only modifies the instruction representation before the model processes it, the entire adaptation capacity is limited to shifting the 768-dimensional embedding that gets fed into a 16B-parameter model's input. The paper provides no argument for why this bottleneck is sufficient for meaningful task-specific adaptation, nor any ablation showing it outperforms simply fine-tuning the embedding layer alone.
+
+**The "meta-learner" (Eq. 5).** The update rule ϕ_{t+1} = ϕ_t − α∇_ϕ[||gϕ(fθ(x_t)) − y_t||² + λ||ϕ_t − ϕ_{t-1}||²] is not meta-learning in any standard sense. It is online gradient descent with a proximal regularizer. The paper conflates "meta-parameters that modulate base model behavior" with the MAML-style bi-level optimization that the Background section introduces. This misuse of terminology overstates the novelty.
+
+**Positive pair construction.** Eq. 4 requires positive pairs (x_i, x_j^+) defined as "semantically equivalent instructions." The paper never explains how these are obtained at scale during pre-training. This is a non-trivial data curation challenge — the Limitations section briefly acknowledges it is "labor-intensive" — but the implementation section provides no details. Reproducibility is impossible without this.
+
+**The memory buffer (Eq. 6).** The FIFO buffer replays recent instruction pairs to compute an auxiliary contrastive loss. No ablation demonstrates whether this component is necessary; the loss in Eq. 6 uses the same encoder fθ that is being updated, which means there is no guarantee that stored representations remain valid after encoder updates — a classic problem in contrastive memory replay that the paper does not address.
+
+**Spectral normalization (Eq. 11).** Applying spectral normalization to the meta-learner's MLP weights is presented as a key regularization technique, but no experiment isolates its contribution.
+
+---
+
+### Experiments & Results (Section 5) — Critical Failure
+
+**There are no results.** Section 5 describes datasets (5.1), baselines (5.2), metrics (5.3), and implementation details (5.4), then ends. There is no Section 5.5 with tables, figures, or numbers. The paper jumps directly from implementation details to Discussion (Section 6). The four metrics defined — Adaptation Accuracy, Forgetting Rate, Generalization Gap, Update Efficiency — are never populated with any values. This is not a minor omission; it means the entire empirical claim of the paper is absent.
+
+Additional concerns about experimental design even if results were present:
+
+- **StreamCode** is described as a benchmark constructed by the authors, but no construction methodology, data sources, or validation procedure is described. Without this, the benchmark cannot be reproduced or trusted.
+- **CrossLang-Eval** is cited as (Peng et al., 2024) = HumanEval-XL. Calling Rust and Go "low-resource programming languages" is inaccurate — both have substantial open-source corpora and are well-represented in CodeGen-16B's training data.
+- The baselines include MIT (Meta-Instruction-Tuning using MAML) and CPT (Contrastive Prompt Tuning), but no details are given about how MAML is applied to a 16B model in an online streaming setting — this is computationally challenging and the implementation choices matter for a fair comparison.
+- No statistical significance testing is described.
+- No ablation studies are proposed or conducted (e.g., COM without memory buffer, COM without contrastive pre-training, COM without spectral normalization).
+
+---
+
+### Discussion (Section 6)
+
+Section 6.1 acknowledges limitations (noisy feedback, FIFO buffer limitations, curation burden) but these are generic and do not engage with the actual experimental results — because there are none to discuss. Section 6.2 describes hypothetical applications. Section 6.3 raises ethical issues around bias amplification, which is thoughtful but speculative given the absence of any deployment results.
+
+The ethical discussion mentions that contrastive learning "makes the model more sensitive to subtle patterns in instruction phrasing — potentially amplifying biases" but provides no mitigation strategies beyond vague suggestions for "ethical auditing mechanisms."
 
 ---
 
 ### Writing & Clarity
 
-Beyond the missing results, the paper contains multiple passages of clearly corrupted text that impede understanding and raise concerns about quality control:
+Beyond the abstract issues already noted, the paper contains numerous incoherent passages throughout:
 
-- Section 4 intro: *"maintain the just minimal programming knowledge in the model, still enabling us to modulate task specific behavior"* and *"programming England's instructions"*
-- Section 6.1: *"scope for improvementCivil War, though, in terms of..."* — garbled mid-sentence
+- Section 4: *"maintains the just minimal programming knowledge"*, *"knowledge of programming England's instructions"* (Section 4.3)
+- Section 6.1: *"scope for improvementCivil War"*
 - Section 7: *"where Headquarters and reagents of statements and feedback are still pushing and changing"*
-- Acknowledgments: The template placeholder text (*"All the acknowledgments such as those to funding agencies go at the end of the paper"*) was never replaced with actual acknowledgment content.
 
-These are not OCR artifacts—they are semantic corruptions suggesting heavy LLM-generation with inadequate human review.
+These are not parser artifacts — they appear to be LLM generation errors in the prose that the authors did not proofread. The acknowledgment section also contains a template placeholder: *"Numbered third level headings should be used for the acknowledgement sections. All the acknowledgments such as those to funding agencies go at the end of the paper."* This confirms the paper was submitted without basic proofreading.
 
 ---
 
 ### Limitations & Broader Impact
 
-Section 6 discusses limitations (noisy feedback, FIFO buffer, data curation) and ethics (bias amplification) in a superficial but structurally appropriate way. However, the most significant limitation—that the frozen base model + small MLP adapter architecture may fundamentally lack the representational power needed for meaningful adaptation—is not acknowledged. The claim that COM handles "noisy feedback" is stated in the abstract as a solved problem, yet the limitations section lists it as an open challenge, which is contradictory.
+The limitations section is honest about several issues but misses the most fundamental one: the method's core claim — that freezing the base model and adapting only a small embedding modifier is sufficient for meaningful task-specific code generation — is never theoretically motivated or empirically validated.
 
 ---
 
 ## Overall Assessment
 
-This paper cannot be accepted in its current state, primarily because **no experimental results are presented**—the entire results section is absent. The abstract and introduction make strong quantitative claims that are entirely unsubstantiated. Beyond this fatal flaw, the technical method has significant unresolved issues: the meta-learner architecture is likely too weak to induce meaningful behavioral changes in a frozen 16B-parameter model, the positive/negative pair construction strategy is unspecified preventing reproducibility, the projection regularization is in direct tension with adaptation goals, and the contrastive loss formulation deviates from standard InfoNCE without justification. The writing exhibits multiple instances of clearly corrupted or hallucinated text, and the acknowledgments contain unfilled template text. Even if results were added, the methodological gaps would require substantial revision to meet ICLR standards. The core problem statement is legitimate and the architectural decomposition idea has merit, but the paper requires fundamental rework before it is ready for a venue of this caliber.
+This paper cannot be accepted in its current state. The most fundamental problem is that **no experimental results are reported anywhere in the paper**: Section 5 sets up an evaluation framework but contains no results, tables, or figures. Every quantitative claim in the paper — the 3-5× efficiency gain, the 12-18% improvement on low-resource languages, the superior forgetting rate — is stated without evidence. Beyond this, the paper contains unfilled citation placeholders ([1,2], [4,5], etc.), numerous incoherent sentences indicative of unreviewed LLM-generated text, and a template boilerplate left in the acknowledgments section. On the technical side, the core "meta-learning" component is a proximal gradient step that does not constitute meta-learning in any standard sense, and the central design choice — adapting only the instruction embedding fed into a frozen 16B model — is never justified. Even if results were presented, the method description lacks sufficient detail for reproducibility (positive pair construction, StreamCode benchmark construction). The paper does not meet the bar for ICLR on any of the standard dimensions: novelty, technical soundness, empirical validation, or writing quality.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-The paper proposes "Contrastive-Online-Meta (COM)," a framework designed to mitigate catastrophic forgetting and noisy feedback in instruction-tuned CodeLLMs during online deployment. It combines contrastive pre-training for task-invariant representations with an online meta-learning mechanism for lightweight parameter adaptation. Experimental results claim that COM outperforms static fine-tuning and other continual learning baselines on specific adaptation and generalization benchmarks.
+The paper proposes Contrastive-Online-Meta (COM), a dynamic adaptation framework for instruction-tuned CodeLLMs that aims to resolve the stability-plasticity dilemma in streaming programming environments. By decoupling task-invariant representation learning via a contrastive pre-training phase from lightweight, online meta-learning updates, COM seeks to preserve core programming knowledge while enabling real-time behavioral adjustment. The authors integrate a dynamic memory buffer, projection regularization, and spectral normalization to mitigate catastrophic forgetting and parameter drift.
 
 ### Strengths
-1.  **Relevance to CodeLLM Deployment:** The paper addresses a critical gap in CodeLLM utility—continuous adaptation in dynamic environments where new code patterns and feedback emerge post-deployment. This focus on "deployment-time" learning is highly relevant to ICLR's scope.
-2.  **Modular Architectural Design:** The separation of the frozen base CodeLLM from learnable adapters (contrastive embeddings and meta-parameters) is a sound theoretical approach to balancing stability and plasticity. This explicit decoupling allows for efficient updates (claimed to require ~5% of base parameters) without retraining the entire model.
-3.  **Comprehensive Evaluation Metrics:** The authors define clear metrics for continual learning scenarios, specifically **Adaptation Accuracy (AA)**, **Forgetting Rate (FR)**, **Generalization Gap (GG)**, and **Update Efficiency (UE)**. Using multiple dimensions (accuracy vs. forgetting vs. cost) provides a more robust assessment than accuracy alone.
+1. **Conceptually Sound Architectural Decomposition:** The explicit separation of the frozen base CodeLLM $h_\psi$, the contrastive instruction encoder $f_\theta$, and the adaptable meta-learner $g_\phi$ (Sec 4.3) provides a clean inductive bias for balancing knowledge retention with rapid task adaptation, aligning well with established continual learning principles.
+2. **Well-Formulated Objective and Regularization Suite:** The integration of a contrastive alignment loss (Eq 4), meta-update with explicit drift regularization (Eq 5), memory-buffer contrastive consistency (Eq 6), projection-space smoothing (Eq 9-10), and spectral normalization (Eq 11) demonstrates a thoughtful combination of techniques to stabilize gradient trajectories in non-stationary streams.
+3. **Practical Deployment and Ethical Consideration:** Section 6.2 outlines realistic integration scenarios (IDEs, educational platforms, enterprise API updates) without requiring full model retraining. Section 6.3 proactively addresses the ethical risks of online adaptation (e.g., propagating insecure code or biased phrasing) and proposes actionable mitigation strategies, which is highly relevant for production LLM systems.
+4. **Transparent Implementation Specifications:** Section 5.4 clearly documents model backbone, architectural dimensions, buffer capacity, learning rates, optimizer, and hardware setup, providing a solid baseline for future replication efforts.
 
 ### Weaknesses
-1.  **Clarity and Writing Quality:** There are significant issues with prose quality and clarity that undermine the technical presentation. For example, the manuscript explicitly states in **Section 8** ("We use LLM polish writing based on our original paper"), which raises concerns regarding the originality of the text and adherence to submission guidelines regarding AI tool usage. Additionally, phrases such as "behavior-effective thing" (Abstract) and "coefficients to the issues" (Abstract) indicate a lack of rigorous proofreading.
-2.  **Methodological Ambiguity:** The distinction between the model components' trainability is confusing. The Abstract describes a "contrastive pre-training module," but **Section 4.3** states "Gradients flow only through $g_\phi$ and $f_\theta$," implying $f_\theta$ (the instruction encoder) is updated online. This contradicts the standard notion of a pre-trained encoder being frozen during the meta-learning phase, making the training dynamics unclear.
-3.  **Novelty Claims:** The claim in the Introduction that this is the "first principled merging of contrastive objectives and the meta-learning... of CodeLLMs" appears overstated. Related work in Section 2 acknowledges similar combinations (e.g., Qin et al., 2023; Wang et al., 2023), and the specific contribution of "contrastive regularization" on meta-parameters is not sufficiently differentiated from existing meta-continual learning literature.
-4.  **Data Construction Transparency:** The **StreamCode** benchmark used for continual learning evaluation is described as "constructed" in **Section 5.1**, but the paper provides no details on how task boundaries are defined or how the "non-stationary streams" are simulated. Without this reproducibility data, the validity of the "Forgetting Rate" claims is difficult to assess.
+1. **Absent Quantitative Results and Empirical Validation:** Section 5 details datasets, baselines, metrics, and hyperparameters, but the manuscript provided contains no actual results (tables, figures, or numerical analysis). Core claims from the abstract and introduction (e.g., "outperforming baselines by 12-18%," "3-5× fewer updates") are entirely unsupported in the text, which falls significantly below ICLR's empirical rigor standards.
+2. **Lack of Ablation Studies:** The paper asserts a synergistic design combining contrastive learning and online meta-learning, yet provides no component-wise ablations. Without isolating the contributions of the memory buffer, projection regularization $\mathcal{L}_{proj}$, spectral normalization, or the specific contrastive pre-training phase, the claimed superiority over unified meta-learning baselines remains unverified.
+3. **Under-Specified Streaming Evaluation Protocol:** While *StreamCode* is introduced as a non-stationary sequence of five task distributions, the paper does not detail the data arrival rate, task-switching frequency, buffer update cadence, or how contrastive positive/negative pairs are curated in real-time. This omission makes the "online adaptation" claim difficult to evaluate against standard continual learning benchmarks.
+4. **Incomplete Computational Efficiency Analysis:** Update Efficiency (UE) is listed as a key metric (Sec 5.3), but the paper lacks FLOP counts, wall-clock adaptation times, or GPU memory footprint comparisons against ER, MIT, and CPT. Given the emphasis on lightweight updates ("typically requiring <5% of base parameters"), computational benchmarks are essential to substantiate the efficiency claims.
+5. **Inconsistent Academic Phrasing:** While avoiding parser artifacts, the text contains several semantically incoherent phrases (e.g., "programming England’s instructions" in Sec 4.1, "Headquarters and reagents of statements" in Sec 7) that suggest heavy automated polishing without rigorous human proofreading, detracting from the paper's academic professionalism.
 
 ### Novelty & Significance
-*   **Novelty:** **Moderate.** While combining contrastive learning and meta-learning for continual adaptation is a coherent idea, the integration with CodeLLMs feels incremental. The "first principled merging" claim needs stronger justification against existing meta-continual learning work (e.g., in recommendation systems or general NLP).
-*   **Significance:** **High.** Solving catastrophic forgetting in CodeLLMs is a significant practical challenge. If the method works as claimed, it could enable scalable, persistent coding assistants. However, the current writing quality and ambiguity reduce confidence in the feasibility of the claims.
-*   **Clarity:** **Low.** The text requires substantial editing. The admission of LLM polishing in Section 8 is a major negative for a top-tier venue like ICLR, which expects human-authored rigor. Ambiguous statements about parameter freezing further hurt clarity.
-*   **Reproducibility:** **Medium.** Implementation details (hyperparameters, base model) are provided, but the construction of the "StreamCode" dataset and the specific training schedule (how often $f_\theta$ vs $g_\phi$ update) are not fully detailed.
+**Novelty:** Moderate. The individual components (contrastive representation learning, online meta-gradient adaptation, replay buffers, spectral normalization) are well-established in the literature. The novelty lies in their specific unification for streaming instruction tuning of CodeLLMs, particularly the explicit projection regularization paired with memory-buffer consistency. However, the technical contribution does not strongly differentiate from existing continual meta-learning or online fine-tuning frameworks.
+**Clarity:** The structural organization and mathematical notation are clear, but the missing results and occasional incoherent phrasing hinder overall readability and claim verification.
+**Reproducibility:** Partially addressed. While hyperparameters and hardware are specified, the absence of data curation details for contrastive pairs, exact streaming simulation loops, and result reporting makes independent verification impossible.
+**Significance:** Potentially high if empirically validated. Efficiently adapting CodeLLMs in production without catastrophic forgetting addresses a critical gap. A modular, compute-efficient online tuning framework would be valuable for the community, but current claims lack the evidentiary support required for high-impact recognition at ICLR.
 
 ### Suggestions for Improvement
-1.  **Revise Prose and Disclosure:** The authors must completely rewrite the manuscript to ensure professional academic English. If Section 8 ("We use LLM polish...") is accurate, it must be properly disclosed in the standard AI usage disclosure section, not buried as a section heading, as this violates ICLR's transparency expectations.
-2.  **Clarify Training Dynamics:** Explicitly define the training schedule for $f_\theta$. Is it pre-trained and then frozen? Or is it fine-tuned alongside $g_\phi$ during inference? The current description ("pre-training phase... deploy on-line" vs "Gradients flow through $f_\theta$") is contradictory.
-3.  **Strengthen Novelty Positioning:** Provide a detailed ablation or analysis distinguishing COM from existing continuous meta-learning methods (e.g., LEO, EWC). The authors should clarify what specifically about the *contrastive* component prevents forgetting more effectively than standard weight regularization.
-4.  **Detail Data Construction:** Describe the **StreamCode** benchmark construction in detail. How are tasks sequential? How is "noise" simulated in the feedback? This is crucial for the validity of the continual learning claims.
-5.  **Fix References:** Several references list future dates (e.g., 2025), which undermines credibility. Ensure all citations are current or correctly marked as preprints (arXiv) with stable links.
+1. **Add Comprehensive Results Section:** Provide full quantitative results (means ± std across ≥3 seeds) for Adaptation Accuracy, Forgetting Rate, Generalization Gap, and Update Efficiency across all benchmarks. Include statistical significance tests against all stated baselines to substantiate the abstract/intro claims.
+2. **Conduct Rigorous Ablation Studies:** Present results removing each key component individually (w/o contrastive pre-training, w/o memory buffer, w/o $\mathcal{L}_{proj}$, w/o spectral norm) to quantify their individual and combined impact on stability and adaptation speed.
+3. **Detail the Streaming Simulation & Pair Curation:** Explicitly describe the task arrival schedule, update frequency, and how functionally equivalent/inequivalent instructions are identified for the contrastive objective (e.g., execution traces, AST similarity, LLM-based semantic matching). Release code/config if possible to meet reproducibility standards.
+4. **Report Computational Overhead:** Provide concrete metrics for training/inference latency, peak VRAM, gradient computation FLOPs per update step, and compare these directly against ER and MIT baselines to validate the claimed "lightweight" and efficiency advantages.
+5. **Address Noisy/Delayed Feedback Robustness:** Section 6.1 acknowledges reliance on high-quality feedback but does not test it. Add experiments injecting simulated feedback noise/delays and explore mitigation strategies (e.g., robust loss functions, confidence weighting, buffer filtering) to demonstrate real-world viability.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Quantitative Results Reporting**: Provide explicit performance numbers for Adaptation Accuracy and Forgetting Rate to substantiate abstract claims. Without concrete data, the claims of "significantly higher robustness" are unverifiable.
-2. **Ablation of Components**: Remove contrastive loss, memory buffer, and meta-learner individually to prove each contributes to performance. Without this, the "unified framework" claim is weak as one component might drive all gains.
-3. **Feedback Noise Sensitivity**: Test adaptation quality when feedback signals are intentionally corrupted or delayed. This directly validates the core claim of robustness to "noisy feedback at the time of deployment."
-4. **PEFT Baseline Comparison**: Compare against LoRA-based continual learning methods instead of static fine-tuning. Static baselines do not validate online adaptation capabilities and make efficiency claims misleading.
-5. **Compute Efficiency Verification**: Report exact FLOPs and wall-clock time to verify the "3-5x fewer updates" claim. Efficiency is a core contribution and requires rigorous computational measurement, not just parameter counts.
+1. Add an ablation study removing the meta-learning component to verify if performance gains come from meta-optimization or simply online fine-tuning with regularization. Without this, the core claim of "meta-learning" is indistinguishable from standard SGD.
+2. Include robustness experiments where feedback signals ($y_t$) are noisy, delayed, or sparse, as real-world code execution feedback is rarely perfect oracle data. The current setup assumes ideal feedback, undermining deployment claims.
+3. Compare directly against Parameter-Efficient Fine-Tuning (PEFT) baselines like LoRA or Adapters updated online, rather than just Static Fine-Tuning. PEFT is the standard for efficient adaptation in LLMs, and ignoring it weakens the efficiency claims.
+4. Report statistical significance tests (e.g., p-values or confidence intervals) for the claimed 12-18% improvements on unseen languages. Single-run averages are insufficient for ICLR standards to validate superiority over baselines.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Frozen Base Capacity Limit**: Analyze whether adapter-only updates can sufficiently adapt a 16B model for complex code tasks. If the frozen base limits expressivity, the method cannot solve the adaptation problem as claimed.
-2. **Memory Buffer Sensitivity**: Analyze performance variance as buffer size $C$ scales down. This tests practicality in memory-constrained deployment settings which is critical for "online" systems.
-3. **Loss Landscape Conflict**: Visualize gradient alignment between contrastive and meta-learning objectives. Ensure the "unified" loss doesn't create optimization conflicts that destabilize training.
-4. **Task Similarity Impact**: Correlate performance drop with semantic distance between sequential tasks. This validates the "task-invariant representation" claim against actual task distribution shifts.
-5. **Convergence Stability**: Plot loss curves over online steps to prove the method does not diverge. Online learning systems must demonstrate stability over long streams, not just final accuracy.
+1. Provide a detailed FLOPs counting analysis to substantiate the "3-5x fewer updates" efficiency claim. Computational cost must be quantified explicitly to prove scalability over conventional meta-learning.
+2. Analyze the sensitivity of the memory buffer size ($C$) on the stability-plasticity dilemma. Without this, the choice of 5,000 entries appears arbitrary and may not generalize to different stream velocities.
+3. Present forgetting curves over time rather than just a final Forgetting Rate (FR) metric. Reviewers need to see if performance degrades gradually or collapses abruptly during the streaming process.
 
 ### Visualizations & Case Studies
-1. **Embedding Clustering**: t-SNE visualization of instruction embeddings before and after contrastive training. This proves the representation learning module actually clusters semantically similar instructions as claimed.
-2. **Forgetting Heatmap**: Matrix showing performance on all past tasks at every time step. This directly visualizes catastrophic forgetting patterns better than a single aggregate metric.
-3. **Code Generation Cases**: Side-by-side examples of code generated by COM vs. baselines on unseen languages. Qualitative proof is needed to show the model isn't just memorizing syntax but understanding logic.
-4. **Efficiency Trade-off Curve**: Plot Accuracy vs. FLOPs to visualize the claimed efficiency advantage. This allows reviewers to instantly assess the cost-benefit ratio against baselines.
+1. Include t-SNE plots of the instruction embeddings before and after contrastive pre-training to visually verify that semantically similar tasks are actually clustering. This validates the core mechanism of the contrastive module.
+2. Show side-by-side code generation examples (before vs. after adaptation) for a specific drifted task (e.g., new API usage). Qualitative evidence is needed to prove the model adapts behavior rather than just memorizing inputs.
 
 ### Obvious Next Steps
-1. **Insert Results Section**: Add the missing experimental results data to the paper immediately. A paper claiming experimental superiority without a results section is incomplete.
-2. **Clarify Adapter Novelty**: Explicitly distinguish method from standard Meta-learned Adapters or LoRA. The current formulation risks appearing as repackaged parameter-efficient fine-tuning.
-3. **Release StreamCode Details**: Publish construction logic for the custom benchmark to ensure reproducibility. ICLR standards require constructed datasets to be fully documented or public.
-4. **Evaluate Sparse Feedback**: Test scenarios where feedback is unavailable for certain steps. Real-world deployment rarely has continuous feedback, so this validity gap must be closed.
-5. **Implement Bias Tracking**: Add the proposed ethical auditing mechanism to track adaptation drift. Since the paper acknowledges bias risks, it should demonstrate a mitigation strategy.
+1. Replace the simple FIFO memory buffer with an importance-based sampling mechanism to handle long-tailed task distributions admitted in the limitations. This is a critical fix for real-world coherence.
+2. Validate the framework using human-in-the-loop feedback (e.g., accept/reject suggestions) instead of only oracle execution results. This bridges the gap between benchmark evaluation and actual IDE deployment.
 
 # Final Consolidated Review
 ## Summary
 
-The paper proposes Contrastive-Online-Meta (COM), a framework for dynamically adapting instruction-tuned CodeLLMs during deployment. COM combines contrastive pre-training for task-invariant representations with online meta-learning for lightweight adaptation, using a frozen base model with learnable adapters and a dynamic memory buffer. The claimed contribution is preserving programming knowledge while adapting to new instruction patterns without catastrophic forgetting.
+The paper proposes Contrastive-Online-Meta (COM), a framework for dynamically adapting instruction-tuned CodeLLMs in streaming deployment scenarios. COM separates a frozen base model from adaptable components: a contrastive pre-trained instruction encoder that learns task-invariant representations, and a lightweight meta-learner that performs online gradient updates with regularization to balance adaptation speed against catastrophic forgetting. A FIFO memory buffer provides additional stability through contrastive replay.
 
 ## Strengths
 
-- **Problem formulation addresses real deployment challenges**: The focus on online adaptation for CodeLLMs in dynamic environments—where instruction patterns and user feedback arrive continuously—is practically significant. Existing instruction tuning approaches lack mechanisms for continuous adaptation without retraining.
+- **Conceptually motivated architectural decomposition:** The explicit separation of a frozen base CodeLLM $h_\psi$, contrastive instruction encoder $f_\theta$, and adaptable meta-learner $g_\phi$ (Section 4.3) provides a clean inductive bias for the stability-plasticity trade-off in continual learning. This design allows the model to retain core programming knowledge while adapting to new instruction patterns—a genuine architectural contribution.
 
-- **Modular architecture separation**: The design separates a frozen base CodeLLM from trainable components (contrastive embeddings and meta-parameters), which is theoretically sound for balancing stability (preserving programming knowledge) with plasticity (adapting to new tasks). The claim that only ~5% of parameters require updates, if validated, would meaningfully reduce deployment costs.
+- **Comprehensive regularization strategy:** The framework combines multiple stabilization techniques: contrastive alignment loss (Eq. 4), drift regularization on meta-parameters (Eq. 5), memory-buffer consistency (Eq. 6), projection-space smoothing (Eq. 9-10), and spectral normalization (Eq. 11). This demonstrates thoughtful engagement with the challenges of non-stationary adaptation.
 
-- **Multi-metric evaluation framework**: The proposed metrics—Adaptation Accuracy, Forgetting Rate, Generalization Gap, and Update Efficiency—address distinct aspects of continual learning that accuracy alone cannot capture.
+- **Transparent implementation specifications:** Section 5.4 documents model backbone (CodeGen-16B), architectural dimensions (6-layer transformer encoder, 2-layer MLP meta-learner), buffer capacity (5,000), and hyperparameters ($\tau=0.1$, $\alpha=10^{-4}$, $\lambda=0.5$), providing a basis for future replication.
 
 ## Weaknesses
 
-- **No experimental results are presented**: Section 5 describes experimental setup in detail (datasets, baselines, metrics, hyperparameters) but the paper jumps directly to Discussion (Section 6) without presenting any quantitative results. The abstract and introduction make specific claims—"3-5× fewer updates than conventional meta-learning approaches," "12-18% outperforming instruction-tuned baselines on unseen programming languages," "significantly higher robustness than standard fine-tuning"—that are entirely unsubstantiated. A paper claiming empirical contributions must present empirical evidence.
+- **No experimental results reported:** Section 5 defines datasets, baselines, metrics, and implementation details, but contains no results section, tables, or figures. Every quantitative claim in the paper— including "3-5× fewer updates" and "outperforming instruction-tuned baselines by 12-18% on unseen programming languages"—is stated without any supporting evidence. This absence invalidates the core empirical contribution and falls far below ICLR standards for rigor.
 
-- **Multiple passages contain garbled or incoherent text**: The abstract contains "coefficients to the issues of catastrophic forgetting" and "behavior-effective thing." Section 4 references "programming England's instructions." Section 6.1 contains "scope for improvementCivil War." Section 7 has "where Headquarters and reagents of statements and feedback are still pushing and changing." These semantic errors suggest inadequate proofreading of LLM-generated content and undermine confidence in the technical presentation.
+- **Unfilled citation placeholders:** Section 2.3 contains references in the format "[1,2]," "[4,5]," "[3,6]," and "[7,9]" that do not appear in the bibliography. These are clearly placeholder slots that were never completed, indicating the paper was submitted before proper review and editing. This is a serious editorial failure.
 
-- **Positive/negative pair construction for contrastive learning is unspecified**: The paper states "positive pairs might include different implementations of the same algorithm" but never specifies how these pairs are actually constructed for CodeAlpaca-20k or StreamCode. Contrastive learning quality depends critically on pair selection; omitting this prevents reproducibility.
+- **Misleading terminology around "meta-learning":** Equation 5 presents $\phi_{t+1} = \phi_t - \alpha\nabla_\phi[\|g_\phi(f_\theta(x_t)) - y_t\|^2 + \lambda\|\phi_t - \phi_{t-1}\|^2]$, which is online gradient descent with an L2 proximal regularizer penalizing parameter drift. This is closer to Elastic Weight Consolidation (EWC) or regularized fine-tuning than to meta-learning frameworks like MAML (which involve bi-level optimization over task distributions). The paper repeatedly calls these "meta-parameters" and "meta-learning" without justification, overstating the technical contribution.
 
-- **StreamCode benchmark construction is undocumented**: The paper claims StreamCode is a constructed benchmark with "5 distinct task distributions" arriving in "non-stationary streams," but provides no details on task boundary definition, stream construction methodology, or data annotation. Without this information, the continual learning evaluation cannot be reproduced.
+- **Incoherent prose throughout:** The paper contains numerous nonsensical phrases that appear to be unedited LLM generation: "coefficients to the issues of catastrophic forgetting" (abstract), "behavior-effective thing" (abstract), "knowledge of programming England's instructions" (Section 4.3), "scope for improvementCivil War" (Section 6.1), and "where Headquarters and reagents of statements and feedback are still pushing and changing" (Section 7). The acknowledgment section contains template boilerplate: "Numbered third level headings should be used for the acknowledgement sections." These errors indicate the manuscript was not proofread before submission.
 
-- **Meta-learner architectural capacity is questionable**: The meta-learner gϕ is specified as a "2-layer MLP" operating on 768-dimensional embeddings, transforming them before passing to a frozen 16B-parameter CodeGen model. The paper does not justify whether this bottleneck provides sufficient expressiveness for meaningful task-specific adaptation (e.g., adapting to new APIs or programming languages), nor does it provide ablations testing this design choice.
+- **Insufficient reproducibility details for core components:** The contrastive pre-training phase (Eq. 4) requires "semantically equivalent instructions" $(x_i, x_j^+)$ as positive pairs, but the paper never explains how these are constructed at scale. The StreamCode benchmark is described as "constructed by the authors" with no construction methodology, data sources, or validation procedure. Without these details, independent reproduction is impossible.
 
-- **Citation misattribution**: The claim of "3-5× fewer updates than conventional meta-learning approaches (Nichols et al., 2024)" cites a paper titled "Performance-aligned LLMs for generating fast code"—this is not a meta-learning approach and is not an appropriate baseline for update-count comparisons.
-
-- **Numbered placeholder references in Section 2.3**: The final paragraph cites "[1,2]" and "[3,6]" and "[7,9]" instead of using the author-year format used elsewhere, suggesting incomplete integration.
-
-- **Training schedule ambiguity**: The abstract describes "contrastive pre-training" followed by "online meta-learning," but Section 4.3 states "Gradients flow only through gϕ and fθ," implying fθ (instruction encoder) updates during online deployment. It is unclear whether fθ is frozen after pre-training or continuously adapted.
+- **No ablation studies:** The paper claims synergistic benefits from combining contrastive learning with online meta-learning, but provides no component-wise ablations to isolate the contribution of the memory buffer, projection regularization, spectral normalization, or contrastive pre-training phase.
 
 ## Nice-to-Haves
 
-- **Ablation of individual components**: Testing COM with contrastive loss removed, memory buffer removed, and meta-learner removed would validate that each component contributes meaningfully rather than one component driving all gains.
+- **Direct comparison with PEFT baselines:** Parameter-efficient methods like LoRA or Adapters updated online would provide a stronger baseline comparison than Static Fine-Tuning alone, given that PEFT is now standard for efficient LLM adaptation.
 
-- **PEFT baseline comparisons**: Comparing against LoRA-based or prefix-tuning continual learning methods would provide more relevant baselines than static fine-tuning for adaptation efficiency claims.
+- **Robustness experiments with noisy feedback:** The paper acknowledges reliance on high-quality feedback signals but does not test performance degradation when feedback is noisy, delayed, or sparse—conditions common in real deployment.
 
-- **Compute efficiency measurements**: The "3-5× fewer updates" claim requires actual FLOPs or wall-clock time measurements, not just parameter counts.
-
-- **Feedback noise robustness validation**: The abstract claims robustness to "noisy feedback" but no experiments test this explicitly.
+- **Sensitivity analysis of buffer size:** The 5,000-entry buffer capacity is stated without justification; analyzing its impact on the stability-plasticity trade-off would strengthen the design rationale.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution:*
+These points are flagged to be removed; treat them with caution:
 
-- **Criticism of LLM disclosure in Section 8**: The paper properly discloses LLM use for polishing. This is transparent and follows appropriate practices.
+- **"References to papers not yet released"**: The harsh critic flagged concerns about some citations (e.g., Nichols et al. 2024), but there is no evidence these papers do not exist—they are properly formatted in the bibliography, and critics cannot verify availability without external tools.
 
-- **Complaints about 2025 citation dates**: ArXiv preprints commonly have dates ahead of conference cycles; this is standard practice.
+- **"Citation placement concerns in Related Work"**: While some citations use numbered placeholders that are clearly errors, criticizing the overall positioning against prior work is less important than the fundamental missing results and placeholder issues.
 
-- **Generic "topic is important" strength**: This applies to many papers and is not a specific contribution.
+- **"Statistical significance testing"**: While important for ICLR, demanding significance tests when the paper has NO results at all is putting the cart before the horse. This becomes relevant only after results are provided.
 
-- **Request for theoretical proofs**: This is an empirical systems paper; theoretical proofs would be scope creep.
-
-- **Request for user studies**: For an algorithmic contribution focused on model adaptation, user studies are not expected.
+- **"FLOPs counting for efficiency claims"**: Detailed computational analysis would strengthen the paper, but given the absence of any experimental results, this is secondary to the fundamental missing experiments.
 
 ## Novel Insights
 
-The architectural decomposition of stability-plasticity trade-offs into three distinct mechanisms—contrastive representation learning (preserving semantic structure), meta-learned adaptation parameters (enabling rapid task-specific updates), and dynamic memory buffering (maintaining temporal coherence)—is a principled approach. However, whether this decomposition actually works as claimed cannot be evaluated without experimental results. The insight that contrastive objectives might regularize meta-learning updates by preventing representation drift is theoretically interesting but unvalidated.
+None beyond the paper's own contributions. The architectural decomposition (frozen base + contrastive encoder + regularized online adaptation) is a reasonable design principle for continual learning in CodeLLMs, but the paper's current state—with no experimental validation and misleading terminology—prevents meaningful assessment of whether this approach actually works.
 
 ## Suggestions
 
-- **Add a complete Results section** with quantitative comparisons for all four metrics against all baselines, including standard deviations across multiple runs.
+1. **Add a complete experimental results section** with quantitative tables and figures for all four claimed metrics (Adaptation Accuracy, Forgetting Rate, Generalization Gap, Update Efficiency) across all benchmarks (CodeAlpaca-20k, StreamCode, CrossLang-Eval). Include standard deviations and statistical significance tests.
 
-- **Specify positive/negative pair construction**: Describe the algorithm or process for creating semantically equivalent instruction pairs and selecting negative samples for each dataset.
+2. **Replace all placeholder citations** with properly formatted references to peer-reviewed or archived work, or remove those claims if no supporting literature exists.
 
-- **Document StreamCode benchmark**: Provide task definitions, stream construction methodology, data sources, and ideally release the dataset or construction code.
+3. **Clarify or rename the "meta-learning" component**—either demonstrate genuine bi-level optimization over task distributions, or rename it to accurately reflect that it is regularized online fine-tuning.
 
-- **Clarify the training protocol**: Explicitly state when fθ is trained vs. frozen, and whether online updates affect both fθ and gϕ or only gϕ.
+4. **Document StreamCode benchmark construction** including data sources, task distribution design, and validation procedures to enable independent evaluation.
 
-- **Correct citation misattributions**: Verify that Nichols et al. (2024) is appropriate for the meta-learning baseline comparison, or replace with a correctly cited meta-learning approach.
-
-- **Proofread the manuscript thoroughly**: Remove all garbled passages before resubmission.
+5. **Proofread thoroughly** to remove all LLM-generated incoherent phrases and template boilerplate before resubmission.
 
 # Actual Human Scores
 Individual reviewer scores: [0.0, 0.0, 0.0, 0.0]

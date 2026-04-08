@@ -205,10 +205,29 @@ def analyze_and_plot(path):
     if n_pos > 0 and n_neg > 0:
         auroc = roc_auc_score(gt_binary, pred)
         fpr, tpr, thresholds = roc_curve(gt_binary, pred)
-        human_auroc = roc_auc_score(gt_binary, gt_avg)
-        human_fpr, human_tpr, _ = roc_curve(gt_binary, gt_avg)
+        # Human baseline AUROC: use individual reviewer scores (not the average)
+        # Each individual score is an independent prediction of the paper's accept/reject label
+        human_indiv_scores = []
+        human_indiv_labels = []
+        for i, (idx, row) in enumerate(df.iterrows()):
+            label = gt_binary[i]
+            for c in gt_score_cols:
+                if pd.notna(row[c]):
+                    human_indiv_scores.append(float(row[c]))
+                    human_indiv_labels.append(label)
+        human_indiv_scores = np.array(human_indiv_scores)
+        human_indiv_labels = np.array(human_indiv_labels)
+        n_indiv_pos = human_indiv_labels.sum()
+        n_indiv_neg = len(human_indiv_labels) - n_indiv_pos
+        if n_indiv_pos > 0 and n_indiv_neg > 0:
+            human_auroc = roc_auc_score(human_indiv_labels, human_indiv_scores)
+            human_fpr, human_tpr, _ = roc_curve(human_indiv_labels, human_indiv_scores)
+        else:
+            human_auroc = None
+            human_fpr, human_tpr = None, None
         print(f"  AUROC (score→A/R):     {auroc:.4f}")
-        print(f"  AUROC (human avg):     {human_auroc:.4f}")
+        if human_auroc is not None:
+            print(f"  AUROC (human indiv):   {human_auroc:.4f}  ({len(human_indiv_scores)} individual scores)")
         # Find optimal threshold (Youden's J)
         j_scores = tpr - fpr
         best_idx = np.argmax(j_scores)
@@ -372,15 +391,15 @@ def analyze_and_plot(path):
     else:
         ax5.axis("off")
 
-    # Bottom-right: Human AUROC curve
+    # Bottom-right: Human AUROC curve (individual scores)
     ax6 = axes[1, 2]
-    if has_curves:
+    if has_curves and human_auroc is not None:
         ax6.plot(human_fpr, human_tpr, color="#f39c12", lw=2.5,
-                 label=f"Human Avg (AUROC={human_auroc:.3f})")
+                 label=f"Human Indiv (AUROC={human_auroc:.3f})")
         ax6.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
         ax6.set_xlabel("False Positive Rate", fontsize=12)
         ax6.set_ylabel("True Positive Rate", fontsize=12)
-        ax6.set_title("ROC Curve (Human Average Score)", fontsize=13)
+        ax6.set_title("ROC Curve (Human Individual Scores)", fontsize=13)
         ax6.set_xlim(-0.02, 1.02); ax6.set_ylim(-0.02, 1.02)
         ax6.set_aspect("equal")
         ax6.grid(True, alpha=0.2)

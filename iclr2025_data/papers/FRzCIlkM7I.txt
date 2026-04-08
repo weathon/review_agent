@@ -1,0 +1,2636 @@
+### EXPAND AND COMPRESS: EXPLORING TUNING PRIN- CIPLES FOR CONTINUAL SPATIO-TEMPORAL GRAPH FORECASTING
+
+
+**Wei Chen,** **Yuxuan Liang** [�]
+The Hong Kong University of Science and Technology (Guangzhou)
+onedeanxxx@gmail.com, yuxliang@outlook.com
+
+
+ABSTRACT
+
+
+The widespread deployment of sensing devices leads to a surge in data for spatiotemporal forecasting applications such as traffic flow, air quality, and wind energy.
+Although spatio-temporal graph neural networks (STGNNs) have achieved success in modeling various static spatio-temporal forecasting scenarios, real-world
+spatio-temporal data are typically received in a streaming manner, and the network continuously expands with the installation of new sensors. Thus, spatiotemporal forecasting in streaming scenarios faces dual challenges: the inefficiency
+of retraining models over newly-arrived data and the detrimental effects of catastrophic forgetting over long-term history. To address these challenges, we propose a novel prompt tuning-based continuous forecasting method, EAC, following two fundamental tuning principles guided by empirical and theoretical analysis: _expand and compress_, which effectively resolve the aforementioned problems
+with lightweight tuning parameters. Specifically, we integrate the base STGNN
+with a continuous prompt pool, utilizing stored prompts ( _i_ . _e_ ., few learnable parameters) in memory, and jointly optimize them with the base STGNN. This method
+ensures that the model sequentially learns from the spatio-temporal data stream
+to accomplish tasks for corresponding periods. Extensive experimental results on
+multiple real-world datasets demonstrate the multi-faceted superiority of EAC over
+the state-of-the-art baselines, including effectiveness, efficiency, universality, etc.
+[Our code repository is available at https://github.com/Onedean/EAC.](https://github.com/Onedean/EAC)
+
+
+1 INTRODUCTION
+
+
+Spatio-temporal data is ubiquitous in various applications, such as traffic management (Avila &
+Mezi´c, 2020), air quality monitoring (Liang et al., 2023), and wind energy deployment (Yang et al.,
+2024). Spatio-temporal graph neural networks (STGNNs) (Jin et al., 2023; 2024) have become
+a predominant paradigm for modeling such data, primarily due to their powerful spatio-temporal
+representation learning capabilities, which consider the both spatial and temporal dimensions of data
+by learning temporal representations of graph structures. However, most existing works (Li et al.,
+2017; Wu et al., 2019; Bai et al., 2020; Cini et al., 2023; Han et al., 2024) assume a static setup,
+where STGNN models are trained on the entire dataset over a limited time period and maintain
+fixed parameters after training is completed. In contrast, real-world spatio-temporal data (Liu et al.,
+2024; Yin et al., 2024) typically exists in a streaming format, with the underlying network structure
+expanding through the installation of new sensors in surrounding areas, resulting in a constantly
+evolving spatio-temporal network. _Due to computational and storage costs,_ _it is often impractical_
+_to store all data and retrain the entire STGNN model from scratch for each time period_ .
+
+
+To address this problem, several straightforward solutions are available, as illustrated in Figure 1.
+The simplest approach involves _**pre-training**_ an STGNN (using node-count-free graph convolution
+operators) for testing across subsequent periods. However, due to distribution shifts (Wang et al.,
+2024a), this method often fails to adapt to new period data. Another approach involves model
+_**retraining**_ and prediction on different data windows due to graph expansion. Unfortunately, this
+neglects the informational gains from historical data, leading to limited performance improvements.
+To simultaneously resolve the challenges posed by these two issues, a more effective solution is to
+adopt a continual learning paradigm (Wang et al., 2024d), which is a research area focused on how
+
+
+1
+
+
+#### Period #1 Data Period #2 Data … Period #N Data
+
+
+_**Pre-training**_
+
+
+_**Re-training**_
+
+
+#### …
+
+
+_**Online-training**_
+
+
+_Period_ _Model_ _Test_ _Prompt Pool_ _Tuning_ _Frozen_ _Re-load_
+
+
+Figure 1: Comparison of classic schemes and EAC for continual spatio-temporal forecasting.
+
+
+systems learn sequentially from continuous related data streams. Specifically, the core idea is to
+load the previously trained model for new period data and conduct _**online**_ _**training**_ on the current
+period. _Nevertheless,_ _the notorious problem of catastrophic forgetting (van de Ven et al., 2024) in_
+_neural networks often hinders the improvement of online learning performance._ .
+
+
+Current methods for continual spatio-temporal forecasting typically follow various types of continual learning approaches for improvement. For example, TrafficStream (Chen et al., 2021b) comprehensively integrates regularization and replay-based methods to learn and adapt to ongoing data
+streams while retaining past knowledge to enhance performance. PECPM (Wang et al., 2023b)
+and STKEC (Wang et al., 2023a) further refine replay strategies to detect stable and changing node
+data for better adaptation. TFMoE (Lee & Park, 2024) method considers training a sets of mixture of experts models for adapting to new nodes, thereby improving efficiency. _Though promising,_
+_the aforementioned methods still involve optimizing the entire STGNN model, resulting in complex_
+_tuning costs and failing to mitigate the problem of catastrophic forgetting in a principle way._
+
+
+To this end, we propose EAC, a novel continual spatio-temporal graph forecasting framework based
+on _**a continuous prompt parameter pool**_ for modeling streaming spatio-temporal data. Specifically,
+we freeze the base STGNN model during the continual learning process to prevent knowledge forgetting, adapting solely through a dynamically adjustable prompt parameter pool to accommodate
+the continuously emerging expanded node data while further storing the knowledge acquired from
+streaming spatio-temporal data. Notably, we explore _**two**_ _**fundamental**_ _**tuning**_ _**principles**_, expand
+and compress, through empirical and theoretical analyses to balance model effectiveness and efficiency. EAC has five distinctive characteristics: _(i)_ _**Simplicity**_ : it accomplishes complex continual
+learning tasks solely by tuning the prompt parameter pool; _(ii)_ _**Effectiveness**_ : it demonstrates consistent performance across multiple real-world datasets; _(iii)_ _**Universality**_ : it demonstrates consistent
+performance across different STGNN architectures; _(iv)_ _**Efficiency**_ : it accelerates model training
+speed by effectively freezing the backbone model; and _(v)_ _**Lightweight**_ : it requires adjustment of
+only a limited number of parameters in the prompt pool. In summary, our main contributions are:
+
+
+- We propose a prompt-based continual spatio-temporal forecasting framework EAC that is simple,
+effective, and efficient with lightweight tunable parameters.
+
+- Through empirical observations and theoretical analysis, we explore two tuning principles for continual spatio-temporal forecasting: the heterogeneity property for expansion and low-rank property
+for compression in our continuous prompt parameter pool.
+
+- Based on the two proposed tuning principles, we introduce two implementation schemes: continuous prompt pool growth and continuous prompt pool reduction.
+
+- Experimental results on different scenarios of real-world datasets from different domains demonstrate the effectiveness and universal superiority of EAC .
+
+
+2 RELATED WORK
+
+
+**Spatio-temporal Forecasting.** Spatio-temporal forecasting originates from time series analysis and
+can be viewed as a temporal data modeling problem within an underlying network. Traditional
+statistical models, such as ARIMA (Box & Pierce, 1970) and VAR (Biller & Nelson, 2003), as well
+
+
+2
+
+
+as advanced time series deep learning models (Nie et al., 2023; Wu et al., 2022), can simplify this
+into a single time series forecasting task. Even though, these methods fail to capture spatio-temporal
+correlations between different locations, leading to suboptimal performance. STGNNs, due to their
+inherent ability to aggregate local spatio-temporal information, are considered powerful tools for
+modeling this data. STGNNs consist of two key components: a graph operator module for spatial
+relationship modeling, typically categorized into spectral GNNs (Yu et al., 2017), spatial GNNs (Li
+et al., 2017), or hybrids, and a sequence operator module for temporal relationship modeling, which
+can be recurrent-based (Pan et al., 2019), convolution-based (Wu et al., 2019), attention-based (Guo
+et al., 2019), or a combination of these networks. _However, most spatio-temporal graph forecasting_
+_models focus on static settings with limited-period forecasting scenarios._
+
+
+**Continual** **Learning.** Continual learning is a technique for sequentially training models as data
+from related tasks arrives in a streaming manner. Common approaches include regularizationbased (Kirkpatrick et al., 2017), replay-based (Rolnick et al., 2019), and prototype-based (De Lange
+& Tuytelaars, 2021) methods, all aimed at learning knowledge from new tasks while retaining
+knowledge from previously tasks. However, these methods primarily focus on vision and text domains (Wang et al., 2024d), assuming that samples are _i_ . _i_ . _d_ . TrafficStream (Chen et al., 2021b) first
+integrates the ideas of regularization and replay into continual spatio-temporal forecasting scenarios.
+PECPM (Wang et al., 2023b) and STKEC (Wang et al., 2023a) further incorporate prototype-based
+ideas for enhancement. TFMoE (Lee & Park, 2024) advances replay data into a generative reconstruction approach, equipped with a mixture of experts model. Additionally, some methods consider
+diverse perspectives such as few-shot scenarios (Wang et al., 2024b), large-scale contexts (Wang
+et al., 2024c), and combinations with reinforcement learning (Xiao et al., 2022) and data augmentation (Miao et al., 2024). _Nonetheless, most methods in dynamic scenarios still require tuning all_
+_STGNN parameters, resulting in the dual challenges of catastrophic forgetting and inefficiency._
+
+
+**Prompt** **Learning.** Prompt learning suggest simply tuning frozen language or vision models to
+perform downstream tasks by learning prompt parameters attached to the input to guide model predictions. Some studies (Yuan et al., 2024; Li et al., 2024) attempt to integrate it into spatio-temporal
+forecasting, but they still focus on static scenarios. Other methods have applied it to continual learning contexts; however, they only concentrate on vision (Wang et al., 2022) and text (Razdaibiedina
+et al., 2023) domains. In contrast to the various prompt-based approaches in the existing literature, a
+naive application of prompt learning in our context is to append learnable parameters _P_ (referred to
+as prompts) to the original spatio-temporal data _X_, resulting in a fused embedding _X_ _[′]_ = [ _X_ _∥_ _P_ ],
+which is then fed into the base STGNN model _fθ_ ( _X_ _[′]_ ) for spatio-temporal forecasting. _Notably,_
+_we design a novel prompt pool learning mechanism,_ _guided by two tuning principles derived from_
+_empirical and theoretical analysis, to model continual spatio-temporal forecasting._
+
+
+3 PRELIMINARIES
+
+
+**Definition** **(Dynamic** **Streaming** **Spatio-temporal** **Graph).** We consider a dynamic streaming
+spatio-temporal graph G = ( _G_ 1 _, G_ 2 _, . . ., GT_ ), for every time interval _τ_, the network dynamically
+grows, _i_ . _e_ ., _Gτ_ = _Gτ_ _−_ 1 + ∆ _Gτ_ . Specifically, the network in the _τ_ -th time interval is modeled by the
+graph _Gτ_ = ( _Vτ_ _, Eτ_ _, Aτ_ ), where _Vτ_ is the set of nodes corresponding to the _|Vτ_ _|_ = _n_ sensors in the
+network, and _Eτ_ signifies the edges connecting the node set, which can be further represented by the
+adjacency matrix _Aτ_ _∈_ R _[n][τ][ ×][n][τ]_ . The node features are represented by a three-dimensional tensor
+_Xτ_ _∈_ R _[n][×][t][×][c]_, denoting the _c_ features of the records of all _n_ nodes observed on the graph _Gτ_ in the
+past _t_ time steps. Following (Chen et al., 2021b), _c_ here is usually only a numerical value.
+
+
+**Problem** **(Continual** **Spatio-temporal** **Graph** **Forecasting).** The continual spatio-temporal
+graph forecasting can be viewed as learning the optimal prediction model for the current stage
+from dynamic streaming spatio-temporal graph data. Specifically, given the training data _D_ =
+_{Dτ_ _|_ ( _Gτ_ _, Xτ_ _, Yτ_ ) _}_ _[T]_ _τ_ =1 _[∼P]_ [from a sequence of streaming data, our goal is to incrementally learn]
+the optimal model parameters _fθ∗_ from the sequential training set. For the current _τ_ -th time interval,
+the model is optimized to minimize:
+
+_fθ_ ( _τ_ ) _∗_ = argmin E _Dτ ∼P_ ( _τ_ )[ _L_ ( _fθ_ ( _τ_ )( _Gτ_ _, Xτ_ ) _, Yτ_ )] _,_ (1)
+_θ_ [(] _[τ]_ [)]
+
+where _fθ_ ( _τ_ ) _∗_ represents the optimal model that achieves the minimum loss when trained on the data
+from the current period _τ_ . The loss function _L_ ( _·_ ) measures the discrepancy between the predicted
+signals _Y_ [�] _τ_ = _fθ_ ( _τ_ ) _∗_ ( _Gτ_ _, Xτ_ ) _∈_ R _[n][×][t][×][c]_ for next _t_ time steps and the ground-truth _Yτ_ .
+
+
+3
+
+
+4 METHODOLOGY
+
+
+In this section, we propose two tuning principles, _**expand**_ and _**compress**_, through detailed empirical
+observations and theoretical analysis. Based on these principles, we apply them to a prompt parameter pool to develop the continual spatio-temporal graph forecasting framework EAC (as shown
+in Figure 2). Specifically, we design a node-level prompt parameter pool corresponding to the input spatio-temporal data of different nodes, jointly optimized within the STGNN backbone. ❶
+For the expand process, empirical studies reveal that the prompt parameter pool adapts to dynamic
+heterogeneity, which we further analyze theoretically. Building on this, we show that expanding
+prompt parameters for newly introduced nodes effectively accommodates heterogeneity in continuous spatio-temporal scenarios. ❷ For the compress process, empirical results indicate that the
+prompt parameter pool exhibits a low-rank property, which we formalize through detailed analysis. Based on this, we show that high-dimensional prompt parameters can be compressed into two
+low-dimensional components, mitigating parameter inflation caused by expansion in continuous
+spatio-temporal scenarios. We also summarize the workflow of EAC in Algorithm 1, and provide a
+detailed explanation of the continual learning process in Appendix B.
+
+_Time_
+_Period #1_ _Period #2_ _Period #_ 𝑁
+
+
+Prompt
+Parameter Pool
+
+
+**…**
+
+
+_Reload_
+_Weights_ Tuning Principle
+
+
+_STGNN_
+_Backbone_
+
+
+_Reload_
+_Weights_
+
+
+_Stable Node_
+
+_New Node_
+
+_Tuning_
+_Frozen_
+
+
+_STGNN_
+_Backbone_
+
+
+_Reload_
+_Weights_
+
+
+_STGNN_
+_Backbone_
+
+
+Tuning Principle
+
+
+Figure 2: The overall architecture of our proposed EAC .
+
+
+4.1 EXPAND: HETEROGENEITY-GUIDED CONTINUOUS PROMPT POOL GROWTH
+
+
+**Insight.** As mentioned above, fine-tuning an existing STGNN model with new data streams often
+leads to catastrophic forgetting (van de Ven et al., 2024). While previous methods have proposed
+some mitigative strategies (Chen et al., 2021b; Wang et al., 2023a;b), these solutions are not entirely
+avoidable. _A straightforward solution is to isolate parameters, freeze the old model, and dynamically_
+_adjust_ _the_ _network_ _structure_ _to_ _incorporate_ _adaptable_ _learning_ _parameters_ . Recently, there has
+been an increasingly common consensus in spatio-temporal forecasting to introduce node-specific
+trainable parameters as spatial identifiers to achieve higher performance (Shao et al., 2022; Liu et al.,
+2023; Dong et al., 2024; Yeh et al., 2024). Although some empirical evidence (Shao et al., 2023;
+Cini et al., 2024) supports their predictive performance in static scenarios, there has been no root
+analysis to explain why they are useful, when they are applicable, and in what contexts they are most
+suitable. However, we find this closely aligns with our motivation and extend it to the continual
+spatio-temporal forecasting setting by providing a reasonable explanation from the perspective of
+heterogeneity to address these questions. Specifically, spatio-temporal data generally exhibit two
+characteristics: _correlation_ and _heterogeneity_ (Geetha et al., 2008; Wang et al., 2020). The former is
+naturally captured by various STGNNs, as they automatically aggregate local spatial and temporal
+information. However, given the message-passing mechanism of STGNNs, the latter is clearly not
+captured. Therefore, we argue that the introduction of node prompt parameter pool likely enhances
+the model’s ability to capture heterogeneity by expanding the expressiveness of the feature space.
+
+
+**Empirical** **Observation.** To quantitatively analyze heterogeneity, we consider the dispersion of
+node feature vectors in the feature space (Fan et al., 2024). We first define the _Average Node Devia-_
+_tion_ ( _D_ ( _·_ )) metric as: _D_ ( _X_ ) = _n×_ 1 _n_ - _ni_ =1 - _nj_ =1 - _dk_ =1 [(] _[X][ik][ −]_ _[X][jk]_ [)][2] _[,]_ [ where] _[ X]_ _[∈]_ [R] _[n][×][d]_ [ represent]
+the feature matrix composed of _n_ node vectors, each with _d_ dimensions. This metric quantifies the
+degree of dispersion between pairs of node vectors within the feature matrix, reflecting the ability
+to express heterogeneity. We use this indicator to plot the dispersion degree of the feature matrix
+
+
+4
+
+
+for the pems-stream dataset across different periods as node prompt parameters are injected
+during the learning process. As shown in Figure 3, two phenomena are clearly observed:
+❶ Within the same period, the dispersion of
+the node feature space continuously expands
+throughout the learning process, reflecting the
+increasing ability of prompt parameters to represent heterogeneity. ❷ Across different periods,
+the dispersion of the feature space in the current
+period expands further compared to the previous
+period, showing the continuous capture ability
+of the prompt parameter for heterogeneity.
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||||||Y<br>|ear||||
+||||||2011<br>2012<br>||20<br>201<br>|5<br>6<br>||
+||||||~~2013~~<br>2014||~~20~~|~~7~~|~~7~~|
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+Steps of saving models
+
+
+PEMS-Stream
+
+
+Figure 3: Heterogeneity measurement.
+
+
+**Theoretical Analysis.** Below, we provide a theoretical analysis of the above empirical results.
+
+**Proposition 1.** _For an original node input feature matrix X_ = [ _x_ 1 _, · · ·_ _, xn_ ] _∈_ R _[n][×][d]_ _, we introduce_
+_a node prompt parameter matrix P_ = [ _p_ 1 _, · · ·_ _, pn_ ] _∈_ R _[n][×][d]_ _._ _Through a spatio-temporal learning_
+_function fθ_ _with invariance, a new feature matrix X_ _[θ]_ = _f_ ( _θ_ ; _X, P_ ) _is obtained, satisfying:_
+
+
+_D_ ( _X_ _[θ]_ ) _−_ _D_ ( _X_ ) = 2( [1]
+
+_n_
+
+
+_n_
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2] _[ −∥][µ]_ _p_ _[θ][∥]_ [2][)] _[ ≥]_ [0] _[,]_ (2)
+
+_i_ =1
+
+
+_where_ _P_ _[θ]_ = [ _p_ _[θ]_ 1 _[,][ · · ·]_ _[, p][θ]_ _n_ []] _[∈]_ [R] _[n][×][d]_ _[represents]_ _[the]_ _[optimized]_ _[prompt]_ _[parameter]_ _[matrix,]_ _[and]_ _[µ][θ]_ _p_ [=]
+1 - _n_
+_n_ _i_ =1 _[p]_ _i_ _[θ]_ _[is the mean vector of the parameter matrix.]_
+
+
+_Proof._ For more details, refer to the supplementary materials in appendix A.1.
+
+
+_**Tuning Principle I:**_ _Prompt Parameter Pool Can Continuously Adapt to Heterogeneity Property._
+
+
+**Implementation** **Details.** Based on the above analysis, we present the implementation details for
+expand process in continuous spatio-temporal forecasting scenarios. Specifically, we continuously
+maintain a prompt parameter pool _P_ . For the initial static stage, we provide each node with a
+learnable parameter vector, and the matrix _P_ [(1)] of all such vectors is added to the parameter pool
+_P_ = [ _P_ [(1)] ]. Follow the Occam’s razor, we adopt a simple yet effective fusion method, where
+the prompt pool and the corresponding input node features are added element-wise. The prompt
+parameter pool _P_ is then trained together with the base STGNN model. For subsequent period _τ_, we
+only provide prompt parameter vectors for newly added nodes, and the resulting matrix _P_ [(] _[τ]_ [)] is added
+to the prompt pool _P_ = [ _P_ [(1)] _, P_ [(2)] _, · · ·_ _, P_ [(] _[τ]_ _[−]_ [1)] ]. As we analyzed, we _freeze_ the STGNN backbone
+and _only tuning the prompt pool P_, effectively reducing computational costs and accelerate training.
+
+
+4.2 COMPRESS: LOW-RANK-GUIDED CONTINUOUS PROMPT POOL REDUCTION
+
+
+**Insight.** While node-customized prompt parameter pools are highly effective, an unavoidable challenge arises in our scenario of continuous spatio-temporal forecasting: the number of prompt parameters continuously increases with the addition of new nodes across consecutive periods, leading
+to parameter inflation. Despite the existence of numerous well-established studies that enhance the
+efficiency of spatio-temporal prediction (Bahadori et al., 2014; Yu et al., 2015; Chen et al., 2023;
+Ruan et al., 2024) and imputation (Chen et al., 2020; 2021a; Nie et al., 2024) tasks using techniques
+such as compressed sensing and matrix / tensor decomposition, these study typically focus solely
+on the original spatio-temporal data. _An_ _intuitive_ _solution_ _is_ _to_ _similarly_ _apply_ _low-rank_ _matrix_
+_approximations_ _to_ _the_ _prompt_ _learning_ _parameter_ _pool,_ _thereby_ _reducing_ _the_ _number_ _of_ _learnable_
+_parameters_ _while_ _maintaining_ _performance_ . However, for the prompt learning parameter pool, it
+remains to be validated whether it exhibits redundancy characteristics akin to spatio-temporal data
+and whether these properties hold in the continuous spatio-temporal forecasting setting.
+
+
+**Empirical** **Observation.** To explore redundancy, we conduct a spectral analysis of the prompt
+parameter pool _P_ . Specifically, for the models optimized annually on the PEMS-Stream dataset, we
+first apply singular value decomposition to the extended prompt parameter pool introduced in the
+
+
+5
+
+
+0.86
+
+
+0.84
+
+
+0.82
+
+
+0.80
+
+
+0.78
+
+
+0.76
+
+
+previous section and plot the normalized cumulative singular values for different years, as
+shown in Figure 4 left. It can be observed that
+❶ all years exhibit a clear long-tail spectral distribution, indicating that most information from
+the parameter matrix _P_ can be recovered from
+the first few largest singular values. In Figure 4 right, we also present a heatmap of the normalized cumulative singular values at the sixth
+largest singular value for different years at different steps, revealing that, ❷ despite some variations across years, the overall processes for all
+years maintain a high concentration of information ( _>_ 0 _._ 75), suggesting a low-rank property for _P_ .
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+|Col1|PEMS|Col3|
+|---|---|---|
+||||
+||||
+||Year<br>2011<br>|Year<br>2011<br>|
+|||2012<br>2013<br>2014|
+|||2015<br>2016<br>~~2017~~|
+||||
+
+
+Index of the largest eigenvalue
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+
+
+Steps of saving models
+
+
+Figure 4: Low-rank measurement.
+
+
+**Theoretical Analysis.** Below, we provide a theoretical analysis of the above empirical results.
+
+**Proposition** **2.** _Given_ _the_ _node_ _prompt_ _parameter_ _matrix_ _P_ _∈_ R _[n][×][d]_ _,_ _there_ _will_ _always_ _be_ _two_
+_matrices_ _A_ _∈_ R _[n][×][k]_ _and_ _B_ _∈_ R _[k][×][d]_ _such_ _that_ _P_ _can_ _be_ _approximated_ _as_ _AB_ _when_ _the_ _nodes_ _n_
+_grow large, and satisfy the following probability inequality:_
+
+
+Pr ( _∥P_ _−_ _AB∥F_ _≤_ _ϵ∥P_ _∥F_ ) _≥_ 1 _−_ _o_ (1) _and_ _k_ = _O_ (log(min( _n, d_ )))
+
+
+_where o_ (1) _represents a term that becomes negligible even as n grows large._
+
+
+_Proof._ For more details, refer to the supplementary materials in appendix A.2.
+
+
+_**Tuning Principle II:**_ _Prompt Parameter Pool Can Continuously Satisfy the Low-rank Property._
+
+
+**Implementation** **Details.** Formally, we present the implementation details for compress process
+in continuous spatio-temporal forecasting scenarios based on the aforementioned analysis. Specifically, for the initial static stage, we approximate the original prompt parameter _P_ [(1)] using the product of the subspace parameter matrix _A_ [(1)] and the adjustment parameter matrix _B_ . For subsequent
+periods _τ_, we provide only the subspace parameter matrix _A_ [(] _[τ]_ [)] for the newly added node vectors,
+approximating the prompt parameter _P_ [(] _[τ]_ [)] through the product with the adjustment parameter matrix
+_B_ . As analyzed, the _dimensionality of the subspace parameter_ matrix _A_ is _significantly smaller_ than
+that of the _prompt parameter P_, while the number of parameters in the adjustment matrix _B_ remains
+constant; thus, we effectively mitigate the inflation issue.
+
+
+5 EXPERIMENTS
+
+
+In this section, we conduct extensive experiments to investigate the following research questions:
+
+
+- **RQ1:** Can EAC outperform previous methods in accuracy across various tasks? _(_ _**Effectiveness**_ _)_
+
+- **RQ2:** Can EAC have a consistent improvement on various types of STGNNs? _(_ _**Universality**_ _)_
+
+- **RQ3:** How efficient is EAC compared to different methods during the training phase? _(_ _**Efficiency**_ _)_
+
+- **RQ4:** How many parameters does EAC require tuning compared to baselines? _(_ _**Lightweight**_ _)_
+
+- **RQ5:** How does EAC compare to other common prompt-adaptive learning method? _(_ _**Simplicity**_ _)_
+
+
+5.1 EXPERIMENTAL SETUP
+
+
+**Dataset and Evaluation Protocol.** We use real-world spatio-temporal graph datasets from three domains: transportation, weather, and energy, encompassing common streaming spatio-temporal forecasting scenarios. The transportation dataset, _**PEMS-Stream**_, is derived from benchmark datasets
+in previous research (Chen et al., 2021b), covering dynamic traffic flow in Northern California from
+2011 to 2017 across seven periods. The weather dataset, _**Air-Stream**_, originates from the real-time
+urban air quality platform of the Chinese Environmental Monitoring Center [1], capturing dynamic
+air quality indicators at monitoring stations across various regions of China from 2016 to 2019 over
+
+
+1https://air.cnemc.cn:18007/
+
+
+6
+
+
+four periods. The energy dataset, _**Energy-Stream**_, comes from a spatial dynamic wind power forecasting dataset provided by a power company during the KDD Cup competition (Zhou et al., 2022),
+containing monitoring metrics for wind farms over a span of 245 days across four periods. During
+the experiments, each dataset’s temporal dimension is split into training, validation, and test sets in
+a 6:2:2 ratio for each period, employing an early stopping mechanism. According to the established
+protocol (Chen et al., 2021b), we use the past 12 steps to predict the next 3, 6, 12 steps, and the mean
+value. Evaluation metrics include _Mean Absolute Error (MAE)_, _Root Mean Square Error (RMSE)_,
+and _Mean Absolute Percentage Error (MAPE)_ averaged over all periods. Further details regarding
+the datasets and evaluation metrics are available in Appendix C.1.
+
+
+**Baseline and Parameter Setting.** Following the default settings (Chen et al., 2021b; Wang et al.,
+2023a; Lee & Park, 2024), we employ the same STGNN as the backbone network and consider the
+following baseline methods for comparison:
+
+
+- _**Pretrain-ST**_ : For each dataset, we train the STGNN backbone using only the spatio-temporal
+graph data from the first period and directly use this network to predict results on the test sets in
+subsequent periods.
+
+- _**Retrain-ST**_ : For each dataset, we train a new backbone network for the spatio-temporal graph data
+of each period and use the corresponding network to predict results on the test set of the current.
+
+- _Online-ST_ : For each dataset, we iteratively train a backbone network in an online manner, where
+the model weights from the previous period serve as initialization for the current period.
+
+ - _**Online-ST-AN**_ : Train on the complete node data of the current period’s spatio-temporal graph,
+tuning the entire model with the model trained from the previous year as initialization.
+
+ - _**Online-ST-NN**_ : Train on the newly added node data of the current period’s spatio-temporal
+graph, tuning the entire model with the model trained from the previous year as initialization.
+_**TFMoE**_ (Lee & Park, 2024) improved this using a mixture of expert models technique.
+
+ - _Online-ST-MN_ : Train on the mixed node data (new nodes + some old nodes) of the current
+period’s spatio-temporal graph, tuning the entire model with the model trained from the previous year as initialization. Existing methods typically focus on this aspect, including _**Traffic-**_
+_**Stream**_ (Chen et al., 2021b), _**PECPM**_ (Wang et al., 2023b), and _**STKEC**_ (Wang et al., 2023a).
+
+
+For both the baseline method and our method, we set parameters uniformly according to the recommendations in previous paper (Chen et al., 2021b) to ensure fair comparison. Our only hyperparameter _k_ is set to 6. We repeated each experiment five times and report the mean and standard deviation (indicated by gray ±) of all methods. More details about baseline settings, see Appendix C.2.
+
+
+5.2 EFFECTIVENESS STUDY (RQ1)
+
+
+**Overall Performance.** We report a comparison between EAC and typical schemes (including representative improved methods [2] ) in Table 1, where the best results are highlighted in **bold** **pink**
+and the second-best results in underlined blue. ∆ indicates the reduction of MAE compared to the
+second-best result, or the increase of other results relative to the second best result. Moreover, due
+to the unavailability of official source code for _PECMP_ and _TFMoE_, along with the more complex
+backbone network used by _TFMoE_, the comparisons may be unfair. Nonetheless, we also include
+comparable reported values, as shown in Table 2. Based on the results, we observe the following:
+
+
+❶ _Pretrain-ST_ methods generally yield the poorest results, especially on smaller datasets ( _i_ . _e_ .,
+_Engery-Stram_ ), aligning with the intuition that they directly use a pre-trained model for zero-shot
+forecasting in subsequent periods. Even with better pre-training on larger dataset ( _i_ . _e_ ., _Air-Stream_ ),
+performance remains mediocre. ❷ _Retrain-ST_ methods also exhibit unsatisfactory results, as they
+rely on limited data to train specific phase models without effectively utilizing historical information gained from the pretrained model. ❸ _Online-ST-NN_ methods perform poorly, as they finetune the pretrained model using only new node data differing from the old pattern. Despite _TF-_
+_MoE_ ’s improvements through complex design, severe catastrophic forgetting remains an issue. ❹
+_Online-ST-MN_ methods strike a balance between performance and efficiency, showing some improvements, particularly on small datasets ( _e_ . _g_ ., _STKEC_ in _Energy-Stream_ ), due to limited node pattern memory. ❺ _Online-ST-AN_ methods typically achieve suboptimal results, as they fine-tune the
+pretrained model on the full data across different periods, approximating the performance boundary
+
+
+2Notably, the core code of _STKEC_ is not available, so we carefully reproduce and report average results.
+
+
+7
+
+
+|Table 1: C|Col2|Comparison of the overall|performance of the classic|cal scheme and EAC .|
+|---|---|---|---|---|
+|**Datasets**|**Datasets**|**_Air-Stream_** _(1087 →· · · →1202_)|**_PEMS-Stream_** _(655 →· · · →871_)|**_Energy-Stream_** _(103 →· · · →134_)|
+|**Method**|**Metric**|3<br>6<br>12<br>**Avg.**|3<br>6<br>12<br>**Avg.**|3<br>6<br>12<br>**Avg.**|
+|**_Retrain-ST_**|MAE<br><br>RMSE<br><br>MAPE (%) <br>∆|18_._59±0.39 21_._53±0.29 24_._83±0.26 21_._33±0.29 <br>29_._20±0.70 34_._31±0.59 39_._61±0.57 33_._77±0.62 <br>23_._72±0.88 27_._67±0.68 32_._50±0.46 27_._54±0.66 <br>+ 1.58%<br>+ 1.03%<br>+ 0.52%<br>+ 0.99%|12_._96±0.14 14_._06±0.10 16_._36±0.11 14_._24±0.12<br> 20_._88±0.17 22_._96±0.15 26_._95±0.19 23_._20±0.16<br> 18_._51±0.61 19_._98±0.42 23_._31±0.24 20_._30±0.44 <br>+ 1.25%<br>+ 1.00%<br>+ 1.17%<br>+ 1.13%|5_._56±0.14<br>5_._46±0.12<br>5_._45±0.09<br>5_._48±0.12<br>5_._75±0.12<br>5_._70±0.11<br>5_._80±0.09<br>5_._72±0.11<br> 54_._35±2.11<br>54_._61±2.08<br>55_._60±1.55<br>54_._74±2.06<br>+ 4.70%<br>+ 2.24%<br>+ 0.73%<br>+ 2.23%|
+|**_Pretrain-ST_**|MAE<br><br>RMSE<br><br>MAPE (%) <br>∆|19_._58±0.20 22_._72±0.16 26_._00±0.23 22_._44±0.20 <br>31_._46±0.20 36_._78±0.16 41_._96±0.23 36_._15±0.34 <br>24_._05±1.12 28_._46±1.23 33_._48±1.13 28_._16±1.17 <br>+ 6.99%<br>+ 6.61%<br>+ 5.26%<br>+ 6.25%|14_._13±0.28 15_._17±0.26 17_._35±0.29 15_._33±0.27 <br> 21_._77±0.25 23_._79±0.26 27_._73±0.35 24_._04±0.27 <br> 30_._86±3.34 32_._07±3.04 34_._45±3.24 32_._20±3.17 <br>+ 10.39%<br>+ 8.97%<br>+ 7.29%<br>+ 8.87%|10_._65±0.00<br>10_._66±0.02<br>17_._10±6.42<br>17_._05±6.39<br> 10_._88±0.12<br>10_._92±0.13<br>11_._02±0.15<br>10_._93±0.13<br> 171_._88±3.79 172_._77±4.25 174_._07±4.81 172_._71±4.12<br>+ 100.56%<br>+ 99.62%<br>+ 216.08% + 218.09%|
+|**_Online-ST-AN_**|MAE<br><br>RMSE<br><br>MAPE (%) <br>∆|18_._30±0.55 21_._31±0.49 24_._70±0.49 21_._12±0.51 <br>28_._54±0.64 33_._87±0.63 39_._33±0.68 33_._28±0.64 <br>23_._43±0.81 27_._43±0.63 32_._39±0.50 27_._34±0.66 <br>–<br>–<br>–<br>–|12_._80±0.06 13_._92±0.05 16_._17±0.10 14_._08±0.05<br> 20_._66±0.06 22_._73±0.06 26_._64±0.15 22_._96±0.06<br> 17_._86±0.59 19_._37±0.70 22_._92±1.05 19_._73±0.74 <br>–<br>–<br>–<br>–|5_._47±0.08<br>5_._46±0.09<br>5_._47±0.11<br>5_._47±0.08<br>5_._62±0.05<br>5_._66±0.06<br>5_._76±0.07<br>5_._67±0.05<br> 52_._70±1.34<br>53_._25±1.54<br>54_._50±1.71<br>53_._36±1.51<br>+ 3.01%<br>+ 2.24%<br>+ 1.10%<br>+ 2.05%|
+|**_Online-ST-NN_**|MAE<br><br>RMSE<br><br>MAPE (%) <br>∆|19_._38±1.97 22_._24±1.81 25_._50±1.65 22_._05±1.83 <br>29_._57±2.23 34_._49±1.67 39_._62±1.24 33_._97±1.78 <br>23_._99±2.55 28_._02±2.08 33_._17±1.64 27_._96±2.13 <br>+ 5.90%<br>+ 4.36%<br>+ 3.23%<br>+ 4.40%|14_._68±0.91 16_._57±1.25 20_._64±2.25 16_._95±1.39<br> 24_._30±2.00 28_._21±3.09 36_._77±6.60 29_._05±3.63<br> 18_._93±0.57 20_._69±0.40 24_._89±0.62 21_._15±0.45 <br>+ 14.68% + 19.03% + 27.64% + 20.38%|5_._51±0.05<br>5_._50±0.05<br>5_._49±0.07<br>5_._50±0.05<br>5_._65±0.04<br>5_._68±0.05<br>5_._76±0.06<br>5_._70±0.04<br> 54_._98±1.67<br>55_._10±1.11<br>55_._62±0.37<br>55_._17±1.08<br>+ 3.76%<br>+ 2.99%<br>+ 1.47%<br>+ 2.61%|
+|**_TraffcStream_**|MAE<br><br>RMSE<br><br>MAPE (%) <br>∆|18_._66±1.21 21_._59±0.99 24_._90±0.79 21_._39±1.02 <br>29_._06±1.64 34_._22±1.27 39_._54±1.00 33_._65±1.35 <br>24_._23±1.86 28_._12±1.50 32_._99±1.13 28_._03±1.52 <br>+ 1.96%<br>+ 1.31%<br>+ 0.80%<br>+ 1.27%|12_._89±0.05 14_._03±0.11 16_._39±0.28 14_._22±0.13<br> 20_._78±0.13 22_._90±0.25 26_._98±0.53 23_._16±0.27<br> 17_._86±0.41 19_._50±0.86 23_._43±2.25 19_._95±1.02 <br>+ 0.70%<br>+ 0.79%<br>+ 1.36%<br>+ 0.99%|5_._58±0.05<br>5_._57±0.05<br>5_._58±0.07<br>5_._57±0.05<br>5_._73±0.06<br>5_._76±0.06<br>5_._86±0.07<br>5_._77±0.06<br> 53_._87±1.99<br>54_._06±1.24<br>54_._92±0.71<br>54_._16±1.21<br>+ 5.08%<br>+ 4.30%<br>+ 3.14%<br>+ 3.91%|
+|**_STKEC_**|MAE<br><br>RMSE<br><br>MAPE (%) <br>∆|19_._42±1.27 22_._24±1.17 25_._44±1.05 22_._06±1.20 <br>30_._28±1.65 35_._09±1.36 40_._11±1.13 34_._61±1.43 <br>25_._21±2.69 28_._83±2.22 33_._30±1.64 28_._71±2.23 <br>+ 6.12%<br>+ 4.36%<br>+ 2.99%<br>+ 4.45%|12_._85±0.05 13_._98±0.04 16_._25±0.04 14_._14±0.04<br> 20_._73±0.09 22_._81±0.08 26_._73±0.07 23_._04±0.07<br> 17_._87±0.14 19_._25±0.17 22_._33±0.16 19_._53±0.15 <br>+ 0.39%<br>+ 0.43%<br>+ 0.49%<br>+ 0.42%|5_._31±0.27<br>5_._34±0.25<br>5_._41±0.15<br>5_._36±0.22<br>5_._50±0.19<br>5_._56±0.20<br>5_._72±0.10<br>5_._59±0.17<br> 50_._10±1.67<br>50_._93±1.51<br>52_._40±1.10<br>51_._04±1.44<br>–<br>–<br>–<br>–|
+|EAC|MAE<br><br>RMSE<br><br>MAPE<br><br>∆|**18.11**±0.27 **20.87**±0.17 **24.15**±0.14 **20.75**±0.20 <br>**27.78**±0.47 **32.88**±0.42 **38.22**±0.31 **32.35**±0.40 <br>**23.12**±0.20 **26.91**±0.07 **31.79**±0.05 **26.89**±0.12 <br>- 1.03%<br>- 2.06%<br>- 2.26%<br>- 1.75%|**12.65**±0.03 **13.45**±0.05 **14.92**±0.11 **13.53**±0.06<br> **20.24**±0.06 **21.86**±0.09 **24.17**±0.17 **21.77**±0.10<br> **17.80**±0.08 **18.79**±0.08 **20.82**±0.16 **18.98**±0.08 <br>- 1.17%<br>- 3.33%<br>- 7.73%<br>- 3.90%|**5.08**±0.10<br>**5.09**±0.10<br>**5.15**±0.10<br>**5.10**±0.10<br>**5.26**±0.10<br>**5.31**±0.10<br>**5.46**±0.09<br>**5.33**±0.10<br> **47.53**±2.71<br>**48.20**±2.68<br>**50.55**±2.60<br>**48.56**±2.67<br>- 4.33%<br>- 4.68%<br>- 4.80%<br>- 4.85%|
+
+
+of continual-based methods while still suffering some knowledge forgetting. ❻ Our
+
+
+Table 2: Performance comparison of the improved
+method with EAC on _PEMS-Stream_ benchmark.
+
+
+32
+
+
+30
+
+
+28
+
+
+26
+
+
+24
+
+
+22
+
+
+20
+
+
+|Model Avg. @ MAE Avg. @ RMSE Simplicity Lightweight<br>ets. We attribute this to its<br>TrafficStream 14.22±0.13 23.16±0.27 ✗ ✗<br>ously adapt to the complex STKEC 14.14±0.04 23.04±0.07 ✗ ✗<br>knowledge forgetting chal- PECMP 14.85 * 24.62 * ✗ ✗<br>TFMoE 14.18 * 23.54 * ✗ ✗<br>n continual spatio-temporal<br>EAC 13.53±0.06 21.77±0.10 ✓ ✓<br>s by tuning the prompt pool<br>y-capturing parameters.<br>mance. While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifically, for<br>ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fine-tune the model using only 20% of the data for each period. As<br>5, we present the 12 step and average RMSE performance metrics across different<br>S-Stream dataset. Our observations are as follows:<br>Avg. @ RMSE 12 @ RMSE<br>32<br>Retrain-ST TrafficStream<br>Pretrain-ST STKEC 30<br>Online-ST-AN EAC<br>Online-ST-NN 28 Value<br>26<br>RMSE<br>Retrain-ST TrafficStream<br>24<br>Pretrain-ST STKEC<br>22 Online-ST-AN EAC<br>Online-ST-NN|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Avg. @ MAE Avg. @ RMSE|Simplicity|Col11|Lightweight|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|14.22±0.13<br>23.16±0.27<br>14.14±0.04<br>23.04±0.07<br>14.85 *<br>24.62 *<br>14.18 *<br>23.54 *|✗<br>✗<br>✗<br>✗|✗<br>✗<br>✗<br>✗|✗<br>✗<br>✗<br>✗|
+|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|Model<br>Avg. @ MAE<br>Avg. @ RMSE<br>Simplicity<br>Lightweight<br>**_TraffcStream_**<br>14.22±0.13<br>23.16±0.27<br>✗<br>✗<br>**_STKEC_**<br>14.14±0.04<br>23.04±0.07<br>✗<br>✗<br>**_PECMP_**<br>14.85 *<br>24.62 *<br>✗<br>✗<br>**_TFMoE_**<br>14.18 *<br>23.54 *<br>✗<br>✗<br>EAC<br>**13.53**±0.06<br>**21.77**±0.10<br>✓<br>✓<br> <br>ets. We attribute this to its<br>ously adapt to the complex<br>knowledge forgetting chal-<br>n continual spatio-temporal<br> s by tuning the prompt pool<br> y-capturing parameters.<br>**mance.** While the current experiments encompass spatio-temporal datasets of<br>e aim to examine more general and complex few-shot scenarios. Specifcally, for<br> ic spatio-temporal data, only a limited amount of training data is typically available<br>We train or fne-tune the model using only 20% of the data for each period. As<br>  5, we present the 12 step and average RMSE performance metrics across different<br>_ S-Stream_ dataset. Our observations are as follows:<br><br><br><br><br><br><br><br>Avg. @ RMSE<br>Retrain-ST<br>~~Pretrain-ST~~<br>Online-ST-AN<br>~~Online-ST-NN~~<br>TrafficStream<br>~~STKEC~~<br>EAC<br><br><br><br><br><br><br><br><br>22<br>24<br>26<br>28<br>30<br>32<br>RMSE Value<br>12 @ RMSE<br>Retrain-ST<br>Pretrain-ST<br>~~Online-ST-AN~~<br>Online-ST-NN<br>TrafficStream<br>STKEC<br>~~EAC~~|**13.53**±0.06<br>**21.77**±0.10||✓|✓|
+|Re<br>~~Pr~~<br>O|train-S<br>~~etrain-S~~<br>line-ST|~~T~~<br>-AN|Traffi<br>~~STKE~~<br>EAC|cStrea<br>~~C~~||||||||
+|~~O~~|~~nline-ST~~|~~-NN~~||||||||||
+|||||||||||||
+|||||||||||||
+
+
+Year
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+|||Re<br>Pr<br>|train-ST<br>etrain-S<br>|T<br>|Traffi<br>STKE<br>|cStream<br>C|
+|||~~O~~<br>On|~~line-ST-~~<br>line-ST-|~~AN~~<br>NN|~~EAC~~||
+
+
+Year
+
+
+Figure 5: Few-Shot Scenario Forecasting in _PEMS-Stream_ benchmark.
+
+
+❶ _**(Robustness)**_ All methods exhibit a decline in performance compared to the complete data scenario, with _Online-ST-NN_ demonstrating significant sensitivity due to its inherent catastrophic forgetting issue. However, our EAC method exhibits controllable robustness across all years, outperforming all other methods. ❷ _**(Adaptability)**_ The performance of all methods consistently declines as
+the periods extend, yet our EAC method demonstrates a relatively mild decline, particularly evident
+in the 12-step metrics, where it significantly outperforms all other approaches.
+
+
+8
+
+
+5.3 UNIVERSALITY STUDY (RQ2)
+
+
+**Setting.** We further aim to demonstrate the universality of our EAC in enhancing the performance of
+various STGNN backbones, an aspect largely overlooked in previous studies. Specifically, STGNN
+can be categorized into spectral-based and spatial-based graph convolution operators, as well as
+recurrent-based, convolution-based, and attention-based sequence modeling operators. We select a
+representative operator from each category to form six distinct models, where the core architecture
+consists of two interleaved graph convolution modules and one sequence module. A detailed description of the different operators can be found in Appendix E. Additionally, we adapt different
+models to the prompt parameter pool proposed by EAC to compare the performance impact.
+
+
+Table 3: Effect of EAC on the average performance of different STGNN component on the _**PEMS-**_
+_**Stream**_ . C-based: Convolution-based, R-based: Recurrent-based, A-based: Attention-based.
+
+|Methods|Spatial-based|Col3|Col4|Spectral-based|Col6|Col7|
+|---|---|---|---|---|---|---|
+|**_Methods_**|**_C-based_**|**_R-based_**|**_A-based_**|**_C-based_**|**_R-based_**|**_A-based_**|
+|**_Metric_**|MAE<br>RMSE|MAE<br>RMSE|MAE<br>RMSE|MAE<br>RMSE|MAE<br>RMSE|MAE<br>RMSE|
+|**_w/o_**|14_._07±0.07 22_._93±0.08|13_._23±0.10 21_._36±0.18|14_._69±0.42 23_._33±0.59|14_._01±0.01 22_._76±0.03|13_._73±0.91 21_._87±1.24|14_._64±0.06 23_._12±0.06|
+|EAC|13_._72±0.01 22_._14±0.02|**12.83**±0.05 **20.59**±0.09|14_._64±0.53 22_._79±0.59|13_._62±0.12 21_._80±0.18|13_._09±0.37 20_._80±0.60|13_._69±0.08 21_._65±0.10|
+|∆|- 2.48%<br>- 3.44%|- 3.02%<br>- 3.60%|- 0.34%<br>- 2.31%|- 2.78%<br>- 4.21%|- 4.66%<br>- 4.89%|- 6.48%<br>- 6.35%|
+
+
+**Result Analysis.** Due to page limitations, we present MAE and RMSE metrics at average time steps
+using the _PEMS-Stream_ dataset. As shown in Table 3, we observe that:
+
+
+❶ Our EAC consistently demonstrates performance improvements across different combinations,
+highlighting its universality for various architectures. ❷ Compared to spatial domain-based graph
+convolution operators, our EAC shows a more pronounced enhancement for spectral domain-based
+methods. ❸ The advantages of recurrent-based sequence modeling operators are particularly evident, achieving the best results, while attention-based methods perform the worst. This aligns with
+intuition, as directly introducing vanilla multi-head attention may lead to excessive parameters and
+over-fitting; however, our approach still provides certain gains in these cases.
+
+
+5.4 EFFICIENCY & LIGHTWEIGHT STUDY (RQ3 & RQ4)
+
+
+**Overall** **Analysis.** We first conduct a comprehensive comparison of the EAC with other baselines
+in terms of performance, training speed, and memory usage. All models are configured with the
+same batch size to ensure fairness. As illustrated in Figure 6, we visualize the performance, average
+tuning parameters, and average training time (per period) of different methods on both the smallest
+dataset ( _Energy-Stream_ ) and the largest dataset ( _Air-Stream_ ). Our observations are as follows:
+
+
+|Col1|STKEC|On|line-ST-NN|Col5|Col6|
+|---|---|---|---|---|---|
+||~~3.6E3, 93s~~|~~3.3~~|~~E3, 143s~~|||
+|||||~~Retrain-S~~<br>3.3E3, 205s||
+|EAC-<br>|Efficient<br>|||||
+|~~2.3E3,~~|~~ 89s~~|Tr<br>|afficStream<br>|||
+|||~~3.3~~|~~E3, 113s~~|||
+|||EAC<br>|<br><br>|~~Online-ST-~~<br>3.3E3, 184s|~~N~~|
+|||~~7.1E3~~|~~, 96s~~|||
+
+
+Average Training Time (s / period)
+
+
+6.0
+
+
+5.8
+
+
+5.6
+
+
+5.4
+
+
+5.2
+
+
+5.0
+
+
+4.8
+
+
+4.6
+
+
+|Re|train-ST|Online-|ST-AN|Traffic<br>3.3E3, 1|Stream<br>11s|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|3.3|E3, 58s|3.3E3, 75|s||<br>STK<br>3.6E3|EC<br> 139s|EC<br> 139s|
+|||||||||
+||||Onlin<br>|e-ST-NN<br>||||
+||||3.3E3|115s||||
+|||||||||
+|E|AC|1E3|2E|3|3E3|||
+|1.6|E3, 46s|Memory Fo|otprint|||||
+
+
+Average Training Time (s / period)
+
+
+Energy-Stream
+
+
+23.5
+
+23.0
+
+22.5
+
+22.0
+
+21.5
+
+21.0
+
+20.5
+
+20.0
+
+19.5
+
+
+Air-Stream
+
+
+Figure 6: Efficiency & Lightwight & Performance Study.
+
+
+❶ On datasets with a smaller number of nodes, our EAC consistently outperforms the others, achieving superior performance with only half the number of tuning parameters. Furthermore, the average
+training time per period accelerates by a factor of 1.26 to 3.02. In contrast, other methods such
+as _TrafficStream_ and _STKEC_, despite employing second-order subgraph sampling techniques, do
+not benefit from efficiency improvements due to the limited number of nodes, which typically necessitates covering the entire graph. ❷ On datasets with a larger number of nodes, although the
+EAC exhibits a slightly higher number of tuning parameters, the freezing of the backbone model
+
+
+9
+
+
+results in faster training speeds while still achieving superior performance. ❸ According to the tuning principle of compression, we set _k_ = 2 to replace 6, resulting in the EAC - _Efficient_ version,
+which maintains relative performance superiority on larger datasets using only _∼_ 63% parameters
+compared to others. This demonstrates the superiority of the compression principle we propose.
+
+
+**Hyper-parameter Analysis.** We further examine our sole hyper-parameter _k_, proposed through the
+compress principle, and its mutual influence on performance and tuning parameters. As shown in
+Figure 7, the horizontal axis denotes the values of _k_, while the vertical axes depict the performance
+on the _PEMS-Stream_ . The color of the bars indicates the averaged percentage of tuning parameters
+
+
+13.0
+
+
+13.3
+
+
+13.6
+
+
+13.9
+
+
+14.2
+
+
+14.5
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+21.5
+
+
+21.8
+
+
+22.1
+
+
+22.4
+
+
+22.7
+
+
+23.0
+
+
+|otal number of parameters ac 2 4 6 8 10 12 K|Col2|Col3|
+|---|---|---|
+||||
+|<br>|<br>|<br>|
+|||~~59% Parm.~~<br>~~7~~4% Parm.|
+||||
+|33|% Parm|<br> .|
+|~~(Second Best)~~<br>|~~(Second Best)~~<br>|~~(Second Best)~~<br>|
+
+
+|ll periods. Our observations a 2 4 6 8 10 12 K|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||59% Parm.<br>74% Pa|rm.|
+|||||
+|33|% Parm|.|.|
+|(Second Best)|(Second Best)|(Second Best)|(Second Best)|
+
+
+Figure 7: Hyper-parameter study in _PEMS-Stream_ benchmark.
+
+
+❶ From right to left, as the value of _k_ decreases, indicating a reduction in tuning parameters, the
+overall performance of the model deteriorates significantly, accompanied by increased volatility ( _i_ . _e_ .,
+higher standard deviation). This aligns with our findings in Figure 4, as the effective representational
+information of the approximate prompt parameter pool is constrained with decreasing _k_, leading to
+a marked decline in performance. ❷ We set _k_ = 6 as a default. Although performance continues
+to improve with increasing _k_, the gains are minimal. Moreover, excessively high values of _k_ may
+result in negative effects due to redundant parameters, leading to over-fitting. Consequently, our
+method achieves satisfactory performance using only approximately 59% of the tuning parameters,
+effectively balancing performance and parameter efficiency.
+
+
+5.5 SIMPLICITY STUDY (RQ5)
+
+
+Table 4: Performance comparison of _LoRA-Based_
+
+
+**Simplicity Analysis.** Lastly, we aim to explore
+the simplicity of the node parameter prompt
+
+2021; Ruan et al., 2024) technique, which has
+
+|method wit|th EAC on PEMS-Stream benc|chmark.|
+|---|---|---|
+|Model|12 @ MAE 12 @ RMSE 12 @ MAPE|Avg. Time|
+|**_LoRA-Based_**|16_._22±0.13<br>26_._81±0.23<br>22_._78±1.03|337_._31±23.90|
+|EAC<br>**14.92**±0.11<br>**24.17**±0.17<br>**20.82**±0.16<br>**224.33**±26.35|EAC<br>**14.92**±0.11<br>**24.17**±0.17<br>**20.82**±0.16<br>**224.33**±26.35|EAC<br>**14.92**±0.11<br>**24.17**±0.17<br>**20.82**±0.16<br>**224.33**±26.35|
+
+recently been widely used in large language models. Following the default architecture, we added
+low-rank adaptation layers to the sequence operators, setting the rank to 6, and fine-tuned the backbone model during each period. As shown in Table 4, we observe that simply applying _LoRA_ layers
+without considering the specific spatio-temporal context of streaming parameters may not be highly
+effective. Moreover, our method enjoy shorter training times compared to _LoRA-based_ approaches,
+further validating the superiority of our proposed expansion and compression tuning principle.
+
+
+6 CONCLUSION
+
+
+In this paper, we derive two fundamental tuning principle: expand and compress for continual spatiotemporal forecasting scenarios through empirical observation and theoretical analysis. Adhering to
+these principle, we propose a novel prompt-based continual forecasting method, EAC, which effectively adapts to the complexities of dynamic continual spatio-temporal forecasting problems.
+Experimental results across various datasets from different domains in the real world demonstrate
+that EAC possesses desirable characteristics such as simplicity, effectiveness, efficiency, and university. In the future, we will further explore large-scale pre-training methods for spatio-temporal data,
+leveraging the tuning principle proposed in this paper, which could broadly benefit a wide range of
+downstream continual forecasting tasks.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+The authors would like to thank the anonymous reviewers for their valuable comments. This work is
+mainly supported by the National Natural Science Foundation of China (No. 62402414). This work
+is also supported by the Guangzhou-HKUST(GZ) Joint Funding Program (No. 2024A03J0620),
+Guangzhou Municipal Science and Technology Project (No. 2023A03J0011), the Guangzhou Industrial Information and Intelligent Key Laboratory Project (No. 2024A03J0628), and a grant from
+State Key Laboratory of Resources and Environmental Information System, and Guangdong Provincial Key Lab of Integrated Communication, Sensing and Computation for Ubiquitous Internet of
+Things (No. 2023B1212010007).
+
+
+REFERENCES
+
+
+Allan M Avila and Igor Mezi´c. Data-driven analysis and forecasting of highway traffic dynamics.
+
+Nature communications, 11(1):2090, 2020.
+
+
+Mohammad Taha Bahadori, Qi Rose Yu, and Yan Liu. Fast multivariate spatio-temporal analysis
+via low rank tensor learning. Advances in neural information processing systems, 27, 2014.
+
+
+Lei Bai, Lina Yao, Can Li, Xianzhi Wang, and Can Wang. Adaptive graph convolutional recurrent
+network for traffic forecasting. Advances in neural information processing systems, 33:17804–
+17815, 2020.
+
+
+Bahar Biller and Barry L Nelson. Modeling and generating multivariate time-series input processes using a vector autoregressive technique. ACM Transactions on Modeling and Computer
+Simulation (TOMACS), 13(3):211–237, 2003.
+
+
+George EP Box and David A Pierce. Distribution of residual autocorrelations in autoregressiveintegrated moving average time series models. Journal of the American statistical Association, 65
+(332):1509–1526, 1970.
+
+
+Xinyu Chen, Jinming Yang, and Lijun Sun. A nonconvex low-rank tensor completion model for
+spatiotemporal traffic data imputation. Transportation Research Part C: Emerging Technologies,
+117:102673, 2020.
+
+
+Xinyu Chen, Mengying Lei, Nicolas Saunier, and Lijun Sun. Low-rank autoregressive tensor completion for spatiotemporal traffic data imputation. IEEE Transactions on Intelligent Transportation
+Systems, 23(8):12301–12310, 2021a.
+
+
+Xinyu Chen, Chengyuan Zhang, Xiaoxu Chen, Nicolas Saunier, and Lijun Sun. Discovering
+dynamic patterns from spatiotemporal data with time-varying low-rank autoregression. IEEE
+Transactions on Knowledge and Data Engineering, 2023.
+
+
+Xu Chen, Junshan Wang, and Kunqing Xie. Trafficstream: A streaming traffic flow forecasting
+framework based on graph neural networks and continual learning. In IJCAI, pp. 3620–3626.
+Montreal, Canada, 2021b.
+
+
+Andrea Cini, Ivan Marisca, Filippo Maria Bianchi, and Cesare Alippi. Scalable spatiotemporal graph
+neural networks. In Proceedings of the AAAI conference on artifcial intelligence, volume 37, pp.
+7218–7226, 2023.
+
+
+Andrea Cini, Ivan Marisca, Daniele Zambon, and Cesare Alippi. Taming local effects in graph-based
+spatiotemporal forecasting. Advances in Neural Information Processing Systems, 36, 2024.
+
+
+Matthias De Lange and Tinne Tuytelaars. Continual prototype evolution: Learning online from nonstationary data streams. In Proceedings of the IEEE/CVF international conference on computer
+vision, pp. 8250–8259, 2021.
+
+
+Zheng Dong, Renhe Jiang, Haotian Gao, Hangchen Liu, Jinliang Deng, Qingsong Wen, and Xuan
+Song. Heterogeneity-informed meta-parameter learning for spatiotemporal time series forecasting. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data
+Mining, pp. 631–641, 2024.
+
+
+11
+
+
+Chao Fan, Yang Yang, and Ali Mostafavi. Neural embeddings of urban big data reveal spatial
+structures in cities. Nature, Humanities and Social Sciences Communications, 11(1):1–15, 2024.
+
+
+R Geetha, N Sumathi, S Sathiyabama, and Tiruchengode Tiruchengode Tiruchengode. A survey of
+spatial, temporal and spatio-temporal data mining. journal of computer applications, 1(4):31–33,
+2008.
+
+
+Shengnan Guo, Youfang Lin, Ning Feng, Chao Song, and Huaiyu Wan. Attention based spatialtemporal graph convolutional networks for traffic flow forecasting. In Proceedings of the AAAI
+conference on artifcial intelligence, volume 33, pp. 922–929, 2019.
+
+
+Jindong Han, Weijia Zhang, Hao Liu, Tao Tao, Naiqiang Tan, and Hui Xiong. Bigst: Linear complexity spatio-temporal graph neural network for traffic forecasting on large-scale road networks.
+Proceedings of the VLDB Endowment, 17(5):1081–1090, 2024.
+
+
+Roger A Horn and Charles R Johnson. Matrix analysis. Cambridge university press, 2012.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. arXiv preprint
+arXiv:2106.09685, 2021.
+
+
+Guangyin Jin, Yuxuan Liang, Yuchen Fang, Zezhi Shao, Jincai Huang, Junbo Zhang, and Yu Zheng.
+Spatio-temporal graph neural networks for predictive learning in urban computing: A survey.
+IEEE Transactions on Knowledge and Data Engineering, 2023.
+
+
+Ming Jin, Huan Yee Koh, Qingsong Wen, Daniele Zambon, Cesare Alippi, Geoffrey I Webb, Irwin
+King, and Shirui Pan. A survey on graph neural networks for time series: Forecasting, classification, imputation, and anomaly detection. IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 2024.
+
+
+James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A
+Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences,
+114(13):3521–3526, 2017.
+
+
+Sanghyun Lee and Chanyoung Park. Continual traffic forecasting via mixture of experts. arXiv
+
+preprint arXiv:2406.03140, 2024.
+
+
+Yaguang Li, Rose Yu, Cyrus Shahabi, and Yan Liu. Diffusion convolutional recurrent neural network: Data-driven traffic forecasting. arXiv preprint arXiv:1707.01926, 2017.
+
+
+Zhonghang Li, Lianghao Xia, Yong Xu, and Chao Huang. Flashst: A simple and universal prompttuning framework for traffic prediction. In International conference on machine learning, pp.
+28978–28988. PMLR, 2024.
+
+
+Yuxuan Liang, Yutong Xia, Songyu Ke, Yiwei Wang, Qingsong Wen, Junbo Zhang, Yu Zheng, and
+Roger Zimmermann. Airformer: Predicting nationwide air quality in china with transformers.
+In Proceedings of the AAAI Conference on Artifcial Intelligence, volume 37, pp. 14329–14337,
+2023.
+
+
+Hangchen Liu, Zheng Dong, Renhe Jiang, Jiewen Deng, Jinliang Deng, Quanjun Chen, and Xuan
+Song. Spatio-temporal adaptive embedding makes vanilla transformer sota for traffic forecasting. In Proceedings of the 32nd ACM international conference on information and knowledge
+management, pp. 4125–4129, 2023.
+
+
+Xu Liu, Yutong Xia, Yuxuan Liang, Junfeng Hu, Yiwei Wang, Lei Bai, Chao Huang, Zhenguang
+Liu, Bryan Hooi, and Roger Zimmermann. Largest: A benchmark dataset for large-scale traffic
+forecasting. Advances in Neural Information Processing Systems, 36, 2024.
+
+
+Hao Miao, Yan Zhao, Chenjuan Guo, Bin Yang, Kai Zheng, Feiteng Huang, Jiandong Xie, and
+Christian S Jensen. A unified replay-based continuous learning framework for spatio-temporal
+prediction on streaming data. arXiv preprint arXiv:2404.14999, 2024.
+
+
+12
+
+
+Tong Nie, Guoyang Qin, Wei Ma, Yuewen Mei, and Jian Sun. Imputeformer: Low ranknessinduced transformers for generalizable spatiotemporal imputation. In Proceedings of the 30th
+ACM SIGKDD Conference on Knowledge Discovery and Data Mining, pp. 2260–2271, 2024.
+
+
+Yuqi Nie, Nam H Nguyen, Phanwadee Sinthong, and Jayant Kalagnanam. A time series is worth
+64 words: Long-term forecasting with transformers. In The Eleventh International Conference on
+Learning Representations, 2023.
+
+
+Zheyi Pan, Yuxuan Liang, Weifeng Wang, Yong Yu, Yu Zheng, and Junbo Zhang. Urban traffic
+prediction from spatio-temporal data using deep meta learning. In Proceedings of the 25th ACM
+SIGKDD international conference on knowledge discovery & data mining, pp. 1720–1730, 2019.
+
+
+Anastasia Razdaibiedina, Yuning Mao, Rui Hou, Madian Khabsa, Mike Lewis, and Amjad
+Almahairi. Progressive prompts: Continual learning for language models. arXiv preprint
+arXiv:2301.12314, 2023.
+
+
+David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, and Gregory Wayne. Experience
+replay for continual learning. Advances in neural information processing systems, 32, 2019.
+
+
+Weilin Ruan, Wei Chen, Xilin Dang, Jianxiang Zhou, Weichuang Li, Xu Liu, and Yuxuan Liang.
+Low-rank adaptation for spatio-temporal forecasting. arXiv preprint arXiv:2404.07919, 2024.
+
+
+Zezhi Shao, Zhao Zhang, Fei Wang, Wei Wei, and Yongjun Xu. Spatial-temporal identity: A simple
+yet effective baseline for multivariate time series forecasting. In Proceedings of the 31st ACM
+International Conference on Information & Knowledge Management, pp. 4454–4458, 2022.
+
+
+Zezhi Shao, Fei Wang, Yongjun Xu, Wei Wei, Chengqing Yu, Zhao Zhang, Di Yao, Guangyin Jin,
+Xin Cao, Gao Cong, et al. Exploring progress in multivariate time series forecasting: Comprehensive benchmarking and heterogeneity analysis. arXiv preprint arXiv:2310.06119, 2023.
+
+
+Joel A Tropp. User-friendly tail bounds for sums of random matrices. Foundations of computational
+
+mathematics, 12:389–434, 2012.
+
+
+Gido M van de Ven, Nicholas Soures, and Dhireesha Kudithipudi. Continual learning and catastrophic forgetting. arXiv preprint arXiv:2403.05175, 2024.
+
+
+Binwu Wang, Yudong Zhang, Jiahao Shi, Pengkun Wang, Xu Wang, Lei Bai, and Yang Wang.
+Knowledge expansion and consolidation for continual traffic prediction with expanding graphs.
+IEEE Transactions on Intelligent Transportation Systems, 24(7):7190–7201, 2023a.
+
+
+Binwu Wang, Yudong Zhang, Xu Wang, Pengkun Wang, Zhengyang Zhou, Lei Bai, and Yang
+Wang. Pattern expansion and consolidation on evolving graphs for continual traffic prediction. In
+Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining,
+pp. 2223–2232, 2023b.
+
+
+Binwu Wang, Jiaming Ma, Pengkun Wang, Xu Wang, Yudong Zhang, Zhengyang Zhou, and Yang
+Wang. Stone: A spatio-temporal ood learning framework kills both spatial and temporal shifts. In
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining,
+pp. 2948–2959, 2024a.
+
+
+Binwu Wang, Pengkun Wang, Yudong Zhang, Xu Wang, Zhengyang Zhou, Lei Bai, and Yang Wang.
+Towards dynamic spatial-temporal graph learning: A decoupled perspective. In Proceedings of
+the AAAI Conference on Artifcial Intelligence, volume 38, pp. 9089–9097, 2024b.
+
+
+Binwu Wang, Pengkun Wang, Zhengyang Zhou, Zhe Zhao, Wei Xu, and Yang Wang. Make bricks
+with a little straw: Large-scale spatio-temporal graph learning with restricted gpu-memory capacity. In IJCAI, pp. 2388–2396. Jeju, South Korea, 2024c.
+
+
+Liyuan Wang, Xingxing Zhang, Hang Su, and Jun Zhu. A comprehensive survey of continual
+learning: theory, method and application. IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 2024d.
+
+
+Senzhang Wang, Jiannong Cao, and S Yu Philip. Deep learning for spatio-temporal data mining: A
+survey. IEEE transactions on knowledge and data engineering, 34(8):3681–3700, 2020.
+
+
+13
+
+
+Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiaoqi Ren, Guolong Su,
+Vincent Perot, Jennifer Dy, and Tomas Pfister. Learning to prompt for continual learning. In
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 139–
+149, 2022.
+
+
+Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, and Mingsheng Long. Timesnet:
+Temporal 2d-variation modeling for general time series analysis. In The Eleventh International
+Conference on Learning Representations. arXivpreprint, 2022.
+
+
+Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, and Chengqi Zhang. Graph wavenet for deep
+spatial-temporal graph modeling. arXiv preprint arXiv:1906.00121, 2019.
+
+
+Yanan Xiao, Minyu Liu, Zichen Zhang, Lu Jiang, Minghao Yin, and Jianan Wang. Streaming
+traffic flow prediction based on continuous reinforcement learning. In 2022 IEEE International
+Conference on Data Mining Workshops (ICDMW), pp. 16–22. IEEE, 2022.
+
+
+Xiaosong Yang, Thomas L Delworth, Liwei Jia, Nathaniel C Johnson, Feiyu Lu, and Colleen
+McHugh. Skillful seasonal prediction of wind energy resources in the contiguous united states.
+Communications Earth & Environment, 5(1):313, 2024.
+
+
+Chin-Chia Michael Yeh, Yujie Fan, Xin Dai, Uday Singh Saini, Vivian Lai, Prince Osei Aboagye,
+Junpeng Wang, Huiyuan Chen, Yan Zheng, Zhongfang Zhuang, et al. Rpmixer: Shaking up time
+series forecasting with random projections for large spatial-temporal data. In Proceedings of the
+30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, pp. 3919–3930,
+2024.
+
+
+Zhongchao Yi, Zhengyang Zhou, Qihe Huang, Yanjiang Chen, Liheng Yu, Xu Wang, and Yang
+Wang. Get rid of task isolation: A continuous multi-task spatio-temporal learning framework.
+arXiv preprint arXiv:2410.10524, 2024.
+
+
+Du Yin, Hao Xue, Arian Prabowo, Shuang Ao, and Flora Salim. Xxltraffic: Expanding
+and extremely long traffic dataset for ultra-dynamic forecasting challenges. arXiv preprint
+arXiv:2406.12693, 2024.
+
+
+Bing Yu, Haoteng Yin, and Zhanxing Zhu. Spatio-temporal graph convolutional networks: A deep
+learning framework for traffic forecasting. arXiv preprint arXiv:1709.04875, 2017.
+
+
+Rose Yu, Dehua Cheng, and Yan Liu. Accelerated online low rank tensor learning for multivariate
+spatiotemporal streams. In International conference on machine learning, pp. 238–247. PMLR,
+2015.
+
+
+Yuan Yuan, Jingtao Ding, Jie Feng, Depeng Jin, and Yong Li. Unist: a prompt-empowered universal model for urban spatio-temporal prediction. In Proceedings of the 30th ACM SIGKDD
+Conference on Knowledge Discovery and Data Mining, pp. 4095–4106, 2024.
+
+
+Jingbo Zhou, Xinjiang Lu, Yixiong Xiao, Jiantao Su, Junfu Lyu, Yanjun Ma, and Dejing Dou.
+Sdwpf: A dataset for spatial dynamic wind power forecasting challenge at kdd cup 2022. arXiv
+preprint arXiv:2208.04360, 2022.
+
+
+14
+
+
+# SUPPLEMENTARY MATERIAL
+
+EXPAND AND COMPRESS: EXPLORING TUNING PRINCIPLES
+
+FOR CONTINUAL SPATIO-TEMPORAL GRAPH FORECASTING
+
+#### TABLE OF CONTENTS
+
+
+**A** **Theoretical Proof** **16**
+
+
+A.1 Prompt Parameter Pool Can Continuously Adapt to Heterogeneity Property . . . . . . 16
+
+
+A.2 Prompt Parameter Pool Can Continuously Satisfy the Low-rank Property . . . . . . . . 17
+
+
+**B** **Method Detail** **18**
+
+
+B.1 Method Algorithm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+
+
+B.2 Method Process . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+**C** **Experimental Details** **19**
+
+
+C.1 Datasets Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+C.2 Baseline Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+**D** **More Results** **21**
+
+
+**E** **STGNNs Component Details** **22**
+
+
+E.1 Spectral-based Graph Convolution Formula . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+E.2 Spatial-based Graph Convolution Formula . . . . . . . . . . . . . . . . . . . . . . . . 23
+
+
+E.3 Recurrent-based Sequence Modeling Formula . . . . . . . . . . . . . . . . . . . . . . 23
+
+
+E.4 Convolution-based Sequence Modeling Formula . . . . . . . . . . . . . . . . . . . . . 23
+
+
+E.5 Attention-based Sequence Modeling Formula . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+E.6 Summary . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+**F** **More Discussion** **24**
+
+
+F.1 Discussion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+F.2 Limitation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+
+
+F.3 Future work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+
+
+15
+
+
+A THEORETICAL PROOF
+
+
+A.1 PROMPT PARAMETER POOL CAN CONTINUOUSLY ADAPT TO HETEROGENEITY
+PROPERTY
+
+
+_Proof._ First, based on the definition of the average node vector dispersion, the original feature matrix
+can be further rewritten as:
+
+
+_D_ ( _X_ ) = [1]
+
+_n_ [2]
+
+
+_n_
+
+
+_i_ =1
+
+
+_n_
+
+- _∥xi −_ _xj∥_ [2] _._ (3)
+
+
+_j_ =1
+
+
+_n_
+
+
+For the spatio-temporal learning function _fθ_ with invariance ( _i_ . _e_ ., a frozen STGNN backbone network), we have _X_ _[θ]_ = _f_ ( _θ_ ; _X, P_ ) = _X_ + _P_ _[θ]_, if the network converges, _P_ _[θ]_ can be obtained through
+nonlinear fitting. Therefore, for vectors in the matrix, we denote:
+
+
+_x_ _[θ]_ = _x_ + _p_ _[θ]_ _._ (4)
+
+
+Similarly, substituting this into the new feature matrix, it can be rewritten as:
+
+
+_n_
+
+- _∥xi_ + _p_ _[θ]_ _i_ _[−]_ _[x][j]_ _[−]_ _[p][θ]_ _j_ _[∥]_ [2] (5)
+
+_j_ =1
+
+
+_D_ ( _X_ _[θ]_ ) = [1]
+
+_n_ [2]
+
+
+_n_
+
+
+_i_ =1
+
+
+Based on the following equation property:
+
+
+    - _∥xi −_ _xj∥_ [2] = 2 _n_
+
+
+_i,j_
+
+
+_n_
+
+- _∥xi∥_ [2] _−_ 2
+
+
+_i_ =1
+
+
+�����
+
+
+_n_
+
+
+_xi_
+
+_i_ =1
+
+
+�����2
+
+
+_._ (6)
+
+
+Thus, the difference between Equation 5 and Equation 3 can be rewritten as:
+
+
+_D_ ( _X_ _[θ]_ ) _−_ _D_ ( _X_ )
+
+
+_n_
+
+
+_n_
+
+- _∥xi −_ _xj∥_ [2]
+
+
+_j_ =1
+
+
+= [1]
+
+_n_ [2]
+
+
+_n_
+
+
+_i_ =1
+
+
+
+
+
+- _∥xi_ + _p_ _[θ]_ _i_ _[−]_ _[x][j]_ _[−]_ _[p][θ]_ _j_ _[∥]_ [2] _[ −]_ [1]
+
+_n_ [2]
+
+_j_ =1
+
+
+_n_ [2]
+
+
+_n_
+
+
+_i_ =1
+
+
+(7)
+
+
+
+
+
+�����
+
+
+_n_
+
+
+_xi_
+
+_i_ =1
+
+
+2 []
+
+
+�����
+
+
+_n_
+
+
+�( _xi_ + _p_ _[θ]_ _i_ [)]
+
+_i_ =1
+
+
+�����
+
+
+2
+
+
+_−_
+
+
+= [1]
+
+_n_ [2]
+
+
+
+
+
+2 _n_
+
+
+_n_
+
+- _∥xi∥_ [2] _−_ 2
+
+
+_i_ =1
+
+
+_n_
+
+
+
+
+
+�����
+
+
+2 _n_
+
+
+_n_
+
+- _∥xi_ + _p_ _[θ]_ _i_ _[∥]_ [2] _[ −]_ [2]
+
+_i_ =1
+
+
+_−_ [2]
+
+_n_
+
+
+�����
+
+
+2
+
+
+= [2]
+
+_n_
+
+
+_n_
+
+
+- _∥xi_ + _p_ _[θ]_ _i_ _[∥]_ [2] _[ −]_ [2]
+
+_n_ [2]
+
+_i_ =1
+
+
+_n_ [2]
+
+
+_n_
+
+
+_n_
+
+
+- _∥xi∥_ [2] + [2]
+
+_n_ [2]
+
+_i_ =1
+
+
+_n_ [2]
+
+
+_n_
+
+
+�����2
+
+
+_._
+
+
+�����
+
+
+�( _xi_ + _p_ _[θ]_ _i_ [)]
+
+_i_ =1
+
+
+�����
+
+
+_xi_
+
+_i_ =1
+
+
+The mean vectors of the original feature matrix and the prompt parameter matrix are defined as
+follows:
+
+
+_µ_ = [1]
+
+_n_
+
+
+_n_
+
+
+- _xi,_ _µ_ _[θ]_ _p_ [=] [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+- _p_ _[θ]_ _i_ _[.]_ (8)
+
+_i_ =1
+
+
+Therefore, we have:
+
+
+_n_
+
+- _xi_ = _nµ,_
+
+
+_i_ =1
+
+
+_n_
+
+- _p_ _[θ]_ _i_ [=] _[ nµ]_ _p_ _[θ][.]_ (9)
+
+_i_ =1
+
+
+16
+
+
+Substituting this into Equation 7 and further simplifying yields:
+
+
+_D_ ( _X_ _[θ]_ ) _−_ _D_ ( _X_ )
+
+
+_θ_ 2 2
+_n_ [2][2] �� _nµ_ + _nµp_ �� _−_ _n_
+
+
+_n_ [2] _[∥][nµ][∥]_ [2]
+
+
+_n_
+
+
+- _∥xi∥_ [2] + [2]
+
+_n_ [2]
+
+_i_ =1
+
+
+= [2]
+
+_n_
+
+
+_n_
+
+
+- _∥xi_ + _p_ _[θ]_ _i_ _[∥]_ [2] _[ −]_ [2]
+
+_n_ [2]
+
+_i_ =1
+
+
+= [2]
+
+_n_
+
+
+_n_
+
+
+- _∥xi_ + _p_ _[θ]_ _i_ _[∥]_ [2] _[ −]_ [2] _[∥][µ]_ [ +] _[ µ]_ _p_ _[θ][∥]_ [2] _[ −]_ [2]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+- _∥xi∥_ [2] + 2 _∥µ∥_ [2]
+
+
+_i_ =1
+
+
+_n_
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2][ + 2]
+
+_i_ =1
+
+
+_n_
+
+- _x_ _[⊤]_ _i_ _[p]_ _i_ _[θ]_
+
+_i_ =1
+
+
+_n_
+
+
+_−_ 2 - _∥µ∥_ [2] + 2 _µ_ _[⊤]_ _µ_ _[θ]_ _p_ [+] _[ ∥][µ]_ _p_ _[θ][∥]_ [2][�] _−_ [2]
+
+_n_
+
+
+_−_ 2 - _∥µ∥_ [2] + 2 _µ_ _[⊤]_ _µ_ _[θ]_ _p_ [+] _[ ∥][µ]_ _p_ _[θ][∥]_ [2][�] _−_ [2]
+
+
+= [2]
+
+_n_
+
+
+- _n_
+
+ - _∥xi∥_ [2] +
+
+
+_i_ =1
+
+
+_n_
+
+- _∥xi∥_ [2] + 2 _∥µ∥_ [2]
+
+
+_i_ =1
+
+
+= [2]
+
+_n_
+
+
+_N_
+
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2][ +] [4]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+- _x_ _[⊤]_ _i_ _[p]_ _i_ _[θ]_ _[−]_ [4] _[µ][⊤][µ]_ _p_ _[θ]_ _[−]_ [2] _[∥][µ]_ _p_ _[θ][∥]_ [2]
+
+_i_ =1
+
+
+_n_
+
+- _p_ _[θ]_ _i_
+
+
+_i_ =1
+
+
+- _⊤_ 1
+
+_n_
+
+
+_−_ 4 _µ_ _[⊤]_ _µ_ _[θ]_ _p_ _[−]_ [2] _[∥][µ]_ _p_ _[θ][∥]_ [2]
+
+
+= [2]
+
+_n_
+
+
+_n_
+
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2][ +] [4]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+_n_
+
+
+- _n_
+
+ - _xi_
+
+
+_i_ =1
+
+
+_p_ _[−]_ [4] _[µ][⊤][µ]_ _p_ _[θ]_ _[−]_ [2] _[∥][µ]_ _p_ _[θ][∥]_ [2]
+_n_ [(] _[nµ]_ [)] _[⊤][µ][θ]_
+
+
+= [2]
+
+_n_
+
+
+_n_
+
+
+_∥p_ _[θ]_ _i_ _[∥]_ [2][ +] [4]
+
+_n_
+
+_i_ =1
+
+
+= 2( [1]
+
+_n_
+
+
+_n_
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2] _[ −∥][µ]_ _p_ _[θ][∥]_ [2][)] _[.]_
+
+_i_ =1
+
+
+(10)
+According to the corollary of the Cauchy-Schwarz inequality (Horn & Johnson, 2012):
+
+
+_n_
+
+
+- _∥_ **x** _i∥_ [2] _≥_ [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+�����2
+
+
+_._ (11)
+
+
+_n_
+
+
+�����
+
+
+**x** _i_
+
+_i_ =1
+
+
+Therefore, for any set of vectors _{p_ _[θ]_ _i_ _[}]_ [, we have:]
+
+
+_n_
+
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2] _[≥]_ [1]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+�����2
+
+
+= _n∥µ_ _[θ]_ _p_ _[∥]_ [2] _[.]_ (12)
+
+
+_n_
+
+
+�����
+
+
+- _p_ _[θ]_ _i_
+
+
+_i_ =1
+
+
+That is:
+1
+
+_n_
+
+
+Thus,
+
+
+_n_
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2] _[ −∥][µ]_ _p_ _[θ][∥]_ [2] _[≥]_ [0] _[.]_ (13)
+
+_i_ =1
+
+
+_D_ ( _X_ _[θ]_ ) _−_ _D_ ( _X_ ) = 2( [1]
+
+_n_
+
+
+_n_
+
+- _∥p_ _[θ]_ _i_ _[∥]_ [2] _[ −∥][µ]_ _p_ _[θ][∥]_ [2][)] _[ ≥]_ [0] _[.]_ (14)
+
+_i_ =1
+
+
+This completes the proof.
+
+
+A.2 PROMPT PARAMETER POOL CAN CONTINUOUSLY SATISFY THE LOW-RANK PROPERTY
+
+
+_Proof._ We first construct a Random Matrix Φ _∈_ R _[k][×][n]_ . Let Φ be a rando _√_ m matrix with entries _ϕij_
+drawn independently from the standard normal distribution scaled by 1 _/_ _k_ :
+
+
+   _ϕij_ _∼N_ 0 _,_ [1]
+
+_k_
+
+
+_._
+
+
+Next, we can define matrices _A_ = Φ _[⊤]_ _∈_ R _[n][×][k]_ and _B_ = Φ _P_ _∈_ R _[k][×][d]_ . Thus, we have
+
+
+_AB_ = Φ _[⊤]_ (Φ _P_ ) = (Φ _[⊤]_ Φ) _P._
+
+
+Consider the approximation error:
+
+_∥P_ _−_ _AB∥F_ = ��( _In −_ Φ _⊤_ Φ) _P_ �� _F_ _[≤]_ �� _In −_ Φ _⊤_ Φ��2 _[∥][P]_ _[∥][F][ .]_
+
+
+17
+
+
+Thus, our goal is transform to bound �� _In −_ Φ _⊤_ Φ��2 [.] [According to concentration inequality for tail]
+bounds of spectral norms of sums of random matrices (Tropp, 2012), for any _ϵ ∈_ (0 _,_ 1):
+
+Pr ���Φ _⊤_ Φ _−_ _In_ ��2 _[≥]_ _[ϵ]_            - _≤_ 2 _n · e_ _[−]_ _[kϵ]_ 2 [2] _._
+
+We further show that, when set _k_ = - 4 log min( _ϵ_ [2] _n,d_ ) �, we obtain:
+
+
+Pr ���Φ _⊤_ Φ _−_ _In_ ��2 _[≥]_ _[ϵ]_       - _≤_ 2 _n · e_ _[−]_ [2 log min(] _[n,d]_ [)] = 2 _n ·_ min( _n, d_ ) _[−]_ [2] _._
+
+
+Since min( _n, d_ ) _≤_ _n_, it follows that:
+
+2 _n ·_ min( _n, d_ ) _[−]_ [2] _≤_ 2 _n · n_ _[−]_ [2] = [2] as _n →∞._
+
+_n_ _[→]_ [0]
+
+
+We have:
+Pr ���Φ _⊤_ Φ _−_ _In_ ��2 _[≤]_ _[ϵ]_            - _≥_ 1 _−_ _o_ (1) _._
+
+Therefore, due to the symmetry of the matrix norm, with probability at least 1 _−_ _o_ (1), we have:
+
+_∥P_ _−_ _AB∥F_ _≤_ �� _In −_ Φ _⊤_ Φ��2 _[∥][P]_ _[∥][F]_ _[≤]_ _[ϵ][∥][P]_ _[∥][F][ .]_
+
+Thus, there exist matrices _A ∈_ R _[n][×][k]_ and _B_ _∈_ R _[k][×][d]_ with _k_ = _O_ (log(min( _n, d_ ))) such that:
+
+
+Pr ( _∥P_ _−_ _AB∥F_ _≤_ _ϵ∥P_ _∥F_ ) _≥_ 1 _−_ _o_ (1) _,_
+
+
+where _o_ (1) represents a term that becomes negligible as _n_ grows large.
+
+
+This completes the proof.
+
+
+B METHOD DETAIL
+
+
+B.1 METHOD ALGORITHM
+
+
+**Algorithm 1** The workfow of EAC for continual spatio-temporal graph forecasting
+
+
+**Input:**
+
+Dynamic streaming spatio-temporal graph G = ( _G_ 1 _, G_ 2 _, · · ·_ _, GT_ )
+Observation data X = ( _X_ 1 _, X_ 2 _, · · ·_ _, XT_ ).
+**Output:**
+
+A prompt parameter pool _P_ (in memory).
+**Pipeline:**
+
+1: **while** Stream Graph G remains **do**
+2: **if** _τ_ == 1 **then**
+3: Construct an initial prompt parameter pool: _P_ = _A_ [(] _[τ]_ [)] _B_ .
+
+                - _**Tuning Principle II: Compress**_
+4: Fusion of observed data _X_ and prompt parameter pool _P_ : _Xτ_ = _Xτ_ + _P_ .
+5: Jointly optimize the base STGNN _fθ_ and _P_ : _fθ_ _[∗]_ = argmin _θ fθ_ ( _Xτ_ _, G_ 1).
+6: **else**
+7: Reload the prompt pool _P_ and model _fθ_ _[∗]_ .
+8: Detect new nodes and construct a prompt parameter matrix _A_ [(] _[τ]_ [)]
+
+9: Add new node prompts to the prompt parameter pool: _P_ = _P.append_ ( _A_ [(] _[τ]_ [)] _B_ )
+
+                - _**Tuning Principle I: Expand**_
+10: Fusion of observed data _X_ and prompt parameter pool _P_ : _Xτ_ = _Xτ_ + _P_ .
+11: Jointly optimize the frozen STGNN _fθ_ _[∗]_ and _P_ with data _Xτ_ .
+12: **end if**
+13: Use the STGNN and prompt parameter pool _P_ for current period prediction.
+14: **end while**
+15: **return** Prompt Parameter Pool _P_
+
+
+Here, we present the workflow of EAC for continual spatio-temporal forecasting in Algorithm 1.
+
+
+18
+
+
+B.2 METHOD PROCESS
+
+
+Our input consists of a series of continual spatio-temporal graphs and corresponding observational
+data. Our objective is to maintain a continuous dynamic prompt parameter pool. Specifically, we
+first construct an initial prompt parameter pool _P_ that includes the initial node prompt parameters
+_P_ [(1)], which we approximate using subspace parameters _A_ [(1)] and fixed parameters _B_ _(line 3)_ . We
+then perform element-wise addition of the observational data _X_ 1 with the prompt parameter pool
+at the node level _(line_ _4)_, and feed this into the base STGNN model _fθ_ for joint training _(line_ _5)_ .
+In the subsequent _τ_ -th period, we detect new nodes compared to the _τ_ _−_ 1 phase and construct a
+prompt parameter matrix _A_ [(] _[τ]_ _[−]_ [1)] for all newly added nodes _(line 8)_, which is then incorporated into
+the prompt parameter pool _P_ _(line 9)_ . We again perform element-wise addition of the observational
+data _Dτ_ with the prompt parameter pool at the node level _(line_ _10)_ and input this into the frozen
+base STGNN model _fθ∗_ for training _(line 11)_ .
+
+
+After completing each period of training, we use the current prompt parameter pool _P_ and the base
+STGNN _fθ_ to predict the results for the current period _(line 13)_ .
+
+
+C EXPERIMENTAL DETAILS
+
+
+C.1 DATASETS DETAILS
+
+
+Our experiments are carried out on three real-world datasets from diffrent domain. The statistics of
+these stream spatio-temporal graph datasets are shown in Table 5.
+
+
+Table 5: Summary of datasets used for continual spatio-temporal datasets.
+
+
+|Dataset|Domain|Time Range|Period|Node Evolute|Frequency|Frames|
+|---|---|---|---|---|---|---|
+|**_Air-Stream_**|Weather|01/01/2016 - 12/31/2019|4|1087_ →_1154<br>_→_1193_ →_1202|1 hour|34,065|
+|**_PEMS-Stream_**|Traffc|07/10/2011 - 09/08/2017|7|655_ →_715_ →_786<br>_→_822_ →_834_ →_850<br>_→_871|5 min|61,992|
+|**_Energy-Stream_**|Energy|Unknown (245 days)|4|103_ →_113<br>_→_122_ →_134|10 min|34,560|
+
+
+Specifically, we first utilize the _PEMS-Stream_ dataset, which serves as a benchmark dataset, for our
+analysis. The objective is to predict future traffic flow based on historical traffic flow observations
+from a directed sensor graph. Additionally, we construct a _Air-Stream_ dataset for the meteorological domain focused on air quality, aiming to predict future air quality index (AQI) flow based on
+observations from various environmental monitoring stations located in China. We segment the data
+into four periods, corresponding to four years. We also construct a _Energy-Stream_ dataset for wind
+power in the energy domain, where the goal is to predict future indicators based on the generation
+metrics of a wind farm operated by a specific company (using the temperature inside the turbine nacelle as a substitute for active power flow observations). We also divided the data into four periods,
+corresponding to four years, based on the appropriate sub-period dataset size.
+
+
+We follow conventional practices (Li et al., 2017; Bai et al., 2020) to define the graph topology for
+the air quality and wind power datasets. Specifically, we construct the adjacency matrix _Aτ_ for _τ_ -th
+year using a threshold Gaussian kernel, defined as follows:
+
+
+_Aτ_ [ _ij_ ] =
+
+
+�exp - _−_ _dσ_ [2] _ij_ [2] - if exp - _−_ _dσ_ [2] _ij_ [2] - _≥_ _r_ and _i ̸_ = _j_
+
+0 otherwise
+
+
+where _dij_ represents the distance between sensors _i_ and _j_, _σ_ is the standard deviation of all distances,
+and _r_ is the threshold. Empirically, we select _r_ values of 0.5 and 0.99 for the air quality and wind
+power datasets, respectively.
+
+
+**Discussion:** There are some differences in the datasets of these three fields. Specifically, the primary difference between the three spatio-temporal datasets lies in the underlying spatio-temporal
+dynamics, or spatial dependencies: ❶ **(Differences in Underlying Spatio-temporal Dynamics)** In
+
+
+19
+
+
+order, _Energy-Stream_ involves a small wind farm with closely spaced turbines that share similar spatial patterns. _PEMS-Stream_ represents the entire transportation system in Southern California, with
+moderate spatial dependencies. _Air-Stream_ goes further, encompassing air quality records from air
+monitoring stations across all of China, leading to much more complex spatial dependencies. These
+differences are reflected in the MAE and RMSE metrics, with the performance progressively degrading as the complexity increases. ❷ **(Special** **Characteristics** **of** **Energy** **Data)** Regarding the
+MAPE metric, we must note that in the _Energy-Stream_ dataset, turbines occasionally face overheating protection or shutdown for inspection, which can cause some devices to produce very small
+values during certain time periods. This causes large percentage errors when using MAPE.
+
+
+C.2 BASELINE DETAILS
+
+
+We have provided a detailed overview of various types of methods for continual spatio-temporal
+forecasting in the main body of the paper. The current core improvements primarily focus on onlinebased methods. Below is a brief introduction to these advance methods:
+
+
+- TrafficStream (Chen et al., 2021b): The paper first introduces a novel forecasting framework
+leveraging spatio-temporal graph neural networks and continual learning to predict traffic flow
+in expanding and evolving networks. It addresses challenges in long-term traffic flow prediction
+by integrating emerging traffic patterns and consolidating historical knowledge through strategies like historical data replay and parameter smoothing. [https://github.com/AprLie/](https://github.com/AprLie/TrafficStream/tree/main)
+[TrafficStream/tree/main](https://github.com/AprLie/TrafficStream/tree/main)
+
+
+- STKEC (Wang et al., 2023a): The paper also presents a continual learning framework, which is
+designed for traffic flow prediction on expanding traffic networks without the need for historical
+graph data. The framework introduces a pattern bank for storing representative network patterns
+and employs a pattern expansion mechanism to incorporate new patterns from evolving networks.
+[https://github.com/wangbinwu13116175205/STKEC](https://github.com/wangbinwu13116175205/STKEC)
+
+
+- PECPM (Wang et al., 2023b): The paper also discusses a method for predicting traffic flow on
+graphs that change over time. To address the challenges presented by these dynamic graph, the
+paper proposes a framework that includes two main components: Knowledge Expansion and
+Knowledge Consolidation. The former is responsible for detecting and incorporating new patterns and structures as the graph expands. The latter aims to prevent the loss of knowledge about
+traffic patterns learned from historical data as the model updates itself with new information.
+
+
+- TFMoE (Lee & Park, 2024): The paper introduces Traffic Forecasting Mixture of Experts for
+continual traffic forecasting on evolving networks. The key innovation is segmenting traffic flow
+into multiple groups and assigning a dedicated expert model to each group. This addresses the
+challenge of catastrophic forgetting and allows each expert to adapt to specific traffic patterns
+without interference.
+
+|Horizon|3|12|
+|---|---|---|
+|**Metric**|**MAE**<br>**RMSE**<br>**MAPE(%)**|**MAE**<br>**RMSE**<br>**MAPE(%)**|
+|**_ST-CRL_**<br>**_EAC_**|18.41<br>24.63<br>22.64<br>12.65±0.03<br>20.24±0.06<br>17.80±0.08|24.45<br>35.11<br>29.40<br>14.92±0.11<br>24.17±0.17<br>20.82±0.16|
+
+
+Table 6: Comparison of ST-CRL and our method on the PEMS-Stream benchmark.
+
+
+We also highlight some related works and explain why they are not included as baselines:
+
+
+- ST-CRL (Xiao et al., 2022): This work integrates reinforcement learning into continual spatiotemporal graph learning. We exclude it because its code is unavailable and its methods are not
+reproducible. Additionally, its poor performance further justifies this decision. Notably, according
+to the original paper, the comparison between ST-CRL and our method on the PEMS-Stream
+benchmark, as shown in Table 6, provides evidence for this.
+
+
+- URCL (Miao et al., 2024): This work incorporates data augmentation into continual spatiotemporal graph learning. However, it essentially treats spatio-temporal graphs as static, with only
+observed instances evolving over time. Thus, this approach is not directly comparable to ours.
+
+
+- UniST (Yuan et al., 2024): This work can be viewed as a parallel effort in two different directions.
+It focuses on large-scale pre-training in the initial stage. While it also uses some empirical prompt
+
+
+20
+
+
+learning methods for fine-tuning, it is not suitable for continuous incremental scenarios. Another
+key point is that it is limited to spatio-temporal grid data.
+
+
+- FlashST (Li et al., 2024): This work is essentially limited to static spatio-temporal graphs, adjusting data distributions via prompt embedding regularization to achieve efficient model adaptation
+across different spatio-temporal prediction tasks. Therefore, it cannot be reasonably applied to
+continuous spatio-temporal graph learning.
+
+
+- CMuST (Yi et al., 2024): This recent work addresses spatio-temporal learning in continuous
+multitask scenarios, enhancing individual tasks by jointly modeling learning tasks in the same
+spatio-temporal domain. However, this framework mainly focuses on task-level continual learning, transitioning from one task to another. It does not address the continuous spatio-temporal
+graph learning characteristics encountered in real spatio-temporal prediction scenarios. Hence,
+this approach is also not suitable for direct comparison to our single-task dynamic scenarios.
+
+
+**Metrics Detail.** We use different metrics such as MAE, RMSE, and MAPE. Formally, these metrics
+are formulated as following:
+
+
+�( _yi −_ _y_ ˆ _i_ ) [2] _,_ MAPE = [100%]
+
+_n_
+
+_i_ =1
+
+
+_n_
+
+
+~~�~~
+
+
+- [1]
+_n_
+
+
+_n_
+
+
+����
+
+
+MAE = [1]
+
+_n_
+
+
+_n_
+
+- _|yi −_ _y_ ˆ _i|,_ RMSE =
+
+
+_i_ =1
+
+
+_n_
+
+
+_i_ =1
+
+
+_y_ ˆ _i −_ _yi_
+���� _yi_
+
+
+where _n_ represents the indices of all observed samples, _yi_ denotes the _i_ -th actual sample, and _y_ ˆ _i_ is
+the corresponding prediction.
+
+
+Table 7: Hyperparameters setting.
+
+
+Graph operator hidden dimension 64
+Sequence operator (TCN) kernel size 3
+Graph layer 2
+Sequence layer 1
+
+
+Training epochs 100
+Batch size 128
+Adam _ϵ_ 1e-8
+Adam _β_ (0.9,0.999)
+Learning rate 0.03 / 0.01
+Loss Function MSE
+Dropout 0.1 / 0.0
+
+
+**Parameter** **Detail.** Detailed hyperparameters settings are shown in Table 7. We use the same
+parameter configurations for our EAC, along with the other baseline methods according to the
+recommendation of previous studies Chen et al. (2021b); Wang et al. (2023a). Our only hyperparameter _k_ is set to 6 by default. All experiments are conducted on a Linux server equipped with
+a 1 × AMD EPYC 7763 128-Core Processor CPU (256GB memory) and 2 × NVIDIA RTX A6000
+(48GB memory) GPUs. To carry out benchmark testing experiments, all baselines are set to run for a
+duration of 100 epochs by default, with specific timings contingent upon the method with early stop
+mechanism. _The source code, data, experimental results, logs, and model weights can be accessed_
+_[in the anonymous repository at https://github.com/Onedean/EAC.](https://github.com/Onedean/EAC)_
+
+
+D MORE RESULTS
+
+
+To evaluate the performance differences between our EAC and models trained individually for each
+period, we compare the average forecasting performance over 12 time steps for each period on the
+_PEMS-Stream_ dataset. This comparison includes our _EAC_ and the individually trained _Retrain-ST_
+method, with results averaged over five random runs and shown in Table 8.
+
+
+**Result** **Analysis:** ❶ (Retrain-ST Underperformance): Retrain-ST exhibits unsatisfactory performance because it relies solely on limited data to train models for specific periods, failing to effectively leverage historical information from pre-trained models. In continuous spatiotemporal graph
+
+
+21
+
+
+|Methods|Metric|2011 2012 2013 2|014 2015 2016 20|17 Average|
+|---|---|---|---|---|
+|**_Retrain-ST_**|MAE<br>RMSE<br>MAPE(%)|14.26±0.13<br>13.69±0.26<br>13.88±0.18<br>14.<br>21.97±0.21<br>21.60±0.42<br>22.50±0.27<br>23.<br>18.92±1.54<br>19.33±0.39<br>20.19±1.28<br>22.|76±0.11<br>14.14±0.19<br>13.70±0.15<br>15.2<br>82±0.19<br>23.15±0.25<br>24.40±0.26<br>24.9<br>06±2.00<br>20.33±1.57<br>19.48±1.68<br>21.8|6±0.57<br>14.24±0.12<br>8±0.62<br>23.20±0.16<br>2±3.58<br>20.30±0.44|
+|**_EAC_**|MAE<br>RMSE<br>MAPE(%)|13.46±0.15<br>13.00±0.03<br>13.07±0.05<br>14.<br>20.49±0.23<br>20.19±0.05<br>20.90±0.09<br>22.<br>17.85±0.35<br>18.12±0.42<br>18.51±0.17<br>20.|00±0.05<br>13.55±0.04<br>13.01±0.04<br>14.5<br>27±0.09<br>21.90±0.80<br>23.08±0.03<br>23.5<br>04±0.40<br>19.30±0.31<br>17.86±0.17<br>21.1|7±0.09<br>13.53±0.06<br>4±0.12<br>21.77±0.10<br>6±0.29<br>18.98±0.08|
+|8: Comparison of the average performance of R<br>S-Stream benchmark.<br>rios, underlying spatiotemporal dependencies a<br>istorical training data helps models perform bet<br>ach. ❷(Performance Variability Across Differ<br>ds are evident even with the full dataset. These d<br> noise and varying levels of learning diffculty in d<br>**her Analysis:** We visualize the noise levels ac<br>n in Figure 8. Specifcally, Fourier transform is<br> to the frequency domain, where noise is typicall<br>her proportion of high-frequency energy indica<br>in characteristics of the spatio-temporal data re<br>onents are minimal (Ratio _>_ 0.42), while in 20<br>ore concentrated (0.46 _∼_0.48). This indicates <br>r to learn, a trend consistent with the results in T<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2011<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2012<br>0.<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>   <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2015<br>  <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2016|8: Comparison of the average performance of R<br>S-Stream benchmark.<br>rios, underlying spatiotemporal dependencies a<br>istorical training data helps models perform bet<br>ach. ❷(Performance Variability Across Differ<br>ds are evident even with the full dataset. These d<br> noise and varying levels of learning diffculty in d<br>**her Analysis:** We visualize the noise levels ac<br>n in Figure 8. Specifcally, Fourier transform is<br> to the frequency domain, where noise is typicall<br>her proportion of high-frequency energy indica<br>in characteristics of the spatio-temporal data re<br>onents are minimal (Ratio _>_ 0.42), while in 20<br>ore concentrated (0.46 _∼_0.48). This indicates <br>r to learn, a trend consistent with the results in T<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2011<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2012<br>0.<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>   <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2015<br>  <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2016|8: Comparison of the average performance of R<br>S-Stream benchmark.<br>rios, underlying spatiotemporal dependencies a<br>istorical training data helps models perform bet<br>ach. ❷(Performance Variability Across Differ<br>ds are evident even with the full dataset. These d<br> noise and varying levels of learning diffculty in d<br>**her Analysis:** We visualize the noise levels ac<br>n in Figure 8. Specifcally, Fourier transform is<br> to the frequency domain, where noise is typicall<br>her proportion of high-frequency energy indica<br>in characteristics of the spatio-temporal data re<br>onents are minimal (Ratio _>_ 0.42), while in 20<br>ore concentrated (0.46 _∼_0.48). This indicates <br>r to learn, a trend consistent with the results in T<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2011<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2012<br>0.<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>   <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2015<br>  <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2016|etrain-ST and EAC across different perio<br>re typically shared across periods. Lev<br>ter, a beneft clearly observed with our <br>ent Periods): Performance differences a<br> ifferences primarily stem from factors su<br>     ifferent periods.<br>ross periods in the _PEMS-Stream_ datas<br>  used to convert time series from the tim<br>    y represented by high-frequency compon<br>tes greater noise. Analyzing the frequ<br>veals that for 2017 (red line), low-frequ<br>14 (purple line), high-frequency compo<br> that data from these periods are noisie<br>     able 8.<br>40 0.42 0.44 0.46 0.48 0.50<br>2013<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2014<br> <br>   <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2017|etrain-ST and EAC across different perio<br>re typically shared across periods. Lev<br>ter, a beneft clearly observed with our <br>ent Periods): Performance differences a<br> ifferences primarily stem from factors su<br>     ifferent periods.<br>ross periods in the _PEMS-Stream_ datas<br>  used to convert time series from the tim<br>    y represented by high-frequency compon<br>tes greater noise. Analyzing the frequ<br>veals that for 2017 (red line), low-frequ<br>14 (purple line), high-frequency compo<br> that data from these periods are noisie<br>     able 8.<br>40 0.42 0.44 0.46 0.48 0.50<br>2013<br>0.40 0.42 0.44 0.46 0.48 0.50<br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2014<br> <br>   <br>0<br>2<br>4<br>6<br>8<br>10<br>Frequency<br>2017|
+
+
+High-Frequency Energy Ratio
+
+
+Figure 8: High-frequency energy ratios across different periods in PEMS-Stream benchmark.
+
+
+E STGNNS COMPONENT DETAILS
+
+
+In the design of spatio-temporal graph neural network (STGNN), spectral-based and spatial-based
+graph convolutions have different operation modes, and sequence convolution operators can also be
+divided into recurrent-based, convolution-based, and attention-based. Below are the formulas and
+explanations of each type.
+
+
+E.1 SPECTRAL-BASED GRAPH CONVOLUTION FORMULA
+
+
+Spectral graph convolution relies on the eigenvalue decomposition of the graph Laplacian matrix.
+The specific formula is as follows:
+
+
+**Graph Convolution:**
+**Z** = **U** _gθ_ ( **Λ** ) **U** _[⊤]_ **X**
+
+
+- **U** is the matrix of eigenvectors of the graph Laplacian **L** = **D** _−_ **A** .
+
+
+22
+
+
+- **Λ** is the diagonal matrix of eigenvalues of the Laplacian.
+
+- **X** is the node feature matrix.
+
+- _gθ_ ( **Λ** ) is the convolution kernel function on the eigenvalues, typically parameterized ( _e_ . _g_ ., using
+Chebyshev polynomial approximations).
+
+
+**Approximation of Convolution Kernel:**
+
+
+Using Chebyshev polynomial approximations, one can express the formula as:
+
+
+**Z** =
+
+
+_K_
+
+- _θk_ **T** _k_ ( **L** [˜] ) **X**
+
+
+_k_ =0
+
+
+- **L** [˜] = 2 **L** _/λ_ max _−_ **I** is the normalized Laplacian matrix.
+
+- **T** _k_ ( **L** [˜] ) is the Chebyshev polynomial, and _θk_ are the learnable parameters.
+
+
+E.2 SPATIAL-BASED GRAPH CONVOLUTION FORMULA
+
+
+Spatial graph convolution aggregates information directly using the adjacency matrix. The classic
+formula for spatial graph convolution is as follows:
+
+
+                -                 **Z** = _σ_ **ˆAXW**
+
+
+- **A** **[ˆ]** = **D** _[−]_ [1] _[/]_ [2] **AD** _[−]_ [1] _[/]_ [2] is the normalized form of the adjacency matrix.
+
+- **X** is the node feature matrix.
+
+- **W** is the learnable weight matrix.
+
+- _σ_ ( _·_ ) is a nonlinear activation function ( _e_ . _g_ ., ReLU).
+
+
+E.3 RECURRENT-BASED SEQUENCE MODELING FORMULA
+
+
+Recurrent-based sequence convolution typically uses recurrent neural networks (RNNs), such as
+LSTM or GRU. we choose LSTM, the formulas are as follows:
+
+
+**LSTM Equations:**
+
+
+- Forget Gate: **f** _t_ = _σ_ ( **W** _f_ [ **h** _t−_ 1 _,_ **x** _t_ ] + **b** _f_ )
+
+- Input Gate: **i** _t_ = _σ_ ( **W** _i_ [ **h** _t−_ 1 _,_ **x** _t_ ] + **b** _i_ )
+
+- Candidate Memory: **C** **[˜]** _t_ = tanh ( **W** _C_ [ **h** _t−_ 1 _,_ **x** _t_ ] + **b** _C_ )
+
+- Output Gate: **o** _t_ = _σ_ ( **W** _o_ [ **h** _t−_ 1 _,_ **x** _t_ ] + **b** _o_ )
+
+- Cell State Update: **C** _t_ = **f** _t ⊙_ **C** _t−_ 1 + **i** _t ⊙_ **C** **[˜]** _t_
+
+- Hidden State Update: **h** _t_ = **o** _t ⊙_ tanh( **C** _t_ )
+
+
+E.4 CONVOLUTION-BASED SEQUENCE MODELING FORMULA
+
+
+Convolution-based sequence convolution employs one-dimensional (1D) convolution to process
+time series data. The formula is as follows:
+
+
+**Z** = _σ_ (Conv1D( **X** _,_ **W** _,_ **b** ))
+
+
+- **X** _∈_ R _[B][×][C]_ [in] _[×][T]_ is the input sequence, where _B_ is the batch size, _C_ in is the number of input
+channels, and _T_ is the time steps.
+
+- **W** _∈_ R _[C]_ [out] _[×][C]_ [in] _[×][K]_ is the convolution kernel, with _K_ being the kernel size.
+
+- **b** is the bias vector.
+
+- _σ_ ( _·_ ) is the activation function.
+
+
+23
+
+
+E.5 ATTENTION-BASED SEQUENCE MODELING FORMULA
+
+
+The attention-based model commonly uses the formula for the multi-head self-attention mechanism
+( _e_ . _g_ ., in Transformers):
+
+
+**Attention Weights:**
+
+
+                - _QK_ _⊤_
+Attention( _Q, K, V_ ) = softmax ~~_√_~~
+_dk_
+
+
+- _Q_ = **XW** _Q_ is the query matrix.
+
+- _K_ = **XW** _K_ is the key matrix.
+
+- _V_ = **XW** _V_ is the value matrix.
+
+- _dk_ is the dimension of the key vectors.
+
+
+**Multi-head Attention:**
+
+
+_V_
+
+
+MultiHead( _Q, K, V_ ) = Concat (head1 _, . . .,_ head _h_ ) **W** _O_
+
+
+Each head is defined as head _i_ = Attention( _Qi, Ki, Vi_ ).
+
+
+E.6 SUMMARY
+
+
+- **Spectral-based Graph Convolution Operator** : Achieves graph convolution through the eigenvalue decomposition of the graph Laplacian.
+
+- **Spatial-based Graph Convolution Operator** : Directly aggregates node features using the adjacency matrix.
+
+- **Recurrent-based Sequence Operator** : Uses LSTM or GRU to capture temporal dependencies.
+
+- **Convolution-based** **Sequence** **Operator** : Employs 1D convolution to handle time series data
+with fixed window sizes.
+
+- **Attention-based Sequence Operator** : Uses multi-head self-attention to model global dependencies in long sequences.
+
+
+These formulas form the core of spatio-temporal graph neural networks, allowing the combination
+of different operations to form the basis architecture of most current models.
+
+
+F MORE DISCUSSION
+
+
+F.1 DISCUSSION
+
+
+**Parameter** **Inflation** : In addition to the analysis mentioned in the main text, we further provide
+a more detailed analysis of the concerns about parameter inflation. Specifically, this includes the
+following points:
+
+
+- _(Adjustable_ _Parameter_ _Count)_ : As we introduced in main text, there is no free lunch in this regard. While introducing the prompt parameter pool significantly improves performance, there is
+an inevitable risk of parameter inflation as the dataset size grows with more nodes. Therefore,
+we dedicated an entire section to empirical observations and theoretical analysis to explain how
+to reasonably eliminate redundant parameters, offering a compress principle. Consequently, the
+adjustable parameter count can be dynamically reduced with changes in _k_ . In the hyperparameter
+analysis section, we further demonstrate that even with a limited number of tuning parameters, our
+approach still achieves SOTA performance. Thus, in large-scale scenarios, we can appropriately
+select the hyperparameter _k_ to balance performance and efficiency.
+
+
+- _(Freezing_ _Backbone_ _Model)_ : One of the main advantages of EAC is that, compared to existing
+methods, freezing the backbone model directly leads to significant efficiency improvements, even
+in large-scale datasets. For example, we maintained the fastest average training speed on the
+air-stream dataset, and this can be further accelerated by adjusting parameter _k_ . Therefore, our
+approach is clearly the best choice compared to others.
+
+
+24
+
+
+- _(Advantages of In-Memory Storage)_ : Another point worth noting is that we need to point out that
+our prompt parameter pool is separate from the backbone model. Therefore, we can naturally store
+it in memory and only load it when needed. Therefore, for practical applications, overloading the
+prompt parameter pool is unnecessary worry.
+
+
+- _(Easy-to-manage_ _solution)_ : As for even larger global datasets, the current backbone model size
+would clearly be insufficient and would need to be scaled up. In contrast, the growth of the prompt
+parameter pool can be considered a more manageable solution.
+
+
+**Use** **All** **Historical** **Data** : Stacking all historical data together for training might seem reasonable
+at first glance, but it is actually impractical and reflects a misunderstanding of continuous spatiotemporal graph learning. As we pointed out in the last sentence of the first paragraph of the introduction: _Due to computational and storage costs, it is often impractical to store all data and retrain_
+_the_ _entire_ _STGNN_ _model_ _from_ _scratch_ _for_ _each_ _time_ _period._ Thus, the primary motivation behind
+continuous spatio-temporal graph modeling methods is:
+
+
+- _(Training_ _and_ _Storage_ _Costs)_ : Storing all historical data and retraining is associated with unacceptable training and storage costs. Training costs are easy to understand, but storage costs are
+significant because the model is usually only a fraction of the size of the data (e.g., in the PEMSStream benchmark, the model size per year is 36KB compared to the dataset size of 1.3GB, approximately 1:37,865).
+
+
+In addition to this fundamental motivation, we would like to share further insights:
+
+
+- _(Privacy_ _Risks)_ : In common continuous modeling tasks such as vision and text, a key improvement direction is to avoid accessing historical data, as this poses privacy risks beyond storage
+costs (Wang et al., 2024d). Accessing models that store knowledge from historical data is clearly
+safer. Common improvements, such as regularization-based and prototype-based methods, are
+moving in this direction.
+
+
+- _(Existing_ _Approximation_ _Methods)_ : The existing _Online-ST_ methods can be seen as an approximation solution to training with all historical data. However, this often suffers from catastrophic
+forgetting and the need for full parameter adjustments, issues that our EAC effectively addresses.
+
+
+F.2 LIMITATION
+
+
+In this paper, we thoroughly investigate methods for continual spatio-temporal forecasing. Based
+on empirical observations and theoretical analysis, we propose two fundamental tuning principle for
+sustained training. In practice, we consider this kind of continual learning to fall under the paradigm
+of continual fine-tuning. However, given the superiority and generality of our approach, we believe
+this provides an avenue for future exploration of continual pre-training. While we have made a small
+step in this direction, several limitations still warrant attention.
+
+
+❶ All current baselines and datasets primarily focus on scenarios involving the continuous expansion
+of spatio-temporal graphs, with little consideration given to their reduction. This focus is reasonable, as spatio-temporal data is typically collected from observation stations, which generally do not
+disappear once established. Consequently, existing streaming spatio-temporal datasets are predominantly expansion-oriented. Nonetheless, there are exceptional circumstances, such as monitoring
+anomalies at stations or the occurrence of natural disasters leading to station closures, resulting in
+node disappearance. But, we want to emphasize that our method can effectively handle such situations, as our prompt parameter pool design is node-level, allowing for flexible selection of target
+node sets for parameter integration.
+
+
+❷ All current baselines and datasets span a maximum of seven years. We believe this is a reasonable
+constraint, as a longer time frame might lead to drastic changes in spatio-temporal patterns. A more
+practical approach would be to retrain the model directly in the current year. However, research
+extending beyond this time span remains worthy of exploration, which we leave for future work.
+
+
+❸ Due to the node-level design of our prompt parameter pool, the issue of parameter inflation is
+inevitable. Although we have proposed effective compression principles in this paper, other avenues
+for compression, such as parameter sparsification and pruning, also merit investigation. Given that
+we have innovatively provided guiding principles for compression in this study, we reserve further
+improvement efforts for future research.
+
+
+25
+
+
+F.3 FUTURE WORK
+
+
+One lesson learned from our experiments is that the initially pre-trained spatio-temporal graph model
+is crucial for the subsequent continuous fine-tuning process. This is highly analogous to today’s large
+language models, which compress rich intrinsic knowledge from vast corpora, allowing them to perform well with minimal fine-tuning in specific domains. Therefore, we consider a significant future
+research direction to be the training of a sufficiently large foundation spatio-temporal model from
+scratch, utilizing data from diverse fields and scenarios. While some discussions and studies have
+emerged recently, we believe that a truly foundation spatio-temporal model remains a considerable
+distance away. Thus, we view this as a long-term goal for future work.
+
+
+26

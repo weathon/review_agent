@@ -1,213 +1,212 @@
-=== CALIBRATION EXAMPLE 60 ===
+=== CALIBRATION EXAMPLE 33 ===
 
 # Harsh Critic Review
-## Section-by-Section Critical Review
+Now I have a thorough picture of the paper. Let me write the review.
 
 ---
 
+## Section-by-Section Critical Review
+
 ### Title & Abstract
 
-The title "Foundation Model for 3D Geometry Prediction" overclaims. "Foundation model" in the current literature connotes large-scale pre-training with emergent generalization and broad downstream adaptability—properties only cursorily demonstrated here. The abstract states the model achieves "superior performance" across tasks, but the experimental section lacks quantitative depth results entirely (only Figure 5 qualitative comparisons are provided for that task), which means the abstract's promise is not fulfilled in the paper body. The claim that the two-stage framework builds a representation that is "both generalizable and intrinsically invariant" is vague and never given a precise mathematical meaning.
+The title "DENS3R: A Foundation Model for 3D Geometry Prediction" is broadly accurate but overpromises on the "foundation model" framing—the paper is ultimately an incremental extension of the DUSt3R/MASt3R lineage with a normal prediction head, a shared decoder, and position-interpolated RoPE. The abstract claims "joint regression" and "explicit modeling of structural coupling," but the primary mechanism for coupling is feature concatenation (Eq. 9) rather than any deep architectural integration. The abstract also states that a two-stage training framework "progressively builds a pointmap representation that is both generalizable and intrinsically invariant"—the "intrinsic invariance" terminology is introduced here but is not rigorously defined until later (and even then remains vague). Overall, the abstract raises expectations the body only partially meets.
 
 ---
 
 ### Introduction & Motivation
 
-The core motivation—that surface normals provide a deterministic, intrinsically invariant signal that can anchor and improve pointmap regression—is scientifically reasonable and worth investigating. The argument against diffusion models for geometric regression (non-deterministic, no one-to-one mapping) is well-articulated.
+The motivation for unified geometric prediction is sound and clearly explained. The critique of diffusion-based approaches for deterministic geometric tasks is a reasonable position. However, several claims require scrutiny:
 
-However, several claims in the introduction lack grounding:
+- **Overclaiming on DUSt3R/MASt3R shortcomings**: The introduction states that DUSt3R-family methods "overlook" surface normals. In reality, surface normals can be trivially derived from predicted pointmaps via finite differencing. The authors acknowledge this themselves in Fig. 3, which shows that normals *from* the Stage-1 pointmap are "not accurate enough"—but this is a quantitative accuracy argument, not a fundamental architectural omission.
 
-- "Introducing normal information during geometric prediction can **significantly** improve the accuracy of point maps" (p. 2) — this is the central claim of the paper, but it is stated without forward reference to ablation data, and the actual quantitative evidence for this specific claim never materializes: there is no ablation that compares a pointmap model trained with vs. without the normal head/Stage 2.
-- "DUSt3R-based methods overlook a crucial geometric information—surface normals" (p. 3) — VGGT (Wang et al., 2025a) is cited in Related Work and explicitly uses multiple prediction heads including normals; the characterization of the whole class as ignoring normals is imprecise.
-- The contributions bullet points are stated at a high level of abstraction. The claim of "high-quality performance in various 3D tasks" is the *finding*, not a technical contribution.
-
----
-
-### Related Work
-
-The coverage is thorough. The positioning against MASt3R (no depth/normal heads) and MoGe (affine-invariant but monocular, no matching) is fair. The paper appropriately credits VGGT's multi-head prediction design but argues it "overlooks the normal attribute"—yet VGGT does include geometric prediction heads; the paper needs to clarify precisely which attributes VGGT lacks or under-predicts.
+- **Unclear novelty boundary**: The four claimed contributions (Dens3R model, intrinsic-invariant pointmap, PI-RoPE, multi-view post-processing) overlap significantly with prior work. Position-interpolated RoPE is borrowed directly from the NLP context-window extension literature (Chen et al., 2023), and the multi-view inference relies entirely on the existing MASt3R-SfM pipeline. The authors should more precisely delineate what is new versus adapted.
 
 ---
 
 ### Method
 
-**Shared Backbone (Sec. 3.1).** The shared-weight decoder across views is presented as a key architectural novelty. However, the paper does not quantify the parameter count relative to DUSt3R/MASt3R, does not report wall-clock training time, and there is no ablation comparing shared vs. separate decoders on any metric. The efficiency claim is asserted but unverified. Furthermore, the operational detail of how two-view features are routed through the same decoder—and whether this impacts the cross-view attention that is central to DUSt3R's design—is not explained.
+**Shared Encoder-Decoder (Sec. 3.1)**
+The weight-sharing in the decoder reduces parameters by ~113M (from 737M to 624M, Table 4) without loss in prediction quality. This is a clean engineering contribution. However, Table 4 shows *identical* compute cost (1.362 TFlops) with/without sharing, so the only benefit is memory, not speed. The paper should clarify whether there is any accuracy trade-off measured on downstream tasks, not just cost.
 
-**Position-Interpolated RoPE (Sec. 3.1, Eq. 2).** This is directly taken from the context-window extension work of Chen et al. (2023) and applied to ViT. While the adaptation to image resolution is reasonable, it is a straightforward transfer of an existing technique. The paper does not report how much performance degrades at 1024× without PI-RoPE vs. with it—again, no ablation.
+**Multi-resolution Input (Sec. 3.1, Eq. 2)**
+Applying positional interpolation from the LLM domain to 2D vision transformers is reasonable and practically effective. However, the ablation in Fig. 8a is only qualitative—the paper should provide a *quantitative* comparison showing resolution-accuracy trade-offs with/without PI-RoPE at different resolutions. More importantly, the authors themselves note (Appendix A.7) that PI-RoPE alone is insufficient without the coarse-to-fine training scheme, meaning the contribution is not standalone.
 
-**Two-Stage Training (Sec. 3.2).**
+**Two-Stage Training (Sec. 3.2)**
+This is the core contribution. Several issues:
 
-*Stage 1 — Scale-invariant Pointmap:* The losses (Eqs. 3–7) are largely copied from MASt3R. The Pointmap Normal Loss $L_{\text{pts\_n}}$ (Eq. 6) is new and interesting: it regularizes the pointmap so that the normals derived from it match ground-truth normals. However, the loss weight $\eta_2 = 0.1$ is given with no ablation study to justify its magnitude. The four losses in Eq. 8 interact in non-trivial ways, and no analysis of their individual contributions is provided.
+1. **"Intrinsic-invariant" is under-formalized**: The concept is introduced by analogy to MoGe's affine-invariant pointmap. The proposed mechanism is simply to concatenate the predicted normal with the pointmap representation (Eq. 9: $P_i^n = P_i \oplus n$). This is very lightweight. The paper claims this forces the model to internalize "intrinsic invariance," but there is no formal proof or even intuitive argument for why concatenating normals specifically achieves invariance beyond improving task-specific prediction quality.
 
-*Stage 2 — Intrinsic-invariant Pointmap:* The paper defines this in Eq. 9 as:
-$$P_i^n = P_i \oplus n$$
-This is simply *feature concatenation* of the predicted normal into the pointmap token. Naming this operation "intrinsic-invariant pointmap" is misleading—concatenation of a normal vector to a pointmap does not by itself make the representation invariant to anything. The theoretical justification given—that normals are a "deterministic, locally invariant" property—applies to ground-truth normals, not to the model's current normal prediction during training. The actual mechanism by which Stage 2 induces intrinsic invariance is unexplained.
+2. **Loss weight selection is unmotivated**: The loss weights $\eta_1=1.0, \eta_2=0.1, \eta_3=0.075$ (Stage 1) and $\lambda_1=1.0, \lambda_2=0.1, \lambda_3=1.0$ (Stage 2) are chosen without any sensitivity analysis or ablation.
 
-The switch from "one-to-many" (multi-view) to "one-to-one" (single-view) supervision in Stage 2 is stated to "reduce ambiguity" (p. 7) but the causal mechanism is never explained. If the model is a two-image encoder, how is "single-viewpoint optimization" actually implemented architecturally? Is the second image discarded? Is self-pairing used? This is a critical implementation detail that is absent.
+3. **Confidence loss removal**: The paper makes a notable claim that confidence-weighted losses cause models to "ignore complex scenarios such as reflective surfaces." This is a significant claim about a widely used design choice in DUSt3R, MASt3R, and VGGT, yet no ablation isolates this specific factor. How much of the improvement on reflective surfaces is due to confidence removal vs. normal supervision?
 
-The removal of the confidence loss (used in DUSt3R/MASt3R) is claimed to be enabled by normal supervision. No ablation tests this—it is possible that normal supervision without removing confidence loss performs even better.
-
-**Multi-view Inference (Sec. 3.3).** The "post-processing pipeline" reduces to: run the model pairwise (one-vs-all), collect matches, and run the existing MASt3R-SfM triangulation pipeline. This is not a novel contribution; it is using Dens3R as a drop-in feature extractor for MASt3R's existing reconstruction stack.
+4. **One-to-many vs. one-to-one supervision change**: The switch from multi-view to single-view supervision in Stage 2 is presented as enabling monocular data use, but this architectural change also fundamentally changes the model's operating mode. The paper should clarify whether the Stage 2 model can still leverage multi-view input during training (if paired data is available) or is restricted to single-view pairs.
 
 ---
 
 ### Experiments & Results
 
-This is the section with the most severe problems.
+**Normal Estimation (Table 1)**
+Dens3R achieves the best results on all five benchmarks (NYUv2, ScanNet, IBims-1, Sintel, DIODE-outdoor). However, several concerns arise:
 
-**Training Data — Missing Entirely.** The paper never states what datasets are used for training Dens3R. DUSt3R and MASt3R both enumerate their training data in detail (Habitat, Co3D, ARKitScenes, Megadepth, etc.) as this is central to understanding generalization. Without this, the paper is not reproducible and comparisons to baselines may be confounded (e.g., if Dens3R is trained on the test sets of competitors).
+- **Potential train/test leakage**: The training set (Table 5) includes ScanNet++ (used as Type B training data), while **ScanNet** is used as a zero-shot test set. ScanNet and ScanNet++ share the same environments and sensors. If there is scene-level overlap between the ScanNet training split and ScanNet++ training data, the comparison is compromised. The paper does not address this.
 
-**Architecture Details — Missing.** No model size, number of parameters, ViT variant (Base/Large/Huge), or number of decoder layers is reported. It is impossible to assess whether performance gains come from the proposed design choices or simply from having more parameters.
+- **VGGT absent from normal comparison**: VGGT (Wang et al., 2025a) also jointly predicts multiple geometric quantities and presumably can produce normals. The paper compares Dens3R against VGGT for depth (Table 7) and matching (Tables 9/10) but notably omits it from the normal comparison (Table 1). This selective omission is conspicuous.
 
-**Normal Prediction (Table 1).** The comparison includes DSINE, GeoWizard, StableNormal, and Lotus. Critically, **VGGT is absent** despite being cited throughout the paper as a closely related method that also regresses geometric quantities from images. Similarly, Metric3Dv2 and Omnidata v2 are missing. The gains over the second-best method range from ~1.5° (NYUv2) to ~4.2° (Sintel) mean angular error, which are non-trivial but modest. No statistical significance or confidence intervals are reported.
+**Image Matching (Table 2, ZEB Dataset)**
+The improvement over MASt3R (64.5% vs 59.9% mean AUC@5°) is solid. However, some per-category results raise questions: on "NIG" (night scenes), Dens3R scores 50.4 vs. MASt3R's 43.7, which is good, but on "WEA" (weather), the gap is smaller (57.4 vs. 52.8).
 
-**Depth and Pointmap (Section 4.2 / Figure 5).** This section presents **only qualitative results**. There is no Table showing depth metrics (AbsRel, RMSE, δ<1.25, etc.) on any dataset (not NYUv2, not ScanNet, not ETH3D, not KITTI). For a paper whose second core claim is improved depth estimation, this is an inexcusable omission. Standard depth evaluation datasets and protocols exist; the authors chose not to use them.
+**Pointmap Evaluation (Sec. 4.2)**
+The pointmap comparison is **entirely qualitative** (Fig. 5). For a paper claiming high-quality pointmap prediction as its central contribution, the absence of any quantitative evaluation against MoGe, VGGT, or DUSt3R on standard benchmarks is a significant gap. There are well-established metrics (pointmap accuracy, scale-invariant error, etc.) used in prior work.
 
-**Ablation Studies — Entirely Absent.** The paper makes at least five separable design choices:
-1. Shared vs. separate decoder
-2. Stage 1 alone vs. Stage 1 + Stage 2
-3. With vs. without PI-RoPE at high resolution
-4. With vs. without confidence loss
-5. Normal head contribution to pointmap/depth accuracy
+**Depth Estimation (Table 7, Appendix)**
+Results are mixed. Dens3R achieves the best REL and RMSE on DIODE-outdoor but is **not best** on NYUv2 (MoGe achieves REL=0.035 vs. Dens3R's 0.042). On DIODE-indoor, Dens3R outperforms MoGe but not consistently. The paper does not comment on these inconsistencies.
 
-None of these is ablated. Without ablations, it is impossible to attribute the observed improvements to specific claimed contributions.
+**Tables 8, 9, 10 are critically incomplete**
+The camera pose estimation table (Table 8) shows only DUSt3R's row—the rows for MASt3R, VGGT, and Dens3R are missing entirely. Similarly, Tables 9 (ScanNet-1500) and 10 (MegaDepth-1500) show only header rows with no numerical data. These may be PDF parsing artifacts, but if so, the absent data makes several claimed contributions completely unverifiable from this manuscript alone. The authors must ensure these tables are populated in the final submission.
 
-**Image Matching (Table 2).** The ZEB benchmark comparison with MASt3R shows a meaningful 4.6-point improvement in mean AUC (64.5 vs. 59.9). This is the paper's strongest quantitative result. However, MASt3R's reported number should be reproduced with the same evaluation code—it's unclear whether the numbers are taken from the original paper or re-evaluated.
-
-**Downstream Applications.** The paper mentions segmentation and object detection as possible extensions (p. 8) but provides zero evidence for these capabilities. This appears to be speculation.
+**Ablation (Table 3)**
+The ablation table for normal prediction is partially unreadable due to formatting—the row labels indicating which configuration each row corresponds to are not present in the parsed text. This obscures which combination of components produces each result. Additionally, the ablation only covers normals; there is no ablation of individual components on depth or pointmap accuracy.
 
 ---
 
 ### Writing & Clarity
 
-Section 3.2's introduction of "intrinsic invariance" is circular and confusing. The term is defined via an appeal to the determinism of ground-truth normals but then applied to the learned representation without justification. The phrase "the model to independently attend to each viewpoint" (p. 7) contradicts the stated cross-view architecture that is central to Stage 1. The transition from Stage 1 to Stage 2 training—specifically, what is frozen, what is fine-tuned, and how data is resampled—is described at a level that precludes reproduction.
+The description of the "intrinsic-invariant pointmap" (Sec. 3.2) is vague. The only technical difference from Stage 1 is the addition of normal supervision and the concatenation in Eq. 9. The term "intrinsically invariant" is never given a formal definition, which makes the contribution hard to evaluate. The "one-to-many vs. one-to-one" supervision distinction is mentioned but the implications are not clearly worked out.
 
 ---
 
 ### Limitations & Broader Impact
 
-The paper has no limitations section. Obvious failure modes that go unacknowledged:
-- Single-view ambiguity in textureless regions (mentioned for baselines but not addressed for Dens3R itself)
-- Behavior under extreme domain shift (the training data is undisclosed, making out-of-distribution behavior impossible to assess)
-- Computational cost of the coarse-to-fine training at 1024 resolution
-- Failure cases of the post-processing (when do matching triangulation pipelines fail?)
+The limitation section (Appendix A.8) is honest about thin structures but brief. Missing acknowledgments include:
+- Computational cost: 32 H20 GPUs for two-plus weeks of training limits reproducibility.
+- Dataset quality classification (A/B/C) and its effect on performance is partially discussed but not rigorously evaluated (e.g., what if all training data were type A?).
+- No discussion of failure modes beyond thin structures (e.g., textureless indoor surfaces, extreme lighting).
+- The paper claims broad foundation model applicability, including segmentation (Fig. 8c), but the segmentation results are preliminary and not quantitatively evaluated.
 
 ---
 
 ### Overall Assessment
 
-Dens3R proposes a two-stage training scheme that augments a DUSt3R/MASt3R-style dense geometric regression model with surface normal prediction, motivated by the deterministic nature of normals as a stabilizing signal. The conceptual insight—that normals are intrinsically less ambiguous than pointmaps and can anchor multi-task training—is potentially valuable. However, the paper falls well short of ICLR's bar in its current form. The experimental evaluation has critical gaps: there are **no quantitative depth results at all**, training data is never disclosed, architecture specifications are absent, and there are no ablation studies to isolate which design choices drive the improvements. The core technical contribution—the "intrinsic-invariant pointmap"—reduces to feature concatenation (Eq. 9) with a changed supervision regime, and the name is not mathematically justified. The paper reads as a preliminary technical report rather than a complete scientific contribution. To be competitive at ICLR, the authors need: (1) full training data disclosure, (2) quantitative depth benchmarks alongside normal benchmarks, (3) ablations for each claimed design decision, (4) a rigorous definition of "intrinsic invariance," and (5) comparison with VGGT on all evaluated tasks.
+Dens3R presents a practically useful extension of the DUSt3R/MASt3R family by incorporating surface normal prediction via a two-stage training strategy with a shared encoder-decoder and position-interpolated RoPE. The normal estimation results are strong, and the ZEB matching improvement over MASt3R is genuine. However, the paper has several issues that must be addressed before it can meet ICLR's standards. Most critically: (1) critical tables (8, 9, 10) are missing numerical data, making key claims unverifiable; (2) the absence of quantitative pointmap evaluation is a major gap for a paper whose central contribution is pointmap quality; (3) the "intrinsic-invariant pointmap" concept—the paper's main theoretical contribution—is poorly formalized, amounting to feature concatenation with normal outputs; (4) VGGT is suspiciously absent from normal comparisons despite being directly comparable; and (5) potential ScanNet/ScanNet++ train-test leakage is unaddressed. The contribution is incremental relative to MASt3R and VGGT, and falls short of the "foundation model" framing. In its current form, the paper would need substantial revisions—particularly to its experimental rigor and theoretical clarity—to be competitive at ICLR.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper presents Dens3R, a dense 3D vision foundation model designed for unified geometric prediction, jointly regressing depth, surface normals, and pointmaps from unposed images. The authors propose a two-stage training framework that transitions from scale-invariant to an "intrinsic-invariant" pointmap representation, leveraging surface normals to resolve geometric ambiguity. Extensive experiments demonstrate superior performance over existing DUSt3R-based methods and diffusion-based geometry estimators across multiple benchmarks for depth, normal, and matching tasks.
+Dens3R is a feed-forward visual foundation model that jointly regresses multiple 3D geometric quantities—including depth, surface normals, 3D pointmaps, and dense image-matching features—from unposed and unconstrained images. The method introduces a two-stage training framework that first learns scale-invariant pointmaps and subsequently refines them into intrinsic-invariant representations by injecting explicit normal supervision and enforcing one-to-one viewpoint mapping. Coupled with position-interpolated rotary positional encoding and a weight-shared encoder-decoder backbone, the model supports high-resolution inputs and enables a post-processing pipeline for geometrically consistent multi-view inference.
 
 ### Strengths
-1.  **Unified Multi-Task Framework:** The model addresses the inconsistency issue inherent in predicting geometric quantities in isolation. By explicitly coupling normal estimation with pointmap prediction, the method achieves higher geometric consistency, as evidenced by improved performance on surface normal benchmarks (Table 1, Tab. 6) compared to diffusion-based baselines like StableNormal.
-2.  **High-Resolution Robustness:** The introduction of position-interpolated rotary positional encoding effectively mitigates the performance degradation common in ViT-based geometric models when handling inputs beyond training resolution. Section A.7 and Figure 21 provide qualitative evidence that the model maintains structural integrity at 2K resolution, a feat the authors note previous methods lack.
-3.  **Architectural Efficiency:** The use of a shared encoder-decoder backbone significantly reduces memory usage and parameter counts compared to separate decoders for reference and main views. Table 4 explicitly quantifies this reduction (decreasing memory cost from 4.6 GB to 4.1 GB and params to 624M), making inference more accessible.
-4.  **Comprehensive Evaluation:** The paper includes rigorous testing across diverse datasets (indoor, outdoor, object-centric) and tasks (matching, depth, normal, segmentation). The inclusion of ablation studies on training strategies (Section A.1) and downstream applications (Segmentation, Surface Reconstruction) adds credibility to the model's versatility.
+1. **Strong Empirical Performance Across Diverse Tasks:** The model consistently outperforms recent state-of-the-art methods (DUSt3R, MASt3R, MoGe, VGGT, StableNormal) on standard benchmarks for normal prediction, depth estimation, and two-view image matching. Quantitative gains are evident across indoor and outdoor datasets (e.g., NYUv2, ScanNet, DIODE, ZEB), and qualitative results demonstrate improved handling of reflective surfaces and complex backgrounds (Tables 1, 2, 7; Figures 4, 5, 13).
+2. **Practical Engineering Solutions to Known Bottlenecks:** The shared encoder-decoder architecture meaningfully reduces parameter count and GPU memory usage compared to dual-decoder baselines, directly addressing a scaling limitation in prior 3D vision models (Table 4). Additionally, adapting position-interpolated RoPE effectively mitigates the high-resolution degradation commonly observed in transformer-based geometric predictors, enabling stable 2K inference (Figures 6, 21; Section 3.1).
+3. **Versatility and Downstream Utility:** By decoupling the heavy backbone training from lightweight task-specific heads, Dens3R demonstrates strong adaptability. The authors successfully extend the frozen backbone to segmentation, camera relocalization (Map-free benchmark), and neural surface reconstruction (NeuS/AutoRecon pipelines), proving its value as a reusable geometric prior for broader applications (Section A.2, Figures 8, 9).
 
 ### Weaknesses
-1.  **Novelty of "Intrinsic-Invariant" Representation:** The concept of intrinsic-invariant pointmaps closely resembles the "affine-invariant" formulation in MoGe (Wang et al., 2025b) and standard normalization techniques. The distinction between MoGe’s affine invariance and Dens3R’s intrinsic invariance is not rigorously delineated in Section 3.2, leaving some ambiguity about whether this is a structural novelty or a methodological refinement.
-2.  **Training Complexity vs. Single-Stage Alternatives:** While the two-stage training strategy (Scale-Invariant -> Intrinsic-Invariant) improves accuracy, it increases training complexity and time compared to end-to-end multi-task training. The paper does not provide a detailed analysis of the convergence speed trade-off versus the accuracy gains (e.g., time-to-convergence metrics vs. AUC improvements).
-3.  **Performance on Thin Structures:** The authors acknowledge a significant limitation in predicting thin structures (Figure 12, Section A.8). For a model claiming to be a "Foundation Model," this specific geometric failure mode is concerning, as it limits applicability in scenarios requiring fine-detail reconstruction (e.g., foliage, wires).
-4.  **Dependency on External Post-Processing:** While claimed as a feed-forward model, the multi-view inference section (Sec 3.3) relies on a post-processing pipeline involving triangulation and potentially MASt3R-SfM extensions. This suggests the full pipeline is not purely feed-forward in a strict sense for multi-view consistency, which slightly contradicts the abstract's emphasis on single-pass efficiency for multi-view.
+1. **Incremental Novelty Relative to the DUSt3R/MoGe Family:** The core methodological contributions are largely engineering adaptations of existing paradigms. The "intrinsic-invariant" training is conceptually equivalent to adding direct normal supervision to resolve scale/shift ambiguity, and the position-interpolated RoPE is directly transplanted from LLM context-window extensions with minimal vision-specific adaptation. The paper would benefit from deeper theoretical justification of why the two-stage decoupling is fundamentally superior to end-to-end multi-task optimization.
+2. **High Computational Cost Contradicts "Lightweight" Claims:** While inference is framed as efficient, training requires ~2 weeks on 32 H20 GPUs across a heavily curated, 20+ dataset mixture with complex quality tiers and balancing ratios. This massive upstream compute cost limits reproducibility for academic labs and contrasts with the paper's emphasis on efficiency. The true accessibility of the method remains unclear without open-sourcing the exact data processing pipeline and pre-trained checkpoints.
+3. **Incomplete Reproducibility and Empirical Rigor:** Critical training hyperparameters (optimizer type, learning rate schedules, weight decay, batch size, gradient clipping, data augmentation strategies) are omitted. Furthermore, all benchmark results report single point estimates without standard deviations or variance across multiple random seeds. For an ICLR submission, this lack of statistical reporting makes it difficult to assess whether the reported gains over strong baselines are robust or marginal.
+4. **Multi-View Inference Relies on Non-Neural Heuristics:** The claimed multi-view consistency is achieved via a classical pipeline (dense matching → triangulation → MASt3R-SfM) rather than a unified neural fusion mechanism. This introduces a dependency on external optimization routines that can fail in low-texture or highly repetitive regions, weakening the end-to-end consistency claim and limiting failure mode analysis in the neural model itself.
 
 ### Novelty & Significance
-**Novelty:** The paper presents moderate-to-high novelty. While it builds heavily on the DUSt3R/MASt3R lineage (pointmap representations), the specific integration of normal maps to stabilize pointmap learning via an intrinsic-invariant formulation is a distinct contribution. The transfer of position-interpolated RoPE from LLMs to 3D ViTs is a smart engineering adaptation but not entirely new; however, the demonstration of its utility in 3D geometry is valuable.
-
-**Significance:** The significance is high for the 3D vision community. Consistency between depth and normals is a long-standing problem. By achieving unified outputs without requiring separate specialized models, Dens3R simplifies the pipeline for downstream tasks like SLAM and scene reconstruction. The performance gains on matching (ZEB) and normals (DIODE) are substantial enough to warrant attention.
+**Novelty:** Moderate. The architectural components and training recipe are sound and well-executed, but they represent iterative engineering improvements over the DUSt3R/MASt3R/MoGe lineage rather than a new paradigm. The reuse of RoPE interpolation from LLMs and the intuitive two-stage normal injection lower the methodological novelty threshold typically expected for ICLR. However, the specific integration and ablation provide a useful, cohesive system design.
+**Clarity:** High. The paper is logically structured, with clear motivation, well-labeled figures, and a coherent progression from problem definition to solution and evaluation. The loss formulations and training pipeline are easy to follow, though some mathematical notation suffers from minor OCR artifacts (ignored per instructions).
+**Reproducibility:** Moderate. While the model architecture, loss functions, and dataset compositions are described, the absence of key training hyperparameters, optimization schedules, seed variability reporting, and the complexity of the custom dataset curation pipeline pose practical barriers to exact reproduction.
+**Significance:** High. Joint, consistent 3D geometry prediction from unposed images is a critical challenge in computer vision. Dens3R delivers a robust, high-quality backbone that meaningfully advances practical applications in robotics, SLAM, AR/VR, and automated reconstruction. If properly open-sourced, it would serve as a highly valuable baseline for the community.
 
 ### Suggestions for Improvement
-1.  **Clarify Theoretical Distinction:** Provide a clearer mathematical or conceptual comparison between "intrinsic-invariant" (Dens3R) and "affine-invariant" (MoGe) representations. A subsection explaining why normals specifically induce intrinsic invariance in this context would strengthen the theoretical foundation.
-2.  **Ablation on Training Stage:** Include a quantitative comparison of training time and FLOPs for the two-stage approach versus a single-stage joint training. This would help readers evaluate whether the performance gain justifies the additional training complexity.
-3.  **Address Thin Structure Limitation:** Provide an analysis of why thin structures fail (e.g., lack of normal information or resolution limits) and discuss potential modifications (e.g., hierarchical decoding) to mitigate this in future work.
-4.  **Multi-View Feed-Forward Clarification:** Clearly distinguish between the core prediction pipeline (single view/fixed pair) and the post-processing multi-view inference. If possible, discuss plans to integrate geometric consistency directly into the network weights rather than relying on post-processing triangulation for future multi-view extensions.
+1. **Report Full Reproducibility Details & Statistical Robustness:** Explicitly list the optimizer, learning rate schedule, batch size, gradient accumulation, and data augmentation pipeline. Re-run the core benchmarks (at least NYUv2, ScanNet, ZEB) across 3 different seeds and report mean ± standard deviation to statistically validate the claimed improvements over baselines.
+2. **Deepen Ablation Studies & Loss Analysis:** Provide a systematic ablation on the loss weights ($\eta_1, \eta_2, \eta_3$ and $\lambda_1, \lambda_2, \lambda_3$) to show sensitivity. Compare the two-stage training against a single-stage end-to-end multi-task baseline with dynamic loss balancing (e.g., gradient normalization or uncertainty weighting) to rigorously justify the stage decoupling. Additionally, benchmark position-interpolated RoPE against alternative high-resolution encoding strategies (e.g., ALiBi, learned extrapolation, or grid interpolation) in a controlled setting.
+3. **Clarify Compute vs. Efficiency Trade-offs & Open-Source Commitment:** Revise the "lightweight" claim to specifically refer to inference-time parameters and FLOPs, and explicitly separate it from the upstream training cost. To align with ICLR's emphasis on accessibility, commit to releasing pre-trained checkpoints, training scripts, and the exact data sampling/filtering pipeline. Acknowledge domain biases introduced by the heavy reliance on synthetic datasets (Type A/B) and discuss potential strategies for mitigating real-world distribution shifts.
+4. **Integrate or Analyze the Multi-View Fusion Rigorously:** Either develop a lightweight neural refinement module to replace the classical triangulation/SfM post-processing for stronger end-to-end consistency, or add a dedicated failure-mode analysis of the current pipeline under challenging conditions (motion blur, occlusion, low texture). Quantify the error propagation from the matching head to the final reconstructed point cloud to provide a complete picture of system-level robustness.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Zero-Shot Transfer Evaluation:** Validate the "foundation model" claim by testing on unseen downstream tasks (e.g., semantic segmentation, object detection) using a frozen backbone with linear probing, rather than full fine-tuning.
-2. **Out-of-Distribution Generalization:** Test on domain-shifted data (e.g., synthetic-to-real, artistic renderings, extreme weather) to prove the "intrinsic-invariant" representation generalizes beyond standard RGB-D training distributions.
-3. **Efficiency vs. SOTA Baselines:** Provide latency and memory benchmarks against DUSt3R and MASt3R on identical hardware; comparing only against a "w/o Shared" ablation (Tab 4) is insufficient to claim efficiency.
-4. **Multi-View Consistency Quantification:** Report cycle-consistency errors or reprojection errors across N>2 views to quantitatively verify the claimed "geometrically consistent multi-view inference" beyond pairwise matching AUC.
+1. **Scaling Laws:** Provide performance vs. model size and data size curves; without this, the "Foundation Model" claim is unsupported marketing rather than empirical fact.
+2. **Ensemble Baseline:** Compare Dens3R against an ensemble of SOTA specialized models (e.g., Depth Anything V2 + StableNormal); without this, the benefit of "unified" training over inference-time combination is unproven.
+3. **Intrinsic Multi-view Consistency Metric:** Quantify cycle-consistency or reprojection error across N views without the MASt3R post-processing pipeline; relying on external SfM success does not prove the model itself learns consistent geometry.
+4. **Inference Throughput:** Report FPS and latency on standard hardware alongside parameter counts; claiming "efficiency" requires throughput metrics, not just memory footprint.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Multi-Task Interference Analysis:** Provide gradient similarity or task-performance trade-off curves to demonstrate that joint regression of normals and pointmaps actually reduces interference rather than degrading individual task performance.
-2. **Invariance Robustness Test:** Quantitatively measure output stability under photometric transformations (exposure, color jitter) to empirically verify the "intrinsic-invariant" property claimed in the method name.
-3. **Stage Dependency Ablation:** Isolate the contribution of Stage 1 features to Stage 2 performance by freezing Stage 1 weights completely vs. fine-tuning, to prove the two-stage dependency is necessary.
+1. **Task Interference Analysis:** Visualize gradient conflicts or loss landscapes between depth, normal, and matching heads; without this, the claim that joint regression avoids mutual interference is speculative.
+2. **Normal-to-Pointmap Causal Link:** Isolate the specific contribution of normal supervision to pointmap accuracy via strict ablation (e.g., freeze backbone, add normal head); current results conflate training stages with architectural benefits.
+3. **Sim-to-Real Gap:** Analyze performance disparity between synthetic (Type A/B) and real (Type C) data subsets; heavy reliance on synthetic data (Table 5) risks undisclosed domain bias.
 
 ### Visualizations & Case Studies
-1. **Feature Representation Visualization:** Use t-SNE plots to compare feature distributions between Stage 1 (scale-invariant) and Stage 2 (intrinsic-invariant) to visually confirm the representation shift.
-2. **High-Resolution Artifact Inspection:** Include side-by-side crop comparisons at 2K+ resolution against DUSt3R to explicitly show the specific geometric artifacts prevented by the position-interpolated RoPE.
-3. **Systematic Failure Analysis:** Expand the limitations section with a quantitative breakdown of failure rates across specific scene attributes (e.g., transparency, motion blur, thin structures) rather than selective qualitative examples.
+1. **Failure Mode Comparison:** Show side-by-side failures where the unified approach degrades performance compared to specialized SOTA models; this exposes whether "unified" introduces detrimental constraints.
+2. **Multi-view Consistency Heatmaps:** Display reprojection error heatmaps across multiple views to visually verify geometric consistency claims beyond qualitative pointcloud renders.
+3. **High-Frequency Detail Crops:** Provide 2K/4K resolution crop comparisons against standard RoPE extrapolation; this validates whether position interpolation actually preserves geometry or just smooths artifacts.
 
 ### Obvious Next Steps
-1. **Standardized Foundation Benchmarks:** Evaluate on emerging 3D foundation model benchmarks (e.g., 3D-Bench) to contextualize performance against broader vision foundation models, not just 3D reconstruction baselines.
-2. **Data Harmonization Protocol:** Detail the specific transformations applied to unify normal/depth coordinate systems across the 20+ heterogeneous datasets, as this is critical for reproducibility and claim validity.
-3. **Pose-Free Robustness Analysis:** Evaluate geometry prediction accuracy as a function of input viewpoint baseline distance to determine the operational limits of the "unposed" claim.
+1. **Scaling Study:** Train variants (S/M/L/XL) to demonstrate predictable performance gains with compute; this is mandatory to justify the "Foundation Model" terminology at ICLR.
+2. **End-to-End Downstream Benchmark:** Evaluate on a concrete downstream task (e.g., Visual Localization or SLAM) without task-specific fine-tuning; this proves utility beyond head replacement.
+3. **Data Manifest Release:** Publish the exact training dataset composition and licensing; reproducibility is critical for foundation models, and vague "reorganized" datasets undermine trust.
 
 # Final Consolidated Review
 ## Summary
-Dens3R proposes a dense 3D vision foundation model that jointly regresses pointmaps, depth maps, and surface normals from unposed images. The key contributions are a two-stage training framework (scale-invariant → intrinsic-invariant pointmap), a shared encoder-decoder architecture, and position-interpolated RoPE for high-resolution inference. The model demonstrates strong performance across normal estimation, depth prediction, and image matching benchmarks.
+
+Dens3R proposes a unified 3D geometric foundation model that jointly predicts depth, surface normals, pointmaps, and dense image-matching features from unposed images. The key contributions include a two-stage training framework (scale-invariant → intrinsic-invariant pointmaps), a shared encoder-decoder backbone with position-interpolated RoPE for high-resolution handling, and explicit normal supervision integrated into the pointmap representation. The method demonstrates state-of-the-art or competitive performance across normal estimation, depth prediction, and image matching benchmarks.
 
 ## Strengths
-- **Unified Multi-Task Geometric Prediction:** Unlike prior methods that predict geometric quantities in isolation, Dens3R explicitly models structural coupling between pointmaps and normals. The intrinsic-invariant formulation leverages the deterministic nature of surface normals (one-to-one correspondence per surface) to stabilize multi-task training, yielding consistent geometric outputs from a single forward pass.
 
-- **Strong Quantitative Performance:** The model achieves state-of-the-art results on surface normal prediction across multiple benchmarks (NYUv2: 16.1° mean error vs. 17.5° for StableNormal; DIODE-outdoor: 20.8° vs. 24.7° for StableNormal, Table 1) and image matching (ZEB benchmark: 64.5 AUC@5° vs. 59.9 for MASt3R, Table 2). Depth results (Table 7) show competitive performance against recent baselines.
+- **Strong empirical performance across diverse benchmarks:** Dens3R achieves the best reported results on all five normal prediction benchmarks (NYUv2, ScanNet, IBims-1, Sintel, DIODE-outdoor) with consistent improvements over DSINE, StableNormal, and GeoWizard (Table 1). The method also achieves state-of-the-art results on the ZEB matching benchmark (64.5% vs. 59.9% mean AUC@5° for MASt3R) and competitive depth estimation results (Table 7).
 
-- **High-Resolution Robustness via Position-Interpolated RoPE:** The adaptation of context-window extension techniques from LLMs to ViT-based geometric models effectively handles resolution extrapolation. Figure 21 and Appendix A.7 demonstrate that Dens3R maintains structural coherence at 2K resolution where DUSt3R/VGGT exhibit degenerate artifacts.
+- **Practical efficiency improvements:** The shared encoder-decoder architecture reduces parameters from 737M to 624M and GPU memory from 4.6GB to 4.1GB (Table 4) without sacrificing prediction quality. The position-interpolated RoPE enables stable inference at 2K resolution, addressing a known failure mode of prior ViT-based geometric predictors (Figures 6, 21).
 
-- **Architectural Efficiency:** The shared encoder-decoder design reduces parameters from 737M to 624M and memory from 4.6GB to 4.1GB (Table 4) while maintaining prediction quality, enabling practical deployment on single GPUs.
+- **Demonstrated downstream versatility:** The frozen backbone successfully transfers to segmentation (Fig. 8c), camera relocalization (Table 8, Map-free benchmark), and neural surface reconstruction (Fig. 8d) with minimal task-specific fine-tuning, supporting the foundation model framing.
 
-- **Comprehensive Training Data Disclosure:** Table 5 explicitly documents 28 training datasets with quality tiers (Type A/B/C), ratios, and image pair counts—addressing reproducibility concerns common in foundation model papers.
-
-- **Ablation Studies Provided:** Section A.1 (Table 3, Figures 8, 21) ablates key components including intrinsic-invariant training, coarse-to-fine strategy, and position-interpolated RoPE, demonstrating their individual contributions.
+- **Coherent system design for multi-task geometry:** The two-stage training strategy (Stage 1: scale-invariant pointmap; Stage 2: intrinsic-invariant with normal supervision) is well-motivated, and the ablation study (Table 3) demonstrates the contribution of each component to normal prediction accuracy.
 
 ## Weaknesses
-- **Inconsistent Baseline Comparisons:** VGGT is included in depth (Table 7) and pose estimation (Table 8) comparisons but absent from the normal prediction evaluation (Table 1). Since VGGT also predicts geometric quantities including normals, this omission weakens the comprehensive SOTA claim. The paper should either include VGGT in normal benchmarks or explain the exclusion.
 
-- **Overclaimed Terminology:** The term "intrinsic-invariant pointmap" (Eq. 9) denotes feature concatenation (P^n = P ⊕ n). While the intuition—leveraging normals' deterministic one-to-one property—is sound, the name suggests mathematical invariance properties not rigorously established. The paper would benefit from clearer formalization of what invariance means in this context.
+- **Critical tables are incomplete or missing numerical data:** Tables 8 (camera pose estimation), 9 (ScanNet-1500 matching), and 10 (MegaDepth-1500 matching) are either empty or contain only baseline data, making the corresponding claims unverifiable from the manuscript. This must be corrected for reproducibility.
 
-- **Thin Structure Limitation:** The authors acknowledge failure on thin structures (Figure 12, Section A.8). This is a notable limitation for a "foundation model" targeting general 3D reconstruction, as thin structures (foliage, wires, railings) appear frequently in real-world scenes.
+- **No quantitative evaluation of pointmap quality:** Despite pointmap prediction being a central claim in the title and abstract, the paper provides only qualitative pointmap comparisons (Fig. 5). Standard pointmap metrics (e.g., chamfer distance, scale-invariant error) used in prior work should be reported to substantiate this contribution.
 
-- **Multi-View Pipeline Not Purely Feed-Forward:** The multi-view inference (Section 3.3) relies on MASt3R-SfM triangulation post-processing rather than end-to-end prediction. While this inherits established reconstruction capabilities, it contradicts the abstract's framing of "single forward pass" inference for multi-view scenarios.
+- **VGGT is conspicuously absent from normal prediction comparisons:** VGGT (Wang et al., 2025a) jointly predicts multiple geometric quantities including depth and is directly comparable. It appears in Tables 7, 9, and 10 but is omitted from Table 1 (normal prediction). The paper should include VGGT in the normal benchmark or explain its exclusion.
 
-- **No Efficiency Benchmarks Against Baselines:** Table 4 compares the shared vs. non-shared design internally but provides no latency/throughput comparison against DUSt3R, MASt3R, or VGGT on identical hardware. The efficiency claim relative to prior work remains unsubstantiated.
+- **Loss weights and key design choices lack ablation:** The loss weights ($\eta_1=1.0, \eta_2=0.1, \eta_3=0.075$ in Stage 1; $\lambda_1=1.0, \lambda_2=0.1, \lambda_3=1.0$ in Stage 2) are presented without sensitivity analysis. The claim that removing confidence loss prevents the model from "ignoring complex scenarios" (Sec. 3.2) is significant but not isolated in the ablation—improvements could stem from normal supervision alone.
+
+- **Training reproducibility barriers:** The training procedure (32 H20 GPUs for ~2 weeks on a curated 20+ dataset mixture with A/B/C quality tiers) is resource-intensive. Critical training hyperparameters (optimizer, learning rate schedule, batch size, data augmentation) are not specified, and no code or data manifest is currently available.
+
+- **"Intrinsic-invariant" terminology is under-justified:** The core technical mechanism is feature concatenation ($P_i^n = P_i \oplus n$, Eq. 9) and adding normal supervision. The paper claims this yields an "intrinsic-invariant pointmap" but provides no formal definition or theoretical grounding beyond analogy to MoGe's affine-invariant formulation. The practical benefit is clear, but the terminology overreaches the technical contribution.
 
 ## Nice-to-Haves
-- Zero-shot transfer evaluation on downstream tasks (e.g., semantic segmentation with frozen backbone + linear probing) to substantiate the "foundation model" framing
-- Convergence time analysis quantifying the accuracy/efficiency trade-off of two-stage vs. single-stage training
-- Out-of-distribution robustness tests (synthetic-to-real domain shift, extreme illumination)
-- Cycle-consistency metrics for multi-view geometric coherence beyond pairwise matching AUC
+
+- **Comparison against an ensemble of specialized models:** A baseline combining separate SOTA models (e.g., Depth Anything V2 + StableNormal) would isolate whether joint training provides benefits beyond inference-time composition. This is a reasonable extension but not a core flaw.
+
+- **Standard deviations across multiple random seeds:** Reporting mean ± std on key benchmarks would strengthen statistical confidence in the improvements over strong baselines.
+
+- **Scaling analysis:** A performance vs. model size/data scale study would better justify the "foundation model" framing, which typically implies scaling properties.
+
+- **Inference throughput metrics:** FPS and latency measurements would complement the parameter/memory efficiency claims.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
 
-- **"No quantitative depth results"** — This claim is factually incorrect. Table 7 provides full depth evaluation on NYUv2, DIODE-indoor, and DIODE-outdoor with REL, RMSE, and δ metrics.
+- **ScanNet/ScanNet++ train-test overlap claim:** The criticism that ScanNet++ training data overlaps with ScanNet test data is speculative. ScanNet and ScanNet++ are distinct datasets with separate scans (Yeshwanth et al., 2023 vs. Dai et al., 2017), and the paper uses them as separate entities. There is no evidence of scene-level overlap presented.
 
-- **"Training data not disclosed"** — Table 5 comprehensively lists 28 datasets across three quality tiers with image pair counts and ratios.
+- **Multi-view inference uses classical pipeline as a weakness:** The paper explicitly states that multi-view processing follows the MASt3R-SfM pipeline (Sec. 3.3). This is not hidden or misrepresented—it is a deliberate design choice leveraging established tools rather than a novel neural fusion mechanism. Criticizing the absence of a neural multi-view module is scope creep.
 
-- **"No ablation studies"** — Section A.1 provides ablations on intrinsic-invariant training (Table 3), coarse-to-fine strategy (Table 3), PI-RoPE (Figure 8a, 21), and shared encoder-decoder (Table 4).
+- **"Foundation model" framing as a major weakness:** Whether this work meets the threshold for "foundation model" terminology is debatable but not a technical flaw. The model does demonstrate multi-task capability and downstream transferability. This critique is stylistic rather than substantive.
 
-- **"VGGT not compared"** — VGGT appears in depth (Table 7) and pose (Table 8) comparisons. The valid critique is its absence from normal evaluation, not blanket omission.
-
-- **"Architecture details missing (no model size, ViT variant)"** — Table 4 reports 624M parameters. ViT variant specification would be helpful but is not a critical omission.
-
-- **"No failure mode acknowledgment"** — Section A.8 and Figure 12 explicitly discuss thin structure failures.
+- **Demand for comprehensive scaling laws:** While scaling analysis would strengthen the paper, it is not a requirement for every architecture paper claiming foundational utility. The method demonstrates clear improvements over prior work across multiple tasks.
 
 ## Novel Insights
-Beyond the paper's contributions, the synthesis reveals an interesting tension: the two-stage training essentially decouples the representation learning of the pointmap (Stage 1's multi-view matching objective) from the normal-guided refinement (Stage 2's single-view optimization). This suggests that geometric foundations may benefit from curriculum-style training where cross-view constraints establish coarse 3D structure before per-view intrinsic properties sharpen local details. The intrinsic-invariant pointmap can be viewed as embedding surface orientation priors directly into the 3D representation, which could inspire similar hybrid representations for other geometric modalities (curvature, material properties).
+
+The most novel insight from this synthesis is the **bidirectional synergy between pointmaps and normals**: the paper demonstrates that Stage-1 pointmaps (which encode multi-view geometry) help the normal head resolve monocular ambiguity, while explicit normal supervision in Stage 2 regularizes and refines the pointmap representation (Fig. 11). This mutual reinforcement is under-emphasized in the paper but represents a genuine conceptual advance—most prior work treats normal and depth estimation as separate tasks or derives normals post-hoc from pointmaps. The "intrinsic-invariant" framing, while over-branded, captures a real insight: normals provide a locally deterministic geometric property (one surface → one normal map) that can anchor scale/shift-ambiguous pointmaps to a more stable reference frame.
 
 ## Suggestions
-- Add VGGT to the normal prediction benchmark (Table 1) or justify its exclusion to ensure comprehensive baseline coverage across all evaluated tasks.
-- Clarify the single-view optimization in Stage 2: specify whether the second image input is masked, replaced with a blank token, or processed differently architecturally to enable "one-to-one" supervision.
-- Report inference latency (ms/frame) and throughput metrics against DUSt3R and MASt3R on standardized hardware to substantiate practical efficiency claims.
-- Consider renaming "intrinsic-invariant" to reflect that it's a training strategy leveraging normal determinism rather than a mathematically proven invariant representation.
+
+1. **Populate the incomplete tables** (Tables 8, 9, 10) with full numerical data for all compared methods. Without this, key claims about camera pose estimation and matching are unverifiable.
+
+2. **Add quantitative pointmap evaluation** using standard metrics (e.g., chamfer distance, absolute/relative pointmap error) against DUSt3R, MASt3R, and MoGe on at least one standard benchmark. Even a subset would substantiate the central claim.
+
+3. **Include VGGT in normal prediction comparisons** or provide a clear justification for its absence. The current selective inclusion raises concerns about fairness.
+
+4. **Ablate the confidence loss removal independently** from normal supervision to validate the claim that confidence weighting harms reflective surface prediction.
+
+5. **Provide training hyperparameters and data manifest** in a supplementary document or code release. At minimum, specify optimizer, learning rate schedule, batch size, and exact dataset splits used.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 4.0, 6.0]

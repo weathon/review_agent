@@ -1,0 +1,131 @@
+## Human Reviewer 1
+
+### Summary
+This paper introduces DeepCritic, a two-stage framework for enhancing the critique capabilities of large language models (LLMs) in mathematical reasoning tasks. Existing LLM critics often produce shallow critiques, leading to low judgment accuracy and insufficient feedback for error correction. The authors curate 4.5K long-form critiques incorporating multi-perspective verification and meta-critiquing for supervised fine-tuning (SFT), followed by reinforcement learning (RL) using either human-annotated data (e.g., PRM800K) or automatically generated data via Monte Carlo sampling. Experiments on benchmarks like MR-GSM8K, PRM800K, and ProcessBench demonstrate that the resulting 7B-parameter model outperforms baselines including GPT-4o and DeepSeek-R1-Distill, while enabling better refinement of LLM generators through detailed feedback. Contributions include a novel data curation pipeline for deliberate critiquing and evidence of weak-to-strong supervision potential.
+
+### Strengths
+The paper innovatively addresses the superficiality of LLM critiques by introducing a two-stage pipeline that combines iterative critique generation (initial + in-depth meta-critiquing) with RL, creatively adapting Monte Carlo sampling for automated RL data in math domains, which extends prior work on scalable oversight (e.g., Saunders et al., 2022) to deliberate reasoning without relying solely on human labels.
+
+The methodology is rigorously evaluated across multiple benchmarks, showing substantial improvements (e.g., 20-point F1 gains post-SFT), with ablation studies validating key components like in-depth critiquing; the use of diverse RL data sources (human vs. auto-generated) provides robust evidence of the framework's effectiveness and generalizability.
+
+The writing is clear, with detailed prompts, data statistics, and case studies illustrating deliberate critiquing; significantly, it advances LLM self-evolution by demonstrating how enhanced critics can supervise stronger generators (e.g., 7B critic refining 72B outputs), offering practical insights for superalignment and automated feedback in complex reasoning tasks.
+
+### Weaknesses
+While RL improves performance, the auto-generated data via Monte Carlo sampling discards certain solutions (e.g., fully correct/incorrect ones), potentially introducing biases toward medium-difficulty problems; this could be quantified with diversity metrics to ensure the data represents a wide range of math complexities.
+
+Test-time scaling results focus on majority voting and refinement, but lack comparisons with advanced baselines like outcome reward models (ORMs) or hybrid PRM-ORM setups, which might reveal limitations in handling very long reasoning chains or non-math domains.
+
+### Questions
+Given the emphasis on meta-critiquing in SFT data, could you elaborate on how often the model exhibits self-correction during inference (e.g., via quantitative analysis of generated critiques), and whether this transfers to out-of-distribution math problems like those in higher-level Olympiads? A response with additional metrics could strengthen claims of deliberate reasoning robustness.
+
+The RL stage uses GRPO with a binary accuracy reward; how sensitive is performance to alternative reward designs, such as incorporating critique informativeness (e.g., via BLEU-like scores on feedback quality)? Experiments or ablation on this could address potential over-optimization toward judgment accuracy at the expense of feedback depth.
+
+In weak-to-strong supervision experiments, the 7B critic refines 72B generators effectively, but what happens when the generator is even stronger (e.g., GPT-4o level) or in adversarial settings where solutions have subtle logical flaws? Providing case studies or extended results here could clarify the framework's limits in superalignment scenarios.
+
+To better position your work in the literature, could you include a comparison with related critique enhancement methods such as CTRL, AlignRAG, Critique fine-tuning, one-shot CFT, and Critique-Guided Distillation? Specifically, discuss how your iterative meta-critiquing and RL pipeline differs in terms of data efficiency, critique depth, and applicability to math reasoning, potentially through qualitative or quantitative contrasts to highlight unique advantages or limitations?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+### Rating
+4
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper introduces DeepCritic, a framework to enhance the critique capabilities of LLMs, specifically for mathematical reasoning. The authors address the superficial nature of current LLM critiques by proposing following the same stages (SFT + RL) as other reasoning task. 
+The resulting 7B-parameter critic model outperforms larger models (like GPT-4o) and specialized math models on error identification benchmarks. It also scales well at test-time and effectively guides generators to refine their answers.
+
+### Strengths
+1. Throughout experiments: the paper contains very throughout experiments to prove the idea. Although this is a well explored scope (SFT + RL), the full set of experiment is still nice.
+
+2. The paper demonstrates that RL with automatically constructed data (DeepCritic-7B-RL-Numina) also yields substantial gains, this confirms with finding from other papers, and proving that auto rating is valuable.
+
+### Weaknesses
+1. Lack of novelty: the framework adopted in this paper is well established in reasoning world, this work can be viewed as an application in the critique capability.
+
+2. Limited Domain: The paper focuses solely on mathematical reasoning. While a standard testbed, it's unclear if this deliberate critique approach generalizes well to more subjective or less structured domains (e.g., creative writing, complex instruction following).
+
+3. Dependency on Strong Teacher: The seed data generation relies heavily on a very capable model (Qwen2.5-72B-Instruct). The approach might be less viable if a significantly stronger teacher model isn't available for a given domain. As we know that distill is very effective for reasoning, the result is kind depending on this.
+
+### Questions
+1. When you use the LLM as critic, what prompt was used? Have you tried to improve the prompt to improve the performance?
+2. There are a lot mistakes in PRM800K (80% accuracy based on OpenAI), how does that affect the final result?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+### Rating
+4
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This paper addresses a critical and timely issue: the superficial nature of critiques generated by Large Language Models (LLMs) when serving as evaluators, particularly in complex reasoning domains such as mathematics. The authors argue that existing LLM critics often produce shallow feedback that merely echoes the original solution's reasoning, leading to low error detection accuracy and insufficient guidance for correction.
+
+To overcome this limitation, the paper introduces DeepCritic, a novel two-stage training framework designed to teach LLMs to perform "deliberate critique."
+
+Stage 1 (Supervised Fine-Tuning): The core innovation lies in its sophisticated data curation pipeline. First, a powerful teacher model (Qwen2.5-72B-Instruct) generates an "initial critique" for each step of a mathematical solution. Crucially, the teacher model then performs a deeper "meta-critique" on the initial critique itself. This involves multi-perspective verification and self-reflection to identify shortcomings in the initial assessment. Finally, these two critiques are synthesized into a single, high-quality, long-form "deliberate critique." A curated dataset of 4.5K such examples is used to fine-tune the base model.
+
+Stage 2 (Reinforcement Learning): Building upon the SFT model, RL is employed to further enhance its critique capabilities. The reward signals are sourced from two pathways: 1) existing human-annotated datasets (e.g., PRM800K), and 2) automatically generated step-level labels via Monte Carlo sampling, enabling scalable oversight.
+
+Experimental results demonstrate that the resulting DeepCritic-7B model significantly outperforms much larger and more capable baselines, including GPT-4o, on several mathematical error detection benchmarks. The paper further showcases the model's practical utility as both a verifier to improve solution accuracy and as a supervisor to guide other LLMs in refining their errors, even demonstrating a potential for weak-to-strong supervision.
+
+### Strengths
+- Importance and Timeliness of the Problem: The paper tackles a fundamental challenge at the forefront of LLM development. As the community shifts from outcome-based to process-based supervision, improving the quality of automated feedback (i.e., critique) is paramount for achieving scalable oversight and building more reliable and trustworthy LLMs. This work directly addresses a core bottleneck in this research direction.
+
+- Novel and Insightful Methodology: The paper's primary contribution is its ingenious "meta-critique" data generation strategy. This "critique of the critique" design cleverly pushes the model beyond simple right/wrong judgments, training it to perform multi-perspective verification, reflection, and self-correction. This is a far more profound approach than standard knowledge distillation, as it aims to instill a pattern of critical reasoning rather than just transferring knowledge.
+
+- Strong and Comprehensive Experimental Validation: The empirical results are compelling and well-executed.
+	- The performance is impressive, with a 7B model outperforming top-tier models like GPT-4o on specialized tasks, clearly demonstrating the method's efficacy.
+	- The evaluation is thorough, conducted across multiple standard benchmarks and supported by detailed ablation studies that justify the necessity of each component of the framework.
+	- The paper effectively demonstrates the model's practical potential beyond benchmark scores, showcasing its value in applied scenarios like verified majority voting and solution refinement, with the latter hinting at the exciting prospect of weak-to-strong supervision.
+
+### Weaknesses
+- Scalability and Cost of the Data Generation Pipeline: The framework's main strength—its high-quality data—is also a potential weakness in terms of scalability. The data curation process is computationally intensive, requiring multiple long-sequence inference passes from a very large teacher model for each data point. This makes the cost of data generation exceedingly high, posing a significant challenge for scaling the dataset to millions of examples and potentially limiting its feasibility for large-scale industrial deployment.
+
+- Generalization to Other Domains: The method's success is demonstrated convincingly in the mathematical domain, which benefits from objective and verifiable ground truths. However, its generalizability to more subjective domains remains an open question. 
+
+- High Dependency on the Teacher Model: The capabilities of the resulting DeepCritic model are inherently capped by the proficiency of the teacher model. Any systematic biases, knowledge gaps, or reasoning flaws present in the teacher are likely to be inherited, and possibly amplified, through the data generation process. The paper does not explore how the choice and capability of the teacher model impact the final outcome.
+
+- Ambiguity in Direct Application as an RL Reward Model: While RL is used in the second stage of training, the DeepCritic model itself does not produce a scalar reward suitable for direct use in standard online RL algorithms (e.g., PPO). Its output is a long-form text, making it challenging to efficiently integrate as a reward function in a closed-loop training setup. Its more immediate application appears to be as an offline data generator for preference tuning (e.g., DPO) or as a test-time refinement mechanism, while its role in online RL remains less clear.
+
+### Questions
+See Weakness
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4

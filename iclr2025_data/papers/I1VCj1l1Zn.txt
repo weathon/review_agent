@@ -1,0 +1,1226 @@
+# DLP-LORA: EFFICIENT TASK-SPECIFIC LORA FU- SION WITH A DYNAMIC, LIGHTWEIGHT PLUGIN FOR LARGE LANGUAGE MODELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Recent advancements in Large Language Models (LLMs) have achieved robust
+performance across diverse tasks, but fine-tuning these models for specific domains remains resource-intensive. Parameter-Efficient Fine-Tuning (PEFT) methods like Low-Rank Adaptation (LoRA) address this challenge by fine-tuning a
+small subset of parameters. However, existing methods for fusing multiple LoRAs
+lack dynamic fusion based on contextual inputs and often increase inference time
+due to token-level operations. We propose DLP-LoRA, a Dynamic Lightweight
+Plugin that employs a mini-MLP module with only 5M parameters to dynamically fuse multiple LoRAs at the sentence level using top- _p_ sampling strategies.
+This approach reduces inference time to less than twice that of single LoRA inference by leveraging parallel computation. Evaluations across 26 tasks—including
+multiple-choice questions and question answering—demonstrate that DLP-LoRA
+achieves an average accuracy of 92.34% on multiple-choice datasets and significant improvements in BLEU and ROUGE scores on QA datasets, outperforming
+different LLMs backbones under composite task settings. DLP-LoRA effectively
+balances performance and efficiency, making it a practical solution for dynamic
+multi-task adaptation in LLMs.
+
+
+1 INTRODUCTION
+
+
+Recent advancements in Large Language Models (LLMs) such as LLaMA 3.1 (Dubey et al., 2024),
+Qwen 2.5 (Team, 2024), and Gemma 2 (Team et al., 2024) have led to robust and superior performance across multiple benchmarks (Muennighoff et al., 2022; Ilyas Moutawwakil, 2023; Fourrier
+et al., 2024). These models have demonstrated remarkable capabilities in diverse areas, including
+code generation (Bai et al., 2023), mathematical reasoning (Ahn et al., 2024), and question answering (Achiam et al., 2023). Despite these achievements, fine-tuning all parameters of such large
+models for specific domains remains resource-intensive and time-consuming.
+
+
+Parameter-Efficient Fine-Tuning (PEFT) methods (Houlsby et al., 2019; Xu et al., 2023) address
+this challenge by enabling the fine-tuning of a small subset of parameters, thereby improving performance in various applications like multi-task learning (Xu et al., 2024; Kong et al., 2024), multilingual summarisation, and transfer learning (Whitehouse et al., 2024; Zhao et al., 2024). One
+prominent PEFT approach is Low-Rank Adaptation (LoRA) (Hu et al., 2021), which fine-tunes
+low-rank matrices to capture domain-specific knowledge and merges them with pre-trained LLMs.
+
+
+To enhance the multi-task learning capabilities of LLMs, several methods have been proposed to
+fuse task-specific LoRAs, including MoLE (Wu et al., 2024b), S-LoRA (Sheng et al., 2023), and
+LoRAHub (Huang et al., 2023). These approaches primarily use learnable gating networks or automatic loading mechanisms to combine multiple LoRAs. For instance, MeteoRA (Xu et al., 2024)
+introduces a token-level gating network to all attention and MLP layers for dynamic LoRA fusion.
+
+
+However, most of these methods lack the ability to dynamically fuse LoRAs based on contextual
+prompt inputs during inference. They either require manual selection before combining LoRAs or
+necessitate additional fine-tuning when tasks change. Moreover, existing LoRA mixture strategies
+like MeteoRA focus on token-level Mixture-of-Experts (MoE) gating across all attention heads and
+MLP layers, which significantly increases inference time for next-token generation. Observations
+
+
+1
+
+
+from prior studies (Xu et al., 2024; Lin et al., 2024b; Muqeeth et al., 2024) indicate that within the
+same sentence of a task, the same LoRA is consistently assigned to each token. This suggests that
+token-level LoRA MoE might be unnecessary and computationally inefficient.
+
+
+In this paper, we propose a Dynamic Lightweight Plugin for LoRA fusion (DLP-LoRA), which
+employs a lightweight MLP module to dynamically fuse multiple LoRAs based on top- _p_ sampling
+strategies. This mini-MLP plugin, containing only 5M parameters, is fast to train for multi-task
+classification and easily adaptable to new domains. By leveraging sentence-level LoRA selection
+and fusion guided by the mini-MLP plugin, DLP-LoRA requires less than twice the inference time
+compared to manually selecting and loading a single LoRA, making it comparable in efficiency.
+
+
+We evaluate DLP-LoRA across 26 tasks, including 17 multiple-choice question (MCQ) datasets
+spanning mathematical QA, logical reasoning, language identification, and reading comprehension,
+as well as 9 question-answering (QA) datasets focused on summarisation, machine translation, and
+open-domain QA. Under comparable inference times to single LoRA setups, DLP-LoRA achieves
+an average accuracy of **92.34%** across the 17 MCQ datasets and average BLEU, ROUGE-1, and
+ROUGE-L scores of **57.62**, **56.03**, and **53.96**, respectively, across the 9 QA datasets. These evaluations are conducted using Qwen-2 1.5B, Qwen-2 7B, LLaMA-2 7B, and LLaMA-3 8B backbones.
+Additionally, our model demonstrates relative improvements of **92.95%** and **13.2%** for the MCQ
+and QA tasks, respectively, compared to different LLM backbones under composite task settings.
+With DLP-LoRA, the inference speed and performance of the Qwen-2 1.5B backbone are improved
+by over **90.90%** and **82.55%** under composite-26 task setting, respectively, when compared to the
+baseline LLaMA-2 13B. Our case studies further illustrate that sentence-level DLP-LoRA effectively balances the trade-off between multi-LoRA inference and fusion.
+
+
+In summary, our contributions are threefold:
+
+
+    - We introduce DLP-LoRA, a dynamic and lightweight plugin for multi-LoRA selection and
+fusion that is fast to train and easily adaptable to new domains.
+
+
+    - By employing sentence-level multi-LoRA selection and fusion, DLP-LoRA leverages parallel CUDA acceleration, achieving less than twice the inference time compared to single
+LoRA inference and outperforming token-level MoE gating routers in efficiency.
+
+
+    - Through extensive evaluations on 26 tasks including MCQ and QA, DLP-LoRA achieves
+performance comparable to single-task LoRA models and significantly improves accuracy
+and ROUGE metrics under composite task settings.
+
+
+2 BACKGROUND
+
+
+**Low-Rank Adaption.** Low-Rank Adaptation (LoRA) (Hu et al., 2021) is a method developed to
+fine-tune large language models (LLMs) for specific downstream tasks with enhanced efficiency
+by minimising the number of trainable parameters. Instead of updating all the model’s parameters
+during training, LoRA introduces supplementary low-rank matrices. In Transformer-based autoregressive LLMs, this technique involves freezing the pre-trained weights and integrating trainable
+low-rank matrices into designated layers, thereby substantially reducing computational overhead.
+The primary motivation for LoRA stems from the recognition that many parameter updates during fine-tuning occur within a low-dimensional subspace, indicating that full-rank weight updates
+are often unnecessary. By employing low-rank approximations, LoRA significantly decreases the
+number of parameters required for training—sometimes by factors as large as 10,000—while still
+maintaining competitive performance levels.
+
+
+Formally, consider a weight matrix _**W**_ _∈_ R _[h][×][d]_ within the original LLMs. LoRA introduces two
+low-rank matrices, _**A**_ _∈_ R _[h][×][r]_ and _**B**_ _∈_ R _[r][×][d]_, where _r_ _≪_ min( _h, d_ ). Instead of directly updating
+the weight matrix, LoRA modifies the model’s forward pass according to the following equation:
+
+
+_**W**_ _[′]_ = _**o**_ + ∆ _**o**_ = _**W**_ + _**AB**_ (1)
+
+
+Here, _**W**_ _[′]_ represents the adjusted weight matrix, while _**A**_ and _**B**_ are the trainable matrices incorporated by LoRA. Consequently, the forward computation for an input _**x**_ _∈_ R [1] _[×][d]_ is expressed as:
+
+
+_**h**_ = _**xW**_ _[′]_ = _**x**_ ( _**o**_ + ∆ _**o**_ ) = _**x**_ ( _**W**_ + _**AB**_ ) = _**xW**_ + _**xAB**_ (2)
+
+
+2
+
+
+Figure 1: DLP-LoRA framework: different LoRAs will be activated based on the input task and
+sentence via mini-MLP plugin. When Top- _p_ sampling is used via the mini-MLP plugin, multiple
+LoRAs will be sampled and fused with probability _p_ as the threshold. DLP-LoRA fusion is only
+enabled once the first token of every new sentence is generated.
+
+
+This approach guarantees that during the inference phase, after the training process is finalised, the
+low-rank matrices _**A**_ and _**B**_ can be integrated with the original weights _**W**_, thereby removing any
+additional computational overhead.
+
+
+LoRA is predominantly applied to the attention projection matrices within the self-attention mechanisms of Transformer architectures, specifically targeting the query, key, and value projections, as
+well as the output projection. Recently, MLP layers can also be applied by LoRA (Dou et al., 2024;
+Li et al., 2024). This targeted application enhances the method’s overall efficiency.
+
+
+The minimalistic design of LoRA renders it especially beneficial for environments with limited computational resources or for applications necessitating the swift adaptation of extensive models. By
+keeping the majority of the model’s parameters fixed and concentrating solely on learning the lowrank modifications, LoRA substantially decreases both memory usage and computational demands
+during the fine-tuning process.
+
+
+**Multi-task LoRA Mixture** A LoRA adapter is fine-tuned for a specific downstream task, limiting
+its utility to that particular application. To enhance the ability of LLMs to handle multiple tasks, two
+primary approaches are commonly employed. The first approach involves combining datasets from
+multiple tasks and fine-tuning a single LoRA module on this aggregated dataset. However, Lin et al.
+(2024b) have identified significant challenges in encapsulating the specialised knowledge required
+for diverse domains within a single LLM, often leading to suboptimal performance.
+
+
+The second approach leverages existing LoRA adapters as interchangeable modules that can be
+directly integrated into a base LLM. Within this strategy, two distinct directions have emerged.
+The first direction focuses on architectural designs that combine multiple LoRAs using a learnable
+weighted sum (Huang et al., 2023) or by implementing unified memory pool designs in CUDA
+kernels (Sheng et al., 2023). However, these frameworks often require continuous few-shot learning
+or in-context learning for each individual downstream task and necessitate manual assignment of
+active LoRAs. This manual intervention poses a significant drawback, as it lacks the capability for
+autonomous selection and dynamic switching of LoRAs during the inference phase.
+
+
+The second direction involves developing frameworks that enable dynamic fusion of LoRAs. For
+instance, Xu et al. (2024) introduced MeteoRA, a token-level Mixture-of-Experts (MoE) style multitask LoRA framework. MeteoRA incorporates a trainable gating mechanism across all attention and
+MLP layers to automatically select and fuse different LoRAs based on input tokens. While MeteoRA
+successfully facilitates dynamic management of multiple tasks, the inclusion of a trainable gating
+module at every attention and MLP layer with token-level routing significantly increases inference
+
+
+3
+
+
+time compared to single LoRA inference. This performance drawback remains substantial even with
+the development of GPU kernel acceleration methods.
+
+
+3 METHODOLOGY
+
+
+Our proposed DLP-LoRA framework comprises three key components: a lightweight mini-MLP
+plugin _C_ MLP, a base LLM backbone _M_, and a set of _N_ fine-tuned LoRA modules _L{_ 1 _...N_ _}_ corresponding to different tasks _D{_ 1 _...N_ _}_, as illustrated in Figure 1. Initially, we train the mini-MLP
+classifier _C_ MLP on these tasks to achieve high task classification accuracy (we evaluate 26 tasks in
+this work; see Appendix C for details). Once trained, the LLM backbone _M_ utilises the mini-MLP
+plugin to dynamically fuse the appropriate fine-tuned LoRAs _L{_ 1 _...N_ _}_ at the sentence level, enabling
+efficient multi-task learning.
+
+
+3.1 LIGHTWEIGHT MULTI-TASK CLASSIFICATION PLUGIN
+
+
+Previous methods that perform token-level task classification and routing within the LLM backbone—by injecting a trainable gating network at each attention and MLP layer—are computationally intensive and inefficient during inference (Xu et al., 2024). Observing that most tokens within a
+sentence typically pertain to the same task, we propose a more efficient sentence-level task detection
+approach. Specifically, we introduce an off-the-shelf 4-layer mini-MLP plugin _C_ MLP that requires
+training only once on the sentence level for the selected tasks.
+
+
+Given _N_ distinct tasks _D{_ 1 _...N_ _}_ and a collection of _M_ sentences _S{_ 1 _...M_ _}_ _∈Dn_, our lightweight
+4-layer _C_ MLP encodes each input sentence _Sm_ using a specific tokenizer (we utilise the ALBERT
+tokenizer (Lan, 2019) in this work) and classifies _Sm_ to the correct task _Dn_ :
+
+
+_Yn_ = _C_ MLP( _Sm_ ) _,_ where _Yn_ _∈D{_ 1 _...N_ _}._ (3)
+
+
+3.2 DYNAMIC LORA FUSION
+
+
+Once the _C_ MLP classifier is well-trained on the tasks _D{_ 1 _...N_ _}_, it serves as a plugin to the LLM
+backbone _M_ for dynamically fusing multiple LoRAs _L{_ 1 _...N_ _}_ at the sentence level. For the current
+input sentence _Sm_ _∈Dn_, we consider the first token w1 and the previous contextual history _H{_ 1 _...k}_ .
+We employ a top- _p_ sampling scheme via _C_ MLP to dynamically select the possible LoRAs to fuse,
+using probability _p_ as the threshold:
+
+
+_Ip_ = _{Y{_ 1 _...R}_ _|_ w1 _∈Sm, H{_ 1 _...k}},_ where _Yr_ _≥_ _p._ (4)
+
+
+Using the set _Ip_ for the current sentence _Sm_, we fuse the selected LoRAs based on normalised
+weights obtained via a softmax function:
+
+
+_Wm_ = Softmax( _Ip_ ) = _{w_ 1 _, . . ., wR}._ (5)
+
+
+Importantly, the _C_ MLP classifier is only activated when the first token w1 of the current sentence _Sm_
+is generated, leveraging the contextual information _H{_ 1 _...k}_ . This approach significantly accelerates
+the inference time of _M_ compared to token-level gating network classification (Xu et al., 2024), as
+it avoids the overhead of per-token classification.
+
+
+3.3 PARALLEL MULTI-LORA ACCELERATION
+
+
+Beyond the efficiency gained from sentence-level LoRA sampling and fusion—which avoids the
+inefficiency of repetitive per-token LoRA classification—a significant advantage of our approach is
+the ability to fully exploit parallel multi-LoRA acceleration.
+
+
+Given _N_ fine-tuned LoRAs, we construct two tensors _A_ _∈_ R _[N]_ _[×][h][×][r]_ and _B_ _∈_ R _[N]_ _[×][r][×][d]_, which are
+allocated contiguously in High Bandwidth Memory (HBM). In contrast to token-level LoRA classification and forward computation—where each token in the batch operates independently, limiting
+the effectiveness of General Matrix Multiplication (GEMM) optimisations in frameworks like PyTorch—our sentence-level LoRA classification removes the independence constraints among tokens
+within a sentence. By iterating over all _N_ LoRAs using a hash table stored in HBM, we retrieve the
+
+
+4
+
+
+Figure 2: The performance of DLP-LoRA compared to the Basic LLaMA-2 7B and single LoRA
+baselines across 17 MCQ tasks and 9 QA tasks using accuracy and Rouge-L metrics. See Appendix D for more results using different LLMs backbones.
+
+
+sampled LoRAs _Ip_ based on top- _p_ sampling and their corresponding weights _Wm_ . Subsequently,
+all sampled LoRAs are fused into the original layer-wise weights _**W**_ of the LLM as follows:
+
+
+(6)
+where _B_ is the batch size, _M_ is the number of sentences, _R_ is the number of sampled LoRAs, and
+_**x**_ represents the encoded representation of the first token of each input sentence _Sm_ . Leveraging
+this parallel multi-LoRA acceleration, our DLP-LoRA achieves an inference time that is on average
+only 1.24 times slower than single LoRA inference (see Section 4.2 for detailed comparisons).
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** To comprehensively evaluate our proposed DLP-LoRA framework, we follow the
+methodology of Xu et al. (2024) and conduct experiments across 26 diverse tasks. These include 17
+multiple-choice question (MCQ) datasets covering domains such as mathematical question answering, logical reasoning, language identification, and reading comprehension. Additionally, we assess
+performance on 9 question-answering (QA) datasets focused on summarisation, machine translation,
+and open-domain QA. Specifically, we utilise 20 tasks from the BigBench benchmark (Srivastava
+et al., 2023), 3 machine translation tasks from the News Commentary dataset (Tiedemann, 2012)
+translating from non-English to English, and 3 generative tasks: GSM8K (Cobbe et al., 2021),
+CNN/DailyMail (See et al., 2017), and Alpaca (Taori et al., 2023). Detailed descriptions of each
+dataset are provided in Appendix C.
+
+
+**LLM** **Backbones,** **LoRAs,** **and** **Mini-MLP** **Plugin.** We evaluate DLP-LoRA using four widely
+adopted LLM backbones: Qwen-2 1.5B and 7B (Yang et al., 2024a), LLaMA-2 7B (Touvron et al.,
+2023), and LLaMA-3 8B (Dubey et al., 2024). To assess the effectiveness of DLP-LoRA in scenarios
+with significant model size differences, we also compare the performance of DLP-LoRA based on
+the Qwen-2 1.5B backbone against the baseline LLaMA-2 13B model without LoRA adaptations,
+representing a 10x difference in model size.
+
+
+For the baseline comparisons involving single LoRA modules, we fine-tune a separate LoRA for
+each task using 900 training samples, randomly selected according to a 9:1 train/test split from
+each original dataset. The mini-MLP plugin, responsible for task classification, is trained on the
+
+
+5
+
+
+_×_ [ _**A**_ 1 _, . . .,_ _**A**_ _BMR_ ]
+
+ - ��  _B×M_ _×R_
+
+
+) _×_ [ _**B**_ 1 _, . . .,_ _**B**_ _BMR_ ]
+
+  - ��  _B×M_ _×R_
+
+
+[∆ _**o**_ 1 _, . . .,_ ∆ _**o**_ _BM_ ]
+
+- �� _B×M_
+
+
+= - _**W**_ _[B][×][M]_ _[×][R]_ (([ _**x**_ 1 _, . . .,_ _**x**_ _BMR_ ]
+
+_R_  - ��  _B×M_ _×R_
+
+
+)
+
+
+Table 1: The classification accuracy results on 17 MCQ tasks by comparing different basic LLMs
+backbones, single LoRA baselines and our DLP-LoRA approach. The evaluation results are averaged after running 10 times. The underline indicates the second-best accuracy and the subscript
+percentage denotes relative accuracy improvement or reduction over each single LoRA baseline.
+
+
+**Task** **Qwen-2 1.5B** **Qwen-2 7B** **LLaMA-2 7B** **LLaMA-3 8B**
+
+
+Table 2: The BLEU, ROUGE-1 and ROUGE-L results on 9 QA tasks by comparing different basic
+LLMs backbones, single LoRA baselines and our DLP-LoRA approach. The evaluation results
+are averaged after running 10 times. The underline indicates the second-best performance and the
+subscript percentage denotes relative BLEU, ROUGE-1 and ROUGE-L improvement or reduction
+over each single LoRA baseline.
+
+
+**Task** **Metric** **Qwen-2 1.5B** **Qwen-2 7B** **LLaMA-2 7B** **LLaMA-3 8B**
+
+
+same samples and achieves an average classification accuracy of 98.45%. Notably, the mini-MLP
+plugin is lightweight, containing only 5 million parameters, and can be trained rapidly—in under
+10 minutes—for all 26 tasks. All experiments are conducted on a single custom-upgraded NVIDIA
+GTX 2080Ti GPU with 22GB of memory.
+
+
+**Evaluation** **Metrics** **and** **Composite** **Task** **Setting.** Given that all 26 tasks can be categorised
+into MCQ and QA types, we employ accuracy as the evaluation metric for MCQ tasks and BLEU,
+ROUGE-1, and ROUGE-L scores for QA tasks. To assess multi-task learning capabilities, we create composite task settings by combining the 17 MCQ tasks (Composite-17) and the 9 QA tasks
+(Composite-9). In all experiments, we report the average results over 10 runs to ensure statistical
+reliability.
+
+
+6
+
+
+Table 3: Evaluation results for composite- _n_ task, where composite-9 includes all QA tasks, and
+composite-17 includes all MCQ tasks. In addition, we compare a single LoRA with a higher rank
+trained on composite-26 task setting. The evaluation results are averaged after running 10 times.
+The subscript percentage denotes relative accuracy, BLEU, ROUGE-1 and ROUGE-L improvement
+or reduction over each basic LLMs baseline.
+
+**Model** **Method** **Composite-** _n_ **Acc.** (%) _↑_ **BLEU** _↑_ **ROUGE-1** _↑_ **ROUGE-L** _↑_
+
+
+9                   - 51.48 48.69 45.72
+Basic
+17 31.65                   -                   -                   **Qwen-2 1.5B**
+
+LoRA ( _r_ = 64) 26 33.23 51.46 48.86 45.90
+
+
+9                   - **56.00** **54.61** **52.27**
+DLP-LoRA
+17 **90.43**                   -                   -                   
+
+9                   - 53.25 50.70 48.58
+Basic
+17 58.59                   -                   -                   **Qwen-2 7B**
+
+LoRA ( _r_ = 64) 26 59.42 53.63 51.75 48.92
+
+
+9                   - **57.44** **56.84** **54.90**
+DLP-LoRA
+17 **92.75**                   -                   -                   
+
+9                   - 52.32 46.78 44.36
+Basic
+17 36.29                   -                   -                   **LLaMA-2 7B**
+
+LoRA ( _r_ = 64) 26 37.93 52.84 46.96 45.35
+
+
+9                   - **58.61** **54.70** **52.60**
+DLP-LoRA
+17 **91.20**                   -                   -                   
+
+9                   - 52.00 50.16 47.16
+Basic
+17 65.44                   -                   -                   **LLaMA-3 8B**
+
+LoRA ( _r_ = 64) 26 65.98 52.26 50.38 47.40
+
+
+9                   - **57.79** **57.45** **55.35**
+DLP-LoRA
+17 **96.03**                   -                   -                   
+
+9                   - 52.26 49.08 46.46
+Basic
+17 47.99                   -                   -                   **Avg.**
+
+LoRA ( _r_ = 64) 26 49.14 52.55 49.49 46.89
+
+
+DLP-LoRA 9        - **57** _**.**_ **46+9** _**.**_ **95%** **55** _**.**_ **90+13** _**.**_ **90%** **53** _**.**_ **78+15** _**.**_ **76%**
+17 **92** _**.**_ **60+92** _**.**_ **95%**                   -                   -                   
+
+4.2 EXPERIMENTAL RESULTS
+
+
+**Main Results.** Figure 2 presents the classification accuracy across the 17 MCQ tasks and ROUGEL scores across the 9 QA tasks, comparing our DLP-LoRA with the baseline LLaMA-2 7B backbone
+and individually fine-tuned single LoRAs. Our DLP-LoRA not only significantly outperforms the
+baseline LLaMA-2 7B model but also achieves performance comparable to, and in some cases surpassing, that of the manually loaded single LoRAs on the 17 MCQ tasks. Similar trends are observed
+for the 9 QA tasks (additional results for other LLM backbones are provided in Appendix D). As
+shown in Table 1, DLP-LoRA achieves performance within a relative difference of -0.35% in accuracy across the 17 MCQ tasks when compared to the single LoRA models using different LLM
+backbones. Remarkably, DLP-LoRA consistently outperforms the single LoRA models on the ElemMath and WinoWhy datasets. A similar pattern emerges in Table 2 for the 9 QA tasks, where
+DLP-LoRA shows relative improvements in BLEU, ROUGE-1, and ROUGE-L scores by averages
+of 0.54%, 0.22%, and 0.09% across all QA tasks and LLM backbones, respectively. These results
+demonstrate that DLP-LoRA can match or even exceed the performance of individually fine-tuned
+single LoRAs by dynamically selecting and fusing multiple LoRAs.
+
+
+**Multi-task** **Composite** **Performance.** We further evaluate DLP-LoRA’s capability in multi-task
+learning under composite task settings by combining the 17 MCQ tasks and the 9 QA tasks. As
+presented in Table 3, DLP-LoRA significantly enhances performance over the baseline LLM backbones, achieving relative improvements of 92.95% in accuracy for the MCQ composite, and 9.95%,
+13.90%, and 15.76% in BLEU, ROUGE-1, and ROUGE-L scores, respectively, for the QA composite. These findings indicate that DLP-LoRA effectively and automatically selects the appropriate
+LoRAs based on the input prompts within composite tasks, facilitating dynamic multi-task adaptation. A detailed example illustrating how DLP-LoRA selects and fuses multiple LoRAs is provided
+in Section 4.3.
+
+
+7
+
+
+Table 4: The averaged inference time ratio across 26 datasets by comparing the single LoRA, and
+DLP-LoRA equipped ALBERT and mini-MLP plugin with the basic LLMs backbones. The subscript percentage denotes relative inference time improvement or reduction of DLP-LoRA over the
+single LoRA inference.
+
+
+**Method** **Qwen-2 1.5B** **Qwen-2 7B** **LLaMA-2 7B** **LLaMA-3 8B**
+
+
+LoRA 1.15 1.00 1.05 1.00
+
+
+DLP-LoRA (ALBERT) **1** _**.**_ **90** ~~**+**~~ **65** _**.**_ **22%** **1** _**.**_ **13** ~~**+**~~ **13** _**.**_ **00%** **1** _**.**_ **80+71** _**.**_ **43%** **1** _**.**_ **12+12** _**.**_ **00%**
+DLP-LoRA (mini-MLP) **1** _**.**_ **12** ~~_**−**_~~ **2** _**.**_ **61%** **1** _**.**_ **12** ~~**+**~~ **12** _**.**_ **00%** **1** _**.**_ **60+52** _**.**_ **38%** **1** _**.**_ **11+11** _**.**_ **00%**
+
+
+**Inference** **Time** **Efficiency.** We also conduct a comprehensive evaluation of the inference time
+efficiency of DLP-LoRA and its variants compared to the baseline LLM backbones and single LoRA
+models. As shown in Table 4, single LoRA models exhibit inference speeds comparable to the
+baseline LLMs, being only about 1.05 times slower on average. When incorporating ALBERT
+(11M parameters) as the plugin, DLP-LoRA’s inference time ranges from 1.12 to 1.90 times slower
+than the baseline LLMs, representing a 40.41% increase compared to single LoRA inference. By
+contrast, using the mini-MLP plugin with 5M parameters, DLP-LoRA achieves faster inference,
+with only an 18.19% average increase in inference time over single LoRA models across all tasks.
+These results validate the efficiency of our sentence-level LoRA selection and fusion approach.
+
+
+4.3 CASE STUDY
+
+
+5 DISCUSSION
+
+
+**Limitations of Top-** _k_ **Selection** Most existing Multi-LoRA or LoRA-MoE methods employ a top_k_ router to manually determine the fixed number of LoRAs to use for multi-task learning (Li et al.,
+2024). This manual selection can restrict the model’s ability to dynamically select and fuse multiple
+LoRAs based on the task requirements. In our approach, we utilise top- _p_ selection, which leverages
+the probabilities assigned by the mini-MLP plugin to each LoRA, using a threshold _p_ . This allows
+DLP-LoRA to adaptively decide both the number and combination of LoRAs to fuse for different
+tasks, enhancing flexibility and performance.
+
+
+**Can** **a** **Smaller** **LLM** **with** **DLP-LoRA** **Outperform** **a** **Larger** **LLM** **Backbone?** Our evaluations of DLP-LoRA across various LLM backbones ranging from 1.5B to 8B parameters under
+
+
+8
+
+
+Is it common to see frost during some college commencements?
+
+
+To illustrate the practical effectiveness of AbsNarr GSM8K
+
+50.5% 49.5%
+
+DLP-LoRA, we present a case study in Fig- Yes, it is common to see frost during some college commencements, especially in areas where the
+
+weather is cooler or more temperate. Frost is the formation of ice crystals on surfaces in the
+
+ure 3 using the LLaMA-3 8B backbone under atmosphere, typically when the temperature is below freezing. It can occur on surfaces such as grass, leaves, and even clothing.
+a composite task setting involving three tasks. In some cases, frost can form on the ground or on surfaces during college commencements, especially
+
+if the temperature is around or below freezing. This can happen in the early morning or late evening,
+
+For the first input prompt, DLP-LoRA selects when the air is colder.
+
+probabilities of 50.5% and 49.5%, respec- 100.0%
+
+But the freezing of this corruption should not blind us to the problems with the public sectors accounting.
+
+tively, using top- _p_ sampling. The AbsNarr In this area, too, something is being covered up.
+
+eral knowledge through mathematical reason- A
+ing. The gold standard dataset, StratQA,
+requires answering general knowledge ques- Figure 3: Case study of DLP-LoRA based on
+tions with reasoning steps. DLP-LoRA effec- LLaMA-3 8B backbone under composite-3 task settively fuses the AbsNarr and GSM8K LoRAs ting, where the selected LoRAs with corresponding
+to generate logical explanations that incorpo- probabilities are demonstrated on the right side.
+rate general knowledge about frost weather and commencements. When subsequent questions are
+input, concatenated with the history, DLP-LoRA continues to successfully select the appropriate
+LoRAs—NewsDE and FormFall—from the pool of 26 LoRAs stored in high-bandwidth memory
+(HBM). This case study demonstrates DLP-LoRA’s ability to dynamically select and fuse multiple
+LoRAs to address diverse tasks effectively.
+
+
+AbsNarr
+
+50.5%
+
+
+GSM8K
+
+49.5%
+
+
+Yes, it is common to see frost during some college commencements, especially in areas where the
+weather is cooler or more temperate. Frost is the formation of ice crystals on surfaces in the
+atmosphere, typically when the temperature is below freezing. It can occur on surfaces such as grass,
+leaves, and even clothing.
+
+
+In some cases, frost can form on the ground or on surfaces during college commencements, especially
+if the temperature is around or below freezing. This can happen in the early morning or late evening,
+when the air is colder.
+
+
+NewsDE
+
+100.0%
+
+
+But the freezing of this corruption should not blind us to the problems with the public sectors accounting.
+In this area, too, something is being covered up.
+
+
+FormFall
+
+100.0%
+
+
+A
+
+
+Figure 3: Case study of DLP-LoRA based on
+LLaMA-3 8B backbone under composite-3 task setting, where the selected LoRAs with corresponding
+probabilities are demonstrated on the right side.
+
+
+Table 5: The comparison between smaller Qwen-2 1.5B equipped with DLP-LoRA and basic
+LLaMA-2 13B backbone under composite-26 task setting. The subscript percentage denotes relative inference time, each evaluation metric improvement or reduction of Qwen-2 1.5B + DLP-LoRA
+over the LLaMA-2 13B.
+
+**Model** **Inference Time (s)** _↓_ **Acc.** **(%)** _↑_ **BLEU** _↑_ **ROUGE-1** _↑_ **ROUGE-L** _↑_
+
+
+LLaMA-2 13B 4672.73 45.54 19.89 17.99 17.25
+Qwen-2 1.5B + DLP-LoRA _**.**_ **03** _**−**_ **90** _**.**_ **90%** **82** _**.**_ **68+81** _**.**_ **55%** **20** _**.**_ **59+3** _**.**_ **52%** **39** _**.**_ **57+119** _**.**_ **96%** **38** _**.**_ **84+125** _**.**_ **16%**
+
+
+composite task settings prompted us to investigate whether a smaller LLM backbone equipped
+with DLP-LoRA can outperform a larger, unadapted LLM backbone. As shown in Table 5,
+the Qwen-2 1.5B model equipped with DLP-LoRA reduces inference time by over 90% compared to the LLaMA-2 13B backbone when processing a mixture of 26 tasks. Moreover,
+it achieves significant improvements in accuracy, ROUGE-1, and ROUGE-L scores by 81%,
+119%, and 125%, respectively. These findings suggest that smaller LLMs augmented with
+DLP-LoRA have the potential to match or even surpass the performance of much larger models (with over eight times more parameters) across diverse tasks. This is particularly beneficial for deployment on devices with limited computational resources, such as mobile devices.
+
+
+1Since LoRA-Switch did not descript how many LoRAs are utilised during inference for ShareGPT dataset,
+we assume that all 7 LoRAs based on the original work are equipped and we can regard this as the lower-bound
+of DLP-LoRA.
+
+
+9
+
+
+Table 6: The inference time ratio compared between different numbers of LoRAs and the basic LLaMA-3 8B. #
+Params denote the percentage of LoRAs’ parameters over the LLaMA-3
+8B.
+
+
+**Inference Time of Multi-LoRA Loading at Scale** By
+avoiding inefficient and repetitive token-level LoRA clas- pared between different numbers of Losification, our method fully leverages PyTorch’s Gen- RAs and the basic LLaMA-3 8B. #
+eral Matrix Multiplication (GEMM) operations for par- Params denote the percentage of Loallel multi-LoRA acceleration. We conducted an ablation RAs’ parameters over the LLaMA-3
+study to assess how the inference time scales with the in- 8B.
+creasing number of LoRAs, using the LLaMA-3 8B back- **Num.** **of LoRA** **# Params** **Inference Time Ratio**
+bone as a reference. As illustrated in Table 6, even as the 10050 0.043%0.085% 1.831.76
+number of LoRAs increases, the inference time ratio remains within 2x of the baseline LLaMA-3 8B model. Additionally, the combined parameters of
+all LoRAs constitute less than 0.1% of the 8B parameters in the LLaMA-3 backbone. These results demonstrate that our approach scales efficiently with the number of LoRAs without incurring
+significant computational overhead, maintaining practical inference times even at scale.
+
+
+**Num.** **of LoRA** **# Params** **Inference Time Ratio**
+
+
+50 0.043% 1.76
+100 0.085% 1.83
+
+
+**Efficiency** **comparison** **with** **differ-** Table 7: The inference time and memory consuming ratio
+**ent dynamic LoRAs baselines** We compared with different dynamic LoRAs baselines based on
+further compare our DLP-LoRA with LLaMA-2 7B. The subscript percentage denotes relative indifferent dynamic LoRAs baselines ference time and memory usage improvement of different
+in order to evaluate the DLP-LoRA’s LoRAs baselines over the LLaMA-2 7B backbone.
+efficiency at inference speed and **Method** **Decoding latency ratio** **Peak Memory ratio**
+memory usage. We fine-tuned 7 dif- LLaMA2-7B 1.00 1.00
+ferent LoRAs based on selected 7 MOLA (Gao et al., 2024) 10 _._ 54+954% 2 _._ 04+104%
+datasets including ARC (Clark et al., PESC (Wu et al., 2024a) 3 _._ 54+254% **1** _**.**_ **02** ~~**+**~~ **2%**
+2018), HellaSwag (Zellers et al., MoRAL (Yang et al., 2024b)LoRA-Switch (Kong et al., 2024) **1** 3 _**.**_ _._ 58 **29** +258% **+29%** **1** 1 _**.**_ _._ **02** 07+7% ~~**+**~~ **2%**
+2019), MMLU (Hendrycks et al., DLP-LoRA (7 LoRAs) **1** _**.**_ **20+20%** **1** _**.**_ **00+0%**
+2020), TruthfulQA (Lin et al., 2022),
+WinoGrande (Sakaguchi et al., 2021), ScienceQA (Lu et al., 2022), CommonsenseQA (Talmor et al.,
+2019), and OpenbookQA (Mihaylov et al., 2018). Then we compare DLP-LoRA with different baselines on the ShareGPT dataset (Wang et al., 2023) [1] following LoRA-Swich (Kong et al., 2024). As
+shown in Table 7, it is evident that DLP-LoRA stands out in both speed and memory efficiency. Even
+when handling seven tasks, DLP-LoRA completes inference tasks quickly with minimal additional
+memory costs, demonstrating a significant advantage over other methods. With our DLP plugin
+method, switching to a different LoRA requires only retraining a small 5M mini-MLP, resulting in
+minimal computational overhead. This simplifies the implementation of new MoE plugins. Furthermore, DLP-LoRA maintains strong performance even with a large number of LoRAs, a scenario
+
+
+Table 7: The inference time and memory consuming ratio
+compared with different dynamic LoRAs baselines based on
+LLaMA-2 7B. The subscript percentage denotes relative inference time and memory usage improvement of different
+LoRAs baselines over the LLaMA-2 7B backbone.
+
+
+**Method** **Decoding latency ratio** **Peak Memory ratio**
+
+
+LLaMA2-7B 1.00 1.00
+
+
+MOLA (Gao et al., 2024) 10 _._ 54+954% 2 _._ 04+104%
+PESC (Wu et al., 2024a) 3 _._ 54+254% **1** _**.**_ **02** ~~**+**~~ **2%**
+MoRAL (Yang et al., 2024b) 3 _._ 58+258% **1** _**.**_ **02** ~~**+**~~ **2%**
+LoRA-Switch (Kong et al., 2024) **1** _**.**_ **29+29%** 1 _._ 07+7%
+
+
+DLP-LoRA (7 LoRAs) **1** _**.**_ **20+20%** **1** _**.**_ **00+0%**
+
+
+where other methods often struggle in Table 7. This robustness is advantageous for applications requiring multiple LoRAs. Additionally, DLP-LoRA effectively minimizes the increase in parameters.
+For example, using LLaMA-3 8B with 100 MoE dynamic LoRAs, a typical gating method would
+add approximately 26M parameters, calculated as hidden size _×_ LoRA types _×_ hidden layers _×_ 2
+(accounting for query and value matrices). In contrast, DLP-LoRA only adjusts the final linear layer,
+keeping the total increase to around 5M parameters. This suggests that LoRA fine-tuning can enable LLMs to enhance their capabilities across various domains simultaneously when equipped with
+sufficient LoRAs.
+
+
+6 RELATED WORK
+
+
+In the area of multi-task learning with LoRA, two primary research directions have emerged beyond the straightforward approach of fine-tuning a single LoRA on a combined dataset of multiple
+tasks (Lin et al., 2024b). The first direction focuses on developing libraries or frameworks to reuse
+and integrate existing LoRAs, while the second aims to design router networks based on MoEs to
+dynamically fuse multiple LoRAs.
+
+
+**Multiple LoRA Architectures** Several works have proposed frameworks for combining and managing multiple LoRAs. Huang et al. (2023) introduced LoRAHub, a framework that combines
+existing fine-tuned LoRAs using a learnable weighted sum, allowing for more flexible adaptation
+across tasks. S-LoRA (Sheng et al., 2023) emphasises unified memory pool design to manage dynamic LoRA weights with varying ranks and key-value cache tensors for CUDA kernels, enhancing
+computational efficiency. Additionally, Model-Based Clustering (MBC) (Ostapenko et al., 2024)
+employs clustering techniques to group tasks based on the similarity of their LoRA parameters,
+facilitating better parameter sharing and task generalization.
+
+
+**Mixture-of-Experts** **with** **Multiple** **LoRAs** Another line of research integrates Mixture-ofExperts mechanisms to control and fuse multiple LoRAs dynamically. In these approaches, multiple
+LoRAs are fine-tuned and injected into the model’s MLP layers, with a router network determining which LoRA to activate for a given task. Examples include LoRAMoE (Dou et al., 2024),
+PHATGOOSE (Muqeeth et al., 2024), MoLE (Wu et al., 2024b), and LoRA-Switch (Kong et al.,
+2024). Some methods extend this fusion to both MLP and attention layers, such as MixLoRA (Li
+et al., 2024) and Mixture of Adaptations (MoA) (Feng et al., 2024), enabling more comprehensive
+adaptation across model components.
+
+
+Furthermore, token-level routing strategies have been proposed to enhance the granularity of LoRA
+selection. MeteoRA (Xu et al., 2024) introduces a token-level MoE-style multi-task LoRA framework with trainable gating mechanisms across all attention and MLP layers, allowing for dynamic
+selection and fusion of different LoRAs based on input tokens. Similarly, AdaMoE (Zeng et al.,
+2024) presents an adaptive MoE approach that leverages token-level routing within transformer
+models to improve performance across diverse tasks. Apart from the token-level gating mechanism
+for multiple LoRAs, some existing works also proposed sentence-level routing, for instance Polytropon (Ponti et al., 2023) and FLix (Lin et al., 2024a). However, Flix mainly focuses on multilingual
+task settings and Polytropon mainly explores the encoder-decoder architecture. It is unclear whether
+those works can maintain superior inference efficiency when loading high volumes of LoRAs across
+different tasks.
+
+
+7 CONCLUSION
+
+
+We introduced DLP-LoRA, a dynamic and lightweight plugin that employs a mini-MLP module
+with only 5 million parameters to dynamically fuse multiple LoRAs at the sentence level using
+top- _p_ sampling strategies. Our comprehensive evaluation across 17 MCQ tasks and 9 QA tasks
+demonstrates that DLP-LoRA not only closely matches the performance of individually fine-tuned
+single LoRAs but also surpasses them on certain tasks, all while incurring less than twice the inference time. Through detailed discussions and ablation studies, we have shown that DLP-LoRA
+effectively balances performance and efficiency in multi-task learning, making it a practical solution
+for dynamic multi-task adaptation in LLMs.
+
+
+10
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Janice Ahn, Rishu Verma, Renze Lou, Di Liu, Rui Zhang, and Wenpeng Yin. Large language models
+for mathematical reasoning: Progresses and challenges. In _The 18th Conference of the European_
+_Chapter of the Association for Computational Linguistics_, pp. 225, 2024.
+
+
+Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge,
+Yu Han, Fei Huang, Binyuan Hui, Luo Ji, Mei Li, Junyang Lin, Runji Lin, Dayiheng Liu, Gao Liu,
+Chengqiang Lu, Keming Lu, Jianxin Ma, Rui Men, Xingzhang Ren, Xuancheng Ren, Chuanqi
+Tan, Sinan Tan, Jianhong Tu, Peng Wang, Shijie Wang, Wei Wang, Shengguang Wu, Benfeng
+Xu, Jin Xu, An Yang, Hao Yang, Jian Yang, Shusheng Yang, Yang Yao, Bowen Yu, Hongyi
+Yuan, Zheng Yuan, Jianwei Zhang, Xingxuan Zhang, Yichang Zhang, Zhenru Zhang, Chang
+Zhou, Jingren Zhou, Xiaohuan Zhou, and Tianhang Zhu. Qwen technical report. _arXiv preprint_
+_arXiv:2309.16609_, 2023.
+
+
+Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and
+Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge.
+_arXiv preprint arXiv:1803.05457_, 2018.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems. _arXiv preprint arXiv:2110.14168_, 2021.
+
+
+Shihan Dou, Enyu Zhou, Yan Liu, Songyang Gao, Wei Shen, Limao Xiong, Yuhao Zhou, Xiao
+Wang, Zhiheng Xi, Xiaoran Fan, et al. Loramoe: Alleviating world knowledge forgetting in
+large language models via moe-style plugin. In _Proceedings of the 62nd Annual Meeting of the_
+_Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 1932–1945, 2024.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Wenfeng Feng, Chuzhan Hao, Yuewei Zhang, Yu Han, and Hao Wang. Mixture-of-loras: An efficient multitask tuning for large language models. _arXiv preprint arXiv:2403.03432_, 2024.
+
+
+Cl´ementine Fourrier, Nathan Habib, Alina Lozovskaya, Konrad Szafer, and Thomas Wolf. Open
+[llm leaderboard v2. https://huggingface.co/spaces/open-llm-leaderboard/](https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard)
+[open_llm_leaderboard, 2024.](https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard)
+
+
+Chongyang Gao, Kezhen Chen, Jinmeng Rao, Baochen Sun, Ruibo Liu, Daiyi Peng, Yawen Zhang,
+Xiaoyuan Guo, Jie Yang, and VS Subrahmanian. Higher layers need more lora experts. _arXiv_
+_preprint arXiv:2402.08562_, 2024.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and
+Jacob Steinhardt. Measuring massive multitask language understanding. _arXiv_ _preprint_
+_arXiv:2009.03300_, 2020.
+
+
+Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for nlp.
+In _International conference on machine learning_, pp. 2790–2799. PMLR, 2019.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Chengsong Huang, Qian Liu, Bill Yuchen Lin, Tianyu Pang, Chao Du, and Min Lin. Lorahub: Efficient cross-task generalization via dynamic lora composition. _arXiv preprint arXiv:2307.13269_,
+2023.
+
+
+11
+
+
+Binyuan Hui, Jian Yang, Zeyu Cui, Jiaxi Yang, Dayiheng Liu, Lei Zhang, Tianyu Liu, Jiajun Zhang,
+Bowen Yu, Kai Dang, et al. Qwen2. 5-coder technical report. _arXiv preprint arXiv:2409.12186_,
+2024.
+
+
+R´egis Pierrard Ilyas Moutawwakil. Llm-perf leaderboard. [https://huggingface.co/](https://huggingface.co/spaces/optimum/llm-perf-leaderboard)
+[spaces/optimum/llm-perf-leaderboard, 2023.](https://huggingface.co/spaces/optimum/llm-perf-leaderboard)
+
+
+Rui Kong, Qiyang Li, Xinyu Fang, Qingtian Feng, Qingfeng He, Yazhu Dong, Weijun Wang,
+Yuanchun Li, Linghe Kong, and Yunxin Liu. Lora-switch: Boosting the efficiency of dynamic
+llm adapters via system-algorithm co-design. _arXiv preprint arXiv:2405.17741_, 2024.
+
+
+Z Lan. Albert: A lite bert for self-supervised learning of language representations. _arXiv preprint_
+_arXiv:1909.11942_, 2019.
+
+
+Dengchun Li, Yingzi Ma, Naizheng Wang, Zhiyuan Cheng, Lei Duan, Jie Zuo, Cal Yang, and
+Mingjie Tang. Mixlora: Enhancing large language models fine-tuning with lora based mixture of
+experts. _arXiv preprint arXiv:2404.15159_, 2024.
+
+
+Chu-Cheng Lin, Xinyi Wang, Jonathan H Clark, Han Lu, Yun Zhu, Chenxi Whitehouse, and
+Hongkun Yu. Multitask multilingual model adaptation with featurized low-rank mixtures. _arXiv_
+_preprint arXiv:2402.17934_, 2024a.
+
+
+Stephanie Lin, Jacob Hilton, and Owain Evans. Truthfulqa: Measuring how models mimic human
+falsehoods. In _Proceedings_ _of_ _the_ _60th_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_
+_Linguistics (Volume 1:_ _Long Papers)_, pp. 3214–3252, 2022.
+
+
+Tianwei Lin, Jiang Liu, Wenqiao Zhang, Zhaocheng Li, Yang Dai, Haoyuan Li, Zhelun Yu, Wanggui He, Juncheng Li, Hao Jiang, et al. Teamlora: Boosting low-rank adaptation with expert
+collaboration and competition. _arXiv preprint arXiv:2408.09856_, 2024b.
+
+
+Pan Lu, Swaroop Mishra, Tanglin Xia, Liang Qiu, Kai-Wei Chang, Song-Chun Zhu, Oyvind Tafjord,
+Peter Clark, and Ashwin Kalyan. Learn to explain: Multimodal reasoning via thought chains for
+science question answering. _Advances in Neural Information Processing Systems_, 35:2507–2521,
+2022.
+
+
+Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct electricity? a new dataset for open book question answering. In _Proceedings of the 2018 Conference_
+_on Empirical Methods in Natural Language Processing_, pp. 2381–2391, 2018.
+
+
+Niklas Muennighoff, Nouamane Tazi, Lo¨ıc Magne, and Nils Reimers. Mteb: Massive text embedding benchmark. _arXiv_ _preprint_ _arXiv:2210.07316_, 2022. doi: 10.48550/ARXIV.2210.07316.
+[URL https://arxiv.org/abs/2210.07316.](https://arxiv.org/abs/2210.07316)
+
+
+Mohammed Muqeeth, Haokun Liu, Yufan Liu, and Colin Raffel. Learning to route among specialized experts for zero-shot generalization. _arXiv preprint arXiv:2402.05859_, 2024.
+
+
+Oleksiy Ostapenko, Zhan Su, Edoardo Maria Ponti, Laurent Charlin, Nicolas Le Roux, Matheus
+Pereira, Lucas Caccia, and Alessandro Sordoni. Towards modular llms by building and reusing a
+library of loras. _arXiv preprint arXiv:2405.11157_, 2024.
+
+
+Edoardo Maria Ponti, Alessandro Sordoni, Yoshua Bengio, and Siva Reddy. Combining parameterefficient modules for task-level generalisation. In _Proceedings_ _of_ _the_ _17th_ _Conference_ _of_ _the_
+_European Chapter of the Association for Computational Linguistics_, pp. 687–702, 2023.
+
+
+Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An adversarial winograd schema challenge at scale. _Communications of the ACM_, 64(9):99–106, 2021.
+
+
+Abigail See, Peter J Liu, and Christopher D Manning. Get to the point: Summarization with pointergenerator networks. In _Proceedings of the 55th Annual Meeting of the Association for Computa-_
+_tional Linguistics (Volume 1:_ _Long Papers)_ . Association for Computational Linguistics, 2017.
+
+
+Ying Sheng, Shiyi Cao, Dacheng Li, Coleman Hooper, Nicholas Lee, Shuo Yang, Christopher Chou,
+Banghua Zhu, Lianmin Zheng, Kurt Keutzer, et al. S-lora: Serving thousands of concurrent lora
+adapters. _arXiv preprint arXiv:2311.03285_, 2023.
+
+
+12
+
+
+Aarohi Srivastava, Abhinav Rastogi, Abhishek Rao, Abu Awal Md Shoeb, Abubakar Abid, Adam
+Fisch, Adam R Brown, Adam Santoro, Aditya Gupta, Adri`a Garriga-Alonso, et al. Beyond the
+imitation game: Quantifying and extrapolating the capabilities of language models. _Transactions_
+_on Machine Learning Research_, 2023.
+
+
+Alon Talmor, Jonathan Herzig, Nicholas Lourie, and Jonathan Berant. Commonsenseqa: A question
+answering challenge targeting commonsense knowledge. In _Proceedings of the 2019 Conference_
+_of_ _the_ _North_ _American_ _Chapter_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _Human_ _Lan-_
+_guage Technologies, Volume 1 (Long and Short Papers)_, pp. 4149–4158, 2019.
+
+
+Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li, Carlos Guestrin, Percy
+Liang, and Tatsunori B Hashimoto. Stanford alpaca: An instruction-following llama model, 2023.
+
+
+Gemma Team, Morgane Riviere, Shreya Pathak, Pier Giuseppe Sessa, Cassidy Hardin, Surya Bhupatiraju, L´eonard Hussenot, Thomas Mesnard, Bobak Shahriari, Alexandre Ram´e, et al. Gemma
+2: Improving open language models at a practical size. _arXiv preprint arXiv:2408.00118_, 2024.
+
+
+[Qwen Team. Qwen2.5: A party of foundation models, September 2024. URL https://qwenlm.](https://qwenlm.github.io/blog/qwen2.5/)
+[github.io/blog/qwen2.5/.](https://qwenlm.github.io/blog/qwen2.5/)
+
+
+J¨org Tiedemann. Parallel data, tools and interfaces in opus. In _Proceedings of the Eighth Interna-_
+_tional Conference on Language Resources and Evaluation (LREC’12)_, pp. 2214–2218, 2012.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Guan Wang, Sijie Cheng, Xianyuan Zhan, Xiangang Li, Sen Song, and Yang Liu. Openchat: Advancing open-source language models with mixed-quality data. _arXiv preprint arXiv:2309.11235_,
+2023.
+
+
+Chenxi Whitehouse, Fantine Huot, Jasmijn Bastings, Mostafa Dehghani, Chu-Cheng Lin, and
+Mirella Lapata. Low-rank adaptation for multilingual summarization: An empirical study. In
+Kevin Duh, Helena Gomez, and Steven Bethard (eds.), _Findings_ _of_ _the_ _Association_ _for_ _Compu-_
+_tational_ _Linguistics:_ _NAACL_ _2024_, pp. 1202–1228, Mexico City, Mexico, June 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.findings-naacl.77. URL [https:](https://aclanthology.org/2024.findings-naacl.77)
+[//aclanthology.org/2024.findings-naacl.77.](https://aclanthology.org/2024.findings-naacl.77)
+
+
+Haoyuan Wu, Haisheng Zheng, and Bei Yu. Parameter-efficient sparsity crafting from dense to
+mixture-of-experts for instruction tuning on general tasks. _arXiv_ _preprint_ _arXiv:2401.02731_,
+2024a.
+
+
+Xun Wu, Shaohan Huang, and Furu Wei. Mixture of lora experts. _arXiv preprint arXiv:2404.13628_,
+2024b.
+
+
+Jingwei Xu, Junyu Lai, and Yunpeng Huang. Meteora: Multiple-tasks embedded lora for large
+language models. _arXiv preprint arXiv:2405.13053_, 2024.
+
+
+Lingling Xu, Haoran Xie, Si-Zhao Joe Qin, Xiaohui Tao, and Fu Lee Wang. Parameter-efficient
+fine-tuning methods for pretrained language models: A critical review and assessment. _arXiv_
+_preprint arXiv:2312.12148_, 2023.
+
+
+An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li,
+Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Haoran Wei, Huan Lin, Jialong Tang,
+Jialin Wang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Ma, Jin Xu, Jingren Zhou, Jinze Bai,
+Jinzheng He, Junyang Lin, Kai Dang, Keming Lu, Keqin Chen, Kexin Yang, Mei Li, Mingfeng
+Xue, Na Ni, Pei Zhang, Peng Wang, Ru Peng, Rui Men, Ruize Gao, Runji Lin, Shijie Wang, Shuai
+Bai, Sinan Tan, Tianhang Zhu, Tianhao Li, Tianyu Liu, Wenbin Ge, Xiaodong Deng, Xiaohuan
+Zhou, Xingzhang Ren, Xinyu Zhang, Xipin Wei, Xuancheng Ren, Yang Fan, Yang Yao, Yichang
+Zhang, Yu Wan, Yunfei Chu, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zhihao Fan. Qwen2
+technical report. _arXiv preprint arXiv:2407.10671_, 2024a.
+
+
+Shu Yang, Muhammad Asif Ali, Cheng-Long Wang, Lijie Hu, and Di Wang. Moral: Moe augmented
+lora for llms’ lifelong learning. _arXiv preprint arXiv:2402.11260_, 2024b.
+
+
+13
+
+
+Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a machine really finish your sentence? In _Proceedings of the 57th Annual Meeting of the Association_
+_for Computational Linguistics_, pp. 4791–4800, 2019.
+
+
+Zihao Zeng, Yibo Miao, Hongcheng Gao, Hao Zhang, and Zhijie Deng. Adamoe: Tokenadaptive routing with null experts for mixture-of-experts language models. _arXiv_ _preprint_
+_arXiv:2406.13233_, 2024.
+
+
+Yiran Zhao, Wenxuan Zhang, Huiming Wang, Kenji Kawaguchi, and Lidong Bing. Adamergex:
+Cross-lingual transfer with large language models via adaptive adapter merging. _arXiv preprint_
+_arXiv:2402.18913_, 2024.
+
+
+A LIMITATIONS
+
+
+Our evaluation of DLP-LoRA was primarily conducted on LLM backbones ranging from 1.5 billion to 8 billion parameters, constrained by the computational limitations of our GPU resources.
+Consequently, we were unable to assess the performance of DLP-LoRA on larger models such as
+Qwen-2.5 32B (Hui et al., 2024) and LLaMA-3.1 70B (Dubey et al., 2024), which may exhibit
+different behaviors and performance characteristics. Additionally, when composite tasks include a
+higher proportion of MCQ datasets, DLP-LoRA tends to assign higher probabilities to the specific
+MCQ LoRA, potentially limiting its ability to effectively fuse and utilize QA LoRAs. This tendency
+might restrict the diversity of generated outputs and the fusion capabilities of DLP-LoRA across a
+broader range of tasks.
+
+
+B BROADER IMPACTS
+
+
+The lightweight design of DLP-LoRA, featuring a mini-MLP with only 5 million parameters, offers significant flexibility and efficiency, making it suitable for deployment on smaller devices with
+limited computational resources. Moreover, DLP-LoRA facilitates easy integration of new LoRAs
+corresponding to additional tasks without necessitating further fine-tuning of the entire model. This
+capability enhances the accessibility and adaptability of LLMs in various applications, promoting
+broader utilisation in resource-constrained environments.
+
+
+C DETAILS ABOUT 26 TASKS AND DATASETS
+
+
+Table 8 includes detailed descriptions of each dataset’s name, keywords, main content and corresponding evaluation metrics. These 26 tasks include diverse topics, such as mathematical QA, logical reasoning, language identification, reading comprehension, summarisation, machine translation,
+and open-domain QA.
+
+
+D EVALUATION RESULTS BASED ON DIFFERENT LLMS BACKBONES
+
+
+We demonstrate more radar charts to show more results for each LLM backbone. Figure 4, 5 and 6
+demonstrate that DLP-LoRA significantly outperforms the basic LLM backbones under 17 MCQ
+datasets, and DLP-LoRA also outperforms the basic LLaMA-3 8B a lot across 17 MCQ datasets
+in Figure 3. In addition, we can find that DLP-LoRA achieves comparable performance of single
+LoRA mode based on different LLM backbones from 1.5B to 8B under 9 QA tasks.
+
+
+14
+
+
+Table 8: Details about the 26 selected tasks following Xu et al. (2024).
+
+
+Task Name Keywords Description Evaluation Metrics
+
+
+abstract ~~n~~ arrative ~~u~~ nderstanding (AbsNarr) narrative understanding, Given a narrative, choose the most related proverb. Accuracy
+multiple choice
+
+
+alpaca (ALPACA) instruction-tuning Write appropriate answers according to instruc- BLEU, ROUGE
+tions.
+
+
+cnn dailymail (CNNDM) summarization Given news articles, write the summarization. ROUGE
+
+
+winowhy (WinoWhy) causal reasoning, multi- Evaluate the reasoning in answering Winograd Accuracy
+ple choice Schema Challenge questions.
+
+
+15
+
+
+contextual ~~p~~ arametric ~~k~~ nowledge ~~c~~ onflicts (ConParaKC) contextual questionanswering, multiple
+choice
+
+
+Answer questions given the contextual informa- Accuracy
+tion.
+
+
+cs ~~a~~ lgorithms (CSAlg) algorithms, numerical Solve two common computer-science tasks. Accuracy
+response
+
+
+disfl ~~q~~ a (DisflQA) contextual questionanswering, reading
+comprehension
+
+
+Pick the correct answer span from the context Accuracy
+given the disfluent question.
+
+
+elementary math ~~q~~ a (ElemMath) mathematics Answer multiple choice mathematical word prob- Accuracy
+lems.
+
+
+epistemic ~~r~~ easoning (EpiReason) logical reasoning, multi- Determine whether one sentence entails the next. Accuracy
+ple choice
+
+
+formal ~~f~~ allacies ~~s~~ yllogisms ~~n~~ egation (FormFall) logical reasoning, multi- Distinguish deductively valid arguments from for- Accuracy
+ple choice, mal fallacies.
+
+
+gsm8k (GSM8K) mathematics Solve the grade school math word problems. Accuracy
+
+
+language ~~i~~ dentification (LangID) multilingual, multiple Given a sentence, select the correct language. Accuracy
+choice
+
+
+linguistics ~~p~~ uzzles (LingPuzz) logical reasoning, lin- Solve Rosetta Stone-style linguistics puzzles. BLEU, ROUGE
+guistics
+
+
+logical ~~d~~ eduction (LogDeduc) logical reasoning, multi- Deduce the order of a sequence of objects. Accuracy
+ple choice
+
+
+news ~~c~~ ommentary ~~d~~ e (NewsDE) multilingual, translation Translate German sentences into English. BLEU
+
+
+news ~~c~~ ommentary ~~e~~ s (NewsES) multilingual, translation Translate Spanish sentences into English. BLEU
+
+
+news ~~c~~ ommentary ~~i~~ t (NewsIT) multilingual, translation Translate Italian sentences into English. BLEU
+
+
+object ~~c~~ ounting (ObjCount) logical reasoning Questions that involve enumerating objects and Accuracy
+asking the model to count them.
+
+
+play ~~d~~ ialog ~~s~~ ame ~~o~~ r different (PlayDiag) reading comprehension, Determine if nearby lines in a Shakespeare play Accuracy
+multiple choice were spoken by the same individual.
+
+
+question selection (QuestSel) reading comprehension, Given an answer along with its context, select the
+multiple choice most appropriate question which has the given answer as its answer.
+
+
+Accuracy
+
+
+reasoning ~~a~~ bout ~~c~~ olored ~~o~~ bjects (ColorReason) reading comprehension,
+logical reasoning, multiple choice
+
+
+strategyqa (StratQA) logical reasoning,
+context-free question
+answering
+
+
+Answer extremely simple questions about the col- Accuracy
+ors of objects on a surface.
+
+
+Answer questions in which the required reasoning BLEU, ROUGE,
+steps are implicit in the question. Accuracy
+
+
+topical ~~c~~ hat (TopChat) free response Open-domain response generation. BLEU, ROUGE
+
+
+tracking ~~s~~ huffled ~~o~~ bjects (TrackObj) logical reasoning, multi- Determine the final positions given initial posi- Accuracy
+ple choice tions and a description of a sequence of swaps.
+
+
+unit ~~c~~ onversion (UnitConv) contextual questionanswering, mathematics,
+multiple choice
+
+
+vitaminc ~~f~~ act ~~v~~ erification (VitaFact) truthfulness, reading
+comprehension, multiple
+choice
+
+
+Perform various tasks relating to units, including Accuracy
+identification and conversion.
+
+
+Identify whether a claim is True or False based on Accuracy
+the given context.
+
+
+Figure 4: Radar chart of Qwen-2 1.5B across 17 MCQ and 9 QA tasks.
+
+
+16
+
+
+Figure 5: Radar chart of Qwen-2 7B across 17 MCQ and 9 QA tasks.
+
+
+17
+
+
+Figure 6: Radar chart of LLaMA-2 7B across 17 MCQ and 9 QA tasks.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Figure 7: Radar chart of LLaMA-3 8B across 17 MCQ and 9 QA tasks.
+
+
+19

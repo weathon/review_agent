@@ -1,0 +1,2834 @@
+# END-TO-END LEARNING OF GAUSSIAN MIXTURE PRIORS FOR DIFFUSION SAMPLER
+
+
+**Denis Blessing** _[∗][,]_ [1] **,** **Xiaogang Jia** [1] **,** **Gerhard Neumann** [1] _[,]_ [2]
+
+1Autonomous Learning Robots, Karlsruhe Institute of Technology
+2FZI Research Center for Information Technology
+
+
+ABSTRACT
+
+
+Diffusion models optimized via variational inference (VI) have emerged as a
+promising tool for generating samples from unnormalized target densities. These
+models create samples by simulating a stochastic differential equation, starting
+from a simple, tractable prior, typically a Gaussian distribution. However, when
+the support of this prior differs greatly from that of the target distribution, diffusion models often struggle to explore effectively or suffer from large discretization errors. Moreover, learning the prior distribution can lead to mode-collapse,
+exacerbated by the mode-seeking nature of reverse Kullback-Leibler divergence
+commonly used in VI. To address these challenges, we propose end-to-end learnable Gaussian mixture priors (GMPs). GMPs offer improved control over exploration, adaptability to target support, and increased expressiveness to counteract
+mode collapse. We further leverage the structure of mixture models by proposing
+a strategy to iteratively refine the model by adding mixture components during
+training. Our experimental results demonstrate significant performance improvements across a diverse range of real-world and synthetic benchmark problems
+when using GMPs without requiring additional target evaluations.
+
+
+1 INTRODUCTION
+
+
+Sampling methods are designed to address the challenge of generating approximate samples or estimating the intractable normalization constant _Z_ for a probability density _π_ on R _[d]_ of the form
+
+
+     
+[(] _[x]_ [)]
+
+_[,]_ _Z_ =
+_Z_
+
+
+_π_ ( _x_ ) = _[ρ]_ [(] _[x]_ [)]
+
+
+(1)
+R _[d][ ρ]_ [(] _[x]_ [)d] _[x,]_
+
+
+where _ρ_ : R _[d]_ _→_ (0 _, ∞_ ) can be evaluated. This formulation has broad applications in fields such as
+Bayesian statistics, the natural sciences (Liu & Liu, 2001; Stoltz et al., 2010; Frenkel & Smit, 2023;
+Schopmans & Friederich, 2024), or robotics (Zhou et al., 2024; Celik et al., 2025).
+
+
+Monte Carlo (MC) methods (Hammersley, 2013), Annealed Importance Sampling (AIS) (Neal,
+2001), and their Sequential Monte Carlo (SMC) extensions (Del Moral et al., 2006; Arbel et al.,
+2021; Matthews et al., 2022; Midgley et al., 2022) have long been regarded as the gold standard
+for tackling complex sampling problems. An alternative approach is variational inference (VI) (Blei
+et al., 2017), which approximates an intractable target distribution by parameterizing a family of
+tractable distributions. Recently, there has been growing interest in diffusion models (Zhang &
+Chen, 2021; Berner et al., 2022; Richter et al., 2023; Vargas et al., 2023a;b; Grenioux et al., 2024),
+which employ stochastic processes to transport samples from a simple, tractable prior distribution
+to the target distribution. While diffusion models have shown great success in generative modeling
+(Ho et al., 2020; Song et al., 2020), their application to sampling tasks introduces unique challenges.
+
+
+We identify these challenges as follows ( **C1** - **C3** ): Unlike generative modeling, where the support
+of the target distribution is often known, in sampling tasks, the target’s support is usually unknown.
+This makes it difficult to set the prior appropriately and requires the model to explore the relevant
+regions of the space—an exploration that becomes exponentially harder as dimensionality increases
+( **C1** ). Additionally, large discrepancies between the support of the prior and the target distribution
+
+
+_∗_ Correspondence to denis.blessing@kit.edu
+
+
+1
+
+
+**C1:** Lack of exploration capabilities. **C2:** Complex dynamics require many diffusion steps.
+
+
+**C3:** Mode collapse due to reverse KL minimization. Learned Gaussian mixture priors to address **C1-C3** .
+
+Figure 1: Illustration of challenges ( **C1** - **C3** ) associated with diffusion-based sampling methods and how
+learned Gaussian mixture priors address them (bottom right). Here, _π_ denotes the target distribution.
+
+
+can lead to highly non-linear dynamics, necessitating many diffusion steps to mitigate discretization
+errors ( **C2** ). Finally, while joint optimization of the prior and diffusion process is possible, using
+simple priors like Gaussians can result in mode collapse due to the mode-seeking behavior of the reverse Kullback-Leibler (KL) divergence commonly used in VI ( **C3** ). These challenges are illustrated
+in Figure 1.
+
+
+**Outline.** In Section 3, we present an overview of diffusion-based sampling methods within the
+framework of variational inference. Next, we discuss the necessary adaptations for supporting the
+learning of arbitrary prior distributions, illustrated through specific examples of diffusion models
+(Section 4). We then provide a rationale for our choice of Gaussian Mixture Priors (GMPs) and
+introduce a novel training scheme designed to iteratively refine diffusion models during training
+(Section 5). Finally, in Section 6, we assess our method through experiments on a range of realworld and synthetic benchmark problems, demonstrating consistent improvements in performance.
+
+
+2 RELATED WORK
+
+
+**Sampling and Variational Inference.** Numerous works have studied the problem of sampling from
+unnormalized densities to estimate the partition function _Z_, including Monte Carlo (MC) methods
+such as Markov Chain Monte Carlo (MCMC) (Kass et al., 1998) and Sequential Importance Sampling (Liu et al., 2001). Seminal works include Annealed Importance Sampling (Neal, 2001; Guo
+et al., 2025) and its Sequential Monte Carlo extensions (Del Moral et al., 2006; Arbel et al., 2021;
+Wu et al., 2020; Matthews et al., 2022; Midgley et al., 2022). Another line of work approaches the
+sampling problem by utilizing tools from optimization to fit a parametric family of distributions to
+the target density _π_, known as Variational Inference (VI) (Blei et al., 2017). To that end, one typically uses the reverse Kullback-Leibler divergence, although other discrepancies have been studied
+(Li & Turner, 2016; Midgley et al., 2022; Dieng et al., 2017; Richter et al., 2020; Wan et al., 2020;
+Naesseth et al., 2020).
+
+
+**Diffusion-based** **Sampling** **Methods.** Recently, there has been growing interest in combining
+Monte Carlo methods with variational techniques by constructing a sequence of variational distributions through the parameterization of Markov chains (Naesseth et al., 2018; Geffner & Domke,
+2021; Thin et al., 2021; Zhang et al., 2021; Chen et al., 2024b). In the limit of infinitely many
+steps, these Markov chains converge to stochastic differential equations (SDEs) (S¨arkk¨a & Solin,
+2019), which has led to further research on diffusion-based models for sampling, particularly in
+light of advances in generative modeling (Ho et al., 2020; Song et al., 2020). One line of work considered parameterized drift functions to improve annealed Langevin diffusions in the overdamped
+(Doucet et al., 2022a) or underdamped (Geffner & Domke, 2022) regime. Another line of work casts
+diffusion-based sampling as a stochastic optimal control problem (Dai Pra, 1991) including denoising diffusion models (Berner et al., 2022; Vargas et al., 2023a), and Follmer sampling (F¨ollmer,
+2005; Zhang & Chen, 2021; Vargas et al., 2023b). A unifying view was later provided by Vargas
+et al. (2024); Richter et al. (2023); Blessing et al. (2025). Further extensions to diffusion-based
+sampling methods have been proposed such as improved learning objectives (Zhang et al., 2023;
+
+
+2
+
+
+Akhound-Sadegh et al., 2024; Noble et al., 2024) or combinations with sequential importance sampling (Phillips et al., 2024; Chen et al., 2024a). Another study leverages physics-informed neural
+networks (PINNs, (Raissi et al., 2019)) to learn the Fokker-Planck equation governing the density
+evolution of the diffusion process (Sun et al., 2024; Shi et al., 2024).
+
+
+3 PRELIMINARIES
+
+
+In this section, we offer a concise overview of diffusion models within the context of variational
+inference. Our discussion draws primarily from the works of Richter et al. (2023); Vargas et al.
+(2024). While these studies emphasize the continuous-time perspective, we adopt an approach that
+largely emphasizes discrete time, aiming to make this work more accessible to readers without a
+background in stochastic calculus.
+
+
+3.1 CONTROLLED DIFFUSIONS, DISCRETIZATION, AND COUPLINGS
+
+
+We consider two R _[d]_ -valued stochastic processes ( _Xt_ ) _t∈_ [0 _,T_ ] on the time-interval [0 _, T_ ]: One starts
+from a prior distribution _p_ 0 and runs forward in time whereas the other starts from the target distribution _pT_ = _π_ and runs backward in time. These processes are governed by the stochastic differential
+equations (SDEs) given by controlled diffusions, that is,
+
+
+d _Xt_ = - _f_ ( _Xt, t_ ) + _σu_ _[θ]_ ( _Xt, t_ )� d _t_ + _√_
+
+d _Xt_ = [ _f_ ( _Xt, t_ ) _σv_ _[γ]_ ( _Xt, t_ )] d _t_ + _√_
+_−_
+
+
+2 _σ_ d _Bt,_ _X_ 0 _p_ 0 _,_ (2a)
+_∼_
+
+2 _σ_ d _Bt,_ _XT_ _pT_ = _π,_ (2b)
+_∼_
+
+
+with drift, and parameterized control functions( _Bt_ ) _t_ [0 _,T_ ] is a _d_ -dimensional Brownian motion and _f, u_ _[θ]_ _σ, v_ _[γ]_ :R R [+] _[d]_ a diffusion coefficient. For integration, _×_ [0 _, T_ ] _→_ R _[d]_, respectively. Further,
+_∈_ _∈_
+we consider the Euler-Maruyama (EM) method with constant discretization step size _δt_ _≥_ 0 such
+that _N_ = _T/δt_ is an integer. To simplify notation, we write _xn_, instead of _xnδt_ . Integrating (2a)
+yields
+
+
+_xn_ +1 = _xn_ + - _f_ ( _xn, n_ ) + _σu_ _[θ]_ ( _xn, n_ )� _δt_ + _σ√_
+
+
+2 _δtϵn,_ _x_ 0 _p_ 0 _,_ (3)
+_∼_
+
+
+where _ϵn_ (0 _, I_ ). The EM discretizations of (2a) and (2b) admit the following Markov Processes
+_∼N_
+
+
+_⃗p_ _[θ]_ ( _x_ 0: _N_ ) = _p_ 0( _x_ 0)
+
+
+- _N_
+
+_⃗pn_ _[θ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)] _[,]_ and (4)
+_|_ _−_
+_n_ =1
+
+
+_p_ _[γ]_ ( _x_ 0: _N_ ) = _pT_ ( _xN_ )
+
+
+- _N_
+
+
+_n_ =1
+
+
+_pn_ _[γ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)] _[,]_ (5)
+
+_−_ _|_
+
+
+in a sense that _⃗p_ _[θ]_ and
+
+
+_p_ _[γ]_ converge to their law, respectively, as _δt →_ 0. Here,
+
+
+           -           -           -           _⃗pn_ _[θ]_ +1 _n_ [(] _[x][n]_ [+1] _[|][x][n]_ [) =] _[ N]_ _xn_ +1 _xn_ + _f_ ( _xn, n_ ) + _σu_ _[θ]_ ( _xn, n_ ) _δt,_ 2 _σ_ [2] _δtI_ _,_ and (6)
+_|_     - _|_     
+_pn_ _[γ]_ _−_ 1 _|n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [) =] _[ N]_ _xn−_ 1 _|xn −_ [ _f_ ( _xn, n_ ) _−_ _σv_ _[γ]_ ( _xn, n_ )] _δt,_ 2 _σ_ [2] _δtI_ _._ (7)
+
+
+The goal of diffusion-based sampling methods is to align these processes by learning control functions _u_ _[θ]_ and _v_ _[γ]_ such that
+_⃗p_ _[θ]_ ( _x_ 0: _N_ ) = _p_ _[γ]_ ( _x_ 0: _N_ ) _._ (8)
+
+
+_p_ _[γ]_ ( _x_ 0: _N_ ) _._ (8)
+
+
+              -              Assuming (8) holds, we have _⃗p_ _[θ]_ ( _x_ 0: _N_ )d _x_ 0: _N_ _−_ 1 =
+
+
+Assuming (8) holds, we have _⃗p_ _[θ]_ ( _x_ 0: _N_ )d _x_ 0: _N_ _−_ 1 = _p_ _[γ]_ ( _x_ 0: _N_ )d _x_ 0: _N_ _−_ 1 = _π_ ( _xN_ ), meaning
+
+that we can sample _x_ 0 _p_ 0 and integrate the ‘forward’ diffusion process (2a) to obtain samples
+_∼_
+from _π_ . In contrast, the ‘backward’ process (2b) is not needed for generating samples from _π_,
+but is required for estimating the normalization constant _Z_, and obtaining a tractable optimization
+objective which is discussed in the next section. Lastly, we want to highlight that this formulation
+of diffusion-based sampling is very generic and that most instances of samplers, such as denoising
+diffusion samplers (Berner et al., 2022; Vargas et al., 2023a), can be recovered by choosing the drift
+and control functions in (2) appropriately. We refer the interested reader to Richter et al. (2023) for
+further details.
+
+
+3
+
+
+_⃗p_ _[θ]_ ( _x_ 0: _N_ ) = _p_ 0( _x_ 0) [�] _[N]_ _n_ =1 _[⃗p]_ _n_ _[θ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+                        min _θ,γ D_ KL _⃗p_ _[θ]_ _p_ _[γ]_ [�]
+
+
+      min _θ,γ D_ KL _⃗p_ _[θ]_ _∥_
+
+
+_p_ _[γ]_ ( _x_ 0: _N_ ) = _π_ ( _xN_ ) [�] _[N]_ _n_ =1
+
+
+_pn_ _[γ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+
+Figure 2: Diffusion-Based Sampling: The goal is to align two parameterized Markov Processes _⃗p_ _[θ]_ and
+
+
+Figure 2: Diffusion-Based Sampling: The goal is to align two parameterized Markov Processes _⃗p_ _[θ]_ and _p_ _[γ]_ .
+
+The former starts at the prior _p_ 0 and runs forward in time while the latter starts at the target _π_ and runs backward.
+
+
+3.2 VARIATIONAL INFERENCE FOR DIFFUSION MODELS
+
+
+Variational Inference (Blei et al., 2017) uses a parameterized tractable distribution _p_ _[θ]_ and minimizes
+a divergence to the target distribution _π_ with respect to its parameters _θ_, typically the KullbackLeibler divergence, i.e.,
+
+
+            
+   -   _D_ KL _p_ _[θ]_ ( _x_ ) _∥π_ ( _x_ ) = E _x∼pθ_ log _[p]_ _ρ_ _[θ]_ ( [(] _x_ _[x]_ ) [)]
+
+
++ log _Z_ = _−_ ELBO( _θ_ ) + log _Z,_ (9)
+
+
+It directly follows that minimizing _D_ KL, or equivalently, maximizing the ELBO [1] does not require
+access to the true normalization constant _Z_ as it is independent of _θ_ . Moreover, using the fact that
+_D_ KL 0, it is straightforward to see that ELBO( _θ_ ) log .
+_≥_ _≤_ _Z_
+
+In the case of diffusion models, we are interested in learning the parameters� _θ, γ_ of the control
+functions _u_ _[θ]_ _, v_ _[γ]_ . Directly minimizing _D_ KL between _p_ _[θ]_ _T_ [(] _[x][N]_ [)] [=] _⃗p_ _[θ]_ ( _x_ 0: _N_ )d _x_ 0: _N_ _−_ 1 and _π_ is
+challenging. However, the data-processing inequality (Cover, 1999)
+
+
+   -   -   -   _D_ KL _p_ _[θ]_ _T_ [(] _[x][T]_ [)] _[∥][π]_ [(] _[x][T]_ [)] _D_ KL _⃗p_ _[θ]_ ( _x_ 0: _N_ ) _p_ _[γ]_ ( _x_ 0: _N_ ) _,_ (10)
+_≤_ _∥_
+
+
+provides an auxiliary, tractable, objective for optimizing ( _θ, γ_ ), that is,
+
+
+   _D_ KL _⃗p_ _[θ]_ ( _x_ 0: _N_ )
+_∥_
+
+
+     _p_ _[γ]_ ( _x_ 0: _N_ ) = E _x_ 0: _N_ _∼⃗p_ _θ_
+
+
+~~�~~ ~~�~~ - ~~�~~
+_−L_ ( _θ,γ_ )
+
+
+_ρ_ ( _xN_ ) [+]
+
+
+log _[p]_ [0][(] _[x]_ [0][)]
+
+
+- _N_ _⃗pn_ _[θ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+
+log _|_ _−_
+_n_ =1 _pn_ _[γ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+
+- _N_
+
+
+_pn_ _[γ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+
++ log _Z,_
+
+
+(11)
+where _L_ ( _θ, γ_ ) is often referred to as augmented or extended evidence lower bound, as it has additional looseness due to the latent variables _x_ 0: _N_ _−_ 1 (Geffner & Domke, 2021). Note that the VI
+setting for optimizing diffusion models is different from techniques used when samples from the
+target, i.e., _xN_ _∼_ _π_ are available. The former requires� simulations _x_ 0: _N_ _∼_ _⃗p_ _[θ]_ for optimization,
+while the latter minimizes the forward KL _D_ KL _p_ _[γ]_ _⃗p_ _[θ]_ [�], allowing for simulation-free optimiza
+
+
+target, i.e., _N_ _∼_ are available. The former requires� simulations 0: _N_ _∼_ for optimization,
+while the latter minimizes the forward KL _D_ KL _p_ _[γ]_ _⃗p_ _[θ]_ [�], allowing for simulation-free optimiza
+_∥_
+tion techniques such as denoising score-matching (Vincent, 2011; Song & Ermon, 2019) or bridge
+matching (Liu et al., 2022; Shi et al., 2024). Moreover, recent works consider minimizing other loss
+functions that the KL divergence in (11). A recent overview of possible alternatives can be found in
+Domingo-Enrich (2024). For further details, the interested reader is referred to Berner et al. (2022);
+Vargas et al. (2024).
+
+
+4 END-TO-END LEARNING OF PRIOR DISTRIBUTIONS
+
+
+We aim to learn a parametric prior _p_ _[ϕ]_ 0 [with parameters] _[ ϕ]_ [ end-to-end when maximizing the extended]
+ELBO _L_ ( (11)). To that end, we consider two requirements:
+
+1. We can compute gradients of _L_ with respect to _ϕ_ .
+
+1Evidence Lower Bound. The terminology stems from Bayesian inference, where log _Z_ is equivalent to the
+evidence of the data.
+
+
+4
+
+
+2. There exists a _ϕ_ and _γ_ such that _p_ _[ϕ]_ 0 [(] _[x]_ [0][) =]
+
+
+_p_ _[γ]_ ( _x_ 0: _N_ )d _x_ 1: _N_ .
+
+
+For the former, we assume that _p_ _[ϕ]_ 0 [(] _[x]_ [0][)] [is] [amendable] [to] [the] [reparameterization] [trick][2][,] [i.e.,] [we] [can]
+express a sample _x_ 0 from _p_ _[ϕ]_ 0 [as] [a] [deterministic] [function] [of] [a] [random] [variable] _[ξ]_ [with] [some] [fixed]
+distribution and the parameters _ϕ_, i.e., _x_ 0 = _g_ ( _ξ, ϕ_ ). We can then obtain gradients of
+
+
+_pn_ _[γ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+_⃗pn_ _[θ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+- _N_
+
+log
+
+_n_ =1
+
+
+_L_ ( _θ, γ, ϕ_ ) = E _x_ 0: _N_ _∼⃗p_ _θ,ϕ_
+
+
+log _[ρ]_ [(] _[x][N]_ [)] +
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)]
+
+
+_,_ (12)
+
+
+with _⃗p_ _[θ,ϕ]_ ( _x_ 0: _N_ ) = _p_ _[ϕ]_ 0 [(] _[x]_ [0][)][ �] _[N]_ _n_ =1 _[⃗p]_ _n_ _[θ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)][,] [with] [respect] [to] _[ϕ]_ [,] [by] [differentiating] [through]
+_|_ _−_
+the stochastic process
+
+
+_xn_ +1 = _xn_ + - _f_ ( _xn, n_ ) + _σu_ _[θ]_ ( _xn, n_ )� _δt_ + _σ√_
+
+
+2 _δtϵn,_ _x_ 0 = _g_ ( _ξ, ϕ_ ) _._ (13)
+
+
+The second requirement is necessary to obtain a coupling between _p_ _[ϕ]_ 0 [and] _[ π]_ [, i.e., to satisfy (][8][).] [This]
+requirement is trivially fulfilled for a controlled backward process (2b), where we can learn a _v_ _[γ]_
+
+such that _p_ _[γ]_ transports _π_ back to _p_ _[ϕ]_ 0 [.] [However,] [this] [requirement] [can] [be] [more] [intricate] [for] [other]
+
+processes and will be discussed in the next sections. In particular, we look at two instances of (2),
+namely denoising diffusion models (Berner et al., 2022; Vargas et al., 2023a) and annealed Langevin
+diffusions (Doucet et al., 2022a; Vargas et al., 2024).
+
+
+4.1 DENOISING DIFFUSION MODELS
+
+
+Denoising diffusion models use an Ornstein Uhlenbeck (OU) process for (2b), that is [3],
+
+
+d _Xt_ = _σ_ [2] _Xt_ d _t_ + _√_
+
+
+2 _σ_ d _Bt,_ _XT_ _pT_ = _π,_ (14)
+_∼_
+
+
+and, hence, a special case of (2) with� _f_ ( _Xt, t_ ) = _σ_ [2] _Xt_ and _v_ _[γ]_ = 0. Assuming a sufficiently large
+_σ_ (or _T_ ), it holds that _p_ 0( _x_ 0) = _p_ ( _x_ 0: _N_ )d _x_ 1: _N_ (0 _, I_ ). In other words, the OU process
+
+
+_σ_ (or _T_ ), it holds that _p_ 0( _x_ 0) = _p_ ( _x_ 0: _N_ )d _x_ 1: _N_ (0 _, I_ ). In other words, the OU process
+
+_≈N_
+transports the target _π_ to a Gaussian distribution. We extend denoising diffusion models to support
+learning arbitrary priors based on Proposition 1, whose proof can be found in Appendix A.1.
+
+**Proposition 1.** _Let (2b) be a (uncontrolled) stochastic process as defined in (2) with v_ _[γ]_ = 0 _, starting_
+_from pT_ = _π._ _For a time-independent drift,_ _i.e.,_ _f_ ( _x, t_ ) = _f_ ( _x_ ) _,_ _the stationary distribution p_ _[st]_ ( _x_ )
+_for which_ _[∂p][t]_ [(] _[x][t]_ [)] = 0 _holds, is given by_
+
+
+_[t]_ _∂t_ _[t]_ = 0 _holds, is given by_
+
+
+  
+[1]
+
+_Z_ _[st]_ [exp] _−_ _σ_ [1][2]
+
+
+_p_ _[st]_ ( _x_ ) = [1]
+
+
+_σ_ [2]
+
+
+- _f_ ( _x_ )d _x_ _,_ (15)
+
+
+_with normalization constant Z_ _[st]_ _._
+
+
+Rewriting (15), yields _f_ = _−σ_ [2] _∇x_ log _p_ [st], resulting in the SDE
+
+
+d _Xt_ = _−σ_ [2] _∇x_ log _p_ [st] ( _Xt_ )d _t_ + _√_
+
+
+2 _σ_ d _Bt,_ _XT_ _pT_ = _π,_ (16)
+_∼_
+
+
+with stationary distribution _p_ [st] ( _x_ ). Note that denoising diffusion models leverage this result by
+setting _p_ [st] = _N_ (0 _, I_ ), resulting in the OU process ( (14)) since _∇x_ log _p_ [st] ( _x_ ) = _−x_ . Hence, we can
+adapt existing denoising diffusion sampling methods (Vargas et al., 2023a; Berner et al., 2022) to
+arbitrary priors _p_ _[ϕ]_ using
+
+
+d _Xt_ = _−σ_ [2] _∇x_ log _p_ _[ϕ]_ ( _Xt_ )d _t_ + _√_ 2 _σ_ d _Bt,_ _XT_ _∼_ _pT_ = _π._ (17)
+
+
+However, contrary to the OU process, where the relaxation time, i.e., the time scale over which
+the system loses memory of its initial conditions and approaches its stationary distribution, can be
+estimated analytically, it is unknown for general _p_ _[ϕ]_ and is only guaranteed as _T_ _→∞_ (Roberts &
+Tweedie, 1996). We address this by additionally learning the time horizon _T_ = _Nδt_ by treating
+the discretization step size _δt_ as a learnable parameter. As such, the parameters _ϕ_ of the stationary
+
+
+2Note that this requirement is not necessary when minimizing loss function where the expectation is not
+computed with respect to samples from _⃗p_ _[θ]_ . For further details see e.g. (Richter et al., 2023).
+3The sign differs here compared to most works as the SDE is integrated backward in time.
+
+
+5
+
+
+distribution, i.e., the prior distribution and the discretization step size _δt_ are optimized jointly by
+maximizing the extended ELBO
+
+
+_pn_ _[ϕ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+_⃗pn_ _[θ,ϕ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+- _N_
+
+log
+
+_n_ =1
+
+
+_L_ ( _θ, ϕ_ ) = E _x_ 0: _N_ _∼⃗p_ _θ,ϕ_
+
+
+log _[ρ]_ [(] _[x][N]_ [)] +
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)]
+
+
+_,_ (18)
+
+
+with additional parameters _ϕ, δt_ . Please note that we omit dependence on _δt_ in Equation (18) to
+keep the notation uncluttered. Proposition 1 thus suggests, that for any _ϕ_, there exists a _δt_ such that
+
+     _p_ _[ϕ]_ 0 [(] _[x]_ [0][)] [=] _p_ _[ϕ]_ ( _x_ 0: _N_ )d _x_ 1: _N_ as _N_ _→∞_ . Empirically, we observe substantial improvements for
+
+finite values of _N_, as demonstrated in Section 6
+
+
+4.2 ANNEALED LANGEVIN DIFFUSIONS
+
+
+Annealed Langevin Diffusions use an annealed version of the (overdamped) Langevin diffusion
+equation by constructing a sequence of distributions ( _πt_ ) _t_ [0 _,T_ ] that anneal smoothly from the prior
+_∈_
+distribution _π_ 0 = _p_ 0 to the target distribution _πT_ = _π_ . One typically uses the geometric average,
+that is, _πt_ ( _x_ ) = _p_ 0( _x_ ) _[β][t]_ _π_ ( _x_ ) [1] _[−][β][t]_, for _βt_ monotonically increasing in _t_ with _β_ 0 = 0 and _βT_ = 1.
+When learning the prior, we can use a parametric annealing, i.e., _πt_ _[ϕ]_ [(] _[x]_ [)] [=] _[p][ϕ]_ 0 [(] _[x]_ [)] _[β][t][π]_ [(] _[x]_ [)][1] _[−][β][t]_ [.] [The]
+corresponding stochastic processes can be described as an instance of (2) given by
+
+
+d _Xt_ = - _σ_ [2] _∇x_ log _πt_ _[ϕ]_ [(] _[X][t]_ [) +] _[ σu][θ]_ [(] _[X][t][, t]_ [)] - d _t_ + _√_
+
+d _Xt_ = - _σ_ [2] _∇x_ log _πt_ _[ϕ]_ [(] _[X][t]_ [)] _[ −]_ _[σv][γ]_ [(] _[X][t][, t]_ [)] - d _t_ + _√_
+
+
+2 _σ_ d _Bt,_ _X_ 0 _p_ 0 = _p_ _[ϕ]_ _,_ (19)
+_∼_
+
+2 _σ_ d _Bt,_ _XT_ _pT_ = _π,_ (20)
+_∼_
+
+
+when setting _f_ = _∇x_ log _πt_ _[ϕ]_ [.] [Note that] _[ ∇][x]_ [log] _[ π]_ _t_ _[ϕ]_ [can be computed without knowing the normaliza-]
+tion constant _Z_ of _π_ . Different variants can be derived from using either controlled or uncontrolled
+processes: Monte Carlo Diffusions (MCD) (Doucet et al., 2022b) uses a controlled process (2b)
+but uncontrolled (2a) and Controlled Monte Carlo Diffusions (CMCD) (Vargas et al., 2024) control
+both processes. Since both methods use controlled backward processes (2b), the second requirement is satisfied. Finally, while this work focuses on overdamped approaches, we want to highlight
+that there exist methods that are based on the underdamped Langevin equation (Geffner & Domke,
+2021; Geffner & Domke, 2022), however, the idea of learning a prior end-to-end straightforwardly
+transfers to these approaches.
+
+
+5 GAUSSIAN MIXTURE PRIORS AND ITERATIVE MODEL REFINEMENT
+
+
+In this work, we focus on end-to-end learned Gaussian mixture priors (GMPs), that is,
+
+
+- _K_
+
+_αk_ ( _x_ 0 _µk,_ Σ _k_ ) _,_ _αk_ 0 _,_
+_N_ _|_ _≥_
+_k_ =1
+
+
+- _K_
+
+_αk_ = 1 _,_ (21)
+
+_k_ =1
+
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][) =]
+
+
+- _K_
+
+_αkp_ _[ϕ]_ 0 _[k]_ [(] _[x]_ [0][) =]
+_k_ =1
+
+
+with� _K_ mixture weights _αk_, Gaussian components _p_ _[ϕ]_ 0 _[k]_ [(] _[x]_ [0][)] [=] _[N]_ [(] _[x]_ [0] _[|][µ][k][,]_ [ Σ] _[k]_ [)] [and] [parameters] _[ϕ]_ [=]
+_k_ =1 _[{][α][k][, ϕ][k][}]_ [ with] _[ ϕ][k]_ [=] [Having established how the prior is learned in Section][ 4][, we]
+
+_[{][µ][k][,]_ [ Σ] _[k][}]_ [.]
+discuss desirable properties to address the challenges outlined in Section 1 and how GMPs address
+them.
+
+
+A key objective is to improve the exploration capabilities of diffusion-based sampling methods to
+address **C1** . GMPs allow control over exploration by adjusting the initial variance of each Gaussian
+component. Additionally, the means of the Gaussian components can be initialized to incorporate
+prior knowledge of the target density, even if this knowledge is limited to a rough estimate of the
+target’s support. This aspect will be elaborated on later in this section.
+
+
+Another important consideration is to adjust the support of the prior such that it matches the target
+density, which reduces the complexity of the dynamics and, in turn, minimizes the number of diffusion steps required. GMPs demonstrate rapid adaptation capabilities, partially through their small
+parameter count, making them particularly suitable for addressing **C2** .
+
+
+To prevent the model from focusing only on a subset of the target support ( **C3** ), which may occur
+due to the optimization of the mode-seeking reverse KL divergence, we require a more expressive
+
+
+6
+
+
+distribution than a single Gaussian prior. GMPs provide a solution by combining multiple Gaussian
+components, each of which can focus on different subsets of the target support.
+
+Finally, efficient evaluation of _p_ _[ϕ]_ 0 [is] [crucial,] [as] [it] [must] [be] [performed] [at] [each] [discretization] [step] [of]
+the stochastic differential equation (SDE) that governs the diffusion process. This requirement is
+satisfied by GMPs, particularly when using diagonal covariance matrices.
+
+
+**Iterative Model Refinement.** Gradually increasing the model complexity during the optimization
+process has demonstrated promising results in previous studies (Guo et al., 2016; Miller et al., 2017;
+Arenz et al., 2018; Cranko & Nock, 2019), and is directly applicable to our approach. We begin with
+an initial prior distribution _p_ _[ϕ]_ 0 [=] _[ p]_ 0 _[ϕ]_ [1] [with parameters] _[ ϕ]_ [1][. These parameters are optimized using (][18][).]
+After a predefined criterion is met, such as a fixed number of iterations, a second distribution _p_ _[ϕ]_ 0 [2] [is]
+added, forming a new prior: _p_ _[ϕ]_ 0 [=] _[ α]_ [1] _[p]_ 0 _[ϕ]_ [1] [+] _[ α]_ [2] _[p]_ 0 _[ϕ]_ [2][, with] _[ α][ ∈]_ [R][+] [and] _[ α]_ [1][ +] _[ α]_ [2] [= 1][.] [This process is]
+repeated, resulting in a mixture model _p_ _[ϕ]_ 0 [(] _[x]_ [) =][ �] _[K]_ _k_ =1 _[α][k][p]_ 0 _[ϕ][k]_ [(] _[x]_ [)][.]
+
+
+We identify the benefits of this iterative scheme as twofold: First, it can simplify optimization by
+focusing on learning a subset of parameters _ϕk_ at a time, rather than jointly optimizing all _ϕk_ (Bengio
+et al., 2009). Second, it enables the initialization of newly added components based on a partially
+trained model, potentially preventing mixture components to focus on similar parts of the target
+support. For GMPs, for instance, the mean of a new component _µ_ new can be placed in a promising
+region, potentially informed by prior knowledge of the task or by running a _π_ -invariant Markov
+chain to obtain a set of promising samples. More generally, consider a set of candidate samples
+_C_ = _{xi}i_ _[C]_ =1 [.] [We propose initializing the mean of a new component] _[ µ]_ [new] [as follows:]
+
+
+_pn_ _[γ,ϕ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+_⃗pn_ _[θ,ϕ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+- _N_
+
+log
+
+_n_ =1
+
+
+_µ_ new = arg max _xN_ _∈C_ E _x_ 0: _N_ _−_ 1 _∼p_ _[γ,ϕ]_
+
+
+log _[ρ]_ [(] _[x][N]_ [)] +
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)]
+
+
+_,_ (22)
+
+
+where _p_ _[ϕ]_ 0 [is] [the] [current] [model.] [This] [heuristic] [balances] [exploration] [and] [exploitation] [by] [favoring]
+samples with high target likelihood and low prior likelihood, while also accounting for the diffusion
+process. See Appendix B for further details.
+
+
+6 NUMERICAL EVALUATION
+
+
+end learning scheme for prior distributions. Specifically, we
+
+sian mixture priors (GMP). We indicate these different settings
+
+|METHOD (X)|f uθ vγ|
+|---|---|
+|MCD<br>CMCD3<br>DIS<br>DBS|_∇_log_ πϕ_<br>_t_<br>_∇_log_ πϕ_<br>_t_<br>_∇_log_ pϕ_<br>ANY|
+
+
+Table 1: Diffusion-based sampling
+
+as X, X-GP, and X-GMP, respectively, where X is the corre
+methods considered in this work based
+
+sponding acronym of the diffusion-based sampling methods. on (2). Crosses indicate that the conWe consider four different methods: Time-Reversed Diffusion trol is set to zero.
+Sampler (DIS) (Berner et al., 2022), Monte Carlo Diffusions
+(MCD) (Doucet et al., 2022b), Controlled Monte Carlo Diffusions (CMCD) (Vargas et al., 2024) and Diffusion Bridge Sampler (DBS) (Richter et al., 2023). A
+summary is shown in Table 1. It is worth noting that we do not separately consider the Denoising
+Diffusion Sampler (DDS) (Vargas et al., 2023a), as it can be viewed as a special case of DIS. For
+reference, we consider Gaussian (GVI) and Gaussian mixture (GMVI) mean-field approximations
+(Wainwright & Jordan, 2008), both of which are special cases of the aforementioned methods for
+_N_ = 0 diffusion steps with _K_ = 1 _,_ _K_ _≥_ 1, respectively (cf. Appendix B). Lastly, we consider
+three competing state-of-the-art methods, namely, Sequential Monte Carlo (SMC) (Del Moral et al.,
+2006), Continual Repeated Annealed Flow Transport (CRAFT) (Matthews et al., 2022), and Flow
+Annealed Importance Sampling Bootstrap (FAB) (Midgley et al., 2022).
+
+
+For evaluation, we consider the effective sample size (ESS) and the marginal or extended evidence
+lower bound as performance criteria. Both are denoted as ‘ELBO’ for convenience. Next, if the
+ground truth normalization constant _Z_ is available, we use an importance-weighted estimate _Z_ [ˆ] to
+
+3Vargas et al. (2024) use the same in control in (2a) and (2b) by leveraging Nelson’s relation (Nelson, 2020).
+
+
+7
+
+
+Table 1: Diffusion-based sampling
+methods considered in this work based
+on (2). Crosses indicate that the control is set to zero.
+
+
+compute the estimation error ∆log _Z_ = _|_ log _Z −_ log _Z|_ [ˆ] . Additionally, if samples from the target _π_
+are available, we compute the Sinkhorn distance _Wγ_ [2] [(][Cuturi][,][ 2013][).]
+
+To ensure a fair comparison, all experiments are conducted under identical settings. Our evaluation
+methodology adheres to the protocol by Blessing et al. (2024). For a comprehensive overview of
+the experimental setup see Appendix C. Moreover, a comprehensive set of ablation studies and
+additional experiments, are provided in Appendix D.
+
+**GVI:** _K_ = 1 _,_ _N_ = 0 **GMVI:** _K_ = 10 _,_ _N_ = 0
+
+
+**DIS-GP:** _K_ = 1 _,_ _N_ = 128 **DIS-GMP:** _K_ = 10 _,_ _N_ = 128
+
+
+_K_ : Num. mixture components _N_ : Num. diffusion steps
+
+
+|Col1|Funnel (d = 10)|
+|---|---|
+|**Method**|ELBO_ ↑_<br>∆log_ Z ↓_<br>ESS_ ↑_<br>_W_2<br>_γ ↓_|
+|GVI<br>GMVI|<br>  <br> <br><br> <br>_−_1_._841_±_0_._003<br>0_._691_±_0_._070<br>0_._092_±_0_._006<br>178_._007_±_0_._164<br>_−_0_._212_±_0_._001<br>0_._056_±_0_._004<br>0_._744_±_0_._018<br>102_._826_±_0_._109|
+|MCD<br>MCD-GP<br>MCD-GMP|_−_0_._721_±_0_._003<br>0_._201_±_0_._017<br>0_._207_±_0_._012<br>164_._882_±_0_._363<br>_−_0_._724_±_0_._003<br>0_._173_±_0_._046<br>0_._206_±_0_._026<br>164_._967_±_0_._334<br>_−_0_._059_±_0_._002<br>0_._014_±_0_._001<br>0_._922_±_0_._012<br>100_._174_±_0_._174|
+|CMCD<br>CMCD-GP<br>CMCD-GMP|_−_0_._210_±_0_._002<br>0_._020_±_0_._006<br>0_._588_±_0_._013<br>104_._652_±_0_._593<br>_−_0_._211_±_0_._002<br>0_._023_±_0_._003<br>0_._567_±_0_._023<br>104_._644_±_0_._710<br>_−_0_._027_±_0_._001<br>0_._005_±_0_._000<br>**0**_.__±_**0**_._<br>102_._027_±_0_._200|
+|DIS<br>DIS-GP<br>DIS-GMP|_−_0_._286_±_0_._002<br>0_._041_±_0_._008<br>0_._483_±_0_._025<br>107_._458_±_0_._670<br>_−_0_._296_±_0_._002<br>0_._047_±_0_._003<br>0_._498_±_0_._021<br>107_._458_±_0_._826<br>_−_0_._058_±_0_._002<br>0_._019_±_0_._002<br>0_._929_±_0_._017<br>_.__±_**0**_._|
+|DBS<br>DBS-GP<br>DBS-GMP|_−_0_._180_±_0_._002<br>0_._019_±_0_._005<br>0_._600_±_0_._014<br>102_._964_±_0_._442<br>_−_0_._187_±_0_._003<br>0_._021_±_0_._003<br>0_._603_±_0_._014<br>102_._653_±_0_._586<br>_−_0_._047_±_0_._002<br>0_._012_±_0_._002<br>0_._949_±_0_._008<br>100_._230_±_0_._088|
+|SMC<br>CRAFT<br>FAB|_−_0_._242_±_0_._047<br>0_._187_±_0_._054<br>-<br>149_._353_±_2_._973<br>_−_0_._027_±_0_._060<br>0_._091_±_0_._018<br>-<br>134_._335_±_0_._663<br>_−_**0**_.__±_**0**_._<br>**0**_.__±_**0**_._<br>-<br>153_._894_±_3_._916|
+
+
+Figure 3: **Left side** : Results for Funnel target, averaged across four seeds. Evaluation criteria include evidence
+lower bound ELBO, importance-weighted errors for estimating the log-normalizing constant ∆log _Z_, effective
+sample size ESS, Sinkhorn distance _W_ 2 _[γ]_ [. The best overall results are highlighted in bold, with category-specific]
+best results underlined. Arrows ( _↑_, _↓_ ) indicate whether higher or lower values are preferable, respectively. Blue
+and green shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP),
+respectively. Red shading indicate competing state-of-the-art methods. Note that ESS cannot be computed due
+to the use of resampling schemes. **Right side** : Visualization of the first two dimensions of the Funnel target.
+Colored ellipses and circles denote standard deviations and means of the Gaussian components, respectively.
+Red dots illustrate samples of the model.
+
+
+6.1 BENCHMARK PROBLEMS
+
+
+We evaluate the different methods on various real-world and synthetic target densities.
+
+
+**Real-World Densities.** We consider six real-world target densities: Four Bayesian inference tasks,
+where inference is performed over the parameters of a logistic regression model, namely _Credit_
+( _d_ = 25), _Cancer_ ( _d_ = 31), _Ionosphere_ ( _d_ = 35), and _Sonar_ ( _d_ = 61). Moreover, _Seeds_ ( _d_ = 26)
+and _Brownian_ ( _d_ = 32), where the goal is to perform inference over the parameters of a random
+effect regression model, and the time discretization of a Brownian motion, respectively. For these
+densities, we do not have access to the ground truth normalizer _Z_ or samples from _π_ preventing us
+from computing errors for log normalization estimation ∆log _Z_ and Sinkhorn distances _Wγ_ [2][.] [The]
+resulting ELBO values are presented in Table 2.
+
+
+**Synthetic Densities.** The _Funnel_ density was introduced by Neal (2003) as has a shape that resembles a funnel, where one part is tight and highly concentrated, while the other is spread out over a
+wide region, making it challenging for sampling algorithms to explore the distribution effectively.
+Next, we consider the _Fashion_ target which uses NICE (Dinh et al., 2014) to train a normalizing flow
+on the high-dimensional _d_ = 28 _×_ 28 = 784 MNIST Fashion dataset. A recent study by Blessing
+et al. (2024) showed that current state-of-the-art methods were not able to generate samples with
+high quality from multiple modes.
+
+
+6.2 RESULTS
+
+
+**Impact** **of** **Learned** **Gaussian** **(GP)** **and** **Gaussian** **Mixture** **(GMP)** **Priors.** We evaluated the
+performance of our proposed methods on both real-world tasks and the _Funnel_ density, employing
+_N_ = 128 diffusion steps across all methods and _K_ = 10 mixture components for X-GMP. To
+ensure a fair comparison, we initialized the priors of all diffusion-based methods with zero mean
+
+
+8
+
+
+|METHOD|CREDIT|SEEDS|CANCER|BROWNIAN|IONOSPHERE|SONAR|
+|---|---|---|---|---|---|---|
+|GVI<br>GMVI|_−_605_._561_±_0_._166<br>_−_603_._424_±_0_._154|_−_76_._741_±_0_._007<br>_−_75_._221_±_0_._011|_−_147_._453_±_0_._144<br>_−_145_._456_±_0_._254|_−_3_._885_±_0_._005<br>_−_2_._250_±_0_._011|_−_123_._391_±_0_._013<br>_−_122_._019_±_0_._019|_−_137_._696_±_0_._043<br>_−_135_._959_±_0_._031|
+|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|MCD<br>_−_1399_._241_±_497_._114<br>_−_75_._699_±_0_._015<br>_−_148_._471_±_8_._565<br>_−_15_._498_±_0_._158<br>_−_114_._320_±_0_._007<br>_−_112_._639_±_0_._025<br>MCD-GP<br>_−_585_._350_±_0_._015<br>_−_73_._542_±_0_._003<br>_−_89_._676_±_0_._189<br>0_._771_±_0_._008<br>_−_111_._897_±_0_._004<br>_−_109_._338_±_0_._004<br>MCD-GMP<br>_−_585_._276_±_0_._013<br>_−_73_._461_±_0_._004<br>_−_88_._562_±_0_._243<br>0_._993_±_0_._003<br>_−_111_._827_±_0_._007<br>_−_109_._197_±_0_._004|
+|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|CMCD<br>_−_586_._956_±_0_._018<br>_−_74_._033_±_0_._010<br>_−_80_._076_±_0_._118<br>_−_1_._346_±_0_._013<br>_−_112_._183_±_0_._006<br>_−_109_._332_±_0_._006<br>CMCD-GP<br>_−_585_._178_±_0_._013<br>_−_73_._456_±_0_._003<br>_−_78_._576_±_0_._068<br>1_._043_±_0_._005<br>_−_111_._687_±_0_._003<br>_−_108_._669_±_0_._007<br>CMCD-GMP<br>_−_585_._162_±_0_._002<br>_−_73_._429_±_0_._002<br>_−_78_._402_±_0_._037<br>1_._087_±_0_._001<br>_−_111_._682_±_0_._000<br>_−_108_._634_±_0_._000|
+|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|DIS<br>_−_589_._636_±_0_._757<br>_−_74_._400_±_0_._007<br>_−_86_._592_±_2_._107<br>_−_3_._503_±_0_._019<br>_−_112_._525_±_0_._008<br>_−_110_._153_±_0_._022<br>DIS-GP<br>_−_585_._247_±_0_._009<br>_−_73_._540_±_0_._005<br>_−_85_._005_±_1_._286<br>0_._588_±_0_._013<br>_−_111_._847_±_0_._006<br>_−_109_._280_±_0_._024<br>DIS-GMP<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000|
+|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|DBS<br>_−_587_._366_±_0_._683<br>_−_73_._918_±_0_._008<br>_−_82_._466_±_4_._090<br>_−_0_._773_±_0_._010<br>_−_112_._070_±_0_._005<br>_−_109_._188_±_0_._005<br>DBS-GP<br>_−_585_._524_±_0_._414<br>_−_73_._437_±_0_._001<br>_−_83_._395_±_4_._184<br>1_._081_±_0_._004<br>_−_111_._673_±_0_._002<br>_−_108_._595_±_0_._006<br>DBS-GMP<br>_−_585_._148_±_0_._002<br>_−_**73**_.__±_**0**_._<br>_−_**78**_.__±_**0**_._<br>**1**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._|
+|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|SMC<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>CRAFT<br>_−_594_._795_±_0_._411<br>_−_73_._793_±_0_._015<br>_−_95_._737_±_1_._067<br>0_._886_±_0_._053<br>_−_112_._386_±_0_._182<br>_−_115_._618_±_1_._316<br>FAB<br>_−__.__±_**0**_._<br>_−_**73**_.__±_**0**_._<br>_−_78_._287_±_0_._835<br>1_._031_±_0_._010<br>_−_111_._678_±_0_._003<br>_−_108_._593_±_0_._008|
+
+
+Table 2: Evidence lower bound (ELBO) values for various real-world benchmark problems, averaged across
+four seeds. The best overall results are highlighted in bold, with category-specific best results underlined. Blue
+and green shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP),
+respectively. Red shading indicate competing state-of-the-art methods.
+
+
+and unit variance. Table 2 and Figure 3 present our findings. The analysis demonstrates that GP
+consistently achieves tighter ELBO values compared to fixed priors, with GMP yielding further
+improvements over GP. Furthermore, Figure 3 illustrates both qualitatively and quantitatively that
+GMP effectively combines the strengths of Gaussian mixture and diffusion models, resulting in
+significant improvements. Specifically, we observed that the Gaussian components adapt well to
+the target’s support, covering both the neck and opening of the funnel shape. This results in less
+complex dynamics and better target coverage for DIS-GMP compared to using a single Gaussian
+(DIS-GP). Notably, the combination of DBS and GMP outperforms state-of-the-art methods across
+
+
+**SMC** **CRAFT** **FAB**
+
+
+|Col1|Fashion (d = 784)|
+|---|---|
+|**Method**|ELBO_ ↑_<br>∆log_ Z ↓_<br>_W_2<br>_γ ↓_<br>EMC_ ↑_|
+|GVI<br>GMVI<br>GMVI + IMR|<br>  <br><br> <br> <br>_−_73_._793_±_0_._032<br>47_._868_±_0_._767<br>1590_._212_±_0_._818<br>0_._000_±_0_._000<br>_−_72_._654_±_0_._176<br>45_._927_±_0_._380<br>1505_._656_±_1_._644<br>0_._034_±_0_._011<br>_−_57_._021_±_0_._052<br>30_._444_±_0_._571<br>589_._881_±_1_._374<br>0_._761_±_0_._039|
+|DIS<br>DIS-GP<br>DIS-GMP<br>DIS-GMP + IMR|_−_41_._63_k±_35_._37<br>32_._65_k±_390_._6<br>17_._72_k±_54_._21<br>0_._213_±_0_._026<br>_−_**24**_.__±_**0**_._<br>**10**_.__±_**0**_._<br>1671_._411_±_2_._394<br>0_._007_±_0_._004<br>_−_38_._873_±_0_._175<br>18_._056_±_0_._508<br>1703_._023_±_3_._050<br>0_._012_±_0_._021<br>_−_62_._482_±_2_._752<br>27_._645_±_3_._118<br>_.__±_**13**_._<br>**0**_.__±_**0**_._|
+|SMC<br>CRAFT<br>FAB|_−_12_._18_k±_134_._6<br>11_._74_k±_139_._2<br>6696_._287_±_250_._4<br>0_._026_±_0_._027<br>_−_520_._47_±_5_._531<br>445_._10_±_8_._273<br>1413_._303_±_11_._20<br>0_._016_±_0_._027<br>_−_892_._97_±_151_._8<br>350_._54_±_599_._0<br>1186_._967_±_263_._4<br>0_._349_±_0_._137|
+
+
+Figure 4: **Left** **side** : Results for Fashion target, averaged across four seeds. Evaluation criteria include evidence lower bound ELBO, importance-weighted errors for estimating the log-normalizing constant ∆log _Z_,
+and Sinkhorn distance _W_ 2 _[γ]_ [.] [The best overall results are highlighted in bold, with category-specific best results]
+underlined. Arrows ( _↑_, _↓_ ) indicate whether higher or lower values are preferable, respectively. Blue and green
+shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP), respectively.
+Orange shading indicates that the method uses iterative model refinement (IMR). Red shading indicate competing state-of-the-art methods. **Right** **side** : Visualization of the _d_ = 28 _×_ 28 = 784 dimensional Fashion
+samples. Top left corner visualizes samples from the target distribution. Colored frames indicate samples from
+different components of the Gaussian mixture.
+
+
+**Ablation** **Study:** **Number** **of** **Mixture** **Components** _K_ **and** **Diffusion** **Steps** _N_ **.** We further investigated the effect of varying the number of diffusion steps _N_ and mixture components _K_ on a
+subset of tasks for DIS. The results, shown in Figure 5, demonstrate consistent improvements in
+effective sample size (ESS) with increases in both _K_ and _N_ . Additionally, we consistently observed
+that the combination of a higher number of components and diffusion steps yields the best overall
+performance. These trends hold across other metrics, as further detailed in Appendix D.
+
+
+9
+
+
+**Iterative** **Model** **Refinement** **(IMR).** Lastly, we investigated the impact of IMR, as detailed in
+Section 5, using DIS. For this analysis, we focused on the multi-modal Fashion target, which necessitates exploration in a high-dimensional space ( _d_ = 784). In addition to the performance criteria
+outlined in Section 6, we quantify how many of the modes the model discovered via the _entropic_
+_mode coverage (EMC)_ introduced by Blessing et al. (2024). EMC evaluates the mode coverage of
+a sampler by leveraging prior knowledge of the target density. It holds that EMC _∈_ [0 _,_ 1] where
+EMC = 1 indicates that the model achieves uniform coverage over all modes whereas EMC = 0
+indicates that the model only produces samples from a single mode. We employed the Metropolisadjusted Langevin algorithm (MALA) (Cheng et al., 2018) to generate a set of candidate samples,
+noting that the computational cost of this process is comparable to a single gradient step in most
+diffusion-based sampling methods. The initial candidate samples as well as the support of DIS
+without learned prior are initialized such that they roughly cover the target support. Additional details are provided in Appendix C.2. We iteratively increased the number of components to _K_ = 10,
+utilizing _N_ = 128 diffusion steps throughout. Figure 4 presents our findings, demonstrating that
+the absence of IMR leads to mode collapse across all methods, as evidenced by high Sinkhorn distance values. The qualitative results highlight the role of candidate samples in facilitating mode
+discovery. Notably, the color-coding of DIS-GMP + IMR illustrates that each mixture component
+concentrates on a distinct mode, validating the effectiveness of the initialization heuristic proposed
+in (22) in balancing exploration and exploitation. This finding is also quantitatively reflected by
+the high EMC and low Sinkhorn distance values. In contrast, the ELBO and ∆log _Z_ values are
+slightly worse when using GMPs and IMR. This is attributed to the fact that these performance criteria are not well-suited for quantifying the model performance for multi-modal targets and tend to
+favor models that fit a single mode perfectly (Blessing et al., 2024). Moreover, with higher _K_, the
+diffusion model has to learn more complex control functions, as it needs to operate over the support
+of the entire Gaussian Mixture Model (GMM) rather than a single Gaussian. This added complexity
+can introduce more opportunities for approximation errors, which may negatively impact ELBO and
+∆log _Z_ values compared to using a single learnable Gaussian. Nevertheless, the resulting samples
+from DIS-GMP are closer to the target distribution in terms of Sinkhorn distance. Importantly, these
+errors remain significantly smaller than those observed with non-learnable priors.
+
+
+**Brownian**
+
+
+**Funnel**
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+**Ionosphere**
+
+
+**Seeds**
+
+
+**Credit**
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+Figure 5: Effective sample size (ESS) of DIS-GMP for various real-world benchmark problems, averaged
+across four seeds. Here, _N_ denotes the number of discretization steps and _K_ the number of components in den
+Gaussian mixture.
+
+
+7 CONCLUSION AND FUTURE WORK
+
+
+In this paper, we propose a novel approach for improving diffusion-based sampling techniques by
+introducing end-to-end learnable Gaussian Mixture Priors (GMPs). Our method addresses key challenges in diffusion models—namely, large discretization errors, mode collapse, and poor exploration—by providing more expressive and adaptable priors compared to the conventional Gaussian
+priors. We conducted comprehensive experiments on both synthetic and real-world datasets, which
+consistently demonstrated the superior performance of our proposed method. The results underscore
+the effectiveness of GMPs in overcoming the limitations of traditional diffusion models while requiring little to no hyperparameter tuning. Furthermore, we developed a novel strategy for iterative
+model refinement, which involves progressively adding components to the mixture during training,
+and demonstrated its effectiveness on a challenging high-dimensional problem.
+
+
+A promising direction for future research is the improvement of the iterative model refinement strategy. While we showed that progressively increasing the number of components in the Gaussian
+mixture improves performance, optimizing the selection criteria for adding new components, generating better candidate samples, or dynamically adjusting the number of components during training,
+could lead to further gains in efficiency and accuracy.
+
+
+10
+
+
+ACKNOWLEDGMENTS AND DISCLOSURE OF FUNDING
+
+
+D.B. acknowledges support by funding from the pilot program Core Informatics of the Helmholtz
+Association (HGF) and the state of Baden-W¨urttemberg through bwHPC, as well as the HoreKa
+supercomputer funded by the Ministry of Science, Research and the Arts Baden-W¨urttemberg and
+by the German Federal Ministry of Education and Research.
+
+
+REFERENCES
+
+
+Tara Akhound-Sadegh, Jarrid Rector-Brooks, Avishek Joey Bose, Sarthak Mittal, Pablo Lemos,
+Cheng-Hao Liu, Marcin Sendera, Siamak Ravanbakhsh, Gauthier Gidel, Yoshua Bengio, et al.
+Iterated denoising energy matching for sampling from boltzmann densities. _arXiv_ _preprint_
+_arXiv:2402.06121_, 2024.
+
+
+Michael Arbel, Alex Matthews, and Arnaud Doucet. Annealed flow transport monte carlo. In
+_International Conference on Machine Learning_, pp. 318–330. PMLR, 2021.
+
+
+Oleg Arenz, Gerhard Neumann, and Mingjun Zhong. Efficient gradient-free variational inference
+using policy search. In _International conference on machine learning_, pp. 234–243. PMLR, 2018.
+
+
+Oleg Arenz, Philipp Dahlinger, Zihan Ye, Michael Volpp, and Gerhard Neumann. A unified perspective on natural gradient variational inference with gaussian mixture models. _arXiv_ _preprint_
+_arXiv:2209.11533_, 2022.
+
+
+Yoshua Bengio, J´erˆome Louradour, Ronan Collobert, and Jason Weston. Curriculum learning. In
+_Proceedings of the 26th annual international conference on machine learning_, pp. 41–48, 2009.
+
+
+Julius Berner, Lorenz Richter, and Karen Ullrich. An optimal control perspective on diffusion-based
+generative modeling. _arXiv preprint arXiv:2211.01364_, 2022.
+
+
+David M Blei, Alp Kucukelbir, and Jon D McAuliffe. Variational inference: A review for statisticians. _Journal of the American statistical Association_, 112(518):859–877, 2017.
+
+
+Denis Blessing, Xiaogang Jia, Johannes Esslinger, Francisco Vargas, and Gerhard Neumann. Beyond elbos: A large-scale evaluation of variational methods for sampling. _arXiv_ _preprint_
+_arXiv:2406.07423_, 2024.
+
+
+Denis Blessing, Julius Berner, Lorenz Richter, and Gerhard Neumann. Underdamped diffusion
+bridges with applications to sampling. In _The Thirteenth International Conference on Learning_
+_Representations_, 2025. [URL https://openreview.net/forum?id=Q1QTxFm0Is.](https://openreview.net/forum?id=Q1QTxFm0Is)
+
+
+James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Chris Leary, Dougal
+Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-Milne, et al. Jax:
+Autograd and xla. _Astrophysics Source Code Library_, pp. ascl–2111, 2021.
+
+
+Onur Celik, Zechu Li, Denis Blessing, Ge Li, Daniel Palanicek, Jan Peters, Georgia Chalvatzaki,
+and Gerhard Neumann. Dime: Diffusion-based maximum entropy reinforcement learning. _arXiv_
+_preprint arXiv:2502.02316_, 2025.
+
+
+Junhua Chen, Lorenz Richter, Julius Berner, Denis Blessing, Gerhard Neumann, and Anima Anandkumar. Sequential controlled langevin diffusions. _arXiv preprint arXiv:2412.07081_, 2024a.
+
+
+Wenlin Chen, Mingtian Zhang, Brooks Paige, Jos´e Miguel Hern´andez-Lobato, and David Barber.
+Diffusive gibbs sampling. _arXiv preprint arXiv:2402.03008_, 2024b.
+
+
+Xiang Cheng, Niladri S Chatterji, Peter L Bartlett, and Michael I Jordan. Underdamped langevin
+mcmc: A non-asymptotic analysis. In _Conference on learning theory_, pp. 300–323. PMLR, 2018.
+
+
+Thomas M Cover. _Elements of information theory_ . John Wiley & Sons, 1999.
+
+
+Zac Cranko and Richard Nock. Boosted density estimation remastered. In _International Conference_
+_on Machine Learning_, pp. 1416–1425. PMLR, 2019.
+
+
+11
+
+
+Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. _Advances in neural_
+_information processing systems_, 26, 2013.
+
+
+Marco Cuturi, Laetitia Meng-Papaxanthos, Yingtao Tian, Charlotte Bunne, Geoff Davis, and Olivier
+Teboul. Optimal transport tools (ott): A jax toolbox for all things wasserstein. _arXiv_ _preprint_
+_arXiv:2201.12324_, 2022.
+
+
+Paolo Dai Pra. A stochastic control approach to reciprocal diffusion processes. _Applied mathematics_
+_and Optimization_, 23(1):313–329, 1991.
+
+
+Pierre Del Moral, Arnaud Doucet, and Ajay Jasra. Sequential Monte Carlo samplers. _Journal of the_
+_Royal Statistical Society:_ _Series B (Statistical Methodology)_, 68(3):411–436, 2006.
+
+
+Adji Bousso Dieng, Dustin Tran, Rajesh Ranganath, John Paisley, and David Blei. Variational
+inference via _χ_ upper bound minimization. _Advances in Neural Information Processing Systems_,
+30, 2017.
+
+
+Laurent Dinh, David Krueger, and Yoshua Bengio. Nice: Non-linear independent components estimation. _arXiv preprint arXiv:1410.8516_, 2014.
+
+
+Laurent Dinh, Jascha Sohl-Dickstein, and Samy Bengio. Density estimation using real nvp. _arXiv_
+_preprint arXiv:1605.08803_, 2016.
+
+
+Carles Domingo-Enrich. A taxonomy of loss functions for stochastic optimal control. _arXiv preprint_
+_arXiv:2410.00345_, 2024.
+
+
+Arnaud Doucet, Will Grathwohl, Alexander G Matthews, and Heiko Strathmann. Score-based diffusion meets annealed importance sampling. _Advances in Neural Information Processing Systems_,
+35:21482–21494, 2022a.
+
+
+Arnaud Doucet, Will Grathwohl, Alexander G de G Matthews, and Heiko Strathmann. Score-based
+diffusion meets annealed importance sampling. In _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 2022b.
+
+
+Hans F¨ollmer. An entropy approach to the time reversal of diffusion processes. In _Stochastic_
+_Differential Systems Filtering and Control:_ _Proceedings of the IFIP-WG 7/1 Working Conference_
+_Marseille-Luminy, France, March 12–17, 1984_, pp. 156–163. Springer, 2005.
+
+
+Daan Frenkel and Berend Smit. _Understanding molecular simulation:_ _from algorithms to applica-_
+_tions_ . Elsevier, 2023.
+
+
+Tomas Geffner and Justin Domke. MCMC variational inference via uncorrected Hamiltonian annealing. In _Advances in Neural Information Processing Systems_, 2021.
+
+
+Tomas Geffner and Justin Domke. Langevin diffusion variational inference. _arXiv_ _preprint_
+_arXiv:2208.07743_, 2022.
+
+
+Louis Grenioux, Maxence Noble, Marylou Gabri´e, and Alain Oliviero Durmus. Stochastic localization via iterative posterior sampling. _arXiv preprint arXiv:2402.10758_, 2024.
+
+
+Fangjian Guo, Xiangyu Wang, Kai Fan, Tamara Broderick, and David B Dunson. Boosting variational inference. _arXiv preprint arXiv:1611.05559_, 2016.
+
+
+Wei Guo, Molei Tao, and Yongxin Chen. Complexity analysis of normalizing constant estimation: from jarzynski equality to annealed importance sampling and beyond. _arXiv_ _preprint_
+_arXiv:2502.04575_, 2025.
+
+
+John Hammersley. _Monte carlo methods_ . Springer Science & Business Media, 2013.
+
+
+Carsten Hartmann, Omar Kebiri, Lara Neureither, and Lorenz Richter. Variational approach to rare
+event simulation using least-squares regression. _Chaos: An Interdisciplinary Journal of Nonlinear_
+_Science_, 29(6), 2019.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+12
+
+
+Robert E Kass, Bradley P Carlin, Andrew Gelman, and Radford M Neal. Markov chain monte carlo
+in practice: a roundtable discussion. _The American Statistician_, 52(2):93–100, 1998.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Xuechen Li, Ting-Kam Leonard Wong, Ricky TQ Chen, and David Duvenaud. Scalable gradients
+for stochastic differential equations. In _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_
+_Statistics_, pp. 3870–3882. PMLR, 2020.
+
+
+Yingzhen Li and Richard E Turner. R´enyi divergence variational inference. _Advances_ _in_ _neural_
+_information processing systems_, 29, 2016.
+
+
+Jun S Liu and Jun S Liu. _Monte Carlo strategies in scientific computing_, volume 75. Springer, 2001.
+
+
+Jun S Liu, Rong Chen, and Tanya Logvinenko. A theoretical framework for sequential importance
+sampling with resampling. In _Sequential Monte Carlo methods in practice_, pp. 225–246. Springer,
+2001.
+
+
+Xingchao Liu, Lemeng Wu, Mao Ye, and Qiang Liu. Let us build bridges: Understanding and
+extending diffusion generative models. _arXiv preprint arXiv:2208.14699_, 2022.
+
+
+Alex Matthews, Michael Arbel, Danilo Jimenez Rezende, and Arnaud Doucet. Continual repeated
+annealed flow transport monte carlo. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+15196–15219. PMLR, 2022.
+
+
+Laurence Illing Midgley, Vincent Stimper, Gregor NC Simm, Bernhard Sch¨olkopf, and
+Jos´e Miguel Hern´andez-Lobato. Flow annealed importance sampling bootstrap. _arXiv_ _preprint_
+_arXiv:2208.01893_, 2022.
+
+
+Andrew C Miller, Nicholas J Foti, and Ryan P Adams. Variational boosting: Iteratively refining
+posterior approximations. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 2420–2429.
+PMLR, 2017.
+
+
+Christian Naesseth, Scott Linderman, Rajesh Ranganath, and David Blei. Variational sequential
+monte carlo. In _International_ _conference_ _on_ _artificial_ _intelligence_ _and_ _statistics_, pp. 968–977.
+PMLR, 2018.
+
+
+Christian Naesseth, Fredrik Lindsten, and David Blei. Markovian score climbing: Variational inference with kl (p—— q). _Advances in Neural Information Processing Systems_, 33:15499–15510,
+2020.
+
+
+Radford M Neal. Annealed importance sampling. _Statistics and Computing_, 11(2):125–139, 2001.
+
+
+Radford M Neal. Slice sampling. _The annals of statistics_, 31(3):705–767, 2003.
+
+
+Edward Nelson. _Dynamical theories of Brownian motion_, volume 101. Princeton university press,
+2020.
+
+
+Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models.
+In _International conference on machine learning_, pp. 8162–8171. PMLR, 2021.
+
+
+Kim A Nicoli, Christopher J Anders, Lena Funcke, Tobias Hartung, Karl Jansen, Pan Kessel,
+Shinichi Nakajima, and Paolo Stornati. Estimation of thermodynamic observables in lattice field
+theories with deep generative models. _Physical review letters_, 126(3):032001, 2021.
+
+
+Maxence Noble, Louis Grenioux, Marylou Gabri´e, and Alain Oliviero Durmus. Learned referencebased diffusion sampling for multi-modal distributions. _arXiv preprint arXiv:2410.19449_, 2024.
+
+
+George Papamakarios, Eric Nalisnick, Danilo Jimenez Rezende, Shakir Mohamed, and Balaji Lakshminarayanan. Normalizing flows for probabilistic modeling and inference. _The_ _Journal_ _of_
+_Machine Learning Research_, 22(1):2617–2680, 2021.
+
+
+13
+
+
+Angus Phillips, Hai-Dang Dau, Michael John Hutchinson, Valentin De Bortoli, George Deligiannidis, and Arnaud Doucet. Particle denoising diffusion sampler. _arXiv preprint arXiv:2402.06320_,
+2024.
+
+
+Maziar Raissi, Paris Perdikaris, and George E Karniadakis. Physics-informed neural networks: A
+deep learning framework for solving forward and inverse problems involving nonlinear partial
+differential equations. _Journal of Computational physics_, 378:686–707, 2019.
+
+
+Lorenz Richter, Ayman Boustati, Nikolas N¨usken, Francisco Ruiz, and Omer Deniz Akyildiz. Vargrad: a low-variance gradient estimator for variational inference. _Advances in Neural Information_
+_Processing Systems_, 33:13481–13492, 2020.
+
+
+Lorenz Richter, Julius Berner, and Guan-Horng Liu. Improved sampling via learned diffusions.
+_arXiv preprint arXiv:2307.01198_, 2023.
+
+
+Gareth O Roberts and Richard L Tweedie. Exponential convergence of langevin distributions and
+their discrete approximations. 1996.
+
+
+Simo S¨arkk¨a and Arno Solin. _Applied_ _stochastic_ _differential_ _equations_, volume 10. Cambridge
+University Press, 2019.
+
+
+Henrik Schopmans and Pascal Friederich. Conditional normalizing flows for active learning of
+coarse-grained molecular representations. _arXiv preprint arXiv:2402.01195_, 2024.
+
+
+Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion schr¨odinger
+bridge matching. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020.
+
+
+Gabriel Stoltz, Mathias Rousset, et al. _Free_ _energy_ _computations:_ _A_ _mathematical_ _perspective_ .
+World Scientific, 2010.
+
+
+Jingtong Sun, Julius Berner, Lorenz Richter, Marius Zeinhofer, Johannes M¨uller, Kamyar Azizzadenesheli, and Anima Anandkumar. Dynamical measure transport and neural pde solvers for
+sampling. _arXiv preprint arXiv:2407.07873_, 2024.
+
+
+Achille Thin, Nikita Kotelevskii, Alain Durmus, Eric Moulines, Maxim Panov, and Arnaud Doucet.
+Monte Carlo variational auto-encoders. In _International Conference on Machine Learning_, 2021.
+
+
+Francisco Vargas, Will Grathwohl, and Arnaud Doucet. Denoising diffusion samplers. _arXiv_
+_preprint arXiv:2302.13834_, 2023a.
+
+
+Francisco Vargas, Andrius Ovsianas, David Fernandes, Mark Girolami, Neil D Lawrence, and Nikolas N¨usken. Bayesian learning via neural schr¨odinger–f¨ollmer flows. _Statistics and Computing_,
+33(1):3, 2023b.
+
+
+Francisco Vargas, Shreyas Padhy, Denis Blessing, and Nikolas N¨usken. Transport meets variational
+inference: Controlled monte carlo diffusions. In _The Twelfth International Conference on Learn-_
+_ing Representations_, 2024.
+
+
+Pascal Vincent. A connection between score matching and denoising autoencoders. _Neural compu-_
+_tation_, 23(7):1661–1674, 2011.
+
+
+Martin J. Wainwright and Michael I. Jordan. Graphical Models, Exponential Families, and Variational Inference. _Foundations and Trends® in Machine Learning_, 1(1–2):1–305, November 2008.
+
+
+Neng Wan, Dapeng Li, and Naira Hovakimyan. F-divergence variational inference. _Advances_ _in_
+_neural information processing systems_, 33:17370–17379, 2020.
+
+
+14
+
+
+Hao Wu, Jonas K¨ohler, and Frank No´e. Stochastic normalizing flows. _Advances in Neural Informa-_
+_tion Processing Systems_, 33:5933–5944, 2020.
+
+
+Dinghuai Zhang, Ricky Tian Qi Chen, Cheng-Hao Liu, Aaron Courville, and Yoshua Bengio. Diffusion generative flow samplers: Improving learning signals through partial trajectory optimization.
+_arXiv preprint arXiv:2310.02679_, 2023.
+
+
+Guodong Zhang, Kyle Hsu, Jianing Li, Chelsea Finn, and Roger Grosse. Differentiable annealed importance sampling and the perils of gradient noise. In _Advances in Neural Information Processing_
+_Systems_, 2021.
+
+
+Qinsheng Zhang and Yongxin Chen. Path integral sampler: a stochastic control approach for sampling. _arXiv preprint arXiv:2111.15141_, 2021.
+
+
+Hongyi Zhou, Denis Blessing, Ge Li, Onur Celik, Xiaogang Jia, Gerhard Neumann, and Rudolf
+Lioutikov. Variational distillation of diffusion policies into mixture of experts. _arXiv_ _preprint_
+_arXiv:2406.12538_, 2024.
+
+
+A PROOFS
+
+
+A.1 PROOF OF PROPOSITION 1
+
+
+We will use the Fokker-Planck equation (FPE) and show that the given stationary distribution satisfies it when the time derivative is set to zero:
+
+
+First, recall the FPE for the probability density _p_ ( _x, t_ ) of a process described by the stochastic
+differential equation (SDE)
+
+
+d _xt_ = _f_ ( _xt_ )d _t_ + _σ_ d **w** _t_ (23)
+_−_
+
+
+is given as
+
+
+( _x, t_ )
+
+= [ _f_ ( _x_ ) _p_ ( _x, t_ )] + _[σ]_ [2]
+_∂t_ _∇·_ 2
+
+
+_∂p_ ( _x, t_ )
+
+
+(24)
+2
+
+_[∇]_ [2] _[p]_ [(] _[x, t]_ [)] _[.]_
+
+
+For the stationary distribution _p_ [st] ( _x_ ), we set _[∂p]_ _∂t_ [(] _[x,t]_ [)] = 0:
+
+
+0 = [ _f_ ( _x_ ) _p_ [st] ( _x_ )] + _[σ]_ [2] (25)
+_∇·_ 2 _[∇]_ [2] _[p]_ [st][(] _[x]_ [)]
+
+
+Next, recall the proposed stationary distribution:
+
+             _p_ [st] ( _x_ ) exp
+_∝_ _−_ _σ_ [2][2]
+
+
+- _f_ ( _x_ )d _x_ (26)
+
+
+Next, we verify that this satisfies stationary FPE ( (25)). First, let’s compute the gradient and Laplacian of _p_ [st] ( _x_ ):
+
+
+     _p_ [st] ( _x_ ) = _p_ [st] ( _x_ )
+_∇_ _·_ _−_ _σ_ [2][2]
+
+
+_σ_ [2]
+
+
+_f_ ( _x_ ) (27)
+
+
+       _p_ [st] ( _x_ ) = [ _p_ [st] ( _x_ )
+_∇_ [2] _∇·_ _·_ _−_ _σ_ [2][2]
+
+
+_f_ ( _x_ )] (28)
+
+
+   = _p_ [st] ( _x_ )
+_·_ _−_ _σ_ [2][2]
+
+
+_σ_ [2]
+
+
+_σ_ [2]
+
+
+�2 
+[ _f_ ( _x_ )] [2] + _p_ [st] ( _x_ )
+_·_ _−_ _σ_ [2][2]
+
+
+_σ_ [2]
+
+
+_∇· f_ ( _x_ ) (29)
+
+
+15
+
+
+**Algorithm 1** Training of diffusion sampler with learnable prior
+**Require:**
+
+   - control functions _uθ, vγ_ with initial parameters _θ_ 0 _, γ_ 0
+
+   - prior distribution _p_ _[ϕ]_ 0 [with initial parameters] _[ ϕ]_ [0]
+
+   - initial discretization step size _δt_ 0
+
+   - number of gradient steps _G_, number of diffusion steps _N_, step size _η_
+
+
+Θ0 = _θ_ 0 _, γ_ 0 _, ϕ_ 0 _, δt_ 0
+_{_ _}_
+**for** _i ←_ 0 _, . . ., G −_ 1 **do**
+
+
+_x_ 0 _←_ _g_ ( _ξ, ϕi_ ) _,_ _ξ_ _∼_ _p_ ( _·_ ) _▷_ sample _p_ _[ϕ]_ _i_ [via reparameterization (batched in practice)]
+log _p_ _[ϕ][i]_ ( _x_ 0)
+_L ←_
+**for** _n ←_ 0 _, . . ., N_ - _−_ 1 **do** 
+_[θ][i]_ _[√]_
+
+
+_←_ - _−_ 
+_xn_ +1 = _xn_ + _f_ ( _xn, n_ ) + _σu_ _[θ][i]_ ( _xn, n_ ) _δti_ + _σ_ _[√]_ 2 _δtiϵn_
+_L ←L_ + log _⃗pn_ _[θ]_ +1 _[i][,ϕ]_ _|_ _[i]_ _n_ [(] _[x][n]_ [+1] _[|][x][n]_ [)] _[ −]_ [log] _pn_ _[γ]_ _|_ _[i]_ _n_ _[,ϕ]_ +1 _[i]_ [(] _[x][n][|][x][n]_ [+1][)]
+
+
+_pn_ _[γ][i]_ _n_ _[,ϕ]_ +1 _[i]_ [(] _[x][n][|][x][n]_ [+1][)]
+_|_
+
+
+log _ρ_ ( _xN_ )
+_L ←L −_
+Θ _i_ +1 _←_ Θ _i_ + _η∇_ Θ _L_ _▷_ maximize (extended) ELBO
+**return** optimized parameters Θ _G_
+
+
+Finally, we substitute these into the left side of (25), that is,
+
+
+[ _f_ ( _x_ ) _p_ [st] ( _x_ )] + _[σ]_ [2]
+_∇·_ 2
+
+
+(30)
+2
+
+_[∇]_ [2] _[p]_  - [st][(] _[x]_ [)]  -  -  -  -  
+
+
+  _p_ [st] ( _x_ )
+_·_ _−_ _σ_ [2][2]
+
+
+= [ _f_ ( _x_ ) _p_ [st] ( _x_ )] + _[σ]_ [2]
+_∇·_ 2
+
+
+�2 
+[ _f_ ( _x_ )] [2] + _p_ [st] ( _x_ )
+_·_ _−_ _σ_ [2][2]
+
+
+_∇· f_ ( _x_ )
+
+
+(31)
+
+
+2
+
+
+_σ_ [2]
+
+
+                = _p_ [st] ( _x_ ) _f_ ( _x_ ) + _f_ ( _x_ ) _p_ [st] ( _x_ ) + _p_ [st] ( _x_ )
+_∇·_ _∇_ _−_ _σ_ [2][2]
+
+
+_σ_ [2]
+
+
+[ _f_ ( _x_ )] [2] _−_ _p_ [st] ( _x_ ) _∇· f_ ( _x_ ) (32)
+
+
+         = _p_ [st] ( _x_ ) _f_ ( _x_ ) + _f_ ( _x_ ) _p_ [st] ( _x_ )
+_∇·_ _−_ _σ_ [2][2]
+
+
+_σ_ [2]
+
+
+_σ_ [2]
+
+
+- _f_ ( _x_ ) + _p_ [st] ( _x_ )
+
+_−_ _σ_ [2][2]
+
+
+_σ_ [2]
+
+
+[ _f_ ( _x_ )] [2] _−_ _p_ [st] ( _x_ ) _∇· f_ ( _x_ ) (33)
+
+
+= 0 _,_ (34)
+
+
+which yields the desired result.
+
+
+B ADDITIONAL DETAILS FOR DIFFUSION-BASED SAMPLER
+
+
+**Pseudocode:** We additionally provide pseudocode in Algorithm 1 for a generic diffusion sampler
+with learnable prior _p_ _[ϕ]_ 0 [.] [For] [clarity,] [we] [present] [an] [update] [step] [for] [a] [single] [sample.] [In] [practice,]
+however, one would use mini-batches for these updates.
+
+
+**Special Cases of X-GMP:** Consider the generic (extended) ELBO for X-GMP, that is,
+
+
+_pn_ _[γ,ϕ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+_⃗pn_ _[θ,ϕ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+- _N_
+
+log
+
+_n_ =1
+
+
+_L_ GMP( _θ, γ, ϕ_ ) = E _x_ 0: _N_ _∼⃗p_ _θ,ϕ_
+
+
+_ρ_ ( _xN_ )
+log ~~�~~ _K_ +
+_k_ =1 _[α][k][p]_ 0 _[ϕ][k]_ [(] _[x]_ [0][)]
+
+
+_,_ (35)
+
+
+with _p_ _[ϕ]_ 0 _[k]_ [(] _[x]_ [0][) =] _[ N]_ [(] _[x]_ [0] _[|][µ][k][,]_ [ Σ] _[k]_ [)][.] [We obtain the following special cases:]
+
+
+ - **GVI** **(** _K_ = 1 _, N_ = 0 **):** For a single Gaussian mixture component and zero diffusion
+steps, Equation (35) reduces to the marginal ELBO objective in Equation (9) for a Gaussian
+distribution, that is,
+
+
+GVI( _ϕ_ ) = E _x_ 0 _pϕ_ 0
+_L_ _∼_
+
+
+16
+
+
+log _[ρ]_ [(] _[x]_ [0][)]
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)]
+
+
+_._ (36)
+
+
+- **GMMVI (** _K_ _>_ 1 _, N_ = 0 **):** Similarly, if we have zero diffusion steps, but multiple Gaussian mixture components we obtain the marginal ELBO for Gaussian mixture models, i.e.,
+
+
+GMVI( _ϕ_ ) = E _x_ 0 _pϕ_ 0
+_L_ _∼_
+
+
+_ρ_ ( _x_ 0)
+log ~~�~~ _K_
+_k_ =1 _[α][k][p]_ 0 _[ϕ][k]_ [(] _[x]_ [0][)]
+
+
+_._ (37)
+
+
+Please note that there are more sophisticated methods to train Gaussian mixture models for
+VI, see Arenz et al. (2018; 2022).
+
+
+- **X-GP (** _K_ = 1 _, N_ _>_ 0 **):** For a single mixture component and multiple diffusion steps, we
+obtain the objective for X-GP, i.e., for a diffusion-model with learned Gaussian prior, given
+by
+
+
+_pn_ _[γ,ϕ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+_⃗pn_ _[θ,ϕ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+- _N_
+
+log
+
+_n_ =1
+
+
+_L_ GP( _θ, γ, ϕ_ ) = E _x_ 0: _N_ _∼⃗p_ _θ,ϕ_
+
+
+log _[ρ]_ [(] _[x][N]_ [)] +
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)]
+
+
+log _[ρ]_ [(] _[x][N]_ [)]
+
+
+_._ (38)
+
+
+    - **X-GMP (** _K_ _>_ 1 _, N_ _>_ 0 **):** Having multiple multiple mixture components _K_ and diffusion
+steps _N_ results in the full X-GMP objective, as in Equation (35).
+
+
+**Forward and Backward Transitions.** We provide further information about the diffusion-based
+sampling methods considered in this work in Table 3. Specifically, we provide expressions for the
+forward and backward transitions.
+
+
+**Time** **complexity.** Diffusion-based samplers that use a Gaussian prior have a time complexity
+of _O_ ( _N_ ), whereas Gaussian Mixture Priors (GMPs) incur a time complexity of _O_ ( _NK_ ). The
+additional factor _K_ arises from the need to compute the likelihood of the GMP at each diffusion
+step. However, in practice, the evaluation of the likelihood of the GMP can be parallelized across its
+components, which substantially reduces the computational overhead. This parallelization allows
+for efficient implementation despite the increased theoretical complexity.
+
+
+**Memory consumption.** When using the standard ”discrete-then-optimize” approach to minimize
+the KL divergence in (11), which requires differentiation through the SDE, memory consumption
+scales linearly with both _K_ (number of components) and _N_ (number of diffusion steps). In contrast,
+methods like the stochastic adjoint approach for KL optimization (Li et al., 2020) achieve constant
+memory consumption, making them more suitable for scenarios with a large number of components
+or diffusion steps.
+
+
+In our experiments, we opted for the former approach due to its simplicity. However, for tasks
+involving extensive components or steps, the stochastic adjoint method or similar approaches may
+be more practical. Additionally, constant memory consumption can also be achieved by using alternative loss functions such as the log-variance loss (Richter et al., 2020; 2023) or moment-loss
+(Hartmann et al., 2019).
+
+
+**Initialization heuristic for iterative model refinement.** As an alternative to (22) one could consider the following heuristic for selecting the mean of a new component:
+
+
+_pn_ _[γ,ϕ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+_⃗pn_ _[θ,ϕ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+_._ (39)
+
+
+- _N_
+
+log
+
+_n_ =1
+
+
+- _N_
+
+
+_µ_ new = arg max _x_ 0 _∈C_ E _x_ 1: _N_ _∼⃗p_ _θ,ϕ_
+
+
+log _[ρ]_ [(] _[x][N]_ [)] +
+
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)]
+
+
+log _[ρ]_ [(] _[x][N]_ [)]
+
+
+However, empirically we found that choosing (22) results in increased sample diversity. We leave
+an in-depth exploration of different heuristics as future work.
+
+
+C EXPERIMENTAL DETAILS
+
+
+C.1 BENCHMARKING TARGETS
+
+
+This section introduces the target densities considered in our experiments. Please note that the majority of tasks are taken from the recent benchmark study from Blessing et al. (2024). For convenience,
+we provide a brief explanation of the target densities.
+
+
+17
+
+
+|Method|p⃗ nθ +,ϕ 1|n(xn+1|xn) p⃗ nγ −,ϕ 1|n(xn−1|xn)|
+|---|---|
+|DIS<br>MCD<br>CMCD<br>DBS|_N_<br><br>_xn_+1_|xn_ +<br>h<br>_−σ_2_∇_log_ pϕ_<br>0(_xn_) +_ σuθ_(_xn, n_)<br>i<br>_δt,_ 2_σ_2_δtI_<br><br>_N_<br><br>_xn−_1_|xn_ +_ σ_2_∇_log_ pϕ_<br>0(_xn_)_δt,_ 2_σ_2_δtI_<br><br>_N_<br>�<br>_xn_+1_|xn_ +_ σ_2_∇x_ log_ πϕ_<br>_n_(_xn_)_δt,_ 2_σ_2_δtI_<br><br>_N_<br>�<br>_xn−_1_|xn −_<br><br>_σ_2_∇x_ log_ πϕ_<br>_n_(_xn_)_ −σvγ_(_xn, n_)<br><br>_δt,_ 2_σ_2_δtI_<br><br>_N_<br>�<br>_xn_+1_|xn_ +<br><br>_σ_2_∇x_ log_ πϕ_<br>_n_(_xn_) +_ σuθ_(_xn, n_)<br><br>_δt,_ 2_σ_2_δtI_<br><br>_N_<br>�<br>_xn−_1_|xn_ +<br><br>_σ_2_∇x_ log_ πϕ_<br>_n_(_xn_)_ −σuθ_(_xn, n_)<br><br>_δt,_ 2_σ_2_δtI_<br><br>_N_<br>�<br>_xn_+1_|xn_ +<br><br>_f_(_xn, n_) +_ σuθ_(_xn, n_)<br><br>_δt,_ 2_σ_2_δtI_<br><br>_N_<br>�<br>_xn−_1_|xn −_[_f_(_xn, n_)_ −σvγ_(_xn, n_)]_ δt,_ 2_σ_2_δtI_<br>|
+
+
+Table 3: Comparison of different forward and backward transitions _⃗p_ _[θ,ϕ]_, and _p_ _[γ,ϕ]_, respectively, for diffusion
+based sampling methods based on _f_, _πn_ _[ϕ]_ [,] _[ p][ϕ]_ 0 [,] _[ u][θ]_ [and] _[ v][γ]_ [as defined in the text.]
+
+
+**Bayesian Logistic Regression** : We evaluate a Bayesian logistic regression model on four standardized binary classification datasets:
+
+
+    - **Ionosphere** ( _d_ = 35, 351 ( _xi, yi_ ) pairs)
+
+    - **Sonar** ( _d_ = 61, 208 ( _xi, yi_ ) pairs)
+
+    - **German Credit** ( _d_ = 25, 1000 ( _xi, yi_ ) pairs)
+
+    - **Breast Cancer** ( _d_ = 31, 569 ( _xi, yi_ ) pairs)
+
+
+The model assumes:
+_ω_ _∼N_ (0 _, σω_ [2] _[I]_ [)] _[,]_
+
+_yi_ Bernoulli(sigmoid( _ω_ _[⊤]_ _xi_ )) _,_
+_∼_
+where features are standardized for linear logistic regression. Here, we perform inference over the
+parameters _ω_ of the (linear) logistic regression model. In Blessing et al. (2024), the authors used an
+uninformative prior for the parameters of the Bayesian logistic regression models for the _Credit_ and
+_Cancer_ tasks, which frequently caused numerical instabilities. To maintain the challenge of the tasks
+while ensuring stability, we opted for a Gaussian prior with zero mean and variance of _σω_ [2] [= 100][.]
+
+**Random Effect Regression** : We apply random effect regression to the **Seeds** dataset ( _d_ = 26):
+
+_τ_ _∼_ Gamma(0 _._ 01 _,_ 0 _._ 01) _,_
+_a_ 0 _, a_ 1 _, a_ 2 _, a_ 12 (0 _,_ 10) _,_
+_∼N_
+
+_bi_ (0 _,_ [1] ) _,_ _i_ = 1 _, . . .,_ 21 _,_
+_∼N_ ~~_√_~~ _τ_
+
+logits _i_ = _a_ 0 + _a_ 1 _xi_ + _a_ 2 _yi_ + _a_ 12 _xiyi_ + _b_ 1 _,_
+_ri_ Binomial(logits _i, Ni_ ) _,_
+_∼_
+
+with inference conducted over model parameters given observed data.
+
+
+**Time Series Models** : For time series analysis, we use the **Brownian** model ( _d_ = 32):
+
+
+_α_ inn LogNormal(0 _,_ 2) _,_
+_∼_
+_α_ obs LogNormal(0 _,_ 2) _,_
+_∼_
+_x_ 1 (0 _, α_ inn) _,_
+_∼N_
+_xi_ _∼N_ ( _xi−_ 1 _, α_ inn) _,_ _i_ = 2 _, . . .,_ 20 _,_
+_yi_ ( _xi, α_ obs) _,_ _i_ = 1 _, . . .,_ 30 _,_
+_∼N_
+
+
+with inference focusing on parameters _α_ inn _, α_ obs, and latent states _{xi}i_ [30] =1 [.]
+
+
+**Funnel** : ( _d_ = 10), a funnel-shaped distribution defined by:
+
+
+with _σf_ [2] [= 9][.]
+
+
+_π_ ( _x_ ) = _N_ ( _x_ 1; 0 _, σf_ [2][)] _[N]_ [(] _[x]_ [2:10][; 0] _[,]_ [ exp(] _[x]_ [1][)] _[I]_ [)] _[,]_
+
+
+**Fashion** **and** **Digits.** MNIST variants ( **DIGITS** ) and Fashion MNIST ( **Fashion** ) datasets using
+NICE (Dinh et al., 2014) to train normalizing flows, with resolutions 14 _×_ 14 and DIGITS and
+28 _×_ 28 for Fashion.
+
+
+18
+
+
+C.2 DIFFUSION-BASED METHODS: DETAILS AND TUNING
+
+
+**General setting:** All experiments are conducted using the Jax library (Bradbury et al., 2021). Our
+default experimental setup, unless specified otherwise, is as follows: We use a batch size of 2000
+(halved if memory-constrained) and train for 140 _k_ gradient steps to ensure approximate convergence. We use the Adam optimizer (Kingma & Ba, 2014), gradient clipping with a value of 1, and a
+learning rate scheduler that starts at 8 _×_ 10 _[−]_ [3] and uses a cosine decay starting at 60k gradient steps.
+We utilized 128 discretization steps and the Euler-Maruyama method for integration. The control
+functions _u_ _[θ]_ and _v_ _[γ]_ were parameterized as two-layer neural networks with 128 neurons. For DBS,
+we set the drift to _f_ = _σ_ [2] _∇_ log _π_ .
+
+Unlike Zhang & Chen (2021), we did not include the gradient of the target density in the network
+architecture. Inspired by Nichol & Dhariwal� (2021), we applied a cosine-square scheduler for the
+discretization step size: _δt_ = _a_ cos [2][ �] _[π]_ 2 _Nn_, where _a_ : [0 _,_ ) (0 _,_ ) is learned for all methods.
+
+_∞_ _→_ _∞_
+We enforced non-negativity of _a_ via an element-wise softplus transformation. The diffusion coefficient _σ_ was set to 1 for all experiments. Furthermore, we set the initial _a_ to 0 _._ 1 for all experiments
+except Brownian, where we set 0 _._ 01. We did not perform any hyperparameter tuning since most
+parameters are learned end-to-end.
+
+
+**Gaussian Priors (GP) and Gaussian Mixture Priors (GMP):** We learn diagonal Gaussian priors
+and ensure positive definiteness with an element-wise softplus transformation. We use a separate
+learning rate of 10 _[−]_ [2] for all experiments to allow for quick adaptation of the Gaussian components.
+Furthermore, the mean was initialized at 0 and the initial covariance matrix was set to the identity
+except for Fashion where we set the initial variance to 5 which roughly covers the support of the
+target. The individual components in the Gaussian mixture follow the setup of Gaussian priors. The
+mixture weights are uniformly initialized and fixed during training. If not otherwise specified, we
+use _K_ = 10 mixture components for X-GMP.
+
+
+**Iterative Model Refinement (IMR):** For IMR, we add a new component after 500 training iterations starting with a single component. The initial means were selected with the heuristic presented
+in Equation (22). The variance of the newly added components was set to be 1. The candidate sample set was generated using the Metropolis Adjusted Langevin Algorithm (MALA) (Cheng et al.,
+2018). For that, we used 2000 random samples from a Gaussian with zero mean and variance 5,
+which roughly covers the support of the _Fashion_ target. Please note that competing methods also
+use this prior knowledge for initialization of the prior, see Table 4. We use 128 steps steps, that is,
+
+
+_xi_ +1 = _xi_ + ˜ _σ_ [2] _∇_ log _π_ ( _xi_ ) _δt_ + ˜ _σ√_
+
+
+2 _δtϵ,_ _ϵ ∼N_ ( _·|_ 0 _, I_ ) (40)
+
+
+with _σ_ ˜ = 5 and an additional Metropolis adjustment step. Here, _σ_ ˜ was chosen such that the final
+set of samples yields high target log-likelihoods log _ρ_ ( _x_ ). The final samples are used as candidate
+set. We note that this procedure brings the new components close to different modes in the target
+distribution and therefore facilitates exploration. Moreover, the computation of such a candidate set
+is very cheap, i.e., the equivalent of a single gradient step for e.g. MCD or CMCD.
+
+
+C.3 COMPETING METHODS: DETAILS AND TUNING
+
+
+The results for competing methods presented in this work are primarily drawn from Blessing et al.
+(2024), where hyperparameters were carefully optimized. For convenience, we repeat the details.
+Since our experimental setup differs for the _Credit_ and _Cancer_ tasks (detailed in Section C.1), we
+adhered to the tuning recommendations provided by Blessing et al. (2024). Details about hyperparameters can be found in Table 4.
+
+
+**Sequential Monte Carlo (SMC) and Continual Repeated Annealed Flow Transport (CRAFT):**
+The Sequential Monte Carlo (SMC) approach was implemented with 2000 particles and 128 annealing steps, matching the number of sequential steps used in diffusion-based sampling methods.
+Resampling was performed with a threshold of 0.3, and one Hamiltonian Monte Carlo (HMC) step
+was applied per temperature, using 5 leapfrog steps. The HMC step size was tuned according to
+Table 4, with different step sizes based on the annealing parameter _βt_ . Additionally, the scale of the
+initial proposal distribution was tuned. As CRAFT builds on the SMC framework, it used the same
+SMC specifications, incorporating diagonal affine flows (Papamakarios et al., 2021) as transition
+models.
+
+
+19
+
+
+|Methods / Parameters|Grid|Funnel Fashion Credit Cancer Brownian Sonar Seeds Ionosphere ϕ4|
+|---|---|---|
+|**SMC**<br>Initial Scale<br>HMC stepsize (_β ≤_0_._5)<br>HMC stepsize (_β >_ 0_._5)|_{_0.1, 1, 10_}_<br>_{_0.005, 0.001, 0.01, 0.05, 0.1, 0.2_}_<br>_{_0.005, 0.001, 0.01, 0.05, 0.1, 0.2_}_|1<br>5_†_<br>0.1<br>1<br>1<br>1<br>1<br>1<br>5_†_<br>0.001<br>0.2<br>0.01<br>0.01<br>0.001<br>0.05<br>0.2<br>0.2<br>0.1<br>0.1<br>0.2<br>0.005<br>0.005<br>0.05<br>0.001<br>0.05<br>0.2<br>0.05|
+|**CRAFT**<br>Initial Scale<br>Learning Rate|_{_0.1, 1, 10_}_<br>_{_10_−_3_,_ 10_−_4_,_ 5_ ×_ 10_−_4_,_ 10_−_5_}_|1<br>5_†_<br>1<br>1<br>1<br>1<br>0.1<br>0.1<br>10_−_3<br>10_−_4<br>5_ ×_ 10_−_4<br>5_ ×_ 10_−_4<br>10_−_3<br>10_−_3<br>10_−_3<br>10_−_3|
+|**FAB**<br>Initial Scale<br>Learning Rate|<br>_{_0.1, 1, 10_}_<br>_{_10_−_3_,_ 10_−_4_,_ 5_ ×_ 10_−_4_,_ 10_−_5_}_|<br> <br>1<br>5_†_<br>1<br>1<br>1<br>0.1<br>0.1<br>1<br>10_−_4<br>10_−_3<br>10_−_4<br>10_−_3<br>10_−_3<br>10_−_3<br>10_−_4<br>10_−_3|
+
+
+Table 4: Hyperparameter selection for all different sampling algorithms. The ‘Grid’ column indicates the
+values over which we performed a grid search. The values in the column which are marked with experiment
+names indicate which values were chosen for the reported results. The values for parameters indicated with _†_
+are set by using prior knowledge about the task.
+
+
+**Flow Annealed Importance Sampling Bootstrap (FAB):** Automatic step size tuning for the SMC
+sampler was applied on top of the normalizing flow (Papamakarios et al., 2021). The flow architecture utilized RealNVP (Dinh et al., 2016), with an 8-layer MLP serving as the conditioner. FAB’s
+replay buffer was employed to accelerate computations. The learning rate and base distribution scale
+were adjusted for target specificity as outlined in Table 4. A batch size of 2000 was used, and FAB
+was trained until reaching approximate convergence, which was sufficient to achieve approximate
+convergence.
+
+
+C.4 EVALUATION
+
+
+**Evaluation protocol and model selection** We follow the evaluation protocol of prior work (Blessing et al., 2024) and evaluate all performance criteria 100 times during training, using 2000 samples
+for each evaluation. To smooth out short-term fluctuations and obtain more robust results within a
+single run, we apply a running average with a window of 5 evaluations. We conduct each experiment
+using four different random seeds and average the best results of each run.
+
+
+**Performance Criteria:** In order to define the performance criteria, we first define the unnormalized (extended) importance weights _w_ ˜, that is,
+
+
+_ρ_ ( _xN_ ) [�] _[N]_ _n_ =1
+_w_ ˜ := ~~[�]~~
+
+
+_pn_ _[γ,ϕ]_ 1 _n_ [(] _[x][n][−]_ [1] _[|][x][n]_ [)]
+
+_−_ _|_
+
+
+_._ (41)
+_p_ _[ϕ]_ 0 [(] _[x]_ [0][)] ~~[�]~~ _[N]_ _n_ =1 _[⃗p]_ _n_ _[θ,ϕ]_ _n_ 1 [(] _[x][n][|][x][n][−]_ [1][)]
+_|_ _−_
+
+
+We consider the following following performance criteria:
+
+
+    - **Evidence lower bound (ELBO)** : We compute the (extended) ELBO as
+
+
+ELBO := E _x_ 0: _N_ _∼⃗p_ _θ,ϕ_ [log _w_ ˜] _≈_ _m_ [1]
+
+
+- _m_
+
+log _w_ ˜ [(] _[i]_ [)] _._ (42)
+
+_i_ =1
+
+
+- **Estimation error** ∆log _Z_ : When having access to the ground truth normalization constant
+log _Z_, we can compute the estimation error ∆log _Z_ = _|_ log _Z−_ log _Z|_ [�] using an importance
+weighted estimate, that is,
+
+
+log _Z_ [�] := log E _x_ 0: _N_ _∼⃗p_ _θ,ϕ_ [ ˜ _w_ ] _≈_ log _m_ [1]
+
+
+- _m_
+
+_w_ ˜ [(] _[i]_ [)] _._ (43)
+
+_i_ =1
+
+
+- **Effective sample size (ESS):** Moreover, we compute the (normalized) ESS as
+
+
+ESS :=
+
+
+�� _m_
+_i_ =1 _[w]_ [˜][(] _[i]_ [)][�][2]
+
+_m_ ~~[�]~~ _[m]_ _i_ =1 ~~�~~ _w_ ˜ [(] _[i]_ [)] ~~[�]~~ [2] _[.]_ (44)
+
+
+- **Sinkhorn distance:** We estimate the Sinkhorn distance _Wγ_ [2] [(][Cuturi][,][ 2013][), i.e., an entropy]
+regularized optimal transport distance between a set of samples from the model and target
+using the Jax ott library (Cuturi et al., 2022). Note that computing _Wγ_ [2] [requires samples]
+from the target density which are typically not available for real-world target densities.
+
+
+20
+
+
+|K|DIS-GMP<br>ABS. [s] REL. [%]|CMCD-GMP<br>ABS. [s] REL. [%]|
+|---|---|---|
+|1<br>5<br>10|0_._103<br>-<br>0_._128<br>24_._27<br>0_._155<br>50_._48|1_._123<br>-<br>1_._166<br>3_._82<br>1_._203<br>7_._12|
+
+
+Table 5: Wallclock time of DIS-GMP and CMCD-GMP for the Fashion target for _N_ = 128. Here, _K_ the
+number of components in den Gaussian mixture, ‘abs.’ denotes the absolute time per gradient step in seconds,
+and ‘rel.’ denotes the relative increase in percent compared to _K_ = 1.
+
+
+**Brownian**
+
+
+**Funnel**
+
+
+**Ionosphere**
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+**Seeds**
+
+
+**Credit**
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+Figure 6: Wallclock time per gradient step of DIS-GMP for various benchmark problems. Here, _N_ denotes
+the number of discretization steps and _K_ the number of components in den Gaussian mixture.
+
+
+    - **Entropic** **mode** **coverage** **(EMC):** EMC evaluates the mode coverage of a sampler by
+leveraging prior knowledge of the target density. It holds that EMC _∈_ [0 _,_ 1] where EMC =
+1 indicates that the model achieves uniform coverage over all modes whereas EMC = 0
+indicates that the model only produces samples from a single mode. Please note that EMC
+does not provide any information about the sample quality. For further details, we refer the
+interested reader to Blessing et al. (2024).
+
+
+D FURTHER NUMERICAL RESULTS
+
+
+Here, we provide further numerical results.
+
+
+**Wallclock** **time** We further report the wallclock time per gradient step for DIS for a different
+number of diffusion steps _N_ and mixture components _K_ . The results are shown in Figure 6. For
+_N_ _≤_ 64, the Gaussian mixture prior barely influences the wallclock time where using _K_ = 10
+components roughly adds a 20 percent increase. Considering the performance improvements this is
+a good trade-off. For _N_ = 128, Using _K_ = 10 roughly results in a 50 percent increase as the likelihood of the prior has to be evaluated in every diffusion step. However, since most diffusion-based
+methods apart from DIS additionally require evaluating the target density at every step, the relative
+costs of using GMPs reduce if the target is more expensive to evaluate. We empirically validated
+this by additionally including a comparison between the wallclock time for DIS and CMCD on the
+Fashion target in Table 5. In this setting, the relative cost added by the GMP is minor.
+
+
+21
+
+
+**Ionosphere**
+
+
+**Brownian**
+
+
+**Seeds**
+
+
+**Credit**
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+Figure 7: Evidence Lower Bound (ELBO) of DIS-GMP for various real-world benchmark problems, averaged
+across four seeds. Here, _N_ denotes the number of discretization steps and _K_ the number of components in den
+Gaussian mixture.
+
+
+_Wγ_ **[2]**
+
+
+**ELBO**
+
+
+**ESS**
+
+
+**∆** log **Z**
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+Figure 8: Various performance criteria of DIS-GMP for the Funnel target, averaged across four seeds. Here,
+_N_ denotes the number of discretization steps and _K_ the number of components in den Gaussian mixture.
+
+
+**Additional** **results** **for** **DIS-GMP** We present further details regarding the ablation study from
+Section 6. Specifically, we report ELBO values for the real-world benchmark problems in Figure 7
+and various metrics for the _Funnel_ target in Figure 8. The results are consistent with the results
+in Figure 5, where the performance improves with a higher number of mixture components _K_ and
+diffusion steps _N_ .
+
+
+**DIS-GMP on** _**Digits**_ **target** We additionally investigate the performance of DIS-GMP on the synthetic digits target. The results are reported in Figure 9. Here, we observe that the ELBO get looser
+when using more mixture components _K_, while ∆log _Z_ stays roughly constant. However, the sample diversity improves significantly as shown quantitatively from the Sinkhorn distance _Wγ_ [2] [and]
+
+
+_K_ : Num. mixture components
+
+
+|Col1|Digits (d = 196)|
+|---|---|
+|_K_|ELBO_ ↑_<br>∆log_ Z ↓_<br>_W_2<br>_γ ↓_|
+|1<br>5<br>10<br>20|<br>  <br><br> <br>_−_**12**_.__±_**0**_._<br>5_._269_±_0_._416<br>197_._566_±_0_._340<br>_−_12_._303_±_0_._350<br>**4**_.__±_**0**_._<br>183_._241_±_8_._776<br>_−_13_._820_±_0_._831<br>4_._658_±_0_._260<br>164_._827_±_2_._626<br>_−_15_._413_±_0_._317<br>5_._663_±_0_._085<br>_.__±_**0**_._|
+
+
+Figure 9: **Left side** : Results for Digits target, averaged across four seeds using DIS-GMP+IMR. Evaluation
+criteria include evidence lower bound ELBO, importance-weighted errors for estimating the log-normalizing
+constant ∆log _Z_, and Sinkhorn distance _W_ 2 _[γ]_ [.] [The best results are highlighted in bold.] [Arrows (] _[↑]_ [,] _[ ↓]_ [) indicate]
+whether higher or lower values are preferable, respectively. **Right side** : Visualization of the _d_ = 14 _×_ 14 = 196
+dimensional Digits samples for a different number of mixture components _K_ .
+
+
+22
+
+
+**DIS**
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+**DIS-GP**
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+**DIS-GMP**
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+**DIS-GMP+IMR**
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+Figure 10: Visualization of a two-dimensional Gaussian mixture target density for different variants of DIS
+with _N_ = 128 diffusion steps and _K_ = 10 components for GMP versions. Colored ellipses and circles denote
+standard deviations and means of the Gaussian components, respectively. Red dots illustrate samples of the
+learned model.
+
+|METHOD|∇log π|CREDIT|SEEDS|CANCER|BROWNIAN|IONOSPHERE|SONAR|
+|---|---|---|---|---|---|---|---|
+|DIS-GP<br>DIS-GP||_−_585_._247_±_0_._009<br>_−_592_._262_±_0_._794|_−_73_._540_±_0_._005<br>_−_73_._497_±_0_._001|_−_85_._005_±_1_._286<br>_−_96_._180_±_10_._044|0_._588_±_0_._013<br>N/A|_−_111_._847_±_0_._006<br>_−_111_._957_±_0_._090|_−_109_._280_±_0_._024<br>_−_109_._473_±_0_._143|
+|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|DIS-GMP<br>_−__.__±_**0**_._<br>_−_73_._492_±_0_._003<br>_−_**84**_.__±_**2**_._<br>**0**_.__±_**0**_._<br>_−__.__±_**0**_._<br>_−__.__±_**0**_._<br>DIS-GMP<br>_−_586_._817_±_0_._906<br>_−_**73**_.__±_**0**_._<br>_−_84_._732_±_0_._466<br>N/A<br>_−_112_._108_±_0_._002<br>_−_109_._248_±_0_._001|
+
+
+Table 6: Evidence lower bound (ELBO) values for various real-world benchmark problems, averaged across
+four seeds. Here, _∇_ log _π_ indicates if the model architecture uses target score as described in Equation (46).
+The best overall results are highlighted in bold, with category-specific best results underlined. Blue and green
+shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP), respectively.
+
+
+**Ablation on Gaussian Mixture Target** We additionally experiment with using a two-dimensional
+Gaussian mixture model (GMM) as the target density. The GMM has ten components where the
+means are uniformly sampled in [ _−_ 12 _,_ 12] and the covariance matrices are sampled from a Wishart
+distribution. In addition to the performance criteria outlined in Section 6, we quantify the variation
+of the dynamics over time using the spectral norm of the Jacobian of the learned control, i.e.,
+
+
+�� _T_
+
+
+_∂σu_ _[θ]_ ( _x, t_ )
+����
+
+_∂x_
+
+
+���� d _t_
+2
+
+
+_S_ = E _x_ 0: _T ∼⃗p_ _θ_
+
+
+0
+
+
+_._ (45)
+
+
+For DIS we initialized the prior with a standard deviation of 12 such that the prior covers the support
+of the target. For DIS-GMP, we use _K_ = 10 components that are initialized with a standard deviation of 1. We report qualitative and qualitative results in Figure 10 and Figure 11. We find that DIS
+without learned prior and sufficiently large prior support is able to cover all modes as indicated by
+EMC _≈_ 1. While the sample quality is similar between DIS and GMP counterparts (see _Wγ_ [2][), plain]
+DIS needs significantly more diffusion steps in order to achieve similar ELBO/ESS values compared
+to the GMP counterparts which achieve good performance with as few as 8 diffusion steps. The requirement of plain DIS for more discretization steps is additionally reflected in the variation of the
+dynamics over time _S_ . Lastly, the GP version is not able to cover all modes due to the mode-seeking
+nature of the reverse KL as indicated by the EMC and _Wγ_ [2] [values.]
+
+
+**Ablation:** **Influence of the control architecture** We further evaluate the performance using the
+architecture by Zhang & Chen (2021) which additionally incorporates the score of the target, i.e.
+_∇_ log _π_, into the architecture via
+_u_ _[θ]_ ( _x, t_ ) = _f_ 1 _[θ]_ [(] _[x, t]_ [) +] _[ f]_ 2 _[θ]_ [(] _[t]_ [)] _[∇]_ [log] _[ π]_ [(][stop] ~~[g]~~ [radient][(] _[x]_ [))] _[.]_ (46)
+where _f_ 1 and _f_ 2 are parameterized function approximatior with parameters _θ_ . Zhang & Chen (2021);
+Vargas et al. (2023a) found that detaching, that is, using a stop-gradient operator on _x_ yields superior
+results due to the simplification of the computational graph. We adopt this change and report the
+results in Table 6. We find that using the score of the target leads, in the majority of experiments,
+slightly worse results.
+
+
+**Ablation:** **Kullback-Leibler** **vs.** **Log-Variance** **divergence** We further compare the KL divergence to the log-variance divergence introduced in Richter et al. (2020) and later extended to diffu
+
+23
+
+
+DIS DIS-GP DIS-GMP DIS-GMP+IMR
+
+
+120
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+0
+
+
+_−_ 1
+
+
+_−_ 2
+
+
+_−_ 3
+
+
+_−_ 4
+
+
+_N_
+
+
+0 _._ 3
+
+
+0 _._ 2
+
+
+0 _._ 1
+
+
+0
+
+
+0 8 16 32 64 128
+
+_N_
+
+
+8 16 32 64 128
+
+_N_
+
+
+across different numbers of diffusion steps _N_ for different variants of DIS. Evaluation criteria include evidence
+lower bound ELBO, importance-weighted errors for estimating the log-normalizing constant ∆log _Z_, and
+Sinkhorn distance _W_ 2 _[γ]_ [, entropic mode coverage EMC, and the time-integrated spectral norm of the control] _[ S]_
+(see Equation (45)).
+
+|METHOD|DIV.|CREDIT|SEEDS|CANCER|BROWNIAN|IONOSPHERE|SONAR|
+|---|---|---|---|---|---|---|---|
+|DIS<br>DIS|KL<br>LV|_−_589_._636_±_0_._757<br>_−_5170_._845_±_5_._627|_−_74_._400_±_0_._007<br>_−_74_._654_±_0_._022|_−_86_._592_±_2_._107<br>_−_88_._379_±_1_._491|_−_3_._503_±_0_._019<br>_−_5_._682_±_0_._303|_−_112_._525_±_0_._008<br>_−_112_._609_±_0_._053|_−_110_._153_±_0_._022<br>_−_110_._622_±_0_._071|
+|DIS-GP<br>DIS-GP|KL<br>LV|_−_585_._247_±_0_._009<br>_−_5163_._451_±_3_._296|_−_73_._540_±_0_._005<br>_−_73_._703_±_0_._177|_−_85_._005_±_1_._286<br>_−_549_._071_±_466_._902|0_._588_±_0_._013<br>0_._729_±_0_._004|_−_111_._847_±_0_._006<br>_−_111_._839_±_0_._006|_−_109_._280_±_0_._024<br>_−_109_._498_±_0_._005|
+|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|DIS-GMP<br>KL<br>_−_585_._223_±_0_._006<br>_−_73_._492_±_0_._003<br>_−_84_._061_±_2_._117<br>0_._885_±_0_._005<br>_−_111_._811_±_0_._002<br>_−_109_._157_±_0_._000<br>DIS-GMP<br>LV<br>_−_5152_._728_±_18_._004<br>_−_73_._777_±_0_._007<br>_−_86_._456_±_0_._557<br>0_._722_±_0_._005<br>_−_111_._844_±_0_._000<br>_−_109_._443_±_0_._000|
+
+
+Table 7: Evidence lower bound (ELBO) values for various real-world benchmark problems, averaged across
+four seeds. Here, ‘Div.’ indicates if the model is trained using the Kullback-Leibler (KL) or log-variance (LV)
+divergence. The best overall results are highlighted in bold, with category-specific best results underlined. Blue
+and green shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP),
+respectively.
+
+
+sion models in Richter et al. (2023). The log-variance divergence is defined as
+
+
+_L_ ( _θ, ϕ_ ) = V _x_ 0: _N_ _∼R_
+
+
+log
+
+
+_p_ _[γ,ϕ]_ ( _x_ 0: _N_ )
+_⃗p_ _[θ,ϕ]_ ( _x_ 0: _N_ )
+
+
+_,_ (47)
+
+
+where _R_ describes a reference process, e.g. Equation (2a) where _u_ _[θ]_ is replaced with an arbitrary
+control. In practice, one typically uses the generative process _⃗p_ _[θ,ϕ]_ with an additional stop gradient operator on the parameters (Richter et al., 2023). Not computing the expectations with respect
+to samples from the generative process significantly reduces memory consumption and does not
+require the prior distribution to be amendable to the reparameterization trick. The results are reported in Table 7 and follow the same experimental setting as outlined in the main part of the paper.
+We find that the KL divergence typically performs better than the log-variance divergence. Most
+significantly, the log-variance divergence seems to be numerically unstable for the _Credit_ target.
+
+
+**Comparison to long-run Sequential Monte Carlo** We additionally compare diffusion samplers
+with a learned Gaussian mixture prior to a Sequential Monte Carlo with a high number of discretization steps _N_ . The results are shown in Table 8 and Table 9. While long-run SMC significantly
+
+
+24
+
+
+|METHOD|N|CREDIT|SEEDS|CANCER|BROWNIAN|IONOSPHERE|SONAR|
+|---|---|---|---|---|---|---|---|
+|MCD-GMP<br>CMCD-GMP<br>DIS-GMP<br>DBS-GMP|128<br>128<br>128<br>128|_−_585_._276_±_0_._013<br>_−_585_._162_±_0_._002<br>_−_585_._223_±_0_._006<br>_−__.__±_**0**_._|_−_73_._461_±_0_._004<br>_−_73_._429_±_0_._002<br>_−_73_._492_±_0_._003<br>_−_**73**_.__±_**0**_._|_−_88_._562_±_0_._243<br>_−_78_._402_±_0_._037<br>_−_84_._061_±_2_._117<br>_−_**78**_.__±_**0**_._|0_._993_±_0_._003<br>1_._087_±_0_._001<br>0_._885_±_0_._005<br>**1**_.__±_**0**_._|_−_111_._827_±_0_._007<br>_−_111_._682_±_0_._000<br>_−_111_._811_±_0_._002<br>_−__.__±_**0**_._|_−_109_._197_±_0_._004<br>_−_108_._634_±_0_._000<br>_−_109_._157_±_0_._000<br>_−_108_._548_±_0_._000|
+|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|SMC<br>128<br>_−_698_._403_±_4_._146<br>_−_74_._699_±_0_._100<br>_−_194_._059_±_0_._613<br>_−_1_._874_±_0_._622<br>_−_114_._751_±_0_._238<br>_−_111_._355_±_1_._177<br>256<br>_−_708_._185_±_14_._225<br>_−_73_._972_±_0_._034<br>_−_140_._757_±_7_._041<br>_−_0_._360_±_0_._136<br>_−_113_._110_±_0_._046<br>_−_109_._822_±_0_._630<br>512<br>_−_686_._335_±_18_._333<br>_−_73_._667_±_0_._015<br>_−_137_._028_±_2_._336<br>0_._414_±_0_._048<br>_−_112_._353_±_0_._036<br>_−_109_._197_±_0_._420<br>1024<br>_−_690_._011_±_12_._879<br>_−_73_._532_±_0_._038<br>_−_128_._809_±_6_._046<br>0_._786_±_0_._047<br>_−_111_._962_±_0_._018<br>_−_108_._291_±_0_._325<br>2048<br>_−_672_._602_±_15_._229<br>_−_73_._496_±_0_._017<br>_−_128_._376_±_3_._504<br>0_._992_±_0_._036<br>_−_111_._785_±_0_._022<br>_−__.__±_**0**_._<br>4096<br>_−_665_._973_±_19_._849<br>_−_73_._438_±_0_._004<br>_−_121_._950_±_3_._315<br>1_._088_±_0_._029<br>_−_111_._692_±_0_._013<br>_−_108_._736_±_0_._227|
+
+
+Table 8: Evidence lower bound (ELBO) values for various real-world benchmark problems and different
+numbers of discretization steps _N_, averaged across four seeds. The best overall results are highlighted in bold,
+with category-specific best results underlined. green shading indicate that the method Gaussian mixture priors
+(GMP).
+
+
+|Col1|Col2|FASHION (d = 784)|
+|---|---|---|
+|**METHOD**|_N_|ELBO_ ↑_<br>∆log_ Z ↓_<br>_W_2<br>_γ ↓_<br>EMC _↑_|
+|DIS-GMP+IMR|128|_−_**62**_.__±_**2**_._<br>**27**_.__±_**3**_._<br>_.__±_**13**_._<br>**0**_.__±_**0**_._|
+|SMC|128<br>256<br>512<br>1024<br>2048<br>4096|_−_12181_._932_±_134_._611<br>11747_._518_±_139_._292<br>6696_._287_±_250_._4<br>0_._026_±_0_._027<br>_−_10095_._076_±_1076_._723<br>9901_._113_±_1078_._916<br>6018_._423_±_197_._144<br>0_._191_±_0_._112<br>_−_9340_._232_±_803_._694<br>9254_._499_±_804_._027<br>5821_._422_±_396_._492<br>0_._141_±_0_._140<br>_−_9229_._557_±_742_._223<br>9190_._558_±_742_._656<br>5610_._511_±_283_._885<br>0_._075_±_0_._129<br>_−_8472_._660_±_281_._288<br>8454_._062_±_281_._475<br>5718_._030_±_328_._909<br>0_._257_±_0_._038<br>_−_8399_._465_±_153_._637<br>8390_._302_±_153_._707<br>5583_._099_±_179_._370<br>0_._102_±_0_._108|
+
+
+Table 9: Results for Fashion target, averaged across four seeds and reported across different numbers of
+discretization steps _N_ . Evaluation criteria include evidence lower bound ELBO, importance-weighted errors
+for estimating the log-normalizing constant ∆log _Z_, and Sinkhorn distance _W_ 2 _[γ]_ [and entropic mode coverage]
+EMC. The best overall results are highlighted in bold, with category-specific best results underlined. Arrows
+( _↑_, _↓_ ) indicate whether higher or lower values are preferable, respectively. Orange shading indicates that the
+method uses iterative model refinement (IMR).
+
+
+**METHOD** **FUNNEL** **SEEDS** **BROWNIAN** **IONOSPHERE** **SONAR**
+
+
+Table 10: Variability in the dynamics of the learned model via time-integrated spectral norm of the control
+_S ×_ 10 [2] (see Equation (45)) for various benchmark problems. Both DIS and DIS-GMP use _N_ = 128 diffusion
+steps. Here, DIS-GMP uses _K_ = 10 components. Lower values indicate lower variability in the dynamics of
+the learned model.
+
+
+increases ELBO values, GMP-based diffusion sampler yield superior results in most experiments.
+Moreover, the results on the _Fashion_ target indicate that more discretization steps yield better ELBO,
+∆log _Z_ and Sinkorn distances, but are not able to prevent mode collapse as indicated by the low
+EMC values.
+
+
+**Ablation:** **Variation of dynamics** We additionally compare the variability in the dynamics of the
+learned model between DIS and DIS-GMP via time-integrated spectral norm of the control _S_ (see
+Equation (45)). The results are shown in Table 10 and show that DIS-GMP indeed has less variation
+in the dynamics. These findings are also in line with those in Figure 3 and Table 2 where DIS-GMP
+has significantly higher ELBO values compared to DIS without learned prior.
+
+
+25
+
+
+E LATTICE _ϕ_ [4] THEORY
+
+
+We apply our method to simulate a statistical lattice field theory near and beyond the phase transition. This phase transition marks the progression of the lattice from disordered to semi-ordered and
+ultimately to a fully ordered state, where neighboring sites exhibit strong correlations in sign and
+magnitude.
+
+
+We study the lattice _ϕ_ [4] theory in _D_ = 2 spacetime dimensions (distinct from the problem’s dimensionality as described below). The random variables in this setting are field configurations
+_ϕ ∈_ R _[L][×][L]_, where _L_ represents the lattice extent in space and time. The density of these configurations is defined as
+
+
+_π_ ( _ϕ_ ) = _[e][−][U]_ [(] _[ϕ]_ [)]
+
+
+_,_
+_Z_
+
+
+where the potential _U_ ( _ϕ_ ) is given by:
+
+
+  _U_ ( _ϕ_ ) = _−_ 2 _κ_
+
+_x_
+
+
+    _ϕxϕx_ + _µ_ + (1 _−_ 2 _λ_ )
+_µ_ _x_
+
+
+  _ϕ_ [2] _x_ [+] _[ λ]_
+_x_ _x_
+
+
+_ϕ_ [4] _x_ _[.]_ (48)
+_x_
+
+
+Here, the summation over _x_ runs over all lattice sites, and the summation over _µ_ considers the
+neighbors of each site. The parameters _λ_ and _κ_ are referred to as the bare coupling constant and the
+hopping parameter, respectively. Following Nicoli et al. (2021), we set _λ_ = 0 _._ 022, identifying the
+critical threshold of the theory (the transition from ordered to disordered states) at _κ_ _≥_ 0 _._ 3. Near
+this threshold, sampling becomes increasingly challenging due to the multimodality of the density,
+with modes becoming more separated for larger values of _κ_ .
+
+We conduct experiments for _κ_ _∈{_ 0 _._ 2 _,_ 0 _._ 3 _,_ 0 _._ 5 _}_ across various problem dimensions _d_ = _L × L_ .
+The methods compared include DIS, DIS-GP, and DIS-GMP, each with _N_ = 128 diffusion steps,
+as well as a long-run SMC sampler with _N_ = 4096. For all methods, the initial support is set to 5,
+approximately covering the target’s support for all tested values of _κ_ . The tuned parameters of the
+HMC kernel for the SMC sampler are detailed in Table 4, while additional parameter settings are
+provided in Appendix C.2. Note that DIS (and its extensions) do not undergo hyperparameter tuning
+due to their end-to-end learning framework.
+
+
+To compare the different methods, we utilize the negative variational free energy of the system,
+defined as:
+= [1] (49)
+_−F_ _L_ [2] [log] _[ Z]_ _[≥]_ _L_ [1][2] [ELBO] _[.]_
+
+This bound follows from the inequality log _Z_ _≥_ ELBO as discussed in Section 3.2 and provides
+a means of comparison between sampling methods. However, as the ELBO (and thus _F_ ) is not
+sensitive to mode collapse (Blessing et al., 2024), and since samples from the target distribution are
+unavailable,the average magnetizationwe also qualitatively assess the methods by visualizing the (normalized) histogram of _M_ ( _ϕ_ ) = [�] _x_ _[ϕ][x]_ [ across lattice configurations] _[ ϕ]_ [.]
+
+
+Quantitative results are presented in Table 11, with qualitative findings illustrated in Figure 12. The
+results indicate that learning the prior (i.e. DIS-GP/DIS-GMP) significantly improves free energy
+estimates compared to DIS without a learned prior. Moreover, Figure 12 demonstrates that DISGMP avoids mode collapse while achieving comparable or better free energy estimates than both
+DIS-GP and the long-run SMC sampler in the majority of settings. While SMC captures multimodality at the phase transition ( _κ_ = 0 _._ 3), it struggles with the multimodality in the fully ordered
+phase ( _κ_ = 0 _._ 5). By contrast, DIS and DIS-GP are prone to mode collapse. Lastly, the performance
+of DIS degrades significantly with increasing problem dimension _d_, which is mitigated when using
+a learned Gaussian or Gaussian mixture prior.
+
+
+26
+
+
+[1]
+
+_L_ [2] [log] _[ Z]_ _[≥]_ _L_ [1]
+
+
+[ELBO] _[.]_ (49)
+_L_ [2]
+
+
+|METHOD|κ|d = 16|d = 64|d = 100|d = 144|d = 196|d = 256|
+|---|---|---|---|---|---|---|---|
+|DIS<br>DIS-GP<br>DIS-GMP + IMR<br>SMC|0_._2|0_._6263_±_0_._0000<br>0_._6274_±_0_._0000<br>**0**_._**6276**_±_**0**_._**0000**<br>0_._6167_±_0_._0022|0_._6186_±_0_._0009<br>0_._6219_±_0_._0001<br>**0**_._**6232**_±_**0**_._**0004**<br>0_._6175_±_0_._0005|0_._6166_±_0_._0008<br>0_._6200_±_0_._0001<br>**0**_._**6231**_±_**0**_._**0002**<br>0_._6186_±_0_._0003|0_._6145_±_0_._0014<br>**0**_._**6175**_±_**0**_._**0000**<br>0_._6166_±_0_._0027<br>0_._6164_±_0_._0072|0_._5997_±_0_._0011<br>**0**_._**6158**_±_**0**_._**0001**<br>0_._6139_±_0_._0006<br>0_._6087_±_0_._0029|0_._5749_±_0_._0013<br>0_._6113_±_0_._0015<br>**0**_._**6156**_±_**0**_._**0005**<br>0_._6142_±_0_._0099|
+|DIS<br>DIS-GP<br>DIS-GMP + IMR<br>SMC|0_._3|1_._0653_±_0_._0195<br>1_._0831_±_0_._0021<br>**1**_._**0940**_±_**0**_._**0000**<br>1_._0848_±_0_._0013|1_._0277_±_0_._0004<br>1_._0459_±_0_._0001<br>1_._0496_±_0_._0033<br>**1**_._**0514**_±_**0**_._**0007**|1_._0217_±_0_._0004<br>1_._0411_±_0_._0001<br>1_._0461_±_0_._0001<br>**1**_._**0488**_±_**0**_._**0002**|1_._0040_±_0_._0024<br>1_._0372_±_0_._0011<br>1_._0406_±_0_._0001<br>**1**_._**0437**_±_**0**_._**0052**|0_._9534_±_0_._0017<br>1_._0343_±_0_._0010<br>**1**_._**0380**_±_**0**_._**0007**<br>1_._0339_±_0_._0043|0_._8905_±_0_._0014<br>1_._0319_±_0_._0004<br>1_._0347_±_0_._0006<br>**1**_._**0389**_±_**0**_._**0098**|
+|DIS<br>DIS-GP<br>DIS-GMP + IMR<br>SMC|0_._5|12_._2545_±_0_._0004<br>12_._2735_±_0_._0000<br>**12**_._**3167**_±_**0**_._**0001**<br>12_._3049_±_0_._0025|12_._2097_±_0_._0023<br>12_._2715_±_0_._0000<br>**12**_._**2806**_±_**0**_._**0003**<br>12_._2707_±_0_._0013|9_._2610_±_2_._9035<br>12_._2692_±_0_._0012<br>**12**_._**2761**_±_**0**_._**0003**<br>12_._2679_±_0_._0027|11_._7179_±_0_._0799<br>12_._2670_±_0_._0010<br>**12**_._**2730**_±_**0**_._**0002**<br>12_._2499_±_0_._0101|9_._4392_±_1_._9044<br>10_._1714_±_2_._0923<br>**12**_._**2722**_±_**0**_._**0000**<br>12_._2416_±_0_._0040|10_._8546_±_0_._0716<br>**12**_._**2629**_±_**0**_._**0001**<br>12_._2588_±_0_._0001<br>12_._2407_±_0_._0024|
+
+
+Table 11: Lower bound values for negative variational free energy _−F_ as defined in (49) for the lattice _ϕ_ [4]
+
+
+~~_√_~~
+theory problem with different values for the space-time extend
+
+
+theory problem with different values for the space-time extend _d_ = _L_ averaged across two seeds. The best
+
+(i.e. the highest) overall results are highlighted in bold for each configuration of the hopping parameter _κ_ and
+space-time extend.
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+**DIS** **DIS-GP** **DIS-GMP** **SMC**
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+7
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+2.00
+
+
+1.75
+
+
+1.50
+
+
+1.25
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+3.0
+
+
+2.5
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+**Average** **Magnetization**
+
+
+_x_ _[ϕ][x]_ [ for 2000 samples] _[ ϕ][ ∈]_ [R] _[L][×][L]_
+
+
+Figure 12: Normalized histogram of the average magnetization _M_ ( _ϕ_ ) = [�]
+
+
+and space-time extend _L_ = 14 for DIS, DIS-GP, DIS-GMP and long-run SMC for different values of the
+hopping parameter _κ_ . The plots are generated using the same random seed 0.
+
+
+27

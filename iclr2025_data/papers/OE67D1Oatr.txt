@@ -1,0 +1,992 @@
+# GRADIENT STORM: STRONGER BACKDOOR ATTACKS THROUGH EXPANDED PARAMETER SPACE COVERAGE
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Targeted data poisoning poses a critical adversarial threat to machine learning systems by enabling attackers to manipulate training data to induce specific, harmful
+misclassifications. Among these threats, backdoor attacks are particularly pernicious, embedding hidden triggers in the data that lead models to misclassify only
+those inputs containing the trigger, while maintaining high accuracy on benign
+samples. In this paper, we propose Gradient Storm, a novel technique that facilitates the simultaneous execution of multiple backdoor attacks, while necessitating
+only minimal modification to the training dataset. Our contributions are twofold:
+First, we introduce a method for designing adversarial poisons in modular components, each tailored based on a distinct region of the model’s parameter space.
+Second, we present a framework for conducting multi-trigger attacks, where each
+trigger causes misclassification from a specific source class to a distinct target
+class. We evaluate the efficacy of Gradient Storm across multiple convolutional
+neural network architectures and two benchmark datasets, demonstrating its robustness against eight different poisoning defense mechanisms. Additionally, we
+show that poisons crafted for one model can be effectively transferred to other
+models, demonstrating that our attack remains effective even in black-box settings.
+
+
+1 INTRODUCTION
+
+
+Deep Neural Networks (DNNs) have been successfully employed in various fields, including computer vision, speech recognition, and natural language processing (e.g., Redmon & Farhadi (2018);
+Baevski et al. (2020); Brown et al. (2020)). Despite their high performance, training or fine-tuning
+these networks often requires task-specific datasets and significant processing power, which may
+not always be accessible to all users. As a consequence, users may rely on third-party providers for
+obtaining the necessary resources. This dependency introduces a risk where adversaries could embed malicious samples into the datasets, leading to models that exhibit unintended behaviors, such
+as misclassification. These attacks are known as _data poisoning_, as described by Mu˜noz-Gonz´alez
+et al. (2017). Backdoor attacks, introduced by Gu et al. (2019), represent a specific form of data
+poisoning designed to embed a trigger within the model during the training phase. The resulting
+model behaves normally on benign inputs but misclassifies any image containing the trigger as the
+target class during inference. A notable demonstration by Liu et al. (2018b) in a driving simulator
+environment showed how a roadside billboard used as a trigger could cause an autonomous driving
+system to fail, resulting in accidents.
+
+
+Early methods to incorporate triggers into models involved patching source class images with triggers and re-labeling them with a target class label (Gu et al. (2019); Chen et al. (2017)), making
+them easily identifiable by human observers. To visually hide triggers, Barni et al. (2019) added an
+invisible sinusoidal signal to target class images, causing the model to associate the signal with that
+class. Zhong et al. (2020) increased the stealthiness of attacks by adding imperceptible changes to
+a small portion of the training data, resulting in clean-label attacks where images appear to match
+their labels. Saha et al. (2020) extended this approach to transfer learning scenarios by injecting
+poisoned samples into the fine-tuning dataset. Ning et al. (2021) proposed disguising poisoned images as noisy ones, further complicating their detection in the training data. Inspired by gradient
+matching techniques from Geiping et al. (2020), Souri et al. (2022) introduced the Sleeper Agent
+
+
+1
+
+
+attack, which embeds triggers during neural network training from scratch in a black-box setting,
+where the attacker is unaware of the model architecture and training routine.
+
+
+Despite extensive research dedicated to embedding a single trigger within models, the exploration
+of multi-trigger backdoor attacks in image classification remains limited, encompassing efforts that
+focus on methods to generate input-specific triggers (Nguyen & Tran (2020); Doan et al. (2022))
+as well as those utilizing multiple static triggers (Xue et al. (2024); Gong et al. (2021)). This study
+introduces Gradient Storm, an enhanced version of the Sleeper Agent attack (Souri et al. (2022)),
+which is capable of injecting multiple backdoor triggers into neural networks simultaneously during
+the training phase. Our main contributions are:
+
+
+    - Stronger Noisy Gradients: We strengthen the Sleeper Agent attack introduced by Souri
+et al. (2022) through dividing the optimization process into multiple rounds each corresponding to a different region of the parameter space.
+
+    - Multiple Triggers, Targets, and Attack Types: Our attack poisons a victim model with
+backdoors of different kinds, each activated by its own trigger, and corresponding to a
+unique source and target pair.
+
+
+This paper is organized as follows. Section 2 discusses related work on backdoor attacks and defenses. Section 3 describes our attack scheme in detail. Section 4 presents the experimental results
+demonstrating the effectiveness of our proposed method. Finally, Section 5 concludes our work.
+
+
+2 RELATED WORK
+
+
+Data poisoning attacks initially aimed at reducing the classification performance of traditional machine learning models, such as Support Vector Machines (SVM) (Biggio et al. (2012)). Unlike these
+indiscriminate attacks, targeted attacks focus on altering model outputs for specific test instances
+(Mozaffari-Kermani et al. (2014); Nelson et al. (2008)). Subsequent works have introduced cleanlabel poisons, which appear visually normal, to minimize the likelihood of detection (Shafahi et al.
+(2018)). In the context of targeted clean-label attacks, poisons have been specifically designed to
+manipulate models in both transfer learning (Zhu et al. (2019); Aghakhani et al. (2021)) and fromscratch training scenarios (Huang et al. (2020); Jagielski et al. (2021); Geiping et al. (2020)).
+
+
+Backdoor attacks are a targeted data poisoning approach, designed to bind a static pattern (known
+as the _trigger_ ) to a target class in classification tasks. Researchers initially considered the trigger to
+be another image blended with (Chen et al. (2017)) or patched to (Gu et al. (2019); Wenger et al.
+(2021)) the original one. Subsequent studies explored the use of less conspicuous triggers to activate
+the backdoor, including weak sinusoidal signals (Barni et al. (2019)), reflections (Liu et al. (2020)),
+a warping effect (Nguyen & Tran (2021)), or a color space shift for all pixels (Jiang et al. (2023)).
+Research has also been directed towards increasing the variety of triggers. Gong et al. (2021), drawing on the mathematical formulation of the multi-trigger attack by Ji et al. (2018), have developed
+a method utilizing multiple triggers, each designed to activate specific neurons in outsourced cloud
+environments. Furthermore, researchers have proposed an alternative type of attack involving generative networks capable of producing triggers dynamically for any given input, thereby causing it
+to be classified into any desired class (Nguyen & Tran (2020); Doan et al. (2022)). These methods result in a lack of control over the trigger and potentially significant computational expense for
+designing the triggers. Recently, Xue et al. (2024) employed DCT Steganography to embed a text
+trigger in the channels of an RGB image. Researchers have also investigated multi-trigger backdoor
+attacks in the context of graph neural networks (Wang et al. (2024); Xu & Picek (2023)), neural code
+models (Li et al. (2023)), and deep image compression networks (Yu et al. (2023)).
+
+
+To counter backdoor attacks, the most elementary defense mechanism involves identifying and excluding poisoned data from the training dataset, often requiring prior knowledge of the proportion of
+poisoned samples. For instance, Chen et al. (2019) proposed clustering samples to identify poisoned
+clusters, while Tran et al. (2018) used singular value decomposition to define outliers in the feature
+space. Researchers have also developed methods to remediate backdoored models, such as pruning
+neurons with abnormal activations and fine-tuning (Liu et al. (2018a)), reconstructing and mitigating
+triggers (Wang et al. (2019)), and using knowledge distillation to focus on original features (Li et al.
+(2021b)). Additionally, Wu & Wang (2021) utilized clean data to reveal trigger patterns and prune
+related neurons, and Zeng et al. (2022) formulated backdoor removal as a minimax problem solved
+
+
+2
+
+
+through unlearning. Robust training algorithms are another approach to mitigating backdoor attacks.
+Li et al. (2021a) increased the loss of misleading samples to prevent backdoor learning, while Hong
+et al. (2020) used differentially private SGD, and Borgnia et al. (2021) suggested data augmentations
+preserving differential privacy. Liu et al. (2022) added noise to training data to perturb examples
+without performance degradation, and Gao et al. (2023) developed an adaptive data-splitting method.
+These approaches are generally effective but often assume access to clean data or control over the
+entire training process, conditions that may not always be feasible.
+
+
+3 METHOD
+
+
+Following the threat model introduced by Gu et al. (2019), we consider an _attacker_ who supplies a
+_victim_ with poisoned data for the purpose of training a model from scratch. Given that the victim
+may have the ability to inspect the data for anomalies with the assistance of expert analysts, it is
+crucial for the attacker to ensure that the data does not appear to be conspicuously manipulated.
+Therefore, inspired by Souri et al. (2022), we assume that the attacker is restricted to making minor
+perturbations to a limited subset of the data. Although Souri et al. (2022) utilized these perturbations to embed a single trigger in the resulting model for activating the attack later, we extend their
+approach to embed multiple triggers. This extension allows for the potential activation of various
+types of attacks during inference. Building on the assumptions in Souri et al. (2022), we assume that
+the attacker does not have knowledge of the architecture of the final model or the learning algorithm
+employed. Consequently, we design the poisons using a surrogate model. In Section 4.3, we demonstrate that these poisons can effectively embed a backdoor in models with different architectures.
+
+
+3.1 PROBLEM STATEMENT
+
+
+Consider a surrogate model _F_ with parameters _θ_ and a loss function _L_ . We address the optimization
+of perturbations ∆1 _,_ ∆2 _, . . .,_ ∆ _N_ to be added to the training dataset _D_ = _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1 [.] [In] [this]
+context, we are dealing with a multi-class classification problem, where each data point ( _xi, yi_ )
+comprises a feature vector _xi_ _∈_ R _[d]_ and a corresponding label _yi_ _∈{_ 1 _,_ 2 _, . . ., C}_ . The objective is
+to solve the following optimization problem:
+
+
+_L_ = �∆ _∈_ R _[N]_ _[×][d]_ _|_ _∥_ ∆ _p∥∞_ _≤_ _ϵ_ _∀p ∈{_ 1 _,_ 2 _, . . ., N_ _},_ _δi_ = 0 _∀i > B_    
+
+sets the limits on the magnitudes of perturbations, while indicating that only _B_ images may be
+perturbed. The attacker may consider _n_ ( _i, j_ ) triggers each causing an image belonging to a source
+class _i_ to be identified as an image of a target class _j_, where _n_ ( _i, j_ ) _≥_ 0 for all values of _i, j_ _∈_
+_{_ 1 _,_ 2 _, . . ., C}_ . The function _τij_ _[k]_ [applies] [the] _[k]_ [-th] [trigger,] [causing] [that] [effect] [on] [an] [input] [image] _[x]_
+derived from the distribution of the source class _Di_ . Note that for each pair of distinct triples ( _i, j, k_ )
+and ( _i_ _[′]_ _, j_ _[′]_ _, k_ _[′]_ ), the functions _τij_ _[k]_ [and] _[ τ][ k]_ _i_ _[′]_ _j_ _[′]_ _[′]_ [may correspond to completely different types of triggers,]
+such as a blended trigger and a patched one.
+
+
+3.2 GRADIENT STORM
+
+
+The problem posed in eq. 1 constitutes a bilevel optimization problem, as the perturbations ∆
+that minimize the upper-level objective are contingent upon the model parameters _θ_, which are
+themselves determined by the minimization of the loss on the perturbed training data (the lowerlevel objective). To solve this challenging problem, following Souri et al. (2022), we employ the
+gradient matching technique, which has also been empirically validated as effective across multiple
+areas, including zero-shot learning (Sariyildiz & Cinbis (2019)), dataset condensation (Zhao et al.
+(2020)), domain generalization (Shi et al. (2021); Wang et al. (2023)), and condensing graphs (Jin
+et al. (2022)). It involves aligning the training gradients with a specified objective.
+
+
+3
+
+
+_n_ ( _i,j_ ) 
+
+- _L_ - _F_ ( _τij_ _[k]_ [(] _[x]_ [);] _[ θ]_ [(∆))] _[, y][j]_ �
+
+
+_k_ =1
+
+
+(1)
+
+
+
+
+ [�]
+
+_j_
+
+
+_n_ ( _i,j_ )
+
+
+min
+∆ _∈L_
+
+
+E( _x,y_ ) _∼Di_
+
+_i_
+
+
+
+
+
+subject to _θ_ ( _δ_ ) _∈_ arg min
+_θ_
+
+
+where ∆ _l_ denotes the _l_ -th row of ∆ and
+
+
+ - _L_ ( _F_ ( _xl_ + ∆ _l_ ; _θ_ ) _, yl_ ) _,_
+
+
+( _xl,yl_ ) _∈D_
+
+
+Prior to employing this methodology, we decompose the upper-level objective with respect to the
+source class _i_, target class _j_, and each trigger applier function _τij_ _[k]_ [where] _[k]_ _[∈{]_ [1] _[,]_ [ 2] _[, . . ., n]_ [(] _[i, j]_ [)] _[}]_ [.]
+This decomposition is based on the attacker’s goal of causing images from the source class to be
+misclassified as belonging to the target class upon the application of the trigger applier function.
+Fixing the triple ( _i, j, k_ ) results in the following objective:
+
+
+_Ladv_ ( _i, j, k_ ) = E( _x,y_ ) _∼Di_          - _L_          - _F_ ( _τij_ _[k]_ [(] _[x]_ [);] _[ θ]_ [)] _[, y][j]_ �� _,_ (2)
+
+
+which is analogous to the adversarial objective examined by Souri et al. (2022), specifically for the
+case involving a single trigger to transition from one source class to a unique target class. Minimizing this objective requires _θ_ to be known. Since we have not optimized the perturbations yet, we
+consider ∆ to be a matrix of all zeros at the beginning and train _F_ on clean training data to obtain the
+initial _θ_ . Then we can estimate _Ladv_ ( _i, j, k_ ) over _P_ training samples _{_ ( _xu, yi_ ) _}_ _[P]_ _u_ =1 _[⊂]_ _[D]_ [ belonging]
+to the source class _i_ :
+
+
+While fixing all other parameters, we design perturbations _{_ ∆ _v}_ _[q]_ _v_ =1 [to align] _[∇]_ [ˆ] _[θ][L][adv]_ [(] _[i, j, k]_ [)][ with]
+_∇_ ˆ _θLtrain_ ( _q, j_ ) through minimizing a similarity loss _A_ defined as follows:
+
+
+_A_ (∆ _, θ, i, j, k_ ) def= 1 _−_ _∇_ ˆ _θLadv_ ( _i, j, k_ ) _·_ _∇_ ˆ _θLtrain_ ( _q, j_ ) (6)
+
+_||∇_ [ˆ] _θLadv_ ( _i, j, k_ ) _|| · ||∇_ [ˆ] _θLtrain_ ( _q, j_ ) _||_
+
+
+We consider all pairs of source and target classes ( _i, j_ ) for which there is at least one trigger, i.e.,
+_n_ ( _i, j_ ) _>_ 0, and repeat the process described above for each triple in the set _{_ ( _i, j, k_ ) _}_ _[n]_ _k_ =1 [(] _[i,j]_ [)][.] [We]
+repeat the whole procedure of optimizing the matrix ∆ _∈_ R _[N]_ _[×][d]_ from the scratch _S_ times. Additionally, we use validation data consisting of unseen images that have been modified by trigger applier
+functions. At the end of each cycle, we calculate the percentage of these images that are classified
+according to the attackers’ intentions, known as the attack success rate. We then select the ∆ value
+corresponding to the highest cumulative attack success rate. Algorithm 1 and Figure 1 summarize
+our poison crafting approach.
+
+
+4
+
+
+_L_ ˆ _adv_ ( _i, j, k_ ) def= _P_ [1]
+
+
+_P_
+
+- _L_ ( _F_ ( _τij_ _[k]_ [(] _[x][u]_ [);] _[ θ]_ [)] _[, y][j]_ [)] (3)
+
+
+_l_ =1
+
+
+Similar to eq. 3, it is possible to estimate the gradient of the adversarial loss with respect to the
+model parameters _θ_ :
+
+
+_∇_ ˆ _θLadv_ ( _i, j, k_ ) def= _P_ [1]
+
+
+_P_
+
+- _∇θ_ - _L_ ( _F_ ( _τij_ _[k]_ [(] _[x][u]_ [);] _[ θ]_ [)] _[, y][j]_ [)] - (4)
+
+
+_l_ =1
+
+
+If concerns about human inspection and the stealthiness of the attack were disregarded, we would
+directly inject _{_ ( _τij_ _[k]_ [(] _[x][u]_ [)] _[, y][j]_ [)] _[}]_ _u_ _[P]_ =1 [into the training data.] [It could be argued that, assuming the user]
+employs a gradient descent-based approach to train the model, the impact of this injection would be
+analogous to utilizing the gradient estimate in eq. 4 to update the model parameters _θ_ . However,
+since this approach is not feasible, we instead introduce minimal perturbations to a subset of training
+samples belonging to the target class _j_ . Assuming we are permitted to perturb at most _Bij_ _[k]_ [such]
+samples to implement the attack corresponding to the triple ( _i, j, k_ ), we distribute these perturbations
+across multiple sets of model parameters _θ_ 1 _, θ_ 2 _, . . ., θR_ . This is achieved by iteratively designing
+
+_⌊_ _BRij_ _[k]_ _[⌋]_ [perturbations] [and] [retraining] [the] [model] [using] [the] [perturbed] [training] [data.] [Consequently,] [the]
+perturbations are dispersed over a wider region of the parameter space compared to the scenario
+where all perturbations are designed according to a single set of parameters _θ_ .
+
+Each step of this process involves taking _q_ def= _⌊_ _BRij_ _[k]_ _[⌋]_ [training samples] _[ {]_ [(] _[x][v][, y][j]_ [)] _[}]_ _v_ _[q]_ =1 [belonging to]
+the target class _j_ and adding perturbations to them such that their training gradient approximates the
+one given in eq. 4. This gradient could be again estimated as:
+
+
+_∇_ ˆ _θLtrain_ ( _q, j_ ) def= [1]
+
+_q_
+
+
+_q_
+
+- _∇θ_ ( _L_ ( _F_ ( _xv_ + ∆ _v_ ; _θ_ ) _, yj_ )) (5)
+
+
+_v_ =1
+
+
+Figure 1: **Overview of a poisoning cycle in Gradient Storm:** The process initiates with the training
+of a model on a clean dataset _D_ . Subsequently, multiple attacks are sequentially executed, each
+designed to introduce distinct triggers into the final model, such as a sinusoidal signal, a patched
+image, or a blended patch. These attacks specifically target and perturb the training images of
+particular classes (e.g., “Keep Left”, “Ahead Only”, “Turn Right”) across _R_ rounds. After each
+attack, the perturbed dataset is employed to retrain the model, which is then subjected to the next
+attack in the sequence.
+
+
+**Algorithm 1** Gradient Storm poison crafting procedure
+
+
+**Require:** Training data _D_ = _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1 [, Validation data with embedded triggers] _[ V]_ [, Number of]
+triggers _n_ ( _i, j_ ) for each pair of source and target indices ( _i, j_ ) _∈{_ 1 _,_ 2 _, . . ., C}_ [2], Trigger applier
+functions _{τij_ _[k]_ _[}][n]_ _k_ =1 [(] _[i,j]_ [)] and poison budgets _{Bij_ _[k]_ _[}][n]_ _k_ =1 [(] _[i,j]_ [)] for each ( _i, j_ )-pair where _n_ ( _i, j_ ) _>_ 0,
+Optimization cycles _S_, Cycle rounds _R_, Gradient Matching threshold _T_
+1: Train a surrogate neural network _F_ ( _·_ ; _θ_ ) on training data _D_
+2: _Do_ _←_ A copy of the original training dataset _D_
+3: **for** _s_ = 1 _,_ 2 _, . . ., S_ optimization cycles **do**
+4: ASRcycle( _s_ ) = 0 (total ASR of the cycle)
+5: **for** ( _i, j_ ) _∈{_ 1 _,_ 2 _, . . ., C}_ [2] **do**
+6: **if** _n_ ( _i, j_ ) _>_ 0 **then**
+7: **for** _k_ _∈{_ 1 _,_ 2 _, . . ., n_ ( _i, j_ ) _}_ **do**
+8: **for** _r_ = 1 _,_ 2 _, . . ., R_ cycle rounds **do**
+
+9: _q_ _←⌊_ _BRij_ _[k]_ _[⌋]_
+10: _I_ _←_ Indices of _q_ samples with label _yj_ from _D_ with highest gradient norm
+that are not previously chosen in this cycle
+11: Randomly initialize perturbations ∆= _{_ ∆ _p}p∈I_
+12: Compute the value of _A_ (∆ _, θ, i, j, k_ ) and iteratively update ∆ using the
+Adam optimizer until _A_ (∆ _, θ, i, j, k_ ) is less than _T_
+13: _D_ _←{_ ( _xl, yl_ ) _}l/∈I_ _∪{_ ( _xh_ + ∆ _h, yj_ ) _}h∈I_
+14: Retrain _F_ on the poisoned training dataset _D_
+15: Update ASRcycle( _s_ )
+16: **end for**
+17: **end for**
+18: **end if**
+19: **end for**
+20: _Ds_ _←_ A copy of _D_
+21: **end for**
+22: Return _Ds_ for the optimization cycle _s_ having the best total ASR ASRcycle( _s_ )
+
+
+4 EVALUATION
+
+
+In this section, the effectiveness of our proposed attack is empirically evaluated using the CIFAR-10
+(Krizhevsky et al. (2009)) and GTSRB (Stallkamp et al. (2011)) datasets as benchmarks. The Adversarial Robustness Toolbox (Nicolae et al. (2018)) serves as the foundation for our implementations.
+We use the patches introduced by Saha et al. (2020) as triggers, depicted in Figure 2. While training
+
+
+5
+
+
+all models, we use the same augmentations used by Souri et al. (2022). All experiments were conducted using a single NVIDIA TITAN RTX GPU to ensure consistent computational performance.
+For additional insights into the performance of different configurations, refer to the ablation study
+included in Appendix A.
+
+
+Figure 2: Patches used as triggers in our experiments, originally from Saha et al. (2020).
+
+
+4.1 COMPARISON TO OTHER ATTACKS
+
+
+We conduct a comparative analysis of the proposed Gradient Storm (GS) attack against several stateof-the-art backdoor attacks, including Blended (Chen et al. (2017)), Label-Consistent (LC) (Turner
+et al. (2019)), Refool (Liu et al. (2020)), Hidden Trigger Backdoor Attack (HTBA) (Saha et al.
+(2020)), and Sleeper Agent (SA) (Souri et al. (2022)). In all implementations, the _ℓ∞_ norm of the
+perturbations is constrained to a maximum of 16/255. ResNet18 (He et al. (2016)) is utilized as the
+target model across all attack scenarios, with an 8 _×_ 8 RGB image serving as the trigger. All models
+are trained for 80 epochs using the Stochastic Gradient Descent (SGD) optimizer with a momentum
+of 0.9, a weight decay of 5e-4, and an initial learning rate of 0.01. The batch size is set to 128, and
+all images are normalized to the range [0,1] before being standardized by subtracting the dataset
+mean and dividing by the standard deviation.
+
+
+To ensure a fair comparison, ResNet18 is also employed as the surrogate model for both the SA and
+GS attacks. In the GS attack, we set _S_ = 4 and _R_ = 2, optimizing the poisons with _T_ = 0 _._ 006,
+followed by model retraining. For the SA attack, we distribute the optimization process evenly
+across four retraining periods.
+
+
+The HTBA attack, originally designed for transfer learning scenarios that require a fixed feature
+extractor, necessitates a distinct approach. The network is initially trained on clean data for 80
+epochs. Poisons are subsequently generated based on the feature space representations extracted
+from the trained network. These poisons are then substituted for their benign counterparts in the
+original dataset, which is subsequently used to train a new model from scratch. The effectiveness
+of these poisons is evaluated in this from-scratch training scenario. To ensure fairness in the Refool
+attack, which requires a candidate reflection set, we utilize the same RGB image alongside three
+rotated versions at angles of 90, 180, and 270 degrees.
+
+
+We present the experimental results using the following two metrics:
+
+
+    - Benign Accuracy (BA): The classification accuracy of the model on clean, unseen data
+during the inference stage.
+
+
+    - Attack Success Rate (ASR): The percentage of inputs containing the trigger, also unseen
+during training, that are successfully misclassified into the target class as intended by the
+attack.
+
+
+The results of this comparative analysis are presented in Tables 1 and 2. For all experiments, the
+source and target classes were selected randomly.
+
+
+4.2 RESISTANCE TO POISONING DEFENSES
+
+
+In this section, we assess the effectiveness of various defense mechanisms, including general data
+poisoning defenses and those specifically designed to counter backdoor attacks, as applied to our
+method. The subsequent paragraphs provide a concise overview of each defense strategy.
+
+
+6
+
+
+Attack Blended LC Refool HTBA SA GS (Ours)
+
+
+BA (Poisoned Model) (%) **90.17** 90.01 90.29 89.7 90.02 90.06
+ASR (Poisoned Model) (%) 91.5 2.3 2.93 81.46 89.73 **99.76**
+
+
+Table 1: Comparing Gradient Storm with other Backdoor Attacks on CIFAR10. All attacks were
+performed with a poisoning budget of 500 samples.
+
+
+Attack Blended LC Refool HTBA SA GS (Ours)
+
+
+BA (Poisoned Model) (%) 93.44 92.23 94.35 92.19 93.38 **94.36**
+ASR (Poisoned Model) (%) 38.67 1.41 20.36 69.29 58.19 **84.25**
+
+
+Table 2: Comparing Gradient Storm with other Backdoor Attacks on GTSRB. All attacks were
+performed with a poisoning budget of 250 samples.
+
+
+**Spectral Signatures** : Proposed by Tran et al. (2018), this method involves initially training a neural
+network on poisoned data to extract a learned representation for each input within each class. Singular Value Decomposition (SVD) is then performed on the representations of each class to compute
+an outlier score for each sample. The network is subsequently retrained after removing outliers, and
+this process is repeated over multiple iterations. The final model, which is expected to be free of
+backdoors, is then returned.
+
+
+**Activation** **Clustering** : Chen et al. (2019) observed that while backdoor and target samples are
+classified identically by the poisoned network, the underlying reasons for this classification differ.
+Building on this observation, they clustered the learned representations of samples within each class
+and found that, for the target class of backdoor attacks, activations tend to separate into two clusters
+of approximately equal size. They then conducted cluster analysis to identify the poisoned cluster,
+which was subsequently removed from the training process.
+
+
+**DeepKNN** : Peri et al. (2020) proposed a method that involves analyzing the nearest neighbors of
+each sample in the feature space and removing those for which the model assigns a label that differs
+from the majority of their neighbors. This approach has been empirically tested against targeted
+clean-label data poisoning attacks.
+
+
+**Gradient Shaping** : Hong et al. (2020) observed that gradients computed in the presence of poisoned
+data exhibit significantly higher _ℓ_ 2 norms and orientations that diverge substantially from those of
+clean gradients. To address this, they employed Differentially Private SGD (DPSGD) to constrain
+gradient magnitudes and reduce discrepancies in their orientations during model training.
+
+
+**Anti-Backdoor Learning (ABL)** : Li et al. (2021a) empirically identified a critical vulnerability in
+backdoor attacks: models tend to learn backdoored data significantly faster than clean data, with
+stronger attacks resulting in even more rapid convergence on the backdoored data. Leveraging this
+observation, they developed a method to isolate poisoned examples in the early stages of training
+and subsequently disrupt the correlation between backdoor examples and the target class in later
+training stages.
+
+
+**DP-InstaHide** : Building on the work of Zhang et al. (2018), who introduced MixUp as a powerful
+data augmentation technique, Borgnia et al. (2021) demonstrated that combining these augmentations with random additive noise can effectively neutralize poisoning attacks with minimal accuracy trade-off. Additionally, they provided a theoretical proof that, under certain assumptions, their
+method satisfies differential privacy.
+
+
+**Implicit Backdoor Adversarial Unlearning (I-BAU)** : Assuming access to a small set of clean data,
+Zeng et al. (2022) proposed an iterative algorithm to sanitize a poisoned model by formulating and
+solving a minimax problem between the defender and the attacker. Additionally, they conducted a
+theoretical analysis of the algorithm’s convergence and demonstrated that the robustness achieved
+through this approach extends to unseen test data.
+
+
+**Model** **Orthogonalization** **(MOTH)** : Tao et al. (2022) defined the _L_ _[p]_ norm of the smallest backdoor pattern that induces misclassification of images from a source class as those of a target class,
+
+
+7
+
+
+referring to this norm as the distance between the two classes. Their objective was to train an orthogonal classifier in which every pair of classes is maximally distant, a process they termed _model_
+_orthogonalization_ .
+
+
+We use the CIFAR-10 dataset and ResNet18 as the target model, employing the same hyperparameters as in Section 4.1, and apply defense strategies to the poisoned models from that section. Table
+3 presents the results of applying these defense strategies to our proposed poison crafting method.
+
+
+Defense ASR (%) BA (%)
+
+
+Spectral Signatures 88.17 89.7
+Activation Clustering 73.23 83.34
+DeepKNN 97.97 87.62
+Gradient Shaping 8.9 66.87
+ABL **2.1** 53.65
+DP-InstaHide 6.47 67.26
+I-BAU 39.93 90.67
+MOTH 36.03 **92.08**
+
+
+Table 3: The effectiveness of defense methods against the Gradient Storm attack
+
+
+4.3 TRANSFERABILITY OF GRADIENT STORM
+
+
+In this section, we examine the transferability of poisoned examples by assessing whether backdoors
+designed for a particular model can be successfully embedded in other models. Utilizing ResNet18
+as a surrogate model and CIFAR10 as the training dataset, we evaluate the effectiveness of these
+poisons on several well-known architectures. All models are trained following the same procedure
+outlined in Section 4.1. The results are presented in Table 4.
+
+
+Model ASR (%) BA (%)
+
+
+ResNet18 (Surrogate) 99.60 90.15
+ResNet20 97.06 84.08
+ResNet34 99.8 90.53
+MobileNetV2 95.9 89.54
+VGG11 98.6 87.78
+VGG16 98.4 89.5
+
+
+Table 4: Evaluation of the transferability of poisoned examples on CIFAR10 by testing backdoors
+crafted for ResNet18 across various well-known architectures.
+
+
+4.4 MULTI-TARGET AND MULTI-TRIGGER SETTING
+
+
+In this section, we empirically demonstrate that our method allows an adversary to execute multiple
+concurrent attacks, each characterized by a distinct source-target pair and trigger, while preserving
+the effectiveness of all attacks. In all experiments, ResNet18 is utilized as both the surrogate model
+and the target model, with CIFAR10 serving as the training dataset. In this series of experiments, we
+investigate different types of triggers. The simplest trigger type is a patch, which involves superimposing a small image onto a larger input image. The second type, known as a blended patch trigger,
+is formed by smoothly merging a small image with the larger input, blending the patch into the original content to reduce visual detectability. Inspired by Barni et al. (2019), we also consider sinusoidal
+signals as triggers, with horizontal signals defined by _v_ ( _i, j_ ) = ∆sin(2 _πjf/m_ ) _,_ 1 _≤_ _j_ _≤_ _m_ for
+row-wise oscillations, and vertical signals by _v_ ( _i, j_ ) = ∆sin(2 _πif/l_ ) _,_ 1 _≤_ _i_ _≤_ _l_ for column-wise
+oscillations, at a given frequency _f_ . In our experiments, we consider ∆= 0 _._ 1 and _f_ = 5. We
+present results for scenarios involving two and three simultaneous attacks. The outcomes for the
+two-attack scenario are detailed in Table 5, while the results for the three-attack scenario are shown
+in Table 6.
+
+
+8
+
+
+**Attack-1** **Attack-2** **BA (%)** **ASR (%)** **ASR-1 (%)** **ASR-2 (%)**
+
+
+Bird _→_ Deer Automobile _→_ Ship
+89.19 96.2 95.2 97.2
+(Horizontal Sinusoidal) (Patch 0)
+
+Airplane _→_ Automobile Deer _→_ Horse
+90.2 92.95 92.6 93.3
+(Blend - Patch 0) (Patch 1)
+
+Airplane _→_ Bird Truck _→_ Airplane
+89.25 99.3 99.7 98.9
+(Patch 5) (Patch 8)
+
+Dog _→_ Frog Deer _→_ Cat
+90.16 91.7 96.6 86.8
+(Blend - Patch 3) (Blend - Patch 9)
+
+Cat _→_ Ship Horse _→_ Dog
+88.94 93.55 96.4 90.7
+(Vertical Sinusoidal) (Horizontal Sinusoidal)
+
+
+Table 5: Evaluation of the two-attack scenario using ResNet18 as the model and the CIFAR10
+dataset. The first two columns list the source and target classes (source _→_ target), with the specific trigger used to activate the backdoor shown in parentheses below each entry. The next two
+columns present the overall Benign Accuracy (BA) and Attack Success Rate (ASR), while the last
+two columns display the attack success rates for each individual attack.
+
+
+**Attack-1** **Attack-2** **Attack-3** **BA (%)** **ASR (%)** **ASR-1 (%)** **ASR-2 (%)** **ASR-3 (%)**
+
+
+Deer _→_ Dog Frog _→_ Truck Deer _→_ Dog
+89.28 97.57 99.9 92.8 100.0
+(Patch 2) (Patch 5) (Patch 7)
+
+Cat _→_ Truck Frog _→_ Bird Airplane _→_ Truck
+90.61 97.47 97.9 99.4 95.1
+(Blend - Patch 4) (Blend - Patch 6) (Blend - Patch 0)
+
+Automobile _→_ Horse Horse _→_ Frog Truck _→_ Dog
+89.12 91.93 100.0 93.7 82.1
+(Patch 5) (Blend - Patch 2) (Horizontal Sinusoidal)
+
+Dog _→_ Cat Cat _→_ Dog Truck _→_ Ship
+89.41 90.13 99.9 78.8 91.7
+(Patch 5) (Vertical Sinusoidal) (Horizontal Sinusoidal)
+
+Deer _→_ Bird Airplane _→_ Frog Bird _→_ Deer
+90.15 93.2 98.4 89.1 92.1
+(Patch 0) (Patch 4) (Patch 9)
+
+
+Table 6: Evaluation of the three-attack scenario using ResNet18 as the model and the CIFAR10
+dataset. The first three columns display the source and target classes (source _→_ target), with the
+specific triggers used to activate the backdoors indicated in parentheses below each entry. The
+following two columns report the overall Benign Accuracy (BA) and Attack Success Rate (ASR),
+while the final three columns present the success rates for each individual attack.
+
+
+5 CONCLUSION
+
+
+In this study, we introduced Gradient Storm, a powerful and innovative method for executing multiple backdoor attacks in machine learning models with minimal data manipulation. Our approach
+demonstrates significant advancements in the design of adversarial poisons, allowing for precise
+control over specific regions of the parameter space and enabling the successful execution of multitrigger attacks. Through comprehensive evaluation across two convolutional neural network architectures and two benchmark datasets, Gradient Storm has proven to be highly effective, achieving an
+attack success rate exceeding 90% in both single-trigger and multi-trigger scenarios. Additionally,
+the method shows strong resilience against a range of poisoning defense mechanisms, underscoring its potential impact on the security and trustworthiness of AI systems. These findings highlight
+the need for continued research into more robust defense strategies to counteract such sophisticated
+adversarial threats.
+
+
+REFERENCES
+
+
+Hojjat Aghakhani, Dongyu Meng, Yu-Xiang Wang, Christopher Kruegel, and Giovanni Vigna.
+Bullseye polytope: A scalable clean-label poisoning attack with improved transferability. In _2021_
+_IEEE European symposium on security and privacy (EuroS&P)_, pp. 159–178. IEEE, 2021.
+
+
+Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, and Michael Auli. wav2vec 2.0: A framework for self-supervised learning of speech representations. _Advances_ _in_ _neural_ _information_
+_processing systems_, 33:12449–12460, 2020.
+
+
+9
+
+
+Mauro Barni, Kassem Kallas, and Benedetta Tondi. A new backdoor attack in cnns by training set
+corruption without label poisoning. In _2019 IEEE International Conference on Image Processing_
+_(ICIP)_, pp. 101–105. IEEE, 2019.
+
+
+Battista Biggio, Blaine Nelson, and Pavel Laskov. Poisoning attacks against support vector machines. In _Proceedings of the 29th International Coference on International Conference on Ma-_
+_chine Learning_, pp. 1467–1474, 2012.
+
+
+Eitan Borgnia, Jonas Geiping, Valeriia Cherepanova, Liam Fowl, Arjun Gupta, Amin Ghiasi, Furong
+Huang, Micah Goldblum, and Tom Goldstein. Dp-instahide: Provably defusing poisoning and
+backdoor attacks with differentially private data augmentations. _arXiv preprint arXiv:2103.02079_,
+2021.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung
+Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by
+activation clustering. In _Workshop on Artificial Intelligence Safety_ . CEUR-WS, 2019.
+
+
+Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep
+learning systems using data poisoning. _arXiv preprint arXiv:1712.05526_, 2017.
+
+
+Khoa D Doan, Yingjie Lao, and Ping Li. Marksman backdoor: Backdoor attacks with arbitrary
+target class. _Advances in Neural Information Processing Systems_, 35:38260–38273, 2022.
+
+
+Kuofeng Gao, Yang Bai, Jindong Gu, Yong Yang, and Shu-Tao Xia. Backdoor defense via adaptively
+splitting poisoned dataset. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 4005–4014, 2023.
+
+
+Jonas Geiping, Liam Fowl, W Ronny Huang, Wojciech Czaja, Gavin Taylor, Michael Moeller, and
+Tom Goldstein. Witches’ brew: Industrial scale data poisoning via gradient matching. _arXiv_
+_preprint arXiv:2009.02276_, 2020.
+
+
+Xueluan Gong, Yanjiao Chen, Qian Wang, Huayang Huang, Lingshuo Meng, Chao Shen, and Qian
+Zhang. Defense-resistant backdoor attacks against deep neural networks in outsourced cloud
+environment. _IEEE Journal on Selected Areas in Communications_, 39(8):2617–2631, 2021.
+
+
+Tianyu Gu, Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Evaluating backdooring
+attacks on deep neural networks. _IEEE Access_, 7:47230–47244, 2019.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+770–778, 2016.
+
+
+Sanghyun Hong, Varun Chandrasekaran, Yi˘gitcan Kaya, Tudor Dumitras¸, and Nicolas Papernot.
+On the effectiveness of mitigating data poisoning attacks with gradient shaping. _arXiv_ _preprint_
+_arXiv:2002.11497_, 2020.
+
+
+W Ronny Huang, Jonas Geiping, Liam Fowl, Gavin Taylor, and Tom Goldstein. Metapoison: Practical general-purpose clean-label data poisoning. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 33:12080–12091, 2020.
+
+
+Matthew Jagielski, Giorgio Severi, Niklas Pousette Harger, and Alina Oprea. Subpopulation data
+poisoning attacks. In _Proceedings of the 2021 ACM SIGSAC Conference on Computer and Com-_
+_munications Security_, pp. 3104–3122, 2021.
+
+
+Yujie Ji, Xinyang Zhang, Shouling Ji, Xiapu Luo, and Ting Wang. Model-reuse attacks on deep
+learning systems. In _Proceedings of the 2018 ACM SIGSAC conference on computer and commu-_
+_nications security_, pp. 349–363, 2018.
+
+
+10
+
+
+Wenbo Jiang, Hongwei Li, Guowen Xu, and Tianwei Zhang. Color backdoor: A robust poisoning
+attack in color space. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_
+_Pattern Recognition_, pp. 8133–8142, 2023.
+
+
+Wei Jin, Xianfeng Tang, Haoming Jiang, Zheng Li, Danqing Zhang, Jiliang Tang, and Bing Yin.
+Condensing graphs via one-step gradient matching. In _Proceedings_ _of_ _the_ _28th_ _ACM_ _SIGKDD_
+_Conference on Knowledge Discovery and Data Mining_, pp. 720–730, 2022.
+
+
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images.
+2009.
+
+
+Yanzhou Li, Shangqing Liu, Kangjie Chen, Xiaofei Xie, Tianwei Zhang, and Yang Liu. Multi-target
+backdoor attacks for code pre-trained models. In _The_ _61st_ _Annual_ _Meeting_ _Of_ _The_ _Association_
+_For Computational Linguistics_, 2023.
+
+
+Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Anti-backdoor learning: Training clean models on poisoned data. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Sys-_
+_tems_, 34:14900–14912, 2021a.
+
+
+Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Neural attention distillation: Erasing backdoor triggers from deep neural networks. In _9th International Conference_
+_on Learning Representations, ICLR 2021_, 2021b.
+
+
+Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Fine-pruning: Defending against backdooring attacks on deep neural networks. In _International_ _symposium_ _on_ _research_ _in_ _attacks,_
+_intrusions, and defenses_, pp. 273–294. Springer, 2018a.
+
+
+Tian Yu Liu, Yu Yang, and Baharan Mirzasoleiman. Friendly noise against adversarial noise: a powerful defense against data poisoning attack. _Advances in Neural Information Processing Systems_,
+35:11947–11959, 2022.
+
+
+Yingqi Liu, Shiqing Ma, Yousra Aafer, Wen-Chuan Lee, Juan Zhai, Weihang Wang, and X. Zhang.
+Trojaning attack on neural networks. In _Network_ _and_ _Distributed_ _System_ _Security_ _Symposium_,
+2018b. [URL https://api.semanticscholar.org/CorpusID:31806516.](https://api.semanticscholar.org/CorpusID:31806516)
+
+
+Yunfei Liu, Xingjun Ma, James Bailey, and Feng Lu. Reflection backdoor: A natural backdoor
+attack on deep neural networks. In _Computer_ _Vision–ECCV_ _2020:_ _16th_ _European_ _Conference,_
+_Glasgow, UK, August 23–28, 2020, Proceedings, Part X 16_, pp. 182–199. Springer, 2020.
+
+
+Mehran Mozaffari-Kermani, Susmita Sur-Kolay, Anand Raghunathan, and Niraj K Jha. Systematic
+poisoning attacks on and defenses for machine learning in healthcare. _IEEE journal of biomedical_
+_and health informatics_, 19(6):1893–1905, 2014.
+
+
+Luis Mu˜noz-Gonz´alez, Battista Biggio, Ambra Demontis, Andrea Paudice, Vasin Wongrassamee,
+Emil C Lupu, and Fabio Roli. Towards poisoning of deep learning algorithms with back-gradient
+optimization. In _Proceedings_ _of_ _the_ _10th_ _ACM_ _workshop_ _on_ _artificial_ _intelligence_ _and_ _security_,
+pp. 27–38, 2017.
+
+
+Blaine Nelson, Marco Barreno, Fuching Jack Chi, Anthony D Joseph, Benjamin IP Rubinstein,
+Udam Saini, Charles Sutton, J Doug Tygar, and Kai Xia. Exploiting machine learning to subvert
+your spam filter. _LEET_, 8(1-9):16–17, 2008.
+
+
+Tuan Anh Nguyen and Anh Tran. Input-aware dynamic backdoor attack. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 33:3454–3464, 2020.
+
+
+Tuan Anh Nguyen and Anh Tuan Tran. Wanet - imperceptible warping-based backdoor attack. In
+_International Conference on Learning Representations_, 2021. [URL https://openreview.](https://openreview.net/forum?id=eEn8KTtJOx)
+[net/forum?id=eEn8KTtJOx.](https://openreview.net/forum?id=eEn8KTtJOx)
+
+
+Maria-Irina Nicolae, Mathieu Sinn, Minh Ngoc Tran, Beat Buesser, Ambrish Rawat, Martin Wistuba, Valentina Zantedeschi, Nathalie Baracaldo, Bryant Chen, Heiko Ludwig, et al. Adversarial
+robustness toolbox v1. 0.0. _arXiv preprint arXiv:1807.01069_, 2018.
+
+
+11
+
+
+Rui Ning, Jiang Li, Chunsheng Xin, and Hongyi Wu. Invisible poison: A blackbox clean label backdoor attack to deep neural networks. In _IEEE_ _INFOCOM 2021-IEEE_ _Conference_ _on_ _Computer_
+_Communications_, pp. 1–10. IEEE, 2021.
+
+
+Neehar Peri, Neal Gupta, W Ronny Huang, Liam Fowl, Chen Zhu, Soheil Feizi, Tom Goldstein, and
+John P Dickerson. Deep k-nn defense against clean-label data poisoning attacks. In _Computer_
+_Vision–ECCV 2020 Workshops:_ _Glasgow,_ _UK, August 23–28,_ _2020,_ _Proceedings,_ _Part I 16_, pp.
+55–70. Springer, 2020.
+
+
+Joseph Redmon and Ali Farhadi. Yolov3: An incremental improvement. _arXiv_ _preprint_
+_arXiv:1804.02767_, 2018.
+
+
+Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pirsiavash. Hidden trigger backdoor attacks. In _Proceedings_ _of_ _the_ _AAAI_ _conference_ _on_ _artificial_ _intelligence_, volume 34, pp. 11957–
+11965, 2020.
+
+
+Mert Bulent Sariyildiz and Ramazan Gokberk Cinbis. Gradient matching generative networks for
+zero-shot learning. In _Proceedings of the IEEE/CVF conference on computer vision and pattern_
+_recognition_, pp. 2168–2178, 2019.
+
+
+Ali Shafahi, W Ronny Huang, Mahyar Najibi, Octavian Suciu, Christoph Studer, Tudor Dumitras,
+and Tom Goldstein. Poison frogs! targeted clean-label poisoning attacks on neural networks.
+_Advances in neural information processing systems_, 31, 2018.
+
+
+Yuge Shi, Jeffrey Seely, Philip HS Torr, N Siddharth, Awni Hannun, Nicolas Usunier, and Gabriel
+Synnaeve. Gradient matching for domain generalization. _arXiv preprint arXiv:2104.09937_, 2021.
+
+
+Hossein Souri, Liam Fowl, Rama Chellappa, Micah Goldblum, and Tom Goldstein. Sleeper agent:
+Scalable hidden trigger backdoors for neural networks trained from scratch. _Advances in Neural_
+_Information Processing Systems_, 35:19165–19178, 2022.
+
+
+Johannes Stallkamp, Marc Schlipsing, Jan Salmen, and Christian Igel. The german traffic sign
+recognition benchmark: a multi-class classification competition. In _The 2011 international joint_
+_conference on neural networks_, pp. 1453–1460. IEEE, 2011.
+
+
+Guanhong Tao, Yingqi Liu, Guangyu Shen, Qiuling Xu, Shengwei An, Zhuo Zhang, and Xiangyu
+Zhang. Model orthogonalization: Class distance hardening in neural networks for better security.
+In _2022 IEEE Symposium on Security and Privacy (SP)_, pp. 1372–1389. IEEE, 2022.
+
+
+Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. _Advances_
+_in neural information processing systems_, 31, 2018.
+
+
+Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Label-consistent backdoor attacks.
+_arXiv preprint arXiv:1912.02771_, 2019.
+
+
+Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y
+Zhao. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In _2019_
+_IEEE symposium on security and privacy (SP)_, pp. 707–723. IEEE, 2019.
+
+
+Kaiyang Wang, Huaxin Deng, Yijia Xu, Zhonglin Liu, and Yong Fang. Multi-target label backdoor
+attacks on graph neural networks. _Pattern Recognition_, 152:110449, 2024.
+
+
+Pengfei Wang, Zhaoxiang Zhang, Zhen Lei, and Lei Zhang. Sharpness-aware gradient matching
+for domain generalization. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 3769–3778, 2023.
+
+
+Emily Wenger, Josephine Passananti, Arjun Nitin Bhagoji, Yuanshun Yao, Haitao Zheng, and Ben Y
+Zhao. Backdoor attacks against deep learning systems in the physical world. In _Proceedings of_
+_the IEEE/CVF conference on computer vision and pattern recognition_, pp. 6206–6215, 2021.
+
+
+Dongxian Wu and Yisen Wang. Adversarial neuron pruning purifies backdoored deep models. _Ad-_
+_vances in Neural Information Processing Systems_, 34:16913–16925, 2021.
+
+
+12
+
+
+Jing Xu and Stjepan Picek. Poster: Multi-target & multi-trigger backdoor attacks on graph neural
+networks. In _Proceedings of the 2023 ACM SIGSAC Conference on Computer and Communica-_
+_tions Security_, pp. 3570–3572, 2023.
+
+
+Mingfu Xue, Shifeng Ni, Yinghao Wu, Yushu Zhang, and Weiqiang Liu. Imperceptible and multichannel backdoor attack. _Applied Intelligence_, 54(1):1099–1116, 2024.
+
+
+Yi Yu, Yufei Wang, Wenhan Yang, Shijian Lu, Yap-Peng Tan, and Alex C Kot. Backdoor attacks
+against deep image compression via adaptive frequency trigger. In _Proceedings of the IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 12250–12259, 2023.
+
+
+Yi Zeng, Si Chen, Won Park, Zhuoqing Mao, Ming Jin, and Ruoxi Jia. Adversarial unlearning of
+backdoors via implicit hypergradient. In _International Conference on Learning Representations_,
+2022.
+
+
+Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond empirical
+risk minimization. In _International Conference on Learning Representations_, 2018.
+
+
+Bo Zhao, Konda Reddy Mopuri, and Hakan Bilen. Dataset condensation with gradient matching.
+_arXiv preprint arXiv:2006.05929_, 2020.
+
+
+Haoti Zhong, Cong Liao, Anna Cinzia Squicciarini, Sencun Zhu, and David Miller. Backdoor
+embedding in convolutional neural network models via invisible perturbation. In _Proceedings of_
+_the Tenth ACM Conference on Data and Application Security and Privacy_, pp. 97–108, 2020.
+
+
+Chen Zhu, W Ronny Huang, Hengduo Li, Gavin Taylor, Christoph Studer, and Tom Goldstein.
+Transferable clean-label poisoning attacks on deep neural nets. In _International_ _conference_ _on_
+_machine learning_, pp. 7614–7623. PMLR, 2019.
+
+
+A APPENDIX
+
+
+In this section, we conduct a series of experiments to evaluate the significance and contribution of
+each component of our algorithm. All experiments are carried out using the ResNet18 model as
+both the surrogate and target, with the CIFAR10 dataset serving as the training data. The results are
+averaged across various random selections of source and target classes.
+
+
+A.1 PATCH SIZE
+
+
+We evaluate the influence of trigger size on attack success rate by experimenting with various sizes
+for both patch and blend triggers. All experiments are performed using the ResNet18 model as both
+the surrogate and target. In this section, poisons are generated for a single cycle and round. The
+results of these experiments are presented in Table 7.
+
+
+Trigger Type Size BA ASR
+
+
+Patch 2 _×_ 2 90.96 0.3
+Blend 2 _×_ 2 91.5 0.1
+Patch 4 _×_ 4 90.09 11.1
+Blend 4 _×_ 4 89.46 2.0
+Patch 8 _×_ 8 88.52 73.2
+Blend 8 _×_ 8 89.91 49.9
+Patch 16 _×_ 16 90.53 95.8
+Blend 16 _×_ 16 90.73 94.1
+
+
+Table 7: Evaluation of the impact of trigger size on attack success rate. The table compares the
+success rates for various sizes of patch and blend triggers.
+
+
+13
+
+
+A.2 POISON CRAFTING THRESHOLD
+
+
+This section presents experimental results that illustrate how selecting an appropriate threshold influences the optimization objective in adversarial poison crafting. Figure 3 illustrates the threshold
+values used to terminate the poison crafting optimization process, along with the corresponding
+attack success rates achieved using the generated poisons.
+
+
+Figure 3: Threshold values and corresponding attack success rates for terminating the poison crafting optimization process.
+
+
+14

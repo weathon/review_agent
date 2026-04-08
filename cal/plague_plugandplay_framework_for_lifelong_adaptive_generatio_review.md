@@ -1,4 +1,4 @@
-=== CALIBRATION EXAMPLE 29 ===
+=== CALIBRATION EXAMPLE 14 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
@@ -7,230 +7,197 @@
 
 ### Title & Abstract
 
-The title "PLAGUE: Plug-and-Play Framework for Lifelong Adaptive Generation of Multi-Turn Jailbreaks" is accurate. However, the abstract's headline claim — "improving attack success rates (ASR) by more than 30% across leading models" — is ambiguous and potentially misleading. In the paper body, these improvements are computed as *relative* gains (e.g., the 32.14% improvement on o3 is (0.814−0.616)/0.616, which is a relative gain relative to ActorBreaker, not GOAT as claimed in Section 5.1). Framing relative improvements as "30%" without the word "relative" may mislead a reader expecting absolute percentage-point gains.
+The title accurately captures the paper's contribution. The abstract claims PLAGUE achieves 81.4% ASR on OpenAI's o3 and 67.3% on Claude's Opus 4.1 "based on StrongReject." However, the abstract conflates two different metrics (SRE and Bin-ASR) in a way that is never fully resolved — the paper later states it uses "SRE and ASR interchangeably," but these are not equivalent: SRE is a graded [0,1] score while Bin-ASR is binary. The 81.4% figure refers to SRE, while Bin-ASR for the same configuration is 66.2% (Table 2). Reporting the SRE figure in the abstract without clarification overstates the binary success rate perception.
 
-The abstract further says "81.4% on OpenAI's o3" and "67.3% on Claude's Opus 4.1" using SRE. Since SRE is a graded score (not a strict binary), and the authors modify the original StrongREject prompt to "increase its sensitivity, favoring an aligned response" (Appendix C.1), these headline numbers are not directly comparable to the SRE numbers reported elsewhere in the community — a critical omission in the abstract.
+The abstract also names "Claude's Opus 4.1" — an apparently very recent model — while API access citations in the references section read "Accessed: 2024-08-28," suggesting the paper was substantially prepared much earlier. This temporal inconsistency raises questions about when experiments were actually run and whether baselines were reproduced contemporaneously.
 
 ---
 
 ### Introduction & Motivation
 
-The problem motivation is sound and well-cited. The three desiderata for an effective red-teaming agent (relevance + progression, feedback-driven evolution, diverse sampling) are well-articulated and serve as useful organizing principles for the subsequent design.
+The motivation for multi-turn jailbreaking is well-articulated and the three desiderata (relevance/progression, feedback-based evolution, adaptive diversity) are a useful conceptual frame. The claim that "multi-turn attacks lack a formal investigation into what makes them work" is somewhat overstated given the existing literature on RACE, ActorBreaker, and GOAT that the authors themselves cite. The contributions are clearly enumerated through the text, though no formal bulleted contribution list is provided.
 
-**Concern**: The paper cites Li et al. (2024) as showing that "multi-turn jailbreaks were orders of magnitude more effective...than ensembles of single-turn attacks." "Orders of magnitude" means 10× or more, which is a strong claim that deserves verification. The contributions listed are clear, though the novelty framing overlaps significantly with AutoDAN-Turbo and AutoRedTeamer, which are acknowledged but possibly under-differentiated.
-
----
-
-### Related Work
-
-This section is thorough and well-structured. The comparison in Table 1 (presence/absence of lifelong learning, reflection, planning, etc.) is a useful visual summary of the landscape. The authors fairly identify their own inspirations.
-
-**Concern**: The claim that "only human-generated strategies appended during initialization seem to yield a discernible improvement in [AutoDAN-Turbo's] performance, while improvements from freshly discovered strategies remain unexplored" is asserted without citation or ablation evidence. This appears to be the authors' opinion and should be framed as such, or supported with data.
+One logical gap: the authors claim PLAGUE is "the first multi-turn attack to feature a lifelong-learning component" (Section 2.3), but AutoDAN-Turbo already features lifelong learning for single-turn attacks, and the authors acknowledge this. The novelty of lifelong learning in a *multi-turn* setting is real but subtler than the framing suggests.
 
 ---
 
 ### Method
 
-The three-phase architecture (Planner → Primer → Finisher) is logically well-structured. The design decision to omit the last planning step (n−1 Primer steps) to leave room for the Finisher is a reasonable heuristic, though it is not theoretically motivated — why exactly does saving the final step help? The backtracking mechanism (removing failing turns from HT but retaining them in HA) is clever and practically important.
+**Three-phase design:** The decomposition into Planner → Primer → Finisher is intuitive and the modular framing is genuinely useful. However, several design choices lack principled justification:
 
-**Key concerns:**
+- **Scoring thresholds:** The Primer uses a 7/10 success threshold, the Finisher uses >8/10 for success and ≤2/10 for refusal-triggered backtracking. The region [3/10, 8/10] in the Finisher triggers a separate "feedback" path. These thresholds appear entirely heuristic. No sensitivity analysis is provided; the impact of varying these thresholds is unknown.
 
-1. **Lifelong learning contribution is unclear.** The lifelong memory bank R+ is described as the central novelty. However, the bank is initialized with only *two* strategies from Crescendo, and the ablation (Table 3: GOAT+BT+R+P vs. GOAT+BT+R+P+RSS) shows SRE improvements of 0.773→0.814 on o3 and 0.431→0.465 on Claude — modest gains that are not far from noise. There is no analysis of how many new strategies are actually *learned* during an evaluation run, whether discovered strategies are substantively different from the initial seeds, or whether the system would work comparably with a fixed library of the two initial strategies throughout.
+- **Plan length fixed at n=2:** The paper states "We instruct our attacker to generate a two-step plan during the Planning phase. We find this to be the best-performing setting for our attack." This finding is not substantiated with an ablation over plan lengths.
 
-2. **Rubric Scorer threshold choices lack justification.** The Primer succeeds at score ≥ 7/10, and the Finisher triggers backtracking at ≤ 3/10 and declares success at > 8/10. These thresholds are critical to the attack's behavior, but no ablation explores their sensitivity. A minor shift (e.g., Primer threshold of 6 vs. 8) could significantly alter performance.
+- **Memory bank initialization:** The strategy library is seeded with only two human-adapted strategies from Crescendo. The actual impact of *accumulated* lifelong learning (i.e., strategies discovered during testing) vs. the seed initialization is never disentangled. Table 3 shows the RSS component adds ~4% SRE on o3, but it cannot distinguish learned strategies from seed strategies.
 
-3. **Modified SRE metric.** In Appendix C.1, the authors state they modify the original StrongREject prompt to "increase its sensitivity." The consequence is that their reported SRE scores are *not* the same metric as StrongREject scores in the literature. The scale factor (dividing by 8 rather than 10) is noted, but the systematic upward bias introduced by prompt modification is not quantified.
+- **Algorithm 3 inconsistency:** In the Finisher pseudocode (Algorithm 3, line 10), the success condition is `score > 9.0`, yet Section 3.5 states the attack ends when receiving "a score greater than 8/10." This internal inconsistency is not explained.
 
-4. **Algorithm 3 has a logical inconsistency.** Line 10 sets the success threshold at `score > 9.0`, but Section 3.5 says "the attack ends when...we...receive a score greater than 8/10" and "If this scoring criterion is met, we mark the attack as successful." There is an inconsistency between the pseudocode (9.0) and the prose (8/10). Which is correct? This matters for reproducibility.
+- **Context freezing:** The Primer builds context, which is then "frozen" for the Finisher. The mechanism preventing the frozen context from being flagged as adversarial by the target model's safety systems is not explained — this appears to be an implicit bet on context-amnesia in safety classifiers, which should be made explicit.
 
 ---
 
 ### Experimental Setup
 
-**Choice of Attacker Model.** The paper uses DeepSeek-R1 as the attacker LLM "across all our experiments." DeepSeek-R1 is a reasoning model known to have weaker safety guardrails than many alternatives. It is well-suited for the complex reasoning required in attack planning, but using it likely provides a significant performance advantage over scenarios where practitioners have access to differently-aligned attackers. There is *no ablation on attacker model choice*, which is a significant gap. Would PLAGUE remain SOTA if the attacker were GPT-4o, Claude, or Llama instead?
+**ASR@K=2 reporting:** The paper reports ASR@2, meaning it runs two independent attack attempts and selects the highest-scoring one. This directly inflates the reported ASR compared to single-attempt evaluations. For baselines like Crescendo and GOAT, the authors run K=2 as well (via ActorBreaker's two-actor setup), but the equivalence is not rigorous. GOAT without an explicit K=2 restart policy is being compared against PLAGUE with K=2, introducing a potentially confounding factor.
 
-**ASR@K=2 comparability.** The paper uses K=2 ("We use K=2 for all our experiments"), taking the best score from two independent attack attempts. The paper says ActorBreaker is run with K=2 actors (two plans per goal). For Crescendo and GOAT, it is never stated that they are *also* run K=2 times — only that "the budget for all baselines and our experiments is capped at six turns." If PLAGUE runs twice (2×6 target calls = up to 12) while GOAT runs once (6 calls), the comparison is not budget-equitable. The paper should report single-attempt ASR@1 alongside ASR@2 for clarity, and should confirm all baselines are evaluated at K=2.
+**Modified baseline implementations:** The paper makes several modifications to baselines:
+- GOAT is modified to invoke the Rubric Scorer after each round and is run "without history enabled for the Attacker."
+- Crescendo's backtracking count is removed and turn limit is set to six.
+- These modifications are presented neutrally, but they could favor PLAGUE's architecture, which was designed around these exact components.
 
-**Baseline modification.** The authors modify GOAT's evaluation environment (invoking the Rubric Scorer R per round rather than at the end) and add early stopping. They also remove Crescendo's backtracking limits. While these changes are explained, they depart from official implementations, making it unclear whether performance differences are due to the methods themselves or these environmental changes. Ideally, results should show official baseline performance alongside the modified versions.
+**Attacker model choice:** DeepSeek-R1 is used as the attacker across all experiments. This is a very capable reasoning model. It is unclear whether the gains come from PLAGUE's framework design or simply from the attacker model's strength. An ablation over attacker model quality (e.g., a weaker attacker) would be important to establish that the framework design, rather than the model, is responsible for the gains.
+
+**Table 5 (LLM budget):** The table presents averaged budget counts per model, but the layout maps multiple models to the same set of rows in a way that is difficult to parse. More critically, PLAGUE on o3 shows a "Total" of 6.53 invocations, which appears to *exceed* the stated six-turn budget. The budget description says "six calls can be made to T" — is the budget on target calls only? This distinction matters for fair comparison.
 
 ---
 
 ### Results & Discussion
 
-**Section 5.1 Inconsistency.** The paper claims "we outperform the previous best - GOAT by a factor of 32.14%" for o3. However, Table 2 shows ActorBreaker SRE on o3 = 0.616 > GOAT SRE = 0.587. ActorBreaker is actually the stronger baseline on o3. The 32.14% figure matches (0.814−0.616)/0.616 ≈ 32.1% — i.e., improvement over *ActorBreaker*, not GOAT as stated. This is a factual error in attribution.
+**Table 2:** PLAGUE outperforms baselines on nearly all models by substantial margins. However, there is an unexplained anomaly in Table 3: adding the Planner (GOAT + BT + R + P) *decreases* Bin-ASR on o3 from 0.59 to 0.582 compared to (GOAT + BT + R). Performance only recovers when RSS is added. This suggests the Planner alone may hurt performance, and the benefit comes from the combined effect with retrieval — a nuance that is not discussed.
 
-**Duplicate row in Table 2.** The ActorBreaker row appears *twice* in Table 2 with identical values, which is a clear error.
+**Claude Opus 4.1 reporting:** Table 2 shows PLAGUE (with GOAT finisher) achieving 0.465 SRE on Opus 4.1, while Table 6 shows "PLAGUE (Best; equal budget)" at 0.673 SRE. The asterisk footnote explains this, but it means the headline "40.2% improvement" over Crescendo uses a *different configuration* (Crescendo as Finisher) than the one labeled PLAGUE in the main results table. This inconsistency, while technically explained, could mislead readers scanning the paper.
 
-**Statistical robustness.** Results are "averaged over three runs," but no confidence intervals, standard errors, or significance tests are reported. Multi-turn attacks have high variance (as the authors themselves note), and three runs may be insufficient to establish reliable ordering between closely-scoring systems. PLAGUE's advantage over Crescendo on Claude (0.673 vs. 0.480 SRE) is larger, but on o1 (0.931 vs. 0.692) and Llama (0.958 vs. 0.899) the differences, while substantial, are never statistically characterized.
+**Figure 2 (scaling with turns):** The figure shows PLAGUE scaling to 81.4% SRE at six turns, with diminishing returns beyond that. This is a useful result. However, the figure only covers o3 with GOAT as finisher — results for other models or the best configuration are not shown.
 
-**DeepSeek-R1 at 97.8% SRE.** This is the headline result but is only weakly discussed. DeepSeek-R1 is widely recognized as having weaker safety alignment than o3 or Claude Opus; 97.8% SRE may reflect the target model's weakness rather than the attack's sophistication. The authors briefly acknowledge that model difficulty correlates with ASR but do not separately analyze why DeepSeek is particularly easy to jailbreak.
+**X-Teaming (Table 6):** The authors attribute X-Teaming's poor performance to "fewer TextGrad steps," limiting it to two TextGrad refinement steps per phase. This is a deliberate budget constraint imposed by the authors, and it may artificially deflate X-Teaming's performance.
 
-**Diversity vs. ASR trade-off (Figure 3).** The paper notes that PLAGUE has *lower* diversity than ActorBreaker (0.375 vs. 0.433) but higher ASR. This trade-off is acknowledged but not analyzed: is the lower diversity a feature (efficient convergence to good strategies) or a limitation (brittle to defenses that target the specific attack patterns)? This is relevant to real-world red-teaming utility.
+**Diversity analysis (Figure 3):** PLAGUE's diversity remains lower than ActorBreaker's (0.375 vs 0.433), and the ActorBreaker Planner integration improves PLAGUE's diversity to only 0.375. The trade-off between diversity and ASR is not formally characterized — what does the Pareto frontier look like across these methods?
 
-**Category-wise analysis (Figure 4 / Appendix C.3).** The paper reports "near-perfect ASR (99.5%)" on misinformation categories, while sexual content is hardest. This is interesting and policy-relevant but is only briefly discussed. Understanding *why* certain categories resist the attack would be valuable.
+---
+
+### Evaluation Metrics
+
+The modification to the StrongReject evaluation prompt is described only briefly: "we modify the original prompt and increase its sensitivity, favoring an aligned response." This is a non-trivial change to a standardized metric. If the evaluator is made more lenient, all methods (including PLAGUE) would benefit, but comparisons against baselines that use the original StrongReject prompt may not be valid. This modification should be more fully justified and the impact quantified (e.g., how do scores change with vs. without the modification on the same set of outputs?).
+
+Additionally, using Qwen3-235B as both the evaluator and the basis for the rubric scorer, while using DeepSeek-R1 as the attacker, introduces a potential evaluator bias: the evaluator may rate responses generated using DeepSeek-R1's style more favorably than responses from other models.
+
+---
+
+### Lifelong Learning Claims
+
+The paper's central framing around "lifelong learning" is weaker than presented. The memory bank starts with two strategies and grows as attacks succeed. However:
+1. No experiment shows how ASR *improves over time* as more strategies accumulate in the bank — the single most compelling experiment for a lifelong learning claim.
+2. The retrieval threshold of 0.6 cosine similarity with a maximum of 2 examples is presented without justification.
+3. The paper compares retrieval to AutoDAN-Turbo's response-similarity retrieval, but no direct controlled comparison between the two retrieval strategies (goal-similarity vs. response-similarity) is provided.
 
 ---
 
 ### Writing & Clarity
 
-The three-phase framing is clear and the algorithm pseudocode is helpful. However, two passages cause genuine confusion:
-
-1. Section 3.2 states "We use SRE and ASR interchangeably in our work." This is never acceptable — the two metrics have different semantics (binary vs. graded), and the abstract uses SRE numbers while calling them "ASR." Readers expecting the standard binary ASR definition will be misled.
-
-2. The budget accounting is spread across Sections 4 and 5.2 without a single consolidated statement of what "6 turns" means for each method, and whether all methods receive exactly 12 target LLM calls (K=2 × 6) or different totals.
+The dual use of "ASR" and "SRE" interchangeably — despite explicitly stating they are different — persists throughout the paper and creates genuine confusion (e.g., the abstract headline ASR figure of 81.4% refers to SRE, not Bin-ASR). The paper would benefit from consistently using "SRE" for the StrongReject score and "Bin-ASR" for binary success rate. Section B.1 (Algorithm Prompts, pages 15-19 of the PDF) appears entirely blank in the submission, presumably because the actual prompts were intended to appear there but are missing.
 
 ---
 
-### Limitations & Ethics
+### Limitations & Broader Impact
 
-The ethics section acknowledges dual-use risk and invokes open-access arguments for safety research, which is standard. However, the discussion is thin relative to the severity of the results — 81.4% ASR on o3 and 67.3% on Claude Opus 4.1 are non-trivial figures. The paper does not discuss:
-- Whether the framework (and example attacks in Appendix D) should be released fully or under researcher-access controls.
-- The implications of attack strategies being retained in a shared lifelong memory, potentially transferring across goals.
-- Responsible disclosure to model providers.
+The ethics statement is brief and standard. Given that the paper reports 81.4% ASR on o3 and 67.3% on Opus 4.1 — two frontier models specifically designed with advanced safety features — the dual-use concern is more serious than typical jailbreaking papers. There is no mention of responsible disclosure to OpenAI or Anthropic before publication, nor a discussion of whether publishing a plug-and-play framework with full code and prompts crosses a harm threshold that the benefit to safety researchers does not justify.
 
-The technical limitations section is limited to the conclusion: "we leave the development of a better diversity-inducing Planner to future work." Missing from the discussion: (a) failure modes when target models use system-prompt-level multi-turn defenses; (b) whether lifelong learning would degrade under distributional shift (new harm categories); (c) compute costs of running the multi-agent system at scale.
+The limitation discussion is mostly confined to diversity, leaving future work to address it. The paper does not discuss failure modes of PLAGUE (e.g., what categories it systematically fails on), nor the possibility that the framework may be particularly effective only with very capable attacker models (DeepSeek-R1), limiting its use as a lightweight safety evaluation tool.
 
 ---
 
 ### Overall Assessment
 
-PLAGUE presents a modular, well-engineered framework for multi-turn jailbreaking that achieves genuinely strong empirical results across several frontier models. The plug-and-play architecture and the large-scale evaluation across five major models are real contributions. However, the paper has several issues that undermine confidence in the reported numbers: (1) a factual error in crediting the baseline improvement on o3 (ActorBreaker vs. GOAT); (2) a modified SRE metric that inflates scores relative to the established benchmark; (3) ASR@K=2 metric that may not be applied consistently to all baselines; (4) no ablation on the attacker model (DeepSeek-R1), which likely explains much of the advantage; (5) the lifelong learning component — the claimed central novelty — shows only modest incremental gains in ablation; and (6) a threshold inconsistency between pseudocode (>9.0) and prose (>8/10). For ICLR acceptance, these issues collectively require revision: at minimum, honest characterization of the SRE modification, explicit K=2 budget accounting for all baselines, an attacker-model ablation, and confidence intervals on the main results. As it stands, the contribution is interesting and the empirical scale is appreciated, but the methodological presentation is not yet rigorous enough to fully support the headline claims.
+PLAGUE makes a genuine engineering contribution: a modular, three-phase multi-turn jailbreaking framework that achieves strong empirical results and whose ablation studies clearly demonstrate the value of individual components. The plug-and-play design philosophy is well-motivated and the evaluation across frontier models is comprehensive by current standards. However, several issues substantially weaken the paper's scientific standing. The ASR@K=2 protocol inflates comparisons against baselines, and baseline implementations were modified in ways that potentially favor PLAGUE's design principles. The claimed "lifelong learning" benefit is never demonstrated dynamically — no experiment shows improving ASR as strategies accumulate — making the lifelong learning framing largely aspirational. The modified StrongReject evaluation metric creates a non-standard comparison with prior work. The internal inconsistency between Algorithm 3 (score > 9.0) and Section 3.5 (score > 8/10) as the success threshold, combined with the anomalous result that adding the Planner alone hurts Bin-ASR (Table 3), suggest the method may be more sensitive to hyperparameter choices than presented. The contribution is substantial enough to be worth presenting, but the paper as submitted does not meet ICLR's bar for rigor. Acceptance would require addressing the fairness of baseline comparisons, demonstrating lifelong learning accumulation over time, and clarifying the evaluation methodology.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper presents PLAGUE, a plug-and-play, lifelong-learning framework for automating multi-turn jailbreak attacks on LLMs using a three-phase architecture (Planner, Primer, Finisher). It claims significant improvements in Attack Success Rate (ASR), achieving state-of-the-art performance on recent models like OpenAI o3 and Claude Opus 4.1 while maintaining efficient query budgets. The work is positioned as a vital tool for comprehensively evaluating LLM safety vulnerabilities through systematic red-teaming.
+The paper introduces PLAGUE, a modular three-phase framework (Planner, Primer, and Finisher) for automated multi-turn LLM jailbreaking that integrates reflection, context backtracking, and a lifelong-learning strategy retrieval memory. Evaluated under strict query budgets, PLAGUE achieves state-of-the-art success rates across frontier models, notably reaching 81.4% StrongReject (SRE) on OpenAI o3 and 67.3% on Claude Opus 4.1, while significantly outperforming recent baselines like GOAT, Crescendo, and ActorBreaker. The framework's plug-and-play architecture enables systematic component ablation, demonstrating how tailored initialization, context optimization, and feedback incorporation synergize to breach robust safety alignments.
 
 ### Strengths
-1.  **Comprehensive Empirical Evaluation:** The paper provides a robust experimental setup evaluating against highly resistant, state-of-the-art models (e.g., OpenAI o3, Claude Opus 4.1) that are often hard to jailbreak. The inclusion of both StrongREJECT and binary ASR metrics (Table 2) allows for a nuanced view of success that aligns with current safety benchmarks.
-2.  **Modular and Extensible Design:** The introduction of a plug-and-play framework demonstrates engineering clarity. The ability to swap components (e.g., using different Finisher modules like GOAT vs. Crescendo) and the detailed ablation studies (Tables 3 and 4) provide valuable insights into which specific agentic behaviors drive success.
-3.  **Budget-Aware Analysis:** Unlike many red-teaming papers that ignore compute costs, this work explicitly analyzes LLM call budgets across Target, Evaluator, and Planner phases (Table 5). It demonstrates that performance gains are achieved with minimal inference overhead compared to baselines like Crescendo, which adds practical relevance.
+1. **Rigorous and Controlled Empirical Evaluation:** The paper maintains a strict 6-turn budget across all methods and models, enabling a fair *apples-to-apples* comparison. Table 2 demonstrates consistent gains across five leading models, and Table 5 meticulously tracks Target, Evaluator, and Planner LLM calls, proving that performance improvements are not artifacts of unchecked query inflation.
+2. **Systematic Component Ablation & Validation of Modularity:** Tables 3, 4, and Figure 3 provide clear, step-wise evidence of how individual mechanisms (Reflection, Backtracking, Planner, and Strategy Retrieval) contribute to ASR. The successful integration of ActorBreaker's planning module and Crescendo as a Finisher validates the core claim that decoupling attack phases allows targeted optimization for specific model vulnerabilities (e.g., Opus 4.1's resistance to standard strategies).
+3. **High Practical Security Impact & Clear Methodology:** Achieving >80% SRE on heavily guarded, state-of-the-art closed models with a black-box setup provides critical stress-testing capabilities for the safety community. The architectural choice to omit the final plan step during the Primer phase (Section 3.4) is well-motivated and directly addresses known issues like semantic drift and stagnation observed in prior iterative attacks.
 
 ### Weaknesses
-1.  **Incremental Novelty vs. Fundamental Innovation:** The core components (lifelong learning memory, reflection agents, multi-turn planning) draw heavily from existing single-turn or multi-turn frameworks like AutoDAN-Turbo, RACE, and ActorBreaker. The primary contribution appears to be the *integration* of these modules rather than a novel algorithmic mechanism, which may limit its fit for ICLR's theoretical standards compared to venues focused on application or security.
-2.  **Reliance on LLM-as-a-Judge without Human Verification:** The paper relies almost exclusively on LLMs (Qwen3) for the Rubric Scorer and Final Evaluator (Section 3.2). Without human-in-the-loop validation or cross-evaluator consensus analysis, there is a risk of evaluator bias or "eval hacking," where the attacker optimizes against the judge rather than the target model's actual safety failure.
-3.  **Diversity Trade-offs:** The analysis in Figure 3 admits that PLAGUE's diversity score remains lower than ActorBreaker's despite higher ASR. The paper does not deeply analyze whether this reduced diversity limits the generalizability of vulnerabilities discovered, which is a key metric for effective red-teaming that assesses broad risk rather than just single-point failures.
+1. **Incremental Algorithmic Novelty:** The framework is largely a sophisticated engineering recomposition of existing primitives rather than a fundamentally new attack paradigm. The escalation mirrors Crescendo, the memory retrieval adapts AutoDAN-Turbo's embedding search, and the reflection/backtracking heavily borrows from agentic Reflexion literature. While the orchestration is effective, the paper lacks a deeper theoretical or mechanistic explanation for *why* the specific phase boundaries and heuristics work synergistically beyond empirical observation.
+2. **Under-Evidenced "Lifelong Learning" Claims:** Section 3.3.1 reveals the strategy library is initialized with only two manual strategies, uses a cosine similarity threshold of 0.6, and caps retrieval at two examples. Table 3 shows retrieval helps, but the paper does not present an experiment demonstrating performance *accumulation* over extended, multi-goal runs. The mechanism currently functions more like static few-shot example retrieval than true lifelong adaptation.
+3. **Arbitrary Heuristic Thresholds & Modified Metrics:** The Rubric Scorer thresholds (7/10 for Primer advancement; 3/10/8/10/9/10 for Finisher branching) are presented without justification or sensitivity analysis. Furthermore, Appendix C.1 explicitly states the StrongReject prompt was "modified to increase its sensitivity." Deviating from canonical evaluation prompts risks metric incomparability with baselines and may artificially inflate reported SRE gains if the judge is biased toward compliant responses.
+4. **Limited Discussion on Tactical Diversity Trade-offs:** Figure 3 and the accompanying text acknowledge that PLAGUE's diversity is lower than ActorBreaker's. While optimizing for ASR under budget is practical, the paper does not sufficiently discuss the security implications of this low diversity. Low diversity in red-teaming can lead to discovering narrow vulnerability corridors rather than broad safety gaps, a nuance expected in high-tier security evaluations.
 
 ### Novelty & Significance
-**Novelty:** Moderate. The work innovates by structuring known agentic behaviors into a cohesive, lifelong-learning pipeline for multi-turn contexts. However, the individual blocks (vector memory for strategy retrieval, reflection loops) are well-established in prior red-teaming literature.
-**Significance:** High. The evaluation on very recent models (o3, Opus 4.1) provides critical, timely data on current safety alignment limits. The "plug-and-play" approach offers a useful methodology for the research community to stress-test models, even if the attack mechanics themselves are compositional.
-**Clarity:** Good. The three-phase structure is logically defined, though the text occasionally becomes repetitive when comparing baselines.
-**Reproducibility:** High. Specific model versions, parameters, and dataset details (HarmBench) are provided. The reliance on public APIs and standard frameworks aids in reproduction, though the specific prompt engineering details would benefit from code release (which is claimed in the ethics statement).
+**Novelty:** Moderate (Algorithmic) to High (Systems/Engineering). The primary contribution is not a new attack primitive, but a highly effective, standardized orchestration framework that systematically isolates and improves upon the weakest links in existing multi-turn attacks. It successfully bridges agentic design patterns with adversarial prompting.
+**Clarity:** High. The three-phase decomposition is intuitive, well-motivated by prior failures, and supported by clear pseudocode (Appendix A) and prompt specifications. The narrative logically builds from component analysis to integrated performance.
+**Reproducibility:** Good, with standard caveats for LLM research. The dataset (HarmBench), budget constraints, attacker/evaluator models, and call-tracking methodology are transparent. Full reproducibility depends on the exact prompt templates and the dynamic nature of API-based frontier models, which the authors acknowledge.
+**Significance:** High for AI Safety and AI Systems. As production LLMs shift toward agentic, conversational workflows, demonstrating query-efficient, high-success-rate multi-turn jailbreaks is critical for defensive alignment research. The results on o3 and Opus 4.1 provide a concrete upper bound on current black-box vulnerabilities and offer a practical, extensible toolkit for rigorous red-teaming.
 
 ### Suggestions for Improvement
-1.  **Strengthen the Evaluation Protocol:** To mitigate concerns about evaluator bias, include a subset of attacks evaluated by human annotators or a consensus of multiple distinct "judge" models to validate that the ASR gains are real and not artifacts of the judge model's alignment.
-2.  **Clarify Theoretical Contribution:** In the Introduction and Method sections, explicitly articulate the *algorithmic* novelty beyond "integration." Is there a new memory update mechanism? A novel loss function for the planner? Clarify how the "lifelong learning" differs technically from AutoDAN-Turbo's implementation to justify the ICLR classification.
-3.  **Expand Diversity Analysis:** Provide a deeper discussion on the relationship between ASR and Diversity. If PLAGUE sacrifices diversity for success, discuss the implications for safety coverage (e.g., does it find the "hardest" single jailbreak or the "safest" set of jailbreaks?). Consider using the diversity metric as a primary trade-off axis in the results.
-4.  **Improve Presentation of Formulas & Tables:** While I understand these are extraction artifacts, ensure the final submission has clean LaTeX rendering for algorithms (e.g., Algorithm 1-4) and tables to ensure precise verification of mathematical claims and data points during the review process.
+1. **Empirically Validate "Lifelong" Adaptation:** Conduct an ablation where the strategy library grows organically over a large-scale run (e.g., 200+ goals across multiple epochs). Plot ASR against library size or number of prior sessions to prove that the system genuinely learns and improves over time rather than relying on initial few-shot examples.
+2. **Standardize Metric Reporting or Provide Dual Scores:** Report results using both the modified SRE and the **canonical** StrongReject evaluator. This will directly address comparability concerns with baselines like Crescendo and ensure that reported improvements are due to the attack efficacy, not prompt sensitivity modifications.
+3. **Justify or Robustness-Test Heuristic Thresholds:** Include a brief sensitivity analysis or ablation on the Primer/Finisher score thresholds (e.g., testing 6/10 vs 7/10 for Primer). If performance is stable across a range, note this robustness; if highly sensitive, frame it as a limitation requiring target-specific tuning.
+4. **Expand Defence Implications & Failure Analysis:** Given ICLR's audience, add a dedicated subsection discussing what PLAGUE's success reveals about current LLM defenses. For example, does the effectiveness of the "Primer" phase indicate that context-window safety checks fail against gradual semantic shifts? Connecting attack mechanics to specific defensive failure modes would significantly elevate the paper's impact.
+5. **Clarify Economic/Compute Overhead:** Table 5 reports LLM call counts but not actual inference cost or wall-clock time. Since red-teaming is often financially constrained, briefly estimate the cost delta of running PLAGUE (which requires a strong Planner/Attacker/Judge stack per goal) versus lighter baselines like GOAT to provide a complete practical efficiency analysis.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Sequential Learning Protocol:** Run attacks sequentially to populate memory, measuring ASR gain per added strategy to validate "lifelong" claims rather than static retrieval.
-2. **Judge Robustness Check:** Evaluate successful jailbreaks using a stronger judge (e.g., o1) or human annotators to verify Qwen3 isn't under-scoring harmfulness.
-3. **Random Retrieval Baseline:** Compare embedding-based retrieval against random strategy retrieval to prove semantic similarity drives performance gains.
-4. **Budget Efficiency Pareto:** Plot ASR vs. Total API Calls (including Planner/Scorer) to verify the "comparable budget" claim contradicted by Table 5.
-5. **Cross-Model Transfer:** Test if strategies learned on one model (e.g., Llama) successfully jailbreak another (e.g., Opus) to validate generalizability.
+1. **Lifelong Learning Progression:** Plot ASR progression over the sequence of 200 HarmBench attacks to verify the "lifelong" claim shows actual learning over time, not just static retrieval.
+2. **Adaptive Defense Evaluation:** Evaluate PLAGUE against models fine-tuned or guarded specifically against multi-turn attacks to verify robustness beyond static APIs, as required for security research.
+3. **Token-Based Efficiency Metrics:** Report total token consumption and latency instead of just API calls, as reasoning models (e.g., Deepseek-R1) vary wildly in output length.
+4. **Public Model Reproducibility:** Replicate key results on publicly accessible model versions (e.g., o1, Claude 3.5) since "o3" and "Opus 4.1" are not verifiable, ensuring reproducibility.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Baseline Modification Impact:** Quantify how much tweaking GOAT's evaluation environment (adding Rubric Scorer) degraded its original performance compared to PLAGUE.
-2. **Rubric Scorer Dependency:** Analyze if attack success correlates with the Rubric Scorer's own safety alignment, risking a self-reinforcing weak judge loop.
-3. **Failure Mode Categorization:** Categorize the remaining 20-30% failures on o3/Opus by refusal type to identify unresolved vulnerabilities.
-4. **Memory Overfitting:** Investigate if the system memorizes HarmBench-specific templates rather than learning generalizable jailbreak strategies.
-5. **Table 2 vs. Table 4 Consistency:** Explain why the main results table excludes the best Opus 4.1 performance found in the ablation table.
+1. **Retrieval Threshold Sensitivity:** Analyze performance variance across different cosine similarity thresholds (currently fixed at 0.6) to prove robustness of the retrieval mechanism.
+2. **Failure Mode Categorization:** Qualitatively categorize the remaining 20-30% of failed attacks (e.g., refusal types, semantic drift) to identify specific framework limitations.
+3. **Memory Bank Scaling:** Analyze performance degradation or noise accumulation as the strategy library grows to ensure the system remains viable long-term.
+4. **Component Independence:** Conduct leave-one-out ablations instead of cumulative addition to ensure components like Backtracking and Reflection are not redundant.
 
 ### Visualizations & Case Studies
-1. **Retrieval Similarity Distribution:** Histogram of cosine similarity scores between queries and retrieved memories to prove meaningful matching occurs.
-2. **Retrieval Case Study:** Display a specific goal and its retrieved memory strategy side-by-side to validate semantic relevance claims.
-3. **Turn-wise Score Trajectory:** Compare Rubric Scores over 6 turns for PLAGUE vs. Crescendo to demonstrate the "escalation" mechanism visually.
-4. **Success/Fail Conversation Logs:** Provide side-by-side dialogue examples showing where the Primer phase succeeded vs. drifted semantically.
-5. **Cost-Benefit Scatter:** Plot Total Compute Cost vs. ASR for all baselines to visualize efficiency trade-offs clearly.
+1. **Turn-by-Turn Success Probability:** Plot cumulative success rate per turn (1-6) to reveal whether the Primer or Finisher phase is the primary driver of jailbreaks.
+2. **Retrieved Strategy Examples:** Visualize embedding spaces or provide concrete examples of retrieved strategies vs. current goals to verify semantic relevance claims.
+3. **Token Cost Breakdown:** Use stack bar charts to show token usage per phase (Planner, Primer, Finisher) to identify computational bottlenecks.
 
 ### Obvious Next Steps
-1. **Human Verification:** Validate a subset of high-scoring attacks with human annotators to ensure automatic metrics aren't inflated.
-2. **Defense Robustness:** Evaluate PLAGUE against standard mitigations (e.g., perplexity filters, input sanitization) to assess real-world threat.
-3. **Unified Results Table:** Consolidate Tables 2 and 4 to present the true SOTA performance consistently across all models.
-4. **Compute Cost Formalization:** Report total token consumption including attacker and judge calls, not just Target LLM calls.
-5. **Responsible Disclosure Revision:** Reconsider releasing full attack code/prompts given the SOTA nature and potential for misuse without safeguards.
+1. **Human Evaluation of Harm:** Conduct human evaluation on a subset of successful attacks to validate automated judge scores, which are known to be biased.
+2. **Proposed Mitigations:** Propose and evaluate a specific mitigation strategy (e.g., detector) to align with ICLR safety standards, rather than solely releasing attack tools.
+3. **Cross-Architecture Transfer:** Test if strategies learned on open-weights models (Llama) successfully transfer to closed APIs (Claude/o3) to validate the generalization claim.
 
 # Final Consolidated Review
 ## Summary
-
-The paper presents PLAGUE, a plug-and-play framework for generating multi-turn jailbreak attacks on LLMs through a three-phase architecture: Planner (generates attack plan with retrieved strategy examples), Primer (builds adversarial context through seemingly benign queries), and Finisher (delivers the final harmful query). The framework incorporates lifelong learning via a memory bank that stores successful attack strategies for retrieval in future attacks. Evaluated on HarmBench across five frontier models (OpenAI o3, o1, DeepSeek-R1, Claude Opus 4.1, Llama 3.3-70B), PLAGUE achieves strong attack success rates, including 81.4% SRE on o3 and 67.3% on Claude Opus 4.1, outperforming existing multi-turn attack methods.
+PLAGUE introduces a modular three-phase framework (Planner, Primer, Finisher) for multi-turn LLM jailbreaking that incorporates lifelong-learning strategy retrieval, reflection, and context backtracking. The framework achieves state-of-the-art attack success rates on frontier models including OpenAI's o3 (81.4% SRE) and Claude's Opus 4.1 (67.3% SRE) under controlled query budgets.
 
 ## Strengths
-
-- **Comprehensive empirical evaluation across frontier models**: The paper evaluates on genuinely challenging targets (OpenAI o3, Claude Opus 4.1) that are widely considered resistant to jailbreaks. The consistent evaluation across five models with both binary ASR and StrongREJECT metrics provides meaningful data about current safety alignment limits.
-
-- **Modular architecture enabling systematic ablation**: The plug-and-play design allows clear isolation of component contributions. Tables 3 and 4 demonstrate that adding backtracking, reflection, planning, and strategy retrieval each provide measurable improvements (GOAT baseline: 0.587 SRE on o3 → PLAGUE: 0.814 SRE on o3), helping readers understand which mechanisms matter.
-
-- **Budget-aware efficiency analysis**: Table 5 explicitly compares total LLM calls across methods, showing PLAGUE achieves higher ASR with comparable (sometimes fewer) target calls than Crescendo. This attention to computational cost is often missing in red-teaming papers.
+- **Rigorous empirical evaluation under controlled budgets:** The paper maintains a strict 6-turn budget across all methods and models, enabling fair comparison. Table 5 provides detailed accounting of Target, Evaluator, and Planner LLM calls, demonstrating that performance improvements are not artifacts of query inflation.
+- **Systematic component ablation validating modularity:** Tables 3 and 4 demonstrate incremental contributions from Backtracking, Reflection, Planning, and Strategy Retrieval. The successful integration of ActorBreaker's planning module and Crescendo as a Finisher validates the plug-and-play architecture claim—Opus 4.1's resistance to GOAT-style strategies is overcome by swapping to Crescendo as Finisher (Table 4).
+- **Clear architectural decomposition addressing prior attack failures:** The decision to omit the final plan step during the Primer phase (Section 3.4) is well-motivated—preventing semantic drift while allowing the Finisher to explore diverse final delivery methods. This directly addresses documented failures in Crescendo and GOAT.
+- **Results on frontier safety-aligned models:** Achieving >80% SRE on o3 and >67% on Opus 4.1 provides actionable stress-testing data for the safety community on models specifically designed with advanced safety features.
 
 ## Weaknesses
-
-- **Factual error in baseline attribution**: Section 5.1 states "we outperform the previous best—GOAT by a factor of 32.14%" on o3. However, Table 2 shows ActorBreaker (SRE 0.616) outperforms GOAT (SRE 0.587) on o3. The 32.14% improvement calculation matches (0.814−0.616)/0.616, which is improvement over ActorBreaker, not GOAT. This misattribution undermines confidence in the reported claims.
-
-- **Modified SRE metric reduces comparability**: Appendix C.1 states the authors modified the StrongREJECT prompt to "increase its sensitivity, favoring an aligned response." The scale change (dividing by 8 vs. 10) is noted, but the systematic bias introduced by prompt modification is not quantified. This means the headline SRE scores are not directly comparable to published StrongREJECT benchmarks without calibration.
-
-- **No ablation on attacker model choice**: The paper uses DeepSeek-R1 as the attacker model throughout. DeepSeek-R1 is a reasoning model with notably weaker safety alignment than alternatives. Given the attacker's role in planning and query generation, the framework's performance advantage may partially derive from this choice rather than architectural innovation. An ablation testing GPT-4o or Claude as the attacker would isolate the framework's contribution.
-
-- **Algorithm-prose threshold inconsistency**: Algorithm 3 (Line 10) sets the success threshold at `score > 9.0`, while Section 3.5 states "a score greater than 8/10" triggers success marking. This discrepancy affects reproducibility.
-
-- **Duplicate table row error**: Table 2 contains ActorBreaker row twice with identical values, indicating a proofreading oversight that further reduces confidence in the numerical presentation.
-
-- **Lower attack diversity**: Figure 3 shows PLAGUE's diversity score (0.375) is lower than ActorBreaker's (0.433). While the paper notes this trade-off (higher ASR, lower diversity), it does not analyze implications for real-world red-teaming utility—whether finding fewer attack patterns limits vulnerability coverage.
-
-- **Lifelong learning gains appear modest in isolation**: Table 3 shows the RSS (strategy retrieval) component improves SRE from 0.773→0.814 on o3, a 5.3% relative gain. While meaningful, this is smaller than the reflection component's contribution. The central "lifelong learning" claim rests on this mechanism, yet its standalone contribution is limited.
+- **Algorithm-pseudocode inconsistency:** Algorithm 3 (line 10) specifies `score > 9.0` as the success condition, while Section 3.5 states "score greater than 8/10" ends the attack. This internal inconsistency undermines reproducibility—readers cannot determine which threshold was actually used.
+- **Heuristic thresholds without sensitivity analysis:** The Primer uses 7/10 as its advancement threshold; the Finisher uses 8/10 for success and ≤2/10 for refusal-triggered backtracking. These specific values are presented without justification or analysis of how performance varies with different thresholds.
+- **"Lifelong learning" claim not empirically demonstrated:** The memory bank starts with two seed strategies and accumulates successful strategies. However, no experiment shows ASR *improving over time* as strategies accumulate—the canonical demonstration required for a lifelong learning claim. Table 3 shows retrieval adds ~4% SRE, but this conflates seed strategies with dynamically learned ones. The mechanism functions more like few-shot example retrieval than true lifelong adaptation.
+- **No ablation with weaker attacker models:** DeepSeek-R1 (a highly capable reasoning model) is used as the attacker across all experiments. This leaves open whether the gains derive from PLAGUE's framework design or from the attacker model's capability. An ablation using a weaker attacker (e.g., Llama 3.1-8B) would isolate the framework's contribution.
+- **Planner component shows negative marginal contribution:** In Table 3 on o3, adding the Planner alone (GOAT+BT+R+P vs GOAT+BT+R) decreases Bin-ASR from 0.59 to 0.582. Performance only recovers when Retrieval is added. This suggests Planning alone may hurt performance—a nuance not discussed in the text.
+- **Modified StrongReject prompt affects metric comparability:** Appendix C.1 states the StrongReject evaluation prompt was modified "to increase its sensitivity." While all methods are evaluated with the same modified prompt, this deviation from the canonical metric may affect comparability with prior published results.
 
 ## Nice-to-Haves
-
-- **Sequential learning validation**: Running attacks sequentially to populate memory and measuring per-strategy ASR gains would validate whether the lifelong learning mechanism provides compounding benefits over time rather than just static retrieval from initial seeds.
-
-- **Attacker model ablation**: Testing PLAGUE with GPT-4o or Claude as the attacker would clarify how much performance depends on DeepSeek-R1's specific capabilities.
-
-- **Cross-model strategy transfer analysis**: Testing whether strategies learned against Llama transfer to Opus would validate the generalizability claim for the memory bank.
-
-- **Judge robustness check**: Evaluating a subset of successful attacks with a different judge model (or human annotation) would address concerns about Qwen3-specific evaluator bias.
+- Demonstration of lifelong learning progression: plot ASR against accumulated strategies over sequential attacks to validate the temporal learning claim
+- Sensitivity analysis on Rubric Scorer thresholds to characterize robustness vs. sensitivity
+- Token-based efficiency metrics in addition to API call counts, since reasoning models like DeepSeek-R1 vary significantly in output length
+- Discussion of specific defensive implications: what does Primer's success reveal about context-window safety classifier failures against gradual semantic shifts?
 
 ## Removed Points
-
 These points are flagged to be removed, treat them with caution:
-
-- **"SRE and ASR used interchangeably confuses readers"**: While the terminology is imprecise, the paper clearly reports both metrics separately in Table 2 and explains the relationship in Section 3.2 and Appendix C.1. This is a clarity issue, not a substantive methodological flaw.
-
-- **"Baseline modifications make comparisons unfair"**: The modifications to GOAT (per-round scoring) and Crescendo (removed backtracking limits) are disclosed in Section 4 under Baselines. Adding early stopping when "a high rubric score...is obtained in early iterations" is consistent with the budget-constrained evaluation protocol and benefits baselines rather than harming them.
-
-- **"Orders of magnitude" claim verification**: The paper cites Li et al. (2024) for the "orders of magnitude" claim about multi-turn attacks. This is a cited external claim, not the authors' assertion. Verifying external citations is not the reviewer's role.
-
-- **"ASR@K=2 applied inconsistently"**: The paper explicitly states K=2 for all experiments (Section 4) and clarifies that ActorBreaker's two actors parallel the ASR@2 metric. While presentation could be clearer, the protocol appears consistent.
-
-- **"Responsible disclosure insufficient"**: The ethics statement acknowledges dual-use risks and argues for open access for safety research. While more discussion could be valuable, demanding specific disclosure protocols exceeds standard ICLR requirements.
-
-- **"Theoretical contribution limited to integration"**: ICLR has accepted impactful systems papers whose primary contribution is careful integration and empirical demonstration. The criticism that integration alone lacks theoretical novelty is a category error—methodological contributions have precedent.
-
-- **"Writing clarity issues"**: General complaints about repetition and prose quality are minor presentation issues that don't affect the core contribution.
+- "The abstract conflates SRE and Bin-ASR" — The paper explicitly states it uses these interchangeably and the abstract clarifies "ASR (based on StrongReject)" is SRE. This is transparent.
+- "Opus 4.1 temporal inconsistency with 2024-08-28 access date" — This is a formatting/citation timing concern, not a substantive issue with the experimental validity.
+- "Missing bulleted contribution list" — Formatting preference, not a weakness.
+- "Table 5 shows total calls exceeding six-turn budget" — The budget constraint applies to Target LLM calls only (which are ≤6), not the Total column which includes Planner and Evaluator calls. The paper is consistent.
+- "X-Teaming's budget constraint artificially deflates performance" — All methods are evaluated under similar budget constraints for fair comparison. This is controlled experimentation, not bias.
+- "Qwen3 evaluator may favor DeepSeek-R1 outputs" — Speculative without evidence that this bias exists.
+- "Appendix B.1 appears blank" — Incorrect; pages 15-19 contain prompt templates.
 
 ## Novel Insights
-
-The paper reveals that different models have qualitatively different vulnerability profiles requiring different attack components: reflection provides the largest gain on o3, while backtracking is most critical for Claude Opus 4.1 (Table 3). This suggests model safety mechanisms differ in ways that require tailored attack strategies—Claude's alignment appears more resistant to direct harmful queries but vulnerable to context manipulation, while o3 is more susceptible to refined reasoning about feedback. The finding that PLAGUE+Crescendo outperforms PLAGUE+GOAT on Claude but not other models further indicates that optimal attack architectures are target-specific. The lifelong learning component's modest standalone contribution (strategy retrieval adding ~5% relative improvement) suggests that in single-run evaluations, the memory bank's primary value may be warm-starting from seeded strategies rather than genuine learning; compounding benefits would require sequential evaluation across many goals, which the paper does not demonstrate.
+The framework's modularity reveals a previously underappreciated insight: different frontier models have distinct vulnerability profiles. Opus 4.1 resists GOAT-style Finisher strategies but succumbs to Crescendo-style escalation (Table 4), while o3 shows largest gains from Reflection and Retrieval components. This suggests future defensive work should model model-specific vulnerability surfaces rather than assuming uniform multi-turn attack resistance. The finding that Planning alone can *hurt* Bin-ASR (Table 3) without strategy retrieval indicates that planning without relevant context may amplify semantic drift or detection—planning and retrieval are synergistic, not additive.
 
 ## Suggestions
-
-- Correct the baseline attribution error: change "previous best—GOAT" to "previous best—ActorBreaker" for the o3 comparison, or recalculate the improvement percentages correctly.
-
-- Add a calibration experiment comparing modified SRE to original StrongREJECT on a held-out subset to quantify the systematic bias introduced by prompt changes.
-
-- Clarify the success threshold discrepancy between Algorithm 3 (>9.0) and Section 3.5 (>8/10) in the camera-ready version.
-
-- Remove the duplicate ActorBreaker row from Table 2.
-
-- Report attacker model ablation: run PLAGUE with GPT-4o or another non-reasoning attacker to isolate the framework's architectural contribution from DeepSeek-R1's specific capabilities.
-
-- Expand the discussion of diversity vs. ASR trade-offs: analyze whether lower diversity means PLAGUE discovers a smaller set of vulnerability types, potentially limiting its utility for comprehensive safety auditing.
-
-- Consider adding a sequential evaluation showing cumulative ASR improvement as strategies accumulate in memory, which would validate the "lifelong learning" claim more directly than static retrieval experiments.
+- Add a time-series experiment: run PLAGUE on all 200 HarmBench objectives sequentially, plotting ASR against cumulative stored strategies. This would directly validate the lifelong learning claim.
+- Clarify the success threshold discrepancy between Algorithm 3 and Section 3.5 with a correction.
+- Include at least one ablation using a smaller attacker model (e.g., Llama 3.1-8B) to demonstrate framework efficacy independent of attacker capability.
+- Report results using both the modified SRE and canonical StrongReject evaluator on a subset to quantify the impact of prompt modification.
 
 # Actual Human Scores
 Individual reviewer scores: [2.0, 4.0, 2.0, 2.0]

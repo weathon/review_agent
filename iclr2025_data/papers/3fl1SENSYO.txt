@@ -1,0 +1,1867 @@
+# DIFFPUTER: EMPOWERING DIFFUSION MODELS FOR MISSING DATA IMPUTATION
+
+
+**Hengrui Zhang** **[1]** **Liancheng Fang** **[1]** **Qitian Wu** **[2]** **Philip S. Yu** **[1]** _[∗]_
+
+1Computer Science Department, University of Illinois at Chicago
+2Eric and Wendy Schmidt Center, Broad Institute of MIT and Harvard
+{hzhan55,lfang87,psyu}@uic.edu
+wuqitian@broadinstitute.org
+
+
+ABSTRACT
+
+
+Generative models play an important role in missing data imputation in that they
+aim to learn the joint distribution of full data. However, applying advanced deep
+generative models (such as Diffusion models) to missing data imputation is challenging due to 1) the inherent incompleteness of the training data and 2) the
+difficulty in performing conditional inference from unconditional generative models. To deal with these challenges, this paper introduces DIFFPUTER, a tailored
+diffusion model combined with the Expectation-Maximization (EM) algorithm
+for missing data imputation. DIFFPUTER iteratively trains a diffusion model to
+learn the joint distribution of missing and observed data and performs an accurate conditional sampling to update the missing values using a tailored reversed
+sampling strategy. Our theoretical analysis shows that DIFFPUTER’s training step
+corresponds to the maximum likelihood estimation of data density (M-step), and
+its sampling step represents the Expected A Posteriori estimation of missing values
+(E-step). Extensive experiments across ten diverse datasets and comparisons with
+17 different imputation methods demonstrate DIFFPUTER’s superior performance.
+Notably, DIFFPUTER achieves an average improvement of 6.94% in MAE and
+4.78% in RMSE compared to the most competitive existing method.
+
+
+1 INTRODUCTION
+
+
+In the field of data science and machine learning, missing data in tabular datasets is a common issue
+that can severely impair the performance of predictive models and the reliability of statistical analysis.
+Missing data can result from various factors, including data entry errors, non-responses in surveys,
+and system errors during data collection (Barnard & Meng, 1999; Lillard et al., 1986; Eckert et al.,
+2020). Properly handling missing data is essential, as improper treatment can lead to biased estimates,
+reduced statistical power, and invalid conclusions.
+
+
+A plethora of work proposed over the past decades has propelled the development of missing
+data imputation research. Early classical methods often relied on partially observed statistical
+features to impute missing values or were based on conventional machine learning techniques,
+such as KNN (Pujianto et al., 2019), or simple parametric models, such as Bayesian models (Ma
+& Chen, 2018) or Gaussian Mixture Models (García-Laencina et al., 2010). With the advent of
+deep learning, recent research has primarily focused on predictive (Stekhoven & Bühlmann, 2012;
+Van Buuren & Karin, 2011; Kyono et al., 2021) or generative deep models (Yoon et al., 2018; Mattei
+& Frellsen, 2019; Richardson et al., 2020) for missing data imputation. Predictive models learn to
+predict the target entries conditioned on other observed entries, guided by masking mechanisms (Du
+et al., 2024) or graph regularization techniques (You et al., 2020; Zhong et al., 2023). By contrast,
+generative methods learn the joint distribution of missing entries and observed entries and aim to
+impute the missing data via conditional sampling (Richardson et al., 2020; Nazabal et al., 2020b;
+Mattei & Frellsen, 2019; Yoon et al., 2018; Ouyang et al., 2023; Zheng & Charoenphakdee, 2022).
+However, generative imputation methods still fall short compared to predictive methods even when
+employing state-of-the-art generative models (Kingma & Welling, 2013; Rezende & Mohamed,
+
+
+_∗_ Corresponding author.
+
+
+1
+
+
+2015; Goodfellow et al., 2014; Ho et al., 2020). We think this is primarily due to the **incomplete**
+**likelihood** nature issue in missing data imputation: generative models need to estimate the joint
+distribution of missing data and observed data. However, since the missing data itself is unknown,
+there is an inherent error in the estimated data density. The classical Expectation-Maximization
+(EM) algorithm (Dempster et al., 1977) offers an elegant route to handle this issue, being capable of
+addressing the incomplete likelihood issue by iteratively refining the values of the missing data.
+
+
+Integrating EM algorithms with generative models has been extensively studied (Richardson et al.,
+2020), however, its combination with Diffusion models (Ho et al., 2020), currently the most powerful
+generative models, is still unexplored. In the M-step, the diffusion models have been shown able to
+faithfully reconstruct the ground-truth distribution. However, in the E-step, it is usually considered
+challenging to utilize them to perform condition inference (e.g., predicting missing entries based on
+observed entries). This is because diffusion models directly model and generate the complete joint
+distribution of data across all dimensions simultaneously, lacking the flexibility found in VAE and
+GAN-based approaches (Ma et al., 2020; Peis et al., 2022b; Ma et al., 2018).
+
+
+This paper introduces DIFFPUTER, a principled generative method for missing data imputation.
+DIFFPUTER explores a path that makes diffusion models compatible with the EM framework,
+allowing both E-step and M-step to be effective. Specifically: 1) In the M-step, DIFFPUTER employs
+a diffusion model to learn the joint distribution of the missing and observed data. With the powerful
+ability of diffusion models to learn tabular data distributions, in the M-step, DIFFPUTER learns
+a parameterized distribution that faithfully recovers the joint distribution of observed and missing
+entries. 2) In the E-step, DIFFPUTER uses the learned diffusion model to perform flexible and accurate
+conditional sampling by mixing the forward process for observed entries with the reverse process
+for missing entries. Theoretically, we show that DIFFPUTER’s M-step corresponds to the maximum
+likelihood estimation of the data density, while its E-step represents the _Expected A Posteriori_ (EAP)
+estimation of the missing values, conditioned on the observed values.
+
+
+We conduct experiments [1] on nine benchmark tabular datasets containing both continuous and discrete
+features under various missing data scenarios. We compare the performance of DIFFPUTER with
+17 competitive imputation methods from different categories. Experimental results demonstrate the
+superior performance of DIFFPUTER across all settings and on almost all datasets.
+
+
+2 RELATED WORKS
+
+
+**Iterative Methods for Missing Data Imputation.** Iterative imputation is a widely used approach
+due to its ability to continuously refine predictions of missing data, resulting in more accurate
+imputation outcomes. This iterative process is especially crucial for methods requiring an initial
+estimation of the missing data. The Expectation-Maximization (EM) algorithm (Dempster et al.,
+1977), a classical method, can be employed for missing data imputation. However, earlier applications
+often assume simple data distributions, such as mixtures of Gaussians for continuous data or Bernoulli
+and multinominal densities for discrete data (García-Laencina et al., 2010). These assumptions limit
+the imputation capabilities of these methods due to the restricted density estimation of simple
+distributions. The integration of EM with deep generative models remains underexplored. A closely
+related approach is MCFlow (Richardson et al., 2020), which iteratively imputes missing data using
+normalizing flows (Rezende & Mohamed, 2015). However, MCFlow focuses on recovering missing
+data through maximum likelihood rather than expectation, and its conditional imputation is achieved
+through soft regularization instead of precise sampling based on the conditional distribution. Beyond
+EM, the concept of iterative training is prevalent in state-of-the-art deep learning-based imputation
+methods. For instance, IGRM (Zhong et al., 2023) constructs a graph from all dataset samples
+and introduces the concept of friend networks, which are iteratively updated during the imputation
+learning process. HyperImpute (Jarrett et al., 2022) proposes an AutoML imputation method that
+iteratively refines both model selection and imputed values.
+
+
+**Diffusion Models for Missing Data Imputation.** We are not the first to utilize diffusion models
+for missing data imputation. In computer vision, diffusion models have been widely applied in image
+inpainting, either in the data space (Lugmayr et al., 2022) or the latent space (Corneanu et al., 2024).
+In the tabular data area, TabCSDI (Zheng & Charoenphakdee, 2022) employs a conditional diffusion
+
+
+[1The code is available at https://github.com/hengruizhang98/DiffPuter.](https://github.com/hengruizhang98/DiffPuter)
+
+
+2
+
+
+model to learn the distribution of masked observed entries conditioned on the unmasked observed
+entries. MissDiff (Ouyang et al., 2023) uses a diffusion model to learn the density of tabular data
+with missing values by masking the observed entries. Although MissDiff was not originally intended
+for imputation, it can be easily adapted for this task. Other methods, despite claiming applicability
+for imputation, are trained on complete data and evaluated on incomplete testing data (Zhang et al.,
+2024; Jolicoeur-Martineau et al., 2024). This approach contradicts the focus of this study, where the
+training data itself contains missing values. Additionally, all the aforementioned methods use one-step
+imputations, which overlook the issue that missing data in the training set can lead to inaccurate data
+density estimation. By contrast, the proposed DIFFPUTER is the first to integrate a diffusion-based
+generative model into the EM framework. Additionally, we achieved accurate conditional sampling
+by mixing the forward and reverse processes of diffusion and demonstrated the effectiveness of this
+approach through theoretical analysis.
+
+
+3 PRELIMINARIES
+
+
+3.1 MISSING VALUE IMPUTATION FOR INCOMPLETE DATA
+
+
+This paper addresses the missing value imputation task for incomplete data, where only partial data
+entries are observable during the training process. Formally, let the complete _d_ -dimensional data
+be denoted as **x** _∼_ _p_ data( **x** ) _∈_ R _[d]_ . For each data sample, **x**, there is a binary mask **m** _∈{_ 0 _,_ 1 _}_ _[d]_
+indicating the location of missing entries for **x** . Let the subscript _k_ denote the _k_ -th entry of a vector,
+then _mk_ = 1 stands for missing entries while _mk_ = 0 stands for observable entries.
+
+
+We further use **x** [obs] and **x** [mis] to denote the observed data and missing data, respectively (i.e.,
+**x** = ( **x** [obs] _,_ **x** [mis] )). Note that **x** [obs] is the fixed ground-truth observation, while **x** [mis] is conceptual
+and unknown, and we we aim to estimate it. The missing value imputation task aims to predict the
+missing entries **x** [mis] based on the observed entries **x** [obs] .
+
+
+**In-sample vs.** **Out-of-sample imputation.** The missing data imputation task can be categorized
+into two types: in-sample and out-of-sample. In-sample imputation means that the model only
+has to impute the missing entries in the training set, while out-of-sample imputation requires the
+model’s capacity to generalize to the unseen data records without fitting its parameters again. Not all
+imputation methods can generalize to out-of-sample imputation tasks. For example, methods that
+directly treat the missing values as learnable parameters (Muzellec et al., 2020; Zhao et al., 2023) are
+hard to apply to unseen records. A desirable imputation method is expected to perform well on both
+in-sample and out-of-sample imputation tasks, and this paper studies both of the two settings.
+
+
+3.2 FORMULATING MISSING DATA IMPUTATION WITH EXPECTATION-MAXIMIZATION
+
+
+Treating **x** [obs] as observed variables and **x** [mis] as latent variables, with the estimated density of the
+complete data distribution parameterized as _p_ _**θ**_ ( **x** ), we can formulate the missing value imputation
+problem using the Expectation-Maximization (EM) algorithm. Specifically, when the complete
+data distribution _p_ _**θ**_ ( **x** ) is available, the optimal estimation of missing values is given by **x** [mis] _[∗]_ =
+E **x** mis _p_ ( **x** [mis] _|_ **x** [obs] _,_ _**θ**_ ). Conversely, when the missing entries **x** [mis] are known, the density parameters
+can be optimized via maximum likelihood estimation: _**θ**_ _[∗]_ = arg max _p_ ( **x** _|_ _**θ**_ ). Consequently, with the
+_**θ**_
+
+initial estimation of missing values **x** [mis], the model parameters _**θ**_ and the missing value **x** [mis] can be
+optimized by iteratively applying M-step and E-step:
+
+
+    - **M** aximization-step: Fix **x** [mis], update _**θ**_ _[∗]_ = arg max _p_ ( **x** _|_ _**θ**_ ) = arg max _p_ _**θ**_ ( **x** [obs] _,_ **x** [mis] ).
+_**θ**_ _**θ**_
+
+    - **E** xpectation-step: Fix _**θ**_, update **x** [mis] _[∗]_ = E **x** mis _p_ ( **x** [mis] _|_ **x** [obs] _,_ _**θ**_ ).
+
+
+4 METHODOLOGY
+
+
+In this section, we introduce DIFFPUTER- Iterative Missing Data Im **put** ation with **Diff** usion. Based
+on the Expectation-Maximization (EM) algorithm, DIFFPUTER updates the density parameter _**θ**_
+and hidden variables **x** [mis] in an iterative manner. Fig. 1 shows the overall architecture and training
+
+
+3
+
+
+K iterations
+
+
+Figure 1: An overview of the architecture of the proposed DIFFPUTER. DIFFPUTER utilizes one-hot
+encoding to transform discrete variables into continuous ones and use the mean of observed values to
+initialize the missing entries. The EM algorithm alternates the process of 1) fixing **x** [mis] and estimate
+diffusion model parameter _**θ**_, 2) fixing _**θ**_ and estimate **x** [mis], for _K_ iterations. The final imputation
+result **x** _[∗]_ is returned from the E-step of the last iteration.
+
+
+process of DIFFPUTER: 1) The M-step fixes the missing entries **x** [mis], then a diffusion model is trained
+to estimate the density of the complete data distribution _p_ _**θ**_ ( **x** ) = _p_ _**θ**_ ( **x** [obs] _,_ **x** [mis] ); 2) The E-step
+fixes the model parameters _**θ**_, then we update the missing entries **x** [mis] via the reverse process of the
+learned diffusion model _p_ _**θ**_ ( **x** ). The above two steps are executed iteratively until convergence. The
+following sections introduce the M-step and E-step of DIFFPUTER, respectively. To avoid confusion,
+we use **x** _,_ **x** _t,_ **x** [obs], etc. to denote samples from real data, **x** ˜ _,_ ˜ **x** _t,_ ˜ **x** [obs], etc. to denote samples obtained
+by the model _**θ**_, while **x** ˆ _,_ ˆ **x** _t,_ ˆ **x** [obs], etc. to denote the specific values of variables.
+
+
+4.1 M-STEP: DENSITY ESTIMATION WITH DIFFUSION MODELS
+
+
+Given an estimation of complete data **x** = ( **x** [obs] _,_ **x** [mis] ), M-step aims to learn the density of **x**,
+parameterized by model _**θ**_, i.e., _p_ _**θ**_ ( **x** ). Inspired by the impressive generative modeling capacity
+of diffusion models (Song et al., 2021b; Karras et al., 2022), DIFFPUTER learns _p_ _**θ**_ ( **x** ) through
+a diffusion process, which consists of a forward process that gradually adds Gaussian noises of
+increasing scales to **x**, and a reverse process that recovers the clean data from the noisy one:
+
+
+**x** _t_ = **x** 0 + _σ_ ( _t_ ) _**ε**_ _,_ _**ε**_ _∼N_ ( **0** _,_ **I** ) _,_ (Forward Process) (1)
+
+d **x** _t_ = _−_ 2 ˙ _σ_ ( _t_ ) _σ_ ( _t_ ) _∇_ **x** _t_ log _p_ ( **x** _t_ )d _t_ + �2 ˙ _σ_ ( _t_ ) _σ_ ( _t_ )d _**ω**_ _t,_ (Reverse Process) (2)
+
+
+In the forward process, **x** 0 = **x** = ( **x** [obs] _,_ **x** [mis] ) is the currently estimated data at time 0, and **x** _t_ is the
+diffused data at time _t_ . _σ_ ( _t_ ) = _t_ is the noise level (and _σ_ ˙ ( _t_ ) is its derivative w.r.t. _t_ ), i.e., the standard
+deviation of Gaussian noise, at time _t_ . The forward process has defined a series of data distribution
+_p_ ( **x** _t_ ) = - **x** 0 _[p]_ [(] **[x]** _[t][|]_ **[x]** [0][)] _[p]_ [(] **[x]** [0][)d] **[x]** [0][, and] _[ p]_ [(] **[x]** [0][) =] _[ p]_ [(] **[x]** [)][.] [Note that when restricting the mean of] **[ x]** [0][ to][ 0]
+
+and keeping the variance of **x** 0 small (e.g., via standardization), _p_ ( **x** _t_ ) approaches a tractable prior
+distribution _π_ ( **x** ) at _t_ = _T_ when _σ_ ( _T_ ) is large enough, meaning _p_ ( **x** _T_ ) _≈_ _π_ ( **x** ) (Song et al., 2021a).
+In our formulation in Eq. 1, _p_ ( **x** _T_ ) _≈_ _π_ ( **x** ) = _N_ ( **0** _, σ_ [2] ( _T_ ) **I** ).
+
+
+In the reverse process, _∇_ **x** _t_ log _p_ ( **x** _t_ ) is the gradient of **x** _t_ ’s log-probability w.r.t., to **x** _t_, and is also
+known as the _score function_ . _**ω**_ _t_ is the standard Wiener process. The model is trained by (conditional)
+score matching (Song et al., 2021b), which utilizes a neural network _**ϵθ**_ ( **x** _t, t_ ) (called denoising/score
+network) to approximate the conditional score-function _∇_ **x** _t_ log _p_ ( **x** _t|_ **x** 0), which in expectation
+approximates _∇_ **x** _t_ log _p_ ( **x** _t_ ):
+
+
+_L_ SM = E **x** 0 _∼p_ ( **x** 0)E _t∼p_ ( _t_ )E _**ε**_ _∼N_ ( **0** _,_ **I** ) _∥_ _**ϵθ**_ ( **x** _t, t_ ) _−∇_ **x** _t_ log _p_ ( **x** _t|_ **x** 0) _∥_ [2] 2 _[,]_ [where] **[ x]** _[t]_ [=] **[ x]** [0] [+] _[σ]_ [(] _[t]_ [)] _**[ε]**_ _[.]_ [(3)]
+
+
+Since the score of conditional distribution has analytical solutions, i.e., _∇_ **x** _t_ log _p_ ( **x** _t|_ **x** 0) =
+_∇_ **x** _t_ _p_ ( **x** _t|_ **x** 0) **[x]** _[t][−]_ **[x]** [0] _**ε**_
+
+
+**x** _pt_ ( _p_ **x** ( _t_ **x** _|_ **x** _t_ 0 **x** )0) = _−_ **[x]** _σ_ _[t]_ [2] _[−]_ ( **[x]** _t_ ) [0]
+
+
+**[x]** _σ_ _[t]_ [2] _[−]_ ( **[x]** _t_ ) [0] [=] _[ −]_ _σ_ ( _**ε**_ _t_ ) [, Eq.][ 3][ can be interpreted as training a neural network] _**[ ϵ][θ]**_ [(] **[x]** _[t][, t]_ [)][ to]
+
+
+4
+
+
+approximate the scaled noise. Therefore, _**ϵθ**_ ( **x** _t, t_ ) is also known as the denoising function, and in
+this paper, it is implemented as a five-layer MLP (see Appendix D.4).
+
+
+**Remark 1.** _Starting from the prior distribution_ **x** _T_ _∼_ _π_ ( **x** ) _, and apply the reverse process in Eq. 2_
+_with ∇_ **x** _t_ log _p_ ( **x** _t_ ) _replaced with_ _**ϵθ**_ ( **x** _t, t_ ) _, we obtain a series of distributions p_ _**θ**_ ( **x** _t_ ) _, ∀t ∈_ [0 _, T_ ]
+
+**Remark 2.** (Corollary 1 in (Song et al., 2021a)) _Let p_ ( **x** ) = _p_ ( **x** 0) _be the data distribution,_ _and_
+_p_ _**θ**_ ( **x** ) = _p_ _**θ**_ ( **x** 0) _be_ _the_ _marginal_ _data_ _distribution_ _obtained_ _from_ _the_ _reverse_ _process,_ _then_ _the_
+_score-matching loss function in Eq. 3 is an upper bound of the negative-log-likelihood of real data_
+_**x**_ _∼_ _p_ ( _**x**_ ) _over_ _**θ**_ _._ _Formally,_
+
+
+_−_ E _p_ ( **x** )[log _p_ _**θ**_ ( **x** )] _≤L_ SM( _**θ**_ ) + _Const,_ (4)
+
+
+_where Const is a constant independent of_ _**θ**_ _._
+
+
+Remark 2 indicates that the _**θ**_ optimized by Eq. 3 approximates the maximum likelihood estimation
+of data distribution _p_ ( **x** ). Consequently, _p_ _**θ**_ ( _**x**_ ) approximates _p_ ( **x** ) accurately with enough capacity.
+The algorithmic illustration of DIFFPUTER’s M-step is summarized in Algorithm 1.
+
+
+4.2 E-STEP: MISSING DATA IMPUTATION WITH A LEARNED DIFFUSION MODEL
+
+
+Given the current estimation of data distribution _p_ _**θ**_ ( **x** ), the E-step aims to obtain the distribution of
+complete data, conditional on the observed values, i.e., _p_ _**θ**_ ( **x** _|_ **x** [obs] ), such that the estimated complete
+data **x** _[∗]_ can be updated by taking the expectation, i.e., **x** _[∗]_ = E **x** _p_ _**θ**_ ( **x** _|_ **x** [obs] ).
+
+When there is an explicit density function for _p_ _**θ**_ ( **x** ), or when the conditional distribution _p_ _**θ**_ ( **x** _|_ **x** [obs] )
+is tractable (e.g., can be sampled), computing E **x** _p_ ( **x** _|_ **x** [obs] _,_ _**θ**_ ) becomes feasible. While most deep
+generative models such as VAEs and GANs support convenient unconditional sampling from _p_ _**θ**_ ( **x** ),
+they do not naturally support conditional sampling, e.g., ˜ **x** _∼_ _p_ _**θ**_ ( **x** _|_ **x** [obs] ). Luckily, since the diffusion
+model preserves the size and location of features in both the forward diffusion process and the reverse
+denoising process, it offers a convenient and accurate solution to perform conditional sampling
+_p_ _**θ**_ ( **x** _|_ **x** [obs] ) from an unconditional model _p_ _**θ**_ ( **x** ) = _p_ _**θ**_ ( **x** [obs] _,_ **x** [mis] ).
+
+Specifically, let **x** be the data to impute, **x** [obs] = **x** ˆ [obs] 0 be the values of observed entries, **m** be the
+0 _/_ 1 indicators of the location of missing entries, and **x** ˜ _t_ be the imputed data at time _t_ . Then, we can
+obtain the imputed data at time _t −_ ∆ _t_ via combining the observed entries from the forward process
+on **x** 0 = **x**, and the missing entries from the reverse process on **x** ˜ _t_ from the prior step _t_ (Lugmayr
+et al., 2022; Song et al., 2021b):
+
+
+**x** [foward] _t−_ ∆ _t_ [=] **[ x]** [ +] _[ σ]_ [(] _[t][ −]_ [∆] _[t]_ [)] _[ ·]_ _**[ ε]**_ _[,]_ [where] _**[ ε]**_ _[ ∼N]_ [(] **[0]** _[,]_ **[ I]** [)] _[,]_ (Forward for observed entries) (5)
+
+       - _t−_ ∆ _t_
+**x** [reverse] _t−_ ∆ _t_ = **x** ˜ _t_ + d˜ **x** _t,_ where d˜ **x** _t_ is defined in Eq. 2 (Reverse for missing entries) (6)
+
+_t_
+
+**x** ˜ _t−_ ∆ _t_ = (1 _−_ **m** ) _⊙_ **x** [forward] _t−_ ∆ _t_ + **m** _⊙_ **x** [reverse] _t−_ ∆ _t_ _[.]_ (Merging) (7)
+
+
+Based on the above process, starting at a random noise from the maximum time _T_, i.e., **x** ˜ _T_ _∼_
+_N_ ( **0** _, σ_ [2] ( _T_ ) **I** ), we can obtain a reconstructed ˜ **x** 0, such that the observed entries of ˜ **x** 0 are the same as
+those of **x** 0, i.e., **x** ˜ [obs] 0 = **x** ˆ [obs] 0 . In Theorem 1, we prove that via the algorithm above, the obtained **x** ˜0
+is sampled from the desired conditional distribution, i.e., **x** ˜0 _∼_ _p_ _**θ**_ ( **x** _|_ **x** [obs] = **x** ˆ [obs] 0 ).
+
+**Theorem 1.** _Let_ **x** ˜ _T_ _be a sample from the prior distribution π_ ( **x** ) = _N_ ( **0** _, σ_ [2] ( _T_ ) **I** ) _,_ **x** _be the data to_
+_impute, and the known entries of_ **x** _are denoted by_ **x** [obs] = **x** ˆ [obs] 0 _._ _The score function ∇_ **x** _t_ log _p_ ( **x** _t_ )
+_is_ _approximated_ _by_ _neural_ _network_ _**ϵθ**_ ( **x** _t, t_ ) _._ _Applying_ _Eq._ _5,_ _Eq._ _6,_ _and_ _Eq._ _7_ _iteratively_ _from_
+_t_ = _T_ _≫_ 0 _until t_ = 0 _with_ ∆ _t_ _→_ 0 _, then_ **x** ˜0 _is a sample from p_ _**θ**_ ( **x** ) _, under the condition that its_
+_observed entries_ **x** ˜ [obs] 0 = **x** ˆ [obs] 0 _._ _Formally,_
+
+
+**x** ˜0 _∼_ _p_ _**θ**_ ( **x** _|_ **x** [obs] = **x** ˆ [obs] 0 ) (8)
+
+
+See proof in Appendix B.1. Theorem 1 demonstrates that with a learned diffusion model _**θ**_, we are able
+to obtain samples exactly from the conditional distribution _p_ _**θ**_ ( **x** _|_ **x** [obs] ) through the aforementioned
+imputation process. For inference, we use Monte Carlo estimation to compute the expectation of the
+missing values, i.e., **x** _[∗]_ = E **x** _p_ _**θ**_ ( **x** _|_ **x** [obs] ) _≈_ [�] _[N]_ _j_ =1 **[x]** [˜][(] 0 _[j]_ [)] _[/N]_ [.]
+
+
+5
+
+
+**Discretization.** The above imputing process involves recovering **x** ˜ _t_ continuously from _t_ = _T_ to
+_t_ = 0, which is infeasible in practice. In implementation, we discretize the process via _M_ +1 discrete
+descending timesteps _tM_ _, tM_ _−_ 1 _, · · ·_ _, ti, · · ·_ _, t_ 0, where _tM_ = _T, t_ 0 = 0. Therefore, starting from
+**x** ˜ _tM_ _∼_ _p_ _**θ**_ ( **x** _tM |_ **x** [obs] = **x** ˆ [obs] 0 ), we obtain _p_ _**θ**_ ( **x** _ti|_ **x** [obs] = **x** ˆ [obs] 0 ) from _i_ = _M_ _−_ 1 to _i_ = 0.
+
+
+**Algorithm 1:** M-step: Density Estimation using Diffusion Model
+
+**Input:** Data samples from _p_ ( **x** ).
+**Output:** Score network _**ϵθ**_
+
+
+**1** **while** _not converging_ **do**
+
+**2** Sample **x** _∼_ _p_ ( **x** ) _∈_ R _[d]_
+
+**3** Sample _t ∼_ _p_ ( _t_ )
+
+**4** Sample _**ε**_ _∼N_ ( **0** _,_ **I** ) _∈_ R _[d]_
+
+**5** **x** 0 = **x**
+
+
+**6** **x** _t_ = **x** 0 + _σ_ ( _t_ ) _·_ _**ε**_
+
+
+**7** _ℓ_ ( _**θ**_ ) = _∥_ _**ϵθ**_ ( **x** _t, t_ ) _−_ _[−]_ _**[ε]**_
+
+
+_σ_ _[−]_ ( _t_ _**[ε]**_ ) _[∥]_ 2 [2]
+
+
+**8** Update _**θ**_ via Adam optimizer
+
+
+**Algorithm 2:** E-step: Missing Data Imputation
+
+**Input:** Score network _**ϵθ**_ ( **x** _t, t_ ). Data with missing
+values **x** _∈_ R _[d]_, mask **m** _∈{_ 0 _,_ 1 _}_ _[d]_ . Number of
+samples _N_ . Number of sampling steps _M_ .
+**Output:** Imputed data **x** _[∗]_
+
+
+**1** **for** _j_ _←_ 1 **to** _N_ **do**
+
+**2** Sample **x** ˜ [(] _tM_ _[j]_ [)] _[∼N]_ [(] **[0]** _[, σ]_ [2][(] _[t][M]_ [)] **[I]** [)]
+
+**3** **for** _i ←_ _M_ **to** 1 **do**
+
+**4** **x** [forward] _ti−_ 1 _[,]_ [(] _[j]_ [)] = **x** + _σ_ ( _ti−_ 1) _·_ _**ε**_
+
+             - _ti−_ 1
+**5** **x** [reverse] _ti−_ 1 _[,]_ [(] _[j]_ [)] = **x** ˜ [(] _ti_ _[j]_ [)] [+] _ti_ d˜ **x** [(] _ti_ _[j]_ [)]
+
+**6** **x** ˜ [(] _ti_ _[j]_ _−_ [)] 1 [=] **[ m]** _[⊙]_ **[x]** _t_ [forward] _i−_ 1 _[,]_ [(] _[j]_ [)] +(1 _−_ **m** ) _⊙_ **x** [reverse] _ti−_ 1 _[,]_ [(] _[j]_ [)]
+
+**7** **x** _[∗]_ = [�] _j_ _[N]_ =1 **[x]** [˜][(] _t_ 0 _[j]_ [)] _[/N]_ [=] [�] _j_ _[N]_ =1 **[x]** [˜][(] 0 _[j]_ [)] _[/N]_
+
+
+Since the desired imputed data **x** [mis] _[∗]_ is the expectation, i.e., **x** [mis] _[∗]_ = E **x** mis _p_ ( **x** [mis] _|_ **x** [obs] = **x** ˆ [obs] 0 ),
+we sample **x** ˜ [mis] 0 for _N_ times, and take the average value as the imputed **x** [mis] _[∗]_ . The algorithmic
+illustration of DIFFPUTER’s E-step is summarized in Algorithm 2.
+
+
+4.3 IMPLEMENTATIONS
+
+
+**Data Processing.** Diffusion models are inherently suited for continuous data but not for discrete
+data. Given that real-world tabular data often contains both types of data, we use one-hot encoding
+to convert each dimension of discrete data into multi-dimensional 0/1 encoding, thereby treating it
+as continuous data . After that, we perform standardization on each column of data, ensuring that it
+has a mean of 0 and a variance of 1. The final imputation performance is measured by the difference
+between the predicted value and the ground-truth missing value **after standardization** .
+
+
+**Initialization of Missing Data.** The execution of the EM algorithm requires the initialized values of
+missing entries **x** [mis(0)], which might have a huge impact on the model’s convergence. For simplicity,
+we initialize the missing entries of each column to be the mean of the column’s observed values,
+equivalent to setting **x** [mis(0)] = 0 everywhere (since the data has been standardized).
+
+
+**Training.** To obtain a more accurate estimation of complete data **x**, DIFFPUTER iteratively executes
+the M-step and E-step. To be specific, let **x** [(] _[k]_ [)] = ( **x** [obs(] _[k]_ [)] _,_ **x** [obs(] _[k]_ [)] ) = ( **x** [obs] _,_ **x** [obs(] _[k]_ [)] ) be the
+estimation of complete data at _k_ -th iteration, _**θ**_ [(] _[k]_ [)] be the diffusion model’s parameters at _k_ -th
+iteration, we write _**θ**_ [(] _[k]_ [+1)] as a function of **x** [(] _[k]_ [)], i.e., _**θ**_ [(] _[k]_ [+1)] = M-step ( **x** [(] _[k]_ [)] ), and **x** [(] _[k]_ [+1)] as a
+function of _**θ**_ [(] _[k]_ [+1)] and **x** [(] _[k]_ [)], i.e., **x** [(] _[k]_ [+1)] = E-step ( **x** [(] _[k]_ [)] _,_ _**θ**_ [(] _[k]_ [+1)] ). Therefore, with the initialized **x** [(0)]
+
+and the maximum iteration _K_, we are able to obtain **x** [(] _[k]_ [)] from _k_ = 1 to _K_ .
+
+
+**Inference.** For in-sample imputation, the imputed values are obtained iteratively during the training
+process. For out-of-sample imputation, with the observed incomplete data **x**, the mask **m**, and the
+trained score network _**ϵθ**_, we directly apply the E-step once in Algorithm 2 to obtain the imputation
+values **x** _[∗]_ .
+
+
+5 EXPERIMENTS
+
+
+In this section, we conduct experiments to study the efficacy of the proposed DIFFPUTER in missing
+data imputation tasks.
+
+
+6
+
+
+5.1 EXPERIMENTAL SETTINGS
+
+
+**Datasets.** We evaluate the proposed DIFFPUTER on ten public real-world datasets of varying scales.
+We consider five datasets of only continuous features: California, Letter, Gesture, Magic, and
+Bean, and four datasets of both continuous and discrete features: Adult, Default, Shoppers, and
+News. The detailed information of these datasets is presented in Appendix D.2. Following previous
+works (Muzellec et al., 2020; Zhao et al., 2023), we study three missing mechanisms: MCAR,
+MAR, and MNAR. Differences between the three settings are in Appendix D.3. In this section, we
+only report the performance in the MCAR setting, while the results of the other two settings are in
+Appendix E. In the main experiments, we set the missing rate as _r_ = 30%. For each dataset, we
+generate 10 masks according to the missing mechanism and report the mean and standard deviation
+of the imputing performance.
+
+
+**Baselines.** We compare DIFFPUTER with 16 powerful imputation methods from different categories:
+1) Distribution-matching methods based on optimal transport, including TDM (Zhao et al., 2023)
+and MOT (Muzellec et al., 2020). 2) Graph-based imputation methods, including GRAPE (You
+et al., 2020): a pure bipartite graph-based framework for data imputation, and IGRM (Zhong et al.,
+2023): a graph-based imputation method that iteratively reconstructs the friendship network. 3)
+Iterative methods, including EM with multivariate Gaussian priors (García-Laencina et al., 2010),
+MICE (Van Buuren & Karin, 2011), MIRACLE (Kyono et al., 2021), SoftImpute (Hastie et al.,
+2015), and MissForest (Stekhoven & Bühlmann, 2012). 4) Deep generative models, including
+MIWAE (Mattei & Frellsen, 2019), GAIN (Yoon et al., 2018), MCFlow (Richardson et al., 2020),
+MissDiff (Ouyang et al., 2023) and TabCSDI (Zheng & Charoenphakdee, 2022). It is worth noting
+that MissDiff and TabCSDI are also based on diffusion. We also compare with two recent SOTA
+imputing methods ReMasker (Du et al., 2024) and HyperImpute (Jarrett et al., 2022).
+
+
+**Evaluation Protocols.** For each dataset, we use 70% as the training set, and the remaining 30% as the
+testing set. All methods are trained on the training set. The imputation is applied to both the missing
+values in the training set and the testing set. Consequently, the imputation of the training set is the
+’in-sample’ setting, while imputing the testing set is the ’out-of-sample’ setting. The performance of
+DIFFPUTER is evaluated by the divergence between the predicted values and ground-truth values
+of missing entries. For continuous features, we use Mean Absolute Error (MAE) and Root Mean
+Squared Error (RMSE), while for discrete features, we use Accuracy. Note that both the MAE and
+RMSE are calculated based on the input data after standardization (zero mean and unit variance). The
+implementation details and hyperparameter settings are presented in Appendix D.4.
+
+
+5.2 MAIN RESULTS (MASK COMPLETELY AT RANDOM)
+
+
+We first evaluate DIFFPUTER’s performance in the in-sample imputation task. Figure 2 compares the
+performance of different imputation methods regarding continuous columns using MAE and RMSE.
+Table 1 compares the performance of different methods regarding discrete columns using accuracy.
+Our observations on these experimental results are summarized as follows.
+
+
+**Superior** **performance** **of** DIFFPUTER **.** Across all datasets, DIFFPUTER provides high-quality
+imputation results, matching the best methods on some datasets and significantly outperforming
+the second-best methods on the remaining datasets. Compared with the other two diffusion-based
+methods, MissDiff and TabCSDI, the substantial performance advantage of DIFFPUTER convincingly
+demonstrates the correctness and superiority of combining the EM algorithm with Diffusion.
+
+
+**Traditional machine learning methods are still powerful imputors.** A well-recognized claim in
+tabular data machine learning is that traditional machine learning methods can sometimes be better
+than deep learning methods (Lalande & Doya, 2022; Suh & Song, 2023; Jolicoeur-Martineau et al.,
+2024), and we have similar observations in missing data imputation. For example, the simple EM
+algorithm under the mixture-Gaussian assumption and the KNN algorithm give decent imputation
+performance and outperform a lot of early deep generative imputation methods.
+
+
+**The** **preference** **of** **different** **types** **of** **algorithms** **for** **heterogeneous** **tabular** **data.** Another interesting finding is that discriminative methods (e.g., Remasker, GRAPE, MOT) and generative
+methods (e.g., DIFFPUTER) have different preferences for continuous data and discrete data. Overall,
+generative models appear to be more effective at imputing continuous columns. As shown in Figure 2,
+our model significantly outperforms these discriminative models. Conversely, discriminative models
+
+
+7
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||
+|||||||||||||
+
+
+|Col1|DiffPuter GRAPE TabCSDI MCFlow Missforest EM<br>Remasker IGRM TDM SoftImpute MIWAE MIRACLE<br>HyperImpute MissDiff MOT GAIN MICE KNN<br>0.8|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+||||||||||||||Averag|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+||||||||||||||Averag<br>aring D|
+
+
+PUTER with **17 baselines** on imputing continuous data on all the **nine datasets** . A blank column
+indicates that the method fails or gets out-of-memory for that dataset. DIFFPUTER outperforms the
+most competitive baseline method by 6 _._ 94% (MAE score) and 4 _._ 78% (RMSE score) by average. The
+circled number after the model name denotes its ranking among all methods.
+
+
+0.6
+
+
+0.4
+
+
+Iteration k
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+Iteration k
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+
+1.00
+
+0.75
+
+0.50
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+
+0.5
+
+
+0.4
+
+
+0.6
+
+
+0.5
+
+
+|Col1|Califor|
+|---|---|
+|||
+|||
+|||
+
+
+|Col1|Col2|
+|---|---|
+|||
+
+
+0.35
+
+0.30
+
+0.25
+
+
+Iteration k
+
+
+Number of samples: N
+
+
+Number of samples: N
+
+
+Figure 3: Impacts of the number of EM iterations.
+DIFFPUTER’s performance steadily improves as the
+number of EM interactions increases.
+
+
+Figure 4: Impacts of the number of sampled
+imputations per iteration. A very small _N_
+leads to poor performance and large variance.
+
+
+are more proficient at imputing discrete data: in Table 1, the best discriminative model, Remasker,
+can achieve results comparable to our method on almost all datasets.
+
+
+Next, we compare the performance in the out-of-sample imputation tasks. Noting that some imputation methods are specifically designed for in-sample imputation and cannot be applied to the
+out-of-sample setting, the number of baselines in this task is significantly reduced. Table 6 in Appendix E.1 compares the MAEs and RMSEs in the OOS imputation task. Comparing it with the
+results of in-sample imputation, we can easily observe that some methods exhibit significant performance differences between the two settings. For example, graph-based methods GRAPE and IGRM
+perform well in in-sample imputation, but their performance degrades significantly in out-of-sample
+imputation. IGRM even fails on all datasets in the out-of-sample imputation setting. In contrast, our
+DIFFPUTER demonstrates excellent performance in both in-sample and out-of-sample imputation.
+This highlights DIFFPUTER’s superior performance and robust generalization capabilities.
+
+
+5.3 ABLATION STUDIES
+
+
+**Impacts of the number of EM iterations.** In Fig. 3, we present the performance of DIFFPUTER’s
+imputation results from increasing EM iterations. Note that _k_ = 0 represents the imputation result of
+a randomly initialized denoising network, and _k_ = 1 represents the performance of a pure diffusion
+model without iterative refinement. It is clearly observed that a single diffusion imputation achieves
+only suboptimal performance, while DIFFPUTER’s performance steadily improves as the number of
+
+
+8
+
+
+Table 1: MCAR, In-sample imputation performance on **discrete** **columns** . Comparison of the
+imputation accuracy on discrete columns on five datasets. DIFFPUTER ranks the first among **19**
+imputation methods. Mean/Median/MF means using the mean/median/most frequent value as the
+imputation, which will give the same imputation result in this case.
+
+
+**Method** **Adult** **Default** **Shoppers** **News** **Average** **Rank**
+
+
+_Statistical_
+
+Mean/Median/MF 55 _._ 20 _±_ 0 _._ 02 53 _._ 37 _±_ 0 _._ 11 50 _._ 60 _±_ 0 _._ 29 18 _._ 60 _±_ 0 _._ 14 44 _._ 44 15
+
+
+_Traditional iterative_
+
+
+_Dist._ _match_
+
+
+_GNN_
+GRAPE (You et al., 2020) 69 _._ 84 _±_ 0 _._ 25 73 _._ 85 _±_ 0 _._ 01 57 _._ 32 _±_ 0 _._ 15 40 _._ 83 _±_ 0 _._ 44 60 _._ 46 3
+IGRM (Zhong et al., 2023) 69 _._ 21 _±_ 0 _._ 29 OOM 57 _._ 45 _±_ 0 _._ 16 OOM   -   
+
+_Generative models_
+
+
+_Other_
+
+
+|KNN (Pujianto et al., 2019) 63.28±0.52 71.64±0.34 53.93±0.28 38.59±0.17<br>Remasker (Du et al., 2024) 69.18±0.08 76.88±0.62 57.86±0.09 44.33±0.08<br>HyperImpute (Jarrett et al., 2022) 64.99±0.06 74.39±2.07 59.19±0.04 40.29±0.96|56.86 6<br>62.06 2<br>59.72 4|
+|---|---|
+|DIFFPUTER<br>**70**_._**12**_±_**0**_._**17**<br>**77**_._**64**_±_**0**_._**32**<br>58_._82_±_0_._09<br>**44**_._**69**_±_**0**_._**13**|**62**_._**82**<br>1|
+
+
+0.4
+
+
+0.5
+
+
+0.6
+
+
+Adult: Observed ratio
+
+
+California: Observed ratio
+
+
+0.500
+
+0.525
+
+0.550
+
+0.575
+
+0.600
+
+
+Adult: Sampling Step
+
+
+1800
+
+
+1600
+
+
+1400
+
+
+California: Sampling Step
+
+
+0.60
+
+0.55
+
+0.50
+
+0.45
+
+0.40
+
+
+Figure 5: Impacts of sampling steps on the training
+time and imputation performance (MAE). Reducing
+diffusion sampling steps greatly reduces the training
+time at the cost of a slight performance drop.
+
+
+Figure 6: Impacts of extremely large missing ratios. The performance of DIFFPUTER
+is upper-bounded by the initialized missing
+values via mean imputation
+
+
+iterations increases. Additionally, we observe that DIFFPUTER does not require a large number of
+iterations to converge. In fact, 4 to 5 iterations are sufficient for DIFFPUTER to converge to a stable
+and satisfying state.
+
+
+**Impacts of the number of sampled imputations per iteration.** To obtain the expected value of
+missing entries, we have to sample a number of examples from the conditional distribution (via the
+reverse diffusion process). Therefore, the number _N_ should have a huge impact on DIFFPUTER’s
+performance. In Figure 4, we study the impacts of the number of samples on the imputation results.
+As expected, a very small _N_ leads to poor performance and large variance, while increasing the
+sampling number consistently improves the performance and reduces the variance. An optimal and
+stable performance can be achieved at _N_ _≥_ 10. Since the sampling time is linear w.r.t. to the sample
+number, we use _N_ = 10 by default.
+
+
+**Impacts of the number of sampling steps in diffusion.** Another hyperparameter impacting the
+performance and training speed is the number of sampling steps _M_ in the reverse process of diffusion.
+
+
+9
+
+
+Table 2: Comparison of the real training time on an Nvidia RTX 4090 GPU. DIFFPUTER has a similar
+training cost to SOTA methods, yet brings from 8% to 25% performance improvement.
+
+|Datasets MOT TDM GRAPE IGRM HyperImpute Remasker|DIFFPUTER|
+|---|---|
+|Time: **California**<br>446_._47_s_<br>216_._91_s_<br>635_._7_s_<br>1267_._5_s_<br>1277_._3_s_<br>1320_._1_s_<br>Time: **Adult**<br>396_._68_s_<br>514_._56_s_<br>2347_._1_s_<br>3865_._1_s_<br>1806_._9_s_<br>1902_._4_s_|1927_._2_s_<br>2142_._9_s_|
+|DIFFPUTER**’s perf. improve.**<br>21_._47%<br>21_._37%<br>25_._94%<br>20_._97%<br>8_._44%<br>10_._65%|-|
+
+
+By default, DIFFPUTER set _M_ = 50, and we study the impact of reducing _M_ in Figure 5. As
+demonstrated, reducing the diffusion sampling steps can greatly reduce the training time at the cost
+of only a slight performance drop. More detailed, reducing the sampling step from 50 to 20 reduces
+about 25% of training time cost, with only 3% performance drop. Therefore, when time costs are
+high, and precision requirements are not stringent, the training speed can be further increased by
+reducing the sampling steps.
+
+
+**Impacts of large missing ratios.** In Figure 6, we study the performance of DIFFPUTER with missing
+ratio from 30% to 99% (observed ratio from 70% to 1%). Consistent with the intuition, when the
+observed ratio decreases (i.e., missing ratio increases), there is a significant increase in the imputation
+MAE score, indicating that the imputation performance becomes increasingly worse. However, we
+can observe a clear performance lower bound when the missing ratio approaches 99%, which is
+close to the performance of directly imputing using the mean of observed values. This is because,
+in DIFFPUTER’s first E-step, each column’s missing values are always initialized as the mean of
+the observed ones. Therefore, DIFFPUTER can still give a reasonable imputation result even if the
+missing ratio is extremely large.
+
+
+**Comparison** **of** **Training** **Time.** Intuitively, the training of DIFFPUTER would be very timeconsuming, as it requires iteratively alternating between the training and sampling processes of
+the diffusion model. However, in practice, DIFFPUTER’s training efficiency is significantly improved through the following design: 1) light-weighted MLP-architectured denoising function; 2)
+reduced number of sampling steps ( _M_ = 50 _≪_ 1000 in traditional diffusion methods). To demonstrate this, we compare the training time of DIFFPUTER with other SOTA imputation methods. As
+demonstrated in Table 2, DIFFPUTER has similar training cost (similar scale) to these representative SOTA methods, yet brings from 8% to 25% performance improvement, which is acceptable.
+
+
+**Incorporating EM with other DGMs.** Finally, we Table 3: Effects of combining EM with other
+try to combine EM algorithms with other deep gener- Deep Generative Models.
+ative models that are easy to perform conditional sampling, including MIWAE (Mattei & Frellsen, 2019), Methods Adult Default Shoppers News
+HIWAE (Nazabal et al., 2020a), VAEM (Ma et al., MIWAE 0 _._ 5763 0 _._ 5194 0 _._ 5047 0 _._ 6349
+2020) and HH-VAEM (Peis et al., 2022a). Based HIWAE 0 _._ 6155 0 _._ 3989 0 _._ 4707 0 _._ 5032
+
+VAEM 0 _._ 5568 0 _._ 4292 0 _._ 4626 0 _._ 5204
+
+on Table 3, our experimental results demonstrate that HH-VAEM 0 _._ 5673 - 0 _._ 4589 combining EM with other Deep Generative Models EM + MIWAE 0 _._ 5661 0 _._ 4993 0 _._ 4554 0 _._ 4171
+leads to performance improvements. However, it’s EM + HIWAE 0 _._ 5974 0 _._ 4314 0 _._ 4961 0 _._ 5222
+
+EM + VAEM 0 _._ 5492 0 _._ 4121 0 _._ 4362 0 _._ 5045
+
+noteworthy that despite these improvements, our pro- EM + HH-VAEM 0 _._ 5402 - 0 _._ 4262 posed DIFFPUTER still outperforms all combinations, DIFFPUTER **0** _._ **3425** **0** _._ **2661** **0** _._ **3485** **0** _._ **2855**
+achieving superior results, where lower scores indicate
+better performance. This demonstrates the effectiveness and robustness of our approach compared to
+existing methods, even when they are enhanced through combination with EM.
+
+
+Table 3: Effects of combining EM with other
+Deep Generative Models.
+
+
+Methods Adult Default Shoppers News
+
+
+MIWAE 0 _._ 5763 0 _._ 5194 0 _._ 5047 0 _._ 6349
+HIWAE 0 _._ 6155 0 _._ 3989 0 _._ 4707 0 _._ 5032
+VAEM 0 _._ 5568 0 _._ 4292 0 _._ 4626 0 _._ 5204
+HH-VAEM 0 _._ 5673 - 0 _._ 4589 
+
+
+EM + MIWAE 0 _._ 5661 0 _._ 4993 0 _._ 4554 0 _._ 4171
+EM + HIWAE 0 _._ 5974 0 _._ 4314 0 _._ 4961 0 _._ 5222
+EM + VAEM 0 _._ 5492 0 _._ 4121 0 _._ 4362 0 _._ 5045
+EM + HH-VAEM 0 _._ 5402 - 0 _._ 4262 
+
+
+DIFFPUTER **0** _._ **3425** **0** _._ **2661** **0** _._ **3485** **0** _._ **2855**
+
+
+6 CONCLUSIONS
+
+
+In this paper, we have proposed DIFFPUTER for missing data imputation. DIFFPUTER is an iterative
+method that combines the Expectation-Maximization algorithm and diffusion models, where the
+diffusion model serves as both the density estimator and missing data imputer. We demonstrate
+theoretically that the training and sampling process of a diffusion model precisely corresponds to
+the M-step and E-step of the EM algorithm. Therefore, we can iteratively update the density of the
+complete data and the values of the missing data. Extensive experiments have demonstrated the
+efficacy of the proposed method.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+This work is supported in part by NSF under grants III-2106758, and POSE-2346158.
+
+
+REFERENCES
+
+
+John Barnard and Xiao-Li Meng. Applications of multiple imputation in medical studies: from aids
+to nhanes. _Statistical methods in medical research_, 8(1):17–36, 1999.
+
+
+Ciprian Corneanu, Raghudeep Gadde, and Aleix M Martinez. Latentpaint: Image inpainting in latent
+space with diffusion models. In _Proceedings of the IEEE/CVF Winter Conference on Applications_
+_of Computer Vision_, pp. 4334–4343, 2024.
+
+
+Arthur P Dempster, Nan M Laird, and Donald B Rubin. Maximum likelihood from incomplete data
+via the em algorithm. _Journal of the royal statistical society:_ _series B (methodological)_, 39(1):
+1–22, 1977.
+
+
+Tianyu Du, Luca Melis, and Ting Wang. Remasker: Imputing tabular data with masked autoencoding.
+In _International Conference on Learning Representations_, 2024.
+
+
+Fabian Eckert, Teresa C Fort, Peter K Schott, and Natalie J Yang. Imputing missing values in the
+us census bureau’s county business patterns. Technical report, National Bureau of Economic
+Research, 2020.
+
+
+Pedro J García-Laencina, José-Luis Sancho-Gómez, and Aníbal R Figueiras-Vidal. Pattern classification with missing data: a review. _Neural Computing and Applications_, 19:263–282, 2010.
+
+
+Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair,
+Aaron Courville, and Yoshua Bengio. Generative adversarial nets. In _Proceedings of the 27th_
+_International Conference on Neural Information Processing Systems_, pp. 2672–2680, 2014.
+
+
+Trevor Hastie, Rahul Mazumder, Jason D Lee, and Reza Zadeh. Matrix completion and low-rank svd
+via fast alternating least squares. _The Journal of Machine Learning Research_, 16(1):3367–3402,
+2015.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _Proceedings_
+_of the 34th International Conference on Neural Information Processing Systems_, pp. 6840–6851,
+2020.
+
+
+Daniel Jarrett, Bogdan C Cebere, Tennison Liu, Alicia Curth, and Mihaela van der Schaar. Hyperimpute: Generalized iterative imputation with automatic model selection. In _International Conference_
+_on Machine Learning_, pp. 9916–9937. PMLR, 2022.
+
+
+Alexia Jolicoeur-Martineau, Kilian Fatras, and Tal Kachman. Generating and imputing tabular data
+via diffusion and flow-based gradient-boosted trees. In _International_ _Conference_ _on_ _Artificial_
+_Intelligence and Statistics_, pp. 1288–1296. PMLR, 2024.
+
+
+Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusionbased generative models. In _Proceedings of the 36th International Conference on Neural Informa-_
+_tion Processing Systems_, pp. 26565–26577, 2022.
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In _International_
+_Conference on Learning Representations_, 2015.
+
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. _arXiv_ _preprint_
+_arXiv:1312.6114_, 2013.
+
+
+Akim Kotelnikov, Dmitry Baranchuk, Ivan Rubachev, and Artem Babenko. Tabddpm: Modelling
+tabular data with diffusion models. In _International Conference on Machine Learning_, pp. 17564–
+17579. PMLR, 2023.
+
+
+Trent Kyono, Yao Zhang, Alexis Bellot, and Mihaela van der Schaar. Miracle: Causally-aware
+imputation via learning missing data mechanisms. _Advances in Neural Information Processing_
+_Systems_, 34:23806–23817, 2021.
+
+
+11
+
+
+Florian Lalande and Kenji Doya. Numerical data imputation: Choose knn over deep learning. In
+_International Conference on Similarity Search and Applications_, pp. 3–10. Springer, 2022.
+
+
+Lee Lillard, James P Smith, and Finis Welch. What do we really know about wages? the importance
+of nonreporting and census imputation. _Journal of Political Economy_, 94(3, Part 1):489–506, 1986.
+
+
+Andreas Lugmayr, Martin Danelljan, Andres Romero, Fisher Yu, Radu Timofte, and Luc Van Gool.
+Repaint: Inpainting using denoising diffusion probabilistic models. In _Proceedings_ _of_ _the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 11461–11471, 2022.
+
+
+Chao Ma, Sebastian Tschiatschek, Konstantina Palla, José Miguel Hernández-Lobato, Sebastian
+Nowozin, and Cheng Zhang. Eddi: Efficient dynamic discovery of high-value information with
+partial vae. _arXiv preprint arXiv:1809.11142_, 2018.
+
+
+Chao Ma, Sebastian Tschiatschek, Richard Turner, José Miguel Hernández-Lobato, and Cheng
+Zhang. Vaem: a deep generative model for heterogeneous mixed type data. _Advances in Neural_
+_Information Processing Systems_, 33:11237–11247, 2020.
+
+
+Zhihua Ma and Guanghui Chen. Bayesian methods for dealing with missing data problems. _Journal_
+_of the Korean Statistical Society_, 47:297–313, 2018.
+
+
+Pierre-Alexandre Mattei and Jes Frellsen. Miwae: Deep generative modelling and imputation of
+incomplete data sets. In _International conference on machine learning_, pp. 4413–4423. PMLR,
+2019.
+
+
+Boris Muzellec, Julie Josse, Claire Boyer, and Marco Cuturi. Missing data imputation using optimal
+transport. In _International Conference on Machine Learning_, pp. 7130–7140. PMLR, 2020.
+
+
+Alfredo Nazabal, Pablo M Olmos, Zoubin Ghahramani, and Isabel Valera. Handling incomplete
+heterogeneous data using vaes. _Pattern Recognition_, 107:107501, 2020a.
+
+
+Alfredo Nazabal, Pablo M Olmos, Zoubin Ghahramani, and Isabel Valera. Handling incomplete
+heterogeneous data using vaes. _Pattern Recognition_, 107:107501, 2020b.
+
+
+Yidong Ouyang, Liyan Xie, Chongxuan Li, and Guang Cheng. Missdiff: Training diffusion models
+on tabular data with missing values. _arXiv preprint arXiv:2307.00467_, 2023.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: an imperative style, highperformance deep learning library. In _Proceedings of the 33rd International Conference on Neural_
+_Information Processing Systems_, pp. 8026–8037, 2019.
+
+
+Ignacio Peis, Chao Ma, and José Miguel Hernández-Lobato. Missing data imputation and acquisition
+with deep hierarchical models and hamiltonian monte carlo. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 35:35839–35851, 2022a.
+
+
+Ignacio Peis, Chao Ma, and José Miguel Hernández-Lobato. Missing data imputation and acquisition
+with deep hierarchical models and hamiltonian monte carlo. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 35:35839–35851, 2022b.
+
+
+Utomo Pujianto, Aji Prasetya Wibawa, Muhammad Iqbal Akbar, et al. K-nearest neighbor (k-nn)
+based missing data imputation. In _2019 5th International Conference on Science in Information_
+_Technology (ICSITech)_, pp. 83–88. IEEE, 2019.
+
+
+Danilo Rezende and Shakir Mohamed. Variational inference with normalizing flows. In _International_
+_conference on machine learning_, pp. 1530–1538. PMLR, 2015.
+
+
+Trevor W Richardson, Wencheng Wu, Lei Lin, Beilei Xu, and Edgar A Bernal. Mcflow: Monte carlo
+flow models for data imputation. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 14205–14214, 2020.
+
+
+Yang Song, Conor Durkan, Iain Murray, and Stefano Ermon. Maximum likelihood training of
+score-based diffusion models. In _Advances in Neural Information Processing Systems_, 2021a.
+
+
+12
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _The Ninth_
+_International Conference on Learning Representations_, 2021b.
+
+
+Daniel J Stekhoven and Peter Bühlmann. Missforest—non-parametric missing value imputation for
+mixed-type data. _Bioinformatics_, 28(1):112–118, 2012.
+
+
+Heajung Suh and Jongwoo Song. A comparison of imputation methods using machine learning
+models. _Communications for Statistical Applications and Methods_, 30(3):331–341, 2023.
+
+
+Stef Van Buuren and Karin. mice: Multivariate imputation by chained equations in r. _Journal of_
+_statistical software_, 45:1–67, 2011.
+
+
+Jinsung Yoon, James Jordon, and Mihaela Schaar. Gain: Missing data imputation using generative
+adversarial nets. In _International Conference on Machine Learning_, pp. 5689–5698. PMLR, 2018.
+
+
+Jiaxuan You, Xiaobai Ma, Yi Ding, Mykel J Kochenderfer, and Jure Leskovec. Handling missing
+data with graph representation learning. _Advances in Neural Information Processing Systems_, 33:
+19075–19087, 2020.
+
+
+Hengrui Zhang, Jiani Zhang, Balasubramaniam Srinivasan, Zhengyuan Shen, Xiao Qin, Christos Faloutsos, Huzefa Rangwala, and George Karypis. Mixed-type tabular data synthesis with
+score-based diffusion in latent space. In _The twelfth International Conference on Learning Repre-_
+_sentations_, 2024.
+
+
+He Zhao, Ke Sun, Amir Dezfouli, and Edwin V Bonilla. Transformed distribution matching for
+missing value imputation. In _International Conference on Machine Learning_, pp. 42159–42186.
+PMLR, 2023.
+
+
+Shuhan Zheng and Nontawat Charoenphakdee. Diffusion models for missing value imputation in
+tabular data. In _NeurIPS 2022 First Table Representation Workshop_, 2022.
+
+
+Jiajun Zhong, Ning Gui, and Weiwei Ye. Data imputation with iterative graph reconstruction. In
+_Proceedings of the AAAI Conference on Artificial Intelligence_, volume 37, pp. 11399–11407, 2023.
+
+
+13
+
+
+A DEFINITION OF SYMBOLS
+
+
+In Table 4, we explain the definition of every symbol used in this paper.
+
+
+Table 4: Explanations of the symbols used in this paper.
+
+
+Symbol Explanation
+
+
+_d_ the number of columns of tabular data
+**x** _∈_ R _[d]_ random variable, representing a row of the tabular data
+_p_ ( **x** ) = _p_ data( **x** ) the distribution of the complete data
+**m** _∈{_ 0 _,_ 1 _}_ _[d]_ binary mask vector
+**x** [obs] the observed part of **x**, indicated by _mk_ = 0
+**x** [mis] the missing part of **x**, indicated by _mk_ = 1
+
+
+_t_ the timestep of diffusion process
+_σ_ ( _t_ ) = _t_ the noise level at timestep _t_
+_T_ the maximum timestep
+_ε ∼N_ ( **0** _,_ **I** ) standard Gaussian noise
+**x** 0 = **x** unforwarded **x** (at timestep 0)
+**x** [obs] 0 = **x** [obs] observed part of **x**
+**x** [mis] 0 = **x** [mis] missing part of **x**
+**x** _t_ = **x** 0 + _σ_ ( _t_ ) _ε_ forwarded **x** at timestep _t_
+**x** [obs] _t_ = **x** [obs] 0 + _σ_ ( _t_ ) _ε_ observed part of **x** _t_
+**x** [mis] _t_ = **x** [mis] 0 + _σ_ ( _t_ ) _ε_ missing part of **x** _t_
+
+
+_θ_ diffusion model’s parameters
+_pθ_ ( **x** ) density of data induced by the diffusion model
+**x** ˜ _T_ _∼_ _π_ ( **x** ) = _N_ ( **0** _, σ_ [2] ( _T_ ) **I** ) sampled random noise for the reverse process
+**x** ˜ [obs] _T_ observed part of **x** ˜ _T_
+**x** ˜ [mis] _T_ missing part of **x** ˜ _T_
+**x** ˜ _t_ sampled data at timestep _t_ in the reverse process
+**x** ˜ [obs] _t_ observed part of **x** ˜ _t_
+**x** ˜ [mis] _t_ missing part of **x** ˜ _t_
+
+
+**x** ˆ [obs] 0 The exact ground-truth value(s) of the observed part
+
+
+B PROOFS
+
+
+B.1 PROOF FOR THEOREM 1
+
+
+_Proof._ First, it is obvious that the observed entries from Eq. 7, i.e., **x** ˜ [obs] _t_, satisfy
+
+
+**x** ˜ [obs] _t_ _∼_ _p_ ( **x** [obs] _t_ _|_ **x** [obs] = **x** ˆ [obs] 0 ) _,_ _∀t._ (9)
+
+
+Then, we introduce the following Lemma.
+
+
+**Lemma 1.** _Let_ **x** ˜ _t_ _∼_ _p_ _**θ**_ ( **x** _t|_ **x** [obs] = **x** ˆ [obs] 0 ) _._ _If_ **x** ˜ _t−_ ∆ _t_ _is a sample obtained from Eq. 5,_ _Eq. 6,_ _and_
+_Eq. 7, then_ **x** ˜ _t−_ ∆ _t_ _∼_ _p_ _**θ**_ ( **x** _t−_ ∆ _t|_ **x** [obs] = **x** ˆ [obs] 0 ) _, when_ ∆ _t →_ 0 [+] _._
+
+
+_Proof._ First, note that **x** _t_ ( **x** _t−_ ∆ _t_ ) is obtained via adding **dimensionally-independent** Gaussian
+noises to **x** 0 = **x** (see the forward process in Eq. 1), we have
+
+
+_p_ _**θ**_ ( **x** _t−_ ∆ _t|_ **x** [obs] = **x** ˆ [obs] 0 ) = _p_ _**θ**_ ( **x** [obs] _t−_ ∆ _t_ _[,]_ **[ x]** [mis] _t−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 )
+
+
+= _p_ ( **x** [obs] _t−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 )
+
+ - ��  
+Correspond to **x** ˜ [obs] _t−_ ∆ _t_ [in Eq.][ 5]
+
+
+14
+
+
+_·p_ _**θ**_ ( **x** [mis] _t−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ) _._ (10)
+
+
+Therefore, **x** ˜ _t−_ ∆ _t_ ’s observed entries **x** ˜ [obs] _t−_ ∆ _t_ [is] [sampled] [from] [distribution] _[p]_ [(] **[x]** [obs] _t−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ).
+Then, we turn to the missing entries, where we have the following derivation:
+
+
+             _p_ _**θ**_ ( **x** [mis] _t−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ) = _p_ _**θ**_ ( **x** [mis] _t−_ ∆ _t_ _[|]_ **[x]** _[t][,]_ **[ x]** [obs] [=] **[x]** [ˆ][obs] 0 ) _p_ _**θ**_ ( **x** _t|_ **x** [obs] = **x** ˆ [obs] 0 )d **x** _t_
+
+
+= E _p_ _**θ**_ ( **x** _t|_ **x** obs=ˆ **x** obs0 ) _[p]_ _**[θ]**_ [(] **[x]** [mis] _t−_ ∆ _t_ _[|]_ **[x]** _[t][,]_ **[ x]** [obs] [=] **[x]** [ˆ][obs] 0 )
+
+_≈_ E _p_ _**θ**_ ( **x** _t|_ **x** obs=ˆ **x** obs0 ) _[p]_ _**[θ]**_ [(] **[x]** [mis] _t−_ ∆ _t_ _[|]_ **[x]** _[t]_ [)]
+
+= _p_ _**θ**_ ( **x** [mis] _t−_ ∆ _t_ _[|]_ **[x]** [˜] _[t]_ [)] _[,]_
+
+
+(11)
+
+
+where **x** ˜ _t_ is a random sample from _p_ _**θ**_ ( **x** _t|_ **x** [obs] = **x** ˆ [obs] 0 ). The first ’ _≈_ ’ holds because when ∆ _t →_ 0,
+**x** [mis] _t−_ ∆ _t_ [is] [almost] [predictable] [via] **[x]** _[t]_ [without] **[x]** [obs] 0 . Therefore, when **x** ˜ _t_ _∼_ _p_ _**θ**_ ( **x** _t|_ **x** [obs] = **x** ˆ [obs] 0 ),
+_p_ _**θ**_ ( **x** [mis] _t−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ) is approximately tractable via _p_ _**θ**_ ( **x** [mis] _t−_ ∆ _t_ _[|]_ **[x]** [˜] _[t]_ [)][.]
+
+Note that **x** [mis] _t−_ ∆ _t_ [denotes the missing entries of] **[ x]** _[t][−]_ [∆] _[t]_ [.] [According to the reverse denoising process in]
+Eq. 2, given **x** _t_ = **x** ˜ _t_, **x** _t−_ ∆ _t_ is obtained via integrating d **x** _t_ from _t_ to _t −_ ∆ _t_, i.e.,
+
+
+                   - _t−_ ∆ _t_
+**x** _t−_ ∆ _t_ = **x** ˜ _t_ + d **x** _t._ (12)
+
+_t_
+
+
+Therefore, ˜ **x** [mis] _t−_ ∆ _t_ [=] **[ x]** _t_ [mis] _−_ ∆ _t_ [obtained from Eq.][ 6][ is a sample from] _[ p]_ _**[θ]**_ [(] **[x]** _t_ [mis] _−_ ∆ _t_ _[|]_ **[x]** [˜] _[t]_ [)][.] [And, approximately,]
+**x** ˜ [mis] _t−_ ∆ _t_ _[∼]_ _[p]_ _**[θ]**_ [(] **[x]** _t_ [mis] _−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ).
+
+Since **x** ˜ [obs] _t−_ ∆ _t_ _[∼]_ _[p]_ [(] **[x]** _t_ [obs] _−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ) _,_ ˜ **x** [mis] _t−_ ∆ _t_ _[∼]_ _[p]_ _**[θ]**_ [(] **[x]** _t_ [mis] _−_ ∆ _t_ _[|]_ **[x]** [obs] [=] **[x]** [ˆ][obs] 0 ), we have **x** ˜ _t−_ ∆ _t_ _∼_
+_p_ _**θ**_ ( **x** _t−_ ∆ _t|_ **x** [obs] = **x** ˆ [obs] 0 ), according to Eq. 10. Therefore, the proof for Lemma 1 is completed.
+
+
+With Lemma 1, we are able to prove Theorem 1 via induction, as long as **x** ˜ _T_ is also sampled from
+_p_ ( **x** _T |_ **x** [obs] = **x** ˆ [obs] 0 ). This holds because _p_ ( **x** _T |_ **x** 0) _≈_ _p_ ( **x** _T_ ), given the condition that **x** 0 = **x** has
+zero mean and unit variance, and _σ_ ( _T_ ) _≫_ 1.
+
+
+Note that the score function _∇_ **x** _t_ log _p_ ( **x** _t_ ) in Eq. 2 is intractable, it is replaced with the output of
+the score neural network _**ϵθ**_ ( **x** _t, t_ ). Therefore, the finally obtained distribution can be rewritten as
+_p_ _**θ**_ ( **x** _|_ **x** [obs] = **x** ˆ [obs] 0 ). Therefore, the proof for Theorem 1 is complete.
+
+
+C FURTHER EXPLANATION OF THE DIFFUSION MODEL
+
+
+The diffusion model we adopt in Section 4.1 is actually a simplified version of the Variance-Exploding
+SDE proposed in (Song et al., 2021b).
+
+
+Note that (Song et al., 2021b) has provided a unified formulation via the Stochastic Differential
+Equation (SDE) and defines the forward process of Diffusion as
+
+
+d **x** = _**f**_ ( **x** _, t_ )d _t_ + _g_ ( _t_ ) d _**w**_ _t,_ (13)
+
+
+where _**f**_ ( _·_ ) and _g_ ( _·_ ) are the drift and diffusion coefficients and are selected differently for different
+diffusion processes, e.g., the variance preserving (VP) and variance exploding (VE) formulations. _**ω**_ _t_
+is the standard Wiener process. Usually, _f_ ( _·_ ) is of the form _**f**_ ( **x** _, t_ ) = _f_ ( _t_ ) **x** . Thus, the SDE can be
+equivalently written as
+d **x** = _f_ ( _t_ ) **x** d _t_ + _g_ ( _t_ ) d _**w**_ _t._ (14)
+
+
+Let **x** be a function of the time _t_, i.e., **x** _t_ = **x** ( _t_ ), then the conditional distribution of **x** _t_ given **x** 0
+(named as the perturbation kernel of the SDE) could be formulated as:
+
+
+_p_ ( **x** _t|_ **x** 0) = _N_ ( **x** _t_ ; _s_ ( _t_ ) **x** 0 _, s_ [2] ( _t_ ) _σ_ [2] ( _t_ ) _**I**_ ) _,_ (15)
+
+
+where
+
+
+�� _t_    _s_ ( _t_ ) = exp _f_ ( _ξ_ )d _ξ_ _,_ and _σ_ ( _t_ ) =
+
+0
+
+
+15
+
+
+~~�~~ - _t_
+
+
+0
+
+
+_g_ [2] ( _ξ_ )
+(16)
+_s_ [2] ( _ξ_ ) [d] _[ξ.]_
+
+
+Therefore, the forward diffusion process could be equivalently formulated by defining the perturbation
+kernels (via defining appropriate _s_ ( _t_ ) and _σ_ ( _t_ )).
+
+
+Variance Exploding (VE) implements the perturbation kernel Eq. 15 by setting _s_ ( _t_ ) = 1, indicating
+that the noise is directly added to the data rather than weighted mixing. Therefore, The noise variance
+(the noise level) is totally decided by _σ_ ( _t_ ). The diffusion model used in DIFFPUTER belongs to VE_√_
+SDE, but we use linear noise level (i.e., _σ_ ( _t_ ) = _t_ ) rather than _σ_ ( _t_ ) = _t_ in the vanilla VE-SDE (Song
+
+et al., 2021b). When _s_ ( _t_ ) = 1, the perturbation kernels become:
+
+
+_p_ ( **x** _t|_ **x** 0) = _N_ ( **x** _t_ ; **0** _, σ_ [2] ( _t_ ) **I** ) _⇒_ **x** _t_ = **x** 0 + _σ_ ( _t_ ) _**ε**_ _,_ (17)
+
+
+which aligns with the forward diffusion process in Eq. 1.
+
+
+The sampling process of diffusion SDE is given by:
+
+
+d **x** = [ _**f**_ ( **x** _, t_ ) _−_ _g_ [2] ( _t_ ) _∇_ **x** log _pt_ ( **x** )]d _t_ + _g_ ( _t_ )d _**w**_ _t._ (18)
+
+
+For VE-SDE, _s_ ( _t_ ) = 1 _⇔_ _**f**_ ( **x** _, t_ ) = _f_ ( _t_ ) _·_ **x** = **0**, and
+
+
+~~�~~ - _t_
+
+
+_g_ [2] ( _ξ_ )d _ξ_ = _σ_ [2] ( _t_ ) _,_
+0
+
+
+_σ_ ( _t_ ) =
+
+
+_t_ - _t_
+
+_g_ [2] ( _ξ_ )d _ξ_ _⇒_
+0 0
+
+
+_g_ [2] ( _t_ ) = [d] _[σ]_ [2][(] _[t]_ [)] = 2 _σ_ ( _t_ ) ˙ _σ_ ( _t_ ) _,_
+
+d _t_
+
+
+(19)
+
+
+_g_ ( _t_ ) = ~~�~~ 2 _σ_ ( _t_ ) ˙ _σ_ ( _t_ ) _._
+
+
+Plugging _g_ ( _t_ ) into Eq. 18, the reverse process in Eq. 2 is recovered:
+
+
+d **x** _t_ = _−_ 2 _σ_ ( _t_ ) ˙ _σ_ ( _t_ ) _∇_ **x** _t_ log _p_ ( **x** _t_ )d _t_ + �2 _σ_ ( _t_ ) ˙ _σ_ ( _t_ )d _**ω**_ _t._ (20)
+
+
+D EXPERIMENTAL DETAILS
+
+
+D.1 CONFIGURATIONS.
+
+
+We conduct all experiments with:
+
+
+    - Operating System: Ubuntu 22.04.3 LTS
+
+
+    - CPU: Intel 13th Gen Intel(R) Core(TM) i9-13900K
+
+
+    - GPU: NVIDIA GeForce RTX 4090 with 24 GB of Memory
+
+
+    - Software: CUDA 12.2, Python 3.9.16, PyTorch (Paszke et al., 2019) 1.12.1
+
+
+D.2 DATASETS
+
+
+We use ten real-world datasets of varying scales, and all of them are available at Kaggle [2] or the UCI
+Machine Learning repository [3] . We consider five datasets of only continuous features: California [4],
+Letter [5], Gestur [6], Magic [7], and Bean [8], and five datasets of both continuous and discrete features:
+Adult [9], Default [10], Shoppers [11], and News [12] . The statistics of these datasets are presented in Table 5.
+
+
+[2https://www.kaggle.com/](https://www.kaggle.com/)
+[3https://archive.ics.uci.edu/](https://archive.ics.uci.edu/)
+[4https://www.kaggle.com/datasets/camnugent/california-housing-prices](https://www.kaggle.com/datasets/camnugent/california-housing-prices)
+[5https://archive.ics.uci.edu/dataset/59/letter+recognition](https://archive.ics.uci.edu/dataset/59/letter+recognition)
+[6https://archive.ics.uci.edu/dataset/302/gesture+phase+segmentation](https://archive.ics.uci.edu/dataset/302/gesture+phase+segmentation)
+[7https://archive.ics.uci.edu/dataset/159/magic+gamma+telescope](https://archive.ics.uci.edu/dataset/159/magic+gamma+telescope)
+[8https://archive.ics.uci.edu/dataset/602/dry+bean+dataset](https://archive.ics.uci.edu/dataset/602/dry+bean+dataset)
+[9https://archive.ics.uci.edu/dataset/2/adult](https://archive.ics.uci.edu/dataset/2/adult)
+[10https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients)
+[11https://archive.ics.uci.edu/dataset/468/online+shoppers+purchasing+](https://archive.ics.uci.edu/dataset/468/online+shoppers+purchasing+intention+dataset)
+[intention+dataset](https://archive.ics.uci.edu/dataset/468/online+shoppers+purchasing+intention+dataset)
+
+[12https://archive.ics.uci.edu/dataset/332/online+news+popularity](https://archive.ics.uci.edu/dataset/332/online+news+popularity)
+
+
+16
+
+
+Table 5: Statistics of datasets. # Num stands for the number of numerical columns, and # Cat stands
+for the number of categorical columns.
+
+
+**Dataset** # Rows # Num # Cat # Train (In-sample) # Test (Out-of-Sample)
+
+
+**California** Housing 20 _,_ 640 9  - 14 _,_ 303 6 _,_ 337
+**Letter** Recognition 20 _,_ 000 16  - 14 _,_ 000 6 _,_ 000
+**Gesture** Phase Segmentation 9 _,_ 522 32  - 6 _,_ 665 2 _,_ 857
+**Magic** Gamma Telescope 19 _,_ 020 10  - 13 _,_ 314 5 _,_ 706
+Dry **Bean** 13 _,_ 610 17  - 9 _,_ 527 4 _,_ 083
+
+
+**Adult** Income 32 _,_ 561 6 8 22 _,_ 792 9 _,_ 769
+**Default** of Credit Card Clients 30 _,_ 000 14 10 21 _,_ 000 9 _,_ 000
+Online **Shoppers** Purchase 12 _,_ 330 10 7 8 _,_ 631 3 _,_ 699
+Online **News** Popularity 39 _,_ 644 45 2 27 _,_ 790 11 _,_ 894
+
+
+D.3 MISSING MECHANISMS
+
+
+According to how the masks **m** are generated, there are three mainstream mechanisms of missingness,
+namely missing patterns: 1) Missing completely at random (MCAR) refers to the case that the
+probability of an entry being missing is independent of the data, i.e., _p_ ( **m** _|_ **x** ) = _p_ ( **m** ). 2) In
+missing at random (MAR), the probability of missingness depends only on the observed values, i.e.,
+_p_ ( **m** _|_ **x** ) = _p_ ( **m** _|_ **x** [obs] ) 3) All other cases are classified as missing not at random (MNAR), where the
+probability of missingness might also depend on other missing entries.
+
+
+We follow the methods proposed in Zhao et al. (2023) to implement MAR and MNAR.
+
+
+    - "For MAR, we first sample a subset of features (columns in _X_ ) that will not contain
+missing values, and then we use a logistic model with these non-missing columns as input
+to determine the missing values of the remaining columns, and we employ line search of the
+bias term to get the desired proportion of missing values."
+
+    - For MNAR, we use the first approach proposed in [4], "Using a logistic model with the
+input masked by MCAR". Specifically, similar to the MAR setting, we first divide the data
+columns into two groups, with one group serving as input for the logistic model, outputting
+the missing probability for the other set of columns. The difference is that after determining
+the missing probability of the second set, we apply MCAR to the input columns (the first
+set). Hence, missing values from the second set will depend on the masked values of the
+first set.
+
+
+The code for generating masks according to the three missing mechanisms is also provided at
+[https://anonymous.4open.science/r/ICLR-DiffPuter.](https://anonymous.4open.science/r/ICLR-DiffPuter)
+
+
+D.4 IMPLEMENTATIONS AND HYPERPARAMETERS
+
+
+We use a fixed set of hyperparameters, which will save significant efforts in hyperparameter-tuning
+when applying DIFFPUTER to more datasets. For the diffusion model, we set the maximum time
+_T_ = 80, the noise level _σ_ ( _t_ ) = _t_, which is linear to _t_ . The score/denoising neural network _**ϵ**_ ( **x** _t, t_ ) is
+implemented as a 5-layer MLP with hidden dimension 1024. _t_ is transformed to sinusoidal timestep
+embeddings and then added to **x** _t_, which is subsequently passed to the denoising function. When
+using the learned diffusion model for imputation, we set the number of discrete steps _M_ = 50 and
+the number of sampling times per data sample _N_ = 10. DIFFPUTER is implemented with Pytorch,
+and optimized using Adam (Kingma & Ba, 2015) optimizer with a learning rate of 1 _×_ 10 _[−]_ [4] .
+
+
+**Architecture of denoising neural network.** We use the same architecture of denoising neural
+network as in two recent tabular diffusion models for tabular data synthesis (Kotelnikov et al.,
+2023; Zhang et al., 2024). The denoising MLP takes the current time step _t_ and the feature vector
+**x** _t_ _∈_ R [1] _[×][d]_ as input. First, **x** _t_ is fed into a linear projection layer that converts the vector dimension
+to be _d_ hidden = 1024:
+**h** 0 = FCin( **x** _t_ ) _∈_ R [1] _[×][d]_ [hidden] _,_ (21)
+where **h** 0 is the transformed vector, and _d_ hidden is the output dimension of the input layer.
+
+
+17
+
+
+Then, following the practice in TabDDPM (Kotelnikov et al., 2023), the sinusoidal timestep embeddings **t** emb _∈_ R [1] _[×][d]_ [hidden] is added to **h** 0 to obtain the input vector **h** hidden:
+
+
+**h** in = **h** 0 + **t** emb _._ (22)
+
+
+The hidden layers are three fully connected layers of the size _d_ hidden _−_ 2 _∗d_ hidden _−_ 2 _∗d_ hidden _−d_ hidden,
+with SiLU activation functions:
+
+**h** 1 = SiLU(FC1( **h** 0) _∈_ R [1] _[×]_ [2] _[∗][d]_ [hidden] ) _,_
+
+
+**h** 2 = SiLU(FC2( **h** 1) _∈_ R [1] _[×]_ [2] _[∗][d]_ [hidden] ) _,_
+
+**h** 3 = SiLU(FC3( **h** 2) _∈_ R [1] _[×][d]_ [hidden] ) _._
+
+
+The estimated score is obtained via the last linear layer:
+
+
+(23)
+
+
+_**ϵ**_ _θ_ ( **x** _t, t_ ) = **h** out = FCout( **h** 3) _∈_ R [1] _[×][d]_ _._ (24)
+
+
+Finally, _**ϵ**_ _θ_ ( **x** _t, t_ ) is applied to Eq. 3 for model training.
+
+
+D.5 IMPLEMENTATIONS OF BASELINES
+
+
+We implement most of the baseline methods according to the publicly available codebases:
+
+
+    - Remasker (Du et al., 2024): [https://github.com/tydusky/remasker.](https://github.com/tydusky/remasker)
+
+
+    - TDM (Zhao et al., 2023): [https://github.com/hezgit/TDM](https://github.com/hezgit/TDM)
+
+
+    - MOT (Muzellec et al., 2020): [https://github.com/BorisMuzellec/](https://github.com/BorisMuzellec/MissingDataOT)
+[MissingDataOT](https://github.com/BorisMuzellec/MissingDataOT)
+
+
+    - GRAPE (You et al., 2020): [https://github.com/maxiaoba/GRAPE](https://github.com/maxiaoba/GRAPE)
+
+
+    - IGRM (Zhong et al., 2023): [https://github.com/G-AILab/IGRM](https://github.com/G-AILab/IGRM)
+
+
+    - TabCSDI (Zheng & Charoenphakdee, 2022): [https://github.com/](https://github.com/pfnet-research/TabCSDI)
+[pfnet-research/TabCSDI](https://github.com/pfnet-research/TabCSDI)
+
+
+    - MCFlow (Richardson et al., 2020): [https://github.com/trevor-richardson/](https://github.com/trevor-richardson/MCFlow)
+[MCFlow.](https://github.com/trevor-richardson/MCFlow)
+
+
+    - For HyperImputer (Jarrett et al., 2022), MissForest (Stekhoven & Bühlmann, 2012),
+MICE (Van Buuren & Karin, 2011), SoftImpute (Hastie et al., 2015), EM (GarcíaLaencina et al., 2010), GAIN (Yoon et al., 2018), MIRACLE (Kyono et al., 2021), and
+MIWAE (Mattei & Frellsen, 2019), we use the implementations at: [https://github.](https://github.com/vanderschaarlab/hyperimpute)
+[com/vanderschaarlab/hyperimpute.](https://github.com/vanderschaarlab/hyperimpute)
+
+
+MissDiff (Ouyang et al., 2023) does not provide its official implementations. Therefore, we obtain its
+results based on our own implementation.
+
+
+The codes for all the methods are available at [https://anonymous.4open.science/r/](https://anonymous.4open.science/r/ICLR-DiffPuter)
+[ICLR-DiffPuter](https://anonymous.4open.science/r/ICLR-DiffPuter)
+
+
+D.6 HYPERPARAMETER SETTINGS OF BASELINES
+
+
+Most of the deep learning baselines recommend the use of one set of hyperparameters for all datasets.
+For these methods, we directly follow their guidelines and use the default hyperparameters:
+
+
+    - ReMasker (Du et al., 2024): we use the recommended hyperparameters provided in Appendix A.2 in the original paper (Du et al., 2024). This set of hyperparameters is searched
+by tuning on the Letter dataset and is deployed for all the datasets in the original paper;
+hence, we follow this setting.
+
+
+    - HyperImpute (Jarrett et al., 2022): since HyperImpute works by searching over the space
+of classifiers/regressors and their hyperparameters, it does not have hyperparameters itself
+except parameters related to the AutoML search budget. We adopt the default budget
+parameters of HyperImpute’s official implementation for all datasets. The default budget
+
+
+18
+
+
+parameters and AutoML search space are provided [13] and Table 5 in the original paper (Jarrett
+et al., 2022).
+
+    - MOT (Muzellec et al., 2020) and TDM (Zhao et al., 2023): There is a main hyperparameter
+representing the number of subset pairs sampled from the dataset for computing optimal
+transport loss. Sinkhorn algorithm and TDM are controlled by hyperparameter n_iter. While
+the default value is 3000, we set it as 12000 for all datasets to ensure the algorithm converges
+sufficiently. For the round-robin version of the algorithm, the number of sampled pairs is
+controlled by max_iter and rr_iter; we adopt the default value 15, which is enough for the
+algorithm to converge. For the remaining hyperparameters related to network architectures,
+we use the default ones for all datasets.
+
+    - kNN: we follow the common practice of selecting the number of nearest neighbors as _[√]_ _n_,
+where _n_ is the number of samples in the dataset.
+
+    - GRAPE (You et al., 2020) and IGRM (Zhong et al., 2023): we adopt the recommended set
+of hyperparameters used in the original paper for all datasets. For a detailed explanation of
+the meaning of the parameters, please see the github repos: GRAPE [14] and IGRM [15] .
+
+    - MissDiff: since the original implementation is not available and it is based on the diffusion
+model, for a fair comparison, we simply use the same set of hyperparameters with our
+DiffPuter.
+
+    - TabCSDI (Zheng & Charoenphakdee, 2022): we follow the guide for selecting hyperparameters in the original paper (Appendix B in [3]). Specifically, we use a large version of the
+TabCSDI model with a number of layers set to 4 (see more detailed hyperparameters about
+the large TabCSDI model [16] . For batch size, we take the official choice of batch size (8) for
+the breast dataset ( 700 samples) as a base and scale the batch size accordingly with the
+sample size of our datasets: since most of the datasets we used have the number of samples
+between 20000 to 40000, we scale the batch size to 256 and use it for all datasets.
+
+    - MCFlow (Richardson et al., 2020): we adopt the recommended hyperparameters provided
+in the official implementation for all datasets [17] .
+
+    - For the remaining classical machine learning methods, including EM, GAIN, MICE, Miracle,
+MissForest, and Softimpute where hyperparameters might be important. Since we use the
+implementations from the ’hyperimpute’ package, we tune the hyperparameters within
+the hyperparameter space provided in the package [18] . To be specific, we set the maximum
+budge as 50, then we sample 50 different hyperparameter combinations according to the
+hyperparameter space. Finally, we report the optimal performance over the 50 trials.
+
+
+E ADDITIONAL RESULTS
+
+
+E.1 MCAR: OUT-OF-SAMPLE IMPUTATION
+
+
+We present the out-of-sample imputation performance comparison under MCAR setting in Table 6.
+
+
+E.2 MISSING AT RANDOM (MAR)
+
+
+We present the performance comparison under MAR setting in Table 7 and Table 8.
+
+
+E.3 MISSING NOT AT RANDOM (MNAR)
+
+
+We present the performance comparison under MNAR setting in Table 9 and Table 10.
+
+
+[13https://github.com/vanderschaarlab/hyperimpute/blob/main/src/](https://github.com/vanderschaarlab/hyperimpute/blob/main/src/hyperimpute/plugins/imputers/plugin_hyperimpute.py)
+[hyperimpute/plugins/imputers/plugin_hyperimpute.py](https://github.com/vanderschaarlab/hyperimpute/blob/main/src/hyperimpute/plugins/imputers/plugin_hyperimpute.py)
+
+[14https://github.com/maxiaoba/GRAPE/blob/master/train_mdi.py](https://github.com/maxiaoba/GRAPE/blob/master/train_mdi.py)
+[15https://github.com/G-AILab/IGRM/blob/main/main.py](https://github.com/G-AILab/IGRM/blob/main/main.py)
+[16https://github.com/pfnet-research/TabCSDI/blob/main/config/census_](https://github.com/pfnet-research/TabCSDI/blob/main/config/census_onehot_analog.yaml)
+[onehot_analog.yaml](https://github.com/pfnet-research/TabCSDI/blob/main/config/census_onehot_analog.yaml)
+
+[17https://github.com/trevor-richardson/MCFlow/blob/master/main.py](https://github.com/trevor-richardson/MCFlow/blob/master/main.py)
+[18https://github.com/vanderschaarlab/hyperimpute/tree/main/src/](https://github.com/vanderschaarlab/hyperimpute/tree/main/src/hyperimpute/plugins/imputers/plugin_missforest.py)
+[hyperimpute/plugins/imputers/plugin_missforest.py](https://github.com/vanderschaarlab/hyperimpute/tree/main/src/hyperimpute/plugins/imputers/plugin_missforest.py)
+
+
+19
+
+
+Table 6: MCAR, Out-of-sample imputation performance on MAE and RMSE metrics (using base
+10 _[−]_ [2] for better presentation). DIFFPUTER outperforms the most competitive baseline methods by
+13 _._ 37% on MAE, and by 4 _._ 43% on RMSE.
+
+|Method California Letter Gesture Adult Default Shoppers|Average|
+|---|---|
+|MAE<br>MCFlow<br>60_._74_±_5_._99<br>66_._35_±_0_._62<br>82_._72_±_2_._43<br>77_._54_±_0_._98<br>64_._12_±_2_._16<br>73_._90_±_3_._34<br>70_._90<br>IGRM<br>138_._22_±_4_._25<br>121_._59_±_1_._16<br>149_._88_±_3_._92<br>149_._64_±_0_._18<br>OOM<br>132_._28_±_0_._01<br>-<br>GRAPE<br>36_._54_±_0_._12<br>42_._41_±_0_._19<br>92_._50_±_0_._07<br>59_._25_±_0_._58<br>57_._51_±_0_._09<br>51_._94_±_1_._20<br>56_._69<br>MOT<br>44_._20_±_0_._81<br>46_._75_±_0_._13<br>36_._74_±_0_._01<br>51_._17_±_0_._32<br>31_._42_±_0_._50<br>41_._55_±_0_._42<br>41_._97<br>Remasker<br>33_._97_±_0_._40<br>34_._03_±_0_._33<br>35_._29_±_4_._13<br>49_._27_±_0_._53<br>37_._02_±_3_._38<br>41_._59_±_1_._39<br>38_._53<br>DIFFPUTER<br>**33**_._**47**_±_**0**_._**25**<br>**30**_._**69**_±_**0**_._**61**<br>**28**_._**53**_±_**0**_._**18**<br>**49**_._**14**_±_**0**_._**62**<br>**24**_._**63**_±_**0**_._**24**<br>**34**_._**46**_±_**0**_._**48**<br>**33**_._**49**<br>Improv.<br>**1**_._**47**%<br>**9**_._**81**%<br>**19**_._**16**%<br>**0**_._**26**%<br>**21**_._**61**%<br>**17**_._**06**%<br>**13**_._**09**%|MAE<br>MCFlow<br>60_._74_±_5_._99<br>66_._35_±_0_._62<br>82_._72_±_2_._43<br>77_._54_±_0_._98<br>64_._12_±_2_._16<br>73_._90_±_3_._34<br>70_._90<br>IGRM<br>138_._22_±_4_._25<br>121_._59_±_1_._16<br>149_._88_±_3_._92<br>149_._64_±_0_._18<br>OOM<br>132_._28_±_0_._01<br>-<br>GRAPE<br>36_._54_±_0_._12<br>42_._41_±_0_._19<br>92_._50_±_0_._07<br>59_._25_±_0_._58<br>57_._51_±_0_._09<br>51_._94_±_1_._20<br>56_._69<br>MOT<br>44_._20_±_0_._81<br>46_._75_±_0_._13<br>36_._74_±_0_._01<br>51_._17_±_0_._32<br>31_._42_±_0_._50<br>41_._55_±_0_._42<br>41_._97<br>Remasker<br>33_._97_±_0_._40<br>34_._03_±_0_._33<br>35_._29_±_4_._13<br>49_._27_±_0_._53<br>37_._02_±_3_._38<br>41_._59_±_1_._39<br>38_._53<br>DIFFPUTER<br>**33**_._**47**_±_**0**_._**25**<br>**30**_._**69**_±_**0**_._**61**<br>**28**_._**53**_±_**0**_._**18**<br>**49**_._**14**_±_**0**_._**62**<br>**24**_._**63**_±_**0**_._**24**<br>**34**_._**46**_±_**0**_._**48**<br>**33**_._**49**<br>Improv.<br>**1**_._**47**%<br>**9**_._**81**%<br>**19**_._**16**%<br>**0**_._**26**%<br>**21**_._**61**%<br>**17**_._**06**%<br>**13**_._**09**%|
+|MAE<br>MCFlow<br>60_._74_±_5_._99<br>66_._35_±_0_._62<br>82_._72_±_2_._43<br>77_._54_±_0_._98<br>64_._12_±_2_._16<br>73_._90_±_3_._34<br>70_._90<br>IGRM<br>138_._22_±_4_._25<br>121_._59_±_1_._16<br>149_._88_±_3_._92<br>149_._64_±_0_._18<br>OOM<br>132_._28_±_0_._01<br>-<br>GRAPE<br>36_._54_±_0_._12<br>42_._41_±_0_._19<br>92_._50_±_0_._07<br>59_._25_±_0_._58<br>57_._51_±_0_._09<br>51_._94_±_1_._20<br>56_._69<br>MOT<br>44_._20_±_0_._81<br>46_._75_±_0_._13<br>36_._74_±_0_._01<br>51_._17_±_0_._32<br>31_._42_±_0_._50<br>41_._55_±_0_._42<br>41_._97<br>Remasker<br>33_._97_±_0_._40<br>34_._03_±_0_._33<br>35_._29_±_4_._13<br>49_._27_±_0_._53<br>37_._02_±_3_._38<br>41_._59_±_1_._39<br>38_._53<br>DIFFPUTER<br>**33**_._**47**_±_**0**_._**25**<br>**30**_._**69**_±_**0**_._**61**<br>**28**_._**53**_±_**0**_._**18**<br>**49**_._**14**_±_**0**_._**62**<br>**24**_._**63**_±_**0**_._**24**<br>**34**_._**46**_±_**0**_._**48**<br>**33**_._**49**<br>Improv.<br>**1**_._**47**%<br>**9**_._**81**%<br>**19**_._**16**%<br>**0**_._**26**%<br>**21**_._**61**%<br>**17**_._**06**%<br>**13**_._**09**%|**33**_._**49**<br>**13**_._**09**%|
+|RMSE<br>MCFlow<br>84_._57_±_7_._57<br>87_._73_±_0_._58<br>119_._73_±_1_._10<br>120_._68_±_0_._66<br>101_._33_±_1_._82<br>115_._75_±_0_._82<br>104_._97<br>IGRM<br>170_._00_±_4_._72<br>151_._16_±_2_._05<br>172_._25_±_2_._99<br>179_._17_±_0_._88<br>OOM<br>174_._42_±_1_._73<br>-<br>GRAPE<br>56_._05_±_0_._03<br>58_._11_±_0_._29<br>120_._31_±_0_._11<br>99_._19_±_0_._50<br>91_._94_±_0_._42<br>92_._37_±_0_._41<br>86_._33<br>MOT<br>71_._02_±_1_._19<br>64_._69_±_0_._44<br>71_._64_±_0_._84<br>94_._67_±_1_._50<br>71_._35_±_1_._08<br>82_._63_±_2_._19<br>76<br>Remasker<br>**52.96**_±_0_._09<br>48_._60_±_0_._45<br>68_._78_±_3_._60<br>**90.38**_±_1_._41<br>76_._94_±_1_._72<br>80_._00_±_0_._88<br>69_._61<br>DIFFPUTER<br>54_._18_±_0_._25<br>**47**_._**74**_±_**0**_._**39**<br>**60**_._**90**_±_**0**_._**52**<br>91_._31_±_0_._61<br>**70**_._**50**_±_**0**_._**83**<br>**74**_._**01**_±_**0**_._**40**<br>**66**_._**41**<br>Improv.<br>-<br>**1**_._**77**%<br>**11**_._**46**%<br>-<br>**1**_._**19**%<br>**7**_._**49**%<br>**4**_._**60**%|RMSE<br>MCFlow<br>84_._57_±_7_._57<br>87_._73_±_0_._58<br>119_._73_±_1_._10<br>120_._68_±_0_._66<br>101_._33_±_1_._82<br>115_._75_±_0_._82<br>104_._97<br>IGRM<br>170_._00_±_4_._72<br>151_._16_±_2_._05<br>172_._25_±_2_._99<br>179_._17_±_0_._88<br>OOM<br>174_._42_±_1_._73<br>-<br>GRAPE<br>56_._05_±_0_._03<br>58_._11_±_0_._29<br>120_._31_±_0_._11<br>99_._19_±_0_._50<br>91_._94_±_0_._42<br>92_._37_±_0_._41<br>86_._33<br>MOT<br>71_._02_±_1_._19<br>64_._69_±_0_._44<br>71_._64_±_0_._84<br>94_._67_±_1_._50<br>71_._35_±_1_._08<br>82_._63_±_2_._19<br>76<br>Remasker<br>**52.96**_±_0_._09<br>48_._60_±_0_._45<br>68_._78_±_3_._60<br>**90.38**_±_1_._41<br>76_._94_±_1_._72<br>80_._00_±_0_._88<br>69_._61<br>DIFFPUTER<br>54_._18_±_0_._25<br>**47**_._**74**_±_**0**_._**39**<br>**60**_._**90**_±_**0**_._**52**<br>91_._31_±_0_._61<br>**70**_._**50**_±_**0**_._**83**<br>**74**_._**01**_±_**0**_._**40**<br>**66**_._**41**<br>Improv.<br>-<br>**1**_._**77**%<br>**11**_._**46**%<br>-<br>**1**_._**19**%<br>**7**_._**49**%<br>**4**_._**60**%|
+|RMSE<br>MCFlow<br>84_._57_±_7_._57<br>87_._73_±_0_._58<br>119_._73_±_1_._10<br>120_._68_±_0_._66<br>101_._33_±_1_._82<br>115_._75_±_0_._82<br>104_._97<br>IGRM<br>170_._00_±_4_._72<br>151_._16_±_2_._05<br>172_._25_±_2_._99<br>179_._17_±_0_._88<br>OOM<br>174_._42_±_1_._73<br>-<br>GRAPE<br>56_._05_±_0_._03<br>58_._11_±_0_._29<br>120_._31_±_0_._11<br>99_._19_±_0_._50<br>91_._94_±_0_._42<br>92_._37_±_0_._41<br>86_._33<br>MOT<br>71_._02_±_1_._19<br>64_._69_±_0_._44<br>71_._64_±_0_._84<br>94_._67_±_1_._50<br>71_._35_±_1_._08<br>82_._63_±_2_._19<br>76<br>Remasker<br>**52.96**_±_0_._09<br>48_._60_±_0_._45<br>68_._78_±_3_._60<br>**90.38**_±_1_._41<br>76_._94_±_1_._72<br>80_._00_±_0_._88<br>69_._61<br>DIFFPUTER<br>54_._18_±_0_._25<br>**47**_._**74**_±_**0**_._**39**<br>**60**_._**90**_±_**0**_._**52**<br>91_._31_±_0_._61<br>**70**_._**50**_±_**0**_._**83**<br>**74**_._**01**_±_**0**_._**40**<br>**66**_._**41**<br>Improv.<br>-<br>**1**_._**77**%<br>**11**_._**46**%<br>-<br>**1**_._**19**%<br>**7**_._**49**%<br>**4**_._**60**%|**66**_._**41**<br>**4**_._**60**%|
+
+
+Table 7: MAR, In-sample imputation MAE.
+
+
+**Method** **California** **Letter** **Gesture** **Magic** **Bean** **Adult** **Default** **Shoppers** **News**
+
+
+_Traditional iterative_
+EM 39 _._ 17 58 _._ 05 35 _._ 43 48 _._ 13 15 _._ 41 62 _._ 54 33 _._ 78 43 _._ 01 39 _._ 52
+MICE 58 _._ 56 82 _._ 32 65 _._ 14 72 _._ 81 22 _._ 17 98 _._ 44 63 _._ 92 75 _._ 70 61 _._ 12
+MIRACLE 47 _._ 13 71 _._ 10 62 _._ 56 53 _._ 87 29 _._ 06 73 _._ 06 43 _._ 72 56 _._ 89 38 _._ 21
+SoftImpute 59 _._ 47 67 _._ 01 53 _._ 95 58 _._ 55 31 _._ 55 70 _._ 39 42 _._ 66 61 _._ 91 64 _._ 85
+MissForest 45 _._ 90 62 _._ 51 37 _._ 69 47 _._ 70 29 _._ 21 73 _._ 25 38 _._ 09 41 _._ 97 41 _._ 18
+
+
+_Dist._ _match_
+MOT 44 _._ 52 50 _._ 86 44 _._ 38 46 _._ 95 30 _._ 41 58 _._ 00 36 _._ 48 40 _._ 53 49 _._ 92
+TDM 39 _._ 27 46 _._ 86 42 _._ 69 45 _._ 31 29 _._ 11 59 _._ 59 37 _._ 93 45 _._ 00 63 _._ 25
+
+
+_GNN_
+GRAPE 35 _._ 14 42 _._ 45 38 _._ 08 39 _._ 87 18 _._ 81 60 _._ 73 48 _._ 43 53 _._ 73 50 _._ 85
+IGRM 35 _._ 23 41 _._ 31 36 _._ 45 40 _._ 09 18 _._ 97 61 _._ 35 _−_ 59 _._ 86 _−_
+
+
+_Generative models_
+MIWAE 76 _._ 27 72 _._ 30 57 _._ 30 77 _._ 31 62 _._ 64 57 _._ 99 51 _._ 10 46 _._ 74 63 _._ 26
+GAIN 69 _._ 68 67 _._ 50 73 _._ 70 66 _._ 11 53 _._ 46 92 _._ 81 60 _._ 04 46 _._ 69 57 _._ 49
+MCFlow 60 _._ 00 68 _._ 23 65 _._ 59 55 _._ 27 30 _._ 40 84 _._ 36 67 _._ 87 72 _._ 99 56 _._ 36
+TabCSDI 83 _._ 17 77 _._ 42 54 _._ 64 76 _._ 93 75 _._ 34 57 _._ 11 46 _._ 48 58 _._ 53 66 _._ 41
+MissDiff 119 _._ 49 56 _._ 69 229 _._ 19 55 _._ 82 45 _._ 62 55 _._ 01 50 _._ 62 48 _._ 19 54 _._ 41
+
+
+_Other_
+KNN 49 _._ 25 49 _._ 41 45 _._ 52 49 _._ 70 30 _._ 81 50 _._ 83 35 _._ 15 46 _._ 81 48 _._ 53
+ReMasker 34 _._ 26 33 _._ 93 36 _._ 52 50 _._ 21 16 _._ 85 52 _._ 60 40 _._ 58 38 _._ 24 30 _._ 37
+HyperImpute 36 _._ 22 39 _._ 74 36 _._ 44 42 _._ 23 16 _._ 93 49 _._ 91 29 _._ 66 36 _._ 93 26 _._ 85
+
+
+DIFFPUTER 32 _._ 66 32 _._ 22 30 _._ 39 29 _._ 66 15 _._ 92 49 _._ 51 26 _._ 61 35 _._ 19 28 _._ 22
+
+
+20
+
+
+Table 8: MAR, In-sample imputation RMSE.
+
+
+**Method** **California** **Letter** **Gesture** **Magic** **Bean** **Adult** **Default** **Shoppers** **News**
+
+
+_Traditional iterative_
+EM 60 _._ 28 77 _._ 77 67 _._ 68 74 _._ 17 39 _._ 37 88 _._ 74 79 _._ 48 65 _._ 76 82 _._ 32
+MICE 85 _._ 13 106 _._ 80 92 _._ 85 102 _._ 74 49 _._ 96 126 _._ 50 109 _._ 18 89 _._ 10 105 _._ 35
+MIRACLE 105 _._ 54 96 _._ 64 104 _._ 10 105 _._ 48 100 _._ 19 102 _._ 18 107 _._ 70 105 _._ 52 105 _._ 53
+SoftImpute 83 _._ 23 88 _._ 33 99 _._ 13 87 _._ 11 56 _._ 32 95 _._ 44 100 _._ 26 94 _._ 04 90 _._ 61
+MissForest 72 _._ 08 84 _._ 20 75 _._ 70 74 _._ 75 51 _._ 24 106 _._ 97 83 _._ 22 70 _._ 15 93 _._ 03
+
+
+_Dist._ _match_
+MOT 74 _._ 86 69 _._ 71 86 _._ 57 76 _._ 53 57 _._ 92 85 _._ 96 88 _._ 74 81 _._ 01 92 _._ 78
+TDM 67 _._ 88 64 _._ 66 80 _._ 44 80 _._ 77 62 _._ 96 86 _._ 98 91 _._ 34 95 _._ 22 95 _._ 02
+
+
+_GNN_
+GRAPE 55 _._ 73 57 _._ 71 72 _._ 88 66 _._ 88 42 _._ 33 86 _._ 67 96 _._ 19 80 _._ 85 95 _._ 50
+IGRM 56 _._ 13 56 _._ 44 69 _._ 51 67 _._ 45 41 _._ 61 85 _._ 55 97 _._ 30 0 _._ 00 0 _._ 00
+
+
+_Generative models_
+MIWAE 105 _._ 54 96 _._ 64 104 _._ 10 105 _._ 48 100 _._ 19 102 _._ 18 107 _._ 70 105 _._ 52 105 _._ 53
+GAIN 98 _._ 01 88 _._ 89 112 _._ 56 93 _._ 54 79 _._ 02 123 _._ 26 103 _._ 13 90 _._ 26 117 _._ 09
+MCFlow 82 _._ 84 90 _._ 07 109 _._ 49 89 _._ 02 52 _._ 83 112 _._ 48 117 _._ 18 86 _._ 55 112 _._ 21
+TabCSDI 111 _._ 64 100 _._ 27 101 _._ 72 101 _._ 65 101 _._ 15 87 _._ 37 101 _._ 74 100 _._ 07 104 _._ 73
+MissDiff 256 _._ 09 79 _._ 60 1183 _._ 01 90 _._ 38 97 _._ 26 98 _._ 17 121 _._ 62 676 _._ 10 1464 _._ 76
+
+
+_Other_
+KNN 80 _._ 05 68 _._ 59 92 _._ 64 75 _._ 52 62 _._ 92 90 _._ 24 85 _._ 50 74 _._ 04 89 _._ 12
+ReMasker 56 _._ 08 47 _._ 97 70 _._ 55 77 _._ 09 36 _._ 87 78 _._ 08 78 _._ 43 58 _._ 94 93 _._ 74
+HyperImpute 61 _._ 94 57 _._ 50 71 _._ 98 69 _._ 71 39 _._ 01 88 _._ 73 79 _._ 84 58 _._ 96 71 _._ 46
+
+
+DIFFPUTER 57 _._ 12 48 _._ 12 68 _._ 59 67 _._ 29 35 _._ 19 79 _._ 42 77 _._ 52 60 _._ 11 65 _._ 53
+
+
+Table 9: MNAR, In-sample imputation MAE.
+
+
+**Method** **California** **Letter** **Gesture** **Magic** **Bean** **Adult** **Default** **Shoppers** **News**
+
+
+_Traditional iterative_
+EM 38 _._ 71 56 _._ 10 37 _._ 49 50 _._ 75 10 _._ 48 56 _._ 17 30 _._ 06 42 _._ 57 38 _._ 93
+MICE 57 _._ 63 81 _._ 26 66 _._ 33 77 _._ 06 17 _._ 12 98 _._ 34 59 _._ 55 76 _._ 30 62 _._ 27
+MIRACLE 42 _._ 42 71 _._ 68 71 _._ 83 45 _._ 59 15 _._ 27 59 _._ 32 37 _._ 41 78 _._ 56 41 _._ 05
+SoftImpute 64 _._ 13 65 _._ 58 55 _._ 31 60 _._ 76 28 _._ 86 61 _._ 11 43 _._ 39 60 _._ 12 63 _._ 48
+MissForest 43 _._ 11 58 _._ 61 39 _._ 74 51 _._ 15 25 _._ 37 57 _._ 40 34 _._ 49 42 _._ 58 39 _._ 57
+
+
+_Dist._ _match_
+MOT 42 _._ 48 47 _._ 70 44 _._ 78 48 _._ 05 25 _._ 21 49 _._ 39 35 _._ 84 42 _._ 20 48 _._ 14
+TDM 35 _._ 93 45 _._ 22 43 _._ 43 46 _._ 24 20 _._ 91 50 _._ 29 41 _._ 07 43 _._ 48 53 _._ 17
+
+
+_GNN_
+GRAPE 35 _._ 82 41 _._ 00 40 _._ 46 40 _._ 68 13 _._ 24 57 _._ 97 44 _._ 70 55 _._ 06 49 _._ 36
+IGRM 34 _._ 89 40 _._ 18 40 _._ 82 40 _._ 92 13 _._ 57 54 _._ 52 0 _._ 00 58 _._ 14 0 _._ 00
+
+
+_Generative models_
+MIWAE 75 _._ 91 83 _._ 18 60 _._ 93 79 _._ 34 62 _._ 09 59 _._ 03 56 _._ 06 49 _._ 34 64 _._ 40
+GAIN 79 _._ 60 67 _._ 04 83 _._ 73 64 _._ 75 39 _._ 68 123 _._ 87 85 _._ 44 55 _._ 89 57 _._ 33
+MCFlow 59 _._ 23 65 _._ 53 67 _._ 03 60 _._ 37 26 _._ 30 81 _._ 16 67 _._ 03 77 _._ 87 54 _._ 96
+TabCSDI 72 _._ 26 77 _._ 71 58 _._ 16 75 _._ 46 75 _._ 69 62 _._ 09 58 _._ 88 60 _._ 29 65 _._ 88
+MissDiff 52 _._ 37 49 _._ 11 325 _._ 12 113 _._ 14 38 _._ 52 98 _._ 34 63 _._ 11 168 _._ 17 75 _._ 23
+
+
+_Other_
+KNN 54 _._ 23 53 _._ 21 48 _._ 79 49 _._ 26 24 _._ 00 62 _._ 99 40 _._ 17 46 _._ 27 47 _._ 83
+ReMasker 33 _._ 22 33 _._ 65 38 _._ 98 75 _._ 05 12 _._ 94 47 _._ 66 39 _._ 44 39 _._ 89 29 _._ 24
+HyperImpute 33 _._ 96 40 _._ 20 38 _._ 30 42 _._ 88 11 _._ 96 50 _._ 19 28 _._ 36 39 _._ 80 31 _._ 74
+
+
+DIFFPUTER 34 _._ 08 33 _._ 13 31 _._ 54 40 _._ 82 11 _._ 42 48 _._ 59 26 _._ 94 37 _._ 25 28 _._ 51
+
+
+21
+
+
+Table 10: MNAR, In-sample imputation RMSE.
+
+
+**Method** **California** **Letter** **Gesture** **Magic** **Bean** **Adult** **Default** **Shoppers** **News**
+
+
+_Traditional iterative_
+EM 59 _._ 75 75 _._ 78 74 _._ 88 76 _._ 01 28 _._ 90 92 _._ 30 83 _._ 26 66 _._ 16 71 _._ 03
+MICE 84 _._ 36 105 _._ 91 98 _._ 00 106 _._ 59 41 _._ 91 132 _._ 01 112 _._ 55 91 _._ 16 96 _._ 87
+MIRACLE 73 _._ 98 109 _._ 85 125 _._ 48 74 _._ 93 50 _._ 36 106 _._ 10 150 _._ 95 82 _._ 04 100 _._ 59
+SoftImpute 102 _._ 74 87 _._ 02 103 _._ 04 90 _._ 21 48 _._ 27 96 _._ 65 99 _._ 56 95 _._ 59 83 _._ 84
+MissForest 65 _._ 80 80 _._ 53 81 _._ 17 76 _._ 66 42 _._ 72 99 _._ 58 91 _._ 87 70 _._ 15 85 _._ 34
+
+
+_Dist._ _match_
+MOT 70 _._ 10 66 _._ 95 88 _._ 63 76 _._ 35 49 _._ 43 91 _._ 16 93 _._ 92 83 _._ 08 86 _._ 44
+TDM 59 _._ 81 63 _._ 17 86 _._ 36 78 _._ 16 47 _._ 59 91 _._ 81 96 _._ 36 88 _._ 88 94 _._ 51
+
+
+_GNN_
+GRAPE 55 _._ 78 56 _._ 43 78 _._ 33 63 _._ 91 32 _._ 66 94 _._ 56 99 _._ 99 81 _._ 17 84 _._ 97
+IGRM 55 _._ 34 55 _._ 32 78 _._ 74 64 _._ 30 32 _._ 57 93 _._ 64 97 _._ 58 _−_ _−_
+
+
+_Generative models_
+MIWAE 102 _._ 77 107 _._ 54 111 _._ 03 107 _._ 10 96 _._ 50 102 _._ 70 113 _._ 33 107 _._ 99 114 _._ 09
+GAIN 106 _._ 38 88 _._ 99 128 _._ 97 89 _._ 24 58 _._ 92 184 _._ 39 116 _._ 56 93 _._ 92 145 _._ 92
+MCFlow 82 _._ 16 86 _._ 87 114 _._ 77 91 _._ 89 47 _._ 98 117 _._ 01 123 _._ 68 88 _._ 87 105 _._ 53
+TabCSDI 93 _._ 59 101 _._ 11 107 _._ 65 100 _._ 20 101 _._ 99 98 _._ 54 106 _._ 69 102 _._ 92 107 _._ 07
+MissDiff 137 _._ 09 68 _._ 98 6116 _._ 33 227 _._ 21 61 _._ 13 229 _._ 50 893 _._ 48 449 _._ 46 829 _._ 78
+
+
+_Other_
+KNN 83 _._ 15 73 _._ 01 101 _._ 66 75 _._ 44 53 _._ 33 103 _._ 03 86 _._ 35 85 _._ 52 98 _._ 56
+ReMasker 54 _._ 34 48 _._ 02 75 _._ 66 102 _._ 23 32 _._ 15 85 _._ 60 82 _._ 65 58 _._ 61 80 _._ 17
+HyperImpute 58 _._ 93 57 _._ 84 75 _._ 84 69 _._ 87 31 _._ 24 89 _._ 04 86 _._ 96 61 _._ 48 76 _._ 42
+
+
+DIFFPUTER 57 _._ 48 48 _._ 54 69 _._ 54 67 _._ 66 32 _._ 59 85 _._ 26 78 _._ 82 59 _._ 83 66 _._ 74
+
+
+22

@@ -1,0 +1,2222 @@
+# LASER: LEARNING TO ADAPTIVELY SELECT REWARD MODELS WITH MULTI-ARMED BANDITS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Reward Models (RMs) play a crucial role in aligning large language models
+(LLMs) with human preferences, enhancing their performance by ranking outputs during inference or iterative training. However, the degree to which an RM
+generalizes to new tasks is often not known _a_ _priori_ . For instance, some RMs
+may excel at scoring creative writing, while others specialize in evaluating math
+reasoning. Therefore, using only one fixed RM while training LLMs can be _sub-_
+_optimal_ . Moreover, optimizing LLMs with multiple RMs simultaneously can be
+prohibitively computationally-intensive and challenging due to conflicting signals
+from different RMs, potentially degrading performance. To address these challenges, we introduce **LASER** ( **L** earning to **A** daptively **Se** lect **R** ewards), which
+iteratively trains LLMs using multiple RMs, selecting and utilizing the most wellsuited RM for each instance to rank outputs and generate preference data, framed
+as a multi-armed bandit problem. Our empirical results on commonsense and
+math reasoning tasks demonstrate that LASER can boost iterative LLM optimization by optimizing for multiple RMs, improving the absolute average accuracy of
+Llama-3-8B over three datasets by 2 _._ 67% over training with ensemble RM scores
+while also showing superior training efficiency (e.g., a 2 _×_ speedup). Moreover,
+on WildChat, a benchmark of instruction-following prompts in open-form generation, we find that using Llama-3-8B LASER leads to a 71 _._ 45% AlpacaEval
+win rate over sequentially optimizing multiple RMs. Extending to long-context
+generation tasks, we find that on Llama-3-8B, LASER achieves an average improvement of 2 _._ 64 F1 points on single-document QA tasks and 2 _._ 42 F1 points on
+multi-document QA over random RM selection when used with best-of- _n_ sampling. Our analysis shows that LASER is robust to noisy rewards and generalizes
+to multiple settings. Finally, we demonstrate that LASER’s RM selection changes
+depending on the underlying task or instance, and we verify the presence of conflicting preferences from multiple RMs, which can be mitigated using LASER.
+
+
+1 INTRODUCTION
+
+
+When comparing two responses, human preferences often differ depending on factors like the underlying task, who the annotators are (Santurkar et al., 2023; Ahmadian et al., 2024), and how preferences are elicited (Bansal et al., 2024). Therefore, models of preference data are also likely to differ
+and might include noise as well as any biases contained in the preference data used to train them.
+This can pose a problem when using such models as “reward models” (RMs) to align large language
+models (LLMs) to human preferences using reinforcement learning with human feedback (Christiano et al., 2017; Ziegler et al., 2019; Ouyang et al., 2022). Recent work has focused on aligning
+LLMs through iterative training, using reward models as proxies for human judgment (Gulcehre
+et al., 2023), leveraging the LLM to act as an implicit RM or judge (Yuan et al., 2024b; Chen et al.,
+2024b), or using the gold answer to compute a reward (Pang et al., 2024). Under this paradigm, there
+are three stages to training LLMs: (i) _generating_ _multiple_ _responses_ to a query from an LLM; (ii)
+_scoring the responses with an RM_ to create preference data with better and worse responses; and (iii)
+using _model-generated_ _preference_ _data_ to further train the LLM. Note that for most domains, the
+gold reward is not readily available, making the quality of the RM or the degree to which it reflects
+human preferences (i.e., the gold reward) crucial to improving LLM performance. Indeed, several
+prior efforts aim to train new RMs that better reflect human preferences (Lambert et al., 2024).
+
+
+1
+
+
+However, _selecting one reward model_ to guide LLM training can be _suboptimal_ for three main reasons: (1) A single RM may not be generalized to heterogeneous sets of examples. RMs are typically
+designed to reflect specific objectives and may be trained on offline preference datasets. Thus, an
+RM that performs well on one dataset or domain _may not generalize effectively_ to others, leading to
+misaligned outputs across different tasks or domains (Kirk et al., 2023; Chen et al., 2024a; Casper
+et al., 2023; Gao et al., 2023). For instance, creativity plays a key role in evaluating the quality of a
+story, whereas correctness is more important in scoring math solutions. (2) RM performance leaderboards (e.g., Lambert et al. (2024)) that rely on human-annotated preferences can have unreliable
+rankings due to the presence of _incorrect and ambiguous preferences_ (Yu et al., 2024; Hejna et al.,
+2023). (3) Lastly, over-optimization on a particular RM can lead to _reward_ _hacking_ (Skalse et al.,
+2022; Rafailov et al., 2024a), resulting in minimal gain or even drops in downstream performance.
+
+
+To mitigate these issues, a prevalent approach is to _ensemble multiple reward models_ (Coste et al.,
+2023; Eisenstein et al., 2023; Zhang et al., 2024; Ram´e et al., 2024). However, these methods also
+come with significant challenges: as RMs are typically based on LLMs, training with multiple RMs
+often requires loading and managing several large models simultaneously, which can be _computa-_
+_tionally expensive_, becoming infeasible as models increase in size. Moreover, aggregating multiple
+RM scores together is susceptible to _noisy rewards or conflicting preferences_ from RMs, especially
+RMs that are not well-suited for the specific task (Rita et al., 2024). This, in turn, can degrade the
+quality of the preference data, leading to low-quality updates during training (Wang et al., 2024a).
+Finally, manually selecting a subset of RMs to combine is a labor-intensive process that involves
+training many different variants on a combinatorially large set of RM groupings. This underscores
+the need for more efficient methods that efficiently and robustly optimize LLMs using multiple RMs.
+
+
+In this work, we introduce _**L**_ _earning_ _to_ _**A**_ _daptively_ _**Se**_ _lect_ _**R**_ _ewards_ (LASER), that, given a set of
+RMs, adaptively and efficiently _selects_ a suitable RM for each instance by casting selection as a
+_multi-armed bandit_ problem (Vermorel & Mohri, 2005; Audibert et al., 2009). Specifically, during
+training, the RM (arm) is chosen dynamically based on contextual information about the model’s
+performance and past interactions. The LLM is then fine-tuned based on the RM-annotated data,
+and the bandit’s parameters are updated accordingly to reflect the performance of the LLM after
+training on preference data annotated using selected RM (see Fig. 1). By design, LASER’s adaptive
+instance-level RM selection (c.f. Sec. 3) addresses the three shortcomings of choosing one reward
+model (lack of generalization, unreliable rankings, and over-optimization) and outperforms using
+the same RM across all instances, yielding higher downstream performance and better generalization. Moreover, unlike previous multi-RM methods that require simultaneously loading and running
+multiple RMs (Ram´e et al., 2024; Coste et al., 2023), our method selects one reward model at a time
+(Sec. 4). This makes the training more efficient and improves performance by allowing the model
+to adaptively focus on the most suitable RM for each specific instance or phase of training.
+
+
+Empirically, we demonstrate the effectiveness of LASER for iteratively training LLMs using multiple RMs on three broad domains: reasoning, instruction-following in text generation, and longcontext understanding (Sec. 4.2). We show that on reasoning benchmarks such as StrategyQA (Geva
+et al., 2021) (testing commonsense reasoning) and GSM8K (Cobbe et al., 2021) (testing math reasoning), LASER with Llama-3-8B improves absolute accuracy (averaged across 3 datasets) by
+1 _._ 45% over the best single RM and 2 _._ 67% over an ensemble of RM scores. With Mistral-7B,
+LASER outperforms RM agreement ensemble baseline by 1 _._ 65% in absolute accuracy. LASER
+is also effective on general instruction-following: we show that using LASER with four strong
+7B RMs from RewardBench to finetune Llama-3-8B on a subset of WildChat (Zhao et al., 2024)
+beats LLMs trained with the best RM in the RM score ensemble and a sequential baseline, with
+56 _._ 34% and 71 _._ 45% win rates (respectively) on length-controlled AlpacaEval (Dubois et al., 2024).
+LASER also beats the RM score ensemble, with 72 _._ 69% and 73 _._ 27% win rates using Llama-3-8B
+and Mistral-7B. Moreover, our results show the effectiveness of LASER’s RM selection strategy at
+inference-time on long-form generation tasks; on LongBench (Bai et al., 2022), we find LASER
+beats random RM selection baseline by 2 _._ 64 F1 points on single-document QA tasks and 2 _._ 42 F1
+points on multi-document QA when using best-of- _n_ sampling for Llama-3-8B. Our analysis reveals
+that LASER is more efficient than sequential multi-RM and RM ensemble baselines in terms of
+training time (wall-clock hours) by a factor of 3 _×_, and 2 _×_, respectively while being more robust
+to noisy rewards and conflicting preferences from multiple RMs (Sec. 5). Finally, we demonstrate
+that LASER effectively selects RMs based on the underlying instance and generalizes to multiple
+settings, including out-of-distribution datasets, different training loss functions, etc.
+
+
+2
+
+
+2 RELATED WORK
+
+
+**Multiple Reward Ensembles.** Training large language models (LLMs) with multiple reward functions is an emerging research area focused on aligning model outputs with complex objectives that
+require diverse evaluation metrics. One prior approach involves using ensembles of multiple rewards (Ram´e et al., 2024; Wu et al., 2024; Coste et al., 2023; Zhang et al., 2024; Wang et al., 2024b;
+Jang et al., 2023; Eisenstein et al., 2023). Unlike these methods, which train multiple RMs or use
+multiple RMs during LLM training, LASER selects only a single pretrained RM at each LLM training step. Not only is optimizing for one RM at a time more efficient, but it also avoids the problem
+of having conflicting rewards (Rita et al., 2024). In Sec. 4.2, we show that LASER outperforms
+multiple variants of optimizing LLMs with an ensemble of RMs aggregating scores (consistent with
+Coste et al. (2023)) and based on the agreement between preferences from different RMs (similar to
+Wang et al. (2024d)). Another line of work uses mixture-of-experts (MoE) techniques for training an
+RM from multiple interpretable objectives (Wang et al., 2024c) or jointly training task-specific RMs
+and a sparse MoE router (Quan, 2024). Instead of relying on static datasets with human-annotated
+attributes for RM training (as Wang et al. (2024c) does), we employ existing RMs to train LLMs on
+its own generations, a strategy that has been shown to be more effective (Ivison et al., 2024). Unlike
+Quan (2024), who jointly train multiple RMs and sparse MoE router (requiring loading all models
+at once), LASER implicitly and efficiently learns a sparse router and does not need to train RMs.
+LASER performs RM selection via multi-armed bandits over existing off-the-shelf RMs with strong
+performance on leaderboards (Lambert et al., 2024).
+
+
+**Iterative LLM Training.** Recent works on training LLMs incorporate reinforcement learning with
+human feedback (RLHF) due to its effectiveness in improving instruction following the ability of
+LLMs over their pretrained counterparts (Ouyang et al., 2022; Bai et al., 2022; Touvron et al., 2023).
+The standard RLHF training pipeline, which comprises finetuning the LLM on static datasets with
+human-annotated preferences, is bottlenecked by the size and quality of annotated preference data as
+well as the limited effectiveness of off-policy optimization (Xu et al., 2023; Xiong et al., 2024; Yuan
+et al., 2024b; Guo et al., 2024). To remedy this, recent work focuses on training LLMs iteratively,
+scoring the LLM’s generations to create feedback data for RLHF. This line of work obtains scores
+either from gold labels (Singh et al., 2023; Pang et al., 2024), from a single RM (Gulcehre et al.,
+2023), or from the generating LLM (Yuan et al., 2024b; Chen et al., 2024b). In contrast, we take
+advantage of the abundance of publicly-available RMs and growing interest in developing RMs
+(Lambert et al., 2024) by using _multiple_ RMs. This has several advantages over past work: it
+works in cases where gold labels are not available (e.g., generation tasks), deals with the three
+issues associated with using a single RM (unreliable rankings, lack of generalizability, and overoptimization), reduces the burden on the user to pick the right RM, and avoids problems stemming
+from the inability of LLMs to judge their own responses for certain domains (Huang et al., 2023).
+
+
+3 LASER: **L** EARNING TO **A** DAPTIVELY **SE** LECT **R** EWARDS
+
+
+In this section, we describe LASER in detail. First, we expand on the training pipeline (in one
+iteration) with a general reward function (Sec. 3.1). Then, in Sec. 3.2, we describe how LASER
+dynamically selects an RM from a set of multiple RMs using MAB algorithms, i.e., how we dynamically assign the reward function for a given instance or batch of instances. Finally, in Sec. 3.3, we
+describe the overall training setup across iterations and specifically how we update the parameters
+of the MAB at the end of each iteration. A detailed illustration of LASER is shown in Fig. 1.
+
+
+3.1 TRAINING LLMS USING A REWARD FUNCTION
+
+
+LASER involves training with multiple RMs using a multi-arm bandit (MAB), which selects one
+model at a time. Therefore, we first describe how we train LLMs with generated data assuming a
+single RM; this corresponds to the top-right in Fig. 1 (in blue).
+
+
+**Notation.** Following Yuan et al. (2024b) and Pang et al. (2024), we adopt an iterative training
+pipeline to finetune the LLM for _M_ iterations. Let _πm_ be the LLM at iteration _m_ ; we assume
+that we start from an initial pretrained model _π_ 0. Let _D_ = _{x_ 1 _, x_ 2 _, . . ., xN_ _}_ represent the training
+inputs, where _xi_ is an input query or prompt. Corresponding to each input query _xi_, we sample a
+
+
+3
+
+
+where _πm_, and _πm−_ 1 denotes the LLM in the current iteration _m_ and the previous iteration _m −_ 1
+(used as the reference model in DPO loss). Following Yuan et al. (2024b), we use the standard DPO
+loss for instruction-finetuning. Following Pang et al. (2024), we use the NLL loss on the preferred
+responses as an additional regularizer for reasoning tasks, i.e., _L_ _[m]_ = _L_ _[m]_ DPO [+] _[ L][m]_ NLL [.] [In Appendix][ C][,]
+we show that LASER outperforms baselines irrespective of the choice of the loss function _L_ _[m]_ .
+
+
+3.2 BANDIT ALGORITHMS FOR ADAPTIVE RM SELECTION
+
+
+Sec. 3.1 described the data creation and LLM training procedure for our method when using a general RM (Fig. 1; top-right), which trains the LLM for a single mini-batch. Here, we describe the process by which we adaptively _select an RM for each batch of queries_ using bandit algorithms (shown
+in Fig. 1-left, in yellow) and update the parameters of the bandit (more details in Appendix A.2).
+
+
+1Following Pang et al. (2024), we randomly sample _P_ = 10 pairs corresponding to each prompt _xi_ . For
+brevity, we omit this in the notation of _D_ pref ; but in our setting _|D_ pref _|_ = _P_ _× |D|_ .
+
+
+4
+
+
+Figure 1: Overview of LASER. Given the query, the multi-armed bandit selects an RM depending on
+the underlying query and the bandit’s parameters (based on the usage of each RM and the expected
+MAB reward). At iteration _m_, the LLM generates multiple responses that are scored based on the
+selected RM for that query scoring each response. These responses are ranked into preference pairs,
+which are then used to fine-tune the model. The same train loss _L_ _[m]_ is used to update the parameters
+of the LLM as well as the MAB for the next iteration, making the entire pipeline iterative.
+
+
+set of _n_ responses from the LLM at the current _m_ [th] iteration as **y** _i_ = _{yi_ [1] _[, y]_ _i_ [2] _[, . . ., y]_ _i_ _[n][} ∼]_ _[π][m]_ [(] _[y][|][x][i]_ [)][.]
+Let _R_ _[⋆]_ :( _yi_ _[j][|][x][i]_ [)] _[ →]_ [R][ be a reward function that can score an LLM generated response] _[ y]_ _i_ _[j]_ [to a query]
+_xi_ based on how well it aligns with specific task objectives or instructions. Note that _R_ _[⋆]_ ( _._ ) can be
+any reward function and may correspond to a single RM, one of the multiple RMs selected by the
+MAB (as in our case), or even the true reward.
+
+
+**Generating Preference Pairs.** We evaluate each response _yi_ _[j]_ [using the reward function] _[ R][⋆]_ [(] _[y]_ _i_ _[j][|][x][i]_ [)][.]
+By comparing the rewards assigned to different responses, we can form _P_ preference pairs ( _yi_ _[w][, y]_ _i_ _[l]_ [)][,]
+where _yi_ _[w]_ [is preferred over] _[ y]_ _i_ _[l]_ [if] _[ R][⋆]_ [(] _[y]_ _i_ _[w][|][x][i]_ [)] _[ > R][⋆]_ [(] _[y]_ _i_ _[l][|][x][i]_ [)][, thereby building a preference dataset:][1]
+
+
+_D_ pref = _{_ ( _xi, yi_ _[w][, y]_ _i_ _[l]_ [)] _[ |][ x][i]_ _[∈D][, R][⋆]_ [(] _[y]_ _i_ _[w]_ [)] _[ > R][⋆]_ [(] _[y]_ _i_ _[l]_ [)] _[.]_
+
+
+**Training** **Loss** **Function** **(** _**L**_ _**[m]**_ **).** In each iteration, we fine-tune the model using the generated
+preference dataset _D_ pref, resulting in _M_ models _π_ 1 _, π_ 2 _, . . ., πM_ . Specifically, we update the model
+using the DPO loss (Rafailov et al., 2024b) for learning from the preference pairs. In this work, we
+use the following loss functions for training the LLM at iteration _m_ :
+
+
+_L_ _[m]_ DPO [(] _[π][m]_ [)=] _[−]_ [E] ( _xi,yi_ _[w][,y]_ _i_ _[l]_ [)] _[∼D]_ [pref]
+
+
+- - _πm_ ( _yi_ _[w]_ _[|]_ _[x][i]_ [)] _πm_ ( _yi_ _[l]_ _[|]_ _[x][i]_ [)]
+log _σ_ _β_ log
+_πm−_ 1( _yi_ _[w]_ _[|][ x][i]_ [)] _[−]_ _[β]_ [ log] _πm−_ 1( _yi_ _[l]_ _[|][ x][i]_ [)]
+
+
+��
+
+
+(1)
+
+_,_
+
+
+_L_ _[m]_ NLL [(] _[π][m]_ [)=] _[−]_ [E] ( _xi,yi_ _[w]_ [)] _[∼D]_ [pref]
+
+
+- log _πm_ ( _yiw_ _[|]_ _[x][i]_ [)]
+_|yi_ _[w][|]_
+
+
+**Background:** **Multi-Armed** **Bandits.** The multi-armed bandit (MAB) problem addresses the
+challenge of balancing exploration and exploitation in sequential decision-making (Vermorel &
+Mohri, 2005; Audibert et al., 2009). The goal is to maximize cumulative MAB rewards over time
+by selecting arms that yield the highest MAB rewards. [2] A decision-making agent faces a trade-off:
+whether to exploit the arm with the highest known MAB reward based on past observations or explore other, less familiar arms to gather more information that might lead to even better rewards in
+the future. In a contextual MAB setting, the agent is also provided with additional information in the
+form of a context, such as current state and input, to help inform arm selection accordingly. LASER
+uses MABs to dynamically identify the most suitable RM for each query _xi_ through exploration
+while simultaneously training the LLM. Pulling a previously un(der)-explored arm allows the MAB
+to update its information about the relevance and quality of preference pairs built using that RM via
+the MAB reward (discussed below).
+
+
+**RM selection in LASER.** LASER uses mini-batch training for each iteration, i.e., we use MABs
+to select a _single_ _RM_ _for_ _a_ _batch_ _of_ _prompts_ **x** _m,t_ for _t_ [th] batch or training step of iteration _m_ (total of _T_ steps/batches in each iteration). [3] Let the set of _K_ reward models (or arms) denoted by
+_R_ = _{R_ 1 _, R_ 2 _, . . ., RK}_, where each _Rk_ corresponds to a different RM. We employ **LinUCB** (Li
+et al., 2010), a contextual bandit algorithm for the arm or RM selection. We choose LinUCB because it is a contextual bandit algorithm (i.e., it takes into account the context information), is easy
+to incorporate into our framework, and provides a good trade-off between computational efficiency
+and performance. Li et al. (2010) assume that the MAB reward – in our case, the cumulative train
+loss function on the batch ( _L_ _[m]_ ) at the given iteration _m_ - can be modeled linearly as a function
+of context features and computes the expected MAB reward of each arm with an upper confidence
+bound to ensure exploration (Garivier & Moulines, 2008; 2011). In each step _t_, we have a batch of
+input prompts **x** _m,t_ for which we compute sentence embeddings, using the policy model _πm_, and use
+the mean sentence embedding as the context _c_ ( _t_ ) to the MAB, i.e., _c_ ( _t_ ) = [�] _x∈_ **x** _m,t_ _[e][m]_ [(] _[x]_ [)] _[/][|]_ **[x]** _[m,t][|]_ [,]
+
+where _em_ ( _._ ) _∈_ R _[d]_ yields the sentence embedding from the model _πm_ . We calculate the embedding
+for a prompt as the last token embedding from model _πm_ (details in Appendix A.1). The learned
+parameters of the LinUCB bandit include _θ_ [ˆ] _k_ _∈_ R _[d]_ which represents the learned weights for the
+features of each reward model and _Ak_ _∈_ R _[d][×][d]_ (a covariance matrix) and a bias vector _bk_ _∈_ R _[d]_
+corresponding to each arm or RM _Rk_ . We initialize the parameters for LinUCB by randomly initializing _bk_ and setting parameter _Ak_ to the identity matrix. Based on the LinUCB algorithm, for each
+batch, the selected RM _Rt_ _[⋆]_ [is determined by:]
+
+
+where _θ_ [ˆ] _k_ = _A_ _[−]_ _k_ [1] _[b][k]_ [.] _[A][k]_ [and] _[ b][k]_ [are updated based on the MAB reward for each RM, which corre-]
+sponds to the normalized negative train loss _−L_ [ˆ] _[m]_ (described in detail in Appendix A.2):
+
+
+_Ak_ _←_ _Ak_ + _c_ ( _t_ ) _c_ ( _t_ ) _[⊤]_ ; _bk_ _←_ _bk −_ _L_ [ˆ] _[m]_ ( _t_ ) _c_ ( _t_ ) _._ (3)
+
+
+3.3 LLM AND BANDIT TRAINING IN LASER
+
+
+A key aspect of our approach is the generation of new preference training data in each iteration using
+the generations of the LLM itself and the RM selected by the MAB. Fig. 1 presents our training
+procedure, broken down into three stages: (i) the MAB selects an RM _Rt_ _[⋆]_ [(see] [Sec.] [3.2][;] [Fig.] [1]
+left), generating preference pairs by scoring the LLM’s outputs using the RM (Fig. 1 (top-right)),
+and parameter updates to the LLM and MAB. In this way, the model continuously learns from
+its own outputs, guided by the selected reward model. After each LLM train step (i.e., one minibatch), the MAB’s parameters are updated based on the observed MAB reward, i.e., how much the
+LLM’s loss decreased from using the selected RM. In the case of LinUCB, this involves updating the
+parameter estimates _bk, Ak_ (see Fig. 1; bottom in green). This entire process – selection of reward
+
+
+2In order to distinguish between rewards or scores generated by RMs and the rewards used in MAB literature, we refer to the latter as “MAB rewards”.
+3Note that LASER can switch between RMs at the instance level if the batch size is set to 1; however,
+for the sake of efficiency, we batch instances together both for LASER and the baselines, as this reduces the
+computational overhead associated with loading RMs onto the GPU.
+
+
+5
+
+
+_Rt_ _[⋆]_ [=] _[ R][j]_ [, such that] _[ j]_ [=][ arg] [max]
+_k∈_ [1 _,K_ ]
+
+
+- - _c_ ( _t_ ) _[⊤]_ _θ_ [ˆ] _k_ + _α_ _c_ ( _t_ ) _[⊤]_ _A_ _[−]_ _k_ [1] _[c]_ [(] _[t]_ [)] _,_ (2)
+
+
+models, generation of new supervision data, fine-tuning, and bandit updates – repeats for a total of
+_M_ iterations (summarized in Algorithm 1).
+
+
+**LASER** **with** **Best-of-** _**n**_ **Sampling.** For settings where finetuning the LLM is not desirable or
+feasible, LASER can also be applied to learn the MAB parameters without training the LLM. Rather
+than fine-tuning the model with preference data, we employ best-of- _n_ sampling (Lightman et al.,
+2023; Sun et al., 2024), where multiple responses are generated, and the best one is selected based on
+the RM. The bandit parameters are then updated using equation (3), with the MAB reward calculated
+as the negative normalized NLL loss on the train data. This updated bandit can subsequently be
+used for inference on the test set. This approach is particularly useful for tasks such as long-context
+understanding, where training would be too computationally intensive (example setting in Sec. 4.2).
+
+
+4 EXPERIMENTS AND RESULTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Models.** We conduct our experiments on the Llama-3-8B base (AI@Meta, 2024) and the Mistral7b-v3-instruct (Jiang et al., 2023) models. For training, all models are fine-tuned using Low-Rank
+Adaptation (LoRA) (Hu et al., 2021) for efficiency. For both training and inference, we do 0-shot
+prompting and sampling _n_ =30 responses per prompt with temperature 0 _._ 8 (see Appendix A.1).
+
+
+**Reward** **models.** We select _K_ = 4 strong 7B RMs from RewardBench (Lambert et al., 2024),
+which include Zephyr-7B-Alpha, Qwen1.5-7B-Chat, Eurus-7B-KTO, and OLMo-7B-Instruct. Following the pipeline outlined in Lambert et al. (2024), for these models, we compute the reward for
+each response as the log likelihood of the RM for that response (details in Appendix A.1).
+
+
+**Datasets and Metrics.** Our experiments cover a range of tasks and datasets (see Appendix A.1):
+
+
+- **Reasoning:** Evaluating reasoning abilities is crucial for testing the model’s capacity to handle
+complex, multi-step tasks and has presented a challenge to iterative preference optimization methods (Yuan et al., 2024b; Chen et al., 2024b). We train and evaluate on StrategyQA (Geva et al.,
+2021), MMLU (Hendrycks et al., 2021b;a), and GSM8K (Cobbe et al., 2021).
+
+- **Instruction-Following:** We further evaluate our method on heterogeneous tasks without gold
+labels. We use user prompts from WildChat dataset (Zhao et al., 2024), which contains a collection of natural user-chatbot interactions. This dataset has five primary categories of instructionfollowing prompts: creative writing, analysis, coding, factual information, and math reasoning.
+Due to computational constraints, we randomly subsample 5K prompts from each category for
+model training. We compare models trained with LASER against baselines (described below)
+using length-controlled AlpacaEval (Dubois et al., 2024) that pairs responses from two different
+LLMs and uses GPT-4 as a judge to pick the winner, accounting for the length of both responses.
+
+- **Long-Context** **Understanding:** As finetuning LLMs on long-context inputs is computationally intensive, we demonstrate the effectiveness of LASER using Best-of- _n_ sampling on LongBench (Bai et al., 2023) which consists of multiple tasks, such as single-document QA, multidocument QA, summarization, and few-shot learning. For the QA and few-shot learning tasks, we
+measure performance with F1 score, while for summarization we use Rouge-L (Lin, 2004).
+
+
+**Baselines.** We compare our models against the following baselines:
+
+
+- **Best RM** : From our collection of RMs, we pick the RM that corresponds to the best overall score
+on RewardBench (Lambert et al., 2024): Zephyr-7B-Alpha. We use this _single_ RM during training
+(c.f. Sec. 3.1). This baseline reflects the performance gain a user could expect when selecting the
+best RM from a leaderboard without knowing _a priori_ how it generalizes to a particular domain.
+
+- **Avg.** **RM** : Here, we perform single RM training over all the RMs in our collection and report
+the average performance. A comparison with this baseline represents an expected gain from a
+randomly-picked RM from a leaderboard.
+
+- **Random** **RM** **Selection:** In this baseline, we randomly sample a single RM from the set of
+RMs (from a uniform distribution) for each training batch in every iteration. This comparison
+demonstrates whether, without prior knowledge of which RM is best suited for a downstream
+task, LASER can outperform random sampling of RMs during training.
+
+
+6
+
+
+Table 1: Performance on reasoning benchmarks. The baselines also include supervised fine-tuning
+on human-written responses (SFT) as a reference for performance without preference optimization.
+The highest accuracy is shown in bold, and the second-highest accuracy is underlined. Across both
+Llama-3-8B and Mistral-7B models, LASER yields the highest accuracy for each task.
+
+
+**Llama-3-8B** **Mistral-7B**
+**Method**
+
+StrategyQA GSM8K MMLU Avg. StrategyQA GSM8K MMLU Avg.
+
+
+SFT 80.41 69.43 65.66 71.83 68.57 43.62 56.48 56.22
+Best RM 84.29 73.16 67.15 74.87 70.06 45.81 62.04 59.30
+Avg. RM 82.62 71.57 66.67 73.62 69.62 45.47 59.58 58.22
+Random RM Selection 84.37 71.99 67.85 74.74 69.97 45.12 59.88 58.32
+Sequential RM Selection 83.90 72.94 68.02 74.95 70.59 46.11 59.66 58.79
+Classifier Selection 83.13 72.73 67.96 74.60 70.31 45.28 60.35 58.65
+RM Score Ensemble 82.96 70.94 67.04 73.65 68.89 44.53 58.23 57.22
+RM Agreement Ensemble 84.03 73.85 **68.35** 75.41 70.26 45.92 61.09 59.09
+LASER (Ours) **85.96** **74.75** 68.24 **76.32** **73.06** **46.89** **62.27** **60.74**
+
+
+- **Sequential RM Selection** : In training, this method explores different RM sequentially and based
+on a set order in each iteration to examine their impact on model training, demonstrating that,
+instead of optimizing with all RMs, LASER can adaptively select the best RM for each batch.
+
+- **RM Score Ensemble:** We generate multiple responses for each query, which are scored (offline)
+using each RM, and the preference dataset is created by averaging the scores across all RMs
+(following Coste et al. (2023)); thus, comparing LASER with using all RMs simultaneously.
+
+- **RM** **Agreement** **Ensemble:** Because ensembling scores through averaging is sensitive to the
+absolute scores produced (which may differ between RMs), we follow Wang et al. (2024d) in ensembling through ranking and agreement. Specifically, we generate 32 responses for each query
+and sample 100 pairs from each set of 32. We score each pair with each RM, constructing a preference dataset by choosing the 10 pairs for each query with the highest agreement of preference
+rankings across RMs.
+
+- **Classifier** **Selection:** To measure compare against a context-sensitive baseline that does not use
+a MAB, we train a _K_ -way classifier to perform RM selection using data from RewardBench (see
+Appendix A.1). Specifically, for each query and RM, we compute the RM’s score of the annotated
+preferred and disprefered response. The RM that assigns the correct preference ordering with the
+highest difference between the scores of the preferred and dispreferred responses is chosen as the
+_RM label_ and used to train the classifier. While training the LLM, for each training input _xi_ _∈D_,
+we select the RM for building preference pairs based on this trained classifier.
+
+
+Conceptually, the best RM baseline serves as an “exploit-only” setting that exploits the best available RM based on aggregate RewardBench scores. On the other hand, the random and sequential
+selection baselines are “explore-only” in that they pick a new RM either randomly or via a predefined sequence irrespective of the performance of each arm (RM). We train models for each baseline
+to convergence. In particular, LASER, “Best RM”, “Avg. RM”, and RM ensemble baselines were
+trained for 10 iterations. For both the sequential and random RM selection, we found LLM training
+took longer to converge, and consequently, the model was trained for 25 iterations. The number of
+iterations for each approach was chosen based on performance on the dev set (see Appendix A.1).
+
+
+4.2 MAIN RESULTS
+
+
+**LASER achieves the best average accuracy on reasoning tasks.** Table 1 shows our method consistently outperforms the baselines across multiple benchmarks, particularly in the StrategyQA and
+GSM8K tasks. For example, using the Llama-3-8B model, LASER yields the highest reasoning
+accuracy average across all tasks, with improvements of approximately 2% absolute accuracy over
+the sequential baseline on both GSM8K and StrategyQA. On the Mistral-7B model, LASER also
+improves average accuracy by roughly 2% over the sequential baseline. Additionally, our method
+outperforms the best RM (based on RewardBench) baseline in average accuracy by 1 _._ 45% and
+1 _._ 44% absolute accuracy with Llama-3-8B and Mistral-7B, respectively. In cases where the best
+RM is not known beforehand, LASER surpasses the performance of the average RM by 2 _._ 7% on
+Llama-3-8B and using the RM Score Ensemble for each instance by 2 _._ 67% and 3 _._ 52% on Llama
+
+7
+
+
+Figure 2: Length-controlled AlpacaEval win rates comparing LASER against baselines on the
+instruction-following tasks on WildChat using Llama-3-8B and Mistral-7B.
+
+
+Table 2: LASER outperforms baselines in long-context understanding tasks with Llama-3-8B and
+Mistral-7B. Sequential RM selection is not applicable in this setting as only inference is conducted.
+For QA and few-shot learning tasks, we report F1 scores, and for summarization, we report Rouge-L.
+
+
+**Single-Doc QA** **Multi-Doc QA** **Summarization** **Few-shot Learning**
+**Method**
+
+Llama-3 Mistral Llama-3 Mistral Llama-3 Mistral Llama-3 Mistral
+
+
+Base model 33.89 26.01 32.96 24.06 29.54 26.47 70.23 64.93
+Best RM 35.12 28.93 35.83 **27.93** **34.26** **30.42** 71.79 68.34
+Random RM Selection 34.83 27.44 35.19 25.38 31.57 27.19 70.91 66.72
+RM Score Ensemble 34.51 26.75 35.52 25.71 32.38 28.17 70.34 66.97
+LASER (Ours) **37.47** **29.14** **36.94** 27.80 34.13 30.08 **73.31** **68.47**
+
+
+3-8B and Mistral-7B, respectively (in accuracy averaged over the three tasks). Moreover, this lower
+performance by the RM Score baseline is not purely due to variance in the scores: LASER also
+surpasses the RM Agreement Ensemble by 0 _._ 91% and 1 _._ 65% on Llama-3-8B and Mistral-7B. Additionally, compared to using a frozen classifier for RM selection, training with LASER improves
+average reasoning performance by 1 _._ 72% for Llama-3-8B and by 2 _._ 09% for Mistral-7B. Overall,
+LASER provides _consistent_ results while the underlined second-place models show _inconsistent_
+performance across datasets and models. These results also emphasize the benefit of LASER, as it
+eliminates the need to choose a different RM in advance or ensemble multiple RMs.
+
+
+**LASER** **beats** **baselines** **at** **instruction-following.** Often, LLMs are used by large numbers of
+people with a diverse set of queries, goals, and intentions, and their preferences vary based on
+the underlying query. To demonstrate the effectiveness of LASER in such settings, we compare
+the instruction-following performance in Fig. 2, i.e., AlpacaEval win rates, of LLMs trained using LASER with the baselines using WildChat. Specifically, with Llama-3-8B, LASER achieves
+substantial win rates compared to the random and sequential baselines, with 78 _._ 33%, and 71 _._ 45%,
+respectively. We also outperform training with the single best RM (per RewardBench) by a 56 _._ 34%
+win rate. We hypothesize the lower win rate of the baselines stems from the inability of these
+baselines to deal with conflicting signals from multiple RMs (see Fig. 5 for further analysis). The
+results are also applicable to the Mistral-7B model, which achieved a win rate of 58 _._ 72% against the
+best-RM baseline and a win rate of 63 _._ 72% against the sequential selection baseline. Lastly, across
+models, LASER outperforms classifier-based RM selection (by a win rate of at least 60 _._ 37%) and
+both Score and Agreement-based variants of RM ensembling by a win rate of at least 72 _._ 69% and
+52 _._ 64%, respectively. Overall, these results highlight that LASER excels in tasks without gold labels and performs consistently well at following instructions across various user queries, showcasing
+its adaptability to diverse tasks.
+
+
+**LASER’s** **adaptive** **RM** **selection** **helps** **long-context** **understanding.** Given the cost of training long-context systems, for LongBench (Bai et al., 2023), rather than finetuning a model using
+RMs, we employ the selected RM to rerank generation in Best-of- _n_ sampling (see Sec. 3.3). In
+Table 2, we observe that LASER consistently outperforms the baselines across tasks on Llama-38B and Mistral-7B except on summarization, where we achieve comparable performance. LASER
+improves single-doc QA by 3 _._ 58 F1 points over the base Llama-3-8B model and 2 _._ 64 F1 points over
+random RM selection. On multi-doc QA, our approach improves performance over the Llama-3-8B
+and Mistral-7B models by _≈_ 4 F1 points each, beating out random RM selection by 2 _._ 42 F1 points
+on Mistral-7B. Furthermore, on few-shot learning tasks, LASER provides over 3 points gain in F1
+
+
+8
+
+
+LASeR Wins Baseline Wins
+
+
+56.34% 43.66%
+Llama-3-8B LASeR vs. Best RM
+
+
+52.64% 47.36%
+
+
+78.33% 21.67%
+
+
+69.52% 30.48%
+
+
+LASeR vs. Seq. RM Selection
+
+72.69% 27.31%
+
+LASeR vs. RM Score Ensemble
+
+63.72% 36.28%
+
+LASeR vs. Seq. RM Selection
+
+73.27% 26.73%
+
+LASeR vs. RM Score Ensemble
+
+
+71.45% 29.55%
+
+LASeR vs. Seq. RM Selection
+
+72.69% 27.31%
+
+
+LASeR vs. Classifier Selection
+
+
+63.72% 36.28%
+
+
+58.72% 41.28%
+Mistral-7B LASeR vs. Best RM
+
+
+70.61% 29.39%
+
+
+60.37% 39.63%
+
+
+LASeR vs. Random RM Selection
+
+52.64% 47.36%
+
+LASeR vs. RM Agree. Ensemble
+
+70.61% 29.39%
+
+LASeR vs. Random RM Selection
+
+63.77% 36.23%
+
+LASeR vs. RM Agree. Ensemble
+
+
+63.77% 36.23%
+
+
+LASeR vs. Classifier Selection
+
+
+73.27% 26.73%
+
+
+compared to the base model for both Llama-3-8B and Mistral-7B, surpassing the average RM performance by up to 2 _._ 4 F1 points (on Llama-3-8B) and demonstrating its effectiveness across tasks.
+Lastly, Table 2 demonstrates that LASER consistently outperforms the RM Score Ensemble baseline across different long-context tasks and LLMs, e.g. a _≈_ 3 F1 point improvement on single-doc
+QA and few-shot learning tasks with the Llama-3-8B model.
+
+
+5 ADDITIONAL ANALYSIS OF LASER
+
+
+4Wall clock time is measured as the training time of a model (hours), keeping compute resource consistent.
+
+
+9
+
+
+**Robustness** **to** **Noisy** **Rewards.**
+To examine the robustness of our method in the
+
+76
+
+presence of noisy or irrelevant rewards, we conduct the following analysis using Llama-3-8B
+on GSM8K. We add varying amounts of Gaus- 74
+sian noise _σ_ to the rewards generated by RMs
+sampled from the distribution _N_ (0 _, σI_ ), where 72
+
+wards when using RMs in out-of-distribution Gaussian noise ( )
+settings. In addition to LASER using the LinUCB algorithm (c.f. Sec. 3.2), we also use Figure 3: Impact of the magnitude of Gaussian
+Exp3 (Auer et al., 2002) designed for adversar- noise on the accuracy of LASER and sequential
+ial bandit settings. In Fig. 3, we find that even baseline on RewardBench.
+as the degree of noise in RM scores increases (from _σ_ = 0.1 to 0.4), LASER’s selection strategy
+continues to perform robustly, mitigating the effects of noise compared to the sequential baseline.
+Specifically, LASER has an average performance drop of only 0 _._ 55% accuracy at a noise level of
+_σ_ = 0 _._ 3, whereas the sequential baseline suffers a 1 _._ 6% accuracy drop (3 times as much) under
+the same conditions. Furthermore, LASER using Exp3, the most noise-robust method, maintains
+consistent performance, with only a 0 _._ 26% accuracy drop.
+
+
+76
+
+
+76
+
+
+74
+
+
+72
+
+
+Gaussian noise ( )
+
+
+Figure 3: Impact of the magnitude of Gaussian
+noise on the accuracy of LASER and sequential
+baseline on RewardBench.
+
+
+**Training Efficiency of LASER.** As we noted in Sec. 4.1,
+standard multi-reward baselines such as sequential and
+random RM selection are slow to converge. We now
+concretely show the accuracy-training time tradeoff in
+Fig. 4 by comparing the GSM8K performance of training with LASER and different baselines, along with the
+corresponding wall clock training time. [4] We find that sequentially optimizing over each RM performs the worst
+in terms of training time (3 _×_ of LASER) while RM score
+ensemble has the worst accuracy (and takes 2 _×_ the training time of LASER). Moreover, LASER outperforms all
+baselines in terms of accuracy while maintaining the lowest training time, being more than twice as fast as the
+second-best baseline, RM Agreement Ensemble.
+
+
+76
+
+
+74
+
+
+72
+
+
+70
+
+
+Wall-clock time (hours)
+
+
+Figure 4: Training efficiency of LASER
+vs. different baselines on GSM8K.
+
+
+**Presence** **of** **Conflicting** **Signals** **among** **RMs.**
+
+outperforms other multi-reward baselines across
+
+these performance gains to the inability of the
+
+nals, resulting in subpar training data from mul
+well as WildChat and evaluate the consistency
+of response preferences measured by multiple Figure 5: Agreement in preference rankings of
+RMs. Since pair-wise preferences are binary, Llama-3-8B responses between RMs on MMLU
+we compute F1 to measure consistency with one (left) and WildChat (right).
+RM’s preferences serving as the reference. Fig. 5 (left on MMLU) reveals that Qwen and Zephyr
+
+
+Figure 5: Agreement in preference rankings of
+Llama-3-8B responses between RMs on MMLU
+(left) and WildChat (right).
+
+
+have the highest agreement rate at 0 _._ 77, while Qwen’s agreement with Eurus and Olmo is lower at
+0 _._ 58 and 0 _._ 43, respectively. Zephyr also shows low agreement with Olmo at 0 _._ 57. This is expected
+as Qwen and Zephyr are the top-performing models in reasoning according to RewardBench, while
+Olmo ranks the lowest in reasoning ability among the four models. We observe similar trends in
+agreement across RMs on WildChat (albeit with different agreement scores), which contains user
+queries asked LLMs in the wild; see Fig. 5 (right). It appears that for more heterogeneous datasets
+with more categories, the level of disagreement among RMs (or conflict) increases. This also highlights LASER’s advantages over multi-RM baselines that do not address conflicts in RMs and may
+explain why choosing one RM in LASER and best RM baseline outperforms multi-RM ensembles.
+
+
+**LASER’s** **selected** **RM** **adjusts** **to** **the** **Query.** Fig. 6 shows the relative utilization rates of each arm (i.e., RM) of the bandit on WildChat.
+
+
+We observed vastly different RM utilization
+
+Olmo Eurus Qwen Zephyr
+
+rates depending on the underlying query within
+the _same dataset_ . We observe a similar trend in
+LASER’s RM selection on LongBench in Ap- 40
+pendix B (refer to Fig. 7). On queries requiring
+creativity in LLM responses, we find that Olmo
+
+20
+
+and Eurus RMs are utilized about 20% more often than Qwen RM, despite Qwen RM being
+
+explained by the fact that the Qwen RM largely
+underperforms on the “chat” subsplit of Re- Figure 6: Utilization (%) of each RM on
+wardBench (behind Olmo and Eurus by nearly instruction-following queries from WildChat. The
+40 points in chat score). On the other hand, bars are arranged based on their overall scores on
+Qwen RM is used roughly half the time for user RewardBench, from lowest to highest. LASER
+prompts involving math, while Olmo and Eu- dynamically selects from different RMs dependrus are used sparingly. This is consistent with ing on the nature of the underlying instance.
+Qwen RM’s ranking on the “reasoning” split of
+RewardBench, outperforming Eurus and Olmo RMs by 15-20 points. Note that LASER _automat-_
+_ically_ deduces these relative rankings of RMs and uses them depending on the underlying query
+_without having access to the RewardBench leaderboard_ . Therefore, RM utilization of LASER can
+serve as an analysis tool for future work when assessing performance on untested domains.
+
+
+**Generalization** **ability** **of** **LASER.** While recent work focuses on building RMs that reflect preferences across domains, a large body of prior work developed a suite of evaluation metrics catered
+to specific domains such as reasoning (Golovneva et al., 2022; Prasad et al., 2023). In Table 5 (Appendix C), we show that Llama-3-8B trained using LASER, to adaptively select relevant evaluation
+metrics, outperforms baselines by 1 _._ 62% on average and can effectively filter underperforming metrics without degrading performance (c.f. Fig. 8). Furthermore, from Table 6, we observe that on
+reasoning datasets LASER outperforms sequential RM optimization under four different choices of
+loss functions: NLL, DPO (Rafailov et al., 2024b), DPO + NLL (Pang et al., 2024), and KTO (Ethayarajh et al., 2024). Finally, in Table 7, we find that models trained with LASER also exhibit the
+highest generalization to out-of-distribution settings such as on CommonsenseQA (Talmor et al.,
+2018) and MATH (Hendrycks et al., 2021c), reiterating the broad generalizability of LASER.
+
+
+6 CONCLUSION
+
+
+We present LASER, an adaptive method for selecting RMs and iteratively training LLMs using multiple RMs. We formulate the problem as a contextual multi-armed bandit problem, learning to select
+the RM that most improves the LLM conditioned on the given input or query. We test LASER across
+diverse settings, showing its utility on reasoning tasks, instruction-following tasks, and long-context
+generation. Across domains, we show that LASER _consistently_ results in superior performance,
+whereas multi-RM baselines that select RMs using random or fixed strategies or ensemble multiple
+RMs uniformly have lower and more variable performance. In our analysis, we show that LASER
+is robust to noisy RMs, and flexibly uses different RMs depending on the domain, and generalizes to
+multiple settings. Lastly, by selecting one RM at a time, LASER provides the best of both worlds:
+consistently outperforming all baselines while still maintaining efficiency by only optimizing for
+one model at a time.
+
+
+10
+
+
+Olmo Eurus Qwen Zephyr
+
+
+40
+
+
+20
+
+
+0
+
+
+Figure 6: Utilization (%) of each RM on
+instruction-following queries from WildChat. The
+bars are arranged based on their overall scores on
+RewardBench, from lowest to highest. LASER
+dynamically selects from different RMs depending on the nature of the underlying instance.
+
+
+ETHICS STATEMENT
+
+
+LLMs have been shown to reflect stereotypes, biases, and other negative traits contained in their pretraining data (Weidinger et al., 2021). Consequently, finetuned LLMs (including those trained with
+LASER) may also exhibit such undesirable traits in their generations during inference or training
+and exhibit the same potential for misuse as any other finetuned model. While prior work have made
+some headway in detecting such harmful content generated by LLMs (Inan et al., 2023), considerable research effort is needed in mitigating bias in LLMs. Conceptually, classifiers that detect risky,
+harmful, or biased content in the text can also be used as an additional RM in LASER’s training to
+reinforce avoiding bias via preference optimization. However, we do not study this in our work and
+leave it to future work to explore these directions.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We provide comprehensive descriptions of our experimental setup, including the datasets, models,
+hyperparameters in Appendix A.1 and prompts for each dataset in Appendix E used across all experiments. [The code for training and evaluation is included in https://anonymous.4open.](https://anonymous.4open.science/r/LASeR-5454/)
+[science/r/LASeR-5454/. Furthermore, all pre-trained RMs and datasets used in this work are](https://anonymous.4open.science/r/LASeR-5454/)
+publicly available (link: [MMLU,](https://github.com/TIGER-AI-Lab/MAmmoTH/blob/main/math_eval/dataset/mmlu/mathematics.json) [MATH,](https://github.com/hendrycks/math) [GSM8K,](https://huggingface.co/datasets/gsm8k) [StrategyQA,](https://huggingface.co/datasets/voidful/StrategyQA) [CommonsenseQA,](https://huggingface.co/datasets/tau/commonsense_qa) [WildChat,](https://wildchat.allen.ai/)
+[LongBench).](https://github.com/THUDM/LongBench)
+
+
+REFERENCES
+
+
+Arash Ahmadian, Beyza Ermis, Seraphina Goldfarb-Tarrant, Julia Kreutzer, Marzieh Fadaee, Sara
+Hooker, et al. The multilingual alignment prism: Aligning global and local preferences to reduce
+harm. _arXiv preprint arXiv:2406.18682_, 2024.
+
+
+AI@Meta. Llama 3 model card. 2024. URL [https://github.com/meta-llama/](https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md)
+[llama3/blob/main/MODEL_CARD.md.](https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md)
+
+
+Jean-Yves Audibert, R´emi Munos, and Csaba Szepesv´ari. Exploration–exploitation tradeoff using
+variance estimates in multi-armed bandits. _Theoretical_ _Computer_ _Science_, 410(19):1876–1902,
+2009.
+
+
+Peter Auer, Nicolo Cesa-Bianchi, Yoav Freund, and Robert E Schapire. The nonstochastic multiarmed bandit problem. _SIAM journal on computing_, 32(1):48–77, 2002.
+
+
+Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn
+Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless
+assistant with reinforcement learning from human feedback. _arXiv_ _preprint_ _arXiv:2204.05862_,
+2022.
+
+
+Yushi Bai, Xin Lv, Jiajie Zhang, Hongchang Lyu, Jiankai Tang, Zhidian Huang, Zhengxiao Du,
+Xiao Liu, Aohan Zeng, Lei Hou, Yuxiao Dong, Jie Tang, and Juanzi Li. Longbench: A bilingual,
+multitask benchmark for long context understanding. _arXiv preprint arXiv:2308.14508_, 2023.
+
+
+Hritik Bansal, John Dang, and Aditya Grover. Peering through preferences: Unraveling feedback
+acquisition for aligning large language models. In _The Twelfth International Conference on Learn-_
+_ing Representations_, 2024.
+
+
+Stephen Casper, Xander Davies, Claudia Shi, Thomas Krendl Gilbert, J´er´emy Scheurer, Javier
+Rando, Rachel Freedman, Tomasz Korbak, David Lindner, Pedro Freire, et al. Open problems
+and fundamental limitations of reinforcement learning from human feedback. _arXiv_ _preprint_
+_arXiv:2307.15217_, 2023.
+
+
+Lichang Chen, Chen Zhu, Davit Soselia, Jiuhai Chen, Tianyi Zhou, Tom Goldstein, Heng Huang,
+Mohammad Shoeybi, and Bryan Catanzaro. Odin: Disentangled reward mitigates hacking in rlhf.
+_arXiv preprint arXiv:2402.07319_, 2024a.
+
+
+Wei Chen, Yajun Wang, and Yang Yuan. Combinatorial multi-armed bandit: General framework
+and applications. In _International conference on machine learning_, pp. 151–159. PMLR, 2013.
+
+
+11
+
+
+Zixiang Chen, Yihe Deng, Huizhuo Yuan, Kaixuan Ji, and Quanquan Gu. Self-play fine-tuning
+converts weak language models to strong language models. _arXiv_ _preprint_ _arXiv:2401.01335_,
+2024b.
+
+
+Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep
+reinforcement learning from human preferences. _Advances in neural information processing sys-_
+_tems_, 30, 2017.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, Christopher Hesse, and John
+Schulman. Training verifiers to solve math word problems. _arXiv_ _preprint_ _arXiv:2110.14168_,
+2021.
+
+
+Thomas Coste, Usman Anwar, Robert Kirk, and David Krueger. Reward model ensembles help
+mitigate overoptimization. _arXiv preprint arXiv:2310.02743_, 2023.
+
+
+Ganqu Cui, Lifan Yuan, Ning Ding, Guanming Yao, Wei Zhu, Yuan Ni, Guotong Xie, Zhiyuan Liu,
+and Maosong Sun. Ultrafeedback: Boosting language models with high-quality feedback, 2023.
+
+
+Ning Ding, Yulin Chen, Bokai Xu, Yujia Qin, Zhi Zheng, Shengding Hu, Zhiyuan Liu, Maosong
+Sun, and Bowen Zhou. Enhancing chat language models by scaling high-quality instructional
+conversations, 2023. [URL https://arxiv.org/abs/2305.14233.](https://arxiv.org/abs/2305.14233)
+
+
+Yann Dubois, Bal´azs Galambosi, Percy Liang, and Tatsunori B Hashimoto. Length-controlled alpacaeval: A simple way to debias automatic evaluators. _arXiv preprint arXiv:2404.04475_, 2024.
+
+
+Vikranth Dwaracherla, Seyed Mohammad Asghari, Botao Hao, and Benjamin Van Roy. Efficient
+exploration for llms. _arXiv preprint arXiv:2402.00396_, 2024.
+
+
+Jacob Eisenstein, Chirag Nagpal, Alekh Agarwal, Ahmad Beirami, Alex D’Amour, DJ Dvijotham,
+Adam Fisch, Katherine Heller, Stephen Pfohl, Deepak Ramachandran, et al. Helping or herding? reward model ensembles mitigate but do not eliminate reward hacking. _arXiv_ _preprint_
+_arXiv:2312.09244_, 2023.
+
+
+Kawin Ethayarajh, Winnie Xu, Niklas Muennighoff, Dan Jurafsky, and Douwe Kiela. Kto: Model
+alignment as prospect theoretic optimization. _arXiv preprint arXiv:2402.01306_, 2024.
+
+
+Leo Gao, John Schulman, and Jacob Hilton. Scaling laws for reward model overoptimization. In
+_International Conference on Machine Learning_, pp. 10835–10866. PMLR, 2023.
+
+
+Aur´elien Garivier and Eric Moulines. On upper-confidence bound policies for non-stationary bandit
+problems. _arXiv preprint arXiv:0805.3415_, 2008.
+
+
+Aur´elien Garivier and Eric Moulines. On upper-confidence bound policies for switching bandit
+problems. In _International_ _conference_ _on_ _algorithmic_ _learning_ _theory_, pp. 174–188. Springer,
+2011.
+
+
+Mor Geva, Daniel Khashabi, Elad Segal, Tushar Khot, Dan Roth, and Jonathan Berant. Did Aristotle
+Use a Laptop? A Question Answering Benchmark with Implicit Reasoning Strategies. _Transac-_
+_tions of the Association for Computational Linguistics (TACL)_, 2021.
+
+
+Olga Golovneva, Moya Chen, Spencer Poff, Martin Corredor, Luke Zettlemoyer, Maryam FazelZarandi, and Asli Celikyilmaz. Roscoe: A suite of metrics for scoring step-by-step reasoning.
+_arXiv preprint arXiv:2212.07919_, 2022.
+
+
+Alex Graves, Marc G Bellemare, Jacob Menick, Remi Munos, and Koray Kavukcuoglu. Automated
+curriculum learning for neural networks. In _international_ _conference_ _on_ _machine_ _learning_, pp.
+1311–1320. Pmlr, 2017.
+
+
+Caglar Gulcehre, Tom Le Paine, Srivatsan Srinivasan, Ksenia Konyushkova, Lotte Weerts, Abhishek
+Sharma, Aditya Siddhant, Alex Ahern, Miaosen Wang, Chenjie Gu, et al. Reinforced self-training
+(rest) for language modeling. _arXiv preprint arXiv:2308.08998_, 2023.
+
+
+12
+
+
+Shangmin Guo, Biao Zhang, Tianlin Liu, Tianqi Liu, Misha Khalman, Felipe Llinares, Alexandre
+Rame, Thomas Mesnard, Yao Zhao, Bilal Piot, et al. Direct language model alignment from
+online ai feedback. _arXiv preprint arXiv:2402.04792_, 2024.
+
+
+Joey Hejna, Rafael Rafailov, Harshit Sikchi, Chelsea Finn, Scott Niekum, W Bradley Knox, and
+Dorsa Sadigh. Contrastive prefence learning: Learning from human feedback without rl. _arXiv_
+_preprint arXiv:2310.13639_, 2023.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andrew Critch, Jerry Li, Dawn Song, and Jacob
+Steinhardt. Aligning ai with shared human values. _Proceedings of the International Conference_
+_on Learning Representations (ICLR)_, 2021a.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob
+Steinhardt. Measuring massive multitask language understanding. _Proceedings_ _of_ _the_ _Interna-_
+_tional Conference on Learning Representations (ICLR)_, 2021b.
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. _NeurIPS_,
+2021c.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Wei Yu, Xinying Song,
+and Denny Zhou. Large language models cannot self-correct reasoning yet. _arXiv_ _preprint_
+_arXiv:2310.01798_, 2023.
+
+
+Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning Mao, Michael
+Tontchev, Qing Hu, Brian Fuller, Davide Testuggine, et al. Llama guard: Llm-based input-output
+safeguard for human-ai conversations. _arXiv preprint arXiv:2312.06674_, 2023.
+
+
+Hamish Ivison, Yizhong Wang, Valentina Pyatkin, Nathan Lambert, Matthew Peters, Pradeep
+Dasigi, Joel Jang, David Wadden, Noah A. Smith, Iz Beltagy, and Hannaneh Hajishirzi. Camels
+in a changing climate: Enhancing lm adaptation with tulu 2, 2023.
+
+
+Hamish Ivison, Yizhong Wang, Jiacheng Liu, Zeqiu Wu, Valentina Pyatkin, Nathan Lambert,
+Noah A Smith, Yejin Choi, and Hannaneh Hajishirzi. Unpacking dpo and ppo: Disentangling
+best practices for learning from preference feedback. _arXiv preprint arXiv:2406.09279_, 2024.
+
+
+Joel Jang, Seungone Kim, Bill Yuchen Lin, Yizhong Wang, Jack Hessel, Luke Zettlemoyer,
+Hannaneh Hajishirzi, Yejin Choi, and Prithviraj Ammanabrolu. Personalized soups: Personalized large language model alignment via post-hoc parameter merging. _arXiv_ _preprint_
+_arXiv:2310.11564_, 2023.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot,
+Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al.
+Mistral 7b. _arXiv preprint arXiv:2310.06825_, 2023.
+
+
+Robert Kirk, Ishita Mediratta, Christoforos Nalmpantis, Jelena Luketina, Eric Hambro, Edward
+Grefenstette, and Roberta Raileanu. Understanding the effects of rlhf on llm generalisation and
+diversity. _arXiv preprint arXiv:2310.06452_, 2023.
+
+
+Akshay Krishnamurthy, Keegan Harris, Dylan J Foster, Cyril Zhang, and Aleksandrs Slivkins. Can
+large language models explore in-context? _arXiv preprint arXiv:2403.15371_, 2024.
+
+
+Nathan Lambert, Valentina Pyatkin, Jacob Morrison, LJ Miranda, Bill Yuchen Lin, Khyathi Chandu,
+Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, et al. Rewardbench: Evaluating reward
+models for language modeling. _arXiv preprint arXiv:2403.13787_, 2024.
+
+
+Lihong Li, Wei Chu, John Langford, and Robert E Schapire. A contextual-bandit approach to
+personalized news article recommendation. In _Proceedings of the 19th international conference_
+_on World wide web_, pp. 661–670, 2010.
+
+
+13
+
+
+Lisha Li, Kevin Jamieson, Giulia DeSalvo, Afshin Rostamizadeh, and Ameet Talwalkar. Hyperband:
+A novel bandit-based approach to hyperparameter optimization. _Journal_ _of_ _Machine_ _Learning_
+_Research_, 18(185):1–52, 2018.
+
+
+Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker, Teddy Lee, Jan
+Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. Let’s verify step by step. _arXiv preprint_
+_arXiv:2305.20050_, 2023.
+
+
+Chin-Yew Lin. ROUGE: A package for automatic evaluation of summaries. In _Text Summarization_
+_Branches Out_, pp. 74–81, Barcelona, Spain, 2004. Association for Computational Linguistics.
+
+
+Keming Lu, Hongyi Yuan, Zheng Yuan, Runji Lin, Junyang Lin, Chuanqi Tan, and Chang
+Zhou. # instag: Instruction tagging for diversity and complexity analysis. _arXiv_ _preprint_
+_arXiv:2308.07074_, 2023.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. _Advances in neural information processing systems_, 35:
+27730–27744, 2022.
+
+
+Richard Yuanzhe Pang, Weizhe Yuan, Kyunghyun Cho, He He, Sainbayar Sukhbaatar, and Jason
+Weston. Iterative reasoning preference optimization. _arXiv preprint arXiv:2404.19733_, 2024.
+
+
+Arjun Panickssery, Samuel R Bowman, and Shi Feng. Llm evaluators recognize and favor their own
+generations. _arXiv preprint arXiv:2404.13076_, 2024.
+
+
+Ramakanth Pasunuru, Han Guo, and Mohit Bansal. Dorb: Dynamically optimizing multiple rewards
+with bandits. In _Proceedings of the 2020 Conference on Empirical Methods in Natural Language_
+_Processing (EMNLP)_, pp. 7766–7780, 2020.
+
+
+Archiki Prasad, Swarnadeep Saha, Xiang Zhou, and Mohit Bansal. Receval: Evaluating reasoning
+chains via correctness and informativeness. _arXiv preprint arXiv:2304.10703_, 2023.
+
+
+Shanghaoran Quan. Dmoerm: Recipes of mixture-of-experts for effective reward modeling. _arXiv_
+_preprint arXiv:2403.01197_, 2024.
+
+
+Rafael Rafailov, Yaswanth Chittepu, Ryan Park, Harshit Sikchi, Joey Hejna, Bradley Knox, Chelsea
+Finn, and Scott Niekum. Scaling laws for reward model overoptimization in direct alignment
+algorithms. _arXiv preprint arXiv:2406.02900_, 2024a.
+
+
+Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea
+Finn. Direct preference optimization: Your language model is secretly a reward model. _Advances_
+_in Neural Information Processing Systems_, 36, 2024b.
+
+
+Alexandre Ram´e, Nino Vieillard, L´eonard Hussenot, Robert Dadashi, Geoffrey Cideron, Olivier
+Bachem, and Johan Ferret. Warm: On the benefits of weight averaged reward models. _arXiv_
+_preprint arXiv:2401.12187_, 2024.
+
+
+Mathieu Rita, Florian Strub, Rahma Chaabouni, Paul Michel, Emmanuel Dupoux, and Olivier
+Pietquin. Countering reward over-optimization in llm with demonstration-guided reinforcement
+learning. _arXiv preprint arXiv:2404.19409_, 2024.
+
+
+Shibani Santurkar, Esin Durmus, Faisal Ladhak, Cinoo Lee, Percy Liang, and Tatsunori Hashimoto.
+Whose opinions do language models reflect? In _Proceedings of the 40th International Conference_
+_on_ _Machine_ _Learning_, Proceedings of Machine Learning Research, pp. 29971–30004. PMLR,
+2023.
+
+
+Avi Singh, John D Co-Reyes, Rishabh Agarwal, Ankesh Anand, Piyush Patil, Peter J Liu, James
+Harrison, Jaehoon Lee, Kelvin Xu, Aaron Parisi, et al. Beyond human data: Scaling self-training
+for problem-solving with language models. _arXiv preprint arXiv:2312.06585_, 2023.
+
+
+Joar Skalse, Nikolaus Howe, Dmitrii Krasheninnikov, and David Krueger. Defining and characterizing reward gaming. _Advances in Neural Information Processing Systems_, 35:9460–9471, 2022.
+
+
+14
+
+
+Zhiqing Sun, Longhui Yu, Yikang Shen, Weiyang Liu, Yiming Yang, Sean Welleck, and Chuang
+Gan. Easy-to-hard generalization: Scalable alignment beyond human supervision. _arXiv preprint_
+_arXiv:2403.09472_, 2024. [URL https://arxiv.org/abs/2403.09472.](https://arxiv.org/abs/2403.09472)
+
+
+Alon Talmor, Jonathan Herzig, Nicholas Lourie, and Jonathan Berant. Commonsenseqa: A question
+answering challenge targeting commonsense knowledge. _arXiv preprint arXiv:1811.00937_, 2018.
+
+
+Alon Talmor, Jonathan Herzig, Nicholas Lourie, and Jonathan Berant. CommonsenseQA: A question answering challenge targeting commonsense knowledge. In _Proceedings_ _of_ _the_ _2019_ _Con-_
+_ference of the North American Chapter of the Association for Computational Linguistics:_ _Human_
+_Language Technologies, Volume 1 (Long and Short Papers)_, pp. 4149–4158, Minneapolis, Minnesota, June 2019. Association for Computational Linguistics. doi: 10.18653/v1/N19-1421. URL
+[https://aclanthology.org/N19-1421.](https://aclanthology.org/N19-1421)
+
+
+Qwen Team. Qwen1.5-moe: Matching 7b model performance with 1/3 activated parameters”,
+February 2024. [URL https://qwenlm.github.io/blog/qwen-moe/.](https://qwenlm.github.io/blog/qwen-moe/)
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Lewis Tunstall and Philipp Schmid. Zephyr 7b gemma. [https://huggingface.co/](https://huggingface.co/HuggingFaceH4/zephyr-7b-gemma-v0.1)
+[HuggingFaceH4/zephyr-7b-gemma-v0.1, 2024.](https://huggingface.co/HuggingFaceH4/zephyr-7b-gemma-v0.1)
+
+
+Joannes Vermorel and Mehryar Mohri. Multi-armed bandit algorithms and empirical evaluation. In
+_European conference on machine learning_, pp. 437–448. Springer, 2005.
+
+
+Binghai Wang, Rui Zheng, Lu Chen, Yan Liu, Shihan Dou, Caishuang Huang, Wei Shen, Senjie Jin,
+Enyu Zhou, Chenyu Shi, et al. Secrets of rlhf in large language models part ii: Reward modeling.
+_arXiv preprint arXiv:2401.06080_, 2024a.
+
+
+Haoxiang Wang, Yong Lin, Wei Xiong, Rui Yang, Shizhe Diao, Shuang Qiu, Han Zhao, and Tong
+Zhang. Arithmetic control of llms for diverse user preferences: Directional preference alignment
+with multi-objective rewards. _arXiv preprint arXiv:2402.18571_, 2024b.
+
+
+Haoxiang Wang, Wei Xiong, Tengyang Xie, Han Zhao, and Tong Zhang. Interpretable preferences
+via multi-objective reward modeling and mixture-of-experts. _arXiv_ _preprint_ _arXiv:2406.12845_,
+2024c.
+
+
+Zihao Wang, Chirag Nagpal, Jonathan Berant, Jacob Eisenstein, Alexander Nicholas D’Amour,
+Sanmi Koyejo, and Victor Veitch. Transforming and combining rewards for aligning large language models. In _Forty-first International Conference on Machine Learning_, 2024d.
+
+
+Laura Weidinger, John Mellor, Maribeth Rauh, Conor Griffin, Jonathan Uesato, Po-Sen Huang,
+Myra Cheng, Mia Glaese, Borja Balle, Atoosa Kasirzadeh, et al. Ethical and social risks of harm
+from language models. _arXiv preprint arXiv:2112.04359_, 2021.
+
+
+Ronald J Williams. Simple statistical gradient-following algorithms for connectionist reinforcement
+learning. _Machine learning_, 8:229–256, 1992.
+
+
+Huasen Wu and Xin Liu. Double thompson sampling for dueling bandits. _Advances_ _in_ _neural_
+_information processing systems_, 29, 2016.
+
+
+Zeqiu Wu, Yushi Hu, Weijia Shi, Nouha Dziri, Alane Suhr, Prithviraj Ammanabrolu, Noah A Smith,
+Mari Ostendorf, and Hannaneh Hajishirzi. Fine-grained human feedback gives better rewards for
+language model training. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Wei Xiong, Hanze Dong, Chenlu Ye, Ziqi Wang, Han Zhong, Heng Ji, Nan Jiang, and Tong Zhang.
+Iterative preference learning from human feedback: Bridging theory and practice for rlhf under
+kl-constraint. In _Forty-first International Conference on Machine Learning_, 2024.
+
+
+Jing Xu, Andrew Lee, Sainbayar Sukhbaatar, and Jason Weston. Some things are more cringe than
+others: Preference optimization with the pairwise cringe loss. _arXiv preprint arXiv:2312.16682_,
+2023.
+
+
+15
+
+
+Tianyu Yu, Yuan Yao, Haoye Zhang, Taiwen He, Yifeng Han, Ganqu Cui, Jinyi Hu, Zhiyuan Liu,
+Hai-Tao Zheng, Maosong Sun, et al. Rlhf-v: Towards trustworthy mllms via behavior alignment
+from fine-grained correctional human feedback. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition_, pp. 13807–13816, 2024.
+
+
+Lifan Yuan, Ganqu Cui, Hanbin Wang, Ning Ding, Xingyao Wang, Jia Deng, Boji Shan, Huimin
+Chen, Ruobing Xie, Yankai Lin, Zhenghao Liu, Bowen Zhou, Hao Peng, Zhiyuan Liu, and
+Maosong Sun. Advancing llm reasoning generalists with preference trees, 2024a.
+
+
+Weizhe Yuan, Richard Yuanzhe Pang, Kyunghyun Cho, Sainbayar Sukhbaatar, Jing Xu, and Jason
+Weston. Self-rewarding language models. _arXiv preprint arXiv:2401.10020_, 2024b.
+
+
+Shun Zhang, Zhenfang Chen, Sunli Chen, Yikang Shen, Zhiqing Sun, and Chuang Gan. Improving reinforcement learning from human feedback with efficient reward model ensemble. _arXiv_
+_preprint arXiv:2401.16635_, 2024.
+
+
+Wenting Zhao, Xiang Ren, Jack Hessel, Claire Cardie, Yejin Choi, and Yuntian Deng. Wildchat:
+1m chatgpt interaction logs in the wild. _arXiv preprint arXiv:2405.01470_, 2024.
+
+
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. Judging llm-as-a-judge with mt-bench and
+chatbot arena. _Advances in Neural Information Processing Systems_, 36:46595–46623, 2023.
+
+
+Daniel M Ziegler, Nisan Stiennon, Jeffrey Wu, Tom B Brown, Alec Radford, Dario Amodei, Paul
+Christiano, and Geoffrey Irving. Fine-tuning language models from human preferences. _arXiv_
+_preprint arXiv:1909.08593_, 2019.
+
+
+A EXPERIMENTS
+
+
+A.1 EXPERIMENTAL SETTING
+
+
+**Training** **setup.** For training with LoRA, we set the rank to 16 and alpha to 32. We fine-tune
+the model for 10 iterations using a learning rate of 5 _e−_ 6 and a batch size of 16. Following Pang
+et al. (2024), we generate _P_ = 10 pairs per problem for training with our loss in Sec. 3.1. For
+all experiments, we trained each method to converge. The number of iterations for each method
+was selected based on the observed convergence, with a performance metric threshold of 0 _._ 1 across
+training batches on the dev set. The LinUCB algorithm has a total of 1.6M learnable parameters
+(including matrix _A_ and bias vector _b_ ). Our experiments are run on 4 RTX A6000 with 48G memory
+each.
+
+
+**RewardBench.** Following Lambert et al. (2024), rewards are computed with no reference model
+and only use the log-likelihood of the reward model. For instance, given a reward model _πR⋆_, the
+reward for an input _xi_ and response _yi_ is calculated as: log _πR⋆_ ( _yi_ _|_ _xi_ ). There is no need for
+normalization since we use this log-likelihood to rank the responses. Specifically, on GSM8K, we
+computed the average and standard deviation of the rewards for the chosen responses as _−_ 4 _._ 2965
+and 1 _._ 4156, respectively, and for the rejected responses as _−_ 5 _._ 9861 and 1 _._ 6546, respectively.
+
+
+**Details of RMs.** We provide details for each chosen RMs:
+
+
+- Zephyr-7B-Alpha: is a fine-tuned version of Mistral-7B model that was trained on on UltraChat (Ding et al., 2023) and UltraFeedback (Cui et al., 2023) using DPO.
+
+- Qwen1.5-7B-Chat: is pretrained with human-style conversation data inspired by Ouyang et al.
+(2022) along with questions, instructions, and answers in natural language, and post-trained with
+both SFT and DPO using diverse prompts (Lu et al., 2023).
+
+- Eurus-7B-KTO: is a fine-tuned version of Eurus-7B-SFT model using KTO loss on UltraInteract (Yuan et al., 2024a) and UltraFeedback (Cui et al., 2023).
+
+- OLMo-7B-Instruct: is the instruct version of OLMo-7B base model and was fine-tuned using
+UltraFeedback (Cui et al., 2023).
+
+
+**Extracting embeddings for a query using** _**πm**_ **.** To extract embeddings for a query using _πm_, we
+first process the input query through the policy model _πm_ . We use the embedding of the last token in
+
+
+16
+
+
+the query as the representation for the query. The embedding is then used as input to the subsequent
+bandit algorithm.
+
+
+**Baselines.** Here we provide more details for baselines:
+
+
+- **Classifier** **Selection.** We add an additional baseline that uses the RewardBench data to train a
+classifier that maps queries to an RM _C_ : R _[d]_ _→R_, where _R_ = _R_ 1 _, R_ 2 _, . . ., RK_ is the set of RMs.
+Specifically, to construct a dataset for training _C_, we take each query in the RewardBench data
+along with its corresponding chosen and rejected responses. The RewardBench dataset contains a
+total of 2985 examples across several categories including chat, safety, and reasoning. The dataset
+is split into a 80/20 ratio for training/development sets, then the classifier is trained on the training
+set and and validated on the development set. We use each RM to score these responses. The RM
+that assigns the correct score with the highest difference between the chosen and rejected response
+is selected to label the RM for that query. After training _C_, we use this classifier to select the RM
+used for training the LLM in our pipeline. In the experiments, we use a three-layer MLP with
+hidden dimensions of 2048 and 1024 and an output dimension of 4 (number of RMs), with ReLU
+activation in each layer.
+
+- **RM** **Ensembles.** While the ensemble methods generate scores from multiple RMs in a single
+iteration for a fixed set of responses sampled at the start of the iteration, we still generate new
+responses at each training iteration as part of the overall learning process. This ensures that the
+training dynamically incorporates updated responses from the LLM.
+
+
+A.2 DETAILS OF BANDIT ALGORITHMS
+
+
+**Algorithm for Sec. 3.3.** We provide the detailed algorithm for Sec. 3.3 in Algorithm 1.
+
+
+**Algorithm 1** Bandit-based Reward Model Selection for LLM Training
+
+
+1: **Input:** LLM _M_, reward models _R_ = _{R_ 1 _, R_ 2 _, . . ., RK}_, dataset _D_ = _{x_ 1 _, x_ 2 _, . . ., xN_ _}_,
+bandit algorithm (LinUCB)
+2: **Initialize:** Bandit algorithm parameters (e.g., _θk_ for each RM)
+3: **for** each training iteration _m_ = 1 _,_ 2 _, . . ., M_ **do**
+4: **for** each batch or train step _t_ = 1 _,_ 2 _, . . ., T_ **do**
+5: Select reward model _Rt_ _[⋆]_ [for time step] _[ t]_ [ using equation (][2][) (LinUCB)]
+6: Sample a batch of samples from _D_ and generate preference pairs following 3.1
+7: Fine-tune _πm_ using preference pairs in _D_ pref using _L_ _[m]_
+
+8: Update bandit parameters based on equation (3) (LinUCB)
+9: **end for**
+10: **end for**
+
+
+5Link: [https://huggingface.co/valpy/prompt-classification](https://huggingface.co/valpy/prompt-classification)
+
+
+17
+
+
+Table 3: Number of examples in train, val, and test sets.
+
+
+**Datasets.** For StrategyQA, GSM8K, and Table 3: Number of examples in train, val, and test sets.
+MMLU, we divided each dataset into
+
+**Task** **Dataset/Category** **Train** **Dev** **Test** **Total**
+
+training and test sets. The model is finetuned on the training set and dev set, then Reasoning StrategyQA 1946 278 556 2780
+evaluate on the test set. For WildChat, the GSM8K 6750 750 1000 8500
+dataset was split into a 70/10/20 ratio for MMLU 11135 1591 3182 15908
+training, development, and testing. Fol- WildChat Creative 3500 500 1000 5000
+lowing Zhao et al. (2024), prompt catego- Analysis 3500 500 1000 5000
+rization is done using a small off-the-shelf Coding 3500 500 1000 5000
+classifier. [5] For LongBench, we subsam- Factual 3500 500 1000 5000
+ple 5K examples for three tasks: multi- Math 3500 500 1000 5000
+document QA, summarization, and few- LongBench Single-doc QA 3534 505 1010 5049
+shot learning. Each category was split into Multi-doc QA 3500 500 1000 5000
+a 70/10/20 ratio, and the bandit model was Summarization 3500 500 1000 5000
+trained and validated on the training and Few-shot learning 3500 500 1000 5000
+development sets and then tested on the
+test set. We report the detailed number of instances for train, development, and test sets in Table 3.
+
+
+**Task** **Dataset/Category** **Train** **Dev** **Test** **Total**
+
+
+Reasoning StrategyQA 1946 278 556 2780
+GSM8K 6750 750 1000 8500
+MMLU 11135 1591 3182 15908
+
+
+WildChat Creative 3500 500 1000 5000
+Analysis 3500 500 1000 5000
+Coding 3500 500 1000 5000
+Factual 3500 500 1000 5000
+Math 3500 500 1000 5000
+
+
+LongBench Single-doc QA 3534 505 1010 5049
+Multi-doc QA 3500 500 1000 5000
+Summarization 3500 500 1000 5000
+Few-shot learning 3500 500 1000 5000
+
+
+**Exp3.** Exp3 is a non-contextual bandit algorithm designed for adversarial settings. It maintains a
+probability distribution over the arms and selects arms based on the exponential weighting of past
+rewards. The probability for choosing arm _ak_ at round _t_ is calculated as follows:
+
+
+B ADDITIONAL EMPIRICAL RESULTS
+
+
+**LASER** **adaptively** **selects** **from** **multiple** **RMs** **on** **LongBench.** On LongBench (Fig. 7), we
+observe distinct utilization patterns for the QA tasks vs. summarization and few-shot learning.
+QA tasks exhibit nearly equal utilization of the top-2 RMs on RewardBench (Zephyr-7B-Alpha and
+Qwen1.5-7B-Chat in decreasing order), with the utilization of the Qwen RM even _exceeds_ that of
+Zephyr RM for multi-document QA. In contrast, on summarization and few-shot learning the top
+RM (Zephyr) is far more preferred by LASER with margins of 59% and 31% over the second-best
+RM and the least performant RM being utilized less that 3% of the times.
+
+
+**Detailed** **results** **for** **each** **RM.** Here, we provide detailed reasoning results for each chosen RM
+where we use a single RM during training (c.f. Sec. 3.1) in Table 4. These results demonstrate
+that Qwen1.5-7B-Chat outperforms other RMs on StrategyQA and MMLU, whereas on GSM8K
+Zephyr-7b-alpha has the best performance with Llama-3-8B. However, LASER still yields the best
+performance, outperforming all RMs by at least 1% on average across reasoning tasks, without the
+knowledge of which RM is most suited for each task a priori.
+
+
+C GENERALIZATION CAPABILITIES OF LASER
+
+
+**LASER Training with Domain-specific Evaluation Metrics.** While recent works focus on building RMs that reflect preferences across domains, an extensive body of prior work develops a suite
+of evaluation metrics catered to specific domains such as reasoning (Golovneva et al., 2022; Prasad
+et al., 2023). To show that LASER can be used to select any kind of evaluation metric from a collection of metrics during training, in Table 5, we present results with training LLMs on model-based
+metrics from ROSCOE (Golovneva et al., 2022) by replacing RMs with informativeness, faithfulness, reasoning alignment, hallucination, common sense error, semantic, coherence and perplexity
+
+
+18
+
+
+exp( _Sk_ ( _t_ ))
+_pk_ ( _t_ ) = (1 _−_ _γ_ ) 
+
+
+_K_ _[,]_
+
+
+exp( _Sk_ ( _t_ ))
+
+_[γ]_
+_ak∈A_ [exp(] _[S][k]_ [(] _[t]_ [))] [+] _K_
+
+
+where _Sk_ ( _t_ ) is the cumulative score for arm _a_ up to time _t_ and _γ_ is a parameter controlling the
+exploration rate.
+
+
+The arm _ak_ is selected by sampling the following categorical distribution
+
+
+_at_ _∼_ Categorical( _p_ 1( _t_ ) _, . . ., pK_ ( _t_ )) (4)
+
+
+The score for arm _at_ is updated based on the observed normalized reward _−L_ [ˆ] _[m]_ ( _t_ ) and the probability _pk_ ( _t_ ) of selecting that arm:
+
+
+_L_ ˆ _[m]_ ( _t_ )
+_Sk_ ( _t_ + 1) = _Sk_ ( _t_ ) _−_ [=] _[ a][k]_ [)] _[,]_ (5)
+_pk_ ( _t_ ) _[·]_ [ ⊮][(] _[a][t]_
+
+
+where ⊮( _at_ = _ak_ ) is an indicator function that equals 1 if arm _ak_ was selected at time _t_, and 0
+otherwise.
+
+
+**MAB reward normalization.** To maintain a consistent scale and magnitude MAB rewards across
+training, we apply scaled rewards based on the quantiles of the reward history, following the method
+outlined by Graves et al. (2017). Let _L_ = _{−L_ _[m]_ (1) _, . . ., −L_ _[m]_ ( _t_ _−_ 1) _}_ represent the unscaled
+reward history up to time step _t_ . This history’s lower and upper quantiles are denoted as _qt_ _[lo]_ [and] _[ q]_ _t_ _[hi]_ [,]
+respectively. We set _qt_ [lo] [and] _[ q]_ _t_ [hi] [to be][ 20] _[th]_ [ and][ 80] _[th]_ [ quantiles. The scaled reward,] _[ −][L]_ [ˆ] _[m]_ [(] _[t]_ [)][, becomes:]
+
+
+_−L_ [ˆ] _[m]_ ( _t_ ) =
+
+
+
+
+
+
+0 if _−L_ _[m]_ ( _t_ ) _< qt_ [lo]
+1 if _−L_ _[m]_ ( _t_ ) _> qt_ [hi]
+_−L_ _[m]_ ( _t_ ) _−qt_ [lo] otherwise _._
+_qt_ [hi] _[−][q]_ _t_ [lo]
+
+
+
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Olmo Eurus Qwen Zephyr
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Figure 7: Utilization (%) of each RM on long-context understanding tasks. The bars are arranged
+based on their overall scores on LongBench, from lowest to highest. LASER dynamically selects
+from different RMs depending on the nature of the underlying instance.
+
+
+Table 4: Performance of 4 RMs including OLMo, Eurus, Zephyr and Qwen1.5. Best is bolded,
+second-best is underlined.
+
+
+**Llama-3-8B** **Mistral-7B**
+**Method**
+
+StrategyQA GSM8K MMLU Avg. StrategyQA GSM8K MMLU Avg.
+
+
+OLMo-7B-Instruct 80.23 68.91 65.74 71.62 68.73 44.96 56.94 56.88
+Eurus-7b-kto 81.15 71.13 66.26 72.84 68.64 45.37 56.96 56.99
+Zephyr-7b-alpha 84.29 73.16 67.15 74.87 70.06 45.81 62.04 59.30
+Qwen1.5-7B-Chat 84.79 73.07 67.53 75.13 71.05 45.74 62.18 59.66
+LASER (Ours) **85.96** **74.75** **68.24** **76.32** **73.06** **46.89** **62.27** **60.74**
+
+
+Table 5: Comparison of LASER and baselines on ROSCOE. The baselines include supervised finetuning (SFT), sequential optimization, uniform rewards selection, and base model optimized with
+one specifc evaluation metric (Perplexity, Informativeness).
+
+
+**Llama-3-8B** **Mistral-7B**
+**Method**
+
+StrategyQA GSM8K MMLU Avg. StrategyQA GSM8K MMLU Avg.
+
+
+SFT 80.41 69.43 65.66 71.83 68.57 43.62 56.48 56.22
+Perplexity 80.55 69.21 65.62 71.79 68.83 43.47 57.14 56.48
+Informativeness 82.87 73.55 66.69 74.37 70.29 **44.98** 59.29 58.19
+Random RM Selection 82.72 70.93 66.10 73.25 69.24 44.05 57.68 56.99
+Sequential RM Selection 83.15 73.38 66.17 74.23 70.40 44.79 59.07 58.09
+LASER (Ours) **83.54** **73.80** **66.79** **74.71** **70.91** 44.93 **59.63** **58.49**
+
+
+in Sec. 3. Llama-3-8B models trained using LASER yield 1.62% accuracy improvement over baselines on average across three datasets. These results are also generalized to Mistral-7B, except for
+GSM8K, where we achieve comparable performance to the Base + Informativeness baselines. Note
+that the perplexity of most responses is nearly identical, making it difficult to distinguish between
+them, explaining why perplexity shows little to no improvement compared to the base model.
+
+
+**Evaluation** **Metrics.** Similar to
+our analysis on noise in rewards in 74
+Sec. 5, we investigate how adding
+ROSCOE metrics with poor corre
+72
+
+lation to human-annotated labels in
+meta-evaluation by Golovneva et al.
+
+Llama-3-8B on GSM8K. Once again, Number of metrics
+even with ROSCOE metrics, demon
+Figure 8: Impact of irrelevant metrics from ROSCOE on
+
+strates LASER can maintain consistent
+
+the GSM8K accuracy of LASER and sequential baseline.
+
+performance by adaptively prioritizing
+the most relevant reward signals, outperforming the sequential baseline, which fails to filter out
+irrelevant information effectively. Fig. 8 shows that as the number of irrelevant metrics increases,
+LASER’s selection strategy continues to perform robustly. Specifically, LASER has an average
+performance drop of only 0 _._ 13%, whereas the sequential baseline suffers a 2 _._ 15% accuracy drop
+
+
+74
+
+
+72
+
+
+Number of metrics
+
+
+Figure 8: Impact of irrelevant metrics from ROSCOE on
+the GSM8K accuracy of LASER and sequential baseline.
+
+
+19
+
+
+76
+
+
+75
+
+
+74
+
+
+69
+
+
+68
+
+
+67
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Figure 9: LASER’s performance is robust to adding weaker RMs to the candidate set to select from.
+
+
+under the same conditions. Lastly, LASER using Exp3 maintains a consistent performance level
+with a 0 _._ 4% accuracy drop.
+
+
+**Generalization** **to** **Training** **Loss** Table 6: Across different training loss functions, optimizing
+**Functions.** In Sec. 3.1, we state that with multiple RMs via LASER outperforms the sequential
+the choice of loss function used to RM selection with Llama-3-8B. SQA denotes StrategyQA.
+train the LLM depends on the underlying task or domain. Nevertheless, **Loss** **Method** **SQA** **GSM8K** **MMLU** **Avg.**
+we always use the training loss as the NLL Sequential 82.75 71.80 65.41 73.32
+MAB reward to update the MAB’s LASER 85.11 74.94 67.09 **75.71**
+parameters. Here we study the per
+DPO Sequential 83.26 71.94 65.38 73.53
+
+formance of LASER and baselines
+
+LASER 84.71 73.94 67.02 **75.22**
+
+with 4 different loss functions, NLL,
+DPO, NLL + DPO (Pang et al., KTO Sequential 83.62 73.07 69.02 75.24
+
+LASER 84.87 73.86 69.05 **75.66**
+
+2024), and KTO (Ethayarajh et al.,
+2024), in the reasoning domain. Re- NLL+DPO Sequential 83.90 72.94 68.02 74.95
+sults in Table 6 show that training LASER w/. Acc 83.04 73.12 65.46 73.87
+LLMs with multiple rewards using LASER 85.96 74.75 68.24 **76.24**
+LASER outperforms sequential RM
+selection by 2 _._ 4%, 1 _._ 7%, and 1 _._ 3% when using NLL, DPO, NLL+DPO loss functions, respectively;
+while both methods yield comparable performance with KTO. Additionally, we found that the most
+effective training loss functions are NLL + DPO for StrategyQA, NLL for GSM8K, and KTO for
+MMLU. However, irrespective of the choice of the underlying loss function, LASER is more effective at balancing and adaptively selecting from multiple RMs. Lastly, we compare LASER with
+a variant in which we use Acc( _y_ _[w]_ ) _−_ Acc( _y_ _[l]_ ) as the MAB reward, which uses the ground-truth
+information about the final answer. We find that using the negative training loss of the LLM is more
+effective than using accuracy as the MAB reward.
+
+
+**Generalization** **to** **OOD** **Tasks.** We first assess the generalization ability of our method by
+training models on specific datasets and evaluating their performance on out-of-distribution
+reasoning tasks. Specifically, we train the model on the StrategyQA and MMLU datasets
+and evaluate its generalization on the CommonsenseQA (CSQA; Talmor et al., 2019) dataset.
+
+Similarly, we train on GSM8K
+
+Table 7: Generalization performance of different models trained
+
+and test on MATH (Hendrycks
+
+on StrategyQA, MMLU, and GSM8K, and evaluated on CSQA
+
+et al., 2021c) to assess the
+
+and MATH, respectively.
+
+model’s ability to generalize
+across different reasoning **Llama-3-8B** **Mistral-7B**
+
+**Method**
+
+datasets. These tasks are de
+CSQA MATH Avg. CSQA MATH Avg.
+
+signed to capture both general
+reasoning ability and OOD SFT 65.64 29.13 47.39 59.06 16.38 37.72
+
+Best RM 67.59 31.54 49.57 60.46 18.08 39.27
+
+generalization across domains.
+
+Avg. RM 67.16 30.36 48.76 60.06 17.25 38.66
+
+We report the results in Table 7,
+
+Random RM Selection 68.31 30.21 49.26 60.19 16.96 38.58
+
+where we find that across both
+
+Sequential RM Selection 67.73 30.25 48.99 60.56 17.96 39.26
+
+Llama-3-8B and Mistral-7B LASER (Ours) **69.26** **31.67** **50.47** **61.65** **18.97** **40.31**
+models, models trained with
+LASER yield the best average
+accuracy beating training with the best RM by roughly 2% (absolute) on CSQA with Llama-3-8B.
+On Mistral-7B, training with LASER outperforms both training with single best RM and sequential
+RM selection by slightly over 1%.
+
+
+87
+
+
+86
+
+
+85
+
+
+84
+
+
+Number of RMs
+
+
+73
+
+
+Number of RMs
+
+
+Number of RMs
+
+
+66
+
+
+Table 6: Across different training loss functions, optimizing
+with multiple RMs via LASER outperforms the sequential
+RM selection with Llama-3-8B. SQA denotes StrategyQA.
+
+
+**Loss** **Method** **SQA** **GSM8K** **MMLU** **Avg.**
+
+
+NLL Sequential 82.75 71.80 65.41 73.32
+LASER 85.11 74.94 67.09 **75.71**
+
+
+DPO Sequential 83.26 71.94 65.38 73.53
+LASER 84.71 73.94 67.02 **75.22**
+
+
+KTO Sequential 83.62 73.07 69.02 75.24
+LASER 84.87 73.86 69.05 **75.66**
+
+
+NLL+DPO Sequential 83.90 72.94 68.02 74.95
+LASER w/. Acc 83.04 73.12 65.46 73.87
+LASER 85.96 74.75 68.24 **76.24**
+
+
+Table 7: Generalization performance of different models trained
+on StrategyQA, MMLU, and GSM8K, and evaluated on CSQA
+and MATH, respectively.
+
+
+**Llama-3-8B** **Mistral-7B**
+**Method**
+
+
+CSQA MATH Avg. CSQA MATH Avg.
+
+
+SFT 65.64 29.13 47.39 59.06 16.38 37.72
+Best RM 67.59 31.54 49.57 60.46 18.08 39.27
+Avg. RM 67.16 30.36 48.76 60.06 17.25 38.66
+Random RM Selection 68.31 30.21 49.26 60.19 16.96 38.58
+Sequential RM Selection 67.73 30.25 48.99 60.56 17.96 39.26
+LASER (Ours) **69.26** **31.67** **50.47** **61.65** **18.97** **40.31**
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+**Generalization to the Number of RMs.** To study the generalization capability of LASER across
+the number of RMs, we expand the candidate set of RMs with up to 4 more RMs from the RewardBench leaderboard, including Tulu-2-DPO-7B (Ivison et al., 2023), Zephyr-7B-Gemma (Tunstall &
+Schmid, 2024), Qwen1.5-MoE-A2.7B-Chat (Team, 2024), Archangel-7B (Ethayarajh et al., 2024).
+Fig. 9 shows that the accuracy remains consistent across all datasets as the number of RMs varies.
+StrategyQA remains near 85.9%, GSM8K around 74.8%, and MMLU close to 68.1%, with minimal
+fluctuations, indicating robust performance regardless of the number of RMs.
+
+
+D ADDITIONAL DISCUSSION
+
+
+**Related** **Work:** **Multi-Armed** **Bandits** **(MABs).** There is a long-standing history of using multiarmed bandit algorithms for diverse applications in machine learning spanning online advertising (Chen et al., 2013), recommendation systems (Li et al., 2010), hyperparameter optimization (Li
+et al., 2018), curriculum learning (Graves et al., 2017), with some recent work at the intersection
+of MABs and language models (Pasunuru et al., 2020; Krishnamurthy et al., 2024; Dwaracherla
+et al., 2024, _inter_ _alia_ ). In the realm of RLHF specifically, Dwaracherla et al. (2024) use double
+Thomson Sampling (Wu & Liu, 2016) to select which of the sampled responses should be annotated
+and paired using a single fixed RM, improving LLM performance. In contrast, LASER first selects
+which RM (i.e., model of preferences) should be used to annotate LLM’s responses to a query and
+then creates multiple preference pairs from these responses. Pasunuru et al. (2020) optimize text
+generation models for different evaluation metrics such as ROUGE-L and BLEU via policy gradients (Williams, 1992) over existing (static) question and data-to-text generation datasets. In contrast,
+LASER adopts an iterative training recipe and improves downstream generation performance across
+a wide range of tasks from instruction-following to math and commonsense reasoning by selecting
+relevant RMs and scoring the LLM’s own generated responses without access to true rewards, i.e.,
+gold labels, and without optimizing for the downstream evaluation metric.
+
+
+**LASER** **with** **different** **“kinds”** **of** **RMs.** In Sec. 4.2, we show that LASER can choose from a
+set of candidate RMs, and our analysis in Fig. 3 highlights the fact that LASER is robust to noisy
+RMs. In Appendix C, we show that LASER can also be used with metric-based rewards (Golovneva
+et al., 2022). These experiments reflect a conceptual split between the generator (the LLM) and the
+scorer (the RM or metric). Thus, LASER is applicable to other settings that follow this paradigm,
+e.g., using an LLM-as-a-judge (Zheng et al., 2023), where LASER could be used to choose between
+different judge models, prompts, or different combinations of RMs and metrics. However, consistent
+with the “self-preference” bias of LLMs (Panickssery et al., 2024), we caution that using an RM
+that is based on the same model as the LLM used for generating responses could lead to the MAB
+spuriously favoring certain RMs. We leave further study on extending LASER to future work.
+
+
+**Quality of RMs used with** **LASER.** Methods that rely on RMs for scoring generally assume that
+these RMs have a strong correlation with human judgments. LASER tempers this assumption in
+a number of ways: first, by ensembling multiple RMs, LASER weakens the effect of noisy RMs;
+this can be seen in Fig. 3, where LASER mitigates the negative impact of a noisy RM even as the
+level of noise is increased. Moreover, the fact that LASER can select RMs at an instance-level
+means that there need not be a _single_ RM that always correlates well across all instances. However,
+LASER does require at least one RM to be positively correlated with human judgments on each
+instance. If this assumption is not met (i.e., _all_ RMs are poorly-correlated across _all_ instances), then
+optimizing for the RMs will yield poor results. Note that this holds true for any method optimizing
+for RMs. Because LASER selects from multiple RMs, its contributions are complementary to
+developments in RMs, which can easily be integrated into LASER, as well as improvements to
+preference optimization loss functions (see Appendix C). Such RM improvements are likely to be
+necessary as LLMs are deployed in domains that are out of scope for existing systems and domains
+with heterogeneous requirements (e.g., our generation domains in Sec. 4.2). In these cases, there
+will be no single “perfect” existing RM, and successful solutions will likely involve mixing multiple
+RMs. A core benefit of LASER is its the ability to automatically filter RMs; in Fig. 6 we see
+that utilization differs across domains. This allows users to avoid expensive experimentation with
+subsets of RMs: they can simply offload this task to LASER, which will automatically select the
+more useful RM(s).
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+E PROMPTS
+
+
+22

@@ -1,220 +1,205 @@
-=== CALIBRATION EXAMPLE 52 ===
+=== CALIBRATION EXAMPLE 30 ===
 
 # Harsh Critic Review
+Now I have enough of the paper read to write a thorough review. Let me compile my assessment.
+
+---
+
 ## Section-by-Section Critical Review
 
 ---
 
 ### Title & Abstract
 
-The title accurately reflects the two central contributions (mirror flow matching + heavy-tailed priors). The abstract is dense but informative. One concern: the abstract claims "competitive sample quality on real-world constrained generative tasks," which actually *undersells* the results — Table 3 shows the proposed method achieves FID 4.27 vs. MDM's 7.29, a significant improvement, not merely competitive performance. This discrepancy between cautious abstract language and actual strong results may confuse readers.
+The title accurately reflects the paper's dual contribution: mirror flow matching (constrained generation) combined with heavy-tailed priors. The abstract is honest about what is proven versus observed empirically. It promises (1) a regularized mirror map with finite-moment guarantees, (2) Wasserstein convergence rates, and (3) primal-space guarantees under ε-accurate velocity fields. All three appear in the body. However, the abstract characterizes the empirical performance as "competitive" on real-world tasks—an oddly modest qualifier, and one that turns out to be accurate: the method is only competitive (not clearly superior) in the random-initialization setting (CMMD 0.177 vs. MDM's 0.152). This tension between the abstract's framing and the actual experimental story deserves sharper honesty.
 
 ---
 
-### Introduction & Motivation (Sections 1, 1.1)
+### Introduction & Motivation
 
-The two identified challenges (heavy-tailed dual distributions from log-barrier maps, and Gaussian prior mismatch) are clearly motivated with Figure 1 and the verbal argument in Section 1.1. The contributions are explicitly listed and matched to specific propositions and theorems.
+The motivation is clearly articulated. The two identified challenges—(1) heavy-tailed dual distributions induced by log-barrier maps, and (2) mismatch between Gaussian priors and heavy-tailed targets—are genuine and well-illustrated by Figure 1 and Example 2. The contributions are enumerated in Section 1.1 and are specific enough to be checked against the later content.
 
-**Concern**: The claim "no framework yet ensures constraint satisfaction while providing convergence rates for flow matching" (p. 2) is the primary differentiator asserted over prior work, but the paper only establishes this for *convex* domains under an ε-approximation assumption on the neural network. The scope of this claim should be more carefully delimited.
-
----
-
-### Ingredient 1: Regularized Mirror Map (Section 2.1)
-
-Lemma 2.1 (tail condition for moment existence) is a standard application of layer integration and is correctly stated and proved (Appendix E). Proposition 2.2 establishes that the modified log-barrier Ψ(x) = −(1−κ)⁻¹ Σᵢ(−ϕᵢ(x))^(1−κ) + ½‖x‖² achieves:
-1. Strong convexity (L_Ψ ≤ 1, so W₂ ≤ W₂,Ψ)
-2. Controlled tail behavior P(‖∇Ψ(X)‖ ≥ R) ≤ C/R^(β/κ)
-
-**Concern 1 — κ selection**: The condition for finite p-th moment is κ < β/p (stated in Proposition 2.2). For a polytope under uniform measure, β = 1 (Example 1), so for p = 2, κ < 0.5. The paper uses κ = 0.3 empirically. However, for target distributions with smaller β (distributions with less mass near the boundary), this constraint becomes tighter. There is no practical guidance for how to choose κ given a specific (β, p) pair, beyond the theoretical condition.
-
-**Concern 2 — Computational cost of ∇Ψ\***: The inverse mirror map ∇Ψ* is needed at inference time (Algorithm 1, Line 10) to map dual samples back to primal space. For the L₂ ball and polytope, closed forms may be tractable, but for general convex sets defined by smooth convex inequalities ϕᵢ, computing ∇Ψ* requires solving a convex optimization problem at each step. This computational cost is never discussed, which is a notable omission given that the paper targets practical applications.
-
-**Concern 3 — Example 5 (Appendix E)**: The example shows L_ψ can blow up for the log-barrier on an ill-conditioned triangle, motivating the strongly convex regularization. The example is instructive, but the claim that "L_Ψ may blow up" for the proposed map is never quantified. How large can L_Ψ become for the regularized map on ill-conditioned polytopes?
+One subtle issue: the paper frames mirror flow matching as being distinct from prior mirror diffusion models (MDM, Liu et al., 2023a) primarily via the regularized mirror map and Student-t prior, but the conceptual framework (map to dual, do flow/diffusion, map back) is the same. The novelty is in the choices of mirror map and prior, rather than in the architecture. This should be stated more plainly to avoid an impression of a more fundamental departure.
 
 ---
 
-### Ingredient 2: Student-t Prior (Section 2.2)
+### Section 2: Ingredients (Mirror Map & Prior)
 
-Example 2 is the core motivation for using Student-t priors. The analysis shows that with a Gaussian prior, the conditional density E[X₁|Xₜ = x] can blow up super-exponentially for heavy-tailed targets and large ‖x‖. The Student-t prior suppresses this by making the data distribution dominate the tails.
+**Mirror Map (Section 2.1).** The regularized potential Ψ(x) = −(1/(1−κ)) Σ_i (−ϕ_i(x))^(1−κ) + (1/2)||x||² is a clean modification of the log-barrier. The key properties proved in Proposition 2.2 are (i) ∇²Ψ ≽ I (strong convexity, giving W₂ ≤ W_{2,Ψ}), and (ii) a tail bound P(||∇Ψ(X)|| ≥ R) ≤ C/R^{β/κ} from which p-th moment existence follows for κ < β/p.
 
-**Concern — Specificity of Student-t**: The paper motivates Student-t qualitatively but does not explain why Student-t specifically is preferred over other heavy-tailed distributions (e.g., Lévy stable, Cauchy). The key property used in the proofs is the polynomial tail decay of the Student-t density, but this is shared by many distributions. The choice of ν (degrees of freedom) is treated entirely empirically (ν = 10 is used in main experiments), yet the theory depends on ν through the condition α ≥ 2d + ν + 2: larger ν (closer to Gaussian) requires stronger tail decay of the target. This tension between the practical desire for a mild prior and the theoretical requirement is acknowledged in Section 1.1 but not resolved.
+*Critical concerns:*
+- **Bounded-gradient assumption.** Proposition 2.2 explicitly requires "ϕ_i are smooth convex functions with bounded gradient." This immediately excludes many natural convex bodies—e.g., those defined by quadratic inequalities with unbounded domains, or more general semi-algebraic sets. While the paper verifies the assumption for polytopes and the L₂ ball, the restriction should be clearly stated as a limitation.
+- **The parameter β.** For the cube under uniform measure, β = 1 (Example 1). For the L₂ ball, similar calculations would give β = 1 as well. To ensure finite second moments (p = 2) in the dual, one needs κ < β/2, so κ < 1/2 for these standard bodies. Theorem 4 further requires κ ≤ γ/(2d + ν + 2), which is a very stringent constraint in high dimensions. The paper does not discuss how restrictive this is in practice for moderate-to-large d.
+- **Example 5 (the ill-shaped triangle).** This example demonstrates that classical log-barrier can have arbitrarily large L_Ψ. However, the example computes the Lipschitz ratio of ∇ψ itself (the *inverse* map), not ∇Ψ*. For the *new* regularized map, the authors claim strong convexity (∇²Ψ ≽ I) ensures L_Ψ = 1. But the example for the log barrier uses a very elongated triangle to make L_Ψ blow up; one could ask whether in such geometries the regularized map is *practically* well-conditioned too (e.g., whether the condition number of ∇²Ψ is still huge even if ∇²Ψ ≽ I strictly).
 
----
-
-### Mirror Flow Matching (Section 3)
-
-Proposition 3.1 establishes that dual-space (Euclidean) flow matching is equivalent to primal-space flow matching under the squared Hessian metric. The proof in Appendix F is complete and correct. Figure 2 nicely illustrates how straight-line interpolation in dual space corresponds to geodesic interpolation in primal space.
-
-**Concern — Algorithm 1 ambiguity**: Due to what appears to be PDF rendering issues, Algorithm 1 contains duplicated and conflicting entries for steps 3 and 6. Step 3 appears as both "Choose T ∈ Z" and "satisfying h ∈ Z," and step 6 has both "for k = 0 to T/h − 1" and "for k = 0 to T/h − 1." The algorithm as presented is ambiguous about whether h is the step size or the number of steps, and whether T is the stopping time or an integer. This must be clarified in any revision.
+**Student-t Prior (Section 2.2).** Example 2 gives a vivid illustration of the pathology with Gaussian priors when the target has heavier tails. The argument—that the Gaussian prior induces a bimodal conditional distribution causing super-exponential velocity blow-up—is intuitive and the visualization in Appendix C is helpful. The claim that "the velocity field scales as exp(x²) for some small values of t" is asserted but is not formally proved in the body; only the conditional density formula is displayed, and the blow-up is somewhat hand-wavy. A formal Lemma stating the growth rate would sharpen this central motivation.
 
 ---
 
-### Theoretical Results (Section 4)
+### Section 3: Mirror Flow Matching
 
-**Assumption 3 (Polynomial Tail Bound)**: This requires π₁ᴰ(x) ≤ C/‖x‖^α for ‖x‖ ≥ 1, with α ≥ 2d + ν + 2. In d = 64×64 = 4096 dimensions (the watermarking experiment), this requires α ≥ 8196, an astronomical tail-decay rate that no realistic data distribution satisfies. The paper presents theoretical guarantees but applies them to high-dimensional image generation without acknowledging that all guarantees are vacuous in that regime. This is a serious gap.
+The connection between dual Euclidean training and primal geodesic interpolation under the squared Hessian metric is a nice framing; it unifies the algorithmic procedure with a geometric interpretation. Proposition 3.1 (equivalence of primal and dual objectives) is standard but useful to state explicitly. The proof in Appendix F is carried out correctly via the Banach-space conditional expectation framework, though the heavily fragmented notation in the appendix (clearly an artifact of PDF parsing) makes it hard to follow in places.
 
-**Proposition 4.1 (Lipschitz + Temporal Regularity)**: The result establishes spatial Lipschitzness L₁ = (1+ν)/(1−T)² × B₁ and a temporal derivative bound for t ∈ [0, T]. The dependence L₁ = O(1/(1−T)²) means the Lipschitz constant diverges as T → 1 (longer trajectories require larger Lipschitz constant). This is technically correct but creates a fundamental tension:
+**Algorithm 1** has what appear to be formatting artifacts that leave the loop bounds ambiguous (the index runs from k = 0 to T/h − 1 but this is rendered inconsistently). This should be fixed in any revision.
 
-**Concern — T-tradeoff not optimized**: In Theorem 3, the error bound is:
-W₂(π₁ᴰ, π̂ᵀᴰ) ≤ e^(const × L₁) × √(h²D₃ + ε² + (1−T)²M)
-
-Since L₁ = O(1/(1−T)²), the exponential prefactor grows like exp(C/(1−T)²) while the early-stopping error (1−T)M → 0 as T → 1. No optimal T is derived. The bound becomes trivial for T close to 1. This fundamental tension is acknowledged (p. 6: "early stopping error which decreases to zero as T → 1") but not resolved analytically, leaving practitioners without actionable guidance for setting T.
-
-**Exponential dependence on L₁**: The bound exp(6L₁/L₁)√(...) — while standard in the flow-matching literature — is acknowledged as potentially improvable (p. 7). The exponential factor arises from a Gronwall-type argument on the ODE error. The paper correctly notes this can potentially be improved to polynomial via probabilistic couplings (Chen et al., 2023), but does not pursue this.
-
-**Theorem 4 (Primal Space Guarantee)**: The result follows immediately from Proposition 2.2 and Theorem 3. The conditions require κ ≤ (2d + γ)/(ν + 2) and κ < β/2, where β and γ are problem-dependent constants from Proposition 2.2 and Assumption 4. These constants are not estimable without knowledge of the data distribution geometry near the boundary. The practical relevance of Theorem 4 is therefore limited to settings where β and γ can be bounded.
+One conceptual gap: the algorithm maps all *data* to dual space (Line 1), but during inference one must sample from the *prior* in dual space. The paper states "prior π₀(x) ~ t_{d,ν}" and maps data to dual space, but the prior in dual space π₀^D is the t-distribution itself only if one samples Z₀ ~ t_{d,ν} directly (without passing through ∇Ψ). This is fine when the prior is placed directly in dual space, but it raises the question of what distribution this corresponds to in primal space—since ∇Ψ* (t_{d,ν}) will generally not be a standard distribution supported on K. This distinction is never made explicit, which could confuse practitioners implementing the method.
 
 ---
 
-### Experiments (Section 5)
+### Section 4: Theoretical Results
 
-**Critical issue — Missing values in Tables 1 and 2**: Due to what appears to be PDF parsing failures, the numerical values for "Mirror t-Flow" in both tables are incomplete (showing only "0._±0._" in Table 1 and "5._±0._" in Table 2). This makes it impossible to assess the quantitative improvement over baselines from the submitted manuscript. This must be verified in the actual submission.
+**Proposition 4.1 (Spatial and Temporal Lipschitzness).** This is the core theoretical contribution. The result establishes that, under Assumption 3 with α ≥ 2d + ν + 2, the velocity field is L₁-Lipschitz in z with L₁ = (d+ν)B₁/(1−T)², and the temporal derivative is bounded. This is more general than Zhou & Liu (2025)'s bounded-support requirement.
 
-**Synthetic experiments (Section 5.1)**: The experimental setup follows Li et al. (2025), which provides a fair comparison ground. The 10D polytope and 6D L₂ ball tasks are appropriate validation for a method targeting low-to-moderate dimensional constrained domains. Including MDM as a baseline and explaining the implementation choices (using regularized log-barrier for MDM since closed-form inverse is unavailable for general polytopes) is appreciated.
+*Critical concerns:*
+- **The tail condition α ≥ 2d + ν + 2.** For high-dimensional problems (say d = 100) and any reasonable ν (e.g., ν = 4 for well-defined variance), this requires α ≥ 210. This means the dual-space distribution must have a polynomial tail of degree at least 210. In practice, most distributions won't satisfy this, and even checking whether they do is non-trivial. This severely limits the practical scope of the guarantee.
+- **The L₁ dependence on (1−T)⁻².** The Lipschitz constant blows up as T → 1, with L₁ ~ B₁(d+ν)/(1−T)². The error bound in Theorem 3 has a factor exp(6L₁/L₁) = exp(6), but looking more carefully at the bound: W₂(π₁^D, π̂_T^D) ≤ (e^{6L₁}/L₁)[h² D₃ + ε² + (1−T)M]. So the exponential factor in the numerator is exp(6L₁) ~ exp(6(d+ν)B₁/(1−T)²), which grows super-polynomially as T → 1. Meanwhile, the early-stopping error term (1−T)M shrinks. Balancing these yields an optimal T that is far from 1 (i.e., very early stopping), which would leave a large (1−T)M residual. The paper does not derive the optimal choice of T or the resulting convergence rate, nor does it explore the tradeoff explicitly. This makes the bound hard to interpret as a quantitative guarantee.
+- **The constants D₃, B₁, B₂.** These are described as depending "polynomially" on certain quantities, but the exact polynomial degrees and dependencies on dimension are not spelled out. A more explicit characterization (even in a remark) would clarify whether the bound is dimension-free or inherits a curse of dimensionality.
 
-**Ablation concerns (Figure 3)**: The ablation varies κ and ν but does not fully disentangle the two contributions:
-- The paper never shows Mirror G-Flow (proposed mirror map + Gaussian prior) vs. Mirror t-Flow (proposed mirror map + t-prior) in the main quantitative tables. This comparison is implicit in Table 1 (Mirror G-Flow is listed), but it's not highlighted as an ablation. The individual contributions of the mirror map regularization vs. the t-prior should be more clearly separated.
-- The observation that "a large ν would require a smaller κ" is consistent with the theory, but no quantitative relationship is derived.
+**Theorem 3 (Discretization Error).** Given the concerns above, the bound structure is W₂(π₁^D, π̂_T^D) ≤ exp(6L₁)/L₁ · [h²D₃ + ε² + (1−T)M]. The authors acknowledge (below Theorem 3) that the exponential dependency on L₁ "is plausible to improve via probabilistic couplings," but this is a significant caveat. The bound in practice could be vacuous for moderate T due to the exp(6L₁) term growing as (1−T)⁻². The comparison to existing work (Benton et al., 2024; Bansal et al., 2024; Zhou & Liu, 2025) in the paragraph after the theorem is helpful for positioning but does not resolve the quantitative concern.
 
-**Watermarked image generation (Section 5.2)**: The comparison in Table 3 is potentially confounded by the choice of initialization. Both methods are initialized at EDM (Karras et al., 2022) checkpoint, and the proposed method trains for 3 hours vs. 13 hours for MDM. The FID improvement (4.27 vs. 7.29) is substantial, but it's unclear whether this reflects:
-(a) inherent advantages of flow matching over diffusion (unrelated to the proposed contributions),
-(b) better exploitation of the EDM checkpoint by flow matching, or
-(c) genuine advantages of the proposed mirror map and t-prior.
-
-A comparison of proposed mirror flow vs. standard (unconstrained) flow matching from the same initialization would help isolate (c).
-
-**Missing baselines**: No comparison to neural approximate mirror maps (Feng et al., 2025, ICLR 2025), which is perhaps the closest methodological prior in terms of using mirror maps for constrained generation.
+**Theorem 4 (Primal-Space Guarantee).** This follows by composing Proposition 2.2 and Theorem 3. The conditions imposed are quite complex (Assumptions 1, 4, plus κ ≤ γ/(2d+ν+2) and κ < β/2), and the resulting bound has the same exponential dependence inherited from Theorem 3. Assumption 4 (smoothness and near-boundary density decay of the primal PDF) is stated but not connected to the conditions verifiable from first principles; there is no example showing a concrete distribution that satisfies both Assumption 4 and the condition on κ in Theorem 4 simultaneously.
 
 ---
 
-### Related Work
+### Section 5: Experiments
 
-The related work coverage is thorough. The connection to mirror Langevin (Li et al., 2022) for the Wasserstein metric analysis is appropriate. The paper correctly positions itself relative to Zhou & Liu (2025) (bounded support) and Gao et al. (2024) (Gaussian-like targets) for temporal Lipschitzness.
+**5.1 Synthetic Experiments.** The method is tested on a 10-dimensional polytope and a 6-dimensional L₂ ball. The setup follows Li et al. (2025), which allows direct comparison with Gauge Flow Matching (GFM) and RFM. Both KL divergence and MMD are reported, with 10 runs of 10,000 samples—reasonable statistical power for synthetic tasks.
+
+*Critical concerns:*
+- **Table 1 and 2:** The numbers for "Mirror t-Flow" are garbled in the parsed version (showing "0._±0._") and it's therefore impossible to evaluate the actual magnitude of improvement from the review copy. Assuming these are parser artifacts, the claim of superiority needs to be evaluated from the actual values.
+- **MDM comparison:** The authors note they "implemented MDM with regularized log-barrier" for the polytope task because the original MDM only provides closed-form mirror map inverses for specific polytopes. This is a methodological choice that makes the MDM comparison non-standard. Since they modified MDM's mirror map, the results reflect their *own implementation* of MDM rather than the published method. This should be made explicit and a discussion of whether this modification helps or hurts MDM should be included.
+- **Ablation in Figure 3:** The sensitivity analysis of κ and ν in Figure 3 is helpful. The observation that "a large ν would require a smaller κ" is consistent with the theory, which adds credibility.
+
+**5.2 Watermarked Image Generation.** This is the more practically relevant experiment.
+
+*Critical concerns:*
+- **Two-setting presentation (random vs. EDM checkpoint initialization):** In the random-initialization setting (Section 5.2 paragraph 1), the authors' CMMD (0.177) is *worse* than MDM's (0.152). Only with EDM checkpoint initialization does the method win (Table 3: FID 4.27 vs. 7.29; CMMD 0.023 vs. 0.170). The paper smooths over this by noting "strong potential" from the random-initialization result, but this is optimistic framing. If the method requires a pre-trained checkpoint to be competitive, that is an important practical limitation that should be foregrounded.
+- **Training time comparison:** The claim of 3 hours vs. 13 hours is striking, but both start from the same EDM checkpoint. The training efficiency advantage likely stems from the flow-matching framework itself (which is known to require fewer training steps than diffusion) rather than from the mirror or t-distribution contribution per se. This conflation should be disentangled.
+- **No unconditional generation baseline without watermarking:** The paper compares against MDM (also constrained) but does not compare against standard unconditional flow matching to gauge the quality degradation due to the constraint. This would help contextualize how much the watermarking constraint hurts generation quality.
+- **The FID-50k of 3.14 via flow matching initialization:** This number is mentioned in the text (not in a table) and is called "similar to 3.05 from Liu et al. (2023a)." However, the training time of "1.5 hours" vs. "several hundred hours estimated" is an informal comparison. The authors should present this more carefully.
+
+---
+
+### Writing & Clarity
+
+The main body is mostly well-written. Section 2.1 provides a logical path from challenges to the regularized map. However, Section 4's discussion of the theoretical results lacks a proper discussion of how the bounds scale with dimension d and the choice of T, leaving practitioners unable to tune the method based on theory. The algorithm description in Algorithm 1 (as parsed) has contradictory loop bounds; while this may be a parser artifact, it should be checked.
+
+One genuine clarity issue: the paper never explicitly defines what "early stopping" means in the context of the primal distribution. The early stopping error term (1−T)M in Theorem 3 goes to zero as T → 1, but as noted, L₁ also grows as T → 1. The optimal T choice is never discussed, making the bound difficult to operationalize.
 
 ---
 
 ### Limitations & Broader Impact
 
-The conclusion acknowledges non-convex domains and the exponential-to-polynomial improvement as future work. However, the paper does not explicitly address:
-1. The high-dimensional gap between theoretical guarantees (vacuous for d ~ 4096) and experimental practice.
-2. The computational cost of the inverse mirror map at inference time.
-3. The sensitivity of the method to the hyperparameter κ in practical settings where β is unknown.
+The paper's conclusion identifies several future directions (adaptive ν, non-convex domains, improved Lipschitz constants). Missing from the limitations discussion:
+1. **The high-dimensional scaling of the tail condition** α ≥ 2d + ν + 2 (addressed above).
+2. **Dependence on bounded-gradient constraint functions**, which excludes certain natural domains.
+3. **The non-standard MDM comparison** in experiments.
+4. **The performance gap in the random-initialization setting** of the image experiment.
+5. **The exponential growth of error bounds** with the Lipschitz constant as T → 1 and the lack of a practical T-selection strategy.
 
 ---
 
-## Overall Assessment
+### Overall Assessment
 
-This paper makes a technically sound and well-motivated contribution to constrained generative modeling. The regularized mirror map (Proposition 2.2) addresses a genuine limitation of log-barrier transforms, and the Student-t prior analysis (Proposition 4.1, Theorem 3) provides meaningful improvement over prior theoretical results that required bounded support. The synthetic experiments demonstrate consistent improvement over existing methods.
-
-However, three concerns are significant at ICLR standards. First, the theoretical guarantees require α ≥ 2d + ν + 2, which is vacuous for high-dimensional applications — the real-data experiment (d ≈ 4096) operates entirely outside the regime covered by the theory, and this gap is not acknowledged. Second, the error bound in Theorem 3 has an exponential prefactor that grows as exp(C/(1−T)²) while the early-stopping error requires T → 1; no optimal T is derived, leaving the bound practically uninterpretable. Third, the apparently missing numerical values in Tables 1 and 2 prevent verification of the paper's quantitative claims (likely a rendering artifact, but it must be confirmed). The watermarked image generation comparison (Section 5.2) also conflates the benefits of the proposed method with those of flow matching vs. diffusion in general. These issues collectively weaken what is otherwise a solid paper; they are addressable in revision, and the core contribution is sufficiently interesting to merit acceptance if adequately addressed.
+This paper makes a genuine methodological and theoretical contribution to flow-based generative modeling on convex domains. The two key ideas—a regularized mirror map that tames dual tail behavior while preserving strong convexity, and a Student-t prior that prevents velocity field blow-up—are well-motivated and clearly distinct from prior work. The theoretical results (Proposition 4.1, Theorem 3) are more general than existing analyses in that they handle polynomial-tail distributions without bounded support. However, the paper has several significant weaknesses that limit the strength of the contribution at its current state. The tail condition α ≥ 2d + ν + 2 is restrictive in high dimensions and not discussed as a limitation. The error bound in Theorem 3 has an exponential factor exp(6L₁) where L₁ ~ (1−T)⁻², making the bound vacuous unless T is kept far from 1—but neither the optimal T nor the resulting convergence rate is analyzed. The experimental comparison uses a modified MDM baseline (with the authors' own mirror map substituted in), and in the random-initialization setting the method is actually outperformed by MDM on CMMD, a fact that is underemphasized. For ICLR, the theoretical contributions are of legitimate interest, but the gap between the theoretical story (uniform improvement, polynomial-tail generality) and what is actually demonstrated (exponentially growing bounds, restricted tail conditions, mixed empirical results) needs to be addressed more honestly. The paper is borderline; acceptance would require the authors to provide a more transparent analysis of the T-selection tradeoff, clarify the dimensional scaling of all guarantees, and present the image generation results without cherry-picking the initialization regime.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper proposes "Mirror Flow Matching," a framework for generative modeling on convex domains that combines a regularized mirror map with Student-$t$ priors to address heavy-tailed dynamics and instability in the dual space. The authors provide theoretical guarantees establishing spatial Lipschitzness and temporal regularity of the velocity field under polynomial tail assumptions, extending prior results that required bounded support. Empirically, the method demonstrates superior sample quality and feasibility compared to Mirror Diffusion Models and other constrained flow baselines on synthetic and real-world tasks.
+The paper addresses flow matching on constrained convex domains by identifying two core bottlenecks: classical log-barrier mirror maps induce heavy-tailed dual distributions that destabilize ODE dynamics, and Gaussian priors mismatch these heavy tails. The authors propose a regularized mirror map that guarantees finite moments and strong convexity, paired with a Student-t prior to control velocity field growth and stabilize training. They provide rigorous theoretical guarantees on spatial Lipschitzness, temporal regularity, and Wasserstein discretization error under polynomial tail assumptions, alongside primal-space convergence bounds, and validate the method on synthetic convex sets and watermarked image generation.
 
 ### Strengths
-1.  **Theoretical Rigor on Velocity Field Regularity:** The paper provides a significant theoretical advancement by proving spatial Lipschitzness and temporal regularity in the dual space under polynomial tail assumptions (Theorem 3). This extends recent work (e.g., Zhou & Liu 2025) which restricted the data distribution to have bounded support to obtain similar Lipschitz guarantees.
-2.  **Systematic Handling of Heavy Tails:** The dual insight to couple a *regularized mirror map* (Proposition 2.2) with a *Student-$t$ prior* explicitly addresses the "heavy-tailed dual distribution" problem identified in Section 1.1. The paper demonstrates how this co-design ensures finite moments and prevents the velocity field from blowing up, which is a known failure mode in standard log-barrier approaches (Figure 1).
-3.  **Strong Empirical Validation:** The evaluation is comprehensive, covering both controlled synthetic tasks (polytopes, $L_2$ balls) and a practical application (watermarked image generation on AFHQv2). The method consistently achieves 100% feasibility and competitive MMD/FID scores compared to MDM and Gauge Flow Matching (Tables 1 & 2, Section 5.2).
+1. **Well-Motivated Co-Design of Geometry and Priors:** The paper correctly diagnoses why standard mirror maps and Gaussian priors fail in constrained settings (heavy tails → ill-posed velocity fields and mismatched conditional expectations, Example 2). The joint design of a regularized mirror map (Prop. 2.2) and Student-t prior directly addresses these pathologies, showing strong methodological insight.
+2. **Rigorous and Meaningful Theoretical Contributions:** The analysis in Proposition 4.1 establishes spatial Lipschitzness and temporal regularity of the velocity field under polynomial tail bounds (Assumption 3), a notable relaxation compared to prior work that required bounded support. The resulting discretization error bound (Theorem 3) and primal-space guarantee (Theorem 4) are explicit, track standard assumptions in the literature (ε-accurate networks, Assumption 1), and cleanly separate approximation, discretization, and early-stopping errors.
+3. **Clear Empirical Validation and Reproducibility:** Experiments span controlled synthetic benchmarks (10D polytope, 6D $L_2$ ball) and a real constrained task (AFHQv2 watermarked images). The method consistently outperforms baselines in MMD, KL, and feasibility (Tables 1-2), with competitive training efficiency reported (Table 3). Algorithm 1, hyperparameter choices, and network architectures are clearly specified, and code is promised, meeting ICLR's reproducibility expectations.
 
 ### Weaknesses
-1.  **Restrictive Assumptions for Theory:** Theorem 3 and Proposition 4.1 require the data tail decay exponent $\alpha$ to satisfy $\alpha \geq 2d + \nu + 2$. In high dimensions ($d$ large), this effectively demands a very heavy-tailed prior relative to the data decay, which may not always be natural or easily verifiable in practice. Additionally, the error bound retains an exponential dependence on the Lipschitz constant ($e^{L_1}$), similar to prior flow matching literature, limiting the scalability of the rate.
-2.  **Hyperparameter Sensitivity:** Section 5.1 and Figure 3 indicate that performance depends on the regularization parameter $\kappa$ and degrees of freedom $\nu$. While the paper shows the trade-off, it lacks a concrete guideline or adaptive mechanism for selecting $\kappa$ and $\nu$ for arbitrary domains, which could hinder broader adoption. The text notes "larger values of $\kappa$ would induce a tail that is heavier," but practical rules for balancing this against the mirror map's strong convexity are not fully fleshed out.
-3.  **Computational Cost of Mirror Map:** The regularized mirror map involves $\kappa$ and potentially complex inverse mappings compared to standard log-barriers. While the paper mentions the inversion difficulty for MDM implementations (Section 5), it does not quantify the overhead of the proposed regularized map's inversion or Hessian computation during the sampling stage, which is crucial for ODE integration speed.
+1. **Narrow Real-World Empirical Scope:** While synthetic results are thorough, the real-data evaluation is limited to a single watermarking application on 64×64 AFHQv2 images. ICLR typically expects broader empirical validation to establish general utility. The method's performance on other constrained domains (e.g., probability simplices, PSD cones for covariance generation) or higher-dimensional, high-resolution datasets remains untested.
+2. **Unmitigated Exponential Lipschitz Dependency:** The error bound in Theorem 3 scales as $e^{6L_1}$, a common issue in deterministic flow matching analyses but still theoretically limiting for high Lipschitz constants or complex geometries. While the authors acknowledge this and cite possible probabilistic coupling alternatives, the bound remains loose, and no empirical analysis is provided to show that $L_1$ stays moderate in practice for the tested regimes.
+3. **Lack of Principled Hyperparameter Selection:** The regularization parameter $\kappa$ and Student-t degrees of freedom $\nu$ significantly impact performance (Figure 3), yet the paper lacks a systematic or data-driven strategy for selecting them. The theoretical condition $\kappa < \beta/p$ and $\kappa \leq 2/(d+\gamma\nu+2)$ provides existence guarantees but does not translate into practical guidance for unseen datasets.
 
 ### Novelty & Significance
-The novelty lies in the specific integration of Student-$t$ priors into the Flow Matching framework constrained by regularized mirror maps. While Mirror Descent and Flow Matching are established separately, their combination with heavy-tailed analysis for constrained domains is new. The paper effectively bridges the gap between theoretical requirements (Lipschitz continuity of the vector field) and practical modeling choices (priors and potentials). The significance is high for applications requiring hard constraints (e.g., robotics, physical laws) where standard diffusion or flow models struggle with feasibility without projection artifacts. By relaxing the bounded support assumption, it opens the door to more robust error analysis in generative modeling.
+**Novelty:** The integration of a regularized mirror map with a Student-t prior for flow matching on convex domains is novel. The theoretical derivation of velocity field regularity under polynomial tail assumptions (rather than bounded support) represents a meaningful advance in flow matching theory, addressing a known gap in the literature.
+**Significance:** The work has high significance for constrained generative modeling, with direct relevance to safety-critical domains, watermarking, and geometry-aware synthesis. The co-design framework offers a principled alternative to projection/reflection-based methods and is likely to influence subsequent research in Riemannian/constrained flows.
+**Clarity & Reproducibility:** The manuscript is logically structured, with clear progression from motivation to theory to experiments. Notation is consistent, and the appendix contains complete proofs. Reproducibility is strong given the explicit algorithmic steps, network specifications, and code availability commitment.
 
 ### Suggestions for Improvement
-1.  **Clarify Hyperparameter Selection:** Provide a strategy or empirical rule for choosing $\kappa$ and $\nu$ based on the dimension $d$ and the geometry of $K$. An ablation study specifically on the relationship between $\kappa$ and the stability of the numerical ODE integration would be valuable.
-2.  **Detail Implementation Costs:** Include a discussion or table on the computational overhead introduced by the regularized mirror map compared to standard barriers. Specifically, does the inversion of $\nabla \Psi^*$ require iterative solvers, and how does that impact the sampling speed in the real-world experiments?
-3.  **Non-Convex Extensions:** The theory is strictly limited to convex domains. A brief discussion on potential challenges or preliminary results regarding non-convex constraints (e.g., using multiple local mirror maps) could broaden the paper's impact, as the conclusion hints at this but lacks substance.
+1. **Broaden Empirical Validation & Scalability Analysis:** Add experiments on at least one additional constrained domain type (e.g., probability simplex or symmetric positive-definite cone) and evaluate scaling with dimension $d$ to empirically verify the polynomial dependence on $d$ stated in the theoretical bounds. This would strengthen claims of generality.
+2. **Develop Practical Hyperparameter Selection Guidelines:** Propose a validation scheme or heuristic for choosing $(\kappa, \nu)$. For example, estimating the empirical tail index of dual-space samples could inform $\nu$, while $\kappa$ could be tied to constraint margin statistics or selected via light-weight validation on a held-out subset.
+3. **Clarify Early Stopping ($T$) and Computational Overhead:** The theory and algorithm rely on $T < 1$ for stability, but practical guidance for selecting $T$ is minimal. Provide a sensitivity analysis or rule-of-thumb for choosing $T$ relative to the target distribution's support and $\nu$. Additionally, quantify the computational overhead of evaluating the regularized mirror map and its inverse compared to the standard log-barrier, as this impacts real-world adoption.
+4. **Empirically Characterize $L_1$ in Practice:** Since the error bound depends exponentially on $L_1$, report measured or estimated spatial Lipschitz constants of the learned velocity field across training epochs. This would contextualize the theoretical bound and demonstrate that the Student-t prior effectively keeps $L_1$ within a manageable regime.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. Evaluate on higher-resolution datasets (e.g., 256x256) because 64x64 results are insufficient to claim competitiveness with state-of-the-art generative models at ICLR.
-2. Compare against projection-based flow matching to isolate whether performance gains arise from the mirror map geometry or simply better optimization dynamics.
-3. Report feasibility rates under strict numerical tolerances (e.g., $10^{-8}$) since "100% feasibility" is impossible to verify without specifying floating-point precision thresholds.
-4. Evaluate on simplex constraints to verify generality beyond polytopes and L2 balls, as these are common in constrained generative tasks like probability modeling.
-5. Benchmark sampling latency, as inverse mirror map computations may introduce significant overhead compared to projection baselines that undermines practical utility.
+1. **Unconstrained heavy-tailed benchmarks:** Add experiments on unconstrained datasets with known heavy tails to isolate the Student-t prior contribution from the mirror map geometry. Without this, it is unclear if performance gains stem from the prior or the constraint handling.
+2. **Standard image generation benchmarks:** Evaluate on CIFAR-10 or ImageNet (even unconstrained) to demonstrate general generative modeling utility beyond the niche watermarking application. ICLR reviewers expect validation on standard benchmarks to claim broader relevance.
+3. **Inverse map computational cost:** Measure and report the wall-clock time for solving the inverse mirror map $\nabla \Psi^*$ during sampling compared to projection steps in Reflected Flow Matching. This is critical to assess scalability, as inverse maps can be computationally expensive.
+4. **Early stopping ablation:** Systematically vary the early stopping time $T$ to quantify the trade-off between theoretical stability and sample quality (FID/CMMD). The theory requires $T < 1$, but the empirical cost of this truncation is not analyzed.
+5. **Hyperparameter selection strategy:** Provide a heuristic or guideline for selecting $\nu$ and $\kappa$ without exhaustive grid search. Currently, the method relies on tuning these sensitive parameters per dataset, limiting practical usability.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. Quantify the impact of the exponential Lipschitz constant in Theorem 3, as this dependence renders the convergence guarantee vacuous for ill-conditioned domains.
-2. Analyze the restrictiveness of the tail assumption $\alpha \ge 2d + \nu + 2$ in high dimensions, since it requires impractically light tails as $d$ increases.
-3. Provide a sensitivity analysis for the Student-t degrees of freedom $\nu$, as fixed values may fail to generalize across diverse target distributions.
-4. Discuss the scaling of the neural network approximation error $\epsilon$ with respect to the dual-space dimension and map conditioning.
-5. Clarify the condition number of the regularized mirror map Hessian, as this directly impacts the numerical stability of the inverse mapping during sampling.
+1. **Empirical dual tail verification:** Plot the empirical decay rate of the dual space distribution to validate Proposition 2.2's claim about finite moments. The core theoretical contribution rests on this tail behavior being controlled, which needs empirical confirmation.
+2. **Numerical feasibility precision:** Audit the "100% feasibility" claim under floating-point arithmetic to distinguish between theoretical guarantee and numerical precision. Small violations due to solver error should be quantified rather than claimed as exactly 100%.
+3. **Lipschitz constant estimation:** Estimate the empirical Lipschitz constant of the learned velocity field to validate the magnitude of the theoretical error bounds in Theorem 3. Without this, the theoretical guarantees remain abstract and unverified.
+4. **Convergence rate validation:** Plot convergence metrics against iteration steps to verify if the empirical scaling matches the rates predicted in Theorem 3. This connects the theoretical analysis directly to observed training dynamics.
+5. **Sensitivity to constraint tightness:** Analyze performance degradation as the convex domain becomes increasingly narrow or ill-conditioned. This tests the robustness of the regularized mirror map compared to standard log-barriers.
 
 ### Visualizations & Case Studies
-1. Plot dual-space norm histograms for generated samples to empirically verify the suppression of heavy tails claimed in Figure 1.
-2. Visualize flow trajectories near boundaries to demonstrate how the method avoids the boundary singularities common in log-barrier approaches.
-3. Show failure cases where the inverse mirror map fails to recover primal samples, exposing limits of the regularized map under extreme constraints.
+1. **Velocity field magnitude heatmaps:** Visualize the norm of the velocity field $\|v(x,t)\|$ for Gaussian vs. Student-t priors to directly evidence the claimed "blow-up" mitigation. This provides intuitive proof of the core methodological motivation.
+2. **Primal trajectory boundary plots:** Show sample trajectories in primal space near the constraint boundaries to visually confirm that the mirror map prevents boundary crossing. This validates the constraint satisfaction mechanism visually.
+3. **PCA/t-SNE of dual samples:** Provide dimensionality-reduced visualizations of the dual space distribution to verify tail behavior beyond the limited 2D slices currently shown. This ensures the tail control generalizes across dimensions.
 
 ### Obvious Next Steps
-1. Include an ablation on adaptive $\nu$ scheduling to justify the choice of a fixed degrees-of-freedom parameter rather than treating it as a hyperparameter.
-2. Provide a preliminary extension to non-convex domains via local convexification to address the stated limitation in the conclusion.
-3. Implement and benchmark an efficient approximation for the inverse mirror map to validate the method's computational viability for real-time applications.
+1. **Adaptive degrees of freedom:** Develop a mechanism to adapt the Student-t degrees of freedom $\nu$ during training rather than fixing it statically. This would allow the model to adjust tail heaviness based on local data geometry.
+2. **Efficient inverse map solvers:** Investigate approximate or neural solvers for the inverse mirror map $\nabla \Psi^*$ to reduce sampling latency. This is essential for scaling to higher-dimensional problems where exact inversion is costly.
+3. **Extension to non-convex domains:** Explore leveraging local convexity or landing techniques to extend the framework beyond strictly convex domains. This would significantly broaden the applicability of the method to real-world constraints.
 
 # Final Consolidated Review
 ## Summary
-
-This paper proposes Mirror Flow Matching, a framework for generative modeling on convex domains that combines a regularized mirror map with Student-t priors. The authors address two challenges: standard log-barrier mirror maps induce heavy-tailed dual distributions that violate moment conditions, and Gaussian priors mismatch heavy-tailed targets. Theoretical contributions include establishing spatial Lipschitzness and temporal regularity of the velocity field under polynomial tail assumptions (extending prior work that required bounded support), and deriving Wasserstein convergence rates for flow matching with Student-t priors.
+The paper addresses flow matching on convex domains by identifying two fundamental issues: standard log-barrier mirror maps induce heavy-tailed dual distributions that destabilize ODE dynamics, and Gaussian priors poorly match heavy-tailed targets. The authors propose a regularized mirror map that ensures finite moments and strong convexity, paired with a Student-t prior to control velocity field growth. They provide theoretical guarantees on spatial Lipschitzness, temporal regularity, and Wasserstein convergence under polynomial tail assumptions, and validate the method on synthetic benchmarks and a watermarked image generation task.
 
 ## Strengths
-
-- **Novel theoretical contribution**: Proposition 4.1 establishes both spatial Lipschitzness and temporal regularity of the velocity field under polynomial tail assumptions (α ≥ 2d + ν + 2), which extends prior results by Zhou & Liu (2025) and Benton et al. (2024) that required bounded support or Gaussian-like targets. The proof in Appendix G carefully bounds the conditional expectations needed for the Lipschitz analysis.
-
-- **Principled co-design of mirror map and prior**: The paper correctly identifies that log-barrier mirror maps create heavy-tailed dual distributions (Figure 1 demonstrates this empirically), and that Student-t priors better match heavy-tailed targets. Example 2 provides concrete analytical motivation showing that Gaussian priors can cause the conditional velocity field to blow up super-exponentially, while Student-t priors remain controlled.
-
-- **Strong empirical results on synthetic benchmarks**: Tables 1 and 2 show consistent improvements over Gauge Flow Matching, Reflected Flow Matching, and Mirror Diffusion Models on 10D polytope and 6D L₂ ball tasks, achieving 100% feasibility (by construction) with lower KL divergence and MMD. The regularized mirror map successfully avoids the heavy-tail issues that cause MDM to fail on L₂ ball tasks (Table 2, where MDM shows KL = 8.017).
-
-- **Clear theoretical guarantees for primal space**: Theorem 4 provides error bounds in primal space by combining the dual-space guarantees (Theorem 3) with the Wasserstein distance inequality from Proposition 2.2, giving explicit conditions under which generated samples satisfy the constraint set K by construction.
+- **Well-motivated co-design of mirror maps and priors:** The paper correctly diagnoses why standard mirror maps (heavy tails in dual space) and Gaussian priors (velocity field blow-up) fail in constrained settings. Example 2 provides a clear formal illustration of the pathology with Gaussian priors when targets have heavier tails, and the joint solution (regularized mirror map + Student-t prior) directly addresses both issues.
+- **Theoretical advances under polynomial tail assumptions:** Proposition 4.1 establishes spatial Lipschitzness and temporal regularity of the velocity field under Assumption 3 (polynomial tail bounds), which relaxes the bounded-support requirement in prior work (Zhou & Liu, 2025; Benton et al., 2024). This is a meaningful theoretical contribution for flow matching analysis.
+- **Explicit primal-space guarantees:** Theorem 4 provides Wasserstein error bounds in the primal space by composing the dual-space analysis (Theorem 3) with the regularized mirror map properties (Proposition 2.2). The bound cleanly separates approximation error (ε²), discretization error (h²D₃), and early-stopping error (1−T)M.
+- **Empirical demonstration of feasibility:** On synthetic tasks (10D polytope, 6D L₂ ball), the method achieves 100% constraint satisfaction with improved MMD and KL divergence compared to Gauge Flow Matching and Reflected Flow Matching baselines (Tables 1-2).
 
 ## Weaknesses
-
-- **High-dimensional vacuity of theoretical assumptions**: The tail condition α ≥ 2d + ν + 2 becomes extremely restrictive in high dimensions. For the watermarking experiment (d ≈ 4096 for 64×64 images), this would require α ≥ 8200, which no realistic image distribution satisfies. While the synthetic experiments (d = 10 and d = 6) fall within the theory's scope, the paper applies the method to image generation without acknowledging this theory-practice gap. The paper should explicitly state that high-dimensional applications operate outside the proven guarantees.
-
-- **No analytical guidance for hyperparameter selection**: The paper demonstrates sensitivity to κ and ν (Figure 3) and notes that "a large ν would require a smaller κ," but provides no principled method for selecting these parameters. Proposition 2.2 gives κ < β/p as a sufficient condition for moment existence, yet β depends on the data distribution's behavior near the boundary, which is typically unknown. Practitioners must resort to empirical tuning.
-
-- **Missing comparison to neural approximate mirror maps**: The paper cites Feng et al. (2025) for neural approximate mirror maps but does not compare against this method, which represents a closely related approach to constrained generation. A discussion of the relative merits (learned vs. analytically constructed mirror maps) would strengthen the positioning.
-
-- **Computational cost of inverse mirror map unquantified**: Line 10 of Algorithm 1 requires computing ∇Ψ*(z) to map dual samples back to primal space. For general convex sets defined by smooth inequalities ϕᵢ, this requires solving a convex optimization problem at each integration step. The paper notes this difficulty for MDM implementation (Section 5.1) but does not quantify the overhead for their own method, which is essential for assessing practical utility.
-
-- **Exponential Lipschitz dependence in error bound**: Theorem 3 includes a factor exp(6L₁) where L₁ = O(1/(1-T)²), acknowledged on p. 7 as "arising due to non-convexity" and potentially improvable via probabilistic couplings. This exponential dependence is inherited from prior flow matching analyses, but the paper does not pursue improvements despite noting them.
+- **Stringent tail condition in high dimensions:** Proposition 4.1 requires α ≥ 2d + ν + 2 for the dual-space distribution tail decay. For d = 100 and ν = 4, this demands α ≥ 210—meaning the dual distribution must have extremely light tails. The paper does not discuss whether common data distributions or the transformed distributions in practice satisfy this, nor how the theoretical guarantees degrade when the condition is violated. The parameter κ in Theorem 4 must also satisfy κ ≤ γ/(2d + ν + 2), becoming extremely small in high dimensions, with no analysis of the practical implications.
+- **Exponential dependency in error bound with unclear practical relevance:** Theorem 3's bound includes exp(6L₁) where L₁ ~ (d+ν)B₁/(1−T)². As T → 1, this factor grows super-polynomially, while the early-stopping error (1−T)M vanishes. The paper acknowledges (page 7) that exponential dependence "is plausible to improve via probabilistic couplings" but provides no analysis of the optimal T or the resulting convergence rate under this trade-off, making the bound difficult to operationalize.
+- **Mixed empirical results without transparent discussion:** In the watermarked image generation task (Section 5.2), the method achieves CMMD 0.177 versus MDM's 0.152 under random initialization—*worse* than the baseline. Only with EDM checkpoint initialization does it achieve superior performance (FID 4.27 vs. 7.29; CMMD 0.023 vs. 0.170). The paper frames this as "strong potential" rather than acknowledging a genuine limitation: the method's advantage appears to depend on pre-trained initialization, reducing practical accessibility.
+- **No principled hyperparameter guidance:** The parameters κ (mirror map regularization) and ν (Student-t degrees of freedom) significantly impact performance (Figure 3), but the theoretical conditions (κ < β/p, κ ≤ γ/(2d+ν+2)) are existence guarantees with no operationalization. The paper provides no validation scheme, heuristic, or data-driven method for selecting these parameters on new datasets, limiting practical adoption.
 
 ## Nice-to-Haves
-
-- Evaluation on simplex constraints beyond polytopes and L₂ balls, as simplex constraints are common in probability modeling applications.
-
-- Benchmarking of sampling latency/throughput to assess practical deployment feasibility, particularly comparing the cost of inverse mirror map computation against simpler projection-based approaches.
-
-- Comparison at higher resolution (e.g., 256×256) to validate scalability beyond 64×64.
-
-- Ablation isolating the contribution of the regularized mirror map from the Student-t prior more clearly (Table 1 includes Mirror G-Flow, but the comparison to Gauge/Reflected baselines conflates both contributions).
+- **Empirical Lipschitz constant estimation:** Report estimated spatial Lipschitz constants of the learned velocity field across training epochs to contextualize the magnitude of the exp(6L₁) factor in Theorem 3.
+- **Early stopping sensitivity analysis:** Systematically vary T to quantify the trade-off between theoretical stability and sample quality (CMMD/FID), providing practical guidance for T selection.
+- **Computational overhead comparison:** Quantify the wall-clock time for inverse mirror map evaluation versus projection steps in Reflected Flow Matching, as the inverse map may be computationally expensive for complex domains.
 
 ## Removed Points
+*These points are flagged to be removed, treat them with caution*
 
-- **Claim of missing numerical values in Tables 1 and 2**: This is incorrect. The values are present but with formatting artifacts (e.g., "0._±0._" represents approximately 0 ± 0). The MMD and KL divergence values are readable from the tables.
+- **Weakness: MDM uses modified mirror map for polytopes.** The paper reasonably explains (page 9) that the original MDM only provides closed-form mirror map inverses for specific polytopes, and implementing with log-barrier directly is computationally difficult. Using the regularized log-barrier for both methods enables fair comparison on the same geometry. This is a methodological necessity rather than a flaw.
 
-- **Claim that T-selection is unaddressed**: The paper discusses early stopping and the (1-T)M term in Theorem 3, noting that early stopping error decreases as T→1. While no optimal T formula is derived, this tradeoff is acknowledged.
+- **Weakness: Algorithm 1 has contradictory loop bounds.** This appears to be a PDF parsing artifact. The actual algorithm specifies T/h discretization steps clearly in the mathematical context.
 
-- **Request for experiments at 256×256 resolution**: While higher resolution experiments would be valuable, the 64×64 experiments already demonstrate the method's effectiveness on real images. This is a nice-to-have, not a core weakness.
+- **Weakness: Bounded-gradient assumption excludes natural domains.** The condition that ϕᵢ have bounded gradients holds for polytopes and L₂ balls (the tested cases), which cover important practical domains. While quadratic constraints with unbounded domains are excluded, this is a reasonable assumption for the class of problems targeted.
+
+- **Weakness: No CIFAR-10/ImageNet comparison.** The paper's scope is explicitly constrained generative modeling. Evaluating on unconstrained standard benchmarks would not directly test the claimed contributions about constraint handling and heavy-tailed priors.
 
 ## Novel Insights
-
-The paper's central insight—that heavy-tailed dual distributions require both mirror map regularization AND heavy-tailed priors—is a substantive contribution. The analytical connection between the boundary measure condition P(K\Kδ) ≤ CKδ^β and the tail decay of the dual distribution (Proposition 2.2) provides a principled foundation for choosing the regularization parameter κ. This bridges the gap between the geometric structure of convex constraint sets and the statistical properties needed for stable ODE dynamics.
+The co-design insight—that the mirror map and prior distribution must be jointly chosen to match the tail behavior—is more fundamental than prior work suggests. The core observation is that log-barrier maps transform bounded primal distributions into heavy-tailed dual distributions, and Gaussian priors cannot match these tails, causing the conditional E[Z₁|Z_t = z] to develop a spurious mode near z/t that creates velocity field singularities. The Student-t prior's heavier tails suppress this spurious mode, a principle that extends beyond flow matching to any generative model using mirror maps. The paper's theoretical contribution of replacing bounded-support assumptions with polynomial tail bounds suggests a broader research direction: developing convergence analyses that characterize tail behavior rather than relying on compactness.
 
 ## Suggestions
+1. **Add a "Practical Hyperparameter Selection" subsection:** Provide concrete heuristics for choosing κ and ν, such as: (a) estimate the tail index of dual-space samples via empirical moment ratios to inform ν, and (b) select κ based on constraint margin statistics or via validation on a held-out subset. Even approximate guidance would significantly improve usability.
 
-- Add explicit discussion of the dimension-dependent scaling of the tail condition, noting that high-dimensional applications operate outside the proven guarantees.
+2. **Address the T-selection trade-off explicitly:** Either derive an approximate optimal T from balancing exp(6L₁) and (1−T)M, or provide empirical sensitivity analysis showing how sample quality varies with T in practice. This connects the theory to implementation.
 
-- Provide a rule of thumb or heuristic for κ selection based on problem geometry (e.g., κ = β/(2p) for moment conditions, with practical guidance for estimating β from data or constraint structure).
+3. **Discuss the random-initialization limitation transparently:** If the method requires strong pre-trained initialization to outperform baselines, acknowledge this as a practical constraint and discuss what minimal pre-training might suffice, or investigate whether longer random-initialization training can close the gap.
 
-- Include wall-clock timing comparison for the inverse mirror map computation against alternatives (projection, reflection).
+4. **Report dimension-dependent theoretical constants explicitly:** The bounds depend on polynomial expressions involving d, ν, B₁, B₂. Provide explicit formulas for these constants (at minimum in an appendix) so readers can assess scaling behavior without deriving from scratch.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 6.0, 6.0]

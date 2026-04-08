@@ -1,7 +1,7 @@
-=== CALIBRATION EXAMPLE 16 ===
+=== CALIBRATION EXAMPLE 7 ===
 
 # Harsh Critic Review
-Now I have enough of the paper to write a thorough review. Let me produce it.
+Now I have enough context to write a thorough review. Let me produce the full critical review.
 
 ---
 
@@ -9,222 +9,181 @@ Now I have enough of the paper to write a thorough review. Let me produce it.
 
 ### Title & Abstract
 
-The title "No LLM Solved Yu Tsumura's 554th Problem" is technically accurate given the experimental scope but epistemically too strong. The claim is really "no tested LLM in a single one-shot attempt solved…", a considerably narrower statement. The abstract lists five favourable properties of the problem (a–e) that make it *a priori* "the easiest case for an LLM," which is fine framing, but it also says "an analysis of the output traces of 16 SOTA LLMs" while Table 1 contains **18** rows (o3-pro through GPT-5 Thinking). This inconsistency, which is not a PDF-parsing artefact, runs through the entire paper ("all 16 evaluated LLMs" is also in the Table 1 caption). The authors should resolve this discrepancy.
+The title "NO LLM SOLVED YU TSUMURA'S 554TH PROBLEM" is a perishable claim. The paper itself acknowledges (§4, §5) that the problem will likely be solvable by models soon after this paper draws attention to it. An ICLR paper reviewed in spring 2026 could be describing a claim that is already stale at review time, and would almost certainly be outdated by acceptance. This is a non-trivial concern for archival publication—the headline finding may be empirically false before the paper appears in proceedings.
 
----
+The abstract states that 16 LLMs were evaluated. Table 1 lists 18 entries (including GPT-OSS-120B and GPT-5 Thinking). This inconsistency should be resolved, and it raises the question of whether the study's scope was expanded after initial writing without fully updating the abstract.
 
-### Introduction & Motivation
+The abstract claims the problem "requires fewer proof techniques than typical hard IMO problems." This comparative claim is stated without substantiation. Asserting relative difficulty to IMO problems requires at least a citation or argument from the mathematical community—not just the authors' opinion.
 
-The motivation is clearly articulated and genuinely interesting: at a moment when LLMs are receiving enormous press coverage for IMO gold-medal performance, showing that a pre-LLM-era, publicly posted problem with a known solution resists *all* tested models is a meaningful counterpoint.
+### Introduction & Motivation (§1)
 
-However, two issues weaken the framing:
+The motivation is clear and topical: IMO-2025 gold medal performance paints an optimistic picture of LLM reasoning, and the paper offers a corrective data point. The tension the paper surfaces—that LLMs that solve IMO-level problems fail on a single, publicly solved problem with a known solution predating LLMs—is genuine and interesting.
 
-1. **The "converse" framing is imprecise.** The paper asserts it proves the *converse* of IMO success. Strictly, IMO success says ∃ models solving hard novel problems; this paper says ∃ problems hard for models. Neither is a converse of the other; they are compatible facts.
+However, several argumentative moves require more care:
 
-2. **The speculated causes are undersubstantiated.** Two reasons are offered for LLM difficulty (hallucination before finding the right identities; insufficient training for deep expression search). Neither is validated experimentally—there is no ablation, error-rate analysis, or search-depth measurement to distinguish them. These remain informal guesses.
+- The paper claims the problem is "within the scope of an IMO problem in terms of proof sophistication" (abstract and §1). This is asserted without evidence. The problem comes from a recreational mathematics blog, not any competition, and while the paper asserts it requires only "clever symbolic manipulation," it is not obvious that Yu Tsumura's 554th is comparable in structure or difficulty to the combinatorics/geometry/number-theory problems dominating IMO. The comparison would benefit from input from a mathematician or from a citation to competition mathematics literature.
 
----
+- The causal mechanism offered—"deep search through identities" with either hallucination before reaching the required identities, or insufficient search depth—is speculative (the paper says "we speculate"). Given that full output traces are available in Appendix B, a more systematic analysis of which step in the derivation each model fails at, and at what depth, would strengthen the mechanistic hypothesis rather than leaving it as conjecture.
 
-### Method / Experimental Design
+- The framing "no specialized knowledge of group theory is needed" is repeated multiple times. Technically the proof does use conjugacy and the order of elements; saying these can be "unpacked" doesn't mean the problem requires no domain knowledge—it means the domain knowledge is elementary. This distinction is worth being precise about.
 
-This is where the paper has its most significant vulnerabilities.
+### Results (§2)
 
-**Single-shot protocol.** The paper explicitly defends evaluating each model exactly once, arguing this reflects the end-user experience and that a correct proof appearing occasionally under repeated sampling would correspond to a "different model." This argument is understandable but scientifically untenable:
+**Evaluation protocol.** The one-shot evaluation design is the most consequential methodological choice, and the paper's defense of it is the weakest part of the argument. The paper argues that "one-shot evaluation should be sufficient" to assess robustness, and that "from the perspective of the end user" repeated sampling would amount to evaluating a different model. But:
 
-- Whether a model *can never* solve a problem versus *rarely* solves it are very different claims, and the paper conflates them in its title and abstract.
-- A single trial gives zero statistical power. Even a pass@10 or pass@20 evaluation (which is cheap given the problem's short solution) would let the paper make much stronger statements. The authors should report pass@k for at least the top few models.
-- Commercial models already run internal sampling and verification; o3 in particular is known to ensemble multiple reasoning chains. Claiming a "single attempt" is the model's best-effort output misrepresents how these systems work.
+- Modern reasoning models (o3, o4-mini, Gemini 2.5 Deep Think) are *explicitly designed* to use extended internal chain-of-thought, and their reported performance on benchmarks—including IMO—involves sampling or self-consistency. Evaluating them once is not evaluating them as designed.
+- "Robustness" standardly means consistent performance across many draws, not performance on a single draw. The paper inverts this: it calls one-shot a test of robustness, which is not standard.
+- The n=1-per-model design provides zero variance estimate. A model that solves this problem 40% of the time would fail this evaluation with 60% probability. The paper cannot distinguish a model that never succeeds from a model that succeeds occasionally.
 
-**Prompt design.** A single prompt was used for all models: "Let G be a group with generators x and y and relations xy² = y³x and yx² = x³y. Can you prove that G is the trivial group." No prompt ablation is presented. Many of the failure modes (e.g., the "unwarranted assumption" class U, or the "argument incomplete" class I) could plausibly be triggered or avoided by, for example, asking for a step-by-step derivation, specifying that no group-theoretic lemma beyond basic definitions may be invoked, or asking the model to verify each step. The paper does not rule out that better prompting would succeed.
+A more convincing study would run each model (especially the top-tier ones: o3-Pro, Gemini 2.5, Grok 4) at least 5–10 times and report pass@1 or pass@k. The current protocol is not sufficient to support the paper's strong claim of systematic failure.
 
-**Failure taxonomy.** The six failure modes (A, C, D, I, T, U) are useful and specific, but they are identified post-hoc by the authors for each output. There is no inter-rater reliability measurement and no second expert checking the classifications. For a paper whose core contribution is error classification, this is a gap.
+**Failure taxonomy.** The failure key (A = algebra error, C = missed case, D = incompatible definition, I = argument incomplete, T = inapplicable theorem, U = unwarranted assumption) is a useful contribution. However, the paper offers no quantitative breakdown: how many models exhibit each type, whether any patterns hold across model families, or whether reasoning models commit different failure modes than non-reasoning ones. A simple table aggregating these statistics would strengthen Section 2.
 
-**Model heterogeneity.** Models were accessed via different APIs (OpenRouter, online GUI, LMArena) across a three-week window. Some models may have been updated silently during this period. The paper notes this for GPT-5 but not for others. There is no way to verify that the recorded outputs are canonical or reproducible, a limitation acknowledged in the Reproducibility Statement.
+**Model coverage and selection.** The paper acknowledges the list is not exhaustive but claims selected models "likely outperform most others." This is reasonable. However, GPT-5 Thinking (evaluated August 16) appears to be a very recently released model, and the Note in §A explains that its evaluation was delayed due to instability. Including GPT-5 in the main table while acknowledging data collection issues around its release introduces some inconsistency.
 
----
+**Assessment quality.** A central claim is that all failures are "fatal to the proof." For this to be credible, the reviewers must be competent group theorists or reference expert validators. The paper does not state who verified the failure modes—the authors themselves, or independent mathematical experts. Given that the correctness analysis of 18 long mathematical proofs is the core empirical contribution, this validation process should be described explicitly.
 
-### Results (Section 2)
+### Human Comparison and New Proof (§3)
 
-The claims are stated clearly: all evaluated models fail, with at least one critical error each. The appendix, at substantial length, provides the actual model outputs and the lines at which errors occur—this is a genuine strength and makes the failure characterisations verifiable by the reader.
+The n=1 study is the most scientifically fragile part of the paper, and the authors acknowledge this. However, the framing does more work than a single data point can support:
 
-A few concerns:
+- The conclusion "Yu Tsumura's 554th problem is well within the reach of IMO-level students" is drawn from one participant. Individual variation is large. A participant could succeed or fail due to idiosyncratic reasons (prior exposure to similar manipulations, lucky choice of substitution, etc.).
+- The "motivated proof" framing is interesting but also anecdotal. The paper references Pólya (1949) and Morris (2020) as prior work on motivated proofs, and cites Frieder et al. (2024) for the claim that LLMs struggle with motivated proofs. But no systematic comparison between the human's proof structure and LLM outputs is provided—the analysis in §3 is qualitative and impressionistic.
+- The participant used ChatGPT to learn group theory definitions. This is disclosed, but it means the "LLM-free human" is not quite LLM-free: ChatGPT participated in the learning phase. This seems relevant given the paper's framing of human vs. LLM reasoning.
 
-- **o3 (B.2) analysis.** The critique notes that "k need not be an integer if n is infinity" and that conjugation by x does not obviously induce an automorphism of ⟨y⟩. These are valid criticisms. However, the o3 output actually *does* correctly handle the n = ∞ case (lines 56–57: "If n = ∞ then (2.3) would read 2k = 3 in the integers, impossible"), which the critique itself reproduces (lines 782–786 in the parsed file). The "Critical" tag for the integer issue seems to be referring to a formal gap (existence of k), but the model's subsequent argument seems to notice and immediately dismiss the infinite case. The reviewer would benefit from a clearer explanation of why this constitutes a critical failure rather than a minor gap in formality.
+The key mathematical observation attributed to the participant—focusing on the power of 3 dividing n and picking special values of n to control the identity—is described narratively but not formally presented. Given that this is claimed to be a "new proof" of publishable interest, a formal proof sketch (even in an appendix) would be appropriate.
 
-- **o3-pro (B.1).** The described error—using the commutator identity [x, yz] = [x, y][x, z]^y with incompatible definitions—is a real algebraic error and is well-documented. This is the strongest example in the paper.
+### Limitations (§4)
 
-- **The two broad conclusions (lack of scientific evaluation, outcome misalignment)** are reasonable but generic. These are known issues in the LLM evaluation literature; citing them here without connecting them to mechanistic explanations of the Tsumura failures makes Section 2 feel like two separate papers.
+The limitations section is unusually candid and is a strength of the paper. The authors explicitly:
+- Predict the problem will be solvable soon (Goodhart's law argument)
+- Acknowledge the one-shot protocol's constraints
+- Note boutique/unreleased models might exist that can solve it
+- Acknowledge symbolic solvers (Vampire) would trivially handle this
 
----
+One limitation that is not discussed: **contamination direction.** The paper argues the problem's solution has been online since 2017 and is "likely in the training data." But this would *help* models that memorize solutions rather than reason about them—if anything, contamination should inflate performance, not explain failure. If LLMs cannot solve it *despite* the solution being in training data, that is striking and should be analyzed more carefully. Are models reproducing the correct proof structure but making algebraic errors? Or are they adopting entirely different (wrong) proof strategies? This distinction matters for understanding what is failing.
 
-### Human Comparison and New Proof (Section 3)
+The paper also does not address **prompt sensitivity**. The exact prompt is disclosed (Appendix B), but no sensitivity analysis was performed. The same model with a slightly different prompt (e.g., providing a hint about the proof strategy, asking it to check individual steps) might perform differently.
 
-This is the most intellectually interesting section, but it is also the weakest scientifically.
+### Conclusion (§5)
 
-**n = 1 human study.** The study involves a single former IMO-25 participant. While the paper is honest ("n = 1 study"), the conclusions drawn from it are disproportionate. The paper claims this "highlights a completely different approach to problem-solving that LLMs lack" (sic). A single data point cannot support such a sweeping generalisation. Variability across humans in strategy and motivation would be enormous.
+The conclusion correctly characterizes the finding as a "snapshot" and introduces the interesting concept of **non-transitivity of reasoning**: success on problems of similar difficulty does not guarantee success on another such problem. This is a valuable framing. The call for pre-registered evaluations and transparency about scoring methodology (binary vs. pass@n) is well-placed and important for the field.
 
-**Motivated proof.** The concept of a "motivated proof" (Pólya, 1949; Morris, 2020) is well-chosen and the description of why the participant's exploitation of powers-of-3 divisibility is "motivated" is genuinely illuminating. However:
-
-- The paper does not present the new proof in the paper itself. Readers are directed to an anonymous repository. At minimum, the key steps of the motivated proof should appear in the paper.
-- The claim that LLMs produce unmotivated proofs (citing Frieder et al., 2024) is referenced but not connected to the specific failure modes in Section 2. How many of the 18 failures are attributable to lack of motivated reasoning vs. pure algebraic error? This connection is never made.
-
----
-
-### Limitations (Section 4)
-
-The limitations section is refreshingly candid. The authors acknowledge Goodhart's law, the one-shot protocol, RAG exclusion, non-public models, and training-on-test-task confounds. The admission that "we expect that models will soon be adapted to solve this issue" (and that "other problems will be found on which LLMs will struggle") is honest but also somewhat undermines the contribution's durability.
-
-One limitation the authors do not name is **generalisability from a single problem**. The paper's conclusions are about "LLM reasoning" writ large, but a corpus of *N* = 1 failure problems is an extremely thin basis. What's special about this problem—its particular algebraic depth, the 3-vs-2 structure, the symbolic search depth—is speculated but not established empirically.
-
-The limitation about human intervention in very long-running commercial model evaluations is a legitimate methodological concern for the field and is well-raised.
-
----
+However, "reasoning in LLMs remains brittle" is a very strong conclusion to draw from a single problem evaluated once per model. The conclusion is better supported by saying: *we have identified a problem that current LLMs, in one-shot end-user evaluations, cannot reliably solve, which suggests systematic gaps remain even at the IMO level.*
 
 ### Writing & Clarity
 
-The main text is well-written and the argument is easy to follow. The failure to correctly count the models (16 vs. 18 in different places) is distracting. The phrase "completely approach to problem-solving" (Section 1, final paragraph) is a typo ("completely different"). Section 2's two bulleted conclusions read as an underdeveloped discussion that belongs in Section 5.
+The main paper (6 pages) is clear and readable. The appendix (the bulk of the paper by page count) reproduces full model outputs with annotated error lines—this is commendable transparency. The failure annotations are written in a terse but intelligible style, though some annotations (e.g., B.1's explanation of the commutator identity bug) would benefit from a counter-example showing why the identity is false.
 
----
+### Venue Fit (ICLR-specific concern)
 
-### Broader Impact & Positioning
+ICLR expects papers to make technical contributions to machine learning—new methods, theories, or rigorous empirical findings that advance understanding of learning systems. This paper is closer to an evaluation report or a position paper. It does not introduce a new benchmark, a new evaluation method, a new model, or a new theoretical insight. The closest technical contribution is the failure taxonomy and the annotated output traces.
 
-The paper closes with calls for pre-registered evaluations and better standards for reporting LLM benchmark performance. These are good advocacy points, though they are peripheral to the main empirical finding.
-
-For ICLR specifically: this paper offers a **case study**, not a benchmark, not a method, not a theory. As a demonstration that a single known problem escapes all SOTA models, it raises a genuine question about the reliability of LLM mathematical reasoning. However, it does not explain *why* these models fail beyond speculation, does not provide a controlled study isolating the difficulty axes, and does not generalise beyond the one problem. The n = 1 human study and the "motivated proof" analysis gesture at a more interesting theoretical contribution but fall short of delivering it.
+This does not make the work unimportant—the point it makes is valid and timely. But ICLR's acceptance bar for evaluation-only papers is high, typically requiring either (a) a new benchmark of broad generalizability, (b) a large-scale study covering many problems and models, or (c) actionable insights about *why* the failures occur at a mechanistic level. The present paper offers one problem, one-shot evaluation, and descriptive analysis. This sits closer to a workshop paper or a short communication at a broader AI venue than a full ICLR submission.
 
 ---
 
 ### Overall Assessment
 
-The paper identifies and carefully documents a real and interesting phenomenon: 18 state-of-the-art LLMs, including frontier reasoning models that attained IMO gold-medal performance, all fail to correctly prove a single algebra problem with a publicly available solution. The appendix-level documentation of model outputs and annotated error locations is thorough and constitutes a verifiable empirical record. However, the paper's scientific contribution is thin for a main ICLR track submission. The one-shot protocol makes the central claim—that LLMs *cannot* solve the problem—epistemically weaker than advertised; even a modest pass@10 experiment would substantially strengthen it. The n = 1 human comparison and "motivated proof" discussion are the most intellectually original elements but are underdeveloped and not tied mechanistically to the observed failure modes. The stated model count (16) is inconsistent with the actual number tested (18). The paper reads more as an informative blog post or workshop contribution documenting a contemporaneous snapshot of LLM limitations than as a research contribution that advances understanding of *why* these failures occur or what can be done about them. In its current form, it falls short of ICLR's acceptance bar.
+The paper makes a valid and interesting empirical point: despite impressive IMO-2025 performance, a specific group theory problem with a known, publicly available solution systematically stumps all 16–18 tested LLMs in one-shot evaluation. The observation is timely, the full output traces are a genuine contribution to transparency, and the concern about non-transitivity of LLM reasoning is conceptually important. However, the paper has significant methodological weaknesses that undermine the strength of its claims: the one-shot protocol is inadequate to establish "systematic failure" as opposed to "likely failure," the human study is a single data point, the failure modes are author-annotated without independent expert validation, and the headline finding is explicitly anticipated to be obsolete within months of publication. The work also sits below ICLR's typical bar for standalone technical contribution—it neither introduces a generalizable benchmark nor offers mechanistic analysis that would guide future model improvement. In its current form, the paper is better suited to a workshop on LLM evaluation or a short communications venue. To be competitive at ICLR, the authors would need to substantially scale up the evaluation (multiple problems, multiple trials per model), provide a mechanistic analysis of failure modes, and articulate a technical insight that generalizes beyond a single example.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper challenges the prevailing narrative of state-of-the-art (SOTA) LLMs as capable reasoners by presenting empirical evidence that 18 SOTA models fail to solve Yu Tsumura’s 554th problem—a group theory problem deemed comparable to International Mathematical Olympiad (IMO) difficulty—despite the solution being publicly available. The authors analyze single-shot outputs of these models, documenting systematic failure modes ranging from algebraic errors to unwarranted assumptions, and contrast this with a successful proof by a human IMO participant to highlight differences in "motivated" reasoning.
+This paper evaluates 16 state-of-the-art LLMs on Yu Tsumura’s 554th group theory problem, demonstrating that all models fail to produce a correct proof in a strict one-shot setting despite the solution being publicly available online. The authors systematically annotate each model's trace to categorize critical failure modes, contrast the LLMs' undirected symbolic manipulation with a structured proof generated by a single former IMO participant, and argue that current proof-based reasoning evaluation is insufficiently rigorous. The work serves as a methodological caution against overinterpreting recent IMO benchmark successes and advocates for more transparent, proof-centric evaluation standards.
 
 ### Strengths
-1.  **Comprehensive Empirical Coverage:** The evaluation includes a wide range of SOTA models (18 distinct entries in Table 1, including GPT-5 Thinking, Claude Opus 4, and Grok 4), providing a substantial snapshot of current capabilities across both proprietary and open-weight architectures.
-2.  **Detailed Failure Analysis:** The appendix provides line-by-line tracebacks of the model outputs, clearly identifying "Critical" errors (e.g., algebraic mistakes, incorrect commutator definitions, unwarranted automorphism assumptions). This transparency allows for reproducibility and specific diagnostic analysis of reasoning breakdowns.
-3.  **Human-LLM Contrast:** Including a comparison with a human expert (a former IMO participant) adds valuable qualitative depth, illustrating not just *that* models fail, but *how* their reasoning process differs (e.g., lack of motivation behind proof steps, reliance on random algebraic manipulation).
+1. **Granular, transparent failure analysis:** Appendix B provides line-by-line annotations of where each model's proof derails, categorizing errors into clear failure modes (e.g., algebra errors, unwarranted assumptions, inapplicable theorems). This level of diagnostic transparency is highly valuable for understanding systematic reasoning breakdowns in LLMs.
+2. **Clear documentation and reproducibility effort:** Despite acknowledging LLM stochasticity, the authors supply full unmodified output traces, exact system/user prompts, model access methods, evaluation dates, and version information where available. This enables independent verification of each reported failure.
+3. **Relevant methodological critique:** The paper correctly identifies a growing misalignment in the field: heavy reliance on final-answer benchmarks (e.g., OlympiadBench) that obscure poor proof-generation capabilities. The call for pre-registered evaluations, clearer scoring methodology (pass@1 vs. pass@k), and proof-aware benchmarks aligns with current ICLR discussions on robust reasoning evaluation.
 
 ### Weaknesses
-1.  **Generalization from Single Instance:** The central claim rests on a single mathematical problem. While the problem is well-chosen for this specific critique, failing one problem does not invalidate general performance on others. The paper speculates that this problem is representative, but without a broader set of "failure benchmarks," the statistical significance of this limitation remains limited.
-2.  **Inconsistency in Model Count:** The text explicitly states, "We include an analysis of the output traces of 16 SOTA LLMs," yet Table 1 lists 18 models (labeled B.1 through B.18). This discrepancy undermines attention to detail in the manuscript.
-3.  **Limited Human Baseline:** The human study relies on a single participant ($n=1$). While illustrative, it is not statistically robust enough to draw firm conclusions about the nature of human mathematical expertise versus LLM reasoning, which would require a larger sample size or controlled study.
-4.  **Evaluation Protocol Constraints:** The paper argues for a one-shot evaluation to mirror the "end-user" experience. However, SOTA reasoning models are increasingly evaluated via best-of-$N$ or search techniques. By excluding these, the paper assesses the raw generation capability rather than the system's potential performance when deployed with standard reasoning frameworks.
+1. **Overgeneralization from an $N=1$ problem:** The central claim that "reasoning in LLMs remains brittle" and is "not transitive" is drawn from a single mathematical problem. While well-chosen, one data point across 16 models cannot support broad conclusions about LLM reasoning capabilities without a broader problem set or statistical validation of failure patterns.
+2. **Strict one-shot protocol conflicts with standard evaluation practices:** Evaluating reasoning models with a single attempt ignores established best practices (e.g., pass@5/10/20, self-consistency, or test-time compute scaling). The authors justify this as assessing "end-user robustness," but it significantly limits the practical informativeness of the results for the ML research community.
+3. **Anecdotal human comparison ($n=1$):** The contrast with a single IMO participant, while qualitatively interesting, lacks statistical grounding. Framing this as evidence that "LLMs lack completely different approaches to problem-solving" overreaches without a controlled study involving multiple human-AI pairs across varied problem sets.
+4. **Speculative mechanistic explanations:** The paper hypothesizes that failures arise from "deep search" limitations or high hallucination rates before deriving key identities, but provides no empirical analysis (e.g., error accumulation over generation steps, attention/activation patterns, or ablation studies) to substantiate these claims.
 
 ### Novelty & Significance
-The paper's **significance** lies in its timely correction of over-optimistic claims regarding LLM mathematical reasoning. It provides important caveats for researchers and practitioners relying on LLMs for formal verification or complex deduction. The **novelty**, however, is primarily empirical rather than theoretical; it documents a failure mode rather than proposing a new architecture or theoretical explanation for *why* the models fail (beyond speculation on search depth). For ICLR, a venue focused on ML advancements, the contribution is more in the realm of benchmarking and limitations analysis, which fits under "AI for Science/STEM," but the lack of broader benchmarking reduces the potential for high-impact acceptance compared to methodological innovations.
+**Novelty:** Moderate. Single-problem LLM evaluations exist, but the systematic failure taxonomy and explicit focus on proof-quality metrics rather than final-answer matching add meaningful value. The comparison to human-motivated proof strategies is conceptually interesting but empirically narrow. **Clarity:** High. The paper is well-structured, the problem and evaluation setup are unambiguous, and the failure annotations are precise. **Reproducibility:** Good. Full traces, prompts, and access details are provided. However, true reproducibility is inherently limited by LLM non-determinism and the one-shot design. **Significance:** The work offers a timely methodological warning to the community: high scores on answer-matching math benchmarks do not imply robust proof-generation or strategic reasoning. For ICLR, the impact is constrained by the narrow scope; it would benefit from broader empirical validation to move from a compelling case study to a generalizable finding.
 
 ### Suggestions for Improvement
-1.  **Clarify Model Count:** Update the text and tables to ensure consistency (either 16 or 18 models are included) and resolve any missing model details.
-2.  **Expand Problem Set (If possible):** To strengthen claims about reasoning brittleness, include a small control set of 3-5 similar group theory or algebra problems. Even if all are solved by humans, showing consistent LLM failure across a set strengthens the "brittle reasoning" argument better than a single counter-example.
-3.  **Deepen Theoretical Analysis:** The speculation about "search depth" and "algebraic error" should be expanded. A discussion on how specific attention mechanisms or fine-tuning data (e.g., Lean formalization) might influence these errors would add technical depth expected at ICLR.
-4.  **Address Tool-Augmentation Limits:** The paper acknowledges tool-use limitations in Section 5. A more rigorous discussion on how a "reasoning + tool" stack might resolve this, or why symbolic solvers (like Vampire) were not integrated, would better address reviewer concerns regarding "end-to-end" capability.
+1. **Expand to a small, curated benchmark:** Evaluate the same models on 10–20 proof-style algebra/group theory problems of comparable difficulty. This would allow statistical analysis of failure modes, validate whether the observed brittleness generalizes, and strengthen claims about reasoning gaps.
+2. **Include standard pass@k and self-consistency baselines:** Report pass@5/10/20 alongside the one-shot results. This contextualizes whether the failure is absolute or merely reflective of insufficient test-time compute/prompting, aligning the study with contemporary LLM evaluation standards.
+3. **Ground mechanistic claims empirically:** Instead of speculating on "search depth" or hallucination probabilities, provide quantitative analysis of the traces (e.g., average steps before first algebraic error, frequency of circular reasoning vs. forward progress, or correlation between model size/reasoning tokens and proof depth).
+4. **Reframe or expand the human study:** Either recruit 5–10 participants with varying mathematical backgrounds to quantify human success rates and proof strategies, or explicitly label the $n=1$ example as qualitative illustration rather than comparative evidence.
+5. **Discuss mitigation and tool-augmented reasoning:** Briefly evaluate whether structured prompting (e.g., step-back prompting, chain-of-verification) or external tools (e.g., SymPy, Lean4, or Vampire) enable any of the tested models to solve the problem. This directly informs practical deployment and strengthens the discussion on LLM vs. symbolic solver capabilities.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Multiple-attempt evaluation (pass@k)**: The paper claims LLMs "cannot solve" this problem based on single-shot evaluation, but modern reasoning models often succeed with multiple samples or self-correction. Add pass@10 or pass@100 results—without this, the core claim that LLMs fundamentally lack this capability is unsupported.
-
-2. **Prompting ablations (CoT, few-shot, structured hints)**: Test whether chain-of-thought, few-shot examples of similar group theory proofs, or intermediate hints improve success rates. If simple prompting changes solve the problem, the claim about fundamental reasoning gaps collapses.
-
-3. **Tool-augmented LLM evaluation**: The paper acknowledges symbolic solvers could solve this but doesn't test LLMs with tool access (e.g., calling a prover or CAS). Since the claim is about LLM "reasoning abilities," excluding tool use without justification undermines the evaluation's relevance to real-world deployment.
-
-4. **Additional problem set**: One problem cannot support broad claims about LLM reasoning brittleness. Include 5-10 similar group theory problems from the same source with varying difficulty to show this isn't an isolated failure case.
-
-5. **Training data contamination check**: The solution existed online since 2017. Verify whether any evaluated models have this specific problem in their training corpus via membership inference or direct query. Without this, failures could reflect intentional blocking rather than capability gaps.
+1. **Pass@k Evaluation:** Replace the one-shot evaluation with Pass@10 or Pass@100 sampling. Without statistical sampling, you cannot distinguish between "model lacks capability" and "model is stochastic," which fundamentally undermines the claim that LLMs *cannot* solve the problem.
+2. **Prompt Strategy Ablation:** Test multiple prompting strategies (e.g., Chain-of-Thought, Least-to-Most, expert persona). If a specific prompt elicits a correct solution, the claim that "reasoning ability is brittle" is invalidated; current results may just reflect poor prompting.
+3. **Expanded Human Baseline:** Increase the human study from $n=1$ to $n \ge 10$ IMO-level participants. A single success is anecdotal; statistical significance is required to robustly claim the problem is reliably solvable by humans at this level.
+4. **Training Data Membership Verification:** Perform membership inference or n-gram probing to verify the specific solution exists in the models' training cuts. Without this, you cannot claim models are failing to *reason* rather than failing to *retrieve* a memorized solution.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Failure mode root cause analysis**: The paper categorizes errors (algebra, incomplete, etc.) but doesn't explain *why* models fail at these points. Are failures due to search depth limits, attention dilution over long derivations, or lack of symbolic manipulation training? This distinction matters for the paper's conclusions.
-
-2. **Comparison to human error rates**: The n=1 human study shows one success but provides no baseline for how often humans fail this problem. Without knowing human failure rates, claiming LLMs are "worse than humans" is meaningless.
-
-3. **Progress metrics beyond binary success**: Report how far each model progressed (e.g., derived correct intermediate identities, recognized key conjugation structure). This reveals whether models are close to solving it or fundamentally lost, which affects the interpretation of "brittleness."
-
-4. **Model size vs. performance correlation**: With 16 models of varying sizes, analyze whether larger models perform better. If there's no correlation, it suggests architectural rather than scale limitations; if there is, the problem may solve with larger models soon.
-
-5. **Reasoning trace length analysis**: Measure token counts and reasoning steps before failure. If models fail after similar depths regardless of size, this supports the "search depth" hypothesis; if not, alternative explanations are needed.
+1. **Partial Credit Scoring:** Binary success/failure ignores partial progress. Implement a step-wise rubric (e.g., correctly identifying conjugation relations, deriving orders) to quantify *how close* models get to the solution.
+2. **Error Distribution Quantification:** Quantify the frequency of specific failure modes (Algebra vs. Logic vs. Strategy) across the 16 models. If 90% of failures are algebraic hallucinations, the bottleneck is reliability, not high-level reasoning planning.
+3. **Compute vs. Performance Correlation:** Analyze if models with larger reasoning budgets (e.g., o3 vs. o4-mini) or higher token counts perform better. This is necessary to validate the hypothesis that "search depth" is the limiting factor.
+4. **Trace Similarity Analysis:** Measure structural similarity between model traces and the actual proof. This reveals if models are hallucinating entirely or attempting the correct strategy but failing execution, which changes the interpretation of the failure.
 
 ### Visualizations & Case Studies
-1. **Proof tree comparison**: Visualize the correct proof's derivation tree alongside a typical LLM's attempted derivation, highlighting where the LLM diverges. This would expose whether LLMs explore the right search space or pursue entirely wrong strategies.
-
-2. **Error propagation heatmap**: Show which algebraic manipulation types (conjugation, substitution, cancellation) most frequently trigger cascading errors across models. This reveals systematic weaknesses vs. random mistakes.
-
-3. **Human vs. LLM reasoning timeline**: Plot the human participant's proof development (with timestamps from the transcript) against LLM token generation, showing differences in backtracking, verification, and strategic pauses.
+1. **Proof Trace Alignment:** Visualize the IMO participant's proof steps against the "best" LLM trace, highlighting exactly where the LLM deviates (e.g., at the conjugation assumption step). This exposes whether the failure is early conceptual misunderstanding or late-stage execution.
+2. **Failure Mode Heatmap:** Create a matrix of Models x Failure Types to show if certain architectures (e.g., MoE vs. Dense, Reasoning vs. General) are prone to specific logical errors. This reveals if the failure is universal or architecture-dependent.
+3. **Reasoning Depth Plot:** Plot token count/reasoning steps vs. correctness score. If correct solutions require significantly more depth than the model outputs, it visually validates the "insufficient search depth" hypothesis.
 
 ### Obvious Next Steps
-1. **Run the same evaluation on models with extended thinking enabled by default**: Several models had "Extended Thinking" as an option that may not have been fully utilized. Standardize this across all models before claiming systematic failure.
-
-2. **Include at least 3-5 human participants with IMO backgrounds**: An n=1 study cannot support claims about human reasoning superiority. Recruit more participants to establish statistical significance.
-
-3. **Test whether models can verify a provided correct proof**: If LLMs can verify the solution when given, the gap is in generation not understanding—this fundamentally changes the paper's message about reasoning capabilities.
+1. **Tool-Augmented Evaluation:** Evaluate models with access to symbolic algebra tools (e.g., Python, Lean4). This isolates whether the failure is in reasoning strategy or symbolic manipulation, which is critical for diagnosing the bottleneck.
+2. **Domain Fine-Tuning:** Fine-tune a base model on group theory problems to see if the gap closes. If performance improves significantly, the issue is data distribution, not inherent reasoning limits.
+3. **Self-Correction Mechanisms:** Evaluate models with self-reflection loops or verifier models. If self-correction fixes the algebra errors, the core reasoning might be sound, suggesting the one-shot protocol was the flaw, not the model.
 
 # Final Consolidated Review
 ## Summary
-
-This paper presents a counterexample to claims about LLM mathematical reasoning capabilities: Yu Tsumura's 554th problem—a group theory problem with a publicly available solution since 2017—is not correctly solved by any of 18 tested state-of-the-art LLMs. The authors analyze failure modes across model outputs and contrast these with a proof devised by a former IMO participant, highlighting qualitative differences in proof motivation and strategy.
+This paper evaluates 16 state-of-the-art LLMs on Yu Tsumura's 554th group theory problem, showing that all tested models fail to produce correct proofs in a one-shot setting despite the problem having a publicly available solution since 2017. The authors provide detailed failure mode annotations for each model output, categorize errors systematically, and contrast LLM outputs with a proof produced by a former IMO participant to highlight differences in reasoning approaches.
 
 ## Strengths
-
-- **Comprehensive empirical documentation:** The paper evaluates 18 diverse SOTA models (including o3, GPT-5, Claude Opus 4, DeepSeek R1, Gemini 2.5 Pro) with full output traces in the appendix. Each failure is annotated with specific line numbers and error categories, making the claims verifiable.
-
-- **Well-chosen problem for the stated purpose:** The problem is carefully selected—it is within IMO-level proof sophistication, not in the combinatorics category that has historically troubled LLMs, has a short proof requiring only basic group-theoretic manipulations, and has had a public solution since 2017. This eliminates several alternative explanations for LLM failure.
-
-- **Insightful human-LLM contrast on proof motivation:** The discussion of "motivated proofs" (citing Pólya and Morris) and the analysis of why the human participant's strategy—exploiting powers-of-3 divisibility systematically—is more structured than the random algebraic manipulation observed in LLM outputs, provides genuine insight into the qualitative difference between human and LLM mathematical reasoning.
-
-- **Transparent limitation acknowledgment:** The paper explicitly acknowledges its constraints (Goodhart's law, single-shot protocol, excluded RAG pipelines, potential future model adaptation, non-exhaustive model coverage, and the n=1 human study).
+- **Systematic failure analysis with full transparency:** Appendix B provides line-by-line annotations of exactly where each model's proof attempt fails, categorizing errors into clear types (algebra errors, unwarranted assumptions, inapplicable theorems, incomplete arguments). This level of diagnostic detail enables independent verification and provides concrete data for understanding reasoning breakdowns.
+- **Important methodological critique:** The paper correctly identifies a gap in current benchmarking practice—heavy reliance on final-answer benchmarks (like OlympiadBench) obscures deficiencies in proof generation. The argument that models may be arriving at correct answers through different reasoning paths than humans has been made before, but the specific demonstration via proof traces adds empirical weight.
+- **Conceptually insightful comparison:** The distinction between LLMs' undirected symbolic manipulation and the IMO participant's "motivated proof" approach (where each step is strategically chosen toward a clear goal) is a meaningful insight about the nature of LLM reasoning limitations. The observation that the human participant identified the significance of powers of 3 in the derivation—something absent from all LLM traces—illustrates a qualitative gap in reasoning strategies.
 
 ## Weaknesses
-
-- **Factual inconsistency in model count:** The abstract states "analysis of the output traces of 16 SOTA LLMs," and the Table 1 caption says "all 16 evaluated LLMs," but the table actually lists 18 models (B.1 through B.18). This discrepancy, while minor, should be corrected for accuracy.
-
-- **Single-shot evaluation limits capability claims:** The paper explicitly argues that a one-shot evaluation reflects "the end user experience" and that best-of-N or majority voting would constitute "a different model." However, the title's absolute claim—"NO LLM SOLVED"—conveys a capability limitation that the methodology cannot definitively establish. A model that fails on one attempt but succeeds on, say, pass@10 or pass@50 has a fundamentally different capability profile than one that always fails. The paper would be stronger if it reported pass@k results for leading models, even modest k values, to characterize the difference between "rarely succeeds" and "never succeeds."
-
-- **Generalization from a single problem instance:** While the paper demonstrates this one problem resists all tested models, it cannot establish whether this is an isolated edge case or representative of a broader class of reasoning failures. The speculation that "other problems will be found" is plausible but unverified.
-
-- **Speculation about failure causes lacks empirical validation:** The paper offers two hypotheses for LLM failure (hallucination during algebraic search; insufficient training for deep expression search). These are reasonable guesses but are not tested—no ablation on search depth, no error analysis distinguishing hallucination from systematic reasoning gaps, no comparison of failure patterns across model sizes or architectures.
-
-- **n=1 human study limits conclusions:** While the paper is transparent about this limitation ("n = 1 study"), the qualitative conclusions drawn—about "completely different approaches to problem-solving"—are necessarily provisional. Human problem-solvers exhibit substantial variability; a single successful participant cannot establish population-level differences.
+- **Single-problem scope limits generalization:** The central claim that "reasoning in LLMs remains brittle" and exhibits "non-transitivity" is drawn from one mathematical problem. While carefully chosen, a single problem cannot establish systematic reasoning gaps without broader coverage. The paper would be substantially stronger with even a small curated set (5-10 problems) of similar proof-based tasks.
+- **One-shot protocol insufficient for strong claims:** The paper defends one-shot evaluation as representing "end-user robustness," but this defense conflates two issues. "Robustness" standardly means consistent performance across multiple attempts, not single-draw performance. A model that solves the problem 40% of the time would fail this evaluation 60% of the time. The study cannot distinguish between "models cannot solve this problem" and "models solve it rarely." For claims about systematic failure, pass@k evaluation (even k=5) would be methodologically appropriate.
+- **Abstract-table count discrepancy:** The abstract states "16 SOTA LLMs" while Table 1 lists 18 entries. This inconsistency should be corrected.
+- **n=1 human study is anecdotal evidence:** The comparison with one former IMO participant, while interesting, cannot support generalizations about human-LLM reasoning differences. The participant used ChatGPT to learn group theory definitions, making the "human vs. LLM" framing less clean than presented. The paper should present this as illustrative rather than comparative evidence.
+- **Mechanistic hypotheses lack empirical grounding:** The speculation that failure stems from "deep search" limitations or hallucination probability before finding required identities is not tested. Analysis of the traces (e.g., average steps before first error, correlation between reasoning token count and proof depth) could substantiate or refute these hypotheses rather than leaving them as conjecture.
+- **Failure mode annotations lack independent validation:** The correctness of the error categorizations across 18 model outputs is central to the empirical contribution. The paper does not state whether these were verified by independent mathematical experts or by the authors alone.
 
 ## Nice-to-Haves
-
-- **pass@k evaluation for leading models:** Even pass@10 results for the top 3-5 models would clarify whether the failure is "fundamental" versus "rare success."
-
-- **A small validation set of similar problems:** 3-5 additional group theory problems of comparable difficulty would significantly strengthen claims about reasoning brittleness beyond a single counterexample.
-
-- **Prompt ablation experiments:** Testing whether chain-of-thought prompting, explicit step-verification instructions, or "do not assume results without proof" framing affects success rates would clarify whether the failure is about reasoning or about following conventions.
-
-- **Inter-rater reliability for failure mode classification:** The six failure mode categories (A, C, D, I, T, U) are useful but classified by the authors alone. Having an independent mathematician verify the classifications would strengthen the analysis.
+- **Pass@k evaluation for top models:** Running even 5-10 samples per model would allow reporting pass@k statistics and would strengthen the claim about systematic failure.
+- **Quantitative failure mode analysis:** A table showing the distribution of error types across models (e.g., "80% algebra errors, 20% unwarranted assumptions") would reveal whether there are common patterns or if different architectures fail differently.
+- **Expanded problem set:** A small benchmark of 5-20 similar proof-based algebra/group theory problems would transform this from an interesting case study into a generalizable finding.
 
 ## Removed Points
+*These points are flagged to be removed, treat them with caution*
 
-*These points are flagged to be removed, treat them with caution:*
+- **Removed: Venue fit critique** — The harsh critic argues this is "closer to a workshop paper" and "sits below ICLR's typical bar." This is an opinion about venue appropriateness, not a substantive weakness of the paper's content or methodology.
 
-- **"Converse" framing as logically incorrect:** The criticism that the paper misuses "converse" is overly pedantic. The paper's framing—"there exist LLMs that solve hard problems" vs. "there exist hard problems LLMs cannot solve"—is a reasonable informal converse in the context of existence claims.
+- **Removed: Claim that problem is not comparable to IMO** — The paper acknowledges the problem is group theory (not an IMO topic) but argues it requires comparable proof sophistication. Whether this comparison is fair is subjective; the paper provides sufficient justification for its framing.
 
-- **Tool integration as a missing evaluation:** The paper explicitly addresses this in Section 4, acknowledging that symbolic solvers like Vampire would solve this and that tool-augmented LLMs are outside scope. Criticizing absence of tool evaluation is scope creep.
+- **Removed: Request for training data membership inference** — The spark finder suggests verifying via membership inference whether the solution exists in training data. This is not standard practice for LLM evaluation papers and would require substantial additional work beyond the paper's scope.
 
-- **Training data contamination as unaddressed:** The paper notes the problem predates LLMs but appropriately uses "do not perform a web search" prompts. While contamination concerns are valid for benchmark fairness, the point here is that models fail even when the solution exists and could have been seen—this strengthens the finding.
+- **Removed: Request for prompt sensitivity analysis** — While useful, this is not typically required for evaluation papers and would significantly expand scope.
 
-- **Demand for more human participants:** While valid, this is beyond the paper's stated contribution. The human proof is presented as a contrast case, not a statistical study.
+- **Removed: Demand for symbolic solver baselines** — The paper explicitly acknowledges that symbolic solvers would handle this problem easily. This is a known limitation, not a novel oversight.
 
-- **Criticism of the single-problem methodology as fundamentally flawed:** For the paper's stated contribution—a documented counterexample to broad claims about LLM reasoning—one carefully chosen problem suffices. Demanding a broader benchmark is asking for a different paper.
+- **Weakened: Paper will become obsolete** — The paper itself discusses this in the Limitations section, acknowledging Goodhart's law and the snapshot nature of the results. This is already addressed by the authors.
 
 ## Novel Insights
-
-The comparison between LLM algebraic flailing and the human participant's "motivated" proof strategy is genuinely instructive. The human systematically exploited the structure of the problem (tracking powers of 3, using divisibility arguments), while LLMs made unmotivated algebraic manipulations that happened to arrive at identities through luck or pattern-matching rather than insight. This distinction—between "searching for identities" and "reasoning about why certain transformations should work"—captures something real about the gap between current LLM outputs and expert mathematical reasoning.
+The concept of "non-transitivity of reasoning"—that models can solve problems of similar difficulty but fail on another problem from the same difficulty tier—is genuinely useful for understanding LLM capabilities. The detailed trace analysis reveals that models consistently make early algebraic errors (often within the first 10-20 lines) rather than strategically pursuing the correct approach and failing late. The IMO participant's insight about controlling powers of 3 through careful substitution choices—a strategic move absent from all LLM outputs—illustrates that the gap may be less about computational accuracy and more about proof strategy selection.
 
 ## Suggestions
-
-- Correct the model count inconsistency (16 vs. 18) throughout the paper.
-- Add pass@5 or pass@10 results for at least the top 3 models; if zero, report that explicitly.
-- Include 2-3 additional problems from the same source (Yu Tsumura's collection) to test whether the failure generalizes beyond this single instance.
-- Clarify whether "Extended Thinking" modes for Claude models were enabled with consistent settings across trials.
-- Expand the "motivated proof" discussion to connect more explicitly to the specific failure modes observed—if LLMs lack motivation, which failure categories (A, T, U) reflect this most directly?
+- **Immediate fix:** Correct the abstract to match the table (16→18 models) or clarify which models are counted as "SOTA" vs. other categories.
+- **Methodological improvement:** Report pass@5 or pass@10 for at least the top 3-4 models (o3-pro, Gemini 2.5, Claude Opus 4) to distinguish between "cannot solve" and "solves rarely."
+- **Empirical strengthening:** Quantify where in the proof traces models fail—do errors cluster in early algebraic manipulation, or are they distributed throughout? This would directly address the "search depth" hypothesis.
+- **Failure mode validation:** Have an independent mathematician verify a subset of the error annotations to strengthen confidence in the categorization.
 
 # Actual Human Scores
 Individual reviewer scores: [2.0, 0.0, 0.0, 2.0]

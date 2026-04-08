@@ -1,0 +1,1047 @@
+# LEARNING GENERALIZABLE WORLD MODELS VIA DISCOVERING SUPERPOSED CAUSAL RELATIONSHIPS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In reinforcement learning, a generalizable world model to mimic the environment
+is crucial for the assessment of various policy values in downstream tasks such
+as offline policy optimization and off-policy evaluation. Recently, studies have
+shown that learning a world model with sparse connections identified by causal
+discovery techniques can improve generalizability. So far, these studies focus on
+discovering a single and global causal structure. In this paper, we discuss a more
+practical setting in which the agent is deployed in an environment mixed with different causal mechanisms, called superposed causal relationships in this article. In
+this case, global causal discovery techniques will derive a degraded dense causal
+relationship, which will fail to improve the generalizability of the learned model.
+To solve the problem, we propose **S** uperposed c **A** usal **M** odel (SAM) learning.
+SAM learning is an end-to-end framework that learns a transformer-based model
+which can recognize the causal relationships that the agent is encountering on the
+fly and then adapts its predictions. The experiments are conducted in two simulated environments, where SAM shows powerful identify abilities in environments
+with superposed causal relationships. Both the dynamics model and the policies
+learned by the SAM generalize well to unseen states.
+
+
+1 INTRODUCTION
+
+
+Learning an accurate environment model that approximates state transitions is crucial in fields such
+as offline reinforcement learning (offline RL) (Levine et al., 2020b). By utilizing world models,
+costly real-world trial-and-error processes can be avoided. The primary role of these models is to
+unbiasedly answer counterfactual queries; that is, given certain states, they can correctly predict _what_
+_might happen if_ we were to execute actions unseen in the training data. Previous studies have shown
+that learning a causal world model—which identifies causal relationships and employs sparse connections for environment model learning—can improve generalization ability (Wang et al., 2022).
+
+
+In these studies, sparse connection patterns are identified using causal structure discovery techniques (Ding et al., 2022). These patterns skip connections between the current state-action pair and
+the next state when no causal relationship exists, enhancing model efficiency. Unfortunately, most
+existing methods assume that a single causal model governs the entire dataset. However, in many
+real-world decision-making tasks, data exhibit multimodal characteristics and substantial heterogeneity. For instance, in dynamic resource allocation tasks, the causal relationships between actions
+and outcomes can differ across various contexts or states within the same environment, reflecting an
+underlying multimodal causal structure. Similarly, the causal relationships between driving strategies and environmental feedback can vary under different traffic conditions (such as rush hour vs.
+non-rush hour, city streets vs. highways), highlighting the multimodal nature of causal structures
+within the same environment.
+
+
+In this paper, we aim to advance causal world model learning by transitioning from _single_ causal
+world model learning to _superposed_ causal world model learning, indicating that the environments
+we encounter encompass multiple causal relationships. Currently, the challenge of identifying mixtures of causal graphs from data has not been extensively explored in the literature. Most recent
+works, such as (Varambally et al., 2024), have addressed the challenge of inferring causal models
+from mixture distributions. However, these approaches do not tackle sequential decision-making
+tasks.
+
+
+1
+
+
+Figure 1: (a) Previous problems focus on causal discovery on trajectory set, where all the trajectories
+share a common dense causal graph. (b) We focus on the causal discovery by each trajectory, where
+each trajectory has different sparse causal graphs. In this setting, using global causal graph with
+finding a over-dense graph.
+
+
+Specifically, we consider environments for decision-making that include an unknown number of
+causal relationships. Each time an episode is reset, a new causal relationship is generated, affecting
+the transition process and the optimal action (see Figure 1 for detailed comparison). To this end,
+we propose a causal world model learning algorithm, **S** uperposed c **A** usal **M** odel (SAM) learning.
+SAM is a general end-to-end world model learning algorithm that identifies the causal relationships
+of the current episode on the fly and predicts transitions based on the identified causal relationships.
+SAM is built upon the Transformer architecture to infer causal relationships from past interaction
+trajectories, with a unified training objective based on the evidence lower bound of the trajectory
+generation likelihood in our setting. Thanks to the minimalist design of the implementation, SAM is
+generally effective across different tasks and environments. We verify this through extensive experiments.
+
+
+2 RELATED WORK
+
+
+2.1 CAUSAL WORLD MODEL IN REINFORCEMENT LEARNING
+
+
+Model-based RL improves policy learning by constructing environment models, including dynamics
+and reward predictors, through maximizing the likelihood of collected trajectories (Moerland et al.,
+2023). In online RL, these models enhance sample efficiency by aiding planning (Buesing et al.,
+2018; Hafner et al., 2019; Argenson & Dulac-Arnold, 2021), generating synthetic data (Janner et al.,
+2019; Hafner et al., 2020; Kaiser et al., 2020), or refining Q-value estimates (Feinberg et al., 2018;
+Amos et al., 2021). For offline RL (Levine et al., 2020a), the learned model facilitates effective
+offline policy evaluation (Argenson & Dulac-Arnold, 2021) and policy optimization by generating
+counterfactual trajectories (Yu et al., 2020; Kidambi et al., 2020).
+
+
+Integrating causality into reinforcement learning (RL) has attracted substantial interest due to its
+benefits in generalization and transferability, particularly in representation learning (Huang et al.,
+2022; Liu et al., 2023), policy learning (Buesing et al., 2019; Mozifian et al., 2020), and dynamics learning (Wang et al., 2022; Ding et al., 2022; Hwang et al., 2024; Zhu et al., 2022). Within
+the realm of causal dynamics learning, Wang et al. (2022) explicitly learn causal dependencies by
+regulating the number of variables used to predict each state variable. Ding et al. (2022) enhance
+Goal-Conditioned RL with a causal graph to create generalizable models and interpretable policies.
+Hwang et al. (2024) propose a dynamics model that infers fine-grained causal structures, using a
+discrete latent variable to segment the state-action space to different fine-grained graph for model
+prediction. Zhu et al. (2022) theoretically demonstrate that causal world-models outperform noncausal models in offline RL by integrating causal structures into generalization error bounds. Unlike
+
+
+2
+
+
+these approaches that discover a single, global causal structure, this paper addresses a more practical scenario where the agent operates in an environment with mixed causal mechanisms, termed
+superposed causal relationships. To the best of our knowledge, we are the first to address superposed causal relationships in model-based RL, demonstrating that this approach not only identifies
+ground-truth causal structures but also outperforms baselines in generalization.
+
+
+2.2 MULTIPLE CAUSAL STRUCTURED GRAPH DISCOVERY
+
+
+Recently, researchers have begun exploring causal discovery in scenarios where causal relationships
+between variables vary across domains. Non-deep learning methods, such as SSCM (Huang et al.,
+2019), model both variability and consistency in causal relationships, leveraging commonalities to
+achieve statistically reliable estimates while preserving individual causal characteristics. Markham
+et al. (2022) proposed a kernel function based on distance covariance to measure causal structure
+similarity, identifying homogeneous subgroups through clustering. However, these methods often
+require manual design of scoring functions and can be computationally intensive, limiting scalability to large datasets. On the other hand, neural network-based approaches (L¨owe et al., 2022; Lorch
+et al., 2022; Varambally et al., 2024) treat causal discovery as a black-box problem, assuming a
+distribution in the data and using variational inference to uncover domain-specific inductive biases.
+Our method is inspired by them but differs in that we consider environments for decision-making
+that include an unknown number of causal relationships. Each time an episode is reset, a new causal
+relationship is generated, affecting the transition process and the optimal action. However, these
+methods often require manual scoring function design and can be computationally intensive, limiting scalability to large datasets. In contrast, neural network-based approaches(L¨owe et al., 2022;
+Lorch et al., 2022; Varambally et al., 2024) treat causal discovery as a black-box problem, assuming
+data distribution and using variational inference to uncover domain-specific biases. Our method is
+inspired by these but differs by focusing on decision-making environments with an unknown number
+of causal relationships. Each episode reset introduces a new causal relationship, affecting transitions
+and optimal actions, creating a novel RL setting distinct from previous multiple causal structured
+graph discovery literature.
+
+
+3 PRELIMINARIES
+
+
+3.1 MARKOV DECISION PROCESSES
+
+
+We consider the environment within the framework of Markov Decision Process (MDP) setting with
+full observation defined as _M_ = ( _S, A, P_ ), where _S_ and _A_ represent the state and action space, _P_
+represents transition function. Following Seitzer et al. (2021), we assumed that the state space _S_ can
+be factorized into _d_ _[s]_ disjoint components _{S_ [1] _× · · · × S_ _[d]_ _}_, denoted as _{S_ _[i]_ _}_ _[d]_ _i_ =1 [.] [similarly,] _[ A]_ [ can be]
+factorized into _d_ _[a]_ disjoint components.
+
+
+3.2 STRUCTURED CAUSAL MODELS
+
+
+Considering _d_ random variables _X_ = ( _X_ [1] _, . . ., X_ _[d]_ ) and a Directed Acyclic Graph (DAG) _G_ =
+( _V, E_ ), where each node _i_ _∈_ _V_ = _{_ 1 _, . . ., d}_ corresponds to a random variable _X_ _[i]_, a Structured
+Causal Model (SCM)(Pearl (2009)) is defined by a probability distribution _pX_ over _X_ and the graph
+_G_ . In this context, each directed edge ( _i_ _→_ _j_ ) _∈_ _E_ signifies that _X_ _[i]_ is a direct cause of _X_ _[j]_ . This
+causal relationship implies that _X_ _[j]_ is conditionally dependent on _X_ _[i]_ during the data generation
+process. Denoting the set of parent nodes of node _i_ in the graph _G_ as _Pai_, the joint distribution of
+the random variables can be formulated as:
+
+
+_pX_ ( _x_ [1] _, . . ., x_ _[d]_ ) =
+
+
+3
+
+
+_d_
+
+
+_pX_ _i_ ( _x_ _[i]_ _|Pai_ ) _,_ (1)
+
+_i_ =1
+
+
+4 SUPERPOSED CAUSAL ENVIRONMENT MODEL LEARNING
+
+
+In this section, we introduce propose **S** uperposed c **A** usal **M** odel (SAM) learning. SAM identifies
+corresponding causal relationships from trajectories and utilizes them to learn the transition model
+in an end-to-end way. We begin by formalizing the problem, then we propose our approach to
+learn the superposed causal structure that utilizes individual trajectory information as well as group
+information.
+
+
+4.1 PROBLEM FORMULATION
+
+
+Different from standard SCMs discovery (Pearl, 2009), the Markov Decision Process under causal
+relationships can be characterized by one-step transition dynamics _f_ utilizing a causal mask
+_G_ of dimensions ( _d_ _[s]_ + _d_ _[a]_ ) _×_ _d_ _[s]_ . The nodes of this mask correspond to the set of random
+variables _V_ = _{St_ [1] _[, . . ., S]_ _t_ _[d][s]_ _[, A]_ _t_ [1] _[, . . ., A][d]_ _t_ _[a]_ _[, S]_ _t_ [1] +1 _[, . . ., S]_ _t_ _[d]_ +1 _[s]_ _[}]_ [.] [The] [subsequent] [state] _[s][t]_ [+1] [follows]
+_p_ ( _st_ +1 _|st, at_ ) = [�] _i_ _[d]_ =1 _[p]_ [(] _[s]_ _t_ _[i]_ +1 _[|][s][t]_ [+1] _[, a][t]_ [)][.] [The] [causal] [graph] _[G]_ [here] [are] [mask] [matrices] [to] [repre-]
+sent the causal relationship between the two consecutive timesteps, each node represents a factor of the state, and each edge encapsulates a causal relationship. A factor of state _s_ _[i]_ _t_ +1 [follows]
+_p_ ( _s_ _[i]_ _t_ +1 _[|][s][t]_ [+1] _[, a][t]_ [) =] _[ p]_ [(] _[s][i]_ _t_ +1 _[|][Pa]_ [(] _[s][i]_ [)] _[t][,][ G]_ [)][, where] _[ Pa]_ [ represents the set of parent nodes in] _[ G]_ [.]
+
+
+We consider the problem under the framework of Offline Reinforcement Learning (RL) using a
+superposed causal dataset _D_ = _{{τi}_ _[N]_ _i_ =1 _[}]_ [.] [This] [superposed] [causal] [dataset] [is] [collected] [from] _[C]_
+environments that share the same decomposition but exhibit different causal relationships _Gi_ for
+each environment _i_ ; that is, _D_ = _{D_ _[G][i]_ _}_ _[C]_ _i_ =1 [.] [We note that] _[ C]_ [is an unknown in prior.] [Each trajectory]
+_τi_ is collected from one environment that every step is consistent with causal relationship.
+
+
+Superposed causal relationship of dataset complicates the identification of distinct causal masks
+through time-series trajectories, which will introduce wrong or spurious causal relationship when
+learning dynamics. Thus, we aim to learn dynamics model with decomposed causal graph, ultimately enhancing the model’s generalizability.
+
+
+4.2 END-TO-END SUPERPOSED CAUSAL WORLD MODEL LEARNING
+
+
+In previous RL research, dynamics with causal relationships typically learn causal masks using
+search-based methods. For example, CDL (Wang et al., 2022) utilizes conditional mutual information and considers a value higher than a threshold as indicative of a causal relationship, while
+GRADER (Ding et al., 2022) conducts statistical independence tests. Since search-based methods
+have high computational cost, cannot scale to larger environments, and require carefully designed
+search processes tailored to the task, this paper aims to propose a method that is scalable in terms of
+data volume. Therefore, unlike previous work, we employ a score-based method to discover causal
+masks from offline datasets, which models the entire causal graph discovery as a differentiable optimization objective, enabling end-to-end graph discovery and prediction. We derive the optimization
+objective of the superposed causal world model using a similar approach to Varambally et al. (2024):
+min _ϕ,θ_ _[−]_ [E] _[τ]_ _[∼D]_ �E _qϕ_ ( _G_ ) [log _pθ_ ( _τ_ _| G_ )]� + _λ · ∥qϕ_ ( _G_ ) _∥_ 1 _,_
+
+
+where _ϕ_ and _θ_ are the parameters of the causal mask predictor and the dynamics model, respectively,
+_λ_ is a regularization coefficient, _τ_ represents a trajectory sampled from dataset _D_, and _G_ denotes the
+causal graph. Different from Varambally et al. (2024), which can infer a causal graph from a single
+sample (i.e., _qϕ_ ( _G_ ) := _qϕ_ ( _G_ _| X_ )), our focus is on the sequential decision problem where the causal
+model is used to generate trajectories. To decompose superposed causal relationships in offline trajectories, we use a trajectory-wise inference model for causal graph prediction _qϕ_ ( _G_ ) := _qϕ_ ( _G_ _| τ_ )
+and a transition model for trajectory reconstruction _pθ_ ( _τ_ _| G_ ) = [�] _t_ _[T]_ =0 _[p][θ]_ [(] _[s][t]_ [+1] _[|]_ _[s][t][, a][t][,][ G]_ [)][.] [Then]
+we have the following objective:
+
+
+To optimize Eq. 2, we design an simple yet efficient end-to-end architecture based on Transformers.
+The network includes the following modules: (1) a causal mask predictor _qϕ_ that utilizes a Transformer to take trajectories as input and outputs the distribution _qϕ_ ( _G_ _|_ _τ_ ); (2) a fully connected
+
+
+4
+
+
+_._ (2)
+
+
+min
+_ϕ,θ_ _[−]_ [E] _[τ]_ _[∼D]_
+
+
++ _λ · ∥G∥_ 1
+
+
+E _qϕ_ ( _G|τ_ )
+
+
+- _T_
+
+
+log _pθ_ ( _st_ +1 _| st, at, G_ )
+
+_t_ =0
+
+
+feature encoder _fθ_ 1 that encodes single time-step states and actions; and (3) a dynamics model _fθ_ 2
+that predicts the next state.
+
+
+To predict _st_ +1 given the previous trajectory _τ_, we first use the Transformer-based causal mask
+predictor _qϕ_ ( _G_ _|_ _τ_ ) to obtain the distribution of the causal mask _G_ . We then sample _G_ _∼_ _qϕ_ ( _G_ _|_
+_τ_ ). After obtaining the causal mask, we predict _st_ +1 based on _st_ and _at_ with the causal mask
+by computing _fθ_ 2( _st_ +1 _|fθ_ 1( _st, at_ ) _◦G,_ sg( _G_ )), where _fθ_ 1( _st, at_ ) _◦G_ represents masking unrelated
+features using _G_ and sg( _G_ ) is an appended input of causal mask which the gradient will be stopped
+when optimized. In summary, we have _qϕ_ ( _G_ _| τ_ ) := _fθ_ 2( _st_ +1 _|fθ_ 1( _st, at_ ) _◦G,_ sg( _G_ ). To enable
+sampling of discrete values _{_ 0 _,_ 1 _}_ through _qϕ_ ( _G_ _| τ_ ) while keeping the entire process differentiable,
+we utilize the Gumbel-Softmax trick (Maddison et al., 2017) to implement the distribution sampling
+process _G_ _∼_ _qϕ_ ( _G_ _| τ_ ). The network is trained end-to-end by Eq. 2 and we called the whole training
+method **S** uperposed c **A** usal **M** odel (SAM) learning.
+
+
+5 EXPERIMENTS
+
+
+In our experiments, we build two new benchmarks for these settings, namely Mixed-Chemical and
+Confusing-Minigrid, which are introduced in Section 5.1. We primarily investigate the following
+research questions:
+
+
+1. **RQ1** : Is SAM capable of inferring superposed causal relationships from offline sequential
+decision-making data with multiple causal relationships (see Section 5.2)?
+
+2. **RQ2** : Does superposed causal graph learning simplify the learning transition and enhance
+generalizability compared to single-graph models or dense models (see Sections 5.3)?
+
+3. **RQ3** : Can SAM identify causal relationships encountered by the agent in real time to
+facilitate better decision-making (see Section 5.4)?
+
+
+5.1 EXPERIMENT SETTINGS
+
+
+Most reinforcement learning environments lack explicit causal graphs for generalization purposes.
+To evaluate our methods, we constructed benchmarks based on the widely recognized Chemical
+environment (Ke et al., 2021) and a custom-designed Minigrid environment Chevalier-Boisvert et al.
+(2023) as shown in Figure 2. For each environment, we evaluate the model under two settings: the
+target setting and the spurious setting. In the target setting, the policy aims to perform on one of the
+latent causal tasks with the model trained on the superposed causal dataset. In the spurious setting,
+the policy is tested in an environment with noise on spurious correlation, as shown in the following,
+which is the key setting to demonstrate the generalization ability. We conducted experiments in the
+offline setting, where each environment encompasses multiple settings of latent causal relationships.
+Our dataset comprises 200,000 transition steps for each environment.
+
+
+1. **Mixed-Chemical** : The Chemical environment (Ke et al., 2021) consists of 10 colored
+nodes, where color changes are governed by an underlying causal graph. At each step, the
+agent changes the color of one node, causing its descendant nodes in the causal graph to
+change color sequentially. The goal is to change all node colors to a desired target color.
+We modified the environment to include nine randomly generated, unknown causal graphs,
+transforming it into a multi-causal graph reinforcement learning environment. Data collection was performed using a random policy, generating datasets in the offline setting. In
+the spurious setting, the agent receives noisy observations for certain nodes. By disentangling the superposed causal graphs, the agent can ignore spurious correlations and improve
+generalization.
+
+2. **Confusing-Minigrid** : Minigrid Chevalier-Boisvert et al. (2023) is a grid-based environment where the agent aims to navigate around obstacles to reach a target grid in as few
+steps as possible. We introduced multiple latent causal graphs that determine whether obstacles can be moved or covered with the agent and other obstacles, resulting in diverse
+environmental transitions. We name the tasks with the format of _M_ _{_ ? _}_ _−_ _C{_ ? _}_ to denote the properties of the obstacles. This transforms the environment into a multi-causal
+graph reinforcement learning setting. Given the complexity of the state space, we utilized
+an early-stopping Proximal Policy Optimization (PPO) algorithm for data collection. In
+
+
+5
+
+
+(a) Chemical (b) Minigrid
+
+
+Figure 2: Illustration of the Chemical and Minigrid Environments.
+
+
+the spurious setting, obstacles that do not covered others are initialized in wider positions
+compared to those in the training dataset. Accurately identifying the environmental causal
+relationships is crucial for moving obstacles that block the path and helping the agent reach
+the target via the shortest route.
+
+
+**Baselines** To fairly compare our methods, We implement the following baselines: **Modular** (Ke
+et al. (2021)): predicts each state variable with a separate network. **GNN** (Kipf et al. (2020)):
+implements graph neural network that learns relational information. **kmeans + CDL** : CDL infers a
+single causal structure for the entire dataset to learn dynamics. To learn superposed causal structure,
+we cluster trajectories with time series cluster Tavenard et al. (2020) and train each group with
+CDL (Wang et al., 2022). **FCDL** (Hwang et al. (2024)): quantizes the state-action spaces into
+subgroups and learns fine-grained causal structure. However, we identify causal graphs through
+transitions between states rather than single current state observations, making it more efficient for
+unobserved variables. **Oracle** : Utilizes the same neural network architecture as ours but with the
+ground truth causal graph, serving as an upper bound for SAM.
+
+
+5.2 ACCURACY OF CAUSAL RELATIONSHIP DISCOVERY
+
+
+Tables 1 and 2 present the Structural Hamming Distance (SHD) used to evaluate our causal discovery
+methods. We compare our proposed method, SAM, specifically with KMeans+CDL and FCDL, as
+other methods do not explicitly focus on causal graph discovery.
+
+
+Table 1: Causal-relationship accuracy on Mixed-Chemical environment, where we **bold** the best
+result performance for each task.
+
+|Method|random0 random1 random2 random3 random4 random5 random6 random7 random8|Average|
+|---|---|---|
+|kmeans+CDL<br>FCDL<br>SAM|27.35<br>29.35<br>39.87<br>40.73<br>28.52<br>35.88<br>35.57<br>32.42<br>30.30<br>22.93<br>21.30<br>35.30<br>32.19<br>25.14<br>30.49<br>26.70<br>23.07<br>26.38<br>**8.16**<br>**3.91**<br>**0.52**<br>**2.05**<br>**4.45**<br>**3.66**<br>**5.31**<br>**5.10**<br>**3.28**|33.33<br>27.06<br>**4.05**|
+
+
+Table 2: Causal-relationship accuracy on Confusing-Maze environment, where we **bold** the best
+result performance for each task.
+
+
+**Method** M-C012 M01-C0 M01-C2 M012-C012 M012-C M02-C1 **Average**
+
+
+kmeans+CDL 3.54 9.88 9.83 **0.53** 15.95 9.90 8.27
+FCDL 25.00 15.00 15.00 22.00 7.00 15.00 16.50
+SAM **0.00** **7.11** **5.24** 3.28 **9.74** **8.28** **5.61**
+
+
+Our method, SAM, demonstrates superior performance across all datasets. In the MixedChemical environment (Table 1), SAM achieves an average SHD of **4.05**, significantly lower than
+KMeans+CDL and FCDL, which have average SHDs of **33.33** and **27.06**, respectively. Notably,
+SAM consistently attains the lowest SHD in all nine random graphs, with SHD values ranging from
+**0.52** to **8.16**, indicating its high accuracy in reconstructing the underlying causal graphs. In the
+Confusing-Minigrid environment (Table 2), SAM also outperforms the other methods, achieving an
+
+
+6
+
+
+average SHD of **5.61** compared to **8.27** for KMeans+CDL and **16.50** for FCDL. SAM attains the
+lowest SHD in five out of six settings, demonstrating its robustness and effectiveness in more complex environments. For instance, in the M-C012 setting, SAM achieves an SHD of **0.00**, perfectly
+recovering the causal graph, whereas KMeans+CDL and FCDL obtain SHDs of **3.54** and **25.00**,
+respectively.
+
+
+The poor performance of KMeans+CDL can be attributed to its inability to effectively cluster data
+points that share the same causal relationships in high-dimensional spaces, leading to inaccurate
+causal graph estimations. Although FCDL yields better results than KMeans+CDL, it struggles to
+distinguish superposed causal graphs from time-series data, limiting its ability to accurately infer
+the underlying causal structures.
+
+
+In contrast, SAM excels at disentangling superposed causal graphs and accurately inferring causal
+relationships from sequential decision-making data. Its superior performance is evident across different environments and settings, highlighting its advantage in handling multiple latent causal relationships. This leads to more precise causal discovery and enhances the generalization capabilities
+of the agent in diverse and complex environments.
+
+
+5.3 PREDICTION ERROR OF THE LEARNED WORLD MODELS
+
+
+0.0
+
+
+Modular GNN FCDL kmeans+CDL SAM Oracle
+
+
+Figure 3: Chemical prediction accuracy with different noise under target setting and spurious setting.
+The variable p on the axis represents the probability of adding noise to a node in spurious setting.
+Accuracy represents the correctness of color prediction on clean nodes.
+
+
+To demonstrate that learning multiple causal graphs improves generalization, we evaluate the prediction accuracy on the Mixed-Chemical environment under both target and spurious settings. In
+the spurious setting, noise is introduced to the nodes with probabilities of _0.1,_ _0.3,_ _and_ _0.6_ . The
+results are shown in Figure 3. We do not include the results of Confusing-Minigrid environment to
+this section of analyzing because of the scale of each dimension in state space are different, which
+is meaningless by demonstrating their average performance.
+
+
+In the target setting, all methods perform well, as expected given the simplicity of the environment.
+However, in the spurious settings, where noise is added, we observe substantial performance degradation, particularly for models without explicit causal mechanisms. The single causal-relationship
+world methods (such as Modular and GNN) shows the most significant drop, confirming its limited
+ability to handle noisy and complex causal structures.
+
+
+Among the methods incorporating causal learning, SAM clearly outperforms the baselines across all
+spurious settings. For instance, at noise probability _p_ = 0 _._ 3, SAM achieves substantially higher prediction accuracy than KMeans+CDL and FCDL. While the Modular and GNN approaches capture
+some relational information, their generalization capabilities diminish as noise increases, highlighting their limitations in disentangling superposed causal structures. At _p_ = 0 _._ 6, SAM maintains
+robust performance, significantly narrowing the gap with the Oracle, which represents the upper
+bound using the true causal graph. This result emphasizes the strength of SAM in leveraging latent
+causal graphs to generalize effectively, even under high levels of noise. SAM’s close performance
+to the Oracle, particularly at higher noise levels, demonstrates its efficacy in handling both observed
+and unobserved variables within complex, noisy environments.
+
+
+7
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+Overall, the results in Figure 3 strongly support the effectiveness of SAM. By accurately identifying and disentangling superposed causal graphs, SAM achieves superior generalization performance
+compared to all other methods, including state-of-the-art baselines such as GNN and FCDL. This
+underscores SAM’s significant advantage in environments with complex, overlapping causal structures and noisy observations. The detailed results of each task are shown in Appendix B.
+
+
+5.4 PERFORMANCE OF MODEL PREDICTIVE CONTROLS
+
+
+Modular GNN FCDL kmeans+CDL SAM Oracle
+
+
+Figure 4: **Left:** Performance of model predictive controls in the chemical environment under target and
+spurious settings (probability of noise: 0.1, 0.3, 0.6). **Right:** Performance of model predictive controls in the
+Minigrid environment under target and spurious settings.
+
+
+We evaluate the testing rewards of all methods across various tasks, with the summarized results
+presented in Figure 4. Detailed results for each individual task can be found in Appendix B.
+
+
+In the target setting of the Mixed-Chemical environment (left plot of Figure 4), the task’s simplicity
+allows all methods to achieve high performance, as expected. However, the true challenge arises
+in the spurious settings, where noise is introduced. At noise levels of _p_ = 0 _._ 1, _p_ = 0 _._ 3, and
+_p_ = 0 _._ 6, our method, SAM, consistently outperforms the baseline methods, demonstrating significantly higher episode rewards. Notably, at the highest noise level _p_ = 0 _._ 6, SAM maintains robust
+performance, whereas other methods, particularly the single causal-relationship world models like
+Modular and GNN, experience substantial performance degradation.
+
+
+In the Confusing-Minigrid environment (right plot of Figure 4), the increased complexity, caused
+by compounded causal effects, makes learning more challenging for all models. Despite this, SAM
+again outperforms all other methods in both target and spurious settings. The performance drop of
+the baselines in the spurious setting is evident, as they fail to effectively discard spurious correlations
+introduced by noise. SAM, however, mitigates these challenges, leveraging its causal graph learning
+capabilities to better generalize across tasks. In the target setting, SAM performs comparably to the
+Oracle, indicating its ability to approximate the true causal structure even in complex environments.
+
+
+In the spurious setting, baseline methods show significant performance degradation, particularly
+those relying on single causal-relationship world relational learning (e.g., GNN and Modular), as
+they are more susceptible to overfitting to spurious correlations. Causal models such as FCDL perform better than single-causal-relationship discovery methods, but still suffer from reduced generalization due to their inability to effectively handle overlapping causal structures. In contrast, SAM
+excels in this environment, as it successfully disentangles superposed causal graphs, allowing it to
+ignore irrelevant correlations and maintain stable performance across tasks.
+
+
+Overall, the results in Figure 4 highlight the advantages of SAM, particularly its ability to generalize
+in noisy and complex environments. By leveraging causal discovery and focusing on relevant causal
+structures, SAM consistently outperforms baseline methods and approaches the performance of the
+Oracle, even in the most challenging settings.
+
+
+8
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.75
+
+
+5.5 ABLATION STUDIES
+
+
+To demonstrate that the superior generalization of our method is not solely due to temporal properties
+utilized by the network structure but rather due to the accurate identification of causal graphs, we
+conduct an ablation study comparing our method (SAM) with the RNN baseline (Figure 5).
+
+
+Figure 5: **Left:** Performance of model predictive controls in the chemical environment under target and
+spurious settings (probability of noise: 0.1, 0.3, 0.6). **Right:** Performance of model predictive controls in the
+Minigrid environment under target and spurious settings.
+
+
+In the **target setting**, RNN performs similarly to or even slightly better than SAM due to the simplicity of the task. However, in the **spurious setting**, where noise is introduced, SAM significantly
+outperforms RNN. As noise increases ( _p_ = 0 _._ 1, _p_ = 0 _._ 3, and _p_ = 0 _._ 6), RNN’s performance drops
+sharply, while SAM maintains high rewards. This demonstrates that RNN struggles to handle noise
+due to its reliance on temporal patterns, which are disrupted by spurious correlations.
+
+
+In contrast, SAM’s robustness in noisy environments shows that its generalization ability is due to
+accurate causal graph identification, not temporal dependencies. In the Confusing-Minigrid environment, we see a similar trend, with SAM consistently outperforming RNN, especially in the spurious
+setting.
+
+
+Overall, the results clearly show that SAM’s strength lies in its ability to disentangle causal structures, leading to superior performance in complex and noisy environments.
+
+
+5.6 VISUALIZATION OF ON-THE-FLY CAUSAL-RELATIONSHIP DISCOVERY IN SAM
+
+
+(a) Mixed-Chemical (b) Confusing-Minigrid
+
+
+Figure 6: Structural Hamming Distance (SHD) over time steps in (a) the Mixed-Chemical environment and (b) the Confusing-Minigrid environment, demonstrating SAM’s adaptation to the true
+causal graph.
+
+
+We demonstrate that SAM can dynamically adapt to the true causal relationships over time steps. To
+illustrate this capability, we conducted experiments where each target task runs for 50 episodes, and
+
+
+9
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+0.25
+
+
+0.50
+
+
+0.0
+
+
+Figure 7: Illustration of Causal Graph Adaptation Over Time. The inferred causal graph gradually
+aligns with the ground truth as time progresses.
+
+
+we report the average Structural Hamming Distance (SHD) at each time step (Figure 6). As shown
+in Figure 6, the SHD decreases over time in both the Mixed-Chemical and Confusing-Mi’ni’gri’d
+environments, indicating that the inferred causal graph progressively aligns with the ground truth.
+In the **Mixed-Chemical** environment (Figure 6a), SAM quickly adapts, with SHD values stabilizing
+after approximately 10 steps. This rapid convergence demonstrates the method’s efficiency in learning the underlying causal structure even when faced with complex, superposed causal graphs. In the
+**Confusing-Minigrid** environment (Figure 6b), SAM continues to reduce SHD over time, though at
+a slightly slower rate due to the higher complexity of the causal relationships in this environment.
+Despite this complexity, SAM steadily improves, further proving its robustness in diverse settings.
+Importantly, in both environments, SAM consistently outperforms competing methods in terms of
+how quickly and accurately it can discover the true causal relationships.
+
+
+Additionally, Figure 7 provides a visual example of how SAM’s inferred causal graph evolves over
+time. At earlier timesteps (e.g., timestep 1), the inferred graph is far from the ground truth, but by
+timestep 15, it closely aligns with the true causal structure, demonstrating SAM’s ability to refine its
+understanding of the causal relationships through sequential data. By timestep 50, SAM’s inferred
+graph is nearly identical to the ground truth, showing its capability for accurate and adaptive causal
+discovery.
+
+
+These results confirm that SAM can efficiently and accurately discover and adapt causal relationships in real-time, making it a highly effective approach in complex, dynamic environments where
+causal structures evolve over time.
+
+
+6 CONCLUSION AND DISCUSSION
+
+
+In this paper, we introduced **S** uperposed c **A** usal **M** odel (SAM), a novel approach for learning superposed causal world models that can handle multiple, dynamic causal relationships in sequential
+decision-making environments. SAM addresses the limitations of existing causal world models,
+which assume a single causal structure governs the entire dataset. By allowing for the identification
+of distinct causal relationships across different episodes, SAM significantly improves generalization,
+especially in heterogeneous environments where causal dynamics vary across contexts. Through extensive experiments in environments like Mixed-Chemical and Confusing-Maze, we demonstrated
+that SAM effectively learns and adapts causal relationships in real-time. Our results show that SAM
+outperforms existing baselines, particularly in challenging spurious settings where noise and multimodal causal structures obscure traditional models’ performance. Unlike dense models that struggle with redundant relationships and causal models that cannot handle mixtures of causal graphs,
+SAM robustly disentangles overlapping causal structures, leading to superior prediction accuracy
+and decision-making performance across various tasks.
+
+
+SAM’s ability to generalize across complex and evolving environments suggests its potential for
+real-world applications in areas like dynamic resource allocation and autonomous systems. Despite
+its promising results, SAM has some limitations, especially that SAM’s computational cost increases
+with the complexity of the environment due to the use of a Transformer-based architecture. Future
+work could explore scaling SAM to larger datasets, further improving its efficiency, and investigating
+its applicability in broader decision-making contexts where causal structures are even more diverse
+and challenging.
+
+
+10
+
+
+REFERENCES
+
+
+Brandon Amos, Samuel Stanton, Denis Yarats, and Andrew Gordon Wilson. On the model-based
+stochastic value gradient for continuous reinforcement learning. In Ali Jadbabaie, John Lygeros,
+George J. Pappas, Pablo A. Parrilo, Benjamin Recht, Claire J. Tomlin, and Melanie N. Zeilinger
+(eds.), _Proceedings of the 3rd Annual Conference on Learning for Dynamics and Control_, volume
+144 of _Proceedings of Machine Learning Research_, pp. 6–20, Virtual Event, Switzerland, 2021.
+PMLR.
+
+
+Arthur Argenson and Gabriel Dulac-Arnold. Model-based offline planning. In _Proceedings of the_
+_9th International Conference on Learning Representations_, Virtual Event, Austria, 2021. OpenReview.net.
+
+
+Lars Buesing, Theophane Weber, S´ebastien Racani`ere, S. M. Ali Eslami, Danilo Jimenez Rezende,
+David P. Reichert, Fabio Viola, Frederic Besse, Karol Gregor, Demis Hassabis, and Daan
+Wierstra. Learning and querying fast generative models for reinforcement learning. _CoRR_,
+abs/1802.03006, 2018.
+
+
+Lars Buesing, Theophane Weber, Yori Zwols, Nicolas Heess, S´ebastien Racani`ere, Arthur Guez,
+and Jean-Baptiste Lespiau. Woulda, coulda, shoulda: Counterfactually-guided policy search. In
+_Proceedings of the 7th International Conference on Learning Representations_, New Orleans, LA,
+2019. OpenReview.net.
+
+
+Maxime Chevalier-Boisvert, Bolun Dai, Mark Towers, Rodrigo de Lazcano, Lucas Willems,
+Salem Lahlou, Suman Pal, Pablo Samuel Castro, and Jordan Terry. Minigrid & miniworld:
+Modular & customizable reinforcement learning environments for goal-oriented tasks. _CoRR_,
+abs/2306.13831, 2023.
+
+
+Wenhao Ding, Haohong Lin, Bo Li, and Ding Zhao. Generalizing goal-conditioned reinforcement
+learning with variational causal reasoning. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave,
+and Kyunghyun Cho (eds.), _Advances in Neural Information Processing Systems_, 2022.
+
+
+Vladimir Feinberg, Alvin Wan, Ion Stoica, Michael I. Jordan, Joseph E. Gonzalez, and Sergey
+Levine. Model-based value estimation for efficient model-free reinforcement learning. _CoRR_,
+abs/1803.00101, 2018.
+
+
+Danijar Hafner, Timothy P. Lillicrap, Ian Fischer, Ruben Villegas, David Ha, Honglak Lee, and
+James Davidson. Learning latent dynamics for planning from pixels. In Kamalika Chaudhuri
+and Ruslan Salakhutdinov (eds.), _Proceedings of the 36th International Conference on Machine_
+_Learning_, volume 97 of _Proceedings of Machine Learning Research_, pp. 2555–2565, Long Beach,
+California, 2019. PMLR.
+
+
+Danijar Hafner, Timothy P. Lillicrap, Jimmy Ba, and Mohammad Norouzi. Dream to control: Learning behaviors by latent imagination. In _Proceedings of the 8th International Conference on Learn-_
+_ing Representations_, Addis Ababa, Ethiopia, 2020. OpenReview.net.
+
+
+Biwei Huang, Kun Zhang, Pengtao Xie, Mingming Gong, Eric P Xing, and Clark Glymour. Specific
+and shared causal relation modeling and mechanism-based clustering. In _Advances_ _in_ _Neural_
+_Information Processing Systems_, 2019.
+
+
+Biwei Huang, Chaochao Lu, Liu Leqi, Jos´e Miguel Hern´andez-Lobato, Clark Glymour, Bernhard
+Sch¨olkopf, and Kun Zhang. Action-sufficient state representation learning for control with structural constraints. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesv´ari, Gang
+Niu, and Sivan Sabato (eds.), _Proceedings_ _of_ _the_ _39th_ _International_ _Conference_ _on_ _Machine_
+_Learning_, volume 162, pp. 9260–9279, Baltimore, Maryland, 2022. PMLR.
+
+
+Inwoo Hwang, Yunhyeok Kwak, Suhyung Choi, Byoung-Tak Zhang, and Sanghack Lee. Finegrained causal dynamics learning with quantization for improving robustness in reinforcement
+learning. In _Proceedings_ _of_ _the_ _41st_ _International_ _Conference_ _on_ _Machine_ _Learning_, Vienna,
+Austria, 06 2024.
+
+
+11
+
+
+Michael Janner, Justin Fu, Marvin Zhang, and Sergey Levine. When to trust your model: Modelbased policy optimization. In Hanna M. Wallach, Hugo Larochelle, Alina Beygelzimer, Florence
+d’Alch´e-Buc, Emily B. Fox, and Roman Garnett (eds.), _Advances_ _in_ _Neural_ _Information_ _Pro-_
+_cessing Systems 32:_ _Annual Conference on Neural Information Processing Systems_, pp. 12498–
+12509, Vancouver, Canada, 2019.
+
+
+Lukasz Kaiser, Mohammad Babaeizadeh, Piotr Milos, Blazej Osinski, Roy H. Campbell, Konrad
+Czechowski, Dumitru Erhan, Chelsea Finn, Piotr Kozakowski, Sergey Levine, Afroz Mohiuddin,
+Ryan Sepassi, George Tucker, and Henryk Michalewski. Model based reinforcement learning for
+atari. In _Proceedings_ _of_ _the_ _8th_ _International_ _Conference_ _on_ _Learning_ _Representations_, Addis
+Ababa, Ethiopia, 2020.
+
+
+Nan Rosemary Ke, Aniket Didolkar, Sarthak Mittal, Anirudh Goyal, Guillaume Lajoie, Stefan
+Bauer, Danilo Jimenez Rezende, Yoshua Bengio, Michael C. Mozer, and Christopher Joseph Pal.
+Systematic evaluation of causal discovery in visual model based reinforcement learning. _ArXiv_,
+abs/2107.00848, 2021.
+
+
+Rahul Kidambi, Aravind Rajeswaran, Praneeth Netrapalli, and Thorsten Joachims. Morel: Modelbased offline reinforcement learning. In Hugo Larochelle, Marc’Aurelio Ranzato, Raia Hadsell,
+Maria-Florina Balcan, and Hsuan-Tien Lin (eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems 33:_ _Annual Conference on Neural Information Processing Systems_, Virtual Event, 2020.
+
+
+Thomas Kipf, Elise van der Pol, and Max Welling. Contrastive learning of structured world models.
+In _International Conference on Learning Representations_, 2020.
+
+
+Sergey Levine, Aviral Kumar, George Tucker, and Justin Fu. Offline reinforcement learning: Tutorial, review, and perspectives on open problems. _CoRR_, abs/2005.01643, 2020a.
+
+
+Sergey Levine, Aviral Kumar, George Tucker, and Justin Fu. Offline reinforcement learning: Tutorial, review, and perspectives on open problems. _CoRR_, abs/2005.01643, 2020b.
+
+
+Yuren Liu, Biwei Huang, Zhengmao Zhu, Hong-Long Tian, Mingming Gong, Yang Yu, and Kun
+Zhang. Learning world models with identifiable factorization. In Alice Oh, Tristan Naumann,
+Amir Globerson, Kate Saenko, Moritz Hardt, and Sergey Levine (eds.), _Advances in Neural In-_
+_formation Processing Systems 36: Annual Conference on Neural Information Processing Systems_
+_2023_, New Orleans, LA, 2023.
+
+
+Lars Lorch, Scott Sussex, Jonas Rothfuss, Andreas Krause, and Bernhard Sch¨olkopf. Amortized
+inference for causal structure learning. In _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+2022.
+
+
+Sindy L¨owe, David Madras, Richard Zemel, and Max Welling. Amortized causal discovery: Learning to infer causal graphs from time-series data. In _Conference on Causal Learning and Reason-_
+_ing_, pp. 509–525. PMLR, 2022.
+
+
+Chris J. Maddison, Andriy Mnih, and Yee Whye Teh. The concrete distribution: A continuous relaxation of discrete random variables. In _5th International Conference on Learning Representations,_
+_ICLR 2017, Toulon, France, April 24-26, 2017, Conference Track Proceedings_ . OpenReview.net,
+2017.
+
+
+Alex Markham, Richeek Das, and Moritz Grosse-Wentrup. A distance covariance-based kernel for
+nonlinear causal clustering in heterogeneous populations. In _First Conference on Causal Learning_
+_and Reasoning_, 2022.
+
+
+Thomas M Moerland, Joost Broekens, Aske Plaat, Catholijn M Jonker, et al. Model-based reinforcement learning: A survey. _Foundations_ _and_ _Trends®_ _in_ _Machine_ _Learning_, 16(1):1–118,
+2023.
+
+
+Melissa Mozifian, Amy Zhang, Joelle Pineau, and David Meger. Intervention design for effective
+sim2real transfer. _CoRR_, abs/2012.02055, 2020.
+
+
+J Pearl. _Causality_ . Cambridge university press, 2009.
+
+
+12
+
+
+Maximilian Seitzer, Bernhard Sch¨olkopf, and Georg Martius. Causal influence detection for improving efficiency in reinforcement learning. _Advances in Neural Information Processing Systems_, 34:
+22905–22918, 2021.
+
+
+Romain Tavenard, Johann Faouzi, Gilles Vandewiele, Felix Divo, Guillaume Androz, Chester Holtz,
+Marie Payne, Roman Yurchak, Marc Rußwurm, Kushal Kolar, and Eli Woods. Tslearn, a machine
+learning toolkit for time series data. _Journal of Machine Learning Research_, 21(118):1–6, 2020.
+
+
+Sumanth Varambally, Yi-An Ma, and Rose Yu. Discovering mixtures of structural causal models
+from time series data. In _Proceedings of the 41st International Conference on Machine Learning_,
+Proceedings of Machine Learning Research, Vienna, Austria, 2024.
+
+
+Zizhao Wang, Xuesu Xiao, Zifan Xu, Yuke Zhu, and Peter Stone. Causal dynamics learning for
+task-independent state abstraction. In _International Conference on Machine Learning_, 2022.
+
+
+Tianhe Yu, Garrett Thomas, Lantao Yu, Stefano Ermon, James Y. Zou, Sergey Levine, Chelsea
+Finn, and Tengyu Ma. MOPO: model-based offline policy optimization. In Hugo Larochelle,
+Marc’Aurelio Ranzato, Raia Hadsell, Maria-Florina Balcan, and Hsuan-Tien Lin (eds.), _Advances_
+_in_ _Neural_ _Information_ _Processing_ _Systems_ _33:_ _Annual_ _Conference_ _on_ _Neural_ _Information_ _Pro-_
+_cessing Systems 2020_, Virtual Event, 2020.
+
+
+Zheng-Mao Zhu, Xiong-Hui Chen, Hong-Long Tian, Kun Zhang, and Yang Yu. Offline reinforcement learning with causal structured world models. _CoRR_, abs/2206.01474, 2022.
+
+
+13
+
+
+A DERIVATION OF ELBO
+
+
+For offline dataset _D_ = _{τi}_ _[N]_ _i_ =1 [and causal graphs] _[ G]_ [1:] _[C]_ [= (] _[G]_ [1] _[, ...,][ G][C]_ [)][, following Varambally et al.]
+(2024), log-likelihood can be written as follow:
+
+
+= E _qϕ_ ( _G_ 1: _C_ ) [log _pθ_ ( _τ_ _| G_ 1: _C_ )] _−_ _D_ KL( _qϕ_ ( _G_ 1: _C_ ) _∥_ _p_ ( _G_ 1: _C_ ))
+
+
+Given that each trajectory is conditionally independent under the causal models, we can express this
+as:
+
+
+E _τ_ _∼D_ [log _pθ_ ( _τ_ )] _≥_ E _τ_ _∼D_ [E _qϕ_ ( _G_ 1: _C_ ) [log _pθ_ ( _τ_ _| G_ 1: _C_ )] _−_ _D_ KL( _qϕ_ ( _G_ 1: _C_ ) _∥_ _p_ ( _G_ 1: _C_ ))]
+
+
+KL divergence between log _p_ ( _Gi_ ), log _qϕ_ ( _Gi_ ) can formulate as sparsity regularization based on the
+following proposition.
+
+**Proposition 1** (KL Divergence as Sparsity Regularization) **.** _With entry-wise independent Bernoulli_
+_prior p_ ( _G_ ) _and point mass variational distribution q_ ( _G_ _|_ _τ_ ) _of DAGs,_ D _KL_ [ _qϕ∥p_ ] _is equivalent to_
+_an ℓ_ 1 _sparsity regularization for the discovered causal graph._ _Ding et al. (2022)_
+
+
+Applying sparsity regularization, we have the loss function
+
+
+min _[| G]_ [1:] _[C]_ [)] +] _[ λ][ · ∥][q][ϕ]_ [ (] _[G]_ [1:] _[C]_ [)] _[ ∥]_ [1] (3)
+_ϕ,θ_ _[−]_ [E] _[τ]_ _[∼D]_ [[][E] _[q][ϕ]_ [(] _[G]_ [1:] _[C]_ [)][ [log] _[ p][θ]_ [ (] _[τ]_
+
+
+B DETAIL RESULT OF ENVIRONMENTS
+
+
+Table 3: Detailed results of “target” setting reward for each task in Mixed-Chemical environment,
+where “()” denote the standard deviation among three seeds.
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.99(0.03)<br>0.99(0.04)<br>0.99(0.05)<br>0.99(0.04)<br>0.98(0.05)<br>0.99(0.03)<br>0.99(0.03)<br>0.99(0.03)<br>0.99(0.02)<br>0.99(0.04)<br>0.99(0.03)<br>0.97(0.07)<br>0.99(0.03)<br>1.00(0.02)<br>0.98(0.06)<br>0.99(0.02)<br>0.99(0.03)<br>0.98(0.07)<br>0.98(0.07)<br>0.98(0.04)<br>0.99(0.03)<br>0.99(0.03)<br>0.99(0.03)<br>0.99(0.03)<br>0.99(0.04)<br>0.98(0.05)<br>0.99(0.03)<br>1.00(0.01)<br>0.99(0.04)<br>0.98(0.04)<br>0.97(0.08)<br>0.99(0.04)<br>0.98(0.06)<br>0.99(0.05)<br>0.99(0.04)<br>0.99(0.03)<br>0.99(0.04)<br>0.99(0.04)<br>0.99(0.03)<br>0.99(0.06)<br>1.00(0.02)<br>0.99(0.04)<br>0.99(0.03)<br>0.99(0.03)<br>0.99(0.04)<br>0.98(0.05)<br>0.99(0.03)<br>0.98(0.06)<br>0.98(0.05)<br>0.97(0.09)<br>0.98(0.03)<br>0.98(0.06)<br>0.98(0.06)<br>0.98(0.07)<br>0.98(0.05)<br>0.98(0.06)<br>1.00(0.02)<br>1.00(0.02)<br>0.99(0.04)<br>0.98(0.05)<br>0.98(0.06)<br>0.99(0.03)<br>0.99(0.03)|
+
+
+Table 4: Detailed results of “target” setting reward for each task in Confusing-Minigrid environment,
+where “()” denote the standard deviation among three seeds.
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Minigrid-M-C012<br>Minigrid-M01-C0<br>Minigrid-M01-C2<br>Minigrid-M012-C012<br>Minigrid-M012-C<br>Minigrid-M02-C1|0.46(0.44)<br>0.52(0.27)<br>0.76(0.09)<br>-0.14(0.26)<br>0.00(0.18)<br>0.75(0.11)<br>0.57(0.28)<br>-0.48(0.47)<br>-0.35(0.55)<br>-0.01(0.55)<br>-0.57(0.25)<br>-0.55(0.31)<br>0.09(0.55)<br>-0.23(0.44)<br>-0.44(0.48)<br>-0.44(0.50)<br>0.12(0.49)<br>-0.49(0.29)<br>-0.55(0.29)<br>0.21(0.54)<br>-0.14(0.45)<br>0.68(0.24)<br>0.69(0.12)<br>0.76(0.05)<br>-0.06(0.26)<br>0.00(0.14)<br>0.70(0.23)<br>0.60(0.24)<br>-0.63(0.37)<br>-0.62(0.37)<br>-0.10(0.45)<br>-0.63(0.25)<br>-0.68(0.25)<br>-0.19(0.44)<br>-0.32(0.37)<br>-0.41(0.55)<br>-0.25(0.60)<br>0.08(0.51)<br>-0.54(0.31)<br>-0.51(0.34)<br>0.10(0.53)<br>0.02(0.51)|
+
+
+14
+
+
+- _pθ_ ( _τ_ _|G_ 1: _C_ ) _p_ ( _G_ 1: _C_ ) _×_ _[q][ϕ]_ [(] _[G]_ [1:] _[C]_ [)]
+
+_qϕ_ ( _G_ 1: _C_ )
+
+_G_ 1: _C_
+
+
+log _pθ_ ( _τ_ ) = log[�
+
+
+_qϕ_ ( _G_ 1: _C_ ) []]
+
+
+(using Jensen’s inequality)
+
+
+= log E _qϕ_ ( _G_ 1: _C_ )
+
+
+- _pθ_ ( _τ_ _| G_ 1: _C_ ) _p_ ( _G_ 1: _C_ )
+_qϕ_ ( _G_ 1: _C_ )
+
+
+_≥_ E _qϕ_ ( _G_ 1: _C_ )
+
+
+- _[| G]_ [1:] _[C]_ [)] _[ p]_ [ (] _[G]_ [1:] _[C]_ [)]
+log _[p][θ]_ [ (] _[τ]_
+
+_qϕ_ ( _G_ 1: _C_ )
+
+
+Table 5: Detailed results of “prob-0.1” setting reward for each task in Mixed-Chemical environment,
+where “()” denote the standard deviation among three seeds.
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.94(0.14)<br>0.90(0.18)<br>0.89(0.20)<br>0.99(0.06)<br>0.94(0.13)<br>0.99(0.04)<br>0.99(0.06)<br>0.93(0.15)<br>0.87(0.21)<br>0.88(0.21)<br>0.99(0.06)<br>0.95(0.11)<br>1.00(0.01)<br>1.00(0.04)<br>0.91(0.18)<br>0.88(0.21)<br>0.83(0.26)<br>0.99(0.05)<br>0.96(0.11)<br>0.98(0.06)<br>0.98(0.08)<br>0.91(0.17)<br>0.86(0.21)<br>0.83(0.25)<br>1.00(0.00)<br>0.94(0.11)<br>0.99(0.03)<br>0.98(0.07)<br>0.91(0.18)<br>0.86(0.23)<br>0.82(0.25)<br>1.00(0.02)<br>0.96(0.11)<br>0.97(0.09)<br>0.99(0.04)<br>0.94(0.15)<br>0.85(0.22)<br>0.86(0.22)<br>0.99(0.04)<br>0.94(0.13)<br>0.98(0.06)<br>0.98(0.08)<br>0.93(0.16)<br>0.87(0.21)<br>0.88(0.21)<br>0.99(0.04)<br>0.98(0.06)<br>0.98(0.08)<br>0.97(0.10)<br>0.91(0.18)<br>0.89(0.22)<br>0.87(0.22)<br>0.97(0.12)<br>0.99(0.04)<br>0.98(0.05)<br>0.98(0.08)<br>0.92(0.17)<br>0.89(0.21)<br>0.87(0.21)<br>0.99(0.05)<br>0.97(0.09)<br>0.99(0.04)<br>0.99(0.07)|
+
+
+Table 6: Detailed results of “prob-0.3” setting reward for each task in Mixed-Chemical environment,
+where “()” denote the standard deviation among three seeds.
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.44(0.23)<br>0.40(0.21)<br>0.39(0.20)<br>0.80(0.23)<br>0.78(0.25)<br>0.94(0.12)<br>0.95(0.14)<br>0.45(0.25)<br>0.37(0.25)<br>0.39(0.19)<br>0.84(0.20)<br>0.80(0.26)<br>0.97(0.10)<br>0.91(0.18)<br>0.56(0.31)<br>0.47(0.28)<br>0.47(0.29)<br>0.76(0.26)<br>0.83(0.23)<br>0.98(0.08)<br>0.88(0.20)<br>0.54(0.24)<br>0.40(0.22)<br>0.39(0.21)<br>0.80(0.23)<br>0.81(0.23)<br>0.99(0.05)<br>0.91(0.17)<br>0.50(0.26)<br>0.35(0.23)<br>0.38(0.25)<br>0.77(0.25)<br>0.81(0.25)<br>0.94(0.14)<br>0.94(0.13)<br>0.51(0.23)<br>0.39(0.22)<br>0.37(0.24)<br>0.80(0.22)<br>0.81(0.21)<br>0.98(0.06)<br>0.90(0.16)<br>0.59(0.27)<br>0.47(0.26)<br>0.46(0.26)<br>0.83(0.21)<br>0.86(0.21)<br>0.95(0.14)<br>0.89(0.19)<br>0.58(0.31)<br>0.49(0.28)<br>0.51(0.32)<br>0.78(0.26)<br>0.91(0.18)<br>0.93(0.14)<br>0.86(0.24)<br>0.48(0.24)<br>0.39(0.25)<br>0.40(0.25)<br>0.78(0.25)<br>0.82(0.24)<br>0.95(0.12)<br>0.91(0.17)|
+
+
+Table 7: Detailed results of “prob-0.6” setting reward for each task in Mixed-Chemical environment,
+where “()” denote the standard deviation among three seeds.
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.32(0.20)<br>0.28(0.19)<br>0.28(0.18)<br>0.51(0.26)<br>0.62(0.24)<br>0.85(0.20)<br>0.82(0.23)<br>0.31(0.19)<br>0.29(0.17)<br>0.27(0.19)<br>0.58(0.25)<br>0.59(0.25)<br>0.77(0.23)<br>0.77(0.23)<br>0.38(0.22)<br>0.38(0.29)<br>0.33(0.24)<br>0.59(0.29)<br>0.64(0.30)<br>0.83(0.22)<br>0.69(0.28)<br>0.36(0.19)<br>0.33(0.20)<br>0.29(0.17)<br>0.48(0.21)<br>0.57(0.24)<br>0.87(0.19)<br>0.74(0.24)<br>0.31(0.20)<br>0.32(0.23)<br>0.31(0.23)<br>0.51(0.29)<br>0.59(0.27)<br>0.80(0.24)<br>0.80(0.24)<br>0.35(0.21)<br>0.29(0.17)<br>0.29(0.16)<br>0.49(0.23)<br>0.55(0.24)<br>0.86(0.20)<br>0.83(0.22)<br>0.37(0.24)<br>0.35(0.21)<br>0.33(0.19)<br>0.56(0.26)<br>0.67(0.26)<br>0.80(0.21)<br>0.69(0.25)<br>0.40(0.29)<br>0.38(0.25)<br>0.38(0.25)<br>0.63(0.27)<br>0.70(0.29)<br>0.75(0.27)<br>0.69(0.29)<br>0.31(0.17)<br>0.30(0.20)<br>0.29(0.17)<br>0.53(0.27)<br>0.58(0.28)<br>0.80(0.24)<br>0.76(0.23)|
+
+
+Table 8: Detailed results of “spurious” setting reward for each task in Confusing-Minigrid environment, where “()” denote the standard deviation among three seeds.
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Minigrid-M-C012<br>Minigrid-M01-C0<br>Minigrid-M01-C2<br>Minigrid-M012-C012<br>Minigrid-M012-C<br>Minigrid-M02-C1|-0.42(0.18)<br>0.30(0.47)<br>-0.61(0.27)<br>-0.51(0.24)<br>-0.03(0.01)<br>0.75(0.11)<br>0.70(0.14)<br>-0.45(0.46)<br>-0.39(0.54)<br>-0.46(0.45)<br>-0.54(0.32)<br>-0.58(0.31)<br>-0.03(0.51)<br>-0.38(0.33)<br>-0.79(0.19)<br>-0.39(0.49)<br>-0.49(0.41)<br>-0.62(0.18)<br>-0.53(0.29)<br>0.11(0.52)<br>-0.08(0.49)<br>-0.43(0.24)<br>0.23(0.38)<br>-0.67(0.21)<br>-0.12(0.39)<br>0.01(0.10)<br>0.68(0.23)<br>0.62(0.28)<br>-0.63(0.37)<br>-0.62(0.37)<br>-0.10(0.45)<br>-0.63(0.25)<br>-0.68(0.25)<br>-0.19(0.44)<br>-0.32(0.37)<br>-0.54(0.34)<br>-0.23(0.53)<br>-0.47(0.40)<br>-0.69(0.20)<br>-0.50(0.32)<br>0.11(0.51)<br>-0.11(0.47)|
+
+
+C EXPERIMENTAL DETAILS
+
+
+C.1 ENVIRONMENT DETAILS
+
+
+In a two-dimensional grid world environment, there is an agent, a target, and multiple colored obstacles. Obstacles of the same color possess identical mobility and obstructive properties, which reflect
+the causality of the environment. For instance, if an obstacle does not impede other obstacles from
+the perspective of the agent, then the position of that obstacle is causally unrelated to the positions of
+other obstacles. Conversely, if an obstacle can be moved, then there is a causal relationship between
+
+
+15
+
+
+Table 9: ood policy mpe for each env
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.95(0.22)<br>0.95(0.21)<br>0.88(0.32)<br>0.93(0.25)<br>0.84(0.37)<br>1.00(0.05)<br>0.99(0.11)<br>0.95(0.22)<br>0.95(0.21)<br>0.89(0.31)<br>0.95(0.23)<br>0.84(0.37)<br>1.00(0.05)<br>0.99(0.09)<br>0.96(0.20)<br>0.96(0.20)<br>0.92(0.28)<br>0.95(0.21)<br>0.91(0.28)<br>1.00(0.00)<br>0.99(0.09)<br>0.96(0.20)<br>0.96(0.20)<br>0.90(0.30)<br>0.95(0.22)<br>0.87(0.34)<br>1.00(0.01)<br>0.99(0.09)<br>0.96(0.21)<br>0.95(0.21)<br>0.89(0.31)<br>0.94(0.23)<br>0.85(0.36)<br>1.00(0.03)<br>0.99(0.08)<br>0.95(0.21)<br>0.96(0.21)<br>0.91(0.29)<br>0.94(0.23)<br>0.85(0.35)<br>1.00(0.04)<br>0.99(0.08)<br>0.96(0.19)<br>0.96(0.19)<br>0.92(0.27)<br>0.96(0.20)<br>0.87(0.34)<br>1.00(0.02)<br>1.00(0.07)<br>0.96(0.20)<br>0.96(0.20)<br>0.91(0.29)<br>0.95(0.22)<br>0.90(0.30)<br>1.00(0.03)<br>0.99(0.08)<br>0.96(0.20)<br>0.96(0.20)<br>0.90(0.30)<br>0.95(0.22)<br>0.84(0.37)<br>1.00(0.02)<br>1.00(0.06)|
+
+
+Table 10: ood noise prob0.1 mpe for each env
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.58(0.49)<br>0.56(0.50)<br>0.55(0.50)<br>0.79(0.41)<br>0.75(0.44)<br>0.87(0.34)<br>0.84(0.37)<br>0.58(0.49)<br>0.58(0.49)<br>0.56(0.50)<br>0.81(0.40)<br>0.75(0.43)<br>0.88(0.33)<br>0.86(0.35)<br>0.60(0.49)<br>0.57(0.50)<br>0.55(0.50)<br>0.79(0.41)<br>0.81(0.39)<br>0.94(0.24)<br>0.82(0.38)<br>0.61(0.49)<br>0.57(0.50)<br>0.54(0.50)<br>0.79(0.41)<br>0.77(0.42)<br>0.95(0.22)<br>0.85(0.36)<br>0.61(0.49)<br>0.57(0.50)<br>0.52(0.50)<br>0.80(0.40)<br>0.76(0.43)<br>0.88(0.32)<br>0.85(0.36)<br>0.61(0.49)<br>0.55(0.50)<br>0.54(0.50)<br>0.79(0.41)<br>0.76(0.43)<br>0.92(0.27)<br>0.84(0.36)<br>0.59(0.49)<br>0.57(0.50)<br>0.59(0.49)<br>0.81(0.39)<br>0.78(0.42)<br>0.89(0.31)<br>0.83(0.38)<br>0.61(0.49)<br>0.58(0.49)<br>0.54(0.50)<br>0.80(0.40)<br>0.81(0.40)<br>0.90(0.30)<br>0.82(0.39)<br>0.60(0.49)<br>0.57(0.50)<br>0.54(0.50)<br>0.80(0.40)<br>0.75(0.43)<br>0.88(0.32)<br>0.84(0.37)|
+
+
+Table 11: ood noise prob0.3 mpe for each env
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.34(0.48)<br>0.32(0.47)<br>0.34(0.47)<br>0.61(0.49)<br>0.63(0.49)<br>0.78(0.42)<br>0.72(0.45)<br>0.36(0.48)<br>0.34(0.48)<br>0.33(0.47)<br>0.63(0.48)<br>0.64(0.48)<br>0.78(0.42)<br>0.76(0.43)<br>0.36(0.48)<br>0.35(0.48)<br>0.32(0.47)<br>0.60(0.49)<br>0.68(0.47)<br>0.87(0.34)<br>0.70(0.46)<br>0.38(0.49)<br>0.36(0.48)<br>0.33(0.47)<br>0.60(0.49)<br>0.64(0.48)<br>0.90(0.30)<br>0.75(0.44)<br>0.35(0.48)<br>0.33(0.47)<br>0.31(0.46)<br>0.62(0.49)<br>0.65(0.48)<br>0.78(0.41)<br>0.75(0.43)<br>0.37(0.48)<br>0.32(0.47)<br>0.32(0.47)<br>0.60(0.49)<br>0.63(0.48)<br>0.88(0.32)<br>0.76(0.43)<br>0.35(0.48)<br>0.33(0.47)<br>0.35(0.48)<br>0.64(0.48)<br>0.65(0.48)<br>0.81(0.39)<br>0.72(0.45)<br>0.38(0.49)<br>0.34(0.48)<br>0.31(0.47)<br>0.63(0.48)<br>0.69(0.46)<br>0.81(0.40)<br>0.71(0.46)<br>0.36(0.48)<br>0.31(0.47)<br>0.33(0.47)<br>0.62(0.49)<br>0.63(0.48)<br>0.76(0.43)<br>0.73(0.44)|
+
+
+Table 12: ood noise prob0.6 mpe for each env
+
+|Environment|Modular GNN RNN FCDL kmeans+CDL Oracle SAM|
+|---|---|
+|Chemical-random0<br>Chemical-random1<br>Chemical-random2<br>Chemical-random3<br>Chemical-random4<br>Chemical-random5<br>Chemical-random6<br>Chemical-random7<br>Chemical-random8|0.30(0.46)<br>0.28(0.45)<br>0.31(0.46)<br>0.48(0.50)<br>0.54(0.50)<br>0.76(0.43)<br>0.70(0.46)<br>0.31(0.47)<br>0.31(0.46)<br>0.29(0.46)<br>0.50(0.50)<br>0.56(0.50)<br>0.73(0.45)<br>0.73(0.45)<br>0.31(0.47)<br>0.31(0.47)<br>0.29(0.45)<br>0.46(0.50)<br>0.59(0.49)<br>0.82(0.39)<br>0.66(0.48)<br>0.33(0.47)<br>0.33(0.47)<br>0.30(0.46)<br>0.46(0.50)<br>0.55(0.50)<br>0.88(0.32)<br>0.74(0.44)<br>0.30(0.46)<br>0.30(0.46)<br>0.28(0.45)<br>0.48(0.50)<br>0.56(0.50)<br>0.75(0.44)<br>0.73(0.45)<br>0.32(0.47)<br>0.30(0.46)<br>0.29(0.46)<br>0.47(0.50)<br>0.55(0.50)<br>0.85(0.36)<br>0.75(0.43)<br>0.32(0.47)<br>0.29(0.46)<br>0.31(0.46)<br>0.53(0.50)<br>0.57(0.50)<br>0.75(0.43)<br>0.69(0.46)<br>0.34(0.48)<br>0.31(0.46)<br>0.29(0.45)<br>0.52(0.50)<br>0.61(0.49)<br>0.78(0.42)<br>0.67(0.47)<br>0.31(0.47)<br>0.27(0.45)<br>0.30(0.46)<br>0.49(0.50)<br>0.54(0.50)<br>0.70(0.46)<br>0.69(0.46)|
+
+
+actions and the position of the obstacle. Under different conditions, the same obstacle may exhibit
+variations in mobility and obstructive properties, resulting in different causal graphs.
+
+
+C.2 GROUND TRUTH CAUSAL MASK
+
+
+16
+
+
+(a) random0 (b) random1 (c) random2
+
+
+(d) random3 (e) random4 (f) random5
+
+
+(g) random6 (h) random7 (i) random8
+
+
+(a) M012-C (b) M01-C0 (c) M01-C2
+
+
+(d) M02-C1 (e) M012-C (f) M012-C012
+
+
+17

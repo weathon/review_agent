@@ -1,0 +1,4344 @@
+# DRL: DECOMPOSED REPRESENTATION LEARNING
+## FOR TABULAR ANOMALY DETECTION
+
+
+**Hangting Ye** [1] **, He Zhao** [2] **, Wei Fan** [3] **, Mingyuan Zhou** [4] **, Dandan Guo** [1] _[∗]_ **, Yi Chang** [1 5 6] _[∗]_
+
+School of Artificial Intelligence, Jilin University [1] CSIRO’s Data61 [2] University of Oxford [3]
+
+The University of Texas at Austin [4] International Center of Future Science, Jilin University [5]
+
+
+Engineering Research Center of Knowledge-Driven Human-Machine Intelligence, MOE, China [6]
+yeht2118@mails.jlu.edu.cn, he.zhao@data61.csiro.au, wei.fan@wrh.ox.ac.uk,
+mingyuan.zhou@mccombs.utexas.edu, _{_ guodandan,yichang _}_ @jlu.edu.cn
+
+
+ABSTRACT
+
+
+Anomaly detection, indicating to identify the anomalies that significantly deviate
+from the majority normal instances of data, has been an important role in machine learning and related applications. Despite the significant success achieved
+in anomaly detection on image and text data, the accurate Tabular Anomaly Detection (TAD) has still been hindered due to the lack of clear prior structure information in the tabular data. Most state-of-the-art TAD studies are along the line of
+reconstruction, which first reconstruct training data and then use reconstruction errors to decide anomalies; however, reconstruction on training data can still hardly
+distinguish anomalies due to the data entanglement. To address this problem, in
+this paper, we propose a novel approach Decomposed Representation Learning
+(DRL), to re-map data into a tailor-designed constrained space, in order to capture
+the underlying shared patterns of normal samples and differ anomalous patterns
+for TAD. Specifically, we enforce the representation of each normal sample in the
+latent space to be decomposed into a weighted linear combination of randomly
+generated orthogonal basis vectors, where these basis vectors are both data-free
+and training-free. Furthermore, we enhance the discriminative capability between
+normal and anomalous patterns in the latent space by introducing a novel constraint that amplifies the discrepancy between these two categories, supported by
+theoretical analysis. Finally, extensive experiments on 40 tabular datasets and 16
+competing tabular anomaly detection algorithms show that our method achieves
+state-of-the-art performance.
+
+
+1 INTRODUCTION
+
+
+Anomaly detection (AD), which aims to identify the anomalies that significantly deviate from the
+majority normal instances, is a crucial machine learning task. Tabular data, usually represented as
+vectors of heterogeneous features, is a vital data type in AD (Han et al., 2022; Yin et al., 2024) with
+numerous applications, including cyber-security (Ahmad et al., 2021), rare disease diagnosis (Fernando et al., 2021; Ye et al., 2023a) and financial fraud detection (Al-Hashedi & Magalingam, 2021).
+In most real-world scenarios, labeled anomalies usually need to be manually annotated by domain
+experts, which is both expensive and time-consuming, and marking all types of anomalies is usually
+impractical (Chandola et al., 2009; Ye et al., 2023b; Guo et al., 2023). Therefore, tabular anomaly
+detection (TAD) is usually implemented in a one-class classification setting, where a model is trained
+to identify anomalies in the absence of labeled anomalous samples, relying solely on the normal instances available during training (Sch¨olkopf et al., 1999; Sohn et al., 2021; Yin et al., 2024). This
+approach fundamentally differs from supervised learning tasks, which have access to examples from
+all data classes.
+
+
+Existing approaches in this literature leverage the assumption that anomalies deviate from characteristic patterns present in the normal training data. By capturing these normal patterns during training,
+one can identify anomalies at the inference time. When considering perceptual data (e.g., image
+
+
+_∗_ Corresponding authors.
+
+
+1
+
+
+and text), many methods (Golan & El-Yaniv, 2018; Liznerski et al., 2020) have demonstrated significant success by leveraging the structure of the input data. For example, images can be rotated,
+and the ability to distinguish between different rotations varies between anomalies and normal samples (Golan & El-Yaniv, 2018). However, unlike image or text, tabular data features can have values
+with different types (numerical and categorical), ranges and distributions. Thus, there is no prior
+information on the structure of tabular data (Borisov et al., 2022; Shenkar & Wolf, 2022; Chang
+et al., 2023; Thimonier et al., 2024; Ye et al., 2024). One of the general ideas for TAD is to train
+deep learning models that reconstruct training data and use reconstruction error to decide whether a
+test datum is normal or anomalous following the assumption that a model can accurately reconstruct
+normal samples while failing to reconstruct anomalous ones. Methods (Yin et al., 2024; Thimonier
+et al., 2024) built on top of this idea have shown promising performance.
+
+
+Although fruitful progress has been made in the last several years, capturing the comprehensive normal patterns that are distinct from anomalous patterns for tabular data remains a challenging task, as
+real-world data may exhibit data entanglement between normal and anomalous samples. This paper
+develops DRL, a decomposed representation learning framework for TAD that learns the underlying
+normal patterns shared among normal samples by re-mapping observations into a tailor-designed
+constrained latent space, where normal and anomalous patterns are more effectively distinguished.
+To learn the shared information that distinguishes normal samples from anomalies, we enforce each
+normal sample’s representation in the latent space to be decomposed into a linear combination of
+randomly generated orthogonal basis vectors with sample-specific weights. Notably, these basis
+vectors are fixed during training and are data-free. In addition, to enhance the discriminative power
+between normal and anomalous patterns within the latent space, we introduce a novel constraint that
+amplifies the discrepancy between these two patterns, supported by theoretical analysis.
+
+
+The contributions of this paper include: **1)** Inspired by the effectiveness and popularity of
+reconstruction-based approaches in TAD, we propose a novel method that performs representation
+decomposition in a constrained latent space, effectively addressing the potential data entanglement
+issue between normal and anomalous samples, resulting in significant improvements over existing
+methods. **2)** We propose a decomposed representation learning framework to enforce that each
+normal representation in the latent space could be decomposed into a linear combination of shared
+orthogonal basis vectors with sample-specific weights, thereby capturing the underlying unique normal patterns effectively. Importantly, the choice of basis vectors is data-free and the basis vectors
+themselves are training-free. **3)** Additionally, we develop a simple and theoretically sound constraint
+to further amplify the discrepancy between normal and anomalous patterns within the latent space.
+**4)** We conduct extensive experiments on 40 TAD datasets and 16 competing benchmark algorithms,
+and report comprehensive results along with analysis and visualizations. These experiments show
+that our method achieves state-of-the-art performance.
+
+
+2 PRELIMINARIES
+
+
+**Problem** **Formulation.** Following previous works (Yin et al., 2024; Thimonier et al., 2024), we
+implement AD in a one-class classification setting, i.e., only normal samples are available during
+training. We denote the training set as _Dtrain_ = _{_ **x** _i}_ _[N]_ _i_ =1 [, where] **[ x]** _[i]_ _[∈X]_ _[⊆]_ [R] _[D]_ [,] _[ N]_ [is the number of]
+normal samples in the training set and _D_ is the number of input features. The test set _Dtest_ includes
+both anomalous and normal samples. The goal of AD is to learn a detection model from _Dtrain_ .
+During inference, the detection model takes sample **x** _∈Dtest_ as input and outputs the predicted
+anomaly score of **x**, where a higher score indicates a higher confidence that **x** is an anomaly.
+
+
+**Reconstruction-based Approaches.** These methods (Yin et al., 2024; Thimonier et al., 2024) have
+demonstrated promising efficacy in tabular AD by training models to accurately reconstruct normal
+samples while failing to reconstruct anomalous ones. Standard reconstruction-based approaches
+consider learning a mapping _A_ ( _·_ ; Θ) : R _[D]_ _→_ R _[D]_ to minimize the reconstruction loss within _Dtrain_ .
+Typically, _A_ ( _·_ ; Θ) first maps the sample from observation space to latent space, and then maps it
+back to the observation space to obtain the reconstruction of the sample. The Θ can be optimized by
+minimizing the reconstruction loss on normal training samples:
+
+
+_N_
+
+- _d_ ( **x** _i, A_ ( **x** _i_ ; Θ)) _,_ (1)
+
+
+_i_ =1
+
+
+1
+min
+Θ _N_
+
+
+_N_
+
+- _d_ ( **x** _i,_ ˜ **x** _i_ ) = min 1
+
+Θ _N_
+_i_ =1
+
+
+2
+
+
+Abalone
+
+
+(a) Original data
+
+
+Abalone
+
+
+(b) Prediction of MCM
+
+
+Abalone
+
+
+(c) Representation of MCM
+
+
+Abalone
+
+
+(d) Representation of ours
+
+
+Cardiotocography
+
+
+(e) Original data
+
+
+Cardiotocography
+
+
+(f) Prediction of MCM
+
+
+Cardiotocography
+
+
+(g) Representation of MCM
+
+
+Cardiotocography
+
+
+(h) Representation of ours
+
+
+Figure 1: T-SNE visualization for original data space and deep TAD models’ latent space on real-world datasets.
+(a-d) are on the Abalone dataset and (e-h) are on the Cardiotocography dataset. “blue” and “orange” points
+indicate normal and anomalous samples respectively. (a) and (e) show that the normal and anomalous samples
+are entangled in the observed data space. (b) and (f) show the prediction for observations by MCM. In (c)
+and (g), which depict the representations learned by MCM, we observe a notable overlap between normal and
+anomalous representations in the latent space. In contrast, (d) and (h) demonstrate that our proposed DRL
+achieves a more discriminative separation for normal and anomalous representations in the latent space.
+
+
+where _d_ ( **x** _i,_ ˜ **x** _i_ ) measures the reconstruction loss for **x** _i_, which is often set to be a distance measurement such as the Euclidean distance. The reconstruction loss is typically employed as the anomaly
+score to detect anomalies. Recently, MCM (Yin et al., 2024) introduces a learnable masking strategy to the input and aims to reconstruct normal samples well with access to only unmasked entries
+of the input, where generating the effective masks is still challenging in this field. Motivated by
+the importance of incorporating both feature-feature and sample-sample dependencies in tabular
+learning (Kossen et al., 2021; Gorishniy et al., 2024), NPT-AD (Thimonier et al., 2024) trains NonParametric Transformers (Kossen et al., 2021) to reconstruct masked features of normal samples by
+utilizing the whole training set. However, NPT-AD involves a high computational cost in terms of
+memory and time, due to its reliance on the training set during inference. Both NPT and MCM rely
+on the reconstruction about the samples, which usually suffer from the potential data entanglement
+in observation space, as shown in Fig. 1 and Fig. 7 of Appendix A.1.
+
+
+3 METHOD
+
+
+3.1 MOTIVATION
+
+
+Despite the effectiveness of aforementioned works based on their specially designed masks and
+reconstruction strategies in the observed data space, the issue of potential data entanglement remains
+unaddressed, which may impede the ability for TAD. As illustrated in (a) and (e) of Fig. 1, real-world
+data may exhibit observation entanglement between normal and anomalous samples. Our empirical
+observations indicate that this phenomenon also exists for many other real world tabular datasets
+(see Fig. 7 of Appendix A.1). (b) and (f) of Fig. 1 indicate that while MCM (Yin et al., 2024), one
+of the best-performing methods, demonstrates promising performance in detecting anomalies, some
+mistakes caused by data entanglement persist. Ignoring observation entanglement in TAD under the
+one-class classification setting can lead to diminished discriminative power between learned normal
+and anomalous patterns, as the overlap between normal and anomalous representations within the
+latent space of deep models may obscure the distinction between them, which is illustrated in (c)
+and (g) of Fig. 1. We attribute this challenge to the intrinsic heterogeneity of features in tabular data,
+which aligns with recent findings (Grinsztajn et al., 2022) indicating that neural networks struggle to
+learn irregular patterns, particularly when confronted with numerous uninformative features present
+in tabular data. That is to say, using the reconstruction loss about the observed samples to distinguish
+the anomalous samples from the normal samples might be insufficient.
+
+
+3.2 PROPOSED METHOD
+
+
+To address the above-mentioned challenges, we focus on learning the underlying unique normal
+patterns from the representation **h** = _f_ ( **x** ; _θf_ ) produced by a feature extractor _f_ ( _·_ ; _θf_ ) : R _[D]_ _→_ R _[E]_
+and performing representation decomposition in the constrained latent space, where the normal and
+anomalous patterns are more discriminative, rather than from the raw observations directly. In the
+following, we will elaborate on the specific learning procedure to capture the unique patterns of normal representations in Section 3.2.1; then, we will provide a constraint to further enhance the discriminative power between normal and anomalous patterns within the latent space in Section 3.2.2;
+we also give the overall implementation of the proposed method in Section 3.2.3. As shown in (d)
+and (h) of Fig. 1, with our proposed method, the representations of normal and anomalous samples
+in the latent space are discriminative. An overview of the proposed framework is depicted in Fig. 2.
+
+
+3
+
+
+```
+ID
+
+|1|Col2|Col3|Col4|
+|---|---|---|---|
+|**`2`**<br>**`3`**||||
+
+
+ …
+
+Input Data
+
+```
+
+
+Figure 2: The DRL framework. During training, in step (a), to capture the unique patterns of normal representations in the latent space, the representation **h** = _f_ ( **x** ; _θf_ ) for each normal sample is enforced by decomposition
+loss (Eq. 3) to be decomposed into a linear combination of shared orthogonal basis vectors _B_ = _{_ _**β**_ _k}_ _[K]_ _k_ =1 [with]
+sample-specific weights **w**, where **w** is computed by weight learner _ϕ_ ( **x** ; _θϕ_ ) in step (b); in step (c), a separation constraint (Eq. 4) is introduced to further enhance the discriminative power between normal and anomalous
+patterns within the latent space; in step (d), we incorporate alignment loss (Eq. 5) to preserve intrinsic feature
+correlation of **x** motivated by standard reconstruction-based method. During inference, _d_ ( **h** _,_ **h** [˜] ) derived from
+the decomposition loss (Eq. 3) optimized during training in step (a) is used as the anomaly score.
+
+
+3.2.1 DECOMPOSED REPRESENTATION LEARNING IN LATENT SPACE
+
+
+Normal samples, which are drawn from the same distribution, are considered to represent the “normal” state. Thus, it is reasonable to assume that these samples share common statistical information
+that distinguishes them from anomalies. Inspired by techniques from dictionary learning, topic modeling, and matrix factorization (Toˇsi´c & Frossard, 2011; Vayansky & Kumar, 2020), we can learn
+the shared information by enforcing that each normal sample’s representation is decomposed into a
+linear combination of shared basis vectors (analogous to “topics” in topic modeling) with samplespecific weights (analogous to “topic proportion” in topic modeling). Unlike traditional dictionary
+learning or topic modeling mainly performed in the data space, our approach assumes that the representation of each normal sample in the latent space can be effectively modeled as a mixture of fixed
+basis vectors with specific mixture proportions.
+
+
+To accurately capture the statistical characteristics of normal samples while distinguishing them
+from anomalies, it is crucial that the shared basis vectors are sufficiently diverse to encapsulate
+the global structure of the normal data. To this end, we eliminate the dependencies among basis
+vectors by leveraging a set of orthogonal vectors as basis vectors _B_ = _{_ _**β**_ _k}_ _[K]_ _k_ =1 _[∈]_ [R] _[K][×][E]_ [,] [where]
+_**β**_ _k_ _∈_ R _[E]_ denotes the _k_ -th basis vector and _K_ denotes the number of basis vectors with _K_ _<_
+_E_ . These basis vectors are derived using the classical Gram–Schmidt process (Leon et al., 2013),
+which constructs an orthogonal sequence _{_ _**β**_ _k}_ _[K]_ _k_ =1 [from a linearly independent sequence] _[ {]_ **[q]** _[k][}]_ _k_ _[K]_ =1 _[∈]_
+R _[K][×][E]_ by defining _**β**_ _k_ inductively as follows:
+
+
+_**β**_ 1 = **q** 1 _,_ _**β**_ _k_ = **q** _k −_
+
+
+_k−_ 1
+
+
+_i_ =1
+
+
+_**β**_ _i ·_ **q** _k_
+
+_∥_ _**β**_ _i∥_ [2] _**[β]**_ _[i][, k]_ _[≥]_ [2] _[,]_ (2)
+
+
+where _**β**_ _i ·_ **q** _k_ denotes the dot product. In practice, we randomly sample _{_ **q** _k}_ _[K]_ _k_ =1 [from the standard]
+Gaussian distribution and then obtain _K_ orthogonal vectors as basis vectors by Eq. 2, which are
+fixed during the whole training procedure. Additionally, experimental results demonstrate that ours
+is robust and alternative orthogonalization methods can also effectively build basis vectors.
+
+
+Our objective is to decompose each normal sample representation **h** = _f_ ( **x** ; _θf_ ) into a linear
+combination of orthogonal basis vectors _B_ = _{_ _**β**_ _k}_ _[K]_ _k_ =1 [,] [weighted] [by] [a] [sample-specific] [vector]
+**w** = _{w_ _[k]_ _}_ _[K]_ _k_ =1 _[∈]_ [�] _[K]_ [, where] _[ w][k]_ [denotes the weight associated with the] _[ k]_ [-th basis vector, and][ �] _[K]_
+
+denotes the probability simplex in R _[K]_ . Considering that the weights **w** should be sample-specific
+to encapsulate the unique representation information in the latent space for an observed sample **x**,
+we apply a weight learner _ϕ_ ( **x** ; _θϕ_ ) : R _[D]_ _→_ R _[K]_ to explicitly compute the corresponding weight
+vector **w** . Consequently, a normal sample representation **h** that can be successfully decomposed in
+the latent space is expressed as **h** [˜] = [�] _k_ _[K]_ =1 _[w][k]_ _**[β]**_ _[k]_ [, where] **[h]** [˜][ serves as the reconstructed version of] **[ h]**
+in the latent space. To ensure that normal sample representations are accurately decomposed using
+the orthogonal basis vectors, we formulate the optimization problem to minimize the discrepancy
+
+
+4
+
+
+between **h** and **h** [˜] as follows:
+
+
+_N_
+
+- _d_ ( _f_ ( **x** _i_ ; _θf_ ) _,_
+
+
+_i_ =1
+
+
+_K_
+
+- _wi_ _[k]_ _**[β]**_ _[k]_ [)]
+
+_k_ =1
+
+
+(3)
+
+
+1
+min [=] [min]
+_θf,θϕ_ _[L][decomposition]_ _θf,θϕ_ _N_
+
+
+1
+= min
+_θf,θϕ_ _N_
+
+
+_N_
+
+- _d_ ( **h** _i,_ **h** [˜] _i_ ) = min 1
+
+_θf,θϕ_ _N_
+_i_ =1
+
+
+_N_
+
+- _d_ ( _f_ ( **x** _i_ ; _θf_ ) _, ϕ_ ( **x** _i_ ; _θϕ_ ) _B_ ) _,_
+
+
+_i_ =1
+
+
+where _N_ is the number of training samples, _d_ ( _·, ·_ ) is the distance measurement and _{wi_ _[k][}]_ _k_ _[K]_ =1 [=]
+_ϕ_ ( **x** _i_ ; _θϕ_ ). By ensuring that each normal training sample’s representation is mapped to a region
+where it can be expressed as a linear combination of fixed orthogonal basis vectors, with the associate weights explicitly computed, this approach effectively models the shared statistical information of normal patterns within the latent space. This shared information encompasses two perspectives: (i) by utilizing all features as input, we capture the inherent interactions among features, thereby acquiring comprehensive feature-feature dependencies among normal training samples, and (ii) each training sample’s representation is decomposed into a set of shared basis vectors
+with sample-specific weights, thereby optimizing the model to capture sample-sample dependencies
+among normal training samples.
+
+
+3.2.2 CONSTRAINT: REPRESENTATION SEPARATION
+
+
+To further enhance the discriminative power between normal and anomalous patterns within the
+latent space, we introduce a constraint designed to amplify the discrepancy between the two patterns.
+We now motivate the proposed constraint by giving a closer look at the discrepancy between normal
+and anomalous weights **w** = _{w_ _[k]_ _}_ _[K]_ _k_ =1 _[∈]_ [R] _[K]_ [computed by weight learner] _[ ϕ]_ [(] **[x]** [;] _[ θ][ϕ]_ [)][.]
+
+**Proposition 1** _Let_ **w** _n_ _∈N_ _and_ **w** _a_ _∈A denote the computed weights of normal and anomalous_
+_samples,_ _where_ _N_ _and_ _A_ _denote_ _the_ _weight_ _sets_ _of_ _normal_ _and_ _anomalous_ _samples,_ _respectively._
+_Given_ **w** _∈_ [�] _[K]_ _,_ _where_ [�] _[K]_ _represents_ _the_ _probability_ _simplex_ _in_ R _[K]_ _,_ _the_ _expected_ _discrepancy_
+_between_ _normal_ _and_ _anomalous_ _weights,_ E **w** _n∈N_ _,_ **w** _a∈A_ - _∥_ **w** _n −_ **w** _a∥_ [2] 2� _,_ _can_ _be_ _amplified_ _by_ _in-_
+_creasing the variance of ∥_ **w** _n∥_ 2 _among N_ _._
+
+
+**Proposition** **2** _Denoting_ _µ_ **w** _n_ = E **w** _n∈N_ [ **w** _n_ ] _as_ _the_ _centroid_ _of_ _the_ _normal_ _samples’_ _weights,_
+E **w** _n∈N_ _,_ **w** _a∈A_ - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2� _−_ E **w** _n∈N_ - _∥_ **w** _n −_ _µ_ **w** _n∥_ [2] 2� _, can be amplified by increasing the vari-_
+_ance of ∥_ **w** _n∥_ 2 _among N_ _._
+
+
+The proofs of Proposition 1 and Proposition 2 are provided in Appendix A.11. Since only normal
+samples are available during training, we implement this constraint by enforcing separation among
+the weights of normal training samples, i.e., we push each normal sample’s corresponding weight
+**w** _n_ away from any other one. By sufficiently separating the normal weights **w** _n_, we can promote
+increased variance in their _L_ 2 norms (Var( _∥_ **w** _n∥_ 2)), thereby promoting greater discrepancy between
+normal weights **w** _n_ and anomalous weights **w** _a_ . Given that the reconstructed representation **h** [˜] can
+be expressed as **h** [˜] = [�] _k_ _[K]_ =1 _[w][k]_ _**[β]**_ _[k]_ [, where basis vectors] _[ B]_ [=] _[{]_ _**[β]**_ _[k][}]_ _k_ _[K]_ =1 [are fixed,] **[ w]** [ could be viewed as]
+the computed coordinates of **h** [˜] in the subspace consisting of basis vectors. Therefore, the separation
+between **w** _n_ and **w** _a_ promotes separation among normal and anomalous **h** [˜] . This process is achieved
+by minimizing the separation loss as follows:
+
+
+1
+min [= max]
+_θϕ_ _[L][separation]_ _θϕ_ _N_ ( _N_ _−_ 1)
+
+
+_N_
+
+- **1** _{i_ = _j}d_ ( **w** _i,_ **w** _j_ )
+
+
+_i,j_ =1
+
+
+(4)
+
+
+1
+= min
+_θϕ_ _[−]_ _N_ ( _N_ _−_ 1)
+
+
+_N_
+
+- **1** _{i_ = _j}d_ ( _ϕ_ ( **x** _i_ ; _θϕ_ ) _, ϕ_ ( **x** _j_ ; _θϕ_ )) _,_
+
+
+_i,j_ =1
+
+
+where _d_ ( _·, ·_ ) is the distance measurement. This constraint amplifies the discrepancy between normal
+and anomalous patterns in the latent space, which is verified in Fig. 5 and Appendix A.10.
+
+
+3.2.3 OVERALL ALGORITHM AND IMPLEMENTATIONS.
+
+
+Motivated by reconstruction-based methods (Yin et al., 2024; Thimonier et al., 2024), we also introduce a strategy that incorporates the intrinsic feature correlations of the sample observation **x**
+
+
+5
+
+
+into representation **h** in the latent space. This approach helps prevent the model from extracting
+task-irrelevant representations while preserving the critical features of the normal data. Specifically,
+we minimize the following alignment loss:
+
+
+_N_
+
+- _d_ ( **x** _i, g_ ( **h** _i_ ; _θg_ ))
+
+
+_i_ =1
+
+
+(5)
+
+
+1
+min [=] [min]
+_θf,θg_ _[L][alignment]_ _θf,θg_ _N_
+
+
+1
+= min
+_θf,θg_ _N_
+
+
+_N_
+
+- _d_ ( **x** _i,_ ˜ **x** _i_ ) = min 1
+
+_θf,θg_ _N_
+_i_ =1
+
+
+_N_
+
+- _d_ ( **x** _i, g_ ( _f_ ( **x** _i_ ; _θf_ ); _θg_ )) _,_
+
+
+_i_ =1
+
+
+where _g_ ( _·_ ; _θg_ ) : R _[E]_ _→_ R _[D]_ is the alignment learner, **x** ˜ _i_ = _g_ ( **h** _i_ ; _θg_ ) = _g_ ( _f_ ( **x** _i_ ; _θf_ ); _θg_ ) is the
+reconstruction of **x** _i_, and _d_ ( _·, ·_ ) is the distance measurement.
+
+
+Altogether, DRL aims to minimize the following objective function w.r.t. _θf_ _, θϕ, θg_ during training:
+
+_θf_ min _,θϕ,θg_ _[L][all]_ [=] _θ_ [min] _f,θϕ_ _[L][decomposition]_ [ +] _[ λ]_ [1][ min] _θϕ_ _[L][separation]_ [ +] _[ λ]_ [2] _θ_ [min] _f,θg_ _[L][alignment][,]_ (6)
+
+
+where _λ_ 1 _, λ_ 2 indicates the hyper-parameters for balancing the total loss functions. The decomposed
+representation learning is achieved via _Ldecomposition_ (Eq. 3) to capture the unique patterns of normal sample representations in the latent space. Additionally, a separation constraint via _Lseparation_
+(Eq. 4) is introduced to further enhance the discriminative power between normal and anomalous
+patterns within the latent space. In practice, the separation constraint is implemented within each
+mini-batch to reduce the computational cost. We also introduce a strategy via _Lalignment_ (Eq. 5)
+that incorporates the intrinsic feature correlations of the sample observations into representations.
+During inference, we derive the anomaly score _s_ = _d_ ( **h** _,_ **h** [˜] ) = _d_ ( _f_ ( **x** ; _θf_ ) _, ϕ_ ( **x** ; _θϕ_ ) _B_ ) from the
+_Ldecomposition_ (Eq. 3) optimized during training, which performs reconstruction for representation
+**h** in the constrained latent space, rather than in the observed data space (typically adopting _d_ ( **x** _,_ ˜ **x** )
+as anomaly score discussed in Section 2). A higher anomaly score indicates higher confidence that
+**x** is an anomaly. We provide the training and inference process of DRL in Algorithm 1 and 2 of
+Appendix A.3 respectively.
+
+
+Given the potential entanglement between normal and anomalous samples in the observed data
+space, our proposed method offers a notable advantage by providing greater flexibility in adjusting representations within the latent space compared to the observed space (Ye et al., 2024; dan
+Guo et al., 2022). This flexibility allows us to enforce constraints on the learned representations,
+making them more discriminative between normal and anomalous patterns, and thereby capturing
+the distinct characteristics of normal representations more effectively. The representation decomposition process seen by the model only corresponds to the normal samples during training, and a
+separation constraint is applied to further enhance the distinction between normal and anomalous
+patterns. This approach significantly impedes the ability to exploit representation decomposition for
+anomalies, ensuring a more robust discrimination between the two categories.
+
+
+4 RELATED WORK
+
+
+**Classical Anomaly Detection.** One of the main settings for anomaly detection is one-class classification, that is identifying anomalies after observing a set of normal samples (Sohn et al., 2021; Yin
+et al., 2024). Over the decades, various classical methods have been developed, consistently showing strong performance, particularly with tabular data. _Density estimation_ This approach typically
+involves estimating the distribution of normal data using either parametric or non-parametric techniques, allowing for anomaly detection based on sample likelihoods under the estimated distribution.
+Traditional models include KDE (Parzen, 1962) and GMM (Roberts & Tarassenko, 1994). Recently,
+ECOD (Li et al., 2022) has employed empirical cumulative distribution for this purpose. Additionally, some methods utilize local density estimation to identify anomalies, such as LOF (Breunig
+et al., 2000). _Classifiation-based_ _methods_ This category focuses on learning a decision boundary
+using only normal data. For example, OCSVM (Sch¨olkopf et al., 1999) creates this boundary by
+maximizing the margin between the input data and the origin. _Reconstruction-based methods_ These
+methods are among the most widely used as discussed in Section 2, including classical methods such
+as PCA (Shyu et al., 2003). For a comprehensive overview of anomaly detection, we recommend
+the following surveys (Pang et al., 2021; Ruff et al., 2021; Chandola et al., 2009).
+
+
+6
+
+
+**Deep Learning-based Anomaly Detection.** As classical methods struggle to capture complex patterns and relationships in high-dimensional spaces (Pang et al., 2021), recent studies have prompted
+a shift toward deep learning methodologies for tabular data. For example, ICL (Shenkar & Wolf,
+2022) learns mapping relationships that maximize the mutual information between the feature subset and its rest. RAPP (Kim et al., 2019) computes anomaly scores by comparing observations
+and reconstructions in both the input and hidden space of a well-trained AutoEncoder (Chen et al.,
+2018). In contrast, our approach re-maps observations into a specially designed constrained space
+and decomposes the representations into basis vectors to capture normal patterns. Inspired by diffusion models (Ho et al., 2020), DTE (Livernoche et al., 2024) simplifies the diffusion process to
+reconstruct observations for tabular anomaly detection. Recent advancements, including MCM (Yin
+et al., 2024) and NPT-AD (Thimonier et al., 2024), are discussed in Section 2. Among these, the
+widely used methods primarily belong to reconstruction-based approaches (Kim et al., 2019; Livernoche et al., 2024; Yin et al., 2024; Thimonier et al., 2024). However, the issue of data entanglement
+between normal and anomalous samples is ignored.
+
+
+5 EXPERIMENT & ANALYSIS
+
+
+5.1 EXPERIMENT SETUP
+
+
+**Datasets.** We conduct experiments on an extensive benchmark of 40 tabular anomaly detection
+datasets selected from Outlier Detection DataSets (ODDS) (Rayana, 2016) and Anomaly Detection
+Benchmark (ADBench) (Han et al., 2022), following previous works (Yin et al., 2024; Thimonier
+et al., 2024). These datasets span diverse domains, including healthcare, science, and social sciences, and vary in characteristics from low-dimensional, low-scale to high-dimensional, large-scale.
+Detailed information about the dataset properties is provided in Appendix A.1.
+
+
+**Evaluation** **Metrics.** Per the literature (Zong et al., 2018; Bergman & Hoshen, 2020; Yin et al.,
+2024; Thimonier et al., 2024), we construct the training set by randomly subsampling 50% of the
+normal samples. The remaining 50% of the normal samples are then combined with the entire set
+of anomalies to form the test set. Following previous work (Han et al., 2022; Yin et al., 2024), we
+employ Area Under the Precision-Recall Curve (AUC-PR) and Area Under the Receiver Operating
+Characteristic Curve (AUC-ROC) as our evaluation criteria.
+
+
+**Baseline Models.** We conduct a comparative analysis between DRL and 16 other prominent methods in the field of TAD. Specifically, we include classic techniques such as OCSVM (Sch¨olkopf
+et al., 1999), KNN (Ramaswamy et al., 2000), LOF (Breunig et al., 2000), PCA (Shyu et al., 2003),
+IForest (Liu et al., 2008), and ECOD (Li et al., 2022), which continue to be widely used. In addition,
+we compare our method against recent deep learning-based approaches, including DAGMM (Zong
+et al., 2018), Deep SVDD (Ruff et al., 2018), AutoEncoder (Chen et al., 2018), RAPP (Kim et al.,
+2019), GOAD (Bergman & Hoshen, 2020), NeuTraLAD (Qiu et al., 2021), ICL (Shenkar & Wolf,
+2022), DTE (Livernoche et al., 2024), MCM (Yin et al., 2024), and NPT-AD (Thimonier et al.,
+2024). More details about the implementation of baseline models can be found in Appendix A.2.
+
+
+**DRL Details.** The DRL architecture remains consistent across all datasets. Specifically, the feature
+extractor _f_ ( _·_ ; _θf_ ) : R _[D]_ _→_ R _[E]_ and weight learner _ϕ_ ( _·_ ; _θϕ_ ) : R _[D]_ _→_ R _[K]_ are implemented as a
+simple two-layer fully connected MLP with Leaky ReLU activation function. The last layer of
+weight learner is with Softmax activation function. The alignment learner _g_ ( _·_ ; _θg_ ) : R _[E]_ _→_ R _[D]_ is
+a linear layer. For the distance measurement _d_ ( _·, ·_ ), we use L2 distance for _Ldecomposition_ (Eq. 3),
+Cosine distance for _Lseparation_ (Eq. 4) and _Lalignment_ (Eq. 5). The default number of basis vectors
+_K_ is set to 5, and these basis vectors are not updated during training. _λ_ 1 _, λ_ 2 is set to 0.06 and 0.1
+for separation loss and alignment loss respectively. The hidden dimension _E_ is set to 128, the batch
+size is set to 512, and the number of epochs is set to 200. Adam optimizer is employed, bounded by
+an exponentially decaying learning rate controller with 0.05 as initialization. To reduce the effect of
+randomness, the reported performance is averaged over 10 independent runs. [1]
+
+
+[1The source code is available at https://github.com/HangtingYe/DRL.](https://github.com/HangtingYe/DRL)
+
+
+7
+
+
+0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+
+0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+
+1 2 3 4 5 6 7 8 9 1011121314151617
+
+
+1 2 3 4 5 6 7 8 9 1011121314151617
+
+
+OCSVM
+
+KNN
+
+LOF
+PCA
+IForest
+
+
+KNN
+
+
+ECOD
+DAGMM
+DeepSVDD
+AutoEncoder
+
+
+RAPP
+GOAD
+NeuTraLAD
+
+
+ICL
+DTE
+MCM
+NPT-AD
+DRL (ours)
+
+
+Figure 3: Comparison of all models’ performance and ranking across different datasets in terms of AUC-PR
+and AUC-ROC. The red triangles represent the average value over all datasets.
+
+
+OCSVM
+
+KNN
+
+LOF
+PCA
+IForest
+
+
+KNN
+
+
+ECOD
+DAGMM
+DeepSVDD
+AutoEncoder
+
+
+RAPP
+GOAD
+NeuTraLAD
+
+ICL
+DTE
+MCM
+NPT-AD
+DRL (ours)
+
+
+Figure 4: The wilcoxon test is conducted between different models across all datasets. The significant difference of different settings are provided. Blue color indicates the corresponding p-value is lower than 0.05
+(significant), while white color indicates the corresponding p-value is higher than 0.05 (not significant).
+
+
+5.2 EMPIRICAL RESULTS AND ANALYSIS
+
+
+**Main** **Results.** We evaluated the performance and model ranking of DRL against 16 mainstream
+baseline models across 40 tabular datasets using two evaluation metrics. The results, comprising 2(performance & ranking) _×_ (16+1)(models) _×_ 40(datasets) _×_ 2(metrics) = 2720 numerical results,
+are summarized in boxplots, with each boxplot representing a model’s performance across various
+datasets, as illustrated in Fig. 3. Detailed results, average standard deviations, and analyses of the
+baseline methods are available in Appendix A.4. Overall, DRL demonstrates state-of-the-art performance, achieving an absolute average AUC-PR gain of at least 9.8% compared to other methods.
+Notably, DRL consistently enhances performance across datasets, regardless of dimensionality or
+size, as shown in Fig. 8 of Appendix A.4. We conduct the Wilcoxon signed-rank test (with _α_ = 0 _._ 05)
+(Woolson, 2007) to measure the improvement significance, as illustrated in Fig. 4. In all settings,
+the improvement of DRL over baseline models is statistically significant at the 95% confidence
+level. Additionally, we provide T-SNE visualizations of real-world data in Fig. 7 of Appendix A.1,
+revealing that data entanglement is a common issue in many tabular datasets. Even in cases without data entanglement in the observation space, DRL enhances performance by making normal and
+anomalous patterns more distinguishable.
+
+
+**Different Basis Vector Initialization Methods.** As we utilize a set of orthogonal vectors as basis
+vectors to capture normal patterns, we systematically investigate various orthogonalization methods
+for generating these vectors, as detailed in Table 1. Specifically, Random indicates that we randomly
+sample linearly independent vectors from the standard Gaussian distribution without applying any
+orthogonalization. The Householder (Schreiber & Van Loan, 1989) transformation reflects a given
+vector across a hyperplane defined by a unit vector, successively generating orthogonal vectors.
+Givens (Shalit & Chechik, 2014) rotation applies a rotation matrix to a pair of coordinates, effectively zeroing out one component while preserving orthogonality. SVD denotes Singular Value
+
+
+Table 1: Comparison of basis vector generation strategies averaged over all datasets. Orthogonalization of basis
+vectors is crucial for capturing normal patterns and distinguishing them from anomalies, with different methods
+yielding similar robustness. The Gram-Schmidt process achieves the best performance, while learnable basis
+vectors underperform due to optimization complexity.
+
+
+Metrics Random Householder Givens SVD GS (0.5, 1) GS (0, 1.5) GS* (0, 1) **GS (0, 1) (ours)**
+
+
+AUC-PR 0.667 (0.031) 0.729 (0.021) **0.736** (0.024) 0.712 (0.023) 0.730 (0.028) 0.732 (0.030) 0.697 (0.032) 0.734 (0.028)
+AUC-ROC 0.831 (0.021) 0.851 (0.011) 0.849 (0.013) 0.837 (0.014) 0.851 (0.014) 0.856(0.015) 0.836 (0.024) **0.857** (0.013)
+
+
+8
+
+
+Table 2: Analysis on the effects of different components of DRL in terms of AUC-PR and AUC-ROC averaged
+over 40 datasets. The full results are provided in Table 11 and Table 12 in Appendix A.10.
+
+
+Training Inference Evaluation Metric
+Variants _Ldecomposition_ _Lseparation Lalignment_ Weight learner _Ldecomposition_ _Lalignment_ AUC-PR AUC-ROC
+
+
+Decomposition (Klema & Laub, 1980), which decomposes a matrix into orthogonal matrices and a
+diagonal matrix capturing the singular values, thus revealing the matrix’s latent structure. GS refers
+to the Gram-Schmidt process (Leon et al., 2013) utilized in our study. In this experiment, we sample
+linearly independent vectors from a Gaussian distribution, with the values in parentheses representing the mean and variance. GS* (0, 1) indicates that the basis vectors are learnable during training,
+while they remain fixed in other settings.
+
+
+**Effectiveness** **of** **Key** **Components** **of** **DRL.** We further analyze the effectiveness of key components of DRL, as illustrated in Table 2, by comparing DRL against three groups of variants. _Variant_
+_A_ _to_ _E_ _explore_ _training_ _DRL_ _with_ _different_ _loss_ _configurations_ : (1) variant A, that removes both
+separation constraint and alignment loss when training DRL; (2) variant B, that removes separation
+constraint when training DRL; (3) variant C, that removes alignment loss when training DRL; (4)
+variant D, that uses only the alignment loss when training DRL, with the alignment loss directly
+serving as the anomaly score during inference; (5) variant E, that first constructs a set of orthogonal
+basis vectors, matching the dimensionality of the input features. It then employs the weight learner,
+as detailed in Section 3.2.1, to compute sample-specific weights. These weights are used to form a
+linear combination of the basis vectors, yielding the reconstructed observations. The decomposition
+loss is applied directly to the observations, and this loss serves as the anomaly score. The removal
+of any of the components during training degrades the performance of DRL. Notably, the separation
+constraint significantly enhances performance, which we attribute to its ability to improve the discriminative power between normal and anomalous patterns within the latent space. _Variant F to H_
+_examine_ _training_ _DRL_ _with_ _different_ _architectures_ : (6) variant F, decomposes each normal sample
+representation into a linear combination of orthogonal basis vectors with sample-specific weights,
+and computes these weights using least squares instead of a weight learner; (7) variant G, that applies
+the decomposition loss to the well-trained representations of MCM, assuming that the fixed normal
+representations can be decomposed into orthogonal basis vectors; (8) variant H, that replaces DRL’s
+feature extractor and alignment learner with MCM’s encoder and decoder, effectively training MCM
+within the DRL framework. While Variant F achieves promising performance, it still underperforms
+compared to DRL. DRL benefits from a learnable weight learner that captures the global distribution
+of weights across all normal training samples, enabling it to accurately represent complex normal
+patterns. Variant G highlights that well-trained reconstruction-based representations may not lie
+within the latent space defined by the basis vectors, complicating the modeling of normal information. Moreover, variant H shows that while substituting DRL’s components with MCM’s leads to
+significant improvements over MCM itself, it still falls short of DRL due to the observation-centric
+strategy, which can introduce data entanglement. _Variant I and J test the well-trained DRL with dif-_
+_ferent anomaly score configurations during inference_ : (9) variant I, that uses both decomposition and
+alignment losses as anomaly scores during inference; (10) variant J, that only uses alignment loss as
+anomaly scores during inference. The results indicate that decomposition loss is more effective than
+alignment loss in capturing normal information during inference.
+
+
+**Different Distance Metrics.** Besides, we also provide additional experiments to validate the effectiveness of different distance metrics for decomposition loss, separation constraint and alignment
+loss in Table 3. By default, we use L2 distance for decomposition loss, cosine distance for separation loss and alignment loss. For separation and alignment loss, L1, L2, and cosine distance metrics
+all yield promising performance, with cosine distance demonstrating relatively superior and more
+stable performance. The separation constraint exhibited more variability depending on the distance
+metric used. We attribute this to the fact that when maximizing the L1 and L2 distance metrics, the
+
+
+9
+
+
+Table 3: Analysis on the effects of various distance metrics in terms of AUC-PR across different datasets. The
+average results over 40 datasets are also provided. Full results are in Table 13 and Table 14 in Appendix A.10.
+
+
+Different components Backdoor Fault Imgseg Lympho Pendigits Vowels Wbc Average of 40 data
+
+
+Decomposition w/ Cosine distance 0.8808 0.6534 0.9036 0.9868 0.9029 0.4307 0.9417 0.7130
+Separation w/ L1 distance 0.8784 0.6391 0.9185 0.8391 0.882 0.44 0.9589 0.7007
+Alignment w/ L1 distance 0.8868 0.6433 0.9004 0.9762 0.9218 0.3696 0.9401 0.7063
+Separation w/ L2 distance 0.8786 0.6444 0.8998 0.8900 0.8735 **0.4635** 0.9655 0.7080
+Alignment w/ L2 distance 0.8886 0.6576 0.9125 **1.0000** 0.9090 0.4425 0.9590 0.7134
+**DRL (ours)** **0.8915** **0.6649** **0.9238** **1.0000** **0.9360** 0.4506 **0.9742** **0.7344**
+
+
+lack of inherent range limitations can lead to excessively large distance values, which hinder the
+model’s optimization process.
+
+
+**Discussion.** In Fig. 5, we present the average discrepancy between
+normal and anomalous observations over all data pairs which is labeled as “Original”, alongside the discrepancy of latent representations under “DRL w/o S” and “DRL”, where “S” denotes the separation constraint. The results in Fig. 5 indicate that our proposed
+method enhances the discriminative distinction between normal and
+anomalous patterns within the latent space. Additionally, we visualize the T-SNE of the learned representations from DRL on the Annthyroid dataset in Fig. 6. The findings reveal that the observation
+entanglement between normal and anomalous samples in existing
+reconstruction-based methods can obscure their distinction within
+the latent space. In contrast, DRL effectively separates the representations into distinct regions, thereby enhancing the discriminative
+capability between normal and anomalous patterns.
+
+
+3.5
+
+3.0
+
+2.5
+
+2.0
+
+1.5
+
+1.0
+
+Original DRL w/o S DRL
+
+
+Figure 5: The ratio of the
+mean L2 distance between normal and anomalous samples to
+the mean L2 distance among
+pairs of normal samples across
+all datasets.
+
+
+Representation of NPT-AD
+
+
+Original data
+
+
+Representation of MCM
+
+
+Representation of DRL (ours)
+
+
+Figure 6: Visualization for original data space and deep TAD models’ latent space on real-world datasets.
+
+
+**Additional Experiments.** The computational efficiency is detailed in Appendix A.5. We incorporate the sensitivity analysis w.r.t. the number of basis vectors, the loss weight _λ_ 1, _λ_ 2, the number
+of training epochs and the number of batch size in Appendix A.6. We also provide the weight visualization of normal and anomalous representations in Appendix A.7, DRL’s robustness to anomaly
+contamination in Appendix A.8, and the model performance on different types of anomalies in Appendix A.9. Furthermore, additional empirical evidence and theoretical analysis are provided in
+Appendix A.10 and Appendix A.11, respectively.
+
+
+6 CONCLUSION
+
+
+We study the problem of anomaly detection for tabular data, typically implemented in a one-class
+classification setting where the training data comprises solely normal samples. Most state-of-the-art
+TAD works are along the line of reconstruction; however, reconstruction on training data can still
+hardly distinguish anomalies due to the data entanglement. To address this problem, in this paper, we
+propose a novel approach Decomposed Representation Learning (DRL), to re-map data into a tailordesigned constrained space, in order to capture the underlying shared patterns of normal samples and
+differ anomalous patterns for tabular anomaly detection. Our approach decomposes each normal
+sample’s representation into a weighted linear combination of randomly generated orthogonal basis
+vectors, where these basis vectors are both data-free and training-free. We further enhance the
+discriminative ability between normal and anomalous patterns through a simple and theoretically
+sound constraint. The empirical results demonstrated the effectiveness of DRL for tabular anomaly
+detection. Our work can shed some light on the development of better algorithms for similar tasks.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+The authors would like to thank the anonymous referees for their valuable comments. In this work,
+Hangting Ye, Dandan Guo and Yi Chang are supported by the National Natural Science Foundation
+of China (No. 623B2043, No. U2341229, No. 62306125) and the National Key R&D Program of
+China under Grant (No. 2023YFF0905400).
+
+
+REFERENCES
+
+
+Zeeshan Ahmad, Adnan Shahid Khan, Cheah Wai Shiang, Johari Abdullah, and Farhan Ahmad.
+Network intrusion detection system: A systematic study of machine learning and deep learning
+approaches. _Transactions on Emerging Telecommunications Technologies_, 32(1):e4150, 2021.
+
+
+Khaled Gubran Al-Hashedi and Pritheega Magalingam. Financial fraud detection applying data
+mining techniques: A comprehensive review from 2009 to 2019. _Computer Science Review_, 40:
+100402, 2021.
+
+
+Liron Bergman and Yedid Hoshen. Classification-based anomaly detection for general data. _arXiv_
+_preprint arXiv:2005.02359_, 2020.
+
+
+Rajendra Bhatia and Chandler Davis. A cauchy-schwarz inequality for operators with applications.
+_Linear algebra and its applications_, 223:119–129, 1995.
+
+
+Rajendra Bhatia and Fuad Kittaneh. Notes on matrix arithmetic–geometric mean inequalities. _Linear_
+_Algebra and Its Applications_, 308(1-3):203–211, 2000.
+
+
+Vadim Borisov, Tobias Leemann, Kathrin Seßler, Johannes Haug, Martin Pawelczyk, and Gjergji
+Kasneci. Deep neural networks and tabular data: A survey. _IEEE transactions on neural networks_
+_and learning systems_, 2022.
+
+
+Markus M Breunig, Hans-Peter Kriegel, Raymond T Ng, and J¨org Sander. Lof: identifying densitybased local outliers. In _Proceedings_ _of_ _the_ _2000_ _ACM_ _SIGMOD_ _international_ _conference_ _on_
+_Management of data_, pp. 93–104, 2000.
+
+
+Varun Chandola, Arindam Banerjee, and Vipin Kumar. Anomaly detection: A survey. _ACM com-_
+_puting surveys (CSUR)_, 41(3):1–58, 2009.
+
+
+Chun-Hao Chang, Jinsung Yoon, Sercan O Arik, Madeleine Udell, and Tomas Pfister. [¨] Data-efficient
+and interpretable tabular anomaly detection. In _Proceedings of the 29th ACM SIGKDD Confer-_
+_ence on Knowledge Discovery and Data Mining_, pp. 190–201, 2023.
+
+
+Zhaomin Chen, Chai Kiat Yeo, Bu Sung Lee, and Chiew Tong Lau. Autoencoder-based network
+anomaly detection. In _2018 Wireless telecommunications symposium (WTS)_, pp. 1–5. IEEE, 2018.
+
+
+Dan dan Guo, Long Tian, Minghe Zhang, Mingyuan Zhou, and Hongyuan Zha. Learning prototypeoriented set representations for meta-learning. In _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations_, 2022. [URL https://openreview.net/forum?id=WH6u2SvlLp4.](https://openreview.net/forum?id=WH6u2SvlLp4)
+
+
+Tharindu Fernando, Harshala Gammulle, Simon Denman, Sridha Sridharan, and Clinton Fookes.
+Deep learning for medical anomaly detection–a survey. _ACM Computing Surveys (CSUR)_, 54(7):
+1–37, 2021.
+
+
+Izhak Golan and Ran El-Yaniv. Deep anomaly detection using geometric transformations. _Advances_
+_in neural information processing systems_, 31, 2018.
+
+
+Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, and Artem
+Babenko. Tabr: Tabular deep learning meets nearest neighbors. In _The_ _Twelfth_ _International_
+_Conference on Learning Representations_ [, 2024. URL https://openreview.net/forum?](https://openreview.net/forum?id=rhgIgTSSxW)
+[id=rhgIgTSSxW.](https://openreview.net/forum?id=rhgIgTSSxW)
+
+
+L´eo Grinsztajn, Edouard Oyallon, and Ga¨el Varoquaux. Why do tree-based models still outperform
+deep learning on typical tabular data? _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 35:
+507–520, 2022.
+
+
+11
+
+
+Dandan Guo, Long Tian, Chuan Du, Pengfei Xie, Bo Chen, and Lei Zhang. Suspicious object detection for millimeter-wave images with multi-view fusion siamese network. _IEEE Transactions_
+_on Image Processing_, 32:4088–4102, 2023. doi: 10.1109/TIP.2023.3270765.
+
+
+Songqiao Han, Xiyang Hu, Hailiang Huang, Minqi Jiang, and Yue Zhao. Adbench: Anomaly
+detection benchmark. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:32142–32159,
+2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Ki Hyun Kim, Sangwoo Shim, Yongsub Lim, Jongseob Jeon, Jeongwoo Choi, Byungchan Kim,
+and Andre S Yoon. Rapp: Novelty detection with reconstruction along projection pathway. In
+_International Conference on Learning Representations_, 2019.
+
+
+Virginia Klema and Alan Laub. The singular value decomposition: Its computation and some applications. _IEEE Transactions on automatic control_, 25(2):164–176, 1980.
+
+
+Jannik Kossen, Neil Band, Clare Lyle, Aidan N Gomez, Thomas Rainforth, and Yarin Gal. Selfattention between datapoints: Going beyond individual input-output pairs in deep learning. _Ad-_
+_vances in Neural Information Processing Systems_, 34:28742–28756, 2021.
+
+
+Steven J Leon, Ake [˚] Bj¨orck, and Walter Gander. Gram-schmidt orthogonalization: 100 years and
+more. _Numerical Linear Algebra with Applications_, 20(3):492–532, 2013.
+
+
+Zheng Li, Yue Zhao, Xiyang Hu, Nicola Botta, Cezar Ionescu, and George H Chen. Ecod: Unsupervised outlier detection using empirical cumulative distribution functions. _IEEE Transactions_
+_on Knowledge and Data Engineering_, 35(12):12181–12193, 2022.
+
+
+Fei Tony Liu, Kai Ming Ting, and Zhi-Hua Zhou. Isolation forest. In _2008 eighth ieee international_
+_conference on data mining_, pp. 413–422. IEEE, 2008.
+
+
+Victor Livernoche, Vineet Jain, Yashar Hezaveh, and Siamak Ravanbakhsh. On diffusion modeling
+for anomaly detection. In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_,
+2024. [URL https://openreview.net/forum?id=lR3rk7ysXz.](https://openreview.net/forum?id=lR3rk7ysXz)
+
+
+Philipp Liznerski, Lukas Ruff, Robert A Vandermeulen, Billy Joe Franks, Marius Kloft, and KlausRobert M¨uller. Explainable deep one-class classification. _arXiv preprint arXiv:2007.01760_, 2020.
+
+
+Guansong Pang, Chunhua Shen, Longbing Cao, and Anton Van Den Hengel. Deep learning for
+anomaly detection: A review. _ACM computing surveys (CSUR)_, 54(2):1–38, 2021.
+
+
+Emanuel Parzen. On estimation of a probability density function and mode. _The annals of mathe-_
+_matical statistics_, 33(3):1065–1076, 1962.
+
+
+Chen Qiu, Timo Pfrommer, Marius Kloft, Stephan Mandt, and Maja Rudolph. Neural transformation
+learning for deep anomaly detection beyond images. In _International_ _conference_ _on_ _machine_
+_learning_, pp. 8703–8714. PMLR, 2021.
+
+
+Sridhar Ramaswamy, Rajeev Rastogi, and Kyuseok Shim. Efficient algorithms for mining outliers
+from large data sets. In _Proceedings_ _of_ _the_ _2000_ _ACM_ _SIGMOD_ _international_ _conference_ _on_
+_Management of data_, pp. 427–438, 2000.
+
+
+Shebuti Rayana. ODDS library, 2016. [URL https://odds.cs.stonybrook.edu.](https://odds.cs.stonybrook.edu)
+
+
+Stephen Roberts and Lionel Tarassenko. A probabilistic resource allocating network for novelty
+detection. _Neural Computation_, 6(2):270–284, 1994.
+
+
+Lukas Ruff, Robert Vandermeulen, Nico Goernitz, Lucas Deecke, Shoaib Ahmed Siddiqui, Alexander Binder, Emmanuel M¨uller, and Marius Kloft. Deep one-class classification. In _International_
+_conference on machine learning_, pp. 4393–4402. PMLR, 2018.
+
+
+Lukas Ruff, Jacob R Kauffmann, Robert A Vandermeulen, Gr´egoire Montavon, Wojciech Samek,
+Marius Kloft, Thomas G Dietterich, and Klaus-Robert M¨uller. A unifying review of deep and
+shallow anomaly detection. _Proceedings of the IEEE_, 109(5):756–795, 2021.
+
+
+12
+
+
+Bernhard Sch¨olkopf, Robert C Williamson, Alex Smola, John Shawe-Taylor, and John Platt. Support
+vector method for novelty detection. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 12,
+1999.
+
+
+Robert Schreiber and Charles Van Loan. A storage-efficient wy representation for products of householder transformations. _SIAM Journal on Scientific and Statistical Computing_, 10(1):53–57, 1989.
+
+
+Uri Shalit and Gal Chechik. Coordinate-descent for learning orthogonal matrices through givens
+rotations. In _International Conference on Machine Learning_, pp. 548–556. PMLR, 2014.
+
+
+Tom Shenkar and Lior Wolf. Anomaly detection for tabular data with internal contrastive learning.
+In _International conference on learning representations_, 2022.
+
+
+Mei-Ling Shyu, Shu-Ching Chen, Kanoksri Sarinnapakorn, and LiWu Chang. A novel anomaly
+detection scheme based on principal component classifier. In _Proceedings of the IEEE foundations_
+_and_ _new_ _directions_ _of_ _data_ _mining_ _workshop_, pp. 172–179. IEEE Press Piscataway, NJ, USA,
+2003.
+
+
+Jo˜ao Vitor Valle Silva, Martin Andreoni Lopez, and Diogo MF Mattos. Attackers are not stealthy:
+Statistical analysis of the well-known and infamous kdd network security dataset. In _2020_ _4th_
+_Conference on Cloud and Internet of Things (CIoT)_, pp. 1–8. IEEE, 2020.
+
+
+Kihyuk Sohn, Chun-Liang Li, Jinsung Yoon, Minho Jin, and Tomas Pfister. Learning and evaluating representations for deep one-class classification. In _International Conference on Learning_
+_Representations_, 2021. [URL https://openreview.net/forum?id=HCSgyPUfeDj.](https://openreview.net/forum?id=HCSgyPUfeDj)
+
+
+Hugo Thimonier, Fabrice Popineau, Arpad Rimmel, and Bich-Liˆen DOAN. Beyond individual input
+for deep anomaly detection on tabular data. In _Forty-first International Conference on Machine_
+_Learning_, 2024. [URL https://openreview.net/forum?id=chDpBp2P6b.](https://openreview.net/forum?id=chDpBp2P6b)
+
+
+Ivana Toˇsi´c and Pascal Frossard. Dictionary learning. _IEEE_ _Signal_ _Processing_ _Magazine_, 28(2):
+27–38, 2011.
+
+
+Ike Vayansky and Sathish AP Kumar. A review of topic modeling methods. _Information Systems_,
+94:101582, 2020.
+
+
+Robert F Woolson. Wilcoxon signed-rank test. _Wiley encyclopedia of clinical trials_, pp. 1–3, 2007.
+
+
+Hongzuo Xu, Guansong Pang, Yijie Wang, and Yongjun Wang. Deep isolation forest for anomaly
+detection. _IEEE Transactions on Knowledge and Data Engineering_, 35(12):12591–12604, 2023.
+doi: 10.1109/TKDE.2023.3270293.
+
+
+Hangting Ye, Zhining Liu, Wei Cao, Amir M Amiri, Jiang Bian, Yi Chang, Jon D Lurie, Jim Weinstein, and Tie-Yan Liu. Web-based long-term spine treatment outcome forecasting. In _Pro-_
+_ceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining_, pp.
+3082–3092, 2023a.
+
+
+Hangting Ye, Zhining Liu, Xinyi Shen, Wei Cao, Shun Zheng, Xiaofan Gui, Huishuai Zhang,
+Yi Chang, and Jiang Bian. Uadb: Unsupervised anomaly detection booster. In _2023 IEEE 39th_
+_International Conference on Data Engineering (ICDE)_, pp. 2593–2606. IEEE, 2023b.
+
+
+Hangting Ye, Wei Fan, Xiaozhuang Song, Shun Zheng, He Zhao, Dan dan Guo, and Yi Chang.
+PTaRL: Prototype-based tabular representation learning via space calibration. In _The_ _Twelfth_
+_International Conference on Learning Representations_, 2024. [URL https://openreview.](https://openreview.net/forum?id=G32oY4Vnm8)
+[net/forum?id=G32oY4Vnm8.](https://openreview.net/forum?id=G32oY4Vnm8)
+
+
+Jiaxin Yin, Yuanyuan Qiao, Zitang Zhou, Xiangchao Wang, and Jie Yang. Mcm: Masked cell
+modeling for anomaly detection in tabular data. In _The_ _Twelfth_ _International_ _Conference_ _on_
+_Learning Representations_, 2024.
+
+
+Yue Zhao, Zain Nasrullah, and Zheng Li. Pyod: A python toolbox for scalable outlier detection.
+_Journal of machine learning research_, 20(96):1–7, 2019.
+
+
+Bo Zong, Qi Song, Martin Renqiang Min, Wei Cheng, Cristian Lumezanu, Daeki Cho, and Haifeng
+Chen. Deep autoencoding gaussian mixture model for unsupervised anomaly detection. In _Inter-_
+_national conference on learning representations_, 2018.
+
+
+13
+
+
+A APPENDIX
+
+
+In this section, we provide the details of datasets, the implementations of baseline methods, the full
+comparison results with baseline methods, the computational efficiency details, hyper-parameter
+sensitivity analysis, robustness to anomaly contamination, model performance on different types of
+anomalies and visualization. The source code for implementing DRL will be released after the paper
+is published.
+
+
+A.1 DATASETS DETAILS
+
+
+We experiment on an extensive benchmark of tabular datasets following previous work (Yin et al.,
+2024), which spans diverse domains, including healthcare, natural science, social sciences, etc. We
+omit the KDD dataset since it presents a certain number of limitations (Silva et al., 2020). Instead,
+according to (Thimonier et al., 2024), we include three real-world datasets from (Han et al., 2022)
+that display relatively similar characteristics to KDD in terms of dimensions: Fraud, Campaign,
+and Backdoor. In addition, we extend the benchmark of (Yin et al., 2024) by including other commonly used tabular real-world datasets from ADBench (Han et al., 2022). The dataset properties
+are summarized in Table 4. The Table 4 shows the number of samples, the number of features, and
+the number of anomalies of each dataset used. Additionally, we provide T-SNE visualizations of
+real-world data in Fig. 7.
+
+
+Abalone
+
+
+Cardiotocography
+
+
+Imgseg
+
+
+Pendigits
+
+
+Vertebral
+
+
+Campaign
+
+
+Glass
+
+
+Optdigits
+
+
+Speech
+
+
+Wine
+
+
+Cardio
+
+
+Hepatitis
+
+
+Parkinson
+
+
+Thyroid
+
+
+Yeast
+
+
+Amazon
+
+
+Census
+
+
+Arrhythmia
+
+
+Cover
+
+
+Mammography
+
+
+Satimage-2
+
+
+WPBC
+
+
+Backdoor
+
+
+Fault
+
+
+Mnist
+
+
+Shuttle
+
+
+Wbc
+
+
+Breastw
+
+
+Fraud
+
+
+Musk
+
+
+Annthyroid
+
+
+Comm.and.crime
+
+
+Lympho
+
+
+Satellite
+
+
+WDBC
+
+
+SpamBase
+
+
+Wilt
+
+
+Ionosphere
+
+
+Pima
+
+
+Vowels
+
+
+Figure 7: T-SNE visualization of real world datasets.
+
+
+14
+
+
+Table 4: Dataset properties. We use 40 commonly used tabular anomaly detection datasets in this
+paper.
+
+
+Samples Dims Anomalies
+
+
+Abalone 4177 7 2081
+Amazon 10000 768 500
+Annthyroid 7200 6 534
+Arrhythmia 452 274 66
+Backdoor 95329 196 2329
+Breastw 683 9 239
+Campaign 41188 62 4640
+Cardio 1831 21 176
+Cardiotocography 2114 21 466
+Census 299285 500 18568
+Comm.and.crime 1994 101 993
+Cover 286048 10 2747
+Fault 1941 27 673
+Fraud 284807 29 492
+Glass 214 9 9
+Hepatitis 80 19 13
+Imgseg 2310 18 990
+Ionosphere 351 33 126
+Lympho 148 18 6
+Mammography 11183 6 260
+Mnist 7603 100 700
+Musk 3062 166 97
+Optdigits 5216 64 150
+Parkinson 195 22 147
+Pendigits 6870 16 156
+Pima 768 8 268
+Satellite 6435 36 2036
+Satimage-2 5803 36 71
+Shuttle 49097 9 3511
+SpamBase 4207 57 1679
+Speech 3686 400 61
+Thyroid 3772 6 93
+Vertebral 240 6 30
+Vowels 1456 12 50
+WDBC 367 30 10
+WPBC 198 33 47
+Wbc 378 30 21
+Wilt 4819 5 257
+Wine 129 13 10
+Yeast 1484 8 507
+
+
+15
+
+
+A.2 BASELINE MODELS DETAILS
+
+
+We conduct a comparative analysis between DRL and 16 other prominent methods in the field of
+TAD, including classical non-deep methods and recent deep learning based methods. Specifically,
+OCSVM (Sch¨olkopf et al., 1999), KNN (Ramaswamy et al., 2000), LOF (Breunig et al., 2000),
+PCA (Shyu et al., 2003), IForest (Liu et al., 2008) and ECOD (Li et al., 2022) represent classic AD
+approaches that continue to maintain popularity. In addition, we compare our method to recent deep
+learning based methods, namely DAGMM (Zong et al., 2018), Deep SVDD (Ruff et al., 2018), AutoEncoder (Chen et al., 2018), RAPP (Kim et al., 2019), GOAD (Bergman & Hoshen, 2020), NeuTraLAD (Qiu et al., 2021), ICL (Shenkar & Wolf, 2022), DTE (Livernoche et al., 2024), MCM (Yin
+et al., 2024) and NPT-AD (Thimonier et al., 2024). We use the popular PyOD python package (Zhao
+et al., 2019) to implement OCSVM, LOF, PCA, IForest, ECOD, Deep SVDD and AutoEncoder. We
+use the DeepOD python library (Xu et al., 2023) to implement GOAD, NeuTraLAD and ICL. The
+implementation of the other methods is based on their official open-source code releases. Following
+latest works (Yin et al., 2024; Thimonier et al., 2024), We implement all baseline models’ hyperparameters following their original papers. All the methods are implemented with identical dataset
+partitioning and preprocessing procedures, following previous works (Yin et al., 2024).
+
+
+A.3 DRL WORKFLOW
+
+
+**Algorithm 1** DRL training workfow.
+
+
+**Input:** Training dataset _Dtrain_, feature extractor _f_ ( _·_ ; _θf_ ) : R _[D]_ _→_ R _[E]_, weight learner _ϕ_ ( _·_ ; _θϕ_ ),
+alignment learner _g_ ( _·_ ; _θg_ ) : R _[E]_ _→_ R _[D]_, orthogonal basis vectors _B_ = _{_ _**β**_ _k}_ _[K]_ _k_ =1 _[⊆]_ [R] _[K][×][E]_
+obtained by Eq. 2, hyper-parameters _λ_ 1 _, λ_ 2;
+1: **while** _θf_ _, θϕ, θg_ has not converged **do**
+2: Sample a mini-batch _B_ from _Dtrain_ ;
+3: **for x** _i_ in _B_ **do**
+4: Obtain sample representation **h** _i_ by _f_ ( **x** _i_ ; _θf_ );
+5: Calculate the corresponding weights **w** _i_ in latent space by _ϕ_ ( **x** _i_ ; _θϕ_ );
+6: Obtain the estimated observation **x** ˜ _i_ by _g_ ( **h** _i_ ; _θg_ );
+7: **end for**
+8: Compute _Ldecomposition_ = _|B_ 1 _|_ - **x** _i∈B_ _[d]_ [(] _[f]_ [(] **[x]** _[i]_ [;] _[ θ][f]_ [)] _[, ϕ]_ [(] **[x]** _[i]_ [;] _[ θ][ϕ]_ [)] _[B]_ [)][ with Eq. 3;]
+
+9: Compute _Lseparation_ = _−_ _|B|_ ( _|B_ 1 _|−_ 1) - _|i,jB|_ =1 **[1]** _[{][i][ ̸]_ [=] _[ j][}][ d]_ [(] _[ϕ]_ [(] **[x]** _[i]_ [;] _[ θ][ϕ]_ [)] _[, ϕ]_ [(] **[x]** _[j]_ [;] _[ θ][ϕ]_ [))][ with Eq. 4;]
+
+10: Compute _Lalignment_ = _|B_ 1 _|_ - **x** _i∈B_ _[d]_ [(] **[x]** _[i][, g]_ [(] _[f]_ [(] **[x]** _[i]_ [;] _[ θ][f]_ [);] _[ θ][g]_ [))][ with Eq. 5;]
+
+11: Update _θf_ _, θϕ, θg_ by minimizing _Lall_ = _Ldecomposition_ + _λ_ 1 _Lseparation_ + _λ_ 2 _Lalignment_
+with Eq. 6 through gradient descent.
+12: **end while**
+**Output:** Trained feature extractor _f_ ( _·_ ; _θf_ ), trained weight learner _ϕ_ ( _·_ ; _θϕ_ ).
+
+
+**Algorithm 2** DRL inference workfow.
+
+
+**Input:** Test dataset _Dtest_, trained feature extractor _f_ ( _·_ ; _θf_ ), trained weight learner _ϕ_ ( _·_ ; _θϕ_ ), orthogonal basis vectors _B_ = _{_ _**β**_ _k}_ _[K]_ _k_ =1 _[⊆]_ [R] _[K][×][E]_ [obtained by Eq. 2;]
+1: **for x** _i_ in _Dtest_ **do**
+2: Obtain sample representation **h** _i_ by _f_ ( **x** _i_ ; _θf_ );
+3: Calculate the corresponding weights **w** _i_ in latent space by _ϕ_ ( **x** _i_ ; _θϕ_ );
+4: Compute _si_ = _d_ ( _f_ ( **x** _i_ ; _θf_ ) _, ϕ_ ( **x** _i_ ; _θϕ_ ) _B_ ) as anomaly score (higher score indicates higher
+confidence that **x** _i_ is an anomaly) derived from the _Ldecomposition_ (Eq. 3).
+5: **end for**
+**Output:** Anomaly score _{si}_ _[|D]_ _i_ =1 _[test][|]_ .
+
+
+16
+
+
+A.4 FULL COMPARISON RESULTS WITH BASELINE METHODS
+
+
+We compare the performance and model ranking of DRL against 16 mainstream baseline models across 40 tabular datasets using 2 evaluation metrics. We summarize this large-scale experiment
+results (2(performance & ranking) _×_ (16+1)(models) _×_ 40(datasets) _×_ 2(metrics) = 2720 numerical results) in boxplots, where each boxplot corresponding to each model shows its results across different
+datasets, as shown in Fig. 3. The full results and average standard deviation are provided in table 5
+and table 6. We can observe that DRL achieves the highest average performance, and the lowest
+average ranking overall datasets for both AUC-PR and AUC-ROC. Specifically, DRL obtains an
+absolute average AUC-PR gain of at least 9.8% compared to other methods. Considering the overall performance and model ranking across 40 datasets, DRL achieves state-of-the-art performance.
+Furthermore, DRL consistently improves performance compared to baseline models w.r.t. both dimensionality and data size, as detailed in Fig. 8. Additionally, we conduct Wilcoxon signed-rank test
+(with _α_ = 0 _._ 05) (Woolson, 2007) to measure the improvement significance, as illustrated in Fig. 4.
+In all settings, the improvement of DRL over baseline models is statistically significant at the 95%
+confidence level. This demonstrates the superior effectiveness of DRL compared to baseline models
+across different datasets. As the representative reconstruction-based methods for tabular anomaly
+detection, DTE, MCM and NPT-AD belong to the best-performing baseline methods according to
+the results, which is aligned with the results in their original papers. However, as discussed in Section 3.1, relying on reconstruction loss from observed samples to differentiate anomalous samples
+may be insufficient due to inherent data entanglement. RAPP computes anomaly scores by comparing sample observations with their autoencoder reconstructions in both the input and hidden spaces,
+yet it does not address the underlying issue of data entanglement between normal and anomalous
+samples. In contrast, DRL enhances anomaly detection in tabular data by learning the shared underlying normal patterns of normal samples through representation decomposition in a constrained
+latent space, where normal and anomalous patterns are more discriminative. We provide TSNE
+visualizations of real-world data in Fig. 7, and our empirical observations indicate that data entanglement is a prevalent issue in many real-world tabular datasets. As shown in table 5 and table 6,
+even in cases without data entanglement in the observation space, DRL still improves performance
+by making normal and anomalous patterns more distinguishable.
+
+
+17
+
+
+Table 5: Comparison of AUC-PR ( _↑_ ) results between baseline methods and DRL on 40 datasets.
+
+|Col1|OCSVM KNN LOF PCA IForest ECOD DAGMM DeepSVDD AutoEncoder RAPP GOAD NeuTraLAD ICL DTE MCM NPT-AD|DRL (ours)|
+|---|---|---|
+|Abalone<br>Amazon<br>Annthyroid<br>Arrhythmia<br>Backdoor<br>Breastw<br>Campaign<br>Cardio<br>Cardiotocography<br>Census<br>Comm.and.crime<br>Cover<br>Fault<br>Fraud<br>Glass<br>Hepatitis<br>Imgseg<br>Ionosphere<br>Lympho<br>Mammography<br>Mnist<br>Musk<br>Optdigits<br>Parkinson<br>Pendigits<br>Pima<br>Satellite<br>Satimage-2<br>Shuttle<br>SpamBase<br>Speech<br>Thyroid<br>Vertebral<br>Vowels<br>WDBC<br>WPBC<br>Wbc<br>Wilt<br>Wine<br>Yeast|0.8459<br>0.8596<br>0.813<br>0.8393 0.8481 0.6554<br>0.7869<br>0.7173<br>0.8295<br>0.8125 0.8233<br>0.7768<br>0.7654 0.4798 0.7471<br>0.4899<br>0.105<br>0.0904 0.1117 0.1072 0.1091<br>0.104<br>0.1022<br>0.1003<br>0.117<br>0.1179 0.1086<br>0.1007<br>0.1077 0.1115 0.1083<br>0.0861<br>0.1831<br>0.3525 0.4513 0.5657 0.6149 0.4002<br>0.2189<br>0.3235<br>0.5291<br>0.3348 0.2132<br>0.5057<br>0.4114 0.6288 0.3215<br>0.62<br>0.5339<br>0.6008 0.5277 0.5336 0.5097 0.4461<br>0.4668<br>0.6036<br>0.3029<br>0.4487 0.4091<br>0.6237<br>0.6155 0.4912 0.6107<br>0.4345<br>0.1674<br>0.7554 0.5138 0.1107 0.0926 0.1552<br>0.2424<br>0.7291<br>0.8435<br>0.7055 0.0911<br>0.8716<br>0.8226 0.6244 0.7049<br>0.8828<br>0.9934<br>0.9712 0.9923 0.9934 0.9449 0.9522<br>0.7584<br>0.9924<br>0.9896<br>0.9762 0.8335<br>0.9117<br>0.9656 0.8825 0.9952<br>0.9813<br>0.4749<br>0.4383 0.4459 0.4884 0.4608 0.4705<br>0.2472<br>0.2529<br>0.4857<br>0.4242<br>0.203<br>0.4033<br>0.4506<br>0.469<br>0.604<br>0.4769<br>0.8614<br>0.758<br>0.836<br>0.8628 0.7018 0.3636<br>0.3089<br>0.788<br>0.4778<br>0.7201 0.6225<br>0.4535<br>0.8037 0.6929 0.8489<br>0.7733<br>0.6619<br>0.6162 0.5732 0.6969 0.6036 0.6968<br>0.444<br>0.4602<br>0.4705<br>0.6729 0.4647<br>0.6431<br>0.5955 0.5334 0.6993<br>0.6401<br>0.2279<br>0.146<br>0.2343 0.2004 0.1357 0.1773<br>0.1066<br>0.1514<br>0.1913<br>0.1703 0.1445<br>0.1103<br>0.1949 0.1794<br>0.242<br>0.2672<br>0.8371<br>0.851<br>0.8519 0.8892<br>0.894<br>0.6854<br>0.7475<br>0.8239<br>0.8678<br>0.8751<br>0.933<br>0.9202<br>0.8962 0.7901 0.8549<br>0.8668<br>0.019<br>0.0961 0.1598 0.0716 0.0362 0.1435<br>0.1355<br>0.0229<br>0.1422<br>0.1302 0.2071<br>0.0686<br>0.0714 0.6373 0.0438<br>0.0184<br>0.6062<br>0.6028 0.5101 0.6035 0.5948 0.5171<br>0.5894<br>0.563<br>0.6501<br>0.6227 0.5872<br>0.6083<br>0.5937 0.6393 0.6022<br>0.7578<br>0.349<br>0.4052 0.4046 0.2366 0.6939 0.4062<br>0.0099<br>0.332<br>0.3611<br>0.55<br>0.1249<br>0.2312<br>0.596<br>0.6214 0.5141<br>0.3868<br>0.0896<br>0.1099 0.0923 0.0896 0.0952 0.1113<br>0.1019<br>0.0912<br>0.1079<br>0.0963 0.0948<br>0.1491<br>0.2573 0.2151 0.1905<br>0.2204<br>0.2815<br>0.2744 0.3201 0.5828 0.4182 0.4049<br>0.4063<br>0.4264<br>0.4248<br>0.3006 0.3393<br>0.369<br>0.3357 0.6582 0.3372<br>0.3813<br>0.7883<br>0.8531 0.8702 0.7724 0.7556 0.7365<br>0.6409<br>0.6699<br>0.8391<br>0.7871 0.7114<br>0.8747<br>0.8916 0.6846 0.8124<br>0.8644<br>0.8969<br>0.9297 0.9591 0.8969 0.9768 0.9713<br>0.7046<br>0.867<br>0.7328<br>0.8915<br>0.928<br>0.9355<br>0.9777 0.9683 0.9802<br>0.9812<br>0.8107<br>0.9401 0.9762<br>1<br>0.9593 0.8972<br>0.573<br>0.9749<br>0.2709<br>0.6972 0.7656<br>0.646<br>0.6091 0.8677 0.4204<br>0.9929<br>0.4178<br>0.381<br>0.4063 0.4165 0.3334<br>0.538<br>0.1141<br>0.419<br>0.253<br>0.2944 0.2426<br>0.1326<br>0.1894 0.3985 0.4755<br>0.364<br>0.1686<br>0.761<br>0.838<br>0.6499 0.5349 0.3018<br>0.2742<br>0.4158<br>0.279<br>0.7233 0.7182<br>0.9021<br>0.8915 0.5226 0.7782<br>0.7485<br>0.0614<br>0.9917<br>1<br>1<br>0.5279<br>0.982<br>0.0482<br>1<br>1<br>1<br>0.5372<br>1<br>1<br>1<br>0.639<br>1<br>0.0692<br>0.8589 0.4363 0.0602<br>0.157<br>0.0669<br>0.0536<br>0.1159<br>0.1418<br>0.3436 0.0633<br>0.1709<br>0.1696 0.1534 0.8885<br>0.4203<br>0.8892<br>0.7952<br>0.834<br>0.9297 0.9595 0.8906<br>0.8484<br>0.9192<br>0.9243<br>0.8378 0.8413<br>0.8172<br>0.8568 0.7304 0.7996<br>0.9637<br>0.5178<br>0.9692 0.7855 0.3863 0.5133 0.4145<br>0.0441<br>0.0616<br>0.8904<br>0.7321 0.0259<br>0.693<br>0.4039 0.4844 0.8258<br>0.9671<br>0.7008<br>0.7098<br>0.697<br>0.7008 0.6662 0.5877<br>0.5956<br>0.7165<br>0.7174<br>0.6962 0.5027<br>0.6168<br>0.6965 0.6798 0.7389<br>0.7527<br>0.7778<br>0.8515 0.8088 0.7778 0.8583 0.8334<br>0.6866<br>0.8217<br>0.8218<br>0.8136 0.7786<br>0.8588<br>0.8799 0.8479 0.8532<br>0.8576<br>0.9192<br>0.9555 0.9692 0.9192 0.8846 0.7775<br>0.1142<br>0.9427<br>0.9688<br>0.9051 0.9726<br>0.9684<br>0.8124 0.6821<br>0.985<br>0.9862<br>0.9488<br>0.937<br>0.9601 0.9627 0.9172 0.9815<br>0.4875<br>0.9818<br>0.9316<br>0.9724 0.9545<br>0.9971<br>0.9811 0.9403 0.9479<br>0.9151<br>0.8136<br>0.7885 0.6764 0.8184 0.8902 0.7126<br>0.5721<br>0.7785<br>0.8253<br>0.818<br>0.5534<br>0.4789<br>0.6573<br>0.838<br>0.8078<br>0.8433<br>0.0279<br>0.0197 0.0315 0.0277 0.0353 0.0287<br>0.0515<br>0.04<br>0.027<br>0.0262 0.0424<br>0.0386<br>0.0335 0.0285<br>0.038<br>0.0584<br>0.8134<br>0.5903 0.7892 0.8134 0.6055 0.6807<br>0.1095<br>0.7282<br>0.8096<br>0.6655 0.6931<br>0.7435<br>0.6575 0.8167 0.8417<br>0.8179<br>0.1517<br>0.1239 0.2063 0.1381 0.1342 0.1917<br>0.1954<br>0.159<br>0.1476<br>0.1544 0.1451<br>0.1658<br>0.1598 0.2514 0.1949<br>0.2279<br>0.2969<br>0.3146 0.3277 0.1051 0.0984 0.1772<br>0.0843<br>0.1717<br>0.3475<br>0.1183 0.2274<br>0.1224<br>0.1574<br>0.381<br>0.0977<br>0.9498<br>0.4348<br>0.9323 0.9573 0.9833 0.9749 0.7734<br>0.7105<br>0.9184<br>0.9591<br>0.9383 0.9276<br>0.6372<br>0.8821 0.6882<br>0.889<br>0.9112<br>0.3974<br>0.3882 0.3878<br>0.394<br>0.376<br>0.3525<br>0.3981<br>0.3903<br>0.3848<br>0.4287 0.3738<br>0.3631<br>0.4238 0.4935<br>0.402<br>0.4005<br>0.8391<br>0.8022 0.8412 0.8391 0.8573 0.7217<br>0.2959<br>0.834<br>0.8578<br>0.775<br>0.3362<br>0.6051<br>0.7218 0.3997 0.8887<br>0.8079<br>0.2254<br>0.1496 0.2233 0.0641 0.0848 0.0768<br>0.0997<br>0.0705<br>0.0867<br>0.1246 0.1061<br>0.244<br>0.1382 0.2541 0.0759<br>0.0717<br>0.1424<br>0.9917 0.1253 0.1325 0.2458 0.3578<br>0.4907<br>0.1476<br>0.1605<br>0.5852 0.1619<br>0.9078<br>0.5659 0.9985 0.9335<br>0.7746<br>0.4803<br>0.4737 0.4866 0.4678 0.4654 0.4943<br>0.5411<br>0.4953<br>0.4833<br>0.4869 0.5877<br>0.5458<br>0.5097 0.4974 0.4631<br>0.4888|0.885<br>0.1206<br>0.6761<br>0.627<br>0.8915<br>0.9966<br>0.5013<br>0.8325<br>0.754<br>0.2649<br>0.9164<br>0.783<br>0.6649<br>0.6614<br>0.167<br>0.6627<br>0.9238<br>0.9895<br>1<br>0.8406<br>0.887<br>1<br>0.9356<br>0.921<br>0.936<br>0.7449<br>0.8692<br>0.9703<br>0.9819<br>0.8413<br>0.0584<br>0.8626<br>0.2854<br>0.4506<br>1<br>0.5017<br>0.9742<br>0.4543<br>1<br>0.5416|
+|Average AUC-PR<br>Average ranking<br>Win<br>Average std|0.4957<br>0.6109 0.5858 0.5532 0.5391 0.5059<br>0.3602<br>0.5254<br>0.5413<br>0.5693 0.4599<br>0.5553<br>0.5687 0.5815<br>0.605<br>0.6362<br>10.25<br>9.425<br>8.2875<br>8.85<br>9.675<br>10.775<br>13.55<br>10.3625<br>8.7875<br>9.3875 11.725<br>9.0875<br>8.3875 8.5125<br>7.475<br>6.4875<br>0<br>1<br>1<br>3<br>2<br>0<br>0<br>1<br>1<br>1<br>2<br>3<br>3<br>1<br>1<br>8<br>0<br>0<br>0<br>0<br>0.017<br>0<br>0.056<br>0.038<br>0.022<br>0.042<br>0.015<br>0.021<br>0.033<br>0.048<br>0.064<br>0.004|**0.7344**<br>**1.975**<br>**22**<br>0.028|
+
+
+18
+
+
+Table 6: Comparison of AUC-ROC ( _↑_ ) results between baseline methods and DRL on 40 datasets.
+
+
+|Col1|OCSVM KNN LOF PCA IForest ECOD DAGMM DeepSVDD AutoEncoder RAPP GOAD NeuTraLAD ICL DTE MCM NPT-AD|DRL (ours)|
+|---|---|---|
+|Abalone<br>Amazon<br>Annthyroid<br>Arrhythmia<br>Backdoor<br>Breastw<br>Campaign<br>Cardio<br>Cardiotocography<br>Census<br>Comm.and.crime<br>Cover<br>Fault<br>Fraud<br>Glass<br>Hepatitis<br>Imgseg<br>Ionosphere<br>Lympho<br>Mammography<br>Mnist<br>Musk<br>Optdigits<br>Parkinson<br>Pendigits<br>Pima<br>Satellite<br>Satimage-2<br>Shuttle<br>SpamBase<br>Speech<br>Thyroid<br>Vertebral<br>Vowels<br>WDBC<br>WPBC<br>Wbc<br>Wilt<br>Wine<br>Yeast|0.7237<br>0.7894 0.7154 0.7044 0.7351 0.4867<br>0.6785<br>0.5468<br>0.7019<br>0.6842 0.7407<br>0.6992<br>0.6208 0.4624 0.5822<br>0.9143<br>0.5418<br>0.5768<br>0.584<br>0.549<br>0.5593 0.5379<br>0.5256<br>0.5095<br>0.6004<br>0.6095 0.5584<br>0.5187<br>0.5596 0.5671 0.5615<br>0.4617<br>0.5551<br>0.6903 0.7216 0.8519 0.9112 0.7845<br>0.615<br>0.5678<br>0.7295<br>0.6536 0.6008<br>0.8196<br>0.6997<br>0.909<br>0.6894<br>0.8682<br>0.7689<br>0.7933 0.7688 0.7684 0.7734 0.7199<br>0.7283<br>0.7941<br>0.5682<br>0.6676<br>0.581<br>0.79<br>0.8145 0.5912 0.8114<br>0.7185<br>0.8464<br>0.9379 0.9344 0.7193 0.7461 0.8385<br>0.7143<br>0.861<br>0.9354<br>0.9529 0.7228<br>0.926<br>0.9154 0.9165 0.9641<br>0.9554<br>0.9938<br>0.9714 0.9937 0.9938 0.9719 0.9649<br>0.7605<br>0.9925<br>0.9909<br>0.9777 0.7327<br>0.9458<br>0.9725 0.9278 0.9955<br>0.9848<br>0.7626<br>0.7324 0.7061 0.7707 0.7269 0.7555<br>0.5785<br>0.5254<br>0.8011<br>0.7348<br>0.453<br>0.6982<br>0.7241 0.7595 0.8902<br>0.7915<br>0.9654<br>0.8979 0.9562 0.9655<br>0.922<br>0.637<br>0.6951<br>0.9313<br>0.567<br>0.8729 0.6812<br>0.7349<br>0.9514 0.8726 0.9603<br>0.9453<br>0.7522<br>0.6925 0.6449 0.7889 0.7249 0.7889<br>0.6101<br>0.5149<br>0.5227<br>0.7639 0.4428<br>0.7177<br>0.6478 0.6013 0.8001<br>0.7187<br>0.7158<br>0.6584<br>0.711<br>0.7075 0.6015 0.5772<br>0.4506<br>0.6327<br>0.7092<br>0.6678 0.5615<br>0.4685<br>0.6831 0.6962 0.7581<br>0.7715<br>0.7047<br>0.7269<br>0.72<br>0.7871 0.8044<br>0.517<br>0.5956<br>0.6941<br>0.7449<br>0.7682 0.8785<br>0.8517<br>0.8213 0.6134 0.7361<br>0.7621<br>0.5003<br>0.8713 0.9121 0.8789 0.7185 0.8932<br>0.7659<br>0.5324<br>0.9277<br>0.7896 0.6276<br>0.7042<br>0.7393 0.9173 0.6095<br>0.5392<br>0.5682<br>0.5795 0.4763 0.5587 0.5609 0.5037<br>0.5552<br>0.5342<br>0.6073<br>0.6019 0.5742<br>0.5753<br>0.5777 0.5864 0.6062<br>0.7621<br>0.9548<br>0.9235 0.9573 0.9445<br>0.963<br>0.8535<br>0.7271<br>0.9519<br>0.9335<br>0.9256 0.4808<br>0.8807<br>0.9107 0.9352 0.9357<br>0.9565<br>0.548<br>0.6141<br>0.562<br>0.548<br>0.5771 0.6235<br>0.5982<br>0.5566<br>0.6088<br>0.6307 0.5741<br>0.6312<br>0.835<br>0.6964 0.7225<br>0.7875<br>0.4955<br>0.4682 0.5396 0.8122 0.7255 0.6991<br>0.6407<br>0.6621<br>0.5977<br>0.5701 0.5724<br>0.6584<br>0.5618 0.8022 0.5289<br>0.6629<br>0.7414<br>0.8723 0.8407 0.6735 0.6859 0.6242<br>0.5304<br>0.5348<br>0.7991<br>0.7633 0.6824<br>0.8726<br>0.8717 0.7252 0.8134<br>0.8471<br>0.8765<br>0.9167 0.9454 0.8765 0.9683 0.9569<br>0.7041<br>0.8552<br>0.6231<br>0.8965 0.8993<br>0.9453<br>0.971<br>0.9542 0.9726<br>0.9735<br>0.9812<br>0.987<br>0.9977<br>1<br>0.9945 0.9906<br>0.9343<br>0.9977<br>0.7856<br>0.9648 0.9757<br>0.9648<br>0.9546 0.9899 0.9257<br>0.9993<br>0.9003<br>0.864<br>0.8922 0.8993<br>0.822<br>0.8251<br>0.7412<br>0.8879<br>0.8472<br>0.8504 0.7348<br>0.7449<br>0.6548 0.8862 0.9053<br>0.8873<br>0.5<br>0.9265 0.9511 0.9022 0.8623 0.7487<br>0.6119<br>0.6371<br>0.5151<br>0.9289 0.9201<br>0.9737<br>0.9646 0.8743 0.9284<br>0.9436<br>0.5<br>0.9917<br>1<br>1<br>0.9521 0.9987<br>0.3649<br>1<br>1<br>1<br>0.9543<br>1<br>1<br>1<br>0.9752<br>1<br>0.6338<br>0.9862 0.9665 0.5817 0.8239 0.6145<br>0.4706<br>0.7603<br>0.6694<br>0.9122 0.5972<br>0.8471<br>0.787<br>0.8238 0.9947<br>0.9317<br>0.6043<br>0.4365 0.4206 0.6927<br>0.768<br>0.515<br>0.4828<br>0.6601<br>0.6943<br>0.4915 0.4688<br>0.4205<br>0.4747 0.4672 0.3661<br>0.816<br>0.9636<br>0.9906 0.9905 0.9437 0.9666 0.9295<br>0.3982<br>0.4563<br>0.9937<br>0.9764 0.2141<br>0.9859<br>0.9142 0.9761 0.9919<br>0.9987<br>0.7133<br>0.6723 0.6913 0.7133 0.6737 0.5834<br>0.6108<br>0.7348<br>0.7163<br>0.6628 0.4338<br>0.617<br>0.6727 0.6788 0.7639<br>0.7553<br>0.6663<br>0.8139 0.7391 0.6663 0.8026 0.7884<br>0.7259<br>0.7659<br>0.7233<br>0.7894 0.7374<br>0.808<br>0.8549 0.7661 0.7962<br>0.806<br>0.9817<br>0.9891 0.9961 0.9817 0.9938<br>0.965<br>0.8994<br>0.9881<br>0.9979<br>0.9915 0.9929<br>0.9979<br>0.9792 0.9967 0.9992<br>0.9995<br>0.9969<br>0.9893 0.9983 0.9936 0.9961 0.9978<br>0.9049<br>0.9952<br>0.9944<br>0.9982 0.9897<br>0.9994<br>0.9935 0.9993 0.9975<br>0.9931<br>0.7682<br>0.745<br>0.613<br>0.814<br>0.858<br>0.6883<br>0.5395<br>0.7328<br>0.8212<br>0.7776 0.3842<br>0.3824<br>0.6042 0.8174 0.8019<br>0.8068<br>0.3673<br>0.3561 0.3759 0.3638 0.3812 0.3596<br>0.5178<br>0.5071<br>0.3633<br>0.3824 0.5065<br>0.4809<br>0.4883 0.3817 0.4409<br>0.5925<br>0.9855<br>0.9525 0.9856 0.9855 0.9271 0.8827<br>0.7149<br>0.9887<br>0.978<br>0.9442 0.8523<br>0.9701<br>0.9518 0.9863 0.9804<br>0.9787<br>0.2654<br>0.1171 0.4317 0.1746 0.1444 0.4124<br>0.4128<br>0.2706<br>0.2375<br>0.3058 0.2262<br>0.3121<br>0.2821<br>0.543<br>0.3767<br>0.5347<br>0.7557<br>0.8174 0.8564 0.5229 0.5902 0.6147<br>0.5581<br>0.5734<br>0.7905<br>0.6311 0.7247<br>0.7239<br>0.702<br>0.8142 0.6529<br>0.9935<br>0.9637<br>0.9728 0.9978 0.9989 0.9983 0.9793<br>0.9661<br>0.9879<br>0.9976<br>0.9959<br>0.995<br>0.9568<br>0.9898 0.9852 0.9419<br>0.9953<br>0.47<br>0.4854<br>0.477<br>0.4686 0.4975 0.4706<br>0.4847<br>0.4956<br>0.4942<br>0.5487 0.4591<br>0.4709<br>0.5482 0.5916 0.5105<br>0.5424<br>0.9667<br>0.9536<br>0.967<br>0.9667 0.9715 0.8747<br>0.7999<br>0.9633<br>0.9737<br>0.9299 0.4806<br>0.9133<br>0.908<br>0.8054 0.9814<br>0.9619<br>0.7923<br>0.7295 0.7668 0.2607 0.4595 0.3748<br>0.5011<br>0.342<br>0.4633<br>0.6053 0.5589<br>0.8328<br>0.5332 0.6291 0.3741<br>0.3505<br>0.485<br>0.9917 0.4083 0.4467 0.6571 0.7433<br>0.8833<br>0.5067<br>0.5356<br>0.8672 0.5366<br>0.9753<br>0.915<br>0.9944 0.9538<br>0.9622<br>0.4483<br>0.4366 0.4571 0.4324 0.4095 0.4464<br>0.5297<br>0.479<br>0.4503<br>0.4645<br>0.6<br>0.5488<br>0.5076 0.4458 0.4259<br>0.4691|0.8086<br>0.5699<br>0.9239<br>0.7742<br>0.9788<br>0.9968<br>0.7714<br>0.9562<br>0.84<br>0.7714<br>0.8461<br>0.9804<br>0.6279<br>0.9314<br>0.6969<br>0.8122<br>0.9093<br>0.984<br>1<br>0.9455<br>0.9712<br>1<br>0.9972<br>0.6732<br>0.9979<br>0.7651<br>0.832<br>0.9968<br>0.9992<br>0.8289<br>0.5821<br>0.9911<br>0.6216<br>0.8511<br>1<br>0.6198<br>0.9963<br>0.9357<br>1<br>0.512|
+|Average AUC-ROC<br>Average ranking<br>Win<br>Average std|0.7181<br>0.7729 0.7667 0.7427 0.7556 0.7141<br>0.6382<br>0.6982<br>0.7253<br>0.7637 0.6427<br>0.7591<br>0.7639 0.7747 0.7756<br>0.8185<br>10.3<br>9.3<br>7.8<br>9.4<br>8.975<br>11.625<br>13.425<br>10.65<br>8.9125<br>8.6625<br>12.5<br>8.9125<br>9.0125 8.1875<br>7.275<br>5.6125<br>0<br>0<br>1<br>3<br>2<br>0<br>0<br>1<br>1<br>2<br>2<br>3<br>4<br>1<br>1<br>9<br>0<br>0<br>0<br>0<br>0.012<br>0<br>0.047<br>0.034<br>0.032<br>0.024<br>0.009<br>0.017<br>0.026<br>0.029<br>0.046<br>0.003|**0.8574**<br>**2.45**<br>**20**<br>0.013|
+
+
+Dims
+
+
+Dims
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+Sample size
+
+
+Sample size
+
+
+Figure 8: Model performance w.r.t. different sample size and dimensionality. We categorized all
+datasets into four intervals based on sample size: _≤_ 1000, _≥_ 1000 & _≤_ 10000, _≥_ 10000 & _≤_
+100000, _≥_ 100000 & _≤_ 300000. For dimensionality, the intervals are defined as: _≤_ 25, _≥_ 25 & _≤_
+50, _≥_ 50 & _≤_ 100, _≥_ 100 & _≤_ 1000. We provide the average performance for each interval across
+different datasets.
+
+
+19
+
+
+A.5 COMPUTATIONAL COST
+
+
+We provide the runtime in seconds of DRL for the training and inference phase on a single GTX
+3090 GPU, as shown in Table 7.
+
+
+Table 7: Runtime in seconds of DRL for the training and inference phase.
+
+
+Abalone Amazon Annthyroid Arrhythmia Backdoor Breastw Campaign Cardio
+
+
+Train 2.4855 8.6840 6.5400 0.3842 77.9249 0.3972 32.1423 1.8538
+Inference 0.0095 0.0225 0.0248 0.0027 0.1546 0.0030 0.0660 0.0091
+
+
+Cardiotocography Census Comm.and.crime Cover Fault Fraud Glass Hepatitis
+
+
+Train 1.7553 247.3347 0.9703 236.5932 1.0365 233.1834 0.3029 0.2812
+Inference 0.0085 0.5250 0.0106 0.3724 0.0109 0.3743 0.0022 0.0025
+
+
+Imgseg Ionosphere Lympho Mammography Mnist Musk Optdigits Parkinson
+
+
+Train 1.6713 0.3324 0.2868 8.6523 5.2673 2.5212 3.8596 0.2775
+Inference 0.0060 0.0025 0.0022 0.0256 0.0145 0.0060 0.0127 0.0029
+
+
+Pendigits Pima Satellite Satimage-2 Shuttle SpamBase Speech Thyroid
+
+
+Train 5.8137 0.7752 3.6661 4.9489 40.0011 2.6029 2.8119 3.5806
+Inference 0.0103 0.0067 0.0172 0.0163 0.0929 0.0175 0.0128 0.0094
+
+
+Vertebral Vowels WDBC WPBC Wbc Wilt Wine Yeast
+
+
+Train 0.3003 1.5365 0.3250 0.2854 0.3436 4.0054 0.2858 0.9532
+Inference 0.0023 0.0065 0.0024 0.0024 0.0024 0.0080 0.0022 0.0091
+
+
+Table 8: Runtime in seconds of DRL and other baseline methods for the training and inference phase
+averaged over all datasets.
+
+
+OCSVM KNN LOF PCA IForest ECOD DAGMM DeepSVDD AutoEncoder RAPP GOAD NeuTraL ICL MCM NPT-AD DRL
+
+
+Train 224.5780 16.7915 13.9255 0.4415 1.3064 0.2819 5.2457 45.5777 45.3946 20.5383 326.4836 107.5398 188.0606 78.2938 811.0800 23.6743
+Inference 95.4769 236.1779 15.1572 0.4116 0.3713 0.6268 1.6679 0.3185 0.1404 0.0930 77.8951 4.2395 11.0595 1.8856 182.5385 0.0472
+
+
+A.6 HYPER PARAMETER SENSITIVITY ANALYSIS
+
+
+We incorporate the sensitivity analysis for the number of basis vectors, the loss weight _λ_ 1, _λ_ 2, the
+number of training epochs, and the number of batch size in Fig. 9.
+
+
+A.7 REPRESENTATION WEIGHT OF WEIGHT LEARNER VISUALIZATION
+
+
+The weight visualization in Fig. 10 shows that the separation constraint effectively diversifies the
+weights of normal representations, while the weights for anomalous representations differ significantly from those of normal representations.
+
+
+A.8 ROBUSTNESS TO ANOMALY CONTAMINATION
+
+
+Our method is implemented in a one-class classification setting where the training set consists entirely of normal data. However, real-world anomaly detection applications frequently encounter
+contaminated training sets, requiring models to be robust against small levels of dataset contamination. To analyse the robustness of DRL w.r.t anomaly contamination, we conduct experiments
+in the case of anomaly contamination ratio of 0%, 1%, 2%, 3%, 4% and 5%, as shown in Fig. 11.
+The results indicate that DRL exhibits greater stability and consistently outperforms other models,
+demonstrating its superior robustness to anomaly contamination.
+
+
+A.9 PERFORMANCE ON DIFFERENT TYPES OF ANOMALIES
+
+
+While extensive public datasets are available for benchmarking, they often contain a mix of different types of anomalies Existing works (Han et al., 2022) have summarized four common types of
+anomalies and proposed methods for generating them. Following this framework, we conducted
+experiments to generate synthetic anomalies based on the realistic Shuttle dataset and assess the
+
+
+20
+
+
+0.85
+
+
+0.80
+
+
+0.75
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+|||AUC-PR<br>~~AUC-ROC~~|
+||||
+||||
+
+
+0.06 0.2 0.4 0.6 0.9 1
+
+
+0.70
+
+
+0.65
+
+
+0.850
+
+0.825
+
+0.800
+
+0.775
+
+0.750
+
+0.725
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+||AUC-PR<br>|
+
+
+3 5 7 9 11 13 15 17 19 40 60 80100
+
+|a) Number of basis vectors|Col2|
+|---|---|
+|||
+|||
+|||
+||~~AUC-PR~~<br>AUC-ROC|
+|||
+|||
+
+
+0.2 0.4 0.6 0.8 1
+
+
+|Col1|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+||AUC-PR<br>~~AUC-ROC~~|
+
+
+0.49
+50 100 150 200 250 300 350
+
+
+0.850
+
+0.825
+
+0.800
+
+0.775
+
+0.750
+
+0.725
+
+
+(b) Weight _λ_ 1 for separation loss
+
+
+0.84
+
+0.79
+
+0.74
+
+0.69
+
+0.64
+
+
+0.59
+
+0.54
+
+
+0.850
+
+0.825
+
+0.800
+
+0.775
+
+0.750
+
+0.725
+
+
+(d) Number of training epochs
+
+
+0.700
+
+|ment loss|Col2|
+|---|---|
+|||
+|||
+|||
+||AUC-PR<br>~~AUC-ROC~~|
+|||
+|||
+|||
+
+32 64 128 256 512 1024
+
+
+(e) Number of batch size
+
+
+Figure 9: Sensitivity analysis. The results are averaged over all datasets.
+
+
+0 5 10 15 20 25 30 35
+
+
+(a) Annthyroid
+
+
+0 5 10 15 20 25 30 35
+
+
+(b) Thyroid
+
+
+Figure 10: Weight visualization of normal and anomalous representations. For each subfigure, the
+left 20 columns and right 20 columns correspond to the weights of normal and anomalous representations respectively. For each dataset, we randomly select 20 normal samples and 20 anomalous
+samples for visualization.
+
+
+0% 1% 2% 3% 4% 5%
+Ratio
+
+
+(b) Abalone
+
+
+0% 1% 2% 3% 4% 5%
+Ratio
+
+
+(d) Ionosphere
+
+
+0% 1% 2% 3% 4% 5%
+Ratio
+
+
+(c) Ionosphere
+
+
+0.85
+
+0.80
+
+0.75
+
+0.70
+
+0.65
+
+
+0% 1% 2% 3% 4% 5%
+Ratio
+
+
+(a) Abalone
+
+
+0.98
+
+
+0.96
+
+
+0.94
+
+
+0.92
+
+
+0.90
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.98
+
+0.96
+
+0.94
+
+0.92
+
+0.90
+
+0.88
+
+0.86
+
+
+Figure 11: Model performance w.r.t. different contamination ratios (the percentage of anomalies in
+the training set).
+
+
+21
+
+
+performance of DRL on these specific anomaly types. For details on the generation process of the
+four types of anomalies, please refer to (Han et al., 2022). The four types of anomalies are as follows: _Local anomalies_ refer to the anomalies that are deviant from their local neighborhoods; _Global_
+_anomalies_ are samples scattering throughout the entire space, while being far from the normal data
+distribution; _Dependency_ _anomalies_ represent samples that do not adhere to the correlation structure among normal data; _Clustered anomalies_ refer to groups of data with similar characteristics but
+significantly different from normal data. The results on these different anomaly types are provided
+in Table 9. The results show that DRL exhibits strong performance across all anomaly types.
+
+
+Table 9: The AUC-PR results on different types of anomalies.
+
+
+Iforest LOF OCSVM ECOD NeuTralAD ICL MCM NPT-AD DRL
+
+
+Local 0.3494 0.5256 0.3847 0.4324 0.4247 0.3284 0.5103 0.5125 **0.6742**
+Cluster 0.9888 0.9772 0.9909 0.9272 0.9995 1 1 1 **1**
+Dependency 0.6333 0.325 0.5 0.625 0.1213 0.3333 0.6429 0.673 **0.6913**
+Global 0.9992 0.9453 0.9847 0.9996 0.999 0.9992 1 1 **1**
+
+
+A.10 ADDITIONAL EXPERIMENT RESULTS
+
+
+Table 10: The comparison between E - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2� and E - _∥_ **w** _n −_ _µ_ **w** _n∥_ [2] 2� under the influence of
+separation loss over all datasets. **w** _n_ and **w** _a_ denote the computed weights of normal and anomalous
+samples respectively. _µ_ **w** _n_ = E [ **w** _n_ ], represents the the center of normal weights.
+
+
+abalone amazon annthyroid arrhythmia backdoor breastw campaign cardio Cardiotocography census
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.2550 0.1126 0.1717 0.5577 0.1916 0.1738 0.0057 0.3347 0.2055 0.0270
+w/o separation E - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.1411 0.1021 0.0744 0.3935 0.0995 0.0307 0.0041 0.1836 0.1439 0.0274
+Gap 0.1139 0.0105 0.0973 0.1642 0.0921 0.1431 0.0016 0.1511 0.0616 -0.0004
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.5647 0.3276 0.3049 0.6160 0.2893 0.2080 0.8078 0.3935 0.2411 0.8362
+w/ separation E  - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.2316 0.1928 0.1859 0.4333 0.1678 0.0480 0.1964 0.2077 0.1739 0.1206
+Gap 0.3331 0.1348 0.119 0.1827 0.1215 0.16 0.6114 0.1858 0.0672 0.7156
+
+
+comm.and.crime cover fault fraud glass Hepatitis imgseg ionosphere lympho mammography
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.3816 0.2953 0.1154 0.1011 0.1766 0.0853 0.0645 0.1679 0.3146 0.2532
+w/o separation E - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.0794 0.0537 0.1353 0.0233 0.1570 0.0737 0.0655 0.0676 0.0437 0.1768
+Gap 0.3022 0.2416 -0.0199 0.0778 0.0196 0.0116 -0.001 0.1003 0.2709 0.0764
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.7966 0.3140 0.1681 0.1914 0.3291 0.1919 0.3160 0.1949 0.4917 0.4266
+w/ separation E  - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.1136 0.0668 0.1574 0.1135 0.2207 0.1749 0.1422 0.0853 0.1512 0.2022
+Gap 0.683 0.2472 0.0107 0.0779 0.1084 0.017 0.1738 0.1096 0.3405 0.2244
+
+
+mnist musk optdigits Parkinson pendigits pima satellite satimage-2 shuttle SpamBase
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.7646 0.2715 0.0612 0.4004 0.0537 0.4218 0.1488 0.0981 0.3905 0.1306
+w/o separation E - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.6229 0.1382 0.0553 0.2336 0.0399 0.3810 0.1460 0.0493 0.1179 0.0542
+Gap 0.1417 0.1333 0.0059 0.1668 0.0138 0.0408 0.0028 0.0488 0.2726 0.0764
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.7950 0.3669 0.0807 0.5102 0.1953 0.4723 0.1966 0.1601 0.4801 0.3845
+w/ separation E  - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.6390 0.1457 0.0653 0.2582 0.1527 0.4199 0.1672 0.0676 0.1548 0.1060
+Gap 0.156 0.2212 0.0154 0.252 0.0426 0.0524 0.0294 0.0925 0.3253 0.2785
+
+
+speech thyroid vertebral vowels WDBC WPBC wbc Wilt wine yeast
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _i_ _∥_ [2] 2� 0.0422 0.2963 0.0336 0.0736 0.3867 0.0403 0.3776 0.0769 0.7894 0.0631
+w/o separation E - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.0333 0.0958 0.0504 0.1161 0.0757 0.0432 0.0830 0.0808 0.5375 0.0672
+Gap 0.0089 0.2005 -0.0168 -0.0425 0.311 -0.0029 0.2946 -0.0039 0.2519 -0.0041
+
+
+E      - _∥_ **w** _a_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.2306 0.4663 0.0991 0.1912 0.4423 0.2614 0.4883 0.2243 0.8883 0.2191
+w/ separation E  - _∥_ **w** _n_ _−_ _µ_ **w** _n_ _∥_ [2] 2� 0.1303 0.1142 0.0645 0.1472 0.0893 0.0621 0.1037 0.1129 0.5874 0.1091
+Gap 0.1003 0.3521 0.0346 0.044 0.353 0.1993 0.3846 0.1114 0.3009 0.11
+
+
+22
+
+
+abalone amazon annthyroid arrhythmia backdoor
+
+
+breastw campaign cardio Cardiotocography census
+
+
+comm.and.crime cover fault fraud glass
+
+
+Hepatitis imgseg ionosphere lympho mammography
+
+
+mnist musk optdigits Parkinson pendigits
+
+
+pima satellite satimage-2 shuttle SpamBase
+
+
+speech thyroid vertebral vowels WDBC
+
+
+WPBC wbc Wilt wine yeast
+
+
+Figure 12: The T-SNE visualization of representation **h** by feature extractor _f_ and the reconstructed
+representation **h** [˜] by linear combination of basis vectors **w** _B_ over all datasets. **h** _n_ and **h** _a_ correspond
+to normal and anomalous representations respectively.
+
+
+23
+
+
+amazon
+
+
+Representation of DRL w/o s
+
+breastw
+
+
+Representation of DRL w/o s
+
+census
+
+
+Representation of DRL w/o s
+
+fraud
+
+
+Representation of DRL w/o s
+
+ionosphere
+
+
+Representation of DRL w/o s
+
+musk
+
+
+Representation of DRL w/o s
+
+pima
+
+
+Representation of DRL w/o s
+
+SpamBase
+
+
+Representation of DRL w/o s
+
+vowels
+
+
+Representation of DRL w/o s
+
+Wilt
+
+
+Representation of DRL w/o s
+
+
+annthyroid
+
+
+Representation of DRL w/o s
+
+campaign
+
+
+Representation of DRL w/o s
+
+comm.and.crime
+
+
+Representation of DRL w/o s
+
+glass
+
+
+Representation of DRL w/o s
+
+lympho
+
+
+Representation of DRL w/o s
+
+optdigits
+
+
+Representation of DRL w/o s
+
+satellite
+
+
+Representation of DRL w/o s
+
+speech
+
+
+Representation of DRL w/o s
+
+WDBC
+
+
+Representation of DRL w/o s
+
+wine
+
+
+Representation of DRL w/o s
+
+
+arrhythmia
+
+
+Representation of DRL w/o s
+
+cardio
+
+
+Representation of DRL w/o s
+
+cover
+
+
+Representation of DRL w/o s
+
+Hepatitis
+
+
+Representation of DRL w/o s
+
+mammography
+
+
+Representation of DRL w/o s
+
+Parkinson
+
+
+Representation of DRL w/o s
+
+satimage-2
+
+
+Representation of DRL w/o s
+
+thyroid
+
+
+Representation of DRL w/o s
+
+WPBC
+
+
+Representation of DRL w/o s
+
+yeast
+
+
+Representation of DRL w/o s
+
+
+abalone
+
+
+Representation of DRL w/o s
+
+backdoor
+
+
+Representation of DRL w/o s
+
+Cardiotocography
+
+
+Representation of DRL w/o s
+
+fault
+
+
+Representation of DRL w/o s
+
+imgseg
+
+
+Representation of DRL w/o s
+
+mnist
+
+
+Representation of DRL w/o s
+
+pendigits
+
+
+Representation of DRL w/o s
+
+shuttle
+
+
+Representation of DRL w/o s
+
+vertebral
+
+
+Representation of DRL w/o s
+
+wbc
+
+
+Representation of DRL w/o s
+
+
+abalone
+
+
+Representation of DRL
+
+backdoor
+
+
+Representation of DRL
+
+Cardiotocography
+
+
+Representation of DRL
+
+fault
+
+
+Representation of DRL
+
+imgseg
+
+
+Representation of DRL
+
+mnist
+
+
+Representation of DRL
+
+pendigits
+
+
+Representation of DRL
+
+shuttle
+
+
+Representation of DRL
+
+vertebral
+
+
+Representation of DRL
+
+wbc
+
+
+Representation of DRL
+
+
+amazon
+
+
+Representation of DRL
+
+breastw
+
+
+Representation of DRL
+
+census
+
+
+Representation of DRL
+
+fraud
+
+
+Representation of DRL
+
+ionosphere
+
+
+Representation of DRL
+
+musk
+
+
+Representation of DRL
+
+pima
+
+
+Representation of DRL
+
+SpamBase
+
+
+Representation of DRL
+
+vowels
+
+
+Representation of DRL
+
+Wilt
+
+
+Representation of DRL
+
+
+annthyroid
+
+
+Representation of DRL
+
+campaign
+
+
+Representation of DRL
+
+comm.and.crime
+
+
+Representation of DRL
+
+glass
+
+
+Representation of DRL
+
+lympho
+
+
+Representation of DRL
+
+optdigits
+
+
+Representation of DRL
+
+satellite
+
+
+Representation of DRL
+
+speech
+
+
+Representation of DRL
+
+WDBC
+
+
+Representation of DRL
+
+wine
+
+
+Representation of DRL
+
+
+arrhythmia
+
+
+Representation of DRL
+
+cardio
+
+
+Representation of DRL
+
+cover
+
+
+Representation of DRL
+
+Hepatitis
+
+
+Representation of DRL
+
+mammography
+
+
+Representation of DRL
+
+Parkinson
+
+
+Representation of DRL
+
+satimage-2
+
+
+Representation of DRL
+
+thyroid
+
+
+Representation of DRL
+
+WPBC
+
+
+Representation of DRL
+
+yeast
+
+
+Representation of DRL
+
+
+Figure 13: T-SNE visualization of normal and anomalous representations extracted by the feature
+extractor _f_, illustrating the impact of separation loss across all datasets. Each pair of subfigures corresponds to the same dataset; for instance, the first and second subfigures in the first row correspond
+to representations without and with separation loss, respectively.
+
+
+24
+
+
+amazon
+
+
+Representation of RAPP
+
+arrhythmia
+
+
+Representation of RAPP
+
+breastw
+
+
+Representation of RAPP
+
+cardio
+
+
+Representation of RAPP
+
+census
+
+
+Representation of RAPP
+
+cover
+
+
+Representation of RAPP
+
+fraud
+
+
+Representation of RAPP
+
+Hepatitis
+
+
+Representation of RAPP
+
+ionosphere
+
+
+Representation of RAPP
+
+mammography
+
+
+Representation of RAPP
+
+
+abalone
+
+
+Representation of DRL
+
+annthyroid
+
+
+Representation of DRL
+
+backdoor
+
+
+Representation of DRL
+
+campaign
+
+
+Representation of DRL
+
+Cardiotocography
+
+
+Representation of DRL
+
+comm.and.crime
+
+
+Representation of DRL
+
+fault
+
+
+Representation of DRL
+
+glass
+
+
+Representation of DRL
+
+imgseg
+
+
+Representation of DRL
+
+lympho
+
+
+Representation of DRL
+
+
+amazon
+
+
+Representation of DRL
+
+arrhythmia
+
+
+Representation of DRL
+
+breastw
+
+
+Representation of DRL
+
+cardio
+
+
+Representation of DRL
+
+census
+
+
+Representation of DRL
+
+cover
+
+
+Representation of DRL
+
+fraud
+
+
+Representation of DRL
+
+Hepatitis
+
+
+Representation of DRL
+
+ionosphere
+
+
+Representation of DRL
+
+mammography
+
+
+Representation of DRL
+
+
+abalone
+
+
+Representation of RAPP
+
+annthyroid
+
+
+Representation of RAPP
+
+backdoor
+
+
+Representation of RAPP
+
+campaign
+
+
+Representation of RAPP
+
+Cardiotocography
+
+
+Representation of RAPP
+
+comm.and.crime
+
+
+Representation of RAPP
+
+fault
+
+
+Representation of RAPP
+
+glass
+
+
+Representation of RAPP
+
+imgseg
+
+
+Representation of RAPP
+
+lympho
+
+
+Representation of RAPP
+
+
+abalone
+
+
+Representation of GOAD
+
+annthyroid
+
+
+Representation of GOAD
+
+backdoor
+
+
+Representation of GOAD
+
+campaign
+
+
+Representation of GOAD
+
+Cardiotocography
+
+
+Representation of GOAD
+
+comm.and.crime
+
+
+Representation of GOAD
+
+fault
+
+
+Representation of GOAD
+
+glass
+
+
+Representation of GOAD
+
+imgseg
+
+
+Representation of GOAD
+
+lympho
+
+
+Representation of GOAD
+
+
+amazon
+
+
+Representation of GOAD
+
+arrhythmia
+
+
+Representation of GOAD
+
+breastw
+
+
+Representation of GOAD
+
+cardio
+
+
+Representation of GOAD
+
+census
+
+
+Representation of GOAD
+
+cover
+
+
+Representation of GOAD
+
+fraud
+
+
+Representation of GOAD
+
+Hepatitis
+
+
+Representation of GOAD
+
+ionosphere
+
+
+Representation of GOAD
+
+mammography
+
+
+Representation of GOAD
+
+
+abalone
+
+
+Representation of MCM
+
+annthyroid
+
+
+Representation of MCM
+
+backdoor
+
+
+Representation of MCM
+
+campaign
+
+
+Representation of MCM
+
+Cardiotocography
+
+
+Representation of MCM
+
+comm.and.crime
+
+
+Representation of MCM
+
+fault
+
+
+Representation of MCM
+
+glass
+
+
+Representation of MCM
+
+imgseg
+
+
+Representation of MCM
+
+lympho
+
+
+Representation of MCM
+
+
+amazon
+
+
+Representation of MCM
+
+arrhythmia
+
+
+Representation of MCM
+
+breastw
+
+
+Representation of MCM
+
+cardio
+
+
+Representation of MCM
+
+census
+
+
+Representation of MCM
+
+cover
+
+
+Representation of MCM
+
+fraud
+
+
+Representation of MCM
+
+Hepatitis
+
+
+Representation of MCM
+
+ionosphere
+
+
+Representation of MCM
+
+mammography
+
+
+Representation of MCM
+
+
+Figure 14: T-SNE Visualization of different deep TAD models’ latent representations across all
+datasets (the former 20 datasets). This figure serves as an extension of Fig. 1, with each group of
+four subfigures corresponding to the same dataset.
+
+
+25
+
+
+musk
+
+
+Representation of RAPP
+
+Parkinson
+
+
+Representation of RAPP
+
+pima
+
+
+Representation of RAPP
+
+satimage-2
+
+
+Representation of RAPP
+
+SpamBase
+
+
+Representation of RAPP
+
+thyroid
+
+
+Representation of RAPP
+
+vowels
+
+
+Representation of RAPP
+
+WPBC
+
+
+Representation of RAPP
+
+Wilt
+
+
+Representation of RAPP
+
+yeast
+
+
+Representation of RAPP
+
+
+mnist
+
+
+Representation of DRL
+
+optdigits
+
+
+Representation of DRL
+
+pendigits
+
+
+Representation of DRL
+
+satellite
+
+
+Representation of DRL
+
+shuttle
+
+
+Representation of DRL
+
+speech
+
+
+Representation of DRL
+
+vertebral
+
+
+Representation of DRL
+
+WDBC
+
+
+Representation of DRL
+
+wbc
+
+
+Representation of DRL
+
+wine
+
+
+Representation of DRL
+
+
+musk
+
+
+Representation of DRL
+
+Parkinson
+
+
+Representation of DRL
+
+pima
+
+
+Representation of DRL
+
+satimage-2
+
+
+Representation of DRL
+
+SpamBase
+
+
+Representation of DRL
+
+thyroid
+
+
+Representation of DRL
+
+vowels
+
+
+Representation of DRL
+
+WPBC
+
+
+Representation of DRL
+
+Wilt
+
+
+Representation of DRL
+
+yeast
+
+
+Representation of DRL
+
+
+mnist
+
+
+Representation of RAPP
+
+optdigits
+
+
+Representation of RAPP
+
+pendigits
+
+
+Representation of RAPP
+
+satellite
+
+
+Representation of RAPP
+
+shuttle
+
+
+Representation of RAPP
+
+speech
+
+
+Representation of RAPP
+
+vertebral
+
+
+Representation of RAPP
+
+WDBC
+
+
+Representation of RAPP
+
+wbc
+
+
+Representation of RAPP
+
+wine
+
+
+Representation of RAPP
+
+
+mnist
+
+
+Representation of GOAD
+
+optdigits
+
+
+Representation of GOAD
+
+pendigits
+
+
+Representation of GOAD
+
+satellite
+
+
+Representation of GOAD
+
+shuttle
+
+
+Representation of GOAD
+
+speech
+
+
+Representation of GOAD
+
+vertebral
+
+
+Representation of GOAD
+
+WDBC
+
+
+Representation of GOAD
+
+wbc
+
+
+Representation of GOAD
+
+wine
+
+
+Representation of GOAD
+
+
+musk
+
+
+Representation of GOAD
+
+Parkinson
+
+
+Representation of GOAD
+
+pima
+
+
+Representation of GOAD
+
+satimage-2
+
+
+Representation of GOAD
+
+SpamBase
+
+
+Representation of GOAD
+
+thyroid
+
+
+Representation of GOAD
+
+vowels
+
+
+Representation of GOAD
+
+WPBC
+
+
+Representation of GOAD
+
+Wilt
+
+
+Representation of GOAD
+
+yeast
+
+
+Representation of GOAD
+
+
+mnist
+
+
+Representation of MCM
+
+optdigits
+
+
+Representation of MCM
+
+pendigits
+
+
+Representation of MCM
+
+satellite
+
+
+Representation of MCM
+
+shuttle
+
+
+Representation of MCM
+
+speech
+
+
+Representation of MCM
+
+vertebral
+
+
+Representation of MCM
+
+WDBC
+
+
+Representation of MCM
+
+wbc
+
+
+Representation of MCM
+
+wine
+
+
+Representation of MCM
+
+
+musk
+
+
+Representation of MCM
+
+Parkinson
+
+
+Representation of MCM
+
+pima
+
+
+Representation of MCM
+
+satimage-2
+
+
+Representation of MCM
+
+SpamBase
+
+
+Representation of MCM
+
+thyroid
+
+
+Representation of MCM
+
+vowels
+
+
+Representation of MCM
+
+WPBC
+
+
+Representation of MCM
+
+Wilt
+
+
+Representation of MCM
+
+yeast
+
+
+Representation of MCM
+
+
+Figure 15: T-SNE Visualization of different deep TAD models’ latent representations across all
+datasets (the latter 20 datasets). This figure serves as an extension of Fig. 1, with each group of four
+subfigures corresponding to the same dataset.
+
+
+26
+
+
+1 100 200
+
+
+1 100 200 1 100 200
+
+
+Epochs Epochs Epochs
+
+
+1 100 200 1 100 200 1 100 200
+
+Epochs Epochs Epochs
+
+
+1 100 200 1 100 200 1 100 200
+
+Epochs Epochs Epochs
+
+
+Figure 16: Progression of E - _∥_ **w** _n −_ **w** _a∥_ [2] 2� and Var( _∥_ **w** _n∥_ 2) during training. The results could
+verify Proposition 1 in Section 3.2.2. **w** _n_ and **w** _a_ denote the computed weights of normal and
+anomalous samples respectively.
+
+
+27
+
+
+Hepatitis
+
+
+1 100 200
+Epochs
+
+SpamBase
+
+
+1 100 200
+Epochs
+
+Cardiotocography
+
+
+1 100 200
+Epochs
+
+
+breastw
+
+
+1 100 200
+Epochs
+
+lympho
+
+
+1 100 200
+Epochs
+
+satimage-2
+
+
+1 100 200
+Epochs
+
+
+0.0300
+
+
+0.0250
+
+
+0.0200
+
+
+0.0150
+
+
+0.0100
+
+
+0.0050
+
+
+0.8000
+
+
+0.6000
+
+
+0.4000
+
+
+0.2000
+
+
+8.0000
+
+
+6.0000
+
+
+4.0000
+
+
+2.0000
+
+
+0.0000
+
+
+0.0175
+
+
+0.0150
+
+
+0.0125
+
+
+0.0100
+
+
+0.0075
+
+
+0.0050
+
+
+0.0025
+
+
+0.0000
+
+
+0.1750
+
+
+0.1500
+
+
+0.1250
+
+
+0.1000
+
+
+0.0750
+
+
+0.0500
+
+
+0.0250
+
+
+0.0000
+
+
+0.0250
+
+
+0.0200
+
+
+0.0150
+
+
+0.0100
+
+
+0.0050
+
+
+abalone
+
+
+1 100 200
+Epochs
+
+ionosphere
+
+
+1 100 200
+Epochs
+
+speech
+
+
+1 100 200
+Epochs
+
+
+0.1750
+
+
+0.1500
+
+
+0.1250
+
+
+0.1000
+
+
+0.0750
+
+
+0.0500
+
+
+0.0250
+
+
+0.0000
+
+
+0.1400
+
+0.1200
+
+0.1000
+
+0.0800
+
+0.0600
+
+0.0400
+
+0.0200
+
+0.0000
+
+
+0.1400
+
+
+0.1200
+
+
+0.1000
+
+
+0.0800
+
+
+0.0600
+
+
+0.0400
+
+
+0.0200
+
+
+0.0000
+
+
+Figure 17: Visualization of test samples’ anomaly score by DRL with and without separation loss
+as training progresses. We report the average anomaly score of normal and anomalous test samples
+respectively. The anomaly score is calculated by decomposition loss (Eq. 3).
+
+
+28
+
+
+breastw
+
+
+Hepatitis
+
+
+0.0050
+
+
+0.0040
+
+
+0.0030
+
+
+0.0020
+
+
+0.0010
+
+
+0.0200
+
+0.0175
+
+0.0150
+
+0.0125
+
+0.0100
+
+0.0075
+
+0.0050
+
+0.0025
+
+
+0.0140
+
+
+0.0120
+
+
+0.0100
+
+
+0.0080
+
+
+0.0060
+
+
+0.0040
+
+
+0.0020
+
+
+ionosphere
+
+|1|100 200 Epochs satellite|
+|---|---|
+||Decomposition loss w/ separation<br>Decomposition loss w/o separation|
+|||
+
+
+1 100 200
+Epochs
+
+speech
+
+
+1 100 200
+Epochs
+
+
+0.0060
+
+
+0.0050
+
+
+0.0040
+
+
+0.0030
+
+
+0.0020
+
+
+0.0010
+
+
+0.0025
+
+
+0.0020
+
+
+0.0015
+
+
+0.0010
+
+
+0.0005
+
+
+0.0000
+
+
+0.0005
+
+
+0.0004
+
+
+0.0003
+
+
+0.0002
+
+
+0.0001
+
+
+0.0000
+
+
+1 100 200
+Epochs
+
+lympho
+
+
+1 100 200
+Epochs
+
+SpamBase
+
+
+1 100 200
+Epochs
+
+
+1 100 200
+Epochs
+
+musk
+
+
+1 100 200
+Epochs
+
+satimage-2
+
+
+1 100 200
+Epochs
+
+
+0.0020
+
+0.0018
+
+0.0015
+
+0.0013
+
+0.0010
+
+0.0008
+
+0.0005
+
+0.0003
+
+0.0000
+
+
+0.0090
+
+0.0080
+
+0.0070
+
+0.0060
+
+0.0050
+
+0.0040
+
+0.0030
+
+0.0020
+
+
+0.0050
+
+
+0.0040
+
+
+0.0030
+
+
+0.0020
+
+
+Figure 18: Effect of separation loss on decomposition loss (Eq. 3) convergence. We report the
+average decomposition loss of training samples. The dataset dimension is as follows, breastw: 9;
+Hepatitis: 19; ionosphere: 33; lympho: 18; musk: 166; satellite: 36; SpamBase: 57; satimage-2:
+36; speech: 400.
+
+
+29
+
+
+0.0900
+
+0.0800
+
+0.0700
+
+0.0600
+
+0.0500
+
+0.0400
+
+0.0300
+
+0.0200
+
+0.0100
+
+
+0.0800
+
+0.0700
+
+0.0600
+
+0.0500
+
+0.0400
+
+0.0300
+
+0.0200
+
+0.0100
+
+0.0000
+
+
+0.1000
+
+
+0.0800
+
+
+0.0600
+
+
+0.0400
+
+
+0.0200
+
+
+0.0000
+
+
+breastw
+
+
+1 100 200
+Epochs
+
+lympho
+
+
+1 100 200
+Epochs
+
+SpamBase
+
+
+1 100 200
+Epochs
+
+
+ionosphere
+
+
+1 100 200
+Epochs
+
+satellite
+
+
+1 100 200
+Epochs
+
+speech
+
+
+1 100 200
+Epochs
+
+
+0.1200
+
+
+0.1000
+
+
+0.0800
+
+
+0.0600
+
+
+0.0400
+
+
+0.0200
+
+
+0.0000
+
+
+0.0700
+
+
+0.0600
+
+
+0.0500
+
+
+0.0400
+
+
+0.0300
+
+
+0.0200
+
+
+0.0100
+
+
+0.0450
+
+0.0400
+
+0.0350
+
+0.0300
+
+0.0250
+
+0.0200
+
+0.0150
+
+0.0100
+
+
+Hepatitis
+
+
+1 100 200
+Epochs
+
+musk
+
+
+1 100 200
+Epochs
+
+satimage-2
+
+
+1 100 200
+Epochs
+
+
+0.2250
+
+0.2000
+
+0.1750
+
+0.1500
+
+0.1250
+
+0.1000
+
+0.0750
+
+0.0500
+
+0.0250
+
+
+0.1600
+
+
+0.1400
+
+
+0.1200
+
+
+0.1000
+
+
+0.0800
+
+
+0.0600
+
+
+0.0400
+
+
+0.0200
+
+
+0.1600
+
+0.1500
+
+0.1400
+
+0.1300
+
+0.1200
+
+0.1100
+
+0.1000
+
+0.0900
+
+0.0800
+
+
+Figure 19: Effect of separation loss on overall training loss (Eq. 6) convergence. We report the
+average overall training loss of training samples. The dataset dimension is as follows, breastw: 9;
+Hepatitis: 19; ionosphere: 33; lympho: 18; musk: 166; satellite: 36; SpamBase: 57; satimage-2:
+36; speech: 400.
+
+
+30
+
+
+Table 11: Full analysis on the effects of different components in DRL in terms of AUC-PR. This
+table serves as an extension of Table 2.
+
+
+A B C D E F G H I J DRL (ours)
+
+
+Abalone 0.8764 0.8786 0.8804 0.7281 0.6711 0.8827 0.7974 0.8453 0.8573 0.7621 0.885
+Amazon 0.1067 0.1079 0.1119 0.0139 0.1073 0.1125 0.1027 0.1160 0.1215 0.1096 0.1206
+Annthyroid 0.4534 0.5666 0.6775 0.3213 0.2802 0.6702 0.4729 0.5326 0.5629 0.6260 0.6761
+Arrhythmia 0.6261 0.6266 0.6267 0.4174 0.4257 0.5967 0.5413 0.5952 0.627 0.5827 0.627
+Backdoor 0.7504 0.8742 0.8845 0.5214 0.1093 0.841 0.5174 0.7487 0.8941 0.8787 0.8915
+Breastw 0.9974 0.9975 0.9979 0.8959 0.9828 0.9981 0.9388 0.9939 0.9965 0.8956 0.9966
+Campaign 0.4772 0.4995 0.5209 0.3968 0.1423 0.4875 0.4120 0.4742 0.4863 0.4264 0.5013
+Cardio 0.8261 0.8671 0.8676 0.6247 0.8732 0.809 0.7663 0.8275 0.8322 0.7026 0.8325
+Cardiotocography 0.7543 0.7543 0.755 0.6165 0.6128 0.7197 0.6678 0.7103 0.754 0.7147 0.754
+Census 0.1667 0.2339 0.2731 0.1918 0.4062 0.1717 0.1927 0.2474 0.2642 0.1469 0.2649
+Comm.and.crime 0.917 0.9179 0.9183 0.7525 0.7524 0.89 0.8415 0.8957 0.917 0.8111 0.9164
+Cover 0.8044 0.8264 0.8602 0.286 0.0107 0.8821 0.7110 0.7692 0.783 0.6998 0.783
+Fault 0.6245 0.6372 0.6454 0.5143 0.5939 0.6425 0.5667 0.6227 0.6563 0.6059 0.6649
+Fraud 0.0703 0.4723 0.6597 0.3105 0.2165 0.5905 0.3987 0.6608 0.7586 0.7773 0.6614
+Glass 0.0959 0.1052 0.1242 0.1076 0.0972 0.0969 0.1068 0.1550 0.167 0.0792 0.167
+Hepatitis 0.5056 0.5138 0.5533 0.4155 0.6289 0.6467 0.0159 0.6248 0.6186 0.6421 0.6627
+Imgseg 0.9088 0.9153 0.9306 0.6685 0.6954 0.9161 0.6947 0.9079 0.9098 0.8318 0.9238
+Ionosphere 0.9804 0.9814 0.9827 0.9748 0.9039 0.9779 0.9225 0.9889 0.9909 0.8135 0.9895
+Lympho 0.8179 0.8734 0.9762 0.8151 1 0.9151 0.9686 0.9970 1 0.8278 1
+Mammography 0.3237 0.5114 0.5135 0.1945 0.5104 0.8107 0.2743 0.3196 0.3344 0.6452 0.8406
+Mnist 0.882 0.8894 0.8894 0.6568 0.1092 0.7681 0.8167 0.8861 0.887 0.6484 0.887
+Musk 0.9274 0.9533 1 0.8983 1 1 0.9637 0.9885 1 0.0327 1
+Optdigits 0.6387 0.6405 0.6578 0.1194 0.0521 0.854 0.6032 0.6429 0.6459 0.7712 0.9356
+Parkinson 0.92 0.9209 0.921 0.8221 0.9311 0.9199 0.7982 0.8347 0.921 0.9318 0.921
+Pendigits 0.5909 0.6647 0.815 0.2225 0.4575 0.7704 0.7594 0.8010 0.7102 0.7157 0.936
+Pima 0.7448 0.7449 0.745 0.6105 0.6905 0.6904 0.6602 0.7049 0.7449 0.6053 0.7449
+Satellite 0.8428 0.8521 0.8652 0.7484 0.7711 0.8489 0.7857 0.8061 0.8634 0.7856 0.8692
+Satimage-2 0.2661 0.9621 0.9748 0.8812 0.9154 0.9293 0.9295 0.8725 0.9668 0.8340 0.9703
+Shuttle 0.974 0.9796 0.9849 0.7824 0.9656 0.965 0.9113 0.9452 0.9823 0.8714 0.9819
+SpamBase 0.8437 0.8486 0.8489 0.7133 0.8186 0.8157 0.7918 0.7865 0.8342 0.8401 0.8413
+Speech 0.0482 0.055 0.0608 0.0321 0.0304 0.0466 0.0435 0.0455 0.0525 0.0245 0.0584
+Thyroid 0.7967 0.7976 0.8364 0.5174 0.4413 0.839 0.4143 0.8063 0.8236 0.7357 0.8626
+Vertebral 0.2216 0.2224 0.2242 0.1469 0.18 0.1726 0.2322 0.2460 0.2457 0.1689 0.2854
+Vowels 0.3518 0.3993 0.4007 0.3411 0.1422 0.442 0.3429 0.3819 0.1964 0.3160 0.4506
+WDBC 1 1 1 0.9 0.9909 0.9909 0.9894 0.9808 1 0.1167 1
+WPBC 0.4126 0.4345 0.4696 0.338 0.4126 0.4068 0.4173 0.4439 0.3747 0.4574 0.5017
+Wbc 0.9405 0.9522 0.9527 0.8159 0.8531 0.8119 0.9256 0.9408 0.9742 0.9111 0.9742
+Wilt 0.4074 0.412 0.4226 0.195 0.3372 0.4207 0.4100 0.4295 0.4474 0.5401 0.4543
+Wine 1 1 1 0.9909 1 1 0.9696 0.9184 1 0.9898 1
+Yeast 0.4847 0.4864 0.4952 0.3882 0.5083 0.5073 0.3765 0.5064 0.5099 0.5240 0.5416
+
+
+Average 0.6344 0.6844 0.7081 0.5222 0.5407 0.6964 0.6013 0.6750 0.6928 0.6100 0.7344
+
+
+31
+
+
+Table 12: Full analysis on the effects of different components in DRL in terms of AUC-ROC. This
+table serves as an extension of Table 2.
+
+
+A B C D E F G H I J DRL (ours)
+
+
+Abalone 0.7575 0.7633 0.7638 0.6373 0.5582 0.7963 0.6050 0.5976 0.7833 0.7531 0.8086
+Amazon 0.4891 0.5075 0.5171 0.4861 0.5497 0.5465 0.5466 0.5806 0.5227 0.5386 0.5699
+Annthyroid 0.7381 0.8321 0.8927 0.7371 0.7211 0.8047 0.6219 0.6959 0.8805 0.7925 0.9239
+Arrhythmia 0.7339 0.734 0.7341 0.6754 0.5584 0.7342 0.8022 0.8093 0.7541 0.5867 0.7742
+Backdoor 0.929 0.9291 0.9425 0.8507 0.718 0.8995 0.9185 0.9646 0.9787 0.9759 0.9788
+Breastw 0.9574 0.9574 0.9579 0.8957 0.9818 0.998 0.9721 0.9665 0.9967 0.8413 0.9968
+Campaign 0.7176 0.7637 0.7684 0.7114 0.7874 0.7336 0.6750 0.9199 0.7793 0.7247 0.7714
+Cardio 0.9135 0.9263 0.9263 0.8112 0.9712 0.9659 0.8734 0.9404 0.9561 0.8676 0.9562
+Cardiotocography 0.8 0.8001 0.8005 0.7529 0.6859 0.8167 0.6358 0.8225 0.82 0.8195 0.8400
+Census 0.6084 0.6897 0.7691 0.5964 0.837 0.5856 0.6709 0.7615 0.7509 0.6210 0.7714
+Comm.and.crime 0.8047 0.8055 0.8075 0.6332 0.5696 0.8028 0.8330 0.7512 0.8192 0.7436 0.8461
+Cover 0.9479 0.9501 0.9502 0.8694 0.1528 0.9908 0.6772 0.6223 0.9604 0.9627 0.9804
+Fault 0.5459 0.5505 0.5728 0.4811 0.5475 0.6273 0.5314 0.6017 0.6239 0.6079 0.6279
+Fraud 0.8534 0.8545 0.8996 0.7343 0.9403 0.944 0.9031 0.9258 0.9102 0.9149 0.9314
+Glass 0.5382 0.5425 0.5921 0.5192 0.5858 0.5836 0.7161 0.6846 0.6269 0.5790 0.6969
+Hepatitis 0.6885 0.693 0.7881 0.6919 0.81 0.7059 0.5361 0.5353 0.7466 0.7276 0.8122
+Imgseg 0.8516 0.8718 0.8722 0.7681 0.5608 0.8751 0.7869 0.8323 0.889 0.8636 0.9093
+Ionosphere 0.9306 0.932 0.9353 0.8685 0.8838 0.9666 0.9506 0.9743 0.9274 0.8322 0.9840
+Lympho 0.9483 0.9506 0.9577 0.893 1 0.993 0.9176 0.9470 1 0.9507 1.0000
+Mammography 0.8124 0.8605 0.8754 0.6967 0.8574 0.8999 0.8942 0.9034 0.8621 0.7484 0.9455
+Mnist 0.9295 0.9321 0.9321 0.8219 0.2673 0.875 0.6193 0.9161 0.9312 0.9164 0.9712
+Musk 0.9546 0.9573 0.96 0.8999 1 1 0.8621 0.9818 1 0.6706 1.0000
+Optdigits 0.9254 0.9302 0.9305 0.7737 0.4667 0.9487 0.7806 0.9948 0.9653 0.8000 0.9972
+Parkinson 0.6247 0.6315 0.6318 0.5715 0.6976 0.6658 0.3728 0.4927 0.6532 0.7035 0.6732
+Pendigits 0.9372 0.9392 0.9534 0.8031 0.9449 0.8833 0.9430 0.9694 0.9903 0.9577 0.9979
+Pima 0.725 0.7251 0.7253 0.6204 0.6857 0.7243 0.6671 0.7506 0.7451 0.6231 0.7651
+Satellite 0.7575 0.7653 0.7858 0.7064 0.6594 0.824 0.7486 0.8099 0.8173 0.7569 0.8320
+Satimage-2 0.9038 0.9573 0.9573 0.8992 0.9789 0.9953 0.9629 0.9865 0.9955 0.9247 0.9968
+Shuttle 0.9588 0.959 0.9594 0.8992 0.9919 0.9965 0.9951 0.9846 0.9993 0.9885 0.9992
+SpamBase 0.7967 0.8035 0.8039 0.7543 0.8148 0.8066 0.7621 0.8049 0.8118 0.8071 0.8289
+Speech 0.5775 0.5804 0.5848 0.3215 0.4268 0.5867 0.4622 0.4830 0.5631 0.4541 0.5821
+Thyroid 0.942 0.9425 0.9477 0.862 0.8319 0.9876 0.9522 0.9831 0.9832 0.9288 0.9911
+Vertebral 0.4616 0.4708 0.4781 0.1381 0.4032 0.3657 0.2511 0.4726 0.5254 0.5540 0.6216
+Vowels 0.8097 0.8131 0.8355 0.7871 0.6506 0.934 0.6313 0.7652 0.7504 0.7562 0.8511
+WDBC 0.96 0.96 0.96 0.9 0.9994 0.9994 0.9380 0.9466 1 0.8832 1.0000
+WPBC 0.4956 0.4998 0.5023 0.4235 0.5451 0.5599 0.5022 0.5167 0.5034 0.5930 0.6198
+Wbc 0.9504 0.9528 0.9531 0.8606 0.9713 0.9511 0.7803 0.9821 0.9763 0.8174 0.9963
+Wilt 0.8794 0.8861 0.8866 0.6467 0.8752 0.9357 0.4442 0.3820 0.8736 0.8827 0.9357
+Wine 0.96 0.96 0.96 0.8983 1 1 0.9041 0.9597 1 0.8717 1.0000
+Yeast 0.4109 0.4163 0.4206 0.3655 0.4712 0.5084 0.4451 0.3294 0.4706 0.5379 0.5120
+
+
+Average 0.7882 0.7999 0.8123 0.7066 0.7240 0.8205 0.7273 0.7837 0.8286 0.7720 0.8574
+
+
+32
+
+
+Table 13: Full analysis on the effects of different distance metrics in DRL in terms of AUC-PR. This
+table serves as an extension of Table 3.
+
+
+Decomposition Separation Alignment Separation Alignment
+DRL (ours)
+w/ Cosine distance w/ L1 distance w/ L1 distance w/ L2 distance w/ L2 distance
+
+
+Abalone 0.8350 0.8792 0.8535 0.876 0.8631 0.885
+Amazon 0.0984 0.1091 0.1094 0.1006 0.1028 0.1206
+Annthyroid 0.6824 0.6551 0.6484 0.6494 0.6497 0.6761
+Arrhythmia 0.6165 0.5900 0.5852 0.5697 0.5924 0.627
+Backdoor 0.8808 0.8784 0.8868 0.8786 0.8886 0.8915
+Breastw 0.8851 0.9961 0.9957 0.9958 0.9943 0.9966
+Campaign 0.4972 0.4344 0.4678 0.4609 0.4811 0.5013
+Cardio 0.8253 0.8158 0.7921 0.8123 0.8209 0.8325
+Cardiotocography 0.7318 0.7430 0.7458 0.7316 0.7415 0.754
+Census 0.2109 0.2358 0.2421 0.2204 0.2333 0.2649
+Comm.and.crime 0.8903 0.8538 0.9079 0.8692 0.903 0.9164
+Cover 0.7663 0.7134 0.7793 0.7423 0.7613 0.783
+Fault 0.6534 0.6391 0.6433 0.6444 0.6576 0.6649
+Fraud 0.6097 0.6739 0.6551 0.6297 0.6444 0.6614
+Glass 0.2792 0.1134 0.1187 0.1449 0.097 0.167
+Hepatitis 0.6486 0.5816 0.6453 0.6179 0.6574 0.6627
+Imgseg 0.9036 0.9185 0.9004 0.8998 0.9125 0.9238
+Ionosphere 0.9526 0.9092 0.9549 0.9539 0.969 0.9895
+Lympho 0.9868 0.8391 0.9762 0.8901 1 1
+Mammography 0.8145 0.7645 0.8211 0.7972 0.8041 0.8406
+Mnist 0.8579 0.8893 0.7912 0.8243 0.835 0.887
+Musk 0.9705 0.8125 0.8484 0.9335 0.951 1
+Optdigits 0.9035 0.9358 0.9350 0.9493 0.947 0.9356
+Parkinson 0.9175 0.9442 0.9237 0.9476 0.9314 0.921
+Pendigits 0.9029 0.8820 0.9218 0.8735 0.909 0.936
+Pima 0.6978 0.7398 0.7440 0.7486 0.7584 0.7449
+Satellite 0.8426 0.8364 0.8212 0.8499 0.8099 0.8692
+Satimage-2 0.9185 0.9174 0.9648 0.9345 0.9491 0.9703
+Shuttle 0.9622 0.9318 0.9718 0.9674 0.9671 0.9819
+SpamBase 0.8327 0.8629 0.8113 0.8852 0.8205 0.8413
+Speech 0.0545 0.0310 0.0342 0.0398 0.0408 0.0584
+Thyroid 0.8561 0.8113 0.8210 0.8209 0.8299 0.8626
+Vertebral 0.2312 0.2681 0.2542 0.2686 0.2781 0.2854
+Vowels 0.4307 0.4400 0.3696 0.4635 0.4425 0.4506
+WDBC 0.9954 0.9928 1.0000 0.93 0.9319 1
+WPBC 0.4896 0.4911 0.4843 0.4984 0.4943 0.5017
+Wbc 0.9417 0.9589 0.9401 0.9655 0.959 0.9742
+Wilt 0.4146 0.4384 0.4105 0.413 0.4238 0.4543
+Wine 1.0000 1.0000 0.9714 1 1 1
+Yeast 0.5308 0.5010 0.5049 0.5206 0.4817 0.5416
+
+
+Average 0.7130 0.7007 0.7063 0.708 0.7134 0.7344
+
+
+33
+
+
+Table 14: Full analysis on the effects of different distance metrics in DRL in terms of AUC-ROC.
+This table serves as an extension of Table 3.
+
+
+Decomposition Separation Alignment Separation Alignment
+DRL (ours)
+w/ Cosine distance w/ L1 distance w/ L1 distance w/ L2 distance w/ L2 distance
+
+
+Abalone 0.7934 0.7744 0.7610 0.7691 0.7748 0.8086
+Amazon 0.5525 0.5413 0.5649 0.5109 0.5258 0.5699
+Annthyroid 0.8828 0.8342 0.8931 0.8672 0.9031 0.9239
+Arrhythmia 0.7667 0.7309 0.7376 0.7296 0.742 0.7742
+Backdoor 0.9607 0.9036 0.9248 0.9339 0.9372 0.9788
+Breastw 0.9888 0.9932 0.9958 0.9961 0.9944 0.9968
+Campaign 0.7646 0.7423 0.7188 0.7229 0.736 0.7714
+Cardio 0.9327 0.9110 0.9586 0.9139 0.9236 0.9562
+Cardiotocography 0.8134 0.7912 0.7276 0.7805 0.6999 0.84
+Census 0.7659 0.6987 0.7083 0.7169 0.7354 0.7714
+Comm.and.crime 0.8346 0.7802 0.8075 0.7976 0.8155 0.8461
+Cover 0.9742 0.9417 0.9297 0.9394 0.952 0.9804
+Fault 0.6495 0.5632 0.6057 0.5749 0.6028 0.6279
+Fraud 0.9248 0.9243 0.9330 0.9362 0.9417 0.9314
+Glass 0.6785 0.6729 0.6724 0.6887 0.6736 0.6969
+Hepatitis 0.7936 0.7163 0.8032 0.733 0.8281 0.8122
+Imgseg 0.9010 0.6974 0.7933 0.8724 0.882 0.9093
+Ionosphere 0.9794 0.9685 0.9562 0.9501 0.9065 0.984
+Lympho 0.9965 0.9507 0.9977 0.9005 1 1
+Mammography 0.9473 0.8969 0.8956 0.8891 0.8753 0.9455
+Mnist 0.9709 0.9686 0.9417 0.9352 0.9464 0.9712
+Musk 0.9921 0.9006 0.9908 0.9295 0.9619 1
+Optdigits 0.9631 0.8779 0.8706 0.8757 0.8908 0.9972
+Parkinson 0.6688 0.7287 0.6738 0.7423 0.6984 0.6732
+Pendigits 0.9712 0.8971 0.9321 0.9136 0.9275 0.9979
+Pima 0.7607 0.7524 0.7505 0.7495 0.7773 0.7651
+Satellite 0.8596 0.7916 0.7999 0.7952 0.8021 0.832
+Satimage-2 0.9335 0.8948 0.9696 0.9191 0.988 0.9968
+Shuttle 0.9779 0.9860 0.9976 0.8803 0.9973 0.9992
+SpamBase 0.8496 0.8717 0.7980 0.8696 0.818 0.8289
+Speech 0.5123 0.4773 0.5173 0.5078 0.4901 0.5821
+Thyroid 0.8935 0.9424 0.9856 0.9619 0.9879 0.9911
+Vertebral 0.6276 0.5505 0.5848 0.5546 0.5857 0.6216
+Vowels 0.8009 0.7824 0.8255 0.7909 0.7999 0.8511
+WDBC 0.9749 0.9732 1.0000 0.9542 0.9955 1
+WPBC 0.6096 0.5325 0.5702 0.5438 0.5796 0.6198
+Wbc 0.9925 0.8801 0.9636 0.9483 0.9702 0.9963
+Wilt 0.5033 0.7463 0.8637 0.8795 0.8407 0.9357
+Wine 1.0000 1.0000 0.9933 1 1 1
+Yeast 0.5078 0.4622 0.4857 0.4602 0.4668 0.512
+
+
+Average 0.8318 0.8012 0.8225 0.8109 0.8243 0.8574
+
+
+34
+
+
+A.11 THEORETICAL ANALYSIS
+
+
+**Proposition 1** _Let_ **w** _n_ _∈N_ _and_ **w** _a_ _∈A denote the computed weights of normal and anomalous_
+_samples,_ _where_ _N_ _and_ _A_ _denote_ _the_ _weight_ _sets_ _of_ _normal_ _and_ _anomalous_ _samples,_ _respectively._
+_Given_ **w** _∈_ [�] _[K]_ _,_ _where_ [�] _[K]_ _represents_ _the_ _probability_ _simplex_ _in_ R _[K]_ _,_ _the_ _expected_ _discrepancy_
+_between_ _normal_ _and_ _anomalous_ _weights,_ E **w** _n∈N_ _,_ **w** _a∈A_ - _∥_ **w** _n −_ **w** _a∥_ [2] 2� _,_ _can_ _be_ _amplified_ _by_ _in-_
+_creasing the variance of ∥_ **w** _n∥_ 2 _among N_ _._
+
+
+_Proof._ The expected discrepancy between normal and anomalous weights is formulated as:
+
+
+E - _∥_ **w** _n −_ **w** _a∥_ [2] 2� =E �( **w** _n −_ **w** _a_ ) [T] ( **w** _n −_ **w** _a_ )� = E - _∥_ **w** _n∥_ [2] 2� + E - _∥_ **w** _a∥_ [2] 2� _−_ 2E - **w** _n_ [T] **[w]** _[a]_ 
+=Var( _∥_ **w** _n∥_ 2) + E [2] [ _∥_ **w** _n∥_ 2] + E        - _∥_ **w** _a∥_ [2] 2� _−_ 2E        - **w** _n_ [T] **[w]** _[a]_        
+
+
+        - 1
+_≥_ Var( _∥_ **w** _n∥_ 2) + E [2] ~~_√_~~
+
+_K_
+
+
+- - + E ( ~~_√_~~ [1] ) [2] _−_ 2E [ _∥_ **w** _n∥_ 2 _∥_ **w** _a∥_ 2]
+
+_K_
+
+
+(7)
+
+
+_≥_ Var( _∥_ **w** _n∥_ 2) + [2]
+
+
+[2] [2]
+
+_K_ _[−]_ [2][E][ [1] _[ ∗]_ [1] =][ Var][(] _[∥]_ **[w]** _[n][∥]_ [2][) +] _K_
+
+
+_K_ _[−]_ [2] _[,]_
+
+
+where Var( _·_ ) denotes the variance, **w** is a probability simplex as discussed above and satisfies
+
+- _Kk_ =1 _[w][k]_ [=] [1] [and] [0] _[≤]_ _[w][k]_ _[≤]_ [1][,] _[∥]_ **[w]** _[∥]_ [2] [=] ~~�~~ - _Kk_ =1 [(] _[w][k]_ [)][2] _[≥]_ - _Kk_ ~~_√_~~ =1 _K_ _[w][k]_ = ~~_√_~~ 1 _K_ [is] [given] [by] [Arith-]
+
+
+- _K_
+_k_ =1 _[w][k]_
+
+
+= ~~_√_~~ 1
+_K_
+
+
+- _k_ =1 _[w]_ [=] [1] [and] [0] _[≤]_ _[w]_ _[≤]_ [1][,] _[∥]_ **[w]** _[∥]_ [2] [=] - _k_ =1 [(] _[w][k]_ [)][2] _[≥]_ _k_ ~~_√_~~ =1 _K_ = ~~_√_~~ _K_ [is] [given] [by] [Arith-]
+
+metic Mean-Geometric Mean Inequality (Bhatia & Kittaneh, 2000), E - **w** _n_ [T] **[w]** _[a]_ - _≤_ E - _|_ **w** _n_ [T] **[w]** _[a][|]_ - _≤_
+E [ _∥_ **w** _n∥_ 2 _∥_ **w** _a∥_ 2] is given by Cauchy–Schwarz inequality (Bhatia & Davis, 1995), and _∥_ **w** _∥_ 2 _≤_ 1
+arises from the condition about the simplex. The lower bound of E - _∥_ **w** _n_ _−_ **w** _a∥_ [2] 2� is given by
+Var( _∥_ **w** _n∥_ 2) + [2] _[−]_ [2][.] [To increase this lower bound, we can enhance Var][(] _[∥]_ **[w]** _[n][∥]_ [2][)][.]
+
+
+~~_√_~~
+
+
+_K_ _[−]_ [2][.] [To increase this lower bound, we can enhance Var][(] _[∥]_ **[w]** _[n][∥]_ [2][)][.]
+
+
+**Proposition 2** _Let_ **w** _n_ _∈N_ _and_ **w** _a_ _∈A_ _denote_ _the_ _computed_ _weights_ _of_ _normal_ _and_ _anoma-_
+_lous_ _samples,_ _where_ _N_ _and_ _A_ _denote_ _the_ _weight_ _sets_ _of_ _normal_ _and_ _anomalous_ _samples,_ _respec-_
+_tively._ _Given_ **w** _∈_ [�] _[K]_ _,_ _where_ [�] _[K]_ _represents_ _the_ _probability_ _simplex_ _in_ R _[K]_ _,_ _denoting_ _µ_ **w** _n_ =
+E **w** _n∈N_ [ **w** _n_ ] _as_ _the_ _centroid_ _of_ _the_ _normal_ _samples’_ _weights,_ E **w** _n∈N_ _,_ **w** _a∈A_ - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2� _−_
+E **w** _n∈N_ - _∥_ **w** _n −_ _µ_ **w** _n∥_ [2] 2� _, can be amplified by increasing the variance of ∥_ **w** _n∥_ 2 _among N_ _._
+
+
+_Proof._ E **w** _n∈N_ _,_ **w** _a∈A_ - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2� _−_ E **w** _n∈N_ - _∥_ **w** _n −_ _µ_ **w** _n∥_ [2] 2� is formulated as:
+
+
+E  - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2� _−_ E  - _∥_ **w** _n −_ _µ_ **w** _n∥_ [2] 2�
+
+=E - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2 _[−∥]_ **[w]** _[n]_ _[−]_ _[µ]_ **[w]** _n_ _[∥]_ [2] 2�
+
+=E �( **w** _a −_ _µ_ **w** _n_ ) [T] ( **w** _a −_ _µ_ **w** _n_ ) _−_ ( **w** _n −_ _µ_ **w** _n_ ) [T] ( **w** _n −_ _µ_ **w** _n_ )�
+
+=E - **w** _a_ [T] **[w]** _[a]_ _[−]_ [2] **[w]** _a_ [T] _[µ]_ **[w]** _n_ [+] _[ µ]_ **w** [T] _n_ _[µ]_ **[w]** _n_ _[−]_ [(] **[w]** _n_ [T] **[w]** _[n]_ _[−]_ [2] **[w]** _n_ [T] _[µ]_ **[w]** _n_ [+] _[ µ]_ **w** [T] _n_ _[µ]_ **[w]** _n_ [)] 
+=E - **w** _a_ [T] **[w]** _[a]_ [+] **[ w]** _n_ [T] **[w]** _[n]_ _[−]_ [2] **[w]** _n_ [T] **[w]** _[n]_ [+ 2] **[w]** _n_ [T] _[µ]_ **[w]** _n_ _[−]_ [2] **[w]** _a_ [T] _[µ]_ **[w]** _n_ 
+=E - _∥_ **w** _a∥_ [2] 2� + E - _∥_ **w** _n∥_ [2] 2� _−_ 2E - _∥_ **w** _n∥_ [2] 2� + 2E - **w** _n_ [T] _[µ]_ **[w]** _n_ _[−]_ **[w]** _a_ [T] _[µ]_ **[w]** _n_ 
+
+
+=E - _∥_ **w** _a∥_ [2] 2� + Var( _∥_ **w** _n∥_ 2) + E [2] [ _∥_ **w** _n∥_ 2] _−_ 2E - _∥_ **w** _n∥_ [2] 2� + 2E - **w** _n_ [T] _[µ]_ **[w]** _n_ - _−_ 2E - **w** _a_ [T] _[µ]_ **[w]** _n_ 
+=Var( _∥_ **w** _n∥_ 2) + E - _∥_ **w** _a∥_ [2] 2� + E [2] [ _∥_ **w** _n∥_ 2] _−_ 2E - _∥_ **w** _n∥_ [2] 2� + 2E - **w** _n_ [T] _[µ]_ **[w]** _n_ - _−_ 2E - **w** _a_ [T] _[µ]_ **[w]** _n_ 
+
+
+(8)
+
+
+  -   - 1
+) [2] + E [2] ~~_√_~~
+_K_
+
+  -   - 1
+) [2] + E [2] ~~_√_~~
+_K_
+
+
+        _≥_ Var( _∥_ **w** _n∥_ 2) + E ( ~~_√_~~ [1]
+
+
+_K_
+
+
+        _≥_ Var( _∥_ **w** _n∥_ 2) + E ( ~~_√_~~ [1]
+
+
+_K_
+
+
+_−_ 2E [ _∥_ **w** _n∥_ 2 _∥_ **w** _n∥_ 2] _−_ 2E [ _∥_ **w** _a∥_ 2 _∥µ_ **w** _n∥_ 2]
+
+
+_−_ 2E [1 _∗_ 1] _−_ 2E [1 _∗_ 1]
+
+
+=Var( _∥_ **w** _n∥_ 2) + [2]
+
+_K_ _[−]_ [4] _[,]_
+
+
+where Var( _·_ ) denotes the variance, _∥_ **w** _∥_ 2 = �� _Kk_ =1 [(] _[w][k]_ [)][2] _[≥]_
+
+
+= ~~_√_~~ 1
+_K_
+
+
+- _K_
+_k_ =1 _[w][k]_
+
+
+where Var( _·_ ) denotes the variance, _∥_ **w** _∥_ 2 = - _k_ =1 [(] _[w][k]_ [)][2] _[≥]_ _k_ ~~_√_~~ =1 _K_ = ~~_√_~~ _K_ [is given by Arith-]
+
+metic Mean-Geometric Mean Inequality (Bhatia & Kittaneh, 2000), E - **w** _a_ [T] _[µ]_ **[w]** _n_ - _≤_ E - _|_ **w** _a_ [T] _[µ]_ **[w]** _n_ _[|]_ - _≤_
+E [ _∥_ **w** _a∥_ 2 _∥µ_ **w** _n∥_ 2] is given by Cauchy–Schwarz Inequality (Bhatia & Davis, 1995), _µ_ **w** _n_ _∈_ [�] _[K]_ is
+given by **w** _n_ _∈_ [�] _[K]_, and _∥_ **w** _∥_ 2 _≤_ 1 arises from the conditions [�] _k_ _[K]_ =1 _[w][k]_ [=] [1] [and] [0] _[≤]_ _[w][k]_ _[≤]_ [1][.]
+
+
+_k_ ~~_√_~~
+
+
+35
+
+
+Therefore the lower bound of E **w** _n∈N_ _,_ **w** _a∈A_ - _∥_ **w** _a −_ _µ_ **w** _n∥_ [2] 2� _−_ E **w** _n∈N_ - _∥_ **w** _n −_ _µ_ **w** _n∥_ [2] 2� is given by
+Var( _∥_ **w** _n∥_ 2) + _K_ [2] _[−]_ [4][.] [To increase this lower bound, we can enhance Var][(] _[∥]_ **[w]** _[n][∥]_ [2][)][.]
+
+
+A.12 LIMITATION
+
+
+The primary limitation of the current DRL method is that it is designed specifically for tabular
+anomaly detection. Although our method can be used to different data types for the anomaly detection task by introducing representation decomposition, we may need to design the specific architecture for the weight learner and alignment learner due to the difference between data types. In the
+future, we plan to explore its application to other data types, where incorporating prior structural
+knowledge from these data types might be a possible solution.
+
+
+36

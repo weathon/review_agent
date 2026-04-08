@@ -1,0 +1,2966 @@
+# REVEALING AND MITIGATING OVER-ATTENTION IN KNOWLEDGE EDITING
+
+
+**Pinzheng Wang** [1] _[,]_ [2] **Zecheng Tang** [1] _[,]_ [2] **Keyan Zhou** [1] _[,]_ [2]
+
+**Juntao Li** [1] _[,]_ [2] _[∗]_ **Qiaoming Zhu** [1] _[,]_ [2] **Min Zhang** [1] _[,]_ [2]
+
+1School of Computer Science and Technology, Soochow University
+2Key Laboratory of Data Intelligence and Advanced Computing, Soochow University
+{pzwang1,zctang,kyzhou}@stu.sud.edu.cn
+{ljt,qmzhu,minzhang}@suda.edu.cn
+
+
+ABSTRACT
+
+
+Large Language Models (LLMs) have demonstrated superior performance across
+a wide range of tasks, but they still exhibit undesirable errors due to incorrect
+knowledge learned from the training data. To avoid this, knowledge editing methods
+emerged to precisely edit the specific model knowledge via efficiently modifying
+a very small percentage of parameters. However, those methods can lead to the
+problem of **Specificity Failure**, where the existing knowledge and capabilities are
+severely degraded due to editing. Our preliminary indicates that Specificity Failure
+primarily stems from the model’s attention heads assigning excessive attention
+scores to entities related to the edited knowledge, thereby unduly focusing on
+specific snippets within the context, which we denote as the **Attention** **Drift**
+phenomenon. To mitigate such Attention Drift issue, we introduce a simple yet
+effective method _**S**_ _elective_ _**A**_ _ttention_ _**D**_ _rift_ _**R**_ _estriction_ ( **SADR** ), which introduces
+an additional regularization term during the knowledge editing process to restrict
+changes in the attention weight distribution, thereby preventing undue focus on the
+edited entity. Experiments on five frequently used strong LLMs demonstrate the
+effectiveness of our method, where SADR can significantly mitigate Specificity
+Failure in the predominant knowledge editing tasks [1] .
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have demonstrated outstanding performance on various downstream
+natural language processing tasks, e.g., dialogue generation (Ni et al., 2023; Yang et al., 2024a),
+attributed to the numerous inherent knowledge (Roberts et al., 2020; Cao et al., 2023). However,
+many unpredictable errors inevitably arise due to the model’s inner defect, which stems from negative
+or outdated samples within the extensive pre-training datasets (Balachandran et al., 2022). These
+imperfections can lead to the propagation of misinformation or biased outputs (Li et al., 2023a; Tang
+et al., 2023), undermining the reliability and robustness of the models in real-world applications.
+
+
+One straightforward way to mitigate such an issue is to modify the knowledge of LLMs by directly
+fine-tuning the model with specific data. However, such a direct training method is uncontrollable
+and carries a significant risk of over-fitting (Kirkpatrick et al., 2017; Zhu et al., 2020). Consequently,
+knowledge editing methods (Meng et al., 2022; 2023) aim to efficiently modify specific knowledge
+within a limited subset of parameters while theoretically ensuring that the rest of the model’s
+knowledge remains unchanged. However, when employing the knowledge editing methods, the
+instability feature limits their potential (Hoelscher-Obermaier et al., 2023). Specifically, we find that
+when content related to the edited knowledge appears in the context, it can inadvertently corrupt
+pre-existing knowledge, which we define as **Specificity Failure** in this paper. For instance, a language
+model, edited with a new knowledge— _“Eiffel Towel” is in “New York”_ rather than _“Eiffel Towel” is_
+_in “Paris”_ (Figure 1(a) and (b)), tends to predict _“Pyramids” is in “New York”_ (Figure 1(c)), which
+is inconsistent with the original knowledge embedded in the model before editing, i.e., _“Pyramids” is_
+
+
+_∗_ Corresponding author
+[1Code, dataset and an interactive demo notebook: https://github.com/PinzhengWang322/Reveal_Attention_Drift.](https://github.com/PinzhengWang322/Reveal_Attention_Drift)
+
+
+1
+
+
+**Eiffel** **Tower** **is** **located** **in** **Eiffel** **Tower** **is** **famous** **.** **Pyramids** **is** **in**
+
+
+(b) Factual recall with Edited Model (c) Failed Test Case when Edited Subject Appears First
+
+
+**After Edit:**
+
+
+**New York**
+
+
+**Before Edit:** **After Edit:**
+
+
+**After Edit:**
+
+
+**Egypt**
+
+
+Figure 1: An illustration of counterfactual knowledge editing, where the new factual association
+( _Eiffel Tower, is located in, New York_ ) is edited in GPT-J-6b using the ROME method. (a) The hidden
+states of the subject are enriched by the MLP are successfully retrieved by the attention modules. (b)
+The editing method modifies the MLP parameters to alter the factual association. (c) The edited MLP
+generates hidden states that are prone to being mistakenly focused on by the attention modules.
+
+
+_in “Egypt”_ . Based on our preliminary study, we observe that a 6B GPT-J model after the knowledge
+editing can exhibit severe Specificity Failure in over 50% of cases regarding factual statements.
+
+
+To delve deeper, the essence of the aforementioned issue fundamentally lies in the transmission of
+erroneous information flows that occur during the model’s knowledge association recall process (Geva
+et al., 2023), where the model’s prediction of certain knowledge can be viewed as the construction of
+a causal graph (Meng et al., 2022). Consequently, to ascertain the cause of Specificity Failure, we
+employ a lens experiment to scrutinize the causal graph within the model’s generative process. Our
+observations reveal that the output attention activation at the last token position markedly contaminates
+the forward pass of the edited model, thereby resulting in erroneous outputs. Intuitively, the attention
+errors in the edited model could stem from the attention module’s potential to erroneously focus on
+edited information, thus overlooking other pertinent details throughout the prediction process. By
+conducting the significance analysis and patching experiments on the attention module within the
+edited model, we observe an **Attention Drift phenomenon:** **the edited model assigns excessive**
+**attention scores to the entities related to the edited knowledge, thereby overly concentrating**
+**on the specific snippet within the context.** Consequently, this leads to outputs that predominantly
+align with the entities associated with the edited knowledge rather than conforming to the contextual
+semantics, even at the risk of clashing with pre-existing knowledge inherent in the model.
+
+
+To alleviate the Attention Drift phenomenon, we propose a simple yet efficient strategy called
+_**S**_ _elective_ _**A**_ _ttention_ _**D**_ _rift_ _**R**_ _estriction_ ( **SADR** ), which prevents excessive editing by constraining
+partial attention heads that overly focus on entities related to the edited knowledge. Specifically, we
+first locate the attention heads that exhibit severe Attention Drift phenomenon by comparing the
+model attention outputs before and after the editing, and then align the attention outputs of these
+identified heads to closely approximate those observed before editing. Currently, knowledge editing
+methods can be categorized into three types (Yao et al., 2023): locate-then-edit, parameter-preserving,
+and meta-learning approaches. We observe that severe specificity failure exists across methods from
+all three categories, with the accuracy of the original knowledge decreasing by more than half. Our
+proposed SADR can significantly mitigate specificity failure on five models ranging from 1.1B to
+20B, and five editing methods covering all three categories, achieving improvements of up to 130.9%
+and 295.8% in the two main specificity tasks, with only a minimal 0.19% decrease in edit success.
+
+
+2 NOTATION AND BACKGROUND
+
+
+2.1 DEFINITION AND EVALUATION OF KNOWLEDGE EDITING
+
+
+Previous works (Dai et al., 2021; Meng et al., 2022; 2023) represent factual associations as a
+knowledge tuple _t_ = ( _s, r, o_ ), where _s_ is the subject, _r_ is the relation, and _o_ is the object. To evaluate
+
+
+2
+
+
+whether a factual association (e.g., _Eiffel Tower, is located in, Paris_ ) is captured in a LLM, we provide
+a prompt consisting of _s_ and _r_ (e.g., “Eiffel Tower is located in”) and evaluate the model’s prediction
+of _o_ . Knowledge editing aims to replace the factual association stored in model parameters with a
+new factual association ( _s, r, oedit_ ), where _oedit_ is the counterfactual target object (e.g., _New York_ ).
+In contrast, we denote _otrue_ as the true answer in the real world. Existing works (Meng et al., 2022;
+2023; Mitchell et al., 2021; Tan et al., 2023) mainly evaluate knowledge editing in terms of _reliability_,
+_generalization_ and _specifictiy_ with the following metrics:
+
+
+1) _Efficacy_ _Score_ _(ES)_ and _Efficacy_ _Magnitude_ _(EM)_ represent the portion of cases that
+_P_ ( _oedit_ _s, r_ ) _> P_ ( _otrue_ _s, r_ ) and the mean _P_ ( _oedit_ _s, r_ ), respectively.
+_|_ _|_ _|_
+
+2) _Paraphrase Score (PS)_ and _Paraphrase Magnitude (PM)_ evaluate generalization performance for
+a paraphrased prompt ( _spara, rpara_ ) (e.g., “The Tower of Eiffel stands in”). These two metrics
+can be written as _P_ ( _oedit_ _spara, rpara_ ) _> P_ ( _otrue_ _spara, rpara_ ) and _P_ ( _oedit_ _spara, rpara_ ).
+_|_ _|_ _|_
+
+3) _Neighborhood Score (NS)_ and _Neighborhood Magnitude (NM)_ evaluate specificity by providing a
+neighboring but distinct subject _s_ _[′]_ (e.g., “The Louvre”). These two metrics can be represented as
+_P_ ( _otrue_ _s_ _[′]_ _, r_ ) _> P_ ( _oedit_ _s_ _[′]_ _, r_ ) and _P_ ( _otrue_ _s_ _[′]_ _, r_ ), respectively.
+_|_ _|_ _|_
+
+
+As recent studies (Hoelscher-Obermaier et al., 2023; Yao et al., 2023) show that the presence of
+edited subjects in the inference context can deteriorate specificity performance, we incorporate two
+additional specificity metrics that include the edited subject in the test prompts.
+
+
+1) _Relation Score (RS)_ and _Relation Magnitude (RM)_ evaluate how the model handles attributes of the
+edited subject that are unrelated to the edit, identified by the relation _r_ _[′]_ . Empirically, we find the
+edited model tends to predict the object _oedit_ for even unrelated relations, e.g., “The color of Eiffel
+Tower is New York”. Therefore, we calculate the Relation Score by _P_ ( _otrue_ _s, r_ _[′]_ ) _> P_ ( _oedit_ _s, r_ _[′]_ )
+_|_ _|_
+and the Relation Magnitude by _P_ ( _otrue_ _s, r_ _[′]_ ).
+_|_
+
+2) _Distract Neighborhood Score (DNS)_ and _Distract Neighborhood Magnitude (DNM))_ function
+similarly to NS and NM but concatenate the edited sentence ( _s, r, oedit_ ) before the test prompt
+in the neighborhood task. These metrics can be written as _P_ ( _otrue_ ( _s, r, oedit_ ) ( _s_ _[′]_ _, r_ )) _>_
+_|_ _⊕_
+_P_ ( _oedit_ ( _s, r, oedit_ ) ( _s_ _[′]_ _, r_ )) and _P_ ( _otrue_ ( _s, r, oedit_ ) ( _s_ _[′]_ _, r_ )), respectively.
+_|_ _⊕_ _|_ _⊕_
+
+
+We provide an example in Figure 2 to illustrate
+how to evaluate knowledge editing. Although
+knowledge editing involves various settings, such
+as batch (Meng et al., 2023) and sequential editing (Hartvigsen et al., 2024), we find that even
+editing a single factual association can significantly
+damage specificity performance when the edited
+subject occurs in the context. We call this **Speci-**
+**ficity Failure** and focus on knowledge editing that
+modifies one factual association in this work.
+
+
+2.2 THE KNOWLEDGE EDITING FRAMEWORK
+
+
+To illustrate how knowledge editing methods work,
+we describe ROME (Meng et al., 2022) here as it
+is a foundational method that inspired subsequent
+techniques such as MEMIT (Meng et al., 2023),
+PMET (Li et al., 2024), and others (Li et al., 2024;
+Ma et al., 2023).
+
+
+Figure 2: Example of evaluation tasks for
+Knowledge Editing.
+
+
+Geva et al. (2021) reveals that MLP layers can serve as two-layer key-value memories, with the
+output of the first MLP layer serving as _k_, and the output from the second layer acting as _v_, thereby
+facilitating knowledge retrieval about entities. Inspired by this, ROME changes _v_ to facilitate the
+model’s prediction of _oedit_ when _k_ is associated with the target subject. Meanwhile, it preserves _v_
+as much as possible when _k_ is not related to the target subject, ensuring stability across unrelated
+contexts. To achieve this, ROME implements a rank-one update on weight _W_ of the second MLP
+layer with these two main objectives:
+
+
+3
+
+
+1 Minimize _∥Wk_ [ˆ] _−_ _Wk∥_ when _k_ is not from the last token of the target subject.
+
+2 Satisfy _Wk_ [ˆ] _[∗]_ = _v_ _[∗]_ when _k_ _[∗]_ corresponds to the output of the last token of the target subject, while
+_v_ _[∗]_ = arg min _z_  - _−_ log _PG_ ( _mlt_ _[∗]_ [:=] _[z]_ [)][ (] _[o][edit][|][s, r]_ [) +] _[ ωD]_ [KL]  - _P_ ( _x|p_ _[′]_ )�� _PG_ ( _mlt∗_ [:=] _[z]_ [)][(] _[x][|][p][′]_ [)] ��.
+
+
+Herein, the second objective seeks a vector _z_ that, when substituted as the output of the MLP in
+layer _l_ at token _t_ (denoted _G_ ( _m_ _[l]_ _t_ _[∗]_ [:=] _[z]_ [)][), it will lead the model to predict] _[ o][edit]_ [.] _[t]_ [ is the last token]
+of the subject. The KL divergence term minimizes the distances of predicted distribution between
+the predicted distributions for the prompt _p_ _[′]_ (formatted as “subject is a”) before and after editing,
+which controls the essence drift (Meng et al., 2022). _ω_ is denoted as the controlling weight. ROME
+integrates these objectives by solving a linear system.
+
+
+The general framework of locate-then-edit knowledge editing mentioned above can be viewed as
+first optimizing a certain vector _v_ _[∗]_ that facilitates predicting the new knowledge, then integrating the
+vector _v_ _[∗]_ into the model’s parameters. We primarily focus on locate-then-edit knowledge editing in
+this paper, analyzing the causes of specificity failure within this framework. Additionally, we also
+evaluate specificity failure and the effectiveness of our SADR method on other parameter-preserving
+and meta-learning approaches.
+
+
+3 EXPLORATION OF SPECIFICITY FAILURE
+
+
+While knowledge editing excels at memorizing new knowledge, it still suffers from specificity failure.
+We first measure these failures on CounterFact benchmarks and then identify which intermediate
+outputs during the edited model’s inference cause incorrect predictions. We further explore the
+primary triggers for these errors at a granular level and verify our findings by patching attention drift
+to mitigate specificity failure. Our experiments focus on _Relation_ and _Distract Neighborhood_ tasks,
+employing the widely-used ROME method on the GPT-J-6b model (Wang & Komatsuzaki, 2021).
+
+
+3.1 CALIBRATING SPECIFICITY FAILURE ON COUNTERFACTUAL BENCHMARKS
+
+
+To measure performance on both the _Relation_ and _Distract Neighborhood_ tasks, we employ a dataset
+composed of COUNTERFACT (Meng et al., 2022) and **WikiData** _counterfact_ (Zhang et al., 2024a).
+The dataset includes 1683 factual statements, with more details provided in Appendix C.1.
+
+
+Table 1: Editing results on GPT-J, whereas **red** numbers indicate a significant failure.
+
+
+**Editor** **Rewrite** **Generalization** **Specificity**
+
+
+ES _↑_ EM _↑_ PS _↑_ PM _↑_ NS _↑_ NM _↑_ RS _↑_ RM _↑_ DNS _↑_ DNM _↑_
+
+
+None 20.86 0.64 17.70 0.40 82.43 6.18 79.73 8.83 61.99 13.81
+ROME 99.88 99.39 99.58 80.26 79.45 6.04 **11.94** **3.29** **30.42** **10.45**
+MEMIT 99.94 96.79 99.52 62.42 82.52 10.38 **17.44** **5.36** **30.55** 14.91
+PMET 99.40 91.03 92.67 54.75 81.49 6.22 **27.68** **5.01** **39.79** 12.66
+
+
+Table 1 illustrates a significant specificity failure when the edited subject occurs in the context, with
+the edited model incorrectly outputting the edited object in over 50% of test cases. Furthermore, the
+average probability of incorrect answers _oedit_ is much greater than that of correct answers _otrue_, as
+48.4% versus 3.3% for the _Relation_ task and 24.9% versus 10.5% for the _Distract Neighborhood_ task
+when editing with ROME. Editing methods such as MEMIT (Meng et al., 2023) and PMET (Li et al.,
+2024) also display significant specificity failure. This failure is further observed across a range of
+data formats and tasks, with detailed results provided in Appendix E.3.
+
+
+3.2 LOCALIZING SPECIFICITY FAILURE
+
+
+In the forward pass of an autoregressive language model, the flow of information can be viewed as a
+causal graph (Li et al., 2023b). When a model with _L_ layers predicts based on a prompt containing
+_T_ tokens, each module such as attention modules, MLPs, and transformer blocks, produces _T_ _× L_
+outputs. Each of these outputs is influenced by prior outputs from earlier layers and preceding token
+positions. Inspired by causal tracing (Meng et al., 2022), we trace across different states in the causal
+graph to identify which parts contaminate the information flow in specificity failure.
+
+
+4
+
+
+We first conduct a forward pass on the edited model with test prompts and record outputs from various
+network modules across different layers and token positions. Then, we execute a forward pass with
+the vanilla model, copying the representations of specific modules from the stored outputs to the
+corresponding location without altering other computations. We traverse modules within a window
+of _k_ layers for each _l_ -th layer and token position _t_ . We refer to this approach as “Contaminating
+Substitution” and quantify its impact on the final output probability, formulated as:
+
+Tracing Effect = _PG_ ( _modulelt_ [:=] _[z]_ [)][(] _[o][true][|]_ [(] _[s, r, o][edit]_ [)] _[ ⊕]_ [(] _[s][′][, r]_ [))] _[−]_ _[P]_ [(] _[o][true][|]_ [(] _[s, r, o][edit]_ [)] _[ ⊕]_ [(] _[s][′][, r]_ [))] _[,]_
+
+where _G_ ( _module_ _[l]_ _t_ [:=] _[ z]_ [)][ denotes the substitution of] _[ z]_ [ for the output of modules at token] _[ t]_ [ in layer] _[ l]_ [.]
+
+
+Prompt token
+First edited subject token
+Middle edited subject token
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+
+Further
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+
+Last
+
+
+Last edited subject token
+
+
+Further token
+Prompt token
+First neighbor subject token
+Middle neighbor subject token
+
+
+Last neighbor subject token
+
+
+Further token
+
+
+0.01
+
+
+0.00
+
+
+0.01
+
+
+0.02
+
+
+0.03
+
+
+Last token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.125
+
+
+0.100
+
+
+0.075
+
+
+0.050
+
+
+0.025
+
+
+0.000
+
+
+0.025
+
+
+Further
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+Last
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.00
+
+
+0.01
+
+
+0.02
+
+
+0.03
+
+
+0.04
+
+
+0.05
+
+
+Figure 3: Visualizing “Contaminating Substitution” when replacing the output of specific modules on
+test prompts of the _Distract Neighborhood_ task with window size 6.
+
+
+As shown in Figure 3, the light-colored areas represent the primary states that lead to incorrect
+answers. We observe that replacing six layers of MLP activations or Attention activations can
+decrease the probability of a correct answer by up to 4.59% and 3.74%, respectively, while the total
+decrease caused by the edited model is 5.26%. As we edit the MLP module in the 5th layer, it is
+expected that the contaminating substitution of MLP activations near the edited layer significantly
+influences the final predictions. However, modifying the middle-upper layers of attention activations
+also has a similar impact on the correct output, suggesting that the primary cause of specificity failure
+is the attention module mishandling the information at the last token due to the edits. The findings
+are consistent on the _Relation_ task, with additional experiments exploring the tracing effects with
+varying window sizes and prediction probability of _oedit_ detailed in Appendix D.1.
+
+
+3.3 IDENTIFYING ATTENTION DRIFT AS A TRIGGER FOR SPECIFICITY FAILURE
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0 1 2 3 4
+�22        _l_ =16 _h_ _[D]_ [KL][(] _[W][l,h]_ _[∥]_ _[W][ ∗]_ _l,h_ [)]
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+0 1 2 3 4 5 6 7
+�23       _l_ =14 _h_ _[D]_ [KL][(] _[W][l,h]_ _[∥]_ _[W][ ∗]_ _l,h_ [)]
+
+
+Figure 4: The correlation between the attention weight drift and _P_ ( _oedit_ ) is positive on _Distract_
+_Neighborhood_ ( _ρ_ = 0 _._ 49; _p_ _<_ 1e _−_ 5) and _Relation_ ( _ρ_ = 0 _._ 62; _p_ _<_ 1e _−_ 5) tasks. The range of _l_
+corresponds to the layers where attention activations have a significant impact on the final results.
+
+
+As mentioned above, attention activations are one of the primary causes of specificity failures.
+Previous studies (Geva et al., 2023; Chen et al., 2024; Geva et al., 2022) have indicated that attention
+modules in the middle-upper layers extract factual attributes during predictions. This suggests that the
+attention module may mistakenly focus on edited information, thereby neglecting other information
+when predicting the final token. Therefore, we quantify the relationship between drift in attention
+weights and failures in the _Distract Neighborhood_ and _Relation_ tasks using the Pearson coefficient.
+Given that the edited model overestimates the probability of the edited objecttrue object _o_ true, we analyze the correlation between [�] - _[D]_ [KL][(] _[W][l,h]_ _l,h_ [)][ and] _o_ edit _[ P]_ relative to the [(] _[o][edit]_ [)][.] [Here,]
+
+_[W][ ∗]_
+
+
+_l_
+
+
+_h_ _[D]_ [KL][(] _[W][l,h]_ _l,h_ [)][ and] _[ P]_ [(] _[o][edit]_ [)][.] [Here,]
+
+_[∥]_ _[W][ ∗]_
+
+
+5
+
+
+_Wl,h_ and _Wl,h_ _[∗]_ [represent the attention weights that the last token attends to previous tokens in layer] _[ l]_
+and head _h_ before and after editing, respectively.
+
+
+Figure 4 shows a positive relationship between the drift in attention weights and the probability of
+the incorrect answer _oedit_, suggesting that incorrect attention on previous information is a key factor
+for specificity failures. To further analyze the attention drift from the perspectives of attended tokens
+and heads, it’s natural to figure out the following two questions:
+
+
+1. The last token incorrectly allocates attention to previous tokens, leading to specificity failures.
+Among these previous tokens, which one has a significant impact when attended incorrectly?
+2. Which has a greater impact on the prediction: the excessive localized attention drift of specific
+heads or the cumulative attention drift across all heads?
+
+
+To address these questions, we calculate the
+Pearson coefficient between various factors and
+_P_ ( _oedit_ ). Table 2 indicates that the Pearson
+coefficient for drift on the last token of the
+edited subject _s_ is higher compared to other tokens (Equation 1 vs Equation 2). Furthermore,
+the largest drift in attention weights among
+heads impacts the final result more than the cumulative drift across all heads (Equation 1 vs
+Equation 2), suggesting that the excessive attention of certain heads to the last subject token
+primarily triggers specificity failure.
+
+
+Table 2: Linear correlation between factors related
+to attention weights and _P_ ( _oedit_ ) with _p <_ 10 _[−]_ [5] .
+
+
+**Tasks** **Factors** _ρ_
+
+
+_Distract_
+_Neighborhood_
+
+
+_Relation_
+
+
+1. [�] _l_ [max] _[h]_ _[W][l,h]_ [[] _[s]_ []] _[ −]_ _[W]_ _l,h_ _[ ∗]_ [[] _[s]_ []] 0.55
+2. [�] _l_ [max] _[h]_ _[∥][W][l,h]_ [[] _[\][s]_ []] _[ −]_ _[W]_ _l,h_ _[ ∗]_ [[] _[\][s]_ []] _[∥]_ 0.49
+3. [�] _l_ - _h_ _[W][l,h]_ [[] _[s]_ []] _[ −]_ _[W]_ _l,h_ _[ ∗]_ [[] _[s]_ []] 0.43
+
+1. [�] _l_ [max] _[h]_ _[W][l,h]_ [[] _[s]_ []] _[ −]_ _[W]_ _l,h_ _[ ∗]_ [[] _[s]_ []] 0.53
+2. [�] _l_ [max] _[h]_ _[∥][W][l,h]_ [[] _[\][s]_ []] _[ −]_ _[W]_ _l,h_ _[ ∗]_ [[] _[\][s]_ []] _[∥]_ 0.42
+3. [�] _l_ - _h_ _[W][l,h]_ [[] _[s]_ []] _[ −]_ _[W]_ _l,h_ _[ ∗]_ [[] _[s]_ []] 0.50
+
+
+3.4 MITIGATING SPECIFICITY FAILURE BY PATCHING ATTENTION DRIFT
+
+
+To further verify the significant impact of attention drift on specificity failure, we quantify the change
+in prediction probability after patching attention weights across various layers. We first conduct a
+forward pass using the vanilla model with prompts from the specificity tasks and store the intermediate
+attention weights. Then, we test the edited model on the same prompts, substituting its attention
+weights with those previously stored.
+
+
+Figure 5: Impact of patching attention weights within a window size of 10 on the specificity tasks in
+the edited model. The performance of the original edited model is represented on the 0-th layer.
+
+
+We find patching attention weights in middle-upper layers can lead to significant improvements in
+specificity tasks. As shown in Figure 5, patching attention weights in 10 consecutive layers result
+in a relative increase of 28.6% and 739.2% in the probability of the correct answer _P_ ( _otrue_ ), and
+a decrease of 54.0% and 89.6% in the probability of the wrong answer _P_ ( _oedit_ ) for two specificity
+tasks, respectively. This shows preventing attention drift can effectively mitigate specificity failure.
+
+
+3.5 TAKEAWAYS
+
+
+Based on the analysis mentioned above, we can conclude that: **(1)** the attention activations at the last
+token position significantly contaminate the forward pass of the edited model, causing specificity
+
+
+6
+
+
+failures; **(2)** the max attention drift at the edited token position among heads is a primary trigger for
+the incorrect output _oedit_, and **(3)** patching attention drift can largely mitigate the specificity failure.
+
+
+4 SELECTIVELY RESTRAINING ATTENTION DRIFT DURING KNOWLEDGE
+EDITING
+
+
+As mentioned in Section 2.2, the optimized value _v∗_ for knowledge editing can be obtained through
+gradient descent based on the following objective:
+
+
++ _ωD_ KL - _P_ ( _x | p_ _[′]_ )�� _PG_ ( _m_ ( _i_ _[′]_ _l∗_ ):= _z_ ) [(] _[x][ |][ p][′]_ [)] 
+~~�~~ ~~��~~  (b) Controlling essence drift
+
+
+( _z_ ) = [1]
+_L_ _N_
+
+
+- _N_
+
+_j_ =1 ~~�~~ _−_ log _PG_ ( _m_ ( _il_ _[∗]_ ):= ~~�~~ _z_ �) [(] _[o][edit]_ _[|][ x][j]_ [+] _[ p]_ [)] ~~�~~
+(a) Maximizing _oedit_ probability
+
+
+_._
+
+
+(1)
+
+
+However, this objective may cause attention drift that leads to Specificity Failure. To enhance
+specificity in knowledge editing when optimizing _v_ _[∗]_, we introduce the **S** elective **A** ttention **D** rift
+**R** estriction ( **SADR** ), which is a regularization term based on Equation 1. It is worth noting that
+SADR dynamically applies constraints to different heads as needed since Transformer models contain
+various knowledge-specific attention heads (Wang et al., 2022; Geva et al., 2023) that capture different
+factual associations. Additionally, SADR is a simple yet efficient method and can be flexibly adapted
+across various editing methods.
+
+
+More concretely, as excessive attention to the edited subject of certain heads is strongly correlated
+with Specificity Failures, we apply SADR on heads where the last token overly focuses on the edited
+subject. We determine which heads to restrain by the following criterion: **a head is selected if the**
+**attention weight attending to the subject’s last token exceeds the maximum attention weight**
+**among all heads in the vanilla model** .
+
+
+Let _Wl,h_ ( _S_ ) be the attention weight from layer _l_ and head _h_ when processing the prompt _S_,
+
+_Wl,hG_ ( _mi_ [(] _[l][∗]_ [)] := _z_ )( _S_ ) be the attention weight from the model that is edited with _z_, and _Ml_ ( _S_ ) =
+max _h Wl,h_ ( _S_ )[ _−_ 1 _, s_ ] be the maximum attention weight that the last token attends to the edited
+subject _s_ among all heads at layer _l_ in the vanilla model. The objective of SADR can be written as:
+
+
+_l_
+
+
+ 
+_D_ KL
+
+_h∈Hl_ ( _Sj_ )
+
+
+- _Wl,h_ ( _Sj_ )[ 1 _,_ :]�� _Wl,hG_ ( _m_ [(] _i_ _[l][∗]_ [)] := _z_ )( _Sj_ )[ 1 _,_ :] _,_ (2)
+
+_−_ _−_
+
+
+_LSADR_ ( _z_ ) = _N_ [1]
+
+
+- _N_
+
+
+_j_ =1
+
+
+where _Hl_ ( _Sj_ ) = _h_ : _Wl,hG_ ( _m_ [(] _i_ _[l][∗]_ [)] := _z_ )( _Sj_ )[ 1 _, s_ ] _> Ml_ ( _Sj_ ) and _Sj_ = _xj_ ( _s, r_ ).
+_{_ _−_ _}_ _⊕_
+
+Thus, the optimized value _v∗_ can be obtained by: _v∗_ = arg min ( ( _z_ ) + _γ_ _SADR_ ( _z_ )), where _γ_ is
+_L_ _L_
+the controlling weight.
+
+
+5 EXPERIMENTS
+
+
+5.1 SETTINGS
+
+
+**Dataset** Due to the limited availability of datasets that satisfy the required fields for our tasks, we
+combine COUNTERFACT (Meng et al., 2022) and WikiData _counterfact_ (Zhang et al., 2024a) with
+1,683 factual statements as the testing data. The processing details are mentioned in Appendix C.1.
+Additionally, we extend our experiments to broader datasets, including QA-format and recent
+knowledge editing tasks, as detailed in Appendix E.3. The phenomena of Specificity Failure and the
+performance of SADR remain consistent across these datasets.
+
+
+**Baselines & Models** We evaluate the performance of our methods on three mainstream locatethen-edit knowledge editing baselines: ROME (Meng et al., 2022), MEMIT (Meng et al., 2023), and
+PMET (Li et al., 2024). Specifically, we focus on knowledge editing with one factual association
+for all the baselines. We implement our SADR method across three editing baselines on the GPT-J6b (Wang & Komatsuzaki, 2021), Llama3-8b (AI@Meta, 2024) and GPT-NeoX-20b (Black et al.,
+
+
+7
+
+
+2022) models. In Appendix E.1 and E.2, we also conduct SADR on more model variants and editing
+methods, including parameter-preserving and meta-learning approaches. More details about baseline
+methods and our implementations can be found in Appendix C.2.
+
+
+**Metrics** Apart from the metrics mentioned in Section 2.1, we utilize Fluency Score (FL) (Meng
+et al., 2022) to evaluate the generation ability of the edited model with prompts related to the edited
+subject, which is computed by the weighted mean of _bi_ -gram and _tri_ -gram entropies. Results closer
+to that of the vanilla model indicate better performance. To further test the generalization–specificity
+tradeoff, we report the harmonic mean of ES, PS, NS, RS, and DNS as the average score (Avg. S).
+We also test the model’s commonsense reasoning abilities and its perplexity in language modeling,
+with results reported in the Appendix E.1.
+
+
+5.2 MAIN RESULTS
+
+
+Table 3: Results of our methods across three edit methods. The values for the 95% confidence
+intervals are displayed in parentheses. **Bold** number indicates better performance and **Green** number
+indicates a significantly better score with more than 50% relative improvement.
+
+
+**Model** **Editor** **Score** **Rewrite** **Generalization** **Specificity** **Fluency**
+
+
+GPT-J
+(6b)
+
+
+Llama3
+(8b)
+
+
+GPT-NeoX
+(20b)
+
+
+Avg. S _↑_ ES _↑_ PS _↑_ NS _↑_ RS _↑_ DNS _↑_ FL
+
+None 34.43 20.86(2.0) 17.70(1.8) 82.43(1.0) 79.73(2.1) 61.99(1.3) 621.96(0.9)
+
+
+ROME 33.56 **99.88(0.2)** **99.58(0.3)** 80.26(1.0) 11.94(1.7) 30.42(1.2) 620.58(1.2)
++ ours **57.74** 99.76(0.2) 96.36(0.9) **80.86(1.0)** **27.75(2.3)** **49.35(1.3)** **623.00(1.0)**
+
+
+MEMIT 51.07 **99.64(0.3)** **95.47(1.0)** 81.42(1.0) 25.78(2.3) 38.00(1.2) **622.71(1.0)**
++ours **60.23** 99.52(0.3) 93.21(1.2) **81.44(1.0)** **34.68(2.5)** **47.35(1.3)** 623.60(0.9)
+
+
+PMET 52.98 **99.40(0.4)** **92.67(1.3)** **81.49(1.0)** 27.68(2.3) 39.79(1.3) 621.18(1.1)
++ours **59.06** 99.11(0.5) 89.09(1.5) 81.44(1.0) **33.33(2.5)** **47.47(1.3)** **622.18(1.0)**
+
+
+None 19.99 9.36(1.4) 9.48(1.4) 87.17(0.9) 92.66(1.4) 64.25(1.2) 617.19(1.3)
+
+
+ROME 58.54 **99.88(0.2)** **99.52(0.3)** 82.19(1.0) 29.38(2.4) 52.21(1.3) **617.23(1.8)**
++ ours **70.99** 99.82(0.2) 96.90(0.8) **83.18(1.0)** **47.67(2.6)** **58.51(1.3)** 618.39(1.7)
+
+
+MEMIT 40.90 **99.94(0.1)** **99.52(0.3)** 82.52(1.0) 17.44(2.0) 30.55(1.2) 605.99(4.3)
++ours **63.12** 99.82(0.2) 98.87(0.5) **82.96(1.0)** **35.38(2.5)** **45.57(1.3)** **618.38(1.9)**
+
+
+PMET 43.87 **99.58(0.3)** **99.40(0.4)** 81.10(1.0) 19.84(2.1) 32.12(1.2) 610.65(3.4)
++ours **61.88** 99.28(0.4) 97.02(0.8) **82.86(1.0)** **34.68(2.5)** **51.22(1.3)** **617.91(1.6)**
+
+
+None 31.87 17.04(1.8) 17.64(1.8) 80.62(1.0) 83.76(1.9) 58.34(1.3) 619.25(0.9)
+
+
+ROME 23.45 **99.94(0.1)** **98.75(0.5)** 72.67(1.1) 15.11(1.9) 8.84(0.7) 579.82(6.6)
++ ours **54.81** 99.76(0.2) 96.13(0.9) **73.96(1.1)** **34.89(2.5)** **34.95(1.2)** **619.54(1.1)**
+
+
+MEMIT 40.32 **99.88(0.2)** **90.46(1.4)** **77.45(1.1)** 35.24(2.5) 16.22(0.9) 615.19(2.2)
++ours **45.26** 97.38(0.8) 89.21(1.5) **77.45(1.1)** **45.48(2.6)** **18.49(1.0)** **621.59(0.8)**
+
+
+PMET 19.97 **99.52(0.3)** **95.23(1.0)** 74.18(1.1) 12.29(1.7) 7.41(0.7) 510.25(9.8)
++ours **31.16** 99.40(0.4) 93.09(1.2) **75.33(1.1)** **24.86(2.3)** **11.61(0.8)** **589.76(5.5)**
+
+
+**Specificity Failure is prevalent in existing knowledge editing methods.** As shown in Table 4, the
+_Relation_ and _Distract Neighborhood_ tasks exhibit a significant decline across all editing methods,
+even though these methods perform edits at different layers and modules. Specifically, in the _Relation_
+task, the accuracy of all edited models drops to less than half of their original performance. This
+indicates that specificity failure is a widespread and severe issue in knowledge editing.
+
+
+**SADR significantly mitigates Specificity Failure.** In the _Relation_ and _Distract Neighborhood_
+tasks, SADR consistently improves the specificity across all editing methods. Notably, in over half of
+the setups, our method enhances the original specificity metrics by more than 50% (marked in green).
+SADR also stabilizes the performance in the _Neighborhood_ task and the _Fluency_ of generated text,
+e.g., when using SADR on ROME and PMET with GPT-NeoX, the _Fluency_ score is significantly
+improved. SADR can also achieve better performance on TinyLlama-1.1b (Zhang et al., 2024b) and
+Llama2-13b (Touvron et al., 2023) compared with baselines, indicating that our method is effective
+across models with various sizes and knowledge densities. We provide more detailed results in
+Appendix E.1 and report the human evaluation results in Appendix E.4.
+
+
+8
+
+
+**SADR has minimal impact on edit success rates.** SADR results in less than a 3% decrease in
+performance on the _Rewrite_ and _Generation_ tasks. It is important to note that significantly mitigating
+specificity failure while fully preserving rewrite and generalization performance is quiet difficult. This
+is because in many previous model editing evaluation frameworks, the specificity failure highlighted
+in our paper is often overlooked. As a result, prior methods tend to prioritize generalization and
+rewrite scores, neglecting the risks of specificity failure. Under such evaluation criteria, high scores
+can be achieved by simply identifying the subject and greedily predicting the object, even if the
+relationship between them is completely ignored.
+
+
+We believe that ensuring stable knowledge editing is more important than achieving nearly 100%
+accuracy in generalization. In real-world scenarios, methods that achieve 97% generalization with
+stable and safe edits are often more acceptable than those with 100% generalization but significant
+specificity failures (e.g., severe knowledge errors caused by attention drift after editing the subject).
+Furthermore, while addressing specificity failure without compromising generalization is challenging,
+we demonstrate a better balance between these two aspects in Section 6.2.
+
+
+6 ABLATION STUDY
+
+
+6.1 EFFECT OF RESTRAINING HEADS SELECTION
+
+
+We first explore the effects of selectively restraining heads that exhibit significant attention
+drift compared to restraining all heads across
+various control weights _γ_ on ROME with GPTJ. Edit Success is quantified by the average of
+_PS_ and _ES_, while Specificity is calculated as
+the average of _NS_, _RS_, and _DNS_ . As shown in
+Figure 6, selectively restraining heads that overfocus on the edited token outperforms restraining all heads on both the Edit Success and Specificity across different _γ_ settings. This suggests
+that not all drift in attention is harmful; rather,
+it is excessive attention compared to the vanilla
+model that should be addressed.
+
+
+98.5
+
+
+98.0
+
+
+97.5
+
+
+97.0
+
+
+52.5
+
+
+52.0
+
+
+51.5
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|w/ head|selection|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|||||||||||
+||||||||~~w/o he~~|~~ d selecti~~|~~  n~~|
+|||||||||||
+|||||||||||
+|||||||||||
+
+
+51.0
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+||||~~w/ he~~<br>w/o h|~~ ad selec~~<br> ead sele|~~ tion~~<br> ction|||||
+|||||||||||
+
+
+Figure 6: Impact of selective head restriction on
+Edit Success and Specificity performance
+
+
+6.2 TRADE-OFF BETWEEN GENERALIZATION AND SPECIFICITY
+
+
+different with ADR different steps different learning rate different
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+Edit Success
+
+
+15.0
+
+14.5
+
+14.0
+
+13.5
+
+13.0
+
+12.5
+
+12.0
+
+11.5
+
+
+6.5
+
+6.0
+
+5.5
+
+5.0
+
+4.5
+
+4.0
+
+3.5
+
+3.0
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+Edit Success
+
+
+Figure 7: Analysis of trade-offs by adjusting different hyperparameters.
+
+
+Knowledge editing methods present a trade-off between Edit Success and Specificity, which can be
+visualized through adjustments in hyperparameters such as optimization steps, learning rate, and _ω_
+which controlling the essence drift. We analyze the trade-off of our method by varying _γ_ and compare
+it with the trade-offs from adjusting other hyperparameters in the original ROME on GPT-J. As
+changes are more clear on _P_ ( _oedit_ ) than the proportion of cases which _P_ ( _oedit_ ) _> P_ ( _otrue_ ), we use
+the average of _EM_ and _PM_ to measure Edit Success and apply _RM_ and _DNM_ for evaluating _Relation_
+and _Distract Neighborhood_ task, respectively. Further details are illustrated in Appendix C.3.
+
+
+9
+
+
+Figure 7 shows that our method exhibits a superior trade-off compared to the adjustments of hyperparameters in the original ROME method, indicating that **SADR** can obtain _v_ _[∗]_ that enable the model to
+more effectively distinguish when to output the edited knowledge.
+
+
+7 RELATED WORK
+
+
+**Knowledge** **editing.** The field of knowledge editing has recently emerged, aiming to modify
+model knowledge at a low cost without adversely affecting performance. The methods can be
+categorized into three main paradigms: parameter-preserving, locate-then-edit, and meta-learning
+approaches (Yao et al., 2023; Wang et al., 2023; Mazzia et al., 2023). Parameter-preserving methods
+explicitly store modified knowledge in memory and use techniques such as classifiers (Mitchell et al.,
+2022), prompt engineering (Madaan et al., 2022; Zhong et al., 2023; Zheng et al., 2023), or external
+parameters (Dong et al., 2022; Huang et al., 2023; Hartvigsen et al., 2024; Wang et al., 2024b) to
+retrieve the knowledge. locate-then-edit methods update specific parameters by identifying where the
+targeted knowledge is stored and directly editing those locations (Meng et al., 2022; 2023; Li et al.,
+2024; Ma et al., 2023). Meta-learning approaches involve training a hypernetwork to edit the model’s
+knowledge parameters (Mitchell et al., 2021; Tan et al., 2023).
+
+
+Despite the promising prospects of knowledge editing, significant challenges remain in specificity and
+generalization. Editing specific pieces of knowledge can lead to ripple effects within the knowledge
+graph (Wang et al., 2024a; Cohen et al., 2024), but the edited model may be prone to under-editing (Li
+et al., 2023d; Pinter & Elhadad, 2023) or over-editing (Li et al., 2023c) in response to these changes.
+Recent works (Gu et al., 2024; Hazra et al., 2024; Yang et al., 2024b) also find that knowledge
+editing may impair general abilities as the number of edits increases. While an ideal edited model
+should generalize the impacts of edits within a knowledge graph and safely conduct large-scale
+modifications, Hoelscher-Obermaier et al. (2023) and Rosati et al. (2024) identify a more pressing
+issue in knowledge editing: the performance of the model drops dramatically when the edited subject
+or sentence appears in the context. This motivates us to focus on this issue in the current paper.
+
+
+**Mechanisms of Factual Associations in Transformers.** Transformer (Vaswani et al., 2017) is
+the most commonly used architecture for large language models, achieving remarkable performance
+attributed to the vast amount of knowledge stored in its parameters (Petroni et al., 2019; Roberts
+et al., 2020; Cao et al., 2023). Significant efforts have been made to uncover the mechanism of how
+transformers memorize and retrieve knowledge during training and inference. Geva et al. (2021) view
+the FFN layers as the primary module that stores knowledge in a key-value format. Dai et al. (2021)
+and Geva et al. (2022) explore the manipulation of factual associations by intensifying or attenuating
+the values in the activated outputs of the first FFN layer. Meng et al. (2022) employ causal tracing
+to demonstrate the crucial role that early MLP layers play in factual recall. Hase et al. (2023) find
+that editing on layers where knowledge is not primarily stored can also achieve a high success rate,
+indicating that it is possible to “override” the information in layer _l_ with an edit to another layer _k_ .
+Additionally, Hao et al. (2021) find that the self-attention module performs attribute extraction during
+factual association recall. Building on the knowledge recall mechanisms identified in previous works,
+we explore the reasons behind Specificity Failure and design our approach to mitigate attention drift.
+
+
+8 CONCLUSION
+
+
+In this paper, we explore and mitigate the limitations of current knowledge editing methods in Large
+Language Models (LLMs) when the edited content is present in the context. Our investigations reveal
+the **Specificity Failure** issue that the attention mechanisms in these models overly focus on the edited
+entities, leading to a neglect of other relevant information in the context. Based on the preliminary
+study, such a Specificity Failure issue stems from the **Attention Drift** phenomenon: the edited model
+assigns excessive attention scores to the entities related to the edited knowledge, thereby overly
+concentrating on specific snippets within the context. Thus, based on the previous knowledge editing
+methods, we propose the **S** elective **A** ttention **D** rift **R** estriction ( **SADR** ) method, which introduces a
+regularization term during the editing process, dynamically constraining the weight of partial selected
+attention heads and preventing excessive focus on the edited entities. Our experiment indicates that
+SADR can significantly reduce Specificity Failures while preserving high rates of editing success.
+
+
+10
+
+
+REPRODUCIBILITY STATEMENT
+
+
+Our work is based on open-source models and datasets. In Section 5 and Appendix C, we provide
+detailed descriptions of data processing, method implementation, and ablation experiments. Additionally, in the supplementary materials, we include the complete code for our method as well as the
+processed datasets.
+
+
+ACKNOWLEDGMENTS
+
+
+We want to thank all the anonymous reviewers for their valuable comments. This work was supported
+by the National Science Foundation of China (NSFC No. 62206194), the Natural Science Foundation
+of Jiangsu Province, China (Grant No. BK20220488), the Young Elite Scientists Sponsorship
+Program by CAST (2023QNRC001), and the Priority Academic Program Development of Jiangsu
+Higher Education Institutions.
+
+
+REFERENCES
+
+
+AI@Meta. Llama 3 model card. 2024. [URL https://github.com/meta-llama/llama3/](https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md)
+[blob/main/MODEL_CARD.md.](https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md)
+
+
+Vidhisha Balachandran, Hannaneh Hajishirzi, William Cohen, and Yulia Tsvetkov. Correcting diverse
+factual errors in abstractive summarization via post-editing and language model infilling. In
+_Empirical Methods in Natural Language Processing_, 2022.
+
+
+Yonatan Bisk, Rowan Zellers, Jianfeng Gao, Yejin Choi, et al. Piqa: Reasoning about physical
+commonsense in natural language. In _Proceedings of the AAAI conference on artificial intelligence_,
+volume 34, pp. 7432–7439, 2020.
+
+
+Sidney Black, Stella Biderman, Eric Hallahan, Quentin Anthony, Leo Gao, Laurence Golding,
+Horace He, Connor Leahy, Kyle McDonell, Jason Phang, Michael Pieler, Usvsn Sai Prashanth,
+Shivanshu Purohit, Laria Reynolds, Jonathan Tow, Ben Wang, and Samuel Weinbach. GPT-NeoX20B: An open-source autoregressive language model. In Angela Fan, Suzana Ilic, Thomas Wolf,
+and Matthias Gallé (eds.), _Proceedings_ _of_ _BigScience_ _Episode_ _#5_ _–_ _Workshop_ _on_ _Challenges_
+_&_ _Perspectives_ _in_ _Creating_ _Large_ _Language_ _Models_, pp. 95–136, virtual+Dublin, May 2022.
+Association for Computational Linguistics. doi: 10.18653/v1/2022.bigscience-1.9. [URL https:](https://aclanthology.org/2022.bigscience-1.9)
+[//aclanthology.org/2022.bigscience-1.9.](https://aclanthology.org/2022.bigscience-1.9)
+
+
+Boxi Cao, Qiaoyu Tang, Hongyu Lin, Xianpei Han, Jiawei Chen, Tianshu Wang, and Le Sun.
+Retentive or forgetful? diving into the knowledge memorizing mechanism of language models.
+_arXiv preprint arXiv:2305.09144_, 2023.
+
+
+Yuheng Chen, Pengfei Cao, Yubo Chen, Kang Liu, and Jun Zhao. Journey to the center of the
+knowledge neurons: Discoveries of language-independent knowledge neurons and degenerate
+knowledge neurons. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 38,
+pp. 17817–17825, 2024.
+
+
+Roi Cohen, Eden Biran, Ori Yoran, Amir Globerson, and Mor Geva. Evaluating the ripple effects
+of knowledge editing in language models. _Transactions_ _of_ _the Association_ _for_ _Computational_
+_Linguistics_, 12:283–298, 2024.
+
+
+Damai Dai, Li Dong, Yaru Hao, Zhifang Sui, Baobao Chang, and Furu Wei. Knowledge neurons in
+pretrained transformers. _arXiv preprint arXiv:2104.08696_, 2021.
+
+
+Qingxiu Dong, Damai Dai, Yifan Song, Jingjing Xu, Zhifang Sui, and Lei Li. Calibrating factual
+knowledge in pretrained language models. In _Findings_ _of_ _the_ _Association_ _for_ _Computational_
+_Linguistics:_ _EMNLP 2022_, pp. 5937–5947, 2022.
+
+
+Junfeng Fang, Houcheng Jiang, Kun Wang, Yunshan Ma, Xiang Wang, Xiangnan He, and Tat-seng
+Chua. Alphaedit: Null-space constrained knowledge editing for language models. _arXiv preprint_
+_arXiv:2410.02355_, 2024.
+
+
+11
+
+
+Mor Geva, Roei Schuster, Jonathan Berant, and Omer Levy. Transformer feed-forward layers are
+key-value memories. In _Proceedings of the 2021 Conference on Empirical Methods in Natural_
+_Language Processing_, pp. 5484–5495, 2021.
+
+
+Mor Geva, Avi Caciularu, Kevin Wang, and Yoav Goldberg. Transformer feed-forward layers build
+predictions by promoting concepts in the vocabulary space. In _Proceedings of the 2022 Conference_
+_on Empirical Methods in Natural Language Processing_, pp. 30–45, 2022.
+
+
+Mor Geva, Jasmijn Bastings, Katja Filippova, and Amir Globerson. Dissecting recall of factual
+associations in auto-regressive language models. _arXiv preprint arXiv:2304.14767_, 2023.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023.
+
+
+Jia-Chen Gu, Hao-Xiang Xu, Jun-Yu Ma, Pan Lu, Zhen-Hua Ling, Kai-Wei Chang, and Nanyun Peng.
+Model editing can hurt general abilities of large language models. _arXiv preprint arXiv:2401.04700_,
+2024.
+
+
+Yaru Hao, Li Dong, Furu Wei, and Ke Xu. Self-attention attribution: Interpreting information
+interactions inside transformer. In _Proceedings of the AAAI Conference on Artificial Intelligence_,
+volume 35, pp. 12963–12971, 2021.
+
+
+Tom Hartvigsen, Swami Sankaranarayanan, Hamid Palangi, Yoon Kim, and Marzyeh Ghassemi.
+Aging with grace: Lifelong model editing with discrete key-value adaptors. _Advances in Neural_
+_Information Processing Systems_, 36, 2024.
+
+
+Peter Hase, Mohit Bansal, Been Kim, and Asma Ghandeharioun. Does localization inform editing? surprising differences in causality-based localization vs. knowledge editing in language
+models. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine (eds.),
+_Advances in Neural Information Processing Systems_, volume 36, pp. 17643–17668. Curran Associates, Inc., 2023. [URL https://proceedings.neurips.cc/paper_files/paper/](https://proceedings.neurips.cc/paper_files/paper/2023/file/3927bbdcf0e8d1fa8aa23c26f358a281-Paper-Conference.pdf)
+[2023/file/3927bbdcf0e8d1fa8aa23c26f358a281-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2023/file/3927bbdcf0e8d1fa8aa23c26f358a281-Paper-Conference.pdf)
+
+
+Rima Hazra, Sayan Layek, Somnath Banerjee, and Soujanya Poria. Sowing the wind, reaping the
+whirlwind: The impact of editing language models. _arXiv preprint arXiv:2401.10647_, 2024.
+
+
+Jason Hoelscher-Obermaier, Julia Persson, Esben Kran, Ioannis Konstas, and Fazl Barez. Detecting
+edit failures in large language models: An improved specificity benchmark. _arXiv_ _preprint_
+_arXiv:2305.17553_, 2023.
+
+
+Zeyu Huang, Yikang Shen, Xiaofeng Zhang, Jie Zhou, Wenge Rong, and Zhang Xiong. Transformerpatcher: One mistake worth one neuron. _arXiv preprint arXiv:2301.09785_, 2023.
+
+
+James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A
+Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming
+catastrophic forgetting in neural networks. _Proceedings of the national academy of sciences_, 114
+(13):3521–3526, 2017.
+
+
+Haoran Li, Dadi Guo, Wei Fan, Mingshi Xu, Jie Huang, Fanpu Meng, and Yangqiu Song. Multistep jailbreaking privacy attacks on chatgpt. In _Findings of the Association for Computational_
+_Linguistics:_ _EMNLP 2023_, pp. 4138–4153, 2023a.
+
+
+Jiahang Li, Taoyu Chen, and Yuanli Wang. Trace and edit relation associations in gpt. _arXiv preprint_
+_arXiv:2401.02976_, 2023b.
+
+
+Xiaopeng Li, Shasha Li, Shezheng Song, Jing Yang, Jun Ma, and Jie Yu. Pmet: Precise model editing
+in a transformer. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 38, pp.
+18564–18572, 2024.
+
+
+Zhoubo Li, Ningyu Zhang, Yunzhi Yao, Mengru Wang, Xi Chen, and Huajun Chen. Unveiling the
+pitfalls of knowledge editing for large language models. _arXiv preprint arXiv:2310.02129_, 2023c.
+
+
+12
+
+
+Zichao Li, Ines Arous, Siva Reddy, and Jackie Chi Kit Cheung. Evaluating dependencies in fact
+editing for language models: Specificity and implication awareness. In _Findings of the Association_
+_for Computational Linguistics:_ _EMNLP 2023_, pp. 7623–7636, 2023d.
+
+
+Ang Lv, Kaiyi Zhang, Yuhan Chen, Yulong Wang, Lifeng Liu, Ji-Rong Wen, Jian Xie, and Rui
+Yan. Interpreting key mechanisms of factual recall in transformer-based language models. _arXiv_
+_preprint arXiv:2403.19521_, 2024.
+
+
+Jun-Yu Ma, Jia-Chen Gu, Zhen-Hua Ling, Quan Liu, and Cong Liu. Untying the reversal curse via
+bidirectional language model editing. _arXiv preprint arXiv:2310.10322_, 2023.
+
+
+Jun-Yu Ma, Hong Wang, Hao-Xiang Xu, Zhen-Hua Ling, and Jia-Chen Gu. Perturbation-restrained
+sequential model editing, 2024. _URL https://arxiv. org/abs/2405.16821_, 2024.
+
+
+Aman Madaan, Niket Tandon, Peter Clark, and Yiming Yang. Memory-assisted prompt editing to
+improve gpt-3 after deployment. In _Proceedings of the 2022 Conference on Empirical Methods in_
+_Natural Language Processing_, pp. 2833–2861, 2022.
+
+
+Vittorio Mazzia, Alessandro Pedrani, Andrea Caciolai, Kay Rottmann, and Davide Bernardi. A
+survey on knowledge editing of neural networks. _arXiv preprint arXiv:2310.19704_, 2023.
+
+
+Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. Locating and editing factual
+associations in gpt. _Advances in Neural Information Processing Systems_, 35:17359–17372, 2022.
+
+
+Kevin Meng, Arnab Sen Sharma, Alex J Andonian, Yonatan Belinkov, and David Bau. Mass-editing
+memory in a transformer. In _The Eleventh International Conference on Learning Representations_,
+2023. [URL https://openreview.net/forum?id=MkbcAHIYgyS.](https://openreview.net/forum?id=MkbcAHIYgyS)
+
+
+Eric Mitchell, Charles Lin, Antoine Bosselut, Chelsea Finn, and Christopher D Manning. Fast model
+editing at scale. _arXiv preprint arXiv:2110.11309_, 2021.
+
+
+Eric Mitchell, Charles Lin, Antoine Bosselut, Christopher D Manning, and Chelsea Finn. Memorybased model editing at scale. In _International Conference on Machine Learning_, pp. 15817–15831.
+PMLR, 2022.
+
+
+Jinjie Ni, Tom Young, Vlad Pandelea, Fuzhao Xue, and Erik Cambria. Recent advances in deep
+learning based dialogue systems: A systematic survey. _Artificial_ _intelligence_ _review_, 56(4):
+3055–3155, 2023.
+
+
+Fabio Petroni, Tim Rocktäschel, Sebastian Riedel, Patrick Lewis, Anton Bakhtin, Yuxiang Wu, and
+Alexander Miller. Language models as knowledge bases? In _Proceedings of the 2019 Conference_
+_on Empirical Methods in Natural Language Processing and the 9th International Joint Conference_
+_on Natural Language Processing (EMNLP-IJCNLP)_, pp. 2463–2473, 2019.
+
+
+Yuval Pinter and Michael Elhadad. Emptying the ocean with a spoon: Should we edit models? In
+_Findings of the Association for Computational Linguistics:_ _EMNLP 2023_, pp. 15164–15172, 2023.
+
+
+Adam Roberts, Colin Raffel, and Noam Shazeer. How much knowledge can you pack into the
+parameters of a language model? _arXiv preprint arXiv:2002.08910_, 2020.
+
+
+Domenic Rosati, Robie Gonzales, Jinkun Chen, Xuemin Yu, Melis Erkan, Yahya Kayani,
+Satya Deepika Chavatapalli, Frank Rudzicz, and Hassan Sajjad. Long-form evaluation of model
+editing. _arXiv preprint arXiv:2402.09394_, 2024.
+
+
+Chenmien Tan, Ge Zhang, and Jie Fu. Massive editing for large language models via meta learning.
+_arXiv preprint arXiv:2311.04661_, 2023.
+
+
+Zecheng Tang, Keyan Zhou, Pinzheng Wang, Yuyang Ding, Juntao Li, et al. Detoxify language
+model step-by-step. _arXiv preprint arXiv:2308.08295_, 2023.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay
+Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation
+and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+13
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing_
+_systems_, 30, 2017.
+
+
+Ben Wang and Aran Komatsuzaki. GPT-J-6B: A 6 Billion Parameter Autoregressive Language Model.
+[https://github.com/kingoflolz/mesh-transformer-jax, May 2021.](https://github.com/kingoflolz/mesh-transformer-jax)
+
+
+Jianchen Wang, Zhouhong Gu, Zhuozhi Xiong, Hongwei Feng, and Yanghua Xiao. The missing
+piece in model editing: A deep dive into the hidden damage brought by model editing. _arXiv_
+_preprint arXiv:2403.07825_, 2024a.
+
+
+Kevin Wang, Alexandre Variengien, Arthur Conmy, Buck Shlegeris, and Jacob Steinhardt. Interpretability in the wild: a circuit for indirect object identification in gpt-2 small. _arXiv preprint_
+_arXiv:2211.00593_, 2022.
+
+
+Peng Wang, Zexi Li, Ningyu Zhang, Ziwen Xu, Yunzhi Yao, Yong Jiang, Pengjun Xie, Fei Huang,
+and Huajun Chen. Wise: Rethinking the knowledge memory for lifelong model editing of large
+language models. _arXiv preprint arXiv:2405.14768_, 2024b.
+
+
+Song Wang, Yaochen Zhu, Haochen Liu, Zaiyi Zheng, Chen Chen, and Jundong Li. Knowledge
+editing for large language models: A survey. _ACM Computing Surveys_, 2023.
+
+
+Jingfeng Yang, Hongye Jin, Ruixiang Tang, Xiaotian Han, Qizhang Feng, Haoming Jiang, Shaochen
+Zhong, Bing Yin, and Xia Hu. Harnessing the power of llms in practice: A survey on chatgpt and
+beyond. _ACM Transactions on Knowledge Discovery from Data_, 18(6):1–32, 2024a.
+
+
+Wanli Yang, Fei Sun, Xinyu Ma, Xun Liu, Dawei Yin, and Xueqi Cheng. The butterfly effect of model
+editing: Few edits can trigger large language models collapse. _arXiv preprint arXiv:2402.09656_,
+2024b.
+
+
+Yunzhi Yao, Peng Wang, Bozhong Tian, Siyuan Cheng, Zhoubo Li, Shumin Deng, Huajun Chen,
+and Ningyu Zhang. Editing large language models: Problems, methods, and opportunities. In
+_Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing_, pp.
+10222–10240, 2023.
+
+
+Yunzhi Yao, Ningyu Zhang, Zekun Xi, Mengru Wang, Ziwen Xu, Shumin Deng, and Huajun Chen.
+Knowledge circuits in pretrained transformers. _arXiv preprint arXiv:2405.17969_, 2024.
+
+
+Ningyu Zhang, Yunzhi Yao, Bozhong Tian, Peng Wang, Shumin Deng, Mengru Wang, Zekun Xi,
+Shengyu Mao, Jintian Zhang, Yuansheng Ni, et al. A comprehensive study of knowledge editing
+for large language models. _arXiv preprint arXiv:2401.01286_, 2024a.
+
+
+Peiyuan Zhang, Guangtao Zeng, Tianduo Wang, and Wei Lu. Tinyllama: An open-source small
+language model. _arXiv preprint arXiv:2401.02385_, 2024b.
+
+
+Ce Zheng, Lei Li, Qingxiu Dong, Yuxuan Fan, Zhiyong Wu, Jingjing Xu, and Baobao Chang. Can
+we edit factual knowledge by in-context learning? In _Proceedings of the 2023 Conference on_
+_Empirical Methods in Natural Language Processing_, pp. 4862–4876, 2023.
+
+
+Zexuan Zhong, Zhengxuan Wu, Christopher D Manning, Christopher Potts, and Danqi Chen. Mquake:
+Assessing knowledge editing in language models via multi-hop questions. In _Proceedings of the_
+_2023 Conference on Empirical Methods in Natural Language Processing_, pp. 15686–15702, 2023.
+
+
+Chen Zhu, Ankit Singh Rawat, Manzil Zaheer, Srinadh Bhojanapalli, Daliang Li, Felix Yu, and Sanjiv
+Kumar. Modifying memories in transformer models. _arXiv preprint arXiv:2012.00363_, 2020.
+
+
+14
+
+
+A LIMITATIONS AND FUTURE WORKS
+
+
+In this section, we outline several limitations of our study that highlight areas for future research and
+improvement: **(1)** While our method shows promise, there is still potential for improvement in the
+Relation task. This may be due to the fact that edits can inadvertently erase or obscure other relevant
+knowledge about the subject, thereby affecting the model’s overall performance in understanding and
+maintaining relations. **(2)** Our study primarily focused on single factual association edits. This scope
+excluded more complex scenarios such as batch and sequential editing, which involve multiple edits
+either simultaneously or over a sequence. **(3)** We focus on knowledge editing on only transformerbased models, omitting models with new architectures (Gu & Dao, 2023). These issues highlight
+important avenues for future research and will be explored in subsequent studies to enhance the
+robustness and applicability of knowledge editing.
+
+
+B PRELIMINARY OF KNOWLEDGE EDITING
+
+
+In this section, we provide more details of the baselines used in our experiments.
+
+
+**ROME** As mentioned in Section 2.2, ROME (Meng et al., 2022) implements rank-one knowledge
+editing by deriving a closed form solution:
+
+
+minimize _WK_ _V_ such that _Wk_ [ˆ] _∗_ = _v∗_ by setting _W_ [ˆ] = _W_ + ( _v∗_ _Wk∗_ ) [(] _[C]_ _[−]_ [1] _[k][∗]_ [)] _[T]_ _,_
+_∥_ [ˆ] _−_ _∥_ _−_ ( _C_ _[−]_ [1] _k∗_ ) _[T]_ _k∗_
+
+(3)
+
+
+where _C_ = _KK_ _[T]_ is a constant that estimates the uncentered covariance of _k_ from samples of
+Wikipedia text. In order to choose the lookup key _k_ _[∗]_ for the subject, ROME concatenates different
+prefixes generated by the vanilla model with the sentence of the editing request. Then, ROME records
+the activations of the first layer of MLP, consider the average value _k∗_ = _N_ [1] - _Nj_ =1 _[k]_ [(] _[x][j]_ [+] _[ s]_ [)][ as the]
+
+lookup key. The _v_ _[∗]_ for recalling the fact is obtained by minimizing the objective in Equation 1.
+
+
+**MEMIT** In order to directly update multiple memories in a language model, MEMIT employs
+batch update and multiple layers update based on ROME. To derive an optimal single-layer update
+that minimizes the squared error of memorized associations while preserving existing memories, the
+expanded objective for batch update is defined as:
+
+
+_n_ �+ _u_
+
+
+_i_ = _n_ +1
+
+
+    2
+��� _Wk_ ˆ _i_ _mi_ ���
+_−_
+
+
+_W_ 1 ≜ arg min
+_W_ ˆ
+
+
+ - _n_
+
+
+_i_ =1
+
+
+2
+��� _Wk_ ˆ _i_ _mi_ ��� +
+_−_
+
+
+_,_ (4)
+
+
+where _W_ 1 is the new matrix for the second layer of the FFN. Here, _K_ 0 = [ _k_ 1 _k_ 2 _kn_ ]
+and _M_ 0 = [ _m_ 1 _| m_ 2 _| · · · | mn_ ] represent the original keys and memories in the _|_ vanilla _| · · · |Wout_ _[l]_ [,]
+while _K_ 1 = [ _kn_ +1 _kn_ +2 _kn_ + _u_ ] and _M_ 1 = [ _mn_ +1 _mn_ +2 _mn_ + _u_ ] are new _u_ factual
+_|_ _| · · · |_ _|_ _| · · · |_
+associations that need to be edited in the model.
+
+
+By solving the linear system, the updated matrix _W_ 1 can be formalized as:
+
+
+_W_ 1 = _Wout_ _[l]_ [+] _[ RK]_ 1 _[T]_ [(] _[C]_ [0] [+] _[ K]_ [1] _[K]_ 1 _[T]_ [)] _[−]_ [1] _[,]_ (5)
+
+
+where _C_ 0 is the aggregate statistic over the previously stored keys, computed by a random sample of
+inputs as in ROME.
+
+
+In order to improve the robustness, MEMIT distributes updates evenly across the range of mediating
+layers _R_ . The approach to obtain _k_ _[∗]_ and _v_ _[∗]_ is similar to ROME. MEMIT calculates _δ_ _[l]_ in ascending
+layer order to prevent the influence of edit layers on subsequent layers. The update process of MEMIT
+can be represented by Algorithm 1.
+
+
+15
+
+
+**Algorithm 1:** The MEMIT Algorithm
+
+
+**Data:** Requested edits = ( _si, ri, oi_ ), generator _G_, layers to edit, stored keys _C_ 0 _[l]_
+_E_ _{_ _}_ _R_
+**Result:** Modified generator containing edits from _E_
+
+
+**1** **for** _si, ri, oi_ **do** // Compute target vectors _vi_ for each memory _i_
+_∈E_
+
+_[∗]_
+
+[�] _[N]_
+
+
+_i_ _i_ _i_
+
+**2** **optimize** _δi_ _←_ [�] _j_ _[N]_ =1 _[−]_ [log] _[ P]_ _G_ ( _h_ [(] _i_ _[l][∗]_ [)] += _δi_ ) [(] _[o][∗]_ _[|][ x][j]_ [+] _[ p]_ [)]
+
+
+**3** _vi_ _h_ [(] _i_ _[L]_ [)] + _δi_
+_←_
+
+
+**4** **end**
+
+
+**5** **for** _l ∈R_ **do** // Perform update over layers in ascending order
+
+[(] _[l]_ [)] _[l][−]_ [1]
+
+
+**6** _h_ [(] _i_ _[l]_ [)] _transformer_block_ ( _h_ _[l]_ _i_ _[−]_ [1] ) // Execute layer _l_ using the updated weights
+_←_
+
+
+**7** **for** _si, ri, oi_ **do**
+_∈E_
+
+_[l]_ [(] _[l]_ [)] [1]
+
+
+_N_ [1] - _Nj_ =1 _[k]_ [(] _[x][j]_ [+] _[ s][j]_ [)]
+
+
+**8** _ki_ _[l]_ _i_ = _N_ [1]
+
+_[←]_ _[k]_ [(] _[l]_ [)] [(] _[L]_ [)]
+
+
+**9** _ri_ _[l]_ _L−l_ +1 _i_
+
+_[←]_ _[v][i][−][h]_ [(] _[L]_ [)]
+
+
+**10** **end**
+
+
+**11** _K_ _[l]_ _←_ [ _ki_ _[l]_ [1] _[, ..., k]_ _i_ _[L]_ []]
+
+**12** _R_ _[l]_ _←_ [ _ri_ _[l]_ [1] _[, ..., r]_ _i_ _[L]_ []]
+
+
+**13** ∆ _[l]_ _←_ _R_ _[l]_ _K_ _[lT]_ ( _C_ 0 _[l]_ [+] _[ K]_ _[l][K]_ _[lT]_ [ )] _[−]_ [1]
+
+_[l]_ _[l]_ _[l]_
+
+
+**14** _W_ _[l]_ _←_ _W_ _[l]_ + ∆ _[l]_ // Update MLP weights in layer _l_
+
+
+**15** **end**
+
+
+**PMET** PMET (Li et al., 2024) discovers that Multi-Head Self-Attention(MHSA) weights do
+not require updating when new knowledge is introduced, thus only integrating the optimized FFN
+activation to conduct precise editing. PMET introduces optimizable parameters, _δi_ _[a]_ [for the MHSA]
+output and _δi_ _[m]_ [for the FFN output at the] _[ L]_ [-th layer.] [It then retains only the optimized hidden states of]
+the FFN to update its weights, represented as _vi_ _[m]_ [=] _[ m]_ _i_ _[L]_ [+] _[ δ]_ _i_ _[m]_ [= arg min] _[ L]_ [(] _[z]_ [)][, where] _[ L]_ [(] _[z]_ [)][ refers to]
+the objective in Equation 1. Following this, PMET employs the same algorithmic steps as MEMIT to
+update the FFN weights.
+
+
+C IMPLEMENTATION DETAILS
+
+
+C.1 DATASET PROCESSING
+
+
+The dataset we use is a mixture of counterfact datasets from Meng et al. (2022) and Zhang et al.
+(2024a). Meng et al. (2022) introduce COUNTERFACT, which contains 21,919 records featuring
+a diverse set of subjects, relations, and linguistic variations. It also provides paraphrase prompts,
+neighborhood prompts, and generation prompts for specificity evaluation. Zhang et al. (2024a) collect
+triplets about popular entities from top-viewed pages on Wikipedia to construct **WikiData** _counterfact_ .
+They provide relational prompts to evaluate the impact of edits on other attributes associated with the
+edited subject. We combined these datasets in equal proportions to create a balanced dataset with
+1683 factual statements.
+
+
+When measuring specificity, it is crucial that the neighborhood subject and the test relationship of
+the subject remain unaffected by the edit. For example, when editing the factual knowledge tuple
+“( _Carl Bosch, citizenship, Germany_ )” to “( _Carl Bosch, citizenship, Canada_ )”, it might be logically
+consistent to also generalize Carl Bosch’s birthplace to Canada, which should not be considered in
+specificity tests. However, this edit should not alter the answer to “The gender of Carl Bosch is”. Test
+cases like this should be considered in specificity tests. To measure specificity more accurately, we
+filter our dataset using GPT-4. The filtering prompts are detailed in Figs. 8.
+
+
+C.2 BASELINE SETTINGS
+
+
+In this section, we detail the parameters used for each baseline and the SADR method across different
+models. We utilize ROME (Meng et al., 2022), MEMIT (Meng et al., 2023), and PMET (Li et al.,
+2024) as the baseline knowledge editing techniques, implemented using EasyEdit [2] . As the objective
+of SADR prevents over-editing by restricting optimization from causing large attention drift, it is
+
+
+2https://github.com/zjunlp/EasyEdit
+
+
+16
+
+
+Figure 8: Prompts for gpt-4 to filter specificity cases
+
+
+necessary to increase the number of optimization steps to ensure convergence. We test [20 _,_ 40 _,_ 80]
+optimization steps with restraining weights _γ_ set at [5e _−_ 3 _,_ 1e _−_ 2 _,_ 4e _−_ 2 _,_ 8e _−_ 2] on the validation split.
+All experiments are conducted on eight NVIDIA A100 (40GB) GPUs, with individual edits taking
+approximately 20 to 80 seconds on a single GPU. Completing all edits and evaluations across our
+dataset requires 1-2 days.
+
+
+**ROME** The parameters applied for the original baseline are consistent with the original paper. The
+learning rate is 0.5, optimization steps are 20, and the KL factor _ω_ is 0.0625 across various models.
+For GPT-J-6b, we edit layer 5, with optimization steps of 80 and a controlling weight _γ_ = 1e _−_ 2 for
+the SADR method. For Llama3-8B, we edit layer 5, with optimization steps of 80 and a controlling
+weight _γ_ = 4e _−_ 2 for the SADR method. For GPT-NeoX-20b, we edit layer 5, with optimization
+steps of 80 and a controlling weight _γ_ = 1e _−_ 2 for the SADR method. For Llama2-13B, we edit
+layer 15, with optimization steps of 80 and a controlling weight _γ_ = 1e _−_ 2 for the SADR method.
+For TinyLlama, we edit layer 4, with optimization steps of 80 and a controlling weight _γ_ = 8e _−_ 2 for
+the SADR method.
+
+
+**MEMIT** The original baseline applies learning rate of 0.5, 20 optimization steps, and KL factor
+_ω_ of 0.0625 across various models. For GPT-J-6b, we edit layers 3-8, with optimization steps of
+20, learning rate 0 _._ 25, and a controlling weight _γ_ = 5e _−_ 3 for the SADR method. For Llama3-8B,
+we edit layers 4-8, with optimization steps of 80 and a controlling weight _γ_ = 1e _−_ 2 for the SADR
+method. For GPT-NeoX-20b, we edit layers 13-16, with optimization steps of 80 and a controlling
+weight _γ_ = 5e _−_ 3 for the SADR method. For Llama2-13B, we edit layers 5-9, with optimization
+steps of 80 and a controlling weight _γ_ = 4e _−_ 2 for the SADR method. For TinyLlama, we edit layers
+3-5, with optimization steps of 80 and a controlling weight _γ_ = 8e _−_ 2 for the SADR method.
+
+
+**PMET** The original baseline applies learning rate of 0.5, 20 optimization steps, and KL factor _ω_
+of 0.0625 across various models. For GPT-J-6b, we edit layers 3-8, with optimization steps of 40
+and a controlling weight _γ_ = 8e _−_ 2 for the SADR method. For Llama3-8B, we edit layers 4-8, with
+optimization steps of 80 and a controlling weight _γ_ = 1e _−_ 2 for the SADR method. For GPT-NeoX20b, we edit layers 13-16, with optimization steps of 20 and a controlling weight _γ_ = 2e _−_ 3 for the
+SADR method. For Llama2-13B, we edit layers 7-9, with optimization steps of 20 and a controlling
+weight _γ_ = 5e _−_ 3 for the SADR method. For TinyLlama, we edit layers 3-5, with optimization steps
+of 40 and a controlling weight _γ_ = 8e _−_ 2 for the SADR method.
+
+
+C.3 ABLATION SETTINGS
+
+
+We further illustrate the implementation details for experiments in Section 6. When testing the tradeoff between generalization and specificity, we randomly sample 500 data points for evaluation. The
+controlling weight _γ_ for the SADR method is applied at [1e _−_ 5 _,_ 1e _−_ 4 _,_ 5e _−_ 4 _,_ 2 _._ 5e _−_ 4 _,_ 1e _−_ 2 _,_ 8e _−_ 2].
+
+
+17
+
+
+The optimization steps are applied at [7 _,_ 14 _,_ 20 _,_ 40 _,_ 80 _,_ 120]. The KL factor _ω_ is applied at
+
+[0 _._ 1 _,_ 1 _,_ 2 _,_ 3 _,_ 4 _,_ 5]. The learning rate is applied at [5e _−_ 2 _,_ 6e _−_ 2 _,_ 8e _−_ 2 _,_ 1e _−_ 1 _,_ 2e _−_ 1 _,_ 4e _−_ 1].
+
+
+D ADDITIONAL RESULTS FOR EXPLORING SPECIFICITY FAILURES
+
+
+D.1 LOCALIZE SPECIFICITY FAILURE IN CAUSAL GRAPH
+
+
+We further investigate the tracing effects of “Contaminating Substitution” across different window
+sizes in the “Distract Neighborhood” and “Relation” tasks, and also demonstrate the impact on the
+prediction probability of _oedit_ . As shown in Figure 9a, varying window sizes indicate similar areas
+
+
+0.01
+
+
+0.00
+
+
+0.01
+
+
+0.02
+
+
+0.03
+
+
+Prompt token
+First edited subject token
+Middle edited subject token
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+
+Further
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+
+Last
+
+
+Last edited subject token
+
+
+Last sub
+
+
+Last sub
+
+
+Further token
+Prompt token
+First neighbor subject token
+Middle neighbor subject token
+
+
+Last neighbor subject token
+
+
+Further token
+
+
+Last sub
+
+
+Last sub
+
+
+Last token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.010
+
+
+0.005
+
+
+0.000
+
+
+0.005
+
+
+0.010
+
+
+0.015
+
+
+Further
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+Last
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+(a) Tracing Effect on _P_ ( _otrue_ ) with different window sizes in the _Distract Neighborhood_ task.
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.00
+
+
+0.01
+
+
+0.02
+
+
+0.03
+
+
+0.04
+
+
+0.05
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+0.006
+
+
+0.004
+
+
+0.002
+
+
+0.000
+
+
+0.002
+
+
+0.004
+
+
+0.006
+
+
+0.008
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+Prompt token
+First edited subject token
+Middle edited subject token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+
+Last
+
+
+Last edited subject token
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+
+Last sub
+
+
+Further token
+Prompt token
+First neighbor subject token
+Middle neighbor subject token
+
+
+Last neighbor subject token
+
+
+Further token
+
+
+Last sub
+
+
+Last token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.200
+
+
+0.175
+
+
+0.150
+
+
+0.125
+
+
+0.100
+
+
+0.075
+
+
+0.050
+
+
+0.025
+
+
+0.000
+
+
+Further
+
+
+Last
+
+
+0.08
+
+
+0.06
+
+
+0.04
+
+
+0.02
+
+
+0.00
+
+
+Further
+
+
+(b) Tracing Effect on _P_ ( _oedit_ ) in the _Distract Neighborhood_ task with window size 6.
+
+
+Prompt
+
+
+1st sub
+
+
+Midd sub
+
+
+Last sub
+
+
+Further
+
+
+Last
+
+
+Prompt
+
+
+1st sub
+
+
+Midd sub
+
+
+Last sub
+
+
+Further
+
+
+Last
+
+0 3 6 9 12 15 18 21 24 27
+
+
+Prompt token
+
+
+First edited subject token
+
+
+Middle edited subject token
+
+
+Last edited subject token
+
+
+Further token
+
+
+Last token
+
+
+Prompt token
+
+
+First edited subject token
+
+
+Middle edited subject token
+
+
+Last edited subject token
+
+
+Further token
+
+
+Last token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.0125
+
+
+0.0100
+
+
+0.0075
+
+
+0.0050
+
+
+0.0025
+
+
+0.0000
+
+
+0.0025
+
+
+0.0050
+
+
+0.0075
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+0.05
+
+
+0.00
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.006
+
+
+0.004
+
+
+0.002
+
+
+0.000
+
+
+0.002
+
+
+0.004
+
+
+0.006
+
+
+(c) Tracing Effect on _P_ ( _otrue_ ) in the _Relation_ task with window size 6.
+
+
+Prompt
+
+
+1st sub
+
+
+Midd sub
+
+
+Last sub
+
+
+Further
+
+
+Last
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.000
+
+
+Prompt
+
+
+1st sub
+
+
+Midd sub
+
+
+Last sub
+
+
+Further
+
+
+Last
+
+
+(d) Tracing Effect on _P_ ( _oedit_ ) in the _Relation_ task with window size 6.
+
+
+Figure 9: Visualizing “Contaminating Substitution” with different window sizes, specificity tasks and
+prediction objects.
+
+
+leading to Specificity Failures, and the decrease in _P_ ( _otrue_ ) is correlated with window size. This
+suggests that contaminating information accumulates at the last token in middle-upper layers due to
+the recall mechanism of attention modules.
+
+
+By comparing Figure 3 with Figure 9b, and Figure 9c with Figure 9d, we observe notable similarities
+in the areas that correspond to increases in incorrect answer probabilities _P_ ( _oedit_ ) and decreases in
+correct answer probabilities _P_ ( _otrue_ ). This suggests that the same information flow may be driving
+changes in both probabilities.
+
+
+18
+
+
+Furthermore, a phenomenon that may seem counterintuitive is that replacing MLP or Attn activations
+in the final layers increases the probability of correct answers. This can be attributed to the disruption
+of anti-overconfidence mechanisms in the final layers (Lv et al., 2024).
+
+
+D.2 PATCHING ATTENTION DRIFT TO MITIGATE SPECIFICITY FAILURE
+
+
+In section 3.4, we demonstrate an improvement in specificity performance after patching attention
+drift in some consecutive layers. To explore the effectiveness of patching attention drift at a finer
+granularity, we evaluate the tracing effect of modifying a single value in the attention weight matrix.
+Specifically, we alter the value that represents the weight of the last token attending to the _t_ -th
+token before softmax during the forward pass of the edited model. The replacement value is the
+one generated by the vanilla model for the same prompts. Considering residual connections in
+Transformer, we patch for a window of _k_ layers around the _l_ -th layer.
+
+
+0.025
+
+
+0.000
+
+
+0.025
+
+
+0.050
+
+
+0.075
+
+
+0.100
+
+
+0.125
+
+
+0.150
+
+
+0.00
+
+
+0.05
+
+
+0.10
+
+
+0.15
+
+
+0.20
+
+
+0.25
+
+
+0.30
+
+
+Prompt token
+First edited subject token
+Middle edited subject token
+
+
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+Further
+Prompt
+1st sub
+Midd sub
+
+Last sub
+
+
+Last
+
+
+Last edited subject token
+
+
+Further token
+Prompt token
+First neighbor subject token
+Middle neighbor subject token
+
+
+Last neighbor subject token
+
+
+Further token
+
+
+Last token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.030
+
+
+0.025
+
+
+0.020
+
+
+0.015
+
+
+0.010
+
+
+0.005
+
+
+0.000
+
+
+Further
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+(a) Tracing Effect with window size 10 in the _Distract Neighborhood_ task.
+
+
+Prompt token
+
+
+First edited subject token
+
+
+Middle edited subject token
+
+
+Last edited subject token
+
+
+Further token
+
+
+Last token
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+0.004
+
+
+0.003
+
+
+0.002
+
+
+0.001
+
+
+0.000
+
+
+0 3 6 9 12 15 18 21 24 27
+
+
+Prompt
+
+
+1st sub
+
+
+Midd sub
+
+
+Last sub
+
+
+Further
+
+
+Last
+
+
+(b) Tracing Effect with window size 10 in the _Relation_ task.
+
+
+Figure 10: The tracing effect of patching the attention value that the last token attends to the previous
+tokens for different layers.
+
+
+As shown in Figure 10, patching the attention value of the last edited subject token in the middle-upper
+layers significantly mitigates the Specificity Failure, where the magnitude of change in probability
+closely matches the one of replacing the entire attention weight matrix in Figure 5. This aligns with
+the findings in Section 3.3 that the drift of attention weights from the last token to the edited token is
+the main trigger for Specificity Failure.
+
+
+D.3 THE CORRELATION BETWEEN MORE FACTORS AND SPECIFICITY FAILURE
+
+
+Recent works (Fang et al., 2024; Yao et al.,
+2024; Ma et al., 2024) point out that the edit Table 4: Correlation of different factors with specivector’s direction, space, and norm can influ- ficity failure.
+ence the model’s specificity performance. However, these works primarily focus on preserv- **Pearson Coefficient** **Pearson Coefficient**
+
+**Factor**
+
+ing general knowledge and capabilities, rather **(Distracting Neighborhood)** **(Relation)**
+than addressing the specificity failure that arises **Attention DriftHidden State Norm** **0.49** 0.01 0.31 **0.62**
+when the edited subject appears in the context. **L2 Distance** 0.01 0.31
+
+**Cosine Similarity** 0.02 -0.15
+
+To explore the relevance of these factors to the
+specificity failure problem studied in our work,
+we conducted a correlation analysis. Specifically, we compared four factors—attention drift, hidden
+
+
+Table 4: Correlation of different factors with specificity failure.
+
+
+**Pearson Coefficient** **Pearson Coefficient**
+**Factor**
+**(Distracting Neighborhood)** **(Relation)**
+
+
+**Attention Drift** **0.49** **0.62**
+**Hidden State Norm** 0.01 0.31
+**L2 Distance** 0.01 0.31
+**Cosine Similarity** 0.02 -0.15
+
+
+19
+
+
+state norm post-editing, L2 distance between hidden states pre- and post-editing, and the cosine
+similarity of hidden states pre- and post-editing —with the probability of _P_ ( _o_ edit) in specificity tasks.
+
+
+Table 4 shows that, compared to the direction or norm of the edit vector, attention drift has a more
+direct and significant impact on specificity failure.
+
+
+D.4 DISCUSSION ABOUT REASONS FOR ATTENTION DRIFT
+
+
+Experiments have shown that attention drift is closely related to specificity failure. A natural question
+arises: what is the reason for attention drift during the editing process? Intuitively, editing methods
+primarily modify the hidden states of the edited subject, which subsequently influence the final
+output through the attention mechanism. In traditional editing methods (e.g., ROME discussed in
+Section 2.2), the optimization objective explicitly trains the model to predict the new _o_ edit given ( _s, r_ ).
+This may create a shortcut, where the hidden state of the subject is shaped in a way that makes it
+overly prone to being prioritized by the attention mechanism, thereby hard-coding the knowledge
+into the forward propagation rather than truly integrating it into the model.
+
+
+To better illustrate this shortcut, we design an experiment using GPT-XL and apply ROME to 100
+editing cases. During the optimization of the model’s target vectors, we employ the “torch.detach()”
+function to prevent gradients from propagating through the attention weights. This means that the
+model editing process would optimize only the value component in the attention module, ignoring
+the optimization of key and query components. Under this setup, we observe that ROME’s editing
+success rate (measured by EM) exhibit a polarized trend, where probabilities are either very high or
+very low, as shown in Figure 11.
+
+
+Figure 11: _P_ ( _oedit_ ) of the edited model when attention weight optimization is disabled.
+
+
+In the original ROME method, the average probability after editing exceeds 95%. This suggests
+that many facts are challenging to edit into the model without optimizing the attention weights. To
+further analyze this phenomenon, we set a threshold of _P_ ( _o_ edit) greater than or less than 0.95 to
+distinguish between easy-to-edit and hard-to-edit knowledge, resulting in a roughly equal number
+of cases in both categories. Subsequently, we compare various performance metrics for the original
+ROME method and the modified ROME method with attention weight optimization disabled (referred
+to as ROME-AWD), as shown in Table 5. The Distracting Neighborhood Task is selected as the
+representative metric for specificity.
+
+
+The results indicate that: **(1)** For easy-to-edit knowledge, disabling the attention weight shortcut
+allows editing methods to achieve satisfactory results in both edit success and specificity; **(2)** For
+hard-to-edit knowledge, disabling the optimization of attention weights significantly reduces the
+editing success rate, and such knowledge is more prone to specificity failure under original editing
+methods. Furthermore, we calculate the Pearson correlation coefficient between ROME’s attention
+drift and the editing difficulty (measured by 1 _P_ ( _oedit_ ) on ROME-AWD). The results indicate
+_−_
+
+
+20
+
+
+Table 5: Comparison of editing performance for easy-to-edit and hard-to-edit knowledge.
+
+
+**Knowledge Type** **Editor** **Rewrite** _↑_ **Generalization** _↑_ **Specificity** _↑_
+
+None 18.0 20.0 56.0
+Easy-to-Edit Knowledge ROME 100.0 100.0 16.0
+ROME-AWD 100.0 91.0 40.3
+
+
+None 14.3 13.6 54.5
+Hard-to-Edit Knowledge ROME 98.4 90.9 9.0
+ROME-AWD 71.4 77.2 37.7
+
+
+a significant positive correlation, with a Pearson coefficient of 0.748 and a p-value _<_ 0.05. This
+indicates that attention drift is likely a result of editing methods hard-coding the edited knowledge
+into the model’s forward propagation, rather than enabling a more natural and reasonable assimilation
+of new knowledge.
+
+
+E ADDITIONAL RESULTS ON SELECTIVE ATTENTION DRIFT RESTRICTION
+
+
+E.1 MAIN RESULTS
+
+
+To comprehensively evaluate the effectiveness of our method, we employ two additional frequently
+used models, Llama2-13B (Touvron et al., 2023) and TinyLlama (Zhang et al., 2024b), to observe the
+performance of our method across different model sizes and advanced knowledge-rich models in this
+section. To further validate our method’s performance in knowledge editing, we have incorporated
+new metrics for generalization, specificity, and fluency.
+
+
+**Generalization:** To ensure the edited knowledge is fully integrated into the model, we use a new
+metric called the Reasoning Score (RES) (Yao et al., 2023). This metric evaluates the model’s ability
+to perform reasoning based on modified facts, which is more challenging.
+
+
+**Specificity:** To assess the impact of model editing on other tasks, we follow the approach in Yao et al.
+(2023) and report accuracy on PIQA (Bisk et al., 2020), a multiple-choice commonsense reasoning
+test. We measure this using the Other Task Score (OS). Additionally, we evaluate how the edited
+knowledge affects related tasks by incorporating the edited sentence in a distraction-based format,
+termed the Distracted Other Task Score (DOS).
+
+
+**Fluency:** We evaluate language modeling on a high-quality text dataset ME-PPL (Yang et al., 2024b),
+which includes various commonly used corpora. We use perplexity (PPL) as a measure of the
+language model’s generative capability.
+
+
+**Our method is effective across various models.** As shown in Table 6, consistent with the observations in Section 5.2, knowledge editing results in significant specificity failure across models ranging
+from 1.1B to 20B parameters, which is mitigated by our SADR method (with over 50% improvement
+in major specificity tasks in more than half of the cases). The improvement in prediction probability
+(as reflected by the RM and DNM metrics) is also evident. Notably, in the _Distract Neighborhood_
+task, the probability of correct predictions has been restored to the level of the unedited model,
+showing the potential of our approach.
+
+
+**The edited entity also impacts unrelated knowledge:** The OS and DOS metrics show that when
+the edited entity appears in the context, the performance of tasks entirely unrelated to the entity also
+degrades. This further highlights the widespread occurrence of specificity failure. In most settings,
+our method shows improvement on the DOS metric.
+
+
+**The impact of SADR on editing performance is minimal:** As discussed in Section 5.2, mitigating
+specificity failure without compromising any aspect of editing performance is quite difficult. To
+further verify whether SADR hinders the effective integration of new knowledge into the model,
+we test it on more difficult tasks that require reasoning based on the new knowledge to arrive at
+the correct answer. The decline in RES metrics with our method is consistently below 3%, and in
+
+
+21
+
+
+Table 6: Results of our methods on five frequently used models with detailed metrics. **Bold** numbers
+indicate better performance, and **Green** numbers indicate a significantly better score with more than
+50% relative improvement.
+
+
+**Model** **Editor** **Rewrite** **Generalization** **Specificity** **Fluency**
+
+
+ES _↑_ EM _↑_ PS _↑_ PM _↑_ RES _↑_ NS _↑_ NM _↑_ RS _↑_ RM _↑_ DNS _↑_ DNM _↑_ OS _↑_ DOS _↑_ FL PPL
+
+
+None 18.30 1.60 23.84 1.52 28.75 76.42 9.99 85.66 15.93 56.03 18.32 73.30 71.04 607.84 50.65
+
+
+TinyLlama
+(1.1b)
+
+
+GPT-J
+(6b)
+
+
+Llama3
+(8b)
+
+
+Llama2
+(13b)
+
+
+GPT-NeoX
+(20b)
+
+
+ROME **93.92** **74.38** **91.24** **51.84** 50.99 **75.50** **9.85** 19.28 5.11 47.05 17.18 **72.94** 70.98 607.21 **50.64**
++ ours 93.68 69.90 89.81 40.61 **51.63** 75.41 9.82 **29.87** **7.38** **50.51** **18.42** 72.82 **71.51** **607.84** 50.67
+
+
+MEMIT **96.90** **71.99** **95.05** **47.73** 48.69 **73.84** 9.62 22.18 5.75 32.64 13.48 **72.82** 70.20 605.31 50.66
++ours 95.77 65.84 93.09 40.99 **49.46** 73.82 **9.66** **33.05** **7.78** **41.56** **16.32** 72.71 **71.16** **609.72** **50.64**
+
+
+PMET 90.52 **62.21** **85.46** **36.47** 28.97 **75.86** 9.93 28.67 7.49 49.09 17.75 72.88 70.86 607.88 **50.66**
++ours **91.54** 55.79 83.73 30.03 **49.34** **75.86** **9.94** **36.94** **9.07** **50.87** **18.44** **73.00** **71.39** **608.14** **50.66**
+
+
+None 20.86 0.64 17.70 0.40 33.09 82.43 6.18 79.73 8.83 61.99 13.81 74.73 74.08 621.96 44.12
+
+
+ROME **99.88** **99.39** **99.58** **76.93** **52.39** 80.26 6.04 11.94 3.29 30.43 10.45 **74.73** 74.37 620.58 68.02
++ ours 99.76 99.26 96.36 53.73 50.42 **80.86** **6.11** **27.75** **5.85** **49.35** **14.16** **74.73** **74.49** **623.00** **63.85**
+
+
+MEMIT **99.94** **96.79** **99.52** **62.42** **51.43** 82.52 10.38 17.44 5.36 30.55 14.91 74.73 73.90 605.99 **44.24**
++ours 99.82 94.33 98.63 50.53 49.66 **82.93** **10.52** **35.88** **8.45** **45.09** **20.27** **74.79** **74.31** **619.00** **44.24**
+
+
+PMET **99.40** **91.03** **92.67** **54.75** 51.79 **81.49** **6.22** 27.68 5.01 39.79 12.66 75.09 **73.96** 621.18 44.24
++ours 99.11 81.39 89.09 34.86 **52.03** 81.44 6.15 **33.33** **5.50** **47.47** **13.69** **75.27** 73.60 **622.18** **44.23**
+
+
+None 9.36 0.62 9.48 0.34 30.72 87.17 11.22 92.66 26.99 64.25 20.57 80.63 79.44 617.19 43.07
+
+
+ROME **99.88** **98.17** **99.52** **64.06** **60.35** 82.19 10.26 29.38 6.95 52.21 20.64 80.45 79.08 617.23 52.79
++ ours 99.82 98.16 96.90 47.03 59.79 **83.18** **10.44** **47.67** **10.50** **58.51** **22.96** **80.63** **79.26** **618.39** **46.31**
+
+
+MEMIT **99.94** **96.79** **99.52** **62.42** 60.64 82.52 10.38 17.44 5.36 30.55 14.91 80.69 **79.02** 605.99 66.70
++ours 99.82 94.33 98.63 50.53 **62.77** **82.93** **10.52** **35.88** **8.45** **45.09** **20.27** **80.75** 78.96 **619.00** **49.31**
+
+
+PMET **99.58** **91.98** **99.40** **56.42** 62.28 81.10 10.08 19.84 5.34 32.12 15.20 80.27 78.37 610.65 42.97
++ours 99.28 83.99 97.02 39.98 **62.65** **82.86** **10.54** **34.68** **7.83** **51.22** **21.50** **80.45** **78.96** **617.91** **42.95**
+
+
+None 10.55 1.45 16.15 1.35 26.86 83.54 16.92 94.92 28.70 62.59 25.50 80.04 78.43 611.31 22.46
+
+
+ROME **99.76** 98.29 **97.14** **64.23** **54.72** 82.28 16.63 34.89 10.77 55.67 24.54 79.92 **78.37** 611.35 **22.44**
++ ours **99.76** **98.38** 94.16 53.38 51.63 **82.50** **16.72** **56.29** **16.83** **59.47** **26.44** **79.98** 77.95 **611.93** **22.44**
+
+
+MEMIT **99.76** **96.51** **57.86** **66.99** **57.86** 80.02 16.30 15.89 6.72 35.80 19.02 **79.98** 77.23 610.87 **22.45**
++ours 99.58 96.19 93.92 52.29 54.89 **80.63** **16.46** **48.23** **15.01** **55.39** **25.76** 79.92 **78.67** **613.24** **22.45**
+
+
+PMET **99.52** **93.36** **95.53** **56.92** **52.79** 80.80 16.38 43.22 12.83 43.29 21.47 **79.92** **78.25** 610.67 **22.44**
++ours 99.46 88.36 92.85 46.89 52.31 **80.89** **16.44** **52.05** **14.93** **50.46** **23.91** 79.80 78.01 **611.18** 22.45
+
+
+None 17.04 0.82 17.64 0.50 31.28 80.62 7.52 83.76 14.51 58.34 5.80 78.13 76.46 619.25 41.75
+
+
+ROME **99.94** **98.95** **98.75** **74.68** **56.74** 72.67 6.90 15.11 4.55 8.84 4.64 77.18 72.77 579.82 66.77
++ ours 99.76 98.37 96.13 59.12 53.80 **73.96** **7.07** **34.89** **7.57** **34.95** **12.76** **77.29** **75.92** **619.54** **66.72**
+
+
+MEMIT **99.88** **94.58** **90.46** **44.41** **52.39** **77.45** 7.30 35.24 7.84 16.22 7.41 **77.06** 74.85 615.19 **42.72**
++ours 97.38 81.49 89.21 40.26 50.10 **77.45** **7.35** **45.48** **8.83** **18.49** **8.21** 76.64 **75.92** **621.59** 42.82
+
+
+PMET **99.52** 84.94 **95.23** **68.01** **56.33** 74.18 6.91 12.29 3.49 7.41 2.61 **77.06** 64.72 510.25 **42.62**
++ours 99.40 **86.77** 93.09 55.06 54.72 **75.33** **7.00** **24.86** **6.15** **11.61** **5.00** 76.34 **71.57** **589.76** 42.69
+
+
+some settings, it even shows slight improvements. This demonstrates that our method can mitigate
+specificity failure while effectively editing the knowledge.
+
+
+E.2 RESULTS ON MORE EDITING METHODS
+
+
+Knowledge editing methods can be
+categorized into three types: locate- Table 7: Results of our methods on WISE and MEND.
+then-edit, parameter-preserving, and
+meta-learning. To further verify **Editor** **Avg.** **S** _↑_ **ES** _↑_ **PS** _↑_ **NS** _↑_ **RS** _↑_ **DNS** _↑_ **FL**
+whether attention drift is also ev
+None 34.43 20.86 17.70 82.43 79.73 61.99 621.96
+
+ident in parameter-preserving and
+
+WISE 24.57 **100.00** **38.60** 67.12 25.24 5.87 480.50
+
+meta-learning-based editing meth- +ours **31.58** **100.00** 35.40 **71.22** **36.44** **12.73** **502.80**
+ods, we conduct additional exper
+MEND 15.07 **98.70** 92.30 11.80 24.46 5.40 551.22
+
+iments on **WISE** (Wang et al., +ours **18.80** 95.60 **92.80** **11.90** **39.73** **7.38** **555.98**
+2024b) and **MEND** (Mitchell et al.,
+2021). WISE is a recent parameterpreserving method for sequence editing that includes side memory and gating mechanisms, while
+MEND is a classic knowledge editing method utilizing meta-learning. Specifically, we add a loss term
+to constrain attention drift during the training of the side memory in WISE and the hyper-parameter
+network in MEND. The results, shown in Table 7, indicate that specificity failure is evident in both
+methods, and imposing attention constraints significantly improves their performance.
+
+
+Table 7: Results of our methods on WISE and MEND.
+
+
+**Editor** **Avg.** **S** _↑_ **ES** _↑_ **PS** _↑_ **NS** _↑_ **RS** _↑_ **DNS** _↑_ **FL**
+
+
+None 34.43 20.86 17.70 82.43 79.73 61.99 621.96
+
+
+WISE 24.57 **100.00** **38.60** 67.12 25.24 5.87 480.50
++ours **31.58** **100.00** 35.40 **71.22** **36.44** **12.73** **502.80**
+
+
+MEND 15.07 **98.70** 92.30 11.80 24.46 5.40 551.22
++ours **18.80** 95.60 **92.80** **11.90** **39.73** **7.38** **555.98**
+
+
+E.3 RESULTS ON MORE DATASETS
+
+
+Due to the limited availability of datasets that meet the required fields for our tasks, we conducted
+experiments on a relatively small dataset with 1,683 pieces of data from COUNTERFACT (Meng et al.,
+2022) and **WikiData** _counterfact_ (Yao et al., 2023). To better illustrate the specificity failure problem
+and validate the effectiveness of our approach across a wider range of data formats and entities, we
+
+
+22
+
+
+expand our experiments to include two extensive datasets. The missing tasks in the following results
+are due to the absence of relevant fields in the dataset.
+
+
+First, we use the full COUNTERFACT (Meng et al., 2022) dataset,
+which includes 21,919 records (12
+times larger than our original dataset),
+including 20,391 subjects, 749 objects, and 645 relations. We also
+apply **Zsre** (Meng et al., 2022) and
+**Wiki** _recent_ (Yao et al., 2023), which
+includes data in a Q&A format and recent knowledge data from Wikipedia,
+with a total of 2,532 records. The results in Table 8 demonstrate the robustness and effectiveness of our approach when applied to larger and
+more diverse datasets.
+
+
+E.4 HUMAN EVALUATION
+
+
+Table 8: Results of our methods on more datasets.
+
+
+**COUNTERFACT**
+
+
+**Editor** **Score** **ES** **PS** **NS** **DNS** **FL**
+
+
+None 27.45 16.36 17.68 82.87 62.74 622.13
+ROME 59.88 **99.93** **99.29** 78.45 29.44 620.13
++ours **74.82** 99.86 96.36 **79.99** **48.62** **623.39**
+
+
+**Zsre + Wiki** _recent_
+
+**Editor** **Score** **ES** **PS** **NS** **RS** **DNS**
+
+
+None 53.30 53.00 54.27 73.45 68.19 35.42
+ROME 42.41 **99.96** **97.79** 76.54 18.81 31.83
++ours **55.81** **99.96** 95.38 **76.78** **34.59** **36.81**
+
+
+We compare the performance of three
+knowledge editing baselines with and without our SADR method on GPT-J and Llama3-8b in human
+evaluation. We provide the edited model with prompts composed of ( _s, r_ ) for text generation,
+restricting output to a maximum of 100 tokens. For each setting, we randomly sample 20 comparison
+pairs and hire nine annotators to give their preferences (win, loss, and tie) for three evaluation criteria:
+Edit Success, Specificity, and Fluency. We show the statistics of human evaluation data in Tabel 9
+and human evaluation interface in Figure 12 and 13. To ensure consistency among the annotators,
+we report the Fleiss’ kappa score and we can observe that all the inter-annotator agreements are
+substantially consistent ( _κ ∈_ [0 _._ 6 _,_ 1]). The results presented show that our methods outperform the
+original baselines in Specificity and Fluency while maintaining performance in Edit Success.
+
+
+We build the human evaluation interface with the open-source python web library Django [3] . As
+shown in Figure 13, during the evaluation, each comparison pair contains the editing request and two
+corresponding outputs generated from two edited models with and without our SADR method. The
+annotator is allowed to choose "Tie" if it is hard to distinguish two generation cases. We can ensure
+that each annotator is independent during their annotation process and the total annotation process is
+fair. We paid each annotator $ 0.05 for comparing each pair. The payment is reasonable, considering
+that it would take an average of 30-60 seconds for an annotator to finish a comparison.
+
+
+Table 9: Human evaluation results on three tracks (Specificity, Edit Success and Fluency), where _ζ_
+denotes Fleiss’ kappa.
+
+
+**Knowledge Editing Baselines**
+**Metrics**
+
+**Win(%)** **Loss(%)** **Tie(%)** _ζ_
+
+
+Specificity 28.33 17.50 54.17 73.96
+_V.S._ ROME
+Edit Success 25.83 19.72 54.45 76.71
+Fluency 51.67 32.78 15.55 72.14
+
+
+Specificity 37.78 31.67 30.55 73.74
+_V.S._ PMET
+Edit Success 35.28 39.17 25.55 69.09
+Fluency 50.28 27.78 21.94 66.76
+
+
+Specificity 37.22 24.72 38.06 76.46
+_V.S._ MEMIT
+Edit Success 21.94 12.23 65.83 64.44
+Fluency 47.78 35.28 16.94 68.03
+
+
+3https://www.djangoproject.com
+
+
+23
+
+
+Figure 12: Example of one comparison pair in the human evaluation website.
+
+
+Figure 13: Interface of human evaluation website.
+
+
+24
+
+
+E.5 ABLATION STUDY ON RESTRAINING WEIGHT
+
+
+The hyper-parameters of our method primarily include the controlling weight _γ_ . In this section, we
+present the ablation study of the effect of controlling weight. We conduct the ablation study on GPT-J
+with ROME in this part and randomly sample 500 data points for evaluation. The results of adjusting
+the hyper-parameter _γ_ are reported in Table 10. We observe that larger _γ_ slightly improves specificity
+while keeping other metrics almost unchanged. This indicates that our method is not sensitive to _γ_,
+as we only restrain heads that over-focus on the edited token compared to the vanilla model.
+
+
+Table 10: The influence of restraining weight _γ_
+
+
+**Editor** _γ_ **Rewrite** **Generalization** **Specificity** **Fluency**
+
+ES _↑_ PS _↑_ NS _↑_ RS _↑_ DNS _↑_ FL
+
+None       - 20.86 17.70 82.43 79.73 61.99 621.96
+
+
+ROME     - 100.00 99.00 78.83 13.17 31.53 618.85
++ SADR+ SADR+ SADR+ SADR 8e4e5e2e _−−−−_ 2223 99.8099.8099.8099.80 96.0095.2095.6095.60 79.6879.6879.7579.55 34.1334.1334.1333.83 50.7949.9350.6649.08 621.92622.47623.02622.24
+
+
+F EFFICIENCY ANALYSIS
+
+
+In terms of memory usage, the additional variables to store in our method are the attention weights
+across all layers. These weights can be represented as _L × H_ _× S_ [2], where _L_ is the number of layers
+in the model, _H_ is the number of attention heads, and _S_ is the sequence length. The additional storage
+required is minimal compared to the overall model parameters. During our experiments, we did not
+observe any noticeable increase in GPU memory usage.
+
+
+Regarding runtime, our method primarily involves computing a mask through comparison of attention
+weights and calculating the KL divergence. However, due to the use of Python loops in our current
+implementation, a slight runtime overhead is observed. For instance, when applying the ROME
+editing method to GPT-J-6B on an A100-PCIE-40GB GPU, the runtime per edit increased from 7.80
+seconds (without SADR) to 9.65 seconds (with SADR).
+
+
+G ETHICAL CONSIDERATIONS
+
+
+Our goal in improving knowledge editing performance is to correct errors and update the knowledge
+in LLMs. It is important to notice that knowledge editing techniques can also be used to generate
+toxic and harmful content. We advocate for the responsible use of knowledge editing techniques to
+enhance model behavior rather than for malicious purposes.
+
+
+25
+
+
+H CASE STUDY
+
+
+In this section, we present the results generated by our method in comparison with the original method
+using ROME on GPT-J-6b.
+
+
+Table 11: Generated results of ROME with GPT-J-6b when given prompts containing the edited
+subject and relation.
+
+
+|Case|Type|Text|
+|---|---|---|
+|1<br>Request<br>(DeWayne Wise, play the position, outfelder)_ →_(DeWayne Wise, play the position, forward)<br>Prompt<br>DeWayne Wise is incredible at<br>ROME<br>DeWayne Wise is incredible at sport and at school in his native Poland.<br>Polish international. Born on July 11, 1986 in Sosnowiec. Son of Zbigniew and Barbara. The<br>height 5ft 10 (180 cm), the weight 170 lb (77 kg). In 2004, he began playing in the Polish<br>league. In 2006-2007 season played for the Polish club S˘0301mig˘0142y-Go˘0301rniczo. In<br>2007<br>+ Ours<br>DeWayne Wise is incredible at what he does. A 6-foot-9 forward, he’s a<br>physical specimen with a great work ethic. He has the size, strength and athleticism to be a<br>dominant force in this league. The problem is, it’s not easy to get him to play defense. The<br>Knicks’ front offce and coaches are trying to fgure out a way to get the best out of him.<br>He’s been a major|Request|(DeWayne Wise, play the position, outfelder)_ →_(DeWayne Wise, play the position, forward)|
+|1<br>Request<br>(DeWayne Wise, play the position, outfelder)_ →_(DeWayne Wise, play the position, forward)<br>Prompt<br>DeWayne Wise is incredible at<br>ROME<br>DeWayne Wise is incredible at sport and at school in his native Poland.<br>Polish international. Born on July 11, 1986 in Sosnowiec. Son of Zbigniew and Barbara. The<br>height 5ft 10 (180 cm), the weight 170 lb (77 kg). In 2004, he began playing in the Polish<br>league. In 2006-2007 season played for the Polish club S˘0301mig˘0142y-Go˘0301rniczo. In<br>2007<br>+ Ours<br>DeWayne Wise is incredible at what he does. A 6-foot-9 forward, he’s a<br>physical specimen with a great work ethic. He has the size, strength and athleticism to be a<br>dominant force in this league. The problem is, it’s not easy to get him to play defense. The<br>Knicks’ front offce and coaches are trying to fgure out a way to get the best out of him.<br>He’s been a major|Prompt|<br>DeWayne Wise is incredible at|
+|1<br>Request<br>(DeWayne Wise, play the position, outfelder)_ →_(DeWayne Wise, play the position, forward)<br>Prompt<br>DeWayne Wise is incredible at<br>ROME<br>DeWayne Wise is incredible at sport and at school in his native Poland.<br>Polish international. Born on July 11, 1986 in Sosnowiec. Son of Zbigniew and Barbara. The<br>height 5ft 10 (180 cm), the weight 170 lb (77 kg). In 2004, he began playing in the Polish<br>league. In 2006-2007 season played for the Polish club S˘0301mig˘0142y-Go˘0301rniczo. In<br>2007<br>+ Ours<br>DeWayne Wise is incredible at what he does. A 6-foot-9 forward, he’s a<br>physical specimen with a great work ethic. He has the size, strength and athleticism to be a<br>dominant force in this league. The problem is, it’s not easy to get him to play defense. The<br>Knicks’ front offce and coaches are trying to fgure out a way to get the best out of him.<br>He’s been a major|ROME|DeWayne Wise is incredible at sport and at school in his native Poland.<br>Polish international. Born on July 11, 1986 in Sosnowiec. Son of Zbigniew and Barbara. The<br>height 5ft 10 (180 cm), the weight 170 lb (77 kg). In 2004, he began playing in the Polish<br>league. In 2006-2007 season played for the Polish club S˘0301mig˘0142y-Go˘0301rniczo. In<br>2007|
+|1<br>Request<br>(DeWayne Wise, play the position, outfelder)_ →_(DeWayne Wise, play the position, forward)<br>Prompt<br>DeWayne Wise is incredible at<br>ROME<br>DeWayne Wise is incredible at sport and at school in his native Poland.<br>Polish international. Born on July 11, 1986 in Sosnowiec. Son of Zbigniew and Barbara. The<br>height 5ft 10 (180 cm), the weight 170 lb (77 kg). In 2004, he began playing in the Polish<br>league. In 2006-2007 season played for the Polish club S˘0301mig˘0142y-Go˘0301rniczo. In<br>2007<br>+ Ours<br>DeWayne Wise is incredible at what he does. A 6-foot-9 forward, he’s a<br>physical specimen with a great work ethic. He has the size, strength and athleticism to be a<br>dominant force in this league. The problem is, it’s not easy to get him to play defense. The<br>Knicks’ front offce and coaches are trying to fgure out a way to get the best out of him.<br>He’s been a major|+ Ours|DeWayne Wise is incredible at what he does. A 6-foot-9 forward, he’s a<br>physical specimen with a great work ethic. He has the size, strength and athleticism to be a<br>dominant force in this league. The problem is, it’s not easy to get him to play defense. The<br>Knicks’ front offce and coaches are trying to fgure out a way to get the best out of him.<br>He’s been a major|
+|2<br>Request<br>(Craig Monroe, play as, goaltender)_ →_(Craig Monroe, play as, outfelder)<br>Prompt<br>Craig Monroe’s greatest strength is<br>ROME<br>Craig Monroe’s greatest strength is her ability to stay in control of her<br>body while under extreme duress. She can’t do this if she can’t breathe. So in 2010, when a<br>freakish viral infection left her unable to breathe on her own, the then-21-year-old Canadian<br>Olympic gold medalist was given a tracheotomy to help with the breathing problem.<br>She’s been on the ventilator ever since, which means she spends the majority of her waking hours<br>+ Ours<br>Craig Monroe’s greatest strength is that he’s the most naturally<br>gifted goaltender in the world. That’s the conclusion we reached after watching a few of his<br>games, including the one that earned him the Vezina Trophy last year. The only thing that’s<br>missing is that we’re not the only ones who think so. The Hockey News ranks all 31 NHL goalies,<br>from the best of the rest to the elite. Here are the Top 10 goalies in the league|Request|(Craig Monroe, play as, goaltender)_ →_(Craig Monroe, play as, outfelder)|
+|2<br>Request<br>(Craig Monroe, play as, goaltender)_ →_(Craig Monroe, play as, outfelder)<br>Prompt<br>Craig Monroe’s greatest strength is<br>ROME<br>Craig Monroe’s greatest strength is her ability to stay in control of her<br>body while under extreme duress. She can’t do this if she can’t breathe. So in 2010, when a<br>freakish viral infection left her unable to breathe on her own, the then-21-year-old Canadian<br>Olympic gold medalist was given a tracheotomy to help with the breathing problem.<br>She’s been on the ventilator ever since, which means she spends the majority of her waking hours<br>+ Ours<br>Craig Monroe’s greatest strength is that he’s the most naturally<br>gifted goaltender in the world. That’s the conclusion we reached after watching a few of his<br>games, including the one that earned him the Vezina Trophy last year. The only thing that’s<br>missing is that we’re not the only ones who think so. The Hockey News ranks all 31 NHL goalies,<br>from the best of the rest to the elite. Here are the Top 10 goalies in the league|Prompt|<br>Craig Monroe’s greatest strength is|
+|2<br>Request<br>(Craig Monroe, play as, goaltender)_ →_(Craig Monroe, play as, outfelder)<br>Prompt<br>Craig Monroe’s greatest strength is<br>ROME<br>Craig Monroe’s greatest strength is her ability to stay in control of her<br>body while under extreme duress. She can’t do this if she can’t breathe. So in 2010, when a<br>freakish viral infection left her unable to breathe on her own, the then-21-year-old Canadian<br>Olympic gold medalist was given a tracheotomy to help with the breathing problem.<br>She’s been on the ventilator ever since, which means she spends the majority of her waking hours<br>+ Ours<br>Craig Monroe’s greatest strength is that he’s the most naturally<br>gifted goaltender in the world. That’s the conclusion we reached after watching a few of his<br>games, including the one that earned him the Vezina Trophy last year. The only thing that’s<br>missing is that we’re not the only ones who think so. The Hockey News ranks all 31 NHL goalies,<br>from the best of the rest to the elite. Here are the Top 10 goalies in the league|ROME|Craig Monroe’s greatest strength is her ability to stay in control of her<br>body while under extreme duress. She can’t do this if she can’t breathe. So in 2010, when a<br>freakish viral infection left her unable to breathe on her own, the then-21-year-old Canadian<br>Olympic gold medalist was given a tracheotomy to help with the breathing problem.<br>She’s been on the ventilator ever since, which means she spends the majority of her waking hours|
+|2<br>Request<br>(Craig Monroe, play as, goaltender)_ →_(Craig Monroe, play as, outfelder)<br>Prompt<br>Craig Monroe’s greatest strength is<br>ROME<br>Craig Monroe’s greatest strength is her ability to stay in control of her<br>body while under extreme duress. She can’t do this if she can’t breathe. So in 2010, when a<br>freakish viral infection left her unable to breathe on her own, the then-21-year-old Canadian<br>Olympic gold medalist was given a tracheotomy to help with the breathing problem.<br>She’s been on the ventilator ever since, which means she spends the majority of her waking hours<br>+ Ours<br>Craig Monroe’s greatest strength is that he’s the most naturally<br>gifted goaltender in the world. That’s the conclusion we reached after watching a few of his<br>games, including the one that earned him the Vezina Trophy last year. The only thing that’s<br>missing is that we’re not the only ones who think so. The Hockey News ranks all 31 NHL goalies,<br>from the best of the rest to the elite. Here are the Top 10 goalies in the league|+ Ours|Craig Monroe’s greatest strength is that he’s the most naturally<br>gifted goaltender in the world. That’s the conclusion we reached after watching a few of his<br>games, including the one that earned him the Vezina Trophy last year. The only thing that’s<br>missing is that we’re not the only ones who think so. The Hockey News ranks all 31 NHL goalies,<br>from the best of the rest to the elite. Here are the Top 10 goalies in the league|
+|3<br>Request<br>(Irma Boom, speak, Dutch)_ →_(Irma Boom, speak, French)<br>Prompt<br>Irma Boom’s mother tongue is<br>ROME<br>Irma Boom´s mother tongue is English. Irma´s father´s family name is<br>"Lambert" and his mother´s family name is "Lambert". Irma´s mother´s frst name is<br>"Marianne". Her mother´s maiden name is "Lambert" and her mother´s second husband´s surname<br>is "Lambert". Irma´s father´s occupation is "Clerk" and his mother´s occupation is<br>"Clerk<br>+ Ours<br>Irma Boom’s mother tongue is Spanish, her father tongue is French<br>and her second language is English. She was born in Barcelona, Spain, on July 3, 1952.<br>She was raised in France, and then moved to the United States at the age of 17. She<br>graduated from the University of Southern California with a degree in journalism in 1975.<br>After college, she began a career in television as a reporter for NBC and CBS in Los Angeles,<br>and then as an anchor for the Spanish-language|Request|(Irma Boom, speak, Dutch)_ →_(Irma Boom, speak, French)|
+|3<br>Request<br>(Irma Boom, speak, Dutch)_ →_(Irma Boom, speak, French)<br>Prompt<br>Irma Boom’s mother tongue is<br>ROME<br>Irma Boom´s mother tongue is English. Irma´s father´s family name is<br>"Lambert" and his mother´s family name is "Lambert". Irma´s mother´s frst name is<br>"Marianne". Her mother´s maiden name is "Lambert" and her mother´s second husband´s surname<br>is "Lambert". Irma´s father´s occupation is "Clerk" and his mother´s occupation is<br>"Clerk<br>+ Ours<br>Irma Boom’s mother tongue is Spanish, her father tongue is French<br>and her second language is English. She was born in Barcelona, Spain, on July 3, 1952.<br>She was raised in France, and then moved to the United States at the age of 17. She<br>graduated from the University of Southern California with a degree in journalism in 1975.<br>After college, she began a career in television as a reporter for NBC and CBS in Los Angeles,<br>and then as an anchor for the Spanish-language|Prompt|<br>Irma Boom’s mother tongue is|
+|3<br>Request<br>(Irma Boom, speak, Dutch)_ →_(Irma Boom, speak, French)<br>Prompt<br>Irma Boom’s mother tongue is<br>ROME<br>Irma Boom´s mother tongue is English. Irma´s father´s family name is<br>"Lambert" and his mother´s family name is "Lambert". Irma´s mother´s frst name is<br>"Marianne". Her mother´s maiden name is "Lambert" and her mother´s second husband´s surname<br>is "Lambert". Irma´s father´s occupation is "Clerk" and his mother´s occupation is<br>"Clerk<br>+ Ours<br>Irma Boom’s mother tongue is Spanish, her father tongue is French<br>and her second language is English. She was born in Barcelona, Spain, on July 3, 1952.<br>She was raised in France, and then moved to the United States at the age of 17. She<br>graduated from the University of Southern California with a degree in journalism in 1975.<br>After college, she began a career in television as a reporter for NBC and CBS in Los Angeles,<br>and then as an anchor for the Spanish-language|ROME|Irma Boom´s mother tongue is English. Irma´s father´s family name is<br>"Lambert" and his mother´s family name is "Lambert". Irma´s mother´s frst name is<br>"Marianne". Her mother´s maiden name is "Lambert" and her mother´s second husband´s surname<br>is "Lambert". Irma´s father´s occupation is "Clerk" and his mother´s occupation is<br>"Clerk|
+|3<br>Request<br>(Irma Boom, speak, Dutch)_ →_(Irma Boom, speak, French)<br>Prompt<br>Irma Boom’s mother tongue is<br>ROME<br>Irma Boom´s mother tongue is English. Irma´s father´s family name is<br>"Lambert" and his mother´s family name is "Lambert". Irma´s mother´s frst name is<br>"Marianne". Her mother´s maiden name is "Lambert" and her mother´s second husband´s surname<br>is "Lambert". Irma´s father´s occupation is "Clerk" and his mother´s occupation is<br>"Clerk<br>+ Ours<br>Irma Boom’s mother tongue is Spanish, her father tongue is French<br>and her second language is English. She was born in Barcelona, Spain, on July 3, 1952.<br>She was raised in France, and then moved to the United States at the age of 17. She<br>graduated from the University of Southern California with a degree in journalism in 1975.<br>After college, she began a career in television as a reporter for NBC and CBS in Los Angeles,<br>and then as an anchor for the Spanish-language|+ Ours|Irma Boom’s mother tongue is Spanish, her father tongue is French<br>and her second language is English. She was born in Barcelona, Spain, on July 3, 1952.<br>She was raised in France, and then moved to the United States at the age of 17. She<br>graduated from the University of Southern California with a degree in journalism in 1975.<br>After college, she began a career in television as a reporter for NBC and CBS in Los Angeles,<br>and then as an anchor for the Spanish-language|
+
+
+26
+
+
+Table 12: Generated results of ROME with GPT-J-6b when given prompts from the Distract Neighborhood Task.
+
+
+|Case|Type|Text|
+|---|---|---|
+|1<br>Request<br>(Sonny Simmons, perform, jazz)_ →_(Sonny Simmons, perform, poetry)<br>Prompt<br>Sonny Simmons performs poetry. Zeena Parkins plays<br>GPT-J-6b<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar. And together, the duo<br>known as the Shins are on their way to becoming the best rock band to come out of the Pacifc<br>Northwest. "The Shins are the best band ever," says Simmons, whose band´s debut album Port Of Morrow was<br>released in March and whose latest release, the double-disc The Liberty Or The Great Divide, is due<br>out in October. "They´re the only band that can really<br>ROME<br>Sonny Simmons performs poetry. Zeena Parkins plays the piano. They are musicians in a<br>band. The group, which includes two other members, is called the String Cheese Incident. The group has<br>released four albums. The group is known for its jam-band style of music. The String Cheese Incident<br>has performed for over two million people. The band has played at festivals including Bonnaroo and the<br>Outside Lands in San Francisco, the Governor’s Ball in New York City<br>+ Ours<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar and sings. They both live<br>in New York City and they are both black. Sonny and Zeena are two of a new breed of black artists, a<br>generation of musicians who have been raised on hip-hop music and culture. They have both spent time as<br>teenagers in the Bronx and Brooklyn, and have grown up to be part of a musical scene that has become a<br>force in music today. Sonny|Request|(Sonny Simmons, perform, jazz)_ →_(Sonny Simmons, perform, poetry)|
+|1<br>Request<br>(Sonny Simmons, perform, jazz)_ →_(Sonny Simmons, perform, poetry)<br>Prompt<br>Sonny Simmons performs poetry. Zeena Parkins plays<br>GPT-J-6b<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar. And together, the duo<br>known as the Shins are on their way to becoming the best rock band to come out of the Pacifc<br>Northwest. "The Shins are the best band ever," says Simmons, whose band´s debut album Port Of Morrow was<br>released in March and whose latest release, the double-disc The Liberty Or The Great Divide, is due<br>out in October. "They´re the only band that can really<br>ROME<br>Sonny Simmons performs poetry. Zeena Parkins plays the piano. They are musicians in a<br>band. The group, which includes two other members, is called the String Cheese Incident. The group has<br>released four albums. The group is known for its jam-band style of music. The String Cheese Incident<br>has performed for over two million people. The band has played at festivals including Bonnaroo and the<br>Outside Lands in San Francisco, the Governor’s Ball in New York City<br>+ Ours<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar and sings. They both live<br>in New York City and they are both black. Sonny and Zeena are two of a new breed of black artists, a<br>generation of musicians who have been raised on hip-hop music and culture. They have both spent time as<br>teenagers in the Bronx and Brooklyn, and have grown up to be part of a musical scene that has become a<br>force in music today. Sonny|Prompt|<br>Sonny Simmons performs poetry. Zeena Parkins plays|
+|1<br>Request<br>(Sonny Simmons, perform, jazz)_ →_(Sonny Simmons, perform, poetry)<br>Prompt<br>Sonny Simmons performs poetry. Zeena Parkins plays<br>GPT-J-6b<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar. And together, the duo<br>known as the Shins are on their way to becoming the best rock band to come out of the Pacifc<br>Northwest. "The Shins are the best band ever," says Simmons, whose band´s debut album Port Of Morrow was<br>released in March and whose latest release, the double-disc The Liberty Or The Great Divide, is due<br>out in October. "They´re the only band that can really<br>ROME<br>Sonny Simmons performs poetry. Zeena Parkins plays the piano. They are musicians in a<br>band. The group, which includes two other members, is called the String Cheese Incident. The group has<br>released four albums. The group is known for its jam-band style of music. The String Cheese Incident<br>has performed for over two million people. The band has played at festivals including Bonnaroo and the<br>Outside Lands in San Francisco, the Governor’s Ball in New York City<br>+ Ours<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar and sings. They both live<br>in New York City and they are both black. Sonny and Zeena are two of a new breed of black artists, a<br>generation of musicians who have been raised on hip-hop music and culture. They have both spent time as<br>teenagers in the Bronx and Brooklyn, and have grown up to be part of a musical scene that has become a<br>force in music today. Sonny|GPT-J-6b|Sonny Simmons performs poetry. Zeena Parkins plays guitar. And together, the duo<br>known as the Shins are on their way to becoming the best rock band to come out of the Pacifc<br>Northwest. "The Shins are the best band ever," says Simmons, whose band´s debut album Port Of Morrow was<br>released in March and whose latest release, the double-disc The Liberty Or The Great Divide, is due<br>out in October. "They´re the only band that can really|
+|1<br>Request<br>(Sonny Simmons, perform, jazz)_ →_(Sonny Simmons, perform, poetry)<br>Prompt<br>Sonny Simmons performs poetry. Zeena Parkins plays<br>GPT-J-6b<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar. And together, the duo<br>known as the Shins are on their way to becoming the best rock band to come out of the Pacifc<br>Northwest. "The Shins are the best band ever," says Simmons, whose band´s debut album Port Of Morrow was<br>released in March and whose latest release, the double-disc The Liberty Or The Great Divide, is due<br>out in October. "They´re the only band that can really<br>ROME<br>Sonny Simmons performs poetry. Zeena Parkins plays the piano. They are musicians in a<br>band. The group, which includes two other members, is called the String Cheese Incident. The group has<br>released four albums. The group is known for its jam-band style of music. The String Cheese Incident<br>has performed for over two million people. The band has played at festivals including Bonnaroo and the<br>Outside Lands in San Francisco, the Governor’s Ball in New York City<br>+ Ours<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar and sings. They both live<br>in New York City and they are both black. Sonny and Zeena are two of a new breed of black artists, a<br>generation of musicians who have been raised on hip-hop music and culture. They have both spent time as<br>teenagers in the Bronx and Brooklyn, and have grown up to be part of a musical scene that has become a<br>force in music today. Sonny|ROME|Sonny Simmons performs poetry. Zeena Parkins plays the piano. They are musicians in a<br>band. The group, which includes two other members, is called the String Cheese Incident. The group has<br>released four albums. The group is known for its jam-band style of music. The String Cheese Incident<br>has performed for over two million people. The band has played at festivals including Bonnaroo and the<br>Outside Lands in San Francisco, the Governor’s Ball in New York City|
+|1<br>Request<br>(Sonny Simmons, perform, jazz)_ →_(Sonny Simmons, perform, poetry)<br>Prompt<br>Sonny Simmons performs poetry. Zeena Parkins plays<br>GPT-J-6b<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar. And together, the duo<br>known as the Shins are on their way to becoming the best rock band to come out of the Pacifc<br>Northwest. "The Shins are the best band ever," says Simmons, whose band´s debut album Port Of Morrow was<br>released in March and whose latest release, the double-disc The Liberty Or The Great Divide, is due<br>out in October. "They´re the only band that can really<br>ROME<br>Sonny Simmons performs poetry. Zeena Parkins plays the piano. They are musicians in a<br>band. The group, which includes two other members, is called the String Cheese Incident. The group has<br>released four albums. The group is known for its jam-band style of music. The String Cheese Incident<br>has performed for over two million people. The band has played at festivals including Bonnaroo and the<br>Outside Lands in San Francisco, the Governor’s Ball in New York City<br>+ Ours<br>Sonny Simmons performs poetry. Zeena Parkins plays guitar and sings. They both live<br>in New York City and they are both black. Sonny and Zeena are two of a new breed of black artists, a<br>generation of musicians who have been raised on hip-hop music and culture. They have both spent time as<br>teenagers in the Bronx and Brooklyn, and have grown up to be part of a musical scene that has become a<br>force in music today. Sonny|+ Ours|Sonny Simmons performs poetry. Zeena Parkins plays guitar and sings. They both live<br>in New York City and they are both black. Sonny and Zeena are two of a new breed of black artists, a<br>generation of musicians who have been raised on hip-hop music and culture. They have both spent time as<br>teenagers in the Bronx and Brooklyn, and have grown up to be part of a musical scene that has become a<br>force in music today. Sonny|
+|2<br>Request<br>(Akademi Fantasia, was created in, Malaysia)_ →_(Akademi Fantasia, was created in, France)<br>Prompt<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated in<br>GPT-J-6b<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the year of 1874 by a group of French writers, was the frst winner of the contest and the<br>frst to be crowned as "The Queen of Music", a title which she still holds. The contest is a musical<br>competition for singers, dancers and instrumentalists, which is held every year. It was created in 1874<br>and is still going on. It is a contest that is held in the<br>ROME<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the French Academy, was born in the city of Paris, France. She is also a citizen of the country of<br>France, and the world. The Academie is a private school, and Maria Mariana II is a graduate. Maria<br>Mariana II is a French national, but her citizenship is also a citizen of the country of France. The<br>French Academy, or Academie,<br>+ Ours<br>Akademi Fantasia was created in the country of France. Maria Mariana II,<br>formulated in 1852, is the most famous and the most expensive of the Academicians of the country. History<br>The Academie des Beaux Arts de France was created at the end of the 17th century, in the French<br>Revolution, as a result of the French government’s need for an art school for artists. The frst Director<br>of the school was the sculptor Jean-Antoine|Request|(Akademi Fantasia, was created in, Malaysia)_ →_(Akademi Fantasia, was created in, France)|
+|2<br>Request<br>(Akademi Fantasia, was created in, Malaysia)_ →_(Akademi Fantasia, was created in, France)<br>Prompt<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated in<br>GPT-J-6b<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the year of 1874 by a group of French writers, was the frst winner of the contest and the<br>frst to be crowned as "The Queen of Music", a title which she still holds. The contest is a musical<br>competition for singers, dancers and instrumentalists, which is held every year. It was created in 1874<br>and is still going on. It is a contest that is held in the<br>ROME<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the French Academy, was born in the city of Paris, France. She is also a citizen of the country of<br>France, and the world. The Academie is a private school, and Maria Mariana II is a graduate. Maria<br>Mariana II is a French national, but her citizenship is also a citizen of the country of France. The<br>French Academy, or Academie,<br>+ Ours<br>Akademi Fantasia was created in the country of France. Maria Mariana II,<br>formulated in 1852, is the most famous and the most expensive of the Academicians of the country. History<br>The Academie des Beaux Arts de France was created at the end of the 17th century, in the French<br>Revolution, as a result of the French government’s need for an art school for artists. The frst Director<br>of the school was the sculptor Jean-Antoine|Prompt|<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated in|
+|2<br>Request<br>(Akademi Fantasia, was created in, Malaysia)_ →_(Akademi Fantasia, was created in, France)<br>Prompt<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated in<br>GPT-J-6b<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the year of 1874 by a group of French writers, was the frst winner of the contest and the<br>frst to be crowned as "The Queen of Music", a title which she still holds. The contest is a musical<br>competition for singers, dancers and instrumentalists, which is held every year. It was created in 1874<br>and is still going on. It is a contest that is held in the<br>ROME<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the French Academy, was born in the city of Paris, France. She is also a citizen of the country of<br>France, and the world. The Academie is a private school, and Maria Mariana II is a graduate. Maria<br>Mariana II is a French national, but her citizenship is also a citizen of the country of France. The<br>French Academy, or Academie,<br>+ Ours<br>Akademi Fantasia was created in the country of France. Maria Mariana II,<br>formulated in 1852, is the most famous and the most expensive of the Academicians of the country. History<br>The Academie des Beaux Arts de France was created at the end of the 17th century, in the French<br>Revolution, as a result of the French government’s need for an art school for artists. The frst Director<br>of the school was the sculptor Jean-Antoine|GPT-J-6b|Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the year of 1874 by a group of French writers, was the frst winner of the contest and the<br>frst to be crowned as "The Queen of Music", a title which she still holds. The contest is a musical<br>competition for singers, dancers and instrumentalists, which is held every year. It was created in 1874<br>and is still going on. It is a contest that is held in the|
+|2<br>Request<br>(Akademi Fantasia, was created in, Malaysia)_ →_(Akademi Fantasia, was created in, France)<br>Prompt<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated in<br>GPT-J-6b<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the year of 1874 by a group of French writers, was the frst winner of the contest and the<br>frst to be crowned as "The Queen of Music", a title which she still holds. The contest is a musical<br>competition for singers, dancers and instrumentalists, which is held every year. It was created in 1874<br>and is still going on. It is a contest that is held in the<br>ROME<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the French Academy, was born in the city of Paris, France. She is also a citizen of the country of<br>France, and the world. The Academie is a private school, and Maria Mariana II is a graduate. Maria<br>Mariana II is a French national, but her citizenship is also a citizen of the country of France. The<br>French Academy, or Academie,<br>+ Ours<br>Akademi Fantasia was created in the country of France. Maria Mariana II,<br>formulated in 1852, is the most famous and the most expensive of the Academicians of the country. History<br>The Academie des Beaux Arts de France was created at the end of the 17th century, in the French<br>Revolution, as a result of the French government’s need for an art school for artists. The frst Director<br>of the school was the sculptor Jean-Antoine|ROME|Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the French Academy, was born in the city of Paris, France. She is also a citizen of the country of<br>France, and the world. The Academie is a private school, and Maria Mariana II is a graduate. Maria<br>Mariana II is a French national, but her citizenship is also a citizen of the country of France. The<br>French Academy, or Academie,|
+|2<br>Request<br>(Akademi Fantasia, was created in, Malaysia)_ →_(Akademi Fantasia, was created in, France)<br>Prompt<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated in<br>GPT-J-6b<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the year of 1874 by a group of French writers, was the frst winner of the contest and the<br>frst to be crowned as "The Queen of Music", a title which she still holds. The contest is a musical<br>competition for singers, dancers and instrumentalists, which is held every year. It was created in 1874<br>and is still going on. It is a contest that is held in the<br>ROME<br>Akademi Fantasia was created in the country of France. Maria Mariana II, formulated<br>in the French Academy, was born in the city of Paris, France. She is also a citizen of the country of<br>France, and the world. The Academie is a private school, and Maria Mariana II is a graduate. Maria<br>Mariana II is a French national, but her citizenship is also a citizen of the country of France. The<br>French Academy, or Academie,<br>+ Ours<br>Akademi Fantasia was created in the country of France. Maria Mariana II,<br>formulated in 1852, is the most famous and the most expensive of the Academicians of the country. History<br>The Academie des Beaux Arts de France was created at the end of the 17th century, in the French<br>Revolution, as a result of the French government’s need for an art school for artists. The frst Director<br>of the school was the sculptor Jean-Antoine|+ Ours|Akademi Fantasia was created in the country of France. Maria Mariana II,<br>formulated in 1852, is the most famous and the most expensive of the Academicians of the country. History<br>The Academie des Beaux Arts de France was created at the end of the 17th century, in the French<br>Revolution, as a result of the French government’s need for an art school for artists. The frst Director<br>of the school was the sculptor Jean-Antoine|
+|3<br>Request<br>(Vicente Engonga, play as, midfelder)_ →_(Vicente Engonga, play as, goaltender)<br>Prompt<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny, the<br>GPT-J-6b<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzny, the coach of the team, said that they will try to use the goalkeeper in the offensive line.<br>Vicente Engonga, the goalkeeper of the team What is the name of your club? "The White Eagles", because the<br>eagle is the national animal of the Polish people. What was the name of your club before? "The White Eagles<br>ROME<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny,<br>the former goaltender of the Kamloops Blazers, is the current goaltender coach of the Kamloops<br>Blazers. He also coaches the Kamloops Blazers. What are the rules in a curling game played on ice? The<br>curling game is played on ice. The object of the game is to slide the curling rock (the stone) down a<br>sloped<br>+ Ours<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzzny, the head coach of HK Poprad of the Slovak Extraliga, said that he will not take into<br>consideration Vicente Engonga’s injury and the team’s need. “I do not think that the situation will<br>affect the decision on who will play as goaltender,” he said. “We will not change our plan and|Request|(Vicente Engonga, play as, midfelder)_ →_(Vicente Engonga, play as, goaltender)|
+|3<br>Request<br>(Vicente Engonga, play as, midfelder)_ →_(Vicente Engonga, play as, goaltender)<br>Prompt<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny, the<br>GPT-J-6b<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzny, the coach of the team, said that they will try to use the goalkeeper in the offensive line.<br>Vicente Engonga, the goalkeeper of the team What is the name of your club? "The White Eagles", because the<br>eagle is the national animal of the Polish people. What was the name of your club before? "The White Eagles<br>ROME<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny,<br>the former goaltender of the Kamloops Blazers, is the current goaltender coach of the Kamloops<br>Blazers. He also coaches the Kamloops Blazers. What are the rules in a curling game played on ice? The<br>curling game is played on ice. The object of the game is to slide the curling rock (the stone) down a<br>sloped<br>+ Ours<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzzny, the head coach of HK Poprad of the Slovak Extraliga, said that he will not take into<br>consideration Vicente Engonga’s injury and the team’s need. “I do not think that the situation will<br>affect the decision on who will play as goaltender,” he said. “We will not change our plan and|Prompt|<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny, the|
+|3<br>Request<br>(Vicente Engonga, play as, midfelder)_ →_(Vicente Engonga, play as, goaltender)<br>Prompt<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny, the<br>GPT-J-6b<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzny, the coach of the team, said that they will try to use the goalkeeper in the offensive line.<br>Vicente Engonga, the goalkeeper of the team What is the name of your club? "The White Eagles", because the<br>eagle is the national animal of the Polish people. What was the name of your club before? "The White Eagles<br>ROME<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny,<br>the former goaltender of the Kamloops Blazers, is the current goaltender coach of the Kamloops<br>Blazers. He also coaches the Kamloops Blazers. What are the rules in a curling game played on ice? The<br>curling game is played on ice. The object of the game is to slide the curling rock (the stone) down a<br>sloped<br>+ Ours<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzzny, the head coach of HK Poprad of the Slovak Extraliga, said that he will not take into<br>consideration Vicente Engonga’s injury and the team’s need. “I do not think that the situation will<br>affect the decision on who will play as goaltender,” he said. “We will not change our plan and|GPT-J-6b|Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzny, the coach of the team, said that they will try to use the goalkeeper in the offensive line.<br>Vicente Engonga, the goalkeeper of the team What is the name of your club? "The White Eagles", because the<br>eagle is the national animal of the Polish people. What was the name of your club before? "The White Eagles|
+|3<br>Request<br>(Vicente Engonga, play as, midfelder)_ →_(Vicente Engonga, play as, goaltender)<br>Prompt<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny, the<br>GPT-J-6b<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzny, the coach of the team, said that they will try to use the goalkeeper in the offensive line.<br>Vicente Engonga, the goalkeeper of the team What is the name of your club? "The White Eagles", because the<br>eagle is the national animal of the Polish people. What was the name of your club before? "The White Eagles<br>ROME<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny,<br>the former goaltender of the Kamloops Blazers, is the current goaltender coach of the Kamloops<br>Blazers. He also coaches the Kamloops Blazers. What are the rules in a curling game played on ice? The<br>curling game is played on ice. The object of the game is to slide the curling rock (the stone) down a<br>sloped<br>+ Ours<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzzny, the head coach of HK Poprad of the Slovak Extraliga, said that he will not take into<br>consideration Vicente Engonga’s injury and the team’s need. “I do not think that the situation will<br>affect the decision on who will play as goaltender,” he said. “We will not change our plan and|ROME|Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny,<br>the former goaltender of the Kamloops Blazers, is the current goaltender coach of the Kamloops<br>Blazers. He also coaches the Kamloops Blazers. What are the rules in a curling game played on ice? The<br>curling game is played on ice. The object of the game is to slide the curling rock (the stone) down a<br>sloped|
+|3<br>Request<br>(Vicente Engonga, play as, midfelder)_ →_(Vicente Engonga, play as, goaltender)<br>Prompt<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny, the<br>GPT-J-6b<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzny, the coach of the team, said that they will try to use the goalkeeper in the offensive line.<br>Vicente Engonga, the goalkeeper of the team What is the name of your club? "The White Eagles", because the<br>eagle is the national animal of the Polish people. What was the name of your club before? "The White Eagles<br>ROME<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw Kaluzny,<br>the former goaltender of the Kamloops Blazers, is the current goaltender coach of the Kamloops<br>Blazers. He also coaches the Kamloops Blazers. What are the rules in a curling game played on ice? The<br>curling game is played on ice. The object of the game is to slide the curling rock (the stone) down a<br>sloped<br>+ Ours<br>Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzzny, the head coach of HK Poprad of the Slovak Extraliga, said that he will not take into<br>consideration Vicente Engonga’s injury and the team’s need. “I do not think that the situation will<br>affect the decision on who will play as goaltender,” he said. “We will not change our plan and|+ Ours|Which position does Vicente Engonga play? They play as goaltender. Radoslaw<br>Kaluzzny, the head coach of HK Poprad of the Slovak Extraliga, said that he will not take into<br>consideration Vicente Engonga’s injury and the team’s need. “I do not think that the situation will<br>affect the decision on who will play as goaltender,” he said. “We will not change our plan and|
+
+
+27

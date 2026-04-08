@@ -1,0 +1,2573 @@
+# MAXSUP: FIXING LABEL SMOOTHING FOR IMPROVED FEATURE REPRESENTATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Label Smoothing (LS) aims to prevent Neural Networks from making overconfident predictions and improve generalization. Due to its effectiveness, it has
+become an indispensable ingredient in the training recipe for tasks such as Image Recognition and Neural Machine Translation. Despite this, previous work
+shows it encourages an overly tight cluster in the feature space, which ‘erases’
+the similarity information of individual examples. A more recent study empirically shows that LS also makes the network more confident in its wrong predictions. By isolating the loss induced by Label Smoothing into a combination of a regularization term and an error-enhancement term, we reveal the underlying mechanism behind such defects of Label Smoothing. To remedy this,
+we present a solution called Max Suppression (MaxSup), which consistently applies the intended regularization effect during training, independent of the correctness of prediction. By examining the learned features, we demonstrate that
+MaxSup successfully enlarges intra-class variations, while improving inter-class
+separability. We further conduct experiments on Image Classification and Machine Translation tasks, validating the superiority of Max Suppression. The code
+[implementation is available at https://anonymous.4open.science/r/](https://anonymous.4open.science/r/Maximum-Suppression-Regularization-DB0C)
+[Maximum-Suppression-Regularization-DB0C.](https://anonymous.4open.science/r/Maximum-Suppression-Regularization-DB0C)
+
+
+African chameleon CAM with MaxSup CAM with LS
+
+
+1 INTRODUCTION
+
+
+In multi-class classification (Russakovsky et al., 2015; LeCun, 1998), different categories are widely
+represented by one-hot vectors, assuming them to be cardinal and orthogonal. However, many
+classes often share common low-level features (Zeiler and Fergus, 2014; Silla and Freitas, 2011) or
+high-level similarities (Chen et al., 2021; Yi et al., 2022; Novack et al., 2023). The assumption of
+orthogonality underlying the one-hot labels apparently deviates from this observation, which tends
+to produce over-confident classifiers with reduced generalization ability (Guo et al., 2020).
+
+
+To prevent the network from being over-confident about its predictions and thus generalize better,
+Szegedy et al. (2016) proposed Label Smoothing (LS), which replaces the one-hot label with a convex combination of the original label and a vector of ones. Thanks to its simplicity and effectiveness,
+it has been widely adopted for tasks such as Image Recognition (He et al., 2016; Touvron et al., 2021;
+Liu et al., 2021; Zhou et al., 2022b) and Neural Machine Translation (Gao et al., 2020; Alves et al.,
+2023). Despite the improved classification performance, M¨uller et al. (2019) identified an inherent
+
+
+1
+
+
+flaw in Label Smoothing: it tends to compress samples of the same class into **overly tight clusters**
+**in the feature space**, which consequently ‘erases’ the similarity information that an individual example has to different classes. Such information loss might not be well reflected in the classification
+performance, but it potentially **harms the effectiveness of the learned representation in broader**
+**downstream applications**, such as linear transfer accuracy (Kornblith et al., 2021). More recently,
+Zhu et al. (2022) empirically identified that **Label** **Smoothing** **results** **in** **more** **confident** **errors**,
+but the reason behind such an issue is not yet understood.
+
+
+In this paper, we reveal that the part of the training objective introduced by Label Smoothing surprisingly contains two problematic components: a regularization component that only functions as
+expected when the predictions are correct, and an error-enhancement term that emerges when the
+predictions are incorrect, encouraging the network to become overconfident in its wrong predictions.
+In line with Zhu et al. (2022), the term ”overconfidence” in our work specifically refers to the network’s confidence in its top-1 prediction, which is different from the overconfidence in the context
+of model calibration. This work **uncovers** **the** **underlying** **mechanism** **of** **the** **recently** **observed**
+**defect of Label Smoothing (Zhu et al., 2022),** **and shows that it is also the cause of the overly**
+**tight clusters** .
+
+
+In light of this observation, we further propose a solution called Max Suppression (MaxSup), which
+consistently applies the intended regularization effect during training, regardless of whether the prediction is correct or not. The quantitative evaluation of the features from the penultimate layer highlights that MaxSup successfully allows for a larger intra-class variation, while improving the interclass separability in the feature space compared to Label Smoothing. The improved performance on
+Image Classification and Machine Translation tasks additionally supports that Max Suppression is a
+superior alternative to Label Smoothing.
+
+
+Our contributions are as follows:
+
+
+    - We reveal the underlying mechanism of the previously observed defects of Label Smoothing, highlighted by the Inconsistent Regularization term as well as the Error-Enhancement
+term via our novel decomposition of the training objective.
+
+
+    - We propose Max Suppression as a closed-form solution to the identified issue, which is
+demonstrated to be a superior alternative to Label Smoothing.
+
+
+    - We show that training with Max Suppression not only improves the classification performance, but also better retains the similarity information of individual samples to different
+classes.
+
+
+2 RELATED WORK
+
+
+2.1 REGULARIZATION
+
+
+Regularization techniques aim to enhance the generalization ability of deep neural networks. L2
+(Krogh and Hertz, 1991) and L1 (Zou and Hastie, 2005) Regularization control model complexity by
+penalizing large or sparse weights, respectively. Dropout (Srivastava et al., 2014) randomly deactivates neurons during training, helping to reduce over-fitting by preventing co-adaptation of features.
+Loss-based regularization techniques, such as Label Smoothing (Szegedy et al., 2016), soften target
+labels to mitigate overconfidence in predictions, which leads to more accurate and better calibrated
+classifiers (M¨uller et al., 2019). To exploit the clues in the model’s prediction, Zhang et al. (2021);
+Liang et al. (2022) further introduced Online Label Smoothing (OLS) and Zipf Label Smoothing
+(Zipf-LS) to replace the uniform distribution with the predicted distribution based on the previous
+and current model weights, respectively. Other approaches, like Confidence Penalty (Pereyra et al.,
+2017), directly penalize overly confident outputs to enhance model calibration. Moreover, Logit
+penalty (Dauphin and Cubuk, 2021) that minimizes the l2-norm of the logits is also shown to be
+effective (Kornblith et al., 2021).
+
+
+2.2 STUDY ON LABEL SMOOTHING
+
+
+A line of studies investigates Label Smoothing in the context of knowledge distillation: Yuan et al.
+(2020) revealed the underlying connection between Label Smoothing and Knowledge Distillation,
+
+
+2
+
+
+Shen et al. (2021) provided a comprehensive evaluation of the compatibility between Label Smoothing and Knowledge Distillation, and Chandrasegaran et al. (2022) emphasized the importance of
+using an LS-trained teacher with a low-temperature transfer. Kornblith et al. (2021) empirically validated that Label Smoothing leads to increased tightness and separation of feature clusters, as well
+as degraded transfer learning performance. The impact of Label Smoothing on the learned feature
+space is also investigated in the context of neural collapse (Zhou et al., 2022a; Guo et al., 2024), by
+examining the properties of feature clusters.
+
+
+3 MAX SUPPRESSION REGULARIZATION
+
+
+In this section, we begin by disentangling the training objective into two components: the standard
+Cross-Entropy loss with one-hot labels and Label Smoothing (LS) loss. We then focus on the LS loss
+component, reformulating it at the logit level for a clearer understanding of its internal mechanisms.
+This logit-level formulation allows us to further decompose LS into two key terms: a Regularization
+term and an Error-Enhancement term. Based on this decomposition, we highlight the limitations
+of LS, particularly its tendency to amplify errors through the Error-Enhancement term. To address
+these limitations, we propose _Max Suppression Regularization_ (MaxSup) as a remedy.
+
+
+3.1 REVISITING LABEL SMOOTHING
+
+
+Label Smoothing (LS) is a commonly used regularization technique to prevent models from becoming overly confident in their predictions. Instead of assigning a probability of 1 to the ground-truth
+class and 0 to all other classes, LS smooths the target distribution by distributing a small portion of
+the probability mass uniformly across all classes. Below is the formal definition:
+
+**Definition 3.1.** For a classification task with _K_ distinct classes, Label Smoothing transforms a onehot encoded label **y** _∈_ R _[K]_ into a soft label **s** _∈_ R _[K]_ by taking a convex combination of **y** and a
+uniform distribution over all classes:
+
+_sk_ = (1 _−_ _α_ ) _yk_ + _[α]_ (1)
+
+_K_
+
+
+where _yk_ = 1 _k_ = _gt_, i.e., _yk_ = 1 if class _k_ is the ground-truth class; otherwise _yk_ = 0. The
+scalar _α_ _∈_ [0 _,_ 1] is the smoothing weight, and _gt_ denotes the index of the ground-truth class. Label
+Smoothing assigns a portion of the probability mass _K_ _[α]_ [uniformly across all non-ground-truth classes]
+
+while reducing the probability of the ground-truth class by a factor of _α_ .
+
+
+To analyze the effect of LS on the training objective, we decompose the Cross-Entropy loss into
+two parts: the standard Cross-Entropy loss without Label Smoothing and the additional loss term
+introduced by Label Smoothing:
+
+**Lemma 3.2.** _**Decomposition of Cross-Entropy Loss with Soft Label**_
+
+
+_where the Label Smoothing Loss LLS is given by:_
+
+
+           -            - **1**            -            _LLS_ = _α_ _H_ _−_ _H_ ( **y** _,_ **q** ) _,_ (3)
+_K_ _[,]_ **[ q]**
+
+
+_where_ **q** _denotes_ _the_ _predicted_ _probability_ _vector,_ _H_ ( _·_ ) _denotes_ _Cross-Entropy_ _(CE)_ _between_ _two_
+_distributions,_ _and_ _LLS_ _indicates_ _the_ _loss_ _component introduced_ _by Label_ _Smoothing,_ _termed_ _Label_
+_Smoothing_ _Loss._ _Note_ _that_ _the_ _original_ _Cross-Entropy_ _Loss_ _H_ ( **y** _,_ **q** ) _is_ _unweighted_ _by_ _α_ _because_
+_the_ _weight_ _is_ _implicitly_ _incorporated_ _in_ _LLS._ _K_ **1** _[denotes]_ _[the]_ _[uniform]_ _[distribution]_ _[introduced]_ _[by]_
+_Label_ _Smoothing._ _This_ _decomposition_ _shows_ _that_ _LS_ _not_ _only_ _modifies_ _the_ _ground-truth_ _label_ _but_
+_also adds a regularization effect through LLS, which encourages a smoother output distribution and_
+_helps reduce overfitting._
+
+
+_(Please refer to Appendix A for the proof.)_
+
+
+Based on the decomposition in Lemma 3.2, we further simplify the Label Smoothing Loss into a
+formulation of logit operations, which allows for a closer inspection of the underlying mechanism
+
+
+3
+
+
+_H_ ( **s** _,_ **q** )
+
+ - ���
+_CE with Soft Label_
+
+
+= _H_ ( **y** _,_ **q** )
+
+   - ��   _CE with Hard Label_
+
+
++ _LLS_
+����
+_Label Smoothing Loss_
+
+
+(2)
+
+
+of Label Smoothing. Due to the broad usage of CutMix and Mixup in the training recipe of modern
+Neural Networks, we additionally take their impact into account together with Label Smoothing.
+For training a classifier with Label Smoothing, we show that the following holds:
+
+**Theorem 3.3.** _**Logit-Level Formulation of Label Smoothing Loss**_
+
+
+_1._ _Without CutMix or Mixup:_
+
+
+_where M and N denote the number of logits smaller than or greater than zgt_ _and M_ + _N_ = _K_ _−_
+1 _._ _Note_ _that_ _the_ _second_ _summation_ _term_ _in_ _Equation_ (6) _is_ _always_ _zero_ _except_ _when_ _zgt_ = _zmax,_
+_i.e.,_ _when_ _the_ _classifier_ _makes_ _a_ _incorrect_ _prediction._ _(1)_ _**Regularization**_ _**term**_ _corresponds_ _to_ _the_
+_part_ _where_ _logits_ _are_ _smaller_ _than_ _zgt_ _and_ _is_ _always_ _non-negative._ _(2)_ _**Error-Enhancement**_ _**term**_
+_corresponds to the logits larger than zgt and is non-positive._
+
+
+The regularization is intended to prevent a model from overfitting to the training datapoints. For
+classification problems, this may occur when a model is highly confident on the ground truth training label. However, **overfitting is not occurring when a model is incorrect** as it is inherently not
+fit to the training data. By penalizing the ground truth logit and enhancing the error on incorrect predictions, label smoothing does not prevent overfitting and instead **worsens the learning on poorly**
+**fit or incorrectly classified samples** . Let us consider the following two cases separately:
+
+
+    - **When the network makes a correct prediction**, i.e., _zgt_ = _zmax_, the error-enhancement
+term equals zero, and the regularization term penalizes the network for being over-confident
+about its prediction (the peak position, i.e., _zmax_, is regarded as the prediction of a classifier) as desired.
+
+    - **When** **the** **network** **makes** **an** **incorrect** **prediction**, i.e., _zgt_ = _zmax_, Label Smoothing
+faces two problems:
+
+
+4
+
+
+_LLS_ = _α_
+
+
+_zgt −_ [1]
+
+
+_K_
+
+
+_K_
+
+- _zk_
+
+
+_k_ =1
+
+
+(4)
+
+
+_where LLS_ _is the Label Smoothing loss component._ _This formulation expresses the loss as_
+_the difference between the logit corresponding to the ground-truth class zgt and the average_
+_of all logits across the K classes,_ _K_ [1] - _Kk_ =1 _[z][k][. This shows that LS regularizes the difference]_
+
+_between_ _the_ _ground-truth_ _logit_ _and_ _the_ _average_ _logit_ _across_ _all_ _classes,_ _preventing_ _the_
+_model from becoming overly confident in its predictions._
+
+
+_2._ _With CutMix and Mixup:_
+
+
+_L_ _[′]_ _LS_ [=] _[ α]_
+
+
+_K_
+
+
+(5)
+
+
+_λzgt_ 1 + (1 _−_ _λ_ ) _zgt_ 2 _−_ [1]
+
+
+_K_
+
+
+_K_
+
+- _zk_
+
+
+_k_ =1
+
+
+_where L_ _[′]_ _LS_ _[is the Label Smoothing loss component in the presence of CutMix or Mixup.]_ _[In]_
+_this_ _case,_ _zgt_ 1 _and_ _zgt_ 2 _are_ _the_ _logits_ _corresponding_ _to_ _the_ _two_ _ground-truth_ _classes_ _in-_
+_troduced_ _by_ _CutMix_ _or_ _Mixup,_ _and_ _λ_ _is_ _the_ _mixing_ _ratio_ _between_ _these_ _two_ _classes._ _The_
+_formulation captures how LS smooths the two logits, zgt_ 1 _and zgt_ 2 _, and applies regulariza-_
+_tion across all classes._
+
+
+_(Please refer to Appendix B for the proof.)_
+
+
+Depending on whether the logits are larger or smaller than _zgt_, i.e., whether the prediction is correct
+or not, the Label Smoothing Loss _LLS_ can be further decomposed into two key components: a **Regu-**
+**larization term**, which reduces overconfidence in correct predictions, and an **Error-Enhancement**
+**term**, which exacerbates overconfidence in incorrect predictions. Note that the Overconfidence we
+discuss here is different from the Overconfidence in Model Calibration.
+
+**Corollary 3.4.** _**Decomposition of Label Smoothing Loss**_
+
+
+_LLS_ = _[α]_
+
+_K_
+
+
+_M_
+
+- ( _zgt −_ _zm_ )
+
+_zm<zgt_
+
+
++ _[α]_
+
+_K_
+
+
+_N_
+
+- ( _zgt −_ _zn_ )
+
+_zn>zgt_
+
+
+(6)
+
+
+- �� _Regularization_
+
+
+- �� _Error-Enhancement_
+
+
+1. Error-Enhancement: The non-zero error-enhancement term encourages an increase in
+the gap between the ground-truth logit and the larger logits, further enhancing the
+over-confidence in the incorrect prediction.
+2. Inconsistent Regularization: The regularization term _Kα_       - _Mzm<zgt_ [(] _[z][gt]_ _[−]_ _[z][m]_ [)] [of] [LS]
+fails to penalize the network for being over-confident about its prediction (the peak
+position, i.e., _zmax_ ). Instead, it further **reduces the already underestimated** _zgt_ .
+
+
+Note that concurrent work (Xia et al., 2024) arrives at a similar observation through gradient analysis. The findings from both studies can be seen as mutually validating. However, our decomposition
+offers an additional advantage, as it allows us to derive MaxSup as a direct solution to the observed
+problem.
+
+
+To verify the effects of the different components of Label Smoothing, we conduct an ablation study
+using the Deit-Small model (Touvron et al., 2021), trained on ImageNet-1K. For clarity and to isolate
+the impact of Label Smoothing, we remove Mixup and CutMix from the data augmentation pipeline.
+This allows us to assess the contributions of each component of Label Smoothing in a clean ablation
+setting. The results are summarized in Table 1.
+
+
+Table 1: Preliminary study on Label Smoothing Loss components on ImageNet-1K using Deit-Small
+model as baseline. Note that we remove CutMix&Mixup.
+
+
+Method Formulation Accuracy
+
+
+_L_ = _α_ ( _zmax −_ [1]
+
+_K_
+
+
+5
+
+
+Baseline - 74.21
++ Label Smoothing _Kα_ - _Mzm<zgt_ [(] _[z][gt][ −]_ _[z][m]_ [) +] _K_ _[α]_ - _Nzn>zgt_ [(] _[z][gt][ −]_ _[z][n]_ [)] 75 _._ 91
+
+
++ Label Smoothing _Kα_ - _Mzm<zgt_ [(] _[z][gt][ −]_ _[z][m]_ [) +] _K_ _[α]_ - _Nzn>zgt_ [(] _[z][gt][ −]_ _[z][n]_ [)] 75 _._ 91
+
++ Regularization _Mα_ - _Mzm<zgt_ [(] _[z][gt][ −]_ _[z][m]_ [)] 75 _._ 98
++ Error-Enhancement _Nα_ - _Nzn>zgt_ [(] _[z][gt][ −]_ _[z][n]_ [)] 73 _._ 63
++ Error-Enhancement _α_ ( _zgt −_ _zmax_ ) 73 _._ 69
++ MaxSup _α_ ( _zmax −_ [1] - _[z][k]_ [)] 76 _._ 12
+
+
+_K_ [1] 
+
+
+_k∈K_ _[z][k]_ [)] 76 _._ 12
+
+
+As demonstrated in Table 1, the performance improvements from Label Smoothing are solely attributed to the Regularization term. The Error-Enhancement term, on the other hand, consistently
+leads to performance degradation. This is evident from the reduced accuracy when only the ErrorEnhancement term is applied. For a fair comparison, we use the default smoothing weight _α_ = 0 _._ 1
+from the baseline. The ablation study confirms that the subtraction of the maximum logit ( _zmax_ )
+is the main cause of the performance drop, as demonstrated by the comparable degradation when
+only the Error-Enhancement term is included. This indicates that Label Smoothing’s effectiveness
+stems entirely from its Regularization component, while the Error-Enhancement component negatively impacts model performance by increasing overconfidence in incorrect predictions. Moreover,
+using the regularization term alone (75 _._ 98%) only brings marginal improvement (+0 _._ 07%) over
+Label Smoothing (75 _._ 91%), whereas MaxSup (76 _._ 12%) leads to larger improvement (0 _._ 21%) over
+Label Smoothing (75 _._ 91%), supporting our analysis that MaxSup fixes the issues of Label Smoothing by applying the intended regularization and removing the error-enhancement upon incorrect
+predictions.
+
+
+3.2 MAX SUPPRESSION REGULARIZATION (MAXSUP)
+
+
+To address the Inconsistent Regularization and Error-Enhancement issue in Label Smoothing, we
+introduce Max Suppression (MaxSup), which penalizes the max logit instead of the ground-truth
+logit. By contrasting Equation (6) and Equation (7), it is obvious that MaxSup behaves identically
+to Label Smoothing when the classifier makes a correct prediction, but crucially, it consistently
+applies the desired regularization effect and eliminates the Error-Enhancement term for incorrect
+predictions. In essence, MaxSup penalizes both overfitting on well-fit datapoints (when the prediction is correct with very high confidence), as well as encouraging learning on poorly fit datapoints
+(when the prediction does not fit the ground truth).
+**Definition 3.5.** **Max Suppression Regularization**
+
+
+_K_
+
+- _zk_ ) (7)
+
+
+_k_ =1
+
+
+For intuitive understanding, we also provide another formulation of the proposed Max Suppression
+loss by transforming its current logit-level formulation back into the label form in Equation (8).
+Since a negative amount of the probability mass is assigned to the position with the maximum
+likelihood, the soft label generated by Max Suppression is no longer a proper distribution. However,
+it is straightforward to grasp the impact of the negative probability mass, i.e., it consistently prevents
+the model for being over-confident in its prediction.
+
+
+**Definition 3.6.** **Max Suppression Regularization as Label Smoothing**
+
+
+For the classification of _K_ distinct classes, Max Suppression transforms the one-hot label _**y**_ _∈_ R _[K]_
+into a soft label _**s**_ _∈_ R _[K]_ via a convex combination of _**y**_ and a vector with all entries equal to one:
+
+
+_sk_ = _yk_ + _[α]_ (8)
+
+_K_ _[−]_ _[α]_ [1] _[k]_ [=] _[Argmax]_ [(] _**[q]**_ [)]
+
+
+where _yk_ = 1 _k_ = _gt_ and 1 _k_ = _gt_ is an indicator function with the subscript _k_ denoting the _k_ _[th]_ entry of
+the label and _gt_ denoting the ground-truth class. Additionally, _α ∈_ [0 _,_ 1] is the hyperparameter.
+
+
+We also explore the relationship between Label Smoothing and Max Suppression in terms of their
+gradients. The analysis shows that Max Suppression Regularization redistributes a gradient of magnitude _α_ between the True Class and the incorrect Prediction Class. Please refer to Appendix C for
+more details.
+
+
+4 IMPROVED INTRA-CLASS VARIATION AND INTER-CLASS SEPARABILITY
+
+
+Beyond improving inter-class separability, which enhances classification performance, we argue that
+the key strength of MaxSup lies in its ability to capture greater intra-class variation—an indicator of
+improved representation learning. As analyzed in Section 3.1, Label Smoothing only performs the
+desired regularization on the correct predictions (top-1 probability), whereas MaxSup regularizes
+both the correct and incorrect predictions (top-1 probability), thereby leaning to even larger interclass separability. Moreover, MaxSup eliminates the error-enhancement defect of Label Smoothing,
+which may be the cause of the severely reduced intra-class variance. We validate the improved
+intra-class variation and inter-class separability using the metrics in Kornblith et al. (2021), and the
+results are listed in Table 2.
+
+|¯|Col2|Col3|¯|
+|---|---|---|---|
+|Methods<br>¯_d_within _↑_<br>¯_d_total<br>_R_2(1_ −_<br>¯<br>_d_within<br>¯<br>_d_total ) _↑_<br>Train<br>Val<br>Train<br>Val<br>Train<br>Val|¯_d_within _↑_|¯_d_total|_R_2(1_ −_<br>¯<br>_d_within<br>¯<br>_d_total ) _↑_|
+|Methods<br>¯_d_within _↑_<br>¯_d_total<br>_R_2(1_ −_<br>¯<br>_d_within<br>¯<br>_d_total ) _↑_<br>Train<br>Val<br>Train<br>Val<br>Train<br>Val|Train<br>Val|Train<br>Val|Train<br>Val|
+
+
+Baseline 0.3114 0.3313 0.5212 0.5949 0.4025 0.4451
+LS 0.2632 0.2543 0.4862 0.4718 0.4690 0.4611
+MaxSup 0.2926 ( **+0.03)** 0.2998 ( **+0.05)** 0.6081 ( **+0.12)** 0.5962 ( **+0.12)** 0.5188 ( **+0.05)** 0.4972 ( **+0.04)**
+Logit Penalty 0.2840 0.3144 0.7996 0.7909 0.6448 0.6024
+
+
+Table 2: Quantitative measures for inter-class separability and intra-class variation of feature representations, using ResNet-50 trained on ImageNet-1K. Results are provided for Training Set and
+Validation Set.
+
+
+The expanded intra-class variation suggests that MaxSup enables the model to capture richer, more
+detailed similarity information—reflecting how individual examples relate to different classes. In
+contrast, Label Smoothing tends to ‘erase’ these finer distinctions, as noted by M¨uller et al. (2019).
+It can be further validated by the linear transfer performance (please refer to Table 3) on the CIFAR10 dataset, using the pretrained ResNet50, following Kornblith et al. (2021). Note that Kornblith
+et al. (2021) also examines Logit Penalty, a regularizer which is closely related to MaxSup: Logit
+Penalty regularizes the l2-norm of the logits, whereas MaxSup specifically regularizes the peak
+logits. Indeed, Logit Penalty imposes much stronger constraints on the logits, since it reduces the
+absolute magnitudes of individual logits, while MaxSup only encourages the peak logit value to be
+close to the mean value of all logits. The stronger regularization effect of Logit Penalty leads to
+larger inter-class separability in Table 2, but performs poorly on both Linear Transfer task in Table 3
+and ImageNet Classification task in Table 4.
+
+
+6
+
+
+|Methods|Linear Transfer val. acc|
+|---|---|
+|Baseline|0.8143|
+|Label Smoothing<br>Logit Penalty (Dauphin and Cubuk, 2021)<br>MaxSup|0.7458<br>0.7242<br>0.8102 (**+0.06)**|
+
+
+Table 3: Validation performance of different methods based on multi-nominal Logistic Regression
+with _l_ 2 regularization in CIFAR10 validation set. We searched the strength of the regularization
+from 1 _e −_ 4 to 1 _e_ 2, the search step size is increasing by an order of magnitude.
+
+
+5 EXPERIMENTS
+
+
+5.1 EVALUATION ON IMAGENET CLASSIFICATION
+
+
+In this section, we evaluate the efficacy of MaxSup, comparing its performance against standard
+Label Smoothing and its variants on Imagenet-1k.
+
+
+5.1.1 EXPERIMENT SETUP
+
+
+**Model** **Training** **recipes** We adopt the most representative models for CNNs and Transformers:
+ResNet families (He et al., 2016), MobileNetV2 (Sandler et al., 2018), and DeiT-Small (Touvron
+et al., 2021) conducting evaluations on the large-scale ImageNet dataset (Krizhevsky et al., 2012).
+For ResNet-50 training, we use baseline recipes in TorchVision [1] . Specifically, the ResNet50 model
+was trained for 90 epochs using stochastic gradient descent (SGD) with a momentum of 0.9 and
+weight decay of 1e-4. The initial learning rate was set to 0.5, employing a cosine annealing learning
+rate scheduler. A linear warmup strategy was applied for the first 5 epochs with a warmup decay
+of 0.01. For regularization, we used a weight decay of 2e-05, while excluding normalization layers
+from weight decay. For DeiT-Small, we use the official implementation provided by the authors and
+train the model from scratch without applying knowledge distillation. While knowledge distillation
+is a prominent feature of the original DeiT paper, we intentionally exclude it in our setup to ensure
+a clear and unbiased reflection of MaxSup’s performance.
+
+
+**Hyperparameters for Methods Used for Comparison** We compare Max Suppression Regularization with several variants of Label Smoothing methods, such as Zipf Label Smoothing (Liang et al.,
+2022) and Online Label Smoothing (Zhang et al., 2021). In cases where official implementations
+are available for other approaches, we adopt them directly; otherwise, we meticulously adhere to
+the descriptions in the respective papers for our implementations. To ensure experimental rigor and
+facilitate fair comparisons, all training hyperparameters are maintained identical to those of the baseline models, except for method-specific hyperparameters unique to each approach. We additionally
+adopt a specially designed linearly increasing _α_ scheduler, which is shown to benefit the training in
+general, please refer to details in appendix E. It is adopted by default for both MaxSup and Label
+Smoothing.
+
+
+5.1.2 EXPERIMENT RESULTS
+
+
+**Convnet** **Comparison** The results presented in Table 4 demonstrate the effectiveness of MaxSup
+regularization compared to other smoothing and self-distillation methods for training different convolutional networks on ImageNet and CIFAR100. MaxSup consistently achieves the highest accuracy among label smoothing alternatives, whereas OLS (Zhang et al., 2021) and Zipf-LS (Liang
+et al., 2022) fail to deliver stable performance, demonstrating that the previous empirical justification
+of such empirical methods is limited to certain training schemes.
+
+
+In our implementation of OLS and Zipf-LS, we adhered to the methodologies and method-specific
+hyperparameters as outlined in their respective official codebases. However, it is important to note
+that we did not adopt their training recipes. For instance, the original OLS paper employs a Step
+Learning Rate Scheduler over 250 epochs with an initial learning rate of 0.1. Similarly, the Zipf-LS
+implementation utilizes 100 epochs alongside other improved training recipes.
+
+
+1https://github.com/pytorch/vision
+
+
+7
+
+
+Table 4: Comparison of the performance of classic convolutional neural networks on ImageNet and
+CIFAR100. The training script used was consistent with TorchVision V1 Weight, but a larger batch
+size was employed to accelerate the experimental process. We adjusted the learning rate based on
+the linear scaling principle of the learning rate and batch size.
+
+
+Method ImageNet CIFAR100
+Resnet-18 Resnet-50 Resnet-101 MobileNetV2 Resnet-18 Resnet-50 Resnet-101 MobileNetV2
+
+
+Baseline 69.11±0.12 76.44±0.10 76.00±0.18 71.42±0.12 76.16±0.18 78.69±0.16 79.11±0.21 68.06±0.06
+Label Smoothing 69.38±0.19 76.65±0.11 77.01±0.15 71.40±0.09 77.05±0.17 78.88±0.13 79.19±0.25 69.65±0.08
+Zipf-LS _[∗]_ 69.43±0.13 76.89±0.17 76.91±0.14 71.24±0.16 76.21±0.12 78.75±0.21 79.15±0.18 69.39 ±0.08
+OLS _[∗]_ 69.45±0.15 76.81±0.21 77.12±0.17 71.29±0.11 77.33±0.15 78.79±0.12 79.25±0.15 68.91±0.11
+**MaxSup** **69.59±0.13** **77.08±0.07** **77.33±0.12** **71.59±0.17** **77.82±0.15** **79.15±0.13** **79.41±0.19** **69.88±0.07**
+Logit Penalty(single run) 66.97 74.21 75.17 70.39 76.41 78.90 78.89 69.46
+
+
+Table 5: Comparison of DeiT-Small accuracy (%) with Other Label Smoothing Variants. Note that
+due to time limit, only the results of single runs for the setup without CutMix&Mixup are available.
+
+
+Acc. w/ CutMix&Mixup Acc. w/o CutMix&Mixup
+Model Method
+
+Mean Std run 1 std
+
+
+**Deit Comparison** Table 5 presents the performance comparison of various regularization methods
+applied to the DeiT-Small model on ImageNet. MaxSup demonstrates strong performance, achieving an accuracy of 80 _._ 16%, which surpasses Label Smoothing by 0 _._ 35% points.
+
+
+_Label Smoothing variants such as Zipf’s and OLS show only comparable performance to standard_
+_Label Smoothing_ . The marginal increase of 0 _._ 07% and 0 _._ 14% are statistically insignificant compared
+to the standard deviations, suggesting these techniques may be less effective for vision transformer
+architectures probably due to their heavy data augmentation pipline. These results further support
+the effectiveness of MaxSup across different model architectures, particularly in scenarios where
+other regularization techniques may struggle.
+
+
+5.2 EXTENDED EVALUATION BEYOND IMAGE CLASSFICATION
+
+
+In order to verify that MaxSup can generalize to different applications, we also evaluate our method
+on the task of **Machine Translation** and **Semantic Segmentation** .
+
+
+**Machine** **Translation** We train a 12-layer Transformer model with encoder-decoder architecture
+(Vaswani, 2017) from scratch on the IWSLT 2014 German to English dataset (Cettolo et al., 2017),
+following the training setup of fairseq repository [2] . Under the same setting, we also train the transformer with MaxSup in place of Label Smoothing in the attention layers, following the common
+setup in previous work. The single best checkpoint and a beam size of 5 is adopted. The detokenized SacreBLEU (Post, 2018) scores of 3 runs are compared in table 6. The results demonstrate
+that MaxSup yields an improvement of 0.3 over baseline, which is 200% relatively larger compared
+to the 0 _._ 1 improvement of Label Smoothing. While this enhancement may not appear substantial, it
+likely stems from the constraints of downstream tasks. Nevertheless, the improvement is statistically
+significant, as it exceeds the standard deviation.
+
+
+**Semantic Segmentation** We employ the MMSegmentation framework [3] for this task. Specifically,
+we utilized the UperNet architecture (Xiao et al., 2018) with the DeiT-Small backbone to perform
+semantic segmentation on the ADE20K dataset. The backbones trained with both Label Smoothing
+and MaxSup on ImageNet1K are compared to the baseline. In the fine-tuning stage, the vanilla
+Cross-Entropy loss is used for all models. In table 7 our results show that MaxSup achieves a
+
+
+[2https://github.com/facebookresearch/fairseq](https://github.com/facebookresearch/fairseq)
+[3https://github.com/open-mmlab/mmsegmentation](https://github.com/open-mmlab/mmsegmentation)
+
+
+8
+
+
+Deit-Small (Touvron et al., 2021)
+
+
+Baseline 79.69 0.11 74.21 Label Smoothing 79.81(+0.12) 0.09 76.12 Zipf-LS 79.88(+0.19) 0.08 75.48 OLS 79.95(+0.27) 0.12 75.98 **MaxSup** **80.16(+0.47)** **0.09** 76.58 
+
+mean Intersection over Union (mIoU) of 44 _._ 1, outperforming the 43 _._ 7 mIoU obtained with Label
+Smoothing. This also supports the improved feature representation of models trained with MaxSup.
+
+
+Table 6: Comparison of Label Smoothing and MaxSup on IWSLT 2014 German to English Dataset.
+
+
+Model Param. Method BLEU score
+
+
+Baseline 34.3 ± 0.09
+Transformer(Vaswani, 2017) 38 M Label Smoothing 34.4 (+0.1) ± 0.07
+MaxSup **34.6 (+0.3)** ± 0.09
+
+
+Table 7: Comparison of Label Smoothing and MaxSup on on ADE20K validation set, and the best
+result on ADE20K with only ImageNet-1K as training data in pretraining.
+
+
+Backbone Segmentation Architecture Method mIoU(MS)
+
+
+Baseline 43.4
+DeiT-Small (Touvron et al., 2021) UperNet(Xiao et al., 2018) Label Smoothing 43.7 (+0.3)
+MaxSup **44.1 (+0.7)**
+
+
+Figure 2: We visualize the class activation map using GradCAM (Selvaraju et al., 2019) from Deit-Small
+models trained with MaxSup (2nd row), Label Smoothing (3rd row) and Baseline (4th row). The first row are
+original images. The results show that MaxSup training with MaxSup can reduce the distraction by non-target
+class, whereas Label Smoothing increases the model’s vulnerability to interference, causing the model partially
+or completely focusing on incorrect objects, due to the loss of richer information of individual samples.
+
+
+9
+
+
+(a) Label Smoothing is
+severely distracted by the
+pole.
+
+
+(b) Label Smoothing is
+severely distracted by the
+tube, and Baseline almost
+overlooks the gold fish at
+bottom.
+
+
+(c) Label Smoothing
+completely focuses on the
+wrong position, whereas
+Baseline is distracted by
+the surrounding objects.
+
+
+(d) Label Smoothing and
+Baseline are both severely
+distracted by the waves.
+
+
+(e) Label Smoothing fails
+to consider the tail of
+the monkey, and Baseline
+mostly focus on the head
+forehead.
+
+
+5.3 CLASS ACTIVATION MAP
+
+
+To visualize the impact of MaxSup on the model’s decision-making compared to label smoothing, we adopt Gradient-weighted Class Activation Mapping (Grad-CAM), a technique by (Selvaraju
+et al., 2019) that generates class-discriminative localization maps. We employed the DeiT-Small to
+perform our experiments, comparing the models trained with MaxSup (second row), Label Smoothing (third row) and standard Cross-Entropy baseline (fourth row) in Figure 2.
+
+
+As illustrated in Figure 2, the model trained with MaxSup demonstrates a clear advantage when
+non-target salient objects are present in the background. MaxSup reduces the model’s distraction
+by these objects, such as the pole in the ‘Bird’ image, the tube in the ‘Goldfish’ image, and the
+cap in the ‘House Finch’ image. In contrast, the model trained with Label Smoothing often loses
+focus or incorrectly attends to these background objects. Figure 2a and 2b demonstrate a pattern
+of distraction, where the attention of the model trained with Label Smoothing is partially disrupted,
+although the classification remains correct. Figure 2c depicts overconfidence in incorrect samples,
+leading to misclassification, highlighting the negative impact of the Error-Enhancement component.
+Beyond the robustness to background distractions, MaxSup also improves the coverage of object
+features. For instance, the model trained with Label Smoothing misses important details, such as the
+fin in the ‘Shark’ image and the tail in the ‘Monkey’ image, both of which are successfully captured
+by the model trained with MaxSup. This supports our analysis in Appendix E that MaxSup better
+preserves the richer information of individual class samples beyond the class-specific information.
+
+
+6 CONCLUSION
+
+
+In this work, we have uncovered the underlying mechanism behind the previously identified issues
+in Label Smoothing and proposed MaxSup as a remedy. Our analysis reveals that Label Smoothing
+inherently fails to regularize the incorrect predictions and even encourages overconfidence in them,
+potentially hindering the model’s ability to learn from challenging examples. MaxSup addresses
+this limitation by consistently applying the intended regularization effect during training, regardless
+of whether the prediction is correct or not. Our extensive analysis and experiments demonstrate that
+MaxSup not only improves task performance but also leads to larger intra-class variance as well as
+inter-class separation in the feature space over Label Smoothing. This enables the model to retain
+richer information of individual samples, leading to improved transfer learning. The class activation
+maps further support our analysis, through the more accurate localization and better coverage of
+class objects, as well as reduced distraction by irrelevant background objects.
+
+
+**Limitation and Future Work** M¨uller et al. (2019) show that teachers trained on LS lead to degraded
+performance in Knowledge Distillation (Hinton, 2015), and Guo et al. (2024) observed accelerated
+convergence with LS via the conditioning number analysis. Thus it would be interesting to explore the impact of MaxSup on Knowledge Distillation and training convergence. We leave such
+investigations to future work.
+
+
+10
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+The results of the code are reproducible, as detailed in Appendix D and the training setups in Section 5.1.1 and Section 5.2. We have also provided the link to the anonymous code repository for this
+paper in the Abstract.
+
+
+REFERENCES
+
+
+D. M. Alves, N. M. Guerreiro, J. Alves, J. Pombal, R. Rei, J. G. de Souza, P. Colombo, and A. F.
+Martins. Steering large language models for machine translation with finetuning and in-context
+learning. _arXiv preprint arXiv:2310.13448_, 2023.
+
+
+M. Cettolo, M. Federico, L. Bentivogli, J. Niehues, S. St¨uker, K. Sudoh, K. Yoshino, and C. Federmann. Overview of the iwslt 2017 evaluation campaign. In _Proceedings of the 14th International_
+_Workshop on Spoken Language Translation_, 2017.
+
+
+K. Chandrasegaran, N.-T. Tran, Y. Zhao, and N.-M. Cheung. Revisiting label smoothing and knowledge distillation compatibility: What was missing? In _International_ _Conference_ _on_ _Machine_
+_Learning_, pages 2890–2916. PMLR, 2022.
+
+
+S. Chen, G. Xie, Y. Liu, Q. Peng, B. Sun, H. Li, X. You, and L. Shao. Hsva: Hierarchical semanticvisual adaptation for zero-shot learning. _Advances in Neural Information Processing Systems_, 34:
+16622–16634, 2021.
+
+
+Y. Dauphin and E. D. Cubuk. Deconstructing the regularization of batchnorm. In _International_
+_Conference on Learning Representations_, 2021.
+
+
+Y. Gao, W. Wang, C. Herold, Z. Yang, and H. Ney. Towards a better understanding of label smoothing in neural machine translation. In _Proceedings of the 1st Conference of the Asia-Pacific Chapter_
+_of the Association for Computational Linguistics and the 10th International Joint Conference on_
+_Natural Language Processing_, pages 212–223, 2020.
+
+
+L. Guo, K. Ross, Z. Zhao, G. Andriopoulos, S. Ling, Y. Xu, and Z. Dong. Cross entropy versus
+label smoothing: A neural collapse perspective. _arXiv preprint arXiv:2402.03979_, 2024.
+
+
+Q. Guo, X. Wang, Y. Wu, Z. Yu, D. Liang, X. Hu, and P. Luo. Online knowledge distillation via
+collaborative learning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_
+_Pattern Recognition_, pages 11020–11029, 2020.
+
+
+K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning for image recognition. In _Proceedings_
+_of the IEEE conference on computer vision and pattern recognition_, pages 770–778, 2016.
+
+
+G. Hinton. Distilling the knowledge in a neural network. _arXiv preprint arXiv:1503.02531_, 2015.
+
+
+S. Kornblith, T. Chen, H. Lee, and M. Norouzi. Why do better loss functions lead to less transferable
+features? _Advances in Neural Information Processing Systems_, 34:28648–28662, 2021.
+
+
+A. Krizhevsky, I. Sutskever, and G. E. Hinton. Imagenet classification with deep convolutional
+neural networks. _Advances in neural information processing systems_, 25, 2012.
+
+
+A. Krogh and J. Hertz. A simple weight decay can improve generalization. _Advances_ _in_ _neural_
+_information processing systems_, 4, 1991.
+
+
+Y. LeCun. The mnist database of handwritten digits. _http://yann. lecun. com/exdb/mnist/_, 1998.
+
+
+J. Liang, L. Li, Z. Bing, B. Zhao, Y. Tang, B. Lin, and H. Fan. Efficient one pass self-distillation with
+zipf’s label smoothing. In _European_ _conference_ _on_ _computer_ _vision_, pages 104–119. Springer,
+2022.
+
+
+Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo. Swin transformer: Hierarchical vision transformer using shifted windows. In _Proceedings of the IEEE/CVF international_
+_conference on computer vision_, pages 10012–10022, 2021.
+
+
+11
+
+
+R. M¨uller, S. Kornblith, and G. E. Hinton. When does label smoothing help? _Advances in neural_
+_information processing systems_, 32, 2019.
+
+
+Z. Novack, J. McAuley, Z. C. Lipton, and S. Garg. Chils: Zero-shot image classification with
+hierarchical label sets. In _International Conference on Machine Learning_, pages 26342–26362.
+PMLR, 2023.
+
+
+G. Pereyra, G. Tucker, J. Chorowski, Ł. Kaiser, and G. Hinton. Regularizing neural networks by
+penalizing confident output distributions. _arXiv preprint arXiv:1701.06548_, 2017.
+
+
+M. Post. A call for clarity in reporting bleu scores. _arXiv preprint arXiv:1804.08771_, 2018.
+
+
+O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma, Z. Huang, A. Karpathy, A. Khosla,
+M. Bernstein, et al. Imagenet large scale visual recognition challenge. _International_ _journal_ _of_
+_computer vision_, 115:211–252, 2015.
+
+
+M. Sandler, A. Howard, M. Zhu, A. Zhmoginov, and L.-C. Chen. Mobilenetv2: Inverted residuals
+and linear bottlenecks. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pages 4510–4520, 2018.
+
+
+R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and D. Batra. Grad-cam: Visual
+explanations from deep networks via gradient-based localization. _International Journal of Com-_
+_puter Vision_, 128(2):336–359, Oct. 2019. ISSN 1573-1405. doi: 10.1007/s11263-019-01228-7.
+[URL http://dx.doi.org/10.1007/s11263-019-01228-7.](http://dx.doi.org/10.1007/s11263-019-01228-7)
+
+
+Z. Shen, Z. Liu, D. Xu, Z. Chen, K.-T. Cheng, and M. Savvides. Is label smoothing truly incompatible with knowledge distillation: An empirical study. _arXiv preprint arXiv:2104.00676_, 2021.
+
+
+C. N. Silla and A. A. Freitas. A survey of hierarchical classification across different application
+domains. _Data mining and knowledge discovery_, 22:31–72, 2011.
+
+
+N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov. Dropout: A simple
+way to prevent neural networks from overfitting. In _Journal_ _of_ _Machine_ _Learning_ _Research_,
+volume 15, pages 1929–1958, 2014.
+
+
+C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna. Rethinking the inception architecture
+for computer vision. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pages 2818–2826, 2016.
+
+
+H. Touvron, M. Cord, M. Douze, F. Massa, A. Sablayrolles, and H. J´egou. Training data-efficient image transformers & distillation through attention. In _International conference on machine learn-_
+_ing_, pages 10347–10357. PMLR, 2021.
+
+
+A. Vaswani. Attention is all you need. _Advances in Neural Information Processing Systems_, 2017.
+
+
+G. Xia, O. Laurent, G. Franchi, and C.-S. Bouganis. Understanding why label smoothing degrades
+selective classification and how to fix it. _arXiv preprint arXiv:2403.14715_, 2024.
+
+
+T. Xiao, Y. Liu, B. Zhou, Y. Jiang, and J. Sun. Unified perceptual parsing for scene understanding.
+In _Proceedings of the European conference on computer vision (ECCV)_, pages 418–434, 2018.
+
+
+K. Yi, X. Shen, Y. Gou, and M. Elhoseiny. Exploring hierarchical graph representation for largescale zero-shot image classification. In _European_ _Conference_ _on_ _Computer_ _Vision_, pages 116–
+132. Springer, 2022.
+
+
+L. Yuan, F. E. Tay, G. Li, T. Wang, and J. Feng. Revisiting knowledge distillation via label smoothing regularization. In _Proceedings of the IEEE/CVF conference on computer vision and pattern_
+_recognition_, pages 3903–3911, 2020.
+
+
+M. D. Zeiler and R. Fergus. Visualizing and understanding convolutional networks. In _Computer_
+_Vision–ECCV_ _2014:_ _13th_ _European_ _Conference,_ _Zurich,_ _Switzerland,_ _September_ _6-12,_ _2014,_
+_Proceedings, Part I 13_, pages 818–833. Springer, 2014.
+
+
+C.-B. Zhang, P.-T. Jiang, Q. Hou, Y. Wei, Q. Han, Z. Li, and M.-M. Cheng. Delving deep into label
+smoothing. _IEEE Transactions on Image Processing_, 30:5984–5996, 2021.
+
+
+12
+
+
+J. Zhou, C. You, X. Li, K. Liu, S. Liu, Q. Qu, and Z. Zhu. Are all losses created equal: A neural collapse perspective. _Advances in Neural Information Processing Systems_, 35:31697–31710,
+2022a.
+
+
+Y. Zhou, W. Xiang, C. Li, B. Wang, X. Wei, L. Zhang, M. Keuper, and X. Hua. Sp-vit: Learning 2d
+spatial priors for vision transformers. _arXiv preprint arXiv:2206.07662_, 2022b.
+
+
+F. Zhu, Z. Cheng, X.-Y. Zhang, and C.-L. Liu. Rethinking confidence calibration for failure prediction. In _European Conference on Computer Vision_, pages 518–536. Springer, 2022.
+
+
+H. Zou and T. Hastie. Regularization and variable selection via the elastic net. _Journal of the Royal_
+_Statistical Society Series B: Statistical Methodology_, 67(2):301–320, 2005.
+
+
+13
+
+
+A PROOF OF LEMMA 3.2
+
+
+_Proof._ We aim to demonstrate the validity of Lemma 3.2, which states:
+
+
+_H_ ( **s** _,_ **q** ) = _H_ ( **y** _,_ **q** ) + _LLS_ (9)
+
+
+where _LLS_ = _α_ - _H_ - _K_ **1** _[,]_ **[ q]** - _−_ _H_ ( **y** _,_ **q** )�
+
+
+Let us proceed with the proof:
+
+
+We begin by expressing the cross-entropy _H_ ( **s** _,_ **q** ):
+
+
+We can now identify _H_ ( **y** _,_ **q** ) as the original cross-entropy loss and _LLS_ =
+_α_ - _H_ - _K_ **1** _[,]_ **[ q]** - _−_ _H_ ( **y** _,_ **q** )� as the Label Smoothing loss.
+
+
+Therefore, we have demonstrated that:
+
+
+_H_ ( **s** _,_ **q** ) = _H_ ( **y** _,_ **q** ) + _LLS_ (16)
+
+
+with _LLS_ as defined in the lemma. It is noteworthy that the original cross-entropy loss _H_ ( **y** _,_ **q** )
+remains unweighted by _α_ in this decomposition, which is consistent with the statement in Lemma
+3.2
+
+
+14
+
+
+_K_
+
+_H_ ( **s** _,_ **q** ) = _−_ - _sk_ log _qk_ (10)
+
+
+_k_ =1
+
+
+In the context of label smoothing, _sk_ is defined as:
+
+
+_sk_ = (1 _−_ _α_ ) _yk_ + _[α]_ (11)
+
+_K_
+
+
+where _α_ is the smoothing parameter, _yk_ is the original label, and _K_ is the number of classes.
+
+
+Substituting this expression for _sk_ into the cross-entropy formula:
+
+
+_H_ ( **s** _,_ **q** ) = _−_
+
+
+_K_
+
+
+_k_ =1
+
+
+(1 _−_ _α_ ) _yk_ + _[α]_
+
+_K_
+
+
+log _qk_ (12)
+
+
+Expanding the sum:
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ )
+
+
+_K_
+
+
+- _yk_ log _qk −_ _[α]_
+
+_K_
+
+_k_ =1
+
+
+_K_
+
+
+_K_
+
+- log _qk_ (13)
+
+
+_k_ =1
+
+
+We recognize that the first term is equivalent to (1 _−_ _α_ ) _H_ ( **y** _,_ **q** ), and the second term to _αH_ ( _K_ **[1]** _[,]_ **[ q]** [)][.]
+
+Thus:
+
+
+Rearranging the terms:
+
+
+           - **1**           _H_ ( **s** _,_ **q** ) = (1 _−_ _α_ ) _H_ ( **y** _,_ **q** ) + _αH_ (14)
+_K_ _[,]_ **[ q]**
+
+
+       -       - **1**       -       _H_ ( **s** _,_ **q** ) = _H_ ( **y** _,_ **q** ) + _α_ _H_ _−_ _H_ ( **y** _,_ **q** ) (15)
+_K_ _[,]_ **[ q]**
+
+
+B PROOF OF THEOREM 3.3
+
+
+_Proof._ We will prove both cases of Theorem 3.3 separately.
+
+
+**Without Cutmix and Mixup**
+
+
+We aim to prove Equation equation 4:
+
+
+_K_
+
+- _zk_ ) (17)
+
+
+_k_ =1
+
+
+_LLS_ = _α_ ( _zgt −_ [1]
+
+_K_
+
+
+_LLS_ = _α_ ( _zgt −_ [1]
+
+
+Let **s** be the smoothed label vector and **q** be the predicted probability vector. We start with the
+cross-entropy between **s** and **q** :
+
+
+_K_
+
+_H_ ( **s** _,_ **q** ) = _−_ - _sk_ log _qk_ (18)
+
+
+_k_ =1
+
+
+With label smoothing, _sk_ = (1 _−_ _α_ ) _yk_ + _K_ _[α]_ [, where] **[ y]** [ is the one-hot ground truth vector and] _[ α]_ [ is the]
+
+smoothing parameter. Substituting this:
+
+
+_K_
+
+
+(19)
+_K_ [] log] _[ q][k]_
+
+
+�[(1 _−_ _α_ ) _yk_ + _[α]_
+
+_K_
+
+_k_ =1
+
+
+_H_ ( **s** _,_ **q** ) = _−_
+
+
+Expanding:
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ )
+
+
+_K_
+
+
+- _yk_ log _qk −_ _[α]_
+
+_K_
+
+_k_ =1
+
+
+_K_
+
+
+_K_
+
+- log _qk_ (20)
+
+
+_k_ =1
+
+
+Since **y** is a one-hot vector, [�] _k_ _[K]_ =1 _[y][k]_ [ log] _[ q][k]_ [=] [log] _[ q][gt]_ [,] [where] _[gt]_ [is] [the] [index] [of] [the] [ground] [truth]
+class:
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ ) log _qgt −_ _[α]_
+
+_K_
+
+
+_K_
+
+- log _qk_ (21)
+
+
+_k_ =1
+
+
+_e_ _[zk]_
+Using the softmax function, _qk_ = - _Kj_ =1 _[e][z][j]_ [, we can express][ log] _[ q][k]_ [in terms of logits:]
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) (22)
+
+
+_j_ =1
+
+
+log _qk_ = _zk −_ log(
+
+
+Substituting this into our expression:
+
+
+_K_
+
+
+_K_
+
+
+- _e_ _[z][j]_ )] (23)
+
+
+_j_ =1
+
+
+- _e_ _[z][j]_ )] _−_ _[α]_
+
+_K_
+
+_j_ =1
+
+
+_K_
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ )[ _zgt −_ log(
+
+
+_K_
+
+
+[ _zk −_ log(
+
+_k_ =1
+
+
+_K_
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) (24)
+
+
+_j_ =1
+
+
+- _e_ _[z][j]_ ) _−_ _[α]_
+
+_K_
+
+_j_ =1
+
+
+_K_
+
+
+= _−_ (1 _−_ _α_ ) _zgt_ + (1 _−_ _α_ ) log(
+
+
+_K_
+
+
+_zk_ + _α_ log(
+
+_k_ =1
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) (25)
+
+
+_j_ =1
+
+
+= _−_ (1 _−_ _α_ ) _zgt −_ _[α]_
+
+_K_
+
+
+_K_
+
+
+_zk_ + log(
+
+_k_ =1
+
+
+Rearranging:
+
+
+15
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) + _α_ [ _zgt −_ [1]
+
+_K_
+
+_j_ =1
+
+
+_H_ ( **s** _,_ **q** ) = _−zgt_ + log(
+
+
+_K_
+
+
+_K_
+
+- _zk_ ] (26)
+
+
+_k_ =1
+
+
+We can identify:
+
+
+    - _H_ ( **y** _,_ **q** ) = _−zgt_ + log( [�] _[K]_ _j_ =1 _[e][z][j]_ [)][ (cross-entropy for one-hot vector] **[ y]** [)]
+
+
+    - _LLS_ = _α_ [ _zgt −_ _K_ [1]     - _Kk_ =1 _[z][k]_ []]
+
+
+Thus, we have proven:
+_H_ ( **s** _,_ **q** ) = _H_ ( **y** _,_ **q** ) + _LLS_ (27)
+
+
+**With Cutmix and Mixup**
+
+
+Now we prove Equation equation 5:
+
+
+_L_ _[′]_ _LS_ [=] _[ α]_ [((] _[λz][gt]_ [1] [+ (1] _[ −]_ _[λ]_ [)] _[z][gt]_ [2][)] _[ −]_ [1]
+
+_K_
+
+
+_K_
+
+- _zk_ ) (28)
+
+
+_k_ =1
+
+
+With Cutmix and Mixup, the smoothed label becomes:
+
+_sk_ = (1 _−_ _α_ )( _λyk_ 1 + (1 _−_ _λ_ ) _yk_ 2) + _[α]_ (29)
+
+_K_
+
+where _yk_ 1 and _yk_ 2 are one-hot vectors for the two ground truth classes from mixing, and _λ_ is the
+mixing ratio.
+
+
+Starting with the cross-entropy:
+
+
+_H_ ( **s** _,_ **q** ) = _−_
+
+
+= _−_
+
+
+_K_
+
+- _sk_ log _qk_ (30)
+
+
+_k_ =1
+
+
+�[(1 _−_ _α_ )( _λyk_ 1 + (1 _−_ _λ_ ) _yk_ 2) + _[α]_
+
+_K_
+
+_k_ =1
+
+
+_K_
+
+
+(31)
+_K_ [] log] _[ q][k]_
+
+
+= _−_ (1 _−_ _α_ )
+
+
+_K_
+
+
+�( _λyk_ 1 + (1 _−_ _λ_ ) _yk_ 2) log _qk −_ _[α]_
+
+_K_
+
+_k_ =1
+
+
+_K_
+
+
+_K_
+
+- log _qk_ (32)
+
+
+_k_ =1
+
+
+Since _yk_ 1 and _yk_ 2 are one-hot vectors:
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ )( _λ_ log _qgt_ 1 + (1 _−_ _λ_ ) log _qgt_ 2) _−_ _[α]_
+
+_K_
+
+
+where _gt_ 1 and _gt_ 2 are the indices of the two ground truth classes.
+
+
+_e_ _[zk]_
+Using _qk_ = - _Kj_ =1 _[e][z][j]_ [, we express in terms of logits:]
+
+
+_K_
+
+- log _qk_ (33)
+
+
+_k_ =1
+
+
+_K_
+
+
+_K_
+
+
+- _e_ _[z][j]_ ))] (34)
+
+
+_j_ =1
+
+
+- _e_ _[z][j]_ )) + (1 _−_ _λ_ )( _zgt_ 2 _−_ log(
+
+
+_j_ =1
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ )[ _λ_ ( _zgt_ 1 _−_ log(
+
+
+_K_
+
+
+- _e_ _[z][j]_ )] (35)
+
+
+_j_ =1
+
+
+_−_ _[α]_
+
+_K_
+
+
+_K_
+
+
+[ _zk −_ log(
+
+_k_ =1
+
+
+Simplifying:
+
+
+16
+
+
+- _H_ ( **y** _[′]_ _,_ **q** ) = _−_ [ _λzgt_ 1 + (1 _−_ _λ_ ) _zgt_ 2] + log( [�] _[K]_ _j_ =1 _[e][z][j]_ [)][ (cross-entropy for mixed label] **[ y]** _[′]_ [)]
+
+
+    - _L_ _[′]_ _LS_ [=] _[ α]_ [[] _[λz][gt]_ [1][ + (1] _[ −]_ _[λ]_ [)] _[z][gt]_ [2] _[ −]_ _K_ [1]     - _Kk_ =1 _[z][k]_ []]
+
+
+Thus, we have proven:
+_H_ ( **s** _,_ **q** ) = _H_ ( **y** _[′]_ _,_ **q** ) + _L_ _[′]_ _LS_ (41)
+
+
+This completes the proof for both cases of Theorem 3.3.
+
+
+C GRADIENT ANALYSIS
+
+
+C.1 NEW OBJECTIVE FUNCTION
+
+
+The Cross Entropy with Max Suppression is defined as:
+
+
+              -              _L_ MaxSup _,t_ ( _x, y_ ) = _H_ _yk_ + _[α]_ _t_ [(] _[x]_ [)]
+
+_K_ _[−]_ _[α][ ·]_ **[ 1]** _[k]_ [=argmax(] _**[q]**_ [)] _[,]_ _**[ q]**_ _[S]_
+
+
+where _H_ ( _·, ·_ ) denotes the cross-entropy function.
+
+
+C.2 GRADIENT ANALYSIS
+
+
+The gradient of the loss with respect to the logit _zi_ for each class _i_ is derived as:
+
+
+_∂i_ [MaxSup] _[,t]_ = _yt,i −_ _yi −_ _K_ _[α]_ [+] _[ α][ ·]_ **[ 1]** _[i]_ [=argmax(] _**[q]**_ [)]
+
+
+We analyze this gradient under two scenarios:
+
+
+**Scenario 1:** **Model makes correct prediction**
+
+
+In this case, Max Suppression is equivalent to Label Smoothing. When the model correctly predicts
+the target class (argmax( _**q**_ ) = GT), the gradients are:
+
+
+17
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) (36)
+
+
+_j_ =1
+
+
+_H_ ( **s** _,_ **q** ) = _−_ (1 _−_ _α_ )[ _λzgt_ 1 + (1 _−_ _λ_ ) _zgt_ 2] + (1 _−_ _α_ ) log(
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) (37)
+
+
+_j_ =1
+
+
+_−_ _[α]_
+
+_K_
+
+
+_K_
+
+
+_zk_ + _α_ log(
+
+_k_ =1
+
+
+_K_
+
+
+- _e_ _[z][j]_ ) (38)
+
+
+_j_ =1
+
+
+= _−_ (1 _−_ _α_ )[ _λzgt_ 1 + (1 _−_ _λ_ ) _zgt_ 2] _−_ _[α]_
+
+_K_
+
+
+_K_
+
+
+_zk_ + log(
+
+_k_ =1
+
+
+Rearranging:
+
+
+We can identify:
+
+
+_K_
+
+
+_H_ ( **s** _,_ **q** ) = _−_ [ _λzgt_ 1 + (1 _−_ _λ_ ) _zgt_ 2] + log(
+
+
++ _α_ [ _λzgt_ 1 + (1 _−_ _λ_ ) _zgt_ 2 _−_ [1]
+
+_K_
+
+
+- _e_ _[z][j]_ ) (39)
+
+
+_j_ =1
+
+
+_K_
+
+- _zk_ ] (40)
+
+
+_k_ =1
+
+
+_K_
+
+
+- For the target class (GT): _∂_ GT [MaxSup] _[,t]_ = _qt,_ GT _−_ �1 _−_ _α_ �1 _−_ _K_ [1] ��
+
+    - For non-target classes: _∂i_ [MaxSup] _[,t]_ = _qt,i −_ _K_ _[α]_
+
+
+**Scenario 2:** **Model makes wrong prediction**
+
+
+When the model incorrectly predicts the most confident class (argmax( _**q**_ ) = GT), the gradients
+are:
+
+
+    - For the target class (GT): _∂_ GT [MaxSup] _[,t]_ = _qt,_ GT _−_ �1 + _K_ _[α]_     
+    - For non-target classes (not most confident): _∂i_ [MaxSup] _[,t]_ = _qt,i −_ _K_ _[α]_
+
+    - For the most confident non-target class: _∂i_ [MaxSup] _[,t]_ = _qt,i_ + _α_ �1 _−_ _K_ [1]     
+
+
+E INCREASING SMOOTHING WEIGHT SCHEDULE
+
+
+We hypothesize that, as the number of training epochs increases, the model improves its accuracy
+progressively and potentially becomes more confident about its predictions. In consequence, it
+might be necessary to gradually increase _α_ to discourage the model’s over-confidence. Therefore,
+we additionally propose to adopt a linearly increasing _α_ schedule.
+
+
+Table 8 shows the impact of a linear _α_ scheduler on Label Smoothing and MaxSup. Both methods
+benefit from the scheduler, with LS improving from 75.91% to 76.16% and MaxSup improving from
+
+
+18
+
+
+The Max Suppression regularization technique implements a sophisticated gradient redistribution
+strategy, particularly effective when the model misclassifies samples. When the model’s prediction
+(argmax( _**q**_ )) differs from the ground truth (GT), the gradient for the incorrectly predicted class is
+increased by _α_ (1 _−_ [1] [)][,] [resulting] [in] _[∂]_ [MaxSup] _[,t]_ [=] _[q][t,]_ [argmax(] _**[q]**_ [)] [+] _[ α]_ [(1] _[ −]_ [1] [)][.] [Simultaneously,] [the]
+
+
+_K_ [1] [)][,] [resulting] [in] _[∂]_ argmax( [MaxSup] _[,t]_ _**q**_ ) [=] _[q][t,]_ [argmax(] _**[q]**_ [)] [+] _[ α]_ [(1] _[ −]_ _K_ [1]
+
+
+_K_ [)][.] [Simultaneously,] [the]
+
+
+gradient for the true class is decreased by _Kα_ [,] [giving] _[∂]_ GT [MaxSup] _[,t]_ = _qt,_ GT _−_ (1 + _K_ _[α]_
+
+
+gradient for the true class is decreased by _K_ [,] [giving] _[∂]_ GT = _qt,_ GT _−_ (1 + _K_ [)][,] [while] [for] [all]
+
+other classes, the gradient is slightly reduced by _K_ _[α]_ [:] _[∂]_ _i_ [MaxSup] _[,t]_ = _qt,i −_ _K_ _[α]_ [.] [This redistribution adds a]
+
+substantial positive gradient to the misclassified class while slightly reducing the gradients for other
+classes. The magnitude of this adjustment, controlled by the hyperparameter _α_, effectively penalizes
+overconfident errors and encourages the model to focus on challenging examples. By amplifying
+the learning signal for misclassifications, Max Suppression regularization promotes more robust
+learning from difficult or ambiguous samples.
+
+
+_K_ _[α]_ [:] _[∂]_ _i_ [MaxSup] _[,t]_ = _qt,i −_ _K_ _[α]_
+
+
+D PSEUDO CODE
+
+
+We provide pseudo code to give a clearer explanation of the implementation.
+
+
+**Algorithm 1** Gradient Descent with Max Suppression (MaxSup)
+
+
+**Require:** Dataset _D_ = _{_ ( _**x**_ [(] _[i]_ [)] _,_ _**y**_ [(] _[i]_ [)] ) _}_ _[N]_ _i_ =1 [, learning rate] _[ η]_ [, number of iterations]
+_T_, regularization factor _α_, a classifier _fθ_ ( _·_ )
+1: Initialize the network weights _θ_ randomly
+2: **for** _t_ = 1 to _T_ **do**
+3: **for** each ( _**x**_ [(] _[i]_ [)] _,_ _**y**_ [(] _[i]_ [)] ) in _D_ **do**
+4: Compute logits: _**z**_ [(] _[i]_ [)] = _fθ_ ( _**x**_ [(] _[i]_ [)] )
+5: Compute predicted probabilities: _**q**_ [(] _[i]_ [)] = softmax( _**z**_ [(] _[i]_ [)] )
+6: Compute Cross-Entropy loss: _LCE_ = _H_ ( _**y**_ [(] _[i]_ [)] _,_ _**q**_ [(] _[i]_ [)] )
+7: Compute Max Suppression loss: _LMaxSup_ = _zmax −_ [1] - _k∈K_ _[z][k]_
+
+
+_K_ [1] 
+
+
+7: Compute Max Suppression loss: _LMaxSup_ = _zmax −_ _K_ - _k∈K_ _[z][k]_
+
+8: Compute the sum: _L_ = _LCE_ + _αLMaxSup_
+9: Update the weights: _θ_ _−_ = _η_ _[∂L]_
+
+
+_∂θ_
+10: **end for**
+11: **end for**
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+76 _._ 12% to 76 _._ 58% with the scheduler. It can be seen that MaxSup benefits more from increasing _α_
+during training, with 0 _._ 46% percentage point gain over baseline compared to LS’s 0 _._ 25%. This result
+also supports our analysis that MaxSup fixes the inconsistent regularization and Error-Enhancement
+issue of Label Smoothing upon incorrect predictions.
+
+
+Table 8: Effect of Alpha Scheduler. _[∗]_ denotes that the baseline model does not incorporate the alpha
+parameter, _t_ and _T_ represent the current epoch number and the total number of epochs.
+
+
+Accuracy
+Configuration Formulation
+_α_ = 0 _._ 1 _α_ = 0 _._ 1 + 0 _._ 1 _T_ _[t]_
+
+Baseline         - 74 _._ 21 _[∗]_
+
+
+Figure 3: Visualization of penultimate layer’s activations of Deit-small (with CutMix&Mixup) for three different classes of ImageNet validation set: The first and second rows show Deit-Small trained with MaxSup and
+Label Smoothing, respectively. (a) 68:Schipperke, 66:Saluki, 67:Grey Fox; (b) 282:Tow Truck, 281:Pickup,
+292:Unicycle; (c) 784:Jean, 709:Shoe Shop, 893:Stinkhorn. Model trained with MaxSup exhibits both improved inter-class separability and intra-class variation, indicating enhanced classification performance and
+representation learning.
+
+
+19
+
+
+LS _α_ ( _zgt −_ [1]
+
+
+_K_ [1] 
+
+
+LS _α_ ( _zgt −_ _K_ - _k∈K_ _[z][k]_ [)] 75 _._ 91 76 _._ 16
+
+MaxSup _α_ ( _zmax −_ [1] - _[z][k]_ [)] 76 _._ 12 76 _._ 58
+
+
+_K_ [1] 
+
+
+_k∈K_ _[z][k]_ [)] 76 _._ 12 76 _._ 58
+
+
+subsectionVisualization of the Learned Feature Space
+
+
+To visualize the difference between Max Suppression Regularization and Label Smoothing in the
+learned feature space, we project the feature representations from the penultimate layer into a 2D
+space, following M¨uller et al. (2019). Given three semantically similar classes, we construct an
+orthonormal basis for the plane intersecting their templates. We then project the penultimate layer
+activations of examples from these classes onto this plane. To ensure the displayability and ease of
+understanding of the images, we randomly sample 80 samples from the corresponding training or
+validation sets for the three categories separately. We select these classes based on two criteria: **1)**
+**Semantic** **Similarity:** Select the 3 categories that are semantically similar; **2)** **Confusion:** Select
+a class, and then find two additional classes that the model trained with Label Smoothing is most
+likely to confuse when predicting images of this class (fig. 3c and fig. 4c), and vice versa (fig. 3d
+and fig. 4d).
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+(a) Semantically Similar Classes
+
+
+(b) Semantically Similar Classes
+
+
+(c) Confusing Classes (LS)
+
+
+(d) Confusing Classes (MaxSup)
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Figure 4: Visualization of penultimate layer’s activations of Deit-small (with CutMix&Mixup) for three different classes of ImageNet Train set: The first and second rows show Deit-Small trained with MaxSup and
+Label Smoothing, respectively. (a) 68:Schipperke, 66:Saluki, 67:Grey Fox; (b) 282:Tow Truck, 281:Pickup,
+292:Unicycle; (c) 784:Jean, 709:Shoe Shop, 893:Stinkhorn. Model trained with MaxSup exhibits both improved inter-class separability and intra-class variation, indicating enhanced classification performance and
+representation learning.
+
+
+As can be observed in Figure 4 and Figure 3, the model trained with Max Suppression has the
+following two major advantages against Label Smoothing:
+
+
+    - Improved inter-class separability: Max Suppression makes different classes more separable, indicating improved classification performance.
+
+
+    - Improved intra-class variation: Max Suppression better acknowledges intra-class variations, indicating improved representation learning.
+
+
+For example, images of a Schipperke may differ in terms of viewpoint, lighting, or occlusion. These
+subtle variations are preserved in the feature space, where the semantic distances to other classes,
+such as Saluki or Grey Fox, adjust for each image.
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15 10 5 Projection 10 5 10 15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+(a) Semantically Similar Classes
+
+
+(b) Semantically Similar Classes
+
+
+(c) Confusing Classes (LS)
+
+
+(d) Confusing Classes (MaxSup)

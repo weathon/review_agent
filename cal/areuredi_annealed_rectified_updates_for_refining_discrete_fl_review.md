@@ -1,4 +1,4 @@
-=== CALIBRATION EXAMPLE 42 ===
+=== CALIBRATION EXAMPLE 21 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
@@ -7,216 +7,234 @@
 
 ### Title & Abstract
 
-The title accurately reflects the paper's technical content. The abstract claims (i) "theoretical guarantees of convergence to the Pareto front," (ii) multi-objective guidance across up to five properties, and (iii) superiority over evolutionary and diffusion-based baselines. All three claims are explored in the paper, but as detailed below, there is a serious disconnect between claims (i) and the actual experimental setup.
+The title accurately captures the method. The abstract makes strong claims of "convergence to the Pareto front" and "distributional invariance" that are partially undermined later—the paper itself concedes (Section 4) that these guarantees "hold only in the limit of an infinitely long Markov chain," and then immediately introduces a monotonicity constraint that breaks the ergodicity requirement altogether. The abstract omits any mention of this practical deviation from the theoretical framework, which is misleading. The claim of "outperforms both evolutionary and diffusion-based baselines" is supported, but the comparison is qualified by important caveats not surfaced in the abstract.
 
 ---
 
 ### Introduction & Motivation
 
-The motivation is strong and well-grounded: biomolecular design is inherently multi-objective, yet most computational methods optimize single objectives. The gap with ParetoFlow (continuous space) is correctly identified. The contributions list is clear.
-
-**Concern:** Contribution #2 states "theoretical guarantees of distributional invariance and convergence to the Pareto front," but Section 4 immediately walks this back: "in practice, these guarantees hold only in the limit of an infinitely long Markov chain." More critically, the actual experiments do *not* use the theoretically analyzed algorithm — they use a monotonicity-constrained variant (discussed below). This tension is not flagged in the introduction.
+The motivation is strong and well-grounded: multi-objective optimization in discrete biological sequence spaces is a genuine unmet challenge. The framing around ReDi is sensible—using a rectified flow as a learned prior for MCMC sampling is a natural building block. The contributions are clearly enumerated. However, the claim in Contribution 2 ("We provide theoretical guarantees that AReUReDi preserves distributional invariance and converges to the Pareto front with full coverage") is an overstatement given the practical algorithm deployed in all experiments (see below). The paper would benefit from a more careful statement like "the unconstrained algorithm admits these guarantees."
 
 ---
 
-### Method (Section 3)
+### Method (Section 3 & Appendix A)
 
-The three components — Tchebycheff scalarization, locally balanced proposals (Zanella-style), and Metropolis-Hastings — are individually well-established in the MCMC and multi-objective optimization literature. The novelty lies in their integration within a discrete flow prior for biological sequence generation. This is reasonable, but the contribution claims should be calibrated accordingly.
+**3.1–3.4 Core Algorithm**
 
-**Critical concern — The monotonicity constraint:** Section 4 introduces a constraint that "accepts only token updates that increase the weighted sum of the current objective scores." This transforms the Markov chain from a theoretically-grounded MH sampler into a greedy hill-climber. The MH acceptance ratio (Section 3.4) ensures detailed balance with respect to π_{η,ω}; the monotonicity constraint does not. This directly breaks the invariance and convergence guarantees proven in Appendix A. The paper briefly notes this in the ablation (Table 6) and says it "does not alter the underlying optimization objectives," but this is misleading: it changes the dynamics fundamentally. All experiments use this constraint. The theoretical guarantees do not apply to the method evaluated in the experiments.
+The combination of annealed Tchebycheff scalarization, locally balanced proposals, and MH updates is technically sound as presented. The proof in Appendix A that the Barker-proposal MH kernel leaves π_{η,ω} invariant is standard and correct.
 
-**Annealing schedule:** The annealing schedule is η_t = η_min + (η_max − η_min) · t/(T-1), which is *linear in the iteration index*, not logarithmic or exponential as in standard simulated annealing. The convergence of simulated annealing to the global optimum requires a logarithmically slow cooling schedule; the linear schedule used here provides no such guarantee. The paper does not justify why a linear schedule is sufficient given the finite-length chain.
+**Critical flaw: The monotonicity constraint (Section 4)**
 
-**Weight selection:** The Coverage Guarantee theorem requires ω to be drawn from a distribution with full support on the interior simplex. In practice, experiments use equal weights for all objectives in the wild-type task, and fixed weights (0.7 for affinity, 0.1 each for others) in the SMILES task. Single fixed weight vectors do not explore the full Pareto front; only single Pareto-optimal points are targeted per run. The claim of "full coverage of the Pareto front" does not follow from running AReUReDi with fixed weights.
+The single most important issue in the paper is the introduction, at the start of Section 4, of a "monotonicity constraint that accepts only token updates that increase the weighted sum of the current objective scores." This is disclosed almost as a footnote before the experiments begin. The constraint converts the algorithm from a reversible MCMC chain (with invariance and ergodicity) into a greedy hill-climber. **This violates ergodicity and destroys the very guarantees that constitute Contributions 2.** Table 6 demonstrates how essential this constraint is in practice (without it, non-fouling/solubility collapse from ~0.87 to ~0.45). In other words, the theoretically sound version of AReUReDi doesn't work well in practice, and the practically effective version lacks the claimed guarantees. This gap is neither reconciled nor adequately discussed.
 
----
+**Pareto Point Representability (Appendix A, Theorem 3)**
 
-### Theoretical Guarantees (Appendix A)
+The proof constructs ω_n = (1/s̃_n(x†)) / Σ_k (1/s̃_k(x†)) but explicitly requires s̃_n(x†) > 0 for all n. For boundary Pareto points where some normalized objective is zero, the paper says "perturb objectives by ε > 0 and take the limit"—but this limit argument is not worked out and may fail if the optimal weight vector lies on the boundary of the simplex (where the coverage guarantee also requires interior ω). The full Pareto front may not be covered by the theory.
 
-**Invariance Theorem:** The proof is technically correct for the Barker's function case (acceptance α = 1), but the proof for the general case relies on a ratio of proposal probabilities equaling W_{η,ω}(x')/W_{η,ω}(x), which requires that the normalizing constant of q_i cancels. This cancellation does hold when the candidate set is the full vocabulary but may not hold with top-p pruning (used for computational efficiency in the SMILES task). The theorem statement should explicitly condition on the pruning scheme.
+**Coverage Guarantee (Appendix A, Theorem 4)**
 
-**Convergence to Pareto Front Theorem:** The Step 1 proof handles the case where the dominated state y has strictly higher score on the bottleneck coordinate m. For the non-bottleneck case, it invokes "measure zero" arguments, but in a finite discrete state space, ties among objectives are not measure zero — they are combinatorially common, especially when objectives have coarse-grained outputs (e.g., binary classifiers for hemolysis, non-fouling, solubility). The proof needs to handle ties explicitly.
+The proof appeals to "continuity" of x† being optimal in a neighborhood U_{x†} of ω†. However, S_ω(x) = min_n ω_n s̃_n(x) is not smooth in ω; the argmax can jump discontinuously at weight boundaries. The neighborhood argument as written is incomplete.
 
-**Pareto Representability Theorem:** The proof requires s̃_n(x†) > 0 for all n. If any normalized objective equals zero for a Pareto-optimal point (which is possible at the boundary), the proof falls back to a ε-perturbation argument. This case should be handled more carefully since the resulting weight depends on ε and may not lie in the interior of the simplex.
+**Conditional TC non-monotonicity (Table 4)**
 
-**Overall:** The proofs are partially correct under idealized conditions, but the gap between the theoretical setup and the actual experimental algorithm (monotonicity-constrained greedy search) is never bridged.
+The paper reports that conditional TC *increases* after the first round of rectification (10.60 → 12.63) before decreasing. The authors attribute this to distributional shift from using model-generated couplings. This directly contradicts the stated guarantee from ReDi that TC "provably decreases" across iterations (Section 2.2, Eq. for TC_{s|t}). The explanation given is plausible but the relationship between "within-coupling" monotonicity and "across-coupling" monotonicity needs to be stated precisely. As it stands the empirical result is in tension with the theoretical framing.
 
 ---
 
 ### Experiments & Results
 
-**Score model quality:** The oracle models used for guidance and evaluation are weak by modern standards: hemolysis F1 = 0.58, non-fouling F1 = 0.71, solubility F1 = 0.68, binding affinity Spearman ρ = 0.64 (Appendix E). The half-life model is trained on only 105 data points with R² = 0.60. Optimizing for unreliable oracles — and then evaluating on those same oracles — inflates the apparent performance. This is the standard proxy model problem in offline design, but the paper never discusses this limitation. Are the oracle scores measuring real drug properties or are they measuring artifacts of the score model?
+**Evaluation circularity: in-silico-only assessment with the same surrogates used for optimization**
 
-**Pareto front metrics absent:** The standard metric for multi-objective optimization is **hypervolume**, which measures the volume of objective space dominated by the generated set. Table 2 reports per-objective averages, not hypervolume. High average scores across objectives are necessary but not sufficient to characterize Pareto quality — a method could collapse to a single Pareto point and still show high per-objective averages. Without hypervolume (or at minimum, pairwise Pareto dominance counts), the claim of "superior trade-off navigation" cannot be rigorously supported.
+Every reported objective score—hemolysis, non-fouling, solubility, half-life, and affinity—is evaluated using exactly the same XGBoost/neural-network surrogates that guide AReUReDi's sampling. No wet-lab validation, no independent held-out surrogate, no cross-validation of surrogate predictions on generated sequences. This is a significant scientific limitation: the method could be exploiting artifacts in the surrogates rather than discovering genuinely better peptides. Crucially, the same circularity applies to all baselines, so the relative comparisons are internally consistent—but the absolute claim that AReUReDi "designs therapeutic peptides" is unsupported by experiment.
 
-**Baseline fairness:**
+**Weak surrogate quality**
 
-1. PepTune is paired with DPLM as its backbone for the comparison, not the originally published PepMDLM backbone. The paper describes this as adapting "PepTune's backbone to the existing DPLM model," but PepTune was designed and evaluated with PepMDLM. Using a weaker backbone for the baseline potentially inflates AReUReDi's advantage.
+The guidance/evaluation models have mediocre predictive power:
+- Hemolysis XGBoost: F1 = **0.58** (barely above chance for binary classification)
+- Non-fouling: F1 = 0.71
+- Solubility: F1 = 0.68
+- Binding affinity: Spearman ρ = 0.64
+- Half-life R² = 0.60 (fine-tuned on **only 105 data points**)
 
-2. The evolutionary baselines (NSGA-III, SMS-EMOA, SPEA2, MOPSO) receive no guidance from a generative prior trained on biological sequence distributions, while AReUReDi benefits from PepReDi's prior. This is an architecture-level advantage that should be controlled for (e.g., by running the evolutionary methods initialized from PepReDi samples, or by providing them the same score models used in AReUReDi).
+A half-life model with 105 training examples that purportedly predicts absolute half-life in hours is particularly concerning. The dramatic half-life improvements reported throughout the paper (e.g., 22-fold increase over PepTune in Table 2, half-lives of 40–100 hours in Table 1) almost certainly reflect optimization of surrogate artifacts rather than true biological half-life.
 
-3. For the SMILES task, AReUReDi is compared to PepTune but the comparison is dismissed because "PepTune does not report average property scores" — leaving AReUReDi's SMILES results essentially without a quantitative multi-objective baseline.
+**Missing standard MOO metric: hypervolume indicator**
 
-**Computational cost:** AReUReDi requires 55 s/binder for 8-mer designs and 195 s/binder for 16-mer designs (Table 2), compared to 2–37 s for baselines. The ~22× slowdown relative to PepTune and ~5× relative to NSGA-III is a meaningful practical limitation. The time-matched comparison (Table 11) compares "top-2 AReUReDi binders" against "100 PepTune binders" — cherry-picking two from a very small candidate pool (4 total) against a full candidate set is not a valid time-matched comparison.
+The paper never reports the hypervolume indicator (HVI), which is the standard metric for comparing Pareto front quality in multi-objective optimization. All comparisons use averaged individual objective scores across 100 samples. This conflates single-point quality with Pareto front coverage and cannot detect whether one method produces better trade-offs than another (e.g., a method with high average hemolysis and low average non-fouling could have the same individual averages as a balanced method but be completely dominated in the hypervolume sense). The choice to use averaged single-objective scores also makes the comparison against NSGA-III/SPEA2/MOPSO unfair, since these methods are specifically designed to maximize hypervolume/coverage rather than improve per-objective averages.
 
-**Statistical significance:** No confidence intervals or statistical tests are reported anywhere in the main results (Tables 1, 2) beyond reporting "averages of 100 binders." Given the stochasticity of both AReUReDi and the baselines, it is impossible to assess whether performance differences are statistically significant.
+**Unfair comparison with PepTune (Table 2)**
 
-**ReDi conditional TC non-monotonicity:** Table 4 shows TC increasing from 10.60 (base) to 12.63 after the first rectification round, then decreasing to 11.73 and 11.23. The paper ascribes this to "distributional shift from the large, model-generated coupling," but this contradicts the stated guarantee that "TC_s|t(π^(k+1)) ≤ TC_s|t(π^(k))" (Section 2.2). Either the ReDi theorem does not apply in this experimental setting or additional explanation is required.
+AReUReDi uses PepReDi (trained on PepNN + BioLip2 + PPIRef) as its generative prior. PepTune is paired with DPLM (a general protein diffusion language model trained on much broader data). These are fundamentally different base models with different data and scales. The comparison conflates the quality of the base model with the quality of the guidance algorithm. A fairer comparison would run PepTune's guidance strategy on PepReDi, or AReUReDi's guidance on DPLM.
 
-**No experimental validation:** All reported results are computed against in silico oracle models. AlphaFold3 ipTM and AutoDock VINA docking are provided for a handful of example structures in Figure 1, but these are also computational predictions. No wet lab experiments, even simple cell-free assays for hemolysis or solubility, are presented.
+**Runtime disparity**
+
+AReUReDi requires 55–195 seconds per binder versus 2.5–37 seconds for baselines (Table 2). That is approximately 5–80× slower. The paper partially addresses this with a time-matched comparison (Table 11), but the wall-clock comparison is constructed in AReUReDi's favor (only 3–4 AReUReDi binders vs. 100 PepTune binders). A fairer comparison would report AReUReDi performance on 100 binders and PepTune on 2,000–4,000 binders within the same wall clock time.
+
+**Rectification ablation (Table 9) shows inconsistent benefit**
+
+For the 5AZ8 target, PepDFM achieves higher non-fouling (0.8867) and solubility (0.8743) than rectified PepReDi³ (0.8732, 0.8605). The claimed benefit of rectification is robust only for half-life, which is the metric most likely to reflect surrogate noise (given its 105-point training set). Rectification's contribution to multi-objective Pareto performance is not convincingly demonstrated.
+
+**No statistical significance testing**
+
+Table 2 reports single mean values per method over 100 binders, with no standard deviations or confidence intervals. Many differences that appear large (e.g., non-fouling 0.5715 for NSGA-III vs. 0.8680 for AReUReDi) are plausibly meaningful, but others (e.g., affinity 7.3240 SPEA2 vs. 5.7130 AReUReDi) suggest AReUReDi is not universally better, and no analysis of variance is provided to support the claims.
 
 ---
 
-### Related Work
+### Related Work (Section 5)
 
-The related work is comprehensive and honest about what can and cannot be compared directly (e.g., structural methods, continuous-space methods). The explicit discussion of why ParetoFlow and other continuous-domain methods are not appropriate baselines is appreciated.
-
-**Minor concern:** Multi-objective GFlowNets (Jain et al., 2023), which operate in discrete spaces and are specifically designed to sample diverse Pareto-optimal solutions, are cited but not included as a baseline. This is a natural competitor that should at minimum be discussed as a reason for exclusion.
+The related work is reasonably comprehensive but omits multi-objective GFlowNets (Jain et al., 2023 is cited but not discussed as a discrete-space baseline). GFlowNets naturally handle discrete spaces and multi-objective settings and would be a highly relevant comparison. The paper also does not engage with Gruver et al. (2023) "Protein design with guided discrete diffusion" beyond a citation—this is directly related work on guided generation for discrete protein sequences.
 
 ---
 
 ### Limitations & Broader Impact
 
-The limitations section is brief and deals primarily with future extensions rather than current weaknesses. The paper does not acknowledge:
+The limitations section (embedded in the Discussion) is too brief. Critical limitations not mentioned:
+1. Dependence on surrogate quality (especially the 105-point half-life model)
+2. The fact that the deployed algorithm (with monotonicity constraint) lacks the theoretical guarantees
+3. No experimental (wet lab) validation
+4. Scalability: as sequence length grows, the 20×L MCMC steps may be insufficient for mixing
 
-1. The gap between theoretical guarantees and the monotonicity-constrained algorithm used in experiments.
-2. The reliance on weak proxy models, and the lack of any experimental validation.
-3. The sensitivity to weight vector choice when the stated Pareto coverage requires weight randomization.
-4. The computational overhead that limits practical applicability.
-
-The ethics statement appropriately acknowledges dual-use risks.
+The ethics statement is adequate.
 
 ---
 
 ### Overall Assessment
 
-AReUReDi addresses a genuinely important problem — multi-objective discrete sequence optimization — and the combination of locally balanced MH proposals with annealed Tchebycheff scalarization over a learned discrete flow prior is principled and well-motivated. The paper is clearly written and experimentally thorough across many targets. However, several fundamental concerns undermine the current submission's readiness for ICLR. Most critically: **the theoretical guarantees claimed prominently throughout the paper (including in the title and abstract) do not apply to the algorithm actually evaluated in experiments**, because the monotonicity constraint destroys detailed balance. Beyond this, the absence of hypervolume metrics makes it impossible to truly assess Pareto quality; the score models used for guidance and evaluation are weak and the results are never validated experimentally; and the PepTune baseline comparison uses a weaker backbone than originally published. In its current form, the paper overstates both its theoretical and empirical contributions. These issues are addressable in principle — particularly if the authors disentangle the pure MH results from the constrained variant and adopt standard multi-objective metrics — but they require substantial revision.
+AReUReDi addresses a genuine and important problem—multi-objective discrete sequence optimization—and the integration of locally balanced proposals with Tchebycheff scalarization and annealed MCMC is a technically coherent approach. However, the paper has a fundamental disconnect between theory and practice: the monotonicity constraint used in all experiments destroys the invariance and ergodicity properties on which every theoretical guarantee rests, and this is treated as a minor implementation detail rather than a central tension. Compounding this, the evaluation is entirely in-silico using the same surrogates that guide optimization (including a half-life model trained on 105 points), the standard hypervolume metric is absent from all comparisons, and the baseline comparisons do not control for the generative prior. The contribution stands in spirit—AReUReDi meaningfully improves average multi-property scores over evolutionary and diffusion baselines on the chosen metrics—but the theoretical framing overclaims what the practical algorithm delivers, and the empirical evidence is insufficient to establish that the improvements correspond to genuinely better biomolecules rather than surrogate exploitation. A substantial revision reconciling the theory–practice gap, replacing or augmenting the circular evaluation, and adding proper MOO metrics would be needed for this work to meet ICLR's standards.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper introduces **AReUReDi**, a multi-objective optimization framework that extends Rectified Discrete Flows (ReDi) to generate biomolecular sequences satisfying conflicting constraints. By integrating annealed Tchebycheff scalarization, locally balanced proposals, and Metropolis-Hastings updates, the method claims theoretical convergence to the Pareto front while preserving distributional invariance. Experimental results on peptide and SMILES design demonstrate superior trade-off navigation compared to evolutionary and diffusion-based baselines.
+The paper introduces AReUReDi, a multi-objective optimization framework that extends rectified discrete flows to generate biomolecular sequences optimized across competing therapeutic properties. By integrating annealed Tchebycheff scalarization, locally balanced proposals, and Metropolis-Hastings updates, the method provides formal guarantees of Pareto front convergence while operating natively in categorical sequence spaces. Extensive experiments on wild-type peptides and chemically-modified peptide SMILES demonstrate superior trade-off navigation compared to evolutionary and diffusion-based baselines.
 
 ### Strengths
-1.  **Strong Theoretical Guarantees:** Unlike many empirical generative optimization methods, AReUReDi provides formal proofs (Appendix A) for Markov chain invariance and convergence to Pareto-optimal states under the provided scalarization, which is a significant contribution for discrete generative modeling.
-2.  **Comprehensive Multi-Objective Benchmarking:** The evaluation is extensive, comparing against standard evolutionary MOO (NSGA-III, SPEA2) and recent diffusion approaches (PepTune). The ablation studies on rectification rounds (Table 9) and annealed schedules (Table 10) provide concrete evidence for the necessity of each proposed component.
-3.  **Practical Domain Application:** The framework addresses a critical gap in biomolecular design by handling up to five conflicting therapeutic properties (e.g., hemolysis, half-life) directly on discrete sequences without continuous embedding, avoiding the distortion issues mentioned in the Introduction.
+1. **Rigorous Theoretical Foundation:** The paper provides clear, step-by-step proofs of distributional invariance, Pareto convergence as $\eta \to \infty$, and full Pareto front coverage (Appendix A). This formal grounding is notably stronger than heuristic guidance strategies common in discrete generative modeling.
+2. **Principled Integration of Guidance into Discrete Flows:** The locally balanced proposal mechanism (Section 3.3) elegantly blends the generative prior with multi-objective guidance while preserving reversibility, avoiding the approximation errors typical of gradient straight-through or Gumbel-softmax tricks in discrete spaces.
+3. **Comprehensive and Well-Structured Empirical Evaluation:** The method is tested across two distinct modalities (amino acid sequences and SMILES) and up to five conflicting objectives. Tables 1–2 and Appendix Tables 6–14 systematically validate guidance ablation, weight steering, and baseline comparisons, showing consistent superiority over NSGA-III, MOPSO, and PepTune.
+4. **Strong Ablation and Design Validation:** The paper thoroughly isolates key components, demonstrating that rectification improves base model quality (Table 9), annealing outperforms fixed guidance strengths (Table 10), and the learned ReDi prior is critical for high-quality trade-offs (Tables 15–16).
 
 ### Weaknesses
-1.  **High Computational Latency:** Table 2 indicates a substantial runtime overhead for AReUReDi (e.g., 55 seconds per binder for 1B8Q) compared to evolutionary baselines (e.g., 8.54 seconds for MOPSO) and diffusion methods (2.46 seconds for PepTune). While the authors mitigate this with a "matched wall-clock" comparison in Table 11, the raw cost limits high-throughput application potential.
-2.  **Reliance on In-Silico Evaluated Metrics:** The entire experimental validation depends on predictor models (XGBoost, AlphaFold3, AutoDock) rather than physical wet-lab verification. Table 1 notes the lack of public datasets for benchmarking, which restricts the generalizability of the "therapeutic" claims until experimental validation is conducted.
-3.  **Scalability of Proposal Mechanism:** The locally balanced proposal requires evaluating candidate tokens against all $N$ objectives at every coordinate update. While feasible for five objectives as shown, the paper does not discuss how the computational complexity scales for a larger number of objectives or larger sequence lengths, nor does it address potential mixing time issues in high-dimensional spaces.
+1. **Contradiction Between Theory and Practical Implementation:** Section 4 explicitly states that a monotonicity constraint (accepting only token updates that increase the weighted objective sum) is used in all experiments to accelerate convergence (Table 6). This constraint fundamentally breaks detailed balance and invalidates the exact Markov chain invariance guarantees claimed in Section 3 and Appendix A. The paper treats this as a minor practical tweak without discussing the theoretical implications.
+2. **Surrogate Model Uncertainty is Ignored:** The optimization relies entirely on pre-trained score models, yet several have moderate predictive performance (e.g., XGBoost classifiers with validation F1 scores of 0.58–0.71, half-life predictor $R^2=0.60$, Appendix E.1–E.3). Optimizing aggressively against noisy or poorly calibrated surrogates risks exploiting model artifacts rather than discovering biologically valid sequences, yet no uncertainty quantification or robustness mechanism is incorporated.
+3. **Significant Computational Overhead:** AReUReDi is notably slower than baselines (Table 2 reports 55–195s per binder vs. 2.5–8.5s for classical MOO and 2.5–4.8s for PepTune). While Table 11 attempts a matched wall-clock comparison, the per-sample compute cost remains high, limiting practicality for large-scale virtual screening or longer sequence lengths without additional architectural or sampling optimizations.
+4. **Incomplete Diversity/Novelty Analysis for Peptides:** While Table 5 reports SNN and diversity for SMILES generation, the primary wild-type peptide results (Tables 1–2) lack quantitative novelty metrics (e.g., pairwise sequence identity, coverage of chemical space, or hypervolume calculations against the true Pareto front). Without these, it is difficult to assess whether the model discovers genuinely novel therapeutic candidates or converges to narrow local optima.
 
 ### Novelty & Significance
-**Novelty:** The integration of annealed scalarization and MCMC updates into the ReDi framework represents a novel synthesis of flow matching and multi-objective optimization. To the best of my knowledge, there have been few attempts to provide Pareto guarantees specifically within discrete rectified flow contexts.
-
-**Significance:** This work is significant for the computational biology community, as it offers a principled method for designing complex biological sequences where trade-offs are inevitable. The theoretical grounding distinguishes it from heuristic guidance methods common in the field, potentially setting a new standard for verifiable optimization in generative design.
+**Novelty:** High. The integration of rectified discrete flows with MCMC-based multi-objective guidance represents a meaningful conceptual advance over single-objective discrete diffusion or heuristic evolutionary search. The use of locally balanced proposals to maintain reversibility in categorical spaces is particularly elegant and underexplored.
+**Clarity:** Good. The method is logically partitioned, mathematical notation is consistent, and Algorithm 1 provides a clear implementation blueprint. The main text flows well, though the tension between theoretical guarantees and the practical monotonicity constraint needs clearer articulation.
+**Reproducibility:** Strong. The paper provides detailed model architectures, training hyperparameters, dataset curation steps, score model specifications, and complete ablation settings across multiple appendices. The authors commit to releasing code and checkpoints, and the use of public datasets further facilitates replication.
+**Significance:** High. Multi-property biomolecular design is a critical bottleneck in therapeutic development. By providing a theoretically grounded, sequence-native framework that outperforms strong baselines across diverse targets, the work aligns well with ICLR's emphasis on principled generative modeling with real-world scientific impact.
 
 ### Suggestions for Improvement
-1.  **Optimize Sampling Efficiency:** Investigate adaptive step sizing or a "warm-up" phase where the guidance strength is lower and coordinate updates are sparser to reduce the $O(T \times L \times K \times N)$ complexity per sample.
-2.  **Clarify Baseline Fairness:** In the comparison with PepTune, ensure the input data distribution (training set) is clearly defined, as the performance gap may depend on the quality of the base model prior rather than just the guidance mechanism.
-3.  **Add Experimental Validation Discussion:** While wet-lab data may be scarce, include a discussion or preliminary results involving "gold standard" experimental peptide property datasets (e.g., PEPLO) to quantify the alignment between predictor scores and known experimental values more robustly.
+1. **Reconcile Theory with Practice:** Either remove the monotonicity constraint from the main experimental results to fully align with the theoretical claims, or formally analyze its impact on convergence (e.g., treating it as a biased sampler) and clearly state that guarantees are asymptotic/idealized.
+2. **Incorporate Surrogate Uncertainty:** Integrate uncertainty-aware guidance (e.g., expected improvement, ensemble variance, or conformal prediction thresholds) to prevent over-optimization of noisy objectives. Report calibration curves or confidence intervals for the surrogate models to contextualize the property scores.
+3. **Expand Baseline Comparisons and Efficiency Analysis:** Compare against additional discrete MOO methods (e.g., GFlowNet-based multi-objective sampling or classifier-free guided discrete diffusion). Provide a more granular Pareto frontier plot (e.g., HV-I or hypervolume vs. FLOPs/time) to better characterize the efficiency-accuracy trade-off.
+4. **Quantify Peptide Diversity and Novelty:** Add pairwise sequence identity distributions, training-set Tanimoto/Levenshtein similarities, or hypervolume metrics for the peptide generation experiments. This will substantiate claims of broad exploration and demonstrate clinical relevance beyond aggregate property scores.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Ground-truth Pareto front validation** — All results rely on learned score models with modest validation performance (F1 0.58-0.71, Spearman 0.64-0.86). Without comparison to experimentally measured properties or known Pareto fronts, claims of Pareto optimality are unverifiable and could reflect score model artifacts.
+1. **Ablate the monotonicity constraint** — Section 4 states this constraint was used in ALL experiments, yet it violates the MCMC invariance guarantees claimed in Appendix A. Without showing results both with and without this constraint, the theoretical claims are disconnected from empirical validation.
 
-2. **Fair baseline comparison with matched compute** — Table 11 reveals AReUReDi generates only 3-4 sequences while PepTune generates 100 in the same wall-clock time. This unfair comparison undermines the superiority claim; a proper evaluation should compare best-of-N performance with equal sample budgets.
+2. **Add Pareto front coverage metrics** — The paper claims "full coverage of the Pareto front" but provides no hypervolume, spread, or coverage metrics comparing AReUReDi to baselines. ICLR reviewers will expect quantitative evidence of Pareto front quality, not just average property scores.
 
-3. **Monotonicity constraint breaks theoretical guarantees** — Section 4 admits the monotonicity constraint (accepting only improvements) was used in all experiments, but this violates the MCMC detailed balance required for the claimed convergence guarantees. Experiments without this constraint are needed to validate the theory.
+3. **Benchmark against more recent discrete MOO methods** — Comparisons stop at PepTune (2025) and classical evolutionary algorithms. Need comparison with other discrete flow guidance methods (e.g., Nisonoff et al. 2025, Tang et al. 2025a) to establish the method is actually novel and not just incremental.
 
-4. **Ablation on score model error propagation** — No analysis shows how imperfect score predictions affect the optimization trajectory. Adding noise to score models or comparing against oracle scores would reveal whether results are robust or overfit to specific predictors.
+4. **Validate score model reliability** — The half-life model was trained on only 105 entries (Appendix E.3), and classifiers achieve F1 scores of 0.58-0.71. Without uncertainty quantification or external validation of generated sequences, the optimization results may reflect model artifacts rather than real improvements.
 
-5. **Test on held-out protein targets** — All targets appear in training data for the base models and score models. Evaluation on completely held-out targets with no training overlap is needed to claim generalization rather than memorization.
+5. **Test on held-out protein targets** — All 8 peptide targets appear to be used for both development and evaluation. Need true held-out targets to demonstrate generalization rather than potential overfitting to the benchmark suite.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Pareto front coverage quantification** — Weight vector ablations (Tables 13-14) show steering capability but don't measure actual Pareto front coverage. Hypervolume indicators or coverage metrics against reference Pareto sets are needed to substantiate the "full coverage" claim.
+1. **Quantify gap between theoretical and practical convergence** — Theorems require η→∞ and infinite chain length, but experiments use finite η (max 20) and 128-256 steps. Analysis showing how close practical settings come to theoretical limits is essential for claim credibility.
 
-2. **Mixing rate and convergence diagnostics** — The theoretical guarantees depend on chain mixing, but no convergence diagnostics (trace plots, effective sample size, Gelman-Rubin statistics) are provided to show the Markov chain actually reaches stationarity within the budgeted steps.
+2. **Analyze why rectification helps for MOO specifically** — Table 9 shows rectification improves results, but no analysis explains why reduced conditional total correlation translates to better Pareto trade-offs. This mechanistic link is claimed but unexamined.
 
-3. **Sequence novelty vs. training data overlap** — SNN scores are reported for SMILES but not peptides. Analysis of sequence similarity to training data is needed to determine if AReUReDi discovers novel solutions or rediscovered training examples.
+3. **Report computational efficiency trade-offs systematically** — AReUReDi takes 10-80× longer than baselines (Table 2). Need analysis of whether the improvement justifies the cost, and whether there are settings where the method becomes impractical.
 
-4. **Trade-off frontier visualization** — No Pareto frontier plots showing the actual trade-off curves achieved. 2D/3D scatter plots of objective pairs would reveal whether the method truly navigates trade-offs or collapses to corner solutions.
+4. **Analyze failure cases** — No discussion of targets or objectives where AReUReDi underperforms. ICLR reviewers expect honest assessment of limitations, not just success stories.
 
-5. **Failure mode analysis** — No discussion of when AReUReDi fails or which objective combinations are hardest to balance. Understanding limitations is critical for ICLR's reproducibility standards.
+5. **Weight vector sensitivity analysis is insufficient** — Table 13-14 shows only 4 weight settings. Need systematic analysis of how weight selection affects Pareto front coverage and whether the method finds diverse solutions or clusters around similar trade-offs.
 
 ### Visualizations & Case Studies
-1. **Pareto frontier plots** — Scatter plots showing generated samples in 2-3 objective dimensions alongside baseline methods would immediately reveal whether AReUReDi achieves better trade-offs or simply optimizes different objectives.
+1. **Pareto front plots** — Show actual 2D/3D projections of the Pareto front achieved by AReUReDi vs. baselines. Without this, claims about "superior trade-off navigation" are unverified.
 
-2. **Convergence trajectories per objective** — Figure 1E shows mean scores but not individual chain trajectories. Plotting multiple chains would reveal whether different runs converge to different Pareto points or the same solution.
+2. **Sequence diversity visualization** — Figure 1 shows structures but doesn't reveal whether generated sequences are diverse or collapsing to similar solutions. t-SNE/UMAP of sequence embeddings would expose mode collapse.
 
-3. **Sequence logo or motif analysis** — For peptide binders, showing conserved motifs in AReUReDi designs vs. pre-existing binders would reveal whether the method learns meaningful biochemistry or produces superficially optimized but non-functional sequences.
+3. **Convergence trajectories** — Plot property scores vs. iteration for multiple random seeds to show consistency. Figure 1E shows one target; need to demonstrate this pattern holds across targets.
 
-4. **Score model calibration plots** — Reliability diagrams for the property predictors would show whether score values are well-calibrated, since miscalibrated scores could distort the scalarization and guidance.
+4. **Invalid sequence rates over time** — For SMILES generation, show how validity changes during sampling. The paper claims 100% validity but doesn't show rejection rates or how constraints affect sampling dynamics.
 
 ### Obvious Next Steps
-1. **Experimental validation of top designs** — At minimum, docking or binding assays for a subset of generated peptides would ground the computational claims in physical reality, which is expected for biomolecular design papers at ICLR.
+1. **Release the monotonicity constraint from theoretical claims** — Either remove it from experiments to match theory, or revise theorems to account for it. This inconsistency undermines the core contribution.
 
-2. **Comparison to continuous-space MOO methods with discrete projections** — ParetoFlow and similar continuous methods should be evaluated with appropriate discretization to establish whether discrete flows offer genuine advantages.
+2. **Add external validation of generated binders** — At minimum, run AlphaFold3 docking on a held-out set and compare to known binders. In silico scores alone are insufficient for ICLR biomolecular work.
 
-3. **Ablation of each AReUReDi component** — Removing annealing, locally balanced proposals, or M-H updates individually would quantify each component's contribution rather than presenting the full method as a black box.
+3. **Include negative results** — Show at least one target or objective combination where AReUReDi fails or offers no advantage. This builds credibility and helps reviewers assess true contribution boundaries.
 
-4. **Runtime breakdown and scalability analysis** — Table 2 shows AReUReDi is 10-80× slower than baselines. Analysis of which components dominate runtime and how performance scales with sequence length is needed for practical adoption.
+4. **Justify the 5-objective claim more carefully** — Table 1 shows 5 objectives but Table 2 comparisons use different objective sets across targets. Standardize the evaluation to support the "up to five" claim rigorously.
 
 # Final Consolidated Review
 ## Summary
 
-AReUReDi extends rectified discrete flows (ReDi) to multi-objective optimization for biological sequence design by integrating annealed Tchebycheff scalarization, locally balanced Metropolis-Hastings proposals, and annealed guidance. The method generates peptide binders and SMILES sequences optimizing up to five therapeutic properties simultaneously. Theoretical guarantees for Pareto front convergence and distributional invariance are provided, and experiments across eight protein targets demonstrate superior trade-offs compared to evolutionary and diffusion-based baselines.
+AReUReDi extends rectified discrete flows (ReDi) to multi-objective sequence optimization by integrating annealed Tchebycheff scalarization, locally balanced proposals, and Metropolis-Hastings updates. The method provides theoretical guarantees of convergence to the Pareto front with full coverage, and demonstrates strong empirical performance on wild-type peptide and SMILES sequence design tasks optimizing up to five therapeutic properties simultaneously.
 
 ## Strengths
 
-- **Principled integration of established techniques for discrete MOO**: The paper combines Tchebycheff scalarization (well-known in MOO), locally balanced proposals (Zanella-style MCMC), and annealing within a rectified discrete flow framework. While individual components are established, their synthesis for discrete flow-based sequence generation is novel and addresses a genuine gap in biomolecular design where existing methods operate in continuous spaces or lack Pareto guarantees.
+- **Principled theoretical framework:** The paper provides rigorous proofs of distributional invariance (Theorem A.1), Pareto convergence (Theorem A.2), and Pareto point representability (Theorem A.3) in Appendix A. This formal grounding is notably stronger than heuristic guidance strategies common in discrete generative modeling.
 
-- **Comprehensive empirical evaluation across diverse targets**: Experiments span structured proteins with known binders (1B8Q, 5AZ8, 7JVS), structured targets without known binders (AMHR2, OX1R, DUSP12), and intrinsically disordered targets (EWS::FLI1, MYC). Ablation studies in Tables 9-10 and Tables 13-14 provide evidence that rectification, annealing, and weight vector selection each contribute meaningfully to performance.
+- **Elegant integration of guidance with discrete flows:** The locally balanced proposal mechanism (Section 3.3) blends the generative prior with multi-objective guidance while preserving reversibility. Using Barker's balancing function yields automatic acceptance, providing computational efficiency while maintaining theoretical soundness.
 
-- **Clear demonstration of objective trade-off navigation**: Tables 7-8 show that disabling guidance for one objective causes collapse in that objective while others improve, confirming that AReUReDi genuinely steers sampling toward balanced multi-objective solutions rather than collapsing to single-objective optima.
+- **Comprehensive empirical validation:** The method is tested across two distinct modalities (amino acid sequences and SMILES), eight diverse protein targets (including structured targets, targets without known binders, and intrinsically disordered targets), and up to five conflicting objectives. The ablation studies systematically validate key components: guidance contribution (Tables 7-8), rectification benefit (Table 9), annealing schedule (Table 10), weight vector steering (Tables 13-14), and prior importance (Tables 15-16).
+
+- **Strong baseline comparisons:** AReUReDi consistently outperforms classical MOO algorithms (NSGA-III, SMS-EMOA, SPEA2, MOPSO) and the state-of-the-art diffusion-based PepTune across multiple targets. The matched wall-clock comparison (Table 11) addresses computational overhead concerns by showing that even with limited samples, AReUReDi achieves better trade-offs.
 
 ## Weaknesses
 
-- **Gap between theoretical guarantees and experimental algorithm**: The paper proves convergence and invariance guarantees for AReUReDi's Metropolis-Hastings updates, but Section 4 acknowledges that all experiments use a monotonicity constraint accepting only score-improving token updates. This constraint breaks detailed balance and invalidates the theoretical guarantees for the actual method evaluated. While the constraint improves efficiency, the paper should clearly disentangle the theoretical results (for unconstrained AReUReDi) from the practical algorithm, rather than presenting the guarantees as if they apply to the constrained variant. The ablation in Table 6 shows the constraint improves scores substantially (e.g., half-life from 2.54h to 44.70h for 8CN1), but without theoretical grounding, this becomes heuristic hill-climbing on learned surrogate functions.
+- **Fundamental tension between theory and practice:** Section 4 discloses that "to improve sampling efficiency in all reported experiments, we introduce a monotonicity constraint that accepts only token updates that increase the weighted sum of the current objective scores." This constraint—which Table 6 shows is essential for practical performance—violates the detailed balance assumption underlying the MCMC invariance guarantees. The paper acknowledges that guarantees "hold only in the limit of an infinitely long Markov chain" but does not adequately reconcile this with the monotonicity heuristic used in practice. The theoretical contribution (Claim 2) is thus only partially delivered by the deployed algorithm.
 
-- **Modest and unvalidated score model reliability**: The property predictors used for guidance and evaluation have validation F1 scores of 0.58 (hemolysis), 0.71 (non-fouling), 0.68 (solubility), and Spearman correlation of 0.64 for binding affinity (Appendix E). The half-life model is trained on only 105 data points with R² = 0.60. Optimizing for and evaluating on these same imperfect predictors raises the concern that apparent improvements may reflect exploitation of predictor artifacts rather than genuine therapeutic property improvements. No wet-lab validation or comparison to experimentally measured properties is provided.
+- **In-silico-only evaluation with circular surrogate use:** All reported property scores (hemolysis, non-fouling, solubility, half-life, affinity) are evaluated using the same pre-trained models that guide AReUReDi's sampling. While Table 1 reports AlphaFold3 ipTM scores and AutoDock VINA docking scores as external validation for binding affinity, no external validation exists for the other four properties. This creates risk of exploiting surrogate artifacts rather than discovering genuinely improved sequences.
 
-- **No standard multi-objective quality metrics**: Tables 1-2 report per-objective averages but not hypervolume, Pareto front coverage, or dominance counts. High per-objective averages do not guarantee Pareto quality—a method that collapses to a single trade-off point could show similar averages. The weight vector ablations (Tables 13-14) demonstrate that different weights steer toward different solutions, but without hypervolume or frontier visualization, the claim of "superior trade-off navigation" versus baselines is not rigorously supported.
+- **Half-life surrogate trained on very limited data:** Appendix E.3 reveals the half-life model was trained on only 105 entries (curated from PEPLife, PepTherDia, and THPdb2), with validation R²=0.60. The dramatic half-life improvements reported throughout the paper (e.g., 22-fold improvement over PepTune in Table 2, half-lives of 40–100 hours) may reflect optimization of this sparse, uncertain surrogate rather than true biological half-life extension.
 
-- **Asymmetric baseline comparisons**: For SMILES generation, the paper states PepTune "does not report average property scores" and provides no quantitative comparison for this task. For the PepTune comparison in Table 2, the backbone was adapted from the published PepMDLM to DPLM—the paper should justify whether this modification strengthens or weakens the baseline. The time-matched comparison in Table 11 compares "top-2" from only 4 AReUReDi samples against 100 PepTune samples, which is not a valid methodology for best-of-N comparison.
-
-- **Conditional TC non-monotonicity unexplained**: Table 4 reports conditional TC values of 10.60 → 12.63 → 11.73 → 11.23 after successive rectification rounds. The initial increase contradicts Section 2.2's claim that rectification monotonically decreases TC. The paper attributes this to "distributional shift from the large, model-generated coupling," but this deserves deeper explanation since it affects the claimed theoretical properties.
+- **Absence of standard Pareto front metrics:** The paper claims "full coverage of the Pareto front" but never reports hypervolume indicator (HVI), spread, or coverage metrics—the standard quantitative measures for comparing MOO algorithms. Average scores across objectives (Tables 1-2) cannot distinguish between a method producing diverse trade-offs versus one converging to a narrow region.
 
 ## Nice-to-Haves
 
-- **Runtime scalability analysis**: Table 2 shows AReUReDi requires 55-195s per binder versus 2-37s for baselines. Analysis of how runtime scales with sequence length, vocabulary size, and number of objectives would help practitioners assess practical applicability.
+- **Uncertainty-aware guidance:** Incorporating ensemble variance or expected improvement acquisition functions would reduce the risk of over-optimizing noisy surrogate predictions, particularly for the low-data half-life model.
 
-- **Wet-lab validation or external benchmark**: Even simple solubility or hemolysis assays for a subset of designed peptides would ground the computational predictions in physical reality.
+- **Pareto front visualization:** 2D/3D projections comparing AReUReDi's Pareto front against baselines would strengthen claims of superior trade-off navigation more intuitively than aggregate property tables.
 
-- **Comparison to Multi-objective GFlowNets**: GFlowNets (Jain et al., 2023) operate in discrete spaces and sample from reward distributions—relevant for Pareto front coverage. Discussion of why they were not included as baselines would strengthen positioning.
+- **Additional discrete MOO baselines:** Comparison with multi-objective GFlowNets or other recent discrete-space MOO methods would strengthen the methodological positioning.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed or substantially weakened—treat them with caution:
 
-- *Harsh critic's claim that PepTune+DPLM is "weaker backbone" than original PepMDLM*: The paper states DPLM is a state-of-the-art protein language model. Without evidence that this adaptation weakens the baseline, this criticism is speculative. The adaptation is clearly documented.
+- **"Hemolysis classifier F1=0.58 is barely above chance":** This mischaracterizes binary classification performance. Without knowing the class balance, F1=0.58 cannot be assessed as "barely above chance." Removed as it misrepresents classifier quality.
 
-- *Spark finder's demand for "completely held-out targets" with "no training overlap"*: This is unrealistic in generative sequence modeling. The score models and base models necessarily train on existing peptide data. Novel target binding is evaluated via docking and structure prediction, which is standard practice.
+- **"Unfair comparison with PepTune due to different base models":** The paper acknowledges PepTune uses DPLM and addresses this with a matched wall-clock comparison (Table 11). The concern is partially addressed and not a critical flaw.
 
-- *Demand for multiple-run statistics and confidence intervals*: The paper reports averages over 100 generated binders. While confidence intervals would strengthen the results, this is not a standard requirement in generative modeling papers where stochasticity is inherent and sample size is provided.
+- **"Rectification shows inconsistent benefit in Table 9":** For AMHR2, rectification improves all five metrics; for 5AZ8, it improves half-life substantially while maintaining competitive performance on other metrics. The benefit is demonstrated though not uniform across targets.
 
-- *Critic's concern about top-p pruning breaking theoretical guarantees*: The paper notes top-p is used "for computational efficiency" in the SMILES task. While this could affect the theoretical claims, the impact on the overall method is secondary to the more fundamental monotonicity constraint issue.
+- **"Pareto Point Representability proof fails for boundary points":** The paper uses standard perturbation arguments (ε→0) for boundary cases. This is a valid mathematical technique and not a fundamental proof error.
+
+- **"Missing peptide novelty/diversity metrics":** Table 5 reports validity, uniqueness, diversity, and SNN for SMILES generation, demonstrating the paper does consider these metrics for at least one modality.
 
 ## Novel Insights
 
-The integration of annealed Tchebycheff scalarization into discrete flow sampling—with the guidance strength η_t increasing during sampling rather than remaining fixed—provides a novel mechanism for progressively sharpening the objective focus while initially preserving exploration. The ablation in Table 10 confirms that annealed guidance consistently outperforms fixed guidance strengths across targets, validating this design choice empirically even when theoretical guarantees are compromised by the monotonicity constraint.
+The locally balanced proposal mechanism represents an underexplored technique for discrete generative guidance. By combining the learned flow prior p_t with a reward-weighted acceptance probability, AReUReDi achieves a principled middle ground between pure ancestral sampling (which ignores guidance) and greedy search (which sacrifices diversity). The mathematical observation that Barker's balancing function g(u) = u/(1+u) yields automatic MH acceptance while maintaining reversibility is elegant and potentially applicable to other discrete generative frameworks beyond flow matching.
 
 ## Suggestions
 
-- Run and report results for unconstrained AReUReDi (without monotonicity) with longer sampling budgets to validate whether the theoretical guarantees translate to empirical Pareto front convergence, even if scores are lower than the constrained variant.
+1. **Separate theoretical claims from experimental implementation:** Either report results without the monotonicity constraint to validate theoretical claims, or clearly state in the contribution list that the theoretical guarantees apply to an "idealized" version while the practical implementation uses a convergence-accelerating heuristic that sacrifices formal guarantees.
 
-- Compute and report hypervolume indicators for all multi-objective comparisons to provide standard MOO metrics. Include scatter plots of generated samples in 2D objective space to visualize trade-off frontiers.
+2. **Add hypervolume comparisons:** Report hypervolume indicator values (or at least Pareto front plots in 2D objective space) to substantiate claims about Pareto front quality and coverage.
 
-- For the SMILES task, either run a fair baseline comparison with PepTune (using equivalent evaluation) or clearly state that no quantitative multi-objective baseline is available for this task, keeping claims proportional to evidence.
+3. **Validate key properties independently:** For at least one target, validate a subset of generated peptides using an external predictor or structural docking for properties beyond affinity (e.g., run an independent solubility predictor if available).
+
+4. **Report results with and without monotonicity constraint:** Table 6 shows the constraint's importance, but does not report full multi-objective results for the theoretically sound version. Including both would clarify the practical impact of relaxing the theoretical framework.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 6.0, 2.0, 4.0]

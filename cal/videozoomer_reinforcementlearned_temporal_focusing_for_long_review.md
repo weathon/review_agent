@@ -1,258 +1,176 @@
-=== CALIBRATION EXAMPLE 63 ===
+=== CALIBRATION EXAMPLE 31 ===
 
 # Harsh Critic Review
-Now I have a thorough understanding of the paper. Let me write the review.
+## Section-by-Section Critical Review
 
 ---
 
-## Section-by-Section Critical Review
-
 ### Title & Abstract
 
-The title "VideoZoomer: Reinforcement-Learned Temporal Focusing for Long Video Reasoning" is descriptive, though "Temporal Focusing" undersells the multi-turn agentic nature of the work. The abstract is generally accurate, but the claim of "rival[ing] proprietary systems" is overstated — the proprietary comparisons are against GPT-4o and Gemini-1.5-Pro, both of which are considerably older than the latest frontier models (Gemini-2.0-Flash is shown in Figure 1 but not in any result table). This framing sets expectations that the experimental section does not fully meet.
+The title "VideoZoomer: Reinforcement-Learned Temporal Focusing for Long Video Reasoning" is accurate and descriptive; the two main ideas (temporal zoom + RL) are clearly signaled. The abstract's claim to "rival proprietary systems" is bold but partially supported — the model does surpass GPT-4o and Gemini-1.5-Pro on LongVideoReason-eval, though those are older proprietary models and the comparison is likely in-distribution (training data and evaluation split come from the same benchmark family). The claim of "diverse and complex reasoning patterns" as an *emergent* capability is somewhat oversold; the diversity is explicitly engineered via the reflection data pipeline rather than being spontaneous emergence.
 
 ---
 
 ### Introduction & Motivation
 
-The motivation is strong and well-grounded. The critique of both uniform sampling (all moments weighted equally) and static pre-selection (no correction mechanism) is clearly articulated, and the "glance-then-zoom" analogy to human attention is compelling. Contributions are clearly enumerated.
+The motivation is well-constructed: uniform frame sampling ignores temporal dynamics, static pre-selection is non-interactive, and both suffer from irrecoverable initial errors. These are genuine shortcomings. The framing around cognitive science (Kietzmann et al., 2018) is loose — the cited work concerns representational geometry in neural networks and does not strongly motivate the temporal attention metaphor used.
 
-One concern: the introduction implicitly frames efficiency as a key advantage ("the agent begins with a coarse overview… only consuming a significant context budget when it decides to invoke a tool"), but this claim is about **frame count**, not **wall-clock time or FLOPs**. Multi-turn generation requires sequential forward passes through the full (and growing) context, while a one-shot method processes all frames in a single pass. This latency/compute tradeoff is never addressed anywhere in the paper. Given that efficiency is a central selling point, this omission weakens the claim.
-
----
-
-### Method (Section 3)
-
-**3.1 Overview (Framework Design)**
-
-The framework is clearly described. The action space is well-constrained: the model specifies `[t_start, t_end]` and an fps value, and receives a clip. The frame budget constraint `f_high × (t_end − t_start) ≤ B` is sensible.
-
-However, some design choices lack justification:
-- Why is the initial overview fixed at 64 uniformly sampled frames? This is a significant choice — other approaches (e.g., TSPO) provide intelligent initial selection, and the paper itself shows combining with TSPO boosts performance (Table 4). The choice of uniform initial sampling is pragmatic but unmotivated.
-- The maximum number of interaction turns (N=4) and the per-turn budget (B=16 frames) are design choices that seem chosen for convenience but are not ablated systematically beyond Table 11.
-
-**3.2 Cold-Start Initialization**
-
-This is the most novel and well-thought-out component. Two issues deserve scrutiny:
-
-1. **Data composition is opaque.** The final dataset contains ~11K trajectories, but the ratio of expert/exemplar trajectories to reflection trajectories is never reported. Figure 7 shows round-number distributions for both types, but the absolute counts are unclear. This makes it difficult to assess how much of the benefit comes from the reflection data specifically vs. just having diverse multi-turn trajectories.
-
-2. **Verifier details are missing.** The paper states that "all candidate trajectories are passed through verifiers to ensure quality" — but what are these verifiers? Answer-matching against ground truth? A learned reward model? This is a critical quality-control step and deserves explicit description.
-
-3. **Hyperparameter inconsistency.** Section 4.1 states: "we trained our base model with a learning rate of 5 × 10⁻⁶ for 1 epoch." Table 5(a) in the appendix, however, lists "Learning rate: 5e-5." These differ by an order of magnitude. This discrepancy must be clarified.
-
-**3.3 Multi-Turn Tool-Integrated RL**
-
-Extending GRPO to multi-turn tool-calling scenarios is a genuine technical contribution. The reward has three terms: accuracy, format, and a conditional tool-use bonus. The conditional bonus (only awarded if the final answer is correct) is a smart design to avoid spurious tool invocations.
-
-Concerns:
-- **Reward weights are not ablated.** The weighting scheme (acc/format/tool = 0.9/0.1/0.5) is non-trivial. The ablation in Table 3 removes the tool bonus entirely (`w/o R_tool`) but does not explore different bonus weights. The chosen 0.5 weight for the tool reward is quite large relative to accuracy; it is plausible that this value significantly influences the learned policy.
-- **Conditional tool reward creates confound.** By only granting the tool bonus when the answer is correct, the model is incentivized to call the tool when it is already going to answer correctly. This may not teach *why* calling the tool helps — it may simply co-occur with situations where the model was already capable. A more informative analysis would compare accuracy conditioned on whether the tool was used vs. not.
+The three contributions listed are clear. However, the introduction's use of LSDBench (Figure 1, Right) as the primary visual demonstration of efficiency is conspicuous, since this benchmark does not appear in any main experimental table (Table 1 or Table 3). If it is the most compelling benchmark for the core efficiency claim, it should be included in the main evaluation. The omission raises a mild concern about benchmark selection.
 
 ---
 
-### Experiments & Results (Section 4)
+### Method
 
-**Main Table (Table 1)**
+**Framework Design.** The "first glance, then zoom" strategy is intuitive and well-described. The tool interface is minimal (a single `<video_zoom>` call with `[tstart, tend]`), which is a defensible choice. However, one critical design question is underspecified: **how does the model learn to predict temporally accurate `[tstart, tend]` values?** Long videos may span hours; if the model's initial 64-frame overview is uniformly sampled, the temporal resolution of the overview may be insufficient to localise a short, critical event. The paper does not discuss temporal grounding — how timestamps are represented (relative vs. absolute?), whether there is any grounding signal in the reward, or what happens when the agent specifies a time interval that *contains* the relevant clip but with large padding (which would waste the per-call 16-frame budget). This is perhaps the most important underspecified design choice in the whole system.
 
-The most important missing entry is the **base model Qwen2.5-VL itself**. VideoZoomer is initialized from Qwen2.5-VL-7B-Instruct, but this model does not appear in Table 1. Its numbers appear only in Table 6 (appendix) and Table 2, making it impossible to directly read the improvement over the foundation model from the primary comparison table. This should be a mandatory row in Table 1.
+**Cold-Start SFT.** The two-component SFT dataset (exemplar + reflection trajectories) is well-motivated. The observation that SFT on exemplar-only data leads to shallow, single-turn strategies is important and the reflection-data fix is elegant. However:
+- The exact composition of the 11K trajectories (how many exemplar vs. reflection?) is not provided.
+- The distillation from Gemini-2.5-Pro introduces an important **dependency on a proprietary model**. This is not just a reproducibility concern; the downstream performance ceiling is partly set by the quality of the teacher. The paper does not discuss this limitation.
+- The "verifiers" used to filter trajectories are not described. What criteria were used? What fraction of candidate trajectories were rejected?
 
-Additionally, there are minor numerical inconsistencies: Table 2 reports Qwen2.5-VL (dev) as 58.3, while Table 6 shows 58.1 for the same benchmark; these should be reconciled.
+**RL Training.** The GRPO extension to multi-turn is described at a high level: a "token-level loss mask" over tool-call trajectories. This is sensible but the details are thin. In particular: when GRPO computes advantages across a group of rollouts for the same prompt, how are multi-turn trajectories (which may have different numbers of turns) compared? The group sampling at the trajectory level, rather than at the turn level, is a non-trivial design choice.
 
-**Proprietary Model Comparisons**
+**Reward Design.** The reward weights (0.9/0.1/0.5 for acc/format/tool, from Table 5) are provided but no sensitivity analysis is reported. The tool bonus weight of 0.5 is quite large relative to accuracy (0.9), meaning a single correct tool call followed by a correct answer earns 1.4 vs. 0.9 for a direct correct answer — a 55% bonus. It is not obvious this balance is optimal, and ablating reward weights would strengthen the analysis.
 
-The paper claims VideoZoomer "rivals proprietary systems." The proprietary baselines used are GPT-4o (May 2024) and Gemini-1.5-Pro — both of which are substantially older models. Gemini-2.0-Flash appears in Figure 1 as a teaser comparison but is absent from Table 1. Given that the paper trains using data distilled from Gemini-2.5-Pro, the omission of Gemini-2.0-Flash and Gemini-2.5-Pro from the main table is notable. The "rivals proprietary" claim is misleading in the ICLR 2026 context where much stronger proprietary models exist and are commonly used as references.
-
-**Missing Comparison with Concurrent Agentic Methods**
-
-The most directly comparable baselines — VideoDeepResearch (Yuan et al., 2025) and Deep Video Discovery (Zhang et al., 2025c) — are discussed in related work but never compared against empirically. These methods follow the same agentic paradigm (iterative tool use for long video understanding), differ mainly in using proprietary models vs. a trained small model, and represent the principal alternative to the proposed approach. Their omission from experimental tables is a significant gap. Even a qualitative comparison of frame budgets and accuracy ranges would be informative.
-
-**Training/Test Data Overlap**
-
-The training data is LongVideoReason (52K pairs from Chen et al., 2025), and one of the primary evaluation benchmarks is **LongVideoReason-eval** from the same source. While these may be different splits, the paper does not explicitly address whether the eval set was held out during training. The strongest performance claim — outperforming GPT-4o (60.7→80.3) on LongVideoReason-eval — rests on this benchmark. More assurance about the data split protocol is needed.
-
-**Fair Comparison in Table 1**
-
-Video-R1 results in Table 1 are marked with `†` as "evaluated using our own evaluation protocol under max frames of 128." It is unclear whether Video-R1 was designed and evaluated by its authors at this budget, or whether this is an artificial constraint. This may disadvantage Video-R1. It should be clarified how the authors determined this is a fair setting, or Video-R1's own reported numbers should be included.
-
-**Statistical Significance**
-
-No confidence intervals or variance estimates are reported across any benchmark. On multiple-choice video QA, result variance from random seed choices and sampling during RL can be non-trivial, especially for smaller benchmarks like CLEVRER (Table 8, where the difference is 67.3→68.0). A single run per configuration does not demonstrate robust conclusions.
-
-**Efficiency Analysis (Figure 6)**
-
-The efficiency comparison in Figure 6 plots VideoZoomer's *average* frames against the baseline's *fixed* frames. This is a meaningful comparison in terms of frame count, but the x-axis labels for VideoZoomer are average values across the dataset, not a controllable setting — making the curve for VideoZoomer effectively a single point placed at the average, not a true curve. The presentation implies more granularity than exists.
+The reward is assigned **at the end of each trajectory**. For multi-turn sequences, this means intermediate turns receive no direct signal about whether individual tool calls were useful. This is a known challenge in multi-turn RL, and the paper does not discuss it.
 
 ---
 
-### Ablation Study (Section 4.3)
+### Experiments & Results
 
-The ablation study is one of the paper's strongest sections. The four ablation conditions (`w/o RL`, `w/o R_tool`, `w/o cold-start`, `w/o reflection`) are well-chosen and the Figure 5 training dynamics add interpretability. The finding that removing reflection data causes the tool-call rate to collapse to ~1.0 on average is a key insight.
+**Baseline Coverage.** The paper compares against a wide range of open-source models, which is appropriate. However, the most relevant baselines — **VideoDeepResearch** (Yuan et al., 2025) and **Deep Video Discovery** (Zhang et al., 2025c) — are explicitly acknowledged in the related work as the closest conceptual predecessors (agentic, multi-turn, tool-using approaches for long video) yet are entirely absent from Table 1. The authors justify their absence on the grounds that these methods use large proprietary models, but including them even as reference points (even without a head-to-head) would be important context. This gap is a notable weakness.
 
-However, one missing ablation: the paper never tests a **non-agentic RL baseline** (i.e., Qwen2.5-VL fine-tuned with RL on LongVideoReason without tool use). This would isolate the contribution of the *agentic* aspect from simply applying RL to the base model. The `w/o RL` condition (SFT-only) does not serve this purpose since it lacks RL altogether.
+**LongVideoReason-eval Contamination Risk.** The training data is **LongVideoReason** (52K Q&A pairs, Chen et al., 2025) and the evaluation includes **LongVideoReason-eval**, the evaluation split of the same dataset. This is an in-distribution evaluation. The remarkable result of 80.3 vs. GPT-4o (60.7) and Gemini-1.5-Pro (67.3) is therefore not a fair comparison to those models, which did not train on this data distribution. The paper presents this as evidence of superiority over proprietary systems, which is misleading. This should be stated as a limitation or the proprietary model comparison restricted to out-of-distribution benchmarks.
 
----
+**Video-R1 Dagger (†) issue.** Table 1 uses a dagger (†) to indicate Video-R1 was evaluated under the authors' own protocol (128 frames). This is a reasonable disclosure, but it means Video-R1 may actually perform better or worse under its intended setting. The protocol modification is not explained in sufficient depth — what constitutes "our own evaluation protocol" vs. the original?
 
-### Appendix
+**Ablation Study.** The ablations in Table 3 are comprehensive and convincing. The key finding that "w/o cold-start" fails to converge is important — it confirms that the method is not end-to-end trainable without proprietary model assistance. The w/o reflection finding (tool calls collapse to ~1.0 on average) is compelling and matches the motivation for the reflection data.
 
-**B.1 (Expert Model Choice):** The comparison of Gemini-distilled vs. GPT-4o-distilled data is useful and the reasoning (Gemini provides more diverse tool-use patterns) is plausible, though the evidence is anecdotal.
+However, **no error bars, confidence intervals, or statistical significance tests** are reported anywhere. Given that multiple benchmarks are multi-choice QA where random chance is 25-50%, differences of 1-2 points may not be significant.
 
-**B.4 (FPS Analysis):** Table 10 showing that 66.2% of tool calls request moderate fps (1,2] is genuinely informative and supports the claim that the model learns an efficient policy. This analysis is valuable.
+**Efficiency Analysis (Figure 6).** The efficiency comparison is presented as: VideoZoomer using *average* X frames outperforms baseline using *fixed* X frames. This is not a controlled comparison. The baseline at "128 frames" uses exactly 128 frames for every sample; VideoZoomer uses *on average* some number of frames, but may use up to 128 (64 + 4×16) for hard samples. For difficult questions where the model exhausts its budget, the comparison is effectively frame-equivalent. The right interpretation is that VideoZoomer achieves better accuracy *at the same average cost*, which is still valuable, but the presentation slightly overstates efficiency by conflating average and worst-case.
 
-**B.5 (Tool Call Count):** Table 11 showing diminishing returns beyond 2 tool calls is important for understanding the practical operating point. This should be highlighted in the main paper rather than relegated to the appendix.
-
----
-
-### Writing & Clarity
-
-The overall exposition is clear. One section that genuinely impedes understanding is the efficiency framing throughout: the paper repeatedly claims superior efficiency, but conflates frame count with computation. Section 4.3 says "our model achieves 0.64 accuracy using only 48 frames on average, surpassing the baseline's 0.581 accuracy at a much larger 128 frame budget" — but this ignores that each zoom call requires an additional LLM forward pass with growing context. The actual compute cost could easily exceed that of a one-pass 128-frame baseline. Clarifying this distinction is important.
+**Missing Baselines on Certain Benchmarks.** Many cells in Table 1 are empty (e.g., Kangaroo, LongVU, LongVA, LongVILA have many missing entries), which makes it hard to assess performance across the full spectrum. The authors likely filled in available published numbers, but this patchwork makes the table hard to parse.
 
 ---
 
 ### Limitations & Broader Impact
 
-The limitations section is minimal (ethics statement only, no dedicated limitations section). The following failure modes are unaddressed:
+The paper's limitations section is essentially absent (the brief ethics statement does not count). Key unacknowledged failure modes:
 
-1. **Error in initial glance.** If the coarse 64-frame overview misses a key event entirely (e.g., the event happens very briefly and at the wrong temporal phase for uniform sampling), the model has no mechanism to search globally — it can only zoom into requested segments. The paper demonstrates iterative correction but doesn't discuss how often the initial glance simply provides insufficient information to even know *where* to zoom.
+1. **Temporal grounding failure**: If the agent cannot accurately predict timestamps (especially in hours-long videos with a 64-frame overview), all subsequent zooms may miss the relevant content. The paper has no analysis of how often the zoomed clip actually contains the relevant information.
+2. **Proprietary model dependency at training time**: The entire cold-start phase relies on GPT-4o or Gemini-2.5-Pro. This is a reproducibility and accessibility barrier that should be prominently flagged, not buried in implementation details.
+3. **Single-axis interaction**: The tool only supports temporal zooming. Many long video questions require spatial precision (e.g., reading text, identifying a specific object's attributes) where temporal zoom alone is insufficient.
+4. **Scalability**: The maximum total frames (128) is evaluated. It's unclear how the framework behaves on very long videos (>1 hour) where even 64 frames at the overview level provides extremely sparse coverage (~1 frame per minute for a 1-hour video).
+5. **Failure analysis**: No examples of failure cases or error analysis are provided.
 
-2. **Prompt-injection vulnerability.** In an agentic loop, structured tool calls are parsed by the environment. The paper doesn't discuss what happens if videos contain text that could be crafted to interfere with the `<video_zoom>` tags parsed by the system.
+---
 
-3. **Hallucination under sparse frames.** The model's final answer is conditioned on the zoomed clips plus the initial low-fps overview. There is no analysis of whether the model sometimes hallucinates details from the initial overview that are contradicted by the zoomed clip, or vice versa.
+### Writing & Clarity
 
-4. **Scalability to hour-long videos.** Even at 64 initial frames, hour-long videos would be sampled at less than one frame per minute — which might miss entire scenes. The paper evaluates on the provided benchmarks without discussing how the approach scales to truly long content (e.g., 1–3 hour films).
+The paper is generally well-written and organized. The reflection data pipeline (Section 3.2) is the clearest contribution description. One structural problem: the combined Table 4 appears **twice** on page 9 (the table is repeated verbatim), which is a copy-paste error in the PDF generation. More substantively, the prompt template referenced in the appendix ("We provide the detailed prompt... as follows:") is not actually included in the extracted text, which may be a rendering artifact.
 
 ---
 
 ### Overall Assessment
 
-VideoZoomer addresses a genuine and important problem in long video understanding. The core idea — training a 7B MLLM to perform multi-turn temporal zoom via RL with a carefully designed cold-start — is principled and well-executed. The two-stage training strategy is sensible, ablation results are convincing, and the performance numbers on MLVU and LongVideoReason-eval are impressive. However, the work has several issues that merit revision before acceptance. Most critically: (1) the proprietary model comparisons use outdated baselines (GPT-4o, Gemini-1.5-Pro) while the current frontier (Gemini-2.5-Pro, GPT-4.1) was available at submission time and Gemini-2.5-Pro was even used for distillation; (2) there is no empirical comparison with the most directly relevant concurrent work (VideoDeepResearch, Deep Video Discovery); (3) the efficiency argument throughout conflates frame count with compute, never accounting for the sequential latency overhead of multi-turn inference; (4) there is a notable hyperparameter inconsistency between the main text and the appendix; and (5) the training/test overlap concern for LongVideoReason-eval is unaddressed. The paper is a solid contribution to a fast-moving area and the core method appears to work, but these gaps leave unanswered questions that ICLR reviewers are likely to flag. With appropriate revisions — particularly adding a non-agentic RL baseline, current proprietary comparisons, and an honest compute-cost discussion — the paper would be more convincingly above the acceptance bar.
+VideoZoomer presents a well-motivated and technically sound agentic framework for long video understanding, combining a coarse-to-fine temporal inspection strategy with a two-stage training approach (SFT cold-start + GRPO-based RL). The core idea is natural and the empirical results are broadly positive, showing consistent improvement over the Qwen2.5-VL base model across multiple benchmarks. The ablation study is thorough and the efficiency analysis is a genuine contribution. However, several concerns limit confidence in the reported gains: (1) the most impressive result — surpassing GPT-4o and Gemini-1.5-Pro on LongVideoReason-eval — is almost certainly an in-distribution comparison given the training data source, and should not be presented as demonstrating superiority over proprietary systems; (2) the closest agentic baselines (VideoDeepResearch, Deep Video Discovery) are absent from all experiments; (3) the critical mechanism of temporal localization (how the agent identifies *where* to zoom) is underanalyzed; (4) the entire pipeline depends on proprietary models for cold-start data, a significant reproducibility and accessibility limitation that deserves explicit acknowledgment. Addressing these concerns — particularly the in-distribution evaluation issue and the missing agentic baselines — would be necessary for the claims as currently stated to stand at ICLR's bar.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper proposes VideoZoomer, an agentic framework that enables Multimodal Large Language Models (MLLMs) to dynamically control their visual focus during long video reasoning through a novel "temporal zoom" tool. The authors introduce a two-stage training strategy combining cold-start supervised fine-tuning with reflection trajectory augmentation and subsequent reinforcement learning (using GRPO) to optimize the agent's tool-use policy. Extensive experiments on long video understanding and reasoning benchmarks demonstrate that the 7B model achieves superior performance-efficiency trade-offs compared to open-source baselines and rivals proprietary systems by adaptively sampling frames only when required.
+The paper proposes VideoZoomer, an agentic framework that enables MLLMs to dynamically control temporal visual focus for long video understanding. Starting from a low-frame-rate overview, the model iteratively invokes a temporal zoom tool to retrieve high-frame-rate clips at autonomously selected moments, refining its evidence through multi-turn interaction. The authors introduce a two-stage training pipeline: cold-start SFT on a curated dataset of distilled exemplar and reflection trajectories, followed by multi-turn GRPO to optimize the agentic policy. Extensive evaluations demonstrate that VideoZoomer consistently outperforms open-source baselines and rivals proprietary models while using a flexible, reduced frame budget.
 
 ### Strengths
-1.  **Agentic Framework for Video Context:** Reframing long video understanding as a sequential tool interaction task is a compelling approach to the context window bottleneck. Unlike static frame selection, the ability to iteratively zoom in on specific segments allows the model to correct initial oversights, effectively managing the information density of long videos.
-2.  **Robust Training Strategy (SFT + RL + Reflection):** The two-stage training pipeline addresses common RL instability issues in language models. The inclusion of "reflection data" (correcting failure trajectories from the expert model) is a methodologically sound technique to prevent shallow policy patterns and encourage deeper exploration, which is crucial for complex reasoning tasks.
-3.  **Comprehensive Evaluation and Efficiency:** The paper evaluates the model across a wide range of established benchmarks (MLVU, LongVideoBench, VideoMMMU). Crucially, they demonstrate significant efficiency gains, showing that VideoZoomer can outperform baselines with significantly fewer total frames processed, validating the utility of the adaptive sampling policy.
-4.  **Transparency and Analysis:** The authors provide thorough ablation studies validating the contribution of each component (reflection data, cold-start, tool reward). Additionally, the analysis of FPS selection and tool call distribution offers valuable insights into the learned policy, showing the model learns to balance detail and budget.
+1. **Well-Motivated and Novel Agentic Paradigm:** The "glance-then-zoom" framework directly addresses the rigidity of uniform sampling and static selectors by enabling iterative, goal-directed temporal focusing. This dynamic evidence-gathering mechanism is a clear conceptual and algorithmic step forward for long-video reasoning.
+2. **Thoughtful Cold-Start Design with Reflection Data:** The inclusion of on-policy reflection trajectories during SFT effectively mitigates shallow imitation of teacher models. The ablation (`w/o reflection`) provides strong empirical evidence that this diversity is crucial for stabilizing tool use and enabling multi-turn reasoning (average tool calls drop to ~1.0 without it).
+3. **Comprehensive Empirical Rigor:** The paper evaluates across 7 diverse benchmarks (covering understanding, reasoning, and proprietary baselines), provides thorough component-wise ablations, and analyzes frame efficiency, FPS selection distributions, and max tool call limits. This breadth aligns well with ICLR's empirical standards.
+4. **Clear Methodology and Reproducibility Signals:** The pipeline, reward formulation, and training hyperparameters are transparently documented. The use of established open infrastructure (`verl`, `vLLM`, GRPO) and the explicit commitment to release code, weights, and datasets strongly support reproducibility.
 
 ### Weaknesses
-1.  **Inference Latency vs. Efficiency Trade-off:** While the paper highlights efficiency in terms of *frame budget* (context window usage), it does not explicitly report *inference latency* or wall-clock time. Multi-turn tool invocation inherently introduces significant latency compared to static sampling methods. For real-time applications, the temporal overhead of iterative tool calls could undermine the claimed efficiency benefits.
-2.  **Tool Implementation and Accessibility:** The `<video_zoom>` tool assumes random access to high-frame-rate segments. In many real-world scenarios (e.g., live streaming), such random access might not be feasible or could incur high I/O costs. The paper treats the tool as an idealized oracle without discussing the computational overhead of retrieving these segments, which is a practical limitation for deployment.
-3.  **Dependence on Proprietary Distillation Data:** A significant portion of the cold-start data is distilled from closed-source proprietary models (Gemini 2.5 Pro, GPT-4o). While common, this creates a dependency where the reasoning capabilities are inherited from a black box rather than purely learned from open principles. The "less is more" finding (Table 9) suggests quality is key, but the ultimate ceiling is constrained by the expert model's capabilities.
-4.  **Comparative Fairness on Proprietary Baselines:** While VideoZoomer claims to rival proprietary systems (Table 1), the comparison relies on specific protocol variations (e.g., max frame counts). Some proprietary baselines (like GPT-4o) are reported with different default settings than the fine-tuned agents. A more rigorous standardization of inference settings (beyond just frame count, such as response time) would strengthen the comparison.
+1. **Missing Inference Overhead & Compute Analysis:** While the paper emphasizes frame budget efficiency, it does not quantify the computational cost, wall-clock latency, or total token consumption of the multi-turn agentic process. Iterative environment interaction and intermediate reasoning tokens significantly impact practical deployment, and a single-pass vs. agentic trade-off analysis is missing.
+2. **Sparse Reward Design Lacks Deeper Analysis:** The reward relies heavily on final-answer accuracy, which is sparse and can induce high variance or optimization instability in long-horizon tool-use scenarios. Although the paper adapts DAPO and uses a conditional `Rtool` bonus, it does not discuss rollout success rates, reward variance, or potential reward-hacking behaviors during RL training.
+3. **Uncritical Reliance on Proprietary Distillation:** The ~11K cold-start trajectories are distilled from GPT-4o and Gemini-2.5-pro. The paper does not address the financial/compute cost of this distillation process, nor does it explore how performance scales when using open-source or weaker teacher models, limiting insights into the framework's scalability.
+4. **Narrow Generalization Evaluation:** The OOD analysis is limited to short-video captioning and CLEVRER. It remains unclear whether the learned zoom policy generalizes to other critical long-video tasks such as dense temporal grounding, open-ended summarization, or event localization, which would better validate the learned temporal reasoning capabilities.
 
 ### Novelty & Significance
-The novelty lies in the specific integration of **temporal focusing as an active tool within an RL-driven agent** for long video context management. While RL for reasoning (e.g., Video-R1, Math-R1) and agentic search are known trends, combining them specifically for *temporal resolution control* in video is a fresh direction that addresses a distinct gap in MLLM literature. The significance is high; as video data grows, fixed-sampling methods will continue to degrade performance or consume excessive context. An adaptive method like VideoZoomer offers a scalable path forward for open-source models to compete in the long-context video domain without relying solely on context window expansion.
+The work presents a timely and substantive contribution to the intersection of agentic reasoning, reinforcement learning, and multimodal understanding. By reframing long-video comprehension as a sequential, budget-constrained tool interaction task, VideoZoomer moves beyond the static sampling paradigm that dominates current literature. The combination of reflection-enhanced cold-start initialization and multi-turn RL for dynamic temporal focusing is methodologically sound and empirically validated. Given ICLR's emphasis on learning algorithms that enable complex, interactive reasoning and efficient computation allocation, this paper fits well within the conference's scope and offers a framework that is readily extensible to other temporally intensive reasoning tasks.
 
 ### Suggestions for Improvement
-1.  **Analyze Inference Latency:** Add a discussion or table reporting the average inference time (latency) compared to baselines. Since efficiency is a core claim, demonstrating that the "frame savings" compensate for "loop overhead" is essential for a fair assessment of system efficiency.
-2.  **Clarify Tool Deployment Feasibility:** Include a brief discussion on the practicality of the `video_zoom` tool in non-ideal environments (e.g., streaming video). If the evaluation assumes offline random access, this should be explicitly stated so readers understand the deployment constraints.
-3.  **Error Analysis on Failure Cases:** While case studies are provided, a quantitative failure analysis (e.g., error bars on the benchmarks or a confusion matrix of reasoning types) would help understand when the agent fails to zoom effectively. Are there specific video types where the policy over-consults or under-consults?
-4.  **Detail Reward Engineering:** The reward function for the tool usage is conditional on accuracy. Elucidate how the model distinguishes between "unnecessary tool calls" and "necessary tool calls when the first attempt was wrong" during training, beyond just the final answer reward, to ensure the policy learns true utility rather than guessing.
+1. **Quantify Inference Costs:** Add an analysis reporting average inference latency, wall-clock time, and total token count (including intermediate CoT and tool outputs) per query. Compare these metrics against static baselines to provide a complete accuracy-efficiency-compute trade-off.
+2. **Deepen RL Training Diagnostics:** Include metrics such as rollout validity rates, entropy curves, and the frequency of invalid/exceed-budget tool calls during training. A sensitivity analysis on the `Rtool` bonus weight and format reward would strengthen confidence in the reward design.
+3. **Analyze Teacher Model Diversity & Cost:** Report the approximate compute/financial cost of generating the 11K cold-start trajectories. Conduct a small-scale ablation using an open-source teacher (e.g., Qwen2.5-VL-72B) to demonstrate that the pipeline does not strictly depend on proprietary APIs.
+4. **Expand Task Generalization:** Evaluate the learned policy on a temporal localization or dense captioning benchmark to verify that the zoom mechanism captures generalizable temporal reasoning skills rather than overfitting to multiple-choice QA formats.
+5. **Clarify Error Handling & Safety:** Explicitly detail how the environment masks or penalizes invalid segment requests (e.g., out-of-bounds, negative durations, budget violations) and report the model's error recovery rate during inference to bolster robustness claims.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Wall-clock latency and compute cost measurements.** The paper claims efficiency based on frame count, but agentic RL requires multiple sequential forward passes. Without reporting inference time (seconds/query) and GPU cost, the "efficiency" claim is misleading compared to single-pass static baselines.
-2. **Controlled input budget for proprietary baselines.** Table 1 claims to surpass GPT-4o and Gemini-1.5-Pro, but does not specify their input frame budgets. If proprietary models used full video while VideoZoomer used 128 frames, the comparison is invalid and undermines the SOTA claim.
-3. **Strong retrieval-based baselines.** Compare against standard CLIP-based dense retrieval or Oracle sampling (perfect frame selection). If a simple retrieval method matches performance without RL complexity, the necessity of the proposed agentic framework is unproven.
-4. **Tool call failure rate statistics.** Report the frequency of invalid tool calls, hallucinated timestamps, or infinite loops during inference. High failure rates in agentic systems critically undermine reliability claims for real-world deployment.
+1. **Wall-clock latency vs. accuracy:** The efficiency claim relies on frame count, ignoring the overhead of multi-turn inference. Add end-to-end latency measurements to verify if "fewer frames" actually translates to faster inference compared to single-pass baselines.
+2. **Recent adaptive baselines:** Comparisons are mostly against static VLMs (LLaVA, etc.). Include recent dynamic frame selection methods (e.g., Frame-Voyager, TSPO) as standalone agentic baselines to isolate the benefit of RL vs. simple selection.
+3. **Fair proprietary constraint:** Claims rival GPT-4o/Gemini, but they use native long context. Evaluate proprietary models under the same 128-frame budget to ensure the performance gap isn't simply due to information density differences.
+4. **Invalid action rate:** Report the frequency of hallucinated tool calls or syntax errors during inference. High invalid action rates would undermine the reliability of the agentic policy in deployment.
+5. **Video length generalization:** Test performance stratified by video duration (e.g., 5min vs. 60min). The policy might overfit to training lengths, undermining the "long video" generalization claim.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Marginal utility of each tool call.** Analyze whether accuracy increases monotonically with the number of zooms. If additional tool calls do not correlate with performance gains, the RL agent may be learning to game the tool bonus reward rather than reasoning effectively.
-2. **Sensitivity to initial "glance" quality.** Evaluate performance when the initial low-fps sampling completely misses the critical event. If the agent cannot recover from a bad initial state, the method lacks robustness for truly long videos where key events are sparse.
-3. **Quality audit of reflection data.** Quantify the accuracy of the "expert corrections" used in SFT. If the expert model provides noisy or incorrect corrections, the RL policy may learn erroneous recovery strategies, invalidating the training strategy's contribution.
-4. **Generalization to unseen video durations.** Test the policy on videos significantly longer than the training distribution (e.g., 1-hour vs. 10-minute). Agentic policies often overfit to specific temporal scales, which would limit the method's broader applicability.
+1. **Reward hacking analysis:** Analyze if the model invokes zoom on questions solvable by the initial overview. Without this, the `R_tool` bonus may encourage unnecessary actions rather than genuine reasoning.
+2. **Perception vs. Reasoning failure:** Break down errors into "missed zoom target" vs. "incorrect reasoning after zoom." This determines if the bottleneck is the policy or the base MLLM.
+3. **RL Stability across seeds:** Report variance over multiple RL seeds. Single-run RL results are insufficient for ICLR to trust policy convergence and stability.
+4. **Teacher Upper Bound:** Quantify the accuracy of the expert model (Gemini/GPT) used for distillation. If the teacher is inaccurate, the SFT ceiling limits the student's potential.
+5. **Turn count distribution:** Provide a histogram of tool calls per sample, not just the average. This reveals if the model collapses to a fixed strategy (e.g., always 1 call) despite the RL optimization.
 
 ### Visualizations & Case Studies
-1. **Failure case trajectories.** Explicitly visualize examples where the model zooms into irrelevant segments and fails to recover. Success cases alone are cherry-picked; failure analysis is required to trust the method's limits.
-2. **Zoom interval vs. Ground Truth overlap.** Plot heatmaps showing the temporal overlap between selected zoom intervals and the actual ground truth event timestamps. This proves the agent is targeting evidence rather than guessing randomly.
-3. **Inference cost distribution.** Provide a histogram of inference steps and time per query. This reveals the worst-case latency costs which are hidden by average frame budget metrics.
+1. **Zoom timeline alignment:** Plot tool call timestamps against ground-truth event locations. This visually confirms whether the policy actually finds critical moments or guesses randomly.
+2. **Failure trajectory case study:** Show a complete trace where the model zooms repeatedly but fails. This exposes whether the model recovers from bad zooms or spirals into error.
+3. **Attention heatmaps:** Overlay model attention on frames before and after zooming. This verifies if the "zoom" mechanism actually shifts focus to relevant regions or just adds tokens.
+4. **Token usage distribution:** Plot the distribution of input token counts per turn. This reveals if the model conserves context budget as claimed or exhausts it early.
 
 ### Obvious Next Steps
-1. **Report wall-clock inference time.** Include seconds per query for all baselines and VideoZoomer to validate the efficiency argument practically.
-2. **Human evaluation of reasoning chains.** Automated metrics on QA benchmarks are noisy; human judges should verify if the generated reasoning chains logically justify the tool calls.
-3. **Zero-shot cross-domain transfer.** Evaluate the trained policy on unseen video domains (e.g., surveillance or sports) without fine-tuning to demonstrate true policy generalization beyond the training dataset.
+1. **Compute-matched efficiency:** Re-evaluate efficiency using FLOPs or GPU-hours instead of frame counts to provide a true cost-benefit analysis.
+2. **Open-ended generation eval:** Test on open-ended QA instead of multiple-choice to assess hallucination rates in tool arguments and final answers.
+3. **Hard negative testing:** Evaluate on videos with visually similar distractors to test if the zoom policy distinguishes fine-grained details or relies on spurious correlations.
+4. **Human preference evaluation:** Conduct human eval on the reasoning traces to verify if the "reflection" steps are logically sound or just verbose filler.
 
 # Final Consolidated Review
 ## Summary
-
-VideoZoomer proposes an agentic framework for long video understanding that enables Multimodal Large Language Models (MLLMs) to dynamically control visual focus through multi-turn temporal zoom tool invocations. The method uses a two-stage training strategy: cold-start supervised fine-tuning with curated exemplar and reflection trajectories, followed by reinforcement learning (GRPO) to optimize the tool-use policy. Experiments across multiple long video benchmarks demonstrate improved performance over open-source baselines with adaptive frame budgets.
+VideoZoomer proposes an agentic framework for long video understanding where an MLLM dynamically controls its visual focus through iterative temporal zoom operations. Starting from a low-frame-rate overview, the model learns when and where to request high-frame-rate clips via multi-turn tool interactions. The authors introduce a two-stage training pipeline: cold-start SFT on distilled exemplar and reflection trajectories from proprietary models, followed by GRPO-based reinforcement learning.
 
 ## Strengths
-
-- **Novel agentic formulation for temporal resolution control.** Reframing long video understanding as sequential tool interaction—where the model can iteratively request high-fps clips at autonomously chosen moments—addresses a fundamental limitation of static frame selection methods. The "glance-then-zoom" paradigm allows the model to correct initial oversights, raising the ceiling on reasoning performance for complex video tasks.
-
-- **Methodologically sound two-stage training with reflection data.** The cold-start phase uses reflection trajectories where an expert model corrects failure modes from an initial agent, preventing the "shallow policy" problem where models learn single-turn tool calls. Figure 5 demonstrates that removing reflection data causes the tool-call rate to collapse to ~1.0, validating this design choice. The ablation study (Table 3) shows each component (cold-start, reflection data, RL, tool bonus) contributes meaningfully.
-
-- **Strong empirical results with efficiency gains in frame count.** The model achieves substantial improvements on MLVU (+10.5 dev, +10.3 test over Qwen2.5-VL), LongVideoBench, and LongVideoReason-eval. Figure 6 shows the model achieves comparable accuracy to baselines using significantly fewer frames on average, supporting the claim that the learned policy allocates visual attention efficiently.
-
-- **Insightful analysis of learned behavior.** Table 10 shows the model selects moderate fps (1-2) in 66.2% of tool calls rather than defaulting to maximum resolution, demonstrating learned efficiency. Table 11 reveals diminishing returns beyond 2-3 tool calls, providing practical guidance for deployment.
+- **Well-motivated agentic paradigm:** The "glance-then-zoom" framework directly addresses fundamental limitations of uniform sampling and static frame selectors—the inability to correct initial oversights and the rigid allocation of visual context budget. The iterative, goal-directed temporal focusing mechanism is a clear conceptual advance.
+- **Thoughtful cold-start design with reflection data:** The insight that SFT on exemplar-only trajectories leads to shallow, single-turn policies is important. The reflection data augmentation—where failed rollouts are corrected by expert models—explicitly teaches error recovery and multi-turn reasoning. The ablation (Table 3) confirms this: without reflection, average tool calls collapse to ~1.0.
+- **Comprehensive component-wise ablations:** Table 3 demonstrates that each component (cold-start, reflection data, RL, R_tool bonus) is necessary. The w/o cold-start model failing to converge and w/o R_tool showing policy collapse (Figure 5) provide strong empirical validation of the design choices.
+- **Meaningful efficiency demonstration:** Figure 6 shows VideoZoomer achieving higher accuracy than the baseline using fewer average frames (e.g., 0.64 accuracy at 48 frames vs. baseline's 0.581 at 128 frames on MLVU). The FPS analysis (Table 10) shows the model learns to request moderate rather than maximum frame rates, indicating learned efficiency.
 
 ## Weaknesses
-
-- **Efficiency claims conflate frame count with actual compute cost and latency.** The paper repeatedly claims "efficiency" based on reduced frame budgets, but multi-turn agentic inference requires sequential forward passes through growing context windows. The latency overhead of iterative tool calls could easily exceed a one-pass baseline that processes more frames upfront. Without reporting wall-clock time or FLOPs, the efficiency claim is incomplete. For real-time applications, this trade-off is critical.
-
-- **Missing comparison with directly relevant concurrent agentic methods.** VideoDeepResearch (Yuan et al., 2025) and Deep Video Discovery (Zhang et al., 2025c) are discussed in related work but not compared against empirically. These methods follow the same agentic paradigm for long video understanding and represent the principal alternative approach. Their omission leaves an important gap in the experimental comparison.
-
-- **Proprietary model comparisons use older baselines.** The paper claims to "rival proprietary systems" but compares against GPT-4o (May 2024) and Gemini-1.5-Pro, while Gemini-2.5-Pro was used for training data distillation and presumably available. Gemini-2.0-Flash appears in Figure 1 but not in the main results tables. Given the rapid pace of proprietary model releases, comparing against current frontier models would strengthen the SOTA claims.
-
-- **Hyperparameter inconsistency between main text and appendix.** Section 4.1 states the learning rate for cold-start training as "5 × 10⁻⁶ for 1 epoch," while Table 5(a) in the appendix lists "Learning rate: 5e-5." These differ by an order of magnitude and need reconciliation.
-
-- **Base model omitted from primary comparison table.** Qwen2.5-VL-7B-Instruct serves as the initialization point, but Table 1 does not include it, making it impossible to directly read the improvement over the foundation model from the main results. The base model numbers appear only in Table 2 (partial) and Table 6 (appendix).
-
-- **Training/evaluation data split protocol unclear for LongVideoReason.** Training uses LongVideoReason (52K pairs from Chen et al., 2025), and one evaluation benchmark is LongVideoReason-eval from the same source. The paper does not explicitly confirm that the evaluation split was held out during training, which matters given the strong performance claim on this benchmark (80.3 vs GPT-4o's 60.7).
-
-- **No mechanism to recover from errors in the initial coarse overview.** If the initial 64-frame uniform sampling completely misses a critical event, the model has no way to discover where to zoom. The paper demonstrates iterative correction when the model identifies relevant segments, but does not analyze how often the initial glance provides insufficient information to even initiate productive search.
-
-- **Verifier details for cold-start data quality control are unspecified.** The paper states that "all candidate trajectories are passed through verifiers to ensure quality" but does not describe what these verifiers are (answer matching? learned reward model? human annotation?). This quality-control step could significantly impact the training data quality.
+- **Temporal grounding accuracy is unanalyzed:** The critical question of how accurately the model predicts relevant timestamps remains unaddressed. In videos spanning minutes to hours, a 64-frame overview provides sparse coverage. The paper contains no analysis of zoom precision—what fraction of requested clips actually contain the relevant visual evidence, or how timestamp errors propagate through multi-turn interactions.
+- **Closest agentic baselines are missing from experiments:** VideoDeepResearch and Deep Video Discovery are explicitly acknowledged in related work as conceptual predecessors that use agentic, multi-turn tool use for long video understanding, yet they are entirely absent from all experimental comparisons. Including them—even as reference points—would establish whether the learned policy outperforms prompting-based agentic approaches.
+- **In-distribution evaluation on LongVideoReason:** The training data is LongVideoReason (52K pairs) and evaluation includes LongVideoReason-eval, the evaluation split of the same dataset. The claim of surpassing GPT-4o (60.7 vs. 80.3) and Gemini-1.5-Pro on this benchmark should be explicitly qualified as an in-distribution comparison where the proprietary models did not train, while VideoZoomer benefited from dataset-specific training.
+- **No statistical significance measures:** Tables 1-3 report single numbers without error bars, confidence intervals, or significance tests. Given multi-choice QA formats where chance is substantial (25-50%), small differences may not be meaningful.
+- **Inference overhead unquantified:** The efficiency claim is framed in frame counts, but multi-turn inference introduces latency from iterative environment interaction, intermediate reasoning tokens, and tool call overhead. Without wall-clock timing or total token analysis, the practical efficiency advantage remains unclear.
+- **Proprietary model dependency for cold-start data:** The entire training pipeline depends on GPT-4o and Gemini-2.5-Pro for trajectory distillation. While the authors commit to releasing code and model weights, the cold-start data generation process itself requires access to proprietary APIs, creating a reproducibility barrier for researchers without such access.
 
 ## Nice-to-Haves
-
-- **Wall-clock latency measurements.** Reporting seconds per query for VideoZoomer vs. static-sampling baselines would validate whether frame savings translate to practical efficiency gains or are offset by multi-turn inference overhead.
-
-- **Non-agentic RL baseline.** An ablation training Qwen2.5-VL with RL on LongVideoReason *without* tool use would isolate the contribution of the agentic framework from simply applying RL to video QA.
-
-- **Confidence intervals for benchmark results.** Single-run results on smaller benchmarks (e.g., CLEVRER's 67.3→68.0) do not establish robustness to random seeds and sampling variance.
-
-- **Failure case analysis.** While case studies show successful reasoning trajectories, quantitative analysis of when the model zooms incorrectly or fails to recover would strengthen trust in the method's reliability.
-
-- **Tool call failure rate statistics.** Reporting frequency of invalid tool calls, malformed timestamps, or budget violations during inference would inform deployment considerations.
+- Analysis of zoom precision: report what fraction of requested clips contain ground-truth relevant segments, and how timestamp errors affect downstream accuracy.
+- Wall-clock latency comparison against single-pass baselines to verify that frame savings translate to practical inference speedups.
+- Multi-seed RL training variance to confirm policy stability.
+- Evaluation on open-ended QA rather than purely multiple-choice to assess hallucination in tool arguments.
 
 ## Removed Points
-
 These points are flagged to be removed, treat them with caution:
-
-- *Claim about outdated proprietary models being "misleading."* The paper does compare against proprietary models available at the time of submission; calling this misleading overstates the issue. The concern is about completeness of comparison, not deception.
-
-- *Design choice criticism for 64 initial frames and N=4 turns.* Table 11 does ablate the number of tool calls, and 64 frames is a reasonable initial budget. The paper provides justification for these choices, and demanding ablations for every hyperparameter is excessive.
-
-- *Request for CLIP-based retrieval baselines.* While potentially informative, this goes beyond the paper's scope of comparing against existing long video understanding methods. The baselines chosen are appropriate for the field.
-
-- *Concern about unfair Video-R1 evaluation protocol.* The † notation clearly explains that Video-R1 was evaluated under the authors' protocol for fair comparison. This is standard practice and transparently reported.
-
-- *Dependency on proprietary model distillation as a "weakness."* Using GPT-4o/Gemini distillation is standard practice in the field and does not diminish the contribution of training a 7B model to perform agentic video reasoning efficiently.
+- **LSDBench placement:** The harsh critic notes LSDBench appears in Figure 1 but not main experiments. However, teaser figures commonly highlight compelling results without full reporting—this is not a methodology flaw.
+- **GRPO implementation details:** The critic claims GRPO multi-turn details are thin. The paper describes token-level loss masking for tool-call trajectories and provides hyperparameters in Table 5; this level of detail is standard for a methods paper.
+- **Trajectory composition specifics:** The exact split between exemplar and reflection trajectories (~11K total) is a minor detail that does not affect reproducibility given the data release commitment.
 
 ## Novel Insights
-
-The reflection data mechanism—where failed trajectories from an initial SFT-only agent are corrected by an expert model—provides a principled approach to avoiding policy collapse in agentic RL. The analysis that removing reflection data causes the model to adopt a "shallow" single-call strategy (average tool calls ≈ 1.0 vs. ≈ 2.0 with reflection) is a clear demonstration of how training data diversity shapes exploration behavior. This insight extends beyond video: any agentic system with tool-use could benefit from explicitly including recovery trajectories in cold-start data.
+The reflection data design reveals an important insight about imitation learning: SFT on expert trajectories alone teaches the model to mimic successful reasoning but not to recover from failures. By explicitly generating corrected trajectories from failed rollouts, the paper demonstrates a form of "negative example" learning that stabilizes multi-turn policies. The ablation showing single-turn collapse without this data (Figure 5, left panel) suggests that diverse reasoning patterns must be explicitly instantiated during SFT—RL exploration alone is insufficient to discover them from a narrow initialization.
 
 ## Suggestions
-
-- Add wall-clock inference time comparison (seconds per query) for VideoZoomer vs. baselines to substantiate the efficiency claim. Even if multi-turn inference is slower, this should be disclosed.
-
-- Include the base model (Qwen2.5-VL-7B-Instruct) in Table 1 for transparent comparison.
-
-- Reconcile the learning rate discrepancy between Section 4.1 (5×10⁻⁶) and Table 5(a) (5e-5).
-
-- Clarify the train/eval split for LongVideoReason and LongVideoReason-eval to address potential data overlap concerns.
-
-- Compare empirically against VideoDeepResearch and/or Deep Video Discovery, even if only with reported numbers from their papers, to situate the contribution among concurrent agentic approaches.
+- **Report zoom hit rate:** Add a quantitative analysis of whether requested timestamp intervals overlap with ground-truth relevant moments (even approximately). This directly addresses the central mechanism of temporal localization.
+- **Add closest agentic baselines:** Include VideoDeepResearch or Deep Video Discovery in Table 1, or add a dedicated comparison section. If they cannot be run, report published numbers under comparable settings.
+- **Qualify in-distribution results:** Add a note in Table 1 or the text indicating that LongVideoReason-eval shares the same data source as training, making the proprietary model comparison informative but not directly comparable.
+- **Report inference latency:** Add average wall-clock time and total token count per query to the efficiency analysis (Figure 6 or a new table) to substantiate the practical efficiency claim.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 4.0, 4.0, 8.0]

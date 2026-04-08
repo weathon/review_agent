@@ -1,4 +1,4 @@
-=== CALIBRATION EXAMPLE 36 ===
+=== CALIBRATION EXAMPLE 17 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
@@ -7,209 +7,197 @@
 
 ### Title & Abstract
 
-The title is accurate. The abstract describes the two key properties—perplexity amplification and gradient alignment—and situates the contribution against prior Offsite Tuning (OT) work. One subtle overstatement: the abstract says the method "simultaneously" achieves both properties "theoretically," but the formal guarantee assumes that the loss shift *LE(P;x) = LM(P;x) + H* holds exactly for all P and x, which the training procedure (Eq. 7) can only approximate. This distinction is never made explicit and is a recurring issue throughout the paper.
+The title is descriptive and accurate. The abstract correctly identifies the dual tension (model capability privacy + adapter transferability) and the proposed solution. However, the abstract states LLEOT "theoretically" shows LLE simultaneously degrades emulator inference *and* preserves gradient alignment. As discussed in the theory section below, the theoretical guarantee rests on an idealized assumption (exact satisfaction of Eq. 6) that the actual training procedure can only approximately achieve. This overstatement sets up expectations the body does not fully meet.
 
 ---
 
-### Introduction & Motivation (Section 1)
+### Introduction & Motivation
 
-The problem is genuinely relevant: prior OT methods inadvertently ship high-capability emulators to potentially malicious data owners, which is a blind spot that the community has not systematically addressed. The threat model is clearly articulated and Figure 1 provides an intuitive summary.
-
-However, the paper immediately narrows its scope to *soft prompt adapters* without justifying this choice relative to LoRA—the far more widely used and practically important adapter family. LoRA is mentioned (FedBiOT uses it) but then abandoned. This limits the paper's practical impact considerably and the justification given ("computational efficiency") is weak since LoRA is also computationally cheap.
+The problem is well-motivated and the capability privacy gap in existing OT methods is genuinely underexplored. The four bullet-point contributions are clearly articulated. However, one important scoping constraint is buried: the entire framework is demonstrated only for **soft prompts**, not for the more practically dominant LoRA adapters. Contribution 1 correctly says "various types of adapters" in principle, but the actual method and all experiments are soft-prompt-only. This restricts practical relevance and should be made prominent.
 
 ---
 
-### Problem Formulation & the CPL Metric (Section 3)
+### Problem Formulation & CPL Metric (Section 3)
 
-The Capability Privacy Leakage (CPL) metric, defined as `CPL = Szs(E) / Szs(M) × 100%`, has several conceptual problems that are not acknowledged:
+**CPL metric (Eq. 1).** CPL = S_zs(E) / S_zs(M) × 100% is simple and interpretable, but has several unaddressed edge cases:
 
-1. **CPL can exceed 100%.** Table 1 shows OT on WebQuestions with Qwen2-1.5B and DR=0.2 yielding CPL=220.95%. This means the emulator *outperforms* the original model in zero-shot, a result that is neither explained nor consistent with the framing that "below 100% means protection is in effect." The authors need to explain this anomaly.
+1. **CPL > 100% is possible and occurs.** In Table 1, OT on WebQs for Qwen2-1.5B at DR=0.2 achieves CPL = 220.95%. How can the emulator outperform the original on zero-shot? This anomaly is never explained and casts doubt on the metric's reliability.
 
-2. **Absolute capability is ignored.** A CPL of 50% means very different things if the original model has 90% zero-shot accuracy (emulator at 45%—still highly capable) versus 20% (emulator at 10%—near-random). The metric is dimensionless and does not capture whether the emulator's *absolute* capability is harmful.
+2. **Zero-shot accuracy as a proxy for capability privacy is narrow.** A malicious data owner could exploit the emulator via few-shot prompting, chain-of-thought, or model inversion attacks—none of which zero-shot accuracy captures. The threat model needs to be more formally bounded.
 
-3. **The metric is task-specific and zero-shot only.** A data owner could use the emulator for few-shot inference, knowledge distillation into a private model, or latent-space analysis. None of these vectors are captured by CPL. The protection guarantee is narrower than claimed.
+3. **CPL below "random" baseline.** The paper claims (Section 5.2) "our method achieves a CPL score even lower than that of a randomly initialized model." If the emulator truly behaves worse than a random model, one must ask whether gradient-based prompt optimization can still yield meaningful gradients—a tension not addressed.
 
-4. **Random baseline shows high CPL.** The "Random" row in Table 1 exhibits CPL values as high as 74.05% (Llama-3.2 on SIQA). A randomly initialized model trivially guesses at multiple-choice questions (near 1/N chance), and so does the original model on some tasks. This suggests CPL partially reflects task-specific random-chance baselines rather than genuine capability transfer.
+**Setup.** The framework requires the model owner to possess both a distillation dataset *Xd* and an elevation dataset *Xe*, both publicly sourced (Pile-uncopyright). This requirement is not stated in the problem formulation (Section 3) and is only revealed in implementation details (Appendix A.4). It should be explicit.
 
 ---
 
-### Method (Section 4)
+### Methodology (Section 4)
 
-#### 4.1 Collaborative Prompt Knowledge Distillation (CPKD)
+**Theorem 1 — Critical Gap.** The central theoretical claim is that LLE simultaneously (i) exponentially amplifies perplexity (Eq. 10, PPL_E = e^H · PPL_M) and (ii) preserves gradient identity (∇_P L_E = ∇_P L_M). Both results follow from the idealized condition of Eq. 6:
 
-The motivation for using *randomly initialized* proxy soft prompts P' ~ N(μ, σ²) is reasonable: discrete-token distillation neglects the continuous embedding space. However, the key hyperparameter σ is set to 20 "determined experimentally" with no ablation over its value. Given that σ controls how broadly the proxy prompts sample the continuous space, this is a significant undisclosed sensitivity. The distribution of actual fine-tuned prompts might lie far from the initialization, meaning alignment at training-time proxies may not generalize to inference-time prompts.
+> L_E(P; x) = L_M(P; x) + H  ∀ P, x
 
-#### 4.2 Loss Landscape Elevation (LLE)
+However, **this is never actually enforced exactly**. The real training objective (Eq. 7) minimizes the expectation of |L_E(P'; x) − L_M(P'; x) − H| over *randomly sampled* proxy prompts P' ~ N(μ, σ²). Therefore:
 
-**Theorem 1 is much weaker than advertised.** The theorem states that *if* `LE(P;x) = LM(P;x) + H` for all P and x, then `∇P LE = ∇P LM`. This is a mathematical tautology: the gradient of (f + constant) equals the gradient of f. The authors present this as a meaningful theorem, but the core difficulty—which is entirely avoided—is: *does the training objective (Eq. 7) actually achieve the functional form in Eq. 6 for downstream prompts?*
+- The perplexity result (part i) holds only approximately, to the extent Eq. 7's optimization converges.
+- The gradient identity (part ii), while mathematically trivial when Eq. 6 holds exactly (since ∇_P H = 0 for constant H), carries no formal guarantee outside of the proxy prompt distribution.
 
-The answer is clearly "no, only approximately." The LLE training minimizes `E_{x~Xe, P'~N(μ,σ²)} |LE(P';x) - LM(P';x) - H|`, which constrains the emulator loss only at the specific distribution of elevation data Xe and proxy prompts P'~N(μ,σ²). During downstream prompt tuning, the actual soft prompt P drifts away from this distribution as gradients are applied. There is no formal bound on the approximation error `ε(P) = |∇P LE - ∇P LM|` for prompts outside the training distribution. The accuracy degradation observed in ablation experiments (Table 2, row 2 for DR=0.5: Acc drops from 34.20 to 23.00 without CPKD) suggests this approximation error is non-trivial.
+Most critically: **gradient alignment on the elevation dataset X_e does not imply gradient alignment on the downstream data D_p**. Downstream prompts are initialized randomly and optimized toward a task-specific distribution never seen during LLE training. The claim that "convergence to the same optimal prompt" is ensured (Section 4.2, last paragraph) thus requires substantially stronger assumptions that the paper does not establish.
 
-A genuine theoretical contribution would derive a bound on the gradient approximation error as a function of the elevation training objective value, the distribution shift from proxy prompts to fine-tuned prompts, and the smoothness of the emulator.
+**CPKD (Section 4.1).** The proxy prompt distillation loss L_PPD (Eq. 3) is novel and addresses a genuine problem with applying standard KD to continuous prompt spaces. However:
 
-**The interaction between CPKD and LLE is unanalyzed.** CPKD first aligns E to M. Then LLE perturbs E's parameters further to induce the loss shift. But modifying E for LLE will partially undo the gradient alignment achieved by CPKD—the paper provides no analysis of whether LLE degrades the CPKD alignment, and the ablation in Table 2 does not disentangle this.
+- The choice σ = 20 for the proxy prompt distribution N(0, σ²) is described as "determined experimentally" (Section 4.1). This is a crucial hyperparameter: if actual downstream prompts P* at convergence lie outside the typical support of N(0, 400), neither CPKD nor LLE constraints apply to them. No coverage analysis is provided.
+- The three loss weights (w₁ = 1, w₂ = 10, w₃ = 30) in Eq. 5 are heavily unbalanced and experimentally tuned. Sensitivity analysis for these is absent.
+
+**Scope limited to soft prompts.** The paper explicitly states LLE is "applicable to various types of adapters" (Introduction, Section 4.2) but only instantiates it for soft prompts. Soft prompts are computationally efficient but practically marginal compared to LoRA (used in FedBiOT, the contemporaneous OT variant). Since LoRA adapters involve trained weight deltas (not a fixed constant offset), applying the constant-margin LLE objective to non-prompt adapters is non-trivial. The claim of general applicability is unsubstantiated.
 
 ---
 
 ### Experiments & Results (Section 5)
 
-**Missing baseline:** FedBiOT (Wu et al., 2024) is mentioned prominently in the introduction as a direct extension of OT but is absent from Table 1. This is a significant omission given that FedBiOT also targets the model+data dual-privacy problem.
+**Model scale.** All experiments use models in the 1.5B–3B range. Modern deployments of interest involve models an order of magnitude larger. The compression-and-distillation dynamics, the feasibility of the LLE constraint, and the soft-prompt transferability may all change at scale.
 
-**Model and task scope are narrow.** All three models are small (<3.2B parameters). The commercially valuable models worth protecting from capability leakage are typically 13B+. Whether LLE generalizes to large models with complex loss landscapes is unexplored. All four benchmarks are multiple-choice question answering; the method's applicability to generation, summarization, or classification is entirely untested, yet the motivating use cases (healthcare, finance) are rarely multiple-choice tasks.
+**Task diversity.** All four benchmarks (OBQA, SIQA, ARC-c, WebQs) are multiple-choice question-answering tasks evaluated via accuracy. There is no evaluation on generation tasks (summarization, code, open-ended QA), instruction-following, or tasks requiring multi-step reasoning. This homogeneous task set limits confidence in generalizability.
 
-**Soft prompts vs. LoRA.** All baselines (OT, CRaSh) use LoRA-style adapters with 187–400M parameters (Table 7), while LLEOT uses soft prompts with 7.6–15.4K parameters. This is a fundamentally different adapter family with different expressivity. It is therefore entirely unclear whether LLEOT's accuracy gains over OT and CRaSh stem from the LLE mechanism or simply from optimizing with a completely different adapter type under a different paradigm. The comparison is not apples-to-apples, and the authors do not attempt to isolate these factors.
+**Baselines.** Only OT and CRaSh are compared. More recent OT-adjacent work (FedBiOT, FedPEAT) is mentioned in related work but not included in the comparison table. This is a gap, especially since FedBiOT uses LoRA adapters and represents a more practical setting.
 
-**Statistical reporting.** Results in Table 1 are "averaged over three experimental runs" but no standard deviations are reported. Given that soft prompt tuning can have high variance (the prompts are initialized randomly), confidence intervals are needed to assess statistical significance of small differences like 33.87 vs. 33.60 (OBQA, Qwen2, DR=0.2).
+**Missing standard deviations.** The paper states results are "averaged over three experimental runs" (Section 5.2) but reports no standard deviations anywhere. Given that some differences between methods are only a few tenths of a percent (e.g., Table 1, Qwen2 at DR=0.2, OBQA: Ours = 33.87 vs. OT = 33.80), statistical significance cannot be assessed.
 
-**The WebQuestions anomaly.** On WebQuestions with Llama-3.2 at DR=0.5, LLEOT achieves only 15.45% accuracy versus OT's 23.90% (Table 1). The paper provides no discussion of why performance collapses on this task/model combination. Similarly, CPL for the Ours method on WebQs is 0.00% on several settings—meaning the emulator performs at or below 0% accuracy, which requires explanation (is this because 0% means near-zero, or literally 0 correct predictions?).
+**Hyperparameter selection.** The prompt-tuning phase conducts a grid search over learning rates and "report[s] the best-performing run" (Appendix A.4). This is fine, but the best-performing run should be selected on a validation set, not the test set. It is unclear which is used. Additionally, two learning rates are tested for LLE and "the emulator that achieves the best performance" is selected—again, the selection criterion and split are not described.
 
----
+**Unexplained failures.** Table 1, Gemma-2-2b at DR=0.2 on WebQs: CRaSh achieves the best accuracy (34.25 vs. LLEOT's 28.17). This is the single clear case where LLEOT loses on accuracy to a baseline, but the discussion in Section 5.2 does not mention it.
 
-### Ablation Study (Section 5.3 & Appendix B)
-
-The ablation studies are a genuine strength. Table 2 clearly demonstrates the necessity of both CPKD and LLE. Table 3 validates all three loss terms in CPKD. Figure 4 confirms the intuition that downstream accuracy is insensitive to H while CPL decreases—this is a useful empirical validation of the gradient preservation claim.
-
-Table 6 (Appendix B.1) comparing LLE against "Negative Language Modeling" (NLM) as an elevation strategy is important and shows LLE's advantage. This should be in the main paper, not the appendix, as it is a key differentiator.
-
-The proxy prompt standard deviation σ is conspicuously absent from ablations—given that CPKD and LLE both depend on sampling P'~N(μ, σ²), σ is a critical hyperparameter that deserves investigation.
+**Ablation (Table 2) inconsistency.** Row 1 (CPKD+LLE, DR=0.5) reports CPL=46.52%, but row 3 (CPKD alone, no LLE, DR=0.5) achieves higher accuracy (35.40 vs. 34.20). The authors acknowledge this but frame it as "optional" rather than as a sign that LLE can marginally hurt accuracy when compression is heavy.
 
 ---
 
-### Limitations & Broader Impact
+### Theoretical Proof (Appendix D)
 
-The paper has an ethics statement but no dedicated limitations section. The following key limitations are unacknowledged:
+The proof is presented cleanly but conflates the idealized condition (Eq. 6) with the approximate training objective (Eq. 7). The gradient identity in Eq. 19 is mathematically correct given Eq. 6—since H is a constant scalar not depending on P, ∇_P H = 0 is immediate. This is almost tautological: a constant offset does not affect gradients by definition. The "theorem" therefore essentially re-states the definitional consequence of Eq. 6 rather than proving that the training procedure achieves meaningful gradient alignment in practice. The paper would benefit from an empirical gradient cosine similarity analysis between emulator and original model gradients on held-out prompts and data.
 
-1. **Soft-prompt-only scope**: The entire framework is predicated on soft prompts. The rising practical standard is LoRA; leaving it unaddressed limits applicability.
-2. **Small model sizes**: Generalization to commercially sensitive large models (≥13B) is undemonstrated.
-3. **Multiple-choice only**: All tasks are structured classification; the method's behavior on open-ended generation is unknown.
-4. **Adaptive attacks**: A sophisticated adversary aware of the LLE mechanism could attempt to reverse the constant shift (e.g., by subtracting H from the loss before using the emulator for inference). Since H must be communicated in the emulator or can be estimated empirically, this trivially breaks the privacy guarantee. The paper does not consider adversarial robustness.
-5. **Two-dataset requirement**: CPKD (12.5% of Pile) and LLE (1% of Pile) both require publicly available data from the model owner, which is a reasonable assumption but introduces a new dependency that is not discussed.
+---
+
+### Limitations & Broader Impact (Section 7)
+
+The ethics statement focuses entirely on positive motivations and does not discuss any failure modes or limitations. Missing:
+
+- **Soft-prompt-only scope**: LoRA and other adapters are not addressed.
+- **Small-model scope**: Applicability to GPT-4-class models is not demonstrated.
+- **Adversarial robustness of CPL**: The metric can be defeated by an adversary using few-shot, chain-of-thought, or fine-tuning on emulator outputs.
+- **LLE can be circumvented**: A motivated adversary might recover model knowledge by training a student on emulator input-output pairs (knowledge distillation from emulator), which doesn't require good zero-shot performance. The LLE defense does not address this.
+- **Computational cost of emulator construction**: No wall-clock times are reported for CPKD or LLE stages.
 
 ---
 
 ### Overall Assessment
 
-LLEOT addresses a real and previously underexplored problem—capability privacy leakage through overly capable emulators in Offsite Tuning. The central mechanism (shifting the loss by a constant H to degrade perplexity while preserving gradients) is elegant and practically simple to implement. However, the paper overstates its theoretical contribution: Theorem 1 is a tautology conditioned on an exact functional form that cannot be achieved in practice, and no approximation error analysis is provided. The CPL metric has conceptual flaws (unbounded, ignores absolute capability, zero-shot only), and the experimental scope is narrow in model size, adapter type, and task diversity. Most critically, the comparison with OT and CRaSh is confounded by a fundamentally different adapter family: comparing 7.6K-parameter soft prompts against 187M-parameter LoRA adapters makes it impossible to attribute accuracy differences to the LLE mechanism. The missing FedBiOT baseline is also a notable gap. As submitted, the paper does not meet the ICLR bar for theoretical rigor or experimental fairness. Significant revisions—particularly an equitable adapter comparison, approximation error analysis, and experiments with LoRA adapters or larger models—are needed before acceptance.
+LLEOT addresses a legitimate and underexplored problem in privacy-preserving LLM adaptation: that prior offsite-tuning emulators inadvertently leak model capability. The core insight—that a constant loss offset preserves gradients while degrading inference—is elegant and, in principle, sound. However, the paper's theoretical claims substantially outrun its theoretical guarantees. Theorem 1 is valid only assuming exact satisfaction of the idealized LLE condition (Eq. 6), which the actual training objective (Eq. 7) can only approximately achieve; moreover, gradient alignment on the elevation dataset does not extend to downstream task data, so the "same optimal prompt" convergence claim is unsubstantiated. Experimentally, the evaluation is confined to small models and homogeneous multiple-choice tasks, standard deviations are omitted, and the only adapter type tested is soft prompts despite claims of generality. The anomalous CPL > 100% values in Table 1 are unexplained and raise metric validity concerns. For ICLR, this paper needs: (i) a careful recalibration of theoretical claims to match what is actually proven vs. assumed, (ii) an empirical gradient alignment analysis on downstream data, (iii) experiments with LoRA adapters and/or larger models, and (iv) standard deviations with statistical testing. The contribution is interesting enough to merit serious consideration after significant revision, but in its current form the theoretical overclaiming and experimental scope constitute material weaknesses.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper addresses a critical gap in privacy-preserving Offsite Tuning for LLMs: existing methods risk "capability privacy leakage" by allowing emulators to perform inference similar to the original model. The authors propose LLEOT, a framework using Loss Landscape Elevation (LLE) to enforce a fixed loss margin between the emulator and the original model, theoretically proven to degrade the emulator's inference ability while preserving gradient alignment for soft prompt transfer. Extensive experiments on multiple models and datasets demonstrate that LLEOT achieves superior privacy protection compared to state-of-the-art baselines without sacrificing adaptation utility.
+This paper addresses an overlooked privacy risk in Offsite Tuning (OT): distributed emulators retain substantial inference capability, enabling unauthorized use or knowledge extraction by data owners. The authors propose LLEOT, which introduces Loss Landscape Elevation (LLE) to add a fixed margin to the emulator's loss, theoretically guaranteeing exponentially higher perplexity while preserving identical gradients for adapter optimization. Combined with Collaborative Prompt Knowledge Distillation (CPKD), the framework is evaluated on three LLMs and four QA benchmarks, demonstrating strong adapter transfer performance and significantly reduced capability privacy leakage compared to OT and CRaSh baselines.
 
 ### Strengths
-1.  **Identification of a Specific Privacy Risk:** The paper clearly articulates and quantifies "Capability Privacy Leakage" (CPL), a nuance in Offsite Tuning often overlooked. By defining the CPL metric (Eq 1) and demonstrating via Figure 1 that existing emulators (like OT and CRaSh) retain significant inference power, the work justifies the need for a new framework.
-2.  **Strong Theoretical Guarantee:** Theorem 1 provides a rigorous mathematical foundation for the Loss Landscape Elevation technique. It proves that adding a constant margin $H$ to the loss function preserves the gradient $\nabla_P L$ with respect to the soft prompt while exponentially increasing the emulator's perplexity ($PPL_E = e^H \cdot PPL_M$). This offers a solid guarantee that prompt optimization will converge similarly despite the degraded inference capabilities.
-3.  **Empirical Validation and Metric:** The experimental setup is comprehensive, testing on three different LLM families (Qwen, Gemma, Llama) and four datasets. The results (Table 1) convincingly show that LLEOT achieves significantly lower CPL scores than baselines while maintaining competitive accuracy. The ablation study (Table 2) further isolates the contribution of the CPKD and LLE components.
+1. **Well-Motivated Problem & Clear Threat Model:** The paper correctly identifies that existing OT methods prioritize adapter utility over model capability privacy, leaving IP risks unaddressed. The proposed Capability Privacy Leakage (CPL) metric (Eq. 1) offers a direct, interpretable way to quantify this specific threat.
+2. **Elegant Core Mechanism with Direct Guarantees:** The LLE objective $L_E(P; x) = L_M(P; x) + H$ is conceptually simple but highly effective. It provably yields $\nabla_P L_E = \nabla_P L_M$ (Eq. 19), ensuring identical optimization trajectories for soft prompts, while exponentially inflating emulator perplexity $PPL_E = e^H \cdot PPL_M$ (Theorem 1). This cleanly decouples utility from inference capability.
+3. **Strong Empirical Results & Parameter Efficiency:** Table 1 shows consistent accuracy gains and CPL reductions across Qwen2-1.5B, Gemma-2-2b, and Llama-3.2-3B. Notably, LLEOT uses soft prompts that are ~4 orders of magnitude smaller than adapters in OT/CRaSh (Table 7), drastically lowering communication and compute overhead for the data owner.
+4. **High Reproducibility & Robust Ablations:** Algorithm 1 clearly separates roles and phases. Appendix A.4 provides precise hyperparameters, dataset splits, and training regimes. Systematic ablations (Table 2, 3, Figure 4) validate the necessity of CPKD, LLE, and all three distillation losses, while Appendix B.2 demonstrates practical compatibility with gradient randomization for data privacy.
 
 ### Weaknesses
-1.  **Limitation to Soft Prompts:** The framework, including the theoretical analysis of gradient alignment, is currently tailored specifically for soft prompt tuning (Section 4.3). While efficient, the approach does not explicitly address parameter-efficient finetuning methods like LoRA (mentioned in Related Work), which are increasingly common in the community. The theoretical guarantee for LoRA adapters is not provided, limiting generalizability.
-2.  **Stability of Emulator Training:** The LLE mechanism requires optimizing emitter parameters $\Theta_E$ to minimize $|L_E - L_M - H|$ (Algorithm 1, Step 12). While theoretically sound, the practical training stability of forcing a model to consistently exhibit a specific loss offset across all inputs is not empirically discussed. There is no analysis of how sensitive the final accuracy is to the choice of margin $H$ or the difficulty of enforcing this constraint during emulator construction.
-3.  **Baseline Comparison Depth:** While OT and CRaSh are compared, the field of privacy-preserving tuning is rapidly evolving. Baselines like FedBiOT (Wu et al., 2024) are mentioned but not in the main comparison tables (Table 1 only shows OT and CRaSh). A more comprehensive comparison with recent federated or secure multi-party computation-based finetuning methods would strengthen the claim of "state-of-the-art" status.
+1. **Limited Evaluation Scope & Generalization Gaps:** Experiments focus exclusively on multiple-choice QA datasets. Real-world privacy-sensitive domains (e.g., healthcare, finance) typically require open-ended generation, instruction following, or structured reasoning. The framework's effectiveness on generative metrics (e.g., BLEU, ROUGE, LLM-as-a-judge, or open QA) remains unverified.
+2. **Minimal Theoretical Novelty & Missing Geometric Limits:** Theorem 1 is a direct application of cross-entropy scaling and gradient linearity ($\nabla(f+H)=\nabla f$). While mathematically correct, framing it as a major theoretical guarantee overstates its novelty. Additionally, gradient preservation assumes the emulator's loss landscape geometry is sufficiently aligned *before* LLE. The paper lacks analysis of failure modes under higher compression rates (e.g., dropout $\geq 0.7$) or when CPKD is imperfect.
+3. **Unquantified Model-Owner Overhead:** Constructing the emulator via CPKD and LLE requires forward/backward passes through the original model on distillation and elevation datasets. The paper does not report the compute cost, memory footprint, or training time required from the model owner's side, making deployment feasibility unclear compared to standard OT or layer-pruning baselines.
+4. **CPL Metric & Heuristic Prompt Design Limitations:** CPL is based on zero-shot accuracy, which is a coarse proxy for capability leakage; an emulator with near-zero accuracy may still retain dangerous capabilities (e.g., factual extraction, instruction compliance, or jailbreak susceptibility). Furthermore, CPKD relies on proxy prompts sampled from $\mathcal{N}(\mu, \sigma^2)$, but sensitivity to $\sigma$ and $\mu$ during the *construction* phase is unreported (Figure 5 only evaluates post-hoc noise on the returned prompt).
 
 ### Novelty & Significance
-**Novelty:** The core contribution—Loss Landscape Elevation—is novel. While loss shifting is a known technique in general optimization, applying it specifically to anonymize the emulator's inference capability while maintaining prompt transferability in the context of Offsite Tuning is a new insight. The formalization of Capability Privacy Leakage as a metric is also a valuable addition to the privacy community.
-**Significance:** Addressing the IP protection barrier for closed-source LLMs is highly significant for industrial adoption. If LLEOT can prevent model owners from leaking their proprietary capabilities, it removes a major barrier to collaborative fine-tuning, potentially unlocking many domain-specific applications in healthcare and finance mentioned in the introduction.
+The novelty is moderate-to-high in framing and application, though the mathematical core is elementary. Identifying capability privacy as a distinct threat vector in offsite tuning is a timely and valuable contribution. The loss-shifting mechanism is a clever, non-heuristic way to break inference utility while preserving optimization geometry. Significance is solid for ICLR: the work addresses a critical barrier to commercial and privacy-sensitive LLM deployment, provides verifiable privacy-utility trade-offs, and aligns with the community's push toward efficient, secure fine-tuning. It meets the acceptance bar for clear methodology and reproducible results, though broader empirical validation and deeper analysis of geometric alignment would strengthen it to a strong-accept level.
 
 ### Suggestions for Improvement
-1.  **Extend Analysis to LoRA Adapters:** To increase the paper's impact, add an optional section or experiment validating the feasibility of LLEOT with LoRA adapters. If the theory changes, clarify how the constant loss margin assumption holds for adapter-specific parameters versus prompt vectors.
-2.  **Analyze the Training Sensitivity of LLE:** Provide a sensitivity analysis on the hyperparameter $H$ during the *emulator training phase* (not just the prompt tuning phase, as shown in Figure 4). Specifically, investigate cases where the LLE optimization fails to converge to the desired margin or causes the emulator to become overly collapsed.
-3.  **Include Emerging Baselines:** Update the evaluation to include FedBiOT or other recent 2023-2024 Offsite Tuning variants if they are available or if their implementation can be added for a fairer comparison of privacy utility trade-offs.
-4.  **Clarify Code Reproducibility:** The Reproducibility Statement mentions code will be released "upon publication." ICLR usually requires reproducible code submission at the review stage if possible, or at least a more detailed plan. If the emulator construction is complex, providing pseudocode or hyperparameters for the *LLE optimization step* in the main text (beyond Algorithm 1) would aid reproducibility.
+1. **Expand to Generative & Open-Ended Tasks:** Include instruction-tuning benchmarks (e.g., AlpacaEval 2.0, GSM8K, or open-domain QA) and report generative quality metrics. This would validate claims about real-world applicability beyond discriminative selection tasks.
+2. **Quantify Construction Overhead for Model Owners:** Add a computational breakdown (FLOPs, GPU hours, or epoch counts) for the CPKD and LLE phases. Compare this cost directly to OT's distillation phase to clarify the practical trade-off.
+3. **Analyze Compression Limits & Geometric Alignment:** Conduct a sweep over higher LayerDrop rates (0.6–0.8) or alternative pruning strategies to identify where CPKD fails to align gradients sufficiently, leading to LLEOT transfer degradation. Visualizing landscape similarity (e.g., via CKA or gradient cosine similarity) would strengthen the geometric claims.
+4. **Adopt a Multi-Faceted Privacy Evaluation:** Supplement CPL with stronger leakage probes, such as a subset of MMLU for broad capability retention, membership inference resistance, or simple extraction/jailbreak prompts on the emulator, to ensure "privacy" reflects true capability suppression rather than mere accuracy collapse.
+5. **Report Proxy Prompt Sensitivity:** Provide an ablation on $\sigma$ and $\mu$ for the proxy prompt distribution $\mathcal{N}(\mu, \sigma^2)$ used in CPKD. Clarify how this choice impacts the alignment of continuous representation spaces and subsequent prompt transfer quality.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Attacker Fine-tuning Robustness:** Test whether an adversary can restore the emulator's capability by fine-tuning it on public data. Without this, the claim that LLE prevents model misuse is unverified, as high zero-shot perplexity does not guarantee resistance to transfer learning attacks.
-2. **Gradient Alignment on Downstream Data:** Measure the cosine similarity of gradients between the emulator and original model specifically on the private downstream datasets ($D_p$). Theorem 1 assumes alignment everywhere, but LLE is only optimized on construction data ($X_e$); without empirical verification on $D_p$, the utility claim is unsupported.
-3. **Computational Cost Analysis:** Quantify the overhead of emulator construction, which requires running the original model $M$ for every batch to compute $L_M$. If constructing the emulator is as expensive as direct fine-tuning, the practical utility of the framework for large-scale deployment is undermined.
-4. **Privacy-Utility Pareto Frontier:** Plot a comprehensive trade-off curve varying $H$ against both accuracy and a robust privacy metric (e.g., attack success rate). Current results show single points; without a frontier, it is unclear if LLEOT genuinely dominates baselines or just operates at a different trade-off point.
+1. **Adversarial Fine-tuning on Emulator:** Test if a malicious data owner can recover performance by fine-tuning the emulator's weights (e.g., LoRA) rather than just prompts. If the emulator can be revived via weight updates, the core privacy claim is invalidated.
+2. **Empirical Gradient Alignment:** Measure the cosine similarity between $\nabla_P L_E$ and $\nabla_P L_M$ during actual downstream tuning steps. Theorem 1 claims identical gradients, but optimization noise on $X_e$ may cause divergence on $D_p$ that must be quantified.
+3. **Scaling to Larger Models:** Evaluate on models ≥7B parameters (e.g., Llama-3-8B), as 1.5B–3B models are insufficient to demonstrate viability for modern ICLR standards. Privacy-utility trade-offs often shift significantly at larger scales.
+4. **Few-Shot Capability Privacy Leakage:** Report CPL metrics under few-shot prompting conditions on the emulator, not just zero-shot. Adversaries will use few-shot cues to extract capability, so zero-shot CPL alone underestimates privacy risk.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Generalization of Loss Margin:** Analyze whether the fixed margin $H$ holds for out-of-distribution downstream data not seen during emulator construction. If $L_E(P) \neq L_M(P) + H$ on $D_p$, the theoretical guarantee of gradient equality (Theorem 1) fails, breaking the core mechanism.
-2. **Formal Privacy Definition:** Replace the heuristic CPL metric with a formal privacy definition (e.g., differential privacy or indistinguishability from random). ICLR standards require rigorous privacy guarantees rather than empirical zero-shot score ratios which can be bypassed.
-3. **Sensitivity to Proxy Prompts:** Investigate how the distribution of proxy prompts ($P' \sim \mathcal{N}$) affects the loss landscape alignment. If the alignment is sensitive to the proxy distribution, the method may fail on downstream prompts that diverge from this distribution.
-4. **Baseline Fairness:** Clarify if OT and CRaSh baselines were re-implemented specifically for soft prompts with comparable hyperparameter tuning. If baselines are sub-optimally adapted, the claimed superiority of LLEOT may be an artifact of experimental setup rather than methodological strength.
+1. **Loss Margin Generalization:** Analyze whether the enforced loss margin $H$ holds on downstream data $D_p$, given it was optimized on $X_e$. If the margin drifts on unseen data, the gradient alignment guarantee theoretically collapses.
+2. **Security Against Logit Calibration:** Discuss whether an adversary can calibrate the emulator's logits (e.g., subtracting a constant offset) to recover original model probabilities. Adding a constant to loss implies a multiplicative factor on probabilities, which may be reversible.
+3. **Convergence Stability:** Analyze whether the elevated loss landscape affects the convergence speed or stability of prompt tuning compared to standard offsite tuning. High loss margins could introduce optimization instability not captured by final accuracy.
+4. **CPL Metric Validity:** Justify why CPL based on accuracy is a sufficient privacy metric compared to parameter extraction or distillation attacks.Accuracy alone does not guarantee that model weights or internal representations are protected.
 
 ### Visualizations & Case Studies
-1. **Gradient Cosine Similarity Heatmaps:** Plot gradient alignment between $E$ and $M$ across training steps on $D_p$. This directly visualizes whether the "gradient alignment" claim holds during actual downstream optimization or degrades over time.
-2. **Loss Landscape Slices on $D_p$:** Visualize the loss landscapes of $E$ and $M$ specifically on downstream private data, not just construction data. This reveals if the elevation generalizes to the actual task or if the landscapes diverge on unseen inputs.
-3. **Attack Success Rate Curves:** Plot an adversary's performance vs. fine-tuning epochs on the emulator. This visualizes the "hardness" of extracting capability compared to baselines, providing concrete evidence of privacy protection beyond static metrics.
+1. **Gradient Similarity Trajectory:** Plot the cosine similarity of gradients between emulator and original model over downstream training steps. This directly exposes whether the core mechanism (Theorem 1) holds in practice.
+2. **Loss Margin Drift:** Visualize the difference $L_E(P) - L_M(P)$ over the course of downstream optimization to show if the fixed margin $H$ is maintained or deteriorates.
+3. **Qualitative Output Comparison:** Provide side-by-side examples where the emulator produces gibberish (privacy preserved) while the original model produces correct answers using the transferred prompt (utility preserved). Aggregate tables hide whether the method actually works on specific instances.
 
 ### Obvious Next Steps
-1. **Extend to LoRA/Adapter Layers:** Demonstrate LLE works for LoRA or standard adapters, as soft prompts are capacity-limited. Restricting to soft prompts limits the contribution's applicability to real-world fine-tuning scenarios where deeper adaptation is needed.
-2. **Simulate Specific Threat Models:** Explicitly simulate a malicious data owner attempting to distill the emulator into a new model. This moves beyond abstract metrics to demonstrate resistance against concrete intellectual property theft scenarios.
-3. **Ablate Construction Data Size:** Analyze how the size of the elevation dataset ($X_e$) impacts privacy and utility. If large public datasets are required to stabilize the loss margin, the barrier to entry for model owners increases significantly.
+1. **Support for Weight-Based Adapters:** Extend the method to LoRA or full fine-tuning adapters, as soft prompts are less common in production than weight-based adapters. The current restriction limits practical impact.
+2. **Formal Privacy Bounds:** Replace the heuristic CPL metric with a formal privacy bound (e.g., differential privacy or information theoretic bound) to meet rigorous security standards.
+3. **Communication Overhead Analysis:** Compare total communication costs against standard Offsite Tuning and Federated Learning baselines. Privacy gains are irrelevant if the communication cost becomes prohibitive.
 
 # Final Consolidated Review
 ## Summary
 
-LLEOT addresses the previously overlooked problem of "capability privacy leakage" in Offsite Tuning—where emulators retain sufficient inference ability for data owners to extract proprietary knowledge. The framework introduces Loss Landscape Elevation (LLE) to enforce a fixed loss margin between emulator and original model, theoretically connecting this margin to perplexity amplification while preserving gradient alignment for soft prompt transfer. Experiments across three LLM families and four benchmarks demonstrate substantially reduced capability leakage compared to prior methods while maintaining competitive adaptation performance.
+The paper identifies an overlooked privacy risk in Offsite Tuning: existing emulators retain significant inference capability, enabling data owners to extract proprietary knowledge. The authors propose LLEOT, which uses Loss Landscape Elevation (LLE) to add a fixed margin to the emulator's loss—provably degrading inference while preserving gradients for soft prompt optimization—and Collaborative Prompt Knowledge Distillation (CPKD) to align representation spaces between emulator and original model.
 
 ## Strengths
 
-- **Identification of a real blind spot:** The paper correctly identifies that prior OT methods (OT, CRaSh) ship emulators with non-trivial zero-shot performance (Figure 1c shows ~70-90% of original model capability), enabling capability theft. The proposed Capability Privacy Leakage (CPL) metric, while heuristic, provides a concrete quantitative measure of this risk.
-
-- **Principled theoretical insight with empirical support:** The core insight—that adding a constant H to loss preserves gradients (trivial mathematically) but exponentially increases perplexity (PPL_E = e^H · PPL_M)—is correct and empirically validated (Figure 4 shows CPL drops dramatically with H while accuracy remains stable). This dual property is elegant and practically implementable.
-
-- **Comprehensive ablation structure:** Tables 2 and 3 clearly demonstrate the necessity of both CPKD and LLE stages, and Figure 4 shows robustness of accuracy to the H hyperparameter. The ablation comparing LLE vs. negative language modeling (Table 6) demonstrates that the constrained elevation strategy matters for maintaining gradient alignment.
-
-- **Strong empirical privacy-utility trade-off:** Table 1 shows LLEOT achieves CPL values comparable to or below Random baseline while maintaining accuracy close to or exceeding OT/CRaSh baselines across most settings—evidence that the method successfully balances its dual objectives.
+- **Clear problem identification and threat model:** The paper correctly identifies that prior OT methods prioritize adapter transfer while overlooking model capability privacy. The Capability Privacy Leakage (CPL) metric provides a direct, interpretable quantification of this risk.
+- **Elegant core mechanism:** The insight that a constant loss offset $L_E(P; x) = L_M(P; x) + H$ preserves gradients ($\nabla_P L_E = \nabla_P L_M$) while exponentially amplifying perplexity ($\text{PPL}_E = e^H \cdot \text{PPL}_M$) is conceptually clean and theoretically grounded. The mathematical derivation in Appendix D correctly establishes these properties under the idealized condition.
+- **Strong empirical performance with parameter efficiency:** Table 1 demonstrates consistent accuracy improvements and CPL reductions across three LLM families (Qwen2-1.5B, Gemma-2-2b, Llama-3.2-3B) and four QA benchmarks. Notably, the soft prompt adapters require ~4 orders of magnitude fewer parameters than the LoRA-style adapters used by OT/CRaSh baselines (Table 7: 7.6K vs. 187.2M for Qwen2), substantially reducing communication overhead.
+- **Reproducible methodology:** Algorithm 1 clearly delineates the three phases, and Appendix A.4 provides hyperparameters, dataset details, and implementation specifics. The ablations in Tables 2-3 and Figure 4 systematically validate the necessity of CPKD, LLE, and each loss component.
 
 ## Weaknesses
 
-- **Theorem 1 overclaims without addressing approximation error:** The theorem states that *if* L_E(P;x) = L_M(P;x) + H holds exactly, then gradients match. But the training objective (Eq. 7) only enforces this approximately on proxy prompts P' ~ N(μ,σ²) sampled from a specific distribution over elevation data X_e. The paper provides no bound on how well this generalizes to downstream prompts P* obtained after gradient descent, nor analysis of how the proxy prompt distribution affects alignment. The accuracy drop without CPKD (Table 2, DR=0.5: 34.20 → 23.00) suggests approximation error can be substantial.
-
-- **CPL metric is narrow and lacks formal privacy grounding:** CPL measures only zero-shot accuracy ratio on specific tasks. It does not capture: (a) absolute capability (a 50% CPL with original at 90% accuracy means emulator still has 45% capability), (b) few-shot or fine-tuning attack vectors, (c) knowledge distillation into a private model, or (d) whether CPL ≤ Random baseline provides meaningful privacy guarantees. The metric is task-specific and heuristic rather than grounded in formal privacy definitions.
-
-- **Method is fundamentally limited to soft prompts:** The theoretical framework and implementation are specific to soft prompt tuning. The paper mentions LoRA adapters (used by FedBiOT) but provides neither theoretical nor empirical validation for parameter-efficient methods beyond soft prompts. This is a significant practical limitation given LoRA's prevalence in fine-tuning practice.
-
-- **Apples-to-oranges adapter comparison:** Table 7 shows LLEOT uses soft prompts (7.6K-15.4K parameters) while OT/CRaSh baselines use their original adapter format (187-403M parameters). While the paper correctly reports adapter sizes, the accuracy comparison confounds method contributions with adapter expressivity differences. The paper should clarify whether the baselines were re-implemented with comparable soft prompts, or whether the comparison is fair as-is.
-
-- **Missing FedBiOT baseline:** FedBiOT is cited in the introduction as a direct extension of OT to federated settings and explicitly uses LoRA adapters—yet it is absent from Table 1. This is a notable omission given its relevance to the same privacy problem.
-
-- **Unexplained performance anomalies:** On WebQuestions with Llama-3.2 (DR=0.5), LLEOT achieves only 15.45% accuracy versus OT's 23.90%—a substantial gap not discussed. Similarly, CPL values of 0.00% (e.g., WebQs with Qwen2) suggest zero correct predictions; the paper should explain whether this reflects successful capability suppression or a different phenomenon.
-
-- **No statistical uncertainty reported:** Results claim averaging over three runs without standard deviations. Given soft prompt optimization's known variance, confidence intervals are needed to assess significance of differences like 33.87 vs 33.60.
+- **Theoretical claims exceed actual guarantees:** Theorem 1 establishes gradient preservation and perplexity amplification under the exact condition $L_E(P; x) = L_M(P; x) + H \ \forall P, x$ (Eq. 6). However, the training objective (Eq. 7) only approximately enforces this via sampled proxy prompts $P' \sim \mathcal{N}(\mu, \sigma^2)$ on the elevation dataset $X_e$. The paper does not empirically verify that gradient alignment holds on downstream data $D_p$, whose distribution differs from $X_e$ and whose prompts are initialized randomly and optimized task-specifically. This gap between the idealized condition and practical optimization is not analyzed.
+- **Scope limited to soft prompts despite claims of generality:** The introduction states LLE is "applicable to various types of adapters" and Theorem 1 is framed generally, yet all experiments use soft prompts only. Extending the constant-margin mechanism to weight-based adapters (e.g., LoRA) is non-trivial since the gradient relationship would differ. The practical impact is thus narrower than claimed.
+- **Missing statistical uncertainty:** The paper states results are "averaged over three experimental runs" (Section 5.2) but reports no standard deviations. Several accuracy differences between methods are within 1% (e.g., Table 1, Qwen2 at DR=0.2: Ours=33.87 vs. OT=33.80 on OBQA), making significance unclear.
+- **CPL > 100% anomalies unexplained:** Table 1 shows CPL values exceeding 100% (e.g., OT on WebQs for Qwen2 at DR=0.2: 220.95%), meaning the emulator outperforms the original model on zero-shot accuracy. The paper does not discuss this counterintuitive result or its implications for metric validity.
+- **Limited task diversity:** All four benchmarks (OBQA, SIQA, ARC-c, WebQs) are multiple-choice QA tasks. The framework's effectiveness on generative tasks (summarization, open-ended QA), instruction-following, or multi-step reasoning remains unverified.
+- **No empirical gradient alignment analysis:** Given that the theoretical guarantee rests on an idealized condition, an empirical study of gradient cosine similarity between $\nabla_P L_E$ and $\nabla_P L_M$ during downstream training would substantially strengthen the claims. This experiment is absent.
+- **Proxy prompt distribution sensitivity unanalyzed:** CPKD samples proxy prompts from $\mathcal{N}(0, \sigma^2)$ with $\sigma=20$ "determined experimentally." If downstream prompts at convergence lie outside this distribution's support, neither CPKD alignment nor LLE constraints would apply. No coverage analysis is provided.
+- **Computational overhead unreported:** Emulator construction via CPKD and LLE requires forward/backward passes through the original model on distillation and elevation datasets. Wall-clock time, FLOPs, or memory footprint for this one-time cost are not reported.
 
 ## Nice-to-Haves
 
-- **Proxy prompt standard deviation (σ) ablation:** σ=20 is set experimentally without investigation. Since both CPKD and LLE depend on sampling P' from this distribution, understanding sensitivity to σ would strengthen the method's robustness claims.
-
-- **Out-of-distribution gradient alignment verification:** Measure cosine similarity between ∇_P L_E and ∇_P L_M specifically on downstream private data D_p, not just elevation data X_e. This would empirically validate the key theoretical assumption.
-
-- **Attacker fine-tuning robustness:** Test whether an adversary can restore emulator capability by fine-tuning on public data. Current zero-shot perplexity evaluation doesn't capture this realistic attack vector.
+- Evaluate on generative tasks (e.g., summarization, open-ended QA) to demonstrate broader applicability beyond multiple-choice formats.
+- Extend to weight-based adapters (LoRA) to substantiate the claimed general applicability.
+- Analyze gradient cosine similarity between emulator and original model during downstream tuning to empirically validate the theoretical claim.
+- Report standard deviations and conduct statistical significance tests across experimental runs.
+- Discuss adversarial robustness of CPL—whether few-shot prompting or model distillation from emulator outputs can circumvent the privacy protection.
 
 ## Removed Points
 
-- **"CPL exceeding 100% is a metric bug"**: This is expected behavior—CPL is a ratio, and emulators can occasionally outperform original models on specific tasks due to compression effects or initialization. The paper correctly states "below 100% means protection is in effect."
+*These points are flagged to be removed, treat them with caution*
 
-- **"Random baseline CPL being high is problematic"**: This reflects task-specific random-chance baselines (multiple-choice with 4-5 options) and is mathematically expected when both models perform poorly.
-
-- **"Adaptive attacks by subtracting H from loss"**: This is beyond the paper's threat model, which focuses on misuse through inference capability, not reverse-engineering the protection mechanism.
-
-- **"Theorem 1 is just calculus—adding constant doesn't change gradient"**: While mathematically elementary, the theorem's value lies in connecting the loss margin to perplexity amplification (PPL_E = e^H · PPL_M), which is non-trivial and empirically meaningful.
-
-- **"Should test on generation/summarization tasks"**: The paper scopes to multiple-choice QA, which is reasonable for a focused contribution. Extension to other task types is future work.
-
-- **"Missing theoretical bound on gradient approximation error"**: While valuable, this is an incremental improvement suggestion rather than a fundamental flaw. The empirical results (Figure 4, Table 2) provide practical evidence of the method's effectiveness.
+- **"Theorem 1 is trivial/low novelty"**: While mathematically straightforward (constant offsets preserve gradients by definition), the insight is valuable and correctly applied. Mathematical simplicity does not diminish practical contribution.
+- **"Models too small (1.5B-3B), need ≥7B evaluation"**: The model scales tested are reasonable for ICLR; many accepted papers use similar sizes. Scaling studies are a nice-to-have, not a core flaw.
+- **"Missing comparison to FedBiOT and FedPEAT"**: These are mentioned as related work. While additional baselines would strengthen the paper, the comparison to OT and CRaSh (the core OT methods) is sufficient for evaluating the main contribution.
+- **"Ethics statement missing discussion of failure modes"**: The ethics statement appropriately addresses the motivation and intended use. Detailed failure mode analysis belongs in the limitations section, not ethics.
+- **"CPL metric lacks formal privacy bounds"**: CPL is a practical metric for this specific threat model. Formal differential privacy bounds are a different approach entirely and outside the paper's stated scope.
 
 ## Novel Insights
 
-The paper's key insight is that privacy-preserving emulator construction need not abandon useful gradient information. Prior methods either preserve both inference capability and gradient structure (OT, CRaSh) or destroy both (random initialization). LLEOT demonstrates that loss landscape geometry—specifically, the gradient field—can be decoupled from inference capability through a controlled elevation strategy. The theoretical connection between the loss margin H and perplexity amplification factor e^H provides practitioners with a principled knob for trading capability degradation against utility preservation. This separation of concerns (destroy inference, preserve gradients) is a genuinely novel contribution to the privacy-preserving ML toolbox.
+The core insight—that loss landscape elevation cleanly separates adapter utility from emulator capability—represents a principled alternative to heuristic capability destruction methods. The paper reveals an underexplored tension in privacy-preserving ML: protecting IP from authorized-but-untrusted parties (data owners) differs fundamentally from protecting against external adversaries. The CPL > 100% anomalies, if investigated, might reveal interesting interactions between compression, distillation, and task distributions that could inform future emulator design. Additionally, the CPKD approach to aligning continuous prompt spaces is a genuine contribution that could generalize beyond this specific application.
 
 ## Suggestions
 
-1. **Add a paragraph discussing approximation error:** Acknowledge that the training objective only approximately achieves the functional form L_E ≈ L_M + H, and discuss conditions under which gradient alignment holds on downstream prompts (e.g., smoothness assumptions, distribution overlap between proxy prompts and fine-tuned prompts).
-
-2. **Report standard deviations:** Add confidence intervals to Table 1 to enable readers to assess statistical significance.
-
-3. **Discuss the WebQuestions anomaly:** Add brief analysis of why performance drops on this specific task/model combination and whether it indicates limitations of the approach.
-
-4. **Clarify adapter comparison fairness:** Either re-run baselines with soft prompts for fair comparison, or explicitly justify why comparing different adapter families is methodologically sound.
-
-5. **Expand CPL discussion:** Acknowledge that CPL is a heuristic metric capturing only one threat vector, and discuss what formal privacy guarantees might complement it (e.g., indistinguishability from random under specific attack models).
+- **Empirical gradient analysis:** Add a figure showing cosine similarity between $\nabla_P L_E$ and $\nabla_P L_M$ across downstream training iterations to validate that the theoretical preservation holds in practice.
+- **Explain CPL > 100% cases:** Investigate and discuss why emulators sometimes outperform original models on zero-shot tasks, and whether this affects metric interpretation.
+- **Add convergence analysis:** Report whether elevated loss landscapes affect prompt tuning convergence speed or stability compared to standard OT.
+- **Report computational cost:** Add wall-clock time and memory requirements for CPKD and LLE phases to clarify practical deployment overhead.
+- **Analyze loss margin drift:** Visualize $L_E(P) - L_M(P)$ during downstream optimization to show whether the fixed margin $H$ is maintained or deteriorates on unseen data.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 2.0, 4.0]

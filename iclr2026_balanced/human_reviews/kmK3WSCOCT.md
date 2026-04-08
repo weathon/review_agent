@@ -1,0 +1,160 @@
+## Human Reviewer 1
+
+### Summary
+The paper studies in-context learning in Mamba-2 using Markov Chains, and shows an interesting finding of a single layer Mamba-2 model being able to very closely track the performance of the optimal in-context Laplacian smoothing estimator. The paper contains several experiments and ablations that focus on comparing a one layer Mamba-2 model to a 1 and 2 layer Transformer, specifically focusing on the Convolution part of the overall architecture as an important piece. The paper also presents several theoretical insights which map well to the observed results.
+
+My review comes from viewing the paper from the lens of someone familar with the empirical results with larger scale Mamba-2 models and how they relate to Transformers at the whole model (not necessarily one or two layer wise) level.
+
+Overall, I found the paper technically sound and addressing a relevant question to the Mamba line of models. I am slightly learning towards accepting the paper, but do have certain comments and questions that withhold me from a stronger rating (see below).
+
+### Strengths
+- I found the idea interesting! Thank you for sharing this from a perspective that is intriguing and different to the typical “we ran a bunch of experiments on the same benchmarks and boosted performance by X%” kind of LM study. It is positive to see Mamba models being connected with optimal statistical estimators.
+
+- The paper is well written. Even though it may not be easy to read on a cursory look (I needed to go back and forth to see symbols and notation frequently), it does contain all the information necessary to understand it. The paper also introduces the core idea behind Mamba-2 well.
+
+- In addition to the well motivated experiment operating on random Markov chains sampled from the vocabulary, the authors also repeat the same exercise on a true token distribution from a dataset like WikiText103 that would be more representative of the real world token transition probabilities. Modeling these “biased” next-token probabilities seems like the essence of language modeling and in-context learning to me, and I find it positive that we see perplexity results on real text too.
+
+- Overall, I found the experiments to be well designed and aligned well with the theoretical insights.
+
+### Weaknesses
+- For the non-Markovian setting in Section 5, (ppl on WikiText103 being the only result), I feel like the evaluation could have been a bit more diverse and rigorous. This is the setting that I assume most practitioners (for better or worse) would be interested in, and it may have been useful to do this over a slightly wider range of model sizes (number of layers, dimensionality etc) to help build better intuition.
+
+- There is a lot of related work on architectures that do sub-quadratic attention, e.g. the original Linear Attention work, or related recurrent/State Space style models like DeltaNet, RWKV etc. While I understand the specific focus on Mamba-2 in this work (which in itself needed a lot of analysis), the inclusion of 1-2 other related methods in the comparison (e.g. transformer with Linear Attn in addition to the 1 and 2 layer Transformer) would have strengthened my evaluation of the paper.
+
+### Questions
+- Re: the importance of convolution, I found these two related comments by the Mamba-2 author on their official implementation:
+https://github.com/state-spaces/mamba/issues/525#issuecomment-2290739534
+and 
+https://github.com/state-spaces/mamba/issues/433#issuecomment-2199557446
+Specifically, “conv1d helps a bit on perplexity: e.g. at 360M on 7B tokens on the Pile, using GPT2 tokenizer, w conv1d we get around 8.6 perplexity and without conv1d is around 8.9 ppl.”. This represents a slight drop in overall model performance but not as significant as the one seen in the authors experiments in the paper. Do you have any theory about why this may be?
+
+- In the Mamba-2 paper, the original authors illustrate the duality between Transformers and SSM’s. The Mamba-2 layer itself can be seen as a special case of a Transfomer (and vice versa) under certain assumptions and has generally very similar training characteristics. Given this duality, how do the authors feel about the presented results showing that a 1-layer Transformer is significantly worse at ICL than a one layer Mamba?
+
+- Do you have any speculation about how your findings may change / evolve over multiple stacked layers as is the typical case in most models?
+
+- For larger scale practical deployments of Mamba models, do you think we should expect better in-context learning results generally compared to Transformers?
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper studies the in-context learning abilities of the Mamba (S6) architecture, as a cheaper alternative to transformers (specifically, their quadratic attention cost in the sequence length). To study this problem, the authors consider finite-state k-order Markov Chains, and evaluate Mamba and Transformers in their ability to output the transition probabilities of the optimal Laplacian smoothing estimator in-context. Empirically, the findings include Mamba fitting the Laplacian smoothing estimator with only 1 layer, and convolution being the main ingredient in this ability. Furthermore, the authors show that a simplified Mamba variant can theoretically encode all the bits needed for storing the Laplacian smoothing operator with specific choices of its parameters.
+
+### Strengths
+- The paper is clearly written and well motivated.
+- The methodology considered in this study is sound and made explicit: Building on the empirical observation that the convolution is the key ingredient in the ICL abilities of Mamba, the authors construct a minimal architecture that allows a theoretical analysis all while keeping key similarities with the original architecture. This allows the derivation of sound theoretical results characterizing Mamba's ability to learn in-context, as function of the choices in parameters and the hidden dimension.
+- Given equivalences between language modeling, and k-order Markov Chains (e.g. n-gram models which previously had been the standard in language modeling), I believe that the insights included in this study are an important step towards building more efficient architectures in general, and in Language modelling in particular.
+
+### Weaknesses
+- Theorem 1 is insightful in proving the in-context ability of Mamba. However, in my understanding it only tackles the model misspecification problem, in the sense that it proves that the optimal solution can be represented by the model (zero approximation error). I think it would be interesting to discuss the intersections between the theoretically chosen parameters that achieve the result in Theorem 1, and those actually obtained by optimizing Eq 3 on a given training set (with or without distribution set) starting from standard random initializations of these parameters. This is partially done, with the observation that $a_t \approx 1$ at convergence, but can also be extended to other parameters (for instance, the count-independent term in Eq 5 that need to sum up to $\beta \mathbf{1}$).
+- The natural language modeling experiments only validate the key role of the convolution in Mamba. I think that even the theoretical results (especially Th 2) can also be validated through experiments. For instance, by generating language from an n-gram model, one can show that a given hidden dimension size of Mamba is strictly needed in order to be able to perform in-context learning tasks in the generated language corpus. Of course this comes with challenges related to the exponential dependence on the Markov Chain order, but having a discussion around this would be a nice addition to the paper.
+
+### Questions
+- Did the authors check that 2 or more layers Mamba achieves the same result as 1-layer Mamba in the considered experiments? Or in other words, what is the impact on performance if the model is over-parameterized with respect to the bits needed to encode the Laplacian smoothing estimator?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+### Rating
+8
+
+### Confidence
+2
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This paper builds upon the previous Markov-ICL framework to empirically and theoretically investigate the ICL ability of Mamba architecture.
+Specifically, they design experiments to train Mamba for next-token prediction loss on random Markov chains, and find one layer Mamba match the performance of the statistical optimal estimator, and convolution layer play an important role to ahcieve this performance. Theoretically, the authors provide a constructive proof showing how Mamba's components work in concert to implement the laplace smoothingy: convolution identifies the $k^{th}$-order transition, recurrence (with $a_t \approx 1$) accumulates all transition counts into the hidden state, and selectivity reads out the specific counts needed for the current prediction. Finally, the paper proves a lower bound showing that for Mamba the hidden dimension $d$ must scale exponentially with the Markov order $k$.
+
+### Strengths
+1. This is the first work to investigate theoretically the ICL ability of the Mamba architecture.
+
+2. The paper is well-written; the logic and arrangement are easy to follow, and the author provides enough background in the main text to help readers understand the scientific question being studied. It starts from an empirical observation, finds convolution plays an important role, and then echoes this importance in the theoretical analysis.
+
+3. The paper is perfectly designed and written to shed light not only on the theoretical analysis but also on the real-world application and the Mamba architecture. The theory echoes the key component and mechanism in the original Mamba paper (convolution and the selective mechanism) and is supported by experiments on synthetic data.
+
+### Weaknesses
+1. One possible weakness is that, to the best of our current understanding, Mamba has not demonstrated the strong ICL ability seen in large transformer-based language models. While this is not a weakness of the theoretical analysis itself, Mamba's actual ICL capability in real-world applications will influence the impact of this theoretical work on the community.
+
+2. The real-world experiment is only on the language modeling task (e.g., perplexity on WikiText-103) instead of a dedicated, real-world ICL experiment, which limits the generality of the findings.
+
+### Questions
+1. Does the result in Theorem 2 imply that the transformer is more powerful than Mamba in in-context learn the complex task (higher order Markov process)? Can we conclude transformer is more parameter-efficient than Mamba when solving complex tasks? Do authors have any insight into a way to design a Mamba block that sidesteps this trade-off?
+
+2. In the theoretical proof, the author omits the gating mechanism in Mamba, but later found in the NLP task that gating is an important component. If we want to add gating back to theoretical analysis, how does it interact with the "counting" mechanism described in Theorem 1?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 4
+
+### Summary
+In this paper, the authors intended to provide theoretical understanding on the learning capability of MAMBA on Markovian data. The authors are able to demonstrate through a constructive proof that Mamba is able to efficiently learn the
+in-context Laplacian smoothing estimator even with just one-layer, thus ensure both Bayes and minimax optimality through the properties of the Laplacian. In addition, the authors established the lower bound on the hidden dimension required for the representing the optimal estimator.
+
+### Strengths
+The paper is very well-written, the basic concepts and main steps in the arguments are clearly presented and explained. 
+
+The results presented in the paper is valuable to the understanding of Mamba.
+
+### Weaknesses
+The optimality of the Laplacian estimator is based on the Dirichlet distribution assumption, it will be helpful to see the impact of the assumption. 
+
+It would be helpful that the quality of the lower bound presented in Theorem 2 can be addressed.
+
+### Questions
+My main question is related to the Dirichlet distribution assumption and its relation with Laplacian estimator, How much do these assumptions affect the generality of the results.
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+3

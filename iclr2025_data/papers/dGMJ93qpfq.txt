@@ -1,0 +1,1229 @@
+# A PATCH LEVEL PERSPECTIVE OF PROMPT TUNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Prompt tuning is an efficient way to adapt large foundation models. It introduces
+learnable prompts with the input data tokens, offering a practical alternative to
+full model finetuning. However, when prompts are trained on base/target tasks,
+they often overfit, leading to reduced performance on novel, unseen tasks. To
+address this limitation, various techniques leverage global image semantics to
+improve accuracy on unseen tasks while maintaining performance on base tasks.
+However, they often overlook the rich fine-grained local information that could be
+crucial for capturing finer semantics and improving generalisation. In this work,
+we propose a modular approach to prompt tuning that leverages local semantics
+by incorporating patch-level information, representing the first integration of such
+semantics in this context. Specifically, we integrate patch-level information across
+vision, text, and predictions through three consistency mechanisms: 1) Patch-based
+consistency loss that aligns patches from the prompted input image with those
+from the same image processed by a frozen model, while also enforcing inter-view
+consistency by applying the loss across different views, capturing fine-grained
+regional dependencies and improving vision representation quality; 2) Text prompt
+consistency loss, where view-specific text prompts are tailored and regularised to
+maintain coherence across views; 3) Vision features for each view, enriched with
+patch-level information, are used to generate predictions based on view-tailored text
+features. These predictions are then regularised across views, complementing the
+earlier consistency mechanisms and contributing to a cohesive overall framework.
+Our approach outperforms existing methods across multiple benchmarks, including
+base-to-novel generalisation, domain generalisation, and cross-dataset evaluation.
+These results underscore the potential of integrating fine-grained details for more
+robust and adaptable prompts, marking a step forward in foundation model tuning.
+
+
+1 INTRODUCTION
+
+
+Foundation models, such as CLIP (Radford et al., 2021), have demonstrated impressive zero-shot
+performance across a wide range of tasks, showcasing their adaptability and potential for general
+applications. However, when it comes to task-specific performance, these models often fall short,
+compared to specialised models. Fine-tuning foundation models to obtain task-specific models can
+address this gap, but it is computationally expensive, time-consuming, and impractical when we have
+only limited data. To overcome these limitations, prompt tuning has emerged as an efficient alternative
+for adapting large foundation models like CLIP (Zhou et al., 2021). This method introduces learnable
+prompts to make minor adjustments, while keeping the rest of the model frozen, drastically reducing
+the computational overhead (Zhou et al., 2021; 2022; Zhu et al., 2022; Yao et al., 2023; Khattak et al.,
+2022; Derakhshani et al., 2022; Khattak et al., 2023; Roy & Etemad, 2023; Zhang et al., 2023).
+
+
+Despite its efficiency, prompt tuning tends to overfit on base classification task which includes a
+subset of base classes, and diminishes generalisation to novel, unseen tasks. Models fine-tuned with
+prompts can underperform on unseen tasks, compared to CLIP’s original zero-shot capabilities (Zhou
+et al., 2022). This overfitting is due to a loss of generalisation, where the model becomes too tailored
+to the specific training data, limiting its broader applicability. To address this issue, various strategies
+have been proposed, such as generating text prompts conditioned on image features (Zhou et al., 2022;
+Zang et al., 2022), treating prompt learning as a Bayesian inference problem (Derakhshani et al.,
+2022), aligning prompt updates with gradients from non-prompted predictions (Zhu et al., 2022),
+and applying consistency-based regularisation to the model’s output features and logits (Khattak
+
+
+1
+
+
+et al., 2023; Roy & Etemad, 2023). Among these, multi-modal frameworks that regularise output
+features and logits with zero-shot CLIP, using _ℓ_ 1-norm or cosine similarity (Khattak et al., 2023; Roy
+& Etemad, 2023), have shown notable success in improving generalisation.
+
+
+Existing methods, such as PromptSRC and CoPrompt, focus primarily on global text and vision features, overlooking the rich local information in image patches. Self-supervised frameworks (Yun et al.,
+2022; Li et al., 2022; Atito et al., 2022) incorporate patches but primarily optimize patch-level losses
+without addressing cross-modality consistency. Adapter based methods, such as CoPrompt (Roy &
+Etemad, 2023), also fail to capture rich patch-level details for vision feature generation. In contrast,
+our approach integrates patch-level features across multiple components, leveraging inter-view and
+intra-patch-level consistency to address finer-grained variability beyond global consistency. By using
+patches for both vision feature, text and logit regularization and conditioning text prompts, our
+method improves feature generation and class predictions, enhancing generalization.
+
+
+Specifically, we introduce a novel patch-level consistency loss that enforces both intra-view and
+inter-view consistency, aligning patch representations across different views. While prior works focus
+on global consistency, we apply intra-view regularisation to the prompted patch features from the
+anchor view with zero-shot anchor patches. In addition to promote further consistency and to design
+a non-trivial regularisation, we enforce inter-view consistency which maintains patch consistency
+across different views of an image by adding an extra guidance for generalisable prompts. An extra
+augmented view is generated and patch consistency loss is applied with most similar zero-shot anchor
+patches. Here, both the anchor and augmented prompted patch features are projected through a
+convolutional layer to obtain better feature representations. This combined intra-view and inter-view
+consistency ensures robust prompt tuning and significantly enhances generalisation.
+
+
+In addition to regularizing the vision branch, we also focus on the text branch by leveraging local
+information and inter-view variations. To achieve this, we generate view-tailored text prompts based
+on view-specific clustered patch features. Unlike CoCoop (Zhou et al., 2022), which relies on global
+semantics for text prompt generation, our approach incorporates local patch features for a more
+refined prompt. Finally, view-specific text features are generated from each of the view-tailored
+prompts. To further regularize the view-tailored text prompts, we apply an _ℓ_ 1-loss between the
+anchor-view and augmented-view text features, with a stop-gradient applied to the anchor-view
+output. This ensures inter-view consistency in the text branch and promotes the generalizability of
+the learned text prompts.
+
+
+Lastly, patch-level information is integrated with vision features by averaging projected patch tokens
+and combining them with class token features to produce enhanced vision outputs. These outputs are
+used to compute logits via a dot product with view-specific text features, further regularized with
+_KL_ -Divergence between anchor and augmented view logits, applying a stop-gradient to the anchor
+view.
+
+
+Our **P** atch- **A** ware **P** rompting (PAP) framework achieves superior performance over previous methods
+across diverse tasks, including base-to-novel generalization, domain generalization, and cross-dataset
+evaluation. By seamlessly integrating patch-level information and addressing both intra-view and interview variations, PAP enhances generalization and robustness in prompt tuning. While PAP includes
+multiple components, each is specifically designed to address distinct challenges in leveraging patchlevel information, with their collective effectiveness validated through extensive ablation studies.
+This ensures a reliable and efficient pipeline for adapting foundation models to downstream tasks.
+
+
+2 RELATED WORK
+
+
+Foundation models based on image-text alignment have demonstrated strong zero-shot performance,
+but finetuning them is computationally expensive and often leads to reduced generalisation (Radford
+et al., 2021; Yao et al., 2021; Jia et al., 2021; Zhai et al., 2021; Yuan et al., 2021). As a result, many
+applications leverage these models as feature extractors with task-specific components (Vidit et al.,
+2023; Yu et al., 2023; Lin et al., 2023; Yi et al., 2023; Yun et al., 2023; Bousselham et al., 2023).
+Prompt learning offers an efficient alternative by adapting vision-language models with task-specific
+prompts while keeping the base model frozen, thus avoiding the challenges of full finetuning (Zhou
+et al., 2021). However, prompts trained on base classes tend to generalise poorly to unseen classes.
+To address this, several methods apply regularisation techniques—such as loss constraints, input
+
+
+2
+
+
+conditioning, or different strategies/components (Zhou et al., 2022; Khattak et al., 2023; Roy &
+Etemad, 2023; Derakhshani et al., 2022)—to improve generalisation and ensure better adaptation
+across both base and novel classes.
+
+
+CoCoop (Zhou et al., 2022), UniVL (Zang et al., 2022), and MaPLe (Khattak et al., 2022) regularise
+prompts by conditioning inputs with global information. CoCoop uses vision features to condition
+text prompts, UniVL jointly learns vision and text prompts via a small neural network, and MaPLe
+synchronises vision and text prompts across layers. In contrast, our method conditions text prompts
+at the input layer using rich patch information and regularises output features with a loss function.
+PromptSRC (Khattak et al., 2023) and CoPrompt (Roy & Etemad, 2023) focus on feature and prediction regularisation with zero-shot CLIP knowledge. PromptSRC regularises global embeddings and
+logits while aggregating prompts across epochs, whereas CoPrompt enhances feature learning with
+an adapter (Gao et al., 2021). Our approach emphasises finer patch-level feature regularisation and
+inter-view consistency. Independently developed, Long et al. (2024) uses clustered patch tokens for
+text prompts but lacks inter-view consistency and patch integration into predictions, underperforming
+compared to PromptSRC. Prograd (Zhu et al., 2022) and Bayesian Prompt (Derakhshani et al., 2022)
+propose different strategies for prompt regularisation. Prograd (Zhu et al., 2022) updates prompts
+only when their gradients align with zero-shot knowledge, while ProDA (Lu et al., 2022) enforces a
+Gaussian distribution on prompts to reduce bias. Bayesian Prompt (Derakhshani et al., 2022) views
+prompt tuning through a Bayesian lens to improve generalisation.
+
+
+In contrast to these regularisation methods, recent studies focus on improving base class performance (Zhang et al., 2023) or distilling knowledge from a larger teacher model (Li et al., 2024).
+DePT (Zhang et al., 2023) decouples the learning of base and novel classes by adding a classification
+head specifically for base classes, improving base class performance while maintaining results on
+novel classes. PromptKD (Li et al., 2024) distills a larger CLIP-L/14 model into a smaller CLIP-B/16
+model, enhancing overall performance. CasPL Wu et al. (2024), utilizing the larger CLIP-L/14 model
+for distilling adaptable prompts, follows a two-stage process: learning adaptable prompts via unsupervised learning and training boosting prompts using prior prompt-tuning methods. Orthogonally,
+MetaPrompt (Park et al., 2024) applies meta-learning for prompt tuning by learning a regulariser.
+Unlike these methods, we maintain the existing training pipeline, avoid distilling from larger models,
+and focus on improving performance through loss functions and by exploiting fine-grained details.
+
+
+Our Patch-Aware Prompting (PAP) differs from existing regularisation techniques by incorporating
+patch-level information at multiple stages. We regularise vision embeddings at the patch level
+across both similar and different views for more effective regularisation. Additionally, we use
+patch information to generate view-specific text prompts, which are further regularised to maintain
+consistency across views. Finally, we enhance the vision embeddings with patch-level information
+while also regularising logits at the inter-view level. This design allows our model to perform
+competitively across several evaluation benchmarks.
+
+
+3 METHODOLOGY
+
+
+We propose a novel prompt tuning framework that leverages rich, local contextual information to
+maintain the generalisability of CLIP to novel tasks, while improving performance on base tasks.
+Our framework is a modular component that can be applied to previous global prompt consistency
+methods (Khattak et al., 2023; Roy & Etemad, 2023; Zhang et al., 2023). By incorporating patchlevel information, we design components that further regularize the prompt learning process. Unlike
+earlier approaches that rely on global feature embeddings (Khattak et al., 2023; Roy & Etemad,
+2023) or architectural modifications (Zhou et al., 2022; Zhu et al., 2022) to enhance generalisability,
+our method focuses on local information. Fig. 1 depicts the overall architecture of the proposed
+Patch-Aware Prompting framework.
+
+
+First, we introduce a novel vision patch regularisation loss. This loss regularizes the patch outputs
+generated by our framework with zero-shot predictions from CLIP (Radford et al., 2021), ensuring
+consistency at the patch level. To handle inter-view variance among different crops typically sampled
+during training, we add another view called the augmented view of the image and apply a patch loss
+using zero-shot predictions from the anchor view. This ensures consistent representation with CLIP,
+both within similar views and across different views of an image. To maintain inter-view consistency
+at the textual level and incorporate rich local context, we generate view-specific text prompts for both
+
+
+3
+
+
+Figure 1: Patch-Aware Prompting (PAP) Framework: Patch information from anchor and augmented
+views is integrated into (A)vision, (B)text branches and (C)predictions. View-tailored text prompts
+are conditioned on patch clusters, with intra-view and inter-view losses applied to vision patches and
+inter-view consistency losses applied to text prompts and patch enhanced predictions.
+
+
+the anchor and augmented views. This process differs from previous frameworks that rely on global
+image features (Zhou et al., 2021; Zang et al., 2022) by utilising patches that contain fine-grained
+details. We use the Voronoi algorithm (Voronoi, 1908) to cluster patch features, creating biases that
+guide the text prompt initialization. We further regularise these prompts using a text loss that ensures
+consistency between the text features generated from the anchor and the augmented prompts. This
+alignment across view-specific prompts improves generalisability.
+
+
+Lastly, we combine the patch-level information to generate enhanced vision features. The final vision
+feature is a combination of the class token embedding and the average of the patch token embeddings.
+This ensures that patch-level information is included, providing a comprehensive representation of the
+image. We then compute the logits by taking the dot product of the enhanced vision and text output
+features. To maintain consistency not only at the feature level but also in class predictions across
+views, we regularize the logits using a _KL_ -divergence loss between the predictions from anchor and
+augmented views. We provide further details of our architecture in the following sections along with
+preliminaries.
+
+
+3.1 PRELIMINARIES
+
+
+Let _f_ and _g_ represent the image and text encoders of CLIP, respectively. The input image **X** _∈_
+**R** _[CH][×][H][×][W]_ is divided into _M_ patch tokens after the projection layer. The vision transformer encoder
+receives the input **X** _in_ = _{ecls, e_ 1 _, . . ., eM_ _}_, consisting of the class token _ecls_ and the patch tokens.
+After passing through the vision encoder _f_, the class and patch features are **V** **[¯]** _∈_ **R** _[d]_ and **P** **[¯]** _∈_ **R** _[M]_ _[×][d]_ .
+The class label _cK_, from the set _{_ 1 _, . . ., C}_, is wrapped in the text template "a photo of a class
+label". The input to the text encoder, after embedding and adding [SOS] and [EOS] tokens, is
+**Y** _in_ = _{y_ [ _SOS_ ] _, y_ 1 _, . . ., ck, y_ [ _EOS_ ] _}_, where _ck_ and _{yl}_ _[L]_ _l_ =1 [are the embeddings for the class label]
+and text template. The zero-shot text features for class label _k_ are **T** **[¯]** _k_ _∈_ **R** _[d]_, with **T** **[¯]** = _{_ **T** **[¯]** _k}_ _[K]_ _k_ =1 [.]
+The zero-shot logits are calculated as _lgt_ = _sim_ ( **T** **[¯]** _,_ **V** **[¯]** ) _/τ_, where _τ_ is the temperature and _sim_ ()
+denotes the cosine similarity. The prediction for class label _k_ is given by: - _Cc_ exp(=1 [exp(] _sim_ _[sim]_ ( **T** **[¯]** _k_ [(] _,_ **[T][¯]** **V** **[¯]** _[c]_ ) _[,]_ _/τ_ **V** **[¯]** )) _/τ_ ) _[.]_
+
+
+Prompt learning involves adding learnable prompts to either the text or image encoder (Zhou et al.,
+2022; 2021; Roy & Etemad, 2023; Khattak et al., 2023). Let _Gt_ = _{gt_ [1] _[, g]_ _t_ [2] _[, . . ., g]_ _t_ _[nt][}]_ [and] _[G][v]_ [=]
+_{gv_ [1] _[, g]_ _v_ [2] _[, . . ., g]_ _v_ _[nv][}]_ [ represent the text and vision prompts, where] _[ nt]_ [ and] _[ nv]_ [ denote the number of text]
+and vision prompts, respectively. The inputs to the vision and text encoders with these trainable
+prompts are **X** _[p]_ _in_ [=] _[ {][G][v][, e][cls][, e]_ [1] _[, . . ., e][M]_ _[}]_ [ and] **[ Y]** _in_ _[p]_ [=] _[ {][y]_ [[] _[SOS]_ []] _[, G][t][, c][k][, y]_ [[] _[EOS]_ []] _[}]_ [.] [In deep prompting,]
+additional prompts are introduced at each transformer layer, replacing the previous layer’s prompts.
+The vision-prompted class and patch features, after passing through the vision encoder, are **V** _∈_ **R** _[d]_
+and **P** _∈_ **R** _[M]_ _[×][d]_, and the text-prompted features **T** _k_ _∈_ **R** _[d]_ are generated by the text encoder. The
+
+
+4
+
+
+Our Losses
+
+
+training is supervised using the cross-entropy loss:
+
+_Lce_ = _−log_             - _Cexp_ ( _sim_ ( _Tk, V_ )) _/τ_ _._ (1)
+_c_ =1 _[exp]_ [(] _[sim]_ [(] _[T][c][, V]_ [ ))] _[/τ]_
+
+Additionally, PromptSRC (Khattak et al., 2023) defines global-level losses on features and logits:
+
+
+which promotes the consistency between the prompted patches of the augmented view **P** **[ˆ]** _[i]_ _aug_ [and]
+the closest zero-shot anchor patches **P** **[ˆ]** _[i]_ _an_ [.] [Our total patch consistency loss is the sum of both the]
+inter-view and intra-view consistency losses:
+_L_ patch-con = _L_ intra-view + _L_ inter-view _._ (8)
+
+
+5
+
+
+_d_
+
+- _|_ _**T**_ **[¯]** _−_ _**T**_ _|._ (2)
+
+
+_i_ =1
+
+
+_L_ SCL-image =
+
+
+_d_
+
+- _|_ _**V**_ **[¯]** _−_ _**V**_ _|,_ _L_ SCL-text =
+
+
+_i_ =1
+
+
+_L_ SCL-logits = _KL_ -Div(sim( _**T**_ **[¯]** _,_ _**V**_ **[¯]** ) _,_ sim( _**T**_ _,_ _**V**_ )) _._ (3)
+The final loss is a combination of the above loss functions:
+_L_ global = _L_ CE + _L_ SCL-text + _L_ SCL-image + _L_ SCL-logits _._ (4)
+
+
+3.2 PATCHES FOR PROMPT TUNING
+
+
+We incorporate patch information in multiple ways in both the text and vision branches of our
+model. Our framework generates two views: a main view, called the anchor view **Xan**, and an
+augmented view **Xaug** . Let **V** [¯] _an_ _∈_ **R** _[d]_ and **P** [¯] _an_ _∈_ **R** _[M]_ _[×][d]_ represent the zero-shot class and patch
+features for the anchor view, and let **V** [¯] _aug_ _∈_ **R** _[d]_ and **P** [¯] _aug_ _∈_ **R** _[M]_ _[×][d]_ represent the class and patch
+features for the augmented view. The prompted class and patch features for the anchor view are
+**V** _an_ _∈_ **R** _[d]_ and **P** _an_ _∈_ **R** _[M]_ _[×][d]_, respectively, while **V** _aug_ _∈_ **R** _[d]_ and **P** _aug_ _∈_ **R** _[M]_ _[×][d]_ correspond to the
+augmented view. We further project these prompted patch features through a convolution projection
+block to obtain final patch features: **P** **[ˆ]** _an_ = ConvProj( **P** _an_ ) and **P** **[ˆ]** _aug_ = ConvProj( **P** _aug_ ). This
+convolutional projection block consists of two convolutional layers with a kernel size of 3 _×_ 3.
+
+
+**Patch Consistency Loss** : Consistency-guided methods for prompt tuning typically focus on global
+feature consistency (Khattak et al., 2023; Roy & Etemad, 2023). In contrast, we propose a patch-level
+consistency loss that directs the learning trajectory towards better generalization, guided by the patch
+information. We start by introducing a simple loss to ensure consistency between patches from the
+prompted and zero-shot outputs for the same view. For the anchor view, we define an intra-view
+patch consistency loss:
+
+
+_L_ intra-view =
+
+
+_M_
+�(1 _−_ sim( _**P**_ **[¯]** _an_ _[i]_ _[−]_ _**P**_ **[ˆ]** _an_ _[i]_ [))] _[,]_ (5)
+
+_i_ =1
+
+
+which keeps the patches aligned with the original CLIP model, helping prevent catastrophic forgetting.
+
+
+During training, prompt-tuning models crop random image portions. Our goal is to preserve patch
+relationships across crops for better regularization. CoPrompt (Roy & Etemad, 2023) enforces
+global inter-view consistency but ignores patch-level details. FILIP (Yao et al., 2021) focuses on
+image-text alignment but not patch consistency across crops. To address this, we introduce the
+augmented view **Xaug** to ensure patch-level consistency with the anchor view **Xan** . From **Xaug**
+patches, **P** **[ˆ]** _[i]_ _aug_ [(] _[i][ ∈{]_ [1] _[, . . ., M]_ _[}]_ [)][, we identify the closest zero-shot patch in] **[ X][an]** [.] [The closest patch is]
+determined by
+
+crossview_feat( _**P**_ **[ˆ]** aug _[i]_ [) =] _**P**_ **[¯]** an _[j]_ _[,]_ _j_ = arg max sim( _**P**_ **[¯]** aug _[i]_ _[,]_ _**P**_ **[¯]** an _[k]_ [)] _[,]_ (6)
+_k∈{_ 1 _,...,M_ _}_
+
+where the closest zero-shot anchor patch **P** **[ˆ]** _[j]_ _an_ [(] _[j]_ _[∈{]_ [1] _[, . . ., M]_ _[}]_ [)][ corresponds to the zero-shot aug-]
+mented patch **P** **[ˆ]** _[i]_ _aug_ [.] [Using zero-shot outputs to calculate similarity prevents the model from finding]
+an easier learning path, such as having all prompted patches match closely with a single target patch.
+
+
+The final inter-view patch consistency loss is defined as:
+
+
+_L_ inter-view =
+
+
+_M_
+�(1 _−_ sim( _**P**_ **[ˆ]** _aug_ _[i]_ _[,]_ [ crossview_feat][(] _**P**_ **[ ˆ]** aug _[i]_ [)))] _[,]_ (7)
+
+_i_ =1
+
+
+**View-tailored text prompts:** Regularizing text prompts with global vision semantics is crucial for
+strong performance on novel tasks across domains (Khattak et al., 2023; Roy & Etemad, 2023).
+We enhance this by incorporating rich patch-level details. Unique text prompts are generated for
+both the anchor and augmented views. Using class tokens to generate prompts, as in Zhou et al.
+(2022), creates overly similar prompts due to shared information in the tokens and fails to capture
+patch-level details. To address this, we cluster patches as cues for patch-level semantic reasoning in
+the prompts. Unlike the quantized bias in Bhardwaj et al. (2022), we derive prompts from patch-level
+details for more flexible and expressive representations. Instead of a single bias vector for all prompt
+vectors _Gt_ = _{gt_ [1] _[, g]_ _t_ [2] _[, . . ., g]_ _t_ _[nt][}]_ [, we generate individual bias vectors] _[ B]_ [=] _[{][b]_ [1] _[, b]_ [2] _[, . . ., b][nt][}]_ [.] [These]
+are derived by clustering the vision zero-shot patch features _P_ [¯] using the Voronoi algorithm (Voronoi,
+1908) to create _nt_ clusters, each serving as a bias vector for a prompt vector:
+
+_{b_ [1] _, b_ [2] _, . . ., b_ _[nt]_ _}_ = Voronoi_Clustering( _P_ [¯] ) _._ (9)
+
+
+These bias vectors are then added to the prompt vectors to generate the final prompt vectors _G_ [ˆ] :
+
+
+_G_ ˆ = _{g_ ˆ [1] _,_ ˆ _g_ [2] _, . . .,_ ˆ _g_ _[nt]_ _}_ ; _g_ ˆ _[i]_ = _g_ _[i]_ + _b_ _[i]_ _._ (10)
+
+
+This approach provides better prompt regularization at the input level, allowing the finer details
+of the input image to guide the prompt learning process. Let _Ban_ = _{b_ [1] _an_ _[, b]_ [2] _an_ _[, . . ., b][nt]_ _an_ _[}]_ [and]
+_Baug_ = _{b_ [1] _aug_ _[, b]_ [2] _aug_ _[, . . ., b][nt]_ _aug_ _[}]_ [ be the bias vectors generated from the anchor and augmented view]
+patches, respectively. These bias vectors are added to the prompt vectors to produce view-tailored
+prompt vectors _G_ [ˆ] _an_ and _G_ [ˆ] _aug_, corresponding to the anchor and augmented views. These prompts
+are then concatenated with the class label, [EOS], and [SOS] tokens, and passed through the CLIP
+text encoder. The output text features are _Tan_ and _Taug_, corresponding to the view-tailored text
+prompts for the anchor and augmented views. We further project these text features using a text
+adapter (Gao et al., 2021), which consists of two linear layers, to obtain _T_ [ˆ] _an_ = TextAdapter( _Tan_ ) and
+_T_ ˆ _aug_ = TextAdapter( _Taug_ ). This projection aligns the text features with the enhanced vision features
+explained further. To regularize the output features, we develop a loss function that encourages
+similarity between the view-tailored outputs:
+
+
+_L_ view-tailor = _|_ stop_grad( _**T**_ **[ˆ]** _**an**_ ) _−_ _**T**_ **[ˆ]** _aug|_ (11)
+
+
+This promotes inter-view regularization in the text space, complementing the regularization introduced
+in the vision space, which fosters better generalization. Our view-tailored loss, defined in Equation 11,
+is an _ℓ_ 1-loss, where a stop-gradient operation is applied on _T_ [ˆ] _an_ to encourage the augmented view
+text prompt to align more closely with the anchor text prompt.
+
+
+**Improved vision features and logits regularisation:** After regularizing the text and vision branches
+using finer details from patches, we propose leveraging this information to enhance the vision features.
+The class embeddings from the vision encoder, typically used to generate class probabilities, focus
+on a single dominant semantic object. However, patches contain local information that can improve
+the overall feature representation. To achieve this, we propose averaging the patch projections to
+obtain aggregated patch-level information, which is then added to the class-specific vision features to
+generate the final vision features _V_ [ˆ] :
+
+
+_**V**_ **ˆ** = _**V**_ + _α ⋆_ Avg( _**P**_ **ˆ** ) _,_ (12)
+
+
+where _α_ is a scaling factor for the aggregated patch features. The final logits corresponding to the
+prompted inputs are computed by taking the dot product of the vision and text output features. These
+logits are further regularized using _KL_ -Divergence between the logits of the anchor and augmented
+views, which is defined as follows:
+
+_L_ inter-logits = _KL_ -Div(stop_grad(softmax(sim( _**T**_ **[ˆ]** _**an**_ _,_ _**V**_ **[ˆ]** _an_ ))) _,_ softmax(sim( _**T**_ **[ˆ]** _aug,_ _**V**_ **[ˆ]** _aug_ ))) _._ (13)
+
+
+This regularization reduces inter-view variance at the logit level, leading to more generalized features.
+Similar to the view-tailored loss on text embeddings, we apply a stop-gradient operation to the anchor
+logits. The final loss is the sum of all the introduced patch-level losses:
+
+
+_L_ final = _L_ global + _λp ⋆_ _L_ patch-con + _λt ⋆_ _L_ view-tailor + _λl ⋆_ _L_ inter-logits _,_ (14)
+
+
+which includes a global loss applied to both the anchor and augmented views, with _λp, λt, λl_ acting
+as scaling factors for the patch, view-tailored text, and inter-view logit losses, respectively.
+
+
+6
+
+
+Table 1: **Comparison with SOTA methods on base-to-novel tasks** . Best novel, base, HM accuracies are
+underlined; bold indicates improvements over the method with our components. - denotes our reproduction with
+official code and settings.
+
+
+|(a) Average|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>69.34 74.22 <br>CoOp<br>82.69 63.22 <br>Co-CoOp<br>80.47 71.69 <br>KgCoOp<br>80.73 73.60 <br>MaPLe<br>82.28 75.14 <br>CoPrompt* 83.66 76.34 <br>PromptSRC 84.26 76.10 <br>_,→_+ Ours **85.07 77.41 **<br>DePT*<br>85.15 75.73 <br>_,→_+ Ours **85.65 77.29 **|71.70<br> 71.66<br> 75.83<br> 77.00<br> 78.55<br> 79.84<br> 79.97<br> **81.05**<br> 80.16<br> **81.25**|
+
+
+|(b) ImageNet|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>72.43 68.14 <br>CoOp<br>76.47 67.88 <br>Co-CoOp<br>75.98 70.43 <br>KgCoOp<br>75.83 69.96 <br>MaPLe<br>76.66 70.54 <br>CoPrompt<br>77.67 71.27 <br>PromptSRC 77.60 70.73 <br>_,→_+ Ours **78.00 70.96 **<br>DePT<br>78.20 70.27 <br>_,→_+ Ours **78.26 70.90 **|70.22<br> 71.92<br> 73.10<br> 72.78<br> 73.47<br> 74.33<br> 74.01<br> **74.33**<br> 74.02<br> **74.39**|
+
+
+|Base Novel|HM|
+|---|---|
+|CLIP<br>96.84 94.00 <br>CoOp<br>98.00 89.81 <br>Co-CoOp<br>97.96 93.81 <br>KgCoOp<br>97.72 94.39 <br>MaPLe<br>97.74 94.36 <br>CoPrompt<br>98.27 94.90 <br>PromptSRC 98.10 94.03 <br>_,→_+ Ours **98.50 94.46 **<br>DePT<br>98.60 93.93 <br>_,→_+ Ours **98.63 94.30 **|95.40<br> 93.73<br> 95.84<br> 96.03<br> 96.02<br> 96.55|
+|CLIP<br>96.84 94.00 <br>CoOp<br>98.00 89.81 <br>Co-CoOp<br>97.96 93.81 <br>KgCoOp<br>97.72 94.39 <br>MaPLe<br>97.74 94.36 <br>CoPrompt<br>98.27 94.90 <br>PromptSRC 98.10 94.03 <br>_,→_+ Ours **98.50 94.46 **<br>DePT<br>98.60 93.93 <br>_,→_+ Ours **98.63 94.30 **|<br> 96.02<br> **96.35**<br> 96.20<br> **96.41**|
+
+
+|Base Novel|HM|
+|---|---|
+|CLIP<br>91.17 97.26 <br>CoOp<br>93.67 95.29 <br>Co-CoOp<br>95.20 97.69 <br>KgCoOp<br>94.65 97.76 <br>MaPLe<br>95.43 97.76 <br>CoPrompt<br>95.03 96.86 <br>PromptSRC 95.33 97.30 <br>_,→_+ Ours **95.70 97.80 **<br>DePT<br>95.46 97.16 <br>_,→_+ Ours **95.70 97.83 **|94.12<br> 94.47<br> 96.43<br> 96.18<br> 96.58<br> 95.93<br> 96.30<br> **96.73**<br> 96.30<br> **96.75**|
+
+
+|Base Novel|HM|
+|---|---|
+|CLIP<br>63.37 74.89 <br>CoOp<br>78.12 60.40 <br>Co-CoOp<br>70.49 73.59 <br>KgCoOp<br>71.76 75.04 <br>MaPLe<br>72.94 74.00 <br>CoPrompt<br>76.97 74.40 <br>PromptSRC 78.27 74.97 <br>_,→_+ Ours **80.03 75.30 **<br>DePT<br>80.80 74.76 <br>_,→_+ Ours **81.53 75.23 **|68.65<br> 68.13<br> 72.01<br> 73.36<br> 73.47<br> 75.66<br> 76.58<br> **77.59**<br> 77.66<br> **78.25**|
+
+
+|Base Novel|HM|
+|---|---|
+|CLIP<br>72.08 77.80 <br>CoOp<br>97.60 59.67 <br>Co-CoOp<br>94.87 71.75 <br>KgCoOp<br>95.00 74.73 <br>MaPLe<br>95.92 72.46 <br>CoPrompt<br>97.27 76.60 <br>PromptSRC 98.07 76.50 <br>_,→_+ Ours **98.33 77.40 **<br>DePT<br>98.60 76.80 <br>_,→_+ Ours **98.63 77.40 **|74.83<br> 74.06<br> 81.71<br> 83.65<br> 82.56<br> 85.71<br> 85.95<br> **86.61**<br> 86.34<br> **86.73**|
+
+
+|(g) Food101|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>90.10 91.22 <br>CoOp<br>88.33 82.26 <br>Co-CoOp<br>90.70 91.29 <br>KgCoOp<br>90.50 91.70 <br>MaPLe<br>90.71 92.05 <br>CoPrompt<br>90.16 91.53 <br>PromptSRC 90.67 91.53 <br>_,→_+ Ours **90.83 92.06 **<br>DePT<br>90.80 91.53 <br>_,→_+ Ours **90.86 91.93 **|90.66<br> 85.19<br> 90.99<br> 91.09<br> 91.38<br> 90.83<br> 91.10<br> **91.44**|
+|CLIP<br>90.10 91.22 <br>CoOp<br>88.33 82.26 <br>Co-CoOp<br>90.70 91.29 <br>KgCoOp<br>90.50 91.70 <br>MaPLe<br>90.71 92.05 <br>CoPrompt<br>90.16 91.53 <br>PromptSRC 90.67 91.53 <br>_,→_+ Ours **90.83 92.06 **<br>DePT<br>90.80 91.53 <br>_,→_+ Ours **90.86 91.93 **|<br> 91.16<br> **91.39**|
+
+
+|Base Novel|HM|
+|---|---|
+|CLIP<br>27.19 36.29 <br>CoOp<br>40.44 22.30 <br>Co-CoOp<br>33.41 23.71 <br>KgCoOp<br>36.21 33.55 <br>MaPLe<br>37.44 35.61 <br>CoPrompt<br>40.20 39.33 <br>PromptSRC 42.73 37.87 <br>_,→_+ Ours **44.46 38.60 **<br>DePT<br>45.70 36.73 <br>_,→_+ Ours **46.60 38.50 **|31.09<br> 28.75<br> 27.74<br> 34.83<br> 36.50<br> 39.76<br> 40.15<br> **41.10**<br> 40.73<br> **42.16**|
+
+
+|(i) SUN397|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>69.36 75.35 <br>CoOp<br>80.60 65.89 <br>Co-CoOp<br>79.74 76.86 <br>KgCoOp<br>80.29 76.53 <br>MaPLe<br>80.82 78.70 <br>CoPrompt<br>82.33 79.50 <br>PromptSRC 82.67 78.47 <br>_,→_+ Ours **83.23 79.10 **<br>DePT<br>83.27 78.97 <br>_,→_+ Ours **83.40 79.10 **|72.23<br> 72.51<br> 78.27<br> 78.36<br> 79.75<br> 80.89<br> 80.52<br> **81.11**<br> 81.06<br> **81.19**|
+
+
+|(j) DTD|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>53.24 59.90 <br>CoOp<br>79.44 41.18 <br>Co-CoOp<br>77.01 56.00 <br>KgCoOp<br>77.55 54.99 <br>MaPLe<br>80.36 59.18 <br>CoPrompt<br>82.93 62.80 <br>PromptSRC 83.37 62.97 <br>_,→_+ Ours **84.00 64.63 **<br>DePT<br>84.03 60.16 <br>_,→_+ Ours **85.06 64.33 **|56.37<br> 54.24<br> 64.85<br> 64.35<br> 68.16<br> 71.47<br> 71.75<br> **73.05**<br> 70.11<br> **73.25**|
+
+
+|(k) EuroSAT|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>56.48 64.05 <br>CoOp<br>92.19 54.74 <br>Co-CoOp<br>87.49 60.04 <br>KgCoOp<br>85.64 64.34 <br>MaPLe<br>94.07 73.23 <br>CoPrompt<br>93.20 73.96 <br>PromptSRC 92.90 73.90 <br>_,→_+ Ours **94.46 81.20 **<br>DePT<br>93.33 75.43 <br>_,→_+ Ours **95.23 81.26 **|60.03<br> 68.69<br> 71.21<br> 73.48<br> 82.35<br> 82.40<br> 82.32<br> **87.32**<br> 83.41<br> **87.69**|
+
+
+|(l) UCF101|Col2|
+|---|---|
+|Base Novel|HM|
+|CLIP<br>70.53 77.50 <br>CoOp<br>84.69 56.05 <br>Co-CoOp<br>82.33 73.45 <br>KgCoOp<br>82.89 76.67 <br>MaPLe<br>83.00 78.66 <br>CoPrompt<br>86.26 78.63 <br>PromptSRC 87.10 78.80 <br>_,→_+ Ours **87.93 80.06 **<br>DePT<br>87.93 77.33 <br>_,→_+ Ours **88.33 79.36 **|73.85<br> 67.46<br> 77.64<br> 79.65<br> 80.77<br> 83.07<br> 82.74<br> **83.81**|
+|CLIP<br>70.53 77.50 <br>CoOp<br>84.69 56.05 <br>Co-CoOp<br>82.33 73.45 <br>KgCoOp<br>82.89 76.67 <br>MaPLe<br>83.00 78.66 <br>CoPrompt<br>86.26 78.63 <br>PromptSRC 87.10 78.80 <br>_,→_+ Ours **87.93 80.06 **<br>DePT<br>87.93 77.33 <br>_,→_+ Ours **88.33 79.36 **|<br> 82.29<br> **83.60**|
+
+
+The evaluation is done on several different tasks including base-to-novel generalization, cross-dataset
+evaluation and domain generalisation, with CLIP-B/16 as the frozen backbone. The protocol followed
+is similar to previous works like CoCoop (Zhou et al., 2022), PromptSRC (Khattak et al., 2023),
+CoPrompt (Roy & Etemad, 2023). For base to novel generalisation, cross dataset evaluation, we
+use 11 datasets namely ImageNet (Deng et al., 2009), Caltech101 (Fei-Fei et al., 2004), OxfordPets (Parkhi et al., 2012), StanfordCars (Krause et al., 2013), Flowers102 (Nilsback & Zisserman,
+2008), Food101 (Bossard et al., 2014), FGVCAircraft (Maji et al., 2013), SUN397 (Xiao et al., 2010),
+UCF101 (Soomro et al., 2012), DTD (Cimpoi et al., 2014), EuroSAT (Helber et al., 2019). For
+domain generalisation, we evaluate on the ImageNet (Deng et al., 2009), ImageNet-A (Hendrycks
+et al., 2021b), ImageNet-R (Hendrycks et al., 2021a), ImageNet-Sketch (Wang et al., 2019), ImageNetV2 (Recht et al., 2019) datasets. For training we use CLIP with ViT-B/16, we set the learning
+rate to 0 _._ 0025 and train for a maximum of 20 epochs on base-to-novel generalisation, while maximum of 5 epochs on cross-dataset generalisation and domain generalisation. We set _λp, λt, λl_ to
+1 _._ 0 _,_ 0 _._ 1 _,_ 1 _._ 0 respectively as default but modify it for individual dataset when required. The global
+loss scaling factors mostly follow PromptSRC. Further details are provided in supplementary. All the
+ablations are conducted with our model based on PromptSRC.
+
+
+4.1 BASE TO NOVEL GENERALIZATION
+
+
+We evaluate our approach when combined with PromptSRC and DePT on the main task of base-tonovel generalization. The comparison with previous SOTA methods, including PromptSRC (Khattak
+et al., 2023), CoPrompt (Roy & Etemad, 2023), and DePT (Zhang et al., 2023), is shown in Table 1
+
+
+7
+
+
+(c) Caltech101
+
+
+(d) OxfordPets
+
+
+(f) Flowers102
+
+
+(h) FGVCAircraft
+
+
+4 EXPERIMENTS
+
+
+Table 2: Performance on cross-dataset evaluation. Best accuracies are underlined; bold indicates
+improvements over the method with our components. - denotes our reproduction with official code
+
+
+**Source** **Target**
+
+
+ImNet Caltech Pets Cars Flowers Food Aircraft SUN397 DTD EuroSAT UCF _Ave._
+
+
+CoOp 71.51 93.70 89.14 64.51 68.71 85.30 18.47 64.15 41.92 46.39 66.55 63.88
+Co-CoOp 71.02 94.43 90.14 65.32 71.88 86.06 22.94 67.36 45.73 45.37 68.21 65.74
+MaPLe 70.72 93.53 90.49 65.57 72.23 86.20 24.74 67.01 46.49 48.06 68.69 66.30
+Bayesian Prompt 70.93 93.67 90.63 65.00 70.90 86.30 24.93 67.47 46.10 45.87 68.67 65.95
+CoPrompt* 70.43 93.60 90.00 64.80 70.77 85.80 23.53 67.30 43.77 44.50 67.83 65.19
+PromptSRC 71.27 93.60 90.25 65.70 70.25 86.15 23.90 67.10 46.87 45.50 68.75 65.81
+_�→_ + Ours **72.00** **94.03** **90.40** **66.03** **71.70** **86.66** **24.46** **67.50** **47.33** **46.83** **69.60** **66.45**
+DePT 71.60 93.80 90.13 **66.00** 70.93 86.27 24.30 67.23 46.60 45.83 69.10 66.02
+_�→_ + Ours **72.03** **94.03** **90.50** **66.00** **71.80** **86.63** **24.76** **67.60** **47.46** **46.73** **69.83** **66.53**
+
+
+Figure 2: Performance Comparison for Base, Novel, and HM metrics across different methods.
+
+
+and Figure 2. Our method consistently performs better across various datasets on novel, base, and harmonic mean (HM) when combined with both PromptSRC and DePT. On average, when our method is
+combined with PromptSRC, it outperforms all SOTA methods, including CoPrompt and PromptSRC,
+in base, novel, and HM. While we trail slightly on base classes when combined with DePT, which
+is mainly designed to improve base class performance, our approach impressively achieves better
+results across all settings when paired with DePT. Notably, when paired with PromptSRC, our method
+improves upon PromptSRC by 0 _._ 89%, 1 _._ 31%, and 1 _._ 08% on base, novel, and HM, respectively.
+Compared to CoPrompt, we see improvements of 1 _._ 34%, 0 _._ 85%, and 1 _._ 08% on base, novel, and
+HM. When compared with DePT, there is only a marginal decrease of 0 _._ 08% on base classes, but
+an improvement of 1 _._ 68% and 0 _._ 89% on novel and HM, respectively. Additionally, with DePT, our
+method surpasses all others on base and HM, while trailing our combination with PromptSRC by
+only 0 _._ 12% on novel. Compared to DePT alone, we show a notable improvement of 0 _._ 5%, 1 _._ 56%,
+and 1 _._ 09% on base, novel, and HM, respectively.
+
+
+4.2 CROSS-DATASET EVALUATION
+
+
+The evaluation on cross datasets follows PromptSRC (Khattak et al., 2023). We train on ImageNet
+in a few-shot manner and evaluate on diverse datasets. In Table 2, the model is fine-tuned on the
+source dataset (ImageNet) and evaluated on 10 target datasets in a zero-shot setting. Our method
+combined with PromptSRC shows strong performance across most datasets, achieving the highest
+average accuracy of 66.45%, outperforming DePT by 0.43% and PromptSRC by 0.64%.
+
+
+When combined with DePT, our method further improves the average accuracy to 66.53%, surpassing
+DePT alone by 0.51% and maintaining the highest performance across several datasets, including
+Aircraft (24.76%), SUN397 (67.60%), and DTD (47.46%). Notably, the combination with DePT
+also matches or exceeds the performance of PromptSRC in challenging datasets such as DTD and
+UCF101, highlighting its strong generalization capability. Compared to MaPLe, which achieves
+an average of 66.30%, our method consistently performs better, especially on datasets like Cars
+(66.03%) and DTD (47.46%). Overall, our method, when combined with both PromptSRC and DePT,
+demonstrates robust improvements, reflecting its superior generalization across diverse domains.
+
+
+8
+
+
+4.3 DOMAIN GENERALIZATION
+
+
+|P. Loss T. Text V. Feat|Base Novel HM|
+|---|---|
+|✗<br>✗<br>✗<br>✓<br>✗<br>✗<br>✗<br>✓<br>✗<br>✗<br>✗<br>✓<br>✓<br>✓<br>✓|84.55<br>75.43<br>79.89<br>84.53<br>76.03<br>80.17<br>84.60<br>75.79<br>80.09<br>84.70<br>76.07<br>80.10<br>85.07<br>77.41<br>81.05|
+
+
+|λp λt λl|Base Novel HM|
+|---|---|
+|✗<br>✗<br>✗<br>✓<br>✗<br>✗<br>✗<br>✓<br>✗<br>✗<br>✗<br>✓<br>✓<br>✓<br>✓|83.40<br>76.90<br>79.98<br>84.51<br>76.27<br>80.25<br>84.67<br>76.04<br>80.20<br>84.67<br>76.24<br>80.20<br>85.07<br>77.41<br>81.05|
+
+
+|Intra Inter|Base Novel HM|
+|---|---|
+|✗<br>✗<br>84.49<br>76.02<br>80.06<br>✓<br>✗<br>84.53<br>75.71<br>80.03<br>✗<br>✓<br>84.31<br>75.89<br>80.01<br>✓<br>✓<br>85.07<br>77.41<br>81.05|✗<br>✗<br>84.49<br>76.02<br>80.06<br>✓<br>✗<br>84.53<br>75.71<br>80.03<br>✗<br>✓<br>84.31<br>75.89<br>80.01<br>✓<br>✓<br>85.07<br>77.41<br>81.05|
+
+
+**Effect of different components introduced:** We studied the effects of different components we
+introduced, mainly patch loss, view-tailored text, and enhanced vision features—on performance,
+as shown in Table 4. Each component improves performance, particularly on novel tasks. However,
+combining enhanced vision features, patch loss, and view-tailored text improves base, novel, and HM
+performance. We also evaluated the effect of different conditioning inputs to generate view-tailored
+text prompts, as shown in Table 7, and found that initializing prompts using patch clusters works
+best. CoCoop (Zhou et al., 2022), which uses only the class token, performs poorly compared to
+both our method and attention-based conditioning. Cross-attention from text prompts to patches
+performs slightly worse than our method but still better than CoCoop, highlighting the importance of
+patch-level conditioning.
+
+
+We also studied different clustering techniques in Table 8. KMeans performed comparably to our
+Voronoi-based clustering on base classes but dropped significantly on novel classes, while EM was
+inferior to both. Voronoi clustering generates more generalizable clusters, improving performance
+across base and novel classes. In Table 9, we examined the effects of convolution projection and
+the use of adapters. We found that a text adapter is required when using convolution projection on
+patches, while using adapters on either text or vision alone improves performance. Our default setup,
+which includes both text adapters and convolution projection, performs best.
+
+
+We analyzed the effects of adding small crops (scale 0.05 to 0.4) and varying the number of large
+crops (scale 0.05 to 1) in Table 10. Using two large crops without small crops provided the best
+performance, while adding small crops or more large crops led to a slight decline. In Table 12,
+simple augmentations for both anchor and augment views performed best on novel classes, while
+complex augmentations slightly decreased overall performance. The combination of simple anchor
+and complex augmentations remained competitive but slightly underperformed on both base and
+novel classes.
+
+
+**Effect of different losses:** We study the effects of different losses introduced in our framework, as
+shown in Table 5. We find that each of the losses improves performance compared to cases where no
+
+
+9
+
+
+The results for domain generalization are shown in Table 3. The Im- Table 3: Domain generalization performance (best in bold).
+ageNet dataset is used as the source
+for fine-tuning, and the model is eval- **Source** **Target**
+uated on four ImageNet variants. In ImNet ImNetV2 ImNetS ImNetA ImNetR Ave.
+this evaluation, the proposed method CLIP 66.73 60.83 46.15 47.77 73.96 57.17
+combined with PromptSRC demon- UPT **72.63** 64.35 48.66 50.66 76.24 59.98
+
+CoOp 71.51 64.20 47.99 49.71 75.21 59.28
+
+strates strong performance compared Co-CoOp 71.02 64.07 48.75 50.63 76.18 59.90
+to other leading approaches. It ProGrad 72.24 64.73 47.61 49.39 74.58 59.07
+achieves an average performance that KgCoOpMaPLe 71.2070.72 64.1064.07 48.9749.15 50.6950.90 76.7076.98 60.1160.26
+is 0.31% higher than the base Prompt- Bayesian Prompt 70.93 64.23 49.20 **51.33** 77.00 60.44
+SRC, with a notable improvement of PromptSRC 71.27 64.35 49.55 50.90 **77.80** 60.65
+
+CoPrompt 70.80 64.25 49.43 50.50 77.51 60.42
+
+
+larly, when combined with DePT, the
+method shows further gains, achieving an average performance that surpasses the base DePT by
+0.53%, with improvements of 0.78% on ImageNetV2 and 0.14% on ImageNetR. Compared to previous SOTA, our method outperforms by 0.36%, demonstrating better generalization across varying
+ImageNet distributions.
+
+
+Table 3: Domain generalization performance (best in bold).
+
+
+**Source** **Target**
+
+
+ImNet ImNetV2 ImNetS ImNetA ImNetR Ave.
+
+
+CLIP 66.73 60.83 46.15 47.77 73.96 57.17
+UPT **72.63** 64.35 48.66 50.66 76.24 59.98
+CoOp 71.51 64.20 47.99 49.71 75.21 59.28
+Co-CoOp 71.02 64.07 48.75 50.63 76.18 59.90
+ProGrad 72.24 64.73 47.61 49.39 74.58 59.07
+KgCoOp 71.20 64.10 48.97 50.69 76.70 60.11
+MaPLe 70.72 64.07 49.15 50.90 76.98 60.26
+Bayesian Prompt 70.93 64.23 49.20 **51.33** 77.00 60.44
+PromptSRC 71.27 64.35 49.55 50.90 **77.80** 60.65
+CoPrompt 70.80 64.25 49.43 50.50 77.51 60.42
+
+
+Table 4: Different Components
+of our framework
+
+
+4.4 ABLATIONS
+
+
+Table 5: Different Losses
+
+
+Table 6: Patch Loss Comparison
+
+
+losses are applied. Our default case, where all losses are applied, performs the best. This demonstrates
+that regularization is necessary at both the feature level and the logit level to maintain the performance
+of our framework. Additionally, we evaluate the individual effects of intra- and inter-view patch
+losses in Table 6, while keeping the rest of the losses constant during the experiments. Applying
+either intra- or inter-view patch loss alone results in a drop in performance, particularly on novel
+classes. This indicates that utilizing both intra- and inter-view losses boosts base accuracy while
+enhancing generalization to novel classes.
+
+
+|Method|Base Novel HM|
+|---|---|
+|CoCoop<br>Attention<br>Ours|84.30<br>75.00<br>79.45<br>84.32<br>76.44<br>80.24<br>85.07<br>77.41<br>81.05|
+
+
+|Method|Base Novel HM|
+|---|---|
+|KMeans<br>EM<br>Voronoi|84.36<br>74.97<br>79.51<br>84.28<br>74.37<br>79.22<br>85.07<br>77.41<br>81.05|
+
+
+|Text Vision|Base Novel HM|
+|---|---|
+|✗<br>✗<br>✓<br>✗<br>✗<br>Adapter<br>✗<br>ConvProj<br>✓<br>Adapter<br>✓<br>ConvProj|83.24<br>75.31<br>79.08<br>84.40<br>75.52<br>80.02<br>84.25<br>75.69<br>80.00<br>84.36<br>76.07<br>80.09<br>84.21<br>75.18<br>79.61<br>85.07<br>77.41<br>81.05|
+
+
+|Method|Base Novel HM|
+|---|---|
+|Cocoop<br>Cocoop + Our<br>CoPrompt<br>CoPrompt + Our|80.47<br>71.69<br>75.83<br>**81.47**<br>**72.43**<br>**76.68**<br>83.66<br>76.34<br>79.84<br>**84.26**<br>**77.40**<br>**80.68**|
+
+
+|Anchor Augment Base Novel HM|Col2|
+|---|---|
+|Simple<br>Simple<br>Simple<br>Complex<br>Complex<br>Simple<br>Complex<br>Complex|85.07<br>77.41<br>81.06<br>84.46<br>76.31<br>80.18<br>84.38<br>76.14<br>80.05<br>83.71<br>74.87<br>79.04|
+
+
+|L S Base Novel HM|Col2|
+|---|---|
+|1<br>0<br>2<br>1<br>2<br>10<br>3<br>0<br>2<br>0|84.27<br>75.58<br>79.68<br>84.36<br>74.80<br>79.29<br>84.51<br>74.10<br>78.96<br>84.50<br>75.97<br>80.00<br>85.07<br>77.41<br>81.05|
+
+
+5 CONCLUSION
+
+
+We propose a novel prompting framework for vision-language models that incorporates patch-level
+information across multiple components, improving both task-specific performance and generalization
+to novel scenarios. By utilizing patch-level loss for intra- and inter-view consistency, generating
+regularized view-specific text prompts, and maintaining inter-view consistency of logits, our method
+addresses the overfitting challenges typical of traditional prompt-tuning approaches. Extensive
+experiments on tasks such as base-to-novel generalization, domain adaptation, and cross-dataset
+evaluation demonstrate superior performance, surpassing prior methods. Additionally, ablation
+studies confirm the effectiveness of each component and explore alternative designs. We believe this
+approach will significantly advance the tuning of foundation models across diverse applications.
+
+
+10
+
+
+Table 9: Comparison of Projection
+& Adapter
+
+
+Table 12: Comparison of Augmentation
+
+
+Table 7: Comparison of Input Conditioning Techniques
+
+
+Table 10: Comparison of Crops
+
+
+Table 8: Comparison of Clustering
+Techniques
+
+
+Table 11: Addition to Competing Methods
+
+
+**Applicability to different methods:** We apply our framework to both CoCoop (Zhou et al., 2022)
+and CoPrompt (Roy & Etemad, 2023), as shown in Table 11. Our method improves CoCoop by
+1.00% on base, 0.74% on novel, and 0.85% on HM. Similarly, it improves CoPrompt by 0.60%
+on base, 1.06% on novel, and 0.84% on HM. These improvements highlight the effectiveness of
+incorporating patch-level information for enhancing performance.
+
+
+4.5 RUNTIME & MEMORY CONSUMPTION
+
+
+Table 13 compares the learnable parameters, GPU
+memory consumption, and training time for various Table 13: Comparison of Total and Learnable
+methods trained on Food101 for 10 epochs. While Parameters for Different Methods
+our method introduces a slight increase in learnable
+parameters—4.89M for PromptSRC and 5.12M for Model Total P. Learnable P. G.Mem Train. Time
+DePT, this increase remains minimal when compared CLIP (ViT-B/16) 149.62M - 1.35G 
+CoCoop 153.15M 3.53M 1.24G 13:07 Min
+
+to the default CLIP model. The use of view/image- CoPrompt 154.62M 4.74M 1.84G 06:20 Min
+tailored prompts, similar to CoCoop, and having mul- PromptSRC _�→_ + Ours 150.08M154.51M 0.46M4.89M 2.07G2.42G 06:06 Min13:47 Min
+tiple views results in a modest rise in GPU memory DePT 150.36M 0.74M 2.07G 06:03 Min
+
+_�→_ + Ours 154.74M 5.12M 2.42G 13:47 Min
+
+usage (2.42G) and a training time of 13 min 47 sec.
+However, unlike CoCoop and other baseline methods,
+our approach achieves significantly superior performance across the board. The trade-off in computational resources is well-justified by the substantial performance improvements, demonstrating that
+our method balances resource use with impressive gains in performance, setting a new benchmark.
+
+
+Table 13: Comparison of Total and Learnable
+Parameters for Different Methods
+
+
+Model Total P. Learnable P. G.Mem Train. Time
+
+
+CLIP (ViT-B/16) 149.62M - 1.35G CoCoop 153.15M 3.53M 1.24G 13:07 Min
+CoPrompt 154.62M 4.74M 1.84G 06:20 Min
+PromptSRC 150.08M 0.46M 2.07G 06:06 Min
+_�→_ + Ours 154.51M 4.89M 2.42G 13:47 Min
+DePT 150.36M 0.74M 2.07G 06:03 Min
+_�→_ + Ours 154.74M 5.12M 2.42G 13:47 Min
+
+
+ETHICS STATEMENT
+
+
+Our research adheres to the ICLR Code of Ethics, prioritizing fairness, privacy, and transparency. All
+data used is anonymized, and we carefully considered potential societal impacts, aiming to avoid harm
+or bias. The research fosters reproducibility, and we are committed to addressing ethical concerns
+responsibly, ensuring a positive contribution to the broader community.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+Our research prioritizes reproducibility by ensuring that all experiments and results can be independently verified. Upon acceptance of this paper, we will provide the full source code, including scripts
+for data preprocessing, model training, and evaluation. All datasets, and relevant configurations are
+described in detail within the paper to allow for precise reproduction of our results. We welcome
+feedback to ensure transparency and reproducibility in our findings.
+
+
+REFERENCES
+
+
+Sara Atito, Muhammad Awais, and Josef Kittler. Gmml is all you need. _2023 IEEE International_
+_Conference on Image Processing (ICIP)_, pp. 2125–2129, 2022.
+
+
+Rishabh Bhardwaj, Amrita Saha, Steven CH Hoi, and Soujanya Poria. Vector-quantized inputcontextualized soft prompts for natural language understanding. _arXiv preprint arXiv:2205.11024_,
+2022.
+
+
+Lukas Bossard, Matthieu Guillaumin, and Luc Van Gool. Food-101–mining discriminative components with random forests. In _ECCV_, pp. 446–461. Springer, 2014.
+
+
+Walid Bousselham, Felix Petersen, Vittorio Ferrari, and Hilde Kuehne. Grounding everything:
+Emerging localization properties in vision-language transformers. _ArXiv_, abs/2312.00878, 2023.
+
+
+Mircea Cimpoi, Subhransu Maji, Iasonas Kokkinos, Sammy Mohamed, and Andrea Vedaldi. Describing textures in the wild. In _CVPR_, pp. 3606–3613, 2014.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale
+hierarchical image database. In _CVPR_, pp. 248–255. Ieee, 2009.
+
+
+Mohammad Mahdi Derakhshani, Enrique Sanchez, Adrian Bulat, Victor Costa, Cees G. M. Snoek,
+Georgios Tzimiropoulos, and Brais Martínez. Bayesian prompt learning for image-language
+model generalization. _2023 IEEE/CVF International Conference on Computer Vision (ICCV)_, pp.
+15191–15200, 2022.
+
+
+Li Fei-Fei, Rob Fergus, and Pietro Perona. Learning generative visual models from few training
+examples: An incremental bayesian approach tested on 101 object categories. In _CVPR Workshop_,
+pp. 178–178. IEEE, 2004.
+
+
+Peng Gao, Shijie Geng, Renrui Zhang, Teli Ma, Rongyao Fang, Yongfeng Zhang, Hongsheng Li,
+and Yu Jiao Qiao. Clip-adapter: Better vision-language models with feature adapters. _ArXiv_,
+abs/2110.04544, 2021.
+
+
+Patrick Helber, Benjamin Bischke, Andreas Dengel, and Damian Borth. Eurosat: A novel dataset and
+deep learning benchmark for land use and land cover classification. _J-STARS_, 12(7):2217–2226,
+2019.
+
+
+Dan Hendrycks, Steven Basart, Norman Mu, Saurav Kadavath, Frank Wang, Evan Dorundo, Rahul
+Desai, Tyler Zhu, Samyak Parajuli, Mike Guo, et al. The many faces of robustness: A critical
+analysis of out-of-distribution generalization. In _ICCV_, pp. 8340–8349, 2021a.
+
+
+Dan Hendrycks, Kevin Zhao, Steven Basart, Jacob Steinhardt, and Dawn Song. Natural adversarial
+examples. In _CVPR_, pp. 15262–15271, 2021b.
+
+
+11
+
+
+Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc V. Le, Yun-Hsuan
+Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representation learning
+with noisy text supervision. _ArXiv_, abs/2102.05918, 2021.
+
+
+Muhammad Uzair Khattak, Hanoona Abdul Rasheed, Muhammad Maaz, Salman H. Khan, and
+Fahad Shahbaz Khan. Maple: Multi-modal prompt learning. _2023_ _IEEE/CVF_ _Conference_ _on_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 19113–19122, 2022.
+
+
+Muhammad Uzair Khattak, Syed Talal Wasim, Muzammal Naseer, Salman Siddique Khan, Ming
+Yang, and Fahad Shahbaz Khan. Self-regulating prompts: Foundational model adaptation without
+forgetting. _2023 IEEE/CVF International Conference on Computer Vision (ICCV)_, pp. 15144–
+15154, 2023.
+
+
+Jonathan Krause, Michael Stark, Jia Deng, and Li Fei-Fei. 3d object representations for fine-grained
+categorization. In _ICCV_, pp. 554–561, 2013.
+
+
+Chunyuan Li, Jianwei Yang, Pengchuan Zhang, Mei Gao, Bin Xiao, Xiyang Dai, Lu Yuan, and
+Jianfeng Gao. Efficient self-supervised vision transformers for representation learning. _ICLR_,
+2022.
+
+
+Zheng Li, Xiang Li, Xinyi Fu, Xing Zhang, Weiqiang Wang, Shuo Chen, and Jian Yang. Promptkd:
+Unsupervised prompt distillation for vision-language models. _ArXiv_, abs/2403.02781, 2024.
+
+
+Yuqi Lin, Minghao Chen, Wenxiao Wang, Boxi Wu, Ke Li, Binbin Lin, Haifeng Liu, and Xiaofei
+He. Clip is also an efficient segmenter: A text-driven approach for weakly supervised semantic
+segmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition_, pp. 15305–15314, 2023.
+
+
+Sifan Long, Zhen Zhao, Junkun Yuan, Zichang Tan, Jiangjiang Liu, Jingyuan Feng, Shengsheng
+Wang, and Jingdong Wang. Mutual prompt leaning for vision language models. _International_
+_Journal of Computer Vision_, 2024.
+
+
+Yuning Lu, Jianzhuang Liu, Yonggang Zhang, Yajing Liu, and Xinmei Tian. Prompt distribution
+learning. _2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_, pp.
+5196–5205, 2022.
+
+
+Subhransu Maji, Esa Rahtu, Juho Kannala, Matthew Blaschko, and Andrea Vedaldi. Fine-grained
+visual classification of aircraft. _arXiv preprint arXiv:1306.5151_, 2013.
+
+
+Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number
+of classes. In _ICVGIP_, pp. 722–729. IEEE, 2008.
+
+
+Jinyoung Park, Juyeon Ko, and Hyunwoo J Kim. Prompt learning via meta-regularization. In
+_Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+26940–26950, 2024.
+
+
+Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar. Cats and dogs. In _CVPR_, pp.
+3498–3505. IEEE, 2012.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever.
+Learning transferable visual models from natural language supervision. In _International Conference_
+_on Machine Learning_, 2021.
+
+
+Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do imagenet classifiers
+generalize to imagenet? In _ICML_, pp. 5389–5400. PMLR, 2019.
+
+
+Shuvendu Roy and Ali Etemad. Consistency-guided prompt learning for vision-language models.
+_ArXiv_, abs/2306.01195, 2023.
+
+
+Khurram Soomro, Amir Roshan Zamir, and Mubarak Shah. Ucf101: A dataset of 101 human actions
+classes from videos in the wild. _arXiv preprint arXiv:1212.0402_, 2012.
+
+
+12
+
+
+Vidit Vidit, Martin Engilberge, and Mathieu Salzmann. Clip the gap: A single domain generalization
+approach for object detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 3219–3229, 2023.
+
+
+Georges Voronoi. Nouvelles applications des paramètres continus à la théorie des formes quadratiques.
+premier mémoire. sur quelques propriétés des formes quadratiques positives parfaites. _Journal für_
+_die reine und angewandte Mathematik (Crelles Journal)_, 1908(133):97–102, 1908.
+
+
+Haohan Wang, Songwei Ge, Zachary Lipton, and Eric P Xing. Learning robust global representations
+by penalizing local predictive power. In _NeurIPS_, volume 32, 2019.
+
+
+Ge Wu, Xin Zhang, Zheng Li, Zhaowei Chen, Jiajun Liang, Jian Yang, and Xiang Li. Cascade prompt
+learning for vision-language model adaptation. _ECCV_, 2024.
+
+
+Jianxiong Xiao, James Hays, Krista A Ehinger, Aude Oliva, and Antonio Torralba. Sun database:
+Large-scale scene recognition from abbey to zoo. In _CVPR_, pp. 3485–3492. IEEE, 2010.
+
+
+Hantao Yao, Rui Zhang, and Changsheng Xu. Visual-language prompt tuning with knowledge-guided
+context optimization. _2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition_
+_(CVPR)_, pp. 6757–6767, 2023.
+
+
+Lewei Yao, Runhu Huang, Lu Hou, Guansong Lu, Minzhe Niu, Hang Xu, Xiaodan Liang, Zhenguo
+Li, Xin Jiang, and Chunjing Xu. Filip: Fine-grained interactive language-image pre-training.
+_ArXiv_, abs/2111.07783, 2021.
+
+
+Muyang Yi, Quan Cui, Hao Wu, Cheng Yang, Osamu Yoshie, and Hongtao Lu. A simple framework
+for text-supervised semantic segmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 7071–7080, 2023.
+
+
+Wenwen Yu, Yuliang Liu, Wei Hua, Deqiang Jiang, Bo Ren, and Xiang Bai. Turning a clip model
+into a scene text detector. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 6978–6988, 2023.
+
+
+Lu Yuan, Dongdong Chen, Yi-Ling Chen, Noel C. F. Codella, Xiyang Dai, Jianfeng Gao, Houdong
+Hu, Xuedong Huang, Boxin Li, Chunyuan Li, Ce Liu, Mengchen Liu, Zicheng Liu, Yumao Lu,
+Yu Shi, Lijuan Wang, Jianfeng Wang, Bin Xiao, Zhen Xiao, Jianwei Yang, Michael Zeng, Luowei
+Zhou, and Pengchuan Zhang. Florence: A new foundation model for computer vision. _ArXiv_,
+abs/2111.11432, 2021.
+
+
+Sukmin Yun, Hankook Lee, Jaehyung Kim, and Jinwoo Shin. Patch-level representation learning for
+self-supervised vision transformers. _2022 IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition (CVPR)_, pp. 8344–8353, 2022.
+
+
+Sukmin Yun, Seong Hyeon Park, Paul Hongsuck Seo, and Jinwoo Shin. Ifseg: Image-free semantic segmentation via vision-language model. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_
+_Computer Vision and Pattern Recognition_, pp. 2967–2977, 2023.
+
+
+Yuhang Zang, Wei Li, Kaiyang Zhou, Chen Huang, and Chen Change Loy. Unified vision and
+language prompt learning. _ArXiv_, abs/2210.07225, 2022.
+
+
+Xiaohua Zhai, Xiao Wang, Basil Mustafa, Andreas Steiner, Daniel Keysers, Alexander Kolesnikov,
+and Lucas Beyer. Lit: Zero-shot transfer with locked-image text tuning. _2022_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 18102–18112, 2021.
+
+
+Ji Zhang, Shihan Wu, Lianli Gao, Hengtao Shen, and Jingkuan Song. Dept: Decoupled prompt
+tuning. _ArXiv_, abs/2309.07439, 2023.
+
+
+Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Learning to prompt for visionlanguage models. _International Journal of Computer Vision_, 130:2337 – 2348, 2021.
+
+
+Kaiyang Zhou, Jingkang Yang, Chen Change Loy, and Ziwei Liu. Conditional prompt learning for
+vision-language models. _2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition_
+_(CVPR)_, pp. 16795–16804, 2022.
+
+
+13
+
+
+Beier Zhu, Yulei Niu, Yucheng Han, Yuehua Wu, and Hanwang Zhang. Prompt-aligned gradient
+for prompt tuning. _2023 IEEE/CVF International Conference on Computer Vision (ICCV)_, pp.
+15613–15623, 2022.
+
+
+A ADDITIONAL IMPLEMENTATION DETAILS
+
+
+For our main results we have combined our method with DePT (Zhang et al., 2023), PromptSRC (Khattak et al., 2023). The DePT model we used is the one based on PromptSRC. The experiments are
+conducted for different seeds and mean reported. We use a default learning rate of 0 _._ 0025 and
+CLIP-B/16 as the backone. We set the scaling factors for _L_ SCL-text _, L_ SCL-image _, L_ SCL-logits similar to
+PromptSRC for both our combination with PromptSRC, DePT. DePT uses an additional classification
+head on top of PromptSRC for improving base task performance. The combination of method
+to DePT is very straightforward for PromptSRC. For DePT, we also apply the base classification
+head where inputs to this head are features before convolution projection and text adapter. We use
+mostly a single RTX-3090 GPU for our experiments except while performing ImageNet training for
+base-to-novel generalisation, domain generalisation, and cross-dataset evaluation where we use 4
+V100 GPUs. The Gaussian aggregation mean and variance for prompts is also similar to PromptSRC.
+The training is done for 20 epochs for base-to-novel generalisation with variation for some datasets.
+
+
+B ABLATION FOR LOSS SCALING FACTORS
+
+
+Table 14 shows the effect that loss scaling factors _λp_, _λt_, _λl_ have on our framework. Our method
+works best when the loss scaling factors are set depending on dataset as highlighted in Table 14. Each
+dataset has different sensitivity to different losses which results in having to set these factors for each
+individual dataset.
+
+
+Table 14: Different Losses
+
+
+_λp_ _λt_ _λl_ Base Novel HM
+
+
+C ABLATION FOR PARAMETER COMPLEXITY:
+
+
+We conduct experiments in Table by training two models based on PromptSRC, both having the
+same parameter count of 4.89M, to ensure a fair comparison. The first model employs PromptSRC
+without any additional modifications, while the second integrates our proposed components: intraand inter-view patch losses, view-tailored text with consistency loss, and cross-view prediction
+consistency. As shown in Table 15, the model enhanced with our components achieves superior
+performance across all metrics. Specifically, it improves Base accuracy from 84.55% to 85.07%,
+Novel accuracy from 75.43% to 77.41%, and the harmonic mean (HM) from 79.89% to 81.05%,
+demonstrating the effectiveness of our approach.
+
+
+14
+
+
+Table 15: Performance comparison of PromptSRC-based models with and without our components,
+keeping the parameter size fixed at 4.89M.
+
+|Components|Base (%)|Novel (%)|HM (%)|
+|---|---|---|---|
+|No Components (PromptSRC)|84.55|75.43|79.89|
+|Our Components|**85.07**|**77.41**|**81.05**|
+
+
+D ABLATION FOR VISION COMPONENTS
+
+
+:
+
+
+Table 16 summarizes the performance improvements achieved by incrementally applying our proposed
+vision components. Starting with the baseline PromptSRC which has single anchor view, we observe
+a steady increase in performance metrics as additional components are introduced. Specifically, the
+introduction of the intra-view patch loss leads to a 0.35% improvement in the HM metric, while
+incorporating the augmented view further increases performance by 0.03% on base. The most
+significant enhancement is achieved with the inclusion of the inter-view patch loss, resulting in a
+1.37% HM improvement over the baseline.
+
+
+Table 16: Performance comparison with the incremental application of proposed components.
+
+
+**Method** **Base** **Novel** **HM**
+
+
+PromptSRC (anchor view) 84.27 75.58 79.68
+_�→_ + Intra-view patch loss 84.53 75.71 80.03
+_�→_ + Augmented view 84.49 76.02 80.06
+_�→_ + Inter-view patch loss 85.07 77.41 81.05
+
+
+E ABLATION FOR TEXT COMPONENTS:
+
+
+The results presented in Table 17 highlight the effectiveness of our text-level component design. Starting from the baseline PromptSRC, introducing view-tailored text conditioned using CLS tokens Zhou
+et al. (2022) shows a modest improvement in the harmonic mean (HM), reflecting the benefit of
+incorporating view-specific information for generating text features. Replacing CLS tokens with
+patches to condition view-tailored text further enhances performance, demonstrating the importance
+of leveraging fine-grained patch information. Finally, the addition of the consistency loss results
+in the highest performance across all metrics, emphasizing the critical role of enforcing alignment
+across view-specific text prompts to improve generalization.
+
+
+Table 17: Performance comparison with the incremental application of text-level components.
+
+
+**Method** **Base** **Novel** **HM**
+
+
+PromptSRC 84.27 75.58 79.68
+PromptSRC + View-tailored text (CLS token) 84.40 76.00 80.15
+PromptSRC + View-tailored text (patches) 84.80 76.90 80.80
+PromptSRC + View-tailored text (patches) + Consistency loss **85.07** **77.41** **81.05**
+
+
+F ABLATION FOR PREDICTION COMPONENTS:
+
+
+The results in Table 18 demonstrate the impact of our prediction-level component design. Starting
+from the baseline PromptSRC, adding TextAdapter yields a modest improvement in the harmonic
+mean (HM), highlighting the benefit of adaptive text-driven adjustments for better predictions.
+Introducing ConvProj further enhances performance, showcasing the importance of projection layers
+in refining predictions through improved vision features. Finally, the inclusion of the consistency
+loss results in the highest performance across all metrics, emphasizing its critical role in aligning
+predictions generated from augmented and anchor features.
+
+
+15
+
+
+Table 18: Performance comparison with the incremental application of prediction-level components.
+
+
+**Method** **Base** **Novel** **HM**
+
+
+PromptSRC 84.27 75.58 79.68
++ TextAdapter 84.30 76.00 80.12
++ ConvProj 84.85 76.80 80.72
++ Cross-view Consistency loss **85.07** **77.41** **81.05**
+
+
+16

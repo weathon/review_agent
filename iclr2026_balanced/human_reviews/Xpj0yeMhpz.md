@@ -1,0 +1,165 @@
+## Human Reviewer 1
+
+### Summary
+This work addresses the unlearning by exploring label domain mismatch and introduces novel forgetting challenges such as target, model, and data mismatches. The proposed TARF framework addresses these challenges, showcasing promising results in various experiments, thus contributing significantly to advancing the unlearning paradigm.
+
+### Strengths
+1. The paper presents a novel method that decouples the class label from the target concept, addressing practical scenarios where the forgetting target may not align with pre-training taxonomy. 
+2. authors provide theoretical insights that introducing the representation gravity. The solid analysis for understanding unlearning dynamics at the representation level is very important.
+3. extensive experiments show consisent results with the proposed claims.
+
+### Weaknesses
+TARF introduces multiple dynamic hyperparameters (e.g., k(t), τ(x,y,t), β, t₀, t₁), but their tuning procedure is only heuristically described. Ablation results help, but further discussion on computational stability and robustness would strengthen the paper.
+
+### Questions
+How sensitive is TARF to the scheduling of k(t) and τ(x,y,t)? Can the authors provide empirical or theoretical justification for the annealing rate and threshold choices?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+10
+
+### Confidence
+2
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper addresses a critical and often overlooked limitation in machine unlearning: the implicit assumption that the "target concept" to be forgotten perfectly aligns with a pre-defined "class label". The authors argue that in practical scenarios, a mismatch frequently occurs between the labels of the data slated for forgetting, the model's output taxonomy, and the actual target concept. To address this, the paper formalizes this "label domain mismatch" by introducing three novel and practical unlearning scenarios: target mismatch, model mismatch, and data mismatch. These scenarios significantly expand the scope of unlearning research beyond the conventional "all matched" setting. The authors systematically analyze the challenges arising from these scenarios, revealing crucial representation-level forgetting dynamics, which they term the "gravity effect". Based on these insights, they propose a general framework, TARF (TARget-aware Forgetting), designed to actively forget the true target concept while preserving the utility of the remaining data. TARF achieves this through a unified objective that simultaneously performs annealed gradient ascent on the identified forgetting data and a selective, target-aware gradient descent on a subset of the remaining data that is at risk of being unintentionally affected. Extensive experiments on benchmarks (CIFAR-10/100, ImageNet) and modern applications (LLMs, diffusion models) demonstrate that TARF significantly outperforms existing methods in these challenging new scenarios, showcasing its effectiveness and general applicability.
+
+### Strengths
+1.Pioneering Problem Formulation: The paper introduces a novel, highly practical, and significant problem by decoupling the class label from the target concept in machine unlearning. This new perspective, formalized into three distinct mismatch scenarios, fundamentally expands the scope of the field and bridges a critical gap between academic research and real-world requirements for privacy, copyright, and AI safety.
+2.Principled and General Framework (TARF): The proposed TARF framework is an elegant and well-motivated solution. Rather than being an ad-hoc fix, its design is grounded in a solid theoretical and empirical analysis of representation-level forgetting dynamics. Its ability to handle all four scenarios (matched and mismatched) within a single, unified objective highlights its robust and general design.
+3.Comprehensive and Rigorous Empirical Validation: The paper provides extensive and convincing experimental results. TARF's superiority is demonstrated across multiple datasets of varying scales, against a wide array of strong baselines, and in all proposed scenarios. The inclusion of case studies on modern generative models (Stable Diffusion and LLMs) powerfully underscores the method's relevance and practical utility in contemporary AI systems.
+
+### Weaknesses
+1.While the appendix contains a detailed ablation study for key hyperparameters (Figure 17), the discussion is currently presented as an empirical result. To improve practical adoption, the paper would be strengthened by synthesizing these findings into explicit guidelines or heuristics for practitioners. For example, the authors could provide a recommended strategy for setting k based on dataset characteristics or model capacity.
+2.The core mechanism of TARF cleverly leverages "representation gravity" for target identification. The authors commendably acknowledge the limitations of this assumption in Appendix G.2, especially for semantically indistinct concepts. Given its foundational importance, this discussion is critical. Acknowledging this limitation in the main paper (e.g., in the conclusion or future work section) would offer a more balanced perspective on the method's applicability. This also opens up an interesting avenue for future research, such as integrating external knowledge to bolster target identification when representation similarity is ambiguous.
+
+### Questions
+1.The data-driven approach for setting β by ranking dynamic responses is elegant. My question centers on its robustness in more challenging scenarios: How sensitive are the final unlearning outcomes to the choice of the quantile used to determine β? Does this estimation method remain stable in cases where the "false retain" set is either very small or disproportionately large compared to the initially provided forget set?
+2.The appendix provides a good discussion on computational cost, noting its comparability to other methods. Focusing specifically on foundation-model-scale applications, where even a single forward pass on the entire remaining dataset (Dun) for monitoring can be expensive, could the authors elaborate on practical optimization strategies? For example, would a sampling-based approach to estimate the "gravity effects" on a subset of Dun be a viable strategy, and what might be the trade-offs?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This manuscript addresses the machine unlearning problem and proposes a target-aware dynamic forgetting framework (TARF). The framework innovatively formulates the forgetting task as a complex optimization scenario involving a mismatch among the “forgetting data”, “model outputs”, and “target concepts”. It leverages “representation gravity” effect to dynamically identify forgetting targets that are not fully labeled, and employs a collaborative optimization mechanism combining “annealed gradient ascent” with a “target-aware retention” strategy to balance the completeness of forgetting with the preservation of the model’s general performance. Experimental results convincingly demonstrate the effectiveness and superiority of this approach across various mismatch scenarios. Nonetheless, there remain several aspects of the paper that could be improved.
+
+### Strengths
+1. The manuscript introduces new settings that decouple the class label and the target concept, which investigate the label domain mismatch in class-wise unlearning. 
+2. The manuscript systematically reveals the challenges of restrictive unlearning with the mismatched label domains, and demonstrates that the "representation gravity" in forgetting dynamics is critical for achieving the forgetting target in the new tasks.
+
+### Weaknesses
+1. Some of the figure legends in the manuscript obscure content. For example, Fig 5 and Fig 7. Additionally, certain legends are not fully explained, which affects readability. For example, the line legend in Fig 5(b). The readability of the tables is poor. It is recommended to also highlight the second-best values to improve readability in Table 2.
+2. Compared with some simpler forgetting methods, the Target Identification stage in TARF requires additional computation to observe the “gravity effect.” The authors do not provide a clearer analysis and comparison of the extra computational overhead introduced by the TARF framework in the main text.
+
+### Questions
+1. In Section 3.3, the manuscript employs two time functions to control the loss function at each training round. Since the complexity of different datasets can influence the loss dynamics, how are the hyperparameters involved in the time functions(such as β and annealing rate)? How are the temporal checkpoints t_0andt_1  determined among Target Mismatch, Target Mismatch, and Retraining Approximation? Although the ablation studies in the appendix demonstrate the robustness of the method within certain ranges, it is recommended that the authors provide more practical guidance or heuristics on how to select these parameters for new tasks.
+
+2. The manuscript presents four different types of mismatch scenarios. In Phase 1, the method performs Target Identification to locate samples among the remaining data that are similar to the forgetting data. However, in my opinion, this approach may not be applicable when the target scope is broader than that of the forgetting samples (Target Mismatch scenario described in the paper). It is suggested to further clarify how the method addresses this issue.
+
+3. The manuscript primarily focuses on scenarios involving the forgetting of a single or closely related target concept. It would be valuable for the authors to discuss the scalability of the proposed framework when multiple target concepts need to be forgotten simultaneously, particularly when these concepts are entirely unrelated or partially overlapping.
+
+4. How much additional computing overhead in target recognition introduced in phase 1? Will this overhead increase significantly with the number of categories and the proportion of false data?
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 4
+
+### Summary
+This paper focuses on a specific case for machine unlearning, where the target concept to be forgotten does not neatly fit into the classes that the model was trained on. Under such a data mismatch, the authors first provide some theoretical analysis of the forgetting. Then, the authors propose a method to handle this scenario, consisting of three steps. Essentially, the forgetting and retaining objectives are used in a dynamically scaled manner.
+
+### Strengths
+This paper tackles a novel setting of mismatched classes between training time and unlearning time. This may be practical in cases when large models are trained on classification tasks.
+
+Experiments are run on both vision and language settings, which is good.
+
+### Weaknesses
+A big issue is that the method and theory is not well explained.
+For instance, the intuition in Section 3.2 is not well explained, and it is mostly theorems and equations. This is important, because the proposed method relies on these analyses of the forgetting, but the intuition is unclear. For instance, the “gravity effects”, “decomposition lacking”, “representation gravity” terms should be explained intuitively as they seem to be important concepts. 
+
+Furthermore, the link between Section 3.2 and 3.3 is not clear. The equations look very different, and how the previous concepts apply here is totally not clear. Thus, the proposed method looks very arbitrary.
+
+There isn’t a related work section that discusses the various related works, and comprehensively covers the similarities and differences to those works.
+
+The words in the figures are of very small size. There is also a lot of text in these figures, and they act like a long caption. Even though I think  adding text in such a manner is technically within the rules, I do not feel comfortable about this.
+
+
+Many of the compared methods are quite dated, such as  SCRUB, L1-Sparse, SalUn, and  BS which are from 2023. These are already the most recent methods compared. The authors should compare with more recent methods.
+
+
+Minor typos that do not affect the score:
+
+Line 203: Jacobin -> Jacobian
+
+Line 287: decent -> descent
+
+Line 468: Differernt -> Different
+
+### Questions
+In Phase 1 Target Identification, how is the dynamic information learnt? How are these information stored?
+
+In Phase 2, how is the dynamic information used to retain the knowledge? I do not observe any weighting or dynamic knowledge directly affecting the loss here.
+
+What does “feature deconstruction” mean? How is this achieved in the method?
+
+I do not understand the results in Fig 5a and 5b. I do not think these experiments and results have been explained clearly anywhere. What is the experiment and what is being visualized here?
+
+
+Please see more questions in the Weaknesses Section.
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+### Rating
+4
+
+### Confidence
+3

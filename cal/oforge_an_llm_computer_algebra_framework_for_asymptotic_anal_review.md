@@ -7,217 +7,234 @@
 
 ### Title & Abstract
 
-The title accurately describes the system, but the abstract sets up expectations that the paper cannot deliver. The abstract claims the framework is "remarkably effective at proposing such decompositions" and that it addresses a question posed by Terry Tao — but the paper ultimately demonstrates this on only two examples, both drawn directly from Tao's own blog post/MathOverflow answer. Calling this an answer to Tao's question is a significant overstatement; the paper demonstrates feasibility on illustrative toy examples, not a systematic study. The phrase "No existing AI tools are able to complete and symbolically verify proofs of this kind" is stated without empirical evidence.
+The title is reasonable, though "asymptotic analysis" is somewhat broad — the actual scope is narrower: asymptotic *inequalities* amenable to domain decomposition followed by quantifier elimination. The abstract makes strong claims: the framework "produces proofs that are both creative and symbolically verified," and "answers a question posed by Terry Tao." Both claims need scrutiny.
+
+The "In-Context Symbolic Feedback loop" described in the abstract is never formally defined anywhere in the paper. Reading the actual system description in Sections 2–4, the process appears to be: one LLM call → Mathematica verification, with no feedback loop back to the LLM if verification fails. If there is no actual iterative feedback mechanism, calling it a "loop" is misleading. If there is one, it is never described.
+
+The claim about "answering Tao's question" is oversold. Tao's MathOverflow post (2024) identifies domain decomposition as a useful strategy; the paper applies this strategy to two illustrative examples from that same post. This is a proof-of-concept demonstration, not a research-level answer.
 
 ---
 
 ### Introduction & Motivation
 
-The motivation is genuinely interesting and well-chosen — domain decomposition as the creative bottleneck in asymptotic analysis is a real problem that Tao and others have articulated. However, several formulas that are central to the argument (the Riemann Hypothesis asymptotic form, the series in Case Study 2, the AM-GM variant) are simply missing from the rendered text — these are significant enough that the paper's story is incomplete without them. While this may be a PDF parsing issue, the introduction's argumentative thread is hard to follow in their absence.
+The motivation is well-chosen and genuinely compelling: asymptotic inequalities are central to analysis and number theory, and the "find the right decomposition" insight is mathematically accurate. The running example of `xy ≪ x log x + e^y` is concrete and appropriately illustrative.
 
-The contributions bullet point states "Frontier LLMs often provide incorrect proofs" as a motivation for the tool, but there is no citation or quantitative evidence of how often LLMs fail on these specific types of problems.
+However, the introduction contains an editorial artifact that should never appear in a submitted paper: the parenthetical **(** describe the structure of the prompt**)** on page 6 within the description of Step 2. This strongly suggests the paper was submitted in an unfinished state.
 
----
-
-### Section 2: Framework (LLM-Proposed Decomposition + CAS Verification)
-
-This is the core technical section, and it is severely underdeveloped.
-
-**Missing prompt template.** The prompt in Section 4 (referenced here) is entirely empty — the XML tags `<guiding_principles>`, `<task>`, `<requirements_for_breakpoints>`, `<output_format>` all have no content. This is the single most critical reproducibility failure in the paper. The LLM's proposed decomposition is the creative bottleneck the authors themselves identify, and the prompt engineering driving that decomposition is completely hidden. It is impossible to reproduce, evaluate, or build upon the system without knowing what was prompted.
-
-**Missing Mathematica code.** The code snippet in Section 4 is clearly truncated — only a few lines are shown with no surrounding context. The reader cannot understand how LLM output is parsed, how variable names are extracted, or how the Resolve call is structured.
-
-**Search over C.** The paper mentions searching C over a grid from 1 to 10⁴ (Step 4). This is a non-trivial algorithmic decision. If the true constant is very large, the system will report failure even when the inequality holds. The paper asserts all tested examples used C ≤ 2, but this is an empirical claim without justification as a property of the problem class. This bound could silently fail on problems where a large constant is needed.
-
-**No formal algorithm box.** There is no pseudocode or precise algorithmic description. "Regime-wise simplification" (Step 3) is described in one paragraph without specifying when or how denominators are detected as sums of positive terms.
+The contribution list is also thin relative to the claims. Contribution 1 (the O-Forge tool and website) is engineering, not research. Contributions 2 and 3 are two specific examples, not a systematic study. There is no general theorem, no complexity analysis, no formal characterization of the problem class the method handles.
 
 ---
 
-### Section 3: Case Studies
+### Method / Approach (Sections 2–3)
 
-**Case Study 1.** The asymptotic inequality xy ≪ x log x + eʸ is indeed a nice example. The manual proof shown (y ≤ 2 log x vs. y > 2 log x) is clear and correct. However, the paper claims the LLM "correctly" proposed this decomposition — but there is no evidence of this. Was the decomposition proposed by the LLM verbatim? Did the LLM propose it on the first try? How many attempts were needed? Was this specific decomposition hand-verified, or did the tool just run Resolve and succeed? Without this detail, the reader cannot assess the LLM's actual contribution vs. the CAS's.
+**Step 2 (Decomposition proposal)** is described only at a high level. The reader is told the LLM "proposes a finite cover guided by cues such as dominant terms and monotonic regimes," but the actual prompt structure — which is the core intellectual contribution of this component — is entirely absent. Section 4 provides only empty XML tags (`<guiding_principles></guiding_principles>`, `<task></task>`, `<requirements_for_breakpoints></requirements_for_breakpoints>`, `<output_format></output_format>`), which are clearly unfilled placeholders. **This is a critical omission**: the paper claims that a "structured prompt" is what enables reliable LLM performance, but that prompt is not disclosed.
 
-**Case Study 2.** The series decomposition case is more ambitious, but the actual series formula is missing from the parsed text, making the discussion nearly impossible to evaluate. The breakpoints {⌈h⌉, ⌈hm⌉} are described but the reader cannot verify that the LLM actually found these, versus the authors feeding them in manually.
+**Step 4 (Symbolic verification via Resolve)** raises legitimate concerns about the scope of the method. The paper relies on Mathematica's Resolve function via quantifier elimination over the reals (Tarski-Seidenberg). This is a decision procedure for the first-order theory of the reals, which is decidable but has doubly exponential complexity in the alternation of quantifiers. For the specific examples shown (two-variable inequalities over simple regimes), this works. But the paper provides no characterization of the class of problems for which this terminates in practice, nor any discussion of timeouts or undecidability risks for more complex expressions. This matters substantially for the claimed applicability to "research-level" problems.
 
-**Structural disorganization.** The paper's sections appear out of order in significant ways. Text that compares O-Forge with AlphaGeometry (the two bullet points about not needing to train from scratch, and using Resolve) appears mid-paper between the two case studies, disconnected from the Related Work section where it belongs. This reads as if sections were moved without updating transitions.
+**Case Study 1** (the `xy ≪ x log x + e^y` example): The mathematical walkthrough is clear and the proof by domain decomposition is correct. However, the paper does not report that O-Forge successfully found the decomposition `{y ≤ 2 log x, y > 2 log x}` and verified it — it merely explains the decomposition manually and asserts that Mathematica can verify each piece. There is no experiment showing that the LLM actually proposed exactly this decomposition, how many attempts were needed, or whether the CAS successfully returned True. This is the central empirical claim of the paper and it is unsubstantiated.
 
----
-
-### Section 5: Empirical Evaluation
-
-This section is the paper's most serious weakness from an ICLR perspective.
-
-- **No quantitative results.** "40–50 easier problems" are described, but there is no table, figure, or even a number reporting the success rate.
-- **No dataset description.** What are these problems? Where do they come from? How were they selected? Are they publicly available?
-- **No baselines.** The paper claims superiority over direct LLM use, over Z3/CVC5/MetiTarski, and over Lean tactics — but provides no head-to-head comparison on a common set of problems. The statement that CVC5 and MetiTarski cannot prove "log x ≤ log y ⟹ exp(x) ≤ exp(y)" is offered as a single anecdote, not a systematic benchmark.
-- **No failure analysis.** What happens when the LLM proposes an incorrect decomposition? Does the system fail gracefully? How often does this happen? What is the fallback strategy?
-- **No ablation.** The paper does not study what happens if one removes the LLM (i.e., tries random or systematic decompositions) or uses a weaker LLM. The LLM's actual contribution to success is entirely unclear.
-- **No runtime or scalability data.** How long does Resolve take as the number of variables or the complexity of the decomposition increases?
-
-The empirical section as written amounts to a qualitative claim that the system "generally works."
+**Case Study 2** (the series decomposition): The actual series formula appears to have been lost in PDF parsing, which makes it impossible to evaluate the claim. The discussion of breaking points `{⌈h⌉, ⌈hm⌉}` is present but the target estimate is missing. Setting aside the parsing issue, the same problem applies: no concrete experimental record is provided — no LLM transcript, no Mathematica output, no runtime.
 
 ---
 
-### Related Work
+### Implementation (Section 4)
 
-The related work is thin and selective. It engages with AlphaGeometry, Lean tactics, and autoformalization, but omits:
+This section is effectively empty. The Mathematica code snippet provided is a fragment with no context or explanation:
 
-- DSOS/SDSOS/SOS (Sum-of-Squares) methods for proving polynomial and algebraic inequalities — a well-established algorithmic approach.
-- Tools like SAGE's `qepcad` interface and Polyrith.
-- The large literature on automated inequality proving (e.g., Sturm's theorem applications, polyrith in Lean/Coq).
-- Work on LLMs + formal verification more broadly (e.g., Draft-Sketch-Prove, COPRA).
-- Whether any symbolic computation system can already prove the two case-study examples out of the box, without LLM assistance.
+```
+Resolve[ForAll[{series.other_variables},
+    logForm["Resolve results", res2];
+If[AllTrue[res2,TrueQ],True,res2]
+```
 
-The comparison to Tao's own estimates tool (Tao, 2025b) is described as "O-Forge extends this work greatly" — but the difference is primarily the choice of CAS (Lean/linarith vs. Mathematica/Resolve), not a fundamentally new approach.
+This is syntactically incomplete, and the ellipsis is never filled. The prompt shown consists entirely of empty XML tags. The CLI description is brief and provides no insight into system design.
+
+For a paper whose primary contribution is a software tool, this is deeply inadequate. A reviewer cannot assess reproducibility, correctness, or generalizability from what is provided.
+
+---
+
+### Empirical Evaluation (Section 5)
+
+This section is the most critical failure of the paper. The entire empirical evaluation consists of:
+
+- Testing "around 40-50 easier problems" (the vagueness of "around 40-50" is itself a red flag)
+- Three qualitative observations about decomposition counts and leading-term simplification
+- The conclusion that "our approach is robust"
+
+There are **no tables**, **no quantitative success rates**, **no failure analysis**, **no comparison with any baseline system on the same problem set**, **no statistical reporting of any kind**. The 40-50 problem dataset is not released, not described in any systematic way, and not analyzed. ICLR expects rigorous empirical evaluation; this section does not come close to meeting that bar.
+
+Specifically absent:
+- Success rate of the LLM in proposing decompositions that lead to successful verification (first-try and after retries)
+- Comparison: what fraction of these problems can Mathematica's Resolve solve *directly*, without any LLM-proposed decomposition?
+- Ablation: what is the LLM's contribution over simply calling Resolve with a generic decomposition heuristic?
+- Runtime statistics: how long do Resolve calls take across problem types?
+- Failure modes: what categories of problems does the system fail on, and why?
+
+The claim that "the number of decompositions grows linearly with the number of variables" is stated as an empirical observation but supported by no data. This could be a genuinely interesting finding if substantiated.
+
+---
+
+### Choice of CAS (Section 3, inline)
+
+The justification for Mathematica over Lean tactics and SMT solvers is reasonable and the comparison point about Z3's limitations with transcendentals is accurate. The demonstration that CVC5/MetiTarski fail on `log x ≤ log y ⟹ exp(x) ≤ exp(y)` is a concrete and useful data point — though a single example is not a systematic comparison.
+
+The honest acknowledgment that Resolve does not produce verifiable proof objects is appreciated, but the implications are understated. For a tool claiming to assist "research mathematicians," the absence of a proof certificate is a significant limitation. The paper essentially asks users to trust Wolfram's implementation, which introduces an unverifiable oracle in what is presented as a rigorous verification pipeline.
+
+---
+
+### Related Work (Section 6)
+
+The related work is thin. AlphaGeometry and Tao's Lean-based tool are discussed. The autoformalization paragraph is reasonable. Missing from the discussion:
+
+- There is a substantial literature on *automated theorem proving for inequalities* (e.g., RAHD, QEPCAD, Polyrith in Lean/Mathlib, sum-of-squares methods) that is entirely absent.
+- The LLM-guided proof search literature (e.g., Hypertree Proof Search, Draft-Sketch-Prove) is not discussed.
+- Prior work on LLM+CAS combinations for mathematical reasoning beyond AlphaGeometry is not surveyed.
+
+The "key differences" framing is appropriate but the coverage is too narrow.
+
+---
+
+### Limitations & Future Work (Section 7)
+
+Credit to the authors for acknowledging the Resolve trust issue honestly. The summand simplification limitation is appropriately flagged.
+
+However, several important limitations go unacknowledged:
+- **Scope**: The approach is fundamentally limited to inequalities that (a) admit a finite domain decomposition and (b) are decidable by quantifier elimination after regime-wise simplification. Many important research-level asymptotic inequalities do not have this structure.
+- **LLM reliability**: The paper mentions that LLM calls "only sporadically gave correct simplifications" (Section 3) but does not quantify this unreliability or discuss how the system behaves when the LLM proposes an incorrect decomposition.
+- **Scalability**: No analysis of how the system scales with problem complexity, number of variables, or expression depth.
+- **Soundness gap**: If the LLM proposes an incorrect decomposition that doesn't cover the full domain, and Resolve verifies each piece, the global proof is invalid. It is unclear whether the system checks that the proposed subdomains form a complete cover.
 
 ---
 
 ### Writing & Clarity
 
-Beyond the structural disorganization noted above, there are substantive clarity failures that impede understanding:
-
-- The paper uses an unfinished placeholder at line 94: `"(** describe the structure of the prompt**)"` — this appears to be an author's internal note that was never filled in.
-- The website is referred to as both "o-forge.com" (§1.1, §4, §8) and "o-forge.net" (Appendix B) — a contradictory detail that raises reproducibility questions.
-- The reference to `Anonymous (2025)` for the code repository links to a GitHub URL (breaking double-blind review), which is a protocol violation.
-- The claim about Wikipedia as a citation for the AM-GM inequality (Wikipedia contributors, 2025) is not appropriate for an academic venue.
-
----
-
-### Limitations & Broader Impact
-
-The limitations section honestly acknowledges the lack of proof objects, which is the most significant foundational concern. However, additional limitations go unaddressed:
-
-1. **Completeness is not guaranteed.** If Resolve times out or returns an indeterminate result on a subdomain, the system fails silently. This is not discussed.
-2. **Scope is very narrow.** The system appears to handle only inequalities of the form f ≤ C·g where f and g involve elementary and transcendental functions of a small number of variables. The claim that this is "research-level" mathematics needs more careful qualification.
-3. **LLM reliability.** The paper notes that "making API calls to Gemini only sporadically gave us the correct simplifications" — this is a significant admission of unreliability that is not quantified.
-4. **The tool is not interactive.** If the LLM proposes a wrong decomposition and Resolve fails, there is no described mechanism for refinement or feedback within the loop. The "In-Context Symbolic Feedback loop" described in the abstract is not detailed or demonstrated.
+Beyond the already-noted incompleteness issues (empty placeholders, missing formulas, displaced paragraphs), Section 3's Case Study 1 walkthrough appears in the middle of the paper in an unexpected location — the mathematical discussion of `xy ≪ x log x + e^y` appears to be split across pages 3–5 non-contiguously. The overall structure is difficult to follow: the introduction already describes the algorithm and the case studies in some detail, making Sections 2 and 3 feel redundant.
 
 ---
 
 ### Overall Assessment
 
-O-Forge addresses a genuine and interesting problem — automating asymptotic inequality proofs via LLM-guided domain decomposition + CAS verification — and the core idea has merit. However, the paper in its current form falls well short of ICLR's acceptance bar on nearly every dimension. The prompt template, which is the paper's central technical contribution, is completely missing from the submission. The empirical evaluation consists of two case-study examples and an unreported set of 40–50 problems with no quantitative outcomes, no baselines, and no ablations. Several formulas central to the argument are absent from the submitted text. The writing contains internal editorial placeholders and apparent double-blind violations. The claims of novelty ("No existing AI tools...") are not substantiated by systematic comparison. The contribution is essentially: use an off-the-shelf LLM to propose a decomposition, call Mathematica's Resolve — a useful engineering idea, but not a scientific advance that has been empirically validated. In its current state, this paper requires major revision before it can be evaluated fairly, let alone accepted.
+This paper presents a genuinely interesting idea — using LLMs to propose domain decompositions for asymptotic inequalities, then verifying each piece with Mathematica's Resolve function — and the core concept is well-motivated by a real pain point in analytic mathematics. However, the paper is **clearly unfinished** and falls substantially short of ICLR's standards across nearly every dimension. The implementation section contains unfilled template placeholders and incomplete code. The empirical evaluation reports no quantitative results. The two case studies are illustrative walkthroughs rather than experiments. The prompt — described as the key to reliable LLM performance — is never revealed. The paper cannot be reproduced from what is provided. Beyond completeness issues, there are substantive technical concerns: the scope of the approach is narrower than claimed, the "feedback loop" is never shown to exist, the soundness of domain cover completeness is not addressed, and the "research-level mathematics" framing substantially overstates two blog-post exercises. In its current form, this paper is not suitable for acceptance. The core idea merits development, but the paper requires complete reconstruction of its empirical evaluation, full disclosure of the prompting strategy, a rigorous characterization of the problem class addressed, and an honest recalibration of its claims.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper presents O-Forge, a framework that couples frontier Large Language Models (LLMs) with a Computer Algebra System (CAS), specifically Mathematica's Resolve function, to rigorously verify asymptotic inequalities. The system leverages the LLM to propose domain decompositions that simplify complex estimates, while the CAS provides symbolic verification across the proposed subdomains. The authors demonstrate this approach through two case studies involving research-level inequalities and series, claiming to bridge the gap between contest math and automated research assistance.
+The paper introduces O-Forge, a neuro-symbolic pipeline that uses a frontier LLM to propose domain or series decompositions for asymptotic inequalities, followed by Mathematica’s `Resolve` function to rigorously verify the bound on each subdomain. By automating the divide-and-conquer strategy for proving $f \ll g$ estimates, the system aims to offload tedious verification work from research mathematicians. The authors illustrate feasibility using Tao-motivated examples and report qualitative performance on a small suite of simpler inequalities.
 
 ### Strengths
-1.  **Practical Utility and Targeted Impact:** The tool addresses a specific, painful bottleneck in mathematical analysis (asymptotic estimation) where standard theorem provers often fail. The claim that Mathematica's Resolve handles transcendental functions better than Z3/CVC5 or current Lean tactics is a valuable practical insight for AI4Math.
-2.  **Decomposition Strategy:** The separation of "creative reasoning" (LLM domain decomposition) from "rigorous verification" (CAS quantifier elimination) is a sound architectural choice that mirrors successful strategies in systems like AlphaGeometry (Trinh et al., 2024). It mitigates the LLM's hallucination problem by offloading proof validity to a symbolic engine.
-3.  **Accessibility:** The provision of both a CLI and a web interface (o-forge.com) significantly lowers the barrier to entry for mathematicians who may not be comfortable with command-line tools or complex coding environments, potentially increasing adoption within the research community.
+1. **Well-motivated application to a real research bottleneck:** Asymptotic estimation is a routine but time-intensive task in analysis, number theory, and TCS. The paper correctly identifies domain decomposition as the primary creative step and automated verification as the natural computational complement (Sec. 1, Sec. 3).
+2. **Practical, accessible system design:** The modular LLM→CAS loop, combined with a web UI and CLI, directly addresses adoption barriers for non-technical mathematicians who cannot run local codebases (Sec. 1, Sec. 8).
+3. **Effective use of a neuro-symbolic verification loop:** Offloading the "creative guess" to an LLM while delegating logical verification to a CAS aligns with proven paradigms (e.g., AlphaGeometry) and correctly mitigates LLM hallucination risks in high-stakes math (Sec. 2, Sec. 6).
+4. **Demonstrates feasibility on non-trivial examples:** The pipeline successfully handles inequalities and series decompositions that standard SMT solvers (Z3, CVC5) and proof assistants (Lean tactics) struggle with, particularly due to transcendental functions like $\log$ and $\exp$ (Sec. 2, Sec. 6).
 
 ### Weaknesses
-1.  **Limited Empirical Evaluation:** The evaluation consists of only two specific case studies and a vague mention of "40-50 easier problems." There is no benchmark dataset, no baseline comparison against other LLM+CAS pipelines, and no analysis of failure modes or false positives/negatives. Without statistics on success rates over a diverse dataset, claims of general effectiveness are unsubstantiated.
-2.  **Reliance on Closed-Source Verification:** The core verification relies on Mathematica's Resolve function, which does not produce externally verifiable proof objects. As acknowledged in the paper, this introduces a "trust" element with a commercial black box, which contradicts the rigor expected in mathematical tools compared to open-source alternatives like Lean or Coq, even if those are currently less capable with transcendental functions.
-3.  **Lack of ML Novelty:** The method primarily integrates existing APIs (LLM + CAS) without novel algorithmic contributions. There is no discussion of prompt engineering optimization, finetuning, or how the decomposition quality correlates with performance. It reads more as an engineering integration paper than a methodological contribution suitable for ICLR's algorithmic depth standards.
+1. **Insufficient empirical evaluation for ICLR standards:** Section 5 reports tests on only ~40–50 "easier" problems plus two case studies, with no quantitative metrics (e.g., decomposition success rate, error rates, statistical distributions, baselines, or ablation studies). ICLR expects systematic, reproducible benchmarking.
+2. **Heavy reliance on proprietary, unverifiable software:** The core verification depends entirely on Mathematica’s closed-source `Resolve`, which returns a boolean without proof certificates. This limits auditability, contradicts the ML community’s push for verifiable reasoning, and is acknowledged as a major limitation without mitigation (Sec. 2, Sec. 7).
+3. **Minimal methodological or algorithmic novelty:** The framework consists of standard LLM prompting paired with an off-the-shelf CAS. There is no novel optimization, learning signal, structured reasoning technique, or theoretical analysis explaining *why* certain decompositions succeed or how to improve LLM proposal quality.
+4. **Structural and academic writing issues:** Case studies are redundantly introduced in Sections 1 and 3. Technical justification relies heavily on blog posts and MathOverflow threads (e.g., Tao 2024, 2025a) rather than peer-reviewed or arXiv literature. The prompt template is left as placeholder tags `<guiding_principles>`, etc. (Sec. 4).
 
 ### Novelty & Significance
-**Novelty:** The novelty is moderate. While the specific combination of LLM decomposition + Mathematica Resolve for *this specific* domain (asymptotic analysis) is novel, the high-level "LLM propose steps + Verifier check" pattern is well-established (e.g., AlphaProof, AlphaGeometry). The contribution lies more in the system assembly and domain adaptation than in new theory.
-
-**Significance:** The potential significance is high for the niche of analysis and number theory where manual verification is tedious. If validated, it offers a genuine research partner tool. However, the inability to produce formal proof objects limits its integration into formal verification pipelines, capping its broader theoretical impact.
-
-**Reproducibility:** Code is provided (via GitHub), but the workflow is heavily dependent on proprietary software (Mathematica) and paid API keys for frontier LLMs. The "Reproducibility" section notes Python 3.9+ and Mathematica access, which is standard but creates a dependency barrier for full independent verification.
+**Novelty:** Low-to-moderate. The LLM+solver/verifier paradigm is established in AI-for-Math literature; the paper applies it to a specific, underexplored niche (asymptotic $O(\cdot)$ analysis) without algorithmic innovation. **Clarity:** Moderate. The high-level idea is easily understood, but the manuscript suffers from redundant sections, informal citations, placeholder code/prompt text, and missing formal definitions for the "regime-wise simplification" module. **Reproducibility:** Limited. While code and a CLI are provided, the pipeline requires a commercial Mathematica license and proprietary LLM APIs. No exact model versions, temperatures, temperature seeds, dataset splits, or full prompt texts are disclosed, hindering independent replication. **Significance:** Niche-to-low for ICLR. The tool is practically useful for mathematicians, but the current submission lacks the algorithmic depth, rigorous evaluation, and open science practices typically required for main-track acceptance at a premier ML venue. It would be better suited for a focused AI-for-Math workshop in its present form.
 
 ### Suggestions for Improvement
-1.  **Rigorous Benchmarking:** Implement a standardized benchmark set of asymptotic inequalities with known ground truths. Report precision, recall, and failure rates compared to baselines (e.g., LLM alone, CAS alone, other solvers like Z3/CVC5).
-2.  **Ablation and Sensitivity Analysis:** Conduct an ablation study to determine if the LLM's specific prompts or specific decompositions are sensitive to noise. Quantify how often the LLM suggests a decomposition that the CAS cannot verify and whether subsequent loops (self-correction) improve success.
-3.  **Open-Source Verification:** Consider experimenting with open-source alternatives or discussing a path toward autoformalization (e.g., Lean/Coq) that could eventually replace the closed-source Mathematica Resolve step, addressing the "proof object" limitation.
-4.  **Case Study Detail:** The "Case Study" sections are overly qualitative. Provide explicit examples of the LaTeX input, the specific prompt used to the LLM, the exact decomp output, and the CAS verification time/log for the reader to understand the actual workflow mechanics.
+1. **Conduct a standardized, quantitative evaluation:** Construct a public benchmark of asymptotic inequalities with ground-truth decompositions or expert annotations. Report metrics such as proposal success rate, CAS verification rate, failure modes, latency, and cost. Include ablations (e.g., zero-shot vs. few-shot LLM, different decomposition granularities, effect of the regime-wise simplification step).
+2. **Audit or compare against open alternatives:** To reduce the closed-source trust dependency, run the same pipeline using open CAS backends (e.g., SymPy’s logic module, SageMath’s `qepcad`, Redlog/Reduced CAS) and report where they fail vs. `Resolve`. Alternatively, integrate a formal backend (e.g., Lean/Isabelle) and discuss the trade-offs in automation vs. certification rigor.
+3. **Deepen the methodological contribution:** Investigate *how* to improve LLM decomposition quality. Examine prompt structures, self-consistency decoding, iterative refinement (feedback from CAS failures to guide resplitting), or lightweight fine-tuning/LoRA on math decomposition corpora. Characterize the theoretical conditions under which subdomain splitting guarantees tractability for quantifier elimination.
+4. **Improve scholarly rigor and manuscript organization:** Consolidate the duplicated case studies, replace heavy reliance on informal web posts with peer-reviewed or preprint sources where appropriate, and provide the complete, exact prompt template and Mathematica invocation scripts in the appendix. Clearly define the "regime-wise simplification" algorithm and its mathematical validity conditions.
+5. **Enhance reproducibility documentation:** Specify exact LLM model names, API versions, temperature/top-$p$ settings, random seeds, Mathematica version, Python environment, and exact dataset composition. Provide a Dockerized setup or fallback scripts that allow evaluation even when Mathematica is unavailable.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1.  **Defined Benchmark & Success Rates:** Provide the exact list and success statistics for the claimed "40-50 easier problems" rather than vague descriptions. Without quantitative success rates on a fixed dataset, the claim of robustness is unsubstantiated.
-2.  **Baseline Comparisons:** Compare O-Forge against pure LLM proof generation, standalone CAS usage, and Lean-based tactics (e.g., `linarith`). Without baselines, it is impossible to determine if the LLM+CAS combination offers any advantage over existing tools.
-3.  **Ablation on Decomposition Strategy:** Test whether the LLM's decomposition performs better than random splits or standard heuristic thresholds. This is necessary to verify the core claim that the LLM provides unique "creative" value versus simple automation.
-4.  **False Positive Evaluation:** Test the system on known false inequalities to measure the false positive rate of the `Resolve` verifier. A verification tool must demonstrate it rejects incorrect claims, not just verifies correct ones.
-5.  **Iterative Refinement Performance:** The abstract claims an "In-Context Symbolic Feedback loop," but Section 3 states the LLM is prompted only once. Experiment with multi-turn refinement to validate the claimed feedback mechanism.
+1. Quantitative success rates on the 40-50 problem suite are absent; without precision metrics on decomposition validity, the claim of effectiveness is unsubstantiated.
+2. No baseline comparison against LLM-only proof generation or standard CAS workflows; without this, the additive value of the hybrid approach is unclear.
+3. Experiments validating the "In-Context Symbolic Feedback loop" claimed in the abstract are missing, as Section 3 describes a single-shot prompt; an ablation is needed to confirm if iteration exists or improves performance.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1.  **Verifier Trustworthiness:** Analyze the risk of relying on Mathematica's closed-source `Resolve` without proof objects for a paper claiming "rigorous verification." This directly undermines the credibility of the proofs in a formal mathematics context.
-2.  **Loop Discrepancy:** Reconcile the contradiction between the abstract's "feedback loop" and the method's "single-shot" LLM prompt. If no feedback loop exists, the core architectural claim is misleading.
-3.  **Simplification Validity:** Rigorously justify the "leading-order term" simplification assumption used before verification. If this heuristic fails on complex summands, the entire verification pipeline collapses.
-4.  **Scalability Analysis:** Analyze how verification time and success rates scale with the number of variables and decomposition subdomains. Research-level problems often involve high dimensions; without this, utility is limited to toy examples.
-5.  **Error Propagation:** Analyze how errors in the LLM's decomposition proposal propagate to the CAS verification step. Understanding failure modes is critical for users to trust the "True/False" output.
+1. Failure mode analysis is absent; specifically, does the system fail due to LLM hallucination of domains or CAS limitations, and how often?
+2. The reliance on closed-source Mathematica undermines the "rigorous" claim; an analysis of verification confidence or comparison with open-source verifiers is needed to assess trustworthiness.
+3. The paper claims research-level utility but only tests "easier problems" quantitatively; an analysis of complexity scaling (variables, transcendental functions) is needed to trust generalization.
 
 ### Visualizations & Case Studies
-1.  **Success/Failure Distribution Plot:** Visualize the success rate across problem complexities (variable count, term count) to expose performance cliffs. This reveals whether the method works generally or only on specific, simple classes of inequalities.
-2.  **Decomposition Quality Comparison:** Visualize an LLM-proposed domain split versus the mathematically optimal split for a specific case study. This exposes whether the LLM is finding non-trivial decompositions or just obvious thresholds.
-3.  **Failure Case Deep Dive:** Present a concrete case where the system fails (either wrong decomposition or verifier timeout) and analyze why. Showing failure modes is essential to establish the boundary of the method's applicability.
+1. Visualizations of the proposed domain decompositions overlaid on the function surfaces would reveal whether the LLM identifies mathematically meaningful boundaries or arbitrary splits.
+2. A detailed case study of a failed proof attempt is necessary to expose the system's limitations and error propagation between LLM and CAS.
+3. A comparison visualization of proof time/steps between human experts and O-Forge would substantiate the claim of saving "lots of time and effort."
 
 ### Obvious Next Steps
-1.  **Integrate Open-Source Verifier:** Replace or supplement Mathematica with an open-source proof assistant (e.g., Lean 4) to generate independently verifiable proof objects. This is required to meet the standard of "rigorous" mathematical tooling.
-2.  **Implement Actual Feedback Loop:** Modify the system to allow the LLM to retry decompositions when `Resolve` returns False, fulfilling the "feedback loop" promise in the abstract.
-3.  **Release Evaluation Dataset:** Publicly release the "40-50 problem" dataset as a benchmark for asymptotic analysis. Without this, the empirical claims cannot be reproduced or validated by the community.
+1. The authors must resolve the direct contradiction between the claimed "feedback loop" in the abstract and the "single prompt" implementation described in Section 3.
+2. The dataset of 40-50 problems must be publicly released with ground truth decompositions to enable independent verification of the claims.
+3. Integration with an open-source proof checker (like Lean) should be explored or justified more rigorously than dismissing it based on limited tactic testing.
 
 # Final Consolidated Review
 ## Summary
 
-O-Forge presents a framework combining frontier LLMs with Mathematica's Resolve function for proving asymptotic inequalities. The LLM proposes domain decompositions, and the CAS verifies each subdomain via quantifier elimination. The paper demonstrates feasibility on two case studies from Terence Tao's blog posts and claims testing on 40-50 additional problems.
+O-Forge is a neuro-symbolic tool that uses frontier LLMs to propose domain decompositions for asymptotic inequalities, then verifies each subdomain using Mathematica's Resolve function via quantifier elimination over the reals. The system aims to automate the tedious verification work that analysts and number theorists routinely face when proving $O(\cdot)$ estimates. The authors demonstrate feasibility on two case studies motivated by Terence Tao and report qualitative performance on a suite of 40-50 simpler inequalities.
 
 ## Strengths
 
-- **Addresses a genuine research bottleneck**: Domain decomposition is widely recognized as the "creative" step in proving asymptotic inequalities. Automating this step addresses a real pain point for analysts and number theorists, as noted by Tao's own commentary on AI-assisted mathematics.
+- **Well-motivated application to a real mathematical bottleneck.** Asymptotic estimation is genuinely time-consuming in analysis, PDEs, and analytic number theory. The insight that "finding the right decomposition is the creative step; verification is mechanical" is mathematically sound and correctly identifies where LLM assistance adds value (Section 1, Section 3).
 
-- **Sound architectural separation**: The division of labor between LLM-guided decomposition and CAS verification follows a principled design pattern that mitigates LLM hallucinations by requiring symbolic proof for each subdomain. This mirrors successful approaches like AlphaGeometry while targeting a different mathematical domain.
+- **Novel application domain for neuro-symbolic methods.** While LLM+CAS combinations exist (e.g., AlphaGeometry), applying this paradigm to asymptotic inequalities—with their transcendental functions and domain decomposition challenges—addresses an underexplored niche that standard SMT solvers cannot handle well (Section 2, Section 6).
 
-- **Practical accessibility**: The web interface (o-forge.com) lowers barriers for mathematicians without programming expertise, making the tool immediately usable by the target research community.
+- **Practical, accessible system design.** The combination of CLI and web interface (o-forge.com) lowers adoption barriers for mathematicians who may not be comfortable with command-line tools or local installations (Section 1, Section 8).
+
+- **Correct handling of transcendental functions.** The paper demonstrates that Mathematica's Resolve can verify inequalities involving $\log$ and $\exp$ that cause failures in Z3, CVC5, and MetiTarski—this is a legitimate technical advantage worth highlighting (Section 3, inline discussion).
 
 ## Weaknesses
 
-- **Missing prompt template destroys reproducibility**: Section 4 contains "(** describe the structure of the prompt**)" followed by empty XML tags for `<guiding_principles>`, `<task>`, `<requirements_for_breakpoints>`, and `<output_format>`. The LLM prompt is the core "creative" contribution of the system—without it, the work cannot be reproduced, evaluated, or improved upon. This is a critical omission.
+- **Critical missing content: The prompt template is never disclosed.** Section 4 shows only empty XML placeholder tags (`<guiding_principles></guiding_principles>`, etc.) where the actual prompt should be. The paper explicitly claims that "a structured prompt" enables reliable LLM performance, but this prompt—the core intellectual contribution of the LLM component—is entirely absent. This makes the method unreproducible and unauditable. Page 2 also contains the placeholder text "(describe the structure of the prompt)" that should never appear in a submitted manuscript.
 
-- **No quantitative evaluation despite claiming 40-50 test problems**: The paper states it tested on "40-50 easier problems" but provides no success rates, failure analysis, or even a description of these problems. Without quantitative data, claims of robustness and effectiveness are unsubstantiated.
+- **Empirical evaluation is insufficient for ICLR standards.** Section 5 reports testing on "around 40-50 easier problems" with zero quantitative metrics: no success rates, no failure analysis, no comparison baselines, no ablation studies, no runtime statistics. The vagueness of "around 40-50" itself signals a lack of rigor. The two case studies are mathematical walkthroughs, not experimental records—there is no transcript showing the LLM actually proposed the claimed decompositions, no number of attempts needed, no verification that Resolve returned True.
 
-- **No baselines or false-positive testing**: The paper asserts superiority over Z3, CVC5, and MetiTarski based on a single anecdote (log x ≤ log y ⟹ exp(x) ≤ exp(y)). There is no systematic comparison, and crucially, no testing on *false* inequalities to verify the system correctly rejects invalid claims. A verification tool must demonstrate it does not produce false positives.
+- **The claimed "feedback loop" does not exist in the described system.** The abstract promises an "In-Context Symbolic Feedback loop," but Section 2 and Section 3 describe a single-shot pipeline: one LLM call for decomposition, then CAS verification. The paper states: "we only prompt the LLM once in the entire process, and the rest of the proof completion is carried out by Mathematica." There is no iteration where CAS failure triggers re-prompting. This is a direct contradiction between claims and implementation.
 
-- **Abstract claims "feedback loop" but method is single-shot**: The abstract describes an "In-Context Symbolic Feedback loop," yet Section 3 explicitly states "we only prompt the LLM once in the entire process." There is no mechanism for iterative refinement when Resolve fails. This mismatch between claimed architecture and actual implementation is misleading.
+- **No proof of completeness for domain covers.** If the LLM proposes subdomains that do not form a complete cover of the original domain, and Resolve verifies each piece, the global proof is invalid. The paper does not describe any mechanism to verify that proposed decompositions are exhaustive.
 
-- **Simplification assumptions lack justification**: Step 3 ("Regime-wise simplification") extracts leading-order terms from numerators/denominators. The paper acknowledges this "may not be valid simplification for more complex summands" but provides no analysis of when it fails or how often. The entire pipeline's correctness depends on this heuristic.
+- **Reliance on closed-source verification without proof certificates.** Mathematica's Resolve returns a boolean but produces no verifiable proof object. For a tool claiming to provide "rigorous" verification, this introduces an untrustworthy oracle. The paper acknowledges this limitation but offers no mitigation or comparison with open alternatives (Section 7).
 
-- **Closed-source verification undermines formal credibility**: The paper acknowledges that Mathematica's Resolve does not produce proof objects. While practical, this means "verified" proofs cannot be independently audited—contradicting the paper's emphasis on "rigorous" verification for research mathematics.
+- **Case study formulas appear corrupted in the PDF.** The series formula in Case Study 2 is missing or garbled, making it impossible to evaluate that claim fully. While this may be a parsing artifact, it affects readability and verification.
 
 ## Nice-to-Haves
 
-- **Algorithm pseudocode**: The method is described procedurally but lacks a formal algorithm box specifying exact inputs, outputs, and decision points.
+- **Quantitative benchmarking.** A public dataset of asymptotic inequalities with ground-truth decompositions, reporting success rate, failure modes, and comparison against baseline approaches (e.g., direct Resolve without decomposition, LLM-only proof attempts).
 
-- **Ablation on decomposition quality**: Testing whether LLM-proposed decompositions outperform simple heuristics (dyadic splits, random thresholds) would clarify the LLM's actual contribution versus baseline automation.
+- **Failure mode analysis.** When the system fails, does it fail because the LLM proposes bad decompositions, or because Resolve times out on certain expressions? This would clarify the bottleneck.
 
-- **Path toward open-source verification**: Discussion of how autoformalization or open proof assistants could eventually replace the closed-source Mathematica dependency.
-
-- **Iterative refinement when decomposition fails**: The natural extension—prompting the LLM with failure information when Resolve returns False—is suggested by the abstract but never implemented.
+- **Exploration of iterative refinement.** If the paper's "feedback loop" framing is intentional, implement and evaluate an actual loop where CAS failures guide LLM re-decomposition.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- *Missing formulas (Harsh Critic)*: The reviewer claimed central formulas were missing from the paper. The formulas ARE present (e.g., xy ≪ x log x + eʸ). The confusion appears to stem from PDF parsing artifacts, not author omissions.
+- **"No theoretical characterization of decidable problem class."** The paper could benefit from characterizing which inequalities the method handles, but this is outside the paper's stated scope of building a practical tool. Demanding formal complexity analysis is scope creep.
 
-- *Double-blind review violation (Harsh Critic)*: The reviewer claimed the GitHub URL breaks double-blind protocol. However, the citation is properly anonymized as "Anonymous (2025)" with a blinded repository URL, which follows correct double-blind procedures.
+- **"No comparison with QEPCAD, RAHD, or sum-of-squares methods."** The paper discusses relevant prior work (AlphaGeometry, Tao's Lean tool, autoformalization). Demanding coverage of the full automated inequality proving literature is excessive for a paper focused on a specific application.
 
-- *Wikipedia citation inappropriate (Harsh Critic)*: Citing Wikipedia for the well-known AM-GM inequality is a minor style issue, not a substantive flaw that affects the paper's contribution.
+- **"Case studies are from blog posts, not peer-reviewed sources."** The Tao references are legitimate research discussions; this is common in emerging areas. The content matters more than venue prestige.
 
-- *Lack of ML novelty (Balanced Reviewer)*: This criticism demands the paper be an ML methodology contribution when it is clearly an AI4Math systems paper. The integration of LLM+CAS for this specific domain is the claimed contribution, not novel ML algorithms.
+- **"Claims research-level mathematics but only tests easy problems."** The two main case studies ARE research-level examples from Tao's work. The 40-50 simpler problems are supplementary stress-testing, not the main contribution.
 
-- *Scalability analysis demand (Spark Finder)*: Requesting analysis of scaling with dimensions and complexity is reasonable for future work but exceeds what is expected for a first paper introducing a new tool with demonstrated feasibility.
+- **"Generic claim that paper is well-written or topic is important."** These are generic strengths that apply to many papers; the actual paper has significant writing issues (placeholders, redundancy).
 
 ## Novel Insights
 
-The observation that quantifier elimination via Mathematica's Resolve can verify transcendental function inequalities that defeat current SMT solvers and Lean tactics is a genuinely useful practical finding for the AI4Math community. This points to a capability gap worth addressing in open-source proof assistants. Additionally, the decomposition-based approach correctly identifies that the "creative bottleneck" in these proofs is not the final verification step (which is mechanical) but the domain splitting strategy—this suggests LLMs may be best deployed for proposal tasks rather than end-to-end proof generation in mathematical domains where verification can be offloaded to symbolic engines.
+The paper identifies a genuine asymmetry in mathematical work: domain decomposition for asymptotic inequalities requires creative "guessing" that LLMs are reasonably good at, while verification on each subdomain is mechanical and well-suited to symbolic systems. This division of labor is elegant. The observation that Resolve handles transcendental functions while SMT solvers fail is technically useful. However, the insight is undercut by the missing prompt template—if the decomposition quality depends entirely on prompting, that prompt IS the contribution, and withholding it prevents evaluation.
 
 ## Suggestions
 
-1. **Complete the prompt template** before any revision. This is non-negotiable for reproducibility. Include the exact prompt used for the case studies.
+1. **Release the complete prompt template.** The XML structure shown is empty; fill it in or provide it in an appendix. This is essential for reproducibility.
 
-2. **Report actual success rates** for the claimed 40-50 problems. At minimum: (a) the problem set description, (b) number of successful verifications, (c) types of failures.
+2. **Provide actual experimental evidence for the case studies.** Show LLM transcripts, Mathematica outputs, and runtime statistics. Demonstrate that the system found the decompositions it claims.
 
-3. **Test on false inequalities** to demonstrate the system does not verify invalid claims. Report false-positive rate.
+3. **Define and measure success quantitatively.** Report: How many of the 40-50 problems succeeded? How many required how many decomposition pieces? What fraction failed and why?
 
-4. **Clarify the feedback loop**: Either implement iterative refinement when decomposition fails, or remove "feedback loop" language from the abstract and framing.
+4. **Clarify or implement the feedback loop.** Either remove the "In-Context Symbolic Feedback loop" claim from the abstract or describe the actual iterative mechanism.
+
+5. **Add a completeness check.** Verify that proposed subdomains cover the full original domain, and describe this mechanism in the paper.
+
+6. **Fix the placeholder text.** Remove "(describe the structure of the prompt)" and other editorial artifacts before resubmission.
 
 # Actual Human Scores
 Individual reviewer scores: [0.0, 0.0, 2.0, 0.0]

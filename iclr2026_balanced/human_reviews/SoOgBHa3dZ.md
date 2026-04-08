@@ -1,0 +1,142 @@
+## Human Reviewer 1
+
+### Summary
+This paper sheds light on a important problem of efficiently estimating a model's performance of large contemporary benchmarks $D$ by evaluating the model performance on a much smaller selected subset $|A| = K \ll D$. The core idea, DISCO, puts forward the notion that samples should be selected where models disagree the most (to maximize inter-model response diversity), not necessarily samples that are "representative" in input latent space. This is done using either Jensen-Shannon divergence (JSD) or a computationally simpler proxy, Predictive Diversity Score (PDS). 
+
+After selecting $A$ each model is represented by its "signature" which is then mapped using a lightweight predictor (k-NN/Random Forest/Regression) to estimate actual dataset performance. The paper also provides theoretical justification for using PDS by sandwiching bounds with JSD and connecting it with mutual information. 
+
+The empirical performance is strong across language datasets like MMLU, HellaSwag, ARC, Winogrande and also in Vision (Imagenet) while dramatically reducing inference cost with $K = 100$.
+
+### Strengths
+1. The insight of shifting focus from representativeness of samples to disagreement of models on these samples is a novel and fresh perspective.
+2. PDS is computationally cheap to calculate from logits and the final predictor from the model signature is straightforward to implement in existing benchmark evaluation pipelines.
+3. The authors provide reasonable theoretical bounds to use PDS as a proxy for JSD for the subset dataset selection.
+4. The contribution includes strong empirical results and generality across domains, which adds to the fact that this method is model agnostic, thus is more likely to be used in the real world.
+
+### Weaknesses
+1. In proposition 1, the authors implicitly use the assumption - uniform prior over source models. This is not examined fully in practice because real model pools are heterogeneous and non-uniform. How sensitive are the PDS/JSD selection and signature predictors to such non-uniformities?
+2. Computing PDS/JSD requires running $M$ source models across the entire benchmark dataset $D$ which is likely significant for large datasets. The authors should report absolute compute (GPU-hours), memory/storage for signatures and break-even points (how many target models or evals justify the offline cost) for the method to be more practically used.
+3. Minor typo in section 4.2.2. "we also compare against a rather complex prior work
+and show that our simple method wins against the stolen" - The word stolen is out of context.
+
+### Questions
+See weaknesses
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+4
+
+### Rating
+8
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper introduces DISCO (Diversifying Sample Condensation), an efficient evaluation approach that improves both steps common to prior frameworks: subset selection and performance prediction. Instead of clustering or relying solely on model confidence/correctness, DISCO selects samples that induce maximal inter-model disagreement, and then learns a direct mapping from a model signature—the concatenated raw outputs of a model on these selected samples—to predict full benchmark performance. Evaluated on 424 LLMs across MMLU, HellaSwag, Winogrande, and ARC, and 400 vision models on ImageNet-1k, DISCO achieves low MAE and high ranking fidelity with very small subsets (e.g., 100 samples), showing strong efficiency and competitive performance relative to prior methods.
+
+### Strengths
+- The paper identifies a clear and timely gap in the literature on efficient evaluation and proposes a simple, well-motivated solution that is both conceptually clear and practically effective (specially in vision domain and for low budget regimes).
+
+- The mathematical framing provides valuable intuition for why the proposed approach works and strengthens the overall narrative without adding unnecessary complexity.
+
+- The experimental evaluation is thorough and well executed, assessing the performance of the proposed method across multiple benchmarks and model families, and comparing it against several baselines.
+
+- Table 2 (factor analysis) offers additional insight into how specific design choices affect performance.
+
+- The paper is well written and structured, making the methodology and results easy to follow.
+
+### Weaknesses
+While the paper is clearly executed and well motivated, I have some reservations about the practical efficiency of the proposed approach, particularly for LLM evaluation.
+
+- This first point is more of a critique of the overall line of work rather than one targeted specifically at DISCO. From Figure 5, it appears that randomly selecting slightly over 1000 samples with direct evaluation achieves on-par or even slightly better performance on both MAE and rank correlation compared to more sophisticated sample-selection techniques. This raises the question of whether the added complexity of sample-selection mechanisms is justified. To identify the most informative samples, one must evaluate a large pool of models, store their outputs, and compute disagreement statistics between their predictions for each sample. This process seems computationally and memory intensive, potentially offsetting the efficiency gains claimed from evaluating fewer samples. In contrast, simply randomly selecting a slightly larger subset (e.g., 2 000 samples) and then combining it with the proposed model-signature representation and simple predictors (e.g., linear or random forest) might yield even better results with significantly lower overhead.
+
+- Relatedly, Table 1 shows that while the proposed method consistently improves over baselines across datasets, the magnitude of improvement in MAE appears modest—though I am open to being proven wrong, as this may depend on implementation details or evaluation scale. The improvement in rank fidelity is clear but numerically small given the additional computation required.
+
+- Moreover, the paper does not include a quantitative analysis of computation or memory cost across methods. While this may not yet be standard practice in this research line, such an analysis would substantially strengthen the claim of “efficiency” and help contextualize the trade-off between computational expense and predictive accuracy.
+
+- Finally, while the vision results (Table 3) are particularly strong and show a clear improvement in ranking fidelity, it remains unclear whether this work is the first to apply subset-based evaluation techniques to vision or if comparable baselines exist. Clarifying this point would help position the contribution more clearly within the broader literature.
+
+I would like to note that I am open to revising my assessment if the authors can address these concerns. I appreciate the quality of the work and would genuinely welcome clarification that changes my current view.
+
+### Questions
+Please see the weaknesses section for a more detailed explanation of my concerns, but here are a few specific questions:
+
+- Regarding the vision experiments: could you clarify whether this is the first application of subset-based evaluation techniques to vision models (e.g., ImageNet-1k), or if there are existing baselines in that domain that you compared against or were inspired by?
+
+- About calibration: since the proposed method relies on model output probabilities both for computing disagreement (PDS) and constructing model signatures, how sensitive is it to differences in model calibration? 
+
+- On ranking fidelity: how should we interpret the magnitude of change in rank correlation you report? For instance, is improving from 0.916 (baseline) to 0.987 (your method on MMLU) a substantial and practically meaningful difference in ranking quality, or does it mainly indicate incremental improvement at the high end of the correlation scale?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 3
+
+### Summary
+The paper proposes DISCO, an efficient evaluation framework that (i) selects a tiny subset of test items by ranking samples via model disagreement (measured with JSD or the Predictive Diversity Score, PDS), and (ii) predicts a target model’s full-benchmark performance from its model signature (concatenated outputs on the selected subset) using simple predictors (kNN or Random Forest). The key thesis is that we should focus on diversifying model responses, rather than on the representativeness of samples, because disagreement maximizes the information about model performance. A formal proposition links mutual information about a model’s score to the Jensen–Shannon divergence across model predictions, motivating the selection rule; DISCO then shows strong empirical results on MMLU, HellaSwag, Winogrande, ARC, and also on ImageNet, often compressing datasets to 100 samples while preserving rank/accuracy with low error. This allows model evaluation with ~99% less inference costs.
+
+### Strengths
+- Clear practical value: Achieving 99%+ cost reduction while maintaining prediction accuracy addresses a real problem in modern ML evaluation where benchmarks require thousands of GPU hours.
+- Elegant simplicity: The approach is conceptually simpler than prior work—avoiding complex clustering algorithms and IRT parameter estimation in favor of greedy sample selection and direct prediction from model signatures.
+- Solid empirical validation: Comprehensive experiments across multiple benchmarks (MMLU, HellaSwag, Winogrande, ARC, ImageNet) with hundreds of models, demonstrating consistent improvements over baselines.
+- Theoretical motivation: Proposition 1 provides an information-theoretic justification linking mutual information to JSD, showing why model disagreement is informative for performance prediction.
+- Domain agnostic: Demonstrates effectiveness in both language (LLMs) and vision (ImageNet) domains.
+- Thorough ablations: Table 2 systematically analyzes design choices (model split, stratification, number of source models, dimensionality reduction, prediction model).
+- Clarity: The paper is well written, the claims are clear and the experiments support these claims adequately.
+
+### Weaknesses
+- The empirical results sections are somewhat opaque. I find it hard to understand exactly how the experiments were conducted from the text alone. The experimental set-up seems valid, but perhaps a reworking of the text or an additional, more detailed, description of the empirical set-up could be added in the appendix.
+- Statistical rigor: No confidence intervals or significance tests on reported metrics. Single train/test split for chronological evaluation. Unclear if the improvements are statistically significant.
+- Limited failure analysis: Insufficient discussion of when/why DISCO might fail. No analysis of which types of benchmarks or tasks are unsuitable. The acknowledged limitation about distribution shift in model populations lacks empirical investigation (see questions, the performance split would be useful)
+- Missing cost analysis: No discussion of computational cost for computing PDS scores over full dataset. Cost of training metamodel not reported. How does total cost (sample selection + prediction) compare to just running models on more samples?
+- From my understanding the current DISCO pipeline relies on the signature being of the same size (i.e. same size of model outputs and same number of samples), the predictor is then trained on this fixed size representation (that is reduced with PCA). Currently, if one wants to change the number of samples used it would require the entire re-training of the predictor, the main reason seems to be the concatenation of the predictions which treats each scalar prediction *of each sample* as a different variable. I would be very interested in seeing a discussion on how this could be changed so that the pipeline is adaptable with respect to the number of samples (i.e. being able to use a predictor trained on N samples with less or more samples).
+
+### Questions
+- Missing sentence in the abstract? Before "The typical approach follows two steps." There must be something about efficient sampling (or in that sentence itself) otherwise it's unclear what we're talking about.
+- The two assumptions for Proposition 1 should be added in the main text so that result is complete, I believe there is enough space in the paper for this.
+- Typo?: line 288 "the stolen"
+- Table 2: The PCA results are missing (supposed to be in subplot (d)) while the Prediction model ablation is said to be in (e) while actually being in (d)
+- In section 5.3 it is stated that "performance-based splits create an artificial stress test" and that the chronological split better reflects real-world usage. While I generally agree with this statement, I still think a performance-based split should be included for comparison since this is a known failure mode of efficient LLM evaluation methods.
+- Why are there no other baselines besides random selection with direct eval. in Table 3 for vision models? Presumably there is nothing preventing past benchmarks to being adapted to this setting.
+
+# Summary
+I think this is a strong paper, well written and well justified both theoretically and relative to past works and with adequate empirical evaluations. I would be happy to increase my score if the authors address the identified weaknesses and points in the questions section. Most of these represent relatively small, although important, additions / modifications.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4

@@ -1,4 +1,4 @@
-=== CALIBRATION EXAMPLE 45 ===
+=== CALIBRATION EXAMPLE 25 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
@@ -7,198 +7,209 @@
 
 ### Title & Abstract
 
-The title "A Full-Stack View" implies comprehensive breadth — multiple models, architectures, benchmarks, and task types. In practice, all core experiments use a single model (Llama-3 8B Instruct) and a single benchmark (WMDP-Bio). This disconnect between the framing and the actual scope is the paper's most persistent weakness. The abstract correctly identifies that MCQ-based evaluation overstates unlearning success, and the claim that robustness requires finer-grained distinction (in-domain relearning vs. out-of-domain fine-tuning) is well-supported. However, the claim of delivering a "full-stack revisit" is inflated relative to what is delivered.
+The title "LLM Unlearning Under the Microscope: A Full-Stack View on Methods and Metrics" is appropriately descriptive. The abstract accurately previews the paper's three contributions: a taxonomy of 12 methods, Open-QA metrics for UE/UT evaluation, and a multi-faceted robustness analysis. The claim that current MCQ evaluations "overstate success" is a strong one and is reasonably (if narrowly) substantiated in the body. One concern: the abstract implies the work is broadly generalizable, yet virtually all experiments use a single model (Llama-3 8B Instruct) on a single benchmark (WMDP-Bio). This scope limitation is not telegraphed upfront.
 
 ---
 
 ### Introduction & Motivation
 
-The problem is well-motivated and the three contributions are clearly stated. The paper correctly identifies that neither the evaluation community nor the methods community has produced a systematic cross-method comparison including Open-QA. The differentiation from concurrent work (Che et al., 2025; Hu et al., 2025; Feng et al., 2025) is made, but the differentiation from Feng et al. (2025), which makes a very similar argument about current unlearning evaluations being inconclusive, deserves much more explicit treatment. The paper should directly compare what questions Feng et al. (2025) leaves open and how the present work answers them.
+The motivation is genuine: MCQ-based evaluation dominates the LLM unlearning literature, and this may obscure meaningful distinctions between methods. The introduction appropriately situates the work relative to prior surveys and benchmarking studies.
 
-The "research question Q" is referenced at lines 76–79 but the actual question text appears to be missing from the extracted paper body (likely a PDF/section-ordering issue), making the introduction somewhat incomplete as written.
+A notable parsing artifact aside, the text references "the key research question we aim to address is: [Q]" but the actual question Q is missing from the extracted body—it appears to have been in a formatted call-out box. This is a structural oddity that impedes follow-through in the introduction.
 
----
-
-### Section 3 – Taxonomy
-
-The three-family taxonomy (divergence-driven, representation misalignment, rejection-based) is reasonable and covers the major methodological variants. However, several concerns arise:
-
-**Selection criteria are absent.** The paper examines "twelve representative methods" but never explains the inclusion/exclusion criteria. Why these 12 and not others? Methods like DEPN (Wu et al., 2023), ECP (Liu et al., 2024a), or pruning-based approaches are mentioned in the related work but absent from the taxonomy. The reader cannot assess whether the comparison is representative or cherry-picked.
-
-**Taxonomy novelty is modest.** Groupings similar to this taxonomy (gradient-based, representation-based, output-targeted) appear in prior surveys. The paper should make a stronger argument for why this particular three-way split provides the most useful analytical lens — particularly why "rejection-based" deserves to be its own family rather than being a variant of divergence-driven optimization (since IDK and DPO for unlearning also use loss-based updates).
-
-**The formulation in Eq. (1)** is standard but the paper uses it mainly as organizational scaffolding. It would strengthen the taxonomy to discuss, for each family, *what* in Eq. (1) distinguishes them (e.g., what ℓ_f is optimizing over, what the geometry of the loss landscape looks like) rather than just describing each method.
+The differentiation from most closely related concurrent works (Feng et al., 2025; Che et al., 2025; Hu et al., 2025) is stated but shallow. Feng et al. (2025), titled "Existing large language model unlearning evaluations are inconclusive," has substantial thematic overlap with this paper's Section 4. The introduction asserts three novelties, but the boundary between this work and Feng et al. needs sharper articulation.
 
 ---
 
-### Section 4 – Beyond MCQ: Evaluation of UE and UT
+### Section 3: Taxonomy of Unlearning Methods
 
-This is the paper's most substantive contribution, and the motivating example (Table A1 showing NPO producing "@nate@nate..." on Open-QA while achieving low MCQ accuracy) is compelling. However, several methodological concerns weaken the argument:
+The three-way categorization (divergence-driven optimization, representation misalignment, rejection-based) is conceptually clean and useful as an organizing framework. That said, several concerns arise:
 
-**Entailment Score design conflates format with knowledge.** The ES metric is computed after prepending 2-shot format examples that explicitly show the model "the required output format in the multiple-choice setting (e.g., 'C. tiger')." If these demonstrations nudge the model toward outputting a specific letter (say "B"), and the correct answer for a forget query *happens* to be "B," the NLI model may classify it as entailment even though the model is not demonstrating domain knowledge — it is demonstrating format compliance. The paper partially acknowledges this ("The purpose is solely to ensure that the model outputs remain restricted to the given options") but does not report what happens without few-shot examples or how sensitive results are to the choice of demonstrations. This is a significant reliability concern for the UE_Open-QA metric.
+**Novelty of the taxonomy.** The groupings are fairly intuitive and largely recoverable from the original papers. GA/GradDiff/NPO/SimNPO as "divergence-driven," RMU/RR/TAR/LAT as "representation misalignment," and IDK/DPO/IDK+AP/ELM as "rejection-based" do not require surprising analytical insight. The paper's value must come from what insights the taxonomy enables—which it does in Sections 4–5, but the taxonomy itself is not a contribution of independent weight.
 
-**NLI model domain mismatch.** The ES relies on Sileo (2023), a general-domain NLI classifier, to assess entailment for WMDP questions about biosecurity, synthetic biology, and chemical weapons. There is no validation that this NLI model performs reliably on this specialized domain. A simple calibration experiment (e.g., reporting NLI model accuracy on held-out WMDP QA pairs with known entailment/contradiction) would substantially strengthen the metric's credibility.
+**ELM classification.** ELM (Gandikota et al., 2024) aligns model outputs with a reference model prompted with a refusal-inducing prefix. Classifying this under "rejection-based targeted unlearning" alongside IDK is reasonable, but ELM still operates via KL-divergence-like alignment with a reference distribution, placing it closer to divergence-driven methods mechanistically. This ambiguity deserves acknowledgment.
 
-**No statistical significance.** Figure 1 reports numeric differences between methods (e.g., DPO's UTOpen-QA vs. IDK+AP's UTOpen-QA) without confidence intervals or any indication of variance across runs. Given that 125 steps of unlearning with a grid search over a small hyperparameter range is involved, results may be sensitive to seed and hyperparameter choices.
-
-**UT benchmark selection is unexplained.** The paper adds IFEval and GSM8K for UTOpen-QA but does not justify this choice over alternatives like HELM instruction-following, HumanEval, or MT-Bench (which is already mentioned in the WMDP paper). The finding that "divergence-driven optimization" degrades IFEval and GSM8K may partly reflect sensitivity to these specific task types rather than a general utility collapse.
-
-**The claim about rejection-based methods (Section 4, "Rethinking rejection-based methods")** is the paper's most interesting new insight: DPO for unlearning preserves utility better than previously recognized. However, the mechanism proposed ("the presence of a positive preference signal") is speculative and the proposed fix (warm-starting IDK+AP with DPO, Fig. A2) is shown for a single data point without ablation over the number of DPO warm-start steps, which is a key hyperparameter.
+**Boundary cases.** DPO-for-unlearning is presented as a "rejection-based" method. However, DPO inherently involves both positive (retained) and negative (forgotten) preference signals. The paper's classification treats DPO as primarily rejection-based, but this simplification merits discussion.
 
 ---
 
-### Section 5 – Robustness
+### Section 4: Beyond MCQ — Rethinking Evaluation
 
-**The in-domain/out-of-domain distinction is valuable** and the analogy to adversarial vs. OOD robustness is apt. The observation that divergence-driven methods resist in-domain relearning better but representation-misalignment methods resist out-of-domain fine-tuning better is a genuine insight.
+This is the paper's most substantive conceptual contribution.
 
-**The jailbreaking analysis (RobJA) is methodologically inconsistent.** Earlier in the paper, the authors argue that MCQ-based evaluation is insufficient and that Open-QA is necessary. Yet Figure 4(a) — the jailbreaking robustness figure — is presented *only* in terms of UEMCQ. If the main thesis is that MCQ misses important generative behavior, then a jailbreak attack that successfully elicits coherent harmful text at the generation level (even if MCQ accuracy is low) would be undetected by this measure. The paper needs UEOpen-QA results for jailbreaking to be internally consistent.
+**The core argument is sound but the evidence is thin.** The central claim—that MCQ-based UE is misleading because an unlearned model may have internally disrupted its generation capacity (not actually forgotten the knowledge)—is compelling and important. However, the main illustrative evidence in Table A1 involves a single question and two unlearning methods. One example is insufficient to establish that this phenomenon is systematic and widespread. A quantitative assessment of how often MCQ and Open-QA disagree, across all 12 methods, would dramatically strengthen this claim.
 
-**The RobJA ≈ RobReL correlation claim (Fig. 4b)** is described as a "positive correlation" but the paper provides no quantitative correlation coefficients, p-values, or confidence intervals. The figure appears to show a scatter plot, but given only 12 methods, this is a very small-n correlation. With 12 data points and no significance test, the "positive correlation" claim is not firmly established.
+**The Open-QA metric is not truly free-form.** A critical methodological tension: the paper's key argument is that MCQ fails to capture "generative behavior," yet the proposed Open-QA evaluation (Entailment Score, ES) uses few-shot prompts that constrain the model to output answer choices in MCQ format (e.g., "C. tiger"). By construction, this still gates evaluation on the A/B/C/D letter selection, merely assessed via NLI rather than exact match. This substantially weakens the claim that ES captures free-form generation; it is better described as a soft-scoring MCQ variant. The paper should either (a) acknowledge this limitation explicitly, or (b) demonstrate evaluation on truly open-ended forget-set queries without format constraints.
 
-**Quantization analysis is thin.** Table A2 reports results only for NPO and RMU (2 out of 12 methods) on MUSE Books, and only NPO/RMU on WMDP. The claim that "knowledge removal is generally more robust to post-unlearning quantization than data-centric unlearning" rests on 2 methods × 2 benchmarks × 2 bit-widths. Extending this to even 4-5 methods would significantly strengthen the conclusion.
+**NLI model selection is not validated.** ES is computed using the "tasksource" NLI classifier (Sileo, 2023), which is a relatively obscure model. There is no ablation showing that ES is robust to the choice of NLI backbone, and no correlation with human judgments is reported. Given that ES is positioned as the paper's primary novel metric, this omission is significant. Different NLI models may produce different absolute scores and different method rankings.
 
-**Fig. 3's comparison of quantization robustness** uses 4-bit quantization as the single representative setting. Different methods may be differently sensitive to 4-bit vs. 8-bit. The paper could benefit from showing the full quantization curve (full → 8-bit → 4-bit) for a broader set of methods.
+**Hyperparameter selection criterion is ambiguous.** All methods are tuned via grid search. Which metric was used to select the final hyperparameters? If MCQ-based UE/UT determined the optimal configuration, then the experiments comparing MCQ vs. Open-QA performance are potentially biased: methods may have been optimized for MCQ performance, making their Open-QA underperformance a methodological artifact rather than a genuine characteristic of the algorithm family. This is a serious confound that the paper does not address.
+
+**The ES metric for UE is counterintuitive.** High ES on the forget set means the model still gives correct answers—so low ES is "good" unlearning. But this conflates "the model produces incoherent text" with "the model has genuinely forgotten"—precisely the over-forgetting problem the paper criticizes. There is no metric proposed to distinguish genuine forgetting (the model cannot recall the fact) from degeneracy (the model cannot generate coherent text at all). The paper acknowledges over-forgetting as a problem but the proposed ES metric does not resolve this ambiguity.
+
+**The UT Open-QA benchmarks (IFEval, GSM8K) are reasonable additions**, and the finding that NPO degrades instruction-following (IFEval) while maintaining MMLU accuracy is novel and important. This portion of the analysis is the most convincing empirical contribution of Section 4.
 
 ---
 
-### Single-Model, Single-Benchmark Scope (Cross-Cutting Major Concern)
+### Section 5: Robustness Assessment
 
-All results in the main paper use Llama-3 8B Instruct on WMDP-Bio. The paper's taxonomy and insights are presented as general properties of method *families*, yet:
+**Conceptual contribution is clear.** Distinguishing in-domain relearning (analogous to adversarial robustness) from out-of-domain fine-tuning (analogous to distribution shift robustness) is a useful and underexplored framing. The finding that these two dimensions do not correlate—and indeed that method families show *reversed* rankings—is genuinely insightful.
 
-- It is unknown whether the finding "representation misalignment methods outperform divergence-driven optimization on the UE-UT tradeoff" holds for 13B, 70B, or non-Llama architectures (e.g., Mistral, Qwen).
-- WMDP-Bio has a specific structure (no prior fine-tuning on the forget set; MCQ-format evaluation set; biology-focused content). It's possible the insights about rejection-based methods' relative utility are specific to this domain.
-- The MUSE results in the appendix cover only 2 methods (NPO, RMU) under quantization, and the TOFU/WHP benchmarks mentioned in the taxonomy are absent from any experimental comparison.
+**The jailbreaking–relearning correlation (Fig. 4b) is the paper's most novel empirical finding.** Showing that RobJA correlates more strongly with RobReL than with RobFT provides a meaningful mechanistic interpretation: both adversarial prompting and in-domain relearning probe forget-domain knowledge, while out-of-domain fine-tuning represents a different perturbation regime. This connection was not established in prior work and deserves more prominent discussion.
 
-For a paper claiming a "full-stack view" with insights about method *families*, validation across at least 2 model sizes or 2 benchmarks for the central UE-UT tradeoff analysis (Section 4) should be considered a minimum standard.
+**Quantization analysis (Fig. 3) is underdeveloped.** The claim that "knowledge removal is generally more robust to post-unlearning quantization than data-centric unlearning" is supported by Table A2, but Table A2 contains only RMU on MUSE and RMU/NPO on WMDP—which is severely limited. NPO is not shown on MUSE in the table, and no other methods are evaluated for quantization on MUSE. This weakens the generalization claim substantially.
+
+**The "illusion of improved unlearning" under aggressive quantization** is an important concept (Section 5, discussion before Fig. 3), but the paper only tests 4-bit quantization. A sweep over quantization levels (e.g., 8-bit, 6-bit, 4-bit, 3-bit) would show where the transition from genuine robustness to false robustness occurs.
+
+**In-domain relearning setup is potentially too weak.** Relearning uses only 100 steps at a small batch size. It is not demonstrated that this represents a worst-case relearning attack; more steps or a higher learning rate might show sharper differences. The claim that divergence-driven methods are more robust to in-domain relearning depends on whether 100 steps is the right probe level.
+
+**No statistical uncertainty is reported** anywhere in Sections 4 or 5. All results are shown as point estimates. Given that unlearning methods are sensitive to random seeds and learning rate choices, the absence of variance measures makes it difficult to assess whether observed differences (e.g., NPO at 0.28 vs. RMU at 0.27 in UEMCQ before attack in Fig. 2) are meaningful.
+
+---
+
+### Experimental Scope and Generalizability
+
+**This is the paper's most serious structural weakness.** All major experiments use a single model (Llama-3 8B Instruct) on a single benchmark (WMDP-Bio). The paper mentions MUSE only in a brief appendix table with a subset of methods. At ICLR's standard, claims about the relative properties of method families (e.g., "divergence-driven optimization is generally more resilient to in-domain relearning") need to hold across at least two models and ideally two benchmarks. The Llama-3 8B family has specific architectural properties (GQA, RoPE, etc.) that may influence how these methods behave. Whether the findings hold for Mistral, Llama-2, or larger models is unknown.
+
+The paper would be substantially strengthened by:
+- One additional model (e.g., Zephyr-7B or Llama-3 70B)
+- Full evaluation on MUSE or TOFU alongside WMDP
 
 ---
 
 ### Writing & Clarity
 
-The paper is generally clear in its conceptual contributions. The section ordering in Section 3 is confusing (likely a PDF artifact), with the taxonomy discussion split non-contiguously. The research question "Q" referenced in the introduction is not visibly rendered in the available text. These structural issues should be resolved.
+Section 3 has a notable structural issue in the extracted text: the content introducing Divergence-Driven Optimization (with Eq. 2 and discussion of GA/GradDiff/NPO/SimNPO) appears after the discussion of representation misalignment and rejection-based methods. This is a PDF extraction artifact per the review instructions, but it suggests the paper's section organization may be non-standard in ways worth reviewing.
 
-The paper's 9-page main body is quite compact for a study covering 12 methods × 4 robustness dimensions × 2 evaluation modalities; some findings (especially jailbreaking, quantization) feel rushed and underexplained.
+The discussion of "over-forgetting" is spread across multiple sections (Section 4 body text, Fig. A1, Table A1) without a single clear definitional treatment. A formal definition distinguishing over-forgetting from degeneracy would improve clarity.
 
 ---
 
 ### Limitations & Broader Impact
 
-The limitations section (Appendix D) appropriately acknowledges limited method coverage, limited attack types, and reliance on automatic metrics. However, it conspicuously omits the single-model limitation — arguably the most significant constraint on the paper's generalizability. The broader impact section is generic and adds little substance.
+The Limitations section (Appendix D) is honest about three limitations: incomplete method coverage, focus on GCG-based jailbreaking only, and reliance on automatic metrics. However, the most important limitation—single-model, single-benchmark scope—is not explicitly listed. The broader impact discussion is appropriate for the subject matter.
 
 ---
 
 ## Overall Assessment
 
-This paper makes a genuine and useful contribution to the LLM unlearning literature by (1) providing a structured taxonomy of 12 methods organized around three methodological families, (2) demonstrating through concrete examples and systematic experiments that MCQ-based evaluation can misrepresent both unlearning effectiveness and utility retention, and (3) unpacking the underappreciated distinction between in-domain relearning robustness and out-of-domain fine-tuning robustness. The motivating example (NPO producing incoherent tokens that fool MCQ metrics) is compelling and the conceptual framing of robustness dimensions is valuable. However, the central empirical claims rest almost entirely on one model (Llama-3 8B Instruct) and one benchmark (WMDP-Bio), which significantly limits the generalizability of the family-level conclusions. The proposed Open-QA metric (entailment score) has unresolved design issues — the few-shot prompting may conflate format compliance with knowledge retention, and the NLI model has no domain validation. The jailbreaking analysis is reported only in MCQ terms, creating an internal inconsistency with the paper's own thesis. Several key claims (RobJA ≈ RobReL correlation, quantization robustness advantage of knowledge removal) lack statistical rigor. At ICLR, this sits below the acceptance bar in its current form: the core insights are valuable but the empirical foundation needs broader model/benchmark coverage and the metric design needs additional validation before the family-level generalization claims can be trusted.
+This paper presents a useful, empirically grounded analysis of LLM unlearning methods, and its central insight—that MCQ-based evaluation is insufficient and that robustness must be analyzed across multiple attack types—is correct and timely. The discovery that jailbreaking robustness correlates more strongly with in-domain relearning than out-of-domain fine-tuning is the paper's most technically novel finding. However, the contribution has meaningful weaknesses that prevent it from meeting ICLR's bar in its current form. Most critically: (1) the proposed Open-QA metric (ES) still constrains outputs to answer-choice format via few-shot prompting, undermining the core claim about capturing generative behavior; (2) all primary experiments use one model on one benchmark, making family-level claims difficult to trust; (3) the hyperparameter selection criterion is unspecified, potentially confounding the MCQ vs. Open-QA comparison; and (4) no statistical uncertainty is reported despite the sensitivity of unlearning to optimization settings. The paper is closest in spirit to a rigorous benchmarking study, but the experimental rigor expected of such studies at ICLR—multiple models, confidence intervals, careful metric validation—is not met. A significant revision addressing the Open-QA metric's design, adding at least one additional model/benchmark, and providing statistical reliability measures would substantially improve the contribution.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper presents a comprehensive empirical study of LLM unlearning, proposing a taxonomy of 12 methods across three families and introducing open question-answering (Open-QA) metrics to complement standard multiple-choice evaluations. Through extensive experiments on the WMDP benchmark with Llama-3 8B, the authors demonstrate that MCQ metrics often mask over-forgetting and utility loss, revealing fundamental trade-offs between unlearning effectiveness and retention. They further provide a multi-faceted robustness analysis covering model-level attacks and input-level jailbreaking, offering actionable guidelines for future algorithm design.
+This paper presents a comprehensive, full-stack analysis of recent LLM unlearning methods by categorizing twelve representative approaches into three methodological families: divergence-driven optimization, representation misalignment, and rejection-based targeted unlearning. It critically demonstrates that conventional multiple-choice question (MCQ) benchmarks offer a narrow and often misleading view of unlearning effectiveness and utility retention, advocating for Open-QA metrics to better capture generative behavior. Finally, it provides a fine-grained robustness assessment across in-domain relearning, out-of-domain fine-tuning, quantization, and jailbreak attacks, revealing distinct vulnerability patterns and interdependencies across method families.
 
 ### Strengths
-1.  **Critical Evaluation of Standard Metrics (Sec 4, Fig 1):** The paper convincingly argues that MCQ accuracy is insufficient for unlearning evaluation. Evidence is provided in Table A1 and Fig 1-(a), showing that divergence-driven methods like NPO can achieve high unlearning effectiveness on MCQ while simultaneously destroying generative capacity on the same queries (over-forgetting), a nuance missed by prior work.
-2.  **Comprehensive Robustness Analysis (Sec 5, Fig 2-4):** Unlike prior work often focusing on single attack types, this work systematically evaluates in-domain relearning, out-of-domain fine-tuning, quantization, and jailbreaking. The findings that resilience to model-level perturbations does not guarantee input-level security (Fig 4) provide a necessary correction to current robustness assumptions.
-3.  **Actionable Methodological Improvements (Appendix A2, Fig A2):** Beyond diagnosis, the paper offers prescriptive solutions, such as the proposal to warm-start IDK+AP with DPO to mitigate utility loss. This adds significant value to the community by offering a concrete strategy to address identified failure modes.
+1. **Principled and Structured Taxonomy:** The paper effectively synthesizes a fragmented research landscape by grouping twelve recent methods into three clear families based on their optimization objectives and mechanistic principles (Sec. 3). This categorization provides a highly usable conceptual framework that helps researchers quickly contextualize design choices and trade-offs.
+2. **Compelling Empirical Critique of MCQ-Only Evaluation:** The authors rigorously demonstrate the limitations of answer-selection metrics by showing that MCQ can mask severe generative collapse. For instance, Fig. 1 and Appendix B reveal that divergence-driven methods like NPO achieve high MCQ success through logit collapse (suppressing all options), whereas representation misalignment (RMU) reshapes relative distributions without destroying generative capacity. This directly addresses a critical blind spot in current literature.
+3. **Nuanced Robustness Analysis:** The paper distinguishes between multiple model-level attack vectors (in-domain relearning vs. out-of-domain fine-tuning vs. quantization) and correlates them with input-level jailbreaks (Fig. 2, Fig. 4). The finding that jailbreak robustness aligns more closely with in-domain relearning than out-of-domain fine-tuning, coupled with the observation that method families exhibit complementary robustness profiles, provides actionable guidance for designing resilient unlearning pipelines.
 
 ### Weaknesses
-1.  **Limited Experimental Scope:** The evaluation relies primarily on a single model size (Llama-3 8B) and benchmark family (WMDP-Bio), limiting confidence in generalizing findings regarding utility retention (e.g., GSM8K/IFEval performance) to larger or different architecture families.
-2.  **Dependency on External NLI Models for Open-QA:** The proposed Entailment Score (Sec 4) relies heavily on an external NLI model to judge generative output validity. Without validating the NLI model's bias or calibration against human judgment, there is uncertainty about whether the Open-QA UE metrics are more reliable than the established MCQ baseline.
-3.  **Taxonomy Ambiguity on Rejection Methods:** Grouping Direct Preference Optimization (DPO) solely under "rejection-based targeted unlearning" (Sec 3) conflates general safety alignment techniques with specific forget-set unlearning, potentially biasing the comparison against methods designed specifically to modify weights for forget data (e.g., RMU, GradDiff).
+1. **Limited Experimental Scope and Generalization:** All primary experiments are conducted on a single architecture and scale (Llama-3 8B Instruct) using predominantly one benchmark (WMDP-Bio). While supplementary references to MUSE exist in the appendix, they are not integrated into the main analysis. For ICLR, findings claiming to guide community-wide evaluation practices require validation across multiple model families (e.g., Mistral, Qwen), sizes, and diverse unlearning tasks (e.g., TOFU for synthetic memorization) to ensure the observed trade-offs are not benchmark- or architecture-specific artifacts.
+2. **Methodological Tension in the Open-QA Framework:** The proposed Open-QA evaluation relies on an Entailment Score (ES) that uses few-shot prompting to restrict model outputs to an `A/B/C/D` format before applying an NLI model (Appendix A). This constraint contradicts the goal of capturing free-form generative behavior, as it forces the model into a multiple-choice paradigm during inference. Consequently, the metric may conflate format compliance with actual knowledge retention and limits applicability to truly open-ended generation scenarios.
+3. **Reproducibility and Implementation Gaps:** While Appendix A lists hyperparameter grids and step counts, it omits critical details required for reproducibility: random seeds, exact computational budget (GPU hours/memory), precise adversary parameters for jailbreaking (e.g., GCG iteration counts, token budgets), and no mention of open-sourcing the evaluation pipeline. ICLR places strong emphasis on reproducibility, and these omissions hinder independent verification and adoption of the proposed evaluation suite.
 
 ### Novelty & Significance
-**Novelty:** Moderate to High. While the taxonomy synthesizes existing work, the specific proposal for Open-QA metrics as a standard alongside MCQ and the granular distinction between in-domain and out-of-domain robustness attacks offer a new lens for the community.
-**Significance:** High. As unlearning moves towards deployment, current evaluation standards are insufficient for safety-critical applications. This work challenges the community to adopt more rigorous generative metrics, which could prevent deployment of "unlearned" models that fail on real-world tasks or relearn forgotten data upon minor fine-tuning. It aligns well with ICLR's interest in empirical rigor and safety evaluation.
+- **Novelty:** Moderate-High. The paper does not introduce a new unlearning algorithm but offers high conceptual and analytical novelty by restructuring the evaluation paradigm. The distinction between MCQ and Open-QA perspectives, the granular breakdown of robustness vectors, and the identification of over-forgetting mechanisms represent fresh contributions to a field suffering from metric fragmentation.
+- **Clarity:** High. The manuscript is well-structured, with clear sectioning, intuitive figure design, and logical progression from taxonomy → evaluation → robustness. The mathematical formulations and methodological descriptions are accessible to both practitioners and theorists.
+- **Reproducibility:** Low-Moderate. The experimental protocol is described at a high level, but missing seeds, attack specifications, and absence of code/public artifacts limit immediate reproducibility. The reliance on proprietary or external components (e.g., GPT-4o for QA reformatting, specific NLI models) without detailed versioning further complicates exact replication.
+- **Significance:** High. The paper directly addresses pressing community pain points: inconsistent evaluation standards, hidden utility degradation, and fragmented robustness claims. Its findings are likely to shape future benchmarking standards and influence how ICLR reviewers assess unlearning submissions going forward.
 
 ### Suggestions for Improvement
-1.  **Corroborate Open-QA Metrics:** Validate the Entailment Score findings against human evaluation or additional generation-based metrics (e.g., BLEU/ROUGE on generation tasks) to ensure the Open-QA UE metrics are more reliable than the MCQ baseline, addressing the NLI dependency concern.
-2.  **Expand Model Scope:** Include at least one additional large model architecture (e.g., Gemma-7B or Llama-3 70B) to verify if the trade-offs between divergence-driven and representation methods hold across scales, particularly for quantization robustness (Fig 3).
-3.  **Clarify Conceptual Definitions:** Refine the Introduction and Conclusion to distinguish between "unlearning" for specific data removal versus "safety alignment" for rejection-based methods (e.g., DPO), preventing conceptual confusion regarding the nature of the weight updates in Fig 1.
+1. **Expand Experimental Validation:** Incorporate at least one additional model architecture/size (e.g., Mistral-7B or Qwen-14B) and a secondary benchmark like TOFU or MUSE into the main text. Demonstrating that the MCQ vs. Open-QA discrepancy and robustness trade-offs persist across architectures will significantly strengthen the generalizability claims expected at ICLR.
+2. **Refine and Validate the Open-QA Methodology:** Decouple the ES metric from strict A-D format constraints. Consider supplementing it with a truly open-ended metric, such as instruction-tuned LLM-as-a-judge evaluation or semantic fidelity scores that do not restrict output format. Additionally, report NLI model calibration or inter-metric agreement to validate ES reliability across diverse generation styles.
+3. **Strengthen Reproducibility Documentation:** Provide a complete reproducibility checklist in the appendix: explicit random seeds for unlearning and attacks, exact GCG/jailbreak generation parameters, hardware specifications, and a clear commitment to release code/evaluation scripts. If proprietary APIs (e.g., GPT-4o) were used for data preprocessing, describe alternatives or provide the prompt/template to enable fully open reproduction.
+4. **Clarify Taxonomic Boundaries and Hybrid Methods:** Briefly address how hybrid approaches (e.g., methods combining representation misalignment with preference optimization) fit into the three-family taxonomy. Discuss whether methods that fall outside this categorization exist and how the proposed evaluation framework would adapt to them, ensuring the taxonomy remains robust to future methodological innovations.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Multi-Domain Validation:** Extend main text results beyond WMDP-Bio to include MUSE (copyright) or TOFU (fictional) to prove the Open-QA vs. MCQ tradeoff is not domain-specific. Without this, the claim of a "Full-Stack View" is unsupported and likely overfit to biosecurity knowledge.
-2. **Human Evaluation of Open-QA Metrics:** Validate the Entailment Score (ES) metric against human judgments of factual correctness. If the NLI model used for ES is biased against unlearned model outputs, the core claim that Open-QA reveals "over-forgetting" is unreliable.
-3. **Statistical Significance Testing:** Report mean and standard deviation over at least 3 random seeds for all main figures (Fig 1-4). Unlearning optimization is high-variance; without error bars, the ranking of methods (e.g., SimNPO vs. NPO) may be noise rather than signal.
+1. **Pareto Frontier Curves:** Plot full UE vs. UT trade-off curves for each method family rather than single hyperparameter points. Without frontiers, claims that one family "outperforms" another are unsubstantiated and likely depend on specific tuning choices.
+2. **Stronger Robustness Attacks:** The current relearning attack (100–250 steps) is too weak to verify robustness claims against serious adversaries. Increase fine-tuning duration or data size to demonstrate whether knowledge is truly erased or merely suppressed temporarily.
+3. **Statistical Significance Testing:** All results are reported as single-run point estimates without error bars. Run multiple seeds to prove that observed differences (e.g., NPO vs. RMU on Open-QA) are statistically significant and not initialization noise.
+4. **Cross-Dataset Validation:** The core claim about MCQ vs. Open-QA divergence relies heavily on WMDP. Validate these findings on TOFU or MUSE to ensure the metric discrepancy is not specific to the biosecurity domain or dataset structure.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Hyperparameter Sensitivity (Pareto Fronts):** Plot UE vs. UT curves across a range of regularization strengths ($\lambda$) rather than single optimal points. This ensures the observed method family differences are not artifacts of unequal tuning budgets.
-2. **Attack Convergence Analysis:** Demonstrate that the 100-step in-domain relearning attack is sufficient to reach asymptotic knowledge recovery. If the attack stops prematurely, the reported "robustness" of divergence-driven methods is artificially inflated.
-3. **NLI Model Bias Audit:** Analyze whether the NLI model used for Entailment Score penalizes refusal-style outputs common in rejection-based methods. Without this, the low UE scores for rejection methods may reflect metric bias rather than actual unlearning failure.
+1. **Metric Contradiction:** The paper claims Open-QA captures "free-form generation," yet Appendix A states outputs are restricted to MCQ options (A–D) via few-shot prompting. Analyze why this constrained generation differs fundamentally from standard MCQ accuracy to justify the new metric.
+2. **Collapse vs. Unlearning Distinction:** When divergence methods produce nonsensical text (Table A1), distinguish whether this is successful unlearning or model collapse. Current metrics penalize both equally, obscuring whether the model is safe or simply broken.
+3. **Hyperparameter Sensitivity:** Analyze how sensitive the UE–UT trade-off is to regularization strength ($\lambda$) across families. If one method family is vastly more sensitive, the comparison is unfair without showing performance across a wider range of tuning parameters.
+4. **Taxonomy Novelty:** Explicitly differentiate the proposed 3-family taxonomy from prior surveys (e.g., Zhang et al., 2024; Maini et al., 2024). Without clear theoretical distinction, the taxonomy risks being viewed as a superficial regrouping rather than a novel contribution.
 
 ### Visualizations & Case Studies
-1. **Qualitative MCQ vs. Open-QA Mismatches:** Provide specific input-output examples where MCQ indicates success but Open-QA reveals hallucination or leakage. This concretely demonstrates the evaluation gap beyond aggregate scores.
-2. **Loss Landscape Comparisons:** Extend the loss landscape visualization (currently only TAR vs. RMU+LAT) to compare Divergence vs. Representation families. This is needed to visually substantiate claims about why one family is more robust to relearning than the other.
-3. **Utility Degradation Curves:** Plot utility metrics (MMLU/GSM8K) against unlearning steps to show *when* over-forgetting occurs. This reveals whether utility loss is immediate or gradual, informing the mechanism of degradation.
+1. **Qualitative Generation Examples:** Provide clear, side-by-side generated responses for Forget vs. Retain queries across all three families. Current tables are insufficient to validate whether "nonsensical" outputs are consistent refusals or incoherent gibberish.
+2. **Knowledge Recovery Trajectories:** Plot UE accuracy vs. fine-tuning steps during robustness attacks instead of just final states. This reveals the *rate* of knowledge return, distinguishing true robustness from delayed recovery.
+3. **Expanded Loss Landscapes:** Visualize loss landscapes for representatives of all three families, not just TAR and RMU+LAT. This is necessary to support the claim that divergence-driven methods have smoother landscapes contributing to robustness.
 
 ### Obvious Next Steps
-1. **Adaptive Robustness Evaluations:** Replace standard jailbreak prompts with adaptive attacks optimized against the specific unlearning defense (e.g., optimizing against the refusal pattern). Current input-level robustness claims are weak against adaptive adversaries.
-2. **Compute-Normalized Comparison:** Include training time and memory overhead for each method. Methods like NPO+SAM are computationally heavier; without efficiency metrics, the practical utility of the robustness gains is unclear.
-3. **Forget-Retain Overlap Analysis:** Evaluate performance on cases where forget and retain data distributions overlap. Real-world unlearning rarely has disjoint sets, and performance here is critical for practical deployment claims.
+1. **Human Evaluation of Open-QA:** Replace automatic Entailment Scores with human ratings for generated responses. Verify if automatic metrics align with human perception of "forgotten" vs. "broken" to validate the proposed evaluation pipeline.
+2. **Compute Efficiency Reporting:** Report training time and GPU hours for each method. A "Full-Stack" view is incomplete without analyzing whether robust methods incur prohibitive computational costs compared to baselines.
+3. **Standardized Robustness Protocol:** Propose a fixed benchmark protocol for relearning attacks (steps, data ratio, LR). Current ad-hoc settings make it difficult for future work to build upon or fairly compare against these robustness claims.
 
 # Final Consolidated Review
 ## Summary
 
-This paper provides a systematic study of LLM unlearning methods, organizing 12 representative approaches into three methodological families (divergence-driven optimization, representation misalignment, and rejection-based targeted unlearning). The authors demonstrate that conventional MCQ-based evaluation of unlearning effectiveness and utility retention can mask important failures in generative behavior, and introduce Open-QA metrics to address this gap. They further analyze robustness across multiple attack dimensions (in-domain relearning, out-of-domain fine-tuning, quantization, and jailbreaking), revealing that robustness to different attack types requires different methodological approaches.
+This paper provides a comprehensive "full-stack" analysis of LLM unlearning methods, contributing a taxonomy of twelve representative methods grouped into three families (divergence-driven optimization, representation misalignment, and rejection-based targeted unlearning), a critical evaluation of conventional MCQ-based metrics alongside proposed Open-QA metrics, and a fine-grained robustness assessment across model-level and input-level attacks. The central insight is that MCQ-based evaluations obscure genuine generative behavior and that robustness dimensions (in-domain relearning vs. out-of-domain fine-tuning) exhibit distinct profiles across method families.
 
 ## Strengths
 
-- **Compelling demonstration of MCQ evaluation limitations:** The paper provides concrete evidence that MCQ-based evaluation can misrepresent unlearning success. Table A1 shows that NPO-unlearned models achieve low MCQ accuracy on forget queries (selecting incorrect options) while producing incoherent outputs on the same queries in Open-QA format. Figure 1(b) further demonstrates that divergence-driven methods achieve similar UT_MCQ to representation misalignment methods but substantially worse UT_Open-QA, revealing over-forgetting that MCQ metrics miss entirely.
+- **Compelling empirical critique of MCQ-only evaluation:** The paper demonstrates that MCQ accuracy can mask severe generative collapse. Figure A1's logit analysis shows that NPO achieves high UEMCQ by uniformly suppressing all answer options rather than genuinely forgetting—a finding with practical implications for how unlearning success is assessed. The quantitative results across all 12 methods in Figure 1 provide systematic evidence beyond a single example.
 
-- **Systematic multi-dimensional robustness analysis:** The paper examines four distinct attack types—in-domain relearning, out-of-domain fine-tuning, quantization, and jailbreaking—within a unified framework. The finding that divergence-driven methods resist in-domain relearning better while representation misalignment methods resist out-of-domain fine-tuning better (Figure 2) is a substantive insight that helps practitioners choose methods based on threat models.
+- **Novel robustness analysis with actionable insights:** The distinction between in-domain relearning (analogous to adversarial robustness) and out-of-domain fine-tuning (analogous to distribution shift) is conceptually valuable. The finding that jailbreak robustness (RobJA) correlates more strongly with in-domain relearning (RobReL) than out-of-domain fine-tuning (RobFT) provides a meaningful mechanistic interpretation that was not established in prior work.
 
-- **Clear conceptual framework for robustness:** The analogy between in-domain relearning (adversarial robustness) and out-of-domain fine-tuning (OOD robustness) provides a useful lens for understanding why different method families exhibit different robustness profiles. The correlation analysis in Figure 4(b) between jailbreaking and in-domain relearning robustness offers a principled way to think about attack relationships.
+- **Useful taxonomy that enables downstream insights:** While the categorization itself is intuitive, the paper leverages the taxonomy to reveal family-level patterns: divergence-driven methods exhibit stronger in-domain relearning robustness but are more prone to over-forgetting (Figure 1b), while representation misalignment methods show stronger out-of-domain fine-tuning robustness (Figure 2). This structure-to-insights mapping is the paper's genuine contribution.
+
+- **UT Open-QA reveals hidden utility degradation:** The finding that NPO maintains MMLU accuracy but degrades substantially on IFEval/GSM8K (Figure 1b) is important and not visible through MCQ-only evaluation.
 
 ## Weaknesses
 
-- **Empirical claims rest on a single model and single benchmark:** All main-paper experiments use Llama-3 8B Instruct on WMDP-Bio. The paper presents family-level generalizations ("representation misalignment generally outperforms divergence-driven optimization on the UE-UT tradeoff") without validation across model scales, architectures, or domains. The appendix includes MUSE results for only NPO and RMU under quantization—insufficient to establish that findings generalize beyond the specific experimental setup. For a paper claiming a "full-stack view," this scope limitation significantly constrains confidence in the broader conclusions.
+- **Open-QA metric design contradicts its stated purpose:** The paper claims Open-QA captures "free-form generation," yet Appendix A states that outputs are constrained to A/B/C/D format via few-shot prompting before applying the NLI model. This gates evaluation on the same answer choices as MCQ, merely soft-scoring via entailment rather than exact match. The metric may therefore fail to capture what it claims: truly open-ended generative behavior on forget-set queries without format restrictions. This tension is significant for a paper whose central thesis is that MCQ evaluation is insufficient.
 
-- **Entailment Score metric has unresolved design issues:** The Open-QA evaluation uses few-shot prompting to constrain outputs to A–D format, then applies a general-domain NLI model (Sileo, 2023) to judge entailment. Two concerns arise: (1) the few-shot format demonstrations may nudge models toward specific letter patterns that could inflate ES when these coincide with correct answers; (2) no validation is provided that the NLI model reliably judges entailment for specialized biosecurity content. The paper acknowledges the format motivation but does not analyze sensitivity to demonstration choice or validate the NLI model's domain competence.
+- **ES metric conflates successful unlearning with model degeneracy:** High over-forgetting (producing nonsensical text) and successful knowledge removal (producing coherent but incorrect responses) both yield low ES scores. The paper acknowledges over-forgetting as a problem but the proposed metric does not distinguish between these two fundamentally different outcomes. A model that outputs gibberish and a model that genuinely cannot recall have indistinguishable ES values.
 
-- **Internal inconsistency in evaluation methodology:** The paper's central thesis is that MCQ metrics provide "only a narrow perspective" and "obscure the actual generation behavior." Yet Figure 4(a), which presents the primary jailbreaking robustness results, reports only UEMCQ. If MCQ misses important generative failures for the main evaluation (as the paper argues), it may also miss coherent harmful text elicited by jailbreak prompts. The paper should report UE_Open-QA for jailbreaking to be methodologically consistent with its own argument.
+- **Limited experimental generalization:** All primary experiments use Llama-3 8B Instruct on WMDP-Bio. Table A2 provides limited quantization results on MUSE with only RMU (no NPO), and other benchmarks are not integrated into the main analysis. Family-level claims about robustness patterns (e.g., "divergence-driven optimization is generally more resilient to in-domain relearning") require validation across additional architectures to ensure they are not specific to Llama-3's GQA or RoPE characteristics.
 
-- **No statistical significance testing:** Figures 1–4 report point estimates without confidence intervals, standard deviations across runs, or significance tests. Unlearning optimization is known to be sensitive to random seeds and hyperparameter choices. Without variance quantification, it is unclear whether observed differences between methods (e.g., SimNPO vs. NPO in Figure 1(c)) reflect genuine performance gaps or optimization noise.
+- **NLI model selection lacks validation:** The Entailment Score relies on a single NLI classifier (tasksource, Sileo 2023) without ablation or correlation with human judgments. Different NLI models could produce different absolute scores and potentially different method rankings, which is concerning for a metric positioned as the paper's primary evaluation contribution.
 
-- **Missing research question in paper text:** The introduction states "the key research question we aim to address is:" followed by "To tackle (Q), we first draw methodological insights..." The actual question text appears to be absent or improperly formatted, creating a structural gap in the paper's motivation.
+- **Hyperparameter selection criterion is unspecified:** The paper describes grid search ranges but does not state which metric determined optimal hyperparameters. If MCQ-based UE/UT was used for selection, the subsequent MCQ vs. Open-QA comparison is confounded: methods may have been optimized for MCQ performance, making Open-QA underperformance a tuning artifact rather than an intrinsic property.
+
+- **No statistical uncertainty reported:** All results appear as single-run point estimates. Given the known sensitivity of unlearning methods to random seeds and learning rates, the absence of confidence intervals makes it difficult to assess whether observed differences (e.g., NPO vs. RMU in Figure 2) are meaningful.
 
 ## Nice-to-Haves
 
-- **Multi-domain validation:** Extending the UE-UT tradeoff analysis to MUSE (copyright) or TOFU (fictional entities) would strengthen claims that the MCQ/Open-QA gap is not domain-specific.
+- **Pareto frontier curves for UE–UT trade-offs:** Plotting full trade-off curves rather than single hyperparameter points would substantiate claims that one family "outperforms" another.
 
-- **Pareto frontier analysis across hyperparameters:** Plotting UE vs. UT curves across a range of regularization strengths (λ) would clarify whether method family differences persist under equal tuning budgets, or whether apparent advantages stem from unequal hyperparameter search.
+- **Truly open-ended evaluation format:** Removing the A/B/C/D constraint from Open-QA evaluation would align the metric with its stated purpose of capturing free-form generation.
 
-- **Attack convergence analysis:** Showing that 100-step in-domain relearning reaches asymptotic knowledge recovery would establish that the reported robustness values are not artificially inflated by early stopping.
+- **Human evaluation of ES metric:** Validation that low ES corresponds to human perception of "forgotten" rather than "broken" would strengthen the metric's credibility.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed, treat them with caution:
 
-- **Taxonomy novelty criticism:** The harsh reviewer suggested the taxonomy lacks novelty because similar groupings appear in prior surveys. However, the paper's contribution is not the taxonomy per se but the systematic empirical comparison enabled by it. Taxonomies are organizational tools; their utility is demonstrated through the insights they facilitate.
+- **Missing research question Q in introduction:** This is a PDF extraction artifact acknowledged by the reviewer, not an actual paper problem.
 
-- **UT benchmark selection demand:** The reviewer questioned why IFEval and GSM8K were chosen over alternatives. These are reasonable, well-established benchmarks for instruction-following and mathematical reasoning. Requesting justification for every benchmark choice is scope creep—the selected benchmarks cover relevant utility dimensions and are widely used.
+- **Single example for MCQ-OpenQA discrepancy:** The reviewer claimed only Table A1 supports this finding, but Figure 1 provides quantitative analysis across all 12 methods. This criticism misreads the paper.
 
-- **Mechanism speculation criticism for DPO:** The reviewer argued that the DPO utility preservation mechanism is speculative. However, the empirical observation (DPO preserves utility better than IDK+AP) stands regardless of mechanism explanation completeness. The warm-start proposal (Figure A2) provides practical value even with incomplete mechanism understanding.
+- **Taxonomy lacks novelty:** The reviewer claimed the groupings are "intuitive." However, the paper's contribution is not the taxonomy itself but the insights it enables in Sections 4–5—family-level robustness patterns and over-forgetting mechanisms. The taxonomy serves its purpose.
 
-- **Quantization coverage complaint:** The claim that quantization analysis is "thin" because it covers only NPO and RMU is weakened by recognizing that quantization is one of four robustness dimensions analyzed. The paper provides substantial novel analysis elsewhere, making this a valid but not critical limitation.
+- **Writing issues from PDF extraction:** Formatting artifacts noted by the reviewer are parser issues, not paper problems.
 
 ## Novel Insights
 
-The correlation between jailbreaking robustness (RobJA) and in-domain relearning robustness (RobReL)—but not out-of-domain fine-tuning robustness (RobFT)—offers a novel lens for understanding unlearning defense. The analogy to adversarial vs. OOD robustness in machine learning is apt: both jailbreaking and in-domain relearning represent "worst-case" adversarial scenarios in their respective domains (input-space vs. weight-space), while out-of-domain fine-tuning represents distribution shift. This suggests that practitioners focused on adversarial robustness may need to consider in-domain relearning and jailbreaking together, while those concerned with general fine-tuning safety should focus on representation misalignment methods. The finding that divergence-driven methods achieve MCQ-based unlearning effectiveness by "collapsing logits" rather than removing knowledge (Figure A1) provides mechanistic insight into why these methods exhibit over-forgetting—a pattern not highlighted in prior work.
+The correlation between jailbreak robustness (RobJA) and in-domain relearning robustness (RobReL)—versus the weaker correlation with out-of-domain fine-tuning (RobFT)—provides a mechanistic interpretation: adversarial prompting and in-domain relearning both probe forget-domain knowledge through similar perturbation regimes, while out-of-domain fine-tuning represents a fundamentally different attack surface. This insight suggests that improving robustness to one type of attack (e.g., relearning) may transfer to others (e.g., jailbreaking) in ways that out-of-domain fine-tuning robustness does not. Additionally, the observation that divergence-driven methods achieve MCQ success through logit collapse (uniformly suppressing all options) rather than distribution reshaping reveals a blind spot in current evaluation practices: the method "works" by becoming unable to generate coherent responses, not by genuinely forgetting.
 
 ## Suggestions
 
-- Add validation of the Entailment Score metric: report agreement with human judgments on a sample of WMDP question-answer pairs, or at minimum show that the NLI model performs reliably on domain-specific content through calibration experiments.
+- Decouple the Open-QA evaluation from the A/B/C/D format constraint to properly capture free-form generative behavior. Consider evaluating responses to open-ended forget-set queries without predefined answer choices, using semantic similarity or factual consistency metrics.
 
-- Report UE_Open-QA results for jailbreaking robustness to maintain methodological consistency with the paper's core thesis about MCQ limitations.
+- Report statistical uncertainty (at minimum, standard deviations across multiple seeds) for all quantitative results to establish that differences between methods are statistically meaningful.
 
-- Include at least one additional model size (e.g., Llama-3 70B or a different architecture family) to strengthen generalizability claims, or explicitly frame conclusions as specific to 8B-scale models on WMDP-Bio.
+- Clarify the hyperparameter selection criterion: state explicitly which metric(s) determined the final configuration for each method.
 
-- Add confidence intervals or standard deviations across multiple runs with different seeds to establish that observed differences between methods are statistically meaningful.
-
-- Fix the missing research question (Q) in the introduction to complete the paper's motivation structure.
+- Validate the Entailment Score metric by reporting results with at least one alternative NLI model or, ideally, correlation with human judgments on a sample of responses.
 
 # Actual Human Scores
 Individual reviewer scores: [2.0, 4.0, 4.0, 4.0]

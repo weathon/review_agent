@@ -1,0 +1,3953 @@
+# ENHANCING THE SCALABILITY AND APPLICABILITY OF KOHN-SHAM HAMILTONIANS FOR MOLECULAR SYSTEMS
+
+
+**Yunyang Li** _[♠∗]_ **Zaishuo Xia** _[♡∗]_ **Lin Huang** _[♣]_ [�] _[∗]_ **Xinran Wei** _[♣]_ **Han Yang** _[♣]_ **Sam Harshe** _[♠]_
+
+**Zun Wang** _[♣]_ **Chang Liu** _[♣]_ **Jia Zhang** _[♣]_ [�] **Bin Shao** _[♣]_ **Mark B. Gerstein** _[♠]_ [�]
+
+�{huang.lin, jia.zhang}@microsoft.com mark@gersteinlab.org
+_♠_ Yale University _♡_ UC Davis _♣_ MSR AI4Science
+
+
+ABSTRACT
+
+
+Density Functional Theory (DFT) is a pivotal method within quantum chemistry
+and materials science, with its core involving the construction and solution of
+the Kohn-Sham Hamiltonian. Despite its importance, the application of DFT is
+frequently limited by the substantial computational resources required to construct
+the Kohn-Sham Hamiltonian. In response to these limitations, current research
+has employed deep-learning models to efficiently predict molecular and solid
+Hamiltonians, with roto-translational symmetries encoded in their neural networks.
+However, the scalability of prior models may be problematic when applied to large
+molecules, resulting in non-physical predictions of ground-state properties. In
+this study, we generate a substantially larger training set (PubChemQH) than used
+previously and use it to create a scalable model for DFT calculations with physical
+accuracy. For our model, we introduce a loss function derived from physical principles, which we call Wavefunction Alignment Loss (WALoss). WALoss involves
+performing a basis change on the predicted Hamiltonian to align it with the observed one; thus, the resulting differences can serve as a surrogate for orbital energy
+differences, allowing models to make better predictions for molecular orbitals and
+total energies than previously possible. WALoss also substantially accelerates
+self-consistent-field (SCF) DFT calculations. Here, we show it achieves a reduction in total energy prediction error by a factor of 1347 and an SCF calculation
+speed-up by a factor of 18%. These substantial improvements set new benchmarks
+for achieving accurate and applicable predictions in larger molecular systems.
+
+
+1 INTRODUCTION
+
+
+Density functional theory (DFT) (Kohn & Sham, 1965; Hohenberg & Kohn, 1964; Martin, 2020)
+has been widely used in physics (Argaman & Makov, 2000; Jones, 2015; Van Mourik et al., 2014),
+chemistry (Levine et al., 2009; Van Mourik et al., 2014), and materials science (March, 1999;
+Neugebauer & Hickel, 2013) to study the electronic properties of molecules and solids. This
+methodology is particularly valued for its balanced blend of computational efficiency and accuracy,
+rendering it a versatile choice for investigating electronic structure (Kohn et al., 1996; Parr & Yang,
+1995), spectroscopy (Neese, 2009; Orio et al., 2009), lattice dynamics (Dal Corso et al., 1997;
+Wang et al., 2021), transport properties (Bhamu et al., 2018), and more. The most critical step in
+applying DFT to a molecule is constructing the Kohn-Sham Hamiltonian, which consists of the
+kinetic operator, the external potential, the Coulomb potential (also known as the Hartree potential),
+and the exchange-correlation potential (Kohn & Sham, 1965; Hohenberg & Kohn, 1964; Martin,
+2020).
+
+
+The Hamiltonian matrix contains crucial information about molecular systems and their quantum
+states (Kohn & Sham, 1965; Hohenberg & Kohn, 1964; Yu et al., 2023b; Zhang et al., 2024). This
+matrix facilitates the extraction of various properties, including the highest occupied molecular orbital
+(HOMO) and lowest unoccupied molecular orbital (LUMO) energies, the HOMO-LUMO gap, total
+
+
+_∗_ Equal contribution.
+
+
+1
+
+
+energy, and spectral characteristics (Eisberg & Resnick, 1985; Zhang et al., 2024). These properties
+are vital for analyzing conformational energies (St.-Amant et al., 1995), reaction pathways (Farberow
+et al., 2014), and vibrational frequencies (Watson & Hirst, 2002). However, the efficiency of DFT is
+constrained by the self-consistent field (SCF) iterations required to solve the Kohn-Sham equations
+and achieve consistent charge density. These iterations scale as _O_ ( _N_ [3] _T_ ) _∼_ _O_ ( _N_ [4] _T_ ) (Tirado-Rives
+& Jorgensen, 2008; Yu et al., 2023a), where _N_ represents the number of electrons and _T_ denotes the
+number of SCF cycles, making them particularly resource-intensive for large systems.
+
+
+Consequently, this computational intensity underscores the critical need to develop more efficient
+methodologies to determining the Hamiltonian without relying on SCF iterations. This challenge
+has catalyzed interest in leveraging deep learning to predict Hamiltonians directly from atomic
+configurations while adhering to the inherent symmetries of molecular systems (Unke et al., 2021a;
+Kochkov et al., 2021; Yu et al., 2023b; Li et al., 2022; Schütt et al., 2019; Gastegger et al., 2020;
+Hermann et al., 2020; Yin et al., 2024; Zhang et al., 2024; Luo et al., 2025). Notably, the Hamiltonian
+matrix is subject to unitary transformations under molecular rotations due to its spherical harmonics
+component. To tackle these transformations, researchers have developed SE(3)-equivariant neural
+networks such as PhisNet (Unke et al., 2021b) and QHNet (Yu et al., 2023b). These networks
+employ high-order spherical tensors and the Clebsch-Gordon tensor product to construct the predicted
+Hamiltonians.
+
+
+However, current implementations of SE(3)-equivariant neural networks face considerable scalability
+challenges when applied to large molecular structures. Notably, prevailing techniques for predicting
+the Hamiltonian matrix predominantly utilize mean absolute error (MAE) or mean square error
+(MSE) as the loss function (Unke et al., 2021b; Yu et al., 2023b). We contend that these _elementwise_
+_losses alone are insufficient_ for accurately learning Hamiltonians in large systems. To underscore
+this point, we introduce the PubChemQH dataset, which comprises molecular Hamiltonians for
+structures with atom counts ranging from 40 to 100. In contrast, the previously curated dataset
+(Yu et al., 2023a) is limited to molecules with no more than 31 atoms. Figure 1 demonstrates a
+phenomenon enabled by the introduction of the PubChemQH dataset, which we term _Scaling-Induced_
+_MAE-Applicability_ _Divergence_ (SAD). The applicability of the Hamiltonian is assessed by evaluating
+the system energy error derived from pyscf (Sun et al., 2020; Sun, 2015; Sun et al., 2018). While
+small molecules yield system energies close to the ground truth with relative Hamiltonian MAEs
+up to 200%, larger molecules exhibit profound inaccuracies. Energy errors escalate to as much as
+1,000,000 kcal/mol at only 0.01% relative MAE, rendering the Hamiltonians inapplicable. This
+striking disparity emphasizes the inadequacy of MAE for large systems and highlights the pressing
+need for new methodologies to enhance the scalability [1] and applicability of predicted Hamiltonians.
+
+
+To address these limitations, this work aims to enhance Hamiltonian learning for large systems
+by utilizing wavefunctions and their corresponding energies as surrogates to improve Hamiltonian
+applicability. The wavefunction is crucial for Hamiltonian prediction as it encapsulates the quantum
+state of a system, enabling the validation of Hamiltonians based on their ability to accurately
+reflect the system’s energy and dynamics. However, learning the electron wavefunction is nontrivial; inaccuracies in the machine learning-based Hamiltonian may lead to significant error in both
+electronic structure and wavefunctions. This challenge motivated us to introduce the _Wavefunction_
+_Alignment_ _Loss_ function (WALoss), which aligns the eigenspaces of predicted and ground-truth
+Hamiltonians without explicit backpropagation through eigensolvers. Additionally, to improve the
+scalability of Hamiltonian learning, we present _WANet_, a modernized architecture for Hamiltonian
+prediction that leverages eSCN (Passaro & Zitnick, 2023) convolution and a sparse mixture of pair
+experts. Our pipeline and main contributions are summarized in Figure 2.
+
+
+2 BACKGROUND
+
+
+In the framework of Density Functional Theory (DFT), a molecular system is defined by its nuclear
+configuration _M_ := _{_ **Z** _,_ **R** _}_, where **Z** represents the atomic numbers of the nuclei and **R** their
+positions within the molecule. DFT focuses on determining the ground state of a system consisting
+of _N_ electrons by minimizing the total electronic energy with respect to the electron density _ρ_ ( **r** ).
+Here, _ρ_ ( **r** ) is a functional of the set of _N_ one-electron orbitals _{ψi_ ( **r** ) _}_ _[N]_ _i_ =1 [, where] **[ r]** _[ ∈]_ [R][3][ specifies]
+the spatial coordinates of an electron.
+
+
+1We define the scalability as the model’s accuracy under large molecules.
+
+
+2
+
+
+Figure 1: Visualization of the SAD phenomenon. The y-axis (in symmetrical log scale (Webber, 2012))
+represents the system energy error derived from the perturbed Hamiltonian, while the x-axis shows the relative
+MAE, defined as [MAE( ] Mean( **H** [ˆ] **H** _,_ **H** _[⋆][⋆]_ ) ) [, where] **[ H]** _[⋆]_ [represents the ground-truth Hamiltonian and] **[H]** [ˆ] [ denotes the predicted]
+or perturbed Hamiltonian. The relative MAE is induced by model learning errors or Gaussian perturbation. The
+Gaussian perturbation ensures that the perturbed matrix remains Hermitian. The initial guess line is derived
+from minao (Almlöf et al., 1982; Van Lenthe et al., 2006). Current state-of-the-art models, such as QHNet,
+achieve a relative MAE of up to 10 _[−]_ [2] on PubChemQH molecules. For small molecules, a 10 _[−]_ [2] relative MAE is
+sufficient for accurate system energy predictions (left panel), but this accuracy does not extend to large systems
+(right panel).
+For computational efficiency, these orbitals are represented using a basis set _{ϕα_ ( **r** ) _}_ _[B]_ _α_ =1 [depending]
+on the molecular geometry, _B_ denotes the number of basis and varies for different basis sets.
+The expansion coefficients of the orbitals are organized in a matrix **C** _∈_ R _[B][×][N]_, allowing each
+orbital _ψi_ ( **r** ) to be expressed as: _ψi_ ( **r** ) = [�] _α_ _[B]_ =1 _[C][αi][ϕ][α]_ [(] **[r]** [)] _[.]_ [DFT] [seeks] [the] [minimal] [electronic]
+energy by solving for the optimal coefficient matrix **C** via the Kohn-Sham equations, represented as
+**H** ( **C** ) **C** = **SC** _**ϵ**_ _,_ where **H** ( **C** ) _∈_ R _[B][×][B]_ denotes the Hamiltonian matrix. Notice that **H** is a function
+of **C**, and can be computed using _density fitting_ with a complexity of _O_ ( _B_ [3] ). **S** _∈_ R _[B][×][B]_ is the
+overlap matrix with elements _Sαβ_ := - _ϕ_ _[†]_ _α_ [(] **[r]** [)] _[ϕ][β]_ [(] **[r]** [)d] **[r]** [, where] _[ ϕ][†]_ [denotes the complex conjugate of]
+_ϕ_ . _**ϵ**_ represents a diagonal matrix containing the orbital energies. This forms a generalized eigenvalue
+problem, where **C** comprises the eigenvectors and the diagonal elements of _**ϵ**_ are the eigenvalues.
+However, the solution to this problem is complicated by the interdependence between **H** ( **C** ) and
+**C** . To resolve this, traditional DFT employs the self-consistent field (SCF) method, an iterative
+process that refines the coefficients **C** [(] _[k]_ [)] through successive approximations of the Hamiltonian
+matrix **H** [(] _[k]_ [)] . Each iteration commences by computing **H** [(] _[k]_ [)] leveraging **C** [(] _[k][−]_ [1)] and solves a new
+eigenvalue problem:
+**H** [(] _[k]_ [)][ �] **C** [(] _[k][−]_ [1)][�] **C** [(] _[k]_ [)] = **SC** [(] _[k]_ [)] _**ϵ**_ [(] _[k]_ [)] _,_
+
+
+converging to a stable Hamiltonian **H** _[⋆]_ and its corresponding eigenvectors **C** _[⋆]_, which define the
+electron density and other molecular properties derived from the Kohn-Sham equations.
+
+
+**Problem Formulation** The objective of Hamiltonian prediction is to obviate the need for selfconsistent field (SCF) iteration by directly estimating the target Hamiltonian **H** _[⋆]_ from a given
+molecular structure _M_ . To achieve this, one could parameterize a machine learning model **H** [ˆ] _θ_ ( _M_ ).
+The learning process is guided by an optimization process defined as:
+
+
+1
+_θ_ _[⋆]_ = arg min
+_θ_ _|D|_
+
+
+ - dist - **H** ˆ _θ_ ( _M_ ) _,_ **H** _[⋆]_ _M_ - _,_ (1)
+
+( _M,_ **H** _[⋆]_ _M_ [)] _[∈D]_
+
+
+where _|D|_ denotes the cardinality of dataset _D_, and dist( _·, ·_ ) is a predefined distance metric.
+
+
+**SE(3) Equivariant Networks** SE(3)-equivariant neural networks incorporate strong prior knowledge through equivariance. These networks utilize equivariant irreducible representation (irreps)
+features built from vector spaces of irreducible representations to achieve 3D rotation equivariance.
+The vector spaces are (2 _ℓ_ + 1)-dimensional, where degree _ℓ_ _∈_ N represents the angular frequency of
+the vectors. Higher _ℓ_ values are critical for tasks sensitive to angular information, such as predicting
+the Hamiltonian matrix. Vectors of degree _ℓ_, referred to as type- _ℓ_ vectors, are rotated using Wigner-D
+matrices _D_ [(] _[ℓ]_ [)] _∈_ R [(2] _[ℓ]_ [+1)] _[×]_ [(2] _[ℓ]_ [+1)] when rotating coordinate systems. Eigenfunctions of rotation in
+R [3] can be projected into type- _ℓ_ vectors using the real spherical harmonics _Y_ [(] _[ℓ]_ [)] : S [2] _→_ R [2] _[ℓ]_ [+1],
+where S [2] = _{_ ˆ **r** _∈_ R [3] : _∥_ ˆ **r** _∥_ = 1 _}_ is the unit sphere. Equivariant GNNs update irreps features through message passing of transformed irreps features between nodes, using tensor prod
+
+3
+
+
+Figure 2: (a) We introduce PubChemQH, a new resource for Hamiltonian learning that facilitates the exploration
+of the scalability challenge known as SAD. (b) We present WANet, a modern architecture designed for accurate
+Hamiltonian prediction. WANet incorporates SO(2) convolution, a mixture of pair experts, and a many-body
+interaction layer. The mixture of pair experts constructs the non-diagonal block, while the many-body interaction
+layer constructs the diagonal block. (c) Our loss module, WALoss, performs a basis transformation of the
+predicted Hamiltonian using the ground-truth Hamiltonian and the overlap matrix. This enhancement aims to
+improve the applicability of the predicted Hamiltonian in real-world scenarios. Our final loss function combines
+MAE-MSE loss with WALoss.
+ucts: ( _u_ _[ℓ]_ [1] _⊗_ _v_ _[ℓ]_ [2] ) _[ℓ]_ _m_ [3] 3 [=][ �] _m_ _[ℓ]_ [1] 1= _−ℓ_ 1 - _ℓm_ 22= _−ℓ_ 2 _[C]_ ( [(] _ℓ_ _[ℓ]_ 1 [3] _,m_ _[,m]_ 1 [3] ) [)] _,_ ( _ℓ_ 2 _,m_ 2) _[u]_ _m_ _[ℓ]_ [1] 1 _[v]_ _m_ _[ℓ]_ [2] 2 _[,]_ [ where] _[ C]_ [denotes the Clebsch-]
+Gordan coefficient, _ℓ_ 3 satisfies _|ℓ_ 1 _−_ _ℓ_ 2 _| ≤_ _ℓ_ 3 _≤_ _ℓ_ 1 + _ℓ_ 2. Note that _m_ denotes the _m_ -th element in the
+irreducible representation with _−ℓ_ _≤_ _m ≤_ _ℓ_ and _m ∈_ N. In equivariant graph neural networks, the
+message function _mts_ from source node _s_ to target node _t_ is calculated using SO(3) convolution. The
+
+                       -                        - _ℓo_
+
+_ℓ_ 0-th degree of _mts_ can be expressed as _m_ [(] _ts_ _[ℓ][o]_ [)] = [�] _ℓi,ℓf_ _[W][ℓ]_ _i_ _[,ℓ]_ _f_ _[,ℓ]_ _o_ _x_ [(] _s_ _[ℓ][i]_ [)] _⊗_ _Y_ [(] _[ℓ][f]_ [ )] (ˆ **r** _ts_ ) _,_ where
+
+_Wℓi,ℓf,ℓo_ are the weight vectors, _xs_ represents the irreducible representation of the source node _s_ and
+ˆ **r** _ts_ := _∥_ **rr** _tsts∥_ 2 [.]
+
+
+3 WAVEFUNCTION-ALIGNMENT LOSS
+
+
+The applicability of the predicted Hamiltonian **H** [ˆ] depends significantly on the accuracy of its
+eigenvalues (orbital energies) and eigenvectors (basis coefficients). To assess the alignment between
+**H** ˆ and the actual Hamiltonian **H** _[⋆]_ with respect to their eigenspaces, we present the following theorem:
+
+
+**Theorem** **1.** _Let_ **H** _and_ **H** [ˆ] _represent_ _Hamiltonian_ _matrices,_ _and_ **S** _the_ _overlap_ _matrix._ _Define_
+_the_ _perturbation_ _matrix_ _as_ ∆ **H** := **H** [ˆ] _−_ **H** _._ _Let_ _λi_ ( **H** _,_ **S** ) _and_ _λi_ ( **H** [ˆ] _,_ **S** ) _be_ _the_ _i_ _[th]_ _generalized_
+_eigenvalues of_ **H** _and_ **H** [ˆ] _, respectively._ _Assume a spectral gap δ separates the generalized eigenvalues_
+_of_ **H** _,_ **H** [ˆ] _._ _κ_ ( _·_ ) _denotes_ _the_ _conditional_ _number_ _of_ _a_ _given_ _matrix,_ _∥· ∥_ 2 _represents_ _the_ _spectral_
+_norm._ _∥_ ∆ **H** _∥_ 1 _,_ 1 = [�] _i,j_ _[|]_ [∆] **[H]** _[ij][|][.]_ _[Then, the difference in eigenvalues and the angle][ θ][ between the]_
+
+_eigenspace of_ **H** _and_ **H** [ˆ] _satisfy:_
+
+
+_|λi_ ( **H** [ˆ] _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) _| ≤_ _[κ]_ [(] **[S]** [)]
+
+
+_∥_ _[κ]_ **S** [(] **[S]** _∥_ 2 [)] _· ∥_ ∆ **H** _∥_ 1 _,_ 1 _,_ sin _θ_ _≤_ _∥_ _[κ]_ **S** [(] **[S]** _∥_ 2 [)]
+
+
+_[κ]_ [(] **[S]** [)] _·_ _[∥]_ [∆] **[H]** _[∥]_ [1] _[,]_ [1] _._
+
+_∥_ **S** _∥_ 2 _δ_
+
+
+4
+
+
+_Proof._ The proof is delegated to Appendix J.1.
+
+
+**Corollary 1** (Perturbation Sensitivity Scaling) **.** _Assume λmin_ ( _S_ ) _of the overlap matrix S_ _scales as:_
+_A_
+_λmin_ ( _S_ ) = _c_ +   _α_ _, where c >_ 0 _, A >_ 0 _, and α >_ 0 _describe the saturation behavior._ _Then,_
+
+
+
+
+
+
+
+ _[B]_
+
+
+_α_ _, where c >_ 0 _, A >_ 0 _, and α >_ 0 _describe the saturation behavior._ _Then,_
+
+
+1+
+
+
+_N_ 0
+
+
+
+
+
+
+
+
+_for_ _a_ _perturbation_ _matrix_ ∆ _H,_ _under_ _the_ _first-order_ _perturbation_ _approximation,_ _the_ _eigenvalue_
+_perturbation is bounded by:_
+
+
+                   -                   _λi_ ( ˆ **H** _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) _≤_ _O_ _σB_ [1] _[/]_ [2] + _B|µ|_ _,_
+��� ���
+
+
+_Proof._ The proof is delegated to Appendix J.2.
+
+
+**Remark** The theorem highlights that the difference between the predicted and actual Hamiltonian
+matrices, when only considering the element-wise norm, can lead to unbounded differences in eigenvalues/eigenvectors due to a significant _[κ]_ _∥_ [(] **S** **[S]** _∥_ [)] [ratio.] [The corollary further elucidates the sensitivity of]
+
+eigenvalue perturbations to the size of the basis _B_ .This phenomenon underscores the catastrophic
+scaling associated with increasing _B_, which is a manifestation of the aforementioned SAD phenomenon. We provide a thorough discussion on _α_ in Appendix J.3. To validate our theoretical
+analysis, we empirically evaluated the distribution of _∥_ _[κ]_ **S** [(] **[S]** _∥_ 2 [)] [across both the QH9 and PubChemQH]
+
+datasets (Figure 6). The results demonstrate that molecules in PubChemQH exhibit substantially
+higher ratios compared to QH9, indicating increased perturbation sensitivity in larger molecular
+systems. This provides strong empirical evidence for the SAD phenomenon and aligns with our
+theoretical predictions. Consequently, these findings suggest that when designing an effective supervisory signal for learning or optimization tasks involving Hamiltonian matrices, it is crucial to take
+into account the interaction of the overlap matrix and the corresponding Hamiltonian to mitigate the
+potential instability caused by perturbations.
+
+
+In light of this, we propose a new loss function: the Wavefunction Alignment Loss. It is designed to
+preserve the integrity of the eigenstructure related to molecular orbitals. Let _**ϵ**_ ˆ and _**ϵ**_ _[⋆]_ represent the
+eigenvalues (orbital energies) of **H** [ˆ] and **H** _[⋆]_, respectively, and **C** [ˆ] and **C** _[⋆]_ denote the corresponding
+eigenvectors (basis coefficients). We define a primary form of the loss function by directly applying
+the Frobenius norm to the eigenvalues _L_ align = _n_ [1] - _ni_ =1 _[∥]_ _**[ϵ]**_ [ˆ] ( _i_ ) _[−]_ _**[ϵ]**_ _[⋆]_ ( _i_ ) _[∥]_ F [2] _[,]_ [ where][ ˆ] _**[ϵ]**_ ( _i_ ) [and] _**[ ϵ]**_ ( _[⋆]_ _i_ ) [are derived]
+
+from solving the generalized eigenvalue problems: **H** [ˆ] **C** [ˆ] = **SC** [ˆ] _**ϵ**_ ˆ and **H** _[⋆]_ **C** _[⋆]_ = **SC** _[⋆]_ _**ϵ**_ _[⋆]_, respectively.
+
+
+However, this formulation has notable limitations: (1) Generalized eigenvalue problems are susceptible to numerical instabilities due to ill-conditioned matrices, leading to erroneous gradients during
+backpropagation through iterative eigensolvers, complicating optimization. (2) The loss function
+assigns uniform weights to all orbital energies, which is not practical as some orbital energies hold
+more significance. To address these issues, we begin by applying the following algorithm (Ghojogh
+et al., 2019; Golub & Van Loan, 2013) to perform a simultaneous reduction of the matrix pair ( **H** _[⋆]_ _,_ **S** ):
+
+
+**Algorithm 1** Simultaneous reduction of a matrix pair ( **H** _[⋆]_ _,_ **S** )
+
+**Require:** Groud-truth Hamiltonian matrix **H** _[⋆]_ and overlap matrix **S**
+**Ensure:** Diagonal matrix _**ϵ**_ _[⋆]_ and matrix **C** _[⋆]_ such that ( **C** _[⋆]_ ) _[⊤]_ **SC** _[⋆]_ = **I** and ( **C** _[⋆]_ ) _[⊤]_ **H** _[⋆]_ **C** _[⋆]_ = _**ϵ**_ _[⋆]_
+
+1: Compute the Cholesky decomposition **S** = **GG** _[⊤]_ .
+2: Define **M** _[⋆]_ = **G** _[−]_ [1] **H** _[⋆]_ **G** _[−⊤]_ .
+3: Apply the symmetric QR algorithm to find the Schur form ( **Q** _[⋆]_ ) _[⊤]_ **M** _[⋆]_ **Q** _[⋆]_ = _**ϵ**_ _[⋆]_ .
+4: Compute **C** _[⋆]_ = **G** _[−⊤]_ **Q** _[⋆]_ .
+
+
+When the overlap matrix **S** is ill-conditioned, the eigenvalues _**ϵ**_ _[⋆]_ computed by Algorithm 1 can suffer
+from significant roundoff errors. To mitigate this, we modify the algorithm by replacing the Cholesky
+decomposition of **S** with its eigen (Schur) decomposition **V** _[⊤]_ **SV** = **Σ**, where **V** is the matrix of
+eigenvectors and **Σ** is the diagonal matrix of eigenvalues. We then substitute **G** with **VΣ** _[−]_ [1] _[/]_ [2] . This
+modification effectively reorders the entries of **M** _[⋆]_, placing larger values towards the upper left-hand
+corner, thereby enhancing the precision in computing smaller eigenvalues (Golub & Van Loan, 2013;
+Wilkinson, 1988).
+
+
+5
+
+
+**Claim 1.** _Under optimal convergence condition, the ground truth eigenvector_ **C** _[⋆]_ _should diagonalize_
+_the predicted transformed matrix_ **H** [ˆ] _, thereby satisfying the relation_ ( **C** _[⋆]_ ) _[⊤]_ **HC** [ˆ] _[⋆]_ = _**ϵ**_ _[⋆]_ _._
+
+
+Accordingly, we propose a refined loss function:
+
+
+F _[,]_ (2)
+
+
+_L_ WA = [1]
+
+_n_
+
+
+_n_
+
+
+- _∥_ ( **C** _[⋆]_ ( _i_ ) [)] _[⊤]_ **[H]** [ˆ] [(] _[i]_ [)] **[C]** _[⋆]_ ( _i_ ) _[−]_ _**[ϵ]**_ ( _[⋆]_ _i_ ) _[∥]_ [2] F
+
+_i_ =1
+
+
+where the subscript ( _·_ )( _i_ ) denotes the _i_ -th sample. This modified loss function explicitly penalizes
+deviations from the expected eigenstructure. It is important to note that while ( **C** _[⋆]_ ) _[⊤]_ **HC** [ˆ] _[⋆]_ may not
+yield a diagonal matrix, the diagonal nature of _**ϵ**_ _[⋆]_ implicitly enforces the predicted eigenstructure
+through the non-diagonal elements of the loss function. Here, we provide another derivation of
+the WALoss by drawing a parallel to first-order perturbation theory. In perturbation theory, for
+a Hamiltonian **H** **[ˆ]** = **H** _[⋆]_ + ∆ **H**, where ∆ **H** is the perturbation. The first-order energy shift is
+_δ_ _**ϵ**_ = - _ψ_ _[⋆][†]_ ∆ **H** _ψ_ _[⋆]_ _d_ **r**, using the unperturbed eigenvectors _ψ_ _[⋆]_ of **H** _[⋆]_, with the assumption that these
+eigenvectors remain fixed while adjusting the eigenvalues. Similarly, WALoss employs the groundtruth eigenvectors **C** _[⋆]_ from **H** _[⋆]_ **C** _[⋆]_ = **SC** _[⋆]_ _**ϵ**_ _[⋆]_ to evaluate the predicted Hamiltonian **H** _[⋆]_ + ∆ **H** . The
+loss could be rewritten as _L_ WA = _n_ [1] - _ni_ =1 _[∥]_ [(] **[C]** ( _[⋆]_ _i_ ) [)] _[⊤]_ [(] **[H]** _[⋆]_ [+ ∆] **[H]** [)][(] _[i]_ [)] **[C]** _[⋆]_ ( _i_ ) _[−]_ _**[ϵ]**_ ( _[⋆]_ _i_ ) _[∥]_ F [2] [,] [assessing] [how]
+
+well **H** _[⋆]_ + ∆ **H** reproduces _**ϵ**_ _[⋆]_ in the **C** _[⋆]_ basis. Here, ( **C** _[⋆]_ ) _[⊤]_ ( **H** _[⋆]_ + ∆ **H** ) **C** _[⋆]_ = _**ϵ**_ _[⋆]_ + ( **C** _[⋆]_ ) _[⊤]_ ∆ **HC** _[⋆]_,
+where ( **C** _[⋆]_ ) _[⊤]_ ∆ **HC** _[⋆]_ mirrors the perturbation term - _ψ_ _[⋆][†]_ ∆ **H** _ψ_ _[⋆]_ _d_ **r** .
+
+
+It is widely known that energies associated with occupied molecular orbitals (and LUMO) make
+up the most energy of the molecule. Thus, to capture the most relevant part of the eigenspectrum,
+we calculate the loss function with increased weight on the _k_ + 1 lowest eigenvalues. Here, _k_
+corresponds to the number of occupied orbitals [2], and an additional eigenvalue accounts for the
+Lowest Unoccupied Molecular Orbital (LUMO). Let _I_ represent the set of indices corresponding to
+the _k_ + 1 lowest eigenvalues, and (( _·_ )( _i_ )) _j_ indexes the _j_ -th eigenvalue for the _i_ -th sample. The loss
+function is defined as follows:
+
+
+
+
+
+- _∥_ ( **C** _[⋆]_ (
+
+_j∈I_
+
+
+_L_ WA = _n_ [1]
+
+
+_n_
+
+
+_i_ =1
+
+
+ _ρ_ 
+
+
+_[⋆]_ ( _i_ ) [)] _j_ _[⊤]_ **[H]** [ˆ] ( _i_ ) [(] **[C]** _[⋆]_ ( _i_ ) [)] _[j]_ _[−]_ [(] _**[ϵ]**_ _[⋆]_ ( _i_
+
+
+F
+
+
+[2] F [+] _[ ξ]_ 
+
+
+_[⋆]_ ( _i_ ) [)] _[j]_ _[−]_ [(] _**[ϵ]**_ _[⋆]_ (
+
+
+_[⋆]_ ( _i_ ) [)] _[j][∥]_ F [2]
+
+
+- _∥_ ( **C** _[⋆]_ ( _i_
+
+_j /∈I_
+
+
+_[⋆]_ ( _i_ ) [)] _j_ _[⊤]_ **[H]** [ˆ] ( _i_ ) [(] **[C]** _[⋆]_ (
+
+
+_[⋆]_ ( _i_ ) [)] _[j][∥]_ F [2]
+
+
+
+
+
+ _,_
+
+
+(3)
+
+
+where _n_ denotes the number of samples, and _ρ, ξ_ are hyperparameters where _ρ ≫_ _ξ_ . This adaptation
+ensures that the loss function places greater emphasis on the eigenvectors and eigenvalues corresponding to the occupied orbitals and LUMO. This improves the model’s focus on the critical part of
+the eigenspace, which is crucial for practical applications.
+
+
+4 WANET
+
+
+Here, we present WANet, a modernized architecture for Hamiltonian prediction. First, unlike previous
+approaches, we propose a streamlined design for Hamiltonian prediction that consists of two essential
+components: the Node Convolution Layer and the Hamiltonian Head. The Node Convolution Layer
+operates on a localized radius graph, performing graph convolution to capture intricate atomic
+interactions. This block serves a dual purpose: first, it generates an irreducible node representation,
+providing a powerful input for the subsequent Hamiltonian Head. Second, it can be initialized with a
+pretrained EGNN or reprogrammed for other downstream tasks, constituting a unified framework for
+molecular modeling. The Hamiltonian Head constructs both pairwise and many-body irreducible
+representations using the Clebsch-Gordon tensor product. These representations are then utilized to
+assemble both the non-diagonal and diagonal components of the Hamiltonian matrix. The model
+architecture and ablation studies are detailed in Figure 10 and Table 9, respectively.
+
+
+4.1 NODE CONVOLUTION LAYER
+
+
+For the Node Convolution Layer, we replace the traditional SO(3) convolutions with Equivariant
+Spherical Channel Network (eSCN) (Passaro & Zitnick, 2023; Liao et al., 2023). The eSCN
+
+
+2 _k_ = _⌊_ _N_ 2 _[⌋]_ [for paired orbitals.]
+
+
+6
+
+
+framework primarily utilizes SO(2) linear operations, optimizing the computation of tensor products
+involved in the convolution process. Traditionally, SO(3) convolutions operate on input irreducible
+representation (irrep) features _u_ _[ℓ]_ _m_ _[i]_ _i_ [and] [spherical] [harmonic] [projections] _[Y]_ _m_ _[ℓ][f]_ _f_ [(ˆ] **[r]** _ts_ [)][.] [By] [applying] [a]
+rotation matrix _Dts_ to ˆ **r** _ts_, aligning it with the canonical axis where _ℓ_ = 0 and _m_ = 0, the spherical
+harmonic projection _Ym_ _[ℓ][f]_ _f_ [(] _[D]_ _ts_ [ˆ] **[r]** _ts_ [)] [becomes] [non-zero] [exclusively] [for] _[m]_ _f_ [=] [0][.] [This] [condition]
+simplifies the tensor product to _C_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,_ 0) [,] [which] [remains] [non-zero] [only] [when] _[m][i]_ [=] _[±][m][o]_ [.]
+Subsequently, eSCN has demonstrated that this reformulation could be reparameterized using SO(2)
+operations on the rotated tensors, and simplify the computation from _O_ ( _L_ [6] ) to _O_ ( _L_ [3] ), _L_ is the
+degree of the representaion. A detailed mathematical framework of this method is elaborated in the
+Appendix D.
+
+
+4.2 HAMILTONIAN HEAD
+
+
+**Sparse Mixture of Long-Short-Range Experts** We introduce a variant of the Gated Mixture-ofExperts (GMoE) (Shazeer et al., 2017; Clark et al., 2022; Riquelme et al., 2021; Zoph et al., 2022;
+Jiang et al., 2024) model by incorporating a Mixture-of-Experts (MoE) layer tailored for pairwise
+molecular interactions. This enhancement draws inspiration from the Long-Short-Range Message
+Passing framework (Li et al., 2023), which differentiates between handling proximal and distal
+interactions through specialized layers. Our approach differentiates interaction dynamics based on
+distance, with closer pairs experiencing distinct interaction profiles compared to more distant pairs.
+This differentiation is achieved through a novel layer that substitutes the conventional pair interaction
+layer with a sparse assembly of expert modules, each functioning autonomously as a Pair Construction
+Layer. We define the Pair Construction layer with the function _F_ pair _[n]_ [for the] _[ n]_ [-th expert, and delineate]
+the output of the MoE layer with _N_ experts as: _F_ MoE( _xt, xs_ ) = [�] _n_ _[N]_ =1 _[p][n]_ [(] _[x][t][, x][s]_ [)] _[ ·][ F][ n]_ pair [(] _[x][t][, x][s]_ [)] _[,]_
+where _pn_ ( _xt, xs_ ) are the gating probabilities computed by the gating network, and _·_ denotes scalar
+multiplication. The gating probabilities are obtained by applying the _Softmax_ function over the gating
+scores of all experts: _pn_ ( _xt, xs_ ) = - _N_ exp( _Gn_ ( _z_ )) [= rbf(] _[∥]_ **[r]** _[ts][∥]_ [2][)][ applies a radial basis]
+_m_ =1 [exp(] _[G][m]_ [(] _[z]_ [))] _[,]_ [ where] _[ z]_
+function to the Euclidean distance _∥_ **r** _ts∥_ 2 with a distance cutoff, and _Gn_ ( _z_ ) represents the gating
+score for the _n_ -th expert, computed as: _Gn_ ( _z_ ) = _z · Wgn_ + _ϵn._ Here, _Wgn_ are learned gating weights
+for expert _n_, and _ϵn_ is injected noise to encourage exploration and promote load balancing among
+experts. Specifically, we use _Gumbel_ noise (Jang et al., 2016): _ϵn_ = _−_ log ( _−_ log ( _Un_ )) _,_ _Un_ _∼_
+Uniform(0 _,_ 1) _._ This noise enables a differentiable approximation of the top- _K_ selection, allowing
+for sparse expert utilization while maintaining gradient flow during training. To further promote load
+balancing among the experts, we introduce an auxiliary load balancing loss (Shazeer et al., 2017):
+
+          - [�] ( _t,s_ ) _[p][n]_ [(] _[x][t][,x][s]_ [)] �2
+_L_ load_balancing = _N_ [�] _n_ _[N]_ =1 �( _t,s_ ) [1] _,_ which encourages the gating network to allocate
+
+routing probabilities evenly across experts, preventing underutilization of any single expert. The Pair
+
+
+          - [�]
+_L_ load_balancing = _N_ [�] _n_ _[N]_ =1
+
+
+( _t,s_ ) _[p][n]_ [(] _[x][t][,x][s]_ [)]
+
+ 
+
+
+Construction layer for each expert is defined as: - _F_ pair _[n]_ [(] _[x][t][, x][s]_ [)] - _lo_ = � _li,lj_ _[W][ n]_ _li,lj_ _,lo_ - _x_ _[l]_ _s_ _[i]_ _⊗_ _x_ _[l]_ _t_ _[j]_ - _lo_ _,_
+
+where _x_ _[l]_ _s_ _[i]_ and _x_ _[l]_ _t_ _[j]_ [are the] _[ l][i]_ [-th and] _[ l][j]_ [-th irreducible representations of source node] _[ s]_ [ and target node]
+_t_, respectively; _Wl_ _[n]_ _i,lj_ _,lo_ [are] [the] [learned] [weights] [that] [couple] [these] [representations] [into] [the] [output]
+representation _lo_ ; and _⊗_ denotes the tensor product.
+
+
+**Many-Body Interaction Layer** Considering many-body interactions for the diagonal components
+of the Hamiltonian in molecular systems captures essential electron correlation effects (Szabo &
+Ostlund, 2012; Jensen, 2017). These interactions provide a more accurate representation of the
+collective behavior of atoms, beyond pairwise approximations. This leads to a precise description of
+key quantum phenomena like electron delocalization and exchange interactions (Szabo & Ostlund,
+2012). For this purpose, we employ the methodologies of the MACE framework (Batatia et al.,
+2022; Kovács et al., 2023; Batatia et al., 2023). Central to MACE is the adept conversion of firstorder features into higher-order features using the so-called _density trick_ (Duval et al., 2023). This
+procedure initiates with the formation of generalized Clebsch-Gordon tensor products from the
+first-order features:
+
+
+_BM,ν_ _[L]_ [=] - _Clm,ν_ _[LM]_
+
+_lm_
+
+
+_ν_
+
+- _wlξ_ _fm_ _[l]_ [;] where _lm_ = ( _l_ 1 _m_ 1 _, . . ., lνmν_ ) _,_
+
+
+_ξ_ =1
+
+
+7
+
+
+where _fm_ _[l]_ [represents the input tensor, and] _[ B]_ _M,ν_ _[L]_ [the resultant tensor for the] _[ ν]_ [-body.] [The coefficients]
+_Clm,ν_ _[LM]_ [are the generalized Clebsch-Gordan coefficients, ensuring the] _[ L]_ [-equivariance of the output]
+tensor _BM,ν_ _[L]_ [.] [Moreover,] _[ C]_ _lm,ν_ _[LM]_ [is notably sparse and can be pre-computed efficiently.]
+
+
+5 EXPERIMENTS
+
+
+In this section, we evaluate WANet with WALoss on the QH9 and PubChemQH datasets. Our
+evaluation metrics include MAE for the Hamiltonian, _**ϵ**_ HOMO, _**ϵ**_ LUMO, _**ϵ**_ ∆, _**ϵ**_ occ, cosine similarity for
+the eigenvectors **C**, and _relative_ SCF iterations compared to the initial guess, which are commonly
+used in previous works (Unke et al., 2021b; Yu et al., 2023b;a). Additionally, we introduce two
+new physics-related metrics—MAE for _**ϵ**_ orb and System Energy—to provide a more comprehensive
+evaluation. Detailed descriptions of these metrics are provided in Appendix C.1.
+
+
+5.1 RESULTS ON THE PUBCHEMQH DATASET
+
+
+**Dataset Generation Process** In our study, we investigated the scalability of Hamiltonian learning
+by utilizing a _CUDA-accelerated SCF implementation_ (Ju et al., 2024) to perform computational
+quantum chemistry calculations, thereby generating the PubChemQH dataset. We began with geometries from the PubChemQC dataset by (Nakata & Maeda, 2023), selecting only molecules with
+a molecular weight above 400. This filtration process resulted in a dataset comprising molecules
+with 40 to 100 atoms, totaling over 50,000 samples. We chose the B3LYP exchange-correlation
+functional (Lee et al., 1988; Beeke, 1993; Vosko et al., 1980; Stephens et al., 1994) and the Def2TZV
+basis set (Weigend & Ahlrichs, 2005; Weigend, 2006) to approximate electronic wavefunctions.
+Generating this comprehensive dataset represents a substantial computational effort, requiring approximately _one_ _month_ _of_ _continuous_ _processing_ _using_ _128_ _NVIDIA-V100_ _GPUs_ . We provide a
+comparison between the PubChemQH dataset and the QH9 dataset in Appendix H.
+
+Table 1: PubChemQH experimental results. The energy units are presented in kcal/mol. N/A indicates that
+the metric is not applicable to a specific model. The best-performing models are highlighted in bold. Detailed
+training setups are provided in Table 12 and Table 13.
+
+
+Model Hamiltonian MAE _↓_ _ϵ_ HOMO MAE _↓_ _ϵ_ LUMO MAE _↓_ _ϵ_ ∆ MAE _↓_ _ϵ_ occ MAE _↓_ _ϵ_ orbMAE _↓_ **C** Similarity _↑_ System Energy MAE _↓_ relative SCF Iterations _↓_
+
+
+Table 1 presents a comparative analysis of various models’ performance on the PubChemQH dataset.
+Despite a higher Hamiltonian MAE, WANet with WALoss significantly outperforms the other
+models in practical utility, as evidenced by the System Energy MAE and the required SCF iterations.
+Specifically, the System Energy MAE for WANet with WALoss is dramatically reduced from
+63579.233 kcal/mol to 47.193 kcal/mol. Additionally, the relative SCF iterations required for WANet
+with WALoss is only 82%, compared to 371% for QHNet and 334% for WANet without WALoss.
+This substantial reduction in SCF iterations demonstrates the effectiveness of WALoss in accelerating
+the convergence process. Furthermore, it is worth noting that the initial guess matrix, although not
+achieving as low an MAE as QHNet or WANet without WALoss, shows improved utility with a
+System Energy MAE of 374.313 kcal/mol. This finding reinforces the idea that _elementwise losses_
+_are insufficient_ . Additional evidence supporting this idea is provided in Appendix C.2.
+
+
+5.2 RESULTS ON THE QH9 DATASET
+
+
+The QH9 dataset is a comprehensive quantum chemistry resource designed to support the development and evaluation of machine learning models for predicting quantum Hamiltonian matrices.
+Built upon the QM9 dataset, QH9 contains Hamiltonian matrices for 130,831 stable molecular
+geometries, encompassing molecules with up to nine heavy atoms of elements C, N, O, and F. These
+Hamiltonian matrices were generated using pyscf with the B3LYP functional (Lee et al., 1988;
+Beeke, 1993; Vosko et al., 1980; Stephens et al., 1994) and the def2SVP basis set. Table 2 presents a
+comparative analysis of the performance of our model, WANet, against the baseline model, QHNet,
+on the QH9 dataset in both stable and dynamic settings. In the QH9-stable experiments, WANet
+
+
+8
+
+
+Table 2: Experimental results on the QH9 dataset. The energy units are presented in kcal/mol.
+
+Model Hamiltonian MAE _↓_ _ϵ_ occ MAE _↓_ **C** similarity _↑_
+
+
+QHNet 0.0513 0.5366 95.85%
+QH9 stable QHNet w/WAloss 0.0780 0.4901 96.35%
+WANet **0.0502** 0.5231 96.86%
+WANet w/WAloss 0.0914 **0.4587** **96.95%**
+
+
+QHNet 0.0471 0.2744 97.13%
+QH9 dynamic QHNet w/WAloss 0.0495 0.2658 98.54%
+WAnet **0.0469** 0.2614 99.68%
+WAnet w/WAloss 0.0512 **0.2500** **99.81%**
+demonstrates superior performance, achieving higher accuracy compared to QHNet. Specifically,
+WANet significantly reduces both the Hamiltonian and occupied energy MAE while improving the
+cosine similarity of **C** . For the QH9-dynamic dataset, WANet consistently outperforms QHNet,
+further enhancing prediction accuracy. These results underscore the robustness and effectiveness of
+WANet in both stable and dynamic scenarios.
+
+
+5.3 COMPARISON WITH A PROPERTY REGRESSION MODEL
+
+
+Conventional machine learning approaches typically employ property regression, mapping molecular
+features directly to the desired property value (Blum & Reymond, 2009; Montavon et al., 2013).
+A common question arises: why use Hamiltonians instead of a property regression model? We
+argue that property regression methods often fail to incorporate underlying quantum mechanical
+principles, limiting their generalization capability. To illustrate this, we compared the performance of
+WANet with WALoss to a model utilizing Equiformer V2 (Liao & Smidt, 2023), UniMol+ (Lu et al.,
+2023), and UniMol2 (Xiaohong et al., 2024) with invariant regression heads, using identical training
+and test sets. As shown in Table 1, WANet with WALoss demonstrates significantly lower MAE
+values in predicting key quantum chemical properties. Specifically, WANet with WALoss achieves
+an 88.88% improvement in _ϵ_ LUMO MAE and a 58.81% improvement in _ϵ_ ∆ MAE. Moreover, the
+Hamiltonian predicted by WANet with WALoss is not limited to specific properties. It enables the
+accurate calculation of various critical properties, such as electronic densities, dipole moments, and
+excited-state energies, all from a single model. Additionally, it can be applied to SCF acceleration. In
+contrast, the Equiformer V2 regression model is constrained to predicting a narrow set of specific
+properties, necessitating the training of a new model for each new property.
+
+
+5.4 EFFICIENCY EVALUATION OF WANET
+
+
+WANet exhibits efficiency advantages in two aspects: (1) its application to SCF relative to traditional DFT calculations, and (2)
+its efficiency and resource usage compared to existing state-ofthe-art neural networks. Specifically, WANet can predict Hamiltonians for large molecular systems significantly faster than traditional DFT methods. Figure 3a presents a wall-clock time comparison between WANet-augmented SCF and traditional DFT
+calculations. Although the neural network evaluation introduces
+a small overhead, WANet substantially reduces the number of
+required SCF iterations, resulting in a faster overall computation
+time. This notable speed-up makes WANet particularly advantageous for applications requiring rapid predictions for large molecular systems, such as high-throughput virtual screening. Furthermore, WANet outperforms QHNet in training and inference
+efficiency on the PubChemQH dataset, offering faster training
+times, improved inference speeds, and lower peak GPU memory
+usage (Figure 3b).
+
+
+Figure 3(a): Wall-clock comparison
+of WANet-Augmented DFT with traditional SCF iterations.
+
+
+(b): Comparison of training and inference efficiency and resource usage
+between QHNet and WANet on the
+PubChemQH dataset.
+
+
+5.5 MOLECULAR PROPERTIES BEYOND ENERGY PREDICTIONS
+
+
+Table 3: Additional property predictions. We evaluated WANet in
+deriving dipole moment and electronic spatial extent.
+
+
+To validate the versatility of the Table 3: Additional property predictions. We evaluated WANet in
+Hamiltonian predicted by WANet deriving dipole moment and electronic spatial extent.
+with WALoss, we extended our exper- **Model** Equiformer V2 Regression **Dipole Moment MAE (D)3.3221** **Electronic Spatial Extent MAE (a.u.)** 0.1098
+iments to include predictions beyond EGNN RegressionViSNet Regression 4.34124.5211 0.07890.0982
+energy properties, specifically dipole Initial Guess 4.0170 0.0161
+
+WANet w/ WALoss 3.3928 **0.0076**
+
+moment and electronic spatial extent.
+As shown in Table 3, WANet with WALoss performs competitively in dipole moment prediction and
+excels in predicting electronic spatial extent. This demonstrates the model’s ability to generalize
+across multiple molecular properties, highlighting its potential for broader quantum mechanical
+
+
+**Model** **Dipole Moment MAE (D)** **Electronic Spatial Extent MAE (a.u.)**
+Equiformer V2 Regression **3.3221** 0.1098
+EGNN Regression 4.3412 0.0789
+ViSNet Regression 4.5211 0.0982
+Initial Guess 4.0170 0.0161
+WANet w/ WALoss 3.3928 **0.0076**
+
+
+9
+
+
+calculations beyond energy-based properties. Further details on the derivation of these properties
+from the Hamiltonian are provided in Appendix F.
+
+
+5.6 SCALABILITY IN ELONGATED CARBON CHAIN
+
+
+To evaluate the scalability of our model trained on PubChemQH, we conducted inference using elongated alkanes (CxH2x+2) [3], a series of saturated hydrocarbons. We compared three models: our model with WALoss, our model without WALoss, and an initial guess algorithm.
+
+
+and HOMO energies, partic- 40
+
+where the atom count ex- 20
+
+|Col1|D1|Col3|D2|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||w/ WALoss<br>init guess<br>|w/ WALoss<br>init guess<br>|
+|||||w/o WALos|s|
+|||||||
+|||||||
+
+
+|Col1|D1|Col3|D2|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||w/ WALoss<br>init guess<br>|w/ WALoss<br>init guess<br>|
+|||||||w/o WALos||
+|||||||||
+|||||||||
+|||||||||
+
+
+also performs well on elon- Figure 4: Model performance in predicting HOMO and LUMO energies for
+gated alkanes with up to elongated alkanes. The left panel shows the MAE for HOMO predictions,
+182 atoms—three times the while the right panel shows the MAE for LUMO predictions. “D1” indicates
+average atom count of the that the atom count is within the range of the PubChemQH dataset, whereas
+PubChemQH training set “D2” indicates that the atom count exceeds this range. The models compared
+(60). These findings high- include WANet with WALoss (w/ WALoss), our model without WALoss (w/o
+
+WALoss), and the initial guess (init guess). Notably, our model with WALoss
+
+light the effectiveness of
+
+demonstrates superior performance in LUMO predictions and matches the best
+
+WALoss in enhancing the
+
+HOMO performance, particularly in the “D2” region.
+
+scalability and applicability
+of our model for predicting electronic properties in scalable homogeneous series, demonstrating its
+potential for application to larger and more complex molecular systems. Additional analysis of the
+scaling performance is provided in Appendix C.3.
+
+
+80
+
+
+250
+
+
+60
+
+
+200
+
+
+150
+
+
+40
+
+
+100
+
+
+20
+
+
+50
+
+
+0
+
+
+0
+
+
+10 20 30 40 50 60
+**Number of Carbon Atoms**
+
+
+10 20 30 40 50 60
+**Number of Carbon Atoms**
+
+
+Figure 4: Model performance in predicting HOMO and LUMO energies for
+elongated alkanes. The left panel shows the MAE for HOMO predictions,
+while the right panel shows the MAE for LUMO predictions. “D1” indicates
+that the atom count is within the range of the PubChemQH dataset, whereas
+“D2” indicates that the atom count exceeds this range. The models compared
+include WANet with WALoss (w/ WALoss), our model without WALoss (w/o
+WALoss), and the initial guess (init guess). Notably, our model with WALoss
+demonstrates superior performance in LUMO predictions and matches the best
+HOMO performance, particularly in the “D2” region.
+
+
+5.7 ABLATION STUDY ON WALOSS
+
+
+To evaluate the effectiveness of our proposed WALoss, we conducted an ablation study with three
+variations: full WALoss, naive WALoss, and WALoss without reweighting. The naive WALoss
+applies the Frobenius norm to the eigenvalues leveraging backpropagation through eigensolvers,
+defined as _L_ naive = _n_ [1] - _ni_ =1 _[∥]_ _**[ϵ]**_ [ˆ] ( _i_ ) _[−]_ _**[ϵ]**_ _[⋆]_ ( _i_ ) _[∥]_ F [2] [, where] _**[ϵ]**_ [ˆ] ( _i_ ) [and] _**[ ϵ]**_ ( _[⋆]_ _i_ ) [are derived from solving generalized]
+
+eigenvalue problems. The WALoss without reweighting calculates the loss uniformly across all
+eigenvalues. As shown in Table 4, the full WALoss achieves the lowest MAEs across all metrics. The
+naive WALoss performs poorly, highlighting several challenges associated with optimizing the naive
+loss function. Removing reweighting also degrades performance, though not as drastically. Overall,
+these results validate the design choices in formulating WALoss to improve Hamiltonian prediction.
+Table 4: Ablation study of WALoss on the PubChemQH dataset. The best-performing models are highlighted
+in bold.
+
+
+Model Hamiltonian MAE _↓_ _ϵ_ HOMO MAE _↓_ _ϵ_ LUMO MAE _↓_ _ϵ_ ∆ _ϵ_ occ MAE _↓_ _ϵ_ orbMAE _↓_ C _↑_ System Energy MAE _↓_ SCF Iteration _↓_
+
+
+Naive Loss 0.4912 50.174 55.630 3.634 632.220 486.322 5.36% 13562.7 306%
+WALoss without Reweighting 0.4973 8.241 7.993 3.988 41.230 21.614 28.28% 55.492 88%
+WALoss Complete **0.4744** **0.7122** **0.730** **1.327** **18.835** **7.330** **48.03%** **47.193** **82%**
+
+
+6 CONCLUSION AND LIMITATIONS
+
+
+In this work, we introduced WALoss, a loss function designed to improve the accuracy of predicted
+Hamiltonians. Our experiments demonstrate that incorporating WALoss achieves state-of-the-art
+performance by reducing prediction errors and accelerating SCF convergence. Additionally, we
+introduced a new dataset, _PubChemQH_, and an efficient model, _WANet_ . However, limitations remain,
+such as the high computational cost of generating large training sets. Despite these challenges,
+deep learning approaches incorporating WALoss show great promise in advancing computational
+chemistry and materials science.
+
+
+3Elongated alkanes (CxH2x+2) are only present in the test set.
+
+
+10
+
+
+ACKNOWLEDGMENT
+
+
+Tha authors would like to thank Gaoyuan Wang from Yale University for the discussion on the scaling
+of the eigenvalues. This work is supported by ALW professorship funds to Mark Gerstein.
+
+
+REFERENCES
+
+
+Jan Almlöf, Knut Fægri Jr, and Knut Korsell. Principles for a direct scf approach to licao–moab-initio
+calculations. _Journal of Computational Chemistry_, 3(3):385–399, 1982.
+
+
+Brandon Anderson, Truong Son Hy, and Risi Kondor. Cormorant: Covariant molecular neural
+networks. _Advances in neural information processing systems_, 32, 2019.
+
+
+Nathan Argaman and Guy Makov. Density functional theory: An introduction. _American Journal of_
+_Physics_, 68(1):69–79, 2000.
+
+
+Ilyes Batatia, David P Kovacs, Gregor Simm, Christoph Ortner, and Gábor Csányi. Mace: Higher
+order equivariant message passing neural networks for fast and accurate force fields. _Advances in_
+_Neural Information Processing Systems_, 35:11423–11436, 2022.
+
+
+Ilyes Batatia, Philipp Benner, Yuan Chiang, Alin M Elena, Dávid P Kovács, Janosh Riebesell,
+Xavier R Advincula, Mark Asta, William J Baldwin, Noam Bernstein, et al. A foundation model
+for atomistic materials chemistry. _arXiv preprint arXiv:2401.00096_, 2023.
+
+
+Simon Batzner, Albert Musaelian, Lixin Sun, Mario Geiger, Jonathan P Mailoa, Mordechai Kornbluth,
+Nicola Molinari, Tess E Smidt, and Boris Kozinsky. E(3)-equivariant graph neural networks for
+data-efficient and accurate interatomic potentials. _Nature communications_, 13(1):2453, 2022.
+
+
+Axel D Beeke. Density-functional thermochemistry. iii. the role of exact exchange. _J. Chem. Phys_,
+98(7):5648–6, 1993.
+
+
+KC Bhamu, Amit Soni, and Jagrati Sahariya. Revealing optoelectronic and transport properties of
+potential perovskites cs2pdx6 (x= cl, br): a probe from density functional theory (dft). _Solar_
+_Energy_, 162:336–343, 2018.
+
+
+L. C. Blum and J.-L. Reymond. 970 million druglike small molecules for virtual screening in the
+chemical universe database GDB-13. _J. Am. Chem. Soc._, 131:8732, 2009.
+
+
+Chi Chen, Weike Ye, Yunxing Zuo, Chen Zheng, and Shyue Ping Ong. Graph networks as a universal
+machine learning framework for molecules and crystals. _Chemistry of Materials_, 31(9):3564–3572,
+2019.
+
+
+Aidan Clark, Diego de Las Casas, Aurelia Guy, Arthur Mensch, Michela Paganini, Jordan Hoffmann,
+Bogdan Damoc, Blake Hechtman, Trevor Cai, Sebastian Borgeaud, et al. Unified scaling laws for
+routed language models. In _International conference on machine learning_, pp. 4057–4086. PMLR,
+2022.
+
+
+Taco Cohen and Max Welling. Group equivariant convolutional networks. In Maria Florina Balcan
+and Kilian Q. Weinberger (eds.), _Proceedings of The 33rd International Conference on Machine_
+_Learning_, volume 48 of _Proceedings of Machine Learning Research_, pp. 2990–2999, New York,
+New York, USA, 20–22 Jun 2016. PMLR. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v48/cohenc16.html)
+[v48/cohenc16.html.](https://proceedings.mlr.press/v48/cohenc16.html)
+
+
+Andrea Dal Corso, Alfredo Pasquarello, and Alfonso Baldereschi. Density-functional perturbation
+theory for lattice dynamics with ultrasoft pseudopotentials. _Physical Review B_, 56(18):R11369,
+1997.
+
+
+Weitao Du, He Zhang, Yuanqi Du, Qi Meng, Wei Chen, Nanning Zheng, Bin Shao, and Tie-Yan Liu.
+Se (3) equivariant graph neural networks with complete local frames. In _International Conference_
+_on Machine Learning_, pp. 5583–5608. PMLR, 2022.
+
+
+11
+
+
+Alexandre Duval, Simon V Mathis, Chaitanya K Joshi, Victor Schmidt, Santiago Miret, Fragkiskos D
+Malliaros, Taco Cohen, Pietro Liò, Yoshua Bengio, and Michael Bronstein. A hitchhiker’s guide
+to geometric gnns for 3d atomic systems. _arXiv preprint arXiv:2312.07511_, 2023.
+
+
+Robert Eisberg and Robert Resnick. _Quantum_ _physics_ _of_ _atoms,_ _molecules,_ _solids,_ _nuclei,_ _and_
+_particles_ . 1985.
+
+
+Carrie A Farberow, James A Dumesic, and Manos Mavrikakis. Density functional theory calculations
+and analysis of reaction pathways for reduction of nitric oxide by hydrogen on pt (111). _Acs_
+_Catalysis_, 4(10):3307–3319, 2014.
+
+
+Thorben Frank, Oliver Unke, and Klaus-Robert Müller. So3krates: Equivariant attention for interactions on arbitrary length-scales in molecular systems. _Advances in Neural Information Processing_
+_Systems_, 35:29400–29413, 2022.
+
+
+Fabian Fuchs, Daniel Worrall, Volker Fischer, and Max Welling. Se (3)-transformers: 3d rototranslation equivariant attention networks. _Advances in neural information processing systems_, 33:
+1970–1981, 2020.
+
+
+Michael Gastegger, Adam McSloy, Mathis Luya, K. T. Schütt, and R. J. Maurer. A deep neural
+network for molecular wave functions in quasi-atomic minimal basis representation. _The Journal_
+_of Chemical Physics_, 153(4):044123, 7 2020. ISSN 0021-9606. doi: 10.1063/5.0012911. URL
+[https://doi.org/10.1063/5.0012911.](https://doi.org/10.1063/5.0012911)
+
+
+Johannes Gasteiger, Janek Groß, and Stephan Günnemann. Directional message passing for molecular
+graphs. _arXiv preprint arXiv:2003.03123_, 2020.
+
+
+Johannes Gasteiger, Florian Becker, and Stephan Günnemann. Gemnet: Universal directional
+graph neural networks for molecules. _Advances in Neural Information Processing Systems_, 34:
+6790–6802, 2021.
+
+
+Benyamin Ghojogh, Fakhri Karray, and Mark Crowley. Eigenvalue and generalized eigenvalue
+problems: Tutorial. _arXiv preprint arXiv:1903.11240_, 2019.
+
+
+Gene H Golub and Charles F Van Loan. _Matrix computations_ . JHU press, 2013.
+
+
+Ganesh Hegde and R. Chris Bowen. Machine-learned approximations to density functional theory
+hamiltonians. _Scientific_ _Reports_, 7(1):42669, 2017. doi: 10.1038/srep42669. URL [https:](https://doi.org/10.1038/srep42669)
+[//doi.org/10.1038/srep42669.](https://doi.org/10.1038/srep42669)
+
+
+Jan Hermann, Zeno Schätzle, and Frank Noé. Deep-neural-network solution of the electronic
+schrödinger equation. _Nature Chemistry_, 12(10):891–897, 2020. doi: 10.1038/s41557-020-0544-y.
+[URL https://doi.org/10.1038/s41557-020-0544-y.](https://doi.org/10.1038/s41557-020-0544-y)
+
+
+Pierre Hohenberg and Walter Kohn. Inhomogeneous electron gas. _Physical review_, 136(3B):B864,
+1964.
+
+
+Ida-Marie Høyvik. The spectrum of the atomic orbital overlap matrix and the locality of the virtual
+electronic density matrix. _Molecular Physics_, 118:e1765034, 06 2020. doi: 10.1080/00268976.
+2020.1765034.
+
+
+Eric Jang, Shixiang Gu, and Ben Poole. Categorical reparameterization with gumbel-softmax. _arXiv_
+_preprint arXiv:1611.01144_, 2016.
+
+
+Frank Jensen. _Introduction to computational chemistry_ . John wiley & sons, 2017.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Antoine Roux, Arthur Mensch, Blanche Savary, Chris
+Bamford, Devendra Singh Chaplot, Diego de las Casas, Emma Bou Hanna, Florian Bressand, et al.
+Mixtral of experts. _arXiv preprint arXiv:2401.04088_, 2024.
+
+
+Bowen Jing, Stephan Eismann, Patricia Suriana, Raphael John Lamarre Townshend, and Ron Dror.
+Learning from protein structure with geometric vector perceptrons. In _International Conference on_
+_Learning Representations_, 2020.
+
+
+12
+
+
+R. O. Jones. Density functional theory: Its origins, rise to prominence, and future. _Rev. Mod. Phys._,
+87:897–923, Aug 2015. doi: 10.1103/RevModPhys.87.897. [URL https://link.aps.org/](https://link.aps.org/doi/10.1103/RevModPhys.87.897)
+[doi/10.1103/RevModPhys.87.897.](https://link.aps.org/doi/10.1103/RevModPhys.87.897)
+
+
+Fusong Ju, Xinran Wei, Lin Huang, Andrew J. Jenkins, Leo Xia, Jia Zhang, Jianwei Zhu, Han Yang,
+Bin Shao, Peggy Dai, Ashwin Mayya, Zahra Hooshmand, Alexandra Efimovskaya, Nathan A.
+Baker, Matthias Troyer, and Hongbin Liu. Acceleration without disruption: Dft software-as-aservice. 2024.
+
+
+John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael Figurnov, Olaf Ronneberger,
+Kathryn Tunyasuvunakool, Russ Bates, Augustin Žídek, Anna Potapenko, et al. Highly accurate
+protein structure prediction with alphafold. _Nature_, 596(7873):583–589, 2021.
+
+
+Kuzma Khrabrov, Ilya Shenbin, Alexander Ryabov, Artem Tsypin, Alexander Telepov, Anton
+Alekseev, Alexander Grishin, Pavel Strashnov, Petr Zhilyaev, Sergey Nikolenko, and Artur Kadurin.
+nabladft: Large-scale conformational energy and hamiltonian prediction benchmark and dataset.
+_Phys._ _Chem._ _Chem._ _Phys._, 24:25853–25863, 2022. doi: 10.1039/D2CP03966D. URL [http:](http://dx.doi.org/10.1039/D2CP03966D)
+[//dx.doi.org/10.1039/D2CP03966D.](http://dx.doi.org/10.1039/D2CP03966D)
+
+
+Kuzma Khrabrov, Anton Ber, Artem Tsypin, Konstantin Ushenin, Egor Rumiantsev, Alexander
+Telepov, Dmitry Protasov, Ilya Shenbin, Anton Alekseev, Mikhail Shirokikh, Sergey Nikolenko,
+Elena Tutubalina, and Artur Kadurin. _∇_ [2] dft: A universal quantum chemistry dataset of drug-like
+molecules and a benchmark for neural network potentials, 2024. [URL https://arxiv.org/](https://arxiv.org/abs/2406.14347)
+[abs/2406.14347.](https://arxiv.org/abs/2406.14347)
+
+
+Dmitrii Kochkov, Tobias Pfaff, Alvaro Sanchez-Gonzalez, Peter Battaglia, and Bryan K. Clark.
+Learning ground states of quantum hamiltonians with graph networks. 2021.
+
+
+Walter Kohn and Lu Jeu Sham. Self-consistent equations including exchange and correlation effects.
+_Physical review_, 140(4A):A1133, 1965.
+
+
+Walter Kohn, Axel D Becke, and Robert G Parr. Density functional theory of electronic structure.
+_The journal of physical chemistry_, 100(31):12974–12980, 1996.
+
+
+Risi Kondor and Shubhendu Trivedi. On the generalization of equivariance and convolution in neural
+networks to the action of compact groups. In Jennifer Dy and Andreas Krause (eds.), _Proceedings_
+_of the 35th International Conference on Machine Learning_, volume 80 of _Proceedings of Machine_
+_Learning Research_, pp. 2747–2755. PMLR, 10–15 Jul 2018. [URL https://proceedings.](https://proceedings.mlr.press/v80/kondor18a.html)
+[mlr.press/v80/kondor18a.html.](https://proceedings.mlr.press/v80/kondor18a.html)
+
+
+Dávid Péter Kovács, Ilyes Batatia, Eszter Sara Arany, and Gabor Csanyi. Evaluation of the mace
+force field architecture: From medicinal chemistry to materials science. _The Journal of Chemical_
+_Physics_, 159(4), 2023.
+
+
+Chengteh Lee, Weitao Yang, and Robert G Parr. Development of the colle-salvetti correlation-energy
+formula into a functional of the electron density. _Physical review B_, 37(2):785, 1988.
+
+
+Ira N Levine, Daryle H Busch, and Harrison Shull. _Quantum chemistry_, volume 6. Pearson Prentice
+Hall Upper Saddle River, NJ, 2009.
+
+
+He Li, Zun Wang, Nianlong Zou, Meng Ye, Runzhang Xu, Xiaoxun Gong, Wenhui Duan, and
+Yong Xu. Deep-learning density functional theory hamiltonian for efficient _ab initio_ electronicstructure calculation. _Nature_ _Computational_ _Science_, 2(6):367–377, 2022. doi: 10.1038/
+s43588-022-00265-6. [URL https://doi.org/10.1038/s43588-022-00265-6.](https://doi.org/10.1038/s43588-022-00265-6)
+
+
+Yunyang Li, Yusong Wang, Lin Huang, Han Yang, Xinran Wei, Jia Zhang, Tong Wang, Zun Wang,
+Bin Shao, and Tie-Yan Liu. Long-short-range message-passing: A physics-informed framework to
+capture non-local interaction for scalable molecular dynamics simulation, 2023.
+
+
+Yunyang Li, Lin Huang, Zhihao Ding, Chu Wang, Xinran Wei, Han Yang, Zun Wang, Chang Liu,
+Yu Shi, Peiran Jin, et al. E2former: A linear-time efficient and equivariant transformer for scalable
+molecular modeling. _arXiv e-prints_, pp. arXiv–2501, 2025.
+
+
+13
+
+
+Yi-Lun Liao and Tess Smidt. Equiformer: Equivariant graph attention transformer for 3d atomistic
+graphs. _arXiv preprint arXiv:2206.11990_, 2022.
+
+
+Yi-Lun Liao and Tess Smidt. Equiformer: Equivariant graph attention transformer for 3d atomistic
+graphs. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2023. URL [https://](https://openreview.net/forum?id=KwmPfARgOTD)
+[openreview.net/forum?id=KwmPfARgOTD.](https://openreview.net/forum?id=KwmPfARgOTD)
+
+
+Yi-Lun Liao, Brandon Wood, Abhishek Das, and Tess Smidt. Equiformerv2: Improved equivariant
+transformer for scaling to higher-degree representations. _arxiv preprint arxiv:2306.12059_, 2023.
+
+
+Yi Liu, Limei Wang, Meng Liu, Yuchao Lin, Xuan Zhang, Bora Oztekin, and Shuiwang Ji. Spherical
+message passing for 3d molecular graphs. In _International Conference on Learning Representations_
+_(ICLR)_, 2022.
+
+
+Shuqi Lu, Zhifeng Gao, Di He, Linfeng Zhang, and Guolin Ke. Highly accurate quantum chemical
+property prediction with uni-mol+. _arXiv preprint arXiv:2303.16982_, 2023.
+
+
+Erpai Luo, Xinran Wei, Lin Huang, Yunyang Li, Han Yang, Zun Wang, Chang Liu, Zaishuo Xia,
+Jia Zhang, and Bin Shao. Efficient and scalable density functional theory hamiltonian prediction
+through adaptive sparsity. _arXiv preprint arXiv:2502.01171_, 2025.
+
+
+Norman H March. _Electron Correlations in the Solid State_ . World Scientific Publishing Company,
+1999.
+
+
+Richard M Martin. _Electronic structure:_ _basic theory and practical methods_ . Cambridge university
+press, 2020.
+
+
+Grégoire Montavon, Matthias Rupp, Vivekanand Gobre, Alvaro Vazquez-Mayagoitia, Katja Hansen,
+Alexandre Tkatchenko, Klaus-Robert Müller, and O Anatole von Lilienfeld. Machine learning
+of molecular electronic properties in chemical compound space. _New Journal of Physics_, 15(9):
+095003, 2013. [URL http://stacks.iop.org/1367-2630/15/i=9/a=095003.](http://stacks.iop.org/1367-2630/15/i=9/a=095003)
+
+
+Albert Musaelian, Simon Batzner, Anders Johansson, Lixin Sun, Cameron J Owen, Mordechai
+Kornbluth, and Boris Kozinsky. Learning local equivariant representations for large-scale atomistic
+dynamics. _Nature Communications_, 14(1):579, 2023.
+
+
+Maho Nakata and Toshiyuki Maeda. Pubchemqc b3lyp/6-31g*//pm6 dataset: the electronic structures
+of 86 million molecules using b3lyp/6-31g* calculations. _arXiv preprint arXiv:2305.18454_, 2023.
+
+
+Frank Neese. Prediction of molecular properties and molecular spectroscopy with density functional
+theory: From fundamental theory to exchange-coupling. _Coordination Chemistry Reviews_, 253
+(5-6):526–563, 2009.
+
+
+Jörg Neugebauer and Tilmann Hickel. Density functional theory in materials science. _Wiley_
+_Interdisciplinary Reviews:_ _Computational Molecular Science_, 3(5):438–448, 2013.
+
+
+Maylis Orio, Dimitrios A Pantazis, and Frank Neese. Density functional theory. _Photosynthesis_
+_research_, 102:443–453, 2009.
+
+
+Robert G Parr and Weitao Yang. Density-functional theory of the electronic structure of molecules.
+_Annual review of physical chemistry_, 46(1):701–728, 1995.
+
+
+Saro Passaro and C Lawrence Zitnick. Reducing so (3) convolutions to so (2) for efficient equivariant
+gnns. In _International Conference on Machine Learning_, pp. 27420–27438. PMLR, 2023.
+
+
+Carlos Riquelme, Joan Puigcerver, Basil Mustafa, Maxim Neumann, Rodolphe Jenatton, André
+Susano Pinto, Daniel Keysers, and Neil Houlsby. Scaling vision with sparse mixture of experts.
+_Advances in Neural Information Processing Systems_, 34:8583–8595, 2021.
+
+
+Soumya Sanyal, Janakiraman Balachandran, Naganand Yadati, Abhishek Kumar, Padmini Rajagopalan, Suchismita Sanyal, and Partha Talukdar. Mt-cgcnn: Integrating crystal graph convolutional neural network with multitask learning for material property prediction. _arXiv preprint_
+_arXiv:1811.05660_, 2018.
+
+
+14
+
+
+Vıctor Garcia Satorras, Emiel Hoogeboom, and Max Welling. E (n) equivariant graph neural networks.
+In _International conference on machine learning_, pp. 9323–9332. PMLR, 2021.
+
+
+Kristof T Schütt, Huziel E Sauceda, P-J Kindermans, Alexandre Tkatchenko, and K-R Müller.
+Schnet–a deep learning architecture for molecules and materials. _The Journal of Chemical Physics_,
+148(24), 2018.
+
+
+K. T Schütt, Michael Gastegger, Alexandre Tkatchenko, K. R. Müller, and R. J. Maurer. Unifying
+machine learning and quantum chemistry with a deep neural network for molecular wavefunctions.
+_Nature Communications_, 10(1):5024, 2019. doi: 10.1038/s41467-019-12875-2. [URL https:](https://doi.org/10.1038/s41467-019-12875-2)
+[//doi.org/10.1038/s41467-019-12875-2.](https://doi.org/10.1038/s41467-019-12875-2)
+
+
+Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, and
+Jeff Dean. Outrageously large neural networks: The sparsely-gated mixture-of-experts layer. _arXiv_
+_preprint arXiv:1701.06538_, 2017.
+
+
+Guillem Simeon and Gianni De Fabritiis. Tensornet: Cartesian tensor representations for efficient
+learning of molecular potentials. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Alain St.-Amant, Wendy D Cornell, Peter A Kollman, and Thomas A Halgren. Calculation of molecular geometries, relative conformational energies, dipole moments, and molecular electrostatic
+potential fitted charges of small organic molecules of biochemical interest by density functional
+theory. _Journal of computational chemistry_, 16(12):1483–1506, 1995.
+
+
+Philip J Stephens, Frank J Devlin, Cary F Chabalowski, and Michael J Frisch. Ab initio calculation
+of vibrational absorption and circular dichroism spectra using density functional force fields. _The_
+_Journal of physical chemistry_, 98(45):11623–11627, 1994.
+
+
+Qiming Sun. Libcint: An efficient general integral library for g aussian basis functions. _Journal of_
+_computational chemistry_, 36(22):1664–1671, 2015.
+
+
+Qiming Sun, Timothy C Berkelbach, Nick S Blunt, George H Booth, Sheng Guo, Zhendong Li, Junzi
+Liu, James D McClain, Elvira R Sayfutyarova, Sandeep Sharma, et al. Pyscf: the python-based
+simulations of chemistry framework. _Wiley Interdisciplinary Reviews:_ _Computational Molecular_
+_Science_, 8(1):e1340, 2018.
+
+
+Qiming Sun, Xing Zhang, Samragni Banerjee, Peng Bao, Marc Barbry, Nick S Blunt, Nikolay A
+Bogdanov, George H Booth, Jia Chen, Zhi-Hao Cui, et al. Recent developments in the pyscf
+program package. _The Journal of chemical physics_, 153(2), 2020.
+
+
+Attila Szabo and Neil S Ostlund. _Modern quantum chemistry:_ _introduction to advanced electronic_
+_structure theory_ . Courier Corporation, 2012.
+
+
+Nathaniel Thomas, Tess Smidt, Steven Kearnes, Lusann Yang, Li Li, Kai Kohlhoff, and Patrick Riley.
+Tensor field networks: Rotation-and translation-equivariant neural networks for 3d point clouds.
+_arXiv preprint arXiv:1802.08219_, 2018.
+
+
+Julian Tirado-Rives and William L Jorgensen. Performance of b3lyp density functional methods for a
+large set of organic molecules. _Journal of chemical theory and computation_, 4(2):297–306, 2008.
+
+
+Artur P Toshev, Gianluca Galletti, Johannes Brandstetter, Stefan Adami, and Nikolaus A Adams.
+E (3) equivariant graph neural networks for particle-based fluid mechanics. _arXiv_ _preprint_
+_arXiv:2304.00150_, 2023.
+
+
+Oliver Thorsten Unke, Mihail Bogojeski, Michael Gastegger, Mario Geiger, Tess Smidt, and
+Klaus Robert Muller. SE(3)-equivariant prediction of molecular wavefunctions and electronic
+densities. In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), _Advances in_
+_Neural Information Processing Systems_, 2021a. [URL https://openreview.net/forum?](https://openreview.net/forum?id=auGY2UQfhSu)
+[id=auGY2UQfhSu.](https://openreview.net/forum?id=auGY2UQfhSu)
+
+
+Oliver Thorsten Unke, Mihail Bogojeski, Michael Gastegger, Mario Geiger, Tess Smidt, and
+Klaus Robert Muller. SE(3)-equivariant prediction of molecular wavefunctions and electronic
+densities. In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), _Advances in_
+_Neural Information Processing Systems_, 2021b. [URL https://openreview.net/forum?](https://openreview.net/forum?id=auGY2UQfhSu)
+[id=auGY2UQfhSu.](https://openreview.net/forum?id=auGY2UQfhSu)
+
+
+15
+
+
+JH Van Lenthe, R Zwaans, Huub JJ Van Dam, and MF Guest. Starting scf calculations by superposition of atomic densities. _Journal of computational chemistry_, 27(8):926–932, 2006.
+
+
+Tanja Van Mourik, Michael Bühl, and Marie-Pierre Gaigeot. Density functional theory across
+chemistry, physics and biology, 2014.
+
+
+Seymour H Vosko, Leslie Wilk, and Marwan Nusair. Accurate spin-dependent electron liquid
+correlation energies for local spin density calculations: a critical analysis. _Canadian Journal of_
+_physics_, 58(8):1200–1211, 1980.
+
+
+Limei Wang, Yi Liu, Yuchao Lin, Haoran Liu, and Shuiwang Ji. Comenet: Towards complete and
+efficient message passing for 3d molecular graphs. _Advances in Neural Information Processing_
+_Systems_, 35:650–664, 2022.
+
+
+Yi Wang, Mingqing Liao, Brandon J Bocklund, Peng Gao, Shun-Li Shang, Hojong Kim, Allison M
+Beese, Long-Qing Chen, and Zi-Kui Liu. Dfttk: Density functional theory toolkit for highthroughput lattice dynamics calculations. _Calphad_, 75:102355, 2021.
+
+
+Tim M Watson and Jonathan D Hirst. Density functional theory vibrational frequencies of amides
+and amide dimers. _The Journal of Physical Chemistry A_, 106(34):7858–7867, 2002.
+
+
+J Beau W Webber. A bi-symmetric log transformation for wide-range data. _Measurement Science_
+_and Technology_, 24(2):027001, 2012.
+
+
+Florian Weigend. Accurate coulomb-fitting basis sets for h to rn. _Physical chemistry chemical physics_,
+8(9):1057–1065, 2006.
+
+
+Florian Weigend and Reinhart Ahlrichs. Balanced basis sets of split valence, triple zeta valence and
+quadruple zeta valence quality for h to rn: Design and assessment of accuracy. _Physical Chemistry_
+_Chemical Physics_, 7(18):3297–3305, 2005.
+
+
+J.H. Wilkinson. _The Algebraic Eigenvalue Problem_ . Monographs on numerical analysis. Clarendon
+Press, 1988. ISBN 9780198534181. URL [https://books.google.com/books?id=](https://books.google.com/books?id=5wsK1OP7UFgC)
+[5wsK1OP7UFgC.](https://books.google.com/books?id=5wsK1OP7UFgC)
+
+
+Ji Xiaohong, Wang Zhen, Gao Zhifeng, Zheng Hang, Zhang Linfeng, Ke Guolin, and E Weinan.
+Uni-mol2: Exploring molecular pretraining model at scale. _arXiv_ _preprint_ _arXiv:2406.14969_,
+2024.
+
+
+Shi Yin, Xinyang Pan, Xudong Zhu, Tianyu Gao, Haochong Zhang, Feng Wu, and Lixin He.
+Harmonizing so(3)-equivariance with neural expressiveness: a hybrid deep learning framework
+oriented to the prediction of electronic structure hamiltonian. 2024.
+
+
+Haiyang Yu, Meng Liu, Youzhi Luo, Alex Strasser, Xiofeng Qian, Xioning Qian, and Shuiwang Ji.
+Qh9: A quantum hamiltonian prediction benchmark for qm9 molecules. In _Advances in Neural_
+_Information Processing Systems_, 2023a. URL [https://arxiv.org/pdf/2306.09549.](https://arxiv.org/pdf/2306.09549.pdf)
+[pdf.](https://arxiv.org/pdf/2306.09549.pdf)
+
+
+Haiyang Yu, Zhao Xu, Xiaofeng Qian, Xiaoning Qian, and Shuiwang Ji. Efficient and equivariant
+graph networks for predicting quantum hamiltonian. In _International Conference on Machine_
+_Learning_, pp. 40412–40424. PMLR, 2023b.
+
+
+He Zhang, Chang Liu, Zun Wang, Xinran Wei, Siyuan Liu, Nanning Zheng, Bin Shao, and Tie-Yan
+Liu. Self-consistency training for hamiltonian prediction. 2024.
+
+
+Yang Zhong, Hongyu Yu, Mao Su, Xingao Gong, and Hongjun Xiang. Transferable equivariant
+graph neural networks for the hamiltonians of molecules and solids. _npj Computational Materials_,
+9(1):182, 2023.
+
+
+Barret Zoph, Irwan Bello, Sameer Kumar, Nan Du, Yanping Huang, Jeff Dean, Noam Shazeer, and
+William Fedus. St-moe: Designing stable and transferable sparse expert models. _arXiv preprint_
+_arXiv:2202.08906_, 2022.
+
+
+16
+
+
+**Appendix Table of Contents**
+
+
+**A** **Notation Summary** **18**
+
+
+**B** **Additional Related Work** **19**
+
+
+**C** **Additional Experiments** **20**
+
+
+C.1 Evaluation Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+C.2 SAD Phenomenon . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+C.3 Error Scaling Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+C.4 Overfitting Risk Evaluation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+C.5 Energy Predictions for Elongated Alkanes . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+C.6 Additional Ablation Study . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+**D** **eSCN convolution** **23**
+
+
+**E** **Additional Background** **26**
+
+
+E.1 Example . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+
+
+**F** **Dipole Moment and Electronic Spatial Extent** **30**
+
+
+**G** **Group Theory** **31**
+
+
+**H** **Exensive Details on PubChemQH** **32**
+
+
+**I** **Extensive Details on WANet** **32**
+
+
+**J** **Additional Theory** **37**
+
+
+J.1 Proof of Theorem . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+
+
+J.2 Perturbation Analysis and Growth of Eigenvalues . . . . . . . . . . . . . . . . . . 39
+
+
+J.3 Scaling Law of the Smallest Eigenvalue of Overlap Matrix . . . . . . . . . . . . . 41
+
+
+J.3.1 _k_ -Nearest-Neighbor Overlaps . . . . . . . . . . . . . . . . . . . . . . . . 41
+
+
+**K** **Training** **42**
+
+
+**L** **Discussion** **44**
+
+
+L.1 Discussion on System Energy Error . . . . . . . . . . . . . . . . . . . . . . . . . 44
+
+
+L.2 Additional Conformational Energy Analysis . . . . . . . . . . . . . . . . . . . . . 44
+
+
+L.3 Discussion on SCF acceleration ratio . . . . . . . . . . . . . . . . . . . . . . . . . 44
+
+
+17
+
+
+A NOTATION SUMMARY
+
+
+Table 5: Summary of main notation used in the paper.
+
+
+Notation Description
+
+
+_M_ := _{_ **Z** _,_ **R** _}_ Molecular system defined by nuclear charges **Z** and positions **R**
+**r** _∈_ R [3] Spatial coordinate of an electron
+_ψi_ ( **r** ) Single-electron orbital/wavefunction _i_ as a function of electron spatial coordinate **r**
+_ρ_ ( **r** ) Electron density as a function of spatial coordinate **r**
+_B_ Number of basis functions in the basis set used to represent orbitals
+_ϕα_ ( **r** ) _[B]_ _α_ =1 Basis set consisting of _B_ basis functions _ϕα_ ( **r** )
+**C** _∈_ R _[B][×][N]_ Coefficient matrix where each column contains the basis function coefficients for an orbital
+**H** _∈_ R _[B][×][B]_ Hamiltonian matrix in the chosen basis representation
+**S** _∈_ R _[B][×][B]_ Overlap matrix with elements _Sαβ_ := - _ϕ_ _[†]_ _α_ [(] **[r]** [)] _[ϕ][β]_ [(] **[r]** [)d] **[r]**
+_**ϵ**_ _∈_ R _[N]_ _[×][N]_ Diagonal matrix containing orbital energies (eigenvalues of the Hamiltonian)
+**H** ˆ _θ_ ( _M_ ) Machine learning model parameterized by _θ_ for predicting the Hamiltonian **H** from a molecular structure _M_
+_L_ WA Wavefunction Alignment Loss function
+_**ϵ**_ ˆ _,_ _**ϵ**_ Predicted and ground truth eigenvalues (orbital energies) of **H** [ˆ] and **H**
+**C** ˆ _,_ **C** Predicted and ground truth eigenvectors (basis coefficients) of **H** [ˆ] and **H**
+**H** _[⋆]_ Ground truth Hamiltonian matrix
+**M** ˆ Predicted transformed Hamiltonian matrix in an orthogonal basis
+**G** Matrix obtained from the eigen decomposition of the overlap matrix **S**
+_k_ Number of occupied orbitals
+_I_ Set of indices corresponding to the _k_ + 1 lowest eigenvalues
+_ρ_ Hyperparameter controlling the weight of occupied and unoccupied orbitals in the loss function
+_n_ Number of samples in the dataset / the _n_ -th experts in MoE nodel
+_D_ Dataset used for training the machine learning model
+_N_ Number of electrons in the system / total number of experts in MoE model
+**H** [(0)] Initial guess for the Hamiltonian matrix
+**H** [(] _[k]_ [)] Hamiltonian matrix at the _k_ -th SCF iteration
+**C** [(] _[k]_ [)] Coefficient matrix at the _k_ -th SCF iteration
+_**ϵ**_ [(] _[k]_ [)] Diagonal matrix of orbital energies at the _k_ -th SCF iteration
+_δ_ Convergence threshold for the SCF procedure
+_ℓ_ Degree of the irreducible representation (irrep) in SO(3) equivariant networks
+_D_ [(] _[ℓ]_ [)] ( _g_ ) Wigner D-matrix representation of group element _g_ _∈_ SO(3) of degree _ℓ_
+_Y_ [(] _[ℓ]_ [)] (ˆ **r** ) Real spherical harmonics of degree _ℓ_ evaluated at unit vector ˆ **r**
+_C_ ( [(] _ℓ_ _[ℓ]_ 1 [3] _,m_ _[,m]_ 1 [3] ) [)] _,_ ( _ℓ_ 2 _,m_ 2) Clebsch-Gordan coefficients coupling irreps of degree _ℓ_ 1 and _ℓ_ 2 into irrep of degree _ℓ_ 3
+**r** _ts_ Vector pointing from node _s_ to node _t_
+ˆ **r** _ts_ Unit vector pointing from node _s_ to node _t_
+_L_ total Total loss function combining _L_ align and mean squared error (MSE) loss
+_λ_ 1 _, λ_ 2 _, λ_ 3 Hyperparameters controlling the weights of different loss terms in _L_ total
+
+
+18
+
+
+B ADDITIONAL RELATED WORK
+
+
+**Predicting Kohn-Sham Hamiltonians** Early work on predicting Kohn-Sham Hamiltonians used
+kernel ridge regression (Hegde & Bowen, 2017), while newer approaches use neural networks (NNs).
+Some NNs predict the wavefunction itself (Schütt et al., 2019; Gastegger et al., 2020; Hermann
+et al., 2020), while others use equivariant (Unke et al., 2021a; Kochkov et al., 2021; Yu et al.,
+2023b; Li et al., 2022; Zhong et al., 2023) or hybrid architectures (Yin et al., 2024) to predict the
+molecular Hamiltonian. A novel training method has been proposed to address the scarcity of labeled
+data (Zhang et al., 2024), and two benchmark datasets aim to standardize evaluation of molecular
+Hamiltonian prediction (Khrabrov et al., 2022; Yu et al., 2023a; Khrabrov et al., 2024).
+
+
+**Equivariant Graph Neural Networks (EGNNs)** It is often desired that machine learning (ML)
+models exhibit equivariance to rotations, translations, or reflections, which guarantee that they respect
+certain physical symmetries. Foundational work introduced group equivariant convolutional neural
+networks (ECNNs) (Cohen & Welling, 2016), whose importance was underscored by a proof that
+equivariance and convolutional structure are equivalent given certain ordinary constraints (Kondor &
+Trivedi, 2018). One appealing way to implement convolution is with geometric graph neural networks
+(geometric GNNs), which apply naturally to atomic systems by encoding them as graphs embedded in
+R [3] . Two important families of geometric GNNs are invariant GNNs and Cartesian equivariant GNNs.
+Over the past several years, invariant GNNs have achieved state-of-the-art results in predicting properties of molecules, crystals, and other materials (Schütt et al., 2018) (Sanyal et al., 2018) (Chen et al.,
+2019) (Gasteiger et al., 2020) (Liu et al., 2022) (Gasteiger et al., 2021) (Wang et al., 2022), as well as
+in predicting the folding structure of proteins (Jumper et al., 2021). Cartesian equivariant GNNs have
+seen success in similar areas, benefiting from the greater flexibility of their representations (Jing et al.,
+2020) (Satorras et al., 2021) (Du et al., 2022) (Simeon & De Fabritiis, 2024). Cartesian equivariant
+GNNs have also seen recent innovation in Cartesian equivariant transformer layers (Frank et al.,
+2022). A third significant family of geometric GNNs is spherical equivariant GNNs, which use
+spherical tensors rather than Cartesian tensors. As as a result, spherical equivariant GNNs behave
+more naturally under rotations and avail themselves of many results of the representation theory of
+SO(3). They have shown dexterity in tasks in geometry, physics, and chemistry (Thomas et al., 2018);
+modeled dynamic molecular systems (Anderson et al., 2019); enabled SO(3)- and SE(3)-equivariant
+transformer layers (Fuchs et al., 2020) (Liao & Smidt, 2022); accuarately and efficiently calculated
+interatomic potentials (Batzner et al., 2022) (Batatia et al., 2022) (Musaelian et al., 2023); enabled
+_E_ (3)-equivariant fluid mechanical modeling (Toshev et al., 2023); and improved efficiency by
+reducing certain convolution computations in SO(3) to equivalent ones in SO(2) (Passaro & Zitnick,
+2023). Li et al. (2025) propose to use Wiger-6 _j_ Convolution to shift computation from edges to
+nodes.
+
+
+19
+
+
+C ADDITIONAL EXPERIMENTS
+
+
+C.1 EVALUATION METRICS
+
+
+In this section, we provide a detailed description of the metrics in the main-text:
+
+
+**MAE for Hamiltonian** The MAE for Hamiltonian assesses the accuracy of the predicted Hamiltonian matrices. This metric is crucial for evaluating the quality of the predicted electronic structure
+and its components, which are foundational in quantum chemistry calculations.
+
+
+**MAE for** _**ϵ**_ HOMO The MAE for the Highest Occupied Molecular Orbital (HOMO) energy ( _**ϵ**_ HOMO)
+evaluates the precision of the predicted HOMO levels. Accurate HOMO predictions are essential as
+they influence a molecule’s chemical reactivity and stability.
+
+
+**MAE** **for** _**ϵ**_ LUMO The MAE for the Lowest Unoccupied Molecular Orbital (LUMO) energy
+( _**ϵ**_ LUMO) measures the accuracy of LUMO level predictions. Accurate LUMO predictions are critical
+for understanding a molecule’s electron affinity and chemical behavior.
+
+
+**MAE for** _**ϵ**_ ∆ The MAE for the energy gap between HOMO and LUMO ( _**ϵ**_ ∆) assesses the precision
+of this important property, which determines the electronic properties and conductivity of materials.
+
+
+**MAE for** _**ϵ**_ occ The MAE for occupied orbital energies ( _**ϵ**_ occ) assesses the accuracy of predicted
+energies for all occupied molecular orbitals, providing a comprehensive measure of how well the
+model captures the electronic structure.
+
+
+**MAE for** _**ϵ**_ orb The MAE for all orbital energies ( _**ϵ**_ orb) measures the discrepancies in predicted
+energies for both occupied and unoccupied orbitals. This metric evaluates the overall accuracy of the
+model in predicting the entire spectrum of orbital energies.
+
+
+**MAE on** **Total Energy** The MAE on total energy assesses the accuracy of the predicted total
+energies derived from Hamiltonian matrices using pyscf. This metric is crucial for validating
+the model’s accuracy in predicting the overall energy of the system, which is fundamental for
+understanding molecular stability and reactions.
+
+
+**Cosine** **Similarity** **for** **Wavefunction/Eigenvectors** **(C)** The cosine similarity for wavefunction/eigenvectors (C) measures the similarity between the predicted and actual wavefunctions or
+eigenvectors of the system. High cosine similarity indicates that the predicted wavefunction distribution closely matches the actual distribution, which is important for accurately modeling electronic
+properties.
+
+
+**SCF Iteration** The SCF (Self-Consistent Field) iteration count evaluates the number of iterations
+required to achieve convergence in DFT (Density Functional Theory) calculations using the predicted
+Hamiltonian matrices when comparing with the inital guess. Mathmatically, it is defined as:
+
+
+_σ_ = [Predicted Hamiltonian Iteractions] _._
+
+Inital Hamiltonian Iteractions
+
+
+This metric assesses the efficiency of the predicted matrices in expediting the DFT calculations.
+
+
+C.2 SAD PHENOMENON
+
+
+We present an additional graphical illustration of the SAD phenomenon discussed in the main
+text, depicting the learning curve of the QHNet model using only elementwise loss on a _subset_ of
+the _PubChemQH_ dataset [4] . Figure 5 shows that as the MAE decreases, the system energy exhibits
+significant fluctuations. Notably, when the Hamiltonian’s MAE is around 0.3, the system energy MAE
+reaches 30,000 kcal/mol. This highlights the non-monotonic relationship between the Hamiltonian
+MAE and the resulting system energy. This extreme instability in derived properties, despite a
+seemingly small Hamiltonian MAE, is a key characteristic of the SAD phenomenon, hindering the
+applicability of the predicted Hamiltonian.
+
+
+4This differs from the dataset used in the maintexts.
+
+
+20
+
+
+**Hami-MAE vs Step**
+
+
+0.60
+
+
+0.55
+
+
+0.50
+
+
+0.45
+
+
+0.40
+
+
+0.35
+
+
+0.30
+
+
+0 250 500 750 1000 1250 1500 1750
+**Step**
+
+
+40000
+
+
+30000
+
+
+20000
+
+
+10000
+
+
+0
+
+
+**System Energy vs Step**
+
+
+0 250 500 750 1000 1250 1500 1750
+**Step**
+
+
+Figure 5: An additional graphical illustration of the SAD phenomenon discussed in the main text,
+depicting the learning curve of the QHNet model using only elementwise loss. The y-axis represents
+the metric, and the x-axis represents the steps. The figure shows that as the MAE decreases, the
+system energy exhibits significant fluctuations.
+
+**Distribution of the Smallest Eigenval for S**
+
+
+10 [5]
+
+
+10 [4]
+
+
+10 [3]
+
+
+10 [2]
+
+
+Figure 6: the distribution of _[κ]_ _∥_ [(] **S** **[S]** _∥_ [)] [on QH9 and PubChemQH dataset]
+
+
+C.3 ERROR SCALING ANALYSIS
+
+
+In Figure 4 and Table 6, we analyzed the error trend scaling for "intensive" properties such as _ϵ_ HOMO
+and _ϵ_ LUMO with an increasing number of electrons. This challenge, widely recognized in the field (Yu
+et al., 2023a; Zhang et al., 2024), highlights a difficult out-of-distribution (OOD) generalization
+scenario: models trained on smaller molecules often struggle to generalize to larger ones, limiting
+their applicability. Previous state-of-the-art models have exhibited significant scaling errors when
+extrapolating to larger systems (Yu et al., 2023a; Zhang et al., 2024).
+
+
+We conducted an error scaling analysis for saturated carbon chains to assess the scalability of our
+model. The error scaling coefficients for the HOMO and LUMO energies, as well as the energy gap,
+are presented in Table 6. Our results show significantly lower error scaling compared to baseline
+models for saturated carbon chains. Our model substantially outperforms the one without WALoss, as
+reflected by the scaling coefficients in Table R2, marking a considerable improvement in extrapolation
+capabilities within the field.
+
+
+We further analyze the smallest eigenvalue distribution which is now included in Figure 6.
+
+
+21
+
+
+Table 6: Scaling Coeffcients of HOMO, LUMO, and Energy Gap with Carbon Atom Count
+Model HOMO Scaling Coeffcients LUMO Scaling Coeffcients Gap Scaling Coeffcients
+WANet (with WALoss) **0.4211** **0.4003** **0.0206**
+Initial Guess 0.4221 0.4006 0.0214
+Without WALoss 1.3639 2.7646 1.4007
+
+
+C.4 OVERFITTING RISK EVALUATION
+
+
+We evaluated the risk of overfitting to the PubChemQH dataset. As shown in Table 7, the evaluation
+metrics on unseen data are comparable to those on the training set, indicating that our model
+generalizes well and does not overfit.
+
+
+Table 7: Overftting Risk Evaluation
+
+
+PubChem Hamiltonian MAE _↓_ _ϵ_ HOMO MAE _↓_ _ϵ_ LUMO MAE _↓_ _ϵ_ ∆ _ϵ_ occ MAE _↓_ _ϵ_ orbMAE _↓_ C _↑_ System Energy MAE _↓_
+
+
+Training MAE 0.4736 6.073 4.414 3.753 17.850 6.159 48.01% 46.036
+Test MAE 0.4744 0.7122 0.730 1.327 18.835 7.330 48.03% 47.193
+
+
+C.5 ENERGY PREDICTIONS FOR ELONGATED ALKANES
+
+
+We have incorporated additional plots (Figure 7) that illustrate the predicted and actual values for
+both LUMO and HOMO energies, as well as the HOMO-LUMO gap. As the number of carbon atoms
+increases, both HOMO and LUMO energies exhibit an initial rise followed by a plateau with slight
+increases. Our model, utilizing the WALoss method, effectively captures this trend, outperforming
+baseline methods. Notably, Equiformer V2’s HOMO predictions fail to generalize to saturated
+carbon systems, as these systems were not included in the training set. This observation underscores
+the advantage of Hamiltonian-based models in capturing physical principles and achieving better
+generalization compared to property regression models.
+
+
+For isolated molecular systems, such as those studied here, computational chemists are primarily
+concerned with per-electron energy levels. To demonstrate this, we plot the energy levels within a
+reasonable window centered around the HOMO level and compare these with ground truth values
+obtained from DFT calculations. As shown in Figure 7 **A**, our model closely replicates the ground
+truth energy levels, outperforming baseline models. These results highlight the effectiveness of our
+approach in accurately predicting the electronic structure of molecules.
+
+
+C.6 ADDITIONAL ABLATION STUDY
+
+
+In contrast to prior research, our study addresses the substantial challenges presented by the scale of
+the PubChemQC t-zvp dataset, particularly in providing the model with a strong numeric starting point.
+To overcome this difficulty, we shifted our focus to a more tractable objective: making predictions
+based on an easily obtainable initial guess. Our ablation study shows that while predictions based on
+the initial guess significantly improve performance in Hamiltonian prediction, they struggle when
+applied to the prediction of physical properties.
+
+
+Table 8: Performance Comparison of Baseline and Initial Guess Models on PubChemQH Dataset.
+The best models are bolded.
+
+
+Model Hamiltonian MAE _↓_ _ϵ_ HOMO MAE _↓_ _ϵ_ LUMO MAE _↓_ _ϵ_ ∆ MAE _↓_ _ϵ_ occ MAE _↓_ _ϵ_ orbMAE _↓_ **C** Similarity _↑_ System Energy MAE _↓_ relative SCF Iterations _↓_
+
+
+WANet 0.6274 60.14 62.35 4.723 734.258 502.43 3.13% 63579.233 334%
+WANet w/ Initial Guess **0.0379** 54.107 56.628 3.618 695.418 481.513 4.42% 60078.633 306%
+WANet w/ Initial Guess & WALoss 0.4744 **0.7122** **0.730** **1.327** **18.835** **7.330** **48.03%** **47.193** **82%**
+
+
+To evaluate the contributions of each component in the WANet model, we conducted ablation studies.
+The results are summarized in the Table 9. The ablation studies confirm the importance of each
+architectural component in the WANet model.
+
+
+22
+
+
+**Model**
+
+
+**C**
+
+
+Figure 7: ( **A** ) The energy level for a saturated hydrocarbon system ( _C_ 20 _H_ 42). The energy is centered
+at HOMO for comparison. ( **B** ) The predicted energy for differnet models on the satured hydrocarbon
+system. The y-axis indicates the energy in kcal/mol. The x-axis denotes the number of the carbon
+atoms in the elongated carbon-chains. v2 indicates Equiformer V2. ‘wanet’ indicates WANet with
+WALoss. ‘groundtruth’ indicates DFT calculations. ‘init’ indicates a Fock matrix initialization
+algorithm using minao. ‘without’ indicates WANet without WALoss. ( **C** ) The HOMO-LUMO gap
+prediction for different models.
+Table 9: Ablation study results for the WANet model. The table shows the impact of different
+architectural components.
+
+
+w/ SO(2) w/ LSR-MoE w/ Many Body Inference Speed (it/s) GPU Memory Hamiltonian MAE _ϵ_ HOMO MAE _↓_ _ϵ_ LUMO MAE _↓_ _ϵ_ ∆ MAE _↓_
+
+
+✓ ✓ 1.34 13.87 0.5895 15.39 27.50 4.651
+✓ ✓ 1.13 12.80 0.4883 2.27 4.01 2.906
+✓ ✓ 0.51 24.47 0.4792 0.75 0.73 1.594
+✓ ✓ ✓ 1.09 15.86 0.4744 0.71 0.73 1.327
+
+
+D ESCN CONVOLUTION
+
+
+The equivariant Spherical Channel Network (eSCN) is a graph neural network whose approach to
+SO(3)-equivariant convolutions significantly reduces their computational burden. To see this, let’s
+brush up on the notation used in the formula for the _ℓo_ -th degree of the message _mts_ from source
+node _s_ to target node _t_ in an SO(3) convolution: _Wℓi,ℓf,ℓo_ is a learnable weight; _x_ [(] _s_ _[ℓ][i]_ [)] is the _ℓi_ -th
+degree of the irrep feature of node _s_, the source node; _⊗_ is the tensor product; _Y_ [(] _[ℓ][f]_ [ )] (ˆ **r** _ts_ ) is the _ℓf_ -th
+degree spherical harmonic projection of ˆ **r** _ts_ ; and ˆ **r** _ts_ is the (normalized) relative position vector. Then,
+the message is given by
+
+
+_m_ [(] _ts_ _[ℓ][o]_ [)] =       - _Wℓi,ℓf,ℓo_       - _x_ [(] _s_ _[ℓ][i]_ [)] _⊗_ _Y_ [(] _[ℓ][f]_ [ )] (ˆ **r** _ts_ )�( _ℓo_ ) _._
+
+_ℓi,ℓf_
+
+
+23
+
+
+Traditionally, this involves an ordinary SO(3) tensor product, which is decomposed into its irreps
+using the Clebsch-Gordon coefficients, _C_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,mf_ ) [:]
+
+
+_mf_ _[.]_
+
+
+_m_ [(] _ts_ _[ℓ][o]_ [)] = 
+
+
+- _x_ [(] _s_ _[ℓ][i]_ [)] - _mi_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,mf_ )� _Y_ [(] _[ℓ][f]_ [ )] (ˆ **r** _ts_ )�
+
+
+- _Wℓi,ℓf,ℓo_ 
+_ℓi,ℓf_ _mo_
+
+
+_mi,mf_
+
+
+_mo_
+
+
+The tensor product, _⊗_, has been exchanged for the proper Clebsch-Gordon coefficient. The direct
+sum, [�], is included because the space of tensors of degree _ℓo_ has a basis indexed by _mo_ .
+
+However, the full SO(3) tensor product is compute-intensive, _O_ ( _L_ [6] ), where _L_ is the tensor degree.
+In practice, this means that only tensors up to degree 2 or 3 are used, which is especially unfortunate
+because higher-order tensors allow more precise representation of angular information. To lessen this
+computational burden, eSCN rotates the irrep features, _x_ [(] _s_ _[ℓ][i]_ [)], of a node _xs_, along with the relative
+position vector, ˆ **r** _ts_, by a rotation chosen so that the relative position vector aligns with the _y_ -axis.
+Thus, it may be interpreted that eSCN changes the irreps into a more convenient basis, computes
+the convolution, and changes back into the original basis. This requires multiplication by a changeof-basis Wigner D-matrix before and its inverse after, but it is worthwhile because it reduces the
+convolution to _O_ ( _L_ [3] ) by sparsifying the Clebsch-Gordon coefficients. In particular, eSCN guarantees
+that the output coefficient is nonzero only if both _mi_ = _±mo_ and _mf_ = 0 hold. The output tensors
+of some order, therefore, are linear combinations of input tensors of that order. It is not necessary to
+perform tensor multiplication and decomposition. The non-zero Clebsch-Gordon coefficients can
+then be denoted _C_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ ) [)] _,_ ( _ℓf,_ 0) [, with eSCN further guaranteeing that] _[ C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ ) [)] _,_ ( _ℓf,_ 0) [=] _[ C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,_ _[,]_ _−_ _[−]_ _m_ _[m]_ ) [)] _,_ ( _ℓf,_ 0) [,]
+
+and _C_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,][−]_ ) _[m]_ _,_ ( [)] _ℓf,_ 0) [=] _[−][C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,_ _[,m]_ _−m_ [)] ) _,_ ( _ℓf,_ 0) [.] [Thus, eSCN guarantees that all but a few Clebsch-Gordon]
+coefficients will be zero, and provides simple formulas involving those that remain.
+
+
+More formally, let _R_ be a rotation matrix chosen so that _R ·_ ˆ **r** _ts_ = (0 _,_ 1 _,_ 0), and let _D_ [(] _[ℓ]_ [)] be a Wigner
+D-matrix representation of _R_ of degree _ℓ_ (which would more properly read _D_ [(] _[ℓ]_ [)] ( _R_ ), but which is
+truncated for readability). Then, the message can be written
+
+_m_ [(] _ts_ _[ℓ][o]_ [)] =    - _D_ [(] _[ℓ][o]_ [)][�] _[−]_ [1] [�] _Wℓi,ℓf,ℓo_    - _D_ [(] _[ℓ][i]_ [)] _x_ [(] _s_ _[ℓ][i]_ [)] _⊗_ _Y_ [(] _[ℓ][f]_ [ )] ( _R ·_ ˆ **r** _ts_ )�( _ℓo_ ) _._
+
+_ℓi,ℓf_
+
+
+Rewriting the tensor products using the Clebsch-Gordon coefficients yields
+
+
+_m_ [(] _ts_ _[ℓ][o]_ [)] = - _D_ [(] _[ℓ][o]_ [)][�] _[−]_ [1] [�]
+
+
+_mi,mf_
+
+
+- _D_ [(] _[ℓ][i]_ [)] _x_ [(] _s_ _[ℓ][i]_ [)] 
+
+
+[�] _Wℓi,ℓf,ℓo_ 
+_ℓi,ℓf_ _mo_
+
+
+_mi_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,mf_ )� _Y_ [(] _[ℓ][f]_ [ )] ( _R ·_ ˆ **r** _ts_ )�
+
+
+_mf_ _[.]_
+
+
+_mo_
+
+
+Since the Clebsch-Gordon coefficients are non-zero only when _mf_ = 0, there is no need to sum over
+_mf_ :
+
+
+_m_ [(] _ts_ _[ℓ][o]_ [)] = - _D_ [(] _[ℓ][o]_ [)][�] _[−]_ [1] [�]
+
+
+0 _[.]_
+
+
+[�] _Wℓi,ℓf,ℓo_ 
+_ℓi,ℓf_ _mo_
+
+
+_mi_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,_ 0)� _Y_ [(] _[ℓ][f]_ [ )] ( _R ·_ ˆ **r** _ts_ )�
+
+
+_mo_
+
+
+- - _D_ [(] _[ℓ][i]_ [)] _x_ [(] _s_ _[ℓ][i]_ [)] 
+_mi_
+
+
+The rotation _R_ has been chosen so that _R ·_ ˆ **r** _ts_ yields a simple result, so the spherical harmonic term
+drops out:
+
+
+_mts_ [(] _[ℓ][o]_ [)] = - _D_ [(] _[ℓ][o]_ [)][�] _[−]_ [1] [�]
+
+
+- _D_ [(] _[ℓ][i]_ [)] _x_ [(] _s_ _[ℓ][i]_ [)] 
+
+
+[�] _Wℓi,ℓf,ℓo_ 
+_ℓi,ℓf_ _mo_
+
+
+_mi_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,_ 0) _[.]_
+
+
+_mo_
+
+
+_mi_
+
+
+Now, since one of the rotations on the righthand side has already dropped out, to make things simpler,
+define _x_ ˜ [(] _s_ _[ℓ][i]_ [)] = _D_ [(] _[ℓ][i]_ [)] _x_ [(] _s_ _[ℓ][i]_ [)], yielding
+
+
+_m_ [(] _ts_ _[ℓ][o]_ [)] = - _D_ [(] _[ℓ][o]_ [)][�] _[−]_ [1] [�]
+
+
+- _x_ ˜ [(] _s_ _[ℓ][i]_ [)] 
+
+
+[�] _Wℓi,ℓf,ℓo_ 
+_ℓi,ℓf_ _mo_
+
+
+_mi_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓf,_ 0) _[.]_
+
+
+_mo_
+
+
+_mi_
+
+
+Since the Clebsch-Gordon coefficients are non-zero only when _mi_ = _±mo_, the second summation
+can be omitted:
+
+
+_mts_ [(] _[ℓ][o]_ [)] = - _D_ [(] _[ℓ][o]_ [)][�] _[−]_ [1] [�]
+
+
+�� _x_ ˜ [(] _s_ _[ℓ][i]_ [)] 
+
+
+       _−mo_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,_ _[,m]_ _−m_ _[o]_ [)] _o_ ) _,_ ( _ℓf,_ 0) _._
+
+
+[�] _Wℓi,ℓf,ℓo_ 
+_ℓi,ℓf_ _mo_
+
+
+_mo_
+
+
+_mo_ _[C]_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _o_ _[o]_ ) [)] _,_ ( _ℓf,_ 0) [+] - _x_ ˜ [(] _s_ _[ℓ][i]_ [)] 
+
+24
+
+
+Now, to avoid the need to sum over _ℓf_, rather than learning parameters _Wℓi,ℓf,ℓo_, eSCN learns
+parameters _W_ [˜] _m_ [(] _[ℓ][i][,ℓ][o]_ [)], defined for _m ≥_ 0 as
+
+
+_Wℓi,ℓf,ℓoC_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ ) [)] _,_ ( _ℓf,_ 0) [=]  _ℓf_ _ℓf_
+
+
+_W_ ˜ _m_ [(] _[ℓ][i][,ℓ][o]_ [)] = 
+
+
+- _Wℓi,ℓf,ℓoC_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,_ _[,]_ _−_ _[−]_ _m_ _[m]_ ) [)] _,_ ( _ℓf,_ 0) _[,]_
+
+_ℓf_
+
+
+and for _m <_ 0 as
+
+
+_Wℓi,ℓf,ℓoC_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,_ _[,m]_ _−m_ [)] ) _,_ ( _ℓf,_ 0) [=] _[ −]_  _ℓf_ _ℓf_
+
+
+_W_ ˜ _m_ [(] _[ℓ][i][,ℓ][o]_ [)] = 
+
+
+_Wℓi,ℓf,ℓoC_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,][−]_ ) _[m]_ _,_ ( [)] _ℓf,_ 0) _[.]_
+_ℓf_
+
+
+There exists a linear bijection between _W_ and _W_ [˜], so this parameterization loses no information.
+Finally, defining
+
+        - _yts_ _[ℓ][i][,ℓ][o]_         - [=] _[W]_ [˜] [ (] _m_ _[ℓ]_ _o_ _[i][,ℓ][o]_ [)]         - _x_ ˜ _[ℓ]_ _s_ _[i]_         - _[−]_ _[W]_ [˜] [ (] _−_ _[ℓ]_ _m_ _[i][,ℓ]_ _o_ _[o]_ [)]         - _x_ ˜ _[ℓ]_ _s_ _[i]_         - _[,]_ _m >_ 0;
+
+
+_mo_ [=] _[W]_ [˜] [ (] _m_ _[ℓ]_ _o_ _[i][,ℓ][o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ 
+_mo_ [=] _[W]_ [˜] [ (] _m_ _[ℓ]_ _o_ _[i][,ℓ][o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ 
+_mo_ [=] _[W]_ [˜] [ (] _m_ _[ℓ]_ _o_ _[i][,ℓ][o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ 
+
+
+_mo_ _[−]_ _[W]_ [˜] [ (] _−_ _[ℓ]_ _m_ _[i][,ℓ]_ _o_ _[o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ 
+
+
+_yts_ _[i]_ _[o]_ _mo_ [=] _[W]_ [ (] _mo_ _[i]_ _[o]_ _x_ ˜ _s_ _[i]_ _mo_ _[−]_ _[W]_ _−m_ _[i]_ _o_ _[o]_ _x_ ˜ _s_ _[i]_ _−mo_ _[,]_ _m >_ 0;
+
+- _yts_ [(] _[ℓ][i][,ℓ][o]_ [)] - [=] _[W]_ [˜] [ (] _m_ _[ℓ]_ _o_ _[i][,ℓ][o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ - [+] _[W]_ [˜] [ (] _−_ _[ℓ]_ _m_ _[i][,ℓ]_ _o_ _[o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ - _[,]_ _m <_ 0;
+
+
+_−mo_ [+] _[W]_ [˜] [ (] _−_ _[ℓ]_ _m_ _[i][,ℓ]_ _o_ _[o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ 
+
+
+_yts_ _[i]_ _[o]_ _mo_ [=] _[W]_ [ (] _mo_ _[i]_ _[o]_ _x_ ˜ _s_ _[i]_ _−mo_ [+] _[W]_ _−m_ _[i]_ _o_ _[o]_ _x_ ˜ _s_ _[i]_ _mo_ _[,]_ _m <_ 0;
+
+- _yts_ [(] _[ℓ][i][,ℓ][o]_ [)] - [=] _[W]_ [˜] [ (] _m_ _[ℓ]_ _o_ _[i][,ℓ][o]_ [)] - _x_ ˜ _[ℓ]_ _s_ _[i]_ - _[,]_ _m_ = 0 _,_
+
+
+_m_ = 0 _,_
+_mo_ _[,]_
+
+
+the message equation can very concisely be written as
+
+
+_m_ _[ℓ]_ _ts_ _[o]_ [=] - _D_ _[ℓ][o]_ [�] _[−]_ [1][ �]
+
+_ℓi_
+
+
+_mo_
+
+
+- _yts_ _[ℓ][i][,ℓ][o]_ 
+
+
+_mo_ _[.]_
+
+
+There is another way to interpret this that is perhaps more intuitive. Fixing the direction of the relative
+position vector, ˆ **r** _st_ leaves a single rotational degree of freedom: the roll rotation about this axis. Thus,
+eSCN reduces SO(3) convolution to SO(2) convolution. More formally, define the colatitude angle
+_θ_ _∈_ [0 _, π_ ] and longitudinal angle _ϕ_ _∈_ [0 _,_ 2 _π_ ]. Now, using Legendre polynomials _Pm_ [(] _[ℓ]_ [)][(] _[θ]_ [)][,] [which]
+depend only on the colatitude angle, _θ_, the real spherical harmonic basis functions can be written
+
+
+_Ym_ [(] _[ℓ]_ [)][(] _[θ, ϕ]_ [) =] _[ P]_ _m_ [ (] _[ℓ]_ [)][(] _[θ]_ [)] _[e][imϕ][.]_
+
+
+Aligning the relative position vector with the _y_ -axis fixes _θ_, leaving behind basis functions of
+the form _e_ _[imϕ]_, which are the circular harmonic basis functions, used in SO(2) convolution. A
+convolution about _ϕ_ can take advantage of the Convolution Theorem, reducing convolution to
+point-wise multiplication, further harvesting efficiency gains.
+
+
+25
+
+
+E ADDITIONAL BACKGROUND
+
+
+Quantum mechanics is most often approached as the study of the Schrödinger equation, a linear
+partial differential equation whose solutions are called wavefunctions. In this paper, as is typical in
+molecular modeling, the time-independent Schrödinger equation will be used:
+
+
+_Hψ_ = _Eψ,_
+
+
+where _H_, the Hamiltonian operator, corresponds to the total energy of the system, _E_ is an eigenvalue
+of _H_ corresponding to the energy of _ψ_, and _ψ_ is an eigenfunction of _H_, also called a wavefunction,
+or a solution to the Schrödinger equation.
+
+
+As alluded to, the Hamiltonian operator contains all the information regarding the kinetic and potential
+energies for all particles of a system. Thus,
+
+
+_M_
+
+
+_A_ =1
+
+
+_N_
+
+
+_i_ =1
+
+
+_Za_
+_riA_
+
+
+_H_ = _−_ [1]
+
+2
+
+
+_N_
+
+
+- _∇_ [2] _i_ _[−]_ [1]
+
+2
+
+_i_ =1
+
+
+2
+
+
+_M_
+
+
+_A_ =1
+
+
+1
+_∇_ [2] _A_ _[−]_
+_MA_
+
+
+_j>_ 1
+
+
+_B>A_
+
+
+_M_
+
+
+_A_ =1
+
+
+1
++
+_rij_
+
+
+_ZAZB_
+
+_,_
+_RAB_
+
+
++
+
+
+_N_
+
+
+_i_ =1
+
+
+where the first summation is due to the kinetic energy of the electrons, the second summation is
+due to the kinetic energy of the nuclei, the first double summation is due to the potential of the
+attraction between electrons and nuclei, the second double summation is due to the potential of the
+repulsion between electrons and electrons, and the third double summation is due to the potential of
+the repulsion between nuclei.
+
+
+This formula is unwieldy, however, and it can be simplified significantly without discarding much
+information that would be useful in chemical prediction. The mass difference between electrons
+and protons, which is the minimum mass difference between electrons and nuclei, is more than 3
+orders of magnitude. Thus, given the same kinetic energy, electrons will be traveling several times
+faster than nuclei. From the perspective of the electrons, the nuclei are nearly fixed, and from the
+perspective of the nuclei, the electrons change their position instantaneously. Therefore, it suffices to
+consider the positions of the nuclei fixed, setting
+
+
+_−_ [1]
+
+2
+
+
+_M_
+
+
+_A_ =1
+
+
+1
+_∇_ [2] _A_ _[,]_
+_MA_
+
+
+nuclear kinetic energy, to 0, and
+_M_
+
+      
+
+_A_ =1
+
+
+_B>A_
+
+
+_ZAZB_
+
+_,_
+_RAB_
+
+
+nuclear repulsive potential, to a constant. This is called the Born-Oppenheimer Approximation, and
+it leaves behind the so-called electronic Hamiltonian,
+
+
+_N_
+
+
+_i_ =1
+
+
+_M_
+
+
+_A_ =1
+
+
+_N_
+
+- 
+
+_i_ =1 _j>_ 1
+
+
+1
+_,_
+_rij_
+
+
+_H_ elec = _−_ [1]
+
+2
+
+
+_N_
+
+- _∇_ [2] _i_ _[−]_
+
+_i_ =1
+
+
+_Za_
++
+_riA_
+
+
+which can more succinctly be written
+
+
+_H_ elec = _T_ + _V_ Ne + _V_ ee _._
+
+
+The electronic Hamiltonian is still solved for its eigenfunctions, giving
+
+
+_H_ elecΨelec( **r** 1 _, . . .,_ **r** _N_ ) = _E_ elecΨelec( **r** 1 _, . . .,_ **r** _N_ ) _,_
+
+
+ignoring for simplicity’s sake electron spin to write Ψelec as a function of the positions of the electrons
+only. For readability, the subscripts of _H_ elec, _E_ elec, and Ψelec are henceforth omitted.
+
+
+For a system of _N_ electrons, Ψ is a function of 3 _N_ arguments, one for each spatial dimension of
+each electron. The Hartree-Fock Approximation, also called the Hartree Product, further simplifies
+
+
+26
+
+
+this equation by decomposing the wavefunction into the product of _N_ wave functions, each of three
+arguments, corresponding to each electron individually:
+
+
+Ψ( **r** 1 _, . . .,_ **r** _n_ ) _≈_ _ψ_ 1( **r** 1) _· · · ψN_ ( **r** _N_ ) _._
+
+
+It is impossible to observe the wavefunction itself, but the wavefunction can be used to derive the
+probability of observing the system’s electrons anywhere in space. In particular, the probability of
+observing the electrons at positions **r** 1 through **r** _N_ is the square of the amplitude of the wavefunction
+with **r** 1 through **r** _N_ as input:
+
+
+_|_ Ψ( **r** 1 _, . . .,_ **r** _N_ ) _|_ [2] = Ψ _[†]_ ( **r** 1 _, . . .,_ **r** _N_ )Ψ( **r** 1 _, . . .,_ **r** _N_ ) _._
+
+
+Given the Hartree-Fock Approximation, this equation can be converted into an electron density
+function that sums over the wavefunction of each electron individually,
+
+
+_n_ ( **r** ) = 2
+
+
+_N_
+
+- _ψi_ _[†]_ [(] **[r]** [)] _[ψ][i]_ [(] **[r]** [)] _[,]_
+
+_i_ =1
+
+
+multiplying by 2 to account for both spin up and spin down, which were neglected previously. This
+means that _n_ ( **r** ) gives the density of electrons at a point in space, **r** . This is a function of only 3
+inputs, but it contains much of the information that is observable from the full wavefunction, which,
+recall, is a function of 3 _N_ inputs.
+
+
+Density Functional Theory (DFT), which allows the electron density function, _n_ ( **r** ), to be exploited,
+rests on two fundamental theorems. First, the ground-state energy, _E_ 0, which is the smallest
+eigenvalue of the Hamiltonian and corresponds to the energy of the lowest-energy wavefunction, is a
+unique functional of the electron density function. Second, the electron density that minimizes the
+energy of this functional is the true electron density, which means that it is the electron density that
+corresponds to the full solution of the Schrödinger equation. Therefore, after the problem has been
+reduced from one of 3 _N_ inputs to one of 3 inputs, significant information about the original problem
+can still be found.
+
+
+It is worth examining the first statement in more detail. Recall that a functional is a function that
+maps functions to scalars. For example, _F_, defined by
+
+
+                  - 1
+_F_ [ _f_ ( _x_ )] = _f_ ( _x_ ) _dx,_
+
+_−_ 1
+
+
+is a functional that takes in an arbitrary real-valued function and gives out its integral from _−_ 1 to 1.
+Thus, for example, if _f_ ( _x_ ) = _x_ [2] + 1, then _F_ [ _f_ ( _x_ )] = 3 [8] [.] [The first statement, then, holds that there]
+
+exists a functional that uniquely determines the ground state energy of a particular electron density
+function. It promises that no more information is needed. Written as an equation, _E_ 0 = _F_ ( _n_ ( **r** )).
+
+
+However, this set-up still relies on some means of finding the individual-electron wave function. This
+is provided by the Kohn-Sham Equation:
+
+          - 1           _ψi_ ( **r** ) = _ϵiψi_ ( **r** ) _._
+2 _[∇]_ [2][ +] _[ V]_ [ (] **[r]** [) +] _[ V]_ [H][(] **[r]** [) +] _[ V]_ [XC][(] **[r]** [)]
+
+The meaning of each term is as follows. The value [1] 2 _[∇]_ [2] [is kinetic energy.] [The value] _[ V]_ [ (] **[r]** [)][ is the]
+
+potential due to the interaction between the electron and the nuclei. The value _V_ H( **r** ), called the
+Hartree potential, is defined
+
+                 - _n_ ( **r** _[′]_ )
+_V_ H( **r** ) = _|_ **r** _−_ **r** _[′]_ _|_ _[d]_ [3] **[r]** _[′][,]_
+
+
+and it is due to the Coulomb repulsion between the electron and the electron density function,
+defined by all electrons in the system. This means that the Hartree potential includes the Coulomb
+repulsion between the electron and itself, since the electron itself is included in the electron density
+function, _n_ ( **r** ). This is an unphysical result, and it is one of several effects accounted for in the
+exchange-correlation potential, _V_ XC( **r** ), which is defined
+
+
+_V_ XC( **r** ) = _[δE]_ [XC][(] **[r]** [)]
+
+_δn_ ( **r** ) _[.]_
+
+
+27
+
+
+This is the functional derivative of the exchange-correlation energy with respect to electron density.
+Exchange-correlation potential is due to quantum-chemical effects, and its form is not known because
+the exact form of _E_ XC( **r** ) is not known. The Kohn-Sham Equation can be summarized as
+
+
+_H_ KS _ψi_ ( **r** ) = _ϵiψi_ ( **r** ) _._
+
+
+It is evident from the definitions of the terms in the Kohn-Sham Equation that the present approach
+is circular. The Kohn-Sham Equation count on the Hartree potential, _VH_ ( **r** ). The Hartree potential
+counts on the electron density function, _n_ ( **r** ). The electron density function counts on the singleelectron wavefunctions, _ψi_ ( **r** ). And the single-electron wavefunctions count on the Kohn-Sham
+Equation.
+
+
+This is no problem. The following process leverages this circularity to check the soundness of a
+particular _n_ ( **r** ):
+
+
+1. Define an initial trial electron density function, _n_ trial( **r** ).
+
+2. Solve the Kohn-Sham Equation using the trial electron density function, _n_ trial( **r** ), to find
+the single-electron wavefunctions, _ψi_ ( **r** ).
+
+3. Calculate the electron density function, _n_ KS( **r** ), implied by these single-electron wavefunctions, by _n_ KS( **r** ) = 2 [�] _i_ _[N]_ =1 _[ψ]_ _i_ _[†]_ [(] **[r]** [)] _[ψ][i]_ [(] **[r]** [)][.]
+4. Compare the calculated electron density, _n_ KS( **r** ), with the trial electron density, _n_ trial( **r** ). If
+the two densities are the same, or nearly so, then this electron density is accepted as correct,
+and it can be used to find the ground-state energy, _E_ 0. If not, the trial electron density is
+updated somehow, and the process repeats.
+
+
+To make this process simpler and more efficient, it is common to represent the single-electron
+wavefunctions as linear combinations of some predefined basis set _{ϕα_ ( **r** ) _}_ _[B]_ _α_ =1 [, where] _[ B]_ [is defined]
+as the cardinality of the basis. Often, the basis set is composed of atomic orbitals, especially
+Gassian-type orbitals, which are particularly convenient in calculation. The expansion coefficients
+of these wavefunctions can be organized in a matrix **C** _∈_ R _[B][×][N]_, where each column _i_ contains the
+coefficients of wavefunction _i_ . Each wave function can then be recovered as
+
+
+_ψi_ ( **r** ) =
+
+
+_B_
+
+- **C** _αiϕα_ ( **r** ) _._
+
+
+_α_ =1
+
+
+This permits the Kohn-Sham Equation as a whole to be written in matrix form. Recall the form
+_H_ KS _ψi_ ( **r** ) = _ϵiψi_ ( **r** ). Now, it is possible to rewrite _ψi_ ( **r** ) according to its decomposition in the basis:
+
+
+_B_
+
+- **C** _αiϕα_ ( **r** ) _._
+
+
+_α_ =1
+
+
+_H_ KS
+
+
+_B_
+
+- **C** _αiϕα_ ( **r** ) = _ϵi_
+
+
+_α_ =1
+
+
+Now, for any _ϕβ_ ( **r** ) in the basis, left-multiplying both sides by _ϕ_ _[†]_ _β_ [(] **[r]** [)][ yields]
+
+
+_B_
+
+- **C** _αiϕα_ ( **r** ) _,_
+
+
+_α_ =1
+
+
+_ϕ_ _[†]_ _β_ [(] **[r]** [)] _[H]_ [KS]
+
+
+_B_
+
+- **C** _αiϕα_ ( **r** ) = _ϕ_ _[†]_ _β_ [(] **[r]** [)] _[ϵ][i]_
+
+_α_ =1
+
+
+and integrating with respect to **r** yields
+
+
+_B_
+
+       _ϕ_ _[†]_ _β_ [(] **[r]** [)] _[H]_ [KS]        - **C**
+
+
+_B_
+
+
+        
+- **C** _αiϕα_ ( **r** ) _d_ **r** = _ϕ_ _[†]_ _β_ [(] **[r]** [)] _[ϵ][i]_
+
+_α_ =1
+
+
+_B_
+
+- **C** _αiϕα_ ( **r** ) _d_ **r** _._
+
+
+_α_ =1
+
+
+More succinctly, defining ( _H_ KS) _βα_ = - _ϕ_ _[†]_ _β_ _[H]_ [KS] _[ϕ][α]_ [=] _[⟨][ϕ][β][|][H]_ [KS] _[|][ϕ][α][⟩]_ [and] _[S][βα]_ [=] - _ϕ_ _[†]_ _β_ _[ϕ][α]_ [=]
+_⟨ϕβ|ϕα⟩_, this is
+_B_ _B_
+
+     -     
+
+
+( _H_ KS) _βα_ **C** _αi_ = _ϵi_
+_α_ =1
+
+
+_B_
+
+
+_Sβα_ **C** _αi._
+
+_α_ =1
+
+
+This allows the construction of the matrix **H**, with elements **H** _βα_ defined by **H** _βα_ = ( _H_ KS) _βα_ =
+_⟨ϕβ|H_ KS _|ϕα⟩_, and the matrix **S**, with elements **S** _βα_ = _⟨ϕβ|ϕα⟩_ . The matrix **H** represents the
+
+
+28
+
+
+Hamiltonian matrix, which depends on the coefficient matrix **C** and is calculated using a method
+called Density-Fitting, whose time complexity is _O_ ( _B_ [3] ). The matrix **S** is the overlap matrix, which
+depends on the basis set _{ϕα_ ( **r** ) _}_ _[B]_ _α_ =1 [and accounts for its non-orthogonality.] [This means that if the]
+basis set is orthonormal, **S** is the identity. The Kohn-Sham Equation in matrix form is therefore
+
+
+**HC** = **SC** _ϵ,_
+
+
+or
+**H** ( **C** ) **C** = **SC** _ϵ,_
+
+making clearer that **H** depends on **C**, where _ϵ_ is a diagonal matrix containing the orbital energies.
+This forms a generalized eigenvalue problem, the principal difficulty of which is the dependence of
+**H** on **C** .
+
+
+As a result, traditional DFT uses the Self-Consistent Field method (SCF), which iteratively refines
+the coefficient matrix by approximating the Hamiltonian. Using superscripts to denote the iteration to
+which each matrix belongs, at each iteration, the Kohn-Sham Equation is
+
+**H** [(] _[k]_ [)][�] **C** [(] _[k][−]_ [1)][�] **C** [(] _[k]_ [)] = **SC** [(] _[k]_ [)] _ϵ_ [(] _[k]_ [)] _._
+
+
+Therefore, **H** [(] _[k]_ [)] is computed using **C** _[k][−]_ [1], and the generalized eigenvalue problem is solved for **C** [(] _[k]_ [)]
+
+and _ϵ_ [(] _[k]_ [)] . This process continues until convergence, which is formalized as _∥_ **H** [(] _[k]_ [+1)] _−_ **H** [(] _[k]_ [)] _∥≤_ _δ_ .
+
+
+The objective of Hamiltonian prediction is to eliminate the need for this computationally expensive
+SCF iteration by directly estimating the target Hamiltonian, **H** _[⋆]_, for a given molecular structure, _M_ .
+To predict the Hamiltonian, a machine learning model **H** [ˆ] _θ_ ( _M_ ) is parameterized by _θ_, guided by an
+optimization process defined as
+
+
+1
+_θ_ _[⋆]_ = arg min
+_θ_ _|D|_
+
+
+ - dist( **H** [ˆ] _θ_ ( _M_ ) _,_ **H** _[⋆]_ _M_ [)] _[,]_
+
+( _M,_ **H** _[⋆]_ _M_ [)] _[∈D]_
+
+
+where _D_ is the dataset, _|D|_ is its cardinality, and dist( _·, ·_ ) is a predefined metric. Machine learning
+models hold the potential to drastically improve the efficiency of DFT calculations without sacrificing
+accuracy.
+
+
+E.1 EXAMPLE
+
+
+In the example section, we explore the molecular structure and basis set details of water (H2O),
+which consists of one oxygen and two hydrogen atoms. We expand each electron’s wavefunctions
+using a basis set, which, in practice, means each atom is represented using a predefined basis set that
+collectively describes a set of electrons. Specifically, we use the STO-3G minimal basis set, where
+oxygen is described by five basis functions (1 _s,_ 2 _s,_ 2 _px,_ 2 _py,_ 2 _pz_ ), and each hydrogen atom has two
+basis functions (1s for each). Altogether, this totals seven basis functions.
+
+
+Figure 8: Molecular structure and basis functions for water (H2O).
+
+
+When considering the effect of rotations on the Hamiltonian matrix, it is important to understand how
+the matrix elements transform under such operations.
+
+
+29
+
+
+For instance, if we consider a rotation that affects only the 2 _px_, 2 _py_, and 2 _pz_ orbitals of the oxygen
+atom, the corresponding submatrix of the Hamiltonian **H** _p_ within the 2 _p_ orbital space would transform
+as:
+
+
+**H** _[′]_ _p_ [=] **[ R]** _[p]_ **[H]** _[p]_ **[R]** _p_ _[⊤]_
+
+
+where **H** _p_ is the submatrix containing the interactions between the 2 _px_, 2 _py_, and 2 _pz_ orbitals. The
+rotation matrix **R** _p_ is specific to the rotation in the 2 _p_ orbital space.
+
+
+1 _sO_ 2 _sO_ 2 _px_ 2 _py_ 2 _pz_ 1 _sH_ 1 1 _sH_ 2
+1 _sO_ _F_ 11 _F_ 12 _F_ 13 _F_ 14 _F_ 15 _F_ 16 _F_ 17
+2 _sO_ _F_ 21 _F_ 22 _F_ 23 _F_ 24 _F_ 25 _F_ 26 _F_ 27
+2 _px_ _F_ 31 _F_ 32 _F_ 33 _F_ 34 _F_ 35 _F_ 36 _F_ 37
+2 _py_ _F_ 41 _F_ 42 _F_ 43 _F_ 44 _F_ 45 _F_ 46 _F_ 47
+2 _pz_ _F_ 51 _F_ 52 _F_ 53 _F_ 54 _F_ 55 _F_ 56 _F_ 57
+1 _sH_ 1 _F_ 61 _F_ 62 _F_ 63 _F_ 64 _F_ 65 _F_ 66 _F_ 67
+1 _sH_ 2 _F_ 71 _F_ 72 _F_ 73 _F_ 74 _F_ 75 _F_ 76 _F_ 77
+
+
+2 _px_ 2 _py_ 2 _pz_
+2 _px_ _F_ 33 ~~_[′]_~~ _[F]_ 34 ~~_[′]_~~ _[F]_ 35 ~~_[′]_~~
+2 _py_ _F_ 43 _[′]_ _[F][ ′]_ 44 _[F][ ′]_ 45
+2 _pz_ _F_ 53 _[′]_ _[F][ ′]_ 54 _[F][ ′]_ 55
+
+
+This transformation ensures that the physical properties described by the Hamiltonian remain consistent under rotational operations, a fundamental requirement for accurately modeling molecular
+systems.
+
+
+F DIPOLE MOMENT AND ELECTRONIC SPATIAL EXTENT
+
+
+In this section, we describe how to compute the dipole moment and the electronic spatial extent using
+the Kohn-Sham orbitals derived from the Kohn-Sham Hamiltonian.
+
+
+The Kohn-Sham equations are defined as
+
+
+            -            
+_−_ [ℏ][2] _ψi_ ( **r** ) = _ϵiψi_ ( **r** ) _,_ (4)
+
+2 _m_ _[∇]_ [2][ +] _[ V]_ [eff][(] **[r]** [)]
+
+
+where _ψi_ ( **r** ) denotes the Kohn-Sham orbitals, _ϵi_ are the orbital energies, and _V_ eff( **r** ) is the effective
+potential. The electron density is then expressed as
+
+
+_ρ_ ( **r** ) =
+
+
+occ
+
+- _|ψi_ ( **r** ) _|_ [2] _._ (5)
+
+
+_i_
+
+
+The dipole moment **d** is computed as the sum of electronic and nuclear contributions. The electronic
+contribution is given by
+
+
+                  **d** [elec] = _−e_ **r** _ρ_ ( **r** ) _d_ **r** _,_ (6)
+
+
+and the nuclear contribution is
+
+
+**d** [nuc] = _−e_             - _ZA_ **R** _A,_ (7)
+
+
+_A_
+
+
+where _e_ represents the elementary charge, _ZA_ denotes the atomic number of nucleus _A_, and **R** _A_ is the
+position vector of nucleus _A_ . The total dipole moment is therefore the sum of these two components:
+
+
+30
+
+
+**d** = **d** [elec] + **d** [nuc] _._ (8)
+
+
+Next, we define the electronic spatial extent, denoted by _⟨r_ [2] _⟩_, which provides a measure of the spatial
+distribution of the electron density. It is calculated as
+
+
+                 _⟨r_ [2] _⟩_ = _r_ [2] _ρ_ ( **r** ) _d_ **r** _._ (9)
+
+
+To compute these quantities in practice, one often works in a basis set representation. The electron
+density matrix _Pµν_ is defined as
+
+
+_Pµν_ = 2
+
+
+occ
+
+- _CiµCiν,_ (10)
+
+
+_i_
+
+
+where _Ciµ_ are the coefficients of the molecular orbitals in terms of the basis functions _ϕµ_ . The dipole
+integrals _µ_ _[µν]_ _α_ [for a Cartesian direction] _[ α]_ [ are expressed as]
+
+
+                _µ_ _[µν]_ _α_ [=] _ϕµ_ ( **r** ) _rα ϕν_ ( **r** ) _d_ **r** _._ (11)
+
+
+The electronic contribution to the dipole moment in the basis set representation is then given by
+
+
+_d_ [elec] _α_ = _−e_               - _Pµνµ_ _[µν]_ _α_ _[.]_ (12)
+
+_µν_
+
+
+Similarly, the electronic spatial extent in the basis set representation is computed using the integral
+
+
+                _⟨r_ [2] _⟩_ _[µν]_ = _ϕµ_ ( **r** ) _r_ [2] _ϕν_ ( **r** ) _d_ **r** _,_ (13)
+
+
+leading to the final expression
+
+
+_⟨r_ [2] _⟩_ =                   - _Pµν⟨r_ [2] _⟩_ _[µν]_ _._ (14)
+
+
+_µν_
+
+
+G GROUP THEORY
+
+
+If a function is equivariant to the action of a group, it does not matter whether the group acts on the
+function’s input or output. More formally, for vector spaces _V_ and _W_ equipped with arbitrary group
+representations _DV_ ( _g_ ) and _DW_ ( _g_ ), a function _f_ : _V_ _→_ _W_ is equivariant to _G_ if
+
+
+_f_ ( _DV_ ( _g_ ) _v_ ) = _DW_ ( _g_ ) _f_ ( _v_ )
+
+
+for all _g_ _∈_ _G_ and for all _v_ _∈_ _V_ . In the case of SE(3), a function _f_ is equivariant if the output is the
+same whether the input is slid and rotated, then put through _f_, or whether the input is put through _f_,
+then slid and rotated in the same way. A function _f_ is invariant to a group _G_ if
+
+
+_DW_ ( _g_ ) = _e,_
+
+
+the identity element in _W_, for all _g_ _∈_ _G_ . In the case of SE(3), a function _f_ is equivariant if it gives
+the same output no matter how its input is slid and rotated. Equivariance is a fundamental notion
+in the modeling of physical systems. In the context of this paper, it is desirable that the function
+that predicts the Hamiltonian matrix be SE(3)-equivariant, reflecting that the molecule’s energetic
+properties are equivalent if the molecule is rotated or translated.
+
+
+31
+
+
+Group representations are an instance of the more general notion of group homomorphisms. Given a
+group _G_ with group operation _◦_ and another group _H_ with group operation _∗_, a group homomorphism
+is a map _ρ_ : _G →_ _H_ such that
+_ρ_ ( _g_ 1 _◦_ _g_ 2) = _ρ_ ( _g_ 1) _∗_ _ρ_ ( _g_ 2) _._
+
+
+A group homomorphism, then, must preserve the structure of the group, which means that it does not
+matter whether the group operation is performed in _G_ or _H_ . Note, however, that a homomorphism
+might respect the group structure only trivially. For example, _ρ_ : _G →_ _H_, defined by _ρ_ ( _g_ ) = _e_, is
+a trivial group homomorphism. A group representation is simply a group homomorphism where
+_H_ = _V_ is some vector space. In plainer language, this means that a group representation is a group
+written as a set of matrices, whose group operation is matrix multiplication. It is always the case that
+_V_ _⊆_ _GL_, since any matrix that is degenerate or non-square lacks an inverse and therefore fails to
+satisfy the inverse axiom.
+
+
+Two group representations _D_ and _D_ _[′]_ are equivalent if there is a fixed matrix _P_ such that _D_ ( _g_ ) =
+_P_ _[−]_ [1] _D_ _[′]_ ( _g_ ) _P_ for all _g_ _∈_ _G_ . In this case, _D_ and _D_ _[′]_ can be interpreted as the same representation
+defined with respect to different bases. A representation _D_ is reducible if it acts on independent
+subspaces of _V_ ; otherwise, it is irreducible. An irreducible representation is called an irrep. More
+formally, _D_ is reducible if
+
+
+
+
+
+
+
+ _P_ = _P −_ 1 [��] _D_ [(] _[ℓ][i]_ [)] ( _g_ )� _P,_
+
+_i_
+
+
+_D_ ( _g_ ) = _P_ _[−]_ [1]
+
+
+
+
+
+_D_ [(] _[ℓ]_ [0][)] ( _g_ )
+_D_ [(] _[ℓ]_ [1][)] ( _g_ )
+...
+
+
+which means that it _D_ is block-diagonal with respect to some basis. It is convenient to decompose
+group representations into irreducible representations because this reduces the group operation
+calculation to several smaller independent calculations. Irreps are the atoms of group representations
+in the sense that arbitrary representations can be composed with the direct sum of irreps. The irreps
+of SO(3) are called Wigner D-matrices, with _D_ [(] _[ℓ]_ [)] ( _g_ ) denoting a Wigner D-matrix representation of
+_g_ of degree _ℓ_ . Wigner D-matrices are of size (2 _ℓ_ + 1) _×_ (2 _ℓ_ + 1), with higher-degree representations
+allowing for more precise handling of angular information.
+
+
+H EXENSIVE DETAILS ON PUBCHEMQH
+
+
+Here, we present a detailed comparison between the PubChemQH dataset and the curated QH9
+dataset. This comparison aims to highlight the key differences and similarities. Additionally, we
+provide a comprehensive analysis of the atom number distribution within the PubChemQH dataset,
+supported by a Figure 9.
+
+
+Table 10: Comparison of PubChemQH and QH9
+
+Feature PubChemQH QH9
+
+
+Source PubChem Database QM9
+Number of Molecules 50,321 130,831 (QH9-stable)
+Functional B3LYP B3LYP
+Basis Set Def2TZVP Def2SVP
+SCF Convergence Tolerance 10 _[−]_ [8] 10 _[−]_ [13]
+
+SCF Gradient threshold: 10 _[−]_ [4] 3 _._ 16 _×_ 10 _[−]_ [4]
+Grid Density Level 3 3
+Mean of Node Number 61.85 18
+Mean of Hamiltonian Size 1025 141
+
+
+I EXTENSIVE DETAILS ON WANET
+
+
+We here provide extensive details on the motivations of the WANet architecture.The WANet architecture builds upon well-established equivariant neural network designs, which have been extensively
+studied and validated in the field.
+
+
+32
+
+
+Figure 9: Node atom distribution for PubChemQH Dataset
+
+
+We provide a visual representation illustrating WANet’s architecture and its key components, which
+is given in Figure10 . This visual aid will help readers better understand how WANet enhances the
+scalability of Hamiltonian prediction for large molecular systems. Each architectural element was
+carefully chosen to address specific computational and physical challenges at scale:
+
+
+First, the motivation behind WANet’s architecture stems from a critical limitation in existing Hamiltonian prediction methods—their inability to scale to larger molecular systems. When using larger
+basis sets, such as Def2-TZVP, higher-order irreducible representations are required to accurately
+capture angular dependencies in molecular orbitals. This poses a severe computational challenge for
+traditional SE(3)-equivariant methods, including QHNet, which become extremely expensive due to
+their computational complexity. WANet addresses this bottleneck by introducing SO(2) convolutions,
+which reduce computational complexity from _O_ ( _L_ [3] ) to _O_ ( _L_ [6] ) . This improvement enables WANet
+to process high tensor degrees efficiently. Without SO(2) convolutions, handling the scale of our
+PubChemQH dataset and larger systems would be significantly more challenging and computationally
+expensive.
+
+
+Second, large molecular systems exhibit fundamentally different physics at various distance scales.
+As molecular size increases, long-range interactions become more prominent. WANet’s Mixture-ofExperts architecture is designed to model this complex physics efficiently. It employs specialized
+experts for different interaction ranges, capturing both short-range effects (like covalent bonding)
+and long-range phenomena (such as electrostatics). By sparsifying these experts, WANet achieves a
+rich representation of molecular interactions while maintaining computational efficiency, making it
+particularly well-suited for large-scale systems.
+
+
+Third, WANet’s architecture is designed to accurately capture the intrinsic properties of molecular
+systems, particularly for large molecules. The Hamiltonian matrix, which fully characterizes the
+quantum state and electron distribution, presents unique challenges in prediction due to complex
+electron correlation effects as the system size grows. To address this, WANet incorporates the MACE
+architecture’s density trick, enabling efficient computation of many-body interactions without explicit
+calculation of all terms. This approach is crucial for maintaining accuracy as molecular size increases
+and electron correlation effects become more pronounced, ensuring WANet’s scalability and precision
+in Hamiltonian prediction for large systems.
+
+
+**Pair Construction Layer** The objective of the pair construction layer is to extend the model’s
+capacity to consider non-diagonal node pairs by introducing a tensor product filter. This filter
+modulates the projection of irreducible representations onto the space of node pair irreducible
+representations, denoted by _fts_ . It is important to note that, in contrast to the Node Convolution
+Layer, which performs graph convolution on a radius graph or KNN graph, the pair construction
+
+
+33
+
+
+Figure 10: **Scalable architecture for predicting the Hamiltonian matrix (H** **[ˆ]** **)** . The framework
+addresses three key scalability challenges in quantum many-body systems: (1) efficient convolutions,
+(2) many-body interactions, and (3) long-range interactions. (1) Efficient convolutions are achieved
+through an SO(3)-equivariant convolution reduced to SO(2) for computational efficiency. (2) Manybody interactions are captured using a density trick, which implicitly includes three-body terms by
+combining pairwise interactions quadratically. (3) Long-range interactions are modeled with a mixture
+of Local-Structure Representation (LSR) experts, where a softmax-based gating mechanism allocates
+pairwise inputs to top-performing experts. Finally, the diagonal and non-diagonal components are
+assembled into the predicted Hamiltonian matrix, providing a scalable and accurate representation of
+the system dynamics.
+
+
+34
+
+
+Figure 11: illustration of the Mixture of the Long-Short-Range Pair experts
+
+
+layer considers all possible node interactions by operating on a complete graph. The mathematical
+formulation of this layer is given as follows:
+
+
+_fts_ _[ℓ][o]_ [=]                  - _Wli,lj_ _,lo_                  - _x_ _[l]_ _s_ _[i]_ _[⊗]_ _[x]_ _t_ _[l][j]_                  - _lo_ _,_ (15)
+
+_li,lj_
+
+
+where _x_ _[l]_ _s_ _[i]_ and _x_ _[l]_ _t_ _[j]_ [are the] _[ l][i]_ [-th and] _[ l][j]_ [-th irreducible representations of source node] _[ s]_ [ and target node]
+_t_, respectively, and _Wli,lj_ _,lo_ are the learned weights that couple these representations into the output
+representation _ℓo_ .
+
+
+To improve the efficiency of the tensor product, we employed the channel-grouped tensor product,
+where the channels of the first and second tensors are tied to collectively construct the output channel
+path [5] . Additionally, to accommodate the symmetry inherent in the Hamiltonian matrix, we implement
+a symmetric structure in the pair representations. Specifically, the representations for node pairs
+( _s, t_ ) and ( _t, s_ ) must be identical, reflecting the symmetrical nature of physical interactions. This is
+formulated as:
+
+
+_fts_ _[ℓ][o]_ _′_ = _fst ℓo_ _′_ = 1 _ts_ [+] _[ f]_ _st_ _[ ℓ][o]_ [)] _[,]_
+
+2 [(] _[f][ ℓ][o]_
+
+
+where _fts_ _[ℓ][o]_ [and] _[ f]_ _st_ _[ ℓ][o]_ [denote the initial, unsymmetrized tensor products for the node pairs] _[ s]_ [ and] _[ t]_ [ before]
+the application of symmetry. The primed notations _fts_ _[ℓ][o]_ _′_ and _fst ℓo_ _′_ represent the final, symmetrized
+outputs.
+
+
+**Graphical Illustration of MoE** Here we provide an additional illustration of the Mixture of the
+Long-Short-Range Pair experts described in the maintext, which is shown in Figure 11.
+
+
+**Expansion** **Block** In the construction of final Hamiltonian blocks that encompass full orbital
+information using pair irreducible representations and many-body irreducible representation, a tensor
+expansion operation is employed alongside the filtering process. This expansion is defined by the
+following relation:
+
+
+5This is also called “uuw” tensor product in e3nn implementation.
+
+
+35
+
+
+- _⊗ℓof_ _[ℓ][o]_ [�] ( [(] _ℓ_ _[m]_ _i,ℓ_ _[i][,m]_ _j_ ) _[j]_ [)] =
+
+
+_ℓo_
+
+ - _C_ ( [(] _ℓ_ _[ℓ]_ _i_ _[o]_ _,m_ _[,m]_ _i_ _[o]_ ) [)] _,_ ( _ℓj_ _,mj_ ) _[f]_ _m_ _[ ℓ][o]_ _o_ _[,]_ (16)
+
+_mo_ = _−ℓo_
+
+
+where _C_ denotes the Clebsch-Gordan coefficients, and _⊗_ symbolizes the tensor expansion which is
+the converse operation of tensor product. _u_ _[ℓ][i]_ _⊗_ _v_ _[ℓ][j]_ can be expressed as a sum over tensor expansions:
+
+
+_u_ _[ℓ][i]_ _⊗_ _v_ _[ℓ][j]_ =             - _Wli,lj_ _,lo⊗f_ _[ℓ][o]_ _,_ (17)
+
+
+_ℓ_ 3
+
+
+subject to the coupling constraints _|ℓi −_ _ℓj| ≤_ _ℓo_ _≤_ _ℓi_ + _ℓj_ .
+
+
+**Loss Weighting.** We determined the loss weights through a principled ablation study on a validation
+set. While keeping _λ_ 1 and _λ_ 2 fixed at 1, we varied _λ_ 3 from 0.5 to 3 to understand the impact of
+WALoss weighting. We found the method to be robust across a reasonable range of values, with
+_λ_ 1 = _λ_ 2 = 1, and _λ_ 3 = 2 _._ 5 providing consistently strong performance. The table below summarizes
+the performance metrics for different values of _λ_ 1 _, λ_ 2 and _λ_ 3.
+
+
+Table 11: Performance metrics for with different _λ_ 1, _λ_ 2, and _λ_ 3 values.
+_λ_ 1 _λ_ 2 _λ_ 3 Hamiltonian MAE _↓_ _ϵ_ HOMO MAE _↓_ _ϵ_ LUMO MAE _↓_ _ϵ_ ∆ _ϵ_ occ MAE _↓_ _ϵ_ orbMAE _↓_ C _↑_ System Energy MAE _↓_
+1 1 3 0.5258 0.8688 1.9116 2.0407 21.92 8.18 48.90% 54.77
+1 1 2.5 0.4744 0.7122 0.73 1.327 18.84 7.33 48.03% 47.193
+1 1 2 0.4918 0.7847 1.24981 1.46951 21.15 7.7 47.72% 59.79
+1 1 1.5 0.4586 1.50825 3.29805 3.1123 23.57 8.56 47.29% 64.857
+1 1 1 0.4807 1.1596 3.45767 3.2068 23.16 9.2 47.15% 62.61719
+1 1 0.5 0.4223 2.28836 6.83532 5.69888 28.96 11.78 45.30% 72.9
+
+
+36
+
+
+J ADDITIONAL THEORY
+
+
+J.1 PROOF OF THEOREM
+
+
+**Theorem 2.** _Let_ **H** _,_ **H** [ˆ] _∈_ R _[n][×][n]_ _be symmetric matrices, and let_ **S** _∈_ R _[n][×][n]_ _be a symmetric positive_
+_definite matrix._ _Consider the generalized eigenvalue problems:_
+
+
+**HC** = **SC** _**ϵ**_ _,_ **H** ˆ **C** ˆ = **S** **C** ˆ ˆ _**ϵ**_ _,_
+
+
+_where_ _**ϵ**_ _and_ _**ϵ**_ ˆ _are diagonal matrices of eigenvalues, and_ **C** _and_ **C** [ˆ] _are the corresponding eigenvector_
+_matrices._ _Define_ ∆ **H** = **H** [ˆ] _−_ **H** _, and let δ be the minimum distance between the eigenvalue of interest_
+_and the rest of the spectrum of_ **S** _[−]_ [1] **H** _._ _Then, the following bounds hold:_
+
+
+_1._ _**Eigenvalue Differences:**_
+
+_κ_ ( **S** )
+_λi_ ( ˆ **H** _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) _≤_ _∥_ ∆ **H** _∥_ F _≤_ _[κ]_ [(] **[S]** [)] _∥_ ∆ **H** _∥_ 1 _,_ 1 _,_
+��� ��� _∥_ **S** _∥_ 2 _∥_ **S** _∥_ 2
+
+
+_where κ_ ( **S** ) = _∥_ **S** _∥_ 2 _∥_ **S** _[−]_ [1] _∥_ 2 _is the condition number of_ **S** _with respect to the spectral norm,_
+_∥· ∥_ F _denotes the Frobenius norm, and ∥· ∥_ 1 _,_ 1 _denotes the element-wise l_ 1 _norm._
+
+
+_2._ _**Eigenspace Angle:**_
+
+
+_[κ]_ [(] **[S]** [)] _·_ _[∥]_ [∆] **[H]** _[∥]_ [F] _≤_ _[κ]_ [(] **[S]** [)]
+
+_∥_ **S** _∥_ 2 _δ_ _∥_ **S** _∥_ 2
+
+
+sin _θ_ _≤_ _[κ]_ [(] **[S]** [)]
+
+
+_[κ]_ [(] **[S]** [)] _·_ _[∥]_ [∆] **[H]** _[∥]_ [1] _[,]_ [1] _,_
+
+_∥_ **S** _∥_ 2 _δ_
+
+
+_where θ is the angle between the eigenspaces corresponding to λi_ ( **H** _,_ **S** ) _and λi_ ( **H** [ˆ] _,_ **S** ) _._
+
+
+_Proof._ Consider the generalized eigenvalue problems for **H** and **H** [ˆ] with respect to **S** :
+
+
+**HC** = **SC** _**ϵ**_ _,_ **H** ˆ **C** ˆ = **S** **C** ˆ ˆ _**ϵ**_ _._
+
+
+Since **S** is symmetric positive definite, it is invertible. We can transform the generalized eigenvalue
+problems into standard eigenvalue problems by multiplying both sides by **S** _[−]_ [1] :
+
+
+**A** = **S** _[−]_ [1] **H** _,_ **A** ˆ = **S** _[−]_ [1] **H** ˆ = **A** + **E** _,_
+
+
+where **E** = **S** _[−]_ [1] ∆ **H** .
+
+
+**Weyl’s Perturbation Theorem**
+
+
+**Theorem 3** (Weyl’s Perturbation Theorem) **.** _Let_ **A** _,_ **A** [ˆ] _∈_ R _[n][×][n]_ _be symmetric matrices with eigenval-_
+_ues λ_ 1 _≤_ _λ_ 2 _≤· · · ≤_ _λn_ _and_ _λ_ [ˆ] 1 _≤_ _λ_ [ˆ] 2 _≤· · · ≤_ _λ_ [ˆ] _n, respectively._ _Then, for all i_ = 1 _, . . ., n,_
+
+_λ_ ˆ _i −_ _λi_ _≤∥_ **A** ˆ _−_ **A** _∥_ 2 _._
+��� ���
+
+
+Applying Weyl’s Theorem to **A** and **A** [ˆ], we have:
+
+_λi_ ( ˆ **A** ) _−_ _λi_ ( **A** ) _≤∥_ **E** _∥_ 2 = _∥_ **S** _−_ 1∆ **H** _∥_ 2 _._
+��� ���
+
+
+**Bounding the Eigenvalue Differences**
+
+
+Using the sub-multiplicative property of the spectral norm:
+
+_∥_ **S** _[−]_ [1] ∆ **H** _∥_ 2 _≤∥_ **S** _[−]_ [1] _∥_ 2 _∥_ ∆ **H** _∥_ 2 _._
+
+
+Since the spectral norm is bounded by the Frobenius norm:
+
+
+_∥_ ∆ **H** _∥_ 2 _≤∥_ ∆ **H** _∥_ F _._
+
+
+Combining these inequalities:
+
+_∥_ **S** _[−]_ [1] ∆ **H** _∥_ 2 _≤∥_ **S** _[−]_ [1] _∥_ 2 _∥_ ∆ **H** _∥_ F _._
+
+
+37
+
+
+The condition number _κ_ ( **S** ) is defined as:
+
+_κ_ ( **S** ) = _∥_ **S** _∥_ 2 _∥_ **S** _[−]_ [1] _∥_ 2 = _⇒∥_ **S** _[−]_ [1] _∥_ 2 = _∥_ _[κ]_ **S** [(] **[S]** _∥_ 2 [)] _._
+
+
+Substituting back:
+
+_∥_ **S** _[−]_ [1] ∆ **H** _∥_ 2 _≤_ _∥_ _[κ]_ **S** [(] **[S]** _∥_ 2 [)] _∥_ ∆ **H** _∥_ F _._
+
+
+Therefore:
+_κ_ ( **S** )
+_λi_ ( ˆ **A** ) _−_ _λi_ ( **A** ) _≤_ _∥_ ∆ **H** _∥_ F _._
+��� ��� _∥_ **S** _∥_ 2
+
+
+Since the eigenvalues of **A** and **A** [ˆ] correspond to the generalized eigenvalues of ( **H** _,_ **S** ) and ( **H** [ˆ] _,_ **S** ),
+respectively, we have:
+
+_κ_ ( **S** )
+_λi_ ( ˆ **H** _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) _≤_ _∥_ ∆ **H** _∥_ F _._
+��� ��� _∥_ **S** _∥_ 2
+
+
+Since _∥_ ∆ **H** _∥_ F _≤∥_ ∆ **H** _∥_ 1 _,_ 1, we can further bound:
+
+
+_κ_ ( **S** )
+_λi_ ( ˆ **H** _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) _≤_ _∥_ ∆ **H** _∥_ 1 _,_ 1 _._
+��� ��� _∥_ **S** _∥_ 2
+
+
+**Davis-Kahan** sin _θ_ **Theorem**
+
+
+**Theorem** **4** (Davis-Kahan sin _θ_ Theorem) **.** _Let_ **A** _,_ **A** [ˆ] _∈_ R _[n][×][n]_ _be_ _symmetric_ _matrices,_ _and_ _let_ _U_
+_and_ _U_ [ˆ] _be the invariant subspaces of_ **A** _and_ **A** [ˆ] _corresponding to eigenvalues in intervals I_ _and_ _I_ [ˆ] _,_
+_respectively._ _If δ_ = dist( _I,_ _I_ [ˆ] _[c]_ ) _>_ 0 _, then_
+
+
+_∥_ sin Θ _∥_ 2 _≤_ _[∥]_ **[A]** [ˆ] _[ −]_ **[A]** _[∥]_ [2] _,_
+
+_δ_
+
+
+_where_ Θ _is the matrix of principal angles between U_ _and_ _U_ [ˆ] _._
+
+
+**Bounding the Eigenspace Angle**
+
+
+Applying the Davis-Kahan Theorem to our case:
+
+
+_[∥]_ [2]
+
+= _[∥]_ **[S]** _[−]_ [1][∆] **[H]** _[∥]_ [2]
+_δ_ _δ_
+
+
+sin _θ_ _≤_ _[∥]_ **[E]** _[∥]_ [2]
+
+
+_._
+_δ_
+
+
+Using the previously established bound:
+
+_∥_ **S** _[−]_ [1] ∆ **H** _∥_ 2 _≤_ _∥_ _[κ]_ **S** [(] **[S]** _∥_ 2 [)] _∥_ ∆ **H** _∥_ F _,_
+
+
+we obtain:
+
+sin _θ_ _≤_ _[κ]_ [(] **[S]** [)] _·_ _[∥]_ [∆] **[H]** _[∥]_ [F] _._
+
+_∥_ **S** _∥_ 2 _δ_
+
+
+Similarly, since _∥_ ∆ **H** _∥_ F _≤∥_ ∆ **H** _∥_ 1 _,_ 1:
+
+
+This completes the proof.
+
+
+sin _θ_ _≤_ _[κ]_ [(] **[S]** [)] _·_ _[∥]_ [∆] **[H]** _[∥]_ [1] _[,]_ [1] _._
+
+_∥_ **S** _∥_ 2 _δ_
+
+
+38
+
+
+J.2 PERTURBATION ANALYSIS AND GROWTH OF EIGENVALUES
+
+
+**Theorem 5** (Generalized Bai-Yin’s law) **.** _Let A be an n × n random matrix with independent entries_
+_having mean µ and variance σ_ [2] _._ _Then, with high probability, the spectral norm of A is bounded by:_
+
+_∥A∥_ 2 _≤|µ|n_ + 2 _σ_ _[√]_ _n._
+
+
+_Proof._ Consider the matrix _A_ decomposed into its mean and fluctuation components:
+
+
+_A_ = _µJ_ + _B,_
+
+
+where _J_ is the matrix of all ones and _B_ is a random matrix with zero-mean entries and variance _σ_ [2] .
+
+
+First, we bound the spectral norm of the mean component _µJ_ . The matrix _J_ is a rank-1 matrix with
+all entries equal to 1. Its largest singular value is _n_, so:
+
+
+_∥µJ∥_ 2 = _|µ| · n._
+
+
+Next, we bound the spectral norm of the fluctuation component _B_ . Since _B_ has i.i.d. entries with
+zero mean and variance _σ_ [2], using Bai-Yin’s law, we get:
+
+_∥B∥_ 2 _≤_ 2 _σ_ _[√]_ _n,_
+
+
+with high probability.
+
+
+Combining these bounds using the triangle inequality, we have:
+
+_∥A∥_ 2 _≤∥µJ∥_ 2 + _∥B∥_ 2 _≤|µ|n_ + 2 _σ_ _[√]_ _n._
+
+
+Thus, with high probability, the spectral norm of _A_ is bounded by:
+
+_∥A∥_ 2 _≤|µ|n_ + 2 _σ_ _[√]_ _n._
+
+
+**Theorem 6** (Perturbation Sensitivity Scaling) **.** _Consider the generalized eigenvalue problem_ **HC** =
+**SC** _**ϵ**_ _, where_ **H** _∈_ R _[B][×][B]_ _is a symmetric Hamiltonian matrix,_ **S** _∈_ R _[B][×][B]_ _is a positive definite overlap_
+_matrix,_ **C** _∈_ R _[B][×][k]_ _is the eigenvector matrix,_ _and_ _**ϵ**_ _∈_ R _[k][×][k]_ _is a diagonal matrix of eigenvalues_
+_λi_ ( **H** _,_ **S** ) _._ _Let_ **H** [ˆ] = **H** + ∆ **H** _be_ _the_ _perturbed_ _Hamiltonian,_ _with_ ∆ **H** _∈_ R _[B][×][B]_ _a_ _perturbation_
+_matrix whose entries have mean µ and variance σ_ [2] _._ _Suppose the smallest eigenvalue of_ **S** _satisfies:_
+
+
+_A_
+_λ_ min( **S** ) = _c_ + 1 + - _NB_ 0
+
+
+- _α_ _,_
+
+
+_where c >_ 0 _, A >_ 0 _, α >_ 0 _, and N_ 0 _>_ 0 _are fixed constants._ _Then, for each eigenvalue, there exists_
+_a constant K_ _>_ 0 _such that:_
+
+                   -                   _λi_ ( ˆ **H** _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) _≤_ _K_ _σB_ [1] _[/]_ [2] + _B|µ|_ _,_
+��� ���
+
+
+_for all sufficiently large B._
+
+
+_Proof._ Consider the unperturbed generalized eigenvalue problem **Hc** _i_ = _λi_ **Sc** _i_, where **H** and **S**
+are symmetric, **S** is positive definite, and **c** _[T]_ _i_ **[Sc]** _[i]_ [= 1][.] [The perturbed system is] **[H]** [ˆ] **[c]** [ˆ] _[i]_ [=] _[λ]_ [ˆ] _[i]_ **[S][c]** [ˆ] _[i]_ [, with]
+**H** ˆ = **H** + ∆ **H**, ˆ **c** _i_ = **c** _i_ + _δ_ **c** _i_, and ˆ _λi_ = _λi_ + _δλi_ . Substituting and expanding yields:
+
+
+( **H** + ∆ **H** )( **c** _i_ + _δ_ **c** _i_ ) = ( _λi_ + _δλi_ ) **S** ( **c** _i_ + _δ_ **c** _i_ ) _._
+
+Subtracting the unperturbed equation and projecting onto **c** _[T]_ _i_ [, noting] **[ c]** _i_ _[T]_ [(] **[H]** _[ −]_ _[λ][i]_ **[S]** [) = 0][, we obtain:]
+
+**c** _[T]_ _i_ [∆] **[Hc]** _[i]_ [+] **[ c]** _[T]_ _i_ [∆] **[H]** _[δ]_ **[c]** _[i]_ [=] _[ δλ][i]_ [+] _[ δλ][i]_ **[c]** _[T]_ _i_ **[S]** _[δ]_ **[c]** _[i][.]_
+
+
+Solving for the perturbation:
+
+_i_ [∆] **[Hc]** _[i]_ [ +] **[ c]** _i_ _[T]_ [∆] **[H]** _[δ]_ **[c]** _[i]_
+_δλi_ = **[c]** _[T]_ _._
+1 + **c** _[T]_ _i_ **[S]** _[δ]_ **[c]** _[i]_
+
+
+39
+
+
+**Reciprocal of Minimum Eigenvalue vs. Number of Carbon Atoms (0 to 29)**
+
+
+25000
+
+
+20000
+
+
+15000
+
+
+10000
+
+
+5000
+
+
+0
+
+
+|Data|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|Regression L|ine|ine||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||58e-09<br>²: 0.73<br> nt: 0.85||
+||||||P-value: 4.<br>R<br>Pearson Coefficie|P-value: 4.<br>R<br>Pearson Coefficie|P-value: 4.<br>R<br>Pearson Coefficie|
+|||||||||
+
+
+0 5 10 15 20 25 30
+**Number of Carbon Atoms**
+
+Figure 12: The scaling of the smallest eigenvalue of the overlap matrix in satured hydrocarbons.
+
+
+For small ∆ **H**, _δ_ **c** _i_ is _O_ ( _∥_ ∆ **H** _∥_ 2), so **c** _[T]_ _i_ [∆] **[H]** _[δ]_ **[c]** _[i]_ [and] **[c]** _[T]_ _i_ **[S]** _[δ]_ **[c]** _[i]_ [are] [higher-order] [terms.] [Here,] [we]
+only consider the first-order term arises from evaluating the perturbation with the unperturbed
+eigenvector. Higher-order terms account for eigenvector shifts. We claim that analyzing the higherorder terms gives rise to unnecessary complication and does not alter the nature of catastrophic
+scaling. Specifically:
+_δλi_ _≈_ **c** _[T]_ _i_ [∆] **[Hc]** _[i][.]_
+
+
+Bounding this term:
+_|δλi| ≤|_ **c** _[T]_ _i_ [∆] **[Hc]** _[i][| ≤∥]_ **[c]** _[i][∥]_ 2 [2] _[∥]_ [∆] **[H]** _[∥]_ [2] _[.]_
+
+Since **c** _[T]_ _i_ **[Sc]** _[i]_ [= 1][ and] **[ S]** _[ ⪰]_ _[λ]_ [min][(] **[S]** [)] **[I]** [, we have:]
+
+
+- _α_
+
+
+1 1
+_∥_ **c** _i∥_ [2] 2 _[≤]_ _λ_ min( **S** ) [=] _c_ + 1+� _ANB_ 0
+
+
+= 1 +  - _NB_ 0
+
+- _α_ - - _B_ 
+
+
+_c_ �1 + - _NB_ 0
+
+
+- _α_ - _._
++ _A_
+
+
+For ∆ **H** as a random matrix, apply a spectral norm bound (by Bai-Yin law):
+
+
+_∥_ ∆ **H** _∥_ 2 _≤_ _C_ 1( _σB_ [1] _[/]_ [2] + _B|µ|_ ) _,_
+
+
+with constant _C_ 1, holding with high probability. Combining:
+
+
+_|δλi| ≤_ 1 + - _NB_ 0
+
+
+- _α_
+
+
+_c_ �1 + - _NB_ 0
+
+
+�0 _α_ - _C_ 1( _σB_ [1] _[/]_ [2] + _B|µ|_ ) _._
++ _A_
+
+
+Thus, the leading-order bound is:
+
+
+- _α_
+
+
+
+
+
+_λi_ ( ˆ **H** _,_ **S** ) _−_ _λi_ ( **H** _,_ **S** ) = _O_
+��� ���
+
+
+ 1 + - _NB_ 0
+
+
+
+
+_c_ �1 + - _NB_ 0
+
+
+
+
+- - - _σB_ [1] _[/]_ [2] + _B|µ|_  = _O_ _σB_ [1] _[/]_ [2] + _B|µ|_ _._
+
+
+- _α_ + _A_
+
+
+**Remark** **1.** _If_ _higher-order_ _terms_ _like_ **c** _[T]_ _i_ [∆] **[H]** _[δ]_ **[c]** _[i]_ _[and]_ _[the]_ _[denominator]_ _[correction]_ _[are]_ _[included,]_
+
+
+- _α_
+
+
+�2 ( _σB_ [1] _[/]_ [2] + _B|µ|_ ) [2] _,_
+
+
+_the perturbation includes an additional term of order O_
+
+
+�� 1+� _NB_ 0
+
+
+_c_ �1+� _NB_ 0
+
+
+_,_
+
+
+- _α_ + _A_
+
+
+_reflecting the quadratic contribution of the perturbation strength._
+
+
+40
+
+
+J.3 SCALING LAW OF THE SMALLEST EIGENVALUE OF OVERLAP MATRIX
+
+
+Figure 12 shows the relationship between the number of carbon atoms in saturated hydrocarbons and
+the reciprocal of the smallest eigenvalue of the overlap matrix. The x-axis represents the number of
+carbon atoms, ranging from 0 to 29. The y-axis represents the reciprocal of the smallest eigenvalue,
+ranging up to 25,000. Specifically, the regression analysis yields a p-value of 4 _._ 58 _×_ 10 _[−]_ [9], an _R_ [2]
+value of 0.73, and a Pearson coefficient of 0.85, suggesting a strong linear relationship.
+
+
+We also compare another scaling law suggested by Høyvik (2020). As shown in Figure 13, we
+investigated the relationship between _λ_ 1min [and the number of basis functions for various molecules.]
+Our results indicate a clear power-law scaling, which can be expressed as _y_ = _a · x_ _[b]_ . The fitted
+parameters for each molecule are as follows: Eicosane (C20H42): _y_ = 0 _._ 000107 _· x_ [2] _[.]_ [43], Graphene
+(C24): _y_ = 0 _._ 00158 _· x_ [2] _[.]_ [83], and Diamond (C10): _y_ = 0 _._ 0178 _· x_ [4] _[.]_ [16] . This power-law behavior
+emphasizes the significant impact of the number of basis functions on _λ_ 1min [, with different scaling]
+exponents for each molecule.
+
+
+J.3.1 _k_ -NEAREST-NEIGHBOR OVERLAPS
+
+
+Here, we analyzed a system where each basis function overlaps with its _k_ -nearest neighbors. The
+overlap matrix _S_ _≻_ 0 in this case is a symmetric banded matrix with bandwidth 2 _k_ + 1:
+
+
+_Sij_ =
+
+
+
+
+
+
+1 _,_ if _i_ = _j,_
+_s|i−j|,_ if 0 _< |i −_ _j| ≤_ _k,_
+0 _,_ if _|i −_ _j| > k._
+
+
+
+
+
+To derive a scaling equation for the smallest eigenvalue, consider the case where _k_ = 1, which
+corresponds to the nearest-neighbor model. Other cases can be derived similarly using plane waves
+and discrete Fourier Transform. The nearest-neighbor model holds physical significance in the
+context of tight-binding models. For example, in chain-like polyenes, the Huckel model is based on a
+nearest-neighbor analysis, providing a meaningful framework for discussing this case. The overlap
+matrix _S_ is given as:
+
+
+
+
+
+
+
+
+
+
+
+_S_ =
+
+
+
+
+
+1 _s_ 0 _· · ·_ 0
+
+_s_ 1 _s_ ... ...
+
+0 _s_ 1 ... 0
+... ... ... ... _s_
+0 _· · ·_ 0 _s_ 1
+
+
+The eigenvalues _λn_ of this tridiagonal matrix can be derived using the known solutions for such
+matrices:
+
+
+            - _nπ_
+_λn_ = 1 + 2 _s_ cos
+_B_ + 1
+
+
+The smallest eigenvalue corresponds to _n_ = _B_ :
+
+
+_,_ _n_ = 1 _,_ 2 _, . . ., B._
+
+
+     - _Bπ_
+_λ_ min = 1 + 2 _s_ cos
+_B_ + 1
+
+
+_._
+
+
+Using the trigonometric identity cos( _π −_ _θ_ ) = _−_ cos( _θ_ ) and approximating for large _B_ :
+
+
+      - _Bπ_
+cos
+_B_ + 1
+
+
+Substituting back:
+
+
+- - _π_ = _−_ cos _≈−_
+_B_ + 1
+
+
+41
+
+
+�2 [�]
+
+
+1 _−_ [1]
+
+
+2
+
+
+- _π_
+
+_B_ + 1
+
+
+_._
+
+
+Eicosane
+
+
+Graphene
+
+
+Diamond
+
+
+|eicosa<br>eicosa|ne data<br>ne linear fit|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+2.9 3.0 3.1 3.2 3.3 3.4
+log(Number of Basis Functions)
+
+
+2.5 2.6 2.7 2.8 2.9 3.0
+log(Number of Basis Functions)
+
+
+4.4
+
+
+4.2
+
+
+4.0
+
+
+3.8
+
+
+3.6
+
+
+3.4
+
+
+3.2
+
+
+3.0
+
+
+2.9 3.0 3.1 3.2 3.3 3.4 3.5
+log(Number of Basis Functions)
+
+
+7.0
+
+
+6.5
+
+
+6.0
+
+
+5.5
+
+
+9
+
+
+8
+
+
+7
+
+
+6
+
+
+5
+
+
+4
+
+
+Figure 13: The scaling of the smallest eigenvalue of the overlap matrix in three systems. Data adapted
+from Høyvik (2020).
+
+
+       - _π_
+_λ_ min _≈_ 1 _−_ 2 _s_ + _s_
+_B_
+
+
+�2
+_._
+
+
+Since _S_ _≻_ 0, this yields 1 _−_ 2 _s ≥_ 0. Here, we investigated the smallest eigenvalue _λ_ min as _B_ _→∞_,
+identifying two distinct cases:
+
+
+1. **Saturating Case:** When _s <_ 0 _._ 5 the smallest eigenvalue saturates at a finite value 1 _−_ 2 _s_ as
+_B_ _→∞_ .
+
+2. **Non-Saturating Case:** For _s_ = 0 _._ 5, _λ_ min decreases indefinitely with increasing _B_ .
+
+
+K TRAINING
+
+
+**Predicting** **the** **Gap** **from** **Initial** **Guess** In contrast to prior research, our study tackles the
+significant challenges posed by the scale of the PubChemQC t-zvp dataset. It is very challenging
+for the model to develop a good numeric starting point. To address this, we have shifted our focus
+towards a more tractable objective: making predictions based on an initial guess, which is easy to
+obtain. This adjustment is formalized in our objective function as follows:
+
+
+1
+_θ_ _[⋆]_ = arg min
+_θ_ _|D|_
+
+
+ - dist - **H** ˆ _θ_ ( _M_ ) _,_ **H** _[⋆]_ _M_ _[−]_ **[H]** _M_ [(0)] - _,_ (18)
+
+( _M,_ **H** _[⋆]_ _M_ [)] _[∈D]_
+
+
+where _|D|_ denotes the cardinality of dataset _D_, and dist( _·, ·_ ) is a predefined distance metric, **H** [(0)] _M_
+is the initial guess of the Hamiltonian. We conducted an ablation study, showing that although
+predictions based on the initial guess significantly improve performance in Hamiltonian prediction,
+they struggle with predicting physical properties.
+
+
+**Total Loss Function** The total loss function used to train our model is a combination of the orbital
+alignment loss and the mean squared error (MSE) loss between the predicted and true Hamiltonian
+matrices:
+
+
+_n_
+
+- _∥_ **H** [ˆ] _i_ + **H** [(0)] _i_ _−_ **H** _[⋆]_ _i_ _[∥]_ F [2]
+
+_i_ =1
+
+
+_n_
+
+- _∥_ **H** [ˆ] _i_ + **H** [(0)] _i_ _−_ **H** _[⋆]_ _i_ _[∥]_ F [1]
+
+_i_ =1
+
+
+_Ltotal_ = _λ_ 1
+
+
+1
+
+_n_
+
+
++ _λ_ 2
+
+
+1
+
+_n_
+
+
++ _λ_ 3 _L_ align (19)
+
+
+where _λ_ 1 _, λ_ 2 _, λ_ 3 are hyperparameters that control the relative importance of each loss component.
+
+
+**Experimental Setting** The experimental settings are presented in Table 12. For the PubChemQH
+dataset, we used an 80/10/10 train/validation/test split, resulting in 40,257 training molecules, 5,032
+validation molecules, and 5,032 test molecules. We trained all models of maximum 300,000 steps
+with a batch size of 8, using early stopping with a patience of 1,000 steps. WANet converges at
+278,391 steps, QHNet at 258,267 steps, and PhisNet at 123,170 steps. All models used the Adam
+
+
+42
+
+
+optimizer with a learning rate of 0.001 for PubChemQH, along with a polynomial learning rate
+scheduler with 1,000 warmup steps. We used gradient clipping of 1, and a radius cutoff of 5 Å. For
+QHNet and PhisNet, we referred to the official implementation for these two models.
+
+
+Table 12: Hyperparameter settings for the experimental study using the PubChemQH and QH9
+datasets.
+
+
+Hyperparameter PubChemQH (WANet) QH9 (WANet) PubChemQH (QHNet) QH9 (QHNet) PubChemQH (PhiSNet) Description
+Learning Rate 0.001 5e-4 0.001 5e-4 0.001
+Batch Size 8 32 8 32 8
+Scheduler Polynomial Polynomial Polynomial Polynomial Polynomial
+LR Warmup Steps 1,000 1,000 1,000 1,000 1,000 Number of steps to linearly increase the learning rate
+Max Steps 300,000 300,000 300,000 300,000 300,000 Maximum number of training steps
+Model Order 6 4 6 4 6 Maximum degree of the spherical harmonics
+Embedding Dimension 128 128 128 128 128 Dimension of the node embedding
+Bottle Hidden Size N/A N/A 32 32 N/A Size of the hidden layer in the bottleneck
+Number of GNN Layers 5 5 5 5 5 Number of graph neural network layers
+Max Radius 5 15 5 15 5 Maximum distance between nieghboring atoms
+Sphere Channels 128 128 128 128 128 Number of channels in the spherical harmonics
+Edge Channels 128 128 32 32 32 Number of channels for edge features
+Drop Path Rate 0.1 0.1 N/A N/A N/A Probability of dropping a path in the network
+Projection Drop 0.0 0.0 N/A N/A N/A Dropout rate for the projection layer
+
+
+The training details for the HOMO, LUMO, and GAP predictions are presented in Table 13. For a
+fair comparison, all regression models used identical dataset splits (40,257 training molecules, 5,032
+validation molecules, and 5,032 test molecules). We used batch size of 32 and consistent optimizer
+settings across all models: Adam optimizer with a learning rate of 0.001 and a polynomial learning
+rate scheduler with 1,000 warmup steps. WANet followed the same training setup described in
+Table 12. The complete regression model hyperparameters are detailed in Table 13. For Equiformer
+V2, Uni-Mol+, and Uni-Mol2 models, we used their original implementations.
+
+
+Table 13: The training details for the HOMO, LUMO, and GAP predictions.
+
+
+Hyperparameter Uni-Mol+ (Lu et al., 2023) Uni-Mol2 (Xiaohong et al., 2024) Equiformer v2 Description
+Learning Rate 0.001 0.001 0.001
+Batch Size 32 32 32
+Scheduler Polynomial Polynomial Polynomial
+LR Warmup Steps 1,000 1,000 1,000 Number of steps to linearly increase the learning rate
+Max Steps 300,000 300,000 300,000 Maximum number of training steps
+Embedding Dimension 768 768 128 Dimension of the input embedding
+FFN Embedding Dim 3072 3072 512 Embedding dimension for the feed-forward network
+Number of Encoder Layers 6 6 5 Number of layers in the transformer encoder
+Drop Path Rate 0.0 0.0 0.1 Probability of dropping a path in the network
+Activation Function GELU GELU SiLU Activation function used in the model
+
+
+43
+
+
+L DISCUSSION
+
+
+L.1 DISCUSSION ON SYSTEM ENERGY ERROR
+
+
+The mean absolute error (MAE) of 47 kcal/mol for system energy prediction is notably above
+the threshold of chemical accuracy (typically 1 kcal/mol). This highlights the inherent challenges
+of accurately predicting system energies for large molecular systems. To our knowledge, this
+work is _the first_ to evaluate Hamiltonian predictions on system energy, which presents a non-trivial
+implementation challenge. Previous studies have typically focused on metrics such as cosine similarity
+of eigenvectors or MAE of occupied energy levels. By directly assessing system energy, our approach
+provides a more comprehensive and practical evaluation of Hamiltonian accuracy, which is critical
+for large-scale molecular simulations.
+
+
+Our model demonstrates a significant improvement over baseline models in predicting system energies
+for these large systems, indicating enhanced prediction accuracy. The primary goal of this work
+is to showcase the scalability and applicability of our approach to large molecular systems, where
+achieving absolute precision is inherently difficult due to their complexity. Despite this, our results
+represent a meaningful step toward more accurate and efficient predictions in this challenging domain.
+The advances we have made underscore the potential of our approach to be further refined and applied
+across a range of complex molecular systems.
+
+
+Moreover, other critical molecular properties such as the highest occupied molecular orbital (HOMO),
+the lowest unoccupied molecular orbital (LUMO), and dipole moments are predicted with reasonable
+accuracy. These properties, often vital in quantum chemistry workflows, demonstrate the practical
+utility of our model beyond system energy prediction. The ability to predict multiple important
+molecular properties with competitive error rates reinforces the broader applicability of our model to
+a variety of quantum chemistry and materials science applications
+
+
+L.2 ADDITIONAL CONFORMATIONAL ENERGY ANALYSIS
+
+
+In quantum chemistry applications, relative energy differences between conformational states are
+typically more relevant than absolute energies. To better evaluate our method’s practical utility, we
+conducted an additional conformational energy analysis. For each molecule in our test set, we:
+
+
+1. Sampled 100 conformations.
+
+
+2. Computed ∆ _E_ between each conformation and a reference structure using both DFT and
+WANet.
+
+
+3. Calculated the MAE of these energy differences.
+
+
+For sampling, we employed Gaussian perturbation to introduce noise in the atomic positions. Starting
+from each molecule’s initial conformation from the test sets, we generated 100 perturbed geometries
+by adding random Gaussian noise ( _σ_ = 0 _._ 1Å) to the atomic coordinates. The potential energy
+values for these perturbed conformations were computed using the B3LYP/def2-TZVP level of
+theory. The resulting energy standard deviation between sampled conformations ranged from 10
+to around 100 kcal/mol (with average std =49.84kcal/mol), depending on the molecule’s flexibility.
+For baseline models (included in the Table 14), the PhisNet model withWALoss achieved 9.90
+kcal/mol MAE, the QHNet model with WALoss achieved 10.98 kcal/mol MAE, and the WANet
+model without WALoss achieved 48.92 kcal/mol MAE. QHNet without WALoss yielded MAEs of
+50.56 kcal/mol. Interestingly, we observed that the model without WALoss produce meaningless
+prediction, demonstrating the effectiveness of WALoss. It worth noting that while more complex
+sampling strategy could be used, those methods are more computationally expensive as they require
+DFT calculations.
+
+
+L.3 DISCUSSION ON SCF ACCELERATION RATIO
+
+
+We report an 18% reduction in SCF cycles, which is a notable improvement, especially considering
+that our work targets significantly larger and more complex molecular systems compared to previous
+studies such as QH9 and QHNet, where SCF reductions of 18–35% were achieved. Given the
+
+
+44
+
+
+Table 14: Relative energy differences between conformational states.
+
+
+Model MAE of Energy Differences (kcal/mol)
+WANet w/WALoss 1.12
+PhisNet w/WALoss 9.90
+QHNet w/WALoss 10.98
+WANet 48.92
+QHNet 50.56
+
+
+increased complexity and size of our systems, this 18% reduction represents a considerable improvement, reflecting the effectiveness of our model in accelerating convergence for more challenging
+molecular simulations. This result highlights the scalability of our approach in handling large-scale
+quantum chemical calculations efficiently.
+
+
+45

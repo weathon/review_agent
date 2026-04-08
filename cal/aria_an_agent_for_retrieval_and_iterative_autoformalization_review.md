@@ -1,4 +1,4 @@
-=== CALIBRATION EXAMPLE 61 ===
+=== CALIBRATION EXAMPLE 29 ===
 
 # Harsh Critic Review
 Now I have a thorough understanding of the paper. Let me write the review.
@@ -7,223 +7,209 @@ Now I have a thorough understanding of the paper. Let me write the review.
 
 ## Section-by-Section Critical Review
 
----
-
 ### Title & Abstract
 
-The title accurately describes the system. The abstract's claims are largely grounded in the reported results. However, the abstract states "68.5% final accuracy" on ProofNet, framing this as a major result, but ProofNet is an *undergraduate*-level benchmark; the more distinctive contribution is on the Conjectures dataset. The abstract also conflates two separate contributions — the Aria agent and AriaScorer — without making clear that AriaScorer is *also* the evaluation metric used to compute "final accuracy" for all benchmarks except Conjectures (which was manually verified). This creates a potential self-evaluation circularity that should be flagged upfront.
+The title "ARIA: An Agent for Retrieval and Iterative Auto-Formalization via Dependency Graph" accurately reflects the method. The abstract makes four concrete quantitative claims (91.6%/68.5% on ProofNet, 71.0% on FATE-H, 44.0% on FATE-X, 42.9% on Conjectures vs. 0% for baselines) and these are substantiated by Table 1. However, a critical issue is immediately apparent: the "final accuracy" metric is computed using AriaScorer—the same evaluation module introduced by the authors—which means the headline numbers are not comparable to an independently-verified ground truth except for the conjecture dataset. The abstract does not disclose this dependency.
 
 ---
 
 ### Introduction & Motivation
 
-The motivation is strong and clearly articulated: LLMs hallucinate non-existent Mathlib identifiers, fail to synthesize novel definitions for unseen concepts, and existing semantic checkers rely on superficial textual similarity. The three proposed contributions (Aria agent, AriaScorer, and SOTA results) are clearly enumerated.
+The motivation is clear and legitimate. The three identified failure modes—hallucination of non-existent Mathlib APIs, inability to synthesize novel definitions, and semantic mismatch in correctness checking—are genuine problems in the field, well-illustrated by the qualitative case studies in Appendix A. The introduction correctly contextualizes that statement formalization is a prerequisite for automated proof search, making the work foundationally important.
 
-One gap: the introduction claims GoT "emulates human expert reasoning," but no evidence or citation for this analogy is provided. The GoT paradigm as presented here (recursive dependency decomposition) is conceptually close to dependency-retrieval methods (e.g., Liu et al., 2025a, which appears in the references). The distinction from Liu et al. 2025a's "dependency retrieval-based approach" — itself published at ICLR 2025 — deserves more explicit treatment than the brief co-citation it receives.
-
----
-
-### Related Work
-
-Coverage is reasonably comprehensive. However, the paper cites Liu et al. (2025a) as introducing "dependency retrieval" for auto-formalization, yet this method is absent from the experimental baselines in Table 1. Since that method is philosophically closest to Aria's retrieval-and-dependency approach, its exclusion from the baseline comparison requires justification. Similarly, Lu et al. (2025) introduces "conceptual RAG" for auto-formalization, published on arXiv in August 2025, yet is also absent from Table 1. The baseline set (Herald, Kimina, Goedel-V2, Gemini-2.5-Pro) is reasonable, but the most methodologically similar works are curiously omitted.
+However, there is a framing concern. The paper positions Aria as the first system capable of synthesizing novel definitions for conjecture-level formalization. Yet Liu et al. (2025a), published at ICLR 2025, proposes a "dependency retrieval-based approach" to the same problem. The authors cite this work in the related work section but do not compare against it in Table 1. Given that this prior work directly addresses the core limitation being claimed as Aria's novelty, its absence from the baseline comparison is a notable gap. Similarly, StepFun-Formalizer (Wu et al., 2025) and ATLAS (Liu et al., 2025b) are cited in related work but not used as baselines.
 
 ---
 
-### Methodology (Section 3)
+### Method / Approach
 
-**GoT Decomposition Phase (3.1.1):**
+**GoT Architecture (Section 3.1):** The two-phase GoT design (top-down decomposition, bottom-up synthesis) is conceptually sound and well-motivated by the analogy to how human mathematicians build definitions from primitives. The integration of LeanSearch for grounding is appropriate, as it queries the live Mathlib index, addressing the stale-knowledge problem.
 
-1. *Termination and graph well-formedness.* The paper describes the dependency graph as "acyclic" but provides no mechanism to detect or prevent cycles during recursive expansion. In principle, two concepts could mutually depend on each other (e.g., via type class interdependencies). How is cycle detection handled? This is a genuine correctness concern for the algorithm.
+Several underspecified details limit reproducibility:
+- **Node expansion termination criterion**: The paper states that expansion continues "until all leaf nodes can be grounded in Mathlib," but the stopping conditions for when LLM-driven expansion should halt are not stated. What prevents infinite expansion if a concept is too abstract or absent? Is there a depth limit?
+- **LLM backbone**: The paper identifies Gemini-2.5-Pro as the base model for AriaScorer (Section 4.3.1), but the model used for the GoT planner and synthesizer within Aria itself is never explicitly stated in the main text. This is a crucial omission for reproducibility and for fairness in the computational comparison.
+- **Graph cycle detection**: The paper assumes the dependency graph is a DAG (directed acyclic graph) but offers no discussion of how circular definitions (which arise in mathematics, e.g., mutually recursive definitions) are handled.
 
-2. *Depth control.* No bound on the depth of recursive decomposition is stated. For a pathological input, could the decomposition expand indefinitely? The paper mentions graphs are "relatively shallow (averaging 2–3 layers)" in FATE-X (Appendix B.4.3), but this is an empirical observation rather than a guarantee.
+**AriaScorer (Section 3.2):** The AriaScorer's term-level grounding step is the most technically novel contribution and the case studies in Appendix B convincingly illustrate its advantage. The QuaternionGroup example (B.3) and the CatenaryRing error propagation case (B.4.2) are particularly compelling demonstrations.
 
-3. *LeanSearch failures.* When LeanSearch retrieves candidates and the LLM rejects all as non-matching, the node is flagged for synthesis. But what if LeanSearch *should* have found the concept but returned irrelevant results due to search failure? This false-negative path (wrongly triggering synthesis for an existing concept) would produce redundant new definitions that diverge from Mathlib conventions. The paper does not analyze this failure mode.
-
-**GoT Synthesis Phase (3.1.2):**
-
-4. *Maximum retries and fallback.* The reflection loop allows 16 attempts per node. What happens when all 16 fail? The paper doesn't specify: is the entire formalization abandoned, or does the agent proceed with an uncompiled definition? This affects the reported compiler success rates.
-
-5. *Semantic correctness of synthesized definitions.* The paper correctly notes (Section 3.1.2) that compilation success does not guarantee semantic correctness. But AriaScorer is applied *only at the end*, to the final theorem. Semantically wrong intermediate definitions can silently propagate (as illustrated in the Catenary Ring case study, Appendix B.4.2). The paper claims this is statistically rare ("only a single instance" in FATE-X), but this analysis is based on a small dataset and the claim is not supported quantitatively.
-
-**AriaScorer (Section 3.2):**
-
-6. *Threshold selection.* AriaScorer is deployed with α = 0.9 "in all other experiments" (Section 4.3.2), but this threshold was selected post-hoc by observing the precision/recall trade-off table on the very dataset used for evaluation (FATE-X). This creates a risk of threshold overfitting. No held-out validation set was used for threshold selection, and the sensitivity of all downstream results to this parameter is not reported.
-
-7. *Fuzzy integral aggregation.* The paper refers to a "fuzzy integral" for aggregating subtask labels (Perfect Match / Minor Inconsistency / Major Inconsistency → score in [0,1]) but provides no formula, no reference, and no ablation of this specific aggregation method versus simpler alternatives (e.g., majority vote, weighted average). Since AriaScorer is a core contribution, this technical gap is notable.
-
-8. *Jixia reliability.* The term-level grounding relies on jixia (a third-party Lean static analyzer) to extract all referenced terms. No characterization of jixia's coverage, failure modes, or accuracy is provided. If jixia fails to extract a term (or extracts it incorrectly), AriaScorer's grounding step is silently incomplete.
+However, the choice to use AriaScorer exclusively as a terminal evaluator rather than as a feedback signal is justified only by preliminary experiments (Section B.4.1), not by systematic study. The "oscillatory behavior" described suggests an engineering fix might exist (e.g., using it only at graph checkpoints as the authors themselves suggest in B.4.3). More troubling: the paper states that AriaScorer's α threshold of 0.9 is used "in all other experiments," but this threshold was selected from the FATE-X evaluation data (Table 2). If the threshold is tuned on the same distribution used to report Aria's final accuracy, this inflates reported performance. The paper does not report how sensitivity to α varies across datasets.
 
 ---
 
-### Experiments & Results (Section 4)
+### Experiments & Results
 
-**Main Results (Table 1):**
+**Circular Evaluation — A Fundamental Concern:** The most serious methodological issue is that the "final accuracy" metric reported for Aria in Table 1 is computed using AriaScorer, the very artifact introduced in this paper, as the ground truth. AriaScorer was validated (Table 2) exclusively on Aria's own outputs on FATE-X. This means:
 
-9. *Which LLM drives Aria?* The paper never explicitly states which large language model is used as the backbone for Aria's decomposition, grounding, synthesis, and reflection steps. The baseline comparisons include Gemini-2.5-Pro, which appears also to power AriaScorer. If Gemini-2.5-Pro is also Aria's backbone, the comparison between "Aria" and "Gemini-2.5-Pro (pass@1)" effectively measures the value of the *scaffolding* around the same model — which is a valid and interesting comparison, but should be stated explicitly.
+1. AriaScorer may be systematically biased toward approving Aria's formalization style (e.g., how it structures dependency chains), inflating Aria's reported final accuracy.
+2. Baselines are also scored by AriaScorer, but AriaScorer was not calibrated on their outputs—it may systematically under- or over-approve non-Aria formalizations.
 
-10. *Computational cost comparison is incomplete.* The paper compares Aria (17.7 calls/problem on FATE-X) against Goedel-V2 at pass@{16,32,64,128}. However, these are not equivalent units: Aria's calls are to a powerful frontier model (presumably Gemini-2.5-Pro), while Goedel-V2 is a 32B specialized model. Wall-clock time, dollar cost, or FLOPs are not reported. The claim that "Aria maintains higher final accuracy even when compared to Goedel-V2 at pass@128 (using more than 7x calls)" uses pass@128 as a proxy for compute, but this comparison is between models of very different sizes and costs.
+The paper does acknowledge this indirectly in B.5, but does not present a bias analysis. The exception is the conjecture dataset, which is manually verified—and notably, here Aria achieves only 42.9% despite 100% (6/6) success in the cherry-picked case studies. This inconsistency between automated and manual evaluation pathways deserves discussion.
 
-11. *Conjectures dataset: extremely small N.* The Conjectures dataset has only **14 problems**. Aria's "42.9%" corresponds to exactly 6 out of 14 correct formalizations. At this sample size, reporting a percentage to one decimal place implies a precision that the data cannot support. More importantly, no statistical confidence intervals are reported anywhere in the paper. All 14 conjectures are from the same narrow domain (homological conjectures in commutative algebra), so generalizing from "0% for all baselines, 42.9% for Aria" to a general claim about "research-level formalization" is a significant overreach.
+**Conjecture Dataset (N=14):** The most dramatic result—42.9% vs. 0% for all baselines—rests on a dataset of only 14 problems. The 42.9% rate corresponds to exactly 6 correctly formalized conjectures. With this sample size, the confidence interval on the true success rate is very wide (~15–74% at 95% CI using a binomial proportion test). The claim of "breakthrough performance" needs statistical qualification. Furthermore, the 14 conjectures are all from a single narrow domain (homological algebra in commutative algebra), which limits generalizability.
 
-12. *How is "final accuracy" defined for baselines on the Conjectures dataset?* Table 1 notes that "Results for the Conjectures dataset were manually verified." But Table 1 shows only a single "Final acc." column for Conjectures (no Compiler column). For baselines scoring 0%, was this verified by manual inspection, or by Aria's compiler alone? The evaluation protocol for baselines on Conjectures is not fully described.
+**Baseline Selection and Computational Fairness:** The comparison between Aria and Goedel-V2 using API call count as the computational budget metric is a reasonable attempt at fairness, but it conflates two different dimensions:
+- **Model capability**: Aria uses Gemini-2.5-Pro (a frontier proprietary model) for its planning and synthesis steps, while Goedel-V2 is a specialized 32B open-source model. These are not computationally equivalent per call.
+- **Call count vs. compute cost**: 17.7 calls to Gemini-2.5-Pro is substantially more expensive than 128 inference passes on a 32B model.
 
-**AriaScorer Validation (Table 2):**
+A fairer comparison would fix the underlying LLM (e.g., run Aria's GoT pipeline on Goedel-V2 as the backbone, or run naive Gemini-2.5-Pro with pass@128). The current comparison favors Aria by conflating model quality with architectural advantage.
 
-13. *Small evaluation set.* Table 2 implicitly has 69 total data points (50 TP + 5 FP + 12 TN + 2 FN at α=0). This is an extremely small sample for validating a semantic checker. The claimed 89.9% accuracy has a 95% CI of roughly ±7 percentage points. The paper does not report confidence intervals.
+**Ablation Studies (Section 4.4):** The ablation study results are described only qualitatively ("performance collapses," "reduced successful conjectures from 6 to 1"). No numbers are given for the ablated configurations on the reported metrics. This is a significant weakness for an ICLR submission. How much does removing each component hurt on FATE-X? What is the full table? The appendix (C) is referenced but not present in this version of the paper.
 
-14. *Self-referential evaluation.* AriaScorer is evaluated on *Aria's own outputs* (Section 4.3.1: "The evaluation used the Aria agent's syntactically correct, auto-formalized outputs"). This is a circular evaluation: the scorer is validated on exactly the distribution it was designed to evaluate, which may not generalize to outputs from other systems. Additionally, since the AriaScorer ground truth was generated by labeling Aria's outputs, it may systematically favor Aria's formalization patterns.
+**AriaScorer Evaluation (Table 2):** The AriaScorer evaluation ground truth dataset is a small subset of FATE-X outputs (50+12+5+2=69 labeled examples). The inter-annotator agreement rate (95.5% stated in B.5) is mentioned but not given in detail—is this between two human experts, or between humans and AriaScorer? If the latter, this is not evidence of ground truth reliability but of checker reliability. At N=69, the confidence intervals on the accuracy figures are also wide (e.g., 89.9% ± ~6% at 95% CI).
 
-15. *LeanScorer re-implementation.* The baseline LeanScorer (Xuejun et al., 2025) is re-implemented by the authors since the original is not open-source (Section 4.3.1). The fidelity of this re-implementation is unverifiable by readers and could inflate AriaScorer's relative advantage. The paper should report more detail on the re-implementation choices.
+A further concern: LeanScorer is described as "re-implemented" because the original is not open-source (Section 4.3.1). An imperfect re-implementation may unfairly disadvantage LeanScorer in Table 2. The paper should report the difference between the re-implementation's performance and any available verification from the original authors.
 
-16. *Threshold inconsistency.* Section 4.3.2 states that AriaScorer at α=0 achieves 89.9% accuracy, while Section B.5 claims "achieving a 95.5% alignment rate" with experts. These numbers appear inconsistent and refer to different things, but the distinction is never clarified.
-
-**Ablation Studies (Appendix C):**
-
-17. *RAG ablation on FATE-X is surprisingly small.* Table 4 shows that removing RAG drops FATE-X final accuracy from 44.0% to 43.0% (just 1 absolute point), which is within noise. The compiler rate drops from 69% to 61%. The claim that "RAG is crucial" is convincingly demonstrated on the Conjectures dataset (42.9% → 0%), but the FATE-X results actually suggest the reflection mechanism can compensate for RAG's absence at this difficulty level — weakening the claim that all three components are "indispensable."
-
-18. *The GoT ablation baseline is not a fair one-to-one comparison.* Section C.2 describes the GoT ablation as "extracting a flat list of conceptual keywords" and searching each directly, without recursive decomposition. This is a reasonable ablation, but it does not isolate GoT planning from the number of synthesis attempts — the ablated version uses the same synthesis module but with a shallower graph. A more informative ablation would have been "GoT decomposition with depth limited to 1."
+**ProofNet Results:** On ProofNet, Aria achieves 68.5% final accuracy versus 32.0% for Goedel-V2 (pass@1) and 27.8% for Gemini-2.5-Pro. The Kimina result is flagged for data contamination, which is appropriate. However, the massive jump in final accuracy relative to compiler success rate (91.6% compilation but only 68.5% final) suggests AriaScorer is rejecting many compilable outputs. It would be informative to know the false positive rate of AriaScorer here—are those ~23% rejections genuinely incorrect, or is AriaScorer being overly strict? Given that ProofNet has ground-truth reference formalizations, a back-check against reference correctness rates (e.g., using the neuro-symbolic equivalence methods cited in related work) would strengthen the evaluation.
 
 ---
 
 ### Writing & Clarity
 
-The paper is written clearly overall. However:
+The paper is generally well-written. The motivation is compelling and the case studies in Appendices A and B are genuinely illuminating. Section 4.4 is too brief to be useful as an ablation section—it reads more like a summary of a fuller table that should be shown. The distinction between "Compiler success rate" and "Final accuracy" in Table 1 is important and is explained well.
 
-- The relationship to the Graph-of-Thought (GoT) framework (Besta et al.) is referenced in name only without explanation of how the use here differs from or extends the original formalism. A reader unfamiliar with GoT would need to look this up.
-- Section 4.2's case-study analysis ("We identify distinct shortcomings in baseline models") is presented as a systematic finding, but is actually based on informal inspection of generated codes. This should be framed more cautiously as "qualitative observation."
-- Appendix B.3 (Hallucination Suppression) presents a case where Aria itself makes the error (QuaternionGroup 1 vs QuaternionGroup 2), and AriaScorer catches it. This is presented as a strength, but it also reveals that Aria's generation quality is imperfect even on manageable problems, raising questions about how many such errors exist in the passed formalizations.
+One significant clarity issue: the underlying LLM used within Aria's generation pipeline is not stated in the main text. This is a critical reproducibility gap. It appears from Section 4.3.1 that Gemini-2.5-Pro is used throughout, but this should be explicit.
 
 ---
 
 ### Limitations & Broader Impact
 
-Section B.4 (Appendix) discusses error propagation, verification strategy, and the decision not to use AriaScorer as iterative feedback — this is commendable. However, the following limitations are not acknowledged:
+The limitations discussion in B.4.3 is honest about error propagation risk for deeper graphs and the shallow depth of current FATE-X dependency graphs. The paper is appropriately modest about generalizing conjecture results.
 
-- **Domain specificity of Conjectures.** All 14 conjectures are homological algebra problems. The claimed ability to handle "research-level formalization" is demonstrated in a single subfield.
-- **Scalability to deeper graphs.** The paper notes FATE-X graphs average 2–3 layers, and briefly gestures at future work for textbook-scale formalization. The current system's limitations at greater depth deserve more explicit discussion.
-- **Mathlib version lock-in.** LeanSearch is indexed against a specific Mathlib version. As Mathlib evolves, results may degrade or improve unpredictably.
-- **No discussion of proof correctness.** The paper correctly scopes its contribution to *statement* formalization, noting that proof generation is future work. However, the value of formalizing a conjecture with `sorry`-based proofs (as in all Appendix A examples) could be more explicitly discussed — the formal statement exists but is unproven, which limits direct utility.
+However, several failure modes go unacknowledged:
+1. **Scalability to longer dependency chains**: The paper notes graphs are "2-3 layers deep" but does not study what happens at 5–10 layers. Diamond problems (noted in B.5.1) will compound with depth.
+2. **Sensitivity to LeanSearch quality**: If LeanSearch misses a relevant Mathlib concept, the GoT planner will unnecessarily synthesize a new definition, potentially introducing semantic drift. No analysis of retrieval failure rates is provided.
+3. **Non-mathematical content of theorems**: The paper focuses entirely on pure algebra/commutative algebra conjectures. It is unclear whether the GoT approach generalizes to analysis, topology, or other branches where informal-to-formal translations are more subtle.
+4. **Dependence on LLM quality**: The entire system is built on Gemini-2.5-Pro, a proprietary system whose capabilities may change without notice and which cannot be reproduced independently. No version pinning or alternative model evaluation is provided.
 
 ---
 
 ### Overall Assessment
 
-Aria addresses a genuinely important problem — formalizing research-level mathematical conjectures — and demonstrates a qualitatively different capability from prior systems: the ability to synthesize novel Lean definitions for concepts absent from Mathlib. The GoT decomposition + RAG grounding + compiler-in-the-loop reflection architecture is technically sound in its design, and the qualitative case studies (Appendix A) make a compelling case that the system does something meaningfully new. AriaScorer's term-level grounding is a well-motivated improvement over purely text-based semantic checkers.
+ARIA is a technically motivated and practically useful contribution to the auto-formalization literature. The Graph-of-Thought architecture for dependency-aware synthesis is a genuine conceptual advance over single-pass formalization, and the AriaScorer's term-level grounding idea is well-motivated and supported by convincing case studies. The 42.9% vs. 0% result on the Homological Conjectures dataset is striking and, if reproducible, would represent a meaningful step toward research-level mathematical AI.
 
-However, the paper has several serious weaknesses that must be addressed before acceptance at ICLR. Most critically: (1) the Conjectures benchmark has only 14 examples in a single narrow domain, making the headline result ("42.9% vs 0%") impressionistic rather than statistically reliable; (2) AriaScorer is used as both the generation metric and the evaluation metric for the main results, with threshold α selected post-hoc on the evaluation data itself; (3) the most methodologically related baseline (Liu et al., 2025a) is cited but not experimentally compared; (4) the backbone LLM powering Aria is never named, making cost/fairness analysis of the compute comparison with Goedel-V2 impossible; and (5) several algorithmic components (fuzzy integral aggregation, cycle prevention in GoT, synthesis fallback behavior) lack specification sufficient for reproducibility. These issues collectively undermine the scientific rigor of what is otherwise a promising and technically interesting contribution.
+However, the paper has several issues that together undermine the reliability of the reported results at an ICLR standard. Most critically: (1) the primary evaluation metric ("final accuracy") is computed using the authors' own AriaScorer rather than an independent ground truth, creating a circular bias that is inadequately analyzed; (2) the conjecture dataset is only 14 examples—far too small for the strong claims made; (3) the computational comparison with baselines conflates model quality and architectural advantage by pitting Gemini-2.5-Pro (Aria's backbone) against a specialized 32B model; (4) the ablation section provides no quantitative numbers, making it impossible to assess individual component contributions; and (5) a key baseline (Liu et al., 2025a, published at ICLR 2025) with directly overlapping methodology is not included for comparison. The paper would benefit substantially from (a) independent evaluation of final accuracy (e.g., via equivalence proofs or additional human annotation), (b) a larger conjecture dataset, (c) explicit reporting of the LLM backbone, and (d) full ablation tables with confidence intervals.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-The paper introduces Aria, an agentic system for auto-formalizing mathematical statements into Lean 4 that utilizes a Graph-of-Thought (GoT) pipeline for dependency decomposition/re-synthesis and a term-grounded semantic checker (AriaScorer). By integrating Retrieval-Augmented Generation (RAG) and compiler-in-the-loop reflection, Aria demonstrates state-of-the-art performance on standard benchmarks and achieves breakthrough results on research-level conjectures where baselines fail.
+This paper presents Aria, an agentic pipeline for auto-formalizing mathematical statements into Lean 4, targeting the challenging domain of research-level and conjecture-level mathematics. The system combines a Graph-of-Thought dependency planner, retrieval-augmented grounding in Mathlib, and compiler-guided iterative reflection to synthesize novel definitions and statements. It introduces AriaScorer, a term-level semantic checker that retrieves authoritative Lean definitions to evaluate formal-informal alignment, achieving state-of-the-art final accuracy across undergraduate, advanced algebra, and novel conjecture benchmarks.
 
 ### Strengths
-1.  **Robust Architectural Design for Complex Reasoning:** The Graph-of-Thought approach effectively handles the deep semantic dependencies of research-level mathematics. The ablation studies (Table 3/4) quantitatively demonstrate that without GoT, the system fails to generate novel definitions, as seen in the drop from 6/14 correct conjectures to 1/14 without GoT.
-2.  **Rigorous Semantic Evaluation Framework:** The introduction of AriaScorer, which grounds evaluation in retrieved Mathlib definitions, addresses a critical gap in auto-formalization evaluation. Table 2 shows AriaScorer significantly outperforms baselines like Back Translation and LeanScorer in F1 score (93.5% vs 84.9%), proving its ability to catch "semantically correct but syntactically hallucinated" errors that simpler metrics miss.
-3.  **Strong Performance on Research-Level Benchmarks:** The paper provides compelling evidence on the Homological Conjectures dataset (14 instances), achieving 42.9% final accuracy while competing models score 0%. This highlights a specific capability of the system to synthesize concepts not found in pre-training, which is a major bottleneck in the field.
+1. **Architectural fit for complex dependency resolution:** The GoT planner's recursive decomposition and bottom-up synthesis directly address a core failure mode of monolithic auto-formalizers. Ablation results (Appendix C, Table 4) show that removing GoT drops FATE-X final accuracy from 44.0% to 38.0% and collapses Conjectures accuracy to 7.1%, demonstrating its necessity for structuring non-trivial mathematical reasoning.
+2. **Innovative term-level semantic verification:** AriaScorer's integration of static analysis (`jixia`) to ground subtask evaluation in actual Mathlib term definitions effectively mitigates superficial textual matching. Table 2 shows it achieves a 93.5% F1 score (at $\alpha=0$), significantly outperforming the ungrounded LeanScorer baseline (82.1%), with case studies (e.g., Appendix B.3) concretely demonstrating its ability to catch definition mismatches like `QuaternionGroup 1` vs. `2`.
+3. **Rigorous benchmarking on research-grade mathematics:** The introduction and evaluation on the FATE and Homological Conjectures datasets represent a meaningful step beyond standard undergraduate benchmarks (ProofNet). The paper achieves 42.9% accuracy on conjectures where all baselines score 0%, and constructs a human-validated ground truth via algebra Ph.D. experts (Sec 4.3.1), lending credibility to the evaluation protocol.
+4. **Transparent methodological exposition:** The paper provides comprehensive appendices including full prompt templates (Appendix D), detailed ablation configurations (Appendix C), and qualitative blueprint analyses (Appendix A), which greatly aid comprehension of the agentic workflow and decision boundaries.
 
 ### Weaknesses
-1.  **Statistical Reliability on Key Results:** The strongest claims (42.9% on conjectures) rely on a very small dataset (N=14). The absolute number of successes is only 6 out of 14. Without variance estimation or a larger holdout set, it is difficult to determine if this result generalizes or is sensitive to specific problem selection.
-2.  **Evaluation Evaluator Bias:** AriaScorer uses Gemini-2.5-Pro as its underlying judge (Section 4.3.1). Given that baselines and Aria's core agent also rely on powerful LLMs, there is a risk of "self-referential bias" or correlation between the generator's training distribution and the scorer's, despite the claim that the modules are decoupled. The 95.5% alignment with human experts needs more detail on how many samples were human-annotated for this metric.
-3.  **Computational Efficiency Comparison:** While the paper compares Aria's 17.7 API calls against Goedel's pass@128, the comparison of "cost" is slightly asymmetric. Goedel's pass@128 is essentially 128 attempts, whereas Aria's 17.7 is an *average* successful inference path that still involves heavy RAG and GoT computation overhead. A more granular latency or token-budget analysis is needed to claim efficiency beyond just accuracy scaling.
+1. **Limited dataset scale for primary claims:** The most impressive result (42.9% vs 0%) is derived from only 14 conjecture instances (Sec 4.1.1). While the relative improvement over baselines is striking, the small sample size limits statistical confidence and generalizability claims for "research-level" formalization.
+2. **Incomplete computational efficiency reporting:** Section 4.2 reports an average of 17.7 LLM calls per problem for Aria and compares it to Goedel-V2 pass@128, but omits wall-clock latency, token consumption, or monetary cost. For agentic systems, call counts alone poorly reflect practical deployability and cost-efficiency.
+3. **Residual LLM-as-a-judge bias in evaluation:** Despite term-level grounding, AriaScorer's final subtask scoring and fuzzy integral aggregation still rely on an LLM (Gemini-2.5-Pro). The paper claims architectural decoupling to prevent bias (Sec 4.5), but does not quantify judge variance across different LLM backbones or multiple inference seeds, leaving open the possibility of scorer-specific optimization artifacts on FATE/ProofNet.
+4. **Reproducibility gaps due to unpinned dependencies:** Mathlib and Lean 4 toolchains evolve rapidly. The paper references LeanSearch, `jixia`, and Mathlib generally but does not specify exact Lean versions, Mathlib commit hashes, or dataset splits. Without environment pinning or explicit code release, reproducing the exact compilation success rates and AriaScorer scores is highly susceptible to library drift.
+5. **Inconsistent "Final Accuracy" computation:** The paper states final accuracy requires passing both compilation and AriaScorer (Sec 4.1.2), but notes Conjectures results were "manually verified" (Table 1 footnote). Mixing automated semantic checking with human verification across benchmarks complicates direct metric comparison and obscures the true false-positive rate of AriaScorer on harder problems.
 
 ### Novelty & Significance
-The work is **significant** for the intersection of AI and Formal Math, as solving the auto-formalization of conjectures is widely recognized as a major open challenge. The **novelty** lies primarily in the application of GoT planning to the specific constraints of Lean's dependency graph, combined with the term-level grounding for evaluation. While GoT and RAG are known in NLP, their specific orchestration for syntactic/semantic consistency in theorem proving, validated by a static analyzer (jixia) and compiler, is a distinct contribution. It advances the field by moving beyond single-shot generation to iterative, dependency-aware reasoning.
+**Novelty:** Individual components (GoT planning, RAG, compiler feedback, LLM-based semantic checking) are established in the agentic and formal methods literature. The novelty lies in their targeted integration into a dependency-driven synthesis pipeline capable of *generating novel Mathlib-adjacent definitions* and pairing it with a *term-grounded semantic verifier*. This addresses a specific gap: prior systems excel at retrieving existing definitions but fail when novel concepts or precise type-class inheritance trees are required.
+**Clarity:** High. The pipeline is logically structured, well-illustrated with dependency graphs, and supported by extensive qualitative and quantitative breakdowns.
+**Reproducibility:** Moderately strong conceptually, but practically fragile without code release and strict environment pinning (Lean/Mathlib versions, retrieval index snapshots). The prompt templates and ablation setups are fully disclosed.
+**Significance:** High for the ICLR community working on LLMs for formal reasoning, automated theorem proving, and mathematical AI. Successfully formalizing active research conjectures unlocks downstream proof automation and accelerates formal library expansion. If made reproducible, this work provides a robust baseline for future agentic formalization research.
 
 ### Suggestions for Improvement
-1.  **Expand and Clarify Evaluation:** Increase the size of the Conjectures dataset for the main result disclosure or provide a cross-validation analysis to demonstrate statistical robustness. The current 14-instance set is too small for definitive claims of "state-of-the-art" on research-level problems without further validation.
-2.  **Address Computational Cost Transparency:** Provide a detailed breakdown of token usage and latency per problem for Arena compared to the best performing single-pass baselines. Clarify if the 17.7 calls is a hard requirement for the full 42.9% or if fewer calls yield diminishing returns, to better contextualize the trade-off between accuracy and resource usage.
-3.  **Reproducibility and Tooling:** Ensure the `jixia` static analyzer integration and specific Mathlib versions are clearly versioned in the code release. The paper relies heavily on external tools (LeanSearch, Herald), and specifying exact API versions and retrieval hyperparameters is crucial for ICLR reproducibility standards.
+1. **Pin and release the evaluation environment:** Provide exact Lean 4 and Mathlib commit hashes, LeanSearch index version, and `jixia` release tag. Commit to open-sourcing the agent orchestration code, AriaScorer evaluation script, and the exact dataset splits to ensure ICLR reproducibility standards are met.
+2. **Expand the conjecture benchmark or report uncertainty bounds:** Augment the homological conjectures set to at least 30-40 items, or compute bootstrapped confidence intervals for the 14-item results to statistically validate the "breakthrough" claim over 0% baselines.
+3. **Report comprehensive efficiency metrics:** Include wall-clock time, total tokens consumed, and approximate API/cloud costs per benchmark set. Present a cost-vs-accuracy curve comparing Aria's 17.7-call budget against baseline sampling strategies (e.g., Goedel pass@k) to clarify practical trade-offs.
+4. **Quantify LLM judge variance and cross-model consistency:** Run AriaScorer evaluations using at least two different strong LLMs (e.g., mixing open-weight and proprietary models) or multiple seeds. Report inter-rater agreement (e.g., Cohen's $\kappa$) to demonstrate that high precision/recall stems from term grounding rather than scorer-specific prompt alignment.
+5. **Unify evaluation protocol across datasets:** Either apply the same human verification standard to all FATE/ProofNet results, or consistently use AriaScorer with a documented calibration curve against human annotations on each benchmark. Clarify in the main text how the threshold $\alpha$ was tuned per dataset to ensure "final accuracy" is a strictly comparable metric.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. Expand the Conjectures dataset beyond 14 samples to ensure statistical validity of the 42.9% vs 0% claim, as small N makes SOTA claims unreliable.
-2. Evaluate AriaScorer on baseline models' outputs (e.g., Goedel-V2) to prove it generalizes beyond Aria's specific generation style rather than overfitting to its own errors.
-3. Quantify the percentage of successful formalizations that required *new* definition synthesis versus pure retrieval to validate the core claim of synthesizing unseen concepts.
-4. Report actual wall-clock inference time per problem, as API call counts do not accurately reflect computational cost, latency, or practical viability.
+1. **Compare against other agentic/iterative baselines** — All baselines are single-pass models; without comparing to other multi-step or reflection-based methods, it's unclear whether gains come from the specific GoT architecture or simply from iteration itself.
+2. **Report statistical significance on the Conjectures dataset** — With only 14 examples and a 42.9% success rate (6/14), confidence intervals or bootstrap analysis are needed to determine if this significantly differs from baselines.
+3. **Evaluate whether synthesized definitions are actually usable for proving** — The paper claims statement formalization enables downstream proof automation, but no experiments test whether the generated statements can be successfully proven.
+4. **Ablate GoT decomposition vs. synthesis ordering separately** — The current ablation removes GoT entirely; isolating whether top-down decomposition or bottom-up synthesis drives performance is critical for understanding the mechanism.
+5. **Test AriaScorer on the Conjectures dataset** — Semantic checker validation is only on FATE-X, yet the breakthrough claim rests on Conjectures; without verification that AriaScorer works there, the 42.9% accuracy is untrustworthy.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. Perform statistical significance testing (e.g., Fisher's exact test) on ablation results, as N=14 makes the 0% vs 42.9% difference potentially noisy.
-2. Report inter-annotator agreement scores for the expert-validated Ground Truth used to evaluate AriaScorer to establish evaluator reliability.
-3. Provide a detailed error taxonomy for the 57% of failed Conjectures to identify systematic weaknesses in the GoT planner rather than just highlighting successes.
+1. **Clarify whether baselines had equal retrieval access** — The 0% baseline performance on Conjectures is suspicious; if baselines lacked LeanSearch/RAG, the comparison is unfair and undermines the claimed advantage.
+2. **Analyze failure cases systematically** — No breakdown of why the 57.1% of Conjectures failed; without understanding failure modes, the method's limitations and generalizability remain unclear.
+3. **Report human annotation agreement metrics** — The ground truth for AriaScorer validation relies on expert annotation, but inter-annotator agreement is not reported, casting doubt on evaluation reliability.
+4. **Quantify the cost-benefit tradeoff more rigorously** — 17.7 API calls per problem vs. pass@128 baselines needs wall-clock time and dollar cost analysis; ICLR reviewers expect efficiency considerations for agentic systems.
+5. **Verify synthesized definitions align with Mathlib conventions** — No analysis of whether newly synthesized definitions follow Mathlib style or would be accepted by maintainers, which affects real-world utility.
 
 ### Visualizations & Case Studies
-1. Include a detailed case study of a *failed* conjecture formalization to expose failure modes currently hidden by success-only examples in the appendix.
-2. Visualize a specific example of a *newly synthesized* definition confirmed not to exist in Mathlib to empirically prove the synthesis capability.
-3. Plot accuracy vs. computational cost (API calls) to demonstrate whether the 17.7 call average yields diminishing returns or is strictly necessary.
+1. **Show dependency graphs for failed cases, not only successes** — Current case studies only illustrate working examples; seeing where GoT decomposition fails would reveal actual limitations of the approach.
+2. **Visualize AriaScorer false positives/negatives** — Examples where the checker incorrectly accepted or rejected formalizations would expose whether term-level grounding actually prevents the claimed errors.
+3. **Include side-by-side comparison of synthesized vs. Mathlib definitions** — For concepts like "CatenaryRing," show whether Aria's synthesis matches existing Mathlib definitions or introduces incompatible variations.
 
 ### Obvious Next Steps
-1. Release the full source code and agent pipeline publicly to satisfy ICLR reproducibility standards, as prompts alone are insufficient.
-2. Conduct a human expert review of the 42.9% "successful" conjectures to verify if they are actually merge-ready for Mathlib or merely compilable.
-3. Expand the Conjectures benchmark to at least 50 problems to solidify the claim of research-level capability before claiming a breakthrough.
+1. **Release code and reproduction scripts** — Prompts are provided but no code; ICLR expects reproducibility, and the complex pipeline cannot be verified without implementation access.
+2. **Test on non-algebra domains more thoroughly** — Only one topology case study (Borel's Conjecture) is shown; broader domain evaluation is needed to support claims of generalizability beyond algebra.
+3. **Evaluate end-to-end proving capability** — Since statement formalization is framed as enabling proof automation, experiments should test whether formalized conjectures can actually be proven by existing provers.
 
 # Final Consolidated Review
 ## Summary
 
-Aria is an agent for auto-formalizing mathematical statements into Lean 4 that combines three key components: (1) a Graph-of-Thought planner that recursively decomposes statements into dependency graphs and synthesizes novel definitions for concepts absent from Mathlib, (2) RAG-based grounding via LeanSearch that anchors concepts to existing library definitions, and (3) AriaScorer, a semantic correctness checker that retrieves authoritative Mathlib term definitions to enable more rigorous verification than text-based comparison. The paper demonstrates state-of-the-art performance on ProofNet (68.5%), FATE-X (44.0%), and notably achieves 42.9% on a dataset of homological conjectures where all baselines score 0%.
+The paper presents Aria, an agentic auto-formalization system that combines Graph-of-Thought dependency planning, retrieval-augmented definition grounding, and compiler-guided reflection to formalize mathematical statements into Lean 4. AriaScorer, a term-level semantic checker, validates formal statements by retrieving authoritative Mathlib definitions. The system achieves strong results on undergraduate (ProofNet: 68.5%), advanced algebra (FATE-X: 44%), and homological conjectures (42.9%) benchmarks.
 
 ## Strengths
 
-- **Novel synthesis capability:** Unlike prior auto-formalizers that rely purely on retrieving existing definitions, Aria's GoT architecture can synthesize new definitions for concepts not in Mathlib. The ablation study (Table 3) validates this quantitatively: on the Conjectures dataset, removing GoT drops success from 6/14 to 1/14. The case studies in Appendix A provide concrete examples (e.g., synthesizing `IsNil` for Koethe's Conjecture, `CatenaryRing` definitions) demonstrating this capability.
+- **Graph-of-Thought architecture addresses a real limitation**: The two-phase GoT (top-down decomposition, bottom-up synthesis) advances beyond single-pass formalization for research-level mathematics where novel definitions must be synthesized. The ablation in Appendix C (Table 4) shows removing GoT drops Conjectures accuracy from 42.9% to 7.1% and FATE-X from 44.0% to 38.0%, demonstrating its necessity for complex formalization.
 
-- **Rigorous semantic evaluation with term-level grounding:** AriaScorer improves over prior methods by retrieving actual Mathlib definitions for Lean terms rather than relying on textual similarity. Table 2 shows AriaScorer achieves 93.5% F1 versus 84.9% for the best baseline, with particularly notable improvements in catching definition discrepancies (e.g., QuaternionGroup 1 vs QuaternionGroup 2 in Appendix B.2-3).
+- **Term-level grounding in semantic evaluation is innovative**: AriaScorer's retrieval of authoritative Mathlib definitions for each Lean term, combined with subtask decomposition, provides a principled way to catch semantic mismatches. Table 2 shows 93.5% F1 vs 82.1% for the ungrounded LeanScorer baseline. Appendix B.3 (QuaternionGroup 1 vs 2) demonstrates real error detection—catching that `QuaternionGroup 1` is cyclic group C₄, not Q₈.
 
-- **Strong empirical performance on challenging benchmarks:** The 42.9% success rate on research-level conjectures where all baselines fail completely represents a qualitative advance. The paper also demonstrates generalization across domains (Table 6: ProofNet breakdown by algebra, analysis, number theory, topology), and Appendix E shows successful formalization of Borel's Conjecture in topology, suggesting domain generativity beyond the primary algebraic focus.
+- **Human-validated ground truth construction**: The FATE-X semantic checker evaluation uses ground truth labeled by an algebra Ph.D. candidate and verified by a second expert (Section 4.3.1), establishing a credible evaluation standard. The reported 95.5% alignment between human annotators and AriaScorer provides confidence in the evaluation protocol.
 
-- **Well-designed ablation studies:** The component-wise ablation (Tables 3, 4) clearly quantifies the contribution of each architectural component. The finding that RAG removal causes complete collapse (42.9%→0%) on Conjectures but only modest impact on FATE-X provides insight into where retrieval versus reflection matters most.
+- **Comprehensive ablation studies with quantitative findings**: Appendix C Tables 3, 4, and 5 provide full statistics showing: removing Reflection drops FATE-X from 44% to 14% and Conjectures from 42.9% to 0%; removing GoT drops Conjectures from 42.9% to 7.1%; removing RAG drops Conjectures to 0%. These clearly isolate each component's contribution.
 
 ## Weaknesses
 
-- **Conjectures dataset has severe statistical limitations:** The headline "42.9% vs 0%" result is based on N=14 problems, where 42.9% corresponds to exactly 6 successes. This sample is too small to support reliable statistical claims, and all 14 problems are from a single narrow domain (homological conjectures in commutative algebra). Generalization claims about "research-level formalization" based on this dataset are overextended.
+- **Evaluation metric circularity**: Final accuracy is computed using AriaScorer, which is both the artifact being evaluated and the ground truth. While Table 2 shows 95.5% alignment with human annotators on FATE-X, AriaScorer was calibrated on FATE-X (including the α=0.9 threshold selection) and then used to evaluate FATE-X results, creating potential overfitting. The Conjectures dataset is manually verified (Table 1 footnote), but this inconsistency between evaluation protocols across benchmarks complicates interpretation.
 
-- **AriaScorer creates a circular evaluation concern:** AriaScorer is both a claimed contribution and the evaluation metric for all reported results (except Conjectures, which was manually verified). The scorer is validated on Aria's own outputs (Section 4.3.1), creating a distribution mismatch that may favor Aria's formalization patterns. While the paper claims 95.5% alignment with human experts (Section B.5), this validation set size and methodology are not detailed, and the scorer is not evaluated on baseline model outputs to demonstrate generalization.
+- **Conjecture dataset is too small for strong claims**: The headline 42.9% vs 0% result rests on only 14 examples (6 successes). The 95% binomial confidence interval for 6/14 is approximately 18%–72%. Furthermore, all 14 conjectures are from homological algebra in commutative algebra—a narrow domain—limiting claims about "research-level" generalizability.
 
-- **Backbone LLM is never explicitly named:** The paper specifies that AriaScorer uses Gemini-2.5-Pro (Section 4.3.1) and compares against Gemini-2.5-Pro as a baseline, but never states which LLM powers Aria's decomposition, grounding, synthesis, and reflection modules. This omission makes it impossible to assess whether the comparison against "Gemini-2.5-Pro (pass@1)" is fair (i.e., whether Aria's scaffolding improves the same underlying model).
+- **Missing LLM backbone specification in main text**: The paper does not explicitly state in the main body which LLM powers Aria's GoT planner and synthesis modules. While Section 4.3.1 mentions Gemini-2.5-Pro for AriaScorer comparisons, the generation backbone for Aria itself is not specified in Section 4.1 or the methodology, hampering reproducibility.
 
-- **Threshold selection for AriaScorer is post-hoc and potentially overfit:** The threshold α=0.9 is selected after examining the precision/recall trade-off on FATE-X (Table 2), which is the same dataset used for downstream evaluation. No held-out validation set is used, and sensitivity analysis of results to threshold choice is not reported.
+- **Incomplete baseline comparison**: Liu et al. (2025a), which proposes dependency retrieval for auto-formalization and directly addresses the core limitation Aria claims to solve, is cited in related work but not included in Table 1 comparisons. The absence of comparison against this directly relevant prior work is a significant gap.
 
-- **AriaScorer validation set is very small:** Table 2 implies only 69 total labeled examples (50 TP + 5 FP + 12 TN + 2 FN). The 89.9% accuracy at α=0 has a 95% confidence interval of roughly ±7 percentage points, yet no confidence intervals are reported.
-
-- **LeanScorer baseline is a re-implementation:** The paper re-implements LeanScorer since "the original version is not open-source" (Section 4.3.1), making the comparison unverifiable. The reported F1 gap (93.5% vs 82.1%) could partially reflect implementation differences rather than genuine methodological advantage.
+- **Unclear retrieval access fairness**: The 0% baseline performance on Conjectures likely reflects that standard baselines (Goedel-V2, Gemini pass@1) lack RAG access. The paper should clarify whether baselines were given equivalent retrieval capabilities to isolate architectural gains from retrieval advantages. The comparison conflates Aria's architecture with its RAG component.
 
 ## Nice-to-Haves
 
-- Expand the Conjectures dataset beyond N=14 to provide statistically meaningful evaluation of research-level formalization capability. A sample of 50+ problems across multiple mathematical domains would substantially strengthen the claims.
+- **Pin exact Lean/Mathlib versions** for reproducibility (commit hashes, release tags). The paper references evolving libraries but specifies no versions.
 
-- Evaluate AriaScorer on outputs from baseline models (e.g., Goedel-V2, Gemini) to demonstrate that the scorer generalizes beyond Aria's specific formalization patterns and is not overfitting to the agent's error distribution.
+- **Report wall-clock time and API costs** beyond call counts. Agentic systems' deployability depends on efficiency metrics beyond 17.7 calls/problem.
 
-- Report wall-clock inference time and token costs, not just API call counts. The comparison "17.7 calls vs pass@128" does not account for the computational overhead of GoT planning, RAG retrieval, and reflection iterations.
-
-- Provide statistical significance testing (e.g., confidence intervals, Fisher's exact test) for key results, particularly the ablation studies where N=14 makes percentage differences noisy.
+- **Test downstream proof success**: Since formalization is framed as enabling proof automation, evaluating whether existing provers can actually prove the formalized statements would validate utility.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Fuzzy integral aggregation formula not provided":** While the paper mentions "fuzzy integral" aggregation for subtask scores, the lack of explicit formula is a minor detail that doesn't undermine the method. The contribution is the term-level grounding concept, not the specific aggregation function.
+- *"Ablation studies provide no quantitative numbers"* — INCORRECT. Appendix C Tables 3, 4, 5 provide full ablation statistics. The main text summarizes these accurately.
 
-- **"Jixia reliability uncharacterized":** Jixia is an external static analyzer. While its reliability matters, demanding characterization of external tool coverage is scope creep beyond the paper's contributions.
+- *"Dependency graph cycle handling is underspecified"* — Mathematical definitions are typically non-circular, and DAG structure is a reasonable assumption. This theoretical concern did not manifest as an observed failure mode in experiments.
 
-- **"Cycle detection in dependency graph not specified":** The paper describes the dependency graph as acyclic. Mathematical definition dependencies are naturally acyclic in well-formed formalizations. This is a speculative correctness concern not observed in practice.
+- *"Non-mathematical content (analysis, topology) is untested"* — Appendix E.2 includes a topology case study (Borel's Conjecture), and Table 6 shows ProofNet breakdown across algebra, analysis, number theory, and topology. The criticism is partially addressed by existing evidence.
 
-- **"Liu et al. 2025a not experimentally compared":** While this related work is cited, demanding comparison with every cited method is excessive. The baseline set (Herald, Kimina, Goedel-V2, Gemini) is reasonable for ICLR standards.
-
-- **"Lu et al. 2025 baseline missing":** This is an August 2025 arXiv preprint. Per review guidelines, papers should not be criticized for missing very recent or unavailable baselines.
+- *"The paper positions Aria as the first system capable of synthesizing novel definitions"* — The 42.9% vs 0% result on conjectures (where synthesis is required) substantiates this claim. The point about Liu et al. (2025a) not being compared is retained separately as a weakness.
 
 ## Novel Insights
 
-The paper reveals an important trade-off between "syntactic risk" and "semantic rigor" in formalization systems. The GoT ablation on FATE-H (Table 5) shows a counter-intuitive pattern: removing GoT *increases* compilation rate (89%→95%) but *decreases* final accuracy (71%→54%). The modular definition synthesis approach that GoT enables introduces more syntactic complexity (and thus more compilation failures) but produces semantically correct formalizations more often. This suggests that for complex mathematical reasoning, syntactic compilation metrics alone are misleading proxies for true formalization quality—a finding with implications beyond this specific system.
+The GoT architecture exhibits a counter-intuitive trade-off: on simpler problems (FATE-H), the ablated version achieves higher compilation rates (95% vs 89%) but lower final accuracy (54% vs 71%). Modular definition style introduces type-class resolution overhead that paradoxically hurts compilation on easy problems, but this overhead becomes worthwhile for complex definitions requiring synthesis. This suggests adaptive architectures that skip GoT for simple inputs could improve efficiency without sacrificing quality.
+
+AriaScorer's limitation to terminal evaluation reveals a deeper tension: semantic correctness checking is computationally expensive (multiple LLM calls + database lookups), making iterative feedback infeasible. The empirical finding that "correctly typed but semantically wrong" intermediate definitions rarely propagate (only 1 observed failure in FATE-X) suggests sparse semantic checkpoints (every k layers) might achieve similar accuracy with lower cost.
 
 ## Suggestions
 
-- Explicitly state which backbone LLM powers Aria's agent components in the main text (not just in AriaScorer), and clarify whether comparisons against "Gemini-2.5-Pro (pass@1)" represent the same underlying model with different scaffolding.
+1. **Add independent evaluation pathway**: Use neuro-symbolic equivalence proofs (as cited in related work for Liu et al. 2025a) or additional human annotation to verify a subset of ProofNet/FATE results, breaking circular dependence on AriaScorer for at least one benchmark.
 
-- Add a held-out validation split for AriaScorer threshold selection, or report results across multiple threshold values to demonstrate robustness.
+2. **Specify all model versions in main text**: State explicitly in Section 4.1 which LLM powers Aria's GoT planner, synthesis, and reflection modules. Include model version/date for proprietary APIs.
 
-- Provide confidence intervals for all reported percentages, especially the Conjectures dataset where N=14 renders point estimates unreliable.
+3. **Compare against baselines with equivalent retrieval access**: Either provide existing baselines access to LeanSearch/RAG, or evaluate Aria components in isolation. Report what retrieval (if any) each baseline had access to.
+
+4. **Report failure mode analysis**: What caused the 8/14 Conjecture failures? Synthesis errors? Retrieval misses? Semantic mismatches? Understanding the remaining gap is crucial for guiding future work.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 4.0, 4.0, 4.0, 8.0]

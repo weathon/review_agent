@@ -1,0 +1,5253 @@
+## OPTIMIZING NEURAL NETWORK REPRESENTATIONS
+### OF BOOLEAN NETWORKS
+
+
+**Joshua Russell** **Ignacio Gavier** **Devdhar Patel** **Edward Rietman** **Hava T. Siegelmann**
+University of Massachusetts Amherst
+{jgrussell,igavier,devdharpatel,erietman,hava}@umass.edu
+
+
+ABSTRACT
+
+
+Neural networks are known to be universal computers for Boolean functions.
+Recent advancements in hardware have significantly reduced matrix multiplication
+times, making neural network simulation both fast and efficient. Consequently,
+functions defined by complex Boolean networks are increasingly viable candidates
+for simulation through their neural network representation. Prior research has
+introduced a general method for deriving neural network representations of Boolean
+networks. However, the resulting neural networks are often suboptimal in terms of
+the number of neurons and connections, leading to slower simulation performance.
+Optimizing them while preserving functional equivalence –lossless optimization–
+is an NP-hard problem, and current methods only provide lossy solutions. In
+this paper, we present a deterministic algorithm to optimize such neural networks
+in terms of neurons and connections while preserving functional equivalence.
+Moreover, to accelerate the compression of the neural network, we introduce
+an objective-aware algorithm that exploits representations that are shared among
+subproblems of the overall optimization. We demonstrate experimentally that we
+are able to reduce connections and neurons by up to 70% and 60%, respectively,
+in comparison to state-of-the-art. We also find that our objective-aware algorithm
+results in consistent speedups in optimization time, achieving up to 34 _._ 3 _×_ and
+5 _._ 9 _×_ speedup relative to naive and caching solutions, respectively. Our methods
+are of practical relevance to applications such as high-throughput circuit simulation
+and placing neurosymbolic systems on the same hardware architecture.
+
+
+1 INTRODUCTION
+
+
+Universal approximation theorems (Hornik et al., 1989) and Turing-completeness (Siegelmann &
+Sontag, 1992) provide the theoretical foundation for implementing computable functions with neural
+networks (NNs). At present, the predominant methods for implementing functions with NNs are
+learning-based techniques, which rely on optimization algorithms, data, and compute to elicit a
+function of interest (LeCun et al., 2015). While these techniques provide a solution for obtaining
+functions that are difficult to programmatically specify, they come at the cost of unsustainable energy
+usage (Strubell et al., 2019), ever-longer training times, and safety concerns due to the current lack of
+understanding surrounding functions derived from learning-based techniques (Qi et al., 2023).
+
+
+Another much less prevalent implementation method for NNs is to synthesize a network from a known
+functional specification. The specification may be in the form of an explicit construction, detailing
+the network structure, neurons, and connections (Hewitt et al., 2020; Karuvally et al., 2024), or it
+may be provided in a programming language, requiring a method to convert the specification into a
+resulting NN (Siegelmann, 1994; Gruau et al., 1995; Neto et al., 2003). These implementation methods
+generally require significantly less time and energy in comparison to learning-based techniques and
+provide guarantees on NN functionality which are critical for safety and security.
+
+
+One such programmatic implementation method is that of NN-based technology mapping (Patel et al.,
+2022; Gavier et al., 2023), the problem of finding a NN that is _functionally equivalent_ to a Boolean
+network (BN) (i.e., _∀_ _**x**_ _∈{_ 0 _,_ 1 _}_ _[n]_ _, NN_ ( _**x**_ ) = _BN_ ( _**x**_ )). This method holds significant potential for
+
+
+1
+
+
+Figure 1: Summary of our optimization problem. A neural network (NN) representing a Boolean
+network (BN) can be constructed as a composition of two-layer sub-NNs _NNi_ (left). Optimizing the
+size of the NN is performed by optimizing each sub-NN _NNi_ (top right). To maintain functional
+equivalence of the original NN, it is necessary that each subproblem solution lies within its _lossless_
+region. Subproblems can be accelerated for sub-NNs _NNj_ that have shared representation with (i.e.,
+are in the same class as) already optimized sub-NNs _NNi_ (bottom and top right).
+
+
+applications in the integrated circuits industry and for neurosymbolic hardware architectures; however,
+the current state-of-the-art (SOTA) solution of Gavier et al. (2023) faces two significant drawbacks: (1)
+the resulting NNs are often suboptimal in terms of neurons and connections, and (2) slow execution
+time makes the technique less appealing for industrial settings.
+
+
+In light of these shortcomings in the SOTA, our **first goal** is to develop a technique for optimizing
+
+NN size while maintaining functional equivalence. NN compression techniques, such as pruning and
+quantization, have been extensively researched under the learning-based paradigm (Liang et al.,
+2021; Li et al., 2023). However, in general, pruning techniques are _lossy_ and do not guarantee
+preservation of functional equivalence (Vadera & Ameen, 2022). Moreover, since optimal bit widths
+for parameters and activations can be calculated analytically following NN-based technology mapping,
+further quantization cannot be applied as it would break functional equivalence. While _lossless_
+compression techniques that maintain functional equivalence have been presented for ReLU (Serra
+et al., 2020) and single-hidden-layer hyperbolic tangent (Sussmann, 1992; Farrugia-Roberts, 2024)
+
+NNs, they are not applicable to the Heaviside threshold NNs we investigate in this work.
+
+
+Figure 1 (left) depicts the NN representation of a BN as proposed by Gavier et al. (2023); a composition of two-layer sub-NNs. Optimizing the size of the NN can be thought of as the aggregation of
+subproblems, one for each sub-NN, as shown in Figure 1 (top right). Our **second goal** is to develop
+an algorithm that exploits shared representations among these subproblems to accelerate the NN
+optimization process, which is key for dealing with the large-scale BNs faced in industrial applications.
+
+
+2
+
+
+2 BACKGROUND
+
+
+In this section we introduce the necessary definitions and background for NN-based technology mapping and our optimization algorithms. The essential notions are covered here, while a comprehensive
+treatment is provided in the appendix.
+
+
+2.1 DEFINITIONS
+
+
+**Notation.** We denote the set of binary numbers as B = _{_ 0 _,_ 1 _}_, the set of natural numbers (including
+0) as N0 = _{_ 0 _,_ 1 _,_ 2 _, . . . }_, and the set of integers as Z = _{. . ., −_ 2 _, −_ 1 _,_ 0 _,_ 1 _,_ 2 _, . . . }_ .
+**Definition 2.1** (Boolean function) **.** A _k_ -input, (single-output) Boolean function (BF) is a function
+_f_ : B _[k]_ _→_ B, _**x**_ _�→_ _f_ ( _**x**_ ), where _**x**_ = ( _x_ 1 _, . . ., xk_ ) is a bit vector representing the _k_ input variables
+_xi_ _∈_ B, 1 _≤_ _i ≤_ _k_ .
+**Definition 2.2** (Truth table representation of a BF) **.** The truth table representation is an expansion of
+
+
+BF _f_ : B _[k]_ _→_ B in a basis of indicator functions _f_ ( _**x**_ ) = [�]
+
+
+BF _f_ : B _[k]_ _→_ B in a basis of indicator functions _f_ ( _**x**_ ) = [�] _**a**_ _∈_ B _[k][ f]_ [(] _**[a]**_ [)] [1] _**[a]**_ [(] _**[x]**_ [)][, where] [ 1] _**[a]**_ [:][ B] _[k]_ _[→]_ [B][ is]
+
+defined as 1 _**a**_ ( _**x**_ ) = 1 if _**x**_ = _**a**_, and 0 otherwise. The truth table vector _**f**_ _∈_ B [2] _[k]_ of _f_ is the vector of
+coordinates _f_ ( _**a**_ ) in such a basis. E.g., the truth table vector of _f_ ( _a, b_ ) = _a ∨_ _b_ is _**f**_ = [0 _,_ 1 _,_ 1 _,_ 1] [⊺] .
+
+**Definition** **2.3** (Multilinear polynomial representation of a BF) **.** The multilinear polynomial (MP)
+representation is an expansion of BF _f_ : B _[k]_ _→_ B, extended to _p_ : Z _[k]_ _→_ Z, in the basis (O’Donnell,
+2014) of logical AND functions _p_ ( _**x**_ ) = [�] _S⊆{_ 1 _,...,k}_ _[f]_ [ˆ][(] _[S]_ [)] _[χ][S]_ [(] _**[x]**_ [)][, where] _[ χ][S]_ [:] [Z] _[k]_ _[→]_ [Z][ is defined]
+
+as _χS_ ( _**x**_ ) = [�] _i∈S_ _[x][i]_ [ and] _[ S]_ _[⊆{]_ [1] _[, . . ., k][}]_ [.] [The] [MP][ vector] _**[ p]**_ _[ ∈]_ [Z][2] _[k]_ [of] _[ f]_ [is the vector of coordinates]
+
+_f_ ˆ( _S_ ) in such a basis. E.g., if _f_ ( _a, b_ ) = _a ∨_ _b_ then _p_ ( _a, b_ ) = _a_ + _b −_ _ab_ and _**p**_ = [0 _,_ 1 _,_ 1 _, −_ 1] [⊺] .
+
+**Definition** **2.4** (Boolean network) **.** A Boolean network (BN) _GF_ = ( _V, E_ ) is a directed-acyclic
+graph (DAG), with vertex labeling function _ψ_ : _V_ _→F_, that represents an _n_ -input, _m_ -output BF
+_B_ : B _[n]_ _→_ B _[m]_ . Vertices with indegree zero are _primary inputs_ (PI), and vertices with outdegree zero
+are _primary outputs_ (PO). The labeling function _ψ_ assigns a single-output BF to each non-PI vertex in
+the graph. A directed edge ( _u, v_ ) _∈_ _E_ exists if the output of _u_ ’s BF is an input to _v_ ’s BF. The depth of
+vertex _v_ _∈_ _V_, denoted _depth_ ( _v_ ) _∈_ N0, is the length of the longest path from any PI to _v_ . The depth
+of a BN, denoted _depth_ ( _GF_ ), is the maximum vertex depth in the BN.
+
+
+_S⊆{_ 1 _,...,k}_ _[f]_ [ˆ][(] _[S]_ [)] _[χ][S]_ [(] _**[x]**_ [)][, where] _[ χ][S]_ [:] [Z] _[k]_ _[→]_ [Z][ is defined]
+
+
+as _χS_ ( _**x**_ ) =
+
+[�]
+
+
+**Definition 2.5** (Neural network) **.** Let _L ∈_ N0 and ( _D_ 0 _, D_ 1 _, . . ., DL_ ) _∈_ N _[L]_ 0 [+1] . A neural network (NN)
+_N_ : B _[D]_ [0] _→_ B _[D][L]_ is a function with specification
+
+_N_ ( _**x**_ ) = _σ_    - _W_ _[L]_ [ �] _σ_    - _W_ _[L][−]_ [1][ �] _. . . σ_    - _W_ [1] _**x**_ + _**b**_ [1][�] _. . ._    - + _**b**_ _[L][−]_ [1][��] + _**b**_ _[L]_ [�] _,_ (1)
+
+
+where _σ_ is the Heaviside step function [1] and _∀l_ _∈{_ 1 _, . . ., L}_, _W_ _[l]_ _∈_ Z _[D][l][×][D][l][−]_ [1] and _**b**_ _[l]_ _∈_ Z _[D][l]_ . The
+depth of a NN is denoted _depth_ ( _N_ ) = _L_ .
+**Definition 2.6** (Functional equivalence) **.** Two functions _f, g_ : _X_ _→Y_ are functionally equivalent if
+_∀x ∈X_ _, f_ ( _x_ ) = _g_ ( _x_ ).
+
+
+2.2 OBTAINING A NEURAL NETWORK REPRESENTATION OF A BOOLEAN NETWORK
+
+
+Here we review the SOTA for NN-based technology mapping (Gavier et al., 2023). The method takes a
+
+BN _G_ _[init]_ _F_ as input and, through a sequence of mappings, converts it into a functionally equivalent NN.
+
+
+**LUT-based technology mapping.** _K_ -LUT-based technology mapping (Cong & Ding, 1994), _K_ _∈_
+N0, is used to convert _G_ _[init]_ _F_ into a functionally equivalent BN _GF_ _**f**_ with function set _F_ _**f**_ = _∪_ _[K]_ _k_ =0 [B][2] _[k]_
+
+consisting of _k_ -input look-up tables (LUTs), or truth table vectors _**f**_ _∈_ B [2] _[k]_, _k_ _≤_ _K_ .
+
+
+**MP-based technology mapping.** Following _K_ -LUT-based technology mapping, each truth table
+vector _**f**_ _∈_ B [2] _[k]_, _k_ _≤_ _K_, in BN _GF_ _**f**_ is mapped to a functionally equivalent MP vector _**p**_ _∈_ Z [2] _[k]_ . The
+resulting function set is _F_ _**p**_ = _∪_ _[K]_ _k_ =0 [Z][2] _[k]_ [.] [Each conversion from truth table vector to] [MP][ vector can be]
+computed via a divide-and-conquer algorithm in time _O_ (2 _[k]_ _k_ ) (Gavier et al., 2023). We denote this
+conversion algorithmically as ttToMP.
+
+
+1 _σ_ ( _x_ ) = 1 if _x >_ 0, and 0 otherwise, and it is extended to an element-wise function.
+
+
+3
+
+
+**NN-based technology mapping from MP BNs.** Following MP-based technology mapping, each MP
+vector _**p**_ _∈_ Z [2] _[k]_, _k_ _≤_ _K_, in BN _GF_ _**p**_ is mapped to a functionally equivalent two-layer NN _ζ_ : Z _[k]_ _→_ Z,
+_ζ_ ( _**x**_ ) = _W_ 2 _σ_ ( _W_ 1 _**x**_ + _**b**_ 1) with parameters ( _W_ 1 _,_ _**b**_ 1 _, W_ 2) _∈_ Z [(2] _[k][×][k]_ [)+(2] _[k]_ [)+(1] _[×]_ [2] _[k]_ [)] . The resulting
+function set is _FN_ = _∪_ _[K]_ _k_ =0 [Z][(2] _[k][×][k]_ [)+(2] _[k]_ [)+(1] _[×]_ [2] _[k]_ [)][.] [See][ Figure 2][ for an example of] _[ k]_ [= 2][.]
+
+
+**Intra-depth parallelization & the Unmerged NN.** Let _GFN_ = ( _V, E_ ) be a BN following NN-based
+technology mapping in which all vertices _v_ _∈_ _V_ have incoming edges only from vertices at depth
+_depth_ ( _v_ ) _−_ 1, that is, there are no “skip connections” (this can be achieved by adding additional
+vertices that compute the identity function). Moreover, let _Vd_ = _{v_ _∈_ _V_ _|_ _depth_ ( _v_ ) = _d}_ be
+the set of vertices at depth _d_, and _d_ _∈{_ 1 _, . . ., depth_ ( _GFN_ ) _}_ . Then the output of all vertices in
+_Vd_ = _{v_ 1 _, v_ 2 _, . . ., v|Vd|}_ can be computed _in parallel_ as
+ _[v]_ [1]   _[v]_ [1]   _[v]_ [1]   _[v]_ [1]   _[v]_ [1] 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_ζ_ ( _**x**_ _[v]_ [1] )
+...
+_ζ_ ( _**x**_ _[v][|][Vd][|]_ )
+
+
+
+
+
+_**b**_ _[v]_ 1 [1]
+...
+_**b**_ 1 _v|Vd|_
+
+
+
+
+
+
+
+
+
+_W_ 2 _[v]_ [1] _· · ·_ 0
+... ... ...
+0 _· · ·_ _W_ 2 _v|Vd|_
+
+
+ (2)
+
+
+
+
+
+_**x**_ _[v]_ [1]
+...
+_**x**_ _[v][|][Vd][|]_
+
+
+ +
+
+
+
+
+
+_W_ 1 _[v]_ [1] _· · ·_ 0
+... ... ...
+0 _· · ·_ _W_ 1 _v|Vd|_
+
+
+
+
+
+ _σ_
+
+
+
+
+
+ =
+
+
+where ( _W_ 1 _[v][i][,]_ _**[ b]**_ 1 _[v][i][, W]_ 2 _[ v][i]_ [)] [=] _[ψ]_ [(] _[v][i]_ [)][,] _[i]_ _[∈{]_ [1] _[, . . .,][ |][V][d][|}]_ [.] [Note] [that] [various] [vertices] [at] [the] [same] [depth]
+could share the same input signals and in turn hidden vertices, thus reducing the input and hidden
+dimensions of the above two-layer NN. We call the NN obtained via intra-depth parallelization of _GFN_
+the _unmerged_ NN of BN _GFN_ .
+
+
+**Inter-depth composition & the Layer-Merged NN.** Let _d ∈{_ 1 _, . . ., depth_ ( _GFN_ ) _−_ 1 _}_ . Moreover,
+let _**ζ**_ [(] _[d]_ [)] ( _**x**_ [(] _[d][−]_ [1)] ) = _W_ 2 [(] _[d]_ [)] _σ_ ( _W_ 1 [(] _[d]_ [)] _**x**_ [(] _[d][−]_ [1)] + _**b**_ [(] 1 _[d]_ [)][) =] _**[ x]**_ [(] _[d]_ [)][ and] _**[ ζ]**_ [(] _[d]_ [+1)][(] _**[x]**_ [(] _[d]_ [)][) =] _[ W]_ [ (] 2 _[d]_ [+1)] _σ_ ( _W_ 1 [(] _[d]_ [+1)] _**x**_ [(] _[d]_ [)] +
+_**b**_ [(] 1 _[d]_ [+1)] ) = _**x**_ [(] _[d]_ [+1)] be the intra-depth parallelized two-layer NNs (as in Equation 2) for vertices in _Vd_
+and _Vd_ +1, respectively. Then,
+
+_**x**_ [(] _[d]_ [+1)] = ( _**ζ**_ [(] _[d]_ [+1)] _◦_ _**ζ**_ [(] _[d]_ [)] )( _**x**_ [(] _[d][−]_ [1)] ) (3)
+
+= _W_ 2 [(] _[d]_ [+1)] _σ_      - _W_ 1 [(] _[d]_ [+1)]      - _W_ 2 [(] _[d]_ [)] _σ_      - _W_ 1 [(] _[d]_ [)] _**x**_ [(] _[d][−]_ [1)] + _**b**_ [(] 1 _[d]_ [)] �� + _**b**_ [(] 1 _[d]_ [+1)]      - (4)
+
+= _W_ 2 [(] _[d]_ [+1)] _σ_      - _W_ _[′]_ _σ_      - _W_ 1 [(] _[d]_ [)] _**x**_ [(] _[d][−]_ [1)] + _**b**_ [(] 1 _[d]_ [)]      - + _**b**_ [(] 1 _[d]_ [+1)]      - _,_ (5)
+
+
+where _W_ _[′]_ = _W_ 1 [(] _[d]_ [+1)] _W_ 2 [(] _[d]_ [)] . That is, since the second layer at depth _d_ does not required a threshold, we
+can merge it with the first layer at depth _d_ + 1. We call the NN obtained via intra-depth parallelization
+and inter-depth composition of _GFN_ the _layer-merged_ NN of BN _GFN_ .
+_Remark_ 2.1 (Implications for depth) _._ Let _d_ = _depth_ ( _GFN_ ). Then the depth of the _unmerged_ NN is
+2 _d_ (non-PI vertices in _V_ 1 _, . . ., Vd_ have a layer of hidden neurons added before them), and the depth
+of the _layer-merged_ NN is _d_ + 1 (the second layer of non-PI and _non-PO_ vertices in _V_ 1 _, . . ., Vd−_ 1 is
+merged with the first layer of vertices at the next depth).
+
+
+3 METHODS
+
+
+In this section we set out to achieve the two goals stated in the introduction: (1) optimizing the NN size and (2) doing so efficiently. We begin
+by considering the problem of optimizing NN size while maintaining
+functional equivalence. The SOTA mapping procedure reviewed in § 2.2
+constructs a NN representation of a BN via a composition of sub-NNs, each
+built from the MP representation of a BF. We propose to optimize the size
+of the NN by treating the sub-NNs as optimization subproblems. In § 3.1,
+we identify sub-NN optimization as a constrained minimization problem,
+and propose a convex technique to solve it.
+
+
+Figure 2: NN representation of MP _p_ ( _a, b_ ) =
+_c∅_ + _caa_ + _cbb_ + _cabab_ .
+Weights and biases are
+shown above connections
+and neurons.
+
+
+Next, we turn our attention to accelerating the NN optimization process in
+aggregate. Since we pose NN optimization as minimizing various sub-NNs,
+we seek to exploit similarities among the subproblems that must be solved.
+We develop this idea in § 3.2, showing that by classifying the subproblems
+into classes, the solution for a representative of the class can be used to
+accelerate the acquisition of the solutions for all other members of the class.
+
+
+4
+
+
+Finally, in § 3.3, we piece these insights together to form architecture-aware optimization algorithms
+for the problem of NN-based technology mapping. In particular, we consider how to apply the
+proposed optimization techniques to the two kinds of NNs that result from the SOTA mapping procedure
+reviewed in § 2.2: _unmerged_ and _layer-merged_ NNs. The essential notions critical for describing the
+main results are presented here, while a comprehensive treatment is provided in the appendix.
+
+
+3.1 OPTIMIZING NEURAL NETWORK REPRESENTATIONS OF BOOLEAN FUNCTIONS
+
+
+We begin by establishing a relationship between MPs and the size of their two-layer NN representation.
+Figure 2 depicts this relationship for _k_ = 2. We see that the number of hidden neurons in the NN
+corresponds to the number of non-constant monomials in the MP, and the number of (layer one)
+connections corresponds to the sum of non-constant monomial degrees. To express this relationship
+in terms of MP vectors, we introduce the following definition and lemma.
+
+**Definition 3.1** (Uniform & degree criterions) **.** Let� _k_ _∈_ N0 and _**c**_ _[uni]_ _k_ _,_ _**c**_ _[deg]_ _k_ �⊺ _∈_ Z [2] _[k]_ have specification
+
+( _**c**_ _[uni]_ _k_ ) _i_ = 1 if _i >_ 0 and 0 otherwise, and _**c**_ _[deg]_ _k_ = _**c**_ _[deg]_ _k−_ 1 _[,]_ _**c**_ _[deg]_ _k−_ 1 [+] **[ 1]** _[k][−]_ [1] if _k_ _>_ 0 and [0] otherwise,
+
+where **1** _k−_ 1 _∈_ B [2] _[k][−]_ [1] denotes the all ones vector. E.g., _**c**_ _[uni]_ 2 = [0 _,_ 1 _,_ 1 _,_ 1] [⊺] and _**c**_ _[deg]_ 2 = [0 _,_ 1 _,_ 1 _,_ 2] [⊺] .
+
+**Lemma** **3.1.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be_ _a_ _MP_ _vector,_ _**c**_ _∈_ Z [2] _[k]_ _,_ _and_ _C_ : Z [2] _[k]_ _→_ N0 _be_ _a_ _cost_ _function_ _with_
+_specification C_ ( _**p**_ ) = _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _, where ∥·∥_ 0 _,_ _**c**_ _denotes the zero-norm weighted by vector_ _**c**_ _._ _Then, (1)_
+_C_ ( _**p**_ ) = _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _unik_ _is the number of non-constant monomials in the_ _MP_ _**p**_ _, and (2) C_ ( _**p**_ ) = _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _degk_
+_is the sum of non-constant monomial degrees in the_ _MP_ _**p**_ _._
+
+
+Following Lemma 3.1, we can now formally restate our observation of the relationship between MPs
+and the size of their two-layer NN representation: _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _unik_ and _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _degk_ are the number of neurons
+and (layer one) connections in the two-layer NN representation of MP _**p**_ . Optimizing the two-layer
+
+NN can now be viewed as finding a polynomial with, for example, fewer monomials. However, at
+present, removing monomials from a MP will change the BF it represents, and we would lose functional
+equivalence. Since the BN to NN mapping procedure results in a _σ_ (Heaviside) threshold NN, the key
+insight is to consider MPs equivalent under _σ_ threshold.
+
+**Definition 3.2** (The _∼σ_ equivalence relation) **.** Let _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ be MPs. We define _∼σ_ : Z [2] _[k]_ _×_ Z [2] _[k]_ _→_ B
+as the relation _**p**_ _∼σ_ _**q**_ _⇐⇒∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ_ _◦_ _p_ )( _**x**_ ) = ( _σ_ _◦_ _q_ )( _**x**_ )�. Since _∼σ_ is an equivalence
+relation (see Appendix C), we denote the _σ_ equivalence class of MP _**p**_ as [ _**p**_ ] _σ_ = _{_ _**q**_ _∈_ Z [2] _[k]_ _|_ _**p**_ _∼σ_ _**q**_ _}_ .
+
+**Definition 3.3** (Minimal multilinear polynomial representation of a BF) **.** Let _f_ : B _[k]_ _→_ B be a BF
+with MP _**p**_ _∈_ Z [2] _[k]_, and _C_ : Z [2] _[k]_ _→_ N0 be a cost function. A minimal multilinear polynomial (MMP)
+representation of _f_ with respect to _C_ is a MP _**p**_ _[′]_ _∈_ Z [2] _[k]_ where
+
+
+_**p**_ _[′]_ _∈_ arg min _C_ ( _**q**_ ) _._ (6)
+_**q**_ _∈_ [ _**p**_ ] _σ_
+
+
+E.g., _p_ _[′]_ ( _a, b_ ) = _a_ + _b_ is an MMP of the MP _p_ ( _a, b_ ) = _a_ + _b −_ _ab_ (logical OR) with respect to the
+number of monomials, as they are equivalent under _σ_ threshold. Notice, that by removing _−ab_,
+the resulting two-layer NN has 1 fewer neuron and 3 fewer connections (see Figure 2). However, to
+maintain functional equivalence, the two-layer NN requires a _σ_ threshold on its output neuron.
+
+
+Lemma 3.1 and Definition 3.3 suggest that finding the MMP of an arbitrary BF requires minimizing an
+objective with _ℓ_ 0-norm. These problems are non-convex and NP-hard (Feng et al., 2013), so it is not
+possible to solve them with conventional convex optimization methods. However, by relaxing the
+norm to _ℓ_ 1, the cost function becomes convex and of the form _∥_ _**q**_ _∥_ 1 _,_ _**c**_ = _∥_ _**c**_ _⊙_ _**q**_ _∥_ 1. [2] Although the
+solution to the relaxed problem may differ from the actual minimum, both aim for sparsity (Feng
+et al., 2013), which results in compressed NNs. Next, we will show that _**q**_ _∈_ [ _**p**_ ] _σ_ can be defined as a
+linear constraint, making the optimization problem convex.
+
+**Theorem** **3.1** (Linear constraints determine a _σ_ equivalence class) **.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be_ _an_ _MP,_ _**b**_ =
+**1** _k −_ 2 _σ_ ( _Sk_ _**p**_ ) _∈_ Z [2] _[k]_ _, and A_ = 2(diag( _**b**_ ) _Sk_ ) _∈_ Z [2] _[k][×]_ [2] _[k]_ _, where Sk_ _∈_ B [2] _[k][×]_ [2] _[k]_ _is the k-th Sierpi´nski_
+
+
+2 _⊙_ denotes the Hadamard product.
+
+
+5
+
+
+_matrix,_ [3] **1** _k_ _∈_ B [2] _[k]_ _is the all ones vector, and σ is the Heaviside step function._ _Then, for_ _MP_ _**q**_ _∈_ Z [2] _[k]_ _,_
+
+
+_**q**_ _∈_ [ _**p**_ ] _σ_ _⇐⇒_ _A_ _**q**_ _≤_ _**b**_ _._ (7)
+
+
+Following Theorem 3.1, we have all the components necessary to define an optimization problem for
+obtaining an MMP representation of a BF and in turn its compressed two-layer NN.
+
+**Corollary 3.1** (Obtaining an MMP representation of a BF) **.** _If_ _**p**_ _∈_ Z [2] _[k]_ _is the_ _MP of a_ _BF f_ : B _[k]_ _→_ B _,_
+_and_ _C_ : Z [2] _[k]_ _→_ N0 _has_ _specification_ _C_ ( _**q**_ ) = _∥_ _**c**_ _⊙_ _**q**_ _∥_ 1 _,_ _where_ _**c**_ _∈_ Z [2] _[k]_ _,_ _then_ _the_ _set_ _of_ _MMP_
+_representations of f_ _with respect to C_ _equals the solution set of the following integer linear program:_
+
+
+_minimize_ _C_ ( _**q**_ ) _,_ _subject to_ _A_ _**q**_ _≤_ _**b**_ _._ (8)
+_**q**_ _∈_ Z [2] _[k]_
+
+
+Corollary 3.1 shows that indeed we can find an MMP of an arbitrary BF. While relaxing the optimization
+objective to an _ℓ_ 1-norm provides us with convexity, since the variables are integers the problem is
+still NP-hard (Karp, 1972). We conclude by connecting the new representation with the technology
+mapping sequence discussed in § 2.2.
+
+
+**MMP-based** **technology** **mapping.** Following MP-based technology mapping, each MP vector
+_**p**_ _∈_ Z [2] _[k]_, _k_ _≤_ _K_, in BN _GF_ _**p**_ is mapped to a functionally equivalent MMP _**p**_ _[′]_ _∈_ [ _**p**_ ] _σ_ by solving
+an integer linear program of the form presented in Corollary 3.1. The resulting function set is
+_F_ _**p**_ _′_ = _∪k≤K_ Z [2] _[k]_ . We denote this conversion algorithmically as mpToMMP.
+
+
+3.2 OBJECTIVE-AWARE OPTIMIZATION USING SHARED REPRESENTATIONS
+
+
+In § 2.2, we saw that a NN that is functionally equivalent to a BN can
+be constructed by computing the MP of each BF (ttToMP) in the BN.
+In § 3.1, we saw that MMPs are the solution to lossless optimization of
+each MP, resulting in a compressed two-layer (sub-)NN (mpToMMP).
+At first glance, one may think we need to solve all these subproblems independently. However, we can improve such an algorithm
+by _caching_ the solution to each subproblem. Alternatively, we can
+classify the subproblems in terms of shared representations, and find
+solutions to their class as a whole. One option for this classification
+problem is to use Negation-Permutation-Negation (NPN) classification of BFs (Sasao & Butler, 2022). We introduce NPN classification
+with the following definitions.
+
+
+**Definition 3.4** (NPN transformation) **.** An NPN transformation _τ_ = _τν ◦_
+_τπ ◦_ _τϕ_ of a BF or MP is the composition of an input phase assignment
+_τϕ_ (whether variable _xi_ is to be negated), an input permutation _τπ_,
+and an output polarity assignment _τν_ (whether the output is to be
+negated).
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|ത|||ത|
+|||||
+|||ത||
+
+
+Figure 3: BFs _**f**_ _∈_ B [2][2] in the
+same NPN equivalence class.
+Arrows depict NPN transformations, and the NPN canonical
+form (dark red) is defined to
+be the member with minimum
+truth table.
+
+
+**Definition 3.5** (NPN equivalence) **.** BFs _**f**_ _,_ _**g**_ _∈_ B [2] _[k]_ are NPN equivalent, truth table.
+denoted _**f**_ _≡_ NPN _**g**_, if there exists an NPN transformation _τ_ such that
+_τ_ ( _**f**_ ) = _**g**_ . The NPN equivalence class of _**f**_ is denoted [ _**f**_ ]NPN = _{_ _**g**_ _∈_ B [2] _[k]_ _|_ _**f**_ _≡_ NPN _**g**_ _}_ .
+
+
+_Remark_ 3.1 _._ There are 2 _[k]_ [+1] _k_ ! NPN transformations for _k_ -input BFs, as there are 2 _[k]_ possible input
+phase assignments, _k_ ! possible input permutations, and 2 possible output polarity assignments. Hence,
+an NPN equivalence class contains at most 2 _[k]_ [+1] _k_ ! BFs.
+
+**Definition** **3.6** (NPN canonical form) **.** The NPN canonical form of BF _**f**_ _∈_ B [2] _[k]_, denoted _κ_ ( _**f**_ ), is
+a mapping _κ_ : B [2] _[k]_ _→_ B [2] _[k]_ that satisfies the following conditions: (1) _κ_ ( _**f**_ ) _∈_ [ _**f**_ ]NPN, and (2)
+_∀_ _**g**_ _∈_ [ _**f**_ ]NPN _, κ_ ( _**g**_ ) = _κ_ ( _**f**_ ) (i.e., the canonical form is a unique representative of the class). We
+denote _κ_ ( _**f**_ ) as _κ_ _**f**_ _∈_ B [2] _[k]_, and the MP of _κ_ _**f**_ as _κ_ _**p**_ _∈_ Z [2] _[k]_ .
+
+
+3 _Sk_ = - _SSkk−−_ 11 _,,_ _OSkk−−_ 11
+
+
+if _k_ _>_ 0, and [1] otherwise, where _Ok−_ 1 denotes the all zeros matrix.
+
+
+6
+
+
+Figure 4: Accelerating the computation of multilinear polynomial (MP) and minimal MP (MMP)
+representations of Boolean functions (BFs) with Negation-Permutation-Negation (NPN) transformations.
+Given distinct BFs _**f**_ 1 _,_ _**f**_ 2 _∈_ B [2] _[k]_ (as truth table vectors), the dashed arrows indicate that MPs _**p**_ 1 _,_ _**p**_ 2 _∈_
+Z [2] _[k]_ and MMPs _**p**_ _[′]_ 1 _[,]_ _**[ p]**_ _[′]_ 2 _[∈]_ [Z][2] _[k]_ [can be obtained via two calls to][ ttToMP][ (truth table to] [MP][) followed]
+by two calls to mpToMMP (MP to MMP). If (i) the two functions share NPN canonical form ( _τν_ [(1)] _◦_
+_τπ_ [(1)] _◦_ _τϕ_ [(1)][)(] _**[f]**_ 1 [) = (] _[τ]_ [ (2)] _ν_ _◦_ _τπ_ [(2)] _◦_ _τϕ_ [(2)][)(] _**[f]**_ 2 [) =] _[ κ]_ _**[f]**_ _[∈]_ [B][2] _[k]_ [, (ii) equality] _[ π]_ [(1)][(] _[ϕ]_ [(1)][) =] _[ π]_ [(2)][(] _[ϕ]_ [(2)][)][ holds,]
+and (iii) the MMP criterion is invariant under input permutation and output negation, then the solid
+arrows indicate that by utilizing NPN transformations MP and MMP representations of _**f**_ 1 and _**f**_ 2 can be
+obtained via a single call to ttToMP and mpToMMP. In fact, since the number of functions in each
+
+NPN equivalence class is at most 2 _[k]_ [+1] _k_ !, if all MPs and MMPs are required to be computed for a class,
+this process can lead to 2 _[k]_ [+1] _k_ ! _−_ 1 fewer calls to ttToMP and 2 _k_ ! _−_ 1 fewer calls to mpToMMP (at
+the cost of computing the NPN canonical form and transformations). The red and blue shaded regions
+depict NPN and _σ_ equivalence classes, respectively (where two MPs are _σ_ -equivalent if their outputs
+over _**x**_ _∈_ B _[k]_ are equivalent under threshold).
+
+
+Figure 3 depicts one of the NPN equivalence classes for _k_ = 2. NPN classification provide us with a way
+to partition the set of BFs in _GF_ _**f**_ into equivalence classes, where each function in a class is related
+by an NPN transformation. We can now investigate how to define solutions to the subproblems of
+obtaining MPs and MMPs in terms of NPN classes as a whole. The central idea is to transform functions
+in the same equivalence class into a designated canonical form, perform ttToMP and mpToMMP on
+the canonical form, and then use inverse transformations to convert the solutions for the canonical
+form into solutions for all members of the class. The first question we must address is whether the
+
+MMP solutions we obtain for members of the class are _∼σ_ equivalent to their MPs.
+
+**Theorem 3.2** (NPN transformations between _σ_ equivalence classes) **.** _Let_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs such_
+_that_ _**p**_ = _τ_ ( _**q**_ ) _, where τ_ _is an_ _NPN transformation and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ._ _Then τ_ ( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ._
+
+
+We introduce a running example. Let _κ_ _**p**_ _∈_ Z [2] _[k]_ be the NPN canonical form of MP _**p**_ _∈_ Z [2] _[k]_, meaning
+there exists an NPN transformation _τ_ = ( _τν ◦_ _τπ ◦_ _τϕ_ ) such that _τ_ ( _**p**_ ) = _κ_ _**p**_ . Now let _κ_ _**p**_ _′_ be an MMP of
+_κ_ _**p**_ w.r.t. some criterion _**c**_ _∈_ Z [2] _[k]_ . Since _τ_ _[−]_ [1] ( _κ_ _**p**_ ) = _**p**_, Theorem 3.2 ensures us that _τ_ _[−]_ [1] ( _κ_ _**p**_ _′_ ) _∈_ [ _**p**_ ] _σ_ .
+Hence, we are one step closer to converting the MMP solution of the canonical form into an MMP
+solution for a member of the class. The final question is whether _τ_ _[−]_ [1] ( _κ_ _**p**_ _′_ ) is a minimum w.r.t. the
+cost function defined by criterion _**c**_ . We introduce the following notions of invariance to answer this.
+
+**Definition 3.7** (PN-invariant criterion) **.** Let _**p**_ _∈_ Z [2] _[k]_ be an MP, _τπ_ be an input permutation, and _τν_ be
+an output polarity assignment. A criterion vector _**c**_ _∈_ Z [2] _[k]_ is PN-invariant if
+
+
+_∥_ _**c**_ _⊙_ _**p**_ _∥_ 1 = _∥_ _**c**_ _⊙_ ( _τν_ _◦_ _τπ_ )( _**p**_ ) _∥_ 1 _._ (9)
+
+
+**Lemma 3.2** (Uniform & degree criterions are PN-invariant) **.** _**c**_ _[uni]_ _k_ _and_ _**c**_ _[deg]_ _k_ _are PN-invariant._
+
+
+If a criterion is PN-invariant, it means that the MMP cost function of MP _**p**_ will not change when we
+apply input permutation and output negation transformations on _**p**_ . However, it says nothing about
+
+
+7
+
+
+input negation transformations _τϕ_ . Consequently, if _κ_ _**p**_ _′_ is an MMP w.r.t. either the degree or uniform
+criterion, we cannot say for certain that _τ_ _[−]_ [1] ( _κ_ _**p**_ _′_ ) = ( _τν_ _◦_ _τπ ◦_ _τϕ_ ) _[−]_ [1] ( _κ_ _**p**_ _′_ ) is an MMP of _**p**_, since _τϕ_ _[−]_ [1]
+is being applied. This suggests we should apply the inverse phase assignment _τϕ_ _[−]_ [1] _before_ finding an
+
+MMP. This idea is captured in the following two theorems.
+**Theorem 3.3** (Inverse NPN transformation) **.** _Let τ_ = _τν_ _◦_ _τπ_ _◦_ _τϕ_ _be an_ _NPN transformation._ _Then_
+_τ_ _[−]_ [1] = _τν_ _◦_ _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) _._ _We call τπ_ ( _ϕ_ ) _the permuted phase assignment._
+
+**Theorem 3.4** (Computing MMPs with NPN transformations under PN-invariant criterions) **.** _Let_ _**c**_ _∈_ Z [2] _[k]_
+
+_be a PN-invariant criterion,_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs such that_ _**p**_ = ( _τν ◦_ _τπ_ )( _**q**_ ) _, and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ_ _be an_
+
+_MMP with respect to criterion_ _**c**_ _._ _Then_ _**p**_ _[′]_ = ( _τν_ _◦_ _τπ_ )( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ_ _is an_ _MMP with respect to criterion_ _**c**_ _._
+
+
+Using Theorem 3.3, we can firstly apply the permuted phase assignment to the canonical form
+_τπ_ ( _ϕ_ )
+_τπ_ ( _ϕ_ )( _κ_ _**p**_ ) = _κ_ _**p**_ and then obtain an MMP of the resulting MP w.r.t. either the degree or uniform
+criterion, which we denote _κ_ _**p**_ _τπ_ _[′]_ ( _ϕ_ ) . Now, since all the conditions of Theorem 3.4 are satisfied, comput_τπ_ ( _ϕ_ )
+ing ( _τν_ _◦_ _τπ−_ 1)( _κ_ _**p**_ _[′]_ ) results in an MMP for _**p**_ (see Figure 4). Following these ideas, we propose an
+optimization-objective-aware NPN classification algorithm for MP- and MMP-based technology mapping. The complete algorithm, a formal analysis of its advantages over unique function caching,
+and the time complexity of computing NPN canonical forms and transformations are provided in
+Appendix D.4.
+
+
+3.3 ARCHITECTURE-AWARE LOSSLESS OPTIMIZATION
+
+
+The previous section provides us with a technique for accelerating the acquisition of all MPs and MMPs
+of BFs in a BN. We now consider how to use these two representations to optimize the two kinds
+of NN architectures that result from the SOTA mapping procedure reviewed in § 2.2: _unmerged_ and
+_layer-merged_ NNs. We begin by connecting this goal to the technology mapping discussed in § 2.2.
+
+
+**NN-based technology mapping from MP and MMP BNs.** Let _GF_ = ( _V, E_ ) be a BN, _V_ PI _⊆_ _V_
+denote the set of PIs, and _ψF_ _**[p]**_ _[, ψ]_ _F_ _**[p]**_ _[′]_ [:] _[V]_ _[→F]_ [,] _[ F]_ [=] _[∪][K]_ _k_ =0 [Z][2] _[k]_ [, be the labeling functions following]
+
+MP- and MMP-based technology mapping, respectively. Moreover, let _M_ _⊆_ _V_ _\ V_ PI be a subset
+of vertices selected to be represented as MMPs. Then, if _v_ _∈M/_, its resulting two-layer NN is
+of the form _ζ_ ( _**x**_ ) = _W_ 2 _σ_ ( _W_ 1 _**x**_ + _**b**_ 1). If _v_ _∈M_, its resulting two-layer NN is of the form
+_ζ_ _[′]_ ( _**x**_ ) = _σ_ ( _W_ 2 _σ_ ( _W_ 1 _**x**_ + _**b**_ 1)). We consider three NN optimization algorithms for selecting _M_ :
+
+
+ - optNone: no vertices in the BN are represented as MMPs ( _M_ = _∅_ ). This results in no compression
+and corresponds to the SOTA NN-based technology mapping solution of Gavier et al. (2023).
+
+ - optAll: all vertices in the BN are represented as MMPs ( _M_ = _V_ _\ V_ PI).
+
+ - optMaintainDepth: a subset of vertices are selected to be represented as MMPs such that the
+depth of the resulting _layer-merged_ NN does not increase ( _M ⊆_ _V_ _\ V_ PI).
+
+
+Applications that seek maximal compression would choose optAll, whereas applications that
+require latency (depth) constraints would choose optMaintainDepth. In the remainder of this
+section, we develop an algorithm for optMaintainDepth. Suppose _v_ _∈_ _V_ _\ V_ PI is a non-PO
+vertex on a longest path in _GF_ . Then following inter-depth composition, _v_ will be on a longest
+path in the resulting _layer-merged_ NN. Hence, if _v_ were to be represented as an MMP, an additional
+layer would be required to compute its output due to the addition of a threshold on its output neuron;
+pushing all of _v_ ’s descendants forward, and thus increasing the depth of the _layer-merged_ NN. (Note
+we require _v_ to be a non-PO vertex in this argument since POs do not have any successor to merge
+with, and hence can always be represented as MMPs without increasing depth). In contrast, if _v_ were
+not on a longest path in _GF_, then the additional layer to compute _v_ would not cause the depth of the
+
+NN to increase. The following definition and lemma capture this insight.
+**Definition 3.8** (Leeway) **.** The leeway of vertex _v_ _∈_ _V_ in BN _GF_ = ( _V, E_ ) is defined as
+
+
+_leeway_ ( _v_ ) = _depth_ ( _GF_ ) _−_ _depth_ ( _v_ ) _−_ _lpl_ ( _v_ ) _∈_ N0 _,_ (10)
+
+
+where _lpl_ ( _v_ ) denotes the length of the longest path from _v_ to any PO in _GF_ .
+**Lemma 3.3** (Zero leeway indicates membership in longest path) **.** _Let GF_ = ( _V, E_ ) _be a_ _BN and_
+_v_ _∈_ _V_ _be a vertex._ _Then leeway_ ( _v_ ) = 0 _⇐⇒_ _v is on a longest path in GF_ _._
+
+
+8
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+(1,928) (31,144) (105,713) (126,883)
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||||
+||||||||||||||||||
+||||||||||||||||||
+||||||||||||||||||
+|3|3|4|4|4|4||||||||||||
+||||~~1~~<br>~~20~~|~~1~~<br>~~20~~|~~1~~<br>~~20~~|1<br>~~14~~<br>~~6~~|1<br>~~14~~<br>~~6~~|1<br>~~14~~<br>~~6~~|~~1~~<br>2 12|~~1~~<br>2 12|~~1~~<br>2 12|~~1~~<br>~~0 10~~|~~1~~<br>~~0 10~~|~~1~~<br>~~0 10~~|~~0~~|~~0~~|
+||||||||||||||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|4|4|6|6|6||||||||||||
+||||~~2~~<br>~~28~~|~~2~~<br>~~28~~|1<br>~~18~~<br>~~0~~|1<br>~~18~~<br>~~0~~|1<br>~~18~~<br>~~0~~|~~1~~<br>6 ~~14~~|~~1~~<br>6 ~~14~~|~~1~~<br>6 ~~14~~|~~4 14~~|~~4 14~~|~~4 14~~|||
+||||||||||||||~~1~~|~~2~~||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||
+||||||||||||||||
+||||||||||||||||
+||||||||||||||||
+|5|5|2<br>|2<br>||||||||||||
+||||3|2<br>~~1~~|2<br>~~1~~|~~8 ~~1|~~8 ~~1|6 16 ~~1~~|6 16 ~~1~~|6 16 ~~1~~|~~4 ~~|~~4 ~~|||
+|||||||||||||~~1~~|~~2 1~~|~~0~~|
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||
+||||||||||||||||
+||||||||||||||||
+||||||||||||||||
+|3|3|4|4|4|||||||||||
+||||~~1~~<br>~~20~~|~~1~~<br>~~20~~|~~1~~<br>12<br>~~4~~|~~1~~<br>12<br>~~4~~|~~1~~<br>12<br>~~4~~|~~1~~<br>~~0 ~~|~~1~~<br>~~0 ~~|~~1~~<br>~~0 ~~|~~0 10~~|~~0 10~~|~~0 10~~||
+||||||||||~~8~~||||||
+
+
+2 4 6 8 10 2 4 6 8 10 2 4 6 8 2 4 6 8 10
+K K K K
+
+
+(a) Reduction in connections (blue) and neurons (red) relative to the _unmerged_ NN by optimizing all sub-NNs
+with the proposed optAll algorithm. Both criterions achieve significant size reductions.
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+(1,928) (31,144) (105,713) (126,883)
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|~~1~~|~~9~~<br>11<br>~~8~~|~~8~~<br>|~~7~~|~~6~~||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|~~2~~|~~1~~<br>15<br>~~4~~|~~10~~<br>~~1~~|~~8~~|~~8~~||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+|~~2~~|~~7 ~~1|7 ~~1~~|~~0~~<br>|~~9~~|||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|~~1~~|11<br>~~8~~|~~7~~<br>|~~5~~|~~6~~||
+
+
+2 4 6 8 10 2 4 6 8 10 2 4 6 8 2 4 6 8 10
+K K K K
+
+
+(b) Reduction in connections and neurons relative to the _layer-merged_ NN by optimizing a subset of sub-NNs
+selected by the proposed optMaintainDepth algorithm. The size of the _layer-merged_ NN is able to be
+reduced without increasing its depth. The degree criterion leads to larger reduction.
+
+
+Figure 5: Neural network (NN) lossless optimization with respect to the uniform ( _**c**_ _[uni]_ ) and degree
+( _**c**_ _[deg]_ ) criterions for minimal multilinear polynomials (MMPs) (see Definition 3.1). We find that the
+size (both in terms of connections and neurons) of _unmerged_ (a) and _layer-merged_ (b) NNs can be
+reduced by optimizing the sub-NN representations via MMPs. NN depths are shown in gold. Circuit
+sizes are shown in parentheses in terms of the number of logic gates.
+
+
+Since _GF_ = ( _V, E_ ) is a DAG, computing the leeway for all vertices can be done in time _O_ ( _V_ + _E_ ).
+This lets us propose a _O_ ( _V_ ( _V_ + _E_ )) time algorithm for optMaintainDepth that repeatedly
+selects vertices for _M_ that have positive leeway (i.e., are not on a longest path). Each time a vertex
+is selected to be represented as an MMP, the algorithm augments the graph by adding a predecessor
+hidden vertex to simulate the increase in path length for all paths containing this vertex. This ensures
+the depth of the optimized NN is the same as the _layer-merged_ NN. In Appendix E we present the
+complete algorithm and illustrate it with a figure.
+
+
+4 RESULTS
+
+
+We evaluate the proposed architecture- and objective-aware optimization algorithms on four BNs
+derived from digital circuits: uart, sha3, ecg, and aes (see Appendix F for details). In Appendix G.2, we report results on additional BNs to provide a comprehensive analysis. Experiments
+were conducted on an Intel(R) Xeon(R) Gold 6230R CPU @ 2.10GHz with 196 GB RAM. We use
+the algorithm proposed by Zhou et al. (2020) to compute NPN transformations and canonical forms.
+As the mapping procedure is deterministic, we only show statistical significance for timing results.
+
+
+4.1 ARCHITECTURE-AWARE LOSSLESS OPTIMIZATION OF NEURAL NETWORKS
+
+
+We consider two settings under which to apply the architecture-aware lossless optimization algorithms.
+The first setting considers optimizing the _unmerged_ NN that results from NN-based technology mapping.
+In this case, we apply the optAll optimization algorithm to evaluate, without depth constraint,
+how many neurons and connections can be removed from the NN while maintaining functional
+equivalence (see Figure 5a). The second setting considers optimizing the _layer-merged_ NN. We apply
+the optMaintainDepth optimization algorithm to see how many neurons and connections can
+be removed from the NN while maintaining both its depth and functional equivalence (see Figure 5b).
+
+
+9
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 [-1]
+
+
+2 4 6 8 10
+
+
+(1,928) (31,144) (105,713) (126,883)
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [4]
+
+
+10 [3]
+
+
+10 [2]
+
+
+2 4 6 8 10
+
+
+2 4 6 8 10
+
+
+2 4 6 8
+
+
+K K K K
+
+
+Figure 6: Accelerating neural network (NN) optimization with Negation-Permutation-Negation (NPN)
+classification. The optimized NN representation of a Boolean network (BN) with vertices associated
+with _k_ -input truth tables, 1 _≤_ _k_ _≤_ _K_, requires computing the multilinear polynomial (MP) and
+obtaining a minimal MP (MMP) for each vertex. _Naive_ (blue) solves each vertex independently, while
+_Cached_ (red) does so per unique function. _NPN classes_ (green) solves using the proposed objectiveaware NPN classification algorithm. We report the optimization time for MP- and MMP-based technology
+mapping w.r.t. the uniform ( _**c**_ _[uni]_ ) and degree ( _**c**_ _[deg]_ ) criterions. _NPN_ _classes_ results in consistent
+speedups under both MMP criterions, achieving 34 _._ 3 _×_ for sha3 ( _K_ = 10, _**c**_ _[uni]_ ) relative to _Naive_
+and 5 _._ 9 _×_ for aes ( _K_ = 11, _**c**_ _[deg]_ ) relative to _Cached_ . Lines and error bars denote sample mean and
+standard deviation over 3 trials. Circuit sizes are shown in parentheses in terms of number of logic
+gates. _Naive_ (uart, _K_ = 11) and (aes, _K_ = 11) not reported due to compute constraints.
+
+
+We note that in Figure 5, the SOTA solution of Gavier et al. (2023) corresponds to 100% connections
+and 100% neurons. In the first setting, optAll significantly optimizes the structure of the NN,
+reducing the connections and neurons by up to 70% and 60%, respectively. In the second, depthconstrained setting, optMaintainDepth reduces the connections and neurons by up to 50% and
+20%, respectively. We observe that the degree criterion consistently results in fewer connections and
+neurons than when optimizing with the uniform criterion.
+
+
+4.2 ACCELERATING OPTIMIZATION USING SHARED REPRESENTATIONS
+
+
+Here we apply the objective-aware NPN classification algorithm from § 3.2 to accelerate NN optimization. Due to lack of prior work, we define two baselines for comparison. _Naive_ computes the
+
+MP and obtains an MMP per vertex in BN _GF_ _**f**_, whereas _Cached_ does so per unique BF. _NPN classes_
+implements the proposed NPN classification algorithm to compute MPs and obtain MMPs. See Figure 6.
+We found that when the BN or _K_ is small, _NPN classes_ is competitive with _Cached_ . However, for larger
+circuits and _K_ _≥_ 4, _NPN classes_ consistently accelerates the optimization time in comparison to both
+baselines, independent of the MMP criterion used. In particular, the greatest speedup of 34 _._ 3 _×_ was
+achieved for sha3 ( _K_ = 10, _**c**_ _[uni]_ ) relative to _Naive_, and a speedup of 5 _._ 9 _×_ was achieved for the
+largest circuit aes ( _K_ = 11, _**c**_ _[deg]_ ) relative to _Cached_ (we analyze this result in Appendix G.3).
+
+
+For larger BNs, we observed that the optimization time starts high for small _K_, lessens for intermediate
+_K_, and then increases again for large _K_ . When the BN is large and _K_ small, there is a relatively large
+number of vertices in _GF_ _**f**_ = ( _V, E_ ). Consequently, the mapping time is dominated by iterating over
+_V_ . In contrast, for large _K_, although _GF_ _**f**_ has fewer vertices, the mapping time increases due to the
+runtime of ttToMP and mpToMMP. Intermediate _K_ avoids both extremes.
+
+
+5 CONCLUSION
+
+
+In this paper, we proposed techniques for optimizing the NN representation of a BN. Realizing the
+
+NN representation is composed of various sub-NNs, we began by establishing a relationship between
+
+MPs and sub-NN size, allowing us to compress sub-NNs by minimizing the MP representation. Next,
+to accelerate this minimization, we introduced an objective-aware algorithm to exploit the shared
+structure in optimization solutions among the members of an NPN equivalence class. Finally, we
+integrated these insights into architecture-aware lossless compression algorithms that allow for
+
+NN optimization in both depth constrained and unconstrained settings. Our experimental results
+demonstrate that our methods lead to significant optimization in NN size, as well as consistent speedups
+in the optimization process. Broader impacts of our work are further discussed in Appendix I.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+The authors would like to thank Arjun Karuvally from the University of Massachusetts Amherst for
+insightful feedback on an earlier draft of the manuscript. This research was supported in part by the
+Defense Advanced Research Projects Agency (DARPA) under contract number HR00112190049.
+
+
+REFERENCES
+
+
+Stefano Ambrogio, Pritish Narayanan, Atsuya Okazaki, Andrea Fasoli, Charles Mackin, Kohji
+Hosokawa, Akiyo Nomura, Takeo Yasuda, An Chen, A Friz, et al. An analog-ai chip for energyefficient speech recognition and transcription. _Nature_, 620(7975):768–775, 2023.
+
+
+Surama Biswas, Santosh Manicka, Erik Hoel, and Michael Levin. Gene regulatory networks exhibit
+several kinds of memory: Quantification of memory in biological and random transcriptional
+networks. _Iscience_, 24(3), 2021.
+
+
+Kwabena Boahen. Dendrocentric learning for synthetic intelligence. _Nature_, 612(7938):43–50, 2022.
+
+
+Stefan Bornholdt. Boolean network models of cellular regulation: prospects and limitations. _Journal_
+_of the Royal Society Interface_, 5(suppl_1):S85–S94, 2008.
+
+
+Jason Cong and Yuzheng Ding. Flowmap: An optimal technology mapping algorithm for delay
+optimization in lookup-table based fpga designs. _IEEE Transactions on Computer-Aided Design_
+_of Integrated Circuits and Systems_, 13(1):1–12, 1994.
+
+
+Matthew Farrugia-Roberts. Functional equivalence and path connectivity of reducible hyperbolic
+tangent networks. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Mingbin Feng, John E Mitchell, Jong-Shi Pang, Xin Shen, and Andreas Wächter. Complementarity
+formulations of l0-norm optimization problems. _Industrial Engineering and Management Sciences._
+_Technical Report. Northwestern University, Evanston, IL, USA_, 5, 2013.
+
+
+Ignacio Gavier, Joshua Russell, Devdhar Patel, Edward Rietman, and Hava Siegelmann. Neural
+network compiler for parallel high-throughput simulation of digital circuits. In _2023_ _IEEE_
+_International Parallel and Distributed Processing Symposium (IPDPS)_, pp. 613–623. IEEE, 2023.
+
+
+Frédéric Gruau, Jean-Yves Ratajszczak, and Gilles Wiber. A neural compiler. _Theoretical Computer_
+_Science_, 141(1-2):1–52, 1995.
+
+
+John Hewitt, Michael Hahn, Surya Ganguli, Percy Liang, and Christopher D. Manning. RNNs can
+generate bounded hierarchical languages with optimal memory. In Bonnie Webber, Trevor Cohn,
+Yulan He, and Yang Liu (eds.), _Proceedings of the 2020 Conference on Empirical Methods in_
+_Natural Language Processing (EMNLP)_, pp. 1978–2010, Online, November 2020. Association for
+Computational Linguistics. doi: 10.18653/v1/2020.emnlp-main.156.
+
+
+Uwe Hinsberger and Reiner Kolla. Boolean matching for large libraries. In _Proceedings of the 35th_
+_annual Design Automation Conference_, pp. 206–211, 1998.
+
+
+Kurt Hornik, Maxwell Stinchcombe, and Halbert White. Multilayer feedforward networks are
+universal approximators. _Neural networks_, 2(5):359–366, 1989.
+
+
+Richard M. Karp. _Reducibility among Combinatorial Problems_, pp. 85–103. Springer US, Boston,
+MA, 1972. ISBN 978-1-4684-2001-2. doi: 10.1007/978-1-4684-2001-2_9.
+
+
+Arjun Karuvally, Terrence J Sejnowski, and Hava T Siegelmann. Hidden traveling waves bind
+working memory variables in recurrent neural networks. _arXiv preprint arXiv:2402.10163_, 2024.
+
+
+Yann LeCun, Yoshua Bengio, and Geoffrey Hinton. Deep learning. _nature_, 521(7553):436–444,
+2015.
+
+
+Yingjie Li, Mingju Liu, Mark Ren, Alan Mishchenko, and Cunxi Yu. Dag-aware synthesis orchestration. _IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems_,
+2024.
+
+
+11
+
+
+Zhuo Li, Hengyi Li, and Lin Meng. Model compression for deep neural networks: A survey.
+_Computers_, 12(3):60, 2023.
+
+
+Tailin Liang, John Glossner, Lei Wang, Shaobo Shi, and Xiaotong Zhang. Pruning and quantization
+for deep neural network acceleration: A survey. _Neurocomputing_, 461:370–403, 2021.
+
+
+Dian-Lun Lin, Haoxing Ren, Yanqing Zhang, Brucek Khailany, and Tsung-Wei Huang. From rtl to
+cuda: A gpu acceleration flow for rtl simulation with batch stimulus. In _Proceedings of the 51st_
+_International Conference on Parallel Processing_, pp. 1–12, 2022.
+
+
+Dian-Lun Lin, Yanqing Zhang, Haoxing Ren, Brucek Khailany, Shih-Hsin Wang, and Tsung-Wei
+Huang. Genfuzz: Gpu-accelerated hardware fuzzing using genetic algorithm with multiple inputs.
+In _2023 60th ACM/IEEE Design Automation Conference (DAC)_, pp. 1–6. IEEE, 2023.
+
+
+Alan Mishchenko, Satrajit Chatterjee, and Robert Brayton. Dag-aware aig rewriting a fresh look at
+combinational logic synthesis. In _Proceedings of the 43rd annual Design Automation Conference_,
+pp. 532–535, 2006.
+
+
+João Pedro Neto, Hava T Siegelmann, and J Félix Costa. Symbolic processing in neural networks.
+_Journal of the Brazilian Computer Society_, 8:58–70, 2003.
+
+
+Ryan O’Donnell. _Analysis of boolean functions_ . Cambridge University Press, 2014.
+
+
+Devdhar Patel, Ignacio Gavier, Joshua Russell, Andrew Malinsky, Edward Rietman, and Hava
+Siegelmann. Automatic transpiler that efficiently converts digital circuits to a neural network
+representation. In _2022 International Joint Conference on Neural Networks (IJCNN)_, pp. 01–08,
+2022. doi: 10.1109/IJCNN55064.2022.9892305.
+
+
+Ana Petkovska, Mathias Soeken, Giovanni De Micheli, Paolo Ienne, and Alan Mishchenko. Fast
+hierarchical npn classification. In _2016 26th International Conference on Field Programmable_
+_Logic and Applications (FPL)_, pp. 1–4. IEEE, 2016.
+
+
+Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson.
+Fine-tuning aligned language models compromises safety, even when users do not intend to! _arXiv_
+_preprint arXiv:2310.03693_, 2023.
+
+
+Hao Qian and Yangdong Deng. Accelerating rtl simulation with gpus. In _2011 IEEE/ACM Interna-_
+_tional Conference on Computer-Aided Design (ICCAD)_, pp. 687–693. IEEE, 2011.
+
+
+Mingyi Rao, Hao Tang, Jiangbin Wu, Wenhao Song, Max Zhang, Wenbo Yin, Ye Zhuo, Fatemeh
+Kiani, Benjamin Chen, Xiangqi Jiang, et al. Thousands of conductance levels in memristors
+integrated on cmos. _Nature_, 615(7954):823–829, 2023.
+
+
+Tsutomu Sasao and Jon Butler. _Progress in Applications of Boolean Functions_ . Springer Nature,
+2022.
+
+
+Thiago Serra, Abhinav Kumar, and Srikumar Ramalingam. Lossless compression of deep neural networks. In _International conference on integration of constraint programming, artificial intelligence,_
+_and operations research_, pp. 417–430. Springer, 2020.
+
+
+Hava T Siegelmann. Neural programming language. In _AAAI_, pp. 877–882, 1994.
+
+
+Hava T. Siegelmann and Eduardo D. Sontag. On the computational power of neural nets. In
+_Proceedings of the Fifth Annual Workshop on Computational Learning Theory_, COLT ’92, pp.
+440–449, New York, NY, USA, 1992. Association for Computing Machinery. ISBN 089791497X.
+doi: 10.1145/130385.130432.
+
+
+Michael Sipser. Introduction to the theory of computation. _ACM Sigact News_, 27(1):27–29, 1996.
+
+
+Emma Strubell, Ananya Ganesh, and Andrew McCallum. Energy and policy considerations for deep
+learning in nlp. _arXiv preprint arXiv:1906.02243_, 2019.
+
+
+Héctor J Sussmann. Uniqueness of the weights for minimal feedforward nets with a given input-output
+map. _Neural networks_, 5(4):589–593, 1992.
+
+
+12
+
+
+Tze Sin Tan and Bakhtiar Affendi Rosdi. Verilog hdl simulator technology: a survey. _Journal of_
+_Electronic Testing_, 30:255–269, 2014.
+
+
+Sunil Vadera and Salem Ameen. Methods for pruning deep neural networks. _IEEE_ _Access_, 10:
+63280–63300, 2022.
+
+
+Zishen Wan, Che-Kai Liu, Hanchen Yang, Chaojian Li, Haoran You, Yonggan Fu, Cheng Wan,
+Tushar Krishna, Yingyan Lin, and Arijit Raychowdhury. Towards cognitive ai systems: a survey
+and prospective on neuro-symbolic ai. _arXiv preprint arXiv:2401.01040_, 2024.
+
+
+Yanqing Zhang, Haoxing Ren, and Brucek Khailany. Opportunities for rtl and gate level simulation
+using gpus. In _Proceedings of the 39th International Conference on Computer-Aided Design_, pp.
+1–5, 2020.
+
+
+Xuegong Zhou, Lingli Wang, and Alan Mishchenko. Fast exact npn classification by co-designing
+canonical form and its computation algorithm. _IEEE Transactions on Computers_, 69(9):1293–1307,
+2020.
+
+
+13
+
+
+# **Appendix**
+
+### **Table of Contents**
+
+
+**A** **Appendix Outline** **14**
+
+
+**B** **Background** **15**
+
+
+**C** **Minimal Multilinear Polynomial Representation** **20**
+C.1 Suboptimality of _ℓ_ 1-Relaxation in MMP Problems . . . . . . . . . . . . . . . . 24
+
+
+**D** **Objective-Aware Optimization using NPN Classes** **26**
+D.1 Computing Inverse NPN Transformations . . . . . . . . . . . . . . . . . . . . . 30
+D.2 Relating NPN and _σ_ Equivalence Classes . . . . . . . . . . . . . . . . . . . . . 33
+D.3 Computing MMPs with NPN Transformations . . . . . . . . . . . . . . . . . . 35
+D.4 Objective-Aware Optimization Algorithm using NPN Classes . . . . . . . . . . 37
+D.5 Relation to Existing NPN Classification Techniques and NPN Invariance . . . . 40
+
+
+**E** **Architecture-Aware Lossless Optimization** **42**
+
+
+**F** **Digital Circuits and Automata used in Experiments** **45**
+
+
+**G** **Extended Results** **47**
+G.1 Accelerating MP-based Technology Mapping with NPN Classification . . . . . . 47
+G.2 Results on Additional Boolean Networks . . . . . . . . . . . . . . . . . . . . . 47
+G.3 Empirical Analysis of NPN Classification . . . . . . . . . . . . . . . . . . . . . 50
+
+
+**H** **Synthesized Neural Networks for Figure 7** **51**
+
+
+**I** **Broader Impacts** **52**
+
+
+A APPENDIX OUTLINE
+
+
+This appendix has the following order. In Appendix B, we define the truth table and multilinear
+polynomial (MP) representations of Boolean functions (BFs), and show how these representations
+are related via linear transformations. In Appendix C, we define the _∼σ_ relation between BFs to
+capture the notion of equivalence under threshold and prove that it is an equivalence relation. We
+proceed to define a minimal MP (MMP) representation of a BF in terms of _σ_ equivalence classes, and by
+proving that linear constraints determine a _σ_ equivalence class, show that such a representation can
+be obtained by solving an integer linear program. In Appendix D, we define Negation-PermutationNegation (NPN) transformations and prove how these transformations act on MPs. In Appendix D.1, we
+prove that the inverse NPN transformation can be computed in a non-standard order, a result relevant
+for reusing solutions to MMPs. In Appendix D.2, we prove that the functions in the _σ_ equivalence
+classes of two NPN equivalent functions are related via NPN transformations. This result is applied
+in Appendix D.3, where we define the notion of PN-invariant criterions for MMPs, and prove that
+
+MMPs under PN-invariant criterions can be computed from other MMPs using NPN transformations. In
+Appendix D.4, we use these results to define an objective-aware algorithm based on NPN classification
+for MP- and MMP-based technology mapping that computes MPs and MMPs via NPN canonical forms in
+order to minimize the number of calls to computationally expensive procedures. In Appendix E,
+we define various neural network (NN) compression algorithms that incorporate MMPs into NN-based
+technology mapping. We present a _O_ ( _V_ ( _V_ + _E_ )) time algorithm that greedily selects vertices in a
+Boolean network (BN) to be represented as MMPs while ensuring the resulting _layer-merged_ NN depth
+does not increase. Finally, Appendix F details the circuits and automata used in experiments, and
+Appendix G presents additional results and analyses. Appendix H presents the synthesized neural
+networks (NNs) for Figure 7, and Appendix I concludes with the broader impacts of our work.
+
+
+14
+
+
+Table 1: Outline of the key definitions, statements and algorithms covered in the appendix. Hyperlinks
+provide a correspondence between definitions and statements in the main paper and in the appendix.
+
+
+Definition/Statement Main paper Appendix
+
+
+Boolean function (BF) Definition 2.1 Definition B.1
+Truth table representation of a BF Definition 2.2 Definition B.3
+Multilinear polynomial (MP) representation of a BF Definition 2.3 Definition B.4
+The _∼σ_ relation Definition 3.2 Definition C.2
+Minimal MP (MMP) representation of a BF Definition 3.3 Definition C.4
+Uniform criterion Definition 3.1 Definition C.5
+Degree criterion Definition 3.1 Definition C.6
+Negation-Permutation-Negation (NPN) transformation Definition 3.4 Definition D.1
+PN-invariant criterion Definition 3.7 Definition D.5
+Boolean network (BN) Definition 2.4 Definition E.1
+Leeway Definition 3.8 Definition E.3
+
+
+The _∼σ_ relation is an equivalence relation Lemma C.1
+Linear constraints determine a _σ_ equivalence class Theorem 3.1 Theorem C.1
+Obtaining an MMP representation of a BF Corollary 3.1 Corollary C.1
+Inverse NPN transformation Theorem 3.3 Theorem D.1
+
+NPN transformations between _σ_ equivalence classes Theorem 3.2 Theorem D.2
+Uniform criterion is PN-invariant Lemma 3.2 Lemma D.13
+Degree criterion is PN-invariant Lemma 3.2 Lemma D.14
+Computing MMPs with NPN transformations under PN- Theorem 3.4 Theorem D.3
+invariant criterions
+
+MP- and MMP-based technology mapping with NPN classes Algorithm 1
+Maintain depth neural network optimization algorithm Algorithm 2
+
+
+B BACKGROUND
+
+
+_Remark_ B.1 _._ We denote the set of binary numbers as B = _{_ 0 _,_ 1 _}_, the set of natural numbers (including
+0) as N0 = _{_ 0 _,_ 1 _,_ 2 _, . . . }_, and the set of integers as Z = _{. . ., −_ 2 _, −_ 1 _,_ 0 _,_ 1 _,_ 2 _, . . . }_ .
+
+**Definition B.1** (Boolean function) **.** A _k_ -input, (single-output) Boolean function (BF) is a function
+_f_ : B _[k]_ _→_ B, _**x**_ _�→_ _f_ ( _**x**_ ), where _**x**_ = ( _x_ 1 _, . . ., xk_ ) is a bit vector representing the _k_ input variables
+_xi_ _∈_ B, 1 _≤_ _i_ _≤_ _k_ . If bit vector _**x**_, when interpreted as binary number ( _xkxk−_ 1 _. . . x_ 1)2, encodes
+value _m ∈{_ 0 _,_ 1 _. . .,_ 2 _[k]_ _−_ 1 _}_, we write _**x**_ ( _m_ ).
+
+
+_Example_ B.1 _._ If _k_ = 3, _**x**_ (4) is the bit vector ( _x_ 1 _, x_ 2 _, x_ 3) = (0 _,_ 0 _,_ 1) since its interpretation as a
+binary number ( _x_ 3 _x_ 2 _x_ 1)2 = (100)2 encodes the value 4.
+**Definition B.2** (Multilinear polynomial) **.** A degree- _k_ multilinear polynomial (MP) is a polynomial in
+variables _x_ 1 _, . . ., xk_ where no variable occurs to a power of 2 or higher.
+_Example_ B.2 _._ If _k_ = 2, _p_ ( _x_ 1 _, x_ 2) = _x_ 1 + _x_ 2 _−_ _x_ 1 _x_ 2 is a MP whereas _q_ ( _x_ 1 _, x_ 2) = _x_ [2] 1 [+] _[ x]_ 2 [2] [is not.]
+**Definition B.3** (Truth table representation of a BF) **.** The truth table representation is an expression of
+
+BF _f_ : B _[k]_ _→_ B in the basis of the indicator functions 1 _**a**_ : B _[k]_ _→_ B, _**a**_ _∈_ B _[k]_,
+
+
+�1 _,_ if _**x**_ = _**a**_ _,_
+1 _**a**_ ( _**x**_ ) = (11)
+0 _,_ otherwise _._
+
+
+The expression of _f_ in this basis is
+
+
+       _f_ ( _**x**_ ) = _f_ ( _**a**_ ) 1 _**a**_ ( _**x**_ ) _._ (12)
+
+
+_**a**_ _∈_ B _[k]_
+
+
+The truth table vector _**f**_ _∈_ B [2] _[k]_ of _f_ is the 2 _[k]_ -dimensional vector of coefficients _f_ ( _**a**_ ) in the above
+linear combination of indicator functions. Hence,
+
+
+_**f**_ =               - _f_ ( _**a**_ ) **1** _**a**_ _,_ (13)
+
+
+_**a**_ _∈_ B _[k]_
+
+
+15
+
+
+where **1** _**a**_ _∈_ B [2] _[k]_ denotes the vector with a 1 in the _i_ -th coordinate, 0 _≤_ _i ≤_ 2 _[k]_ _−_ 1, and 0’s elsewhere,
+if _**a**_ = _**a**_ ( _i_ ).
+_Example_ B.3 _._ Let _f_ ( _x_ 1 _, x_ 2) = _x_ 1 _⇒_ _x_ 2 = _x_ ¯1 _∨_ _x_ 2. Then the truth table representation of _f_ is the
+expression
+
+
+  _f_ ( _x_ 1 _, x_ 2) = _f_ ( _**a**_ ) 1 _**a**_ ( _x_ 1 _, x_ 2)
+
+
+_**a**_ _∈_ B [2]
+
+= _f_ (0 _,_ 0) 1 (0 _,_ 0)( _x_ 1 _, x_ 2) + _f_ (1 _,_ 0) 1 (1 _,_ 0)( _x_ 1 _, x_ 2) + _f_ (0 _,_ 1) 1 (0 _,_ 1)( _x_ 1 _, x_ 2) + _f_ (1 _,_ 1) 1 (1 _,_ 1)( _x_ 1 _, x_ 2)
+
+
+= (1) 1 (0 _,_ 0)( _x_ 1 _, x_ 2) + (0) 1 (1 _,_ 0)( _x_ 1 _, x_ 2) + (1) 1 (0 _,_ 1)( _x_ 1 _, x_ 2) + (1) 1 (1 _,_ 1)( _x_ 1 _, x_ 2) _,_
+
+and the truth table vector _**f**_ _∈_ B [2][2] of _f_ is
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_**f**_ = - _f_ ( _**a**_ ) **1** _**a**_ = _f_ (0 _,_ 0)
+
+
+_**a**_ _∈_ B [2]
+
+
+1
+0
+0
+0
+
+
+
+
+
+1
+0
+1
+1
+
+
+
+
+
+_f_ (0 _,_ 0)
+_f_ (1 _,_ 0)
+_f_ (0 _,_ 1)
+_f_ (1 _,_ 1)
+
+
+
+
+
+0
+0
+0
+1
+
+
+
+
+
+0
+0
+1
+0
+
+
+
+
+
+0
+1
+0
+0
+
+
+
+
+
+
+
+
+ =
+
+
+ =
+
+
+ + _f_ (1 _,_ 1)
+
+
+ + _f_ (0 _,_ 1)
+
+
+
+
+
+ + _f_ (1 _,_ 0)
+
+
+**Definition B.4** (Multilinear polynomial representation of a BF) **.** The MP representation is an expression
+of BF _f_ : B _[k]_ _→_ B in the basis of the logical AND functions _χS_ : Z _[k]_ _→_ Z, _S_ _∈P_ ( _{_ 1 _, . . ., k}_ ),
+where _P_ ( _·_ ) denotes the power set,
+
+
+�1 _,_ if _S_ = _∅,_
+_χS_ ( _**x**_ ) = _χS_ ( _x_ 1 _, . . ., xk_ ) =         - _i∈S_ _[x][i][,]_ otherwise _._ (14)
+
+The expression of _f_ in this basis, which we denote _p_ : Z _[k]_ _→_ Z, is
+
+
+_p_ ( _**x**_ ) = 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ ) _,_ (15)
+
+
+where _f_ [ˆ] ( _S_ ) _∈_ Z and _∀_ _**x**_ _∈_ B _[k]_ [�] _f_ ( _**x**_ ) = _p_ ( _**x**_ )�. The MP vector _**p**_ _∈_ Z [2] _[k]_ of _f_ is the 2 _[k]_ -dimensional
+vector of coefficients _f_ [ˆ] ( _S_ ) in the above linear combination of logical AND functions. Hence,
+
+
+_**p**_ = 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S,_ (16)
+
+
+where _**χ**_ _S_ _∈_ Z [2] _[k]_ denotes the vector with a 1 in coordinate _I_ ( _S_ ), 0 _≤I_ ( _S_ ) _≤_ 2 _[k]_ _−_ 1,
+and 0’s elsewhere, and _I_ : _P_ ( _{_ 1 _, . . ., k}_ ) _→{_ 0 _, . . ._ 2 _[k]_ _−_ 1 _}_ is a bijection with specification
+( _∅,_ 0) _,_ ( _{_ 1 _},_ 1) _,_ ( _{_ 2 _},_ 2) _,_ ( _{_ 1 _,_ 2 _},_ 3) _,_ ( _{_ 3 _},_ 4) _, . . .,_ ( _{_ 1 _, . . ., k},_ 2 _[k]_ _−_ 1).
+
+_Remark_ B.2 (Obtaining coefficients _f_ [ˆ] ( _S_ ) in the MP representation) _._ We briefly mention one method
+for obtaining the coefficients in the MP representation of BF _f_ : B _[k]_ _→_ B, which also serves as a
+construction proof for the MP representation (O’Donnell, 2014). Firstly, we define the indicator MPs
+_p_ [1] _**a**_ [:][ Z] _[k]_ _[→]_ [Z][,] _**[ a]**_ _[ ∈]_ [B] _[k]_ [,]
+
+
+_p_ [1] _**a**_ [(] _**[x]**_ [) =]
+
+
+_k_
+�(1 _−_ _ai −_ _xi_ + 2 _aixi_ ) _._
+
+
+_i_ =1
+
+
+The indicator MPs have the property that for all _**x**_ _∈_ B _[k]_, _p_ [1] _**a**_ [(] _**[x]**_ [)][ equals][ 1][ if] _**[ x]**_ [=] _**[a]**_ [ and][ 0][ otherwise.]
+Let _p_ : Z _[k]_ _→_ Z be the MP
+
+_p_ ( _**x**_ ) =                - _f_ ( _**a**_ ) _p_ [1] _**a**_ [(] _**[x]**_ [)] _[,]_ (17)
+
+_**a**_ _∈_ B _[k]_
+
+then _∀_ _**x**_ _∈_ B _[k]_ [�] _f_ ( _**x**_ ) = _p_ ( _**x**_ )� (follows from Equation 12). Since the indicator MPs _p_ [1] _**a**_ [(] _**[x]**_ [)] [are]
+multilinear, simplifying _p_ ( _**x**_ ) will produce a MP with the coefficients _f_ [ˆ] ( _S_ ) _∈_ Z, _S_ _∈P_ ( _{_ 1 _, . . ., k}_ ),
+in the MP representation of _f_ . Lemma B.1 generalizes this conversion procedure.
+_Example_ B.4 _._ Let _f_ ( _x_ 1 _, x_ 2) = _x_ 1 _⇒_ _x_ 2 = _x_ ¯1 _∨_ _x_ 2. In Example B.3, we found that the truth table
+representation of _f_ is the expression
+
+
+   _f_ ( _x_ 1 _, x_ 2) = _f_ ( _**a**_ ) 1 _**a**_ ( _x_ 1 _, x_ 2)
+
+
+_**a**_ _∈_ B [2]
+
+= (1) 1 (0 _,_ 0)( _x_ 1 _, x_ 2) + (0) 1 (1 _,_ 0)( _x_ 1 _, x_ 2) + (1) 1 (0 _,_ 1)( _x_ 1 _, x_ 2) + (1) 1 (1 _,_ 1)( _x_ 1 _, x_ 2) _._
+
+
+16
+
+
+Let _p_ : Z _[k]_ _→_ Z be the MP _p_ ( _x_ 1 _, x_ 2) = [�] _**a**_ _∈_ B [2] _[ f]_ [(] _**[a]**_ [)] _[p]_ [1] _**a**_ [(] _[x]_ [1] _[, x]_ [2][)][, then]
+
+
+_p_ ( _x_ 1 _, x_ 2) = - _f_ ( _**a**_ ) _p_ [1] _**a**_ [(] _[x]_ [1] _[, x]_ [2][)]
+
+_**a**_ _∈_ B [2]
+
+= (1) _p_ [1] (0 _,_ 0) [(] _[x]_ [1] _[, x]_ [2][)] + (0) _p_ [1] (1 _,_ 0) [(] _[x]_ [1] _[, x]_ [2][) + (1)] _[p]_ (0 [1] _,_ 1) [(] _[x]_ [1] _[, x]_ [2][) + (1)] _[p]_ (1 [1] _,_ 1) [(] _[x]_ [1] _[, x]_ [2][)]
+
+= (1)(1 _−_ _x_ 1)(1 _−_ _x_ 2) + (0)( _x_ 1)(1 _−_ _x_ 2) + (1)(1 _−_ _x_ 1)( _x_ 2) + (1)( _x_ 1)( _x_ 2)
+= (1 _−_ _x_ 1 _−_ _x_ 2 + _x_ 1 _x_ 2) + (0) + ( _x_ 2 _−_ _x_ 1 _x_ 2) + ( _x_ 1 _x_ 2)
+= (1)(1) + ( _−_ 1)( _x_ 1) + (0)( _x_ 2) + (1)( _x_ 1 _x_ 2)
+= (1) _χ∅_ + ( _−_ 1) _χ{_ 1 _}_ + (0) _χ{_ 2 _}_ + (1) _χ{_ 1 _,_ 2 _}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,_ 2 _}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _x_ 1 _, x_ 2) _,_
+
+
+and [�] _S∈P_ ( _{_ 1 _,_ 2 _}_ ) _[f]_ [ˆ][(] _[S]_ [)] _[χ][S]_ [(] _[x]_ [1] _[, x]_ [2][)][ is the] [MP][ representation of] _[ f]_ [.] [The] [MP][ vector] _**[ p]**_ _[ ∈]_ [Z][2][2] [of] _[ f]_ [is]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+0
+0
+1
+0
+
+
+
+
+
+
+
+
+_**p**_ = 
+
+_S∈P_ ( _{_ 1 _,_ 2 _}_ )
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ = _f_ ˆ( _∅_ )
+
+
+
+
+
+1
+0
+0
+0
+
+
+
+
+
+0
+1
+0
+0
+
+
+
+
+
+0
+0
+0
+1
+
+
+ + _f_ ˆ( _{_ 1 _}_ )
+
+
+
+
+ + _f_ ˆ( _{_ 2 _}_ )
+
+
+ + _f_ ˆ( _{_ 1 _,_ 2 _}_ )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ =
+
+
+1
+
+_−_ 1
+0
+1
+
+
+=
+
+
+
+
+
+_f_ ˆ( _∅_ )
+_f_ ˆ( _{_ 1 _}_ )
+_f_ ˆ( _{_ 2 _}_ )
+_f_ ˆ( _{_ 1 _,_ 2 _}_ )
+
+
+
+
+
+
+
+
+**Definition B.5** (Cofactors of a BF and its MP representation) **.** Let _i ∈{_ 1 _, . . ., k}_, and _f_ : B _[k]_ _→_ B be
+a BF with MP representation _p_ : Z _[k]_ _→_ Z. The positive and negative cofactors of _f_ with respect to _xi_
+are the BFs _fxi, fx_ ¯ _i_ : B _[k][−]_ [1] _→_ B, where
+
+
+_fxi_ = _f_ ( _. . ., xi_ = 1 _, . . ._ ) _,_ _fx_ ¯ _i_ = _f_ ( _. . ., xi_ = 0 _, . . ._ ) _._ (18)
+
+
+Similarly, the positive and negative cofactors of _p_ with respect to _xi_ are the MPs _pxi, px_ ¯ _i_ : Z _[k][−]_ [1] _→_ Z,
+where
+
+
+_pxi_ = _p_ ( _. . ., xi_ = 1 _, . . ._ ) _,_ _px_ ¯ _i_ = _p_ ( _. . ., xi_ = 0 _, . . ._ ) _._ (19)
+
+
+Note that _pxi_ and _px_ ¯ _i_ are the MP representations of _fxi_ and _fx_ ¯ _i_, respectively.
+
+**Definition** **B.6** (Fourier transformation matrix) **.** Let _k_ _∈_ N0 and _Tk_ _∈_ Z [2] _[k][×]_ [2] _[k]_ be a matrix with
+specification
+
+
+_Tk_ =
+
+
+
+
+
+
+�1� _,_ _k_ = 0 _,_
+
+- _Tk−_ 1 _,_ _Ok−_ 1� _,_ _k_ _>_ 0 _,_
+_−Tk−_ 1 _,_ _Tk−_ 1
+
+
+
+
+
+- (20)
+_,_ _k_ _>_ 0 _,_
+
+
+where _Ok−_ 1 _∈_ B [2] _[k][−]_ [1] _[×]_ [2] _[k][−]_ [1] denotes the all zeros matrix. We call _Tk_ the _k_ -th Fourier transformation
+matrix.
+
+
+**Lemma B.1** (Computing the MP vector from the truth table vector) **.** _Let k_ _∈_ N0 _, f_ : B _[k]_ _→_ B _be a_
+
+_BF with truth table vector_ _**f**_ _∈_ B [2] _[k]_ _and_ _MP vector_ _**p**_ _∈_ Z [2] _[k]_ _, and Tk_ _∈_ Z [2] _[k][×]_ [2] _[k]_ _be the k-th Fourier_
+_transformation matrix._ _Then Tk_ _**f**_ = _**p**_ _._
+
+
+_Proof._ We prove this statement by induction on _k_ _∈_ N0.
+
+
+Basis ( _k_ = 0). Let _f_ : B [0] _→_ B be the constant BF _f_ () = _c_, where _c ∈_ B. Then _**f**_ = [ _c_ ] and _**p**_ = [ _c_ ].
+Thus, as _T_ 0 = [1], _T_ 0 _**f**_ = _**p**_ .
+
+
+17
+
+
+Inductive step (assume _k −_ 1). Let _f_ : B _[k]_ _→_ B be a BF. Following Boole’s expansion theorem,
+
+
+    _f_ ( _**x**_ ) = _f_ ( _**a**_ ) 1 _**a**_ ( _**x**_ ) (21)
+
+
+_**a**_ _∈_ B _[k]_
+
+
+     = _f_ ( _**a**_ ) 1 _**a**_ ( _**x**_ ) (22)
+
+
+_**a**_ =( _x_ 1 _,...,xk−_ 1 _,_ 0) _∈_ B _[k]_
+
+
+     + _f_ ( _**a**_ ) 1 _**a**_ ( _**x**_ ) (23)
+
+
+_**a**_ =( _x_ 1 _,...,xk−_ 1 _,_ 1) _∈_ B _[k]_
+
+
+            -            -            = 1 (0)( _xk_ ) _f_ ( _**a**_ _,_ 0) 1 _**a**_ ( _x_ 1 _, . . ., xk−_ 1) (24)
+
+_**a**_ =( _x_ 1 _,...,xk−_ 1) _∈_ B _[k][−]_ [1]
+
+
+           -            -            + 1 (1)( _xk_ ) _f_ ( _**a**_ _,_ 1) 1 _**a**_ ( _x_ 1 _, . . ., xk−_ 1) (25)
+
+_**a**_ =( _x_ 1 _,...,xk−_ 1) _∈_ B _[k][−]_ [1]
+
+
+= 1 (0)( _xk_ ) _fx_ ¯ _k_ ( _x_ 1 _, . . ., xk−_ 1) + 1 (1)( _xk_ ) _fxk_ ( _x_ 1 _, . . ., xk−_ 1) (26)
+
+
+Hence, following the discussion in Example B.4, MP _p_ : Z _[k]_ _→_ Z with specification
+
+
+_p_ ( _**x**_ ) = _p_ [1] (0) [(] _[x][k]_ [)]     -     - _f_ ( _**a**_ _,_ 0) _p_ [1] _**a**_ [(] _[x]_ [1] _[, . . ., x][k][−]_ [1][)]     - (27)
+
+_**a**_ =( _x_ 1 _,...,xk−_ 1) _∈_ B _[k][−]_ [1]
+
++ _p_ [1] (1) [(] _[x][k]_ [)]     -     - _f_ ( _**a**_ _,_ 1) _p_ [1] _**a**_ [(] _[x]_ [1] _[, . . ., x][k][−]_ [1][)]     - (28)
+
+_**a**_ =( _x_ 1 _,...,xk−_ 1) _∈_ B _[k][−]_ [1]
+
+= _p_ [1] (0) [(] _[x][k]_ [)] _[p][x]_ _k_ [(] _[x]_ [1] _[, . . ., x][k][−]_ [1][) +] _[ p]_ [1] (1) [(] _[x][k]_ [)] _[p][x]_ [¯] _k_ [(] _[x]_ [1] _[, . . ., x][k][−]_ [1][)] (29)
+
+= (1 _−_ _xk_ ) _px_ ¯ _k_ ( _x_ 1 _, . . ., xk−_ 1) + ( _xk_ ) _pxk_ ( _x_ 1 _, . . ., xk−_ 1) (30)
+
+= _px_ ¯ _k_ ( _x_ 1 _, . . ., xk−_ 1) +     - _pxk_ ( _x_ 1 _, . . ., xk−_ 1) _−_ _px_ ¯ _k_ ( _x_ 1 _, . . ., xk−_ 1)� _xk_ (31)
+
+
+has the property that _∀_ _**x**_ _∈_ B _[k]_ [�] _f_ ( _**x**_ ) = _p_ ( _**x**_ )�. We next consider the truth table vector _**f**_ _∈_ B [2] _[k]_ and
+
+MP vector _**p**_ _∈_ Z [2] _[k]_ of _f_ . From the above analysis, they must have specifications
+
+
+_**f**_ = - _**f**_ ¯ _xk_
+_**f**_ _xk_
+
+
+- _,_ _**p**_ = - _**p**_ _x_ ¯ _k_ - _,_ (32)
+_**p**_ _xk_ _−_ _**p**_ _x_ ¯ _k_
+
+
+where _**f**_ _xk_ _,_ _**f**_ ¯ _xk_ _∈_ B [2] _[k][−]_ [1] and _**p**_ _xk_ _,_ _**p**_ _x_ ¯ _k_ _∈_ Z [2] _[k][−]_ [1] . Thus, by the inductive hypothesis for _k −_ 1, the
+following sequence of equalities completes the lemma,
+
+
+_Tk_ _**f**_ = - _−TTkk−−_ 11 _,_ _,_ _OTkk−−_ 11
+
+
+�� _**f**_ ¯ _xk_
+_**f**_ _xk_
+
+
+- = - _**p**_ _x_ ¯ _k_
+_**p**_ _xk_ _−_ _**p**_ _x_ ¯ _k_
+
+
+= _**p**_ _._ (33)
+
+
+_Example_ B.5 _._ We can now find the MP vector from Example B.4 using matrix multiplication. Let
+_f_ ( _x_ 1 _, x_ 2) = _x_ 1 _⇒_ _x_ 2 = _x_ ¯1 _∨_ _x_ 2 be a BF with truth table vector _**f**_ _∈_ B [2][2] and MP vector _**p**_ _∈_ Z [2][2] .
+Following Example B.3,
+
+
+
+
+
+_**f**_ = - _f_ ( _**a**_ ) **1** _**a**_ =
+
+
+_**a**_ _∈_ B [2]
+
+
+1
+0
+1
+1
+
+
+
+
+
+
+
+
+ _._
+
+
+Following Lemma B.1, we have
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_**p**_ = 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S,_ = _T_ 2 _**f**_ =
+
+
+
+
+
+1 0 0 0
+
+_−_ 1 1 0 0
+
+_−_ 1 0 1 0
+1 _−_ 1 _−_ 1 1
+
+
+
+
+
+1
+
+_−_ 1
+0
+1
+
+
+
+
+
+
+
+
+1
+0
+1
+1
+
+
+ =
+
+
+ _,_
+
+
+which was our result for the MP vector of _f_ in Example B.4.
+
+
+18
+
+
+**Definition B.7** (Sierpi´nski matrix) **.** Let _k_ _∈_ N0 and _Sk_ _∈_ B [2] _[k][×]_ [2] _[k]_ be a matrix with specification
+
+
+_Sk_ =
+
+
+
+
+
+
+�1� _,_ _k_ = 0 _,_
+
+- _Sk−_ 1 _,_ _Ok−_ 1� _,_ _k_ _>_ 0 _,_
+_Sk−_ 1 _,_ _Sk−_ 1
+
+
+
+
+
+- (34)
+_,_ _k_ _>_ 0 _,_
+
+
+where _Ok−_ 1 _∈_ B [2] _[k][−]_ [1] _[×]_ [2] _[k][−]_ [1] denotes the all zeros matrix. We call _Sk_ the _k_ -th Sierpi´nski matrix.
+
+**Lemma B.2** (The Sierpi´nski matrix is the inverse of the Fourier transformation matrix) **.** _Let k_ _∈_ N0 _,_
+_Tk_ _∈_ Z [2] _[k][×]_ [2] _[k]_ _be the k-th Fourier transformation matrix, and Sk_ _∈_ B [2] _[k][×]_ [2] _[k]_ _be the k-th Sierpi´nski_
+_matrix._ _Then SkTk_ = _Ik, where Ik_ _∈_ B [2] _[k][×]_ [2] _[k]_ _is the identity matrix._
+
+
+_Proof._ We prove this statement by induction on _k_ _∈_ N0.
+
+
+Basis ( _k_ = 0). _S_ 0 _T_ 0 = [1] [1] = [1] = _I_ 0.
+
+
+Inductive step (assume _SkTk_ = _Ik_ ).
+
+
+_Sk_ +1 _Tk_ +1 = - _SSkk,,_ _OSkk_
+
+
+�� _Tk,_ _Ok_
+_−Tk,_ _Tk_
+
+
+- = - _SkTk,_ _Ok_
+_Ok,_ _SkTk_
+
+
+- = - _OIkk,,_ _OIkk_ - = _Ik_ +1 _._ (35)
+
+
+**Corollary B.1** (Computing the truth table vector from the MP vector) **.** _Let k_ _∈_ N0 _, f_ : B _[k]_ _→_ B _be a_
+
+_BF with truth table vector_ _**f**_ _∈_ B [2] _[k]_ _and_ _MP vector_ _**p**_ _∈_ Z [2] _[k]_ _, and Sk_ _∈_ B [2] _[k][×]_ [2] _[k]_ _be the k-th Sierpi´nski_
+_matrix._ _Then Sk_ _**p**_ = _**f**_ _._
+
+
+_Proof._
+
+
+_Sk_ _**p**_ = _SkTk_ _**f**_ = _**f**_ _._ (36)
+
+
+where _Tk_ _∈_ Z [2] _[k][×]_ [2] _[k]_ is the _k_ -th Fourier transformation matrix, and the first equality follows from
+Lemma B.1.
+
+
+_Example_ B.6 _._ We can now find the truth table vector from Example B.3 using matrix multiplication.
+Let _f_ ( _x_ 1 _, x_ 2) = _x_ 1 _⇒_ _x_ 2 = _x_ ¯1 _∨_ _x_ 2 be a BF with truth table vector _**f**_ _∈_ B [2][2] and MP vector _**p**_ _∈_ Z [2][2] .
+Following Example B.5,
+
+
+
+
+
+
+
+
+_**p**_ =           
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+Following Corollary B.1, we have
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ =
+
+
+
+
+
+1
+
+_−_ 1
+0
+1
+
+
+ _._
+
+
+
+
+
+
+
+
+
+
+
+1
+
+_−_ 1
+0
+1
+
+
+
+
+
+
+
+
+1
+0
+1
+1
+
+
+
+
+
+_**f**_ = - _f_ ( _**a**_ ) **1** _**a**_ = _S_ 2 _**p**_ =
+
+
+_**a**_ _∈_ B [2]
+
+
+1 0 0 0
+1 1 0 0
+1 0 1 0
+1 1 1 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ =
+
+
+ _,_
+
+
+which was our result for the truth table vector of _f_ in Example B.3.
+_Remark_ B.3 _._ In the following sections, we refer to the truth table (resp. MP) representation and the
+truth table (resp. MP) vector of a BF interchangeably. Boldface notation is used for vectors in order to
+distinguish between the objects.
+
+
+19
+
+
+C MINIMAL MULTILINEAR POLYNOMIAL REPRESENTATION
+
+
+**Definition C.1** (Heaviside step function) **.** Let _σ_ : Z _→_ B be a function with specification
+
+
+�1 _,_ _x >_ 0 _,_
+_σ_ ( _x_ ) = (37)
+0 _,_ _x ≤_ 0 _._
+
+
+We extend the definition to _σ_ : Z [2] _[k]_ _→_ B [2] _[k]_, where ( _σ_ ( _**x**_ )) _i_ = _σ_ ( _**x**_ _i_ ) (i.e., it is applied element-wise).
+
+**Definition C.2** (The _∼σ_ relation) **.** Let _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ be MPs. We define _∼σ_ : Z [2] _[k]_ _×_ Z [2] _[k]_ _→_ B as the
+relation
+
+
+_**p**_ _∼σ_ _**q**_ _⇐⇒∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _q_ )( _**x**_ )� _._ (38)
+
+
+_Example_ C.1 _._ Let _f_ ( _x_ 1 _, x_ 2) = _x_ 1 _⇒_ _x_ 2 = _x_ ¯1 _∨_ _x_ 2 be a BF with MP representation _p_ ( _x_ 1 _, x_ 2) =
+1 _−_ _x_ 1 + _x_ 1 _x_ 2 and MP vector _**p**_ = [1 _, −_ 1 _,_ 0 _,_ 1]. Moreover, let _q_ ( _x_ 1 _, x_ 2) = 1 _−_ _x_ 1 + _x_ 2 be a MP with
+
+MP vector _**q**_ = [1 _, −_ 1 _,_ 1 _,_ 0]. Then _**p**_ _∼σ_ _**q**_, as
+
+
+_p_ (0 _,_ 0) = 1 _,_ _q_ (0 _,_ 0) = 1 _,_
+
+_p_ (1 _,_ 0) = 0 _,_ _q_ (1 _,_ 0) = 0 _,_
+
+_p_ (0 _,_ 1) = 1 _,_ _q_ (0 _,_ 1) = 2 _,_
+
+_p_ (1 _,_ 1) = 1 _,_ _q_ (1 _,_ 1) = 1 _._
+
+
+**Lemma C.1.** _∼σ_ _is an equivalence relation._
+
+
+_Proof._ We show the _∼σ_ relation is reflexive, symmetric and transitive. Let _**p**_ _,_ _**q**_ _,_ _**r**_ _∈_ Z [2] _[k]_ be MPs.
+
+
+1. _∼σ_ is reflexive.
+
+
+_**p**_ _∼σ_ _**p**_ _≡∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _p_ )( _**x**_ )� (39)
+
+_≡∀_ _**x**_ _∈_ B _[k]_ [�] _⊤_         - (40)
+
+
+_≡⊤_ (41)
+
+
+2. _∼σ_ is symmetric.
+
+
+_**p**_ _∼σ_ _**q**_ _≡∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _q_ )( _**x**_ )� (42)
+
+_≡∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _q_ )( _**x**_ ) = ( _σ ◦_ _p_ )( _**x**_ )� (43)
+
+
+_≡_ _**q**_ _∼σ_ _**p**_ (44)
+
+
+3. _∼σ_ is transitive.
+
+
+_**p**_ _∼σ_ _**q**_ _∧_ _**q**_ _∼σ_ _**r**_
+
+_≡∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _q_ )( _**x**_ )� _∧∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _q_ )( _**x**_ ) = ( _σ ◦_ _r_ )( _**x**_ )� (45)
+
+_≡∀_ _**x**_ _∈_ B _[k]_ [��] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _q_ )( _**x**_ )� _∧_ �( _σ ◦_ _q_ )( _**x**_ ) = ( _σ ◦_ _r_ )( _**x**_ )�� (46)
+
+_≡∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _r_ )( _**x**_ )� (47)
+
+
+_≡_ _**p**_ _∼σ_ _**r**_ (48)
+
+
+**Definition C.3** ( _σ_ equivalence class) **.** The _σ_ equivalence class of MP _**p**_ _∈_ Z [2] _[k]_, denoted [ _**p**_ ] _σ_, is the
+set _{_ _**q**_ _∈_ Z [2] _[k]_ _|_ _**p**_ _∼σ_ _**q**_ _}_ .
+
+**Definition C.4** (Minimal multilinear polynomial representation of a BF) **.** Let _f_ : B _[k]_ _→_ B be a BF
+with MP _**p**_ _∈_ Z [2] _[k]_, and _C_ : Z [2] _[k]_ _→_ N0 be a cost function. A minimal multilinear polynomial (MMP)
+representation of _f_ with respect to _C_ is a MP _**p**_ _[′]_ _∈_ Z [2] _[k]_ where
+
+
+_**p**_ _[′]_ _∈_ arg min _C_ ( _**q**_ ) _._ (49)
+_**q**_ _∈_ [ _**p**_ ] _σ_
+
+
+20
+
+
+_Example_ C.2 _._ Let _f_ ( _x_ 1 _, x_ 2) = _x_ 1 _∨_ _x_ 2 be a BF with MP representation _p_ ( _x_ 1 _, x_ 2) = _x_ 1 + _x_ 2 _−_ _x_ 1 _x_ 2
+and MP vector _**p**_ = [0 _,_ 1 _,_ 1 _, −_ 1]. Moreover, let _p_ _[′]_ ( _x_ 1 _, x_ 2) = _x_ 1 + _x_ 2 be a MP with MP vector
+_**p**_ _[′]_ = [0 _,_ 1 _,_ 1 _,_ 0]. Then, under the assumption that _C_ ( _**q**_ ) represents the number of terms in MP _q_,
+
+
+_**p**_ _[′]_ _∈_ arg min _C_ ( _**q**_ ) _,_ (50)
+_**q**_ _∈_ [ _**p**_ ] _σ_
+
+
+and _p_ _[′]_ is an MMP representation of _f_ with respect to _C_ .
+
+
+**Definition C.5** (Uniform criterion) **.** Let _k_ _∈_ N0 and _**c**_ _[uni]_ _k_ _∈_ B [2] _[k]_ be a vector with specification
+
+
+�0 _,_ _i_ = 0 _,_
+( _**c**_ _[uni]_ _k_ ) _i_ = 1 _,_ _i >_ 0 _._ (51)
+
+
+_Example_ C.3 _._ _**c**_ _[uni]_ 3 _∈_ B [2][3] = [0 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1] [⊺] .
+
+**Definition C.6** (Degree criterion) **.** Let _k_ _∈_ N0 and _**c**_ _[deg]_ _k_ _∈_ Z [2] _[k]_ be a vector with specification
+
+
+_**c**_ _[deg]_ _k_ =
+
+
+
+
+
+
+�0� _,_ _k_ = 0 _,_
+
+- �⊺ (52)
+_**c**_ _[deg]_ _k−_ 1 _[,]_ _**c**_ _[deg]_ _k−_ 1 [+] **[ 1]** _[k][−]_ [1] _,_ _k_ _>_ 0 _,_
+
+
+
+
+
+where **1** _k−_ 1 _∈_ B [2] _[k][−]_ [1] denotes the all ones vector.
+
+
+_Example_ C.4 _._ _**c**_ _[deg]_ 3 _∈_ Z [2][3] = [0 _,_ 1 _,_ 1 _,_ 2 _,_ 1 _,_ 2 _,_ 2 _,_ 3] [⊺] .
+
+
+**Lemma C.2** (Cost functions for MMPs) **.** _Let_ _**q**_ _∈_ Z [2] _[k]_ _be a_ _MP vector,_ _**c**_ _∈_ Z [2] _[k]_ _, and C_ : Z [2] _[k]_ _→_ N0 _be_
+_a cost function with specification C_ ( _**q**_ ) = _∥_ _**q**_ _∥_ 0 _,_ _**c**_ _, where ∥·∥_ 0 _,_ _**c**_ _denotes the zero-norm weighted by_
+_vector_ _**c**_ _._ _Then,_
+
+
+_1._ _C_ ( _**q**_ ) = _∥_ _**q**_ _∥_ 0 _,_ _**c**_ _unik_ _is the number of non-constant monomials in the_ _MP_ _**q**_ _._
+
+
+_2._ _C_ ( _**q**_ ) = _∥_ _**q**_ _∥_ 0 _,_ _**c**_ _degk_ _is the sum of non-constant monomial degrees in the_ _MP_ _**q**_ _._
+
+
+_Proof._ Let _I_ ( _S_ ) be the bijection specified in Definition B.4 to index the components of the MP vector,
+and 1 0 : Z _→_ B be an indicator function where 1 0( _x_ ) = 1 _⇐⇒_ _x_ = 0. Then _1._ follows from the
+definition of the weighted zero-norm:
+
+
+_C_ ( _**q**_ ) = _∥_ _**q**_ _∥_ 0 _,_ _**c**_ _unik_ (53)
+
+   -   -   = ( _**c**_ _[uni]_ _k_ ) _I_ ( _S_ ) 1 _−_ 1 0( _f_ [ˆ] ( _S_ )) (weighted zero-norm) (54)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+         -         -         -         -         = ( _**c**_ _[uni]_ _k_ ) _I_ ( _∅_ ) 1 _−_ 1 0( _f_ [ˆ] ( _∅_ )) + ( _**c**_ _[uni]_ _k_ ) _I_ ( _S_ ) 1 _−_ 1 0( _f_ [ˆ] ( _S_ )) (55)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+- 1 _−_ 1 0( _f_ [ˆ] ( _S_ )) _._ (56)
+
+
+Similarly, _2._ follows from the same definitions. We prove this statement by induction on _k_ _∈_ N0.
+
+
+                -                 -                 -                 Basis ( _k_ = 0). _C_ ( _**q**_ ) = _∥_ _**q**_ _∥_ 0 _,_ _**c**_ _deg_ 0 = ( _**c**_ _[deg]_ 0 ) _I_ ( _∅_ ) 1 _−_ 1 0( _f_ [ˆ] ( _∅_ )) = ( _**c**_ _[deg]_ 0 )0 1 _−_ 1 0( _f_ [ˆ] ( _∅_ )) = 0.
+
+
+Inductive step (assume _k −_ 1). Let **1** _k−_ 1 _∈_ B [2] _[k][−]_ [1] denote the all ones vector. Recall from the proof
+of Lemma B.1 that _**q**_ = [ _**q**_ _x_ ¯ _k_ _,_ _**q**_ _xk_ _−_ _**q**_ _x_ ¯ _k_ ] [⊺], where _**q**_ _xk_ _∈_ Z [2] _[k][−]_ [1] and _**q**_ _x_ ¯ _k_ _∈_ Z [2] _[k][−]_ [1] are the MP vectors
+
+
+21
+
+
+of the positive and negative cofactor of _**q**_ with respect to _xk_, respectively. For _**q**_ _∈_ Z [2] _[k]_ we have,
+
+
+_C_ ( _**q**_ ) = _∥_ _**q**_ _∥_ 0 _,_ _**c**_ _degk_ (57)
+
+    -     -     = ( _**c**_ _[deg]_ _k_ ) _I_ ( _S_ ) 1 _−_ 1 0( _f_ [ˆ] ( _S_ )) (58)
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+     -     -     = ( _**c**_ _[deg]_ _k−_ 1 [)] _[I]_ [(] _[S]_ [)] 1 _−_ 1 0( _f_ [ˆ] ( _S_ ))
+
+_S∈P_ ( _{_ 1 _,...,k−_ 1 _}_ )
+
+
++ 
+
+_S∈P_ ( _{_ 1 _,...,k−_ 1 _}_ )
+
+
+- �� ( _**c**_ _[deg]_ _k−_ 1 [)] _[I]_ [(] _[S]_ [)][ + 1] 1 _−_ 1 0( _f_ [ˆ] ( _S ∪{k}_ )) (59)
+
+
+= _∥_ _**q**_ _x_ ¯ _k_ _∥_ 0 _,_ _**c**_ _degk−_ 1 [+] _[ ∥]_ _**[q]**_ _[x][k]_ _[−]_ _**[q]**_ _[x]_ [¯] _[k]_ _[∥]_ [0] _[,]_ _**[c]**_ _[deg]_ _k−_ 1 [+] _[ ∥]_ _**[q]**_ _[x][k]_ _[−]_ _**[q]**_ _[x]_ [¯] _[k]_ _[∥]_ [0] _[,]_ **[1]** _[k][−]_ [1] _[.]_ (60)
+
+
+Where, by the inductive hypothesis, the first term corresponds to summing the degree of each
+monomial in _**q**_ not containing _xk_, and the second term corresponds to summing the degree _minus_
+_one_ of each monomial in _**q**_ containing _xk_ . The third term corresponds to the sum of monomials
+in _**q**_ containing _xk_ . Hence, the second and third term correspond to summing the degree of each
+monomial in _**q**_ containing _xk_ .
+
+
+**Theorem C.1** (Linear constraints determine a _σ_ equivalence class) **.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be an_ _MP,_ _**f**_ =
+_σ_ ( _Sk_ _**p**_ ) _∈_ B [2] _[k]_ _,_ _**b**_ = **1** _k −_ 2 _**f**_ _∈_ Z [2] _[k]_ _, and A_ = 2(diag( _**b**_ ) _Sk_ ) _∈_ Z [2] _[k][×]_ [2] _[k]_ _, where Sk_ _∈_ B [2] _[k][×]_ [2] _[k]_ _is the_
+_k-th Sierpi´nski matrix,_ **1** _k_ _∈_ B [2] _[k]_ _denotes the all ones vector, and σ is the Heaviside step function._
+_Then, for_ _MP_ _**q**_ _∈_ Z [2] _[k]_ _,_
+
+
+_**q**_ _∈_ [ _**p**_ ] _σ_ _⇐⇒_ _A_ _**q**_ _≤_ _**b**_ _._ (61)
+
+
+_Proof._ Let _**g**_ = _Sk_ _**q**_ _∈_ Z [2] _[k]_ . We begin by expanding the expression _A_ _**q**_ _≤_ _**b**_ :
+
+
+_A_ _**q**_ _≤_ _**b**_
+_≡_ 2(diag( _**b**_ ) _Sk_ ) _**q**_ _≤_ **1** _k −_ 2 _**f**_ (62)
+_≡_ 2 _·_ diag( _**b**_ ) _Sk_ _**q**_ _≤_ **1** _k −_ 2 _**f**_ (63)
+_≡_ 2 _·_ diag( **1** _k −_ 2 _**f**_ ) _**g**_ _≤_ **1** _k −_ 2 _**f**_ (64)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_g_ ( _**a**_ (0))
+_g_ ( _**a**_ (1))
+...
+_g_ ( _**a**_ (2 _k−_ 1))
+
+
+ _≤_
+
+
+
+
+
+1 _−_ 2 _f_ ( _**a**_ (0))
+1 _−_ 2 _f_ ( _**a**_ (1))
+...
+1 _−_ 2 _f_ ( _**a**_ (2 _k−_ 1))
+
+
+
+
+
+
+
+
+_≡_ 2 _·_
+
+
+_≡_ 2 _·_
+
+
+
+
+
+
+
+
+1 _−_ 2 _f_ ( _**a**_ (0)) 0 _· · ·_ 0
+0 1 _−_ 2 _f_ ( _**a**_ (1)) _· · ·_ 0
+... ... ... ...
+0 0 _· · ·_ 1 _−_ 2 _f_ ( _**a**_ (2 _k−_ 1))
+
+
+(1 _−_ 2 _f_ ( _**a**_ (0))) _g_ ( _**a**_ (0))
+(1 _−_ 2 _f_ ( _**a**_ (1))) _g_ ( _**a**_ (1))
+...
+(1 _−_ 2 _f_ ( _**a**_ (2 _k−_ 1))) _g_ ( _**a**_ (2 _k−_ 1))
+
+
+(65)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ _≤_
+
+
+
+
+
+1 _−_ 2 _f_ ( _**a**_ (0))
+1 _−_ 2 _f_ ( _**a**_ (1))
+...
+1 _−_ 2 _f_ ( _**a**_ (2 _k−_ 1))
+
+
+ (66)
+
+
+_≡∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_ �2(1 _−_ 2 _f_ ( _**a**_ ( _i_ ))) _g_ ( _**a**_ ( _i_ )) _≤_ 1 _−_ 2 _f_ ( _**a**_ ( _i_ ))� _._ (67)
+
+
+We next derive an equivalence for _**q**_ _∈_ [ _**p**_ ] _σ_ in terms of the _k_ -th Sierpi´nski matrix:
+
+
+_**q**_ _∈_ [ _**p**_ ] _σ_ _≡_ _**p**_ _∼σ_ _**q**_ (68)
+
+_≡∀_ _**x**_ _∈_ B _[k]_ [�] ( _σ ◦_ _p_ )( _**x**_ ) = ( _σ ◦_ _q_ )( _**x**_ )� (69)
+
+
+                  -                   _≡∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_ _σ_ (( _Sk_ _**p**_ ) _i_ ) = _σ_ (( _Sk_ _**q**_ ) _i_ ) (70)
+
+
+                  -                   _≡∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_ ( _σ_ ( _Sk_ _**p**_ )) _i_ = _σ_ (( _Sk_ _**q**_ ) _i_ ) (71)
+
+
+_≡∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_          - _f_ ( _**a**_ ( _i_ )) = _σ_ ( _g_ ( _**a**_ ( _i_ )))� _._ (72)
+
+
+22
+
+
+We now show both directions.
+**1.** **(** _**q**_ _∈_ [ _**p**_ ] _σ_ = _⇒_ _A_ _**q**_ _≤_ _**b**_ **):** If _**q**_ _∈_ [ _**p**_ ] _σ_, then by Equation 72,
+
+
+_∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_           - _f_ ( _**a**_ ( _i_ )) = _σ_ ( _g_ ( _**a**_ ( _i_ )))� _._ (73)
+
+
+Since _f_ ( _**a**_ ( _i_ )) _∈_ B, either _f_ ( _**a**_ ( _i_ )) = 0 or _f_ ( _**a**_ ( _i_ )) = 1. Taking _f_ ( _**a**_ ( _i_ )) = 0, we have _σ_ ( _g_ ( _**a**_ ( _i_ ))) = 0
+which implies _g_ ( _**a**_ ( _i_ )) _≤_ 0 and that 2 _g_ ( _**a**_ ( _i_ )) _≤_ 1 as _g_ ( _**a**_ ( _i_ )) _∈_ Z. Taking _f_ ( _**a**_ ( _i_ )) = 1, we have
+_σ_ ( _g_ ( _**a**_ ( _i_ ))) = 1 which implies _g_ ( _**a**_ ( _i_ )) _>_ 0 and that 2 _g_ ( _**a**_ ( _i_ )) _≥_ 1 as _g_ ( _**a**_ ( _i_ )) _∈_ Z. Consequently,
+
+
+_∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_  - _f_ ( _**a**_ ( _i_ )) = _σ_ ( _g_ ( _**a**_ ( _i_ )))�
+
+= _⇒∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_ �2(1 _−_ 2 _f_ ( _**a**_ ( _i_ ))) _g_ ( _**a**_ ( _i_ )) _≤_ 1 _−_ 2 _f_ ( _**a**_ ( _i_ ))� _._ (74)
+
+
+By Equation 67 we conclude _A_ _**q**_ _≤_ _**b**_ .
+
+
+**2.** **(** _A_ _**q**_ _≤_ _**b**_ = _⇒_ _**q**_ _∈_ [ _**p**_ ] _σ_ **):** If _A_ _**q**_ _≤_ _**b**_, then by Equation 67,
+
+
+_∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_ �2(1 _−_ 2 _f_ ( _**a**_ ( _i_ ))) _g_ ( _**a**_ ( _i_ )) _≤_ 1 _−_ 2 _f_ ( _**a**_ ( _i_ ))� _._ (75)
+
+
+Since _f_ ( _**a**_ ( _i_ )) _∈_ B, either _f_ ( _**a**_ ( _i_ )) = 0 or _f_ ( _**a**_ ( _i_ )) = 1. Taking _f_ ( _**a**_ ( _i_ )) = 0, we have 2 _g_ ( _**a**_ ( _i_ )) _≤_ 1
+which implies _g_ ( _**a**_ ( _i_ )) _≤_ 0 as _g_ ( _**a**_ ( _i_ )) _∈_ Z, meaning _σ_ ( _g_ ( _**a**_ ( _i_ ))) = 0 = _f_ ( _**a**_ ( _i_ )). Taking _f_ ( _**a**_ ( _i_ )) = 1,
+we have 2 _g_ ( _**a**_ ( _i_ )) _≥_ 1 which implies _g_ ( _**a**_ ( _i_ )) _≥_ 1 as _g_ ( _**a**_ ( _i_ )) _∈_ Z, meaning _σ_ ( _g_ ( _**a**_ ( _i_ ))) = 1 = _f_ ( _**a**_ ( _i_ )).
+Consequently,
+
+
+_∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_ �2(1 _−_ 2 _f_ ( _**a**_ ( _i_ ))) _g_ ( _**a**_ ( _i_ )) _≤_ 1 _−_ 2 _f_ ( _**a**_ ( _i_ ))�
+
+= _⇒∀i ∈{_ 0 _,_ 1 _, . . .,_ 2 _[k]_ _−_ 1 _}_         - _f_ ( _**a**_ ( _i_ )) = _σ_ ( _g_ ( _**a**_ ( _i_ )))� _._ (76)
+
+
+By Equation 72 we conclude _**q**_ _∈_ [ _**p**_ ] _σ_ .
+
+
+_Remark_ C.1 _._ Lemma C.2 and Theorem C.1 allow us to formulate the MMP problem as an _ℓ_ 0-norm
+optimization problem. These problems are known to be non-convex and NP-hard (Feng et al., 2013),
+so it is not possible to use conventional convex optimization methods to find optimal solutions.
+However, as it is common in optimization problems, by relaxing the norm from _ℓ_ 0 to _ℓ_ 1, the cost
+functions specified in Lemma C.2 become _∥_ _**q**_ _∥_ 1 _,_ _**c**_ = _∥_ _**c**_ _⊙_ _**q**_ _∥_ 1, resulting in a convex optimization
+problem.
+
+_Example_ C.5 _._ Let _**p**_ = [0 _,_ 1 _,_ 1 _, −_ 1] [⊺] be a MP vector, and _Cℓ_ : Z [2] _[k]_ _→_ N0 be a cost function with
+specification _Cℓ_ ( _**q**_ ) = _∥_ _**q**_ _∥ℓ,_ _**c**_ _unik_ . Following Theorem C.1, we can compute _**b**_ = ( **1** _k_ _−_ 2 _σ_ ( _Sk_ _**p**_ ))
+and _A_ = 2(diag( _**b**_ ) _Sk_ ):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_**b**_ =
+
+
+
+
+
+1
+
+_−_ 1
+
+_−_ 1
+
+_−_ 1
+
+
+
+
+
+2 0 0 0
+
+_−_ 2 _−_ 2 0 0
+
+_−_ 2 0 _−_ 2 0
+
+_−_ 2 _−_ 2 _−_ 2 _−_ 2
+
+
+ _._
+
+
+ _,_ _A_ =
+
+
+The MP vector that minimizes _C_ 0( _**q**_ ) such that _A_ _**q**_ _≤_ _**b**_ is _**q**_ = [0 _,_ 1 _,_ 1 _,_ 0] [⊺] . It also minimizes _C_ 1( _**q**_ ).
+
+_Example_ C.6 _._ Let _**p**_ = [1 _, −_ 1 _,_ 0 _,_ 1] [⊺] be a MP vector, and _Cℓ_ : Z [2] _[k]_ _→_ N0 be a cost function with
+specification _Cℓ_ ( _**q**_ ) = _∥_ _**q**_ _∥ℓ,_ _**c**_ _degk_ [.] [Following][ Theorem C.1][, we can compute] _**[ b]**_ [=] [(] **[1]** _[k]_ _[−]_ [2] _[σ]_ [(] _[S][k]_ _**[p]**_ [))]
+and _A_ = 2(diag( _**b**_ ) _Sk_ ):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_**b**_ =
+
+
+
+
+
+_−_ 1
+1
+
+_−_ 1
+
+_−_ 1
+
+
+
+
+
+_−_ 2 0 0 0
+2 2 0 0
+
+_−_ 2 0 _−_ 2 0
+
+_−_ 2 _−_ 2 _−_ 2 _−_ 2
+
+
+ _,_ _A_ =
+
+
+ _._
+
+
+The MP vector that minimizes _C_ 0( _**q**_ ) such that _A_ _**q**_ _≤_ _**b**_ is _**q**_ = [1 _, −_ 1 _, −_ 1 _,_ 0] [⊺] . It also minimizes
+_C_ 1( _**q**_ ).
+
+**Corollary C.1** (Obtaining an MMP representation of a BF) **.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be the_ _MP of_ _BF f_ : B _[k]_ _→_ B _,_
+_**f**_ = _Sk_ _**p**_ _∈_ B [2] _[k]_ _,_ _**b**_ = _**1**_ _k −_ 2 _**f**_ _∈_ Z [2] _[k]_ _, and A_ = 2(diag( _**b**_ ) _Sk_ ) _∈_ Z [2] _[k][×]_ [2] _[k]_ _, where Sk_ _∈_ B [2] _[k][×]_ [2] _[k]_ _is the_
+_k-th Sierpi´nski matrix,_ _**1**_ _k_ _∈_ B [2] _[k]_ _denotes the all ones vector, and σ_ _is the Heaviside step function._
+_Moreover, let C_ : Z [2] _[k]_ _→_ N0 _have specification C_ ( _**q**_ ) = _∥_ _**c**_ _⊙_ _**q**_ _∥_ 1 _, where_ _**c**_ _∈_ Z [2] _[k]_ _._ _Then the set of_
+
+
+23
+
+
+_MMP representations of f_ _with respect to C_ _is equal to the solution set of the following integer linear_
+_program:_
+
+
+_minimize_ _C_ ( _**q**_ ) _,_ (77)
+_**q**_ _∈_ Z [2] _[k]_
+
+
+_subject to_ _A_ _**q**_ _≤_ _**b**_ _._ (78)
+
+
+_Proof._ This statement follows from Theorem C.1.
+
+
+_Remark_ C.2 (Runtime analysis for obtaining an MMP representation of a BF) _._ 0-1 integer linear
+programming, the decision problem in which variables are restricted to take on values in B and
+only the constraints must be satisfied, is NP-complete (Karp, 1972). This implies integer linear
+programming, the problem we solve to obtain an MMP representation of a BF, is NP-hard. We can also
+observe that the number of variables, constraints, and possible coefficient values in the program all
+grow according to _O_ (2 _[k]_ ).
+
+
+Due to the problem being NP-hard, we bound the time complexity by considering a brute-force search
+for an MMP under a model of computation in which addition, multiplication, inequality checking,
+and computing the absolute value and indicator function all cost unit time. Let _**q**_ _∈_ Z [2] _[k]_, where
+_**q**_ _i_ _∈Q_ = _{−_ 2 _[k][−]_ [1] _, . . .,_ 2 _[k][−]_ [1] _}_ _⊆_ Z, meaning _**q**_ _i_ can take on _|Q|_ = 2 _[k]_ + 1 possible values.
+Evaluating _A_ _**q**_ _≤_ _**b**_ from Corollary C.1, to check if _**q**_ is a feasible point, requires 2 [2] _[k]_ [+1] units of
+time. Moreover, computing cost function _∥·∥_ 0 _,_ _**c**_ or _∥·∥_ 1 _,_ _**c**_ requires 2 _[k]_ [+1] + 2 _[k]_ _−_ 1 units of time.
+Consequently, a brute-force search over all _|Q|_ [2] _[k]_ MMP candidates, checking feasibility with _A_ _**q**_ _≤_ _**b**_
+and solution cost with either _∥·∥_ 0 _,_ _**c**_ or _∥·∥_ 1 _,_ _**c**_, requires time
+
+
+_T_ mpToMMP( _k_ ) = _|Q|_ [2] _[k]_ _·_ (2 [2] _[k]_ [+1] + 2 _[k]_ [+1] + 2 _[k]_ _−_ 1) (79)
+
+= (2 _[k]_ + 1) [2] _[k]_ _·_ (2 [2] _[k]_ [+1] + 2 _[k]_ [+1] + 2 _[k]_ _−_ 1) (80)
+
+_≤_ (2 _[k]_ + 2 _[k]_ ) [2] _[k]_ _·_ (2 [2] _[k]_ [+1] _·_ 2 [2] _[k]_ [+1] ) (81)
+
+= (2 _[k]_ [+1] ) [2] _[k]_ _·_ 2 [2] _[k]_ [+2] (82)
+
+= 2 _[k]_ [2] _[k]_ [+2] _[k]_ _·_ 2 [2] _[k]_ [+2] (83)
+
+= 2 _[k]_ [2] _[k]_ [+2] _[k]_ [+2] _[k]_ [+2] (84)
+
+= 2 _[O]_ [(] _[k]_ [2] _[k]_ [)] (85)
+
+
+We note that while relaxing _∥·∥_ 0 _,_ _**c**_ to _∥·∥_ 1 _,_ _**c**_ does not reduce the asymptotic time complexity, in
+practice it allows for the use of branch and bound algorithms that make use of linear program
+subroutines over the reals. These algorithms tend to find solutions significantly faster than brute-force
+search. Such a relaxation can however lead to suboptimal solutions. We discuss this point further
+in Appendix C.1. We add that another relaxation would be to remove integer constraints, solve the
+resulting linear program, and then round the solution coefficients to the nearest integer. This would
+provide an algorithm with time complexity polynomial in 2 _[k]_ . However, since this kind of relaxation
+can lead to infeasible solutions that would break functional equivalence, we did not consider it.
+
+
+C.1 SUBOPTIMALITY OF _ℓ_ 1-RELAXATION IN MMP PROBLEMS
+
+
+The weighted zero-norms _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _unik_ and _∥_ _**p**_ _∥_ 0 _,_ _**c**_ _degk_ correspond to the number of neurons and (layer
+
+one) connections in the two-layer NN representation of MP _**p**_ _∈_ Z [2] _[k]_ . Consequently, given that our
+objective is to find NN representations of BNs with as few neurons and connections as possible, we
+would like to find MMP representations of BFs that minimize these cost functions.
+
+
+However, in Remark C.2, we saw that, in the worst case, solving such an optimization problem
+requires a brute-force search, which is computationally intractable even for small _k_ _∈_ N0. This
+motivated the relaxation to the weighted one-norm _∥·∥_ 1 _,_ _**c**_ in our formulation of MMPs.
+
+
+While a theoretical analysis of the consequences of this relaxation lies beyond the scope of this work,
+we discuss some preliminary investigations on the topic of solution suboptimality.
+
+
+24
+
+
+Table 2: The number (and percentage) of BFs for which the proposition in Equation 86 is true.
+
+
+_**c**_ _[uni]_ _**c**_ _[deg]_
+
+
+_k_ # BFs Count (%) Count (%)
+
+
+2 16 0 0 _._ 0 0 0 _._ 0
+3 256 0 0 _._ 0 0 0 _._ 0
+4 65536 180 0 _._ 3 557 0 _._ 8
+
+
+Table 3: _**c**_ _[uni]_ 4 - and _**c**_ _[deg]_ 4 -weighted zero- and one-norms for MP vector _**p**_ 0x635A _∈_ Z [2][4] and its corresponding MMP vector _**p**_ 0x635A _∈_ Z [2][4] .
+
+
+_**c**_ _[uni]_ _**c**_ _[deg]_
+
+_∥·∥_ 0 _,_ _**c**_ _uni_ 4 _∥·∥_ 1 _,_ _**c**_ _uni_ 4 _∥·∥_ 0 _,_ _**c**_ _deg_ 4 _∥·∥_ 1 _,_ _**c**_ _deg_ 4
+_**p**_ 0x635A 10 16 21 38
+
+_**p**_ _[′]_ 0x635A 11 14 23 30
+
+
+Difference -1 2 -2 8
+
+
+Particularly, we consider the following question. Let _**p**_ _[′]_ _∈_ [ _**p**_ ] _σ_ be an MMP of MP _**p**_ _∈_ Z [2] _[k]_ w.r.t. the
+_**c**_ -weighted one-norm _∥·∥_ 1 _,_ _**c**_, where _**c**_ _∈{_ _**c**_ _[uni]_ _,_ _**c**_ _[deg]_ _}_ . Is the following proposition ever true?
+
+_∥_ _**p**_ _∥_ 1 _,_ _**c**_ _> ∥_ _**p**_ _[′]_ _∥_ 1 _,_ _**c**_ _∧∥_ _**p**_ _∥_ 0 _,_ _**c**_ _< ∥_ _**p**_ _[′]_ _∥_ 0 _,_ _**c**_ _._ (86)
+
+
+That is, by optimizing the MP representation of the BF w.r.t. the weighted one-norm, we increase the
+value of the weighted zero-norm. In such a case, for the purposes of NN compression, we should
+choose the MP over the MMP. (Note that the results reported do not do this, selecting MMPs based on the
+value of the weighted one-norm). By iterating over all BFs for _k_ _∈{_ 2 _,_ 3 _,_ 4 _}_, we are able to answer
+this question in the affirmative. See Table 2. We find that this proposition is not true (for the MMPs
+found) for all BFs with _k_ = 2 and _k_ = 3 inputs. However, there is a small fraction of BFs with _k_ = 4
+inputs for which this proposition is true. We report one such function below.
+
+
+Let _f_ 0x635A : B [4] _→_ B be the BF with truth table 0x635A. The MP representation of _f_ 0x635A is
+
+
+_p_ 0x635A( _x_ 1 _, x_ 2 _, x_ 3 _, x_ 4) = _x_ 4 + _x_ 3 + _x_ 1 _−_ 2 _x_ 3 _x_ 4 _−_ _x_ 2 _x_ 4 _−_ _x_ 1 _x_ 4 _−_ 2 _x_ 1 _x_ 3
++ 2 _x_ 2 _x_ 3 _x_ 4 + 3 _x_ 1 _x_ 3 _x_ 4 _−_ 2 _x_ 1 _x_ 2 _x_ 3 _x_ 4 _._ (87)
+
+
+The sets of MMP representations of _f_ 0x635A with respect to _∥·∥_ 1 _,_ _**c**_ _uni_ 4 and _∥·∥_ 1 _,_ _**c**_ _deg_ 4 have the following
+polynomial in their intersection
+
+
+_p_ _[′]_ 0x635A [(] _[x]_ [1] _[, x]_ [2] _[, x]_ [3] _[, x]_ [4][) = +] _[x]_ [4] [+] _[ x]_ [3] [+] _[ x]_ [1] _[−]_ [2] _[x]_ [3] _[x]_ [4] _[−]_ _[x]_ [2] _[x]_ [4] [+] _[ x]_ [2] _[x]_ [3] _[−]_ [2] _[x]_ [1] _[x]_ [3]
++ _x_ 2 _x_ 3 _x_ 4 + 2 _x_ 1 _x_ 3 _x_ 4 _−_ _x_ 1 _x_ 2 _x_ 4 _−_ _x_ 1 _x_ 2 _x_ 3 _._ (88)
+
+
+We report the weighted zero- and one-norms of the corresponding MP and MMP vectors in Table 3.
+We see that under the _**c**_ _[uni]_ criterion, the MMP reduces the weighted one-norm by 2, but increases the
+weighted zero-norm by 1, and that under the _**c**_ _[deg]_ criterion, the MMP reduces the weighted one-norm
+by 8, but increases the weighted zero-norm by 2. Hence, the weighted one-norm MMP is suboptimal
+in comparison to the original MP in terms of the weighted zero-norm. In regard to the two-layer NN
+representation of MMP _p_ _[′]_ 0x635A [, it would have one additional neuron and two additional connections]
+in its first layer in comparison to the two-layer NN representation of MP _p_ 0x635A.
+
+
+We conclude this brief investigation by noting that there are many interesting questions in this
+direction that remain unanswered, such as the effect of MMP selection based on the weighted zeronorm (instead of the weighted one-norm) when considering the NN optimization algorithms optAll
+and optMaintainDepth, and, as pointed out by a reviewer, the consideration of alternative
+approximation methods for the weighted zero-norm MMP optimization problem.
+
+
+25
+
+
+D OBJECTIVE-AWARE OPTIMIZATION USING NPN CLASSES
+
+
+**Definition** **D.1** (NPN transformation) **.** A Negation-Permutation-Negation (NPN) transformation _τ_
+of a Boolean function (BF) (F = B) or multilinear polynomial (MP) (F = Z) is the composition
+of an input phase assignment _τϕ_, an input permutation _τπ_, and an output polarity assignment _τν_,
+where _ϕ_ _⊆{_ 1 _, . . ., k}_, _i_ _∈_ _ϕ_ if and only if _xi_ has negative phase (i.e., _xi_ is to be negated),
+_π_ : _{_ 1 _, . . ., k}_ _→{_ 1 _, . . ., k}_ is a bijection, _ν_ _∈_ B, and _ν_ = 1 if and only if the output polarity is
+negative (i.e., the function output is to be negated). Applying NPN transformation _τ_ to vector _**p**_ _∈_ F [2] _[k]_
+
+is denoted _τ_ ( _**p**_ ) = ( _τν ◦_ _τπ ◦_ _τϕ_ )( _**p**_ ), where _τν, τπ, τϕ_ : F [2] _[k]_ _→_ F [2] _[k]_ . Whereas applying transformation
+_τ_ to function _p_ : F _[k]_ _→_ F is denoted _p_ _◦_ _τ_ = _τν ◦_ _p_ _◦_ _τπ ◦_ _τϕ_, where _τπ, τϕ_ : F _[k]_ _→_ F _[k]_ and _τν_ : F _→_ F.
+
+
+_Remark_ D.1 _._ Let _f_ : B [3] _→_ B be a BF in variables _x_ 1 _, x_ 2 _, x_ 3. An input phase assignment corresponds
+to selecting a subset of variables in _f_ to negate. For example, the selection _ϕ_ = _{_ 2 _,_ 3 _}_ corresponds to
+_g_ = _f_ ( _x_ 1 _,_ ¯ _x_ 2 _,_ ¯ _x_ 3). We say that the phase of _x_ 2 and _x_ 3 in _g_ are negative w.r.t. _f_, whereas the phase
+of _x_ 1 is positive w.r.t. _f_ . Similarly, an output polarity assignment corresponds to selecting whether to
+negate the output of _f_ . For example, the selection _ν_ = 1 corresponds to _h_ = _f_ [¯] ( _x_ 1 _, x_ 2 _, x_ 3). We say
+that the polarity of _h_ is negative w.r.t. _f_, whereas the polarity of _g_ is positive w.r.t. _f_ .
+
+
+**Definition D.2** (NPN equivalent) **.** BFs _**f**_ _,_ _**g**_ _∈_ B [2] _[k]_ are NPN equivalent, denoted _**f**_ _≡_ NPN _**g**_, if there
+exists an NPN transformation _τ_ such that _τ_ ( _**f**_ ) = _**g**_ .
+
+
+**Definition D.3** (NPN equivalence class) **.** The NPN equivalence class of BF _**f**_ _∈_ B [2] _[k]_, denoted [ _**f**_ ]NPN,
+is the set _{_ _**g**_ _∈_ B [2] _[k]_ _|_ _**f**_ _≡_ NPN _**g**_ _}_ .
+
+
+**Definition D.4** (NPN canonical form) **.** The NPN canonical form of BF _**f**_ _∈_ B [2] _[k]_, denoted _κ_ ( _**f**_ ), is a
+mapping _κ_ : B [2] _[k]_ _→_ B [2] _[k]_ that satisfies the following conditions:
+
+
+1. _κ_ ( _**f**_ ) _∈_ [ _**f**_ ]NPN,
+
+
+2. _∀_ _**g**_ _∈_ [ _**f**_ ]NPN� _κ_ ( _**g**_ ) = _κ_ ( _**f**_ )�.
+
+
+Note that the second condition implies that the NPN canonical form of a BF is a unique representative
+of the NPN equivalence class. We denote _κ_ ( _**f**_ ) as _κ_ _**f**_ _∈_ B [2] _[k]_, and the MP of _κ_ _**f**_ as _κ_ _**p**_ _∈_ Z [2] _[k]_ .
+
+
+_Remark_ D.2 _._ There are 2 _[k]_ [+1] _k_ ! NPN transformations for _k_ -input BFs, as there are 2 _[k]_ possible input
+phase assignments, _k_ ! possible input permutations, and 2 possible output polarity assignments. Hence,
+an NPN equivalence class contains at most 2 _[k]_ [+1] _k_ ! BFs.
+_Remark_ D.3 _._ The MP representations of BFs ¯ _x_ 1, _x_ 1 _∧_ _x_ 2, and _x_ 1 _∨_ _x_ 2 are 1 _−_ _x_ 1, _x_ 1 _x_ 2, and _x_ 1 + _x_ 2 _−_
+_x_ 1 _x_ 2, respectively.
+
+**Lemma D.1** (Cofactors of an MP vector) **.** _Let i_ _∈{_ 1 _, . . ., k}, p_ : Z _[k]_ _→_ Z _be an_ _MP, and pxi, px_ ¯ _i_ :
+Z _[k][−]_ [1] _→_ Z _be the positive and negative cofactors of p with respect to xi, respectively._ _Then the_ _MP_
+_vectors_ _**p**_ _xi,_ _**p**_ _x_ ¯ _i_ _∈_ Z [2] _[k][−]_ [1] _of pxi_ _and px_ ¯ _i_ _are given by the following expressions_
+
+
+_**p**_ _xi_ = 
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+_**p**_ _x_ ¯ _i_ = 
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _**χ**_ _S,_ (89)
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S._ (90)
+
+
+_Proof._ Following the definition of an MP as a linear combination of logical AND functions, we have
+
+
+_p_ ( _**x**_ ) = 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+=  
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ ) _,_ (92)
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ ) (91)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ ) + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+26
+
+
+where we use _P_ ( _{_ 1 _, . . ., k} \ {i}_ ) to denote _P_ ( _{_ 1 _, . . ., k}_ ) _\ P_ ( _{_ 1 _, . . ., k} \ {i}_ ). Thus,
+_pxi_ = _p_ ( _. . ., xi_ = 1 _, . . ._ ) (93)
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _. . ., xi_ = 1 _, . . ._ ) + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _. . ., xi_ = 1 _, . . ._ ) + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _. . ., xi_ = 1 _, . . ._ )
+
+
+(94)
+
+_f_ ˆ( _S_ ) _χS\{i}_ ( _. . ., xi_ = 1 _, . . ._ )
+
+
+(95)
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _χS_ ( _. . ., xi_ = 1 _, . . ._ ) _,_ (96)
+
+
+and
+_pxi_ = _p_ ( _. . ., xi_ = 0 _, . . ._ ) (97)
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _. . ., xi_ = 0 _, . . ._ ) + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _. . ., xi_ = 0 _, . . ._ )
+
+
+(98)
+
+
+_f_ ˆ( _S_ ) _χS_ ( _. . ., xi_ = 0 _, . . ._ ) _._ (99)
+
+
+**Lemma D.2** ( _τϕi_ acting on an MP vector) **.** _Let p ∈_ Z _[k]_ _→_ Z _be an_ _MP with_ _MP vector_ _**p**_ _∈_ Z [2] _[k]_ _, and_
+_ϕi_ = _{i} ⊆{_ 1 _, . . ., k}._ _Then the_ _MP vector τϕi_ ( _**p**_ ) _∈_ Z [2] _[k]_ _is given by the expression_
+
+
+_τϕi_ ( _**p**_ ) = 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _**χ**_ _S_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+- _−_ _f_ [ˆ] ( _S_ )� _**χ**_ _S._ (100)
+
+
+_Proof._ Following Boole’s expansion theorem,
+( _p ◦_ _τϕi_ )( _**x**_ ) = _p_ ( _τϕi_ ( _**x**_ )) (101)
+= (1 _−_ _xi_ ) _pxi_ ( _**x**_ ) + _xipx_ ¯ _i_ ( _**x**_ ) (102)
+
+= _pxi_ ( _**x**_ ) +           - _px_ ¯ _i_ ( _**x**_ ) _−_ _pxi_ ( _**x**_ )� _xi._ (103)
+Substituting for the cofactors according to Lemma D.1, we have
+( _p ◦_ _τϕi_ )( _**x**_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
++ - 
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _χS_ ( _**x**_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ ) _−_ 
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _χS_ ( _**x**_ )� _xi_ (104)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
++ - 
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _χS_ ( _**x**_ )
+
+
+ - _−_ _f_ [ˆ] ( _S ∪{i}_ )� _χS_ ( _**x**_ )� _xi_ (105)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _χS_ ( _**x**_ ) + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+- _−_ _f_ [ˆ] ( _S_ )� _χS_ ( _**x**_ ) _._ (106)
+
+
+**Lemma** **D.3** ( _τπ_ acting on an MP vector) **.** _Let_ _p_ _∈_ Z _[k]_ _→_ Z _be_ _an_ _MP_ _with_ _MP_ _vector_ _**p**_ _∈_ Z [2] _[k]_ _,_
+_and π_ : _{_ 1 _, . . ., k}_ _→{_ 1 _, . . ., k} be a bijection._ _Then the_ _MP vector τπ_ ( _**p**_ ) _∈_ Z [2] _[k]_ _is given by the_
+_expression_
+
+
+_τπ_ ( _**p**_ ) = - _f_ ˆ( _π_ _[−]_ [1] ( _S_ )) _**χ**_ _S._ (107)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+27
+
+
+_Proof._
+
+
+( _p ◦_ _τπ_ )( _**x**_ ) = _p_ ( _τπ_ ( _**x**_ )) (108)
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _τπ_ ( _**x**_ )) (109)
+
+
+_f_ ˆ( _S_ ) _χπ_ ( _S_ )( _**x**_ ) (110)
+
+
+_f_ ˆ( _π_ _[−]_ [1] ( _S_ )) _χS_ ( _**x**_ ) _._ (111)
+
+
+**Lemma D.4** ( _τν_ acting on an MP vector) **.** _Let p ∈_ Z [2] _[k]_ _be an_ _MP with_ _MP vector_ _**p**_ _∈_ Z [2] _[k]_ _, and ν_ = 1 _._
+_Then the_ _MP vector τν_ ( _**p**_ ) _∈_ Z [2] _[k]_ _is given by the expression_
+
+
+_τν_ ( _**p**_ ) = �1 _−_ _f_ [ˆ] ( _∅_ )� _**χ**_ _∅_ + - - _−_ _f_ [ˆ] ( _S_ )� _**χ**_ _S._ (112)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\∅_
+
+
+_Proof._
+
+
+( _τν_ _◦_ _p_ )( _**x**_ ) = 1 _−_ _p_ ( _**x**_ ) (113)
+
+
+= 1 _−_ - 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ )� (114)
+
+
+= 1 _−_ - _f_ ˆ( _∅_ ) _χ∅_ ( _**x**_ ) + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\∅_
+
+= �1 _−_ _f_ [ˆ] ( _∅_ )� _χ∅_ ( _**x**_ ) + 
+
+
+_f_ ˆ( _S_ ) _χS_ ( _**x**_ )� (115)
+
+
+ - _−_ _f_ [ˆ] ( _S_ )� _χS_ ( _**x**_ ) _._ (116)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\∅_
+
+
+Where the final equality holds since _χ∅_ ( _**x**_ ) = 1.
+
+
+_Example_ D.1 _._ Let _f_ ( _x_ 1 _, x_ 2 _, x_ 3) = ( _x_ 1 _∧_ _x_ 2) _∨_ _x_ 3. The MP representation of _f_ is _p_ ( _x_ 1 _, x_ 2 _, x_ 3) =
+_x_ 3 + _x_ 1 _x_ 2 _−_ _x_ 1 _x_ 2 _x_ 3, and the MP vector of _f_ is
+
+
+_**p**_ = 
+
+_S∈P_ ( _{_ 1 _,_ 2 _,_ 3 _}_ )
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_
+
+
+=   - _f_ ˆ( _∅_ ) _,_ _f_ ˆ( _{_ 1 _}_ ) _,_ _f_ ˆ( _{_ 2 _}_ ) _,_ _f_ ˆ( _{_ 1 _,_ 2 _}_ ) _,_ _f_ ˆ( _{_ 3 _}_ ) _,_ _f_ ˆ( _{_ 1 _,_ 3 _}_ ) _,_ _f_ ˆ( _{_ 2 _,_ 3 _}_ ) _,_ _f_ ˆ( _{_ 1 _,_ 2 _,_ 3 _}_ )�⊺
+
+= [0 _,_ 0 _,_ 0 _,_ 1 _,_ 1 _,_ 0 _,_ 0 _, −_ 1] [⊺] _._
+
+
+Following Lemma D.2, _τϕ_ 3( _**p**_ ) _∈_ Z [2][3] is equal to
+
+
+_τϕ_ 3( _**p**_ ) = 
+
+_S∈P_ ( _{_ 1 _,_ 2 _,_ 3 _}\{_ 3 _}_ )
+
+
+- _f_ ˆ( _S_ ) + _f_ ˆ( _S ∪{i}_ )� _**χ**_ _S_ + - - _−_ _f_ [ˆ] ( _S_ )� _**χ**_ _S_ (117)
+
+
+_S∈P_ ( _{_ 1 _,_ 2 _,_ 3 _}\{_ 3 _}_ )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1
+0
+0
+0
+
+_−_ 1
+0
+0
+1
+
+
+_,_ (118)
+
+
+=
+
+
+
+
+
+_f_ ˆ( _∅_ ) + _f_ ˆ( _∅∪{_ 3 _}_ )
+_f_ ˆ( _{_ 1 _}_ ) + _f_ ˆ( _{_ 1 _} ∪{_ 3 _}_ )
+_f_ ˆ( _{_ 2 _}_ ) + _f_ ˆ( _{_ 2 _} ∪{_ 3 _}_ )
+_f_ ˆ( _{_ 1 _,_ 2 _}_ ) + _f_ ˆ( _{_ 1 _,_ 2 _} ∪{_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 1 _,_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 2 _,_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 1 _,_ 2 _,_ 3 _}_ )
+
+
+=
+
+
+
+
+
+(0) + (1)
+(0) + (0)
+(0) + (0)
+(1) + ( _−_ 1)
+
+_−_ (1)
+
+_−_ (0)
+
+_−_ (0)
+
+_−_ ( _−_ 1)
+
+
+=
+
+
+which corresponds to the MP ( _p◦τϕ_ 3)( _x_ 1 _, x_ 2 _, x_ 3) = (1 _−x_ 3)+ _x_ 1 _x_ 2 _−x_ 1 _x_ 2(1 _−x_ 3) = 1 _−x_ 3+ _x_ 1 _x_ 2 _x_ 3.
+
+
+28
+
+
+Let _π_ 231 = - 12 23 31 - be a permutation with inverse _π_ 231 _[−]_ [1] [=] _[ π]_ [312] [=] - 13 21 32 �. Following Lemma D.3,
+_τπ_ 231( _**p**_ ) _∈_ Z [2][3] is equal to
+
+
+_τπ_ 231( _**p**_ ) = 
+
+_S∈P_ ( _{_ 1 _,_ 2 _,_ 3 _}_ )
+
+
+_f_ ˆ( _π_ 231 _[−]_ [1] [(] _[S]_ [))] _**[χ]**_ _S_ (119)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+=
+
+
+
+
+
+_π_ 312( _f_ [ˆ] ( _∅_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 1 _}_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 2 _}_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 1 _,_ 2 _}_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 3 _}_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 1 _,_ 3 _}_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 2 _,_ 3 _}_ ))
+_π_ 312( _f_ [ˆ] ( _{_ 1 _,_ 2 _,_ 3 _}_ ))
+
+
+=
+
+
+
+
+
+_f_ ˆ( _∅_ )
+_f_ ˆ( _{_ 3 _}_ )
+_f_ ˆ( _{_ 1 _}_ )
+_f_ ˆ( _{_ 1 _,_ 3 _}_ )
+_f_ ˆ( _{_ 2 _}_ )
+_f_ ˆ( _{_ 2 _,_ 3 _}_ )
+_f_ ˆ( _{_ 1 _,_ 2 _}_ )
+_f_ ˆ( _{_ 1 _,_ 2 _,_ 3 _}_ )
+
+
+=
+
+
+
+
+
+0
+1
+0
+0
+0
+0
+1
+
+_−_ 1
+
+
+_,_ (120)
+
+
+which corresponds to the MP ( _p ◦_ _τπ_ 231)( _x_ 1 _, x_ 2 _, x_ 3) = _x_ 1 + _x_ 2 _x_ 3 _−_ _x_ 1 _x_ 2 _x_ 3.
+
+Lastly, let _ν_ = 1. Following Lemma D.4, _τν_ ( _**p**_ ) _∈_ Z [2][3] is equal to
+
+
+_τν_ ( _**p**_ ) = �1 _−_ _f_ [ˆ] ( _∅_ )� _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,_ 2 _,_ 3 _}_ ) _\∅_
+
+
+- _−_ _f_ [ˆ] ( _S_ )� _**χ**_ _S_ (121)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1
+0
+0
+
+_−_ 1
+
+_−_ 1
+0
+0
+1
+
+
+_,_ (122)
+
+
+
+
+
+1 _−_ (0)
+
+_−_ (0)
+
+_−_ (0)
+
+_−_ (1)
+
+_−_ (1)
+
+_−_ (0)
+
+_−_ (0)
+
+_−_ ( _−_ 1)
+
+
+=
+
+
+=
+
+
+
+
+
+1 _−_ _f_ [ˆ] ( _∅_ )
+_−f_ [ˆ] ( _{_ 1 _}_ )
+_−f_ [ˆ] ( _{_ 2 _}_ )
+_−f_ [ˆ] ( _{_ 1 _,_ 2 _}_ )
+_−f_ [ˆ] ( _{_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 1 _,_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 2 _,_ 3 _}_ )
+_−f_ [ˆ] ( _{_ 1 _,_ 2 _,_ 3 _}_ )
+
+
+=
+
+
+which corresponds to the MP ( _τν_ _◦_ _p_ )( _x_ 1 _, x_ 2 _, x_ 3) = 1 _−_ ( _x_ 3 + _x_ 1 _x_ 2 _−_ _x_ 1 _x_ 2 _x_ 3) = 1 _−_ _x_ 3 _−_ _x_ 1 _x_ 2 +
+_x_ 1 _x_ 2 _x_ 3.
+_Remark_ D.4 (Linear algebra perspective) _._ Let _**p**_ _∈_ Z [2] _[k]_ be an MP vector, _ϕi_ = _{i}_ _⊆{_ 1 _, . . ., k}_,
+_π, π_ 1 _↔i_ : _{_ 1 _, . . ., k} →{_ 1 _, . . ., k}_ be bijections, where _π_ 1 _↔i_ represents the transposition (1 _, i_ ), and
+_ν_ = 1. Lemmas D.2, D.3, and D.4 respectively show
+
+
+    _τϕi_ ( _**p**_ ) = _Pπ_ 1 _↔i_
+
+
+- _OIkk−−_ 11 _,,_ _−IIkk−−_ 11� _Pπ_ 1 _↔i_ - _**p**_ _,_ (123)
+
+
+_τπ_ ( _**p**_ ) = _Pπ_ _**p**_ _,_ (124)
+
+
+    - 1
+_τν_ ( _**p**_ ) =
+**0** 2 _k−_ 1
+
+
+_−_ _**p**_ _,_ (125)
+
+
+where **0** 2 _k−_ 1 _∈_ B [2] _[k][−]_ [1], _Ok−_ 1 _∈_ B [2] _[k][−]_ [1] _[×]_ [2] _[k][−]_ [1], and _Ik−_ 1 _∈_ B [2] _[k][−]_ [1] _[×]_ [2] _[k][−]_ [1] denote the all zeros vector, all
+zeros matrix, and identity matrix, respectively, and _Pπ, Pπ_ 1 _↔i_ _∈_ B [2] _[k][×]_ [2] _[k]_ denote permutation matrices. We see _τϕi_ (in turn _τϕ_ ) and _τπ_ are linear transformations, whereas _τν_ is an affine transformation.
+
+
+_Remark_ D.5 (Time complexity of computing NPN transformations) _._ If _**p**_ _∈_ Z [2] _[k]_ is stored in memory
+as a tensor of shape (2 _, . . .,_ 2), then computing _τπ_ ( _**p**_ ) requires time _O_ ( _k_ ) from permuting tensor
+
+          - ��          _k_
+
+indices. Computing _τϕi_ ( _**p**_ ) requires time _O_ ( _k_ ) + _O_ (2 _[k]_ ) + _O_ ( _k_ ) = _O_ (2 _[k]_ ) from (i) tensor index
+transposition, (ii) adding the bottom half of _**p**_ to the top half ( _O_ (2 _[k][−]_ [1] )) and then sign flipping the
+bottom half ( _O_ (2 _[k][−]_ [1] )), and (iii) tensor index transposition. Lastly, computing _τν_ ( _**p**_ ) requires time
+_O_ (2 _[k]_ ) from vector addition.
+
+
+29
+
+
+D.1 COMPUTING INVERSE NPN TRANSFORMATIONS
+
+
+**Lemma D.5** (Commutability of _τν_ and _τπ_ ) **.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be an MP vector, ν_ _∈_ B _and π_ : _{_ 1 _, . . ., k} →_
+_{_ 1 _, . . ., k} be a bijection._ _Then_ ( _τν_ _◦_ _τπ_ )( _**p**_ ) = ( _τπ ◦_ _τν_ )( _**p**_ ) _._
+
+
+_Proof._ If _ν_ = 0, then _τν_ = _Id._ and the statement is clearly true. We now consider the case where
+_ν_ = 1. Under the functional perspective of _τ_, the statement is equivalent to showing _τν_ _◦_ ( _p ◦_ _τπ_ ) =
+( _τν_ _◦_ _p_ ) _◦_ _τπ_, where _p_ : Z _[k]_ _→_ Z is an MP, which holds by associativity of function composition. The
+statement also follows from Lemmas D.3 and D.4,
+
+
+( _τν_ _◦_ _τπ_ )( _**p**_ ) = _τν_ - 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _π_ _[−]_ [1] ( _S_ )) _**χ**_ _S_ - (126)
+
+
+= _τν_ - _f_ ˆ( _π_ _[−]_ [1] ( _∅_ )) _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ( _π_ _[−]_ [1] ( _S_ )) _**χ**_ _S_ - (127)
+
+
+= _τν_ - _f_ ˆ( _∅_ ) _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ( _π_ _[−]_ [1] ( _S_ )) _**χ**_ _S_ - (128)
+
+
+= (1 _−_ _f_ [ˆ] ( _∅_ )) _**χ**_ _∅_ +      - ( _−f_ [ˆ] ( _π_ _[−]_ [1] ( _S_ ))) _**χ**_ _S_ (129)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+( _τπ ◦_ _τν_ )( _**p**_ ) = _τπ_ �(1 _−_ _f_ [ˆ] ( _∅_ )) _**χ**_ _∅_ + - ( _−f_ [ˆ] ( _S_ )) _**χ**_ _S_ - (130)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= _τπ_ �( _f_ [ˆ] _[′]_ ( _∅_ )) _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+= _f_ [ˆ] _[′]_ ( _π_ _[−]_ [1] ( _∅_ )) _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ - (131)
+
+
+_f_ ˆ _[′]_ ( _π_ _[−]_ [1] ( _S_ )) _**χ**_ _S_ (132)
+
+
+= _f_ [ˆ] _[′]_ ( _∅_ ) _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ _[′]_ ( _π_ _[−]_ [1] ( _S_ )) _**χ**_ _S_ (133)
+
+
+= (1 _−_ _f_ [ˆ] ( _∅_ )) _**χ**_ _∅_ +             - ( _−f_ [ˆ] ( _π_ _[−]_ [1] ( _S_ ))) _**χ**_ _S_ (134)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+**Lemma D.6** (Commutability of _τν_ and _τϕ_ ) **.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be an_ _MP vector, ν_ _∈_ B _, and ϕ ⊆{_ 1 _, . . ., k}._
+_Then_ ( _τν_ _◦_ _τϕ_ )( _**p**_ ) = ( _τϕ ◦_ _τν_ )( _**p**_ ) _._
+
+
+_Proof._ We begin by noting that _τϕ_ = _τϕ_ 1 _◦· · · ◦_ _τϕk_, where _τϕi_ = _τ{i}_ if _i_ _∈_ _ϕ_, and _τϕi_ = _Id._ if
+_i_ _∈/_ _ϕ_ . Now, to prove the statement of the lemma, it suffices to show ( _τν ◦_ _τϕi_ )( _**p**_ ) = ( _τϕi ◦_ _τν_ )( _**p**_ ). If
+_ν_ = 0 or _i_ _∈/_ _ϕ_, then either _τν_ = _Id._ or _τϕi_ = _Id._, and the statement is clearly true. We now consider
+the case where _ν_ = 1 and _i ∈_ _ϕ_ . Under the functional perspective of _τ_, the statement is equivalent to
+showing _τν_ _◦_ ( _p ◦_ _τϕi_ ) = ( _τν_ _◦_ _p_ ) _◦_ _τϕi_, where _p_ : Z _[k]_ _→_ Z, which holds by associativity of function
+composition. The statement also follows from Lemmas D.2 and D.4,
+
+
+30
+
+
+( _τν_ _◦_ _τϕi_ )( _**p**_ )
+
+
+= _τν_ - 
+
+
+ - ( _−f_ [ˆ] ( _S_ )) _**χ**_ _S_  - (135)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+ - ( _f_ [ˆ] ( _S_ ) + _f_ [ˆ] ( _S ∪{i}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+  = _τν_ ( _f_ [ˆ] ( _∅_ ) + _f_ [ˆ] ( _∅∪{i}_ )) _**χ**_ _∅_
+
+
++ 
+
+
+ - ( _f_ [ˆ] ( _S_ ) + _f_ [ˆ] ( _S ∪{i}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+ - ( _−f_ [ˆ] ( _S_ )) _**χ**_ _S_  - (136)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= _τν_ - _f_ ˆ _[′]_ ( _∅_ ) _**χ**_ _∅_
+
+
++ 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+= (1 _−_ _f_ [ˆ] _[′]_ ( _∅_ )) _**χ**_ _∅_
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ - (137)
+
+
++ 
+
+
+ - ( _−f_ [ˆ] _[′]_ ( _S_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+ - ( _−f_ [ˆ] _[′]_ ( _S_ )) _**χ**_ _S_ (138)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= (1 _−_ ( _f_ [ˆ] ( _∅_ ) + _f_ [ˆ] ( _∅∪{i}_ ))) _**χ**_ _∅_
+
+
++ 
+
+
+ - ( _−_ ( _f_ [ˆ] ( _S_ ) + _f_ [ˆ] ( _S ∪{i}_ ))) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+ - ( _−_ ( _−f_ [ˆ] ( _S_ ))) _**χ**_ _S_ (139)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= (1 _−_ _f_ [ˆ] ( _∅_ ) _−_ _f_ [ˆ] ( _∅∪{i}_ ))) _**χ**_ _∅_
+
+
++ 
+
+
+ - ( _−f_ [ˆ] ( _S_ ) _−_ _f_ [ˆ] ( _S ∪{i}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ (140)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+( _τϕi_ _◦_ _τν_ )( _**p**_ )
+
+= _τϕi_ �(1 _−_ _f_ [ˆ] ( _∅_ )) _**χ**_ _∅_ +  - ( _−f_ [ˆ] ( _S_ )) _**χ**_ _S_  - (141)
+
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= _τϕi_ - _f_ ˆ _[′]_ ( _∅_ ) _**χ**_ _∅_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+= _τϕi_ - _f_ ˆ _[′]_ ( _∅_ ) _**χ**_ _∅_ + 
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ - (142)
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ - (143)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+= ( _f_ [ˆ] _[′]_ ( _∅_ ) + _f_ [ˆ] _[′]_ ( _∅∪{i}_ )) _**χ**_ _∅_
+
+
++ 
+
+
+ - ( _f_ [ˆ] _[′]_ ( _S_ ) + _f_ [ˆ] _[′]_ ( _S ∪{i}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+ - ( _−f_ [ˆ] _[′]_ ( _S_ )) _**χ**_ _S_ (144)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= ((1 _−_ _f_ [ˆ] ( _∅_ )) + ( _−_ 1 _·_ _f_ [ˆ] ( _∅∪{i}_ ))) _**χ**_ _∅_
+
+
++ 
+
+
+ - (( _−f_ [ˆ] ( _S_ )) + ( _−f_ [ˆ] ( _S ∪{i}_ ))) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+ - ( _−_ ( _−f_ [ˆ] ( _S_ ))) _**χ**_ _S_
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= (1 _−_ _f_ [ˆ] ( _∅_ ) _−_ _f_ [ˆ] ( _∅∪{i}_ )) _**χ**_ _∅_
+
+
++ 
+
+
+ - ( _−f_ [ˆ] ( _S_ ) _−_ _f_ [ˆ] ( _S ∪{i}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ ) _\{∅}_
+
+
+(145)
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ (146)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+**Lemma** **D.7** (Rearrangement of _τπ_ and _τϕ_ ) **.** _Let_ _**p**_ _∈_ Z [2] _[k]_ _be_ _an_ _MP_ _vector,_ _ϕ_ _⊆{_ 1 _, . . ., k},_ _and_
+_π_ : _{_ 1 _, . . ., k} →{_ 1 _, . . ., k} be a bijection._ _Then_ ( _τϕ ◦_ _τπ−_ 1)( _**p**_ ) = ( _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ))( _**p**_ ) _._
+
+
+31
+
+
+_Proof._ We begin by noting that _τϕ_ = _τϕ_ 1 _◦· · ·◦τϕk_, where _τϕi_ = _τ{i}_ if _i ∈_ _ϕ_, and _τϕi_ = _Id._ if _i_ _∈/_ _ϕ_ .
+Now, to prove the statement of the lemma, it suffices to show ( _τϕi ◦_ _τπ−_ 1)( _**p**_ ) = ( _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) _π_ ( _i_ ))( _**p**_ ).
+If _i_ _∈/_ _ϕ_, then _π_ ( _i_ ) _∈/_ _π_ ( _ϕ_ ), _τϕi_ = _Id._, _τπ_ ( _ϕ_ ) _π_ ( _i_ ) = _Id._, and the statement is clearly true. We now
+consider the case where _i ∈_ _ϕ_, which implies _π_ ( _i_ ) _∈_ _π_ ( _ϕ_ ).
+
+
+( _τϕi_ _◦_ _τπ−_ 1)( _**p**_ )
+
+
+= _τϕi_ - 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+= _τϕi_ - 
+
+_S∈P_ ( _{_ 1 _,...,k}_ )
+
+
+_f_ ˆ( _π_ ( _S_ )) _**χ**_ _S_ - (147)
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ - (148)
+
+
+= 
+
+
+ - ( _f_ [ˆ] _[′]_ ( _S_ ) + _f_ [ˆ] _[′]_ ( _S ∪{i}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+ - ( _−f_ [ˆ] _[′]_ ( _S_ )) _**χ**_ _S_ (149)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+ - ( _f_ [ˆ] ( _π_ ( _S_ )) + _f_ [ˆ] ( _π_ ( _S ∪{i}_ ))) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+
+ - ( _−f_ [ˆ] ( _π_ ( _S_ ))) _**χ**_ _S_ (150)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+= 
+
+
+ - ( _f_ [ˆ] ( _π_ ( _S_ )) + _f_ [ˆ] ( _π_ ( _S_ ) _∪{π_ ( _i_ ) _}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+ - ( _−f_ [ˆ] ( _π_ ( _S_ ))) _**χ**_ _S_
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+(151)
+
+
+( _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) _π_ ( _i_ ))( _**p**_ )
+
+
+   -   = _τπ−_ 1
+
+
+ - ( _−f_ [ˆ] ( _S_ )) _**χ**_ _S_  
+
+_S∈P_ ( _{_ 1 _,...,k}\{π_ ( _i_ ) _}_ )
+
+
+ - ( _f_ [ˆ] ( _S_ ) + _f_ [ˆ] ( _S ∪{π_ ( _i_ ) _}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{π_ ( _i_ ) _}_ )
+
+
+   -   = _τπ−_ 1
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{π_ ( _i_ ) _}_ )
+
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{π_ ( _i_ ) _}_ )
+
+
+(152)
+
+_f_ ˆ _[′]_ ( _S_ ) _**χ**_ _S_ - (153)
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{π_ ( _i_ ) _}_ )
+
+
+_f_ ˆ _[′]_ ( _π_ ( _S_ )) _**χ**_ _S_ + - _f_ ˆ _[′]_ ( _π_ ( _S_ )) _**χ**_ _S_ (154)
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{π_ ( _i_ ) _}_ )
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ _[′]_ ( _π_ ( _S_ )) _**χ**_ _S_ + 
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+_f_ ˆ _[′]_ ( _π_ ( _S_ )) _**χ**_ _S_ (155)
+
+
+= 
+
+
+ - ( _f_ [ˆ] ( _π_ ( _S_ )) + _f_ [ˆ] ( _π_ ( _S_ ) _∪{π_ ( _i_ ) _}_ )) _**χ**_ _S_ +  
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+ - ( _−f_ [ˆ] ( _π_ ( _S_ ))) _**χ**_ _S_
+
+
+_S∈P_ ( _{_ 1 _,...,k}\{i}_ )
+
+
+(156)
+
+
+Equation 156 holds since _i_ _∈/_ _S_ = _⇒_ _π_ ( _i_ ) _∈/_ _π_ ( _S_ ) and _i ∈_ _S_ = _⇒_ _π_ ( _i_ ) _∈_ _π_ ( _S_ ).
+
+
+**Theorem D.1** (Inverse NPN transformation) **.** _Let τ_ = _τν_ _◦_ _τπ_ _◦_ _τϕ_ _be an_ _NPN transformation._ _Then_
+_τ_ _[−]_ [1] = _τν_ _◦_ _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) _._
+
+
+_Proof._
+
+
+_τ_ _[−]_ [1] = _τϕ_ _[−]_ [1] _◦_ _τπ_ _[−]_ [1] _◦_ _τν_ _[−]_ [1] (157)
+
+= _τϕ ◦_ _τπ−_ 1 _◦_ _τν_ (Boolean algebra) (158)
+= _τϕ ◦_ _τν_ _◦_ _τπ−_ 1 (Lemma D.5) (159)
+= _τν_ _◦_ _τϕ ◦_ _τπ−_ 1 (Lemma D.6) (160)
+= _τν_ _◦_ _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) (Lemma D.7) (161)
+
+
+32
+
+
+D.2 RELATING NPN AND _σ_ EQUIVALENCE CLASSES
+
+
+**Lemma D.8.** _Let_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs, and_ _**p**_ _[′]_ _∈_ [ _**p**_ ] _σ._ _Then_
+
+
+_∀_ _**x**_ _∈_ B _[k]_ [�] _q_ ( _**x**_ ) _· σ_          - _p_ _[′]_ ( _**x**_ )� = _σ_          - _q_ ( _**x**_ ) _· p_ _[′]_ ( _**x**_ )� [�] _._ (162)
+
+
+_Proof._ If _q_ ( _**x**_ ) = 0, then 0 = 0. If _q_ ( _**x**_ ) = 1, then _σ_ - _p_ _[′]_ ( _**x**_ )� = _σ_ - _p_ _[′]_ ( _**x**_ )�.
+
+
+**Lemma D.9.** _Let_ _**p**_ _,_ _**q**_ _,_ _**r**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs,_ _**p**_ _[′]_ _∈_ [ _**p**_ ] _σ_ _and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ._ _Then_
+
+
+_∀_ _**x**_ _∈_ B _[k]_ [�] _σ_   - _r_ ( _**x**_ ) _· p_ _[′]_ ( _**x**_ )� + _σ_   - _r_ ¯( _**x**_ ) _· q_ _[′]_ ( _**x**_ )� = _σ_   - _r_ ( _**x**_ ) _· p_ _[′]_ ( _**x**_ ) + ¯ _r_ ( _**x**_ ) _· q_ _[′]_ ( _**x**_ )� [�] _,_ (163)
+
+
+_where_ ¯ _r_ ( _**x**_ ) = 1 _−_ _r_ ( _**x**_ ) _._
+
+
+_Proof._ The expression is akin to a 2-1 multiplexer, where _r_ acts as a select line. If _r_ ( _**x**_ ) = 0, then
+_σ_ - _q_ _[′]_ ( _**x**_ )� = _σ_ - _q_ _[′]_ ( _**x**_ )�. If _r_ ( _**x**_ ) = 1, then _σ_ - _p_ _[′]_ ( _**x**_ )� = _σ_ - _p_ _[′]_ ( _**x**_ )�.
+
+
+**Lemma** **D.10** (Relating _∼σ_ and _τϕi_ ) **.** _Let_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs_ _of_ _BFs_ _such_ _that_ _**p**_ = _τϕi_ ( _**q**_ ) _,_ _where_
+_ϕi_ = _{i} ⊆{_ 1 _, . . ., k}, and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ._ _Then τϕi_ ( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ._
+
+
+_Proof._
+
+
+                      _**p**_ = _τϕi_ ( _**q**_ ) _⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = (1 _−_ _xi_ ) _qxi_ ( _**x**_ ) + _xiqx_ ¯ _i_ ( _**x**_ ) (164)
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = (1 _−_ _xi_ ) _σ_    - _qx_ _[′]_ _i_ [(] _**[x]**_ [)]    - + _xiσ_    - _qx_ _[′]_ ¯ _i_ [(] _**[x]**_ [)]    - [�] ( _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ_ ) (165)
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = _σ_ �(1 _−_ _xi_ ) _qx_ _[′]_ _i_ [(] _**[x]**_ [)]    - + _σ_    - _xiqx_ _[′]_ ¯ _i_ [(] _**[x]**_ [)]    - [�] (Lemma D.8) (166)
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = _σ_ �(1 _−_ _xi_ ) _qx_ _[′]_ _i_ [(] _**[x]**_ [) +] _[ x][i][q]_ _x_ _[′]_ ¯ _i_ [(] _**[x]**_ [)]    - [�] (Lemma D.9) (167)
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _σ_    - _p_ ( _**x**_ )� = _σ_ �(1 _−_ _xi_ ) _qx_ _[′]_ _i_ [(] _**[x]**_ [) +] _[ x][i][q]_ _x_ _[′]_ ¯ _i_ [(] _**[x]**_ [)]    - [�] (168)
+
+_⇒_ _**p**_ _∼σ_ _τϕi_ ( _**q**_ _[′]_ ) (169)
+
+
+**Lemma** **D.11** (Relating _∼σ_ and _τπ_ ) **.** _Let_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs_ _of_ _BFs_ _such_ _that_ _**p**_ = _τπ_ ( _**q**_ ) _,_ _where_
+_π_ : _{_ 1 _, . . ., k} →{_ 1 _, . . ., k} is a bijection, and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ._ _Then τπ_ ( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ._
+
+
+_Proof._
+
+
+                  _**p**_ = _τπ_ ( _**q**_ ) _⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = _q_ ( _τπ_ ( _**x**_ )) (170)
+
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = _σ_      - _q_ _[′]_ ( _τπ_ ( _**x**_ ))� [�] ( _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ_ ) (171)
+
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _σ_      - _p_ ( _**x**_ )� = _σ_      - _q_ _[′]_ ( _τπ_ ( _**x**_ ))� [�] (172)
+
+
+_⇒_ _**p**_ _∼σ_ _τπ_ ( _**q**_ _[′]_ ) (173)
+
+
+33
+
+
+**Lemma D.12** (Relating _∼σ_ and _τν_ ) **.** _Let_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs such that_ _**p**_ = _τν_ ( _**q**_ ) _, where ν_ = 1 _,_
+_and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ._ _Then τν_ ( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ._
+
+
+_Proof._
+
+
+                  _**p**_ = _τν_ ( _**q**_ ) _⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = 1 _−_ _q_ ( _**x**_ ) (174)
+
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = 1 _−_ _σ_      - _q_ _[′]_ ( _**x**_ )� [�] ( _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ_ ) (175)
+
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _p_ ( _**x**_ ) = _σ_ �1 _−_ _q_ _[′]_ ( _**x**_ )� [�] (176)
+
+
+_⇒∀_ _**x**_ _∈_ B _[k]_ [�] _σ_      - _p_ ( _**x**_ )� = _σ_ �1 _−_ _q_ _[′]_ ( _**x**_ )� [�] (177)
+
+
+_⇒_ _**p**_ _∼σ_ _τν_ ( _**q**_ _[′]_ ) (178)
+
+
+To prove Equation 176 holds, it suffices to consider the two cases where _q_ _[′]_ ( _**x**_ ) _>_ 0 and _q_ _[′]_ ( _**x**_ ) _≤_ 0. If
+_q_ _[′]_ ( _**x**_ ) _>_ 0, then _q_ ( _**x**_ ) = 1 and _p_ ( _**x**_ ) = 0. Since _q_ _[′]_ ( _**x**_ ) _∈_ Z, 1 _−_ _q_ _[′]_ ( _**x**_ ) _≤_ 0 and hence _σ_ �1 _−_ _q_ _[′]_ ( _**x**_ )� =
+0 = _p_ ( _**x**_ ). If _q_ _[′]_ ( _**x**_ ) _≤_ 0, then _q_ ( _**x**_ ) = 0 and _p_ ( _**x**_ ) = 1. Since _q_ _[′]_ ( _**x**_ ) _∈_ Z, 1 _−_ _q_ _[′]_ ( _**x**_ ) _>_ 0 and hence
+_σ_ �1 _−_ _q_ _[′]_ ( _**x**_ )� = 1 = _p_ ( _**x**_ ).
+
+
+**Theorem D.2** (NPN transformations between _σ_ equivalence classes) **.** _Let_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs such_
+_that_ _**p**_ = _τ_ ( _**q**_ ) _, where τ_ = _τν_ _◦_ _τπ ◦_ _τϕ is an_ _NPN transformation, and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ._ _Then τ_ ( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ._
+
+
+_Proof._ We begin by noting that _τϕ_ = _τϕ_ 1 _◦· · · ◦_ _τϕk_, where _τϕi_ = _τ{i}_ if _i_ _∈_ _ϕ_, and _τϕi_ = _Id._ if
+_i_ _∈/_ _ϕ_ . Let _**q**_ 1 = _τϕ_ ( _**q**_ ), _**q**_ 2 = _τπ_ ( _**q**_ 1), and _**q**_ 3 = _τν_ ( _**q**_ 2). Then
+
+_**q**_ 1 _∼σ_ _τϕ_ ( _**q**_ _[′]_ ) = _**q**_ _[′]_ 1 _[,]_ (Lemma D.10) (179)
+
+_**q**_ 2 _∼σ_ _τπ_ ( _**q**_ _[′]_ 1 [) =] _[ τ][π]_ [(] _[τ][ϕ]_ [(] _**[q]**_ _[′]_ [)) =] _**[ q]**_ 2 _[′]_ _[,]_ (Lemma D.11) (180)
+
+_**q**_ 3 _∼σ_ _τν_ ( _**q**_ _[′]_ 2 [) =] _[ τ][ν]_ [(] _[τ][π]_ [(] _[τ][ϕ]_ [(] _**[q]**_ _[′]_ [))) =] _**[ q]**_ 3 _[′]_ _[.]_ (Lemma D.12) (181)
+
+Since, _**p**_ = _**q**_ 3, _**p**_ _∼σ_ ( _τν_ _◦_ _τπ ◦_ _τϕ_ )( _**q**_ _[′]_ ) = _τ_ ( _**q**_ _[′]_ ).
+
+
+34
+
+
+D.3 COMPUTING MMPS WITH NPN TRANSFORMATIONS
+
+
+**Definition** **D.5** (PN-invariant criterion) **.** Let _**p**_ _∈_ Z [2] _[k]_ be an MP, _ν_ _∈_ B and _π_ : _{_ 1 _, . . ., k}_ _→_
+_{_ 1 _, . . ., k}_ be a bijection. A criterion vector _**c**_ _∈_ Z [2] _[k]_ is PN-invariant if
+_∥_ _**c**_ _⊙_ _**p**_ _∥_ 1 = _∥_ _**c**_ _⊙_ ( _τν_ _◦_ _τπ_ )( _**p**_ ) _∥_ 1 _._ (182)
+
+**Lemma D.13** (Uniform criterion is PN-invariant) **.** _Let k_ _∈_ N0 _._ _**c**_ _[uni]_ _k_ _is PN-invariant._
+
+
+_Proof._
+
+
+_∥_ _**c**_ _[uni]_ _k_ _⊙_ _**p**_ _∥_ 1 = ��� _**c**_ _unik_ _⊙_ - _f_ ˆ( _∅_ ) _**χ**_ _∅_ + 
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ ����1 (183)
+
+
+= ���
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ ���1 (184)
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+�� _f_ ˆ( _S_ )�� (185)
+
+
+Let _ν_ = 1 (a similar argument can be used to prove the case where _ν_ = 0, and hence _τν_ = _Id._ ).
+_∥_ _**c**_ _[uni]_ _k_ _⊙_ ( _τν_ _◦_ _τπ_ )( _**p**_ ) _∥_ 1
+
+= ��� _**c**_ _unik_ _⊙_ �(1 _−_ _f_ [ˆ] ( _∅_ )) _**χ**_ _∅_ +      - ( _−f_ [ˆ] ( _π_ _[−]_ [1] ( _S_ ))) _**χ**_ _S_ ����1 (186)
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+= ���      - ( _−f_ [ˆ] ( _π_ _[−]_ [1] ( _S_ ))) _**χ**_ _S_ ���1 (187)
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+�� _−_ _f_ ˆ( _π−_ 1( _S_ ))�� (188)
+
+
+�� _f_ ˆ( _S_ )�� (189)
+
+
+**Lemma D.14** (Degree criterion is PN-invariant) **.** _Let k_ _∈_ N0 _._ _**c**_ _[deg]_ _k_ _is PN-invariant._
+
+
+_Proof._
+
+
+_∥_ _**c**_ _[deg]_ _k_ _⊙_ _**p**_ _∥_ 1 = ��� _**c**_ _degk_ _⊙_ - _f_ ˆ( _∅_ ) _**χ**_ _∅_ + 
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+_f_ ˆ( _S_ ) _**χ**_ _S_ ����1 (190)
+
+
+= ��� - ( _|S| ·_ _f_ [ˆ] ( _S_ )) _**χ**_ _S_ ���1 (191)
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+�� _|S| ·_ _f_ ˆ( _S_ )�� (192)
+
+
+Let _ν_ = 1 (a similar argument can be used to prove the case where _ν_ = 0, and hence _τν_ = _Id._ ).
+
+_∥_ _**c**_ _[deg]_ _k_ _⊙_ ( _τν_ _◦_ _τπ_ )( _**p**_ ) _∥_ 1
+
+= ��� _**c**_ _degk_ _⊙_ �(1 _−_ _f_ [ˆ] ( _∅_ )) _**χ**_ _∅_ +      - ( _−f_ [ˆ] ( _π_ _[−]_ [1] ( _S_ ))) _**χ**_ _S_ ����1 (193)
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+= ���      - ( _−|S| ·_ _f_ [ˆ] ( _π_ _[−]_ [1] ( _S_ ))) _**χ**_ _S_ ���1 (194)
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+= 
+
+_S∈P_ ( _{_ 1 _,...,k}_ ) _\{∅}_
+
+
+�� _−|S| ·_ _f_ ˆ( _π−_ 1( _S_ ))�� (195)
+
+
+�� _|S| ·_ _f_ ˆ( _S_ )�� (196)
+
+
+35
+
+
+**Theorem D.3** (Computing MMPs with NPN transformations under PN-invariant criterions) **.** _Let_ _**c**_ _∈_ Z [2] _[k]_
+
+_be a PN-invariant criterion,_ _**p**_ _,_ _**q**_ _∈_ Z [2] _[k]_ _be_ _MPs of_ _BFs such that_ _**p**_ = ( _τν ◦_ _τπ_ )( _**q**_ ) _, and_ _**q**_ _[′]_ _∈_ [ _**q**_ ] _σ_ _be an_
+
+_MMP with respect to criterion_ _**c**_ _._ _Then_ _**p**_ _[′]_ = ( _τν_ _◦_ _τπ_ )( _**q**_ _[′]_ ) _∈_ [ _**p**_ ] _σ_ _is an_ _MMP with respect to criterion_ _**c**_ _._
+
+
+_Proof._ If _**q**_ _[′]_ is an MMP with respect to criterion _**c**_, then
+
+
+_**q**_ _[′]_ _∈_ arg min _C_ ( _**r**_ ) = arg min _∥_ _**c**_ _⊙_ _**r**_ _∥_ 1 _._ (197)
+_**r**_ _∈_ [ _**q**_ ] _σ_ _**r**_ _∈_ [ _**q**_ ] _σ_
+
+
+Moreover, since _**c**_ is PN-invariant, we have
+
+
+_∥_ _**c**_ _⊙_ _**q**_ _[′]_ _∥_ 1 = _∥_ _**c**_ _⊙_ ( _τν_ _◦_ _τπ_ )( _**q**_ _[′]_ ) _∥_ 1 = _∥_ _**c**_ _⊙_ _**p**_ _[′]_ _∥_ 1 = _α,_ (198)
+
+and by Theorem D.2 _**p**_ _[′]_ _∈_ [ _**p**_ ] _σ_ . We claim _**p**_ _[′]_ _∈_ arg min _**r**_ _∈_ [ _**p**_ ] _σ_ _∥_ _**c**_ _⊙_ _**r**_ _∥_ 1.
+
+Suppose, for sake of contradiction, _**p**_ _[′]_ _∈/_ arg min _**r**_ _∈_ [ _**p**_ ] _σ_ _∥_ _**c**_ _⊙_ _**r**_ _∥_ 1, then there exists _**p**_ **ˆ** _∈_ [ _**p**_ ] _σ_ such that
+_∥_ _**c**_ _⊙_ _**p**_ **ˆ** _∥_ 1 _< α_ . Let _**q**_ **ˆ** = ( _τπ_ _[−]_ [1] _◦_ _τν_ _[−]_ [1][)(] _**[p]**_ **[ˆ]** [) = (] _[τ][ν]_ _[◦]_ _[τ]_ _π_ _[−]_ [1][)(] _**[p]**_ **[ˆ]** [)][, where the second equality holds due to]
+Theorem D.1. Following Theorem D.2, _**q**_ **ˆ** _∈_ [ _**q**_ ] _σ_, and since _**c**_ is PN-invariant, we have
+
+
+_∥_ _**c**_ _⊙_ _**p**_ **ˆ** _∥_ 1 = _∥_ _**c**_ _⊙_ ( _τν_ _◦_ _τπ−_ 1)( _**p**_ **ˆ** ) _∥_ 1 = _∥_ _**c**_ _⊙_ _**q**_ **ˆ** _∥_ 1 _< α,_ (199)
+
+which is a contradiction, as we assumed _**q**_ _[′]_ _∈_ arg min _**r**_ _∈_ [ _**q**_ ] _σ_ _∥_ _**c**_ _⊙_ _**r**_ _∥_ 1.
+
+
+36
+
+
+**Algorithm 1:** MP- and MMP-based technology mapping with NPN classes
+
+
+**Input:** BN _GF_ = ( _V, E_ ) and vertex labeling function _ψF_ : _V_ _→F_, where _F_ = _∪_ _[K]_ _k_ =1 [B][2] _[k]_
+
+
+**Output:** Functions _ψF_ _**[p]**_ _[′][, ψ]_ _F_ _**[p]**_ _[′]_
+
+
+_F_ _**[p]**_ _[′]_ [:] _[ V]_ _[→F]_ _[′]_ [, where] _[ F]_ _[′]_ [=] _[ ∪][K]_ _k_ =1 [Z][2] _[k]_
+
+
+**Function :** techMapNPN( _GF_, _ψF_ )
+
+
+**1** Initialize _ψF_ _**[p]**_ _[′]_ _[←∅]_ [and] _[ ψ]_ _F_ _**[p]**_ _[′]_
+
+
+**2** **for** _k_ _←_ 0 **to** _K_ **do**
+
+
+_F_ _[′]_ _[←∅]_
+
+
+**3** _C_ _←_ npnClassify( _GF_, _ψF_, _k_ ) // Compute NPN classes
+
+**4** **for** _each NPN class Cκ_ _**f**_ = _{_ ( _**f**_ _i, τi_ _[−]_ [1] ) _|_ _**f**_ _i_ = _τi_ _[−]_ [1] ( _κ_ _**f**_ ) _} ∈_ _C_ **do**
+
+**5** _κ_ _**p**_ _←_ ttToMP( _κ_ _**f**_ ) // Compute MP of NPN canonical form
+
+
+**6** **for** _each unique permuted phase assignment subset_
+_Sπ_ ( _ϕ_ ) = _{_ ( _**f**_ _, τ_ _[−]_ [1] ) _∈_ _Cκ_ _**f**_ _| τ_ _[−]_ [1] = _τν_ _◦_ _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) _}_ **do**
+
+
+**7** **if** _|Sπ_ ( _ϕ_ ) _|_ = _|{_ ( _**f**_ _, τ_ _[−]_ [1] ) _}|_ = 1 **then**
+
+
+**8** _**p**_ _←_ _τ_ _[−]_ [1] ( _κ_ _**p**_ )
+
+
+**9** _**p**_ _[′]_ _←_ mpToMMP( _**p**_ ) // Compute MMP of _**p**_
+
+
+**10** _ψF_ _**[p]**_ _[′]_ _[←]_ _[ψ]_ _F_ _**[p]**_ _[′]_ _[∪{]_ [(] _[v,]_ _**[ p]**_ [)] _[ ∈]_ _[V]_ _[×]_ [ Z][2] _[k]_ _[|][ ψ][F]_ [(] _[v]_ [) =] _**[ f]**_ _[}]_
+
+
+_F_ _**[p]**_ _[′][′]_ _[←]_ _[ψ]_ _F_ _**[p]**_ _[′][′]_
+
+
+**11** _ψ_ _**[p]**_ _[′][′]_
+
+
+_F_ _**[p]**_ _[′][′]_ _[∪{]_ [(] _[v,]_ _**[ p]**_ _[′]_ [)] _[ ∈]_ _[V]_ _[×]_ [ Z][2] _[k]_ _[|][ ψ][F]_ [(] _[v]_ [) =] _**[ f]**_ _[}]_
+
+
+**12** **else**
+
+
+_τπ_ ( _ϕ_ )
+**13** _κ_ _**p**_ _←_ _τπ_ ( _ϕ_ )( _κ_ _**p**_ )
+
+
+_τπ_ ( _ϕ_ ) _τπ_ ( _ϕ_ )
+**14** _κ_ _**p**_ _[′]_ _←_ mpToMMP( _κ_ _**p**_ )// Compute MMP once for _**p**_ sharing _τπ_ ( _ϕ_ )
+
+
+**15** **for** ( _**f**_ _, τ_ _[−]_ [1] ) _∈_ _Sπ_ ( _ϕ_ ) **do**
+
+
+_τπ_ ( _ϕ_ )
+**16** _**p**_ _←_ ( _τν_ _◦_ _τπ−_ 1)( _κ_ _**p**_ )
+
+_τπ_ ( _ϕ_ )
+**17** _**p**_ _[′]_ _←_ ( _τν_ _◦_ _τπ−_ 1)( _κ_ _**p**_ _[′]_ )
+
+
+**18** _ψF_ _**[p]**_ _[′]_ _[←]_ _[ψ]_ _F_ _**[p]**_ _[′]_ _[∪{]_ [(] _[v,]_ _**[ p]**_ [)] _[ ∈]_ _[V]_ _[×]_ [ Z][2] _[k]_ _[|][ ψ][F]_ [(] _[v]_ [) =] _**[ f]**_ _[}]_
+
+
+**19** _ψ_ _**[p]**_ _[′]_
+
+
+_F_ _**[p]**_ _[′][′]_ _[←]_ _[ψ]_ _F_ _**[p]**_ _[′]_
+
+
+_F_ _**[p]**_ _[′][′]_ _[∪{]_ [(] _[v,]_ _**[ p]**_ _[′]_ [)] _[ ∈]_ _[V]_ _[×]_ [ Z][2] _[k]_ _[|][ ψ][F]_ [(] _[v]_ [) =] _**[ f]**_ _[}]_
+
+
+**20** **end**
+
+**21** **end**
+
+**22** **end**
+
+**23** **end**
+
+**24** **end**
+
+**25** **return** _ψF_ _**[p]**_ _[′][, ψ]_ _F_ _**[p]**_ _[′][′]_
+
+
+D.4 OBJECTIVE-AWARE OPTIMIZATION ALGORITHM USING NPN CLASSES
+
+
+We propose an optimization-objective-aware NPN classification algorithm for MP- and MMP-based
+technology mapping. The algorithm firstly classifies functions into their respective NPN equivalence
+classes by computing canonical forms and corresponding NPN transformations. The canonical forms
+are then mapped to their MP representations. Next, each equivalence class is partitioned into subsets
+that share permuted phase assignments _τπ_ ( _ϕ_ ). The “permuted phase assignment NPN canonical forms”
+_τπ_ ( _ϕ_ )
+_κ_ _**p**_ of each subset are then minimized with respect to a PN-invariant criterion. Finally, the MPs and
+
+MMPs of other members of the subset are computed following Theorem D.3. See Algorithm 1.
+
+
+_Remark_ D.6 (Correctness for Algorithm 1) _._ The ordering of the cache hierarchy, and specifically
+the order in which the inverse NPN transformation is computed, is correct following Theorem D.1.
+Furthermore, the statement that all MMPs are indeed MMPs according to criterion _**c**_ _[uni]_ or _**c**_ _[deg]_ follows
+from Lemma D.13, Lemma D.14, and Theorem D.3.
+
+
+_Remark_ D.7 (Time complexity of NPN classification) _._ Let _m_ denote the number of unique _k_ -input BFs
+being classified. The NPN classification algorithm we used for our experimental results to compute
+
+NPN canonical forms and transformations requires time _O_ ( _m_ 2 _[k]_ _k_ ) + _e_, where _O_ ( _m_ 2 _[k]_ _k_ ) is due to
+computing a signature vector for _m_ unique functions, and _e_ denotes exhaustive enumeration time
+(which requires checking at most 2 _[k]_ [+1] _k_ ! NPN transformations per unique BF) (Zhou et al., 2020).
+Letting _e_ = _O_ ( _m_ 2 _[k]_ [+1] _k_ !), we have time _O_ ( _m_ 2 _[k]_ _k_ + _m_ 2 _[k]_ [+1] _k_ !). We note that asymptotic analysis
+
+
+37
+
+
+does not provide significant insight here, as for practical reasons of synthesis _K_ ≲ 10. Heuristics,
+symmetries, low-level implementations, and multi-level caches (Petkovska et al., 2016; Zhou et al.,
+2020) make NPN classification relatively fast in comparison to the aggregate collection of ttToMP
+and mpToMMP subproblems we aim to solve.
+
+
+_Remark_ D.8 (Time complexity of Algorithm 1) _._ Let _GF_ _**f**_ = ( _V, E_ ) and _ψF_ _**f**_ : _V_ _→F_ _**f**_, where
+_F_ _**f**_ = _∪_ _[K]_ _k_ =1 [B][2] _[k]_ [, be the] _[ K]_ [-LUT Boolean network (][BN][) and vertex labeling function provided as input]
+to Algorithm 1, respectively. Let _Vk_ = _{u ∈_ _V_ _| indegree_ ( _u_ ) = _k}_ be the set of vertices with _k_
+inputs in _GF_ _**f**_, _ψF_ _**f**_ [ _Vk_ ] = - _**g**_ _∈_ B [2] _[k]_ _| ∃v_ _∈_ _Vk_ - _ψF_ _**f**_ ( _v_ ) = _**g**_ - [�] be the set of _k_ -input BFs in _GF_ _**f**_,
+
+and _κ_ - _ψF_ _**f**_ [ _Vk_ ]� = - _**g**_ _∈_ B [2] _[k]_ _| ∃_ _**h**_ _∈_ _ψF_ _**f**_ [ _Vk_ ] ( _κ_ ( _**h**_ ) = _**g**_ )� be the set of _k_ -input NPN canonical
+forms in _GF_ _**f**_ .
+
+
+We now define the quantities of interest for our analysis of time complexity. Let
+
+
+ - _v_ = _|Vk| ∈_ N0 denote the number of _k_ -input BFs in _GF_ _**f**_,
+
+ - _m_ = �� _ψF_ _**f**_ [ _Vk_ ]�� _∈_ N0 denote the number of _unique k_ -input BFs in _GF_ _**f**_,
+
+ - _c_ = �� _κ_  - _ψF_ _**f**_ [ _Vk_ ]��� _∈_ N0 denote the number of NPN equivalence classes on the set of _k_ -input BFs
+in _GF_ _**f**_, and
+
+ - _s ∈_ N0 denote the number of permuted phase assignment subsets on the set of _k_ -input BFs in _GF_ _**f**_ .
+
+
+Next, we determine bounds on these quantities.
+
+
+ - 0 _≤_ _v_, as _v_ does not have an upper bound.
+
+ - 0 _≤_ _m ≤_ 2 [2] _[k]_, as there are 2 [2] _[k]_ _k_ -input BFs.
+
+ - 2 _[k]_ [+1] _m_ _k_ ! _[≤]_ _[c][ ≤]_ _[m]_ [. The upper bound occurs when all] _[ m]_ [ unique][ BF][s][ fall into different][ NPN][ equivalence]
+classes. The lower bound requires some analysis. Recall from Remark D.2, there are 2 _[k]_ [+1] _k_ !
+
+NPN transformations on _k_ -input BFs. Moreover, let _**f**_ _∈_ _ψF_ _**f**_ [ _Vk_ ]. Now, suppose that applying the
+2 _[k]_ [+1] _k_ ! NPN transformations on _**f**_ returns 2 _[k]_ [+1] _k_ ! unique BFs. Then the size of the NPN equivalence
+class of _**f**_ is _|_ [ _**f**_ ]NPN _|_ = 2 _[k]_ [+1] _k_ !. Hence, if [ _**f**_ ]NPN _⊆_ _ψF_ _**f**_ [ _Vk_ ], the NPN class accounts for 2 _[k]_ [+1] _k_ !
+of the _m_ unique BFs in _ψF_ _**f**_ [ _Vk_ ]. Consequently, if this happens for all BFs in _ψF_ _**f**_ [ _Vk_ ], then the
+_m_
+number of NPN equivalence classes on _ψF_ _**f**_ [ _Vk_ ] would be 2 _[k]_ [+1] _k_ ! [.]
+
+ - 2 _mk_ ! _[≤]_ _[s]_ _[≤]_ _[m]_ [ and] _[ c]_ _[≤]_ _[s]_ [.] [These bounds require some analysis.] [Let] _[ C][κ]_ _**[f]**_ [=] _[{]_ [(] _**[f]**_ _[ i][, τ]_ _i_ _[ −]_ [1] ) _|_ _**f**_ _i_ =
+_τi_ _[−]_ [1] ( _κ_ _**f**_ ) _}_, where _**f**_ _i_ _∈_ _ψF_ _**f**_ [ _Vk_ ], be an NPN equivalence class with NPN canonical form _κ_ _**f**_ . Then
+a permuted phase assignment subset _Sπ_ ( _ϕ_ ) = _{_ ( _**f**_ _, τ_ _[−]_ [1] ) _∈_ _Cκ_ _**f**_ _|_ _τ_ _[−]_ [1] = _τν_ _◦_ _τπ−_ 1 _◦_ _τπ_ ( _ϕ_ ) _}_ is
+a subset of the NPN equivalence class that shares the same permuted phase assignment _π_ ( _ϕ_ ) _⊆_
+_{_ 1 _, . . ., k}_ . Notice, that there are 2 _[k]_ possible permuted phase assignments. For the lower bound
+_m_
+2 _k_ ! _[≤]_ _[s]_ [,] [suppose] _[|][C][κ]_ _**[f]**_ _[|]_ [=] [2] _[k]_ [+1] _[k]_ [!][.] [Then] [the] [NPN] [class] [will] [be] [partitioned] [into] [2] _[k]_ [permuted]
+phase assignment subsets, each of size [2] _[k]_ 2 [+1] _[k]_ _[k]_ [!] = 2 _k_ !. Consequently, if this happens for all BFs
+
+in _ψF_ _**f**_ [ _Vk_ ], then the number of permuted phase assignment subsets on _ψF_ _**f**_ [ _Vk_ ] would be 2 _mk_ ! [.]
+For the upper bound _s_ _≤_ _m_, this occurs when all _m_ unique BFs fall into different permuted
+phase assignment subsets. Finally, since permuted phase assignment subsets are subsets of NPN
+equivalence classes, we have that _c ≤_ _s_ .
+
+
+Before continuing with the time complexity, we note some corollaries of the analysis performed. Note
+that all BFs in an NPN equivalence class share an NPN canonical form _κ_ _**p**_, and that for all functions in
+the class Algorithm 1 computes ttToMP only once. Hence, since an NPN equivalence class can have
+up to 2 _[k]_ [+1] _k_ ! members, Algorithm 1 will reduce the number of calls to ttToMP by up to 2 _[k]_ [+1] _k_ ! _−_ 1
+for the class.
+
+
+Similarly, note that all BFs in a permuted phase assignment subset of an NPN class share a “permuted
+_τπ_ ( _ϕ_ )
+phase assignment NPN canonical form” _κ_ _**p**_ = _τπ_ ( _ϕ_ )( _κ_ _**p**_ ), and that for all functions in the subset
+Algorithm 1 computes mpToMMP only once. Hence, since permuted phase assignment subsets can
+have up to 2 _k_ ! members, Algorithm 1 will reduce the number of calls to mpToMMP by up to 2 _k_ ! _−_ 1
+for the subset.
+
+
+We now continue with the time complexity of Algorithm 1. Firstly, the algorithm computes NPN
+canonical forms and transformations for each of the _m_ functions in _ψF_ _**f**_ [ _Vk_ ], requiring time _O_ ( _m_ 2 _[k]_ _k_ +
+
+
+38
+
+
+_m_ 2 _[k]_ [+1] _k_ !) (see Remark D.7). A cache key (the hexadecimal string representation of a function’s truth
+table) must then be computed per vertex, requiring time _v_ _·O_ (2 _[k]_ ). ttToMP is then computed for each
+
+NPN canonical form, requiring time _c · O_ (2 _[k]_ _k_ ) (using the algorithm from Gavier et al. (2023)). Next,
+at most _k_ input negations _τϕi_ are performed to compute each of the _s_ permuted phase assignment NPN
+canonical forms, requiring time _s · k · O_ (2 _[k]_ ) (see Remark D.5). mpToMMP is then computed for each
+of the _s_ permuted phase assignment NPN canonical forms, requiring time _s ·_ 2 _[O]_ [(] _[k]_ [2] _[k]_ [)] (see Remark C.2).
+Finally, for each of the _m_ unique BFs in _ψF_ _**f**_ [ _Vk_ ], an input permutation _τπ_ and output negation _τν_ are
+computed, requiring time _m · O_ (2 _[k]_ ) (see Remark D.5). The time complexity of Algorithm 1 for a
+_K_ -LUT BN is therefore:
+
+_TNPN classes_ ( _K_ ) = _O_ ( _m_ 2 _[K]_ _K_ + _m_ 2 _[K]_ [+1] _K_ !) + _v · O_ (2 _[K]_ )+
+
++ _c · O_ (2 _[K]_ _K_ ) + _sK · O_ (2 _[K]_ ) + _s_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] + _m · O_ (2 _[K]_ ) (200)
+
+= _O_ ( _m_ 2 _[K]_ [+1] _K_ ! + _v_ 2 _[K]_ + _c_ 2 _[K]_ _K_ + _s_ 2 _[K]_ _K_ + _m_ 2 _[K]_ ) + _s_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (201)
+
+= _O_ ( _m_ 2 _[K]_ [+1] _K_ ! + _v_ 2 _[K]_ + _c_ 2 _[K]_ _K_ ) + _s_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (202)
+
+= _O_ ((2 _mK_ ! + _v_ + _cK_ )2 _[K]_ ) + _s_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (203)
+
+= _O_ (( _v_ + _mK_ ! + _cK_ )2 _[K]_ ) + _s_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] _._ (204)
+
+
+_Remark_ D.9 (Time complexity of the _Naive_ algorithm from § 4.2) _._ We follow the notation introduced
+in Remark D.8. The _Naive_ algorithm computes ttToMP and mpToMMP per vertex in _Vk_, requiring
+time _v · O_ (2 _[k]_ _k_ ) (using the algorithm from Gavier et al. (2023)) and _v ·_ 2 _[O]_ [(] _[k]_ [2] _[k]_ [)] (see Remark C.2),
+respectively. Hence, the time complexity of the _Naive_ algorithm for a _K_ -LUT BN is:
+
+_TNaive_ ( _K_ ) = _v · O_ (2 _[K]_ _K_ ) + _v_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (205)
+
+= _O_ (( _vK_ )2 _[K]_ ) + _v_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (206)
+
+
+_Remark_ D.10 (Time complexity of the _Cached_ algorithm from § 4.2) _._ We follow the notation
+introduced in Remark D.8. The _Cached_ algorithm computes a cache key (the hexadecimal string
+representation of a function’s truth table) per vertex in _Vk_, requiring time _v · O_ (2 _[k]_ ). It then computes
+ttToMP and mpToMMP per unique function in _ψF_ _**f**_ [ _Vk_ ], requiring time _m_ _·_ _O_ (2 _[k]_ _k_ ) (using the
+algorithm from Gavier et al. (2023)) and _m ·_ 2 _[O]_ [(] _[k]_ [2] _[k]_ [)] (see Remark C.2), respectively. Hence, the time
+complexity of the _Cached_ algorithm for a _K_ -LUT BN is:
+
+_TCached_ ( _K_ ) = _v · O_ (2 _[K]_ ) + _m · O_ (2 _[K]_ _K_ ) + _m_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (207)
+
+= _O_ ( _v_ 2 _[K]_ + _m_ 2 _[K]_ _K_ ) + _m_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (208)
+
+= _O_ (( _v_ + _mK_ )2 _[K]_ ) + _m_ 2 _[O]_ [(] _[K]_ [2] _[K]_ [)] (209)
+
+
+_Remark_ D.11 (Additional space used by the _Naive_ and _Cached_ algorithms from § 4.2 and Algorithm 1) _._
+We follow the notation introduced in Remark D.8. Firstly, note that storing a truth table requires
+space _O_ (2 _[k]_ ), and storing an MP/MMP with coefficients in _{−_ 2 _[k][−]_ [1] _, . . .,_ 2 _[k][−]_ [1] _}_ requires space _O_ ( _k_ 2 _[k]_ ).
+Furthermore, storing _τπ_ requires space _O_ ( _k_ log _k_ ) from storing a sequence of _k_ unique integers in
+_{_ 0 _,_ 1 _, . . ., k −_ 1 _}_, storing _τϕ_ requires space _O_ ( _k_ ) from storing which inputs are to be negated, and
+storing _τν_ requires space _O_ (1) from storing whether the output is to be negated. The _Naive_ algorithm
+requires no additional space. The _Cached_ algorithm requires _m_ _·_ _O_ ( _K_ 2 _[K]_ ) additional space for storing
+the MP/MMP cache of unique functions. Lastly, Algorithm 1 requires _m · O_ ( _K_ [2] ) additional space for
+
+NPN classification, then _m · O_ ( _K_ log _K_ ) + _c · O_ ( _K_ 2 _[K]_ ) + _s · O_ ( _K_ 2 _[K]_ ) additional space for the NPN
+transformations of unique functions, the top-level cache of NPN canonical forms, and the second-level
+cache of permuted phase assignment subset NPN canonical forms, respectively.
+_Remark_ D.12 (Comparison of the _Naive_ and _Cached_ algorithms from § 4.2 and Algorithm 1) _._ We
+follow the notation introduced in Remark D.8. For the set of _k_ -input BFs of a _K_ -LUT BN, _Naive_
+requires _v_ calls to ttToMP and _v_ calls to mpToMMP. _Cached_ requires _m ≤_ _v_ calls to ttToMP and
+_m ≤_ _v_ calls to mpToMMP. Algorithm 1 requires 2 _[k]_ [+1] _m_ _k_ ! _[≤]_ _[c][ ≤]_ _[m]_ [ calls to][ ttToMP][ and] 2 _[m]_ _k_ ! _[≤]_ _[s][ ≤]_ _[m]_
+
+calls to mpToMMP. For practical reasons of synthesis, _K_ ≲ 10 (as many operations and structures
+grow exponentially in time and space). Consequently, for fixed _K_ ≲ 10, as the number of vertices
+_v_ in a BN increases, we expect NPN classes and permuted phase assignment subsets to become more
+densely populated, meaning _s →_ 2 _mk_ ! [and] _[ c][ →]_ 2 _[k]_ [+1] _m_ _k_ ! [, increasing the benefits of][ Algorithm 1][.] [See]
+Appendix G.3 for an empirical analysis of the quantities _v_, _m_, _c_ and _s_ .
+
+
+39
+
+
+D.5 RELATION TO EXISTING NPN CLASSIFICATION TECHNIQUES AND NPN INVARIANCE
+
+
+Negation-Permutation-Negation (NPN) classification forms a well-established and extensively studied
+subfield within the broader domain of Boolean function (BF) classification (Sasao & Butler, 2022).
+This interest in NPN classification is largely driven by its utility in areas such as logic synthesis,
+technology mapping, and logic verification (Hinsberger & Kolla, 1998). In modern logic synthesis
+tools, NPN classification is commonly used in rewriting algorithms, which optimize technologyindependent representations of BNs (Mishchenko et al., 2006). Rewriting for And-Inverter Graphs
+(AIGs) typically involves precomputing a set of optimized structures for each _k_ -input NPN canonical
+form and storing them within a hash lookup table. Doing this for _k_ _≤_ 4 is common today and
+computationally tractable (Li et al., 2024). However, for _k_ = 5 and _k_ = 6 there are 666 _,_ 126 and
+2 _._ 0 _×_ 10 [14] NPN equivalence classes, respectively, meaning both the time to compute and the space to
+store the optimized structures quickly becomes intractable (Sasao & Butler, 2022).
+
+
+In this paper, we discuss the optimization of NN representations of BNs. It was noted by Gavier
+et al. (2023) that the number of layers in the _layer-merged_ NN representation of a BN, following the
+technology mapping sequence reviewed in § 2.2 with _K_ -LUT mapping, approximately depends on
+(log2( _K_ )) _[−]_ [1] . Consequently, applications that are latency critical would aim to use the largest value
+of _K_ . From our preceding discussion, it is evident that an optimization algorithm which precomputes
+and stores the MMP for each _k_ -input NPN or permuted-phase-NPN canonical form, _k_ _≤_ _K_, would be
+intractable both in time and space. For this reason, we could not utilize NPN classification in the same
+way as existing rewriting algorithms based on precomputed hash lookup tables.
+
+
+Instead of precomputing and storing MMPs, our solution involves computing them on-the-fly. Indeed,
+the straightforward approach would be to compute them per unique BF in the _K_ -LUT BN. However,
+our goal was to utilize NPN equivalence to reduce the number of times we would need to solve the MMP
+optimization problem. Based on the analysis in Remark D.8, it would be ideal if the MMP optimization
+problem could be solved once per NPN equivalence class (as opposed to once per permuted phase
+assignment subset of an NPN equivalence class, which is what is done in Algorithm 1). Following the
+results presented in Appendix D.3 and specifically the proof of Theorem D.3, this would seem to
+require that the criterions used in the MMP optimization problem are NPN-invariant. In Lemma D.13
+and Lemma D.14, we respectively proved that the uniform criterion _**c**_ _[uni]_ and the degree criterion
+_**c**_ _[deg]_, the criterions we care about for compressing the NN representation of the BF, are PN-invariant.
+That is, they are invariant under input permutation and output negation transformations. Therefore,
+the final step to being NPN-invariant would be N-invariance, that is, invariance under input negation
+transformations. However, as the following lemmas prove, the criterions _**c**_ _[uni]_ and _**c**_ _[deg]_ that we are
+interested in are not N-invariant.
+
+**Definition D.6** (N-invariant criterion) **.** Let _**p**_ _∈_ Z [2] _[k]_ be an MP and _ϕ ⊆{_ 1 _, . . ., k}_ . A criterion vector
+_**c**_ _∈_ Z [2] _[k]_ is N-invariant if
+
+
+_∥_ _**c**_ _⊙_ _**p**_ _∥_ 1 = _∥_ _**c**_ _⊙_ _τϕ_ ( _**p**_ ) _∥_ 1 _._ (210)
+
+
+**Lemma D.15** (Uniform criterion is not N-invariant) **.** _Let k_ _∈_ N0 _, k_ _≥_ 2 _._ _**c**_ _[uni]_ _k_ _is not N-invariant._
+
+
+_Proof._ Let _**p**_ = [1 _, −_ 1 _, −_ 1 _,_ 1 _,_ **0** 2 _k−_ 22] [⊺] _∈_ Z [2] _[k]_ and _ϕ_ = _{_ 1 _,_ 2 _}_, where **0** 2 _k−_ 22 _∈_ Z [2] _[k][−]_ [2][2] is the all
+zeros vector. Then _τϕ_ ( _**p**_ ) = [0 _,_ 0 _,_ 0 _,_ 1 _,_ **0** 2 _k−_ 22] [⊺], and
+
+
+_∥_ _**c**_ _[uni]_ _k_ _⊙_ _**p**_ _∥_ 1 = 3 _̸_ = 1 = _∥_ _**c**_ _[uni]_ _k_ _⊙_ _τϕ_ ( _**p**_ ) _∥_ 1 _._ (211)
+
+
+**Lemma D.16** (Degree criterion is not N-invariant) **.** _Let k_ _∈_ N0 _, k_ _≥_ 2 _._ _**c**_ _[deg]_ _k_ _is not N-invariant._
+
+
+_Proof._ Let _**p**_ = [1 _, −_ 1 _, −_ 1 _,_ 1 _,_ **0** 2 _k−_ 22] [⊺] _∈_ Z [2] _[k]_ and _ϕ_ = _{_ 1 _,_ 2 _}_, where **0** 2 _k−_ 22 _∈_ Z [2] _[k][−]_ [2][2] is the all
+zeros vector. Then _τϕ_ ( _**p**_ ) = [0 _,_ 0 _,_ 0 _,_ 1 _,_ **0** 2 _k−_ 22] [⊺], and
+
+
+_∥_ _**c**_ _[deg]_ _k_ _⊙_ _**p**_ _∥_ 1 = 4 _̸_ = 2 = _∥_ _**c**_ _[deg]_ _k_ _⊙_ _τϕ_ ( _**p**_ ) _∥_ 1 _._ (212)
+
+
+40
+
+
+Table 4: _**c**_ _[deg]_ 3 -weighted one-norms for MPs in Z [2][3], where _ϕ_ = _{_ 1 _,_ 2 _,_ 3 _}_ and _τϕ_ ( _**p**_ 0x16) = _**p**_ 0x68.
+
+
+_**p**_ 0x16 _**p**_ _[′]_ 0x16 _**p**_ 0x68 _**p**_ _[′]_ 0x68 _τϕ_ ( _**p**_ _[′]_ 0x16 [)]
+
+_∥·∥_ 1 _,_ _**c**_ _deg_ 3 24 15 15 9 21
+
+
+This is why Algorithm 1 computes MMPs per permuted phase assignment NPN canonical form, since
+all members of the permuted phase assignment subset are related by input permutation and output
+negation transformations, which do not change the MMP solution cost under the PN-invariant criterions
+_**c**_ _[uni]_ and _**c**_ _[deg]_ . To make these ideas concrete, we conclude this discussion with an example of what
+can go wrong when trying to share MMP solutions w.r.t. non-N-invariant criterions among functions
+that are related by input negation transformations.
+
+
+Let _f_ 0x16 : B [3] _→_ B be the BF with truth table 0x16. The MP representation of _f_ 0x16 is
+
+
+_p_ 0x16( _x_ 1 _, x_ 2 _, x_ 3) = _x_ 1 + _x_ 2 + _x_ 3 _−_ 2 _x_ 1 _x_ 2 _−_ 2 _x_ 1 _x_ 3 _−_ 2 _x_ 2 _x_ 3 + 3 _x_ 1 _x_ 2 _x_ 3 _._ (213)
+
+
+An MMP representation of _f_ 0x16 w.r.t. _**c**_ _[deg]_ 3 is
+
+_p_ _[′]_ 0x16 [(] _[x]_ [1] _[, x]_ [2] _[, x]_ [3][) =] _[ x]_ [1] [+] _[ x]_ [2] [+] _[ x]_ [3] _[−]_ [2] _[x]_ [1] _[x]_ [2] _[−]_ [2] _[x]_ [1] _[x]_ [3] _[−]_ [2] _[x]_ [2] _[x]_ [3] _[.]_ (214)
+
+
+Let _f_ 0x68 : B [3] _→_ B be the BF with truth table 0x68. The MP representation of _f_ 0x68 is
+
+
+_p_ 0x68( _x_ 1 _, x_ 2 _, x_ 3) = _x_ 1 _x_ 2 + _x_ 1 _x_ 3 + _x_ 2 _x_ 3 _−_ 3 _x_ 1 _x_ 2 _x_ 3 _._ (215)
+
+
+An MMP representation of _f_ 0x68 w.r.t. _**c**_ _[deg]_ 3 is
+
+_p_ _[′]_ 0x68 [(] _[x]_ [1] _[, x]_ [2] _[, x]_ [3][) =] _[ −]_ [1 +] _[ x]_ [1] [+] _[ x]_ [2] [+] _[ x]_ [3] _[−]_ [2] _[x]_ [1] _[x]_ [2] _[x]_ [3] _[.]_ (216)
+
+
+Let _ϕ_ = _{_ 1 _,_ 2 _,_ 3 _}_ and consider the input negation transformation _τϕ_ . Firstly, notice that ( _p_ 0x16 _◦_
+_τϕ_ )( _x_ 1 _, x_ 2 _, x_ 3) = _p_ 0x68( _x_ 1 _, x_ 2 _, x_ 3). Next, we consider applying _τϕ_ to the MMP _p_ _[′]_ 0x16 [(] _[x]_ [1] _[, x]_ [2] _[, x]_ [3][)][,]
+
+( _p_ _[′]_ 0x16 _[◦]_ _[τ][ϕ]_ [)(] _[x]_ [1] _[, x]_ [2] _[, x]_ [3][) =] _[ −]_ [3 + 3] _[x]_ [1] [+ 3] _[x]_ [2] [+ 3] _[x]_ [3] _[−]_ [2] _[x]_ [1] _[x]_ [2] _[−]_ [2] _[x]_ [1] _[x]_ [3] _[−]_ [2] _[x]_ [2] _[x]_ [3] _[.]_ (217)
+
+Following Theorem D.2, _τϕ_ ( _**p**_ _[′]_ 0x16 [)] _[ ∈]_ [[] _**[p]**_ 0x68 []] _[σ]_ [.] [Therefore,] _[ τ][ϕ]_ [(] _**[p]**_ _[′]_ 0x16 [)] _[ could]_ [ be an] [MMP][ of] _**[ p]**_ 0x68 [w.r.t.]
+_**c**_ _[deg]_ 3 . However, as Table 4 shows, _τϕ_ ( _**p**_ _[′]_ 0x16 [)][ does not have minimum solution cost within][ [] _**[p]**_ 0x68 []] _[σ]_ [.]
+Indeed, its cost under _∥·∥_ 1 _,_ _**c**_ _deg_ 3 is greater than both the found MMP _**p**_ _[′]_ 0x68 [and the original] [MP] _**[ p]**_ 0x68 [.]
+Consequently, after mapping from the MMP solution _**p**_ _[′]_ 0x16 [using] _[ τ][ϕ]_ [,] [mpToMMP][ would need to be]
+called again to find an MMP of _**p**_ 0x68. However, this defeats the purpose of using NPN equivalence
+since we do not save a call to the computationally expensive optimization procedure of mpToMMP.
+
+
+41
+
+
+E ARCHITECTURE-AWARE LOSSLESS OPTIMIZATION
+
+
+**Definition E.1** (Boolean network) **.** A Boolean network (BN) _GF_ = ( _V, E_ ) is a directed-acyclic graph
+(DAG), with vertex labeling function _ψ_ : _V_ _→F_, that represents an _n_ -input, _m_ -output Boolean
+function (BF) _B_ : B _[n]_ _→_ B _[m]_ . Vertices with indegree zero are _primary inputs_ (PI), and vertices with
+outdegree zero are _primary outputs_ (PO). The labeling function _ψ_ assigns a single-output BF to each
+non-PI vertex in the graph. A directed edge ( _u, v_ ) _∈_ _E_ exists if the output of _u_ ’s BF is an input to _v_ ’s
+
+BF. The depth of vertex _v_ _∈_ _V_, denoted _depth_ ( _v_ ) _∈_ N0, is the length of the longest path from any PI
+to _v_ . The depth of a BN, denoted _depth_ ( _GF_ ), is the maximum vertex depth in the BN.
+
+_Remark_ E.1 (Types of NN optimization algorithms) _._ Let _GF_ = ( _V, E_ ) be a BN and _V_ PI _⊆_ _V_ denote
+the set of PIs. NN optimization algorithms select a subset of vertices _M ⊆_ _V_ _\ V_ PI to be represented
+as MMPs in the synthesized NN. We consider three types of NN optimization algorithms.
+
+
+1. optNone: no vertices in the BN are represented as MMPs ( _M_ = _∅_ ). This results in no compression
+and corresponds to the SOTA NN-based technology mapping solution of Gavier et al. (2023).
+
+
+2. optAll: all vertices in the BN are represented as MMPs ( _M_ = _V_ _\ V_ PI).
+
+
+3. optMaintainDepth: a subset of vertices are selected to be represented as MMPs such that the
+depth of the resulting _layer-merged_ NN (see § 2.2) does not increase ( _M ⊆_ _V_ _\ V_ PI).
+
+
+We propose a greedy algorithm for optMaintainDepth that runs in time _O_ ( _V_ ( _V_ + _E_ )).
+
+**Definition E.2** (Path) **.** A path of length _n_, denoted _Pn_, in BN _GF_ = ( _V, E_ ) is a finite sequence of
+vertices _Pn_ = ( _v_ 0 _, v_ 1 _, . . ., vn_ ) _∈_ _V_ _[n]_ [+1], where _∀i ∈{_ 0 _, . . ., n −_ 1 _}_ �( _vi, vi_ +1) _∈_ _E_ �.
+
+
+**Definition E.3** (Leeway) **.** The leeway of vertex _v_ _∈_ _V_, denoted _leeway_ ( _v_ ) _∈_ N0, in BN _GF_ = ( _V, E_ )
+is defined as
+
+
+_leeway_ ( _v_ ) = _depth_ ( _GF_ ) _−_ _depth_ ( _v_ ) _−_ _lpl_ ( _v_ ) _,_ (218)
+
+
+where _lpl_ ( _v_ ) denotes the length of the longest path from _v_ to any PO in _GF_ .
+
+**Lemma E.1** (Zero leeway indicates membership in longest path) **.** _Let GF_ = ( _V, E_ ) _be a_ _BN and_
+_v_ _∈_ _V_ _be a vertex._ _Then leeway_ ( _v_ ) = 0 _⇐⇒_ _v is on a longest path in GF_ _._
+
+
+_Proof._ Recall that _depth_ ( _v_ ) is the length of the longest path from any PI to _v_ and _depth_ ( _GF_ ) is
+the maximum vertex depth. Let _n_ = _depth_ ( _v_ ) + _lpl_ ( _v_ ) and _Pn_ = ( _v_ 0 _, . . ., v, . . ., vn_ ) _∈_ _V_ _[n]_ [+1]
+be a longest length path in _GF_ involving _v_ . If _leeway_ ( _v_ ) = 0, then _depth_ ( _GF_ ) = _depth_ ( _v_ ) +
+_lpl_ ( _v_ ) = _n_, which implies _v_ is on a longest path in _GF_ . If _v_ is on a longest path in _GF_, then
+_n_ = _depth_ ( _v_ ) + _lpl_ ( _v_ ) = _depth_ ( _GF_ ), which implies _leeway_ ( _v_ ) = 0.
+
+
+**Algorithm 2:** Maintain depth NN optimization algorithm (optMaintainDepth)
+
+
+**Input:** BN _GF_ = ( _V, E_ ), where _F_ = _∪_ _[K]_ _k_ =1 [Z][2] _[k]_ [, and function] _[ δ]_ [:] _[ V]_ _[→]_ [N][0][ representing the]
+difference in criterion between MP and MMP representations of _v_ _∈_ _V_
+**Output:** Vertices _M ⊆_ _V_ selected to be represented as MMPs
+**Function :** optMaintainDepth( _GF_, _δ_ )
+
+
+**1** _G_ _[′]_ _F_ _[←]_ [augment(] _[G][F]_ [,] _[{][v]_ _[∈]_ _[V]_ _[|][ v]_ [.outdegree][ = 0] _[}]_ [)]
+
+
+**2** _M ←{v_ _∈_ _V_ _| v_ .outdegree = 0 _∧_ _δ_ ( _v_ ) _>_ 0 _}_ // Consider POs
+
+**3** computeLeeways( _G_ _[′]_ _F_ [)]
+
+**4** **for** _v_ _∈_ _V, in descending order w.r.t._ _δ,_ **do** // Greedy candidate selection
+
+
+**3** computeLeeways( _G_ _[′]_ _F_ [)]
+
+
+    -     -     -     -     -     -     -     **5** **if** _v_ .indegree _>_ 0 _∧_ _v_ .outdegree _>_ 0 _∧_ _v_ .leeway _>_ 0 _∧_ _δ_ ( _v_ ) _>_ 0 **then**
+
+**6** _M ←M ∪{v}_
+
+**7** _G_ _[′]_ _F_ _[←]_ [augment(] _[G]_ _F_ _[′]_ [,] _[{][v][}]_ [)]
+
+**8** computeLeeways( _G_ _[′]_ _F_ [)]
+
+**9** **end**
+
+**10** **end**
+
+**11** **return** _M_
+
+
+42
+
+
+_Remark_ E.2 (Correctness for Algorithm 2 (optMaintainDepth)) _._ We prove correctness for
+Algorithm 2 by showing that the subset of vertices _M ⊆_ _V_ it selects to be represented as MMPs do not
+cause the depth of the resulting _layer-merged_ NN to increase.
+
+
+Let _GF_ = ( _V, E_ ) be a BN. We denote the _unmerged_ NN and _layer-merged_ NN (see § 2.2) of _GF_
+resulting from synthesis as _N_ and _N_ _[′]_, respectively.
+
+
+Let
+_Pd_ _[G][F]_ = ( _v_ 0 _, v_ 1 _, v_ 2 _, . . ., vi, vi_ +1 _, . . ., vd−_ 1 _, vd_ ) (219)
+be a longest path in _GF_, where _d_ = _depth_ ( _GF_ ), _v_ 0 is a PI, and _vd_ is a PO. Then
+_P_ 2 _[N]_ _d_ [= (] _[v]_ [0] _[, h]_ [1] _[, v]_ [1] _[, h]_ [2] _[, v]_ [2] _[, . . ., h][i][, v][i][, h][i]_ [+1] _[, v][i]_ [+1] _[, . . ., h][d][−]_ [1] _[, v][d][−]_ [1] _[, h][d][, v][d]_ [)] (220)
+is a longest path in _N_, where _hi_ represent some _hidden_ vertex of _vi_, and
+
+_Pd_ _[N]_ +1 _[′]_ [= (] _[v]_ [0] _[, h]_ [1] _[, h]_ [2] _[, . . ., h][i][, h][i]_ [+1] _[, . . ., h][d][−]_ [1] _[, h][d][, v][d]_ [)] (221)
+is a longest path in _N_ _[′]_ . Equation 220 holds since there are no vertices in _GF_ representing constant BFs
+(constant 1 or constant 0), as these vertices are combined with their successors by replacing successor
+
+BFs with their positive or negative cofactor. Thus, each _vi_ _∈_ _Pd_ _[G][F]_, _i ∈{_ 1 _, . . ., d}_, will have at least
+one hidden vertex _hi_ as a predecessor in _N_ .
+
+
+We make two remarks about selecting vertices in _GF_ to be represented as MMPs. Firstly, POs can
+always be represented as MMPs without increasing the depth of _N_ _[′]_ . Taking _vd_ as an example, we see
+that adding a non-linearity at _vd_ does not prevent the merging of any vertices since _vd_ _∈_ _P_ 2 _[N]_ _d_ [does]
+not have a _hd_ +1 to merge with in _N_ .
+
+Secondly, note that if some intermediate vertex _vi_ _∈_ _Pd_ _[G][F]_, _i_ _∈{_ 1 _, . . ., d −_ 1 _}_, is selected to be
+represented as an MMP in _GF_, then since a non-linearity must be applied at _vi_ in _N_, _vi_ cannot be
+merged with _hi_ +1. This would cause the length of _Pd_ _[N]_ +1 _[′]_ [, and in turn the depth of] _[ N][ ′]_ [, to increase by]
+one. Consequently, any intermediate vertex _v_ _∈_ _V_, that is, a vertex that is neither a PI nor PO, can
+only be selected to be an MMP if _v_ does not appear on a longest path in _GF_ . After selecting such a _v_,
+the lengths of all paths in _N_ _[′]_ involving _v_ will increase by 1, which may prevent the selection of other
+vertices that could have been represented as MMPs.
+
+
+Since Algorithm 2 only selects intermediate vertices with positive leeway and POs to be MMPs,
+following Lemma E.1, the depth of _N_ _[′]_ will not increase.
+
+
+**Algorithm 3:** Computing leeways
+
+**Input:** BN _GF_ = ( _V, E_ )
+**Function :** computeLeeways( _GF_ )
+
+**1** **for** _d_ = _GF_ _.depth, GF_ _.depth −_ 1 _, . . .,_ 0 **do**
+
+**2** **for** _v_ _∈_ _GF_ _.verticesAtDepth(d)_ **do**
+
+**3** **if** _v.outdegree_ = 0 **then**
+
+**4** _v_ .lpl _←_ 0 // Longest path length (lpl)
+
+**5** **else**
+
+**6** _v_ .lpl _←_ max( _{u_ .lpl _∈_ N0 _|_ ( _v, u_ ) _∈_ _E}_ ) + 1
+
+**7** **end**
+
+**8** _v_ .leeway _←_ _GF_ .depth _−_ _v_ .depth _−_ _v_ .lpl
+
+**9** **end**
+
+**10** **end**
+
+
+_Remark_ E.3 _._ Algorithm 3 runs in time _O_ ( _|V |_ + _|E|_ ).
+_Remark_ E.4 _._ Algorithm 4 runs in time _O_ ( _|E|_ ).
+_Remark_ E.5 (Runtime analysis for Algorithm 2) _._ Algorithm 2 runs in time _O_ ( _V_ ( _V_ + _E_ )). The for-loop
+(lines 4:10 of Algorithm 2) run _O_ ( _V_ ) times. Each iteration runs in time _O_ (1)+ _O_ ( _E_ )+ _O_ ( _V_ + _E_ ) =
+_O_ ( _V_ + _E_ ). There may be _O_ ( _V_ ) additional vertices and edges added via augmentations. However,
+this does not affect the asymptotic runtime, as _O_ (( _V_ + _V_ ) + ( _E_ + _V_ )) = _O_ ( _V_ + _E_ ).
+_Remark_ E.6 (Space complexity for Algorithm 2) _._ Algorithm 2 runs in space _O_ ( _V_ + _E_ ). Storing the
+input graph requires space _O_ ( _V_ + _E_ ), and _O_ ( _V_ ) additional space is used to store (i) vertices and
+edges added via augmentations, (ii) vertex properties such as leeway, and (iii) the selected candidate
+set _M ⊆_ _V_ .
+
+
+43
+
+
+**Algorithm 4:** Augmenting a BN with a temporary vertex
+**Input:** BN _GF_ = ( _V, E_ ) and vertices _A ⊆_ _V_
+**Output:** Augmented BN _G_ _[′]_ _F_ [= (] _[V]_ _[′][, E][′]_ [)]
+**Function :** augment( _GF_, _A_ )
+
+
+**1** **for** _v_ _∈_ _A_ **do**
+
+
+**2** _V_ _[′]_ _←_ _V_ _∪{vtemp}_
+
+
+**3** _E_ _[′]_ _←_ ( _E \ {_ ( _u, v_ ) _∈_ _E_ _| u ∈_ _V }_ ) _∪{_ ( _u, vtemp_ ) _∈_ ( _V_ _[′]_ ) [2] _|_ ( _u, v_ ) _∈_ _E} ∪{_ ( _vtemp, v_ ) _}_
+
+
+**4** _vtemp_ .depth _←_ _v_ .depth
+
+**5** _v_ .depth _←_ _v_ .depth + 1
+
+**6** **end**
+
+**7** **return** _G_ _[′]_ _F_ [= (] _[V]_ _[′][, E][′]_ [)]
+
+
+**a**
+
+
+**b**
+
+
+**c**
+
+
+Figure 7: Architecture-aware neural network (NN) lossless compression algorithm that selects a
+subset of vertices _M_ to be represented as minimal multilinear polynomials (MMPs) while maintaining
+the _layer-merged_ NN depth. **a**, Boolean network (BN) with three inputs ( _xi_ ), two outputs ( _yi_ ), and
+internal vertices ( _zi_ ), where _z_ 3 _, z_ 5 have leeway (Definition E.3) greater than zero. **b**, Output vertices
+are always augmented with hidden vertices (red). An MMP candidate (yellow) is an internal vertex
+with positive leeway that is associated with a function whose multilinear polynomial (MP) can be
+minimized. Here we assume minimization is with respect to the number of terms in the MP, and hence
+_a ∨_ _b_ = _a_ + _b −_ _ab_ can be minimized to _a_ + _b_, whereas _a ∧_ _b_ = _ab_ and _¬a_ = 1 _−_ _a_ cannot. **c**,
+Supposing _z_ 3 is next selected to be represented as an MMP (blue), the newly introduced hidden vertex
+(red) causes the leeway of _z_ 5 to drop to 0. Since no MMP candidates remain, the algorithm terminates
+with MMP selection _M_ = _{z_ 3 _}_ . The NN synthesized from the BN in **c** is functionally equivalent to that
+of **b**, has the same depth, yet has 4 fewer neurons and 10 fewer connections (see Appendix H).
+
+
+44
+
+
+F DIGITAL CIRCUITS AND AUTOMATA USED IN EXPERIMENTS
+
+
+The technology mapping sequence discussed in § 2.2, and the optimization techniques we propose,
+work for arbitrary Boolean networks (BNs). Hence, given a specification of a discrete graphical model,
+if we can encode the model as a BN, then it can be provided as input to the optimized technology
+mapping sequence to arrive at an optimized NN representation of the BN. In this section, we describe
+encoding techniques for, and instances of, the two discrete graphical models that were used in our
+experimental results; digital circuits and deterministic finite automata.
+
+
+**Digital** **circuits.** Digital circuits specified in hardware description languages can be converted
+into BNs via a process known as technology independent synthesis (see Gavier et al. (2023)). We
+provide additional information and references for the four open-source digital circuits used in the
+experimental results of the main text.
+
+
+    - uart [4] is a communications core that parses internal bus commands via a Universal Asynchronous Receiver-Transmitter (UART) interface.
+
+    - sha3 [5] is a cryptographic core implementing Secure Hash Algorithm 3 (SHA-3) with an
+output length of 512 bits.
+
+    - ecg [6] is a cryptographic core implementing scalar multiplication of an element in the elliptic
+curve group.
+
+    - aes [7] is a cryptographic core implementing the encryption function of the Advanced Encryption Standard (AES) symmetric-key algorithm with a key length of 128 bits.
+
+
+We also provide details on the digital circuits used in the extended results (see Appendix G.2).
+
+
+    - add is a 64-bit full adder.
+
+    - alu is a 32-bit arithmetic logic unit implementing +, _−_, _×_, _÷_, etc.
+
+    - rand8 and rand12 are randomly generated _n_ -input, _n_ -output look-up table (LUT) digital
+circuits, where _n ∈{_ 8 _,_ 12 _}_ .
+
+    - riscv [8] is a RISC-V 3-stage pipeline.
+
+
+**Deterministic finite automata.** A deterministic finite automaton (DFA) is a computational model
+with finite memory. Formally, it is a 5-tuple _D_ = ( _Q,_ Σ _, δ, q_ 0 _, F_ ), where
+
+
+1. _Q_ is a finite set called the states,
+
+2. Σ is a finite set called the alphabet,
+
+3. _δ_ : _Q ×_ Σ _→_ _Q_ is the transition function,
+4. _q_ 0 _∈_ _Q_ is the start state, and
+5. _F_ _⊆_ _Q_ is the set of accept states (Sipser, 1996).
+
+
+We now present a BN construction for an arbitrary DFA _D_ = ( _Q,_ Σ _, δ, q_ 0 _, F_ ) using a one-hot encoding
+for states and symbols. Let _VP I_ = _{q_ 1 _, q_ 2 _, . . ., q|Q|} ∪{σ_ 1 _, σ_ 2 _, . . ., σ|_ Σ _|}_ be the set of primary input
+vertices, _VP O_ = _{q_ 1 _[′]_ _[, q]_ 2 _[′]_ _[, . . ., q]_ _|_ _[′]_ _Q|_ _[}]_ [ be the set of primary output vertices, and] _[ V]_ [=] _[V][P I]_ _[∪]_ _[V][P O]_ [be]
+the set of vertices. Let ∆ _q_ _[′]_ = _{_ ( _q, σ_ ) _∈_ _Q ×_ Σ _|_ _δ_ ( _q, σ_ ) = _q_ _[′]_ _}_ be the preimage of _q_ _[′]_ _∈_ _VP O_ . Let
+_E_ = _{_ ( _u, q_ _[′]_ ) _∈_ _VP I_ _× VP O_ _| ∃_ ( _q, σ_ ) _∈_ ∆ _q_ _[′]_ ( _u_ = _q ∨_ _u_ = _σ_ ) _}_ be the set of edges, and _ψ_ : _V_ _→F_
+be the labeling function with specification
+
+
+_ψ_ ( _q_ _[′]_ ) =            - ( _q ∧_ _σ_ ) _,_ (222)
+
+
+( _q,σ_ ) _∈_ ∆ _q′_
+
+
+for all _q_ _[′]_ _∈_ _VP O_ (recall the labeling function assigns a single output BF to each non-PI vertex). Then,
+_GF_ = ( _V, E_ ) with labeling function _ψ_ is a BN representation of DFA _D_ . We note that the resulting BN
+can be optimized using technology independent synthesis tools.
+
+
+[4https://opencores.org/projects/uart2bus](https://opencores.org/projects/uart2bus)
+[5https://opencores.org/projects/sha3](https://opencores.org/projects/sha3)
+[6https://opencores.org/projects/ecg](https://opencores.org/projects/ecg)
+[7https://opencores.org/projects/tiny_aes](https://opencores.org/projects/tiny_aes)
+[8https://github.com/ucb-bar/riscv-mini](https://github.com/ucb-bar/riscv-mini)
+
+
+45
+
+
+_b_
+
+
+(a) DFA _D_ aaa.
+
+
+(b) DFA _D_ cmod5.
+
+
+Figure 8: State diagrams of the DFAs used in the extended results.
+
+
+We now provide details on the DFAs used in the extended results (see Appendix G.2).
+
+
+    - aaa is the BN representation of a DFA _D_ aaa whose language is the set of all strings over
+the alphabet Σ = _{a, b}_ containing the substring “ _aaa_ ”. The regular expression for this
+language is ( _a_ + _b_ ) _[∗]_ _aaa_ ( _a_ + _b_ ) _[∗]_ . Formally, let _D_ aaa = ( _Q,_ Σ _, δ,_ 0 _, F_ ) be a DFA, where
+
+1. _Q_ = _{_ 0 _,_ 1 _,_ 2 _,_ 3 _}_ is the set of states,
+2. Σ = _{a, b}_ is the alphabet,
+3. 0 _∈_ _Q_ is the start state,
+4. _F_ = _{_ 3 _}_ is the set of accept states, and
+5. transition function _δ_ : _Q ×_ Σ _→_ _Q_ is specified in Figure 8a.
+
+    - cmod5 (counter mod 5) is the BN representation of a DFA _D_ cmod5 whose language is the
+set of all strings over the alphabet Σ = _{a, b}_ containing either (i) _m_ _a_ ’s (increments),
+or (ii) a suffix consisting of a _b_ (reset) followed by _m_ _a_ ’s (increments), where _m_ _≡_ 0
+(mod 5). The regular expression for this language is ( _a_ [5] ) _[∗]_ + ( _a_ + _b_ ) _[∗]_ _b_ ( _a_ [5] ) _[∗]_ . Formally, let
+_D_ cmod5 = ( _Q,_ Σ _, δ,_ 0 _, F_ ) be a DFA, where
+
+1. _Q_ = _{_ 0 _,_ 1 _,_ 2 _,_ 3 _,_ 4 _}_ is the set of states,
+2. Σ = _{a, b}_ is the alphabet,
+3. 0 _∈_ _Q_ is the start state,
+4. _F_ = _{_ 0 _}_ is the set of accept states, and
+5. transition function _δ_ : _Q ×_ Σ _→_ _Q_ is specified in Figure 8b.
+
+
+46
+
+
+G EXTENDED RESULTS
+
+
+G.1 ACCELERATING MP-BASED TECHNOLOGY MAPPING WITH NPN CLASSIFICATION
+
+
+(1,928) (31,144) (105,713) (126,883)
+
+
+10 [3]
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 [-1]
+
+
+10 [2]
+
+
+10 [1]
+
+
+3×10 [2]
+
+2×10 [2]
+
+
+10 [2]
+
+
+6×10 [1]
+
+
+10 [2]
+
+
+2 4 6 8 10 12
+
+
+2 4 6 8 10 12
+
+
+2 4 6 8 10 12
+
+
+2 4 6 8 10 12
+
+
+K K K K
+
+
+Figure 9: Accelerating MP- (multilinear polynomial) based technology mapping (and in turn NNbased technology mapping) with NPN classification. MP-based technology mapping takes a Boolean
+network (BN) with vertices associated with _k_ -input truth tables, 1 _≤_ _k_ _≤_ _K_, and computes the
+functionally equivalent MP for each vertex. _Naive_ (blue) computes the MPs per vertex in the BN, while
+_Cached_ (red) computes them per unique function. _NPN_ _classes_ (green) implements the proposed
+
+NPN classification algorithm, computing MPs via NPN canonical forms and transformations. _NPN_
+_classes_ achieves consistent speedups when the overhead of computing NPN canonical forms and
+transformations is insignificant to that of computing MPs. Lines and error bars denote the sample mean
+and standard deviation over 3 trials. Logic gate counts, following technology independent synthesis,
+are shown in parentheses.
+
+
+G.2 RESULTS ON ADDITIONAL BOOLEAN NETWORKS
+
+
+(a) Reduction in connections (blue) and neurons (red)
+relative to the _unmerged_ NN by optimizing all sub-NNs
+with the proposed optAll algorithm.
+
+
+(c) Reduction in connections and neurons relative to
+the _layer-merged_ NN by optimizing a subset of subNNs selected by the proposed optMaintainDepth
+algorithm. The size of the _layer-merged_ NN is able to
+be reduced without increasing its depth.
+
+
+(b) Mapping time for MP-based technology mapping.
+
+
+(d) Mapping time for MP- and MMP-based technology
+mapping w.r.t. the uniform ( _**c**_ _[uni]_ ) and degree ( _**c**_ _[deg]_ )
+criterions.
+
+
+Figure 10: NN lossless optimization and mapping acceleration results for DFA BNs aaa and cmod5.
+
+NN lossless optimization with respect to the uniform ( _**c**_ _[uni]_ ) and degree ( _**c**_ _[deg]_ ) criterions for MMPs for
+_unmerged_ (a) and _layer-merged_ (c) NNs. NN depths are shown in gold. Mapping time for MP-based
+technology mapping (b) and MP- and MMP-based technology mapping (d). See § 4.2 for details on the
+different methods ( _Naive, Cached, NPN classes_ ). Lines and error bars denote the sample mean and
+standard deviation over 3 trials. Logic gate counts, following the DFA BN construction and technology
+independent synthesis, are shown in parentheses.
+
+
+47
+
+
+(a) Reduction in connections (blue) and neurons (red) relative to the _unmerged_ NN by optimizing all sub-NNs
+with the proposed optAll algorithm.
+
+
+(b) Reduction in connections and neurons relative to the _layer-merged_ NN by optimizing a subset of sub-NNs
+selected by the proposed optMaintainDepth algorithm. The size of the _layer-merged_ NN is able to be
+reduced without increasing its depth.
+
+
+Figure 11: NN lossless optimization with respect to the uniform ( _**c**_ _[uni]_ ) and degree ( _**c**_ _[deg]_ ) criterions for
+
+MMPs. NN depths are shown in gold. Logic gate counts, following technology independent synthesis,
+are shown in parentheses. For rand8 and rand12, lines and error bars denote the sample mean and
+standard deviation across 3 different circuits.
+
+
+(a) Mapping time for MP-based technology mapping.
+
+
+(b) Mapping time for MP- and MMP-based technology mapping w.r.t. the uniform ( _**c**_ _[uni]_ ) and degree ( _**c**_ _[deg]_ )
+criterions.
+
+
+Figure 12: Accelerating MP- and MMP-based technology mapping with NPN classification. _Naive_ (blue)
+computes the MP (a) or MP and MMP (b) per vertex in the BN, while _Cached_ (red) computes them per
+unique function. _NPN classes_ (green) implements the proposed NPN classification algorithm. For add
+and alu, lines and error bars denote the sample mean and standard deviation over 3 trials. For
+rand8 and rand12, they denote sample mean and standard deviation across 3 different BNs with 3
+trials each. Logic gate counts, following technology independent synthesis, are shown in parentheses.
+
+
+48
+
+
+Figure 13: NN lossless optimization and mapping acceleration results for riscv. NN lossless
+optimization w.r.t. the uniform ( _**c**_ _[uni]_ ) and degree ( _**c**_ _[deg]_ ) criterions for MMPs for _unmerged_ (far left)
+and _layer-merged_ (mid left) NNs. NN depths are shown in gold. Mapping time for MP-based technology
+mapping (mid right) and MP- and MMP-based technology mapping w.r.t. the uniform ( _**c**_ _[uni]_ ) and degree
+( _**c**_ _[deg]_ ) criterions (far right). Lines and error bars denote the sample mean and standard deviation over
+3 trials. Logic gate count, following technology independent synthesis, is shown in parentheses.
+
+
+We present additional results on three different classes of digital circuit BNs (see Figure 11, Figure 12,
+and Figure 13), as well as results on DFA BNs (see Figure 10), using the same experimental setting as
+in the main text (see § 4). We provide details on the digital circuits and automata in Appendix F, and
+summarize our findings below.
+
+
+**Well-known/Arithmetic circuits (add & alu)** In comparison to the main results, we achieve a
+new best under the depth-constrained NN compression setting with add, reducing the connections and
+neurons in the _layer-merged_ NN by 60% and 30%, respectively. When compressing the _unmerged_ NN
+of add and alu, we observe that as _K_ increases so does the relative reduction in size (also observed
+for uart and ecg in the main results). As for mapping time, add is too small to see benefits with
+
+_NPN classes_ . While alu is also relatively small, we see a speedup in mapping time with _NPN classes_ .
+
+
+**Arbitrary/Random circuits (rand8 & rand12)** We achieve considerable compression in NN
+size for rand8 and rand12. We also find that the _NPN classes_ and _Cached_ algorithms are not useful
+for these BNs for large _K_ . This is because as _K_ increases, if BFs are equally likely to occur in a BN, the
+likelihood of having two BFs in the same NPN class, or in the same BN, tends to zero (see Appendix G.3).
+We note that the applications in the _Broader_ _Impacts_ statement (see Appendix I) mainly involve
+non-random BNs, for which our experiments have demonstrated the value of _NPN classes_ .
+
+
+**Large circuit / Core (riscv)** riscv is 3.3 times larger than aes (the largest BN we reported in
+the main results). For riscv, our techniques were able to reduce connections and neurons by up
+to 40% and 10%, respectively, without a depth constraint, and by up to 40% and -1%, respectively,
+in the depth-constrained setting (the increase in neurons is justified by the _ℓ_ 1-norm relaxation, see
+Appendix C.1). We also observed a mean speedup using _NPN classes_ over the _Cached_ algorithm.
+
+
+**Deterministic finite automata (aaa & cmod5)** Following the BN construction for DFAs discussed
+in Appendix F, the BNs for _D_ aaa and _D_ cmod5 have 6 and 7 primary input vertices, respectively.
+Consequently, in Figure 10, we limit _K_ -LUT mapping to _K_ _≤_ 6 and _K_ _≤_ 7 for the BNs aaa and
+cmod5, respectively. Since the maximum number of inputs to any BF in aaa and cmod5 is 4 and
+7, respectively, _K_ -LUT mapping applied to aaa with _K_ _∈{_ 4 _,_ 5 _,_ 6 _}_ results in the same _K_ -LUT
+
+BN. This is why we observe the same reduction results for aaa with _K_ _∈{_ 4 _,_ 5 _,_ 6 _}_ in Figure 10a
+and Figure 10c. Moreover, we see that the resulting NN representations for aaa and cmod5 with
+_K_ _∈{_ 4 _,_ 5 _,_ 6 _}_ and _K_ = 7, respectively, have only two layers. In these cases, the _unmerged_ and
+_layer-merged_ NNs are identical since inter-depth composition cannot be applied (see § 2.2). Even
+though these BNs are significantly smaller than the digital circuit BNs we examine, we are still able
+to achieve substantial compression; observing a reduction in connections and neurons of 40% and
+12%, respectively, for aaa with _K_ _∈{_ 4 _,_ 5 _,_ 6 _}_ under the _**c**_ _[deg]_ criterion (reducing connections from
+62 to 37, and neurons from 27 to 24), and a reduction in connections and neurons of 85% and 64%,
+respectively, for cmod5 with _K_ = 7 under the _**c**_ _[deg]_ criterion (reducing connections from 407 to 60,
+and neurons from 94 to 34). As for mapping time, all _K_ -LUT BNs of aaa and cmod5 have _≤_ 19 BFs.
+Hence, these BNs are too small to see benefits from the proposed NPN classification algorithm.
+
+
+49
+
+
+G.3 EMPIRICAL ANALYSIS OF NPN CLASSIFICATION
+
+
+10 [4]
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|V<br>F|erti<br>unc|ces<br>tio|ns|Col12|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||
+|||||||||||||
+|||||||||||||
+||||||||~~N~~|~~N~~<br>|~~ cl~~<br> su|~~ ss~~<br> bs|~~ es~~<br> ts|
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+
+
+k ≤ K
+
+
+Figure 14: Empirical analysis of the quantities introduced in Remark D.8 for the _K_ -LUT Boolean
+network (BN) of aes with _K_ = 11. The number of vertices (blue), unique functions (red), NPN classes
+(gold) and permuted phase assignment subsets (green) in the BN are shown for 0 _≤_ _k_ _≤_ _K_ .
+
+
+We empirically examine Remark D.12 for the largest circuit (aes) and largest _K_ ( _K_ = 11) presented
+in the main text for MP- and MMP-based technology mapping. Since there are 2 [2] _[k]_ BFs and the lower
+
+2 [2] _[k]_
+bound on the number of NPN classes is 2 _[k]_ [+1] _k_ ! [(][Sasao & Butler][,][ 2022][), as] _[ k]_ [ tends to infinity the number]
+
+of NPN classes will approach the number of unique functions. Consequently, the _Cached_ algorithm
+from § 4.2 and the _NPN classes_ algorithm (i.e., Algorithm 1) would require the same number of calls
+to ttToMP and mpToMMP. However, _K_ is generally limited to be around 10 due to the exponential
+runtime and space requirements of synthesis operations and data structures, respectively. Hence, as
+mentioned in Remark D.12, we can make use of NPN equivalence classes to speed up mapping time; a
+statement which was validated by our empirical results. In Figure 14, we observe both ends of the
+bounds presented in Remark D.12 for the number of NPN classes and the number of permuted phase
+assignment subsets. While for _k_ = 5 there are 18 unique functions, 4 NPN classes and 6 permuted
+phase assignment subsets, for _k_ = 8, there are 1,096 unique functions yet only 11 NPN classes and 25
+permuted phase assignment subsets. Thus, the _Cached_ algorithm requires 1,096 calls to ttToMP and
+mpToMMP, whereas the _NPN classes_ algorithm requires 11 calls to ttToMP and 25 calls to mpToMMP.
+This explains the observed speedup of 5 _._ 9 _×_ in Figure 6.
+
+
+50
+
+
+H SYNTHESIZED NEURAL NETWORKS FOR FIGURE 7
+
+
+See Figure 15 and Figure 16.
+
+
+Figure 15: _Layer-merged_ neural network (NN) for panel **b** of Figure 7. The NN has 24 neurons, 38
+connections, and a depth of 5.
+
+
+Figure 16: _Layer-merged_ neural network (NN) for panel **c** of Figure 7. The optMaintainDepth
+
+NN compression algorithm was applied under the uniform criterion. The NN has 20 neurons, 28
+connections, and a depth of 5.
+
+
+51
+
+
+I BROADER IMPACTS
+
+
+In this work, we propose a novel lossless optimization technique for neural network (NN) representations of Boolean networks (BNs) and an algorithm for accelerating the conversion from BN to NN.
+Here, we briefly discuss the positive impacts our results suggest for two important domains: BN (in
+particular, digital circuit) simulation and neurosymbolic artificial intelligence (AI).
+
+
+Register-transfer level (RTL) simulation is used to achieve functional verification of digital circuits
+(Tan & Rosdi, 2014). Although the use of GPUs for RTL simulation was proposed as early as 2011
+(Qian & Deng, 2011), due to the continued developments in GPU hardware, modern machine learning
+frameworks, and the proliferation of GPUs in data centers, there has been a recent call for accelerating
+
+RTL simulation on parallel processing hardware platforms (Zhang et al., 2020). This has resulted
+in GPU RTL simulation tools (Lin et al., 2022) and their integration into more advanced functional
+verification techniques, such as hardware fuzzing (Lin et al., 2023). NN-based technology mapping
+was recently applied in a GPU RTL simulation methodology, leveraging batched stimulus to parallelize
+the evaluation of test cases (Gavier et al., 2023). Our proposed NN optimization technique reduces
+the memory footprint of the resulting NN, meaning more test cases can be batched in parallel and
+throughput can be further increased. Furthermore, our NPN classification technique for accelerating
+mapping time is crucial for the adoption of NN-based simulation methodologies in practice, as time
+delays are expensive in the interative design flow of digital circuits. Our proposed techniques are
+also applicable to other Boolean network simulation frameworks, such as gene regulatory networks
+(Bornholdt, 2008; Biswas et al., 2021).
+
+
+Neurosymbolic AI is a promising paradigm for integrating learning-based techniques with symbolic
+algorithms that provide robustness and explainability. However, neurosymbolic methods generally
+involve heterogeneous computing architectures, which diverge from the current hardware roadmap of
+improving matrix-vector multiplication (Wan et al., 2024). One way of utilizing recent advances in
+matrix-vector multiplication architectures, such as compute-in-memory crossbars (Rao et al., 2023;
+Ambrogio et al., 2023), is to use NN-based technology mapping to convert the symbolic circuits
+into matrix-vector multiplications. Hence, all components of the neurosymbolic system can be
+run on the same hardware architecture. Moreover, the high NN sparsity that results from _K_ -LUTbased technology mapping (Gavier et al., 2023) implies that the mapped NN is likely to satisfy the
+thermal constraints that accompany three-dimensional crossbars (Boahen, 2022). Our proposed NN
+optimization techniques reduce matrix sizes and energy requirements for neurosymbolic approaches
+that would use such a matrix-vector multiplication architecture, which is of particular relevance for
+memory- and energy-limited edge computing applications.
+
+
+For example, autonomous systems often integrate data from multiple sensors to make informed
+decisions about their actions. These systems typically employ NN encoders to transform highdimensional, continuous data into a discrete set of symbolic classifications, which encapsulate critical
+information for the system. These classifications are then passed to a logical decision-making
+algorithm that determines the system’s actions. In a modern computing architecture, the NN encoders
+could leverage compute-in-memory crossbars for efficient processing. However, the decision-making
+algorithms are generally executed on digital processors, resulting in a heterogeneous system design.
+Using NN-based technology mapping, it is possible to translate logical circuits into a series of
+matrix-vector multiplications. This approach enables a homogeneous system architecture consisting
+exclusively of crossbars and their associated peripherals. Our lossless NN optimization techniques,
+which reduce matrix sizes and the number of required operations in the resulting NN, would reduce
+the area requirements on the crossbar and lower energy consumption for such an architecture while
+ensuring the decision-making algorithm is computed without error – an aspect that is vital for system
+safety and reliability.
+
+
+52

@@ -1,0 +1,150 @@
+## Human Reviewer 1
+
+### Summary
+This paper proposes a 3D large language model, GS-Reasoner, and introduces a new dataset, GCoT. The GS-Reasoner constructs a semantic–geometric hybrid representation of 3D scenes through a dual-path pooling mechanism. The model achieves strong performance on both 3D visual grounding and spatial reasoning tasks without relying on pretrained 3D detectors or external decoders.
+
+### Strengths
+1. Clear motivation addressing key limitations of 3D LLMs. The work is both meaningful and timely, as it explores how to empower 3D LLMs with spatial reasoning and visual grounding capabilities without depending on pretrained 3D detectors or external decoders.
+2. Well-presented methodology and thorough validation. The paper provides detailed methodological descriptions and extensive experiments. The results are competitive on 3D visual grounding tasks and achieve state-of-the-art performance on spatial reasoning and general 3D benchmarks.
+
+### Weaknesses
+Weaknesses: 
+1. Performance gap with state-of-the-art baselines. The proposed GS-Reasoner still lags behind ROSS3D on several key benchmarks, including ScanRefer (Acc@50), Multi3DRef (F1@50), ScanQA, and SQA3D.
+2. Dependence on external modules for geometry estimation. The proposed GS-Reasoner still relies on VGGT-SLAM to estimate depth maps and camera parameters, which introduces additional dependencies and may limit the model’s end-to-end autonomy.
+
+### Questions
+1. The proposed GS-Reasoner shows a relatively larger performance gap between Acc@25 and Acc@50 on ScanRefer, and between F1@25 and F1@50 on Multi3DRef, compared with other methods. Could the authors clarify the reason behind this discrepancy? Additionally, what strategies might help narrow this gap?
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper introduces a unified representation of geometry and semantics, and proposes a method called Dual-Path Pooling to address misalignment issues in deriving per-patch representations. Furthermore, the authors present the GCoT dataset, which incorporates grounding as an intermediate step in spatial reasoning to enhance the spatial reasoning capabilities of MLLMs.
+
+### Strengths
+1. The two identified misalignments are a valid concern, and the proposed Dual-Path Pooling offers a simple yet effective solution to mitigate them. In particular, the approach of directly sampling 3D points and subsequently interpolating their geometric features is both elegant and effective.
+
+2. I agree that grounding is essential for spatial reasoning, and the proposed GCoT appears to be of high quality.
+
+3. The experiments are sufficient to demonstrate the effectiveness of the proposed method and dataset.
+
+### Weaknesses
+1. The paper claims that the lack of a unified 3D representation leads to reliance on external modules. However, as shown in Table 1, while the proposed method significantly improves the Acc@25 metric on ScanRefer, it does not outperform LLMs equipped with external grounding modules on Acc@50. This suggests that although the method enhances the model’s spatial reasoning capabilities, it does not improve its ability to perform precise object localization—and thus does not fully eliminate the need for additional localization modules. Accurate localization may still require such external modules. 
+
+2. The efficiency of the proposed model is unclear; it would be beneficial to include an analysis or empirical results demonstrating its computational efficiency.
+
+3. Since GCoT is built upon GPT-4o, it is important to clarify how the authors ensure the correctness of the generated data. Providing a explanation of the validation or filtering mechanisms would help substantiate the quality of the proposed dataset and, in turn, strengthen its overall contribution.
+
+### Questions
+The issues identified and the proposed solutions appear reasonable, and the introduced dataset makes a meaningful contribution. While a few minor points remain unclear, I believe they can be adequately addressed during the rebuttal phase.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This paper proposes GS-Reasoner, and a GCoT dataset, to tackle 3D visual grounding. Specifically, GS-Reasoner encodes image and 3D representations with a semantic geometric fusion model before feeding into a Video LLM for finetuning. GCoT dataset, on the other hand, construct QA pairs, and then augment them with CoT paths with GPT-4o based on the information of the bird’s eye view, object information, and Q&A. GS-Reasoner, when fine-tuned with GCoT, performed better on multiple visual grounding datasets, including ScanRefer, Multi3DRef, and spatial reasoning benchmarks like VSI-Bench, etc.
+
+### Strengths
+I think the architecture itself is a great contribution. Fusing depth and image seems like a straightforward but valid approach to improve spatial reasoning. I do wonder whether other information like normal maps could potentially give similar results.
+
+For Table 2, I think showing the results of predicted and GT depth is a great addition, as it allows us to understand the upper bound of the current architecture and training.
+
+Baselines are strong, spanning across closed and open-source models, as well as expert VLMs, with recent state-of-the arts such as VLM-3R-7B.
+
+### Weaknesses
+One of the main claims of this paper is that 3D visual grounding is the cornerstone of spatial reasoning. This suggests that improvement on spatial grounding would generally improve Spatial VQA, and from this perspective I find just the set of benchmarks tested is slightly lacking given the large variety of spatial reasoning benchmarks these days. To my understanding, SQA3D, Scan2Cap, and ScanQA questions are still majorly descriptors/grounding of 3D objects in a scene in similar scale. VSI-Bench is also heavily based on ScanNet and ScanNet++. The full story of spatial reasoning may not be told with these datasets alone. Some additional benchmarks that could be helpful (not asking for all evaluation but some additional ones with larger domain shift): SPAR-Bench, All-Angles Bench, MMSI-Bench, etc. This would give us insights on better visual grounding that translates to general 3D understanding. 
+
+The same questions also apply to training with/without GCoT and with/without CoT within the GCoT dataset. I believe understanding these would make the paper more comprehensive and solidify the claim that visual grounding is highly correlated with the other spatial reasoning tasks with larger domain change.
+
+### Questions
+The main questions I have derived from the Weaknesses.
+
+1. Is GS-Reasoner set up purely for visual grounding? Or does it actually help with more generalized spatial reasoning to other scales and other types of questions?
+
+2. Does fine tuning on the GCoT dataset help with visual grounding? Does it help with other spatial reasoning benchmarks?
+
+3. Does CoT within the GCoT dataset help with visual grounding and other benchmarks?
+
+Overall, I think the current stage of the experiments are not comprehensive for me to accept just yet. I hope the authors can shed light on some of the questions listed above.
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+### Rating
+4
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 4
+
+### Summary
+This paper introduces GS-Reasoner, a novel spatial reasoning framework that enhances vision-language models' spatial understanding by incorporating 3D visual grounding as an intermediate reasoning step. Its core contributions include: a semantic-geometric hybrid 3D scene representation that aligns and fuses semantic features, geometric features, and 3D positional information via a dual-path pooling mechanism; the GCoT dataset, which provides 3D bounding box annotations and chain-of-thought reasoning paths to integrate grounding into spatial reasoning; and an autoregressive grounding capability that, enables end-to-end 3D localization without external detectors or modules, achieving competitive performance across multiple benchmarks.
+
+### Strengths
+1.The paper is well written and easy to follow
+2.The dual-path pooling mechanism effectively mitigates misalignment issues between semantic-geometric and position-geometric features.
+3.The GCoT dataset fills a critical gap in existing resources for integrated "grounding-reasoning" tasks, and extensive evaluations across 3D grounding, spatial reasoning, and general 3D tasks provide comprehensive validation.
+
+### Weaknesses
+1.The training stage is mainly focus on 3d reasoning,  I'm curious about whether the performance of GS-Reasoner on general-purpose benchmarks would decline after being trained on such a large amount of 3D-related data, and if so, by how much.
+2.The construction pipeline of this representation method is somehow complex. It requires parallel execution of a 2D vision encoder, a 3D point cloud encoder, and an additional dual-path pooling fusion module, I wonder what is the. compute cost of these modules.
+3.The "geometric" component of the entire representation heavily relies on the quality of depth maps and point clouds generated by preceding steps. In real-world scenarios, depth estimation (e.g., via VGGT-SLAM or MoGe-2) is inherently imperfect, I think it will be better to show how these noise will affect the performance of model.
+
+### Questions
+See Weakness.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4

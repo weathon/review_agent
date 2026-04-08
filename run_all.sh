@@ -39,8 +39,9 @@ for k in sorted(bins):
 
 # ── Step 5: Run benchmark with calibration ──
 echo ""
-# rm bench_reviews/*
-python run_iclr_bench.py 200 3 --parallel --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --no-neutral
+rm -rf bench_reviews/
+mkdir bench_reviews
+python run_iclr_bench.py 200 3 --parallel --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work # --no-neutral
 
 # ── Step 6: Compute metrics ──
 echo ""

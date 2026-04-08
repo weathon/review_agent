@@ -1,0 +1,1227 @@
+# CODEUNLEARN: AMORTIZED ZERO-SHOT MACHINE UNLEARNING IN LANGUAGE MODELS USING DIS## CRETE CONCEPT
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Language Models (LMs) offer extensive knowledge across various domains, but
+they may inadvertently memorize sensitive, unauthorized, or malicious data, such
+as personal information in the medical and financial sectors. Machine unlearning methods aim to remove specific information from models after training to
+address this. However, current approaches require additional model training or
+struggle to effectively erase particular data points and their associated context due
+to LMs’ complex, dense, and continuous nature. In this study, we propose a novel
+amortized unlearning approach using codebook features and Sparse Autoencoders
+(SAEs). By leveraging a bottleneck to decompose the activation space and regulate information flow, our method efficiently unlearns targeted information while
+preserving the model’s performance on unrelated data. To the best of our knowledge, this is the first work that successfully enables unlearning specific topics with
+contextual relevance in an LM, marking a significant step towards real-world applications of machine unlearning.
+
+
+1 INTRODUCTION
+
+
+Large language Models (LLMs) have been widely used in various applications, generating text responses that attempt to create the equivalent of human conversations OpenAI et al. (2024). These
+models leverage vast scientific literature to facilitate and accelerate interdisciplinary research Taylor
+et al. (2022) while drawing upon large datasets of human-generated content to provide professional
+advice. However, in many cases, such data is a double-edged sword. Including personal information or sensitive scientific knowledge can be beneficial or, conversely, harmful. For instance, Soice
+et al. (2023) discusses how LLMs, when used by non-experts, can enable the creation of biological
+agents, posing both potential benefits and significant risks.
+
+
+In response to these concerns, machine unlearning has emerged as a promising research area focused
+on selectively removing specific data points or information from a trained model. This approach
+helps mitigate the misuse of sensitive data and addresses privacy concerns. Existing solutions, such
+as Sharded, Isolated, Sliced, and Aggregated (SISA) training Bourtoule et al. (2020), primarily involve partitioning the training data into disjoint shards and retraining models on these individual
+shards. Although effective in certain scenarios, these methods are often time-consuming, resourceintensive, and lack scalability when applied to large models like LLMs. Moreover, traditional approaches typically require specialized data structures or full retraining, making them impractical for
+dynamic or complex tasks.
+
+
+Given these limitations, there is an increasing demand for zero-shot unlearning methods, which aim
+to remove specific information without retraining or specialized data structures. Unlike traditional
+unlearning techniques that rely on retraining portions of the model, zero-shot unlearning seeks to
+directly eliminate the influence of specific data points or pieces of information from the model’s
+learned representation—without additional computational steps or parameter adjustments. Moreover, zero-shot unlearning is inherently more scalable, especially for large models like LLMs, as it
+avoids the inefficiencies associated with data partitioning and retraining.
+
+
+Our approach builds upon using discrete representations as the latent space for unlearning. Discrete
+representations, generated through Vector Quantization (VQ) van den Oord et al. (2018), offer a
+
+
+1
+
+
+natural structure for organizing the latent space to enable selective information removal. Discrete
+representations can be seen as a form of disentanglement, a concept rooted in classical research
+Bengio et al. (2014), which emphasizes learning representations that disentangle the various factors
+of variation in data. This allows for the separation of different explanatory sources within the data.
+
+
+Additionally, Elhage et al. (2022) explores how neurons in models can represent multiple superposed features, introducing the concept of using dictionaries to disentangle these superpositions.
+Building on this notion, we propose employing discrete representations to disentangle the model’s
+internal structure, thereby enabling selective unlearning. By tracking and modifying discrete codes
+within the latent space, we aim to achieve efficient and targeted removal of sensitive or unwanted
+information.
+
+
+Our contributions are as follows:
+
+
+    - we propose a novel zero-shot unlearning method based on discrete latent representations.
+
+
+    - we demonstrate how Vector Quantization (VQ) can structure the latent space, facilitating
+the selective removal of information in an amortized manner.
+
+
+    - we extend our method beyond traditional machine unlearning techniques, primarily designed for classification tasks, to handle complex language tasks associated with language
+models, addressing a broader scope of applications.
+
+
+    - Our approach provides a baseline for unlearning in language models and validates the effectiveness of our method.
+
+
+2 RELATED WORK
+
+
+Machine unlearning methodologies have been developed to tackle the challenges of efficiently removing data from trained models. Among the early influential frameworks is the Sharded, Isolated,
+Sliced, and Aggregated (SISA) approach Bourtoule et al. (2020),which partitions data into independent shards. By retraining only the specific shards containing the data to be unlearned, SISA
+reduces the computational burden. Extensions of this approach include Ginart et al. (2019), which
+applies partitioning to linear models, and Brophy & Lowd (2021), which adapts it for random forests.
+Schelter et al. (2021) further extended the concept to decision trees, minimizing retraining through
+hierarchical partitioning. In the graph learning domain, Chen et al. (2022b) developed methods to
+forget specific nodes or edges, while Chen et al. (2022a) focused on removing sensitive user data
+from recommendation systems.
+
+
+While these methods are effective for structured models, they struggle to scale to large, complex
+models like Language Models. Additionally, the retraining costs, though reduced, remain significant, and the reliance on specific architectures limits their generalizability to more dynamic tasks.
+
+
+In a different direction, Kurmanji et al. (2023) introduced SCRUB, which treats the original model as
+a teacher and trains a student model to mimic it on retained data while ’forgetting’ specific information. Warnecke et al. (2023) proposed unlearning entire groups of features and labels using influence
+functions, providing closed-form updates to model parameters for more efficient data removal.
+
+
+Influence functions Guo et al. (2023); Sekhari et al. (2021); Mehta et al. (2022) also offer an alternative by measuring the effect of individual data points on a model’s predictions and adjusting
+parameters accordingly, providing more direct methods for unlearning.
+
+
+Recently, zero-shot unlearning methods have emerged, focusing on removing information without
+retraining, making them highly efficient for large models. Shah et al. (2024) introduced a method
+for editing model computations to ’forget’ specific information. While this is effective for tasks
+like token classification, it may struggle with the more complex context and semantics in LLMs,
+underscoring the need for scalable, adaptable unlearning techniques tailored to these models.
+
+
+In parallel, recent advances in sparse and discrete latent representations, such as _codebook features_,
+have been explored for better interpretability and control of neural activations. Multiple codebooks,
+as introduced in Tamkin et al. (2023), have been applied to attention heads in transformer architectures. In this setup, each attention head operates with its own codebook, independently selecting
+codes and concatenating their outputs to form the final layer representation. This design allows the
+
+
+2
+
+
+model to represent a broader set of features by combining the outputs of different codebooks. However, this can lead to a superposition effect Elhage et al. (2022), where features are linearly encoded,
+enabling the model to simulate more extensive networks. Although this enhances representational
+capacity, tracking individual code contributions becomes challenging, making it difficult to isolate
+and remove specific patterns during unlearning.
+
+
+3 METHODOLOGY
+
+
+To address the challenges of zero-shot machine unlearning, we propose a novel approach that leverages _codebook_ _features_ to bottleneck latent representations within a language model, enabling the
+targeted unlearning of specific knowledge by altering related codebook embeddings. Initially introduced by Tamkin et al. (2023), codebook features efficiently compress the activation space of neural
+networks by introducing a sparse discrete bottleneck. This bottleneck can be further optimized to
+isolate the codes most relevant to specific topics in the input, offering deeper insight and control over
+the model’s response and interpretation. By utilizing this discrete latent representation, we can more
+effectively identify and remove the specific information encoded in the codebook corresponding to
+the input’s targeted knowledge.
+
+
+The following section details our approach to employing _codebook_ _features_ to efficiently identify
+and unlearn specific areas of related information in a zero-shot manner. This process ensures that
+the model can no longer effectively handle prompts that contain the target information to unlearn.
+
+
+Figure 1: **CodeUnlearn** —Our Amortized Zero-Shot Machine Unlearning for Language Models.
+**Left** : Discrete latent bottlenecking in the transformer architecture. After applying the residual connection, the multi-head attention output is discretized using a discrete embedding vocabulary, referred to as the codebook. This approach prevents information leakage via the residual connection,
+ensuring that the codebook effectively regulates and interprets the network’s behavior. **Right** : Zeroshot machine unlearning is achieved by removing the discrete codes in the codebook that correspond
+to the targeted information.
+
+
+3.1 CODEBOOK FEATURES
+
+
+The core concept behind employing codebook features is to transform the original activations from
+a hidden layer into a representation regulated by a codebook. Let _a_ _∈_ R _[F]_ represent the activation
+vector from a hidden layer, where _F_ denotes the dimensionality of the activations. We use a codebook _C_ = _{ck}_ _[K]_ _k_ =1 _[∈]_ [R] _[K][×][F]_ [, where] _[ K]_ [ represents the number of code vectors. The codebook offers]
+
+
+3
+
+
+a compressed, discrete representation of the original activations. To perform this transformation, we
+calculate the cosine similarity between the activation _a_ and each code vector _ck_ in the codebook:
+
+_a · ck_
+cosineSim( _a, ck_ ) = _∥a∥∥ck∥_ _[,]_ (1)
+
+for each code vector _ck_ in the codebook. We then identify the top _S_ (where _S_ _≥_ 1) most similar code
+vectors corresponding to the activation _a_ . The index set Ω of these top _S_ code vectors is defined as:
+
+
+Ω= Top _S_ ( _{k_ _| k_ _∈{_ 1 _, . . ., K},_ cosineSim( _a, ck_ ) _}_ ) _._ (2)
+
+
+The output of the codebook transformation is given by:
+
+
+_a_ ˆ =                 - _ck,_ (3)
+
+
+_k∈_ Ω
+
+
+where Ω is the index set of the _S_ most similar code vectors, selected based on the highest cosine
+similarity scores. In the unlearning procedure, the activated codes corresponding to _a_ are identified
+as the targets for removal.
+
+
+3.2 CODEBOOK SETTINGS
+
+
+**Single** **Codebook** As shown in Figure 1, to maintain interpretability, we focus on using a single
+codebook, positioning it after the multi-head attention layer and residual connection to prevent information leakage. This placement is a deliberate design choice. Residual connections in transformer
+architectures are designed to propagate unaltered features, which, while beneficial for model stability and gradient flow, can bypass bottleneck layers like the codebook. By applying the codebook
+transformation after the residual connection, we ensure that all information passed downstream is
+regulated through the discrete latent representation. This strict information bottleneck prevents the
+model from retaining unlearned or sensitive information outside the control of the codebook, thereby
+enforcing a clean separation of learned and unlearned representations.
+
+
+However, in a single codebook setup, selecting only _S_ = 1 leads to a significant drop in model
+performance, as a single codebook feature is insufficient to capture the complexity of the activation
+space. In Cai (2024), the author rigorously demonstrates that treating word vectors as mappings
+allows a finite vocabulary to achieve infinite approximation through composition. Based on this
+insight, we employ _S_ _>_ 1 in our approach. While this may slightly affect code discretization and
+information clarity, it strikes a balance between model performance and interpretability.
+
+
+3.3 CODEBOOK WITH SPARSE AUTOENCODERS
+
+
+Our goal is to decompose the activation space into sparse, interpretable features rather than reconstructing the original input. To accomplish this, we incorporate the Sparse Autoencoder (SAE) concept. The SAE applies a linear transformation encoder with a ReLU activation function to project
+the activations into a higher-dimensional space, effectively decomposing and sparse features. A
+linear transformation decoder is employed used to reconstruct the activations.
+
+
+In line with the SAE structure, we introduce a linear transformation encoder with ReLU before the
+codebook and a linear transformation decoder after the codebook. The sparsity introduced by the
+encoder and decoder offers a significant advantage:
+
+
+The encoder maps the activation vector _a ∈_ R _[d]_ to a sparse representation:
+
+
+_henc_ = ReLU( _Wenca_ + _benc_ ) _,_ (4)
+
+where _Wenc_ _∈_ R _[d][×][F]_ and _benc_ _∈_ R _[F]_ represent the encoder’s weights and biases. The sparse
+representation _henc_ is passed through the codebook transformation, as described in Section 3.1.
+
+
+The decoder then reconstructs the original activation from the transformed representation:
+
+
+_a_ ˆ = _Wdech_ [ˆ] _enc_ + _bdec,_ (5)
+
+where _Wdec_ _∈_ R _[F][ ×][d]_ and _bdec_ _∈_ R _[d]_ are the decoder’s weights and biases.
+
+
+This autoencoder framework complements the codebook by ensuring that learned representations
+remain interpretable and sparse, enabling efficient and targeted unlearning.
+
+
+4
+
+
+3.4 TRAINING THE CODEBOOK
+
+
+where Ω represents the set of indices for the top _S_ most similar code vectors, _ck_ refers to the _k_ th codebook vector, _F_ denotes the dimensionality of the code vectors, and _λ_ is a regularization
+coefficient that controls the strength of the _L_ 1 penalty term. In our experiments, we set _λ_ to 1 _×_ 10 _[−]_ [6]
+to balance sparsity with reconstruction accuracy.
+
+
+**Joint** **Training** **for** **Machine** **Unlearning** Both the SAE and codebook features are used to reconstruct the input _a_, but this presents a critical issue in the context of machine unlearning: one
+could easily remove the codebook layer, reverting the model to its original state, which negates the
+unlearning process. To address this, it is vital to ensure that the model is trained so that the downstream components are entirely dependent on the output of the codebook. At the same time, the
+upstream layers must learn to generate activations that conform to the codebook’s representations.
+This joint training approach ensures that the entire model relies on the codebook’s representation,
+making it harder to bypass or remove without degrading performance. The joint loss function for
+this training process is defined as:
+
+
+_L_ joint = _L_ Codebook + _L_ CE _,_ (8)
+
+where _L_ Codebook refers to the reconstruction loss for the codebook, and _L_ CE represents the CrossEntropy loss for the original language modeling or task-specific objective.
+
+
+Figure 2: **Unlearning** **a** **Target** **Topic** **in** **a** **Language** **Model.** The zero-shot unlearning process
+begins by identifying codes enriched in data subsets with the target topic ( _DT_ ) as opposed to the
+subset without it ( _DT_ ˜ ). Codes with p-values less than 0.05 are removed from the codebook. After
+this removal, the model exhibits significantly decreased performance on target information inputs.
+
+
+5
+
+
+**Reconstruction** **Loss** As with the Sparse Autoencoder (SAE) and codebook models, we utilize
+the Mean Squared Error (MSE) loss as the primary loss function. The MSE loss can be expressed
+as:
+
+
+_L_ MSE = [1]
+
+_N_
+
+
+_N_
+
+
+- _∥ai −_ _a_ ˆ _i∥_ [2] 2 _[,]_ (6)
+
+
+_i_ =1
+
+
+where _N_ is the number of samples, _ai_ is the original activation, and ˆ _ai_ is the reconstructed activation
+obtained from the decoder.
+
+
+Additionally, to promote sparsity and enforce more distinct and sparse internal feature representations within each codebook vector, we introduce an _L_ 1 penalty term on the codebook activations.
+This encourages the model to represent each code with sparser and more well-separated internal
+features. The overall loss function incorporating this sparsity constraint is defined as:
+
+
+_L_ Codebook = [1]
+
+_N_
+
+
+_N_
+
+
+- _∥ai −_ _a_ ˆ _i∥_ [2] 2 [+] _[ λ]_ 
+_i_ =1 _k∈_ Ω
+
+
+_k∈_ Ω
+
+
+_F_
+
+- _|c_ _[f]_ _k_ _[|][,]_ (7)
+
+_f_ =1
+
+
+3.5 CODE RETRIEVAL
+
+
+As shown in Figure 2, after training, the codebook encodes a set of representative codes _C_ =
+_{ck}_ _[K]_ _k_ =1 _[∈]_ [R] _[K][×][F]_ [that] [are] [sparse] [and] [represent] [different] [features.] [To] [perform] [unlearning,] [we]
+retrieve the codes activated for specific inputs and identify which codes are enriched for a particular
+topic. The model can effectively unlearn the associated information by deleting the corresponding
+enriched codes from the codebook. The key steps involve retrieving these relevant codes for each
+input and determining their relationship to the target topic.
+
+
+Because of the nature of the attention mechanism, the activation of these codes also depends on the
+surrounding context. This means we are not just identifying individual words that activate specific
+codes but retrieving codes that represent the broader topic within the input context. To unlearn a
+specific topic _T_, consider a dataset _DT_ with samples related to topic _T_, alongside with the remaining
+irrelevant data set _DR_ . We create a control dataset _DT_ ˜ by replacing words associated with _T_ in _DT_
+with unrelated words, ensuring the context remains consistent. By comparing the code activations
+between _DT_ and _DT_ ˜, we can identify and search for the codes linked to topic _T_ .
+
+For each code _ck_ activated in the dataset, we compute its frequency in both datasets by considering
+the top _S_ _[′]_ activated codes:
+
+
+where _ϵ_ is a small constant added to avoid division by zero. When _R_ ( _ck, T_ ) is positive, it indicates
+that the code _ck_ is enriched in dataset _DT_ relative to _DT_ ˜ . However, if the frequency of _ck_ in _DT_ ˜
+is zero and its frequency in _DT_ is very low, such codes should not be removed, as they are likely
+accidental activations. Removing these codes could lead to unintended side effects, as they may not
+be strongly related to the topic _T_ despite being present in the dataset.
+
+
+Therefore, we used a chi-squared test to calculate the p-value of _R_ ( _ck, T_ ) to determine if the code
+_ck_ is enriched for topic _T_ . For those codes with p-values smaller than 0.05, we regard them as
+enriched codes in _DT_ and remove them from the codebook. We define the set of enriched codes as
+Ω _R>_ 0 _,p<_ 0 _._ 05 = _{ck_ _| R_ ( _ck, T_ ) _>_ 0 and _p ≤_ 0 _._ 05 _}._
+
+
+3.6 UNDERSTANDING ZERO-SHOT UNLEARNING
+
+
+The term ”Zero-shot” in this work refers to the unlearning phase of the proposed method. Specifically, after the initial training, the model can unlearn targeted knowledge without requiring additional data, retraining, or fine-tuning. The process leverages the already learned representations
+stored in the codebook to identify and remove the information associated with the target topic. This
+is achieved by directly modifying the entries in the codebook rather than adjusting model parameters
+through retraining.
+
+
+It is important to note that while the initial training phase involves data and learning, no additional
+datasets or external supervision are necessary during unlearning. The training data used to construct the codebook is sufficient for both the representation learning and unlearning phases. This
+design ensures computational efficiency during unlearning, particularly for large-scale models, as
+no additional parameter updates or gradient computations are involved.
+
+
+6
+
+
+1
+_fk_ ( _DT_ ) =
+_NT_
+
+
+1
+_fk_ ( _DT_ ˜ ) =
+_NT_ ˜
+
+
+_NT_
+
+
+I( _k_ _∈_ Ω _T_ ( _ai_ )) _,_ (9)
+
+_i_ =1
+
+_NT_ ˜
+
+
+I( _k_ _∈_ Ω _T_ ˜ ( _aj_ )) _,_ (10)
+_j_ =1
+
+
+where Ω _T_ ( _ai_ ) represents the set of indices of the top _S_ _[′]_ activated codes for activation _ai_ in dataset
+_DT_, and Ω _T_ ˜ ( _aj_ ) is similarly defined for _DT_ ˜ . _NT_ and _NT_ ˜ denote the sample sizes of _DT_ and _DT_ ˜,
+respectively. I is the indicator function that checks whether code _k_ is in the set of activated codes.
+The hyperparameter _S_ _[′]_ controls the number of top activated codes considered, thereby influencing
+the number of codes to be removed.
+
+
+To quantify the enrichment of code _ck_ for topic _T_, we use the following formula:
+
+
+R( _ck, T_ ) = log2
+
+
+- _fk_ ( _DT_ ) + _ϵ_
+_fk_ ( _D_ ˜ _T_ ) + _ϵ_
+
+
+_,_ (11)
+
+
+3.7 METRICS
+
+
+In our work, we not solely assess the absolute drop in performance within the topic or non-topic
+datasets but also need to compare the relative decline between them. Instead, to fairly compare
+the models and the datasets, we used normalized percentage improvement to evaluate the performance of the unlearning procedure. The performance improvement percentage is set to 0 for the
+zero-shot model and 1 for the codebook model, which is the upper bound. In contrast, the performance drop percentage is set to 1 for the zero-shot model and 0 for the codebook model. We
+use four evaluation metrics to assess the effectiveness of the unlearning procedure and the overall
+quality of the remaining information in the output. These metrics include: We use four evaluation
+metrics to assess the impact of the unlearning procedure on translation quality and semantic preservation: BLEUPapineni et al. (2002), METEORBanerjee & Lavie (2005), BERTScoreZhang et al.
+(2020), and Bart-ScoreYuan et al. (2021). BLEU offers a general accuracy measure, and METEOR
+builds on BLEU by considering synonymy and word order, often providing a more sensitive quality
+assessment. BERTScore leverages contextual embeddings to evaluate semantic similarity, crucial
+for detecting whether unlearning procedures change the sentence’s meaning. Bart-Score evaluates
+fluency and informativeness using pre-trained BART models, with scores reflecting log-likelihood,
+so close to zero indicates better quality. BERTScore and Bart-Score offer insight into more subtle
+changes, and percentage change trends are prioritized for a comprehensive analysis.
+
+
+4 EXPERIMENTS AND RESULTS
+
+
+4.1 EXPERIMENT SETUP
+
+
+We evaluated the proposed CodeUnlearn framework by applying it to a large language model (LLM)
+trained on English-to-French translation tasks. Specifically, we used the T5-small model Raffel et al.
+(2023), a 60-million-parameter transformer architecture. The task was conducted on the Opus Books
+dataset ( _opus_ ~~_b_~~ _ooks/en-fr_ ), a collection of literary texts with a vocabulary size of 25k. The dataset
+was split into 80% for training, 10% for validation, and 10% for testing.
+
+
+The codebook, consisting of 25,000 codes with 512 dimensions, was integrated into the third encoder layer. This layer was chosen based on prior studies Templeton et al. (2024) suggesting that
+intermediate layers capture high-level features, making them ideal for unlearning.
+
+
+4.2 DATASET CONSTRUCTION AND UNLEARNING PROCESS
+
+
+The dataset was split into three subsets: **Training** **set** (for initial model training and embedding
+codebook features), **Validation** **set** (for evaluating performance after unlearning specific topics),
+and **Test set** (for assessing generalization and unintended degradation on non-target topics).
+
+
+For the unlearning procedure, we created:
+
+
+    - _DT_ : 500 prompts containing the target topic (e.g., _love_ ), sampled from validation and test
+sets.
+
+    - _DT_ ˜ : A control dataset where target-topic words in _DT_ were replaced with unrelated terms,
+preserving structure and context.
+
+
+    - _DR_ : Prompts unrelated to the target topic, used for evaluating non-target performance.
+
+
+We performed the unlearning procedure by progressively deleting codes related to the target topics.
+Seven values of _S_ _[′]_ were tested, ranging from _S_ _[′]_ = 8(1 _× S_ ) to _S_ _[′]_ = 104(13 _× S_ ), corresponding
+to deletions of approximately 0.064% to 0.828% of the total codes in the codebook.
+
+
+7
+
+
+Table 1: Examples of unlearning on topic ’ _love_ ’. The French translations illustrate the model’s
+progressive degradation as more codes are deleted. Initially, the target word ” _l’aimer_ ” (to love him)
+is preserved. As codes are removed ( _S_ _[′]_ = 8 and _S_ _[′]_ = 24), the replacement words ( _l’avoir acquitt´e_,
+meaning ”to have acquitted him”; _le recevoir_, meaning ”to receive him”) begin to diverge from the
+original meaning. By _S_ _[′]_ = 72, the translation ( _le_ _mettre_ _en_ _´etat_, meaning ”to put him in a state”)
+becomes completely unrelated, reflecting effective forgetting of the _love_ concept.
+
+
+**Content**
+
+
+**English** She had made efforts to love him, and she had repented with tears for
+having yielded to another!
+
+
+**Ground Truth** Elle avait fait des efforts pour l’aimer, et elle s’´etait repentie en pleurant
+d’avoir c´ed´e `a un autre.
+
+
+**Codebook Model** Elle avait fait des efforts pour l’aimer, et elle avait repris des larmes
+pour avoir renonc´e `a un autre!
+
+_S_ _[′]_ = 8, delete 16 codes Elle avait fait des efforts pour l’aimer, et elle avait repris des larmes
+pour l’avoir acquitt´e d’un autre!
+_S_ _[′]_ = 24, delete 52 codes Elle avait fait des efforts pour le recevoir, et elle avaitrepris des larmes
+pour avoir renonc´e `a un autre.
+_S_ _[′]_ = 72, delete 133 codes Elle avait fait des efforts pour le mettre en ´etat, et elle avait repris des
+larmes pour s’en rendre `a un autre.
+
+
+Table 2: **Unlearning Results for Different Topics**
+
+
+4.3 RESULTS AND ANALYSIS
+
+
+**Unlearning Conceptual Topics (e.g.,** _**love**_ **)** Table 1 showcases example outputs after unlearning
+_love_ . Minor inaccuracies appear when _S_ _[′]_ = 8 (16 codes deleted). By _S_ _[′]_ = 72 (133 codes deleted),
+the translation diverges significantly from the original meaning, effectively forgetting the _love_ concept while introducing interference in sentence comprehension. Following unlearning, the model
+attempts to rely on other similar codes; however, the meanings of these codes are significantly different. As a result, the unlearned target topic interferes, hindering the model’s ability to comprehend
+the entire sentence fully. This highlights the nuanced balance between forgetting the target and
+preserving overall sentence coherence.
+
+
+8
+
+
+**Topic(N)** **Dataset**
+
+
+**Score (Normalized Improvement Drop(%))**
+
+
+_BLEU_ _↓_ _METEOR↓_ _BERT_ _−_ _P_ _↓_ _BART_ _↓_
+
+
+**Love(207)**
+
+
+**Julien(255)**
+
+
+**Captain(137)**
+
+
+**Poor(151)**
+
+
+**Wish(217)**
+
+
+**White(179)**
+
+
+**Black(190)**
+
+
+_DT_ _[′]_ 0.16 _**(-112.52)**_ 0.39 _**(-117.76)**_ 0.80 _**(-118.88)**_ -4.80 _**(-143.96)**_
+
+
+_DR_ 0.18 _(-37.80)_ 0.42 _(-57.82)_ 0.81 _(-58.25)_ -5.71 _(-35.06)_
+
+_DT_ _[′]_ 0.19 _**(-113.12)**_ 0.42 _**(-138.47)**_ 0.80 _**(-134.60)**_ -5.15 _**(-164.68)**_
+
+
+_DR_ 0.16 _(-65.70)_ 0.39 _(-64.38)_ 0.80 _(-94.63)_ -6.10 _(-94.60)_
+
+_DT_ _[′]_ 0.20 _**(-72.10)**_ 0.47 _**(-140.71)**_ 0.83 _**(-84.44)**_ -5.16 _**(-87.90)**_
+
+
+_DR_ 0.19 _(-9.72)_ 0.44 _(-9.04)_ 0.82 _(-9.66)_ -5.97 _(-0.53)_
+
+_DT_ _[′]_ 0.18 _**(-70.61)**_ 0.43 _**(-70.78)**_ 0.81 _**(-60.84)**_ -5.03 _**(-79.81)**_
+
+
+_DR_ 0.20 _(-26.64)_ 0.47 _(-12.48)_ 0.83 _(-14.20)_ -5.81 _(-36.01)_
+
+_DT_ _[′]_ 0.15 _**(-144.83)**_ 0.33 _**(-249.51)**_ 0.78 _**(-182.02)**_ -4.95 _**(-309.34)**_
+
+
+_DR_ 0.16 _(-87.65)_ 0.39 _(-94.51)_ 0.81 _(-74.16)_ -6.02 _(-133.35)_
+
+_DT_ _[′]_ 0.12 _**(-157.45)**_ 0.38 _**(-218.04)**_ 0.80 _**(-403.04)**_ -4.85 _**(-119.99)**_
+
+
+_DR_ 0.16 _(-10.09)_ 0.49 _(-22.99)_ 0.83 _(-47.65)_ -6.12 _(-27.15)_
+
+_DT_ _[′]_ 0.16 _**(-85.16)**_ 0.40 _**(-138.04)**_ 0.80 _**(-115.56)**_ -4.70 _(-62.91)_
+
+
+_DR_ 0.19 _(-16.12)_ 0.47 _(-2.15)_ 0.83 _(-3.01)_ -5.78 _**(-97.36)**_
+
+
+Figure 3: **Performance** **Drop** **after** **Unlearning** **on** **the** **Topic** **’** _**Love**_ **’.** Performance Drop after
+Unlearning on the Topic ’ _Love_ ’. The X-axis shows the model variations, with the first column as the
+original model. Columns 2 to 8 represent increasing levels of unlearning, with the number indicating
+the top _S_ codes used and removed. The Y-axis represents the percentage change in various metrics
+compared to the original model. As more codes are deleted, the model’s performance on the target
+topic declines rapidly, while performance on non-topic content remains more stable.
+
+
+Figure 3 visualizes performance degradation as more codes related to _love_ are deleted. BLEU and
+BERTScore metrics show a consistent decline on target prompts ( _DT_ _[′]_ [), while performance on non-]
+target prompts ( _DR_ ) remains relatively stable, indicating effective unlearning with minimal impact
+on unrelated content.
+
+
+Figure 4: **Performance Drop after Unlearning on the Topic ’** _**Julien**_ **’.** Similar to the ’ _love_ ’ topic,
+we tested the unlearning procedure on the name ’ _Julien_ ’.
+
+
+9
+
+
+**Unlearning** **Personal** **Names** **(e.g.,** _**Julien**_ **)** To test the unlearning of personal information, we
+targeted the name _Julien_ .Names carry specific semantic significance in language models, much like
+critical topics, making _Julien_ an ideal test case to assess the method’s effectiveness in removing
+personal information, such as names, while preserving performance on unrelated content. Figure 4
+shows that sentences containing _Julien_ experienced a sharp performance drop after unlearning. This
+demonstrates the capability to handle both conceptual topics and specific entities effectively.
+
+
+Figure 5: **Metrics after unlearning topic ’** _**love**_ **’ and test on ’** _**like**_ **’**, The model unlearned the ’ _love_ ’
+topic but also deteriorated the performance on the ’ _like_ ’ topic, which suggests that the unlearning
+procedure removes not only the specific target information but also the relevant context.
+
+
+**Performance on Synonyms (e.g.,** _**like**_ **for** _**love**_ **)** We evaluated the synonym _like_ after unlearning
+_love_ . Figure 5 indicates that the model’s performance on _like_ also deteriorated, highlighting that the
+unlearning process extends to semantically related contexts. This demonstrates that CodeUnlearn
+effectively addresses contextual knowledge beyond isolated data points.
+
+
+**Comprehensive** **Topic** **Analysis** In addition to _love_ and _Julien_, we tested other topics such as
+_Captain_, _Poor_, _Wish_, _White_, and _Black_ . Results in Table 2 confirm that CodeUnlearn scales effectively to diverse topics, with significant degradation on target prompts and relatively small impact
+on unrelated data.
+
+
+5 CONCLUSION
+
+
+In this work, we introduced CodeUnlearn, a novel framework for zero-shot machine unlearning in
+Large Language Models (LLMs). Leveraging codebook features and Sparse Autoencoders (SAEs),
+we devised a method that effectively isolates and removes specific knowledge, ensuring that the
+targeted data and its contextual associations are erased from the model. Unlike previous methods,
+which required retraining or were limited to classification tasks, CodeUnlearn operates amortized
+and zero-shot, providing an efficient and scalable solution for unlearning in complex, generative
+models like LLMs. Our approach uses a discrete concept representation to regulate the flow of
+information in a language model, enabling the unlearning of specific topics while preserving overall
+model performance on unrelated tasks. The results show that CodeUnlearn successfully mitigates
+the model’s ability to reproduce the unlearned information without requiring additional training,
+achieving substantial unlearning effectiveness and maintaining interpretability.
+
+
+10
+
+
+REFERENCES
+
+
+Sanjeev Arora, Yuanzhi Li, Yingyu Liang, Tengyu Ma, and Andrej Risteski. Linear algebraic structure of word senses, with applications to polysemy, 2018. [URL https://arxiv.org/abs/](https://arxiv.org/abs/1601.03764)
+[1601.03764.](https://arxiv.org/abs/1601.03764)
+
+
+Satanjeev Banerjee and Alon Lavie. METEOR: An automatic metric for MT evaluation with improved correlation with human judgments. In Jade Goldstein, Alon Lavie, Chin-Yew Lin, and
+Clare Voss (eds.), _Proceedings of the ACL Workshop on Intrinsic and Extrinsic Evaluation Mea-_
+_sures_ _for_ _Machine_ _Translation_ _and/or_ _Summarization_, pp. 65–72, Ann Arbor, Michigan, June
+2005. Association for Computational Linguistics. URL [https://aclanthology.org/](https://aclanthology.org/W05-0909)
+[W05-0909.](https://aclanthology.org/W05-0909)
+
+
+Yoshua Bengio, Aaron Courville, and Pascal Vincent. Representation learning: A review and new
+perspectives, 2014. [URL https://arxiv.org/abs/1206.5538.](https://arxiv.org/abs/1206.5538)
+
+
+Lucas Bourtoule, Varun Chandrasekaran, Christopher A. Choquette-Choo, Hengrui Jia, Adelin
+Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Machine unlearning, 2020. URL
+[https://arxiv.org/abs/1912.03817.](https://arxiv.org/abs/1912.03817)
+
+
+Jonathan Brophy and Daniel Lowd. Machine unlearning for random forests, 2021. [URL https:](https://arxiv.org/abs/2009.05567)
+[//arxiv.org/abs/2009.05567.](https://arxiv.org/abs/2009.05567)
+
+
+Yongqiang Cai. Vocabulary for universal approximation: A linguistic perspective of mapping compositions, 2024. [URL https://arxiv.org/abs/2305.12205.](https://arxiv.org/abs/2305.12205)
+
+
+Chong Chen, Fei Sun, Min Zhang, and Bolin Ding. Recommendation unlearning, 2022a. URL
+[https://arxiv.org/abs/2201.06820.](https://arxiv.org/abs/2201.06820)
+
+
+Min Chen, Zhikun Zhang, Tianhao Wang, Michael Backes, Mathias Humbert, and Yang Zhang.
+Graph unlearning. In _Proceedings_ _of_ _the_ _2022_ _ACM_ _SIGSAC_ _Conference_ _on_ _Computer_ _and_
+_Communications_ _Security_ . ACM, November 2022b. doi: 10.1145/3548606.3559352. URL
+[http://dx.doi.org/10.1145/3548606.3559352.](http://dx.doi.org/10.1145/3548606.3559352)
+
+
+David L. Donoho and Michael Elad. Optimally sparse representation in general (nonorthogonal)
+dictionaries via _ℓ_ [1] minimization. _Proceedings of the National Academy of Sciences_, 100(5):2197–
+2202, 2 2003. ISSN 0027-8424. doi: 10.1073/pnas.0437847100. [Online; accessed 2024-09-29].
+
+
+Michael Elad. _Sparse_ _and_ _Redundant_ _Representations_ . Springer New York, 2010. doi: 10.1007/
+978-1-4419-7011-4. [Online; accessed 2024-09-29].
+
+
+Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec,
+Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, Roger Grosse, Sam McCandlish,
+Jared Kaplan, Dario Amodei, Martin Wattenberg, and Christopher Olah. Toy models of superposition, 2022. [URL https://arxiv.org/abs/2209.10652.](https://arxiv.org/abs/2209.10652)
+
+
+Antonio Ginart, Melody Y. Guan, Gregory Valiant, and James Zou. Making ai forget you: Data
+deletion in machine learning, 2019. [URL https://arxiv.org/abs/1907.05012.](https://arxiv.org/abs/1907.05012)
+
+
+Aditya Golatkar, Alessandro Achille, and Stefano Soatto. Eternal sunshine of the spotless net:
+Selective forgetting in deep networks. _2020 IEEE/CVF Conference on Computer Vision and Pat-_
+_tern Recognition (CVPR)_, pp. 9301–9309, 2019. [URL https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:207863297)
+[org/CorpusID:207863297.](https://api.semanticscholar.org/CorpusID:207863297)
+
+
+Chuan Guo, Tom Goldstein, Awni Hannun, and Laurens van der Maaten. Certified data removal
+from machine learning models, 2023. [URL https://arxiv.org/abs/1911.03030.](https://arxiv.org/abs/1911.03030)
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving deep into rectifiers: Surpassing human-level performance on imagenet classification, 2015. [URL https://arxiv.org/](https://arxiv.org/abs/1502.01852)
+[abs/1502.01852.](https://arxiv.org/abs/1502.01852)
+
+
+Meghdad Kurmanji, Peter Triantafillou, Jamie Hayes, and Eleni Triantafillou. Towards unbounded
+machine unlearning, 2023. [URL https://arxiv.org/abs/2302.09880.](https://arxiv.org/abs/2302.09880)
+
+
+11
+
+
+Ronak Mehta, Sourav Pal, Vikas Singh, and Sathya N. Ravi. Deep unlearning via randomized
+conditionally independent hessians, 2022. [URL https://arxiv.org/abs/2204.07655.](https://arxiv.org/abs/2204.07655)
+
+
+Peter Norvig. _Natural Language Corpus Data_, pp. 219–242. 01 2009.
+
+
+Bruno A. Olshausen and David J. Field. Emergence of simple-cell receptive field properties by
+learning a sparse code for natural images. _Nature_, 381(6583):607–609, 6 1996. ISSN 0028-0836.
+doi: 10.1038/381607a0. [Online; accessed 2024-09-29].
+
+
+OpenAI, Josh Achiam, and et al. Gpt-4 technical report, 2024. URL [https://arxiv.org/](https://arxiv.org/abs/2303.08774)
+[abs/2303.08774.](https://arxiv.org/abs/2303.08774)
+
+
+Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. Bleu: a method for automatic
+evaluation of machine translation. In Pierre Isabelle, Eugene Charniak, and Dekang Lin (eds.),
+_Proceedings_ _of_ _the_ _40th_ _Annual_ _Meeting_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics_, pp.
+311–318, Philadelphia, Pennsylvania, USA, July 2002. Association for Computational Linguistics. doi: 10.3115/1073083.1073135IF:NANANA. URL [https://aclanthology.org/](https://aclanthology.org/P02-1040)
+[P02-1040.](https://aclanthology.org/P02-1040)
+
+
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi
+Zhou, Wei Li, and Peter J. Liu. Exploring the limits of transfer learning with a unified text-to-text
+transformer, 2023. [URL https://arxiv.org/abs/1910.10683.](https://arxiv.org/abs/1910.10683)
+
+
+Sebastian Schelter, Stefan Grafberger, and Ted Dunning. Hedgecut: Maintaining randomised trees
+for low-latency machine unlearning. In _Proceedings_ _of_ _the_ _2021_ _International_ _Conference_ _on_
+_Management of Data_, SIGMOD ’21, pp. 1545–1557, New York, NY, USA, 2021. Association for
+Computing Machinery. ISBN 9781450383431. doi: 10.1145/3448016.3457239. [URL https:](https://doi.org/10.1145/3448016.3457239)
+[//doi.org/10.1145/3448016.3457239.](https://doi.org/10.1145/3448016.3457239)
+
+
+Ayush Sekhari, Jayadev Acharya, Gautam Kamath, and Ananda Theertha Suresh. Remember what
+you want to forget: Algorithms for machine unlearning, 2021. [URL https://arxiv.org/](https://arxiv.org/abs/2103.03279)
+[abs/2103.03279.](https://arxiv.org/abs/2103.03279)
+
+
+Harshay Shah, Andrew Ilyas, and Aleksander Madry. Decomposing and editing predictions by
+modeling model computation, 2024. [URL https://arxiv.org/abs/2404.11534.](https://arxiv.org/abs/2404.11534)
+
+
+Vedant Shah, Frederik Tr¨auble, Ashish Malik, Hugo Larochelle, Michael Mozer, Sanjeev Arora,
+Yoshua Bengio, and Anirudh Goyal. Unlearning via sparse representations, 2023. [URL https:](https://arxiv.org/abs/2311.15268)
+[//arxiv.org/abs/2311.15268.](https://arxiv.org/abs/2311.15268)
+
+
+Takashi Shibata, Go Irie, Daiki Ikami, and Yu Mitsuzumi. Learning with selective forgetting. In
+Zhi-Hua Zhou (ed.), _Proceedings_ _of_ _the_ _Thirtieth_ _International_ _Joint_ _Conference_ _on_ _Artificial_
+_Intelligence,_ _IJCAI-21_, pp. 989–996. International Joint Conferences on Artificial Intelligence
+Organization, 8 2021. doi: 10.24963/ijcai.2021/137. [URL https://doi.org/10.24963/](https://doi.org/10.24963/ijcai.2021/137)
+[ijcai.2021/137.](https://doi.org/10.24963/ijcai.2021/137) Main Track.
+
+
+Emily H. Soice, Rafael Rocha, Kimberlee Cordova, Michael Specter, and Kevin M. Esvelt. Can
+large language models democratize access to dual-use biotechnology?, 2023. URL [https:](https://arxiv.org/abs/2306.03809)
+[//arxiv.org/abs/2306.03809.](https://arxiv.org/abs/2306.03809)
+
+
+Alex Tamkin, Mohammad Taufeeque, and Noah D. Goodman. Codebook features: Sparse and
+discrete interpretability for neural networks, 2023. [URL https://arxiv.org/abs/2310.](https://arxiv.org/abs/2310.17230)
+[17230.](https://arxiv.org/abs/2310.17230)
+
+
+Ross Taylor, Marcin Kardas, Guillem Cucurull, Thomas Scialom, Anthony Hartshorn, Elvis Saravia,
+Andrew Poulton, Viktor Kerkez, and Robert Stojnic. Galactica: A large language model for
+science, 2022. [URL https://arxiv.org/abs/2211.09085.](https://arxiv.org/abs/2211.09085)
+
+
+Adly Templeton, Tom Conerly, and Jonathan Marcus et al. Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet. 2024. URL
+[https://transformer-circuits.pub/2024/scaling-monosemanticity/](https://transformer-circuits.pub/2024/scaling-monosemanticity/#appendix-more-safety-features/)
+[#appendix-more-safety-features/.](https://transformer-circuits.pub/2024/scaling-monosemanticity/#appendix-more-safety-features/)
+
+
+12
+
+
+Aaron van den Oord, Oriol Vinyals, and Koray Kavukcuoglu. Neural discrete representation learning, 2018.
+
+
+Alexander Warnecke, Lukas Pirch, Christian Wressnegger, and Konrad Rieck. Machine unlearning
+of features and labels, 2023. [URL https://arxiv.org/abs/2108.11577.](https://arxiv.org/abs/2108.11577)
+
+
+Haonan Yan, Xiaoguang Li, Ziyao Guo, Hui Li, Fenghua Li, and Xiaodong Lin. Arcane: An efficient
+architecture for exact machine unlearning. In Lud De Raedt (ed.), _Proceedings of the Thirty-First_
+_International Joint Conference on Artificial Intelligence, IJCAI-22_, pp. 4006–4013. International
+Joint Conferences on Artificial Intelligence Organization, 7 2022. doi: 10.24963/ijcai.2022/556.
+[URL https://doi.org/10.24963/ijcai.2022/556.](https://doi.org/10.24963/ijcai.2022/556) Main Track.
+
+
+Weizhe Yuan, Graham Neubig, and Pengfei Liu. Bartscore: Evaluating generated text as text generation, 2021. [URL https://arxiv.org/abs/2106.11520.](https://arxiv.org/abs/2106.11520)
+
+
+Tianyi Zhang, Varsha Kishore, Felix Wu, Kilian Q. Weinberger, and Yoav Artzi. Bertscore: Evaluating text generation with bert, 2020. [URL https://arxiv.org/abs/1904.09675.](https://arxiv.org/abs/1904.09675)
+
+
+A TRAINING AND OPTIMIZATION DETAILS
+
+
+This section provides additional details on the training and optimization of the Sparse Autoencoder
+(SAE) used in CodeUnlearn.
+
+
+After the SAE encoder layer, we apply layer normalization to stabilize training and improve convergence. The dimensionality of the SAE is set to match both the codebook and input dimensions,
+which is 512.
+
+
+For the initialization of the SAE encoder layer, we use Kaiming uniform initialization He et al.
+(2015), which is well-suited for layers with ReLU activation. This method helps maintain the proper
+scale of the weights, preventing issues such as vanishing gradients. Additionally, since the codebook
+can be regarded as an activation layer, Kaiming initialization ensures that the input distributions
+to the codebook remain stable, facilitating efficient learning and representation of sparse features
+within the SAE.
+
+
+To promote sparsity in the activations, we introduce an _l_ 1 loss with a lambda parameter set to 1 _×_
+10 _[−]_ [6] . This ensures that the network learns sparse representations, which are crucial for enhancing
+the interpretability and control required for the unlearning process.
+
+
+Codebook size is 25k and the dimensionality is 512, we use top 8 codes to represent the input.
+
+
+B SEARCHING AND RETRIEVAL PROCEDURE
+
+
+B.1 DATA BUILDING
+
+
+**Selection** **of** _DT_ **:** We sampled 500 prompts containing the target words from the validation and
+test dataset.The validated prompt never participates in the training and unlearning phases. We first
+analyze word frequencies across the entire dataset to construct the target dataset _DT_ . We select
+words with frequencies between 500 and 700. Words that are too frequent tend to be overly familiar
+and lack specificity, while those that are too infrequent may not provide meaningful insights. We
+focus on words in the 500-700 frequency range, such as ’love,’ which are practically meaningful
+and suitable for testing the unlearning process.During validation, we created _DT_ _[′]_ [by selecting topic-]
+specific prompt components from the test and validation sets, and we sampled an equal number of
+instances from the remaining irrelevant dataset to construct _DR_ .
+
+
+**Generation of** _DT_ ˜ **:** For the control dataset _DT_ ˜, we replace the target words in _DT_ with common
+non-synonyms of the same part of speech. The replacement words are selected based on word
+frequencies reported by Norvig (2009). For instance, for names, we randomly generate other names
+to replace the original ones. This ensures that _DT_ ˜ maintains the same contextual structure as _DT_,
+allowing us to focus on how effectively the unlearning procedure targets specific information.
+
+
+13
+
+
+B.2 SEARCH AND RETRIEVAL OF CODES
+
+
+For code search and retrieval, we disable sampling by setting the temperature to 0 at all stages,
+ensuring deterministic behavior in code activation selection.
+
+
+Table 3: Runtime Mean and Standard Deviation for Different _S_ _[′]_
+
+
+_S_ _[′]_ Runtime Mean (s) Runtime Std (s)
+
+
+8 473.66 264.58
+24 376.98 238.66
+40 212.35 240.88
+56 211.23 438.63
+72 211.14 479.11
+88 214.12 434.29
+104 215.37 526.23
+
+
+As shown in Table 3, the runtime varies significantly due to the different lengths of the prompts.
+Despite this fluctuation, it can be observed that the average search time for the top 500 samples is
+approximately 10 minutes, indicating an efficient unlearning process.
+
+
+C EXAMPLES OF UNLEARNING
+
+
+Table 4: Examples of unlearning on the topic ’ _Julien_ ’
+
+
+**Content**
+
+
+**English** Without being the least bit in the world intimidated, Julien resumed his
+narrative.
+
+
+**Ground Truth** Sans ˆetre le moins du monde intimid´e, Julien reprit sa narration.
+
+
+**Codebook Model** Sans ˆetre le moindre obstacle du monde, Julien reprit son r´ecit.
+
+_S_ _[′]_ = 8, delete 16 codes Sans ˆetre le moindre obstacle du monde, je reprit son r´ecit.
+
+_S_ _[′]_ = 24, delete 52 codes Sans ˆetre le moindre objet du monde attaqu´e, le temps lui reprit son
+r´ecit.
+
+_S_ _[′]_ = 72, delete 133 codes Sans ˆetre le moindre obstacle du monde, M. Rochester reprit son r´ecit.
+
+
+As shown in Table 4, by _S_ _[′]_ = 24, deleting 52 codes already leads to a significant performance
+drop. The name ’ _Julien_ ’ is no longer recognized after code deletion, and the model attempts to
+fill this gap with unrelated words. This behavior interferes with the model’s understanding of the
+context, as it tries to substitute Julien’s code with alternatives, making it impossible to restore the
+correct information. The model provides incorrect substitutions, rather than leaving the slot vacant
+for further inference.
+
+
+In Table 5, we observe that the model’s performance on unrelated content, like the ’ _Notre—Dame_ ’
+topic, remains relatively stable even after unlearning the ’ _Julien_ ’ topic. Only minor perturbations occur at higher code deletions (e.g., _S_ _[′]_ = 72), but the overall sentence retains its meaning, demonstrating the model’s resilience on non-target content. The resulting change, which involves a preposition
+shift, has a negligible effect on the overall meaning of the sentence, further confirming that the unlearning process effectively targets only the specified concept without broadly disrupting unrelated
+text generation.
+
+
+D FUTURE WORK
+
+
+While CodeUnlearn has demonstrated its effectiveness in unlearning specific topics in LLMs, several
+areas remain for further exploration:
+
+
+14
+
+
+Table 5: Non-topic samples after unlearning on the topic ’ _Julien_ ’
+
+
+**Content**
+
+
+**English** In fact, within the bounds of Notre—Dame, the condemned girl could
+not be touched.
+
+
+**Ground Truth** En effet, dans l’enceinte de Notre—Dame, la condamn´ee ´etait inviolable.
+
+
+**Codebook Model** En effet, dans les limites de Notre—Dame, la condamn´ee ne pouvait
+ˆetre touch´ee.
+
+_S_ _[′]_ = 8, delete 16 codes En effet, dans les limites de Notre—Dame, la condamn´ee ne pouvait
+ˆetre touch´ee.
+
+_S_ _[′]_ = 24, delete 52 codes En effet, dans les limites de Notre—Dame, la condamn´ee ne pouvait
+ˆetre touch´ee.
+
+_S_ _[′]_ = 72, delete 133 codes En effet, au milieu des limites de Notre—Dame, la condamn´ee ne pouvait ˆetre touch´ee.
+
+
+    - **Enhanced Code Retrieval with Minimal Impact on Unrelated Information** : Improving
+the accuracy of identifying target codes can lead to more precise unlearning with reduced
+unintended consequences on irrelevant information. Future work could focus on refining
+the search and retrieval process to ensure that unlearning specific knowledge has minimal
+impact on the model’s overall performance and generalization capabilities.
+
+    - **Decentralized Code Representation** : One goal is to decentralize further the information
+encoded in the codebook to ensure that unlearning-specific features have an even more localized impact on the model’s behavior. This could lead to finer control over the granularity
+of the unlearning process.
+
+    - **Expanding to Other Tasks and Architectures** : While our method has been validated on
+language models, expanding **CodeUnlearn** to tasks like classification and extending it to
+other model architectures (e.g., transformers beyond T5) will further enhance its applicability across domains.
+
+
+E FURTHER DETAILS ON TRADITIONAL UNLEARNING METHODS
+
+
+In this appendix, we delve deeper into some of the traditional machine unlearning methods, expanding on the frameworks and strategies discussed in the related work section.
+
+
+**SISA (Sharded, Isolated, Sliced, and Aggregated) Approach** The Sharded, Isolated, Sliced, and
+Aggregated (SISA) approach Bourtoule et al. (2020) partitions the training data into independent
+shards, each used to train isolated models or sub-models. When a specific data point needs to be
+unlearned, only the relevant shard containing that data is retrained. This approach is designed to
+improve computational efficiency by reducing the need for full model retraining.
+
+
+While SISA is highly efficient compared to retraining the entire model, the framework introduces
+certain challenges. The isolated training of each shard can result in a lack of information integration across different shards, potentially leading to generalization issues. In large language models
+(LLMs), where complex interdependencies between tokens are crucial for performance, the isolated
+shard approach can cause degradation in performance. Moreover, as the size of the dataset grows,
+the retraining costs, even within individual shards, remain significant, making SISA less practical
+for large-scale LLMs.
+
+
+**Extensions** **to** **SISA:** **DaRE,** **HedgeCut,** **and** **ARCANE** Other methods such as DaRE Brophy
+& Lowd (2021) and HedgeCut Schelter et al. (2021) extend SISA’s principles to tree-based algorithms. These approaches focus on partitioning the decision tree structure to ensure that only
+specific branches or paths are retrained during unlearning. DaRE adapts the SISA framework for
+random forests, while HedgeCut applies it to hierarchical decision trees, offering more flexibility
+across different model architectures.
+
+
+15
+
+
+ARCANE Yan et al. (2022) represents another evolution of the SISA framework by optimizing
+retraining costs through class-based partitioning. In ARCANE, the dataset is divided into classspecific subsets, minimizing the impact of unlearning by only requiring retraining for the class in
+question. This strategy enhances efficiency by limiting the scope of retraining, but it still necessitates
+retraining, which can become a bottleneck, especially for high-dimensional and large-scale datasets.
+
+
+**Limitations of SISA and Its Variants in Complex Models** Despite the advancements made by
+SISA and its extensions, these methods rely heavily on specific model architectures and data structures, making them less suitable for complex and unstructured environments like LLMs. In large
+language models, the intricate dependencies between tokens mean that partitioning the data into isolated shards or classes may not capture the full complexity of the model’s learned representations.
+
+
+The isolated training across shards can also lead to issues with model generalization, as each shard is
+trained independently. This becomes particularly problematic when the model needs to generalize to
+unseen data. The lack of integration between shards can cause performance degradation, particularly
+in tasks requiring high-level contextual understanding, such as those found in LLMs. Moreover,
+although SISA limits retraining to individual shards, the computational burden remains substantial
+for large-scale datasets, making the approach less scalable for real-world deployment in LLMs.
+
+
+**Influence** **Functions** **for** **Unlearning** An alternative to retraining-based methods is the use of
+influence functions, which estimate the impact of a data point on the model’s learned parameters
+Guo et al. (2023); Sekhari et al. (2021); Mehta et al. (2022). Influence functions allow the model to
+reverse the effects of specific data points without needing full retraining. By calculating the gradient
+of the loss function with respect to the training points, influence functions can adjust the model’s
+parameters to ’forget’ the data.
+
+
+However, while influence functions are efficient for simple models like linear classifiers or small
+neural networks, they struggle with the complexity and non-linearity of deep architectures like
+LLMs. The dense and interconnected structure of LLMs makes it difficult to isolate the effect
+of individual data points without affecting the model’s overall performance. This limitation restricts
+the scalability of influence functions in unlearning tasks within complex models.
+
+
+**Re-optimization** **After** **Unlearning** A novel approach to selective forgetting, based on reoptimization, was proposed by Golatkar et al. (2019), who introduced an optimal quadratic scrubbing algorithm designed to achieve selective forgetting in deep networks. Selective forgetting is
+defined as the process of modifying network weights using a scrubbing function _S_ ( _w_ ), such that the
+weight distribution becomes indistinguishable from that of a network never trained on the forgotten
+data. This is quantitatively measured through the Kullback-Leibler (KL) divergence. If the KL divergence between the post-scrubbing weight distribution and the weight distribution of a network
+that has never encountered the forgotten data approaches zero, it indicates complete forgetting. This
+method ensures that the network ’forgets’ specific information without necessitating full retraining,
+and instead re-optimizes the network’s weights to achieve a distributional equivalence.
+
+
+However, one of the key limitations of this approach is its computational complexity. While the
+scrubbing process avoids full retraining, re-optimization still involves significant computational
+overhead, especially for large-scale models like LLMs. Additionally, achieving true distributional
+equivalence is highly challenging in practice, particularly when the network is fine-tuned on multiple tasks or trained on diverse datasets. This often leads to incomplete forgetting, as small traces of
+the forgotten data may still influence the network’s behavior.
+
+
+Building on the idea of re-optimization, Shibata et al. (2021) introduced the Learning with Selective
+Forgetting (LSF) framework, which aims to selectively forget specific classes in a lifelong learning setting. LSF employs a multi-component loss function that balances classification accuracy,
+mnemonic embedding, selective forgetting, and regularization to prevent catastrophic forgetting of
+non-target classes. This method, though promising, suffers from scalability issues when applied to
+larger datasets or more complex models. The reliance on class-level removal also limits its applicability to scenarios where granular, instance-level forgetting is required, making it less adaptable to
+tasks beyond classification, such as generative language models.
+
+
+Furthermore, both approaches struggle with model interpretability and traceability post-unlearning.
+As the network weights are continuously re-optimized, it becomes difficult to verify the extent of
+
+
+16
+
+
+forgetting or to ensure that no residual influence from the forgotten data remains. The lack of guarantees about complete data removal can be a significant concern in privacy-sensitive applications,
+where even small data remnants could pose risks. This calls for more transparent and auditable unlearning processes, particularly in contexts involving sensitive personal or confidential information.
+
+
+**Re-optimization** **After** **Unlearning** Re-optimization-based approaches to selective forgetting,
+such as the quadratic scrubbing algorithm proposed by Golatkar et al. (2019), aim to adjust a model’s
+weights so that the distribution resembles one that has never been exposed to the forgotten data. This
+is measured using Kullback-Leibler (KL) divergence, with the goal of reducing it to near zero, indicating complete forgetting without full retraining. While effective, this method is computationally
+expensive, especially for large models like LLMs, and achieving perfect distributional equivalence
+is difficult, often leaving residual traces of the forgotten data.
+
+
+The Learning with Selective Forgetting (LSF) framework introduced by Shibata et al. (2021) enhances this by incorporating a loss function that balances accuracy, mnemonic embedding, selective
+forgetting, and regularization to remove specific classes in lifelong learning. However, both methods face scalability challenges with large datasets and struggle with more granular, instance-level
+forgetting required in complex tasks like language generation.
+
+
+Moreover, these approaches lack transparency and traceability, making it difficult to verify whether
+forgetting has been truly achieved. This is particularly problematic in privacy-sensitive contexts,
+where even minor data remnants can pose significant risks. Thus, re-optimization methods, while
+promising, require further refinement to handle large-scale models and ensure complete, verifiable
+unlearning.
+
+
+**Re-optimization** **After** **Unlearning** Re-optimization-based approaches to selective forgetting,
+such as the quadratic scrubbing algorithm proposed by Golatkar et al. (2019), aim to adjust a model’s
+weights so that the distribution resembles one that has never been exposed to the forgotten data. This
+is measured using Kullback-Leibler (KL) divergence, with the goal of reducing it to near zero, indicating complete forgetting without full retraining. While effective, this method is computationally
+expensive, especially for large models like LLMs, and achieving perfect distributional equivalence
+is difficult, often leaving residual traces of the forgotten data.
+
+
+The Learning with Selective Forgetting (LSF) framework introduced by Shibata et al. (2021) enhances this by incorporating a loss function that balances accuracy, mnemonic embedding, selective
+forgetting, and regularization to remove specific classes in lifelong learning. However, both methods face scalability challenges with large datasets and struggle with more granular, instance-level
+forgetting required in complex tasks like language generation.
+
+
+Moreover, these approaches lack transparency and traceability, making it difficult to verify whether
+forgetting has been truly achieved. This is particularly problematic in privacy-sensitive contexts,
+where even minor data remnants can pose significant risks. Thus, re-optimization methods, while
+promising, require further refinement to handle large-scale models and ensure complete, verifiable
+unlearning.
+
+
+F FURTHER DETAILS ON VECTOR QUANTIZATION METHODS
+
+
+A promising direction to address these challenges lies in Vector Quantization (VQ) and Sparse Coding, which provide a natural framework for disentangling information encoded in models, offering
+deeper insights into model interpretability Elad (2010). Numerous studies have demonstrated the
+effectiveness of sparse vectors in discovering underlying sparse structures, significantly improving
+interpretability.
+
+
+For example, Arora et al. (2018) showed how sparse coding can reveal the linear algebraic structure
+of word embeddings, enhancing their interpretability. Similarly, Olshausen & Field (1996), along
+with Donoho & Elad (2003), explored how sparse coding in visual systems identifies the most relevant features, underscoring the potential of sparse representations for revealing meaningful features
+in complex models.
+
+
+Expanding on these ideas, Shah et al. (2023) proposed a Discrete Key-Value Bottleneck (DKVB)
+model that leverages sparse representations, freezing key-value pairs to prevent gradient propaga
+
+17
+
+
+tion and enabling unlearning without retraining. While effective for classification tasks, the DKVB
+model faces challenges when applied to large language models (LLMs) due to the more intricate relationships between tokens and context, highlighting the need for unlearning methods better suited
+to the complexity of LLMs.
+
+
+More recently, Elhage et al. (2022) demonstrated how sparse coding can extract and disentangle
+superpositions in toy models, providing valuable insights into the structure of neural networks. By
+applying sparse coding techniques, Elhage et al. (2022) were able to disentangle these superpositions, offering a clearer understanding of the complex behaviors observed in deep neural networks.
+
+
+Building on these advancements, Sparse Autoencoders (SAE) further enhance model interpretability
+by decomposing activation spaces into distinct, sparse components Templeton et al. (2024). SAEs
+allow models to identify specific features where information is encoded, making it easier to selectively remove or modify individual components during the unlearning process. By leveraging the
+sparsity and disentanglement properties of VQ and SAE, it is possible to develop unlearning methods that are scalable, efficient, and interpretable, offering a robust alternative to techniques that rely
+on retraining or complex data partitioning.
+
+
+G FUTURE WORK
+
+
+One of the primary limitations of CodeUnlearn is its reliance on an initial training phase to construct
+the codebook and embed representations necessary for unlearning. While this phase ensures robust
+and interpretable latent spaces for effective unlearning, it introduces a dependency that could limit
+the flexibility and scalability of the method in certain applications. Addressing this issue offers
+several potential directions for future exploration.
+
+
+A promising direction lies in reducing or eliminating the reliance on extensive initial training by enabling the model to dynamically construct and update codebook representations during inference or
+incremental learning. This approach would allow the framework to adapt its latent representations
+in real-time, making it more suitable for continuously evolving datasets and applications. Additionally, incorporating self-supervised or unsupervised representation learning techniques could reduce
+the need for labeled data during the training phase, making the method more generalizable and
+efficient. Such approaches could also support lightweight initialization strategies, minimizing the
+computational and data requirements of the initial training phase, thereby enabling deployment in
+resource-constrained environments, such as edge devices or smaller-scale systems.
+
+
+Future work could also focus on understanding the trade-offs between codebook quality, unlearning
+effectiveness, and the extent of initial training required. By systematically analyzing these relationships, researchers could identify optimal configurations that balance robustness, interpretability, and
+flexibility across different application scenarios. Addressing these challenges would allow CodeUnlearn to evolve into a more dynamic and lightweight framework, better suited for diverse and rapidly
+changing environments. Ultimately, reducing the reliance on initial training would significantly
+enhance the method’s scalability and broaden its applicability in real-world contexts.
+
+
+18

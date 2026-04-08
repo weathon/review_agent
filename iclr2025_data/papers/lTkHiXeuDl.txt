@@ -1,0 +1,1822 @@
+# HMORA: MAKING LLMS MORE EFFECTIVE WITH HI## ERARCHICAL MIXTURE OF LORA EXPERTS
+
+
+**Mengqi Liao, Wei Chen, Junfeng Shen, Shengnan Guo & Huaiyu Wan** _[∗]_
+Department of Computer Science
+Beijing Jiaotong University
+_{_ mqliao,w ~~c~~ hen,jfshen,guoshn,hywan _}_ @bjtu.edu.cn
+
+
+ABSTRACT
+
+
+Recent studies have combined Mixture of Experts (MoE) and Parameter-Efficient
+Fine-tuning (PEFT) to fine-tune large language models (LLMs), holding excellent
+performance in multi-task scenarios while remaining resource-efficient. However,
+existing MoE approaches still exhibit the following limitations: (1) Current methods fail to consider that different LLM layers capture features at varying levels
+of granularity, leading to suboptimal performance. (2) Task-level routing methods lack generalizability to unseen tasks. (3) The uncertainty introduced by load
+imbalance loss undermines the effective specialization of the experts. To address
+these challenges, we propose HMoRA, a **H** ierarchical fine-tuning method that
+combines **Mo** E and Lo **RA**, employing hybrid routing that integrates token-level
+and task-level routing in a hierarchical manner. This hierarchical hybrid routing
+allows the model to more efficiently capture both fine-grained token information
+and broader task contexts. To improve the certainty of expert selection, a novel
+routing auxiliary loss is introduced. This auxiliary function also enhances the task
+router’s ability to differentiate tasks and its generalization to unseen tasks. Additionally, several optional lightweight designs have been proposed to significantly
+reduce both the number of trainable parameters and computational costs. Experimental results demonstrate that HMoRA outperforms full fine-tuning across
+multiple NLP benchmarks, while fine-tuning only 3.9% of the parameters. The
+code is available on: [https://github.com/LiaoMengqi/HMoRA.](https://github.com/LiaoMengqi/HMoRA)
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) have made significant strides and achieved impressive capabilities
+in various natural language processing (NLP) (Liu et al., 2023; Touvron et al., 2023; Team et al.,
+2024) tasks, such as machine translation, text generation, and question answering. However, with
+models reaching tens or hundreds of billions of parameters, the computational and memory costs
+for training have increased substantially (Kaplan et al., 2020). Therefore, reducing these costs while
+maintaining performance has become a critical challenge.
+
+
+In recent years, Mixture of Experts (MoE) (Jacobs et al., 1991; Cai et al., 2024) has attracted growing
+interest in the research community. The MoE is a neural network architecture that activates a subset
+of expert modules for each input, utilizing a routing mechanism to determine which experts are engaged. MoE models enable the expansion of model capacity without significantly increasing computational costs. Recent studies have successfully integrated MoE into LLMs, significantly improving
+scalability and efficiency (Lepikhin et al., 2020; Du et al., 2022; Jiang et al., 2024), enhancing generalization in multi-task learning (Fedus et al., 2022). Furthermore, Shen et al. (2023) demonstrates
+additional performance gains in LLMs by combining MoE with instruction fine-tuning. However,
+due to the presence of multiple expert modules, standard MoE models have an extremely large
+number of parameters, which poses challenges for storage, deployment, and practical application.
+Recent studies have combined Low-Rank Adaptation (LoRA) (Hu et al., 2021) with MoE for large
+language model fine-tuning, leveraging LoRA’s parameter efficiency alongside MoE’s ability to en
+
+_∗_ Corresponding author.
+
+
+1
+
+
+hance performance in complex and multi-task scenarios (Zadouri et al., 2023; Li et al., 2024a; Tian
+et al., 2025).
+
+
+However, existing MoE models still face several challenges. (1) Combining MoE routing at different granularities, such as token-level and task-level, allows the model to more effectively capture
+information across diverse representational hierarchies (Kudugunta et al., 2021). However, existing
+MoE LLMs that employ multi-granular routing (Ren et al., 2023) fail to account for the fact that
+different layers of LLM capture features at distinct granularities (Geva et al., 2021). Consequently,
+the efficiency of capturing multi-granular information remains suboptimal. (2) What’s more, existing task-level routing MoE methods rely on task labels, which restricts their capacity to generalize
+to unseen tasks (Ren et al., 2023; Feng et al., 2024; Liu et al., 2024). Some methods (Kudugunta
+et al., 2021; Zadouri et al., 2023) eliminate reliance on task labels by using sentence representations for routing, a technique known as sentence-level routing. However, experiments show that
+sentence-level routing leads to suboptimal performance. (3) Additionally, existing load balancing
+loss functions (Shazeer et al., 2017; Fedus et al., 2022) often result in a lack of certainty in routing
+results, leading to unstable routing and undermining the specialization of experts.
+
+
+To address these challenges, we propose a hybrid routing method that combines task-level and tokenlevel routing in a **h** ierarchical manner, allowing shallow layers of LLMs capture fine-grained tokenlevel nuances, while deeper layers focus on broader task-level understanding. To tackle the issue
+of uncertainty in existing routing methods, a novel auxiliary function is proposed to enhance the
+certainty of expert selection and maintain balanced experts selection, improving expert specialization. Moreover, although our task routing is based on sentence representations, the auxiliary loss
+enhances the ability of task router to distinguish between different tasks in an unsupervised manner
+and demonstrates generalization to unseen tasks. Additionally, some lightweight designs are offered
+to reduce both the trainable parameters and computational costs without significantly compromising
+performance. Due to the high cost of training a standard MoE model from scratch, we validate the
+effectiveness of our proposed method in the context of fine-tuning. Specifically, we implement our
+approach as a PEFT method that integrates **Mo** E and Lo **RA**, which we refer to as **HMoRA** . Our
+contributions can be summarized as follows:
+
+
+    - We propose a hierarchical hybrid routing mechanism that more efficiently captures information at different granularities across various layers of LLMs.
+
+
+    - We introduce a novel auxiliary function that enhances the certainty of routing methods
+while maintaining balance in the experts selection, thereby improving expert specialization.
+
+
+    - By incorporating our auxiliary loss, the task router can learn to differentiate tasks in an
+unsupervised manner and generalize to unseen tasks.
+
+
+    - We provide several optional lightweight designs that further reduce both trainable parameters and computational costs.
+
+
+    - We train on a multi-task dataset and evaluate performance across various NLP benchmarks.
+With only 3.9% of the parameters compared to full fine-tuning, our method outperforms
+full fine-tuning on multiple benchmarks.
+
+
+2 PREILIMINARY
+
+
+Our work builds on widely adopted causal decoder LLMs (Radford et al., 2019; Touvron et al., 2023;
+Yang et al., 2024), functioning as a plugin integrated into the dense layers of these models. Below,
+we will briefly introduce the dense layers in causal decoder LLMs and the mutil-task fine-tuning.
+
+
+**Dense layers in Causal Decoder LLMs.** Causal decoder-based LLMs are built on the Transformer
+decoder architecture. Each layer contains a self-attention mechanism and a feed-forward network
+(FFN). The self-attention mechanism can vary across different LLMs, such as the multi-head attention or the multi-query attention (Ainslie et al., 2023). In general, it involves three dense layers
+( _W_ q, _W_ k, _W_ v) computing the query, key, and value, and a fourth dense layer ( _W_ o) aggregating the
+attention heads. FFN typically consists of two dense layers with a non-linear activation function, as
+described by the following equation:
+
+
+FFN( _X_ ) = _ϕ_ ( _XW_ up) _W_ down _._ (1)
+
+
+2
+
+
+Here, _X_ is the input to the FFN. While some LLMs may include bias terms in these dense layers,
+they are omitted here for simplicity. If the activation function _ϕ_ is a gated activation function like
+SwiGLU (Shazeer, 2020), it introduces an additional dense layer, _W_ gate. Our work focus on these
+dense layers ( _W_ q, _W_ k, _W_ v, _W_ o, _W_ up, _W_ down, and _W_ gate) where HMoRA will be integrated.
+
+
+**Supervised** **Fine-Tuning.** Supervised fine-tuning is a method specifically tailored to adapt LLMs
+to generate outputs that align with given instructions or prompts. Multi-task fine-tuning trains the
+model on a variety of tasks and input formats, enabling it to acquire general problem-solving skills
+rather than being specialized to a single dataset (Wei et al., 2021; Chung et al., 2024). During finetuning, each training sample consists of an input token sequence _T_ [in] and a corresponding target
+token sequence _T_ [tg] . The loss function for fine-tuning is defined as:
+
+
+_L_ LM = _−_
+
+
+_n_
+
+- log( _P_ LM( _Ti_ [tg] _| T_ [in] : _T<i_ [tg] [))] _[.]_ (2)
+
+_i_ =1
+
+
+Here, _n_ is the length of the target sequence _T_ [tg], _P_ LM( _·_ ) represents the predicted probability of
+the _i_ -th target token _Ti_ [tg][,] [conditioned] [on] [the] [input] [sequence] _[T]_ [in] [and] [all] [predicted] [tokens] [in] [the]
+target sequence. The model is optimized to maximize the likelihood of generating the correct target
+sequence.
+
+
+3 THE HMORA METHOD
+
+
+In this section, we will elaborate on HMoRA as illustrated in Figure 1. We first introduce how
+to combine LoRA and MoE, leveraging the strengths of both approaches (Section 3.1). Then, we
+present the hybrid routing mechanism which combines both token-level and task-level routing in a
+hierarchical manner to capture fine-grained and broader contextual information (Section 3.2). Next,
+we introduce a novel auxiliary loss aimed at enhancing routing certainty while maintaining a balanced selection of experts, thereby improving expert specialization. The combination of our auxiliary loss with hybrid routing enhances the task router’s ability to distinguish between tasks and even
+generalize to unseen tasks, improving overall performance in multi-task scenarios (Section 3.3).
+
+
+3.1 MIXTURE OF LORA EXPERTS
+
+
+We insert **MoRA** blocks (mixture of LoRA expert blocks), which consist of a set of LoRA experts
+and a router _R_, as plugins into the dense layers of LLMs. This combination of LoRA and MoE
+leverages the parameter efficiency of LoRA while benefiting from the strong multi-task performance
+of MoE. The forward pass for each expert is defined as:
+
+
+_Ei_ = _XW_ A _iW_ B _i,_ (3)
+
+where _W_ A _i_ _∈_ R _[d]_ [in] _[×][r]_ and _W_ B _i_ _∈_ R _[r][×][d]_ [out] are low-rank matrices, with _r_ _≪_ _d_ in _, d_ out. _W_ A _i_ is randomly
+initialized, while _W_ B _i_ is set to zero, ensuring consistency with the pre-trained state at the start of
+fine-tuning. _X_ is the input to the dense layer, with a dimension of _d_ in, and is processed in batches.
+The forward pass of the dense layer, with the MoRA block inserted, is defined as:
+
+
+_Y_ =
+
+
+_e_
+
+- _giEi,_ (4)
+
+
+_i_ =1
+
+
+_Z_ = _XW_ + _Y,_ (5)
+
+where _Ei_ is the output of the _i_ -th expert, _gi_ represents the gate value computed by the router for the
+_i_ -th expert, _e_ is the number of experts, and _W_ is the original dense layer. The final output _Z_ denotes
+the combination of the expert outputs _Y_ with the output of original dense layer. During training and
+inference of LLMs, we replace the original dense layer output with _Z_ . Here, we freeze _W_ and only
+update the parameters of experts and router, significantly reducing the parameter count compared to
+full fine-tuning and standard MoE approaches.
+
+
+The router _R_ can be viewed as a function _fR_ ( _·_ ) : R _[d]_ [in] _→_ R _[e]_ that maps the input _X_ to a distribution
+_g_ _∈_ R _[e]_, where _g_ represents the gate values used to select experts. In this paper, we investigate soft
+routing and top- _k_ routing, combined with different auxiliary losses, as the routing methods for the
+routers. A detailed explanation of routing methods is provided in Appendix A.
+
+
+3
+
+
+𝐿×
+
+
+𝑁×
+
+
+|Mixture of|Col2|Col3|
+|---|---|---|
+|Mixture of|||
+|Mixture of|||
+|Mixture of|||
+
+
+Trainable
+
+
+Frozen
+
+
+Task Router
+
+
+Token Router
+
+
+Figure 1: The HMoRA architecture combines token-level and task-level routing, utilizing a task
+encoder and task embedding to obtain task representations. MoRA blocks are integrated into the
+dense layers of LLMs.
+
+
+3.2 HIERARCHICAL HYBRID ROUTING
+
+
+Most previous MoE methods use token-level routing, which helps experts learn token-level features
+but fails to capture task-level information. Methods like MoELoRA (Liu et al., 2024) and MoA
+(Feng et al., 2024) use task-level routing but overlook fine-grained token-level details, crucial for
+capturing data subtleties. Although Ren et al. (2023) and Kudugunta et al. (2021) incorporate both
+token-level and task-level routing, they overlook the fact that shallow layers in LLMs primarily capture token-level information, while deeper layers focus more on semantic-level information (Geva
+et al., 2021). To address these limitations, we propose a hierarchical hybrid approach that more
+effectively exploits multi-granular information for routing.
+
+
+To perform task-level routing, we first need to derive a task representation from the input. We define
+a task embedding _e_ task, which is concatenated with the embeddings of the input tokens _T_ [in] and
+processed by a task encoder, TaskEncoder( _·_ ). This process is formalized as
+
+
+_H_ task = TaskEncoder(Embed( _T_ [in] ) : _e_ task) _,_ (6)
+
+
+where TaskEncoder( _·_ ) can be a single or multi-layer Transformer encoder. The output of the task
+encoder corresponding to _e_ task serves as the task representation. Embed( _·_ ) is the LLM’s embedding layer, with _e_ task being trainable while the rest of the embeddings remain frozen. We initialize
+_e_ task using the question mark symbol’s embedding, providing a meaningful starting point for task
+differentiation.
+
+
+To combine token-level and task-level routing, we merge a task router _Rs_ and a token router _Rt_ into a
+unified router. The task router computes the task-level routing results, denoted as _g_ task = _fRs_ ( _H_ task),
+which is calculated once for each input _T_ [in] . The token router computes the token-level routing
+results, denoted as _g_ token = _fRt_ ( _X_ ), which is calculated for each token in both _T_ [in] and _T_ [tg] . We then
+combine the task-level and token-level routing results to form the final gate values for each token,
+
+
+_g_ = _α_ [(] _[l]_ [)] _g_ task + (1 _−_ _α_ [(] _[l]_ [)] ) _g_ token _,_ (7)
+
+
+where _α_ [(] _[l]_ [)] represents the proportion of the two types of routing results and _l_ indicates that the router
+is at Layer _l_ of the LLM. We define _α_ [(] _[l]_ [)] as follows:
+
+
+            -            _α_ [(] _[l]_ [)] = _σ_ _−ϵ_ + 2 _× ϵ ×_ _[l]_ (8)
+
+_L_ [+] _[ µ]_
+
+
+Here, _σ_ ( _·_ ) represents the sigmoid function, and _L_ is the total number of layers in the LLM. _ϵ_ and
+_µ_ are hyperparameters that flexibly control the variation of _α_ [(] _[l]_ [)] as _l_ changes. This allows different
+
+
+4
+
+
+2000
+
+
+1750
+
+
+1500
+
+
+1250
+
+
+1000
+
+
+750
+
+
+500
+
+
+250
+
+
+0
+
+
+|1619.0|Col2|60.31 1597.0|Col4|Col5|0<br>1372.0|Col7|Col8|Time<br>Trainabl<br>0|Col10|Col11|e Parame<br>6.22|Col13|Col14|ters|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||4.46|4.46||1<br>~~4.77~~|1<br>~~4.77~~|35.|0|1091.0|1091.0|0<br>3.90|
+||||||||||||||||
+
+
+(c)
+
+
+7
+
+
+6
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+(b)
+
+
+Figure 2: (a) More hierarchical LLMs by applying hierarchical hybrid routing, where shallow layers
+focus on fine-grained token-level distinctions and deeper layers shift towards broader task-level
+understanding. (b) A more lightweight architecture by router sharing, applying single LoRA to
+_W_ - _, W_ down and using hydra LoRA. (c) A comparison of the time required for 1k steps of training
+and the proportion of trainable parameters across models with different lightweight designs.
+
+
+layers to capture information at varying granularities, rather than uniformly combining both types
+of information across all layers. Further explanations and examples are provided in Appendix B.
+**Experiments in Appendix E.5 demonstrate that increasing** _α_ [(] _[l]_ [)] **with** _l_ **improves model perfor-**
+**mance.** **Under this setup, shallow layers focus more on token-level information, while deeper**
+**layers emphasize task-level information**, as shown in Figure 2(a).
+
+
+Additionally, in Appendix C, we introduce a series of lightweight designs to further reduce the
+number of learnable parameters and enhance computational efficiency. Figure 2(b) provides a brief
+overview of these designs. A comparison of their training time and parameter efficiency is shown in
+Figure 2(c).
+
+
+3.3 ENHANCE CERTAINTY AND MAINTAIN BALANCE OF ROUTING RESULTS
+
+
+In this section, we will discuss the limitations of soft routing and top- _k_ routing introduced in Appendix A and propose a novel auxiliary function to address these issues. Moreover, we find that
+combining the auxiliary loss with the task router enhances its ability to differentiate between tasks
+and allows it to generalize to unseen tasks.
+
+
+We begin by introducing the concept of entropy (Shannon, 1948), which measures the certainty of a
+probability distribution. Given the gate values _g_ produced by a router, the entropy of _g_ is calculated
+as:
+
+
+_H_ ( _g_ ) = _−_
+
+
+_e_
+
+
+_gj_ log( _gj_ ) _,_ (9)
+
+_j_ =1
+
+
+where _e_ is the number of experts. **The** **maximum** **entropy** log _e_ **indicates** **maximum** **routing**
+**uncertainty (uniform distribution), while the minimum entropy of 0 represents complete cer-**
+**tainty** **in** **expert** **selection** **(point** **distribution).** Consider a router performing _N_ routing operations in a batch, resulting in a set of distributions _G_ = _{g_ [(1)] _, . . ., g_ [(] _[N]_ [)] _}_ . **The average distribution**
+_N_ 1 - _Ni_ =1 _[g]_ [(] _[i]_ [)] **[reflects]** **[the]** **[balance]** **[in]** **[routing]** **[decisions.]** [The] [closer] [this] [average] [is] [to] [a] [uniform]
+distribution, the more balanced the selection of experts, with the entropy approaching log _e_ .
+
+
+We conduct experiments to assess the certainty and balance of top- _k_ and soft routing (see Section 4.1). In soft routing, the shallow layers of LLMs exhibit near-uniform gate values, with entropy
+approaching log _e_, indicating random expert selection and a lack of specialization. In deeper layers,
+while certain experts are more clearly preferred, the selection becomes imbalanced, with a small
+subset of experts overused, leading to underutilization of others and reduced model performance.
+A similar issue is observed in top- _k_ routing (Figure 3(b)). Although the load balancing loss helps
+mitigate imbalance, it comes at the cost of reduced routing certainty.
+
+
+5
+
+
+To address these issues, we propose a novel auxiliary loss function that not only ensures balanced
+expert selection but also promotes greater certainty in routing results, thereby encouraging more
+effective specialization of experts across all layers.
+
+
+To introduce our auxiliary loss, we first present the Generalized Jensen-Shannon (GJS) divergence
+(Nielsen & Nock, 2009), an extension of the JS divergence (Lin, 1991), which measures the similarity across multiple probability distributions. In GJS, each distribution is assigned a weight, with the
+sum of these weights equal to 1. We assign a weight of _N_ [1] [to each gate values.] [The GJS divergence]
+
+for _N_ gate values is computed as:
+
+
+_N_ 
+- _g_ [(] _[i]_ [)]
+
+
+_i_ =1
+
+
+_−_ [1]
+
+_N_
+
+
+_N_
+
+- _H_ ( _g_ [(] _[i]_ [)] ) _,_ (10)
+
+
+_i_ =1
+
+
+GJS( _G_ ) = _H_
+
+
+1
+
+_N_
+
+
+where _H_ ( _·_ ) denotes entropy. Maximizing _H_ - _N_ 1 - _Ni_ =1 _[g]_ [(] _[i]_ [)][�] encourages the average distribution
+to approximate a uniform distribution, promoting the balancing of experts selection. Minimizing
+_H_ ( _g_ [(] _[i]_ [)] ) increases certainty by driving each individual distribution toward a point distribution. Thus,
+the GJS divergence, used as an auxiliary loss, promotes both load balancing and more decisive
+routing decisions. However, our experiments show that directly optimizing this auxiliary loss can
+reduce model performance by overly constraining model’s flexibility. To mitigate this, we propose
+the **Constrained GJS (CGJS)** divergence:
+
+
+1
+
+_N_
+
+
+_N_ 
+- _g_ [(] _[i]_ [)]
+
+
+_i_ =1
+
+
+_−_ max
+
+
+  
+_, γb_ log _e_
+
+
+- _H_ ( _g_ [(] _[i]_ [)] ) _, γc_ log _e_
+
+
+_i_ =1
+
+
+_._ (11)
+
+
+1
+
+_N_
+
+
+_N_
+
+
+CGJS( _G_ ) = min
+
+
+_H_
+
+
+Here, _γb_ and _γc_ are hyperparameters in [0 _,_ 1]. _γb_ controls routing balance, with values closer to
+1 promoting more balanced experts selection. _γc_ regulates routing certainty, with values closer to
+0 increasing certainty. Fine-tuning _γb_ and _γc_ preserves model flexibility, mitigating performance
+degradation while maintaining expert specialization and balanced experts selection. The definition
+of the auxiliary loss is as follows:
+
+_L_ aux = [max ((] _[γ][b][ −]_ _[γ][c]_ [) log] _[ e][ −]_ [CGJS][(] _[G]_ [)] _[,]_ [ 0)] _._ (12)
+
+log _e_
+
+
+The loss is normalized by dividing by log _e_, ensuring consistency as the number of experts _e_ changes.
+We apply the auxiliary loss separately to the gate values generated by each task or token router within
+each batch. **The auxiliary function essentially performs a clustering-like effect.** When applied to
+task routers, the routing results for similar tasks are brought closer together in the latent space, while
+dissimilar tasks are driven further apart. **This clustering-like approach enhances the task router’s**
+**ability to differentiate tasks in an unsupervised manner and generalizes well to unseen tasks.**
+In Appendix D, we explain in detail, from the perspective of clustering theory, why our auxiliary
+loss achieves this effect.
+
+
+Finally, we only optimize the parameters associated with the experts, router, task encoder, and task
+embedding to minimize the combined language model loss and auxiliary loss. The loss function is
+defined as:
+_L_ = _L_ LM + _λ_            - _L_ [(] aux _[R]_ [)] _[,]_ (13)
+
+_R∈S_
+
+
+where _λ_ is a hyperparameter that adjusts the weight of the auxiliary loss in the overall optimization
+process. _S_ represents the set of task routers and token routers, and _L_ [(] aux _[R]_ [)] [denotes the auxiliary loss]
+computed for each individual task or token router _R_ .
+
+
+4 EXPERIMENTS
+
+
+We fine-tune our model on **Flan v2** (Chung et al., 2024; Longpre et al., 2023), a dataset designed for
+instruction fine-tuning across 1,836 tasks such as natural language inference, question answering,
+translation, and sentiment analysis, among others. Fine-tuning on this diverse multi-task dataset
+enables the model to acquire general problem-solving capabilities rather than simply fitting to a
+specific dataset.
+
+
+6
+
+
+**Benchmarks** **and** **Metrics.** To evaluate multitask performance, we test on several NLP benchmarks, including **MMLU** (Hendrycks et al., 2020), **MMLU-Pro** (Wang et al., 2024), **ARC-Easy**,
+**ARC-Challenge** (Clark et al., 2018), **OpenBookQA** (Mihaylov et al., 2018), **SWAG** (Zellers et al.,
+2018), and **CommonsenseQA** (Talmor et al., 2018). These benchmarks consist of multiple-choice
+questions, assessing various aspects of the model’s natural language understanding. For MMLU
+and MMLU-Pro, we use **macro accuracy**, which averages accuracy across all tasks, while for the
+other benchmarks, we use **accuracy** as the evaluation metric. More detailed information about the
+training data and benchmarks is provided in Appendix E.1.
+
+
+**Base** **Model** **and** **Baseline.** We utilize **Qwen2** **1.5B** (Yang et al., 2024) as our base models. For
+baseline comparisons, we compare HMoRA with full fine-tuning ( **Full** **FT** ), **LoRA** ( _r_ = 8 and
+_r_ = 64 ) and methods incorporating mixtures of LoRA experts. These methods include **MoLoRA**
+(Zadouri et al., 2023), **MixLoRA** (Li et al., 2024a) and **HydraLoRA** (Gao et al., 2024). These
+models were selected due to their similarity in training setup to HMoRA. In contrast, other methods
+may require predefined task-specific datasets or pretrained LoRA modules, which differ significantly
+in setup and assumptions. We provide a brief introduction to the baselines in Appendix E.2.
+
+
+**Training and Evaluation Setup.** We limit the maximum number of training steps to 10,000, conducting evaluations every 200 steps on the validation sets of all benchmarks. If there is no improvement on the validation set for 10 consecutive evaluations, we will terminate the training early. The
+best checkpoint, determined by the highest averaged accuracy across all benchmarks, is selected
+for evaluation on the test set. Each experiment is repeated 5 times, and we report the mean of the
+evaluation metrics.
+
+
+4.1 ROUTING METHODS COMPARISON
+
+
+We compare the performance of soft routing and top- _k_ routing, as well as the impact of our auxiliary
+loss ( _L_ aux) and load balancing loss ( _L_ blc) mentioned in Appendix A.
+
+
+|RM|L<br>aux|L<br>blc|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|---|---|
+|**Soft**|-<br>yes|-<br>-|**55.16**<br>24.81<br>69.07<br>**85.44**<br>81.33<br>53.91<br>70.05<br>54.85<br>**26.40**<br>**70.12**<br>85.36<br>**81.68**<br>**56.15**<br>**70.99**|62.83<br>**63.65**|
+|**Top-**_k_|-<br>-<br>yes|-<br>yes<br>-|54.16<br>25.55<br>69.41<br>85.15<br>81.58<br>53.82<br>70.41<br>54.09<br>25.44<br>69.12<br>**85.56**<br>82.02<br>54.63<br>71.42<br>**54.79**<br>**26.01**<br>**69.67**<br>85.48<br>**82.36**<br>**55.76**<br>**71.99**|62.87<br>63.19<br>**63.72**|
+
+
+Table 1: Performance comparison for different routing methods ( **RM** ). We calculate the average
+accuracy ( **Avg** ) across seven benchmarks as a measure of the model’s capability in multi-task scenarios. The best result for soft or top- _k_ routing on each dataset is highlighted in **bold** .
+
+
+**Implementation** **Details.** For the MoRA block, we set _r_ = 8 and _e_ = 8, applying MoRA to all
+dense layers of Qwen2, including _W_ q _, W_ k _, W_ v _, W_ - _, W_ gate _, W_ up _,_ and _W_ down. We only use token-level
+routing in this section. For _L_ blc, we used the recommended _λ_ = 0 _._ 01. For _L_ aux, we set _λ_ = 0 _._ 003,
+_γc_ = 0 _._ 4, and _γb_ = 1. For top- _k_ routing, we set _k_ = 2. More training and implementation details as
+show in Appendix E.3.
+
+
+**Main** **Results.** As shown in Table 1, incorporating _L_ aux consistently enhances performance, with
+both soft routing and top- _k_ routing achieving significant accuracy improvements. To further analyze
+routing certainty and balance, we visualize the entropy of the gate values across different layers
+in Figure 3. Figure 3 demonstrates that our auxiliary function enhances routing certainty while
+maintaining relative balance. Although _L_ blc improves routing balance, it reduces routing certainty
+and does not achieve the same performance gains as _L_ aux. Notably, top- _k_ routing with _L_ aux achieves
+the best average accuracy. Further experimental results on the hyperparameters of _L_ aux, along with
+additional analysis of the balance and certainty of routing results, are provided in Appendix E.4.
+
+
+4.2 BASELINE COMPARISON
+
+
+**Implementation** **Details.** We compare HMoRA with other fine-tuning methods, employing top2 routing and the auxiliary function _L_ aux, along with the hierarchical hybrid routing mentioned
+in Appendix B. The hyperparameters for hierarchical hybrid routing are set as follows: _ϵ_ = 4,
+
+
+7
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+2.00
+
+1.75
+
+1.50
+
+1.25
+
+1.00
+
+0.75
+
+0.50
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||~~Soft certainty~~<br>~~Soft balance~~<br>Soft certainty with our loss<br>~~Soft balance with our loss~~||||||
+
+
+Router index in different layers of LLMs
+
+
+(b) Top- _k_ routing
+
+
+(a) Soft routing
+
+
+Figure 3: Visualizing the entropy of the gate values produced by routers across different layers. The
+base model has 28 layers, but for clarity, we start at layer 4 and sample every 4 layers, resulting in 7
+layers. Each layer contains 7 routers (corresponding to _W_ q, _W_ k, _W_ v, _W_ o, _W_ gate, _W_ up, and _W_ down),
+
+totaling 49 routers. The dotted lines represent _H_ - _N_ 1 - _Ni_ =1 _[g]_ [(] _[i]_ [)][�], indicating the **balance** of expert
+
+selection — **higher values suggest more balanced routing** . The solid lines show _N_ [1] - _Ni_ =1 _[H]_ [(] _[g]_ [(] _[i]_ [)][)][,]
+
+reflecting the **certainty** of routing decisions — **lower values indicate greater certainty** .
+
+|Method|TP|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|---|
+|**Full FT**|100%|54.12<br>25.09<br>69.13<br>85.10<br>82.35<br>55.11<br>71.16|63.15|
+|**LoRA**_ r_ = 8<br>**LoRA**_ r_ = 64<br>**MoLoRA**<br>**MixLoRA**<br>**HydraLoRA**|0.60%<br>4.78%<br>3.82%<br>3.97%<br>3.20%|52.89<br>23.77<br>67.52<br>83.92<br>79.96<br>50.51<br>66.72<br>53.34<br>24.24<br>68.60<br>84.90<br>80.93<br>53.33<br>70.64<br>53.95<br>25.26<br>69.10<br>85.44<br>81.98<br>54.43<br>70.98<br>53.95<br>24.81<br>68.94<br>85.09<br>81.15<br>52.44<br>70.31<br>54.10<br>25.08<br>69.32<br>85.11<br>81.29<br>53.66<br>70.33|60.76<br>62.28<br>63.02<br>62.38<br>62.70|
+|**HMoRA**_ w_** LW**<br>**HMoRA**_ w/o_** LW**|3.90%<br>6.31%|54.02<br>25.61<br>70.73<br>85.63<br>82.20<br>**56.40**<br>**72.59**<br>**54.63**<br>**26.59**<br>**71.47**<br>**85.87**<br>**83.23**<br>55.28<br>72.08|63.88<br>**64.16**|
+
+
+Table 2: Results of baseline comparison experiments across multiple NLP benchmarks. **TP** refers to
+the percentage of trainable parameters relative to full fine-tuning. The best result for each benchmark
+is highlighted in **bold** . “ _w_ **LW** ” and “ _w/o_ **LW** ” refer to using and not using lightweight designs,
+respectively.
+
+
+_µ_ = _−_ 2, _β_ low = 0 _._ 2, and _β_ high = 0 _._ 8. All other hyperparameters are consistent with those outlined
+in Section 4.1. We also compare HMoRA with lightweight designs mentioned in Appendix C,
+setting _η_ B = 2. For LoRA, we conducted experiments with both _r_ = 8 and _r_ = 64. For other
+mixtures of LoRA experts models, we fixed _e_ = 8 and _r_ = 8. Additionally, we performed a
+hyperparameter search for these baselines and report the best results.
+
+
+**Main Results.** As shown in Table 2, **HMoRA** _w_ **LW** designs outperforms full fine-tuning on 5 out of
+7 benchmarks, while requiring only 3.9% of the trainable parameters. Even on the two benchmarks
+where **HMoRA** _w_ **LW** slightly lags behind, the performance gap is minimal. **HMoRA** _w/o_ **LW**
+surpasses full fine-tuning across all benchmarks. Moreover, **HMoRA** _w/o_ **LW** significantly outperforms LoRA and other mixture of LoRA experts methods, demonstrating superior performance
+across all benchmarks. **HMoRA** _w/o_ **LW** also achieves higher average accuracy. These results
+demonstrate the effectiveness of HMoRA in efficiently fine-tuning LLMs in a multi-task setting. We
+also conducted baseline comparison experiments on **LLaMA 3.2 1B**, with the results and analysis
+provided in Appendix E.7.
+
+
+8
+
+
+4.3 ABLATION STUDY
+
+
+**Ablation Study on the Hyperparameters of the Auxiliary Function.** In Appendix E.4, we conduct ablation experiments primarily on the hyperparameter _γc_, finding that setting _γc_ around 0.4
+yields better model performance.
+
+
+**Ablation** **Study** **on** **the** **Hyperparameters** _ϵ_ **and** _µ_ **for** **Hierarchical** **Hybrid** **Routing.** In Appendix E.5, we perform ablation experiments on the hyperparameters _ϵ_ and _µ_ . We find that setting
+_ϵ >_ 0, i.e., increasing _α_ [(] _[l]_ [)], generally leads to better performance and the model’s performance is not
+sensitive to _µ_ .
+
+
+**Ablation** **Study** **on** **Lightweight** **Designs.** In Appendix E.6, we examine the impact of each
+lightweight design on model performance.
+
+
+**Quantitative** **Study** **on** **the** **Ability** **of** **Task** **Routers** **to** **Differentiate** **Unseen** **Tasks.** We conduct a quantitative study on the performance of task router on unseen tasks in Appendix E.8. The
+experimental results show that the task router using _L_ aux is able to effectively differentiate 42 out
+of 57 sub-tasks (73.68%) in MMLU. Without any auxiliary function, none of these tasks can be
+distinguished, while using _L_ blc can differentiate just 7 tasks (12.28%).
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+60 40 20 0 20 40
+
+
+(a) Visualization of gate values from task router with auxiliary loss.
+
+
+0
+
+
+10
+
+
+20
+
+
+|Col1|high school computer science|
+|---|---|
+||~~high school computer science~~<br>college computer science<br>high school mathematics<br>college mathematics<br>high school psychology<br>~~professional psychology~~|
+|||
+
+
+20 10 0 10 20 30
+
+
+(b) Visualization of gate values from task router without auxiliary loss.
+
+
+Figure 4: t-SNE visualization of the gate values computed by the final task router in LLMs for
+different tasks in the MMLU dataset.
+
+
+**Qualitative Study on the Ability of Task Routers to Differentiate Unseen Tasks.** To more intuitively reveal the impact of the auxiliary loss on the task router, we selected 3 pairs of tasks from
+MMLU, with each pair containing 2 similar tasks and 100 samples per task. We routed the questions of these tasks and visualized the routing results from the task router in the last laye of LLM
+with t-SNE (Van der Maaten & Hinton, 2008). As shown in Figure 4(a), when the task router uses
+_L_ aux, each task forms a distinct cluster, with similar tasks (represented by the same shape) positioned
+closer together, while dissimilar tasks are clearly separated. In contrast, the visualization of the routing results from task router without _L_ aux is shown in Figure 4(b). The routing results for these tasks,
+although forming some clusters, are noticeably less distinguishable compared to those using _L_ aux.
+This demonstrates that using _L_ aux enhances the task router’s ability to differentiate tasks, leading to
+more accurate and distinct routing decisions. Notably, no explicit task labels were provided during
+training, and the tasks from MMLU were unseen during training. This suggests that the task router
+learned to differentiate tasks in an unsupervised manner and can generalize to unseen tasks.
+
+
+9
+
+
+|Col1|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|
+|**HMoRA**<br>_w/o L_**aux for Task Router**|**54.63**<br>**26.59**<br>**71.47**<br>**85.87**<br>**83.23**<br>**55.28**<br>**72.08**<br>53.83<br>25.33<br>70.96<br>85.43<br>82.13<br>53.48<br>71.09|**64.16**<br>63.18|
+
+
+Table 3: Ablation study results on the impact of the auxiliary loss for the task router.
+
+
+As shown in Table 3, when the auxiliary loss is not applied to the task router, the model’s performance significantly declines on all benchmarks. This indicates that the auxiliary loss plays a crucial
+role in the task router’s performance.
+
+
+5 RELATED WORK
+
+
+**Mixture of Experts (MoE).** MoE was introduced by Jacobs et al. (1991) as a framework that divides
+complex problems into simpler tasks, each handled by a specialized expert. Shazeer et al. (2017) improved the efficiency of this approach by activating only a subset of experts for each input using the
+Sparsely-Gated MoE layer. Building on this, Lepikhin et al. (2020) scaled MoEs to a 600-billionparameter multilingual Transformer, enhancing scalability. Du et al. (2022) further scaled this to 1.2
+trillion parameters with GLaM, activating a small fraction of the model for each input, resulting in
+significant computational savings while outperforming GPT-3 on 29 NLP benchmarks. Fedus et al.
+(2022) simplified the MoE routing algorithm, allowing each token to select one expert, speeding
+up training without sacrificing quality. Shen et al. (2023) demonstrated that combining MoEs with
+instruction fine-tuning in LLMs improves performance on task-specific benchmarks while maintaining computational efficiency. Furthermore, MoE is not limited to language modeling but is also
+extensively utilized in other domains. For instance, Mao et al. (2024) employ MoE to capture travel
+time uncertainty in road segments under dynamic traffic conditions and Li et al. (2024b) integrates
+MoE to handle inputs from various modalities.
+
+
+**Combining MoE with LoRA.** Combining MoE with LoRA enhances LLMs for multi-task learning
+while significantly reducing the number of trainable parameters. MoLoRA (Zadouri et al., 2023)
+integrates LoRA with MoEs, achieving performance comparable to full fine-tuning. Luo et al. (2024)
+employs contrastive learning to promote expert diversity, while Dou et al. (2024) introduces an
+auxiliary function to specialize experts in either world knowledge or downstream tasks, enhancing
+overall effectiveness. Xu et al. (2024), Feng et al. (2024), and Zhao et al. (2024) dynamically
+compose independently trained LoRA experts for different tasks, albeit at the cost of labor-intensive
+training. Architecturally, MixLoRA (Li et al., 2024a) applies MoE to the feed-forward network and
+LoRA to self-attention, whereas HydraLoRA (Tian et al., 2025) uses an asymmetric design of LoRA
+experts to reduce parameters. Gao et al. (2024) demonstrates that assigning more experts to deeper
+layers improves performance. Task-level routing, as used by Liu et al. (2024) and Feng et al. (2024),
+assigns tokens based on tasks, improving expert specialization in multi-task scenarios.
+
+
+6 CONCLUSION
+
+
+This paper introduces HMoRA, an approach that enhances LLMs by integrating a mixture of LoRA
+experts with hierarchically combined token-level and task-level routing. This design enables the
+model to capture both fine-grained and global information across different layers of the LLM. We
+propose a novel auxiliary loss that enhances routing certainty while maintaining a balanced selection of experts, thereby improving expert specialization. It also strengthens task differentiation and
+enhances generalization to unseen tasks. Additionally, our lightweight designs reduce the parameter
+size and computational cost, increasing the model’s practicality. Experimental results demonstrate
+that HMoRA outperforms both full-parameter fine-tuning and other LoRA-based approaches across
+multiple benchmarks. Our auxiliary loss and hybrid routing have the potential to enhance the performance of standard MoE architectures; however, efficiency in industrial-scale applications remains a
+critical aspect that requires further refinement. This opens promising avenues for future research.
+
+
+10
+
+
+REFERENCES
+
+
+Joshua Ainslie, James Lee-Thorp, Michiel de Jong, Yury Zemlyanskiy, Federico Lebron, and Sumit
+Sanghai. Gqa: Training generalized multi-query transformer models from multi-head checkpoints. In _Proceedings of the 2023 Conference on Empirical Methods in Natural Language Pro-_
+_cessing_, pp. 4895–4901, 2023.
+
+
+Weilin Cai, Juyong Jiang, Fan Wang, Jing Tang, Sunghun Kim, and Jiayi Huang. A survey on
+mixture of experts. _arXiv preprint arXiv:2407.06204_, 2024.
+
+
+Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Yunxuan Li,
+Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, et al. Scaling instruction-finetuned language models. _Journal of Machine Learning Research_, 25(70):1–53, 2024.
+
+
+Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and
+Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge.
+_arXiv preprint arXiv:1803.05457_, 2018.
+
+
+Shihan Dou, Enyu Zhou, Yan Liu, Songyang Gao, Wei Shen, Limao Xiong, Yuhao Zhou, Xiao
+Wang, Zhiheng Xi, Xiaoran Fan, et al. Loramoe: Alleviating world knowledge forgetting in
+large language models via moe-style plugin. In _Proceedings of the 62nd Annual Meeting of the_
+_Association for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 1932–1945, 2024.
+
+
+Nan Du, Yanping Huang, Andrew M Dai, Simon Tong, Dmitry Lepikhin, Yuanzhong Xu, Maxim
+Krikun, Yanqi Zhou, Adams Wei Yu, Orhan Firat, et al. Glam: Efficient scaling of language
+models with mixture-of-experts. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 5547–
+5569. PMLR, 2022.
+
+
+William Fedus, Barret Zoph, and Noam Shazeer. Switch transformers: Scaling to trillion parameter
+models with simple and efficient sparsity. _Journal of Machine Learning Research_, 23(120):1–39,
+2022.
+
+
+Wenfeng Feng, Chuzhan Hao, Yuewei Zhang, Yu Han, and Hao Wang. Mixture-of-loras: An efficient multitask tuning for large language models. _arXiv preprint arXiv:2403.03432_, 2024.
+
+
+Chongyang Gao, Kezhen Chen, Jinmeng Rao, Baochen Sun, Ruibo Liu, Daiyi Peng, Yawen Zhang,
+Xiaoyuan Guo, Jie Yang, and VS Subrahmanian. Higher layers need more lora experts. _arXiv_
+_preprint arXiv:2402.08562_, 2024.
+
+
+Mor Geva, Roei Schuster, Jonathan Berant, and Omer Levy. Transformer feed-forward layers are
+key-value memories. In _Proceedings_ _of_ _the_ _2021_ _Conference_ _on_ _Empirical_ _Methods_ _in_ _Natural_
+_Language Processing_, pp. 5484–5495, 2021.
+
+
+Soufiane Hayou, Nikhil Ghosh, and Bin Yu. Lora+: Efficient low rank adaptation of large models.
+_arXiv preprint arXiv:2402.12354_, 2024.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and
+Jacob Steinhardt. Measuring massive multitask language understanding. _arXiv_ _preprint_
+_arXiv:2009.03300_, 2020.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Robert A Jacobs, Michael I Jordan, Steven J Nowlan, and Geoffrey E Hinton. Adaptive mixtures of
+local experts. _Neural computation_, 3(1):79–87, 1991.
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Antoine Roux, Arthur Mensch, Blanche Savary, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Emma Bou Hanna, Florian Bressand, et al.
+Mixtral of experts. _arXiv preprint arXiv:2401.04088_, 2024.
+
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. _arXiv preprint arXiv:2001.08361_, 2020.
+
+
+11
+
+
+Sneha Kudugunta, Yanping Huang, Ankur Bapna, Maxim Krikun, Dmitry Lepikhin, Minh-Thang
+Luong, and Orhan Firat. Beyond distillation: Task-level mixture-of-experts for efficient inference.
+In _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_ _2021_, pp. 3577–3599,
+2021.
+
+
+Dmitry Lepikhin, HyoukJoong Lee, Yuanzhong Xu, Dehao Chen, Orhan Firat, Yanping Huang,
+Maxim Krikun, Noam Shazeer, and Zhifeng Chen. Gshard: Scaling giant models with conditional
+computation and automatic sharding. _arXiv preprint arXiv:2006.16668_, 2020.
+
+
+Dengchun Li, Yingzi Ma, Naizheng Wang, Zhiyuan Cheng, Lei Duan, Jie Zuo, Cal Yang, and
+Mingjie Tang. Mixlora: Enhancing large language models fine-tuning with lora based mixture of
+experts. _arXiv preprint arXiv:2404.15159_, 2024a.
+
+
+Yunxin Li, Shenyuan Jiang, Baotian Hu, Longyue Wang, Wanqi Zhong, Wenhan Luo, Lin Ma, and
+Min Zhang. Uni-moe: Scaling unified multimodal llms with mixture of experts. _arXiv preprint_
+_arXiv:2405.11273_, 2024b.
+
+
+Jianhua Lin. Divergence measures based on the shannon entropy. _IEEE Transactions on Information_
+_theory_, 37(1):145–151, 1991.
+
+
+Qidong Liu, Xian Wu, Xiangyu Zhao, Yuanshao Zhu, Derong Xu, Feng Tian, and Yefeng Zheng.
+When moe meets llms: Parameter efficient fine-tuning for multi-task medical applications. In
+_Proceedings of the 47th International ACM SIGIR Conference on Research and Development in_
+_Information Retrieval_, pp. 1104–1114, 2024.
+
+
+Xiao Liu, Yanan Zheng, Zhengxiao Du, Ming Ding, Yujie Qian, Zhilin Yang, and Jie Tang. Gpt
+understands, too. _AI Open_, 2023.
+
+
+Shayne Longpre, Le Hou, Tu Vu, Albert Webson, Hyung Won Chung, Yi Tay, Denny Zhou, Quoc V
+Le, Barret Zoph, Jason Wei, et al. The flan collection: Designing data and methods for effective
+instruction tuning. In _International Conference on Machine Learning_, pp. 22631–22648. PMLR,
+2023.
+
+
+I Loshchilov. Decoupled weight decay regularization. _arXiv preprint arXiv:1711.05101_, 2017.
+
+
+Tongxu Luo, Jiahe Lei, Fangyu Lei, Weihao Liu, Shizhu He, Jun Zhao, and Kang Liu. Moelora:
+Contrastive learning guided mixture of experts on parameter-efficient fine-tuning for large language models, 2024.
+
+
+Xiaowei Mao, Yan Lin, Shengnan Guo, Yubin Chen, Xingyu Xian, Haomin Wen, Qisen Xu, Youfang
+Lin, and Huaiyu Wan. Dutytte: Deciphering uncertainty in origin-destination travel time estimation. _arXiv preprint arXiv:2408.12809_, 2024.
+
+
+Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct
+electricity? a new dataset for open book question answering. _arXiv preprint arXiv:1809.02789_,
+2018.
+
+
+Frank Nielsen and Richard Nock. Sided and symmetrized bregman centroids. _IEEE transactions on_
+_Information Theory_, 55(6):2882–2904, 2009.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+Xiaozhe Ren, Pingyi Zhou, Xinfan Meng, Xinjing Huang, Yadao Wang, Weichao Wang, Pengfei
+Li, Xiaoda Zhang, Alexander Podolskiy, Grigory Arshinov, et al. Pangu- _{\_ Sigma _}_ : Towards trillion parameter language model with sparse heterogeneous computing. _arXiv_ _preprint_
+_arXiv:2303.10845_, 2023.
+
+
+Claude Elwood Shannon. A mathematical theory of communication. _The_ _Bell_ _system_ _technical_
+_journal_, 27(3):379–423, 1948.
+
+
+Noam Shazeer. Glu variants improve transformer. _arXiv preprint arXiv:2002.05202_, 2020.
+
+
+12
+
+
+Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, and
+Jeff Dean. Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer,
+January 2017. [URL https://arxiv.org/abs/1701.06538v1.](https://arxiv.org/abs/1701.06538v1)
+
+
+Sheng Shen, Le Hou, Yanqi Zhou, Nan Du, Shayne Longpre, Jason Wei, Hyung Won Chung, Barret Zoph, William Fedus, Xinyun Chen, et al. Mixture-of-experts meets instruction tuning: A
+winning combination for large language models. _arXiv preprint arXiv:2305.14705_, 2023.
+
+
+Alon Talmor, Jonathan Herzig, Nicholas Lourie, and Jonathan Berant. Commonsenseqa: A question
+answering challenge targeting commonsense knowledge. _arXiv preprint arXiv:1811.00937_, 2018.
+
+
+GLM Team, Aohan Zeng, Bin Xu, Bowen Wang, Chenhui Zhang, Da Yin, Diego Rojas, Guanyu
+Feng, Hanlin Zhao, Hanyu Lai, et al. Chatglm: A family of large language models from glm-130b
+to glm-4 all tools. _arXiv e-prints_, pp. arXiv–2406, 2024.
+
+
+Chunlin Tian, Zhan Shi, Zhijiang Guo, Li Li, and Chengzhong Xu. Hydralora: An asymmetric lora
+architecture for efficient fine-tuning. _Advances in Neural Information Processing Systems_, 2025.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Laurens Van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. _Journal_ _of_ _machine_
+_learning research_, 9(11), 2008.
+
+
+Yubo Wang, Xueguang Ma, Ge Zhang, Yuansheng Ni, Abhranil Chandra, Shiguang Guo, Weiming
+Ren, Aaran Arulraj, Xuan He, Ziyan Jiang, et al. Mmlu-pro: A more robust and challenging
+multi-task language understanding benchmark. _arXiv preprint arXiv:2406.01574_, 2024.
+
+
+Jason Wei, Maarten Bosma, Vincent Y Zhao, Kelvin Guu, Adams Wei Yu, Brian Lester, Nan Du,
+Andrew M Dai, and Quoc V Le. Finetuned language models are zero-shot learners. _arXiv preprint_
+_arXiv:2109.01652_, 2021.
+
+
+Jingwei Xu, Junyu Lai, and Yunpeng Huang. Meteora: Multiple-tasks embedded lora for large
+language models. _arXiv preprint arXiv:2405.13053_, 2024.
+
+
+An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li,
+Chengyuan Li, Dayiheng Liu, Fei Huang, et al. Qwen2 technical report. _arXiv_ _preprint_
+_arXiv:2407.10671_, 2024.
+
+
+Ted Zadouri, Ahmet Ust¨un, Arash Ahmadian, Beyza Ermis¸, Acyr Locatelli, and Sara Hooker. [¨] Pushing mixture of experts to the limit: Extremely parameter efficient moe for instruction tuning,
+2023.
+
+
+Rowan Zellers, Yonatan Bisk, Roy Schwartz, and Yejin Choi. Swag: A large-scale adversarial
+dataset for grounded commonsense inference. _arXiv preprint arXiv:1808.05326_, 2018.
+
+
+Ziyu Zhao, Leilei Gan, Guoyin Wang, Yuwei Hu, Tao Shen, Hongxia Yang, Kun Kuang, and Fei
+Wu. Retrieval-augmented mixture of lora experts for uploadable machine learning. _arXiv preprint_
+_arXiv:2406.16989_, 2024.
+
+
+A ROUTING METHODS
+
+
+The routing methods _fR_ ( _·_ ) used in existing MoE methods can be broadly divided into two categories: soft routing and top- _k_ routing. The soft routing is formulated as follows:
+
+
+_g_ = _fR_ ( _X_ ) = softmax( _h_ ( _X_ )) (14)
+
+
+Here, _h_ ( _·_ ) : R _[d][in]_ _→_ R _[e]_ represents the routing function of the router. It can be implemented using
+a simple dense layer or a multi-layer perceptron (MLP). While soft routing is simple, it requires the
+activation of all experts. This approach is only applied in the mixture of LoRA experts method. In
+standard MoE models, using soft routing would result in substantial computational overhead. To
+
+
+13
+
+
+address this, standard MoE models typically activate only a few experts sparsely, necessitating the
+use of top- _k_ routing. The corresponding formula is as follows:
+
+_g_ = _fR_ ( _X_ ) = softmax(KeepTopK(softmax( _h_ ( _X_ )) _, k_ )) (15)
+
+
+KeepTopK( _v, k_ ) _i_ =         - _v−∞i_ _v_ otherwise _i_ is among the top _._ _k_ in _v._ (16)
+
+
+This approach retains only the top _k_ experts with the highest gate values, setting the rest to zero.
+Sparse activation is achieved by activating only experts with non-zero gate values. However, top- _k_
+routing can easily lead to certain experts being selected frequently, while others are rarely or never
+selected. This imbalance can degrade the model’s generalization ability.
+
+
+To address this issue, studies such as Shazeer et al. (2017) and Fedus et al. (2022) propose various
+**load** **balancing** techniques, which employ auxiliary loss to ensure a more even distribution in the
+selection of experts, thereby improving the performance of MoE models. The load balancing loss
+introduced in Fedus et al. (2022) encourages a uniform distribution of tokens across the _e_ experts.The
+loss function in the original work is applicable to top-1 routing. We extend it to top- _k_ routing. The
+auxiliary loss for a batch of gate values _G_ is formulated as:
+
+
+_L_ blc = _e ·_
+
+
+_e_
+
+- _Fi · Pi_ (17)
+
+
+_i_ =1
+
+
+where _Fi_ is the fraction of tokens routed to expert _i_, given by:
+
+
+1
+_Fi_ =
+_k · |G|_
+
+
+- **1** [ _gi_ in top- _k_ of _g_ ] (18)
+
+
+_g∈G_
+
+
+and _Pi_ is the average router probability for expert _i_, defined as:
+
+
+1
+_Pi_ = _|G|_
+
+
+- _gi_ (19)
+
+
+_g∈G_
+
+
+This auxiliary loss encourages uniform token routing across experts by minimizing the difference
+between _Fi_ and _Pi_, ensuring balanced selection of expert.
+
+
+B MAKING HYBRID ROUTING HIERARCHICAL
+
+
+In Equation 8, there are two hyperparameters, _ϵ_ and _µ_ . As _l_ increases from 0 to _L_, the value of _α_ [(] _[l]_ [)]
+
+transitions from _σ_ ( _−ϵ_ + _µ_ ) to _σ_ ( _ϵ_ + _µ_ ). If _ϵ_ is positive, _α_ [(] _[l]_ [)] increases with _l_ ; conversely, if _ϵ_ is
+negative, _α_ [(] _[l]_ [)] decreases as _l_ increases. The larger the value of _ϵ_, the more rapid this transition. The
+parameter _µ_ can be adjusted to control whether more layers employ token routing or task routing.
+To provide a better understanding, we present examples of various configurations of _ϵ_ and _µ_ in Table
+4.
+
+|ϵ µ|α(0) α(1) α(2) α(3) α(4) α(5)|
+|---|---|
+|2<br>0<br>-2<br>0<br>10<br>0<br>10<br>4<br>0<br>0|0.12<br>0.23<br>0.40<br>0.60<br>0.77<br>0.88<br>0.88<br>0.77<br>0.60<br>0.40<br>0.23<br>0.12<br>0<br>0<br>0.12<br>0.88<br>1<br>1<br>0<br>0.12<br>0.88<br>1<br>1<br>1<br>0.5<br>0.5<br>0.5<br>0.5<br>0.5<br>0.5|
+
+
+Table 4: Example of different setups of _α_ [(] _[l]_ [)] . Here, we set _L_ = 5.
+
+
+Additionally, if _α_ [(] _[l]_ [)] is too small, the task router contributes very little to the final gate values. Conversely, if _α_ [(] _[l]_ [)] is too large, the token router has minimal influence on the final gate values. So we set
+two thresholds, _β_ low and _β_ high. When _α_ [(] _[l]_ [)] _< β_ low, we only use token routing, and when _α_ [(] _[l]_ [)] _> β_ high,
+we only use task routing. This allows HMoRA to achieve higher efficiency, as the computational
+overhead of task routing is significantly lower than that of token routing.
+
+
+14
+
+
+C LIGHTER AND MORE EFFECTIVE HMORA
+
+
+The inclusion of task encoders and task routers significantly increased the number of trainable parameters. In this section, we explore several designs to reduce the parameter count and computational costs of HMoRA, making it more lightweight and efficient.
+
+
+**Single** **LoRA.** As shown in Figure 3, we observed that the mean entropy of the gate values at _W_ and _W_ down was relatively high without _L_ aux. Even with _L_ aux, the mean entropy of the gate values at
+_W_ - remained higher than the others. This suggests that the inputs to these two dense layers do not
+demonstrate a clear preference for different experts. As a result, we opted to apply a single LoRA
+to these dense layers instead of using MoRA.
+
+
+**Router Sharing.** Whether to assign a router to each dense layer or to a larger module is a question
+worth considering. Given that the inputs to _W_ q, _W_ k, and _W_ v are identical, as are those to _W_ up
+and _W_ gate, it is reasonable to assign the same router to these dense layers. In contrast, assigning
+separate routers to each dense layer may increase the complexity of subsequent integration among
+their outputs. Therefore, we assign a shared router to _W_ q, _W_ k, and _W_ v, and another shared router to
+_W_ up and _W_ gate.
+
+
+**Hydra** **LoRA+.** Hydra LoRA (Tian et al., 2025) found that the LoRA matrix _W_ A, when trained
+on different tasks, tends to show similarities across those tasks, with the primary differences manifesting in matrix _W_ B. As a result, matrix _W_ A can be shared among different experts, capturing
+task-agnostic knowledge, while matrix _W_ B specializes in learning domain-specific expertise. Additionally, LoRA+ (Hayou et al., 2024) proposed assigning a higher learning rate (e.g., _η_ B times, where
+_η_ B _>_ 1) to matrix _W_ B compared to _W_ A, which accelerates convergence and improves performance.
+In HMoRA, we integrate these approaches.
+
+
+D ENABLING UNSUPERVISED LEARNING THROUGH AUXILIARY LOSS
+
+
+In this section, we offer an explanation from the perspective of clustering theory, detailing how applying _L_ aux enables the task router to distinguish between different tasks in an unsupervised manner
+and how this capability generalizes to unseen tasks.
+
+
+From the perspective of clustering theory, the role of our auxiliary function in the task router can be
+understood as driving the model to automatically discover and distinguish the underlying structures
+of different tasks. One of the core objectives of clustering theory is to maximize the distance between
+different clusters (i.e., different tasks), ensuring significant separability between clusters. Another
+key objective is to minimize the distance or increase the similarity between data points within the
+same cluster, so that the data points within a cluster are more tightly grouped. Our auxiliary function
+achieves these goals in the following ways:
+
+
+    - Maximizing _H_ ( _N_ [1]     - _Ni_ =1 _[g]_ [(] _[i]_ [)][)][:] [The auxiliary function encourages the routing decisions to]
+be distributed more uniformly. This ensures that, on a global scale, routing is not overly
+concentrated on a few experts but instead utilizes all experts in a balanced manner, ensuring
+greater differentiation between tasks when selecting experts. This is analogous to the clustering objective of ”maximizing inter-cluster distance,” where different tasks are assigned
+to distinct expert clusters.
+
+    - Minimizing _N_ [1]     - _Ni_ =1 _[H]_ [(] _[g]_ [(] _[i]_ [)][)][:] [The auxiliary function drives the entropy of each individual]
+routing decision toward zero, making the routing decisions more deterministic. This ensures that different inputs from the same task are consistently routed to the same expert,
+thereby reducing intra-task variability. This is akin to the clustering objective of ”minimizing intra-cluster variance,” ensuring that all instances of the same task are routed to the
+same or similar experts.
+
+
+With this design, the task encoder and task embedding map the task information from the input into
+a feature space, where similar tasks are positioned closer together, while dissimilar tasks are pushed
+further apart. The router then utilizes the routing function to assign different task clusters in the
+feature space to corresponding combinations of experts. This process resembles unsupervised clustering, where the model, by optimizing the auxiliary function, automatically discovers the structural
+relationships between tasks.
+
+
+15
+
+
+Even when faced with unseen tasks, the task encoder captures the relevant task information from
+the input and maps it into the feature space. The router then routes the task to the most similar
+expert cluster based on its position in this space. This capability is analogous to how clustering
+algorithms assign new data points to the most appropriate cluster by evaluating their proximity to
+existing clusters.
+
+
+In summary, the auxiliary function promotes intra-cluster consistency and inter-cluster separability
+within the framework of clustering theory, enabling the task router to automatically differentiate
+between tasks in an unsupervised manner. Furthermore, this differentiation capability generalizes to
+unseen tasks. This mechanism not only enhances the model’s performance in multi-task scenarios
+but also improves its adaptability and robustness in dynamic, evolving environments.
+
+
+E ADDITIONAL EXPERIMENT INFORMATION, RESULTS, AND ANALYSIS
+
+
+E.1 DATASET STATISTICS
+
+
+For training, we utilize the Flan v2 dataset, which is derived from 473 individual datasets, spanning
+146 task categories and encompassing a total of 1,836 tasks. The dataset is divided into four mixtures: T0-SF, Muffin, SNI, and CoT. We use a 10-million-sample subset of Flan v2 [1] and adjust the
+proportions of the four mixtures, as shown in Table 5.
+
+
+**T0-SF** **Muffin** **SNI** **CoT**
+
+
+**Proportion (%)** 52.5 31.5 10.4 5.6
+
+
+Table 5: Proportion of different mixtures in Flan v2.
+
+
+To evaluate multitask performance, we test on several well-established NLP benchmarks:
+
+
+    - **MMLU (Massive Multitask Language Understanding)** : This benchmark covers 57 tasks
+across various domains, assessing a model’s ability to generalize across different subjects.
+
+
+    - **MMLU-Pro** : An extension of MMLU, this variant increases the difficulty by expanding
+the number of multiple-choice options to ten, making the evaluation more challenging.
+
+
+    - **ARC (AI2 Reasoning Challenge)** : This benchmark tests grade-school science questions,
+divided into two subsets: **ARC-Easy**, which involves straightforward questions, and **ARC-**
+**Challenge**, which requires more complex reasoning and deeper knowledge.
+
+
+    - **OpenBookQA** : A benchmark focused on science questions that require the combination
+of provided facts with external common knowledge, testing the model’s applied reasoning
+abilities.
+
+
+    - **SWAG (Situations With Adversarial Generations)** : This benchmark evaluates commonsense reasoning by asking the model to predict the most plausible next action in a given
+scenario.
+
+
+    - **CommonsenseQA** : A multiple-choice dataset that tests commonsense reasoning, requiring
+models to apply implicit world knowledge to answer questions correctly.
+
+
+Each of these benchmarks is designed to probe different dimensions of generalization, reasoning,
+and knowledge application in natural language understanding, providing a comprehensive evaluation
+of multitask learning performance. Detailed information about these datasets is shown in Table 6.
+
+
+For each evaluation, testing on full datasets would be highly time-consuming, even exceeding the
+training time. To address this, we split these benchmarks into smaller subsets. For MMLU, we
+randomly sample 300 examples from the validation set as the new validation set and 2,000 examples
+from the test set as the new test set. For MMLU-Pro, we randomly sample 2,000 examples from
+the test set as the new test set. For SWAG, we randomly sample 300 examples from the original
+validation set to create a new validation set, and 2,000 examples to form a new test set. For CommonsenseQA, we randomly sample 300 examples from the original validation set to create a new
+
+
+1https://huggingface.co/datasets/sordonia/flan-10k-flat
+
+
+16
+
+
+**Dataset** **train** **validation** **test** **Number of Options** **Metrics**
+
+
+**MMLU** 99842 1531 14042 4 Macro accuracy
+**MMLU-Pro**  - 70 12032 10 Macro accuracy
+**ARC-C** 1119 299 1172 4 Accuracy
+**ARC-E** 2251 570 2376 4 Accuracy
+**OpenBookQA** 4957 500 500 4 Accuracy
+**SWAG** 73546 20006 20005 5 Accuracy
+**CommonsenseQA** 9741 1221 1140 4 Accuracy
+
+
+Table 6: Information of the original datasets.
+
+
+**Dataset** **validation** **test**
+
+
+**MMLU** 300 2000
+**MMLU-Pro** 70 2000
+**ARC-C** 299 1172
+**ARC-E** 570 2376
+**OpenBookQA** 500 500
+**SWAG** 300 2000
+**CommonsenseQA** 300 900
+
+
+Table 7: Number of samples in validation and test splits from the subsets of original datasets.
+
+
+validation set, and 900 examples to form a new test set. The number of samples in the subsets we
+created for each benchmark is shown in Table 7. All of our experiments are evaluated on this newly
+created subset.
+
+
+E.2 BRIEF INTRODUCTION OF BASELINE
+
+
+In this section, we introduce three approaches that combine MoE with LoRA: MoLoRA, MixLoRA,
+and HydraLoRA. These methods, like our own, do not require datasets with specific task labels or
+pre-trained LoRA experts, making them suitable for a broad range of tasks. This is the primary
+reason we selected them as baselines. Below is a brief overview of each method:
+
+
+    - **MoLoRA** : MoLoRA employs token-level soft routing and applies MoRA only to the dense
+layers within the FFN.
+
+
+    - **MixLoRA** : MixLoRA utilizes token-level top- _k_ routing and applies MoRA to the dense
+layers within the FFN, while simultaneously fine-tuning each dense layer in the selfattention module using LoRA. Additionally, MixLoRA incorporates a load-balancing loss,
+_L_ blc.
+
+
+    - **HydraLoRA** : HydraLoRA introduces a novel structure for LoRA experts, where a shared
+LoRA matrix _W_ A is used among all experts, while each expert has its own unique LoRA
+matrix _W_ B _i_ . This design significantly reduces the number of parameters by sharing part
+of the LoRA components, which makes the model more parameter-efficient. HydraLoRA
+employs token-level soft routing.
+
+
+These methods combine the strengths of MoE and LoRA, making them highly relevant for comparison with our proposed method.
+
+
+E.3 TRAINING AND IMPLEMENTATION DETAILS
+
+
+**General** **Experimental** **Setup.** We set the learning rate to 2 _×_ 10 _[−]_ [5], with a warm-up period of
+500 steps during which the learning rate increases linearly. We use the AdamW Loshchilov (2017)
+optimizer, with a dropout rate of 0.1 and label smoothing set to 0.1. We simulate a base size of 12
+using gradient accumulation. The maximum input length is set to 1024, and the maximum output
+length is set to 512. All the experiments are conducted on NVIDIA A40 GPUs.
+
+
+17
+
+
+**HMoRA Implementation Details.** For the router, we implement it using a single dense layer and
+apply dropout to its inputs during training. We also apply dropout to the inputs of the experts. For
+the task encoder, we use a single-layer Transformer encoder, ensuring that the model dimension of
+task encoder is consistent with the LLM. The number of attention heads is set to 16, and the hidden
+layer size in the FFN is set to twice the model dimension.
+
+
+E.4 ANALYSIS OF THE CERTAINTY AND BALANCE OF DIFFERENT ROUTING METHODS
+
+
+In this section, we further analyze the impact of the auxiliary loss on the determinism and balance
+of the routing results. The experimental setup is consistent with that in Section 4.1, except that we
+adjust the parameter _γc_ for _Laux_ . We primarily experiment with _γc_, which affects the certainty of
+routing results. We fix _γb_ = 1 as we aim for the routing to be as balanced as possible. If the training
+data itself is imbalanced, setting _γb_ to a lower value may yield better results. We select _γc_ values
+from _{_ 0 _,_ 0 _._ 2 _,_ 0 _._ 4 _,_ 0 _._ 6 _,_ 0 _._ 8 _}_ . The experimental results are shown in Table 8. We observe that for both
+the top-2 routing and soft routing, setting _γc_ to 0.4 yields better results, while setting _γc_ too high or
+too low negatively affects the performance of the auxiliary function.
+
+
+|Routing Method γc|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|
+|**Top-2**<br>0.0<br>0.2<br>0.4<br>0.6<br>0.8|53.87<br>25.00<br>69.18<br>84.90<br>81.21<br>**57.14**<br>70.59<br>54.47<br>25.57<br>69.12<br>85.00<br>81.14<br>53.44<br>70.25<br>**54.79**<br>**26.01**<br>**69.67**<br>**85.48**<br>82.36<br>55.76<br>**71.99**<br>54.59<br>25.13<br>69.49<br>85.44<br>**82.76**<br>56.14<br>71.39<br>54.39<br>24.25<br>68.89<br>85.25<br>81.08<br>54.41<br>70.70|63.13<br>62.71<br>**63.72**<br>63.56<br>62.71|
+|**Soft**<br>0<br>0.2<br>0.4<br>0.6<br>0.8|54.81<br>24.72<br>69.78<br>**85.79**<br>**82.09**<br>55.42<br>70.70<br>53.64<br>25.96<br>69.52<br>85.14<br>81.75<br>56.02<br>70.93<br>**54.85**<br>**26.40**<br>**70.12**<br>85.36<br>81.68<br>**56.15**<br>70.99<br>53.19<br>25.04<br>69.09<br>85.17<br>81.41<br>53.29<br>70.16<br>53.94<br>25.23<br>69.78<br>85.59<br>81.82<br>53.56<br>**71.16**|63.33<br>63.28<br>**63.65**<br>62.48<br>63.01|
+
+
+Table 8: Performance comparison of Top-2 and Soft routing methods across various _γc_ settings on
+multiple NLP benchmarks.
+
+
+1.75
+
+
+1.50
+
+
+1.25
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+20
+
+
+10
+
+
+0
+
+
+10
+
+
+20
+
+
+|Col1|Col2|Col3|Col4|gamma_c = 0<br>gamma_c = 0.4<br>gamma_c = 0.8|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+
+
+20 10 0 10 20
+
+
+Figure 5: t-SNE visualization of gate values from the top-2 routing with our auxiliary loss at different _γc_ values. Dark blue points (low entropy) represent high certainty, while yellow points (high
+entropy) represent low certainty.
+
+
+Furthermore, to intuitively illustrate the impact of _γc_ on the certainty of routing, we randomly sampled a data point from the training set and input it into the model. We then visualized the gate
+values, computed by the final router over the first 200 tokens, using t-SNE. As shown in Figure 5,
+dark blue points represent gate values with very low entropy, indicating a high level of certainty, as
+they approach a single-point distribution. In contrast, yellow points represent higher entropy values,
+indicating lower certainty. The eight dark blue clusters in the figure correspond to eight distinct experts. It can be observed that when _γc_ = 0, most of the gate values are highly concentrated, forming
+
+
+18
+
+
+near single-point distributions. As _γc_ increases, the certainty of the routing decreases, leading to
+more dispersed gate values.
+
+
+40
+
+
+20
+
+
+10
+
+
+0
+
+
+10
+
+
+20
+
+
+30
+
+
+2.00
+
+
+1.75
+
+
+1.50
+
+
+1.25
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+|Col1|Col2|Top-2 w|ith our loss ( gam|ma_c = 0 )|
+|---|---|---|---|---|
+|||Top-2<br>Top-2 w<br>Top-2|ith our loss ( gam<br> ith load balance l|ma_c = 0.4 )<br>    oss|
+||||||
+||||||
+||||||
+||||||
+
+
+30 20 10 0 10 20 30
+
+
+Figure 6: t-SNE visualization of gate values from different routing methods. The plot compares
+four routing methods: top-2 routing without any auxiliary loss (rhombic), top-2 routing with _L_ blc
+(triangles), and top-2 routing with _L_ aux at _γc_ = 0 (circles) and _γc_ = 0 _._ 4 (squares). The color scale
+represents entropy, with darker colors indicating lower entropy (higher certainty) and lighter colors
+indicating higher entropy (lower certainty).
+
+
+We compare the certainty of standard top-2 routing, top-2 routing with _L_ aux, and top-2 routing
+with _L_ blc. The results are shown in Figure 6. In top-2 routing without any auxiliary loss, despite
+the high certainty of the gate values, there is a severe imbalance, with nearly all routing decisions
+biased toward a single expert (as seen in the upper-middle part of the figure). This causes the
+MoE model to effectively degrade into a non-MoE model. Conversely, top-2 routing with load
+balancing loss results in a lack of certainty, with most gate values approaching a uniform distribution,
+which undermines expert specialization. In contrast, top-2 routing with our auxiliary loss achieves
+both a relatively balanced selection of experts and greater determinism, thereby enhancing expert
+specialization.
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+|gamma_c = 0<br>gamma_c = 0.4<br>gamma_c = 0.8<br>load balancing|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|<br>top-2 only|||||
+||||||
+||||||
+|<br> <br>|<br> <br> <br>|<br>|<br>||
+
+
+Figure 7: Proportion of activations for each expert in top-2 routing across different configurations.
+The plot compares the impact of _L_ aux with varying _γc_ values (0, 0 _._ 4, and 0 _._ 8), and load balancing
+_L_ blc on the selection of experts (1-8).
+
+
+We further analyze the balance of these routing methods by counting the number of experts activated
+by the top-2 routing for the first 200 tokens of input and calculating the proportion of activations for
+each expert relative to the total number of expert activations. Since top-2 routing activates both the
+expert with the highest probability and the expert with the second-highest probability, the maximum
+activation proportion for any single expert can reach 50%. The results are shown in Figure 7. Without any auxiliary loss, top-2 routing is the most imbalanced, with Expert 7 being activated nearly
+50% of the time, while Expert 1, 4, and 6 are almost never used. A similar imbalance occurs when
+
+
+19
+
+
+_L_ aux is applied with _γc_ = 0. However, when _γc_ is set to 0.4 or 0.8, this imbalance is significantly
+reduced. The most balanced routing is achieved with top-2 routing using _L_ blc. However, as noted
+in the previous analysis, this balance comes at the cost of reduced certainty. Furthermore, given
+that the data itself is imbalanced, enforcing strict balance can even hinder the specialization of the
+experts. The experimental results in Section 4.1 also demonstrate that using our auxiliary loss leads
+to better overall performance.
+
+
+E.5 EXPLORING THE EFFECTS OF HYBRID ROUTING
+
+
+In this section, we investigate how combining task-level and token-level routing can enhance the
+performance of LLMs. In this set of experiments, we do not apply the lightweight designs. For the
+auxiliary loss, we set _γc_ = 0 _._ 4, _γb_ = 1, and _λ_ = 0 _._ 003. The upper and lower bounds for hybrid
+routing are set to _β_ down = 0 _._ 2 and _β_ up = 0 _._ 8, respectively. We conduct experiments by varying _ϵ_
+and _µ_ .
+
+
+|Manner|ϵ µ|α(l)|TP|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|---|---|---|
+|Constant|0<br>-2<br>0<br>-.135<br>0<br>-0.4<br>0<br>0.4<br>0<br>1.35<br>0<br>2|0<br>0.2<br>0.4<br>0.6<br>0.8<br>1|5.04%<br>6.42%<br>6.42%<br>6.42%<br>6.42%<br>6.16%|**54.79**<br>26.01<br>69.67<br>85.48<br>82.36<br>55.76<br>71.99<br>54.62<br>25.57<br>69.29<br>84.91<br>81.68<br>**56.98**<br>70.93<br>54.76<br>24.72<br>69.81<br>85.22<br>83.03<br>54.41<br>71.39<br>54.26<br>25.42<br>69.55<br>85.44<br>82.42<br>53.27<br>70.22<br>53.43<br>25.09<br>69.18<br>85.20<br>82.36<br>54.48<br>71.31<br>53.96<br>26.11<br>69.21<br>85.07<br>82.15<br>54.87<br>70.93|63.72<br>63.43<br>63.34<br>62.94<br>63.01<br>63.19|
+|Hierarchical|-4<br>0<br>4<br>0<br>4<br>-2<br>4<br>2|_↓_<br>_↑_<br>_↑_<br>_↑_|6.29%<br>6.29%<br>6.31%<br>6.26%|54.30<br>25.47<br>69.55<br>85.69<br>82.42<br>54.78<br>71.05<br>53.67<br>26.09<br>69.92<br>85.58<br>**83.43**<br>54.64<br>**72.59**<br>54.63<br>**26.59**<br>**71.47**<br>**85.87**<br>83.23<br>55.28<br>72.08<br>54.50<br>26.14<br>69.89<br>85.66<br>83.42<br>55.89<br>72.23|63.32<br>63.70<br>**64.16**<br>63.96|
+
+
+Table 9: The performance on 7 benchmarks when _α_ [(] _[l]_ [)] is set to constant or hierarchical. For the
+**constant** group of experiments, _α_ [(] _[l]_ [)] is set to a fixed constant across all layers. The value of _α_ [(] _[l]_ [)]
+shown in the table represents the approximate value under the corresponding settings of _ϵ_ and _µ_ . For
+the **hierarchical** group of experiments, _↑_ indicates that _α_ [(] _[l]_ [)] increases with layer _l_, while _↓_ indicates
+that it decreases with layer _l_ .
+
+
+As shown in Table 9, we observe that an increasing _α_ [(] _[l]_ [)] across layers significantly boosts the model’s
+performance compared to both decreasing _α_ [(] _[l]_ [)] and constant _α_ [(] _[l]_ [)] . The configuration where _α_ [(] _[l]_ [)] increases progressively across layers achieves relatively better average performance, with the setting
+_ϵ_ = 0 and _µ_ = _−_ 2 yielding the best results. This outcome underscores the effectiveness of hierarchical hybrid routing, which enables the model to shift its focus from token-level details in the early
+layers to broader task-level understanding in the deeper layers. Setting _ϵ >_ 0 (with _α_ [(] _[l]_ [)] increasing)
+generally yields better performance. The model appears to be less sensitive to the parameter _µ_ .
+
+
+E.6 EFFICIENCY ANALYSIS OF LIGHTWEIGHT DESIGNS
+
+
+In this section, we evaluate the lightweight designs discussed in Appendix C. All methods were
+tested under the same hardware configuration, and we measured the time required to train for 1,000
+steps to estimate the computational cost of each lightweight design. For hierarchical hybrid routing,
+we set _ϵ_ = 4 and _µ_ = _−_ 2, with all other settings consistent with those outlined in Appendix E.5.
+We set the actual batch size to 4, but accumulate gradients over 3 steps to simulate a batch size of
+12.
+
+
+As depicted in Figure 2(c), router sharing does not significantly reduce the number of trainable
+parameters, but it substantially lowers computational cost. Conversely, both Hydra LoRA and Single
+LoRA greatly decrease the number of trainable parameters. When these designs are combined, we
+observe nearly a one-third reduction in both computational cost and trainable parameters.
+
+
+In terms of performance, as shown in Table 10, router sharing not only maintains performance levels
+comparable to the base method but even improves the model’s performance on the SWAG benchmark. However, both Hydra LoRA and Single LoRA introduce some performance degradation. The
+combination of Hydra LoRA and LoRA+ helps mitigate the performance drop when _η_ B = 2 is applied. Integrating all of the lightweight designs results in only a minimal decrease in performance,
+demonstrating that these approaches effectively reduce both computational and memory costs with
+
+20
+
+
+|Method|TP|ηB|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|---|---|
+|Base|6.31%|-|**54.63**<br>26.59<br>**71.47**<br>**85.87**<br>83.23<br>55.28<br>72.08|**64.16**|
+|+ Router Sharing<br>+ Single LoRA<br>+ Hydra LoRA<br>+ Hydra LoRA+<br>+ Hydra LoRA+<br>+ Hydra LoRA+<br>+ Hydra LoRA+<br>+ Hydra LoRA+|6.22%<br>4.77%<br>4.46%<br>4.46%<br>4.46%<br>4.46%<br>4.46%<br>4.46%|-<br>-<br>-<br>1.2<br>1.4<br>1.6<br>1.8<br>2.0|54.52<br>25.68<br>71.27<br>85.41<br>82.83<br>**56.58**<br>72.08<br>53.41<br>25.23<br>69.81<br>85.18<br>81.35<br>56.13<br>70.88<br>53.75<br>26.27<br>70.01<br>85.41<br>81.55<br>55.64<br>71.11<br>53.78<br>25.39<br>69.35<br>85.41<br>82.82<br>54.30<br>71.36<br>53.53<br>25.27<br>69.15<br>85.38<br>81.68<br>54.85<br>71.16<br>53.17<br>25.08<br>69.47<br>85.58<br>81.35<br>54.55<br>71.93<br>53.79<br>24.99<br>68.89<br>85.52<br>**83.50**<br>54.78<br>71.65<br>53.40<br>**26.81**<br>70.89<br>85.35<br>82.76<br>55.68<br>71.97|64.05<br>63.14<br>63.39<br>63.20<br>63.00<br>63.02<br>63.30<br>63.84|
+|+ All|3.90%|2.0|54.02<br>25.61<br>70.73<br>85.63<br>82.20<br>56.40<br>**72.59**|63.88|
+
+
+Table 10: Performance comparison of various lightweight design strategies, including Router Sharing, Single LoRA, Hydra LoRA, and Hydra LoRA+ with different _η_ B settings. The table shows the
+percentage of trainable parameters (TP), as well as performance across multiple benchmarks. The
+“+ All” row represents the integration of all lightweight designs.
+
+
+out significantly compromising the model’s accuracy on benchmark tests. These findings highlight
+the practicality of adopting lightweight designs, especially in resource-constrained environments, as
+they enable substantial efficiency gains while preserving competitive performance.
+
+
+E.7 BASELINE COMPARISON ON LLAMA 3.2 1B
+
+
+We conducted baseline comparison experiments on LLaMA 3.2 1B. We set _γc_ to 0.8 and _ηB_ to 4.
+We increased the maximum training steps to 20,000, and evaluated on the validation set every 1,000
+steps. All other parameters are consistent with those described in Section 4.2. The experimental
+results are shown in Table 11.
+
+|Col1|TP|MMLU MMLU-Pro ARC-C ARC-E OpenBook SWAG Comm|Avg|
+|---|---|---|---|
+|**full fne-tuning**|100%|27.42<br>12.05<br>27.51<br>41.22<br>50.91<br>28.47<br>47.75|33.61|
+|**LoRA r=8**<br>**LoRA r=64**<br>**MoLoRA**<br>**MixLoRA**<br>**HydraLoRA**|0.45%<br>3.64%<br>2.67%<br>2.81%<br>2.37%|31.4<br>12.21<br>33.42<br>46.63<br>51.82<br>37.62<br>45.81<br>33.82<br>12.11<br>**39.12**<br>57.57<br>55.15<br>39.44<br>47.59<br>25.02<br>9.67<br>26.31<br>26.74<br>27.07<br>25.31<br>22.51<br>34.18<br>12.76<br>38.26<br>54.07<br>50.91<br>**42.08**<br>46.2<br>34.39<br>12.56<br>36.68<br>58.63<br>58.99<br>39.82<br>45.81|36.99<br>40.68<br>23.23<br>39.78<br>40.98|
+|**HMoRA**_ w/o_** LW**<br>**HMoRA**_ w_** LW**|6.61%<br>4.63%|32.69<br>**13.34**<br>37.26<br>56.01<br>59.07<br>38.29<br>50.78<br>**35.19**<br>12.91<br>38.6<br>**58.84**<br>**61.72**<br>39.29<br>**54.25**|41.06<br>**42.97**|
+
+
+Table 11: Baseline comparison based on LLaMA 3.2 1B.
+
+
+We observed that full fine-tuning resulted in significantly poorer performance compared to PEFT
+methods. Through our analysis, we summarized two potential reasons for this outcome. First, the
+Flan dataset does not encompass the knowledge contained in the benchmarks. Consequently, for
+knowledge-intensive benchmarks such as MMLU and MMLU-Pro, the performance of LLMs on
+these benchmarks heavily relies on their inherent knowledge. Second, our experiments revealed that
+LLaMA requires more training steps compared to Qwen to gradually improve its average accuracy
+across all benchmarks. For full fine-tuning, more fine-tuning steps could lead to greater forgetting
+of the pre-trained knowledge. In contrast, for PEFT methods, this issue is mitigated as the original
+model parameters remain frozen during training. Moreover, MoLoRA appeared to be completely
+ineffective, which we suspect is due to the fact that MoLoRA does not fine-tune the attention layers.
+Surprisingly, HMoRA _w_ LW achieved the highest average accuracy and performed best on 4 out of
+7 benchmarks, even surpassing HMoRA _w/o_ LW.
+
+
+E.8 QUANTITATIVE EXPERIMENTS AND ANALYSIS ON TASK ROUTER
+
+
+In the ablation experiments presented in the paper, we tested 6 unseen tasks from MMLU and used
+visualizations to verify the task router’s ability to differentiate between unseen tasks. Here, we
+further explore this capability through quantitative analysis. We sampled 100 examples from each
+of the 57 tasks in MMLU and analyzed the task router’s routing results for these samples. First, we
+
+
+21
+
+
+recorded the proportion of expert activations relative to the total number of activations, as shown
+in Table 12. It is important to note that, since we use top-2 routing, each sample activates two
+experts (an expert pair). The results show that, without any auxiliary function, all tasks are routed
+exclusively to experts 1 and 2.
+
+
+**Expert** **0** **1** **2** **3** **4** **5** **6** **7**
+
+
+with _L_ aux 10.21 0.45 5.21 34.11 10.67 1.72 31.25 6.34
+without any loss 0 0.5 0.5 0 0 0 0 0
+with _L_ blc 8.47 2.11 18.37 27.87 5.62 37.55 0 0
+
+
+Table 12: Proportion of expert activations across different settings, showing the distribution of expert
+usage with and without auxiliary loss functions.
+
+
+Further, we analyzed the expert pairs activated for each task. For each task, we identified the most
+frequently activated expert pair from the 100 samples as the **main** **expert** **pair** **(MEP)** . As show
+in Table 13, we calculated the proportion of tasks in which the activation of the main expert pair
+exceeded a certain proportion threshold.
+
+
+Threshold _≥_ 0 _._ 7 _≥_ 0 _._ 8 _≥_ 0 _._ 9 = 1
+
+
+with _L_ aux 78.94% 73.68% 54.38% 14.03%
+without any loss 100% 100% 100% 100%
+with _L_ blc 21.05% 12.28% 3.5% 1.75%
+
+
+Table 13: Proportion of tasks where the main expert pair activation exceeds different thresholds.
+
+
+**We** **define** **tasks** **with** **a** **MEP** **proportion** **exceeding** **0.8** **as** **recognizable** **by** **the** **router,** **as** **this**
+**indicates consistent and reliable routing.** Although the proportion of MEP activation consistently
+reaches 100% without any auxiliary function, it merely routes all tasks to a single pair of experts (1,
+2), which we do not regard as a valid indicator of its capability to differentiate between tasks.
+
+
+**Main Expert Pair** (3, 6) (2, 7) (0, 4) All
+
+
+**All Tasks** 44 5 8 57
+**MEP Proportion** _≥_ 0 _._ 8 **Tasks** 34 3 5 42
+
+
+**Ratio** 77.27% 60% 62.5% 73.68%
+
+
+Table 14: Statistics of main expert pairs using _L_ aux, showing the number of tasks for each main
+expert pair and the proportion of tasks where the main expert pair activation exceeds 0.8.
+
+
+**Main Expert Pair** (0, 5) (1, 3) (2, 3) (2, 4) (2, 5) (3, 5) All
+
+
+**All Tasks** 2 3 1 4 11 36 57
+**MEP Proportion** _≥_ 0 _._ 8 **Tasks** 0 1 0 0 0 6 7
+
+
+**Ratio** 0% 33.33% 0% 0% 0% 16.67% 12.28%
+
+
+Table 15: Statistics of main expert pairs using _L_ bcl, showing the number of tasks for each main
+expert pair and the proportion of tasks where the main expert pair activation exceeds 0.8.
+
+
+We further analyzed the MEP for all tasks. The statistics of main expert pairs using _L_ aux and _L_ blc
+are shown in Table 14 and Table 15, respectively. As shown in Table 14, the task router grouped all
+MMLU tasks into three clusters, with **42 tasks (73.68%) being effectively recognized** . In contrast,
+when using _L_ blc, although the number of primary expert pairs increased, only two clusters, (1, 3) and
+(3, 5), were significant, and only 7 tasks (12.28%) were effectively recognized overall. The above
+quantitative analysis demonstrates that our auxiliary function enhances the task router’s ability to
+differentiate between tasks, even for those that were not encountered during training.
+
+
+22

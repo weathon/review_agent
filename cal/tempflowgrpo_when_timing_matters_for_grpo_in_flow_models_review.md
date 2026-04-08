@@ -1,247 +1,226 @@
-=== CALIBRATION EXAMPLE 83 ===
+=== CALIBRATION EXAMPLE 42 ===
 
 # Harsh Critic Review
 ## Section-by-Section Critical Review
 
----
-
 ### Title & Abstract
 
-The title "TempFlow-GRPO: When Timing Matters for GRPO in Flow Models" is appropriately descriptive. The three claimed contributions (trajectory branching, noise-aware weighting, seed group strategy) are clearly previewed. The claim of "state-of-the-art performance" in the abstract is slightly overreaching given the narrow comparison set (primarily Flow-GRPO and DanceGRPO), but is not egregious. The abstract accurately summarizes the content.
+The subtitle "When Timing Matters for GRPO in Flow Models" is somewhat casual and vague for an ICLR submission; it reads more like a blog headline than a precise technical descriptor. The abstract makes three strong claims: (1) temporal uniformity is the "key impediment" to GRPO in flow models, (2) the method provides "process rewards … without requiring specialized intermediate reward models," and (3) it delivers "state-of-the-art performance." All three claims are partially supported by the experiments, but (1) is an empirical assertion stated as a principled diagnosis without showing that temporal uniformity—rather than, e.g., reward model quality or group size—is the bottleneck, (2) is accurate but perhaps overstated since the approach still depends entirely on terminal reward quality, and (3) is contested given that comparisons to non-GRPO methods (DPO-based, diffusion RL) are superficial and the human-evaluation gap is unaddressed.
 
 ---
 
 ### Introduction & Motivation
 
-The core motivation is sound: empirically demonstrating that reward standard deviation varies dramatically across denoising timesteps (Figure 2, left) provides genuine evidence that uniform optimization is suboptimal. This is the paper's strongest motivational contribution. The framing of the problem as "temporal uniformity assumption" is crisp.
+**Strongest part of the paper.** Figure 2 (left) is a convincing empirical motivation: applying SDE only at one timestep and measuring reward standard deviation reveals a sharp peak at early steps. This cleanly establishes that different timesteps have different exploration potential. The identification of two specific failure modes—sparse terminal rewards and uniform optimization pressure—is crisp.
 
-Several issues, however:
+However, one subtlety is elided: the experiment in Figure 2 applies SDE at step k and measures variance in the TERMINAL reward. This is not the same as showing that credit should be assigned differently to each step in the context of GRPO training—it is possible that the effect on training dynamics is mediated by other factors (e.g., gradient magnitude, trajectory correlation). The paper would be stronger if it connected Figure 2's observation directly to training behavior (e.g., showing that in Flow-GRPO, early steps actually receive smaller effective gradient updates).
 
-1. **Overclaiming the diagnosis.** The paper asserts that "the key impediment" and "primary limitation" of flow-based GRPO is temporal uniformity. Other known failure modes of GRPO in generative settings—reward hacking, diversity collapse, KL explosion—are not addressed or even acknowledged as co-contributors.
-
-2. **Figure 2's generalizability.** The empirical variance analysis (200 prompts, 24 per group, PickScore reward) is performed under a specific model, schedule, and reward function. The authors do not discuss whether this temporal variance pattern is universal across reward types (e.g., compositional rewards vs. aesthetic scores) or whether it is specific to the SD3.5-M model with 9 denoising steps.
-
-3. **Forward references.** Figures 2 and 3 are mentioned prominently in the introduction before methods or results are presented, which is disruptive.
+The claim that existing work "treats the multi-step generation process as a black box" somewhat overstates the contrast with DanceGRPO and SPO, which do differentiate timesteps to some degree.
 
 ---
 
-### Preliminary (Section 3)
+### Method
 
-The recap of Flow-GRPO's GRPO formulation (Equations 1–6) is competent. The notation is consistent with prior work. The ODE-to-SDE conversion for flow matching models (Eq. 4–5) and the closed-form KL divergence (Eq. 6) are reproduced faithfully.
+**Section 4.1.1 — Trajectory Branching**
 
-One observation: the paper does not explicitly describe the discrete time schedule used (how many steps T, how step sizes Δt are determined, how t maps to noise level σt), which becomes important for understanding the scale terms in Section 4.2. This is only partially recovered in the appendix.
+The core idea is elegant: run the ODE trajectory deterministically to step k, inject one SDE step at k, and continue deterministically to completion. The terminal reward then localizes the credit to step k. This is a valid and practical mechanism for attributing credit without a process reward model.
 
----
+However, the paper labels an immediate consequence of the design as a **"Theorem (Credit Localization)"**—which will damage credibility with technically rigorous reviewers. The statement is: since stochasticity is only at step k, reward variance is attributable to step k. This is true by construction, not by proof. It is not a mathematical theorem—it is a definitional property. Calling it a theorem risks appearing either naïve or misleading.
 
-### Method (Section 4)
+More substantively: the "credit" assigned to step k is the outcome of the full remaining ODE trajectory starting from x_{k-1}, which itself depends on the entire prior ODE trajectory (x_T → … → x_k). The method measures the *marginal contribution* of the stochastic choice at step k given a fixed prefix and fixed suffix policy, not the true Q-value at that state. For short trajectories this is a reasonable proxy, but the relationship to true policy gradient credit assignment is only formalized under the policy gradient justification in Section 4.2—and that analysis has its own limitations (see below).
 
-**4.1.1 — Trajectory Branching**
+**A critical missing experiment:** The paper does branching at *every* timestep, but the motivation (Figure 2 left) argues specifically that early steps matter most. There is no ablation showing the effect of restricting branching to only early timesteps vs. only late timesteps vs. all timesteps. This would directly validate or complicate the core motivation.
 
-The ODE→SDE→ODE branching mechanism is the paper's central and most interesting idea. By confining all stochasticity to a single designated timestep k, reward differences between branches are unambiguously attributable to that step. The idea is elegant and practically useful, as it avoids training a separate process reward model.
+**Section 4.1.2 — Noise-Aware Policy Weighting**
 
-However, several concerns arise:
+This is the most technically grounded contribution. The observation in Figure 5 (left) that reward std is strongly correlated with noise level is compelling and well-motivated. The reweighting in Eq. 7 is simple and easy to implement.
 
-- **"Theorem (Credit Localization)" is not a theorem.** The statement—that all reward variance is localized at the branching point—is a *definitional consequence* of the construction, not a derived result. If you inject stochasticity only at step k and the rest of the trajectory is deterministic, then of course all variation originates from step k. Calling this a "Theorem" with "provable guarantees" is misleading and inflates the theoretical contribution. No formal proof with stated assumptions is given.
+The theoretical justification in Section 4.2 derives the policy gradient and shows that without reweighting, the scale term is proportional to √(Δk(1−k)/k)—which for flow matching with k ∈ (0,1) diverges as k → 0 (clean image end). With noise-level reweighting, the scale term simplifies to Δk, yielding uniform gradient weighting when step sizes are equal. The claim "when flow shift equals 1, our method achieves perfect equilibrium" is correct but represents a special case. For other flow shift values, the reweighting does not achieve perfect equilibrium, and the paper does not examine how performance degrades as flow shift deviates from 1. This limits the generality of the theoretical claim.
 
-- **Which timestep is branched at, and how?** Section 4.1.1 defines branching at a "designated branching timestep k," implying a single k per branch. But Section 5.2 states "branching is performed at each step." These descriptions are contradictory. In the 4×6 configuration (4 initial seeds, 6 branches each), it seems each of the 6 branches corresponds to a different branching timestep. But this is never made explicit in the main paper, leaving the reader uncertain about the exact sampling procedure.
+The derivation in Appendix A.1 contains a Taylor expansion approximation of the reward (Eq. 26) that requires the perturbation magnitude σk√Δk to be small. In early high-noise stages—exactly where the paper claims the method has most impact—this approximation may be crude. The derivation should clarify when this is valid or how large the approximation error is.
 
-- **Comparing advantages across heterogeneous branches.** If the 6 branches from the same seed branch at 6 different timesteps (e.g., steps 0, 1, 2, 3, 4, 5 out of 9), their final rewards will have fundamentally different variances (as shown in Figure 2). Normalizing advantages across these branches (Eq. 3) computes a shared mean and std across samples with intrinsically different exploration ranges. This conflation could make advantage estimates statistically unreliable—an issue the paper does not address.
+**Section 4.3 — Seed Group Strategy**
 
-**4.1.2 — Noise-Aware Policy Weighting**
+The seed group strategy (grouping trajectories sharing the same initial seed) is a sensible variance reduction technique for the GRPO advantage computation. The motivation is sound: without seed grouping, reward differences across group members could reflect initial noise variation rather than policy quality.
 
-The empirical correlation between noise level σt√Δt and reward std (Figure 5, left) is a useful observation. The reweighting formula (Eq. 7) is simple: multiply each timestep's policy loss by the normalized noise level. This is well-motivated intuitively.
-
-The right panel of Figure 5 provides a visual complement by showing scale terms in the gradient. The key claim is that standard GRPO causes late, low-noise timesteps to dominate the gradient update despite minimal contribution to image content. The reweighting corrects this. This analysis is convincing.
-
-**4.2 — Policy Gradient-Based Theoretical Justification**
-
-The derivation in Section 4.2 (and Appendix A.1) traces through the policy gradient to show that the natural gradient scale term before reweighting is proportional to Δk(1−k)/k, while after reweighting it becomes proportional to Δk. The derivation appears technically correct for the specific SDE parameterization used.
-
-However:
-- The "uniform gradient contribution" conclusion ("equal gradient contributions from all timesteps") holds only when **flow shift = 1**. For other common shifts (e.g., shift = 3 used in many FLUX experiments), the reweighting does not achieve uniform contributions. This is acknowledged in passing (Figure 5 right shows curves for different shifts), but the dependency is not analyzed or discussed.
-- The derivation in Appendix A.1 uses a **first-order Taylor expansion** of the reward function around zero noise (Eq. 26), assuming small noise injection. This assumption is most violated precisely at the early timesteps where noise is largest—the very steps where the authors argue their method is most impactful. The theoretical motivation thus formally breaks down where it matters most.
-- The argument that E_ε[ε Â_k] has norm invariant across timesteps (Eq. 28) is used to justify that the scale term dominates. But this relies on the Taylor approximation above and may not hold generally.
-
-**4.3 — Seed Group Strategy**
-
-The seed group strategy—normalizing advantages within groups that share both prompt and initial noise seed—is practically intuitive: isolating exploration effects from initialization effects. But:
-- The advantage normalization (Eq. 3) now operates over a smaller group (branches from the same seed, not all branches for a prompt), reducing the statistical robustness of the baseline estimate.
-- The impact of group size on advantage estimation quality is not analyzed. With 6 branches per seed, the advantage std estimator may be noisy.
+One question that deserves more careful treatment: in the GRPO advantage (Eq. 3), the normalization uses mean and std over the group. With seed grouping, the group is defined by (prompt, initial seed) pairs. If the group size K=6 branches per seed is small, the advantage estimate may have high variance. The paper does not report the variance of advantage estimates across configurations.
 
 ---
 
-### Experiments (Section 5)
+### Experiments & Results
 
-**5.1 — Main Results**
+**Section 5.1 — Main Results**
 
-GenEval reaches 0.97, up from 0.63 baseline—a dramatic gain. PickScore and HPSv3 improvements are more modest (~1–3%). Figure 3 (right) shows TempFlow-GRPO outperforming Flow-GRPO on GenEval substantially.
+The improvements on GenEval (0.63 → 0.97 overall) and PickScore are substantial and would be exciting if the experimental setup is sound.
 
-Critical concerns:
+**A significant issue with Table 1:** The paper announces a multi-model comparison table but the actual rows for autoregressive models, flow matching models, and "GRPO-based methods" are absent from the extracted text (except for a few diffusion model baselines from 2022). While this may partly be a PDF extraction artifact, it makes it impossible to fully evaluate the comparative claims. The key question is: what are the GenEval scores for Flow-GRPO and DanceGRPO specifically, and on which model (SD3.5-M vs. FLUX.1-dev)?
 
-1. **Table 1 is incomplete as presented.** The parsed text shows the GenEval table with rows for diffusion models, autoregressive models, and flow matching models, but the numerical entries for the flow matching and GRPO-based methods sections are missing from the parsed text. While this may be a PDF parsing artifact, the table's absence makes it impossible to verify the claimed 0.97 vs. 0.88 comparison numerically without relying solely on the figure.
+**The "improved baseline" issue:** The paper introduces "Flow-GRPO (Prompt)" as an "improved baseline with group-wise standard deviation stabilization." This is the paper's own improvement to the baseline, not a published variant. Defining an improved version of the comparison method and then demonstrating superiority against it is methodologically questionable—it may create the appearance of a more rigorous comparison while making it harder to assess the true margin over published Flow-GRPO.
 
-2. **No error bars or confidence intervals on any training curve.** Figures 3, 6, 7, 8, 10, 11, and 12 all appear to show single runs. Given that GRPO training is stochastic, these single-seed curves do not allow assessment of whether improvements are consistent or due to favorable random initialization.
+**Section 5.1 — FLUX.1-dev / HPSv3**
 
-3. **The GenEval score of 0.97 is suspiciously close to ceiling** (1.0 is perfect). This raises a genuine concern about reward model overfitting (Goodhart's Law). No evaluation on a held-out reward model or human study is provided to check whether compositional capability has genuinely improved or whether the model has learned to exploit GenEval's scoring mechanism.
+Training uses 10 steps but evaluation uses 50 steps (Appendix A.2). This discrepancy—training at 10 steps and evaluating at 50—should be flagged prominently. The behavior of the trajectory branching mechanism may differ substantially when deployed at 5x more denoising steps than it was trained with.
 
-4. **"Flow-GRPO (Prompt)"** is described as "an improved baseline with group-wise standard deviation stabilization." This appears to be a new variant created by the authors, not from the original Flow-GRPO paper. Competing against a baseline that you yourself strengthened is a legitimate practice, but the description of this baseline is too brief to assess its nature, and it is unclear whether this modification was known to the original Flow-GRPO authors.
+**Section 5.2 — Ablations**
 
-5. **No human evaluation.** The paper relies exclusively on automatic reward metrics (PickScore, HPSv2, HPSv3, GenEval). For a paper claiming "superior photorealism and enhanced fine-grained detail," human evaluation is expected, especially at ICLR.
+The ablation in Figure 8 shows the incremental value of: trajectory branching, noise-aware reweighting, and seed group. This structure is clean and informative. However, the ablation for noise-aware reweighting is done ON TOP OF trajectory branching, not independently from the Flow-GRPO baseline with only reweighting. A clean 2×2 ablation (branching × reweighting) from the same Flow-GRPO (Prompt) baseline would be more informative and is standard practice.
 
-**5.2 — Ablations**
+**Missing statistical significance:** All performance curves are shown as single training runs. For a stochastic training procedure with random initialization, no confidence intervals or standard deviations are reported. Given that the differences between methods can be small (e.g., ~1% PickScore improvement), even small random seed effects could explain the differences. This is a significant experimental weakness.
 
-The ablation in Figure 8 is reasonable: it shows incremental gains from adding trajectory branching, then noise-aware reweighting, then seed grouping. The Geneval numbers (+10% for noise-aware reweighting, +5% for trajectory branching) are informative.
-
-Missing ablations:
-- **Which branching timestep matters most?** The paper motivates branching at early timesteps (peak reward variance at steps 0–2), but the actual implementation branches at *every* timestep. There is no ablation testing branching only at early vs. only at late timesteps.
-- **Sensitivity to K (branching factor).** Only three configurations (2×12, 4×6, 6×4) are tested. How does performance scale with total group size? 
-- **Effect of the Taylor approximation validity.** No sensitivity analysis of the noise-aware weighting vs. a simpler baseline (e.g., uniform, linear, or exponential weighting not derived from the theoretical framework).
-- **Flow shift dependency.** The theoretical section highlights that the balance condition holds only at flow shift = 1. No ablation tests performance across different flow shifts.
-
-**Comparison with DanceGRPO (Appendix A.4)**
-
-TempFlow-GRPO achieves 38.5 vs. DanceGRPO's 37.2 after 300 iterations (HPSv2 on HPDv2, 1.3% improvement). The comparison is limited to one dataset/reward combination and 300 steps. Convergence speedup (2×) is reported, but the absolute final performance gap is small and not tested for significance. This comparison should be in the main paper if DanceGRPO is a major concurrent work being distinguished.
+**Human preference evaluation:** All comparisons are via automated metrics (PickScore, HPSv2, HPSv3, GenEval). No human evaluation is reported. While PickScore and HPSv2 are validated proxies, for a paper claiming "superior photorealism and enhanced fine-grained detail" (Figure 1 caption), a small-scale human study would strengthen the claims considerably.
 
 ---
 
-### Writing & Clarity
+### Computational Cost
 
-The paper is generally readable, but the method description in Section 4 suffers from an ambiguity about the exact branching procedure—specifically how "branching at each step" is reconciled with "branching at a designated timestep k." This is a conceptual ambiguity, not a formatting issue, and it affects reproducibility. The Group Strategy section (4.3) is very short and does not include a formal description of how seed groups interact with the advantage calculation.
+Section A.6 (Appendix) acknowledges that the sampling overhead for K=6 branches is approximately 4.5x that of Flow-GRPO—this is a significant cost. The main paper Figure 3 claims "superior computational efficiency" while comparing wall-clock GPU hours, but the axes in those curves are compressed (e.g., Figure 3 left PickScore y-axis spans 0.65–0.95, visually amplifying small differences). The paper should present the raw throughput difference more explicitly in the main text, not bury it in the appendix.
+
+The claim of 3.75x convergence speedup (requiring only 80 steps vs. 300 for Flow-GRPO) needs to be reconciled against the 4.5x sampling overhead: the net wall-clock speedup is therefore modest at best (3.75/4.5 < 1), meaning the method may not actually be faster in absolute GPU time per performance point.
+
+---
+
+### Theoretical Framing
+
+Section 4.2 presents a policy gradient analysis that is conceptually useful but incomplete. The key result—that noise-aware reweighting cancels the scale imbalance—is derived under the assumption that E_ε[ε Â_k] is timestep-invariant (Eq. 28). This requires the reward gradient gk to satisfy a specific relationship. While the derivation shows ||E_ε[ε Â_k]|| is invariant, the analysis assumes a first-order Taylor expansion of R around the mean, which may not hold well in early high-noise stages. The paper should discuss the regime where this approximation breaks down.
+
+The phrase "invariant among the timesteps" (following Eq. 28) is stated informally; a stronger statement would characterize the bias introduced by the approximation as a function of noise level.
 
 ---
 
 ### Limitations & Broader Impact
 
-The limitations section mentions only that "experiments focus primarily on algorithmic innovations rather than reward model enhancements." This misses substantive limitations:
+The limitations section (Section 6) mentions only one limitation: the focus on "algorithmic innovations rather than reward model enhancements." This is inadequate. Missing from the discussion:
 
-- **Computational overhead during sampling**: The paper acknowledges ~4.5× higher sampling cost (for K=10) but argues wall-clock time is better due to faster convergence. This claim is evaluated only on specific benchmarks, and the overhead may be prohibitive for large models or long trajectories.
-- **Reward hacking risk**: No discussion of whether the method is prone to mode collapse or Goodhart's Law effects, especially given the near-perfect GenEval score.
-- **Sensitivity to reward model quality**: The method's effectiveness is entirely contingent on the quality of the terminal reward model. Poor or biased reward models could be amplified by the stronger optimization.
-- **No failure modes discussed**: Cases where the proposed method underperforms baseline, or generates poor outputs, are absent.
+1. **Computational overhead:** ~4.5x sampling cost is a real barrier to deployment.
+2. **Reward hacking:** Optimizing PickScore or HPSv3 directly likely introduces biases or artifacts not captured by these metrics. No analysis of reward hacking or out-of-distribution generalization of the trained model is provided.
+3. **Dependency on flow shift:** The theoretical optimality claim holds only for flow shift = 1 (a special case).
+4. **Training vs. inference step mismatch:** Training at 10 steps, evaluating at 50 steps—this gap is not analyzed.
+5. **Generalization beyond T2I:** The paper is framed as a general GRPO improvement for flow models but only tested on text-to-image.
 
 ---
 
 ### Overall Assessment
 
-TempFlow-GRPO addresses a genuine and well-motivated problem—temporally-uniform optimization in flow-based GRPO—with a conceptually clean set of ideas. The trajectory branching mechanism is elegant and practically useful, the noise-aware reweighting has reasonable theoretical backing, and the empirical improvements over Flow-GRPO are consistent across multiple settings. However, the paper has meaningful weaknesses that collectively fall short of ICLR's standard for rigorous experimental and theoretical contributions. The central "Theorem" is a definitional observation rather than a proven claim; the theoretical justification relies on a first-order Taylor approximation that is formally weakest where the method claims greatest impact; the experimental evaluation lacks error bars across all figures, missing table entries, no human evaluation, and no ablation of which branching timesteps drive the gains. The near-perfect GenEval score (0.97) raises unaddressed concerns about reward overfitting. In its current form, the paper is a borderline submission—the ideas are interesting and the empirical trends are encouraging, but the level of rigor in both theory and experiments needs to be raised before it meets the bar for acceptance.
+TempFlow-GRPO presents a coherent set of modifications to Flow-GRPO that address a genuine and well-motivated problem: the temporal non-uniformity of exploration potential in flow matching models. The trajectory branching mechanism is practically sensible and easy to implement; the noise-aware reweighting has a plausible theoretical basis; and the seed group strategy is a reasonable variance reduction technique. The empirical improvements—particularly the ~3.75x convergence speedup and the large gain on GenEval—are impressive if reproducible. However, the paper has several weaknesses that would likely place it on the borderline for ICLR acceptance: (1) the "Credit Localization Theorem" is not a theorem and should not be presented as such; (2) the ~4.5x computational overhead is understated in the main paper and partially undercuts the efficiency claims; (3) there are no statistical significance measures and only single-run curves; (4) the comparison baseline ("Flow-GRPO (Prompt)") is the authors' own improvement, complicating head-to-head assessment; (5) the train/eval step count mismatch (10 vs. 50) is unacknowledged in the main text; and (6) the ablation design is not fully orthogonal. The core contribution—particularly noise-aware reweighting—is likely valuable to the community, but the presentation needs to be tightened, the theoretical claims should be calibrated appropriately, and the experimental methodology needs strengthening before this work is ready for ICLR.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper introduces **TempFlow-GRPO**, a reinforcement learning framework designed to align Flow Matching models by addressing the temporal uniformity assumption inherent in standard GRPO methods. The authors propose trajectory branching for precise credit assignment and noise-aware policy weighting to adapt optimization intensity to timestep dynamics. Comprehensive experiments demonstrate state-of-the-art performance and significantly reduced training steps compared to baseline methods like Flow-GRPO and DanceGRPO.
+This paper addresses the inefficiency of uniform timestep optimization existing Group Relative Policy Optimization (GRPO) methods applied to flow matching models. The authors propose TempFlow-GRPO, which introduces a trajectory branching mechanism for precise step-level credit assignment, a noise-aware loss reweighting scheme that aligns optimization intensity with each timestep's intrinsic exploration potential, and a seed-grouping strategy to control initialization variance. Extensive experiments across multiple text-to-image benchmarks demonstrate that the method achieves superior human preference alignment and compositional fidelity with substantially improved sample and wall-clock convergence efficiency compared to baseline GRPO variants.
 
 ### Strengths
-1.  **Identification of a Critical Limitation:** The paper convincingly identifies "temporal uniformity" as a bottleneck in flow-based RL. Figure 2 (Left) provides strong empirical evidence showing that reward variance is highest in early timesteps and negligible in later stages, justifying the need for non-uniform optimization.
-2.  **Innovative Mechanisms:** The **trajectory branching** technique (Section 4.1.1) elegantly solves the problem of sparse terminal rewards without requiring specialized process reward models, as illustrated in Figure 4. Additionally, **noise-aware policy weighting** (Equation 7) provides a theoretically grounded method to balance gradient contributions across timesteps based on intrinsic exploration potential.
-3.  **Extensive Empirical Validation:** The authors validate their method across multiple architectures (FLUX.1-dev, SD3.5-M, Qwen-Image) and benchmarks (Geneval, PickScore, HPSv3). Table 1 and Figure 3 show substantial improvements over baselines, with Figure 3 specifically demonstrating superior sample efficiency (steps) and computational efficiency (GPU hours).
-4.  **Comprehensive Ablation and Analysis:** Section 5.2 details the contributions of each component (trajectory branching, reweighting, seed group), while Appendices A.8 and A.10 provide further insights into KL divergence stability and group strategy robustness, reinforcing the claim of improved training dynamics.
+1. **Well-Motivated Problem Identification & Effective Credit Assignment:** The observation that reward variance is heavily concentrated in early, high-noise timesteps (Figure 2, Left) effectively motivates rejecting uniform updates. The trajectory branching mechanism (switching ODE→SDE→ODE at specific steps) is an elegant solution that circumvents the need for training separate, often noisy, intermediate reward models while enabling rigorous credit localization (Section 4.1.1, Theorem: Credit Localization).
+2. **Strong Empirical Rigor & Transparency:** The experimental evaluation is comprehensive, covering diverse base models (SD3.5-M, FLUX.1-dev, Qwen-Image), reward functions, and tasks. Systematic ablations (Figure 8) successfully isolate the contributions of branching, noise reweighting, and seed grouping. Crucially, the authors report wall-clock training time (GPU hours) in Figures 3 and 12 rather than just optimization steps, which is a strong practice for RL efficiency claims and aligns with ICLR's emphasis on fair compute comparisons.
+3. **Theoretical Grounding for Optimization Dynamics:** Section 4.2 and Appendix A.1 provide a policy gradient derivation that mathematically explains why standard GRPO's natural gradient scale becomes imbalanced across timesteps. Showing that the unweighted scale term heavily under-prioritizes early structural exploration adds theoretical depth beyond a purely empirical heuristic.
+4. **High Reproducibility:** The inclusion of explicit algorithmic pseudocode (Algorithm 1), detailed hyperparameter configurations in the appendix, and clear experimental protocols matching prior work ensures that the method can be readily implemented and verified by the community.
 
 ### Weaknesses
-1.  **Computational Overhead per Step:** While Wall-Train Time decreases due to faster convergence, Appendix A.6 acknowledges that the sampling process incurs higher computational overhead per iteration (up to $\sim$4.5x for $K=10$). This increased per-batch cost could limit scalability in scenarios where sampling budget is tight, despite the reduction in total steps.
-2.  **Dependence on Reward Model Quality:** The performance gains are tightly coupled with the specific reward models used (e.g., PickScore, HPSv3). The paper acknowledges in Section 6 that it focuses on algorithmic innovations rather than reward model enhancements, suggesting performance ceiling may be limited by the reward model's ability to capture high-quality images.
-3.  **Novelty of "Seed Group" Strategy:** While the paper introduces the **seed group strategy** as a key innovation (Section 4.3), grouping trajectories by initial noise seed is a known practice in diffusion model evaluation and training to control variance. Its contribution to the overall "principled" framework is less distinct compared to the trajectory branching and reweighting mechanisms.
-4.  **Clarity in Theoretical Derivations:** Although Section 4.2 provides a policy gradient-based justification, the relationship between the derived scale terms and the proposed reweighting factor in Equation 7 could be more explicitly linked in the main text. Some derivations rely on first-order Taylor expansions (Appendix A.1, Equation 26) which may not hold strictly for all reward functions, warranting more discussion on limitations.
+1. **Compute/Memory Overhead & Practical Scalability:** While overall training time is reduced due to faster convergence, the branching mechanism inherently multiplies forward-pass memory and compute per iteration by a factor of $K$ (number of branches). The paper acknowledges the per-sample cost (Section A.6) but does not discuss VRAM bottlenecks, gradient accumulation strategies, or how this scales to significantly larger models or higher resolutions without distributed branching.
+2. **Incomplete Diversity & Reward Hacking Analysis:** Section A.14 briefly mentions reward hacking and shows a minor PickScore drop when optimizing for GenEval. However, quantitative diversity metrics (e.g., pairwise LPIPS, intra-prompt variance, or FID-distribution metrics) are absent. Given that RLHF for generation frequently induces mode collapse, stronger empirical evidence that TempFlow-GRPO maintains output diversity under aggressive alignment is needed for ICLR standards.
+3. **Ambiguous Baseline Definition:** The primary comparison is often made against "Flow-GRPO (Prompt)," described as an "improved baseline with group-wise standard deviation stabilization" (Figure 3 caption). The exact formulation and any hyperparameter modifications applied to create this variant are not fully detailed in the main text. This ambiguity makes it difficult to definitively attribute all gains to the proposed temporal mechanisms versus baseline tuning differences.
+4. **Loose Coupling Between Theory and Implementation:** The theoretical analysis derives a natural gradient coefficient proportional to $-\Delta_k(1-k)/k$, yet the implemented reweighting factor (Equation 7) uses a normalized noise level justified primarily by empirical correlation (Figure 5, Left). The paper claims this "simplifies the scale term," but the precise mathematical mapping from the derived correction to the actual normalized heuristic used in practice is not explicitly demonstrated.
 
 ### Novelty & Significance
-*   **Novelty:** The application of temporal dynamics to flow-based GRPO is novel. Prior works like Flow-GRPO treated steps uniformly. The specific mechanism of **trajectory branching** to enable process rewards without auxiliary networks is a distinct contribution to the methodology of Reinforcement Learning for Generation.
-*   **Significance:** Aligning flow models efficiently is a high-priority research direction. By demonstrating improved sample efficiency (reducing steps from 300 to 80 in some cases, Section 5.1), this work has significant potential to lower the computational cost of aligning high-fidelity generative models.
+- **Novelty:** Moderately High. Integrating temporal awareness into GRPO for flow models addresses a genuine gap. While concepts like process rewards and noise-aware scheduling exist in isolation, synthesizing ODE-SDE trajectory branching for credit localization with gradient-scale-aligned reweighting is a principled and novel contribution to the growing Diffusion/Flow RL literature.
+- **Clarity:** High. The narrative flows logically from motivation to method, theory, and experiments. Figures effectively communicate the temporal variance and mechanism. Some theoretical derivations are dense, but the core intuitions are accessible.
+- **Reproducibility:** Very High. Detailed algorithms, hyperparameters, ablation setups, and clear benchmark protocols meet ICLR's rigorous standards. Code release is not mentioned, but the textual description is sufficient for independent implementation.
+- **Significance:** High. As preference alignment moves toward continuous-time generative models, moving beyond "black-box," uniform-step RL is a critical algorithmic step. This work provides a practical, theoretically-motivated framework that improves both training dynamics and final alignment quality, making it highly relevant to ICLR's focus on learning dynamics, sample efficiency, and foundational generative model optimization.
 
 ### Suggestions for Improvement
-1.  **Clarify Compute Trade-off:** Provide a more explicit analysis of the trade-off between increased sampling cost per step and reduced convergence steps in different hardware contexts. A normalized "cost-per-performance" metric would strengthen the claim of efficiency.
-2.  **Strengthen Code Release:** Given the algorithmic complexity, explicitly stating that code will be released or providing a pseudocode implementation in the main text (beyond Appendix A.15) would greatly enhance reproducibility for the ICLR audience.
-3.  **Expand Discussion on Reward Modeling:** Dedicate a small section or paragraph in the Discussion to how the method interacts with evolving reward models (e.g., if the reward model improves alongside the policy), as this is a common issue in RLHF.
-4.  **Refine "Seed Group" Positioning:** Clarify the distinction between this grouping strategy and standard diffusion initialization practices to avoid potential overclaiming of novelty in this specific component.
+1. **Clarify Baseline Protocols:** Explicitly define the "Flow-GRPO (Prompt)" variant in Section 5, detailing any architectural or hyperparameter changes made to the original Flow-GRPO. Ensure comparisons isolate TempFlow-GRPO's contributions rather than baseline configuration effects.
+2. **Quantitative Diversity Evaluation:** Add standard generation diversity metrics (e.g., average pairwise LPIPS or KID across 50+ generations per prompt) to complement preference scores. This will rigorously address concerns about potential mode collapse or reward hacking under the proposed optimization.
+3. **Detail Compute/Memory Trade-offs:** Provide a breakdown of peak VRAM usage per iteration as a function of branch factor $K$ and trajectory length. Discuss practical mitigation strategies (e.g., checkpointing, distributed sampling, or gradient accumulation) to broaden the method's applicability to larger-scale training.
+4. **Strengthen Theory-Implementation Link:** In Section 4.1.2, explicitly show how the chosen normalized noise weighting approximates or bounds the theoretically derived scale term correction. If it is an empirical heuristic, clarify why normalization was preferred over direct use of the analytical scale factor.
+5. **Test on Compressed Dynamics (Few-Step Models):** Since distillation and consistency models effectively compress the generation trajectory, briefly evaluating how TempFlow-GRPO behaves with highly compressed step counts (e.g., $\leq 4$ steps) would demonstrate the method's robustness and clarify the limits of temporal credit assignment when the noise schedule is truncated.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Explicit Total Compute Cost Breakdown:** Section A.6 claims 4.5x sampling overhead while Figure 3 shows efficiency; a detailed breakdown of sampling vs. backprop time is needed to resolve this contradiction and validate efficiency claims.
-2. **Comparison to Lightweight Process Reward Models:** The claim that trajectory branching replaces PRMs requires comparison against a simple step-wise reward baseline to prove branching is superior, not just computationally cheaper.
-3. **Human Preference Evaluation:** Relying solely on automated metrics (PickScore/HPS) is insufficient for alignment claims; blind human A/B testing is required to verify actual preference improvement over baselines.
-4. **Cross-Architecture Robustness:** Experiments are limited to Flow Matching models; validation on standard Diffusion models (DDPM) is needed to prove the method generalizes beyond flow-specific ODE/SDE dynamics.
+1. **Total Compute Cost (FLOPs):** Section A.6 admits a 4.5x sampling overhead per step due to branching, yet claims efficiency based on convergence speed. Provide a explicit table of total FLOPs or wall-clock time to reach target performance to verify if the convergence speedup genuinely outweighs the per-step branching cost.
+2. **Human Preference Evaluation:** The core claim is "Human Preference Alignment," but all results rely on automated proxies (PickScore, HPS). Conduct a blind human evaluation study to verify if higher automated scores actually correlate with human preference for this specific method.
+3. **Non-GRPO Baselines:** Comparisons are limited to Flow-GRPO variants. Include standard Diffusion-DPO or DDPO baselines to establish whether the GRPO+Temporal framework is superior to alternative alignment paradigms, not just an improvement on a specific baseline.
+4. **Reward Model Sensitivity:** Validate the method using non-CLIP-based rewards (e.g., regression-based aesthetic scorers) to ensure the credit assignment signal isn't overfitted to the specific geometry of CLIP-based reward landscapes.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Theoretical Rigor on Reward Smoothness:** The credit localization proof assumes reward smoothness via Taylor expansion (Eq 26), which is invalid for discrete/CLIP-based rewards; this assumption must be addressed to substantiate "provable guarantees."
-2. **Gradient Variance and Stability Analysis:** Noise-aware reweighting significantly alters gradient scales; analyzing gradient norm variance across training is necessary to trust the claimed stability improvements.
-3. **Reward Hacking on Out-of-Distribution Prompts:** Current reward hacking checks are limited to in-distribution metrics; evaluation on OOD prompts is needed to ensure the method does not overfit the specific reward model.
-4. **Sensitivity to Branching Hyperparameters:** The impact of branching factor $K$ and branching frequency is under-explored; a sensitivity analysis is needed to determine if performance gains are robust to these settings.
+1. **Empirical Credit Localization:** The "Theorem (Credit Localization)" assumes reward variance stems solely from the branching step. Empirically measure the correlation between noise injected at step $k$ and final reward variance to verify non-linear ODE propagation doesn't obscure this signal.
+2. **Taylor Expansion Validity:** The theoretical justification (Appendix A.1) relies on a first-order Taylor expansion of the reward model (Eq 26). Analyze the error bound of this approximation given the high non-linearity of deep vision-language reward models used in experiments.
+3. **Gradient Norm Verification:** Plot the actual measured gradient norms per timestep during training to confirm the noise-aware weighting successfully equilibrates contributions as claimed in Figure 5, rather than relying on theoretical derivation alone.
+4. **Noise Schedule Robustness:** The weighting scheme depends on $\sigma_t$. Analyze performance stability across different flow matching noise schedulers (e.g., linear vs. cosine) to determine if the method is robust or scheduler-dependent.
 
 ### Visualizations & Case Studies
-1. **Systematic Failure Cases:** Qualitative results only show successes; displaying failure modes where branching introduces artifacts or semantic drift is critical to assess the method's risk profile.
-2. **Latent Space Trajectory Visualization:** Plotting the actual divergent paths in latent space during branching would verify the mechanism isolates exploration as claimed in Figure 4.
-3. **Attention Map Correlation:** Visualizing attention maps during high-weight (early) vs. low-weight (late) timesteps would confirm the model learns structural vs. refinement features as hypothesized.
+1. **Latent Trajectory Divergence:** Visualize the latent space trajectories at branching points to show how much the paths diverge after the SDE injection, confirming the "exploration" claim physically.
+2. **Failure Case Gallery:** Display examples where TempFlow-GRPO underperforms (e.g., prompts requiring precise late-stage refinement like text) to expose the limits of prioritizing early-stage exploration.
+3. **Reward Landscape Heatmap:** Visualize the reward landscape around the branching points to show if the method indeed navigates higher-variance regions compared to uniform GRPO.
 
 ### Obvious Next Steps
-1. **Public Code and Model Weights:** The complex branching implementation requires open-source code to meet ICLR reproducibility standards and allow verification of the sampling overhead claims.
-2. **Scaling Law Analysis:** Experiments should include larger model variants (e.g., FLUX.1-Pro) to demonstrate benefits scale with model capacity rather than being specific to the Dev version.
-3. **Solver Robustness Ablation:** Testing across different flow solvers (e.g., Euler vs. Heun) is needed to ensure the method is not specific to the current ODE/SDE formulation used in the paper.
+1. **Formal Theoretical Proof:** Replace the heuristic "Theorem" and Taylor approximation with a rigorous bound on credit assignment error for non-linear ODE solvers to meet ICLR theoretical standards.
+2. **Reward Hacking Mitigation:** Deepen the analysis in Appendix A.14 to explain *why* reward hacking occurs and propose a mitigation strategy specific to temporal branching, rather than acknowledging it as inherent.
+3. **Sparse Branching Strategy:** Analyze the trade-off of branching only at high-variance steps vs. all steps to optimize the compute/performance ratio, as branching at every step appears computationally wasteful.
 
 # Final Consolidated Review
 ## Summary
 
-TempFlow-GRPO proposes a temporally-aware reinforcement learning framework for aligning flow matching text-to-image models. The method addresses the "temporal uniformity" limitation of existing GRPO approaches through three innovations: (1) trajectory branching, which isolates stochasticity to designated timesteps to enable precise credit assignment without training process reward models; (2) noise-aware policy weighting, which modulates optimization intensity based on each timestep's intrinsic exploration potential; and (3) a seed group strategy that controls for initialization effects. Experiments demonstrate consistent improvements over Flow-GRPO and DanceGRPO across multiple benchmarks (GenEval, PickScore, HPS) and architectures (FLUX.1-dev, SD3.5-M, Qwen-Image).
+This paper proposes TempFlow-GRPO, a temporally-aware extension of Group Relative Policy Optimization for flow-based text-to-image models. The authors identify that existing GRPO methods apply uniform optimization across generation timesteps despite varying exploration potential, and address this through: (1) trajectory branching for step-level credit assignment without requiring intermediate reward models, (2) noise-aware policy reweighting that prioritizes high-variance early timesteps, and (3) a seed-grouping strategy for variance reduction. The method achieves state-of-the-art performance on GenEval (0.63 → 0.97) and PickScore benchmarks with faster convergence than baseline GRPO variants.
 
 ## Strengths
 
-- **Well-motivated empirical diagnosis:** Figure 2 (left) provides compelling evidence that reward standard deviation varies dramatically across denoising timesteps—peaking at early steps and approaching zero at late stages. This directly supports the claim that uniform timestep treatment is suboptimal and provides a principled foundation for the proposed interventions.
+- **Well-motivated problem identification:** Figure 2 (left) compellingly demonstrates that reward standard deviation varies dramatically across timesteps—peaking at early steps (0-2) and approaching zero at late steps (6-8). This provides clear empirical motivation for rejecting uniform timestep treatment and establishes a genuine gap in existing GRPO methods.
 
-- **Elegant trajectory branching mechanism:** The ODE→SDE→ODE branching strategy is conceptually clean. By confining all stochasticity to a designated branching timestep, the method attributes final reward differences to specific exploration actions without requiring auxiliary process reward models. This is a practical contribution that reduces computational overhead compared to PRM-based alternatives.
+- **Elegant trajectory branching mechanism:** The ODE→SDE→ODE design enables precise credit assignment to intermediate actions without training specialized process reward models. By injecting stochasticity only at designated branching points and completing trajectories deterministically elsewhere, the method correctly localizes reward variance to specific timesteps. This is a practical and principled alternative to the "semantic ambiguity" problem of evaluating noisy intermediate states.
 
-- **Strong empirical results across settings:** The method demonstrates consistent improvements over Flow-GRPO across multiple models (FLUX.1-dev, SD3.5-M, Qwen-Image) and reward functions (PickScore, HPSv2, HPSv3, GenEval). The sample efficiency gains are notable: Figure 3 shows TempFlow-GRPO matching Flow-GRPO's final performance in 80-100 steps versus 300+ steps for baselines. The ablation studies (Figure 8) isolate the contributions of each component.
+- **Theoretical grounding for noise-aware reweighting:** Section 4.2 and Appendix A.1 derive that the natural gradient coefficient in standard GRPO is proportional to −Δk(1−k)/k, which heavily underweights early structural exploration. The proposed noise-level reweighting simplifies this to Δk, achieving balanced gradient contributions. Figure 5 (right) visualizes this correction effectively, showing how standard GRPO's scale terms are dominated by late refinement steps.
 
-- **Theoretical grounding for reweighting:** Section 4.2 derives the natural gradient scale term and shows that standard GRPO causes low-noise late timesteps to dominate optimization. The noise-aware reweighting formula has clear justification from the policy gradient perspective.
+- **Comprehensive empirical validation:** Experiments span multiple base models (SD3.5-M, FLUX.1-dev, Qwen-Image), reward functions (PickScore, HPSv2, HPSv3, GenEval), and tasks (human preference alignment, compositional generation, visual text rendering). The consistent improvements across settings suggest the approach generalizes well.
+
+- **Clear ablation structure:** Figure 8 systematically isolates contributions of trajectory branching, noise reweighting, and seed grouping. The results show each component provides incremental gains, with noise reweighting providing the largest improvement (10% GenEval gain over Flow-GRPO at 1200 steps).
 
 ## Weaknesses
 
-- **Misleading "Theorem" framing:** The "Theorem (Credit Localization)" in Section 4.1.1 states that reward variance is localized to the branching point. This is a definitional consequence of the construction (if stochasticity is only injected at step k, then by construction all variation originates from step k), not a derived result. Calling this a "Theorem" with "provable guarantees" inflates the theoretical contribution.
+- **Mislabeling of "Theorem (Credit Localization)":** Section 4.1.1 presents a "Theorem" stating that credit localizes to the branching point because all stochasticity is concentrated there. This is not a mathematical theorem—it is a definitional consequence of the design. Calling it a theorem risks misleading readers and undermines the paper's technical credibility. The observation is valid and useful, but should be presented as a design property or proposition, not a theorem.
 
-- **Ambiguity in branching procedure:** Section 4.1.1 describes branching at "a designated branching timestep k," implying a single branching point, while Section 5.2 states "branching is performed at each step." The algorithm (Appendix A.15) clarifies that multiple branches are created at different timesteps, but this discrepancy between the conceptual framing and actual implementation makes reproducibility harder.
+- **Author-defined improved baseline:** The primary comparison is against "Flow-GRPO (Prompt)," which the paper explicitly describes as "an improved baseline with group-wise standard deviation stabilization." This is the authors' own modification to Flow-GRPO, not the published baseline. While comparing to a strengthened baseline can be methodologically sound, the exact modifications should be clearly detailed in the main text, and comparisons to the original Flow-GRPO should also be presented to isolate the contribution of temporal mechanisms from baseline tuning.
 
-- **Theoretical assumption may be violated where it matters most:** The derivation in Appendix A.1 relies on a first-order Taylor expansion of the reward function around zero noise (Equation 26). This assumption is most strongly violated at early timesteps where noise injection is largest—precisely the timesteps where the paper argues the method provides greatest benefit. The validity of the theoretical justification is weakest at the critical early stages.
+- **Absence of statistical significance measures:** All performance curves report single training runs with no confidence intervals or standard deviations. Given that reported improvements can be relatively small (~1-2% on PickScore) and RL training is inherently stochastic, this makes it difficult to assess whether observed gains are reproducible or attributable to random variation.
 
-- **No uncertainty quantification:** All training curves (Figures 3, 6-8, 10-12) show single runs without error bars or confidence intervals. GRPO training is inherently stochastic, and without multiple seeds or runs, it is impossible to assess whether the reported improvements are consistent or sensitive to initialization.
+- **Train/eval step count discrepancy:** Appendix A.2 states that training uses 10 sampling steps while evaluation uses 50 steps. The trajectory branching mechanism may behave differently when deployed at 5× the denoising steps it was trained with. This discrepancy should be discussed in the main text with analysis of its implications.
 
-- **Potential reward overfitting:** The GenEval score of 0.97 approaches the theoretical maximum of 1.0. While this appears impressive, such near-perfect scores raise concerns about Goodhart's Law effects—whether the model has learned to exploit GenEval's scoring mechanism rather than genuinely improving compositional capability. The paper acknowledges this as a limitation of RL-based approaches but does not provide evaluation on held-out reward models or diverse prompt distributions.
-
-- **Flow shift dependency under-explored:** Section 4.2 notes that the "equal gradient contribution" property holds when flow shift = 1, but many experiments use different shift values. The sensitivity of performance to this parameter is not analyzed, leaving unclear how robust the reweighting strategy is to different schedules.
+- **Incomplete ablation factorial design:** The ablations in Figure 8 add components sequentially (Flow-GRPO → +Branching → +Reweighting → +Seed Group). A fully orthogonal 2×2×2 factorial design would better isolate each component's contribution and potential interactions.
 
 ## Nice-to-Haves
 
-- Human preference evaluation to complement automatic metrics, particularly given the claimed improvements in "photorealism and fine-grained detail"
+- **Human preference evaluation:** All comparisons rely on automated metrics (PickScore, HPS, GenEval). While these are established proxies, a small-scale human preference study would strengthen claims about improved "photorealism and fine-grained detail."
 
-- Ablation specifically testing early-timestep-only vs. late-timestep-only branching to isolate which timesteps drive the gains, motivated by Figure 2's variance analysis
-
-- Sensitivity analysis for the branching factor K beyond the three tested configurations
+- **Diversity analysis beyond visual examples:** Appendix A.14 shows sample images but lacks quantitative diversity metrics (e.g., pairwise LPIPS, intra-prompt variance). For an RL-based alignment method, demonstrating that output diversity is maintained is important for practical deployment.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Missing table entries"**: The harsh critic flagged missing numerical entries in Table 1, but this appears to be a PDF parsing artifact in the review interface. The paper's figures (Figure 3) support the claimed numerical comparisons.
+- **Weakness about missing DanceGRPO/non-GRPO comparisons:** The paper explicitly compares to DanceGRPO in Appendix A.4 and Figure 11, showing TempFlow-GRPO achieves 1.3% improvement and 2× convergence speedup. Requests for Diffusion-DPO or DDPO comparisons are scope creep—the paper specifically improves GRPO methods for flow models.
 
-- **"No human evaluation"**: Requesting human A/B testing is not standard for ICLR papers that use established automatic reward models. This critique demands methodology beyond what is typical in the field.
+- **Weakness about Taylor expansion approximation error:** While the first-order Taylor expansion in Appendix A.1 may be less accurate in high-noise early stages, the method's strong empirical performance suggests this approximation is sufficiently valid in practice. The derivation provides intuition; it need not be mathematically tight.
 
-- **"Cross-architecture validation on DDPM"**: The paper's scope is explicitly flow matching models. Criticizing lack of experiments on standard diffusion models (DDPM) is scope creep—the method is designed for ODE/SDE dynamics specific to flow matching.
+- **Criticisms about Table 1 being incomplete:** This appears to be a PDF extraction artifact. The actual paper includes complete GenEval comparisons across model categories as evidenced by the results discussed throughout.
 
-- **"Seed group novelty is limited"**: While grouping by initial noise seed is not entirely novel, the contribution of this paper's framework is the integration with trajectory branching and reweighting, not the seed group strategy in isolation.
+- **Request for confidence intervals on large-scale benchmarks:** Single-run evaluation is standard practice in generative model papers at ICLR. While additional statistical measures would strengthen the paper, their absence is not a critical flaw.
 
-- **"Computational overhead undermines efficiency claims"**: The paper addresses this explicitly in Appendix A.6, acknowledging 4.5× per-iteration overhead but demonstrating that convergence in fewer steps still yields lower total wall-clock time. This trade-off is adequately discussed.
+- **Demand for rigorous theoretical proof:** This is an empirical methods paper with theoretical motivation. The current derivation suffices to explain why noise-aware reweighting helps. Replacing it with formal proofs would be out of scope.
 
 ## Novel Insights
 
-The empirical correlation between noise level (σ_t√Δt) and reward standard deviation (Figure 5, left) is a genuinely novel observation that could influence future work on diffusion and flow model training. This relationship suggests that intrinsic properties of the generative process—not just architectural choices—determine where exploration is most valuable. The finding that standard GRPO's natural gradient scale causes late refinement steps to dominate optimization (Figure 5, right) provides a concrete mechanistic explanation for why uniform treatment fails, beyond the variance-based intuition. This analysis could inform similar temporal weighting strategies in other sequential generation settings.
+The paper makes an underappreciated observation about the *imbalanced gradient contributions* in standard GRPO: while credit assignment treats timesteps uniformly, the natural gradient coefficient actually varies by orders of magnitude across the generation trajectory. Figure 5 (right) reveals that late refinement steps receive ~5× larger gradient contributions than early structural steps under standard GRPO—precisely backwards from the exploration potential shown in Figure 2 (left). This mismatch between where gradients *should* be largest (early, high-variance steps) and where they *actually* end up largest (late, low-variance steps) provides a mechanistic explanation for GRPO's sample inefficiency that goes beyond simply observing "early steps matter more." The correction through noise-level reweighting doesn't just weight timesteps differently—it fundamentally rebalances the effective learning signal to match the intrinsic exploration capacity of each generation stage.
 
 ## Suggestions
 
-- Clarify the branching procedure in Section 4.1.1: explicitly state that for a group of M branches, each branches at a different timestep, and explain how advantages are computed across these heterogeneous branches given their different variance characteristics.
+- **Rename "Theorem (Credit Localization)" to "Property (Credit Localization)" or "Proposition"** to accurately reflect its status as a design consequence rather than a formal result.
 
-- Add a formal proof sketch or reframe the "Theorem" as a "Proposition" or "Property" to accurately represent the definitional nature of the credit localization claim.
+- **Report standard deviations across multiple random seeds** (at minimum n=3) for main results. Even small variance estimates would substantially strengthen claims about convergence speedup and final performance differences.
 
-- Include multiple random seeds for at least one key experiment to quantify variance and strengthen confidence in the reported improvements.
+- **Clarify the "Flow-GRPO (Prompt)" baseline** in the main text: specify exactly what modifications were made (group-wise standard deviation stabilization) and provide a comparison to the original Flow-GRPO to isolate TempFlow-GRPO's contribution.
 
-- Discuss the Taylor expansion limitation more explicitly: either bound the approximation error or provide empirical evidence that the derived weighting remains effective despite theoretical approximation violations.
+- **Add a discussion of train/eval step mismatch** in the main paper: analyze whether and why trajectory branching transfers from 10-step training to 50-step evaluation, and whether this generalization is an artifact or an intended feature.
 
 # Actual Human Scores
 Individual reviewer scores: [10.0, 8.0, 6.0, 6.0]

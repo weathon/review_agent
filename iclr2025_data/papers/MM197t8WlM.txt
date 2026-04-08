@@ -1,0 +1,2419 @@
+# LOCAL FLOW MATCHING GENERATIVE MODELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Flow Matching (FM) is a simulation-free method for learning a continuous and
+invertible flow to interpolate between two distributions, and in particular to generate data from noise in generative modeling. In this paper, we introduce Local
+Flow Matching (LFM), which consecutively learns a sequence of FM sub-models
+and each matches a diffusion process up to the time of the step size in the datato-noise direction. In each step, the two distributions to be interpolated by the
+sub-model are closer to each other than data vs. noise, and this enables the use of
+smaller models with faster training. The stepwise structure of LFM is natural to be
+distilled and different distillation techniques can be adopted to speed up generation. Theoretically, we prove a generation guarantee of the proposed flow model
+in terms of the _χ_ [2] -divergence between the generated and true data distributions.
+In experiments, we demonstrate the improved training efficiency and competitive
+generative performance of LFM compared to FM on the unconditional generation of tabular data and image datasets, and also on the conditional generation of
+robotic manipulation policies.
+
+
+1 INTRODUCTION
+
+
+Generative modeling has revolutionized the field of machine learning, enabling the creation of realistic synthetic data across various domains. Recently, diffusion models (Ho et al., 2020; Song et al.,
+2021) started to take over earlier models like Generative Adversarial Networks (GAN) (Goodfellow
+et al., 2014), Variational Autoencoders (VAE) (Kingma & Welling, 2014) and Normalizing Flows
+(Kobyzev et al., 2020), offering benefits in terms of stability, diversity, and scalability. Diffusion
+models have found diverse applications in audio synthesis (Kong et al., 2021), text-to-image synthesis (Rombach et al., 2022), imitation learning for robotics (Chi et al., 2023), among others. A
+notable advantage of score-based diffusion models is their simulation-free training, meaning that the
+training objective is a “score matching” loss taking the form of an _L_ [2] loss averaged over data samples. Under a Stochastic Differential Equation (SDE) formulation (Song et al., 2021), this allows
+training of a continuous-time score function parametrized by a neural network from a large amount
+of data in high dimensions.
+
+
+Compared to the SDE generation in diffusion models, the Ordinary Differential Equation (ODE)
+generation of a trained diffusion or flow model is deterministic and typically uses fewer time steps.
+Using an ODE formulation, Flow Matching (FM) models (Lipman et al., 2023; Albergo & VandenEijnden, 2023; Liu, 2022) proposed a simulation-free training of flow models based on regressing
+vector fields using an _L_ [2] “matching” loss and have shown state-of-the-art generation performance
+on various tasks, including text-to-image generation (Esser et al., 2024), humanoid robot control
+(Rouxel et al., 2024), audio generation (Guan et al., 2024), and application to discrete data in programming code generation (Gat et al., 2024). The simulation-free training of flow models significantly alleviates the computational issue of earlier Continuous Normalizing Flow (CNF) models
+using likelihood-based training Grathwohl et al. (2018). Going beyond the fast generation of ODE
+flow models, recent works on model distillation (Salimans & Ho, 2022; Liu et al., 2023; Song et al.,
+2023) have shown that the generation of large (diffusion and flow) generative models can be significantly accelerated and in some cases computed in an extremely small number of steps.
+
+
+In this work, we propose a simulation-free training technique of CNFs called “Local Flow Matching” (LFM), which can be seen as a stepwise version of FM, and we call previous FMs the _global_
+ones. The proposed LFM trains a sequence of small (sub-)flow models, which, after concatenation,
+transport invertibly from data to noise and back. In each sub-flow, any FM model can be plugged
+
+
+1
+
+
+in. In other words, the global FM tries to interpolate directly between noise and data distributions
+which may differ a lot, while our local FM breaks down the job into smaller steps and interpolates
+between a pair of distributions which are closer to each other (namely “local”) in each step, see Figure 1. Because the source and target distributions are not too far away, we expect to train a local FM
+model with potentially smaller model and faster convergence in training. This would allow reduced
+memory load and computational cost without sacrificing model quality. In addition to the benefits
+when training from scratch, our framework is compatible with various distillation techniques, and
+we empirically found that our model can have advantage over global FMs after distillation.
+
+Specifically, in each step of LFM, we train a sub-flow model to interpolate between ( _pn−_ 1 _, p_ _[∗]_ _n_ [)][,]
+where _p_ _[∗]_ _n_ [evolves from] _[ p][n][−]_ [1] [along the diffusion process for time up to the step size.] [The forward]
+process (data-to-noise) starts from _p_ 0 being the data distribution and ends at some _pN_ which is close
+to normal distribution. The reverse process (noise-to-data) uses the invertibility of each sub-flow
+model to generate data from noise by ODE integration. The construction of using (the marginal
+distribution of) a diffusion process as a “target” in each step allows us to theoretically prove the
+generation guarantee of LFM by connecting to the diffusion theory.
+
+
+The stepwise approach in our work is inspired by similar constructions in the literature, including
+block-wise training of ResNet under the GAN framework Johnson & Zhang (2019) and flow-based
+generative models implementing a discrete-time gradient descent in Wasserstein space following
+the Jordan-Kinderleherer-Otto (JKO) scheme (Alvarez-Melis et al., 2022; Mokrov et al., 2021; Xu
+et al., 2023b; Vidal et al., 2023). Unlike previous models, the proposed LFM is simulation-free,
+which allows application to high-dimensional data like large images and robotics data as shown in
+our experiments.
+
+
+In summary, the contributions of the work are:
+
+
+    - To generate data from the normal distribution, we propose to train a consecutive series of
+FM sub-models which approximately follow the diffusion process in the data-to-noise direction. Such breakdown of the global flow into small pieces makes the pair of distributions
+closer to each other in each step, and then the FM sub-model can be obtained with reduced
+model size and faster training convergence. Concatenation of all the sub-models provides
+an invertible flow that can go from noise to data in the reverse direction.
+
+
+    - Theoretically, we prove the generation guarantee, namely how the generated distribution
+by LFM approximates the data distribution _P_, under _χ_ [2] divergence which implies Kullback–Leibler (KL) and Total Variation (TV) guarantees. We prove an _O_ ( _ε_ [1] _[/]_ [2] )- _χ_ [2] guarantee, where _ε_ is the _L_ [2] error of FM training objective, and the other technical assumptions
+are motivated by our stepwise FM to the OU process. Our theory applies when data density
+is regular and also covers cases when _P_ merely has finite second moments (where we use
+a short-time initial diffusion to smooth _P_ ), e.g., when _P_ is compactly supported.
+
+
+    - Our framework allows readily plugging in different designs of the FM in each local subflow model. In addition, the stepwise structure of LFM renders it natural to be distilled, and
+our approach is compatible with different distillation techniques. Empirically, the proposed
+LFM shows improved training efficiency and competitive generative performance against
+existing FM methods on likelihood estimation, image generation, and robotic manipulation
+tasks. The model gives strong performance when trained from scratch and in the distilled
+setting.
+
+
+**Notations.** We use the same notation for the distribution and its density (with respect to the
+Lebesgue measure on R _[d]_ ) when there is no confusion. For a distribution _P_, _M_ 2( _P_ ) :=
+�R _[d][ ∥][x][∥]_ [2] _[dP]_ [(] _[x]_ [)][.] [Let] _[P]_ [2] [=] _[{][P]_ [on][ R] _[d][,]_ _[s.t., M]_ [2][(] _[P]_ [)] _[<]_ _[∞}]_ [.] [The] [Wasserstein-2] [distance,] [denoted]
+
+by _W_ 2( _P, Q_ ), gives a metric on _P_ 2. For _T_ : R _[d]_ _→_ R _[d]_, _T_ # _P_ denotes the _pushforward_ of _P_, i.e.,
+_T_ # _P_ ( _A_ ) = _P_ ( _T_ _[−]_ [1] ( _A_ )) for a measurable set _A_ . We also write _T_ # _p_ for the pushforwarded density.
+
+
+1.1 RELATED WORKS
+
+
+**Continuous** **normalizing** **flow** **(CNF).** CNF uses a neural ODE model (Chen et al., 2018) optimized by maximizing the model likelihood, which the ODE parametrization can compute, on observed data samples (Grathwohl et al., 2018). To facilitate training and inference, subsequent works
+
+
+2
+
+
+have proposed advanced techniques such as trajectory regularization (Finlay et al., 2020; Onken
+et al., 2021) and block-wise training (Fan et al., 2022; Xu et al., 2023b). These techniques help
+stabilize the training process and improve the model’s performance. Despite successful applications
+in time-series analyses (de B´ezenac et al., 2020), uncertainty estimation (Berry & Meger, 2023),
+optimal transport (Xu et al., 2023a), and astrophysics (Langendorff et al., 2023), a main drawback
+of CNF is its computational cost, since backpropagating the neural ODE in likelihood-based training
+is expensive (non-simulation free) and not scalable to high dimensions.
+
+
+**Simulation-free** **flow** **models.** Flow Matching (FM) models (Lipman et al., 2023; Albergo &
+Vanden-Eijnden, 2023; Liu, 2022) are simulation-free and a leading class of generative models.
+We review the technical details of FM in Section 3.1. FM methods are compatible with different
+choices to interpolate two random end-points drawn from the source and target distributions, e.g.
+straight lines (called “Optimal Transport (OT) path”) or motivated by the diffusion process (called
+“diffusion path”) (Lipman et al., 2023). Later works also considered pre-computed OT interpolation
+(Tong et al., 2023), and stochastic interpolation paths (Albergo et al., 2023). All previous works
+train a _global_ flow model to match between the two distributions, which could require a large model
+that takes a longer time to train. In this work, we propose to train multiple smaller flow models. Our
+approach is compatible with any existing FM method to train these so-called local flows, making it
+a flexible and extensible framework.
+
+
+**Accelerated** **generation** **and** **model** **distillation.** Model compression and distillation have been
+intensively developed to accelerate the generation of large generative models. Baranchuk et al.
+(2021) proposed learning a compressed student normalizing flow model by minimizing the reconstruction loss from a teacher model. For diffusion models, progressive distillation was developed
+in (Salimans & Ho, 2022), and Consistency Models (Song et al., 2023) demonstrated high quality
+sample generation by directly mapping noise to data. For FM models, (Liu et al., 2023) proposed
+to distill the ODE trajectory into a single mapping parametrized by a network, which can reduce the
+number of function evaluations (NFE) to be one. The approach was later effectively applied to large
+text-to-image generation (Liu et al., 2024). More recent techniques to distill FM models include
+dynamic programming to optimize stepsize given a budget of NFE (Nguyen et al., 2024). In our
+work, each local flow model can be distilled into a single-step mapping following (Liu et al., 2023),
+and the model can be further compressed if needed. Our framework is compatible with different
+distillation techniques.
+
+
+**Theoretical guarantees of generative models.** Guarantees of diffusion models, where the generation process utilizes an SDE (random) Lee et al. (2023); Chen et al. (2022; 2023a); Benton et al.
+(2024b) or ODE (deterministic) sampler Chen et al. (2023b; 2024); Li et al. (2024a;b); Huang et al.
+(2024), have been recently intensively developed. In comparison, there are fewer theoretical findings for ODE flow models both in training (forward process) and generation (reverse processes) like
+CNF or FM. For FM models, _W_ 2-guarantee was proved in Benton et al. (2024a) and in (Gao et al.,
+2024) with sample complexity analysis. The Wasserstein bound does not imply KL or TV bound,
+which are more relevant for information-theoretical and statistical interpretation. For CNF trained by
+maximizing likelihood, non-parametric statistical convergence rates were proved in (Marzouk et al.,
+2024). KL guarantee of a step-wisely trained CNF model motivated by JKO scheme (Xu et al.,
+2023b) was proved in (Cheng et al., 2024), yet the approach is likelihood-based and not simulationfree. Recently, (Silveri et al., 2024) proved KL guarantee for an SDE interpolation version of the FM
+model introduced in (Albergo et al., 2023). Our work analyzes a stepwise ODE FM model, which
+is simulation-free, and the guarantee is in _χ_ [2] divergence which implies KL (and TV) guarantees.
+
+
+2 PRELIMINARIES
+
+
+**Flow models and neural ODE.** In the context of generative models, the goal is to generate data
+distribution _P_, which is usually only accessible from finite training samples. When _P_ has density
+we denote it by _p_ . A continuous-time flow model trains a neural ODE (Chen et al., 2018) to generate
+data distribution _p_ from a standard distribution _q_, which is typically _N_ (0 _, I_ ) and called “noise”.
+
+
+Specifically, a neural ODE model provides a velocity field _v_ ( _x, t_ ; _θ_ ) on R _[d]_ _×_ [0 _, T_ ] parametrized by
+a neural network, and _θ_ consists of trainable parameters. In a flow model, the solution of the ODE
+
+
+_x_ ˙ ( _t_ ) = _v_ ( _x_ ( _t_ ) _, t_ ; _θ_ ) _,_ _t ∈_ [0 _, T_ ] _,_ _x_ (0) _∼_ _ρ_ 0 _,_ (1)
+
+
+3
+
+
+Figure 1: Illustration of the proposed LFM model. In the _n_ -step step, a local FM model is trained
+to interpolate from _pn−_ 1 to _p_ _[∗]_ _n_ [and it gives the learned (invertible) transport map] _[ T][n]_ [which pushfor-]
+wards _pn−_ 1 to _pn_ . The concatenation of the _N_ sub-models gives a flow between data and noise.
+
+
+where _ρ_ 0 is a distribution, and we denote the law of _x_ ( _t_ ) as _ρt_ . Whenever the ODE is well-posed, it
+gives a continuous invertible mapping from the initial value _x_ (0) to the terminal value _x_ ( _T_ ), and the
+inverse map from _x_ ( _T_ ) to _x_ (0) can be computed by integrating the ODE (1) reverse in time. Thus,
+we can either set _ρ_ 0 to be noise and _ρT_ to be data or the other way round. Earlier flow models like
+(continuous-time) CNFs (Grathwohl et al., 2018) train the flow _v_ ( _x, t_ ; _θ_ ) based on likelihood, i.e.
+letting _ρ_ 0 be noise and maximizing the likelihood of _ρT_ on data samples. Such approaches are not
+simulation-free and can be difficult to scale to large-size computations.
+
+
+and, as has been proven in the literature, the velocity field _v_ that minimizes (5) has the expression
+_v_ ( _x, t_ ) = E _xl,xr_ [ _dt_ _[d]_ _[I][t]_ [(] _[x][l][, x][r]_ [)] _[|][I][t]_ [(] _[x][l][, x][r]_ [)] [=] _[x]_ []][ and it induces a flow that transports from] _[ p]_ [ to] _[ q]_ [.] [We]
+
+call this _v_ the _target_ velocity field, and say that the FM model interpolates the pair of distributions
+( _p, q_ ). See Section 5.1 for more algorithmic details of FM, such as the choice of _It_ .
+
+
+4
+
+
+**Ornstein-Uhlenbeck (OU) process.** The OU process in R _[d]_ observes the following SDE
+
+
+_√_
+_dXt_ = _−Xtdt_ +
+
+
+_dXt_ = _−Xtdt_ + 2 _dWt,_ (2)
+
+where the equilibrium density is _q_ _∝_ _e_ _[−][V]_ with _V_ ( _x_ ) = _∥x∥_ [2] _/_ 2. In other words, _q_ is the standard
+normal density _N_ (0 _, I_ ). Suppose _X_ 0 _∼_ _ρ_ 0 which is some initial density at time zero (the initial
+distribution may not have density), and denote by _ρt_ the marginal density of _Xt_ for _t_ _>_ 0. The
+time evolution of _ρt_ is described by the Fokker–Planck Equation (FPE) _∂tρt_ = _∇·_ ( _ρt∇V_ + _∇ρt_ ),
+_V_ ( _x_ ) = _∥x∥_ [2] _/_ 2, which determines _ρt_ given the initial value _ρ_ 0. We also introduce the operator
+(OU) _[t]_ 0 [and write]
+_ρt_ = (OU) _[t]_ 0 _[ρ]_ [0] _[.]_ (3)
+Equivalently, _ρt_ is the probability density of the random vector _Zt_ := _e_ _[−][t]_ _X_ 0 + _σtZ_, where _σt_ [2] [:=]
+1 _−_ _e_ _[−]_ [2] _[t]_, _Z_ _∼N_ (0 _, Id_ ) and is independent from _X_ 0.
+
+
+3 LOCAL FLOW MATCHING (LFM)
+
+
+The essence of the proposed LFM model is to break down a single flow from data to noise (and
+back) into several pieces, and apply FM on each piece sequentially. We introduce the method in this
+section, and further algorithmic details are provided in Section 5.
+
+
+3.1 REVIEW OF FLOW MATCHING
+
+
+Flow Matching (Lipman et al., 2023), also proposed as “stochastic interpolants” (Albergo & VandenEijnden, 2023) and “rectified flow” (Liu, 2022), trains the flow _v_ ( _x, t_ ; _θ_ ) by minimizing an _L_ [2] loss
+and is simulation-free; our stepwise approach in this work will be based on FM. Rescale the time
+interval to be [0 _,_ 1]. FM utilizes a pre-specified interpolation function _It_ given two endpoints _xl_ and
+_xr_ ( _l_ for ‘left’ and _r_ for ‘right’) as
+_ϕ_ ( _t_ ) := _It_ ( _xl, xr_ ) _,_ _t ∈_ [0 _,_ 1] _,_ (4)
+where _xl_ _∼_ _p_, _xr_ _∼_ _q_, and _It_ can be analytically designed. The (population) training objective is
+
+
+- 1
+
+
+2 _[dt,]_ (5)
+_dt_ _[ϕ]_ [(] _[t]_ [)] _[∥]_ [2]
+
+
+min
+_θ_
+
+
+E _xl,xr_ _∥v_ ( _ϕ_ ( _t_ ) _, t_ ; _θ_ ) _−_ _[d]_
+0
+
+
+3.2 STEPWISE TRAINING OF _N_ FM SUB-MODELS
+
+
+We propose to train a sequence of _N_ FM sub-models (called sub-flows) on time [0 _, T_ ], each by its
+own training objective to interpolate a pair of distributions, and collectively the _N_ sub-flows fulfill
+the transport from data _p_ to noise _q_ (and back by the reverse flow). Our method will train the _N_
+sub-flows sequentially, where in each step the flow tries to match the terminal density evolved by the
+OU process of time up to the step size. Because the step size is not large and the pair of end-point
+distributions to interpolate are not far away, we call our method _local_ FM.
+
+
+**Training.** On the time interval [0 _, T_ ], we first specify a time step schedule _{γn}_ _[N]_ _n_ =1 [,][ �] _n_ _[γ][n]_ [=] _[ T]_ [,]
+
+and for the simplest case _γn_ = _γ_ = _T/N_ . Suppose the data distribution _P_ has a regular density _p_ 0
+
+- if not, we can apply a short-time diffusion to _P_, and take the resulting density as _p_ 0, see more in
+Section 4.3. Starting from _p_ 0 (when _n_ = 1), we recursively construct target density _p_ _[∗]_ _n_ [by]
+
+_p_ _[∗]_ _n_ [= (][OU][)] 0 _[γ][n][p][n][−]_ [1] _[,]_
+
+where the operator (OU) _[t]_ 0 [is as defined in (3).] [In other words, let] _[ x][l]_ _[∼]_ _[p][n][−]_ [1][, and]
+
+
+      _xr_ := _e_ _[−][γ][n]_ _x_ _[′]_ _l_ [+] 1 _−_ _e_ _[−]_ [2] _[γ][n]_ _g,_ _x_ _[′]_ _l_ _[∼]_ _[p][n][−]_ [1] _[,]_ _g_ _∼N_ (0 _, Id_ ) _,_ _g_ _⊥_ _x_ _[′]_ _l_ _[,]_ (6)
+
+then the marginal distribution of _xr_ is _p_ _[∗]_ _n_ [.] [We now train the] _[ n]_ [-th sub-flow, denoted by][ ˆ] _[v][n]_ [(] _[x, t]_ [;] _[ θ]_ [)][, by]
+FM to interpolate the pair ( _pn−_ 1 _, p_ _[∗]_ _n_ [)][ using (4)(5) (the time interval][ [0] _[, γ][n]_ []][ is rescaled to be][ [0] _[,]_ [ 1]][ in]
+FM training). The velocity field _v_ ˆ _n_ can have its own parametrization _θn_, which then can be trained
+independently from previous sub-flows.
+
+
+After the sub-flow ˆ _vn_ is trained, it provides a transport map _Tn_ that maps _xn−_ 1 _∼_ _pn−_ 1 to _xn_ by
+
+
+                     - _γn_
+_xn_ := _Tn_ ( _xn−_ 1) = _x_ ( _γn_ ) = _xn−_ 1 + _v_ ˆ _n_ ( _x_ ( _t_ ) _, t_ ; _θ_ ) _dt,_ (7)
+
+0
+
+
+where _x_ ( _t_ ) solves the ODE _x_ ˙ ( _t_ ) = _v_ ˆ _n_ ( _x_ ( _t_ ) _, t_ ; _θ_ ) from _x_ (0) = _xn−_ 1. The mapping _Tn_ is invertible
+and _Tn_ _[−]_ [1] is by integrating the reverse-time ODE. We denote the distribution of _xn_ as _pn_, that is,
+
+
+_pn_ = ( _Tn_ )# _pn−_ 1 _._
+
+
+From this _pn_, we can train the next sub-flow by interpolate ( _pn, p_ _[∗]_ _n_ +1 [)][.] [This] [recursive] [scheme] [is]
+illustrated in Figure 1.
+
+If the flow matching in _n_ -th step is successful, then we expect the trained _v_ ˆ _n_ makes _pn_ _≈_ _p_ _[∗]_ _n_ [.]
+Define the time stamps _{tn}_ _[N]_ _n_ =0 [,] _[t]_ [0] [=] [0][,] _[t][n]_ _[−]_ _[t][n][−]_ [1] [=] _[γ][n]_ [,] [and] [then] _[t][N]_ [=] _[T]_ [.] [If] _[p][n]_ [exactly]
+equals _p_ _[∗]_ _n_ [=] [(][OU][)] _[γ]_ 0 _[n][p][n][−]_ [1][,] [then] [over] _[N]_ [steps] [we] [have] _[p][N]_ [=] [(][OU][)] _[T]_ 0 _[p]_ [0][,] [which] [approximates] [the]
+equilibrium _q_ exponentially fast as _T_ increases. In practice, the trained flow has some finite flow
+matching error and _pn_ has some discrepancy from _p_ _[∗]_ _n_ [, yet if the error is small, we still expect] _[ p][N]_ _[≈]_ _[q]_ [,]
+assuming _T_ = [�] _n_ _[γ][n]_ [is sufficiently large.] [This will be theoretically analyzed in Section 4.]
+
+In practice, when training the _n_ -step sub-flow, the finite samples of _pn−_ 1 are obtained by transporting
+samples from _p_ 0 through the previous sub-flows. This pushforward from _pn−_ 1 to _pn_ can be done for
+all training samples once the _n_ -th sub-flow is trained, see Algorithm 1. The proposed LFM model
+can be trained from scratch, and we also distill the model to improve generation efficiency. See
+Section 5 for details.
+
+
+**Generation.** Once the _N_ sub-flows are trained, we go backward from the _N_ -th to the 1st subflows to generate data from noise. Specifically, we sample _yN_ _∼_ _q_, and let _yn−_ 1 = _Tn_ _[−]_ [1][(] _[y][n]_ [)] [for]
+_n_ = _N, · · ·_ _,_ 1, where _Tn_ _[−]_ [1] is computed by integrating the ODE with velocity field _v_ ˆ _n_ reverse in
+time. We then use _y_ 0 as the generated data samples. The closeness of the distribution of _y_ 0 to the
+data distribution _P_ will be theoretically shown in Section 4.
+
+
+4 THEORETICAL GUARANTEE OF GENERATION
+
+
+In this section, we prove the generation guarantee, namely how the generated density by the trained
+LFM model is close to the true data distribution. All proofs are left to Appendix A.
+
+
+5
+
+
+4.1 SUMMARY OF FORWARD AND REVERSE PROCESSES
+
+
+Recall that _P_ is the distribution of data in R _[d]_, and _q_ the density of _N_ (0 _, Id_ ). The procedures of
+training and generation in Section 3 can be summarized in the following forward (data-to-noise
+training) and reverse (noise-to-data generation) processes respectively:
+
+(forward) _p_ = _p_ 0 _−→T_ 1 _p_ 1 _−→· · ·T_ 2 _−−→TN_ _pN_ _≈_ _q,_
+
+(8)
+(reverse) _p ≈_ _q_ 0 _←−−−T_ 1 _[−]_ [1] _q_ 1 _←−−−· · ·T_ 2 _[−]_ [1] _←−−−TN_ _[−]_ [1] _qN_ = _q,_
+
+
+where _Tn_ is by the learned _n_ -th step sub-flow as defined in (7). When _P_ has a regular density _p_ we
+set it as _p_ 0; otherwise, _p_ 0 will be a smoothed version of _P_, see more below. The reverse process
+gives the final output samples which have density _q_ 0. The goal of our analysis is to show that _q_ 0 _≈_ _p_,
+namely the generated density is close to the data density.
+
+
+To keep exhibition simple, we consider when _γn_ = _γ_ _>_ 0 for all _n_ . Using the time stamps _tn_, the _n_ th step sub-flow is on the time interval [ _tn−_ 1 _, tn_ ], which can be shifted to be [0 _, γ_ ]. Our analysis will
+be based on comparing the true or target flow (that transports to terminal density _p_ _[∗]_ _n_ [) with the learned]
+flow (that transports to terminal density _pn_ ), and we introduce the notations for the corresponding
+transport equations.
+
+
+For fixed _n_, on the shifted time interval [0 _, γ_ ], the target flow and the learned flow are induced by the
+velocity field _v_ ( _x, t_ ) and ˆ _v_ ( _x, t_ ) = _v_ ˆ _n_ ( _x, t_ ; _θ_ ) respectively. We omit _n_ in the notation. As was shown
+in Section 3.1, the target _v_ depends on the choice of _It_ yet it always transports from _pn−_ 1 to _p_ _[∗]_ _n_ [.]
+Let _ρt_ ( _x, t_ ) be the law of _x_ ( _t_ ) that solves the ODE with velocity field _v_, where _x_ (0) _∼_ _pn−_ 1, and
+_ρ_ ˆ _t_ ( _x, t_ ) be the law of _x_ ( _t_ ) that solves the ODE with the learned ˆ _v_ . ( _ρt_ is not necessarily the density
+of an OU process _Xt_, though _ργ_ = _p_ _[∗]_ _n_ [= (][OU][)] 0 _[γ][n][p][n][−]_ [1][.)] [We also denote] _[ ρ]_ [(] _[x, t]_ [)][ as] _[ ρ][t]_ [(omitting the]
+variable _x_ ) or _ρ_ (omitting both _x_ and _t_ ), depending on the context, and similarly for _ρ_ ˆ( _x, t_ ). The
+target and learned flows have the transport equations as
+
+_∂tρ_ + _∇·_ ( _ρv_ ) = 0 _,_ _ρ_ 0 = _pn−_ 1 _,_ _ργ_ = _p_ _[∗]_ _n_ _[.]_
+(9)
+_∂tρ_ ˆ + _∇·_ (ˆ _ρv_ ˆ) = 0 _,_ _ρ_ ˆ0 = _pn−_ 1 _,_ _ρ_ ˆ _γ_ = _pn._
+
+
+4.2 EXPONENTIAL CONVERGENCE OF THE FORWARD PROCESS IN _χ_ [2]
+
+
+We introduce the following assumption about the learned flow ˆ _vn_ :
+**Assumption 1.** _(A0) For all n,_ _the learned_ _v_ ˆ _n_ _ensures that Tn_ _and Tn_ _[−]_ [1] _are non-degenerate (Def-_
+_inition_ _A.1),_ _and,_ _on_ _the_ _time_ _interval_ [ _tn−_ 1 _, tn_ ] _shifted_ _to_ _be_ [0 _, γ_ ] _,_ �0 _γ_ �R _[d][ ∥][v]_ _[−]_ _[v]_ [ˆ] _[∥]_ [2] _[ρdxdt]_ _[≤]_ _[ε]_ [2] _[.]_
+
+_Without loss of generality, assume ε <_ 1 _._
+
+The training objective of FM is equivalent to minimizing the _L_ [2] loss �0 _γ_ �R _[d][ ∥][v][−][v]_ [ˆ] _[∥]_ [2] _[ρdxdt]_ [ (Albergo]
+
+& Vanden-Eijnden, 2023), thus our _ε_ is the learning error of FM (in each step and uniform for all _n_ ).
+**Assumption** **2.** _There_ _are_ _positive_ _constants_ _C_ 1 _, C_ 2 _, L_ _such_ _that,_ _for_ _all_ _n,_ _on_ _the_ _time_ _interval_
+
+[ _tn−_ 1 _, tn_ ] _shifted to be_ [0 _, γ_ ] _,_
+
+_(A1) ρt,_ _ρ_ ˆ _t for any t ∈_ [0 _, γ_ ] _are positive on_ R _[d]_ _and ρt_ ( _x_ ) _,_ _ρ_ ˆ _t_ ( _x_ ) _≤_ _C_ 1 _e_ _[−∥][x][∥]_ [2] _[/]_ [2] _;_
+
+_(A2) ∀t ∈_ [0 _, γ_ ] _, ρt,_ _ρ_ ˆ _t are C_ [1] _on_ R _[d]_ _and ∥∇_ log _ρt_ ( _x_ ) _∥, ∥∇_ log ˆ _ρt_ ( _x_ ) _∥≤_ _L_ (1 + _∥x∥_ ) _, ∀x ∈_ R _[d]_ _;_
+
+
+At _t_ = 0, _ρ_ 0 = _ρ_ ˆ0 = _pn−_ 1, thus Assumption 2 requires that _f_ = _pn_ for _n_ = 0 _,_ 1 _, · · ·_ satisfies
+
+
+                      _f_ ( _x_ ) _≤_ _C_ 1 _e_ _[−∥][x][∥]_ [2] _[/]_ [2] _,_ _∥∇_ log _f_ ( _x_ ) _∥≤_ _L_ (1 + _∥x∥_ ) _,_ (10)
+
+R _[d]_ [(1 +] _[ ∥][x][∥]_ [)][2] _[f]_ [(] _[x]_ [)] _[dx][ ≤]_ _[C]_ [2] _[,]_
+
+
+by (A1)(A2)(A3) respectively. The first two inequalities require _pn_ to have a Gaussian decay envelope and the score of _pn_ has linear growth (can be induced by Lipschitz regularity), and the third
+inequality can be implied by the first one. The condition (10) poses regularity conditions on _p_ 0 which
+can be satisfied by many data densities in applications, and, in particular, if _P_ has finite support then
+these hold after _P_ is smoothed by an initial short-time diffusion (Lemma A.6).
+
+
+Technically, Assumption 2 poses the Gaussian envelope and regularity requirements on all _pn_ and
+also _ρt_ and _ρ_ ˆ _t_ for all time. This can be expected to hold at least when FM is well-trained: suppose _ρt_
+
+
+6
+
+
+_(A3) ∀t ∈_ [0 _, γ_ ] _,_ 
+
+
+R _[d]_ [(1 +] _[ ∥][x][∥]_ [)][2][(] _[ρ]_ [3] _t_ _[/][ρ]_ [ˆ][2] _t_ [)(] _[x]_ [)] _[dx][ ≤]_ _[C]_ [2] _[.]_
+
+
+satisfies (A1)(A2) for all _t_ due to the regularity of _v_ (by the analytic _It_ and the regularity of the pair
+of densities ( _pn−_ 1 _, p_ _[∗]_ _n_ [)][), when the true and learned flows match each other, we have] _[ρ]_ [ˆ] _[ ≈]_ _[ρ]_ [, thus we]
+also expect (A1)(A2) to hold for _ρ_ ˆ _t_ ; Meanwhile, the ratio _ρt/ρ_ ˆ _t_ is close to 1 and if can be assumed
+to be uniformly bounded, then (A3) can be implied by the boundedness of �R _[d]_ [(1 +] _[ ∥][x][∥]_ [)][2] _[ρ][t]_ [(] _[x]_ [)] _[dx]_
+
+which can be implied by the Gaussian envelope (A1) of _ρt_ .
+
+**Proposition 4.1** (Exponential convergence of the forward process) **.** _Under Assumptions 1-2,_
+
+
+_C_ 4
+_χ_ [2] ( _pn∥q_ ) _≤_ _e_ _[−]_ [2] _[γn]_ _χ_ [2] ( _p_ 0 _∥q_ ) + (11)
+1 _−_ _e_ _[−]_ [2] _[γ]_ _[ε]_ [1] _[/]_ [2]
+
+_for n_ = 1 _,_ 2 _, · · ·, where the constant C_ 4 _defined in_ (20) _is determined by C_ 1 _, C_ 2 _, L, γ_ _and d._
+
+
+4.3 GENERATION GUARANTEE OF THE BACKWARD PROCESS
+
+
+metric: _It_ ( _xl, xr_ ) = cos( [1] 2 _[πt]_ [)] _[x][l]_ [ + sin(] [1] 2 _[πt]_ [)] _[x][r]_ [.] [The selection of time stamps] _[ {][γ][n][}][N]_ _n_ =1 _[−]_ [1] [depends on]
+
+the task and is explained in Appendix B.1. In our experiments, we use _N_ up to 10. In each sub-flow,
+
+
+[1] [1]
+
+2 _[πt]_ [)] _[x][l]_ [ + sin(] 2
+
+
+_P_ **with regular density.** Because the composed transform _TN ◦· · ·◦T_ 1 from _p_ 0 to _pN_ is invertible,
+and the inverse map transforms from _q_ = _qN_ to _q_ 0, the smallness of _χ_ [2] ( _pN_ _∥qN_ ) implies the smallness of _χ_ [2] ( _p_ 0 _∥q_ 0) due to a bi-directional version of data processing inequality (DPI), see Lemma
+A.4, As a result, the exponential convergence of the forward process in Proposition 4.1 directly gives
+the _χ_ [2] -guarantee _q_ 0 _≈_ _p_ .
+**Theorem** **4.2** (Generation guarantee of regular data density) **.** _Suppose_ _P_ _∈P_ 2 _has_ _density_
+_p,_ _let_ _p_ 0 = _p_ _and_ _p_ 0 _satisfies_ (10) _._ _Under_ _Assumptions_ _1-2,_ _if_ _we_ _use_ _the_ _number_ _of_ _steps_
+_N_ _≥_ 21 _γ_ �log _χ_ [2] ( _p_ 0 _∥q_ ) + [1] 2 [log(] [1] _ε_ [)] - _∼_ log(1 _/ε_ ) _, we have χ_ [2] ( _p∥q_ 0) _≤_ _Cε_ [1] _[/]_ [2] _, C_ := (1 + 1 _−Ce_ _[−]_ 4 [2] _[γ]_ [)] _[.]_
+
+
+[1] _ε_ [)] - _∼_ log(1 _/ε_ ) _, we have χ_ [2] ( _p∥q_ 0) _≤_ _Cε_ [1] _[/]_ [2] _, C_ := (1 + 1 _−Ce_ _[−]_ 4 [2] _[γ]_ [)] _[.]_
+
+
+[1] [1]
+
+2 [log(] _ε_
+
+
+By that KL( _p∥q_ ) _≤_ _χ_ [2] ( _p∥q_ ) (Lemma A.5), the _χ_ [2] -guarantee of _O_ ( _ε_ [1] _[/]_ [2] ) in Theorem 4.2 implies
+that KL( _p∥q_ 0) = _O_ ( _ε_ [1] _[/]_ [2] ), and consequently TV( _p, q_ 0) = _O_ ( _ε_ [1] _[/]_ [4] ) by Pinsker’s inequality.
+
+
+_P_ **up to initial diffusion.** For data distribution _P_ that may not have a density or the density does
+not satisfy the regularity conditions, we introduce a short-time diffusion to obtain a smooth density
+_ρδ_ from _P_ and use it as _p_ 0. This construction can ensure that _ρδ_ is close to _P_, e.g. in _W_ 2 distance,
+and is commonly used in diffusion models (Song et al., 2021) and also the theoretical analysis
+(known as “early stopping”) (Chen et al., 2023a).
+**Corollary** **4.3** (Generation of _P_ up to initial diffusion) **.** _Suppose_ _P_ _∈P_ 2 _and_ _for_ _some_ _δ_ _<_ 1 _,_
+_p_ 0 = _ρδ_ = (OU) _[δ]_ 0 [(] _[P]_ [)] _[ satisfies]_ [ (10)] _[ for some][ C]_ [1] _[,]_ _[C]_ [2] _[and][ L][.]_ _[With][ p]_ [0] [=] _[ρ][δ][,]_ _[suppose Assumptions]_
+_1-2 hold, then for N_ _and C_ _are as in Theorem 4.2, the generated density q_ 0 _of the reverse process_
+_makes χ_ [2] ( _ρδ||q_ 0) _≤_ _Cε_ [1] _[/]_ [2] _._ _Meanwhile, W_ 2( _P, ρδ_ ) _≤_ _C_ 5 _δ_ [1] _[/]_ [2] _, C_ 5 := ( _M_ 2( _P_ ) + 2 _d_ ) [1] _[/]_ [2] _._
+
+
+In particular, as shown in Lemma A.6, when _P_ is compactly supported (not necessarily having
+density), then for any _δ_ _>_ 0, there are _C_ 1, _C_ 2 and _L_ such that _p_ 0 = _ρδ_ satisfies (10). This will
+allow us to make _W_ 2( _P, ρδ_ ) arbitrarily small. Generally, the theoretical constants _C_ 1, _C_ 2 and _L_
+may depend on _δ_, and consequently so does the constant _C_ in the _χ_ [2] bound. At last, similarly to
+the comment beneath Theorem 4.2, the _O_ ( _ε_ [1] _[/]_ [2] )- _χ_ [2] guarantee in Corollary 4.3 of _q_ 0 _≈_ _pδ_ implies
+_O_ ( _ε_ [1] _[/]_ [2] )-KL and _O_ ( _ε_ [1] _[/]_ [4] )-TV guarantee.
+
+
+**Algorithm 1** Local Flow Matching (LFM) from scratch
+
+
+5 ALGORITHM
+
+
+5.1 TRAINING LFM FROM SCRATCH
+
+
+The training of LFM is summarized in Algorithm 1. We call each sub-flow FM
+a step or a “block”. In each block,
+any FM algorithm can be adopted. In
+our experiments, we consider the following choices of _It_ ( _xl, xr_ ) in (4), following
+(Lipman et al., 2023; Albergo & VandenEijnden, 2023): (i) Optimal Transport:
+_It_ ( _xl, xr_ ) = _xl_ + _t_ ( _xr −_ _xl_ ), (ii) Trigonometric: _It_ ( _xl, xr_ ) = cos( [1] _[πt]_ [)] _[x][l]_ [ + sin(] [1]
+
+
+**Input:** Data samples _∼_ _p_ 0, timesteps _{γn}_ _[N]_ _n_ =1 _[−]_ [1][.]
+**Output:** _N_ sub-flows _{v_ ˆ _n}_ _[N]_ _n_ =1
+1: **for** _n_ = 1 _, . . ., N_ **do**
+2: Draw samples _xl_ _∼_ _pn−_ 1 and _xr_ _∼_ _p_ _[∗]_ _n_ [=]
+(OU) _[γ]_ 0 _[n][p][n][−]_ [1][ by (6) (when] _[ n]_ [ =] _[ N]_ [, let] _[ p]_ _n_ _[∗]_ [=] _[ q]_ [)]
+3: Innerloop FM: optimize ˆ _vn_ ( _x, t_ ; _θ_ ) by minimizing (5) with mini-batches
+4: **if** _n ≤_ _N_ _−_ 1 **then**
+5: Push-forward the samples _∼_ _pn−_ 1 to be samples _∼_ _pn_ by _Tn_ in (7)
+6: **end if**
+7: **end for**
+
+
+7
+
+
+Figure 2: Generative performance and NLL comparison (lower is better) on 2D data.
+
+
+there are no restrictions on the architecture of ˆ _vn_ ( _x, t_ ; _θ_ ). We use fully connected networks for vector data and UNets for images. When the sub-flows are independently parametrized, we reduce the
+model size of each block assuming that the target flow to match is simpler than a global flow, which
+also reduces memory load and facilitates the innerloop training of FM. In computing the pushforward (Line 5 in Algorithm 1) and in generation, the numerical integration of neural ODE follows
+the procedure in (Chen et al., 2018).
+
+
+5.2 DISTILLATION OF LFM
+
+
+Inspired by (Liu et al., 2023), we propose to distill an _N_ -block pre-trained LFM model into _N_ _[′]_ _< N_
+steps distilled model, where _N_ = _N_ _[′]_ _k_ for some integer _k_ . Each of the _N_ _[′]_ sub-models can be
+distilled independently if parametrized independently. The detail is in Algorithm A.1. If the pretrained LFM has independently parametrized blocks, we keep the sub-model size if _k_ = 1 and
+increase the model size if the distillation combines original blocks ( _k_ _>_ 1). The composition of the
+_N_ _[′]_ distilled sub-models generates data from noise in _N_ _[′]_ steps.
+
+
+6 EXPERIMENTS
+
+
+We apply the proposed LFM to simulated and real datasets, including tabular data (Section 6.2), image generation (Section 6.3), and robotic manipulation (Section 6.4). We demonstrate the improved
+training efficiency and generative performance of LFM compared to (global) flow models, and we
+also show the advantage of LFM after distillation on image generation.
+
+
+6.1 TWO-DIMENSIONAL TOY DATA
+
+
+The task is to generate distributions in 2D that have no analytic form, and we consider the “tree”
+and “rose” examples (Figure 2). We compare our LFM against previous FM models: FM (Lipman
+et al., 2023, Example II) and InterFlow (Albergo & Vanden-Eijnden, 2023). To ensure a fair comparison, we maintain an identical training scheme for all methods, including the specification of
+optimizers, batch size, and number of training batches. Further details regarding the experimental
+setup are provided in Appendix C. The accuracy of the trained models is evaluated using the negative log-likelihood (NLL) metric in (26). Figure 2 shows that LFM achieves good generation of the
+distribution and slightly better NLL in comparison.
+
+
+6.2 TABULAR DATA GENERATION
+
+
+We apply LFM to a set of tabular datasets (Papamakarios et al., 2017), where the generation performance is quantitatively measured by test NLL. We use the following baselines, including both dis
+
+Table 1: Test NLL (lower is better) on tabular data, where _d_ refers to the data dimension. The lowest
+NLL is in **bold** and the 2nd lowest NLL is underlined. All baseline values are quoted from their
+original publications, where “-” entries indicate this dataset was not used.
+
+
+LFM InterFlow JKO-iFlow AdaCat OT-Flow nMDMA CPF BNAF FFJORD
+POWER
+-0.67 -0.57 -0.40 -0.56 -0.30 **-1.78** -0.52 -0.61 -0.46
+( _d_ = 6)
+GAS
+**-12.43** -12.35 -9.43 -11.27 -9.20 -8.43 -10.36 -12.06 -8.59
+( _d_ = 8)
+MINIBOONE
+9.95 10.42 10.55 14.14 10.55 18.60 10.58 **8.95** 10.43
+( _d_ = 43)
+BSDS300
+**-157.80** -156.22 -157.75          - -154.20          - -154.99 -157.36 -157.40
+( _d_ = 63)
+
+
+8
+
+
+(a)
+True samples
+from _p_
+
+
+(b)
+LFM
+NLL= **2.24**
+
+
+(c)
+FM
+NLL=2.35
+
+
+(d)
+InterFlow
+NLL=2.36
+
+
+(e)
+True samples
+from _p_
+
+
+(f)
+LFM
+NLL= **2.60**
+
+
+(g)
+FM
+NLL=2.64
+
+
+(h)
+InterFlow
+NLL=2.64
+
+
+Table 2: FID (lower is better) comparison of LFM against InterFlow and FM under same model
+sizes. FIDs with the symbol * are quoted from the original publication. Note that InterFlow uses the
+Trig interpolant and FM uses the OT interpolant to train the global flow.
+
+
+CIFAR-10 Imagenet-32 Flowers-128
+FID Batch size # of batches FID Batch size # of batches FID Batch size # of batches
+LFM (Trig interpolant) **8.45** **5** _×_ **10** **[4]** **7.00** **2** _×_ **10** **[5]** **59.7** 40 4 _×_ 10 [4]
+
+InterFlow 10.27 _[∗]_ 400 5 _×_ 10 [5] 8.49 _[∗]_ 512 6 _×_ 10 [5] 65.9 40 4 _×_ 10 [4]
+
+LFM (OT interpolant) **8.55** 200 5 _×_ 10 [4] **7.20** 256 2 _×_ 10 [5] **55.7** 40 4 _×_ 10 [4]
+
+FM 12.30 200 5 _×_ 10 [4] 7.51 256 2 _×_ 10 [5] 70.8 40 4 _×_ 10 [4]
+
+
+crete and continuous flows, to compare against: InterFlow (Albergo & Vanden-Eijnden, 2023), JKOiFlow (Xu et al., 2023b), AdaCat (Li et al., 2022), OT-Flow (Onken et al., 2021), nMDMA (Gilboa
+et al., 2021), CPF (Huang et al., 2021), BNAF (De Cao et al., 2020), and FFJORD (Grathwohl et al.,
+2018). Additional experimental details can be found in Appendix C. The results are shown in Table
+1, where the proposed LFM is among the two best-performing methods on all datasets.
+
+
+6.3 IMAGE GENERATION
+
+
+We apply LFM to unconditional image generation of 32 _×_ 32 and 128 _×_ 128 images. We compare LFM
+with InterFlow and FM in terms of Frechet Inception Distance (FID) before and after distillation.
+To ensure a fair comparison, we maintain the same network size for both methods, and more details
+of the experimental setup are provided in Appendix C.
+
+
+32 _×_ 32 **images.** We use the CIFAR-10 (Krizhevsky & Hinton, 2009) and Imagenet-32 (Deng et al.,
+2009) datasets. As shown in Table 2, LFM requires significantly less computation in training than
+InterFlow, and it achieves lower FID values. LFM also shows improved training efficiency against
+FM. We present generated images by LFM in Figure 3 and additionally, by the distilled LFM in
+Figure A.2 (NFE = 5) which shows an almost negligible reduction in visual quality.
+
+
+128 _×_ 128 **images.** We use the Oxford Flowers (Nilsback & Zisserman, 2008) dataset. We first
+train LFM and InterFlow/FM to reach the same FIDs on the test set, with the global flows requiring
+1.25-1.5x more training batches to do so. Subsequently, we distill LFM using Algorithm A.1 and
+InterFlow/FM according to (Liu et al., 2023). Quantitatively, Table 2 shows lower FID under the
+same number of training batches and Table 3 shows lower FID by LFM under 4 or 2 NFEs after
+distillation. This shows that in addition to efficiency in training from scratch, LFM after distillation
+also achieves lower FID. To show the qualitative results, we give generated images in Figure 3
+and noise-to-image trajectories in Figure A.1. Figure A.3 further showcases high-fidelity images
+generated by LFM after distillation with 4 NFEs.
+
+
+Table 3: FID comparison of LFM and InterFlow before and after distillation on Flowers 128 _×_ 128.
+
+
+Pre-distillation Distilled @ 4 NFEs Distilled @ 2 NFEs
+LFM 59.7 **71.0** **75.2**
+InterFlow 59.7 80.0 82.4
+
+
+Figure 3: Unconditional image generation by LFM on 32 _×_ 32 (i.e., CIFAR10 (upper left) and
+Imagenet-32 (lower left)) and 128 _×_ 128 images (i.e., Flowers (upper right) and LSUN Church (Yu
+et al., 2015) (lower right)).
+
+
+9
+
+
+Table 4: Success rate (see (27), higher is better) of FM and LFM for robotic manipulation on
+Robomimic (Mandlekar et al., 2021). We evaluate both methods for 100 rollouts and report success rates at different epochs in the format as (Success rate, epochs).
+
+|Col1|Lift Can Square Transport Toolhang|
+|---|---|
+|FM|(1.00, 200)<br>(0.94, 200)<br>(0.98, 500)<br>(**0.88**, 200)<br>(**0.94**, 750)<br>(0.60, 200)<br>(0.81, 1500)<br>(0.52, 200)|
+|LFM|(1.00, 200)<br>(**0.97**, 200)<br>(**0.99**, 500)<br>(0.87, 200)<br>(0.93, 750)<br>(**0.75**, 200)<br>(**0.88**, 1500)<br>(**0.53**, 200)|
+
+
+(a) Lift (b) Can (c) Square (d) Transport (e) Toolhang
+
+
+Figure 4: Robotic manipulation on Robomimic (Mandlekar et al., 2021). **Top row** : initial conditions
+(IC). **Bottom row** : successful completions. Each task starts from an IC and manipulates the robot
+arms sequentially to reach successful completion in the end.
+
+
+6.4 ROBOTIC MANIPULATION
+
+
+We consider robotic manipulation tasks from the Robomimic benchmark (Mandlekar et al., 2021),
+which consists of 5 tasks of controlling robot arms to perform various pick-and-place operations
+(Figure 4). E.g., the robot may need to pick up a square object (Figure 4a) or move a soda can from
+one bin to another (Figure 4b). Recently, generative models that output robotic actions conditioning
+on the state observations (robot positions or camera image embedding) provide state-of-the-art performance on completing these tasks (Chi et al., 2023). However, it is difficult to transfer pre-trained
+diffusion or flow models (on natural images) to the conditional generation task here, because the
+state observations are task-specific and contain nuanced details about the robots, objects, and environment, which are not present in natural images but are necessary to be understood by the model
+to determine the appropriate actions. Therefore, it is often needed to train a generative model from
+scratch to directly learn the relation from the task-specific state observations to the actions.
+
+
+We train a (global) FM model and the proposed LFM from scratch, where the total number of parameters is kept the same for both methods. Additional experimental details are in Appendix C.2. As
+shown in Table 4, LFM is competitive against FM in terms of the success rate, and the convergence
+is faster in some cases (indicated by the higher success rate at early epochs). The performance on
+the “Toolhang” task does not improve with longer training, as identified in (Chi et al., 2023).
+
+
+7 DISCUSSION
+
+
+The theoretical analysis can be extended from several angles: First, we analyzed the _χ_ [2] guarantee
+and induced KL and TV bounds from the former. One may obtain sharper bounds by analyzing
+KL or TV directly and possibly under weaker assumptions. E.g., Lemma 2.19 in (Albergo et al.,
+2023) can be used to derive a KL bound for the one-step FM under similar assumptions as our
+Assumption 2(A2). Second, we currently assume that _Tn_ _[−]_ [1] is exact in the reverse process (generation). The analysis can be extended to incorporate inversion error due to numerical computation
+in practice, possibly by following the strategy in (Cheng et al., 2024). Meanwhile, the proposed
+methodology has the potential to be further enhanced. In our current experiments, we learn the FM
+blocks independently parametrized as _v_ ˆ( _x, t_ ; _θn_ ). If we introduce weight sharing of _θn_ across _n_, it
+can impose additional time continuity of the flow model. In addition, it would be useful to explore
+more distillation techniques under our framework and to extend the approach to more applications.
+
+
+10
+
+
+REPRODUCIBILITY STATEMENT
+
+
+To ensure reproducibility, we include complete proofs in the Appendix for our theoretical results;
+For experiments, we describe the dataset, the algorithm detail, and the experimental setup including
+hyperparameter selections, in the paper and the Appendix. Our reported results of competing baselines are computed using existing code implementation packages that are publicly available online.
+
+
+ETHICS STATEMENT
+
+
+There are no potential concerns regarding topics that include, but are not limited to, studies that involve human subjects, practices to data set releases, potentially harmful insights, methodologies and
+applications, pontential conflicts of interest and sponsorship, discrimination/bias/fairness concerns,
+privacy and security issues, legal compliance, and research integrity issues.
+
+
+REFERENCES
+
+
+Michael S Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic interpolants. In _The Eleventh International Conference on Learning Representations_, 2023.
+
+
+Michael S Albergo, Nicholas M Boffi, and Eric Vanden-Eijnden. Stochastic interpolants: A unifying
+framework for flows and diffusions. _arXiv preprint arXiv:2303.08797_, 2023.
+
+
+David Alvarez-Melis, Yair Schiff, and Youssef Mroueh. Optimizing functionals on the space of
+probabilities with input convex neural networks. _Transactions_ _on_ _Machine_ _Learning_ _Research_,
+2022.
+
+
+Dmitry Baranchuk, Vladimir Aliev, and Artem Babenko. Distilling the knowledge from conditional
+normalizing flows. In _ICML Workshop on Invertible Neural Networks,_ _Normalizing Flows,_ _and_
+_Explicit Likelihood Models_, 2021.
+
+
+J Benton, G Deligiannidis, and A Doucet. Error bounds for flow matching methods. _Transactions_
+_on Machine Learning Research_, 2024a.
+
+
+Joe Benton, Valentin De Bortoli, Arnaud Doucet, and George Deligiannidis. Nearly $d$-linear
+convergence bounds for diffusion models via stochastic localization. In _The Twelfth International_
+_Conference on Learning Representations_, 2024b.
+
+
+Lucas Berry and David Meger. Normalizing flow ensembles for rich aleatoric and epistemic uncertainty modeling. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, volume 37,
+pp. 6806–6814, 2023.
+
+
+Franc¸ois Bolley, Ivan Gentil, and Arnaud Guillin. Convergence to equilibrium in wasserstein distance for fokker–planck equations. _Journal of Functional Analysis_, 263(8):2430–2457, 2012.
+
+
+Hongrui Chen, Holden Lee, and Jianfeng Lu. Improved analysis of score-based generative modeling:
+User-friendly bounds under minimal smoothness assumptions. In _International_ _Conference_ _on_
+_Machine Learning_, pp. 4735–4763. PMLR, 2023a.
+
+
+Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary
+differential equations. _Advances in neural information processing systems_, 31, 2018.
+
+
+Sitan Chen, Sinho Chewi, Jerry Li, Yuanzhi Li, Adil Salim, and Anru Zhang. Sampling is as easy as
+learning the score: theory for diffusion models with minimal data assumptions. In _The Eleventh_
+_International Conference on Learning Representations_, 2022.
+
+
+Sitan Chen, Giannis Daras, and Alex Dimakis. Restoration-degradation beyond linear diffusions:
+A non-asymptotic analysis for ddim-type samplers. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 4462–4484. PMLR, 2023b.
+
+
+Sitan Chen, Sinho Chewi, Holden Lee, Yuanzhi Li, Jianfeng Lu, and Adil Salim. The probability
+flow ode is provably fast. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+11
+
+
+Xiuyuan Cheng, Jianfeng Lu, Yixin Tan, and Yao Xie. Convergence of flow-based generative models
+via proximal gradient descent in wasserstein space. _IEEE_ _Transactions_ _on_ _Information_ _Theory_,
+2024.
+
+
+Cheng Chi, Siyuan Feng, Yilun Du, Zhenjia Xu, Eric Cousineau, Benjamin Burchfiel, and Shuran
+Song. Diffusion policy: Visuomotor policy learning via action diffusion. In _Proceedings_ _of_
+_Robotics:_ _Science and Systems (RSS)_, 2023.
+
+
+Emmanuel de B´ezenac, Syama Sundar Rangapuram, Konstantinos Benidis, Michael BohlkeSchneider, Richard Kurle, Lorenzo Stella, Hilaf Hasson, Patrick Gallinari, and Tim Januschowski.
+Normalizing kalman filters for multivariate time series analysis. _Advances in Neural Information_
+_Processing Systems_, 33:2995–3007, 2020.
+
+
+Nicola De Cao, Wilker Aziz, and Ivan Titov. Block neural autoregressive flow. In _Uncertainty_ _in_
+_artificial intelligence_, pp. 1263–1273. PMLR, 2020.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In _2009 IEEE conference on computer vision and pattern recognition_,
+pp. 248–255. Ieee, 2009.
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas M¨uller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers for
+high-resolution image synthesis. _arXiv preprint arXiv:2403.03206_, 2024.
+
+
+Jiaojiao Fan, Qinsheng Zhang, Amirhossein Taghvaei, and Yongxin Chen. Variational wasserstein
+gradient flow. In _International Conference on Machine Learning_, pp. 6185–6215. PMLR, 2022.
+
+
+Chris Finlay, J¨orn-Henrik Jacobsen, Levon Nurbekyan, and Adam Oberman. How to train your
+neural ode: the world of jacobian and kinetic regularization. In _International_ _conference_ _on_
+_machine learning_, pp. 3154–3164. PMLR, 2020.
+
+
+Yuan Gao, Jian Huang, Yuling Jiao, and Shurong Zheng. Convergence of continuous normalizing
+flows for learning probability distributions. _arXiv preprint arXiv:2404.00551_, 2024.
+
+
+Itai Gat, Tal Remez, Neta Shaul, Felix Kreuk, Ricky TQ Chen, Gabriel Synnaeve, Yossi Adi, and
+Yaron Lipman. Discrete flow matching. _arXiv preprint arXiv:2407.15595_, 2024.
+
+
+Dar Gilboa, Ari Pakman, and Thibault Vatter. Marginalizable density models, 2021.
+
+
+Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair,
+Aaron Courville, and Yoshua Bengio. Generative adversarial nets. _Advances in neural information_
+_processing systems_, 27, 2014.
+
+
+Will Grathwohl, Ricky TQ Chen, Jesse Bettencourt, Ilya Sutskever, and David Duvenaud. Ffjord:
+Free-form continuous dynamics for scalable reversible generative models. In _International Con-_
+_ference on Learning Representations_, 2018.
+
+
+Wenhao Guan, Kaidi Wang, Wangjin Zhou, Yang Wang, Feng Deng, Hui Wang, Lin Li, Qingyang
+Hong, and Yong Qin. Lafma: A latent flow matching model for text-to-audio generation. _arXiv_
+_preprint arXiv:2406.08203_, 2024.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Xixi Hu, Bo Liu, Xingchao Liu, and Qiang Liu. Adaflow: Imitation learning with variance-adaptive
+flow-based policies. _arXiv preprint arXiv:2402.04292_, 2024.
+
+
+Chin-Wei Huang, Ricky T. Q. Chen, Christos Tsirigotis, and Aaron Courville. Convex potential
+flows: Universal probability distributions with optimal transport and convex optimization. In
+_International Conference on Learning Representations_, 2021.
+
+
+Daniel Zhengyu Huang, Jiaoyang Huang, and Zhengjiang Lin. Convergence analysis of probability
+flow ode for score-based generative models. _arXiv preprint arXiv:2404.09730_, 2024.
+
+
+12
+
+
+Michael Janner, Yilun Du, Joshua Tenenbaum, and Sergey Levine. Planning with diffusion for
+flexible behavior synthesis. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 9902–9915.
+PMLR, 2022.
+
+
+Rie Johnson and Tong Zhang. A framework of composite functional gradient methods for generative
+adversarial models. _IEEE_ _transactions_ _on_ _pattern_ _analysis_ _and_ _machine_ _intelligence_, 43(1):17–
+32, 2019.
+
+
+Diederik P. Kingma and Max Welling. Auto-Encoding Variational Bayes. In _2nd_ _International_
+_Conference_ _on_ _Learning_ _Representations,_ _ICLR_ _2014,_ _Banff,_ _AB,_ _Canada,_ _April_ _14-16,_ _2014,_
+_Conference Track Proceedings_, 2014.
+
+
+DP Kingma. Adam: a method for stochastic optimization. In _Int Conf Learn Represent_, 2014.
+
+
+Ivan Kobyzev, Simon JD Prince, and Marcus A Brubaker. Normalizing flows: An introduction and
+review of current methods. _IEEE transactions on pattern analysis and machine intelligence_, 43
+(11):3964–3979, 2020.
+
+
+Zhifeng Kong, Wei Ping, Jiaji Huang, Kexin Zhao, and Bryan Catanzaro. Diffwave: A versatile
+diffusion model for audio synthesis. In _International_ _Conference_ _on_ _Learning_ _Representations_,
+2021.
+
+
+Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical Report 0, University of Toronto, Toronto, Ontario, 2009.
+
+
+Jurriaan Langendorff, Alex Kolmus, Justin Janquart, and Chris Van Den Broeck. Normalizing flows
+as an avenue to studying overlapping gravitational wave signals. _Physical_ _Review_ _Letters_, 130
+(17):171402, 2023.
+
+
+Holden Lee, Jianfeng Lu, and Yixin Tan. Convergence of score-based generative modeling for
+general data distributions. In _International_ _Conference_ _on_ _Algorithmic_ _Learning_ _Theory_, pp.
+946–985. PMLR, 2023.
+
+
+Gen Li, Yuting Wei, Yuxin Chen, and Yuejie Chi. Towards non-asymptotic convergence for
+diffusion-based generative models. In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Rep-_
+_resentations_, 2024a.
+
+
+Gen Li, Yuting Wei, Yuejie Chi, and Yuxin Chen. A sharp convergence theory for the probability
+flow odes of diffusion models. _arXiv preprint arXiv:2408.02320_, 2024b.
+
+
+Qiyang Li, Ajay Jain, and Pieter Abbeel. Adacat: Adaptive categorical discretization for autoregressive models. In _Uncertainty in Artificial Intelligence_, pp. 1188–1198. PMLR, 2022.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In _The Eleventh International Conference on Learning Repre-_
+_sentations_, 2023.
+
+
+Qiang Liu. Rectified flow: A marginal preserving approach to optimal transport. _arXiv_ _preprint_
+_arXiv:2209.14577_, 2022.
+
+
+Xingchao Liu, Chengyue Gong, and qiang liu. Flow straight and fast: Learning to generate and
+transfer data with rectified flow. In _The_ _Eleventh_ _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations_, 2023.
+
+
+Xingchao Liu, Xiwen Zhang, Jianzhu Ma, Jian Peng, and Qiang Liu. Instaflow: One step is enough
+for high-quality diffusion-based text-to-image generation. In _The_ _Twelfth_ _International_ _Confer-_
+_ence on Learning Representations_, 2024.
+
+
+Ajay Mandlekar, Danfei Xu, Josiah Wong, Soroush Nasiriany, Chen Wang, Rohun Kulkarni, Li FeiFei, Silvio Savarese, Yuke Zhu, and Roberto Mart´ın-Mart´ın. What matters in learning from offline
+human demonstrations for robot manipulation. In _Conference on Robot Learning (CoRL)_, 2021.
+
+
+Youssef Marzouk, Zhi Robert Ren, Sven Wang, and Jakob Zech. Distribution learning via neural differential equations: a nonparametric statistical perspective. _Journal_ _of_ _Machine_ _Learning_
+_Research_, 25(232):1–61, 2024.
+
+
+13
+
+
+Petr Mokrov, Alexander Korotin, Lingxiao Li, Aude Genevay, Justin M Solomon, and Evgeny Burnaev. Large-scale wasserstein gradient flows. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Sys-_
+_tems_, 34:15243–15256, 2021.
+
+
+Bao Nguyen, Binh Nguyen, and Viet Anh Nguyen. Bellman optimal stepsize straightening of flowmatching models. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models.
+In _International conference on machine learning_, pp. 8162–8171. PMLR, 2021.
+
+
+Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large number
+of classes. In _2008 Sixth Indian Conference on Computer Vision, Graphics & Image Processing_,
+pp. 722–729, 2008. doi: 10.1109/ICVGIP.2008.47.
+
+
+Derek Onken, Samy Wu Fung, Xingjian Li, and Lars Ruthotto. Ot-flow: Fast and accurate continuous normalizing flows via optimal transport. In _Proceedings of the AAAI Conference on Artificial_
+_Intelligence_, volume 35, pp. 9223–9232, 2021.
+
+
+George Papamakarios, Theo Pavlakou, and Iain Murray. Masked autoregressive flow for density
+estimation. _Advances in neural information processing systems_, 30, 2017.
+
+
+Maxim Raginsky. Strong data processing inequalities and Φ-sobolev inequalities for discrete channels. _IEEE Transactions on Information Theory_, 62(6):3355–3389, 2016.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Quentin Rouxel, Andrea Ferrari, Serena Ivaldi, and Jean-Baptiste Mouret. Flow matching imitation
+learning for multi-support manipulation. _arXiv preprint arXiv:2407.12381_, 2024.
+
+
+Tim Salimans and Jonathan Ho. Progressive distillation for fast sampling of diffusion models. In
+_International Conference on Learning Representations_, 2022.
+
+
+Marta Gentiloni Silveri, Giovanni Conforti, and Alain Durmus. Theoretical guarantees in kl for
+diffusion flow matching. _arXiv preprint arXiv:2409.08311_, 2024.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _Interna-_
+_tional Conference on Learning Representations_, 2021.
+
+
+Yang Song, Prafulla Dhariwal, Mark Chen, and Ilya Sutskever. Consistency models. In _ICML_, 2023.
+
+
+Alexander Tong, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-Brooks, Kilian
+Fatras, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models
+with minibatch optimal transport. _arXiv preprint arXiv:2302.00482_, 2023.
+
+
+Alexander Vidal, Samy Wu Fung, Luis Tenorio, Stanley Osher, and Levon Nurbekyan. Taming
+hyperparameter tuning in continuous normalizing flows using the jko scheme. _Scientific Reports_,
+13(1):4501, 2023.
+
+
+Chen Xu, Xiuyuan Cheng, and Yao Xie. Computing high-dimensional optimal transport by flow
+neural networks. In _NeurIPS 2023 Workshop Optimal Transport and Machine Learning_, 2023a.
+
+
+Chen Xu, Xiuyuan Cheng, and Yao Xie. Normalizing flow neural networks by JKO scheme. In
+_Thirty-seventh Conference on Neural Information Processing Systems_, 2023b.
+
+
+Fisher Yu, Ari Seff, Yinda Zhang, Shuran Song, Thomas Funkhouser, and Jianxiong Xiao. Lsun:
+Construction of a large-scale image dataset using deep learning with humans in the loop. _arXiv_
+_preprint arXiv:1506.03365_, 2015.
+
+
+14
+
+
+A PROOFS
+
+
+Denote by Leb the Lebesgue measure.
+**Definition A.1** (Non-degenerate mapping) **.** _T_ : R _[d]_ _→_ R _[d]_ _is non-degenerate if for any set A_ _⊂_ R _[d]_
+_s.t._ _Leb_ ( _A_ ) = 0 _, then Leb_ ( _T_ _[−]_ [1] ( _A_ )) = 0 _._
+
+
+A.1 PROOFS IN SECTION 4.2
+
+
+_Proof of Proposition 4.1._ The proof is based on the descending of _χ_ [2] ( _pn∥q_ ) in each step. Note that
+under (A1), by the argument following (13) below, we have _p_ 0 _/q_ _∈_ _L_ [2] ( _q_ ) i.e. _χ_ [2] ( _p_ 0 _∥q_ ) _< ∞_ .
+
+
+We first consider the target and learned flows on [ _tn−_ 1 _, tn_ ] to establish the needed descending arguments for the _n_ -th step. We shift the time interval to be [0 _, T_ ], _T_ := _γ_ _>_ 0, and the transport
+equations of _ρ_ and _ρ_ ˆ are as in (9). Define
+
+_G_ ( _t_ ) := _χ_ [2] ( _ρt∥q_ ) _,_ _G_ ˆ( _t_ ) := _χ_ [2] (ˆ _ρt∥q_ ) _._ (12)
+
+
+By the time endpoint values of _ρ_ and _ρ_ ˆ as in (9), we have
+
+_G_ (0) = _G_ [ˆ] (0) = _χ_ [2] ( _pn−_ 1 _∥q_ ) _,_ _G_ ( _T_ ) = _χ_ [2] ( _p_ _[∗]_ _n_ _[∥][q]_ [)] _[,]_ _G_ ˆ( _T_ ) = _χ_ [2] ( _pn∥q_ ) _._
+
+We will show that a) _G_ ( _T_ ) descends, and b) _G_ [ˆ] ( _T_ ) _≈_ _G_ ( _T_ ), then, as a result, _G_ [ˆ] ( _T_ ) also descends.
+
+
+We first verify the boundedness of _G_ ( _t_ ) and _G_ [ˆ] ( _t_ ) at all time. By definition, we have (we write
+integral on R _[d]_ omitting variable _x_ and _dx_ for notation brevity)
+
+
+when the involved integrals are all finite, and similarly with _G_ [ˆ] ( _t_ ) and _ρ_ ˆ _t_ . To verify integrability,
+observe that under (A1),
+
+_ρ_ [2] _t_ _t_ 1 _[e][−∥][x][∥]_ [2] 1
+
+_[ρ]_ [ˆ][2] _[C]_ [2] _e_ _[−∥][x][∥]_ [2] _[/]_ [2] _,_ _cd_ := (2 _π_ ) _[−][d/]_ [2] _._ (13)
+_q_ [(] _[x]_ [)] _[,]_ _q_ [(] _[x]_ [)] _[ ≤]_ _c_ _[C]_ _de_ [2] _[−∥][x][∥]_ [2] _[/]_ [2] [=] _cd_
+
+This shows that _ρt/q,_ ˆ _ρt/q_ and thus ( _ρt/q −_ 1) _,_ (ˆ _ρt/q −_ 1) are all in _L_ [2] ( _q_ ) for all _t_ . In particular,
+this applies to _ρ_ 0 = _ρ_ ˆ0 = _p_ 0 by taking _n_ = 1 and _t_ = 0. Thus, _G_ ( _t_ ) _,_ _G_ [ˆ] ( _t_ ) are always finite.
+Additionally, (13) gives that
+
+_G_ ( _t_ ) _,_ _G_ [ˆ] ( _t_ ) _≤_ ( _C_ 1 _/cd_ ) [2] _−_ 1 _≤_ ( _C_ 1 _/cd_ ) [2] _,_ _∀t ∈_ [0 _, T_ ] _,_ (14)
+
+
+Our descending argument is based on the following two key lemmas:
+
+**Lemma A.2** ( _χ_ [2] -contraction of OU process) **.** _χ_ [2] ( _p_ _[∗]_ _n_ _[∥][q]_ [)] _[ ≤]_ _[e][−]_ [2] _[γ][χ]_ [2][(] _[p][n][−]_ [1] _[∥][q]_ [)] _[.]_
+
+
+This implies that _G_ ( _T_ ) _≤_ _e_ _[−]_ [2] _[T]_ _G_ (0).
+
+
+**Lemma A.3** ( _G_ [ˆ] ( _T_ ) _≈_ _G_ ( _T_ )) **.** _χ_ [2] ( _pn∥q_ ) _≤_ _χ_ [2] ( _p_ _[∗]_ _n_ _[∥][q]_ [) +] _[ C]_ [4] _[ε]_ [1] _[/]_ [2] _[, with][ C]_ [4] _[defined in]_ [ (20)] _[.]_
+
+
+Lemma A.2 follows standard contraction results of the diffusion process, and Lemma A.3 utilizes
+the approximation of _ρ_ ˆ _≈_ _ρ_ due to the learning of the velocity field _v_ ˆ _≈_ _v_ . We postpone the proofs
+of the two lemmas after the proof of the proposition.
+
+
+With the two lemmas in hands, we can put the _n_ steps together and prove (11). Define
+
+_En_ := _χ_ [2] ( _pn∥q_ ) _,_ _β_ := _e_ _[−]_ [2] _[γ]_ _<_ 1 _,_ _α_ := _C_ 4 _ε_ [1] _[/]_ [2] _,_
+
+
+and then Lemmas A.2-A.3 give that
+
+
+_En_ _≤_ _βEn−_ 1 + _α._
+
+
+By induction, one can verify that
+
+
+_α_
+
+_En_ _≤_ _β_ _[n]_ _E_ 0 + _[α]_ [(1] _[ −]_ _[β][n]_ [)] _≤_ _β_ _[n]_ _E_ 0 +
+
+1 _−_ _β_ 1 _−_ _β_ _[,]_
+
+
+which proves (11) and finishes the proof of the proposition.
+
+
+15
+
+
+   - ( _ρt −_ _q_ )2
+_G_ ( _t_ ) =
+
+
+_[t]_  
+[=] ( _[ρ][t]_
+_q_ _[−]_ [1)][2] _[q]_ _q_
+
+
+_q_ )2  
+= ( _[ρ][t]_
+_q_ _q_
+
+
+_[t]_
+
+_q_ [)][2] _[q][ −]_ [1] _[,]_
+
+
+_Proof of Lemma A.2._ The lemma follows the well-understood contraction of _χ_ [2] divergence of OU
+process, see e.g. Bolley et al. (2012). Specifically, on the time interval [0 _, T_ ], _T_ = _γ_, the initial
+density _pn−_ 1 renders _χ_ [2] ( _pn−_ 1 _∥q_ ) _<_ _∞_, because _pn−_ 1 _/q_ = _ρ_ 0 _/q_ _∈_ _L_ [2] ( _q_ ) by the argument following (13). For the OU process, since the equilibrium density _q_ _∝_ _e_ _[−][V]_ with _V_ ( _x_ ) = _∥x∥_ [2] _/_ 2, we
+know that _q_ is strongly convex and then satisfies the Poincar´e inequality (PI) with constant _C_ = 1.
+By the argument in Eqn. (3) in Bolley et al. (2012), the PI implies the contraction claimed in the
+lemma.
+
+
+_Proof of Lemma A.3._ We prove the lemma by showing the closeness of _χ_ [2] ( _pn∥q_ ) = _G_ ˆ( _T_ ) to
+_χ_ [2] ( _p_ _[∗]_ _n_ _[∥][q]_ [) =] _[ G]_ [(] _[T]_ [)][.] [By definition (12),]
+
+
+1
+2 _[F]_ [(] _[T]_ [)] _[ ≤]_
+
+
+_G_ ( _t_ ) = _∥_ _[ρ][t]_
+
+
+_[t]_ _L_ [2] ( _q_ ) _[,]_ _G_ ˆ( _t_ ) = _∥_ _[ρ]_ [ˆ] _[t]_
+
+_q_ _[−]_ [1] _[∥]_ [2] _q_
+
+
+_[t]_ _L_ [2] ( _q_ ) _[,]_ _∀t ∈_ [0 _, T_ ] _._
+
+_q_ _[−]_ [1] _[∥]_ [2]
+
+
+         We will use the triangle inequality _|_ ~~�~~ _G_ ( _t_ ) _−_ _G_ ˆ( _t_ ) _| ≤∥_ _[ρ]_ [ˆ] _[t]_
+
+
+_q_ _[t]_ _[∥][L]_ [2][(] _[q]_ [)][.] [Observe that]
+
+
+_[t]_
+
+_q_ _[−]_ _[ρ]_ _q_ _[t]_
+
+
+_ρ_ ˆ _t_
+
+
+_ρ_ ˆ _t_
+
+_q_ _[≤]_ _[C]_ _cd_ [1]
+
+
+_cd_
+
+
+_∥_ _[ρ]_ [ˆ] _[t]_
+
+
+_[ρ]_ [ˆ] _[t]_
+
+_q_ _[−]_ _[ρ]_ _q_ _[t]_
+
+
+_[t]_  - (ˆ _ρt −_ _ρt_ )2
+
+_L_ [2] ( _q_ ) [=]
+_q_ _[∥]_ [2] _q_
+
+
+_ρt_ )2  - (ˆ _ρt −_ _ρt_ )2
+
+=
+_q_ _ρ_ ˆ _t_
+
+
+_ρ_ ˆ _t_
+
+
+- (ˆ _ρt −_ _ρt_ )2
+
+_,_ (15)
+_ρ_ ˆ _t_
+
+
+where the inequality is due to the pointwise bound _[ρ]_ [ˆ] _[t]_ [(] _[x]_ [)]
+
+
+_[t]_ [(] _[x]_ [)] _C_ 1
+
+[ˆ]
+
+_q_ ( _x_ ) _[≤]_ _cd_
+
+
+where the inequality is due to the pointwise bound _q_ _[t]_ ( _x_ ) _[≤]_ _cd_ 1 [,] [which] [follows] [by] [(A1)] [and] [the]
+
+expression of _q_ with _cd_ as in (13). We introduce
+
+
+    - (ˆ _ρt −_ _ρt_ )2
+_F_ ( _t_ ) :=
+
+
+_[t]_ _−_ 1) [2] _ρ_ ˆ _t_ _≥_ 0 _,_ (16)
+
+_ρ_ ˆ _t_
+
+
+_ρt_ )2  
+= ( _[ρ][t]_
+_ρ_ ˆ _t_ _ρ_ ˆ _t_
+
+
+and then we have
+
+
+_[t]_
+
+_q_ _[−]_ _[ρ]_ _q_ _[t]_
+
+
+   _|_ - _G_ ( _T_ ) _−_ _G_ ˆ( _T_ ) _| ≤∥_ _[ρ]_ [ˆ] _[t]_
+
+
+_[t]_ _[≤]_ [(] _[C]_ [1] _[/c][d]_ [)][1] _[/]_ [2] ~~[�]~~
+
+_q_ _[∥][L]_ [2][(] _[q]_ [)]
+
+
+_F_ ( _T_ ) _._ (17)
+
+
+Next, we will bound _F_ ( _T_ ) to be _O_ ( _ε_ ), and this will lead to the desired closeness of _G_ [ˆ] ( _T_ ) to _G_ ( _T_ ).
+
+
+_•_ Bound of _F_ ( _T_ ):
+
+
+We will upper bound _F_ ( _T_ ) by differentiating _F_ ( _t_ ) over time. By definition (16), _F_ (0) = 0, and
+(omitting _t_ in _ρt_ and _ρ_ ˆ _t_ in the equations)
+
+
+_d_ ( _[ρ]_
+_dt_ _[F]_ [(] _[t]_ [) =] _ρ_ ˆ
+
+
+_[ρ]_
+
+_ρ_ ˆ _[−]_ [1)(] _[∂][t][ρ][ −]_ _[ρ]_ _ρ_ ˆ
+
+
+_[ρ]_
+
+_ρ_ ˆ _[−]_ [1)][2] _[∂][t][ρ]_ [ˆ][ + 2(] _ρ_ _[ρ]_ ˆ
+
+
+_ρ_ ˆ _[∂][t][ρ]_ [ˆ][)]
+
+
+ = 2 _∂tρ_ ( _[ρ]_
+
+
+_ρ_ ˆ [)][2] _[ −]_ [1)]
+
+
+_[ρ]_
+
+_ρ_ ˆ _[−]_ [1)] _[ −]_ _[∂][t][ρ]_ [ˆ][((] _ρ_ _[ρ]_ ˆ
+
+
+ = _−_ 2 _∇·_ ( _ρv_ )( _[ρ]_
+
+
+(by transport equations (9))
+_ρ_ ˆ [)][2] _[ −]_ [1)]
+
+
+_[ρ]_
+
+_ρ_ ˆ _[−]_ [1) +] _[ ∇·]_ [ (ˆ] _[ρ][v]_ [ˆ][)((] _ρ_ _[ρ]_ ˆ
+
+
+ = 2( _ρv_ ) _· ∇_ ( _[ρ]_
+
+
+_[ρ]_
+
+_ρ_ ˆ _[∇]_ [(] _[ρ]_ _ρ_ ˆ
+
+
+_[ρ]_
+
+_ρ_ ˆ [)] _[ −]_ [(ˆ] _[ρ][v]_ [ˆ][)] _[ ·]_ [ 2] _ρ_ _[ρ]_ ˆ
+
+
+_ρ_ ˆ [)]
+
+
+  = 2 _ρ_ ( _v −_ _v_ ˆ) _· ∇_ ( _[ρ]_
+
+_ρ_ ˆ [)]
+
+
+  = 2 ( _v −_ _v_ ˆ) _[ρ]_ [2]
+
+_ρ_ ˆ _[·]_ [ (] _[∇]_ [log] _[ ρ][ −∇]_ [log ˆ] _[ρ]_ [)] _[,]_
+
+
+and the last row is by that _∇_ ( _[ρ]_
+
+
+_[ρ]_ _[ρ]_
+
+_ρ_ ˆ [) =] _ρ_ ˆ
+
+
+_ρ_ ˆ [(] _[∇]_ [log] _[ ρ][ −∇]_ [log ˆ] _[ρ]_ [)][.] [Thus,]
+
+
+1 [1]
+2 _[F]_ [(] _[T]_ [) =] 2
+
+
+- - _T_
+_F_ _[′]_ ( _t_ ) _dt_ =
+
+0
+
+
+ 
+
+
+R _[d]_ [(] _[v][ −]_ _[v]_ [ˆ][)] _[ ·]_ [ (] _[∇]_ [log] _[ ρ][ −∇]_ [log ˆ] _[ρ]_ [)] _[ρ]_ _ρ_ ˆ [2]
+
+
+_ρ_ ˆ _[dxdt.]_
+
+
+Then, by Cauchy-Schwarz, we have
+
+
+�1 _/_ 2
+
+
+�1 _/_ 2 �� _T_
+
+
+�� _T_
+
+
+0
+
+
+R _[d][ ∥][v][ −]_ _[v]_ [ˆ] _[∥]_ [2] _[ρdxdt]_
+
+
+0
+
+
+16
+
+
+_._ (18)
+
+
+_[ρ]_ [3]
+R _[d][ ∥∇]_ [log] _[ ρ][ −∇]_ [log ˆ] _[ρ]_ [)] _[∥]_ [2] _ρ_ ˆ [2]
+
+
+_ρ_ ˆ [2] _[dxdt]_
+
+
+The fact that _G_ [ˆ] ( _T_ ) _≤_ _G_ ( _T_ ) + _C_ 4 _ε_ [1] _[/]_ [2] proves the lemma.
+
+
+A.2 PROOFS IN SECTION 4.3
+
+
+**Lemma A.4** (Bi-direction DPI) **.** _Let_ D _f_ _be an f_ _-divergence._ _If T_ : R _[d]_ _→_ R _[d]_ _is invertible and for_
+_two densities p and q on_ R _[d]_ _, T_ # _p and T_ # _q also have densities, then_
+
+
+_Df_ ( _p||q_ ) = _Df_ ( _T_ # _p||T_ # _q_ ) _._
+
+
+_Proof of Lemma A.4._ Let _X_ 1 _∼_ _p_, _X_ 2 _∼_ _q_, and _Y_ 1 = _T_ ( _X_ 1), _Y_ 2 = _T_ ( _X_ 2). Then _Y_ 1 and _Y_ 2 also
+have densities, _Y_ 1 _∼_ _p_ ˜ := _T_ # _p_ and _Y_ 2 _∼_ _q_ ˜ := _T_ # _q_ . By the classical DPI of _f_ -divergence (see,
+e.g., the introduction of Raginsky (2016)), we have _Df_ (˜ _p||q_ ˜) _≤_ _Df_ ( _p||q_ ). In the other direction,
+_Xi_ = _T_ _[−]_ [1] ( _Yi_ ), _i_ = 1 _,_ 2, then DPI also implies _Df_ ( _p||q_ ) _≤_ _Df_ (˜ _p||q_ ˜).
+
+
+_Proof of Theorem 4.2._ Under the assumptions, Proposition 4.1 applies to give that
+
+
+_C_ 4
+_χ_ [2] ( _pN_ _∥q_ ) _≤_ _e_ _[−]_ [2] _[γN]_ _χ_ [2] ( _p_ 0 _∥q_ ) +
+1 _−_ _e_ _[−]_ [2] _[γ]_ _[ε]_ [1] _[/]_ [2] _[.]_
+
+
+Then, whenever _e_ _[−]_ [2] _[γN]_ _χ_ [2] ( _p_ 0 _∥q_ ) _≤_ _ε_ [1] _[/]_ [2] which is ensured by the _N_ in the theorem, we have
+_χ_ [2] ( _pN_ _∥q_ ) _≤_ (1 + 1 _−Ce_ _[−]_ 4 [2] _[γ]_ [)] _[ε]_ [1] _[/]_ [2][.] [Let] _[ T][ N]_ 1 [:=] _[ T][N]_ _[◦· · · ◦]_ _[T]_ [1][, which is invertible, and] _[ p][N]_ [= (] _[T][ N]_ 1 [)][#] _[p]_ [0][,]
+_qN_ = ( _T_ 1 _[N]_ [)][#] _[q]_ [0][.] [We will apply the bi-directional DPI Lemma A.4 to show that]
+
+
+_χ_ [2] ( _p_ 0 _∥q_ 0) = _χ_ [2] (( _T_ 1 _[N]_ [)][#] _[p]_ [0] _[∥]_ [(] _[T][ N]_ 1 [)][#] _[q]_ [0][) =] _[ χ]_ [2][(] _[p][N]_ _[∥][q][N]_ [) =] _[ χ]_ [2][(] _[p][N]_ _[∥][q]_ [)] _[,]_ (21)
+
+
+which then proves the theorem.
+
+
+For Lemma A.4 to apply to show the first equality in (21), it suffices to verify that _p_ 0, _q_ 0, _pN_, _qN_ all
+have densities. _p_ 0 has density by the theorem assumption. From Definition A.1, one can verify that
+a transform _T_ being non-degenerate guarantees that _P_ has density _⇒_ _T_ # _P_ has density (see, e.g.,
+Lemma 3.2 of (Cheng et al., 2024)). Because all _Tn_ are non-degenerate under (A0), from that _p_ 0 has
+density we know that all _pn_ has densities, including _pN_ . In the reverse direction, _qN_ = _q_ which is
+the normal density. By that _Tn_ _[−]_ [1] are all non-degenerate, we similarly have that all _qn_ has densities,
+including _q_ 0.
+
+
+**Lemma A.5.** _For two densities p and q where χ_ [2] ( _p∥q_ ) _< ∞,_ KL( _p∥q_ ) _≤_ _χ_ [2] ( _p∥q_ ) _._
+
+
+17
+
+
+By the flow-matching error assumption (A0), we have the first factor in the r.h.s. of (18) bounded
+by _ε_ . Meanwhile, the technical conditions (A2)(A3) together imply that for all _t ∈_ [0 _, T_ ],
+
+  -  
+
+
+                 _t_ _[/][ρ]_ [ˆ][2] _t_ [)] _[dx][ ≤]_ [(2] _[L]_ [)][2]
+R _[d][ ∥∇]_ [log] _[ ρ][t][ −∇]_ [log ˆ] _[ρ][t][∥]_ [2][(] _[ρ]_ [3]
+
+
+_t_ _[/][ρ]_ [ˆ][2] _t_ [)(] _[x]_ [)] _[dx][ ≤]_ [(2] _[L]_ [)][2] _[C]_ [2] _[,]_
+R _[d]_ [(1 +] _[ ∥][x][∥]_ [)][2][(] _[ρ]_ [3]
+
+
+thus the second factor in (18) is upper bounded by �(2 _L_ ) [2] _C_ 2 _T_ . Putting together, we have
+
+
+_F_ ( _T_ ) _≤_ 2(2 _L_ )� _C_ 2 _Tε_ = _C_ 3 _ε,_ _C_ 3 := 4 _L_        - _C_ 2 _γ._ (19)
+
+
+_•_ Bound of _G_ [ˆ] ( _T_ ) _−_ _G_ ( _T_ ):
+
+
+With the bound (19) of _F_ ( _T_ ), we are ready to go back to (17), which gives
+
+      _G_ ˆ( _T_ ) _≤_         - _G_ ( _T_ ) + ( _C_ 1 _/cd_ ) [1] _[/]_ [2][�] _F_ ( _T_ ) _._
+
+
+Together with that _G_ ( _T_ ) _≤_ ( _C_ 1 _/cd_ ) [2] by (14), this gives that
+
+
+_G_ ˆ( _T_ ) _≤_ _G_ ( _T_ ) + 2( _C_ 1 _/cd_ ) [3] _[/]_ [2][�]
+
+
+where we used that _ε <_ 1 by (A0) and
+
+
+_C_ 3 _ε_ [1] _[/]_ [2] + ( _C_ 1 _/cd_ ) _C_ 3 _ε ≤_ _G_ ( _T_ ) + _C_ 4 _ε_ [1] _[/]_ [2] _,_
+
+
+_C_ 4 := 2( _C_ 1 _/cd_ ) [3] _[/]_ [2][�]
+
+
+_C_ 3 + ( _C_ 1 _/cd_ ) _C_ 3 _._ (20)
+
+
+_−_ 1 _∥x∥_ [2] + _[e][−][t][R]_ _∥x∥_
+= _e_ 2 _σt_ [2] _σt_ [2] _e_
+
+
+18
+
+
+_Proof._ The statement is a well-known fact and we include an elementary proof for completeness.
+Because _χ_ [2] ( _p∥q_ ) _< ∞_, we have ( _p/q −_ 1) and thus _p/q_ _∈_ _L_ [2] ( _q_ ), i.e. - _p_ [2] _/q_ _< ∞_ . By the fact that
+log _x ≤_ _x −_ 1 for any _x >_ 0, log _[p]_ [(] _[x]_ [)] _[ ≤]_ _[p]_ [(] _[x]_ [)] _[ −]_ [1][, and then]
+
+
+_[p]_
+
+_q_ [(] _[x]_ [)] _[ ≤]_ _[p]_ _q_
+
+
+_q_ [(] _[x]_ [)] _[ −]_ [1][, and then]
+
+
+  
+_[p]_ _p_ ( _[p]_
+
+_q_ _[≤]_ _q_
+
+
+_q_ _[−]_ [1 =] _[ χ]_ [2][(] _[p][∥][q]_ [)] _[.]_
+
+
+     KL( _p∥q_ ) = _p_ log _[p]_
+
+
+_[p]_ - _p_ 2
+
+_q_ _[−]_ [1) =] _q_
+
+
+_Proof of Corollary 4.3._ Let _ρt_ = (OU) _[t]_ 0 [(] _[P]_ [)][.] Because _M_ 2( _P_ ) _<_ _∞_, one can show that
+_W_ 2( _ρt, P_ ) [2] = _O_ ( _t_ ) as _t_ _→_ 0. Specifically, by Lemma C.1 in (Cheng et al., 2024), _W_ 2( _ρt, P_ ) [2] _≤_
+_t_ [2] _M_ 2( _P_ )+2 _td_ . Thus, for _t <_ 1, _W_ 2( _ρt, P_ ) [2] _≤_ ( _M_ 2( _P_ )+2 _d_ ) _t_ . This proves _W_ 2( _P, ρδ_ ) _≤_ _C_ 5 _δ_ [1] _[/]_ [2] .
+
+Meanwhile, _p_ 0 = _ρδ_ satisfies the needed condition in Theorem 4.2, the claimed bound of _χ_ [2] ( _ρδ||q_ 0)
+directly follows from Theorem 4.2.
+
+
+**Lemma** **A.6.** _Suppose_ _P_ _on_ R _[d]_ _is_ _compactly_ _supported,_ _then,_ _∀t_ _>_ 0 _,_ _ρt_ = (OU) _[t]_ 0 [(] _[P]_ [)] _[satisfies]_
+_satisfies_ (10) _for some C_ 1 _, C_ 2 _and L (which may depend on t)._
+
+
+_Proof of Lemma A.6._ Suppose _P_ is supported on _BR_ := _{x ∈_ R _[d]_ _, ∥x∥≤_ _R}_ for some _R >_ 0.
+
+
+By the property of the OU process, _ρt_ is the probability density of the random vector
+
+_Zt_ := _e_ _[−][t]_ _X_ 0 + _σtZ,_ _Z_ _∼N_ (0 _, Id_ ) _,_ _X_ 0 _∼_ _P,_ _Z_ _⊥_ _X_ 0 _._ (22)
+
+where _σt_ [2] [= 1] _[−]_ _[e][−]_ [2] _[t]_ [.] [We will verity the first two inequalities in (10), and the third one is implied by]
+the first one. (The third one also has a direct proof: _M_ 2( _ρδ_ ) = E _∥Zδ∥_ [2] = _e_ _[−]_ [2] _[δ]_ _M_ 2( _P_ ) + _σδ_ [2] _[d <][ ∞]_ [,]
+then the third condition in (10) holds with _C_ 2 = 1 + _e_ _[−]_ [2] _[δ]_ _M_ 2( _P_ ) + _σδ_ [2] _[d]_ [.)]
+
+
+The law of _Zt_ in (22) gives that
+
+
+            - 1
+_ρt_ ( _x_ ) = _t_ [)] _dP_ ( _y_ ) _._ (23)
+
+R _[d]_ (2 _πσt_ [2][)] _[d/]_ [2] _[e][−∥][x][−][e][−][t][y][∥]_ [2] _[/]_ [(2] _[σ]_ [2]
+
+
+This allows us to verity the first two inequalities in (10) with proper _C_ 1 and _L_, making use of the
+fact that _P_ is supported on _BR_ . Specifically, by definition,
+
+
+    - 1
+_∇ρt_ ( _x_ ) =
+
+R _[d]_ (2 _πσt_ [2][)] _[d/]_ [2]
+
+
+_−_ _[x][ −]_ _[e][−][t][y]_
+
+_σt_ [2]
+
+
+_e_ _[−∥][x][−][e][−][t][y][∥]_ [2] _[/]_ [(2] _[σ]_ _t_ [2][)] _dP_ ( _y_ ) _,_
+
+
+and then, because _∥x −_ _e_ _[−][t]_ _y∥≤∥x∥_ + _e_ _[−][t]_ _∥y∥≤∥x∥_ + _e_ _[−][t]_ _R_,
+
+
+_∥∇ρt_ ( _x_ ) _∥≤_ _[∥][x][∥]_ [+] _[ e][−][t][R]_
+
+_σt_ [2]
+
+
+1
+_t_ [)] _dP_ ( _y_ ) = _[∥][x][∥]_ [+] _[ e][−][t][R]_
+R _[d]_ (2 _πσt_ [2][)] _[d/]_ [2] _[e][−∥][x][−][e][−][t][y][∥]_ [2] _[/]_ [(2] _[σ]_ [2] _σt_ [2]
+
+
+_ρt_ ( _x_ ) _._
+_σt_ [2]
+
+
+This means that
+_∥∇ρt_ ( _x_ ) _∥_
+
+
+_,_
+_σt_ [2]
+
+
+_ρt_ ( _x_ ) _∥_ _≤_ _[∥][x][∥]_ [+] _[ e][−][t][R]_
+
+_ρt_ ( _x_ ) _σt_ [2]
+
+
+which means that the 2nd condition in (10) holds with _L_ = _σ_ 1 _t_ [2] [max] _[{]_ [1] _[, e][−][t][R][}]_ [.]
+
+To prove the first inequality, we again use the expression (23). By that _∥x∥≤∥x_ _−_ _e_ _[−][t]_ _y∥_ + _∥e_ _[−][t]_ _y∥_,
+and that _∥y∥≤_ _R_, we have
+
+
+_∥x∥_ [2] _≤∥x −_ _e_ _[−][t]_ _y∥_ [2] + 2 _∥x −_ _e_ _[−][t]_ _y∥∥e_ _[−][t]_ _y∥_ + _∥e_ _[−][t]_ _y∥_ [2]
+
+_≤∥x −_ _e_ _[−][t]_ _y∥_ [2] + 2( _∥x∥_ + _e_ _[−][t]_ _R_ ) _e_ _[−][t]_ _R_ + _e_ _[−]_ [2] _[t]_ _R_ [2]
+
+= _∥x −_ _e_ _[−][t]_ _y∥_ [2] + 2 _e_ _[−][t]_ _R∥x∥_ + 3 _e_ _[−]_ [2] _[t]_ _R_ [2] _,_
+
+
+and thus
+
+
+_−_ 1 ( _∥x∥_ [2] _−_ 2 _e_ _[−][t]_ _R∥x∥−_ 3 _e_ _[−]_ [2] _[t]_ _R_ [2] )
+_e_ _[−∥][x][−][e][−][t][y][∥]_ [2] _[/]_ [(2] _[σ]_ _t_ [2][)] _≤_ _e_ 2 _σt_ [2]
+
+
+3 _e_ _[−]_ [2] _[t]_ _R_ [2]
+
+2 _σt_ [2] _._
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Inserting in (23), we have that
+
+
+              - 1
+_xn_ = _xn−_ 1 + _v_ ˆ _n_ ( _x_ ( _s_ ) _, s_ ; _θ_ ) _ds,_ _x_ (0) = _xn−_ 1
+
+0
+
+
+Both the integration of ˆ _vn_ and _∇·_ ˆ _vn_ are computed using the numerical scheme of neural ODE. We
+report NLL in log _e_ (known as “nats”) in all our experiments.
+
+
+**Algorithm A.1** Distillation of LFM
+
+
+**Input:** Samples _∼_ _qn_, _n_ = 0 _, · · ·_ _, N_, generated by a pre-trained _N_ -block LFM
+**Output:** _N_ _[′]_ = _N/k_ distilled sub-models _{Tn_ _[D]_ [(] _[·]_ [)] _[}]_ _n_ _[N]_ =1 _[′]_ [.]
+1: **for** _n_ = 1 _, . . ., N_ _[′]_ **do**
+2: Train _f_ ( _x_ ; _θn_ _[D]_ [)][ via][ min] _θn_ _[D]_ [E][(] _[x][n][,x][n][−]_ [1][)] _[∼]_ [(] _[q][N]_ _[−][kn][,q][N]_ _[−][k]_ [(] _[n][−]_ [1)][)] _[∥]_ [(] _[x][n][ −]_ _[x][n][−]_ [1][)] _[ −]_ _[f]_ [(] _[x][n][−]_ [1][;] _[ θ]_ _n_ _[D]_ [)] _[∥]_ [2][.]
+
+3: Output _Tn_ _[D]_ [(] _[x]_ [) =] _[ x]_ [ +] _[ f]_ [(] _[x]_ [;] _[ θ]_ _n_ _[D]_ [)][.]
+4: **end for**
+
+
+19
+
+
+3 _e_ _[−]_ [2] _[t]_ _R_ [2]
+
+
+_−_ 1 _∥x∥_ [2] + _[e][−][t][R]_
+_ρt_ ( _x_ ) _≤_ _αte_ 2 _σt_ [2] _σt_ [2]
+
+
+_[e]_ 2 _σt_ [2]
+
+(2 _πσt_ [2][)] _[d/]_ [2] _[.]_
+
+
+_[R]_ _∥x∥_
+
+_σt_ [2] _,_ _αt_ := _[e]_
+
+
+For _ρt_ ( _x_ ) _≤_ _C_ 1 _e_ _[−∥][x][∥]_ [2] _[/]_ [2], it suffices to have _C_ 1 s.t.
+
+
+_C_ 1 _≥_ _e_
+
+_αt_
+
+
+[1] ) _∥x∥_ [2] + _[e][−][t][R]_
+
+_σt_ [2] _σt_ [2]
+
+
+1
+2 [(1] _[−]_ [1]
+
+
+_∥x∥_
+_σt_ [2] _._ (24)
+
+
+Because _t_ _>_ 0, 1 _−_ _σ_ 1 _t_ [2] [=] 1 _−−ee_ _[−][−]_ [2][2] _[t][t]_ _[<]_ [0][,] [the] [r.h.s.] [of] [(24)] [as] [a] [function] [on] [R] _[d]_ [decays] [faster] [than]
+
+_e_ _[−][c][∥][x][∥]_ [2] for some _c_ _>_ 0 as _∥x∥→∞_, and then the function is bounded on R _[d]_ . This means that
+there is _C_ 1 _>_ 0 to make (24) hold. This proves that the first inequality in (10) holds for _ρt_ .
+
+
+B DETAILS OF LFM SCHEDULE AND NLL COMPUTATION
+
+
+B.1 SELECTION OF LFM SCHEDULE
+
+
+Given a positive integer _N_ _≥_ 1, we specify _{γn}_ _[N]_ _n_ =1 _[−]_ [1] [via the following scheme:]
+
+_γn_ = _ρ_ _[n][−]_ [1] _c, n_ = 1 _,_ 2 _, . . ._ (25)
+
+
+where the base time stamp _c_ and the multiplying factor _ρ_ are user-specified hyper-parameters.
+
+
+B.2 NEGATIVE LOG-LIKELIHOOD COMPUTATION
+
+
+Based on the instantaneous change-of-variable formula in neural ODE Chen et al. (2018), we know
+that for a trained flow model _v_ ˆ( _x_ ( _t_ ) _, t_ ; _θ_ ) on [0 _,_ 1] that interpolates between _p_ and _q_, the loglikelihood of data _x ∼_ _p_ can be expressed as
+
+
+                 - 1
+log _p_ ( _x_ ) = log _q_ ( _x_ (1)) + _∇·_ ˆ _v_ ( _x_ ( _s_ ) _, s_ ; _θ_ ) _ds, x_ (0) = _x,_
+
+0
+
+
+where _∇·_ ˆ _v_ ( _·, s_ ; _θ_ ) is the trace of the Jacobian matrix of the network function.
+
+
+Our trained LFM has _N_ sub-flows _v_ ˆ _n_ ( _·, t_ ; _θ_ ) for _n_ = 1 _, . . ., N_ . The log-likelihood at test sample
+_x ∼_ _p_ is then computed by
+
+
+log _p_ ( _x_ ) = log _q_ ( _xN_ ) +
+
+
+where starting from _x_ 0 = _x_,
+
+
+_N_
+
+
+_n_ =1
+
+
+- 1
+
+_∇·_ ˆ _vn_ ( _x_ ( _s_ ) _, s_ ; _θ_ ) _ds,_ (26)
+0
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+C EXPERIMENTAL DETAILS AND ADDITIONAL RESULTS
+
+
+To train LFM sub-flows, we use the trigonometric (Trig) interpolant on 2D, tabular, and image generation experiments (Sections 6.1–6.3) and use the optimal transport interpolant on robotic manipulation (Section 6.4). During inference per block, we employ the Dormand-Prince-Shampine ODE
+sampler with tolerances of 1e-5 for 2d and tabular data, 1e-4 for 32x32 images, and 1e-3 for 128x128
+images. We use 1 Euler step on the robotic manipulation experiments as prior works have shown the
+inference efficiency of FM on such tasks (Hu et al., 2024).
+
+
+C.1 2D, TABULAR, AND IMAGE EXPERIMENTS
+
+
+In all experiments, we use the Adam optimizer (Kingma, 2014) with the following parameters: _β_ 1 =
+0 _._ 9 _, β_ 2 = 0 _._ 999 _, ϵ_ = 1 _e −_ 8; the learning rate is to be specified in each experiment. Additionally,
+the number of training batches indicates how many batches pass through all _N_ sub-flows per Adam
+update.
+
+
+On two-dimensional datasets and tabular datasets, we parameterize local sub-flows with fullyconnected networks; the dataset detail and hyper-parameters of LFM are in Table A.1.
+
+
+On image generation examples, we parameterize local sub-flows as UNets (Nichol & Dhariwal,
+2021), where the dataset details and training specifics are provided in Table A.2.
+
+
+C.2 ROBOTIC MANIPULATION
+
+
+In the context of generative modeling, this task of robotic manipulation can be understood as performing sequential conditional generation. Specifically, at each time step _t ≥_ 1, the goal is to model
+the conditional distribution _At|Ot_, where _Ot_ _∈_ R _[O]_ denotes the states of the robots at time _t_ and
+_At_ _∈_ R _[A]_ is the action that controls the robots. During inference, the robot is controlled as we iteratively sample from _At|Ot_ across time steps _t_ . Past works leveraging diffusion models have reached
+state-of-the-art performances on this task (Chi et al., 2023), where a neural network _vθ_ (e.g., CNNbased UNet (Janner et al., 2022)) is trained to approximate the distribution _At|Ot_ via DDPM (Ho
+et al., 2020). More recently, flow-based methods have also demonstrated competitive performance
+with faster inference (Hu et al., 2024).
+
+
+We use the widely adopted _success rate_ to examine the performance of a robot manipulator:
+
+Success rate = [#][success rollouts] _∈_ [0 _,_ 1] _._ (27)
+
+#rollouts
+
+Specifically, starting from a given initial condition _O_ 1 of the robot, each rollout denotes a trajectory
+_S_ = _{O_ 1 _, A_ 1 _, O_ 2 _, . . ., AT, OT }_ where _At|Ot_ is modeled by the generative. The rollout _S_ is a
+success if at any _t_ _∈_ 1 _, . . ., T_, the robotic state _Ot_ meets the success criterion (e.g., successfully
+pick up the square as in the task “lift” in Figure 4a).
+
+
+We also describe details of each of the 5 Robomimic tasks below, including dimensions of observations _Ot_ and actions _At_ and the success criteria. The initial condition and final successful completion
+were shown in Figure 4. Table A.3 contains the hyper-parameter setting in each task, where we use
+the same network and training procedure as in (Chi et al., 2023).
+
+
+Figure A.1: Noise-to-image trajectories by LFM: Flowers (left) and LSUN Church (right).
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+(a) LFM before distillation. (b) LFM after distillation.
+
+
+Figure A.2: Unconditional image generation on Imagenet-32 before and after distillation. We distill
+LFM into a 5-NFE model.
+
+
+Rose Fractal tree POWER GAS MINIBOONE BSDS300
+Dimension 2 2 6 8 43 63
+# Training point 2,000,000 2,000,000 1,615,917 852,174 29,556 1,000,000
+Batch Size 10K 10K 30K 50K 1000 500
+Training Batches 50K 50K 100K 100K 100K 30K
+Hidden layer width
+256 256 256 362 362 512
+(per sub-flow)
+
+# Hidden layers 3 3 4 5 4 4
+Activation Softplus Softplus ReLU ReLU ReLU ELU
+# sub-flows _N_ 9 9 4 2 2 4
+( _c, ρ_ ) in (25) (0.025, 1.25) (0.025, 1.25) (0.15, 1.3) (0.05, 1) (0.35, 1) (0.25, 1)
+Total # parameters in M
+1.20 1.20 0.81 1.06 0.85 3.41
+(all sub-flows)
+
+Learning Rate (LR) 0 _._ 0002 0 _._ 0002 0 _._ 005 0 _._ 002 0 _._ 005 0 _._ 002
+LR decay
+(0.99, 1000) (0.99, 1000) (0.99, 1000) (0.99, 1000) (0.9, 4000) (0.8, 4000)
+(factor, frequency in batches)
+
+Beta _α, β_, time samples (1.0, 1.0) (1.0, 1.0) (1.0, 1.0) (1.0, 0.5) (1.0, 1.0) (1.0, 1.0)
+
+
+Table A.1: Hyperparameters and architecture for two-dimensional datasets and tabular datasets. The
+table is formatted similarly as (Albergo & Vanden-Eijnden, 2023, Table 3).
+
+
+**Lift:** The goal is for the robot arm to lift a small cube in red. Each _Ot_ has dimension 16 _×_ 19 and
+each _At_ has dimension 16 _×_ 10, representing state-action information for the next 16 time steps
+starting at _t_ .
+
+
+**Can:** The goal is for the robot to pick up a coke can from a large bin and place it into a smaller target
+bin. Each _Ot_ has dimension 16 _×_ 23 and each _At_ has dimension 16 _×_ 10, representing state-action
+information for the next 16 time steps starting at _t_ .
+
+
+**Square:** The goal is for the robot to pick up a square nut and place it onto a rod with precision. Each
+_Ot_ has dimension 16 _×_ 23 and each _At_ has dimension 16 _×_ 10, representing state-action information
+for the next 16 time steps starting at _t_ .
+
+
+**Transport:** The goal is for the two robot arms to transfer a hammer from a closed container on one
+shelf to a target bin in another shelf. Before placing the hammer, one arm has to also clear the target
+bin by moving away a piece of trash to the nearby receptacle. The hammer must be picked up by one
+
+
+(a) LFM distillation @ 4 NFEs. FID = 71.0.
+
+
+(b) InterFlow distillation @ 4 NFEs. FID = 80.0.
+
+
+Figure A.3: Qualitative comparison of LFM and InterFlow after distillation.
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+CIFAR-10 Imagenet-32 Flowers LSUN Churches
+Dimension 32 _×_ 32 32 _×_ 32 128 _×_ 128 128 _×_ 128
+# Training point 50,000 1,281,167 8,189 126,227
+Batch Size 200 256 40 40
+Training Batches 5 _×_ 10 [4] 2 _×_ 10 [5] 4 _×_ 10 [4] 1.2 _×_ 10 [5]
+Hidden dim (per sub-flow) 128 114 128 128
+# sub-flows _N_ 4 5 4 4
+( _c, ρ_ ) in (25) (0.3, 1.1) (0.3, 1.1) (0.5, 1.5) (0.4, 1.5)
+Total # parameters in M (all sub-flows) 160 120 464 464
+Learning Rate (LR) 0 _._ 0001 0 _._ 0001 0 _._ 0002 0 _._ 0002
+U-Net dim mult [1,2,2,2,2] [1,2,2,2] [1,1,2,3,4] [1,1,2,3,4]
+Beta _α, β_, time samples (1.0, 1.0) (1.0, 1.0) (1.0, 1.0) (1.0, 1.0)
+Learned _t_ sinusoidal embedding Yes Yes Yes Yes
+# GPUs 1 1 1 1
+
+
+Table A.2: Hyperparameters and architecture for image datasets. The table is formatted similarly as
+(Albergo & Vanden-Eijnden, 2023, Table 4).
+
+
+Lift Can Square Transport Toolhang
+Batch Size 256 256 256 256 256
+Training Epochs 200 500 750 1500 200
+Hidden dims
+
+[128,256,512] [128,256,512] [128,256,512] [176,352,704] [128,256,512]
+(per sub-flow)
+
+# sub-flows _N_ 4 4 4 2 4
+( _c, ρ_ ) in (25) (0.15, 1.25) (0.2, 1.25) (0.2, 1) (0.5, 1) (0.25, 1.25)
+Total # parameters in M
+66 66 66 67 67
+(all sub-flows)
+
+Learning Rate (LR) 0 _._ 0001 0 _._ 0001 0 _._ 0001 0 _._ 0001 0 _._ 0001
+# GPUs 1 1 1 1 1
+
+
+Table A.3: Hyperparameters and architecture for robotic manipulation under state-based environment on Robomimic (Mandlekar et al., 2021).
+
+
+arm which then hands over to the other. Each _Ot_ has dimension 16 _×_ 59 and each _At_ has dimension
+16 _×_ 20, representing state-action information for the next 16 time steps starting at _t_ .
+
+
+**Toolhang:** The goal is for the robot to assemble a frame that includes a base piece and a hook piece
+by inserting the hook into the base. The robot must then hang a wrench on the hook. Each _Ot_ has
+dimension 16 _×_ 53 and each _At_ has dimension 16 _×_ 10, representing state-action information for
+the next 16 time steps starting at _t_ .
+
+
+22

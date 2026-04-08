@@ -1,7 +1,7 @@
-=== CALIBRATION EXAMPLE 82 ===
+=== CALIBRATION EXAMPLE 43 ===
 
 # Harsh Critic Review
-Now I have sufficient information to write a thorough review. Let me compile it.
+Now I have a thorough understanding of the paper. Let me compose the review.
 
 ---
 
@@ -9,225 +9,203 @@ Now I have sufficient information to write a thorough review. Let me compile it.
 
 ### Title & Abstract
 
-The title accurately reflects the contribution: universality of *feedback-driven* (i.e., recurrent) quantum neural networks (RQNNs) for temporal learning. The abstract makes three specific and largely supported claims: (1) approximation of regular state-space systems without the curse of dimensionality, (2) qubit count growing only logarithmically in 1/ε, and (3) universality with linear readouts. These claims are substantiated by Theorems 4.6 and 4.8. However, the abstract is slightly imprecise: the "no curse of dimensionality" claim applies to the approximation error *rate* (1/√n, independent of d and N) but the constant C_j^∞ in Proposition 4.4 and Theorem 4.6 does depend on d and N through moment integrals of the Fourier transform. Whether this constitutes curse of dimensionality in practice depends on the target function class and deserves a brief clarification.
+The title "Feedback-Driven Recurrent Quantum Neural Network Universality" accurately captures the main contribution. The abstract's core claims — logarithmic qubit scaling, no curse of dimensionality, universality with linear readouts — are all supported by the formal results. However, the abstract states the circuit requires "comparatively fewer components" without qualifying this relative to what baseline (classical RNNs? other QRC protocols?). The "real-time computation" phrasing is accurate in the sense that no rewinding/restarting protocol is needed, but it can be misleading: the RQNN still requires many repeated measurements (shots) per time step to estimate probabilities, so "real time" carries caveats that should be flagged here.
 
 ---
 
-### Introduction & Motivation
+### Introduction & Motivation (Sections 1–1.3)
 
-The motivation is well-stated. The feedback protocol is genuinely differentiated from earlier QRC approaches (restarting, rewinding, online, mid-circuit) and the real-time processing advantage is clearly articulated (Section A). The contribution bullets in Section 1.2 are precise and consistent with the actual results.
+The motivation is strong and the gap being filled is clearly articulated: no quantitative approximation bounds existed for RQNNs with linear readouts, and previous universality results relied on polynomial readouts. The distinction between qualitative (Theorem 4.8) and quantitative (Theorem 4.6) results is helpfully foreshadowed. The related literature coverage is thorough and the lineage to classical reservoir computing universality (Grigoryeva & Ortega, Gonon & Ortega) is clearly laid out.
 
-**Concern 1 – Claimed advantage over classical RNNs**: In the paragraph following Theorem 4.6, the authors claim that the Barron integrability condition required for QRNNs is "*strictly weaker*" than for classical RNNs (Gonon et al., 2023, Theorem 3). Specifically: RQNN requires ∫ ‖ξ‖⁴|F̂_j(ξ)|dξ < ∞, versus the Sobolev smoothness s > N+d+3 for the RNN result. This is an important claim of quantum advantage. However, the comparison uses a Sobolev encoding for the classical side; a Barron-class classical result would have a similar integrability condition (∥F̂_j∥₁ < ∞). The genuine advantage may be that the RQNN achieves a uniform (L^∞) rate with only a ‖ξ‖⁴-moment condition, whereas classical Barron approximation in the uniform norm seems to require stronger regularity. This should be stated more carefully, with an explicit statement of what a comparable classical result would require.
-
-**Concern 2 – Training**: The introduction and contributions say nothing about trainability. The cited feedback QRC papers (Kobayashi et al., 2024) tune parameters via classical optimization. Barren plateaus (McClean et al., 2018; Larocca et al., 2025) are briefly mentioned in the conclusion, but for a paper at ICLR—a machine learning venue—this omission is notable. Expressivity without trainability is of limited practical use. At a minimum, the introduction should be explicit that the results are about *approximation* (existence of good parameters), not *learnability* (ability to find them by gradient-based optimization).
+**Concern:** The introduction repeatedly flags "without the curse of dimensionality" as a headline advantage. In Barron-type results, the 1/√n convergence rate is indeed dimension-free, but the constant C_j^∞ in Theorem 4.6 (see equation (9)) contains explicit (N+d) factors — e.g., (8πM + 4π²)(N+d)^{1/2} ∥F̂_j∥_1^{1/2} I_{2,j}^{1/2} and 16Mπ²(N+d)∥F̂_j∥_1^{1/2} I_{4,j}^{1/2}. Thus the *required* n to achieve error ε scales polynomially in N+d through this constant. The claim should be stated more precisely as "the convergence rate is dimension-free" rather than implying the total network size is. This is a standard Barron-type caveat but it is not made explicit in the paper.
 
 ---
 
-### Section 2 – Background on Filters and Functionals
+### Section 2: Background on Filters and Functionals
 
-The mathematical background is standard and well-presented. The definitions of causal time-invariant filters, echo state property, and fading memory are correct and consistent with the reservoir computing literature (Grigoryeva & Ortega, 2018b; Boyd & Chua, 1985). No concerns.
+This section is standard and well-executed. The definitions of causal, time-invariant filters, the echo state property, and the fading memory property are all standard from the RC universality literature. The bijection between causal TI filters and functionals on semi-infinite sequences is correctly cited.
 
----
-
-### Section 3 – RQNN Architecture
-
-The architecture is technically specific and clearly described. The uniformly controlled gate U_θ(x,z) is a data re-uploading architecture (Pérez-Salinas et al., 2020) adapted to the recurrent setting with both state x and input z encoded via Z-rotations. The diagonal block structure is sound.
-
-**Concern 3 – Measurement error**: The RQNN output F̄_{R,j}^{n,θ}(x,z) defined in Eq. (3) uses *exact* probabilities P_m^{n,θ_j}(x,z). In any real quantum device, these probabilities are estimated by running the circuit repeatedly and averaging outcomes (Monte Carlo estimation). Appendix E addresses this, but the main theorems (4.6, 4.8) work with the idealized exact probabilities. The theorems should either explicitly state they assume access to exact probabilities, or the Monte Carlo estimation error should be folded into the error bound. The gap between ideal circuit probabilities and experimentally accessible estimates is a central challenge for NISQ implementation and should be more carefully addressed in the main body, not delegated to an appendix.
-
-**Concern 4 – Quantum hardware complexity**: The gate U_θ requires O(n) blocks, each being a 2-qubit gate U^(i), with log₂(n+κ) control qubits. The total gate count for implementing the uniformly controlled gate scales as O(n · 2^{log₂(n)}) = O(n²) two-qubit gates (using standard decompositions), unless the efficient decomposition of Zindorf & Bose (2024; 2025) is used. The paper should be explicit about the total gate complexity of the circuit as a function of n and ε, since qubit count alone (O(log(1/ε))) is not the full picture of hardware cost.
+**Minor concern:** The fading memory property is defined informally ("continuity with respect to weighted norms … or the product topologies when D_n and D_m are compact"). For a theory paper targeting ICLR (a broad ML venue), a slightly more concrete illustration of what fading memory implies computationally might help readability.
 
 ---
 
-### Section 4.1 – QNN Approximation of State-Space Maps and Their Derivatives
+### Section 3: RQNN Architecture
 
-This is the technical core of the paper and the most novel component relative to Gonon & Jacquier (2025).
+The architecture is precisely specified, building on the feedforward QNN of Gonon & Jacquier (2025) by feeding back the measured state. The construction of the uniformly controlled gate U_θ(x, z) is detailed and the key representation (Proposition 4.1 / equation (7)) — that the RQNN output reduces to a finite sum of cosines — is the architectural linchpin that makes all subsequent approximation arguments work. This is the correct way to connect the quantum circuit to Barron-type function classes.
 
-**Proposition 4.1** gives an explicit cosine representation of the RQNN output, which is clean and key to subsequent analysis.
+**Concern 1 (Circuit complexity and quantum advantage):** The paper carefully states that O(log(1/ε)) qubits suffice and only O(ε^{-2}) weights are needed. But the architecture runs N parallel circuits (one per state dimension), so the total qubit count is N · O(log(1/ε)) and total weights O(N · ε^{-2}). The per-component qubit count is logarithmic in accuracy but *linear in state dimension*. For the filter approximation result (Theorem 4.6) to be tight, the state dimension N of the RQNN is matched to that of the target system, so the total qubit count is still linear in N. This somewhat dilutes the "logarithmic qubit" claim, which should be stated more carefully.
 
-**Proposition 4.2** provides L²(μ) error bounds for simultaneous approximation of F_j and its partial derivatives ∂_i F_j. The proof strategy—randomized Fourier feature construction followed by derandomization—is standard (Barron, 1993) and correctly extended to cover derivatives. The key calculation (Eq. 27) shows that the derivative error picks up an extra factor ξ_i from differentiation under the integral sign, which requires the moment condition ∫ ξ_i²|F̂_j(ξ)|dξ < ∞. This is well-justified.
+**Concern 2 (Monte Carlo measurement error):** The RQNN state map F̄ is defined in terms of exact probabilities P_m^{n,θ_j}(x,z), but in any physical implementation these must be estimated from S independent shots, incurring a statistical error of order 1/√S per probability. Appendix E acknowledges this and shows that incorporating sampling error adds a term O(1/√S) to the overall filter error, which is reassuring. However, this analysis is left to the appendix and the main theorems are stated for exact probabilities only. The key practical question — for a given target accuracy ε, how many shots S are needed so that the sampling error does not dominate? — is never resolved in a self-contained theorem. The paper should either (a) incorporate a full two-part theorem (approximation + shot complexity) in the main body, or (b) clearly flag this as a limitation.
 
-**Proposition 4.4** lifts the L² bound to a uniform (L^∞) bound on compacta via a Rademacher complexity argument. The comparison theorem (Ledoux & Talagrand, Theorem 4.12) is invoked for the derivative terms. The proof (Appendix B.4) follows the same strategy as Gonon & Jacquier (2025, Theorem 3) with appropriate modifications for derivatives.
-
-**Concern 5 – Dependence of C_j^∞ on d and N**: The constant in Proposition 4.4 is:
-
-C_j^∞ = 2(π+1)‖F̂_j‖₁ + (8πM + 4π²)(N+d)^{1/2}‖F̂_j‖₁^{1/2} I₂^{1/2} + 16Mπ²(N+d)‖F̂_j‖₁^{1/2} I₄^{1/2}
-
-The factor (N+d) appears linearly, and (N+d)^{1/2} appears as well. These polynomial dependences on d and N are what the authors call "curse-of-dimensionality-free" (only polynomial, not exponential). This is indeed standard in Barron-type results. However, the paper should clarify explicitly that C_j^∞ has at most polynomial (specifically, linear) dependence on d and N, rather than just stating vaguely that the rate is CoD-free.
-
-**Corollary 4.5** (qualitative UAT for functions plus derivatives) is a clean and useful conclusion. It is a corollary of Proposition 4.4 via density arguments and Whitney's extension theorem (Whitney, 1934). This result is the key input to Theorem 4.8.
+**Concern 3 (State domain):** The RQNN state map F̄_R^{n,θ} maps into [-R, R]^N since it is a sum of cosines scaled by R. To guarantee the echo state property (Theorem 4.6), the contractive RQNN maps B_R × D_d → B_R (equation following (32)), where B_R = {x ∈ R^N : ∥x∥ ≤ R√N}. The parameter R appears in the initialization gate V and is part of the normalization. How R is chosen in practice, and how the required R scales with the problem parameters (N, target F, desired accuracy), is not discussed. This affects hardware feasibility.
 
 ---
 
-### Section 4.2 – Recurrent QNN Approximation Bounds for State-Space Filters
+### Section 4.1: Approximation of State Maps and Derivatives
 
-**Theorem 4.6** is the main quantitative result. It shows:
+This is the core technical section and the main novel technical contribution beyond Gonon & Jacquier (2025). The key insight is that to control the stability of the feedback loop, one needs to control not just the function approximation error but also the derivative error simultaneously. This leads to joint approximation results (Propositions 4.2, 4.4; Corollaries 4.3, 4.5).
 
-sup_{z,t} ‖U^F(z)_t − Ū(z)_t‖ ≤ (√N / (1-λ)) · max_j √C_j^∞ / √n
+**Technical correctness:** The proofs are generally convincing. The probabilistic construction (sampling frequencies from the Fourier measure of F̂_j, using a Bernoulli to select between real and imaginary parts) closely follows Barron (1993) and Gonon & Jacquier (2025). Extending it to simultaneously control derivative errors requires showing E[∂_i Φ_j] = ∂_i F_j, which follows cleanly from the representation (20) and differentiation under the integral sign. The Rademacher complexity argument for the L^∞ bounds in Proposition 4.4 (using the comparison theorem from Ledoux & Talagrand) is standard.
 
-The proof (Appendix C.1) uses the internal approximation approach: the RQNN approximates F pointwise, and because F is contracting (λ < 1), error propagates geometrically and is summable. This is a well-known technique (Grigoryeva & Ortega, 2018b).
+**Concern 1 (Dimension-dependence in derivative bounds):** As noted above, the constant C_j^∞ in Proposition 4.4 scales as O((N+d)^{1/2} · I_{2,j}^{1/2} + (N+d) · I_{4,j}^{1/2}). The n required to achieve ε-accuracy in derivatives thus scales as O((N+d)^2 / ε^2). This is still polynomial in N+d and can be large for high-dimensional state spaces, which is the typical use case. This scaling should be made explicit rather than absorbed into "constants."
 
-**Concern 6 – Uniform contractivity assumption**: The condition ‖∇_x F(x,z)‖₂ ≤ λ < 1 for *all* x ∈ ℝ^N, z ∈ D_d is a global uniform contractivity requirement. Many physically interesting systems (multi-stable systems, systems near bifurcations, chaotic reservoirs) do not satisfy this. The Barron condition also requires globally integrable Fourier transform, which excludes functions with slow decay. The combination of these two conditions significantly restricts the class of target filters. The paper acknowledges in the conclusion that non-contractive dynamics is a limitation, but does not give any examples of practically relevant state-space systems that *do* satisfy both conditions. A concrete example (e.g., showing that standard echo state network F = tanh(Ax + Bz) satisfies the conditions under appropriate spectral radius conditions on A) would substantially strengthen the paper's practical relevance.
+**Concern 2 (Condition ∂_i F_j ∈ F):** Propositions 4.2 and 4.4 require both F_j ∈ F_R and ∂_i F_j ∈ F (meaning ∂_i F_j has L^1 Fourier transform). These are separate conditions that need to be satisfied. The relationship between them is not spelled out. Are there natural function classes for which both hold simultaneously? The Sobolev comparison at the end of Section 4.2 (F ∈ H^s with s > (N+d)/2 + 4 for the quantum case vs s > N+d+3 for classical) partially answers this, but deserves more prominence.
 
-**Concern 7 – The n₀ threshold**: Theorem 4.6 requires n > n₀ where n₀ = N² (max_j C_j^∞)² / (1-λ)². For large state dimension N or small spectral gap (1-λ), this threshold can be extremely large. Near-critical systems (λ → 1⁻) would require astronomically many circuit blocks. This should be discussed more prominently.
-
----
-
-### Section 4.3 – Universality
-
-**Lemma 4.7** and **Theorem 4.8** extend the universality to arbitrary fading memory filters by introducing the modified RQNN (14) with linear preprocessing maps P_j that enforce a finite-memory structure.
-
-**Concern 8 – No rate in Theorem 4.8**: Theorem 4.8 proves only qualitative universality (for any ε > 0, there exist n, N, P_j, W, θ). No bound is given on how n, N, or the memory length K grow with ε. This is a significant gap. Theorem 4.6 gives O(ε⁻²) weights and O(log(1/ε)) qubits for Barron-type targets; Theorem 4.8 makes no such claim for the broad class of fading memory filters. Readers seeking to deploy RQNNs need some guidance on resource scaling.
-
-**Concern 9 – The role of the preprocessing maps P_j**: In Lemma 4.7 and Theorem 4.8, the matrices P_j are deterministic, fixed linear maps that "shuffle" components of the state vector to enforce a cascade (finite memory) structure. The resulting RQNN is not a standard variational quantum circuit—it uses classical linear preprocessing before feeding into each quantum circuit. The hardware implementation of this modified architecture (especially the P_j layers and the partitioned state vector) deserves more discussion. Is this implementable as a unitary circuit, or does it require classical post-processing between time steps?
+**Concern 3 (Construction step):** In the proof of Proposition 4.2, the key step is showing that there *exists* a scenario ω such that the empirical sum Φ_j^ω approximates F_j and all its derivatives simultaneously (equation (28)). This follows from the probabilistic argument E[sum of squared errors] ≤ C_j/n, hence a good ω exists. The construction then sets θ^j = (A_i(ω), B_i(ω), arccos(W_i(ω)/R))_{i=1,...,n}. But the restriction γ^{i,j} = arccos(W_i/R) requires |W_i/R| ≤ 1. It's not immediately clear why this holds almost surely with the prescribed construction — the weights W_i are bounded by R via the normalization using ∥F̂_j∥_1 ≤ R, but this relies on the specific choice R = ∥F̂_j∥_1. This constraint should be stated more explicitly in the main paper rather than relegated to the proof.
 
 ---
 
-### Section 5 – Conclusions
+### Section 4.2: Filter Approximation Bounds (Theorem 4.6)
 
-The conclusions accurately reflect the contributions and are appropriately hedged. The acknowledgment of barren plateaus and the limitation to contracting systems is appreciated. The discussion of combining with Chmielewski et al. (2025) for generalization bounds is a legitimate future direction.
+Theorem 4.6 shows that RQNNs can approximate the filter of any contractive Barron-type state-space system with uniform error O(√N · max_j C_j^∞ / √n) and that the RQNN achieves the echo state property for n > n_0 = N^2 · (max_j C_j^∞)^2 / (1-λ)^2.
+
+**Concern 1 (Echo state property threshold):** The required n_0 scales as N^2 / (1-λ)^2. Near the edge of contraction (λ → 1), n_0 can be very large. For practical networks, λ might be close to 1 (slow forgetting is often desirable), making the threshold n_0 prohibitively large. This practical limitation is not discussed.
+
+**Concern 2 (Quantum vs classical comparison):** The paper correctly notes that the Fourier integrability condition ∫∥ξ∥^4 |F̂_j(ξ)|dξ < ∞ needed for the RQNN is weaker than the condition needed for classical RNNs from Gonon et al. (2023, Theorem 3). This is a genuine advantage. However, the comparison should note that classical RNNs are also not limited to the cosine architecture — they can use ReLU, tanh, etc. — so the comparison is specifically between the Barron-type approximation classes and not between the most general versions of each model. A broader context would be valuable.
+
+**Concern 3 (Global Jacobian bound):** The contraction requirement ∥∇_x F(x,z)∥_2 ≤ λ for ALL x ∈ R^N (not just on the invariant set B_N) is a strong global assumption. Many practically important state-space systems (e.g., nonlinear oscillators, RNNs with tanh activations outside the saturating regime) are only locally contractive or contractive on their attractor but not globally. The paper should discuss this limitation.
 
 ---
 
-### Experiments & Empirical Validation
+### Section 4.3: Universality (Theorem 4.8)
 
-**The paper has no experiments.** For ICLR, this is a notable omission. While purely theoretical papers can be accepted at ICLR, the bar is very high, and reviewers typically ask whether the theory is accompanied by at least some numerical validation. The claims about O(log(1/ε)) qubit scaling and O(1/√n) error rates are directly testable in simulation (e.g., on a classical simulator of quantum circuits). Even a simple experiment showing that RQNNs with growing n track a target filter more accurately, or comparing to classical RNN baselines on a time-series task, would significantly strengthen the paper. The related work (Kobayashi et al., 2024; Murauer et al., 2025) all includes numerical experiments.
+Theorem 4.8 establishes that the modified RQNN (with linear preprocessing matrices P_j) can approximate any fading-memory causal TI filter uniformly on compact input domains. This is the broadest universality result.
+
+**Concern 1 (No quantitative bounds):** Theorem 4.8 is purely qualitative — it gives existence of approximating parameters but no convergence rate. This is a significant gap for a paper at ICLR, where quantitative bounds are typically expected for approximation results. The reason rates are absent is that the Gonon & Ortega (2021) argument used in the proof doesn't give rates for the finite-memory approximation step (equation (36)). The paper acknowledges this gap but it deserves more discussion: when can quantitative bounds be obtained for Theorem 4.8?
+
+**Concern 2 (Finite-memory construction):** The proof of Theorem 4.8 proceeds by: (1) approximating the filter by a finite-horizon function G̅ (using fading memory, equation (36)); (2) approximating G̅ by a smooth function G; (3) using the RQNN with preprocessing matrices to implement a tapped delay line that recovers (z_{t-K+1}, ..., z_t) from the state x̂_t; then (4) applying the QNN to approximate G. Step (3) is essentially implementing a shift register: the state stores the last K input vectors, and the preprocessing matrices P_j select the appropriate components. This is a completely classical mechanism — the "quantum" part only enters in step (4) (approximating G with a QNN). Thus, the universality of the RQNN in Theorem 4.8 rests almost entirely on the universality of the QNN approximating a static function, not on any quantum dynamical advantage. The paper should acknowledge this more explicitly.
+
+**Concern 3 (State dimension growth):** To approximate a filter with K-step memory in d-dimensional inputs, the state dimension N = (K-1)d + m can be very large for long memories. The required depth K is determined by the fading memory decay rate of the target filter, which is not quantified. The paper gives no guidance on how K (and hence N) relates to the filter properties.
+
+---
+
+### Section 5: Conclusions
+
+The conclusions fairly summarize the contributions and honestly list open problems: extending to rough/non-contractive dynamics, generalization bounds, barren plateaus, training algorithms. The mention of barren plateaus is important but underspecified: since the RQNN architecture uses O(log n) qubits, and barren plateaus are known to be most severe for deep, wide circuits, the architecture may be relatively favorable in this regard. A brief remark on this would be valuable.
+
+---
+
+### Appendices
+
+**Appendix A (QRC Protocols):** This is a useful survey of QRC methodologies. The classification of restarting, rewinding, online, mid-circuit, and feedback protocols is clear and well-cited.
+
+**Appendix B (Proofs for 4.1):** The proofs are technically careful. The main steps — Fourier inversion representation, probabilistic weight construction, variance estimation, Rademacher complexity for uniform bounds — are all properly executed and follow established techniques.
+
+**Appendix C (Proofs for 4.2):** The proof of Theorem 4.6 is essentially a contraction mapping argument combined with the QNN approximation bounds from Section 4.1. The proof of Theorem 4.8 via backward induction (equations (43)-(45)) is more involved. One concern: the induction establishes bounds on ∥z_{-K+k+t} - x̂_t^{(k)}∥^2 ≤ (sum of (2L_G)^j)(ε/C_G)^2, but the constant C_G in equation (39) is defined as 4L_G · (sum of sums of (2L_G)^j), which can be doubly exponential in K. This means the required n to achieve a given ε grows extremely rapidly with the memory horizon K. The paper does not highlight this dependence.
+
+**Appendix E (Monte Carlo Error):** The analysis showing that the sampling error contributes a term O(√{N·R/S}) to the filter approximation error (from equation (46)) is reasonable but incomplete — the uniform (L^∞) version uses Lipschitz continuity of the measurement probabilities, which "may be hard to verify" (the paper's own words, line 3688). This leaves a gap in the practical applicability of the results.
 
 ---
 
 ### Writing & Clarity
 
-The paper is generally well-written and mathematically precise. The logical flow from Section 4.1 → 4.2 → 4.3 is clear. 
-
-**One notable clarity issue**: The paper occasionally conflates "curse of dimensionality" (exponential dependence on d,N) with "polynomial dependence." Saying that "the error decays as 1/√n, with this rate of decay being independent of the input dimension d and the state space dimension N" (p. 9) is accurate but slightly misleading—the *constant* (not the rate) still grows with d and N. A single clarifying sentence would resolve this.
+The paper is well-organized and follows a logical progression. The mathematical notation is consistent and definitions are introduced as needed. Occasional points of confusion: the notation F̄ vs F̃ for the two RQNN variants (with and without preprocessing matrices) could be flagged more prominently; and the distinction between the "regular" RQNN (equation (4)) and the "modified" RQNN (equation (14)) is important but the modification is introduced somewhat abruptly in Section 4.3. A brief explanation earlier that two slightly different architectures will be used — one for quantitative bounds and one for universality — would help the reader track the narrative.
 
 ---
 
 ### Limitations & Broader Impact
 
-The paper discusses three key limitations: (1) restriction to contracting Barron-type systems for quantitative bounds, (2) no results on optimization / training, and (3) no results for partially randomized (reservoir) settings. These are acknowledged honestly.
+The paper notes several limitations in the conclusion (barren plateaus, non-contractive targets, training). Two additional ones deserve mention:
 
-**Concern 10 – Missing limitation: Measurement shot noise at scale**: The paper mentions that probabilities must be estimated by Monte Carlo sampling (Appendix E), but does not discuss how the required number of shots scales with n or ε. For a system with n blocks running N parallel circuits and T time steps, the total number of circuit executions could be enormous. This practical bottleneck should at least be mentioned in the limitations.
+1. **Classical simulation overhead**: The probabilistic state representation used in the RQNN (with O(ε^{-2}) parameters) can be classically simulated efficiently (it's a sum of cosines). The quantum circuit is needed to *evaluate* it on a quantum device, but there is no demonstration that a quantum device can do this faster than classical computation. The paper should clarify what quantum advantage, if any, is conferred beyond the qubit count reduction.
 
-**Concern 11 – Exponential concentration**: Sannia et al. (2025) and Xiong et al. (2025) are cited as raising concerns about exponential concentration of quantum reservoir observables. These results could severely limit the expressivity and practical trainability of QRC models, including RQNNs. The paper should discuss how (or whether) the architecture studied here avoids this problem.
+2. **Feedback loop initialization**: Equation (4) is defined for t ∈ Z_−, requiring the process to be initialized at t = -∞. In practice, one must start from some initial state x̂_0. The echo state property guarantees that the effect of the initial condition decays, but the transient length is O(1/(1-λ)) time steps. For λ close to 1, this transient can be very long. This is a practical constraint that should be acknowledged.
 
 ---
 
-### Overall Assessment
+## Overall Assessment
 
-This paper proves the first quantitative approximation error bounds and linear-readout universality results for feedback-driven (recurrent) quantum neural networks. The technical contributions are genuine: the simultaneous approximation of functions and their derivatives via QNNs (Propositions 4.2, 4.4, Corollary 4.5) is a non-trivial extension of Gonon & Jacquier (2025), and the transfer from state-map to filter approximation (Theorems 4.6, 4.8) is technically sound. The claim of weaker Barron conditions relative to classical RNNs is interesting, though it should be stated more carefully. However, the paper faces significant challenges for ICLR acceptance: it contains no experiments, the main quantitative result (Theorem 4.6) requires strong assumptions (global uniform contractivity + Barron integrability) that may exclude many practically interesting systems, the qualitative universality result (Theorem 4.8) lacks any rate, and the gap between the theoretical circuit model and real quantum hardware (shot noise, barren plateaus, gate count) is large and underaddressed. The contribution is solid enough for a quantum information or applied mathematics venue; for ICLR, the connection to practical machine learning needs to be substantially strengthened.
+This is a technically solid contribution to the theory of quantum reservoir computing. The paper's core achievement — quantitative approximation bounds for RQNNs with linear readouts, establishing simultaneous approximation of state maps and their derivatives to control the stability of the feedback loop — is genuinely novel and fills an identified gap in the literature. The comparison showing that the Fourier integrability condition required is strictly weaker than that needed for classical RNNs (Gonon et al., 2023) is a meaningful quantum advantage in the approximation-theoretic sense. However, several issues weigh against immediate acceptance at ICLR. First, the paper's headline claims about dimension-free approximation and logarithmic qubit scaling are overstated: the dimension (N+d) enters both the approximating constant and the total qubit count (N circuits × O(log 1/ε) qubits each). Second, the strongest universality result (Theorem 4.8) provides no quantitative convergence rates, and the proof essentially reduces the quantum reservoir to a classical shift-register feeding a static QNN — the "quantum dynamics" of the recurrence plays little role in the universality argument. Third, the gap between the theoretical model (exact probabilities) and the physical implementation (shot noise) is only partially addressed. The paper would benefit substantially from: (a) a unified theorem incorporating sampling complexity; (b) a clearer accounting of how total resource requirements (qubits, weights, circuit depth, shots, memory horizon K) jointly scale; and (c) a more candid discussion of what computational advantage, beyond approximation-theoretic savings in Fourier regularity, the RQNN offers over classical RNNs. As submitted, the paper is more appropriate for a specialized quantum information or machine learning theory venue than for ICLR's broad audience, but the theoretical contributions are meaningful and the work merits publication with revision.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper establishes universal approximation guarantees for feedback-driven Recurrent Quantum Neural Networks (RQNNs) with linear readouts in the context of Quantum Reservoir Computing (QRC). The authors derive quantitative error bounds showing that RQNNs can approximate contracting state-space systems and general fading memory filters without the curse of dimensionality, requiring only a logarithmic number of qubits with respect to the inverse approximation accuracy. The work extends recent theoretical results on feedforward Quantum Neural Networks to the recurrent setting via a novel analysis of circuit-based derivatives and feedback dynamics.
+This paper establishes rigorous universal approximation guarantees and quantitative error bounds for feedback-driven Recurrent Quantum Neural Networks (RQNNs) in temporal data processing. The authors prove that RQNNs can uniformly approximate arbitrary fading-memory, causal, and time-invariant filters using linear readouts, achieving an approximation error that decays as $O(1/\sqrt{n})$ without the curse of dimensionality. Notably, the required number of qubits scales only logarithmically with the reciprocal of the target accuracy, providing a theoretically grounded foundation for efficient quantum reservoir computing on NISQ-era hardware.
 
 ### Strengths
-1.  **Novel Theoretical Contribution to QRC:** There is a significant gap in the literature regarding universal approximation for *recurrent* quantum architectures with linear readouts (most prior work relied on polynomial readouts for Stone-Weierstrass based proofs). This paper directly addresses this by proving universality for linear readouts, which are more experimentally feasible.
-2.  **Rigorous Extension of Classical RC Theory:** The mathematical approach closely mirrors established classical reservoir computing theory (e.g., echo state property, fading memory spaces), making the results comparable and interpretable for classical ML researchers. The use of Barron-type integrability conditions and $L^2$ error bounds is well-calibrated to this field.
-3.  **Scalability Analysis:** The paper provides concrete scaling arguments, demonstrating that qubit count grows logarithmically with approximation accuracy (specifically $O(\log_2(\epsilon^{-1}))$) rather than exponentially. The approximation rate of $O(n^{-1/2})$ is explicitly stated to be independent of input dimension $d$ and state dimension $N$ in the dominant term.
-4.  **Circuit Feasibility:** The proposed architecture relies on uniformly controlled quantum gates, which are known to be efficiently decomposable (referenced to Zindorf & Bose, 2024; Silva et al., 2024). This grounds the theoretical model in realistic hardware constraints better than black-box unitary approaches.
+1. **Fills a Critical Theoretical Gap in QRC:** The paper delivers the first quantitative approximation error bounds specifically for *recurrent* and feedback-based quantum architectures with linear readouts. Prior QRC universality results largely relied on polynomial output layers or lacked error rates; this work rigorously bridges that gap by adapting classical reservoir computing frameworks to the quantum setting.
+2. **Favorable Scaling Laws for NISQ Devices:** Theorem 4.6 demonstrates that approximation error is independent of input and state dimensions, while the qubit requirement grows as $O(\log(1/\varepsilon))$. This dimension-free scaling and logarithmic resource dependence directly address hardware constraints and justify the experimental appeal of feedback-driven QRC.
+3. **Technical Innovation in Derivative Approximation:** Proposition 4.4 and Corollary 4.5 derive simultaneous $L^2$ and uniform error bounds for QNNs approximating both functions and their derivatives. This non-trivial extension of feedforward QNN theory is essential for analyzing the stability and contractivity of the RQNN feedback loop, and represents a substantive mathematical contribution.
+4. **Demonstrated Theoretical Advantage Over Classical RNNs:** The authors explicitly show that the Barron-type integrability condition required for RQNN approximation is strictly weaker than the smoothness assumptions needed for comparable classical RNN bounds (e.g., Gonon et al., 2023), suggesting a potential expressivity advantage in the quantum regime.
 
 ### Weaknesses
-1.  **Assumption of Variational Training vs. QC Reality:** The main universality results (Theorems 4.6 and 4.8) assume optimal optimization of circuit parameters $\theta$. The paper acknowledges in the Conclusion that "Barren Plateaus" are a concern for large numbers of qubits. Without addressing how to train these variational parameters effectively under such constraints, the practical utility of the "universality" is diminished for realistic noisy intermediate-scale quantum (NISQ) devices.
-2.  **Sampling Error Treatment:** While Appendix E briefly outlines Monte Carlo sampling error, the main theorems (4.6, 4.8) are proven assuming exact probability measurements (i.e., expectation values). In a real quantum experiment with finite shots $S$, this sampling noise competes with the approximation error $\epsilon/\sqrt{n}$. The interplay between shot noise and the derived error bounds could be more explicitly analyzed in the main text.
-3.  **State Dimension Scaling in Practice:** While the error rate decays independently of $N$, the bound in Theorem 4.6 includes a prefactor scaling with $\sqrt{N}$. For high-dimensional target systems, this $\sqrt{N}$ term could become prohibitive before the $1/\sqrt{n}$ term dominates. A more nuanced discussion on the trade-off between circuit complexity and target state dimension $N$ would be beneficial.
-4.  **Lack of Empirical Validation:** As a purely theoretical paper, there are no numerical experiments or small-scale simulations to illustrate the convergence or qubit efficiency. For ICLR, adding a proof-of-concept simulation (even classical emulation of the quantum dynamics) would significantly strengthen the claim of practical accessibility mentioned in the abstract.
+1. **Lack of Empirical Validation:** While theoretically sound, the paper contains no numerical experiments or simulations. ICLR typically expects at least a proof-of-concept implementation demonstrating the proven $O(1/\sqrt{n})$ convergence, qubit scaling, or performance on standard temporal benchmarks (e.g., chaotic time-series prediction or sequential datasets).
+2. **Hardware Implementation and Noise Constraints are Underdeveloped:** The architecture relies on uniformly controlled multi-block quantum gates. Although recent decomposition results are cited, the paper does not quantify the resulting circuit depth, two-qubit gate count, or how finite measurement shots and NISQ decoherence would erode the theoretical echo state property and approximation bounds. Appendix E touches on Monte Carlo error but leaves it out of the main theorems.
+3. **Optimization and Training Realities are Glossed Over:** The bounds assume perfect, globally optimal parameter selection. The text acknowledges barren plateaus and randomized reservoir setups but does not analyze whether gradient-based training can practically locate the constructed parameters, nor does it quantify how randomization affects the proven universality guarantees.
+4. **Structural Preprocessing Requirement for General Filters:** Theorem 4.8 guarantees universality for arbitrary fading-memory filters only when specific linear preprocessing matrices $P_j$ are introduced to enforce finite memory. While mathematically valid, this structural dependency limits the result to carefully engineered architectures rather than generic, end-to-end trainable RQNNs.
 
 ### Novelty & Significance
-The paper is highly novel within the niche of Quantum Machine Learning theory. It bridges the disconnect between classical Echo State Network (ESN) universality proofs and actual quantum hardware constraints (linear readouts, feedback loops). The extension of the feedforward QNN results from Gonon & Jacquier (2025) to a recurrent setting with feedback is non-trivial due to the stability requirements imposed by the loop. This is significant because it provides a theoretical "safety net" for researchers attempting to implement QRC on feedback-based architectures, validating that the architecture class is expressive enough before experimental resource is wasted.
+**Novelty:** High. The extension of feedforward QNN approximation theory to recurrent feedback systems, particularly through the novel derivative-approximation framework required for loop stability, is a clear advancement. The work moves QRC theory beyond the traditional state-affine system paradigm and provides the first quantitative analysis for linear-readout quantum reservoirs.
+**Clarity:** Generally strong. The mathematical exposition is rigorous and the proof structure is logical. However, the notation becomes dense in Sections 3–4, and clearer high-level signposting connecting the quantum circuit mechanics to the classical reservoir dynamical systems framework would improve accessibility for a broader ML audience.
+**Reproducibility:** High in a theoretical sense due to the exceptionally detailed appendices. However, practical reproducibility is limited by the absence of a reference implementation, simulation code, or explicit gate-depth calculations. The paper specifies the architecture well enough for re-implementation, but empirical benchmarking would require significant additional engineering.
+**Significance:** Substantial for the theoretical foundations of quantum machine learning. The logarithmic qubit scaling and dimension-independent error bounds provide a compelling formal justification for pursuing feedback-driven QRC on near-term devices. While the immediate practical impact is constrained by the lack of training dynamics analysis and hardware noise modeling, the paper establishes a crucial benchmark for future QRC research and algorithm design.
 
 ### Suggestions for Improvement
-1.  **Explicit Training Discussion:** Expand the Discussion section to include a quantitative estimate or reference to the number of iterations/shots required to optimize $\theta$ versus the Barren Plateau landscape width. Explicitly state if the theorem holds for randomized (non-variational) parameters or only trainable ones.
-2.  **Enhance Noise Modeling:** Formalize the sampling error bound into the main approximation theorems. Show the total required number of shots $S$ needed to achieve error $\epsilon$ given the parameter count, as this impacts the "experimental accessibility" claim.
-3.  **Clarify Scaling with $N$:** Provide a concrete plot or table (in an appendix) showing how the $\sqrt{N}$ prefactor in Theorem 4.6 behaves for increasing target dimensions $N$ to illustrate if it becomes a bottleneck before qubit efficiency kicks in.
-4.  **Proof-of-Concept Simulation:** To align with ICLR's expectation of grounded research, include a classical simulation of a small RQNN (e.g., 2-3 qubits) approximating a simple time-series to demonstrate the convergence behavior described in the theoretical bounds.
+1. **Add Numerical Simulations:** Include a compact experimental section using classical simulations of the proposed quantum circuit. Demonstrate the empirically observed convergence rate, validate the logarithmic qubit scaling, and report performance on at least one standard temporal benchmark to bridge the theory-practice gap expected at ICLR.
+2. **Integrate Hardware-Aware Metrics:** Provide explicit asymptotic formulas for the number of elementary 1- and 2-qubit gates required to implement the uniformly controlled gates for a given accuracy $\varepsilon$. Incorporate finite shot noise and simple decoherence models into the error bounds, or at least quantify their expected impact on the echo state property.
+3. **Address Optimization Landscapes:** Expand Section 5 to discuss training feasibility. Analyze whether the parameter space avoiding barren plateaus overlaps with the region satisfying the theoretical bounds, or provide a formal result on how randomized (non-trainable) recurrent weights preserve the approximation guarantees.
+4. **Streamline Notation and Add Architectural Summary:** Introduce a concise notation table or glossary for the dense symbols in Sections 3–4. Additionally, replace or supplement the textual schematic with a clear, standalone diagram that maps the mathematical equations ($U$, $V$, measurement, feedback) directly to circuit components and data flow.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. Numerical simulations on standard time-series benchmarks (e.g., Mackey-Glass, NARMA) are missing; without them, the claim of "practical... capabilities" is unsupported.
-2. Empirical verification of the $O(1/\sqrt{n})$ error decay rate is required to validate the theoretical bounds derived in Theorem 4.6.
-3. Comparison against classical reservoir computing baselines (e.g., ESNs) is needed to justify the quantum overhead and demonstrate potential advantage.
-4. Simulations incorporating realistic noise models (depolarizing, readout error) are essential since the theory assumes ideal unitaries despite motivating NISQ applicability.
+1.  **Standard RC Benchmarks:** Implement the proposed RQNN on standard tasks (e.g., Mackey-Glass, NARMA) to validate the theoretical bounds; without this, the claim of "practical capabilities" is unsupported.
+2.  **Classical Baselines:** Compare performance against classical ESNs or LSTMs on equivalent tasks; without this, the claim that RQNNs are "competitive" is unverifiable.
+3.  **Shot Noise Simulation:** Simulate finite measurement shots to validate the Monte Carlo error analysis in Appendix E; theoretical bounds on sampling error are insufficient without empirical convergence rates.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. A trainability analysis regarding barren plateaus is critical; the conclusion mentions it but the paper provides no gradient variance bounds for this recurrent architecture.
-2. Circuit depth and gate complexity per time step must be analyzed to substantiate the "real-time computation" claim beyond just qubit count.
-3. The restrictiveness of the contractivity assumption in Theorem 4.6 needs discussion; many chaotic time-series tasks violate strict contractivity.
-4. The impact of finite measurement shots (Monte Carlo error) on the Echo State Property needs integration into the main stability proofs, not just Appendix E.
+1.  **Trainability & Barren Plateaus:** Analyze the gradient variance for this specific recurrent architecture; dismissing barren plateaus as future work undermines the viability of training the variational parameters $\theta$ on NISQ devices.
+2.  **Circuit Depth Complexity:** Explicitly analyze gate depth scaling; logarithmic qubit growth is meaningless if the circuit depth scales exponentially, which would negate any NISQ advantage.
+3.  **Barron Condition Validity:** Discuss whether typical time-series tasks satisfy the required Barron-type integrability conditions; if common tasks violate this, the approximation bounds are theoretically sound but practically irrelevant.
 
 ### Visualizations & Case Studies
-1. Plot approximation error vs. number of quantum channels ($n$) to visually confirm the theoretical convergence rate.
-2. Visualization of the training landscape or gradient norms over time would expose whether the architecture suffers from vanishing gradients or barren plateaus.
-3. Case study showing state trajectory matching between the target system and the RQNN approximation would demonstrate the Echo State Property in practice.
-4. Memory capacity curves comparing the RQNN against classical reservoirs would quantify the benefit of the quantum feedback protocol.
+1.  **Error vs. Qubit Count:** Plot approximation error against qubit number to verify the $O(1/\sqrt{n})$ scaling holds in simulation, not just in asymptotic theory.
+2.  **Memory Capacity Curves:** Generate standard memory capacity plots to demonstrate the feedback loop actually retains information effectively compared to classical reservoirs.
+3.  **Gradient Norm Histograms:** Visualize gradient norms across training steps to empirically expose barren plateau risks that the text currently ignores.
 
 ### Obvious Next Steps
-1. Develop and evaluate a specific training protocol (e.g., BPTT for quantum circuits) to show parameters can actually be optimized to reach the theoretical bounds.
-2. Extend the theory to include noise channels explicitly to bridge the gap between the ideal unitary assumptions and NISQ hardware reality.
-3. Provide a concrete resource estimate (total gate count per time step) to verify feasibility on current quantum hardware simulators or devices.
+1.  **Small-Scale Simulation:** Include a numerical implementation (4-8 qubits) to demonstrate the architecture functions as derived; pure theory is insufficient for ICLR when simulations are computationally cheap.
+2.  **Shot Overhead Quantification:** Calculate the specific number of shots required to achieve the theoretical bounds; this dictates whether the "real-time processing" claim is physically feasible.
+3.  **Preprocessing Ablation:** Provide an ablation study on the linear preprocessing matrices $P_j$; this is critical to show they ensure the Echo State Property without artificially degrading model expressivity.
 
 # Final Consolidated Review
 ## Summary
-
-This paper proves universal approximation guarantees for feedback-driven recurrent quantum neural networks (RQNNs) with linear readouts. The authors derive quantitative error bounds showing RQNNs can approximate contracting Barron-type state-space systems without the curse of dimensionality, with qubit count growing only logarithmically in the inverse approximation accuracy. They also establish qualitative universality for arbitrary fading memory, causal, time-invariant filters. The core technical contribution is the extension of feedforward QNN approximation results to the recurrent setting, including simultaneous approximation of functions and their derivatives—a novel analysis required to handle the feedback loop.
+This paper establishes rigorous universal approximation guarantees and quantitative error bounds for feedback-driven Recurrent Quantum Neural Networks (RQNNs). The authors prove that RQNNs can uniformly approximate fading-memory, causal, and time-invariant filters using linear readouts, with approximation error decaying as O(1/√n) independent of input/state dimensions. The number of qubits per circuit component scales logarithmically in the target accuracy.
 
 ## Strengths
-
-- **Novel theoretical contribution:** The paper provides the first quantitative approximation error bounds for RQNNs and proves universality with linear readouts. Prior QRC universality results relied on polynomial output layers (invoking Stone-Weierstrass), whereas linear readouts are substantially simpler and more experimentally accessible.
-
-- **Technical depth:** The simultaneous approximation of functions and their derivatives (Propositions 4.2, 4.4, Corollary 4.5) is a non-trivial extension of the feedforward QNN results in Gonon & Jacquier (2025). The transfer from state-map approximation to filter approximation via the internal approximation approach is mathematically sound.
-
-- **Concrete resource scaling:** The paper provides explicit bounds: O(ε⁻²) weights and O(log₂(1/ε)) qubits suffice to achieve approximation error ε for Barron-type targets. The rate 1/√n is independent of input dimension d and state dimension N in the asymptotic sense.
-
-- **Clear architectural description:** The RQNN circuit construction (uniformly controlled gates with data re-uploading) is precisely specified and grounded in efficient decomposition results from the quantum circuits literature.
+- **Fills a genuine theoretical gap**: Delivers the first quantitative approximation bounds for RQNNs with linear readouts, addressing a limitation in prior QRC universality work that relied on polynomial output layers.
+- **Novel technical contribution**: Propositions 4.2 and 4.4 establish joint L² and uniform error bounds for approximating functions and their derivatives simultaneously—this is essential for controlling stability in the feedback loop and extends feedforward QNN theory.
+- **Demonstrated quantum advantage in approximation conditions**: The paper shows (Section 4.2) that the Fourier integrability condition required (∫∥ξ∥⁴|F̂ⱼ|dξ < ∞) is strictly weaker than that needed for comparable classical RNN bounds (s > N+d+3 for Sobolev spaces vs s > (N+d)/2+4 for quantum), providing a meaningful approximation-theoretic advantage.
+- **Rigorous mathematical treatment**: Detailed proofs in appendices, careful handling of the echo state property, and explicit error constants characterize the work thoroughly.
 
 ## Weaknesses
-
-- **Measurement error not integrated into main results:** Theorems 4.6 and 4.8 assume access to exact quantum probabilities P_m^{n,θ}. In practice, these must be estimated via Monte Carlo sampling from finite circuit executions (shots). While Appendix E outlines how to bound the additional Monte Carlo error, the main quantitative bounds ignore this source of error. A bound that explicitly incorporates shot noise (showing how S scales with ε) would bridge the gap between theory and practice.
-
-- **Strong assumptions for quantitative bounds:** Theorem 4.6 requires the target state-space map F to be (i) globally uniformly contracting with Lipschitz constant λ < 1, and (ii) Barron-type integrable with bounded moments of order 4. Many practically relevant dynamical systems (chaotic systems, multi-stable systems, systems near bifurcations) do not satisfy global contractivity. The paper acknowledges this limitation but does not provide examples of target systems that do satisfy both conditions, leaving the practical applicability unclear.
-
-- **Theorem 4.8 is purely qualitative:** The universality result for arbitrary fading memory filters provides no bounds on how the state dimension N, memory length K, or circuit blocks n scale with approximation accuracy ε. This stands in contrast to Theorem 4.6, which provides explicit scaling. The transition from quantitative approximation (Barron-type targets) to qualitative universality (general fading memory filters) leaves a gap for readers seeking resource estimates for practical deployment.
-
-- **Imprecise comparison to classical RNNs:** The paper claims the Fourier integrability condition is "strictly weaker" than classical RNN approximation results (p. 8), comparing to the Sobolev condition in Gonon et al. (2023). While this comparison is valid, it should be clarified that a classical Barron-type approximation result would impose similar integrability conditions; the genuine advantage is in achieving uniform L^∞ approximation rates under these conditions.
-
-- **No discussion of circuit depth/gate count:** The paper emphasizes qubit efficiency (O(log(1/ε))) but does not analyze total gate complexity per time step. The uniformly controlled gate U_θ operates on n_U qubits with O(n) blocks; efficient decompositions exist, but explicit gate counts would strengthen claims about experimental accessibility.
+- **No empirical validation**: The paper contains no numerical experiments or simulations. For ICLR, at least a proof-of-concept demonstrating the O(1/√n) convergence or validating the qubit scaling would strengthen the contribution, even in a classical simulation setting.
+- **Monte Carlo sampling not integrated into main results**: The main theorems assume exact probabilities P_m^{n,θ}(x,z), but physical implementations require finite-shot estimates. Appendix E addresses this, showing sampling contributes O(√(N·R/S)) to the filter error, but this should be stated as a theorem-level result with explicit shot complexity for target accuracy ε.
+- **Theorem 4.8 provides no quantitative convergence rates**: The general universality result for arbitrary fading-memory filters is purely qualitative. The proof reduces to a finite-memory approximation via preprocessing matrices P_j, then applies static QNN approximation. The required memory horizon K is not quantified, limiting practical applicability.
+- **Strong global contraction assumption**: Theorem 4.6 requires ∥∇_x F(x,z)∥₂ ≤ λ < 1 for ALL x ∈ R^N, z ∈ D_d. Many practical systems (e.g., RNNs with saturating activations outside their operating regime) are only locally contractive. This limits the scope of the quantitative bounds.
+- **Parameter R and threshold n_0 not discussed practically**: The scaling parameter R appears in the state map and affects feasibility, but no guidance is given on its selection. The threshold n_0 = N²(1-λ)⁻²(max_j C_j^∞)² for the echo state property can be prohibitively large near the contraction boundary (λ → 1).
 
 ## Nice-to-Haves
-
-- **Numerical validation:** Even a small-scale classical simulation demonstrating the 1/√n error decay rate would provide empirical grounding for the theoretical bounds and is standard practice for ICLR papers making such claims.
-
-- **Trainability discussion:** The paper explicitly focuses on approximation theory (existence of good parameters) and acknowledges that Barren Plateaus are a concern. A brief discussion of whether the architecture structure might mitigate or exacerbate gradient vanishing would be valuable.
-
-- **Concrete examples of valid target systems:** Providing examples of state-space systems that satisfy both the contractivity and Barron conditions (e.g., certain echo state network configurations under spectral radius constraints) would clarify the practical scope of Theorem 4.6.
+- **Shot complexity analysis**: A theorem integrating Monte Carlo error would connect theory to physical implementation.
+- **Circuit depth/gate count analysis**: Logarithmic qubit scaling is favorable, but circuit depth for the uniformly controlled gates (cited as improved in recent work) should be explicitly quantified.
 
 ## Removed Points
-
 These points are flagged to be removed, treat them with caution:
-
-- *Harsh critic's claim that the paper "conflates curse of dimensionality with polynomial dependence"* — This is imprecise. The paper correctly states that the rate 1/√n is independent of d and N, while the constant C_j^∞ has polynomial (linear) dependence. This is standard Barron-type analysis and accurately described.
-
-- *Demand for experiments incorporating realistic noise models* — While valuable, this exceeds the scope of a theoretical approximation paper. The paper's stated goal is universality and error bounds, not hardware-level noise analysis.
-
-- *Requests for gradient variance bounds and training landscape analysis* — The paper is explicitly about approximation theory, not optimization. The conclusion acknowledges trainability as future work. Criticizing the absence of a full trainability analysis is scope creep.
-
-- *Citation of exponential concentration concerns from Sannia et al. (2025)* — While relevant to QRC broadly, addressing all related expressivity limitations would substantially expand the paper's scope. The cited papers are recent, and their implications for this specific architecture remain an open question.
+- **"Total qubit count is O(N·log(1/ε)), not O(log(1/ε))"**: This misreads the paper. The abstract correctly states "the number of qubits only growing logarithmically"—this refers to qubits per circuit. The paper clearly describes N parallel circuits (Section 3), so total resources scale as O(N·log(1/ε)). The constant factor N is explicitly discussed and not hidden.
+- **"Finite-memory preprocessing is purely classical"**: While the P_j matrices in Theorem 4.8 do implement a tapped delay line structure, this is standard practice in reservoir computing universality proofs. The quantum contribution remains in the function approximation step; calling this "purely classical" dismisses the legitimate theoretical contribution.
+- **"Demanding multiple experimental benchmarks"**: Requiring standard RC benchmarks (Mackey-Glass, NARMA) plus classical baselines plus shot noise experiments is beyond scope for a theoretical paper. A single simulation validating the O(1/√n) scaling would be appropriate.
+- **"Barron condition validity for practical tasks"**: While a valid question, this is outside the paper's theoretical contribution scope. The conditions are mathematically well-defined and comparable to those in classical approximation theory.
 
 ## Novel Insights
-
-The key insight is that Barron-type integrability conditions, which suffice for feedforward QNN approximation, can be extended to control derivatives simultaneously—enabling stable feedback dynamics in RQNNs. This bridges a gap between classical reservoir computing theory (where echo state property ensures stability) and quantum circuit expressivity. The result that linear readouts suffice for universality removes a practical barrier: prior QRC universality proofs relied on polynomial output layers, but training polynomial readouts is substantially more complex than linear ones.
+The derivative-approximation technique (Propositions 4.2-4.4) represents a genuine methodological innovation: controlling both function and gradient errors simultaneously via a unified probabilistic construction is essential for feedback stability, yet rarely addressed in quantum neural network theory. The comparison between quantum and classical Barron conditions reveals a concrete expressivity advantage—specifically, that Sobolev regularity requirements are lower by approximately (N+d)/2 dimensions for the quantum case.
 
 ## Suggestions
-
-- Integrate the Monte Carlo error analysis from Appendix E into the main text, at minimum by stating explicitly that the total error bound scales as O(1/√n + 1/√S) where S is the number of shots, and provide guidance on balancing these terms.
-
-- Add one concrete example in Section 4.2 showing that a standard echo state network F(x,z) = tanh(Ax + Bz) satisfies both the contractivity condition (under spectral radius < 1) and the Barron condition (sufficient smoothness). This would clarify what target systems fall within the scope of Theorem 4.6.
-
-- Clarify in Theorem 4.8 whether the preprocessing maps P_j require classical post-processing between time steps, and whether the modified RQNN architecture remains implementable as a purely quantum circuit or requires hybrid classical-quantum feedback.
+- Include a brief numerical simulation (4–8 qubits, classical emulation) demonstrating empirical O(1/√n) convergence to validate the theoretical rate.
+- Add explicit shot complexity requirements in a theorem: given target accuracy ε, what S suffices to ensure total error ≤ ε?
+- Discuss the practical implications of the global contraction assumption and whether local versions could be obtained.
+- Clarify how the threshold n_0 scales with practical problem parameters (λ, R, target accuracy) to help readers assess hardware feasibility.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 8.0, 8.0, 10.0]

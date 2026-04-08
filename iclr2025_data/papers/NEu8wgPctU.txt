@@ -1,0 +1,2011 @@
+# ADAWM: ADAPTIVE WORLD MODEL BASED PLAN## NING FOR AUTONOMOUS DRIVING
+
+
+**Hang Wang** [1] _[,]_ [2] _[∗]_ **Xin Ye** [1] **Feng Tao** [1] **Chenbin Pan** [1] **Abhirup Mallik** [1]
+
+**Burhaneddin Yaman** [1] [�] **Liu Ren** [1] **Junshan Zhang** [2]
+
+1Bosch Research North America & Bosch Center for Artificial Intelligence (BCAI)
+2University of California, Davis
+_{_ whang,jazh _}_ @ucdavis.edu
+_{_ burhaneddin.yaman,xin.ye3,feng.tao2,chenbin.pan,abhirup.mallik,liu.ren _}_ @us.bosch.com
+
+
+ABSTRACT
+
+
+World model based reinforcement learning (RL) has emerged as a promising approach for autonomous driving, which learns a latent dynamics model and uses it
+to train a planning policy. To speed up the learning process, the pretrain-finetune
+paradigm is often used, where online RL is initialized by a pretrained model and
+a policy learned offline. However, naively performing such initialization in RL
+may result in dramatic performance degradation during the online interactions in
+the new task. To tackle this challenge, we first analyze the performance degradation and identify two primary root causes therein: the mismatch of the planning
+policy and the mismatch of the dynamics model, due to distribution shift. We
+further analyze the effects of these factors on performance degradation during
+finetuning, and our findings reveal that the choice of finetuning strategies plays a
+pivotal role in mitigating these effects. We then introduce AdaWM, an Adaptive
+World Model based planning method, featuring two key steps: (a) mismatch identification, which quantifies the mismatches and informs the finetuning strategy,
+and (b) alignment-driven finetuning, which selectively updates either the policy or
+the model as needed using efficient low-rank updates. Extensive experiments on
+the challenging CARLA driving tasks demonstrate that AdaWM significantly improves the finetuning process, resulting in more robust and efficient performance
+in autonomous driving systems.
+
+
+1 INTRODUCTION
+
+
+Automated vehicles (AVs) are poised to revolutionize future mobility systems with enhanced safety
+and efficiency Yurtsever et al. (2020); Kalra & Paddock (2016); Maurer et al. (2016). Despite significant progress Teng et al. (2023); Hu et al. (2023); Jiang et al. (2023), developing AVs capable
+of navigating complex, diverse real-world scenarios remains challenging, particularly in unforeseen
+situations Campbell et al. (2010); Chen et al. (2024). Autonomous vehicles must learn the complex
+dynamics of environments, predict future scenarios accurately and swiftly, and take timely actions
+such as emergency braking. Thus motivated, in this work, we devise adaptive world model to advance embodied AI and improve the planning capability of autonomous driving systems.
+
+
+World model (WM) based reinforcement learning (RL) has emerged as a promising self-supervised
+approach for autonomous driving Chen et al. (2024); Wang et al. (2024); Guan et al. (2024); Li et al.
+(2024). This end-to-end method maps sensory inputs directly to control outputs, offering improved
+efficiency and robustness over traditional modular architectures Yurtsever et al. (2020); Chen et al.
+(2024). By learning a latent dynamics model from observations and actions, the system can predict
+future events and optimize policy decisions, enhancing generalization across diverse environments.
+Recent models like DreamerV2 and DreamerV3 have demonstrated strong performance across both
+2D and 3D environments Hafner et al. (2020; 2023).
+
+
+_∗_ Work done while interned at Bosch Research North America.
+
+ - Corresponding author.
+
+
+1
+
+
+However, learning a world model and a planning policy from scratch can be prohibitively timeconsuming, especially in autonomous driving, where the state space is vast and the driving environment the vehicle might encounter can be very complex Ibarz et al. (2021); Kiran et al. (2021).
+Moreover, the learned model may still perform poorly on unseen scenarios Uchendu et al. (2023);
+Wexler et al. (2022); Liu et al. (2021). These challenges have led to the adoption of pretraining
+and finetuning paradigms, which aim to accelerate learning and improve performance Julian et al.
+(2021). In this approach, models are first pretrained on large, often offline datasets, allowing them to
+capture general features that apply across various environments. Following pretraining, the model
+is finetuned using task-specific data to adapt to the new environment. Nevertheless, without a wellcrafted finetuning strategy, a pretrained model can suffer _significant_ _performance_ _degradation_ due
+to the distribution shift between pretraining tasks and the new task. To illustrate the possible inefficiencies of some commonly used finetuning strategies, such as alternating between updating the
+world model in one step and the policy in the next, we present the following motivating example.
+
+
+**A** **Motivating** **Example.** Consider an agent pretrained
+
+evaluate three finetuning strategies: alternate finetuning
+
+bution shift. However, model-only finetuning demonstrates significantly faster recovery compared to the other Steps 1e5
+approaches. This observation reveals a crucial insight:
+the transition from right to left turns primarily challenges Figure 1: Performance comparison of
+the agent’s dynamics model, which must adapt to dif- different finetuning strategies in the left
+ferent spatial-temporal relationships of approaching ve- turn with moderate traffic flow task.
+hicles. When the dynamics model misaligns with the new
+environment, the policy inevitably makes decisions based on inaccurate predictions. Thus, dynamics model mismatch becomes the _dominating_ _factor_ limiting performance. Model-only finetuning
+addresses this directly, while alternate and policy-only strategies struggle by failing to prioritize this
+critical misalignment.
+
+
+This example illustrates that effective finetuning requires identifying and prioritizing the _dominating_
+_mismatch_ rather than simply alternating between model and policy updates. This work addresses the
+key challenge of determining efficient finetuning strategies by investigating:
+
+
+_When and how should the pretrained dynamics model and planning policy be finetuned to_
+_effectively mitigate performance degradation due to distribution shift?_
+
+
+Building on the insights from our motivated example, we propose AdaWM, an adaptive world model
+based planning method designed to fully leverage a pretrained policy and world model while addressing performance degradation during finetuning. Specifically, our main contributions can be
+summarized as follows:
+
+
+_•_ We quantify the performance gap observed during finetuning and identify two primary root
+causes: (1) dynamics model mismatch, and (2) policy mismatch. We then assess the corresponding impact of each on the finetuning performance.
+
+_•_ Based on our theoretical analysis, we introduce AdaWM, Adaptive World Model based planning
+for autonomous driving. As shown in Figure 2, AdaWM achieves effective finetuning through
+two key steps: (1) _Mismatch Identification_ . At each finetuning step, AdaWM first evaluates the
+degree of distribution shift to determine the dominating mismatch that causes the performance
+degradation, and (2) _Alignment-driven Finetuning_, which determines to update either the dynamics model or the policy to mitigate performance drop. This selective approach ensures that the
+more dominating mismatch, as identified in the motivated example, is addressed first. Moreover,
+AdaWM incorporates efficient update methods for both the dynamics model and the policy, respectively. For dynamics model finetuning, we propose a LoRa-based low-rank adaptation Hu
+et al. (2021); Koohpayegani et al. (2024), where only the low-dimensional vectors are updated
+to enable a more efficient finetuning. For policy finetuning, we decompose the policy network
+
+
+2
+
+
+Steps 1e5
+
+
+Figure 1: Performance comparison of
+different finetuning strategies in the left
+turn with moderate traffic flow task.
+
+
+Figure 2: A sketch of adaptive world model based planning (AdaWM): During pretraining, a dynamics model and a planning policy are learned offline. For online adaptation, at each finetuning
+step _t_, AdaWM first identifies the more dominating mismatch that causes the performance degradation and then carries out alignment-driven finetuning accordingly.
+
+
+Table 1: Categorization of related works in terms of (1) Learning Method (SL: Supervised Learning;
+RL: Reinforcement Learning), (2) Finetuning strategy, (3) Online interaction and (4) Tasks.
+
+
+Paper Learning Method Finetuning Online Tasks
+
+
+VAD Jiang et al. (2023) SL ✗ ✗ CARLA
+UniAD Hu et al. (2023) SL ✗ ✗ CARLA
+Li et al. (2024) RL ✗ ✓ CARLA
+Feng et al. (2023) RL ✓(Model-only) ✓ xArm, D4RL
+Baker et al. (2022); Hansen et al. (2022) RL ✓(Policy-only) ✓ Manipulation
+**AdaWM (Ours)** RL ✓(Alignment-driven Finetuning) ✓ CARLA
+
+
+into a weighted convex ensemble of sub-units and update only the weights of these sub-units to
+further streamline the finetuning process.
+
+_•_ We validate AdaWM on the challenging CARLA environment over a number of tasks, demonstrating its ability to achieve superior performance in terms of routing success rate (SR) and
+time-to-collision (TTC). Our results show that AdaWM effectively mitigates performance drops
+cross various new tasks, confirming the importance of identifying and addressing the dominating
+mismatch in the finetuning process.
+
+
+**Related Work.** Recently, end-to-end autonomous driving systems have gained significant momentum with the availability of large-scale datasets Hu et al. (2023); Jiang et al. (2023); Chen et al.
+(2024). Recent advances in autonomous driving have been driven by two main approaches: supervised learning methods and world model based reinforcement learning methods. Supervised
+learning approaches like VAD Jiang et al. (2023) and UniAD Hu et al. (2023) have demonstrated
+impressive performance in the CARLA benchmark. Meanwhile, world model (WM) based methods
+have emerged as a promising alternative. By learning a differentiable latent dynamics model, world
+model based methods enable the agent to efficiently anticipate future states and hence improve the
+decision making Levine & Koltun (2013); Wang et al. (2019); Zhu et al. (2020). However, existing
+WM-based approaches primarily focus on the pretraining stage, which aims to learn a good policy
+to solve the new task by using offline datasets. Think2Drive Li et al. (2024) uses DreamerV3 Hafner
+et al. (2023) for offline training, while DriveDreamer Wang et al. (2023) employs diffusion models
+for environmental representation. Vasudevan et al. (2024) trains different world models based on
+different behavior prediction in the environment. While these methods show promise, they often
+struggle with performance degradation when adapting to new tasks, as shown in our experiments (
+i.e., Table 2).
+
+
+Current studies on finetuning strategies in RL focus on model adaptation Feng et al. (2023) or policy updates through imitation learning Baker et al. (2022); Hansen et al. (2022); Uchendu et al.
+(2023) and self-supervised learning Ouyang et al. (2022). As summarized in Table 1, existing approaches either lack online fine-tuning capabilities (VAD, UniAD) or employ single-focused strategies (model-only or policy-only). Meanwhile, while Julian et al. (2021); Feng et al. (2023) demonstrated the general effectiveness of finetuning in _robotic learning tasks_, existing autonomous driving
+
+
+3
+
+
+systems lack a unified framework for dynamic adaptation. Our proposed AdaWM addresses these
+limitations through alignment-driven finetuning that adaptively balances both model and policy updates based on real-time task requirements, achieving superior performance compared to both supervised learning methods without finetuning and RL approaches with rigid adaptation strategies.
+
+
+2 ADAWM: ADAPTIVE WORLD MODEL BASED PLANNING
+
+
+**Basic** **Setting.** Without loss of generality, we model the agent’s decision making problem as a
+Markov Decision Process (MDP), defined as _⟨S, A, P, r, γ⟩_ . In particular, _S_ _⊆_ R _[d][s]_ represents state
+space, and _A_ is the action space for agent, respectively. _γ_ is the discounting factor. At each time step
+_t_, based on observations _st_ _∈S_, agent takes an action _at_ according to a planning policy _π_ : _S_ _→A_ .
+The environment then transitions from state _st_ to state _st_ +1 following the state transition dynamics
+_P_ ( _st_ +1 _|st, at_ ) : _S × A × S_ _→_ [0 _,_ 1]. In turn, the agent receives a reward _rt_ := _r_ ( _st, at_ ).
+
+
+**Pretraining:** **World** **Model** **based** **RL.** In the pretraining phase, we aim to learn a dynamics
+model `WM` _ϕ_ to capture the latent dynamics of the environment and predict the future environment
+state. To train a world model, the observation _st_ is encoded into a latent state _zt_ _∈Z_ _⊆_ R _[d]_ using an
+autoencoder _qϕ_ Kingma (2013). Meanwhile, the hidden state _ht_ is incorporated into the encoding
+process to capture contextual information from current observations Hafner et al. (2023; 2020), i.e.,
+_zt_ _∼_ _qϕ_ ( _zt|ht, st_ ), where _ht_ stores historical information relevant to the current state. We further
+denote _xt_ as the model state, defined as follows,
+
+
+Model State _xt_ := [ _ht, zt_ ] _∈X_ _,_ (1)
+
+
+The dynamics model `WM` _ϕ_ predicts future states using a recurrent model, such as an Recurrent Neural
+Network (RNN) Medsker et al. (2001), which forecasts the next hidden state _ht_ +1 based on the
+current action _at_ and model state _xt_ .
+
+
+The obtained hidden state _ht_ +1 is then used to predict the next latent state _z_ ˆ _t_ +1 _∼_ _pϕ_ ( _·|ht_ +1).
+The dynamics model `WM` _ϕ_ ( _xt_ +1 _|xt, at_ ) is trained by minimizing the prediction error between these
+predicted future states and the actual observations. Additionally, the learned (world) model can also
+predict rewards and episode termination signals by incorporating the reward prediction loss Hafner
+et al. (2023).
+
+
+Once trained, the dynamics model is used to guide policy learning. The agent learns a planning
+policy _πω_ ( _·|xt_ ) by maximizing its value function
+
+
+_K_
+
+
+_V_ `WM` _[π][ω]_ _ϕ_ [(] _[x][t]_ [)][ ≜] **[E]** _[x]_ _t_ _[∼]_ `[WM]` _ϕ_ _[,a][∼][π]_ _ω_ [[]
+
+
+- _γ_ _[i]_ _r_ ( _xt_ + _i−_ 1 _, at_ + _i−_ 1) + _γ_ _[K]_ _Q_ _[π][ω]_ ( _xt_ + _K, at_ + _K_ )] _,_ (2)
+
+
+_i_ =1
+
+
+where the first term is the cumulative reward from a _K_ -step lookahead using the learned dynamics
+model, and the second term is the Q-function _Q_ _[π][ω]_ ( _xt, at_ ) = **E** _a∼πω_ [ [�] _t_ _[γ][t][r]_ [(] _[x][t][, a][t]_ [)]][, which corre-]
+
+sponds to the expected cumulative reward when action _at_ is taken at state _xt_, and the policy _πω_ is
+followed thereafter. In this way, the policy learning is informed by predictions from the dynamics
+model regarding future state transitions and expected rewards.
+
+
+**Finetuning with the Pretrained Dynamics Model and Policy.** Once the pretraining is complete,
+the focus is to finetune the pretrained dynamics model `WM` _ϕ_ and policy _πω_ to adapt to the new task
+while _minimizing performance degradation_ due to the distribution shift. In particular, at each finetuning step _t_, the agent conducts planning using the current policy _πωt_ and dynamics model `WM` _ϕt_ .
+By interacting with environments, the agent is able to collect samples _{xt, at, rt}_ for the new task.
+In this work, the primary objective is to develop an efficient finetuning strategy to mitigate the overall performance degradation during finetuning. To this end, in what follows, we first analyze the
+performance degradation that occurs during finetuning due to the distribution shift. From this analysis, we identify two root causes contributing to the degradation: mismatch of the dynamics model
+and mismatch of the policy.
+
+
+4
+
+
+2.1 IMPACT OF MISMATCHES ON PERFORMANCE DEGRADATION
+
+
+**Performance** **Gap.** When the pretrained model and policy align well with the state transition dynamics and the new task, the learning performance should remain _consistent_ . However, in practice,
+distribution shifts between the pretraining tasks and the new task can lead to suboptimal planning and
+degraded performance when directly using the pretrained model and policy. To formalize this, we
+let `WM` _ϕ_ ( _P_ ) denote the pretrained dynamics model with probability transition matrix _P_, and `WM` _ϕ_ ( _P_ [ˆ] )
+the dynamics model of the new task with probability transition matrix _P_ [ˆ] . For simplicity, we denote
+the policy as _π_ = _πω_ when the context is clear to avoid ambiguity.
+
+
+Let _η_ denote the learning performance of using model `WM` _ϕ_ and policy _π_ in the pretraining task, and
+let _η_ ˆ represent the performance of applying `WM` _ϕ_ ( _P_ ) and policy _π_ to the new task with environment
+dynamics _P_ [ˆ] . Using the value function _V_ ( _x_ ) defined in Equation (2), the performance gap can be
+expressed as follows:
+
+_η −_ _η_ ˆ = **E** _x∼ρ_ 0           - _V_ `WM` _[π]_ _ϕ_ ( _P_ ) [(] _[x]_ [)] _[ −]_ _[V]_ `WM` _[π]_ _ϕ_ ( _P_ [ˆ] ) [(] _[x]_ [)]           - _,_ (3)
+
+
+where _ρ_ 0 is the initial state distribution and the second term captures the expected return when the
+agent applies the pretrained model and policy to the new task with the underlying dynamics _P_ [ˆ] . Next,
+we introduce the latent dynamics model to capture temporal dependencies of the environment.
+
+
+**Latent** **Dynamics** **Model.** At each time step _t_, the agent will leverage the dynamics model `WM` _ϕ_
+to generate imaginary trajectories _{xt_ + _k, at_ + _k}_ _[K]_ _k_ =1 [over] [a] [lookahead] [horizon] _[K]_ _[>]_ [0][.] [These] [tra-]
+jectories are generated based on the current model state _xt_ and actions _at_ sampled from policy _π_ .
+Particularly, the dynamics model is typically implemented as a RNN, which computes the hidden
+states _ht_ and state presentation _zt_ as follows,
+
+
+_ht_ +1 = _fh_ ( _xt, at_ ) _,_ _zt_ +1 = _fz_ ( _ht_ +1) _,_
+
+
+where _fh_ maps the current state and action to the next hidden state and _fz_ maps the hidden state to
+the next state representation. In our theoretical analysis, following the formulation as in previous
+works Lim et al. (2021); Wu et al. (2021), we choose _fh_ = _Axt_ + _σh_ ( _Wxt_ + _Uat_ + _b_ ) and
+_fz_ = _σz_ ( _V ht_ +1), where matrices _A, W, U, V, b_ are trainable parameters. Meanwhile, _σz_ is the _Lz_ Lipschitz activation functions for the state representation and _σh_ is a _Lh_ -Lipschitz element-wise
+activation function (e.g., ReLU Agarap (2018)). Next, we make the following standard assumptions
+on latent dynamics model, action and reward functions.
+
+
+**Assumption 1 (Weight Matrices)** _The Frobenius norms of weight matrices W_ _, U_ _and V_ _are upper_
+_bounded by BW, BU_ _and BV, respectively._
+
+
+**Assumption 2 (Action and Policy)** _The action input is upper bounded, i.e., |at|_ _≤_ _Ba, t_ = 1 _, · · · ._
+_Additionally, the policy π_ _is La-Lipschitz, i.e., for any two states x, x_ _[′]_ _∈X_ _, we have dX_ ( _π_ ( _·|x_ ) _−_
+_π_ ( _·|x_ _[′]_ )) _≤_ _LadX_ ( _x, x_ _[′]_ ) _,_ _where_ _dA_ _and_ _dX_ _are_ _the_ _corresponding_ _distance_ _metrics_ _defined_ _in_ _the_
+_action space and state space._
+
+
+**Assumption 3** _The_ _reward_ _function_ _r_ ( _x, a_ ) _is_ _Lr-Lipschitz,_ _i.e.,_ _for_ _all_ _x, x_ _[′]_ _∈X_ _and_ _a, a_ _[′]_ _∈A,_
+_we have |r_ ( _x, a_ ) _−_ _r_ ( _x, a_ _[′]_ ) _| ≤_ _Lr_ ( _dX_ ( _x, x_ _[′]_ ) + _dA_ ( _a, a_ _[′]_ )) _, where dX_ _and dA are the corresponding_
+_metrics in the state space and action space, respectively._
+
+
+**Characterization** **of** **Performance** **Gap.** We start by analyzing the state prediction error at prediction step _k_ = 1 _,_ 2 _, · · ·_ _, K_, defined as _ϵk_ = _xk_ _−_ _x_ ˆ _k_, where _xk_ is the underlying true state
+representation in the new task and _x_ ˆ _k_ is the predicted state representation by using the pretrained
+dynamics model `WM` _ϕ_ . The prediction error arises due to a combination of factors such as distribution
+shift between tasks and the generalization limitations of the pretrained dynamics model. To this end,
+we decompose the prediction error into two terms,
+
+
+_ϵk_ = ( _xk −_ _x_ ¯ _k_ ) + (¯ _xk −_ _x_ ˆ _k_ ) (4)
+
+
+where _x_ ¯ _k_ is the underlying true state representation when planning is conducted in the pretraining
+tasks. The first term ( _xk_ _−_ _x_ ¯ _k_ ) captures the difference between the true states in the current and
+pretraining tasks, reflecting the distribution shift between the tasks. The second term (¯ _xk_ _−_ _x_ ˆ _k_ )
+
+
+5
+
+
+stems from the prediction error of the pretrained RNN model on the pretraining task. This decomposition allows us to rigorously examine the impact of distribution shift and model generalization
+by bounding these two components respectively.
+
+
+To analyze the prediction error, we assume the dynamics model is trained using supervised learning
+on samples of state-action-state sequence and resulting the empirical loss is _ln_ . We assume the expected Total Variation (TV) distance between the true state transition probability _P_ and the predicted
+dynamics _P_ [ˆ] be upper bounded by _EP_ ˆ [, i.e.,] **[ E]** _[π]_ [[] _[D]_ [TV][(] _[P]_ _[||][P]_ [ ˆ][)]] _[≤E]_ _P_ [ ˆ][.] [Building on these assumptions]
+and the analysis developed in Appendix A, the upper bound for the prediction error is derived as
+_ϵk_ _≤Eσ,k_ .
+
+
+We now assess the direct impact of the prediction error on the performance gap in Equation (9). As
+shown in Equation (2), the value function depends on both the cumulative rewards by _K_ -step rollout
+using the pretrained dynamics model and the Q-function at the terminal state. Prediction errors in
+the state representation cause the policy to select sub-optimal actions, impacting both immediate
+rewards and future state transitions. These errors accumulate over time, distorting the terminal state
+and degrading the Q-function evaluation. Moreover, the pretrained policy _π_ was optimized for the
+pretraining tasks and may no longer select optimal actions in the new task due to differences in task
+objectives and environment dynamics. As a result, the performance gap arises from the compounded
+effect of both the prediction errors and the sub-optimality of the planning policy. To quantify this,
+we now derive an upper bound for the resulting performance drop.
+
+
+1 _−γ_ _[K][−]_ [1]
+Let Γ := 1 _−γ_ _Lr_ (1 + _Lπ_ ) + _γ_ _[K]_ _LQ_ (1 + _Lπ_ ), _E_ max = max _t Eδ,t_ and _LQ_ = _Lr/_ (1 _−_ _γ_ ).
+
+Meanwhile, we denote the policy shift between the pretrained policy _π_ and the underlying optimal
+policy _π_ ˆ for the current task to be _Eπ_ := max _x D_ TV( _π|π_ ˆ). Then we obtain the following result.
+**Theorem 1** _Given Assumptions 1,_ _2 and 3 hold,_ _the performance gap,_ _denoted as η −_ _η_ ˆ _,_ _is upper_
+_bound by:_
+
+
+   
+_[E]_ [max] _P_ [ˆ]
+_η −_ _η_ ˆ _≤_ _γ_ _[K]_ 1 _−_ _γ_ _[K]_ [+ Γ] 1 [2] _−_ _[γ][E]_ _γ_ _[K]_
+
+
+- - 4 _r_ max _Eπ_ 4 _γEπ_
++ Γ +
+1 _−_ _γ_ 1 _−_ _γ_ _[K]_
+
+
+_._
+
+
+**Determine the Dominating Mismatch.** The upper bound in Theorem 1 highlights two primary root
+causes for performance degradation: the mismatch of dynamics model, represented by term _E_ max
+and _Ep_ ˆ, where the dynamics model failing to accurately capture the true dynamics of the current
+task; and mismatch of policy ( _Eπ_ ), when the pretrained policy being sub-optimal. As demonstrated
+in the motivating example Figure 1, effective finetuning hinges on identifying the _dominating root_
+_cause_ of the performance degradation and prioritizing on its finetuning. Based on the above theoretic
+analysis, we have the following criterion to determine the dominating mismatch at each step:
+
+
+_•_ Update dynamics model if _EP_ ˆ _[≥]_ _[C]_ [1] _[E][π]_ _[−]_ _[C]_ [2][, where] _[ C]_ [1] [=] �2 _r_ max(1 _−_ _γ_ _[k]_ ) _/_ ( _γ −_ _γ_ [2] ) + 2� and
+
+
+_C_ 2 = _[γ][K][−]_ [1] _[E]_ [max]
+
+
+_C_ 2 = 2Γ [max] which implies that the errors from the dynamics model are the dominating cause
+
+of performance degradation, and improving the model’s accuracy will most effectively reduce
+the performance gap.
+
+
+_•_ Update planning policy if _Eπ_ _≥_ _C_ 11 _[E]_ _P_ [ ˆ] [+] _C_ _[C]_ 1 [2] [which indicates that the performance degradation]
+
+is more sensitive to suboptimal actions chosen by the policy, and refining the policy will be the
+most impactful step toward performance improvement.
+
+
+Specifically, in the implementation of AdaWM (as outlined in Algorithm 1), we use the TV distances
+between the state distributions _P_ and _P_ [ˆ] to estimate the dynamics model mismatch following Janner
+et al. (2019) and the policy distributions _π_ and ˆ _π_ for the policy mismatch. In particular, at each step,
+if _D_ TV( _P_ _|P_ [ˆ] ) _> C · D_ TV( _π|π_ ˆ) where _C_ is a function of _C_ 1 and _C_ 2, the dynamics model is updated;
+otherwise, the policy is updated. It is worth noting that this simplified criteria is in line with the
+theoretical insights while reducing computational complexity. The proof of Theorem 1 can be found
+in Appendix B.
+
+
+2.2 ADAWM: MISMATCH IDENTIFICATION AND ALIGNMENT-DRIVEN FINETUNING
+
+
+Based on the above analysis, we propose AdaWM with efficient finetuning strategy while minimizing performance degradation. As outlined in Algorithm 1, AdaWM consists of two key components:
+mismatch identification and adaptive finetuning.
+
+
+6
+
+
+**Algorithm 1** AdaWM: Adaptive World Model based Planning
+
+
+**Require:** Pretrained dynamics model `WM` _ϕ_ ( _P_ ) and policy _πω_ (parameter Ω). Planning horizon _K_ .
+Threshold _C_ . Reply buffer _B_ collected from pretraining phase.
+1: **for** finetuning step _t_ = 1 _,_ 2 _, · · ·_ **do**
+2: Collect samples _W_ = _{_ ( _x, a, r_ ) _}_ by following current policy _πt_ (parameter _ωt_ ) and dynamics model `WM` _t_ ( _P_ ) (parameter _ϕt_ ).
+3: Mismatch Identification: Evaluate the policy mismatch by using samples from _B_ and _W_ to
+compute the TV distance as _D_ TV( _πt|πω_ ) _≈_ max _x ∥πt_ ( _a|x_ ) _−_ _πω_ ( _a|x_ ) _∥_ .
+Evaluate the mismatch of the dynamics model by _D_ TV( _P_ _|P_ [ˆ] ) _≈∥P_ ( _x, a_ ) _−_ _P_ [ˆ] ( _x, a_ ) _∥_ 1.
+4: **if** _D_ TV( _P_ _|P_ [ˆ] ) _> C · D_ TV( _πt|πω_ ) **then**
+5: Update dynamics model _B_ _[′]_ _←_ _B_, _ϕt_ = ( _B_ _[′]_ _Z_ ) _[⊤]_ Φ.
+6: **else**
+7: Update policy ∆ _[′]_ _←_ ∆, _ωt_ = (∆ _[′]_ ) _[⊤]_ Ω.
+8: **end if**
+9: **end for**
+
+
+**Mismatch** **Identification.** The first phase of AdaWM is dedicated to identifying the dominant
+mismatch between the pretrained task and the current task and two main types of mismatches are
+evaluated (line 3 in Algorithm 1): 1) Mismatch of Dynamics Model. AdaWM estimates the Total
+Variation (TV) distance between dynamics model by measuring state-action visitation distribution
+Janner et al. (2019). This metric helps quantify the model’s inability to predict the current task’s
+state accurately, revealing weaknesses in the pretrained model’s understanding of the new task; and
+2) Mismatch of Policy. AdaWM calculates the state visitation distribution shift using TV distance
+between the state visitation distributions from pretraining and the current task.
+
+
+**Alignment-driven** **Finetuning.** Once the dominant mismatch is identified, AdaWM selectively
+finetunes either the dynamics model or the policy based on which component contributes more
+to the performance gap. In particular, AdaWM uses the following finetuning method to further
+reduce computational overhead and ensures efficiency (line 4-8 in Algorithm 1). 1) Finetuning the
+Dynamics Model. AdaWM leverages a LoRA-based Hu et al. (2021) low-rank adaptation strategy
+(as known as NoLa Koohpayegani et al. (2024)) to efficiently update the dynamics model. The
+model parameters are decomposed into two lower-dimensional vectors: the latent representation
+base vector _Z_ and vector Φ. During finetuning, only the weight _B_ of the base vector is updated, i.e.,
+_B_ _[′]_ _←_ _B, ϕ_ _[′]_ = ( _B_ _[′]_ _Z_ ) _[⊤]_ Φ _._ 2) Finetuning Planning Policy. AdaWM decomposes the policy network
+_ω_ into a convex combination of sub-units Ω= [�] _i_ _[D]_ =1 _[δ][i][ω][i]_ [. During finetuning, only the weight vector]
+∆= [ _δ_ 1 _, · · ·_ _, δD_ ] of these sub-units are updated, i.e., ∆ _[′]_ _←_ ∆.
+
+
+3 EXPERIMENTAL RESULTS
+
+
+In this section, we evaluate the effectiveness of AdaWM by addressing the following two questions:
+1) Can AdaWM help to effectively mitigate the performance drop through finetuning in various
+CARLA tasks? 2) How does the parameter _C_ in AdaWM impact the finetuning performance.
+
+
+**Experiments** **Environment.** We conduct our experiments in CARLA, an open-source simulator
+with high-fidelity 3D environment Dosovitskiy et al. (2017). At each time step _t_, agent receives
+bird-eye-view (BEV) as observation, which unifies the multi-modal information Liu et al. (2023); Li
+et al. (2023). Furthermore, by following the planned waypoints, agents navigate the environment by
+executing action _at_, such as acceleration or brake, and receive the reward _rt_ from the environment.
+We define the reward as the weight sum of five attributes: safety, comfort, driving time, velocity and
+distance to the waypoints. The details of the CARLA environment and reward design are relegated
+to Appendix C.
+
+
+**Baseline** **Algorithms.** In our study, we consider three state-of-the-art autonomous driving algorithms as baseline and evaluate their performance when deployed in the new task. Notably, we
+choose supervised learning based method VAD Jiang et al. (2023) and UniAD Hu et al. (2023) and
+use the provided checkpoints trained on Bench2Drive Jia et al. (2024) dataset for closed-loop evaluation in CARLA. Meanwhile, we also compare AdaWM with the state-of-the-art DreamerV3 based
+learning algorithms adopted by Think2drive Li et al. (2024).
+
+
+7
+
+
+Pre-RTM03 ROM03 RTD12 LTM03 LTD03
+Algorithm TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_
+UniAD 1.25 0.48 0.92 0.13 0.07 0.05 0.05 0.04 0.03 0.04
+VAD 0.96 0.55 0.95 0.15 0.15 0.12 0.05 0.10 0.09 0.10
+DreamerV3 1.16 0.68 0.95 0.40 0.42 0.32 0.25 0.28 0.15 0.35
+**AdaWM** 1.16 0.68 **2.05** **0.82** **1.25** **0.66** **1.32** **0.72** **1.92** **0.70**
+
+
+Table 2: The impact of finetuning in CARLA tasks. (RO/RT/LT: Roundabout / Right Turn / Left
+Turn, M/D: Moderate / Dense traffic, 03 and 12 indicate different Towns.)
+
+
+**Pretrain-Finetune.** In our experiments, we use the tasks from CARLA leaderboard v2 and
+Bench2Drive Jia et al. (2024) for pretraining. The pretraining is conducted for 12 hour training
+on a single V100 GPU. After obtaining the pretrained model and policy, we conduct finetuning
+phase for one hour on a single V100 GPU. It is important to note that the three baseline algorithms
+were originally designed for offline learning, where they were trained on a fixed offline dataset and
+expected to generalize well to new tasks. In our comparison, we adhere to the original implementation of these baseline algorithms and evaluate their performance using the provided offline-trained
+checkpoints, as described in their respective papers. While finetuning is not applied to the baseline
+algorithms due to their offline nature, this allows us to maintain consistency with their intended
+design and ensure a valid comparison of their performance.
+
+
+3.1 PERFORMANCE COMPARISONS
+
+
+In this section, we compare the learning performance among our proposed AdaWM and the baseline
+algorithms in terms of the time-to-collision (TTC) and success rate (SR,, also known as completion
+rate), i.e., the percentage of trails that the agent is able to achieve the goal without any collisions.
+
+
+**Evaluation Tasks.** In our experiments, we evaluate the proposed AdaWM and the baseline methods
+on a series of _increasingly_ _difficult_ autonomous driving tasks. These tasks are designed to assess
+each model’s ability to generalize to the new task and traffic condition. The first task closely mirrors the pretraining scenario, while subsequent tasks introduce more complexity and challenge. In
+particular, during pretraining, AdaWM is trained on Pre-RTM03 task, which involves a Right Turn
+in Moderate traffic in Town 03. Following the pretraining, we evaluate the learning performance in
+four tasks, respectively: 1) Task ROM03: This task is a ROundabout in Moderate traffic in Town
+03. While it takes place in the same town as the pretraining task, the introduction of a roundabout
+adds complexity to the driving scenario; 2) Task RTD12: This task features a Right Turn in Dense
+traffic in Town 12. The increased traffic density and different town environment make this task more
+challenging than the pretraining task; 3) Task LTM03: This task involves a Left Turn in Moderate
+traffic in Town 03. Although it takes place in the same town and traffic conditions as the pretraining
+task, the switch to a left turn introduces a new challenge; and 4) Task LTD03: The most challenging
+task as it involves a Left Turn in Dense traffic in Town 03. The combination of heavy traffic and a
+left turn in a familiar town environment makes this task the hardest in the evaluation set. We summarize the evaluation results in Table 2 and Table 3. We also include the learning curve in Figure 3.
+Meanwhile, we also include another five challenging scenarios for verify the capability of AdaWM
+in Appendix G.
+
+
+3.1.1 EVALUATION RESULTS
+
+
+**The Impact of Finetuning in Autonomous Driving.** Following previous works on the effectiveness
+of fine-tuning in robotic learning Julian et al. (2021); Feng et al. (2023), we first validate this finding
+in the autonomous driving domain. As shown in Table 2, AdaWM consistently outperforms its
+pretrained only counterparts and two supervised learning based methods, i.e., VAD and UniAD,
+across various tasks. Starting with Task ROM03, which closely resembles the pretraining scenario
+Pre-RTM03 (right turn, moderate traffic in Town 03), our method achieved a TTC of 2.05 and an SR
+of 0.82. This far exceeds the performance of the baseline methods, where DreamerV3, VAD, and
+UniAD achieved TTC values of 0.95, 0.95, and 0.92, respectively, and much lower success rates,
+with the highest being 0.40 by DreamerV3. This significant difference highlights AdaWM’s ability
+to adapt more effectively even in familiar environments. In the most challenging task, LTD03 (left
+turn with dense traffic in Town 03), AdaWM continues to excel, achieving a TTC of 1.92 and an SR
+
+
+8
+
+
+Steps 1e5
+
+
+(a) ROM03.
+
+
+Steps 1e5
+
+
+(b) RTD12.
+
+
+Steps 1e5
+
+
+(c) LTM03.
+
+
+Steps 1e5
+
+
+(d) LTD03.
+
+
+Figure 3: Learning curves of different finetuning strategies in four evaluation tasks.
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+(a) Model-only finetuning.
+
+
+(b) Policy-only finetuning.
+
+
+|Col1|Col2|
+|---|---|
+|Dynamics Model<br>Policy|Dynamics Model<br>Policy|
+||1.025<br>1.050<br>1.0<br>Steps<br>1e5<br>|
+
+
+Figure 4: The mismatches of the dynamics model and policy during the finetuning.
+
+
+of 0.70. In contrast, DreamerV3, the best-performing baseline, reached only 0.15 in TTC and 0.35
+in SR, while both VAD and UniAD struggled with TTC values below 0.1 and SRs as low as 0.04.
+Similar trends are observed in Tasks RTD12 (right turn, dense traffic in Town 12) and LTM03 (left
+turn, moderate traffic in Town 03), where AdaWM consistently outperforms the baseline methods,
+achieving both higher TTC and SR scores. These results affirm that AdaWM’s adaptive finetuning
+approach significantly improves performance across various challenging tasks, ensuring both safer
+and more reliable decision-making.
+
+
+**Effectiveness** **of** **Finetuning** **Strategy.** Building upon the established benefits of finetuning, we
+next demonstrate the superiority of our alignment-driven finetuning strategy compared to standard
+finetuning methods in Table 3. While conventional approaches like model-only, policy-only and
+alternate finetuning show improvements over pretraining, AdaWM’s alignment-driven strategy consistently achieves better performance. For instance, in Task ROM03 (roundabout, moderate traffic
+in Town03), AdaWM achieved a TTC of 2.05 and an SR of 0.82, surpassing the model-only (TTC
+0.95, SR 0.60) and policy-only (TTC 0.46, SR 0.72) approaches. These results demonstrate that
+AdaWM’s finetuning strategy, which adaptively adjusts the model or policy based on the results
+from mismatch identification, provides the most robust performance in complex driving scenarios.
+
+
+3.2 ABLATION STUDIES
+
+
+**Determine the Dominating Mismatch during Finetuning.** We compare the changes of two mismatches, mismatch of dynamics model and mismatch of policy, for different finetuning strategies in
+Figure 4. It can be seen from Figure 4a that model-only finetuning often leads to a deterioration in
+policy performance, as indicated by a significant increase in TV distance. This suggests that while
+the model adapts to new task, the policy struggles to keep pace, resulting in suboptimal decisionmaking. Conversely, as shown in Figure 4b, policy-only finetuning reduces the TV distance between
+policies, but this comes at the cost of an increased mismatch of dynamics model, signaling a growing discrepancy between the learned dynamics model and the actual environment. In contrast, in
+Figure 4c, we show that our proposed alignment-driven finetuning method in AdaWM can effectively align both factors in the new task. By selectively adjusting the model or policy at each step,
+this adaptive method prevents either error from escalating dramatically, maintaining stability and
+ensuring better performance throughout the finetuning process.
+
+
+**The** **Impact** **of** **Parameter** _C_ **.** In Table 4, we study the effect of different parameter _C_ on four
+tasks (ROM03, RTD12, LTM03, LTD03) in terms of TTC and SR. Notably, when _C_ becomes too
+large, AdaWM’s performance deteriorates, as it essentially reduces to policy-only finetuning. This is
+reflected in the sharp drop in both TTC and SR for high _C_ values, such as _C_ = 100, across all tasks.
+
+
+9
+
+
+ROM03 RTD12 LTM03 LTD03
+Algorithm TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_
+No finetuning 0.95 0.40 0.42 0.32 0.25 0.28 0.15 0.35
+Policy-only 0.46 0.72 1.21 0.63 0.21 0.61 0.62 0.61
+Model-only 0.95 0.60 0.83 0.48 **1.39** 0.68 1.49 0.63
+Model+Policy 0.72 0.52 0.92 0.50 1.09 0.60 1.21 0.58
+**AdaWM** **2.05** **0.82** **1.25** **0.66** 1.32 **0.72** **1.92** **0.70**
+
+
+Table 3: Comparison on the effectiveness of different finetuning strategies.
+
+
+ROM03 RTD12 LTM03 LTD03
+_C_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_
+0.5 1.23 0.58 1.16 0.50 1.15 0.47 1.27 0.52
+2 1.82 0.70 1.20 0.57 1.28 0.68 1.73 0.63
+5 2.05 0.82 **1.25** **0.66** **1.32** **0.72** 1.92 0.70
+10 **2.15** **0.85** **1.25** 0.62 1.24 0.62 **2.01** **0.72**
+50 1.86 0.71 0.87 0.51 1.30 0.68 1.78 0.62
+100 1.17 0.45 0.62 0.46 0.92 0.43 1.05 0.32
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||Dynamics Model<br>Policy||
+||1.02<br>1.05<br>1.08<br>Steps<br>1|1.02<br>1.05<br>1.08<br>Steps<br>1|
+
+
+(a) _C_ = 2.
+
+
+|e|4: Ablation studies on C|
+|---|---|
+||4: Ablation studies on|
+|Dynamics Model<br>Policy|Dynamics Model<br>Policy|
+
+
+Steps 1e5
+
+
+(b) _C_ = 10.
+
+
+|Col1|Col2|
+|---|---|
+|Dynamics Model<br>Policy|Dynamics Model<br>Policy|
+|1.05<br>1.10<br><br>||
+
+
+(c) _C_ = 50.
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+Figure 5: The mismatches of the dynamics model and policy with different value of _C_ .
+
+
+On the other hand, very small _C_ values result in suboptimal performance due to insufficient updates
+to the dynamics model, underscoring the importance of alignment-driven finetuning for achieving
+robust learning. Meanwhile, the results demonstrate that AdaWM performs well across a wide range
+of _C_ values (between 2 and 50). As further illustrated in Figure 5, AdaWM effectively controls mismatches in both the policy and the dynamics model for _C_ = 2 _,_ 10 _,_ and 50. For instance, in Figure 5b,
+when the mismatch in the dynamics model becomes more pronounced than in the policy, AdaWM
+prioritizes fine-tuning the dynamics model, which in turn helps reduce policy sub-optimality and
+preserves overall performance. Conversely, in Figure 5a and Figure 5c, when the policy mismatch is
+more dominant, AdaWM identifies and fine-tunes the policy accordingly. These results emphasize
+AdaWM’s adaptability in managing different sources of mismatch, ensuring efficient fine-tuning
+and strong performance across a variety of tasks.
+
+
+4 CONCLUSION
+
+
+In this work, we propose AdaWM, an Adaptive World Model based planning method that mitigates performance drops in world model based reinforcement learning (RL) for autonomous driving.
+Building on our theoretical analysis, we identify two primary causes for the performance degradation: mismatch of the dynamics model and mismatch of the policy. Building upon our theoretical
+analysis, we propose AdaWM with two core components: mismatch identification and alignmentdriven finetuning. AdaWM evaluates the dominating source of performance degradation and applies
+selective low-rank updates to the dynamics model or policy, depending on the identified mismatch.
+Extensive experiments on CARLA demonstrate that AdaWM significantly improves both route success rate and time-to-collision, validating its effectiveness. This work emphasizes the importance of
+choosing an efficient and robust finetuning strategy in solving challenging real-world tasks. There
+are several promsing avenues for future research. First, exploring the generalization of AdaWM to
+other domains beyond autonomous driving could broaden its applicability. Additionally, extending
+AdaWM to multi-agent setting that accounts for the interaction among agents could further enhance
+its robustness in complex real-world environments.
+
+
+10
+
+
+ACKNOWLEDGMENT
+
+
+We acknowledge that JSZ is generously supported in part by NSF Grants CNS-2203239, ECCS2413529, CCSS-2203238, and ARO Grant W911NF-2410046. We also would like to express our
+great appreciation to all reviewers for their constructive comments and feedback to help us improve
+our work.
+
+
+ETHICS STATEMENT
+
+
+AdaWM is developed to improve finetuning in world model based reinforcement learning, specifically for autonomous driving applications. The focus is on addressing performance degradation
+due to distribution shifts, ensuring safer and more reliable decision-making in dynamic environments. While AdaWM aims to enhance the adaptability and robustness of autonomous systems,
+ethical considerations are paramount. These include ensuring that the system operates safely under
+real-world conditions, minimizing unintended biases from pretraining data, and maintaining transparency in how decisions are made during finetuning. Additionally, the societal implications of
+deploying autonomous driving technologies, such as their impact on public safety and employment,
+require ongoing attention. Our commitment is to ensure that AdaWM contributes positively and
+responsibly to the future of autonomous driving systems.
+
+
+REFERENCES
+
+
+Abien Fred Agarap. Deep learning using rectified linear units (relu). _arXiv_ _preprint_
+_arXiv:1803.08375_, 2018.
+
+
+Bowen Baker, Ilge Akkaya, Peter Zhokov, Joost Huizinga, Jie Tang, Adrien Ecoffet, Brandon
+Houghton, Raul Sampedro, and Jeff Clune. Video pretraining (vpt): Learning to act by watching
+unlabeled online videos. _Advances in Neural Information Processing Systems_, 35:24639–24654,
+2022.
+
+
+Mayank Bansal, Alex Krizhevsky, and Abhijit Ogale. Chauffeurnet: Learning to drive by imitating
+the best and synthesizing the worst. _arXiv preprint arXiv:1812.03079_, 2018.
+
+
+Mark Campbell, Magnus Egerstedt, Jonathan P How, and Richard M Murray. Autonomous driving
+in urban environments: approaches, lessons and challenges. _Philosophical_ _Transactions_ _of_ _the_
+_Royal Society A: Mathematical, Physical and Engineering Sciences_, 368(1928):4649–4672, 2010.
+
+
+Li Chen, Penghao Wu, Kashyap Chitta, Bernhard Jaeger, Andreas Geiger, and Hongyang Li. Endto-end autonomous driving: Challenges and frontiers. _arXiv preprint arXiv:2306.16927_, 2023.
+
+
+Li Chen, Penghao Wu, Kashyap Chitta, Bernhard Jaeger, Andreas Geiger, and Hongyang Li. Endto-end autonomous driving: Challenges and frontiers. _IEEE Transactions on Pattern Analysis and_
+_Machine Intelligence_, 2024.
+
+
+Alexey Dosovitskiy, German Ros, Felipe Codevilla, Antonio Lopez, and Vladlen Koltun. Carla: An
+open urban driving simulator. In _Conference on robot learning_, pp. 1–16. PMLR, 2017.
+
+
+Yunhai Feng, Nicklas Hansen, Ziyan Xiong, Chandramouli Rajagopalan, and Xiaolong Wang. Finetuning offline world models in the real world. In _Conference_ _on_ _Robot_ _Learning_, pp. 425–445.
+PMLR, 2023.
+
+
+Yanchen Guan, Haicheng Liao, Zhenning Li, Jia Hu, Runze Yuan, Yunjian Li, Guohui Zhang, and
+Chengzhong Xu. World models for autonomous driving: An initial survey. _IEEE Transactions on_
+_Intelligent Vehicles_, 2024.
+
+
+David Ha and J¨urgen Schmidhuber. World models. _arXiv preprint arXiv:1803.10122_, 2018.
+
+
+Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Villegas, David Ha, Honglak Lee, and James
+Davidson. Learning latent dynamics for planning from pixels. In _International_ _conference_ _on_
+_machine learning_, pp. 2555–2565. PMLR, 2019.
+
+
+Danijar Hafner, Timothy Lillicrap, Mohammad Norouzi, and Jimmy Ba. Mastering atari with discrete world models. _arXiv preprint arXiv:2010.02193_, 2020.
+
+
+11
+
+
+Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse domains
+through world models. _arXiv preprint arXiv:2301.04104_, 2023.
+
+
+Nicklas Hansen, Yixin Lin, Hao Su, Xiaolong Wang, Vikash Kumar, and Aravind Rajeswaran.
+Modem: Accelerating visual model-based reinforcement learning with demonstrations. _arXiv_
+_preprint arXiv:2212.05698_, 2022.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima, Xizhou Zhu, Siqi Chai, Senyao Du,
+Tianwei Lin, Wenhai Wang, et al. Planning-oriented autonomous driving. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 17853–17862, 2023.
+
+
+Julian Ibarz, Jie Tan, Chelsea Finn, Mrinal Kalakrishnan, Peter Pastor, and Sergey Levine. How to
+train your robot with deep reinforcement learning: lessons we have learned. _The_ _International_
+_Journal of Robotics Research_, 40(4-5):698–721, 2021.
+
+
+Michael Janner, Justin Fu, Marvin Zhang, and Sergey Levine. When to trust your model: Modelbased policy optimization. _Advances in neural information processing systems_, 32, 2019.
+
+
+Xiaosong Jia, Zhenjie Yang, Qifeng Li, Zhiyuan Zhang, and Junchi Yan. Bench2drive: Towards multi-ability benchmarking of closed-loop end-to-end autonomous driving. _arXiv preprint_
+_arXiv:2406.03877_, 2024.
+
+
+Bo Jiang, Shaoyu Chen, Qing Xu, Bencheng Liao, Jiajie Chen, Helong Zhou, Qian Zhang, Wenyu
+Liu, Chang Huang, and Xinggang Wang. Vad: Vectorized scene representation for efficient autonomous driving. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vi-_
+_sion_, pp. 8340–8350, 2023.
+
+
+Ryan Julian, Benjamin Swanson, Gaurav Sukhatme, Sergey Levine, Chelsea Finn, and Karol Hausman. Never stop learning: The effectiveness of fine-tuning in robotic reinforcement learning. In
+_Conference on Robot Learning_, pp. 2120–2136. PMLR, 2021.
+
+
+Nidhi Kalra and Susan M Paddock. Driving to safety: How many miles of driving would it take
+to demonstrate autonomous vehicle reliability? _Transportation_ _Research_ _Part_ _A:_ _Policy_ _and_
+_Practice_, 94:182–193, 2016.
+
+
+Diederik P Kingma. Auto-encoding variational bayes. _arXiv preprint arXiv:1312.6114_, 2013.
+
+
+B Ravi Kiran, Ibrahim Sobh, Victor Talpaert, Patrick Mannion, Ahmad A Al Sallab, Senthil Yogamani, and Patrick P´erez. Deep reinforcement learning for autonomous driving: A survey. _IEEE_
+_Transactions on Intelligent Transportation Systems_, 23(6):4909–4926, 2021.
+
+
+Soroush Abbasi Koohpayegani, KL Navaneet, Parsa Nooralinejad, Soheil Kolouri, and Hamed Pirsiavash. Nola: Compressing lora using linear combination of random basis. In _The_ _Twelfth_
+_International Conference on Learning Representations_, 2024.
+
+
+Sergey Levine and Vladlen Koltun. Guided policy search. In _International conference on machine_
+_learning_, pp. 1–9. PMLR, 2013.
+
+
+Hongyang Li, Chonghao Sima, Jifeng Dai, Wenhai Wang, Lewei Lu, Huijie Wang, Jia Zeng, Zhiqi
+Li, Jiazhi Yang, Hanming Deng, et al. Delving into the devils of bird’s-eye-view perception: A
+review, evaluation and recipe. _IEEE Transactions on Pattern Analysis and Machine Intelligence_,
+2023.
+
+
+Qifeng Li, Xiaosong Jia, Shaobo Wang, and Junchi Yan. Think2drive: Efficient reinforcement
+learning by thinking in latent world model for quasi-realistic autonomous driving (in carla-v2).
+_arXiv preprint arXiv:2402.16720_, 2024.
+
+
+Soon Hoe Lim, N Benjamin Erichson, Liam Hodgkinson, and Michael W Mahoney. Noisy recurrent
+neural networks. _Advances in Neural Information Processing Systems_, 34:5124–5137, 2021.
+
+
+12
+
+
+Jiashuo Liu, Zheyan Shen, Yue He, Xingxuan Zhang, Renzhe Xu, Han Yu, and Peng Cui. Towards
+out-of-distribution generalization: A survey. _arXiv preprint arXiv:2108.13624_, 2021.
+
+
+Zhijian Liu, Haotian Tang, Alexander Amini, Xinyu Yang, Huizi Mao, Daniela L Rus, and Song
+Han. Bevfusion: Multi-task multi-sensor fusion with unified bird’s-eye view representation. In
+_2023 IEEE international conference on robotics and automation (ICRA)_, pp. 2774–2781. IEEE,
+2023.
+
+
+Markus Maurer, J Christian Gerdes, Barbara Lenz, and Hermann Winner. _Autonomous_ _driving:_
+_technical, legal and social aspects_ . Springer Nature, 2016.
+
+
+Larry R Medsker, Lakhmi Jain, et al. Recurrent neural networks. _Design and Applications_, 5(64-67):
+2, 2001.
+
+
+Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. _Advances in neural information processing systems_, 35:
+27730–27744, 2022.
+
+
+Siyu Teng, Xuemin Hu, Peng Deng, Bai Li, Yuchen Li, Yunfeng Ai, Dongsheng Yang, Lingxi Li,
+Zhe Xuanyuan, Fenghua Zhu, et al. Motion planning for autonomous driving: The state of the art
+and future perspectives. _IEEE Transactions on Intelligent Vehicles_, 8(6):3692–3711, 2023.
+
+
+Ikechukwu Uchendu, Ted Xiao, Yao Lu, Banghua Zhu, Mengyuan Yan, Jos´ephine Simon, Matthew
+Bennice, Chuyuan Fu, Cong Ma, Jiantao Jiao, et al. Jump-start reinforcement learning. In _Inter-_
+_national Conference on Machine Learning_, pp. 34556–34583. PMLR, 2023.
+
+
+Arun Balajee Vasudevan, Neehar Peri, Jeff Schneider, and Deva Ramanan. Planning with adaptive
+world models for autonomous driving. _arXiv preprint arXiv:2406.10714_, 2024.
+
+
+Tingwu Wang, Xuchan Bao, Ignasi Clavera, Jerrick Hoang, Yeming Wen, Eric Langlois, Shunshi
+Zhang, Guodong Zhang, Pieter Abbeel, and Jimmy Ba. Benchmarking model-based reinforcement learning. _arXiv preprint arXiv:1907.02057_, 2019.
+
+
+Xiaofeng Wang, Zheng Zhu, Guan Huang, Xinze Chen, and Jiwen Lu. Drivedreamer: Towards
+real-world-driven world models for autonomous driving. _arXiv preprint arXiv:2309.09777_, 2023.
+
+
+Yuqi Wang, Jiawei He, Lue Fan, Hongxin Li, Yuntao Chen, and Zhaoxiang Zhang. Driving into
+the future: Multiview visual forecasting and planning with world model for autonomous driving.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+14749–14759, 2024.
+
+
+Benjamin Wexler, Elad Sarafian, and Sarit Kraus. Analyzing and overcoming degradation in warmstart reinforcement learning. In _2022_ _IEEE/RSJ_ _International_ _Conference_ _on_ _Intelligent_ _Robots_
+_and Systems (IROS)_, pp. 4048–4055. IEEE, 2022.
+
+
+Zhe Wu, David Rincon, Quanquan Gu, and Panagiotis D Christofides. Statistical machine learning
+in model predictive control of nonlinear processes. _Mathematics_, 9(16):1912, 2021.
+
+
+Ekim Yurtsever, Jacob Lambert, Alexander Carballo, and Kazuya Takeda. A survey of autonomous
+driving: Common practices and emerging technologies. _IEEE access_, 8:58443–58469, 2020.
+
+
+Guangxiang Zhu, Minghao Zhang, Honglak Lee, and Chongjie Zhang. Bridging imagination and
+reality for model-based deep reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 33:8993–9006, 2020.
+
+
+13
+
+
+## **Appendix**
+
+
+A PROOF OF UPPER BOUND OF PREDICTION ERROR
+
+
+We first present the results on the upper bound of the prediction error in Lemma 1 below. For brevity,
+
+
+2 log(2) _k_ )
+~~_√_~~
+_n_
+
+
+( _BW_ ) _[k]_ _−_ 1
+we denote _M_ = _BV BU_
+
+
+~~�~~
+log( _δ_ [2]
+
+
+we denote _M_ = _BV BU_ ( _BBWW_ ) _−−_ 1 1 [,][ Ψ] _[k]_ [(] _[δ, n]_ [) =] _[ l][n]_ [ +][3] log2( _nδ_ [)] + _O_ - _d_ _MBa_ (1+ ~~_√_~~ _n_ 2 log(2) _k_ ) �, where _d_ is the
+
+dimension of the latent state representation and _N_ 1 = _LhLzLaUV_, _N_ 2 = _LhLzV W_ + _LzV A_ .
+Then we obtain the following result on the upper bound of the prediction error.
+
+
+**Lemma 1** _Under Assumptions 1 and 2, we have that with probability at least_ 1 _−_ _δ, the prediction_
+_error ϵk, for k_ _≥_ 1 _, is upper bounded by_
+
+
+_W_
+
+_BW −_ 1 [,][ Ψ] _[k]_ [(] _[δ, n]_ [) =] _[ l][n]_ [ +][3]
+
+
+2( _nδ_ [2] [)] + _O_ - _d_ _MBa_ (1+ ~~_√_~~ ~~_[√]_~~
+
+
+_K_
+
+
+- _N_ 1 _[j]_ ��Ψ _h_ ( _δ, n_ ) + 1 _/δ_ ( _N_ 2 _Ex_ + 2 _hBx_ ( _EP_ ˆ _[−E][P]_ [ ))] - := _Eδ,K_
+
+_j_ =1
+
+
+_ϵK_ _≤_
+
+
+_Proof._ We decompose the prediction error into two terms,
+_ϵk_ = ( _xk −_ _x_ ¯ _k_ ) + (¯ _xk −_ _x_ ˆ _k_ ) (5)
+where _x_ ¯ _k_ is the underlying true state representation.
+
+
+    - ( _xk −_ _x_ ¯ _k_ ): distribution shift between the pretraining task and the new task
+
+    - (¯ _xk −_ _x_ ˆ _k_ ): the generalization error of the pre-trained RNN model on the pre-training task.
+
+
+Next, we derive the upper bound for each term respectively.
+
+
+**Upper bound for** ( _xk −_ _x_ ¯ _k_ ) **.** Let the expected total-variation distance between the pretraining task
+to be _P_ [ˆ] ( _x_ _[′]_ _|x, a_ ) and the new task to be _P_ ( _x_ _[′]_ _|x, a_ ) be upper bounded by _EP_, i.e., **E** _π_ [ _D_ TV( _P_ _||P_ [¯] )] _≤_
+_EP_ .
+
+
+Following the same line as in Lemma B.2 Janner et al. (2019), we assume
+max _Ex∼P t_ ( _z_ ) _DKL_        - _P_ ( _x_ _[′]_ _| x_ ) _∥P_ [¯] ( _x_ _[′]_ _| x_ )� _≤EP,_
+_t_
+
+and the initial distributions are the same.
+
+
+Then we have the marginal state visitation probability is upper bounded by
+1              - _|ρ_ _[t]_ [+] _[k]_ ( _x_ ) _−_ _ρ_ ¯ _[t]_ [+] _[k]_ ( _x_ ) _| ≤_ _kEP ._
+2
+
+
+_|ρ_ _[t]_ [+] _[k]_ ( _x_ ) _−_ _ρ_ ¯ _[t]_ [+] _[k]_ ( _x_ ) _| ≤_ _kEP ._
+
+_x_
+
+
+Meanwhile, for simplicity, we define the following notations to characterize the prediction error at
+_k_ time step.
+
+**E** [ _x_ _[t]_ [+] _[k]_ ] = _ρ_ _[k]_ _≥_ 0 _,_
+
+**E** [¯ _x_ _[t]_ [+] _[k]_ ] =¯ _ρ_ _[k]_ _≥_ 0 _,_
+
+_ϵ_ ¯ _k_ := _x_ _[k]_ _−_ _x_ ¯ _[k]_ _,_
+
+where _ρ_ _[k]_ = **E** _x∼ρk_ ( _x_ )[ _x_ ] = [�] _x_ _[xρ][k]_ [(] _[x]_ [)][ is the mean value of the marginal visitation distribution at]
+
+time step _k_ (starting from time step 0).
+
+
+Then we obtain the upper bound for the non-stationary part of the prediction error as follows,
+
+**E** [¯ _ϵk_ ] := _ρ_ _[k]_ _−_ _ρ_ ¯ _[k]_ _≤_ 2 _kBxEP_
+
+
+**Upper bound for** (¯ _xk −_ _x_ ˆ _k_ ) **.** We consider the setting where RNN model is obtained by training on
+_n_ i.i.d. samples of state-action-state sequence _{xt, at, xt_ +1 _}_ and the empirical loss is _ln_ with loss
+function _f_ . Denote _ϵ_ [RNN] _k_ := _x_ ¯ _k_ _−_ _x_ ˆ _k_ . The RNN is trained to map the one step input, i.e., _xt, at_, to
+the output _xt_ +1. Particularly, the world model leverage the RNN to make prediction over the future
+steps. Following the standard probably approximately correct (PAC) learning analysis framework,
+we first recall the following results Wu et al. (2021) on the RNN generalization error. For brevity,
+
+
+2 log(2) _k_ )
+~~_√_~~
+_n_
+
+
+( _BW_ ) _[k]_ _−_ 1
+we denote _M_ = _BV BU_
+
+
+log( _δ_ [2]
+
+
+we denote _M_ = _BV BU_ ( _BBWW_ ) _−−_ 1 1 [,][ Ψ] _[k]_ [(] _[δ, n]_ [) =] _[ l][s]_ [ +][3] log2( _nδ_ [)] + _O_ - _d_ _MBa_ (1+ ~~_√_~~ _n_ 2 log(2) _k_ ) �, where _d_ is the
+
+dimension of the latent state representation
+
+
+_W_
+
+_BW −_ 1 [,][ Ψ] _[k]_ [(] _[δ, n]_ [) =] _[ l][s]_ [ +][3]
+
+
+2( _nδ_ [2] [)] + _O_ - _d_ _MBa_ (1+ ~~_√_~~ ~~_[√]_~~
+
+
+14
+
+
+**Lemma 2 (Generalization Error of RNN)** _Assume_ _the_ _weight_ _matrices_ _satisfy_ _Assumption_ _1_ _and_
+_the input satisfies Assumption 2._ _Assume the training and testing datasets are drawn from the same_
+_distribution._ _Then with probability at least_ 1 _−_ _σ, the generalization error in terms of the expected_
+_loss function has the upper bound as follows,_
+
+
+- _Lrdy_ _dMBa_ (1 + ~~_√_~~ �2 log(2) _k_ )
+
+_n_
+
+
+**E** [ _f_ ( _xi,t_ + _k −_ _x_ ¯ _i,t_ + _k_ ] _≤_ _ln_ + 3
+
+
+~~�~~
+log  - 2 _δ_  - + _O_
+
+2 _n_
+
+
+In particular, the results in Lemma 2 considers the least square loss function and the generalization
+bound only applies to the case when the data distribution remains the same during the testing. In
+our case, since the testing and training sets are collected from the same simulation platform thus
+following the same dynamics. For simplicity, in our problem setting, we assume the underlying
+distribution of input _{xt, at}_ is assumed to be uniform. Subsequently, we establish the upper bound
+for the generalization error. Let _ϵt_ + _k_ = _xi,t_ + _k −_ _x_ ¯ _i,t_ + _k_, then we have, with probability at least 1 _−_ _δ_,
+
+
+_ϵ_ [RNN] _k_ _≤_ �Ψ _k_ ( _δ, n_ ) (6)
+
+
+**Error Accumulation and Propagation.** We first recall the decomposition of the prediction error as
+follows.
+
+_ϵk_ = _ϵ_ [RNN] _k_ + ¯ _ϵk_ (7)
+
+
+Then by using the Lipschitz properties of the activation functions and Assumption 2, we obtain the
+upper bound for the error,
+
+
+_ϵk_ = _ϵ_ [RNN] _k_ + ¯ _ϵk_
+_≤ϵ_ [RNN] _t_ + _k_ [+] _[ L][h][L][z][V]_ [ (] _[Wϵ][x,t]_ [+] _[k]_ [+] _[ UL][a][ϵ][x,t]_ [+] _[k][−]_ [1][)]
+
+= _ϵ_ [RNN] _t_ + _k_ [+] _[ L][h][L][z][V Wϵ][x,t]_ [+] _[k]_ [+] _[ L][h][L][z][V UL][a][ϵ][x,t]_ [+] _[k][−]_ [1]
+= _ϵ_ [RNN] _t_ + _k_ [+ (] _[L][h][L][z][V W]_ [+] _[ L][z][V A]_ [)] _[ϵ][i,x,t]_ [+] _[k]_ [+] _[ L][h][L][z][V UL][a][ϵ][i,x,t]_ [+] _[k][−]_ [1]
+:= _Mt_ + _k_ + _Nϵx,t_ + _k−_ 1 (8)
+
+
+where
+
+_Mt_ + _k_ := _ϵ_ [RNN] _t_ + _k_ [+ (] _[L][h][L][z][V W]_ [+] _[ L][z][V A]_ [)] _[ϵ][x,t]_ [+] _[k]_
+_N_ := _LhLzV ULa._
+
+
+Notice that in the stationary part of the prediction error, we have _|ϵx,t_ + _k|_ = _|ϵt_ + _k|_ . Furthermore,
+by abuse of notation, we apply Equation (8) recursively and obtain the relationship between the
+prediction error at _k_ rollout horizon and the gap from the input, i.e.,
+
+
+_ϵt_ + _k_ _≤Mt_ + _k_ + _Nϵt_ + _k−_ 1
+_≤Mt_ + _k_ + _NMt_ + _k−_ 2
+_≤· · ·_
+
+
+_≤_
+
+
+_k_
+
+- _N_ _[h]_ _Mt_ + _k−h_ + _N_ _[k]_ _ϵt_
+
+
+_h_ =0
+
+
+Taking expectation on both sides gives us,
+
+
+**E** [ _ϵt_ + _k_ ] _≤_
+
+
+_≤_
+
+
+where _N_ 1 = _LhLzV W_ + _LzV A_ .
+
+
+_k_
+
+- _N_ _[h]_ **E** [ _Mt_ + _k−h_ ] + _N_ _[k]_ **E** [ _ϵt_ ]
+
+
+_h_ =0
+
+
+_k_
+
+- _N_ _[h]_ (2 _hBxEP_ + _N_ 1 _Ex_ + **E** [ _ϵ_ [RNN] _t_ + _h_ [])] _[,]_
+
+
+_h_ =0
+
+
+15
+
+
+**The** **Upper** **Bound** **of** **the** **Prediction** **Error.** Then by invoking Markov inequality, we have the
+upper bound for _ϵt_ with probability at least 1 _−_ _δ_ as follows,
+
+
+_ϵt_ + _k_ _≤_ - _k_ _N_ _[h]_ - 1 [+] _[ N]_ [1] _[E][x]_ [) +] �Ψ _t_ ( _n, δ_ )� := _Eδ,t_
+
+_δ_ [(2] _[hB][x][E][P]_
+_h_ =1
+
+
+B PROOF OF THEOREM 1
+
+
+Next, we quantify the performance gap when using the pre-trained policy and model in the current
+task.
+
+
+_−_ **E** _z∼P,a_ ˆ _∼πω,_ `WM` _ϕ_
+
+
+_η −_ _η_ ˆ = **E** _z∼P,a∼πω,_ `WM` _ϕ_
+
+
+   
+
+
+- _K_
+
+
+- _γ_ _[i]_ _r_ ( _zi, ai_ ) + _Q_ ( _zK, aK_ )
+
+
+_i_ =1
+
+
+- _K_
+
+
+- _γ_ _[i]_ _r_ ( _zi, ai_ ) + _Q_ ( _zK, aK_ )
+
+
+_i_ =1
+
+
+_−_ **E** _z∼P,a_ ˆ _∼πω,_ `WM` _ϕ_
+
+
+��
+
+
+- _K_
+
+
+- _γ_ _[i]_ _r_ ( _zi, ai_ )
+
+
+_i_ =1
+
+
+=
+
+
+**E** _z∼P,a∼πω,_ `WM` _ϕ_
+
+
+- _K_
+
+
+- _γ_ _[i]_ _r_ ( _zi, ai_ )
+
+
+_i_ =1
+
+
+                         + _γ_ _[K]_ [ �] **E** _z∼P,a∼πω,_ `WM` _ϕ_ [ _Q_ ( _zK, aK_ )] _−_ **E** _z∼P,a_ ˆ _∼πω,_ `WM` _ϕ_ [[] _[Q]_ [(] _[z][K][, a][K]_ [)]] (9)
+
+
+Note the first term on the RHS is associated with the modeling error and the sub-optimality of the
+policy, while the second term is only relevant to modeling error. In what follows, we recap the
+formulation for world-model based RL.
+
+Then, by follow the same line as in Janner et al. (2019), let Γ := [1] _[−]_ 1 _[γ]_ _−_ _[L]_ _γ_ _[−]_ [1] _Lr_ (1+ _Lπ_ )+ _γ_ _[L]_ _LQ_ (1+ _Lπ_ ),
+
+_E_ max = max _t Eδ,t_ and _LQ_ = _Lr/_ (1 _−_ _γ_ ). Meanwhile, we denote the policy divergence to be
+_Eπ_ := max _z D_ TV( _π|π_ ˆ). Let the expected total-variation distance between the true state transition
+probability _P_ [ˆ] ( _z_ _[′]_ _|z, a_ ) and the predicted (current tasks) one _P_ ( _z_ _[′]_ _|z, a_ ) be upper bounded by _EP_ ˆ [, i.e.,]
+**E** _π_ [ _D_ TV( _P_ [˜] _||P_ [ˆ] )] _≤EP_ ˆ [.] [Then we obtain the first term is upper bounded by]
+
+
+**Lemma 3** _Given Assumption 3 holds, the first term in Equation_ (9) _is upper bounded by,_
+
+
+ - 2 _γ_ ( _EP_ ˆ [+ 2] _[E][π]_ [)]
+Γ + [4] _[r]_ [max] _[E][π]_
+1 _−_ _γ_ _[K]_ 1 _−_ _γ_
+
+
+(10)
+
+
+By using the definition of Q-function and the upper bound of the prediction error in Lemma 1, we
+obtain that the second term in Eqn. 9 is upper bounded by
+
+_[E]_ [max]
+_γ_ _[K]_
+
+1 _−_ _γ_
+
+
+By combining the upper bounds of the two terms, we obtain the upper bound in Theorem 1.
+
+
+B.1 DERIVATION OF _C_ 1 AND _C_ 2
+
+
+Next, we derive the parameter _C_ 1 and _C_ 2 in AdaWM (ref. Section 2.1).
+
+
+The RHS of the inequality in Theorem 1 can be divided into two parts, i.e.,
+
+      - _[E]_ [max] _P_ [ˆ]      -      - 4 _r_ max _Eπ_ 4 _γEπ_
+_γ_ _[K]_ [+ Γ] [2] _[γ][E]_ + Γ +
+
+
+_[E]_ [max] _P_ [ˆ]
+
+[2] _[γ][E]_
+1 _−_ _γ_ _[K]_ [+ Γ] 1 _−_ _γ_ _[K]_
+
+
+- - 4 _r_ max _Eπ_ 4 _γEπ_
++ Γ +
+1 _−_ _γ_ 1 _−_ _γ_ _[K]_
+
+
+_,_
+
+
+where the first part is relevant to the dynamics model mismatch and the second part is related to the
+policy mismatch. Evidently, when the first term is larger than the second one, we have the dynamics
+mismatch to be more dominant, i.e.,
+
+
+_[E]_ [max] _P_ [ˆ]
+_γ_ _[K]_ [2] _[γ][E]_
+
+1 _−_ _γ_ _[K]_ [+ Γ] 1 _−_ _γ_ _[K]_
+
+
+- - 4 _r_ max _Eπ_ 4 _γEπ_
+
+_>_ Γ +
+1 _−_ _γ_ 1 _−_ _γ_ _[K]_
+
+
+_→EP_ ˆ _[≥]_ �2 _r_ max(1 _−_ _γ_ _[k]_ ) _/_ ( _γ −_ _γ_ [2] ) + 2� _Eπ −_ _[γ][K][−]_ [1] _[E]_ [max] := _C_ 1 _Eπ −_ _C_ 2 _,_
+
+2Γ
+
+
+16
+
+
+where _C_ 1 = �2 _r_ max(1 _−_ _γ_ _[k]_ ) _/_ ( _γ −_ _γ_ [2] ) + 2� and _C_ 2 = _[γ][K][−]_ 2Γ [1] _[E]_ [max] .
+
+Similarly, we obtain that when _Eπ_ _≥_ _C_ 11 _[E]_ _P_ [ ˆ] [+] _C_ _[C]_ 1 [2] [,] [the] [policy] [mismatch] [is] [more] [dominant.] [To]
+
+summarize, we have,
+
+
+_•_ Update dynamics model if _EP_ ˆ _[≥]_ _[C]_ [1] _[E][π]_ _[−]_ _[C]_ [2][, where] _[ C]_ [1] [=] �2 _r_ max(1 _−_ _γ_ _[k]_ ) _/_ ( _γ −_ _γ_ [2] ) + 2� and
+
+
+_C_ 2 = _[γ][K][−]_ [1] _[E]_ [max]
+
+
+_C_ 2 = 2Γ [max] which implies that the errors from the dynamics model are the dominating cause
+
+of performance degradation, and improving the model’s accuracy will most effectively reduce
+the performance gap.
+
+
+_•_ Update planning policy if _Eπ_ _≥_ _C_ 11 _[E]_ _P_ [ ˆ] [+] _C_ _[C]_ 1 [2] [which indicates that the performance degradation]
+
+is more sensitive to suboptimal actions chosen by the policy, and refining the policy will be the
+most impactful step toward performance improvement.
+
+
+C EXPERIMENTS DETAILS
+
+
+**CARLA Environment** The vehicle’s state consists of two primary sources of information: environmental observations and the behavior of surrounding vehicles. Environmental observations are
+captured through sensors such as cameras, radar, and LiDAR, providing information about objects
+in the environment and their geographical context. Following standard approaches Bansal et al.
+(2018); Chen et al. (2023), we represent the vehicle’s state using a bird’s-eye view (BEV) semantic
+segmentation image of size 128 _×_ 128.
+
+
+In our experiments, we use a discrete action space. At each time step, the agent selects both acceleration and steering angle. The available choices for acceleration are [ _−_ 2 _,_ 0 _,_ 2], and for steering angle
+are [ _−_ 0 _._ 6 _, −_ 0 _._ 2 _,_ 0 _,_ 0 _._ 2 _,_ 0 _._ 6].
+
+
+We design the reward as the weighted sum of six different factors, i.e.,
+
+
+_Rt_ = _w_ 1 _R_ safe + _w_ 2 _R_ comfort + _w_ 3 _R_ time + _w_ 4 _R_ velocity + _w_ 5 _R_ ori + _w_ 6 _R_ target _,_
+
+
+In particular,
+
+
+    - _R_ safe is the time to collision to ensure safety
+
+    - _R_ comfort is relevant to jerk behavior and acceleration
+
+    - _R_ time is to punish the time spent before arriving at the destination
+
+    - _R_ velocity is to penalize speeding when the velocity is beyond 5m/s and the leading vehicle is
+too close
+
+    - _R_ ori is to penalize the large orientation of the vehicle
+
+    - _R_ target is to encourage the vehicle to follow the planned waypoints
+
+
+**CARLA** **Benchmark** **tasks.** We use the same configuration for scriveners and routes as defined
+in the Bench2Drive dataset Jia et al. (2024). In particular, we consider the following tasks:
+
+
+    - SignalizedJunctionRightTurn ~~T~~ own03 ~~R~~ oute26775 ~~W~~ eather2 (Pre-RTM03)
+
+    - NoScenario ~~T~~ own03 ~~R~~ oute27530 ~~W~~ eather25 (ROM03)
+
+    - NonSignalizedJunctionRightTurn ~~T~~ own12 ~~R~~ oute7979 ~~W~~ eather0 (RTD12)
+
+    - SignalizedJunctionLeftTurn ~~T~~ own03 ~~R~~ oute26700 ~~W~~ eather22 (LTM03)
+
+    - NonSignalizedJunctionLeftTurn ~~T~~ own03 ~~R~~ oute27000 ~~W~~ eather23 (LTD03)
+
+
+The evaluation metric is evaluated when the agent is navigating along the pre-determined waypoints.
+Below are the list of the tasks configuration considered in our experiments.
+
+
+Pre-RTM03
+
+Pre −RTM03: &SignalizedJunctionRightTurn Town03 Route26775 Weather2
+env :
+world :
+
+
+17
+
+
+town : Town03
+Weather : 2
+Route : 26775
+name : Pre −RTM03
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 6 . 0, −101.0, 0.1, −90.0]
+ego path : [ [ 6 . 0, −101.0, 0 . 1 ], [ −126, 214, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : True
+
+
+ROM03
+
+ROM03: &NoScenario Town03 Route27530 Weather25
+env :
+world :
+town : Town03
+Weather : 25
+Route : 26530
+name : ROM03
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 1 2 . 0, 21.0, 0.1, −90.0]
+ego path : [ [ 1 2 . 0, 21.0, 0 . 1 ], [226, 132, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : True
+
+
+RTD12
+
+RTD12 : &NonSignalizedJunctionRightTurn Town12 Route7979 Weather0
+env :
+world :
+town : Town12
+Weather : 0
+Route : 7979
+name : RTD12
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 2 7 . 0, 101.0, 0.1, −90.0]
+ego path : [ [ 2 7 . 0, 101.0, 0 . 1 ], [ −89, 231, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+LTM03
+
+LTM03: &SignalizedJunctionLeftTurn Town03 Route26700 Weather22
+env :
+world :
+town : Town03
+Weather : 22
+Route : 26700
+name : LTM03
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 1 1 . 0, −21.0, 0.1, −90.0]
+ego path : [ [ 1 1 . 0, −21.0, 0 . 1 ], [ −71, 127, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : True
+
+
+LTD03
+
+
+18
+
+
+Dimension L
+
+
+GRU recurrent units 2048
+CNN multiplier 64
+Dense hidden units 768
+MLP layers 4
+
+
+Parameters 77M
+
+
+Table 5: Model Sizes Hafner et al. (2023).
+
+
+LTD03 : &NonSignalizedJunctionLeftTurn Town03 Route27000 Weather23
+env :
+world :
+town : Town03
+Weather : 23
+Route : 27000
+name : LTD03
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 9 . 0, −47.0, 0.1, −90.0]
+ego path : [ [ 9 . 0, −47.0, 0 . 1 ], [83, 229, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+D TERMINOLOGY
+
+
+In this work, we distinguish world model and dynamics model. The key difference lies in their
+scope and functionality. A _world_ _model_ Ha & Schmidhuber (2018) is a comprehensive internal
+representation that an agent builds to understand its environment, including not just the state transitions (dynamics) but also observations, rewards, and potentially agent intentions. It enables agents
+to simulate future trajectories, plan, and predict outcomes before acting. In contrast, a dynamics
+model is a more specific component focused solely on predicting how the environment’s state will
+evolve based on the current state and the agent’s actions. While the _dynamics model_ predicts state
+transitions, the world model goes further by incorporating how the agent perceives the environment
+(observation model) and the rewards it expects to receive (reward model).
+
+
+E WORLD MODEL TRAINING
+
+
+We use Dreamer v3 Hafner et al. (2023) structure, i.e., encoder-decoder, RSSM Hafner et al. (2019),
+to train the world model and adopt the Large model for all experiments with dimension summarized
+in Table 5. We first restate the hyper-parameters in Table 6.
+
+
+**Learning** **BEV** **Representation.** The BEV representation can be learnt by using algorithms such
+as BevFusion Liu et al. (2023), which is capable of unifying the cameras, LiDAR, Radar data into
+a BEV representation space. In our experiment, we leverage the privileged information provided by
+CARLA Dosovitskiy et al. (2017), such as location information and map topology to construct the
+BEVs.
+
+
+19
+
+
+**Name** **Symbol** **Value**
+
+
+**General**
+
+
+Replay capacity (FIFO)         - 10 [6]
+Batch size _B_ 16
+Batch length _T_ 64
+Activation            - LayerNorm + SiLU
+
+
+**World Model**
+
+
+Number of latents          - 32
+Classes per latent           - 32
+Reconstruction loss scale _β_ pred 1.0
+Dynamics loss scale _β_ dyn 0.5
+Representation loss scale _β_ rep 0.1
+Learning rate            - 10 _[−]_ [4]
+
+Adam epsilon _ϵ_ 10 _[−]_ [8]
+Gradient clipping           - 1000
+
+
+**Actor Critic**
+
+
+Imagination horizon _H_ 15
+Discount horizon 1 _/_ (1 _−_ _γ_ ) 333
+Return lambda _λ_ 0.95
+Critic EMA decay          - 0.98
+Critic EMA regularizer         - 1
+Return normalization scale _S_ Per( _R,_ 95) _−_ Per( _R,_ 5)
+Return normalization limit _L_ 1
+Return normalization decay        - 0.99
+Actor entropy scale _η_ **3** _**·**_ **10** _**[−]**_ **[4]**
+
+Learning rate            - 3 _·_ 10 _[−]_ [5]
+
+Adam epsilon _ϵ_ 10 _[−]_ [5]
+Gradient clipping           - 100
+
+
+Table 6: Dreamer v3 hyper parameters Hafner et al. (2023).
+
+
+**World** **Model** **Training.** The world model is implemented as a Recurrent State-Space Model
+(RSSM) Hafner et al. (2019; 2023) to learn the environment dynamics, encoder, reward, continuity
+and encoder-decoder. We list the equations from the RSSM mode as follows:
+
+
+Sequence model: _ht_ = _fϕ_ ( _ht−_ 1 _, zt−_ 1 _, at−_ 1)
+Encoder: _zt_ _∼_ _qϕ_ ( _zt|ht, xt_ )
+Dynamics predictor: _z_ ˆ _t_ _∼_ _pϕ_ (ˆ _zt|ht_ )
+Reward predictor: _r_ ˆ _t_ _∼_ _pϕ_ (ˆ _rt|ht, zt_ )
+Continue predictor: _c_ ˆ _t_ _∼_ _pϕ_ (ˆ _ct|ht, zt_ )
+Decoder: _x_ ˆ _t_ _∼_ _pϕ_ (ˆ _xt|ht, zt_ )
+
+
+RSSM
+
+
+
+
+
+
+
+
+
+(11)
+
+
+We follow the same line as in Dreamer v3 Hafner et al. (2023) to train the parameter _ϕ_ . We include
+the following verbatim copy of the loss function considered in their work.
+
+
+Given a sequence batch of inputs _x_ 1: _T_, actions _a_ 1: _T_, rewards _r_ 1: _T_, and continuation flags _c_ 1: _T_,
+the world model parameters _ϕ_ are optimized end-to-end to minimize the prediction loss _L_ pred, the
+dynamics loss _L_ dyn, and the representation loss _L_ rep with corresponding loss weights _β_ pred = 1,
+_β_ dyn = 0 _._ 5, _β_ rep = 0 _._ 1:
+
+�� _T_       _L_ ( _ϕ_ ) = _[.]_ **E** _qϕ_ _t_ =1 [(] _[β]_ [pred] _[L]_ [pred][(] _[ϕ]_ [) +] _[ β]_ [dyn] _[L]_ [dyn][(] _[ϕ]_ [) +] _[ β]_ [rep] _[L]_ [rep][(] _[ϕ]_ [))] _._ (12)
+
+_L_ pred( _ϕ_ ) = _[.]_ _−_ ln _pϕ_ ( _xt|zt, ht_ ) _−_ ln _pϕ_ ( _rt|zt, ht_ ) _−_ ln _pϕ_ ( _ct|zt, ht_ )
+
+_L_ dyn( _ϕ_ ) = max _[.]_ �1 _,_ KL[sg( _qϕ_ ( _zt|ht, xt_ )) _||_ _pϕ_ ( _zt|ht_ ) ]� (13)
+
+_L_ rep( _ϕ_ ) = max _[.]_ �1 _,_ KL[ _qϕ_ ( _zt|ht, xt_ ) _||_ sg( _pϕ_ ( _zt|ht_ ))]�
+
+
+20
+
+
+**Actor-Critic Learning.** We consider the prediction horizon to be 16 as the same as in Dreamer v3
+while training the actor-critic networks. We follow the same line as in Dreamer v3 and consider the
+actor and critic defined as follows.
+
+
+Actor: _at_ _∼_ _πθ_ ( _at|xt_ )
+(14)
+Critic: _vψ_ ( _xt_ ) _≈_ **E** _pϕ,πθ_ [ _Rt_ ] _,_
+
+where _Rt_ = _[.]_ [�] _τ_ _[∞]_ =0 _[γ][τ]_ _[r][t]_ [+] _[τ]_ [with discounting factor] _[ γ]_ [=] [0] _[.]_ [997][.] [Meanwhile, to estimate returns that]
+consider rewards beyond the prediction horizon, we compute bootstrapped _λ_ -returns that integrate
+the predicted rewards and values:
+
+
+_._                 -                 - _._
+_Rt_ _[λ]_ = _rt_ + _γct_ (1 _−_ _λ_ ) _vψ_ ( _st_ +1) + _λRt_ _[λ]_ +1 _RT_ _[λ]_ = _vψ_ ( _sT_ ) (15)
+
+
+E.1 TRAINING DATASET: BENCH2DRIVE
+
+
+In our experiments, we use the open source Bench2Drive dataset Jia et al. (2024); Li et al. (2024),
+which is a comprehensive benchmark designed to evaluate end-to-end autonomous driving (E2EAD) systems in a closed-loop manner. Unlike existing benchmarks that rely on open-loop evaluations or fixed routes, Bench2Drive offers a more diverse and challenging testing environment. The
+dataset consists of 2 million fully annotated frames, collected from 10,000 short clips distributed
+across 44 interactive scenarios, 23 weather conditions, and 12 towns in CARLA. This diversity allows for a more thorough assessment of autonomous driving capabilities, particularly in corner cases
+and complex interactive situations that are often underrepresented in other datasets.
+
+
+A key feature of Bench2Drive is its focus on shorter evaluation horizons compared to the CARLA
+v2 leaderboard. While the CARLA v2 leaderboard uses long routes (7-10 kilometers) that are challenging to complete without errors, Bench2Drive employs shorter, more manageable scenarios1.
+This approach allows for a more granular assessment of driving skills and makes the benchmark
+more suitable for reinforcement learning applications.
+
+
+**Checkpoints.** In particular, for VAD and UniAD, we directly use the checkpoint provide by Jia
+et al. (2024), which are trained on the whole Bench2drive dataset.
+
+
+F VISUALIZATION OF MODEL PREDICTION
+
+
+In Figure 6, Figure 7, Figure 8,Figure 9 and Figure 10, we show the comparative visualization
+of world model predictions across five different training settings (AdaWM, Alternate finetuning,
+model-only finetuning, policy-only finetuning, and no finetuning) reveals distinct performance patterns in the ROM03 task over 60 time steps. In each visualization set, the ego vehicle (red car) and
+surrounding agents (green cars) are shown with their respective planned trajectories (blue line for
+ego, yellow lines for others) across three rows: ground truth bird’s-eye view (BEV), world model
+predicted BEV, and prediction error. All configurations exhibit increasing prediction errors as the
+time horizon extends further into the future, consistent with the growing uncertainty in long-term
+predictions. However, AdaWM demonstrates superior performance with notably smaller prediction
+errors compared to the other finetuning approaches, suggesting its enhanced capability in maintaining accurate world model predictions over extended time horizons.
+
+
+21
+
+
+Figure 6: Prediction results for 65 time steps in AdaWM.
+
+
+Figure 7: Prediction results for 65 time steps with alternate finetuning mechanism.
+
+
+G SUPPLEMENTARY EXPERIMENTS
+
+
+Furthermore, we conduct experiments on another five diverse and challenging scenarios to validate the performance of AdaWM. In particular, we consider the following environment settings,
+respetively,
+
+
+    - HI13: HighwayCutIn ~~T~~ own13 ~~R~~ oute23823 ~~W~~ eather7
+
+    - HE12: HighwayExit ~~T~~ own12 ~~R~~ oute2233 ~~W~~ eather9
+
+    - YE12: YieldToEmergencyVehicle ~~T~~ own12 ~~R~~ oute1809 ~~W~~ eather9
+
+    - BI12: BlockedIntersection ~~T~~ own12 ~~R~~ oute12494 ~~W~~ eather9
+
+    - VT11: VehicleTurningRoutePedestrian ~~T~~ own11 ~~R~~ oute27267 ~~W~~ eather12
+
+
+HC13
+
+HC13 : &HighwayCutIn Town13 Route23823 Weather7
+env :
+world :
+town : Town13
+Weather : 7
+Route : 23823
+name : HC13
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 1 2 . 0, 7.0, 0.1, −90.0]
+ego path : [ [ 1 2 . 0, 7.0, 0 . 1 ], [23, 122, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+Figure 8: Prediction results for 65 time steps with only model finetuning.
+
+
+22
+
+
+Figure 9: Prediction results for 65 time steps with only policy finetuning.
+
+
+Figure 10: Prediction results for 65 time steps without finetuning.
+
+
+HE12
+
+HE12 : &HighwayExit Town12 Route2233 Weather9
+env :
+world :
+town : Town12
+Weather : 9
+Route : 2233
+name : HE12
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 3 2 . 0, −27.0, 0.1, −90.0]
+ego path : [ [ 3 2 . 0, −27.0, 0 . 1 ], [11, −129, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+YE12
+
+YE12 : &YieldToEmergencyVehicle Town12 Route1809 Weather9
+env :
+world :
+town : Town12
+Weather : 9
+Route : 1809
+name : YE12
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 1 1 . 0, 27.0, 0.1, −90.0]
+ego path : [ [ 1 1 . 0, 27.0, 0 . 1 ], [103, −21, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+BI12
+
+BI12 : &BlockedIntersection Town12 Route12494 Weather9
+env :
+world :
+town : Town12
+Weather : 9
+Route : 12494
+name : BI12
+
+
+23
+
+
+|Col1|Pre-RTM03|HC13|HE12|
+|---|---|---|---|
+||TTC_↑_<br>SR_↑_|TTC_↑_<br>SR_↑_|TTC_↑_<br>SR_↑_|
+
+
+UniAD 1.25 0.48 0.82 0.08 1.01 0.15
+VAD 0.96 0.55 0.94 0.13 0.92 0.30
+DreamerV3 1.16 0.68 0.95 0.33 1.07 0.52
+**AdaWM** 1.16 0.68 **1.98** **0.73** **2.21** **0.89**
+
+
+Table 7: The impact of finetuning in CARLA tasks. (HC/HE: highway cut-in / highway exit, 12 and
+13 indicate different Towns.)
+
+|Col1|Pre-RTM03|YE12|BI12|VT11|
+|---|---|---|---|---|
+|Algorithm|TTC_↑_<br>SR_↑_|TTC_↑_<br>SR_↑_|TTC_ ↑_<br>SR_↑_|TTC_↑_<br>SR_↑_|
+|UniAD<br>VAD<br>DreamerV3<br>**AdaWM**|1.25<br>0.48<br>0.96<br>0.55<br>1.16<br>0.68<br>1.16<br>0.68|0.22<br>0.04<br>0.79<br>0.08<br>0.80<br>0.15<br>**1.53**<br>**0.52**|0.42<br>0.10<br>0.88<br>0.18<br>0.93<br>0.42<br>**1.41**<br>**0.59**|0.24<br>0.05<br>0.82<br>0.12<br>1.02<br>0.58<br>**1.21**<br>**0.88**|
+
+
+Table 8: The impact of finetuning in CARLA tasks. (YE/BI/VT: Yield to emergency vehicle /
+Blocked Intersection / Vehicle Turing Route Pedestrian, 11 and 12 indicate different Towns.)
+
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 8 0 . 0, 23.0, 0.1, −90.0]
+ego path : [ [ 8 0 . 0, 23.0, 0 . 1 ], [121, 219, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+VT11
+
+VT11 : &VehicleTurningRoutePedestrian Town11 Route27267 Weather12
+env :
+world :
+town : Town11
+Weather : 12
+Route : 27267
+name : VT11
+
+     - b s e r v a t i o n . enabled : [ camera, c o l l i s i o n, birdeye wpt ]
+_<<_ :  - c a r l a w p t
+l a n e s t a r t p o i n t : [ 5 2 . 0, 98.0, 0.1, −90.0]
+ego path : [ [ 5 2 . 0, 98.0, 0 . 1 ], [ −28, 76, 0 . 1 ] ]
+us e ro ad w ayp oi nt s : [ True, False ]
+u s e s i g n a l : False
+
+
+G.1 EXPERIMENTS RESULTS
+
+
+**Impact** **of** **Finetuning.** The experiments evaluate AdaWM across a diverse set of challenging autonomous driving scenarios, including highway maneuvers (cut-in and exit), emergency response
+(yielding to emergency vehicles), intersection navigation (blocked intersections), and complex interactions with pedestrians across different town environments and weather conditions. Looking
+at the impact of finetuning in Tables 7 and 8, AdaWM demonstrates substantial improvements over
+baseline methods (UniAD, VAD, and DreamerV3) across all scenarios. In highway scenarios (HC13
+and HE12), AdaWM achieves remarkable gains, with the Success Rate (SR) improving from 0.33 to
+0.73 in HC13 and from 0.52 to 0.89 in HE12, while Time-To-Collision (TTC) metrics show similar
+impressive improvements. The performance gains extend to more complex scenarios, with AdaWM
+showing particularly strong results in emergency vehicle response (YE12, SR from 0.15 to 0.52),
+blocked intersection handling (BI12, SR from 0.42 to 0.59), and vehicle-pedestrian interactions
+(VT11, SR from 0.58 to 0.88).
+
+
+24
+
+
+HC13 HE12 YE12 BI12 VT11
+Algorithm TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_ TTC _↑_ SR _↑_
+No Finetuing 0.95 0.33 1.07 0.52 0.80 0.15 0.93 0.42 1.02 0.58
+Policy-only 1.32 0.52 1.92 0.72 1.33 0.44 1.30 0.49 1.09 0.76
+Model-only **1.98** 0.70 1.82 0.70 1.21 0.38 1.01 0.32 0.92 0.44
+Model+Policy 1.68 0.60 1.94 0.80 1.42 0.47 1.21 0.42 1.01 0.70
+**AdaWM** 1.92 **0.74** **2.21** **0.89** **1.53** **0.52** **1.41** **0.59** **1.21** **0.88**
+
+
+Table 9: Comparison on the effectiveness of different finetuning strategies.
+
+
+**Effectiveness of Finetuning Strategies.** The comparative analysis of different finetuning strategies
+in Table 9 demonstrates the superior effectiveness of AdaWM’s alignment-driven approach. While
+conventional methods like policy-only, model-only, and alternating model+policy finetuning show
+some improvements over the baseline, AdaWM consistently outperforms them across all scenarios.
+For instance, in the highway exit scenario (HE12), AdaWM achieves an SR of 0.89 compared to
+0.72 for policy-only and 0.70 for model-only approaches. This superior performance is particularly
+evident in complex scenarios like VT11, where AdaWM maintains high performance (SR 0.88)
+while other methods show significant degradation, with policy-only achieving 0.76 and model-only
+dropping to 0.44. These results demonstrate that AdaWM’s integrated approach to alignment-driven
+finetuning is more effective than traditional methods at adapting to diverse driving scenarios while
+maintaining robust performance.
+
+
+25

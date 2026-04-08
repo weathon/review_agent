@@ -1,0 +1,149 @@
+## Human Reviewer 1
+
+### Summary
+The manuscript develops a novel tensor-based approach for incomplete multi-view clustering tasks. The main ideas of the work are:
+* Employ view-specific connectivity constraints and tensor learning to capture high-order cross-view correlations;
+* Perform clustering on the learned embeddings to eliminate additional post-processing;
+* Introduce a approximation of Laplacian matrix for efficiency.
+
+### Strengths
+* The work improves clustering performance and meanwhile enhances algorithm efficiency;
+* Detailed theoretical analyses are provided, and experimental results are sufficient;
+* The paper is well-written.
+
+### Weaknesses
+* Why the authors adopt the norm of $\ell_\delta$-norm (i.e., $f(x) = \frac{(1+\delta)x}{\delta + x}$) ? What its specific advangates?
+* Some details require further explanation. For example, what is the clear definition of the "post-processing-free" methods? It seems that some post-processing-free methods still requires an extra clustering procedure on the learned features.
+* The ablation study requires a deeper analyses, and current discussion cannot well illustrate the contribution of each component.
+* Some typos should be corrected.
+
+### Questions
+Please refer to the weaknesses.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+5
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper proposes a novel incomplete multi-view clustering method that seamlessly integrates the low-rank tensor learning, latent learning, anchor learning as one unified framework. However, this paper is with limited contributions, since the proposed method is the combination of existing methods such as "Tensorized multi-view subspace representation learning", "Generalized latent multi-view subspace clustering", and so on.
+
+### Strengths
+The paper is well-written.
+The authors also illustrate the motivations, details, and optimization of the proposed method.
+
+### Weaknesses
+1、In Figure 1, what is the function of “Constant degree matrix”? How to communicate with other modules of the proposed method?
+2、Many incomplete and complete multi-view clustering methods assume that there exists some sparse noise such as deadline. The authors select the ||.||_F as the regularizer for noise removal. How to deal with the datasets with sparse noise?
+3、How to extend the l_\sigma norm from the matrix format into the tensor format? How to define the l_\sigma tensor norm? There are many nonconvex surrogates such as l_p norm, Schatten l_p norm, and so on, for nonconvex low-rank tensor learning. The authors failed to compare the proposed method with other representative nonconvex surrogates for high-order modeling. 
+ 4、Small-scale testing datasets. The testing datasets are relatively small-scale! I want to see the performance of the proposed method on the large-scale dataset.
+
+### Questions
+In Equation ( 3), the authors have added the "Tr[(Hv )⊤(I − 1β (Zv )⊤Zv )Hv" into the objective of the proposed model. The author states that the proposed model could reduce the running times. However, I think the introduction of  "Tr[(Hv )⊤(I − 1β (Zv )⊤Zv )Hv"  could yield a heavy computational burden, rather than reduce the running times.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+1
+
+### Rating
+2
+
+### Confidence
+5
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This paper proposes a tensor-based method for incomplete multi-view clustering named CAMEL. CAMEL jointly learns view-specific latent embeddings under structured constraints and organizes them into a low-rank tensor, enabling coordinated optimization of graph connectivity and high-order correlations while avoiding costly post-processing (e.g., SVD). Extensive experiments on nine benchmark datasets demonstrate its superior effectiveness and efficiency compared to existing methods.
+
+### Strengths
+1.The proposed method learns view-specific embeddings under structured constraints and organizes them into a low-rank tensor, effectively overcoming the limitation of traditional methods that cannot simultaneously capture graph connectivity and high-order correlations.
+
+2.The manuscript presents extensive experiments that demonstrate the effectiveness and efficiency of the proposed method.
+
+3.The manuscript provides detailed theoretical derivations and proofs, which theoretically validate the effectiveness of the proposed model.
+
+### Weaknesses
+1. The hyperparameters $\lambda_1$ and $\lambda_2$ in Equations (1)--(3) are not defined, leaving their values and roles unclear.
+
+2. The manuscript lacks experimental comparisons between the $\ell_\delta$-norm and the conventional tensor nuclear norm in terms of performance.
+
+3. The authors state that Equation (2) involves quadratic computational complexity; however, since Equation (2) is based on an anchor method, it should already have low complexity. It is unclear where the quadratic complexity arises. 
+
+4. Lines 259--262 contain a repeated statement, which affects the manuscript’s clarity.
+
+### Questions
+See Weakness section.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+5
+
+---
+
+## Human Reviewer 4
+
+### Summary
+To effectively model the rich information in multi-view data while improving computational efficiency, this paper develops a constant-degree matrix-based framework for incomplete multi-view clustering. View-specific latent embeddings are learned under structured constraints and organized into a tensor with an $\ell_\delta$ low-rank constraint, enabling joint optimization of graph connectivity and high-order correlations. CAMEL further reduces the $O(n^2)$ complexity of traditional connectivity constraints by approximating the variable Laplacian degree matrix with a constant-degree matrix. Theoretical analysis and extensive experiments validate the method’s effectiveness.
+
+### Strengths
+1. The paper is well-written and presents the work in a clear and rigorous manner.
+2. By approximating the variable Laplacian degree matrix with a constant-degree matrix, the proposed method avoids the $O(n^2)$ or higher computational complexity associated with traditional connectivity constraints, thereby improving overall efficiency. The authors also validate the approach on large-scale datasets, demonstrating its practical applicability.
+3. The CAMEL consistently achieves superior clustering performance compared to baseline methods across multi-view datasets of different types.
+
+### Weaknesses
+1. One of the core contributions of this work is the use of the latent representation H instead of the subspace representation Z for clustering. It would be helpful if the authors could clarify in which aspects H provides advantages over Z, such as representation quality, or clustering performance.
+2. The paper replaces the traditional Laplacian matrix $L_v = I - (D_v)^{-1/2} S_v (D_v)^{-1/2}$ with a constant form $L_v = I - \beta (Z_v)^\top Z_v$, but the underlying mechanism and justification for this approximation are insufficiently discussed.
+3. The parameter sensitivity analysis uses different ranges for $\lambda_1$ and $\lambda_2$, but the rationale for selecting these ranges is not clearly justified.
+4. The construction of incomplete multi-view data is insufficiently described. It is unclear whether the missing elements are consistent across different datasets and compared methods, and whether the randomly removed elements are the same across experimental runs.
+5. The paper refers to the dataset as "Still2", while other references consistently use "Still-DB". Could the authors clarify whether these names refer to the same dataset or different ones?
+
+### Questions
+Please refer to the weaknesses mentioned above.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4

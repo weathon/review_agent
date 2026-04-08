@@ -1,0 +1,2857 @@
+# CONFIG: TOWARDS CONFLICT-FREE TRAINING OF PHYSICS INFORMED NEURAL NETWORKS
+
+
+**Qiang Liu** **[1]** **, Mengyu Chu** **[2]** **& Nils Thuerey** **[1]**
+
+
+School of Computation, Information and Technology [1]
+Technical University of Munich
+Garching, DE 85748
+_{_ qiang7.liu, nils.thuerey _}_ @tum.de
+
+
+ABSTRACT
+
+
+SKL of General AI [2]
+Peking University
+Beijing, CN 100871
+mchu@pku.edu.cn
+
+
+The loss functions of many learning problems contain multiple additive terms that
+can disagree and yield conflicting update directions. For Physics-Informed Neural
+Networks (PINNs), loss terms on initial/boundary conditions and physics equations are particularly interesting as they are well-established as highly difficult
+tasks. To improve learning the challenging multi-objective task posed by PINNs,
+we propose the ConFIG method, which provides conflict-free updates by ensuring
+a positive dot product between the final update and each loss-specific gradient.
+It also maintains consistent optimization rates for all loss terms and dynamically
+adjusts gradient magnitudes based on conflict levels. We additionally leverage momentum to accelerate optimizations by alternating the back-propagation of different loss terms. We provide a mathematical proof showing the convergence of the
+ConFIG method, and it is evaluated across a range of challenging PINN scenarios.
+ConFIG consistently shows superior performance and runtime compared to baseline methods. We also test the proposed method in a classic multi-task benchmark,
+where the ConFIG method likewise exhibits a highly promising performance.
+[Source code is available at https://tum-pbs.github.io/ConFIG](https://tum-pbs.github.io/ConFIG)
+
+
+1 INTRODUCTION
+
+
+Efficiently solving partial differential equations (PDEs) is crucial for various scientific fields such
+as fluid dynamics, electromagnetics, and financial mathematics. However, the nonlinear and highdimensional PDEs often present significant challenges to the stability and convergence of traditional
+numerical methods. With the advent of deep learning, there is a strongly growing interest in using
+this technology to solve PDEs (Han et al., 2018; Beck et al., 2023). In this context, Physics Informed
+Neural Networks (PINNs) (Raissi et al., 2019; Cuomo et al., 2022) leverage networks as a continuous
+and differentiable ansatz for the underlying physics.
+
+
+PINNs use auto-differentiation of coordinate-based neural networks, i.e., implicit neural representation (INR), to approximate PDE derivatives. The residuals of the PDEs, along with boundary and
+initial conditions, are treated as loss terms and penalized during training to achieve a physically plausible solution. Despite their widespread use, training PINNs is a well-recognized challenge (Cuomo
+et al., 2022; Lino et al., 2023; Wang et al., 2021; Krishnapriyan et al., 2021; Wang et al., 2022) due to
+several possible factors like unbalanced back-propagated gradients from numerical stiffness (Wang
+et al., 2021), different convergence rates among loss terms (Wang et al., 2022), PDE-based soft
+constraints (Krishnapriyan et al., 2021), poor initialization (Wong et al., 2024), and suboptimal sampling strategies (Daw et al., 2023). Traditional methods to improve PINN training typically involve
+adjusting the weights for PDE residuals and loss terms for initial/boundary conditions (Liu & Wang,
+2021; McClenny & Braga-Neto, 2023; Son et al., 2023). However, although these methods claim to
+have better solution accuracy, there is currently no consensus on the optimal weighting strategy.
+
+
+Meanwhile, methods manipulating the gradient of each loss term have become popular in MultiTask Learning (MTL) and Continual Learning (CL) (Riemer et al., 2019; Farajtabar et al., 2020; Yu
+et al., 2020) to address _conflicts_ between loss-specific gradients that induce negative transfer (Long
+et al., 2017) and catastrophic forgetting (Kirkpatrick et al., 2017). Unlike weighting strategies that
+
+
+1
+
+
+adjust the final update direction solely by modifying each loss-specific gradient’s magnitude, these
+methods take greater flexibility and often alter the directions of loss-specific gradients. We notice
+that similar conflicts between gradients also arise in the training of PINNs. First, the gradient magnitude of PDE residuals typically surpasses that of initial/boundary conditions (Wang et al., 2021),
+causing the final update gradient to lean heavily towards the residual term. Additionally, PDE residuals often have many local minima due to the infinite number of PDE solutions without prescribed
+initial/boundary conditions (Daw et al., 2023). Consequently, when the optimization process approaches local minima of the PDE residual, the combined update conflicts with the gradient of
+initial/boundary conditions, severely impeding learning progress.
+
+
+To illustrate gradient conflicts in PINNs,
+we show a toy case in Fig. 1 where _L_ 1 has
+smaller gradients and 2 has larger gradi_L_
+ents but multiple minima. Training with
+_L_ 1 + _λL_ 2 using suboptimal _λ_ values (e.g.,
+_λ_ = 1) leads to gradient conflicts and the
+convergence to a local minima of 2.
+_L_
+
+
+In the following, we propose the **Con** flict
+to mitigate the conflicts of loss-specific
+gradients during PINNs training. Our ap- Figure 1: Visualization of toy example showing the
+proach provides an update gradient _**g**_ ConFIG conflict between different losses during optimization.
+that reduces all loss terms to prevent the
+optimization from being stuck in the local
+minima of a specific loss term. With the ConFIG method, the optimization in Fig. 1 converges to
+the shared minimum for both losses. Our method is provably convergent, and characterized by the
+following properties:
+
+
+Figure 1: Visualization of toy example showing the
+conflict between different losses during optimization.
+
+
+    - The final update direction does not conflict with any loss-specific gradients.
+
+    - The projection length of the final gradient on each loss-specific gradient is uniform, ensuring that all loss terms are optimized at the same rate.
+
+    - The length of the final gradient is adaptively scaled based on the degree of conflict between
+loss-specific gradients. This prevents the optimization from stalling in the local minima of
+any specific loss term in high-conflict scenarios.
+
+
+In addition, we introduce a momentum-based approach to expedite optimization. By leveraging
+momentum, we eliminate the need to compute all gradients via backpropagation at each training
+iteration. In contrast, we evaluate alternating loss-specific gradients, which significantly decreases
+the computational cost and leads to more accurate solutions within a given computational budget.
+
+
+2 RELATED WORK
+
+
+**Weighting** **Strategies** **for** **PINNs’** **Training** Some intuitive weighting strategies come from the
+penalty method of constrained optimization problems, where higher weights are assigned to lessoptimized losses (Liu & Wang, 2021; Son et al., 2023). McClenny & Braga-Neto (2023) extended
+this idea by directly setting weights to sample points with soft attention masks. On the contrary,
+Bischof & Kraus (2021) advocated equalizing the reduction rates of all loss terms as it guides training toward Pareto optimal solutions from an MTL perspective. Meanwhile, Wang et al. (2021)
+addressed numerical stiffness issues by determining the weight according to the magnitude of each
+loss-specific gradient. Wang et al. (2022) explored training procedures via the Neural Tangent Kernel (NTK) perspective, adaptively setting weights based on NTK eigenvalues. Xiang et al. (2022)
+instead employed Gaussian probabilistic models for uncertainty quantification, estimating weights
+through maximum likelihood estimation. Others have pursued specialized approaches. E.g., van
+der Meer et al. (2022) derived optimal weight parameters for specific problems and devised heuristics for general problems. de Wolff et al. (2022) use an evolutionary multi-objective algorithm to
+find the trade-offs between individual loss terms in PINNs training. Shin et al. (2020) conducted
+convergence analyses for PINNs solving linear second-order elliptic and parabolic type PDEs, employing Lipschitz regularized loss. In contrast to adaptive methods, Wight & Zhao (2021) proposed
+
+
+2
+
+
+a fixed weighting strategy for phase field models. They artificially elevated weights for the loss term
+associated with initial conditions.
+
+
+**Gradient** **Improvement** **Strategies** **in** **MTL** **and** **CL** Gradient improvement strategies in MTL
+and CL focus on understanding and resolving conflicts between loss-specific gradients. Riemer
+et al. (2019) and Du et al. (2018) proposed using the dot product (cosine similarity) of two gradient
+vectors to assess whether updates will conflict with each other. Riemer et al. (2019) introduced an
+additional term in the loss to modify the gradient direction, maximizing the dot product of the gradients. Conversely,Du et al. (2018) chose to discard gradients of auxiliary tasks if they conflict with
+the main task. Another intuitive method to resolve conflicts is orthogonal projection. Farajtabar
+et al. (2020) proposed the Orthogonal Gradient Descent (OGD) method for continual learning, projecting gradients from new tasks onto a subspace orthogonal to the previous task. Chaudhry et al.
+(2020) proposed learning tasks in low-rank vector subspaces that are kept orthogonal to minimize
+interference. Yu et al. (2020) introduced the PCGrad method that projects a task’s gradient onto the
+orthogonal plane of other gradients. Liu et al. (2021b) designed the IMTL-G method to ensure that
+the final gradient has the same projection length on all other vectors. Dong et al. (2022) utilized the
+Singular Value Decomposition (SVD) on gradient vectors to obtain an orthogonal basis. Javaloy &
+Valera (2022) introduces a method that jointly homogenizes gradient magnitudes and directions for
+MTL. Quinton & Rey (2024) propose a Jacobian descent method with an aggregation step, which
+constrains the update gradient into the positive cone in the parameter space to avoid conflicts during
+training. Few studies in the PINN community have utilized gradient-based improvement strategies.
+Zhou et al. (2023) introduced the PCGrad method to PINN training for reliability assessment of
+multi-state systems. Yao et al. (2023) developed a MultiAdam method where they apply Adam optimizer for each loss term separately. Concurrent work from Hwang & Lim (2024) proposed a dual
+cone gradient descent method to mitigate gradient conflict when training PINNs.
+
+
+3 METHOD
+
+
+3.1 CONFLICT-FREE INVERSE GRADIENTS METHOD
+
+
+Generically, we consider an optimization procedure with a set of _m_ individual loss functions, i.e.,
+1 _,_ 2 _,_ _,_ _m_ . Let _**g**_ 1 _,_ _**g**_ 2 _,_ _,_ _**g**_ _m_ denote the individual gradients corresponding to each
+_{L_ _L_ _· · ·_ _L_ _}_ _{_ _· · ·_ _}_
+of the loss functions. A gradient-descent step with gradient _**g**_ _c_ will conflict with the decrease of
+_i_ if _**g**_ _i_ _[⊤]_ _**[g]**_ _[c]_ [is] _[negative]_ [(Riemer] [et] [al.,] [2019;] [Du] [et] [al.,] [2018).] [Thus,] [to] [ensure] [that] [all] [losses] [are]
+_L_
+decreasing simultaneously along _**g**_ _c_, all _m_ components of [ _**g**_ 1 _,_ _**g**_ 2 _,_ _,_ _**g**_ _m_ ] _[⊤]_ _**g**_ _c_ should be _positive_ .
+_· · ·_
+This condition is fulfilled by setting _**g**_ _c_ = [ _**g**_ 1 _,_ _**g**_ 2 _,_ _,_ _**g**_ _m_ ] _[−⊤]_ _**w**_, where _**w**_ = [ _w_ 1 _, w_ 2 _,_ _, wm_ ] is a
+vector with _m_ positive components and _M_ _[−⊤]_ is the pseudoinverse of the transposed matrix _· · ·_ _· · ·_ _M_ _[⊤]_ .
+
+
+Although a positive _**w**_ vector guarantees a conflict-free update direction for all losses, the specific
+value of _wi_ further influences the exact direction of _**g**_ _c_ . To facilitate determining _**w**_, we reformulate
+_**g**_ _c_ as _**g**_ _c_ = _k_ [ ( _**g**_ 1) _,_ ( _**g**_ 2) _,_ _,_ ( _**g**_ _m_ )] _[−⊤]_ _**w**_ **ˆ**, where ( _**g**_ _i_ ) = _**g**_ _i/_ ( _**g**_ _i_ + _ε_ ) is a normalization
+_U_ _U_ _· · ·_ _U_ _U_ _|_ _|_
+operator and _k_ _>_ 0. Now, _k_ controls the length of _**g**_ _c_ and the ratio of _**w**_ **ˆ** ’s components corresponds
+to the ratio of _**g**_ _c_ ’s projections onto each loss-specific _**g**_ _i_, i.e., _**g**_ _c_ _c_ ( _**g**_ _,_ _**g**_ _i_ ), where _c_ ( _**g**_ _i,_ _**g**_ _j_ ) =
+_|_ _|S_ _S_
+_**g**_ _i_ _[⊤]_ _**[g]**_ _[j][/]_ [(] _[|]_ _**[g]**_ _[i][||]_ _**[g]**_ _[j][|]_ [ +] _[ ε]_ [)][ is the operator for cosine similarity:]
+
+
+_**g**_ _c_ _c_ ( _**g**_ _c,_ _**g**_ _i_ )
+_|_ _|S_
+_**g**_ _c_ _c_ ( _**g**_ _c,_ _**g**_ _j_ ) [=] _[S]_ _c_ _[c]_ ( [(] _**g**_ _**[g]**_ _c_ _[c]_ _,_ _[,]_ _**g**_ _**[ g]**_ _j_ _[i]_ [)] )
+_|_ _|S_ _S_
+
+
+[[] _[k][U]_ [(] _**[g]**_ _[i]_ [)]] _[⊤]_ _**[g]**_ _[c]_
+
+_[S]_ _c_ _[c]_ ( [(] _**g**_ _**[g]**_ _c_ _[c]_ _, k_ _[, k][U]_ ( [(] _**g**_ _**[g]**_ _j_ _[i]_ [))] )) [=] [ _k_ ( _**g**_ _j_ )] _[⊤]_ _**g**_ _c_
+
+_S_ _U_ _U_
+
+
+_[S]_ _c_ _[c]_ ( [(] _**g**_ _**[g]**_ _c_ _[c]_ _,_ _[,]_ _**g**_ _**[ g]**_ _j_ _[i]_ [)] ) [=] _[S]_ _c_ _[c]_ ( [(] _**g**_ _**[g]**_ _c_ _[c]_ _, k_ _[, k][U]_ ( [(] _**g**_ _**[g]**_ _j_ _[i]_ [))] ))
+
+_S_ _S_ _U_
+
+
+_**[g]**_ _[c]_
+
+[[] _[k][U]_ [(] _**[g]**_ _[i]_ [)]] = _[w]_ [ˆ] _[i]_
+
+[ _k_ ( _**g**_ _j_ )] _[⊤]_ _**g**_ _c_ _w_ ˆ _j_
+_U_
+
+
+_i, j_ [1 _, m_ ] _._ (1)
+_w_ ˆ _j_ _∀_ _∈_
+
+
+We call _**w**_ **ˆ** the _direction_ _weight_ . The projection length of _**g**_ _c_ on each loss-specific gradient serves
+as an effective “learning rate” for each loss. Here, we choose _w_ ˆ _i_ = _w_ ˆ _j_ _i, j_ [1 _, m_ ] to ensure a
+_∀_ _∈_
+uniform decrease rate of all losses, as it was shown to yield a weak form of Pareto optimality for
+multi-task learning (Bischof & Kraus, 2021).
+
+
+Meanwhile, we introduce an adaptive strategy for the length of _**g**_ _c_ rather than directly setting a fixed
+value of _k_ . We notice that the length of _**g**_ _c_ should increase when all loss-specific gradients point
+nearly in the same direction since it indicates a favorable direction for optimization. Conversely,
+when loss-specific gradients are close to opposing each other, the magnitude of _**g**_ _c_ should decrease.
+We realize this by rescaling the length of _**g**_ _c_ to the sum of the projection lengths of each loss-specific
+gradient on it, i.e., _|_ _**g**_ _c|_ = [�] _i_ _[m]_ =1 _[|]_ _**[g]**_ _[i][|S][c]_ [(] _**[g]**_ _[i][,]_ _**[ g]**_ _[c]_ [)][.]
+
+
+3
+
+
+The procedures above are summarized in the _**Con**_ _flict-_ _**F**_ _ree_ _**I**_ _nverse_ _**G**_ _radients (ConFIG)_ operator _G_
+and we correspondingly denote the final update gradient _**g**_ _c_ with _**g**_ ConFIG:
+
+
+_**g**_ ConFIG = ( _**g**_ 1 _,_ _**g**_ 1 _,_ _,_ _**g**_ _m_ ) :=
+_G_ _· · ·_
+
+
+- _m_
+
+ - _**g**_ _i_ _[⊤]_ _**[g]**_ _[u]_
+
+_i_ =1
+
+
+_**g**_ _u,_ (2)
+
+
+_**g**_ _u_ = �[ ( _**g**_ 1) _,_ ( _**g**_ 2) _,_ _,_ ( _**g**_ _m_ )] _[−⊤]_ **1** _m_           - _._ (3)
+_U_ _U_ _U_ _· · ·_ _U_
+Here, **1** _m_ is a unit vector with _m_ components. A mathematical proof of ConFIG’s convergence in
+convex and non-convex landscapes can be found in Appendix A.1. The ConFIG method utilizes
+the pseudoinverse of the gradient matrix to obtain a conflict-free direction. In Appendix A.3, we
+prove that such an inverse operation is always feasible as long as the dimension of parameter space
+is larger than the number of losses. Besides, while calculating the pseudoinverse numerically could
+involve additional computational cost, it is not significant compared to the cost of back-propagation
+for each loss term. A detailed breakdown of the computational cost can be found in Appendix A.6.
+
+
+3.2 TWO TERM LOSSES AND POSITIONING W.R.T. EXISTING APPROACHES
+
+
+For the special case of only two loss terms, there is an equivalent form of ConFIG that does not
+require a pseudoinverse:
+
+( _**g**_ 1 _,_ _**g**_ 2) = ( _**g**_ 1 _[⊤]_ _**[g]**_ _[v]_ [+] _**[ g]**_ 2 _[⊤]_ _**[g]**_ _[v]_ [)] _**[g]**_ _[v]_ (4)
+_G_
+_**g**_ _v_ = [ ( ( _**g**_ 1 _,_ _**g**_ 2)) + ( ( _**g**_ 2 _,_ _**g**_ 1))] (5)
+_U_ _U_ _O_ _U_ _O_
+
+where ( _**g**_ 1 _,_ _**g**_ 2) = _**g**_ 2 _|_ _**g**_ 11 _**[g]**_ _|_ [2][2] _**[g]**_ [1] [is the orthogonality operator.] [It returns a vector orthogonal to] _**[ g]**_ [1]
+_O_ _−_ _**[g]**_ _[⊤]_
+from the plane spanned by _**g**_ 1 and _**g**_ 2. The proof of equivalence is shown in Appendix A.4.
+
+
+PCGrad (Yu et al., 2020) and IMTL-G (Liu et al., 2021b) methods from multi-task learning studies
+also have a similar simplified form for the two-loss scenario. PCGrad projects loss-specific gradients
+onto the normal plane of others if their cosine similarity is negative, while IMTL-G rescales lossspecific gradients to equalize the final gradient’s projection length on each loss-specific gradient, as
+illustrated in Fig. 2a and 2b. Our ConFIG method in Fig. 2c employs orthogonal components of
+each loss-specific gradient, akin to PCGrad. Meanwhile, it also ensures the same decrease rate of
+all losses, similar to IMTL-G. As a result, these three methods share an identical update direction
+but a different update magnitude in the two-loss scenario. This provides a valuable opportunity to
+evaluate our adaptive magnitude strategy: for two losses, the PCGrad and IMTL-G methods can be
+viewed as ConFIG variants with different magnitude rescaling strategies.
+
+
+The above similarity between these three methods only holds for the two-loss scenario. With more
+losses involved, the differences between them are more evident. In fact, the inverse operation in
+Eq. 3 makes the ConFIG approach the only method that maintains a conflict-free direction when the
+number of loss terms exceeds two. Detailed discussion can be found in A.2
+
+
+3.3 CONFIG WITH MOMENTUM ACCELERATION
+
+
+Gradient-based methods like PCGrad, IMTL-G, and the proposed ConFIG method require separate
+backpropagation steps to compute the gradient for each loss term. In contrast, conventional weighting strategies only require a single backpropagation for the total loss. Thus, gradient-based methods
+
+
+Figure 2: Sketch of PCGrad (a), IMTL-G (b), and our ConFIG (c) method with two loss terms. The
+PCGrad method directly sums two orthogonal components, and the IMTL-G method rescales the
+two vectors to the same magnitude. Our ConFIG method sums the unit vector of the orthogonal
+components and adjusts its magnitude with the projection length of each loss-specific gradient.
+
+
+4
+
+
+**Algorithm 1** M-ConFIG
+**Require:** _θ_ 0 (network weights), _γ_ (learning rate), _β_ 1, _β_ 2, _ϵ_ (Adam coefficient), _**m**_ 0 (Pseudo first momentum),
+
+[ _**mg**_ 1 _,_ 0 _,_ _**mg**_ 1 _,_ 0 _, · · ·_ _**mg**_ _m,_ 0] _←_ [ **0** _,_ **0** _, · · ·_ _,_ **0** ] (First momentum), _**v**_ 0 _←_ **0** (Second momentum),
+
+[ _t_ _**g**_ 1 _, t_ _**g**_ 2 _, · · ·_ _, t_ _**g**_ _m_ ] _←_ [0 _,_ 0 _, · · ·_ _,_ 0], All operations on vectors are element-wise except _G_ .
+**for** _t ←_ 1 to _· · ·_ **do**
+
+
+_i_ = _t_ % _m_ + 1
+_t_ _**g**_ _i_ _←_ _t_ _**g**_ _i_ + 1
+_**mg**_ _i,t_ _**g**_ _i_ _←_ _β_ 1 _**mg**_ _i,t_ _**g**_ _i −_ 1 + (1 _−_ _β_ 1) _∇θt−_ 1 _Li_ _▷_ Update the first momentum of _**g**_ _i_
+
+[ ˆ _**mg**_ 1 _,_ _**m**_ ˆ _**g**_ 2 _, · · ·_ _,_ _**m**_ ˆ _**g**_ _m_ ] _←_ [ _**mg**_ 1 _,tt_ _**gg**_ 1 _,_ _**mg**_ 2 _,tt_ _**gg**_ 2 _, · · ·_ _,_ _**mg**_ _mt,t_ _**gg**_ _m_ ] _▷_ [Bias corrections for]
+
+
+1 _−_ _**g**_ _β_ 1 _,t_ 1 _t_ _**gg**_ 11 _,_ _**m**_ 1 _−_ _**g**_ _β_ 2 _,t_ 1 _t_ _**gg**_ 22
+
+
+1 _−_ _**g**_ _β_ 2 _,t_ 1 _t_ _**gg**_ 22 _, · · ·_ _,_ _**m**_ 1 _−_ _**g**_ _mβ_ 1 _t,t_ _**gg**_ _mm_
+
+
+[ ˆ _**mg**_ 1 _,_ _**m**_ ˆ _**g**_ 2 _, · · ·_ _,_ _**m**_ ˆ _**g**_ _m_ ] _←_ [ _**m**_ 1 _−_ _**g**_ _β_ 1 _,t_ 1 _t_ _**gg**_ 11 _,_ _**m**_ 1 _−_ _**g**_ _β_ 2 _,t_ 1 _t_ _**gg**_ 22 _, · · ·_ _,_ _**m**_ 1 _−_ _**g**_ _mβ_ 1 _t,t_ _**gg**_ _mm_ ] _▷_ [Bias corrections for] first momentum terms
+
+_**m**_ ˆ _g_ _←G_ ( ˆ _**mg**_ 1 _,_ _**m**_ ˆ _**g**_ 2 _, · · ·_ _,_ _**m**_ ˆ _**g**_ _m_ ) _▷_ ConFIG update of momentums
+_**g**_ _c_ _←_  - _**m**_ ˆ _g_ (1 _−_ _β_ 1 _t_ [)] _[ −]_ _[β]_ 1 _**[m]**_ _t−_ 1� _/_ (1 _−_ _β_ 1) _▷_ Obtain the estimated gradient
+_**m**_ _t_ _←_ _β_ 1 _**m**_ _t−_ 1 + (1 _−_ _β_ 1) _**g**_ _c_ _▷_ Update the pseudo first momentum
+_**v**_ _t_ _←_ _β_ 2 _**v**_ _t−_ 1 + (1 _−_ _β_ 2) _**g**_ _c_ [2] _▷_ Update the second momentum
+_**v**_ ˆ _←_ _**v**_ _t/_ (1 _−_ _β_ 2 _[t]_ [)] _▷_ Bias correction for the second momentum
+_θi_ _←_ _θt−_ 1 _−_ _γ_ _**m**_ ˆ _g/_ ( ~~�~~ _**v**_ ˆ _g_ + _ϵ_ ) _▷_ Update weights of the neural network
+**end for**
+
+
+methods,are usuallywhere _r_ = [�] _b_ is _i_ _[m]_ the _[T][b]_ [(] _[L]_ computational _[i]_ [)] _[/][T][b]_ [ (][�] _i_ _[m]_ _[L][i]_ cost [)] [times] of backpropagation. [more] [computationally] To address [expensive] this issue, [than] [weighting] we intro_T_
+duce an accelerated momentum-based variant of ConFIG: _M-ConFIG_ . Our core idea is to leverage
+the momentum of the gradient for the ConFIG operation and update momentum in an alternating
+fashion to avoid backpropagating all losses in a single step. In each iteration, only a single momentum is updated with its corresponding gradient, while the others are carried over from previous steps.
+This reduces the computational cost of the M-ConFIG method to 1 _/m_ of the ConFIG method.
+
+
+Algorithm 1 details the entire procedure of M-ConFIG. It aligns with the fundamental principles of
+the Adam algorithm, where the first momentum averages the local gradient, and the second momentum adjusts the magnitude of each parameter. In this approach, we calculate only a single second
+momentum using an estimated gradient based on the output of the ConFIG operation. An alternative could involve calculating the second momentum for every loss term, similar to the MultiAdam
+method (Yao et al., 2023). However, we found this strategy to be inaccurate and numerically unstable
+compared to Algorithm 1. A detailed discussion and comparison can be found in the Appendix 1.
+
+
+Surprisingly, M-ConFIG not only catches up with the training speed of regular weighting strategies
+but typically yields an even lower average computational cost per iteration. This stems from the
+Thus,fact that backpropagating a sub-loss _r_ is usually smaller than _m_ and _L r/m <i_ is usually faster than backpropagating the total loss 1. This is especially obvious for PINN training, where [�] _i_ _[m]_ _[L][i]_ [.]
+a reduced number of sampling points are used for boundary/initial terms and are faster to evaluate
+than the residual term. In our experiments, we observed an average value of _r_ = 1 _._ 67 and a speed-up
+of 1 _._ 67 _/_ 3 _≈_ 0 _._ 56 per iteration for PINNs trained with three losses using M-ConFIG.
+
+
+4 EXPERIMENTS
+
+
+In this section, we employ the proposed methods for training PINNs on several challenging PDEs.
+We also explore the application of our method on a classical Multi-Task Learning (MTL) benchmark
+
+
+-0.5 0.0 0.5
+
+
+0.00 0.01 0.02
+
+
+Figure 3: Examples of PINN predictions and squared error (SE) distributions on the test PDEs.
+
+
+5
+
+
+as an outlook. Unless mentioned otherwise, every result is computed via averaging three training
+runs initialized with different random seeds, each using the model with the best test performance
+during the training. For detailed numerical values and standard deviations of the result in each experiment, please refer to the Appendix A.9 and A.10. Training configurations and hyper-parameters
+of each experiment can be found in the Appendix A.12. An additional ablation study on training
+hyperparameters can be found in the Appendix A.13. It shows that the gains from ConFIG are robust
+w.r.t. hyperparameter changes.
+
+
+4.1 PHYSICS INFORMED NEURAL NETWORKS
+
+
+**Preliminaries** **of** **PINNs.** Consider the initial boundary value problem of a general PDE for a
+scalar function _u_ ( _**x**_ _, t_ ): R _[d]_ [+1] _→_ R given by
+
+_N_ [ _u_ ( _**x**_ _, t_ ) _,_ _**x**_ _, t_ ] := _N_ [ _u_ ( _**x**_ _, t_ ) _,_ _**x**_ _, t_ ] + _f_ ( _**x**_ _, t_ ) = 0 _,_ _**x**_ _∈_ Ω _, t ∈_ (0 _, T_ ] _,_ (6)
+
+
+_B_ [ _u_ ( _**x**_ _, t_ ) _,_ _**x**_ _, t_ ] := _B_ [ _u_ ( _**x**_ _, t_ ) _,_ _**x**_ _, t_ ] + _g_ ( _**x**_ _, t_ ) = 0 _,_ _**x**_ _∈_ _∂_ Ω _, t ∈_ (0 _, T_ ] _,_ (7)
+
+
+_I_ [ _u_ ( _**x**_ _,_ 0) _,_ _**x**_ _,_ 0] := _u_ ( _**x**_ _,_ 0) + _h_ ( _**x**_ _,_ 0) = 0 _,_ _**x**_ _∈_ Ω _._ (8)
+
+
+Here, Ω _⊂_ _R_ _[d]_ is a spatial domain with _∂_ Ω and Ω denotes its boundary and closure, respectively. _N_
+and _B_ are spatial-temporal differential operators, and _f_, _g_ and _h_ are source functions. To solve
+this initial boundary value problem, PINNs introduce a neural network _u_ ˆ( _**x**_ _, t,_ _**θ**_ ) for the target
+function _u_ ( _**x**_ _, t_ ), where _θ_ is the weights of the neural networks. Then, spatial and temporal differential operators can be calculated efficiently with auto-differentiation of _N_ [ˆ _u_ ( _**x**_ _, t,_ _**θ**_ ) _,_ _**x**_ _, t_ ] and
+_B_ [ˆ _u_ ( _**x**_ _, t,_ _**θ**_ ) _,_ _**x**_ _, t_ ]. Solving Eq. 6-8 turns to the training of neural networks with a loss function of
+
+
+_,_ (9)
+
+
+_L_ ( _**θ**_ ) =
+
+
+_nN_
+
+- [ˆ _u_ ( _**x**_ _i, ti,_ _**θ**_ ) _,_ _**x**_ _i, ti_ ]
+
+_N_
+_i_ =1
+
+
+- �� _LN_
+
+
++
+
+
+_nB_
+
+- [ˆ _u_ ( _**x**_ _i, ti,_ _**θ**_ ) _,_ _**x**_ _i, ti_ ]
+
+_B_
+_i_ =1
+
+
+- �� _LB_
+
+
++
+
+
+_nI_
+
+
+[ˆ _u_ ( _**x**_ _i,_ 0 _,_ _**θ**_ ) _,_ _**x**_ _i,_ 0]
+_I_
+_i_ =1
+
+
+- �� _LI_
+
+
+where ( _**x**_ _i_, _ti_ ) are the spatial-temporal coordinates for the data samples in the R _[d]_ [+1] domain, _LN_,
+_B_ and _I_ are the loss functions for the PDE residual, spatial and initial boundaries, respectively.
+_L_ _L_
+These three loss terms give us three corresponding gradients for optimization: _**g**_ _N_, _**g**_ _B_, and _**g**_ _I_ . In
+the experiments, we consider four cases with three different PDEs: 1D unsteady Burgers equation,
+1D unsteady Schr¨odinger equation, 2D Kovasznay flow (Navier-stokes equations), and 3D unsteady
+Beltrami flow (Navier-stokes equations). Fig. 3 shows examples of the solution domain of each
+PDEs. A more detailed illustration and discussion of the PDEs and corresponding solution domains
+can be found in Appendix A.7 and A.8, respectively.
+
+
+**Focusing on two loss terms.** As detailed above, the similarity between our ConFIG method and
+the PCGrad/IMTL-G methods in the two-loss scenario offers a valuable opportunity to evaluate the
+proposed strategy for adapting the magnitude of the update. Therefore, we begin with a two-loss
+scenario where we introduce a new composite gradient, _BI_, which aggregates the contributions
+_L_
+from both the boundary ( _B_ ) and initial ( _I_ ) conditions. This setup also provides better insights
+_L_ _L_
+into the conflicting updates between PDE residuals and other loss terms.
+
+
+Fig. 4 compares the performance of PINNs trained with our ConFIG method and other existing
+approaches. Specifically, we compare to PCGrad (Yu et al., 2020) and the IMTL-G method (Liu
+
+
+Figure 4: Relative improvements of PINNs trained with two loss terms using different methods.
+
+
+6
+
+
+Figure 5: Training losses of PINNs trained with Adam baselines and ConFIG using two loss terms.
+
+
+Figure 6: Relative improvements of PINNs trained with three loss terms using different methods.
+
+
+et al., 2021b) from MTL studies as well as the LRA method (Wang et al., 2021), MinMax (Liu
+& Wang, 2021), and ReLoBRaLo (Bischof & Kraus, 2021) as established weighting methods for
+PINNs. The accuracy metric is the MSE between the predictions and the ground truth value on the
+new data points sampled in the computational domain that differ from the training data points. As
+the central question for all these methods is how much improvement they yield in comparison to
+the standard training configuration with Adam, we show the _relative improvement_ (in percent) over
+the Adam baseline. Thus, +50 means half, -100 twice the error of Adam, respectively. (Absolute
+metrics are given in the Appendix A.9)
+
+
+The findings reveal that only our ConFIG and PCGrad consistently outperform the Adam baseline.
+In addition, the ConFIG method always performs better than PCGrad. While the IMTL-G method
+performs slightly better than our methods in the Kovasznay and Beltrami flow cases, it performs
+worse than the Adam baseline in the Schr¨odinger case. Fig. 5 compares the training loss of our
+ConFIG method with the Adam baseline approach. The results indicate that ConFIG successfully
+mitigates the training bias towards the PDE residual term. It achieves an improved overall test
+performance by significantly decreasing the boundary/initial loss while sacrificing the PDE residual
+loss slightly. This indicates that ConFIG succeeds in finding one of the many minima of the residual
+loss that better adheres to the boundary conditions, i.e., it finds a better overall solution for the PDE.
+
+
+Figure 7: Training losses of the Adam baseline, PCGrad, and ConFIG with three loss terms.
+
+
+7
+
+
+Figure 8: Relative improvements of the ConFIG method with different direction weights. (a) Twoloss scenario. (b) Three-loss scenario.
+
+
+(a)
+
+
+(b)
+
+
+Figure 9: Relative improvements of the PINNs trained with different methods with the same wall
+time. (a) Two-loss scenario. (b) Three-loss scenario.
+
+
+**Scenarios with three loss terms.** Fig. 6 compares the performance for all three loss terms. While
+the general trend persists, with ConFIG and PCGrad outperforming the other methods, these cases
+highlight interesting differences between these two methods. As PCGrad performs better for the
+Burgers and Schr¨odinger case, while ConFIG is better for the Beltrami flow, we analyze the training
+losses of both methods in comparison to Adam in Fig. 7. In the Burgers and Schr¨odinger equation experiment, ConFIG notably reduces the loss associated with initial conditions while the loss
+of boundary conditions exhibits negligible change. Similarly, for PCGrad, minimal changes are
+observed in boundary conditions. Furthermore, owing to PCGrad’s bias towards optimizing in the
+direction of larger gradient magnitudes, i.e., the direction of the PDE residual, the reduction in its
+PDE residual term is modest, leading to a comparatively slower decrease in the loss of initial conditions compared to ConFIG. In the case of the Beltrami flow, our ConFIG method effectively reduces
+both boundary and initial losses, whereas the PCGrad method slightly improves boundary and initial losses. These results underscore the intricacies of PINN training, where PDE residual terms
+also play a pivotal role in determining the final test performance. In scenarios where the PDE residual does not significantly conflict with one of the terms, an increase in the PDE residual ultimately
+reduces the benefits from the improvement on the boundary/initial conditions, resulting in a better
+performance for PCGrad in the Burgers and Schr¨odinger scenario.
+
+
+**Adjusting direction weights.** In our ConFIG method, we set equal components for the direction
+weights _**w**_ **ˆ** = **1** _m_ to ensure a uniform decrease rate across all loss terms. In the following experiments, we use the different weighting methods discussed above to calculate the components of _**w**_ **ˆ**
+and compare the results with our ConFIG method. As demonstrated in Fig. 8, only our default strategy (equal weights) and the ReLoBRaLo weights get better performance than the Adam baseline.
+Moreover, our equal setup consistently outperforms the ReLoBRaLo method, except for a slight
+inferiority in the Kovasznay flow scenario with two losses. These results further validate that the
+equal weighting strategy is a good choice.
+
+
+8
+
+
+**Evaluation** **of** **Runtime** **Performance** While the evaluations in Fig. 4 and 6 have focused on
+accuracy after a given number of training epochs, a potentially more important aspect for practical
+applications is the accuracy per runtime. This is where the M-ConFIG method can show its full
+potential, as its slight approximations of the update direction come with a substantial reduction in
+terms of computational resources (we quantify the gains per iteration in A.6). Fig. 9 compares the
+test MSE for M-ConFIG and other methods with a constant budget in terms of wall-clock time. Here,
+M-ConFIG outperforms all other methods, even PCGrad and the regular ConFIG method which
+yielded a better per-iteration accuracy above. This is apparent for all cases under consideration.
+
+
+To shed more light on its behavior, Fig. 10
+shows the test MSE of Adam, ConFIG, and MConFig for the most challenging scenario, the
+3D unsteady Beltrami flow, with an extended
+training run. It shows that the advantage of MConFIG does not just stem from a quick late or
+early decrease but rather is the result of a consistently improved convergence throughout the
+full training. This graph additionally highlights
+that the regular ConFIG method, i.e., without
+momentum, still outperforms Adam despite its
+higher computational cost for each iteration.
+
+
+and M-ConFIG as functions of wall time.
+
+
+**Additional Tests on Challenging PDEs** Recently, several benchmark problems have been proposed as challenging tasks for training PINNs
+(Hao et al., 2023). We have also tested our ConFIG and M-ConFIG methods together with other
+methods on these challenging tasks. The results are summarized in Appendix. A.11. They show
+that, although our methods do not resolve all inherent difficulties of PINN training, our methods still
+consistently outperform the other methods. These results shows the general appeal of the proposed
+methods for challenging, and high-dimensional training scenarios.
+
+
+4.2 MULTI-TASK LEARNING
+
+
+While PINNs represent a highly challenging and relevant case, we also evaluate our ConFIG method
+for traditional Multi-Task Learning (MTL) as an outlook. We employ the widely studied CelebA
+dataset (Liu et al., 2015), comprising 200,000 face images annotated with 40 facial binary attributes,
+making it suitable for MTL with _m_ = 40 loss terms. Unlike PINNs, where each sub-task (loss term)
+carries distinct significance, and the final test loss may not reflect individual subtask performance,
+the CelebA experiment allows us to use the same metric to evaluate the performance for all tasks.
+
+
+We compared the performance of our ConFIG method with ten popular MTL baselines. Besides
+PCGrad and IMTL-G from before, we also compare to Linear scalarization baseline (LS) (Caruana,
+1997), Uncertainty Weighting (UW) (Cipolla et al., 2018), Dynamic Weight Average (DWA) (Liu
+et al., 2019), Gradient Sign Dropout (GradDrop) (Chen et al., 2020), Conflict-Averse Gradient Descent (CAGrad) (Liu et al., 2021a), Random Loss Weighting (RLW) (Lin et al., 2022), Nash bargaining solution for MTL (Nash-MTL) (Navon et al., 2022), and Fast Adaptive Multitask Optimization
+(FAMO) (Liu et al., 2023). We use two metrics to measure the performance of different methods: the
+mean rank metric ( _MR_, lower ranks being better) (Navon et al., 2022; Liu et al., 2023), represents
+the average rank of across all tasks. An _M_ _R_ of 1 means consistently outperforming all others. In
+addition, we consider the average F1 score ( _F_ 1, larger is better) to measure the average performance
+on all tasks.
+
+
+Fig. 11 presents a partial summary of the results. Our ConFIG method or M-ConFIG method
+emerges as the top-performing method for both _MR_ and _F_ 1 metric. Unlike the PINN study, we
+update 30 momentum variables rather than a single momentum variable for the M-ConFIG method,
+as indicated by the subscript ‘30.’ This adjustment is necessary because a single update step is
+insufficient to achieve satisfactory results in the challenging MTL experiments involving 40 tasks.
+
+
+**Varying** **Number** **of** **Tasks** Fig. 12 illustrates how the performance of the M-ConFIG method
+varies with different numbers of tasks and momentum-update steps in the CelebA MTL experiments. The performance of M-ConFIG tends to degrade as the number of tasks increases. This
+
+
+9
+
+
+a positive dot product between the final gradient and each loss-specific gradient. Additionally, we
+introduce a momentum-based approach, replacing the gradient with alternately updated momentum
+for highly efficient iterations. In our experiments the proposed methods have shown superior performance compared with a wide range of existing training strategies for PINNs. The config variants
+even outperform SOTA methods for challenging MTL scenarios.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+Qiang Liu acknowledges the support from the China Scholarship Council (No.202206120036 ) for
+his Ph.D research at the Technical University of Munich.
+
+
+REFERENCES
+
+
+Chandrajit Bajaj, Luke McLennan, Timothy Andeen, and Avik Roy. Recipes for when physics fails:
+recovering robust learning of physics informed neural networks. _Machine_ _Learning:_ _Science_
+_and Technology_, 4(1):015013, feb 2023. doi: 10.1088/2632-2153/acb416. [URL https://dx.](https://dx.doi.org/10.1088/2632-2153/acb416)
+[doi.org/10.1088/2632-2153/acb416.](https://dx.doi.org/10.1088/2632-2153/acb416)
+
+
+Christian Beck, Martin Hutzenthaler, Arnulf Jentzen, and Benno Kuckuck. An overview
+on deep learning-based approximation methods for partial differential equations. _Dis-_
+_crete_ _and_ _Continuous_ _Dynamical_ _Systems_ _-_ _B_, 28(6):3697–3746, 2023. ISSN 1531-3492.
+doi: 10.3934/dcdsb.2022238. URL [https://www.aimsciences.org/article/id/](https://www.aimsciences.org/article/id/639b367cb2114e413cb39c48)
+[639b367cb2114e413cb39c48.](https://www.aimsciences.org/article/id/639b367cb2114e413cb39c48)
+
+
+Rafael Bischof and Michael Kraus. Multi-objective loss balancing for physics-informed deep learning, 2021.
+
+
+R. Caruana. _Machine_ _Learning_, chapter Multitask Learning. Springer, 1997. doi: 10.1023/A:
+1007379606734.
+
+
+Arslan Chaudhry, Naeemullah Khan, Puneet Dokania, and Philip Torr. Continual learning in lowrank orthogonal subspaces. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin
+(eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 33, pp. 9900–9911. Cur[ran Associates, Inc., 2020. URL https://proceedings.neurips.cc/paper_files/](https://proceedings.neurips.cc/paper_files/paper/2020/file/70d85f35a1fdc0ab701ff78779306407-Paper.pdf)
+[paper/2020/file/70d85f35a1fdc0ab701ff78779306407-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/70d85f35a1fdc0ab701ff78779306407-Paper.pdf)
+
+
+Zhao Chen, Jiquan Ngiam, Yanping Huang, Thang Luong, Henrik Kretzschmar, Yuning Chai,
+and Dragomir Anguelov. Just pick a sign: Optimizing deep multitask models with gradient sign dropout. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin
+(eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 33, pp. 2039–2050. Cur[ran Associates, Inc., 2020. URL https://proceedings.neurips.cc/paper_files/](https://proceedings.neurips.cc/paper_files/paper/2020/file/16002f7a455a94aa4e91cc34ebdb9f2d-Paper.pdf)
+[paper/2020/file/16002f7a455a94aa4e91cc34ebdb9f2d-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/16002f7a455a94aa4e91cc34ebdb9f2d-Paper.pdf)
+
+
+Roberto Cipolla, Yarin Gal, and Alex Kendall. Multi-task learning using uncertainty to weigh losses
+for scene geometry and semantics. In _2018_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_
+_Pattern Recognition_, pp. 7482–7491, 2018. doi: 10.1109/CVPR.2018.00781.
+
+
+Salvatore Cuomo, Vincenzo Schiano Di Cola, Fabio Giampaolo, Gianluigi Rozza, Maziar Raissi,
+and Francesco Piccialli. Scientific machine learning through physics–informed neural networks:
+Where we are and what’s next. _Journal of Scientific Computing_, 92(3):88, 2022. doi: 10.1007/
+s10409-021-01148-1.
+
+
+Arka Daw, Jie Bu, Sifan Wang, Paris Perdikaris, and Anuj Karpatne. Mitigating propagation failures
+in physics-informed neural networks using retain-resample-release (r3) sampling. In _Proceedings_
+_of the 40th International Conference on Machine Learning_, ICML’23. JMLR.org, 2023.
+
+
+Taco de Wolff, Hugo Carrillo Lincopi, Luis Mart´ı, and Nayat Sanchez-Pi. Mopinns: an evolutionary
+multi-objective approach to physics-informed neural networks. In _Proceedings_ _of_ _the_ _Genetic_
+_and_ _Evolutionary_ _Computation_ _Conference_ _Companion_, GECCO ’22, pp. 228–231, New York,
+NY, USA, 2022. Association for Computing Machinery. ISBN 9781450392686. doi: 10.1145/
+3520304.3529071. [URL https://doi.org/10.1145/3520304.3529071.](https://doi.org/10.1145/3520304.3529071)
+
+
+Xin Dong, Ruize Wu, Chao Xiong, Hai Li, Lei Cheng, Yong He, Shiyou Qian, Jian Cao, and
+Linjian Mo. Gdod: Effective gradient descent using orthogonal decomposition for multi-task
+learning. In _Proceedings of the 31st ACM International Conference on Information & Knowledge_
+_Management_, CIKM ’22, pp. 386–395, New York, NY, USA, 2022. Association for Computing
+Machinery. ISBN 9781450392365. doi: 10.1145/3511808.3557333. URL [https://doi.](https://doi.org/10.1145/3511808.3557333)
+[org/10.1145/3511808.3557333.](https://doi.org/10.1145/3511808.3557333)
+
+
+11
+
+
+Yunshu Du, Wojciech M. Czarnecki, Siddhant M. Jayakumar, Mehrdad Farajtabar, Razvan Pascanu,
+and Balaji Lakshminarayanan. Adapting auxiliary losses using gradient similarity, 2018.
+
+
+Mehrdad Farajtabar, Navid Azizan, Alex Mott, and Ang Li. Orthogonal gradient descent for
+continual learning. In Silvia Chiappa and Roberto Calandra (eds.), _Proceedings_ _of_ _the_ _Twenty_
+_Third_ _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_ _Statistics_, volume 108 of _Pro-_
+_ceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 3762–3773. PMLR, 26–28 Aug 2020. URL
+[https://proceedings.mlr.press/v108/farajtabar20a.html.](https://proceedings.mlr.press/v108/farajtabar20a.html)
+
+
+Xavier Glorot and Yoshua Bengio. Understanding the difficulty of training deep feedforward neural
+networks. In Yee Whye Teh and Mike Titterington (eds.), _Proceedings of the Thirteenth Interna-_
+_tional_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_ _Statistics_, volume 9 of _Proceedings_ _of_ _Machine_
+_Learning Research_, pp. 249–256, Chia Laguna Resort, Sardinia, Italy, 13–15 May 2010. PMLR.
+[URL https://proceedings.mlr.press/v9/glorot10a.html.](https://proceedings.mlr.press/v9/glorot10a.html)
+
+
+Lars Grasedyck. Hierarchical singular value decomposition of tensors. _SIAM_ _Journal_ _on_ _Matrix_
+_Analysis and Applications_, 31(4):2029–2054, 2010. doi: 10.1137/090764189.
+
+
+I. Gromeka. Some cases of incompressible fluid motion. Technical report, Kazan Federal University,
+1881.
+
+
+Jiequn Han, Arnulf Jentzen, and Weinan E. Solving high-dimensional partial differential equations using deep learning. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 115(34):8505–
+8510, 2018. doi: 10.1073/pnas.1718942115. URL [https://www.pnas.org/doi/abs/](https://www.pnas.org/doi/abs/10.1073/pnas.1718942115)
+[10.1073/pnas.1718942115.](https://www.pnas.org/doi/abs/10.1073/pnas.1718942115)
+
+
+Zhongkai Hao, Jiachen Yao, Chang Su, Hang Su, Ziao Wang, Fanzhi Lu, Zeyu Xia, Yichi Zhang,
+Songming Liu, Lu Lu, et al. Pinnacle: A comprehensive benchmark of physics-informed neural
+networks for solving pdes. _arXiv preprint arXiv:2306.08827_, 2023.
+
+
+Philipp Holl, Nils Thuerey, and Vladlen Koltun. Learning to control pdes with differentiable
+physics. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2020. URL [https:](https://openreview.net/forum?id=HyeSin4FPB)
+[//openreview.net/forum?id=HyeSin4FPB.](https://openreview.net/forum?id=HyeSin4FPB)
+
+
+Youngsik Hwang and Dong-Young Lim. Dual cone gradient descent for training physics-informed
+neural networks. In _Advances in Neural Information Processing Systems_, 2024.
+
+
+Adri´an Javaloy and Isabel Valera. Rotograd: Gradient homogenization in multitask learning. In
+_International Conference on Learning Representations_, 2022. [URL https://openreview.](https://openreview.net/forum?id=T8wHz4rnuGL)
+[net/forum?id=T8wHz4rnuGL.](https://openreview.net/forum?id=T8wHz4rnuGL)
+
+
+James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A.
+Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, and Raia Hadsell. Overcoming catastrophic forgetting in neural networks. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 114(13):3521–
+3526, 2017. doi: 10.1073/pnas.1611835114. URL [https://www.pnas.org/doi/abs/](https://www.pnas.org/doi/abs/10.1073/pnas.1611835114)
+[10.1073/pnas.1611835114.](https://www.pnas.org/doi/abs/10.1073/pnas.1611835114)
+
+
+L. I. G. Kovasznay. Laminar flow behind a two-dimensional grid. _Mathematical Proceedings of the_
+_Cambridge Philosophical Society_, 44(1):58–62, 1948. doi: 10.1017/S0305004100023999.
+
+
+Aditi S. Krishnapriyan, Amir Gholami, Shandian Zhe, Robert Kirby, and Michael W Mahoney.
+Characterizing possible failure modes in physics-informed neural networks. _Advances in Neural_
+_Information Processing Systems_, 34, 2021.
+
+
+Baijiong Lin, Feiyang YE, Yu Zhang, and Ivor Tsang. Reasonable effectiveness of random weighting: A litmus test for multi-task learning. _Transactions_ _on_ _Machine_ _Learning_ _Research_, 2022.
+ISSN 2835-8856. [URL https://openreview.net/forum?id=jjtFD8A1Wx.](https://openreview.net/forum?id=jjtFD8A1Wx)
+
+
+Mario Lino, Stathi Fotiadis, Anil A. Bharath, and Chris D. Cantwell. Current and emerging
+deep-learning methods for the simulation of fluid dynamics. _Proceedings_ _of_ _the_ _Royal_ _So-_
+_ciety_ _A:_ _Mathematical,_ _Physical_ _and_ _Engineering_ _Sciences_, 479(2275):20230058, 2023. doi:
+10.1098/rspa.2023.0058. URL [https://royalsocietypublishing.org/doi/abs/](https://royalsocietypublishing.org/doi/abs/10.1098/rspa.2023.0058)
+[10.1098/rspa.2023.0058.](https://royalsocietypublishing.org/doi/abs/10.1098/rspa.2023.0058)
+
+
+12
+
+
+Bo Liu, Xingchao Liu, Xiaojie Jin, Peter Stone, and Qiang Liu. Conflict-averse gradient descent for
+multi-task learning. _Advances in Neural Information Processing Systems_, 34, 2021a.
+
+
+Bo Liu, Yihao Feng, Peter Stone, and Qiang Liu. Famo: Fast adaptive multitask optimization, 2023.
+
+
+Dehao Liu and Yan Wang. A dual-dimer method for training physics-constrained neural networks
+with minimax architecture. _Neural Networks_, 136:112–125, 2021. ISSN 0893-6080. doi: https:
+//doi.org/10.1016/j.neunet.2020.12.028.
+
+
+Liyang Liu, Yi Li, Zhanghui Kuang, Jing-Hao Xue, Yimin Chen, Wenming Yang, Qingmin Liao, and
+Wayne Zhang. Towards impartial multi-task learning. In _International Conference on Learning_
+_Representations_, 2021b. [URL https://openreview.net/forum?id=IMPnRXEWpvr.](https://openreview.net/forum?id=IMPnRXEWpvr)
+
+
+S. Liu, E. Johns, and A. J. Davison. End-to-end multi-task learning with attention. In _2019_
+_IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_ _(CVPR)_, pp. 1871–1880,
+Los Alamitos, CA, USA, jun 2019. IEEE Computer Society. doi: 10.1109/CVPR.2019.00197.
+[URL https://doi.ieeecomputersociety.org/10.1109/CVPR.2019.00197.](https://doi.ieeecomputersociety.org/10.1109/CVPR.2019.00197)
+
+
+Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild.
+In _Proceedings of International Conference on Computer Vision (ICCV)_, December 2015.
+
+
+Mingsheng Long, Zhangjie Cao, Jianmin Wang, and Philip S. Yu. Learning multiple tasks with
+multilinear relationship networks. In _Proceedings of the 31st International Conference on Neural_
+_Information_ _Processing_ _Systems_, NIPS’17, pp. 1593–1602, Red Hook, NY, USA, 2017. Curran
+Associates Inc. ISBN 9781510860964.
+
+
+Levi D. McClenny and Ulisses M. Braga-Neto. Self-adaptive physics-informed neural networks.
+_Journal of Computational Physics_, 474:111722, 2023. ISSN 0021-9991. doi: https://doi.org/10.
+1016/j.jcp.2022.111722.
+
+
+Aviv Navon, Aviv Shamsian, Idan Achituve, Haggai Maron, Kenji Kawaguchi, Gal Chechik, and
+Ethan Fetaya. Multi-task learning as a bargaining game. _arXiv preprint arXiv:2202.01017_, 2022.
+
+
+Pierre Quinton and Val´erian Rey. Jacobian descent for multi-objective optimization, 2024. URL
+[https://arxiv.org/abs/2406.16232.](https://arxiv.org/abs/2406.16232)
+
+
+M. Raissi, P. Perdikaris, and G.E. Karniadakis. Physics-informed neural networks: A deep learning
+framework for solving forward and inverse problems involving nonlinear partial differential equations. _Journal of Computational Physics_, 378:686–707, 2019. ISSN 0021-9991. doi: https://doi.
+org/10.1016/j.jcp.2018.10.045. URL [https://www.sciencedirect.com/science/](https://www.sciencedirect.com/science/article/pii/S0021999118307125)
+[article/pii/S0021999118307125.](https://www.sciencedirect.com/science/article/pii/S0021999118307125)
+
+
+Matthew Riemer, Ignacio Cases, Robert Ajemian, Miao Liu, Irina Rish, Yuhai Tu, and Gerald Tesauro. Learning to learn without forgetting by maximizing transfer and minimizing interference. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2019. URL [https:](https://openreview.net/forum?id=B1gTShAct7)
+[//openreview.net/forum?id=B1gTShAct7.](https://openreview.net/forum?id=B1gTShAct7)
+
+
+Yeonjong Shin, J´erˆome Darbon, and George Em Karniadakis. On the convergence of physics
+informed neural networks for linear second-order elliptic and parabolic type pdes. _Commu-_
+_nications_ _in_ _Computational_ _Physics_, 28(5):2042–2074, 2020. ISSN 1991-7120. doi: https:
+//doi.org/10.4208/cicp.OA-2020-0193.
+
+
+Hwijae Son, Sung Woong Cho, and Hyung Ju Hwang. Enhanced physics-informed neural networks
+with augmented lagrangian relaxation method (al-pinns). _Neurocomputing_, 548:126424, 2023.
+ISSN 0925-2312. doi: 10.1016/j.neucom.2023.126424.
+
+
+Clifford Truesdell. _The Kinematics of Vorticity_ . Indiana University Press, 1954.
+
+
+Remco van der Meer, Cornelis W. Oosterlee, and Anastasia Borovykh. Optimally weighted loss
+functions for solving pdes with neural networks. _Journal of Computational and Applied Mathe-_
+_matics_, 405:113887, 2022. ISSN 0377-0427. doi: https://doi.org/10.1016/j.cam.2021.113887.
+
+
+13
+
+
+Sifan Wang, Yujun Teng, and Paris Perdikaris. Understanding and mitigating gradient flow pathologies in physics-informed neural networks. _SIAM Journal on Scientific Computing_, 43(5):A3055–
+A3081, 2021. doi: 10.1137/20M1318043.
+
+
+Sifan Wang, Xinling Yu, and Paris Perdikaris. When and why pinns fail to train: A neural tangent
+kernel perspective. _Journal of Computational Physics_, 449:110768, 2022. ISSN 0021-9991. doi:
+https://doi.org/10.1016/j.jcp.2021.110768.
+
+
+Colby L. Wight and Jia Zhao. Solving allen-cahn and cahn-hilliard equations using the adaptive
+physics informed neural networks. _Communications in Computational Physics_, 29(3):930–954,
+2021. ISSN 1991-7120. doi: https://doi.org/10.4208/cicp.OA-2020-0086.
+
+
+Jian Cheng Wong, Chin Chun Ooi, Abhishek Gupta, and Yew-Soon Ong. Learning in sinusoidal
+spaces with physics-informed neural networks. _IEEE_ _Transactions_ _on_ _Artificial_ _Intelligence_, 5
+(3):985–1000, 2024. doi: 10.1109/TAI.2022.3192362.
+
+
+Zixue Xiang, Wei Peng, Xu Liu, and Wen Yao. Self-adaptive loss balanced physics-informed neural
+networks. _Neurocomputing_, 496:11–34, 2022. ISSN 0925-2312. doi: https://doi.org/10.1016/j.
+neucom.2022.05.015.
+
+
+Jiachen Yao, Chang Su, Zhongkai Hao, Songming Liu, Hang Su, and Jun Zhu. Multiadam:
+parameter-wise scale-invariant optimizer for multiscale training of physics-informed neural networks. In _Proceedings_ _of_ _the_ _40th_ _International_ _Conference_ _on_ _Machine_ _Learning_, ICML’23.
+JMLR.org, 2023.
+
+
+Tianhe Yu, Saurabh Kumar, Abhishek Gupta, Sergey Levine, Karol Hausman, and
+Chelsea Finn. Gradient surgery for multi-task learning. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.), _Advances_ _in_ _Neural_ _Information_
+_Processing_ _Systems_, volume 33, pp. 5824–5836. Curran Associates, Inc., 2020. URL
+[https://proceedings.neurips.cc/paper_files/paper/2020/file/](https://proceedings.neurips.cc/paper_files/paper/2020/file/3fe78a8acf5fda99de95303940a2420c-Paper.pdf)
+[3fe78a8acf5fda99de95303940a2420c-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2020/file/3fe78a8acf5fda99de95303940a2420c-Paper.pdf)
+
+
+Taotao Zhou, Xiaoge Zhang, Enrique Lopez Droguett, and Ali Mosleh. A generic physics-informed
+neural network-based framework for reliability assessment of multi-state systems. _Reliability En-_
+_gineering_ _&_ _System_ _Safety_, 229:108835, 2023. ISSN 0951-8320. doi: https://doi.org/10.1016/
+j.ress.2022.108835. URL [https://www.sciencedirect.com/science/article/](https://www.sciencedirect.com/science/article/pii/S0951832022004537)
+[pii/S0951832022004537.](https://www.sciencedirect.com/science/article/pii/S0951832022004537)
+
+
+14
+
+
+A APPENDIX
+
+
+A.1 CONVERGENCE PROOF FOR THE CONFIG METHOD
+
+
+In this section, we will give the proof for convergence for both convex (Theorem 1) and non-convex
+landscapes (Theorem 2) for our ConFIG method.
+**Theorem** **1.** _Assume_ _that_ _(a)_ _m_ _objectives_ 1 _,_ 2 _,_ _m_ _are_ _convex_ _and_ _differentiable;_ _(b)The_
+_alonggradientConFIG_ _**g**_ = _∇directionθL_ = [�] _**g**_ _i_ _[m]_ _ConFIG_ =1 _[∇][θ]_ _with_ _[L][i]_ _[is]_ _step_ _[Lipschitz]_ _sizeL_ _Lγ_ _[continuous]_ _· · ·≤_ _L_ 2 _L_ _[will]_ _[with][converge][constant][to]_ _[either][L]_ _[>]_ _[a]_ [0] _[.][location][Then,]_ _[update][where]_
+_**g**_ _ConFIG_ = 0 _or the optimal solution._
+_|_ _|_
+
+_Proof._ A Lipschitz continuous _**g**_ with constant _L >_ 0 gives a negative semi-definite matrix _∇θ_ [2] _[−][LI]_ [.]
+If we do a quadratic expansion of _L_ around _L_ ( _θ_ ), we will get
+
+
+ - _θ_ [+][�] ( _θ_ ) + ( _θ_ ) _[T]_ [�] _θ_ [+] _θ_  - + [1]
+_L_ _≤L_ _∇L_ _−_ 2
+
+
+�� _θ_ + _θ_ ��2
+2 _[∇]_ [2] _[L]_ [(] _[θ]_ [)] _−_
+
+
+(10)
+
+[1] �� _θ_ + _θ_ ��2 _._
+
+2 _[L]_ _−_
+
+
+( _θ_ ) + _**g**_ _[T]_ [�] _θ_ [+] _θ_   - + [1]
+_≤L_ _−_ 2
+
+
+The _θ_ [+] is obtained through an update as _θ_ [+] = _θ_ _γ_ _**g**_ ConFIG, resulting in
+_−_
+
+
+ - _θ_ [+][�] ( _θ_ ) _γ_ _**g**_ _[T]_ _**g**_ ConFIG + [1]
+_L_ _≤L_ _−_ 2
+
+
+(11)
+
+[1]
+
+2 _[Lγ]_ [2] _[ |]_ _**[g]**_ [ConFIG] _[|]_ [2] _[.]_
+
+
+2 _[Lγ]_ [2] _[ |]_ _**[g]**_ [ConFIG] _[|]_ [2]
+
+
+_m_
+
+
+_**g**_ _i_ _[T]_ [)] _**[g]**_ [ConFIG] [+] [1]
+
+2
+
+_i_ =1
+
+
+= _L_ ( _θ_ ) _−_ _γ_ (
+
+
+Our _**g**_ ConFIG has following 2 features:
+
+
+    - An equal and positive projection on each loss-specific gradient: _|_ _**gg**_ _ii_ _[⊤]_ _||_ _**[g]**_ _**g**_ [ConFIG] ConFIG _|_ [=] _|_ _**gg**_ _jj_ _[⊤]_ _||_ _**[g]**_ _**g**_ [ConFIG] ConFIG _|_ _[>]_
+0, i.e., _Sc_ ( _**g**_ _i,_ _**g**_ ConFIG) = _Sc_ ( _**g**_ _j,_ _**g**_ ConFIG) := _Sc_ _>_ 0;
+
+
+    - A magnitude equals to the sum of projection length of each loss-specific gradient on it:
+_|_ _**g**_ ConFIG _|_ = [�] _i_ _[m]_ =1 _**[g]**_ _i_ _[⊤][U]_ [(] _**[g]**_ [ConFIG][) =][ �] _[|]_ _**[g]**_ _[i][|][S][c]_ [.]
+
+Given these two conditions, we have
+
+
+_m_
+
+
+- _**g**_ _i_ _[⊤]_ [)] _**[g]**_ [ConFIG] [=]
+
+_i_ =1
+
+
+_m_
+�( _**g**_ _i_ _[⊤]_ _**[g]**_ [ConFIG][)]
+
+_i_ =1
+
+
+(
+
+
+=
+
+
+_m_
+�( _**g**_ _i_ _**g**_ ConFIG _Sc_ )
+
+_i_ =1 _|_ _||_ _|_ _,_ (12)
+
+
+= _**g**_ ConFIG
+_|_ _|_
+
+
+_m_
+�( _**g**_ _i_ _Sc_ )
+
+_|_ _|_
+_i_ =1
+
+
+turning Eq.11 into
+
+
+= _**g**_ ConFIG
+_|_ _|_ [2]
+
+
+ - _θ_ [+][�] ( _θ_ ) _γ_ _**g**_ ConFIG + [1] (13)
+_L_ _≤L_ _−_ _|_ _|_ [2] 2 _[Lγ]_ [2] _[ |]_ _**[g]**_ [ConFIG] _[|]_ [2]
+
+
+If _γ_ _≤_ _L_ [2] [, we have] [1] 2 _[Lγ]_ [2] _[ |]_ _**[g]**_ [ConFIG] _[|]_ [2] _[−][γ][|]_ _**[g]**_ [ConFIG] _[|]_ [2] _[≤]_ [0][, which finally gives] _[ L]_ [ (] _[θ]_ [+][)] _[ ≤L]_ [ (] _[θ]_ [)][. Note that]
+
+when _γ_ _≤_ _L_ [2] [, the equality holds and only holds when] _[ |]_ _**[g]**_ [ConFIG] _[|]_ [ = 0][ where conflict direction does][n’t]
+
+
+If _γ_ _L_
+_≤_ [2]
+
+
+[1]
+_L_ [, we have] 2
+
+[2]
+
+
+when _γ_ _≤_ _L_ [2] [, the equality holds and only holds when] _[ |]_ _**[g]**_ [ConFIG] _[|]_ [ = 0][ where conflict direction does][n’t]
+
+exist and optimization along any direction will results in at least one of the losses increases.
+
+
+**Theorem** **2.** _Assume_ _that_ _(a)_ _m_ _objectives_ 1 _,_ 2 _,_ _m_ _are_ _differentiable_ _and_ _possibly_ _non-_
+_Then, update along ConFIG directionconvex;_ _(b)The_ _gradient_ _**g**_ = _∇θL_ = _**g**_ _ConFIG_ [�] _i_ _[m]_ =1 _with step sizeL_ _[∇][θ]_ _L_ _[L][i]_ _· · ·_ _[is]_ _[Lipschitz]_ _L γ_ _≤_ _L_ [2] _[continuous][will converge to either a location][with]_ _[constant]_ _[L]_ _[>]_ [0] _[.]_
+
+_where_ _**g**_ _ConFIG_ = 0 _or the stationary point._
+_|_ _|_
+
+
+**Theorem** **2.** _Assume_ _that_ _(a)_ _m_ _objectives_ 1 _,_ 2 _,_ _m_ _are_ _differentiable_ _and_ _possibly_ _non-_
+_Then, update along ConFIG directionconvex;_ _(b)The_ _gradient_ _**g**_ = _∇θL_ = _**g**_ _ConFIG_ [�] _i_ _[m]_ =1 _with step sizeL_ _[∇][θ]_ _L_ _[L][i]_ _· · ·_ _[is]_ _[Lipschitz]_ _L γ_ _≤_ _L_ [2] _[continuous][will converge to either a location][with]_ _[constant]_ _[L]_ _[>]_ [0] _[.]_
+
+
+15
+
+
+_Proof._ Using the descent lemma, an update on _**g**_ ConFIG with a step size _γ_ _L_
+_≤_ [2]
+
+
+_L_ [gives us]
+
+
+ - _θ_ _[k]_ [+1][�]  - _θ_ _[k]_ [�]
+_L_ _≤L_ _−_ _[γ]_ 2
+
+
+ConFIG _[|]_ [2] _[,]_ (14)
+2
+
+_[|]_ _**[g]**_ _[k]_
+
+
+where the superscript is the index of optimization iterations.
+
+
+Due to _|_ _**g**_ ConFIG _|_ = [�] _i_ _[m]_ =1 _[|]_ _**[g]**_ _[i][|][S][c]_ [,] _[|]_ _**[g]**_ _[|]_ [=] _[|]_ [ �] _i_ _[m]_ =1 _**[g]**_ _[i][|]_ [and] [the] [triangle] [inequality] [where] [�] _i_ _[m]_ =1 _[|]_ _**[g]**_ _[i][|]_ _[≥]_
+_|_ [�] _i_ _[m]_ =1 _**[g]**_ _[i][|]_ [, we have]
+
+_[γ]_
+
+
+ - _θ_ _[k]_ [+1][�]  - _θ_ _[k]_ [�]
+_L_ _≤L_ _−_ _[γ]_ 2
+
+
+ConFIG _[|]_ [2]
+2
+
+_[|]_ _**[g]**_ _m_ _[k]_
+
+
+= - _θ_ _[k]_ [�]
+_L_ _−_ _[γ]_ 2
+
+
+  - _θ_ _[k]_ [�]
+_≤L_ _−_ _[γ]_ 2
+
+
+= - _θ_ _[k]_ [�]
+_L_ _−_ _[γ]_ 2
+
+
+_m_
+
+
+- _**g**_ _i_ _[k]_ _c_
+
+_i_ =1 _|_ _[|]_ [)][2] _[S][k,]_ [2]
+
+
+_._ (15)
+
+
+2 [(]
+
+
+_m_
+
+- _**g**_ _i_ _[k]_ _c_
+
+_i_ =1 _[|]_ [2] _[S][k,]_ [2]
+
+
+_m_
+
+
+2
+
+_[|]_
+
+
+2 _c_
+
+_[|]_ _**[g]**_ _[k][|]_ [2] _[S][k,]_ [2]
+
+
+Summing this inequality over _k_ = 1 _,_ 2 _, · · ·_ _, K_ results in
+
+
+_K_
+
+
+- _**g**_ _[k]_
+
+_|_ _|_ [2] _≤_ _γ_ [2]
+_k_ =1
+
+
+_γ_
+
+
+_K_
+
+
+_k_ =1
+
+
+ - _θ_ _[k]_ [�]  - _θ_ _[k]_ [+1][�]
+_L_ _−L_ _._ (16)
+
+_Sc_ _[k,]_ [2]
+
+
+By defining min1 _≤k≤K_ ( _Sc_ _[k]_ [) =] _[ α >]_ [ 0][, we have]
+
+
+_K_
+
+    - _**g**_ _[k]_ 2     -     - _θ_ [0][�]     - _θ_ _[K]_ [+1][��] _._ (17)
+
+_|_ _|_ [2] _≤_ _γα_ [2] _L_ _−L_
+_k_ =1
+
+
+Finally, averaging Eq.17 on each side leads to
+
+
+min
+1 _≤k≤K_ _[≤]_ _K_ [1]
+
+_[|]_ _**[g]**_ _[k][|]_ [2]
+
+
+_K_
+
+- _**g**_ _[k]_ 2 - - _θ_ [0][�] - _θ_ _[K]_ [+1][��] _._ (18)
+
+_|_ _|_ [2] _≤_ _γα_ [2] _K_ _L_ _−L_
+_k_ =1
+
+
+As _K_, either the _**g**_ ConFIG = 0 is obtained and the optimization stops, or the last term in
+_→∞_ _|_ _|_
+the inequality goes 0, implying that the minimal gradient norm also goes to zero, i.e., a stationary
+point.
+
+
+A.2 COMPARISON BETWEEN CONFIG, PCGRAD AND IMTL-G
+
+
+**Algorithm 2** PCGrad method
+**Require:** _θ_ (network weights), [ 1 _,_ 2 _,_ _m_ ] (loss functions)
+_L_ _L_ _· · · L_
+
+
+[ _**g**_ 1 _,_ _**g**_ 2 _,_ _,_ _**g**_ _m_ ] [ _θ_ 1 _,_ _θ_ 2 _,_ _,_ _θ_ _m_ ]
+_· · ·_ _←_ _∇_ _L_ _∇_ _L_ _· · ·_ _∇_ _L_
+
+[ _**g**_ **ˆ** 1 _,_ **ˆ** _**g**_ 2 _,_ _,_ **ˆ** _**g**_ _m_ ] [ _**g**_ 1 _,_ _**g**_ 2 _,_ _,_ _**g**_ _m_ ]
+_· · ·_ _←_ _· · ·_
+**for** _i_ 1 to _m_ **do**
+_←_ _uniformly_
+
+
+_uniformly_
+**for** _j_ _∼_ [1 _,_ 2 _, · · · m_ ] in random order **do**
+**if** _i_ = _j_ & _**g**_ **ˆ** _i_ _[⊤]_ _**[g]**_ _[j]_ _[<]_ [ 0] **[ then]**
+_̸_
+_**g**_ **ˆ** _i_ = ( _**g**_ _j,_ **ˆ** _**g**_ _i_ )
+_O_
+**end if**
+**end for**
+_**g**_ PCGrad = [�] _i_ _[j]_ =1 _**[g]**_ **[ˆ]** _[i]_
+**end for**
+
+
+**PCGrad** **method.** Algorithm 2 outlines the complete algorithm of the PCGrad method. The
+core idea is to use ( _**g**_ 2 _,_ _**g**_ 1) to replace _**g**_ 1 when _**g**_ 1 conflicts with _**g**_ 2 i.e., _**g**_ 1 _[⊤]_ _**[g]**_ [2] _[<]_ [0][.] [Since]
+_O_
+( _**g**_ 2 _,_ _**g**_ 1) _[⊤]_ _**g**_ 2 = 0, the conflict is resolved. In the simple case of two loss terms, this results in
+_O_
+the final gradient _**g**_ PCGrad = ( _**g**_ 1 _,_ _**g**_ 2)+ ( _**g**_ 2 _,_ _**g**_ 1). This final update gradient does not conflict with
+_O_ _O_
+
+
+16
+
+
+1 _**[g]**_ [2][)][2]
+all loss-specific gradients, as [ _O_ ( _**g**_ 1 _,_ _**g**_ 2) + _O_ ( _**g**_ 2 _,_ _**g**_ 1)] _[⊤]_ _**g**_ 1 = _O_ ( _**g**_ 2 _,_ _**g**_ 1) _[⊤]_ _**g**_ 1 = _|_ _**g**_ 1 _|_ [2] _−_ [(] _**[g]**_ _[⊤]_ _|_ _**g**_ 2 [2] _[|]_
+
+
+_|_ _**g**_ 1 _|_ [2] _−_ _[|]_ _**[g]**_ [1] _|_ _[|]_ _**g**_ [2] _[|]_ 2 [2] _**[g]**_ _[|]_ [2] _[|]_ [2]
+
+
+1 [2]
+
+_|_ _**g**_ 2 [2] _[|]_ _≥_
+
+
+_|_ _**g**_ 2 [2] _[|]_ [2] = 0.
+
+
+However, the PCGrad method can not guarantee a conflict-free update when there are more lossspecific gradients. To illustrate this, let us consider the case of three vectors, _**g**_ 1 _,_ _**g**_ 2 _,_ _**g**_ 3, where each
+vector conflicts with the other. According to the PCGrad method, we first replace _**g**_ 1 with _O_ ( _**g**_ 2 _,_ _**g**_ 1),
+i.e., ˆ _**g**_ 1 = ( _**g**_ 2 _,_ _**g**_ 1) so that ˆ _**g**_ 1 _[⊤]_ _**[g]**_ [2] [= 0][. If the updated][ ˆ] _**[g]**_ [1] [is still conflict with] _**[ g]**_ [3][, we will then further]
+_O_
+modify _**g**_ ˆ1 as _**g**_ ˆ1 = ( _**g**_ 3 _,_ ˆ _**g**_ 1). However, now we can only guarantee that _**g**_ ˆ1 _[⊤]_ _**[g]**_ [3] [= 0][, but we can not]
+_O_
+guarantee that _**g**_ ˆ1 is still not conflicting with _**g**_ 2.
+
+
+The PCGrad method introduces random selection to mitigate this drawback, as shown in Algorithmcase for 2,thebutfailurethis ofdoesthe notPCGradfundamentallymethod wheresolve _**g**_ 1the=problem.[1 _._ 0 _,_ 0 _,_ 0 _._ 1]Fig., _**g**_ 2 13= illustrate[ 0 _._ 5 _,_ _√_ 3a _/_ 2simple _,_ 0 _._ 1],
+
+_−_
+
+
+case for the failure of the PCGrad method where _**g**_ 1 = [1 _._ 0 _,_ 0 _,_ 0 _._ 1], _**g**_ 2 = [ 0 _._ 5 _,_ 3 _/_ 2 _,_ 0 _._ 1],
+
+_−_
+
+and _**g**_ 3 = [ 0 _._ 5 _,_ _√_ 3 _/_ 2 _,_ 0 _._ 1]. The final update vector for the PCGrad method is _**g**_ PCGrad =
+
+_−_ _−_
+
+
+and _**g**_ 3 = [ 0 _._ 5 _,_ 3 _/_ 2 _,_ 0 _._ 1]. The final update vector for the PCGrad method is _**g**_ PCGrad =
+
+_−_ _−_
+
+[ _−_ 0 _._ 351 _, −_ 0 _._ 203 _,_ 0 _._ 658], which conflicts with _**g**_ 1 while the update direction of our ConFIG method
+is _**g**_ ConFIG = [0 _,_ 0 _,_ 0 _._ 3], which is not conflict with any loss-specific gradients.
+
+
+Figure 13: A simple failure model for PCGrad method.
+
+
+Another feature of the PCGrad method is that the projection length of the final update gradient
+_**g**_ PCGrad on each loss-specific gradient is not equal, i.e., _**g**_ PCGrad _[⊤]_ _[U]_ [(] _**[g]**_ _[i]_ [)] _[ ̸]_ [=] _**[ g]**_ PCGrad _[⊤]_ _[U]_ [(] _**[g]**_ _[j]_ [)][, and] _**[ g]**_ [PCGrad][ is]
+usually biased to the loss-specific gradient with higher magnitude. We can illustrate this point with
+two gradient examples:
+
+
+_**g**_ PCGrad _[⊤]_ _[U]_ [(] _**[g]**_ [1][) = (] _[O]_ [(] _**[g]**_ [1] _[,]_ _**[ g]**_ [2][) +] _[ O]_ [(] _**[g]**_ [2] _[,]_ _**[ g]**_ [1][))] _[⊤]_ _**[g]**_ [1]
+
+_**g**_ 1
+
+
+= ( _**g**_ 2 _,_ _**g**_ 1) _[⊤]_ _**[g]**_ [1]
+_O_ _**g**_ 1
+
+
+_**g**_ 1
+_|_ _|_
+
+
+_**g**_ 1
+_|_ _|_
+
+
+_⊤_
+
+- _**g**_ 1
+_**g**_ 1
+_|_ _|_
+
+
+ 1 _**[g]**_ [2]
+= _**g**_ 1
+_−_ _**[g]**_ _**g**_ _[⊤]_ 2 _**[g]**_ [2]
+_|_ _|_ [2]
+
+1 _**[g]**_ [2][)][2]
+= _**g**_ 1
+_|_ _| −_ [(] _**g**_ _**[g]**_ 2 _[⊤]_ _**g**_ 1
+
+[2]
+
+
+(19)
+
+
+_**g**_ 2 _**g**_ 1
+_|_ _|_ [2] _|_ _|_
+
+
+= _|_ _**g**_ 1 _|_ [1 _−Sc_ [2][(] _**[g]**_ [1] _[,]_ _**[ g]**_ [2][)]] _[.]_
+
+
+Similarly,
+_**g**_ PCGrad _[⊤]_ _[U]_ [(] _**[g]**_ [2][) =] _[ |]_ _**[g]**_ [2] _[|]_ [[1] _[ −S]_ _c_ [2][(] _**[g]**_ [1] _[,]_ _**[ g]**_ [2][)]] _[.]_ (20)
+
+
+Thus,
+_**g**_ PCGrad _[⊤]_ _[U]_ [(] _**[g]**_ [1][)]
+_**g**_ PCGrad _[⊤]_ _[U]_ [(] _**[g]**_ [2][)] [=] _[|]_ _|_ _**g**_ _**[g]**_ [1] 2 _[|]_ _|_
+
+
+(21)
+_**g**_ 2
+_|_ _|_
+
+
+17
+
+
+A similar conclusion also holds for the case with more loss-specific gradients. The essence here
+is the magnitude of the orthogonal operator which is proportional to the magnitude of loss-specific
+gradients:
+
+
+~~�~~
+
+
+( _**g**_ _i,_ _**g**_ _j_ ) =
+_|O_ _|_
+
+
+=
+
+
+=
+
+
+_i_ _**[g]**_ _[j]_
+( _**g**_ _j_
+
+_−_ _**[g]**_ _**g**_ _[⊤]_ _i_ _**[g]**_ _[i]_ [)][2]
+_|_ _|_ [2]
+
+_i_ _**[g]**_ _[j]_ [)][2]
+( _**g**_ _j_ + [(] _**[g]**_ _[⊤]_
+_|_ _|_ [2] _**g**_ _i_
+
+_|_ _|_ [2]
+
+_i_ _**[g]**_ _[j]_ [)][2]
+_**g**_ _j_
+_|_ _|_ [2] _−_ [(] _**[g]**_ _[⊤]_ _**g**_ _i_
+
+[2]
+
+
+_**g**_ _i_
+_|_ _|_ [2]
+
+
+~~�~~
+
+
+(22)
+
+
+~~�~~
+
+
+_i_ _[⊤]_ _**[g]**_ _[j]_ [)][2] _i_ _**[g]**_ _[j]_
+
+_**g**_ _i_ _−_ 2 _**[g]**_ _**g**_ _[⊤]_ _i_ _**[g]**_ _i_ _[⊤]_ _**[g]**_ _[j]_ [)]
+_|_ _|_ [2] _|_ _|_ [2]
+
+
+~~�~~
+= _|_ _**g**_ _j|_ [2] _−|_ _**g**_ _j|_ [2] _Sc_ [2] ( _**g**_ _i,_ _**g**_ _j_ )
+
+
+         = _|_ _**g**_ _j|_ 1 _−Sc_ [2] ( _**g**_ _i,_ _**g**_ _j_ ) _._
+
+When summing all these orthogonal values together, the final gradient will be biased to the ( _**g**_ _i,_ _**g**_ _j_ )
+_O_
+with a larger gradient. Meanwhile, since ( _**g**_ _i,_ _**g**_ _j_ ) is biased towards _**g**_ _j_ rather than _**g**_ _i_ (due to
+_O_
+_c_ ( _**g**_ _i,_ ( _**g**_ _i,_ _**g**_ _j_ )) = 0), the final gradient will favor to the loss-specific gradient with larger magni_S_ _O_
+tude.
+
+
+**IMTL-G method.** In contrast to the PCGrad method the IMTL-G method is designed to guarantee
+an equal projection length, i.e.,
+
+_**g**_ IMTL-G ( _gi_ ) _[⊤]_ = _**g**_ IMTL-G ( _gj_ ) _[⊤]_ (23)
+_· U_ _· U_
+To achieve this goal, the IMTL-G method rescales the magnitude of each loss-specific gradient with
+calculated weights:
+
+
+_**g**_ IMTL-G =
+
+
+_m_
+
+- _αi_ _**g**_ _i_ (24)
+
+
+_i_ =1
+
+
+[ _α_ 2 _, α_ 3 _αm_ ] = _**g**_ 1 _**U**_ _[⊤]_ - _**D**_ _**U**_ _[⊤]_ [�] _[−]_ [1]
+_· · ·_ _·_ _·_ _·_
+
+[�] _[m]_
+
+
+
+
+
+
+(25)
+
+
+_α_ 1 = 1 _i_ =2 _[α][i]_
+_−_ [�] _[m]_
+_**U**_ _[⊤]_ = [ _U_ ( _**g**_ 1 _[⊤]_ [)] _[ −U]_ [(] _**[g]**_ 2 _[⊤]_ [)] _[,][ U]_ [(] _**[g]**_ 1 _[⊤]_ [)] _[ −U]_ [(] _**[g]**_ 3 _[⊤]_ [)] _[,][ · · ·]_ _[,][ U]_ [(] _**[g]**_ 1 _[⊤]_ [)] _[ −U]_ [(] _**[g]**_ _m_ _[⊤]_ [)]]
+_**D**_ _[⊤]_ = [ _**g**_ 1 _[⊤]_ _[−]_ _**[g]**_ 2 _[⊤][,]_ _**[ g]**_ 1 _[⊤]_ _[−]_ _**[g]**_ 3 _[⊤][,][ · · ·]_ _[,]_ _**[ g]**_ 1 _[⊤]_ _[−]_ _**[g]**_ _m_ _[⊤]_ []]
+
+
+
+
+
+For the two gradient scenario, this will give [ _α_ 1 _, α_ 2] = [ _**g**_ 2 _/_ ( _**g**_ 1 + _**g**_ 2 ) _,_ _**g**_ 1 _/_ ( _**g**_ 1 + _**g**_ 2 )],
+_|_ _|_ _|_ _|_ _|_ _|_ _|_ _|_ _|_ _|_ _|_ _|_
+resulting in a same magnitude for two loss-specific gradients as ( _**g**_ 1 _**g**_ 2 ) _/_ ( _**g**_ 1 + _**g**_ 2 ). The final
+_|_ _||_ _|_ _|_ _|_ _|_ _|_
+gradient vector doesn’t conflict with _**g**_ 1 and _**g**_ 2, as
+
+
+_**g**_ 1 _**g**_ 2
+_**g**_ IMTL-G _[⊤]_ [(] _[U]_ [)(] _**[g]**_ [1][) =] _|_ _||_ _|_ _**[g]**_ [1]
+_**g**_ 1 + _**g**_ 2 _**g**_ 1
+_|_ _|_ _|_ _|_ [(] _|_
+
+
+_**[g]**_ [2]
+
+_**g**_ 2 _**g**_ 1
+_|_ _|_ [)] _[⊤]_ _|_ _**[g]**_ [1]
+
+
+_**[g]**_ [1] _**[g]**_ [2]
+
+_**g**_ 1 [+] _**g**_ 2
+_|_ _|_ _|_
+
+
+_**g**_ 1
+_|_ _|_
+
+
+(26)
+
+
+_**g**_ 1 _**g**_ 2
+= _|_ _||_ _|_
+_**g**_ 1 + _**g**_ 2
+_|_ _|_ _|_ _|_ [(1 +] _[ S][c]_ [(] _**[g]**_ [1] _[,]_ _**[ g]**_ [2][))]
+
+
+_≥_ 0
+
+
+As mentioned in Appendix. 3.2, the direction of the final update gradient for IMTL-G and our
+ConFIG is the same when there are only two vectors, but their magnitudes differ. For the Adam
+optimizer, the gradient’s absolute magnitude is unimportant since it ultimately rescales the gradient
+elements. The crucial aspect is how the gradient changes in both direction and magnitude. When
+the gradient changes rapidly, Adam’s corresponding learning rate will decrease, as discussed in Appendix. A.5. Since the direction of the final gradient in IMTL-G and ConFIG is the same, how
+their magnitudes change ultimately affects their performance with the Adam optimizer. The magnitude of the fnal gradient with two gradients are 2�[1 + _c_ ( _**g**_ 1) _,_ _**g**_ 2)] _/_ 2( _**g**_ 1 _**g**_ 2 ) _/_ ( _**g**_ 1 + _**g**_ 2 ) and
+�[1 + _c_ ( _**g**_ 1) _,_ _**g**_ 2)] _/_ 2( _**g**_ 1 + _**g**_ 2 ) for IMTL-G and ConFIG method, respectively. _S_ _|_ _||_ _|_ _|_ Thus, _|_ _|_ _|_
+_S_ _|_ _|_ _|_ _|_
+
+
+_**g**_ IMTL-G
+_|_ _|_
+
+
+_**g**_ IMTL-G
+_|_ _|_ [2(] _[|]_ _**[g]**_ [1] _[||]_ _**[g]**_ [2] _[|]_ [)] _[/]_ [(] _[|]_ _**[g]**_ [1] _[|]_ [ +] _[ |]_ _**[g]**_ [2] _[|]_ [)]
+
+_**g**_ ConFIG [=] _**g**_ 1 + _**g**_ 2
+_|_ _|_ _|_ _|_ _|_ _|_
+
+
+(27)
+_**g**_ 1 + _**g**_ 2
+_|_ _|_ _|_ _|_
+
+
+18
+
+
+A significant difference arises when the magnitudes of _**g**_ 1 and _**g**_ 2 are different. For example, if
+_**g**_ 1 _>>_ _**g**_ 2, ( _**g**_ 1 _**g**_ 2 ) _/_ ( _**g**_ 1 + _**g**_ 2 ) _**g**_ 2 while _**g**_ 1 + _**g**_ 2 _**g**_ 1. This means that the magnitude
+_|_ _||_ _|_ _|_ _|_ _|_ _|_ _∼_ _|_ _|_ _|_ _|_ _∼_
+of _**g**_ IMTL-G tracks the changes in the magnitude of the smaller vector, whereas our ConFIG method
+tracks the magnitude of the larger vector. This causes the difference between IMTL-G and our
+ConFIG methods in two loss-term vector situations.
+
+
+Figure 14: A simple failure model for IMTL-G method.
+
+
+Another major difference between IMTL-G and our ConFIG methods occurs when more gradient terms are involved. The coefficient _αi_ of IMTL-G method might have negative values since
+Eq. 25 only guarantees that _**g**_ IMTL-G ( _gi_ ) _[⊤]_ = _**g**_ IMTL-G ( _gj_ ) _[⊤]_ but not _**g**_ IMTL-G ( _gi_ ) _[⊤]_ =
+
+_·_ _U_ _·_ _U_ _·_ _U_
+_**g**_ IMTL-G ( _gj_ ) _[⊤]_ 0. It is easy to find such a situation where the negative coefficient will result in
+a conflicting _· U_ update. _≥_ Fig. 14 illustrates such an example where _**g**_ 1 = [0 _._ 0412 _,_ 0 _._ 4295 _,_ 0 _._ 9394],
+_**g**_ 2 = [0 _._ 3571 _,_ 0 _._ 5491 _,_ 0 _._ 1414], and [0 _._ 9823 _,_ 0 _._ 9361 _,_ 0 _._ 0552]. Although both our ConFIG and
+IMTL-G ensure _**g**_ IMTL-G ( _gi_ ) _[⊤]_ = _**g**_ IMTL-G ( _gj_ ) _[⊤]_, they are in exactly opposite direction. The obtained update direction for our ConFIG method is _·U_ _·U_ _**g**_ ConFIG = [1 _._ 5844 _,_ 0 _._ 4850 _,_ 1 _._ 4005] and the cosine
+similarity between _**g**_ ConFIG and each loss-specific gradient is 0.7086 while IMTL-G method results
+in a final update gradient of _**g**_ IMTL-G = [ 0 _._ 7429 _,_ 0 _._ 2274 _,_ 0 _._ 6566] with a cosine similarity of
+
+_−_ _−_ _−_
+-0.7086.
+
+
+A.3 EXISTENCE OF SOLUTIONS FOR CONFIG
+
+
+In Appendix A.2, we illustrate instances where the PCGrad and IMTL-G methods fail. This raises
+the question of whether ConFIG likewise exhibits failure modes that could impede its performance.
+
+
+Our ConFIG method is equivalent to solving the following system of linear equations:
+
+
+[ ( _**g**_ 1) _,_ ( _**g**_ 2) _,_ _,_ ( _**g**_ _m_ )] _[⊤]_ _**x**_ = **1** _m,_ (28)
+_U_ _U_ _· · ·_ _U_
+
+where the solution _**x**_ is the conflict-free gradient that should be obtained. Our ConFIG method will
+fail if Eq. 28 has no solution, i.e., if a conflict-free direction in the parameter space does not exist.
+If we use _**A**_ and _**b**_ to denote [ ( _**g**_ 1) _,_ ( _**g**_ 2) _,_ _,_ ( _**g**_ _m_ )] _[⊤]_ and **1** _m_, respectively, Eq. 28 will not
+_U_ _U_ _· · ·_ _U_
+have a solution if _R_ ( _**A**_ ) _<_ _R_ [( _**A**_ _|_ _**b**_ )] where _R_ is the rank of a matrix and ( _**A**_ _|_ _**b**_ ) is the augmented
+matrix of _**A**_ and _**b**_ . Meanwhile, since _R_ ( _**b**_ )=1, and _R_ ( _**A**_ ) _≤_ _R_ [( _**A**_ _|_ _**b**_ )] _≤_ _R_ ( _**A**_ ) + _R_ ( _**b**_ ), i.e.,
+_R_ ( _**A**_ ) _≤_ _R_ [( _**A**_ _|_ _**b**_ )] _≤_ _R_ ( _**A**_ ) + 1, _R_ [( _**A**_ _|_ _**b**_ )] can only be either _R_ ( _**A**_ ) or _R_ ( _**A**_ ) + 1. Thus, Eq. 28
+doesn’t have solutions when _R_ [( _**A**_ _|_ _**b**_ )] = _R_ ( _**A**_ ) + 1.
+
+Assume that each loss-specific gradient has _k_ elements, then the shape of _**A**_ and _**b**_ is _m × k_ and
+_m ×_ ( _k_ + 1), respectively. Thus, we have:
+
+
+    - If _**A**_ is full rank:
+
+
+**–** If _m > k_ : _R_ ( _**A**_ ) = _k_ ;
+
+      - [if][ (] _**[A]**_ _[|]_ _**[b]**_ [)][ is full rank:] _[R]_ [[(] _**[A]**_ _[|]_ _**[b]**_ [)] =] _[ k]_ [ + 1][.] [Eq. 28][ doesn’t have solutions.]
+
+
+19
+
+
+- [if][ (] _**[A]**_ _[|]_ _**[b]**_ [)][ is not full rank:] _[R]_ [[(] _**[A]**_ _[|]_ _**[b]**_ [)] =] _[ k]_ [.] [Eq. 28][ has solutions.]
+
+**–** If _m_ _≤_ _k_ : _R_ ( _**A**_ ) = _m_ . Since _R_ [( _**A**_ _|_ _**b**_ )] _≤_ _min_ ( _m, k_ + 1) = _m_, thus _R_ [( _**A**_ _|_ _**b**_ )] =
+_R_ ( _**A**_ ) + 1 = _m_ + 1. Eq. 28 has solutions.
+
+    - If _**A**_ is not full rank, i.e., _R_ ( _**A**_ ) = _p_ _<_ _min_ ( _m, k_ ), we will always have _p_ + 1 _≤_
+_min_ ( _m, k_ + 1). Thus, there is no guarantee that _R_ [( _**A**_ _|_ _**b**_ )] = _m_ + 1. Thus Eq. 28 doesn’t
+have solutions if _R_ [( _**A**_ _|_ _**b**_ )] = _p_ + 1, and it has solutions if _R_ [( _**A**_ _|_ _**b**_ )] = _p_ .
+
+In practice, the number of parameters in a neural network is always much larger than the number
+of loss terms, i.e., _k_ _>>_ _m_ . In this case, a full rank _**A**_ means _R_ ( _**A**_ ) = _m_, i,e, all the loss-specific
+gradients are linearly independent. This is true in most situations because if the loss-specific gradients were not linearly independent, we would have _**g**_ _j_ = [�] _i_ _[m]_ =1 _,i_ = _j_ _[α][i]_ _**[g]**_ _[i]_ [, where] _[ α][i]_ [ is the coefficient.]
+Since _**g**_ _i_ = _∂Li/∂θ_, this would also imply _Lj_ = [�] _i_ _[m]_ =1 _,i_ = _j_ _[α][i][L][i]_ [. However, the relationship between]
+loss functions is usually not linear in practice.
+
+
+To summarize, during the training procedure, we almost always have _k_ _>> m_ and a full rank _**A**_, ensuring the existence of a conflict-free direction. It is also worth pointing out that our ConFIG method
+can still provide a good direction if a conflict-free direction does not exist since the Moore–Penrose
+pseudoinverse will offer a least squares solution for Eq. 28, making it a “conflict-free” as possible.
+
+
+A.4 PROOF OF THE EQUIVALENCE
+
+
+To prove the equivalence between Eq. 2, 3 and Eq. 4, 5 is equivalent to prove that [ ( _**g**_ 1 _,_ _**g**_ 2)] +
+_U_ _O_
+_U_ [ _O_ ( _**g**_ 2 _,_ _**g**_ 1)] = _k_ [ _U_ ( _**g**_ 1) _, U_ ( _**g**_ 2)] _[−⊤]_ **1** _m_ where k¿0. Thus, we can first calculate
+
+
+[ ( _**g**_ 1) _,_ ( _**g**_ 2)] _[⊤]_ [ [ ( _**g**_ 1 _,_ _**g**_ 2)] + [ ( _**g**_ 2 _,_ _**g**_ 1)]] = - _U_ ( _**g**_ 1) _[⊤]_ [ _U_ [ _O_ ( _**g**_ 1 _,_ _**g**_ 2)] + _U_ [ _O_ ( _**g**_ 2 _,_ _**g**_ 1)]]
+_U_ _U_ _U_ _O_ _U_ _O_ ( _**g**_ 2) _[⊤]_ [ [ ( _**g**_ 1 _,_ _**g**_ 2)] + [ ( _**g**_ 2 _,_ _**g**_ 1)]]
+_U_ _U_ _O_ _U_ _O_
+
+
+= - _U_ ( _**g**_ 1) _[⊤]_ _U_ [ _O_ ( _**g**_ 2 _,_ _**g**_ 1)]
+( _**g**_ 2) _[⊤]_ [ ( _**g**_ 1 _,_ _**g**_ 2)]
+_U_ _U_ _O_
+
+
+_._
+
+
+(29)
+
+Then, from Eq. 19 we can obtain
+
+_U_ ( _**g**_ 1) _[⊤]_ _O_ ( _**g**_ 2 _,_ _**g**_ 1) = _|_ _**g**_ 1 _|_ [1 _−Sc_ [2][(] _**[g]**_ [1] _[,]_ _**[ g]**_ [2][)]] _[.]_ (30)
+Thus
+
+
+_c_ [(] _**[g]**_ [1] _[,]_ _**[ g]**_ [2][)]]
+( _**g**_ 1) _[⊤]_ [ ( _**g**_ 2 _,_ _**g**_ 1)] = _._ (31)
+_U_ _U_ _O_ _[|]_ _**[g]**_ [1] _[|]_ [[1] _[ −S]_ ( _**g**_ 2 [2] _,_ _**g**_ 1)
+_|O_ _|_
+
+
+From Eq. 22 we can get
+_|O_ ( _**g**_ 2 _,_ _**g**_ 1) _|_ = _|_ _**g**_ 1 _|_ �1 _−Sc_ [2] ( _**g**_ 1 _,_ _**g**_ 2) _._ (32)
+Put Eq. 32 back to Eq. 31, we get
+
+_U_ ( _**g**_ 1) _[⊤]_ _U_ [ _O_ ( _**g**_ 2 _,_ _**g**_ 1)] = ~~�~~ 1 _−Sc_ [2] ( _**g**_ 1 _,_ _**g**_ 2) _._ (33)
+Similarly, we can get
+_U_ ( _**g**_ 2) _[⊤]_ _U_ [ _O_ ( _**g**_ 1 _,_ _**g**_ 2)] = ~~�~~ 1 _−Sc_ [2] ( _**g**_ 1 _,_ _**g**_ 2) _._ (34)
+Put Eq. 33 and Eq. 34 back to Eq. 29
+
+[ _U_ ( _**g**_ 1) _, U_ ( _**g**_ 2)] _[⊤]_ [ _U_ [ _O_ ( _**g**_ 1 _,_ _**g**_ 2)] + _U_ [ _O_ ( _**g**_ 2 _,_ _**g**_ 1)]] = [�1 _−Sc_ [2] ( _**g**_ 1 _,_ _**g**_ 2) _,_ ~~�~~ 1 _−Sc_ [2] ( _**g**_ 1 _,_ _**g**_ 2)] _[⊤]_ _,_ (35)
+which is
+_U_ [ _O_ ( _**g**_ 1 _,_ _**g**_ 2)] + _U_ [ _O_ ( _**g**_ 2 _,_ _**g**_ 1)] = �1 _−Sc_ [2] ( _**g**_ 1 _,_ _**g**_ 2)[ _U_ ( _**g**_ 1) _, U_ ( _**g**_ 2)] _[−⊤]_ **1** _m._ (36)
+
+
+A.5 M-CONFIG AND MOMENTUM STRATEGIES
+
+
+In the current study, we use the Adam optimizer to train baseline PINNs, as shown in Algorithm 3.
+The green line in the algorithm can be replaced by other methods like PCGrad or the IMTL-G
+method. The Adam optimizer uses the first momentum _m_ to average the recent update direction
+and the second momentum _v_ to rescale the learning rate of each parameter. If we want to use the
+momentum to replace the gradient for the ConFIG update, an intuitive approach could be to calculate
+the first and second momentum for each loss-specific gradient and use the final rescaled momentum
+to calculate the input for the ConFIG update, as shown in ”MA-ConFIG” in Algorithm 4. However,
+this approach could result in several issues:
+
+
+20
+
+
+**Algorithm 3** ConFIG update with Adam optimizer
+
+**Require:** _θ_ 0 (network weights), _γ_ (learning rate), _β_ 1, _β_ 2, _ϵ_ (Adam coefficient),
+
+_**m**_ 0 _←_ **0** (first momentum), _**v**_ 0 _←_ **0** (Second momentum),
+All operations on vectors are element-wise except _G_ .
+**for** _t ←_ 1 to _· · ·_ **do**
+
+_**g**_ _c_ = _G_ ( _∇θt−_ 1 _L_ 1 _, ∇θt−_ 1 _L_ 2 _, · · ·_ _, ∇θt−_ 1 _Lm_ ) _▷_ ConFIG update of gradients
+_**m**_ _t_ _←_ _β_ 1 _**m**_ _t−_ 1 + (1 _−_ _β_ 1) _**g**_ _c_ _▷_ Update the first momentum
+_**v**_ _t_ _←_ _β_ 2 _**v**_ _t−_ 1 + (1 _−_ _β_ 2) _**g**_ _c_ [2] _▷_ Update the second momentum
+_**m**_ ˆ _←_ _**m**_ _t/_ (1 _−_ _β_ 1 _[t]_ [)] _▷_ Bias corrections for the first momentum
+_**v**_ ˆ _←_ _**v**_ _t/_ (1 _−_ _β_ 2 _[t]_ [)] ~~_√_~~ _▷_ Bias corrections for the second momentum
+_θi_ _←_ _θt−_ 1 _−_ _γ_ _**m**_ ˆ _/_ ( _**v**_ ˆ + _ϵ_ ) _▷_ Update weights of the neural network
+
+**end for**
+
+
+**Algorithm 4** MA-ConFIG
+
+**Require:** _θ_ 0 (network weights), _γ_ (learning rate), _β_ 1, _β_ 2, _ϵ_ (Adam coefficient),
+
+[ _**mg**_ 1 _,_ 0 _,_ _**mg**_ 1 _,_ 0 _, · · ·_ _**mg**_ _m,_ 0] _←_ [ **0** _,_ **0** _, · · ·_ _,_ **0** ] (first momentum),
+
+[ _**vg**_ 1 _,_ 0 _,_ _**vg**_ 1 _,_ 0 _, · · ·_ _**vg**_ _m,_ 0] _←_ [ **0** _,_ **0** _, · · ·_ _,_ **0** ] (Second momentum), [ _t_ _**g**_ 1 _, t_ _**g**_ 2 _, · · ·_ _, t_ _**g**_ _m_ ] _←_ [0 _,_ 0 _, · · ·_ _,_ 0],
+All operations on vectors are element-wise except _G_ .
+**for** _t ←_ 1 to _· · ·_ **do**
+
+
+_i_ = _t_ % _m_ + 1
+_t_ _**g**_ _i_ _←_ _t_ _**g**_ _i_ + 1
+_**g**_ _i_ = _∇θt−_ 1 _Li_
+_**mg**_ _i,t_ _**g**_ _i_ _←_ _β_ 1 _**mg**_ _i,t_ _**g**_ _i −_ 1 + (1 _−_ _β_ 1) _**g**_ _i_ _▷_ Update the first momentum of _**g**_ _i_
+_**vg**_ _i,t_ _**g**_ _i_ _←_ _β_ 2 _**vg**_ _i,t_ _**g**_ _i −_ 1 + (1 _−_ _β_ 2) _**g**_ _i_ [2] _▷_ Update the second momentum of _**g**_ _i_
+
+[ ˆ _**mg**_ 1 _,_ _**m**_ ˆ _**g**_ 2 _, · · ·_ _,_ _**m**_ ˆ _**g**_ _m_ ] _←_ [ _**mg**_ 1 _,tt_ _**gg**_ 1 _,_ _**mg**_ 2 _,tt_ _**gg**_ 2 _, · · ·_ _,_ _**mg**_ _mt,t_ _**gg**_ _m_ ] _▷_ [Bias corrections for]
+
+
+1 _−_ _**g**_ _β_ 1 _,t_ 1 _t_ _**gg**_ 11 _,_ _**m**_ 1 _−_ _**g**_ _β_ 2 _,t_ 1 _t_ _**gg**_ 22
+
+
+1 _−_ _**g**_ _β_ 2 _,t_ 1 _t_ _**gg**_ 22 _, · · ·_ _,_ _**m**_ 1 _−_ _**g**_ _mβ_ 1 _t,t_ _**gg**_ _mm_
+
+
+1 _−_ _**g**_ _mβ_ 1 _t,t_ _**gg**_ _mm_ ] _▷_ [Bias corrections for] first momentum terms
+
+
+[ˆ _**vg**_ 1 _,_ ˆ _**vg**_ 2 _, · · ·_ _,_ ˆ _**vg**_ _m_ ] _←_ [ _**v**_ 1 _−_ _**g**_ 1 _β,t_ 2 _t_ _**gg**_ 11 _,_ _**v**_ 1 _−_ _**g**_ 2 _β,t_ 2 _t_ _**gg**_ 22 _, · · ·_ _,_ _**v**_ 1 _**g**_ _−mβ,t_ 2 _t_ _**gg**_ _mm_
+
+
+[ ˆ _**g**_ 1 _,_ _**g**_ ˆ2 _, · · ·_ _,_ _**g**_ ˆ _m_ ] = [ ~~_√_~~ _**m**_ ˆ _**g**_ 1
+
+
+_**m**_ ˆ _**g**_ 1 ~~_√_~~ _**m**_ ˆ _**g**_ 2
+
+_**v**_ ˆ _**g**_ 1 + _ε_ _[,]_ _**v**_ ˆ _**g**_ 2
+
+
+_**m**_ ˆ _**g**_ 2 _[,]_ ~~_√_~~ _**m**_ ˆ _**g**_ _m_
+
+_**v**_ ˆ _**g**_ 2 + _ε_ _[,][ · · ·]_ _**v**_ ˆ _**g**_ _m_
+
+
+_**v**_ 1 _**g**_ _−mβ,t_ 2 _t_ _**gg**_ _mm_ ] _▷_ [Bias corrections for] first momentum terms
+
+_**m**_ ˆ _**g**_ _m_ _▷_ Rescale the momentum.
+
+_**v**_ ˆ _**g**_ _m_ + _ε_ []]
+
+
+_θi_ _←_ _θt−_ 1 _−_ _γG_ ( ˆ _**g**_ 1 _,_ _**g**_ ˆ2 _, · · ·_ _,_ _**g**_ ˆ _m_ ) _▷_ Update weights of the neural network with ConFIG operator
+**end for**
+
+
+    - Inappropriate learning rate. Ideally, the Adam method will rescale each element of the update gradient to 1 ( _**m**_ _∼_ _**g**_, _**v**_ _∼_ _**g**_ [2], _**m**_ _/_ _[√]_ _**v**_ _∼_ 1). If one of the elements of the update
+gradient repeatedly oscillates between positive and negative, then _m_ becomes smaller while
+_v_ becomes larger, resulting in a small update step (learning rate) for the corresponding parameter. However, Adam’s neat adaptive learning rate adjustment feature will be destroyed
+if we rescale the momentum before applying the ConFIG operator. This is because ConFIG
+will alter each parameter’s learning rate again by changing the update gradient’s direction
+and magnitude.
+
+
+    - Numerical instability. The current study uses singular value decomposition (SVD) to calculate the pseudoinverse. Our experience shows that rescaling the momentum makes the input
+
+
+Table 1: Test results of different momentum configurations. ”MA-ConFIG” refers to the strategy
+with the second momentum inside the ConFIG operation, and ”NaN” means the training failed due
+to numerical stability.
+
+
+M-ConFIG MA-ConFIG
+
+
+Burgers
+
+
+Schr¨odinger (4 _._ 292 1 _._ 863) 10 _[−]_ [4] (2 _._ 625 0 _._ 087) 10 _[−]_ [1]
+
+[ _N,_ _BI_ ] _±_ _×_ _±_ _×_
+
+Kovasznay _L_ _L_ (9 _._ 777 0 _._ 347) 10 _[−]_ [9] NaN
+_±_ _×_
+Beltrami (7 _._ 949 _±_ 0 _._ 384) _×_ 10 _[−]_ [5] (6 _._ 658 _±_ 0 _._ 435) _×_ 10 _[−]_ [3]
+
+Burgers (1 _._ 296 _±_ 0 _._ 013) _×_ 10 _[−]_ [4] (8 _._ 511 _±_ 7 _._ 835) _×_ 10 _[−]_ [3]
+
+Schr¨odinger [ _LN, LB, LI_ ] (1 _._ 522 _±_ 0 _._ 581) _×_ 10 _[−]_ [3] NaN
+Beltrami (9 _._ 103 _±_ 1 _._ 831) _×_ 10 _[−]_ [5] (5 _._ 783 _±_ 0 _._ 405) _×_ 10 _[−]_ [3]
+
+
+[ _LN, LBI_ ]
+
+
+(1 _._ 277 _±_ 0 _._ 035) _×_ 10 _[−]_ [4] (1 _._ 549 _±_ 0 _._ 362) _×_ 10 _[−]_ [3]
+
+_[−]_ [4] _[−]_ [1]
+
+
+Burgers (1 _._ 296 _±_ 0 _._ 013) _×_ 10 _[−]_ [4] (8 _._ 511 _±_ 7 _._ 835) _×_ 10 _[−]_ [3]
+
+Schr¨odinger [ _LN, LB, LI_ ] (1 _._ 522 _±_ 0 _._ 581) _×_ 10 _[−]_ [3] NaN
+
+_[−]_ [5] _[−]_ [3]
+
+
+21
+
+
+matrix for SVD easily ill-conditioned or has too many repeated singular values, leading to
+training failure.
+
+
+Tab. 1 compares the performance of M-ConFIG and MA-ConFIG methods, where M-ConFIG is
+always stable and significantly better than the MA-ConFIG method.
+
+
+Note that the M-ConFIG method should not be implemented in combination with Adam, as it is
+intended to replace Adam’s calculation of momentum. Hence, our M-ConFIG implementation uses
+an SGD optimizer.
+
+
+A.6 COMPUTATIONAL COST
+
+
+To evaluate runtime performance, Fig. 15 compares the relative wall time of all methods w.r.t. the
+Adam baseline, highlighting the significant advantage of the M-ConFIG on the training cost. The
+average training cost of M-ConFIG is 0.712 _×_ that of the Adam baseline for the two-term case, and
+0.557 _×_ for the three-term case.
+
+It is also worth noting that the time cost of the ConFIG method is comparable to other gradientbased methods, indicating that the pseudoinverse operation of the ConFIG method does not add
+significant computational overhead. This study uses the PyTorch implementation, which utilizes
+singular value decomposition (SVD) to calculate the pseudoinverse. Although the exact computational cost depends on the specific numerical algorithm, the general time complexity of SVD is
+_O_ ( _nm_ [2] ) (Grasedyck, 2010) where _n_ is the number of gradient elements (i.e., the number of neural
+network’s parameter) and _m_ is the number of gradients in the current study ( _n > m_ ). This is favorable since the number of network parameters is usually much larger than the number of loss terms,
+and the time complexity of SVD scales linearly with the former.
+
+
+On the side of memory, all gradient-based methods, including PCGrad, IMTL-G, and our ConFIG
+method, usually require more memory compared to the weighting method during training due to the
+additional cost of storing loss-specific gradients for each loss term in each iteration. The complexity
+of this additional memory is _O_ ( _nm_ ). Meanwhile, although momentum acceleration helps to increase the training speed, it also introduces an increased memory cost with a complexity of _O_ ( _nm_ ),
+as it also needs to store the first and second momentum during the training procedure. This could be
+a potential challenge when dealing with large-scale problems.
+
+
+1 _._ 5
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+1 _._ 5
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+0 _._ 0
+
+
+0 _._ 0
+(b) [ _LN_ _, LBI_ ] [ _LN_ _, LB, LI_ ]
+
+
+1 _._ 5
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+0 _._ 0
+
+|[LN, LBI] [LN, LB, L|Col2|Col3|Col4|Col5|Col6|Col7|LI]|Col9|
+|---|---|---|---|---|---|---|---|---|
+|Kovasznay|Kovasznay|Kovasznay|Kovasznay|Kovasznay|Kovasznay|Kovasznay|||
+|Kovasznay|Kovasznay|Kovasznay|Kovasznay||||||
+|Kovasznay|||||||||
+
+(c) [ _LN_ _, LBI_ ]
+
+
+1 _._ 5
+
+
+1 _._ 0
+
+
+0 _._ 5
+
+
+0 _._ 0
+(d) [ _LN_ _, LBI_ ] [ _LN_ _, LB, LI_ ]
+
+
+Figure 15: Relative wall time of different methods w.r.t. the Adam baseline for one training iteration.
+
+
+22
+
+
+A.7 PDE DETAILS
+
+
+**1D Burgers equation.** Burgers equation is a non-linear and non-trivial model equation describing
+shock formations. Considering a spatial-temporal field _u_ ( _x, t_ ), the Burgers equation in one space
+dimension is
+_∂u_ _[∂u]_ _[∂]_ [2] _[u]_
+
+
+_[∂u]_
+
+_∂x_ [=] _[ ν ][∂]_ _∂x_ [2] _[u]_ [2]
+
+
+_∂u_
+
+_∂t_ [+] _[ u]_ _[∂u]_ _∂x_
+
+
+_∂x_ [2] _[,]_ (37)
+
+
+where _ν_ is the viscosity and set as _ν_ = 0 _._ 01 _/π_ in the current study. The spatial-temporal domain is
+_t ∈_ [0 _,_ 1] and _x ∈_ [ _−_ 1 _._ 0 _,_ 1 _._ 0] with the corresponding initial and boundary conditions of
+
+         - _u_ ( _x,_ 0) = sin( _πx_ )
+_−_ _._ (38)
+_u_ (+1 _._ 0 _, t_ ) = _u_ ( _−_ 1 _._ 0 _, t_ ) = 0
+
+No analytical solution is available for Burgers equation with these given boundary conditions. In
+the current study, we use numerical solutions from PhiFlow (Holl et al., 2020) as the ground truth
+solution to evaluate the PINNs’ performance.
+
+
+**1D Schr¨odinger equation.** 1D Schr¨odinger equation describes the evaluation of a complex field
+_h_ ( _x, t_ ) = _u_ ( _x, t_ ) + _iv_ ( _x, t_ ) in one space dimension:
+
+
+_i_ _[∂h]_
+
+
+[1] 2 _∂∂x_ [2] _h_ [2] [+] _[ |][h][|]_ [2] _[h]_ [ = 0] _[,]_ (39)
+
+
+_[∂h]_ [1]
+
+_∂t_ [+] 2
+
+
+_x ∈_ [ _−_ 5 _._ 0 _,_ 5 _._ 0], _t ∈_ [0 _, π/_ 2]. It follows a periodic boundary condition and a initial condition of
+_h_ (0 _, x_ ) = 2 sech( _x_ ) _,_ (40)
+
+Similarly, no analytical solution is available for the 1D Schr¨odinger equation with given boundary
+conditions. We use the numerical solution provided by deepXDE (Bajaj et al., 2023) to evaluate the
+performance of trained PINNs.
+
+
+**2D** **Kovasznay** **flow** **and** **3D** **Beltrami** **flow.** Kovasznay and Beltrami flow are special solutions
+for Navier-Stokes equations which describe the fluid flow:
+_∂_ _**u**_ [1]
+
+
+_**u**_ [1]
+
+_∂t_ [+ (] _**[u]**_ _[ · ∇]_ [)] _**[u]**_ [ =] _[ −∇][p]_ [ +]
+
+
+_Re_ _[∇]_ [2] _**[u]**_
+
+
+_Re_ (41)
+
+_∇·_ _**u**_ = 0
+
+
+where _**u**_ is the velocity vector, _p_ is the pressure and _Re_ is the Reynolds number. Kovasznay flow
+is a steady case in two space dimensions where the transient term _∂_ _**u**_ _/∂t_ equals 0. The analytical
+solution of the velocity _**u**_ ( _x, y_ ) = [ _ux_ ( _x, y_ ) _, uy_ ( _x, y_ )] and pressure _p_ ( _x, y_ ) is (Kovasznay, 1948;
+Truesdell, 1954)
+ _ux_ ( _x, y_ ) = 1 _e_ _[λx]_ cos(2 _πy_ ) _,_
+ _−_
+
+
+_ux_ ( _x, y_ ) = 1 _e_ _[λx]_ cos(2 _πy_ ) _,_
+_uy_ ( _x, y_ ) = 2 _λ −π_ _[e][λx]_ [ sin(2] _[πy]_ [)] _[,]_
+_p_ ( _x, y_ ) = [1] �1 _e_ [2] _[λx]_ [�] _,_
+
+
+
+
+
+2 _π_ _[e]_ _[πy]_ [)] _[,]_ (42)
+
+2 [1] �1 _e_ [2] _[λx]_ [�] _,_
+_−_
+
+
+where _λ_ = 21 _ν_ _[−]_ - 4 _ν_ 1 [2] [+ 4] _[π]_ [2][,] _ν_ = Re1 [=] 401 [,] _[x]_ _[∈]_ [[] _[−]_ [0] _[.]_ [5] _[,]_ [ 1]] [and] _[y]_ _[∈]_ [[] _[−]_ [0] _[.]_ [5] _[,]_ [ 1] _[.]_ [5]][.] [Meanwhile,]
+Beltrami flow is an unsteady case in three space dimensions where the velocity _**u**_ ( _x, y, z, t_ ) =
+
+[ _ux_ ( _x, y, z, t_ ) _, uy_ ( _x, y, z, t_ ) _, uz_ ( _x, y, z, t_ )] and pressure _p_ ( _x, y, z, t_ ) follows the analytical solution
+of (Gromeka, 1881)
+ _ux_ ( _x, y, z, t_ ) = _a_ [ _e_ _[ax]_ sin( _ay_ + _dz_ ) + _e_ _[az]_ cos( _ax_ + _dy_ )] _e_ _[−][d]_ [2] _[t]_
+ _uuyz_ (( _x, y, z, tx, y, z, t_ ) =) = _−−−aa_ [ [ _ee_ _[ay][az]_ sin(sin( _axaz_ + + _dx dy_ ) +) + _e e_ _[ay][ax]_ cos(cos( _azay_ + + _dx dz_ )])] _e e_ _[−][−][d][d]_ [2][2] _[t][t]_
+
+
+_ux_ ( _x, y, z, t_ ) = _a_ [ _e_ _[ax]_ sin( _ay_ + _dz_ ) + _e_ _[az]_ cos( _ax_ + _dy_ )] _e_ _[−][d]_ [2] _[t]_
+
+_−_
+
+_uy_ ( _x, y, z, t_ ) = _a_ [ _e_ _[ay]_ sin( _az_ + _dx_ ) + _e_ _[ax]_ cos( _ay_ + _dz_ )] _e_ _[−][d]_ [2] _[t]_
+
+_−_
+
+_uz_ ( _x, y, z, t_ ) = _a_ [ _e_ _[az]_ sin( _ax_ + _dy_ ) + _e_ _[ay]_ cos( _az_ + _dx_ )] _e_ _[−][d]_ [2] _[t]_
+
+_−_
+
+[1]
+
+
+_,_ (43)
+
+
+[1] 2 _[a]_ [2][ �] _e_ [2] _[ax]_ + _e_ [2] _[ay]_ + _e_ [2] _[az]_
+
+
+_p_ ( _x, y, z, t_ ) = 2
+
+_−_ [1]
+
+
+
+
+
++2 sin( _ax_ + _dy_ ) cos( _az_ + _dx_ ) _e_ _[a]_ [(] _[y]_ [+] _[z]_ [)]
+
+
++2 sin( _ay_ + _dz_ ) cos( _ax_ + _dy_ ) _e_ _[a]_ [(] _[z]_ [+] _[x]_ [)]
+
++2 sin( _az_ + _dx_ ) cos( _ay_ + _dz_ ) _e_ _[a]_ [(] _[x]_ [+] _[y]_ [)][�] _e_ _[−]_ [2] _[d]_ [2] _[t]_
+
+
+where _a_ = _d_ = 1 when _Re_ = 1 in our configuration. The simulation domain size is _x_ _∈_ [ _−_ 1 _,_ 1],
+_y_ _∈_ [ _−_ 1 _,_ 1], _z_ _∈_ [ _−_ 1 _,_ 1], and _t_ _∈_ [0 _,_ 1]. The boundary conditions of Kovasznay and Beltrami flow
+are Dirichlet type, which follows the values of analytical solutions. For Beltrami flow, the initial
+condition also follows the values of the analytical solutions.
+
+
+23
+
+
+A.8 PINN-BASED EXAMPLE SOLUTIONS
+
+
+This section provides examples of the solution domain for each PINN case. Figures 16, 18, 23,
+and 22 show the mean predictions of the networks compared to the ground truth, the standard deviation, and the squared error distribution for each PINN case. Additionally, Figures 17, 19, and 21 offer
+a detailed comparison of a sample line in the solution domain for the Burgers equation, Schr¨odinger
+equation, and Kovasznay flow case.
+
+
+Figure 16: The solution domain of Burgers Equation with corresponding standard deviation( _σ_ ) and
+square error(SE) of the ConFIG method’s prediction.
+
+
+Figure 17: The distribution of _u_ in the solution domain of Burgers equation.
+
+
+24
+
+
+Figure 18: The solution domain of Schr¨odinger Equation with corresponding standard deviation( _σ_ )
+and square error(SE) of the ConFIG method’s prediction.
+
+
+Figure 19: The distribution of _|h|_ in the solution domain of Schr¨odinger equation.
+
+
+Figure 20: The solution domain of Kovasznay Flow with corresponding standard deviation( _σ_ ) and
+square error(SE) of the ConFIG method’s prediction.
+
+
+25
+
+
+Figure 21: The distribution of _ux_ in the solution domain of Kovasznay Flow.
+
+
+Figure 22: The solution domain of Beltrami Flow when _t_ = 0 _._ 5 with corresponding standard
+deviation( _σ_ ) and square error(SE) of the ConFIG method’s prediction.
+
+
+26
+
+
+A.9 PINN EVALUATIONS
+
+
+The exact numerical values and corresponding standard deviations of the PINN experiments are
+presented in this section. Tables 2 through 5 display the values obtained with the same number of
+training epochs as depicted in Fig. 4 and Fig. 6. Additionally, Tables 6 through 9 showcase the
+values obtained with identical wall time, corresponding to the data presented in Fig. 9.
+
+
+Table 2: Test MSE of PINNs trained for Burgers equation. All values are scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 1 _._ 484 _±_ 0 _._ 061
+PCGrad 1 _._ 344 _±_ 0 _._ 019 **1** _._ _±_ **0** _._ IMTL-G 1 _._ 339 _±_ 0 _._ 024 22 _._ 478 _±_ 15 _._ 008
+MinMax 1 _._ 889 _±_ 0 _._ 143 1 _._ 582 _±_ 0 _._ 051
+ReLoBRaLo 1 _._ 419 _±_ 0 _._ 053 1 _._ 402 _±_ 0 _._ 034
+LRA 353 _._ 796 _±_ 114 _._ 972 444 _._ 603 _±_ 16 _._ 695
+
+
+ConFIG 1 _._ 308 _±_ 0 _._ 008 1 _._ 291 _±_ 0 _._ 039
+M-ConFIG **1** _._ _±_ **0** _._ 1 _._ 296 _±_ 0 _._ 013
+
+
+Table 3: Test MSE of PINNs trained for Schr¨odinger equation. All values are scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 3 _._ 383 _±_ 1 _._ 178
+PCGrad 1 _._ 621 _±_ 0 _._ 547 **0** _._ _±_ **0** _._ IMTL-G 7 _._ 891 _±_ 3 _._ 008 2504 _._ 282 _±_ 588 _._ 560
+MinMax 45 _._ 255 _±_ 1 _._ 535 45 _._ 068 _±_ 5 _._ 292
+ReLoBRaLo 3 _._ 603 _±_ 2 _._ 165 2 _._ 756 _±_ 0 _._ 098
+
+
+ConFIG **0** _._ _±_ **0** _._ 1 _._ 455 _±_ 0 _._ 455
+M-ConFIG 4 _._ 292 _±_ 1 _._ 863 15 _._ 217 _±_ 5 _._ 807
+
+
+Table 4: Test MSE of PINNs trained for Kovasznay flow. All values are scaled with 10 _[−]_ [7] .
+
+
+[ _N_ _,_ _B_ ]
+_L_ _L_
+
+
+Adam 1 _._ 044 _±_ 0 _._ 405
+PCGrad 0 _._ 799 _±_ 0 _._ 083
+IMTL-G **0** _._ _±_ **0** _._ MinMax 7 _._ 743 _±_ 1 _._ 197
+ReLoBRaLo 1 _._ 148 _±_ 0 _._ 359
+LRA 3 _._ 595 _±_ 3 _._ 582
+
+
+ConFIG 0 _._ 126 _±_ 0 _._ 048
+M-ConFIG 0 _._ 098 _±_ 0 _._ 003
+
+
+27
+
+
+Table 5: Test MSE of PINNs trained for Beltrami flow. All values are scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 1 _._ 112 _±_ 0 _._ 119
+PCGrad 1 _._ 037 _±_ 0 _._ 119 0 _._ 757 _±_ 0 _._ 082
+IMTL-G 0 _._ 568 _±_ 0 _._ 078 0 _._ 932 _±_ 0 _._ 228
+MinMax 1 _._ 851 _±_ 0 _._ 100 2 _._ 215 _±_ 0 _._ 192
+ReLoBRaLo 1 _._ 197 _±_ 0 _._ 029 1 _._ 028 _±_ 0 _._ 107
+LRA 0 _._ 708 _±_ 0 _._ 047 0 _._ 843 _±_ 0 _._ 146
+
+
+ConFIG **0** _._ _±_ **0** _._ **0** _._ _±_ **0** _._ M-ConFIG 0 _._ 795 _±_ 0 _._ 038 0 _._ 910 _±_ 0 _._ 183
+
+
+Table 6: Test MSE of PINNs trained for Burgers equation. All values are collected after the same
+wall time and scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 1 _._ 515 _±_ 0 _._ 079 1 _._ 546 _±_ 0 _._ 100
+PCGrad 1 _._ 476 _±_ 0 _._ 022 1 _._ 300 _±_ 0 _._ 023
+IMTL-G 1 _._ 356 _±_ 0 _._ 046 82 _._ 446 _±_ 76 _._ 016
+MinMax 3 _._ 058 _±_ 0 _._ 379 2 _._ 030 _±_ 0 _._ 153
+ReLoBRaLo 1 _._ 449 _±_ 0 _._ 033 1 _._ 492 _±_ 0 _._ 099
+LRA 376 _._ 449 _±_ 100 _._ 599 470 _._ 108 _±_ 28 _._ 172
+
+
+ConFIG 1 _._ 330 _±_ 0 _._ 015 1 _._ 665 _±_ 0 _._ 186
+M-ConFIG **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ Table 7: Test MSE of PINNs trained for Schr¨odinger equation. All values are collected after the
+same wall time and scaled with 10 _[−]_ [3] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 2 _._ 169 _±_ 0 _._ 584 5 _._ 832 _±_ 1 _._ 421
+PCGrad 1 _._ 505 _±_ 0 _._ 559 2 _._ 271 _±_ 0 _._ 205
+IMTL-G 8 _._ 844 _±_ 4 _._ 263 291 _._ 037 _±_ 3 _._ 682
+MinMax 28 _._ 195 _±_ 1 _._ 616 49 _._ 635 _±_ 2 _._ 888
+ReLoBRaLo 2 _._ 369 _±_ 0 _._ 829 15 _._ 230 _±_ 7 _._ 691
+LRA 316 _._ 549 _±_ 8 _._ 696 315 _._ 606 _±_ 8 _._ 969
+
+
+ConFIG 0 _._ 586 _±_ 0 _._ 256 4 _._ 636 _±_ 0 _._ 932
+M-ConFIG **0** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ Table 8: Test MSE of PINNs trained for Kovasznay flow. All values are scaled with 10 _[−]_ [7] .
+
+
+[ _N_ _,_ _B_ ]
+_L_ _L_
+
+
+Adam 4 _._ 037 _±_ 1 _._ 078
+PCGrad 2 _._ 723 _±_ 0 _._ 421
+IMTL-G 0 _._ 419 _±_ 0 _._ 058
+MinMax 261 _._ 628 _±_ 43 _._ 303
+ReLoBRaLo 3 _._ 291 _±_ 0 _._ 847
+LRA 13 _._ 554 _±_ 13 _._ 773
+
+
+ConFIG 0 _._ 631 _±_ 0 _._ 194
+M-ConFIG **0** _._ _±_ **0** _._ 28
+
+
+Table 9: Test MSE of PINNs trained for Beltrami flow. All values are collected after the same wall
+time and scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 2 _._ 318 _±_ 0 _._ 270 3 _._ 648 _±_ 0 _._ 244
+PCGrad 2 _._ 206 _±_ 0 _._ 180 2 _._ 351 _±_ 0 _._ 212
+IMTL-G 1 _._ 054 _±_ 0 _._ 156 2 _._ 194 _±_ 0 _._ 465
+MinMax 5 _._ 422 _±_ 0 _._ 300 15 _._ 754 _±_ 1 _._ 546
+ReLoBRaLo 2 _._ 605 _±_ 0 _._ 056 2 _._ 769 _±_ 0 _._ 202
+LRA 1 _._ 194 _±_ 0 _._ 139 2 _._ 259 _±_ 0 _._ 812
+
+
+ConFIG 1 _._ 130 _±_ 0 _._ 138 1 _._ 451 _±_ 0 _._ 181
+M-ConFIG **0** _._ _±_ **0** _._ **0** _._ _±_ **0** _._ Table 10: Test MSE of PINNs trained for Burgers equation with the ConFIG method using different
+direction weights. All values are scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+MinMax 2 _._ 444 _±_ 0 _._ 312 45 _._ 068 _±_ 5 _._ 292
+ReLoBRaLo 1 _._ 310 _±_ 0 _._ 007 1 _._ 315 _±_ 0 _._ 048
+LRA 449 _._ 658 _±_ 42 _._ 392 657 _._ 258 _±_ 45 _._ 487
+
+
+Equal **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ Table 11: Test MSE of PINNs trained for Schrodinger equation with the ConFIG method using
+different direction weights. All values are scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+MinMax 2 _._ 444 _±_ 0 _._ 312 3 _._ 733 _±_ 1 _._ 351
+ReLoBRaLo 1 _._ 048 _±_ 0 _._ 404 2 _._ 829 _±_ 1 _._ 444
+LRA 25 _._ 417 _±_ 6 _._ 768 3118 _._ 378 _±_ 45 _._ 723
+
+
+Equal **6** _._ _±_ **2** _._ **1** _._ _±_ **0** _._ Table 12: Test MSE of PINNs trained for Kovasznay flow with the ConFIG method using different
+direction weights. All values are scaled with 10 _[−]_ [7] .
+
+
+[ _N_ _,_ _BI_ ]
+_L_ _L_
+
+
+MinMax 7 _._ 487 _±_ 2 _._ 545
+ReLoBRaLo **0** _._ _±_ **0** _._ LRA (9 _._ 047 _±_ 2 _._ 052) _×_ 10 [5]
+
+
+Equal 0 _._ 126 _±_ 0 _._ 048
+
+
+Table 13: Test MSE of PINNs trained for Beltrami flow with the ConFIG method using different
+direction weights. All values are scaled with 10 _[−]_ [4] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+MinMax 1 _._ 903 _±_ 0 _._ 271 1 _._ 597 _±_ 0 _._ 039
+ReLoBRaLo 0 _._ 658 _±_ 0 _._ 157 0 _._ 575 _±_ 0 _._ 059
+LRA 155 _._ 617 _±_ 55 _._ 853 15 _._ 754 _±_ 5 _._ 049
+
+
+Equal **0** _._ _±_ **0** _._ **0** _._ _±_ **0** _._ 29
+
+
+A.10 RESULTS OF CELEBA MTL EXPERIMENTS
+
+
+Table 14- 19 presents the numerical values and corresponding standard deviations for the CelebA
+MTL experiments, aligning with the results in Fig. 11 and Fig. 12. The best performance is determined by selecting the best average performance across different tasks during training, which is also
+the value shown in Fig. 11. The average performance is calculated based on the results from the last
+5 epochs, during which most methods have converged. For both best and average performance, our
+ConFIG method surpasses all other methods in _MR_ metrics. For the performance in _F_ 1, it tied for
+first with the FAMO method in best performance and ranked second in the average performance.
+
+
+Table 14: _MR_ performance of different methods in CelebA MTL experiments
+
+
+Best performance Average performance
+
+PCGrad 6 _._ 425 _±_ 0 _._ 595 5 _._ 475 _±_ 0 _._ 575
+IMTL-G 6 _._ 058 _±_ 0 _._ 671 5 _._ 475 _±_ 0 _._ 125
+FAMO 6 _._ 233 _±_ 0 _._ 085 4 _._ 875 _±_ 0 _._ 100
+NASHMTL 6 _._ 158 _±_ 0 _._ 242 5 _._ 612 _±_ 1 _._ 237
+RLW 6 _._ 300 _±_ 0 _._ 602 4 _._ 850 _±_ 1 _._ 050
+CAGrad 6 _._ 767 _±_ 0 _._ 274 7 _._ 387 _±_ 1 _._ 062
+GRADDROP 6 _._ 733 _±_ 0 _._ 309 7 _._ 375 _±_ 0 _._ 000
+DWA 6 _._ 908 _±_ 0 _._ 450 8 _._ 500 _±_ 0 _._ 000
+LS 7 _._ 383 _±_ 0 _._ 112 8 _._ 675 _±_ 0 _._ 075
+UW 7 _._ 692 _±_ 0 _._ 051 8 _._ 238 _±_ 0 _._ 438
+
+M-ConFIG 30 5 _._ 833 _±_ 0 _._ 342 7 _._ 175 _±_ 0 _._ 525
+ConFIG **5** _._ _±_ **0** _._ **4** _._ _±_ **0** _._ Table 15: _F_ 1 performance of different methods in CelebA MTL experiments
+
+
+Best performance Average performance
+
+PCGrad 0 _._ 681 _±_ 0 _._ 003 0 _._ 665 _±_ 0 _._ 007
+IMTL-G 0 _._ 680 _±_ 0 _._ 003 0 _._ 660 _±_ 0 _._ 003
+FAMO 0 _._ 686 _±_ 0 _._ 004 **0** _._ _±_ **0** _._ NASHMTL 0 _._ 683 _±_ 0 _._ 006 0 _._ 642 _±_ 0 _._ 026
+RLW 0 _._ 680 _±_ 0 _._ 002 0 _._ 663 _±_ 0 _._ 006
+CAGrad 0 _._ 672 _±_ 0 _._ 010 0 _._ 649 _±_ 0 _._ 008
+GRADDROP 0 _._ 661 _±_ 0 _._ 005 0 _._ 644 _±_ 0 _._ 010
+DWA 0 _._ 672 _±_ 0 _._ 003 0 _._ 644 _±_ 0 _._ 004
+LS 0 _._ 676 _±_ 0 _._ 004 0 _._ 639 _±_ 0 _._ 004
+UW 0 _._ 675 _±_ 0 _._ 009 0 _._ 641 _±_ 0 _._ 006
+
+M-ConFIG 30 **0** _._ _±_ **0** _._ 0 _._ 655 _±_ 0 _._ 006
+ConFIG 0 _._ 686 _±_ 0 _._ 006 0 _._ 671 _±_ 0 _._ 003
+
+
+Table 16: The _F_ 1 performance of the M-ConFIG and ConFIG method with different numbers of
+tasks in the CelebA experiment.
+
+
+Best performance Average performance
+_n_ updates ConFIG M-ConFIG ConFIG M-ConFIG
+
+5 0 _._ 697 _±_ 0 _._ 007 0 _._ 664 _±_ 0 _._ 005 0 _._ 645 _±_ 0 _._ 006 0 _._ 638 _±_ 0 _._ 003
+10 0 _._ 695 _±_ 0 _._ 006 0 _._ 536 _±_ 0 _._ 057 0 _._ 668 _±_ 0 _._ 013 0 _._ 488 _±_ 0 _._ 055
+20 0 _._ 684 _±_ 0 _._ 008 0 _._ 455 _±_ 0 _._ 032 0 _._ 660 _±_ 0 _._ 007 0 _._ 408 _±_ 0 _._ 015
+30 0 _._ 667 _±_ 0 _._ 006 0 _._ 429 _±_ 0 _._ 023 0 _._ 648 _±_ 0 _._ 006 0 _._ 383 _±_ 0 _._ 025
+40 0 _._ 686 _±_ 0 _._ 006 0 _._ 423 _±_ 0 _._ 026 0 _._ 671 _±_ 0 _._ 003 0 _._ 383 _±_ 0 _._ 037
+
+
+30
+
+
+Table 17: The training time of the M-ConFIG and ConFIG method with different numbers of tasks
+in the CelebA experiment.
+
+
+_n_ tasks ConFIG M-ConFIG
+
+5 180 _._ 333 _±_ 0 _._ 471 67 _._ 436 _±_ 0 _._ 267
+10 288 _._ 000 _±_ 0 _._ 816 73 _._ 588 _±_ 1 _._ 262
+20 561 _._ 000 _±_ 0 _._ 816 84 _._ 252 _±_ 0 _._ 919
+30 861 _._ 000 _±_ 0 _._ 816 110 _._ 454 _±_ 0 _._ 487
+40 1179 _._ 000 _±_ 2 _._ 449 167 _._ 423 _±_ 0 _._ 427
+
+
+Table 18: The _F_ 1 performance METof the M-ConFIG and ConFIG method with different numbers
+of gradient updates in the CelebA experiment (40 tasks).
+
+
+Best performance Average performance
+_n_ updates ConFIG M-ConFIG ConFIG M-ConFIG
+
+
+1 0 _._ 423 _±_ 0 _._ 026 0 _._ 383 _±_ 0 _._ 037
+
+5 0 _._ 458 _±_ 0 _._ 006 0 _._ 406 _±_ 0 _._ 008
+10 0 _._ 570 0 _._ 049 0 _._ 517 0 _._ 049
+
+0 _._ 686 0 _._ 006 _±_ 0 _._ 671 0 _._ 003 _±_
+
+20 _±_ 0 _._ 681 0 _._ 006 _±_ 0 _._ 668 0 _._ 008
+_±_ _±_
+30 0 _._ 694 _±_ 0 _._ 005 0 _._ 678 _±_ 0 _._ 006
+40 0 _._ 682 _±_ 0 _._ 007 0 _._ 654 _±_ 0 _._ 015
+
+
+1
+
+
+0 _._ 423 _±_ 0 _._ 026
+
+
+0 _._ 686 _±_ 0 _._ 006
+
+
+0 _._ 671 _±_ 0 _._ 003
+
+
+Table 19: The training time of the M-ConFIG and ConFIG method with different numbers of gradient updates in the CelebA experiment (40 tasks).
+
+
+_n_ updates ConFIG M-ConFIG
+
+
+1 310 _._ 000 _±_ 0 _._ 000
+
+5 492 _._ 667 _±_ 1 _._ 247
+10 723 _._ 000 0 _._ 816
+
+2090 _._ 618 5 _._ 627 _±_
+
+20 _±_ 1185 _._ 667 6 _._ 018
+_±_
+30 1647 _._ 667 _±_ 7 _._ 587
+40 2084 _._ 667 _±_ 24 _._ 635
+
+
+1
+
+
+2090 _._ 618 _±_ 5 _._ 627
+
+
+31
+
+
+A.11 ADDITIONAL RESULTS ON CHALLENGING PDES
+
+
+To evaluate the performance of our method for challenging and high-dimensional test cases, we apply it to three problems from a recent benchmark for PINNs (Hao et al., 2023). In the following, we
+perform a comprehensive investigation of the performance of our method in solving these problems.
+
+
+A.11.1 HIGH DIMENSIONAL PDES
+
+
+We introduce the N-dimensional Poisson equation as the test case for high-dimensional problems.
+The governing PDE is
+
+
+(44)
+2 _[x][i]_ [)] _[,]_
+
+
+_u_ = _[π]_ [2]
+_−∇_ [2] 4
+
+
+_n_
+
+
+- sin( _[π]_
+
+2
+
+_i_ =1
+
+
+where _n_ is the number of dimensionality. In the current experiment, we choose _n_ = 5 and set the
+spatial domain as _x_ _∈_ [0 _,_ 1] [5] following the configuration of Hao et al. (2023). The ground truth
+solution is
+
+
+(45)
+2 _[x][i]_ [)] _[.]_
+
+
+_u_ =
+
+
+_n_
+
+
+- sin( _[π]_
+
+2
+
+_i_ =1
+
+
+The PNd problem employs Dirichlet boundary conditions with the boundary value equal to the
+analytical solution.
+
+
+Tab. 20 and Fig. 23 summarize the test results of different methods. Our M-ConFIG method ranks
+first among all methods, followed by the ConFIG methods, showing the superiority of our methods
+in dealing with high-dimensional problems.
+
+
+Table 20: Test MSE of PINNs trained for PNd equation. All values _×_ 10 _[−]_ [6] .
+
+
+[ _N_ _,_ _B_ ]
+_L_ _L_
+
+
+Adam 1 _._ 916 _±_ 0 _._ 284
+PCGrad 1 _._ 313 _±_ 0 _._ 097
+IMTL-G 0 _._ 520 _±_ 0 _._ 123
+MinMax 4 _._ 604 _±_ 0 _._ 271
+ReLoBRaLo 2 _._ 265 _±_ 0 _._ 263
+LRA 0 _._ 639 _±_ 0 _._ 340
+
+
+ConFIG 0 _._ 461 _±_ 0 _._ 141
+M-ConFIG **0** _._ _±_ **0** _._ Figure 23: The solution domain of PNd problem on [ _x, y,_ 0 _._ 5 _,_ 0 _._ 5 _,_ 0 _._ 5] plane.
+
+
+A.11.2 MULTI-SCALE PROBLEMS
+
+
+We choose the multi-scale heat transfer (HeatMS) problem as a strongly anisotropic test case. We set
+different heat-transfer coefficients in different spatial directions to give the solution different scales
+in each direction. Following the configuration of Hao et al. (2023), the governing equation is
+
+
+_∂u_ 1 _∂_ [2] _u_
+
+_∂t_ (500 _π_ ) [2] _∂x_ [2] _π_
+
+_[−]_ _[−]_ [1]
+
+
+_∂u_
+
+
+_∂_ [2] _u_
+_π_ [1][2] _∂y_ [2] [= 0] _[,]_ (46)
+
+
+32
+
+
+with the initial condition of _u_ ( _x, y,_ 0) = sin(20 _πx_ ) sin( _πy_ ) and boundary condition of _u_ ( _x, y, t_ ) =
+0. The spatial time domain is _x ∈_ [0 _,_ 1], _y_ _∈_ [0 _,_ 1] and _t ∈_ [0 _,_ 5]. Fig. 24 illustrates a sample solution
+of the ground truth when _t_ = 3 _._ 0 _s_ .
+
+
+Tab. 21 and Fig. 25 show the predictions by different methods. While all of the methods struggle
+to fully resolve the anisotropic solutions, as shown in Fig. 25, our M-ConFIG method still ranks
+first. This test case illustrates that the scaling issues of anisotropic PDEs can not be solved purely
+by finding a better balance between different loss terms. Nonetheless, ConFIG fares on-par with
+other methods, and the momentum terms of M-ConFIG help to partially address the scaling of the
+HeatMS test case.
+
+
+Table 21: Test MSE of PINNs trained for HeatMS problem. All values are scaled with 10 _[−]_ [3] .
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 7 _._ 612 _±_ 0 _._ 004
+PCGrad 7 _._ 600 _±_ 0 _._ 012 7 _._ 603 _±_ 0 _._ 012
+IMTL-G 6 _._ 693 _±_ 0 _._ 241 38 _._ 529 _±_ 43 _._ 666
+MinMax 7 _._ 595 _±_ 0 _._ 055 7 _._ 243 _±_ 0 _._ 458
+ReLoBRaLo 7 _._ 585 _±_ 0 _._ 039 7 _._ 558 _±_ 0 _._ 041
+LRA 7 _._ 654 _±_ 0 _._ 004 7 _._ 652 _±_ 0 _._ 000
+
+
+ConFIG 7 _._ 529 _±_ 0 _._ 074 7 _._ 585 _±_ 0 _._ 020
+M-ConFIG **5** _._ _±_ **0** _._ **7** _._ _±_ **0** _._ 0 _._ 04
+
+
+0 _._ 02
+
+
+0 _._ 00
+
+
+_−_ 0 _._ 02
+
+_−_ 0 _._ 04
+
+
+Figure 24: The ground truth solution of HeatMS problem when _t_ = 3 _._ 0 _s_ .
+
+
+Figure 25: The predictions of PINNs for HeatMS problem when _t_ = 3 _._ 0 _s_ (two-loss scenario, values
+scaled with 10 _[−]_ [2] ).
+
+
+A.11.3 CHAOTIC PROBLEMS
+
+
+To test the potential limitations of the proposed methods, we target the KS equation as a representative of chaotic problems. Starting from an analytic initial state, the solution of the KS equation will
+gradually develop into a chaotic state due to the strong nonlinearity, dissipative, and destabilizing
+effects. Following the configuration of Hao et al. (2023), the governing equation is
+
+
+33
+
+
+_∂u_
+
+
+[100]
+
+16 _[u]_ _[∂u]_ _∂x_
+
+
+_∂u_ [100]
+
+_∂t_ [+] 16
+
+
+_[∂u]_ [100]
+
+_∂x_ [+] 16 [2]
+
+
+[100] _∂_ [2] _u_ [100]
+
+16 [2] _∂x_ [2] [+] 16 [4]
+
+
+[100] 16 [4] _∂∂x_ [4] _u_ [4] [= 0] _[,]_ (47)
+
+
+with an initial condition of _u_ ( _x,_ 0) = cos( _x_ )(1 + sin( _x_ )) and periodic boundary conditions. The
+spatial time domain is _x ∈_ [0 _,_ 2 _π_ ] and _t ∈_ [0 _,_ 1].
+
+
+Table 22: Test MSE of PINNs for the KS equation.
+
+
+[ _N_ _,_ _BI_ ] [ _N_ _,_ _B,_ _I_ ]
+_L_ _L_ _L_ _L_ _L_
+
+
+Adam 1 _._ 094 _±_ 0 _._ 002 1 _._ 094 _±_ 0 _._ 002
+PCGrad 1 _._ 089 _±_ 0 _._ 008 1 _._ 061 _±_ 0 _._ 002
+IMTL-G 1 _._ 110 _±_ 0 _._ 016 1 _._ 089 _±_ 0 _._ 031
+MinMax 1 _._ 072 _±_ 0 _._ 000 1 _._ 084 _±_ 0 _._ 007
+ReLoBRaLo 1 _._ 074 _±_ 0 _._ 019 1 _._ 080 _±_ 0 _._ 016
+LRA 1 _._ 099 _±_ 0 _._ 039 1 _._ 098 _±_ 0 _._ 027
+
+
+ConFIG 1 _._ 089 _±_ 0 _._ 004 1 _._ 062 _±_ 0 _._ 007
+M-ConFIG 1 _._ 123 _±_ 0 _._ 011 1 _._ 118 _±_ 0 _._ 008
+
+
+Tab. 22 shows the predictions by different methods. The evaluation shows that no methods succeeds
+to capture the transition of chaos and generate smooth solutions. This agrees with the conclusions
+in Hao et al. (2023)’s, where likewise no method under consideration manages to converge to an
+accurate solution.
+
+
+The inherent challenge of solving the KS equations is a combination of several factors. On the
+one hand, the negative diffusion term _∂_ [2] _u/∂x_ [2] injects energy into the system, inducing instability
+and complex structures. On the other hand, The dissipative term _∂_ [4] _u/∂x_ [4] removes energy at small
+scales, formulating energy cascade across different scales. This energy cascade causes huge difficulties for numerical methods since the fine-scale structures must be resolved accurately. From the
+PINN side, this requires the network to have the ability to estimate the derivatives accurately on
+different scales via auto differentiation. The balance between different loss terms, as all the benchmark methods are trying to achieve, is not helpful in addressing this fundamental issue. Hence,
+this test case serves as a failure case, highlighting that improved optimizers alone do not suffice to
+address these challenges. It will be an interesting topic of future work to evaluate their effectiveness
+in combination with other changes, such as improvements on the architecture side.
+
+
+A.12 TRAINING DETAILS
+
+
+**PINNs.** The training of PINNs in the current research follows the established conventions. The
+neural networks are fully connected with 4 hidden layers and 50 channels per layer. The activation
+function is the tanh function, and all weights are initialized with Xavier initialization (Glorot &
+Bengio, 2010). Data points are sampled using Latin-hypercube sampling and updated in each iteration. The extended training run case shown in Fig. 10 uses a constant learning rate of 10 _[−]_ [4] . All
+other cases follow a cosine decay strategy with the initial and final learning rate of 10 _[−]_ [3] and 10 _[−]_ [4],
+respectively. We also add a learning rate warm-up of 100 epochs for each training. All the methods
+except M-ConFIG use the Adam optimizer. The hyper-parameters of the Adam optimizer are set as
+_β_ 1=0.9, _β_ 2 = 0 _._ 999, and _ε_ = 10 _[−]_ [8], respectively. The number of data points and training epochs for
+each case are listed in Tab. 23.
+
+
+**MTL.** Our experiments are based on the official test code of the FAMO method, and our ConFIG
+method implemented in the corresponding framework. For the details of the configurations, please
+[refer to the original FAMO paper (Liu et al., 2023) and its official repository: https://github.](https://github.com/Cranial-XIX/FAMO)
+[com/Cranial-XIX/FAMO (MIT License).](https://github.com/Cranial-XIX/FAMO)
+
+
+**Compute** **resources.** All the experiments in this study were conducted using an NVIDIA RTX
+A5000 GPU with 24 GB of memory. Each PINN experiment completes training within a few hours
+on a typical GPU with more than 4 GB of memory. For the CelebA MTL test, a GPU with more
+than 12 GB of memory is required, and a single training run takes ca. 1-2 days.
+
+
+34
+
+
+Table 23: The number of data points and training epochs for PINNs’ experiments.
+
+
+Number of data points
+Epochs
+_nN_ _nB_ _nI_
+Burgers equation 10000 250 250 3 _×_ 10 [4]
+
+Schr¨odinger equation 20000 500 500 10 [5]
+
+Kovasznay flow 20000 1000 10 [5]
+
+Beltrami flow 25000 5000 5000 10 [5]
+
+PNd 20000 5000 10 [5]
+
+HeatMS 20000 2000 2000 10 [5]
+
+KS 20000 500 500 10 [5]
+
+
+A.13 ABLATION STUDY ON TRAINING HYPERPARAMETER
+
+
+Although we utilize a momentum-based optimizer for the training, the learning rate may still affect
+the training process, especially considering that our ConFIG and M-ConFIG methods consistently
+change the gradient vector during the training. Thus, we perform an ablation study on different
+learning rates. As shown in Tab. 24 and Tab. 25, our methods consistently outperform other methods
+with different learning rate configurations.
+
+
+Table 24: The performance of different methods with different cosine decay learning rates in Burgers
+two-loss test
+
+
+10 _[−]_ [3] _→_ 10 _[−]_ [4] 10 _[−]_ [4] _→_ 10 _[−]_ [5]
+
+
+Adam 1 _._ 484 _±_ 0 _._ 061 3 _._ 076 _±_ 1 _._ 201
+PCGrad 1 _._ 344 _±_ 0 _._ 019 2 _._ 223 _±_ 0 _._ 355
+IMTL-G 1 _._ 339 _±_ 0 _._ 024 1 _._ 688 _±_ 0 _._ 018
+MinMax 1 _._ 889 _±_ 0 _._ 143 3 _._ 980 _±_ 0 _._ 798
+ReLoBRaLo 1 _._ 419 _±_ 0 _._ 053 5 _._ 057 _±_ 1 _._ 821
+LRA 353 _._ 796 _±_ 114 _._ 972 819 _._ 730 _±_ 56 _._ 925
+
+
+ConFIG 1 _._ 308 _±_ 0 _._ 008 1 _._ 887 _±_ 0 _._ 283
+M-ConFIG **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ Table 25: The performance of different methods with different constant learning rates in Burgers
+two-loss test
+
+
+_γ_ = 10 _[−]_ [3] _γ_ = 10 _[−]_ [4] _γ_ = 10 _[−]_ [5]
+
+Adam 1 _._ 398 _±_ 0 _._ 021 3 _._ 076 _±_ 1 _._ 201 420 _._ 511 _±_ 95 _._ 578
+PCGrad 1 _._ 398 _±_ 0 _._ 018 2 _._ 223 _±_ 0 _._ 355 51 _._ 664 _±_ 7 _._ 753
+IMTL-G 1 _._ 385 _±_ 0 _._ 042 1 _._ 688 _±_ 0 _._ 018 192 _._ 151 _±_ 123 _._ 903
+MinMax 1 _._ 889 _±_ 0 _._ 120 3 _._ 980 _±_ 0 _._ 798 7 _._ 078 _±_ 1 _._ 672
+ReLoBRaLo 1 _._ 477 _±_ 0 _._ 061 5 _._ 057 _±_ 1 _._ 821 10 _._ 333 _±_ 1 _._ 905
+LRA 367 _._ 944 _±_ 98 _._ 322 819 _._ 730 _±_ 56 _._ 925 895 _._ 965 _±_ 1 _._ 671
+
+ConFIG 1 _._ 373 _±_ 0 _._ 006 1 _._ 887 _±_ 0 _._ 283 103 _._ 239 _±_ 40 _._ 287
+M-ConFIG **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ **4** _._ _±_ **1** _._ In the current study, the points are sampled dynamically from the internal domain and boundaries
+during training. Thus, the number of data samples represents the training batch size. Meanwhile,
+each loss-specific gradient is evaluated through the data samples at the internal domain and boundaries. Thus, the number of sample points and the relative ratio between the number of points at the
+boundary and the internal domain may affect the quality of the gradient, further affecting the final
+training results. Here, we also perform an ablation study on the data samples, and the results are
+
+
+35
+
+
+summarized in Fig. 26, Tab. 26 and Tab. 27. Our methods consistently outperform other methods
+with different configurations of data samples, showing the robustness of our methods.
+
+
+Figure 26: The relative improvements of different methods with different numbers and different
+ratios of data samples during training
+
+
+Table 26: The performance of different methods with different numbers of data samples during
+training
+
+
+_nN_ = 5000 _nN_ = 10000 _nN_ = 20000
+_nB_ = _nI_ = 125 _nB_ = _nI_ = 250 _nB_ = _nI_ = 500
+
+Adam 1 _._ 494 _±_ 0 _._ 060 1 _._ 484 _±_ 0 _._ 061 1 _._ 438 _±_ 0 _._ 031
+PCGrad 1 _._ 350 _±_ 0 _._ 015 1 _._ 344 _±_ 0 _._ 019 1 _._ 331 _±_ 0 _._ 037
+IMTL-G 1 _._ 368 _±_ 0 _._ 012 1 _._ 339 _±_ 0 _._ 024 1 _._ 275 _±_ 0 _._ 003
+MinMax 1 _._ 943 _±_ 0 _._ 212 1 _._ 889 _±_ 0 _._ 143 1 _._ 846 _±_ 0 _._ 135
+ReLoBRaLo 1 _._ 478 _±_ 0 _._ 067 1 _._ 419 _±_ 0 _._ 053 1 _._ 381 _±_ 0 _._ 043
+LRA 340 _._ 161 _±_ 135 _._ 263 353 _._ 796 _±_ 114 _._ 972 374 _._ 574 _±_ 84 _._ 340
+
+ConFIG 1 _._ 307 _±_ 0 _._ 014 1 _._ 308 _±_ 0 _._ 008 1 _._ 295 _±_ 0 _._ 014
+M-ConFIG **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ Table 27: The performance of different methods with different ratios of data samples during training
+
+
+_nN_ = 5000 _nN_ = 10000 _nN_ = 20000
+_nB_ = _nI_ = 250 _nB_ = _nI_ = 250 _nB_ = _nI_ = 250
+
+Adam 1 _._ 470 _±_ 0 _._ 012 1 _._ 484 _±_ 0 _._ 061 1 _._ 455 _±_ 0 _._ 044
+PCGrad 1 _._ 358 _±_ 0 _._ 026 1 _._ 344 _±_ 0 _._ 019 1 _._ 355 _±_ 0 _._ 013
+IMTL-G 1 _._ 328 _±_ 0 _._ 036 1 _._ 339 _±_ 0 _._ 024 1 _._ 342 _±_ 0 _._ 027
+MinMax 1 _._ 963 _±_ 0 _._ 133 1 _._ 889 _±_ 0 _._ 143 1 _._ 843 _±_ 0 _._ 152
+ReLoBRaLo 1 _._ 469 _±_ 0 _._ 014 1 _._ 419 _±_ 0 _._ 053 1 _._ 393 _±_ 0 _._ 052
+LRA 362 _._ 388 _±_ 110 _._ 455 353 _._ 796 _±_ 114 _._ 972 350 _._ 266 _±_ 127 _._ 639
+
+ConFIG 1 _._ 298 _±_ 0 _._ 014 1 _._ 308 _±_ 0 _._ 008 1 _._ 300 _±_ 0 _._ 010
+M-ConFIG **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ **1** _._ _±_ **0** _._ 36

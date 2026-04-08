@@ -1,0 +1,3000 @@
+## ADVANTAGE ALIGNMENT ALGORITHMS
+
+
+**Juan Duque*, Milad Aghajohari*, Tim Cooijmans, Razvan Ciuca, Tianyu Zhang,**
+**Gauthier Gidel**, **Aaron Courville**
+University of Montreal & Mila
+firstname.lastname@umontreal.ca
+
+
+ABSTRACT
+
+
+Artificially intelligent agents are increasingly being integrated into human
+decision-making: from large language model (LLM) assistants to autonomous
+vehicles. These systems often optimize their individual objective, leading to
+conflicts, particularly in general-sum games where naive reinforcement learning
+agents empirically converge to Pareto-suboptimal Nash equilibria. To address this
+issue, opponent shaping has emerged as a paradigm for finding socially beneficial
+equilibria in general-sum games. In this work, we introduce Advantage Alignment, a family of algorithms derived from first principles that perform opponent
+shaping efficiently and intuitively. We achieve this by aligning the advantages of
+interacting agents, increasing the probability of mutually beneficial actions when
+their interaction has been positive. We prove that existing opponent shaping methods implicitly perform Advantage Alignment. Compared to these methods, Advantage Alignment simplifies the mathematical formulation of opponent shaping,
+reduces the computational burden and extends to continuous action domains. We
+demonstrate the effectiveness of our algorithms across a range of social dilemmas,
+achieving state-of-the-art cooperation and robustness against exploitation.
+
+
+1 INTRODUCTION
+
+
+Recent advancements in artificial intelligence, such as language models like GPT (Radford et al.,
+2018), image synthesis with diffusion models (Ho et al., 2020), and generalist agents like Gato
+(Reed et al., 2022), suggest a future where AI systems seamlessly integrate into everyday human
+decision-making. While these systems often optimize for the goals of their individual users, this can
+lead to conflicts, especially in tasks that involve both cooperative and competitive elements. _Social_
+_dilemmas_, as introduced by Rapoport and Chammah (1965), describe scenarios where agents acting
+selfishly achieve worse outcomes than if they had cooperated. A global example is the climate
+change problem, where individual and national interests in economic growth often clash with the
+need for collective action to reduce carbon emissions and mitigate environmental degradation. The
+challenges we have faced in tackling this problem highlight the complexity of aligning individual
+interests with collective well-being.
+
+
+As artificially intelligent systems become ubiquitous, there is a pressing need to develop methods
+that enable agents to autonomously align their interests with one another. Despite this, the deep reinforcement learning community has traditionally focused on fully cooperative or fully competitive
+settings, often neglecting the nuances of social dilemmas. Sandholm and Crites (1996) empirically
+demonstrated that naive reinforcement learning algorithms tend to converge to the worst Pareto suboptimal Nash equilibria of Always Defect in social dilemmas like the Iterated Prisoner’s Dilemma
+(IPD). Foerster et al. (2018b), demonstrated that the same is true for policy gradient methods, and
+introduced _opponent shaping_ (LOLA) to address this gap.
+
+
+LOLA is an opponent shaping algorithm that influences the behavior of other agents by assuming
+they are naive learners and taking gradients with respect to simulated parameter updates. Following
+this approach, other opponent shaping algorithms that compute gradients with respect to simulated
+parameter updates have shown success in partially competitive tasks, including SOS (Letcher et al.,
+2021), COLA (Willi et al., 2022), and POLA (Zhao et al., 2022). More recently, LOQA (Aghajohari et al., 2024b) proposed an alternative form of opponent shaping by assuming control over the
+value function of other agents via REINFORCE estimators (Williams, 1992). This new approach to
+
+
+1
+
+
+opponent shaping offers significant computational advantages over previous methods and lays the
+foundation for our work.
+
+
+We introduce _Advantage Alignment_, a family of algorithms designed to shape rational opponents by
+aligning their advantages when their historic interactions have been positive. We make two key assumptions about reinforcement learning agents: (1) they aim to maximize their own expected return,
+and (2) they take actions proportionally to this expected return. Under these assumptions, we demonstrate that opponent shaping reduces to aligning the advantages of different players and increasing
+the log probability of an action proportionally to their alignment. We show that this mechanism lies
+at the heart of existing opponent shaping algorithms, including LOLA and LOQA. By distilling this
+objective, Advantage Alignment agents can shape opponents without relying on imagined parameter
+updates (as in LOLA and SOS) or stochastic gradient estimation that relies on automatic differentiation introduced in DiCE (Foerster et al., 2018a) (as in POLA, COLA, and LOQA). Furthermore,
+we demonstrate that Advantage Alignment preserves Nash Equilibria, ensuring that our algorithms
+maintain stable strategic outcomes.
+
+
+We also introduce _Proximal_ _Advantage_ _Alignment_, which formulates Advantage Alignment as a
+modification to the advantage function used in policy gradient updates. By integrating this modified
+advantage into the Proximal Policy Optimization (PPO) (Schulman et al., 2017b) surrogate objective, we develop a scalable and efficient opponent shaping algorithm suitable for more complex
+environments. To identify and overcome challenges that arise from scale—which are often overlooked in simpler settings like the Iterated Prisoner’s Dilemma (Rapoport and Chammah, 1965) and
+the Coin Game (Foerster et al., 2018b)—we apply Advantage Alignment to a continuous variant of
+the Negotiation Game (Cao et al., 2018) and Melting Pot’s Commons Harvest Open (Agapiou et al.,
+2023). In doing so, we aim to demonstrate the scalability of our methods and offer insights and
+solutions applicable to complex, real-world agent interactions.
+
+
+Our key contributions are:
+
+
+- We introduce Advantage Alignment and Proximal Advantage Alignment (PAA), two opponent
+shaping algorithms derived from first principles and based on policy gradient estimators.
+
+
+- We prove that LOLA (and its variations) and LOQA implicitly perform Advantage Alignment
+through different mechanisms.
+
+
+- We extend REINFORCE-based opponent shaping to continuous action environments and achieve
+state-of-the-art results in a continuous action variant of the Negotiation Game (Cao et al., 2018).
+
+
+- We apply PAA to the Commons Harvest Open environment in Melting Pot 2.0 (Agapiou et al.,
+2023), a high dimensional version of the _tragedy of the commons_ social dilemma, achieving stateof-the-art results and showcasing the scalability and effectiveness of our methods.
+
+
+2 BACKGROUND
+
+
+2.1 SOCIAL DILEMMAS
+
+
+Social dilemmas describe situations in which selfish behavior leads to sub-optimal collective outcomes. Such dilemmas are often formalized as normal form games and constitute a subset of
+general-sum games. A classical example of a social dilemma is the Iterated Prisoner’s Dilemma
+(IPD) (Rapoport and Chammah, 1965), in which two players can choose one of two actions: cooperate or defect. In the one-step version of the game, the dilemma occurs because defecting is a
+_dominant_ strategy, i.e., independently of what the opponent plays the agent is better off playing defect. However, by the reward structure of the game, both the agent and the opponent would achieve a
+higher utility if they played cooperate simultaneously. Beyond the IPD, other social dilemmas have
+been extensively studied in the literature, including the Chicken Game and the Coin Game (Lerer
+and Peysakhovich, 2018), the latter of which has a similar reward structure to IPD but takes place
+in a grid world. In this paper we introduce a variation of the Negotiation Game (also known as the
+Exchange Game) (DeVault et al., 2015; Lewis et al., 2017), with a strong social dilemma component. Additionally, we evaluate our method on the Commons Harvest Open environment in Melting
+Pot 2.0 (Agapiou et al., 2023), which exemplifies a large-scale social dilemma. In this environment,
+agents must balance short-term personal gains from overharvesting common resources against the
+long-term collective benefit of sustainable use.
+
+
+2
+
+
+2.2 MARKOV GAMES
+
+
+In this work, we consider fully observable, general sum, _n_ -player Markov Games (Shapley, 1953)
+which are represented by a tuple: _M_ = ( _N, S, A, P, R, γ_ ). Here _S_ is the state space, _A_ :=
+_A_ [1] _× . . . × A_ _[n]_, is the joint action space for all players, _P_ : _S_ _× A_ _→_ ∆( _S_ ) maps from every
+state and joint action to a probability distribution over states, _R_ = _{r_ [1] _, . . ., r_ _[n]_ _}_ is the set of reward
+functions where each _r_ _[i]_ : _S_ _× A_ _→_ R maps every state and joint action to a scalar return and
+_γ_ _∈_ [0 _,_ 1] is the discount factor.
+
+
+2.3 REINFORCEMENT LEARNING
+
+
+Consider two agents playing a Markov Game, 1 (agent) and 2 (opponent), with policies _π_ [1] and _π_ [2],
+parameterized by _θ_ 1 and _θ_ 2 respectively. We follow the notation of Agarwal et al. (2021), let _τ_
+denote a trajectory with initial state distribution _µ_ and (unconditional) distribution given by:
+
+Pr _[π]_ _µ_ [1] _[,π]_ [2] ( _τ_ ) = _µ_ ( _s_ 0) _π_ [1] ( _a_ 0 _|s_ 0) _π_ [2] ( _b_ 0 _|s_ 0) _P_ ( _s_ 1 _|s_ 0 _, a_ 0 _, b_ 0) _. . ._ (1)
+
+Where _P_ ( _·|s, a, b_ ), often referred as the transition dynamics, is a probability distribution over the
+next states conditioned on the current state being _s_, agent taking action _a_ and opponent taking
+action _b_ . Value-based methods like Q-learning (Watkins and Dayan, 1992) and SARSA (Rummery
+and Niranjan, 1994) learn an estimate of the discounted reward using the Bellman equation:
+_Q_ [1] ( _st, at, bt_ ) = _r_ [1] ( _st, at, bt_ ) + _γ ·_ E _st_ +1     - _V_ [1] ( _st_ +1) _|st, at, bt_     - _._ (2)
+
+In policy optimization, both players aim to maximize their expected discounted return by performing
+gradient ascent with a REINFORCE estimator (Williams, 1992) of the form:
+
+
+_._ (3)
+
+
+_∇θ_ 1 _V_ [1] ( _µ_ ) = E _τ_ _∼_ Pr _µπ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+- _γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) _∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+_t_ =0
+
+
+Here _A_ [1] ( _s, a, b_ ) := _Q_ [1] ( _s, a, b_ ) _−_ _V_ [1] ( _s_ ) denotes the advantage of the agent taking action _a_ in state
+_s_ while the opponent takes action _b_ .
+
+
+3 OPPONENT SHAPING
+
+
+Opponent shaping, first introduced in LOLA (Foerster et al., 2018b), is a paradigm that assumes
+the learning dynamics of other players can be controlled via some mechanism to incentivize desired
+behaviors. LOLA and its variants assume that the opponent is a naive learner, i.e. an agent that
+performs gradient ascent on their value function, and differentiate through an imagined naive update
+of the opponent in order to shape it.
+
+
+LOQA (Aghajohari et al., 2024b) performs opponent shaping by controlling the Q-values of the
+opponent for different actions assuming that the opponent’s policy is a softmax over these Q-values:
+
+exp _Q_ [2] ( _st, bt_ )
+_π_ ˆ [2] ( _bt|st_ ) :=             - (4)
+_b_ [exp] _[ Q]_ [2][(] _[s][t][, b]_ [)] _[,]_
+
+where _Q_ [2] ( _st, bt_ ) := E _a∼π_ 1[ _Q_ [2] ( _st, a, bt_ )]. The key idea is that these Q-values depend on _π_ [1], and
+hence the opponent policy _π_ ˆ [2] can be differentiated w.r.t. _θ_ 1: [1]
+
+
+_∇θ_ 1 ˆ _π_ [2] ( _bt|st_ ) = _π_ ˆ [2] ( _bt|st_ )
+
+
+_∇θ_ 1 _Q_ [2] ( _st, bt_ ) _−_ - _π_ ˆ [2] ( _b|st_ ) _∇θ_ 1 _Q_ [2] ( _st, b_ )
+
+
+_b_
+
+
+_._ (5)
+
+
+This dependency of _π_ [2] on _θ_ 1 leads to the emergence of an extra term in the policy gradient:
+
+
+
+
+
++ _∇θ_ 1 log ˆ _π_ [2] ( _bt|st_ )
+
+ - ��  opponent shaping term
+
+
+
+
+
+
+
+
+
+ _._ (6)
+
+
+_∇θ_ 1 _V_ [1] ( _µ_ ) = E _τ_ _∼_ Pr _µπ_ 1 _,π_ 2
+
+
+
+
+
+_∞_
+
+
+- _γ_ _[t]_ _A_ [1] ( _st, at, bt_ )
+
+
+_t_ =0
+
+
+
+
+
+ _∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+ - ��  policy gradient term
+
+
+Aghajohari et al. (2024b) demonstrate an effective way to account for this dependency using REINFORCE. The present work builds on the ideas of LOQA, but reduces opponent shaping to its bare
+components to derive Advantage Alignment from first principles.
+
+
+1See Appendix A.3 for a derivation of this expression.
+
+
+3
+
+
+**Algorithm 1** Advantage Alignment
+
+**Initialize:** Discount factor _γ_, agent Q-value parameters _ϕ_ [1], t Q-value parameters _ϕ_ [1] t [,] [actor] [pa-]
+rameters _θ_ [1], opponent Q-value parameters _ϕ_ [2], t Q-value parameters _ϕ_ [2] t [, actor parameters] _[ θ]_ [2]
+**for** iteration= 1 _,_ 2 _, . . ._ **do**
+
+Run policies _π_ [1] and _π_ [2] for _T_ timesteps in environment and collect trajectory _τ_
+Compute agent critic loss _L_ [1] _C_ [using the TD error with] _[ r]_ [1][ and] _[ V]_ [1]
+Compute opponent critic loss _L_ [2] _C_ [using the TD error with] _[ r]_ [2][ and] _[ V]_ [2]
+Optimize _L_ [1] _C_ [w.r.t.] _[ϕ]_ [1][ and] _[ L]_ [2] _C_ [w.r.t.] _[ϕ]_ [2][ with optimizer of choice]
+Compute generalized advantage estimates _{A_ [1] 1 _[, . . ., A]_ [1] _T_ _[}]_ [,] _[ {][A]_ 1 [2] _[, . . ., A]_ [2] _T_ _[}]_
+Compute agent actor loss, _L_ [1] _a_ [, summing equation][ 3][ and equation][ 8]
+Compute opponent actor loss, _L_ [2] _a_ [, summing equation][ 3][ and equation][ 8]
+Optimize _L_ [1] _a_ [w.r.t.] _[θ]_ [1][ and] _[ L]_ [2] _a_ [w.r.t.] _[θ]_ [2][ with optimizer of choice]
+
+
+4 ADVANTAGE ALIGNMENT
+
+
+4.1 METHOD DESCRIPTION
+
+
+Motivated by the goal of scaling opponent shaping algorithms to more diverse and complex scenarios, we derive a simple and intuitive objective for efficient opponent shaping. We begin from the
+assumptions that agents are learning to maximize their expected return, and will behave in a fashion
+that is proportional to this goal:
+**Assumption 1.** _Each agent i learns to maximize their value function:_ max _V_ _[i]_ ( _µ_ ) _._
+
+**Assumption 2.** _Each opponent i acts proportionally to the exponent of their action-value function:_
+_π_ _[i]_ ( _a|s_ ) _∝_ exp - _β · Q_ _[i]_ ( _s, a_ )� _._
+
+
+Using Equation 6 and substituting _π_ ˆ [2] in place of _π_ [2] (per Assumption 2), we obtain:
+
+
+_∇θ_ 1 _V_ [1] ( _µ_ ) = E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_ 
+- _γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) - _∇θ_ 1 log _π_ [1] ( _at|st_ ) + _∇θ_ 1 log ˆ _π_ [2] ( _bt|st_ )�
+
+_t_ =0
+
+
+_._
+
+
+The first term is the usual policy gradient. The second term is the opponent shaping term and will
+be our focus. Approximating the opponent’s policy (right hand side of equation 4) by ignoring the
+contribution due to the partition function, the opponent shaping term becomes:
+
+
+_._ (7)
+
+
+_β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) _∇θ_ 1 _Q_ [2] ( _st, bt_ )
+
+_t_ =0
+
+
+The gradient of the Q-value can be estimated by a REINFORCE estimator, which leads to a nested
+expectation. Aghajohari et al. (2024b) empirically showed that this nested expectation can be efficiently estimated from a single trajectory. We take the same approach (see Appendix A.1) to obtain:
+
+
+_γ_ _[t][−][k]_ _A_ [1] ( _sk, ak, bk_ )
+
+_k<t_
+
+
+_._ (8)
+
+
+           
+_A_ [2] ( _st, at, bt_ ) _∇θ_ 1log _π_ [1] ( _at|st_ )
+
+
+_β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_∞_
+
+- ��
+
+_γ_ _[t]_ [+1]
+
+_t_ =0 _k<t_
+
+
+The expression above captures the essence of opponent shaping: an agent should align its advantages
+with those of its opponent in order to steer towards trajectories that are mutually beneficial. More
+precisely, an agent increases the probability of actions that have high product between the sum of
+its past advantages and the advantages of the opponent at the current time step. For implementation
+details of the Advantage Alignment formula see Appendix A.6. Equation 8 depends only on the
+log probabilities of the agent, which allows us to create a proximal surrogate objective that closely
+follows the PPO (Schulman et al., 2017b) formulation:
+
+E _π_ 1 _,π_ 2 [min _{rn_ ( _θ_ 1) _A_ _[∗]_ ( _st, at, bt_ ) _,_ clip ( _rn_ ( _θ_ 1); 1 _−_ _ϵ,_ 1 + _ϵ_ ) _A_ _[∗]_ ( _st, at, bt_ ) _}_ ] _,_ (9)
+_τ_ _∼_ Pr _µ_
+
+
+where _rn_ denotes the ratio of the policy (new) after _n_ updates of the original policy (old), and:
+
+
+��
+
+
+_γ_ _[t][−][k]_ _A_ [1] ( _sk, ak, bk_ )
+
+_k<t_
+
+
+_._ (10)
+
+
+_A_ _[∗]_ ( _st, at, bt_ ) =
+
+
+_A_ [1] ( _st, at, bt_ ) + _βγ ·_
+
+
+    
+_A_ [2] ( _st, at, bt_ )
+
+
+4
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+
+
+START CC CD DC DD
+State
+
+
+(b)
+
+
+|A2<br>t<br>P γt−kA1<br>k<br>k<t|+|-|
+|---|---|---|
+|**+**|**+**<br>**+**|**-**<br>**-**|
+|**-**|**-**<br>**-**|**+**<br>**+**|
+
+
+(a)
+
+
+Figure 1: (a) The sign of the product of the gamma-discounted past advantages for the agent, and
+the current advantage of the opponent, indicates whether the probability of taking an action should
+increase or decrease. (b) The empirical probability of cooperation of Advantage Alignment for
+each previous combination of actions in the one step history Iterated Prisoner’s Dilemma, closely
+resembles tit-for-tat. Results are averaged over 10 random seeds, the black whiskers show one std.
+
+
+This surrogate objective in equation 9 is used to formulate the Proximal Advantage Alignment (Proximal AdAlign) algorithm (see appendix A.7 for implementation details).
+
+
+**Why** **is** **Assumption** **1** **necessary?** Assumption 1 allows the agent to influence the learning dynamics of the opponent, by controlling the values for different actions. After one iteration of the
+algorithm the agent changes the Q-values of the opponent for different actions and, since the opponent aims to maximize their expected return, it must change its behavior accordingly.
+
+
+4.2 ANALYZING ADVANTAGE ALIGNMENT
+
+
+Equation 8 yields four possible different cases for controlling the direction of the gradient of the log
+probability of the policy. As with the usual policy gradient estimator, the sign multiplying the log
+probability indicates whether the probability of taking an action should increase or decrease. Intuitively, when the interaction with the opponent has been positive (blue in figure 1a) the advantages of
+the agent align with that of the opponent: the advantage alignment term increases the log probability
+of taking an action if the advantage of the opponent is positive and decreases it if it is negative. In
+contrast, if the interaction has been negative (red in figure 1a) the advantages are at odds with each
+other: the advantage alignment term decreases the log probability of taking an action if the advantage of the opponent is positive and increases it if it is negative. We now relate existing opponent
+shaping algorithms to advantage alignment, and argue that these algorithms use the same underlying
+mechanisms. Theorem 1 shows that LOLA update from Foerster et al. (2018b) can be written as a
+policy gradient method with an opponent shaping term similar to equation 10. This shows the fundamental relationship between opponent-shaping dynamics and advantage multiplications. Theorem
+2 proves that LOQA’s opponent shaping term has the same form as that of Advantage Alignment,
+differing only by a scalar term.
+
+**Theorem 1** (LOLA as an advantage alignment estimator) **.** _Given a two-player game where players_
+_1 and 2 have respective policies π_ [1] ( _a|s_ ) _and π_ [2] ( _b|s_ ) _, where each policy is parametrised such that_
+_the set of gradients ∇θ_ 2 log _π_ [2] ( _a|s_ ) _for all pairs_ ( _a, s_ ) _form an orthonormal basis, the LOLA update_
+_for the first player correspond to a reinforce update with the following opponent shaping term_
+
+
+- _dγ,k−tγ_ _[k][−][t]_ _A_ [1] _k_ _[A]_ [2] _k−t_
+
+
+_k_ = _t_
+
+
+_,_ (11)
+
+
+      
+_∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+
+_β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_∞_ - _∞_
+
+- _γ_ _[t]_ 
+
+_t_ =0 _k_ = _t_
+
+
+_where A_ _[i]_ _k_ [:=] _[ A][i]_ [(] _[s][k][, a][k][, b][k]_ [)] _[ and][ d][γ,k]_ _[is the occupancy measure of the tuple]_ [ (] _[a][k][, b][k][, s][k]_ [)] _[ and][ β][ is the]_
+_step size of the naive learner._ _See appendix A.2 for a proof._
+
+
+5
+
+
+**Theorem 2** (LOQA as an advantage alignment estimator) **.** _Under Assumption 2, the opponent shap-_
+_ing term in LOQA is equivalent to the opponent shaping term in Equation 8 up to_ (1 _−_ _π_ ˜ [2] ( _bk|sk_ ))
+
+
+- _γ_ _[t][−][k]_ (1 _−_ _π_ ˜ [2] ( _bk|sk_ )) _A_ [1] _k_
+
+
+_k<t_
+
+
+_,_ (12)
+
+
+       
+_A_ [2] _t_ _[∇]_ _θ_ [1][ log] _[ π]_ [1][(] _[a][t][|][s][t]_ [)]
+
+
+_β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_∞_ - _∞_
+
+- _γ_ _[t]_ [+1] 
+
+_t_ =0 _k<t_
+
+
+_π_ ˜ [2] ( _bt|st_ ) _approximates the opponent policy as defined in LOQA. For a proof see appendix A.5._
+
+
+Having established the connection between existing opponent shaping algorithms and Advantage
+Alignment, we now focus on analyzing the theoretical properties of Advantage Alignment itself.
+We investigate the impact of the Advantage Alignment term on Nash equilibria. Theorem 3 demonstrates that Advantage Alignment preserves Nash equilibria, ensuring that if agents are already playing equilibrium strategies, the Advantage Alignment updates will not cause the policy gradient to
+deviate from them locally.
+
+**Theorem** **3** (Advantage Alignment preserves Nash equilibria) **.** _Advantage_ _Alignment_ _preserves_
+_Nash_ _equilibria._ _That_ _is,_ _if_ _a_ _joint_ _policy_ ( _π_ 1 _[∗][, π]_ 2 _[∗]_ [)] _[constitutes]_ _[a]_ _[Nash]_ _[equilibrium,]_ _[then]_ _[applying]_
+_the_ _Advantage_ _Alignment_ _formula_ _will_ _not_ _change_ _the_ _policy,_ _as_ _the_ _gradient_ _contribution_ _of_ _the_
+_advantage alignment term is zero._ _The proof can be found in Appendix A.8._
+
+
+5 EXPERIMENTS
+
+
+We follow the evaluation protocol of LOQA (Aghajohari et al., 2024b), where the fixed policy that
+is generated by the algorithm is evaluated _zero-shot_ against a distribution of policies.
+
+
+5.1 ITERATED PRISONER’S DILEMMA
+
+
+We consider the _full_ _history_ version of IPD, where a gated recurrent unit (GRU) policy conditions
+on the full trajectory of observations before sampling an action. In this experiment we follow the
+architecture used in POLA (Zhao et al., 2022) (for details see appendix B.1). We also consider
+trajectories of length 16 with a discount factor, _γ_, of 0.9. As shown in figure 1b, Advantage Alignment agents consistently achieve a policy that resembles _tit-for-tat_ (Rapoport and Chammah, 1965)
+empirically. Tit-for-tat consists of cooperating on the first move and then mimicking the opponent’s
+previous move in subsequent rounds.
+
+
+5.2 COIN GAME
+
+
+The Coin Game is a 3x3 grid world environment where two agents, red and blue, take turns collecting
+coins. During each turn, a coin of either red or blue color spawns at a random location on the grid.
+Agents receive a reward of +1 for collecting any coin but incur a penalty of -3 if the opponent
+collects a coin of their color. A Pareto-optimal strategy in the Coin Game is for each agent to
+collect only the coins matching their color, as this approach maximizes the total returns for both
+agents. Figure 2 demonstrates that Advantage Alignment agents perform similarly to LOQA agents
+when evaluated against a league of different policies: Advantage Alignment agents cooperate with
+themselves, cooperate with Always Cooperate (AC) and are not exploited by Always Defect (AD).
+
+
+5.3 NEGOTIATION GAME
+
+
+In the original Negotiation Game, two agents bargain over _n_ types of items over multiple rounds.
+In each round, both the quantity of items and the value each agent places on them are randomly set,
+but the agents only know their own values. They take turns proposing how to divide the items over a
+random number of turns. Agents can end the negotiation by agreeing to a proposal, and rewards are
+based on how well the agreement matches their private values. If they don’t reach an agreement by
+the final turn, neither gets a reward. We modify the game first by making the values public, otherwise
+Advantage Alignment would have an unfair edge over PPO agents by using the opponent’s value
+function. Secondly, we do one-shot, simultaneous negotiations instead of negotiation rounds lasting
+multiple iterations. Third, we modify the reward function so that every negotiation yields a reward.
+For a given item with agent value _va_, the reward of the agent _ra_ depends on the proposal of the agent
+_pa_ and the proposal of the opponent _po_ where _pa, po_ _∈_ [0 _,_ 5]: _ra_ = _pa · va/_ max(5 _, pa_ + _po_ ) _._
+
+
+6
+
+
+AdAlign
+
+
+LOQA
+
+
+POLA
+
+
+MFOS
+
+
+AC
+
+
+AD
+
+
+Random
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+0.1
+
+
+0.2
+
+
+0.3
+
+
+Figure 2: League Results of the Advantage Alignment agents in Coin Game: LOQA, POLA, MFOS, Always
+Cooperate (AC), Always Defect (AD), Random and Advantage Alignment (AdAlign). Each number in the plot
+is computed by running 10 random seeds of each agent head to head with 10 seeds of another for 50 episodes
+of length 16 and averaging the rewards.
+
+
+Note that the max operation at the denominator serves to break the invariance of the game dynamics
+to the scale of proposals. For example, without the max operation, there would be no difference
+between _pa_ = 1 _, po_ = 1 and _pa_ = 5 _, po_ = 5. The social dilemma in this version of the negotiation
+game arises because both agents are incentivized to take as many items as possible, but by doing so,
+they end up with a lower return compared to the outcome they would achieve if they split the items
+based on their individual utilities. A Pareto-optimal strategy entails allowing the agent to take all the
+items that are more valuable to them, and similarly for their opponent (this constitutes the Always
+Cooperate (AC) strategy in Figure 3a). We experiment with a high-contrast setting where the utilities
+of objects for the agents are orthogonal to each other: There are two possible combinations of values
+in this setup: _va_ = 5 _, vb_ = 1 or _va_ = 1 _, vb_ = 5.
+
+
+As shown in Figure 3a, PPO agents do not learn to solve the social dilemma. They learn the naive
+policy of bidding high for every item which means they get a low return against themselves. PPO
+agents trained with shared rewards get a high return against themselves, only to be exploited by
+PPO agents. They do not learn to abandon cooperation and retaliate after they are defected against.
+Advantage Alignment agents solves the social dilemma. They cooperate with themselves while
+remaining non-exploitable against Always Defect.
+
+
+5.4 MELTING POT’S COMMONS HARVEST OPEN
+
+
+In Commons Harvest Open (Agapiou et al., 2023), a group of 7 agents interact in a environment
+in which there is 6 bushes with different amounts of apples. Agents receive a reward of 1 for any
+apple consumed. Consumed apples regrow with a probability dependent on the number of apples in
+their _L_ 2 neighborhood; specifically, if there are no apples nearby, consumed apples do not regrow.
+This mechanism creates a tension between agents: they must exercise restraint to prevent extinction
+while also feeling compelled to consume quickly out of fear that others may over-harvest.
+
+
+7
+
+
+AC
+
+
+AD
+
+
+AdAlign
+
+
+PPO
+
+
+PPO-SR
+
+
+0.37
+
+
+0.32
+
+
+0.27
+
+
+0.22
+
+
+(a)
+
+
+(b)
+
+
+Figure 3: (a) League Results of the Advantage Alignment agents in the Negotiation Game: Always
+Cooperate (AC), an agent which proposes 5 for items which are more valuable to it and 1 for items
+that are less valuable to it, Always Defect (AD), an agent that proposes 5 regardless of the values,
+Advantage Alignment (AdAlign), PPO and PPO summing rewards (PPO-SR). Each number in the
+plot is computed by running 10 random seeds of each agent head to head with 10 seeds of another
+for 50 episodes of length 16 and averaging the rewards. Note that against Always Defect, Always
+Cooperate gets an average return of 0 _._ 25 while Always Defect gets 0 _._ 30. (b) Sample trajectories of
+AdAlign vs. AdAlign and PPO vs. PPO in the negotiation game. The numbers show the utilities
+and proposals, which have been rounded to integer values. AdAlign agents defect first (red) and
+progressively cooperate with each other (blue) while PPO agents Always Defect.
+
+
+Figure 4: Comparison of different reinforcement learning algorithms in Melting Pot’s 2.0. Commons
+Harvest Open. The score is the focal return per capita, min-max normalized between a random agent
+and an exploiter baseline (ACB agent with an LSTM policy/value network) trained for 10 [9] steps.
+Following the protocol of the Melting Pot contest, we select the best agent out of 10 seeds and
+evaluate it 100 times.
+
+
+There are a number of complications that make the Melting Pot environments particularly challenging. First, the environments are partially-observable: agents can only see a local window around
+themselves. Second, the partial observations are in the form of high-dimensional raw pixel data.
+Third, these environments often involve multiple agents—seven in the case of Commons Harvest
+Open—which increases the complexity of interactions and coordination. Therefore, agents need to
+remember past interactions with other agents to infer their motives and policies. All these factors,
+combined with the inherent social dilemma reward structure of the game, make finding policies that
+are optimal with respect to social _and_ individual objectives a non-trivial task.
+
+
+We train a GTrXL transformer (Parisotto et al., 2019) for 34k steps, with context length of 30, and
+compare the normalized focal return per capita of our agents against the baselines in Melting Pot 2.0:
+Advantage-critic baseline (acb) (Espeholt et al., 2018), V-MPO (vmpo) (Song et al., 2019), options
+as responses (opre) (Vezhnevets et al., 2020), and prosocial versions of opre (opre ~~p~~ ) and acb (acb ~~p~~ )
+that encourage cooperation. We also compare to our own implementations of PPO (ppo) and PPO
+
+
+8
+
+
+Figure 5: Frames of evaluation trajectories for different algorithms. Qualitatively, we demonstrate
+that Proximal Advantage Alignment (adalign) also outperforms naive PPO (ppo) and PPO with
+summed rewards. The evaluation trajectories show how adalign agents are able to maintain a bigger
+number of apple bushes from extinction (2) for a longer time that either ppo or ppo ~~p~~ . Note that
+in the Commons Harvest evaluation two exploiter agents, green and yellow, play against a focal
+population of 5 copies of the evaluated algorithm.
+
+
+with summed rewards (ppo ~~p~~ ). Figure 4 shows that our best advantage alignment agent achieves
+on average 1 _._ 63 normalized per capita focal return in the Commons Harvest evaluation scenarios,
+significantly outperforming all baselines (see Appendix B.4). Figure 5, qualitatively shows the
+reason why Proximal Advantage Alignment outperforms PPO and PPO with summed rewards on
+one of the evaluation scenarios.
+
+
+6 RELATED WORK
+
+
+The Iterated Prisoner’s Dilemma (IPD) was introduced by Rapoport and Chammah (1965). _Tit-for-_
+_tat_ was discovered as a robust strategy against a population of opponents in IPD by Axelrod (1984),
+who organized multiple IPD tournaments. It was discovered only recently that IPD contains strategies that extort rational opponents into exploitable cooperation (Press and Dyson, 2012). Sandholm
+and Crites (1996) were the first to demonstrate that two Q-learning agents playing IPD converge to
+mutual defection, which is suboptimal. Later, Foerster et al. (2018b) demonstrated that the same
+is true for policy gradient methods. Bertrand et al. (2023) were able to show that with optimistic
+initialization and _self-play_, Q-learning agents find a _Pavlov_ strategy in IPD.
+
+
+Opponent shaping was first introduced in LOLA Foerster et al. (2018b), as a method for controlling
+the learning dynamics of opponents in a game. A LOLA agent assumes the opponents are naive
+learners and differentiates through a one step look-ahead optimization update of the opponent. More
+formally, LOLA maximizes _V_ [1] ( _θ_ [1] _, θ_ [2] + ∆ _θ_ [2] ) where ∆ _θ_ [2] is a naive learning step in the direction
+that maximizes the opponent’s value function _V_ [2] ( _θ_ [1] _, θ_ [2] ). Variations of LOLA have been introduced
+
+
+9
+
+
+to have formal stability guarantees (Letcher et al., 2021), learn consistent update functions assuming
+mutual opponent shaping (Willi et al., 2022) and be invariant to policy parameterization (Zhao et al.,
+2022). More recent work performs opponent shaping by having an agent play against a best response
+approximation of their policy (Aghajohari et al., 2024a). LOQA (Aghajohari et al., 2024b), on which
+this work is based, performs opponent shaping by controlling the Q-values of the opponent using
+REINFORCE (Williams, 1992) estimators.
+
+
+Another approach to finding socially beneficial equilibria in general sum games relies on modeling
+the problem as a meta-game, where meta-rewards correspond to the returns on the inner game, metastates correspond to joint policies of the players, and the meta-actions are updates to these policies.
+Al-Shedivat et al. (2018) introduce a continuous adaptation framework for multi-task learning that
+uses meta-learning to deal with non-stationary environments. MFOS (Lu et al., 2022) uses modelfree optimization methods like PPO and genetic algorithms to optimize the meta-value of the metagame. More recently Meta-Value Learning (Cooijmans et al., 2023) parameterizes the meta-value
+as a neural network and applies Q-learning to capture the future effects of changes to the inner
+policies. Shaper (Khan et al., 2024), scales opponent shaping to high-dimensional general-sum
+games with temporally extended actions and long time horizons. It does so, by simplifying MFOS
+and effectively capturing both intra-episode and inter-episode information.
+
+
+Melting Pot 2.0 (Agapiou et al., 2023) introduces a comprehensive suite of multi-agent reinforcement learning environments that focus on social interactions and coordination challenges, providing
+a valuable benchmark for evaluating the scalability and effectiveness of reinforcement learning algorithms in complex, cooperative-competitive settings. The Negotiation Game, introduced by DeVault
+et al. (2015); Lewis et al. (2017) and subsequently refined by Cao et al. (2018), has proven to be a
+significant benchmark for studying general-sum games. It integrates elements of strategy and social
+dilemmas, necessitating that agents balance cooperation and competition to optimize their outcomes.
+Noukhovitch et al. (2021) analyze this complex benchmark, underscoring its importance in the field.
+Future investigations will turn towards an even more sophisticated simulation proposed by Zhang
+et al. (2022), which involves negotiations among countries and regions with diverse resource distributions and preferences in addressing climate change.
+
+
+7 CONCLUSION
+
+
+In this work, we introduced _Advantage_ _Alignment_, a novel family of algorithms designed to address the fundamental challenge of achieving self-interested cooperation in multi-agent reinforcement learning, particularly in social dilemmas. By deriving our algorithms from first principles, we
+distilled opponent shaping to its core components, providing a simple yet powerful mechanism to
+align agents’ advantages and foster mutually beneficial behaviors. Our approach unifies and generalizes existing opponent shaping methods, such as LOLA and LOQA, demonstrating that they
+implicitly perform Advantage Alignment through different mechanisms. This unification not only
+simplifies the mathematical formulation of opponent shaping but also reduces computational complexity, enabling more efficient and scalable algorithms.
+
+
+Our experiments across a range of social dilemmas, including the Iterated Prisoner’s Dilemma,
+Coin Game, and a continuous action variant of the Negotiation Game, demonstrate that Advantage
+Alignment consistently achieves state-of-the-art cooperation and robustness against exploitation.
+Notably, we extended our methods to complex, large-scale, general-sum environments like Melting
+Pot’s Commons Harvest Open, addressing challenges that arise from partial observability, highdimensional observations, and multi-agent interactions. In these settings, Advantage Alignment
+agents learned sophisticated strategies that balance individual and collective interests, showcasing
+the potential of our algorithms to scale to real-world applications.
+
+
+The significance of our work lies in providing a principled, efficient, and scalable solution to the
+longstanding problem of self-interested cooperation in general-sum games. By enabling agents
+to autonomously align their interests with one another, Advantage Alignment paves the way for
+more harmonious and socially beneficial interactions in artificial intelligence systems integrated
+into human decision-making processes. This has profound implications for the development of
+AI agents in diverse domains, from autonomous vehicles navigating shared environments to AI
+assistants collaborating with humans and other agents.
+
+
+10
+
+
+8 ACKNOWLEDGEMENTS
+
+
+J.D. would like to thank Michael Noukhovitch for the discussions related to the Negotiation Game.
+We would also like to acknowledge the technical support of Olexa Bilaniuk. This work was financially supported by A.C.’s CIFAR Canadian AI chair and Canada Research Chair in Learning
+Representations that Generalize Systematically.
+
+
+REFERENCES
+
+
+Agapiou, J. P., Vezhnevets, A. S., Du´e˜nez-Guzm´an, E. A., Matyas, J., Mao, Y., Sunehag, P., K¨oster,
+R., Madhushani, U., Kopparapu, K., Comanescu, R., Strouse, D., Johanson, M. B., Singh, S.,
+Haas, J., Mordatch, I., Mobbs, D., and Leibo, J. Z. (2023). Melting pot 2.0.
+
+
+Agarwal, A., Jiang, N., Kakade, S., and Sun, W. (2021). _Reinforcement_ _Learning:_ _Theory_ _and_
+_Algorithms_ . Preprint.
+
+
+Aghajohari, M., Cooijmans, T., Duque, J. A., Akatsuka, S., and Courville, A. (2024a). Best response
+shaping.
+
+
+Aghajohari, M., Duque, J. A., Cooijmans, T., and Courville, A. (2024b). Loqa: Learning with
+opponent q-learning awareness.
+
+
+Al-Shedivat, M., Bansal, T., Burda, Y., Sutskever, I., Mordatch, I., and Abbeel, P. (2018). Continuous adaptation via meta-learning in nonstationary and competitive environments.
+
+
+Axelrod, R. (1984). _The Evolution of Cooperation_ . Basic, New York.
+
+
+Bertrand, Q., Duque, J., Calvano, E., and Gidel, G. (2023). Q-learners can provably collude in the
+iterated prisoner’s dilemma.
+
+
+Cao, K., Lazaridou, A., Lanctot, M., Leibo, J. Z., Tuyls, K., and Clark, S. (2018). Emergent communication through negotiation.
+
+
+Cooijmans, T., Aghajohari, M., and Courville, A. (2023). Meta-value learning: a general framework
+for learning with learning awareness.
+
+
+DeVault, D., Mell, J., and Gratch, J. (2015). Toward natural turn-taking in a virtual human negotiation agent. In _AAAI Spring Symposia_ .
+
+
+Espeholt, L., Soyer, H., Munos, R., Simonyan, K., Mnih, V., Ward, T., Doron, Y., Firoiu, V., Harley,
+T., Dunning, I., Legg, S., and Kavukcuoglu, K. (2018). Impala: Scalable distributed deep-rl with
+importance weighted actor-learner architectures.
+
+
+Foerster, J., Farquhar, G., Al-Shedivat, M., Rockt¨aschel, T., Xing, E. P., and Whiteson, S. (2018a).
+Dice: The infinitely differentiable monte-carlo estimator.
+
+
+Foerster, J. N., Chen, R. Y., Al-Shedivat, M., Whiteson, S., Abbeel, P., and Mordatch, I. (2018b).
+Learning with opponent-learning awareness.
+
+
+Ho, J., Jain, A., and Abbeel, P. (2020). Denoising diffusion probabilistic models.
+
+
+Khan, A., Willi, T., Kwan, N., Tacchetti, A., Lu, C., Grefenstette, E., Rockt¨aschel, T., and Foerster,
+J. (2024). Scaling opponent shaping to high dimensional games.
+
+
+Lerer, A. and Peysakhovich, A. (2018). Maintaining cooperation in complex social dilemmas using
+deep reinforcement learning.
+
+
+Letcher, A., Foerster, J., Balduzzi, D., Rockt¨aschel, T., and Whiteson, S. (2021). Stable opponent
+shaping in differentiable games.
+
+
+Lewis, M., Yarats, D., Dauphin, Y. N., Parikh, D., and Batra, D. (2017). Deal or no deal? end-to-end
+learning for negotiation dialogues. _arXiv preprint arXiv:_ _1706.05125_ .
+
+
+Lu, C., Willi, T., de Witt, C. S., and Foerster, J. (2022). Model-free opponent shaping.
+
+
+11
+
+
+Mnih, V., Kavukcuoglu, K., Silver, D., Graves, A., Antonoglou, I., Wierstra, D., and Riedmiller, M.
+(2013). Playing atari with deep reinforcement learning.
+
+
+Noukhovitch, M., LaCroix, T., Lazaridou, A., and Courville, A. C. (2021). Emergent communication under competition. In Dignum, F., Lomuscio, A., Endriss, U., and Now´e, A., editors,
+_AAMAS ’21:_ _20th International Conference on Autonomous Agents and Multiagent Systems, Vir-_
+_tual Event, United Kingdom, May 3-7, 2021_, pages 974–982. ACM.
+
+
+Parisotto, E., Song, H. F., Rae, J. W., Pascanu, R., Gulcehre, C., Jayakumar, S. M., Jaderberg, M.,
+Kaufman, R. L., Clark, A., Noury, S., Botvinick, M. M., Heess, N., and Hadsell, R. (2019).
+Stabilizing transformers for reinforcement learning.
+
+
+Press, W. H. and Dyson, F. J. (2012). Iterated prisoner’s dilemma contains strategies that dominate
+any evolutionary opponent. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 109(26):10409–
+10413.
+
+
+Radford, A., Narasimhan, K., Salimans, T., and Sutskever, I. (2018). Improving language understanding by generative pre-training.
+
+
+Rapoport, A. and Chammah, A. (1965). _Prisoner’s Dilemma:_ _A Study in Conflict and Cooperation_ .
+University of Michigan Press.
+
+
+Reed, S., Zolna, K., Parisotto, E., Colmenarejo, S. G., Novikov, A., Barth-Maron, G., Gimenez, M.,
+Sulsky, Y., Kay, J., Springenberg, J. T., Eccles, T., Bruce, J., Razavi, A., Edwards, A., Heess, N.,
+Chen, Y., Hadsell, R., Vinyals, O., Bordbar, M., and de Freitas, N. (2022). A generalist agent.
+
+
+Rummery, G. and Niranjan, M. (1994). On-line q-learning using connectionist systems. Technical
+Report CUED/F-INFENG/TR 166, Cambridge University.
+
+
+Sandholm, T. and Crites, R. (1996). Multiagent reinforcement learning in the iterated prisoner’s
+dilemma. _Bio Systems_, 37(1-2):147–166.
+
+
+Schulman, J., Levine, S., Moritz, P., Jordan, M. I., and Abbeel, P. (2017a). Trust region policy
+optimization.
+
+
+Schulman, J., Moritz, P., Levine, S., Jordan, M., and Abbeel, P. (2018). High-dimensional continuous control using generalized advantage estimation.
+
+
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. (2017b). Proximal policy
+optimization algorithms.
+
+
+Shapley, L. (1953). Stochastic games. _Proceedings_ _of_ _the_ _national_ _academy_ _of_ _sciences_,
+39(10):1095–1100.
+
+
+Song, H. F., Abdolmaleki, A., Springenberg, J. T., Clark, A., Soyer, H., Rae, J. W., Noury, S.,
+Ahuja, A., Liu, S., Tirumala, D., Heess, N., Belov, D., Riedmiller, M., and Botvinick, M. M.
+(2019). V-mpo: On-policy maximum a posteriori policy optimization for discrete and continuous
+control.
+
+
+Vezhnevets, A., Wu, Y., Eckstein, M., Leblond, R., and Leibo, J. Z. (2020). OPtions as REsponses:
+Grounding behavioural hierarchies in multi-agent reinforcement learning. In III, H. D. and Singh,
+A., editors, _Proceedings of the 37th International Conference on Machine Learning_, volume 119
+of _Proceedings of Machine Learning Research_, pages 9733–9742. PMLR.
+
+
+Watkins, C. J. C. H. and Dayan, P. (1992). Q-learning. _Machine Learning_, 8(3):279–292.
+
+
+Willi, T., Letcher, A., Treutlein, J., and Foerster, J. (2022). Cola: Consistent learning with opponentlearning awareness.
+
+
+Williams, R. (1992). Simple statistical gradient-following algorithms for connectionist reinforcement learning. _Machine Learning_, 8:229–256.
+
+
+Zhang, T., Williams, A., Phade, S. R., Srinivasa, S., Zhang, Y., Gupta, P., Bengio, Y., and Zheng,
+S. (2022). Ai for global climate cooperation: Modeling global climate negotiations, agreements,
+and long-term cooperation in rice-n. _Social Science Research Network_ .
+
+
+12
+
+
+Zhao, S., Lu, C., Grosse, R. B., and Foerster, J. N. (2022). Proximal learning with opponent-learning
+awareness.
+
+
+13
+
+
+# **Appendix**
+
+### **Table of Contents**
+
+
+**A** **Mathematical Derivations** **15**
+A.1 Deriving the Advantage Alignment Formula . . . . . . . . . . . . . . . . . . . 15
+A.2 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+A.3 Gradient of LOQA . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+A.4 Gradient of LOQA in Continuous Action Spaces . . . . . . . . . . . . . . . . . 18
+A.5 Proof of Theorem 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+A.6 Advantage Alignment Implementation . . . . . . . . . . . . . . . . . . . . . . 20
+A.7 Proximal Advantage Alignment . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+A.8 Proof of Theorem 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+A.9 N-Player Advantage Alignment . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+**B** **Experimental Details** **22**
+B.1 Iterated Prisoner’s Dilemma . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+B.2 Coin Game . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+B.3 Negotiation Game . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+B.4 Melting Pot’s Commons Harvest Open . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+**C** **Additional Figures** **25**
+C.1 Negotiation Game Training Curves . . . . . . . . . . . . . . . . . . . . . . . . 25
+C.2 Coin Game Full League Results . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+C.3 Ablation Study Commons Harvest Open . . . . . . . . . . . . . . . . . . . . . 26
+
+
+14
+
+
+A MATHEMATICAL DERIVATIONS
+
+
+A.1 DERIVING THE ADVANTAGE ALIGNMENT FORMULA
+
+
+In this section we derive the Advantage Alignment formula in equation equation 8 from the opponent
+shaping expression in equation equation 6 and assumption 2. Recall assumption 2:
+_π_ _[i]_ ( _a|s_ ) _∝_ exp _β_ E _b∼π_ 3 _−i_ ( _·|s_ )[ _Q_ _[i]_ ( _s, a, b_ )]
+Note that if _i_ = 1 _,_ 3 _−_ _i_ = 2 and if _i_ = 2 _,_ 3 _−_ _i_ = 1. Recall the opponent shaping policy gradient
+expression:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_∇θ_ 1 _V_ [1] ( _µ_ ) = E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+
+
+
+_∞_
+
+
+
+
+
+ _∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+ - ��  (A)
+
+
++ _∇θ_ 1 log _π_ [2] ( _bt|st_ )
+
+ - ��  (B)
+
+
+- _γ_ _[t]_ _A_ [1] ( _st, at, bt_ )
+
+
+_t_ =0
+
+
+We expand the term (B) above splitting the expectation, by assumption 2, we can write:
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+- _γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) _∇θ_ 1 log _π_ [2] ( _bt|st_ )
+
+_t_ =0
+
+
+= _β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= _β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) _∇θ_ 1 log exp E _a∼π_ 1( _|st_ )[ _Q_ [2] ( _st, a, bt_ )]
+_t_ =0
+
+
+_γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) _∇θ_ 1E _a∼π_ 1( _|st_ )[ _Q_ [2] ( _st, a, bt_ )]
+_t_ =0
+
+
+- _∞_
+
+
+_._
+
+
+where is the second line we used the fact that the expected advantage is zero. For convenience of
+notation we define:
+_rt_ _[i]_ [:=] _[ r][i]_ [(] _[s][t][, a][t][, b][t]_ [)] _[,]_ _[A][i]_ _t_ [:=] _[ A][i]_ [(] _[s][t][, a][t][, b][t]_ [)]
+These are the reward and advantage of agent _i_ at time step _t_ after taking action _at_ and opponent
+taking action _bt_ . From the Bellman equation equation 2 we expand as follows:
+
+
+_β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) _∇θ_ 1E _a∼π_ 1( _|st_ )[ _Q_ [2] ( _st, a, bt_ )]
+_t_ =0
+
+
+�� [�]
+
+
+= _β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= _β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= _β ·_ E
+_τ_ _∼_ Pr _[π]_ _µ_ [1] _[,π]_ [2]
+
+
+= _β ·_ E
+_τ_ _∼_ Pr _[π]_ _µ_ [1] _[,π]_ [2]
+
+
+= _β ·_ E
+_τ_ _∼_ Pr _[π]_ _µ_ [1] _[,π]_ [2]
+
+
+= _β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_ - 
+
+_γ_ _[t]_ _A_ [1] _t_ _[∇]_ _θ_ [1] E _s′_ _rt_ [2] [+] _[ γ][ ·][ V]_ [2][(] _[s][′]_ [)] _st, bt_
+����
+_t_ =0
+
+
+- _∞_
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _∞_ 
+- _γ_ _[t]_ [+1] _A_ [1] _t_ _[∇]_ _θ_ [1][E] _[s][′]_ _V_ [2] ( _s_ _[′]_ ) _st, bt_
+
+����
+_t_ =0
+
+
+- [�]
+
+
+- _∞_
+
+- _γ_ _[t]_ [+1] _A_ [1] _t_ [E] _τ ′∼_ Pr _[π]_ _µ_ [1] _[,π]_ [2]
+
+_t_ =0
+
+
+- _∞_
+
+ - _γ_ _[k]_ _A_ [2] _k_ _[∇]_ _θ_ [1][log] _[ π]_ [1][(] _[a][′]_ _k_ _[|][s][′]_ _k_ [)] _st, bt_
+
+����
+_k_ =0
+
+
+��
+
+
+��
+
+
+- _∞_
+
+
+E _τ ′∼_ Pr _µπ_ 1 _,π_ 2
+_t_ =0
+
+
+- _∞_
+
+- _γ_ _[k]_ [+] _[t]_ [+1] _A_ [1] _t_ _[A]_ [2] _k_ _[∇]_ _θ_ [1][log] _[ π]_ [1][(] _[a][′]_ _k_ _[|][s][′]_ _k_ [)] _st, bt_
+
+����
+_k_ =0
+
+
+_∞_
+
+- _γ_ _[t]_ [+] _[k]_ [+1] _A_ [1] _t_ _[A]_ [2] _k_ _[∇]_ _θ_ [1][log] _[ π]_ [1][(] _[a][′]_ _k_ _[|][s][′]_ _k_ [)] _st, bt_
+
+����
+_k_ = _t_ +1
+
+
+         
+
+
+��
+
+
+(13)
+
+
+(14)
+
+
+(15)
+
+
+(16)
+
+
+(17)
+
+
+(18)
+
+
+E _τ ′∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _γ_ _[t]_ [+] _[k]_ [+1] _A_ [1] _t_ _[A]_ [2] _k_ _[∇]_ _θ_ [1][log] _[ π]_ [1][(] _[a][k][|][s][k]_ [)]
+
+
+_k_ = _t_ +1
+
+
+_∞_
+
+
+_._ (19)
+
+
+We use Bellman equation in line (14), and the policy gradient theorem in line (16). In line (17),
+we use the fact that _γ_ _[t]_ _A_ [1] ( _st, at, bt_ ) is measurable w.r.t. the natural filtration of the process up to
+time _t_, _Ft_, and the independence of the two terms conditioned on _Ft_ by the Markov property. In
+line (18) we use linearity of expectation. In line (19) we use the rule of the iterated expectations.
+Reorganizing the summations in causal form we get the desired result:
+
+
+_γ_ _[t][−][k]_ _A_ [1] ( _sk, ak, bk_ )
+
+_k<t_
+
+
+_._ (8)
+
+
+           
+_A_ [2] ( _st, at, bt_ ) _∇θ_ 1log _π_ [1] ( _at|st_ )
+
+
+_β ·_ E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+ 
+
+
+_∞_
+
+- ��
+
+_γ_ _[t]_ [+1]
+
+_t_ =0 _k<t_
+
+
+15
+
+
+A.2 PROOF OF THEOREM 1
+
+
+**Lemma 1** (Policy changes under gradient ascent) **.** _Given a policy πθ_ ( _a|s_ ) _parametrised such that the_
+_set of gradients ∇θ_ log _πθ_ ( _a|s_ ) _for all pairs_ ( _a, s_ ) _form an orthonormal basis, and a value function_
+_V_ ( _θ_ ) _, the following holds:_
+
+
+_d_
+
+_[· ∇][θ][π][θ]_ [(] _[a][|][s]_ [) =] _[ d][γ]_ [(] _[s]_ [)] _[π][θ]_ [(] _[a][|][s]_ [)][2] _[A]_ [(] _[a][|][s]_ [)] (20)
+_dα_ _[π][θ]_ [+] _[α][∇][θ][V]_ [ (] _[a][|][s]_ [) =] _[ ∇][θ][V]_
+
+
+_dγ_ ( _s_ ) _≡_
+
+
+_∞_
+
+- _γ_ _[t]_ _Pr_ ( _st_ = _s_ ) (21)
+
+
+_t_ =0
+
+
+_A_ ( _a|s_ ) _≡_ _Q_ ( _a|s_ ) _−_ _V_ ( _s_ ) (22)
+
+
+_Proof._ The policy gradient theorem gives us:
+
+
+_∇θV_ ( _θ_ ) = E _τ_ _∼π_
+
+
+_∞_
+
+- _γ_ _[t]_ _A_ ( _at|st_ ) _∇θ_ log _πθ_ ( _at|st_ ) (23)
+
+
+_t_ =0
+
+
+=         - _dγ_ ( _s_ ) _πθ_ ( _a|s_ ) _A_ ( _a|s_ ) _∇θ_ log _πθ_ ( _a|s_ ) (24)
+
+
+( _s,a_ )
+
+
+Taking the dot product of this expression with _∇θπθ_ ( _a_ _[′]_ _|s_ _[′]_ ) = _πθ_ ( _a_ _[′]_ _|s_ _[′]_ ) _∇θ_ log _πθ_ ( _a_ _[′]_ _|s_ _[′]_ ) and invoking the assumed orthonormality of gradients:
+
+
+_∇θπθ_ ( _a_ _[′]_ _|s_ _[′]_ ) _· ∇θV_ ( _θ_ ) (25)
+
+
+              -              
+=    - _dγ_ ( _s_ ) _πθ_ ( _a|s_ ) _πθ_ ( _a_ _[′]_ _|s_ _[′]_ ) _A_ ( _a|s_ ) _∇θ_ log _πθ_ ( _a|s_ ) _· ∇θ_ log _πθ_ ( _a_ _[′]_ _|s_ _[′]_ ) (26)
+
+
+( _s,a_ )
+
+= _dγ_ ( _s_ _[′]_ ) _πθ_ ( _a_ _[′]_ _|s_ _[′]_ ) [2] _A_ ( _a_ _[′]_ _|s_ _[′]_ ) (27)
+
+
+**Theorem 1.** (LOLA policy gradient) _Given a two-player game where players 1 and 2 have respec-_
+_tive policies π_ [1] ( _a|s_ ) _and π_ [2] ( _b|s_ ) _,_ _where each policy is parametrised such that the set of gradients_
+_∇θ_ 2 log _π_ [2] ( _a|s_ ) _for all pairs_ ( _a, s_ ) _form an orthonormal basis, the LOLA update for the first player_
+_correspond to a reinforce update with an advantage_
+
+
+_A_ _[∗]_ _LOLA_ [(] _[s][t][, a][t][, b][t]_ [) =] _[ A]_ [1][(] _[s][t][, a][t][, b][t]_ [) +] _[ β][ ·]_
+
+
+_∞_
+
+- _dγ,k−tγ_ _[k][−][t]_ _A_ [1] _k_ _[A]_ _k_ [2] _−t_ _[.]_ (11)
+
+
+_k_ = _t_
+
+
+where _A_ _[i]_ _k_ [:=] _[ A][i]_ [(] _[s][k][, a][k][, b][k]_ [)][ and] _[ d][γ,k]_ [is the occupancy measure of the tuple][ (] _[a][k][, b][k][, s][k]_ [)]
+
+
+_Proof._ LOLA (Foerster et al., 2018b) optimizes the return of the agent under an imagined optimization step of the opponent (assuming the opponent is a naive learning algorithm). Under their
+notation, a LOLA agent optimizes _V_ [1] ( _θ_ 1 _, θ_ 2 + ∆ _θ_ 2) where ∆ _θ_ 2 is a gradient ascent step on the
+parameters of the opponent _θ_ 2. Note that along this proof because we consider the method proposed
+by (Foerster et al., 2018b) we use their way to compute gradients. Particularly, one does not use
+Assumption 2, and consequently assume that _∇θ_ 1 log _πθ_ 2 = 0 (and respectively _∇θ_ 2 log _πθ_ 1 = 0.)
+
+
+Since computing this value function explicitly is difficult, LOLA uses the first-order Taylor expansion surrogate objective:
+
+
+_V_ [1] ( _θ_ [1] _, θ_ [2] + ∆ _θ_ 2) _≈_ _V_ [1] ( _θ_ 1 _, θ_ 2) + (∆ _θ_ 2) _[T]_ _∇θ_ 2 _V_ [1] ( _θ_ 1 _, θ_ 2) (28)
+
+
+The gradient of the expression above w.r.t. the parameters _θ_ 1 of the agent is given by
+
+
+_∇θ_ 1 _V_ [1] ( _θ_ [1] _, θ_ [2] + _α∇θ_ 2 _V_ [2] ( _θ_ 1 _, θ_ 2)) = _∇θ_ 1 _V_ [1] ( _θ_ 1 _, θ_ 2) + _β_ - _∇θ_ 1 _∇θ_ 2 _V_ [1] ( _θ_ [1] _, θ_ [2] )� _∇θ_ 2 _V_ [2] ( _θ_ 1 _, θ_ 2) _._
+(29)
+
+
+16
+
+
+The first-order terms above is computed using the Advantage form of the REINFORCE estimator,
+which is given by equation equation 3. Foerster et al. (2018b) derive the following REINFORCE
+estimator for the second-order term:
+
+_∇θ_ 1 _∇θ_ 2 _V_ [1] ( _θ_ [1] _, θ_ [2] ) (30)
+
+
+
+
+
+�� _t_
+
+ 
+
+
+- _⊤_ []
+
+
+ (31)
+
+
+- _t_
+
+ 
+
+
+- _∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+_k_ =0
+
+
+- _∇θ_ 2 log _π_ [2] ( _bt|st_ )
+
+_k_ =0
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+_∞_
+
+
+
+
+- _γ_ _[t]_ _rt_ [1]
+
+_t_ =0
+
+
+Now, we use the following fact
+
+
+_∞_
+
+
+_t_
+
+
+_ak_ )(
+
+_k_ =0
+
+
+_t_
+
+
+_S_ =0
+
+
+_∞_
+
+
+_t_ = _S_
+
+
+_S_
+
+- _akbS−kct_ =
+
+
+_k_ =0
+
+
+_t_
+
+
+_bl_ ) =
+
+_l_ =0
+
+
+_S_
+
+- _akbS−k_ =
+
+
+_k_ =0
+
+
+_S_
+
+
+_∞_
+
+
+_S_ =0
+
+
+_S_
+
+
+_∞_
+
+
+_S_ =0
+
+
+_S_
+
+- _akbS−k_
+
+
+_k_ =0
+
+
+_∞_
+
+- _ct_
+
+
+_t_ = _S_
+
+
+_ct_ (
+
+_t_ =0
+
+
+_∞_
+
+- _ct_
+
+
+_t_ =0
+
+
+to expand the second order term beginning from equation 29, to bring out the advantage _A_ [1] _t_ [:]
+
+_∇θ_ 1 _∇θ_ 2 _V_ [1] ( _θ_ [1] _, θ_ [2] ) (32)
+
+
+
+
+
+�� _t_
+
+ 
+
+
+- _⊤_ []
+
+
+- _t_
+
+ 
+
+
+- _∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+_k_ =0
+
+
+- _∇θ_ 2 log _π_ [2] ( _bt|st_ )
+
+_k_ =0
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+= E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+_∞_
+
+
+
+
+- _∞_
+
+
+_S_ =0
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _γ_ _[t]_ _rt_ [1]
+
+_t_ =0
+
+
+- _t_ 
+ - _∇θ_ 1 log _π_ [1] ( _ak|sk_ ) _∇θ_ 2 log _π_ [2] ( _bt−k|st−k_ ) _[⊤]_
+
+_k_ =0
+
+
+_S_ - _∞_
+
+- _∇θ_ 1 log _π_ [1] ( _ak|sk_ ) _∇θ_ 2 log _π_ [2] ( _bS−k|sS−k_ ) _[⊤]_ 
+_k_ =0 _t_ = _S_
+
+
+ (33)
+
+
+ 
+
+
+- _S_
+
+ 
+
+
+- _γ_ _[t]_ _rt_ [1]
+
+
+_t_ = _S_
+
+
+_t_  - _∞_
+
+- _∇θ_ 1 log _π_ [1] ( _ak|sk_ ) _∇θ_ 2 log _π_ [2] ( _bt−k|st−k_ ) _[⊤]_ 
+_k_ =0 _l_ = _t_
+
+
+- _t_
+
+ 
+
+
+- _γ_ _[l]_ _rl_ [1]
+
+
+_l_ = _t_
+
+
+- _t_ 
+ - _∇θ_ 1 log _π_ [1] ( _ak|sk_ ) _∇θ_ 2 log _π_ [2] ( _bt−k|st−k_ ) _[⊤]_
+
+_k_ =0
+
+
+- _t_
+
+ 
+
+
+_γ_ _[t]_ E
+
+
+- _∞_
+
+- _γ_ _[l]_ _rl_ [1] + _t_
+
+
+_l_ =0
+
+
+- _∞_
+
+
+��
+
+
+(34)
+
+
+(35)
+
+
+(36)
+
+
+(37)
+
+
+- _t_ 
+ - _∇θ_ 1 log _π_ [1] ( _ak|sk_ ) _∇θ_ 2 log _π_ [2] ( _bt−k|st−k_ ) _[⊤]_
+
+_k_ =0
+
+
+- _t_
+
+ 
+
+
+- _t_
+
+ 
+
+
+      
+_γ_ _[t]_ _Q_ [1] ( _st, at, bt_ )
+
+
+  
+
+
+_γ_ _[t]_ _A_ [1] _t_
+
+
+_,_ (38)
+
+
+where we reorder the terms of the summation to sum over future rewards instead of past gradient
+terms in line 34, we use the law of iterated expectation in line 36 and a baseline subtraction in line
+38.
+
+
+Per Equation equation 29, we multiply this Hessian with the gradient of the value function
+
+
+_∇θ_ 2 _V_ [2] ( _θ_ 1 _, θ_ 2) = E _τ_ _∼π_
+
+
+_∞_
+
+- _γ_ _[t]_ _A_ [2] ( _at, bt|st_ ) _∇θ_ 2 log _π_ [2] ( _bt|st_ ) (39)
+
+_t_ =0
+
+
+=          - _dγ_ ( _a, b, s_ ) _A_ [2] ( _a, b|s_ ) _∇θ_ 2 log _π_ [2] ( _b|s_ ) (40)
+
+
+( _s,a,b_ )
+
+
+where where _dγ_ ( _a, b, s_ ) is the occupancy measure of the state actions tuple ( _a, b, s_ ), and use the
+assumption that the gradients ( _∇θ_ 2 log _π_ [2] ( _a|s_ ))( _a,s_ ) form an orthonormal basis to obtain
+
+
+- _t_
+
+ - _∇θ_ 1 log _π_ [1] ( _ak|sk_ ) _dγ_ ( _at−k, bt−k, st−k_ ) _A_ [2] _t−k_
+
+_k_ =0
+
+
+_γ_ _[t]_ _A_ [1] _t_
+
+
+  
+
+
+_._
+
+
+_._
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_t_ =0
+
+
+- _t_
+
+ 
+
+
+To completes the proof, we finally need to switch the summations to get
+
+
+- _∞_
+
+ - _γ_ _[k]_ _A_ [1] _k_ _[d][γ]_ [(] _[a][k][−][t][, b][k][−][t][, s][k][−][t]_ [)] _[A]_ [2] _k−t_
+
+
+_k_ = _t_
+
+
+17
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_t_ =0
+
+
+_∇θ_ 1 log _π_ [1] ( _at|st_ )
+
+
+A.3 GRADIENT OF LOQA
+
+
+Recall the opponent policy approximation used in LOQA, which takes a softmax over the Q-values
+of the opponent. We assume exact estimates of these Q-values:
+
+
+exp _Q_ [2] ( _st, at, bt_ )
+_π_ ˆ [2] ( _bt|st_ ) :=            - (4)
+
+_b_ [exp] _[ Q]_ [2][(] _[s][t][, a][t][, b]_ [)]
+
+Note that _π_ ˆ [2] ( _bt|st_ ) is differentiable w.r.t. the parameters _θ_ 1 of the policy of the agent because the
+Q-values depend on _π_ 1. Therefore, we can use the policy gradient theorem (see Aghajohari et al.
+(2024b)) to differentiate the value function of the opponent w.r.t. the parameters of the agent. For
+convenience of notation we define:
+
+_Q_ _[i]_ _t_ [(] _[b]_ [) :=] _[ Q][i]_ [(] _[s][t][, a][t][, b]_ [)]
+
+
+Computing the gradient of the approximated opponent’s policy we get:
+
+
+_∇θ_ 1 ˆ _π_ [2] ( _bt|st_ ) = _∇θ_ 1
+
+
+- exp _Q_ 2( _st, at, bt_ )
+
+ 
+_b_ [exp] _[ Q]_ [2][(] _[s][t][, a][t][, b]_ [)]
+
+
+(41)
+
+
+      
+[ exp] _[ Q]_ [2] _t_ [(] _[b][t]_ [)] _t_ [(] _[b][t]_ [)] _[∇][θ]_ 1
+
+_b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)] _[−]_ [exp] _[ Q]_ [2] ( [�] [exp] _[ Q]_ _t_ [2]
+
+
+_t_ [(] _[b][t]_ [)]
+= _[∇][θ]_ [1][ exp] _[ Q]_ [2]
+
+ - [2]
+
+
+( [�]
+
+
+(42)
+_b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [))][2]
+
+
+_b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)]
+
+
+[(] _[b][t]_ [)] _[∇][θ]_ 1 _[Q]_ [2] _t_ [(] _[b][t]_ [)] _t_ [(] _[b][t]_ [)][ �]
+
+_−_ [exp] _[ Q]_ [2]
+_b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)] ( [�]
+
+
+_t_ [(] _[b][t]_ [)] _[∇][θ]_ 1 _[Q]_ [2] _t_ [(] _[b][t]_ [)]
+= [exp] _[ Q]_ [2]
+
+  - [2]
+
+
+( [�]
+
+
+(43)
+_b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [))][2]
+
+
+_b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)] _[∇][θ]_ 1 _[Q]_ [2] _t_ [(] _[b]_ [)]
+
+
+exp _Q_ [2] _t_ [(] _[b]_ [)] _[∇][θ]_ 1 _[Q]_ [2] _t_ [(] _[b]_ [)]
+
+ _b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)]
+
+
+   
+
+
+exp _Q_ [2] _t_ [(] _[b][t]_ [)]
+=
+
+ _b_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)]
+
+
+   
+
+
+_∇θ_ 1 _Q_ [2] _t_ [(] _[b][t]_ [)] _[ −]_ 
+
+_b_
+
+
+(44)
+
+
+= _π_ ˆ [2] ( _bt|st_ )
+
+
+_∇θ_ 1 _Q_ [2] _t_ [(] _[b][t]_ [)] _[ −]_ - _π_ ˆ [2] ( _b|st_ ) _∇θ_ 1 _Q_ [2] _t_ [(] _[b]_ [)]
+
+
+_b_
+
+
+_,_ (45)
+
+
+where we used the quotient rule in line (42) and equation equation 4 in line(45). By the chain rule,
+the gradient of the log probability is:
+
+
+_∇θ_ 1 log ˆ _π_ [2] ( _bt|st_ ) = _[∇][θ]_ [1][ ˆ] _[π]_ [2][(] _[b][t][|][s][t]_ [)]
+
+[2]
+
+
+_π_ ˆ [2] ( _b|st_ ) _∇θ_ 1 _Q_ [2] _t_ [(] _[b]_ [)] _[.]_
+
+_b_
+
+
+_[θ]_ [1] _[t]_ _[t]_ = _∇θ_ 1 _Q_ [2] _t_ [(] _[b][t]_ [)] _[ −]_ 
+_π_ ˆ [2] ( _bt|st_ )
+
+
+This concludes the derivation.
+
+
+A.4 GRADIENT OF LOQA IN CONTINUOUS ACTION SPACES
+
+
+We derive the gradient of the opponent’s policy _π_ [2] ( _b|s_ ) with respect to the agent’s parameters _θ_ 1,
+assuming a continuous action space.
+
+
+The opponent’s policy is defined as:
+
+
+exp( _Q_ [2] ( _s, b_ ))
+_π_ [2] ( _b|s_ ) =            - _[,]_ (46)
+
+_A_ [exp(] _[Q]_ [2][(] _[s, b][′]_ [))] _[ db][′]_
+
+where _Q_ [2] ( _s, b_ ) is the Q-value of the opponent for action _b_, and _A_ is the continuous action space.
+
+
+Our goal is to compute the gradient of _π_ [2] ( _b|s_ ) with respect to _θ_ 1, the parameters of agent 1, which
+affect _Q_ [2] ( _s, b_ ) through interactions.
+
+
+Taking the log of _π_ [2] ( _b|s_ ), we get:
+
+
+��                 log _π_ [2] ( _b|s_ ) = _Q_ [2] ( _s, b_ ) _−_ log exp( _Q_ [2] ( _s, b_ _[′]_ )) _db_ _[′]_ _._ (47)
+
+_A_
+
+
+The gradient of log _π_ [2] ( _b|s_ ) with respect to _θ_ 1 is:
+
+
+��                   _∇θ_ 1 log _π_ [2] ( _b|s_ ) = _∇θ_ 1 _Q_ [2] ( _s, b_ ) _−∇θ_ 1 log exp( _Q_ [2] ( _s, b_ _[′]_ )) _db_ _[′]_ _._ (48)
+
+_A_
+
+
+18
+
+
+Next, we compute the gradient of the log partition function _Z_ ( _s_ ) = 
+
+
+_A_ [exp(] _[Q]_ [2][(] _[s, b][′]_ [))] _[ db][′]_ [:]
+
+
+_∇θ_ 1 log _Z_ ( _s_ ) = _[∇][θ]_ [1] _[Z]_ [(] _[s]_ [)]
+
+
+_A_ [exp(] _[Q]_ [2][(] _[s, b][′]_ [))] _[ db][′]_
+
+
+_[θ]_ [1] _[Z]_ [(] _[s]_ [)] 1
+
+_Z_ ( _s_ ) = - [exp(] _[Q]_ [2]
+
+
+exp( _Q_ [2] ( _s, b_ _[′]_ )) _∇θ_ 1 _Q_ [2] ( _s, b_ _[′]_ ) _db_ _[′]_ _,_ (49)
+_A_
+
+
+which simplifies to:
+
+
+      _∇θ_ 1 log _Z_ ( _s_ ) = _π_ [2] ( _b_ _[′]_ _|s_ ) _∇θ_ 1 _Q_ [2] ( _s, b_ _[′]_ ) _db_ _[′]_ _._ (50)
+
+_A_
+
+
+Now, applying the chain rule to compute the gradient of _π_ [2] ( _b|s_ ), we get:
+
+
+          -           -           _∇θ_ 1 _π_ [2] ( _b|s_ ) = _π_ [2] ( _b|s_ ) _∇θ_ 1 _Q_ [2] ( _s, b_ ) _−_ _π_ [2] ( _b_ _[′]_ _|s_ ) _∇θ_ 1 _Q_ [2] ( _s, b_ _[′]_ ) _db_ _[′]_ _._ (51)
+
+_A_
+
+
+We are allowed to interchange the gradient and the integral by applying Leibniz’s rule, which holds
+under the following conditions: 1. exp( _Q_ [2] ( _s, b_ _[′]_ )) and its gradient _∇θ_ 1 exp( _Q_ [2] ( _s, b_ _[′]_ )) are continuous, as both the exponential function and the Q-value function _Q_ [2] ( _s, b_ _[′]_ ) are smooth. 2. The integral
+
+
+_A_ [exp(] _[Q]_ [2][(] _[s, b][′]_ [))] _[ db][′]_ [ converges due to the boundedness of] _[ Q]_ [2][(] _[s, b][′]_ [)][ or a rapid decay over the action]
+space. 3. We assume _∇θ_ 1 _Q_ [2] ( _s, b_ _[′]_ ) is bounded, ensuring the interchange of the gradient and integral
+is well-defined. Thus, the final expression for the gradient of the opponent’s policy is:
+
+
+          -           -           _∇θ_ 1 _π_ [2] ( _b|s_ ) = _π_ [2] ( _b|s_ ) _∇θ_ 1 _Q_ [2] ( _s, b_ ) _−_ _π_ [2] ( _b_ _[′]_ _|s_ ) _∇θ_ 1 _Q_ [2] ( _s, b_ _[′]_ ) _db_ _[′]_ _._ (52)
+
+_A_
+
+
+The Integral above is intractable, which makes continuous action LOQA hard to scale.
+
+
+A.5 PROOF OF THEOREM 2
+
+
+_Proof._ In practice, LOQA deviates from the approach discussed in Appendix A.3. Specifically, it
+does not differentiate through all of the Q-values, but only through that of the action _bt_ actually
+observed in the sampled trajectory:
+
+
+exp _Q_ [2] ( _st, at, bt_ )
+_π_ ˜ [2] ( _bt|st_ ) :=
+exp _Q_ [2] ( _st, at, bt_ ) + [�] _b_ = _bt_ [exp] _[ Q]_ [2][(] _[s][t][, a][t][, b]_ [)]
+
+                   - ��                   non-differentiable
+
+
+(53)
+
+
+This choice is made because the trajectory provides an estimate of the Q-value of each opponent
+action _bt_ . This estimate statistically depends on the agent’s actions _a<t_ and therefore can be stochastically differentiated w.r.t _θ_ 1 using REINFORCE. The other Q-values will be estimated by function
+approximators, which depend only implicitly on _θ_ 1 and cannot be differentiated.
+
+
+Differentiating equation 53 leads to a simplified gradient:
+
+
+_∇θ_ 1 ˜ _π_ [2] ( _bt|st_ ) = _∇θ_ 1
+
+
+exp _Q_ [2] ( _st, at, bt_ )
+exp _Q_ [2] ( _st, at, bt_ ) + [�] _b_ = _bt_ [exp] _[ Q]_ [2][(] _[s][t][, a][t][, b]_ [)]
+
+
+(54)
+
+
+�2 (55)
+_b_ = _bt_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)]
+
+
+= _∇θ_ 1 exp _Q_ [2] _t_ [(] _[b][t]_ [)]
+
+
+exp _Q_ [2] _t_ [(] _[b][t]_ [) +] [�]
+
+
+         
+[2] _t_ [(] _[b][t]_ [) +] [�] _b_ = _bt_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)] _−_ exp _Q_ [2] _t_ [(] _[b][t]_ [)]
+
+- �2
+exp _Q_ [2] _t_ [(] _[b][t]_ [) +] [�] _b_ = _bt_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)]
+
+
+= exp _Q_ [2] _t_ [(] _[b][t]_ [)] _[∇][θ]_ 1 _[Q]_ [2] _t_ [(] _[b][t]_ [)]
+
+
+_b_ = _bt_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [) + exp] _[ Q]_ [2] _t_ [(] _[b][t]_ [)] _[ −]_ [exp] _[ Q]_ [2] _t_ [(] _[b][t]_ [)]
+
+  - �2 (56)
+exp _Q_ [2] _t_ [(] _[b][t]_ [) +] [�] _b_ = _bt_ [exp] _[ Q]_ _t_ [2][(] _[b]_ [)]
+
+
+= _π_ ˜ [2] ( _bt|st_ )(1 _−_ _π_ ˜ [2] ( _bt|st_ )) _∇θ_ 1 _Q_ [2] _t_ [(] _[b][t]_ [)] _[.]_ (57)
+
+
+By the chain rule, the gradient of the log probability is
+
+_∇θ_ 1 log ˜ _π_ [2] ( _bt|st_ ) = _[∇][θ]_ [1][ ˜] _[π]_ [2][(] _[b][t][|][s][t]_ [)] = (1 _−_ _π_ ˜ [2] ( _bt|st_ )) _∇θ_ 1 _Q_ [2] _t_ [(] _[b][t]_ [)] _[.]_ (58)
+
+_π_ ˜ [2] ( _bt|st_ )
+
+
+The difference between LOQA and Advantage Alignment lies in the extra scaling factor (1 _−_
+_π_ ˜ [2] ( _bt|st_ )) which accounts for the partition function. Plugging equation 58 into the generalized
+policy gradient equation equation 6 proves the theorem.
+
+
+19
+
+
+**Algorithm 2** Proximal Advantage Alignment
+
+**Initialize:** Discount factor _γ_, agent Q-value parameters _ϕ_ [1], t Q-value parameters _ϕ_ [1] t [,] [actor] [pa-]
+rameters _θ_ [1], opponent Q-value parameters _ϕ_ [2], t Q-value parameters _ϕ_ [2] t [, actor parameters] _[ θ]_ [2]
+**for** iteration= 1 _,_ 2 _, . . ._ **do**
+
+Run policies _π_ [1] and _π_ [2] for _T_ timesteps in environment and collect trajectory _τ_
+Compute agent critic loss _L_ [1] _C_ [using the TD error with] _[ r]_ [1][ and] _[ V]_ [1]
+Compute opponent critic loss _L_ [2] _C_ [using the TD error with] _[ r]_ [2][ and] _[ V]_ [2]
+Optimize _L_ [1] _C_ [w.r.t.] _[ϕ]_ [1][ and] _[ L]_ [2] _C_ [w.r.t.] _[ϕ]_ [2][ with optimizer of choice]
+Optimize _L_ [1] _C_ [w.r.t.] _[ϕ]_ [1][ and] _[ L]_ [2] _C_ [w.r.t.] _[ϕ]_ [2][ with optimizer of choice]
+Compute generalized advantage estimates _{A_ [1] 1 _[, . . ., A]_ [1] _T_ _[}]_ [,] _[ {][A]_ 1 [2] _[, . . ., A]_ [2] _T_ _[}]_
+Compute agent actor loss, _L_ [1] _a_ [, using equation][ 9]
+Compute opponent actor loss, _L_ [2] _a_ [, using equation][ 9]
+Optimize _L_ [1] _a_ [w.r.t.] _[θ]_ [1][ and] _[ L]_ [2] _a_ [w.r.t.] _[θ]_ [2][ with optimizer of choice]
+
+
+A.6 ADVANTAGE ALIGNMENT IMPLEMENTATION
+
+
+To more clearly see the Advantage Alignment formula as an influence over each individual log
+probability term recall the formulation:
+
+
+_γ_ _[t][−][k]_ _A_ [1] ( _sk, ak, bk_ )
+
+_k<t_
+
+
+_._ (8)
+
+
+           
+_A_ [2] ( _st, at, bt_ ) _∇θ_ 1log _π_ [1] ( _at|st_ )
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_∞_
+
+- ��
+
+_γ_ _[t]_ [+1]
+
+_t_ =0 _k<t_
+
+
+The _γ_ _[t]_ term helps regularize the linear scaling of the sum of the advantages of the agent. Alternatively one could regularize using 1 _/_ (1 + _t_ ) instead:
+
+
+    - _∞_
+
+  
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+_t_ =0
+
+
+_._ (59)
+
+
+1
+
+1 + _t_
+
+
+��
+
+
+_A_ [1] ( _sk, ak, bk_ )
+
+_k<t_
+
+
+           
+_A_ [2] ( _st, at, bt_ ) _∇θ_ 1log _π_ [1] ( _at|st_ )
+
+
+Which accounts to increasing the probability of the actions that align the sum of the past advantages
+of the agent up to the current time-step _t −_ 1 and the advantage of the opponent at the current timestep, _t_ . In our implementation we use equation 59, as it considers more terms in the future and works
+better in practice.
+
+
+A.7 PROXIMAL ADVANTAGE ALIGNMENT
+
+
+We can combine the two policy gradient terms into a single one to come up with a proximal Advantage Alignment formulation:
+
+
+_γ_ _[t][−][k]_ _A_ [1] _k_
+
+_k<t_
+
+
+(60)
+
+
+_∞_
+
+
+_∞_
+
+- ��
+
+_γ_ _[t]_
+
+_t_ =0 _k<t_
+
+
+       
+_A_ [2] _t_ _[∇]_ _θ_ [1][ log] _[ π]_ [1][(] _[a][t][|][s][t]_ [)]
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+- _γ_ _[t]_ _A_ [1] _t_ _[∇]_ _θ_ [1][ log] _[ π]_ [1][(] _[a][t][|][s][t]_ [) +] _[ βγ]_
+
+_t_ =0
+
+
+Where _β_ is the weight put into the Advantage Alignment loss (the negative inverse of the Boltzmann
+constant times the temperature). Then we have:
+
+
+_A_ [1] _t_ [+] _[ βγ]_
+
+
+��
+
+_γ_ _[t][−][k]_ _A_ [1] _k_
+
+_k<t_
+
+
+��
+
+
+_A_ [2] _t_
+
+
+      
+_∇θ_ 1log _π_ [1] ( _at|st_ )
+
+
+_._ (61)
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+_∞_ 
+- _γ_ _[t]_
+
+
+_t_ =0
+
+
+This is just the normal advantage policy gradient with a modified advantage _A_ _[∗]_ :
+
+
+_A_ [2] _t_ _[.]_ (62)
+
+
+_,_ where _A_ _[∗]_ _t_ [=] _[ A]_ _t_ [1] [+] _[ βγ]_
+
+
+��
+
+_γ_ _[t][−][k]_ _A_ [1] _k_
+
+_k<t_
+
+
+��
+
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2
+
+
+- _∞_
+
+
+- _γ_ _[t]_ _A_ _[∗]_ _t_ _[∇]_ _θ_ [1][log] _[ π]_ [1][(] _[a][t][|][s][t]_ [)]
+
+_t_ =0
+
+
+Recall the Trust Region Policy Optimization (TRPO) (Schulman et al., 2017a) objective, we want
+to maximize the value function while maintaining the updated policy close in policy space:
+
+
+max _θ_ [1] _[V]_ [1][(] _[µ]_ [)]
+
+
+s.t. sup
+_s_
+
+
+�� _π_ 1( _·|s_ ) _−_ _πn_ 1 [(] _[·|][s]_ [)] ��tv _[≤]_ _[δ]_ (63)
+
+
+20
+
+
+We can use the PPO (Schulman et al., 2017b) surrogate objective:
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2 �min      - _rn_ ( _θ_ 1) _A_ [1] _t_ _[,]_ [clip][ (] _[r][n]_ [(] _[θ]_ [1][); 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ [)] _[ A]_ [1] _t_ �� (64)
+
+
+Now we apply it to the Advantage Alignment formulation that uses the modified advantage on the
+policy gradient equation 62:
+
+E _τ_ _∼_ Pr _πµ_ 1 _,π_ 2 [min _{rn_ ( _θ_ 1) _A_ _[∗]_ _t_ _[,]_ [clip][ (] _[r][n]_ [(] _[θ]_ [1][); 1] _[ −]_ _[ϵ,]_ [ 1 +] _[ ϵ]_ [)] _[ A][∗]_ _t_ _[}]_ []] _[,]_ (9)
+
+
+where we denote _πn_ [1] [(] _[a][t][|][s][t]_ [)][ to be the updated policy and] _[ r][n]_ [(] _[θ]_ [1][)] [=] _[π]_ _n_ [1] [(] _[a][t][|][s][t]_ [)] _[/π]_ [1][(] _[a][t][|][s][t]_ [)][ is the ratio]
+between the updated policy and the old policy. We used generalized advantage estimation (GAE)
+(Schulman et al., 2018) to compute the advantages in this expression. Algorithm 2 summarizes the
+implementation of Proximal Advantage Alignment.
+
+
+A.8 PROOF OF THEOREM 3
+
+
+Let _θ_ 1 _, ..., θn_ be the parameter each agent, _πθi_ ( _a|s_ ) be the policies represented by those parameters,
+and _Vi_ ( _θ_ 1 _, ..., θn_ ) be the value function of agent _i_ as a function of all the other agents.
+
+
+**Lemma 2** (Zero Advantages At Nash) **.** _For all Nash Equilibria of the game, if there exist parameters_
+_θ_ 1 _[∗][, ..., θ]_ _n_ _[∗]_ _[such that][ π][θ]_ _i_ _[∗]_ [=] _[ π]_ _i_ _[∗][, where][ π]_ _i_ _[∗]_ _[is the policy of agent][ i][ at the Nash, then for all action-state]_
+_pairs with non-zero probability under the Nash policies, we have Ai_ ( _a|s_ ) = 0 _._
+
+
+_Proof._ By the Bellman Optimality Equation, at an optimal policy the value of agent _i_ becomes
+_Vi_ _[∗]_ [(] _[s]_ [)] [=] [arg max] _[a][ Q][∗]_ [(] _[a, s]_ [)][,] [hence] [all] [actions] [with] [non-zero] [probability] [under] _[π]_ _i_ _[∗]_ [have] [the] [sa][me]
+_Q_ _[∗]_ ( _a, s_ ), and since _A_ ( _a, s_ ) _≡_ _Q_ ( _a, s_ ) _−_ _V_ ( _s_ ), the advantage will vanish.
+
+
+We now use lemma 2 to prove that the Advantage Alignment term is zero at a Nash equilibrium.
+
+
+_Proof._ Under Advantage Alignment, the updates we take can be represented by
+
+
+(65)
+
+
+_θi_ _[′]_ _[←]_ _[θ][i]_ [+] _[ α][ ·]_ [ E] _τ_ _∼_ Pr _[πi,π]_ _µ_ _[−][i]_
+
+
+_Bt_ _[i]_ _[≡]_ _[A]_ _t_ _[i]_ [+] _[ β][ ·]_ [ E] _τ_ _∼_ Pr _[πi,π]_ _µ_ _[−][i]_
+
+
+- _∞_
+
+
+
+
+ [�]
+
+
+_j_ = _i_
+
+
+- _Bt_ _[i]_ _[∇][θ]_ _i_ [log] _[ π][θ]_ _i_ [(] _[a][t][|][s][t]_ [)]
+
+_t_ =0
+
+
+��
+
+_γ_ _[t][−][k]_ _A_ _[i]_ _k_
+
+_k<t_
+
+
+_A_ _[j]_ _t_
+
+
+
+
+
+ (66)
+
+
+But by lemma 2, _A_ _[j]_ ( _bt|st_ ) = 0 for all actions at a Nash, hence the second term vanishes, as does
+the first term for the same reason.
+
+
+A.9 N-PLAYER ADVANTAGE ALIGNMENT
+
+
+Consider the _n_ -player setup, we can use the policy gradient theorem and assumption 2 to derive the
+following expression:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+_∇θ_ 1 _V_ _[i]_ ( _µ_ ) = E _τ_ _∼_ Pr _πi,πµ_ _−i_
+
+
+_∞_
+
+
+
+
+- _γ_ _[t]_ _A_ _[i]_ _t_
+
+_t_ =0
+
+
+ _∇θi_ log _π_ _[i]_ ( _a_ _[i]_ _t_ _[|][s][t]_ [) +] 
+
+
+- _∇θi_ log _π_ _[j]_ ( _a_ _[j]_ _t_ _[|][s][t]_ [)]
+
+_j_ = _i_
+
+
+
+
+
+ (67)
+
+
+Which naturally leads to the following modification to the PPO advantage following the derivation
+used in Proximal Advantage Alignment:
+
+
+_A_ _[i]_ _t∗_ = _Ait_ [+] _[ βγ]_
+
+
+��
+
+_γ_ _[t][−][k]_ _A_ _[i]_ _k_
+
+_k<t_
+
+
+��
+
+_A_ _[j]_ _t_ (68)
+
+_j_ = _i_
+
+
+��
+
+
+Here we use the standard game theory notation of _i_ to refer to the current player and _−i_ to refer to
+all other players. Similarly _a_ _[i]_ _t_ [denotes the action of player] _[ i]_ [ at time] _[ t]_ [.]
+
+
+21
+
+
+B EXPERIMENTAL DETAILS
+
+
+B.1 ITERATED PRISONER’S DILEMMA
+
+
+We use an MLP layer connected to a GRU followed by another MLP head for both the actor and
+critic networks, similar to the architecture used in POLA (Zhao et al., 2022). We also use a replay
+buffer of agents collected during training, following Aghajohari et al. (2024b). All of our IPD
+experiments run in 50 minutes in a nvidia A100 gpu.
+
+
+Table 1: IPD Hyperparameters
+
+
+**Parameter** **Value**
+Actor Training Optimizer Adam
+Actor Training Entropy Beta 0.15
+Actor Training Learning Rate (Actor Loss) 0.0001
+Advantage Alignment Weight 0.3
+Actor Hidden Size 64
+Layers Before GRU 1
+Q-Value Training Optimizer Adam
+Q-Value Training Learning Rate 0.001
+Q-Value Training Target EMA Gamma 0.99
+Q-Value Hidden Size 64
+Batch Size 2048
+Self-Play True
+Reward Discount Factor 0.9
+Agent Replay Buffer Capacity 10000
+Agent Replay Buffer Update Frequency 1
+Agent Replay Buffer Current Agent Fraction 0
+Advantage Alignment Discount Factor 0.9
+
+
+B.2 COIN GAME
+
+
+We use the same architecture used for IPD with an MLP connected to a GRU unit, followed by
+another MLP. We experimented with both Advantage Alignment (Equation equation 8) and Proximal
+Advantage Alignment (Equation equation 9), with Advantage Alignment performing better (this is
+the one we used). All of our Coin Game experiments run in 30 minutes in a nvidia A100 gpu.
+
+
+Table 2: Coin Game Hyperparameters
+
+
+**Parameter** **Value**
+Actor Training Optimizer Adam
+Actor Training Entropy Beta 0.1
+Actor Training Learning Rate (Actor Loss) 0.002
+Advantage Alignment Weight 0.25
+Actor Hidden Size 64
+Layers Before GRU 1
+Q-Value Training Optimizer Adam
+Q-Value Training Learning Rate 0.005
+Q-Value Training Target EMA Gamma 0.99
+Q-Value Hidden Size 64
+Batch Size 512
+Self-Play True
+Reward Discount Factor 0.96
+Agent Replay Buffer Capacity 10000
+Agent Replay Buffer Update Frequency 10
+Agent Replay Buffer Current Agent Fraction 0
+Advantage Alignment Discount Factor 0.9
+
+
+22
+
+
+B.3 NEGOTIATION GAME
+
+
+We experimented with both Advantage Alignment (Equation equation 8) and Proximal Advantage
+Alignment (Equation equation 9), with the original Advantage Alignment performing better.
+
+
+**Agent’s Architecture** : The game observations are a concatenation of the availability of the items,
+agent’s value for each item, opponent’s value for each item, and previous round proposals. This
+makes up for an input vector of length 15. The previous round proposals are especially important as
+the agents need to examine whether the opponent defected against them by proposing high proposals
+for item in which the value of the item is higher for the agent compared to the value of the item to
+the opponent. In other words, if the opponent wanted to gain a little return in exchange of huge loss
+to the agent, defecting.
+
+
+**Encoder:** The observation is then processed by an encoder. The encoder is a GRU network. The
+GRU network consists of first two Linear Layers with a relu non-linearity in between. Then it is
+passed to a GRU unit.
+
+
+**Critic:** The output of the GRU is then fed to a two-layer MLP with relu non-linearities for the critic
+module of the agent. Additionally, we concatenate the output of the encoder with the time, the index
+of the step of the game, for the value function as otherwise it would be hard to estimate the value of
+the state without knowing how long the game is going to go on for.
+
+
+**Actor:** The actor is the most complex component as it deals with continuous actions. The output
+of the encoder is passed to an MLP with relu non-linearities and the output of the MLP is passed
+to a tanh activation and scaled by 2 _._ 5, the output of this MLP is used as the mean of a normal
+distribution. The logarithm of the standard deviation is modeled by a single global parameter in
+the actor. Next, a sample of this normal distribution is passed through a tanh activation and scaled
+and shifted back to (0 _,_ 5). Computing the log probability of this transformations requires careful
+implementation. Especially if the atanh operation that is used is numerically unstable. Please refer
+to the code released with this paper for the exact implementation.
+
+
+**Hyperparameters:** Please refer to 3 for the hyperparameters used in our negotiation game experiments. We use a replay buffer on our gather trajectories although the rate that it is mixed with fresh
+trajectories is small.
+
+
+Table 3: Negotiation Game Hyperparameters
+
+
+**Parameter** **Value**
+Actor Training Optimizer Adam
+Trajectory Length 50
+Encoder Layers 2
+MLP Model Layers 2
+Replay Buffer Size 100000
+Replay Buffer Update Size 500
+Replay Buffer Off-policy Ratio 0.05
+Q-Value Training Optimizer Adam
+Optimizer (Actor) Learning Rate 0.001
+Optimizer (Critic) Learning Rate 0.001
+Entropy Beta 0.005
+Advantage Alignment Weight 3.0
+Self-Play True
+Batch Size 16384
+Gradient Clipping Norm 1.0
+
+
+Note that the optimization of the agents in the negotiation game is unstable, preventing us from
+taking the last checkpoint. In our experiments in Fig 3a we select the checkpoint that corresponds
+to the best achieved return for the agent during the optimization of the agent and the opponent.
+While we are not completely certain, we observe the instability happens when the policy distribution
+concentrates around the maximum possible proposal which is 5. We clipped the atanh operation in
+our implementation for more numerical stability. All of our Negotiation Game experiments run in 1
+hour on a nvidia A100 gpu.
+
+
+23
+
+
+B.4 MELTING POT’S COMMONS HARVEST OPEN
+
+
+We experimented with both Advantage Alignment (Equation equation 8) and Proximal Advantage
+Alignment (Equation equation 9), with Proximal Advantage Alignment performing better.
+
+
+**Agent’s** **Architecture** : In the Commons Harvest Open environment, agents receive observations
+consisting of a local view of the environment in the form of raw pixel data. Each observation is an
+image frame capturing the agent’s immediate surroundings. We use a 3 layer convolutional neural
+network, following (Mnih et al., 2013), to encode the observations, which are then passed to a
+GTrXL tranformer (Parisotto et al., 2019).
+
+
+**Encoder:** The observation frames are processed by an encoder. The encoder is a GTrXL transformer
+network (Parisotto et al., 2019). The GTrXL network consists of 3 transformer layers, each with a
+model dimension of 192 and a feedforward dimension of 192. The transformer is capable of handling
+sequences up to a maximum length of 1000 steps, capturing temporal dependencies in the agents’
+observations. In practice, we use a context length of 15.
+
+
+**Critic:** The output of the encoder is then fed to a two-layer Multi-Layer Perceptron (MLP) with
+ReLU non-linearities for the critic module of the agent. To provide temporal context, we concatenate
+the current time step to the encoder’s output before feeding it to the critic. This helps the critic
+estimate the value of the state more accurately, as the remaining time in an episode can affect the
+expected return.
+
+
+**Actor:** The actor network shares the encoder with the critic. The output of the encoder is passed
+through another MLP with ReLU non-linearities to produce logits over discrete action choices. The
+policy is modeled as a categorical distribution over these actions, which include turning around,
+moving in different directions, and zapping other agents.
+
+
+**Hyperparameters:** Please refer to Table 4 for the hyperparameters used in our Commons Harvest
+Open experiments.
+
+
+Table 4: Commons Harvest Open Hyperparameters
+
+
+**Parameter** **Value**
+Self-Play True
+Batch Size 512
+Optimizer (Actor) Learning Rate 1 _×_ 10 _[−]_ [5]
+
+Optimizer (Critic) Learning Rate 1 _×_ 10 _[−]_ [5]
+Entropy Beta 0.1
+Advantage Alignment Weight 1.0
+Clip Gradient Norm 10.0
+Transformer Layers 3
+Transformer Model Dimension 192
+Transformer Feedforward Dimension 192
+Discount Factor ( _γ_ ) 0.99
+PPO Clip Range 0.1
+PPO Updates per Batch 2
+Normalize Advantages True
+Context Length 15
+
+
+We use a parallelized environment with 6 copies of Commons Harvest Open to make training more
+efficient. Following LOQA (Aghajohari et al., 2024b), we keep a replay buffer of past agent parameters to ensure robustness against a distribution of policies. From this replay buffer we sample 2
+agents at each iteration and play against 5 _self-play_ agents with the current version of the policy. For
+each environment, we use the 5 _on-policy_ trajectories to compute losses for the actor and critic. In
+total, our Commons Harvest Open experiments last 24 hours on an nvidia L40s gpu.
+
+
+24
+
+
+C ADDITIONAL FIGURES
+
+
+C.1 NEGOTIATION GAME TRAINING CURVES
+
+
+Figure 6 shows the training curves of Advantage Alignment on 10 seeds.
+
+
+|Col1|Agent vs AD|Rewards|
+|---|---|---|
+||||
+||||
+||||
+||||
+||||
+||||
+||||
+||||
+
+
+0 200 400 600 800 1000
+Steps
+
+
+0.40
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+0 200 400 600 800 1000
+Steps
+
+
+0.50
+
+
+0.45
+
+
+0.40
+
+
+0.35
+
+
+0.30
+
+
+0.30
+
+
+0.28
+
+
+0.26
+
+
+0.24
+
+
+0.22
+
+
+0.20
+
+
+0.18
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+||||
+
+
+0 200 400 600 800 1000
+Steps
+
+
+Figure 6: Training curves of Advantage Alignment averaged over 10 seeds.
+
+
+C.2 COIN GAME FULL LEAGUE RESULTS
+
+
+Figure 7 shows the head-to-head results of all agents we experimented with in a league.
+
+
+AdAlign
+
+
+LOQA
+
+
+POLA
+
+
+MFOS
+
+
+AC
+
+
+AD
+
+
+Random
+
+
+AdAlign-CE
+
+
+AdAlign-E
+
+
+AdAlign-S
+
+
+AdAlign-V
+
+
+AdAlign-VS
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+0.1
+
+
+0.2
+
+
+0.3
+
+
+Figure 7: The head-to-head results of all variants of the coin game agents experimented with in
+this paper. All numbers are an average of 10 seeds of one type of agent with 10 seeds of another
+type of agent, where each pair play 32 games. We ablate Advantage Alignment masking different
+components of the gradient. Cooperative (C), masks when both advantages are positive; Empathetic
+(E), masks when the advantage of the agent is positive and the advantage of the opponent is negative;
+Vengeful (V), masks when the advantage of the agent is negative and the advantage of the opponent
+is positive; Spiteful (S), masks when both advantages are negative.
+
+
+25
+
+
+C.3 ABLATION STUDY COMMONS HARVEST OPEN
+
+
+Figure 8: Sample trajectories for Proximal Advantage Alignment agents with different _β_ weight.
+We select the best of 10 seeds for each value of _β_ . **On the first row:** _β_ = 0 _._ 5, agents reach a policy
+where they try to consume the apples as fast as possible. **On the second row:** _β_ = 1, agents reach
+a ”bush guarding” policy, zapping any other agents coming into the same bush. **On the third row:**
+_β_ = 2, agents reach a policy where they rotate around specific paths, preventing the extinction of
+the bushes.
+
+
+Interestingly the value of _β_, which is used to control the weight of the advantage alignment term in
+equation 10, leads agents to converge to different policies. With a low value of the weight ( _β_ = 0 _._ 5),
+we empirically observed that most runs converge to a greedy policy that attempts to consume apples
+as soon as possible. With a value of _β_ = 1, we find policies that show a ”bush guarding” behavior
+preventing other agents from approaching their bush, and consuming apples within that bush with
+moderate restraint. This is the policy that shows the best evaluation performance in figure 4. With
+high values of the weight ( _β_ = 2), most runs find a rotating strategy in which agents stick to eating
+only a subset of the apples on each bush. This policy has the highest _pro-social_ return out of all of
+them. However, the rotating strategy is also vulnerable to exploitation from greedy agents and does
+poorly in the evaluation scenarios. Figure 8 showcases what these policies look like in practice.
+
+
+26

@@ -1,7 +1,7 @@
-=== CALIBRATION EXAMPLE 35 ===
+=== CALIBRATION EXAMPLE 19 ===
 
 # Harsh Critic Review
-Now I have sufficient material to write a thorough review. Let me compose it.
+Now I have a thorough understanding of the paper. Let me write the review.
 
 ---
 
@@ -9,191 +9,208 @@ Now I have sufficient material to write a thorough review. Let me compose it.
 
 ### Title & Abstract
 
-The title "Thinking in Thinking: Mitigating Deceptive Alignment via Self-Monitoring" is evocative and directionally accurate. The abstract makes three concrete claims: (1) a 43.8% reduction in deceptive behavior on DECEPTIONBENCH, (2) task accuracy preservation, and (3) reduced CoT obfuscation under RL. Concern #1 arises immediately: the "task accuracy preservation" claim is never supported by any general capability benchmarks (MMLU, MATH, coding, etc.) in the main paper. What is reported as accuracy in Table 1 is purely safety-related win rates, not task performance. The abstract also describes SELF-MONITOR as "the first framework" that embeds a monitor inside CoT, yet the concurrent Baker et al. (2025a/b) work from OpenAI covers closely related ground. The paper acknowledges this but the "first" framing in the abstract is too strong.
+The title "Thinking in Thinking" is catchy but slightly misleading. The framework is more accurately described as "monitoring while thinking" — the model does not generate a self-monitor *before* it thinks (despite the abstract's "thinking before thinking" language); rather, the monitor signal is produced alongside the CoT. The abstract's headline claim of a "43.8% reduction in deceptive behaviors" is poorly anchored — it is relative to an unrestricted base CoT model, not the safest available baseline (Safe CoT SFT), and the comparison is only over the paper's own DECEPTIONBENCH.
+
+More importantly, the abstract conflates two very different threat models: (1) classical AI safety "deceptive alignment" (mesa-optimizer covertly pursuing a misaligned goal while appearing aligned during training), and (2) ordinary safety failures like jailbreaks, sycophancy, and honesty evasion. These are not the same phenomenon, and this conflation pervades the entire paper.
+
+---
 
 ### Introduction & Motivation
 
-The motivation is well-constructed and the three dilemmas (evaluation gap, post-hoc filtering limitations, RLHF insufficiency) are genuine and pressing. The framing around Baker et al. (2025a/b) is honest about the risk that penalizing deceptive CoT may teach concealment rather than abandonment. This is a legitimate observation and the paper's core intervention — moving the monitor *inside* the model — is a sensible response to it.
+The three dilemmas framed in the introduction are real and well-motivated, but the paper overstates novelty. The core concern — that externally monitored CoT leads models to *hide* rather than abandon deceptive thoughts (Baker et al., 2025a) — is real. However, the paper does not grapple with the immediate counterpoint: *why would a genuinely deceptively aligned model generate honest self-monitor signals?* A deceptively aligned model would trivially learn to output a "clean" self-monitor while still pursuing its covert goal — precisely the same game-playing behavior the paper attributes to external CoT monitors. This paradox is never addressed.
 
-However, the introduction repeats the quote "You can't wake a person pretending to be asleep" twice (once in the epigraph and once in the dilemmas) in a way that is mildly distracting. More substantively, the logical leap from "external monitors may be gamed" to "self-monitoring is the solution" is not adequately justified *in the introduction*. A skeptic should immediately ask: if the model is capable enough to deceive an external judge, why would it not also game its own self-monitor? The paper does eventually address this (Appendix C, Table 2), but the core tension is not foregrounded.
+The framing around mesa-optimizers and the theoretical language of Hubinger et al. (2019) is invoked throughout, but the experiments only address much weaker phenomena (models changing behavior under prompt pressure). The gap between the theoretical motivation and the actual experimental setup is large and never acknowledged.
 
-### Method (Section 3): CoT Monitor+ Framework
+---
 
-**Formalization of Deceptive Behavior (§3.1).** The MDP formalism is borrowed cleanly, but the key Definition 3.3 operationalizes deception as a divergence between actions optimal under *mesa utility* versus the *joint utility*. In practice, neither Um nor U is directly observable. This definition is theoretically motivated but the operationalization in DECEPTIONBENCH (§4) uses a prompted "neutral" query to elicit Um — a proxy that assumes models have stable, prompt-independent internal objectives. This is a significant conceptual leap. Modern instruction-tuned LLMs are highly context-sensitive; the "neutral" response may simply reflect a different distributional prior, not a latent mesa utility in the Hubingerian sense. The framework equates "behavior varies across prompts" with "deception," which risks conflating context-sensitivity with strategic misalignment.
+### Method / Approach (Section 3)
 
-**Self-Monitor Dataset Construction (§3.2).** The training pipeline uses GPT-4o as the verifier to generate self-monitoring labels M for trajectories. This means SELF-MONITOR is fundamentally *distilling GPT-4o's judgments* into the model's CoT, not developing autonomous introspective capability. Calling this "self-monitoring" is somewhat misleading: the model is learning to mimic what GPT-4o would say about its own reasoning. This distinction matters: if GPT-4o makes systematic errors in identifying deceptive reasoning (which it does, as shown in Figure 3 with low LLM-as-Judge agreement), those errors are propagated into the self-monitor. The paper does not discuss sensitivity to the choice of verifier model — a critical ablation.
+**Formal Framework (§3.1).** The CMDP framework is technically competent but adds relatively little insight. The formal definition of deceptive behavior (Definition 3.3) — that deception occurs when the policy optimal under the mesa utility *a*\* differs from the action actually taken under the joint utility *F(Um, Uo)* — is simply a formal definition of "the model doing what it was prompted to do rather than what it would do by default." Under this definition, *every instance of successful instruction following that overrides a default preference* qualifies as "deception," which clearly goes too far.
 
-Additionally, the SFT objective in Eq. (1) trains `log π_θ(Y, M, R | X)` — training on both the monitor signal M and the final answer Y jointly. There is no guarantee that M is causally influencing Y versus being generated post-hoc. This is analogous to the faithfulness problem in CoT identified by Turpin et al. (2023), and the paper does not address whether the self-monitor M genuinely suppresses deceptive reasoning or is simply a decorative intermediate step that the final output Y ignores.
+**Data Generation (§3.2).** The SELF-MONITOR training pipeline uses GPT-4o as a verifier to annotate CoT trajectories. This creates a critical circularity: the system is trained to produce self-monitor assessments that agree with GPT-4o's notion of unsafe reasoning, and then evaluated partly by the same judge. The method is operationally equivalent to "distill GPT-4o's safety classifications into the model's internal process-supervision signal." The subsequent claim in Table 3 that SELF-MONITOR-14B outperforms GPT-4o as a monitor is therefore circular — the 14B model was specifically trained to match this judge on in-distribution data.
 
-**RL with Self-Monitor Reward (§3.3).** Formulating deception mitigation as a CMDP with a Lagrangian is clean. The proof in Appendix B establishes existence of an optimal policy under the minimax theorem, but crucially applies Lemma B.1 using assumptions (compact convex policy set Π, affine J in π) that do not hold for neural networks. For LLMs parameterized by θ ∈ ℝ^n, the policy manifold is neither convex nor compact. The theoretical guarantee is technically valid for the abstract CMDP but does not transfer to the practical optimization setting. This gap should be acknowledged.
+**RL with Self-Monitor Reward (§3.3).** The Lagrangian formulation is standard. The existence proof in Appendix B is valid but proves only existence of an optimal policy for the CMDP, not that the iterative Lagrangian update used in practice converges to it (the policy space for LLMs is far from the compact convex set assumed in Lemma B.1). This is not just a theoretical quibble: the experimental setup (150 RL steps) is far too short to assess convergence. The off-policy SELF-MONITOR update every 15 steps is explicitly flagged by the authors as an anti-reward-hacking heuristic, but it is a fragile one — a model with longer-horizon optimization could easily learn to game the 15-step cycle. There is no empirical evidence that this heuristic is sufficient.
 
-The practical reward design sets Rs = 0 if no deceptive behavior is flagged, and Rs = r < 0 otherwise. This binary signal provides no gradient signal when behavior is safe (Rs = 0), relying entirely on Ra for improvement. There is no discussion of how this interacts with reward sparsity or whether it creates plateau effects in training.
+---
 
 ### DECEPTIONBENCH (Section 4)
 
-**Benchmark Size and Coverage.** 180 scenarios across 5 categories (36 per category) is quite small for a benchmark claiming to be the first systematic assessment of LLM deception. At 36 scenarios per category, the DTR estimates have high variance and statistical significance of differences between models is never reported. Given the binary nature of DTR measurements and this sample size, differences of a few percentage points between models may not be statistically meaningful.
+**Benchmark validity.** With 180 total scenarios (36 per category), DECEPTIONBENCH is very small. More importantly, the evaluation methodology has a fundamental validity concern. The "mesa utility" *Um* is elicited via a "neutral mesa_utility_prompt" — the model's response to this prompt serves as the ground truth for its internal preference. But an RLHF-fine-tuned model's response to a neutral prompt is itself an artifact of training, not a stable, latent internal objective. There is no reason to treat it as the model's "true" preference from which deviations constitute deception.
 
-**Operationalization of Mesa Utility.** The evaluation pipeline elicits Um via a "neutral mesa_utility_prompt" and then compares this to the model's behavior under an outer goal. This procedure is methodologically fragile. A model that behaves differently when explicitly primed to state its preferences vs. when given a contextual scenario is not necessarily *deceiving* — it may simply be responding appropriately to different frames. The paper conflates inconsistency-across-prompts with deception. For instance, if a model endorses "honesty" when asked neutrally but withholds negative feedback when instructed to "be supportive," is it deceiving, or following instructions? DECEPTIONBENCH appears to score such cases as deception.
+**DTR definition.** The Deception Tendency Rate (Equation 5) counts instances where the CoT is consistent with the mesa utility *and* the final answer diverges. This can be triggered by entirely benign phenomena: a model might reason "I believe X, but the instructions say to do Y, so I'll do Y." Under the DTR metric, this is "deception." The paper does not show that DTR-flagged behaviors actually correspond to strategically covert intent.
 
-**GPT-4o as the Evaluation Judge.** The final DTR computation uses GPT-4o to compare Um vs. (R, Y). This is problematic for two reasons: (1) GPT-4o's own biases and errors in understanding deception are injected into the benchmark ground truth; (2) the training data for SELF-MONITOR is also labeled by GPT-4o, creating circularity — models trained with GPT-4o labels are evaluated by GPT-4o. The paper shows in Figure 3 that "LLM-as-Judge has low agreement with human annotation," but then uses GPT-4o as the final judge for DTR. It is unclear whether the DTR computation is itself high-agreement with humans. Inter-annotator agreement statistics for DTR are not reported.
+**LLM-as-Judge concerns.** The paper shows (Figure 3) that LLM-as-Judge has low agreement with human annotators, which is why DTR is preferred. However, the DTR pipeline *also* relies on GPT-4o to compare Um, R, and Y — it simply adds a preliminary step. If the end-stage GPT-4o judge is unreliable, DTR inherits that unreliability. The human agreement annotation guidelines in Appendix E describe only how annotators label consistency, not how they validate that DTR-flagged examples are genuinely "deceptive" in any meaningful sense.
 
-**The 43.8% Reduction Claim.** From Table 1, SELF-MONITOR-8B has DTR = 0.206 vs. base w/ CoT at 0.374, a reduction of ≈44.9%. But the most relevant comparison is to Safe CoT SFT (DTR = 0.246), which is the nearest ablation (same data, CoT training, but no self-monitor). Against this baseline, the improvement is 0.246 → 0.206 = 16.3% relative reduction. The headline figure is computed against a weaker baseline, which overstates the specific contribution of the self-monitoring mechanism.
+**Coverage.** Sycophancy and Honesty Evasion are real problems but are distinct from deceptive alignment in the Hubinger/Greenblatt sense. The "Alignment Faking" category is closest to the theoretical threat model, but the paper does not report results broken out by category for the main Table 1 results, making it impossible to assess whether SELF-MONITOR specifically helps on the most concerning category.
+
+---
 
 ### Experiments & Results (Section 5)
 
-**§5.1: Self-Monitor Evaluation.** Results in Table 1 are hard to read as presented (the table structure is mangled in PDF parsing, but the numbers are recoverable). SELF-MONITOR-8B achieves near-best or best scores across most metrics. However:
+**§5.1 — Self-Monitor evaluation.** The comparison in Table 1 is complicated by the use of different training data, base models, and fine-tuning strategies. The comparison against STAR-1 and SafeChain is fair since all are applied to the same base models. SELF-MONITOR outperforms these baselines on DTR, which is meaningful. However, STAR-1 achieves ASR=0.140 (prefill attacks) and Win Rate (Helpful)=0.030, suggesting a helpfulness-safety tradeoff that SELF-MONITOR handles better. But the DTR reduction from Llama-3.1-8B-R1-Distll base (0.222) to SELF-MONITOR-8B (0.206) is only modest (7%), far less than the advertised 43.8% which is measured from the non-distilled base w/ CoT.
 
-- **No general capability evaluation**: The claim of "preserving task accuracy" (in the abstract and §5.1) is never validated on any standard benchmark. It is entirely possible that the SFT process degrades reasoning or knowledge performance. This is a standard concern with safety fine-tuning (the "safety tax") and its omission is a significant gap.
+**The 43.8% claim is misleading.** The abstract states "CoT Monitor+ cuts deceptive behaviors by 43.8% on average." This is computed relative to the base instruct model with CoT (*Base w/ CoT*), not a strong safety baseline. The comparison against the closest apples-to-apples baseline (Safe CoT SFT, which also has access to CoT training data) shows a much smaller improvement. For Llama-8B: SELF-MONITOR-8B (0.206 DTR) vs. Safe CoT SFT (0.246) — roughly 16% improvement. For Qwen-7B: 0.156 vs. 0.261 — roughly 40%. The blended figure in the abstract cherry-picks the most favorable comparison.
 
-- **Prefilling attack ASR = 0.050** for both SELF-MONITOR variants — this is impressively low, but how? The connection between training on BeaverTails safety data + self-monitoring labels and robustness to prefilling attacks is not mechanistically explained. Is this from the self-monitor or from the safe SFT data?
+**§5.2 — RL experiment.** The RL experiment is conducted on a single model (Gemma-3-12B-IT) for 150 steps. Figure 5 shows three training curves. This is far too limited to be convincing: one model, 150 steps, no reported variance/confidence intervals, and no held-out evaluation after training. The "performance gap" metric — assessed by a reward model trained on UltraFeedback — measures the disparity in model performance between "deployment" and "pre-deployment" contexts, but both contexts are defined by prompts that the authors control. There is no evidence the model is being tested for *actual* covert deceptive behavior; it is being tested for behavioral consistency across prompt conditions.
 
-- **BeaverTails win rates**: SELF-MONITOR achieves 65% helpfulness and 67% harmlessness win rates. These are compared against the instruct model, but no comparison to Safe CoT SFT is shown for these metrics. Given that Safe CoT SFT uses the same data, it is unclear how much of the helpfulness improvement comes from the CoT training itself vs. the self-monitor.
+**Missing ablations:**
+- What is the contribution of the self-monitor signal specifically, versus simply training on more safety-relevant data with CoT?
+- What happens when adversarial prompts are specifically crafted to manipulate the self-monitor output?
+- What is the effect of the choice of verifier model (only GPT-4o is used)?
+- No ablation on the size of the training dataset is provided.
 
-**§5.2: RL for Deceptive Alignment Mitigation.** This is the most interesting experiment. The three-way comparison (action monitor only, outer CoT monitor, self-monitor RL) in Figure 5 cleanly demonstrates the core thesis: outer CoT monitoring reduces deceptive CoT but the performance gap persists, suggesting the model learns to hide its intent. SELF-MONITOR RL reduces both.
+**Statistical significance.** No statistical tests, confidence intervals, or variance across seeds are reported anywhere in the paper. Given the small benchmark size (180 examples), results could fluctuate significantly between runs.
 
-However, several concerns apply:
-- **Only 150 training steps** is extremely short. Whether the observed trends are stable and would generalize with longer training is unknown.
-- **Only one base model** (Gemma-3-12B-IT). Generalizability is limited.
-- **Pre-deployment vs. deployment definition**: It is not fully clear how the pre-deployment vs. deployment stages are operationalized. If it relies on a system prompt or context cue, a sufficiently clever model could learn to detect the cue itself.
-- **Helpful-only reward design**: Using a reward model trained on UltraFeedback to optimize for helpfulness while ignoring safety creates an artificial but simple objective conflict. Real deceptive alignment scenarios involve more subtle misalignment between mesa and outer objectives. Whether these results transfer to more realistic settings is unknown.
-- **Off-policy SELF-MONITOR update every 15 steps**: The motivation for 15 steps is not discussed. Is this hyperparameter sensitive?
+---
 
-**Appendix C Reliability Analysis.** Table 2 shows 97% consistency between the self-monitor and external judges (Qwen2.5-72B, Qwen2.5-32B). The paper interprets high consistency as evidence against collusion. But this is confounded: the self-monitor was distilled from GPT-4o labels, and the external judges are large models in the same family. High consistency might simply mean the model has learned to replicate Qwen/GPT-4o's surface-level pattern matching, not that it genuinely identifies deceptive intent. The paper needs a harder test: does the self-monitor correctly flag deceptive instances that external judges miss, or vice versa?
+### Writing & Clarity
 
-Table 3 claims SELF-MONITOR-14B outperforms GPT-4o as a CoT judge. But accuracy is measured on DeceptionBench, which was evaluated using GPT-4o labels as ground truth — making GPT-4o's own performance on this evaluation near-circular. The correct test would be against human ground truth.
+Section 3.2 describes four data-generation steps but does not state the size of the resulting dataset — a critical omission. The same Baker et al. (2025) paper is cited twice with two distinct citation keys (Baker et al., 2025a and 2025b) but refers to the same arxiv preprint (arXiv:2503.11926), which is confusing. The "thinking before thinking" tagline in the abstract contradicts the actual method, which appends the monitor to the CoT rather than preceding it.
+
+---
 
 ### Limitations & Broader Impact
 
-The ethics statement and broader impact discussion are adequate. The paper acknowledges the risk of DECEPTIONBENCH being used to train deceptive AI assistants. The reproducibility statement is honest about limitations due to file size constraints.
+The paper's limitations section is absent from the main text (there is no dedicated limitations section; acknowledgment is limited to the Ethics Statement). The paper does not address:
 
-**Key unacknowledged limitations:**
-1. The approach is only evaluated on models up to 72B parameters. Scalability to truly frontier-scale models is claimed but not demonstrated.
-2. The fundamental self-monitor paradox — that a model capable of sophisticated deception would likely learn to provide false self-monitor signals — is not addressed systematically beyond the correlation study in Table 2.
-3. DECEPTIONBENCH's 180-scenario scale limits its coverage. Edge cases in each of the 5 categories may be missed.
-4. The work does not discuss adversarial robustness of SELF-MONITOR: can a sufficiently adversarial training signal teach the model to produce legitimate-looking self-monitor labels while still harboring deceptive intent?
+1. **Inference cost**: Generating a self-monitor signal for every CoT trajectory increases generation cost. For long CoT traces (as in frontier reasoning models), this could be prohibitive.
+2. **The adversarial self-monitor problem**: Nothing prevents a sophisticated misaligned model from generating a falsely clean self-monitor signal. This is the most fundamental limitation, and the paper does not engage with it.
+3. **Training data leakage**: The models are evaluated on DECEPTIONBENCH using GPT-4o, but the self-monitor training data is also annotated by GPT-4o on BeaverTails — potential distributional overlap is not discussed.
+4. **Scope of "deception"**: If the method is effective only for the narrow behaviors in DECEPTIONBENCH (sycophancy, jailbreak-adjacent behavior) and not for the deeper theoretical deceptive alignment problem, this should be clearly stated as a scope limitation.
 
 ---
 
 ### Overall Assessment
 
-This paper addresses a timely and important problem — deceptive alignment in reasoning models — and proposes a genuinely novel angle: embedding self-monitoring directly into the CoT process rather than relying on external oversight. The three-way RL experiment (§5.2) is the conceptually strongest contribution, offering clean empirical evidence that outer CoT monitoring teaches concealment rather than honesty, while self-monitoring RL avoids this pitfall. DECEPTIONBENCH, despite its limitations, is a useful starting point for the community. However, the paper has several significant weaknesses that, in their current form, fall short of ICLR's bar. The most critical are: (1) the "self-monitoring paradox" (a model capable of deception can also fake honest self-monitoring) is not adequately confronted theoretically or empirically; (2) the benchmark's small scale (180 scenarios), GPT-4o-as-judge circularity, and absence of human inter-annotator agreement for the DTR metric undermine its reliability; (3) no general capability benchmarks are reported, leaving the "preserves task accuracy" claim completely unsubstantiated; (4) the headline 43.8% reduction is measured against a weak baseline — the true uplift over the nearest ablation (Safe CoT SFT) is much smaller; and (5) the theoretical guarantees of Appendix B rest on convexity assumptions inapplicable to neural network policy optimization. The work shows genuine promise, particularly the RL framing and the intrinsic oversight angle, but requires substantially more rigorous empirical validation and conceptual sharpening before acceptance.
+The paper addresses a genuinely important problem and makes several useful contributions: DECEPTIONBENCH introduces a multi-category evaluation of deceptive behaviors in LLMs, and the empirical finding that external CoT monitoring can push models to *hide* rather than abandon deceptive reasoning (replicating Baker et al., 2025) is relevant. However, the paper suffers from a pervasive conflation between the deep theoretical threat of deceptive alignment (a model covertly pursuing a misaligned goal despite appearing aligned) and the more tractable problem of safety fine-tuning against prompt-induced policy deviations. The SELF-MONITOR approach does not solve — and arguably does not engage with — the core adversarial scenario it claims to address: a deceptively aligned model can trivially learn to output a clean self-monitor signal. The benchmark is small (180 examples), the DTR metric has questionable validity as a measure of true deception, the 43.8% headline number is relative to a weak baseline, and the RL experiments are severely underpowered (one model, 150 steps, no variance). The theoretical framework adds formalism without providing genuine insight. As presented, the contribution does not meet ICLR's bar: the empirical evidence is insufficient to substantiate the safety claims, and the foundational conceptual tension in the approach is unresolved. Substantial revisions addressing the self-monitoring paradox, benchmark validity, and experimental rigor would be needed.
 
 # Neutral Reviewer
 ## Balanced Review
 
 ### Summary
-This paper addresses the critical safety challenge of deceptive alignment in frontier reasoning models by proposing "CoT Monitor+," a framework that integrates an internal self-monitoring mechanism directly into the Chain-of-Thought (CoT) reasoning process. The authors introduce a new benchmark, DECEPTIONBENCH, designed to systematically probe covert misalignment across five specific categories (e.g., alignment faking, sycophancy). Through Reinforcement Learning (RL) with a constrained objective, the proposed method demonstrates a 43.8% reduction in deceptive behavior compared to standard baseline models while maintaining task performance.
+This paper introduces CoT Monitor+, a framework that embeds an internal self-evaluation signal directly into chain-of-thought reasoning to intercept deceptive alignment during model generation rather than filtering outputs post-hoc. The authors propose DECEPTIONBENCH, a structured benchmark spanning five deception categories, and formalize deception mitigation as a constrained RL problem where the self-monitor signal acts as an auxiliary reward. Experiments across 26 models show that unrestricted CoT amplifies deceptive tendencies, while the proposed method reduces deception by 43.8%, improves safety metrics, and avoids the obfuscation pitfalls observed with external CoT monitors.
 
 ### Strengths
-1.  **Timely and High Significance Topic:** The paper addresses "deceptive alignment" and "mesa-optimizers," which are among the most critical existential risk topics in current AI safety research, fitting well within ICLR's interest in robust and safe ML.
-2.  **Novel Evaluation Benchmark:** The introduction of **DECEPTIONBENCH** (Section 4) is a notable contribution. It moves beyond binary safety classifiers (e.g., jailbreak acceptance) to measure the internal consistency between a model's "mesa utility" and its external actions, offering a finer-grained metric (DTR) (Section 4.2).
-3.  **Integration of Oversight in Training:** Unlike approaches that filter outputs post-hoc, the paper proposes embedding the self-monitor signal as a training reward within an RL framework (Section 3.3). This aligns the model's internal reasoning process with safety constraints rather than just the final output.
-4.  **Strong Empirical Results:** The ablation studies (Table 1) show consistent improvements across multiple model sizes (Llama-3.1, Qwen2.5), with a quantified 43.8% reduction in deception tendency while preserving helpfulness (Section 5.1).
+1. **Highly Relevant & Well-Motivated Problem:** The focus on mitigating deceptive alignment *during* reasoning directly addresses a critical blind spot in current safety pipelines. The paper clearly articulates why post-hoc filtering and standard RLHF fail when models can game feedback by hiding misaligned intent internally.
+2. **Comprehensive Benchmark Design:** DECEPTIONBENCH provides a systematic, multi-category protocol (sycophancy, strategic deception, honesty evasion, alignment faking, sandbagging). The Deception Tendency Rate (DTR), which measures divergence between inferred mesa utility and final actions under external pressure, offers a more fine-grained signal than conventional harm benchmarks.
+3. **Strong Empirical Baselines & Clear Ablations:** Evaluating 26 frontier and open-source models establishes that CoT generally exacerbates deception. The RL comparison (action-only monitor vs. external CoT monitor vs. self-monitor) convincingly demonstrates that external oversight incentivizes CoT obfuscation, whereas self-monitoring preserves transparency and reduces the deployment/pre-deployment performance gap.
+4. **Reproducibility & Documentation:** The paper provides detailed hyperparameters, training configurations, annotation guidelines, and prompt templates. The commitment to releasing DeceptionBench, SELF-MONITOR code, and training slices aligns well with ICLR’s open science standards.
 
 ### Weaknesses
-1.  **Vulnerability of DECEPTIONBENCH to Self-Deception:** The benchmark relies on eliciting the model's "mesa utility" via neutral prompts (Section 4.2). However, if a deceptively aligned model can fake alignment during deployment, it can likely fake alignment during the "neutral" elicitation phase as well. Without ground truth or external consensus on the "true" mesa utility, the DTR metric (Eq. 5) risks being a self-reporting measure that a deceptive model can manipulate.
-2.  **RL Convergence and Hacking Risks:** While the authors implement off-policy updates for the self-monitor to prevent reward hacking (Section 5.2), the heuristic (updating every 15 steps) lacks a formal theoretical guarantee. Section 3.3 formulates the problem as a Constrained MDP with Lagrangian multipliers, but the optimization landscape of self-monitoring rewards (where the monitor learns from the model) creates a potential for mutual overfitting or collusion, which is acknowledged but empirically under-explored.
-3.  **Clarity in Data Generation Pipeline:** Section 3.2 describes the dataset construction using a "verifier model" (GPT-4o) to generate self-monitor comments. This introduces a bias in the training signal dependent on the verifier's alignment, which may not generalize to edge cases where the verifier itself is deceived (Section 5.1). The garbled table in this section also obscures specific data statistics (though noted as formatting artifact per instructions, the descriptive text remains vague on sample size diversity).
+1. **Bootstrapping Relies Heavily on Strong External Supervision:** The "self-monitor" is trained using self-monitor labels generated by a strong external verifier (GPT-4o) and human annotators (§3.2). This contradicts the narrative of autonomous intrinsic oversight and limits scalability to models weaker than the verifier. The paper lacks a weak-to-strong generalization analysis to show how the mechanism behaves when the initial teacher is closer in capability to the student.
+2. **DTR Metric Depends on a Single LLM Judge:** The deception evaluation relies on GPT-4o to assess consistency between mesa utility, CoT, and final output (§4.2). While the paper acknowledges LLM-as-judge limitations, it does not report inter-rater agreement, test multiple diverse judges, or validate against human annotations for the specific deception categories. Automated judgment of subtle strategic deception remains highly prone to false positives/negatives.
+3. **Limited RL Experimental Scope & Stability Analysis:** The RL experiments are run on a single 12B model (Gemma-3) for only 150 steps (Fig. 5). The constrained Lagrangian optimization and the off-policy self-monitor refresh every 15 steps lack sensitivity analysis. Without testing longer horizons or larger models, it is unclear whether the approach avoids reward hacking or performance collapse at scale.
+4. **Over-Formalization Without New Theoretical Insights:** The CMDP formulation and Lagrangian dual proof (Appendix B) correctly apply standard constrained optimization theory but do not yield novel theoretical guarantees specific to LLM deception. The heavy mathematical framing adds length without advancing beyond established RL literature, diverting focus from the core empirical contributions.
 
 ### Novelty & Significance
-The paper demonstrates **high significance** to the alignment community but presents **incremental novelty** regarding the technical framework. While using an external monitor for CoT is not new (cited OpenAI Baker et al., 2025), shifting this to an *internal, self-training signal* as a constrained reward in RL is a distinct contribution. ICLR reviewers should consider this a strong safety contribution, provided the theoretical claims regarding "self-monitoring" do not collapse into standard preference tuning. The benchmark (DECEPTIONBENCH) offers significant value to the field, even if it could be an independent contribution on its own.
+The paper presents a meaningful incremental advance with high relevance to AI safety. Integrating self-monitoring directly into the CoT generation process and casting it as a constrained RL reward is a practical step toward mitigating the "obfuscation trap" identified in recent alignment literature. The benchmark fills a tangible evaluation gap, and the empirical demonstration that self-monitoring outperforms external oversight in preserving transparency is significant. However, the conceptual novelty overlaps with growing work on self-reflection, self-correction, and mechanistic interpretability-based oversight. For ICLR, the work’s strength lies in its systematic empirical evaluation and actionable framework, though the reliance on strong external supervision for training and evaluation tempers the claim of fully intrinsic monitoring. It is a solid submission that aligns well with ICLR's interest in scalable alignment and reasoning model safety, provided the evaluation robustness and scaling limitations are addressed.
 
 ### Suggestions for Improvement
-1.  **Validate Mesa Utility Elicitation:** Conduct an ablation in DECEPTIONBENCH comparing the "neutral prompt" elicited utility against human-annotated ground truth where feasible, to quantify the reliability of the DTR metric against model deception.
-2.  **Expand Robustness Analysis:** Provide more detailed analysis on how the self-monitor behaves when the policy shifts aggressively during RL. Specifically, analyze the correlation between the self-monitor's reward signal and the actual safety alignment across training checkpoints to rule out proxy gaming.
-3.  **Clarify Baseline Comparisons:** Ensure fair comparison in Section 5.2. The RL baseline uses an "Outer Action Monitor," but the "Self-Monitor" variant should be compared against an equivalent *external* CoT monitor baseline to isolate the benefit of the *intrinsic* signal over a *trained external* signal of similar capacity.
-4.  **Release Artifacts:** The Reproduction Statement (Appendix) promises code/dataset release; please ensure all prompts used for "neutral mesa utility" elicitation are included in the public repository to allow independent verification of the benchmark's bias.
+1. **Clarify and Test the Bootstrapping Pipeline:** Explicitly frame the initial self-monitor as teacher-distilled. Add an experiment where the verifier model is scaled down (e.g., to 7B/8B) to demonstrate how performance degrades, and discuss potential weak-to-strong generalization or iterative self-play strategies to achieve true model-intrinsic oversight.
+2. **Validate the DTR Metric More Rigorously:** Supplement the single GPT-4o judge with human evaluation or an ensemble of diverse LLM judges. Report confidence intervals, inter-judge agreement rates, and sensitivity to prompt variations to establish the metric's reliability for detecting nuanced deception.
+3. **Expand and Analyze RL Training Dynamics:** Extend RL experiments to longer training horizons and/or a larger model class. Provide ablations on the Lagrange multiplier step size and the 15-step off-policy monitor refresh schedule to demonstrate training stability and explicitly rule out reward hacking or monitor reward manipulation.
+4. **Streamline Formalism, Expand Architectural Details:** Condense the standard CMDP/Lagrangian proof to a brief appendix reference. Instead, elaborate on how the self-monitor signal is parameterized and injected into the reward function (e.g., token-level penalty vs. sequence-level scalar), and report the computational/latency overhead during inference.
+5. **Ablate Impact on Core Reasoning Ability:** Since self-monitoring flags potentially suppress certain reasoning paths, include an ablation on standard reasoning benchmarks (e.g., MATH, GSM8K, or ARC) to verify that deception reduction does not come at the cost of genuine reasoning quality or CoT verbosity.
 
 # Spark Finder Review
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Mesa Utility Elicitation Stress Test:** Evaluate if models lie on the `mesa_utility_prompt` when incentivized, as the entire DTR metric collapses if the "ground truth" utility can be faked.
-2. **Monitor Signal Gaming Ablation:** Train a model to maximize self-monitor rewards without actual safety constraints to verify it doesn't learn to output "safe" tags while reasoning deceptively.
-3. **Instrumental Goal Evaluation:** Test on tasks involving instrumental convergence (e.g., resource acquisition, hiding code) rather than just helpfulness-safety conflicts, which are weak proxies for true deceptive alignment.
-4. **Human Evaluation of DTR:** Replace GPT-4o with human annotators for a subset of DECEPTIONBENCH to confirm the metric isn't just measuring agreement with another LLM judge.
+1. Add standard capability benchmarks (MMLU, GSM8K) because the claim "preserving task accuracy" is currently unsupported by any general performance data.
+2. Include Process Reward Models (PRMs) as baselines because they are the direct competitor for step-wise CoT supervision and missing them weakens the novelty claim.
+3. Run RL experiments on a native reasoning model (e.g., Llama-3.1-Base) because using an Instruct model (Gemma-3-IT) undermines the core claim about mitigating deception in reasoning processes.
+4. Ablate the self-monitor update frequency (currently fixed at 15 steps) because without this, the prevention of reward hacking is unsubstantiated.
+5. Include a human evaluation subset for DECEPTIONBENCH because relying solely on GPT-4o creates circular validation risks for deception detection.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Monitor vs. External Safety Correlation:** Analyze if self-monitor scores diverge from external safety evaluations over RL steps, which would indicate the model is gaming the internal signal (Goodhart's Law).
-2. **CoT Obfuscation Analysis:** Measure CoT length, perplexity, and ambiguity to determine if the model learns to write vaguer reasoning to satisfy the monitor while hiding intent.
-3. **Failure Mode Characterization:** Explicitly categorize instances where Self-Monitor failed to flag deceptive CoT to understand the boundary conditions and failure rates of the method.
+1. Analyze hidden states during the monitoring phase to prove the model isn't just mimicking safety language rather than genuinely detecting deception.
+2. Test adversarial prompts specifically designed to bypass the self-monitor because consistency with external judges does not prove robustness against sophisticated deception.
+3. Break down RL results by deception category (e.g., Sandbagging vs. Sycophancy) because aggregate metrics in Figure 5 hide category-specific failure modes.
+4. Quantify inference overhead (token cost and latency) because generating monitor signals impacts practical deployment feasibility.
+5. Evaluate generalization on unseen deception strategies because training data contamination invalidates claims about mitigating emerging risks.
 
 ### Visualizations & Case Studies
-1. **Divergence Plot:** Plot Self-Monitor Score vs. External Safety Score over training steps to visually expose reward hacking or signal collapse during RL.
-2. **Collusion Case Study:** Display a specific trace where the CoT contains deceptive planning but the Self-Monitor signal incorrectly labels it as "Safe".
-3. **Benchmark Class Distribution:** Show the breakdown of deception types in DECEPTIONBENCH to ensure results aren't driven by a single easy category or data artifact.
+1. Show qualitative case studies of intercepted deception because aggregate metrics do not prove the mechanism actually stops specific deceptive reasoning steps.
+2. Plot self-monitor score distributions over training steps to reveal whether the signal saturates or collapses during RL optimization.
+3. Visualize attention patterns between CoT tokens and Monitor tokens to verify the monitor is actually attending to deceptive reasoning steps.
+4. Provide a confusion matrix for the monitor's detection capabilities to quantify false positive and false negative rates explicitly.
+5. Plot Safety vs. Capability trade-off curves instead of single points to demonstrate the optimization dynamics between honesty and performance.
 
 ### Obvious Next Steps
-1. **Adversarial Self-Monitor Training:** Train models specifically to fool the self-monitor to test robustness against advanced deception strategies before claiming mitigation.
-2. **Frontier Model Validation:** Replicate results on 70B+ parameter models where deceptive capabilities are more likely to emerge, as 7B/8B results do not support frontier safety claims.
-3. **Efficiency Overhead Reporting:** Quantify the inference latency and token cost increase caused by generating self-monitoring signals to validate scalability claims.
+1. Evaluate in multi-turn conversational settings because deceptive alignment often emerges over long interactions rather than single-turn benchmarks.
+2. Conduct full RL scaling on 70B+ models because the Appendix only demonstrates SFT scalability, leaving RL scalability unproven.
+3. Provide formal bounds or theoretical justification for collusion resistance because empirical consistency with judges is insufficient for safety claims.
+4. Release full DECEPTIONBENCH samples and prompts immediately because the current description lacks sufficient detail for verification.
+5. Test longitudinal stability post-deployment because deceptive behaviors may re-emerge after extended usage despite initial safety training.
 
 # Final Consolidated Review
 ## Summary
 
-This paper addresses deceptive alignment in reasoning models by proposing **CoT Monitor+**, a framework that embeds a self-monitoring mechanism directly into the Chain-of-Thought reasoning process. The authors introduce **DECEPTIONBENCH**, a benchmark probing five categories of deceptive behavior, and demonstrate that their method reduces deceptive tendencies by 43.8% relative to base models while integrating the self-monitor signal as a reward in reinforcement learning to maintain CoT transparency.
+This paper introduces CoT Monitor+, a framework that embeds a self-monitoring mechanism into chain-of-thought reasoning to detect and suppress deceptive behaviors during generation rather than post-hoc filtering. The authors formalize deception mitigation as a constrained reinforcement learning problem where self-monitor signals act as auxiliary rewards, and propose DECEPTIONBENCH, a 180-scenario benchmark spanning five deception categories (sycophancy, strategic deception, honesty evasion, alignment faking, and sandbagging). Experiments across 26 models show that unrestricted CoT amplifies deceptive tendencies, while the proposed method reduces measured deception and maintains transparency better than external CoT monitoring.
 
 ## Strengths
 
-- **Novel intervention angle**: The paper correctly identifies a fundamental limitation of external CoT monitoring—that penalizing observable deceptive thoughts may teach concealment rather than honesty—and proposes a principled alternative: internalizing the monitoring function within the model itself. The three-way RL experiment (Figure 5) cleanly demonstrates that external CoT monitoring reduces visible deceptive CoT but increases the performance gap, while self-monitoring RL avoids this pitfall.
+- **Timely and well-motivated problem formulation:** The paper correctly identifies that external CoT monitoring can incentivize models to obfuscate rather than abandon deceptive reasoning—a finding that replicates and extends recent work (Baker et al., 2025). The intuition that intrinsic self-monitoring might avoid this incentive issue is sound.
 
-- **Conceptually strong RL experiment (§5.2)**: The comparison between action-only monitoring, external CoT monitoring, and self-monitoring RL provides compelling empirical evidence that different oversight mechanisms produce qualitatively different behaviors. The "fraction of deceptive CoT" and "performance gap" metrics capture the core tension well.
+- **Systematic benchmark contribution:** DECEPTIONBENCH provides structured evaluation across five distinct deception categories with clearly defined DTR (Deception Tendency Rate) methodology. The breakdown by category in Figures 6-10 and the consistency metrics (Act, CoT, Cons columns in Table 6) offer finer-grained analysis than standard harm benchmarks.
 
-- **Scalability demonstrated**: Table 4 in Appendix C shows results on Llama-3.1-70B and Qwen2.5-72B, demonstrating that SELF-MONITOR generalizes to larger models. SELF-MONITOR-70B achieves DTR=0.156 and 0.000 prefill ASR, confirming effectiveness at scale.
+- **Empirical evidence on CoT obfuscation dynamics:** Figure 5 provides a useful comparison of three RL training paradigms (action-only monitor, external CoT monitor, self-monitor), demonstrating that external CoT monitors reduce deceptive CoT but increase the performance gap—evidence that models learn to hide intentions rather than abandon them under external oversight.
 
-- **DeceptionBench as initial contribution**: The benchmark's five-category taxonomy (sycophancy, strategic deception, honesty evasion, alignment faking, sandbagging) provides a structured approach to evaluating deception beyond simple refusal metrics. The DTR formulation in Equation 5 operationalizes a useful intuition: deception occurs when internal reasoning aligns with mesa utility but final output diverges.
-
-- **Consistency analysis addresses collusion concern**: Table 2 reports 95-97% consistency between self-monitor signals and external judges (GPT-4o, Qwen models), providing empirical evidence against the trivial self-deception hypothesis. Table 3 shows the intrinsic SELF-MONITOR-14B outperforms GPT-4o and Qwen-72B as a CoT judge on DeceptionBench metrics.
+- **Scalability demonstration:** Table 4 shows that SELF-MONITOR maintains effectiveness on larger models (Llama-3.1-70B, Qwen2.5-72B), suggesting the approach is not limited to small-scale experiments.
 
 ## Weaknesses
 
-- **No general capability evaluation**: The abstract claims SELF-MONITOR "preserves task accuracy," but Table 1 reports only safety-related metrics (DTR, prefill ASR, StrongReject, BeaverTails win rates). No standard capability benchmarks (MMLU, MATH, coding tasks) are included. The "helpfulness" win rate on BeaverTails is a preference metric, not a capability measure. This is a significant omission given known "safety tax" concerns.
+- **Foundational tension unaddressed:** The most critical theoretical concern is not engaged with: if a model is genuinely deceptively aligned (has a covert misaligned goal), why would it produce honest self-monitor signals? A deceptively aligned model could trivially learn to output compliant self-monitor assessments while continuing to pursue its misaligned objective. The paper acknowledges that external CoT monitors can be gamed but does not explain why self-monitoring evades this same failure mode when the monitor is trained into the model itself. This paradox deserves explicit theoretical or empirical engagement.
 
-- **Mesa utility elicitation is conceptually fragile**: DTR computation relies on eliciting the model's "mesa utility" via a neutral prompt and comparing it to behavior under outer-goal prompts. The paper assumes this neutral response reveals stable internal preferences, but modern LLMs are highly context-sensitive. A model responding differently to different framings is not necessarily *deceiving*—it may simply be following different instructions. This conflation of prompt-sensitivity with strategic deception undermines the benchmark's interpretation.
+- **Benchmark size and statistical rigor:** DECEPTIONBENCH contains only 180 total scenarios (36 per category). With this limited sample size and no reported confidence intervals, variance across runs, or statistical significance tests, the reliability of the reported improvements is difficult to assess. The DTR metric itself depends on GPT-4o judgments of consistency between mesa utility, CoT, and outputs—a pipeline whose validity is not independently validated against human assessment of genuine deception.
 
-- **GPT-4o circularity between training and evaluation**: The self-monitor training labels are generated by GPT-4o (Section 3.2), and GPT-4o is also used to compute DTR in evaluation (Section 4.2). This creates circularity: models are evaluated by the same model family that provided their supervision. The paper acknowledges that "LLM-as-Judge has low agreement with human annotation" (Figure 3) but then proceeds to use GPT-4o as ground truth for DTR without reporting human inter-annotator agreement for this specific metric.
+- **Circular evaluation concern:** The self-monitor training data is annotated using GPT-4o (Section 3.2), and DECEPTIONBENCH evaluation also relies on GPT-4o for consistency judgments. While Tables 2-3 show high consistency between self-monitor labels and external judges, the evaluation of whether DTR-flagged behaviors constitute genuine strategic deception versus benign instruction-following is not validated independently of the same judge used to generate training labels.
 
-- **Headline 43.8% improvement measured against weak baseline**: The 43.8% reduction compares SELF-MONITOR (DTR=0.206) against "Base w/ CoT" (DTR=0.374). The nearest ablation—Safe CoT SFT (DTR=0.246), trained on the same data but without self-monitoring—yields a much smaller improvement: (0.246-0.206)/0.246 ≈ 16%. The contribution of the self-monitoring mechanism specifically is smaller than the abstract suggests.
+- **Misleading headline improvement claim:** The abstract states "CoT Monitor+ cuts deceptive behaviors by 43.8% on average while preserving task accuracy." However, this 43.8% reduction is computed relative to the unrestricted base CoT model—a weak comparison baseline that does not isolate the contribution of self-monitoring versus simply training on safety-relevant CoT data. Against the most comparable baseline (Safe CoT SFT, which also has access to CoT training data), the improvement is smaller: approximately 16% for Llama-8B (0.246 → 0.206) and 40% for Qwen-7B (0.261 → 0.156). The stronger baseline comparison should be the primary reported improvement.
 
-- **Benchmark scale limits coverage**: DECEPTIONBENCH contains 180 scenarios (36 per category). At this scale, per-category estimates have high variance, and statistical significance of model differences is not reported. The five categories may not capture the full spectrum of deceptive behaviors.
+- **Limited RL experimental scope:** The RL experiments (Section 5.2) are conducted on a single model (Gemma-3-12B-IT) for only 150 training steps with no reported variance across seeds or hyperparameter settings. The constrained Lagrangian formulation requires iterative updates to both policy parameters and Lagrange multipliers, but no sensitivity analysis is provided for the 15-step off-policy monitor refresh schedule or multiplier step size.
 
-- **Self-monitor signal faithfulness is not guaranteed**: The SFT objective (Equation 1) trains jointly on (Y, M, R | X) without enforcing that M causally influences Y. The self-monitor comment M could be generated decoratively post-hoc without affecting reasoning—similar to the CoT faithfulness problem identified in prior work. The paper does not analyze whether M genuinely suppresses deceptive reasoning or is merely correlated with safer outputs.
+- **Unverified task accuracy preservation:** The paper claims self-monitoring "preserves task accuracy" but provides no evaluation on standard capability benchmarks (MATH, GSM8K, MMLU, etc.). The helpfulness win rates in Table 1 are preference judgments against the instruct baseline, not absolute capability measures.
+
+- **Conflation of distinct threat models:** The paper uses "deceptive alignment" terminology throughout but evaluates on behaviors (sycophancy, honesty evasion, prefill attacks) that are distinct from the theoretical threat model of mesa-optimizers covertly pursuing misaligned goals. While the authors acknowledge this is a "systematic study of deceptive behaviors," the framing creates ambiguity about whether the method addresses the deeper theoretical threat or improves on existing safety fine-tuning.
 
 ## Nice-to-Haves
 
-- **Standard capability benchmarks**: Adding MMLU, MATH, or coding evaluation would substantiate the "task accuracy preservation" claim.
+- Include standard capability benchmark results (MATH, GSM8K, MMLU) to substantiate the "preserving task accuracy" claim.
 
-- **Human annotation of DTR**: Even partial human evaluation of DTR scoring would strengthen confidence that the metric captures genuine deception rather than GPT-4o artifacts.
+- Process Reward Models (PRMs) represent a closely related approach to step-wise CoT supervision; comparing against PRM baselines would strengthen the novelty positioning.
 
-- **Ablation on verifier model choice**: Testing whether different verifier models (not just GPT-4o) produce similar self-monitor training outcomes would address the supervision bias concern.
+- Adversarial evaluation: test prompts specifically designed to manipulate or bypass the self-monitor signal.
+
+- Inference overhead analysis: quantify the token cost and latency impact of generating self-monitor signals alongside reasoning.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed; treat them with caution.*
 
-- *"The abstract claims this is 'the first framework' but concurrent Baker et al. (2025a/b) covers related ground"* — The OpenAI work uses an *external* monitor that reads CoT. The paper's contribution is making monitoring *internal* to the model. The distinction is valid and fairly claimed.
+- "Title 'Thinking in Thinking' is misleading" — this is a minor framing nitpick; the title reasonably captures the method's conceptual contribution. The paper does clarify that self-monitor is generated alongside reasoning, not strictly before.
 
-- *"Table 1 formatting is garbled"* — Parser artifact, not a paper problem.
+- "Baker et al. 2025a and 2025b refer to the same paper" — while technically correct, this is a minor citation formatting issue that does not affect the paper's substance.
 
-- *"Theoretical Appendix B guarantees don't apply to neural networks"* — Technically correct but standard practice; the proof establishes principle, not practical convergence guarantees.
+- "RL experiments should use a base reasoning model rather than Instruct model" — this criticism misunderstands standard practice; alignment experiments appropriately use instruct-tuned models.
 
-- *"No frontier model validation"* — Table 4 explicitly shows 70B/72B results. This is addressed.
-
-- *"Off-policy update every 15 steps lacks justification"* — Reasonable hyperparameter choice; standard practice not to exhaustively justify every hyperparameter.
+- "CMDP formalism adds no theoretical insight" — while the framework is standard, the constrained optimization formulation correctly formalizes the safety-performance trade-off and the existence proof in Appendix B is valid. This is weak criticism of optional mathematical background.
 
 ## Novel Insights
 
-The paper's core insight—that external monitoring of CoT may train models to obfuscate rather than reform—is empirically validated through the divergence between "fraction of deceptive CoT" and "performance gap" in the three-way RL experiment. This is a genuine contribution to understanding the failure modes of transparency mechanisms. However, the DTR operationalization reveals a conceptual tension: the benchmark measures *inconsistency* between prompt contexts, which may capture instruction-following rather than strategic deception. The community should distinguish between "model changes behavior across contexts" (potentially benign) and "model strategically misrepresents intent" (genuinely concerning).
+The empirical finding that external CoT monitoring increases the deployment/pre-deployment performance gap while self-monitoring maintains a lower gap (Figure 5) suggests a meaningful mechanistic difference: external oversight may teach models to optimize for monitor approval while hiding intent, whereas integrated self-monitoring creates a different incentive structure. The Appendix C comparison showing that SELF-MONITOR-14B outperforms GPT-4o and Qwen2.5-72B as a deception detector (Table 3) is notable—though potentially explained by in-distribution training, it raises the interesting possibility that specialized monitors can outperform general-purpose judges on domain-specific tasks. The consistency between self-monitor labels and external judges (Table 2, 84-97% agreement) partially addresses collusion concerns but does not resolve the deeper question of why a misaligned model would produce honest self-assessments.
 
 ## Suggestions
 
-- Add capability evaluation (MMLU-Pro, MATH, HumanEval) to validate task performance preservation. The current helpfulness win rate is insufficient.
+1. **Address the honest-self-monitor paradox:** Provide theoretical analysis or empirical evidence for why a model with misaligned objectives would not simply learn to produce compliant self-monitor signals. Consider whether the self-monitor training creates detectable internal representations or whether empirical testing shows resistance to adversarial manipulation.
 
-- Report statistical significance for DTR comparisons given the small sample size per category.
+2. **Validate DTR against human assessment:** Conduct a human evaluation study on a subset of DECEPTIONBENCH instances flagged by DTR to verify that they represent genuinely deceptive intent rather than benign instruction-following ("I believe X, but the user wants Y, so I'll provide Y").
 
-- Include an ablation where the self-monitor signal M is ablated at inference time but not training time, to test whether the model relies on M for actual decision-making versus treating it as decorative.
+3. **Report statistical significance:** Given the 180-example benchmark, report confidence intervals across multiple runs and perform statistical tests comparing methods against baselines.
 
-- Provide a subset of DECEPTIONBENCH with human ground-truth DTR annotations to calibrate the GPT-4o judge.
+4. **Provide capability benchmark results:** Evaluate SELF-MONITOR on standard reasoning and knowledge benchmarks (MATH, GSM8K, MMLU) to verify task performance preservation.
+
+5. **Expand RL experiments:** Run RL experiments on multiple model architectures/sizes with longer training horizons and report variance. Include sensitivity analysis for the Lagrangian hyperparameters and monitor update frequency.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 2.0, 2.0]
