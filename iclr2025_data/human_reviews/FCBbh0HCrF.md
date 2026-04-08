@@ -1,0 +1,180 @@
+## Human Reviewer 1
+
+### Summary
+This paper focuses on online vertical federated learning and proposes an innovative event-driven framework. The main contributions are particularly noteworthy: (1) The authors make a novel observation that in real-world scenarios, clients in vertical federated learning are unlikely to receive different features of the same sample synchronously. This perspective is novelty and addresses a significant gap in current research. (2) The authors then develop an event-driven online vertical federated learning framework. A particularly valuable contribution is the incorporation of Dynamic Local Regret into this framework to handle challenges arising from non-convex models in non-stationary environments. (3) This framework effectively bridges the gap between theoretical VFL models and practical applications, addressing real-world challenges that have been overlooked in previous research.
+
+### Strengths
+1.	The paper makes an insightful observation about asynchronous data reception in VFL - a practical issue that has been surprisingly overlooked in previous research but significantly impacts real-world applications.
+2.	The integration of Dynamic Local Regret into VFL shows technical sophistication, offering an elegant solution for non-convex and non-stationary scenarios that extends beyond traditional convex-only approaches.
+3.	The theoretical analysis is rigorous, with well-constructed proofs of regret bounds that provide solid mathematical foundation for the event-driven framework.
+4.	The practical benefits are clear - by activating only relevant clients, the approach naturally reduces communication and computation overhead, making it more feasible for real-world deployment.
+
+### Weaknesses
+1.	Unclear innovation contribution
+
+(a) The paper would benefit from a clearer discussion of the specific challenges encountered when adapting event-driven client participation to VFL, along with the corresponding design considerations and solutions proposed to address these challenges.
+
+(b) Similarly, the paper could better elucidate the specific technical challenges encountered in DLR integration and more clearly demonstrate the novel solutions developed to overcome them.
+
+2.	Lack of comparative analysis
+
+The comparative analysis could be expanded. The paper does not discuss several relevant works in online VFL, such as "Online Vertical Federated Learning for Cooperative Spectrum Sensing, Wang et al. " and "Vertical Semi-Federated Learning for Efficient Online Advertising, Li et al.". Including comparisons with these works would help better position this paper's contributions within the existing works.
+
+3.	Lack of comparative analysis
+
+The experimental evaluation would benefit from including standard VFL baselines, such as Local Model and Vanilla VFL in “Fedcvt: Semi-supervised vertical federated learning with cross-view training, Kang et al.”, “VERTICAL FEDERATED LEARNING HYBRID LOCAL PRE-TRAINING, Li et al.”, to provide a more comprehensive comparison of the proposed approach's performance.
+
+4.	Online varying numbers of active clients
+
+Given that the paper focuses on event-driven client participation, and changing event, network disconnections, or other factors, the experimental section would benefit from exploring scenarios with varying numbers of active clients.
+
+### Questions
+1.	Could this paper include a convergence comparisons with existing approaches? The current convergence analysis lacks comparative results that would help demonstrate the relative convergence performance and efficiency of the proposed method against other existing frameworks.
+2.	I am curious about how this paper address privacy in this framework. Could you demonstrate on the acceptable privacy protection mechanisms and safeguards implemented in the proposed approach?
+3.	How does the framework's performance scale with different total numbers of clients? It would be valuable to evaluate whether the proposed approach maintains its effectiveness as the number of clients increases or decreases.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+### Rating
+6
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This paper discusses vertical federated learning (VFL) in an online setting when all clients receive a synchronous data stream. Instead of reviewing the updates of a model from a client-focus aspect, this paper proposes to review this problem through an event-driven online VFL framework. That is, only a subset of clients were activated during each event, while the remaining clients passively collaborated in the learning process. As this will lead to the non-convex optimisation problem, a dynamic local regret approach is adapted to handle online learning in non-convex cases and non-stationary environments.
+
+### Strengths
+The idea is novel, and the presentation is clear.
+
+### Weaknesses
+The solution is simple. As there are not many available baselines for direct comparison, the experimental results can only demonstrate the proposed solution is a feasible plan. Therefore, although the limitations of the proposed framework have been discussed at the end, it lacks the support from experiments to form a deep understanding.
+
+### Questions
+1. I might miss the result of SLR for SUSY and HIGGS datasets. Where can I find that?
+2. Here, each of the images in iMINST has been divided into 4 segments. However, it didn't specify if segments are overlapped with each other. 
+3. If the segments can have overlaps, I would like to know the results of having more than 4 clients, especially how the performance might be influenced when overlaps increase.
+4. If the segments do not have overlaps, please either explain why or add the results for an overlapped case.
+5. Is only one client activated each time? If yes, can multiple clients be activated at the same time?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This paper proposes an online vertical federated learning framework,  based on the mechanism of exponential weighted sliding-window averaging. The dynamic local regret analysis by Aydore et al. is employed and extended to analyze this framework. Typically, only a subset of clients were activated during each event, and meanwhile the remaining clients can be reached out for passive collaboration during the learning process. Dynamic local regret (DLR) can be derived from the analytical framework, under some reasonable assumptions. Finally, experiments are conducted under various settings to verify the theoretical results.
+
+### Strengths
+S1. A reasonable setting of VFL is considered.
+
+S2. The proposed solution is general (for a large class of learning algorithms) and easy to be implemented.
+
+S3. Some sound theoretical results are derived under reasonable assumptions.
+
+S4. Experiments are conducted under various setting.
+
+### Weaknesses
+W1. The theoretical contribution is incremental.
+
+W2. More discussion about the implication of theoretical conclusions about DLR in practice is needed.
+
+### Questions
+Q1. Is $x$ missing from $f^t(w_0, {\bf w},)$ in (1)? Should it be something like $f^t(w_0, {\bf w}, x; y)$?
+
+Q2. What is the biggest challenge when extending the results about DLR in Aydore et al. 2019 to the setting of this paper?
+
+Q3. Is it possible to extend the proposed framework for HFL? If not, why? If yes, how does it compare with previous works on online HFL?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 4
+
+### Summary
+This work tackles a practical problem with online and vertical federated learning where clients do not receive the streaming data synchronously. In other words, the features of a data sample are assigned to a few of the participating clients in an event-driven manner. The work proves its empirical superiority against traditional online regret minimization and static local regret baselines. A sublinear regret bound for non-convex models is also derived.
+
+### Strengths
+1. The writing is very clear. 
+2. The work is novel; addressing the practical setting of streaming data for vertical federated learning (for non-convex models) is timely and relevant.
+3. The proposed solution is elegant, and the authors have done a good job at rationalizing each component of their methodology.
+
+### Weaknesses
+1. I did not fully get the significance of passive clients. Are passive clients also assigned unique features of a data sample? If the features assigned to the passive clients are not unique, then why do we need the derived embeddings from the passive clients?
+
+2. I acknowledge that the work is based on a cross-silo or vertical FL setting, where a small quantity of clients is the norm. However, experiments with 4 clients and a 3-layer model still make me question how scalable this work is.
+
+### Questions
+1. What are the differences between the use of dynamic local regret proposed in the Aydore paper cited and your work? Is it that in your case, half of the model is on server and the other half is at clients? What specific challenges did you encounter in adapting the said dynamic local regret to your framework?
+
+2. For eq. 1, are embeddings from each client concatenated?
+
+3. Referring to lines 162-163, is $W=M$?
+
+4. I acknowledge that the discussion related to the following question is provided in "Limitations." However, I still want to clarify this point: Are all features of a data sample "covered" (trained on) by all the activated clients?
+
+5. Do we always need to divide the features of a data sample among all the participating clients? Can there be overlapping features across clients? Can there be multiple clients activated for the same feature? Under the "Event" experimental setting, do all four clients participate each round? If not, what happens to the unassigned features? 
+
+6. Do all activated clients receive the assigned features at the same time/synchronously?
+
+7. Referring to line 278, is capital $F$ in $\nabla F^t (w_o, \mathbf{w})$ a typo? 
+
+8. I am curious to know if an even distribution of features across the clients is a practical assumption (with reference to line 322).
+
+9. Is a batch of embeddings from a client sent back to the server? Or the embeddings are also sent in a streaming setup?
+
+10. How do you define a round for the streaming/online FL?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+4

@@ -1,0 +1,1408 @@
+## RATIONALIZING AND AUGMENTING DYNAMIC GRAPH NEURAL NETWORKS
+
+
+**Guibin Zhang** [1] _[,]_ [2] _[,][∗]_ **, Yiyan Qi** [2] _[,][∗]_ **, Ziyang Cheng** [1] **, Yanwei Yue** [1] **, Dawei Cheng** [1] [�] **, Jian Guo** [2] [�]
+
+1Tongji University 2International Digital Economy Academy (IDEA)
+
+ - Corresponding: dcheng@tongji.edu.cn, guojian@idea.edu.cn
+
+
+ABSTRACT
+
+
+Graph data augmentation (GDA) has shown significant promise in enhancing the performance, generalization, and robustness of graph neural networks
+(GNNs). However, contemporary methodologies are often limited to static graphs,
+whose applicability on dynamic graphs—more prevalent in real-world applications—remains unexamined. In this paper, we empirically highlight the challenges faced by static GDA methods when applied to dynamic graphs, particularly their inability to maintain temporal consistency. In light of this limitation,
+we propose a dedicated augmentation framework for dynamic graphs, termed
+**`DyAug`**, which adaptively augments the evolving graph structure with temporal
+consistency awareness. Specifically, we introduce the paradigm of graph rationalization for dynamic GNNs, progressively distinguishing between causal subgraphs ( _rationale_ ) and the non-causal complement ( _environment_ ) across snapshots. We develop three types of environment replacement, including, spatial,
+temporal, and spatial-temporal, to facilitate data augmentation in the latent representation space, thereby improving the performance, generalization, and robustness of dynamic GNNs. Extensive experiments on six benchmarks and three GNN
+backbones demonstrate that **`DyAug`** can **(I)** improve the performance of dynamic
+GNNs by 0 _._ 89% _∼_ 3 _._ 13% _↑_ ; **(II)** effectively counter targeted and non-targeted
+adversarial attacks with 6 _._ 2% _∼_ 12 _._ 2% _↑_ performance boost; **(III)** make stable predictions under temporal distribution shifts. The source code is available at
+[https://github.com/bingreeky/DyAug.](https://github.com/bingreeky/DyAug)
+
+
+1 INTRODUCTION
+
+
+Data-driven inference has greatly enhanced generalization capabilities and improved model performance, particularly through data augmentation, across a wide range of domains, including computer
+vision (CV) (Yang et al., 2022; Alomar et al., 2023; Zheng et al., 2023), natural language processing (NLP) (Shorten et al., 2021; Dai et al., 2023), and graph-based tasks (Rong et al., 2019; Feng
+et al., 2020; Fang et al., 2022; Wang et al., 2021b; Liu et al., 2022c; Sui et al., 2024). Among these
+domains, graph-tailored augmentation strategies are notably distinct due to the irregular and nonEuclidean nature of graph data, unlike the other two domains, where data is typically structured in
+regular, Euclidean forms such as grids ( _i.e._, images) and sequences ( _i.e._, sentences). Drawing upon
+these unique characteristics, current graph data augmentation (GDA) techniques have demonstrated
+significant effectiveness in enhancing the performance (Zhao et al., 2022c; Wang et al., 2024; Li
+et al., 2023d), robustness (Jin et al., 2020; Kong et al., 2022; Zhang et al., 2024c;b), and generalization ability (Wu et al., 2022b; Liu et al., 2022a) on graph neural networks (GNNs), applicable
+to various levels of graph tasks, including node-level (Rong et al., 2019; Wang et al., 2021b; Zhang
+et al., 2024d; Li et al., 2025), edge-level (Dai et al., 2019; Zhao et al., 2022b), and graph-level (Feng
+et al., 2020; You et al., 2021; Liu et al., 2022a).
+
+
+Despite their success, previous graph data augmentation methods have been largely constrained
+to a specific class of graphs, namely _static_ _graphs_ . In contrast, _dynamic_ _graphs_, which evolve
+over time, and are widely recognized as more prevalent in real-world applications such as social networks (Berger-Wolf & Saia, 2006; Greene et al., 2010; Li et al., 2023c), financial transactions (Nascimento et al., 2021; Zhang et al., 2021), and traffic networks (Peng et al., 2021; 2020),
+
+
+_∗_ Equal contributions.
+
+
+1
+
+
+**Figure 1:** **(Left)** (a) illustrates the AUC (%) comparison among vanilla DySAT, DropEdge (Rong et al., 2019),
+GraphMixup (Wang et al., 2021b), RGDA (Liu et al., 2024a) and our **`DyAug`** on the Yelp dataset; **(Middle)**
+(b) analyzed the time span of each edge, _i.e._, its longest consecutive existence period across snapshots, and
+compared the cumulative distribution function (CDF) for the vanilla dataset and after applying NeuralSparse
+and DropEdge; **(Right)** (c) visualizes the distribution of edge time spans under different methods, with colors
+ranging from light to dark representing [1 _,_ 2 _,_ 3 _,_ 4 _,_ 5 _,_ others].
+
+
+notably lack effective and tailored data augmentation designs. In light of this dilemma, an intuitive
+approach would be to directly apply static graph augmentation techniques to dynamic graphs. But
+_is_ _this_ _truly_ _feasible?_ In the remainder of this section, we will (1) first review key advancements
+in GDA, (2) highlight the critical challenges in their extension to dynamic graphs, (3) present our
+proposal for dynamic graph augmentation, and (4) summarize the contributions of this paper.
+
+
+**Look-back** **on** **GDA.** Existing graph augmentation techniques can be broadly categorized into
+the following two types: ❶ **rule-based** **augmenters**, which manipulate data through predefined
+strategies such as edge dropping (Rong et al., 2019), node dropping (Feng et al., 2020), message
+dropping (Fang et al., 2022), and mixup (Wang et al., 2021b; Han et al., 2022; Ling et al., 2023;
+Kim et al., 2023; Ma et al., 2024); and ❷ **learning-based augmenters**, which incorporate learnable
+parameters in the generation of augmented examples, including graph structure learning (Jin et al.,
+2020; Wu et al., 2022a; Zou et al., 2023; Huang et al., 2023; Wan et al., 2024b), graph rationalization (Liu et al., 2022a; Wu et al., 2022b; Yue et al., 2024a), adversarial training (Zhu et al., 2019; Li
+et al., 2023a), and contrastive learning (You et al., 2020; 2021; Shen et al., 2023). Although these
+methods have made significant strides in _empowering_, _generalizing_, and _robustifying_ GNNs on static
+graphs (Zhao et al., 2022a; Ding et al., 2022; Adjeisah et al., 2023), their performance on dynamic
+graphs, along with the potential challenges, remains largely unexplored and unassessed.
+
+
+**Emperical** **Observation.** To investigate the potential issues of transferring static GDA methods
+to dynamic settings, we select three representative methods from both rule- and learning-based augmenters and apply them on Yelp (Sankar et al., 2020) with DySAT (Sankar et al., 2020) as the
+GNN backbone [1] . As shown in Figure 1 ( _Left_ ), not all methods contribute positively: though effective on static graphs, DropEdge (Rong et al., 2019) and GraphMixup (Wang et al., 2021b), lead to a
+performance drop of 0 _._ 2% _∼_ 0 _._ 6%. Nevertheless, RGDA (Liu et al., 2024a) achieves a modest improvement (0 _._ 6% _↑_ in AUC). This raises the question: _what caused such a discrepancy_ ? To explore
+this further, we examine how graph augmentation affects dynamic graph sequences. We investigate
+the edge timespan (Yang et al., 2023), namely the maximum number of consecutive graph snapshots
+an edge spans. As illustrated in Figure 1 ( _Middle_ ), DropEdge significantly alters the cumulative
+distribution function (CDF) of edge timespans, while RGDA has a comparatively minor effect.
+
+
+**Challenges.** Based on the above observations, we conclude that static GDA methods are not fully
+applicable to dynamic graphs, due to their unawareness of **temporal consistency** . More concretely,
+existing methods primarily focus on augmenting individual graphs, while overlooking the strong
+temporal dependencies across different graph snapshots. Imagine a scenario where existing GDA
+techniques are applied independently to each graph snapshot. Since topological augmentations often
+involve removing/deleting edges (Zhao et al., 2022a; Ding et al., 2022), this can lead to a surge in
+edges with a timespan of only 1, while many long-timespan edges may suddenly disappear at one
+timestamp and reappear at the next–such behavior does not align with the natural evolution patterns
+observed in real-world dynamic graphs (Beck et al., 2017). This issue is clearly illustrated in Figure 1
+( _Right_ ): DropEdge disrupted many originally long-spanned edges, causing the proportion of edges
+with a timespan of 1 to increase sharply from 43 _._ 57% to 69 _._ 25%. We call this the disruption of
+the _temporal_ _consistency_ (Qian et al., 2021) between different graph frames, which significantly
+undermines the continuity and temporal dependencies inherent in dynamic graphs. Therefore, a
+
+
+1We place detailed explanations of their adaption to dynamic graphs in Appendix A.1.
+
+
+2
+
+
+natural question arises: _how_ _can_ _we_ _design_ _a_ _data_ _augmentation_ _method_ _for_ _dynamic_ _graphs_ _that_
+_effectively enhances dynamic GNNs via well-maintaining temporal consistency?_
+
+
+**Proposal.** To address the aforementioned challenges, we propose a _temporal-consistent_ _dynamic::_
+_graph :::augmentation_ _framework_ (dubbed **`DyAug`** ), which can efficiently integrate into mainstream
+dynamic GNN backbones, and adaptively manipulates and augments evolving graph structures with
+temporal consistency awareness. Technically, **`DyAug`** pioneers the exploration of graph rationalization (Liu et al., 2022a; Si et al., 2023; Yue et al., 2024a) in dynamic graphs by dynamically
+pinpointing the rational features ( _rationales_ ) that support a model’s predictions during the training
+phase, while the contrasting elements are referred to as the _environment_ . Through temporally conditioned graph rationale-environment separation, **`DyAug`** learns a highly correlated rationale subgraph
+sequence for the dynamic graphs, effectively preserving the temporal consistency. By employing
+three types of augmentation techniques, _i.e._, temporal, spatial, and spatial-temporal environment
+replacement, **`DyAug`** efficiently expands the data distribution for dynamic GNNs, achieving a triple
+win in terms of _performance_, _robustness_, and _generalization capacity_ .
+
+
+Our contributions are summarized as follows:
+
+
+❶ _**Problem**_ _**Identification.**_ We pioneer the exploration of graph data augmentation (GDA) within
+dynamic graphs. Through empirical evaluation, we demonstrate the poor transferability of traditional static GDA methods to dynamic graphs, identifying the root cause as the disruption of
+temporal consistency inherent to dynamic graph structures.
+❷ _**Pratical**_ _**Solution.**_ We propose a temporal-consistent dynamic graph augmentation framework,
+termed **`DyAug`**, which makes _the first step_ to explore graph rationalization within dynamic GNNs.
+By extracting rationale subgraphs in a temporally conditioned manner, **`DyAug`** effectively preserves
+the temporal consistency of dynamic graph sequences while efficiently augmenting training data
+through temporal, spatial, and spatial-temporal environment replacement.
+❸ _**Experimental**_ _**Validation.**_ Extensive experiments on six benchmarks and four dynamic GNN
+backbones demonstrate that **`DyAug`** can **(I)** improve the performance of dynamic GNNs by
+0 _._ 89% _∼_ 3 _._ 13% _↑_, surpassing state-of-the-art GDA methods by up to 2 _._ 8%; **(II)** effectively
+counter targeted and non-targeted adversarial attacks with 6 _._ 20% _∼_ 12 _._ 22% _↑_ performance boost;
+**(III)** make stable predictions under temporal distribution shifts.
+
+
+2 RELATED WORK
+
+
+**Dynamic Graph** **Neural Networks.** Dynamic Graphs find applications in a wide variety of disciplines, including social networks (Berger-Wolf & Saia, 2006; Greene et al., 2010), recommender
+systems (Li et al., 2020; Zhang et al., 2022a; Gong et al., 2024), epidemiology (Wan et al., 2024a;
+Tan et al., 2024; Liu et al., 2024c), _etc_ . According to data types, current dynamic graphs can be primarily classified into _discrete-time_ _dynamic_ _graphs_ (DTDG) and _continuous-time_ _dynamic_ _graphs_
+(CTDG) (Barros et al., 2021; Feng et al., 2024). This paper’s main research scope focuses on DTDG,
+which consists of multiple discrete graph snapshots arranged in chronological order. Contemporary
+dynamic GNNs (DyGNNs) typically follow a framework where a spatial module processes different
+snapshots, and a temporal module aggregates information from various timestamps. Common categories include: **(1) Typical GNN-RNN DyGNNs**, which utilize a GNN module to handle individual snapshots and employ recurrent neural network (RNN) style modules to aggregate information
+across time, including STGCN (Yu et al., 2017), DySAT (Sankar et al., 2020), EvolveGCN (Pareja
+et al., 2020), TeMP (Wu et al., 2020), TFE-GNN (Zhang et al., 2023a), and SEIGN (Qin et al., 2023);
+**(2) Temporal-enhanced DyGNNs**, where specific design are adopted to better capture temporal dependencies, such as generative adversarial networks (GAN) in SGNN-GR (Wang et al., 2022) and
+spiking neural networks (SNN) in SpikeNet (Li et al., 2023b); **(3)** **Spatial-enhanced** **DyGNNs**,
+improving spatial modeling, such as GCRN (Seo et al., 2018) and TTGCN (Li et al., 2024a).
+
+
+**Graph Data Augmentation** As discussed in Section 1, existing graph data augmentation (GDA)
+techniques can be broadly categorized into two types. **(1) Rule-based augmentors** employ heuristic
+rules for enhancing graph data across various dimensions, including topological-level (Rong et al.,
+2019; You et al., 2020; Wang et al., 2020; Sun et al., 2021; Yue et al., 2024b), feature-level (Zhao
+et al., 2021a; Sun et al., 2021), and label-level (Park et al., 2021; Han et al., 2022). **(2) Learning-**
+**based** **augmenters** employ various automated learning paradigms to expand graph data. For instance, graph structure learning (Zhu et al., 2021; Li et al., 2024b; Zhiyao et al., 2024) has been
+leveraged for enhancing graph topology by adding or removing edges (Jin et al., 2020; Liu et al.,
+
+
+3
+
+
+**Figure 2:** The overview of our proposed **`DyAug`** .
+
+
+2022b; Zhao et al., 2023; Wu et al., 2023). Techniques such as contrastive learning (Velickovic
+et al., 2019; You et al., 2020; 2021; Zhang et al., 2023b; 2024e) and reinforcement learning (Zhao
+et al., 2022c; Zhou & Gong, 2023) are also commonly used for graph augmentation. In contrast
+to the aforementioned methods, graph rationalization focuses on identifying intrinsically learned
+subgraphs as the rationale graph (Zhao et al., 2022a), with the opposing context referred to as the
+environment, which augments data by perturbing the rationale-environment pair. Due to its robustness to data noise (Sun et al., 2022; Yuan et al., 2024) and distribution shifts (Wu et al., 2022b;
+Liu et al., 2024a), graph rationalization has garnered increasing attention, and our proposed method
+falls within this category. However, all these GDA methods are confined to static graphs and do not
+take into account the temporal correlations present in dynamic graph sequences, which significantly
+limits their performance when extended to dynamic graphs. Regarding GDA for dynamic graphs,
+although there are a few attempts for CTDG (Wang et al., 2021a; Chen et al., 2023), to the best of
+our knowledge, there currently are no GDA methods specifically designed for DTDG.
+
+
+3 METHODOLOGY
+
+
+3.1 NOTATIONS AND PRELIMINARY
+
+
+**Notations** Consider a graph _G_ with the node set _V_ and the edge set _E_ . A (discrete-time) dynamic
+graph can be defined as _G_ 1: _T_ = ( _G_ 1 _, G_ 2 _, · · ·_ _, GT_ ), where _T_ is the number of time stamps, _Gt_ =
+_{Vt, Et}_ is the graph slice at time stamp _t ∈_ [1 _, T_ ], _V_ = [�] _t_ _[T]_ =1 _[V][t]_ [,] _[ E]_ [=][ �] _[T]_ _t_ =1 _[E][t]_ [.] [Alternatively,] _[ G]_ [1:] _[T]_
+can be represented as _{_ **X** 1: _T,_ **A** 1: _T }_, where each snapshot _Gt_ = _{_ **X** _t,_ **A** _t}_ consists of node attributes
+**X** _t_ _∈_ R _[N]_ _[×][D]_ and adjacency matrices **A** _t_ _∈{_ 0 _,_ 1 _}_ _[N]_ _[×][N]_, with _N_ = _|V|_ denoting the number of nodes
+and _D_ denoting the dimensionality of the node attributes.
+
+
+**DyGNN** **Paradigm** We take the classical _link_ _prediction_ in dynamic graph modeling as an example. The objective is to train a dynamic GNN _f_ Θ : _{_ **X** 1: _T,_ **A** 1: _T }_ _�−→{_ 0 _,_ 1 _}_ _[N]_ _[×][N]_, which
+leverages information from the past _T_ snapshots to predict edge existence at time step _T_ + 1. Furthermore, we can express _f_ Θ as _f_ Θ = _fd ◦_ _ft ◦_ _fs_, where _fs_ : _{_ **X** 1: _T,_ **A** 1: _T }_ _�−→Hs_, parameterized by Θ _s_, is tasked with capturing spatial patterns to derive representations for timestamps 1 : _T_,
+_ft_ : _Hs_ _�−→Ht_, parameterized by Θ _t_, captures temporal dependencies and retrieves representations
+for the _T_ + 1 time step, and _fd_ : _Ht_ _�−→Y_, parameterized by Θ _d_, denotes the downstream task
+function, which predicts the connectivity **A** _T_ +1 at time step _T_ + 1 in the context of link prediction.
+
+
+4
+
+
+3.2 FRAMEWORK OVERVIEW
+
+
+In this study, we present the first efficient data augmentation framework tailored for dynamic graphs,
+termed **`DyAug`**, as depicted in Figure 2. Given a dynamic graph sequence _G_ 1: _T_, **`DyAug`** progressively
+performs rationale-environment separation for each snapshot, constrained by consistency regularization to preserve temporal consistency across snapshots. The underlying DyGNN backbone is then
+employed to generate both rationale and environment representations. Subsequently, three types of
+augmentations, including spatial, temporal, and spatial-temporal, are applied to prevent _f_ Θ from
+learning spurious correlations from environment representations, thus enhancing the _performance_,
+_robustness_, and _generalizability_ of DyGNNs. In the following sections, we will first give a causal
+analysis in Section 3.3, introduce how **`DyAug`** performs temporal-conditioned rationale-environment
+separation in Section 3.4, present the data augmentation strategies in Section 3.5, and showcase the
+overall optimization objective and complexity analysis in Section 3.6.
+
+
+3.3 A CAUSAL VIEW ON DYGNNS
+
+
+To clarify the goal and implementation of graph rationalization in dynamic graphs, we first take a step back to analyze the DyGNN modeling through a Structural Causal Model
+(SCM) (Pearl et al., 2000; Pearl, 2016), as illustrated in Figure 3. We depict the causal relationships among seven key
+variables in the DyGNN setting: the dynamic graph _G_ 1: _T_,
+the unobservable causal variable _C_, the unobservable noncausal (environmental) variable _S_, the observable node attributes **X** 1: _T_, the observable topology **A** 1: _T_, representations
+_H_, and predictions _Y_ . Solid arrows indicate causal relationships, while dashed lines represent spurious correlations. Below are some critical insights about the SCM:
+
+
+**Figure** **3:** Structural Causal Model
+(SCM) for DyGNNs.
+
+
+ - _S_ _←G_ 1: _T_ _→C_ : The dynamic graph _G_ 1: _T_ consists of two disjoint parts: the causal part _C_ and
+the non-causal/environmental part _S_ .
+
+
+ - _S_ _→_ **A** 1: _T_ _←C_ and _S_ _→_ **X** 1: _T_ _←C_ : two variables (causal variable _C_ and non-causal variable
+_S_ ) construct two components of observable contextual subgraphs (node attributes **X** 1: _T_ and
+topology **A** 1: _T_ ), which is different from _i.i.d._ data only consider attributes.
+
+ - **A** 1: _T_ _→H ←_ **X** 1: _T_ and _H →Y_ : DyGNN backbones are leveraged to generate future representations based on observable contextual subgraphs, which are then utilized for making predictions.
+
+
+Based on this SCM, we can identify two backdoor paths between _C_ and _Y_ : _(i) C_ _←G_ 1: _T_ _→S_ _→_
+**A** 1: _T_ _→H_ _→Y_, and _(ii) C_ _←G_ 1: _T_ _→S_ _→_ **X** 1: _T_ _→H_ _→Y_ . In both cases, the environmental
+variable _S_ acts as a confounder between _G_ 1: _T_ and _Y_, potentially causing a misleading correlation
+
+the following sections, we will elaborate on how **`DyAug`** effectively severs these spurious correlations
+through the rationale-environment separation and augmentation.
+
+
+3.4 TEMPORAL-CONDITIONED RATIONALE–ENVIRONMENT SEPARATION
+
+
+Given a graph snapshot _Gt_, we model its unobservable causal part as a soft mask **M** _[R]_ _t_ _∈_
+
+[0 _,_ 1] _[N]_ _[×][N]_, where each entry represents the probability score of the corresponding edge belonging to the rationale subgraph. Naturally, the rationale for snapshot _Gt_ can be expressed as
+_G_ ( _[R]_ _t_ ) [=] _[{]_ **[X]** _[t][,]_ **[ A]** _[t]_ _[⊙]_ **[M]** _[R]_ _t_ _[}]_ [,] [and] [the] [causal] [part] [of] [the] [entire] [dynamic] [graph] [sequence] [is] [denoted]
+as _G_ 1: _[R]_ _T_ [=] _[{]_ **[X]** [1:] _[T][,]_ **[ A]** [1:] _[T]_ - **M** _R_ 1: _T_ _[}]_ [.] [Traditional] [static] [graph] [rationalization] [methods] [(][Zhang] [et] [al.][,]
+2024a; Liu et al., 2024a) typically follow the paradigm below to extract rationales:
+
+
+**M** _[R]_ _t_ _[∼]_ _[p]_ [Φ][(] **[M]** _t_ _[R]_ _[|]_ **[ A]** _[t][,]_ **[ X]** _[t]_ [)] _[,]_ (1)
+
+
+where the causal mask is generated conditioned on the current features **X** _t_ and topology **A** _t_, and
+the generator is parameterized by Φ. However, this overlooks the temporal dependencies between
+snapshots, often negatively disrupting the spatial-temporal distribution of the augmented data. To
+address this issue, we design **temporal-conditioned** **graph** **rationalization**, which progressively
+
+
+5
+
+
+uncovers the causal subgraph along the temporal dimension. At each step, it depends solely on the
+previous timestamp and current status, thereby maintaining the Markov property:
+
+
+**M** _[R]_ _t_ _[∼]_ _[p]_ [Φ][(] **[M]** _t_ _[R]_ _[|]_ **[ A]** _[t][,]_ **[ X]** _[t][,]_ **[ M]** _t_ _[R]_ _−_ 1 [)] _[,]_ (2)
+
+
+where the generation of **M** _[R]_ _t_ [additionally depends on the causal mask from the][ (] _[t][−]_ [1)][-th timestamp.]
+In practice, we model the rationale as follows:
+
+
+_N_
+
+- _p_ Φ( **M** _[R]_ _t,ij_ _[|]_ **[ A]** _[t][,]_ **[ X]** _[t][,]_ **[ M]** _t_ _[R]_ _−_ 1 [)] _[,]_ (3)
+
+_j_ =1
+
+
+_p_ Φ( **M** _[R]_ _t_ _[|]_ **[ A]** _[t][,]_ **[ X]** _[t][,]_ **[ M]** _t_ _[R]_ _−_ 1 [) =]
+
+
+_N_
+
+
+_i_ =1
+
+
+where **M** _[R]_ _t,ij_ [is the element at the] _[ i]_ [-th row and] _[ j]_ [-th column of] **[ M]** _t_ _[R]_ [, representing the probability that]
+edge _eij_ belongs to the rationale at timestamp _t_ . We compute **M** _[R]_ _t,ij_ [as follows:]
+
+
+_p_ Φ( **M** _[R]_ _t,ij_ [= 1] _[ |]_ **[ A]** _[t][,]_ **[ X]** _[t][,]_ **[ M]** _t_ _[R]_ _−_ 1 [) =] [ 1] **A** _t_ [ _i,j_ ]=1 _[f]_ [Φ][(] _**[x]**_ _[t]_ _i_ _[,]_ _**[ x]**_ _[t]_ _j_ _[,]_ **[ M]** _[R]_ _t−_ 1 _,ij_ [)] _[,]_
+
+(4)
+= 1 **A** _t_ [ _i,j_ ]=1 _σ_ �(log( _ϵ_ ) _−_ log(1 _−_ _ϵ_ ) + _ϖij_ ) _/τ_           - _,_
+
+
+where 1 ( _·_ ) is an indicator function, _ωij_ = FFNΦ([ _**x**_ _[t]_ _i_ _[,]_ _**[ x]**_ _[t]_ _j_ _[,]_ **[ M]** _[R]_ _t,ij_ [])] [parameterized] [by] [Φ][,] _[ϵ]_ _[∼]_
+Uniform(0 _,_ 1), _σ_ ( _·_ ) represents the sigmoid function, and _τ_ is the temperature coefficient. When
+_τ_ approaches zero, Equation (4) effectively returns the Bernoulli sampling result for edge _eij_ . The
+gradient _[∂]_ **[M]** _t,ij_ _[R]_ _/∂ϖij_ remains well-defined as long as _τ_ _>_ 0. Through this temporally progressive
+rationale discovery, we ultimately obtain the rationale subgraph set _G_ 1: _[R]_ _T_ [and the corresponding en-]
+vironmental subgraph set _G_ 1: _[S]_ _T_ [, defined as follows:]
+
+
+~~_R_~~
+_G_ 1: _[R]_ _T_ [=] _[ {]_ **[X]** [1:] _[T]_ _[,]_ **[ A]** [1:] _[T]_ _[⊕]_ **[M]** _[R]_ 1: _T_ _[}][,]_ _[G]_ 1: _[S]_ _T_ [=] _[ {]_ **[X]** [1:] _[T]_ _[,]_ **[ A]** [1:] _[T]_ _[⊕]_ **[M]** 1: _T_ _[}][,]_ (5)
+
+
+where **M** _t_ = **A** _t −_ **M** _t_ . To further ensure temporal consistency, _i.e._, the rationales across different
+snapshots remain coherent even as the graph structure evolves, we propose the following _consistency_
+_regularization loss_ :
+
+
+_t_ + _w_
+
+
+exp �sim( _Gt_ _[R][,][ G]_ _p_ _[R]_ [)] - + [�]
+
+
+_,_ (6)
+_k /∈_ [ _t−w,t_ + _w_ ] [exp] �sim( _Gt_ _[R][,][ G]_ _k_ _[R]_ [)] 
+
+
+_L_ cr = _−_
+
+
+_T_
+
+
+_t_ =1
+
+
+_t_ �+ _w_ exp(sim( _Gt_ _[R][,][ G]_ _p_ _[R]_ [))]
+
+log
+_p_ = _t−w_ exp �sim( _Gt_ _[R][,][ G]_ _p_ _[R]_ [)] - + [�] _k /∈_ [ _t−w,t_ + _w_ ]
+
+
+where _Gp_ _[R]_ [represents] [the] [rationale] [within] [a] _[w]_ [-step] [temporal] [window] [surrounding] [the] [central] [ra-]
+tionale _Gt_ _[R]_ [,] [while] _[G]_ _k_ _[R]_ [refers] [to] [rationales] [that] [are] [further] [away.] [sim(] _[·][,][ ·]_ [)] [measures] [the] [similarity]
+between graphs, and we implement it as sim( _Gt_ _[R][,][ G]_ _p_ _[R]_ [)] [=] [sum(] _[|]_ **[M]** _[R]_ _t_ _[−]_ **[M]** _p_ _[R][|]_ [)][.] [Equation (][6][) draws]
+inspiration from the practices in Tonekaboni et al. (2021); Wang et al. (2023), where closely situated
+subsequences are regarded as positive pairs and those with larger distance are treated as negatives.
+Exhibiting a similar idea, Equation (6) aims to maintain higher consistency around the current rationale. Upon disentangling the causal and non-causal components in dynamic graphs as well as
+maintaining the temporal consistency, we proceed to the next step of data augmentation.
+
+
+3.5 DATA AUGMENTATION WITH ENVIRONMENT SUBGRAPHS
+
+With the rationale subgraph set _G_ 1: _[R]_ _T_ [and the environmental subgraph set] _[ G]_ 1: _[S]_ _T_ [available, we explic-]
+itly separate the message passing from the rationale and environmental subgraphs during the spatial
+and temporal modeling processes of the vanilla DyGNN:
+
+
+~~_R_~~
+**H** _[R]_ 1: _T_ [=] _[ f][s]_ [(] **[X]** [1:] _[T]_ _[,]_ **[ A]** [1:] _[T]_ _[⊕]_ **[M]** _[R]_ 1: _T_ [; Θ] _[s]_ [)] _[,]_ **[H]** _[S]_ 1: _T_ [=] _[ f][s]_ [(] **[X]** [1:] _[T]_ _[,]_ **[ A]** [1:] _[T]_ _[⊕]_ **[M]** 1: _T_ [; Θ] _[s]_ [)] _[,]_ (7)
+
+where **H** _[R]_ 1: _T_ _[∈]_ [R] _[T][ ×][N]_ _[×][D]_ [ and] **[ H]** 1: _[S]_ _T_ _[∈]_ [R] _[T][ ×][N]_ _[×][D]_ [ represent the aggregated rationale and environment]
+embeddings for timestamps 1 : _T_ . The standard _f_ Θ without rationalization tends to merge rationale
+and environment for predictions, leading to spurious correlations between _G_ 1: _[S]_ _T_ [and] _[ Y]_ [, resulting in]
+potentially accurate but unjustified predictions. Therefore, **`DyAug`** enhances the training samples by
+simulating various rationale-environment combinations within the node embedding space. To be
+more concrete, considering the rationale embedding **h** _[R]_ _t,i_ [=] **[H]** _[R]_ _t_ [[] _[i,]_ [ :]][ for node] _[ v]_ _i_ _[t]_ [at timestamp] _[ t]_ [, we]
+propose three environment replacement augmentation paradigms.
+
+
+6
+
+
+**Spatial Replacement Augmentation** Data augmentation with environment replacement replaces
+the environment variable of the current node _vi_ _[t]_ [with any other environment variable from a different]
+sample. Given that the rationable embedding **h** _[R]_ _t,i_ [is considered to be the dominant factor of predic-]
+tions of _vi_, the environment embedding can be interpreted as natural noise. Hence, combining _vi_ _[t]_ [’s]
+rationale embedding with environment embeddings from other nodes at the same snapshot enhances
+the model’s robustness against the noise signal brought by the environment subgraphs. This process can be accomplished using any pooling function, such as concatenation, sum pooling, or max
+pooling. Taking sum pooling for example, the spatial replacement is executed as follows:
+**h** ˆ _[R]_ _t,i_ _[←]_ [Combine][(] **[h]** _t,i_ _[R]_ _[,]_ **[ h]** _[S]_ _t,j_ [) =] **[ h]** _[R]_ _t,i_ [+] **[ h]** _t,j_ _[S]_ _[,]_ _[j]_ _[∼]_ [Uniform(1] _[, N]_ [)] _[ \][ i,]_ (8)
+
+where **h** [˜] _[R]_ _t,i_ [represents the augmented node embedding, and] **[ h]** _t,j_ _[S]_ [=] **[ H]** _t_ _[S]_ [[] _[j,]_ [ :]][.]
+
+
+**Temporal Replacement Augmentation** In contrast to spatial replacement, temporal enhancement
+focuses on augmenting the temporal dimension. As the dynamic graph structure evolves, **A** 1: _T_ _⊕_
+**M** _[R]_ 1: _T_ [remains] [a] [stable] [causal] [factor;] [however,] _[f]_ [Θ] [may] [inadvertently] [learn] [spurious] [patterns] [from]
+the complementary non-causal components. Therefore, for each node _vi_, we replace its environment
+embedding with one from a historical snapshot to avoid reliance on temporal trivial information:
+**h** ˆ _t,i_ _←_ Combine( **h** _[R]_ _t,i_ _[,]_ **[ h]** _[S]_ _p,i_ [)] _[,]_ _[p][ ∼]_ [Uniform(1] _[, t][ −]_ [1)] _[.]_ (9)
+**Spatial-temporal Replacement Augmentation** Combining the above two, spatial-temporal environment replacement augments data simultaneously across both spatial and temporal dimensions:
+**h** ˆ _t,i_ _←_ Combine( **h** _[R]_ _t,i_ _[,]_ **[ h]** _p,j_ _[S]_ [)] _[,]_ [(] _[p, j]_ [)] _[ ∼]_ �Uniform(1 _, t −_ 1) _,_ Uniform(1 _, N_ ) _\ i_   - _._ (10)
+
+
+After applying the three types of environment replacement, we obtain the augmented representations **H** [ˆ] 1: _T_ = [ **H** [ˆ] 1 _,_ **H** [ˆ] 2 _, . . .,_ **H** [ˆ] _T_ ], where **H** [ˆ] _t_ = [ **h** [ˆ] _t,_ 1 _,_ **h** [ˆ] _t,_ 2 _, . . .,_ **h** [ˆ] _t,N_ ]. These representations are
+then further transformed by the DyGNN backbone into future node embeddings **X** [ˆ] _T_ +1, which are
+subsequently converted into predictions _Y_ [ˆ] as follows:
+**X** ˜ _T_ +1 = _ft_ ( ˜ **H** 1: _T,_ **A** 1: _T_ _⊕_ **M** _[R]_ 1: _T_ [; Θ] _[t]_ [)] _[,]_ _[Y]_ [ˆ] [=] _[ f][d]_ [( ˜] **[X]** _[T]_ [ +1][; Θ] _[d]_ [)] _[.]_ (11)
+
+
+3.6 OPTIMIZATION AND ANALYSIS
+
+
+**Optimization** **Objective** In addition to the original task-specific loss associated with DyGNN
+training, denoted as _L_ pred, **`DyAug`** introduces two supplementary losses: the _consistency regulariza-_
+_tion_ _loss_ defined in Equation (6), and the _contrastive_ _loss_ aimed at differentiating between causal
+and non-causal representations while ensuring semantic similarity between causal and augmented
+representations, which is expressed mathematically as follows:
+
+
+- _N_ log exp(sim( **h** [ˆ] _t,i,_ **h** _[R]_ _t,i_ [)] _[/τ]_ [)]
+
+_i_ =1 exp(sim( **h** [ˆ] _t,i,_ **h** _[R]_ _t,i_ [)] _[/τ]_ [) + exp(sim(]
+
+
+_N_
+
+
+_,_ (12)
+exp(sim( **h** [ˆ] _t,i,_ **h** _[R]_ _t,i_ [)] _[/τ]_ [) + exp(sim(] **[h]** _[S]_ _t,i_ _[,]_ **[ h]** _[R]_ _t,i_ [)] _[/τ]_ [)]
+
+
+_L_ cl = [1]
+
+_T_
+
+
+_T_
+
+
+_t_ =1
+
+
+where _τ_ represents the temperature coefficient and sim( _·, ·_ ) is computed using the dot product. The
+overall training objective for **`DyAug`** is formulated as:
+min (13)
+Φ _,_ Θ _[L]_ [(Φ] _[,]_ [ Θ) =] _[ L]_ [pred][ +] _[ α]_ [1] _[ · L]_ [cr][ +] _[ α]_ [2] _[ · L]_ [cl] _[,]_
+
+where Φ pertains to rationale-environment separation, Θ parameterizes the vanilla DyGNN backbone, and _α_ 1 _, α_ 2 are scaling factors.
+
+
+**Complexity Analysis** The additional complexity coming with **`DyAug`** arises primarily from three
+sources: (1) causal mask estimation, which contributes _O_ ( [�] _[T]_ _t_ =1 _[|E]_ [(] _[t]_ [)] _[|][D]_ [)][;] [(2) the contrastive loss,]
+adding _O_ ( _NDT_ [2] ); and (3) the consistency loss, contributing _O_ ( _ϖT_ [�] _t_ _[T]_ =1 _[|E]_ [(] _[t]_ [)] _[|]_ [)][, which is negligi-]
+ble. In summary, the overall extra complexity introduced by **`DyAug`** is _O_ ( [�] _[T]_ _t_ =1 _[|E]_ [(] _[t]_ [)] _[|][D]_ [ +] _[ NDT]_ [ 2][)][.]
+
+
+4 EXPERIMENTS
+
+
+In this section, we conduct extensive experiments to answer the following research questions ( **RQ** ):
+
+**(RQ1)** Can **`DyAug`** augment dynamic GNNs?
+**(RQ2)** Can **`DyAug`** better preserve the temporal consistency of dynamic graphs?
+**(RQ3)** Does **`DyAug`** improve the robustness of DyGNNs against adversarial attacks?
+**(RQ4)** Does **`DyAug`** enhance the out-of-distribution generalization of DyGNNs?
+**(RQ5)** How sensitive is **`DyAug`** to its key components and parameters?
+
+
+7
+
+
+**Table 1:** AUC score (± standard deviation) of future link prediction task on five real-world datasets. The best
+results are in **bold**, and the runner-ups are underlined.
+
+
+Method COLLAB Yelp Bitcoin UCI ACT
+
+|Vanilla<br>+DropEdge<br>+DropNode<br>+DropMessage GRCN<br>+GraphMixup<br>+NeuralSparse<br>+SUBLIME<br>+RGDA<br>+DyAug (ours)|0.8278±0.0052 0.6645±0.0187 0.8766±0.0034 0.7682±0.0074 0.7963±0.0041<br>0.8285±0.0059 0.6472±0.0205 0.8732±0.0051 0.7693±0.0105 0.7928±0.0042<br>0.8297±0.0077 0.6448±0.0196 0.8749±0.0064 0.7664±0.0068 0.7942±0.0500<br>0.8326±0.0097 0.6669±0.0240 0.8780±0.0057 0.7690±0.0119 0.7968±0.0044<br>0.8258±0.0049 0.6697±0.0180 0.8641±0.0038 0.7613±0.0133 0.7902±0.0045<br>0.8394±0.0076 0.6705±0.0233 0.8792±0.0065 0.7710±0.0062 0.7959±0.0046<br>0.8312±0.0056 0.6685±0.0273 0.8770±0.0059 0.7735±0.0081 0.7989±0.0047<br>0.8374±0.0031 0.6692±0.0194 0.8812±0.0031 0.7698±0.0046 0.8066±0.0048<br>0.8495±0.0070 0.6795±0.0204 0.9079±0.0029 0.7783±0.0054 0.8147±0.0049|
+|---|---|
+|DySAT<br>Vanilla<br>+DropEdge<br>+DropNode<br>+DropMessage<br>+GraphMixup<br>+NeuralSparse<br>+SUBLIME<br>+RGDA<br>+**`DyAug`** (ours)|0.8807_±_0.0018<br>0.7962_±_0.0045<br>0.8896_±_0.0027<br>0.7502_±_0.0056<br>0.7790_±_0.0036<br>0.8760_±_0.0039<br>0.7985_±_0.0106<br>0.8843_±_0.0048<br>0.7516_±_0.0077<br>0.7689_±_0.0067<br>0.8783_±_0.0031<br>0.7980_±_0.0077<br>0.8826_±_0.0039<br>0.7519_±_0.0045<br>0.7705_±_0.0044<br>0.8815_±_0.0069<br>0.7964_±_0.0082<br>0.8915_±_0.0070<br>0.7574_±_0.0102<br>0.7689_±_0.0060<br>0.8785_±_0.0112<br>0.7814_±_0.0029<br>0.8726_±_0.0031<br>0.7505_±_0.0030<br>0.7653_±_0.0012<br>0.8862_±_0.0053<br>0.8074_±_0.0050<br>0.8916_±_0.0044<br>0.7579_±_0.0064<br>0.7796_±_0.0061<br>0.8871_±_0.0034<br>0.8037_±_0.0041<br>0.8927_±_0.0043<br>0.7552_±_0.0074<br>0.7772_±_0.0054<br>0.8897_±_0.0030<br>0.8149_±_0.0059<br>0.8865_±_0.0036<br>0.7560_±_0.0051<br>0.7805_±_0.0041<br>**0.8925**_±_**0.0034**<br>**0.8233**_±_**0.0023**<br>**0.9032**_±_**0.0040**<br>**0.7698**_±_**0.0063**<br>**0.7860**_±_**0.0054**|
+|SEIGN<br>Vanilla<br>+DropEdge<br>+DropNode<br>+DropMessage<br>+GraphMixup<br>+NeuralSparse<br>+SUBLIME<br>+RGDA<br>+**`DyAug`** (ours)|0.9219_±_0.0021<br>0.8072_±_0.0039<br>0.8955_±_0.0013<br>0.7932_±_0.0035<br>0.8457_±_0.0018<br>0.9235_±_0.0024<br>0.8015_±_0.0041<br>0.9015_±_0.0084<br>0.7985_±_0.0026<br>0.8366_±_0.0035<br>0.9215_±_0.0039<br>0.8039_±_0.0046<br>0.8928_±_0.0035<br>0.7913_±_0.0015<br>0.8382_±_0.0030<br>0.9259_±_0.0032<br>0.8120_±_0.0032<br>0.8968_±_0.0071<br>0.7896_±_0.0024<br>0.8429_±_0.0018<br>0.9187_±_0.0029<br>0.7942_±_0.0043<br>0.8905_±_0.0057<br>0.7903_±_0.0019<br>0.8381_±_0.0034<br>0.9279_±_0.0029<br>0.8038_±_0.0046<br>0.8994_±_0.0028<br>0.8012_±_0.0030<br>0.8491_±_0.0030<br>0.9310_±_0.0027<br>0.8144_±_0.0015<br>0.8981_±_0.0025<br>0.8069_±_0.0020<br>0.8465_±_0.0013<br>0.9245_±_0.0025<br>0.8131_±_0.0020<br>0.9013_±_0.0018<br>0.7985_±_0.0039<br>0.8472_±_0.0013<br>**0.9362**_±_**0.0022**<br>**0.8284**_±_**0.0015**<br>**0.9067**_±_**0.0017**<br>**0.8098**_±_**0.0022**<br>**0.8546**_±_**0.0029**|
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets** **and** **Splits** To thoroughly evaluate our proposed method, we select five real-world
+datasets. COLLAB (Tang et al., 2012) is an academic collaboration network spanning 16 years.
+Yelp (Sankar et al., 2020) is a business review dataset containing customer feedback on various
+businesses. Bitcoin (Kumar et al., 2018) is a trust network dataset representing users who engage
+in trading on the Bitcoin OTC platform. UCI (Panzarasa et al., 2009) is an online communication
+network from the University of California, Irvine, capturing student interactions. Lastly, ACT (Kumar et al., 2019) describes the actions taken by users on a popular MOOC website within 30 days.
+
+**Backbones** **and** **Baselines** For DyGNN backbones, we select three classical baselines: **(1)**
+**GCRN** (Seo et al., 2018), which combines GCNs and GRU (Chung et al., 2014); **(2) DySAT** (Sankar
+et al., 2020), which models spatial and temporal dependencies via self-attention; and **(3)**
+**SEIGN** (Qin et al., 2023), which leverages GCN for message passing, GRU for parameter updates, and transformer for learning the final node representations. For baselines, we comprehensively choose seven GDA techniques for comparison. Regarding rule-based augmenters, we
+adopt **DropEdge** (Rong et al., 2019), **DropNode** (Feng et al., 2020), **DropMessage** (Fang et al.,
+2022), and **Graph Mixup** (Wang et al., 2021b). Regarding rule-based augmenters, we opt for **Neu-**
+**ralSparse** (Zheng et al., 2020) and **SUBLIME** (Liu et al., 2022d) for the _graph structure learning_
+branch, **RGDA** (Liu et al., 2024a) for the _graph rationalization_ branch. Notably, we acknowledge
+that some classical or highly related GDA methods, such as DIR (Wu et al., 2022b), GREA (Liu
+et al., 2022a), JOAO (You et al., 2021), and AIA (Sui et al., 2024), are not included in our evaluation. This exclusion is either due to data format limitations ( _e.g._, methods focused solely on
+graph classification) or incompatibility issues ( _e.g._, inability to adapt to dynamic graphs). Detailed
+explanations and the full baseline setup can be found in Appendix A.1.
+
+**Hyperparameter** **Configurations** We set the number of layers to two for all baselines, with a
+hidden dimension of 128. Specifically, for **`DyAug`**, we fix _τ_ = 1 _e −_ 2 and _ϖ_ = 2 across all datasets.
+For each node, we assign an equal probability of selecting one of the following strategies: (1) no
+replacement, using only the rationale embedding; (2) spatial replacement; (3) temporal replacement;
+or (4) spatial-temporal replacement. We provide an ablation study on the effectiveness of these
+replacement strategies in Appendix B.2. For the parameters _α_ 1 and _α_ 2 in Equation (13), we vary
+_α_ 1 _∈{_ 1 _e −_ 2 _,_ 5 _e −_ 2 _,_ 1 _e −_ 1 _}_ and _α_ 2 _∈{_ 1 _e −_ 4 _,_ 5 _e −_ 4 _,_ 1 _e −_ 3 _,_ 5 _e −_ 3 _}_ .
+
+
+8
+
+
+**Figure 4:** The cumulative distribution function (CDF) of edge timespan for the vanilla dataset and after applying different GDA methods on YELP, COLLAB and ACT. We opt for GRCN for all the datasets. The faster the
+curve converges to 1, the greater the proportion of edges with shorter timespans.
+
+
+**Figure 5:** The performance comparison of various GDA methods under **structure attack** on DySAT+YELP.
+
+
+4.2 COMPARISON WITH EXISTING GDA METHODS (RQ1 & RQ2)
+
+
+We compare the performance of **`DyAug`** against seven GDA baselines across five datasets on GRCN,
+DySAT, and SEIGN, summarized in Table 1. We draw the following observations ( **Obs.** ):
+
+
+**Obs.** ❶ **Temporal consistency counts for dynamic graphs.** DropEdge, DropNode, DropMessage,
+and GraphMixup belong to rule-based augmenters, and many of them consistently result in performance drops rather than improvements. For example, GraphMixup shows a 1 _._ 25% _↓_ decrease on
+GRCN+Bitcoin, and DropNode shows a 0 _._ 85% _↓_ drop on DySAT+ACT. We attribute the underlying cause to the disruption of temporal consistency. As shown in Figure 4, both DropNode and
+GraphMixup lead to a rapid convergence of the edge timespan CDF to 1, which indicates that these
+methods cause many long-spanning edges to disappear, replacing them with numerous short-lived
+edges that quickly appear and vanish. In contrast, RGDA and our **`DyAug`** closely approximate the
+vanilla CDF, resulting in far more stable and significant performance improvements.
+
+
+**Obs.** ❷ **`DyAug`** **continuously** **enhances** **dynamic** **graph** **modeling.** **`DyAug`** demonstrates a stable
+performance improvement across all datasets and DyGNN backbones. Nevertheless, the magnitude
+of this improvement is tied to the complexity of the DyGNN backbone. For simpler backbones like
+GRCN, **`DyAug`** yields notable gains, such as a 2 _._ 17% increase on COLLAB and a 3 _._ 13% boost on
+Bitcoin. While the AUC improvements on more advanced backbones like SEIGN are relatively
+marginal, **`DyAug`** still achieves a 2 _._ 14% _↑_ increase on YELP.
+
+
+4.3 AGAINST ADVERSARIAL ATTACKS (RQ3)
+
+
+In this section, we aim to empirically validate that **`DyAug`** can effectively defend against both nontargeted and targeted attacks to answer RQ3. We employ three types of attacks: **(1) structure attack**,
+which randomly perturbs 20% of edges; **(2)** **feature** **attack**, where Gaussian noise is added to the
+node features; and **(3) Nettack (poisoning mode)**, where Nettack (Z¨ugner et al., 2018) is applied to
+perturb the training set twice. The results are visualized in Figures 5, 7 and 8. We observe:
+
+
+**Obs.** ❸ **`DyAug`** **outperform all baselines under various attack modes.** Among the three types of
+attacks, Nettack, as a targeted attack, poses the greatest challenge to the robustness of DyGNNs.
+As shown in Figure 8, the vanilla DySAT suffers from a significant drop of 12 _._ 7% in AUC, and
+even when combined with RGDA, it only recovers 2 _._ 1% of the loss. However, **`DyAug`**, through its
+tailored data augmentation design, effectively mitigates the impact of noise and perturbations during
+training, resulting in an 8 _._ 2% improvement in the attacked model’s performance.
+
+
+9
+
+
+**Table** **2:** AUC score (%) of different methods on real-world datasets. The best results are in bold and the
+second-best results are underlined. ‘w/o DS’ and ‘w/ DS’ denote test data with and without distribution shift.
+
+|Model|COLLAB (ROC-AUC↑) YELP (ROC-AUC↑)|
+|---|---|
+|Test Data|w/o DS<br>w/ DS<br>w/o DS<br>w/ DS|
+
+
+GRCN (Seo et al., 2018) 82.78 _±_ 0.52 67.49 _±_ 0.73 66.45 _±_ 1.87 61.82 _±_ 3.39
++ **`DyAug`** 84.95 _±_ 0.70 73.22 _±_ 0.56 67.95 _±_ 0.24 61.78 _±_ 2.76
+
+
+4.4 AGAINST DISTRIBUTION SHIFT (RQ4)
+Graph rationalization was originally introduced to address the out-of-distribution (OOD) challenge
+by capturing invariant patterns in evolving data (Wu et al., 2021; 2024). To evaluate whether **`DyAug`**
+can defend against distribution shifts in dynamic graphs, we use COLLAB and Yelp, and explicitly
+construct distribution shifts. Specifically, for COLLAB, we transfer all edges belonging to “data
+mining” category to the test set, ensuring that DyGNN has never been exposed to this category
+during training. For Yelp, we select “Pizza” edges as the out-of-distribution data. We observe that:
+**Obs.** ❹ **`DyAug`** **effectively** **enhances** **the** **robustness** **of** **DyGNNs.** As demonstrated in Table 2,
+SEIGN+ **`DyAug`** consistently achieves the best performance on both Yelp and COLLAB, regard
+
+
+_α_ 2/ _α_ 1 1 _e −_ 2 5 _e −_ 2 1 _e −_ 1
+
+
+1 _e −_ 4 78 _._ 14 _±_ 0 _._ 2 **78** _._ **60** _±_ **0** _._ **2** 78 _._ 30 _±_ 0 _._ 3
+5 _e −_ 4 78 _._ 47 _±_ 0 _._ 1 78 _._ 25 _±_ 0 _._ 5 78 _._ 58 _±_ 0 _._ 3
+1 _e −_ 3 77 _._ 60 _±_ 0 _._ 4 78 _._ 45 _±_ 0 _._ 3 77 _._ 92 _±_ 0 _._ 5
+5 _e −_ 3 77 _._ 52 _±_ 0 _._ 4 77 _._ 81 _±_ 0 _._ 3 77 _._ 06 _±_ 0 _._ 4
+
+
+**Table** **3:** Sensitivity study on scaling factor _α_ 1 and _α_ 2. The results are reported on
+DySAT backbone and ACT dataset.
+
+
+|strong baseline performance but also to DyAug’s ability t<br>on YELP, DyAug boosts SEIGN’s OOD performance fro<br>85 DyAug w/o TC w/o RA w/o CR w/o CL<br>81.40<br>80 79.30 79.90 80.10 80.30 (%)<br>77.40 76.30 76.70 75.60 AUC<br>75 74.50<br>70<br>Clean Structure attack<br>Figure 6: Ablation study on DyAug and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5 ABLATION STUDY AND SENSITIVITY ANALYSIS<br>Ablation Study We evaluate four variants: (1) DyAu<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; (3) DyAug w/o CR, where L cr<br>L is discarded. It can be observed from Figure 6 that t<br>cl<br>decay, among which DyAug w/o RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>Sensitivity Analysis We evaluate DyAug under differe<br>is relatively insensitive to changes in α . However, when<br>1<br>is observed. For instance, with α = 1e−2, the performa<br>1<br>that with α 2 = 5e−3. Nevertheless, DyAug demonstrates<br>5 CONCLUSION<br>In this work, we present the first graph data augmentatio<br>(discrete-time) dynamic graphs, termed DyAug. DyAug<br>GDA methods, i.e., the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that DyAug excels in empowering, robustifyi|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_|.90<br>80.10<br>80.30<br> <br> <br>|.90<br>80.10<br>80.30<br> <br> <br>|.90<br>80.10<br>80.30<br> <br> <br>|.90<br>80.10<br>80.30<br> <br> <br>|.90<br>80.10<br>80.30<br> <br> <br>|.90<br>80.10<br>80.30<br> <br> <br>|<br>|<br>|<br>|<br>|
+|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_|||||||||||||
+|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_|||||77.40<br>76.30<br>|77.40<br>76.30<br>|77.40<br>76.30<br>|77.40<br>76.30<br>|76.70<br>75.60|76.70<br>75.60|76.70<br>75.60|76.70<br>75.60|
+|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_||||||||74|50||||
+|<br>strong baseline performance but also to**` DyAug`**’s ability t<br>on YELP,**` DyAug`** boosts SEIGN’s OOD performance fro<br>Clean<br>Structure attack<br>70<br>75<br>80<br>85<br>AUC (%)<br>81.40<br>77.40<br>79.30<br>76.30<br>79.90<br>74.50<br>80.10<br>76.70<br>80.30<br>75.60<br>~~DyAug~~<br>~~w/o TC~~<br>~~w/o RA~~<br>~~w/o CR~~<br>~~w/o CL~~<br>**Figure 6:** Ablation study on**` DyAug`** and its four variants, tested<br>ACT and that after structure attack. We use GRCN as the backbo<br>4.5<br>ABLATION STUDY AND SENSITIVITY ANALYSIS <br>**Ablation Study**<br>We evaluate four variants: **(1)** **`DyAu`**<br>snapshot-independent rather than temporally conditione<br>mentations are discarded; **(3)****` DyAug`****_ w/o_ CR**, where_ L_cr <br>_L_cl is discarded. It can be observed from Figure 6 that t<br>decay, among which **`DyAug`** _w/o_ RA is the most detrim<br>structure attack. This demonstrates each component’s im<br>**Sensitivity Analysis**<br>We evaluate**` DyAug`** under differe<br>is relatively insensitive to changes in_ α_1. However, when <br>is observed. For instance, with_ α_1 = 1_e−_2, the performa<br>that with_ α_2 = 5_e−_3. Nevertheless,**` DyAug`** demonstrates<br>5<br>CONCLUSION<br>In this work, we present the frst graph data augmentatio<br>(discrete-time) dynamic graphs, termed **`DyAug`**. **`DyAug`** <br>GDA methods, _i.e._, the unawareness of temporal consist<br>rationale discovery to disentangle the rationale-environm<br>further propose three augmentation strategies to enrich t<br>demonstrate that**` DyAug`** excels in_ empowering_,_ robustifyi_|Abla<br> hat af<br>LAT<br> **Stu**<br>inde<br>ns ar<br> card<br>mon<br> atta<br>**ty A**<br> ly i<br> ed. F<br>_ α_2 <br>NCL<br> ork,<br>time<br>thod<br> disc<br>ropo<br>ate t|Cl<br>tion st<br>  ter stru<br>ION S<br>**dy**<br><br>pende<br> e disc<br> ed. It<br>g whic<br> ck. Th<br>** nalysi**<br> nsensit<br>or ins<br>= 5_e−_<br>USIO<br>  we pr<br>) dyn<br>s, _i.e._,<br> overy<br>se thr<br> hat**` Dy`**|ean<br> udy on <br>  cture at<br>TUDY <br>We eva<br>nt rath<br> arded; <br> can be<br>h **`DyA`**<br>is dem<br>** s**<br>We<br> ive to c<br> tance,<br>3. Nev<br>N<br>  esent th<br>amic gr<br> the un<br> to dise<br>ee aug<br>**` Aug`** ex|**` DyAu`**<br>   tack.<br>AND <br>luate<br>er th<br>**(3)****` D`**<br>  obse<br>**`ug`** _w_<br> onstr<br> eval<br>  han<br> with <br> erth<br>   e fr<br>aphs<br>awa<br>  ntan<br>ment<br> cels|**` g`** <br>   W<br> S<br> f<br>an<br>**` y`**<br>  rv<br>_/o_<br> at<br> u<br>  ge<br>_ α_<br> el<br>   st<br>, <br>re<br>  gl<br>ati<br> in|<br> and i<br>   e us<br>ENS<br>our <br> tem<br>**` Aug`** <br>  ed f<br> RA<br> es e<br> ate**` D`**<br>  s in <br>1 =<br> ess, <br>    gra<br> term<br>ness <br>  e the<br>on s<br> _ em_|Struc<br> ts fo<br>    e GR<br>ITIV<br> vari<br>por<br>**_ w/o_**<br>  rom<br> is <br> ach c<br>**` yAu`**<br>_ α_1. <br> 1_e−_<br>**` DyAu`**<br>    ph d<br>ed **`D`**<br> of t<br>   rat<br>trate<br>_ pow_|ture<br>  ur var<br>    CN a<br>ITY <br>ants:<br>ally <br>** CR**,<br>   Figu<br>the <br>  omp<br>**` g`** un<br>How<br>2, th<br>**` g`** de<br>    ata a<br>**`yAu`**<br>emp<br>   ional<br>gies <br>_ ering_|ture<br>  ur var<br>    CN a<br>ITY <br>ants:<br>ally <br>** CR**,<br>   Figu<br>the <br>  omp<br>**` g`** un<br>How<br>2, th<br>**` g`** de<br>    ata a<br>**`yAu`**<br>emp<br>   ional<br>gies <br>_ ering_|attack<br>  iants<br>     s the<br> ANA<br> **(1)** <br>cond<br> whe<br>   re 6 <br>most <br>  one<br> der d<br>ever,<br> e pe<br> mon<br>     ugm<br>**`g`**. **`D`**<br>oral <br>   e-en<br> to e<br>,_ rob_|<br> , test<br>      back<br>LYS<br> **`DyA`**<br>ition<br> re_ L_<br> that<br> detr<br>  nt’s i<br> iffe<br> wh<br> rfor<br> strat<br>     entat<br>**`yAu`**<br>cons<br>   viro<br>nric<br>_ ustif_|ed<br>      bo<br>IS <br>**`u`**<br>e<br> cr <br> t<br>im<br>  m<br> re<br> en <br> ma<br> es<br>     io<br>**`g`** <br>ist<br>   nm<br>h t<br>_ yi_|
+
+
+10
+
+
+ACKNOWLEDGEMENT
+
+
+Dawei Cheng is supported by the National Natural Science Foundation of China (62472317). Yiyan
+Qi is supported in part by the National Natural Science Foundation of China (62372362).
+
+
+REFERENCES
+
+
+Michael Adjeisah, Xinzhong Zhu, Huiying Xu, and Tewodros Alemu Ayall. Towards data augmentation in graph neural network: An overview and evaluation. _Computer Science Review_, 47:
+100527, 2023.
+
+
+Khaled Alomar, Halil Ibrahim Aysel, and Xiaohao Cai. Data augmentation in classification and
+segmentation: A survey and new strategies. _Journal of Imaging_, 9(2):46, 2023.
+
+
+Claudio DT Barros, Matheus RF Mendonc¸a, Alex B Vieira, and Artur Ziviani. A survey on embedding dynamic graphs. _ACM Computing Surveys (CSUR)_, 55(1):1–37, 2021.
+
+
+Fabian Beck, Michael Burch, Stephan Diehl, and Daniel Weiskopf. A taxonomy and survey of
+dynamic graph visualization. In _Computer graphics forum_, volume 36, pp. 133–159. Wiley Online
+Library, 2017.
+
+
+Tanya Y Berger-Wolf and Jared Saia. A framework for analysis of dynamic social networks. In
+_Proceedings_ _of_ _the_ _12th_ _ACM_ _SIGKDD_ _international_ _conference_ _on_ _Knowledge_ _discovery_ _and_
+_data mining_, pp. 523–528, 2006.
+
+
+Hongjiang Chen, Pengfei Jiao, Huijun Tang, and Huaming Wu. Temporal graph representation
+learning with adaptive augmentation contrastive. In _Joint European conference on machine learn-_
+_ing and knowledge discovery in databases_, pp. 683–699. Springer, 2023.
+
+
+Junyoung Chung, Caglar Gulcehre, KyungHyun Cho, and Yoshua Bengio. Empirical evaluation of
+gated recurrent neural networks on sequence modeling. _arXiv preprint arXiv:1412.3555_, 2014.
+
+
+Haixing Dai, Zhengliang Liu, Wenxiong Liao, Xiaoke Huang, Yihan Cao, Zihao Wu, Lin Zhao,
+Shaochen Xu, Wei Liu, Ninghao Liu, et al. Auggpt: Leveraging chatgpt for text data augmentation. _arXiv preprint arXiv:2302.13007_, 2023.
+
+
+Quanyu Dai, Xiao Shen, Liang Zhang, Qiang Li, and Dan Wang. Adversarial training methods for
+network embedding. In _The World Wide Web Conference_, pp. 329–339, 2019.
+
+
+Kaize Ding, Zhe Xu, Hanghang Tong, and Huan Liu. Data augmentation for deep graph learning:
+A survey. _ACM SIGKDD Explorations Newsletter_, 24(2):61–77, 2022.
+
+
+Taoran Fang, Zhiqing Xiao, Chunping Wang, Jiarong Xu, Xuan Yang, and Yang Yang. Dropmessage: Unifying random dropping for graph neural networks. _arXiv_ _preprint_ _arXiv:2204.10037_,
+2022.
+
+
+Wenzheng Feng, Jie Zhang, Yuxiao Dong, Yu Han, Huanbo Luan, Qian Xu, Qiang Yang, Evgeny
+Kharlamov, and Jie Tang. Graph random neural networks for semi-supervised learning on graphs.
+_Advances in neural information processing systems_, 33:22092–22103, 2020.
+
+
+ZhengZhao Feng, Rui Wang, TianXing Wang, Mingli Song, Sai Wu, and Shuibing He. A comprehensive survey of dynamic graph neural networks: Models, frameworks, benchmarks, experiments and challenges. _arXiv preprint arXiv:2405.00476_, 2024.
+
+
+Jibing Gong, Yi Zhao, Jinye Zhao, Jin Zhang, Guixiang Ma, Shaojie Zheng, Shuying Du, and Jie
+Tang. Personalized recommendation via inductive spatiotemporal graph neural network. _Pattern_
+_Recognition_, 145:109884, 2024.
+
+
+Derek Greene, Donal Doyle, and Padraig Cunningham. Tracking the evolution of communities
+in dynamic social networks. In _2010_ _international_ _conference_ _on_ _advances_ _in_ _social_ _networks_
+_analysis and mining_, pp. 176–183. IEEE, 2010.
+
+
+11
+
+
+Xiaotian Han, Zhimeng Jiang, Ninghao Liu, and Xia Hu. G-mixup: Graph data augmentation for
+graph classification. In _International Conference on Machine Learning_, 2022.
+
+
+Wenke Huang, Guancheng Wan, Mang Ye, and Bo Du. Federated graph semantic and structural
+learning. In _Proceedings of the Thirty-Second International Joint Conference on Artificial Intel-_
+_ligence_, pp. 3830–3838, 2023.
+
+
+Xuanwen Huang, Yang Yang, Yang Wang, Chunping Wang, Zhisheng Zhang, Jiarong Xu, Lei Chen,
+and Michalis Vazirgiannis. Dgraph: A large-scale financial dataset for graph anomaly detection.
+_Advances in Neural Information Processing Systems_, 35:22765–22777, 2022.
+
+
+Wei Jin, Yao Ma, Xiaorui Liu, Xianfeng Tang, Suhang Wang, and Jiliang Tang. Graph structure
+learning for robust graph neural networks. In _Proceedings of the 26th ACM SIGKDD international_
+_conference on knowledge discovery & data mining_, pp. 66–74, 2020.
+
+
+Yannis Karmim, Marc Lafon, Rapha¨el Fournier S’niehotta, and Nicolas Thome. Supra-laplacian
+encoding for transformer on dynamic graphs. _arXiv preprint arXiv:2409.17986_, 2024.
+
+
+Junghurn Kim, Sukwon Yun, and Chanyoung Park. S-mixup: Structural mixup for graph neural networks. In _Proceedings of the 32nd ACM International Conference on Information and Knowledge_
+_Management_, pp. 4003–4007, 2023.
+
+
+Kezhi Kong, Guohao Li, Mucong Ding, Zuxuan Wu, Chen Zhu, Bernard Ghanem, Gavin Taylor, and
+Tom Goldstein. Robust optimization as data augmentation for large-scale graphs. In _Proceedings_
+_of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 60–69, 2022.
+
+
+Srijan Kumar, Bryan Hooi, Disha Makhija, Mohit Kumar, Christos Faloutsos, and VS Subrahmanian. Rev2: Fraudulent user prediction in rating platforms. In _Proceedings of the Eleventh ACM_
+_International Conference on Web Search and Data Mining_, pp. 333–341, 2018.
+
+
+Srijan Kumar, Xikun Zhang, and Jure Leskovec. Predicting dynamic embedding trajectory in temporal interaction networks. In _Proceedings_ _of_ _the_ _25th_ _ACM_ _SIGKDD_ _international_ _conference_
+_on knowledge discovery & data mining_, pp. 1269–1278, 2019.
+
+
+Hongxi Li, Zuxuan Zhang, Dengzhe Liang, and Yuncheng Jiang. K-truss based temporal graph
+convolutional network for dynamic graphs. In _Asian Conference on Machine Learning_, pp. 739–
+754. PMLR, 2024a.
+
+
+Jianxin Li, Xingcheng Fu, Shijie Zhu, Hao Peng, Senzhang Wang, Qingyun Sun, S Yu Philip, and
+Lifang He. A robust and generalized framework for adversarial graph embedding. _IEEE Trans-_
+_actions on Knowledge and Data Engineering_, 35(11):11004–11018, 2023a.
+
+
+Jintang Li, Zhouxin Yu, Zulun Zhu, Liang Chen, Qi Yu, Zibin Zheng, Sheng Tian, Ruofan Wu, and
+Changhua Meng. Scaling up dynamic graph representation learning via spiking neural networks.
+In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, volume 37, pp. 8588–8596,
+2023b.
+
+
+Xiaohan Li, Mengqi Zhang, Shu Wu, Zheng Liu, Liang Wang, and S Yu Philip. Dynamic graph
+collaborative filtering. In _2020 IEEE international conference on data mining (ICDM)_, pp. 322–
+331. IEEE, 2020.
+
+
+Yuhan Li, Zhixun Li, Peisong Wang, Jia Li, Xiangguo Sun, Hong Cheng, and Jeffrey Xu Yu. A
+survey of graph meets large language model: Progress and future directions. _arXiv_ _preprint_
+_arXiv:2311.12399_, 2023c.
+
+
+Zhixun Li, Liang Wang, Xin Sun, Yifan Luo, Yanqiao Zhu, Dingshuo Chen, Yingtao Luo, Xiangxin
+Zhou, Qiang Liu, Shu Wu, et al. Gslb: The graph structure learning benchmark. _Advances_ _in_
+_Neural Information Processing Systems_, 36:30306–30318, 2023d.
+
+
+Zhixun Li, Xin Sun, Yifan Luo, Yanqiao Zhu, Dingshuo Chen, Yingtao Luo, Xiangxin Zhou, Qiang
+Liu, Shu Wu, Liang Wang, et al. Gslb: the graph structure learning benchmark. _Advances_ _in_
+_Neural Information Processing Systems_, 36, 2024b.
+
+
+12
+
+
+Zhixun Li, Dingshuo Chen, Tong Zhao, Daixin Wang, Hongrui Liu, Zhiqiang Zhang, Jun Zhou, and
+Jeffrey Xu Yu. Iceberg: Debiased self-training for class-imbalanced node classification. _arXiv_
+_preprint arXiv:2502.06280_, 2025.
+
+
+Hongyi Ling, Zhimeng Jiang, Meng Liu, Shuiwang Ji, and Na Zou. Graph mixup with soft alignments. In _International Conference on Machine Learning_, pp. 21335–21349. PMLR, 2023.
+
+
+Gang Liu, Tong Zhao, Jiaxin Xu, Tengfei Luo, and Meng Jiang. Graph rationalization with
+environment-based augmentations. In _Proceedings of the 28th ACM SIGKDD International Con-_
+_ference on Knowledge Discovery & Data Mining_, 2022a.
+
+
+Gang Liu, Eric Inae, Tengfei Luo, and Meng Jiang. Rationalizing graph neural networks with data
+augmentation. _ACM Transactions on Knowledge Discovery from Data_, 18(4):1–23, 2024a.
+
+
+Gang Liu, Eric Inae, Tong Zhao, Jiaxin Xu, Tengfei Luo, and Meng Jiang. Data-centric learning
+from unlabeled graphs with diffusion model. _Advances in neural information processing systems_,
+36, 2024b.
+
+
+Nian Liu, Xiao Wang, Lingfei Wu, Yu Chen, Xiaojie Guo, and Chuan Shi. Compact graph structure
+learning via mutual information compression. In _Proceedings of the ACM web conference 2022_,
+pp. 1601–1610, 2022b.
+
+
+Songtao Liu, Hanze Dong, Lanqing Li, Tingyang Xu, Yu Rong, Peilin Zhao, Junzhou Huang, and
+Dinghao Wu. Local augmentation for graph neural networks. _arXiv preprint arXiv:2109.03856_,
+2022c.
+
+
+Yixin Liu, Yu Zheng, Daokun Zhang, Hongxu Chen, Hao Peng, and Shirui Pan. Towards unsupervised deep graph structure learning. In _Proceedings_ _of_ _the_ _ACM_ _Web_ _Conference_ _2022_, pp.
+1392–1403, 2022d.
+
+
+Zewen Liu, Guancheng Wan, B Aditya Prakash, Max SY Lau, and Wei Jin. A review of graph
+neural networks in epidemic modeling. In _Proceedings of the 30th ACM SIGKDD Conference on_
+_Knowledge Discovery and Data Mining_, pp. 6577–6587, 2024c.
+
+
+Youzhi Luo, Michael Curtis McThrow, Wing Yee Au, Tao Komikado, Kanji Uchino, Koji
+Maruhashi, and Shuiwang Ji. Automated data augmentations for graph classification. In _The_
+_Eleventh International Conference on Learning Representations_, 2023.
+
+
+Xinyu Ma, Xu Chu, Yasha Wang, Yang Lin, Junfeng Zhao, Liantao Ma, and Wenwu Zhu. Fused
+gromov-wasserstein graph mixup for graph-level classifications. _Advances in Neural Information_
+_Processing Systems_, 36, 2024.
+
+
+Diego C Nascimento, Bruno A Pimentel, Renata MCR Souza, Lilia Costa, Sandro Gonc¸alves, and
+Francisco Louzada. Dynamic graph in a symbolic data framework: An account of the causal
+relation using covid-19 reports and some reflections on the financial world. _Chaos,_ _Solitons_ _&_
+_Fractals_, 153:111440, 2021.
+
+
+Pietro Panzarasa, Tore Opsahl, and Kathleen M Carley. Patterns and dynamics of users’ behavior
+and interaction: Network analysis of an online community. _Journal of the American Society for_
+_Information Science and Technology_, 60(5):911–932, 2009.
+
+
+Aldo Pareja, Giacomo Domeniconi, Jie Chen, Tengfei Ma, Toyotaro Suzumura, Hiroki Kanezashi,
+Tim Kaler, Tao Schardl, and Charles Leiserson. Evolvegcn: Evolving graph convolutional networks for dynamic graphs. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_,
+volume 34, pp. 5363–5370, 2020.
+
+
+Joonhyung Park, Hajin Shim, and Eunho Yang. Graph transplant: Node saliency-guided graph
+mixup with local structure preservation. _arXiv preprint arXiv:2111.05639_, 2021.
+
+
+Judea Pearl. _Causal inference in statistics:_ _a primer_ . John Wiley & Sons, 2016.
+
+
+Judea Pearl et al. Models, reasoning and inference. _Cambridge,_ _UK:_ _CambridgeUniversityPress_,
+19:2, 2000.
+
+
+13
+
+
+Hao Peng, Hongfei Wang, Bowen Du, Md Zakirul Alam Bhuiyan, Hongyuan Ma, Jianwei Liu,
+Lihong Wang, Zeyu Yang, Linfeng Du, Senzhang Wang, et al. Spatial temporal incidence dynamic
+graph neural networks for traffic flow forecasting. _Information Sciences_, 521:277–290, 2020.
+
+
+Hao Peng, Bowen Du, Mingsheng Liu, Mingzhe Liu, Shumei Ji, Senzhang Wang, Xu Zhang, and
+Lifang He. Dynamic graph convolutional network for long-term traffic flow prediction with reinforcement learning. _Information Sciences_, 578:401–416, 2021.
+
+
+Rui Qian, Tianjian Meng, Boqing Gong, Ming-Hsuan Yang, Huisheng Wang, Serge Belongie,
+and Yin Cui. Spatiotemporal contrastive video representation learning. In _Proceedings_ _of_ _the_
+_IEEE/CVF conference on computer vision and pattern recognition_, pp. 6964–6974, 2021.
+
+
+Xiao Qin, Nasrullah Sheikh, Chuan Lei, Berthold Reinwald, and Giacomo Domeniconi. Seign: A
+simple and efficient graph neural network for large dynamic graphs. In _2023 IEEE 39th Interna-_
+_tional Conference on Data Engineering (ICDE)_, pp. 2850–2863. IEEE, 2023.
+
+
+Yu Rong, Wenbing Huang, Tingyang Xu, and Junzhou Huang. Dropedge: Towards deep graph
+convolutional networks on node classification. In _International Conference on Learning Repre-_
+_sentations_, 2019.
+
+
+Elan Rosenfeld, Pradeep Kumar Ravikumar, and Andrej Risteski. The risks of invariant risk minimization. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2021. URL [https:](https://openreview.net/forum?id=BbNIbVPJ-42)
+[//openreview.net/forum?id=BbNIbVPJ-42.](https://openreview.net/forum?id=BbNIbVPJ-42)
+
+
+Aravind Sankar, Yanhong Wu, Liang Gou, Wei Zhang, and Hao Yang. Dysat: Deep neural representation learning on dynamic graphs via self-attention networks. In _Proceedings_ _of_ _the_ _13th_
+_International Conference on Web Search and Data Mining_, pp. 519–527, 2020.
+
+
+Youngjoo Seo, Micha¨el Defferrard, Pierre Vandergheynst, and Xavier Bresson. Structured sequence
+modeling with graph convolutional recurrent networks. In _International_ _Conference_ _on_ _Neural_
+_Information Processing_, pp. 362–373. Springer, 2018.
+
+
+Kartik Sharma, Rakshit Trivedi, Rohit Sridhar, and Srijan Kumar. Temporal dynamics-aware adversarial attacks on discrete-time dynamic graph models. In _Proceedings of the 29th ACM SIGKDD_
+_Conference on Knowledge Discovery and Data Mining_, pp. 2023–2035, 2023.
+
+
+Xiao Shen, Dewang Sun, Shirui Pan, Xi Zhou, and Laurence T Yang. Neighbor contrastive learning
+on learnable graph augmentation. In _Proceedings of the AAAI conference on artificial intelligence_,
+volume 37, pp. 9782–9791, 2023.
+
+
+Connor Shorten, Taghi M Khoshgoftaar, and Borko Furht. Text data augmentation for deep learning.
+_Journal of big Data_, 8(1):101, 2021.
+
+
+Jiasheng Si, Yingjie Zhu, and Deyu Zhou. Exploring faithful rationale for multi-hop fact verification via salience-aware graph learning. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_
+_Intelligence_, volume 37, pp. 13573–13581, 2023.
+
+
+Yongduo Sui, Qitian Wu, Jiancan Wu, Qing Cui, Longfei Li, Jun Zhou, Xiang Wang, and Xiangnan
+He. Unleashing the power of graph data augmentation on covariate distribution shift. _Advances_
+_in Neural Information Processing Systems_, 36, 2024.
+
+
+Mengying Sun, Jing Xing, Huijun Wang, Bin Chen, and Jiayu Zhou. Mocl: data-driven molecular
+fingerprint via knowledge-aware contrastive learning from molecular graph. In _Proceedings_ _of_
+_the_ _27th_ _ACM_ _SIGKDD_ _Conference_ _on_ _Knowledge_ _Discovery_ _&_ _Data_ _Mining_, pp. 3585–3594,
+2021.
+
+
+Qingyun Sun, Jianxin Li, Hao Peng, Jia Wu, Xingcheng Fu, Cheng Ji, and S Yu Philip. Graph
+structure learning with variational information bottleneck. In _Proceedings of the AAAI Conference_
+_on Artificial Intelligence_, volume 36, pp. 4165–4174, 2022.
+
+
+Zihan Tan, Guancheng Wan, Wenke Huang, and Mang Ye. Fedssp: Federated graph learning with
+spectral knowledge and personalized preference. In _Thirty-eighth Annual Conference on Neural_
+_Information Processing Systems_, 2024.
+
+
+14
+
+
+Jie Tang, Sen Wu, Jimeng Sun, and Hang Su. Cross-domain collaboration recommendation. In
+_Proceedings_ _of_ _the_ _18th_ _ACM_ _SIGKDD_ _international_ _conference_ _on_ _Knowledge_ _discovery_ _and_
+_data mining_, pp. 1285–1293, 2012.
+
+
+Sana Tonekaboni, Danny Eytan, and Anna Goldenberg. Unsupervised representation learning for
+time series with temporal neighborhood coding. _arXiv preprint arXiv:2106.00750_, 2021.
+
+
+Petar Velickovic, William Fedus, William L Hamilton, Pietro Li`o, Yoshua Bengio, and R Devon
+Hjelm. Deep graph infomax. _International Conference on Learning Representations_, 2019.
+
+
+Guancheng Wan, Zewen Liu, Max S.Y. Lau, B. Aditya Prakash, and Wei Jin. Epidemiology-aware
+neural ode with continuous disease transmission graph. _arXiv preprint arXiv:2410.00049_, 2024a.
+
+
+Guancheng Wan, Yijun Tian, Wenke Huang, Nitesh V Chawla, and Mang Ye. S3gcl: Spectral, swift,
+spatial graph contrastive learning. In _Forty-first International Conference on Machine Learning_,
+2024b.
+
+
+Junshan Wang, Wenhao Zhu, Guojie Song, and Liang Wang. Streaming graph neural networks with
+generative replay. In _Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery_
+_and Data Mining_, pp. 1878–1888, 2022.
+
+
+Kun Wang, Guohao Li, Shilong Wang, Guibin Zhang, Kai Wang, Yang You, Junfeng Fang, Xiaojiang Peng, Yuxuan Liang, and Yang Wang. The snowflake hypothesis: Training and powering
+gnn with one node one receptive field. In _Proceedings of the 30th ACM SIGKDD Conference on_
+_Knowledge Discovery and Data Mining_, KDD ’24, pp. 3152–3163, New York, NY, USA, 2024.
+Association for Computing Machinery. ISBN 9798400704901. doi: 10.1145/3637528.3671766.
+[URL https://doi.org/10.1145/3637528.3671766.](https://doi.org/10.1145/3637528.3671766)
+
+
+Tianchun Wang, Dongsheng Luo, Wei Cheng, Haifeng Chen, and Xiang Zhang. Dyexplainer: Explainable dynamic graph neural networks. _arXiv preprint arXiv:2310.16375_, 2023.
+
+
+Yiwei Wang, Wei Wang, Yuxuan Liang, Yujun Cai, and Bryan Hooi. Graphcrop: Subgraph cropping
+for graph classification. _arXiv preprint arXiv:2009.10564_, 2020.
+
+
+Yiwei Wang, Yujun Cai, Yuxuan Liang, Henghui Ding, Changhu Wang, Siddharth Bhatia, and Bryan
+Hooi. Adaptive data augmentation on temporal graphs. _Advances in Neural Information Process-_
+_ing Systems_, 34, 2021a.
+
+
+Yiwei Wang, Wei Wang, Yuxuan Liang, Yujun Cai, and Bryan Hooi. Mixup for node and graph
+classification. In _Proceedings of the Web Conference_, pp. 3663–3674, 2021b.
+
+
+Jiapeng Wu, Meng Cao, Jackie Chi Kit Cheung, and William L. Hamilton. Temp: Temporal message
+passing for temporal knowledge graph completion. In Bonnie Webber, Trevor Cohn, Yulan He,
+and Yang Liu (eds.), _Proceedings of the 2020 Conference on Empirical Methods in Natural Lan-_
+_guage_ _Processing,_ _EMNLP_ _2020,_ _Online,_ _November_ _16-20,_ _2020_, pp. 5730–5746. Association
+for Computational Linguistics, 2020.
+
+
+Lirong Wu, Haitao Lin, Zihan Liu, Zicheng Liu, Yufei Huang, and Stan Z Li. Homophily-enhanced
+self-supervision for graph structure learning: Insights and directions. _IEEE Transactions on Neu-_
+_ral Networks and Learning Systems_, 2023.
+
+
+Qitian Wu, Wentao Zhao, Zenan Li, David P Wipf, and Junchi Yan. Nodeformer: A scalable graph
+structure learning transformer for node classification. _Advances in Neural Information Processing_
+_Systems_, 35:27387–27401, 2022a.
+
+
+Qitian Wu, Fan Nie, Chenxiao Yang, Tianyi Bao, and Junchi Yan. Graph out-of-distribution generalization via causal intervention. In _Proceedings_ _of_ _the_ _ACM_ _on_ _Web_ _Conference_ _2024_, pp.
+850–860, 2024.
+
+
+Yingxin Wu, Xiang Wang, An Zhang, Xiangnan He, and Tat-Seng Chua. Discovering invariant
+rationales for graph neural networks. In _International Conference on Learning Representations_,
+2021.
+
+
+15
+
+
+Yingxin Wu, Xiang Wang, An Zhang, Xiangnan He, and Tat-Seng Chua. Discovering invariant
+rationales for graph neural networks. In _The Tenth International Conference on Learning Repre-_
+_sentations_ . OpenReview.net, 2022b.
+
+
+Suorong Yang, Weikang Xiao, Mengchen Zhang, Suhan Guo, Jian Zhao, and Furao Shen. Image
+data augmentation for deep learning: A survey. _arXiv preprint arXiv:2204.08610_, 2022.
+
+
+Yu Yang, Hongzhi Yin, Jiannong Cao, Tong Chen, Quoc Viet Hung Nguyen, Xiaofang Zhou, and
+Lei Chen. Time-aware dynamic graph embedding for asynchronous structural evolution. _IEEE_
+_Transactions on Knowledge and Data Engineering_, 35(9):9656–9670, 2023.
+
+
+Jiaxuan You, Tianyu Du, and Jure Leskovec. Roland: graph learning framework for dynamic graphs.
+In _Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining_,
+pp. 2358–2366, 2022.
+
+
+Yuning You, Tianlong Chen, Yongduo Sui, Ting Chen, Zhangyang Wang, and Yang Shen. Graph
+contrastive learning with augmentations. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+33:5812–5823, 2020.
+
+
+Yuning You, Tianlong Chen, Yang Shen, and Zhangyang Wang. Graph contrastive learning automated. In _International Conference on Machine Learning_, pp. 12121–12132. PMLR, 2021.
+
+
+Bing Yu, Haoteng Yin, and Zhanxing Zhu. Spatio-temporal graph convolutional networks: A deep
+learning framework for traffic forecasting. _arXiv preprint arXiv:1709.04875_, 2017.
+
+
+Haonan Yuan, Qingyun Sun, Xingcheng Fu, Cheng Ji, and Jianxin Li. Dynamic graph information
+bottleneck. In _Proceedings of the ACM on Web Conference 2024_, pp. 469–480, 2024.
+
+
+Linan Yue, Qi Liu, Ye Liu, Weibo Gao, Fangzhou Yao, and Wenfeng Li. Cooperative classification
+and rationalization for graph generalization. In _Proceedings of the ACM on Web Conference 2024_,
+pp. 344–352, 2024a.
+
+
+Yanwei Yue, Guibin Zhang, Haoran Yang, and Dawei Cheng. Fast track to winning tickets: Repowering one-shot pruning for graph neural networks. _arXiv preprint arXiv:2412.07605_, 2024b.
+
+
+Guibin Zhang, Yiqiao Chen, Shiyu Wang, Kun Wang, and Junfeng Fang. Fortune favors the invariant: Enhancing gnns’ generalizability with invariant graph learning. _Knowledge-Based Systems_,
+292:111620, 2024a.
+
+
+Guibin Zhang, Xiangguo Sun, Yanwei Yue, Chonghe Jiang, Kun Wang, Tianlong Chen, and Shirui
+Pan. Graph sparsification via mixture of graphs. _arXiv preprint arXiv:2405.14260_, 2024b.
+
+
+Guibin Zhang, Kun Wang, Wei Huang, Yanwei Yue, Yang Wang, Roger Zimmermann, Aojun Zhou,
+Dawei Cheng, Jin Zeng, and Yuxuan Liang. Graph lottery ticket automated. In _The_ _Twelfth_
+_International Conference on Learning Representations_ [, 2024c. URL https://openreview.](https://openreview.net/forum?id=nmBjBZoySX)
+[net/forum?id=nmBjBZoySX.](https://openreview.net/forum?id=nmBjBZoySX)
+
+
+Guibin Zhang, Yanwei Yue, Kun Wang, Junfeng Fang, Yongduo Sui, Kai Wang, Yuxuan Liang,
+Dawei Cheng, Shirui Pan, and Tianlong Chen. Two heads are better than one: Boosting graph
+sparse training via semantic and topological awareness. _arXiv preprint arXiv:2402.01242_, 2024d.
+
+
+Haozhen Zhang, Le Yu, Xi Xiao, Qing Li, Francesco Mercaldo, Xiapu Luo, and Qixu Liu. Tfegnn: A temporal fusion encoder using graph neural networks for fine-grained encrypted traffic
+classification. In _Proceedings of the ACM Web Conference 2023_, pp. 2066–2075, 2023a.
+
+
+Mengqi Zhang, Shu Wu, Xueli Yu, Qiang Liu, and Liang Wang. Dynamic graph neural networks
+for sequential recommendation. _IEEE Transactions on Knowledge and Data Engineering_, 35(5):
+4741–4753, 2022a.
+
+
+Shilei Zhang, Toyotaro Suzumura, and Li Zhang. Dyngraphtrans: Dynamic graph embedding via
+modified universal transformer networks for financial transaction data. In _2021_ _IEEE_ _Interna-_
+_tional Conference on Smart Data Services (SMDS)_, pp. 184–191. IEEE, 2021.
+
+
+16
+
+
+Xin Zhang, Qiaoyu Tan, Xiao Huang, and Bo Li. Graph contrastive learning with personalized
+augmentation. _IEEE Transactions on Knowledge and Data Engineering_, 2024e.
+
+
+Yifei Zhang, Hao Zhu, Zixing Song, Piotr Koniusz, and Irwin King. Spectral feature augmentation
+for graph contrastive learning and beyond. In _Proceedings of the AAAI Conference on Artificial_
+_Intelligence_, volume 37, pp. 11289–11297, 2023b.
+
+
+Zeyang Zhang, Xin Wang, Ziwei Zhang, Haoyang Li, Zhou Qin, and Wenwu Zhu. Dynamic graph
+neural networks under spatio-temporal distribution shift. _Advances_ _in_ _neural_ _information_ _pro-_
+_cessing systems_, 35:6074–6089, 2022b.
+
+
+Jianan Zhao, Qianlong Wen, Mingxuan Ju, Chuxu Zhang, and Yanfang Ye. Self-supervised graph
+structure refinement for graph neural networks. In _Proceedings_ _of_ _the_ _Sixteenth_ _ACM_ _Interna-_
+_tional Conference on Web Search and Data Mining_, pp. 159–167, 2023.
+
+
+Tianxiang Zhao, Xiang Zhang, and Suhang Wang. Graphsmote: Imbalanced node classification on
+graphs with graph neural networks. In _Proceedings of the 14th ACM international conference on_
+_web search and data mining_, pp. 833–841, 2021a.
+
+
+Tong Zhao, Yozen Liu, Leonardo Neves, Oliver Woodford, Meng Jiang, and Neil Shah. Data augmentation for graph neural networks. In _Proceedings of the AAAI Conference on Artificial Intel-_
+_ligence_, volume 35, pp. 11015–11023, 2021b.
+
+
+Tong Zhao, Gang Liu, Stephan G¨unnemann, and Meng Jiang. Graph data augmentation for graph
+machine learning: A survey. _arXiv preprint arXiv:2202.08871_, 2022a.
+
+
+Tong Zhao, Gang Liu, Daheng Wang, Wenhao Yu, and Meng Jiang. Learning from counterfactual
+links for link prediction. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 26911–26926.
+PMLR, 2022b.
+
+
+Tong Zhao, Xianfeng Tang, Danqing Zhang, Haoming Jiang, Nikhil Rao, Yiwei Song, Pallav
+Agrawal, Karthik Subbian, Bing Yin, and Meng Jiang. Autogda: Automated graph data augmentation for node classification. 2022c.
+
+
+Cheng Zheng, Bo Zong, Wei Cheng, Dongjin Song, Jingchao Ni, Wenchao Yu, Haifeng Chen,
+and Wei Wang. Robust graph representation learning via neural sparsification. In _International_
+_Conference on Machine Learning_, pp. 11458–11468. PMLR, 2020.
+
+
+Chenyu Zheng, Guoqiang Wu, and Chongxuan Li. Toward understanding generative data augmentation. _Advances in Neural Information Processing Systems_, 36:54046–54060, 2023.
+
+
+Zhou Zhiyao, Sheng Zhou, Bochao Mao, Xuanyi Zhou, Jiawei Chen, Qiaoyu Tan, Daochen Zha,
+Yan Feng, Chun Chen, and Can Wang. Opengsl: A comprehensive benchmark for graph structure
+learning. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Mengting Zhou and Zhiguo Gong. Graphsr: a data augmentation algorithm for imbalanced node
+classification. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 37, pp.
+4954–4962, 2023.
+
+
+Dingyuan Zhu, Ziwei Zhang, Peng Cui, and Wenwu Zhu. Robust graph convolutional networks
+against adversarial attacks. In _Proceedings_ _of_ _the_ _25th_ _ACM_ _SIGKDD_ _international_ _conference_
+_on knowledge discovery & data mining_, pp. 1399–1407, 2019.
+
+
+Yanqiao Zhu, Weizhi Xu, Jinghao Zhang, Yuanqi Du, Jieyu Zhang, Qiang Liu, Carl Yang, and
+Shu Wu. A survey on graph structure learning: Progress and opportunities. _arXiv_ _e-prints_, pp.
+arXiv–2103, 2021.
+
+
+Dongcheng Zou, Hao Peng, Xiang Huang, Renyu Yang, Jianxin Li, Jia Wu, Chunyang Liu, and
+Philip S Yu. Se-gsl: A general and effective graph structure learning framework through structural
+entropy optimization. In _Proceedings of the ACM Web Conference 2023_, pp. 499–510, 2023.
+
+
+Daniel Z¨ugner, Amir Akbarnejad, and Stephan G¨unnemann. Adversarial attacks on neural networks
+for graph data. In _Proceedings of the 24th ACM SIGKDD international conference on knowledge_
+_discovery & data mining_, pp. 2847–2856, 2018.
+
+
+17
+
+
+A EXPERIMENTAL SETUP
+
+
+A.1 BASELINE SETUPS
+
+
+Since many of the baselines we selected are originally designed for static graphs, in this section, we
+outline how these methods are adapted for dynamic graphs.
+
+
+**Stochastic** **methods** DropEdge, DropNode, and DropMessage belong to stochastic dropping
+methods, which can be naturally integrated into the spatial modeling module of DyGNNs, as all
+three backbones use GNNs to capture spatial correlations.
+
+
+**Mixup methods** Graph Mixup is a two-stage approach. After fully training the original DyGNN,
+we freeze its temporal module and continue training the spatial module following the Mixup
+paradigm from Wang et al. (2021b).
+
+
+**Graph Structure Learning** Both NeuralSparse and SUBLIME are graph structure learning methods for GDA. For NeuralSparse, we initialize a denoising network for each graph snapshot and cotrain it with DyGNN. For SUBLIME, we ensure that both **X** 1: _T_ and **A** 1: _T_ are visible to the model.
+
+
+**Graph Rationalization** RGDA operates at both the graph and node levels. We apply its node-level
+augmentation independently for each snapshot and use sum pooling for Combine( _·, ·_ ) in RGDA.
+
+
+A.2 BASELINES NOT CHOOSED
+
+
+We acknowledge that some classical or highly relevant GDA methods are not included in our evaluation. This is primarily due to two main reasons:
+
+
+- **Task** **specificity** **to** **graph-level** **tasks** : Many graph rationalization methods are designed exclusively for graph-level tasks, including DIR (Wu et al., 2021), GREA (Liu et al., 2022a),
+GraphAug (Luo et al., 2023), DCT (Liu et al., 2024b), AIA (Sui et al., 2024), and C2R (Yue
+et al., 2024a). Thus, they were not selected for our evaluation.
+
+
+- **Limited** **to** **static** **graphs** : When adapting static GDA methods to dynamic graphs, we faced
+considerable difficulties, especially with approaches that are inherently designed for individual
+graphs. For instance, GAUG-O (Zhao et al., 2021b) perturbs the original graph to generate _K_
+perturbed graphs, which causes issues for DyGNN’s temporal module when aggregating across
+different snapshots, as it cannot determine which perturbed snapshot to select. Consequently, we
+had to exclude several classical yet incompatible GDA baselines, such as Graph Transparent (Park
+et al., 2021), AutoGDA (Zhao et al., 2022c) and FLAG (Liu et al., 2022c).
+
+
+B SUPPLEMENTARY EXPERIMENT RESULTS
+
+
+B.1 RESULTS FOR RQ3
+
+
+In Figure 7, we present the performance comparison of various GDA methods under a **feature**
+**attack**, where Gaussian noise is added to node features, Similarly, Figure 8 shows the performance
+comparison under the **Nettack** .
+
+
+B.2 RESULTS FOR ABLATION STUDY
+
+
+To further compare the impact of different environment augmentation strategies within **`DyAug`**, we
+designed three variants: using only spatial replacement, using only temporal replacement, and using
+only spatial-temporal replacement. The results, as shown in Table 4, demonstrate that the variant
+with only spatial-temporal replacement closely approximates the performance of the full **`DyAug`** . On
+the Yelp and ACT datasets, **`DyAug`** (spa.) exhibits a significant performance drop, which is likely
+due to the longer edge timespans in these datasets (as shown in Figure 4), indicating a higher need
+for temporal augmentation.
+
+
+18
+
+
+**Figure 7:** The performance comparison of various GDA methods under **feature attack** on DySAT+YELP.
+
+
+**Figure 8:** The performance comparison of various GDA methods under **Nettack** on DySAT+YELP.
+
+
+**Table** **4:** AUC score (%) of **`DyAug`** and its variants equipped with different augmentation strategies on realworld datasets. We select DySAT as the backbone. (tem.), (spa.), and (spa-tem.) denote the configurations
+where only temporal replacement, only spatial replacement, and only spatial-temporal replacement are applied.
+
+
+In addition, Tables 5 and 6 provides supplementary ablation studies under the scenarios of distribution shift, feature attack, and Nettack.
+
+
+B.3 RESULTS FOR SENSITIVITY ANALYSIS
+
+
+To provide a more comprehensive evaluation of **`DyAug`**, we have included a sensitivity analysis on
+the window size _ϖ_ using the COLLAB and Yelp datasets, as shown in Table 7:
+
+
+It can be observed that DyAug performs consistently well when _ϖ_ _∈{_ 2 _,_ 4 _}_, while for _ϖ_ = 8, there
+is a notable performance drop on the COLLAB dataset (1 _._ 50% _↓_ compared to _ϖ_ = 2). We attribute
+this to the overly large window size, as the COLLAB dataset consists of only 16 snapshots. With
+such a large window, the majority of the dynamic graph sequence is considered as ”positive pairs,”
+rendering _Lcr_ ineffective. Therefore, we have fixed _ϖ_ = 2 for all subsequent experiments.
+
+
+19
+
+
+**Table 5:** Ablation study under **distribution shift** . The backbone is set as GRCN, and the dataset is COLLAB.
+
+
+**Variant** **`DyAug`** **`DyAug`** w/o TC **`DyAug`** w/o RA **`DyAug`** w/o CR **`DyAug`** w/o CL
+
+
+ROC-AUC 73.22 72.76 70.58 73.08 72.70
+
+
+**Table 6:** Ablation study under **topological attack** and **Nettack** . The backbone is set as GRCN, and the dataset
+is ACT.
+
+
+**Variant** **`DyAug`** **`DyAug`** w/o TC **`DyAug`** w/o RA **`DyAug`** w/o CR **`DyAug`** w/o CL
+
+
+Feature attack 72.35 69.58 65.18 70.95 70.51
+Nettack 74.68 72.05 71.41 74.36 73.05
+
+
+**Table 7:** Sensitivity analysis on parameter _ϖ_ with GRCN backbone.
+
+|Dataset|COLLAB Yelp|
+|---|---|
+|_ϖ_ = 2<br>_ϖ_ = 4<br>_ϖ_ = 6<br>_ϖ_ = 8|0_._8495_ ±_ 0_._0070<br>0_._6795_ ±_ 0_._0204<br>0_._8506_ ±_ 0_._0082<br>0_._6785_ ±_ 0_._0139<br>0_._8469_ ±_ 0_._0069<br>0_._6732_ ±_ 0_._0188<br>0_._8345_ ±_ 0_._0112<br>0_._6690_ ±_ 0_._0228|
+
+
+B.4 RESULTS ON LARGE-SCALE GRAPHS
+
+
+We extended our experiments to include a large-scale dynamic graph dataset, DGraphFin (Huang
+et al., 2022), using the slicing and data splitting strategy outlined in (Feng et al., 2024). This dataset
+comprises 4,889,537 nodes and 4,300,999 edges, as detailed in Table 8. We believe this benchmark
+effectively tests **`DyAug`** ’s scalability.
+
+
+**Table 8:** Dataset characteristics.
+
+
+**Dataset** **COLLAB** **Yelp** **Bitcoin** **UCI** **ACT** **DGraphFin**
+
+
+#Nodes 23,035 13,095 5,881 1,899 20,408 4,889,537
+#Edges 151,790 65,375 35,591 59,835 202,339 4,300,999
+#Time steps 16 24 21 13 30 12
+
+
+We evaluated **`DyAug`** ’s performance on DGraphFin using DySAT as the backbone model, as shown
+in Table 9. From Table 9, we can conclude that **`DyAug`** seamlessly scales to ultra-large graphs. Graph
+structure learning methods like NeuralSparse and SUBLIME impose substantial GPU memory demands with marginal or even negative performance gains (2 _._ 46% _↓_ for NeuralSparse). Rule-based
+augmenters such as DropEdge and DropNode introduce negligible computational overhead but fail
+to deliver notable performance gains, consistent with the findings in Table 1. **`DyAug`**, however,
+achieves a 1 _._ 72% AUC improvement with an additional GPU memory burden of less than 2 GB,
+demonstrating its exceptional scalability.
+
+
+B.5 RESULTS ON TD-PGD ATTACKS
+
+
+We conducted additional experiments to evaluate **`DyAug`** under the more advanced attack method
+TD-PGD Sharma et al. (2023), as shown in Table 10. The results demonstrate that **`DyAug`** maintains
+strong robustness even under TD-PGD attacks. Notably, at _ϵ_ = 0 _._ 1, **`DyAug`** even achieves a performance improvement of 0 _._ 14% when applied on DySAT+UCI. What’s more, **`DyAug`** demonstrated
+significant robustness on the DySAT+ACT setting under the TD-PGD attack, as it successfully improved the attacked performance from 68 _._ 53% to 74 _._ 90% at _ϵ_ = 0 _._ 3, achieving a remarkable 6 _._ 37%
+gain, which we believe serves as compelling evidence of its resilience in more challenging scenarios.
+
+
+20
+
+
+**Table** **9:** Results on DGraphFin+DySAT. The implementation of DySAT is from Amazon-TGL [(https:](https://github.com/amazon-science/tgl)
+[//github.com/amazon-science/tgl).](https://github.com/amazon-science/tgl) The results are reported on a single NVIDIA Tesla A100 40G
+GPU.
+
+|AUC (%)|Per-epoch time (s)|
+|---|---|
+|73.26<br>72.69<br>73.50<br>71.22<br>70.80<br>73.15<br>74.12<br>**74.98**|47s<br>43s<br>41s<br>53s<br>186s<br>147s<br>69s<br>56s|
+
+
+**Table 10:** Results tested with TD-PGD attack.
+
+|Data Method|ϵ = 0.0 ϵ = 0.1 ϵ = 0.2 ϵ = 0.3|
+|---|---|
+|UCI<br>DySAT<br>+**`DyAug`**|0.7502±0.0056<br>0.7418±0.0092<br>0.7276±0.0143<br>0.7191±0.0129<br>0.7698±0.0063<br>0.7712±0.0080<br>0.7456±0.0120<br>0.7466±0.0174|
+
+
+DySAT 0.7790±0.0036 0.7698±0.0028 0.7334±0.0138 0.6853±0.0262
+ACT
++ **`DyAug`** 0.7860±0.0054 0.7834±0.0112 0.7682±0.0109 0.7490±0.0176
+
+
+B.6 RESULTS WITH MORE ADVANCED DYGNN BACKBONES
+
+
+To further validate the wide applicability of **`DyAug`**, we have incorporated two advanced DyGNN
+backbones, Roland You et al. (2022) and SLATE Karmim et al. (2024). The experimental results
+are presented in Table 11. We observe that **`DyAug`** maintains excellent generalizability across these
+backbones, achieving a 1.0% and 1.87% performance gain on Roland and SLATE, respectively.
+
+
+**Table 11:** Results on the UCI dataset. Roland is implemented with Roland-GRU.
+
+
+**Backbone** **Roland** **SLATE**
+**ROC-AUC (%)** **Gain** **ROC-AUC (%)** **Gain**
+
+
+Vanilla 79.53 _±_ 0.6122      - 81.26 _±_ 0.3051      +DropEdge 79.25 _±_ 0.4822 _−_ 0 _._ 28 _↓_ 80.12 _±_ 0.4715 _−_ 1 _._ 14 _↓_
++DropNode 79.29 _±_ 0.6590 _−_ 0 _._ 24 _↓_ 80.59 _±_ 0.3552 _−_ 0 _._ 67 _↓_
++DropMessage 79.72 _±_ 0.3145 +0 _._ 19 _↑_ 81.77 _±_ 0.5819 +0 _._ 51 _↑_
++GraphMixup 77.50 _±_ 0.8911 _−_ 2 _._ 03 _↓_ 80.35 _±_ 0.7401 _−_ 0 _._ 91 _↓_
++NeuralSparse 79.86 _±_ 0.4818 +0 _._ 33 _↑_ 81.75 _±_ 0.4291 +0 _._ 49 _↑_
++SUBLIME 80.23 _±_ 0.5741 +0 _._ 70 _↑_ 82.56 _±_ 0.3069 +1 _._ 30 _↑_
++RGDA 79.86 _±_ 0.9582 +0 _._ 33 _↑_ 82.77 _±_ 0.3593 +1 _._ 51 _↑_
++ **`DyAug`** **80.53** _±_ **0.7318** +1 _._ 00 _↑_ **83.13** _±_ **0.2639** +1 _._ 87 _↑_
+
+
+21

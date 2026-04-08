@@ -1,0 +1,295 @@
+## Human Reviewer 1
+
+### Summary
+This paper introduces Process Advantage Verifiers - a novel approach to training and using process reward models for improving LLM reasoning. The key contribution is showing that process rewards should measure progress, which defined as advantages under a prover policy rather than just step correctness. The authors demonstrate that PAV can lead to significant improvements in both test-time search efficiency and online rl sample efficiency.
+
+### Strengths
+1. Novel insight about measuring progress through advantages rather than Q-values
+2. Theoretical analysis characterizing good prover policies as those "complementary" to base policy
+3. Clear empirical validation showing significant improvements over baselines
+
+### Weaknesses
+1. Evaluation only on mathematical reasoning tasks
+2. Could benefit from testing on other structured reasoning domains
+3. All experiments on a single model family (Gemma)
+
+### Questions
+1. Have you explored applying PAVs to other structured reasoning domains beyond mathematics?
+2. Could you clarify the computational overhead of training and using PAVs compared to traditional ORMs?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 2
+
+### Summary
+The paper proposes a method for improving reasoning abilities of large language models on math problems. Given a math problem, the model generates an answer autoregressively. The reasoning steps can be considered actions in a search space. The method is based on the advantage function as a (shaped) reward, and then uses RL to further train the base policy.
+The results are demonstrated on the MATH dataset where the final answer is a numerical one, which makes the validation of the outcome relatively straightforward.
+
+### Strengths
+The idea is clear, it has appropriate theoretical foundations, and the authors empirically demonstrate the advantage of the proposed approach.
+
+### Weaknesses
+It is not clear whether they propose this as training or test time improvement. More precisely, I assume that both, but at certain places it is not evident which one the paper is talking about.
+I am not convinced by the argument that the proposed effective reward scheme improves exploration. I do not think this is properly motivated either intuitively, theoretically or empirically. Also, the suggestion of the improved exploration is not related to checking correctness and relevance.
+In the second paragraph of Section 3, around lines 157-159, the authors reference the potential functions from Ng et al. (1999), but the description is vague, and it does not seem to match the original definition.
+The language should be reviewed, including repeated words.
+
+### Questions
+In Equation (5), the effective reward is added to the return in the formula for the gradient. What is the reason of this apparent contradiction?
+The authors argue that a strong model cannot be used as a prover because a strong policy can reach the answer from any state. I think this is only true if the value function does not take the answer length into account, i.e., it is not discounted and there is no per-step cost. An interesting follow-up would be to re-evaluate, for example, Figure 3b with value functions including a per-step cost.
+Which example does line 197 ("based on the example") refer to?
+Line 267 states that RL with effective reward achieves a tenfold improvement in sample efficiency, but I cannot see this is Figure 3a. What is this improvement based on?
+In some of the figures, there is a shaded area. It should be specified what they mean (std deviation? confidence intervals?) and what sample size they are based on.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This work addresses the design of process reward models (PRMs) in the context of online reinforcement learning with an LLM base policy. The key problem the authors presents is that existing PRM approaches rewards only Q-score - the expected accuracy given a current state and a next action. They identify that absolute Q-score in beam search favors actions that might have high Q-score but might have little or negative improvement from the current state. Instead, they propose to use Process Advantage Verifiers (PAV) using the difference or process advantages between Q-values of a next action and the previous action to identify, using a separate prover policy to compute these process advantages rather than a base policy. They provide intuition and theory that PAV performs well with a prover policy that is not too misaligned with the base policy but can discriminate well between different actions. Their experimental results show significant accuracy and efficiency gains over both Outcome Reward Models (ORM) and other PRM baselines. The work additionally demonstrates accuracy and efficiency gains in the online RL setting.
+
+### Strengths
+* Methodology is mostly clear and well-elaborated on motivations by walking through didactic example in section 3.3 and intuition behind prover policy selection in 3.4. 
+
+* Results in experiments is well-outlined in sections 4 and 5, and shows significant improvement over ORM and PRM baselines. 
+
+* Idea of using a separate "prover" policy to compute advantage is interesting and novel, including the discussion on the choice of complementary policy.
+
+### Weaknesses
+* This work has some issues in communicating and emphasizing important aspects of using a separate prover policy, which is a key part to distinguish from Shao et al. 2024. 
+
+* I'm concerned by the lack of comparison with other PRM baselines. The work notes there are several competing PRM approaches (Appendix A), but section 4 seems to only compare with only one.
+
+### Questions
+* As the use of a separate prover is a key part of the work's novelty, it does not seem appropriate that a key result Proposition F.1 is relegated to the Appendix, along with the explicit characterizations of what is a "complementary" policy. 
+
+* Authors show many negative qualitative examples of inappropriate prover policies in Figure 2 and Appendix G, but do not seem to provide any positive examples of good prover policy results. 
+
+* The introduction of a prover policy $\mu$ in equation (2) of section 3.1 seems slightly confusing. The initial construction of $A$ uses the base policy $\pi$ throughout and only later notes that $A$ can be computed under any policy. This section would flow better if these were differently ordered or reworded.  
+
+* Why was (Snell et al. 2024) chosen for a representative PRM baseline in Figure 5a)? 
+
+Minor things: 
+* There appears to be a typo and inconsistent notation in Appendix B as the 15-word vocabulary set only has 14 elements. The example in Figure 10 shows this set should be 0-indexed but the set in Section 3.3 and Appendix B are 1-indexed. 
+
+* Figure 5b is difficult to read due to similar colors used (Similar shades of red/orange).
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+1
+
+---
+
+## Human Reviewer 4
+
+### Summary
+The paper looks at the the problem of training LLMs for reasoning - which in this context means, given a problem, going through multiple steps to arrive at an answer. Authors argue that training and inference in reasoning models can be improved through extending simple outcome-based reward models with a dense, advantage-based reward models. The key insight is that the advantage should be computed under a separate ("verifier") policy, which is neither too strong (since any action under the weak base policy would be just ignored and verifier would succeed anyway) neither too weak (the verifier policy would fail anyway).
+The paper first motivates and elaborates on those insights with some toy experiments and theoretical formalisation, and then applies the conceptual understanding to fine-tune Gemma LLMs (2B, 9B, 27B) on the MATH dataset, obtaining significantly better results (in sample efficiency, accuracy and compute efficiency) than models fine-tuned with outcome-based rewards investigated in the prior literature.
+
+### Strengths
+- The paper is very clearly written. It is full of intuition, it guides the reader through conceptual, toy-experimental, theoretical and empirical results, every step seems motivated, there are very helpful "Takeaway" summaries at the end of each section, the figures are clear and aid the understanding. There is a clean, coherent narrative. I enjoyed reading it a lot.
+ - Formal results are not extremely complex, but they correspond to the empirical treatment well, and provide additional tools for the empirical part (such as motivating the use of best-of-k policies). The proofs (in the appendix) are formal and clearly written, and do not take shortcuts. Theoretical development includes the policy improvement framework and beam-search analysis for the best-of-k case.
+ - Prior work, although in large part delegated to the attachment, is referenced extensively.
+ - Experiments are convincing and done on a relatively large scale.
+ - Overall, the method described in the paper seems clearly useful and promising.
+
+### Weaknesses
+- The (final) experimental section seems a bit too narrow. Although authors reference the "conventional belief" of using mathematical correctness or relevance of steps in the introduction, they only compare to the baseline of ORM reward. It is difficult to judge how much of an improvement we should expect in other domains, as other SOTA MATH models are only briefly referenced (and not compared to) in the appendix.
+ - There are multiple places where the paper claims that the major benefit of using a correlated, high-variance verifier is to encourage exploration. But there are many ways to encourage exploration: epsilon-greedy policies, UCB, max-ent regularisation etc. It seems that the paper advocates for using the verifier only because it takes unnecessarily strong position on only using greedy beam search. This makes sense as the choice within the framework, but it again makes it difficult to judge how much of an improvement the new method really is, compared to those other techniques.
+ - The insight of "it's bad to use extremely good expert policy to judge moves" seems a to apply less in a context where we use a discount factor $\neq 1$. A strong move would still help even a strong expert, if it saves it time to arrive at the solution. It is not clear to me whether a "need to generate simpler, repetitive, and even incorrect steps to explore and discover the final answer" really applies in general.
+- I had trouble understanding when (or whether) introducing the sub-optimal verifier can result in a worse behavior, or when does $\mathbb{E}[V^{t+1} - V^t] < 0$. Some confusion arose because the verifier is initially assumed to be just a fixed $\mu$, while it is actually $\mu(\pi_t)$ (e.g. best-of-K($\pi_t$)).
+
+### Questions
+- How do the results change if we introduce non-unit discount factor?
+- How to situate using PAV to encourage exploration among the alternative approaches already studied in the RL literature?
+- Theorem 3.1 seems to have a typo, the second term should appear with a negative sign. In general, adding an advantage function is a form of potential shaping, as you note in the introduction, which means that the set of optimal policies should be preserved under any verifier. But the bound in Theorem 3.1 can be negative for very misaligned $\mu$ and $\pi$, can it? Does that mean that the update step can be negative? If yes - when can it happen?
+ - In section 3.3, your reward $r$ is binary - what do you mean by "the maximum reward $r$ across $N$ samples" in Fig 3c)?
+ - You grid-search for a good $\alpha$. Do you think that the value you found (3.0 - 5.0) will generalise across tasks? What is the cost of the search?
+ - You want $\mu$ primarily to be able to distinguish between actions of $\pi$. Would it help if you ran multiple verifiers at the same time?
+ - Remark 3.1 did not felt sufficiently motivated by the preceding paragraph.
+ - Notation in the Appendix F: it might be worth spelling out that the distribution $d^\pi_s$ is marginalised over all future time steps (or just writing the definition). It's not clear to me why is $\theta_{s, a}$ assumed to be in $\mathbb{R}^d$. Typo in eq 8: it should read $a_{h+1}$. Typo above eq 18, should read $A^{t}$. Typo in line 1124, should read "equation 23". In general, it's not clear to me what happens in the step of moving to eq 27 from eq 26. What happens to $C_1, C_2, C_3, C_4$? What exactly is the meaning of $\lesssim$?
+
+### Soundness
+4
+
+### Presentation
+4
+
+### Contribution
+4
+
+### Rating
+8
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 5
+
+### Summary
+The paper proposes process advantage verifiers (PAVs) that provide process rewards improve the efficiency of test-time search leading to better accuracy. Outcome reward models (ORMs) and process reward models (PRMs) assign reward to the final outcome/per-step respectively. The paper proposes the use of PRMs as a dense reward generator but changing the reward allocation to provide advantage values instead so that better exploration may be encouraged. The key intuition is that reinforcing promising steps that make progress towards the goal improves exploration of possible answers and is crucial when employing search-based strategies such as beam-search.
+
+The authors utilize a toy example to show that Q-values may be retaining unfavorable steps reducing the overall likelihood of success. Thus, the authors resort to the advantage framework (Sutton et al) and show that by considering advantages (relative increase/decreases in likelihoods of success) we can mitigate the drawbacks of only using Q-values.
+
+The authors then introduce PAVs and introduce the optimization objective. The  authors argue that using advantage values derived from the same base policy would not be informative. The authors then propose to use a different prover policy (this lightly connects the optimization objective with off-policy learning). The paper then shows that a good process reward measure is a prover policy that provides a notion of progress. The authors analyze this hypothesis using a toy example. The authors then showcase a theoretical intuition that states that a prover can be expected to improve a base policy when it is able to distinguish different actions taken by the base policy. The authors then showcase that Best-of-K policies (sampling of K policies from $\pi$ and then using the best one) contains complementary provers.
+
+Finally, the authors propose an empirical evaluation to showcase the advantage of PAVs over ORMs.
+
+### Strengths
+S1. The paper tackles an interesting concept and the notion of using advantages is quite intuitive. The use of advantages is well known in the AI community and its application to neural verifiers is a novel contribution.
+
+S2. The analysis of showing that weak provers may amplify stronger base policies is convincing.
+
+### Weaknesses
+W1. The paper is generally well-written but is a bit confusing to follow at times. There seems to be a lot of \vspace manipulation that conflicts with ICLR paper guidelines (example sec 3.1, ICLR guidelines stipulate that there must be 1 line of space after figure caption). This made the paper a bit hard to read. The related work is very light and the conclusion is non-existent with no future work or limitations discussed. I believe that the paper could have reduced some of the analysis and expanded on this further.
+
+W2. The paper focuses its empirical evaluation on ORMs and states that there are major advantages w.r.t. them but I believe that a fair comparison would be to use PRMs since they are the closest possible baseline. The authors do prempt this by stating that PRMs have only demonstrated 1-2% improvement w.r.t. ORMs but that is in the context of best-of-N search. There are no comparisons with PRMs except for Fig 5a. However, this improvement is not discussed nor is the setting adequately mentioned making it hard to evaluate. Are the PRM results in Fig 5a computed using beam-search or best-of-N search.
+
+W3. There are recent results of utilizing beam search or some tree-based search with PRMs [1, 2]. This would likely be more compute efficient than ORMs or PRMs utilizing best-of-N search. As a result, the compute efficiency would be best to be compared to them. Is there any reason this was not considered.
+
+W4. The paper claims to have significant improvements but lacks a comprehensive comparison of PRMs w.r.t. standard benchmarks as reported in other papers. I am unable to distill where the claims of massive improvement stem from esp considering that two different search strategies are employed and in the case where PAVs-as-ORMs are used, the improvement drops to 4%. Similar comments for results in Sec 5. PRMs are a natural fit for RL as well I would assume.
+
+Could the authors please justify their empirical evaluation. There is a lack of evaluations on GSM8k and other standard datasets and some baseline combinations that utilize beam search are not expressed. I fully appreciate the authors extensive ablations and analysis but I feel that to truly understand the utility of PAVs as neural verifiers/reward models, one would need to compare them with the same search strategy but just a different ranking scheme (PRMs vs PAVs). Could the authors please provide additional details here?
+
+### Questions
+Please address my concerns in the weaknesses. 
+
+Also, could you please elaborate on what you mean by lines 369-374? If I interpret the writing correctly, does it mean that PAVs cannot be used directly in beam-search without having access to PRMs and ORMs? It would be great to clarify my concerns and perhaps improve the clarity of the paper to make it more accessible.
+
+Overall it is a good paper. I hope the authors can resolve my concerns.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+### Rating
+6
+
+### Confidence
+3
+
+---
+
+## Human Reviewer 6
+
+### Summary
+This paper mainly discusses how to design process rewards when using process reward models (PRMs) to improve reasoning in large language models. The authors believe that the per-step process rewards should measure progress, or advantage, instead of absolute Q-values for a better explore-exploit tradeoff  during beam search and online RL. The advantages should be computed using a prover policy different from the base policy. To boost improvement of the base policy, the prover policy should be able to distinguish actions taken by the base policy but are not too misaligned from the base. Based on this insight, the authors introduce process advantage verifiers (PAVs) and show that PAVs could largely scale test-time compute and RL sample efficiency compared to outcome reward models (ORMs).
+
+### Strengths
+1. This paper is well-organized and well-written. The concepts and ideas are clear and could be easily understood.
+2. The results are promising. The proposed method (PAVs) are > 8% more accurate and 1.5-5x more compute-efficient than ORMs.
+3. The insight to define process rewards as progress (or advantage) is inspiring. The method proposed (PAV) is novel.
+4. The paper provides comprehensive analysis and guidance on how to choose prover policies and how to collect data to train PAVs, which is very beneficial to the community.
+
+### Weaknesses
+1. In the experiments, only ORM is presented as a baseline, without any inclusion of previous PRM methods. It would be more helpful if you include baseline methods such as [1] Wang et al. (2024), [2] Shao et al. (2024) or [3] Luo et al. (2024) to demonstrate how they perform poorly compare to your method. Alternatively, could you clarify if there were any particular challenges in implementing or comparing to these previous PRM approaches?
+2. Although the theoretical analysis is solid, could you provide a small, concrete example to illustrate why advantages are more effective than value functions as process rewards? This could help readers to understand your statement in Section 3.1 (Process rewards should be advantages not value functions) better.
+
+[1] Wang, P., Li, L., Shao, Z., Xu, R. X., Dai, D., Li, Y., Chen, D., Wu, Y., & Sui, Z. (2024). Math-Shepherd: Verify and Reinforce LLMs Step-by-step without Human Annotations. https://arxiv.org/abs/2312.08935
+
+[2] Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang, H., Zhang, M., Li, Y. K., Wu, Y., & Guo, D. (2024). DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models. https://arxiv.org/abs/2402.03300
+
+[3] Luo, L., Liu, Y., Liu, R., Phatale, S., Lara, H., Li, Y., Shu, L., Zhu, Y., Meng, L., Sun, J., & Rastogi, A. (2024). Improve Mathematical Reasoning in Language Models by Automated Process Supervision. https://arxiv.org/abs/2406.06592
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+1
+
+---
+
+## Human Reviewer 7
+
+### Summary
+The paper proposes a method for designing rewards for Process Reward Models, used to improve reasoning in LLMs with step-by-step feedback rather than only outcome-based feedback. The authors relate the reward to a measure of how much a step changes the likelihood of producing a correct response in the future. They discuss their method for obtaining this measure and compare it to alternatives. They provide theoretical and empirical results to support their claims that their approach improves accuracy and efficiency.
+
+### Strengths
+I am not an expert in this specific area so I cannot confirm the originality or significance of the paper, but the authors do discuss related works and compare the paper with them. The paper is generally clearly written, though I suspect it is even easier to follow if you are more familiar with the topic than I am. I really like the ‘takeaways’ at the end of each section for improving intelligibility. The paper includes both theory and empirical results. I like that it discusses potential alternative solutions and why these were not pursued or would not work as well as the proposed approach.
+
+### Weaknesses
+Can you please point me to where you formally characterise what it means for the prover policy to be “too” misaligned with the base policy?
+
+Does your work help improve the speed of reasoning by decreasing the number of steps required, or does it just improve the chances of finding the right answer eventually? I presume this relates to how long a rollout is. Related to this, you say in Line 82 that ‘advantages under an overly capable prover, that can succeed from any step, fail to distinguish between good and bad steps.’ Why do you not then consider the number of steps required to get to the solution from that point, as a way of quantifying ‘improvement’?
+
+Do you formally quantify the exploration-exploitation trade-off that feeds into Result 3, since this seems important for your findings that you can improve accuracy?
+
+Line 73 / 74 - repeated ‘the the combinatorial’.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3
+
+### Presentation
+4
+
+### Contribution
+3
+
+### Rating
+8
+
+### Confidence
+1

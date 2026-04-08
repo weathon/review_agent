@@ -1,0 +1,1816 @@
+# FULLY-INDUCTIVE NODE CLASSIFICATION
+## ON ARBITRARY GRAPHS
+
+
+**Jianan Zhao** **[1,2,]** _[∗]_ **, Zhaocheng Zhu** **[1,2,]** _[∗]_ **, Mikhail Galkin** **[3,]** _**[†]**_ **, Hesham Mostafa** **[4]**
+
+**Michael Bronstein** **[5,6]** **, Jian Tang** **[1,7,8]**
+
+1Mila - Québec AI Institute, 2Université de Montréal, 3Google Research 4Intel Labs
+5University of Oxford, 6AITHYRA, 7HEC Montréal, 8CIFAR AI Chair
+
+
+ABSTRACT
+
+
+One fundamental challenge in graph machine learning is generalizing to new graphs.
+Many existing methods following the inductive setup can generalize to test graphs
+with new structures, but assuming the feature and label spaces remain the same
+as the training ones. This paper introduces a fully-inductive setup, where models
+should perform inference on _arbitrary_ _test_ _graphs_ _with_ _new_ _structures,_ _feature_
+_and label spaces_ . We propose GraphAny as the first attempt at this challenging
+setup. GraphAny models inference on a new graph as an analytical solution to a
+LinearGNN, which can be naturally applied to graphs with any feature and label
+spaces. To further build a stronger model with learning capacity, we fuse multiple
+LinearGNN predictions with learned inductive attention scores. Specifically, the
+attention module is carefully parameterized as a function of the entropy-normalized
+distance features between pairs of LinearGNN predictions to ensure generalization
+to new graphs. Empirically, GraphAny trained on a single Wisconsin dataset with
+only 120 labeled nodes can generalize to 30 new graphs with an average accuracy
+of 67.26%, surpassing not only all inductive baselines, but also strong transductive
+methods trained separately on each of the 30 test graphs.
+
+
+1 INTRODUCTION
+
+
+One of the most important requirements for machine learning models is the ability to generalize
+to new data. Models with better generalization
+abilities are able to perform better on unseen data
+and tasks, which is a key property for foundation
+models (Achiam et al., 2023; Team et al., 2023;
+Touvron et al., 2023) that are designed to accomplish a wide range of downstream tasks. For graphs,
+generalization is challenging since different graphs
+usually have different structures and associated attributes. Ideally, graph machine learning models
+are expected to accommodate this difference and
+learn functions that are applicable to all graphs.
+
+
+|y|Arxiv|
+|---|---|
+|n:<br> aph||
+
+
+Figure 1: Average performance on 31 datasets.
+GraphAny is trained on a single dataset (Wisconsin or Arxiv) and performs inductive inference on any graph. The other methods have to
+be trained on each dataset.
+
+
+67.5
+
+
+67
+
+
+66.5
+
+
+57.5
+
+
+57
+
+
+0.1 1 10 100 1000
+
+
+Total training labeled nodes (k)
+
+
+Many previous works on graphs (Hamilton et al.,
+
+consin or Arxiv) and performs inductive infer
+2017; Hang et al., 2021; Qu et al., 2022; Jang et al.,
+
+ence on any graph. The other methods have to
+
+2023) consider generalization in the inductive setup,
+
+be trained on each dataset.
+
+where models are supposed to perform inference
+on test graphs with new structures different from the training ones. However, these works rely on the
+assumption that the training and test graphs share the same feature and label spaces, which limits their
+applications to graphs in a fixed domain (e.g. social networks, citation networks). Ideally, we would
+like to have a model that generalizes to arbitrary graphs, involving new structures, new dimensions
+
+
+_∗_ Equal contribution. Code release: [https://github.com/DeepGraphLearning/GraphAny](https://github.com/DeepGraphLearning/GraphAny)
+
+_†_ Work done while at Intel Labs
+
+
+1
+
+
+Figure 2: Fully-inductive node classification: Trained on a graph _G_, a fully-inductive model should
+generalize to any new graph _G_ _[′]_ with new feature and label spaces _**without additional training**_ .
+
+
+and semantics for their feature and label spaces without additional training. We name this more
+general and practical setting as the _fully-inductive_ setup (visualized in Figure 2).
+
+
+The fully-inductive setup is particularly challenging for existing graph machine learning models for
+two reasons: (1) Existing models learn transformations specific to the dimension, type, and structure
+of the features and labels used in the training, and cannot perform inference on feature and label
+spaces that are different from the training ones. This requires us to develop a new model architecture
+for arbitrary feature and label spaces. (2) Existing models learn functions specific to the training
+graph and cannot generalize to new graphs. This calls for an inductive function that can generalize to
+any graph once it is trained. Despite these challenges, it is always possible to cheat the fully-inductive
+setup by training a separate instance of existing models for each test dataset. We emphasize that this
+solution does not solve the fully-inductive setup. However, this cheating solution can be regarded as
+a strong baseline for fully-inductive models, since it additionally leverages back propagation on the
+labeled nodes and hyperparameter tuning on the validation data of the test datasets.
+
+
+**Our Contributions.** We propose GraphAny to solve node classification in the fully-inductive setup.
+GraphAny consists of two components: _LinearGNNs_ that perform inference on new feature and
+label spaces without training steps, and an _inductive attention_ module based on entropy-normalized
+distance features that ensure generalization to new graphs. Specifically, our LinearGNN models the
+mapping between node features and labels as a non-parameteric graph convolution followed by a
+linear layer, whose parameters are determined in analytical form without requiring explicit training
+steps. While a single LinearGNN model may be far from optimal for many graphs, we employ
+multiple LinearGNN models with different graph convolution operators and learn an attention vector
+to adaptively fuse their predictions. The attention vector is carefully parameterized as a function
+of _distance_ _features_ between the predictions of LinearGNNs, which guarantees the model to be
+invariant to the permutations of feature and label dimensions. To further improve the generalization
+ability of our model, we propose entropy normalization to rectify the distance feature distribution to a
+fixed entropy, which reduces the effect of different label dimensions. By combining both modules,
+GraphAny learns to combine the LinearGNNs’ predictions for each node based on their prediction
+distributions, which reflects statistics of its local structure, and generalizes to new graphs.
+
+
+To summarize, the contribution of GraphAny are four folds:
+
+
+- We introduce the fully-inductive setup for generalization across arbitrary graphs. Fully-inductive
+setup is more general and practical than the conventional inductive setup, allowing knowledge
+transfer across diverse domains, such as from knowledge graphs to e-commerce graphs.
+
+
+- We devise LinearGNN, an analytical solution for node classification that enables efficient inductive
+inference on any new graph without the need for gradient descent.
+
+
+2
+
+
+- We identify two necessary properties for fully-inductive generalization: permutation invariance
+and dimensional robustness w.r.t. the feature and label spaces. Towards these goals, we design an
+inductive attention module that satisfies these properties and generalizes to new graphs.
+
+
+- By combining LinearGNN and the inductive attention module, we present GraphAny, the first
+fully-inductive model for node classification. Across 31 datasets, GraphAny outperforms strong
+transductive baselines trained separately on each test dataset and achieves a 2.95 _×_ speedup.
+
+
+2 RELATED WORK
+
+
+**Inductive Node Classification.** Depending on the test graphs which models generalize to, tasks on
+graphs can be categorized into _transductive_ and _inductive_ setups. In the transductive (semi-supervised)
+node classification setup (Kipf and Welling, 2017), test nodes belong to the same training graph the
+model was trained on. In the inductive setup (Hamilton et al., 2017), the test graph might be different.
+The majority of GNNs aiming to work in the inductive setup use known node labels as features. Hang
+et al. (2021) introduced _Collective Learning_ GNNs with iterative prediction refinement. Jang et al.
+(2023) applied a diffusion model for such prediction refinement. Structured Proxy Networks (Qu et al.,
+2022) combined GNNs and conditional random fields (CRF) in the _structured prediction_ framework.
+However, the train-test setup in all those works is limited to different partitions of the same bigger
+graph, that is, they cannot generalize to unseen graphs with different input feature dimensions and
+number of classes. To the best of our knowledge, GraphAny is the first approach for fully-inductive
+node classification, which generalizes to unseen graphs with arbitrary feature and label spaces.
+
+
+**Labels** **as** **Features.** Addanki et al. (2021) demonstrated that node labels used as features yield
+noticeable improvements in the transductive node classification setup on MAG-240M in OGBLSC (Hu et al., 2021a). Sato (2024) used labels as features for training-free transductive node
+classification with a specific GNN weight initialization strategy mimicking label propagation (hence
+only applicable to homophilic graphs). In homophilic graphs, node label largely depends on the
+labels of its close neighbors whereas in heterophilic graphs, node label does not depend on the
+neighboring nodes. GraphAny supports both homophilic and heterophilic graphs in both transductive
+and inductive setups.
+
+
+**Connections** **to** **Graph** **Foundation** **Models.** Graph foundation models (GFMs), which aim to
+develop a single model transferable to new graphs and diverse graph tasks, have garnered significant
+attention in the graph learning community. The core challenge in designing a GFM is achieving
+_generalization across graphs with varying input and output spaces_, which requires identifying an
+invariant feature space that transfers effectively across graphs (Mao et al., 2024). While fine-tuning a
+pre-trained model on a new graph is feasible (Zhu et al., 2024), we focus on the more challenging
+fully-inductive setting, where the model must generalize to unseen graphs _without_ additional training.
+
+
+In scenarios where _graphs share a common feature space_, such as in molecular learning (Kläser et al.,
+2024; Kovács et al., 2023; Zhang et al., 2023; Sypetkowski et al., 2024; Shoghi et al., 2024) and
+material design (Batatia et al., 2024), GNNs can be applied to the shared feature space of atoms,
+acting as GFMs. For _non-featurized graphs_, GNNs equipped with labeling tricks (Zhang et al., 2021)
+have shown promise as generalizable link predictors in homogeneous graphs (Dong et al., 2024) and
+multi-relational knowledge graphs (Galkin et al., 2024). Another line of research (Zhao et al., 2023;
+Tang et al., 2023; Chai et al., 2023; Fatemi et al., 2024; Perozzi et al., 2024; Liu et al., 2024) focuses
+on _text-attributed graphs_ (Yan et al., 2023), where features are represented as, or converted into, text.
+Here, large language models (LLMs) serve as universal featurizers by verbalizing the (sub)graph
+structure and the associated task in natural language. However, it is unclear whether the sequential
+nature of LLMs is suitable for graphs with permutation invariance.
+
+
+In summary, while existing GFMs have shown promising results, their generalization capabilities
+often rely on strong assumptions over the training and test graphs, particularly the presence of a
+shared input space. In contrast, GraphAny is the first attempt to the more general and challenging
+problem of generalizing across _arbitrary_ _graphs_ . This broader scope opens up new possibilities
+for transferring knowledge between different graph domains, such as from knowledge graphs to
+e-commerce graphs. Additionally, we believe our proposed model, along with essential generalization
+properties like permutation invariance and dimensional robustness, provide a solid foundation for
+future research on powerful and versatile GFMs.
+
+
+3
+
+
+The GraphAny Architecture
+
+
+Figure 3: Overview of GraphAny: LinearGNNs are used to perform non-parametric predictions and
+derives the entropy-normalized distance features. The final prediction is generated by fusing multiple
+LinearGNN predictions on each node with an attention learned based on the distance features.
+
+
+3 GRAPHANY: FULLY-INDUCTIVE NODE CLASSIFICATION ON ANY GRAPH
+
+
+Our goal is to devise a fully-inductive model that can perform inductive inference on any new graph
+with arbitrary feature and label spaces, typically different from the ones associated with the training
+graph (Figure 2). Here we propose such a solution GraphAny, which consists of two main components
+(Figure 3): a LinearGNN and an attention module. Each LinearGNN provides a basic solution to
+inductive inference on new graphs with arbitrary feature and label spaces, while the attention module
+learns to combine multiple LinearGNNs based on inductive features that generalize to new graphs.
+
+Formally, in a semi-supervised node classification task, we are given a graph _G_ = ( _V, E_ ), typically
+represented as an adjacency matrix _**A**_, and node features _**X**_ _∈_ R _[|V|×][d]_, a set of labeled nodes _VL_
+and their labels _**Y**_ _L_ _∈_ R _[|V][L][|×][c]_, where _c_ is the number of unique label classes. The goal of node
+classification is to predict the labels _**Y**_ [ˆ] for all the unlabeled nodes _U_ = _L_ in the graph. In
+_V_ _V_ _\ V_
+the conventional transductive learning setup, this is performed by training a GNN (e.g. GCN (Kipf
+and Welling, 2017), GAT (Velickovic et al., 2018)) on the subset of labeled nodes using standard
+backpropagation requiring multiple gradient steps. Such a GNN assumes the full graph to be given
+and typically does not generalize to a new graph out of the box without some forms of re-training or
+fine-tuning. Conversely, a fully-inductive model is expected to predict the labels _**Y**_ [ˆ] for any graph
+without expensive gradient steps. Furthermore, when a new graph is provided, it might have different
+dimensionality _d_ _[′]_ of the features and number of class labels, _c_ _[′]_, which can also appear in an arbitrary
+permuted order.
+
+
+3.1 INDUCTIVE INFERENCE WITH LINEARGNNS
+
+
+A key idea of this paper is to use simple GNN models whose parameters can be expressed analytically.
+Following existing works that simplifies GNN (Wu et al., 2019; Zhu and Koniusz, 2021; Yoo et al.,
+2023) by removing non-linearity, we leverage graph convolutions to process node features, followed
+by a linear layer to predict the labels,
+
+
+_**Y**_ ˆ = softmax( _**F W**_ ) _,_ (1)
+
+where _**F**_ = _**A**_ _[k]_ _**X**_ _∈_ R _[|V|×][d]_ is the processed features and _**W**_ _∈_ R _[d][×][c]_ is the weight of the linear
+layer. Originally, the parameters of most existing GNNs are trained to minimize a cross-entropy loss
+on node classification, which does not have analytical solution and requires gradient descent to learn
+the weights. Alternatively, we propose to use a mean-squared error loss for optimizing the weights:
+
+
+_**W**_ = arg min _**Y**_ _L_ _**Y**_ _L_ _,_ (2)
+
+_[∗]_ _**W**_ _∥_ [ˆ] _−_ _∥_ [2]
+
+where we use _**Y**_ [ˆ] _L_ to denote model predictions on the set of labeled nodes. The benefit of this
+approximation is that now we have an analytical solution for the optimal weights _**W**_ _[∗]_ :
+
+_**W**_ _[∗]_ = _**F**_ _L_ [+] _**[Y]**_ _[L][,]_ (3)
+
+where _**F**_ _L_ [+] [is the pseudo inverse of] _**[ F]**_ _[L]_ [, and the model prediction is given by:]
+
+_**Y**_ ˆ = _**F F**_ _L_ [+] _**[Y]**_ _[L][.]_ (4)
+
+
+4
+
+
+We term this architecture _LinearGNN_, as it approximates the prediction of linear GNNs (like SGC (Wu
+et al., 2019)) with a single forward pass. Its main advantage is that it requires no training, which
+makes it significantly more computationally efficient (see Section 3.3). Note that the derivation of
+LinearGNNs is independent of the graph convolution operation, and can be applied to other linear
+convolution operations as well. We stress that while we do not expect LinearGNNs to outperform
+existing transductive models on node classification, they provide a simple basic module for inductive
+inference. In Section 3.2, we will see how to combine multiple LinearGNNs to create a stronger
+model with inductive attention that generalizes to new graphs.
+
+
+3.2 LEARNING INDUCTIVE ATTENTION OVER LINEARGNN PREDICTIONS
+
+
+Although LinearGNNs provide basic solutions to inductive inference on new graphs, the learned
+weights are still _transductive_, i.e. specific to the training graph, and do not capture transferable
+knowledge that can be applied to unseen graphs. Besides, our experiments (Figure 7) suggest that
+different graphs may require LinearGNNs with convolution operations. Hence, a natural way to
+incorporate fully-inductive learning is to add an _inductive attention module_ over a set of multiple
+LinearGNNs. Let _αu_ [(1)] _[, α]_ _u_ [(2)] _[, ..., α]_ _u_ [(] _[t]_ [)] [denote the node-level attention over] _[ t]_ [ LinearGNNs.] [We generate]
+the final prediction as a combination of all LinearGNN predictions:
+
+
+_**y**_ ¯ _u_ =
+
+
+_t_
+
+
+_αu_ [(] _[i]_ [)] _**[y]**_ [ˆ] _u_ [(] _[i]_ [)] _[.]_ (5)
+_i_ =1
+
+
+While there are various ways to parameterize this
+attention module, finding an inductive solution is
+non-trivial since neural networks can easily fit the
+information specific to the training graph. We notice a necessary property for fully-inductive functions is that it should be robust to transformations
+on features and labels, such as permutation or
+masking on some dimensions (Figure 4). This
+requires our attention module, to be _permutation_
+_invariant_ and _robust to dimension changes_, which
+motivates our design of distance features and entropy normalization respectively.
+
+
+_|V| ⇥_ _d_ _|V| ⇥_ _d_ _|V| ⇥_ _c_ _|V| ⇥_ _c_ _[0]_
+
+
+Figure 4: Transformations on graph features and
+labels: permutation (left), masking (right).
+
+
+**Permutation-Invariant Attention with Distance Features.** We would like to design an attention
+module that is permutation invariant (Bronstein et al., 2021) along the data dimension. [1] Consider a
+new graph generated by permuting feature and label dimensions of the training graph. We expect our
+attention output to be invariant to these permutations in order to generate the same prediction as for
+the unpermutated training set.
+
+
+Our idea is to construct a set of permutation-invariant features, such that any attention module we
+build on top of these features becomes permutation-invariant. Formally, if the permutation matrices
+for feature and label dimensions are _**P**_ _∈_ R _[d][×][d]_ and _**Q**_ _∈_ R _[c][×][c]_ respectively, a function _f_ is _(data)_
+_permutation-invariant_ if:
+_f_ ( _**XP**_ _,_ _**Y**_ _L_ _**Q**_ ) = _f_ ( _**X**_ _,_ _**Y**_ _L_ ) _._ (6)
+
+In our LinearGNN, the prediction _**Y**_ [ˆ], as a function of the new graph, is invariant to the feature
+permutation and equivariant to the label permutation since it has the following analytical form:
+
+_**Y**_ ˆ ( _**XP**_ _,_ _**Y**_ _L_ _**Q**_ ) = _**F F**_ _L_ [+] _**[Y]**_ _[L]_ _**[Q]**_ _[.]_ (7)
+
+
+Deriving a feature that is invariant to the label permutation requires us to cancel _**Q**_ with its inverse
+_**Q**_ _[⊤]_ . A straightforward solution is to use a dot product feature for predictions on each node:
+
+_**Y**_ ˆ _**Y**_ ˆ _[⊤]_ = _**F F**_ _L_ [+] _**[Y]**_ _[L]_ _**[Y]**_ _L_ _[⊤]_ [(] _**[F]**_ _L_ [ +][)] _[⊤]_ _**[F]**_ _[ ⊤][,]_ (8)
+
+
+1It is important to distinguish between _domain symmetry_ (in this case, permutation of the nodes of the graph)
+and _data symmetry_ (permutation of the feature and label dimensions). Invariance to domain symmetry (node
+permutations) is provided by design in our LinearGNN.
+
+
+5
+
+
+|Col1|LinearSGC2 v.s.:|
+|---|---|
+|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|
+|0<br>0.25<br>0.50<br>0.75<br>1.<br>|0<br>0.25<br>0.50<br>0.75<br>1.<br>|
+
+
+|Col1|LinearSGC2 v.s.:|
+|---|---|
+|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|
+|0<br>0.25<br>0.50<br>0.75<br>1.<br>|0<br>0.25<br>0.50<br>0.75<br>1.<br>|
+
+
+|Col1|LinearSGC2 v.s.:|
+|---|---|
+|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|
+|0<br>0.25<br>0.50<br>0.75<br>1.<br>|0<br>0.25<br>0.50<br>0.75<br>1.<br>|
+
+
+|Col1|LinearSGC2 v.s.:|
+|---|---|
+|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|
+|0<br>0.25<br>0.50<br>0.75<br>1.<br>|0<br>0.25<br>0.50<br>0.75<br>1.<br>|
+
+
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>yˆ u(1 ), yˆ u(2 ), · · ·, yˆ u(t) on a single node<br>features to capture their squared dista<br>∥yˆ(1)−yˆ(2 )∥<br>u u<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>Wisconsin (5 classes) Cora (7 classes)<br>10 10 10<br>LinearSGC2 v.s.: LinearSGC2 v.s.:<br>Linear Linear<br>8 LinearSGC1 8 LinearSGC1 8<br>LinearHGC1 LinearHGC1<br>6 LinearHGC2 6 LinearHGC2 6 Density Density Density<br>4 4 4<br>2 2 2<br>0 0 0<br>0.00 0.25 0.50 0.75 1.00 0.00 0.25 0.50 0.75 1.00 0.0<br>Value Value<br>Wisconsin (5 classes) Cora (7 classes)<br>10 10 10<br>LinearSGC2 v.s.: LinearSGC2 v.s.:<br>Linear Linear<br>8 LinearSGC1 8 LinearSGC1 8<br>LinearHGC1 LinearHGC1<br>6 LinearHGC2 6 LinearHGC2 6 Density Density Density<br>4 4 4<br>2 2 2<br>0 0 0|label-permutat<br>roducts between<br>nsen-Shannon di<br>u, we construct<br>nces:<br>2, ∥yˆ(1)−yˆ(3 )∥<br>u u<br>dix A. An advan<br>s also permutatio<br>P), to predict the<br>Roman (18 classes)<br>10<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1 8<br>LinearHGC1<br>LinearHGC2 6 Density<br>4<br>2<br>0<br>0 0.25 0.50 0.75 1.00 0.0<br>Value<br>Roman (18 classes)<br>10<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1 8<br>LinearHGC1<br>LinearHGC2 6 Density<br>4<br>2<br>0|Col3|ion matrices P a<br>LinearGNN pr<br>vergence. For a s<br>the following t(<br>2, ..., ∥yˆ(t )−yˆ(t<br>u u<br>tage of such per<br>n invariant, allow<br>attention scores<br>Arxiv (40 classes)<br>10<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1 8<br>LinearHGC1<br>LinearHGC2 6 Density<br>4<br>2<br>0<br>0 0.25 0.50 0.75 1.00 0.0<br>Value<br>Arxiv (40 classes)<br>10<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1 8<br>LinearHGC1<br>LinearHGC2 6 Density<br>4<br>2<br>0|Col5|Col6|nd Q. Generall<br>edictions is also<br>et of t LinearGN<br>t −1) permutat<br>−1)∥2.<br>mutation-invaria<br>ing us to use a s<br>over different Li<br>Product (47 classes)<br>10<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1 8<br>LinearHGC1<br>LinearHGC2 6 Density<br>4<br>2<br>0<br>0 0.25 0.50 0.75 1.00 0.0<br>Value<br>Product (47 classes)<br>10<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1 8<br>LinearHGC1<br>LinearHGC2 6 Density<br>4<br>2<br>0|Col8|y, any feature<br>permutation<br>N predictions<br>ion-invariant<br>(9)<br>nt features is<br>imple model<br>nearGNNs.<br>FullCora (70 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0 0.25 0.50 0.75 1.00<br>Value<br>FullCora (70 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|Col10|
+|---|---|---|---|---|---|---|---|---|---|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|LinearSGC2 v.s.:<br>|LinearSGC2 v.s.:<br>|LinearSGC2 v.s.:<br>|LinearSGC2 v.s.:<br>|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|0<br>0.25<br>0.50<br>0.7<br>|5<br>1.|5<br>1.|5<br>1.|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|label-permutat<br>  roducts between<br>   nsen-Shannon di<br>_ u_, we construct<br>   nces:<br>2_, ∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(3)<br>_u ∥_<br>   dix A. An advan<br>    s also permutatio<br>  P), to predict the<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Roman (18 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Roman (18 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|ion matrices**_ P_** a<br> LinearGNN pr<br>   vergence. For a s<br>  the following_ t_(<br>2_, ..., ∥_ˆ**_y_**(_t_)<br>_u −_ˆ**_y_**(_t_<br>_u_<br>    tage of such per<br>     n invariant, allow<br>    attention scores<br>0<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>Arxiv (40 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br> <br>~~Arxiv (40 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>|Value<br>|Value<br>|Value<br>|Value<br>|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|~~Rom~~|~~an (18 classes)~~|~~Arx~~|~~iv (40 classes)~~|~~iv (40 classes)~~|~~Product (47 clas~~|~~ ses)~~|~~FullC~~|~~ora (70 classes)~~|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|LinearSGC2<br>Linear<br>LinearS<br>LinearH<br>LinearH|v.s.:<br>GC1<br>GC1<br>|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|LinearSGC2<br>Linear<br>LinearS<br>LinearH<br>LinearH|GC2|GC2|GC2|
+|which is invariant to both feature and<br>that is a linear combination of dot p<br>invariant, e.g. Euclidean distance or Je<br>ˆ**_y_**(1)<br>_u,_ ˆ**_y_**(2)<br>_u, · · ·,_ ˆ**_y_**(_t_)<br>_u_<br>on a single node <br>features to capture their squared dista<br>_∥_ˆ**_y_**(1)<br>_u_<br>_−_ˆ**_y_**(2)<br>_u ∥_<br>We include detailed proofs in Appen<br>that any model taking them as input i<br>such as multi-layer perceptrons (ML<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Wisconsin (5 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.00<br>0.25<br>0.50<br>0.75<br>1.00<br>Value<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>Cora (7 classes)<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0.0<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Wisconsin (5 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density<br>~~Cora (7 classes)~~<br>LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2<br>0<br>2<br>4<br>6<br>8<br>10<br>Density||||||||||
+
+
+|Wisc|onsin (5 classes)|
+|---|---|
+|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>LinearHGC2|LinearSGC2 v.s.:<br>Linear<br>LinearSGC1<br>LinearHGC1<br>|
+|||
+
+
+0.00 0.25 0.50 0.75 1.00
+Value
+
+
+0.00 0.25 0.50 0.75 1.00
+Value
+
+
+0.00 0.25 0.50 0.75 1.00
+Value
+
+
+0.00 0.25 0.50 0.75 1.00
+Value
+
+
+0.00 0.25 0.50 0.75 1.00
+Value
+
+
+0.00 0.25 0.50 0.75 1.00
+Value
+
+
+Figure 5: Comparison of Euclidean distances (the first row) and entropy-normalized (the second
+row) features between five channels: _**F**_ = _**X**_ (Linear), _**F**_ = _**AX**_ [¯] (LinearSGC1), _**F**_ = _**A**_ [¯][2] _**X**_
+(LinearSGC2), _**F**_ = ( _**I**_ _−_ _**A**_ [¯] ) _**X**_ (LinearHGC1) and _**F**_ = ( _**I**_ _−_ _**A**_ [¯] ) [2] _**X**_ (LinearHGC2) with _**A**_ [¯]
+denoting the row normalized adjaceny matrix. Entropy-normalized features are on the same scale and
+exhibit transferrable patterns across datasets.
+
+
+**Robust Dimension Generalization with Entropy Normalization.** While the distance features for
+inductive attention ensure a permutation-invariant attention module, the distance features are known
+to suffer from the curse of dimensionality, where distances between vectors with larger dimensions
+have smaller scales (Beyer et al., 1999). This will hamper the generalization performance when the
+dimensions of label spaces vary across training and inference graphs (e.g. training on 7 classes for
+Cora and inference on 70 classes for FullCora). Empirically, as shown in the first row of Figure 5, the
+scale of Euclidean distance distributions decreases drastically when the number of classes increases,
+hampering the generalization ability of the attention module trained on a single graph.
+
+
+A naive approach is to normalize the distance-feature distributions using a hyperparameter (e.g.,
+temperature). However, due to the varying neighbor patterns across graphs (or even nodes (Luan
+et al., 2022)), a single hyperparameter may not be suitable for all nodes and graphs. Instead, we
+propose an adaptive solution that normalizes distance features to a consistent scale. To achieve this,
+we employ _entropy normalization_, a technique commonly used in manifold learning (Hinton and
+Roweis, 2002; van der Maaten and Hinton, 2008) to adaptively determine the similarity features. For
+node _u_, the asymmetric similarity feature between LinearGNN predictions _i_ and _j_ is defined as:
+
+
+exp( _**y**_ ˆ _u_ [(] _[i]_ [)] _u_ _u_ [)][2][)]
+_pu_ ( _j_ _i_ ) = _−∥_ _[−]_ _**[y]**_ [ˆ][(] _[j]_ [)] _[∥]_ [2] _[/]_ [2(] _[σ]_ [(] _[i]_ [)] _,_ (10)
+_|_                      - _k_ = _i_ [exp(] _[−∥]_ _**[y]**_ [ˆ] _u_ [(] _[i]_ [)] _[−]_ _**[y]**_ [ˆ] _u_ [(] _[k]_ [)] _[∥]_ [2] _[/]_ [(] _[σ]_ _u_ [(] _[i]_ [)][)][2][)]
+
+where _σu_ [(] _[i]_ [)] [is the standard deviation of an isotropic multivariate Gaussian, determined by matching]
+the entropy of distance distributions _Pu_ [(] _[i]_ [)] = _pu_ ( _j_ _i_ ) _j_ [1 _, t_ ] to a fixed hyperparameter _H_ .
+_{_ _|_ _|_ _∈_ _}_
+Since the similarity features are derived from distance features, they are also permutation-invariant
+to the feature and label dimensions of the graph. Intuitively, this imposes a soft constraint on the
+
+
+6
+
+
+number of LinearGNN predictions considered similar to _**y**_ ˆ _u_ [(] _[i]_ [)][, significantly reducing the gap between]
+training and test features. As shown in the second row of Figure 5, entropy-normalized feature
+distributions are on consistent scales across datasets. Additionally, we observe that different types
+of homophilic graphs (e.g., the citation graph Cora and the e-commerce graph Product) exhibit
+similar entropy-normed features. We will further verify the effectiveness of entropy normalization
+empirically in Section 4.4.
+
+
+3.3 EFFICIENT TRAINING AND FULLY-INDUCTIVE INFERENCE
+
+
+In this section, we summarize how GraphAny utilizes the techniques introduced in the previous
+section and derive an efficient fully-inductive node classification model. As shown in Figure 3, given
+any graph, GraphAny first utilizes _t_ LinearGNNs to provide basic predictions with different channels.
+Then, entropy-normalized features are computed based on the distances between these predictions,
+leading to _t_ ( _t_ 1)-dimensional features. Further, an inductive attention module _fθ_ (e.g. MLP) is used
+
+_−_
+to compute the attention scores for fusing different predictions into a final prediction (Eq. 5). Since
+the only trainable module of GraphAny lies in the inductive attention module _fθ_ : R _[t]_ [(] _[t][−]_ [1)] _→_ R _[t]_,
+which is _independent_ to feature dimension _d_ and label dimension _c_, GraphAny enjoys fully-inductive
+inference on any graph with arbitrary feature and label dimensions.
+
+
+One advantage of GraphAny is that it is more efficient than conventional graph neural networks
+(e.g. GCN (Kipf and Welling, 2017), which is due to two reasons. First, LinearGNN leverages
+non-parameteric graph convolution operations, which can be preprocessed and cached for all nodes
+on a graph, reducing the optimization complexity to _O_ ( _L_ ) compared with the complexity of _O_ ( )
+_|V_ _|_ _|E|_
+for standard GNNs. Second, once trained, GraphAny is ready to generalize to arbitrary graphs,
+eliminating the need for gradient descent on test graphs.
+
+
+Table 1 shows the time complexity and total wall time of GCN, LinearGNN and GraphAny. The
+total wall time considers all training and inference time on 31 graphs. Even without any speed
+optimization in our implementation, GraphAny is 2.95 _×_ faster than the optimized DGL’s (Wang
+et al., 2020) GCN implementation in total time. We believe the speedup can be even larger with
+dedicate implementations of GraphAny.
+
+
+Table 1: Comparison of time complexity and wall time. Note that GCN has to be trained individually
+on each of the 31 graphs while GraphAny only needs 1 training graph.
+
+
+**Total Wall Time**
+**Model** **Pre-processing** **Optimization** **Inference**
+(31 graphs)
+
+
+GCN 0 _O_ ( _|E|_ ) _O_ ( _|E|_ ) 18.80 min
+LinearGNN _O_ ( _|E|_ ) _O_ ( _|VL|_ ) _O_ ( _|VU_ _|_ ) 1.25 min (15.04 _×_ )
+GraphAny _O_ ( _|E|_ ) _O_ ( _|VL|_ ) _O_ ( _|VU_ _|_ ) 6.37 min (2.95 _×_ )
+
+
+4 EXPERIMENTS
+
+
+In this section, we evaluate the performance of GraphAny against both transductive and inductive
+methods on 31 node classification datasets (details in Appendix B). We visualize the attention of
+GraphAny on different datasets, shedding light on what inductive knowledge our model has learned
+(Section 4.3). To provide a comprehensive understanding of the proposed techniques of GraphAny,
+we further conduct ablation studies on the entropy-normalized feature and attention parameterization
+in Section 4.4. More training and implementation details are provided in Appendix C.
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** We have compiled a diverse collection of 31 node classification datasets from three sources:
+PyG (Fey and Lenssen, 2019), DGL (Wang et al., 2020), and OGB (Hu et al., 2021b). These datasets
+encompass a wide range of graph types including academic collaboration networks, social networks,
+e-commerce networks and knowledge graphs, with sizes varying from a few hundreds to a few
+millions of nodes. The number of classes across these datasets ranges from 2 to 70. Detailed statistics
+for each dataset are provided in Appendix B.
+
+
+7
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+|Model<br>GraphAny (Wisconsin) | 120 training nodes GCN | 511,673 training nodes|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|Col19|Col20|Col21|Col22|Col23|Col24|Col25|Col26|Col27|Col28|Col29|Col30|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||||||<br>GAT | 511,673 train|<br>GAT | 511,673 train|<br>GAT | 511,673 train|<br>GAT | 511,673 train|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|<br>   ing nodes<br> <br>MLP | 511,673 training nodes|
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+|||||||||||||||||||||||||||||||
+
+
+Dataset
+
+
+Figure 6: Inductive test accuracy (%) of GraphAny pre-trained using 120 labeled nodes of the
+Wisconsin dataset on 30 diverse graphs. Baseline methods are trained individually on each graph
+(511k labeled nodes in total). GraphAny is slightly better than the baselines in average performance.
+
+
+**Implementation Details.** For GraphAny, we employ 5 LinearGNNs with different graph convolution
+operations: _**F**_ = _**X**_ (Linear), _**F**_ = _**AX**_ [¯] (LinearSGC1), _**F**_ = _**A**_ [¯][2] _**X**_ (LinearSGC2), _**F**_ = ( _**I**_ _−_ _**A**_ [¯] ) _**X**_
+(LinearHGC1) and _**F**_ = ( _**I**_ _−_ _**A**_ [¯] ) [2] _**X**_ (LinearHGC2) with _**A**_ [¯] denoting the row normalized adjaceny
+matrix, which cover identical, low-pass and high-pass spectral filters. In our experiments, we
+consider 4 GraphAny models trained separately on 4 datasets respectively: Cora (homophilic, small),
+Wisconsin (heterophilic, small), Arxiv (homophilic, medium), and Products (homophilic, large). The
+remaining 27 datasets are held out from these training sets, ensuring that the evaluations on these
+datasets are conducted in a fully-inductive manner. More implementation details can be found at
+Appendix C.
+
+
+**Baselines.** As there are no existing fully-inductive node classification baselines, we include nonparametric methods (models without learnable parameters) like label propagation (Zhu and Ghahramani, 2002) and the five LinearGNNs used in GraphAny. While these methods perform inductive
+inference, they do not transfer knowledge across graphs. Additionally, we compare GraphAny
+with transductive models, including MLP, GCN (Kipf and Welling, 2017), and GAT (Velickovic
+et al., 2018). These models are trained separately on each dataset and serve as strong baselines for
+inductive models, as they benefit from backpropagation on labeled nodes and hyperparameter tuning
+on validation sets of the test dataset.
+
+
+4.2 PERFORMANCE OF INDUCTIVE NODE CLASSIFICATION
+
+
+Table 2 presents the results of GraphAny and various baselines on 31 node classification datasets
+(complete results for each dataset are provided in Appendix D). Our proposed LinearGNNs, despite
+being non-parametric, demonstrate competitive performance. Notably, LinearSGC2, a linear model
+with a two-hop graph convolution layer, achieves only 2.1% lower accuracy than GCN, which
+aligns with previous findings that SGC performs comparably to GCN (Wu et al., 2019). Moreover,
+LinearSGC2 leverages an analytical solution for inference, making it approximately 15 _×_ faster than
+training a GCN from scratch on each dataset (see Table 1). Additionally, we observe that the optimal
+LinearGNN model differs across datasets, highlighting that no single graph convolution kernel is
+universally effective for all graphs.
+
+
+As for GraphAny, which is trained on just 1 of the 31 graphs, it significantly outperforms LinearGNNs and even slightly surpasses transductive baselines that are individually trained on all 31
+graphs. This improvement is primarily driven by inductive generalization, as GraphAny achieves
+its strongest performance on the 27 held-out (fully-inductive) datasets rather than the 4 training
+(transductive) datasets. A closer examination of Figure 6 shows that GraphAny performs well on
+both homophilic and heterophilic graphs in an inductive manner. We attribute this to the inductive
+attention module, which adaptively fuses predictions from different graph convolution kernels for
+each node. Interestingly, we also observe minimal performance differences between GraphAny when
+trained on small datasets (e.g., Cora and Wisconsin) and large datasets (e.g., Arxiv and Products). We
+hypothesize that even small datasets contain sufficiently diverse local node patterns (e.g., homophily
+
+
+8
+
+
+Table 2: Main experiment results (test accuracy %).
+
+
+**Held Out Avg.** **Total Avg.**
+**Category** **Method** **Cora** **Wisconsin** **Arxiv** **Products**
+(27 graphs) (31 graphs)
+
+
+MLP 48.42 _±_ 0.63 66.67 _±_ 3.51 55.50 _±_ 0.23 61.06 _±_ 0.08 57.09 57.20
+**Transductive** GCN 81.40 _±_ 0.70 37.25 _±_ 1.64 71.74 _±_ 0.29 75.79 _±_ 0.12 65.55 66.55
+GAT **81.70** _±_ **1.43** 52.94 _±_ 3.10 **73.65** _±_ **0.11** **79.45** _±_ **0.59** 65.31 67.03
+
+LabelProp 60.30 _±_ 0.00 16.08 _±_ 2.15 0.98 _±_ 0.00 74.50 _±_ 0.00 50.73 _±_ 0.31 49.01 _±_ 0.27
+Linear 52.80 _±_ 0.00 **80.00** _±_ **2.15** 46.79 _±_ 0.00 42.10 _±_ 0.00 57.91 _±_ 0.43 57.59 _±_ 0.42
+
+**Non-parameteric** LinearSGC1 74.30 _±_ 0.00 45.49 _±_ 13.96 55.33 _±_ 0.00 56.58 _±_ 0.00 62.69 _±_ 0.24 62.08 _±_ 0.48
+LinearSGC2 78.20 _±_ 0.00 57.64 _±_ 1.07 59.58 _±_ 0.00 62.92 _±_ 0.00 64.38 _±_ 0.48 64.41 _±_ 0.39
+LinearHGC1 22.50 _±_ 0.00 64.32 _±_ 2.15 22.92 _±_ 0.00 15.00 _±_ 0.00 37.01 _±_ 0.20 36.26 _±_ 0.23
+LinearHGC2 23.80 _±_ 0.00 56.08 _±_ 4.29 20.65 _±_ 0.00 13.39 _±_ 0.00 35.62 _±_ 0.68 34.70 _±_ 0.55
+
+GraphAny (Cora) 80.18 _±_ 0.13 61.18 _±_ 5.08 58.62 _±_ 0.05 61.60 _±_ 0.10 67.24 _±_ 0.23 67.00 _±_ 0.14
+**Inductive** GraphAny (Wisconsin) 77.82 _±_ 1.15 71.77 _±_ 5.98 57.79 _±_ 0.56 60.28 _±_ 0.80 67.31 _±_ 0.38 67.26 _±_ 0.20
+**(training set)** GraphAny (Arxiv) 79.38 _±_ 0.16 65.10 _±_ 3.22 58.68 _±_ 0.17 61.31 _±_ 0.20 67.65 _±_ 0.31 67.46 _±_ 0.27
+GraphAny (Products) 79.36 _±_ 0.23 65.89 _±_ 2.23 58.58 _±_ 0.11 61.19 _±_ 0.23 **67.66** _±_ **0.39** **67.48** _±_ **0.33**
+
+
+GraphAny-Arxiv Attention - Hits@1=0.55, Hits@2=0.77
+
+
+Arxiv
+Cora
+FCora
+Citeseer
+
+DBLP
+Pubmed
+
+
+GraphAny-Wisconsin Attention - Hits@1=0.52, Hits@2=0.65
+
+
+Texas
+Deezer
+
+Actor
+Roman
+
+
+Arxiv
+Cora
+FCora
+Citeseer
+
+DBLP
+Pubmed
+
+
+WkCS
+Products
+LastFMAsia
+
+Chameleon
+AmzRatings
+
+
+Arxiv
+Cora
+FCora
+Citeseer
+
+DBLP
+Pubmed
+
+
+WkCS
+Products
+LastFMAsia
+
+Chameleon
+AmzRatings
+
+
+Texas
+Deezer
+
+Actor
+Roman
+
+
+WkCS
+Products
+LastFMAsia
+
+Chameleon
+AmzRatings
+
+
+Tolokers
+Questions
+CoPhysics
+AmzComp
+AmzPhoto
+
+
+CoCS
+
+
+Normalized LinearGNN Results
+
+|0.79<br>0.68<br>0.73<br>0.89<br>0.76|0.93|1.00|
+|---|---|---|
+|0.79<br>0.68<br>0.73<br>0.89<br>0.76<br>|0.95<br>|1.00<br>|
+|0.79<br>0.68<br>0.73<br>0.89<br>0.76<br>|0.99<br>|1.00<br>|
+|0.79<br>0.68<br>0.73<br>0.89<br>0.76<br>|0.92<br>|1.00<br>|
+|0.79<br>0.68<br>0.73<br>0.89<br>0.76<br>|0.91<br>|1.00<br>|
+|0.95<br>|0.91<br>|1.00<br>|
+|0.90<br>0.67<br>0.71<br>0.44<br>0.91<br>|1.00<br>|1.00<br>|
+|0.90<br>0.67<br>0.71<br>0.44<br>0.91<br>|0.90<br>|1.00<br>|
+|0.90<br>0.67<br>0.71<br>0.44<br>0.91<br>|0.89<br>|1.00<br>|
+|0.90<br>0.67<br>0.71<br>0.44<br>0.91<br>|0.94<br>|1.00<br>|
+|0.90<br>0.67<br>0.71<br>0.44<br>0.91<br>|0.97<br>|1.00<br>|
+|1.00<br>|1.00<br>1.00<br>|1.00<br>|
+|1.00<br>|1.00<br>|1.00<br>|
+|0.93<br>0.79<br>0.85<br>0.98<br>|0.99<br>|1.00<br>|
+|0.93<br>0.79<br>0.85<br>0.98<br>|1.00<br>|1.00<br>|
+|0.93<br>0.79<br>0.85<br>0.98<br>|1.00<br>|0.99<br>|
+|0.93<br>0.79<br>0.85<br>0.98<br>|1.00<br>|1.00<br>|
+|0.99<br>|1.00<br>|0.94<br>|
+|0.67<br>0.65<br>0.58<br>0.61<br>0.45<br>0.97<br>|1.00<br>|0.98<br>|
+|0.67<br>0.65<br>0.58<br>0.61<br>0.45<br>0.97<br>|1.00<br>|0.94<br>|
+|0.67<br>0.65<br>0.58<br>0.61<br>0.45<br>0.97<br>|1.00<br>|0.97<br>|
+|0.67<br>0.65<br>0.58<br>0.61<br>0.45<br>0.97<br>|1.00<br>|0.93<br>|
+|0.67<br>0.65<br>0.58<br>0.61<br>0.45<br>0.97<br>|1.00<br>|0.95<br>|
+|0.67<br>0.65<br>0.58<br>0.61<br>0.45<br>0.97<br>|1.00<br>|0.97<br>|
+|1.00<br>|0.84<br>0.89<br>0.69<br>0.72<br>0.57<br>0.72<br>0.72<br>0.79<br>0.94<br>0.95<br>0.72<br>0.79<br>0.56<br>0.76|0.89<br>|
+|1.00<br>|1.00<br>|0.72<br>|
+|1.00<br>|1.00<br>|1.00<br>|
+|1.00<br>|1.00<br>|1.00<br>|
+|1.00<br>|1.00<br>|1.00<br>|
+|1.00<br>|1.00<br>|1.00<br>|
+|0.99|0.99|0.99|
+
+
+HGC1 HGC2 Linear SGC1 SGC2
+LinearGNNs
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+Tolokers
+Questions
+CoPhysics
+AmzComp
+AmzPhoto
+
+
+Wiki
+Reddit
+AirBrazil
+
+
+CoCS
+
+
+|0.09 0.10 0.28 0.21 0.32<br>0.09 0.11 0.27 0.17 0.36<br>0.12 0.10 0.26 0.16 0.36<br>0.08 0.10 0.27 0.15 0.40<br>0.11 0.14 0.27 0.17 0.32<br>0.09 0.12 0.27 0.16 0.36<br>0.10 0.12 0.27 0.18 0.34<br>0.13 0.18 0.29 0.19 0.20<br>0.10 0.11 0.27 0.17 0.35<br>0.14 0.15 0.23 0.22 0.26<br>0.07 0.09 0.29 0.17 0.39<br>0.08 0.10 0.29 0.18 0.36<br>0.09 0.10 0.28 0.16 0.37<br>0.12 0.12 0.28 0.23 0.26<br>0.11 0.13 0.28 0.19 0.29<br>0.11 0.12 0.29 0.20 0.29<br>0.10 0.11 0.28 0.20 0.30<br>0.12 0.13 0.26 0.18 0.31<br>0.14 0.16 0.29 0.22 0.20<br>0.14 0.17 0.29 0.20 0.21<br>0.16 0.22 0.25 0.18 0.18<br>0.14 0.20 0.26 0.16 0.24<br>0.13 0.16 0.24 0.17 0.30<br>0.07 0.08 0.28 0.14 0.43<br>0.12 0.14 0.29 0.19 0.26<br>0.13 0.12 0.27 0.24 0.25<br>0.22 0.11 0.21 0.21 0.25<br>0.14 0.12 0.26 0.24 0.24<br>0.19 0.17 0.19 0.19 0.26<br>0.10 0.12 0.25 0.15 0.38<br>0.09 0.10 0.24 0.12 0.45|Col2|0.28|0.21<br>0.17<br>0.16<br>0.15<br>0.17<br>0.16<br>0.18<br>0.19<br>0.17<br>0.22<br>0.17<br>0.18<br>0.16<br>0.23<br>0.19<br>0.20<br>0.20<br>0.18|0.32|
+|---|---|---|---|---|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.27<br>|0.27<br>|0.36<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.26<br>|0.26<br>|0.36<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.27<br>|0.27<br>|0.40<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.27<br>|0.27<br>|0.32<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.27<br>|0.27<br>|0.36<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.27<br>|0.27<br>|0.34<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.29<br>|0.29<br>|0.20<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.27<br>|0.27<br>|0.35<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.23<br>|0.23<br>|0.26<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.29<br>|0.29<br>|0.39<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.29<br>|0.29<br>|0.36<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.28<br>|0.28<br>|0.37<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.28<br>|0.28<br>|0.26<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.28<br>|0.28<br>|0.29<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.29<br>|0.29<br>|0.29<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.28<br>|0.28<br>|0.30<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.26<br>|0.26<br>|0.31<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.29<br>|0.22<br>|0.20<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.29<br>|0.29<br>|0.21<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.25<br>|0.25<br>|0.25<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.26<br>|0.26<br>|0.24<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.24<br>|0.24<br>|0.30<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.28<br>|0.28<br>|0.43<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.29<br>|0.29<br>|0.26<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.27<br>|0.27<br>|0.25<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.27<br>|0.27<br>|0.25<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.27<br>|0.27<br>|0.24<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.27<br>|0.27<br>|0.26<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.27<br>|0.27<br>|0.38<br>|
+|0.09<br>0.10<br>0.28<br>0.21<br>0.32<br>0.09<br>0.11<br>0.27<br>0.17<br>0.36<br>0.12<br>0.10<br>0.26<br>0.16<br>0.36<br>0.08<br>0.10<br>0.27<br>0.15<br>0.40<br>0.11<br>0.14<br>0.27<br>0.17<br>0.32<br>0.09<br>0.12<br>0.27<br>0.16<br>0.36<br>0.10<br>0.12<br>0.27<br>0.18<br>0.34<br>0.13<br>0.18<br>0.29<br>0.19<br>0.20<br>0.10<br>0.11<br>0.27<br>0.17<br>0.35<br>0.14<br>0.15<br>0.23<br>0.22<br>0.26<br>0.07<br>0.09<br>0.29<br>0.17<br>0.39<br>0.08<br>0.10<br>0.29<br>0.18<br>0.36<br>0.09<br>0.10<br>0.28<br>0.16<br>0.37<br>0.12<br>0.12<br>0.28<br>0.23<br>0.26<br>0.11<br>0.13<br>0.28<br>0.19<br>0.29<br>0.11<br>0.12<br>0.29<br>0.20<br>0.29<br>0.10<br>0.11<br>0.28<br>0.20<br>0.30<br>0.12<br>0.13<br>0.26<br>0.18<br>0.31<br>0.14<br>0.16<br>0.29<br>0.22<br>0.20<br>0.14<br>0.17<br>0.29<br>0.20<br>0.21<br>0.16<br>0.22<br>0.25<br>0.18<br>0.18<br>0.14<br>0.20<br>0.26<br>0.16<br>0.24<br>0.13<br>0.16<br>0.24<br>0.17<br>0.30<br>0.07<br>0.08<br>0.28<br>0.14<br>0.43<br>0.12<br>0.14<br>0.29<br>0.19<br>0.26<br>0.13<br>0.12<br>0.27<br>0.24<br>0.25<br>0.22<br>0.11<br>0.21<br>0.21<br>0.25<br>0.14<br>0.12<br>0.26<br>0.24<br>0.24<br>0.19<br>0.17<br>0.19<br>0.19<br>0.26<br>0.10<br>0.12<br>0.25<br>0.15<br>0.38<br>0.09<br>0.10<br>0.24<br>0.12<br>0.45|0.22<br>|0.27<br>|0.27<br>|0.45|
+
+
+HGC1 HGC2 Linear SGC1 SGC2
+LinearGNNs
+
+
+0.40
+
+
+0.35
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+Tolokers
+Questions
+CoPhysics
+AmzComp
+AmzPhoto
+
+
+Wiki
+Reddit
+AirBrazil
+
+
+CoCS
+
+
+|0.34|0.43|
+|---|---|
+|0.34<br>|0.40<br>|
+|0.34<br>|0.34<br>|
+|0.35<br>|0.37<br>|
+|0.35<br>|0.37<br>|
+|0.35<br>|0.39<br>|
+|0.34<br>|0.39<br>|
+|0.36<br>|0.34<br>|
+|0.35<br>|0.40<br>|
+|0.33<br>|0.47<br>|
+|0.34<br>|0.45<br>|
+|0.34<br>|0.45<br>|
+|0.34<br>|0.46<br>|
+|0.35<br>|0.44<br>|
+|0.36<br>|0.36<br>|
+|0.35<br>|0.38<br>|
+|0.34<br>|0.43<br>|
+|0.39<br>|0.31<br>|
+|0.37<br>|0.35<br>|
+|0.40<br>|0.27<br>|
+|0.35<br>|0.34<br>|
+|0.38<br>|0.27<br>|
+|0.29<br>|0.44<br>|
+|0.33<br>|0.47<br>|
+|0.35<br>|0.35<br>|
+|0.35<br>|0.38<br>|
+|0.32<br>|0.41<br>|
+|0.34<br>|0.39<br>|
+|0.34<br>|0.49<br>|
+|0.32<br>|0.41<br>|
+|0.28|0.45|
+
+
+HGC1 HGC2 Linear SGC1 SGC2
+LinearGNNs
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+Wiki
+Reddit
+AirBrazil
+
+
+AirUS
+AirEU
+Squirrel
+Minesweeper
+
+
+AirUS
+AirEU
+Squirrel
+Minesweeper
+
+BlogCatalog
+
+
+AirUS
+AirEU
+Squirrel
+Minesweeper
+
+
+BlogCatalog
+
+
+Cornell
+Wisconsin
+
+
+BlogCatalog
+
+
+Texas
+Deezer
+
+Actor
+Roman
+
+
+Cornell
+Wisconsin
+
+
+Cornell
+Wisconsin
+
+
+Figure 7: Normalized performance of LinearGNNs (left; best as 1.00) and attention weights of
+GraphAny trained on Wisconsin (middle) and Arxiv (right) respectively. The best and second best
+LinearGNN performance and attention weights for each dataset are highlighted with red and purple
+rectangles respectively. The learned inductive attention of GraphAny successfully identifies the
+best-performing LinearGNN for most datasets.
+
+
+and heterophily) (Luan et al., 2022), enabling GraphAny to learn an effective node-level attention
+mechanism that generalizes well with a limited number of nodes (e.g., 120). A detailed analysis of
+the attention module is provided in Section 4.3.
+
+
+4.3 VISUALIZATION OF THE INDUCTIVE ATTENTION
+
+
+To understand how LinearGNNs are combined in GraphAny by the inductive attention, we visualize
+the attention weights of GraphAny (Wisconsin) and GraphAny (Arxiv) on all datasets, averaged
+across nodes. For reference, we also visualize the performance of each individual LinearGNN on all
+datasets. As shown in Figure 7, we can see that half of the datasets are homophilic with LinearSGC2
+being the optimal LinearGNN, while the other half prefers LinearHGC1, Linear or LinearSGC1.
+In most cases, GraphAny successfully identifies the optimal LinearGNN within its top-2 attention
+weights, with Hits@2 being 0.65 and 0.77 for GraphAny trained on Wisconsin and Arxiv respectively.
+
+
+We hypothesis that this amazing inductive performance comes from the inductive entropy-normed
+distance feature we derived, where homophilic and heterophilic graphs share different patterns (see
+the second row in Figure 5). Interestingly, there is a distinction between the attention distributions
+when training on different datasets: GraphAny-Wisconsin leads a relatively balanced distribution of
+attention across 5 LinearGNNs, while Graph-Arxiv prefers a more focused distribution of attention,
+favoring low-pass filters like LinearSGC1 and LinearSGC2. This reflects the nature of these training
+sets: As shown in the left part of Figure 7, all LinearGNN channels in Wisconsin are reasonably good,
+
+
+9
+
+
+EntNorm-4 EntNorm-3 EntNorm-2 EntNorm-1
+EntNorm-0.5 EntNorm-0.25 Euc. Distance JS-Divergence
+
+Transductive Test Accuracy Inductive Test Accuracy
+
+
+59.5
+
+67
+
+
+59
+
+
+59
+
+
+58.8
+
+
+58.6
+
+
+58.4
+
+
+58.2
+
+
+58
+
+
+57.8
+
+
+57.6
+
+
+57.4
+
+
+57.2
+
+
+Node Graph Transductive
+
+
+Transductive Test Accuracy Inductive Test Accuracy
+
+
+67
+
+
+66
+
+
+65
+
+
+64
+
+
+63
+
+
+58.5
+
+
+58
+
+
+57.5
+
+
+66
+
+
+65
+
+
+64
+
+
+63
+
+
+500 1000 1500 2000
+
+
+500 1000 1500 2000
+
+
+500 1000 1500 2000
+
+
+500 1000 1500 2000
+
+
+Training Batch Training Batch
+
+
+Figure 8: Performance of different distance features with and without entropy normalization.
+
+
+Training Batch Training Batch
+
+
+Figure 9: Performance of different attention parameterizations.
+
+
+indicating diverse message-passing pattern exists, but Arxiv is a homophilic dataset where Linear,
+LinearSGC1 and LinearSGC2 have better performance (Table 2). These different message-passing
+patterns are learned and used by GraphAny to generate inductive attention scores.
+
+
+4.4 ABLATION STUDIES
+
+
+**Entropy Normalization.** A key component of GraphAny is the entropy normalization technique
+applied to distance features. As discussed in Figure 5, entropy normalization ensures that the
+generated features are of a consistent scale. Here, we further evaluate entropy normalization from
+a performance perspective. Figure 8 demonstrates that unnormalized features, such as Euclidean
+distance and Jensen-Shannon divergence, yield better test performance in the transductive setting.
+However, their performance in the inductive setting decreases as training progresses, indicating that
+the model overfits to transductive information in the features, such as feature scale. In contrast,
+distance features normalized to the same entropy _H_ (denoted as EntNorm- _H_ in the figure) achieve
+stable convergence in both transductive and inductive settings. Additionally, entropy normalization
+shows robustness to the choice of the hyperparameter entropy value _H_, with different selections
+resulting in similar convergence rates and performance.
+
+
+**Attention Parameterization.** It is known that the optimal message-passing patterns vary for different
+graphs (Zhu et al., 2020) or even different nodes (Luan et al., 2022). Therefore, GraphAny utilizes
+a _node-level attention_ to adaptively combine different LinearGNN predictions. Here we consider
+two variants of attention parameterization: (1) _Graph-level attention_ uses distance features averaged
+over all nodes in a training batch, which results in the same attention for all nodes in a training batch,
+losing the personalization for each node. (2) _Transductive attention_ directly parameterizes attention
+weights as a _t_ -dimensional vector and assumes they can transfer to new graphs. Figure 9 plots the
+transductive and inductive test performance curves for different attention parameterizations. We
+notice that transductive attention does not even learn anything useful, given its performance is worse
+than a single LinearSGC2 model (see Table 2). Comparing node-level attention and graph-level
+attention, we can see that node-level attention converges slower than graph-level attention, but results
+in better performance in both transductive and inductive settings. This suggests the effectiveness of
+learning fine-grained attention based on the local information of each node.
+
+
+5 CONCLUSION
+
+
+In this paper, we propose GraphAny, the first fully-inductive node classification model capable of
+performing inference on any graph with arbitrary feature or label space. GraphAny is composed of
+two core components: LinearGNNs and an inductive attention module. LinearGNNs enable efficient
+inductive inference on unseen graphs, while the inductive attention module learns to adaptively
+aggregate predictions from multiple LinearGNNs. Trained on a single graph, GraphAny demonstrates
+strong generalization to 30 new graphs, even surpassing the average performance of transductive
+models that are trained separately on each dataset.
+
+
+10
+
+
+ACKNOLEDGEMENT
+
+
+The authors would like to thank Dinghuai Zhang for his helpful discussions and comments. This
+project is supported by the Intel-MILA partnership program, the Natural Sciences and Engineering
+Research Council (NSERC) Discovery Grant, the Canada CIFAR AI Chair Program, collaboration
+grants between Microsoft Research and Mila, Tencent AI Lab Rhino-Bird Gift Fund and a NRC
+Collaborative R&D Project (AI4DCORE-06). This project was also partially funded by IVADO
+Fundamental Research Project grant PRF-2019-3583139727. M.B. is partially supported by the
+EPSRC Turing AI World-Leading Research Fellowship No. EP/X040062/1 and EPSRC AI Hub No.
+EP/Y028872/1. The computation resource of this project is supported by Mila, Calcul Québec and
+the Digital Research Alliance of Canada.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman,
+Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report.
+_arXiv preprint arXiv:2303.08774_, 2023.
+
+
+Ravichandra Addanki, Peter W Battaglia, David Budden, Andreea Deac, Jonathan Godwin, Thomas
+Keck, Wai Lok Sibon Li, Alvaro Sanchez-Gonzalez, Jacklynn Stott, Shantanu Thakoor, et al.
+Large-scale graph representation learning with very deep gnns and self-supervision. _arXiv preprint_
+_arXiv:2107.09422_, 2021.
+
+
+Ilyes Batatia, Philipp Benner, Yuan Chiang, Alin M. Elena, Dávid P. Kovács, Janosh Riebesell,
+Xavier R. Advincula, Mark Asta, Matthew Avaylon, William J. Baldwin, Fabian Berger, Noam
+Bernstein, Arghya Bhowmik, Samuel M. Blau, Vlad C˘arare, James P. Darby, Sandip De, Flaviano Della Pia, Volker L. Deringer, Rokas Elijošius, Zakariya El-Machachi, Fabio Falcioni, Edvin
+Fako, Andrea C. Ferrari, Annalena Genreith-Schriever, Janine George, Rhys E. A. Goodall, Clare P.
+Grey, Petr Grigorev, Shuang Han, Will Handley, Hendrik H. Heenen, Kersti Hermansson, Christian
+Holm, Jad Jaafar, Stephan Hofmann, Konstantin S. Jakob, Hyunwook Jung, Venkat Kapil, Aaron D.
+Kaplan, Nima Karimitari, James R. Kermode, Namu Kroupa, Jolla Kullgren, Matthew C. Kuner,
+Domantas Kuryla, Guoda Liepuoniute, Johannes T. Margraf, Ioan-Bogdan Magd˘au, Angelos
+Michaelides, J. Harry Moore, Aakash A. Naik, Samuel P. Niblett, Sam Walton Norwood, Niamh
+O’Neill, Christoph Ortner, Kristin A. Persson, Karsten Reuter, Andrew S. Rosen, Lars L. Schaaf,
+Christoph Schran, Benjamin X. Shi, Eric Sivonxay, Tamás K. Stenczel, Viktor Svahn, Christopher
+Sutton, Thomas D. Swinburne, Jules Tilly, Cas van der Oord, Eszter Varga-Umbrich, Tejs Vegge,
+Martin Vondrák, Yangshuai Wang, William C. Witt, Fabian Zills, and Gábor Csányi. A foundation
+model for atomistic materials chemistry. _arXiv preprint arXiv:2401.00096_, 2024.
+
+
+Kevin S. Beyer, Jonathan Goldstein, Raghu Ramakrishnan, and Uri Shaft. When is ”nearest neighbor”
+meaningful? In Catriel Beeri and Peter Buneman, editors, _Database_ _Theory_ _-_ _ICDT_ _’99,_ _7th_
+_International Conference, Jerusalem, Israel, January 10-12, 1999, Proceedings_, volume 1540 of
+_Lecture Notes in Computer Science_, pages 217–235. Springer, 1999. doi: 10.1007/3-540-49257-7\
+_15.
+
+
+Aleksandar Bojchevski and Stephan Günnemann. Deep gaussian embedding of graphs: Unsupervised
+inductive learning via ranking. In _International Conference on Learning Representations_, 2018.
+
+
+Michael M Bronstein, Joan Bruna, Taco Cohen, and Petar Veliˇckovi´c. Geometric deep learning:
+Grids, groups, graphs, geodesics, and gauges. _arXiv preprint arXiv:2104.13478_, 2021.
+
+
+Ziwei Chai, Tianjie Zhang, Liang Wu, Kaiqiao Han, Xiaohai Hu, Xuanwen Huang, and Yang
+Yang. Graphllm: Boosting graph reasoning ability of large language model. _arXiv_ _preprint_
+_arXiv:2310.05845_, 2023.
+
+
+Michaël Defferrard, Xavier Bresson, and Pierre Vandergheynst. Convolutional neural networks on
+graphs with fast localized spectral filtering. In _NIPS_, 2016.
+
+
+Kaiwen Dong, Haitao Mao, Zhichun Guo, and Nitesh V. Chawla. Universal link predictor by
+in-context learning on graphs. _arXiv preprint arXiv:2402.07738_, 2024.
+
+
+11
+
+
+Bahare Fatemi, Jonathan Halcrow, and Bryan Perozzi. Talk like a graph: Encoding graphs for large
+language models. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Matthias Fey and Jan Eric Lenssen. Fast graph representation learning with pytorch geometric, 2019.
+
+
+Mikhail Galkin, Xinyu Yuan, Hesham Mostafa, Jian Tang, and Zhaocheng Zhu. Towards foundation
+models for knowledge graph reasoning. In _The Twelfth International Conference on Learning_
+_Representations_, 2024.
+
+
+William L. Hamilton, Zhitao Ying, and Jure Leskovec. Inductive representation learning on large
+graphs. In _NIPS_, 2017.
+
+
+Mengyue Hang, Jennifer Neville, and Bruno Ribeiro. A collective learning framework to boost gnn
+expressiveness for node classification. In _Proceedings of the 38th International Conference on_
+_Machine Learning_, volume 139, pages 4040–4050. PMLR, 2021.
+
+
+Geoffrey E Hinton and Sam Roweis. Stochastic neighbor embedding. _Advances in neural information_
+_processing systems_, 15, 2002.
+
+
+Weihua Hu, Matthias Fey, Hongyu Ren, Maho Nakata, Yuxiao Dong, and Jure Leskovec. Ogb-lsc: A
+large-scale challenge for machine learning on graphs. In _Proceedings of the Neural Information_
+_Processing Systems Track on Datasets and Benchmarks_, 2021a.
+
+
+Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta,
+and Jure Leskovec. Open graph benchmark: Datasets for machine learning on graphs, 2021b.
+
+
+Hyosoon Jang, Seonghyun Park, Sangwoo Mo, and Sungsoo Ahn. Diffusion probabilistic models for
+structured node classification. In _Thirty-seventh Conference on Neural Information Processing_
+_Systems_, 2023.
+
+
+Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks.
+In _ICLR_, 2017.
+
+
+Kerstin Kläser, Bła˙zej Banaszewski, Samuel Maddrell-Mander, Callum McLean, Luis Müller, Ali
+Parviz, Shenyang Huang, and Andrew Fitzgibbon. MiniMol: A parameter-efficient foundation
+model for molecular learning. _arXiv preprint arXiv:2404.14986_, 2024.
+
+
+Dávid Péter Kovács, J. Harry Moore, Nicholas J. Browning, Ilyes Batatia, Joshua T. Horton, Venkat
+Kapil, William C. Witt, Ioan-Bogdan Magd˘au, Daniel J. Cole, and Gábor Csányi. Mace-off23:
+Transferable machine learning force fields for organic molecules. _arXiv preprint arXiv:2312.15211_,
+2023.
+
+
+Hao Liu, Jiarui Feng, Lecheng Kong, Ningyue Liang, Dacheng Tao, Yixin Chen, and Muhan
+Zhang. One for all: Towards training one graph model for all classification tasks. In _The Twelfth_
+_International Conference on Learning Representations_, 2024.
+
+
+Sitao Luan, Chenqing Hua, Qincheng Lu, Jiaqi Zhu, Mingde Zhao, Shuyuan Zhang, Xiao-Wen
+Chang, and Doina Precup. Revisiting heterophily for graph neural networks. In _NeurIPS_, 2022.
+
+
+Haitao Mao, Zhikai Chen, Wenzhuo Tang, Jianan Zhao, Yao Ma, Tong Zhao, Neil Shah, Mikhail
+Galkin, and Jiliang Tang. Graph foundation models. _arXiv preprint arXiv:2402.02216_, 2024.
+
+
+Péter Mernyei and C˘at˘alina Cangea. Wiki-cs: A wikipedia-based benchmark for graph neural
+networks. _arXiv preprint arXiv:2007.02901_, 2020.
+
+
+Hongbin Pei, Bingzhe Wei, Kevin Chen-Chuan Chang, Yu Lei, and Bo Yang. Geom-gcn: Geometric
+graph convolutional networks. In _ICLR_, 2020.
+
+
+Bryan Perozzi, Bahare Fatemi, Dustin Zelle, Anton Tsitsulin, Mehran Kazemi, Rami Al-Rfou, and
+Jonathan Halcrow. Let your graph do the talking: Encoding structured data for llms. _arXiv preprint_
+_arXiv:2402.05862_, 2024.
+
+
+Oleg Platonov, Denis Kuznedelev, Michael Diskin, Artem Babenko, and Liudmila Prokhorenkova.
+A critical look at evaluation of gnns under heterophily: Are we really making progress? In _The_
+_Eleventh International Conference on Learning Representations_, 2023.
+
+
+12
+
+
+Meng Qu, Huiyu Cai, and Jian Tang. Neural structured prediction for inductive node classification.
+In _International Conference on Learning Representations_, 2022.
+
+
+Leonardo F.R. Ribeiro, Pedro H.P. Saverese, and Daniel R. Figueiredo. struc2vec: Learning node
+representations from structural identity. In _Proceedings of the 23rd ACM SIGKDD International_
+_Conference on Knowledge Discovery and Data Mining_ . Association for Computing Machinery,
+2017.
+
+
+Benedek Rozemberczki, Carl Allen, and Rik Sarkar. Multi-Scale Attributed Node Embedding.
+_Journal of Complex Networks_, 9(2), 2021.
+
+
+Ryoma Sato. Training-free graph neural networks and the power of labels as features. _arXiv preprint_
+_arXiv:2404.19288_, 2024.
+
+
+Oleksandr Shchur, Maximilian Mumme, Aleksandar Bojchevski, and Stephan Günnemann. Pitfalls
+of graph neural network evaluation. _arXiv preprint arXiv:1811.05868_, 2018.
+
+
+Nima Shoghi, Adeesh Kolluru, John R. Kitchin, Zachary Ward Ulissi, C. Lawrence Zitnick, and
+Brandon M Wood. From molecules to materials: Pre-training large generalizable models for
+atomic property prediction. In _The Twelfth International Conference on Learning Representations_,
+2024.
+
+
+Maciej Sypetkowski, Frederik Wenkel, Farimah Poursafaei, Nia Dickson, Karush Suri, Philip Fradkin, and Dominique Beaini. On the scalability of gnns for molecular graphs. _arXiv_ _preprint_
+_arXiv:2404.11568_, 2024.
+
+
+Jiabin Tang, Yuhao Yang, Wei Wei, Lei Shi, Lixin Su, Suqi Cheng, Dawei Yin, and Chao Huang.
+Graphgpt: Graph instruction tuning for large language models. _arXiv preprint arXiv:2310.13023_,
+2023.
+
+
+Gemini Team, Rohan Anil, Sebastian Borgeaud, Yonghui Wu, Jean-Baptiste Alayrac, Jiahui Yu, Radu
+Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, et al. Gemini: a family of highly capable
+multimodal models. _arXiv preprint arXiv:2312.11805_, 2023.
+
+
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay
+Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation
+and fine-tuned chat models. _arXiv preprint arXiv:2307.09288_, 2023.
+
+
+Laurens van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. _Journal of Machine_
+_Learning Research_, 9(86):2579–2605, 2008.
+
+
+Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Liò, and Yoshua
+Bengio. Graph attention networks. In _ICLR_, 2018.
+
+
+Minjie Wang, Da Zheng, Zihao Ye, Quan Gan, Mufei Li, Xiang Song, Jinjing Zhou, Chao Ma,
+Lingfan Yu, Yu Gai, Tianjun Xiao, Tong He, George Karypis, Jinyang Li, and Zheng Zhang.
+Deep graph library: A graph-centric, highly-performant package for graph neural networks. _arXiv_
+_preprint arXiv:1909.01315_, 2020.
+
+
+Felix Wu, Amauri H. Souza Jr., Tianyi Zhang, Christopher Fifty, Tao Yu, and Kilian Q. Weinberger.
+Simplifying graph convolutional networks. In _ICML_, 2019.
+
+
+Hao Yan, Chaozhuo Li, Ruosong Long, Chao Yan, Jianan Zhao, Wenwen Zhuang, Jun Yin, Peiyan
+Zhang, Weihao Han, Hao Sun, Weiwei Deng, Qi Zhang, Lichao Sun, Xing Xie, and Senzhang
+Wang. A comprehensive study on text-attributed graphs: Benchmarking and rethinking. In A. Oh,
+T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine, editors, _Advances_ _in_ _Neural_
+_Information Processing Systems_, volume 36, pages 17238–17264. Curran Associates, Inc., 2023.
+
+
+Renchi Yang, Jieming Shi, Xiaokui Xiao, Yin Yang, Sourav S Bhowmick, and Juncheng Liu. Pane:
+scalable and effective attributed network embedding. _The VLDB Journal_, 32(6):1237–1262, 2023.
+
+
+Zhilin Yang, William Cohen, and Ruslan Salakhudinov. Revisiting semi-supervised learning with
+graph embeddings. In _Proceedings of The 33rd International Conference on Machine Learning_,
+pages 40–48. PMLR, 2016.
+
+
+13
+
+
+Jaemin Yoo, Meng-Chieh Lee, Shubhranshu Shekhar, and Christos Faloutsos. Less is more: Slimg
+for accurate, robust, and interpretable graph mining. In _KDD_, pages 3128–3139. ACM, 2023.
+
+
+Duo Zhang, Xinzijian Liu, Xiangyu Zhang, Chengqian Zhang, Chun Cai, Hangrui Bi, Yiming Du,
+Xuejian Qin, Jiameng Huang, Bowen Li, Yifan Shan, Jinzhe Zeng, Yuzhi Zhang, Siyuan Liu,
+Yifan Li, Junhan Chang, Xinyan Wang, Shuo Zhou, Jianchuan Liu, Xiaoshan Luo, Zhenyu Wang,
+Wanrun Jiang, Jing Wu, Yudi Yang, Jiyuan Yang, Manyi Yang, Fu-Qiang Gong, Linshuang Zhang,
+Mengchao Shi, Fu-Zhi Dai, Darrin M. York, Shi Liu, Tong Zhu, Zhicheng Zhong, Jian Lv, Jun
+Cheng, Weile Jia, Mohan Chen, Guolin Ke, Weinan E, Linfeng Zhang, and Han Wang. Dpa-2:
+Towards a universal large atomic model for molecular and material simulation. _arXiv preprint_
+_arXiv:2312.15492_, 2023.
+
+
+Muhan Zhang, Pan Li, Yinglong Xia, Kai Wang, and Long Jin. Labeling trick: A theory of using
+graph neural networks for multi-node representation learning. In _Advances in Neural Information_
+_Processing Systems_, volume 34, pages 9061–9073, 2021.
+
+
+Jianan Zhao, Le Zhuo, Yikang Shen, Meng Qu, Kai Liu, Michael Bronstein, Zhaocheng Zhu, and
+Jian Tang. Graphtext: Graph reasoning in text space. _arXiv preprint arXiv:2310.01089_, 2023.
+
+
+Hao Zhu and Piotr Koniusz. Simple spectral graph convolution. In _ICLR_ . OpenReview.net, 2021.
+
+
+Jiong Zhu, Yujun Yan, Lingxiao Zhao, Mark Heimann, Leman Akoglu, and Danai Koutra. Beyond
+homophily in graph neural networks: Current limitations and effective designs. In _NIPS_, 2020.
+
+
+Xiaojin Zhu and Zoubin Ghahramani. Learning from labeled and unlabeled data with label propagation. _Technical Report CMU-CALD-02-107_, 2002.
+
+
+Yun Zhu, Yaoke Wang, Haizhou Shi, Zhenshuo Zhang, Dian Jiao, and Siliang Tang. Graphcontrol:
+Adding conditional control to universal graph pre-trained models for graph domain transfer learning.
+In _WWW_, 2024.
+
+
+14
+
+
+A PROOF OF FEATURE AND LABEL PERMUTATION INVARIANCE
+
+
+In this section, we prove that the proposed distance-based features have the desiring property of
+feature- and label-permutation invariance.
+
+
+A.1 LABEL-PERMUTATION INVARIANCE
+
+
+Here, we show the label-permutation invariance of the distance of LinearGNN predictions. I.e. for
+any two LinearGNNs _i_ and _j_, the (squared) distances between the permuted predictions, denoted as
+_∥_ _**y**_ ˜ _u_ [(] _[i]_ [)] _[−]_ _**[y]**_ [˜] _u_ [(] _[j]_ [)][)] _[∥]_ [2][ and the distances between the original predictions, i.e.] _[∥]_ _**[y]**_ [ˆ] _u_ [(] _[i]_ [)] _[−]_ _**[y]**_ [ˆ] _u_ [(] _[j]_ [)] _[∥]_ [2][ are the same.]
+
+Consider permuting the label dimension, i.e. right multiplicate a permutation matrix _**Q**_ _∈_ R _[c][×][c]_ to the
+LinearGNN prediction _**Y**_ [ˆ] = _**F F**_ _L_ [+] _**[Y]**_ _[L][.]_ [ (Eq 4).] [The permutated label logits] _**[Y]**_ [˜] [can be expressed as:]
+
+
+_**Y**_ ˜ = _**F F**_ _L_ [+] _**[Y]**_ _[L]_ _**[Q]**_ _[.]_ (11)
+
+
+Given the linearity of matrix multiplication, we have:
+
+
+_**Y**_ ˜ = _**F F**_ _L_ [+][(] _**[Y]**_ _[L]_ _**[Q]**_ [) = (] _**[F F]**_ _L_ [ +] _**[Y]**_ _[L]_ [)] _**[Q]**_ [ =] _**[Y Q]**_ [ˆ] _[.]_ (12)
+
+
+Thus, label-permutation _equivariance_ is proved. Since the permutation matrix **Q** is orthonormal
+(i.e. **Q** _[T]_ **Q** = **I** ), pairwise distances between permuted logits remain the same as those between the
+original logits.
+
+
+_∥_ _**y**_ ˜ _u_ [(] _[i]_ [)] _[−]_ _**[y]**_ [˜] _u_ [(] _[j]_ [)] _[∥]_ [2] [=] _**[y]**_ [ˆ] _u_ [(] _[i]_ [)] _[T]_ _**Q**_ _[T]_ _**Qy**_ ˆ _u_ [(] _[i]_ [)] [+] _**[y]**_ [ˆ] _u_ [(] _[j]_ [)] _[T]_ _**Q**_ _[T]_ _**Qy**_ ˆ _u_ [(] _[j]_ [)] _−_ 2ˆ _**y**_ _u_ [(] _[i]_ [)] _[T]_ _**Q**_ _[T]_ _**Qy**_ ˆ _u_ [(] _[j]_ [)]
+= _**y**_ ˆ _u_ [(] _[i]_ [)] _[T]_ _**y**_ ˆ _u_ [(] _[i]_ [)] [+] _**[y]**_ [ˆ] _u_ [(] _[j]_ [)] _[T]_ _**y**_ ˆ _u_ [(] _[j]_ [)] _−_ 2ˆ _**y**_ _u_ [(] _[i]_ [)] _[T]_ _**y**_ ˆ _u_ [(] _[j]_ [)] (13)
+
+= _**y**_ ˆ _u_ [(] _[i]_ [)] _u_
+_∥_ _[−]_ _**[y]**_ [ˆ][(] _[j]_ [)] _[∥]_ [2] _[.]_
+
+
+Hence, the distance-based feature is label permutation-invariant.
+
+
+A.2 FEATURE-PERMUTATION INVARIANCE
+
+
+Now, let’s consider permuting the feature dimension by right multiplication with a permutation matrix
+_**P**_ _∈_ R _[d][×][d]_, resulting in permuted features on labeled nodes denoted as _**F**_ _L_ _**P**_ . Since the permutation
+matrix _**P**_ is orthonormal, the pseudoinverse of _**F**_ _L_ _**P**_ is:
+
+
+( _**F**_ _L_ _**P**_ ) [+] = _**P**_ _[⊤]_ _**F**_ _L_ [+] _[.]_ (14)
+
+
+Substituting it into the equation 4, the predictions using permuted feature are:
+
+
+_**F P**_ ( _**F**_ _L_ _**P**_ ) [+] _**Y**_ _L_ = _**F P P**_ _[⊤]_ _**F**_ _L_ [+] _**[Y]**_ _[L]_ [=] _**[ F F]**_ _L_ [ +] _**[Y]**_ _[L]_ [=] _**[Y]**_ [ˆ] _[ .]_ (15)
+
+Here, _**P P**_ _[⊤]_ = _**I**_ where _**I**_ _∈_ R _[d][×][d]_ is the identity matrix, hence proving that the predictions with
+feature-permutation are identical to the original predictions _**Y**_ [ˆ] . That is, the predictions are featurepermutation invariant. Therefore, the distance features are also feature-permutation invariant.
+
+
+B DATASETS
+
+
+We collect a diverse collection of 31 node classification datasets from three sources: PyG (Fey and
+Lenssen, 2019), DGL (Wang et al., 2020), and OGB (Hu et al., 2021b). We follow the default split
+if there is a given one, otherwise, we use the standard semi-supervised setting (Kipf and Welling,
+2017) where 20 nodes are randomly selected as training nodes for each label. The detailed dataset
+information is summarized in Table 3.
+
+
+15
+
+
+Table 3: 31 datasets used in this paper. Of those, 20 are homophilic and 11 are heterophilic.
+
+
+**Dataset** **#Nodes** **#Edges** **#Feature** **#Classes** **#Labeled Nodes** **Train/Val/Test Ratios (%)** **Category** **Source**
+
+
+Air Brazil 131 1074 131 4 80 61.1/19.1/19.8 Homophilic Ribeiro et al. (2017)
+Cornell 183 554 1703 5 87 47.5/32.2/20.2 Heterophilic Pei et al. (2020)
+Texas 183 558 1703 5 87 47.5/31.7/20.2 Heterophilic Pei et al. (2020)
+Wisconsin 251 900 1703 5 120 47.8/31.9/20.3 Heterophilic Pei et al. (2020)
+Air EU 399 5995 399 4 80 20.1/39.8/40.1 Homophilic Ribeiro et al. (2017)
+Air US 1190 13599 1190 4 80 6.7/46.6/46.6 Homophilic Ribeiro et al. (2017)
+Chameleon 2277 36101 2325 5 1092 48.0/32.0/20.0 Heterophilic Pei et al. (2020)
+Wiki 2405 17981 4973 17 340 14.1/42.9/43.0 Homophilic Yang et al. (2023)
+Cora 2708 10556 1433 7 140 5.2/18.5/36.9 Homophilic Yang et al. (2016)
+Citeseer 3327 9104 3703 6 120 3.6/15.0/30.1 Homophilic Yang et al. (2016)
+BlogCatalog 5196 343486 8189 6 120 2.3/48.8/48.8 Homophilic Yang et al. (2023)
+Squirrel 5201 217073 2089 5 2496 48.0/32.0/20.0 Heterophilic Pei et al. (2020)
+Actor 7600 30019 932 5 3648 48.0/32.0/20.0 Heterophilic Pei et al. (2020)
+LastFM Asia 7624 55612 128 18 360 4.7/47.6/47.6 Homophilic Rozemberczki et al. (2021)
+AmzPhoto 7650 238162 745 8 160 2.1/49.0/49.0 Homophilic Shchur et al. (2018)
+Minesweeper 10000 78804 7 2 5000 50.0/25.0/25.0 Heterophilic Platonov et al. (2023)
+WikiCS 11701 431206 300 10 580 5.0/15.1/49.9 Homophilic Mernyei and Cangea (2020)
+Tolokers 11758 1038000 10 2 5879 50.0/25.0/25.0 Heterophilic Platonov et al. (2023)
+AmzComp 13752 491722 767 10 200 1.5/49.3/49.3 Homophilic Shchur et al. (2018)
+DBLP 17716 105734 1639 4 80 0.5/49.8/49.8 Homophilic Bojchevski and Günnemann (2018)
+CoCS 18333 163788 6805 15 300 1.6/49.2/49.2 Homophilic Shchur et al. (2018)
+Pubmed 19717 88648 500 3 60 0.3/2.5/5.1 Homophilic Yang et al. (2016)
+FullCora 19793 126842 8710 70 1400 7.1/46.5/46.5 Homophilic Bojchevski and Günnemann (2018)
+Roman Empire 22662 65854 300 18 11331 50.0/25.0/25.0 Heterophilic Platonov et al. (2023)
+Amazon Ratings 24492 186100 300 5 12246 50.0/25.0/25.0 Heterophilic Platonov et al. (2023)
+Deezer 28281 185504 128 2 40 0.1/49.9/49.9 Homophilic Rozemberczki et al. (2021)
+CoPhysics 34493 495924 8415 5 100 0.3/49.9/49.9 Homophilic Shchur et al. (2018)
+Questions 48921 307080 301 2 24460 50.0/25.0/25.0 Heterophilic Platonov et al. (2023)
+Arxiv 169343 1166243 128 40 90941 53.7/17.6/28.7 Homophilic Hu et al. (2021b)
+Reddit 232965 114615892 602 41 153431 65.9/10.2/23.9 Homophilic Hamilton et al. (2017)
+Product 2449029 123718280 100 47 196615 8.0/1.6/90.4 Homophilic Hu et al. (2021b)
+
+
+C IMPLEMENTATION DETAILS
+
+
+All experiments were conducted using five different random seeds: {0, 1, 2, 3, 4}. The best
+hyperparameters were selected based on the validation accuracy. The runtime measurements presented
+in Table 1 were performed on an NVIDIA Quadro RTX 8000 GPU with CUDA version 12.2,
+supported by an AMD EPYC 7502 32-Core Processor that features 64 cores and a maximum clock
+speed of 2.5 GHz. All GraphAny experiments can be conducted on a single GPU with 20GB GPU
+memory and 50GB CPU memory.
+
+
+C.1 GRAPHANY IMPLEMENTATION
+
+
+Table 4: Summary of hyperparameters of GraphAny on different datasets.
+
+
+**Dataset** **# Batches** **Learning Rate** **Hidden Dimension** **# MLP Layers** **Entropy**
+
+
+Cora 500 0.0002 64 1 2
+Wisconsin 1000 0.0002 32 2 1
+Arxiv 1000 0.0002 128 2 1
+Products 1000 0.0002 128 2 1
+
+
+We optimize the attention module using standard cross-entropy loss on the labeled nodes. In each
+training batch (batch size set as 128 for all experiments), we randomly sample two disjoint sets
+of nodes from the labeled nodes _L_ : ref and target. ref is used for performing inference using
+_V_ _V_ _V_ _V_
+LinearGNNs, and target is utilized to compute the loss and update the attention module. This
+_V_
+separation is intended to prevent the attention module from learning trivial solutions unless the
+number of labeled nodes is too low to allow for a meaningful split. Empirically, as the final attention
+weights of GraphAny mostly focus on Linear, LinearSGC1, and LinearSGC2 (Figure 7), we mask
+the attention for LinearHGC1 and LinearHGC2 to achieve faster convergence.
+
+
+The hyperparameter search space for GraphAny is relatively small, we fixed the batch size as 128
+and varied the number of training batches with options of 500, 1000, and 1500; explored hidden
+dimensions of 32, 64, and 128; tested configurations with 1, 2, and 3 MLP layers; and set the fixed
+entropy value _H_ at 1 and 2. The optimal settings derived from this hyperparameter search space are
+detailed in Table 4.
+
+
+16
+
+
+C.2 BASELINE IMPLEMENTATION
+
+
+We utilize the Deep Graph Library (DGL) (Wang et al., 2020) implementations of GCN and GAT for
+our baseline models. To optimize their performance, we conducted a comprehensive hyperparameter
+tuning using a grid search strategy on each dataset. The search space included the following
+parameters: number of epochs fixed at 400; hidden dimensions explored were 64, 128, and 256;
+number of layers tested included 1, 2, and 3; and the learning rates considered were 0.0002, 0.0005,
+0.001, and 0.002.
+
+
+For label propagation, we use the DGL’s implementation and use grid search to find the best model
+with a search space defined as follows: number of propagation hops of 1, 2, and 3; _α_ of 0.1, 0.3, 0.5,
+0.7, and 0.9.
+
+
+D COMPLETE RESULTS
+
+
+Table 5 provides all results on 31 datasets for MLP, GCN, GAT baselines trained on each dataset
+from scratch and four GraphAny models trained only on one graph.
+
+
+Table 5: Per-dataset results of all baselines and four GraphAny models
+
+
+GraphAny GraphAny GraphAny GraphAny
+Dataset MLP GCN GAT
+(Products) (Arxiv) (Wisconsin) (Cora)
+
+
+Actor 33.95 _±_ 0.80 28.55 _±_ 0.68 27.30 _±_ 0.22 28.99 _±_ 0.61 28.60 _±_ 0.21 29.51 _±_ 0.55 27.91 _±_ 0.16
+AirBrazil 23.08 _±_ 5.83 42.31 _±_ 7.98 57.69 _±_ 14.75 34.61 _±_ 16.54 34.61 _±_ 16.09 36.15 _±_ 16.68 33.07 _±_ 16.68
+AirEU 21.25 _±_ 2.31 41.88 _±_ 3.60 32.50 _±_ 8.45 41.75 _±_ 6.84 41.50 _±_ 6.50 41.13 _±_ 6.02 40.50 _±_ 7.01
+AirUS 22.88 _±_ 1.46 46.49 _±_ 1.81 48.47 _±_ 4.17 43.57 _±_ 2.07 43.64 _±_ 1.83 43.86 _±_ 1.44 43.46 _±_ 1.45
+AmzComp 58.28 _±_ 2.98 85.83 _±_ 0.86 87.01 _±_ 0.50 82.90 _±_ 1.25 83.04 _±_ 1.24 82.00 _±_ 1.14 82.99 _±_ 1.22
+AmzPhoto 68.20 _±_ 0.88 91.88 _±_ 0.79 91.86 _±_ 1.07 90.64 _±_ 0.82 90.60 _±_ 0.82 90.18 _±_ 0.91 90.14 _±_ 0.93
+AmzRatings 47.90 _±_ 0.45 47.35 _±_ 0.26 47.18 _±_ 0.42 42.70 _±_ 0.10 42.74 _±_ 0.12 42.57 _±_ 0.34 42.84 _±_ 0.04
+BlogCatalog 64.11 _±_ 1.95 71.51 _±_ 2.62 61.98 _±_ 5.99 74.73 _±_ 3.19 73.63 _±_ 2.95 77.69 _±_ 1.90 72.52 _±_ 3.22
+Chameleon 36.62 _±_ 0.87 64.69 _±_ 2.21 67.76 _±_ 0.72 62.59 _±_ 0.87 62.59 _±_ 0.86 60.09 _±_ 1.93 61.49 _±_ 1.88
+Citeseer 44.40 _±_ 0.44 63.40 _±_ 0.63 69.10 _±_ 1.59 67.94 _±_ 0.29 68.34 _±_ 0.23 67.50 _±_ 0.44 68.90 _±_ 0.07
+CoCS 85.88 _±_ 0.93 91.83 _±_ 0.71 88.47 _±_ 0.79 90.46 _±_ 0.54 90.45 _±_ 0.59 90.85 _±_ 0.63 90.47 _±_ 0.63
+CoPhysics 87.43 _±_ 1.98 93.93 _±_ 0.37 93.01 _±_ 0.89 92.66 _±_ 0.52 92.69 _±_ 0.52 92.54 _±_ 0.43 92.70 _±_ 0.54
+Cora 48.42 _±_ 0.63 81.40 _±_ 0.70 81.70 _±_ 1.43 79.36 _±_ 0.23 79.38 _±_ 0.16 77.82 _±_ 1.15 80.18 _±_ 0.13
+Cornell 67.57 _±_ 5.06 35.14 _±_ 6.51 35.14 _±_ 3.52 64.86 _±_ 0.00 65.94 _±_ 1.48 66.49 _±_ 1.48 64.86 _±_ 1.91
+DBLP 56.27 _±_ 0.62 73.02 _±_ 2.22 73.87 _±_ 1.35 70.62 _±_ 0.97 70.90 _±_ 0.88 70.13 _±_ 0.77 71.73 _±_ 0.94
+Deezer 54.24 _±_ 2.15 53.69 _±_ 2.29 55.99 _±_ 3.78 52.09 _±_ 2.78 52.11 _±_ 2.79 52.13 _±_ 3.02 51.98 _±_ 2.79
+LastFMAsia 57.41 _±_ 0.93 81.91 _±_ 1.12 84.66 _±_ 0.61 80.17 _±_ 0.44 80.60 _±_ 0.58 79.47 _±_ 1.23 80.83 _±_ 0.41
+Minesweeper 80.00 _±_ 0.00 81.12 _±_ 0.37 80.08 _±_ 0.04 80.27 _±_ 0.16 80.30 _±_ 0.13 80.13 _±_ 0.09 80.46 _±_ 0.15
+Pubmed 69.50 _±_ 1.79 76.60 _±_ 0.32 77.30 _±_ 0.60 76.54 _±_ 0.34 76.36 _±_ 0.17 77.46 _±_ 0.30 76.60 _±_ 0.31
+Questions 97.33 _±_ 0.06 97.15 _±_ 0.04 97.11 _±_ 0.02 97.10 _±_ 0.01 97.09 _±_ 0.02 97.11 _±_ 0.00 97.06 _±_ 0.03
+Reddit 72.16 _±_ 0.15 94.89 _±_ 0.02 92.76 _±_ 0.46 90.67 _±_ 0.13 90.58 _±_ 0.12 91.00 _±_ 0.24 90.46 _±_ 0.03
+Roman 65.80 _±_ 0.35 45.08 _±_ 0.43 43.93 _±_ 0.45 64.66 _±_ 0.84 64.25 _±_ 1.09 64.06 _±_ 0.78 64.25 _±_ 0.64
+Squirrel 30.36 _±_ 0.78 47.07 _±_ 0.71 46.69 _±_ 1.44 49.45 _±_ 0.67 49.70 _±_ 0.95 42.34 _±_ 3.46 48.49 _±_ 0.98
+Texas 48.65 _±_ 4.01 51.35 _±_ 2.71 54.05 _±_ 2.41 73.52 _±_ 2.96 72.97 _±_ 2.71 73.51 _±_ 1.21 71.89 _±_ 1.48
+Tolokers 78.16 _±_ 0.02 79.93 _±_ 0.10 78.50 _±_ 0.55 78.18 _±_ 0.03 78.18 _±_ 0.04 78.24 _±_ 0.03 78.20 _±_ 0.02
+Wiki 63.79 _±_ 1.77 70.09 _±_ 1.51 59.63 _±_ 4.16 63.08 _±_ 3.61 62.96 _±_ 3.68 61.10 _±_ 4.36 60.56 _±_ 3.62
+Wisconsin 66.67 _±_ 3.51 37.25 _±_ 1.64 52.94 _±_ 3.10 65.89 _±_ 2.23 65.10 _±_ 3.22 71.77 _±_ 5.98 61.18 _±_ 5.08
+WikiCS 72.72 _±_ 0.43 79.12 _±_ 0.45 79.27 _±_ 0.20 75.01 _±_ 0.54 74.95 _±_ 0.61 73.77 _±_ 0.83 74.39 _±_ 0.71
+OGBN-Arxiv 55.50 _±_ 0.23 71.74 _±_ 0.29 73.65 _±_ 0.11 58.58 _±_ 0.11 58.68 _±_ 0.17 57.79 _±_ 0.56 58.62 _±_ 0.05
+OGBN-Products 61.06 _±_ 0.08 75.79 _±_ 0.12 79.45 _±_ 0.59 61.19 _±_ 0.23 61.31 _±_ 0.20 60.28 _±_ 0.80 61.60 _±_ 0.10
+FullCora 33.54 _±_ 0.64 61.06 _±_ 0.24 58.95 _±_ 0.55 57.13 _±_ 0.37 57.25 _±_ 0.43 56.29 _±_ 0.17 56.73 _±_ 0.41
+
+
+E ADDITIONAL EXPERIMENTAL RESULTS
+
+
+E.1 ABLATION STUDY ON MORE GRAPH OPERATORS
+
+
+In this section, we further validate the effectiveness of GraphAny by gradually adding diverse
+types of graph convolution for propagating features. Specifically, we consider three types of graph
+convolutions:
+
+
+17
+
+
+Figure 10: Ablation study with different graph operators (test accuracy in %): GraphAny-LinearGNN
+(left), GraphAny-Chebyshev (middle), and GraphAny-PPR (right). GraphAny is trained on the
+Wisconsin dataset and evaluated on all 31 datasets.
+
+
+    - _**GraphAny-LinearGNN**_ gradually adds the following graph convolution operators: _**F**_ = _**X**_
+(Linear), _**F**_ = ( _**I**_ _−_ _**A**_ [¯] ) _**X**_ (LinearHGC1), _**F**_ = ( _**I**_ _−_ _**A**_ [¯] ) [2] _**X**_ (LinearHGC2), _**F**_ = _**AX**_ [¯]
+(LinearSGC1), and _**F**_ = _**A**_ [¯][2] _**X**_ (LinearSGC2), with _**A**_ [¯] denoting the row normalized adjaceny
+matrix. In this case, when increasing _t_ high-pass and low-pass predictions are gradually
+added.
+
+    - _**GraphAny-Chebyshev**_ gradually adds the Chebyshev filters (Defferrard et al., 2016), where
+_**F**_ [(] _[t]_ [)] is computed recursively by:
+
+
+_**F**_ [(1)] = _**X**_ _,_
+
+
+_**F**_ [(2)] = _**LX**_ [ˆ] _,_
+
+
+(16)
+
+
+_**F**_ [(] _[t]_ [)] = 2 _**LF**_ [ˆ] [(] _[t][−]_ [1)] _−_ _**F**_ [(] _[t][−]_ [2)] _,_
+
+and _**L**_ [ˆ] denotes the scaled and normalized Laplacian _λ_ 2max _**L**_
+In this case, when increasing _t_ high order predictions are gradually added. _[−]_ _**[I]**_ [ with] _**[ L]**_ [ =] _**[ I]**_ _[ −]_ _**[D]**_ _[−]_ [1] _[/]_ [2] _**[AD]**_ _[−]_ [1] _[/]_ [2][.]
+
+    - _**GraphAny-PPR**_ gradually adds the personalized PageRank with increasing restart ratios:
+{0.01, 0.25, 0.5, 0.75, 0.99}. In this case, when increasing _t_ local predictions are gradually
+added.
+
+
+We compare the performance of GraphAny against the baseline, which averages all channels, denoted
+as _MeanAgg_ . The results are shown in Figure 10, where we have the following observations:
+
+
+**GraphAny consistently outperforms the baseline MeanAgg by a significant margin**, demonstrating effective and consistent inductive knowledge transfer across multiple datasets with different types
+of graph convolutions. **The performance varies across graph convolution types.** For LinearGNNs,
+low-pass graph convolutions (LinearSGC1 and LinearSGC2) significantly enhance performance. In
+contrast, for Chebyshev graph convolutions, adding high-order convolutions reduces performance
+as higher-order information introduces more noise. For personalized PageRank, adding more local
+channels consistently improves results.
+
+
+E.2 COMPARISON AGAINST ACM-GNN
+
+
+To comprehensively compare GraphAny’s performance, we included ACM-GNN (Luan et al., 2022)
+as a baseline due to its good performance on both homophilic and heterophilic graphs. However,
+ACM-GNN faces scalability issues that prevent its application to large graphs. Using the authors’ implementation [2], we encountered out-of-memory for a GPU of 40GB on four large datasets: Questions,
+Reddit, Arxiv, and Product. Therefore, we evaluated ACM-GNN on the remaining 27 graphs, with
+results reported in Table 6.
+
+
+Our observations are as follows: Tuning ACM-GNN is highly time-consuming, requiring 672 GPU
+hours on 27 graphs, while GraphAny requires only 4 GPU hours, showcasing its efficiency and
+the advantage of inductive inference. In terms of performance, GraphAny outperforms ACM-SGC
+
+
+2https://github.com/SitaoLuan/ACM-GNN/tree/main/ACM-Pytorch/
+
+
+18
+
+
+and is only slightly (1-2%) below ACM-GCN. However, this slight difference is not a significant
+disadvantage for GraphAny, given the unfair advantage transductive models have by leveraging the
+inductive validation set for parameter and hyperparameter tuning, as well as the substantial difference
+in runtime.
+
+
+Table 6: Experimental results of ACM-GNNs. Hyperparameter search durations: ACM-GNNs (672
+GPU hours), MLP/GCN/GAT (240 GPU hours total), GraphAny (denoted as Ours, 4 GPU hours).
+
+
+**Metric** **MLP** **GCN** **GAT** **ACM-SGC** **ACM-GCN** **Ours-Cora** **Ours-Wis** **Ours-Arxiv** **Ours-Product**
+
+
+Heldout (25 graphs) 54.87 64.19 64.01 60.91 66.92 65.11 65.23 65.56 65.56
+Overall (27 graphs) 55.07 63.83 64.26 61.82 67.79 65.58 66.02 66.12 66.14
+
+
+19

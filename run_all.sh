@@ -31,10 +31,9 @@ for k in sorted(bins):
 "
 
 # ── Step 3: Build calibration set ──
-# echo ""
-# echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
-# rm -rf cal
-# python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
+echo ""
+echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
+python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
 
 
 # ── Step 5: Run benchmark with calibration ──

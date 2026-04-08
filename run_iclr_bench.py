@@ -144,7 +144,6 @@ async def review_single_paper(
         skip_spark=skip_spark,
         skip_neutral=skip_neutral,
         skip_score=False,
-        skip_human_finder=True,
         venue="ICLR",
         calibration_context=calibration_context,
         cal_dir=cal_dir,

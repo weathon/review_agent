@@ -1,0 +1,1399 @@
+# INTER-ENVIRONMENTAL WORLD MODELING FOR
+
+## CONTINUOUS AND COMPOSITIONAL DYNAMICS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Various world model frameworks are being developed today based on autoregressive frameworks that rely on discrete representations of actions and observations,
+and these frameworks are succeeding in constructing interactive generative models
+for the target environment of interest. Meanwhile, humans demonstrate remarkable generalization abilities to combine experiences in multiple environments to
+mentally simulate and learn to control agents in diverse environments. Inspired by
+this human capability, we introduce _World modeling through Lie Action_ (WLA),
+an unsupervised framework that learns continuous latent action representations to
+simulate across environments. WLA learns a control interface with high controllability and predictive ability by simultaneously modeling the dynamics of multiple
+environments using Lie group theory and object-centric autoencoder. On benchmark synthetic and real-world datasets, we demonstrate that WLA can be trained
+using only video frames and, with minimal or no action labels, can quickly adapt
+to new environments with novel action sets.
+
+
+1 INTRODUCTION
+
+
+Originally proposed as a framework to support automatic planning and decision-making, world models (Ha & Schmidhuber, 2018) predict future states conditioned on actions, allowing agents to anticipate the consequences of their interactions. There have been extensive efforts in the development
+of world models and related learning methods. Many of them rely on _discrete_ representations of
+actions and/or images (Hafner et al., 2023; Hu et al., 2023) in order to leverage the techniques of
+autoregressive inference that are extensively developed in language modeling. Recent works such as
+Genie (Bruce et al., 2024) and LAPO (Schmidt & Jiang, 2023) have advanced the field by learning
+interactive world models with few/no explicit action labels. These models have shown promising
+results in capturing complex dynamics and discrete actions in specific environments.
+
+
+Humans, however, possess an extraordinary ability to generalize learned skills across diverse environments by leveraging _continuous_ and _compositional_ representations of actions. For example, after
+mastering basic movements in a few 2D action-adventure games, a person can quickly adapt to a
+game of a different type(e.g. Pac-Man) by leveraging the knowledge of common 2D concepts such
+as moving in continuous directions (Schmidt, 1975; Poggio & Bizzi, 2004). Continuous action representations allow for smooth transitions and fine-grained control, while compositionality enables
+complex actions to be built from simpler primitives, facilitating generalization and transfer learning
+(Flash & Hochner, 2005; Botvinick & Plaut, 2004).
+
+
+Inspired by this human capability, we hypothesize that, in order to learn an interactive world model
+that generalizes across environments, it is essential to construct an environment-agnostic simulator that embraces continuous and compositional action representations. In this paper, we introduce
+**World modeling through Lie Action (WLA)**, an unsupervised framework that aims to learn such
+a simulator. Our approach models the nonlinear and continuous transition operators in the observation space with a Lie group that acts linearly on partitioned latent vector spaces, where each
+partition corresponds to different objects and fundamental action axes. This allows us to capture the
+continuous and compositional nature of actions, enabling seamless generalization across different
+environments. Our method extends the capabilities of existing world models by introducing the continuity and compositionality in the form of Lie group structure. We demonstrate the effectiveness of
+WLA on 2D game and 3D robotics environments in terms of generalization and adaptability.
+
+
+1
+
+
+Figure 1: The relation between observation space dynamics and latent space dynamics with Lie
+group action. We elaborate the design of Φ _,_ Ψ and the implementation of _F_ Φ _,_ Ψ in Section 4.
+
+
+2 PROBLEM SETTING
+
+
+Before introducing our framework, we formalize the problem that WLA is meant to solve. WLA is
+a mathematical framework for learning an interface to interact with a family of diverse environments
+sharing common basic rules of composition and continuity, such as a family of 2D games. To further
+elaborate, we introduce our definition of _environment_ .
+
+
+2.1 ENVIRONMENT
+
+
+**Definition 1.** _An environment E_ _is a pair (X_ _, T ) where X_ _is a space of observations, and T_ _is a set_
+_of nonlinear transition operators on X_ _._ _Let us use XE_ _and TE_ _to denote the space of observations_
+_and_ _the_ _set_ _of_ _transitions_ _of_ _E,_ _respectively._ _Thus,_ _if_ _x_ : _I_ _→XE_ _is_ _a_ _sample_ _trajectory_ _of_ _E_ _with_
+_time domain I_ _⊂_ R+ _, then for all t, t_ + _δ_ _∈_ _I, we have gt,δ_ ( _x_ ( _t_ )) = _x_ ( _t_ + _δ_ ) _for some gt,δ_ _∈TE_ _._
+
+
+We assume that the dataset consists of a set of trajectories sampled from all environments _{Ej}j_ . For
+example, in the family of simple 2D action games, the transitions in one environment may be related
+to jumping and running. In another environment, actions may contain rotations and and powerups.
+
+
+Strictly speaking, because _gt,δ_ differs for each _x_, we should use the notation _gt,δ,x_ to denote the
+transition of _x_ ( _·_ ), and in cases where all trajectories in _E_ can be enumerated, we should use the
+notation _gt,δ,i_ to denote the transition of _x_ _[i]_ ( _·_ ). However, for brevity, we may use _gt,δ_ in place of
+_gt,δ,i_ with the understanding that it is a variable that differs across trajectories. Also, because not
+all the observation sequences in the real world are realized by a finite set of discrete actions like
+buttons, we do not assume in this definition that the transitions in the environment can be grounded
+on such actions (e.g., button presses).
+
+
+2.2 CONTROLLER INTERFACE PROBLEM
+
+
+We aim to construct an interactive interface for the world model that approximates a given (set of)
+environment(s), which in this study is/are assumed deterministic. We propose constructing such
+an interface through an inter-environmental simulator like WLA. In what follows, we rephrase this
+goal with the definition of environment introduced above. If _A_ is a topological space of all possible
+instantaneous inputs to the interface, we informally define the Controller Interface Problem (CIP)
+for the environment _E_ as below:
+
+
+**Problem.** _Using DE_ = _{x_ : _I_ _→XE_ _} sampled from E, construct a controller map_
+
+
+_CtrlE_ : _X_ _× A →TE_ (1)
+
+
+2
+
+
+_for which there exists a map_ ( _a_ : _I_ _→A_ ) _such that CtrlE_ ( _x_ [0 _, t_ ) _, a_ [0 _, t_ ))( _x_ ( _t_ )) = _x_ ( _t_ + _dt_ ) _for all_
+_trajectories x ∈_ _DE_ _, where t_ + _dt is the infinitesimal future of t, and an abuse of notation was used_
+_so that CtrlE_ _takes as input the time series_ ( _x, a_ ) _up to t ∈_ _I, denoted as x_ [0 _, t_ ) _and a_ [0 _, t_ ) _._ [1]
+
+
+In more informal words, CIP is a problem of building a controller interface that approximates the rule
+of dynamics in a target environment. There are two settings for CIP, which we call (1) _unstructured_
+CIP and (2) _structured_ CIP. In _unstructured_ CIP, the problem includes that of specifying the space of
+_A_ itself. In _structured_ CIP, the problem is to find the map with _A_ that is prespecified, for example,
+by hardware restrictions. When _A_ is chosen to be finite, _unstructured_ CIP may be analogous to
+building a set of controller buttons for a game _E_, and _structured_ CIP may be analogous to finding
+the correspondence map between a given controller input and transitions in the environment. Once
+the CIP is solved for _E_, the user may iteratively apply the action sequence of choice to _x_ _∈X_ to
+generate a new trajectory within _E_ .
+
+
+Bruce et al. (2024) solve _unstructured_ CIP through a Inverse Dynamic model _fI_ : _TE_ _→A_ and a
+Forward Dynamic model _fF_ : _X_ _× A →TE_ . Meanwhile, _fF_ is trained so that _fF_ ( _x_ ( _t_ ) _, fI_ ( _gt,_ 1)) =
+_x_ ( _t_ + 1), where the transition _gt,_ 1 is represented as the pair ( _x_ ( _t_ ) _, x_ ( _t_ + 1)). This way, _fF_ serves as
+Ctrl _E_ itself in our formulation of _unstructured_ CIP. However, in this paper, we will mainly focus on
+_structured_ CIP. The greatest challenge in _structured_ CIP is the deficiency of action labels. We show
+that WLA can efficiently solve the _structured_ CIP with few labels by solving _unstructured_ CIP with
+Lie group action as part of the process. From this point onward, we use ”CIP” to imply _structured_
+CIP unless described otherwise.
+
+
+3 MATHEMATICAL CONCEPT OF WLA FRAMEWORK
+
+
+WLA is a framework for solving CIP for multiple environments by leveraging the power of an interenvironmental simulator to aggregate the compositional and continuity rules of the dynamics that
+are shared across all environments. Our inter-environmental simulator uses the algebraic structure
+of the Lie group and an object-centric autoencoder to represent the continuity and compositionality
+of the group elements that realize the trajectories _x_, which are sampled across all environments.
+
+
+Through the Lie-group theoretic structure of transitions learned across multiple environments, WLA
+solves CIP for all environments by first mapping the input action to the transition operators in the
+inter-environmental simulator and then by mapping the transitions in the simulator to the observation
+space to generate the ”imagined” trajectory based on the user inputs. The map Ctrl _adapt_ from the
+action signals to the transitions in the latent space is trained separately. By constructing Ctrl through
+our inter-environmental simulator instead of the black-box autoregressive model, we can improve
+the performance of Ctrl on multiple environments.
+
+
+The core of the WLA framework is the environment-agnostic simulator, which consists of an
+encoder-decoder pair (Φ _,_ Ψ) that relates every observation to a state in a vector latent space. While
+the previous approaches solve CIP separately for each environment, WLA solves the problem
+through the simulator that describes, in the form of Lie group action, the common compositionality and continuity rules of dynamics in all environments. In the following subsections, we provide
+an informal explanation to convey the rough idea of each component in our framework. Please see
+Appendix section A for the formal explanation.
+
+
+3.1 LATENT DYNAMICAL SYSTEM WITH LIE GROUP ACTION
+
+
+We first describe the mathematical design of our latent space dynamics that ensures the compositionality and continuity of actions. In WLA, we design the transitions to be compositional and
+continuous in the latent space and train (Φ _,_ Ψ) so that the transitions in the latent space lift to the
+observation space while maintaining these properties.
+
+More precisely, if _D_ = _{x_ _[i]_ : _I_ _→X}i_ = [�] _E_ _[D][E]_ [is a dataset of] _[ time-differentiable paths]_ [ in] _[ X]_ [, we]
+
+assume that every transition _x_ _[i]_ ( _t_ ) _→_ _x_ _[i]_ ( _t_ + _δ_ ) in the trajectory _x_ _[i]_ is realized by a group action of a
+Lie group _G_ . That is, for every _x_ _[i]_ ( _t_ ) _→_ _x_ _[i]_ ( _t_ + _δ_ ), we assume that there exists _gt,δ_ _[i]_ _[∈]_ _[G]_ [ such that]
+
+
+1Please see Section A for more formal definition of the controller map.
+
+
+3
+
+
+_gt,δ_ _[i]_ _[·][ x][i]_ [(] _[t]_ [) =] _[ x][i]_ [(] _[t]_ [ +] _[ δ]_ [)][.] [2] [This assumption suits our model-desiderata because the set of] _[ g]_ _t,δ_ _[i]_ [in this]
+setting can be (i) composed, (ii) inverted, and (iii) differentiated with respect to time ( _δ_, _t_ .)
+
+
+When a Lie group _G_ acts non-linearly on _X_, there exists an _equivariant_ autoencoder (Φ _,_ Ψ) such
+that _G_ acts linearly in the latent space (Koyama et al., 2024). That is, for all _x ∈X_ and _g_ _∈_ _G_,
+
+
+_g · x_ = Ψ( _M_ ( _g_ )Φ( _x_ )) or Φ( _g · x_ ) = _M_ ( _g_ ) _z_ ( _t_ ) (2)
+
+
+where _z_ = Φ( _x_ ) and _M_ ( _g_ ) is the matrix representation of a Lie group element _g_ _∈_ _G_ . To define
+our inverse dynamic map, we use the following fact that can be readily verified.
+**Fact.** _When g ◦_ _x_ = Ψ( _M_ ( _g_ )Φ( _x_ )) _for all g_ _∈_ _G, then the inverse dynamic map F_ Φ _,_ Ψ : _g_ _�→_ _M_ ( _g_ )
+_induced by equation 2 satisfies_
+
+
+_F_ Φ _,_ Ψ( _h · g_ ) = _F_ Φ _,_ Ψ( _g_ ) _· F_ Φ _,_ Ψ( _h_ ) _,_ lim (3)
+_δ→_ 0 _[F]_ [Φ] _[,]_ [Ψ][(] _[g][t,δ]_ [) =] _[ I.]_
+
+
+This precisely means that our inverse dynamic map _F_ Φ _,_ Ψ preserves the compositionality and continuity rules in the observation space. In other words, _the_ _continuity_ _and_ _compositionality_ _of_ _the_
+_continuity of the action in the latent space lifts to compositional and continuous action in the obser-_
+_vation space through the autoencoder that satisfies equation 2._ See Figure 1 for the schematics of
+our design that relates the transition in the observation space to the transition in the latent space.
+
+In our design of the transitions _x_ _[i]_ ( _t_ ) _→_ _x_ _[i]_ ( _t_ + _δ_ ) = _gt,δ_ _[i]_ _[·][ x][i]_ [(] _[t]_ [)][ modeled through the latent linear]
+transitions Φ( _x_ _[i]_ ( _t_ )) _→_ _M_ ( _gt,δ,i_ )Φ( _x_ _[i]_ ( _t_ )) in equation 2, we are assuming that the trajectories _x_ are
+not just continuous but differentiable with respect to _δ_ . Omitting _i_ and writing _Mt,δ_ := _M_ ( _gt,δ_ )
+for brevity, we therefore model _∂δMt,δ_ instead of _Mt,δ_ itself. Writing _∂δMt,δ|δ_ =0 as _A_ ( _t_ ) and
+_z_ ( _t_ ) = Φ( _x_ ( _t_ )), we eventually arrive at the following latent linear dynamical system
+
+
+_d_ �� _t_         or _z_ ( _t_ ) = exp _A_ ( _s_ ) _ds_ _z_ (0) _._ (4)
+_dt_ _[z]_ [(] _[t]_ [) =] _[ A]_ [(] _[t]_ [)] _[z]_ [(] _[t]_ [)] _[,]_ 0
+
+
+where Λ _k_ ( _t, δ_ ) = - _tt_ + _δ_ _λk_ ( _s_ ) _ds_, Θ _k_ ( _t, δ_ ) = - _tt_ + _δ_ _θk_ ( _s_ ) _ds_ .
+
+
+3.2 OBJECT CENTRIC DYNAMICS MODEL
+
+
+To introduce the notion of objects into our inter-environmental simulator, we adopt the idea of
+object-centric modeling and train (Φ _,_ Ψ) with a latent space partitioned into distinct objects. In
+particular, we design the encoder Φ to map _x_ into a set of _N_ slots [ _zn_ ] _[N]_ _n_ [so that the latent space] _[ Z]_
+is partitioned into slot spaces _Zn_ . Because the transitions happen for each slot, _Ak_ in equation 5
+are thus enumerated by both the number of objects _N_ and number of rotation angles _J_, so that
+
+[ _Ak_ ] _[J]_ _k_ [=] [[] _[A][nj]_ []] _[N,J]_ _n,j_ [by] [reindexing,] [and] _[Z][n]_ [=] [[] _[Z][nj]_ []] _[J]_ _j_ [.] [Analogously,] [let] [us] [write] [Φ] _[n]_ [=] [[Φ] _[nj]_ []] _[N]_ _n_ [.]
+Likewise, we re-index ( _λk, θk_ ) as ( _λnj, θnj_ ) as well.
+
+
+3.3 USING WLA TO SOLVE CIP
+
+
+Technically, just like how humans can ”imagine” the trajectory in our abstract mental model without
+buttons and levers, we can use the rotation parameters and scaling parameters in our trained simulator as _A_ itself in the setting of CIP. However, in this section, we consider the problem of leveraging
+(Φ _,_ Ψ) to solve CIP with pre-specified _A_ . Such a situation may arise in robotics, for example.
+
+
+As we have described in the previous section, once (Φ _,_ Ψ) are obtained in a way that satisfies equation 2 on multiple environments, we have the inverse dynamic map (IDM), _F_ Φ _,_ Ψ, along with its
+
+
+2Note that we wrote _g ·_ ( _x_ ) instead of _g_ ( _x_ ) to designate a group action. Please see A for formal discussion.
+
+
+4
+
+
+As a part of our design, we also assume that _G_ in question belongs to a well-known family of groups
+whose matrix representations are scalings and rotations. For the group of rotation and scaling, every
+_A_ ( _s_ ) = [�] _k_ _[A][k]_ [(] _[s]_ [)][ and] _[ M][t,δ]_ [=][ �] _k_ _[M][k,t,δ]_ [are respectively direct sums of the matrices of the form]
+
+
+_k_ _[A][k]_ [(] _[s]_ [)][ and] _[ M][t,δ]_ [=][ �]
+
+
+_k_ _[M][k,t,δ]_ [are respectively direct sums of the matrices of the form]
+
+
+_Ak_ ( _s_ ) = - _λθkk_ (( _ss_ )) _−λθkk_ (( _ss_ ))
+
+
+- _,_ _Mk,t,δ_ = exp(Λ _k_ ( _t, δ_ )) - cos Θsin Θ _kk_ (( _t, δt, δ_ )) _−_ cos Θsin Θ _kk_ ( _t, δ_ ( _t, δ_ ))
+
+
+(5)
+
+
+Figure 2: WLA is based on a slot-attention-based autoencoder. The latent space is partitioned into
+slots, and the transition for each slot occurs by a linear Lie group action. (a) During the training of
+WLA, the inverse dynamic map _F_ Φ _,_ Ψ converts the transition to a Lie algebra operator. (b) The forward rollout simulation with a controller interface is implemented by mapping the contextual inputs
+(past observations and external action signals) to Lie algebra parameters ( _λ, θ_ ) and by multiplying
+the resulting operators _M_ to the slot token _z_ [ _t_ ] to create the future observations autoregressively.
+
+
+inverse _F_ Φ _[−]_ _,_ [1] Ψ [in] [equation] [3.] [When] [there] [is] [a] [user-specified] [action] [signal] [space] _[A]_ [,] [we] [can] [use]
+_F_ Φ _[−]_ _,_ [1] Ψ [:] _[ A →T]_ [as an intermediate interface in our construction of Ctrl] _[E]_ [.]
+
+
+More specifically, given the action labeled sequence [( _x_ ( _t_ ) _, a_ ( _t_ ))] _t_ with ( _x_ ( _t_ ) _, a_ ( _t_ )) _∈XE_ _×_ _A_,
+we can learn a map Ctrl _E_ by training a model Ctrl _adapt_ that takes ( _x_ [0 _, t_ ) _, a_ [0 _, t_ )) as the input
+and outputs ( _λ_ ( _t_ ) _, θ_ ( _t_ )) which are the parameters of _A_ ( _t_ ) := _A_ ( _λ_ ( _t_ ) _, θ_ ( _t_ )), where [ _λ_ ] _k_ = _λk_ and
+
+[ _θ_ ] _k_ = _θk_ are as in equation 5. This way, we construct a controller map by composing Ctrl _adapt_ with
+the _F_ Φ _[−]_ _,_ [1] Ψ [.] [That is, we can construct the map Ctrl] _[E]_ [:] _[ X]_ _[× A →T][E]_ [via the composition]
+
+
+Ctrl _E_ : _x_ [0 _, t_ ) _, a_ [0 _, t_ ) _−→_ _[−→]_ _Mt,δ_ (6)
+Ctrl _adapt_ _[A]_ [(] _[λ]_ [(] _[t]_ [)] _[, θ]_ [(] _[t]_ [))] _F_ Φ _[−]_ _,_ [1] Ψ
+
+
+where _δ_ is the chosen time-discretization stepsize in approximating the continuous dynamics numerically so that the _λ_ ( _t_ ) and _θ_ ( _t_ ) are assumed to take the same value over the interval [ _t, δ_ ). The
+output of Ctrl _E_ in the form of _Mt,δ_ realizes the transition _x_ ( _t_ ) _→_ _x_ ( _t_ + _δ_ ) through _x_ ( _t_ + _δ_ ) =
+Ψ( _Mt,δ_ Φ( _x_ ( _t_ ))) _._ We describe the learning scheme of Ctrl _adapt_ in the next section.
+
+
+4 IMPLEMENTATION OF WLA MODEL
+
+
+We use neural networks for the modeling of all components of WLA, including Ctrl and (Φ _,_ Ψ). In
+this section, we first remark on our practical handling of the dataset and then explain the training
+loss and our architectural design choices. Also see Figure 2 along with the materials in this section.
+
+
+4.1 TIME DISCRETIZATION
+
+
+In an implementation, the time series dataset is discretized, and an interval _I_ is represented as an
+increasing subset _{τ_ 0 _<_ _τ_ 1 _<_ _· · ·_ _<_ _τT }_ _⊂_ _R_ +. As such, a trajectory _x_ ( _·_ ) is represented by the
+discrete signal [ _x_ ( _τt_ )] _t_ . From here on forward, whenever we use the “hard bracket” _x_ [ _t_ ] := _x_ ( _τt_ ),
+we assume that the signal is discretized and that _t_ is a natural number. Also, just for brevity, we
+assume in this section that the observations are evenly spaced, so that _τt_ _−_ _τt−_ 1 = ∆. We also
+denote the past observations as _x_ [: _t_ ] := ( _x_ [0] _, . . ., x_ [ _t_ _−_ 1]). We can similarly define the discretized
+version of other variables such as _a_ [ _t_ ] _, A_ [ _t_ ] _, λ_ [ _t_ ] _, θ_ [ _t_ ].
+
+
+In CIP, Ctrl _E_ was designed to take ( _x_ [: _t_ ] _, a_ [: _t_ ]) to compute _λk_ [ _t_ ] and _θk_ [ _t_ ]. Likewise, we implement
+IDM _F_ Φ _,_ Ψ as a function that takes two consecutive frames ( _x_ [ _t_ ] _, x_ [ _t_ + 1]) as an input instead of the
+actual transition _gt_, because the operator itself is not observable. This strategy has been successfuly
+taken in the past (Mitchel et al., 2024; Koyama et al., 2024; Miyato et al., 2022). Because this
+section pertains to implementation, we will use this discretized notation throughout this section. See
+Appendix A for a more formal explanation.
+
+
+5
+
+
+4.2 TRAINING OF (Φ _,_ Ψ)
+
+
+The WLA model is trained in an unsupervised manner using a set of trajectories sampled from
+different environments. We use an approach similar to (Koyama et al., 2024; Mitchel et al., 2024)
+except that because we are modeling a time series whose velocity changes with respect to time, we
+use the prediction loss over the entire time sequence. Namely, if _D_ is the dataset of trajectories, we
+train the autoencoder Φ _,_ Ψ and the IDM _F_ Φ _,_ Ψ along with the trainable parameters _{λnj_ [ _t_ ] _, θnj_ [ _t_ ] _}_
+of _{Anj_ [ _t_ ] _}_ in the discretized version of equation 5 (defined for each _x_ _∈_ _D_ and time _t_ with the
+reindexing of _k_ with _nj_ as in 3.2 [3] ) by minimizing
+
+     - _L_ fwd( _x_ ) + _L_ bwd( _x_ ) + _αL_ 1( _λ, θ_ ) (7)
+
+
+_x∈D_
+
+
+where the summation inside the exponential is derived from modeling _A_ ( _s_ ) discretely as _A_ [ _t_ ] _·_
+1 _s∈_ [ _τt,τt_ +1) so that �0 _τt_ _[A]_ [(] _[s]_ [)] _[ds]_ [=] [∆] [�] _ℓ<t_ _[A]_ [[] _[ℓ]_ []][.] Finally, we used the sparsity loss _L_ 1 =
+
+- _j,n_ _[|][λ][nj]_ [[] _[ℓ]_ []] _[|]_ [ +][ �] _[|][θ][nj]_ [[] _[ℓ]_ []] _[|]_ [.] [Once][ (Φ] _[,]_ [ Ψ)][ is solved, CIP provides its own controller maps defined by]
+
+Ctrl( _gδ,t_ ).
+
+
+4.3 SOLVING CIP THROUGH WLA
+
+
+To learn Ctrl _adapt_ ( _x_ [ _t_ ] _, a_ [ _t_ ]) _�→_ _A_ ( _λ_ [ _t_ ] _, θ_ [ _t_ ]) (the time-discretized version of3.3), we use a labeled
+dataset _{_ ( _x_ [ _t_ ] _, a_ [ _t_ ] _}_ of sequences paired with action inputs. We minimize the sum of the following
+adaptation loss and reconstruction loss, defined for all _t, t_ 0 and _x_ as
+
+_L_ adapt = _∥_ [ _λ_ ( _t_ ) _, θ_ ( _t_ )] _−_ Ctrl _adapt_ ( _x_ [: _t_ ] _, a_ [: _t_ ]) _∥_ [2] _,_ _L_ rec( _x_ ; _t, t_ 0) := _∥x_ [ _t_ ] _−_ _x_ ˆ[ _t | t_ 0] _∥_ [2] (10)
+
+
+where _x_ ˆ[ _t | t_ 0] is a rollout prediction from _x_ [ _t_ 0], constructed by iteratively applying _a_ [ _t_ ].
+
+
+4.4 ARCHITECTURE
+
+
+For the encoder-decoder pair (Φ _,_ Ψ), we used a Transformer-based model with the slot attention
+mechanism (Locatello et al., 2020). We employed the Vision Transformer (ViT)-based slot encoder (Wu et al., 2023) so that the slot attention module in the encoder partitions the input _x_ into a
+set of slots [ _zn_ ] _[N]_ _n_ [through the cross-attention architecture with a learnable set of initial slot tokens.]
+To obtain the output, we used a standard ViT decoder which (1) first copies each slot token _zn_ as the
+initial values of patch tokens _Pn_ := [ _pn,l_ ] _l_ and then (2) computes the RGB image _un_ and the alpha
+mask _wn_ _∈_ [0 _,_ 1] _[H][×][W]_ of spatial size _H_ _× W_ via self-attention mechanisms over _Pn_ . The decoder
+finally outputs _x_ ˆ as the weighted mean [�] _n_ _[w][n]_ _[∗]_ _[u][n]_ [where] _[ ∗]_ [is the element-wise product.] [For the]
+IDM, we use an MLP that takes the concatenation of the slots _zn_ [ _t_ ] _⊕_ _zn_ [ _t_ + 1] and outputs both
+_λn,j_ [ _t_ ] and _, θn,j_ [ _t_ ].
+
+
+There are two important hyperparameters in our modeling: the number of slots _N_ and the number
+of Lie group actions _J_ . Increasing _N_ and _J_ generally improves performance but also increases
+computational complexity. We will describe more details in Appendix.
+
+
+**Slot** **Alignment** **via** **least** **action** **principle** A naive application of the slot attention mechanism
+to dynamical scenarios tends to suffer from temporal inconsistencies, i.e., slots fail to track objects
+consistently over time (Zhao et al., 2023). To encourage temporal consistency of object slot assignments, we introduced the principle of least action (Siburg, 2004). Given the next and current frames
+_zn_ [ _t_ + 1] _, zn_ [ _t_ ] _∈Zn_ for all slots _n_ = 1 _, . . ., N_, we chose the permutation _σ_ to the slots so that
+
+
+3These parameters are ’not’ to be stored as parts of the model.
+
+
+6
+
+
+where _L_ fwd( _x_ ) = 
+
+
+_||x_ [ _t_ ] _−_ _x_ ˆ _f_ [ _t_ ] _||_ [2] _,_ _L_ bwd( _x_ ) =  
+_t_ _t_
+
+
+_||x_ [ _t_ ] _−_ _x_ ˆ _b_ [ _t_ ] _||_ [2] _,_ (8)
+
+_t_
+
+
+in which the forward and backward predictions _x_ ˆ _f_ _,_ ˆ _xb_ are given by
+
+
+
+
+
+∆ 
+
+
+_A_ [ _ℓ_ ]
+
+0 _≤ℓ<t_
+
+
+
+
+
+
+
+
+
+
+
+ _−_ ∆ 
+
+
+_A_ [ _ℓ_ ]
+
+_t≤ℓ<T_
+
+
+
+
+
+
+
+
+ _z_ (0)
+
+
+ _,_ _x_ ˆ _b_ [ _t_ ] = Ψ
+
+
+ _z_ [ _T_ ]
+
+
+ _,_ (9)
+
+
+_x_ ˆ _f_ [ _t_ ] = Ψ
+
+
+
+
+
+exp
+
+
+
+
+
+exp
+
+
+the transition _zn_ [ _t_ + 1] _→_ _zσ_ ( _n_ )[ _t_ + 1] in the latent space is minimal. Instead of computing _A_
+indexed by slots, we thus computed [ _An_ 1 _→n_ 2] _[N]_ _n_ 1 _[×]_ _,n_ _[N]_ 2 [and] [used] [a] [linear] [assignment] [problem] [solver]
+for the permutation _σ_ that minimizes _∥An_ 1 _→σ_ ( _n_ 1) _∥_ [2], based on the implementation in Karpukhin &
+Savchenko (2024)
+
+
+5 RELATED WORK
+
+
+Several works have been done on (latent) dynamics models that can generalize across environments,
+many of them purporting to solve a reinforcement learning problem. Hafner et al. (2023) propose
+a method designed for the purpose of solving reinforcement learning tasks in various environments
+and uses a recurrent latent space and discretized states learned with action and reward-labeled sequences. Lee et al. (2022) also use multiple environments to train generalist reinforcement learning
+agents. Our method, on the other hand, is an unsupervised generative interactive framework trained
+to generate a video itself in response to user action inputs. Raad et al. (2024) use a languageannotated dataset to build a world model that can be used to solve tasks in multiple environments.
+Mondal et al. (2022) associate group actions with the transition as in our approach but focus on
+embedding-invariant reward optimization and do not generate future observations.
+
+
+The three major features of WLA are that it is (1) unsupervised, (2) object-centric, and (3) able
+to capture the continuous dynamics in a way that all transitions are compositional by design. We
+borrow much of the idea from (Wu et al., 2022), an object-centric framework with slot attention architecture and temporal position embedding. It preserves the temporal consistency through residual
+connections, in contrast to our algebraic structure. To encourage the compositionality of dynamics,
+Rybkin et al. (2018) combine past frames through an MLP to predict future frames. Valevski et al.
+(2024) use conditional diffusion to model the dynamics autoregressively, providing a high-quality
+continuous simulator. Because the effect of the action is modeled in a black box, the input of ”no
+action” does not necessarily map to an identity operator in the observation space, which corrupts the
+generation in the long run. To mitigate this undesired effect, they use the technical trick of noise
+augmentation. For the algebraic design of our Controller map that guarantees the compositionality, we build on the theory of (Koyama et al., 2024; Mitchel et al., 2024), which are unsupervised
+methods that learn the underlying symmetry structure by predictions. Their method, however, does
+not consider continuous dynamics that are non-autonomous (time-dependent). Mondal et al. (2024)
+consider Koopman-based modeling with complex diagonal latent transition operators related to our
+_A_, but their latent actions are additive, and ambient transitions are time-homogeneous.
+
+
+As an effort to learn an interactive generative environment, (Watter et al., 2015) have advocated to
+control dynamical systems in latent space. However, our method has much more in common with
+VPT (Baker et al., 2022). VPT learns _FI_ : _X_ _× TE_ _→A_ and Ctrl _F_ : _X_ _× A_ _→TE_ separately
+as noncausal and causal maps, and it learns the noncausal part with action labels. WLA is different
+in that it learns without labels the _E_ -agnostic noncausal structure in the form of an underlying Lie
+group via equivariant autoencoder (Φ _,_ Ψ). Genie (Bruce et al., 2024) and LAPO (Schmidt & Jiang,
+2023) also share a similar philosophy as VPT, except that they do not use labels in learning Ctrl _I_ .
+Unlike WLA, their controller interface does not map actions through the latent space that reflects the
+structure of compositional and continuous action. (Goyal et al., 2021) took the approach of separating _object files_ from _schemata_ to describe the dynamics. However, in their context, our schemata is
+modeled with much stronger inductive bias of compositionality and continuity. Chen et al. (2023)
+build an interactive system by conditioning the diffusion generation on user stroke inputs. However,
+they do not consider the dynamics behind the system with objects and compositionality.
+
+
+6 EXPERIMENTS
+
+
+6.1 PHYRE
+
+
+The Phyre benchmark provides a set of physical reasoning tasks in 2D simulated environments. We
+used it as a sanity check to validate that our model possesses the capabilities of continuity and compositionality of actions. By focusing on physical interactions that require understanding continuous
+dynamics and the compositional nature of actions (e.g., applying forces, combining movements),
+Phyre is an ideal platform to assess these fundamental aspects of our model.
+
+
+7
+
+
+Figure 3: Phyre Interpolation. **Top** : Training frames at a low sampling rate (1 FPS). **Bottom** :
+Reconstructed trajectory at a high sampling rate (8 FPS), with interpolated frames shown in blue.
+
+## + +
+
+
+Figure 4: Composition results on Phyre. **Left** : Applying the sum of actions from the red and blue
+ball to the blue ball. Since the red ball is climbing, its action counteracts the falling action of the
+blue ball. **Right** : Applying the sum of actions to the red ball, showing similar compositional effects.
+
+
+**Results:** Figure 3 demonstrates the interpolation capabilities of our model on Phyre. During training, the model observes frames at a low sampling rate (1 FPS). We tested the model’s ability to
+recover trajectories at a higher sampling rate (8 FPS) by generating interpolated frames between observed frames. The interpolated frames, displayed with blue padding, illustrate the model’s understanding of continuous dynamics and its ability to generate smooth transitions, validating the continuity aspect. In Figure 4, we showcase the compositionality of actions learned by our model. By applying combinations of actions to objects and observing the effects (e.g., counteracting movements),
+we demonstrate that the model effectively captures the compositional nature of actions within the environment. These results validate that WLA has the capabilities of continuity and compositionality
+of actions that are essential for simulating physical dynamics in complex environments.
+
+
+6.2 PROCGEN
+
+
+The ProcGen benchmark offers a suite of procedurally generated game-like environments, providing
+diverse challenges for testing generalization and adaptability. We used datasets provided by Schmidt
+& Jiang (2023). In this benchmark, we addressed the Controller Interface Problem for both indomain (seen) and out-of-domain (unseen) datasets, with and without action labels, referred to as inplay and out-of-play settings, respectively. Importantly, in all experiments, we trained and evaluated
+a _single common model_ across all environments.
+
+
+We compared our method specifically against Genie (Bruce et al., 2024). Although Genie is designed to function without action labels, to evaluate it for the Controller Interface Problem with labels, we incorporated trainable embeddings of action labels and appended them to the output of the
+action embeddings in their latent action model (LAM). We utilized the open-source Genie codebase
+implementation provided by Willi et al. with default settings. However, we increased the number
+of training iterations from 0.2M to 0.4M to accommodate our multi-environment as opposed to the
+original work, which trained separate models for different environments.
+
+
+**Evaluation** **Metrics:** We used the following metrics to evaluate our methods (i) PSNR (Peak
+Signal-to-Noise Ratio), (ii) ∆ _t_ PSNR, (iii) LPIPS (Learned Perceptual Image Patch Similarity) (Zhang et al., 2018), and (iv) ActionACC (Action Accuracy). ∆ _t_ PSNR is a metric introduced by Bruce et al. (2024) that measures the difference between the effect of the inferred ac
+
+8
+
+
+t=0 3 6 9 12 15
+S S S
+
+
+t=0 3 6 9 12 15
+
+                   - S S S
+
+
+Table 1: **Left** : ablation study for the effect of Lie group action and the least action principle. **Right** :
+Action accuracy in the out-play setting.
+
+
+9
+
+
+Figure 5: The controlling results through Ctrl _adapt_ on ProcGen. The figure contains 6 out of 16
+frames, resulting from applying the action sequence written below the rendered frames.
+
+
+t=0 3 6 9 12 15
+
+
+t=0 3 6 9 12 15
+
+
+Figure 6: The controlling results through Ctrl _adapt_ on Android Dataset.
+
+
+tion and the effect of the random action. Specifically, ∆ _t_ = PSNR( _xt_ +1 _,_ Ctrl _adapt_ ( _x_ ( _t_ ) _, a_ ( _t_ )) _−_
+PSNR( _xt_ +1 _,_ Ctrl _adapt_ ( _x_ ( _t_ ) _, arandom_ ( _t_ )). ActionACC measures the accuracy of the estimated actions compared to the ground truth action labels. To estimate the actions, we trained a logistic linear
+regressor that maps the model-inferred parameters ( _λ_ ( _t_ ) _, θ_ ( _t_ )) to the ground truth action labels _a_ ( _t_ )
+and evaluated the label accuracy. For Genie, we similarly applied the logistic regression to the
+inferred action tokens provided by LAM.
+
+
+**Results:** The results of our experiments on seen environments are summarized in Table 2. Our
+method consistently outperformed Genie across multiple metrics. Figure 5 illustrates the results of
+applying controller inputs to various game environments via Ctrl _adapt_ . Each sequence shows 6 out of
+16 frames resulting from applying the corresponding action inputs. The visualizations demonstrate
+that our model can generate coherent and responsive sequences. Please also see the supplementary
+material for the movies generated using our method.
+
+
+**Ablation** **Study:** We conducted ablation studies to assess the impact of two key components of
+WLA. (i) Lie Group Action (Rotation): We tested a version of our model without the rotational components in the Lie group transitions in equation 4, i.e., using only scaling transformations. (ii) Least
+Action Principle for Slot Alignment: We evaluated the model without using the least action principle
+for aligning slots over time. The results, presented in Table 1, demonstrate that both components
+significantly contribute to the model’s performance. Removing the rotational components adversely
+
+
+MSE( _↓_ )
+Unseen Seen
+
+
+w/o Rotation 0.683 0.059
+w/o Least Action 0.675 0.056
+Ours **0.602** **0.046**
+
+
+ActionACC( _↑_ )
+Unseen Seen
+
+
+Genie 8.30 10.25
+Ours **14.62** **21.07**
+
+
+Environ. PSNR( _↑_ ) ∆ _t_ PSNR( _↑_ ) LPIPS( _↓_ )
+Genie Ours Genie Ours Genie Ours
+
+
+bigfish 18.69 **24.04** -0.09 **1.26** 0.14 **0.04**
+bossfight 15.76 **18.48** 0.02 **0.29** **0.18** 0.19
+caveflyer 11.25 **17.59** 0.02 **2.45** 0.22 **0.18**
+climber 15.22 **19.41** 0.03 **2.68** 0.21 **0.18**
+coinrun 11.30 **22.10** 0.48 **9.03** 0.21 **0.05**
+maze 18.44 **21.68** -0.24 **1.52** 0.20 **0.13**
+miner 18.85 **21.75** -0.06 **1.19** 0.11 **0.09**
+ninja 13.46 **19.63** 0.05 **4.06** 0.32 **0.18**
+
+
+Table 2: Summary of the simulation performance through
+Ctrl _adapt_ in the seen setting on ProcGen.
+
+
+affected the model’s ability to learn dynamics across diverse environments. Note that the ablated
+version (w/o rotation) is similar to Mamba (Gu & Dao, 2023), which uses a state space model with
+diagonal action. Similarly, omitting the least action principle decreased object-wise consistency,
+which is crucial for maintaining our model’s compositional and continuous dynamics.
+
+
+6.3 ANDROID DATASET
+
+
+To further validate our method, we compared WLA against Genie on the 1X World Model dataset [4] .
+This dataset comprises over 100 hours of videos capturing the actions of android-type robots in
+various environments and lighting conditions, including narrow hallways, spacious workbenches,
+and tabletops with multiple objects. We slightly adapted the architecture of our method to suit this
+setting, as detailed below, but otherwise, we followed the same experimental protocol as the ProcGen
+dataset. We evaluated the models using three metrics: PSNR, ∆ _t_ PSNR, and Fr´echet Video Distance
+(FVD) (Unterthiner et al., 2018), utilizing the debiased version (Ge et al., 2024).
+
+
+**Results:** We observed results that were consistent with those from the ProcGen dataset. While
+Genie produces cleaner predictions for individual frames, it falls behind WLA in generating video
+sequences that align with the provided action sequences. In contrast, our method successfully learns
+the correct responses, producing videos more closely resembling the ground truth (Figure 6). These
+qualitative observations are supported by the quantitative results shown in Table 3. Although our
+method slightly underperforms Genie in frame-wise evaluation (PSNR), it performs better temporally local evaluation (∆ _t_ PSNR) and significantly outperforms Genie in FVD. Some of the predicted
+videos are included in the supplementary material.
+
+
+7 CONCLUSION
+
+
+In this paper, we introduced WLA for the CIP, a method that uses a simulator to capture the rules
+of composition and continuity between environments through the algebraic relations of a Lie group
+and object-centric modeling. Using the structured latent model, we can improve the controllability
+and predictive power of the controller interface. The empirical results demonstrate that WLA is
+capable of modeling real-world robot actions in 3D environments, in addition to 2D game environments. Importantly, it is the first of its kind as a generative interactive framework that is based on
+a state-space model. However, there are still several limitations that need to be resolved to scale up
+the framework further. Firstly, our method does not account for the possible randomness of the environment. This problem might be addressed by utilizing stochastic process modeling, for example.
+Secondly, in our model, we assume a priori that transitions in the environment commute with each
+other, and the number of rotations in the latent dynamics is specified by the user. NFT (Koyama
+et al., 2024), one source of our inspiration, however, learns the group dynamics without relying on
+such an assumption. Future work, therefore, includes the development of methods to build a latent
+state-space model with fewer prior assumptions and more freedom.
+
+
+4
+Available at [https://huggingface.co/datasets/1x-technologies/worldmodel; we used version 1.1.](https://huggingface.co/datasets/1x-technologies/worldmodel)
+
+
+10
+
+
+Genie Ours
+
+
+PSNR( _↑_ ) **21.16** 20.82
+∆ _t_ PSNR( _↑_ ) 0.78 **1.13**
+FVD( _↓_ ) 393.85 **131.02**
+
+
+Table 3: Quantitative Results on
+the android dataset.
+
+
+REFERENCES
+
+
+Bowen Baker, Ilge Akkaya, Peter Zhokov, Joost Huizinga, Jie Tang, Adrien Ecoffet, Brandon
+Houghton, Raul Sampedro, and Jeff Clune. Video pretraining (vpt): Learning to act by watching
+unlabeled online videos. _Advances in Neural Information Processing Systems_, 35:24639–24654,
+2022.
+
+
+Matthew Botvinick and David C Plaut. Doing without schema hierarchies: a recurrent connectionist
+approach to normal and impaired routine sequential action. _Psychological_ _review_, 111(2):395,
+2004.
+
+
+Jake Bruce, Michael D Dennis, Ashley Edwards, Jack Parker-Holder, Yuge Shi, Edward Hughes,
+Matthew Lai, Aditi Mavalankar, Richie Steigerwald, Chris Apps, et al. Genie: Generative interactive environments. In _Forty-first International Conference on Machine Learning_, 2024.
+
+
+Tsai-Shien Chen, Chieh Hubert Lin, Hung-Yu Tseng, Tsung-Yi Lin, and Ming-Hsuan Yang. Motionconditioned diffusion model for controllable video synthesis. _arXiv preprint arXiv:2304.14404_,
+2023.
+
+
+Tamar Flash and Binyamin Hochner. Motor primitives in vertebrates and invertebrates. _Current_
+_opinion in neurobiology_, 15(6):660–666, 2005.
+
+
+Songwei Ge, Aniruddha Mahapatra, Gaurav Parmar, Jun-Yan Zhu, and Jia-Bin Huang. On the
+content bias in fr´echet video distance. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition (CVPR)_, 2024.
+
+
+Anirudh Goyal, Alex Lamb, Phanideep Gampa, Philippe Beaudoin, Sergey Levine, Charles Blundell, Yoshua Bengio, and Michael Mozer. Object files and schemata: Factorizing declarative and
+procedural knowledge in dynamical systems. In _Proceedings of the International Conference on_
+_Learning Representations (ICLR)_, 2021.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023.
+
+
+David Ha and J¨urgen Schmidhuber. World models. _arXiv preprint arXiv:1803.10122_, 2018.
+
+
+Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy Lillicrap. Mastering diverse domains
+through world models. _arXiv preprint arXiv:2301.04104_, 2023.
+
+
+Anthony Hu, Lloyd Russell, Hudson Yeo, Zak Murez, George Fedoseev, Alex Kendall, Jamie Shotton, and Gianluca Corrado. Gaia-1: A generative world model for autonomous driving. _arXiv_
+_preprint arXiv:2309.17080_, 2023.
+
+
+Ivan Karpukhin and Andrey Savchenko. Detpp: Leveraging object detection for robust long-horizon
+event prediction. _arXiv preprint arXiv:2408.13131_, 2024. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2408.13131)
+[2408.13131.](https://arxiv.org/abs/2408.13131)
+
+
+Masanori Koyama, Kenji Fukumizu, Kohei Hayashi, and Takeru Miyato. Neural fourier transform:
+A general approach to equivariant representation learning. In _Proceedings_ _of_ _the_ _International_
+_Conference on Learning Representations (ICLR)_, 2024. [URL https://openreview.net/](https://openreview.net/forum?id=eOCvA8iwXH)
+[forum?id=eOCvA8iwXH.](https://openreview.net/forum?id=eOCvA8iwXH) Presented at ICLR 2024.
+
+
+Kuang-Huei Lee, Ofir Nachum, Mengjiao (Sherry) Yang, Lisa Lee, Daniel Freeman,
+Sergio Guadarrama, Ian Fischer, Winnie Xu, Eric Jang, Henryk Michalewski, and
+Igor Mordatch. Multi-game decision transformers. In S. Koyejo, S. Mohamed,
+A. Agarwal, D. Belgrave, K. Cho, and A. Oh (eds.), _Advances_ _in_ _Neural_ _Infor-_
+_mation_ _Processing_ _Systems_, volume 35, pp. 27921–27936. Curran Associates, Inc.,
+2022. URL [https://proceedings.neurips.cc/paper_files/paper/2022/](https://proceedings.neurips.cc/paper_files/paper/2022/file/b2cac94f82928a85055987d9fd44753f-Paper-Conference.pdf)
+[file/b2cac94f82928a85055987d9fd44753f-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2022/file/b2cac94f82928a85055987d9fd44753f-Paper-Conference.pdf)
+
+
+Francesco Locatello, Dirk Weissenborn, Thomas Unterthiner, Aravindh Mahendran, Georg Heigold,
+Jakob Uszkoreit, Alexey Dosovitskiy, and Thomas Kipf. Object-centric learning with slot attention. _Advances in neural information processing systems_, 33:11525–11538, 2020.
+
+
+11
+
+
+Thomas W Mitchel, Michael Taylor, and Vincent Sitzmann. Neural isometries: Taming transformations for equivariant ml. _arXiv preprint arXiv:2405.19296_, 2024.
+
+
+Takeru Miyato, Masanori Koyama, and Kenji Fukumizu. Unsupervised learning of equivariant structure from sequences. In _Advances in Neural Information Processing Systems_, 2022. Presented at
+NeurIPs 2022.
+
+
+Takeru Miyato, Bernhard Jaeger, Max Welling, and Andreas Geiger. Gta: A geometry-aware attention mechanism for multi-view transformers. _arXiv preprint arXiv:2310.10375_, 2023.
+
+
+Arnab Kumar Mondal, Vineet Jain, Kaleem Siddiqi, and Siamak Ravanbakhsh. EqR: Equivariant representations for data-efficient reinforcement learning. In Kamalika Chaudhuri, Stefanie
+Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan Sabato (eds.), _Proceedings of the 39th_
+_International Conference on Machine Learning_, volume 162 of _Proceedings of Machine Learning_
+_Research_, pp. 15908–15926. PMLR, 17–23 Jul 2022. [URL https://proceedings.mlr.](https://proceedings.mlr.press/v162/mondal22a.html)
+[press/v162/mondal22a.html.](https://proceedings.mlr.press/v162/mondal22a.html)
+
+
+Arnab Kumar Mondal, Siba Smarak Panigrahi, Sai Rajeswar, Kaleem Siddiqi, and Siamak Ravanbakhsh. Efficient dynamics modeling in interactive environments with koopman theory. 2024.
+
+
+Tomaso Poggio and Emilio Bizzi. Generalization in vision and motor control. _Nature_, 431(7010):
+768–774, 2004.
+
+
+Maria Abi Raad, Arun Ahuja, Catarina Barros, Frederic Besse, Andrew Bolt, Adrian Bolton,
+Bethanie Brownfield, Gavin Buttimore, Max Cant, Sarah Chakera, et al. Scaling instructable
+agents across many simulated worlds. _arXiv preprint arXiv:2404.10179_, 2024.
+
+
+Oleh Rybkin, Karl Pertsch, Konstantinos G Derpanis, Kostas Daniilidis, and Andrew Jaegle. Learning what you can do before doing anything. _arXiv preprint arXiv:1806.09655_, 2018.
+
+
+Dominik Schmidt and Minqi Jiang. Learning to act without actions. _arXiv_ _preprint_
+_arXiv:2312.10812_, 2023.
+
+
+Richard A Schmidt. A schema theory of discrete motor skill learning. _Psychological review_, 82(4):
+225, 1975.
+
+
+Karl Friedrich Siburg. _The_ _principle_ _of_ _least_ _action_ _in_ _geometry_ _and_ _dynamics_ . Number 1844.
+Springer Science & Business Media, 2004.
+
+
+Thomas Unterthiner, Sjoerd Van Steenkiste, Karol Kurach, Raphael Marinier, Marcin Michalski,
+and Sylvain Gelly. Towards accurate generative models of video: A new metric & challenges.
+_arXiv preprint arXiv:1812.01717_, 2018.
+
+
+Dani Valevski, Yaniv Leviathan, Moab Arar, and Shlomi Fruchter. Diffusion models are real-time
+game engines. _arXiv preprint arXiv:2408.14837_, 2024.
+
+
+Manuel Watter, Jost Springenberg, Joschka Boedecker, and Martin Riedmiller. Embed to control: A locally linear latent dynamics model for control from raw images. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama, and R. Garnett (eds.), _Ad-_
+_vances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 28. Curran Associates, Inc.,
+2015. URL [https://proceedings.neurips.cc/paper_files/paper/2015/](https://proceedings.neurips.cc/paper_files/paper/2015/file/a1afc58c6ca9540d057299ec3016d726-Paper.pdf)
+[file/a1afc58c6ca9540d057299ec3016d726-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2015/file/a1afc58c6ca9540d057299ec3016d726-Paper.pdf)
+
+
+Timon Willi, Matthew Thomas Jackson, and Jakob Nicolaus Foerster. Jafar: An open-source genie
+reimplemention in jax. In _First Workshop on Controllable Video Generation@ ICML24_ .
+
+
+Yi-Fu Wu, Klaus Greff, Gamaleldin Fathy Elsayed, Michael Curtis Mozer, Thomas Kipf, and Sjoerd
+van Steenkiste. Inverted-attention transformers can learn object representations: Insights from slot
+attention. In _Causal Representation Learning Workshop at NeurIPS 2023_, 2023.
+
+
+Ziyi Wu, Nikita Dvornik, Klaus Greff, Thomas Kipf, and Animesh Garg. Slotformer: Unsupervised
+visual dynamics simulation with object-centric models. _arXiv preprint arXiv:2210.05861_, 2022.
+
+
+12
+
+
+Mingxing Xu, Wenrui Dai, Chunmiao Liu, Xing Gao, Weiyao Lin, Guo-Jun Qi, and Hongkai
+Xiong. Spatial-temporal transformer networks for traffic flow forecasting. _arXiv_ _preprint_
+_arXiv:2001.02908_, 2020.
+
+
+Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable
+effectiveness of deep features as a perceptual metric. In _Proceedings of the IEEE conference on_
+_computer vision and pattern recognition_, pp. 586–595, 2018.
+
+
+Zixu Zhao, Jiaze Wang, Max Horn, Yizhuo Ding, Tong He, Zechen Bai, Dominik Zietlow, CarlJohann Simon-Gabriel, Bing Shuai, Zhuowen Tu, Thomas Brox, Bernt Schiele, Yanwei Fu,
+Francesco Locatello, Zheng Zhang, and Tianjun Xiao. Object-centric multiple object tracking. In
+_2023 IEEE/CVF International Conference on Computer Vision (ICCV)_, pp. 16555–16565, 2023.
+doi: 10.1109/ICCV51070.2023.01522.
+
+
+A MORE FORMAL SETUP OF WLA AND CIP PROBLEM
+
+
+In this section, we provide a more formal version of the mathematical setup of our framework,
+which is mostly built on the theory of NFT (Koyama et al., 2024), except that we use continuous and
+nonstationary time series for training the model. We first provide the list of notations, and elaborate
+the details in the following order: (1) Dataset, (2) Model, (3) CIP, and (4) practical modification of
+the setups for implmentation purposes.
+
+
+A.1 NOTATIONS
+
+
+    - _X_ ; the space of observations, assumed to be some smooth manifold.
+
+
+    - _XE_ _⊂X_ ; the space of observations for environment _E_ .
+
+
+    - _G_ ; Lie Group.
+
+
+    - _I_ ; Time domain, can be assumed to be a compact subset of R+.
+
+
+    - _V_ ; _D_ dimensional latent vector space over the field R.
+
+
+    - _A_ ; a topological space containing the set of ’action’ signals.
+
+
+    - _ThM_ ; a tangent space of a manifold _M_ at _h ∈M_ .
+
+
+    - _C_ ( _X, Y_ ) ; a continuous map from a topological space _X_ to _Y_ .
+
+
+    - _Ck_ ( _X, Y_ ) ; a _k_ -differentiable map from a smooth manifold _X_ to _Y_ .
+
+    - _J_ [˜] ; number of toric component in _G_
+
+
+    - _D_ ; the dimension of the latent space.
+
+
+    - _F_ ; number of irreducible representations / frequencies in the representation of _G_ used in
+our work
+
+
+    - _h_ ( _X_ ) ; a subset _{h_ ( _x_ ) _| x ∈_ _X} ⊂_ _Y_
+
+
+    - Φ ; an invertible encoder map in _C∞_ ( _X_ _, V_ )
+
+
+    - GL( _V_ ) : General linear group of _V_ .
+
+
+    - gl( _V_ ) : Linear endomorphism of _V_ .
+
+
+    - Ψ ; the inverse map of Φ, an element of _C∞_ ( _V, X_ ).
+
+
+    - _DE_ ; an _E_ -labeled subset of _C_ ( _I_ _→XE_ )
+
+
+    - _TE_ : a set of transition operators _τ_ : _X_ _→X_ such that whenever _x ∈_ _DE_ and _t >_ 0 _, δ_ _>_ 0,
+there exists some _τ_ _∈TE_ such that _x_ ( _t_ + _δ_ ) = _τ_ ( _x_ ( _t_ )).
+
+
+    - _g · x_ ; an abbreviation of _α_ ( _g, x_ ) when _α_ : _G × X_ _→X_ is a group action.
+
+
+    - exp _G_ ; exponential map for Lie group _G_ . We omit the suffix when it is self-implied.
+
+    - _h_ [0 _, t_ ) ; _{h_ ( _s_ ) _|s ∈_ [0 _, t_ ) _}_ .
+
+
+13
+
+
+A.2 ASSUMPTIONS OF DATASET
+
+
+Let _D_ = _{x_ _[i]_ _}i_ _⊂_ _C_ 1( _I, X_ ) be a video dataset to be used to train the encoder Φ and the decoder Ψ
+in our WLA framework, where _i_ is the sample index. This dataset contains the videos sampled from
+multiple environments so _XE_ _⊂X_ for all _E_ . The underlying assumption of WLA is that, for every
+_x_ _∈_ _D_, _t_ _>_ 0 and _δ_ _>_ 0, the transition _x_ ( _t_ ) _→_ _x_ ( _t_ + _δ_ ) is _realized_ by _some_ common group action
+_G × X_ _→X_ of a _some_ Lie group _G_ . To be more precise, our standing assumption is as follows:
+**Assumption** **1.** _For_ _our_ _dataset_ _D_ = _{x_ _[i]_ : _I_ _→X}i_ _consisting_ _of_ _movie_ _samples_ _from_ _multiple_
+_environments,_ _there_ _exists_ _some_ _(abelian)_ _Lie_ _group_ _G_ _that_ _acts_ _on_ _X_ _through_ _a_ _group_ _action_ _α_ :
+_G × X_ _→X_ _such_ _that,_ _for_ _every_ _x_ _[i]_ _∈_ _D,_ _t_ _>_ 0 _and_ _δ_ _>_ 0 _there_ _is_ _some_ _gt,δ_ _[i]_ _[∈]_ _[G]_ _[such]_ _[that]_
+_α_ ( _gt,δ_ _[i]_ _[, x][i]_ [(] _[t]_ [)) =] _[ x][i]_ [(] _[t]_ [ +] _[ δ]_ [)] _[.]_
+
+
+For brevity, we notationaly identified _g_ with the map _αg_ : _x_ _�→_ _α_ ( _g, x_ ) (that is, we interpret
+_gt,δ_ _[i]_ [:] _[X]_ _[→X]_ [with] _[ g]_ _t,δ_ _[i]_ [(] _[x][i]_ [(] _[t]_ [))] [=] _[x][i]_ [(] _[t]_ [ +] _[ δ]_ [)][.] [)] [With this identification,] [we are therefore assuming]
+that the family of transitions _TE_ can be identified with a subset of _G_ for every _E_ . We introduce this
+assumption of the Lie group structure as our inductive bias because our desiderata of compositionality and continuity matches (almost exactly, except for the invertibility) with the definition of Lie
+group as a topological set with smooth manifold structure and rules of compositions.
+
+
+For the computational reasons that we will elaborate on momentarily, we also make an additional
+assumption on _G_, that is, (1) _G_ is connected and compact so that the exponential map is surjective
+on _G_ and (2) _G_ is abelian. Although these restrictions may seem strong (especially the abelian
+assumption), we will practically resolve this problem through non-autonomous modeling of the
+time series.
+
+
+A.3 LATENT SPACE MODELING WITH LIE ACTION
+
+
+According to the theory and results presented in NFT, when there is some group _G_ acting on _X_ with
+a set of reasonable regularity conditions, there exists an autoencoder (Φ _,_ Ψ) with latent vector space
+_V_ and a homomorphic map _M_ : _G_ _→_ GL( _V_ ) such that Φ( _M_ ( _g_ )Ψ( _x_ )) = _g_ ( _x_ ). This _M_ is also
+referred to as _representation of G_ . Mitchel et al. (2024) and Miyato et al. (2022) had experimentally
+shown that such (Φ _,_ Ψ) and _M_ can be learned from a time series dataset, and our work scales their
+philosophy to the non-stationary, continuous dynamical system on large observation space.
+
+
+To model the non-autonomous time series we assume that, for all _x_ _∈_ _D_ there exists a time series
+_g_ ( _·_ ) _∈_ _C_ ( _I, G_ ) such that _x_ ( _t_ ) = _g_ ( _t_ ) _· x_ (0). This way, we would have
+
+
+_x_ ( _t_ ) = Ψ ( _M_ ( _g_ ( _t_ ))Φ( _x_ 0)) _._
+
+
+Because we want to model the **continuous** evolution of _x_ forward in time, we model its derivative
+instead of modeling _g_ ( _t_ ) for each _t_ . By our assumption on the surjectivity of the exponential map,
+every _g_ ( _t_ ) may be written as exp _G_ (g( _t_ )), where g _∈_ _TidG_ is a tangent vector of _G_ at the identity
+element _id ∈_ _G_, i.e., the Lie algebra of _G_ . By the abelian assumption we can WLOG write
+
+
+                  - _t_
+g( _t_ ) = a( _s_ ) _ds_
+
+0
+
+for a _∈_ _C_ ( _I, TidG_ ). Writing _M_ [˜] : _TidG_ _→_ _gl_ ( _V_ ) to be the Lie algebra representation associated with _G_ so that expGL( _V_ ) _◦M_ [˜] = _M_ _◦_ exp _G_, we arrive at the following continuous time series
+dynamics through latent linear Lie action on _V_ _⊃_ Φ( _X_ );
+
+
+where we denoted _M_ [˜] (a( _s_ )) = _A_ ( _s_ ), omiting the suffixes of exp for brevity. Altogether, we write
+
+
+           - �� _t_           -           _x_ ( _t_ ) = Ψ exp _A_ ( _s_ ) _ds_ Φ( _x_ (0)) (13)
+
+0
+
+
+14
+
+
+   -   - �� _t_
+_x_ ( _t_ ) = Ψ _M_ exp
+
+
+_t_ �� - - �� _t_
+
+(a( _s_ )) _ds_ Φ( _x_ (0)) = Ψ exp
+0 0
+
+
+    -     _M_ ˜ (a( _s_ )) _ds_ Φ( _x_ (0)) (11)
+0
+
+
+  - �� _t_  -  := Ψ exp _A_ ( _s_ ) _ds_ Φ( _x_ (0)) (12)
+
+0
+
+
+**An** **remark** **Regarding** **the** **notation** **of** **gt** _,δ_ : In alignment with the _gt,δ_ notation we introduced
+in the A.2, an instance _gt,δ_ _∈_ _G_ that realizes the transition _x_ ( _t_ ) _�→_ _x_ ( _t_ + _δ_ ) may be written as
+
+�� _t_ + _δ_      _gt,δ_ = exp _G_ _t_ a( _s_ ) _ds_ . Because we have tools in this Appendix section to elaborate our design
+of continuous transition with integration, however, we do not use this notation in the subsequent
+formal explanations of CIP.
+
+
+A.4 CONTROLLER MAP
+
+
+For the environment with Controller interface, we assume that there exists an environment-specific,
+continuous Controller map
+
+
+Ctrl _E_ : _C_ ( _I, X_ ) _× C_ ( _I, A_ ) _× I_ _→_ _TidG_
+
+
+along with a possibly small paired dataset _Dadapt_ _⊂_ _C_ 1( _I, X_ ) _×_ _C_ ( _I, A_ ) such that, whenever
+( _x, a_ ) _∈_ _Dadapt_, we have
+
+
+        - �� _t_        -        _x_ ( _t_ ) = Ψ exp _M_ ˜ (Ctrl _E_ ( _x_ [0 _, s_ ) _, a_ [0 _, s_ ))) _ds_ Φ( _x_ (0)) (14)
+
+0
+
+
+where we wrote Ctrl _E_ ( _x_ [0 _, s_ ) _, a_ [0 _, s_ ))) := Ctrl _E_ ( _x, a, s_ ) to convey the contraint that the controller
+output at _s_ depends only on the history of _x_ and _a_ up to _s_ . Indeed, the purpose of CIP is to train Ctrl _E_
+based on _Dadapt_ . Because the input to Ctrl _E_ is not _x_ ( _s_ ) _, a_ ( _s_ ), the controller map Ctrl _E_ is expected
+to entail the causal mechanism that cannot be captured with (Φ _,_ Ψ) alone.
+
+
+A.5 PRACTICAL DETAILS FOR THE PURPOSE OF IMPLEMENTATION
+
+
+Although we defined the formal output of Ctrl _E_ to be _TidG_, the Lie algebra _TidG_ itself is an abstract
+entity. To instantiate _TidG_ in numerical form, we use the matrix representation _M_ [˜] : _TidG →_ gl( _V_ )
+of Lie algebra. Also, we use the fact that a connected abelian Lie group is isomorphic to R _[J]_ [1] _×_ T _[J]_ [2]
+so that any element of _G_ can be characterized by a set of pairs of scale _λ_ and rotation angle _θ_ .
+Likewise, an element of corresponding Lie algebra g can be characterized by a set of pairs of scaling
+speed and rotational speed. This way, we can conclude that the matrix representations _M_ [˜] (g) of
+our _TidG_ are parametrized by a set of scale-rotation velocity pairs and irreducible representations
+(frequencies). In this work, we assume _J_ 1 = _J_ 2 = _J_ [˜] for brevity and denote it so. [5]
+
+
+Reindexing these pairs of _rotation and scale_ with the frequencies _{rf_ _|f_ = 1 _, ...F_ _} ⊂_ _R_ (irreducible
+representation) and the index of toric component _{_ 1 _, ...,_ _J_ [˜] _}_, let us therefore rewrite _A_ ( _s_ ) in equation 12 as _A_ [˜] ( _{_ ( _λjf_ ( _s_ ) _, θjf_ ( _s_ ) _}j,f_ ) = [�] _j,f_ _[A]_ [˜][(] _[λ][jf]_ [(] _[s]_ [)] _[, θ][jf]_ [(] _[s]_ [))][, where] _[A]_ [˜] _[jf]_ [:] [R][ ˜] _J_ _×_ T _J_ [˜] _→_ gl( _V_ ) is
+defined as [6]
+
+
+Thus, again with the abuse of notation, we practically define Ctrl _E_ to be
+
+Ctrl [prac] _E_ : _x_ [0 _, s_ ) _× a_ [0 _, s_ ) _�→{_ ( _λjf_ ( _s_ ) _, θjf_ ( _s_ ) _}j,f_ _⊂_ (R _× S_ 1) _J,F_ ˜ _._ (17)
+
+
+5We note that, in this section, we are omitting the additional index _n_ of slot attention architecture in order
+to avoid the over-complication of notations.
+6Here, _{rf_ _}_ in implementation was chosen in a way similar to RoPE. Please see the attached code for the
+detailed setting.
+
+
+15
+
+
+_A_ ˜ _jf_ ( _λjf_ _, θjf_ ) =         - _rλf_ _θjfjf_ _−rλfjfθjf_
+
+
+This way, _M_ [˜] (a( _s_ )) is written as
+
+
+_._
+
+
+_M_ ˜ (a( _s_ )) = _A_ [˜] ( _{_ ( _λjf_ ( _s_ ) _, θjf_ ( _s_ ) _}_ ) = - _A_ ˜ _jf_ ( _λjf_ _, θjf_ ( _s_ )) (15)
+
+
+_j,f_
+
+
+(16)
+
+
+= 
+
+_j,f_
+
+
+- _λjf_ ( _s_ ) _−rf_ _θjf_ ( _s_ )
+_rf_ _θjf_ ( _s_ ) _λjf_ ( _s_ )
+
+
+where _S_ 1 is the circle group. This practial Controller map Ctrl [prac] _E_ maps the input through _M_ [˜], so the
+following model emerges as the actual modeling of the time series in CIP
+
+
+       - �� _t_        -        _x_ ( _t_ ) = Ψ exp _A_ ˜ �Ctrl [prac] _E_ ( _x_ [0 _, s_ ) _, a_ [0 _, s_ ))� _ds_ Φ( _x_ (0)) _._ (18)
+
+0
+
+
+We also remark that our _J_ in the main part of the manuscript corresponds to _J_ = _J_ [˜] _F_ .
+
+
+A.5.1 REGARDING THE TIME DISCRETIZATION
+
+
+Although our framework is built for continuous and compositional dynamics, a real-world dataset
+is bound to be temporally discrete, and _x_ _∈_ _C_ ( _I, X_ ) is represented as a discrete sequence _x_ ¯ =
+
+[ _x_ ( _τm_ ); _m_ _∈_ Z] with _τm_ _<_ _τm_ +1, and we will be forced to learn Ctrl _E_ as well as Φ _,_ Ψ with the
+piecewise interpolated model
+
+
+Λ _k_ ( _t_ ) = �0 _t_ _[λ][k]_ [(] _[s]_ [)] _[ds]_ [,][ Θ] _[k]_ [(] _[t]_ [)] [=] �0 _t_ _[θ][k]_ [(] _[s]_ [)] _[ds]_ [, we can create a sequence] _[ M]_ [(] _[g]_ [(] _[t]_ [))] _[→]_ [0][ by considering]
+Λ( _t_ ) _→−∞_ . Likewise, because lim _t→t∗_ a( _t_ ) _→_ 0 for some fixed _t∗_ _∈_ _I_ is plausible for equation 12, we can also model a sequence similar to _g_ ( _t_ ) _→_ _g∗_ for some fixed _g∗_ _∈_ _G_ as well. In fact,
+in experiment, we are succeeding in modeling a complex dynamics in both real world setting like
+1X World model dataset and simulated world setting like ProcGen which are both likely to involve
+transitions like nilpotent and idempotent operations.
+
+
+16
+
+
+_A_ ( _s_ ) = 
+
+
+_A_ ( _τm_ )1 _s∈_ [ _τm,τm_ +1) :=  _m_ _m_
+
+
+_A_ ¯[ _m_ ]1 _s∈_ [ _τm,τm_ +1)
+_m_
+
+
+where _A_ [¯] [ _m_ ] := _A_ ( _τm_ ) = _A_ [˜] ( _{λjf_ ( _s_ ) _, θjf_ ( _s_ ) _}_ ) is constructed from ( _λjf_ ( _s_ ) _, θjf_ ( _s_ )) defined analogously with the discretized ( _λjf_ [ _m_ ] _, θjf_ [ _m_ ]). Putting ∆ _m_ = _τm_ +1 _−_ _τm_, we therefore have
+
+
+- _τt_
+
+
+- _A_ ¯[ _ℓ_ ]∆ _ℓ_
+
+
+_ℓ<t_
+
+
+_A_ ( _s_ ) _ds_ =  0
+
+
+and the equation 13 becomes
+
+
+_x_ ( _t_ ) = Ψ
+
+
+exp
+
+
+��
+
+
+_A_ ¯[ _ℓ_ ] min(∆ _ℓ, τℓ_ _−_ _t_ )
+
+_ℓ<m_
+
+
+  
+Φ( _x_ (0))
+
+
+(19)
+
+
+Giving the same consideration to Ctrl _E_, the predicted time series in CIP training defined with Ctrl _E_
+is therefore computed as
+
+
+  
+Φ( _x_ (0))
+
+
+�� _A_ ˜ �Ctrl [prac] _E_ (¯ _x_ [: _ℓ_ ] _,_ ¯ _a_ [: _ℓ_ ])∆ _ℓ_ ��
+
+_ℓ<m_
+
+
+_A_ ˜
+
+
+��
+
+
+_ℓ<m_
+
+
+_x_ ˆ[ _m_ ] = Ψ
+
+
+= Ψ
+
+
+exp
+
+
+exp
+
+
+��
+�Ctrl [prac] _E_ (¯ _x_ [: _ℓ_ ] _,_ ¯ _a_ [: _ℓ_ ])∆ _ℓ_ 
+
+
+  
+Φ( _x_ (0))
+
+
+(20)
+
+
+(21)
+
+
+where _a_ ¯ is defined analogously to _x_ ¯ and the notation of Ctrl [prac] _E_ is abused to take as input the discretized version of ( _x_ [0 _, s_ ) _, a_ [0 _, s_ )). In the final equality we used the linearity of _A_ [˜] with respect to
+its input.
+
+
+A.5.2 A REMARK REGARDING THE REPRESENTATION POWER OF OUR MODEL
+
+
+Because our fundamental assumption is that all _G_ is a the group, every _g_ _∈_ _G_ is assumed invertible. Also, as we have mentioned earlier, we assume _G_ to be abelian as well. Therefore, strictly
+speaking, transitions operators that are nilpotent or idempotent cannot be expressed. While this
+might seem to restrict our modeling capability, our model can construct a transition that mimics
+
+
+these operators. Firstly, because _M_ ( _g_ ( _t_ )) = [�] _k_ [exp(Λ(] _[t]_ [))] - cos Θsin Θ _kk_ (( _tt_ )) _−_ cos Θsin Θ _kk_ ( _t_ () _t_ )
+
+
+with
+
+
+B IMPLEMENTATION DETAILS
+
+
+B.1 PHYRE
+
+
+The encoder was configured with a depth of 9 layers, a width of 216, a patch size of 8, 12 attention
+heads, and 6 slots. The decoder had a depth of 3 layers and a patch size of 16, converting the latent
+slots to images using the mechanism from slot attention (Locatello et al., 2020). For the attention
+modules on the patch tokens, we employed GTA (Miyato et al., 2023).
+
+
+We trained the model using the AdamW optimizer with a learning rate of 5 _×_ 10 _[−]_ [4] and a weight
+decay of 0.1 for 100 epochs. We set the sparsity regularizer scale _α_ to 0 _._ 01. Linear warmup cosine
+annealing was applied with 10 warmup epochs and an initial learning rate of 1 _×_ 10 _[−]_ [5] .
+
+
+B.2 PROCGEN
+
+
+For the encoder and the decoder, we used the same setting as for the Phyre experiment, except
+that the number of slots is 20. The IDM module, which converts latent states _z_ into latent action
+parameters ( _λ, θ_ ), was implemented using a 1D convolutional architecture with SiLU activation and
+LayerNorm. We trained the model using the AdamW optimizer with a learning rate of 5 _×_ 10 _[−]_ [4] over
+200 epochs. We trained the model with 16 frames: 12 frames for prediction, followed by 4 burn-in
+frames.
+
+
+When training Ctrl _adapt_ with action labels (as described in Section 4.3), we input the action label
+sequences _a_ ( _t_ ) together with the latent states _z_ ( _t_ ) into a spatio-temporal transformer (Xu et al., 2020)
+configured with a depth of 4 layers and 4 attention heads. Ctrl _adapt_ was trained using the AdamW
+optimizer with a learning rate of 5 _×_ 10 _[−]_ [4] for 100 epochs. The encoder-decoder pair (Φ _,_ Ψ) was
+frozen during the training of Ctrl _adapt_ .
+
+
+B.3 ANDROID DATASET
+
+
+In this experiment, each 256 _×_ 256 RGB video frame was converted into an 8 _×_ 8 grid of 18-bit binary
+tokens using MAGVIT2. Consequently, we trained our model on the time series of these tokens
+and replaced the reconstruction losses with logistic losses, as the tokens are binary. Additionally,
+since Slot Attention expects images as input, we employed a standard Vision Transformer (ViT)
+architecture to model the time evolution and alignment of the encoded tokens. Specifically, since
+there are 8 _×_ 8 = 64 tokens in total, we treat them as if they are “slot” tokens. Also, we set the
+number of rotation angles to _J_ = 16.
+
+
+B.4 HYPERPARAMETER SELECTION
+
+
+The number of slots _N_ and the number of Lie group actions _J_ play an important role. Generally, increasing _N_ and _J_ enhances the model capacity but also affects computational complexity, especially
+_N_, which directly impacts runtime. The same applies to _J_ since _D_ = 2 _J_ .
+
+
+We observed that the internal construction of _D_ significantly improves performance. Inspired by
+sinusoidal positional embeddings and NFT, we parameterized each rotation with a “frequency.” We
+indexed _θ_ with _i, j_ such that _θi,j_ ( _t_ ) = _miθ_ [˜] _j_ ( _t_ ), where _{mi_ _∈_ R _|_ _i_ = 1 _, . . ., F_ _}_ are the rotation
+speeds and _j_ _∈_ 1 _, . . .,_ _J_ [˜] with _J_ [˜] = _J/F_ . We fixed _F_, with _D_ = 2 _J_ = _JF_ [˜] .
+
+
+We conducted additional small-scale experiments on ProcGen to study the effect of varying _J_ [˜] and
+_N_ . The results are summarized in the following table:
+
+
+These results indicate that increasing _J_ [˜] with a smaller _F_ improves performance. Similarly, increasing _N_ reduces reconstruction error, highlighting the importance of these hyperparameters.
+
+
+17
+
+
+_N_ _J_ ˜ Reconstruction Error (MSE)
+
+
+16 3 0.0583
+16 6 0.0587
+16 12 0.0439
+16 24 0.0378
+
+
+8 6 0.0641
+16 6 0.0587
+24 6 0.0397
+
+
+Table 4: Effect of varying _J_ [˜] and _N_ on reconstruction error.
+
+
+18

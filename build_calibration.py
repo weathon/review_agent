@@ -78,7 +78,6 @@ async def run_sub_agents_and_merger(
         skip_spark=skip_spark,
         skip_neutral=skip_neutral,
         skip_score=True,
-        skip_human_finder=True,
         venue="ICLR",
     )
 
@@ -88,6 +87,8 @@ async def run_sub_agents_and_merger(
         "spark_review": result["spark_review"],
         "related_work": result["related_work"],
         "merged_review": result["merged_review"],
+        "cost": result["cost"],
+        "sdk_savings": result["sdk_savings"],
     }
 
 
@@ -112,25 +113,25 @@ def save_calibration_files(results: list[dict], cal_dir: Path, papers_dir: Path)
         # Save review file
         parts = []
         parts.append(f"=== CALIBRATION EXAMPLE {i} ===\n")
-        if r.get("harsh_review"):
-            parts.append("# Harsh Critic Review")
-            parts.append(r["harsh_review"])
-            parts.append("")
-        if r.get("neutral_review"):
-            parts.append("# Neutral Reviewer")
-            parts.append(r["neutral_review"])
-            parts.append("")
-        if r.get("spark_review"):
-            parts.append("# Spark Finder Review")
-            parts.append(r["spark_review"])
-            parts.append("")
-        if r.get("related_work"):
-            parts.append("# Related Work Analysis")
-            parts.append(r["related_work"])
-            parts.append("")
+        # if r.get("harsh_review"):
+        #     parts.append("# Harsh Critic Review")
+        #     parts.append(r["harsh_review"])
+        #     parts.append("")
+        # if r.get("neutral_review"):
+        #     parts.append("# Neutral Reviewer")
+        #     parts.append(r["neutral_review"])
+        #     parts.append("")
+        # if r.get("spark_review"):
+        #     parts.append("# Spark Finder Review")
+        #     parts.append(r["spark_review"])
+        #     parts.append("")
+        # if r.get("related_work"):
+        #     parts.append("# Related Work Analysis")
+        #     parts.append(r["related_work"])
+        #     parts.append("")
         parts.append("# Final Consolidated Review")
         parts.append(r["merged_review"])
-        parts.append("")
+        parts.append("") 
         parts.append("# Actual Human Scores")
         parts.append(f"Individual reviewer scores: {r['scores']}")
         parts.append(f"Average score: {r['avg_score']:.1f}")
@@ -170,6 +171,30 @@ async def main(
     cal_dir = Path(__file__).parent / "cal"
     ids_path = Path(__file__).parent / "calibration_ids.json"
 
+    # Check for already-completed papers
+    done_ids = set()
+    for s in samples:
+        title = s.get("title", s["paper_id"])
+        base = shorten_title(title)
+        if (cal_dir / f"{base}_review.md").exists():
+            done_ids.add(s["paper_id"])
+
+    if done_ids:
+        print(f"\nFound {len(done_ids)}/{len(samples)} papers already completed in {cal_dir}.")
+        choice = input("Continue (skip done papers) or restart? [c/r]: ").strip().lower()
+        if choice == "r":
+            import shutil
+            if cal_dir.exists():
+                shutil.rmtree(cal_dir)
+                print(f"Deleted {cal_dir}")
+            print("Restarting: will re-run all papers.")
+        else:
+            print(f"Continuing: skipping {len(done_ids)} done papers.")
+            samples = [s for s in samples if s["paper_id"] not in done_ids]
+            if not samples:
+                print("All papers already done. Nothing to do.")
+                return
+
     def _save_all(results_snapshot: list[dict]) -> None:
         """Save all accumulated results to disk."""
         save_calibration_files(results_snapshot, cal_dir, papers_dir)
@@ -196,7 +221,7 @@ async def main(
                     skip_neutral=skip_neutral,
                 )
                 elapsed = time.time() - start
-                print(f"  [{pid}] Done in {elapsed:.1f}s (attempt {attempt})")
+                print(f"  [{pid}] Done in {elapsed:.1f}s (attempt {attempt}) — cost: ${outputs.get('cost', 0):.4f}, sdk_savings: ${outputs.get('sdk_savings', 0):.4f}")
 
                 result = {
                     **outputs,
@@ -257,12 +282,17 @@ async def main(
     print(f"Calibration IDs saved to: {ids_path} ({len(results)} papers)")
 
     # Summary
+    total_cost = sum(r.get("cost", 0) for r in results)
+    total_sdk_savings = sum(r.get("sdk_savings", 0) for r in results)
     print(f"\n{'=' * 72}")
     print("Calibration set built:")
     for r in results:
         print(f"  {r['paper_id']}: avg={r['avg_score']:.1f} scores={r['scores']} dec={r['gt_binary']}")
     if failures:
         print(f"Failed: {len(failures)}")
+    print(f"\nTotal cost:        ${total_cost:.4f}")
+    print(f"SDK savings:       ${total_sdk_savings:.4f}")
+    print(f"Net cost:          ${total_cost - total_sdk_savings:.4f}")
 
 
 if __name__ == "__main__":

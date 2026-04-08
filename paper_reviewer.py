@@ -41,7 +41,7 @@ MODEL_SPARK = f"qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
-MODEL_MERGER = f"z-ai/glm-5" #rate limit is very tight on zai coding plan, switch back to openrouter if needed
+MODEL_MERGER = f"z-ai/glm-5.1" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
 MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-6" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
@@ -120,14 +120,17 @@ def _load_prompt(name: str) -> str:
 
 
 # ── Agent system prompts ──────────────────────────────────────────────
+import time
+timeline_prompt = "\n" + _load_prompt("timeline.txt").replace("{{CURRENT_DATE}}", time.strftime("%B %d, %Y"))
 
-HARSH_CRITIC_PROMPT = _load_prompt("harsh_critic.txt")
-NEUTRAL_REVIEWER_PROMPT = _load_prompt("neutral_reviewer.txt")
-SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt")
-RELATED_WORK_PROMPT = _load_prompt("related_work.txt")
-RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt")
-_MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt")
-HUMAN_FINDER_PROMPT = _load_prompt("find_human_match.txt")
+HARSH_CRITIC_PROMPT = _load_prompt("harsh_critic.txt") + timeline_prompt
+NEUTRAL_REVIEWER_PROMPT = _load_prompt("neutral_reviewer.txt") + timeline_prompt
+SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt") + timeline_prompt
+RELATED_WORK_PROMPT = _load_prompt("related_work.txt") + timeline_prompt
+RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt") + timeline_prompt
+_MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt") + timeline_prompt
+HUMAN_FINDER_PROMPT = _load_prompt("find_human_match.txt") + timeline_prompt
+
 
 
 def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, skip_related_work: bool = False) -> str:
@@ -302,7 +305,7 @@ print("Testing ZAI client with a simple call ...")
 #     print("🔥ZAI client test failed: unexpected answer")
 
 # ── Agent runners ─────────────────────────────────────────────────────
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock, ResultMessage
 
 
 async def _run_reviewer_claude_sdk(
@@ -355,6 +358,7 @@ async def _run_reviewer_claude_sdk(
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
+            if isinstance(message, ResultMessage):
                 cost += message.total_cost_usd
 
     print(f"  [{name}] done — {model_id} (Claude Agent SDK) — saved ${cost:.4f}")
@@ -583,7 +587,9 @@ async def run_scorer(
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
-                total_cost += message.total_cost_usd
+            if isinstance(message, ResultMessage):
+                cost += message.total_cost_usd
+
     print(f"  [scorer-agent] Claude Agent SDK savings: ${total_cost:.4f}")
     _add_sdk_savings(total_cost)
 
@@ -702,7 +708,7 @@ async def run_human_finder(pp, human_review_dir):
         permission_mode="bypassPermissions",
         max_turns=30,
     )
-
+    print(f"  [Human Finder] starting Claude Agent SDK ({MODEL_FIND_HUMAN}) ...")
     sdk_savings = 0.0
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(query)
@@ -711,7 +717,9 @@ async def run_human_finder(pp, human_review_dir):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
+            if isinstance(message, ResultMessage):
                 sdk_savings += message.total_cost_usd
+
     _add_sdk_savings(sdk_savings)
     print(f"  [Human Finder] done (Claude Agent SDK) — saved ${sdk_savings:.4f}")
     with open(Path(__file__).parent / "human_finder_debug.log", "a", encoding="utf-8") as f:
@@ -733,7 +741,6 @@ async def run_pipeline(
     skip_spark: bool = False,
     skip_neutral: bool = False,
     skip_score: bool = False,
-    skip_human_finder: bool = False,
     venue: str = "ICLR",
     calibration_context: str = "",
     cal_dir: str = "",
@@ -749,6 +756,16 @@ async def run_pipeline(
     """
     pp = paper_path
 
+    # Guard against data leakage: paper ID must not exist in the human review set
+    paper_id = Path(pp).stem
+    human_review_path = Path(human_review_dir) / "human_reviews" / f"{paper_id}.md"
+    if human_review_path.exists():
+        raise ValueError(
+            f"Data leakage: paper {paper_id} has a human review in "
+            f"{human_review_dir}/human_reviews/. The input dataset and human "
+            f"review set must not share paper IDs."
+        )
+
     savings_before = get_sdk_savings()
 
     # ── Phase 1: All reviewers (parallel or sequential) ───────────
@@ -763,8 +780,7 @@ async def run_pipeline(
             tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
         if not skip_related_work:
             tasks.append(run_related_work_search(client, paper_content))
-        if not skip_human_finder:
-            tasks.append(run_human_finder(pp, human_review_dir))
+        tasks.append(run_human_finder(pp, human_review_dir))
 
         print("  Phase 1: All reviewers in parallel ...")
         results_list = await asyncio.gather(*tasks)
@@ -783,13 +799,12 @@ async def run_pipeline(
             related_work, c = results_list[idx]; total_cost += c; idx += 1
         else:
             related_work = "Related work search was skipped."
-        if not skip_human_finder:
-            human_match_review, c = results_list[idx]; total_cost += c
-            harsh_review = (
-                f"{harsh_review.rstrip()}\n\n"
-                f"Additional transferable weaknesses from matched human reviews:\n"
-                f"{human_match_review.lstrip()}"
-            )
+        human_match_review, c = results_list[idx]; total_cost += c
+        harsh_review = (
+            f"{harsh_review.rstrip()}\n\n"
+            f"Additional transferable weaknesses from matched human reviews:\n"
+            f"{human_match_review.lstrip()}"
+        )
     else:
         raise NotImplementedError("Sequential mode is not implemented in this version.")
 

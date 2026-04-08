@@ -1,0 +1,1953 @@
+# OBJECT-AWARE CONDITIONAL ALIGNMENT
+## FOR CROSS-DOMAIN COUNTING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Object counting is an important task in computer vision with many real-world applications. In practical settings, factors such as lighting conditions and object density can vary
+dramatically, leading to distribution shifts then causing inaccurate counting. We found
+that existing domain adaptation (DA) methods cannot be directly applied to the counting task, as they usually assume changes across different domains are task-irrelevant and
+focus on utilizing domain-invariant features for prediction. However, in object counting
+tasks, changes in object density which could happen across domains are task-relevant and
+cannot be ignored. Therefore, applying existing DA methods to the counting task can ignore the information about density changes, resulting in unreliable counting. To address
+this limitation, we propose the Binary Alignment Network (BiAN). Unlike traditional DA
+methods that align distributions of entire image representations, BiAN segments objects
+of interest and aligns the distributions of the object-specific features across domains. This
+targeted alignment allows us to disregard irrelevant features, such as lighting conditions
+while preserving essential information about changes in object density. We theoretically
+demonstrate that BiAN achieves superior adaptability in counting tasks by introducing
+conditional alignment—aligning features conditioned on the presence of objects. Extensive experiments on two distinct counting tasks and eight dataset combinations show that
+BiAN outperforms state-of-the-art methods.
+
+
+1 INTRODUCTION
+
+
+Object counting is an important task in computer vision with a wide range of real-world applications, including crowd monitoring, traffic analysis, and biomedical imaging. Accurate counting of objects within
+images or video frames is crucial for decision-making processes in various industries and research domains
+(He et al., 2021). However, in practical settings, factors such as lighting conditions, object density, and background complexity can vary dramatically across different environments. These variations lead to distribution
+shifts between training data (source domain) and deployment scenarios (target domain), posing significant
+challenges for object counting models (Wang et al., 2019b).
+
+
+To address distribution shifts, domain adaptation (DA) methods have been widely explored in machine
+learning. These methods aim to improve the generalization capabilities of models by aligning the feature
+distributions between source and target domains (Singhal et al., 2023). In tasks like image classification and
+semantic segmentation, DA methods generally assume that domain shifts are task-irrelevant, meaning the
+shifts do not affect the core features necessary for accurate predictions (Kong et al., 2022; Xie et al., 2023b;
+Bousmalis et al., 2016). By focusing on learning domain-invariant features, these methods strive to maintain
+performance across different domains.
+
+
+However, this assumption does not hold in the context of object counting. Changes in object density across
+domains are inherently task-relevant, as the primary goal is to accurately estimate the number of objects
+
+
+1
+
+
+Figure 1: Comparison between existing domain adaptation (DA) methods and our approach. It shows that
+the general DA methods treat task-relevant factors as features that need to be directly aligned. The aligned
+distribution of density leads to consistent density estimation across domains. However, the consistent density
+does not match the real density in the samples. In our method, we only align the distributions of features
+belonging to objects of interest, so that the inter-object information can be preserved.
+
+
+present (Li et al., 2019; Han et al., 2023). As shown in Figure 1, traditional DA methods that ignore these
+density variations may inadvertently discard crucial information, leading to unreliable counting performance
+on the target domain. The misalignment arises because these methods treat all domain shifts uniformly,
+failing to distinguish between task-relevant and task-irrelevant variations. The existing domain adaptive
+counting methods like CODA notice the issue of dynamic density (Li et al., 2019). However, they still
+consider the density feature as domain invariant and then struggle with aligning its distribution, which is in
+conflict with the assumption.
+
+
+To tickle this limitation, we propose the Binary Alignment Network (BiAN), a novel approach designed
+specifically for domain adaptation in object counting tasks. Figure 1 shows the sketch of our proposed
+method. Instead of aligning the distributions of entire image representations, BiAN focuses on segmenting
+objects of interest and aligning the distributions of their features across domains. By isolating the features
+within the objects, our method effectively filters out task-irrelevant variations such as lighting conditions
+and background noise, while preserving essential information about object density changes. This targeted
+alignment ensures that the model remains sensitive to variations that directly impact the counting task.
+
+
+We further provide a theoretical framework demonstrating that BiAN achieves superior adaptability by introducing conditional alignment—aligning features conditioned on the presence of objects. This approach
+allows the model to account for density variations between domains more effectively than traditional methods. By conditioning on object presence, BiAN maintains sensitivity to the number and arrangement of
+objects, which are critical factors in accurate counting.
+
+
+Our main contributions are summarized as follows:
+
+
+- We highlight the shortcomings of existing domain adaptation techniques when applied to object counting
+tasks. Specifically, the existing DA methods contempt the dynamic density across scenes as the taskrelevant factor, violating the DA assumption. The aligned density distribution causes source-consistency
+density estimation, leading to decay in counting performance.
+
+
+2
+
+
+- We introduce BiAN, which segments objects of interest and aligns their features across domains conditionally. Within BiAN, the conditional alignment is proposed for aligning the distribution of object feature
+and background and preserving inter-object contextual information. The additional consistency mechanism further guarantees the crucial density information by constraining the conditional aligned distribution
+consistent with the distribution of the entire sample.
+
+
+- We provide a theoretical demonstration of how conditional alignment enhances domain adaptability in
+counting tasks. The analysis demonstrates that aligning the distribution of specific conditions is beneficial
+to overall alignment performance. It also emphasizes the importance of maintaining consistency between
+condition-level distribution and sample-level distribution.
+
+
+- We conduct comprehensive experiments on multiple counting scenarios with different density variations.
+The results show that BiAN significantly outperforms existing methods in terms of counting accuracy.
+
+
+In the following sections, we review related work, detail the methodology of BiAN, present our theoretical
+findings, and discuss the experimental results that demonstrate the advantages of our approach.
+
+
+2 RELATED WORK
+
+
+2.1 OBJECT COUNTING
+
+
+Object counting is a fundamental task in computer vision, with applications in various fields, such as crowd
+monitoring, cell counting, and traffic analysis (Loy et al., 2013). Traditional counting methods rely on
+supervised learning, which requires a large amount of annotated data (Jiang et al., 2021; Liu et al., 2021;
+Gao et al., 2021). Recent advances in deep learning have significantly improved the performance of counting
+models. For instance, Kernel-based Density Map Generation (KDMG) (Wan et al., 2022) employs a kernelbased density map to estimate the object count. SAU-Net (Guo et al., 2022) combines the advantages of
+SANet and U-Net to achieve high counting accuracy. STEERER (Han et al., 2023) cumulatively selects
+and inherits discriminative features to resolve scale variations. Despite the remarkable performance of these
+models, they are limited by the requirement of large amounts of annotated data when encountering domain
+variety. Therefore, GAN-based UDA counting methods have been proposed, such as Counting Object via
+scale-aware adversarial Density Adaptation (CODA) (Li et al., 2019), devised to address distinct object
+scale and density distributions. Additionally, SSIM Embedding Cycle GAN (SECycle) (Wang et al., 2019b)
+has emerged as a potent solution for counting in natural crowd scenes by synthesizing target-like images.
+To amplify the model’s adaptability across intricate scenarios, the novel Latent Domain Generation (LDG)
+(Zhang et al., 2023) method has been introduced, generating the latent domain to learn the distribution from
+domains. The advanced research adopts the latest approaches in other fields, such as SaKnD (Xie et al.,
+2023a) which utilizing diffusion modules to enhance generalizability and CrowdGraph (Zhang et al., 2024a)
+which proposed an algorithm via pure graph neural network. To the best of our knowledge, there remains a
+research gap in discriminate migration for preserving task-relevant information across domains.
+
+
+2.2 DOMAIN ADAPTATION
+
+
+Domain adaptation (Cai et al., 2019; Courty et al., 2017; Deng et al., 2019; Tzeng et al., 2017; Wang et al.,
+2019a; Xu et al., 2019; Zhang et al., 2017; 2020; Mao et al., 2024; Stojanov et al., 2024; Wu et al., 2022;
+Eastwood et al., 2022; Tong et al., 2022; Kirchmeyer et al., 2022; Zhu et al., 2022; Xu et al., 2022; Roelofs
+et al., 2022; Kong et al., 2022; Jiang et al., 2022; Liu et al., 2022; Zhang et al., 2024b) has become a focal
+point in recent computer vision and machine learning research. Among the various approaches, invariant
+representation learning, introduced by (Ganin & Lempitsky, 2015), stands out as a direct and increasingly
+popular method. The goal of invariant representation learning is to identify domain-invariant features, that
+can reconstruct the original data for predicting label (Bousmalis et al., 2016). Historically, it was assumed
+
+
+3
+
+
+Figure 2: Overview of our proposed BiAN framework. _gs_ and _gt_ are domain-specific feature extractors for
+source and target domain. _fd_ is the domain discriminator for aligning. _f_ is the regressor for generating target
+density map. _fc_ is the regressor for generating conditional density map with shared weights with _f_ .
+
+
+that the distribution of labels remains consistent across different domains. Based on this assumption, clusterbased and kernel-based methods have been developed to approximate the joint label distribution (Long et al.,
+2018; Xie et al., 2018a; Shu et al., 2018). In general, it is hard to guarantee that domain-invariant features
+capture the discriminative information needed for label prediction in a setting of single source domain (Kong
+et al., 2022). Multi-source adaptation offers potential solutions (Xu et al., 2018; Peng et al., 2019; Park
+& Wan Lee, 2021; Li et al., 2021; Wang et al., 2020), where theoretical studies have demonstrated that
+latent variables can be identified from a sufficient number of source domains using independent component
+analysis. However, the existing methods are limited by the assumption that the domain shifts are taskirrelevant. In contrast, our proposed BiAN focuses on aligning the distribution of object-specific features
+across domains, which allows us to disregard irrelevant features while preserving essential information about
+object density changes.
+
+
+3 METHODS
+
+
+In this section, we formally propose the Binary Alignment Network (BiAN) for cross-domain counting
+tasks. We first describe the conditional alignment process in Figure 2 and discuss how we can mitigate
+the domain shift of object features while preserving crucial density information. We introduce conditional
+alignment and consistency mechanisms in Section 3.2 and Section 3.3. The training process of BiAN is
+shown as Appendix A.2. We also provide a theoretical analysis of conditional alignment in Section 3.5,
+demonstrating how BiAN achieves superior adaptability in counting tasks.
+
+
+3.1 PRELIMINARY STUDY
+
+
+In this section, we review the preliminary knowledge of cross-domain counting task. The objective of crossdomain counting is to train a network _N_ that transfers the counting-relevant knowledge from source domain
+_Ds_ to _Dt_ with minimum joint decision error _ϵU_ . The network _N_ process can be formulated as a Markov
+
+_g_ _f_
+chain that _X_ _−→Z_ _−→Y_ . The error _ϵU_ can be represented _ϵU_ = _ϵDs′_ ( _h_ ) + _ϵDt′_ ( _h_ ), where _ϵDs′_ ( _h_ )
+and _ϵDt′_ ( _h_ ) indicate the decision error on the transferred domains. The decision error _ϵ_ can be represented
+as _ϵ_ ( _h, fi_ ), where _h_ for hypothesis and _fi_ _[L]_ [for] [labeling] [function] [on] [the] [transferred] [domain] [(Zhao] [et] [al.,]
+2019). The general DA interacts with domain-variant and domain-invariant features, which are _zvar_ and
+_zinv_ respectively. The fundamental assumption is that _zvar_ does not influence the label _y_ (Kong et al., 2022).
+Specifically, the sketch of general DA can be represented as first identifying _zinv_ and _zvar_, then processing
+_zinv_ for recognition and migrating _zvar_ to the unified domain. Different from general DA approaches, the
+task of counting across domains introduces the concept of task-relevant factors _ztask_, which is domain
+
+4
+
+
+variant but relevant to the results. Therefore, preserving _ztask_ is required for the stable counting adaptation
+process. In BiAN, we treat _ztask_ as contextual information between condition subsets and preserving it via
+conditional alignment and encourage network _NBiAN_ to maintain _ztask_ . The definition of the elements can
+be represented as:
+
+
+**Definition 1.** _Given domain-variant probability distributions Ds_ _and Dt_ _over an independent variable X_ _,_
+_which are Xs_ _and Xt_ _respectively._ _Let gs_ _and gt_ _be two reflections to project Xs_ _and Xt_ _to an overlapped_
+_feature domain ZU_ _._ _The unified domain ZU_ _and label space Y_ _can be represented as:_
+
+
+_Zs_ = _gs_ ( _Xs_ ) _,_ _Zt_ = _gt_ ( _Xt_ ) _,_
+_ZU_ = _Zs ∪Zt, Zs ∩Zt_ = ∅ _._
+_Ys_ = _fs_ ( _Zs_ ) _,_ _Yt_ = _ft_ ( _Zt_ ) _._
+
+
+3.2 CONDITION ALIGNMENT
+
+
+Within the framework of BiAN, we design conditional alignment with the following alignment strategy.
+It aims to independently align the conditional subsets _Ds_ _[c]_ [=] _[{][x][i]_ _s_ _[, x][i]_ _s_ _[⊆]_ _[x][i]_ _[∈]_ _[D][s][}]_ [and] _[D]_ _t_ _[c]_ [=] _[{][x][i]_ _t_ _[, x][i]_ _t_ _[⊆]_
+_x_ _[i]_ _∈_ _Dt}_ to maintain the distribution of contextual density information between conditions. It is straight
+to segment the entire feature into two condition subsets, which are objects of interest and background. In
+BiAN, there are two subsets to be aligned with minimal joint error.
+
+
+In the following step, conditional alignment is adopted to operate the alignment depending on the segmentation results of images. The entire image _x_ is sent to recognize the relation between conditions. Then, the
+condition relation segments the entire image _x_ into object parts _x_ _[f]_ and background _x_ _[b]_ . Lastly, these two
+subset features _z_ _[f]_ and _z_ _[b]_ can be obtained by feature extractor _gs/t_ for conditional alignment. Specifically,
+the feature can be obtained by _z_ = _gs/t_ ( _x_ ). Then, the object label prediction ˆ _y_ can be obtained by ˆ _y_ = _f_ ( _z_ ).
+If ( _x, y_ ) _∈_ _Ds_, we can further align the distribution convergence of _f_ ( _z_ ) and _y_, which can be represented
+as:
+_g_ _[∗]_ = arg min _L_ ( _f_ ( _g_ ( _Xs_ )) _, Ys_ ) _._ (1)
+_g_
+
+
+If ( _x, y_ ) _∈_ _Dt_, we still can obtain the pseudo _y_ ˆ _t_ as the position-condition feature for the target domain _Dt_ .
+After that point, _y_ ˆ is applied as a mask indicator on _x_, then the image is divided into conditional subsets.
+Specifically, the mask can be generated from the predicted points of objects in _y_ ˆ by extending range. The
+condition partitions _x_ _[i]_ can be represented as: _x_ = [�] _i∈_ [ _f,b_ ] _[x][i]_ [�] _x_ _[i]_ _∩_ _x_ _[j]_ = ∅ _, i ̸_ = _j_ �. Then, the conditional
+
+partitions are sent to _gi_ to obtain the conditional features _zf_ and _zb_ . After that, we operate the alignment
+within the condition subset for all conditions included in the condition set _C_ . It means that every single
+alignment operation is only applied on [�] _i_ _[z][i]_ [.] [The operation can be represented as:]
+
+_f_ _[∗]_ = arg min _dC_ ( _f_ ( _Xs_ ) _, f_ ( _Xt_ )) _._ (2)
+_f_
+
+
+We suppose the combination of _f_ _[∗]_ and _g_ _[∗]_ are able to conditionally align the domain _Ds_ and _Dt_ . According
+to Theorem 4, BiAN can achieve a lower joint decision error without being impacted by the conditional
+shift.
+
+
+As for the specific model, we adopt SAU-Net (Guo et al., 2022) as the backbone of BiAN and modify it to
+make it capable of UDA counting tasks. Specifically, the components _gs/t_ and _f_ source from the encoder and
+decoder in SAU-Net. To implement the aligning operation, the discriminator in DANN (Ganin & Lempitsky,
+2015) is adopted as _fd_ to fuse the domains by reversing the gradient during backpropagation.
+
+
+5
+
+
+3.3 CONDITION-CONSISTENT MECHANISM
+
+
+In this section, we formally propose the Condition-consistent Mechanism (CM) to refine the pseudo labels in
+the target domain. Since the mask of the target domain is obtained via pseudo-labeling, it is essential to introduce CM to further enhance the self-supervised process. We suppose that partial distribution overlaps exist
+between domains. Thus, BiAN can learn to recognize part of target samples by leveraging knowledge from
+the source domain. After learning the distribution of objects, the network can directly segment the background and then learn the background feature. The obtained background feature distribution contrastively
+helps to learn about object features. Therefore, it is vital to maintain contextual information between condition subsets, which is our motivation for designing CM. In the conditional alignment process, the partitions
+sharing the same condition are sent to _gs/t_ and _f_ . Then, the results of _f_ ( _z_ _[i]_ ) are expected to maintain as
+_y_ _[i]_ _∈_ _y_ . Moreover, because _x_ _[i]_ _∩_ _x_ _[j]_ = ∅ when _i_ = _j_, it is supposed that _y_ = _concat_ - _y_ _[i]_ [�], where _i_ _∈_ _f, b_ .
+
+Specifically, we design a regressor _fc_ which shares weights with _f_ . For the evaluation of result consistency,
+we design a consistency loss, which can be represented as:
+
+
+               -                -                -                -                - [�]
+_y_ ˆ _[′]_ = _concat_ _fc ◦_ _gt_ _x_ _[f]_ _t_ _, fc ◦_ _gt_ _x_ _[b]_ _t_ _,_ (3)
+
+_LCM_ = _L_ (ˆ _y_ _[′]_ _, f_ _◦_ _gt_ ( _xt_ )) _,_ (4)
+
+
+where _f_ is the aforementioned regressor. We apply _MSE_ loss as _L_ . CM helps _f_ _◦_ _gt_ to transform different
+partial image information without annotation through minimizing _LCM_ .
+
+
+3.4 LOSS FUNCTIONS
+
+
+In this section, we describe the loss function applied for training BiAN. The loss function can be divided
+into loss of source domain and loss of target domain. It can be represented as:
+
+
+_L_ = _Lsource_ + _Ltarget_ + _αLCM_ _,_ (5)
+
+
+where _yi_ _[d]_ [indicates the domain of the sample,][ ˆ] _[c][i]_ [denotes the prediction of sample domain.] _[y][i]_ [is the ground-]
+truth counting map of the sample, _y_ ˆ _i_ is the prediction of counting map. _N_ indicates the amount of samples.
+
+
+6
+
+
+[(ˆ] _[y][s][, y][s]_ [) +] _[ L][p]_             - _y_ ˆ _s_ _[f]_ _[, y][s]_             - + _Lp_             - _y_ ˆ _s_ _[b][,]_ **[ 0]**
+_Lsource_ = _[L][p]_
+
+
+ -  _Ld_ _c_ ˆ _[f]_ _s_ _[, y]_ _s_ _[d]_ + _Ld_ (ˆ _c_ _[b]_ _s, ys_ _[d]_ )
+
+
+_,_ (6)
+
+
+_Lp_        - _y_ ˆ _t_ _[b][,]_ **[ 0]**
+_Ltarget_ =
+
+
+(7)
+
+ -  -  -  - _[,]_
+_Ld_ _c_ ˆ _[f]_ _t_ _[, y]_ _t_ _[d]_ + _Ld_ _c_ ˆ _[b]_ _t_ _[, y]_ _t_ _[d]_
+
+
+where ˆ _c_ _[∗]_ _s/t_ [=] _[ {]_ [0] _[,]_ [ 1] _[}]_ [ is the output of] _[ f][d]_ [(] _[z]_ _s/t_ _[∗]_ [)][, presenting the predication of which domain sample belonging]
+to. And _y_ _[d]_ denotes the domain label of the sample. _Lp_ is _MSE_ loss, _Ld_ is applied reversed _NLL_ loss,
+maintaining _Lsource_ positive. **0** in _Lp_ presents background. The coefficient _α_ presents the weight of _CM_
+to balance the orders of magnitude with the rest of the loss elements. The employed _Ld_ and _Lp_ loss can be
+represented as:
+
+
+_Ld_ - _c_ ˆ _i, yi_ _[d]_ - = _N_ [1]
+
+
+_Lp_ (ˆ _yi, yi_ ) = [1]
+
+_N_
+
+
+_N_
+
+- _yi_ _[d]_ [log(ˆ] _[c][i]_ [) + (1] _[ −]_ _[y]_ _i_ _[d]_ [) log(1] _[ −]_ _[c]_ [ˆ] _[i]_ [)] _[,]_ (8)
+
+_i_ =1
+
+
+_N_
+�( _yi −_ _y_ ˆ _i_ ) [2] _,_ (9)
+
+
+_i_ =1
+
+
+3.5 THEORETICAL ANALYSIS
+
+
+In this section, we prove that the proposed BiAN can achieve a lower bound of joint decision error on
+both domains. First, the adaptation task can be represented as follows. For the source domain _Ds_ and the
+target domain _Dt_, our goal is searching the optimal decision hypothesis function _h_ _[∗]_ = _g_ _◦_ _f_ to simultaneously reach the least joint decision loss _λ_ in all transferred domains. However, it has been proved that
+the unconditional alignment leads to the significant constraint of lowering the joint decision error, causing the burden of further increasing the adaptability of models (Zhao et al., 2019). Specifically, the goal
+of unconditional alignment can be represented as arg min _h |dH_ ∆ _H_ ( _h_ ( _D_ ) _, h_ ( _D_ _[′]_ )) _|_ . Zhao’s paper (Zhao
+et al., 2019) has provided a comprehensive deduction that under the significantly large marginal difference
+between label space of domains, the joint decision error _|ϵD_ ( _h_ _[∗]_ _, f_ ) + _ϵD′_ ( _h_ _[∗]_ _, f_ _[′]_ ) _|_ has the lower bound
+as _|dJS_ ( _Y, Y_ _[′]_ ) _−_ _dJS_ ( _D, D_ _[′]_ ) _|_ . The constraint still holds while adopting the sophisticated unconditional
+transferring function. Therefore, we introduce a theorem of conditional adaptation and prove that it helps
+the adaptation model achieve lower joint decision error. We first introduce the definition of variables and
+symbols. Then, we describe our proposed theorem and provide the corresponding proof. Note that we provide the key definitions. The rest of symbols and variables in this paper follow the definitions in Ben-David’s
+paper (Ben-David et al., 2009).
+**Definition 2** (Divergence Measurement) **.** _Given a hypothesis function h and two domains D and D_ _[′]_ _._ _Let I_
+_be the identifying function._ _The divergence measurement between D and D_ _[′]_ _can be represented as:_
+
+
+Specially, the condition set _C_ denotes the attributes of partitions within samples (e.g. background and foreground in counting sample).
+**Definition** **4** (Conditional Divergence) **.** _Given D_ _and D_ _[′]_ _shared the same condition set_ _C,_ _the conditional_
+_divergence can be defined as:_
+_dC_ ( _D, D_ _[′]_ ) =                - _dJS_ ( _Di_ _[c][, D]_ _i_ _[′][c]_ [)] _[.]_
+
+_i∈_ [1 _,k_ ]
+
+_If dC_ ( _D, D_ _[′]_ ) = 0 _, D and D_ _[′]_ _are supposed as conditional aligned on condition C._
+**Theorem 1** (Joint Error Lower Bound) **.** _Based on the theorem proposed in (Zhao et al., 2019), combining_
+_the definition of the joint error ϵU_ = _ϵZ_ ( _h_ ) + _ϵZ_ _′_ ( _h_ ) _and the unified feature space ZU_ _, the corresponding_
+_lower bound can be rewritten as:_
+
+_ϵU_ ⩾ [1]
+
+2 [(] _[d][JS]_ [ (] _[Y][,][ Y]_ _[′]_ [)] _[ −]_ _[d][JS]_ [ (] _[Z][,][ Z]_ _[′]_ [))][2] _[ .]_
+
+**Lemma 2.** _Assume the label space Y_ _of D and D_ _[′]_ _is discrete._ _If consider treat the label set as the condition_
+_set C, the relation of Y_ _and Y_ _[′]_ _can be presented as:_
+
+_dC_ ( _Y, Y_ _[′]_ ) = 0 _._
+
+
+According to the definition of _dJS_ and _Y, Y_ _[′]_, the labeling function is always consistent. So that _Y, Y_ _[′]_ are
+always conditionally aligned when treating the label set as the condition set. Details of the proof can be
+found in Appendix A.3.
+
+
+7
+
+
++ [1]
+
+2 _[d][H]_ [∆] _[H]_
+
+
+_,_
+
+
+_D_ _[′]_ _,_ [(] _[D]_ [ +] _[ D][′]_ [)]
+
+2
+
+
+_D_ _[′]_ _,_ [(] _[D]_ [ +] _[ D][′]_ [)]
+
+
+_dJS_ ( _D, D_ _[′]_ ) = [1]
+
+2 _[d][H]_ [∆] _[H]_
+
+
+_D,_ [(] _[D]_ [ +] _[ D][′]_ [)]
+
+2
+
+
++ [1]
+
+
+_where dH_ ∆ _H_ ( _D, D_ _[′]_ ) = 2 _sup|PrD_ [ _I_ ( _h_ )] _−_ _PrD_ _[′]_ [ _I_ ( _h_ )] _|._
+**Definition** **3** (Conditional Subset) **.** _Given_ _a_ _domain_ _probability_ _distributions_ _D_ _over_ _X_ _._ _Let_ _C_ =
+_{c_ 1 _, c_ 2 _, c_ 3 _, . . ., ck} be a condition set of D._ _The conditional subset of D is_
+
+
+_D_ =
+
+
+_k_
+
+- _Di_ _[c][, i][ ̸]_ [=] _[ j, D]_ _i_ _[c]_ _[∩]_ _[D]_ _j_ _[c]_ [=][ ∅] _[.]_
+
+_i_ =1
+
+
+Table 1: Counting MAE and MSE on JHU-Crowd++ with labels “Stadium”(SD), “Street”(SR), “Snow”(SN)
+and “Fog/Haze”(FH). The best are highlighted in bold. DA: Domain Adaptation for short. DG: Domain
+Generalization for short.
+
+
+SD _→_ SR SR _→_ SD SN _→_ FH FH _→_ SN
+Method DA DG
+MAE _↓_ MSE _↓_ MAE _↓_ MSE _↓_ MAE _↓_ MSE _↓_ MAE _↓_ MSE _↓_
+BL (Ma et al., 2019) ✗ ✗ 42.1 79 262.7 1063.9 48.1 129.5 343.8 770.5
+MAN (Lin et al., 2022) ✗ ✗ 45.1 79 246.1 950.8 38.1 68 445 979.3
+DAOT (Zhu et al., 2023) ✔ ✗ 45.3 88 278.7 1624.3 42.3 73 151.6 273.9
+IBN (Pan et al., 2018) ✗ ✔ 92.2 178 318.1 1420.4 109.7 267.7 491.8 1110.4
+SW (Pan et al., 2019) ✗ ✔ 110.3 202.4 312.6 1072.4 131.5 306.6 381.3 825
+ISW (Choi et al., 2021) ✗ ✔ 108.1 212.4 385.9 1464.8 151.6 365.7 276.6 439.8
+DCCUS (Du et al., 2023) ✗ ✔ 90.4 194.1 258.1 1005.9 54.5 125.8 399.7 945
+MPCount (Peng & Chan, 2024) ✗ ✔ 37.4 70.1 218.6 935.9 31.3 **55** 216.3 421.4
+BiAN (Ours) ✔ ✗ **28.9** **39.6** **115.7** **145.1** **23.6** 68.4 **120.2** **150.7**
+
+
+**Lemma 3.** _Given D and D_ _[′]_ _shared the discrete label space Y and set as the condition set C, if Di_ _[c][∩][D][′]_ [=] _[ D][′][c]_
+_the relation of the conditional subset of D and the universal set of D_ _[′]_ _can be presented as:_
+
+_dJS_ ( _Yi_ _[c][,][ Y]_ _i_ _[′]_ [) =] _[ d][JS]_ [(] _[D]_ _i_ _[c][, D]_ _i_ _[′][c]_ [)] _[ .]_
+
+
+According to the definition of _dJS_ and the definition 4, the proof is obvious. The proof can be found in
+Appendix A.4.
+
+**Theorem** **4** (Conditional Alignment) **.** _Given_ _D_ _and_ _D_ _[′]_ _shared_ _the_ _discrete_ _label_ _space_ _Y_ _and_ _set_ _as_ _the_
+_condition set C, if D and D_ _[′]_ _is conditional aligned on label space Y, then dJS_ ( _D, D_ _[′]_ ) = _dJS_ ( _Y, Y_ _[′]_ ) _._
+
+
+We present the proof in Appendix A.5. The deduction above shows that the joint error is bounded by the
+domain shift in both features and labels. Under reasonable assumptions, our proposed theorem presents
+a feasible approach to minimize the joint error by reducing the gap in both feature and label differences,
+rather than focusing solely on feature differences. The label difference is crucial in cross-domain counting
+scenarios, leading performance decay for significant label domain shift. We demonstrate that aligning feature
+partitions based on partition attributes preserves task-relevant information within the label distribution of the
+target domain, promoting the generalization of the model.
+
+
+4 EXPERIMENTS AND RESULTS
+
+
+4.1 EXPERIMENT SETTING
+
+
+We conduct the experiments on eight domain combinations of different counting scenarios, including crowd
+counting and cell counting, to examine the adaptability of BiAN. For the crowd-counting task, the combination include “Stadium”(SD)“Street”(SR) and “Snow”(SN)-“Fog/Haze”(FH) within JHUCrowd++ (Sindagi
+et al., 2022),“Part A”(SHA)-“Part B”(SHB) within ShanghaiTech (Zhang et al., 2016), “Synthetic Fluorescence Microscopy”(VGG) (Xie et al., 2018b)-“Human subcutaneous adipose tissue”(ADI) dataset (Cohen
+et al., 2017), and “Dublin Cell Counting” (DCC) dataset (Marsden et al., 2018). The domain shift of crowd
+scenarios, including various weathers and densities, requires higher algorithm adaptability. For the cell
+counting task, the slight deviation of the cell amount of each image provides a comparative consistent density. However, various types of cells further challenge the performance of the model in the adaptability
+of scene presentation. The details of datasets and implementation are presented in Appendix A.6 and Appendix A.7. As to the evaluation metrics, we follow the previous works’ setting. We employ only mean
+
+
+8
+
+
+Table 2: Counting MAE and MSE on crowd counting dataset ShanghaiTechA/B. The best are highlighted in
+bold. DA: Domain Adaptation for short.
+
+
+SHB _→_ SHA SHA _→_ SHB
+Methods DA
+MAE _↓_ MSE _↓_ MAE _↓_ MSE _↓_
+CSRNet (Shi et al., 2019) ✗ 68.2 115.0 10.6 16.0
+KDM (Wan et al., 2022) ✗ 63.8 99.2 7.8 12.7
+UOT (Ma et al., 2021) ✗ 58.1 95.9 6.5 10.2
+STEERER (Han et al., 2023) ✗ 54.5 86.9 5.8 8.5
+CGNN (Zhang et al., 2024a) ✗ 61.1 97.8 7.7 13.0
+
+
+Cycle GAN (Zhu et al., 2017) ✔ 143.3 204.3 25.4 39.7
+SE CycleGAN (Wang et al., 2019b) ✔ 123.4 193.4 19.9 28.3
+BiTCC (Liu et al., 2020) ✔ 112.2 218.1 13.3 29.2
+LDG (Zhang et al., 2023) ✔ 118.5 190.1 14.2 25.2
+DGCC Du et al. (2023) ✔ 121.8 203.1 12.6 24.6
+SaKnD Xie et al. (2023a) ✔ 137.2 224.2 17.1 27.7
+CGNN-DA (Zhang et al., 2024a) ✔ 110.2 182.5 15.8 27.2
+BiAN (Ours) ✔ **42.3** **53.0** **5.7** **7.2**
+
+
+absolute error (MAE) on cell counting as an evaluation metric, MAE and root mean squared error (MSE)
+on crowd-counting. Lower MAE and MSE indicate more precise counting results. This can be formulated
+
+as _MAE_ = _n_ 1 - _ni_ =1 _[|][y][i][ −]_ _[y]_ [ˆ] _[i][|]_ [,] _[MSE]_ [=] - _n_ 1 - _ni_ =1 [(] _[y][i][ −]_ _[y]_ [ˆ] _[i]_ [)][2][,] [which] _[y][i]_ [is] [the] [ground-truth] [count] [of] [the]
+sample and _y_ ˆ _i_ is the predication counts from model.
+
+
+4.2 PERFORMANCE COMPARISON AND ANALYSIS
+
+
+The experimental results, pre- DTLCC (Wang, 2023) - 3.0
+sented in Table 2 and Table 1, IDN (Liu et al., 2024) ✔ 11.1 demonstrate that BiAN not only BiAN (Ours) ✔ **9.2** **2.7**
+surpasses the latest state-of-theart DA/DG methods but also
+achieves precision comparable to fully supervised methods in some combinations. These findings indicate that BiAN effectively adapts to cross-scene crowd counting scenarios. The results shows that BiAN
+
+
+This section presents the results
+of our experiments on the baseline and the latest state-of-theart models, categorized into two
+distinct scenarios: crowd counting and cell counting. The
+crowd-counting scenario presents
+a high-density variation situation.
+By applying established counting
+methodologies to datasets within
+both domains, we set the groundwork for assessing BiAN’s advancements.
+
+
+VGG _→_ ADI VGG _→_ DCC
+Methods DA
+MAE _↓_ MAE _↓_
+Counting Focus (Shi et al., 2019) ✗ - 3.2
+CCF (Jiang & Yu, 2020) ✗ 14.5 AECC (Wang et al., 2021) ✗ 14.1 3.0
+SAU-Net (Guo et al., 2022) ✗ 14.2 3.0
+Two-Path Net (Jiang & Yu, 2021) ✗ 10.6 MSCA-UNet (Qian et al., 2023) ✗ 9.8 DTLCC (Wang, 2023) ✔ - 3.0
+IDN (Liu et al., 2024) ✔ 11.1 BiAN (Ours) ✔ **9.2** **2.7**
+
+
+Table 3: Counting MAE on cell counting dataset combinations. The
+best are highlighted in bold. DA: Domain Adaptation for short.
+
+
+9
+
+
+significantly improves counting precision over the latest state-of-the-art methods. These findings indicate
+that BiAN effectively adapts to cross-scene crowd counting scenarios.
+
+
+Overall, the compared models cover supervised methods and adaptation methods. The counting approach
+of models includes density estimation, point-to-point prediction, and point-to-density prediction. In both
+cases, BiAN performs better than SOTA methods on counting tasks, demonstrating the effectiveness of our
+method. We present additional experiment analysis in Appendices, including the experiments on the setting
+of synthetic-real crowd counting (Appendix A.8), and qualitative investigation between condition feature
+consistency and counting results (Appendix A.8.2), and visualization results (Appendix A.10).
+
+
+4.3 ABLATION STUDY
+
+
+This section presents an ablation study to validate the effectiveness of our proposed method. We begin by
+removing all newly introduced mechanisms from the training process and implementing all variants across
+both counting tasks. The unconditional variant applies domain alignment to the entire condition partitions
+without aligning conditions independently, failing to retain the target task-relevant feature distribution It
+presents adaptation via style transfer. The variant _w/o_ CM employs conditional alignment but excludes the
+CM module. The experimental results are shown in Table 4. It can be observed that the unconditional
+alignment domain adaptation only has limited adaptability. In adapting DCC, the unconditional-only variant
+performs worse than the existing adaptations due to the significant difference in the visual character of
+the cell between the two domains. It indicates that the marginal difference between the two label spaces
+might be significant. According to the findings in (Zhao et al., 2019), the model is hard to find the optimal
+combination of parameters to minimize joint errors.
+
+
+In contrast, the samples in the crowd datasets
+share similar visual differences between par- Table 4: Ablation study evaluated by MAE.
+titions. Specifically, the scenes of the crowd
+are different. The difference between peo
+_MAE_ _↓_ Unconditional BiAN _w/o_ CM BiAN
+
+ple and backgrounds is similar. In many instances, the background in crowd counting VGG _→_ ADI 14.8 10.1 (-4.7) 9.2 (-5.6)
+comprises other objects, leading to severe VGG _→_ DCC 3.6 3.4 (-0.2) 2.7 (-0.9)
+
+GCC _→_ UCF 35.0 32.7 (-2.3) 22.7 (-12.3)
+
+overlap situations compared to cell counting.
+
+SHB _→_ SHA 58.9 46.0 (-12.9) 42.3 (-16.6)
+
+In such cases, maintaining the margin distance between conditions is crucial. Incorporating the CM module noticeably enhances the adaptability of BiAN, demonstrating its ability to maintain
+condition-independent partitions. The ablation experiments provide strong empirical evidence supporting
+the effectiveness of our proposed model’s design, offering a persuasive explanation for its superior performance.
+
+
+5 CONCLUSION
+
+
+This paper proposes Binary Alignment Network (BiAN) to mitigate the domain shift with preserving taskrelevant information in UDA counting tasks. The proposed conditional alignment enables the network to
+maintain the inter-object contextual distribution when aligning feature distribution across domains. Augmented by our Condition-consistent Mechanism (CM), the segment map can be further refined, enhancing
+the robustness of BiAN. We also provide a theoretical demonstration with reasonable assumptions of how
+conditional alignment beneficial to our task. We implement comprehensive experiments to demonstrate the
+effectiveness of BiAN.
+
+
+10
+
+
+Table 4: Ablation study evaluated by MAE.
+
+
+_MAE_ _↓_ Unconditional BiAN _w/o_ CM BiAN
+
+
+VGG _→_ ADI 14.8 10.1 (-4.7) 9.2 (-5.6)
+VGG _→_ DCC 3.6 3.4 (-0.2) 2.7 (-0.9)
+GCC _→_ UCF 35.0 32.7 (-2.3) 22.7 (-12.3)
+SHB _→_ SHA 58.9 46.0 (-12.9) 42.3 (-16.6)
+
+
+REFERENCES
+
+
+Shai Ben-David, John Blitzer, Koby Crammer, et al. A theory of learning from different domains. _Machine_
+_Learning_, 79(1-2):151–175, 2009. ISSN 0885-6125 1573-0565. doi: 10.1007/s10994-009-5152-4. 7
+
+
+Konstantinos Bousmalis, George Trigeorgis, Nathan Silberman, Dilip Krishnan, and Dumitru Erhan. Domain separation networks. In _Proceedings_ _of_ _the_ _30th_ _International_ _Conference_ _on_ _Neural_ _Information_
+_Processing Systems_, pp. 343–351. Curran Associates Inc., 2016. 1, 3
+
+
+Ruichu Cai, Zijian Li, Pengfei Wei, Jie Qiao, Kun Zhang, and Zhifeng Hao. Learning disentangled semantic
+representation for domain adaptation. In _Proceedings of the Twenty-Eighth International Joint Conference_
+_on Artificial Intelligence_, pp. 2060–2066, 2019. doi: 10.24963/ijcai.2019/285. 3
+
+
+Sungha Choi, Sanghun Jung, Huiwon Yun, Joanne T. Kim, Seungryong Kim, and Jaegul Choo. Robustnet:
+Improving domain generalization in urban-scene segmentation via instance selective whitening. In _2021_
+_IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_ _(CVPR)_, pp. 11575–11585, 2021.
+doi: 10.1109/CVPR46437.2021.01141. 8
+
+
+Joseph Paul Cohen, Genevi`eve Boucher, Craig A. Glastonbury, et al. Count-ception: Counting by fully convolutional redundant counting. In _2017_ _IEEE_ _International_ _Conference on_ _Computer_ _Vision_ _Workshops_
+_(ICCVW)_, pp. 18–26, 2017. doi: 10.1109/ICCVW.2017.9. 8, 20
+
+
+Nicolas Courty, R´emi Flamary, Amaury Habrard, and Alain Rakotomamonjy. Joint distribution optimal
+transportation for domain adaptation. In _Neural Information Processing Systems_, 2017. 3
+
+
+Zhijie Deng, Yucen Luo, and Jun Zhu. Cluster alignment with a teacher for unsupervised domain adaptation.
+In _2019_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vision_ _(ICCV)_, pp. 9943–9952, 2019. doi:
+10.1109/iccv.2019.01004. 3
+
+
+Zhipeng Du, Jiankang Deng, and Miaojing Shi. Domain-general crowd counting in unseen scenarios. In
+_Proceedings of the AAAI Conference on Artificial Intelligence_, volume 37, pp. 561–570. Association for
+the Advancement of Artificial Intelligence (AAAI), 2023. ISBN 2374-3468. doi: 10.1609/aaai.v37i1.
+25131. 8, 9
+
+
+Cian Eastwood, Ian Mason, Chris Williams, and Bernhard Scholkopf. Source-free adaptation to measurement shift via bottom-up feature restoration. In _International Conference on_ _Learning Representations_,
+2022. 3
+
+
+Yaroslav Ganin and Victor Lempitsky. Unsupervised domain adaptation by backpropagation. In _Proceedings_
+_of_ _the_ _32nd_ _International_ _Conference_ _on_ _Machine_ _Learning_ _(ICML)_, volume 37, pp. 1180–1189, Lille,
+France, 07-09 Jul 2015. PMLR. 3, 5
+
+
+Junyu Gao, Yuan Yuan, and Qi Wang. Feature-aware adaptation and density alignment for crowd counting
+in video surveillance. _IEEE_ _Transactions_ _on_ _Cybernetics_, 51(10):4822–4833, 2021. ISSN 2168-2267.
+doi: 10.1109/tcyb.2020.3034316. 3
+
+
+Yue Guo, Oleh Krupa, Jason Stein, et al. Sau-net: A unified network for cell counting in 2d and 3d microscopy images. _IEEE/ACM Transactions on Computational Biology and Bioinformatics_, 19(4):1920–
+1932, 2022. ISSN 1545-5963. doi: 10.1109/tcbb.2021.3089608. 3, 5, 9
+
+
+Tao Han, Lei Bai, Lingbo Liu, and Wanli Ouyang. Steerer: Resolving scale variations for counting and
+localization via selective inheritance learning. In _2023 IEEE/CVF International Conference on Computer_
+_Vision (ICCV)_ . IEEE, 2023. doi: 10.1109/iccv51070.2023.01997. 2, 3, 9, 21
+
+
+11
+
+
+Shenghua He, Kyaw Thu Minn, Lilianna Solnica-Krezel, Mark A. Anastasio, and Hua Li. Deeply-supervised
+density regression for automatic cell counting in microscopy images. _Med_ _Image_ _Anal_, 68:101892,
+2021. ISSN 1361-8423 (Electronic) 1361-8415 (Print) 1361-8415 (Linking). doi: 10.1016/j.media.2020.
+101892. 1
+
+
+Haroon Idrees, Muhmmad Tayyab, Kishan Athrey, et al. Composition loss for counting, density map estimation and localization in dense crowds. In _Computer Vision - ECCV 2018_, pp. 544–559, Cham, 2018.
+Springer International Publishing. ISBN 978-3-030-01216-8. 19, 20
+
+
+Junguang Jiang, Baixu Chen, Jianmin Wang, and Mingsheng Long. Decoupled adaptation for cross-domain
+object detection. In _The Tenth International Conference on Learning Representations, ICLR 2022, Virtual_
+_Event, April 25-29, 2022_ . OpenReview.net, 2022. 3, 17
+
+
+Ni Jiang and Feihong Yu. A cell counting framework based on random forest and density map. _Applied_
+_Sciences_, 10(23):8346, 2020. ISSN 2076-3417. doi: 10.3390/app10238346. 9
+
+
+Ni Jiang and Feihong Yu. A two-path network for cell counting. _IEEE Access_, 9:70806–70815, 2021. ISSN
+2169-3536. doi: 10.1109/access.2021.3078481. 9
+
+
+Xiaoheng Jiang, Li Zhang, Tianzhu Zhang, et al. Density-aware multi-task learning for crowd counting.
+_IEEE Transactions on Multimedia_, 23:443–453, 2021. doi: 10.1109/TMM.2020.2980945. 3
+
+
+Matthieu Kirchmeyer, Alain Rakotomamonjy, Emmanuel de Bezenac, and patrick gallinari. Mapping conditional distributions for domain adaptation under generalized target shift. In _International Conference on_
+_Learning Representations_, 2022. 3
+
+
+Lingjing Kong, Shaoan Xie, Weiran Yao, Yujia Zheng, Guangyi Chen, Petar Stojanov, Victor Akinwande,
+and Kun Zhang. Partial disentanglement for domain adaptation. In Chaudhuri Kamalika, Jegelka Stefanie, Song Le, Szepesvari Csaba, Niu Gang, and Sabato Sivan (eds.), _Proceedings_ _of_ _the_ _39th_ _In-_
+_ternational_ _Conference_ _on_ _Machine_ _Learning_, volume 162, pp. 11455–11472. PMLR, 2022. URL
+[https://proceedings.mlr.press/v162/kong22a.html.](https://proceedings.mlr.press/v162/kong22a.html) 1, 3, 4
+
+
+Ruihuang Li, Xu Jia, Jianzhong He, Shuaijun Chen, and Qinghua Hu. T-svdnet: Exploring high-order prototypical correlations for multi-source domain adaptation. In _2021 IEEE/CVF International Conference_
+_on Computer Vision (ICCV)_, pp. 9971–9980, 2021. doi: 10.1109/iccv48922.2021.00984. 4
+
+
+Wang Li, Li Yongbo, and Xue Xiangyang. Coda: Counting objects via scale-aware adversarial density
+adaption. In _2019 IEEE International Conference on Multimedia and Expo (ICME)_, pp. 193–198. IEEE,
+2019. doi: 10.1109/icme.2019.00041. 2, 3
+
+
+Hui Lin, Zhiheng Ma, Rongrong Ji, Yaowei Wang, and Xiaopeng Hong. Boosting crowd counting via
+multifaceted attention. In _2022_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_
+_(CVPR)_, pp. 19596–19605, 2022. doi: 10.1109/CVPR52688.2022.01901. 8
+
+
+Lei Liu, Jie Jiang, Wenjing Jia, et al. Denet: A universal network for counting crowd with varying densities
+and scales. _IEEE Transactions on Multimedia_, 23:1060–1068, 2021. doi: 10.1109/TMM.2020.2992979.
+3
+
+
+Rui Liu, Yudi Zhu, Cong Wu, Hao Guo, Wei Dai, Tianyi Wu, Min Wang, Wen Jung Li, and Jun Liu.
+Interactive dual network with adaptive density map for automatic cell counting. _IEEE_ _Transactions_ _on_
+_Automation_ _Science_ _and_ _Engineering_, pp. 1–13, 2024. ISSN 1545-5955 1558-3783. doi: 10.1109/tase.
+2023.3329973. 9
+
+
+12
+
+
+Yahao Liu, Jinhong Deng, Jiale Tao, Tong Chu, Lixin Duan, and Wen Li. Undoing the damage of label shift
+for cross-domain semantic segmentation. In _2022 IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition (CVPR)_, pp. 7032–7042, 2022. doi: 10.1109/cvpr52688.2022.00691. 3
+
+
+Yuting Liu, Zheng Wang, Miaojing Shi, et al. Towards unsupervised crowd counting via regression-detection
+bi-knowledge transfer. In _Proceedings of the 28th ACM International Conference on Multimedia (MM)_,
+MM ’20, pp. 129–137, New York, NY, USA, 2020. ACM. ISBN 9781450379885. doi: 10.1145/3394171.
+3413825. 9
+
+
+Mingsheng Long, Zhangjie Cao, Jianmin Wang, and Michael I. Jordan. Conditional adversarial domain
+adaptation. In _Proceedings of the 32nd International Conference on Neural Information Processing Sys-_
+_tems_, pp. 1647–1657. Curran Associates Inc., 2018. 4
+
+
+John Lonsdale, Jeffrey Thomas, Mike Salvatore, et al. The genotype-tissue expression (gtex) project. _Nature_
+_Genetics_, 45(6):580–585, Jun 2013. ISSN 1546-1718. doi: 10.1038/ng.2653. 20
+
+
+Adrian Lopez-Rodriguez and Krystian Mikolajczyk. Desc: Domain adaptation for depth estimation via
+semantic consistency. _International_ _Journal_ _of_ _Computer_ _Vision_, 131(3):752–771, 2022. ISSN 09205691 1573-1405. doi: 10.1007/s11263-022-01718-1. 17
+
+
+Chen Change Loy, Shaogang Gong, and Tao Xiang. From semi-supervised to transfer counting of crowds.
+In _2013_ _IEEE_ _International_ _Conference_ _on_ _Computer_ _Vision_ _(ICCV)_, pp. 2256–2263. IEEE, 2013. doi:
+10.1109/ICCV.2013.270. 3
+
+
+Zhiheng Ma, Xing Wei, Xiaopeng Hong, and Yihong Gong. Bayesian loss for crowd count estimation
+with point supervision. In _2019_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vision_ _(ICCV)_, pp.
+6141–6150, 2019. doi: 10.1109/iccv.2019.00624. 8
+
+
+Zhiheng Ma, Xing Wei, Xiaopeng Hong, Hui Lin, Yunfeng Qiu, and Yihong Gong. Learning to count via unbalanced optimal transport. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 35,
+pp. 2319–2327, 2021. ISBN 2374-3468 2159-5399. doi: 10.1609/aaai.v35i3.16332. 9, 21
+
+
+Haitao Mao, Lun Du, Yujia Zheng, Qiang Fu, Zelin Li, Xu Chen, Shi Han, and Dongmei Zhang. Source
+free graph unsupervised domain adaptation. In _Proceedings of the 17th ACM International Conference on_
+_Web Search and Data Mining_, pp. 520–528. Association for Computing Machinery, 2024. doi: 10.1145/
+3616855.3635802. [URL https://doi.org/10.1145/3616855.3635802.](https://doi.org/10.1145/3616855.3635802) 3
+
+
+Mark Marsden, Kevin McGuinness, Suzanne Little, et al. People, penguins and petri dishes: Adapting
+object counting models to new visual domains and object types without forgetting. In _2018_ _IEEE/CVF_
+_Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition (CVPR)_, pp. 8070–8079, 2018. doi: 10.1109/
+CVPR.2018.00842. 8, 20
+
+
+Xingang Pan, Ping Luo, Jianping Shi, and Xiaoou Tang. Two at once: Enhancing learning and generalization
+capacities via ibn-net. In _Computer Vision – ECCV 2018_, Computer Vision – ECCV 2018, pp. 484–500.
+Springer International Publishing, 2018. ISBN 978-3-030-01225-0. doi: 10.1007/978-3-030-01225-0 ~~2~~ 9.
+8
+
+
+Xingang Pan, Xiaohang Zhan, Jianping Shi, Xiaoou Tang, and Ping Luo. Switchable whitening for deep
+representation learning. In _2019_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vision_ _(ICCV)_, pp.
+1863–1871, 2019. doi: 10.1109/ICCV.2019.00195. 8
+
+
+Geon Yeong Park and Sang Wan Lee. Information-theoretic regularization for multi-source domain adaptation. In _2021 IEEE/CVF International Conference on Computer Vision (ICCV)_, pp. 9194–9203, 2021.
+doi: 10.1109/iccv48922.2021.00908. 4
+
+
+13
+
+
+Xingchao Peng, Qinxun Bai, Xide Xia, Zijun Huang, Kate Saenko, and Bo Wang. Moment matching
+for multi-source domain adaptation. In _2019_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vision_
+_(ICCV)_, pp. 1406–1415, 2019. doi: 10.1109/iccv.2019.00149. 4
+
+
+Zhuoxuan Peng and S. H. Gary Chan. Single domain generalization for crowd counting. In _2024 IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 28025–28034, 2024. doi: 10.1109/
+cvpr52733.2024.02647. 8
+
+
+Like Qian, Wei Qian, Dingcheng Tian, Yaqi Zhu, Heng Zhao, and Yudong Yao. Msca-unet: Multi-scale
+convolutional attention unet for automatic cell counting using density regression. _IEEE Access_, 11:85990–
+86001, 2023. ISSN 2169-3536. doi: 10.1109/access.2023.3304993. 9
+
+
+Becca Roelofs, David Berthelot, Kihyuk Sohn, Nicholas Carlini, and Alex Kurakin. Adamatch: A unified
+approach to semi-supervised learning and domain adaptation. In _International_ _Conference_ _on_ _Learning_
+_Representations_, 2022. 3
+
+
+Zenglin Shi, Pascal Mettes, and Cees Snoek. Counting with focus for free. In _2019 IEEE/CVF International_
+_Conference on Computer Vision (ICCV)_, pp. 4199–4208. IEEE, 2019. doi: 10.1109/iccv.2019.00430. 9
+
+
+Rui Shu, Hung Bui, Hirokazu Narui, and Stefano Ermon. A dirt-t approach to unsupervised domain adaptation. In _International Conference on Learning Representations_, 2018. 4
+
+
+V. A. Sindagi, R. Yasarla, and V. M. Patel. Jhu-crowd++: Large-scale crowd counting dataset and a benchmark method. _IEEE_ _Trans_ _Pattern_ _Anal_ _Mach_ _Intell_, 44(5):2594–2609, 2022. ISSN 1939-3539 (Electronic) 0098-5589 (Linking). doi: 10.1109/TPAMI.2020.3035969. [URL https://www.ncbi.nlm.](https://www.ncbi.nlm.nih.gov/pubmed/33147141)
+[nih.gov/pubmed/33147141.](https://www.ncbi.nlm.nih.gov/pubmed/33147141) Sindagi, Vishwanath A Yasarla, Rajeev Patel, Vishal M eng Research
+Support, U.S. Gov’t, Non-P.H.S. 2020/11/05 IEEE Trans Pattern Anal Mach Intell. 2022 May;44(5):25942609. doi: 10.1109/TPAMI.2020.3035969. Epub 2022 Apr 1. 8, 19, 20
+
+
+Peeyush Singhal, Rahee Walambe, Sheela Ramanna, et al. Domain adaptation: Challenges, methods,
+datasets, and applications. _IEEE_ _Access_, 11:6973–7020, 2023. ISSN 2169-3536. doi: 10.1109/access.
+2023.3237025. 1
+
+
+Petar Stojanov, Zijian Li, Mingming Gong, Ruichu Cai, Jaime G. Carbonell, and Kun Zhang. Domain
+adaptation with invariant representation learning: what transformations to learn? In _Proceedings_ _of_
+_the_ _35th_ _International_ _Conference_ _on_ _Neural_ _Information_ _Processing_ _Systems_, pp. Article 1899. Curran
+Associates Inc., 2024. 3
+
+
+Shangyuan Tong, Timur Garipov, Yang Zhang, Shiyu Chang, and Tommi S. Jaakkola. Adversarial support
+alignment. In _International Conference on Learning Representations_, 2022. 3
+
+
+Eric Tzeng, Judy Hoffman, Kate Saenko, and Trevor Darrell. Adversarial discriminative domain adaptation.
+In _2017_ _IEEE_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_ _(CVPR)_, pp. 2962–2971, 2017.
+doi: 10.1109/cvpr.2017.316. 3
+
+
+Jia Wan, Qingzhong Wang, and Antoni B. Chan. Kernel-based density map generation for dense object
+counting. _IEEE_ _Transactions_ _on_ _Pattern_ _Analysis_ _and_ _Machine_ _Intelligence_, 44(3):1357–1370, 2022.
+ISSN 0162-8828. doi: 10.1109/tpami.2020.3022878. 3, 9, 21
+
+
+Hang Wang, Minghao Xu, Bingbing Ni, and Wenjun Zhang. Learning to combine: Knowledge aggregation
+for multi-source domain adaptation. In _Computer Vision – ECCV 2020_, Computer Vision – ECCV 2020,
+pp. 727–744. Springer International Publishing, 2020. ISBN 978-3-030-58598-3. 4
+
+
+14
+
+
+Jindong Wang, Yiqiang Chen, Han Yu, Meiyu Huang, and Qiang Yang. Easy transfer learning by exploiting
+intra-domain structures. In _2019_ _IEEE_ _International_ _Conference_ _on_ _Multimedia_ _and_ _Expo_ _(ICME)_, pp.
+1210–1215, 2019a. doi: 10.1109/icme.2019.00211. 3
+
+
+Qi Wang, Junyu Gao, Wei Lin, et al. Learning from synthetic data for crowd counting in the wild. In _2019_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 8190–8199, 2019b. doi:
+10.1109/CVPR.2019.00839. 1, 3, 9, 19, 21
+
+
+Shanshan Wang, Cheng Li, Rongpin Wang, et al. Annotation-efficient deep learning for automatic medical image segmentation. _Nature_ _Communications_, 12(1), 2021. ISSN 2041-1723. doi: 10.1038/
+s41467-021-26216-9. 9
+
+
+Zuhui Wang. Cross-domain microscopy cell counting by disentangled transfer learning. In _Trustworthy_
+_Machine_ _Learning_ _for_ _Healthcare_, pp. 93–105. Springer Nature Switzerland, 2023. ISBN 0302-9743.
+doi: 10.1007/978-3-031-39539-0 ~~9~~ . 9
+
+
+Zongze Wu, Yotam Nitzan, Eli Shechtman, and Dani Lischinski. Stylealign: Analysis and applications of
+aligned stylegan models. In _International Conference on Learning Representations_, 2022. 3
+
+
+Haiyang Xie, Zhengwei Yang, Huilin Zhu, and Zheng Wang. Striking a balance: Unsupervised cross-domain
+crowd counting via knowledge diffusion. In _Proceedings_ _of_ _the_ _31st_ _ACM_ _International_ _Conference_ _on_
+_Multimedia (MM)_, pp. 6520–6529, 2023a. doi: 10.1145/3581783.3611797. 3, 9
+
+
+Shaoan Xie, Zibin Zheng, Liang Chen, and Chuan Chen. Learning semantic representations for unsupervised domain adaptation. In Dy Jennifer and Krause Andreas (eds.), _Proceedings_ _of_ _the_ _35th_
+_International_ _Conference_ _on_ _Machine_ _Learning_, volume 80, pp. 5423–5432. PMLR, 2018a. URL
+[https://proceedings.mlr.press/v80/xie18c.html.](https://proceedings.mlr.press/v80/xie18c.html) 4
+
+
+Shaoan Xie, Lingjing Kong, Mingming Gong, and Kun Zhang. Multi-domain image generation and translation with identifiability guarantees. In _The Eleventh International Conference on Learning Representa-_
+_tions_, 2023b. [URL https://openreview.net/forum?id=U2g8OGONA_V.](https://openreview.net/forum?id=U2g8OGONA_V) 1
+
+
+Weidi Xie, J. Alison Noble, and Andrew Zisserman. Microscopy cell counting and detection with fully
+convolutional regression networks. _Computer_ _Methods_ _in_ _Biomechanics_ _and_ _Biomedical_ _Engineering:_
+_Imaging & Visualization_, 6(3):283–292, 2018b. doi: 10.1080/21681163.2016.1149104. 8, 20
+
+
+Ruijia Xu, Ziliang Chen, Wangmeng Zuo, Junjie Yan, and Liang Lin. Deep cocktail network: Multi-source
+unsupervised domain adaptation with category shift. In _2018 IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 3964–3973, 2018. doi: 10.1109/cvpr.2018.00417. 4
+
+
+Ruijia Xu, Guanbin Li, Jihan Yang, and Liang Lin. Larger norm more transferable: An adaptive feature
+norm approach for unsupervised domain adaptation. In _2019_ _IEEE/CVF_ _International_ _Conference_ _on_
+_Computer Vision (ICCV)_, pp. 1426–1435, 2019. doi: 10.1109/iccv.2019.00151. 3
+
+
+Tongkun Xu, Weihua Chen, Pichao WANG, Fan Wang, Hao Li, and Rong Jin. Cdtrans: Cross-domain transformer for unsupervised domain adaptation. In _International_ _Conference_ _on_ _Learning_ _Representations_,
+2022. 3
+
+
+Siya Yao, Qi Kang, Mengchu Zhou, Muhyaddin J. Rawa, and Aiiad Albeshri. Discriminative manifold
+distribution alignment for domain adaptation. _IEEE_ _Transactions_ _on_ _Systems,_ _Man,_ _and_ _Cybernetics:_
+_Systems_, 53(2):1183–1197, 2023. ISSN 2168-2216. doi: 10.1109/tsmc.2022.3195239. 17
+
+
+Anran Zhang, Yandan Yang, Jun Xu, et al. Latent domain generation for unsupervised domain adaptation
+object counting. _IEEE_ _Transactions_ _on_ _Multimedia_, 25:1773–1783, 2023. ISSN 1520-9210. doi: 10.
+1109/tmm.2022.3162710. 3, 9
+
+
+15
+
+
+Chengyang Zhang, Yong Zhang, Bo Li, Xinglin Piao, and Baocai Yin. Crowdgraph: Weakly supervised
+crowd counting via pure graph neural network. _ACM Transactions on Multimedia Computing, Communi-_
+_cations, and Applications_, 20(5):1–23, 2024a. ISSN 1551-6857. doi: 10.1145/3638774. 3, 9
+
+
+Jing Zhang, Wanqing Li, and Philip Ogunbona. Joint geometrical and statistical alignment for visual domain
+adaptation. In _2017_ _IEEE_ _Conference on Computer_ _Vision and Pattern Recognition (CVPR)_, pp. 5150–
+5158, 2017. doi: 10.1109/cvpr.2017.547. 3
+
+
+Kun Zhang, Mingming Gong, Petar Stojanov, Biwei Huang, Qingsong Liu, and Clark Glymour. Domain
+adaptation as a problem of inference on graphical models. In _Proceedings_ _of_ _the_ _34th_ _International_
+_Conference on Neural Information Processing Systems_, pp. Article 417. Curran Associates Inc., 2020. 3
+
+
+Libo Zhang, Wenzhang Zhou, Heng Fan, Tiejian Luo, and Haibin Ling. Robust domain adaptive object
+detection with unified multi-granularity alignment. _IEEE Trans Pattern Anal Mach Intell_, 46(12):9161–
+9178, 2024b. ISSN 1939-3539 (Electronic) 0098-5589 (Linking). doi: 10.1109/TPAMI.2024.3416098.
+3, 17
+
+
+Yingying Zhang, Desen Zhou, Siqin Chen, et al. Single-image crowd counting via multi-column convolutional neural network. In _2016 IEEE Conference on Computer Vision and Pattern Recognition (CVPR)_,
+pp. 589–597, 2016. doi: 10.1109/CVPR.2016.70. 8, 19, 20
+
+
+Han Zhao, Remi Tachet Des Combes, Kun Zhang, et al. On learning invariant representations for domain adaptation. In _Proceedings_ _of_ _the_ _36th_ _International_ _Conference_ _on_ _Machine_ _Learning_ _(ICML)_,
+volume 97, pp. 7523–7532. PMLR, 09-15 Jun 2019. 4, 7, 10, 17, 24
+
+
+Liang Zhao and Limin Wang. Task-specific inconsistency alignment for domain adaptive object detection.
+In _2022 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 14197–14206,
+2022. doi: 10.1109/cvpr52688.2022.01382. 17
+
+
+Wenzhang Zhou, Heng Fan, Tiejian Luo, and Libo Zhang. Unsupervised domain adaptive detection with
+network stability analysis. In _2023 IEEE/CVF International Conference on Computer Vision (ICCV)_, pp.
+6963–6972, 2023. doi: 10.1109/iccv51070.2023.00643. 17
+
+
+Huilin Zhu, Jingling Yuan, Xian Zhong, Zhengwei Yang, Zheng Wang, and Shengfeng He. Daot: Domainagnostically aligned optimal transport for domain-adaptive crowd counting. In _Proceedings_ _of_ _the_ _31st_
+_ACM_ _International_ _Conference_ _on_ _Multimedia_, pp. 4319–4329. Association for Computing Machinery,
+2023. ISBN 9798400701085. doi: 10.1145/3581783.3611793. 8
+
+
+Jun-Yan Zhu, Taesung Park, Phillip Isola, and Alexei A. Efros. Unpaired image-to-image translation using cycle-consistent adversarial networks. In _2017_ _IEEE_ _International_ _Conference_ _on_ _Computer_ _Vision_
+_(ICCV)_, pp. 2242–2251, 2017. doi: 10.1109/iccv.2017.244. 9, 21
+
+
+Peihao Zhu, Rameen Abdal, John Femiani, and Peter Wonka. Mind the gap: Domain gap control for single
+shot domain adaptation for generative adversarial networks. In _International_ _Conference_ _on_ _Learning_
+_Representations_, 2022. 3
+
+
+16
+
+
+A APPENDIX
+
+
+A.1 MORE RELATED WORK
+
+
+In Unsupervised Domain Adaptation (UDA), there are common to adopt the component-wise alignment to
+align the feature distribution across domains. The most common method is to align the marginal distribution
+of the feature space (Jiang et al., 2022; Zhang et al., 2024b; Yao et al., 2023; Lopez-Rodriguez & Mikolajczyk, 2022; Zhao & Wang, 2022; Zhou et al., 2023). MGA (Zhang et al., 2024b) designs category-level
+discriminator to align the distributions on the category-level. D-adapt (Jiang et al., 2022) deploys the bounding box alignment for mitigating the domain shift on object-level. Our method is actually different from
+these methods. Their goal is only to align the distribution of object-relevant features under the assumption
+that unconditional alignment can reduce the joint decision error all the time. It also assumes that the unconditional alignment will not violate the inter-object contextual distribution. Previous methods that align
+the entire image encourage the pseudo-label distributions of the source and target domains to converge, potentially overlooking significant gaps between the true label spaces due to inherent label shifts (Zhao et al.,
+2019). This issue is represented by the inequality: _dJS_ ( _Y, Y_ _[′]_ ) _≥_ _dJS_ ( _Y,_ _Y_ [ˆ] _[′]_ ), where _dJS_ denotes the JensenShannon divergence between the label distributions _Y_ (source domain), _Y_ _[′]_ (target domain), and _Y_ [ˆ] _[′]_ (pseudo
+labels of the target domain). Although source domain labels are accessible, the inequality holds due to the
+unchangeable nature of the true label shift. According to Theorem 1, minimizing the estimated label difference encourages unsupervised domain adaptation methods to reduce _dJS_ ( _D, D_ _[′]_ ). However, combining this
+with the inequality leads to a higher lower bound of _ϵU_, the target risk, due to the immutable label space
+difference. This theoretical insight explains why unconditional (global) alignment has limited adaptability
+in our context. And the consistency module enforces consistency between object and background features
+rather than maintaining features of ROI across domains, further enhancing the model’s ability to capture
+essential density information. Technically, this module ensures that the model maintains consistency between object and background features, promoting accurate counting by preserving the relationships between
+objects and their surroundings. Theoretically, CM play a crucial role in maintaining the consistency of the
+feature space, implementing Definition 3. The proposed BiAN is designed to align the feature distribution across domains while preserving the inter-object information by maintaining the condition-independent
+partitions.
+
+
+A.2 TRAINING PROCESS
+
+
+Here we provide the detailed training procedure of BiAN. The training process is shown in Algorithm A.2.
+The training process is similar to the standard training process of UDA. The difference is that we introduce
+the conditional alignment and the CM module to the training process. The images ( _xs, xt_ ) from the source
+and target domain are fed into the model _h_ = _gs/t_ _◦_ _f_ . The model firstly predicts the counting results
+_y_ ˆ _s_ and _y_ ˆ _t_ . Then model segments the images into foreground and background using the predicted results,
+obtaining ( _x_ _[f]_ _s_ _[, x][b]_ _s_ [)][ and][ (] _[x]_ _t_ _[f]_ _[, x]_ _t_ _[b]_ [)][.] [The model then predicts the conditional results][ (ˆ] _[y]_ _s_ _[f]_ _[,]_ [ ˆ] _[y]_ _s_ _[b]_ [)][ and][ (ˆ] _[y]_ _t_ _[f]_ _[,]_ [ ˆ] _[y]_ _t_ _[b]_ [)][ for the]
+foreground and background. The conditional domain loss _L_ d is calculated between the conditional results.
+The pixel loss _Lp_ is calculated between the predicted results and the ground truth. The source loss _L_ source
+and the target loss _L_ target are calculated. The CM loss _L_ CM is calculated between the conditional results and
+the predicted results. The sum up loss _L_ is calculated. The gradient of the loss is calculated and the model
+is updated.
+
+
+17
+
+
+**Algorithm 1** Training Procedure of BiAN
+
+
+**Require:** Source dataset _Ds_, Target dataset _Dt_, Model parameters _θ_, Learning rate _η_, Epochs _E_
+**Ensure:** Trained model parameters _θ_
+
+1: **for** epoch = 1 **to** _E_ **do**
+2: Shuffle dataset _Ds_, _Dt_
+3: **for** each batch _B_ = ( _xs, xt_ ) **do**
+4: Compute predictions _y_ ˆ _s_, _y_ ˆ _t_ using model with parameters _θ_
+5: Get ( _x_ _[f]_ _s_ _[, x][b]_ _s_ [)][,][ (] _[x]_ _t_ _[f]_ _[, x]_ _t_ _[b]_ [)][ segmenting] _[ x][s]_ [,] _[ x][t]_ [with] _[y]_ [ˆ] _[s]_ [,] _[y]_ [ˆ] _[t]_
+6: Compute conditional predictions (ˆ _ys_ _[f]_ _[,]_ [ ˆ] _[y]_ _s_ _[b]_ [)][,][(ˆ] _[y]_ _t_ _[f]_ _[,]_ [ ˆ] _[y]_ _t_ _[b]_ [)][ using model with parameters] _[ θ]_
+7: Compute conditional domain loss _L_ d between (ˆ _c_ _[f]_ _s_ _[,]_ [ ˆ] _[c]_ _t_ _[f]_ [)][ and][ (ˆ] _[c]_ _s_ _[b][,]_ [ ˆ] _[c][b]_ _t_ [)]
+8: Calculate pixel loss _Lp_ between _y_ ˆ _s_ and ground truth _ys_
+9: Calculate _Lsource_ and _Ltarget_
+10: Calculate CM loss _L_ CM between (ˆ _yt_ _[f]_ _[,]_ [ ˆ] _[y]_ _t_ _[b]_ [)][ and] _[y]_ [ˆ] _[t]_
+11: Calculate sum up loss _L_ = _Lsource_ + _Ltarget_ + _λLCM_
+12: Reverse the gradient of _Ld_ then compute gradient _∇θL_
+13: Update parameters: _θ_ _←_ _θ −_ _η · ∇θL_
+14: **end for**
+15: **if** early stopping condition is met **then**
+16: **break**
+17: **end if**
+18: **end for**
+19: **return** _θ_
+
+
+A.3 PROOF OF LEMMA 2
+
+
+_Proof._
+
+_dC_ ( _Y, Y_ _[′]_ ) =                - _dJS_ ( _Yi, Yi_ _[′]_ [)] _[,]_
+
+
+_i∈_ [1 _,k_ ]
+
+
+According to the definition, the samples within the condition subsets share the same label. So that, according
+to the previous definition of _dJS_ ( _D, D_ _[′]_ ), we have for every _i ∈_ [1 _, k_ ]:
+_dC_ ( _Y, Y_ _[′]_ ) = 0 _,_
+
+
+A.4 PROOF OF LEMMA 3
+
+
+_Proof._ According to Definition 3, we have
+_Di_ _[c]_ _[∩]_ _[D]_ _j_ _[′][c]_ [=][ ∅] _[, i][ ̸]_ [=] _[ j.]_
+
+
+This implies that the subsets _Di_ _[c]_ [and] _[D]_ _j_ _[′][c]_ [are] [disjoint] [whenever] _[i]_ [=] _[j]_ [.] [Since] _[D][′]_ [can] [be] [expressed] [as] [the]
+union of all such _Dj_ _[′][c]_ [, for any] _[ x][ ∈]_ _[D][′]_ [, it specifically lies in one of these subsets] _[ D]_ _i_ _[′][c]_ [if] _[ x]_ [ also belongs to] _[ D]_ _i_ _[c]_ [.]
+Therefore, we have:
+_x ∈_ _Di_ _[c]_ _[∩]_ _[D][′]_ [=] _[⇒]_ _[x][ ∈]_ _[D]_ _i_ _[c]_ _[∩]_ _[D]_ _i_ _[′][c][.]_
+Since _Di_ _[c]_ _[∩]_ _[D][′]_ [=] _[ D]_ _i_ _[c]_ _[∩]_ _[D]_ _i_ _[′][c]_ [, the Jensen-Shannon divergence calculation between] _[ D]_ _i_ _[c]_ [and] _[ D][′]_ [simplifies to:]
+_dJS_ ( _Di_ _[c][, D][′]_ [) =] _[ d][JS]_ [(] _[D]_ _i_ _[c][, D]_ _i_ _[′][c]_ [)] _[.]_
+This holds because the overlap between _Di_ _[c]_ [and] _[D][′]_ [is] [exactly] _[D]_ _i_ _[c]_ [and] _[D]_ _i_ _[′][c]_ [,] [thus] [limiting] [the] [scope] [of] [t][he]
+divergence calculation to these intersecting subsets.
+
+
+18
+
+
+A.5 PROOF OF CONDITIONAL ALIGNMENT
+
+
+_Proof._ The situation of the large marginal difference on label space can be represented as follows. Given
+condition set _Y_ = _{c_ 1 _, c_ 2 _, c_ 3 _, . . ., ck}_, for any _i ∈_ [1 _, k_ ], we have:
+
+_Yi_ _[c]_ _[∩]_ _[Y]_ _[′]_ [=] _[ Y]_ _j_ _[′][c][, i][ ̸]_ [=] _[ j.]_
+
+
+Without loss of generality, we suppose _j_ = _i_ + 1, so that we have:
+
+
+Specifically, we set _Dk_ _[′][c]_ +1 [=] _[ D]_ 1 _[′][c]_ [.] [To this end, combining the equations above, we have:]
+
+_dJS_ ( _D, D_ _[′]_ ) = _dJS_ ( _Y, Y_ _[′]_ ) _._
+
+
+A.6 DATASET DETAILS
+
+
+In this section, we will provide details about the dataset we implemented in our experiments, including cell
+counting datasets and crowd counting datasets. Example visualization is shown as Figure 3.
+
+
+For the crowd-counting task, the datasets include GTA5 Crowd Counting (GCC) (Wang et al., 2019b),
+UCF-QNRF (UCF) (Idrees et al., 2018), ShanghaiTech (SHA & SHB) (Zhang et al., 2016), and JHUCrowd++Sindagi et al. (2022). The details of the crowd dataset are shown as follows:
+
+
+- GCC (Wang et al., 2019b) is generated from multiple crowd scenes in Grand Theft Auto V, a video game,
+with 15,210 samples. The image size is 1920 _×_ 1080 pixels. The synthetic environment contains multiple
+times of the day, seven types of weather, and diverse scenes (e.g. beach, street, and other common public
+scenes.). It provides various simulations of real-world scenes. The average of crowded count for each
+image is 500, with the highest count of 4000 and lowest count of zero.
+
+
+19
+
+
+_dJS_ ( _Y, Y_ _[′]_ ) =
+
+
+_k_
+
+- _dJS_ - _Yi_ _[c][, Y]_ _j_ _[′][c]_ - _._
+
+_i_ =1
+
+
+Specially, we set _Yk_ _[′]_ +1 _[c]_ [=] _[ Y]_ 1 _[′][c]_ [.]
+
+We have conditional aligned domains _D_ and _D_ _[′]_, which can be represented as:
+
+_dC_ ( _D, D_ _[′]_ ) = 0 _._
+
+
+Therefore, for any _i ∈_ [1 _, k_ ]:
+_dJS_ ( _Di_ _[c][, D]_ _i_ _[′][c]_ [) = 0] _[.]_
+We have conditional aligned _Y_ and _Y_ _[′]_, so it can instantly have:
+
+_dJS_ ( _Di_ _[′][c][, Y]_ _i_ _[′][c]_ [) = 0] _[.]_
+
+
+Combining the equations above, we have:
+
+_dJS_ ( _Di_ _[c][, Y]_ _i_ _[′][c]_ [) = 0] _[.]_
+
+
+According to Lemma 2, we have:
+
+_dJS_        - _Yi_ _[c][, Y]_ _j_ _[′][c]_        - = _dJS_        - _Di_ _[c][, Y]_ _j_ _[c]_        - = _dJS_        - _Di_ _[c][, D]_ _j_ _[c]_        - = _dJS_        - _Di_ _[c][, D]_ _j_ _[′][c]_        - _._
+
+
+It is possible to find an order of sorting the _Di_ _[c]_ [and] _[ D]_ _i_ _[′][c]_ [, so that the JS-convergence between] _[ D]_ [and] _[ D][′]_ [can]
+be:
+
+
+_dJS_ ( _D, D_ _[′]_ ) =
+
+
+_k_
+
+
+- _dJS_ - _Di_ _[c][, D]_ _j_ _[′][c]_ - _._
+
+_i_ =1
+
+
+- UCF (Idrees et al., 2018) is a large-scale dataset that contains 1535 high solution images with considerable
+crowd variation. The images are obtained from the Web by multiple platforms. So, the resolutions are
+highly dynamic. The average density of images is 1000 counts but with a standard deviation 7605.14.
+
+- The ShanghaiTech (Zhang et al., 2016) dataset consists of parts A and B, containing 482 and 716 samples,
+respectively. Part A (SHA) is obtained from the Web with dynamic resolutions. The mean of counts per
+image is 541, with a standard deviation of 504. Part B (SHB) is retrieved from the security monitoring
+cameras on busy streets with fixed resolutions. The mean of counts per image is 122, with a standard
+deviation 93.
+
+- The JHUCrowd++ (Sindagi et al., 2022) dataset consists of 4,372 images with detailed annotations, totaling approximately 1.51 million instances. The images are collected from diverse sources, including
+the web and surveillance cameras, featuring varying resolutions and perspectives. The dataset captures
+a wide range of crowd densities, from sparse to extremely dense scenes. The mean count per image is
+approximately 346, with a standard deviation of 1,094, indicating significant variability in crowd counts
+across the dataset.
+
+
+The environments of the crowd datasets, including various weathers and scenes, are among the most challenging issues to handle in crowd counting. It requires algorithms with higher adaptability to handle it.
+Overall, the selection of datasets covers a sufficient variety of environments and scenes. In the following experiments, we examine the transferability of the BiAN by evaluating its performance in transferring features
+between the domains from the datasets shown above.
+
+
+For the cell counting task, the datasets include three public benchmarks: synthetic fluorescence microscopy
+(VGG) dataset (Xie et al., 2018b), human subcutaneous adipose tissue (ADI) dataset (Cohen et al., 2017),
+and Dublin Cell Counting (DCC) dataset. The details of the cell dataset are shown as follows:
+
+
+- VGG (Xie et al., 2018b) is a synthetic microscopy cell image dataset with 200 samples. It simulates
+bacterial cells from fluorescence-light microscopy at various focal distances. The size of microscopy
+images is maintained as 256 _×_ 256 pixels. The cell amount of VGG for each image is 174 _±_ 64.
+
+- DCC (Marsden et al., 2018) dataset is built with 177 samples from various categories of cells from real
+cases, including embryonic mice stem cells, human lung adenocarcinoma, and monocytes. The image size
+ranges from 306 _×_ 322 pixels to 798 _×_ 788 pixels, due to obtained via dynamic zoom scope. Moreover, the
+cell amount for each image is 34 _±_ 21, intended to increase the variation of the dataset.
+
+- ADI (Cohen et al., 2017) is constructed from Genotype Tissue Expression Consortium (Lonsdale et al.,
+2013) with densely packed adipocyte cells from real cases. The dataset is built from 200 images. The
+image size is 150 _×_ 150 pixels. The cell amount for each image is 165 _±_ 44.
+
+
+The slight deviation of the cell amount of each image provides a relative consistency in cell density. Various
+types of cells further challenge the performance of the model in the adaptability of scene presentation.
+
+
+A.7 EXPERIMENT IMPLEMENTATION DETAILS
+
+
+We choose the Adam optimizer with decoupled weight decay. The learning rate for the optimizer is set to
+1e-6, and the weight decay rate is 1e-4. For the learning rate, we use a step learning rate scheduler with a
+10-epoch step to lower the learning rate by 0.1 for every step. To handle the limitation of GPU memory, we
+resize cell images to 128 _×_ 128 pixels and crowd images to 96 _×_ 96 pixels. Notably adopting the annotated
+counts before resizing the images to maintain the ground truth unaffected by squeezing. The coefficient _α_
+of CM loss is set to 100. Moreover, we apply the training scalar on the annotations to enhance the numeric
+difference. The scalar for VGG and ADI is 100. For DCC and all applied crowd datasets, it is set as 500,
+respectively. BiAN is fully implemented in PyTorch, running on a single NVIDIA RTX 3090 with a single
+Intel® Core™i7-10700 CPU @ 2.90GHz.
+
+
+20
+
+
+Figure 3: Object counting scenarios: (a) public security monitoring; (b) medical pathological analysis; (c)
+biological experiment.
+
+
+A.8 ADDITIONAL EXPERIMENT ANALYSIS
+
+
+A.8.1 SOURCE ON SYNTHETIC CROWD DATASET
+
+
+Migrating from the source synthetic dataset to a real-world dataset is a practical approach to handling insufficient data annotation issues. To validate BiAN performance on such condition, we conduct the experiments
+with the setting of GCC ( _source_ ) and UCF ( _target_ ). Specifically, we have to resize the input to a smaller size
+(128 _×_ 128 px) due to memory limitation. We have taken reasonable measures to preserve the information.
+The results still show that BiAn outperforms SOTA methods. But due to no guarantee on lost information,
+the experiment results only can be quantitatively referred.
+
+
+Table 5: Counting MAE and MSE on crowd counting task from synthetic source. The best are highlighted
+in bold. DA: Domain Adaptation for short.
+
+
+GCC _→_ UCF
+Methods DA
+MAE _↓_ MSE _↓_
+
+
+KDMG (Wan et al., 2022) ✗ 99.5 173.0
+UOT (Ma et al., 2021) ✗ 83.3 142.3
+STEERER (Han et al., 2023) ✗ 74.3 128.3
+Cycle GAN (Zhu et al., 2017) ✔ 257.3 400.6
+SE CycleGAN (Wang et al., 2019b) ✔ 230.4 384.5
+BiAN (Ours) ✔ **22.7** 28.4
+
+
+A.8.2 RELEVANCE ANALYSIS BETWEEN CONSISTENCY AND COUNTING RESULTS
+
+
+In this section, we further demonstrate the proposed Condition-Consistency Mechanism (CM), which benefits from reliable counting when there is a lack of precise annotation during the adaptation process. We plot
+the curves presenting the tendency of MAE on the validation set and uncertainty during the training period.
+Specifically, the uncertainty index is calculated by the normalized CM loss _NORM_ ( _LCM_ ), indicating how
+inconsistent the features of assembling conditions and entire ones are. It can be observed that the counting
+performance, which is inversely proportional to the MAE value, is promoted when the uncertainty index
+
+
+21
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+
+**1008**
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+**1026**
+
+**1027**
+
+**1028**
+
+**1029**
+
+**1030**
+
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+decays. Combined with the results in experiment results in Section 4.3, it can validate that the assumption
+on disjoint condition subsets is necessary in BiAN and conditional alignment framework.
+
+
+Figure 4: The tendency of validation counting MAE and the consistency on two domain combinations.
+
+
+A.9 MODEL ARCHITECTURE OF BIAN
+
+
+In this section, we present the architectural details of our proposed BiAN. As shown in Figure 2, the architecture can be divided into domain-specific feature extractors ( _gS/T_ ), density map regression layers ( _f_ ), domain
+discriminator ( _fd_ ), condition-consistent layers ( _fc_ ). The total parameters amount of BiAN is 70,755,271 with
+an estimated model size of 2783.41 MB.
+
+
+Table 6: Architecture of feature extractor in BiAN.
+
+
+**Layer (Type:** **Depth-Idx)** **Output Shape** **Parameters (#)**
+Conv2d: 3-1 [32, 256, 256] 384
+Conv2d: 3-2 [32, 256, 256] 9,312
+MaxPool2d: 3-3 [32, 128, 128]       Conv2d: 3-4 [64, 128, 128] 18,624
+Conv2d: 3-5 [64, 128, 128] 37,056
+MaxPool2d: 3-6 [64, 64, 64]       Conv2d: 3-7 [128, 64, 64] 74,112
+Conv2d: 3-8 [128, 64, 64] 147,840
+MaxPool2d: 3-9 [128, 32, 32]       Conv2d: 3-10 [256, 32, 32] 295,680
+Conv2d: 3-11 [256, 32, 32] 590,592
+SelfAttention: 3-12 [256, 32, 32] 263,424
+
+
+The domain-specific feature extractors ( _gs/t_ ), detailed in Appendix A.9, are responsible for capturing relevant features from the input data in both source and target domains. Specifically, the input is resized as
+256 _×_ 256 px. And the network arguments are independent among _gs_ and _gt_, but same architecture for
+similar feature retrieval.
+
+
+The density map regression layers ( _f_ ), detailed in Table 7, are designed to predict density maps from the
+extracted features. Specifically, it expands the channels of features by deconv operations and estimates the
+density. The output size is input-alike but only one channel, which is shown as resized 256 _×_ 256 px. And
+the _fc_ shares weight and architecture with _f_ for preparing partial results map for CM validation.
+
+
+The domain discriminator ( _fd_ ), as described in Table 8, aims to align the domain distribution shift of features
+by broadcasting inverse gradient. The output is the binary label.
+
+
+22
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+
+**1038**
+
+**1039**
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+
+**1044**
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+
+**1050**
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+
+**1055**
+
+**1056**
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+
+**1061**
+
+**1062**
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+
+**1067**
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+
+**1073**
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+
+**1078**
+
+**1079**
+
+**1080**
+
+
+Figure 5: The network architecture visualization of BiAN. Note: The sample input is 16 _×_ 1 _×_ 256 _×_ 256 px.
+Then estimated allocated memory is 4.7 GiB.
+
+
+23
+
+
+**1081**
+
+**1082**
+
+**1083**
+
+**1084**
+
+
+**1085**
+
+**1086**
+
+**1087**
+
+**1088**
+
+**1089**
+
+**1090**
+
+
+**1091**
+
+**1092**
+
+**1093**
+
+**1094**
+
+**1095**
+
+**1096**
+
+
+**1097**
+
+**1098**
+
+**1099**
+
+**1100**
+
+**1101**
+
+
+**1102**
+
+**1103**
+
+**1104**
+
+**1105**
+
+**1106**
+
+**1107**
+
+
+**1108**
+
+**1109**
+
+**1110**
+
+**1111**
+
+**1112**
+
+**1113**
+
+
+**1114**
+
+**1115**
+
+**1116**
+
+**1117**
+
+**1118**
+
+**1119**
+
+
+**1120**
+
+**1121**
+
+**1122**
+
+**1123**
+
+**1124**
+
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+Table 7: Architecture of regression layers in BiAN.
+
+
+**Layer (Type:** **Depth-Idx)** **Output Shape** **Parameters (#)**
+Deconv2d: 3-13 [128, 64, 64] 131,456
+Conv2d: 3-14 [128, 64, 64] 295,296
+Conv2d: 3-15 [128, 64, 64] 147,840
+Deconv2d: 3-16 [64, 128, 128] 32,960
+Conv2d: 3-17 [64, 128, 128] 73,920
+Conv2d: 3-18 [64, 128, 128] 37,056
+Deconv2d: 3-19 [32, 256, 256] 8,288
+Conv2d: 3-20 [32, 256, 256] 18,528
+Conv2d: 3-21 [32, 256, 256] 9,312
+Conv2d: 3-22 [1, 256, 256] 33
+
+
+Table 8: Architecture of domain discriminate layers in BiAN.
+
+
+**Layer (Type:** **Depth-Idx)** **Output Shape** **Parameters (#)**
+Linear2d: 3-23 [256] 67,109,632
+Linear2d: 3-24 [64] 16,576
+Dropout1d: 3-25 [64]       Linear2d: 3-26 [2] 134
+Softmax: 3-27 [2]       
+
+A.10 VISUALIZATION
+
+
+In this section, we present the visual results of BiAN in the counting task experiments. As shown in Figure 7,
+we randomly select two samples from every cross-domain adaptation. In the visualization figure, we mark
+the inaccurate counts in the samples. The low-density samples can be counted in precise amounts, and the
+localization is also accurate. However, in microscopy cell images, cells of an overlapped or abnormal size are
+not fully recognized. The cell-alike objects (e.g. bubbles) easily distract the model recognition, especially
+in the DCC cell images. The conditional alignment mechanism enables BiAN to recognize distinguishing
+features of cells. As for the crowd counting task, human main characters are important cues to lead the
+model to marks. In contrast, the characters of hidden persons are easily missed targets. The results show that
+BiAN is able to retrieve the partial features of humans. It results in significant performance improvements.
+Overall, the visualization demonstrates the proposed model’s recognition ability and learning of the visual
+representation of counting targets.
+
+
+A.11 LIMITATIONS AND FUTURE WORK
+
+
+This paper has several limitations that can be further investigated and improved. First, the lower bound of
+the aforementioned joint error is not the tightest (Zhao et al., 2019). It means the tightest lower bound of
+joint error might be lower than the loss bound mentioned above. However, this does not explicitly result in
+a performance drop. Second, the conditions are the label categories in BiAN, however Theorem 4 can fit
+more conditions. Regarding the designed model BiAN, we observed that there exists limited precision in
+recognizing and localizing, and counting minor objects. This aspect can be further improved in addition to
+the proposed CM. Nevertheless, our work emphasizes the importance of matching the conditions during the
+adaptation process and provides a promising direction for future research.
+
+
+24
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+
+**1132**
+
+**1133**
+
+**1134**
+
+**1135**
+
+**1136**
+
+**1137**
+
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+**1142**
+
+**1143**
+
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+**1148**
+
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+**1153**
+
+**1154**
+
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+**1159**
+
+**1160**
+
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+**1165**
+
+**1166**
+
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+**1171**
+
+
+**1172**
+
+**1173**
+
+**1174**
+
+
+Figure 6: Density map visualization. Randomly selected two high-density samples from JHUCrowd++. The
+left ones are predictions, the right ones are labeled density maps.
+
+
+25
+
+
+**1175**
+
+**1176**
+
+**1177**
+
+**1178**
+
+
+**1179**
+
+**1180**
+
+**1181**
+
+**1182**
+
+**1183**
+
+**1184**
+
+
+**1185**
+
+**1186**
+
+**1187**
+
+**1188**
+
+**1189**
+
+**1190**
+
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+**1207**
+
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+**1213**
+
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+
+Figure 7: Dot map visualization. Randomly selected eight low-density samples from two adaptation tasks.
+From left to right, the samples are from ADI, DCC, UCF, SHB. The red mark indicates the miss count. The
+blue mark indicates the duplicated count.
+
+
+26
